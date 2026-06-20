@@ -1,0 +1,170 @@
+# CLAUDE.md — O Plenário · Discovery de Arquitetura
+
+> **Nome do produto: O Plenário** — tagline de trabalho *"Onde a câmara acontece."*
+> (provisório até confirmar domínio e marca — ver `docs/04-nome-e-marca.md`).
+
+> **Este arquivo é lido automaticamente pelo Claude Code ao abrir a pasta.**
+> Ele orienta como continuar o trabalho. Leitura obrigatória antes de qualquer resposta.
+> A referência canônica de decisões é o `documento-mestre-camaras.md`. Em qualquer
+> conflito entre o que se lembra de um chat antigo e o documento-mestre, **o documento prevalece.**
+
+---
+
+## 1. O que é este projeto
+
+**O Plenário** é uma plataforma **SaaS de gestão pública para câmaras municipais brasileiras**,
+tratando a câmara como **instituição** — nunca sistemas de gabinete de vereador (escopo de
+gabinete está excluído desde a origem e não se reabre).
+
+- **Beachhead:** Fortaleza / Nordeste (incumbentes do Sul/Sudeste têm baixa penetração — wedge geográfico real).
+- **Estratégia (Rota D):** entrar com módulo legislativo como *wedge*, expandir para suite administrativa completa, eventualmente prefeituras. Alvo de IPO/exit R$ 1B+ em 8-12 anos.
+- **Fundador/CTO:** Emilio — decisor técnico único, 10+ anos de engenharia. Comunicação direta, intolerante a complexidade desnecessária e framing rebuscado.
+
+**Três apostas de produto da V1:** (1) IA como copiloto legislativo; (2) experiência de
+produto moderna para três públicos (servidor, vereador, cidadão); (3) confiança operacional
+como diferencial comercial (migração como feature, SLA de janela de sessão, compliance TCE automático).
+
+**Três públicos decisores em licitação**, cada um com porta de entrada própria: servidor
+(avalia na POC — ganha com IA e UX), presidente da Mesa (aprova politicamente — ganha com
+engajamento cidadão), jurídico/administrativo (avalia risco — ganha com confiança operacional).
+
+---
+
+## 2. Em que fase estamos
+
+**North Star Architecture** — desenho da arquitetura-alvo de 5 anos compatível com a Rota D,
+trabalhado **uma seção arquitetural por sessão**, com o **documento-mestre** como artefato
+canônico de handoff entre sessões.
+
+**Fechado e consolidado no documento-mestre:** §22.1 (invariantes), §22.2 (alto nível —
+tenancy, modelo de serviços, ingestão de legado), §22.3 (contrato core ↔ IA), §22.4 (modelo de
+dados legislativo), §22.5 (auth), §22.6 (sessão plenária + áudio + real-time), **§22.7 Eixos A, C, B
+e o Eixo de runtime (vocabulário da DSL do motor de compliance + o stress-test que o validou + o
+schema das tabelas de template/regra + o comportamento temporal de runtime — consolidados até v1.12)**.
+Detalhe do que cada uma decidiu em `docs/00-estado-e-roadmap.md`.
+
+**§22.7 — Motor de regras de compliance** (materialização do Invariante 4) é subseção própria
+desde a v1.9, trabalhada **por eixos**. **Eixos A (vocabulário da DSL), C (stress-test com
+requisitos reais do TCE-CE), B (schema das tabelas) e o Eixo de runtime (comportamento temporal)
+fechados** — o C validou a forma A2 e derivou de carga real o vocabulário (**§22.7.5, v1.10**); o B
+cravou o schema estático, separando definição de domínio (sem `ente_id`) de binding por tenant
+(**§22.7.6, v1.11**); o de runtime cravou materialização de obrigação (`prazo_dominio_ativo`
+polimórfico), avaliação (evento+sweep+sob demanda), monitoramento de prazo (S1) e auditoria
+append-only (**§22.7.7, v1.12**). **O avaliador executável da DSL está construído** (`motor-dsl/`,
+zero-dep Python, **39 checagens verdes**) e validou *end-to-end* a forma A2 + o loop de runtime — a
+primeira implementação de fato (§7). **Próximo: os +2 eixos restantes** — geração de artefatos de
+envio ao TCE e expansão a outros TCEs. O granular que resta a reconciliar (mecânica fina do registry,
+formas descartadas no Eixo A) segue em §22.7.4.
+
+---
+
+## 3. ⚠️ Estado do cursor + primeira ação
+
+**Estado (v1.12, 20/06/2026):** **Eixo de runtime consolidado.** A trilha de produto/comercial está
+**completa** (pasta `produto/`). §22.7 (Motor de regras de compliance) tem agora **Eixos A, C, B e o
+Eixo de runtime** no documento-mestre. O Eixo de runtime (**§22.7.7**, bump **v1.12** no §24) cravou o
+**comportamento temporal** do motor — elevado por S1: o motor _monitora prazo_, não só avalia
+booleano. Decisões centrais: obrigação temporal em **dois sabores** (com prazo materializa instância;
+contínua não materializa, só avalia); **generalização disparada (disc. 6)** de `proposicao_prazo_ativo`
+→ **`prazo_dominio_ativo` polimórfico**; ciclo da obrigação é **enum fixo em código, não template**
+(como emendas §22.4 eixo D); `compliance_avaliacao` **append-only** = a **prova de compliance**
+(Invariante 10). Duas tabelas novas de runtime (tenant): `prazo_dominio_ativo`, `compliance_avaliacao`.
+Modelo de avaliação (evento+sweep+sob demanda) decidido; infra deferida ao chat de stack. Rascunho de
+origem em `docs/07-eixo-runtime-motor-rascunho.md`.
+
+**Feito desde a consolidação:** a **primeira implementação de fato** (§7) — o **avaliador executável
+da DSL** — está em `motor-dsl/` (parser + type-checker do save time + loop de runtime materializa →
+avalia → monitora → audita). Roda em `python3 motor-dsl/test_motor.py` (39 checagens) e
+`python3 motor-dsl/demo.py`. Validou *end-to-end*: os 4 templates do Eixo C tipam; T4 (quórum) é
+rejeitado pelo envelope (S4); 5 regras mal-tipadas barram no save (dec. 2); aritmética exata (armadilha
+do quórum); dois sabores de obrigação; re-stamp S3; auditoria append-only. É protótipo de validação —
+**não** decisão de stack (deferida, §22.4.4) — e não inventou conteúdo regulatório (`[GAP]` segue GAP).
+
+**Primeira ação recomendada agora:** abrir um dos **+2 eixos de arquitetura restantes** — geração de
+artefatos de envio ao TCE (gera o *arquivo* da remessa; o runtime só rastreia a *obrigação*) ou
+expansão a outros TCEs (Invariante 4, conteúdo). **Alternativa:** endurecer o `motor-dsl/` (mais
+builtins/tipos, casos de borda) se o objetivo virar caminhar para produção. Abrir uma; o Emilio
+redireciona se preferir outra.
+
+- **Trilhas concluídas:** produto/comercial (completa, `produto/`); arquitetura §22.7 **Eixos A, C, B
+  e Eixo de runtime**.
+- **+2 eixos** de arquitetura ainda não abertos: **geração de artefatos de envio ao TCE** e
+  **expansão a outros TCEs** (S2 — `dominio` em camadas). O Eixo de runtime fechou *comportamento
+  temporal* + *auditoria*; *versionamento* fechou no Eixo B. LLM provider / soberania permanece
+  parqueado (**§22.8 item 1**).
+
+---
+
+## 4. Como trabalhamos (protocolo)
+
+**Detalhe completo em `docs/01-metodologia.md`.** Resumo operacional:
+
+- **Ferramentas fixas deste projeto (decisão do Emilio, 20/06/2026):** todo trabalho de
+  **discovery e engenharia** (pesquisa de mercado, code review, build, etc.) usa o plugin
+  **`ecc`** (suas skills/subagents); todo trabalho de **design de UI/UX** usa o
+  **UI/UX Pro Max – Design Intelligence** como consultor (estilo/cor/tipografia/a11y), com os
+  artefatos autorados à mão em `produto/design-system/`. **Usar sempre que houver trabalho dessas
+  naturezas** — não é preferência pontual, é o trilho do projeto.
+- **Português em toda sessão técnica.**
+- **Um tópico macro por sessão**, fechado e consolidado no documento-mestre antes de seguir.
+- **Eixo por eixo:** abrir opções por eixo → debater tradeoffs explicitamente → chegar a
+  decisão confirmada → consolidar. **Não se relitiga item já fechado.**
+- **Confirmação explícita antes de prosseguir:** protocolo "Confirmo" / "Confirma?". Emilio
+  intervém com correções cirúrgicas e espera incorporação imediata.
+- **Bump de versão vs. patch:** correções dentro de uma sessão podem ser patch de mesma
+  versão ou bump, conforme a natureza da mudança.
+- **Viés forte por consistência disciplinar:** estender padrões existentes (DSL
+  compartilhada, taxonomia de eventos, mecânica de registries) em vez de introduzir conceitos novos.
+- **Escopo diferido por default:** itens sem requisito de cliente validado são parqueados,
+  não pré-construídos. A régua das 4 perguntas (§15 do documento-mestre) é o filtro permanente.
+
+---
+
+## 5. Invariantes que NÃO podem driftar
+
+Os 10 invariantes da §22.1 são lei estrutural de 5 anos. Para o trabalho de §22.7, dois
+pesam mais:
+
+- **Invariante 4 — regras de compliance são dados, não código.** TCE-CE na V1 é
+  *configuração*, não branch de código. A DSL precisa permitir expressar todos os requisitos
+  do TCE-CE como dado na V1, **sem refactor estrutural** para adicionar outros estados depois.
+- **Disciplina 5 de §22.4.3 e §22.5.3 — motor declarativo compartilhado.** A DSL e a mecânica
+  de avaliação são as **mesmas** entre tramitação (§22.4 eixo C), autorização (§22.5 eixo B),
+  regras de plenário (§22.6 — quórum, regras de votação por matéria, tempos de tribuna) e
+  agora compliance. **Não construir DSLs distintas.** Partir sempre do que já está fechado.
+
+Princípio comercial que justifica rigor técnico aqui: **uma regra de compliance falhando em
+runtime e fazendo um cliente perder janela de envio ao TCE é incidente inaceitável** — é o
+que justifica type-checking estático no momento de salvar a regra (decisão do Eixo A).
+
+---
+
+## 6. Mapa da pasta
+
+| Arquivo | Para quê |
+|---|---|
+| `documento-mestre-camaras.md` | **Single source of truth.** Decisões consolidadas. Em conflito, prevalece. **A versão vive no cabeçalho + §24, nunca no nome do arquivo** (evita trocar referências a cada bump). |
+| `docs/00-estado-e-roadmap.md` | **Comece aqui.** Estado do cursor, o descompasso a reconciliar, e o roadmap de §22.7 (eixos + parqueados + pendências). |
+| `docs/01-metodologia.md` | Método de trabalho (eixo a eixo, confirmação, versionamento, escopo). |
+| `docs/02-eixo-A-fechado-rascunho.md` | Decisões do Eixo A de §22.7 — **consolidadas em §22.7 (v1.9)**; mantido como rascunho de origem. Listas granulares seguem "a transcrever" em §22.7.4. |
+| `docs/03-proxima-sessao-eixo-C.md` | Brief + prompt de abertura da próxima sessão: templates TCE-CE como stress-test da DSL. |
+| `docs/04-nome-e-marca.md` | Decisão de nome (**O Plenário**), tagline, e os checks pendentes (domínio + INPI). |
+| `README.md` | Orientação geral da pasta (visão humana). |
+
+---
+
+## 7. Onde o Claude Code agrega além da conversa de design
+
+Até aqui o trabalho foi 100% conversa de arquitetura. A partir desta pasta, dois movimentos
+ficam disponíveis quando os eixos pedirem:
+
+- **No Eixo C (próximo):** ainda é design — o stress-test pega requisitos reais do TCE-CE e
+  os expressa na DSL fechada no Eixo A para **descobrir lacunas** na forma da DSL antes de
+  cravar schema. O Claude Code pode ajudar a **prototipar um avaliador mínimo da DSL** e
+  rodar os templates-exemplo contra ele para validar que a gramática cobre os casos reais.
+- **No Eixo B (depois de C):** materialização concreta — DDL real das tabelas de
+  template/regra, parser/validador da DSL com type-checking estático, suíte de testes de
+  regra. Aqui o Claude Code passa de interlocutor de design para implementação de fato.
+
+Regra de ouro mantida: **não puxar materialização para antes da hora.** A ordem A → C → B é
+deliberada justamente para validar a forma antes de gastar com schema.

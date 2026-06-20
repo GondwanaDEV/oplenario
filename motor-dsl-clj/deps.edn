@@ -1,0 +1,9 @@
+;; Motor de regras de compliance — port Clojure (§22.7). Backend = Clojure (decisão 20/06/2026).
+;; Roda:  clojure -M:test     (suíte de aceitação; sai != 0 se algo falhar)
+;;        clojure -M:demo     (demonstração do loop de runtime)
+{:paths ["src"]
+ :deps {org.clojure/clojure {:mvn/version "1.12.0"}}
+ :aliases
+ {:test {:extra-paths ["test"]
+         :main-opts ["-m" "oplenario.motor.test-runner"]}
+  :demo {:main-opts ["-m" "oplenario.motor.demo"]}}}

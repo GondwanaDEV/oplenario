@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+
+# Clojure / JVM
+target/
+.cpcache/
+.lsp/
+.clj-kondo/.cache/
+.nrepl-port
+*.class
+
+# Node / Next.js (frontend)
+node_modules/
+.next/
+out/
+dist/
+
+# Env / segredos
+.env
+.env.*
+!.env.example
+
+# Editores
+.idea/
+.vscode/
+*.iml

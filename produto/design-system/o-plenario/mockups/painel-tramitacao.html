@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>O Plenário · Painel de Tramitação — 11.3 (protótipo)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&family=Source+Sans+3:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --color-primary:#0F172A; --color-secondary:#334155; --color-accent:#0369A1;
+    --color-background:#F8FAFC; --color-foreground:#020617; --color-muted:#E8ECF1;
+    --color-border:#E2E8F0;
+    --radius:12px; --radius-sm:8px;
+    --unc-fg:#92400E; --unc-bg:#FEF3C7; --venc-fg:#991B1B; --venc-bg:#FEE2E2;
+    --ok-fg:#166534; --ok-bg:#DCFCE7; --src-fg:#1E3A5F; --src-bg:#E0E7EF;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.05);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  body{font-family:'Source Sans 3',system-ui,sans-serif; color:var(--color-foreground); background:var(--color-background); font-size:16px; line-height:1.5; -webkit-font-smoothing:antialiased;}
+  h1,h2,h3,.num{font-family:'Lexend',system-ui,sans-serif;}
+  .num{font-variant-numeric:tabular-nums;}
+  button{font-family:inherit; cursor:pointer;}
+  :focus-visible{outline:3px solid var(--color-accent); outline-offset:2px; border-radius:6px;}
+  svg{display:block;}
+
+  .app{display:grid; grid-template-columns:240px 1fr; min-height:100vh;}
+  .sidebar{background:var(--color-primary); color:#CBD5E1; padding:24px 16px;}
+  .brand{display:flex; align-items:center; gap:10px; color:#fff; font-family:'Lexend'; font-weight:600; font-size:18px; margin-bottom:32px;}
+  .brand .dot{width:28px;height:28px;border-radius:7px;background:var(--color-accent);display:flex;align-items:center;justify-content:center;}
+  .nav{display:flex; flex-direction:column; gap:2px;}
+  .nav a{display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:var(--radius-sm); color:#CBD5E1; text-decoration:none; font-size:15px; transition:background .2s;}
+  .nav a:hover{background:#1E293B; color:#fff;}
+  .nav a.active{background:var(--color-accent); color:#fff; font-weight:600;}
+
+  .main{display:flex; flex-direction:column; min-width:0;}
+  .topbar{display:flex; align-items:center; gap:12px; padding:0 28px; height:62px; background:#fff; border-bottom:1px solid var(--color-border); flex-wrap:wrap;}
+  .topbar h1{font-size:18px; margin:0;}
+  .spacer{flex:1;}
+  .search{display:flex; align-items:center; gap:8px; background:var(--color-background); border:1px solid var(--color-border); border-radius:var(--radius-sm); padding:7px 11px; color:#64748B; min-width:200px;}
+  .search input{border:0; background:transparent; outline:none; font-size:14px; color:var(--color-foreground); font-family:inherit; width:100%;}
+  .chip{font-size:13px; padding:6px 11px; border-radius:var(--radius-sm); border:1px solid var(--color-border); background:#fff; color:var(--color-secondary); display:inline-flex; align-items:center; gap:6px;}
+  .chip:hover{background:var(--color-background);}
+  .toggle{display:flex; border:1px solid var(--color-border); border-radius:var(--radius-sm); overflow:hidden;}
+  .toggle button{border:0; background:#fff; padding:7px 12px; font-size:13px; color:var(--color-secondary); font-weight:600; display:inline-flex; align-items:center; gap:6px;}
+  .toggle button.on{background:var(--color-primary); color:#fff;}
+  .btn{display:inline-flex; align-items:center; gap:7px; font-size:13.5px; font-weight:600; padding:7px 13px; border-radius:var(--radius-sm); border:1px solid var(--color-border); background:#fff; color:var(--color-secondary);}
+  .btn:hover{background:var(--color-background);}
+
+  .content{padding:20px 28px 28px; display:flex; flex-direction:column; min-height:0; flex:1;}
+  .protobanner{display:flex; align-items:center; gap:8px; background:#FEF9C3; border:1px solid #FDE68A; color:#854D0E; padding:7px 14px; border-radius:var(--radius-sm); font-size:12.5px; margin-bottom:16px;}
+  .protobanner code{background:#Fde68a66; padding:1px 5px; border-radius:4px;}
+
+  /* funnel summary */
+  .funnel{display:flex; gap:6px; align-items:stretch; margin-bottom:20px;}
+  .fstage{flex:1; background:#fff; border:1px solid var(--color-border); border-radius:var(--radius-sm); padding:11px 14px; position:relative; display:flex; flex-direction:column; gap:2px;}
+  .fstage.peak{border-color:#FCD34D; background:#FFFBEB;}
+  .fstage .fn{font-family:'Lexend'; font-size:22px; font-weight:700; font-variant-numeric:tabular-nums;}
+  .fstage .fl{font-size:11.5px; color:var(--color-secondary); line-height:1.2;}
+  .fstage .bar{height:4px; border-radius:2px; background:var(--color-accent); margin-top:6px;}
+  .fstage.peak .bar{background:#D97706;}
+
+  /* board */
+  .board{display:flex; gap:16px; overflow-x:auto; padding-bottom:8px; flex:1; align-items:flex-start;}
+  .col{flex:0 0 264px; background:#F1F5F9; border:1px solid var(--color-border); border-radius:var(--radius); display:flex; flex-direction:column; max-height:100%;}
+  .col-h{display:flex; align-items:center; gap:8px; padding:13px 14px 10px; position:sticky; top:0;}
+  .col-h .cn{font-family:'Lexend'; font-weight:600; font-size:14px;}
+  .col-h .ct{margin-left:auto; font-size:12.5px; font-weight:700; color:var(--color-secondary); background:#fff; border:1px solid var(--color-border); border-radius:999px; padding:1px 9px; font-variant-numeric:tabular-nums;}
+  .col-body{padding:0 10px 12px; display:flex; flex-direction:column; gap:9px; overflow-y:auto;}
+
+  .pcard{background:#fff; border:1px solid var(--color-border); border-radius:10px; padding:12px 13px; box-shadow:var(--shadow-sm); cursor:grab;}
+  .pcard:hover{box-shadow:0 4px 10px rgba(0,0,0,.07); border-color:#CBD5E1;}
+  .pcard .pn{font-family:'Lexend'; font-weight:600; font-size:13px; color:var(--color-accent);}
+  .pcard .pt{font-size:13.5px; color:var(--color-foreground); margin:3px 0 9px; line-height:1.35; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
+  .pcard .pf{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+  .pcard .au{display:inline-flex; align-items:center; gap:5px; font-size:11.5px; color:var(--color-secondary);}
+  .pcard .au .av{width:18px;height:18px;border-radius:50%; background:var(--src-bg); color:var(--src-fg); display:flex;align-items:center;justify-content:center; font-size:9px; font-weight:700; font-family:'Lexend';}
+  .pcard .age{font-size:11.5px; color:#94A3B8; margin-left:auto; font-variant-numeric:tabular-nums;}
+  .pill{display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:600; padding:2px 7px; border-radius:999px; margin-top:8px;}
+  .pill.venc{background:var(--venc-bg); color:var(--venc-fg);}
+  .pill.warn{background:var(--unc-bg); color:var(--unc-fg);}
+  .pill.ok{background:var(--ok-bg); color:var(--ok-fg);}
+
+  .footnote{margin-top:16px; font-size:12.5px; color:#64748B; line-height:1.6;}
+  .footnote code{background:var(--color-muted); padding:1px 5px; border-radius:4px; font-size:12px;}
+
+  @media(max-width:860px){ .app{grid-template-columns:1fr;} .sidebar{display:none;} .content{padding:14px;} .topbar{padding:0 14px;} .funnel{display:none;} }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="brand"><span class="dot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V10l7-5 7 5v11"/><path d="M9 21v-6h6v6"/></svg></span>O Plenário</div>
+    <nav class="nav">
+      <a href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>Início</a>
+      <a href="#" class="active"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="11" rx="1"/><rect x="17" y="4" width="4" height="7" rx="1"/></svg>Tramitação</a>
+      <a href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Proposições</a>
+      <a href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Prazos</a>
+    </nav>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <h1>Painel de Tramitação</h1>
+      <span class="spacer"></span>
+      <label class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><input placeholder="Buscar proposição…" aria-label="Buscar"></label>
+      <button class="chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M7 12h10M10 18h4"/></svg>Filtros</button>
+      <div class="toggle">
+        <button class="on"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="11" rx="1"/><rect x="17" y="4" width="4" height="7" rx="1"/></svg>Kanban</button>
+        <button><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Lista</button>
+      </div>
+      <button class="btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>Exportar</button>
+    </header>
+
+    <div class="content">
+      <div class="protobanner">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+        Protótipo — proposições <strong>ilustrativas</strong>. Etapas são exemplo; as reais vêm da <strong>config do regimento</strong> (motor §22.4 eixo C), não fixas (<code>[GAP]</code>).
+      </div>
+
+      <!-- funnel summary -->
+      <section class="funnel" aria-label="Distribuição por etapa">
+        <div class="fstage"><span class="fn">8</span><span class="fl">Protocolada</span><div class="bar" style="opacity:.5"></div></div>
+        <div class="fstage peak"><span class="fn">12</span><span class="fl">Em comissão</span><div class="bar"></div></div>
+        <div class="fstage"><span class="fn">5</span><span class="fl">Pronta p/ pauta</span><div class="bar" style="opacity:.4"></div></div>
+        <div class="fstage"><span class="fn">3</span><span class="fl">Em votação</span><div class="bar" style="opacity:.3"></div></div>
+        <div class="fstage"><span class="fn">6</span><span class="fl">Aprovada</span><div class="bar" style="opacity:.45"></div></div>
+        <div class="fstage"><span class="fn">2</span><span class="fl">Sanção/Promulg.</span><div class="bar" style="opacity:.25"></div></div>
+      </section>
+
+      <!-- board -->
+      <div class="board">
+
+        <!-- Protocolada -->
+        <div class="col">
+          <div class="col-h"><span class="cn">Protocolada</span><span class="ct num">8</span></div>
+          <div class="col-body">
+            <div class="pcard"><div class="pn">PL 051/2026</div><div class="pt">Cria o programa municipal de hortas comunitárias</div><div class="pf"><span class="au"><span class="av">FB</span>F. Brito</span><span class="age">há 2d</span></div></div>
+            <div class="pcard"><div class="pn">REQ 092/2026</div><div class="pt">Requer informações sobre a frota de transporte escolar</div><div class="pf"><span class="au"><span class="av">CM</span>C. Mendes</span><span class="age">há 1d</span></div></div>
+            <div class="pcard"><div class="pn">IND 147/2026</div><div class="pt">Indica recapeamento da Av. Central</div><div class="pf"><span class="au"><span class="av">PS</span>P. Souza</span><span class="age">há 4d</span></div></div>
+          </div>
+        </div>
+
+        <!-- Em comissão (peak) -->
+        <div class="col">
+          <div class="col-h"><span class="cn">Em comissão</span><span class="ct num">12</span></div>
+          <div class="col-body">
+            <div class="pcard"><div class="pn">PL 042/2026</div><div class="pt">Amplia a atenção básica de saúde nos bairros periféricos</div><div class="pf"><span class="au"><span class="av">JR</span>J. Ribeiro</span><span class="age">há 10d</span></div><span class="pill warn"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>parecer vence em 5d</span></div>
+            <div class="pcard"><div class="pn">PL 039/2026</div><div class="pt">Dispõe sobre acessibilidade em prédios públicos municipais</div><div class="pf"><span class="au"><span class="av">LF</span>L. Farias</span><span class="age">há 22d</span></div><span class="pill venc"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><path d="M12 8v4M12 16h.01"/></svg>parada há 22d</span></div>
+            <div class="pcard"><div class="pn">PLC 008/2026</div><div class="pt">Altera o Código de Obras do Município</div><div class="pf"><span class="au"><span class="av">SD</span>S. Dias</span><span class="age">há 6d</span></div></div>
+          </div>
+        </div>
+
+        <!-- Pronta p/ pauta -->
+        <div class="col">
+          <div class="col-h"><span class="cn">Pronta p/ pauta</span><span class="ct num">5</span></div>
+          <div class="col-body">
+            <div class="pcard"><div class="pn">PL 037/2026</div><div class="pt">Institui a Semana Municipal de Conscientização Ambiental</div><div class="pf"><span class="au"><span class="av">JR</span>J. Ribeiro</span><span class="age">há 1d</span></div><span class="pill ok"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>parecer favorável</span></div>
+            <div class="pcard"><div class="pn">MOC 021/2026</div><div class="pt">Moção de aplauso aos profissionais da educação</div><div class="pf"><span class="au"><span class="av">RA</span>R. Alves</span><span class="age">há 3d</span></div></div>
+          </div>
+        </div>
+
+        <!-- Em votação -->
+        <div class="col">
+          <div class="col-h"><span class="cn">Em votação</span><span class="ct num">3</span></div>
+          <div class="col-body">
+            <div class="pcard"><div class="pn">PL 033/2026</div><div class="pt">Autoriza convênio para coleta seletiva nos bairros</div><div class="pf"><span class="au"><span class="av">MC</span>M. Costa</span><span class="age">hoje</span></div><span class="pill warn"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>na pauta de hoje</span></div>
+          </div>
+        </div>
+
+        <!-- Aprovada -->
+        <div class="col">
+          <div class="col-h"><span class="cn">Aprovada</span><span class="ct num">6</span></div>
+          <div class="col-body">
+            <div class="pcard"><div class="pn">PL 028/2026</div><div class="pt">Cria o Conselho Municipal de Juventude</div><div class="pf"><span class="au"><span class="av">TN</span>T. Nunes</span><span class="age">há 5d</span></div><span class="pill warn"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>aguarda autógrafo</span></div>
+          </div>
+        </div>
+
+        <!-- Sanção/Promulgação -->
+        <div class="col">
+          <div class="col-h"><span class="cn">Sanção / Promulgação</span><span class="ct num">2</span></div>
+          <div class="col-body">
+            <div class="pcard"><div class="pn">PL 019/2026</div><div class="pt">Denomina logradouro público no bairro São José</div><div class="pf"><span class="au"><span class="av">PS</span>P. Souza</span><span class="age">há 8d</span></div><span class="pill warn"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>prazo do Executivo</span></div>
+          </div>
+        </div>
+
+      </div>
+
+      <p class="footnote">
+        <strong>O Plenário · painel de tramitação (11.3)</strong> — realiza <code>pages/painel-tramitacao.md</code> sobre o <code>MASTER.md</code>.
+        Read-model <code>[RM]</code> sobre a máquina de estados (§22.4 eixo C). Mover card = transição governada pelo motor (não drag livre); etapas vêm do regimento. Cards parados reusam o motor de prazo (3.8). Tokens agnósticos de stack (§22.4.4).
+      </p>
+    </div>
+  </div>
+</div>
+</body>
+</html>
