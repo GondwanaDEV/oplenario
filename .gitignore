@@ -29,3 +29,4 @@ dist/
 .playwright-mcp/
 /sessao-*.png
 /exp-*.png
+/pc-*.png

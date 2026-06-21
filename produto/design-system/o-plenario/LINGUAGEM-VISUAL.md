@@ -67,6 +67,15 @@ Referência viva: **`telas/sessao-ao-vivo.html`** (toggle no header). Contraste 
 **conteúdo é a coisa**, e o tema vira moldura. Dois casos, em inversão proposital: o **placar** da sessão
 é uma **ilha escura** (em ambos os temas) — a votação é um telão; o **documento** do Expediente é uma
 **ilha de papel** (creme em ambos, só acalmando à noite) — um ofício é papel. Em volta, a UI escurece.
+Na mesma lógica, o **brasão da câmara é objeto heráldico** — selo de cores fixas que não tematiza (assim
+o jade sempre lê no escuro).
+
+**Inversão white-label na superfície pública (decisão de linguagem):** nas telas internas (Mesa, servidor)
+**O Plenário lidera a marca** no topo. No **portal do cidadão**, a inversão: a **Câmara lidera** (brasão +
+nome + "Portal do Cidadão"), e "O Plenário" recua para o rodapé como *plataforma*. A câmara parece sua;
+o esqueleto/IA é o mesmo entre câmaras (5.1). E a **faixa de azulejo da tramitação encontra aqui seu lar**:
+é a timeline pública da proposição (5.6) **e** o ciclo de vida do pedido de e-SIC (Protocolado → Em análise
+→ Respondido → Recurso) — a mesma gramática de Bulcão, agora codificando o direito do cidadão.
 
 ## Tipografia
 
@@ -118,5 +127,12 @@ portal do cidadão.
   o balcão do servidor (HERO de POC). Herói = o **documento em papel ao vivo** com os campos do cadastro
   **sublinhados em telha** (merge legível) + **carimbo do Protocolo Geral** + **livro do Protocolo Geral**
   (numerador único, 3.23). Dual-theme, validada desktop + mobile (a11y AA+).
-- **Próximo:** portal cidadão + e-SIC/LGPD (6.1/5.10), painéis da Mesa (16.11). Cada tela puxa os tokens
-  semânticos; UX/charts/consistência via `ui-ux-pro-max`.
+- **3ª tela aplicada:** `telas/portal-cidadao.html` — Portal do Cidadão (6.1 e-SIC amplo + 5.10 titular LGPD
+  + 5.4/5.6 demo-power), a **porta da rua** white-label (a Câmara lidera; sem cadastro para consultar).
+  Herói = a proposição em **tramitação viva** (faixa de azulejo, 5.6) + **resumo em linguagem simples** com
+  camada de confiança da IA (rótulo + revisão humana + reportar erro). Dois **balcões de direito**: e-SIC
+  **amplo** (qualquer info pública — sem seletor de tema; **anel do prazo legal** LAI 20+10 + recurso +
+  azulejo do ciclo do pedido) e **Meus dados (LGPD)**, balcão separado com Encarregado/DPO público. Crítica
+  adversarial multi-lente (a11y/anti-IA/jurídico/consistência) incorporada. Dual-theme, desktop + mobile, AA+.
+- **Próximo:** painéis da Mesa (16.11). Cada tela puxa os tokens semânticos; UX/charts/consistência via
+  `ui-ux-pro-max`; microcopy crítico em e-SIC/LGPD/cidadão coberto via `frontend-design`.
