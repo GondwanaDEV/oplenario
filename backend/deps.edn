@@ -14,6 +14,8 @@
         com.taoensso/carmine                    {:mvn/version "3.4.1"}} ; client Redis-protocol (Valkey)
  :aliases
  {:dev  {:extra-paths ["dev" "test"]}
-  :test {:extra-paths ["test"]
+  ;; os dirs de suite SAO raizes de classpath (ns oplenario.* sob test/unit, nao test/unit.oplenario.*);
+  ;; alinhado ao tests.edn p/ o REPL carregar tambem, nao so o kaocha (que adiciona test-paths dinamicamente).
+  :test {:extra-paths ["test/unit" "test/integration" "test/e2e"]
          :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}}
          :main-opts   ["-m" "kaocha.runner"]}}}

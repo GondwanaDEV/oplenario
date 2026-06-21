@@ -40,7 +40,7 @@ canônico de handoff entre sessões.
 tenancy, modelo de serviços, ingestão de legado), §22.3 (contrato core ↔ IA), §22.4 (modelo de
 dados legislativo), §22.5 (auth), §22.6 (sessão plenária + áudio + real-time), **§22.7 Eixos A, C, B
 e o Eixo de runtime (vocabulário da DSL do motor de compliance + o stress-test que o validou + o
-schema das tabelas de template/regra + o comportamento temporal de runtime + a geração de artefatos de remessa (§22.7.8) — consolidados até v1.35)**.
+schema das tabelas de template/regra + o comportamento temporal de runtime + a geração de artefatos de remessa (§22.7.8) — consolidados até v1.35; **§22.7.6 averbada na v1.36** = as 5 tabelas do catálogo vivem no schema `motor`)**.
 Detalhe do que cada uma decidiu em `docs/00-estado-e-roadmap.md`.
 
 **§22.7 — Motor de regras de compliance** (materialização do Invariante 4) é subseção própria
@@ -62,7 +62,9 @@ Eixo A) segue em §22.7.4.
 
 ## 3. ⚠️ Estado do cursor + primeira ação
 
-**Estado (v1.35, 21/06/2026):** **Eixo de geração de artefatos de envio ao TCE consolidado (§22.7.8).**
+**Estado (v1.36, 21/06/2026):** **`motor-dsl-clj/` dobrado em `backend/src/oplenario/motor/` + §22.7.6 averbada** —
+as 5 tabelas do catálogo do Eixo B vivem no schema `motor` (não `compliance`; FK+JOIN, §22.10). Antes:
+§22.7.8 (geração de artefatos ao TCE) consolidado (v1.35).
 A trilha de produto/comercial está **completa** (pasta `produto/`). §22.7 tem agora **Eixos A, C, B, o
 Eixo de runtime e a geração de artefatos** no documento-mestre. **Decisão central (2b):** a spec de
 layout da remessa é **descritor declarativo próprio** (dado, reusa o registry, renderizador próprio) —
@@ -86,24 +88,28 @@ rejeitado pelo envelope (S4); 5 regras mal-tipadas barram no save (dec. 2); arit
 do quórum); dois sabores de obrigação; re-stamp S3; auditoria append-only. É protótipo de validação —
 **não** decisão de stack (deferida, §22.4.4) — e não inventou conteúdo regulatório (`[GAP]` segue GAP).
 
-**Feito nesta sessão (implementação §7, NÃO altera o doc-mestre):** o **módulo `compliance` foi
-materializado** no esqueleto `backend/` — silhueta Nubank (**26 stubs `.clj`**, espelhando `legislativo/`:
-schema/models/adapters/db × `obrigacao`·`avaliacao`·`remessa` + ports `SerializadorRemessa`/`TransporteRemessa`/`fontes`
-+ `gerador_remessa` + events/diplomat/logic/controllers/relacoes/components) + **migration `…0005`** com as
-3 tabelas tenant (`prazo_dominio_ativo`, `compliance_avaliacao`, `remessa_gerada`) + **4 índices** (sweep, 2×
-auditoria, costura) + **tripé de teste-stub**. **Validado por ecc** (architect + database-reviewer). Precisão de
-impl. registrada: `remessa_gerada` é **imutável por versão** mas o `estado` de submissão **muta** (não é
-append-only puro como `compliance_avaliacao`). Layout SIM segue `[GAP]`. **Catálogo/registry (template/regra,
-domínio) + binding-por-tenant NÃO entram aqui** — vêm com a dobra do motor (§22.7.6).
+**Feito nesta sessão (implementação §7 + averbação §22.7.6):** o **`motor-dsl-clj/` foi dobrado** em
+`backend/src/oplenario/motor/` — núcleo DSL realocado **verbatim** (`tipos·nucleo·catalogo·verificador·
+runtime·templates`; suíte **12 testes/63 asserções verde** no novo local, clj-kondo limpo) + fachada
+`api.clj` (`verificar-fonte` **real**; `avaliar`/resolução db-backed = **seams documentados, não expostos** —
+o resolvedor de fatos de produção ainda não está fiado) + persistência `db/` **stub** (deferida §22.4.4) +
+**migration `…0006-motor-catalogo`** (schema `motor` + as **5 tabelas estáticas do Eixo B** §22.7.6 + índices
+UNIQUE-`COALESCE` p/ a armadilha `NULL≠NULL`). **Validado por ecc** (architect + clojure-reviewer + database-reviewer;
+CRÍTICOS de UNIQUE+NULL aplicados). **Averbado no doc-mestre (v1.36):** as 5 tabelas vivem no schema **`motor`**
+(não `compliance`) — razão: definição⋈binding têm FK real + resolução conjunta; §22.10 proíbe cross-schema JOIN.
+Seed `motor-dsl-clj/` segue como **referência superseded** (não deletado; candidato a remoção). *(Sessão anterior,
+`375e4ef`: módulo `compliance` materializado — migration `…0005`, runtime §22.7.7/8.)*
 
-**Primeira ação recomendada agora:** **dobrar o `motor-dsl-clj/` → `backend/src/oplenario/motor/`** — o passo
-entrelaçado: traz o catálogo/registry (template/regra) + o binding-por-tenant (§22.7.6) + a DSL que
-`compliance/relacoes` e `gerador_remessa` referenciam; recomendado em **sessão nova** (com `/compact` antes).
-**Alternativa:** abrir o **+1 eixo restante** — expansão a outros TCEs (S2, `dominio` em camadas; content-dependente,
-precisa docs reais do TCE-CE do Emilio). Abrir uma; o Emilio redireciona se preferir outra.
+**Primeira ação recomendada agora:** abrir o **+1 eixo de arquitetura restante** — **expansão a outros TCEs**
+(S2, `dominio` em camadas; **content-dependente**: precisa dos docs reais do TCE-CE do Emilio — sem eles é `[GAP]`).
+**Alternativa (implementação, deferida ao chat de stack §22.4.4):** fiar a **persistência real** do `motor/db/` +
+a **orquestração de runtime** que o `compliance` opera — chamar `motor/avaliar` com **resolvedor de fatos injetado**
+(funções de relação por contexto dono, §22.5.3 disc.5; não o `:estado` em-memória do protótipo) e persistir em
+`compliance.prazo_dominio_ativo`/`compliance_avaliacao`. Abrir uma; o Emilio redireciona se preferir outra.
 
 - **Trilhas concluídas:** produto/comercial (completa, `produto/`); arquitetura §22.7 **Eixos A, C, B,
-  Eixo de runtime e geração de artefatos (§22.7.8)**.
+  Eixo de runtime e geração de artefatos (§22.7.8)**; **esqueleto `backend/` com `compliance` materializado
+  e `motor` dobrado** (catálogo §22.7.6 no schema `motor`).
 - **+1 eixo** de arquitetura restante: **expansão a outros TCEs** (S2 — `dominio` em camadas;
   content-dependente, precisa docs reais do TCE). **Geração de artefatos de envio ao TCE fechada
   (§22.7.8, v1.35)** — forma; o layout físico do SIM segue `[GAP]` de conteúdo regulatório. LLM

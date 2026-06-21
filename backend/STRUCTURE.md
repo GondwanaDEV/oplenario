@@ -6,7 +6,10 @@ Esqueleto do padrão **ports & adapters (versão Nubank)** consolidado em **§22
   Camadas: `schema/`(externo) `models/`(interno) `adapters/`(gate) `db/`(funções) `port/`(protocolos)
   `events/` + `logic` `controllers` `diplomat/` `relacoes` `components`.
 - `src/oplenario/kernel/` — compartilhado puro (não importa módulo).
-- `src/oplenario/motor/` — o motor de regras (§22.7); seed em `../motor-dsl-clj/` (dobra pra cá depois).
+- `src/oplenario/motor/` — o motor de regras (§22.7), **biblioteca compartilhada** (kernel/motor nunca
+  importam módulo). **Dobrado** de `../motor-dsl-clj/`: núcleo DSL real (`tipos/nucleo/catalogo/verificador/
+  runtime/templates`) + fachada `api` + persistência stub `db/` (deferida §22.4.4). Schema `motor` na
+  migration `…0006` (5 tabelas estáticas do Eixo B §22.7.6). Detalhe em `src/oplenario/motor/README.md`.
 - `src/oplenario/{main,sistema,http}.clj` — host/composição.
 
 Comunicação inter-módulo: **só HTTP (port→http_client→http_server) ou eventos (producer/consumer)**.
@@ -34,3 +37,4 @@ Comunicação inter-módulo: **só HTTP (port→http_client→http_server) ou ev
 - Dockerfile de produção: uberjar + `eclipse-temurin:21-jre`.
 - `sistema.clj`/`legislativo/components.clj`: fiação `using` mínima como exemplo-template.
 - `compliance` (§22.7): avaliar **CHECK constraints** em `compliance_avaliacao.veredito`/`origem_avaliacao` (hoje texto+comentário, padrão do projeto — valor é gerado pelo motor em código, não input). Hardening adiado: a tabela é a prova do Invariante 10 (sem UPDATE/DELETE p/ corrigir dado corrompido). Decidir junto da dobra do `motor-dsl-clj`.
+- `motor` (§22.7, **dobrado**): (a) **persistência real** do `db/*.clj` sobre as 5 tabelas do catálogo — stub hoje, deferida ao chat de stack (§22.4.4: não materializar o repositório antes); (b) **orquestração de runtime** que o `compliance` opera — o `runtime` em-memória (`atom`) é referência; produção persiste em `compliance.prazo_dominio_ativo`/`compliance_avaliacao` chamando `motor/avaliar` com **resolvedor de fatos injetado** (funções de relação via contexto dono, §22.5.3 disc.5), não o `:estado` em-memória; (c) popular `[GAP]` de `calendario_feriado`/`prazo_dominio_vigente` (conteúdo regulatório real, com o especialista em regimento). **Reconciliação registrada:** as 5 tabelas do Eixo B vão ao schema `motor` (não `compliance` como dizia `docs/06` pré-§22.10) — razão: resolução junta definição+binding, sem cross-schema JOIN (§22.10). **Seed `../motor-dsl-clj/` superseded** — candidato a remoção quando a dobra buildar verde sob kaocha.
