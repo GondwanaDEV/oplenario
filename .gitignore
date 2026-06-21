@@ -24,3 +24,7 @@ dist/
 .idea/
 .vscode/
 *.iml
+
+# artefatos de screenshot/preview (design)
+.playwright-mcp/
+/sessao-*.png

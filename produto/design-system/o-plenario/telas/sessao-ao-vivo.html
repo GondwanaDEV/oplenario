@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Sessão ao vivo · Mesa de condução</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Tela "Sessão ao vivo — Mesa de condução"
+     Linguagem: República Luminosa (Cívico Tropical) — DOIS MODOS:
+       · claro  = concreto luminoso de Brasília sob luz tropical
+       · escuro = a noite de Brasília (mesma paleta de azulejo,
+                  jade-carvão de fundo; jade/telha/cobalto/amarelo
+                  brilham no escuro)
+     Superfície de OPERAÇÃO — a cabine de quem preside a sessão.
+     A ousadia mora na faixa de azulejo da tramitação e no
+     hemiciclo do quórum (ambos informam, não decoram).
+     Features: 4.2 / 4.3 / 4.4 / 4.13 / 4.14 / 4.16 / 4.17.
+     ============================================================ */
+
+  :root {
+    /* ---- paleta-marca FIXA (identidade do azulejo) ---- */
+    --jade:        #0C5340;
+    --jade-fundo:  #0A4334;
+    --jade-claro:  #16785C;
+    --telha:       #D9542B;
+    --telha-fundo: #B9421F;
+    --cobalto:     #1E5FA8;
+    --cobalto-fundo:#184E8A;
+    --amarelo:     #E8B23A;
+
+    /* ---- tipografia ---- */
+    --display: 'Sora', system-ui, sans-serif;
+    --corpo:   'Hanken Grotesk', system-ui, sans-serif;
+    --mono:    'IBM Plex Mono', ui-monospace, monospace;
+    --t-12: 0.75rem; --t-13: 0.8125rem; --t-16: 1rem;
+    --t-21: 1.3125rem; --t-28: 1.75rem; --t-40: 2.5rem;
+
+    --raio: 14px; --raio-sm: 9px; --max: 1360px;
+    --sombra: 0 1px 0 rgba(25,33,28,.04), 0 18px 40px -28px rgba(12,83,64,.45);
+  }
+
+  /* ====================== TEMA CLARO ====================== */
+  :root, [data-tema="claro"] {
+    --bg:        #F1ECDD;
+    --bg-luz:    radial-gradient(120% 80% at 88% -12%, rgba(232,178,58,.14), transparent 55%),
+                 radial-gradient(90% 70% at -5% 0%, rgba(30,95,168,.07), transparent 50%);
+    --surface:   #FBF8F0;
+    --surface-2: #FFFFFF;
+    --linha:     #E0D7BF;
+    --texto:     #19211C;
+    --texto-2:   #4C574F;
+    --marca:     #0C5340;
+    --acao:      #0C5340;
+    --acao-hover:#0A4334;
+    --acao-texto:#FFFFFF;
+    --acento-texto: #B9421F;     /* telha legível como texto */
+    --foco:      #1E5FA8;
+    --topo-bg:   rgba(241,236,221,.9);
+    --palco-bg:  #0A4334;        /* o palco é uma ilha escura no claro */
+    --palco-texto:   #F1ECDD;
+    --palco-texto-2: rgba(241,236,221,.82);
+    --palco-linha:   rgba(241,236,221,.14);
+    --palco-inset:   rgba(241,236,221,.06);
+  }
+
+  /* ====================== TEMA ESCURO ===================== */
+  [data-tema="escuro"] {
+    --bg:        #0E1A15;
+    --bg-luz:    radial-gradient(120% 80% at 88% -12%, rgba(232,178,58,.08), transparent 55%),
+                 radial-gradient(90% 70% at -5% 0%, rgba(24,158,118,.10), transparent 50%);
+    --surface:   #16271F;
+    --surface-2: #1E332A;
+    --linha:     #2C4438;
+    --texto:     #ECE7D6;
+    --texto-2:   #9FB0A4;
+    --marca:     #43BD93;
+    --acao:      #18A074;
+    --acao-hover:#1FB585;
+    --acao-texto:#06150F;
+    --acento-texto: #F0794B;
+    --foco:      #6AA6DE;
+    --topo-bg:   rgba(14,26,21,.88);
+    --palco-bg:  #0B3A2B;        /* palco = painel jade saturado, brilha no escuro */
+    --palco-texto:   #ECE7D6;
+    --palco-texto-2: rgba(236,231,214,.82);
+    --palco-linha:   rgba(236,231,214,.14);
+    --palco-inset:   rgba(236,231,214,.06);
+    --sombra: 0 1px 0 rgba(0,0,0,.2), 0 20px 44px -28px rgba(0,0,0,.6);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-tema="claro"]) {
+      --bg:#0E1A15; --bg-luz: radial-gradient(120% 80% at 88% -12%, rgba(232,178,58,.08), transparent 55%), radial-gradient(90% 70% at -5% 0%, rgba(24,158,118,.10), transparent 50%);
+      --surface:#16271F; --surface-2:#1E332A; --linha:#2C4438;
+      --texto:#ECE7D6; --texto-2:#9FB0A4; --marca:#43BD93;
+      --acao:#18A074; --acao-hover:#1FB585; --acao-texto:#06150F;
+      --acento-texto:#F0794B; --foco:#6AA6DE; --topo-bg:rgba(14,26,21,.88);
+      --palco-bg:#0B3A2B; --palco-texto:#ECE7D6; --palco-texto-2:rgba(236,231,214,.82);
+      --palco-linha:rgba(236,231,214,.14); --palco-inset:rgba(236,231,214,.06);
+    }
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    margin: 0;
+    background-color: var(--bg);
+    background-image: var(--bg-luz);
+    background-attachment: fixed;
+    color: var(--texto);
+    font-family: var(--corpo);
+    font-size: var(--t-16);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    transition: background-color .25s ease, color .25s ease;
+  }
+
+  .envelope { max-width: var(--max); margin: 0 auto; padding: 0 clamp(1rem, 3vw, 2rem); }
+
+  a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
+    outline: 3px solid var(--foco); outline-offset: 2px; border-radius: 5px;
+  }
+
+  .eyebrow {
+    font-family: var(--mono); font-size: var(--t-13); font-weight: 500;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--acento-texto); margin: 0;
+  }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  /* ============== 1 · BARRA INSTITUCIONAL ============== */
+  .topo {
+    position: sticky; top: 0; z-index: 30;
+    background: var(--topo-bg);
+    backdrop-filter: saturate(140%) blur(10px);
+    border-bottom: 1px solid var(--linha);
+  }
+  .topo-grade { display: flex; align-items: center; gap: 1rem 1.4rem; padding: 0.7rem 0; flex-wrap: wrap; }
+  .marca { display: flex; align-items: center; gap: 0.65rem; }
+  .marca-simbolo { width: 34px; height: 34px; flex: 0 0 auto; display: block; }
+  .marca-nome { font-family: var(--display); font-weight: 800; font-size: var(--t-21); letter-spacing: -0.015em; color: var(--marca); line-height: 1; margin: 0; }
+  .marca-orgao { font-size: var(--t-13); color: var(--texto-2); margin: 2px 0 0; line-height: 1; }
+  .topo-sep { width: 1px; align-self: stretch; background: var(--linha); margin: 2px 0; }
+
+  .ao-vivo {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    font-family: var(--mono); font-size: var(--t-13); font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--acento-texto);
+    padding: 0.32rem 0.7rem; border: 1px solid rgba(217,84,43,.35); background: rgba(217,84,43,.1); border-radius: 999px;
+  }
+  .ao-vivo .pulso { width: 9px; height: 9px; border-radius: 50%; background: var(--telha); flex: 0 0 auto; animation: pulso 1.8s ease-out infinite; }
+  @keyframes pulso { 0% { box-shadow: 0 0 0 0 rgba(217,84,43,.5);} 70% { box-shadow: 0 0 0 7px rgba(217,84,43,0);} 100% { box-shadow: 0 0 0 0 rgba(217,84,43,0);} }
+
+  .sessao-meta { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+  .sessao-meta .tipo { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); }
+  .sessao-meta .quando { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); }
+
+  .topo-dir { margin-left: auto; display: flex; align-items: center; gap: 1rem; }
+  .relogio { font-family: var(--mono); font-size: var(--t-21); font-weight: 600; color: var(--marca); letter-spacing: -0.01em; }
+  .relogio .rotulo { display: block; font-size: var(--t-12); font-weight: 500; color: var(--texto-2); letter-spacing: .04em; }
+  .presidente { display: flex; align-items: center; gap: 0.55rem; }
+  .avatar {
+    width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; flex: 0 0 auto;
+    font-family: var(--display); font-weight: 700; font-size: var(--t-13); color: #fff; background: var(--jade);
+  }
+  .presidente .quem { line-height: 1.15; }
+  .presidente .quem b { font-weight: 600; font-size: var(--t-13); color: var(--texto); display: block; }
+  .presidente .quem span { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+
+  /* toggle de tema */
+  .tema-btn {
+    display: inline-flex; align-items: center; gap: 0.45rem;
+    font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2);
+    background: var(--surface); border: 1px solid var(--linha); border-radius: 999px;
+    padding: 0.4rem 0.7rem; cursor: pointer; min-height: 40px;
+    transition: border-color .12s ease, color .12s ease;
+  }
+  .tema-btn:hover { border-color: var(--foco); color: var(--texto); }
+  .tema-btn svg { color: var(--marca); }
+  .tema-btn .lua { display: none; }
+  [data-tema="escuro"] .tema-btn .sol { display: none; }
+  [data-tema="escuro"] .tema-btn .lua { display: inline; }
+
+  /* ============== 2 · FASE DA SESSÃO ============== */
+  .fases { border-bottom: 1px solid var(--linha); background: var(--surface); }
+  .fases-grade { display: flex; align-items: stretch; flex-wrap: wrap; padding: 0; list-style: none; margin: 0; }
+  .fase { flex: 1 1 0; min-width: 140px; display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 0.4rem 0.7rem 0; font-size: var(--t-13); color: var(--texto-2); }
+  .fase .ord { font-family: var(--mono); font-size: var(--t-12); width: 22px; height: 22px; flex: 0 0 auto; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid var(--linha); color: var(--texto-2); }
+  .fase.feita .ord { background: var(--acao); border-color: var(--acao); color: var(--acao-texto); }
+  .fase.atual { color: var(--texto); font-weight: 600; }
+  .fase.atual .ord { border-color: var(--telha); color: var(--acento-texto); background: rgba(217,84,43,.12); }
+  .fase .nome { font-family: var(--display); font-weight: 600; letter-spacing: -0.01em; }
+  .fase .seta { margin-left: auto; color: var(--linha); }
+
+  /* ============== 3 · LAYOUT DA CABINE ============== */
+  .cabine { display: grid; grid-template-columns: minmax(0,1fr) 372px; gap: clamp(1rem, 2.4vw, 1.8rem); padding: clamp(1.2rem, 3vw, 2rem) 0 7rem; align-items: start; }
+  .rail { display: grid; gap: 1.1rem; position: sticky; top: 84px; }
+
+  .bloco { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); }
+  .bloco-cabeca { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0.9rem 1.1rem; border-bottom: 1px solid var(--linha); }
+  .bloco-cabeca h2 { font-family: var(--display); font-weight: 600; font-size: var(--t-16); letter-spacing: -0.01em; color: var(--texto); margin: 0; }
+  .bloco-corpo { padding: 1.1rem; }
+
+  /* ---- PALCO: a matéria em pauta ---- */
+  .palco { position: relative; overflow: hidden; }
+  .palco::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 5px; background: linear-gradient(90deg, var(--jade) 0 20%, var(--cobalto) 20% 40%, var(--telha) 40% 60%, var(--amarelo) 60% 80%, var(--jade-claro) 80% 100%); }
+  .palco-cabeca { padding: 1.4rem 1.4rem 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+  .item-od { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); }
+  .selo-estado { display: inline-flex; align-items: center; gap: 0.45rem; font-family: var(--mono); font-size: var(--t-13); font-weight: 600; text-transform: uppercase; letter-spacing: .07em; padding: 0.3rem 0.7rem; border-radius: 999px; }
+  .selo-votacao { color: #fff; background: var(--telha-fundo); }
+  .selo-votacao .glifo { width: 8px; height: 8px; border-radius: 50%; background: var(--amarelo); }
+
+  .palco h1 { font-family: var(--display); font-weight: 700; font-size: clamp(var(--t-21), 3vw, var(--t-28)); line-height: 1.18; letter-spacing: -0.02em; color: var(--texto); margin: 0.9rem 1.4rem 0.5rem; text-wrap: balance; }
+  .palco-autoria { margin: 0 1.4rem 1.2rem; color: var(--texto-2); font-size: var(--t-13); }
+  .palco-autoria b { color: var(--texto); font-weight: 600; }
+
+  /* faixa de azulejo da tramitação (assinatura) — mais respiro */
+  .tramitacao { margin: 0 1.4rem 1.4rem; padding: 1.1rem 1.2rem 0.4rem; background: var(--bg); border: 1px solid var(--linha); border-radius: var(--raio-sm); }
+  .tramitacao .rotulo-faixa { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--texto-2); margin: 0 0 0.7rem; }
+  .azulejo-faixa { width: 100%; max-width: 560px; height: auto; display: block; }
+  .azulejo-faixa text { fill: var(--texto-2); }
+  .azulejo-faixa text.ativo { fill: var(--acento-texto); font-weight: 600; }
+  .azulejo-faixa text.pendente { fill: var(--texto-2); opacity: .65; }
+
+  /* ---- placar de votação ao vivo (o herói) ---- */
+  .votacao { border-top: 1px solid var(--linha); background: var(--palco-bg); color: var(--palco-texto); padding: 1.3rem 1.4rem 1.5rem; }
+  .votacao .eyebrow { color: var(--amarelo); }
+  .placar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.8rem; margin: 0.9rem 0 0.4rem; }
+  .voto-col { background: var(--palco-inset); border: 1px solid var(--palco-linha); border-radius: var(--raio-sm); padding: 0.85rem 0.9rem; }
+  .voto-col .rotulo { display: flex; align-items: center; gap: 0.45rem; font-family: var(--mono); font-size: var(--t-13); text-transform: uppercase; letter-spacing: .06em; color: var(--palco-texto-2); margin: 0 0 0.35rem; }
+  .voto-col .ponto { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
+  .voto-col .n { font-family: var(--display); font-weight: 800; font-size: var(--t-40); line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; margin: 0; }
+  .voto-sim .n { color: #8FE3C6; }
+  .voto-nao .n { color: #F2A488; }
+  .voto-abs .n { color: var(--amarelo); }
+
+  .barra-votos { display: flex; height: 12px; border-radius: 999px; overflow: hidden; margin: 0.9rem 0 0.7rem; background: var(--palco-inset); }
+  .barra-votos span { height: 100%; }
+  .seg-sim { background: var(--jade-claro); }
+  .seg-nao { background: var(--telha); }
+  .seg-abs { background: var(--amarelo); }
+  .seg-falta { background: var(--palco-linha); }
+
+  .maioria { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; flex-wrap: wrap; font-size: var(--t-13); color: var(--palco-texto-2); }
+  .maioria .alvo { font-family: var(--mono); }
+  .maioria .alvo b { color: var(--amarelo); font-weight: 600; }
+  .maioria .faltam { font-family: var(--mono); color: #fff; background: rgba(217,84,43,.32); border: 1px solid rgba(217,84,43,.5); padding: 0.25rem 0.6rem; border-radius: 999px; }
+
+  /* ---- votos nominais ao vivo ---- */
+  .nominal { padding: 1.1rem 1.4rem 1.3rem; border-top: 1px solid var(--linha); }
+  .nominal h3 { font-family: var(--display); font-weight: 600; font-size: var(--t-13); text-transform: uppercase; letter-spacing: .08em; color: var(--texto-2); margin: 0 0 0.8rem; }
+  .feed { display: grid; gap: 0.5rem; list-style: none; margin: 0; padding: 0; }
+  .feed li { display: flex; align-items: center; gap: 0.7rem; padding: 0.5rem 0.6rem; border: 1px solid var(--linha); border-radius: var(--raio-sm); background: var(--surface-2); }
+  .feed .av { width: 30px; height: 30px; font-size: var(--t-12); background: var(--cobalto); }
+  .feed .quem { line-height: 1.2; flex: 1 1 auto; min-width: 0; }
+  .feed .quem b { font-weight: 600; font-size: var(--t-13); color: var(--texto); }
+  .feed .quem span { font-size: var(--t-12); color: var(--texto-2); }
+  .feed .hora { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .chip-voto { display: inline-flex; align-items: center; gap: 0.35rem; font-family: var(--mono); font-size: var(--t-12); font-weight: 600; padding: 0.22rem 0.55rem; border-radius: 999px; }
+  .chip-voto .g { width: 8px; height: 8px; border-radius: 50%; }
+  .voto-pill-sim { color: var(--marca); background: rgba(12,83,64,.12); border: 1px solid rgba(12,83,64,.28); }
+  .voto-pill-sim .g { background: var(--jade-claro); }
+  .voto-pill-nao { color: var(--acento-texto); background: rgba(217,84,43,.12); border: 1px solid rgba(217,84,43,.3); }
+  .voto-pill-nao .g { background: var(--telha); }
+  .voto-pill-abs { color: var(--cobalto); background: rgba(30,95,168,.12); border: 1px solid rgba(30,95,168,.3); }
+  [data-tema="escuro"] .voto-pill-abs { color: var(--foco); }
+  .voto-pill-abs .g { background: var(--cobalto); }
+
+  /* ============== 4 · RAIL ============== */
+  .quorum-num { display: flex; align-items: baseline; gap: 0.5rem; }
+  .quorum-num b { font-family: var(--display); font-weight: 800; font-size: var(--t-40); letter-spacing: -0.02em; color: var(--marca); line-height: 1; font-variant-numeric: tabular-nums; }
+  .quorum-num span { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); }
+  .quorum svg.hemi { width: 100%; height: auto; display: block; margin: 0.6rem 0 0.2rem; }
+  .hemi .presente { fill: var(--acao); }
+  .hemi .ausente { fill: var(--linha); }
+  .quorum-legenda { display: flex; gap: 1rem; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin-top: 0.3rem; }
+  .quorum-legenda i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 0.35rem; vertical-align: -1px; }
+  .ok-quorum { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); color: var(--marca); }
+  .ok-quorum svg { color: var(--marca); }
+
+  .tribuna-quem { display: flex; align-items: center; gap: 0.7rem; }
+  .tribuna-quem .av { width: 40px; height: 40px; background: var(--jade); }
+  .tribuna-quem b { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); display: block; line-height: 1.2; }
+  .tribuna-quem span { font-size: var(--t-12); color: var(--texto-2); }
+  .tribuna-tempo { display: flex; align-items: baseline; justify-content: space-between; margin: 1rem 0 0.4rem; }
+  .tribuna-tempo .rotulo { font-family: var(--mono); font-size: var(--t-12); text-transform: uppercase; letter-spacing: .08em; color: var(--texto-2); }
+  .tribuna-tempo .timer { font-family: var(--mono); font-weight: 600; font-size: var(--t-28); color: var(--marca); letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+  .tribuna-tempo .timer.alerta { color: var(--acento-texto); }
+  .barra { height: 8px; border-radius: 999px; background: var(--linha); overflow: hidden; }
+  .barra-preenchida { height: 100%; width: 38%; border-radius: 999px; background: linear-gradient(90deg, var(--jade-claro) 0%, var(--amarelo) 100%); }
+  .inscritos { margin: 0.9rem 0 0; padding: 0.8rem 0 0; border-top: 1px dashed var(--linha); list-style: none; display: grid; gap: 0.55rem; }
+  .inscritos li { display: flex; align-items: center; gap: 0.6rem; font-size: var(--t-13); color: var(--texto-2); }
+  .inscritos .ord { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); width: 1.4ch; }
+  .inscritos b { color: var(--texto); font-weight: 600; }
+
+  .od { list-style: none; margin: 0; padding: 0; }
+  .od li { display: flex; align-items: flex-start; gap: 0.65rem; padding: 0.7rem 0; border-bottom: 1px solid var(--linha); }
+  .od li:last-child { border-bottom: 0; }
+  .od .marca-od { flex: 0 0 auto; width: 18px; height: 18px; margin-top: 2px; }
+  .od .txt { flex: 1 1 auto; min-width: 0; line-height: 1.3; }
+  .od .txt .ref { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .od .txt .tit { font-size: var(--t-13); color: var(--texto); display: block; }
+  .od li.atual { background: rgba(217,84,43,.08); margin: 0 -1.1rem; padding: 0.7rem 1.1rem; border-radius: var(--raio-sm); border-bottom: 1px solid var(--linha); }
+  .od li.atual .tit { font-weight: 600; }
+  .od .est { font-family: var(--mono); font-size: var(--t-12); white-space: nowrap; padding-top: 1px; }
+  .est-feito { color: var(--marca); }
+  .est-agora { color: var(--acento-texto); font-weight: 600; }
+  .est-fila { color: var(--texto-2); }
+
+  .incidentes { display: grid; grid-template-columns: 1fr 1fr; gap: 0.55rem; }
+  .inc-btn { font-family: var(--corpo); font-weight: 500; font-size: var(--t-13); text-align: left; line-height: 1.25; background: var(--surface-2); color: var(--texto); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.6rem 0.7rem; cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 0.5rem; transition: border-color .12s ease, background-color .12s ease, transform .12s ease; }
+  .inc-btn:hover { border-color: var(--foco); transform: translateY(-1px); }
+  .inc-btn svg { flex: 0 0 auto; color: var(--cobalto); }
+  [data-tema="escuro"] .inc-btn svg { color: var(--foco); }
+
+  /* ============== 5 · BARRA DE COMANDO DA MESA ============== */
+  .comando { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--surface); border-top: 1px solid var(--linha); box-shadow: 0 -18px 44px -30px rgba(12,83,64,.55); }
+  .comando-grade { display: flex; align-items: center; gap: 0.7rem 1rem; padding: 0.7rem 0; flex-wrap: wrap; }
+  .comando-ctx { color: var(--texto); font-size: var(--t-13); line-height: 1.25; }
+  .comando-ctx b { font-family: var(--display); font-weight: 600; color: var(--texto); display: block; }
+  .comando-ctx span { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .comando-acoes { margin-left: auto; display: flex; gap: 0.6rem; flex-wrap: wrap; }
+
+  .dica-mesa { width: 100%; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); padding-bottom: 0.55rem; display: flex; align-items: center; gap: 0.45rem; }
+  .dica-mesa svg { color: var(--acento-texto); flex: 0 0 auto; }
+
+  .btn { font-family: var(--corpo); font-weight: 600; font-size: var(--t-16); border-radius: var(--raio-sm); border: 1px solid transparent; padding: 0.7rem 1.15rem; cursor: pointer; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; line-height: 1.2; text-decoration: none; transition: transform .12s ease, background-color .12s ease, box-shadow .12s ease, border-color .12s ease; }
+  .btn:hover { transform: translateY(-1px); }
+  .btn svg { flex: 0 0 auto; }
+  .btn-encerrar { background: var(--telha); color: #fff; box-shadow: 0 10px 22px -14px rgba(217,84,43,.9); }
+  .btn-encerrar:hover { background: var(--telha-fundo); }
+  .btn-contorno { background: transparent; color: var(--texto); border-color: var(--linha); }
+  .btn-contorno:hover { background: var(--surface-2); border-color: var(--texto-2); }
+  .btn-fantasma { background: transparent; color: var(--texto-2); border-color: transparent; }
+  .btn-fantasma:hover { background: var(--surface-2); color: var(--texto); }
+  .btn[aria-disabled="true"] { opacity: .42; cursor: not-allowed; transform: none; box-shadow: none; }
+  .so-mobile { display: none; }
+
+  /* ============== RESPONSIVO ============== */
+  @media (max-width: 1040px) {
+    .cabine { grid-template-columns: 1fr; }
+    .rail { position: static; grid-template-columns: 1fr 1fr; }
+    .rail .bloco.larga { grid-column: 1 / -1; }
+  }
+  @media (max-width: 720px) {
+    .rail { grid-template-columns: 1fr; }
+    .topo-dir { margin-left: 0; width: 100%; justify-content: space-between; flex-wrap: wrap; }
+    .fase { min-width: 50%; }
+    .placar { grid-template-columns: 1fr; }
+    .voto-col { display: flex; align-items: center; justify-content: space-between; }
+    .voto-col .rotulo { margin: 0; }
+    /* refino 1: barra de comando colapsa para a ação primária */
+    .dica-mesa, .comando-ctx { display: none; }
+    .comando-acoes { width: 100%; gap: 0.5rem; }
+    .btn-encerrar { order: -1; flex: 1 0 100%; }
+    .comando-acoes .btn-fantasma, .comando-acoes .btn-contorno { flex: 1 1 auto; font-size: var(--t-13); padding: 0.6rem 0.7rem; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+    .btn:hover, .inc-btn:hover { transform: none; }
+    .ao-vivo .pulso { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+  <!-- ============== 1 · BARRA INSTITUCIONAL ============== -->
+  <header class="topo">
+    <div class="envelope topo-grade">
+      <div class="marca">
+        <svg class="marca-simbolo" viewBox="0 0 40 40" role="img" aria-label="O Plenário">
+          <circle cx="20" cy="20" r="19" fill="#FBF8F0" stroke="#E0D7BF"/>
+          <path d="M7 27 A13 13 0 0 1 33 27" fill="none" stroke="#0C5340" stroke-width="2.4" stroke-linecap="round"/>
+          <path d="M10 27 A10 10 0 0 1 30 27" fill="none" stroke="#1E5FA8" stroke-width="2.4" stroke-linecap="round"/>
+          <path d="M13.5 27 A6.5 6.5 0 0 1 26.5 27" fill="none" stroke="#D9542B" stroke-width="2.4" stroke-linecap="round"/>
+          <rect x="18.4" y="9.5" width="3.2" height="6" rx="1.2" fill="#E8B23A"/>
+        </svg>
+        <div>
+          <p class="marca-nome">O&nbsp;Plenário</p>
+          <p class="marca-orgao">Câmara Municipal de Fortaleza</p>
+        </div>
+      </div>
+
+      <div class="topo-sep" aria-hidden="true"></div>
+
+      <span class="ao-vivo"><span class="pulso" aria-hidden="true"></span>Ao vivo</span>
+      <div class="sessao-meta">
+        <span class="tipo">Sessão Ordinária nº 14</span>
+        <span class="quando">21 mai 2026 · aberta 19h08</span>
+      </div>
+
+      <div class="topo-dir">
+        <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" title="Alternar tema claro / escuro">
+          <svg class="sol" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3.2" fill="currentColor"/><g stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13"/></g></svg>
+          <svg class="lua" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M13 9.5A5.5 5.5 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z" fill="currentColor"/></svg>
+          <span class="tema-rotulo">Claro</span>
+        </button>
+        <div class="relogio" role="timer" aria-label="Tempo de sessão">
+          <span class="rotulo">Sessão há</span>
+          <span id="relogio-sessao">01:12:46</span>
+        </div>
+        <div class="presidente">
+          <span class="avatar" aria-hidden="true">SL</span>
+          <span class="quem"><b>Ver. Sérgio Lopes</b><span>Preside a Mesa</span></span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============== 2 · FASE DA SESSÃO ============== -->
+  <nav class="fases" aria-label="Fase da sessão">
+    <div class="envelope">
+      <ol class="fases-grade">
+        <li class="fase feita"><span class="ord" aria-hidden="true">✓</span><span class="nome">Abertura</span><span class="seta" aria-hidden="true">›</span></li>
+        <li class="fase feita"><span class="ord" aria-hidden="true">✓</span><span class="nome">Expediente</span><span class="seta" aria-hidden="true">›</span></li>
+        <li class="fase atual" aria-current="step"><span class="ord" aria-hidden="true">3</span><span class="nome">Ordem do Dia</span><span class="seta" aria-hidden="true">›</span></li>
+        <li class="fase"><span class="ord" aria-hidden="true">4</span><span class="nome">Encerramento</span></li>
+      </ol>
+    </div>
+  </nav>
+
+  <main class="envelope">
+    <div class="cabine">
+
+      <!-- ============== 3 · PALCO ============== -->
+      <section class="bloco palco" aria-labelledby="materia-titulo">
+        <div class="palco-cabeca">
+          <span class="item-od">Ordem do Dia · item 3 de 9</span>
+          <span class="selo-estado selo-votacao"><span class="glifo" aria-hidden="true"></span>Em votação</span>
+        </div>
+
+        <h1 id="materia-titulo">Cria o Programa Municipal de Hortas Comunitárias.</h1>
+        <p class="palco-autoria">PL <b>042/2026</b> · Autoria <b>Ver.ª Helena Matos</b> · 2ª discussão e votação · votação <b>nominal</b></p>
+
+        <div class="tramitacao">
+          <p class="rotulo-faixa">Tramitação</p>
+          <svg class="azulejo-faixa" viewBox="0 0 600 132" role="img"
+               aria-label="Trâmite do PL 042/2026: Protocolo concluído, Comissões concluído, 1º turno concluído, 2º turno em andamento, Sanção pendente.">
+            <defs>
+              <clipPath id="t0"><rect x="8"   y="8" width="104" height="104" rx="10"/></clipPath>
+              <clipPath id="t1"><rect x="128" y="8" width="104" height="104" rx="10"/></clipPath>
+              <clipPath id="t2"><rect x="248" y="8" width="104" height="104" rx="10"/></clipPath>
+              <clipPath id="t3"><rect x="368" y="8" width="104" height="104" rx="10"/></clipPath>
+              <clipPath id="t4"><rect x="488" y="8" width="104" height="104" rx="10"/></clipPath>
+            </defs>
+            <g clip-path="url(#t0)"><rect x="8" y="8" width="104" height="104" fill="#0C5340"/><path d="M8 112 A104 104 0 0 1 112 8 L112 112 Z" fill="#16785C"/><circle cx="60" cy="60" r="20" fill="#F1ECDD"/></g>
+            <g clip-path="url(#t1)"><rect x="128" y="8" width="104" height="104" fill="#1E5FA8"/><path d="M128 8 A104 104 0 0 1 232 112 L128 112 Z" fill="#184E8A"/><circle cx="180" cy="60" r="20" fill="#F1ECDD"/></g>
+            <g clip-path="url(#t2)"><rect x="248" y="8" width="104" height="104" fill="#D9542B"/><path d="M352 8 A104 104 0 0 1 248 112 L248 8 Z" fill="#B9421F"/><circle cx="300" cy="60" r="20" fill="#F1ECDD"/></g>
+            <g clip-path="url(#t3)"><rect x="368" y="8" width="104" height="104" fill="#0A4334"/><path d="M368 60 A52 52 0 0 1 420 8 L420 60 Z" fill="#E8B23A"/><path d="M420 60 A52 52 0 0 1 472 112 L420 112 Z" fill="#E8B23A"/><circle cx="420" cy="60" r="11" fill="#F1ECDD"/></g>
+            <g clip-path="url(#t4)"><rect x="488" y="8" width="104" height="104" fill="#0A4334"/><path d="M488 8 A104 104 0 0 1 592 112" fill="none" stroke="#16785C" stroke-width="3" stroke-dasharray="6 7"/><circle cx="540" cy="60" r="20" fill="none" stroke="#16785C" stroke-width="3" stroke-dasharray="6 7"/></g>
+            <g font-family="IBM Plex Mono, monospace" font-size="12">
+              <text x="60"  y="128" text-anchor="middle">Protocolo</text>
+              <text x="180" y="128" text-anchor="middle">Comissões</text>
+              <text x="300" y="128" text-anchor="middle">1º turno</text>
+              <text x="420" y="128" text-anchor="middle" class="ativo">2º turno</text>
+              <text x="540" y="128" text-anchor="middle" class="pendente">Sanção</text>
+            </g>
+          </svg>
+        </div>
+
+        <div class="votacao" role="group" aria-labelledby="placar-titulo">
+          <p class="eyebrow" id="placar-titulo">Placar em tempo real</p>
+          <div class="placar">
+            <div class="voto-col voto-sim">
+              <p class="rotulo"><span class="ponto" style="background:#16785C;"></span>Sim</p>
+              <p class="n" aria-live="polite">18</p>
+            </div>
+            <div class="voto-col voto-nao">
+              <p class="rotulo"><span class="ponto" style="background:#D9542B;"></span>Não</p>
+              <p class="n" aria-live="polite">9</p>
+            </div>
+            <div class="voto-col voto-abs">
+              <p class="rotulo"><span class="ponto" style="background:#E8B23A;"></span>Abstenção</p>
+              <p class="n" aria-live="polite">2</p>
+            </div>
+          </div>
+
+          <div class="barra-votos" role="img" aria-label="Sim 18, Não 9, Abstenção 2, faltam votar 2 de 31 presentes.">
+            <span class="seg-sim" style="width:58.0%"></span>
+            <span class="seg-nao" style="width:29.0%"></span>
+            <span class="seg-abs" style="width:6.5%"></span>
+            <span class="seg-falta" style="width:6.5%"></span>
+          </div>
+
+          <div class="maioria">
+            <span class="alvo">Maioria absoluta exigida: <b>22 votos</b> · 31 de 43 presentes</span>
+            <span class="faltam">Faltam 4 votos Sim · 2 ainda não votaram</span>
+          </div>
+        </div>
+
+        <div class="nominal">
+          <h3>Votos registrados · mais recentes</h3>
+          <ul class="feed">
+            <li>
+              <span class="avatar av" aria-hidden="true">RA</span>
+              <span class="quem"><b>Ver. Rodrigo Aguiar</b> <span>PDT · líder do governo</span></span>
+              <span class="chip-voto voto-pill-sim"><span class="g" aria-hidden="true"></span>Sim</span>
+              <span class="hora">19:42</span>
+            </li>
+            <li>
+              <span class="avatar av" aria-hidden="true">CB</span>
+              <span class="quem"><b>Ver.ª Carla Bezerra</b> <span>PT</span></span>
+              <span class="chip-voto voto-pill-sim"><span class="g" aria-hidden="true"></span>Sim</span>
+              <span class="hora">19:42</span>
+            </li>
+            <li>
+              <span class="avatar av" aria-hidden="true">MF</span>
+              <span class="quem"><b>Ver. Marcos Frota</b> <span>PL · oposição</span></span>
+              <span class="chip-voto voto-pill-nao"><span class="g" aria-hidden="true"></span>Não</span>
+              <span class="hora">19:41</span>
+            </li>
+            <li>
+              <span class="avatar av" aria-hidden="true">TN</span>
+              <span class="quem"><b>Ver. Teó Nunes</b> <span>PSB</span></span>
+              <span class="chip-voto voto-pill-abs"><span class="g" aria-hidden="true"></span>Abstenção</span>
+              <span class="hora">19:41</span>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ============== 4 · RAIL ============== -->
+      <aside class="rail" aria-label="Estado do plenário e controles da Mesa">
+
+        <section class="bloco quorum" aria-labelledby="quorum-titulo">
+          <div class="bloco-cabeca">
+            <h2 id="quorum-titulo">Quórum</h2>
+            <span class="ok-quorum">
+              <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2.5 7.5l3 3 6-7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Quórum atingido
+            </span>
+          </div>
+          <div class="bloco-corpo">
+            <div class="quorum-num"><b>31</b><span>de 43 vereadores presentes</span></div>
+            <svg id="hemiciclo" class="hemi" viewBox="0 0 240 130" role="img" aria-label="31 de 43 vereadores presentes."></svg>
+            <div class="quorum-legenda">
+              <span><i style="background:var(--acao);"></i>Presentes 31</span>
+              <span><i style="background:var(--linha);"></i>Ausentes 12</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="bloco larga" aria-labelledby="tribuna-titulo">
+          <div class="bloco-cabeca">
+            <h2 id="tribuna-titulo">Tribuna</h2>
+            <span class="eyebrow" style="color:var(--texto-2)">Discussão encerrada</span>
+          </div>
+          <div class="bloco-corpo">
+            <div class="tribuna-quem">
+              <span class="avatar av" aria-hidden="true">HM</span>
+              <div>
+                <b>Ver.ª Helena Matos</b>
+                <span>Encaminhou a votação · autora do PL 042</span>
+              </div>
+            </div>
+            <div class="tribuna-tempo">
+              <span class="rotulo">Encaminhamento · restante</span>
+              <span class="timer alerta" id="timer-tribuna" role="timer" aria-label="Tempo de tribuna restante">01:12</span>
+            </div>
+            <div class="barra" role="progressbar" aria-label="Tempo de tribuna decorrido" aria-valuemin="0" aria-valuemax="100" aria-valuenow="76">
+              <span class="barra-preenchida" style="width:76%"></span>
+            </div>
+            <ol class="inscritos" aria-label="Inscritos para a próxima discussão">
+              <li><span class="ord">1</span><b>Ver. Marcos Frota</b> — contrário</li>
+              <li><span class="ord">2</span><b>Ver. Teó Nunes</b> — pela ordem</li>
+            </ol>
+          </div>
+        </section>
+
+        <section class="bloco larga" aria-labelledby="od-titulo">
+          <div class="bloco-cabeca">
+            <h2 id="od-titulo">Ordem do Dia</h2>
+            <span class="eyebrow" style="color:var(--texto-2)">3 / 9</span>
+          </div>
+          <div class="bloco-corpo">
+            <ul class="od">
+              <li>
+                <svg class="marca-od" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="8" fill="none" stroke="var(--marca)" stroke-width="1.5"/><path d="M5.5 9.2l2.3 2.3 4.7-5" stroke="var(--marca)" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span class="txt"><span class="ref">PL 038/2026</span><span class="tit">Denominação de via pública no Bairro Messejana</span></span>
+                <span class="est est-feito">Aprovado</span>
+              </li>
+              <li>
+                <svg class="marca-od" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="8" fill="none" stroke="var(--marca)" stroke-width="1.5"/><path d="M5.5 9.2l2.3 2.3 4.7-5" stroke="var(--marca)" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span class="txt"><span class="ref">Req 117/2026</span><span class="tit">Informações sobre coleta seletiva na Regional V</span></span>
+                <span class="est est-feito">Aprovado</span>
+              </li>
+              <li class="atual" aria-current="true">
+                <svg class="marca-od" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="8" fill="none" stroke="var(--telha)" stroke-width="1.8"/><circle cx="9" cy="9" r="3.4" fill="var(--telha)"/></svg>
+                <span class="txt"><span class="ref">PL 042/2026</span><span class="tit">Programa Municipal de Hortas Comunitárias</span></span>
+                <span class="est est-agora">Em votação</span>
+              </li>
+              <li>
+                <svg class="marca-od" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="8" fill="none" stroke="var(--linha)" stroke-width="1.5"/></svg>
+                <span class="txt"><span class="ref">PL 051/2026</span><span class="tit">Arborização viária do entorno da Av. Bezerra de Menezes</span></span>
+                <span class="est est-fila">Em pauta</span>
+              </li>
+              <li>
+                <svg class="marca-od" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="8" fill="none" stroke="var(--linha)" stroke-width="1.5"/></svg>
+                <span class="txt"><span class="ref">PLC 004/2026</span><span class="tit">Altera o Código de Posturas do Município (1º turno)</span></span>
+                <span class="est est-fila">Em pauta</span>
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="bloco larga" aria-labelledby="inc-titulo">
+          <div class="bloco-cabeca">
+            <h2 id="inc-titulo">Incidentes da sessão</h2>
+          </div>
+          <div class="bloco-corpo">
+            <div class="incidentes">
+              <button class="inc-btn" type="button"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3.5M8 11h.01" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Questão de ordem</button>
+              <button class="inc-btn" type="button"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 8s2-3.5 5.5-3.5S13.5 8 13.5 8s-2 3.5-5.5 3.5S2.5 8 2.5 8z" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="1.6" fill="currentColor"/></svg>Pedido de vista</button>
+              <button class="inc-btn" type="button"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l2.4 2.4L13 4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Verificação de quórum</button>
+              <button class="inc-btn" type="button"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="3" width="11" height="3" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="2.5" y="10" width="11" height="3" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>Votação em bloco</button>
+              <button class="inc-btn" type="button"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2l1.6 3.6 3.9.4-2.9 2.6.8 3.8L8 11l-3.4 1.8.8-3.8L2.5 6l3.9-.4z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>Regime de urgência</button>
+              <button class="inc-btn" type="button"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>Retirada de pauta</button>
+            </div>
+          </div>
+        </section>
+
+      </aside>
+    </div>
+  </main>
+
+  <!-- ============== 5 · BARRA DE COMANDO DA MESA ============== -->
+  <div class="comando" role="region" aria-label="Comandos da Mesa">
+    <div class="envelope">
+      <p class="dica-mesa">
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1v2M7 11v2M1 7h2M11 7h2M2.8 2.8l1.4 1.4M9.8 9.8l1.4 1.4M11.2 2.8L9.8 4.2M4.2 9.8l-1.4 1.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+        Encerrar a votação fecha o registro e libera a declaração do resultado. A ação fica no histórico da sessão, assinada por quem preside.
+      </p>
+      <div class="comando-grade">
+        <div class="comando-ctx">
+          <b>PL 042/2026 — em votação nominal</b>
+          <span>29 de 31 votos registrados · maioria absoluta 22</span>
+        </div>
+        <div class="comando-acoes">
+          <button class="btn btn-fantasma" type="button">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><rect x="3.5" y="3.5" width="4" height="11" rx="1" fill="currentColor"/><rect x="10.5" y="3.5" width="4" height="11" rx="1" fill="currentColor"/></svg>
+            Suspender sessão
+          </button>
+          <button class="btn btn-contorno" type="button">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 2v7l4 2" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="9" r="7" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+            Prorrogar votação
+          </button>
+          <button class="btn btn-contorno" type="button" aria-disabled="true" title="Disponível após encerrar a votação">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 9.5l3.5 3.5L15 5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Declarar resultado
+          </button>
+          <button class="btn btn-encerrar" type="button">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><rect x="4" y="4" width="10" height="10" rx="2" fill="currentColor"/></svg>
+            Encerrar votação
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* ---- Tema claro / escuro (lembra a escolha; respeita o sistema) ---- */
+    (function () {
+      var root = document.documentElement;
+      var btn = document.getElementById('tema-toggle');
+      var salvo = null;
+      try { salvo = localStorage.getItem('oplenario-tema'); } catch (e) {}
+      var inicial = salvo || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'escuro' : 'claro');
+      aplicar(inicial);
+      function aplicar(t) {
+        root.setAttribute('data-tema', t);
+        if (btn) {
+          btn.setAttribute('aria-pressed', t === 'escuro' ? 'true' : 'false');
+          var rot = btn.querySelector('.tema-rotulo');
+          if (rot) rot.textContent = t === 'escuro' ? 'Escuro' : 'Claro';
+        }
+      }
+      if (btn) btn.addEventListener('click', function () {
+        var prox = root.getAttribute('data-tema') === 'escuro' ? 'claro' : 'escuro';
+        try { localStorage.setItem('oplenario-tema', prox); } catch (e) {}
+        aplicar(prox);
+      });
+    })();
+
+    /* ---- Hemiciclo do quórum: 43 assentos, 31 presentes ---- */
+    (function () {
+      var svg = document.getElementById('hemiciclo');
+      if (!svg) return;
+      var presentes = 31;
+      var cx = 120, cy = 116;
+      var fileiras = [ {r: 46, n: 11}, {r: 68, n: 15}, {r: 90, n: 17} ]; // 11+15+17 = 43
+      var ns = 'http://www.w3.org/2000/svg';
+      var idx = 0;
+      fileiras.forEach(function (f) {
+        for (var i = 0; i < f.n; i++) {
+          var t = f.n === 1 ? 0.5 : i / (f.n - 1);
+          var ang = Math.PI * (1 - t);
+          var x = cx + f.r * Math.cos(ang);
+          var y = cy - f.r * Math.sin(ang);
+          var c = document.createElementNS(ns, 'circle');
+          c.setAttribute('cx', x.toFixed(1));
+          c.setAttribute('cy', y.toFixed(1));
+          c.setAttribute('r', '4.6');
+          c.setAttribute('class', idx < presentes ? 'presente' : 'ausente');
+          svg.appendChild(c);
+          idx++;
+        }
+      });
+    })();
+
+    /* ---- Cronômetros (ilustrativos; respeitam reduced-motion) ---- */
+    (function () {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      function regressivo(el, restante, aoTick) {
+        var id = setInterval(function () {
+          restante -= 1;
+          if (restante < 0) { clearInterval(id); return; }
+          el.textContent = String(Math.floor(restante / 60)).padStart(2, '0') + ':' + String(restante % 60).padStart(2, '0');
+          if (aoTick) aoTick(restante);
+        }, 1000);
+      }
+      function progressivo(el, d) {
+        setInterval(function () {
+          d += 1;
+          el.textContent = String(Math.floor(d / 3600)).padStart(2, '0') + ':' + String(Math.floor((d % 3600) / 60)).padStart(2, '0') + ':' + String(d % 60).padStart(2, '0');
+        }, 1000);
+      }
+      var tribuna = document.getElementById('timer-tribuna');
+      var barra = document.querySelector('.barra-preenchida');
+      var progressbar = document.querySelector('.barra[role="progressbar"]');
+      if (tribuna) {
+        var total = 5 * 60;
+        regressivo(tribuna, 72, function (rest) {
+          var pct = Math.round(((total - rest) / total) * 100);
+          if (barra) barra.style.width = pct + '%';
+          if (progressbar) progressbar.setAttribute('aria-valuenow', String(pct));
+        });
+      }
+      var sessao = document.getElementById('relogio-sessao');
+      if (sessao) progressivo(sessao, 1 * 3600 + 12 * 60 + 46);
+    })();
+  </script>
+
+</body>
+</html>

@@ -39,6 +39,30 @@ Três públicos, uma língua: **servidor** (eficiência), **vereador** (dignidad
 **texto** sobre areia use `--telha-fundo #B9421F` (a versão cheia falha AA em texto). Cor nunca é o
 único sinal — sempre acompanha ícone/rótulo. Foco visível: anel cobalto 3px.
 
+## Tema claro e escuro
+
+A plataforma tem **dois modos da mesma língua** (decisão Emilio, 21/06): o **claro** é o concreto
+luminoso sob luz tropical; o **escuro — "a noite de Brasília"** — mantém a paleta de azulejo sobre
+um fundo jade-carvão, com jade/telha/cobalto/amarelo brilhando no escuro. Implementação por **tokens
+semânticos** (`--bg`, `--surface`, `--linha`, `--texto`, `--texto-2`, `--marca`, `--acao`,
+`--acento-texto`, `--foco`, `--palco-*`) remapeados por `[data-tema]`; respeita `prefers-color-scheme`
+e lembra a escolha (`localStorage`). A **paleta-marca do azulejo é fixa** — só superfícies e texto trocam.
+
+| Token | Claro | Escuro |
+|---|---|---|
+| `--bg` fundo | `#F1ECDD` areia | `#0E1A15` jade-carvão |
+| `--surface` cartão | `#FBF8F0` | `#16271F` |
+| `--linha` | `#E0D7BF` | `#2C4438` |
+| `--texto` | `#19211C` | `#ECE7D6` |
+| `--texto-2` | `#4C574F` | `#9FB0A4` |
+| `--marca` wordmark/dados | `#0C5340` | `#43BD93` |
+| `--acao` botão primário | `#0C5340` | `#18A074` |
+| `--acento-texto` telha | `#B9421F` | `#F0794B` |
+| `--foco` | `#1E5FA8` | `#6AA6DE` |
+| `--palco-bg` placar | `#0A4334` (ilha escura) | `#0B3A2B` (painel saturado) |
+
+Referência viva: **`telas/sessao-ao-vivo.html`** (toggle no header). Contraste AA+ verificado nos dois modos.
+
 ## Tipografia
 
 - **Display — `Sora`** (700–800): geométrica-humanista com calor. Wordmark, títulos, hero. **Não-Inter.**
@@ -81,7 +105,9 @@ portal do cidadão.
 
 ## Status & próximos passos
 
-- **Linguagem visual FECHADA = República Luminosa (B).** v0 arquivado; A/C/D em `opcoes/`.
-- **Próximo:** aplicar a linguagem às **telas que decidem a compra** — sessão ao vivo + mesa de
-  condução (4.14–4.21), Expediente/documentos (3.22–3.23), portal cidadão + e-SIC/LGPD (6.1/5.10),
-  painéis (16.11). Cada tela puxa estes tokens; UX/charts/consistência via `ui-ux-pro-max`.
+- **Linguagem visual FECHADA = República Luminosa (B)**, agora em **dois modos (claro + escuro)**.
+  v0 descartado (removido); A/C/D em `opcoes/`.
+- **1ª tela aplicada:** `telas/sessao-ao-vivo.html` — Mesa de condução ao vivo (4.2/4.3/4.4/4.16/4.17),
+  dual-theme, validada em desktop + mobile (a11y AA+).
+- **Próximo:** Expediente/documentos (3.22–3.23), portal cidadão + e-SIC/LGPD (6.1/5.10), painéis da
+  Mesa (16.11). Cada tela puxa os tokens semânticos; UX/charts/consistência via `ui-ux-pro-max`.
