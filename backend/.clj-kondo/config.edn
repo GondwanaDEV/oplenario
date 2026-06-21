@@ -1,0 +1,2 @@
+{:linters {:unused-namespace {:level :warning}}}
+;; matriz de import-lint (§22.10) enforcada por test/unit/oplenario/arquitetura_test.clj

@@ -1,0 +1,8 @@
+{:http   {:port 8888}
+ :db     {:jdbc-url "jdbc:postgresql://localhost:5432/oplenario" :user "oplenario" :password "dev"}
+ :valkey {:uri "redis://localhost:6379"}
+ ;; URL por modulo p/ os http_client (local agora, remoto apos extracao — §22.10)
+ :modulos {:cadastros {:base-url "http://localhost:8888"} :identidade {:base-url "http://localhost:8888"}
+           :legislativo {:base-url "http://localhost:8888"} :sessoes {:base-url "http://localhost:8888"}
+           :transparencia {:base-url "http://localhost:8888"} :participacao {:base-url "http://localhost:8888"}
+           :compliance {:base-url "http://localhost:8888"}}}

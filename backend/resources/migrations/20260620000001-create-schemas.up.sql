@@ -1,0 +1,11 @@
+-- schema-por-modulo (§22.10). shared hospeda o que cruza modulos (outbox, supratenant).
+CREATE SCHEMA IF NOT EXISTS shared;
+CREATE SCHEMA IF NOT EXISTS identidade;
+CREATE SCHEMA IF NOT EXISTS cadastros;
+CREATE SCHEMA IF NOT EXISTS legislativo;
+CREATE SCHEMA IF NOT EXISTS sessoes;
+CREATE SCHEMA IF NOT EXISTS transparencia;
+CREATE SCHEMA IF NOT EXISTS participacao;
+CREATE SCHEMA IF NOT EXISTS compliance;
+CREATE SCHEMA IF NOT EXISTS paineis;
+CREATE SCHEMA IF NOT EXISTS tempo_real;

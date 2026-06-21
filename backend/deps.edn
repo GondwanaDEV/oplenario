@@ -1,0 +1,19 @@
+{:paths ["src" "resources"]
+ ;; versões ILUSTRATIVAS — fixar no setup real
+ :deps {org.clojure/clojure                     {:mvn/version "1.12.0"}
+        io.pedestal/pedestal.service            {:mvn/version "0.7.2"}
+        io.pedestal/pedestal.jetty              {:mvn/version "0.7.2"}
+        com.stuartsierra/component              {:mvn/version "1.1.0"}
+        com.github.seancorfield/next.jdbc       {:mvn/version "1.3.955"}
+        com.github.seancorfield/honeysql        {:mvn/version "2.6.1230"}
+        com.zaxxer/HikariCP                     {:mvn/version "5.1.0"}
+        org.postgresql/postgresql               {:mvn/version "42.7.4"}
+        metosin/malli                           {:mvn/version "0.16.4"}
+        metosin/jsonista                        {:mvn/version "0.3.10"}
+        migratus/migratus                       {:mvn/version "1.5.4"}
+        com.taoensso/carmine                    {:mvn/version "3.4.1"}} ; client Redis-protocol (Valkey)
+ :aliases
+ {:dev  {:extra-paths ["dev" "test"]}
+  :test {:extra-paths ["test"]
+         :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}}
+         :main-opts   ["-m" "kaocha.runner"]}}}
