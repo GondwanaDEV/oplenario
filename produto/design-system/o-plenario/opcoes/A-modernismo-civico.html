@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>O Plenário — Linguagem Visual v1 · Modernismo Cívico</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Expanded:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* --- Modernismo Cívico: tokens --- */
+    --petroleo:#123A40;        /* primário — petróleo institucional */
+    --petroleo-900:#0C2A2E;    /* profundidade */
+    --papel:#F4F5F1;           /* fundo — papel quente, frio o bastante p/ não virar "cream de IA" */
+    --papel-2:#FBFBF7;         /* superfície de cartão */
+    --tinta:#191B19;           /* texto */
+    --tinta-2:#51564F;         /* texto secundário (AA sobre papel) */
+    --latao:#9A6A22;           /* assinatura — latão/ouro-velho, metal de insígnia */
+    --latao-claro:#C79A4E;     /* latão p/ uso gráfico sobre petróleo */
+    --pedra:#D9DDD3;           /* superfície neutra */
+    --linha:#CAD0C5;           /* bordas */
+    --aprovado:#2F6B4F;        /* sim / cumprido */
+    --vencido:#A83A2C;         /* não / vencido */
+    --ausente:#B9BEB3;         /* ausência / pendente */
+
+    --serif:'Archivo Expanded', system-ui, sans-serif;
+    --sans:'IBM Plex Sans', system-ui, sans-serif;
+    --mono:'IBM Plex Mono', ui-monospace, monospace;
+  }
+
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:var(--papel); color:var(--tinta);
+    font-family:var(--sans); font-size:16px; line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1040px; margin:0 auto; padding:0 24px}
+
+  /* eyebrow em mono = a "voz de dado" do produto (protocolo, datas, rótulos) */
+  .eyebrow{
+    font-family:var(--mono); font-size:12px; font-weight:500;
+    letter-spacing:.14em; text-transform:uppercase; color:var(--latao);
+  }
+  h1,h2,h3{font-family:var(--serif); font-weight:700; line-height:1.04; margin:0; letter-spacing:-.01em}
+  .lead{font-size:19px; color:var(--tinta-2); max-width:60ch}
+
+  /* ---------------- Cabeçalho / datum line ---------------- */
+  .topo{background:var(--petroleo); color:#EFF3EC}
+  .topo .wrap{padding:18px 24px; display:flex; align-items:center; gap:14px}
+  .marca{display:flex; align-items:center; gap:12px}
+  .marca .nome{font-family:var(--serif); font-weight:800; font-size:19px; color:#fff; letter-spacing:.01em}
+  .topo .meta{margin-left:auto; font-family:var(--mono); font-size:11px; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--latao-claro)}
+
+  /* selo hemiciclo — o símbolo */
+  .selo{width:30px; height:18px; display:block}
+
+  /* ---------------- Hero ---------------- */
+  .hero{padding:72px 0 40px}
+  .hero h1{font-size:clamp(40px,7vw,76px); font-weight:800; max-width:14ch}
+  .hero h1 em{font-style:normal; color:var(--petroleo)}
+  .hero .lead{margin-top:22px; font-size:21px}
+  .datum{height:3px; background:var(--petroleo); width:64px; margin:30px 0 0}
+
+  section{padding:48px 0; border-top:1px solid var(--linha)}
+  .sec-h{display:flex; align-items:baseline; gap:16px; margin-bottom:28px}
+  .sec-h h2{font-size:clamp(24px,3.4vw,34px)}
+  .sec-h .n{font-family:var(--mono); font-size:12px; color:var(--tinta-2); letter-spacing:.1em}
+
+  /* ---------------- Paleta ---------------- */
+  .swatches{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:14px}
+  .sw{border:1px solid var(--linha); border-radius:10px; overflow:hidden; background:var(--papel-2)}
+  .sw .chip{height:84px}
+  .sw .info{padding:11px 13px}
+  .sw .nome{font-weight:600; font-size:14px}
+  .sw .hex{font-family:var(--mono); font-size:12px; color:var(--tinta-2); margin-top:2px}
+  .sw .uso{font-size:12px; color:var(--tinta-2); margin-top:6px; line-height:1.45}
+
+  /* ---------------- Tipografia ---------------- */
+  .type-row{padding:18px 0; border-bottom:1px solid var(--linha)}
+  .type-row:last-child{border-bottom:0}
+  .type-tag{font-family:var(--mono); font-size:11px; color:var(--tinta-2); letter-spacing:.1em; text-transform:uppercase}
+  .specimen-display{font-family:var(--serif); font-weight:800; font-size:clamp(30px,5vw,52px); line-height:1.02; color:var(--petroleo); margin-top:8px}
+  .specimen-body{font-size:18px; max-width:64ch; margin-top:8px}
+  .specimen-mono{font-family:var(--mono); font-size:15px; margin-top:8px; color:var(--tinta)}
+  .scale{display:flex; flex-wrap:wrap; align-items:baseline; gap:20px; margin-top:6px}
+  .scale span{font-family:var(--serif); font-weight:700; color:var(--tinta)}
+
+  /* ---------------- Assinatura: hemiciclo ---------------- */
+  .assinatura{background:var(--petroleo); color:#EFF3EC; border-radius:16px; padding:34px; display:grid;
+    grid-template-columns:1.1fr .9fr; gap:30px; align-items:center}
+  .assinatura h3{color:#fff; font-size:26px}
+  .assinatura p{color:#C6D2CC; max-width:42ch}
+  .hemi-box{display:flex; flex-direction:column; align-items:center; gap:14px}
+  .hemi svg{display:block; width:100%; max-width:360px; height:auto}
+  .quorum{font-family:var(--mono); font-size:13px; letter-spacing:.04em; color:#D8E2DC; text-align:center}
+  .quorum b{color:#fff}
+  .legenda{display:flex; gap:16px; flex-wrap:wrap; margin-top:18px; font-family:var(--mono); font-size:12px; color:#C6D2CC}
+  .legenda i{width:11px;height:11px;border-radius:50%;display:inline-block;margin-right:6px;vertical-align:-1px}
+
+  /* ---------------- Componentes ---------------- */
+  .comp-grid{display:grid; grid-template-columns:1fr 1fr; gap:22px}
+  .card{background:var(--papel-2); border:1px solid var(--linha); border-radius:12px; padding:20px}
+  .card .protocolo{font-family:var(--mono); font-size:12px; color:var(--latao); letter-spacing:.06em}
+  .card h4{font-family:var(--serif); font-weight:700; font-size:19px; margin:8px 0 4px; line-height:1.12}
+  .card .meta{font-size:13px; color:var(--tinta-2)}
+  .chip-status{display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:11px;
+    font-weight:600; letter-spacing:.06em; text-transform:uppercase; padding:4px 9px; border-radius:999px}
+  .chip-aprovado{background:rgba(47,107,79,.13); color:var(--aprovado)}
+  .chip-vencido{background:rgba(168,58,44,.13); color:var(--vencido)}
+  .chip-status i{width:7px;height:7px;border-radius:50%;display:inline-block}
+  .acoes{display:flex; gap:10px; margin-top:18px; flex-wrap:wrap}
+
+  .btn{font-family:var(--sans); font-weight:600; font-size:14px; border-radius:9px; padding:11px 18px;
+    border:1.5px solid transparent; cursor:pointer; transition:background .18s ease, color .18s ease, border-color .18s ease}
+  .btn-primario{background:var(--petroleo); color:#fff}
+  .btn-primario:hover{background:var(--petroleo-900)}
+  .btn-latao{background:transparent; color:var(--latao); border-color:var(--latao)}
+  .btn-latao:hover{background:var(--latao); color:#fff}
+  .btn:focus-visible{outline:3px solid var(--latao-claro); outline-offset:2px}
+
+  .tribuna{display:flex; align-items:center; gap:14px; margin-top:6px}
+  .tribuna .relogio{font-family:var(--mono); font-weight:600; font-size:32px; color:var(--tinta); font-variant-numeric:tabular-nums}
+  .barra{height:6px; background:var(--pedra); border-radius:999px; overflow:hidden; flex:1}
+  .barra > i{display:block; height:100%; width:64%; background:var(--latao)}
+
+  /* ---------------- Anti-IA ---------------- */
+  .anti{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:8px}
+  .anti .col{border:1px solid var(--linha); border-radius:10px; padding:18px; background:var(--papel-2)}
+  .anti h4{font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; margin:0 0 10px}
+  .anti .evitamos h4{color:var(--vencido)}
+  .anti .escolhemos h4{color:var(--aprovado)}
+  .anti ul{margin:0; padding-left:18px}
+  .anti li{font-size:14px; color:var(--tinta-2); margin-bottom:6px}
+  .anti code{font-family:var(--mono); font-size:12px; background:var(--pedra); padding:1px 5px; border-radius:4px}
+
+  footer{padding:40px 0 64px; color:var(--tinta-2); font-size:13px; font-family:var(--mono); letter-spacing:.03em}
+
+  @media (max-width:760px){
+    .assinatura,.comp-grid,.anti{grid-template-columns:1fr}
+  }
+  @media (prefers-reduced-motion:reduce){ .btn{transition:none} }
+</style>
+</head>
+<body>
+
+<!-- ============ datum line / cabeçalho ============ -->
+<header class="topo">
+  <div class="wrap">
+    <span class="marca">
+      <svg class="selo" viewBox="0 0 30 18" aria-hidden="true">
+        <g fill="none" stroke="#C79A4E" stroke-width="2" stroke-linecap="round">
+          <path d="M3 16 A12 12 0 0 1 27 16"/>
+          <path d="M7 16 A8 8 0 0 1 23 16"/>
+          <path d="M11 16 A4 4 0 0 1 19 16"/>
+        </g>
+      </svg>
+      <span class="nome">O&nbsp;Plenário</span>
+    </span>
+    <span class="meta">Linguagem Visual · v1 · Modernismo Cívico</span>
+  </div>
+</header>
+
+<!-- ============ hero ============ -->
+<div class="wrap">
+  <div class="hero">
+    <p class="eyebrow">Direção de arte — proposta para reação</p>
+    <h1>A arquitetura da câmara, <em>traduzida em produto.</em></h1>
+    <p class="lead">Uma identidade fundada no que a câmara é: o hemiciclo do plenário, o metal das
+      insígnias institucionais, o concreto e a luz do modernismo brasileiro. Séria, mas viva.
+      Reconhecível à primeira vista — e nada parecida com um template.</p>
+    <div class="datum"></div>
+  </div>
+</div>
+
+<!-- ============ paleta ============ -->
+<div class="wrap">
+  <section>
+    <div class="sec-h"><span class="n">01</span><h2>Paleta</h2></div>
+    <div class="swatches">
+      <div class="sw"><div class="chip" style="background:#123A40"></div><div class="info"><div class="nome">Petróleo</div><div class="hex">#123A40</div><div class="uso">Primário. Cabeçalhos, ações, o plenário. Não é o navy genérico de SaaS.</div></div></div>
+      <div class="sw"><div class="chip" style="background:#9A6A22"></div><div class="info"><div class="nome">Latão</div><div class="hex">#9A6A22</div><div class="uso">Assinatura. Metal de insígnia/selo — usado com parcimônia, nunca azul.</div></div></div>
+      <div class="sw"><div class="chip" style="background:#F4F5F1; box-shadow:inset 0 0 0 1px #CAD0C5"></div><div class="info"><div class="nome">Papel</div><div class="hex">#F4F5F1</div><div class="uso">Fundo. Quente, mas frio o bastante p/ fugir do "cream" de IA.</div></div></div>
+      <div class="sw"><div class="chip" style="background:#191B19"></div><div class="info"><div class="nome">Tinta</div><div class="hex">#191B19</div><div class="uso">Texto. Grafite quente — contraste AAA sobre papel.</div></div></div>
+      <div class="sw"><div class="chip" style="background:#2F6B4F"></div><div class="info"><div class="nome">Aprovado</div><div class="hex">#2F6B4F</div><div class="uso">Sim · cumprido · vigente. Verde institucional sóbrio.</div></div></div>
+      <div class="sw"><div class="chip" style="background:#A83A2C"></div><div class="info"><div class="nome">Vencido</div><div class="hex">#A83A2C</div><div class="uso">Não · vencido · prazo perdido. Vermelho sério, sem alarme.</div></div></div>
+    </div>
+  </section>
+</div>
+
+<!-- ============ tipografia ============ -->
+<div class="wrap">
+  <section>
+    <div class="sec-h"><span class="n">02</span><h2>Tipografia</h2></div>
+
+    <div class="type-row">
+      <span class="type-tag">Display — Archivo Expanded · letreiro institucional</span>
+      <div class="specimen-display">Sessão Ordinária</div>
+      <div class="scale">
+        <span style="font-size:13px">13</span><span style="font-size:16px">16</span>
+        <span style="font-size:21px">21</span><span style="font-size:28px">28</span>
+        <span style="font-size:40px">40</span><span style="font-size:56px">56</span>
+      </div>
+    </div>
+
+    <div class="type-row">
+      <span class="type-tag">Corpo — IBM Plex Sans · engenhado, legível, não-Inter</span>
+      <p class="specimen-body">A Câmara abre a sessão, lê o expediente e delibera. Para o cidadão, cada
+        proposição vira uma história clara: quem propôs, em que pé está, e quando entra em pauta — sem
+        jargão, sem ruído.</p>
+    </div>
+
+    <div class="type-row">
+      <span class="type-tag">Dados — IBM Plex Mono · protocolo, quórum, datas, prazos</span>
+      <div class="specimen-mono">PL&nbsp;042/2026 &nbsp;·&nbsp; protocolo&nbsp;12.481 &nbsp;·&nbsp; quórum&nbsp;9/15 &nbsp;·&nbsp; prazo&nbsp;31/07/2026</div>
+    </div>
+  </section>
+</div>
+
+<!-- ============ assinatura: hemiciclo ============ -->
+<div class="wrap">
+  <section>
+    <div class="sec-h"><span class="n">03</span><h2>A assinatura</h2></div>
+    <div class="assinatura">
+      <div>
+        <p class="eyebrow" style="color:var(--latao-claro)">Onde gastamos a ousadia</p>
+        <h3>O hemiciclo</h3>
+        <p>A forma real do plenário é a marca. Na sessão ao vivo ele é um mapa: presença, quórum e
+          votação preenchendo as cadeiras em tempo real. Útil e inconfundível — é "O Plenário", não um
+          dashboard qualquer. Todo o resto fica quieto para isso brilhar.</p>
+        <div class="legenda">
+          <span><i style="background:#2F6B4F"></i>Sim</span>
+          <span><i style="background:#A83A2C"></i>Não</span>
+          <span><i style="background:#C79A4E"></i>Abstenção</span>
+          <span><i style="background:#7E8C84"></i>Ausente</span>
+        </div>
+      </div>
+      <div class="hemi-box">
+        <div class="hemi"><svg id="hemiciclo" viewBox="0 0 360 200" role="img"
+          aria-label="Mapa do plenário: 9 votos sim, 4 não, 1 abstenção, 1 ausente — quórum 14 de 15">
+        </svg></div>
+        <div class="quorum">Votação aberta · <b>9 Sim</b> · 4 Não · 1 Abst. &nbsp;|&nbsp; quórum <b>14/15</b></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ============ componentes ============ -->
+<div class="wrap">
+  <section>
+    <div class="sec-h"><span class="n">04</span><h2>No produto</h2></div>
+    <div class="comp-grid">
+
+      <div class="card">
+        <div class="protocolo">PL 042/2026 · PROTOCOLO 12.481</div>
+        <h4>Cria o Programa Municipal de Hortas Comunitárias.</h4>
+        <div class="meta">Autoria: Ver. Helena Matos · 2ª discussão</div>
+        <div style="margin-top:12px">
+          <span class="chip-status chip-aprovado"><i style="background:#2F6B4F"></i>Aprovada em 1º turno</span>
+        </div>
+        <div class="acoes">
+          <button class="btn btn-primario">Abrir tramitação</button>
+          <button class="btn btn-latao">Acompanhar</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="protocolo">REMESSA SIM · COMPETÊNCIA 2026-05</div>
+        <h4>Envio ao TCE-CE vence em 6 dias.</h4>
+        <div class="meta">Obrigação de compliance · responsável: Controladoria</div>
+        <div style="margin-top:12px">
+          <span class="chip-status chip-vencido"><i style="background:#A83A2C"></i>Prazo: 31/07</span>
+        </div>
+        <div class="tribuna" style="margin-top:18px">
+          <span class="relogio">04:32</span>
+          <span class="barra"><i></i></span>
+        </div>
+        <div class="meta" style="margin-top:6px">Cronômetro de tribuna — tempo restante do orador</div>
+      </div>
+
+    </div>
+  </section>
+</div>
+
+<!-- ============ anti-IA ============ -->
+<div class="wrap">
+  <section>
+    <div class="sec-h"><span class="n">05</span><h2>O que evitamos — de propósito</h2></div>
+    <div class="anti">
+      <div class="col evitamos">
+        <h4>Recusado (cara de IA / template)</h4>
+        <ul>
+          <li>Navy <code>#0F172A</code> + azul de SaaS — o "dashboard de governo" genérico.</li>
+          <li>Cream + serif de alto contraste + terracota (o cluster nº1 de IA).</li>
+          <li>Preto + verde-ácido/vermelhão de acento.</li>
+          <li>Gradiente roxo/rosa, fontes default (Inter/Roboto/Lexend).</li>
+          <li>Layout de jornal (fios capilares, colunas densas).</li>
+        </ul>
+      </div>
+      <div class="col escolhemos">
+        <h4>Escolhido (fundado no subject)</h4>
+        <ul>
+          <li>Petróleo + <b>latão</b> — cor e metal das insígnias institucionais.</li>
+          <li>Hemiciclo como assinatura — a forma real do plenário.</li>
+          <li>Archivo Expanded (letreiro) + Plex Sans/Mono (engenharia + dado).</li>
+          <li>Modernismo brasileiro: estrutura, luz, concreto, sobriedade.</li>
+          <li>Acessibilidade AAA como piso — não como enfeite.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="wrap">
+  <footer>
+    O Plenário · linguagem visual v1 — proposta de direção de arte para reação · fontes: Archivo Expanded · IBM Plex Sans · IBM Plex Mono
+  </footer>
+</div>
+
+<script>
+  // Hemiciclo: gera as cadeiras em arcos concêntricos (semicírculo superior).
+  // Cada cadeira recebe um voto; cores = tokens. Sem animação (reduced-motion friendly).
+  (function(){
+    var svg = document.getElementById('hemiciclo');
+    if(!svg) return;
+    var cx=180, cy=190;
+    var rows=[{r:150,n:7},{r:118,n:5},{r:86,n:3}]; // 15 cadeiras, 3 fileiras
+    // distribuição de votos (ordem visual): S=sim, N=não, A=abstenção, X=ausente
+    var votos=['S','S','N','S','S','N','S','S','N','A','S','S','N','S','X'];
+    var cor={S:'#2F6B4F', N:'#A83A2C', A:'#C79A4E', X:'#7E8C84'};
+    var i=0, NS='http://www.w3.org/2000/svg';
+    rows.forEach(function(row){
+      for(var k=0;k<row.n;k++){
+        // ângulo de 180° (esq) a 0° (dir)
+        var t = row.n===1 ? Math.PI/2 : (Math.PI - (Math.PI*(k/(row.n-1))));
+        var x = cx + row.r*Math.cos(t);
+        var y = cy - row.r*Math.sin(t);
+        var c = document.createElementNS(NS,'circle');
+        c.setAttribute('cx',x.toFixed(1)); c.setAttribute('cy',y.toFixed(1));
+        c.setAttribute('r','9');
+        c.setAttribute('fill', cor[votos[i]]||'#7E8C84');
+        c.setAttribute('stroke', '#0C2A2E'); c.setAttribute('stroke-width','1');
+        svg.appendChild(c);
+        i++;
+      }
+    });
+    // mesa diretora (base do hemiciclo)
+    var mesa=document.createElementNS(NS,'rect');
+    mesa.setAttribute('x',cx-34); mesa.setAttribute('y',cy-6);
+    mesa.setAttribute('width','68'); mesa.setAttribute('height','9');
+    mesa.setAttribute('rx','3'); mesa.setAttribute('fill','#C79A4E');
+    svg.appendChild(mesa);
+  })();
+</script>
+</body>
+</html>

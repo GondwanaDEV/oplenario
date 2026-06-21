@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — República Luminosa · Style-tile B</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Direção B — "República Luminosa" (Cívico Tropical)
+     Modernismo brasileiro: azulejo de Athos Bulcão, jardins de
+     Burle Marx, concreto luminoso de Brasília sob a luz dos trópicos.
+     Institucional, mas quente, vivo e confiantemente colorido —
+     brasileiro SEM o clichê do verde-bandeira.
+     ============================================================ */
+
+  :root {
+    /* ---- Paleta ---- */
+    --jade:        #0C5340; /* primário — verde sério, NÃO bandeira */
+    --jade-fundo:  #0A4334; /* jade mais fundo p/ blocos sólidos */
+    --jade-claro:  #16785C; /* hover/realce sobre areia */
+    --telha:       #D9542B; /* acento coral/telha — usado com ousadia */
+    --telha-fundo: #B9421F; /* telha escurecida p/ texto sobre areia (AA) */
+    --cobalto:     #1E5FA8; /* azul azulejo, secundário */
+    --cobalto-fundo:#184E8A;
+    --amarelo:     #E8B23A; /* amarelo Marajó — quarta cor do azulejo, escasso */
+    --areia:       #F1ECDD; /* fundo areia quente */
+    --areia-2:     #FBF8F0; /* superfície de cartão, mais clara */
+    --areia-borda: #E0D7BF; /* divisórias quentes */
+    --tinta:       #19211C; /* tinta — texto principal */
+    --tinta-2:     #4C574F; /* texto secundário (AA sobre areia) */
+    --branco:      #FFFFFF;
+
+    /* ---- Tipografia ---- */
+    --display: 'Sora', system-ui, sans-serif;
+    --corpo:   'Hanken Grotesk', system-ui, sans-serif;
+    --mono:    'IBM Plex Mono', ui-monospace, monospace;
+
+    /* ---- Escala tipográfica (13·16·21·28·40·56) ---- */
+    --t-13: 0.8125rem;
+    --t-16: 1rem;
+    --t-21: 1.3125rem;
+    --t-28: 1.75rem;
+    --t-40: 2.5rem;
+    --t-56: 3.5rem;
+
+    /* ---- Sistema ---- */
+    --raio:    14px;
+    --raio-sm: 9px;
+    --gap:     clamp(1rem, 3vw, 2rem);
+    --max:     1120px;
+    --foco:    var(--cobalto);
+    --sombra:  0 1px 0 rgba(25,33,28,.04), 0 18px 40px -28px rgba(12,83,64,.45);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    margin: 0;
+    background-color: var(--areia);
+    /* concreto luminoso: uma luz tropical difusa no topo */
+    background-image:
+      radial-gradient(120% 80% at 85% -10%, rgba(232,178,58,.16), transparent 55%),
+      radial-gradient(90% 70% at 0% 0%, rgba(30,95,168,.08), transparent 50%);
+    background-attachment: fixed;
+    color: var(--tinta);
+    font-family: var(--corpo);
+    font-size: var(--t-16);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  .envelope { max-width: var(--max); margin: 0 auto; padding: 0 var(--gap); }
+
+  /* Foco visível e consistente em tudo que é interativo */
+  a:focus-visible,
+  button:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 3px solid var(--foco);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: var(--t-13);
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--telha-fundo);
+    margin: 0;
+  }
+
+  /* ============================================================
+     1 · HEADER
+     ============================================================ */
+  .topo {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: rgba(241,236,221,.86);
+    backdrop-filter: saturate(140%) blur(10px);
+    border-bottom: 1px solid var(--areia-borda);
+  }
+  .topo-grade {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.85rem 0;
+    flex-wrap: wrap;
+  }
+  .marca { display: flex; align-items: center; gap: 0.7rem; }
+  .marca-simbolo {
+    width: 38px; height: 38px;
+    flex: 0 0 auto;
+    display: block;
+  }
+  .marca-nome {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: var(--t-21);
+    letter-spacing: -0.015em;
+    color: var(--jade);
+    line-height: 1;
+    margin: 0;
+  }
+  .topo-eyebrow {
+    margin-left: auto;
+    padding: 0.35rem 0.7rem;
+    border: 1px solid var(--areia-borda);
+    border-radius: 999px;
+    background: var(--areia-2);
+  }
+
+  /* ============================================================
+     2 · HERO
+     ============================================================ */
+  .hero { padding: clamp(2.5rem, 7vw, 5rem) 0 clamp(2rem, 5vw, 3.5rem); }
+  .hero-grade {
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: clamp(1.5rem, 4vw, 3rem);
+    align-items: center;
+  }
+  .hero h1 {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: clamp(var(--t-40), 6.5vw, var(--t-56));
+    line-height: 1.02;
+    letter-spacing: -0.025em;
+    color: var(--tinta);
+    margin: 0.9rem 0 1.1rem;
+    text-wrap: balance;
+  }
+  .hero h1 .acento { color: var(--jade); }
+  .hero h1 .acento-telha { color: var(--telha-fundo); }
+  .hero-lead {
+    font-size: var(--t-21);
+    line-height: 1.5;
+    color: var(--tinta-2);
+    max-width: 40ch;
+    margin: 0 0 1.6rem;
+  }
+  .hero-acoes { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+
+  /* botões base */
+  .btn {
+    font-family: var(--corpo);
+    font-weight: 600;
+    font-size: var(--t-16);
+    border-radius: var(--raio-sm);
+    border: 1px solid transparent;
+    padding: 0.7rem 1.2rem;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: transform .12s ease, background-color .12s ease, box-shadow .12s ease;
+    line-height: 1.2;
+  }
+  .btn-primario {
+    background: var(--jade);
+    color: var(--branco);
+    box-shadow: 0 10px 22px -14px rgba(12,83,64,.9);
+  }
+  .btn-primario:hover { background: var(--jade-fundo); transform: translateY(-1px); }
+  .btn-secundario {
+    background: transparent;
+    color: var(--jade);
+    border-color: var(--jade);
+  }
+  .btn-secundario:hover { background: rgba(12,83,64,.07); }
+
+  /* ============================================================
+     SEÇÕES
+     ============================================================ */
+  .secao { padding: clamp(2.2rem, 5vw, 3.4rem) 0; border-top: 1px solid var(--areia-borda); }
+  .secao-cabeca { margin-bottom: 1.8rem; max-width: 60ch; }
+  .secao-cabeca h2 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: var(--t-28);
+    letter-spacing: -0.02em;
+    color: var(--tinta);
+    margin: 0.5rem 0 0.4rem;
+  }
+  .secao-cabeca p { color: var(--tinta-2); margin: 0; max-width: 56ch; }
+
+  /* ============================================================
+     3 · PALETA
+     ============================================================ */
+  .swatches {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.9rem;
+  }
+  .swatch {
+    border-radius: var(--raio);
+    overflow: hidden;
+    background: var(--areia-2);
+    border: 1px solid var(--areia-borda);
+    box-shadow: var(--sombra);
+  }
+  .swatch-cor { height: 88px; display: block; }
+  .swatch-info { padding: 0.75rem 0.85rem 0.9rem; }
+  .swatch-nome { font-family: var(--display); font-weight: 600; font-size: var(--t-16); margin: 0 0 0.15rem; color: var(--tinta); }
+  .swatch-hex { font-family: var(--mono); font-size: var(--t-13); color: var(--tinta-2); margin: 0 0 0.35rem; }
+  .swatch-papel { font-size: var(--t-13); color: var(--tinta-2); margin: 0; line-height: 1.45; }
+
+  /* ============================================================
+     4 · TIPOGRAFIA
+     ============================================================ */
+  .tipo-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-bottom: 1.6rem; }
+  .specimen {
+    background: var(--areia-2);
+    border: 1px solid var(--areia-borda);
+    border-radius: var(--raio);
+    padding: 1.1rem 1.2rem 1.3rem;
+    box-shadow: var(--sombra);
+  }
+  .specimen .rotulo { font-family: var(--mono); font-size: var(--t-13); color: var(--tinta-2); letter-spacing: .08em; text-transform: uppercase; margin: 0 0 0.6rem; }
+  .specimen .amostra-display { font-family: var(--display); font-weight: 700; font-size: var(--t-40); line-height: 1; letter-spacing: -0.02em; color: var(--jade); margin: 0 0 0.3rem; }
+  .specimen .amostra-corpo { font-family: var(--corpo); font-size: var(--t-16); color: var(--tinta); margin: 0; }
+  .specimen .amostra-mono { font-family: var(--mono); font-size: var(--t-21); color: var(--cobalto-fundo); margin: 0; letter-spacing: -0.01em; }
+  .specimen .meta { font-size: var(--t-13); color: var(--tinta-2); margin: 0.6rem 0 0; }
+
+  .escala { background: var(--areia-2); border: 1px solid var(--areia-borda); border-radius: var(--raio); padding: 0.5rem 1.2rem; box-shadow: var(--sombra); }
+  .escala-linha { display: flex; align-items: baseline; gap: 1rem; padding: 0.55rem 0; border-bottom: 1px dashed var(--areia-borda); }
+  .escala-linha:last-child { border-bottom: 0; }
+  .escala-px { font-family: var(--mono); font-size: var(--t-13); color: var(--telha-fundo); width: 4ch; flex: 0 0 auto; }
+  .escala-texto { font-family: var(--display); font-weight: 600; color: var(--tinta); letter-spacing: -0.02em; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ============================================================
+     5 · A ASSINATURA — faixa de azulejo da tramitação
+     ============================================================ */
+  .assinatura-painel {
+    background: var(--jade-fundo);
+    color: var(--areia);
+    border-radius: var(--raio);
+    padding: clamp(1.4rem, 4vw, 2.2rem);
+    box-shadow: 0 24px 50px -30px rgba(10,67,52,.85);
+    position: relative;
+    overflow: hidden;
+  }
+  .assinatura-painel .eyebrow { color: var(--amarelo); }
+  .assinatura-titulo {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: var(--t-21);
+    color: var(--branco);
+    margin: 0.5rem 0 0.3rem;
+    letter-spacing: -0.01em;
+  }
+  .assinatura-painel .desc { color: rgba(241,236,221,.82); margin: 0 0 1.4rem; max-width: 58ch; }
+
+  .azulejo-faixa { width: 100%; height: auto; display: block; }
+
+  .legenda {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.1rem;
+    margin: 1.1rem 0 0;
+    padding: 0;
+    list-style: none;
+    font-family: var(--mono);
+    font-size: var(--t-13);
+    color: rgba(241,236,221,.9);
+  }
+  .legenda li { display: flex; align-items: center; gap: 0.45rem; }
+  .legenda .ponto { width: 11px; height: 11px; border-radius: 3px; flex: 0 0 auto; }
+
+  /* ============================================================
+     6 · NO PRODUTO — cartões de componente
+     ============================================================ */
+  .produto-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 1.1rem; }
+  .cartao {
+    background: var(--areia-2);
+    border: 1px solid var(--areia-borda);
+    border-radius: var(--raio);
+    padding: 1.25rem 1.3rem 1.35rem;
+    box-shadow: var(--sombra);
+    position: relative;
+  }
+  /* fita lateral de azulejo no topo do cartão */
+  .cartao::before {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; top: 0;
+    height: 5px;
+    border-radius: var(--raio) var(--raio) 0 0;
+    background: linear-gradient(90deg,
+      var(--jade) 0 20%, var(--cobalto) 20% 40%, var(--telha) 40% 60%,
+      var(--amarelo) 60% 80%, var(--jade-claro) 80% 100%);
+  }
+  .cartao-topo { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
+  .cartao-id { font-family: var(--mono); font-size: var(--t-13); color: var(--tinta-2); letter-spacing: .02em; }
+  .cartao-titulo { font-family: var(--display); font-weight: 600; font-size: var(--t-21); line-height: 1.25; letter-spacing: -0.015em; color: var(--tinta); margin: 0.7rem 0 0.55rem; }
+  .cartao-meta { font-size: var(--t-13); color: var(--tinta-2); margin: 0 0 1rem; }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: var(--mono);
+    font-size: var(--t-13);
+    font-weight: 500;
+    padding: 0.25rem 0.65rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    line-height: 1.3;
+  }
+  .chip-ok { background: rgba(12,83,64,.10); color: var(--jade); border-color: rgba(12,83,64,.25); }
+  .chip-prazo { background: rgba(217,84,43,.10); color: var(--telha-fundo); border-color: rgba(217,84,43,.30); }
+  .chip .glifo { width: 9px; height: 9px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
+
+  .cartao-acoes { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1.1rem; }
+  .btn-sm { padding: 0.55rem 0.95rem; font-size: var(--t-13); }
+
+  /* cartão de compliance */
+  .compliance-cabeca { display: flex; align-items: center; gap: 0.7rem; }
+  .compliance-selo {
+    width: 34px; height: 34px; flex: 0 0 auto;
+    display: grid; place-items: center;
+    border-radius: 9px;
+    background: rgba(30,95,168,.12);
+  }
+  .compliance-vence { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--telha-fundo); margin: 0.9rem 0 0.2rem; letter-spacing: -0.015em; line-height: 1.15; }
+  .compliance-sub { font-size: var(--t-13); color: var(--tinta-2); margin: 0 0 0.9rem; }
+
+  .tribuna {
+    margin-top: 1.1rem;
+    padding-top: 1rem;
+    border-top: 1px dashed var(--areia-borda);
+  }
+  .tribuna-linha { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+  .tribuna-rotulo { font-family: var(--mono); font-size: var(--t-13); color: var(--tinta-2); text-transform: uppercase; letter-spacing: .1em; }
+  .tribuna-tempo { font-family: var(--mono); font-weight: 600; font-size: var(--t-28); color: var(--jade); letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+  .barra {
+    margin-top: 0.6rem;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--areia-borda);
+    overflow: hidden;
+  }
+  .barra-preenchida {
+    height: 100%;
+    width: 72%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--jade) 0%, var(--jade-claro) 70%, var(--amarelo) 100%);
+  }
+
+  /* ============================================================
+     7 · O QUE EVITAMOS
+     ============================================================ */
+  .evita-grade { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; }
+  .evita-col { border-radius: var(--raio); padding: 1.2rem 1.3rem; border: 1px solid var(--areia-borda); box-shadow: var(--sombra); }
+  .evita-recusado { background: var(--areia-2); }
+  .evita-escolhido { background: var(--jade-fundo); color: var(--areia); border-color: var(--jade-fundo); }
+  .evita-col h3 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); margin: 0.4rem 0 0.9rem; letter-spacing: -0.015em; }
+  .evita-recusado h3 { color: var(--telha-fundo); }
+  .evita-escolhido h3 { color: var(--amarelo); }
+  .evita-col ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.7rem; }
+  .evita-col li { display: flex; gap: 0.6rem; font-size: var(--t-16); line-height: 1.45; }
+  .evita-recusado li { color: var(--tinta-2); }
+  .evita-escolhido li { color: rgba(241,236,221,.92); }
+  .evita-col .marca-li { flex: 0 0 auto; margin-top: 0.32rem; }
+
+  /* ============================================================
+     RODAPÉ
+     ============================================================ */
+  .rodape { padding: 2rem 0 3rem; border-top: 1px solid var(--areia-borda); color: var(--tinta-2); font-size: var(--t-13); }
+  .rodape .mono { font-family: var(--mono); }
+
+  /* ============================================================
+     RESPONSIVO
+     ============================================================ */
+  @media (max-width: 860px) {
+    .hero-grade { grid-template-columns: 1fr; }
+    .hero-figura { order: -1; }
+    .evita-grade { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 420px) {
+    .topo-eyebrow { margin-left: 0; order: 3; width: 100%; text-align: center; }
+    .marca-nome { font-size: var(--t-16); }
+  }
+
+  /* Reduz movimento */
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
+    .btn:hover { transform: none; }
+  }
+</style>
+</head>
+<body>
+
+  <!-- ================= 1 · HEADER ================= -->
+  <header class="topo">
+    <div class="envelope topo-grade">
+      <div class="marca">
+        <!-- símbolo: hemiciclo do plenário — três arcos de assentos sob a tribuna -->
+        <svg class="marca-simbolo" viewBox="0 0 40 40" role="img" aria-label="Hemiciclo do plenário">
+          <circle cx="20" cy="20" r="19" fill="#FBF8F0" stroke="#E0D7BF"/>
+          <path d="M7 27 A13 13 0 0 1 33 27" fill="none" stroke="#0C5340" stroke-width="2.4" stroke-linecap="round"/>
+          <path d="M10 27 A10 10 0 0 1 30 27" fill="none" stroke="#1E5FA8" stroke-width="2.4" stroke-linecap="round"/>
+          <path d="M13.5 27 A6.5 6.5 0 0 1 26.5 27" fill="none" stroke="#D9542B" stroke-width="2.4" stroke-linecap="round"/>
+          <rect x="18.4" y="9.5" width="3.2" height="6" rx="1.2" fill="#E8B23A"/>
+        </svg>
+        <p class="marca-nome">O&nbsp;Plenário</p>
+      </div>
+      <span class="eyebrow topo-eyebrow">Direção B · República Luminosa</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- ================= 2 · HERO ================= -->
+    <section class="hero" aria-labelledby="hero-titulo">
+      <div class="envelope hero-grade">
+        <div>
+          <p class="eyebrow">Cívico tropical · gestão da câmara</p>
+          <h1 id="hero-titulo">
+            A câmara em <span class="acento">cor</span>,
+            com a <span class="acento-telha">disciplina</span> de uma instituição.
+          </h1>
+          <p class="hero-lead">
+            O modernismo brasileiro virou software de gestão pública: o azulejo de Bulcão,
+            o jardim de Burle Marx e o concreto luminoso de Brasília guiam servidor, vereador
+            e cidadão pela mesma sessão — clara, confiável e sem cara de planilha.
+          </p>
+          <div class="hero-acoes">
+            <a class="btn btn-primario" href="#produto">Ver no produto</a>
+            <a class="btn btn-secundario" href="#assinatura">A assinatura</a>
+          </div>
+        </div>
+
+        <!-- figura do hero: o azulejo modular como ladrilho ambiente -->
+        <figure class="hero-figura" aria-hidden="true" style="margin:0;">
+          <svg viewBox="0 0 240 240" width="100%" style="display:block; border-radius:14px; box-shadow:0 24px 50px -30px rgba(12,83,64,.6);">
+            <rect width="240" height="240" fill="#0C5340"/>
+            <!-- malha de ladrilhos Bulcão: quartos de círculo e diagonais -->
+            <g fill="none" stroke-width="0">
+              <!-- linha 1 -->
+              <path d="M0 0 H80 A80 80 0 0 1 0 80 Z" fill="#1E5FA8"/>
+              <path d="M160 0 A80 80 0 0 1 80 80 L80 0 Z" fill="#D9542B"/>
+              <rect x="160" y="0" width="80" height="80" fill="#E8B23A"/>
+              <path d="M240 0 A80 80 0 0 1 160 80 L160 0 Z" fill="#0A4334"/>
+              <!-- linha 2 -->
+              <path d="M0 160 A80 80 0 0 1 80 80 L80 160 Z" fill="#D9542B"/>
+              <circle cx="120" cy="120" r="34" fill="#F1ECDD"/>
+              <path d="M160 80 H240 V160 A80 80 0 0 1 160 80 Z" fill="#16785C"/>
+              <!-- linha 3 -->
+              <rect x="0" y="160" width="80" height="80" fill="#1E5FA8"/>
+              <path d="M160 160 A80 80 0 0 1 80 240 L80 160 Z" fill="#E8B23A"/>
+              <path d="M240 160 A80 80 0 0 1 160 240 L160 160 Z" fill="#D9542B"/>
+            </g>
+          </svg>
+        </figure>
+      </div>
+    </section>
+
+    <!-- ================= 3 · PALETA ================= -->
+    <section class="secao" aria-labelledby="paleta-titulo">
+      <div class="envelope">
+        <div class="secao-cabeca">
+          <p class="eyebrow">Paleta</p>
+          <h2 id="paleta-titulo">Cor de instituição, calor de trópico</h2>
+          <p>Jade sério no comando, telha e cobalto do azulejo como vozes vivas, amarelo Marajó escasso. A areia é quente, mas ancorada pelo grotesco e pelo jade — nunca lê como creme.</p>
+        </div>
+        <div class="swatches">
+          <article class="swatch">
+            <span class="swatch-cor" style="background:#0C5340;"></span>
+            <div class="swatch-info"><p class="swatch-nome">Jade Plenário</p><p class="swatch-hex">#0C5340</p><p class="swatch-papel">Primário. Marca, ações, texto de destaque. Verde sério — não bandeira.</p></div>
+          </article>
+          <article class="swatch">
+            <span class="swatch-cor" style="background:#D9542B;"></span>
+            <div class="swatch-info"><p class="swatch-nome">Telha</p><p class="swatch-hex">#D9542B</p><p class="swatch-papel">Acento coral. Prazos, alertas e ênfase. Usado com ousadia, nunca tímido.</p></div>
+          </article>
+          <article class="swatch">
+            <span class="swatch-cor" style="background:#1E5FA8;"></span>
+            <div class="swatch-info"><p class="swatch-nome">Cobalto Azulejo</p><p class="swatch-hex">#1E5FA8</p><p class="swatch-papel">Secundário. Foco de teclado, dados, links e o azul do ladrilho.</p></div>
+          </article>
+          <article class="swatch">
+            <span class="swatch-cor" style="background:#E8B23A;"></span>
+            <div class="swatch-info"><p class="swatch-nome">Amarelo Marajó</p><p class="swatch-hex">#E8B23A</p><p class="swatch-papel">Quarta cor do azulejo. Pontual: progresso e realce em fundo escuro.</p></div>
+          </article>
+          <article class="swatch">
+            <span class="swatch-cor" style="background:#F1ECDD; border-bottom:1px solid #E0D7BF;"></span>
+            <div class="swatch-info"><p class="swatch-nome">Areia Quente</p><p class="swatch-hex">#F1ECDD</p><p class="swatch-papel">Fundo. Concreto luminoso de Brasília sob luz tropical.</p></div>
+          </article>
+          <article class="swatch">
+            <span class="swatch-cor" style="background:#19211C;"></span>
+            <div class="swatch-info"><p class="swatch-nome">Tinta</p><p class="swatch-hex">#19211C</p><p class="swatch-papel">Texto principal. Contraste 13:1 sobre areia — bem acima de AA.</p></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 4 · TIPOGRAFIA ================= -->
+    <section class="secao" aria-labelledby="tipo-titulo">
+      <div class="envelope">
+        <div class="secao-cabeca">
+          <p class="eyebrow">Tipografia</p>
+          <h2 id="tipo-titulo">Geométrica e humana, com calor</h2>
+          <p>Sora dá voz institucional aos títulos; Hanken Grotesk mantém o corpo legível e moderno; IBM Plex Mono carrega protocolos, prazos e números sem ambiguidade.</p>
+        </div>
+        <div class="tipo-grade">
+          <div class="specimen">
+            <p class="rotulo">Display — Sora 700/800</p>
+            <p class="amostra-display">Plenário</p>
+            <p class="meta">Títulos, marca, números grandes. Geométrico-humanista, ombros largos.</p>
+          </div>
+          <div class="specimen">
+            <p class="rotulo">Corpo — Hanken Grotesk 400/600</p>
+            <p class="amostra-corpo">A sessão ordinária foi aberta com quórum de dois terços e seguiu para a ordem do dia.</p>
+            <p class="meta">Texto longo, rótulos, leitura de tramitação.</p>
+          </div>
+          <div class="specimen">
+            <p class="rotulo">Dados — IBM Plex Mono 500</p>
+            <p class="amostra-mono">PL 042/2026 · 12.481</p>
+            <p class="meta">Protocolos, prazos, IDs, timer de tribuna. Tabular.</p>
+          </div>
+        </div>
+        <div class="escala" aria-label="Escala tipográfica">
+          <div class="escala-linha"><span class="escala-px">13</span><span class="escala-texto" style="font-size:13px;">Competência 2026-05 · remessa SIM</span></div>
+          <div class="escala-linha"><span class="escala-px">16</span><span class="escala-texto" style="font-size:16px;">Acompanhar a tramitação da proposição</span></div>
+          <div class="escala-linha"><span class="escala-px">21</span><span class="escala-texto" style="font-size:21px;">Hortas comunitárias no município</span></div>
+          <div class="escala-linha"><span class="escala-px">28</span><span class="escala-texto" style="font-size:28px;">Onde a câmara acontece</span></div>
+          <div class="escala-linha"><span class="escala-px">40</span><span class="escala-texto" style="font-size:40px;">Sessão plenária</span></div>
+          <div class="escala-linha"><span class="escala-px">56</span><span class="escala-texto" style="font-size:56px;">República</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 5 · A ASSINATURA ================= -->
+    <section class="secao" id="assinatura" aria-labelledby="assinatura-titulo">
+      <div class="envelope">
+        <div class="secao-cabeca">
+          <p class="eyebrow">A assinatura</p>
+          <h2 id="assinatura-titulo">A faixa de azulejo da tramitação</h2>
+          <p>Um ladrilho de Bulcão que não decora — informa. Cada azulejo é uma fase do trâmite; a fase atual abre o quarto de círculo pela metade. Lê-se a etapa de uma proposição em um relance, no chão de Brasília.</p>
+        </div>
+
+        <div class="assinatura-painel">
+          <p class="eyebrow">PL 042/2026 · estágio do trâmite</p>
+          <p class="assinatura-titulo">Hortas Comunitárias — em 2ª discussão</p>
+          <p class="desc">Da esquerda à direita: as fases concluídas vêm preenchidas em cor cheia; a fase em curso traz o motivo Bulcão pela metade; as seguintes ficam em concreto, à espera.</p>
+
+          <!-- faixa modular: 5 azulejos = 5 fases da tramitação -->
+          <svg class="azulejo-faixa" viewBox="0 0 600 132" role="img"
+               aria-label="Trâmite do PL 042/2026: Protocolo concluído, Comissões concluído, 1º turno concluído, 2º turno em andamento, Sanção pendente.">
+            <defs>
+              <clipPath id="t0"><rect x="8"   y="8" width="104" height="104" rx="10"/></clipPath>
+              <clipPath id="t1"><rect x="128" y="8" width="104" height="104" rx="10"/></clipPath>
+              <clipPath id="t2"><rect x="248" y="8" width="104" height="104" rx="10"/></clipPath>
+              <clipPath id="t3"><rect x="368" y="8" width="104" height="104" rx="10"/></clipPath>
+              <clipPath id="t4"><rect x="488" y="8" width="104" height="104" rx="10"/></clipPath>
+            </defs>
+
+            <!-- Azulejo 0 — Protocolo (concluído, jade) -->
+            <g clip-path="url(#t0)">
+              <rect x="8" y="8" width="104" height="104" fill="#0C5340"/>
+              <path d="M8 112 A104 104 0 0 1 112 8 L112 112 Z" fill="#16785C"/>
+              <circle cx="60" cy="60" r="20" fill="#F1ECDD"/>
+            </g>
+            <!-- Azulejo 1 — Comissões (concluído, cobalto) -->
+            <g clip-path="url(#t1)">
+              <rect x="128" y="8" width="104" height="104" fill="#1E5FA8"/>
+              <path d="M128 8 A104 104 0 0 1 232 112 L128 112 Z" fill="#184E8A"/>
+              <circle cx="180" cy="60" r="20" fill="#F1ECDD"/>
+            </g>
+            <!-- Azulejo 2 — 1º turno (concluído, telha) -->
+            <g clip-path="url(#t2)">
+              <rect x="248" y="8" width="104" height="104" fill="#D9542B"/>
+              <path d="M352 8 A104 104 0 0 1 248 112 L248 8 Z" fill="#B9421F"/>
+              <circle cx="300" cy="60" r="20" fill="#F1ECDD"/>
+            </g>
+            <!-- Azulejo 3 — 2º turno (EM ANDAMENTO: motivo pela metade, amarelo + concreto) -->
+            <g clip-path="url(#t3)">
+              <rect x="368" y="8" width="104" height="104" fill="#0A4334"/>
+              <path d="M368 60 A52 52 0 0 1 420 8 L420 60 Z" fill="#E8B23A"/>
+              <path d="M420 60 A52 52 0 0 1 472 112 L420 112 Z" fill="#E8B23A"/>
+              <circle cx="420" cy="60" r="11" fill="#F1ECDD"/>
+            </g>
+            <!-- Azulejo 4 — Sanção (pendente: concreto vazado) -->
+            <g clip-path="url(#t4)">
+              <rect x="488" y="8" width="104" height="104" fill="#0A4334"/>
+              <path d="M488 8 A104 104 0 0 1 592 112" fill="none" stroke="#16785C" stroke-width="3" stroke-dasharray="6 7"/>
+              <circle cx="540" cy="60" r="20" fill="none" stroke="#16785C" stroke-width="3" stroke-dasharray="6 7"/>
+            </g>
+
+            <!-- rótulos -->
+            <g font-family="IBM Plex Mono, monospace" font-size="12" fill="#F1ECDD">
+              <text x="60"  y="128" text-anchor="middle">Protocolo</text>
+              <text x="180" y="128" text-anchor="middle">Comissões</text>
+              <text x="300" y="128" text-anchor="middle">1º turno</text>
+              <text x="420" y="128" text-anchor="middle" fill="#E8B23A" font-weight="600">2º turno</text>
+              <text x="540" y="128" text-anchor="middle" fill="#8FB8AB">Sanção</text>
+            </g>
+          </svg>
+
+          <ul class="legenda">
+            <li><span class="ponto" style="background:#16785C;"></span> Fase concluída</li>
+            <li><span class="ponto" style="background:#E8B23A;"></span> Em andamento</li>
+            <li><span class="ponto" style="background:transparent; border:2px dashed #16785C;"></span> Pendente</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 6 · NO PRODUTO ================= -->
+    <section class="secao" id="produto" aria-labelledby="produto-titulo">
+      <div class="envelope">
+        <div class="secao-cabeca">
+          <p class="eyebrow">No produto</p>
+          <h2 id="produto-titulo">Componentes reais, a mesma linguagem</h2>
+          <p>A fita de azulejo no topo de cada cartão é a assinatura aplicada com disciplina; cor carrega significado, nunca enfeite.</p>
+        </div>
+
+        <div class="produto-grade">
+          <!-- (a) Cartão de proposição -->
+          <article class="cartao" aria-labelledby="prop-titulo">
+            <div class="cartao-topo">
+              <span class="cartao-id">PL 042/2026 · protocolo 12.481</span>
+              <span class="chip chip-ok"><span class="glifo" aria-hidden="true"></span>Aprovada em 1º turno</span>
+            </div>
+            <h3 class="cartao-titulo" id="prop-titulo">Cria o Programa Municipal de Hortas Comunitárias.</h3>
+            <p class="cartao-meta">Autoria: Ver. Helena Matos · 2ª discussão</p>
+            <div class="cartao-acoes">
+              <a class="btn btn-primario btn-sm" href="#produto">Abrir tramitação</a>
+              <a class="btn btn-secundario btn-sm" href="#produto">Acompanhar</a>
+            </div>
+          </article>
+
+          <!-- (b) Cartão de compliance / prazo -->
+          <article class="cartao" aria-labelledby="comp-titulo">
+            <div class="compliance-cabeca">
+              <span class="compliance-selo" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 20 20"><path d="M10 2l6 2.4v4.2c0 4-2.6 6.8-6 8.4-3.4-1.6-6-4.4-6-8.4V4.4L10 2z" fill="none" stroke="#1E5FA8" stroke-width="1.6"/><path d="M6.5 10l2.3 2.3 4.4-4.6" fill="none" stroke="#1E5FA8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+              <span class="cartao-id" id="comp-titulo">Remessa SIM · competência 2026-05</span>
+            </div>
+            <p class="compliance-vence">Envio ao TCE-CE vence em 6 dias</p>
+            <p class="compliance-sub">Layout SIM validado · pendente de geração do arquivo de remessa.</p>
+            <span class="chip chip-prazo"><span class="glifo" aria-hidden="true"></span>Prazo: 31/07</span>
+
+            <div class="tribuna" role="group" aria-label="Cronômetro de tribuna">
+              <div class="tribuna-linha">
+                <span class="tribuna-rotulo">Tribuna · tempo restante</span>
+                <span class="tribuna-tempo" id="timer">04:32</span>
+              </div>
+              <div class="barra" role="progressbar" aria-label="Tempo de tribuna decorrido" aria-valuemin="0" aria-valuemax="100" aria-valuenow="72">
+                <span class="barra-preenchida"></span>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 7 · O QUE EVITAMOS ================= -->
+    <section class="secao" aria-labelledby="evita-titulo">
+      <div class="envelope">
+        <div class="secao-cabeca">
+          <p class="eyebrow">O que evitamos — de propósito</p>
+          <h2 id="evita-titulo">As escolhas têm endereço</h2>
+          <p>Cada decisão veio do mundo real da câmara — modernismo brasileiro, não a estética genérica de IA.</p>
+        </div>
+        <div class="evita-grade">
+          <div class="evita-col evita-recusado">
+            <h3>Recusado</h3>
+            <ul>
+              <li><svg class="marca-li" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 3l8 8M11 3l-8 8" stroke="#B9421F" stroke-width="2" stroke-linecap="round"/></svg> Creme #F4F1EA com serifa de alto contraste e terracota — o cluster de IA nº 1.</li>
+              <li><svg class="marca-li" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 3l8 8M11 3l-8 8" stroke="#B9421F" stroke-width="2" stroke-linecap="round"/></svg> Quase-preto com um único acento verde-ácido ou vermelhão — cluster nº 2.</li>
+              <li><svg class="marca-li" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 3l8 8M11 3l-8 8" stroke="#B9421F" stroke-width="2" stroke-linecap="round"/></svg> Fios capilares de jornal e colunas densas de broadsheet — cluster nº 3.</li>
+              <li><svg class="marca-li" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 3l8 8M11 3l-8 8" stroke="#B9421F" stroke-width="2" stroke-linecap="round"/></svg> Navy #0F172A + azul de SaaS genérico, e as fontes Inter / Roboto / Lexend.</li>
+              <li><svg class="marca-li" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 3l8 8M11 3l-8 8" stroke="#B9421F" stroke-width="2" stroke-linecap="round"/></svg> Verde-bandeira #009C3B como clichê de "brasilidade".</li>
+            </ul>
+          </div>
+          <div class="evita-col evita-escolhido">
+            <h3>Escolhido</h3>
+            <ul>
+              <li><svg class="marca-li" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2.5 7.5l3 3 6-7" stroke="#E8B23A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg> Jade sério #0C5340 — o verde da instituição, não da bandeira.</li>
+              <li><svg class="marca-li" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2.5 7.5l3 3 6-7" stroke="#E8B23A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg> Azulejo de Athos Bulcão como faixa estrutural de dados de tramitação.</li>
+              <li><svg class="marca-li" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2.5 7.5l3 3 6-7" stroke="#E8B23A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg> Areia quente ancorada por grotesco + jade — concreto de Brasília, nunca creme.</li>
+              <li><svg class="marca-li" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2.5 7.5l3 3 6-7" stroke="#E8B23A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg> Sora + Hanken Grotesk + IBM Plex Mono — geométrico-humanista com calor.</li>
+              <li><svg class="marca-li" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2.5 7.5l3 3 6-7" stroke="#E8B23A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg> Cor + padrão com confiança e contraste AA+ — a dignidade não exige cinza.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="rodape">
+    <div class="envelope">
+      <p>O Plenário · <span class="mono">Direção B — República Luminosa (Cívico Tropical)</span> · style-tile para avaliação. Valores no cartão de tribuna são ilustrativos.</p>
+    </div>
+  </footer>
+
+  <script>
+    // Timer de tribuna — contagem regressiva ilustrativa, respeita reduced-motion.
+    (function () {
+      var alvo = document.getElementById('timer');
+      var barra = document.querySelector('.barra-preenchida');
+      var progressbar = document.querySelector('[role="progressbar"]');
+      if (!alvo) return;
+      var prefereReduzir = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (prefereReduzir) return;
+
+      var restante = 4 * 60 + 32; // 04:32
+      var total = 6 * 60;         // tribuna de 6 min
+      var id = setInterval(function () {
+        restante -= 1;
+        if (restante < 0) { clearInterval(id); return; }
+        var m = String(Math.floor(restante / 60)).padStart(2, '0');
+        var s = String(restante % 60).padStart(2, '0');
+        alvo.textContent = m + ':' + s;
+        var pct = Math.round(((total - restante) / total) * 100);
+        if (barra) barra.style.width = pct + '%';
+        if (progressbar) progressbar.setAttribute('aria-valuenow', String(pct));
+      }, 1000);
+    })();
+  </script>
+
+</body>
+</html>

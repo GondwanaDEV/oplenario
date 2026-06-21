@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>O Plenário — Direção C · Pedra &amp; Bronze</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* --- Pedra (light base) --- */
+    --concreto:        #E5E0D6;  /* base — concreto polido */
+    --concreto-claro:  #EFEBE2;  /* cards sobre a base */
+    --concreto-fundo:  #DAD4C7;  /* sulcos / divisas gravadas */
+    /* --- Bronze (metal quente, NUNCA neon) --- */
+    --bronze:          #A06A2C;  /* metal — fills, bordas, gravação (decorativo) */
+    --bronze-texto:    #80531F;  /* MESMO bronze, escurecido p/ texto sobre claro (AA 5:1+) */
+    --bronze-claro:    #C68A45;  /* bordas/realces sobre escuro */
+    --bronze-luz:      #E0B878;  /* brilho da gravação no escuro */
+    /* --- Charcoal-stone (blocos cerimoniais) --- */
+    --pedra-escura:    #26231F;  /* header / hero / placa */
+    --pedra-escura-2:  #322E29;  /* relevo dentro do escuro */
+    /* --- Pórfiro (secundário, oxblood) --- */
+    --porfiro:         #7A2E2E;
+    --porfiro-claro:   #C77A6F;  /* texto de alerta sobre escuro (AA) */
+    /* --- Pátina (verdete do bronze envelhecido — estado "em vigor") --- */
+    --patina:          #4F6A55;
+    --patina-clara:    #9FC2A4;  /* sobre escuro (AA) */
+    /* --- Tinta / texto --- */
+    --tinta:           #1C1916;  /* texto principal sobre claro */
+    --tinta-suave:     #57514A;  /* secundário sobre claro (AA 7:1+) */
+    --osso:            #ECE7DC;  /* texto principal sobre escuro */
+    --osso-suave:      #BDB6A7;  /* secundário sobre escuro (AA) */
+
+    --r-pedra: 3px;              /* pedra mal arredonda */
+    --linha: 1px solid var(--concreto-fundo);
+    --foco: 3px solid var(--bronze);
+
+    --serif: "Cinzel", Georgia, serif;
+    --corpo: "Archivo", system-ui, sans-serif;
+    --mono:  "IBM Plex Mono", ui-monospace, monospace;
+  }
+
+  *{ box-sizing:border-box; }
+  html{ -webkit-text-size-adjust:100%; }
+  body{
+    margin:0;
+    font-family:var(--corpo);
+    color:var(--tinta);
+    background:var(--concreto);
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+  }
+
+  /* textura de concreto sutil — sulcos verticais leves */
+  body::before{
+    content:"";
+    position:fixed; inset:0; z-index:-1; pointer-events:none;
+    background:
+      repeating-linear-gradient(90deg, rgba(28,25,22,.018) 0 1px, transparent 1px 96px),
+      radial-gradient(120% 80% at 50% -10%, rgba(160,106,44,.05), transparent 60%);
+  }
+
+  a{ color:inherit; }
+  :focus-visible{ outline:var(--foco); outline-offset:3px; border-radius:2px; }
+
+  .env{ max-width:1080px; margin:0 auto; padding:0 24px; }
+
+  .eyebrow{
+    font-family:var(--mono);
+    font-size:12px; font-weight:500;
+    letter-spacing:.22em; text-transform:uppercase;
+    color:var(--bronze-texto);
+    margin:0;
+  }
+  .eyebrow--escuro{ color:var(--bronze-luz); }
+
+  /* ---------- HEADER ---------- */
+  .topo{
+    background:var(--pedra-escura);
+    color:var(--osso);
+    border-bottom:2px solid var(--bronze);
+  }
+  .topo__in{
+    display:flex; align-items:center; gap:20px;
+    padding:18px 24px; max-width:1080px; margin:0 auto;
+    flex-wrap:wrap;
+  }
+  .marca{ display:flex; align-items:center; gap:13px; }
+  .marca svg{ display:block; flex:0 0 auto; }
+  .marca__nome{
+    font-family:var(--serif); font-weight:600;
+    font-size:21px; letter-spacing:.10em;
+    text-transform:uppercase; color:var(--osso);
+  }
+  .topo__eyebrow{
+    margin-left:auto;
+    font-family:var(--mono); font-size:11px; font-weight:500;
+    letter-spacing:.24em; text-transform:uppercase;
+    color:var(--bronze-luz);
+    border:1px solid rgba(224,184,120,.4);
+    padding:6px 12px; border-radius:2px;
+    white-space:nowrap;
+  }
+
+  /* ---------- HERO ---------- */
+  .hero{
+    background:var(--pedra-escura);
+    color:var(--osso);
+    position:relative; overflow:hidden;
+  }
+  .hero::after{ /* fio de bronze gravado na base do bloco */
+    content:""; position:absolute; left:0; right:0; bottom:0; height:1px;
+    background:linear-gradient(90deg, transparent, var(--bronze) 20%, var(--bronze-luz) 50%, var(--bronze) 80%, transparent);
+    opacity:.55;
+  }
+  .hero__in{ padding:74px 24px 86px; max-width:1080px; margin:0 auto; position:relative; }
+  .hero__col{ max-width:680px; }
+  .hero h1{
+    font-family:var(--serif); font-weight:600;
+    font-size:clamp(34px, 6vw, 60px);
+    line-height:1.06; letter-spacing:.01em;
+    margin:18px 0 0; color:var(--osso);
+    text-transform:uppercase;
+  }
+  .hero h1 em{
+    font-style:normal; color:var(--bronze-luz);
+    display:block;
+  }
+  .hero__lead{
+    font-size:clamp(16px,2.2vw,19px); line-height:1.6;
+    color:var(--osso-suave); max-width:54ch; margin:26px 0 0;
+  }
+  .hero__lead strong{ color:var(--osso); font-weight:600; }
+
+  /* rítmo de fachada/colunas gravado no canto do hero (decorativo) */
+  .colunata{ position:absolute; right:-10px; top:0; bottom:0; width:230px; opacity:.5; pointer-events:none; }
+  @media (max-width:860px){ .colunata{ display:none; } }
+
+  /* ---------- SECTIONS ---------- */
+  .secao{ padding:64px 0; border-top:var(--linha); }
+  .secao__cab{ margin-bottom:30px; }
+  .secao__titulo{
+    font-family:var(--serif); font-weight:600;
+    font-size:clamp(22px,3vw,30px); letter-spacing:.04em;
+    text-transform:uppercase; color:var(--tinta);
+    margin:8px 0 0;
+  }
+  .secao__sub{ color:var(--tinta-suave); margin:10px 0 0; max-width:62ch; font-size:15px; }
+
+  /* ---------- PALETA ---------- */
+  .paleta{ display:grid; grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:14px; }
+  .swatch{
+    border:var(--linha); border-radius:var(--r-pedra); overflow:hidden;
+    background:var(--concreto-claro);
+  }
+  .swatch__cor{ height:88px; position:relative; }
+  .swatch__cor::after{ /* chanfro gravado no topo de cada amostra */
+    content:""; position:absolute; inset:0;
+    box-shadow:inset 0 2px 0 rgba(255,255,255,.10), inset 0 -2px 0 rgba(0,0,0,.18);
+  }
+  .swatch__txt{ padding:11px 13px 13px; }
+  .swatch__nome{ font-weight:600; font-size:14px; }
+  .swatch__hex{ font-family:var(--mono); font-size:12px; color:var(--tinta-suave); margin-top:2px; }
+  .swatch__papel{ font-size:12px; color:var(--tinta-suave); margin-top:7px; line-height:1.4; }
+
+  /* ---------- TIPOGRAFIA ---------- */
+  .tipo-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:18px; }
+  .tipo-card{ border:var(--linha); border-radius:var(--r-pedra); padding:22px; background:var(--concreto-claro); }
+  .tipo-card__tag{ font-family:var(--mono); font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:var(--bronze-texto); }
+  .tipo-card__nome{ font-size:13px; color:var(--tinta-suave); margin-top:4px; }
+  .specimen-serif{ font-family:var(--serif); font-weight:600; font-size:40px; line-height:1.05; letter-spacing:.03em; text-transform:uppercase; margin:16px 0 0; }
+  .specimen-corpo{ font-family:var(--corpo); font-size:18px; line-height:1.55; margin:14px 0 0; }
+  .specimen-mono{ font-family:var(--mono); font-size:16px; margin:16px 0 0; letter-spacing:.02em; }
+  .escala{ margin-top:26px; border-top:var(--linha); padding-top:20px; display:flex; flex-direction:column; gap:6px; }
+  .escala__lin{ display:flex; align-items:baseline; gap:16px; }
+  .escala__px{ font-family:var(--mono); font-size:12px; color:var(--tinta-suave); width:46px; flex:0 0 auto; text-align:right; }
+  .escala__am{ font-family:var(--serif); font-weight:600; line-height:1; text-transform:uppercase; letter-spacing:.02em; color:var(--tinta); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  /* ---------- A ASSINATURA: A PLACA ---------- */
+  .assinatura{ background:var(--pedra-escura); color:var(--osso); border-radius:var(--r-pedra); border-top:2px solid var(--bronze); padding:0; overflow:hidden; }
+  .assinatura__in{ display:grid; grid-template-columns:1.05fr .95fr; gap:0; }
+  @media (max-width:760px){ .assinatura__in{ grid-template-columns:1fr; } }
+  .assinatura__svg{ padding:34px; display:flex; align-items:center; justify-content:center; background:linear-gradient(160deg, #2C2823, #211E1A); }
+  .assinatura__txt{ padding:34px; border-left:1px solid rgba(224,184,120,.18); }
+  @media (max-width:760px){ .assinatura__txt{ border-left:none; border-top:1px solid rgba(224,184,120,.18); } }
+  .assinatura__txt h3{ font-family:var(--serif); font-weight:600; text-transform:uppercase; letter-spacing:.05em; font-size:22px; margin:14px 0 0; color:var(--osso); }
+  .assinatura__txt p{ color:var(--osso-suave); font-size:15px; margin:12px 0 0; }
+  .assinatura__txt p strong{ color:var(--bronze-luz); font-weight:600; }
+
+  /* ---------- NO PRODUTO ---------- */
+  .produto-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:20px; }
+  .card{ border:var(--linha); border-radius:var(--r-pedra); background:var(--concreto-claro); overflow:hidden; }
+  .card__fita{ height:4px; background:linear-gradient(90deg, var(--bronze), var(--bronze-claro)); }
+  .card__corpo{ padding:22px; }
+  .card__kicker{ font-family:var(--mono); font-size:12px; letter-spacing:.06em; color:var(--tinta-suave); }
+  .card__titulo{ font-family:var(--serif); font-weight:600; font-size:19px; line-height:1.18; text-transform:uppercase; letter-spacing:.02em; margin:10px 0 0; color:var(--tinta); }
+  .card__meta{ font-size:14px; color:var(--tinta-suave); margin:10px 0 0; }
+
+  .chip{
+    display:inline-flex; align-items:center; gap:7px;
+    font-family:var(--mono); font-size:12px; font-weight:500; letter-spacing:.03em;
+    padding:5px 10px; border-radius:2px; margin-top:14px;
+    border:1px solid;
+  }
+  .chip svg{ flex:0 0 auto; }
+  .chip--ok{ color:#2F4A36; background:rgba(79,106,85,.16); border-color:rgba(79,106,85,.45); }
+  .chip--prazo{ color:var(--bronze-texto); background:rgba(160,106,44,.14); border-color:rgba(128,83,31,.5); }
+
+  .acoes{ display:flex; gap:10px; flex-wrap:wrap; margin-top:20px; }
+  .btn{
+    font-family:var(--corpo); font-weight:600; font-size:14px;
+    padding:11px 18px; border-radius:2px; cursor:pointer;
+    border:1px solid transparent; text-decoration:none;
+    display:inline-flex; align-items:center; gap:8px;
+    transition:transform .08s ease, background .15s ease, border-color .15s ease;
+  }
+  .btn:active{ transform:translateY(1px); }
+  .btn--primario{ background:var(--pedra-escura); color:var(--osso); border-color:var(--pedra-escura); }
+  .btn--primario:hover{ background:#322E29; }
+  .btn--secundario{ background:transparent; color:var(--tinta); border-color:var(--concreto-fundo); }
+  .btn--secundario:hover{ border-color:var(--bronze); color:var(--bronze-texto); }
+
+  /* card de compliance — fundo escuro = bloco de bronze gravado */
+  .card--bronze{ background:var(--pedra-escura); color:var(--osso); border-color:#322E29; }
+  .card--bronze .card__kicker{ color:var(--osso-suave); }
+  .card--bronze .card__titulo{ color:var(--osso); }
+  .card--bronze .card__alerta{ color:var(--porfiro-claro); font-weight:600; font-size:15px; margin:8px 0 0; }
+  .card--bronze .chip--prazo{ color:var(--bronze-luz); background:rgba(224,184,120,.12); border-color:rgba(224,184,120,.4); }
+
+  .tribuna{ margin-top:20px; padding-top:18px; border-top:1px solid rgba(224,184,120,.16); }
+  .tribuna__topo{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
+  .tribuna__rotulo{ font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--osso-suave); }
+  .tribuna__tempo{ font-family:var(--mono); font-weight:600; font-size:30px; letter-spacing:.04em; color:var(--bronze-luz); font-variant-numeric:tabular-nums; }
+  .barra{ height:8px; border-radius:2px; background:rgba(236,231,220,.14); margin-top:12px; overflow:hidden; box-shadow:inset 0 1px 2px rgba(0,0,0,.35); }
+  .barra__fill{ height:100%; width:64%; background:linear-gradient(90deg, var(--bronze), var(--bronze-luz)); border-radius:2px; }
+
+  /* ---------- EVITAMOS ---------- */
+  .evita-grid{ display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  @media (max-width:680px){ .evita-grid{ grid-template-columns:1fr; } }
+  .evita-col{ border:var(--linha); border-radius:var(--r-pedra); padding:22px; background:var(--concreto-claro); }
+  .evita-col h3{ font-family:var(--mono); font-size:12px; letter-spacing:.14em; text-transform:uppercase; margin:0 0 14px; }
+  .evita-col--no h3{ color:var(--porfiro); }
+  .evita-col--sim h3{ color:var(--patina); }
+  .evita-col ul{ margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:13px; }
+  .evita-col li{ font-size:14px; line-height:1.5; color:var(--tinta); display:flex; gap:11px; }
+  .evita-col li b{ font-weight:600; }
+  .marca-li{ flex:0 0 auto; margin-top:3px; }
+  .marca-li--no{ color:var(--porfiro); }
+  .marca-li--sim{ color:var(--patina); }
+
+  /* ---------- RODAPÉ ---------- */
+  .rodape{ background:var(--pedra-escura); color:var(--osso-suave); border-top:2px solid var(--bronze); }
+  .rodape__in{ max-width:1080px; margin:0 auto; padding:28px 24px; display:flex; gap:16px; align-items:center; flex-wrap:wrap; font-family:var(--mono); font-size:12px; letter-spacing:.06em; }
+  .rodape__in span{ color:var(--bronze-luz); }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation:none !important; transition:none !important; }
+  }
+</style>
+</head>
+<body>
+
+  <!-- ====================== HEADER ====================== -->
+  <header class="topo">
+    <div class="topo__in">
+      <div class="marca">
+        <!-- símbolo: placa de bronze gravada com o hemiciclo do plenário -->
+        <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true">
+          <rect x="1.5" y="1.5" width="31" height="31" rx="3" fill="#322E29" stroke="#A06A2C" stroke-width="1.5"/>
+          <rect x="5" y="5" width="24" height="24" rx="2" fill="none" stroke="#A06A2C" stroke-width=".75" opacity=".55"/>
+          <!-- hemiciclo embutido -->
+          <path d="M8 23 A9 9 0 0 1 26 23" fill="none" stroke="#E0B878" stroke-width="1.4"/>
+          <path d="M10.5 23 A6.5 6.5 0 0 1 23.5 23" fill="none" stroke="#C68A45" stroke-width="1.1" opacity=".8"/>
+          <circle cx="17" cy="23" r="1.5" fill="#E0B878"/>
+        </svg>
+        <span class="marca__nome">O Plenário</span>
+      </div>
+      <span class="topo__eyebrow">Direção C · Pedra &amp; Bronze</span>
+    </div>
+  </header>
+
+  <!-- ====================== HERO ====================== -->
+  <section class="hero">
+    <!-- colunata gravada decorativa -->
+    <svg class="colunata" viewBox="0 0 230 400" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <g stroke="#A06A2C" stroke-width="1" fill="none" opacity=".7">
+        <line x1="40" y1="40" x2="40" y2="380"/>
+        <line x1="95" y1="40" x2="95" y2="380"/>
+        <line x1="150" y1="40" x2="150" y2="380"/>
+        <line x1="205" y1="40" x2="205" y2="380"/>
+        <rect x="20" y="40" width="190" height="14"/>
+        <rect x="14" y="20" width="202" height="16"/>
+      </g>
+      <g stroke="#E0B878" stroke-width=".6" opacity=".4">
+        <line x1="40" y1="60" x2="40" y2="360"/>
+        <line x1="95" y1="60" x2="95" y2="360"/>
+        <line x1="150" y1="60" x2="150" y2="360"/>
+      </g>
+    </svg>
+    <div class="hero__in">
+      <div class="hero__col">
+        <p class="eyebrow eyebrow--escuro">A instituição como monumento</p>
+        <h1>A câmara tem<em>peso de lei.</em></h1>
+        <p class="hero__lead">
+          <strong>Pedra &amp; Bronze</strong> trata a câmara municipal como aquilo que ela é:
+          uma instituição que perdura. Concreto, placa de bronze, letra gravada.
+          Cada sessão, proposição e prazo do TCE ganha a gravidade de um registro
+          público — sem perder a clareza de uso diário.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <main>
+
+    <!-- ====================== PALETA ====================== -->
+    <section class="secao">
+      <div class="env">
+        <div class="secao__cab">
+          <p class="eyebrow">01 · Materiais</p>
+          <h2 class="secao__titulo">Paleta</h2>
+          <p class="secao__sub">Concreto claro como base; blocos escuros de pedra-carvão para os momentos cerimoniais; bronze quente como acento — nunca neon. Pórfiro para risco, pátina para o que está em vigor.</p>
+        </div>
+        <div class="paleta">
+          <div class="swatch">
+            <div class="swatch__cor" style="background:#E5E0D6"></div>
+            <div class="swatch__txt">
+              <div class="swatch__nome">Concreto</div>
+              <div class="swatch__hex">#E5E0D6</div>
+              <div class="swatch__papel">Fundo da plataforma — pedra polida.</div>
+            </div>
+          </div>
+          <div class="swatch">
+            <div class="swatch__cor" style="background:#26231F"></div>
+            <div class="swatch__txt">
+              <div class="swatch__nome">Pedra-carvão</div>
+              <div class="swatch__hex">#26231F</div>
+              <div class="swatch__papel">Blocos cerimoniais: header, hero, placa.</div>
+            </div>
+          </div>
+          <div class="swatch">
+            <div class="swatch__cor" style="background:#A06A2C"></div>
+            <div class="swatch__txt">
+              <div class="swatch__nome">Bronze</div>
+              <div class="swatch__hex">#A06A2C</div>
+              <div class="swatch__papel">Acento e ação sobre claro. Metal, não tinta.</div>
+            </div>
+          </div>
+          <div class="swatch">
+            <div class="swatch__cor" style="background:#C68A45"></div>
+            <div class="swatch__txt">
+              <div class="swatch__nome">Bronze claro</div>
+              <div class="swatch__hex">#C68A45</div>
+              <div class="swatch__papel">Bordas e realce de dados sobre escuro.</div>
+            </div>
+          </div>
+          <div class="swatch">
+            <div class="swatch__cor" style="background:#7A2E2E"></div>
+            <div class="swatch__txt">
+              <div class="swatch__nome">Pórfiro</div>
+              <div class="swatch__hex">#7A2E2E</div>
+              <div class="swatch__papel">Secundário — alerta, prazo crítico, recusa.</div>
+            </div>
+          </div>
+          <div class="swatch">
+            <div class="swatch__cor" style="background:#4F6A55"></div>
+            <div class="swatch__txt">
+              <div class="swatch__nome">Pátina</div>
+              <div class="swatch__hex">#4F6A55</div>
+              <div class="swatch__papel">Verdete do bronze: aprovado, em vigor, conforme.</div>
+            </div>
+          </div>
+          <div class="swatch">
+            <div class="swatch__cor" style="background:#1C1916"></div>
+            <div class="swatch__txt">
+              <div class="swatch__nome">Tinta</div>
+              <div class="swatch__hex">#1C1916</div>
+              <div class="swatch__papel">Texto principal sobre claro.</div>
+            </div>
+          </div>
+          <div class="swatch">
+            <div class="swatch__cor" style="background:#ECE7DC"></div>
+            <div class="swatch__txt">
+              <div class="swatch__nome">Osso</div>
+              <div class="swatch__hex">#ECE7DC</div>
+              <div class="swatch__papel">Texto principal sobre os blocos escuros.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====================== TIPOGRAFIA ====================== -->
+    <section class="secao">
+      <div class="env">
+        <div class="secao__cab">
+          <p class="eyebrow">02 · Letra gravada</p>
+          <h2 class="secao__titulo">Tipografia</h2>
+          <p class="secao__sub">Caixa-alta inscricional para títulos — a letra dos monumentos e das placas, não o serif editorial. Grotesca robusta no corpo, monoespaçada para os dados.</p>
+        </div>
+        <div class="tipo-grid">
+          <div class="tipo-card">
+            <span class="tipo-card__tag">Display · inscricional</span>
+            <div class="tipo-card__nome">Cinzel — capitulares romanas</div>
+            <div class="specimen-serif">Ordem do Dia</div>
+            <div class="specimen-serif" style="font-size:26px; color:var(--bronze-texto);">Tribuna &amp; Mesa</div>
+          </div>
+          <div class="tipo-card">
+            <span class="tipo-card__tag">Corpo · grotesca</span>
+            <div class="tipo-card__nome">Archivo — robusta, neutra, legível</div>
+            <p class="specimen-corpo">A câmara delibera, registra e publica. Esta é a fonte do trabalho diário — proposições, pareceres, atas e o portal do cidadão.</p>
+            <p class="specimen-corpo" style="font-weight:600;">Servidor, vereador, cidadão.</p>
+          </div>
+          <div class="tipo-card">
+            <span class="tipo-card__tag">Dados · monoespaçada</span>
+            <div class="tipo-card__nome">IBM Plex Mono — números e protocolo</div>
+            <div class="specimen-mono">PL 042/2026 · protocolo 12.481</div>
+            <div class="specimen-mono" style="color:var(--bronze-texto);">TCE-CE · venc. 31/07 · 04:32</div>
+          </div>
+        </div>
+
+        <div class="escala" aria-label="Escala tipográfica">
+          <div class="escala__lin"><span class="escala__px">13px</span><span class="escala__am" style="font-size:13px;">Legenda &amp; protocolo</span></div>
+          <div class="escala__lin"><span class="escala__px">16px</span><span class="escala__am" style="font-size:16px;">Corpo de leitura</span></div>
+          <div class="escala__lin"><span class="escala__px">21px</span><span class="escala__am" style="font-size:21px;">Subtítulo de seção</span></div>
+          <div class="escala__lin"><span class="escala__px">28px</span><span class="escala__am" style="font-size:28px;">Título de seção</span></div>
+          <div class="escala__lin"><span class="escala__px">40px</span><span class="escala__am" style="font-size:40px;">Cabeçalho</span></div>
+          <div class="escala__lin"><span class="escala__px">56px</span><span class="escala__am" style="font-size:56px;">Monumento</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====================== A ASSINATURA ====================== -->
+    <section class="secao">
+      <div class="env">
+        <div class="secao__cab">
+          <p class="eyebrow">03 · O elemento memorável</p>
+          <h2 class="secao__titulo">A assinatura — a placa de bronze</h2>
+          <p class="secao__sub">Todo registro decisivo do produto é gravado numa placa: borda chanfrada, fachada de colunas, o hemiciclo do plenário em relevo. É a metáfora do monumento aplicada a dados reais — não decoração.</p>
+        </div>
+        <div class="assinatura">
+          <div class="assinatura__in">
+            <div class="assinatura__svg">
+              <!-- PLACA GRAVADA viva -->
+              <svg width="320" height="240" viewBox="0 0 320 240" role="img" aria-label="Placa de bronze gravada do plenário com o hemiciclo, a inscrição da sessão e o rítmo de colunas da fachada.">
+                <defs>
+                  <linearGradient id="placa" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stop-color="#3A352E"/>
+                    <stop offset="1" stop-color="#272320"/>
+                  </linearGradient>
+                  <linearGradient id="brz" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0" stop-color="#E0B878"/>
+                    <stop offset=".5" stop-color="#C68A45"/>
+                    <stop offset="1" stop-color="#A06A2C"/>
+                  </linearGradient>
+                </defs>
+
+                <!-- corpo da placa -->
+                <rect x="6" y="6" width="308" height="228" rx="5" fill="url(#placa)" stroke="#A06A2C" stroke-width="2"/>
+                <!-- chanfro interno gravado -->
+                <rect x="16" y="16" width="288" height="208" rx="3" fill="none" stroke="#E0B878" stroke-width="1" opacity=".55"/>
+                <rect x="16" y="16" width="288" height="208" rx="3" fill="none" stroke="#000" stroke-width="1" opacity=".25" transform="translate(1,1)"/>
+
+                <!-- fachada: arquitrave + colunas -->
+                <g stroke="url(#brz)" stroke-width="2" fill="none">
+                  <line x1="46" y1="40" x2="274" y2="40"/>
+                </g>
+                <g stroke="#C68A45" stroke-width="1.3" opacity=".85">
+                  <line x1="64"  y1="46" x2="64"  y2="92"/>
+                  <line x1="112" y1="46" x2="112" y2="92"/>
+                  <line x1="160" y1="46" x2="160" y2="92"/>
+                  <line x1="208" y1="46" x2="208" y2="92"/>
+                  <line x1="256" y1="46" x2="256" y2="92"/>
+                </g>
+
+                <!-- hemiciclo embossado: bancadas em arco -->
+                <g fill="none" stroke-linecap="round">
+                  <path d="M70 188 A90 90 0 0 1 250 188" stroke="#E0B878" stroke-width="2.4"/>
+                  <path d="M82 188 A78 78 0 0 1 238 188" stroke="#C68A45" stroke-width="1.8" opacity=".9"/>
+                  <path d="M94 188 A66 66 0 0 1 226 188" stroke="#A06A2C" stroke-width="1.5" opacity=".8"/>
+                  <path d="M106 188 A54 54 0 0 1 214 188" stroke="#A06A2C" stroke-width="1.3" opacity=".65"/>
+                </g>
+                <!-- assentos gravados (cadeiras do plenário) -->
+                <g fill="#E0B878">
+                  <circle cx="92"  cy="150" r="2.4"/><circle cx="116" cy="134" r="2.4"/><circle cx="144" cy="124" r="2.4"/>
+                  <circle cx="176" cy="124" r="2.4"/><circle cx="204" cy="134" r="2.4"/><circle cx="228" cy="150" r="2.4"/>
+                </g>
+                <!-- mesa diretora -->
+                <rect x="150" y="183" width="20" height="9" rx="1.5" fill="#C68A45"/>
+
+                <!-- inscrição -->
+                <text x="160" y="216" text-anchor="middle"
+                      font-family="'Cinzel', serif" font-size="13" font-weight="600"
+                      letter-spacing="3" fill="#E0B878">O PLENÁRIO</text>
+              </svg>
+            </div>
+            <div class="assinatura__txt">
+              <p class="eyebrow eyebrow--escuro">Inscriptio</p>
+              <h3>Dados como gravação</h3>
+              <p>A placa aparece onde a câmara precisa de <strong>peso institucional</strong>: a aprovação de uma matéria, o cumprimento de um prazo do TCE, a abertura de uma sessão. O hemiciclo em relevo lembra que é a <strong>casa inteira</strong> que decide.</p>
+              <p>Em uso, ela é discreta — um detalhe gravado no canto de um card, não um banner. A ousadia mora aqui; o resto da interface fica em silêncio.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====================== NO PRODUTO ====================== -->
+    <section class="secao">
+      <div class="env">
+        <div class="secao__cab">
+          <p class="eyebrow">04 · Aplicação</p>
+          <h2 class="secao__titulo">No produto</h2>
+          <p class="secao__sub">Os mesmos materiais nas telas que decidem a compra: a proposição em tramitação e o prazo de remessa ao TCE-CE.</p>
+        </div>
+        <div class="produto-grid">
+
+          <!-- (a) PROPOSIÇÃO -->
+          <article class="card">
+            <div class="card__fita"></div>
+            <div class="card__corpo">
+              <div class="card__kicker">PL 042/2026 · protocolo 12.481</div>
+              <h3 class="card__titulo">Cria o Programa Municipal de Hortas Comunitárias.</h3>
+              <p class="card__meta">Ver. Helena Matos · 2ª discussão</p>
+              <span class="chip chip--ok">
+                <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden="true"><path d="M2 7l3 3 6-7" fill="none" stroke="#2F4A36" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Aprovada em 1º turno
+              </span>
+              <div class="acoes">
+                <a href="#" class="btn btn--primario">Abrir tramitação</a>
+                <a href="#" class="btn btn--secundario">Acompanhar</a>
+              </div>
+            </div>
+          </article>
+
+          <!-- (b) COMPLIANCE / PRAZO -->
+          <article class="card card--bronze">
+            <div class="card__fita"></div>
+            <div class="card__corpo">
+              <div class="card__kicker">Remessa SIM · competência 2026-05</div>
+              <h3 class="card__titulo">Envio ao TCE-CE</h3>
+              <p class="card__alerta">Vence em 6 dias.</p>
+              <span class="chip chip--prazo">
+                <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden="true"><circle cx="6.5" cy="6.5" r="5" fill="none" stroke="#E0B878" stroke-width="1.4"/><path d="M6.5 3.5V6.5L8.5 8" fill="none" stroke="#E0B878" stroke-width="1.4" stroke-linecap="round"/></svg>
+                Prazo: 31/07
+              </span>
+
+              <div class="tribuna">
+                <div class="tribuna__topo">
+                  <span class="tribuna__rotulo">Tempo de tribuna</span>
+                  <span class="tribuna__tempo" id="cronometro" aria-live="off">04:32</span>
+                </div>
+                <div class="barra" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="64" aria-label="Tempo de tribuna decorrido">
+                  <div class="barra__fill" id="barraFill"></div>
+                </div>
+              </div>
+            </div>
+          </article>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ====================== EVITAMOS ====================== -->
+    <section class="secao">
+      <div class="env">
+        <div class="secao__cab">
+          <p class="eyebrow">05 · Disciplina</p>
+          <h2 class="secao__titulo">O que evitamos — de propósito</h2>
+          <p class="secao__sub">A direção foi escolhida tanto pelo que afirma quanto pelo que recusa. Nada aqui é o padrão genérico de IA.</p>
+        </div>
+        <div class="evita-grid">
+          <div class="evita-col evita-col--no">
+            <h3>Recusado</h3>
+            <ul>
+              <li><svg class="marca-li marca-li--no" width="13" height="13" viewBox="0 0 13 13" aria-hidden="true"><path d="M3 3l7 7M10 3l-7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span><b>Creme + serif editorial + terracota.</b> O cluster "manifesto bonito" que não tem materialidade de instituição.</span></li>
+              <li><svg class="marca-li marca-li--no" width="13" height="13" viewBox="0 0 13 13" aria-hidden="true"><path d="M3 3l7 7M10 3l-7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span><b>Preto + verde-ácido / vermelhão neon.</b> Nosso escuro é pedra-carvão e o acento é bronze quente, nunca néon.</span></li>
+              <li><svg class="marca-li marca-li--no" width="13" height="13" viewBox="0 0 13 13" aria-hidden="true"><path d="M3 3l7 7M10 3l-7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span><b>Jornalão de fios capilares e colunas densas.</b> Imita imprensa, não monumento público.</span></li>
+              <li><svg class="marca-li marca-li--no" width="13" height="13" viewBox="0 0 13 13" aria-hidden="true"><path d="M3 3l7 7M10 3l-7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span><b>SaaS azul-marinho + azul, com Inter / Lexend.</b> O genérico de painel — invisível e intercambiável.</span></li>
+            </ul>
+          </div>
+          <div class="evita-col evita-col--sim">
+            <h3>Escolhido</h3>
+            <ul>
+              <li><svg class="marca-li marca-li--sim" width="13" height="13" viewBox="0 0 13 13" aria-hidden="true"><path d="M2 7l3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span><b>Concreto + bronze + pórfiro.</b> Os materiais reais de uma câmara: placa, fachada, pedra.</span></li>
+              <li><svg class="marca-li marca-li--sim" width="13" height="13" viewBox="0 0 13 13" aria-hidden="true"><path d="M2 7l3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span><b>Capitulares inscricionais (Cinzel).</b> A letra gravada de monumentos — longe do serif de revista.</span></li>
+              <li><svg class="marca-li marca-li--sim" width="13" height="13" viewBox="0 0 13 13" aria-hidden="true"><path d="M2 7l3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span><b>Blocos escuros cerimoniais.</b> Peso e gravidade onde a decisão acontece, com contraste AA+ garantido.</span></li>
+              <li><svg class="marca-li marca-li--sim" width="13" height="13" viewBox="0 0 13 13" aria-hidden="true"><path d="M2 7l3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span><b>A placa gravada como assinatura.</b> Um único gesto ousado; o resto, silêncio disciplinado.</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ====================== RODAPÉ ====================== -->
+  <footer class="rodape">
+    <div class="rodape__in">
+      <span>O Plenário</span> — onde a câmara acontece · Direção C · Pedra &amp; Bronze · style-tile
+    </div>
+  </footer>
+
+<script>
+  // Cronômetro de tribuna — valores ilustrativos sintéticos (regressivo a partir de 04:32).
+  (function(){
+    var reduz = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduz) return;
+    var el = document.getElementById('cronometro');
+    var fill = document.getElementById('barraFill');
+    var barra = fill ? fill.parentElement : null;
+    if (!el || !fill) return;
+    var totalSeg = 7 * 60;       // tribuna de 7 minutos
+    var restante = 4 * 60 + 32;  // 04:32 restantes
+    function pintar(){
+      var m = Math.floor(restante / 60);
+      var s = restante % 60;
+      el.textContent = (m<10?'0':'')+m+':'+(s<10?'0':'')+s;
+      var pct = Math.round(((totalSeg - restante) / totalSeg) * 100);
+      fill.style.width = pct + '%';
+      if (barra) barra.setAttribute('aria-valuenow', String(pct));
+    }
+    pintar();
+    setInterval(function(){
+      if (restante > 0){ restante--; pintar(); }
+    }, 1000);
+  })();
+</script>
+</body>
+</html>

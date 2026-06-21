@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>O Plenário · Direção D — O Registro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@500;600;700&family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* ——— Paleta · O Registro ——— */
+    --papel:        #FBFAF6; /* papel limpo do diário — mais branco que o creme-IA */
+    --papel-margem: #F2EEE2; /* margem do documento — fundo calmo de specimen/card */
+    --margem:       #E7E2D4; /* sombra de margem / faixa de documento */
+    --tinta:        #1B1A17; /* tinta — texto principal */
+    --tinta-suave:  #4A463E; /* tinta diluída — texto secundário */
+    --carimbo:      #C0392B; /* vermelhão do carimbo PROTOCOLADO */
+    --carimbo-esc:  #97271C; /* vermelhão escuro p/ contraste de texto */
+    --indigo:       #243B6B; /* índigo de registro — secundária */
+    --ledger:       #2F5D43; /* verde-livro — aprovação/saldo */
+    --linha:        #D8D2C2; /* fios discretos (uso parco) */
+
+    --fonte-display: "Zilla Slab", Georgia, serif;
+    --fonte-corpo:   "Public Sans", system-ui, sans-serif;
+    --fonte-dado:    "Space Mono", ui-monospace, monospace;
+
+    /* escala tipográfica 13·16·21·28·40·56 */
+    --t-13: 0.8125rem;
+    --t-16: 1rem;
+    --t-21: 1.3125rem;
+    --t-28: 1.75rem;
+    --t-40: 2.5rem;
+    --t-56: 3.5rem;
+
+    --gap:   clamp(2.5rem, 6vw, 5rem);
+    --raio:  4px;
+    --foco:  0 0 0 3px var(--papel), 0 0 0 5px var(--indigo);
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--papel);
+    /* textura discreta de fibra de papel — não decorativa, só profundidade */
+    background-image:
+      radial-gradient(circle at 18% 12%, rgba(36,59,107,0.03) 0, transparent 38%),
+      radial-gradient(circle at 88% 78%, rgba(192,57,43,0.025) 0, transparent 42%);
+    color: var(--tinta);
+    font-family: var(--fonte-corpo);
+    font-size: var(--t-16);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 clamp(1.25rem, 4vw, 3rem); }
+
+  a { color: var(--indigo); }
+  a:focus-visible, button:focus-visible, .chip:focus-visible {
+    outline: none; box-shadow: var(--foco); border-radius: var(--raio);
+  }
+
+  .eyebrow {
+    font-family: var(--fonte-dado);
+    font-size: var(--t-13);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--carimbo-esc);
+    margin: 0;
+  }
+  .eyebrow--ind { color: var(--indigo); }
+
+  /* ——————————————————— Cabeçalho ——————————————————— */
+  header.topo {
+    border-bottom: 2px solid var(--tinta);
+    background: var(--papel);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .topo-inner {
+    display: flex; align-items: center; gap: 1rem;
+    padding: 0.9rem 0;
+    flex-wrap: wrap;
+  }
+  .marca { display: flex; align-items: center; gap: 0.7rem; }
+  .marca svg { display: block; flex: none; }
+  .wordmark {
+    font-family: var(--fonte-display);
+    font-weight: 700;
+    font-size: var(--t-21);
+    letter-spacing: -0.01em;
+    color: var(--tinta);
+  }
+  .wordmark .o { color: var(--carimbo); }
+  .topo .eyebrow { margin-left: auto; }
+
+  /* ——————————————————— Hero ——————————————————— */
+  .hero { padding-top: var(--gap); padding-bottom: var(--gap); }
+  .hero-grid {
+    display: grid;
+    grid-template-columns: 1.45fr 1fr;
+    gap: clamp(1.5rem, 5vw, 4rem);
+    align-items: center;
+  }
+  .hero h1 {
+    font-family: var(--fonte-display);
+    font-weight: 700;
+    font-size: var(--t-56);
+    line-height: 1.02;
+    letter-spacing: -0.02em;
+    margin: 0.6rem 0 1.1rem;
+    color: var(--tinta);
+  }
+  .hero h1 .grifo { color: var(--carimbo); }
+  .lead {
+    font-size: var(--t-21);
+    color: var(--tinta-suave);
+    max-width: 36ch;
+    margin: 0;
+  }
+  .hero-stamp-col { display: flex; justify-content: center; }
+
+  @media (max-width: 760px) {
+    .hero-grid { grid-template-columns: 1fr; }
+    .hero h1 { font-size: var(--t-40); }
+    .hero-stamp-col { justify-content: flex-start; }
+  }
+
+  /* ——————————————————— Seções ——————————————————— */
+  section { padding: var(--gap) 0; border-top: 1px solid var(--linha); }
+  .sec-head { display: flex; align-items: baseline; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap; }
+  .sec-num {
+    font-family: var(--fonte-display);
+    font-weight: 700;
+    font-size: var(--t-28);
+    color: var(--carimbo);
+    line-height: 1;
+  }
+  .sec-head h2 {
+    font-family: var(--fonte-display);
+    font-weight: 600;
+    font-size: var(--t-28);
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  .sec-head p { margin: 0; color: var(--tinta-suave); font-size: var(--t-16); }
+
+  /* ——————————————————— Paleta ——————————————————— */
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; }
+  .swatch {
+    border: 1.5px solid var(--tinta);
+    border-radius: var(--raio);
+    overflow: hidden;
+    background: var(--papel);
+  }
+  .swatch .chip-cor { height: 84px; border-bottom: 1.5px solid var(--tinta); }
+  .swatch .meta { padding: 0.7rem 0.85rem; }
+  .swatch .nome { font-weight: 600; font-size: var(--t-16); display: block; }
+  .swatch .hex { font-family: var(--fonte-dado); font-size: var(--t-13); color: var(--tinta-suave); display: block; margin-top: 0.15rem; }
+  .swatch .papel-role { font-size: var(--t-13); color: var(--tinta-suave); display: block; margin-top: 0.35rem; }
+
+  /* ——————————————————— Tipografia ——————————————————— */
+  .type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+  @media (max-width: 700px) { .type-grid { grid-template-columns: 1fr; } }
+  .specimen { border: 1.5px solid var(--linha); border-radius: var(--raio); padding: 1.4rem; background: var(--papel-margem); }
+  .specimen .rotulo { font-family: var(--fonte-dado); font-size: var(--t-13); letter-spacing: 0.12em; text-transform: uppercase; color: var(--indigo); margin: 0 0 0.6rem; }
+  .specimen .glyphs-display { font-family: var(--fonte-display); font-weight: 700; font-size: var(--t-40); line-height: 1; margin: 0; }
+  .specimen .glyphs-corpo { font-family: var(--fonte-corpo); font-size: var(--t-21); margin: 0; }
+  .specimen .glyphs-dado { font-family: var(--fonte-dado); font-size: var(--t-21); margin: 0; }
+  .specimen small { display: block; margin-top: 0.6rem; color: var(--tinta-suave); font-size: var(--t-13); }
+
+  .escala { margin-top: 1.5rem; border-top: 1px solid var(--linha); padding-top: 1.25rem; }
+  .escala-linha { display: flex; align-items: baseline; gap: 1.25rem; padding: 0.35rem 0; }
+  .escala-linha .px { font-family: var(--fonte-dado); font-size: var(--t-13); color: var(--carimbo-esc); width: 4ch; flex: none; }
+  .escala-linha .amostra { font-family: var(--fonte-display); font-weight: 600; line-height: 1; color: var(--tinta); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ——————————————————— A assinatura ——————————————————— */
+  .assinatura-bloco {
+    display: grid; grid-template-columns: 1fr 1fr; gap: clamp(1.5rem, 5vw, 3.5rem);
+    align-items: center;
+  }
+  @media (max-width: 760px) { .assinatura-bloco { grid-template-columns: 1fr; } }
+
+  .artigos { display: flex; flex-direction: column; gap: 1.5rem; }
+  .artigo { display: grid; grid-template-columns: auto 1fr; gap: 1.1rem; align-items: start; }
+  .artigo .art-num {
+    font-family: var(--fonte-display);
+    font-weight: 700;
+    font-size: var(--t-56);
+    line-height: 0.82;
+    color: var(--margem);
+    -webkit-text-stroke: 1.5px var(--indigo);
+    color: transparent;
+    letter-spacing: -0.02em;
+  }
+  .artigo:first-child .art-num { color: var(--carimbo); -webkit-text-stroke: 0; }
+  .artigo .art-txt { font-size: var(--t-16); color: var(--tinta-suave); padding-top: 0.4rem; }
+  .artigo .art-txt strong { color: var(--tinta); font-weight: 600; }
+
+  .assinatura-linha { margin-top: 2rem; }
+  .assinatura-linha .firma {
+    font-family: "Zilla Slab", serif; font-style: italic; font-weight: 500;
+    font-size: var(--t-28); color: var(--tinta);
+    border-bottom: 1.5px solid var(--tinta);
+    display: inline-block; padding: 0 1.5rem 0.15rem; line-height: 1.4;
+  }
+  .assinatura-linha .firma-rotulo { font-family: var(--fonte-dado); font-size: var(--t-13); letter-spacing: 0.12em; text-transform: uppercase; color: var(--tinta-suave); margin-top: 0.5rem; }
+
+  .stamp-stage { display: flex; justify-content: center; align-items: center; min-height: 280px; }
+
+  /* o carimbo vive aqui — único gesto ousado */
+  .carimbo-svg { transform: rotate(-9deg); transform-origin: center; max-width: 260px; width: 100%; }
+  .carimbo-svg text { font-family: var(--fonte-dado); fill: var(--carimbo); }
+  .carimbo-svg .ring { fill: none; stroke: var(--carimbo); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .carimbo-svg { animation: bate 0.9s cubic-bezier(.2,.9,.25,1) both; }
+    @keyframes bate {
+      0%   { transform: rotate(-9deg) scale(1.7); opacity: 0; }
+      60%  { transform: rotate(-9deg) scale(0.97); opacity: 1; }
+      100% { transform: rotate(-9deg) scale(1); opacity: 1; }
+    }
+  }
+
+  /* ——————————————————— No produto ——————————————————— */
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  @media (max-width: 760px) { .cards { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--papel);
+    border: 1.5px solid var(--tinta);
+    border-radius: var(--raio);
+    padding: 1.5rem;
+    position: relative;
+  }
+  .card-kicker {
+    font-family: var(--fonte-dado);
+    font-size: var(--t-13);
+    letter-spacing: 0.06em;
+    color: var(--indigo);
+    margin: 0 0 0.6rem;
+    display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
+  }
+  .card-kicker .sep { color: var(--linha); }
+  .card h3 {
+    font-family: var(--fonte-display);
+    font-weight: 600;
+    font-size: var(--t-21);
+    line-height: 1.2;
+    margin: 0 0 0.6rem;
+    color: var(--tinta);
+  }
+  .card .meta-linha { font-size: var(--t-13); color: var(--tinta-suave); margin: 0 0 1.1rem; }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    font-family: var(--fonte-dado); font-size: var(--t-13); font-weight: 700;
+    padding: 0.28rem 0.6rem; border-radius: 999px;
+    border: 1.5px solid currentColor;
+    text-decoration: none;
+  }
+  .chip--aprovada { color: var(--ledger); background: rgba(47,93,67,0.07); }
+  .chip--prazo   { color: var(--carimbo-esc); background: rgba(192,57,43,0.07); }
+  .chip svg { display: block; }
+
+  .btn-row { display: flex; gap: 0.6rem; margin-top: 1.25rem; flex-wrap: wrap; }
+  .btn {
+    font-family: var(--fonte-corpo); font-weight: 600; font-size: var(--t-16);
+    padding: 0.62rem 1.1rem; border-radius: var(--raio);
+    border: 1.5px solid var(--tinta); cursor: pointer;
+    text-decoration: none; display: inline-flex; align-items: center; gap: 0.45rem;
+    background: var(--papel); color: var(--tinta);
+    transition: transform 0.12s ease, background 0.12s ease;
+  }
+  .btn--primary { background: var(--indigo); border-color: var(--indigo); color: var(--papel); }
+  .btn--primary:hover { background: #1c3157; }
+  .btn--ghost:hover { background: var(--papel-margem); }
+  .btn:active { transform: translateY(1px); }
+
+  /* card de prazo / compliance */
+  .prazo-aviso { font-size: var(--t-16); color: var(--tinta); margin: 0.2rem 0 1rem; }
+  .prazo-aviso strong { color: var(--carimbo-esc); }
+  .tribuna { margin-top: 1.25rem; border-top: 1px solid var(--linha); padding-top: 1rem; }
+  .tribuna .topo-t { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+  .tribuna .rot { font-family: var(--fonte-dado); font-size: var(--t-13); text-transform: uppercase; letter-spacing: 0.1em; color: var(--tinta-suave); margin: 0; }
+  .tribuna .timer { font-family: var(--fonte-dado); font-weight: 700; font-size: var(--t-28); color: var(--tinta); line-height: 1; font-variant-numeric: tabular-nums; }
+  .barra { height: 10px; background: var(--margem); border-radius: 999px; margin-top: 0.7rem; overflow: hidden; border: 1px solid var(--linha); }
+  .barra > span { display: block; height: 100%; width: 60%; background: linear-gradient(90deg, var(--indigo), var(--carimbo)); border-radius: 999px; }
+
+  /* ——————————————————— Evitamos de propósito ——————————————————— */
+  .evita { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  @media (max-width: 760px) { .evita { grid-template-columns: 1fr; } }
+  .col-evita { border: 1.5px solid var(--linha); border-radius: var(--raio); padding: 1.4rem; }
+  .col-evita.recusado { border-color: var(--carimbo); background: rgba(192,57,43,0.04); }
+  .col-evita.escolhido { border-color: var(--ledger); background: rgba(47,93,67,0.05); }
+  .col-evita h4 { font-family: var(--fonte-display); font-weight: 600; font-size: var(--t-21); margin: 0 0 0.9rem; display: flex; align-items: center; gap: 0.5rem; }
+  .col-evita.recusado h4 { color: var(--carimbo-esc); }
+  .col-evita.escolhido h4 { color: var(--ledger); }
+  .col-evita ul { margin: 0; padding: 0; list-style: none; }
+  .col-evita li { display: flex; gap: 0.6rem; padding: 0.5rem 0; border-top: 1px solid var(--linha); font-size: var(--t-16); }
+  .col-evita li:first-child { border-top: none; }
+  .col-evita li svg { flex: none; margin-top: 0.3rem; }
+
+  /* ——————————————————— Rodapé ——————————————————— */
+  footer { border-top: 2px solid var(--tinta); padding: 2rem 0 3rem; }
+  footer .fr { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }
+  footer .fr .nota { font-family: var(--fonte-dado); font-size: var(--t-13); color: var(--tinta-suave); margin-left: auto; }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
+</style>
+</head>
+<body>
+
+<!-- ——————————— Cabeçalho ——————————— -->
+<header class="topo">
+  <div class="wrap topo-inner">
+    <a class="marca" href="#topo" aria-label="O Plenário — início">
+      <!-- símbolo: carimbo circular minimal com "art." de registro -->
+      <svg width="34" height="34" viewBox="0 0 34 34" role="img" aria-label="Símbolo O Plenário">
+        <circle cx="17" cy="17" r="15.5" fill="none" stroke="#C0392B" stroke-width="2.2"/>
+        <circle cx="17" cy="17" r="10.5" fill="none" stroke="#243B6B" stroke-width="1.4"/>
+        <line x1="6" y1="17" x2="28" y2="17" stroke="#1B1A17" stroke-width="2.2"/>
+      </svg>
+      <span class="wordmark"><span class="o">O</span> Plenário</span>
+    </a>
+    <p class="eyebrow">Direção D · O Registro</p>
+  </div>
+</header>
+
+<main id="topo">
+
+  <!-- ——————————— Hero ——————————— -->
+  <section class="hero" style="border-top:none;">
+    <div class="wrap hero-grid">
+      <div>
+        <p class="eyebrow">Tipográfico-republicano · style-tile</p>
+        <h1>O ato vira <span class="grifo">registro</span>.<br>O registro vira&nbsp;prova.</h1>
+        <p class="lead">A câmara fala por documentos: a proposição protocolada, o artigo numerado, a assinatura na ata. Aqui o próprio registro é a interface — legível, datado, inegável.</p>
+      </div>
+      <div class="hero-stamp-col">
+        <!-- carimbo de abertura -->
+        <svg class="carimbo-svg" viewBox="0 0 260 260" role="img" aria-label="Carimbo: protocolado número 12.481, 21 de junho de 2026">
+          <circle class="ring" cx="130" cy="130" r="120" stroke-width="3.5"/>
+          <circle class="ring" cx="130" cy="130" r="98" stroke-width="1.6"/>
+          <defs>
+            <path id="arcoTopo" d="M 40 130 A 90 90 0 0 1 220 130" />
+            <path id="arcoBase" d="M 44 130 A 86 86 0 0 0 216 130" />
+          </defs>
+          <text font-size="15" font-weight="700" letter-spacing="3">
+            <textPath href="#arcoTopo" startOffset="50%" text-anchor="middle">CÂMARA MUNICIPAL · O PLENÁRIO</textPath>
+          </text>
+          <text font-size="13" font-weight="400" letter-spacing="2.5">
+            <textPath href="#arcoBase" startOffset="50%" text-anchor="middle">21 · JUN · 2026</textPath>
+          </text>
+          <text x="130" y="118" text-anchor="middle" font-size="30" font-weight="700" letter-spacing="2">PROTO-</text>
+          <text x="130" y="150" text-anchor="middle" font-size="30" font-weight="700" letter-spacing="2">COLADO</text>
+          <line x1="78" y1="166" x2="182" y2="166" stroke="#C0392B" stroke-width="1.5"/>
+          <text x="130" y="190" text-anchor="middle" font-size="22" font-weight="700">Nº 12.481</text>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- ——————————— Paleta ——————————— -->
+  <section>
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="sec-num">01</span>
+        <h2>Paleta</h2>
+        <p>Papel de diário, tinta firme, o vermelhão do carimbo e o índigo de registro.</p>
+      </div>
+      <div class="swatches">
+        <div class="swatch">
+          <div class="chip-cor" style="background:#FBFAF6;"></div>
+          <div class="meta"><span class="nome">Papel</span><span class="hex">#FBFAF6</span><span class="papel-role">Fundo · superfície do diário</span></div>
+        </div>
+        <div class="swatch">
+          <div class="chip-cor" style="background:#1B1A17;"></div>
+          <div class="meta"><span class="nome">Tinta</span><span class="hex">#1B1A17</span><span class="papel-role">Texto principal · fios estruturais</span></div>
+        </div>
+        <div class="swatch">
+          <div class="chip-cor" style="background:#C0392B;"></div>
+          <div class="meta"><span class="nome">Vermelhão Carimbo</span><span class="hex">#C0392B</span><span class="papel-role">Assinatura · protocolo · prazo</span></div>
+        </div>
+        <div class="swatch">
+          <div class="chip-cor" style="background:#243B6B;"></div>
+          <div class="meta"><span class="nome">Índigo de Registro</span><span class="hex">#243B6B</span><span class="papel-role">Ação primária · números de artigo</span></div>
+        </div>
+        <div class="swatch">
+          <div class="chip-cor" style="background:#2F5D43;"></div>
+          <div class="meta"><span class="nome">Verde-Livro</span><span class="hex">#2F5D43</span><span class="papel-role">Aprovação · saldo · estado positivo</span></div>
+        </div>
+        <div class="swatch">
+          <div class="chip-cor" style="background:#E7E2D4; border-bottom-color:#1B1A17;"></div>
+          <div class="meta"><span class="nome">Sombra de Margem</span><span class="hex">#E7E2D4</span><span class="papel-role">Trilhos · fundos calmos · barras</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ——————————— Tipografia ——————————— -->
+  <section>
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="sec-num">02</span>
+        <h2>Tipografia</h2>
+        <p>Slab documental para títulos e números, sans cívica para o corpo, mono para os dados.</p>
+      </div>
+      <div class="type-grid">
+        <div class="specimen">
+          <p class="rotulo">Display · Zilla Slab 700</p>
+          <p class="glyphs-display">Art. 1º &nbsp; Aa Gg 0123</p>
+          <small>Títulos, números de artigo, números de seção. Slab serifa-bloco — documental sem virar a serifa editorial de revista.</small>
+        </div>
+        <div class="specimen">
+          <p class="rotulo">Corpo · Public Sans</p>
+          <p class="glyphs-corpo">A câmara delibera; o sistema registra. Texto longo e legível.</p>
+          <small>Face cívica de uso público — institucional, neutra, alta legibilidade em formulário e tramitação.</small>
+        </div>
+        <div class="specimen">
+          <p class="rotulo">Dado · Space Mono</p>
+          <p class="glyphs-dado">PL 042/2026 · 12.481 · 04:32</p>
+          <small>Protocolos, prazos, cronômetros e qualquer número que precise alinhar em coluna (tabular).</small>
+        </div>
+        <div class="specimen" style="background:var(--papel);">
+          <p class="rotulo">Escala · 13 · 16 · 21 · 28 · 40 · 56</p>
+          <div class="escala" style="border-top:none; padding-top:0.25rem;">
+            <div class="escala-linha"><span class="px">13</span><span class="amostra" style="font-size:13px;">Protocolo geral</span></div>
+            <div class="escala-linha"><span class="px">16</span><span class="amostra" style="font-size:16px;">Corpo de tramitação</span></div>
+            <div class="escala-linha"><span class="px">21</span><span class="amostra" style="font-size:21px;">Subtítulo de matéria</span></div>
+            <div class="escala-linha"><span class="px">28</span><span class="amostra" style="font-size:28px;">Cabeça de seção</span></div>
+            <div class="escala-linha"><span class="px">40</span><span class="amostra" style="font-size:40px;">Título de sessão</span></div>
+            <div class="escala-linha"><span class="px">56</span><span class="amostra" style="font-size:56px;">Art. 1º</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ——————————— A assinatura ——————————— -->
+  <section>
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="sec-num">03</span>
+        <h2>A assinatura</h2>
+        <p>O carimbo de protocolo, os números de artigo em escala e a linha de assinatura. É aqui que gastamos a ousadia.</p>
+      </div>
+      <div class="assinatura-bloco">
+        <div>
+          <div class="artigos">
+            <div class="artigo">
+              <span class="art-num" aria-hidden="true">1º</span>
+              <p class="art-txt"><strong>O número carrega significado.</strong> Art. 1º, Art. 2º, sessão 47ª — a estrutura é informação real de tramitação, não enfeite.</p>
+            </div>
+            <div class="artigo">
+              <span class="art-num" aria-hidden="true">2º</span>
+              <p class="art-txt"><strong>Cada ato é datado e inegável.</strong> O carimbo marca o instante do protocolo; daí em diante o registro é prova de compliance perante o TCE.</p>
+            </div>
+          </div>
+          <div class="assinatura-linha">
+            <span class="firma">Helena Matos</span>
+            <p class="firma-rotulo">Vereadora · relatora · assinatura na ata</p>
+          </div>
+        </div>
+        <div class="stamp-stage">
+          <svg class="carimbo-svg" viewBox="0 0 260 260" role="img" aria-label="Carimbo de assinatura: protocolado, registro 12.481">
+            <circle class="ring" cx="130" cy="130" r="120" stroke-width="3.5"/>
+            <circle class="ring" cx="130" cy="130" r="98" stroke-width="1.6"/>
+            <text font-size="14" font-weight="700" letter-spacing="3">
+              <textPath href="#arcoTopo" startOffset="50%" text-anchor="middle">REGISTRO · PROVA · TRANSPARÊNCIA</textPath>
+            </text>
+            <text font-size="13" font-weight="400" letter-spacing="2.5">
+              <textPath href="#arcoBase" startOffset="50%" text-anchor="middle">FORTALEZA · CE</textPath>
+            </text>
+            <text x="130" y="120" text-anchor="middle" font-size="34" font-weight="700" letter-spacing="2">DEFERIDO</text>
+            <line x1="74" y1="140" x2="186" y2="140" stroke="#C0392B" stroke-width="1.5"/>
+            <text x="130" y="172" text-anchor="middle" font-size="22" font-weight="700">Nº 12.481</text>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ——————————— No produto ——————————— -->
+  <section>
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="sec-num">04</span>
+        <h2>No produto</h2>
+        <p>Os mesmos componentes que decidem a compra: a proposição em tramitação e o prazo de remessa ao TCE.</p>
+      </div>
+      <div class="cards">
+
+        <!-- (a) proposição -->
+        <article class="card" aria-labelledby="card-prop">
+          <p class="card-kicker">PL 042/2026 <span class="sep">·</span> protocolo 12.481</p>
+          <h3 id="card-prop">Cria o Programa Municipal de Hortas Comunitárias.</h3>
+          <p class="meta-linha">Ver. Helena Matos · 2ª discussão</p>
+          <span class="chip chip--aprovada">
+            <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden="true"><path d="M2 7l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Aprovada em 1º turno
+          </span>
+          <div class="btn-row">
+            <a class="btn btn--primary" href="#topo">
+              <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 2h6l3 3v7H3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M9 2v3h3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+              Abrir tramitação
+            </a>
+            <a class="btn btn--ghost" href="#topo">Acompanhar</a>
+          </div>
+        </article>
+
+        <!-- (b) compliance / prazo -->
+        <article class="card" aria-labelledby="card-prazo">
+          <p class="card-kicker">Remessa SIM <span class="sep">·</span> competência 2026-05</p>
+          <h3 id="card-prazo">Envio ao TCE-CE vence em 6 dias</h3>
+          <p class="prazo-aviso">A remessa precisa ser <strong>aceita</strong> pelo tribunal para cumprir a obrigação. Gere e revise antes da janela fechar.</p>
+          <span class="chip chip--prazo">
+            <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden="true"><circle cx="6.5" cy="6.5" r="5.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 3.5v3.2l2 1.3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            Prazo: 31/07
+          </span>
+          <div class="tribuna">
+            <div class="topo-t">
+              <p class="rot">Tempo de tribuna</p>
+              <span class="timer" aria-label="Tempo restante quatro minutos e trinta e dois segundos">04:32</span>
+            </div>
+            <div class="barra" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="60" aria-label="Tempo de tribuna decorrido"><span></span></div>
+          </div>
+        </article>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ——————————— Evitamos de propósito ——————————— -->
+  <section>
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="sec-num">05</span>
+        <h2>O que evitamos — de propósito</h2>
+        <p>Direção feita por escolha, não por default de gerador.</p>
+      </div>
+      <div class="evita">
+        <div class="col-evita recusado">
+          <h4>
+            <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8.5" fill="none" stroke="currentColor" stroke-width="1.6"/><line x1="5" y1="15" x2="15" y2="5" stroke="currentColor" stroke-width="1.6"/></svg>
+            Recusado
+          </h4>
+          <ul>
+            <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><line x1="4" y1="4" x2="12" y2="12" stroke="#C0392B" stroke-width="1.6"/><line x1="12" y1="4" x2="4" y2="12" stroke="#C0392B" stroke-width="1.6"/></svg> Creme #F4F1EA + serifa editorial de alto contraste + terracota.</li>
+            <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><line x1="4" y1="4" x2="12" y2="12" stroke="#C0392B" stroke-width="1.6"/><line x1="12" y1="4" x2="4" y2="12" stroke="#C0392B" stroke-width="1.6"/></svg> Quase-preto com um único acento verde-limão ou vermelhão neon.</li>
+            <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><line x1="4" y1="4" x2="12" y2="12" stroke="#C0392B" stroke-width="1.6"/><line x1="12" y1="4" x2="4" y2="12" stroke="#C0392B" stroke-width="1.6"/></svg> Fios-cabelo de jornal + colunas densas estilo broadsheet.</li>
+            <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><line x1="4" y1="4" x2="12" y2="12" stroke="#C0392B" stroke-width="1.6"/><line x1="12" y1="4" x2="4" y2="12" stroke="#C0392B" stroke-width="1.6"/></svg> SaaS genérico navy #0F172A + azul; fontes Inter / Roboto / Lexend.</li>
+          </ul>
+        </div>
+        <div class="col-evita escolhido">
+          <h4>
+            <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 10.5l2.5 2.5L14 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Escolhido
+          </h4>
+          <ul>
+            <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7.5" fill="none" stroke="#2F5D43" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg> Papel de diário #FBFAF6 — limpo e claro, sem a pátina do creme-IA.</li>
+            <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7.5" fill="none" stroke="#2F5D43" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg> Slab documental (Zilla) + sans cívica (Public Sans) — não a serifa de revista.</li>
+            <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7.5" fill="none" stroke="#2F5D43" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg> O carimbo vermelhão como gesto único, vivo e datado — não acento decorativo.</li>
+            <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7.5" fill="none" stroke="#2F5D43" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg> Tipo-herói + ar generoso + números estruturais reais (Art. 1º, sessão 47ª).</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap fr">
+    <svg width="26" height="26" viewBox="0 0 34 34" aria-hidden="true">
+      <circle cx="17" cy="17" r="15.5" fill="none" stroke="#C0392B" stroke-width="2.2"/>
+      <circle cx="17" cy="17" r="10.5" fill="none" stroke="#243B6B" stroke-width="1.4"/>
+      <line x1="6" y1="17" x2="28" y2="17" stroke="#1B1A17" stroke-width="2.2"/>
+    </svg>
+    <span class="wordmark" style="font-size:var(--t-16);"><span class="o">O</span> Plenário</span>
+    <span class="nota">Direção D · O Registro — style-tile · onde a câmara acontece</span>
+  </div>
+</footer>
+
+<script>
+  // Cronômetro de tribuna — valores ilustrativos, regride de 04:32 e move a barra.
+  (function () {
+    var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var timerEl = document.querySelector('.timer');
+    var barEl = document.querySelector('.barra > span');
+    if (!timerEl || !barEl || prefersReduced) return;
+
+    var total = 8 * 60;          // janela de 8 min
+    var restante = 4 * 60 + 32;  // 04:32
+    function pinta() {
+      var m = Math.floor(restante / 60);
+      var s = restante % 60;
+      timerEl.textContent = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+      var decorrido = Math.round(((total - restante) / total) * 100);
+      barEl.style.width = decorrido + '%';
+      document.querySelector('.barra').setAttribute('aria-valuenow', decorrido);
+    }
+    pinta();
+    setInterval(function () {
+      if (restante > 0) { restante--; pinta(); }
+    }, 1000);
+  })();
+</script>
+
+</body>
+</html>
