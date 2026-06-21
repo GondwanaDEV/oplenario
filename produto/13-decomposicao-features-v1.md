@@ -9,9 +9,11 @@
 >
 > **Convenção:** `[FATO]` (na §16/§22) · `[INF]` (decomposição minha, derivada) · `[REC]` (recomendação) · 🔎 (a confirmar).
 >
-> **Atualizado ao doc-mestre v1.34** (antes refletia v1.14): incorpora o chat de stack (§22.9), o
-> monólito modular (§22.10) e o **bloco GAP 1–5** (admin do sistema, admin do ente, notificações,
-> relatórios). Delta de mudança no fim das flags (seção 1) e no resumo da seção 5.
+> **Atualizado ao doc-mestre v1.38** (antes refletia v1.14): incorpora o chat de stack (§22.9), o
+> monólito modular (§22.10), o **bloco GAP 1–5** (admin do sistema, admin do ente, notificações,
+> relatórios) e a **revisão de completude pré-design (v1.38, §16.13 do doc-mestre / `produto/14`)** —
+> que adicionou ~24 features (linhas marcadas `v1.38`) e corrigiu a 6.1. Delta no fim das flags (seção 1)
+> e no resumo da seção 5.
 
 ---
 
@@ -93,6 +95,8 @@ de aceitação — isso depende do design (ainda a abrir) e do especialista em r
    (`compliance`) / artefato legal (domínio dono, ICP, imutável). Reconcilia 5.5/7.4/11.6/11.7/10.5 que
    existiam **sem** modelo.
 
+9. **⚠️ Revisão de completude pré-design (doc-mestre v1.38, §16.13 — registro em `produto/14-revisao-completude-features.md`).** Auditoria por três lentes (arquitetura/interop · jurídico-regulatório · paridade/JTBD) achou ~34 gaps que passaram batido — vários **omissões da própria §16**. **Entram na V1 e expandem este catálogo:** sessão plenária completa (tipos de sessão, convocação oficial, incidentes processuais, mesa de condução → 16.4); nova superfície **Expediente/Documentos** (geração de documentos por modelo + protocolo geral → 16.3); **e-SIC amplo + prazo LAI** (corrige a 6.1, juridicamente incorreta → 16.6); espécies Decreto Legislativo/Resolução/Emenda à LOM, julgamento de contas do Prefeito (2/3), audiências públicas LRF, coautoria/subscrição, transparência fiscal do órgão (publicação), Carta de Serviços + ouvidoria 13.460, portal do titular LGPD, numeração por tipo/ano, calendário/recesso, URN/LexML (§22.4 eixo H), portabilidade/saída do contrato, observabilidade do modelo de IA, dados abertos, upload validado. **As tabelas por módulo abaixo foram expandidas com esses itens nesta passada (linhas marcadas `v1.38`); contagem re-somada para 113/12 (§5). `produto/14` segue como registro minucioso (severidade, fontes, itens diferidos).**
+
 > **Delta v1.14 → v1.34 (1 linha por mudança):** NOVO épico 16.12 `admin_sistema` (8 features,
 > supratenant) · +3 features em 16.1 (`admin_ente`: 1.8/1.9/1.10) · reescritas 1.1 (passkey), 1.3 (admin
 > supratenant + Keycloak separado), 1.4 (`admin_ente` + disjunção de esferas), 7.1 (PWA-first) · anotadas
@@ -135,6 +139,7 @@ HTTP), superfície de design da trilha UX (ver seção 7).
 | 2.3 | Comissões permanentes/temporárias + CPIs | `[PAR]` | "comissões obrigatórias por matéria" 🔎 (especialista em regimento, §22.4.4) |
 | 2.4 | Legislaturas e sessões legislativas | `[PAR]` `§22.6` | entidades temporais |
 | 2.5 | Blocos / frentes parlamentares | `[PAR]` | |
+| 2.6 | **Calendário/agenda institucional + recesso legislativo** (calendário de sessões, agenda de comissões, reserva de plenário) | `[PAR]` `§22.7` `v1.38` | **recesso altera a contagem de prazos** (motor §22.7 + prazos 3.8); entidade temporal (G16) |
 
 **Fora (guardrail):** servidores administrativos como entidade (delegado ao RH), fornecedores, cadastros contábeis.
 
@@ -159,8 +164,16 @@ HTTP), superfície de design da trilha UX (ver seção 7).
 | 3.13 | **Autógrafo + envio ao Executivo** (C-1) | `[PAR]` `§22.4(origem_versao=redacao_final)` | texto oficial aprovado; **artefato legal** (classe 3 de GAP 5 — domínio dono, ICP, imutável, não relatório); registra envio ao Prefeito |
 | 3.14 | **Controle de sanção/veto + apreciação do veto** (C-1) | `[DIF]` `§22.4` `§22.7.5(S4)` | prazo do Executivo (sanção tácita); veto volta à câmara, votação maioria absoluta (reusa 16.4) |
 | 3.15 | **Promulgação + numeração canônica da lei + publicação** (C-1) | `[PAR]` `§22.4(origem_versao=promulgacao)` | **artefato legal** (classe 3 de GAP 5); fecha a fronteira "da proposição à publicação" (§15) |
+| 3.16 | **Espécies próprias do Legislativo: Decreto Legislativo, Resolução, Emenda à LOM** | `[PAR]` `§22.4(STI)` `§22.7.5(S4)` `v1.38` | fluxo **sem sanção** do Executivo (≠ PL 3.13–3.15); Emenda à LOM 2/3 em dois turnos (quórum no motor S4); rito → especialista de regimento (G8) |
+| 3.17 | **Coautoria / subscrição / apoiamento** de proposições | `[DIF]` `§22.4` `§22.5` `v1.38` | múltiplos autores; assinatura de apoio; subscrição de requerimento — JTBD do vereador (Aposta 2) (G11) |
+| 3.18 | **Numeração automática por tipo/ano configurável** (reinício anual, reserva/cancelamento) | `[PAR]` `§22.9(Eixo 2: gapless)` `v1.38` | explicita sub-capacidade de 3.1; numeração errada = nulidade de ato (G15) |
+| 3.19 | **Identidade canônica interoperável de norma (URN/LexML)** | `[PAR]` `§22.4(eixo H)` `v1.38` | coordenada pública ≠ UUID técnico; base de citação cruzada/intercâmbio SAPL; **decisão de modelo de dados a resolver antes de materializar** (retrofit = refactor estrutural) (G17) |
+| 3.20 | **Registro de publicação = condição de eficácia** (data/veículo do ato) | `[PAR]` `§22.5(eixo F)` `v1.38` | fecha o elo de vigência da lei em 3.15; ≠ ser o DOe-de-registro (V1.5) (G32) |
+| 3.21 | **Gestão documental de anexos: upload validado** (antivírus, allow-list MIME, limite, hash) | `[PAR]` `§22.3.4(objeto_store)` `v1.38` | transversal; sem validação na borda = vetor de malware em portal gov (G21) |
+| 3.22 | **Expediente — geração de documentos a partir de modelos** (ofício, certidão, requerimento administrativo, convite, mala-direta com merge do domínio) | `[DIF]` `[HERO]` `§22.4` `v1.38` | **nova superfície**; trabalho mais frequente do servidor — SAPL e LegisFácil já têm; **maior risco de POC** (G5) |
+| 3.23 | **Expediente — protocolo geral/único** (proposição + documento administrativo recebido/expedido) | `[PAR]` `v1.38` | numerador institucional além de proposições (G6) |
 
-**Fora (guardrail):** integração c/ processo legislativo federal/estadual (V2), mineração cross-câmara (V1.5), similaridade entre proposições (V2). **Prazos/rito exato do veto a confirmar com especialista de regimento** (variam por LOM).
+**Fora (guardrail):** integração c/ processo legislativo federal/estadual (V2), mineração cross-câmara (V1.5), similaridade entre proposições (V2). **Prazos/rito exato do veto a confirmar com especialista de regimento** (variam por LOM). **Diferidos (revisão v1.38):** recepção estruturada do Executivo (mão inversa do autógrafo), sustação de atos/convocação de secretário/pedidos de informação, documentos acessórios tipados, comissão processante/cassação (DL 201/67, raro).
 
 ---
 
@@ -181,6 +194,14 @@ HTTP), superfície de design da trilha UX (ver seção 7).
 | 4.11 | Anexação de ata redigida externamente (upload, indexação, vínculo, imutabilidade, ICP-Brasil) | `[PAR]` `§22.4.3(disc.4)` `§22.5(eixo F)` | decisão v1.7; só texto extraível; **artefato legal** (classe 3 de GAP 5) |
 | 4.12 | Transcrição automática + pré-atribuição de fala (Caminho C) | `[DIF]` `[IA]` `O0/O1` `§22.3` `§22.9(Eixo 10)` | transcrição no **ASR self-host (Whisper-class, GPU própria)**; **embeddings self-host + `pgvector`** alimentam a busca (3.12); revisão manual opcional |
 | 4.13 | **Geração automática de ata pós-sessão por IA** | `[DIF]` `[IA]` `[HERO]` `O1` `§22.6` `§22.9(Eixo 10)` | modo "produtividade"; revisão humana obrigatória (16.8); **rascunho via LLM de fronteira na porta vendor-agnóstica** (dado de sessão fechada filtrado antes da porta); a **ata publicada** é artefato legal (classe 3) |
+| 4.14 | **Tipos de sessão como entidade de 1ª classe** (ordinária/extraordinária/solene/especial) | `[PAR]` `§22.6(tipo+capabilities)` `v1.38` | extraordinária só tem OD; solene não delibera; sem isso só roda a ordinária (G1) |
+| 4.15 | **Convocação oficial + edital com prazo regimental + ciência registrada** | `[PAR]` `§22.6` `§22.10(GAP 4: ledger)` `v1.38` | convocação fora do prazo **anula a sessão**; ciência = ledger durável (flag 8) (G2) |
+| 4.16 | **Incidentes processuais da sessão** (questão de ordem, pedido de vista, votação em bloco, verificação, urgência, retirada de pauta) | `[PAR]` `§22.6(tipo_fala/decisao_mesa)` `§22.7.5(S4)` `v1.38` | uma sessão real trava sem eles; regras no motor (envelope de guard) (G3) |
+| 4.17 | **Mesa de condução ao vivo** (abrir/encerrar, conceder/cassar palavra, abrir/fechar votação, declarar resultado, suspender) | `[DIF]` `§22.6` `[SSE]` `v1.38` | painel de **operação** de quem preside (≠ telão 4.2, ≠ dashboard 11.4); persona presidente/Mesa = quem assina (G4) |
+| 4.18 | **Audiência pública como tipo de reunião** (metas fiscais LRF art.9§4; PPA/LDO/LOA art.48) | `[PAR]` `§22.6` `v1.38` | acontece na câmara perante comissão; reusa pauta+ata+publicação (G10) |
+| 4.19 | **Julgamento das contas do Prefeito + contas da Mesa** (parecer prévio TCE → votação; rejeição 2/3) | `[DIF]` `§22.7.5(S4)` `§22.4` `v1.38` | competência-âncora (CF art.31); reusa votação (4.3) + quórum qualificado (motor S4); matéria = Decreto Legislativo (3.16) (G9) |
+| 4.20 | **Legenda/closed-caption da transmissão** (derivada da transcrição 4.12) | `[PAR]` `[IA]` `§22.6` `v1.38` | acessibilidade (LBI 13.146) quase de graça sobre 4.12; janela Libras diferível (G27) |
+| 4.21 | **Livro de atas canônico** (coleção numerada/contínua/imutável da legislatura) | `[PAR]` `[RM]` `§22.4.3(disc.4)` `v1.38` | projeção sobre atas (4.11/4.13); artefato que o jurídico audita (G24) |
 
 **Fora (guardrail):** software de captação local proprietário; **Plugin de Captura Sincronizada rico** e adaptadores por fornecedor (satélite); shorts automáticos (V1.5); plataforma própria de transmissão; multi-plataforma simultânea.
 
@@ -198,8 +219,12 @@ HTTP), superfície de design da trilha UX (ver seção 7).
 | 5.6 | **Timeline pública da tramitação** da proposição (#5) | `[DIF]` `[RM]` | read-model sobre eventos; demo power + transparência |
 | 5.7 | **Artefato de publicação oficial** (assinado/numerado/imutável) + feed ao DOM externo (C-2 leve) | `[DIF]` `§22.5(eixo F)` `§22.4.3(disc.4)` | **artefato legal** (classe 3 de GAP 5); reusa assinatura; DOe-de-registro = V1.5 (ver Fora) |
 | 5.8 | **Legislação consolidada: repositório as-enacted + consolidação manual assistida** (C-3) | `[DIF]` `§22.4(eixo B)` | texto vivo versionado pelo servidor; IA-auto e bulk histórico = depois (ver Fora) |
+| 5.9 | **Transparência ativa/fiscal do próprio órgão Câmara — camada de publicação** (rol art.8 LAI: remuneração/diárias/contratos do órgão; LC131 tempo real) | `[PAR]` `§22.10(consumo)` `v1.38` 🔎 | **publica**, não produz (contábil/SIAFIC fica Fora — §17); consome do sistema contábil; 🔎 conector de consumo (G12) |
+| 5.10 | **Portal do titular de dados (LGPD art.18)** — acesso/correção/eliminação + contato do Encarregado/DPO | `[PAR]` `§22.5` `v1.38` | obrigação do controlador (Lei 13.709); reusa front do portal; ≠ grant do operador (12.7) (G14) |
+| 5.11 | **Dados abertos / API de dataset** (formato aberto, legível por máquina) | `[PAR]` `§22.3.3` `v1.38` | Decreto 8.777 + LAI art.8 §3 — obrigação de transparência ativa; exportável sobre event-driven (G20) |
+| 5.12 | **Canal real de integração ao DOM** (formato/protocolo/confirmação/idempotência) | `[PAR]` `§22.7.8(padrão)` `v1.38` 🔎 | 🔎 validar com beachhead se "publicar por nós" é dor; se sim, mesmo rigor do adapter de remessa (G22) |
 
-**Fora (guardrail):** portal da transparência geral (despesas/folha/contratos/licitações da câmara) — responsabilidade do sistema administrativo, integramos por consumo; **DOe-de-registro** da câmara (adoção legal + SLA elevado + risco jurídico) → V1.5 se cliente exigir; **consolidação automática por IA** (Onda 2, sobre o copiloto) e **consolidação em massa do acervo histórico** (problema de migração, 16.9).
+**Fora (guardrail):** portal da transparência geral (despesas/folha/contratos/licitações da câmara) — **produção** do dado é responsabilidade do sistema administrativo, integramos por consumo (**exceção v1.38:** a *publicação* da transparência ativa do órgão — 5.9 — entra, pois é obrigação própria da casa, §17); **DOe-de-registro** da câmara (adoção legal + SLA elevado + risco jurídico) → V1.5 se cliente exigir; **consolidação automática por IA** (Onda 2, sobre o copiloto) e **consolidação em massa do acervo histórico** (problema de migração, 16.9).
 
 ---
 
@@ -207,8 +232,8 @@ HTTP), superfície de design da trilha UX (ver seção 7).
 
 | # | Feature | Tags | Notas |
 |---|---|---|---|
-| 6.1 | e-SIC restrito a proposições e atos legislativos | `[PAR]` | |
-| 6.2 | Ouvidoria com roteamento básico por assunto/comissão | `[PAR]` | |
+| 6.1 | **e-SIC amplo** (qualquer info pública do órgão) **+ timer de prazo LAI (20+10) + instância recursal** | `[PAR]` `§22.7.7(prazo)` `v1.38` | **corrige** a restrição ilegal anterior — a LAI não restringe o objeto do SIC por tema; timer reusa `prazo_dominio_ativo` (G7) |
+| 6.2 | **Ouvidoria conforme Lei 13.460** (decisão 30d prorrogável + relatório anual) + **Carta de Serviços ao Usuário** + roteamento por assunto/comissão | `[PAR]` `§22.7.7(prazo)` `[RM]` `v1.38` | TCE/CGU auditam Carta e relatório; reusa motor de prazo + read-model (G13) |
 | 6.3 | Comentários públicos em proposições com moderação | `[PAR]` | |
 
 **Fora (guardrail):** consulta pública estruturada (V2), chatbot cidadão (V2.5+), audiência virtual/e-democracia (V2+), ranking de engajamento por vereador (V2).
@@ -238,6 +263,7 @@ HTTP), superfície de design da trilha UX (ver seção 7).
 | 8.3 | Log auditável de IA | `[DIF]` `[IA]` `§22.1(inv.10)` | |
 | 8.4 | Botão "reportar erro" | `[DIF]` `[IA]` | |
 | 8.5 | Workflow de revisão humana obrigatório antes de publicar | `[DIF]` `[IA]` | governa ata (4.13), resumo (5.4), texto de projeto (3.11) |
+| 8.6 | **Ciclo de vida/observabilidade do modelo de IA** (qual versão de modelo gerou qual artefato legal; versionamento, rollback, drift) | `[DIF]` `[IA]` `§22.3.4` `§22.9(Eixo 10)` `v1.38` | a porta vendor-agnóstica troca o LLM por config e o ASR self-host muda → ata-IA `[HERO]` muda sem rastro; reprodutibilidade/auditoria (G19) |
 
 **Fora (guardrail):** versão robusta (sampling de auditoria, métricas de qualidade por câmara, painel de governança de IA) → Onda 2/V2. **Racional:** constrói-se o mínimo que as 5 capacidades de IA exigem.
 
@@ -252,6 +278,7 @@ HTTP), superfície de design da trilha UX (ver seção 7).
 | 9.3 | Pipeline de áudio que processa histórico em bulk (além de ao vivo) | `[DIF]` `§22.6` | |
 | 9.4 | Migração artesanal da 1ª câmara (humano + scripts ad-hoc sobre 9.1) | `[INF]` | meta 30 dias contrato→go-live |
 | 9.5 | 1º conector (provável Softcam, relevância regional) | `[INF]` `M1` | demais conectores M4 |
+| 9.6 | **Portabilidade / saída do contrato** (off-boarding: dump completo dos dados do ente ao encerrar) | `[DIF]` `§22.1(inv.2)` `§22.5(LGPD art.18)` `v1.38` | simétrico à entrada (9.1); **objeção jurídica de não-aprisionamento em pregão**; barato no event-driven; fecha o ciclo `encerrado` (12.1) (G18) |
 
 **Fora (guardrail):** conectores automatizados para concorrentes como produto (satélite separado, sem cliente fechado); migração de dados administrativos (folha/contábil/licitações) — não há o que migrar.
 
@@ -290,6 +317,7 @@ entrega de notificação (durável, ver 11.6 / flag 8).
 | 11.5 | Busca global simples (não-IA) | `[PAR]` `[RM]` | distinta da semântica (3.12); table-stakes |
 | 11.6 | **Central de notificações/alertas unificada** (C-4) | `[DIF]` `[RM]` `§22.10(GAP 4)` | **vista** (sininho/inbox) = projeção **dropável** no `paineis`; **entrega** (e-mail/push) = **ledger durável idempotente** — a *única peça de verdade durável* desta camada (exceção consciente à regra "projeção não tem verdade"); 3 planos do mesmo evento (outbox/SSE/notificações); redelivery é no-op (nunca re-spam). Graduação a módulo `notificacoes` próprio = V1.5/V2 (push/multicanal/digest) |
 | 11.7 | Exportação PDF/CSV de listas (proposições, presenças, votações) | `[PAR]` `[RM]` `§22.10(GAP 5)` | **relatório-projeção** (classe 1 de GAP 5) — mora no `paineis`, dropável; **não é módulo de relatórios** (seria JOIN cross-schema, proibido); BI/report-builder/benchmarking → V2 |
+| 11.8 | **Espelho / ficha da matéria** (ficha-resumo canônica: autoria, ementa, situação, histórico, anexos, num/ano — imprimível/citável) | `[PAR]` `[RM]` `v1.38` | read-model sobre o substrato; o servidor imprime/anexa, o jurídico cita (G23) |
 
 **Fora (guardrail):** BI de verdade — report-builder, exportação custom configurável, benchmarking
 cross-câmara, ranking de engajamento por vereador (§16.6) — V2 (mesmo substrato, camada robusta).
@@ -356,18 +384,19 @@ regimento**. A ata-IA (4.13) + o pós-aprovação (3.14 veto) + os painéis soma
 **apertam** o plano (PRD §2/§5). **O console do operador (16.12) não estava no plano de 4 meses
 original:** 12.1/12.4/12.8 são fundação barata e inadiável (sem registry de entes não há tenant), mas
 12.2/12.6/12.7 **acrescem** escopo (ver seção 6, risco 11). **PWA-first (7.1) alivia** — remove a banda
-implícita "codebase nativo" de M2–M4. Os read-models (16.11) são baratos mas dependem do dado fluindo (tardios).
+implícita "codebase nativo" de M2–M4. Os read-models (16.11) são baratos mas dependem do dado fluindo (tardios). **Adições v1.38:** URN/LexML (3.19) e portabilidade (9.6) são decisões de fundação (M0–M1); espécies/coautoria/numeração (3.16–3.18) e Expediente (3.22–3.23) em M1–M2; sessão completa (4.14–4.21) em M2–M3; fiscalização (audiência/contas 4.18–4.19) e transparência legal (5.9–5.11, 6.1–6.2) em M3–M4.
 
 ---
 
 ## 5. Cobertura — toda capacidade "Entra" da §16 mapeada + épico supratenant
 
-**81 features tenant-facing em 11 módulos** (§16) **+ 8 features supratenant em 1 módulo operador**
-(§22.10 — `admin_sistema`, fora da fronteira §16) = **89 features, 12 módulos**.
+**105 features tenant-facing em 11 módulos** (§16; inclui as ~24 adições da revisão de completude v1.38)
+**+ 8 features supratenant em 1 módulo operador** (§22.10 — `admin_sistema`, fora da fronteira §16) =
+**113 features, 12 módulos**.
 
-✅ 16.1→F1.1–1.10 · 16.2→F2.1–2.5 · 16.3→F3.1–3.15 · 16.4→F4.1–4.13 · 16.5→F5.1–5.8 ·
-16.6→F6.1–6.3 · 16.7→F7.1–7.5 · 16.8→F8.1–8.5 · 16.9→F9.1–9.5 · 16.10→F10.1–10.5 · 16.11→F11.1–11.7 ·
-**16.12→F12.1–12.8 `[SUPRATENANT]`**.
+✅ 16.1→F1.1–1.10 · 16.2→F2.1–2.6 · 16.3→F3.1–3.23 · 16.4→F4.1–4.21 · 16.5→F5.1–5.12 ·
+16.6→F6.1–6.3 · 16.7→F7.1–7.5 · 16.8→F8.1–8.6 · 16.9→F9.1–9.6 · 16.10→F10.1–10.5 · 16.11→F11.1–11.8 ·
+**16.12→F12.1–12.8 `[SUPRATENANT]`**. *(Ranges 2.6 / 3.16–3.23 / 4.14–4.21 / 5.9–5.12 / 8.6 / 9.6 / 11.8 = adições v1.38.)*
 
 **Nenhum item "Entra" da §16 ficou sem feature.** Itens "Não entra" viraram guardrails por módulo. O
 épico **16.12 não deriva da §16** (deriva de §22.10 GAP 1+3 — escopo de operador SaaS). **Admin do ente
@@ -419,7 +448,7 @@ implícita "codebase nativo" de M2–M4. Os read-models (16.11) são baratos mas
 
 ## 7. Próximo passo da trilha de produto/UX
 
-Com o backlog em pé (**89 features, 12 módulos** — 81 tenant-facing + 8 supratenant), o próximo movimento
+Com o backlog em pé (**113 features, 12 módulos** — 105 tenant-facing + 8 supratenant), o próximo movimento
 é **design** das superfícies `[DIF]`: PWA do vereador (16.7), portal cidadão (16.5), a **superfície de
 revisão humana de IA (8.5)**, os **painéis de 16.11** (onde a confiança operacional e o engajamento ficam
 visíveis) e a **área de administração do ente (1.8–1.9)**. O **console do operador (16.12)** é superfície de

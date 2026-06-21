@@ -62,7 +62,17 @@ Eixo A) segue em §22.7.4.
 
 ## 3. ⚠️ Estado do cursor + primeira ação
 
-**Estado (v1.37, 21/06/2026):** **§22.7 (motor de regras de compliance) FECHADO por completo** — o último eixo,
+**Estado (v1.38, 21/06/2026):** **Revisão de completude das features (gate pré-design) FECHADA.** Auditoria por 3 lentes
+(arquitetura/interop · jurídico-regulatório · paridade/JTBD) achou ~34 gaps que passaram batido — vários **omissões da
+própria §16**; **24 entraram na V1**: sessão plenária completa (tipos de sessão, convocação, incidentes processuais, mesa de
+condução), nova superfície de **Expediente/documentos** (geração de docs por modelo + protocolo geral), **e-SIC amplo**
+(corrige a 6.1 que era juridicamente ilegal), espécies Decreto Leg./Resolução/Emenda à LOM, julgamento de contas (2/3),
+audiências LRF, transparência fiscal do órgão (publicação), Carta de Serviços/ouvidoria 13.460, portal do titular LGPD,
+URN/LexML, portabilidade/saída, observabilidade do modelo de IA, dados abertos, upload validado. Consolidado em
+**§16.13 + changelog v1.38** do doc-mestre; registro minucioso em **`produto/14`**; tabelas de `produto/13` expandidas
+(**113 features / 12 módulos**). Também nesta sessão: o **arco A+B+C de governança da porta de IA** (pesquisa de vendor +
+filtro B1–B4 + protótipo Clojure `governanca-ia-clj/`, suíte verde, ecc-validado — **ainda não commitado**). Antes:
+**§22.7 (motor de compliance) FECHADO por completo** — o último eixo,
 expansão a outros TCEs (§22.7.9), foi consolidado. Antes nesta sessão: `motor-dsl-clj/` dobrado em
 `backend/src/oplenario/motor/` + §22.7.6 averbada (catálogo no schema `motor`, v1.36).
 A trilha de produto/comercial está **completa** (pasta `produto/`). §22.7 tem agora **Eixos A, C, B, o
@@ -108,20 +118,24 @@ relação `tribunal_competente` (reconcilia o "UF JOIN" do Eixo B com a §22.10)
 onboarding (type-check do save = rede de segurança); **E4** forma validada contra 1 tribunal (CE), conteúdo `[GAP]`, rollout
 demand-pulled (NE→N/CO→S/SE, gatilho = cliente validado). Rascunho `docs/08`. **Com isso §22.7 fecha por completo.**
 
-**Primeira ação recomendada agora:** **§22.7 está fechado** — a trilha de *design* de arquitetura do motor de compliance
-está completa. O próximo passo natural é **implementação/materialização (deferida ao chat de stack §22.4.4):** fiar a
-**persistência real** (`motor/db/` + as tabelas de `cadastros` incl. `jurisdicao_camara` do E1) + a **orquestração de runtime**
-que o `compliance` opera — chamar `motor/avaliar` com **resolvedor de fatos injetado** (funções de relação por contexto dono,
-§22.5.3 disc.5; não o `:estado` em-memória) e persistir em `compliance.prazo_dominio_ativo`/`compliance_avaliacao`.
-**Parqueado de design:** §22.8 item 1 (LLM provider / soberania). Abrir uma; o Emilio direciona.
+**Primeira ação recomendada agora:** a revisão de completude **fechou** e o catálogo está pronto para o **DESIGN** — o próximo
+macro-passo (decisão do Emilio: *"depois dela vamos partir para o design"*). Abrir o design das superfícies com o **UI/UX Pro Max**
+(ferramenta fixa do projeto), priorizando as telas que decidem a compra: **sessão ao vivo + mesa de condução** (4.14–4.21),
+**Expediente/documentos** (3.22–3.23 — superfície nova, sem mockup ainda), **portal cidadão** com e-SIC amplo + titular LGPD
+(6.1, 5.10), e os **painéis** (16.11). Mockups atuais em `produto/design-system/o-plenario/` cobrem 7 superfícies — faltam
+Expediente e a mesa de condução. **Pendências paralelas (não bloqueiam o design):** (a) **commitar o arco de governança da porta
+de IA** (`governanca-ia-clj/`, ainda untracked); (b) **implementação/materialização do motor** (persistência real `motor/db/` +
+tabelas do `cadastros` incl. `jurisdicao_camara` + orquestração de runtime — `motor/avaliar` com resolvedor de fatos injetado,
+§22.5.3 disc.5; deferida ao chat de stack §22.4.4); (c) §22.8 sem itens parqueados (item 1 LLM/soberania resolvido no Eixo 10, v1.27).
+Abrir design, ou direcionar.
 
 - **Trilhas concluídas:** produto/comercial (completa, `produto/`); arquitetura **§22.7 COMPLETO** (Eixos A, C, B,
   runtime §22.7.7, geração de artefatos §22.7.8, **expansão §22.7.9**); **esqueleto `backend/` com `compliance`
   materializado e `motor` dobrado** (catálogo §22.7.6 no schema `motor`).
 - **Nenhum eixo de design de arquitetura aberto.** Resta: **implementação/materialização** (persistência real +
   orquestração de runtime + tabelas do `cadastros` incl. `jurisdicao_camara` — deferida ao chat de stack §22.4.4);
-  o **layout físico do SIM** + conteúdo regulatório por tribunal seguem `[GAP]`; LLM provider / soberania
-  parqueado (**§22.8 item 1**). O granular do registry (§22.7.4) segue a reconciliar.
+  o **layout físico do SIM** + conteúdo regulatório por tribunal seguem `[GAP]`; **§22.8 sem itens parqueados**
+  (item 1 LLM/soberania resolvido no Eixo 10, v1.27 — híbrido + porta vendor-agnóstica; vendor concreto = deploy-config/comercial). O granular do registry (§22.7.4) segue a reconciliar.
 
 ---
 

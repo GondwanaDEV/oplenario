@@ -1,6 +1,6 @@
 # Documento-Mestre — SaaS para Câmaras Municipais
 
-**Versão:** 1.37
+**Versão:** 1.38
 **Data de consolidação:** 21 de junho de 2026
 **Status:** documento vivo — atualizar a cada decisão relevante
 
@@ -290,7 +290,7 @@ A V1 é composta de **10 módulos**. Cada um tem escopo explícito do que entra 
 
 ### 16.6 Participação Cidadã (versão mínima)
 
-**Entra:** e-SIC restrito a pedidos sobre proposições e atos legislativos, ouvidoria com roteamento básico por assunto/comissão, comentários públicos em proposições com moderação.
+**Entra:** e-SIC **amplo** (qualquer informação pública do órgão Câmara — **não** restrito a tema legislativo, pois a LAI 12.527/2011 não permite restringir o objeto do SIC), com **timer de prazo legal** (20+10 dias) e **instância recursal**; ouvidoria conforme **Lei 13.460/2017** (decisão em 30 dias prorrogável 1x, **relatório anual de gestão** publicado, pesquisa de satisfação) + **Carta de Serviços ao Usuário**; roteamento por assunto/comissão; comentários públicos em proposições com moderação. *(Correção v1.38: a redação anterior — "e-SIC restrito a pedidos sobre proposições e atos legislativos" — era juridicamente incorreta; ver §16.13 e `produto/14`. O timer reusa o `prazo_dominio_ativo` do motor, §22.4.3 disc.6.)*
 
 **Não entra:** consulta pública estruturada (V2), chatbot cidadão (V2.5+), audiência pública virtual/e-democracia (V2+), ranking de engajamento por vereador (V2).
 
@@ -332,6 +332,63 @@ A V1 é composta de **10 módulos**. Cada um tem escopo explícito do que entra 
 
 **Não entra:** BI de verdade — report-builder, exportação custom configurável, benchmarking cross-câmara, ranking de engajamento por vereador (§16.6) — vem na V2 (mesmo substrato, camada robusta).
 
+### 16.13 Revisão de completude pré-design (v1.38) — capacidades adicionadas
+
+*(O rótulo 16.12 fica reservado ao console do operador SaaS — supratenant, ancorado em §22.10 e decomposto em `produto/13`, fora desta numeração tenant-facing.)*
+
+Antes de abrir a trilha de **design**, uma auditoria de completude por três lentes independentes
+(arquitetura/interoperabilidade · jurídico-regulatório · paridade de mercado + JTBD de persona) achou
+capacidades que **passaram batido** no catálogo de `produto/13` — e várias são omissões da própria §16,
+não só da decomposição. Registro minucioso, com severidade e âncora legal, em
+**`produto/14-revisao-completude-features.md`**. Síntese do que **entra na V1**:
+
+**Tier 1 — bloqueavam o design:**
+- **§16.4 — a sessão plenária completa.** A §16.4 modelava os *outputs* da sessão (telão, votação,
+  quórum, presença, tribuna) mas não a *condução* de uma sessão real: **tipos de sessão** como entidade
+  (ordinária/extraordinária/solene/especial, com regras próprias — extraordinária só tem Ordem do Dia,
+  solene não delibera); **convocação oficial + edital com prazo regimental + ciência registrada**
+  (convocação fora do prazo **anula a sessão**); **incidentes processuais** (questão de ordem, pedido de
+  vista, votação em bloco de emendas, verificação de votação, urgência, retirada de pauta); **mesa de
+  condução ao vivo** (o painel de operação de quem **preside** — distinto do telão 4.2 e do dashboard 11.4).
+- **§16.3 — nova superfície de Expediente/Documentos.** **Geração de documentos a partir de modelos**
+  (ofício, certidão, requerimento administrativo, convite, mala-direta com merge do domínio — o trabalho
+  mais frequente do servidor, que SAPL grátis e LegisFácil pago já entregam) e **protocolo geral/único**
+  (protocola proposição **e** documento administrativo recebido/expedido, não só proposições).
+- **§16.6 — e-SIC amplo + prazo LAI + recurso** (correção da 6.1, acima).
+
+**Tier 2 — entram (régua §15):** espécies faltantes **Decreto Legislativo, Resolução, Emenda à LOM**
+(fluxo sem sanção do Executivo; Emenda à LOM com 2/3 em dois turnos); **julgamento das contas do Prefeito**
+(CF art.31, rejeição por 2/3) e contas da Mesa; **audiências públicas obrigatórias** (LRF art.9§4 metas
+fiscais perante comissão da casa; art.48 PPA/LDO/LOA) como **tipo de reunião** distinto da sessão plenária;
+**coautoria/subscrição/apoiamento** de proposições (Aposta 2); **transparência ativa/fiscal do próprio
+órgão Câmara** = camada de **publicação** (G12, §17); **Carta de Serviços + ouvidoria 30d + relatório
+anual** (Lei 13.460/2017); **portal do titular LGPD** (art.18 acesso/correção/eliminação + contato do
+Encarregado/DPO); **numeração automática por tipo/ano configurável**; **calendário/agenda + recesso
+legislativo** (afeta a contagem de prazos do motor §22.7); **URN/LexML como identidade canônica de norma**
+(decisão de modelo de dados, **§22.4 eixo H** — resolver **antes de materializar**; retrofit é refactor
+estrutural); **portabilidade/saída do contrato** (off-boarding B2G + LGPD art.18 — a §16.9 só tinha
+*entrada*); **ciclo de vida/observabilidade do modelo de IA** (qual versão de modelo gerou qual artefato
+legal — §22.3.4; a ata-IA é artefato legal `[HERO]`); **dados abertos/API de dataset** (Decreto 8.777 +
+LAI art.8); **upload validado** (antivírus/MIME/tamanho/hash) para anexos.
+
+**Mantido 🔎 (validar com o beachhead):** canal real de integração ao DOM — se "publicar oficialmente por
+nós" for dor de compra, mesmo rigor do adapter de remessa TCE (§22.7.8).
+
+**Ganhos baratos puxados:** espelho/ficha da matéria; livro de atas canônico; **legenda da transmissão**
+derivada da transcrição (4.12); registro de publicação = condição de eficácia (fecha o elo de vigência da
+lei em 3.15).
+
+**Diferidos/notados:** documentos acessórios tipados; comissão processante/cassação (DL 201/67, raro);
+recepção estruturada do Executivo; sustação de atos/convocação de secretário; política de retenção/expurgo
+de áudio; proteção de abuso no portal público; consumo read-only para o portal geral; intercâmbio
+Interlegis/SAPL.
+
+**Implicações.** A maioria **reusa substrato já fechado** (motor de prazo `prazo_dominio_ativo`,
+votação+quórum S4, event-driven/read-model, assinatura ICP) — o custo marginal real concentra-se em
+**Expediente/documentos** e na **sessão completa**, que **apertam o §18** (dimensionamento de time, não
+corte). A decomposição `produto/13` e os mockups do design-system serão estendidos a partir daqui antes de
+abrir o design fino.
+
 ---
 
 ## 17. Aplicação explícita da régua aos casos borderline
@@ -344,7 +401,7 @@ Casos onde a tentação de incluir era real e as 4 perguntas da seção 15 foram
 
 **Gestão de contratos de fornecedores da câmara.** Pergunta 1: quebra? Não. Pergunta 2: delegável? Sim. **Fora.**
 
-**Portal da transparência completo (despesas, folha, contratos).** Pergunta 1: quebra? Não — é obrigação da câmara, mas não do sistema legislativo. Pergunta 2: delegável? Sim, e é exatamente isso que acontece hoje. **Fora.** Produzimos o portal legislativo; o portal geral pode consumir nossos dados via integração quando a câmara quiser unificar.
+**Portal da transparência completo (despesas, folha, contratos).** Pergunta 1: quebra? Não. Pergunta 2: delegável? **Parcialmente — distinção cravada na revisão de completude (v1.38, §16.13).** *Produzir* o dado fiscal (execução orçamentária, folha, empenho — SIAFIC) é do sistema contábil e **fica Fora** (o §17 acerta nisso). Mas a câmara é **órgão autônomo** (CF art.31) com obrigação **própria e não-delegável de publicar** sua transparência ativa: o rol mínimo do art.8 da LAI (remuneração de vereadores/servidores, diárias, licitações e contratos **do órgão**) e a execução em tempo real (LC 131/2009). Portanto a **camada de publicação** dessa transparência administrativa do órgão Câmara, **consumindo** do sistema contábil, **entra** (G12, `produto/14`). Regra: produzimos o contábil = Fora; publicamos a vitrine legal da casa = dentro. O portal geral do município segue podendo consumir nossos dados via integração.
 
 **Protocolo administrativo (processos SEI-like da câmara).** Pergunta 1: quebra? Não — nosso protocolo cobre proposições, não ofícios administrativos. Pergunta 2: delegável? Sim. **Fora.** Tentação real porque é "parecido" com protocolo legislativo; é diferente e tem seu próprio universo de complexidade.
 
@@ -368,7 +425,7 @@ Esboço de sequência para testar com o time técnico — não é roadmap detalh
 
 **Mês 3-4:** Busca intra-câmara em transcrições e proposições; Resumo cidadão para portal; Copiloto de redação de projetos; **geração automática de ata por IA (feature-âncora, decisão 20/06/2026)**; Participação Cidadã mínima; SLA/plantão operacional ativado; demais conectores de migração; fechamento e hardening. **A ata-IA agora É escopo entregável** (modo produtividade, revisão humana obrigatória §16.8) — depende da transcrição (mês 2-3) e da captação funcional; o dataset golden (transcrição, ata humana anexada) segue se formando das câmaras e retroalimenta a qualidade. ⚠️ Somar este pipeline ao escopo de 4 meses **aperta** o cronograma (ver §16.4, `produto/05`§2).
 
-**Notas importantes:** o mês 0 depende de decisões de stack que ainda não tomamos (chat de North Star Architecture); o mês 4 é piso, não teto — lançar em 4 meses exige time mínimo de ≥8 engenheiros dedicados, designer sênior, product manager e o especialista em regimento já contratado. Dimensionamento real de time também é conversa do chat de arquitetura.
+**Notas importantes:** o mês 0 depende de decisões de stack que ainda não tomamos (chat de North Star Architecture); o mês 4 é piso, não teto — lançar em 4 meses exige time mínimo de ≥8 engenheiros dedicados, designer sênior, product manager e o especialista em regimento já contratado. Dimensionamento real de time também é conversa do chat de arquitetura. **Revisão de completude (v1.38, §16.13):** a sessão plenária completa (tipos de sessão, convocação formal, incidentes processuais, mesa de condução) + a nova superfície de **Expediente/documentos** somam escopo real e **apertam ainda mais** o cronograma — vira dimensionamento de time, não corte, porque o que falta quebra o fluxo ou perde a POC do servidor.
 
 ---
 
@@ -1375,3 +1432,4 @@ Este é o documento-mestre do projeto. Ele deve:
 | 1.35 | 21/06/2026 | Consolidado o **Eixo de geração de artefatos de envio ao TCE** (nova subseção **22.7.8**) — **primeiro dos +2 eixos restantes** do motor (resta: expansão a outros TCEs). O runtime (§22.7.7) rastreia a *obrigação de enviar*; este eixo gera o *arquivo* (a "remessa") cuja submissão a satisfaz — fronteira já desenhada em §22.7.7/§22.7.4/§22.10 (GAP 5: remessa = artefato regulatório classe 2, dono `compliance`); o template `remessa_mensal_sim` (Eixo C) já existe e `remessa_enviada(...)` é a costura obrigação ↔ artefato. **Nó central (decisão "2b", Emilio):** a spec de layout é **descritor declarativo próprio** (dado versionado por cópia integral como `template_compliance`, reusa o registry de funções de relação como fonte, renderizador próprio) — **não** estende a DSL de avaliação (serialização ≠ avaliação; defendido pelo S4 "um núcleo, múltiplos envelopes/usos") **nem** é código por TCE (feriria Invariante 4); honra Invariante 4 (novo TCE/remessa = dado novo). **Demais decisões:** adapter `gerador_remessa` no `compliance`, descritor = domínio (sem `ente_id`) / arquivo gerado = tenant; gatilho híbrido (evento prepara + sob-demanda com revisão humana); artefato = registro **append-only `remessa_gerada`** (Invariante 10; binário no `objeto_store`, metadata carimba regra+catálogo+`spec_layout_versao`+hash; re-emissão = nova versão); ciclo de vida **enum em código** (`rascunho→validada→submetida→{aceita\|rejeitada}`); **costura confirmada (Emilio): `remessa_enviada` cumpre a obrigação em `aceita`, não em `submetida`** (rejeição não cumpre — incidente inaceitável). Port `SerializadorRemessa` com 1 adapter (SIM), generalização disparada no 2º TCE (S2); proveniência via funções de relação mas com **read-ports em lote** novos (sem JOIN cross-schema §22.10); transporte via port com adapter "download manual" V1. **Fronteira `[GAP]`:** forma fecha com fixture ilustrativo; layout físico do SIM, inventário de remessas, fonte de campos, protocolo/semântica de submissão e assinatura ICP ficam `[GAP]` de conteúdo regulatório. **Esqueleto:** módulo `compliance` segue em stub (só README), atrás das 2 tabelas de runtime + a forma deste eixo — materialização roteada a passo focado (catch-up de decisão fechada, não conteúdo antes da hora; §7/§22.4.4). **Não alteradas:** §22.1–§22.6, §22.7.1–§22.7.7, §22.8–§22.10 e demais seções. |
 | 1.36 | 21/06/2026 | **Averbação: as 5 tabelas estáticas do Eixo B (§22.7.6) vivem no schema `motor`, não `compliance`** (reconciliação com §22.10; decisão Emilio, 21/06). O Eixo B (v1.11) já as descrevia como "schema estático do **motor**", mas `docs/06` rotulava "Módulo: compliance" pré-§22.10 — esta entrada **averba a localização no SSOT** antes que a próxima sessão releia §22.7.6 e reabra. **Razão dura:** `template_compliance` (definição) ⋈ `compliance_regra_tenant` (binding) têm **FK real** (`versao_fixada_id`) + resolução conjunta; §22.10 proíbe FK/JOIN cross-schema → co-localizam; `registry_catalogo_versao`/`prazo_dominio_vigente`/`calendario_feriado` são infra do catálogo/builtins do motor. `compliance_regra_tenant` = **única tabela tenant** no schema `motor` (RLS/partição = política global deferida). **Implementação (catch-up de decisão fechada, NÃO muda decisão):** o seed `motor-dsl-clj/` foi **dobrado** em `backend/src/oplenario/motor/` — núcleo DSL verbatim (suíte **12 testes/63 asserções verde** no novo local, clj-kondo limpo), fachada `api/verificar-fonte` real, persistência `db/` stub (deferida §22.4.4) — + migration `…0006-motor-catalogo` (schema `motor` + as 5 tabelas; UNIQUE via índice com `COALESCE` p/ a armadilha `NULL≠NULL` em `chave_dominio`/`municipio_id`; validado por `ecc` architect+clojure-reviewer+database-reviewer). O módulo `compliance` fora materializado na sessão anterior (migration `…0005`, runtime §22.7.7/8). **Seção alterada:** §22.7.6 (nota de localização). **Não alteradas:** §22.1–§22.6, §22.7.1–§22.7.5, §22.7.7–§22.7.8, §22.8–§22.10 e demais. |
 | 1.37 | 21/06/2026 | Consolidado o **Eixo de expansão a outros TCEs** (nova subseção **22.7.9**) — **fecha §22.7 por completo** (último eixo do motor de compliance; decisões Emilio, 21/06). Não reabre a forma (A/C/B + runtime §22.7.7 + remessa §22.7.8); fecha a estratégia de absorver os **33 Tribunais de Contas** como **dado** (Invariante 4). **E1 — jurisdição:** `tribunal(câmara)` não é `UF→TCE` (TCM-BA/GO/PA julgam todos os municípios da UF; TCM-SP/RJ só a capital) → tabela `jurisdicao_camara` de domínio no `cadastros` (default UF + override por município, precedência município→UF), alcançada pela função de relação `tribunal_competente(ente)→Texto` (padrão B3) que dá o `chave_dominio` da B2 — **reconcilia o Eixo B "via UF JOIN" com §22.10 (sem cross-schema JOIN)**; novo tribunal/fusão = linha de dado; DDL deferida à materialização do `cadastros`. **E2 — taxonomia:** camada `tce_estadual` **renomeada `tribunal_de_contas`** (o rótulo antigo mentia nos ~5 TCMs) — forma/schema não muda (enum-texto); aplicado no código do motor (`verificador`/templates/comentários `…0006`; suíte verde) e propagado a §22.7.6/§22.7.8 (v1.10/v1.11 retêm o nome antigo como registro do achado). **E3 — variação × Invariante 4:** tudo que varia entre tribunais é dado, exceto 3 pontos de código **bounded por eixo compartilhado** (encoding `SerializadorRemessa` / protocolo `TransporteRemessa` / vocabulário no registry B3) — **regra-de-ouro: nunca código por tribunal** (`if tribunal == X` é o cheiro a resistir) + playbook de onboarding com o **type-check do save-time como rede de segurança** (onboarding = edição de dado verificada, não release de engenharia; Aposta 3). **E4 — `[GAP]` + rollout:** forma validada contra 1 tribunal (TCE-CE), conteúdo por tribunal `[GAP]`; rollout demand-pulled (V1 só TCE-CE §10/§325; ordem NE→N/CO→S/SE, gatilho = cliente validado; 2º tribunal = marco de validação empírica). Rascunho de origem: `docs/08-eixo-expansao-tce-rascunho.md`. **Seções alteradas:** §22.7.9 (nova), §22.7.6/§22.7.8 (renomeação da camada), §22.7.1/§22.7.4 (roadmap: §22.7 fechado). **Não alteradas:** §22.1–§22.6, §22.8–§22.10 e demais. |
+| 1.38 | 21/06/2026 | **Revisão de completude das features pré-design** (nova subseção **16.13**; registro minucioso em `produto/14-revisao-completude-features.md`). Auditoria por três lentes independentes (arquitetura/interop · jurídico-regulatório · paridade/JTBD) achou capacidades que passaram batido — várias **omissões da própria §16**. **Tier 1 (bloqueavam o design):** sessão plenária completa em §16.4 (tipos de sessão; convocação oficial + edital com prazo; incidentes processuais — questão de ordem/pedido de vista/votação em bloco/verificação/urgência; mesa de condução ao vivo); nova superfície **Expediente/Documentos** em §16.3 (geração de documentos por modelo + protocolo geral); **e-SIC amplo + prazo LAI 20+10 + recurso** em §16.6 (**correção** — a 6.1 "restrito a proposições" era juridicamente incorreta, a LAI não restringe o objeto do SIC por tema). **Tier 2:** espécies Decreto Legislativo/Resolução/Emenda à LOM; julgamento de contas do Prefeito (2/3); audiências públicas LRF; coautoria/subscrição; transparência ativa/fiscal do órgão (camada de **publicação** — §17 ajustado: produzir=Fora, publicar=dentro); Carta de Serviços+ouvidoria 13.460; portal do titular LGPD; numeração por tipo/ano; calendário+recesso; **URN/LexML** (§22.4 eixo H, antes de materializar); portabilidade/saída do contrato; observabilidade do modelo de IA; dados abertos; upload validado. **Mantido 🔎:** canal DOM. **Baratos puxados:** ficha da matéria, livro de atas, legenda (de 4.12), registro de publicação=eficácia. **Diferidos:** comissão processante DL 201, doc. acessório, recepção do Executivo, retenção de áudio, anti-abuso, consumo read-only, intercâmbio SAPL. **Seções alteradas:** §16.13 (nova), §16.6 (6.1 corrigida), §17 (guardrail de transparência), §18 (nota de aperto). **A decomposição `produto/13` e o design-system serão estendidos a partir daqui** (incl. §22.4 eixo H ganhando URN/LexML e §22.3.4 ganhando observabilidade de modelo, a materializar). **Não alteradas:** §22.* (substância) e demais seções. |
