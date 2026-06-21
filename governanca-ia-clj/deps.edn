@@ -1,0 +1,10 @@
+;; Protótipo de VALIDAÇÃO do filtro de governança da porta de IA (§22.9 Eixo 10 + B1–B4).
+;; Valida a FORMA (gate determinístico fail-closed + redação de minimização + auditoria + porta
+;; vendor-agnóstica), NÃO é o satélite de produção. Clojure por coerência com o idioma de governança
+;; do core (§22.5 authz / §22.7 compliance: rules-as-data, fail-closed). Seed core-owned da política.
+;; Roda:  clojure -M:test
+{:paths ["src"]
+ :deps {org.clojure/clojure {:mvn/version "1.12.0"}}
+ :aliases
+ {:test {:extra-paths ["test"]
+         :main-opts ["-m" "oplenario.governanca.test-runner"]}}}
