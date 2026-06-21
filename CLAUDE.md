@@ -62,7 +62,7 @@ Eixo A) segue em §22.7.4.
 
 ## 3. ⚠️ Estado do cursor + primeira ação
 
-**Estado (v1.38, 21/06/2026):** **Revisão de completude das features (gate pré-design) FECHADA.** Auditoria por 3 lentes
+**Estado (v1.39, 21/06/2026):** **Reorganização do doc-mestre FECHADA** — a §22 (densa) foi extraída para `arquitetura/` (7 arquivos por subseção, **verbatim**, cada um com cabeçalho de SSOT; headings promovidos −2); o doc-mestre virou **espinha estratégica** — §1–§21 + §22.1/§22.2/§22.8 inline + índice da §22 (stub = resumo + ponteiro por subseção) + §23–§24, com **§24 = autoridade única de versão**; encolheu ~1.435→~630 linhas. Validada por `ecc:architect` (sem CRÍTICOS: verbatim, âncoras `§22.x` resolvem, sem duplicação/drift). Corte e checklist em `docs/09`. **Antes nesta sessão — Revisão de completude das features (gate pré-design) FECHADA.** Auditoria por 3 lentes
 (arquitetura/interop · jurídico-regulatório · paridade/JTBD) achou ~34 gaps que passaram batido — vários **omissões da
 própria §16**; **24 entraram na V1**: sessão plenária completa (tipos de sessão, convocação, incidentes processuais, mesa de
 condução), nova superfície de **Expediente/documentos** (geração de docs por modelo + protocolo geral), **e-SIC amplo**
@@ -118,7 +118,7 @@ relação `tribunal_competente` (reconcilia o "UF JOIN" do Eixo B com a §22.10)
 onboarding (type-check do save = rede de segurança); **E4** forma validada contra 1 tribunal (CE), conteúdo `[GAP]`, rollout
 demand-pulled (NE→N/CO→S/SE, gatilho = cliente validado). Rascunho `docs/08`. **Com isso §22.7 fecha por completo.**
 
-**Primeira ação recomendada agora:** a revisão de completude **fechou** e o catálogo está pronto para o **DESIGN** — o próximo
+**Primeira ação recomendada agora:** a **reorganização do doc-mestre FECHOU** (§22 densa extraída para `arquitetura/`, v1.39 — ver o estado em §3 acima e `docs/09`; validada por `ecc:architect`); o catálogo está pronto para o **DESIGN** — o próximo
 macro-passo (decisão do Emilio: *"depois dela vamos partir para o design"*). Abrir o design das superfícies com o **UI/UX Pro Max**
 (ferramenta fixa do projeto), priorizando as telas que decidem a compra: **sessão ao vivo + mesa de condução** (4.14–4.21),
 **Expediente/documentos** (3.22–3.23 — superfície nova, sem mockup ainda), **portal cidadão** com e-SIC amplo + titular LGPD
@@ -188,6 +188,7 @@ que justifica type-checking estático no momento de salvar a regra (decisão do 
 | Arquivo | Para quê |
 |---|---|
 | `documento-mestre-camaras.md` | **Single source of truth.** Decisões consolidadas. Em conflito, prevalece. **A versão vive no cabeçalho + §24, nunca no nome do arquivo** (evita trocar referências a cada bump). |
+| `arquitetura/` | **Parte do SSOT** — as subseções densas da §22, extraídas (v1.39), uma por subseção: `22-3-contrato-core-ia` · `22-4-dados-legislativo` · `22-5-auth` · `22-6-sessao-plenaria` · `22-7-motor-compliance` · `22-9-stack` · `22-10-monolito`. Cada arquivo abre com cabeçalho de SSOT; **versão do conjunto governada pelo §24 do doc-mestre**, nunca por arquivo. |
 | `docs/00-estado-e-roadmap.md` | **Comece aqui.** Estado do cursor, o descompasso a reconciliar, e o roadmap de §22.7 (eixos + parqueados + pendências). |
 | `docs/01-metodologia.md` | Método de trabalho (eixo a eixo, confirmação, versionamento, escopo). |
 | `docs/02-eixo-A-fechado-rascunho.md` | Decisões do Eixo A de §22.7 — **consolidadas em §22.7 (v1.9)**; mantido como rascunho de origem. Listas granulares seguem "a transcrever" em §22.7.4. |
