@@ -63,6 +63,11 @@ e lembra a escolha (`localStorage`). A **paleta-marca do azulejo é fixa** — s
 
 Referência viva: **`telas/sessao-ao-vivo.html`** (toggle no header). Contraste AA+ verificado nos dois modos.
 
+**Ilhas que não trocam de tema (decisão de linguagem):** uma superfície pode permanecer fixa quando o
+**conteúdo é a coisa**, e o tema vira moldura. Dois casos, em inversão proposital: o **placar** da sessão
+é uma **ilha escura** (em ambos os temas) — a votação é um telão; o **documento** do Expediente é uma
+**ilha de papel** (creme em ambos, só acalmando à noite) — um ofício é papel. Em volta, a UI escurece.
+
 ## Tipografia
 
 - **Display — `Sora`** (700–800): geométrica-humanista com calor. Wordmark, títulos, hero. **Não-Inter.**
@@ -109,5 +114,9 @@ portal do cidadão.
   v0 descartado (removido); A/C/D em `opcoes/`.
 - **1ª tela aplicada:** `telas/sessao-ao-vivo.html` — Mesa de condução ao vivo (4.2/4.3/4.4/4.16/4.17),
   dual-theme, validada em desktop + mobile (a11y AA+).
-- **Próximo:** Expediente/documentos (3.22–3.23), portal cidadão + e-SIC/LGPD (6.1/5.10), painéis da
-  Mesa (16.11). Cada tela puxa os tokens semânticos; UX/charts/consistência via `ui-ux-pro-max`.
+- **2ª tela aplicada:** `telas/expediente.html` — Expediente · gerar documento (3.22/3.23/3.18/3.10),
+  o balcão do servidor (HERO de POC). Herói = o **documento em papel ao vivo** com os campos do cadastro
+  **sublinhados em telha** (merge legível) + **carimbo do Protocolo Geral** + **livro do Protocolo Geral**
+  (numerador único, 3.23). Dual-theme, validada desktop + mobile (a11y AA+).
+- **Próximo:** portal cidadão + e-SIC/LGPD (6.1/5.10), painéis da Mesa (16.11). Cada tela puxa os tokens
+  semânticos; UX/charts/consistência via `ui-ux-pro-max`.

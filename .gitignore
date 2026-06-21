@@ -28,3 +28,4 @@ dist/
 # artefatos de screenshot/preview (design)
 .playwright-mcp/
 /sessao-*.png
+/exp-*.png
