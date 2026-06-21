@@ -86,13 +86,21 @@ rejeitado pelo envelope (S4); 5 regras mal-tipadas barram no save (dec. 2); arit
 do quórum); dois sabores de obrigação; re-stamp S3; auditoria append-only. É protótipo de validação —
 **não** decisão de stack (deferida, §22.4.4) — e não inventou conteúdo regulatório (`[GAP]` segue GAP).
 
-**Primeira ação recomendada agora:** **materializar o módulo `compliance` no esqueleto `backend/`**
-(hoje só `README.md`) — silhueta Nubank + as 2 tabelas do runtime (`prazo_dominio_ativo`,
-`compliance_avaliacao`) + a forma do §22.7.8 (ports `SerializadorRemessa`/`TransporteRemessa`,
-`gerador_remessa`, tabela `remessa_gerada`, enum de ciclo); entrelaça-se com dobrar `motor-dsl-clj/`
-para `backend/src/oplenario/motor/`. Layout SIM segue `[GAP]`. **Alternativa:** abrir o **+1 eixo
-restante** — expansão a outros TCEs (S2, `dominio` em camadas; content-dependente, precisa docs do
-Emilio). Abrir uma; o Emilio redireciona se preferir outra.
+**Feito nesta sessão (implementação §7, NÃO altera o doc-mestre):** o **módulo `compliance` foi
+materializado** no esqueleto `backend/` — silhueta Nubank (**26 stubs `.clj`**, espelhando `legislativo/`:
+schema/models/adapters/db × `obrigacao`·`avaliacao`·`remessa` + ports `SerializadorRemessa`/`TransporteRemessa`/`fontes`
++ `gerador_remessa` + events/diplomat/logic/controllers/relacoes/components) + **migration `…0005`** com as
+3 tabelas tenant (`prazo_dominio_ativo`, `compliance_avaliacao`, `remessa_gerada`) + **4 índices** (sweep, 2×
+auditoria, costura) + **tripé de teste-stub**. **Validado por ecc** (architect + database-reviewer). Precisão de
+impl. registrada: `remessa_gerada` é **imutável por versão** mas o `estado` de submissão **muta** (não é
+append-only puro como `compliance_avaliacao`). Layout SIM segue `[GAP]`. **Catálogo/registry (template/regra,
+domínio) + binding-por-tenant NÃO entram aqui** — vêm com a dobra do motor (§22.7.6).
+
+**Primeira ação recomendada agora:** **dobrar o `motor-dsl-clj/` → `backend/src/oplenario/motor/`** — o passo
+entrelaçado: traz o catálogo/registry (template/regra) + o binding-por-tenant (§22.7.6) + a DSL que
+`compliance/relacoes` e `gerador_remessa` referenciam; recomendado em **sessão nova** (com `/compact` antes).
+**Alternativa:** abrir o **+1 eixo restante** — expansão a outros TCEs (S2, `dominio` em camadas; content-dependente,
+precisa docs reais do TCE-CE do Emilio). Abrir uma; o Emilio redireciona se preferir outra.
 
 - **Trilhas concluídas:** produto/comercial (completa, `produto/`); arquitetura §22.7 **Eixos A, C, B,
   Eixo de runtime e geração de artefatos (§22.7.8)**.

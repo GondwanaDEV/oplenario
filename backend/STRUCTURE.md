@@ -33,3 +33,4 @@ Comunicação inter-módulo: **só HTTP (port→http_client→http_server) ou ev
 - `arquitetura_test.clj`: implementar a varredura real da matriz de import-lint.
 - Dockerfile de produção: uberjar + `eclipse-temurin:21-jre`.
 - `sistema.clj`/`legislativo/components.clj`: fiação `using` mínima como exemplo-template.
+- `compliance` (§22.7): avaliar **CHECK constraints** em `compliance_avaliacao.veredito`/`origem_avaliacao` (hoje texto+comentário, padrão do projeto — valor é gerado pelo motor em código, não input). Hardening adiado: a tabela é a prova do Invariante 10 (sem UPDATE/DELETE p/ corrigir dado corrompido). Decidir junto da dobra do `motor-dsl-clj`.
