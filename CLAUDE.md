@@ -145,10 +145,15 @@ Abrir design, ou direcionar.
 
 - **Ferramentas fixas deste projeto (decisão do Emilio, 20/06/2026):** todo trabalho de
   **discovery e engenharia** (pesquisa de mercado, code review, build, etc.) usa o plugin
-  **`ecc`** (suas skills/subagents); todo trabalho de **design de UI/UX** usa o
-  **UI/UX Pro Max – Design Intelligence** como consultor (estilo/cor/tipografia/a11y), com os
-  artefatos autorados à mão em `produto/design-system/`. **Usar sempre que houver trabalho dessas
-  naturezas** — não é preferência pontual, é o trilho do projeto.
+  **`ecc`** (suas skills/subagents); o **design de UI/UX** usa **dois consultores complementares** (decisão Emilio, 21/06/2026 — substitui o
+  arranjo só-UI/UX-Pro-Max): **(a) `frontend-design`** (skill oficial Anthropic do repo `anthropics/skills`, via o
+  plugin `example-skills`) como **diretor de arte + copy** — direção visual ousada/não-templated e microcopy
+  (erro/empty/voz, crítico p/ e-SIC e LGPD), nas telas que decidem a compra; **(b) `ui-ux-pro-max`** como
+  **biblioteca + UX + charts** — catálogo de paleta/fonte, 99 UX guidelines, 25 tipos de chart e consistência de
+  sistema através das 113 features / 3 públicos. Os **artefatos seguem autorados à mão em `produto/design-system/`**
+  (fonte de verdade). *(O `frontend-design` antigo de `claude-plugins-official` foi desabilitado p/ evitar colisão
+  de nome; ambos os consultores ficam habilitados.)* **Usar sempre que houver trabalho dessas naturezas** — não é
+  preferência pontual, é o trilho do projeto.
 - **Português em toda sessão técnica.**
 - **Um tópico macro por sessão**, fechado e consolidado no documento-mestre antes de seguir.
 - **Eixo por eixo:** abrir opções por eixo → debater tradeoffs explicitamente → chegar a
