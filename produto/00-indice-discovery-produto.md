@@ -29,7 +29,7 @@
 | 07 | GTM & motion de venda B2G (`07-gtm-pregao.md`) | `ecc:marketing-campaign` | §11 portas de entrada por persona | 🟡 Duas motions + lighthouse; T1 recalibrado |
 | 08 | Plano de validação (`08-plano-validacao.md`) | `ecc:market-research` | §13 "investigações pendentes" | 🟡 9 perguntas P0–P2; trilhos desk/primário |
 | 10 | Roteiros de entrevista (`10-roteiros-entrevista.md`) | `ecc:market-research` (primária) | §13 entrevistar 5–10 câmaras; `03` personas | 🟢 Roteiro Q5/Q7 pronto p/ execução humana |
-| 13 | Decomposição em features da V1 (`13-decomposicao-features-v1.md`) | — (decompõe §16) | §15 régua, §16 11 módulos, §22 âncoras | 🟢 **Trilha produto/UX aberta (20/06):** 78 features, 11 módulos (novo 16.11 painéis + C-1/C-2/C-3, doc-mestre v1.14); cobertura §16 verificada |
+| 13 | Decomposição em features da V1 (`13-decomposicao-features-v1.md`) | — (decompõe §16 + §22.10) | §15 régua, §16 11 módulos, §22 âncoras | 🟢 **Atualizado ao doc-mestre v1.34:** 89 features, 12 módulos = 81 tenant-facing/11 (§16) + 8 supratenant/1 (16.12 `admin_sistema`, §22.10). Incorpora stack §22.9 (passkey, PWA-first, IA híbrida), monólito §22.10 e bloco GAP 1–5 (admin sistema/ente, notificações, relatórios). Cobertura §16 verificada |
 
 Legenda: 🔴 a fazer · 🟡 em andamento/parcial · 🟢 consolidado.
 

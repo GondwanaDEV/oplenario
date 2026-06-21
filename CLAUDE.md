@@ -40,7 +40,7 @@ canônico de handoff entre sessões.
 tenancy, modelo de serviços, ingestão de legado), §22.3 (contrato core ↔ IA), §22.4 (modelo de
 dados legislativo), §22.5 (auth), §22.6 (sessão plenária + áudio + real-time), **§22.7 Eixos A, C, B
 e o Eixo de runtime (vocabulário da DSL do motor de compliance + o stress-test que o validou + o
-schema das tabelas de template/regra + o comportamento temporal de runtime — consolidados até v1.12)**.
+schema das tabelas de template/regra + o comportamento temporal de runtime + a geração de artefatos de remessa (§22.7.8) — consolidados até v1.35)**.
 Detalhe do que cada uma decidiu em `docs/00-estado-e-roadmap.md`.
 
 **§22.7 — Motor de regras de compliance** (materialização do Invariante 4) é subseção própria
@@ -52,17 +52,23 @@ cravou o schema estático, separando definição de domínio (sem `ente_id`) de 
 polimórfico), avaliação (evento+sweep+sob demanda), monitoramento de prazo (S1) e auditoria
 append-only (**§22.7.7, v1.12**). **O avaliador executável da DSL está construído** (`motor-dsl/`,
 zero-dep Python, **39 checagens verdes**) e validou *end-to-end* a forma A2 + o loop de runtime — a
-primeira implementação de fato (§7). **Próximo: os +2 eixos restantes** — geração de artefatos de
-envio ao TCE e expansão a outros TCEs. O granular que resta a reconciliar (mecânica fina do registry,
-formas descartadas no Eixo A) segue em §22.7.4.
+primeira implementação de fato (§7). **§22.7.8 (geração de artefatos de envio ao TCE) consolidado
+(v1.35)** — forma fechada (spec de layout = descritor declarativo próprio, dec. 2b; `remessa_enviada`
+cumpre a obrigação em `aceita`); conteúdo do layout SIM segue `[GAP]`. **Resta +1 eixo:** expansão a
+outros TCEs. O granular que resta a reconciliar (mecânica fina do registry, formas descartadas no
+Eixo A) segue em §22.7.4.
 
 ---
 
 ## 3. ⚠️ Estado do cursor + primeira ação
 
-**Estado (v1.12, 20/06/2026):** **Eixo de runtime consolidado.** A trilha de produto/comercial está
-**completa** (pasta `produto/`). §22.7 (Motor de regras de compliance) tem agora **Eixos A, C, B e o
-Eixo de runtime** no documento-mestre. O Eixo de runtime (**§22.7.7**, bump **v1.12** no §24) cravou o
+**Estado (v1.35, 21/06/2026):** **Eixo de geração de artefatos de envio ao TCE consolidado (§22.7.8).**
+A trilha de produto/comercial está **completa** (pasta `produto/`). §22.7 tem agora **Eixos A, C, B, o
+Eixo de runtime e a geração de artefatos** no documento-mestre. **Decisão central (2b):** a spec de
+layout da remessa é **descritor declarativo próprio** (dado, reusa o registry, renderizador próprio) —
+não estende a DSL de avaliação nem é código por TCE; honra o Invariante 4. **Costura:** `remessa_enviada`
+cumpre a obrigação em **`aceita`** (rejeição não cumpre). Artefato = registro **append-only
+`remessa_gerada`** (binário no `objeto_store`). Forma fechada; **layout físico do SIM segue `[GAP]`**. O Eixo de runtime (**§22.7.7**, bump **v1.12** no §24) cravou o
 **comportamento temporal** do motor — elevado por S1: o motor _monitora prazo_, não só avalia
 booleano. Decisões centrais: obrigação temporal em **dois sabores** (com prazo materializa instância;
 contínua não materializa, só avalia); **generalização disparada (disc. 6)** de `proposicao_prazo_ativo`
@@ -80,18 +86,20 @@ rejeitado pelo envelope (S4); 5 regras mal-tipadas barram no save (dec. 2); arit
 do quórum); dois sabores de obrigação; re-stamp S3; auditoria append-only. É protótipo de validação —
 **não** decisão de stack (deferida, §22.4.4) — e não inventou conteúdo regulatório (`[GAP]` segue GAP).
 
-**Primeira ação recomendada agora:** abrir um dos **+2 eixos de arquitetura restantes** — geração de
-artefatos de envio ao TCE (gera o *arquivo* da remessa; o runtime só rastreia a *obrigação*) ou
-expansão a outros TCEs (Invariante 4, conteúdo). **Alternativa:** endurecer o `motor-dsl/` (mais
-builtins/tipos, casos de borda) se o objetivo virar caminhar para produção. Abrir uma; o Emilio
-redireciona se preferir outra.
+**Primeira ação recomendada agora:** **materializar o módulo `compliance` no esqueleto `backend/`**
+(hoje só `README.md`) — silhueta Nubank + as 2 tabelas do runtime (`prazo_dominio_ativo`,
+`compliance_avaliacao`) + a forma do §22.7.8 (ports `SerializadorRemessa`/`TransporteRemessa`,
+`gerador_remessa`, tabela `remessa_gerada`, enum de ciclo); entrelaça-se com dobrar `motor-dsl-clj/`
+para `backend/src/oplenario/motor/`. Layout SIM segue `[GAP]`. **Alternativa:** abrir o **+1 eixo
+restante** — expansão a outros TCEs (S2, `dominio` em camadas; content-dependente, precisa docs do
+Emilio). Abrir uma; o Emilio redireciona se preferir outra.
 
-- **Trilhas concluídas:** produto/comercial (completa, `produto/`); arquitetura §22.7 **Eixos A, C, B
-  e Eixo de runtime**.
-- **+2 eixos** de arquitetura ainda não abertos: **geração de artefatos de envio ao TCE** e
-  **expansão a outros TCEs** (S2 — `dominio` em camadas). O Eixo de runtime fechou *comportamento
-  temporal* + *auditoria*; *versionamento* fechou no Eixo B. LLM provider / soberania permanece
-  parqueado (**§22.8 item 1**).
+- **Trilhas concluídas:** produto/comercial (completa, `produto/`); arquitetura §22.7 **Eixos A, C, B,
+  Eixo de runtime e geração de artefatos (§22.7.8)**.
+- **+1 eixo** de arquitetura restante: **expansão a outros TCEs** (S2 — `dominio` em camadas;
+  content-dependente, precisa docs reais do TCE). **Geração de artefatos de envio ao TCE fechada
+  (§22.7.8, v1.35)** — forma; o layout físico do SIM segue `[GAP]` de conteúdo regulatório. LLM
+  provider / soberania permanece parqueado (**§22.8 item 1**).
 
 ---
 
