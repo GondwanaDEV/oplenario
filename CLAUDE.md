@@ -40,7 +40,7 @@ canônico de handoff entre sessões.
 tenancy, modelo de serviços, ingestão de legado), §22.3 (contrato core ↔ IA), §22.4 (modelo de
 dados legislativo), §22.5 (auth), §22.6 (sessão plenária + áudio + real-time), **§22.7 Eixos A, C, B
 e o Eixo de runtime (vocabulário da DSL do motor de compliance + o stress-test que o validou + o
-schema das tabelas de template/regra + o comportamento temporal de runtime + a geração de artefatos de remessa (§22.7.8) — consolidados até v1.35; **§22.7.6 averbada na v1.36** = as 5 tabelas do catálogo vivem no schema `motor`)**.
+schema das tabelas de template/regra + o comportamento temporal de runtime + a geração de artefatos de remessa (§22.7.8) + **a expansão a outros TCEs (§22.7.9)** — **§22.7 COMPLETO, v1.37**; §22.7.6 averbada na v1.36 = as 5 tabelas do catálogo vivem no schema `motor`)**.
 Detalhe do que cada uma decidiu em `docs/00-estado-e-roadmap.md`.
 
 **§22.7 — Motor de regras de compliance** (materialização do Invariante 4) é subseção própria
@@ -54,17 +54,17 @@ append-only (**§22.7.7, v1.12**). **O avaliador executável da DSL está constr
 zero-dep Python, **39 checagens verdes**) e validou *end-to-end* a forma A2 + o loop de runtime — a
 primeira implementação de fato (§7). **§22.7.8 (geração de artefatos de envio ao TCE) consolidado
 (v1.35)** — forma fechada (spec de layout = descritor declarativo próprio, dec. 2b; `remessa_enviada`
-cumpre a obrigação em `aceita`); conteúdo do layout SIM segue `[GAP]`. **Resta +1 eixo:** expansão a
-outros TCEs. O granular que resta a reconciliar (mecânica fina do registry, formas descartadas no
+cumpre a obrigação em `aceita`); conteúdo do layout SIM segue `[GAP]`. **§22.7 completo (v1.37):** o último eixo — expansão a
+outros TCEs (§22.7.9) — fechou. O granular que resta a reconciliar (mecânica fina do registry, formas descartadas no
 Eixo A) segue em §22.7.4.
 
 ---
 
 ## 3. ⚠️ Estado do cursor + primeira ação
 
-**Estado (v1.36, 21/06/2026):** **`motor-dsl-clj/` dobrado em `backend/src/oplenario/motor/` + §22.7.6 averbada** —
-as 5 tabelas do catálogo do Eixo B vivem no schema `motor` (não `compliance`; FK+JOIN, §22.10). Antes:
-§22.7.8 (geração de artefatos ao TCE) consolidado (v1.35).
+**Estado (v1.37, 21/06/2026):** **§22.7 (motor de regras de compliance) FECHADO por completo** — o último eixo,
+expansão a outros TCEs (§22.7.9), foi consolidado. Antes nesta sessão: `motor-dsl-clj/` dobrado em
+`backend/src/oplenario/motor/` + §22.7.6 averbada (catálogo no schema `motor`, v1.36).
 A trilha de produto/comercial está **completa** (pasta `produto/`). §22.7 tem agora **Eixos A, C, B, o
 Eixo de runtime e a geração de artefatos** no documento-mestre. **Decisão central (2b):** a spec de
 layout da remessa é **descritor declarativo próprio** (dado, reusa o registry, renderizador próprio) —
@@ -100,20 +100,28 @@ CRÍTICOS de UNIQUE+NULL aplicados). **Averbado no doc-mestre (v1.36):** as 5 ta
 Seed `motor-dsl-clj/` segue como **referência superseded** (não deletado; candidato a remoção). *(Sessão anterior,
 `375e4ef`: módulo `compliance` materializado — migration `…0005`, runtime §22.7.7/8.)*
 
-**Primeira ação recomendada agora:** abrir o **+1 eixo de arquitetura restante** — **expansão a outros TCEs**
-(S2, `dominio` em camadas; **content-dependente**: precisa dos docs reais do TCE-CE do Emilio — sem eles é `[GAP]`).
-**Alternativa (implementação, deferida ao chat de stack §22.4.4):** fiar a **persistência real** do `motor/db/` +
-a **orquestração de runtime** que o `compliance` opera — chamar `motor/avaliar` com **resolvedor de fatos injetado**
-(funções de relação por contexto dono, §22.5.3 disc.5; não o `:estado` em-memória do protótipo) e persistir em
-`compliance.prazo_dominio_ativo`/`compliance_avaliacao`. Abrir uma; o Emilio redireciona se preferir outra.
+**Também nesta sessão (design — §22.7.9, v1.37):** consolidado o **último eixo de §22.7 — expansão a outros TCEs**
+(E1–E4): **E1** resolução `câmara→tribunal` por tabela `jurisdicao_camara` (domínio no `cadastros`) + função de
+relação `tribunal_competente` (reconcilia o "UF JOIN" do Eixo B com a §22.10); **E2** camada `tce_estadual`→`tribunal_de_contas`
+(aplicado no código do motor — `verificador`/templates/comentários `…0006`; suíte verde); **E3** variação = dado exceto
+**3 exceções-de-código bounded por eixo compartilhado, nunca por tribunal** (encoding/protocolo/vocabulário) + playbook de
+onboarding (type-check do save = rede de segurança); **E4** forma validada contra 1 tribunal (CE), conteúdo `[GAP]`, rollout
+demand-pulled (NE→N/CO→S/SE, gatilho = cliente validado). Rascunho `docs/08`. **Com isso §22.7 fecha por completo.**
 
-- **Trilhas concluídas:** produto/comercial (completa, `produto/`); arquitetura §22.7 **Eixos A, C, B,
-  Eixo de runtime e geração de artefatos (§22.7.8)**; **esqueleto `backend/` com `compliance` materializado
-  e `motor` dobrado** (catálogo §22.7.6 no schema `motor`).
-- **+1 eixo** de arquitetura restante: **expansão a outros TCEs** (S2 — `dominio` em camadas;
-  content-dependente, precisa docs reais do TCE). **Geração de artefatos de envio ao TCE fechada
-  (§22.7.8, v1.35)** — forma; o layout físico do SIM segue `[GAP]` de conteúdo regulatório. LLM
-  provider / soberania permanece parqueado (**§22.8 item 1**).
+**Primeira ação recomendada agora:** **§22.7 está fechado** — a trilha de *design* de arquitetura do motor de compliance
+está completa. O próximo passo natural é **implementação/materialização (deferida ao chat de stack §22.4.4):** fiar a
+**persistência real** (`motor/db/` + as tabelas de `cadastros` incl. `jurisdicao_camara` do E1) + a **orquestração de runtime**
+que o `compliance` opera — chamar `motor/avaliar` com **resolvedor de fatos injetado** (funções de relação por contexto dono,
+§22.5.3 disc.5; não o `:estado` em-memória) e persistir em `compliance.prazo_dominio_ativo`/`compliance_avaliacao`.
+**Parqueado de design:** §22.8 item 1 (LLM provider / soberania). Abrir uma; o Emilio direciona.
+
+- **Trilhas concluídas:** produto/comercial (completa, `produto/`); arquitetura **§22.7 COMPLETO** (Eixos A, C, B,
+  runtime §22.7.7, geração de artefatos §22.7.8, **expansão §22.7.9**); **esqueleto `backend/` com `compliance`
+  materializado e `motor` dobrado** (catálogo §22.7.6 no schema `motor`).
+- **Nenhum eixo de design de arquitetura aberto.** Resta: **implementação/materialização** (persistência real +
+  orquestração de runtime + tabelas do `cadastros` incl. `jurisdicao_camara` — deferida ao chat de stack §22.4.4);
+  o **layout físico do SIM** + conteúdo regulatório por tribunal seguem `[GAP]`; LLM provider / soberania
+  parqueado (**§22.8 item 1**). O granular do registry (§22.7.4) segue a reconciliar.
 
 ---
 

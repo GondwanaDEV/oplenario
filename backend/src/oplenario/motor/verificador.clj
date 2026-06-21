@@ -169,8 +169,8 @@
     ;; 1) envelope estrutural
     (when (not= (:contexto env) "compliance")
       (swap! erros conj (str "contexto deve ser 'compliance', veio " (pr-str (:contexto env)))))
-    (when-not (#{"federal" "tce_estadual" "regimento_tenant"} (:dominio env))
-      (swap! erros conj (str "dominio inválido: " (pr-str (:dominio env)) " (S2: federal|tce_estadual|regimento_tenant)")))
+    (when-not (#{"federal" "tribunal_de_contas" "regimento_tenant"} (:dominio env))
+      (swap! erros conj (str "dominio inválido: " (pr-str (:dominio env)) " (S2: federal|tribunal_de_contas|regimento_tenant)")))
     (when-not (#{"bloqueante" "aviso"} (:severidade env))
       (swap! erros conj (str "severidade inválida: " (pr-str (:severidade env)) " (bloqueante|aviso)")))
 

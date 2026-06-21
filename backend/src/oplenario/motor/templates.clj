@@ -6,7 +6,7 @@
 (def T1 "
 template: remessa_mensal_sim
 contexto: compliance
-dominio: tce_estadual
+dominio: tribunal_de_contas
 parametros: { competencia: Competencia }
 aplica_quando: verdadeiro
 exige: remessa_enviada(ente, \"SIM\", competencia)
@@ -65,7 +65,7 @@ severidade: bloqueante
 (def N1 "
 template: neg_arg_tipo_errado
 contexto: compliance
-dominio: tce_estadual
+dominio: tribunal_de_contas
 parametros: { competencia: Competencia }
 aplica_quando: verdadeiro
 exige: remessa_enviada(ente, 123, competencia)

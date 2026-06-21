@@ -14,7 +14,7 @@ CREATE SCHEMA IF NOT EXISTS motor;
 
 -- ===========================================================================
 -- B1 (§22.7.6): template_compliance — a DEFINICAO da regra. Tabela de DOMINIO, SEM ente_id
--- (regra federal/tce_estadual e lei uniforme central; copia-la por ~1.500 entes seria insustentavel — S2).
+-- (regra federal/tribunal_de_contas e lei uniforme central; copia-la por ~1.500 entes seria insustentavel — S2).
 -- Versionada por COPIA INTEGRAL (§22.4 eixo C): mudar a regra = nova versao, a anterior vira 'superada'.
 -- ===========================================================================
 CREATE TABLE IF NOT EXISTS motor.template_compliance (
@@ -22,8 +22,8 @@ CREATE TABLE IF NOT EXISTS motor.template_compliance (
   chave_template         text NOT NULL,                                  -- id logico estavel (ex.: "remessa_mensal_sim"), constante entre versoes
   versao                 integer NOT NULL,                               -- inteiro crescente por chave_template
   template_pai_id        uuid REFERENCES motor.template_compliance(id),  -- proveniencia da copia (mesmo schema -> FK ok); NAO governanca ativa
-  dominio                text NOT NULL,                                  -- camada S2: federal|tce_estadual|regimento_tenant
-  chave_dominio          text,                                           -- escopo de compartilhamento: NULL p/ federal; cod. TCE/UF p/ tce_estadual
+  dominio                text NOT NULL,                                  -- camada S2: federal|tribunal_de_contas|regimento_tenant
+  chave_dominio          text,                                           -- escopo de compartilhamento: NULL p/ federal; cod. TCE/UF p/ tribunal_de_contas
   descricao              text NOT NULL,
   severidade             text NOT NULL,                                  -- bloqueante|aviso (enum em codigo; valor gerado pelo editor interno)
   referencia_normativa   text NOT NULL,
@@ -51,7 +51,7 @@ CREATE INDEX IF NOT EXISTS idx_template_compliance_dominio
 
 -- ===========================================================================
 -- B2 (§22.7.6): compliance_regra_tenant — o BINDING. Tabela de TENANT, COM ente_id.
--- Resolucao POR ESCOPO (nao linha-por-tenant): federal/tce_estadual aplicam por jurisdicao (UF->TCE);
+-- Resolucao POR ESCOPO (nao linha-por-tenant): federal/tribunal_de_contas aplicam por jurisdicao (UF->TCE);
 -- binding so materializa parametro do tenant, opt-out auditado, ou pin de versao (raro). regimento_tenant
 -- EXIGE binding p/ ativar (3a camada S2). ente_id cruza por guard p/ admin_sistema.ente (sem FK cross-schema).
 -- UNICA tabela TENANT no schema 'motor' (as outras 4 sao dominio): RLS + particao hash(ente_id) = politica
@@ -91,7 +91,7 @@ CREATE INDEX IF NOT EXISTS idx_compliance_regra_tenant_template
 -- ===========================================================================
 CREATE TABLE IF NOT EXISTS motor.prazo_dominio_vigente (
   id             uuid PRIMARY KEY,
-  dominio        text NOT NULL,                                          -- federal|tce_estadual
+  dominio        text NOT NULL,                                          -- federal|tribunal_de_contas
   chave_dominio  text,                                                   -- jurisdicao (ex.: 'TCE-CE')
   tipo_prazo     text NOT NULL,                                          -- ex.: 'SIM_mensal', 'PCS_anual'
   chave_periodo  text NOT NULL,                                          -- competencia/exercicio (ex.: '2026-05')
