@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Configurações da Câmara</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Tela "Configurações da Câmara" — ARQUÉTIPO: config/admin
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+     A área do admin_ente (1.8/1.9): identidade, contatos, canais e
+     flags do ente — alimenta o white-label do portal (5.1). Honra a
+     decisão de que a customização VISUAL profunda é RASA + DIFERIDA:
+     a câmara configura brasão/nome/contatos, não cores (a paleta é da
+     plataforma). Sub-nav de seções + formulários agrupados + barra de
+     salvar/descartar. Componentes locais = receitas (ver PADROES §3).
+     ============================================================ */
+
+  .pagina-cab { padding: 1.5rem 0 0; }
+  .pagina-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
+  .pagina-cab p { color: var(--texto-2); font-size: var(--t-13); margin: 0.3rem 0 0; max-width: 60ch; }
+
+  .config { display: grid; grid-template-columns: 220px 1fr; gap: 1.8rem; align-items: start; margin: 1.4rem 0 0; }
+
+  /* sub-nav */
+  .secoes { position: sticky; top: 76px; display: grid; gap: 0.1rem; }
+  .secoes a { display: flex; align-items: center; gap: 0.6rem; font-size: var(--t-13); font-weight: 500; color: var(--texto-2); text-decoration: none; padding: 0.55rem 0.7rem; border-radius: var(--raio-sm); border-left: 2px solid transparent; }
+  .secoes a:hover { color: var(--texto); background: var(--surface); }
+  .secoes a[aria-current="true"] { color: var(--marca); background: color-mix(in srgb, var(--marca) 8%, transparent); border-left-color: var(--marca); font-weight: 600; }
+  .secoes a svg { flex: 0 0 auto; }
+
+  /* painel de seções */
+  .painel-config { display: grid; gap: 1.2rem; }
+  .secao-card { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.4rem 1.5rem; }
+  .secao-card > h2 { font-family: var(--display); font-weight: 600; font-size: var(--t-21); color: var(--texto); margin: 0 0 0.2rem; }
+  .secao-card > .desc { color: var(--texto-2); font-size: var(--t-13); margin: 0 0 1.2rem; }
+
+  /* upload de brasão */
+  .brasao-linha { display: flex; gap: 1.2rem; align-items: center; flex-wrap: wrap; padding: 0 0 1.2rem; border-bottom: 1px solid var(--linha); margin: 0 0 1.2rem; }
+  .brasao-atual { width: 72px; height: 72px; border-radius: var(--raio-sm); border: 1px solid var(--linha); background: var(--surface-2); display: grid; place-items: center; flex: 0 0 auto; }
+  .brasao-info { font-size: var(--t-13); color: var(--texto-2); }
+  .brasao-info b { display: block; color: var(--texto); margin-bottom: 0.2rem; }
+
+  .grade-campos { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem 1.2rem; }
+  .campo { display: grid; gap: 0.35rem; }
+  .campo.larga { grid-column: 1 / -1; }
+  .campo label { font-size: var(--t-13); font-weight: 600; color: var(--texto); }
+  .campo .ajuda { font-size: var(--t-12); color: var(--texto-2); }
+  .campo input, .campo select { font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 55%, var(--linha)); border-radius: var(--raio-sm); padding: 0.6rem 0.75rem; min-height: 44px; }
+  .campo input[readonly] { background: var(--surface); color: var(--texto-2); cursor: not-allowed; }
+  .campo .somente-leitura { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+
+  /* nota de white-label diferido */
+  .nota-tema { display: flex; gap: 0.6rem; align-items: flex-start; font-size: var(--t-13); color: var(--texto-2); background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.8rem 0.9rem; margin: 1.2rem 0 0; }
+  .nota-tema svg { color: var(--cobalto); flex: 0 0 auto; margin-top: 1px; }
+  [data-tema="escuro"] .nota-tema svg { color: var(--foco); }
+  .nota-tema b { color: var(--texto); }
+
+  /* switch (flag) */
+  .flag { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 0.9rem 0; border-bottom: 1px solid var(--linha); }
+  .flag:last-child { border-bottom: none; }
+  .flag .txt b { display: block; font-size: var(--t-13); color: var(--texto); font-weight: 600; }
+  .flag .txt span { font-size: var(--t-12); color: var(--texto-2); }
+  .switch { position: relative; flex: 0 0 auto; width: 46px; height: 26px; }
+  .switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+  .switch .trilho { position: absolute; inset: 0; border-radius: 999px; background: color-mix(in srgb, var(--texto-2) 40%, var(--surface-2)); border: 1px solid var(--linha); transition: background .15s ease; }
+  .switch .bola { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform .15s ease; }
+  .switch input:checked + .trilho { background: var(--acao); border-color: var(--acao); }
+  .switch input:checked ~ .bola { transform: translateX(20px); }
+  .switch input:focus-visible + .trilho { outline: 3px solid var(--foco); outline-offset: 2px; }
+
+  @media (max-width: 820px) { .config { grid-template-columns: 1fr; } .secoes { position: static; grid-auto-flow: column; overflow-x: auto; } .grade-campos { grid-template-columns: 1fr; } }
+  @media (prefers-reduced-motion: reduce) { .switch .trilho, .switch .bola { transition: none; } }
+</style>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+
+<header class="topo">
+  <div class="envelope topo-grade">
+    <div class="marca">
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div>
+        <p class="marca-nome">O Plenário</p>
+        <p class="marca-orgao">Câmara Municipal de Fortaleza</p>
+      </div>
+    </div>
+    <div class="topo-sep" aria-hidden="true"></div>
+    <span class="eyebrow" style="align-self:center">Administração do ente</span>
+    <div class="topo-dir">
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+      <span class="presidente">
+        <span class="avatar" aria-hidden="true">AM</span>
+        <span class="quem"><b>Ana Moreira</b><span>Administradora do ente</span></span>
+      </span>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope">
+  <div class="pagina-cab">
+    <span class="eyebrow">Configurações</span>
+    <h1>Configurações da Câmara</h1>
+    <p>Identidade, contatos e canais do ente. Estes dados alimentam o portal público e os documentos oficiais. Algumas chaves são somente-leitura (definidas no contrato).</p>
+  </div>
+
+  <div class="config">
+    <!-- sub-nav -->
+    <nav class="secoes" aria-label="Seções de configuração">
+      <a href="#" aria-current="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg> Identidade</a>
+      <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16v12H4zM4 7l8 6 8-6"/></svg> Contatos e canais</a>
+      <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> Transparência</a>
+      <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5M16 11l2 2 4-4"/></svg> Usuários e perfis</a>
+      <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 5h16v14H4zM8 3v4M16 3v4M4 10h16"/></svg> Sessões</a>
+    </nav>
+
+    <!-- painel ativo: Identidade -->
+    <div class="painel-config">
+      <section class="secao-card" aria-labelledby="s-identidade">
+        <h2 id="s-identidade">Identidade visual</h2>
+        <p class="desc">O brasão e o nome oficial aparecem no portal público (white-label) e nos documentos gerados.</p>
+
+        <div class="brasao-linha">
+          <span class="brasao-atual">
+            <svg width="48" height="48" viewBox="0 0 40 40" role="img" aria-label="Brasão atual da Câmara"><rect width="40" height="40" rx="9" fill="#0A4334"/><path d="M20 7l9 4v8c0 6-4 10-9 11-5-1-9-5-9-11v-8z" fill="none" stroke="#E8B23A" stroke-width="2"/><circle cx="20" cy="18" r="3.4" fill="#D9542B"/></svg>
+          </span>
+          <div class="brasao-info">
+            <b>brasao-fortaleza.svg</b>
+            SVG ou PNG, fundo transparente, mín. 240×240px.
+          </div>
+          <button class="btn btn-contorno btn-mini" type="button" style="margin-left:auto">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 16V4m0 0L8 8m4-4l4 4M4 20h16"/></svg>
+            Substituir brasão
+          </button>
+        </div>
+
+        <div class="grade-campos">
+          <div class="campo larga">
+            <label for="nome-oficial">Nome oficial</label>
+            <input id="nome-oficial" type="text" value="Câmara Municipal de Fortaleza" />
+          </div>
+          <div class="campo">
+            <label for="nome-curto">Nome curto (portal)</label>
+            <input id="nome-curto" type="text" value="Câmara de Fortaleza" />
+            <span class="ajuda">Usado no topo do portal do cidadão.</span>
+          </div>
+          <div class="campo">
+            <label for="uf">Município / UF</label>
+            <input id="uf" type="text" value="Fortaleza / CE" readonly aria-describedby="uf-ajuda" />
+            <span class="ajuda somente-leitura" id="uf-ajuda">Somente leitura — definido no contrato.</span>
+          </div>
+        </div>
+
+        <p class="nota-tema">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
+          <span>O <b>tema visual</b> (cores, tipografia) segue a linguagem da plataforma — garante acessibilidade e consistência entre câmaras. Personalização cromática profunda por ente é <b>avaliada sob demanda</b> e não está disponível nesta versão.</span>
+        </p>
+      </section>
+
+      <section class="secao-card" aria-labelledby="s-flags">
+        <h2 id="s-flags">Canais e publicação</h2>
+        <p class="desc">Liga ou desliga superfícies públicas do portal. Cada chave reflete uma obrigação ou um serviço da casa.</p>
+
+        <div class="flag">
+          <span class="txt"><b>Portal do cidadão público</b><span>A porta da rua white-label fica acessível sem cadastro.</span></span>
+          <label class="switch"><input type="checkbox" checked aria-label="Portal do cidadão público" /><span class="trilho" aria-hidden="true"></span><span class="bola" aria-hidden="true"></span></label>
+        </div>
+        <div class="flag">
+          <span class="txt"><b>e-SIC (acesso à informação)</b><span>Balcão de pedidos com prazo legal da LAI. Obrigatório por lei.</span></span>
+          <label class="switch"><input type="checkbox" checked aria-label="e-SIC acesso à informação" /><span class="trilho" aria-hidden="true"></span><span class="bola" aria-hidden="true"></span></label>
+        </div>
+        <div class="flag">
+          <span class="txt"><b>Comentários públicos em proposições</b><span>Cidadãos comentam matérias (com moderação).</span></span>
+          <label class="switch"><input type="checkbox" aria-label="Comentários públicos em proposições" /><span class="trilho" aria-hidden="true"></span><span class="bola" aria-hidden="true"></span></label>
+        </div>
+        <div class="flag">
+          <span class="txt"><b>Transparência fiscal do órgão</b><span>Publica remuneração, diárias e contratos da casa (art. 8º LAI).</span></span>
+          <label class="switch"><input type="checkbox" checked aria-label="Transparência fiscal do órgão" /><span class="trilho" aria-hidden="true"></span><span class="bola" aria-hidden="true"></span></label>
+        </div>
+      </section>
+    </div>
+  </div>
+  <div style="height:1rem"></div>
+</main>
+
+<!-- ===== BARRA SALVAR / DESCARTAR (reusa .comando) ===== -->
+<div class="comando" role="region" aria-label="Salvar configurações">
+  <div class="envelope comando-grade">
+    <div class="comando-ctx"><b>Alterações não salvas</b><span>2 campos editados nesta seção</span></div>
+    <div class="comando-acoes">
+      <button class="btn btn-fantasma" type="button">Descartar</button>
+      <button class="btn btn-primaria" type="button">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>
+        Salvar alterações
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="../sistema/tema.js"></script>
+<script>
+  (function () {
+    var barra = document.querySelector('.comando'), main = document.querySelector('main');
+    if (!barra || !main) return;
+    function ajustar() { main.style.paddingBottom = (barra.offsetHeight + 28) + 'px'; }
+    ajustar(); window.addEventListener('resize', ajustar);
+  })();
+</script>
+</body>
+</html>

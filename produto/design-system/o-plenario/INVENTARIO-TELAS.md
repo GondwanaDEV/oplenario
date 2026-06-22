@@ -32,7 +32,7 @@ POC) · **MÉDIA** (paridade institucional, admin) · **BAIXA** (diferível, nic
 | 1.4 RBAC por perfil | admin do ente | ⤵ | ⤵ | — |
 | 1.6 Trilha de auditoria | **Auditoria / trilha** | lista | ⬜ | MÉDIA |
 | 1.8 Área admin do ente (usuários/vínculos/reset MFA) | **Admin do ente — usuários** | lista+config | ⬜ | MÉDIA |
-| 1.9 Config do ente + branding white-label | **Config do ente / branding** | config | ⬜ | MÉDIA |
+| 1.9 Config do ente + branding white-label | **Config da Câmara** (`telas/config-ente.html`) | config | ✅ | — |
 | 1.3/1.5/1.7/1.10 | infra/embutido | 🔩/⤵ | — | — |
 
 ### 16.2 — Cadastros Estruturais
@@ -165,9 +165,11 @@ Status page (10.3) · Exportar dados do ente (9.6) · Console do operador (12.x)
 - **~30 telas distintas** cobrem as 113 features (o resto é backend/embutido/transversal).
 - **4 prontas** (cabine · balcão · pública · cockpit) — os 4 arquétipos-herói, 3 públicos.
 - **8 ALTA · ~11 MÉDIA · ~8 BAIXA** a desenhar.
-- **Arquétipos ainda sem prova** (próximo a materializar, Eixo 2): ~~lista/tabela filtrável~~ ✅,
-  ~~ficha/detalhe~~ ✅, ~~wizard~~ ✅, **config/admin** (único restante). As telas ALTA #1–#5 exercem esses 4 —
-  então **desenhar ~~lista~~ → ficha → wizard → config** entrega os arquétipos E as telas de maior valor
-  ao mesmo tempo.
-- **Sequência recomendada:** lista filtrável (1) → ficha da matéria (3) → editor+copiloto (2) →
-  tramitação board (4) → minhas pendências (5) → pauta+convocação (6) → ata-IA (7) → dashboard vereador (8).
+- **Os 8 arquétipos estão PROVADOS** ✅ (cabine · balcão · pública · cockpit + lista · ficha · wizard ·
+  config). O design system está **totalmente escafoldado**; o que resta é **aplicar** os arquétipos para
+  preencher o catálogo (telas reais) + formalizar as guidelines (Eixo 4).
+- **Telas-herói feitas (7):** Sessão ao vivo · Expediente · Portal do Cidadão · Painéis da Mesa ·
+  Proposições (lista) · Ficha da matéria · Nova proposição (wizard) · Config da Câmara.
+- **Próximas telas reais (aplicam arquétipos provados) — sequência:** editor+copiloto (balcão+IA) →
+  tramitação board (cockpit) → minhas pendências (cockpit/lista) → pauta+convocação (balcão/wizard) →
+  ata-IA (balcão+IA) → dashboard vereador (cockpit mobile) → MÉDIA (cadastros, login, notificações…).

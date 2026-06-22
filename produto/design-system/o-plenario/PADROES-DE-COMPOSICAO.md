@@ -40,7 +40,7 @@ arquétipo e herda dele a estrutura, em vez de reinventar layout.
 | **Lista/tabela filtrável** | Coleção com filtros, ordenação, ações em massa, paginação, vazio | Proposições (3.x/11.5/11.7) | ✅ provado |
 | **Ficha/detalhe** | Um registro a fundo: cabeçalho + abas/seções + trilha + ações | Ficha da matéria (11.8) | ✅ provado |
 | **Wizard / multi-passo** | Fluxo guiado com indicador de etapa e voltar | Nova proposição (3.1) | ✅ provado |
-| **Config / admin** | Formulários de ajuste agrupados, com salvar/descartar | admin do ente (1.8/1.9) | ⬜ a desenhar |
+| **Config / admin** | Formulários de ajuste agrupados, com salvar/descartar | Config da Câmara (1.9) | ✅ provado |
 
 Os 4 primeiros estão materializados nas telas-herói; os 4 últimos são o trabalho de **Eixo 2** do
 escalonamento. O cruzamento arquétipo × feature está em [`INVENTARIO-TELAS.md`](./INVENTARIO-TELAS.md).
