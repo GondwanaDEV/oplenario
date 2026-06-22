@@ -140,7 +140,7 @@ Sessão ao vivo · Expediente · Portal do Cidadão (home+e-SIC+LGPD) · Painéi
 **🟥 ALTA — fecham os fluxos centrais, as 3 apostas e a POC do servidor (8):**
 1. ✅ **Lista/tabela filtrável** — FEITO (`telas/proposicoes.html`): arquétipo-base provado (proposições 3.x/11.5/11.7) com filtros, ordenação, seleção em massa, paginação, vazio e azulejo-mini por linha. *Destrava dezenas de telas de gestão.*
 2. **Editor de proposição + copiloto IA** (3.11/3.1/3.2/3.4/3.16/3.17) — coração + **Aposta 1**.
-3. **Ficha da matéria / espelho** (11.8/3.4/3.6/3.19) — servidor imprime, jurídico cita.
+3. ✅ **Ficha da matéria / espelho** — FEITO (`telas/ficha-materia.html`): arquétipo ficha/detalhe (11.8/3.4/3.6/3.19) com azulejo herói (tramitação completa), abas ARIA, linha do tempo, LexML/URN. Servidor imprime, jurídico cita.
 4. **Tramitação — board/kanban** (3.3/3.7/11.3) — onde está cada proposição.
 5. **Minhas pendências / tarefas de hoje** (11.2) — momento-matador da POC do servidor.
 6. **Montagem de pauta + Convocação** (4.1/4.14/4.15) — sem isso a sessão ao vivo não tem origem.
@@ -166,7 +166,7 @@ Status page (10.3) · Exportar dados do ente (9.6) · Console do operador (12.x)
 - **4 prontas** (cabine · balcão · pública · cockpit) — os 4 arquétipos-herói, 3 públicos.
 - **8 ALTA · ~11 MÉDIA · ~8 BAIXA** a desenhar.
 - **Arquétipos ainda sem prova** (próximo a materializar, Eixo 2): ~~lista/tabela filtrável~~ ✅,
-  **ficha/detalhe**, **wizard**, **config/admin**. As telas ALTA #1–#5 exercem justamente esses 4 —
+  ~~ficha/detalhe~~ ✅, **wizard**, **config/admin**. As telas ALTA #1–#5 exercem justamente esses 4 —
   então **desenhar ~~lista~~ → ficha → wizard → config** entrega os arquétipos E as telas de maior valor
   ao mesmo tempo.
 - **Sequência recomendada:** lista filtrável (1) → ficha da matéria (3) → editor+copiloto (2) →

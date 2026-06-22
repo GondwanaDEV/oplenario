@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — PL 042/2026 · Ficha da matéria</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Tela "Ficha da matéria" — ARQUÉTIPO: ficha/detalhe
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+     O espelho canônico de uma proposição (11.8): o servidor imprime/
+     anexa, o jurídico cita. Aqui a faixa de azulejo volta à sua
+     LEITURA PRIMÁRIA — a tramitação completa — como herói da ficha
+     (3.4 versões · 3.6 apensação · 3.19 URN/LexML · histórico).
+     Componentes locais (ficha-cab, abas, linha-do-tempo, meta-card)
+     = receitas candidatas a promoção ao chassi (ver PADROES §3).
+     ============================================================ */
+
+  .trilha { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); padding: 1rem 0 0; display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
+  .trilha a { color: var(--texto-2); text-decoration: none; }
+  .trilha a:hover { color: var(--marca); }
+  .trilha .sep { opacity: .5; }
+  .trilha b { color: var(--texto); }
+
+  /* ---- cabeçalho da ficha ---- */
+  .ficha-cab { padding: 0.6rem 0 0; }
+  .ficha-cab .topo-linha { display: flex; gap: 0.7rem; align-items: baseline; flex-wrap: wrap; }
+  .ficha-cab .num { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 600; font-size: var(--t-21); color: var(--marca); }
+  .ficha-cab .especie { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .06em; text-transform: uppercase; color: var(--texto-2); border: 1px solid var(--linha); border-radius: 999px; padding: 0.15rem 0.6rem; }
+  .ficha-cab h1 { font-family: var(--display); font-weight: 800; font-size: clamp(1.6rem, 3.5vw, var(--t-40)); letter-spacing: -0.02em; line-height: 1.08; color: var(--texto); margin: 0.5rem 0 0; max-width: 28ch; }
+  .ficha-meta-linha { display: flex; gap: 0.6rem 1.2rem; flex-wrap: wrap; margin: 0.8rem 0 0; font-size: var(--t-13); color: var(--texto-2); }
+  .ficha-meta-linha b { color: var(--texto); font-weight: 600; }
+
+  .chip { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); letter-spacing: .02em; padding: 0.22rem 0.6rem; border-radius: 999px; border: 1px solid var(--linha); color: var(--texto-2); }
+  .chip::before { content: ""; width: 7px; height: 7px; border-radius: 2px; background: currentColor; flex: 0 0 auto; }
+  .chip-tram { color: var(--marca); border-color: color-mix(in srgb, var(--marca) 40%, transparent); background: color-mix(in srgb, var(--marca) 8%, transparent); }
+
+  /* ---- faixa de azulejo HERÓI (tramitação completa · leitura primária) ---- */
+  .tramitacao { margin: 1.3rem 0 0; padding: 1.3rem 1.4rem; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); }
+  .tramitacao .rotulo { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 0.5rem; }
+  .tramitacao .rotulo .prazo { font-family: var(--mono); font-size: var(--t-13); color: var(--acento-texto); }
+  .azulejo { display: flex; align-items: flex-start; gap: 0; flex-wrap: wrap; margin: 1rem 0 0; }
+  .et { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; width: 92px; flex: 0 0 auto; }
+  .az { position: relative; width: 56px; height: 56px; border-radius: 12px; overflow: hidden; --p: var(--jade); }
+  .az::after { content: ""; position: absolute; inset: 0; }
+  .az-jade { --p: var(--jade); } .az-cobalto { --p: var(--cobalto); } .az-telha { --p: var(--telha); } .az-jadeclaro { --p: var(--jade-claro); } .az-amarelo { --p: var(--amarelo); }
+  .az-feita { background: var(--p); }
+  .az-feita::after { background: radial-gradient(circle at 0% 100%, color-mix(in srgb, #fff 42%, var(--p)) 0 48%, transparent 48%); }
+  .az-curso { background: color-mix(in srgb, var(--amarelo) 20%, var(--surface)); border: 1px solid color-mix(in srgb, var(--amarelo) 60%, var(--linha)); }
+  .az-curso::after { background: radial-gradient(circle at 0% 100%, var(--amarelo) 0 48%, transparent 48%); }
+  .az-pend { background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--texto-2) 12%, transparent) 6px 7px); border: 1px dashed var(--linha); }
+  .az-pend::after { background: radial-gradient(circle at 0% 100%, color-mix(in srgb, var(--texto-2) 12%, transparent) 0 48%, transparent 48%); }
+  .et .nome { font-size: var(--t-12); text-align: center; color: var(--texto); line-height: 1.2; }
+  .et .quando { font-family: var(--mono); font-size: 0.68rem; color: var(--texto-2); }
+  .et.pendente .nome { color: var(--texto-2); }
+  .conector { flex: 1 1 12px; min-width: 12px; height: 3px; margin-top: 26px; background: var(--linha); border-radius: 2px; }
+  .conector.feito { background: color-mix(in srgb, var(--jade) 55%, var(--linha)); }
+
+  /* ---- corpo: 2 colunas ---- */
+  .corpo { display: grid; grid-template-columns: 1fr 320px; gap: 1.6rem; align-items: start; margin: 1.4rem 0 0; }
+
+  /* abas */
+  .abas { display: flex; gap: 0.2rem; border-bottom: 1px solid var(--linha); flex-wrap: wrap; }
+  .aba { font-family: var(--corpo); font-weight: 600; font-size: var(--t-13); color: var(--texto-2); background: none; border: none; border-bottom: 2px solid transparent; padding: 0.6rem 0.8rem; min-height: 44px; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem; }
+  .aba:hover { color: var(--texto); }
+  .aba[aria-selected="true"] { color: var(--marca); border-bottom-color: var(--marca); }
+  .aba .cont { font-family: var(--mono); font-size: var(--t-12); background: var(--surface-2); border: 1px solid var(--linha); border-radius: 999px; padding: 0 0.4rem; }
+  .painel { padding: 1.2rem 0 0; }
+  .painel[hidden] { display: none; }
+
+  /* texto da matéria */
+  .ver-sel { display: inline-flex; align-items: center; gap: 0.5rem; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin: 0 0 1rem; }
+  .ver-sel .pill { color: var(--marca); border: 1px solid color-mix(in srgb, var(--marca) 35%, transparent); background: color-mix(in srgb, var(--marca) 8%, transparent); border-radius: 999px; padding: 0.12rem 0.6rem; }
+  .texto-lei { max-width: 64ch; }
+  .texto-lei h2 { font-family: var(--display); font-weight: 600; font-size: var(--t-21); color: var(--texto); margin: 1.4rem 0 0.4rem; }
+  .texto-lei p { margin: 0.6rem 0; color: var(--texto); }
+  .texto-lei .art { font-weight: 600; }
+  .texto-lei .just { color: var(--texto-2); }
+
+  /* linha do tempo (tramitação) */
+  .tempo { list-style: none; padding: 0; margin: 0; }
+  .tempo li { position: relative; padding: 0 0 1.3rem 1.8rem; border-left: 2px solid var(--linha); }
+  .tempo li:last-child { border-left-color: transparent; padding-bottom: 0; }
+  .tempo li::before { content: ""; position: absolute; left: -7px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--surface); border: 2px solid var(--marca); }
+  .tempo li.pend::before { border-color: var(--linha); background: var(--surface); }
+  .tempo .data { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .tempo .evt { font-weight: 600; color: var(--texto); margin: 0.1rem 0; }
+  .tempo .quem { font-size: var(--t-13); color: var(--texto-2); }
+
+  /* rail */
+  .rail { display: grid; gap: 1rem; }
+  .card { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.1rem 1.2rem; }
+  .card h3 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.8rem; }
+  .dl { display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 0.9rem; font-size: var(--t-13); }
+  .dl dt { color: var(--texto-2); }
+  .dl dd { margin: 0; color: var(--texto); font-weight: 600; text-align: right; }
+  .dl dd.mono { font-family: var(--mono); font-weight: 500; }
+  .card-acoes { display: grid; gap: 0.5rem; }
+  .urn { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); word-break: break-all; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.5rem 0.6rem; }
+
+  @media (max-width: 920px) { .corpo { grid-template-columns: 1fr; } .rail { order: -1; } }
+  @media (max-width: 560px) { .et { width: 64px; } .az { width: 44px; height: 44px; } }
+</style>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+
+<header class="topo">
+  <div class="envelope topo-grade">
+    <div class="marca">
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div>
+        <p class="marca-nome">O Plenário</p>
+        <p class="marca-orgao">Câmara Municipal de Fortaleza</p>
+      </div>
+    </div>
+    <div class="topo-sep" aria-hidden="true"></div>
+    <span class="eyebrow" style="align-self:center">Processo legislativo</span>
+    <div class="topo-dir">
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+      <span class="presidente">
+        <span class="avatar" aria-hidden="true">RC</span>
+        <span class="quem"><b>Rita Campos</b><span>Servidora legislativa</span></span>
+      </span>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope">
+  <nav class="trilha" aria-label="Trilha de navegação">
+    <a href="proposicoes.html">Proposições</a><span class="sep" aria-hidden="true">/</span><b>PL 042/2026</b>
+  </nav>
+
+  <div class="ficha-cab">
+    <div class="topo-linha">
+      <span class="num">PL 042/2026</span>
+      <span class="especie">Projeto de Lei</span>
+      <span class="chip chip-tram">Em 1º turno</span>
+    </div>
+    <h1>Cria o Programa Municipal de Hortas Comunitárias</h1>
+    <div class="ficha-meta-linha">
+      <span>Autoria <b>Ver.ª Helena Matos</b></span>
+      <span>Apresentada em <b>04/04/2026</b></span>
+      <span>Relatoria <b>Ver. Sérgio Lopes</b> (CCJ)</span>
+      <span>Protocolo geral <b class="mono">2026/00831</b></span>
+    </div>
+  </div>
+
+  <!-- ===== TRAMITAÇÃO (azulejo herói) ===== -->
+  <section class="tramitacao" aria-label="Tramitação da matéria">
+    <div class="rotulo">
+      <span class="eyebrow">Onde está a matéria</span>
+      <span class="prazo">prazo na comissão: regimental · em dia</span>
+    </div>
+    <div class="azulejo" role="img" aria-label="Tramitação: Protocolo (04/04) concluído, Comissões (22/04) concluído, 1º turno em curso, 2º turno pendente, Sanção pendente">
+      <div class="et"><span class="az az-feita az-jade"></span><span class="nome">Protocolo</span><span class="quando">04/04</span></div>
+      <span class="conector feito" aria-hidden="true"></span>
+      <div class="et"><span class="az az-feita az-cobalto"></span><span class="nome">Comissões</span><span class="quando">22/04</span></div>
+      <span class="conector feito" aria-hidden="true"></span>
+      <div class="et"><span class="az az-curso"></span><span class="nome">1º turno</span><span class="quando">em curso</span></div>
+      <span class="conector" aria-hidden="true"></span>
+      <div class="et pendente"><span class="az az-pend"></span><span class="nome">2º turno</span><span class="quando">—</span></div>
+      <span class="conector" aria-hidden="true"></span>
+      <div class="et pendente"><span class="az az-pend"></span><span class="nome">Sanção</span><span class="quando">—</span></div>
+    </div>
+  </section>
+
+  <!-- ===== CORPO ===== -->
+  <div class="corpo">
+    <div>
+      <div class="abas" role="tablist" aria-label="Seções da matéria">
+        <button class="aba" role="tab" id="t-texto" aria-selected="true" aria-controls="p-texto">Texto</button>
+        <button class="aba" role="tab" id="t-tram" aria-selected="false" aria-controls="p-tram">Tramitação</button>
+        <button class="aba" role="tab" id="t-pareceres" aria-selected="false" aria-controls="p-pareceres">Pareceres <span class="cont">2</span></button>
+        <button class="aba" role="tab" id="t-emendas" aria-selected="false" aria-controls="p-emendas">Emendas <span class="cont">1</span></button>
+        <button class="aba" role="tab" id="t-anexos" aria-selected="false" aria-controls="p-anexos">Anexos <span class="cont">3</span></button>
+      </div>
+
+      <!-- Texto -->
+      <section class="painel" id="p-texto" role="tabpanel" aria-labelledby="t-texto" tabindex="0">
+        <span class="ver-sel">Versão <span class="pill">vigente · redação inicial</span> · atualizada 04/04/2026</span>
+        <div class="texto-lei">
+          <p><b>A Câmara Municipal de Fortaleza decreta:</b></p>
+          <p><span class="art">Art. 1º</span> Fica instituído o Programa Municipal de Hortas Comunitárias, destinado ao cultivo coletivo de hortaliças, plantas medicinais e frutíferas em terrenos públicos ociosos.</p>
+          <p><span class="art">Art. 2º</span> São objetivos do Programa: I — promover a segurança alimentar e nutricional; II — fomentar a convivência comunitária e a educação ambiental; III — dar destinação social a áreas públicas subutilizadas.</p>
+          <p><span class="art">Art. 3º</span> A adesão de grupos comunitários dar-se-á por edital público, observados os critérios de prioridade definidos em regulamento.</p>
+          <p><span class="art">Art. 4º</span> Esta Lei entra em vigor na data de sua publicação.</p>
+          <h2>Justificativa</h2>
+          <p class="just">A presente proposição responde à demanda de associações de moradores por uso produtivo de terrenos públicos ociosos, com benefícios diretos à segurança alimentar e à coesão comunitária. Experiências semelhantes em outros municípios demonstram baixo custo de implantação e alto retorno social.</p>
+        </div>
+      </section>
+
+      <!-- Tramitação -->
+      <section class="painel" id="p-tram" role="tabpanel" aria-labelledby="t-tram" tabindex="0" hidden>
+        <ol class="tempo">
+          <li><span class="data">12/05/2026</span><p class="evt">Incluída na ordem do dia — 1º turno</p><span class="quem">Mesa Diretora · sessão ordinária nº 14</span></li>
+          <li><span class="data">22/04/2026</span><p class="evt">Parecer favorável da CCJ aprovado</p><span class="quem">Comissão de Constituição e Justiça · relator Ver. Sérgio Lopes</span></li>
+          <li><span class="data">08/04/2026</span><p class="evt">Distribuída às comissões</p><span class="quem">CCJ e Comissão de Meio Ambiente</span></li>
+          <li><span class="data">04/04/2026</span><p class="evt">Protocolada e numerada</p><span class="quem">Protocolo geral 2026/00831 · Ver.ª Helena Matos</span></li>
+          <li class="pend"><span class="data">prevista</span><p class="evt">Votação em 1º turno</p><span class="quem">aguardando deliberação do plenário</span></li>
+        </ol>
+      </section>
+
+      <!-- Pareceres -->
+      <section class="painel" id="p-pareceres" role="tabpanel" aria-labelledby="t-pareceres" tabindex="0" hidden>
+        <ul class="tempo">
+          <li><span class="data">22/04/2026</span><p class="evt">CCJ — favorável</p><span class="quem">Relator Ver. Sérgio Lopes · aprovado por unanimidade</span></li>
+          <li><span class="data">19/04/2026</span><p class="evt">Comissão de Meio Ambiente — favorável com emenda</p><span class="quem">Relatora Ver.ª Carla Souza · sugere Emenda nº 1</span></li>
+        </ul>
+      </section>
+
+      <!-- Emendas -->
+      <section class="painel" id="p-emendas" role="tabpanel" aria-labelledby="t-emendas" tabindex="0" hidden>
+        <ul class="tempo">
+          <li><span class="data">19/04/2026</span><p class="evt">Emenda Modificativa nº 1</p><span class="quem">Acrescenta inciso IV ao art. 2º (compostagem) · Ver.ª Carla Souza · pendente de votação</span></li>
+        </ul>
+      </section>
+
+      <!-- Anexos -->
+      <section class="painel" id="p-anexos" role="tabpanel" aria-labelledby="t-anexos" tabindex="0" hidden>
+        <ul class="tempo">
+          <li><span class="data">PDF</span><p class="evt">Texto original assinado (ICP-Brasil)</p><span class="quem">142 KB · enviado em 04/04/2026 · verificado</span></li>
+          <li><span class="data">PDF</span><p class="evt">Parecer da CCJ</p><span class="quem">88 KB · 22/04/2026</span></li>
+          <li><span class="data">PDF</span><p class="evt">Estudo de impacto — áreas mapeadas</p><span class="quem">1,2 MB · anexo da autora</span></li>
+        </ul>
+      </section>
+    </div>
+
+    <!-- RAIL -->
+    <aside class="rail" aria-label="Dados e ações da matéria">
+      <div class="card">
+        <h3>Dados da matéria</h3>
+        <dl class="dl">
+          <dt>Situação</dt><dd>Em 1º turno</dd>
+          <dt>Regime</dt><dd>Ordinário</dd>
+          <dt>Turnos</dt><dd>2</dd>
+          <dt>Apensados</dt><dd>nenhum</dd>
+          <dt>Apresentada</dt><dd class="mono">04/04/2026</dd>
+          <dt>Última ação</dt><dd class="mono">12/05/2026</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <h3>Identidade canônica (LexML)</h3>
+        <p class="urn">urn:lex:br;ceara;fortaleza:camara.municipal:projeto.lei:2026;042</p>
+      </div>
+      <div class="card">
+        <h3>Ações</h3>
+        <div class="card-acoes">
+          <button class="btn btn-primaria" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>
+            Incluir na pauta
+          </button>
+          <button class="btn btn-contorno" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 2h9l5 5v15H6zM15 2v5h5M9 13h6M9 17h6"/></svg>
+            Gerar ficha (PDF)
+          </button>
+          <button class="btn btn-fantasma" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 12h12m0 0l-4-4m4 4l-4 4M20 4v16"/></svg>
+            Distribuir a comissão
+          </button>
+        </div>
+      </div>
+    </aside>
+  </div>
+  <div style="height:2.5rem"></div>
+</main>
+
+<script src="../sistema/tema.js"></script>
+<script>
+  /* abas: padrão ARIA tabs (clique + setas) */
+  (function () {
+    var tabs = Array.prototype.slice.call(document.querySelectorAll('[role="tab"]'));
+    function sel(t) {
+      tabs.forEach(function (x) {
+        var on = x === t;
+        x.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(x.getAttribute('aria-controls')).hidden = !on;
+      });
+      t.focus();
+    }
+    tabs.forEach(function (t, i) {
+      t.addEventListener('click', function () { sel(t); });
+      t.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowRight') { e.preventDefault(); sel(tabs[(i + 1) % tabs.length]); }
+        if (e.key === 'ArrowLeft') { e.preventDefault(); sel(tabs[(i - 1 + tabs.length) % tabs.length]); }
+      });
+    });
+  })();
+</script>
+</body>
+</html>
