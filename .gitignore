@@ -27,7 +27,5 @@ dist/
 
 # artefatos de screenshot/preview (design)
 .playwright-mcp/
-/sessao-*.png
-/exp-*.png
-/pc-*.png
-/pm-*.png
+# a raiz não guarda PNG de fonte — só previews descartáveis de validação
+/*.png
