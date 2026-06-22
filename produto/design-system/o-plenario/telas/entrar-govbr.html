@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Entrar para participar — Câmara Municipal de Fortaleza</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Entrar com gov.br — ARQUÉTIPO: auth (cidadão, pública)
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+     Entrada do cidadão (1.2): identifica-se com o gov.br só para PARTICIPAR
+     (comentar, acompanhar pedidos). Honesto: consultar é livre e sem
+     cadastro. Transparência LGPD: dados mínimos compartilhados.
+     ============================================================ */
+  body { min-height: 100vh; display: flex; flex-direction: column; }
+  .pub-topo { background: var(--surface); border-bottom: 1px solid var(--linha); }
+  .pub-topo-in { display: flex; align-items: center; gap: 1rem; padding: 0.9rem 0; }
+  .brasao-casa { display: flex; align-items: center; gap: 0.7rem; }
+  .brasao-casa .br { width: 38px; height: 38px; border-radius: 10px; flex: 0 0 auto; }
+  .brasao-casa b { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); line-height: 1.1; display: block; }
+  .brasao-casa span { font-size: var(--t-12); color: var(--texto-2); }
+  .pub-topo .tema-btn { margin-left: auto; }
+
+  .wrap { flex: 1; display: grid; place-items: center; padding: 2rem 0; }
+  .cartao { width: 100%; max-width: 440px; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-lg); box-shadow: var(--sombra-alta); padding: 1.8rem 1.7rem; }
+  .cartao .selo { width: 52px; height: 52px; border-radius: 13px; display: grid; place-items: center; color: #fff; background: var(--jade); margin: 0 0 1rem; }
+  .cartao h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0; line-height: 1.1; }
+  .cartao .lead { font-size: var(--t-16); color: var(--texto-2); margin: 0.5rem 0 0; line-height: 1.5; }
+
+  .porques { display: grid; gap: 0.55rem; margin: 1.3rem 0; }
+  .porque { display: flex; align-items: flex-start; gap: 0.6rem; font-size: var(--t-13); color: var(--texto-2); line-height: 1.45; }
+  .porque svg { color: var(--marca); flex: 0 0 auto; margin-top: 2px; }
+  .porque b { color: var(--texto); }
+
+  /* botão gov.br (oficial) */
+  .govbr { width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.6rem; min-height: 56px; border-radius: var(--raio-sm); border: none; cursor: pointer; background: #1351B4; color: #fff; font-family: var(--corpo); font-weight: 700; font-size: var(--t-16); }
+  .govbr:hover { background: #0C3D8C; }
+  .govbr .wm { font-family: var(--display); font-weight: 800; letter-spacing: -0.02em; }
+  .govbr .wm b { color: #FFCD07; font-weight: 800; }
+
+  .ou { display: flex; align-items: center; gap: 0.7rem; margin: 1.1rem 0; color: var(--texto-2); font-size: var(--t-12); }
+  .ou::before, .ou::after { content:""; flex: 1; height: 1px; background: var(--linha); }
+
+  .livre { display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.85rem 1rem; background: color-mix(in srgb,var(--marca) 6%,var(--surface)); border: 1px solid color-mix(in srgb,var(--marca) 24%,var(--linha)); border-radius: var(--raio); font-size: var(--t-13); color: var(--texto-2); line-height: 1.5; }
+  .livre svg { color: var(--marca); flex: 0 0 auto; margin-top: 2px; }
+  .livre a { color: var(--marca); font-weight: 600; text-decoration: none; } .livre a:hover { text-decoration: underline; }
+
+  .lgpd { display: flex; align-items: flex-start; gap: 0.5rem; margin: 1.1rem 0 0; font-size: var(--t-12); color: var(--texto-2); line-height: 1.5; }
+  .lgpd svg { color: var(--texto-2); flex: 0 0 auto; margin-top: 1px; }
+  .lgpd b { color: var(--texto); } .lgpd a { color: var(--marca); font-weight: 600; text-decoration: none; } .lgpd a:hover { text-decoration: underline; }
+
+  .rodape { padding: 1.4rem 0; border-top: 1px solid var(--linha); display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+  .rodape .plat { margin-left: auto; display: inline-flex; align-items: center; gap: 0.45rem; font-size: var(--t-12); color: var(--texto-2); }
+  .rodape .plat .sig { width: 16px; height: 16px; }
+</style>
+</head>
+<body class="superficie-publica">
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+
+<header class="pub-topo">
+  <div class="envelope pub-topo-in">
+    <div class="brasao-casa">
+      <svg class="br" viewBox="0 0 34 34" role="img" aria-label="Câmara Municipal de Fortaleza"><rect width="34" height="34" rx="9" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div><b>Câmara Municipal de Fortaleza</b><span>Transparência</span></div>
+    </div>
+    <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+      <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+      <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+      <span class="tema-rotulo">Claro</span>
+    </button>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope wrap">
+  <div class="cartao">
+    <span class="selo" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8h16v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5z"/></svg></span>
+    <h1>Entrar para participar</h1>
+    <p class="lead">Identifique-se com a sua conta gov.br para comentar e acompanhar seus pedidos na Câmara.</p>
+
+    <div class="porques">
+      <div class="porque"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span><b>Comentar</b> nas matérias em tramitação.</span></div>
+      <div class="porque"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg><span><b>Acompanhar</b> seus pedidos de e-SIC e ouvidoria.</span></div>
+      <div class="porque"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg><span>Sua identidade é <b>verificada</b>, o que dá mais peso à sua manifestação.</span></div>
+    </div>
+
+    <button class="govbr" type="button">
+      Entrar com <span class="wm">gov<b>.br</b></span>
+    </button>
+
+    <div class="ou">só para participar</div>
+
+    <div class="livre">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <span><b>Consultar é livre.</b> Você não precisa entrar para ver matérias, leis, sessões ou pedir informação pública. <a href="portal-cidadao.html">Voltar e só consultar →</a></span>
+    </div>
+
+    <p class="lgpd">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg>
+      <span>Ao entrar, a Câmara recebe do gov.br apenas <b>seu nome e CPF verificado</b> — o necessário para identificar sua participação. Tratamos seus dados conforme a LGPD. Veja a <a href="#">Política de Privacidade</a>.</span>
+    </p>
+  </div>
+</main>
+
+<div class="envelope rodape">
+  <span style="font-size:var(--t-12);color:var(--texto-2)">Câmara Municipal de Fortaleza · Transparência</span>
+  <span class="plat">
+    <svg class="sig" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+    Plataforma O Plenário
+  </span>
+</div>
+
+<script src="../sistema/tema.js"></script>
+</body>
+</html>
