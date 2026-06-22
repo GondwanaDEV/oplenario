@@ -29,11 +29,18 @@ Três públicos, uma língua: **servidor** (eficiência), **vereador** (dignidad
 | `--cobalto` | `#1E5FA8` | Azul de azulejo — secundário **e anel de foco**. |
 | `--cobalto-fundo` | `#184E8A` | Cobalto sólido. |
 | `--amarelo` | `#E8B23A` | Amarelo Marajó — 4ª cor do azulejo, **escassa** (realce). |
-| `--areia` | `#F1ECDD` | Fundo — areia quente (com luz tropical difusa no topo). |
-| `--areia-2` | `#FBF8F0` | Superfície de cartão. |
-| `--areia-borda` | `#E0D7BF` | Divisórias quentes. |
-| `--tinta` | `#19211C` | Texto principal (~13:1 sobre areia). |
-| `--tinta-2` | `#4C574F` | Texto secundário (AA sobre areia). |
+| `--bg` *(areia)* | `#F1ECDD` | Fundo claro — areia quente (luz tropical difusa). **Token semântico**: escurece no tema escuro. |
+| `--surface` | `#FBF8F0` | Superfície de cartão. |
+| `--linha` | `#E0D7BF` | Divisórias quentes. |
+| `--texto` *(tinta)* | `#19211C` | Texto principal (~13:1 sobre o fundo claro). |
+| `--texto-2` | `#4C574F` | Texto secundário (AA). |
+
+> **Nota:** a paleta-marca acima (`--jade`…`--amarelo`) é **fixa** (`:root` em `sistema/tokens.css`).
+> Os tokens de superfície/texto (`--bg`, `--surface`, `--linha`, `--texto`, `--texto-2`) são
+> **semânticos** e remapeados por `[data-tema]` — os valores na tabela são os do tema **claro**;
+> os do escuro estão na seção "Tema claro e escuro". Tokens AA-legíveis derivados: `--acento-texto`
+> (telha), `--telha-fundo`, `--aviso-texto` e `--amarelo-traco` (Marajó). **Fonte de verdade:
+> `sistema/tokens.css`.**
 
 **Disciplina de cor (load-bearing):** a telha cheia `#D9542B` é para **fills/azulejo/bordas**; para
 **texto** sobre areia use `--telha-fundo #B9421F` (a versão cheia falha AA em texto). Cor nunca é o

@@ -1,0 +1,160 @@
+/* ============================================================
+   O PLENÁRIO · chassi.css — o esqueleto compartilhado
+   Linguagem: "República Luminosa". Linka SEMPRE depois de tokens.css.
+
+   Contém o que TODA tela repete: reset, tipografia-base, utilitários
+   (.envelope, foco, .eyebrow, .mono, .pular, .sr-only), a barra
+   institucional .topo (partes comuns), o toggle de tema, avatar/
+   presidente, o sistema .btn canônico, a barra .comando, e os
+   tratamentos de movimento reduzido.
+
+   O que NÃO está aqui (fica local à tela): cromos específicos de
+   superfície — .ao-vivo/.relogio (cabine), .area-tag/.sino/.data-pill
+   (cockpit), .brasao-marca/.nav-publica/.govbr (portal público),
+   .local/.data-hoje (balcão). São candidatos a promoção quando um
+   2º uso aparecer (ver ../componentes.html).
+   ============================================================ */
+
+/* ---------------- reset + base ---------------- */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  background-color: var(--bg);
+  background-image: var(--bg-luz);
+  background-attachment: fixed;
+  color: var(--texto);
+  font-family: var(--corpo);
+  font-size: var(--t-16);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition: background-color .25s ease, color .25s ease;
+}
+
+/* superfície PÚBLICA (portal do cidadão): mais ar, medida mais estreita */
+body.superficie-publica { --max: 1200px; line-height: 1.6; }
+body.superficie-publica a {
+  color: var(--marca);
+  text-decoration-color: color-mix(in srgb, var(--marca) 35%, transparent);
+  text-underline-offset: 3px;
+}
+
+.envelope { max-width: var(--max); margin: 0 auto; padding: 0 clamp(1rem, 3vw, 2rem); }
+body.superficie-publica .envelope { padding: 0 clamp(1rem, 4vw, 2rem); }
+
+a:focus-visible, button:focus-visible, [tabindex]:focus-visible,
+input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline: 3px solid var(--foco); outline-offset: 2px; border-radius: 5px;
+}
+
+/* ---------------- utilitários de texto ---------------- */
+.eyebrow {
+  font-family: var(--mono); font-size: var(--t-13); font-weight: 500;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--acento-texto); margin: 0;
+}
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* pular para o conteúdo + texto só para leitor de tela */
+.pular {
+  position: absolute; left: -999px; top: 0;
+  background: var(--acao); color: var(--acao-texto);
+  padding: 0.6rem 1rem; border-radius: 0 0 8px 0; z-index: 60;
+}
+.pular:focus { left: 0; }
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+
+/* ============== BARRA INSTITUCIONAL (.topo) — partes comuns ============== */
+.topo {
+  position: sticky; top: 0; z-index: 30;
+  background: var(--topo-bg);
+  backdrop-filter: saturate(140%) blur(10px);
+  border-bottom: 1px solid var(--linha);
+}
+.topo-grade { display: flex; align-items: center; gap: 0.8rem 1.3rem; padding: 0.7rem 0; flex-wrap: wrap; }
+.topo-sep { width: 1px; align-self: stretch; background: var(--linha); margin: 2px 0; }
+.topo-dir { margin-left: auto; display: flex; align-items: center; gap: 0.8rem; }
+
+/* marca "O Plenário" (telas internas) */
+.marca { display: flex; align-items: center; gap: 0.65rem; }
+.marca-simbolo { width: 34px; height: 34px; flex: 0 0 auto; display: block; }
+.marca-nome { font-family: var(--display); font-weight: 800; font-size: var(--t-21); letter-spacing: -0.015em; color: var(--marca); line-height: 1; margin: 0; }
+.marca-orgao { font-size: var(--t-13); color: var(--texto-2); margin: 2px 0 0; line-height: 1; }
+
+/* toggle de tema (claro/escuro) */
+.tema-btn {
+  display: inline-flex; align-items: center; gap: 0.45rem;
+  font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2);
+  background: var(--surface); border: 1px solid var(--linha); border-radius: 999px;
+  padding: 0.45rem 0.75rem; cursor: pointer; min-height: 44px;
+  transition: border-color .12s ease, color .12s ease;
+}
+.tema-btn:hover { border-color: var(--foco); color: var(--texto); }
+.tema-btn svg { color: var(--marca); }
+.tema-btn .lua { display: none; }
+.tema-btn .tema-rotulo { display: none; }
+[data-tema="escuro"] .tema-btn .sol { display: none; }
+[data-tema="escuro"] .tema-btn .lua { display: inline; }
+@media (min-width: 520px) { .tema-btn .tema-rotulo { display: inline; } }
+
+/* avatar + identificação de quem opera (Mesa) */
+.avatar {
+  width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; flex: 0 0 auto;
+  font-family: var(--display); font-weight: 700; font-size: var(--t-13); color: #fff; background: var(--jade);
+}
+.presidente { display: flex; align-items: center; gap: 0.55rem; }
+.presidente .quem { line-height: 1.15; }
+.presidente .quem b { font-weight: 600; font-size: var(--t-13); color: var(--texto); display: block; }
+.presidente .quem span { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+
+/* ============== SISTEMA DE BOTÕES (.btn) ============== */
+.btn {
+  font-family: var(--corpo); font-weight: 600; font-size: var(--t-16);
+  border-radius: var(--raio-sm); border: 1px solid transparent;
+  padding: 0.7rem 1.15rem; cursor: pointer; min-height: 44px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  line-height: 1.2; text-decoration: none;
+  transition: transform .12s ease, background-color .12s ease, box-shadow .12s ease, border-color .12s ease;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn svg { flex: 0 0 auto; }
+
+/* primária — ação afirmativa (jade). `.btn-primario` é alias tolerado. */
+.btn-primaria, .btn-primario { background: var(--acao); color: var(--acao-texto); box-shadow: 0 10px 22px -16px rgba(12,83,64,.9); }
+.btn-primaria:hover, .btn-primario:hover { background: var(--acao-hover); }
+
+/* encerrar — ação destrutiva/terminal (telha) */
+.btn-encerrar { background: var(--telha); color: #fff; box-shadow: 0 10px 22px -14px rgba(217,84,43,.9); }
+.btn-encerrar:hover { background: var(--telha-fundo); }
+
+/* contorno — secundária */
+.btn-contorno { background: transparent; color: var(--texto); border-color: var(--linha); }
+.btn-contorno:hover { background: var(--surface-2); border-color: var(--texto-2); }
+
+/* fantasma — terciária, baixa ênfase */
+.btn-fantasma { background: transparent; color: var(--texto-2); border-color: transparent; }
+.btn-fantasma:hover { background: var(--surface-2); color: var(--texto); }
+
+/* modificador compacto (mantém alvo de toque ≥44px) */
+.btn-mini { font-size: var(--t-13); padding: 0.5rem 0.95rem; min-height: 44px; }
+
+.btn[aria-disabled="true"] { opacity: .42; cursor: not-allowed; transform: none; box-shadow: none; }
+
+/* ============== BARRA DE COMANDO (.comando) — fixa no rodapé ============== */
+.comando { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--surface); border-top: 1px solid var(--linha); box-shadow: 0 -18px 44px -30px rgba(12,83,64,.55); }
+.comando-grade { display: flex; align-items: center; gap: 0.7rem 1rem; padding: 0.7rem 0; flex-wrap: wrap; }
+.comando-ctx { color: var(--texto); font-size: var(--t-13); line-height: 1.25; }
+.comando-ctx b { font-family: var(--display); font-weight: 600; color: var(--texto); display: block; }
+.comando-ctx span { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+.comando-acoes { margin-left: auto; display: flex; gap: 0.6rem; flex-wrap: wrap; }
+
+/* ============== MOVIMENTO REDUZIDO (base) ============== */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+  .btn:hover { transform: none; }
+}

@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Biblioteca de componentes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="sistema/tokens.css" />
+<link rel="stylesheet" href="sistema/chassi.css" />
+<style>
+  /* ============================================================
+     Biblioteca de componentes — STYLEGUIDE VIVO.
+     Linka a MESMA fundação das telas (sistema/tokens.css +
+     sistema/chassi.css + sistema/tema.js): o que se vê aqui é
+     exatamente o que as telas recebem. Flipe o tema no topo e
+     toda a galeria troca.
+
+     O CSS abaixo é SÓ do layout da galeria + dos "padrões de
+     superfície" ainda não promovidos ao chassi (azulejo, ilhas,
+     anel) — cada um marcado com sua proveniência e plano.
+     ============================================================ */
+
+  /* ---- layout da galeria ---- */
+  .doc { display: grid; grid-template-columns: 232px 1fr; gap: 2.4rem; align-items: start; padding: 2rem 0 5rem; }
+  .nav-doc { position: sticky; top: 76px; align-self: start; display: flex; flex-direction: column; gap: 0.1rem; font-size: var(--t-13); }
+  .nav-doc a { color: var(--texto-2); text-decoration: none; padding: 0.4rem 0.6rem; border-radius: var(--raio-sm); border-left: 2px solid transparent; }
+  .nav-doc a:hover { color: var(--texto); background: var(--surface); }
+  .nav-doc .grupo { font-family: var(--mono); font-size: var(--t-12); text-transform: uppercase; letter-spacing: .1em; color: var(--acento-texto); margin: 1rem 0 0.3rem 0.6rem; }
+  .nav-doc .grupo:first-child { margin-top: 0; }
+
+  .secao { margin: 0 0 3rem; scroll-margin-top: 84px; }
+  .secao > h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-28); color: var(--texto); margin: 0 0 0.3rem; letter-spacing: -0.015em; }
+  .secao > .legenda { color: var(--texto-2); margin: 0 0 1.4rem; max-width: 62ch; }
+  .secao h3 { font-family: var(--display); font-weight: 600; font-size: var(--t-21); color: var(--texto); margin: 2rem 0 0.2rem; }
+
+  .titulo-doc { padding: 2.4rem 0 0.4rem; }
+  .titulo-doc h1 { font-family: var(--display); font-weight: 800; font-size: clamp(2rem, 5vw, var(--t-56)); letter-spacing: -0.03em; color: var(--texto); margin: 0.4rem 0 0; line-height: 1.02; }
+  .titulo-doc p { color: var(--texto-2); max-width: 64ch; margin: 0.8rem 0 0; }
+  .ssot { display: flex; gap: 0.7rem; flex-wrap: wrap; margin: 1.2rem 0 0; }
+  .ssot code { font-family: var(--mono); font-size: var(--t-13); background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.3rem 0.6rem; color: var(--acento-texto); }
+
+  /* moldura de demonstração */
+  .demo { border: 1px solid var(--linha); border-radius: var(--raio); background: var(--surface); box-shadow: var(--sombra); padding: 1.4rem; margin: 0.8rem 0 0; }
+  .demo.faixa-clara { background: var(--surface-2); }
+  .demo .linha-itens { display: flex; gap: 0.8rem; flex-wrap: wrap; align-items: center; }
+  .ficha { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.4rem 1.4rem; margin: 0.7rem 0 0; font-size: var(--t-13); color: var(--texto-2); }
+  .ficha b { color: var(--texto); font-weight: 600; }
+  .ficha .quando b { color: var(--marca); }
+  .fonte-tag { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; color: var(--texto-2); border: 1px solid var(--linha); border-radius: 999px; padding: 0.2rem 0.6rem; }
+  .fonte-tag.chassi { color: var(--marca); border-color: color-mix(in srgb, var(--marca) 40%, transparent); }
+  .fonte-tag.receita { color: var(--acento-texto); border-color: color-mix(in srgb, var(--acento-texto) 40%, transparent); }
+
+  /* swatches de cor */
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.7rem; }
+  .swatch { border: 1px solid var(--linha); border-radius: var(--raio-sm); overflow: hidden; background: var(--surface); }
+  .swatch .amostra { height: 56px; }
+  .swatch .rotulo { padding: 0.5rem 0.6rem; font-size: var(--t-12); }
+  .swatch .rotulo b { display: block; color: var(--texto); font-weight: 600; }
+  .swatch .rotulo code { font-family: var(--mono); color: var(--texto-2); }
+
+  /* tabela de tokens semânticos */
+  .tok-tab { width: 100%; border-collapse: collapse; font-size: var(--t-13); }
+  .tok-tab th, .tok-tab td { text-align: left; padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--linha); }
+  .tok-tab th { font-family: var(--mono); font-size: var(--t-12); text-transform: uppercase; letter-spacing: .06em; color: var(--texto-2); }
+  .tok-tab code { font-family: var(--mono); color: var(--acento-texto); }
+  .tok-tab .chip-cor { display: inline-block; width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--linha); vertical-align: middle; margin-right: 0.4rem; }
+
+  /* tipografia */
+  .specimen { border-bottom: 1px dashed var(--linha); padding: 0.7rem 0; display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+  .specimen .meta { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); flex: 0 0 120px; }
+
+  /* ---- PADRÕES DE SUPERFÍCIE (receitas; ainda vivem nas telas) ---- */
+  /* faixa de azulejo da tramitação (A ASSINATURA · motivo de Athos Bulcão) */
+  .azulejo { display: flex; align-items: center; gap: 0; flex-wrap: wrap; }
+  .az-peca { --peca: var(--jade); position: relative; width: 64px; height: 64px; border-radius: 10px; flex: 0 0 auto; overflow: hidden; }
+  /* o quarto-de-círculo de Bulcão em TODA peça — a geometria que define a assinatura */
+  .az-peca::after { content: ""; position: absolute; inset: 0; }
+  /* cor por ETAPA (semântica), nunca por posição no DOM */
+  .az-jade      { --peca: var(--jade); }
+  .az-cobalto   { --peca: var(--cobalto); }
+  .az-telha     { --peca: var(--telha); }
+  .az-jadeclaro { --peca: var(--jade-claro); }
+  .az-amarelo   { --peca: var(--amarelo); }
+  /* concluída: peça cheia + quarto de Bulcão num tom claro da mesma família */
+  .az-feita { background: var(--peca); }
+  .az-feita::after { background: radial-gradient(circle at 0% 100%, color-mix(in srgb, #fff 42%, var(--peca)) 0 48%, transparent 48%); }
+  /* em curso: o quarto-de-círculo aberto em amarelo Marajó sobre "concreto" claro */
+  .az-curso { background: color-mix(in srgb, var(--amarelo) 20%, var(--surface)); border: 1px solid color-mix(in srgb, var(--amarelo) 60%, var(--linha)); }
+  .az-curso::after { background: radial-gradient(circle at 0% 100%, var(--amarelo) 0 48%, transparent 48%); }
+  /* pendente: "concreto" tracejado, o quarto apenas insinuado */
+  .az-pend { background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--texto-2) 12%, transparent) 6px 7px); border: 1px dashed var(--linha); }
+  .az-pend::after { background: radial-gradient(circle at 0% 100%, color-mix(in srgb, var(--texto-2) 14%, transparent) 0 48%, transparent 48%); }
+  .az-con { width: 18px; height: 4px; background: var(--linha); flex: 0 0 auto; }
+  .az-con.feito { background: color-mix(in srgb, var(--jade) 55%, var(--linha)); }
+  .az-passos { display: flex; gap: 0; flex-wrap: wrap; margin: 0.5rem 0 0; }
+  .az-passo { width: 64px; font-size: var(--t-12); color: var(--texto-2); text-align: center; }
+  .az-passo + .az-passo { margin-left: 18px; }
+
+  /* anel de prazo (donut honesto) */
+  .anel-demo { width: 96px; height: 96px; }
+  .anel-demo .trilho { fill: none; stroke: var(--linha); stroke-width: 9; }
+  .anel-demo .arco { fill: none; stroke: var(--acao); stroke-width: 9; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; }
+  .anel-demo .centro { font-family: var(--mono); font-weight: 600; fill: var(--texto); }
+
+  /* chips / tags / pills */
+  .chip { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); letter-spacing: .03em; padding: 0.28rem 0.65rem; border-radius: 999px; border: 1px solid var(--linha); color: var(--texto-2); }
+  .chip-ok { color: var(--marca); border-color: color-mix(in srgb, var(--marca) 45%, transparent); background: color-mix(in srgb, var(--marca) 10%, transparent); }
+  .chip-alerta { color: var(--aviso-texto); border-color: color-mix(in srgb, var(--amarelo) 65%, transparent); background: color-mix(in srgb, var(--amarelo) 18%, transparent); }
+  .chip-risco { color: var(--acento-texto); border-color: color-mix(in srgb, var(--acento-texto) 45%, transparent); background: color-mix(in srgb, var(--acento-texto) 10%, transparent); }
+
+  /* nota [GAP] — disciplina de regra em homologação */
+  .nota-gap { display: flex; gap: 0.6rem; align-items: flex-start; font-size: var(--t-13); color: var(--texto-2); border: 1px dashed color-mix(in srgb, var(--amarelo) 60%, var(--linha)); background: color-mix(in srgb, var(--amarelo) 8%, transparent); border-radius: var(--raio-sm); padding: 0.7rem 0.9rem; }
+  .nota-gap b { color: var(--texto); }
+
+  /* campo de formulário */
+  .campo { display: grid; gap: 0.3rem; max-width: 420px; }
+  .campo label { font-size: var(--t-13); font-weight: 600; color: var(--texto); }
+  .campo .ajuda { font-size: var(--t-12); color: var(--texto-2); }
+  .campo input, .campo select, .campo textarea { font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 58%, var(--linha)); border-radius: var(--raio-sm); padding: 0.6rem 0.7rem; min-height: 44px; }
+  .campo input::placeholder { color: var(--texto-2); }
+
+  /* camada de confiança da IA */
+  .ia-bloco { border: 1px solid var(--linha); border-left: 3px solid var(--cobalto); border-radius: var(--raio-sm); background: var(--surface-2); padding: 0.9rem 1rem; max-width: 560px; }
+  .ia-selo { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; text-transform: uppercase; color: var(--cobalto); }
+  [data-tema="escuro"] .ia-selo { color: var(--foco); }
+  .ia-rodape { display: flex; gap: 1rem; flex-wrap: wrap; margin: 0.6rem 0 0; font-size: var(--t-12); color: var(--texto-2); }
+  .ia-rodape a { color: var(--marca); }
+
+  /* mini-palco / mini-papel para amostra das ilhas */
+  .ilha-palco { background: var(--palco-bg); color: var(--palco-texto); border-radius: var(--raio); padding: 1.2rem 1.3rem; }
+  .ilha-palco .rotulo { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .12em; text-transform: uppercase; color: var(--palco-texto-2); }
+  .ilha-palco .numero { font-family: var(--mono); font-weight: 600; font-size: var(--t-40); }
+  .ilha-papel { background: var(--papel); color: var(--papel-texto); border: 1px solid var(--papel-linha); border-radius: var(--raio); padding: 1.2rem 1.3rem; box-shadow: var(--sombra-papel); }
+  .ilha-papel .merge { color: var(--merge); border-bottom: 2px solid var(--merge); background: var(--merge-fundo); padding: 0 2px; }
+
+  /* topo/comando demonstrados estáticos (sem fixar) */
+  .demo-estatico .comando { position: static; box-shadow: none; border-radius: var(--raio); border: 1px solid var(--linha); }
+  .demo-estatico .topo { position: static; }
+
+  @media (max-width: 860px) {
+    .doc { grid-template-columns: 1fr; }
+    .nav-doc { position: static; flex-direction: row; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 1rem; }
+    .nav-doc .grupo { display: none; }
+  }
+</style>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+
+<!-- ============== TOPO ============== -->
+<header class="topo">
+  <div class="envelope topo-grade">
+    <div class="marca">
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div>
+        <p class="marca-nome">O Plenário</p>
+        <p class="marca-orgao">Design System · República Luminosa</p>
+      </div>
+    </div>
+    <div class="topo-sep" aria-hidden="true"></div>
+    <span class="eyebrow">Biblioteca de componentes</span>
+    <div class="topo-dir">
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<div class="envelope">
+  <div class="titulo-doc">
+    <span class="eyebrow">A língua, escrita uma vez só</span>
+    <h1>Biblioteca de componentes</h1>
+    <p>Tudo aqui é renderizado com a <b>mesma fundação que as telas recebem</b> — a galeria não tem cópia própria de token nem de componente. Edite a fundação e tudo abaixo muda junto. Use o seletor de tema no topo para flipar a galeria inteira entre o concreto luminoso e a noite de Brasília.</p>
+    <div class="ssot">
+      <code>sistema/tokens.css</code>
+      <code>sistema/chassi.css</code>
+      <code>sistema/tema.js</code>
+      <code>LINGUAGEM-VISUAL.md</code>
+    </div>
+  </div>
+
+  <div class="doc">
+    <!-- ============== NAV ============== -->
+    <nav class="nav-doc" aria-label="Seções da biblioteca">
+      <span class="grupo">Fundação</span>
+      <a href="#cores">Cores</a>
+      <a href="#tipografia">Tipografia</a>
+      <a href="#geometria">Geometria · sombra</a>
+      <span class="grupo">Componentes de base</span>
+      <a href="#botoes">Botões</a>
+      <a href="#controles">Toggle · eyebrow · mono</a>
+      <a href="#identidade">Avatar · presidente</a>
+      <a href="#barras">Barras: topo · comando</a>
+      <a href="#campos">Campos de formulário</a>
+      <a href="#chips">Chips · tags · nota [GAP]</a>
+      <span class="grupo">Padrões de composição</span>
+      <a href="#azulejo">Faixa de azulejo</a>
+      <a href="#ilhas">Ilhas: palco · papel</a>
+      <a href="#anel">Anel de prazo</a>
+      <a href="#ia">Camada de confiança da IA</a>
+    </nav>
+
+    <main id="conteudo">
+
+      <!-- ===================== CORES ===================== -->
+      <section class="secao" id="cores">
+        <h2>Cores</h2>
+        <p class="legenda">A <b>paleta-marca do azulejo é fixa</b> — não tematiza (é a identidade). Só os <b>tokens semânticos</b> trocam entre claro e escuro. A telha cheia falha AA como texto; para texto sobre fundo claro use <code>--acento-texto</code>.</p>
+
+        <h3>Paleta-marca <span class="fonte-tag chassi">tokens.css · fixa</span></h3>
+        <div class="demo">
+          <div class="swatches">
+            <div class="swatch"><div class="amostra" style="background:#0C5340"></div><div class="rotulo"><b>Jade</b><code>--jade · #0C5340</code></div></div>
+            <div class="swatch"><div class="amostra" style="background:#0A4334"></div><div class="rotulo"><b>Jade fundo</b><code>--jade-fundo · #0A4334</code></div></div>
+            <div class="swatch"><div class="amostra" style="background:#16785C"></div><div class="rotulo"><b>Jade claro</b><code>--jade-claro · #16785C</code></div></div>
+            <div class="swatch"><div class="amostra" style="background:#D9542B"></div><div class="rotulo"><b>Telha</b><code>--telha · #D9542B</code></div></div>
+            <div class="swatch"><div class="amostra" style="background:#B9421F"></div><div class="rotulo"><b>Telha fundo</b><code>--telha-fundo · #B9421F</code></div></div>
+            <div class="swatch"><div class="amostra" style="background:#1E5FA8"></div><div class="rotulo"><b>Cobalto</b><code>--cobalto · #1E5FA8</code></div></div>
+            <div class="swatch"><div class="amostra" style="background:#184E8A"></div><div class="rotulo"><b>Cobalto fundo</b><code>--cobalto-fundo · #184E8A</code></div></div>
+            <div class="swatch"><div class="amostra" style="background:#E8B23A"></div><div class="rotulo"><b>Amarelo Marajó</b><code>--amarelo · #E8B23A</code></div></div>
+          </div>
+        </div>
+
+        <h3>Tokens semânticos <span class="fonte-tag chassi">tokens.css · por [data-tema]</span></h3>
+        <div class="demo">
+          <table class="tok-tab">
+            <thead><tr><th>Token</th><th>Amostra (tema atual)</th><th>Papel</th></tr></thead>
+            <tbody>
+              <tr><td><code>--bg</code></td><td><span class="chip-cor" style="background:var(--bg)"></span></td><td>Fundo da página</td></tr>
+              <tr><td><code>--surface</code></td><td><span class="chip-cor" style="background:var(--surface)"></span></td><td>Cartão / superfície</td></tr>
+              <tr><td><code>--surface-2</code></td><td><span class="chip-cor" style="background:var(--surface-2)"></span></td><td>Superfície elevada / campo</td></tr>
+              <tr><td><code>--linha</code></td><td><span class="chip-cor" style="background:var(--linha)"></span></td><td>Divisórias / bordas</td></tr>
+              <tr><td><code>--texto</code></td><td><span class="chip-cor" style="background:var(--texto)"></span></td><td>Texto principal</td></tr>
+              <tr><td><code>--texto-2</code></td><td><span class="chip-cor" style="background:var(--texto-2)"></span></td><td>Texto secundário</td></tr>
+              <tr><td><code>--marca</code></td><td><span class="chip-cor" style="background:var(--marca)"></span></td><td>Wordmark / dados / links</td></tr>
+              <tr><td><code>--acao</code></td><td><span class="chip-cor" style="background:var(--acao)"></span></td><td>Botão primário</td></tr>
+              <tr><td><code>--acento-texto</code></td><td><span class="chip-cor" style="background:var(--acento-texto)"></span></td><td>Telha legível (eyebrow, alerta)</td></tr>
+              <tr><td><code>--foco</code></td><td><span class="chip-cor" style="background:var(--foco)"></span></td><td>Anel de foco (cobalto)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ===================== TIPOGRAFIA ===================== -->
+      <section class="secao" id="tipografia">
+        <h2>Tipografia</h2>
+        <p class="legenda"><b>Sora</b> (display, 700–800) · <b>Hanken Grotesk</b> (corpo/UI, 400–700) · <b>IBM Plex Mono</b> (dados, 500, <code>tabular-nums</code>). Escala: 12 · 13 · 16 · 21 · 28 · 40 · 56.</p>
+        <div class="demo">
+          <div class="specimen"><span class="meta">Sora 800 · 56</span><span style="font-family:var(--display);font-weight:800;font-size:var(--t-56);letter-spacing:-0.03em;line-height:1">A câmara acontece</span></div>
+          <div class="specimen"><span class="meta">Sora 700 · 28</span><span style="font-family:var(--display);font-weight:700;font-size:var(--t-28)">Cria o Programa de Hortas</span></div>
+          <div class="specimen"><span class="meta">Hanken 400 · 16</span><span style="font-family:var(--corpo);font-size:var(--t-16)">Texto de leitura e interface — claro, quente, legível.</span></div>
+          <div class="specimen"><span class="meta">Plex Mono 500 · 13</span><span class="mono" style="font-size:var(--t-13);letter-spacing:.06em">PL 042/2026 · 31 SIM · 02:14</span></div>
+          <div class="specimen"><span class="meta">.eyebrow</span><span class="eyebrow">Saúde institucional</span></div>
+        </div>
+      </section>
+
+      <!-- ===================== GEOMETRIA ===================== -->
+      <section class="secao" id="geometria">
+        <h2>Geometria · sombra</h2>
+        <p class="legenda">Raios suaves e sombras de dispersão longa (não drop-shadows duros de SaaS). <code>--raio</code> 14px · <code>--raio-sm</code> 9px · <code>--raio-lg</code> 20px.</p>
+        <div class="demo linha-itens">
+          <div style="width:120px;height:80px;background:var(--surface-2);border:1px solid var(--linha);border-radius:var(--raio-sm)"><div class="mono" style="padding:.4rem;font-size:var(--t-12);color:var(--texto-2)">raio-sm</div></div>
+          <div style="width:120px;height:80px;background:var(--surface-2);border:1px solid var(--linha);border-radius:var(--raio)"><div class="mono" style="padding:.4rem;font-size:var(--t-12);color:var(--texto-2)">raio</div></div>
+          <div style="width:120px;height:80px;background:var(--surface-2);border:1px solid var(--linha);border-radius:var(--raio-lg)"><div class="mono" style="padding:.4rem;font-size:var(--t-12);color:var(--texto-2)">raio-lg</div></div>
+          <div style="width:140px;height:80px;background:var(--surface);border-radius:var(--raio);box-shadow:var(--sombra)"><div class="mono" style="padding:.4rem;font-size:var(--t-12);color:var(--texto-2)">--sombra</div></div>
+          <div style="width:140px;height:80px;background:var(--surface);border-radius:var(--raio);box-shadow:var(--sombra-alta)"><div class="mono" style="padding:.4rem;font-size:var(--t-12);color:var(--texto-2)">--sombra-alta</div></div>
+        </div>
+      </section>
+
+      <!-- ===================== BOTÕES ===================== -->
+      <section class="secao" id="botoes">
+        <h2>Botões</h2>
+        <p class="legenda">Uma <b>ação primária por tela</b> (jade). <code>.btn-encerrar</code> (telha) é reservada à ação terminal/destrutiva. Alvo de toque ≥44px. <code>.btn-primario</code> é alias tolerado de <code>.btn-primaria</code>.</p>
+        <div class="demo linha-itens">
+          <button class="btn btn-primaria" type="button">Protocolar e numerar</button>
+          <button class="btn btn-contorno" type="button">Salvar rascunho</button>
+          <button class="btn btn-fantasma" type="button">Cancelar</button>
+          <button class="btn btn-encerrar" type="button">Encerrar votação</button>
+          <button class="btn btn-primaria" type="button" aria-disabled="true">Indisponível</button>
+        </div>
+        <div class="demo linha-itens">
+          <button class="btn btn-primaria btn-mini" type="button">Mini primária</button>
+          <button class="btn btn-contorno btn-mini" type="button">Mini contorno</button>
+        </div>
+        <div class="ficha">
+          <span class="quando"><b>Quando:</b> primária = a ação que conclui a tarefa da tela.</span>
+          <span><b>A11y:</b> <code>aria-disabled</code> em vez de <code>disabled</code> mantém o botão focável e anunciável.</span>
+          <span class="fonte-tag chassi">chassi.css</span>
+        </div>
+      </section>
+
+      <!-- ===================== CONTROLES ===================== -->
+      <section class="secao" id="controles">
+        <h2>Toggle de tema · eyebrow · mono</h2>
+        <div class="demo linha-itens">
+          <span class="eyebrow">Ordem do dia</span>
+          <span class="mono" style="color:var(--texto)">31 / 43 presentes</span>
+          <span class="chip">exemplo de chip</span>
+        </div>
+        <p class="legenda" style="margin-top:1rem">O toggle de tema vive no topo desta página (e de toda tela). Ele lembra a escolha em <code>localStorage</code> e respeita <code>prefers-color-scheme</code> na primeira visita — ver <code>sistema/tema.js</code>.</p>
+      </section>
+
+      <!-- ===================== IDENTIDADE ===================== -->
+      <section class="secao" id="identidade">
+        <h2>Avatar · presidente</h2>
+        <p class="legenda">Identifica quem opera a Mesa. Iniciais em jade; nome + papel ao lado.</p>
+        <div class="demo">
+          <div class="presidente">
+            <span class="avatar" aria-hidden="true">SL</span>
+            <span class="quem"><b>Ver. Sérgio Lopes</b><span>Presidente da Mesa</span></span>
+          </div>
+        </div>
+        <div class="ficha"><span class="fonte-tag chassi">chassi.css</span></div>
+      </section>
+
+      <!-- ===================== BARRAS ===================== -->
+      <section class="secao" id="barras">
+        <h2>Barras: topo · comando</h2>
+        <p class="legenda">A <code>.topo</code> é sticky e tem duas leituras: <b>interna</b> (O Plenário lidera a marca — ver o topo desta página) e <b>white-label pública</b> (a Câmara lidera; "O Plenário" recua ao rodapé). A <code>.comando</code> fica fixa no rodapé com a ação primária da tela.</p>
+
+        <h3>Topo white-label (porta pública)</h3>
+        <div class="demo demo-estatico" style="padding:0;overflow:hidden">
+          <div class="topo">
+            <div class="envelope topo-grade" style="padding:0.7rem 1rem">
+              <div style="display:flex;align-items:center;gap:0.7rem">
+                <svg width="40" height="40" viewBox="0 0 40 40" role="img" aria-label="Brasão da Câmara"><rect width="40" height="40" rx="9" fill="#0A4334"/><path d="M20 7l9 4v8c0 6-4 10-9 11-5-1-9-5-9-11v-8z" fill="none" stroke="#E8B23A" stroke-width="2"/><circle cx="20" cy="18" r="3.4" fill="#D9542B"/></svg>
+                <div>
+                  <b style="font-family:var(--display);font-weight:700;font-size:var(--t-16);color:var(--texto);display:block;line-height:1.12">Câmara Municipal de Fortaleza</b>
+                  <span style="font-family:var(--mono);font-size:var(--t-12);letter-spacing:.04em;color:var(--acento-texto);text-transform:uppercase">Portal do Cidadão</span>
+                </div>
+              </div>
+              <span class="mono" style="margin-left:auto;font-size:var(--t-12);color:var(--texto-2)">a marca "O Plenário" recua ao rodapé →</span>
+            </div>
+          </div>
+        </div>
+
+        <h3>Barra de comando</h3>
+        <div class="demo demo-estatico">
+          <div class="comando">
+            <div class="envelope comando-grade">
+              <div class="comando-ctx"><b>Sessão em aberto</b><span>quórum atingido · 31/43</span></div>
+              <div class="comando-acoes">
+                <button class="btn btn-fantasma" type="button">Suspender</button>
+                <button class="btn btn-encerrar" type="button">Encerrar votação</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="ficha">
+          <span class="quando"><b>Quando:</b> a barra de comando ancora a decisão; nunca esconda a ação primária no scroll.</span>
+          <span class="fonte-tag chassi">chassi.css (.topo, .comando)</span>
+        </div>
+      </section>
+
+      <!-- ===================== CAMPOS ===================== -->
+      <section class="secao" id="campos">
+        <h2>Campos de formulário</h2>
+        <p class="legenda">Rótulo <b>sempre visível</b> (nunca só placeholder). Texto de ajuda persistente abaixo. Altura ≥44px. Erro com <b>causa + correção</b> junto ao campo (ver guideline de voz).</p>
+        <div class="demo" style="display:grid;gap:1rem">
+          <div class="campo">
+            <label for="g-assunto">Assunto</label>
+            <input id="g-assunto" type="text" placeholder="Ex.: Solicitação de informações sobre hortas" />
+            <span class="ajuda">Aparece no cabeçalho do documento gerado.</span>
+          </div>
+          <div class="campo">
+            <label for="g-tipo">Espécie</label>
+            <select id="g-tipo"><option>Ofício</option><option>Requerimento</option><option>Memorando</option></select>
+          </div>
+        </div>
+        <div class="ficha"><span class="fonte-tag receita">receita (Expediente) · promover ao chassi no Eixo 2</span></div>
+      </section>
+
+      <!-- ===================== CHIPS / GAP ===================== -->
+      <section class="secao" id="chips">
+        <h2>Chips · tags · nota [GAP]</h2>
+        <p class="legenda">Status sempre com <b>ícone/forma + texto</b>, nunca só cor. A <b>nota [GAP]</b> marca número ilustrativo / regra em homologação — disciplina contra cravar conteúdo regulatório que ainda não está fechado.</p>
+        <div class="demo linha-itens">
+          <span class="chip chip-ok">● Em dia</span>
+          <span class="chip chip-alerta">▲ A vencer</span>
+          <span class="chip chip-risco">■ Vencida</span>
+          <span class="chip">○ Neutro</span>
+        </div>
+        <div class="demo">
+          <p class="nota-gap"><b>[GAP]</b><span>Prazos e datas do TCE-CE exibidos são <b>ilustrativos</b> — regra em homologação. A tela mostra a forma e o status da obrigação, não conteúdo regulatório cravado.</span></p>
+        </div>
+        <div class="ficha"><span class="fonte-tag receita">receita (Painéis/Portal) · candidata a chassi</span></div>
+      </section>
+
+      <!-- ===================== AZULEJO ===================== -->
+      <section class="secao" id="azulejo">
+        <h2>Faixa de azulejo da tramitação <span class="fonte-tag receita">a assinatura</span></h2>
+        <p class="legenda">A ousadia mora aqui — e só aqui. Um módulo à la <b>Athos Bulcão</b> em que <b>cada peça é uma etapa</b> e o estado é <b>real, não decorativo</b>: concluída = peça cheia na paleta; em curso = quarto-de-círculo amarelo Marajó; pendente = "concreto" tracejado. Tem <b>três leituras</b> com a mesma gramática: (1) tramitação da proposição, (2) ciclo do pedido de e-SIC, (3) ciclo de uma obrigação de compliance.</p>
+        <div class="demo">
+          <div class="azulejo" role="img" aria-label="Tramitação: Protocolo concluído, Comissões concluído, 1º turno em curso, 2º turno pendente, Sanção pendente">
+            <span class="az-peca az-feita az-jade"></span><span class="az-con feito"></span>
+            <span class="az-peca az-feita az-cobalto"></span><span class="az-con feito"></span>
+            <span class="az-peca az-curso az-telha"></span><span class="az-con"></span>
+            <span class="az-peca az-pend az-jadeclaro"></span><span class="az-con"></span>
+            <span class="az-peca az-pend az-amarelo"></span>
+          </div>
+          <div class="az-passos">
+            <span class="az-passo">Protocolo</span><span class="az-passo">Comissões</span><span class="az-passo">1º turno</span><span class="az-passo">2º turno</span><span class="az-passo">Sanção</span>
+          </div>
+        </div>
+        <div class="ficha">
+          <span class="quando"><b>Quando:</b> qualquer processo com etapas ordenadas e estado verificável.</span>
+          <span><b>A11y:</b> a faixa inteira é um <code>role="img"</code> com <code>aria-label</code> que descreve o estado de cada etapa — cor nunca é o único sinal.</span>
+          <span class="fonte-tag receita">vive em 3 telas · promover como componente parametrizado (próximo passo)</span>
+        </div>
+      </section>
+
+      <!-- ===================== ILHAS ===================== -->
+      <section class="secao" id="ilhas">
+        <h2>Ilhas que não trocam de tema</h2>
+        <p class="legenda">Quando <b>o conteúdo é a coisa</b>, a superfície fica fixa e o tema vira moldura. Em inversão proposital: o <b>placar</b> (votação / saúde institucional) é uma <b>ilha escura</b> nos dois temas — é um telão; o <b>documento</b> é uma <b>ilha de papel</b> nos dois temas — um ofício é papel.</p>
+        <div class="demo" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem">
+          <div class="ilha-palco">
+            <div class="rotulo">Placar em tempo real</div>
+            <div class="numero">31</div>
+            <div class="mono" style="color:var(--palco-texto-2);font-size:var(--t-13)">SIM · de 43 votos</div>
+          </div>
+          <div class="ilha-papel">
+            <div class="mono" style="font-size:var(--t-12);color:var(--papel-texto-2)">OFÍCIO Nº 142/2026 · SL</div>
+            <p style="margin:.5rem 0 0">À <span class="merge">Sra. Lúcia Andrade</span>, Secretária do Meio Ambiente.</p>
+          </div>
+        </div>
+        <div class="ficha"><span class="fonte-tag chassi">tokens.css (--palco-* · --papel-*)</span></div>
+      </section>
+
+      <!-- ===================== ANEL ===================== -->
+      <section class="secao" id="anel">
+        <h2>Anel de prazo</h2>
+        <p class="legenda">Donut <b>honesto</b>: representa <b>uma</b> grandeza temporal (quanto resta de um prazo legal), nunca um KPI decorativo. Número no centro + rótulo fora; nunca depende só do arco.</p>
+        <div class="demo linha-itens">
+          <svg class="anel-demo" viewBox="0 0 100 100" role="img" aria-label="9 dias restantes de 20 do prazo">
+            <circle class="trilho" cx="50" cy="50" r="40"></circle>
+            <circle class="arco" cx="50" cy="50" r="40" stroke-dasharray="251.3" stroke-dashoffset="138.2"></circle>
+            <text class="centro" x="50" y="49" text-anchor="middle" font-size="22">9</text>
+            <text class="centro" x="50" y="64" text-anchor="middle" font-size="9" fill="var(--texto-2)">DIAS</text>
+          </svg>
+          <div>
+            <div style="font-weight:600;color:var(--texto)">Remessa ao TCE · maio</div>
+            <div class="mono" style="font-size:var(--t-13);color:var(--texto-2)">janela em curso · regra em homologação</div>
+          </div>
+        </div>
+        <div class="ficha"><span class="fonte-tag receita">receita (Portal/Painéis) · candidata a chassi</span></div>
+      </section>
+
+      <!-- ===================== IA ===================== -->
+      <section class="secao" id="ia">
+        <h2>Camada de confiança da IA</h2>
+        <p class="legenda">Sempre que a IA gera texto público, três camadas explícitas: <b>rótulo</b> (isto foi gerado por IA), <b>revisão humana</b> (quem assinou) e <b>reportar erro</b>. Crítico no portal do cidadão.</p>
+        <div class="demo">
+          <div class="ia-bloco">
+            <span class="ia-selo">✦ Resumo gerado por IA</span>
+            <p style="margin:.5rem 0 0">Esta proposição cria um programa municipal de hortas comunitárias em terrenos públicos ociosos, com adesão por edital.</p>
+            <div class="ia-rodape">
+              <span>Revisado por <b style="color:var(--texto)">servidor legislativo</b></span>
+              <a href="#">Reportar um erro neste resumo</a>
+            </div>
+          </div>
+        </div>
+        <div class="ficha"><span class="fonte-tag receita">receita (Portal) · padrão obrigatório onde houver IA pública</span></div>
+      </section>
+
+      <p style="color:var(--texto-2);font-size:var(--t-13);border-top:1px solid var(--linha);padding-top:1.2rem">
+        Fonte de verdade: <code class="mono">sistema/</code> + <code class="mono">LINGUAGEM-VISUAL.md</code>. Padrões marcados como <span class="fonte-tag receita">receita</span> ainda vivem nas telas e são candidatos a promoção ao chassi conforme reusados — ver <code class="mono">PADROES-DE-COMPOSICAO.md</code>.
+      </p>
+
+    </main>
+  </div>
+</div>
+
+<script src="sistema/tema.js"></script>
+</body>
+</html>
