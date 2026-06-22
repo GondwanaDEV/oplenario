@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Câmara de Fortaleza · Operação</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Câmara no console — ARQUÉTIPO: config + lista (operador)
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+     Supratenant: drill numa câmara-tenant. Peça de confiança = acesso de
+     suporte GOVERNADO (LGPD, 12.7): operador não vê dados sem grant
+     explícito, time-boxed e logado; a câmara autoriza. + Feature flags
+     por tenant (12.3) + auditoria do operador nesta câmara (12.5).
+     Honesto: ações do operador são auditáveis pela própria câmara.
+     ============================================================ */
+  .migalha { font-size: var(--t-13); color: var(--texto-2); margin: 1.2rem 0 0; display: flex; align-items: center; gap: 0.4rem; }
+  .migalha a { color: var(--marca); font-weight: 600; text-decoration: none; } .migalha a:hover { text-decoration: underline; }
+
+  .ten-cab { display: flex; align-items: center; gap: 0.9rem; margin: 0.6rem 0 0; flex-wrap: wrap; }
+  .ten-cab .uf { width: 48px; height: 48px; border-radius: 11px; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--mono); font-weight: 700; font-size: var(--t-16); color: #fff; background: var(--jade); }
+  .ten-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0; line-height: 1.1; }
+  .ten-cab .meta { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .st { display: inline-flex; align-items: center; gap: 0.35rem; font-size: var(--t-12); font-weight: 600; }
+  .st .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .st-ativa { color: #15634A; } .st-ativa .dot { background: #2C8A66; } [data-tema="escuro"] .st-ativa { color: #58C99E; }
+
+  .secao { margin: 1.8rem 0 0; }
+  .secao > h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); margin: 0 0 0.2rem; }
+  .secao > .aj { font-size: var(--t-13); color: var(--texto-2); margin: 0 0 0.9rem; }
+
+  /* grant de acesso (a peça de confiança) */
+  .grant { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; }
+  .grant-top { display: flex; align-items: center; gap: 0.9rem; padding: 1.1rem 1.3rem; background: color-mix(in srgb,var(--marca) 6%,var(--surface)); border-bottom: 1px solid color-mix(in srgb,var(--marca) 22%,var(--linha)); }
+  .grant-top .ic { width: 44px; height: 44px; border-radius: 11px; flex: 0 0 auto; display: grid; place-items: center; color: #fff; background: var(--jade); }
+  .grant-top .estado b { font-family: var(--display); font-size: var(--t-16); color: var(--texto); display: block; } .grant-top .estado span { font-size: var(--t-13); color: var(--texto-2); }
+  .grant-top .acao { margin-left: auto; }
+  .grant-corpo { padding: 1.1rem 1.3rem; }
+  .prin { display: grid; gap: 0.55rem; }
+  .prin .li { display: flex; align-items: flex-start; gap: 0.55rem; font-size: var(--t-13); color: var(--texto-2); line-height: 1.45; }
+  .prin .li svg { color: var(--marca); flex: 0 0 auto; margin-top: 2px; }
+  .prin .li b { color: var(--texto); }
+
+  /* feature flags */
+  .flags { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; }
+  .flag { display: flex; align-items: center; gap: 1rem; padding: 0.95rem 1.3rem; border-top: 1px solid var(--linha); }
+  .flag:first-child { border-top: none; }
+  .flag .tx { flex: 1; min-width: 0; } .flag .tx b { font-size: var(--t-13); color: var(--texto); font-weight: 600; display: block; } .flag .tx span { font-size: var(--t-12); color: var(--texto-2); }
+  .flag .estado-lab { font-size: var(--t-12); font-weight: 600; color: var(--texto-2); min-width: 76px; text-align: right; }
+  .flag .estado-lab.on { color: #15634A; } [data-tema="escuro"] .flag .estado-lab.on { color: #58C99E; }
+  .sw { width: 46px; height: 28px; border-radius: 999px; flex: 0 0 auto; background: var(--surface-2); border: 1px solid color-mix(in srgb,var(--texto-2) 50%,var(--linha)); position: relative; cursor: pointer; }
+  .sw::after { content:""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--texto-2); transition: transform .12s ease; }
+  .sw.on { background: var(--acao); border-color: var(--acao); }
+  .sw.on::after { background: #fff; transform: translateX(18px); }
+
+  /* auditoria do operador */
+  .audit { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; }
+  .ev { display: grid; grid-template-columns: 120px 1fr auto; gap: 0.2rem 1rem; align-items: center; padding: 0.8rem 1.3rem; border-top: 1px solid var(--linha); }
+  .ev:first-child { border-top: none; }
+  .ev .q { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .ev .o b { font-size: var(--t-13); color: var(--texto); font-weight: 600; } .ev .o span { font-size: var(--t-12); color: var(--texto-2); display: block; }
+  .ev .selo { font-family: var(--mono); font-size: var(--t-12); color: var(--acento-texto); white-space: nowrap; }
+  .audit .rod { padding: 0.8rem 1.3rem; border-top: 1px solid var(--linha); background: var(--surface-2); font-size: var(--t-12); color: var(--texto-2); display: flex; align-items: center; gap: 0.5rem; }
+  .audit .rod svg { color: var(--marca); flex: 0 0 auto; }
+  .audit .rod a { color: var(--marca); font-weight: 600; text-decoration: none; } .audit .rod a:hover { text-decoration: underline; }
+  @media (max-width: 620px) { .ev { grid-template-columns: 1fr auto; } .ev .q { grid-column: 1 / -1; } }
+</style>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+<header class="topo">
+  <div class="envelope topo-grade">
+    <div class="marca">
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div><p class="marca-nome">O Plenário</p><p class="marca-orgao">Operação · console</p></div>
+    </div>
+    <div class="topo-sep" aria-hidden="true"></div>
+    <span class="eyebrow" style="align-self:center">Supratenant</span>
+    <div class="topo-dir">
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+      <span class="presidente"><span class="avatar" aria-hidden="true">OP</span><span class="quem"><b>Operação</b><span>O Plenário</span></span></span>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope" style="max-width:980px">
+  <nav class="migalha" aria-label="Trilha"><a href="console-operador.html">Câmaras</a><span aria-hidden="true">›</span><span>Câmara de Fortaleza</span></nav>
+
+  <div class="ten-cab">
+    <span class="uf" aria-hidden="true">CE</span>
+    <div>
+      <h1>Câmara de Fortaleza</h1>
+      <span class="meta">fortaleza.ce · Suite · 21 vagas</span>
+    </div>
+    <span class="st st-ativa" style="margin-left:auto"><span class="dot" aria-hidden="true"></span>Ativa</span>
+  </div>
+
+  <!-- ACESSO DE SUPORTE (LGPD) -->
+  <section class="secao">
+    <h2>Acesso de suporte</h2>
+    <p class="aj">Você não vê os dados desta câmara sem autorização. O acesso é concedido pela câmara, por tempo limitado, e tudo fica registrado.</p>
+    <div class="grant">
+      <div class="grant-top">
+        <span class="ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>
+        <div class="estado"><b>Sem acesso aos dados</b><span>Para dar suporte com acesso, solicite à câmara. Você pode operar metadados sempre.</span></div>
+        <button class="btn btn-primaria btn-mini acao" type="button">Solicitar acesso</button>
+      </div>
+      <div class="grant-corpo">
+        <div class="prin">
+          <div class="li"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg><span><b>A câmara autoriza.</b> Um administrador da câmara aprova o pedido antes de qualquer acesso a dados pessoais.</span></div>
+          <div class="li"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span><b>Tempo limitado.</b> O acesso expira automaticamente (padrão 24h) e pode ser revogado a qualquer momento.</span></div>
+          <div class="li"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg><span><b>Dados pessoais mascarados</b> por padrão; a exibição é registrada caso necessária ao atendimento.</span></div>
+          <div class="li"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span><b>Tudo é auditado.</b> Cada acesso e ação aparece também na trilha de auditoria da própria câmara.</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURE FLAGS -->
+  <section class="secao">
+    <h2>Recursos da câmara</h2>
+    <p class="aj">Ative ou desative módulos para este tenant. Mudanças são registradas na auditoria.</p>
+    <div class="flags">
+      <div class="flag">
+        <div class="tx"><b>Copiloto de IA legislativo</b><span>Redação assistida, resumos e revisão de ata</span></div>
+        <span class="estado-lab on">Ativado</span>
+        <span class="sw on" role="switch" aria-checked="true" tabindex="0" aria-label="Copiloto de IA legislativo"></span>
+      </div>
+      <div class="flag">
+        <div class="tx"><b>Portal de comentários do cidadão</b><span>Comentários públicos moderados nas matérias</span></div>
+        <span class="estado-lab on">Ativado</span>
+        <span class="sw on" role="switch" aria-checked="true" tabindex="0" aria-label="Portal de comentários do cidadão"></span>
+      </div>
+      <div class="flag">
+        <div class="tx"><b>Legendas ao vivo (LBI)</b><span>Closed-caption automático na transmissão</span></div>
+        <span class="estado-lab on">Ativado</span>
+        <span class="sw on" role="switch" aria-checked="true" tabindex="0" aria-label="Legendas ao vivo"></span>
+      </div>
+      <div class="flag">
+        <div class="tx"><b>Votação pelo app do vereador</b><span>Voto remoto em sessão (onde o regimento permitir)</span></div>
+        <span class="estado-lab">Desativado</span>
+        <span class="sw" role="switch" aria-checked="false" tabindex="0" aria-label="Votação pelo app do vereador"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- AUDITORIA DO OPERADOR -->
+  <section class="secao">
+    <h2>Sua atuação nesta câmara</h2>
+    <p class="aj">Registro do que a Operação fez neste tenant — visível também para a câmara.</p>
+    <div class="audit">
+      <div class="ev"><span class="q">14/06 · 16:20</span><div class="o"><b>Acesso de suporte concedido</b><span>aprovado por Renata Costa · expirou em 15/06 16:20</span></div><span class="selo">selo e4c7·8a09</span></div>
+      <div class="ev"><span class="q">02/06 · 09:11</span><div class="o"><b>Recurso ativado</b><span>Legendas ao vivo (LBI)</span></div><span class="selo">selo a1b2·33cd</span></div>
+      <div class="ev"><span class="q">20/05 · 14:02</span><div class="o"><b>Câmara provisionada</b><span>plano Suite · 21 vagas</span></div><span class="selo">selo 77ef·0a12</span></div>
+      <div class="rod"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Append-only. <a href="trilha-auditoria.html">Ver na trilha completa →</a></div>
+    </div>
+  </section>
+  <div style="height:1.6rem"></div>
+</main>
+<script src="../sistema/tema.js"></script>
+</body>
+</html>
