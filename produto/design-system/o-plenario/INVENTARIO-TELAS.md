@@ -165,14 +165,15 @@ Status page (10.3) · Exportar dados do ente (9.6) · Console do operador (12.x)
 - **~30 telas distintas** cobrem as 113 features (o resto é backend/embutido/transversal).
 - **Os 10 arquétipos estão PROVADOS** ✅ (cabine · balcão · pública · cockpit · lista · ficha · wizard ·
   config · **display** · **calendário**). Toda tela do catálogo tem forma de referência.
-- **✅ ALTA = 100% (8/8)** · **MÉDIA 7/~13** · **~8 BAIXA**.
-- **Telas feitas (21):** Sessão ao vivo · Expediente · Portal do Cidadão · Painéis da Mesa ·
+- **✅ ALTA = 100% (8/8)** · **✅ MÉDIA = 100% (13/13)** · **~8 BAIXA** (nicho/operador, diferível).
+- **Telas feitas (27):** Sessão ao vivo · Expediente · Portal do Cidadão · Painéis da Mesa ·
   Proposições · Ficha da matéria · Nova proposição · Config da Câmara · Editor+copiloto · Tramitação board ·
-  Minhas pendências · Pauta+convocação · Revisão de ata-IA · App do vereador (PWA) · **Login/MFA ·
+  Minhas pendências · Pauta+convocação · Revisão de ata-IA · App do vereador (PWA) · Login/MFA ·
   Central de notificações · Cadastro de vereadores · Livro de atas · Ouvidoria · Telão de votação ·
-  Calendário institucional**. Os 3 públicos cobertos; as 3 apostas materializadas.
+  Calendário institucional · **Admin usuários · Comissões · Parecer · Pós-aprovação · Portal-matérias ·
+  Legislação consolidada**. Os 3 públicos cobertos; as 3 apostas materializadas.
 - **Eixo 4 (guidelines-checklist)** fechado: [`GUIDELINES-CHECKLIST.md`](./GUIDELINES-CHECKLIST.md) = gate de revisão.
-- **Resta (aplicação pura, não invenção):** MÉDIA restantes — Admin do ente/usuários (1.8) · Comissões/Mesa
-  (2.2/2.3) · Pareceres (3.5) · Pós-aprovação sanção→lei (3.13-15) · Portal navegação/lista/ficha pública
-  (5.2) · Legislação consolidada (5.8) — + ~8 BAIXA. Todas reusam arquétipos já provados; rodar o
-  `GUIDELINES-CHECKLIST` em cada.
+- **Resta só a tier BAIXA** (explicitamente diferível/nicho/operador): Audiência pública (4.18) · Julgamento
+  de contas (4.19) · Transparência fiscal (5.9) · Dados abertos (5.11) · Status page (10.3) · Exportar
+  dados do ente (9.6) · Console do operador SaaS (12.x) · cadastros menores (2.4/2.5). Todas reaplicam
+  arquétipos provados; rodar o `GUIDELINES-CHECKLIST` em cada.
