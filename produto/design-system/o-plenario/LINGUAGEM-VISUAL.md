@@ -68,7 +68,8 @@ Referência viva: **`telas/sessao-ao-vivo.html`** (toggle no header). Contraste 
 é uma **ilha escura** (em ambos os temas) — a votação é um telão; o **documento** do Expediente é uma
 **ilha de papel** (creme em ambos, só acalmando à noite) — um ofício é papel. Em volta, a UI escurece.
 Na mesma lógica, o **brasão da câmara é objeto heráldico** — selo de cores fixas que não tematiza (assim
-o jade sempre lê no escuro).
+o jade sempre lê no escuro). O mesmo dispositivo de **ilha escura** reaparece nos **Painéis da Mesa** como o
+**telão da saúde institucional** (a Casa perante o TCE) — não é votação, mas é igualmente "o que a sala inteira lê".
 
 **Inversão white-label na superfície pública (decisão de linguagem):** nas telas internas (Mesa, servidor)
 **O Plenário lidera a marca** no topo. No **portal do cidadão**, a inversão: a **Câmara lidera** (brasão +
@@ -134,5 +135,18 @@ portal do cidadão.
   **amplo** (qualquer info pública — sem seletor de tema; **anel do prazo legal** LAI 20+10 + recurso +
   azulejo do ciclo do pedido) e **Meus dados (LGPD)**, balcão separado com Encarregado/DPO público. Crítica
   adversarial multi-lente (a11y/anti-IA/jurídico/consistência) incorporada. Dual-theme, desktop + mobile, AA+.
-- **Próximo:** painéis da Mesa (16.11). Cada tela puxa os tokens semânticos; UX/charts/consistência via
-  `ui-ux-pro-max`; microcopy crítico em e-SIC/LGPD/cidadão coberto via `frontend-design`.
+- **4ª tela aplicada:** `telas/paineis-mesa.html` — Painéis da Mesa (módulo 16.11 read-model: 11.4 dashboard
+  institucional + 11.1 "o que vence" + 11.2 despachos + 11.3 pipeline + ponte 4.17), **a tela do comprador**
+  (Presidente/Mesa lê a vitrine de cima; jurídico/risco lê a prova embaixo — mesmo read-model, leituras
+  diferentes). Herói = **ilha-placar da saúde institucional** (o telão "A Casa está em dia com o TCE-CE":
+  placar de obrigações 11·1·0 + anel da próxima remessa + **3ª leitura da faixa de azulejo** = ciclo da
+  obrigação de compliance [Aberta → Em curso → Aceita] + selos de continuidade que desarmam o jurídico).
+  Charts honestos (semáforo por linha, trilho de prazos por urgência, tabuleiro de estágios com azulejo,
+  fila de ação — **sem donut/KPI-card**). Disciplina de **[GAP]**: datas do TCE = "regra em homologação" +
+  nota visível. Crítica adversarial 4-lente incorporada (orgulho fora da barra fixa; data da audiência LRF
+  corrigida art. 9º §4º; sparklines → referência honesta; placar unificado; contraste **AA medido em pixel
+  composto** nos 2 temas). Dual-theme, desktop + mobile, AA+.
+- **Próximo:** as **4 telas-que-decidem-a-compra** estão fechadas — os 3 públicos decisores cobertos. O próximo
+  macro-passo deixa de ser telas-herói e vira **escalar o sistema** ao catálogo amplo (113 features / 12
+  módulos): biblioteca de componentes e padrões reusáveis a partir da linguagem provada. Cada tela puxa os
+  tokens semânticos; UX/charts/consistência via `ui-ux-pro-max`; microcopy crítico via `frontend-design`.

@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Painéis da Mesa · Saúde institucional</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Tela "Painéis da Mesa" (módulo 16.11 — read-model)
+     Linguagem: República Luminosa (Cívico Tropical) — DOIS MODOS:
+       · claro  = concreto luminoso de Brasília sob luz tropical
+       · escuro = a noite de Brasília
+     Superfície de GOVERNANÇA — o cockpit que a Mesa e o controle
+     abrem ENTRE sessões (distinto da Mesa de condução ao vivo 4.17
+     e do telão 4.2). A TELA DO COMPRADOR: serve os dois decisores
+     numa só, porque 11.4 (vitrine) e 11.1 (prova de risco) são o
+     MESMO read-model sobre o mesmo substrato (event log + motor de
+     prazo §22.7.7 + audit append-only = a prova de compliance).
+       · Presidente lê de cima  → "saí do apontamento do TCE"
+       · Jurídico   lê de baixo → "risco coberto e provado"
+     A ousadia mora SÓ na ilha-placar (o telão de saúde da Casa) e
+     na faixa de azulejo — aqui em 3ª leitura: o ciclo de uma
+     obrigação de compliance (Materializada → Em curso → Cumprida).
+     Features: 11.1 / 11.2 / 11.3 / 11.4 / 11.6 / 11.7 + 4.4 / 4.15
+               / 4.17 (ponte) + 10.4 / 10.5 (status; layout [GAP]).
+     [GAP] Prazos regulatórios exatos das INs do TCE-CE e o layout
+     físico da remessa seguem GAP — os números aqui são ILUSTRATIVOS;
+     a tela mostra a FORMA e o STATUS da obrigação, não conteúdo
+     regulatório cravado.
+     ============================================================ */
+
+  :root {
+    /* ---- paleta-marca FIXA (identidade do azulejo) ---- */
+    --jade:        #0C5340;
+    --jade-fundo:  #0A4334;
+    --jade-claro:  #16785C;
+    --telha:       #D9542B;
+    --telha-fundo: #B9421F;
+    --cobalto:     #1E5FA8;
+    --cobalto-fundo:#184E8A;
+    --amarelo:     #E8B23A;
+
+    /* ---- tipografia ---- */
+    --display: 'Sora', system-ui, sans-serif;
+    --corpo:   'Hanken Grotesk', system-ui, sans-serif;
+    --mono:    'IBM Plex Mono', ui-monospace, monospace;
+    --t-12: 0.75rem; --t-13: 0.8125rem; --t-16: 1rem;
+    --t-21: 1.3125rem; --t-28: 1.75rem; --t-40: 2.5rem;
+
+    --raio: 14px; --raio-sm: 9px; --max: 1360px;
+    --sombra: 0 1px 0 rgba(25,33,28,.04), 0 18px 40px -28px rgba(12,83,64,.45);
+  }
+
+  /* ====================== TEMA CLARO ====================== */
+  :root, [data-tema="claro"] {
+    --bg:        #F1ECDD;
+    --bg-luz:    radial-gradient(120% 80% at 88% -12%, rgba(232,178,58,.14), transparent 55%),
+                 radial-gradient(90% 70% at -5% 0%, rgba(30,95,168,.07), transparent 50%);
+    --surface:   #FBF8F0;
+    --surface-2: #FFFFFF;
+    --linha:     #E0D7BF;
+    --texto:     #19211C;
+    --texto-2:   #4C574F;
+    --marca:     #0C5340;
+    --acao:      #0C5340;
+    --acao-hover:#0A4334;
+    --acao-texto:#FFFFFF;
+    --acento-texto: #B9421F;     /* telha legível como texto */
+    --foco:      #1E5FA8;
+    --topo-bg:   rgba(241,236,221,.9);
+    --palco-bg:  #0A4334;        /* a ilha de saúde é escura no claro */
+    --palco-texto:   #F1ECDD;
+    --palco-texto-2: rgba(241,236,221,.82);
+    --palco-linha:   rgba(241,236,221,.14);
+    --palco-inset:   rgba(241,236,221,.06);
+  }
+
+  /* ====================== TEMA ESCURO ===================== */
+  [data-tema="escuro"] {
+    --bg:        #0E1A15;
+    --bg-luz:    radial-gradient(120% 80% at 88% -12%, rgba(232,178,58,.08), transparent 55%),
+                 radial-gradient(90% 70% at -5% 0%, rgba(24,158,118,.10), transparent 50%);
+    --surface:   #16271F;
+    --surface-2: #1E332A;
+    --linha:     #2C4438;
+    --texto:     #ECE7D6;
+    --texto-2:   #9FB0A4;
+    --marca:     #43BD93;
+    --acao:      #18A074;
+    --acao-hover:#1FB585;
+    --acao-texto:#06150F;
+    --acento-texto: #F0794B;
+    --foco:      #6AA6DE;
+    --topo-bg:   rgba(14,26,21,.88);
+    --palco-bg:  #0B3A2B;        /* ilha = painel jade saturado, brilha no escuro */
+    --palco-texto:   #ECE7D6;
+    --palco-texto-2: rgba(236,231,214,.82);
+    --palco-linha:   rgba(236,231,214,.14);
+    --palco-inset:   rgba(236,231,214,.06);
+    --sombra: 0 1px 0 rgba(0,0,0,.2), 0 20px 44px -28px rgba(0,0,0,.6);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-tema="claro"]) {
+      --bg:#0E1A15; --bg-luz: radial-gradient(120% 80% at 88% -12%, rgba(232,178,58,.08), transparent 55%), radial-gradient(90% 70% at -5% 0%, rgba(24,158,118,.10), transparent 50%);
+      --surface:#16271F; --surface-2:#1E332A; --linha:#2C4438;
+      --texto:#ECE7D6; --texto-2:#9FB0A4; --marca:#43BD93;
+      --acao:#18A074; --acao-hover:#1FB585; --acao-texto:#06150F;
+      --acento-texto:#F0794B; --foco:#6AA6DE; --topo-bg:rgba(14,26,21,.88);
+      --palco-bg:#0B3A2B; --palco-texto:#ECE7D6; --palco-texto-2:rgba(236,231,214,.82);
+      --palco-linha:rgba(236,231,214,.14); --palco-inset:rgba(236,231,214,.06);
+      --sombra:0 1px 0 rgba(0,0,0,.2), 0 20px 44px -28px rgba(0,0,0,.6);
+    }
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    margin: 0;
+    background-color: var(--bg);
+    background-image: var(--bg-luz);
+    background-attachment: fixed;
+    color: var(--texto);
+    font-family: var(--corpo);
+    font-size: var(--t-16);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    transition: background-color .25s ease, color .25s ease;
+  }
+
+  .envelope { max-width: var(--max); margin: 0 auto; padding: 0 clamp(1rem, 3vw, 2rem); }
+
+  a:focus-visible, button:focus-visible, [tabindex]:focus-visible, input:focus-visible {
+    outline: 3px solid var(--foco); outline-offset: 2px; border-radius: 5px;
+  }
+
+  .eyebrow {
+    font-family: var(--mono); font-size: var(--t-13); font-weight: 500;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--acento-texto); margin: 0;
+  }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .pular { position: absolute; left: -999px; top: 0; background: var(--acao); color: var(--acao-texto); padding: 0.6rem 1rem; border-radius: 0 0 8px 0; z-index: 60; }
+  .pular:focus { left: 0; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+  /* ============== 1 · BARRA INSTITUCIONAL (tela interna: O Plenário lidera) ============== */
+  .topo {
+    position: sticky; top: 0; z-index: 30;
+    background: var(--topo-bg);
+    backdrop-filter: saturate(140%) blur(10px);
+    border-bottom: 1px solid var(--linha);
+  }
+  .topo-grade { display: flex; align-items: center; gap: 0.8rem 1.3rem; padding: 0.7rem 0; flex-wrap: wrap; }
+  .marca { display: flex; align-items: center; gap: 0.65rem; }
+  .marca-simbolo { width: 34px; height: 34px; flex: 0 0 auto; display: block; }
+  .marca-nome { font-family: var(--display); font-weight: 800; font-size: var(--t-21); letter-spacing: -0.015em; color: var(--marca); line-height: 1; margin: 0; }
+  .marca-orgao { font-size: var(--t-13); color: var(--texto-2); margin: 2px 0 0; line-height: 1; }
+  .topo-sep { width: 1px; align-self: stretch; background: var(--linha); margin: 2px 0; }
+
+  .area-tag { display: inline-flex; align-items: center; gap: 0.5rem; font-family: var(--mono); font-size: var(--t-13); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--texto); }
+  .area-tag svg { color: var(--marca); flex: 0 0 auto; }
+
+  .topo-dir { margin-left: auto; display: flex; align-items: center; gap: 0.7rem; }
+  .data-pill { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); text-align: right; line-height: 1.2; }
+  .data-pill b { display: block; color: var(--texto); font-weight: 600; }
+
+  /* sininho de notificações (11.6) */
+  .sino { position: relative; display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 999px; background: var(--surface); border: 1px solid var(--linha); color: var(--texto-2); cursor: pointer; transition: border-color .12s ease, color .12s ease; }
+  .sino:hover { border-color: var(--foco); color: var(--texto); }
+  .sino .badge { position: absolute; top: -3px; right: -3px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 999px; background: var(--telha); color: #fff; font-family: var(--mono); font-size: 0.66rem; font-weight: 600; display: grid; place-items: center; border: 2px solid var(--topo-bg); }
+
+  .tema-btn {
+    display: inline-flex; align-items: center; gap: 0.45rem;
+    font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2);
+    background: var(--surface); border: 1px solid var(--linha); border-radius: 999px;
+    padding: 0.4rem 0.7rem; cursor: pointer; min-height: 40px;
+    transition: border-color .12s ease, color .12s ease;
+  }
+  .tema-btn:hover { border-color: var(--foco); color: var(--texto); }
+  .tema-btn svg { color: var(--marca); }
+  .tema-btn .lua { display: none; }
+  [data-tema="escuro"] .tema-btn .sol { display: none; }
+  [data-tema="escuro"] .tema-btn .lua { display: inline; }
+  .tema-btn .tema-rotulo { display: none; }
+  @media (min-width: 600px) { .tema-btn .tema-rotulo { display: inline; } }
+
+  .quem-mesa { display: flex; align-items: center; gap: 0.55rem; }
+  .avatar { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; flex: 0 0 auto; font-family: var(--display); font-weight: 700; font-size: var(--t-13); color: #fff; background: var(--jade); }
+  .quem-mesa .quem { line-height: 1.15; }
+  .quem-mesa .quem b { font-weight: 600; font-size: var(--t-13); color: var(--texto); display: block; }
+  .quem-mesa .quem span { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+
+  /* sub-barra de contexto (read-model: o que é + frescor) */
+  .contexto { border-bottom: 1px solid var(--linha); background: var(--surface); }
+  .contexto-grade { display: flex; align-items: center; gap: 0.6rem 1.1rem; padding: 0.55rem 0; flex-wrap: wrap; }
+  .contexto-tit { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); }
+  .contexto-tit span { color: var(--texto-2); font-weight: 500; }
+  .frescor { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .frescor .ponto { width: 8px; height: 8px; border-radius: 50%; background: var(--jade-claro); flex: 0 0 auto; }
+  [data-tema="escuro"] .frescor .ponto { background: var(--marca); }
+  .periodo { margin-left: auto; display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); background: var(--bg); border: 1px solid var(--linha); border-radius: 999px; padding: 0.35rem 0.75rem; }
+
+  main { padding-bottom: 8.5rem; } /* JS ajusta p/ a altura real da barra fixa */
+
+  /* ============== 2 · HERO — ILHA-PLACAR DA SAÚDE INSTITUCIONAL ============== */
+  .saude { position: relative; overflow: hidden; margin: clamp(1.2rem, 3vw, 2rem) 0 0; background: var(--palco-bg); color: var(--palco-texto); border-radius: var(--raio); box-shadow: var(--sombra); }
+  .saude::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 5px; background: linear-gradient(90deg, var(--jade) 0 20%, var(--cobalto) 20% 40%, var(--telha) 40% 60%, var(--amarelo) 60% 80%, var(--jade-claro) 80% 100%); }
+  .saude-corpo { padding: clamp(1.4rem, 3.2vw, 2.1rem); }
+  .saude .eyebrow { color: var(--amarelo); }
+  .saude h1 { font-family: var(--display); font-weight: 800; font-size: clamp(var(--t-28), 4vw, var(--t-40)); line-height: 1.08; letter-spacing: -0.025em; color: var(--palco-texto); margin: 0.7rem 0 0; text-wrap: balance; }
+  .saude h1 em { font-style: normal; color: #8FE3C6; }
+  .saude-sub { color: var(--palco-texto-2); font-size: var(--t-16); margin: 0.7rem 0 0; max-width: 56ch; line-height: 1.5; }
+  .saude-sub b { color: var(--palco-texto); font-weight: 600; }
+
+  .saude-grade { display: grid; grid-template-columns: minmax(0,1.45fr) minmax(0,1fr); gap: clamp(1.2rem, 2.6vw, 2rem); align-items: stretch; margin: 1.5rem 0 0; }
+  .saude-col { background: var(--palco-inset); border: 1px solid var(--palco-linha); border-radius: var(--raio-sm); padding: 1.1rem 1.15rem 1.2rem; }
+  .saude-col > .rotulo { display: flex; align-items: center; gap: 0.5rem; font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--palco-texto-2); margin: 0 0 0.9rem; }
+
+  /* placar de obrigações — UM placar (gramática de votação), não 3 cartões */
+  .placar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border: 1px solid var(--palco-linha); border-radius: var(--raio-sm); overflow: hidden; }
+  .ob-col { padding: 0.85rem 0.9rem; border-left: 1px solid var(--palco-linha); }
+  .ob-col:first-child { border-left: 0; }
+  .ob-col .rotulo { display: flex; align-items: center; gap: 0.45rem; font-family: var(--mono); font-size: var(--t-12); text-transform: uppercase; letter-spacing: .05em; color: var(--palco-texto-2); margin: 0 0 0.3rem; }
+  .ob-col .gl { width: 14px; height: 14px; flex: 0 0 auto; }
+  .ob-col .n { font-family: var(--display); font-weight: 800; font-size: var(--t-40); line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; margin: 0; }
+  .ob-dia .n { color: #8FE3C6; }
+  .ob-vencer .n { color: var(--amarelo); }
+  .ob-risco .n { color: #F2A488; }
+  .ob-col .est { font-family: var(--mono); font-size: var(--t-12); color: var(--palco-texto-2); margin: 0.2rem 0 0; }
+  .placar-nota { font-family: var(--mono); font-size: var(--t-12); color: var(--palco-texto-2); margin: 0.9rem 0 0; display: flex; align-items: center; gap: 0.45rem; }
+  .placar-nota svg { color: #8FE3C6; flex: 0 0 auto; }
+
+  /* próxima remessa: anel do prazo + ciclo de obrigação (3ª leitura do azulejo) */
+  .remessa { display: flex; flex-direction: column; }
+  .remessa-topo { display: flex; align-items: center; gap: 1rem; }
+  .prazo-anel { position: relative; width: 92px; height: 92px; flex: 0 0 auto; }
+  .prazo-anel svg { width: 92px; height: 92px; transform: rotate(-90deg); display: block; }
+  .prazo-anel .trilho { fill: none; stroke: var(--linha); stroke-width: 8; }
+  .prazo-anel .arco { fill: none; stroke: var(--jade-claro); stroke-width: 8; stroke-linecap: round; }
+  [data-tema="escuro"] .prazo-anel .arco { stroke: var(--marca); }
+  .prazo-anel .centro { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
+  .prazo-anel .dias { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--marca); line-height: 1; font-variant-numeric: tabular-nums; }
+  .prazo-anel .un { font-family: var(--mono); font-size: 0.72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--texto-2); }
+  /* anel sobre a ilha escura: trilho/arco e número em tokens de palco */
+  .saude .prazo-anel .trilho { stroke: var(--palco-linha); }
+  .saude .prazo-anel .arco { stroke: var(--amarelo); }
+  .saude .prazo-anel .dias { color: var(--amarelo); }
+  .saude .prazo-anel .un { color: var(--palco-texto-2); }
+  .remessa-quem b { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--palco-texto); display: block; line-height: 1.25; }
+  .remessa-quem span { font-family: var(--mono); font-size: var(--t-13); color: var(--palco-texto-2); }
+
+  .azulejo-pedido { width: 100%; height: auto; display: block; margin: 1.1rem 0 0; }
+  .azulejo-pedido text { fill: var(--texto-2); }
+  .azulejo-pedido text.ativo { fill: var(--acento-texto); font-weight: 600; }
+  .azulejo-pedido text.pendente { fill: var(--texto-2); opacity: .62; }
+  .saude .azulejo-pedido text { fill: var(--palco-texto-2); }
+  .saude .azulejo-pedido text.ativo { fill: var(--amarelo); font-weight: 600; }
+  .saude .azulejo-pedido text.pendente { fill: var(--palco-texto-2); opacity: .6; }
+
+  /* selos de continuidade (desarmam o jurídico) */
+  .continuidade { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.7rem; margin: 1.4rem 0 0; }
+  .selo-cont { display: flex; align-items: flex-start; gap: 0.6rem; background: var(--palco-inset); border: 1px solid var(--palco-linha); border-radius: var(--raio-sm); padding: 0.8rem 0.9rem; }
+  .selo-cont svg { flex: 0 0 auto; color: #8FE3C6; margin-top: 1px; }
+  .selo-cont .t { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; text-transform: uppercase; color: var(--palco-texto-2); }
+  .selo-cont .v { font-weight: 600; font-size: var(--t-13); color: var(--palco-texto); display: block; margin-top: 1px; }
+  .selo-cont a { color: #8FE3C6; font-weight: 600; text-decoration-color: rgba(143,227,198,.5); text-underline-offset: 3px; }
+
+  /* ============== 3 · GRID DO COCKPIT ============== */
+  .cockpit { display: grid; grid-template-columns: minmax(0,1fr) 372px; gap: clamp(1rem, 2.4vw, 1.6rem); padding: clamp(1.1rem, 2.6vw, 1.6rem) 0 0; align-items: start; }
+  .coluna { display: grid; gap: 1.1rem; min-width: 0; }
+  .rail { display: grid; gap: 1.1rem; position: sticky; top: 84px; }
+
+  .bloco { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); }
+  .bloco-cabeca { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0.9rem 1.1rem; border-bottom: 1px solid var(--linha); }
+  .bloco-cabeca h2 { font-family: var(--display); font-weight: 600; font-size: var(--t-16); letter-spacing: -0.01em; color: var(--texto); margin: 0; display: flex; align-items: center; gap: 0.55rem; }
+  .bloco-cabeca .selo-n { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .bloco-corpo { padding: 1.1rem; }
+
+  /* contador-âncora textual no topo das filas (nunca KPI-card solto) */
+  .ancora { font-size: var(--t-13); color: var(--texto-2); margin: 0 0 0.9rem; }
+  .ancora b { font-family: var(--display); font-weight: 700; color: var(--texto); }
+  .ancora .urg { color: var(--acento-texto); font-weight: 600; }
+  .nota-gap { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin: 0.9rem 0 0; display: flex; align-items: flex-start; gap: 0.45rem; line-height: 1.4; }
+  .nota-gap svg { color: var(--acento-texto); flex: 0 0 auto; margin-top: 2px; }
+
+  /* ---- PRAZOS "o que vence" (11.1) — trilho por urgência ---- */
+  .prazos { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.65rem; }
+  .prazo-item { display: grid; grid-template-columns: 64px 1fr auto; gap: 0.9rem; align-items: center; padding: 0.85rem 0.95rem; background: var(--surface-2); border: 1px solid var(--linha); border-left-width: 4px; border-radius: var(--raio-sm); }
+  .prz-urgente { border-left-color: var(--telha); }
+  .prz-atencao { border-left-color: var(--amarelo); }
+  .prz-noprazo { border-left-color: var(--jade-claro); }
+  .anel-c { position: relative; width: 64px; height: 64px; flex: 0 0 auto; }
+  .anel-c svg { width: 64px; height: 64px; transform: rotate(-90deg); display: block; }
+  .anel-c .trilho { fill: none; stroke: var(--linha); stroke-width: 6; }
+  .anel-c .arco { fill: none; stroke-width: 6; stroke-linecap: round; }
+  .prz-urgente .anel-c .arco { stroke: var(--telha); }
+  .prz-atencao .anel-c .arco { stroke: var(--amarelo); }
+  .prz-noprazo .anel-c .arco { stroke: var(--jade-claro); }
+  [data-tema="escuro"] .prz-noprazo .anel-c .arco { stroke: var(--marca); }
+  .anel-c .centro { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; line-height: 1; }
+  .anel-c .d { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--texto); font-variant-numeric: tabular-nums; }
+  .anel-c .u { font-family: var(--mono); font-size: 0.62rem; letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); }
+  .prazo-obj b { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); display: block; line-height: 1.3; }
+  .prazo-obj .base { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin-top: 2px; display: inline-flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+  .prazo-obj .quando { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .tag-urg { justify-self: end; align-self: center; display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; padding: 0.28rem 0.6rem; border-radius: 999px; white-space: nowrap; }
+  .tag-urg .gl { width: 13px; height: 13px; flex: 0 0 auto; }
+  .prz-urgente .tag-urg { color: #fff; background: var(--telha-fundo); }
+  .prz-atencao .tag-urg { color: var(--texto); background: rgba(232,178,58,.22); border: 1px solid rgba(232,178,58,.55); }
+  .prz-noprazo .tag-urg { color: var(--marca); background: rgba(12,83,64,.1); border: 1px solid rgba(12,83,64,.26); }
+  [data-tema="escuro"] .prz-noprazo .tag-urg { color: var(--marca); border-color: rgba(67,189,147,.4); background: rgba(67,189,147,.12); }
+
+  /* ---- PENDÊNCIAS / DESPACHOS DA MESA (11.2) — fila de ação ---- */
+  .fila { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+  .fila-item { display: grid; grid-template-columns: 1fr auto; gap: 0.8rem 1rem; align-items: center; padding: 0.8rem 0.95rem; background: var(--surface-2); border: 1px solid var(--linha); border-left-width: 4px; border-radius: var(--raio-sm); }
+  .f-hoje { border-left-color: var(--telha); }
+  .f-semana { border-left-color: var(--amarelo); }
+  .f-livre { border-left-color: var(--linha); }
+  .fila-txt { min-width: 0; }
+  .fila-txt .tag-p { display: inline-flex; align-items: center; gap: 0.35rem; font-family: var(--mono); font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; padding: 0.18rem 0.5rem; border-radius: 999px; margin-bottom: 0.3rem; }
+  .f-hoje .tag-p { color: #fff; background: var(--telha-fundo); }
+  .f-semana .tag-p { color: var(--texto); background: rgba(232,178,58,.22); border: 1px solid rgba(232,178,58,.5); }
+  .f-livre .tag-p { color: var(--texto-2); background: var(--bg); border: 1px solid var(--linha); }
+  .fila-txt b { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); display: block; line-height: 1.3; }
+  .fila-txt .de { font-size: var(--t-13); color: var(--texto-2); }
+  .fila-txt .de .pz { font-family: var(--mono); color: var(--acento-texto); }
+  .f-livre .fila-txt .de .pz, .f-semana .fila-txt .de .pz { color: var(--texto-2); }
+  .fila-acao { justify-self: end; }
+
+  .btn { font-family: var(--corpo); font-weight: 600; font-size: var(--t-16); border-radius: var(--raio-sm); border: 1px solid transparent; padding: 0.7rem 1.15rem; cursor: pointer; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; line-height: 1.2; text-decoration: none; transition: transform .12s ease, background-color .12s ease, box-shadow .12s ease, border-color .12s ease; }
+  .btn:hover { transform: translateY(-1px); }
+  .btn svg { flex: 0 0 auto; }
+  .btn-primaria { background: var(--acao); color: var(--acao-texto); box-shadow: 0 10px 22px -16px rgba(12,83,64,.9); }
+  .btn-primaria:hover { background: var(--acao-hover); }
+  .btn-contorno { background: transparent; color: var(--texto); border-color: var(--linha); }
+  .btn-contorno:hover { background: var(--surface-2); border-color: var(--texto-2); }
+  .btn-fantasma { background: transparent; color: var(--texto-2); border-color: transparent; }
+  .btn-fantasma:hover { background: var(--surface-2); color: var(--texto); }
+  .btn[aria-disabled="true"] { opacity: .42; cursor: not-allowed; transform: none; box-shadow: none; }
+  .btn-mini { font-size: var(--t-13); padding: 0.5rem 0.95rem; min-height: 44px; }
+
+  /* ---- PRÓXIMA SESSÃO / PRONTIDÃO (4.4 / 4.15 / ponte 4.17) ---- */
+  .sessao-quando { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; margin: 0 0 0.2rem; }
+  .sessao-quando .tipo { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); letter-spacing: -0.015em; }
+  .sessao-quando .dia { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); }
+  .convoc-ok { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); color: var(--marca); margin: 0 0 1rem; }
+  .convoc-ok svg { flex: 0 0 auto; }
+  .quorum-num { display: flex; align-items: baseline; gap: 0.5rem; }
+  .quorum-num b { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--marca); line-height: 1; font-variant-numeric: tabular-nums; }
+  .quorum-num span { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); }
+  .hemi { width: 100%; height: auto; display: block; margin: 0.5rem 0 0.2rem; }
+  .hemi .presente { fill: var(--acao); }
+  .hemi .ausente { fill: var(--linha); }
+  .quorum-legenda { display: flex; gap: 1rem; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin-top: 0.2rem; }
+  .quorum-legenda i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 0.35rem; vertical-align: -1px; }
+  .quorum-legenda i.pres { background: var(--acao); }
+  .quorum-legenda i.aus { background: var(--linha); }
+
+  .checklist { list-style: none; margin: 1.1rem 0 0; padding: 1rem 0 0; border-top: 1px dashed var(--linha); display: grid; gap: 0.6rem; }
+  .checklist li { display: flex; align-items: flex-start; gap: 0.6rem; font-size: var(--t-13); color: var(--texto); }
+  .checklist .ck { flex: 0 0 auto; width: 18px; height: 18px; margin-top: 1px; }
+  .checklist .ok .ck { color: var(--marca); }
+  .checklist .pend .ck { color: var(--acento-texto); }
+  .checklist .maioria { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); display: block; margin-top: 1px; }
+  .ponte { margin: 1.1rem 0 0; display: grid; gap: 0.55rem; }
+
+  /* ---- PIPELINE LEGISLATIVO (11.3) — tabuleiro de estágios ---- */
+  .pipeline-board { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.7rem; }
+  .estagio { background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.85rem 0.8rem; display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; }
+  .estagio-cab { display: flex; align-items: center; gap: 0.6rem; }
+  .estagio-azulejo { width: 38px; height: 38px; flex: 0 0 auto; display: block; }
+  .estagio-cab .meta { line-height: 1.1; }
+  .estagio-cab .nome { font-family: var(--mono); font-size: var(--t-12); text-transform: uppercase; letter-spacing: .05em; color: var(--texto-2); }
+  .estagio-cab .n { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: var(--texto); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .estagio-lista { list-style: none; margin: 0.1rem 0 0; padding: 0.6rem 0 0; border-top: 1px solid var(--linha); display: grid; gap: 0.5rem; }
+  .estagio-lista li { line-height: 1.25; }
+  .estagio-lista .ref { font-family: var(--mono); font-size: 0.7rem; color: var(--texto-2); }
+  .estagio-lista .tit { font-size: var(--t-12); color: var(--texto); display: block; }
+  .parado { display: inline-flex; align-items: center; gap: 0.3rem; font-family: var(--mono); font-size: 0.68rem; color: var(--acento-texto); margin-top: 2px; }
+  .parado svg { flex: 0 0 auto; }
+
+  .distribuicao { margin: 1.2rem 0 0; }
+  .distribuicao .rotulo-d { display: flex; align-items: baseline; justify-content: space-between; gap: 0.8rem; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin: 0 0 0.5rem; }
+  .barra-dist { display: flex; height: 26px; border-radius: var(--raio-sm); overflow: hidden; background: var(--bg); border: 1px solid var(--linha); }
+  .barra-dist span { display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: var(--t-12); font-weight: 600; color: #fff; min-width: 0; }
+  .seg-prot { background: #0C5340; }
+  .seg-comi { background: #1E5FA8; }
+  .seg-t1   { background: #D9542B; }
+  .seg-t2   { background: #16785C; }
+  .seg-sanc { background: #E8B23A; color: #4A3608; }
+  .dist-legenda { display: flex; flex-wrap: wrap; gap: 0.5rem 1.1rem; margin: 0.7rem 0 0; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .dist-legenda span { display: inline-flex; align-items: center; gap: 0.4rem; }
+  .dist-legenda i { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
+
+  /* ---- FAIXA DE ORGULHO INSTITUCIONAL (11.4) — vitrine ---- */
+  .orgulho-corpo { display: flex; flex-wrap: wrap; gap: 1.4rem 0; }
+  .org-stat { flex: 1 1 200px; padding: 0 1.4rem; border-left: 1px solid var(--linha); min-width: 0; }
+  .org-stat:first-child { border-left: 0; padding-left: 0; }
+  .org-stat .n { font-family: var(--display); font-weight: 800; font-size: var(--t-40); line-height: 1; letter-spacing: -0.02em; color: var(--texto); font-variant-numeric: tabular-nums; margin: 0; }
+  .org-stat .n small { font-family: var(--mono); font-size: var(--t-13); font-weight: 600; color: var(--marca); letter-spacing: 0; margin-left: 0.35rem; }
+  .org-stat .rot { font-size: var(--t-13); color: var(--texto-2); margin: 0.4rem 0 0; line-height: 1.35; }
+  /* nota de referência (medida-contra-régua), no lugar de sparkline decorativa */
+  .org-nota { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin: 0.7rem 0 0; display: inline-flex; align-items: center; gap: 0.45rem; }
+  .org-nota i { width: 8px; height: 8px; border-radius: 50%; background: var(--jade-claro); flex: 0 0 auto; }
+  [data-tema="escuro"] .org-nota i { background: var(--marca); }
+
+  /* ============== 4 · BARRA DE COMANDO DA MESA ============== */
+  .comando { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--surface); border-top: 1px solid var(--linha); box-shadow: 0 -18px 44px -30px rgba(12,83,64,.55); }
+  .comando-grade { display: flex; align-items: center; gap: 0.7rem 1rem; padding: 0.7rem 0; flex-wrap: wrap; }
+  .comando-ctx { color: var(--texto); font-size: var(--t-13); line-height: 1.25; }
+  .comando-ctx b { font-family: var(--display); font-weight: 600; color: var(--texto); display: block; }
+  .comando-ctx span { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .comando-acoes { margin-left: auto; display: flex; gap: 0.6rem; flex-wrap: wrap; }
+  .dica-mesa { width: 100%; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); padding-bottom: 0.55rem; display: flex; align-items: center; gap: 0.45rem; }
+  .dica-mesa svg { color: var(--acento-texto); flex: 0 0 auto; }
+
+  /* ============== RESPONSIVO ============== */
+  @media (max-width: 1040px) {
+    .cockpit { grid-template-columns: 1fr; }
+    .rail { position: static; }
+    .saude-grade { grid-template-columns: 1fr; }
+    .pipeline-board { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 720px) {
+    .topo-dir { margin-left: 0; width: 100%; justify-content: space-between; flex-wrap: wrap; }
+    .periodo { margin-left: 0; }
+    .placar { grid-template-columns: 1fr; }
+    .ob-col { display: flex; align-items: center; justify-content: space-between; border-left: 0; border-top: 1px solid var(--palco-linha); }
+    .ob-col:first-child { border-top: 0; }
+    .ob-col .rotulo { margin: 0; }
+    .ob-col .est { display: none; }
+    .continuidade { grid-template-columns: 1fr; }
+    .pipeline-board { grid-template-columns: 1fr; }
+    .prazo-item { grid-template-columns: 56px 1fr; }
+    .prazo-item .tag-urg { grid-column: 2; justify-self: start; }
+    .fila-item { grid-template-columns: 1fr; }
+    .fila-acao { justify-self: stretch; }
+    .fila-acao .btn { width: 100%; }
+    .org-stat { border-left: 0; padding: 0; flex-basis: 100%; }
+    .dica-mesa, .comando-ctx { display: none; }
+    .comando-acoes { width: 100%; }
+    .comando-acoes .btn { flex: 1 1 auto; font-size: var(--t-13); padding: 0.6rem 0.7rem; }
+    .comando-acoes .btn-primaria { flex: 1 0 100%; order: -1; }
+  }
+  @media (max-width: 460px) {
+    .anel-c { width: 56px; height: 56px; }
+    .anel-c svg { width: 56px; height: 56px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+    .btn:hover, .sino:hover, .tema-btn:hover { transform: none; }
+  }
+</style>
+</head>
+<body>
+
+  <a class="pular" href="#conteudo">Pular para o conteúdo</a>
+
+  <!-- ============== 1 · BARRA INSTITUCIONAL ============== -->
+  <header class="topo">
+    <div class="envelope topo-grade">
+      <div class="marca">
+        <svg class="marca-simbolo" viewBox="0 0 40 40" role="img" aria-label="O Plenário">
+          <circle cx="20" cy="20" r="19" fill="#FBF8F0" stroke="#E0D7BF"/>
+          <path d="M7 27 A13 13 0 0 1 33 27" fill="none" stroke="#0C5340" stroke-width="2.4" stroke-linecap="round"/>
+          <path d="M10 27 A10 10 0 0 1 30 27" fill="none" stroke="#1E5FA8" stroke-width="2.4" stroke-linecap="round"/>
+          <path d="M13.5 27 A6.5 6.5 0 0 1 26.5 27" fill="none" stroke="#D9542B" stroke-width="2.4" stroke-linecap="round"/>
+          <rect x="18.4" y="9.5" width="3.2" height="6" rx="1.2" fill="#E8B23A"/>
+        </svg>
+        <div>
+          <p class="marca-nome">O&nbsp;Plenário</p>
+          <p class="marca-orgao">Câmara Municipal de Fortaleza</p>
+        </div>
+      </div>
+
+      <div class="topo-sep" aria-hidden="true"></div>
+
+      <span class="area-tag">
+        <svg width="17" height="17" viewBox="0 0 17 17" aria-hidden="true"><rect x="2" y="2" width="6" height="6" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="2" width="6" height="6" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="2" y="9" width="6" height="6" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="9" width="6" height="6" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+        Painéis da Mesa
+      </span>
+
+      <div class="topo-dir">
+        <button class="sino" type="button" aria-label="Notificações: 3 não lidas">
+          <svg width="19" height="19" viewBox="0 0 19 19" aria-hidden="true"><path d="M9.5 2.5a4.5 4.5 0 0 0-4.5 4.5c0 4-1.5 5-1.5 5h12s-1.5-1-1.5-5a4.5 4.5 0 0 0-4.5-4.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 15a1.5 1.5 0 0 0 3 0" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          <span class="badge mono" aria-hidden="true">3</span>
+        </button>
+        <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" title="Alternar tema claro / escuro">
+          <svg class="sol" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3.2" fill="currentColor"/><g stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13"/></g></svg>
+          <svg class="lua" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M13 9.5A5.5 5.5 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z" fill="currentColor"/></svg>
+          <span class="tema-rotulo">Claro</span>
+        </button>
+        <div class="data-pill"><b>ter, 21 mai 2026</b><span>14h47 · America/Fortaleza</span></div>
+        <div class="quem-mesa">
+          <span class="avatar" aria-hidden="true">SL</span>
+          <span class="quem"><b>Ver. Sérgio Lopes</b><span>Presidente da Mesa</span></span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- sub-barra de contexto (read-model) -->
+  <div class="contexto">
+    <div class="envelope contexto-grade">
+      <span class="contexto-tit">Mesa Diretora · <span>visão institucional da Casa</span></span>
+      <span class="frescor"><span class="ponto" aria-hidden="true"></span>Atualizado há 2 min · projeção do registro da Casa</span>
+      <span class="periodo">
+        <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden="true"><rect x="1.5" y="2.5" width="10" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M1.5 5h10M4 1.5v2M9 1.5v2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+        Maio de 2026
+      </span>
+    </div>
+  </div>
+
+  <main id="conteudo" class="envelope">
+
+    <!-- ============== 2 · HERO — ILHA-PLACAR DA SAÚDE INSTITUCIONAL ============== -->
+    <section class="saude" aria-labelledby="saude-titulo">
+      <div class="saude-corpo">
+        <p class="eyebrow">Saúde institucional · prestação de contas da Mesa</p>
+        <h1 id="saude-titulo">A Casa está em dia com o <em>TCE&#8209;CE</em>.</h1>
+        <p class="saude-sub">Nenhum apontamento pendente. As obrigações são <b>monitoradas pelo motor de prazo</b>, e cada cumprimento fica registrado numa trilha auditável — a prova que o controle pede.</p>
+
+        <div class="saude-grade">
+          <!-- placar de obrigações do TCE -->
+          <div class="saude-col" role="group" aria-labelledby="ob-titulo">
+            <p class="rotulo" id="ob-titulo">
+              <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true"><path d="M2 7.5l3.2 3.2L13 3.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Obrigações do TCE-CE · 12 ativas
+            </p>
+            <div class="placar">
+              <div class="ob-col ob-dia">
+                <p class="rotulo">
+                  <svg class="gl" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6" fill="#8FE3C6"/><path d="M4 7.2l2 2 4-4.4" stroke="#0A4334" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  Em dia
+                </p>
+                <p class="n">11</p>
+                <p class="est">conformes</p>
+              </div>
+              <div class="ob-col ob-vencer">
+                <p class="rotulo">
+                  <svg class="gl" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1.5L13 12H1z" fill="#E8B23A"/><path d="M7 5.5v3M7 10h.01" stroke="#4A3608" stroke-width="1.5" stroke-linecap="round"/></svg>
+                  A vencer
+                </p>
+                <p class="n">1</p>
+                <p class="est">remessa de maio</p>
+              </div>
+              <div class="ob-col ob-risco">
+                <p class="rotulo">
+                  <svg class="gl" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1l1.7 1.7H11.3V5.3L13 7l-1.7 1.7v2.6H8.7L7 13l-1.7-1.7H2.7V8.7L1 7l1.7-1.7V2.7h2.6z" fill="#F2A488"/><path d="M5 5l4 4M9 5l-4 4" stroke="#5A1E10" stroke-width="1.3" stroke-linecap="round"/></svg>
+                  Vencidas
+                </p>
+                <p class="n">0</p>
+                <p class="est">nada em atraso</p>
+              </div>
+            </div>
+            <p class="placar-nota">
+              <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden="true"><circle cx="6.5" cy="6.5" r="5.5" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M6.5 3.5v3.2l2 1.3" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round"/></svg>
+              Reavaliado pelo motor há 2 min · histórico append-only
+            </p>
+          </div>
+
+          <!-- próxima remessa: anel + ciclo (3ª leitura do azulejo) -->
+          <div class="saude-col remessa" role="group" aria-labelledby="remessa-titulo">
+            <p class="rotulo" id="remessa-titulo">
+              <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true"><path d="M2 11l6-7 5 4-6 3z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+              Próxima remessa ao TCE
+            </p>
+            <div class="remessa-topo">
+              <!-- anel: faltam 9 dias (45% restante de janela ilustrativa) -->
+              <div class="prazo-anel" role="img" aria-label="Remessa de maio ao TCE-CE em curso; cerca de 9 dias restantes (prazo ilustrativo).">
+                <svg viewBox="0 0 92 92" aria-hidden="true">
+                  <circle class="trilho" cx="46" cy="46" r="40"></circle>
+                  <circle class="arco" cx="46" cy="46" r="40" stroke-dasharray="251.3" stroke-dashoffset="138.2"></circle>
+                </svg>
+                <div class="centro"><span class="dias">9</span><span class="un">dias</span></div>
+              </div>
+              <div class="remessa-quem">
+                <b>Remessa ao TCE · maio</b>
+                <span>janela em curso · regra em homologação</span>
+              </div>
+            </div>
+
+            <!-- 3ª leitura da faixa de azulejo: o ciclo de uma obrigação de compliance -->
+            <!-- estados reutilizam a gramática de Bulcão (sem 6ª cor); "Em risco/Vencida" usaria a peça telha -->
+            <svg class="azulejo-pedido" viewBox="0 0 360 88" role="img"
+                 aria-label="Ciclo da remessa de maio: Aberta concluída, Em curso em andamento, Aceita pelo TCE pendente.">
+              <defs>
+                <clipPath id="o0"><rect x="6"   y="6" width="68" height="56" rx="9"/></clipPath>
+                <clipPath id="o1"><rect x="146" y="6" width="68" height="56" rx="9"/></clipPath>
+                <clipPath id="o2"><rect x="286" y="6" width="68" height="56" rx="9"/></clipPath>
+              </defs>
+              <line x1="74"  y1="34" x2="146" y2="34" stroke="#16785C" stroke-width="2.4"/>
+              <line x1="214" y1="34" x2="286" y2="34" stroke="#16785C" stroke-width="2.4" stroke-dasharray="5 6" opacity=".55"/>
+              <!-- Materializada = concluída (jade cheio + miolo areia) -->
+              <g clip-path="url(#o0)"><rect x="6" y="6" width="68" height="56" fill="#0C5340"/><path d="M6 62 A68 56 0 0 1 74 6 L74 62 Z" fill="#16785C"/><circle cx="40" cy="34" r="12" fill="#F1ECDD"/></g>
+              <!-- Em curso = jade-fundo + 2 quartos amarelo Marajó -->
+              <g clip-path="url(#o1)"><rect x="146" y="6" width="68" height="56" fill="#0A4334"/><path d="M146 34 A34 28 0 0 1 180 6 L180 34 Z" fill="#E8B23A"/><path d="M180 34 A34 28 0 0 1 214 62 L180 62 Z" fill="#E8B23A"/><circle cx="180" cy="34" r="8" fill="#F1ECDD"/></g>
+              <!-- Aceita pelo TCE = pendente (concreto tracejado) -->
+              <g clip-path="url(#o2)"><rect x="286" y="6" width="68" height="56" fill="#0A4334"/><circle cx="320" cy="34" r="13" fill="none" stroke="#16785C" stroke-width="2.4" stroke-dasharray="5 6"/></g>
+              <g font-family="IBM Plex Mono, monospace" font-size="11">
+                <text x="40"  y="80" text-anchor="middle">Aberta</text>
+                <text x="180" y="80" text-anchor="middle" class="ativo">Em curso</text>
+                <text x="320" y="80" text-anchor="middle" class="pendente">Aceita</text>
+              </g>
+            </svg>
+          </div>
+        </div>
+
+        <!-- selos de continuidade — desarmam o medo do jurídico -->
+        <div class="continuidade">
+          <div class="selo-cont">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 1.5l6 2.2v4.1c0 4-2.6 6.4-6 7.7-3.4-1.3-6-3.7-6-7.7V3.7z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M6.2 9l2 2 3.6-4" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <div><span class="t">Janela de sessão</span><span class="v">No ar nas últimas 8 sessões</span></div>
+          </div>
+          <div class="selo-cont">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2.5 5.5c0-1.1 2.9-2 6.5-2s6.5.9 6.5 2-2.9 2-6.5 2-6.5-.9-6.5-2z" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2.5 5.5v7c0 1.1 2.9 2 6.5 2s6.5-.9 6.5-2v-7" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2.5 9c0 1.1 2.9 2 6.5 2s6.5-.9 6.5-2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+            <div><span class="t">Migração do legado</span><span class="v">0 perdas · trilha auditável</span></div>
+          </div>
+          <div class="selo-cont">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><rect x="3" y="2.5" width="12" height="13" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6 6h6M6 9h6M6 12h3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            <div><span class="t">Prova de compliance</span><span class="v"><a href="#">Ver a trilha de cumprimento →</a></span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============== 3 · GRID DO COCKPIT ============== -->
+    <div class="cockpit">
+
+      <!-- coluna principal -->
+      <div class="coluna">
+
+        <!-- PRAZOS "o que vence" (11.1) -->
+        <section class="bloco" aria-labelledby="prazos-titulo">
+          <div class="bloco-cabeca">
+            <h2 id="prazos-titulo">
+              <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M9 4.6V9l3 1.8" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              O que vence
+            </h2>
+            <span class="selo-n mono">compliance + tramitação</span>
+          </div>
+          <div class="bloco-corpo">
+            <p class="ancora">Ordenado por urgência. <span class="urg">1 vence nesta semana</span> · nenhum vencido.</p>
+            <ul class="prazos">
+
+              <li class="prazo-item prz-urgente">
+                <div class="anel-c" role="img" aria-label="Faltam 5 dias.">
+                  <svg viewBox="0 0 64 64" aria-hidden="true"><circle class="trilho" cx="32" cy="32" r="26"></circle><circle class="arco" cx="32" cy="32" r="26" stroke-dasharray="163.4" stroke-dashoffset="122.5"></circle></svg>
+                  <div class="centro"><span class="d">5</span><span class="u">dias</span></div>
+                </div>
+                <div class="prazo-obj">
+                  <b>Parecer da CCJ ao PLC 004/2026</b>
+                  <span class="base">Prazo regimental de comissão · <span class="quando">vence 26/05</span></span>
+                </div>
+                <span class="tag-urg">
+                  <svg class="gl" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1.5L13 12H1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M7 5.5v3M7 10h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                  Urgente
+                </span>
+              </li>
+
+              <li class="prazo-item prz-atencao">
+                <div class="anel-c" role="img" aria-label="Faltam 9 dias.">
+                  <svg viewBox="0 0 64 64" aria-hidden="true"><circle class="trilho" cx="32" cy="32" r="26"></circle><circle class="arco" cx="32" cy="32" r="26" stroke-dasharray="163.4" stroke-dashoffset="89.8"></circle></svg>
+                  <div class="centro"><span class="d">9</span><span class="u">dias</span></div>
+                </div>
+                <div class="prazo-obj">
+                  <b>Remessa ao TCE-CE · maio</b>
+                  <span class="base">Obrigação monitorada pelo motor · <span class="quando">regra em homologação</span></span>
+                </div>
+                <span class="tag-urg">
+                  <svg class="gl" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M7 3.8V7.2l2 1.2" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>
+                  Atenção
+                </span>
+              </li>
+
+              <li class="prazo-item prz-atencao">
+                <div class="anel-c" role="img" aria-label="Cerca de 10 dias restantes.">
+                  <svg viewBox="0 0 64 64" aria-hidden="true"><circle class="trilho" cx="32" cy="32" r="26"></circle><circle class="arco" cx="32" cy="32" r="26" stroke-dasharray="163.4" stroke-dashoffset="81.7"></circle></svg>
+                  <div class="centro"><span class="d">10</span><span class="u">dias</span></div>
+                </div>
+                <div class="prazo-obj">
+                  <b>Audiência das metas fiscais (LRF) · 1º quadrimestre</b>
+                  <span class="base">LRF art. 9º, §4º · Executivo perante a comissão · <span class="quando">até 31/05</span></span>
+                </div>
+                <span class="tag-urg">
+                  <svg class="gl" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M7 3.8V7.2l2 1.2" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>
+                  Atenção
+                </span>
+              </li>
+
+              <li class="prazo-item prz-noprazo">
+                <div class="anel-c" role="img" aria-label="Faltam 42 dias.">
+                  <svg viewBox="0 0 64 64" aria-hidden="true"><circle class="trilho" cx="32" cy="32" r="26"></circle><circle class="arco" cx="32" cy="32" r="26" stroke-dasharray="163.4" stroke-dashoffset="49.0"></circle></svg>
+                  <div class="centro"><span class="d">42</span><span class="u">dias</span></div>
+                </div>
+                <div class="prazo-obj">
+                  <b>Prestação de contas anual · exercício 2025</b>
+                  <span class="base">Contas da Mesa ao TCE-CE · <span class="quando">regra em homologação</span></span>
+                </div>
+                <span class="tag-urg">
+                  <svg class="gl" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 7.5l2.6 2.6L11 4.5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  No prazo
+                </span>
+              </li>
+
+            </ul>
+            <p class="nota-gap">
+              <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden="true"><circle cx="6.5" cy="6.5" r="5.5" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M6.5 5.8v3.4M6.5 3.7h.01" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+              Datas e prazos do TCE-CE são ilustrativos — as regras estão em homologação com o tribunal.
+            </p>
+          </div>
+        </section>
+
+        <!-- PENDÊNCIAS / DESPACHOS DA MESA (11.2) -->
+        <section class="bloco" aria-labelledby="fila-titulo">
+          <div class="bloco-cabeca">
+            <h2 id="fila-titulo">
+              <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 4.5h12M3 9h12M3 13.5h7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+              O que só a Mesa despacha
+            </h2>
+            <span class="selo-n mono">5 itens</span>
+          </div>
+          <div class="bloco-corpo">
+            <p class="ancora"><b>5</b> aguardam a sua decisão · <span class="urg">2 vencem hoje</span></p>
+            <ol class="fila">
+
+              <li class="fila-item f-hoje">
+                <div class="fila-txt">
+                  <span class="tag-p">Vence hoje</span>
+                  <b>Designar relator — PL 051/2026</b>
+                  <span class="de">Arborização viária · aguarda despacho da Presidência · <span class="pz">prazo hoje</span></span>
+                </div>
+                <div class="fila-acao"><button class="btn btn-primaria btn-mini" type="button">Designar</button></div>
+              </li>
+
+              <li class="fila-item f-hoje">
+                <div class="fila-txt">
+                  <span class="tag-p">Vence hoje</span>
+                  <b>Recurso ao e-SIC nº 2026/0471</b>
+                  <span class="de">Negado em 1ª instância · decisão da Mesa em 2ª · <span class="pz">prazo hoje</span></span>
+                </div>
+                <div class="fila-acao"><button class="btn btn-contorno btn-mini" type="button">Decidir</button></div>
+              </li>
+
+              <li class="fila-item f-semana">
+                <div class="fila-txt">
+                  <span class="tag-p">Esta semana</span>
+                  <b>Despachar distribuição — PLC 004/2026</b>
+                  <span class="de">Encaminhar às comissões competentes · <span class="pz">em 3 dias</span></span>
+                </div>
+                <div class="fila-acao"><button class="btn btn-contorno btn-mini" type="button">Despachar</button></div>
+              </li>
+
+              <li class="fila-item f-semana">
+                <div class="fila-txt">
+                  <span class="tag-p">Esta semana</span>
+                  <b>Assinar autógrafo — PL 038/2026</b>
+                  <span class="de">Aprovado em 2 turnos · enviar à sanção · <span class="pz">em 4 dias</span></span>
+                </div>
+                <div class="fila-acao"><button class="btn btn-contorno btn-mini" type="button">Assinar</button></div>
+              </li>
+
+              <li class="fila-item f-livre">
+                <div class="fila-txt">
+                  <span class="tag-p">Sem prazo crítico</span>
+                  <b>Revisar a ata da Sessão nº 13</b>
+                  <span class="de">Transcrição com IA · <span class="pz">aguarda conferência humana</span></span>
+                </div>
+                <div class="fila-acao"><button class="btn btn-fantasma btn-mini" type="button">Revisar</button></div>
+              </li>
+
+            </ol>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- rail: próxima sessão / prontidão -->
+      <aside class="rail" aria-label="Próxima sessão e prontidão">
+        <section class="bloco" aria-labelledby="proxima-titulo">
+          <div class="bloco-cabeca">
+            <h2 id="proxima-titulo">Próxima sessão</h2>
+            <span class="selo-n mono">hoje</span>
+          </div>
+          <div class="bloco-corpo">
+            <div class="sessao-quando">
+              <span class="tipo">Ordinária nº 15</span>
+              <span class="dia">ter 21 mai · 19h00</span>
+            </div>
+            <p class="convoc-ok">
+              <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2.5 7.5l3 3 6-7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Convocação publicada no prazo regimental
+            </p>
+
+            <div class="quorum-num"><b>38</b><span>de 43 deram ciência</span></div>
+            <svg id="hemiciclo" class="hemi" viewBox="0 0 240 130" role="img" aria-label="38 de 43 vereadores deram ciência da convocação; quórum de abertura assegurado."></svg>
+            <div class="quorum-legenda">
+              <span><i class="pres" aria-hidden="true"></i>Ciência 38</span>
+              <span><i class="aus" aria-hidden="true"></i>Pendente 5</span>
+            </div>
+
+            <ul class="checklist" aria-label="Prontidão da pauta">
+              <li class="ok">
+                <svg class="ck" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="8" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 9.2l2.3 2.3 4.7-5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span>Pauta publicada · <b>6 itens</b> na Ordem do Dia<span class="maioria">expediente + ordem do dia versionados</span></span>
+              </li>
+              <li class="ok">
+                <svg class="ck" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="8" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 9.2l2.3 2.3 4.7-5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span>Quórum de abertura assegurado<span class="maioria">mínimo 22 · maioria absoluta</span></span>
+              </li>
+              <li class="pend">
+                <svg class="ck" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="8" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M9 5v4.5M9 12h.01" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+                <span>PLC 004/2026 sem parecer da CCJ<span class="maioria">bloqueia votação · pode exigir adiamento</span></span>
+              </li>
+            </ul>
+
+            <div class="ponte">
+              <a class="btn btn-primaria" href="sessao-ao-vivo.html">
+                <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M5 3.5l9 5.5-9 5.5z" fill="currentColor"/></svg>
+                Abrir a Mesa de condução
+              </a>
+              <button class="btn btn-contorno" type="button">Ver a pauta completa</button>
+            </div>
+          </div>
+        </section>
+      </aside>
+
+    </div>
+
+    <!-- PIPELINE LEGISLATIVO (11.3) -->
+    <section class="bloco" aria-labelledby="pipeline-titulo" style="margin-top: clamp(1rem, 2.4vw, 1.6rem);">
+      <div class="bloco-cabeca">
+        <h2 id="pipeline-titulo">
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><rect x="2" y="3" width="3.4" height="12" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="7.3" y="3" width="3.4" height="12" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="12.6" y="3" width="3.4" height="12" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+          Onde está cada proposição
+        </h2>
+        <span class="selo-n mono">47 em tramitação</span>
+      </div>
+      <div class="bloco-corpo">
+        <div class="pipeline-board">
+
+          <section class="estagio" aria-labelledby="e-prot">
+            <div class="estagio-cab">
+              <svg class="estagio-azulejo" viewBox="0 0 46 46" aria-hidden="true"><clipPath id="ea0"><rect x="2" y="2" width="42" height="42" rx="8"/></clipPath><g clip-path="url(#ea0)"><rect x="2" y="2" width="42" height="42" fill="#0C5340"/><path d="M2 44 A42 42 0 0 1 44 2 L44 44 Z" fill="#16785C"/><circle cx="23" cy="23" r="8" fill="#F1ECDD"/></g></svg>
+              <div class="meta"><span class="nome">Protocolo</span><span class="n" id="e-prot">12</span></div>
+            </div>
+            <ul class="estagio-lista">
+              <li><span class="ref">PL 062/2026</span><span class="tit">Reforma da Praça da Gentilândia</span></li>
+              <li><span class="ref">Req 124/2026</span><span class="tit">Dados de iluminação pública</span></li>
+            </ul>
+          </section>
+
+          <section class="estagio" aria-labelledby="e-comi">
+            <div class="estagio-cab">
+              <svg class="estagio-azulejo" viewBox="0 0 46 46" aria-hidden="true"><clipPath id="ea1"><rect x="2" y="2" width="42" height="42" rx="8"/></clipPath><g clip-path="url(#ea1)"><rect x="2" y="2" width="42" height="42" fill="#1E5FA8"/><path d="M2 2 A42 42 0 0 1 44 44 L2 44 Z" fill="#184E8A"/><circle cx="23" cy="23" r="8" fill="#F1ECDD"/></g></svg>
+              <div class="meta"><span class="nome">Comissões</span><span class="n" id="e-comi">18</span></div>
+            </div>
+            <ul class="estagio-lista">
+              <li>
+                <span class="ref">PLC 004/2026</span><span class="tit">Código de Posturas</span>
+                <span class="parado"><svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true"><circle cx="5.5" cy="5.5" r="4.6" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M5.5 3.2v2.5l1.6 1" stroke="currentColor" stroke-width="1.1" fill="none" stroke-linecap="round"/></svg>parado há 22 dias</span>
+              </li>
+              <li><span class="ref">PL 047/2026</span><span class="tit">Programa de hortas escolares</span></li>
+            </ul>
+          </section>
+
+          <section class="estagio" aria-labelledby="e-t1">
+            <div class="estagio-cab">
+              <svg class="estagio-azulejo" viewBox="0 0 46 46" aria-hidden="true"><clipPath id="ea2"><rect x="2" y="2" width="42" height="42" rx="8"/></clipPath><g clip-path="url(#ea2)"><rect x="2" y="2" width="42" height="42" fill="#D9542B"/><path d="M44 2 A42 42 0 0 1 2 44 L2 2 Z" fill="#B9421F"/><circle cx="23" cy="23" r="8" fill="#F1ECDD"/></g></svg>
+              <div class="meta"><span class="nome">1º turno</span><span class="n" id="e-t1">9</span></div>
+            </div>
+            <ul class="estagio-lista">
+              <li><span class="ref">PL 051/2026</span><span class="tit">Arborização viária</span></li>
+              <li><span class="ref">PL 044/2026</span><span class="tit">Calçada acessível</span></li>
+            </ul>
+          </section>
+
+          <section class="estagio" aria-labelledby="e-t2">
+            <div class="estagio-cab">
+              <svg class="estagio-azulejo" viewBox="0 0 46 46" aria-hidden="true"><clipPath id="ea3"><rect x="2" y="2" width="42" height="42" rx="8"/></clipPath><g clip-path="url(#ea3)"><rect x="2" y="2" width="42" height="42" fill="#16785C"/><path d="M2 44 A42 42 0 0 1 44 2 L44 44 Z" fill="#0A4334"/><circle cx="23" cy="23" r="8" fill="#F1ECDD"/></g></svg>
+              <div class="meta"><span class="nome">2º turno</span><span class="n" id="e-t2">5</span></div>
+            </div>
+            <ul class="estagio-lista">
+              <li><span class="ref">PL 042/2026</span><span class="tit">Hortas Comunitárias · em votação</span></li>
+              <li><span class="ref">PL 039/2026</span><span class="tit">Feira de economia solidária</span></li>
+            </ul>
+          </section>
+
+          <section class="estagio" aria-labelledby="e-sanc">
+            <div class="estagio-cab">
+              <svg class="estagio-azulejo" viewBox="0 0 46 46" aria-hidden="true"><clipPath id="ea4"><rect x="2" y="2" width="42" height="42" rx="8"/></clipPath><g clip-path="url(#ea4)"><rect x="2" y="2" width="42" height="42" fill="#E8B23A"/><path d="M2 2 A42 42 0 0 1 44 44 L2 44 Z" fill="#C8922A"/><circle cx="23" cy="23" r="8" fill="#F1ECDD"/></g></svg>
+              <div class="meta"><span class="nome">Sanção</span><span class="n" id="e-sanc">3</span></div>
+            </div>
+            <ul class="estagio-lista">
+              <li>
+                <span class="ref">PL 038/2026</span><span class="tit">Denominação de via</span>
+                <span class="parado"><svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true"><circle cx="5.5" cy="5.5" r="4.6" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M5.5 3.2v2.5l1.6 1" stroke="currentColor" stroke-width="1.1" fill="none" stroke-linecap="round"/></svg>aguarda autógrafo</span>
+              </li>
+            </ul>
+          </section>
+
+        </div>
+
+        <!-- barra de distribuição segmentada (composição honesta da carga) -->
+        <div class="distribuicao">
+          <p class="rotulo-d"><span>Carga por estágio</span><span>47 proposições ativas</span></p>
+          <div class="barra-dist" role="img" aria-label="Carga por estágio: Protocolo 12, Comissões 18, 1º turno 9, 2º turno 5, Sanção 3.">
+            <span class="seg-prot" style="width:25.5%"></span>
+            <span class="seg-comi" style="width:38.3%"></span>
+            <span class="seg-t1" style="width:19.1%"></span>
+            <span class="seg-t2" style="width:10.6%"></span>
+            <span class="seg-sanc" style="width:6.5%"></span>
+          </div>
+          <div class="dist-legenda">
+            <span><i style="background:#0C5340" aria-hidden="true"></i>Protocolo · 12</span>
+            <span><i style="background:#1E5FA8" aria-hidden="true"></i>Comissões · 18</span>
+            <span><i style="background:#D9542B" aria-hidden="true"></i>1º turno · 9</span>
+            <span><i style="background:#16785C" aria-hidden="true"></i>2º turno · 5</span>
+            <span><i style="background:#E8B23A" aria-hidden="true"></i>Sanção · 3</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAIXA DE ORGULHO INSTITUCIONAL (11.4) -->
+    <section class="bloco" aria-labelledby="orgulho-titulo" style="margin-top: clamp(1rem, 2.4vw, 1.6rem);">
+      <div class="bloco-cabeca">
+        <h2 id="orgulho-titulo">O que a Casa entregou</h2>
+        <span class="selo-n mono">maio · ao mês</span>
+      </div>
+      <div class="bloco-corpo">
+        <div class="orgulho-corpo">
+          <div class="org-stat">
+            <p class="n">47 <small>+6 no mês</small></p>
+            <p class="rot">Proposições em tramitação</p>
+            <p class="org-nota"><i aria-hidden="true"></i>18 em comissões · 5 prontas para pauta</p>
+          </div>
+          <div class="org-stat">
+            <p class="n">89<small>%</small></p>
+            <p class="rot">Presença média nas sessões</p>
+            <p class="org-nota"><i aria-hidden="true"></i>média do biênio: 86%</p>
+          </div>
+          <div class="org-stat">
+            <p class="n">96<small>%</small></p>
+            <p class="rot">Pedidos de informação respondidos no prazo (LAI)</p>
+            <p class="org-nota"><i aria-hidden="true"></i>47 de 49 · piso legal 100%</p>
+          </div>
+          <div class="org-stat">
+            <p class="n">14<small>/14</small></p>
+            <p class="rot">Sessões transmitidas ao vivo</p>
+            <p class="org-nota"><i aria-hidden="true"></i>100% do ano legislativo</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ============== 4 · BARRA DE COMANDO DA MESA ============== -->
+  <div class="comando" role="region" aria-label="Atos da Mesa">
+    <div class="envelope">
+      <p class="dica-mesa">
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1v2M7 11v2M1 7h2M11 7h2M2.8 2.8l1.4 1.4M9.8 9.8l1.4 1.4M11.2 2.8L9.8 4.2M4.2 9.8l-1.4 1.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+        Convocar uma sessão publica o edital e abre o prazo de ciência. Todo ato da Mesa fica no histórico da Casa, assinado por quem o praticou.
+      </p>
+      <div class="comando-grade">
+        <div class="comando-ctx">
+          <b>Mesa Diretora · maio de 2026</b>
+          <span>5 pendências · 1 prazo nesta semana · 0 obrigações vencidas</span>
+        </div>
+        <div class="comando-acoes">
+          <button class="btn btn-fantasma" type="button">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 2v8M9 10l-3-3M9 10l3-3M3.5 11.5V14a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Exportar relatório da Mesa
+          </button>
+          <button class="btn btn-contorno" type="button">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><rect x="2.5" y="3.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2.5 7h13M6 2.5v2.5M12 2.5v2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M6 10.5l2 2 3.5-3.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Publicar pauta
+          </button>
+          <button class="btn btn-primaria" type="button">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 2.5v13M2.5 9h13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            Convocar sessão
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* ---- Tema claro / escuro (lembra a escolha; respeita o sistema) ---- */
+    (function () {
+      var root = document.documentElement;
+      var btn = document.getElementById('tema-toggle');
+      var salvo = null;
+      try { salvo = localStorage.getItem('oplenario-tema'); } catch (e) {}
+      var inicial = salvo || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'escuro' : 'claro');
+      aplicar(inicial);
+      function aplicar(t) {
+        root.setAttribute('data-tema', t);
+        if (btn) {
+          btn.setAttribute('aria-pressed', t === 'escuro' ? 'true' : 'false');
+          btn.setAttribute('aria-label', t === 'escuro' ? 'Alternar para tema claro' : 'Alternar para tema escuro');
+          var rot = btn.querySelector('.tema-rotulo');
+          if (rot) rot.textContent = t === 'escuro' ? 'Escuro' : 'Claro';
+        }
+      }
+      if (btn) btn.addEventListener('click', function () {
+        var prox = root.getAttribute('data-tema') === 'escuro' ? 'claro' : 'escuro';
+        try { localStorage.setItem('oplenario-tema', prox); } catch (e) {}
+        aplicar(prox);
+      });
+    })();
+
+    /* ---- Hemiciclo da ciência: 43 assentos, 38 com ciência ---- */
+    (function () {
+      var svg = document.getElementById('hemiciclo');
+      if (!svg) return;
+      var presentes = 38;
+      var cx = 120, cy = 116;
+      var fileiras = [ {r: 46, n: 11}, {r: 68, n: 15}, {r: 90, n: 17} ]; // 11+15+17 = 43
+      var ns = 'http://www.w3.org/2000/svg';
+      var idx = 0;
+      fileiras.forEach(function (f) {
+        for (var i = 0; i < f.n; i++) {
+          var t = f.n === 1 ? 0.5 : i / (f.n - 1);
+          var ang = Math.PI * (1 - t);
+          var x = cx + f.r * Math.cos(ang);
+          var y = cy - f.r * Math.sin(ang);
+          var c = document.createElementNS(ns, 'circle');
+          c.setAttribute('cx', x.toFixed(1));
+          c.setAttribute('cy', y.toFixed(1));
+          c.setAttribute('r', '4.6');
+          c.setAttribute('class', idx < presentes ? 'presente' : 'ausente');
+          svg.appendChild(c);
+          idx++;
+        }
+      });
+    })();
+
+    /* ---- A barra de comando é fixa: reserva espaço p/ o último bloco não ficar sob ela ---- */
+    (function () {
+      var barra = document.querySelector('.comando');
+      var main = document.querySelector('main');
+      if (!barra || !main) return;
+      function ajustar() { main.style.paddingBottom = (barra.offsetHeight + 28) + 'px'; }
+      ajustar();
+      window.addEventListener('resize', ajustar);
+    })();
+  </script>
+
+</body>
+</html>
