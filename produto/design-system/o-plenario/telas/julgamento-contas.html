@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Julgamento de contas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Julgamento de contas — ARQUÉTIPO: cockpit / ficha
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+     A Câmara julga as contas do Prefeito (4.19). O parecer prévio do
+     TCE só deixa de prevalecer por 2/3 (CF art. 31 §2 — citável). Herói
+     = o parecer prévio + a regra do quórum qualificado (14 de 21).
+     Valores ilustrativos levam nota [GAP]. Reusa cards, chips, ilha-palco.
+     ============================================================ */
+  .pg-cab { padding: 1.4rem 0 0; }
+  .pg-cab .crumb { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.3rem 0 0; }
+  .pg-cab .sub { font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
+
+  .grade { display: grid; grid-template-columns: 1fr 320px; gap: 1.4rem; align-items: start; margin: 1.3rem 0 0; }
+
+  /* parecer prévio do TCE = herói (ilha-palco) */
+  .parecer { background: var(--palco-bg); color: var(--palco-texto); border-radius: var(--raio-lg); box-shadow: var(--sombra-alta); padding: 1.5rem 1.6rem; }
+  .parecer .et { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--palco-texto-2); }
+  .parecer .res { display: flex; align-items: center; gap: 0.8rem; margin: 0.8rem 0 0; }
+  .parecer .res .ic { width: 48px; height: 48px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; color: #06150F; background: var(--jade-claro); }
+  .parecer .res b { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: #fff; line-height: 1.1; }
+  .parecer .res span { font-size: var(--t-13); color: var(--palco-texto-2); display: block; }
+  .parecer .desc { font-size: var(--t-13); color: var(--palco-texto-2); margin: 1rem 0 0; line-height: 1.55; }
+  .parecer .desc b { color: #fff; }
+
+  .card { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.2rem 1.3rem; }
+  .card h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.7rem; }
+  .card h2 .ref { display: block; text-transform: none; letter-spacing: 0; color: var(--texto-2); font-size: var(--t-12); margin-top: 0.2rem; }
+
+  /* regra do 2/3 */
+  .quorum { display: flex; align-items: center; gap: 1.1rem; flex-wrap: wrap; }
+  .quorum .anel { width: 84px; height: 84px; flex: 0 0 auto; position: relative; display: grid; place-items: center; }
+  .quorum .anel svg { transform: rotate(-90deg); }
+  .quorum .anel .trilho { stroke: var(--linha); } .quorum .anel .arco { stroke: var(--telha); stroke-linecap: round; }
+  .quorum .anel .v { position: absolute; inset: 0; display: grid; place-items: center; line-height: 1; }
+  .quorum .anel .v b { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--texto); }
+  .quorum .anel .v span { font-family: var(--mono); font-size: 0.6rem; color: var(--texto-2); }
+  .quorum .tx { flex: 1; min-width: 160px; font-size: var(--t-13); color: var(--texto-2); line-height: 1.55; }
+  .quorum .tx b { color: var(--texto); font-weight: 600; }
+
+  .dl { display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 1rem; margin: 0; }
+  .dl dt { font-size: var(--t-13); color: var(--texto-2); } .dl dd { font-size: var(--t-13); color: var(--texto); margin: 0; font-weight: 500; }
+  .dl dd.mono { font-family: var(--mono); }
+  .nota-gap { font-size: var(--t-12); color: var(--texto-2); margin: 0.7rem 0 0; }
+  .nota-gap .tag { font-family: var(--mono); font-size: 0.6rem; letter-spacing: .04em; text-transform: uppercase; color: var(--aviso-texto); border: 1px solid color-mix(in srgb, var(--amarelo-traco) 45%, transparent); border-radius: 4px; padding: 0.05rem 0.3rem; }
+  .acoes { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1.1rem; }
+
+  @media (max-width: 900px) { .grade { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+<header class="topo">
+  <div class="envelope topo-grade">
+    <div class="marca">
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div><p class="marca-nome">O Plenário</p><p class="marca-orgao">Câmara Municipal de Fortaleza</p></div>
+    </div>
+    <div class="topo-sep" aria-hidden="true"></div>
+    <span class="eyebrow" style="align-self:center">Controle externo · Contas</span>
+    <div class="topo-dir">
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+      <span class="presidente"><span class="avatar" aria-hidden="true">RC</span><span class="quem"><b>Rita Campos</b><span>Servidora legislativa</span></span></span>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope">
+  <div class="pg-cab">
+    <span class="crumb">Contas · Exercício 2024</span>
+    <h1>Julgamento das contas do Prefeito</h1>
+    <p class="sub">Exercício 2024. A Câmara aprecia as contas com base no parecer prévio do Tribunal de Contas.</p>
+  </div>
+
+  <div class="grade">
+    <div>
+      <div class="parecer">
+        <span class="et">Parecer prévio do TCE-CE</span>
+        <div class="res">
+          <span class="ic" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12l5 5L20 6"/></svg></span>
+          <div><b>Favorável à aprovação</b><span>com ressalvas e recomendações</span></div>
+        </div>
+        <p class="desc">O Tribunal recomendou a <b>aprovação</b> das contas, apontando ressalvas a serem sanadas. O parecer prévio só deixa de prevalecer por decisão de <b>dois terços</b> dos vereadores.</p>
+      </div>
+
+      <div class="card" style="margin-top:1rem">
+        <h2>Como a Câmara decide
+          <span class="ref">CF art. 31 §2 — quórum qualificado</span>
+        </h2>
+        <div class="quorum">
+          <span class="anel" role="img" aria-label="14 votos de 21 necessários para rejeitar (dois terços)">
+            <svg width="84" height="84" viewBox="0 0 84 84" aria-hidden="true">
+              <circle class="trilho" cx="42" cy="42" r="35" fill="none" stroke-width="7"/>
+              <circle class="arco" cx="42" cy="42" r="35" fill="none" stroke-width="7" stroke-dasharray="219.9" stroke-dashoffset="73" />
+            </svg>
+            <span class="v"><b>14</b><span>de 21</span></span>
+          </span>
+          <p class="tx">Para <b>rejeitar</b> o parecer favorável do TCE, são necessários <b>2/3 dos vereadores</b> — 14 dos 21. Sem esse quórum, o parecer prevalece e as contas são aprovadas.</p>
+        </div>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card">
+        <h2>A prestação</h2>
+        <dl class="dl">
+          <dt>Exercício</dt><dd class="mono">2024</dd>
+          <dt>Responsável</dt><dd>Prefeito Municipal</dd>
+          <dt>Recebida</dt><dd class="mono">31/03/2025</dd>
+          <dt>Parecer do TCE</dt><dd>Favorável c/ ressalvas</dd>
+          <dt>Situação</dt><dd>Aguardando pauta</dd>
+        </dl>
+        <p class="nota-gap"><span class="tag">[GAP]</span> Valores e índices da prestação seguem o relatório do TCE — não cravados nesta tela.</p>
+        <div class="acoes">
+          <button class="btn btn-contorno btn-mini" type="button">Abrir o relatório do TCE</button>
+          <button class="btn btn-primaria btn-mini" type="button">Incluir em pauta</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+  <div style="height:1.5rem"></div>
+</main>
+<script src="../sistema/tema.js"></script>
+</body>
+</html>
