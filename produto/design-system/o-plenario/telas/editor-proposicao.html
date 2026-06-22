@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Editor de proposição · copiloto legislativo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Editor de proposição — ARQUÉTIPO: balcão + IA
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+
+     Materializa a 1ª APOSTA DE PRODUTO: IA como copiloto legislativo
+     (feature 3.11). O servidor REDIGE o texto normativo na ilha-PAPEL
+     (reusa --papel-*, como o Expediente); o COPILOTO vive ao lado como
+     painel permanente — não popup. ASSINATURA: as observações da IA
+     ficam ANCORADAS ao artigo que comentam (pino na margem ↔ cartão no
+     copiloto), provando que a IA leu ESTE texto. A camada de confiança
+     (rótulo + revisão humana + fontes + reportar erro) é OBRIGATÓRIA.
+     Base honesta das checagens = LC 95/1998 (técnica legislativa) —
+     a IA SUGERE, o humano VERIFICA; nada cravado como autoridade.
+     ============================================================ */
+
+  /* ---------------- sub-cabeçalho do documento ---------------- */
+  .doc-cab { padding: 1.4rem 0 0; display: grid; grid-template-columns: 1fr auto; gap: 1rem 1.4rem; align-items: end; }
+  .doc-cab .titulo h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.25rem 0 0; line-height: 1.1; }
+  .doc-cab .titulo .sub { font-size: var(--t-13); color: var(--texto-2); margin: 0.45rem 0 0; }
+  .doc-cab .titulo .sub b { color: var(--texto); font-weight: 600; }
+  .doc-meta { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; justify-content: flex-end; }
+
+  .chip { display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.28rem 0.7rem; border: 1px solid transparent; white-space: nowrap; }
+  .chip svg { flex: 0 0 auto; }
+  .chip-rascunho { color: var(--aviso-texto); background: color-mix(in srgb, var(--amarelo) 16%, var(--surface)); border-color: color-mix(in srgb, var(--amarelo-traco) 50%, transparent); }
+  .chip-salvo { color: var(--texto-2); background: var(--surface-2); border-color: var(--linha); font-family: var(--mono); font-weight: 500; }
+
+  /* ---------------- layout: papel + copiloto ---------------- */
+  .estudio { display: grid; grid-template-columns: minmax(0, 1fr) 372px; gap: 1.5rem; align-items: start; margin: 1.5rem 0 0; }
+
+  /* === ILHA-PAPEL: o documento normativo ao vivo === */
+  .papel {
+    background: var(--papel); color: var(--papel-texto);
+    border: 1px solid var(--papel-linha); border-radius: var(--raio);
+    box-shadow: var(--sombra-papel); padding: clamp(1.4rem, 3vw, 2.4rem);
+    position: relative; font-size: 1.02rem; line-height: 1.7;
+  }
+  .papel .folha-topo { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--papel-linha); padding-bottom: 0.9rem; margin-bottom: 1.4rem; flex-wrap: wrap; }
+  .papel .folha-topo .casa { font-family: var(--display); font-weight: 700; font-size: var(--t-13); letter-spacing: .02em; color: var(--papel-texto); text-transform: uppercase; }
+  .papel .folha-topo .selo-especie { font-family: var(--mono); font-size: var(--t-12); color: var(--papel-texto-2); }
+
+  .papel .ementa { font-weight: 600; color: var(--papel-texto); margin: 0 0 1.6rem; padding-left: 1.1rem; border-left: 3px solid var(--papel-marca); }
+  .papel .formula { color: var(--papel-texto-2); font-style: italic; margin: 0 0 1.3rem; }
+
+  /* artigo = bloco editável-ao-vivo, ancorável pela IA */
+  .artigo { position: relative; margin: 0 0 1.15rem; padding: 0.15rem 0.15rem 0.15rem 0; border-radius: var(--raio-sm); }
+  .artigo .cabeca { font-weight: 600; color: var(--papel-texto); }
+  .artigo .inciso { display: block; padding-left: 1.6rem; text-indent: -0.2rem; }
+  .artigo .par { display: block; margin-top: 0.35rem; }
+  /* foco de edição simulado */
+  .artigo.editando { background: color-mix(in srgb, var(--papel-marca) 6%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--papel-marca) 22%, transparent); padding: 0.5rem 0.6rem; }
+  .artigo .cursor { display: inline-block; width: 2px; height: 1.05em; background: var(--papel-marca); margin-left: 1px; vertical-align: text-bottom; animation: piscar 1.05s steps(1) infinite; }
+  @keyframes piscar { 50% { opacity: 0; } }
+
+  /* PINO de IA na margem — a assinatura (ancora texto ↔ copiloto) */
+  .pino { position: absolute; left: -1.7rem; top: 0.1rem; width: 1.25rem; height: 1.25rem; border-radius: 50%; display: grid; place-items: center; font-family: var(--mono); font-size: 0.62rem; font-weight: 600; cursor: pointer; border: 1.5px solid; background: var(--papel); }
+  .pino-ok    { color: #15634A; border-color: #2C8A66; }
+  .pino-aviso { color: #8A5A00; border-color: var(--amarelo-traco); }
+  .pino:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
+  @media (max-width: 1100px) { .pino { left: auto; right: 0.2rem; } .artigo { padding-right: 1.8rem; } }
+
+  /* === COPILOTO: painel permanente (rail) === */
+  .copiloto { display: grid; gap: 1rem; position: sticky; top: 76px; }
+  .cop-cabe {
+    background: var(--surface); border: 1px solid var(--linha);
+    border-top: 3px solid var(--cobalto); border-radius: var(--raio);
+    box-shadow: var(--sombra); padding: 1rem 1.1rem;
+  }
+  [data-tema="escuro"] .cop-cabe { border-top-color: var(--foco); }
+  .cop-cabe .marca-ia { display: flex; align-items: center; gap: 0.55rem; }
+  .cop-cabe .marca-ia .glifo { width: 30px; height: 30px; border-radius: 8px; flex: 0 0 auto; display: grid; place-items: center; color: #fff; background: var(--cobalto); }
+  [data-tema="escuro"] .cop-cabe .marca-ia .glifo { background: var(--cobalto-fundo); }
+  .cop-cabe .marca-ia b { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); display: block; line-height: 1.1; }
+  .cop-cabe .marca-ia span { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .cop-confianca { font-size: var(--t-12); color: var(--texto-2); margin: 0.8rem 0 0; line-height: 1.45; border-top: 1px solid var(--linha); padding-top: 0.7rem; }
+  .cop-confianca b { color: var(--texto); font-weight: 600; }
+
+  /* leitura de técnica legislativa = placar honesto, sem nota-fantasia */
+  .tecnica { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; }
+  .tecnica > h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0; padding: 0.85rem 1.1rem 0.6rem; }
+  .tecnica > h2 .ref { display: block; text-transform: none; letter-spacing: 0; color: var(--texto-2); font-size: var(--t-12); margin-top: 0.2rem; }
+  .checks { list-style: none; margin: 0; padding: 0; }
+  .checks li { display: grid; grid-template-columns: 1.4rem 1fr; gap: 0.6rem; padding: 0.7rem 1.1rem; border-top: 1px solid var(--linha); align-items: start; }
+  .checks li .ic { width: 1.4rem; height: 1.4rem; border-radius: 50%; display: grid; place-items: center; flex: 0 0 auto; margin-top: 1px; }
+  .checks .c-ok .ic { color: #15634A; background: color-mix(in srgb, #2C8A66 18%, transparent); }
+  [data-tema="escuro"] .checks .c-ok .ic { color: #58C99E; }
+  .checks .c-aviso .ic { color: var(--aviso-texto); background: color-mix(in srgb, var(--amarelo) 22%, transparent); }
+  .checks li .txt b { font-size: var(--t-13); color: var(--texto); font-weight: 600; display: block; }
+  .checks li .txt p { font-size: var(--t-12); color: var(--texto-2); margin: 0.2rem 0 0; line-height: 1.45; }
+  .checks li .txt .ancora { font-family: var(--mono); font-size: var(--t-12); color: var(--acento-texto); background: none; border: none; padding: 0.2rem 0; cursor: pointer; margin-top: 0.35rem; display: inline-flex; align-items: center; gap: 0.3rem; }
+  .checks li .txt .ancora:hover { text-decoration: underline; }
+
+  /* sugestão ativa da IA — camada de confiança (receita promovida) */
+  .ia-sugestao { border: 1px solid var(--linha); border-left: 3px solid var(--cobalto); border-radius: var(--raio); background: var(--surface); box-shadow: var(--sombra); padding: 1rem 1.1rem; }
+  [data-tema="escuro"] .ia-sugestao { border-left-color: var(--foco); }
+  .ia-sugestao .selo { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; text-transform: uppercase; color: var(--cobalto); }
+  [data-tema="escuro"] .ia-sugestao .selo { color: var(--foco); }
+  .ia-sugestao .alvo { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin: 0.5rem 0 0; }
+  .ia-sugestao .proposta { margin: 0.5rem 0 0.85rem; color: var(--texto); font-size: var(--t-13); line-height: 1.55; padding: 0.6rem 0.75rem; background: var(--surface-2); border-radius: var(--raio-sm); border: 1px solid var(--linha); }
+  .ia-sugestao .acoes { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+  .ia-sugestao .nota { font-size: var(--t-12); color: var(--texto-2); margin: 0.7rem 0 0; display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
+  .ia-sugestao .nota svg { color: var(--texto-2); flex: 0 0 auto; }
+
+  /* normas relacionadas que a IA trouxe */
+  .relacionadas { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 0.95rem 1.1rem; }
+  .relacionadas h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.65rem; }
+  .relacionadas ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.55rem; }
+  .relacionadas li { font-size: var(--t-13); color: var(--texto); display: flex; gap: 0.55rem; align-items: flex-start; line-height: 1.4; }
+  .relacionadas li svg { color: var(--cobalto); flex: 0 0 auto; margin-top: 3px; }
+  [data-tema="escuro"] .relacionadas li svg { color: var(--foco); }
+  .relacionadas li .ref { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); display: block; }
+  .relacionadas .ressalva { font-size: var(--t-12); color: var(--texto-2); margin: 0.75rem 0 0; border-top: 1px dashed var(--linha); padding-top: 0.6rem; }
+
+  /* barra de ferramentas da redação (acima do papel) */
+  .ferramentas { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin: 0 0 0.7rem; }
+  .ferr { display: inline-flex; align-items: center; gap: 0.35rem; font-family: var(--corpo); font-size: var(--t-13); font-weight: 600; color: var(--texto-2); background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.4rem 0.7rem; min-height: 38px; cursor: pointer; }
+  .ferr:hover { color: var(--texto); border-color: var(--texto-2); }
+  .ferr svg { color: var(--marca); flex: 0 0 auto; }
+  .ferr-ia { color: var(--cobalto); border-color: color-mix(in srgb, var(--cobalto) 38%, transparent); background: color-mix(in srgb, var(--cobalto) 8%, var(--surface)); }
+  .ferr-ia svg { color: var(--cobalto); }
+  [data-tema="escuro"] .ferr-ia { color: var(--foco); border-color: color-mix(in srgb, var(--foco) 40%, transparent); }
+  [data-tema="escuro"] .ferr-ia svg { color: var(--foco); }
+  .ferr-sep { width: 1px; height: 24px; background: var(--linha); margin: 0 0.2rem; }
+
+  @media (max-width: 1040px) {
+    .estudio { grid-template-columns: 1fr; }
+    .copiloto { position: static; top: auto; }
+  }
+  @media (max-width: 560px) {
+    .doc-cab { grid-template-columns: 1fr; }
+    .doc-meta { justify-content: flex-start; }
+  }
+</style>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+
+<header class="topo">
+  <div class="envelope topo-grade">
+    <div class="marca">
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div>
+        <p class="marca-nome">O Plenário</p>
+        <p class="marca-orgao">Câmara Municipal de Fortaleza</p>
+      </div>
+    </div>
+    <div class="topo-sep" aria-hidden="true"></div>
+    <span class="eyebrow" style="align-self:center">Processo legislativo · Redação</span>
+    <div class="topo-dir">
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+      <span class="presidente">
+        <span class="avatar" aria-hidden="true">RC</span>
+        <span class="quem"><b>Rita Campos</b><span>Servidora legislativa</span></span>
+      </span>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope">
+  <div class="doc-cab">
+    <div class="titulo">
+      <span class="eyebrow">Editor de proposição</span>
+      <h1>Projeto de Lei — Hortas Comunitárias</h1>
+      <p class="sub">Rascunho de autoria de <b>Ver. Helena Past</b> · preparado por você · ainda não protocolado</p>
+    </div>
+    <div class="doc-meta">
+      <span class="chip chip-rascunho">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+        Rascunho
+      </span>
+      <span class="chip chip-salvo" aria-live="polite">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>
+        Salvo há 12s
+      </span>
+    </div>
+  </div>
+
+  <div class="estudio">
+    <!-- ================= ILHA-PAPEL: o texto normativo ================= -->
+    <section aria-label="Texto da proposição">
+      <div class="ferramentas" role="toolbar" aria-label="Ferramentas de redação">
+        <button class="ferr" type="button"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>Inserir artigo</button>
+        <button class="ferr" type="button"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Inciso</button>
+        <button class="ferr" type="button"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>§ Parágrafo</button>
+        <span class="ferr-sep" aria-hidden="true"></span>
+        <button class="ferr ferr-ia" type="button"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4z"/></svg>Pedir ao copiloto</button>
+      </div>
+
+      <article class="papel">
+        <div class="folha-topo">
+          <span class="casa">Câmara Municipal de Fortaleza</span>
+          <span class="selo-especie mono">Projeto de Lei · rito ordinário · nº a protocolar</span>
+        </div>
+
+        <p class="ementa">Institui o Programa Municipal de Hortas Comunitárias em terrenos públicos ociosos e dá outras providências.</p>
+        <p class="formula">A Câmara Municipal de Fortaleza decreta:</p>
+
+        <div class="artigo">
+          <button class="pino pino-ok" type="button" aria-label="Observação da IA no Art. 1º: coerente" aria-describedby="check-ementa">✓</button>
+          <span class="cabeca">Art. 1º</span> Fica instituído o Programa Municipal de Hortas Comunitárias, destinado a promover a segurança alimentar, a educação ambiental e a destinação social de áreas públicas subutilizadas no Município.
+        </div>
+
+        <div class="artigo">
+          <span class="cabeca">Art. 2º</span> São objetivos do Programa:
+          <span class="inciso">I — promover a segurança alimentar e nutricional das famílias participantes;</span>
+          <span class="inciso">II — fomentar a convivência comunitária e a educação ambiental;</span>
+          <span class="inciso">III — dar destinação social a terrenos públicos ociosos ou subutilizados.</span>
+        </div>
+
+        <div class="artigo">
+          <button class="pino pino-aviso" type="button" aria-label="Atenção da IA no Art. 3º: remissão sem número de lei" aria-describedby="check-remissao">!</button>
+          <span class="cabeca">Art. 3º</span> A seleção das áreas observará a legislação de resíduos sólidos e o plano diretor, priorizando bairros com menor índice de áreas verdes por habitante.
+        </div>
+
+        <div class="artigo editando">
+          <button class="pino pino-aviso" type="button" aria-label="Atenção da IA no Art. 4º: matéria orçamentária" aria-describedby="check-orcamento">!</button>
+          <span class="cabeca">Art. 4º</span> As despesas decorrentes da execução desta Lei correrão por conta das dotações orçamentárias próprias<span class="cursor" aria-hidden="true"></span>
+          <span class="par"><b>Parágrafo único.</b> <span style="color:var(--papel-texto-2)">— em redação —</span></span>
+        </div>
+
+        <div class="artigo">
+          <span class="cabeca">Art. 5º</span> Esta Lei entra em vigor na data de sua publicação.
+        </div>
+      </article>
+    </section>
+
+    <!-- ================= COPILOTO ================= -->
+    <aside class="copiloto" aria-label="Copiloto legislativo">
+      <!-- cabeçalho do copiloto com governança/confiança -->
+      <div class="cop-cabe">
+        <div class="marca-ia">
+          <span class="glifo" aria-hidden="true">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4z"/></svg>
+          </span>
+          <span>
+            <b>Copiloto legislativo</b>
+            <span>lê o texto · sugere · você decide</span>
+          </span>
+        </div>
+        <p class="cop-confianca"><b>As sugestões são geradas por IA</b> e exigem sua revisão antes de entrar no texto. Cada observação cita a fonte; a versão do modelo fica no histórico da matéria.</p>
+      </div>
+
+      <!-- leitura de técnica legislativa (LC 95/1998) -->
+      <div class="tecnica">
+        <h2>Técnica legislativa
+          <span class="ref">conferências baseadas na LC 95/1998</span>
+        </h2>
+        <ul class="checks">
+          <li class="c-ok" id="check-ementa">
+            <span class="ic" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12l5 5L20 6"/></svg></span>
+            <span class="txt">
+              <b>Ementa coerente com o texto</b>
+              <p>O objeto anunciado na ementa corresponde aos artigos. Verbo inicial e objeto único presentes.</p>
+            </span>
+          </li>
+          <li class="c-aviso" id="check-remissao">
+            <span class="ic" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+            <span class="txt">
+              <b>Remissão sem identificação no Art. 3º</b>
+              <p>“a legislação de resíduos sólidos” deveria indicar a norma pelo número e ano (técnica de remissão). A IA propõe a referência — confirme a norma aplicável no seu Município.</p>
+              <button class="ancora" type="button" aria-label="Ir ao Art. 3º no texto"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>Ver no Art. 3º</button>
+            </span>
+          </li>
+          <li class="c-aviso" id="check-orcamento">
+            <span class="ic" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+            <span class="txt">
+              <b>Art. 4º trata de dotação orçamentária</b>
+              <p>A previsão genérica de despesa costuma exigir indicação da dotação ou estimativa de impacto. Verifique a exigência da sua Lei Orgânica antes de protocolar.</p>
+              <button class="ancora" type="button" aria-label="Ir ao Art. 4º no texto"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>Ver no Art. 4º</button>
+            </span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- sugestão ativa: o parágrafo único em redação -->
+      <div class="ia-sugestao" role="group" aria-label="Sugestão de redação por IA">
+        <span class="selo">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4z"/></svg>
+          Rascunho sugerido por IA
+        </span>
+        <p class="alvo">para o Parágrafo único · Art. 4º</p>
+        <p class="proposta">“Parágrafo único. O Poder Executivo consignará, na lei orçamentária subsequente, dotação específica para a execução do Programa, observados os limites da Lei de Responsabilidade Fiscal.”</p>
+        <div class="acoes">
+          <button class="btn btn-primaria btn-mini" type="button">Inserir no texto</button>
+          <button class="btn btn-contorno btn-mini" type="button">Editar antes</button>
+          <button class="btn btn-fantasma btn-mini" type="button">Descartar</button>
+        </div>
+        <p class="nota">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
+          Você é responsável pela redação final. <button class="ancora" type="button" style="font-family:var(--mono);font-size:var(--t-12);color:var(--acento-texto);background:none;border:none;cursor:pointer;padding:0">Reportar erro da IA</button>
+        </p>
+      </div>
+
+      <!-- normas que a IA trouxe -->
+      <div class="relacionadas">
+        <h2>Normas que a IA encontrou</h2>
+        <ul>
+          <li>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>
+            <span>Lei Federal nº 11.326/2006 — agricultura familiar<span class="ref">pode embasar a justificativa</span></span>
+          </li>
+          <li>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>
+            <span>Lei Orgânica do Município — competência sobre bens públicos<span class="ref">confira o artigo aplicável</span></span>
+          </li>
+        </ul>
+        <p class="ressalva">A IA aponta candidatas; a vigência e a aplicabilidade ao caso são sua responsabilidade.</p>
+      </div>
+    </aside>
+  </div>
+  <div style="height:1rem"></div>
+</main>
+
+<!-- ===== BARRA DE COMANDO ===== -->
+<div class="comando" role="region" aria-label="Ações da proposição">
+  <div class="envelope comando-grade">
+    <div class="comando-ctx"><b>Hortas Comunitárias · rascunho</b><span>5 artigos · 1 parágrafo em redação · 2 pontos de atenção</span></div>
+    <div class="comando-acoes">
+      <button class="btn btn-fantasma" type="button">Pré-visualizar</button>
+      <button class="btn btn-contorno" type="button">Salvar rascunho</button>
+      <button class="btn btn-primaria" type="button">
+        Enviar para protocolo
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="../sistema/tema.js"></script>
+<script>
+  /* reserva espaço para a barra fixa não cobrir o conteúdo */
+  (function () {
+    var barra = document.querySelector('.comando'), main = document.querySelector('main');
+    if (!barra || !main) return;
+    function ajustar() { main.style.paddingBottom = (barra.offsetHeight + 28) + 'px'; }
+    ajustar(); window.addEventListener('resize', ajustar);
+  })();
+</script>
+</body>
+</html>
