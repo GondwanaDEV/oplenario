@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Parecer de comissão</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Parecer de comissão — ARQUÉTIPO: balcão
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+
+     A relatora produz um artefato (3.5): o PARECER. Relatório + análise
+     + VOTO (favorável / com emendas / contrário — cartões-rádio = a
+     escolha decisiva). Rail referencia a matéria (link à ficha) e o
+     prazo. Reusa campos, cartões-rádio (de Ouvidoria), .comando.
+     ============================================================ */
+
+  .doc-cab { padding: 1.4rem 0 0; display: grid; grid-template-columns: 1fr auto; gap: 0.8rem 1.4rem; align-items: end; }
+  .doc-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
+  .doc-cab .sub { font-size: var(--t-13); color: var(--texto-2); margin: 0.4rem 0 0; }
+  .doc-cab .sub b { color: var(--texto); font-weight: 600; }
+  .chip-prazo { display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.28rem 0.7rem; color: var(--aviso-texto); background: color-mix(in srgb, var(--amarelo) 16%, var(--surface)); border: 1px solid color-mix(in srgb, var(--amarelo-traco) 50%, transparent); }
+
+  .balcao { display: grid; grid-template-columns: minmax(0,1fr) 320px; gap: 1.5rem; align-items: start; margin: 1.4rem 0 0; }
+
+  .form-card { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.4rem 1.5rem; }
+  .secao { margin: 0 0 1.4rem; }
+  .secao > h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.3rem; }
+  .secao > .aj { font-size: var(--t-12); color: var(--texto-2); margin: 0 0 0.6rem; }
+  .campo textarea { font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 55%, var(--linha)); border-radius: var(--raio-sm); padding: 0.75rem 0.85rem; min-height: 110px; width: 100%; line-height: 1.6; resize: vertical; }
+
+  /* voto = a escolha decisiva (cartões-rádio) */
+  .votos { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.6rem; }
+  .voto { position: relative; }
+  .voto input { position: absolute; opacity: 0; pointer-events: none; }
+  .voto label { display: flex; align-items: center; gap: 0.6rem; padding: 0.9rem; border: 1.5px solid var(--linha); border-radius: var(--raio); cursor: pointer; background: var(--surface-2); }
+  .voto label .ic { width: 30px; height: 30px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; color: #fff; }
+  .vf label .ic { background: var(--jade-claro); } .ve label .ic { background: var(--amarelo-traco); } .vc label .ic { background: var(--telha); }
+  .voto label b { font-size: var(--t-13); color: var(--texto); }
+  .voto input:checked + label { border-color: var(--marca); box-shadow: inset 0 0 0 1px var(--marca); background: color-mix(in srgb, var(--marca) 6%, var(--surface-2)); }
+  .vf input:checked + label { border-color: var(--jade-claro); box-shadow: inset 0 0 0 1px var(--jade-claro); }
+  .ve input:checked + label { border-color: var(--amarelo-traco); box-shadow: inset 0 0 0 1px var(--amarelo-traco); }
+  .vc input:checked + label { border-color: var(--telha); box-shadow: inset 0 0 0 1px var(--telha); }
+  .voto input:focus-visible + label { outline: 3px solid var(--foco); outline-offset: 2px; }
+
+  /* rail */
+  .rail { display: grid; gap: 1rem; position: sticky; top: 76px; }
+  .rcard { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.1rem 1.2rem; }
+  .rcard h3 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.6rem; }
+  .rcard .num { font-family: var(--mono); font-size: var(--t-13); color: var(--acento-texto); font-weight: 600; }
+  .rcard .ementa { font-size: var(--t-13); color: var(--texto); margin: 0.3rem 0 0.8rem; line-height: 1.5; }
+  .rcard a.ir { display: inline-flex; align-items: center; gap: 0.3rem; font-weight: 600; font-size: var(--t-13); color: var(--marca); text-decoration: none; }
+  .rcard a.ir:hover { text-decoration: underline; }
+  .dl { display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 0.9rem; margin: 0; }
+  .dl dt { font-size: var(--t-12); color: var(--texto-2); }
+  .dl dd { font-size: var(--t-13); color: var(--texto); margin: 0; font-weight: 500; }
+  .dl dd.mono { font-family: var(--mono); }
+  .dica-lista { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.5rem; }
+  .dica-lista li { font-size: var(--t-13); color: var(--texto-2); display: flex; gap: 0.5rem; align-items: flex-start; }
+  .dica-lista svg { color: var(--marca); flex: 0 0 auto; margin-top: 2px; }
+
+  @media (max-width: 920px) { .balcao { grid-template-columns: 1fr; } .rail { position: static; top: auto; order: -1; } }
+  @media (max-width: 520px) { .doc-cab { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+
+<header class="topo">
+  <div class="envelope topo-grade">
+    <div class="marca">
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div>
+        <p class="marca-nome">O Plenário</p>
+        <p class="marca-orgao">Câmara Municipal de Fortaleza</p>
+      </div>
+    </div>
+    <div class="topo-sep" aria-hidden="true"></div>
+    <span class="eyebrow" style="align-self:center">Comissões · Parecer</span>
+    <div class="topo-dir">
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+      <span class="presidente">
+        <span class="avatar" aria-hidden="true">HP</span>
+        <span class="quem"><b>Helena Past</b><span>Relatora · CCJ</span></span>
+      </span>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope">
+  <div class="doc-cab">
+    <div>
+      <span class="eyebrow">Parecer de comissão</span>
+      <h1>Parecer ao PL 042/2026</h1>
+      <p class="sub">Comissão de Constituição e Justiça · relatora <b>Helena Past</b> · em elaboração</p>
+    </div>
+    <span class="chip-prazo">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      vence em 3 dias
+    </span>
+  </div>
+
+  <div class="balcao">
+    <form class="form-card" onsubmit="return false">
+      <div class="secao">
+        <h2>Relatório</h2>
+        <p class="aj">Resumo da matéria e do seu trâmite até aqui.</p>
+        <div class="campo"><textarea aria-label="Relatório">Trata-se de Projeto de Lei de autoria da Vereadora Helena Past que institui o Programa Municipal de Hortas Comunitárias em terrenos públicos ociosos. A matéria foi protocolada e distribuída a esta Comissão para análise de constitucionalidade, juridicidade e técnica legislativa.</textarea></div>
+      </div>
+
+      <div class="secao">
+        <h2>Análise</h2>
+        <p class="aj">Constitucionalidade, juridicidade e técnica legislativa.</p>
+        <div class="campo"><textarea aria-label="Análise">A proposição encontra fundamento na competência municipal sobre assuntos de interesse local e na destinação social de bens públicos. Não se vislumbra vício de iniciativa. Quanto à técnica legislativa, recomenda-se ajuste na remissão do art. 3º, que deve indicar a norma de resíduos sólidos pelo número e ano.</textarea></div>
+      </div>
+
+      <div class="secao">
+        <h2>Voto</h2>
+        <p class="aj">A conclusão do parecer. Define como a matéria segue.</p>
+        <div class="votos" role="radiogroup" aria-label="Voto do relator">
+          <div class="voto ve">
+            <input type="radio" name="voto" id="v-emendas" checked />
+            <label for="v-emendas"><span class="ic" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span><b>Favorável com emendas</b></label>
+          </div>
+          <div class="voto vf">
+            <input type="radio" name="voto" id="v-fav" />
+            <label for="v-fav"><span class="ic" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M5 12l5 5L20 6"/></svg></span><b>Favorável</b></label>
+          </div>
+          <div class="voto vc">
+            <input type="radio" name="voto" id="v-con" />
+            <label for="v-con"><span class="ic" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M18 6 6 18M6 6l12 12"/></svg></span><b>Contrário</b></label>
+          </div>
+        </div>
+      </div>
+    </form>
+
+    <aside class="rail" aria-label="Matéria e prazo">
+      <div class="rcard">
+        <h3>Matéria</h3>
+        <span class="num">PL 042/2026</span>
+        <p class="ementa">Institui o Programa Municipal de Hortas Comunitárias em terrenos públicos ociosos.</p>
+        <a class="ir" href="ficha-materia.html">Abrir a ficha <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+      </div>
+      <div class="rcard">
+        <h3>Relatoria</h3>
+        <dl class="dl">
+          <dt>Comissão</dt><dd>CCJ</dd>
+          <dt>Relatora</dt><dd>Helena Past</dd>
+          <dt>Distribuído</dt><dd class="mono">há 5 dias</dd>
+          <dt>Prazo</dt><dd>vence em 3 dias</dd>
+        </dl>
+      </div>
+      <div class="rcard">
+        <h3>Antes de emitir</h3>
+        <ul class="dica-lista">
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>Relatório e análise preenchidos.</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>Voto coerente com a análise.</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>Emendas anexadas, se o voto as previr.</li>
+        </ul>
+      </div>
+    </aside>
+  </div>
+  <div style="height:1rem"></div>
+</main>
+
+<div class="comando" role="region" aria-label="Ações do parecer">
+  <div class="envelope comando-grade">
+    <div class="comando-ctx"><b>Parecer ao PL 042/2026 · CCJ</b><span>voto: favorável com emendas · rascunho salvo</span></div>
+    <div class="comando-acoes">
+      <button class="btn btn-fantasma" type="button">Pré-visualizar</button>
+      <button class="btn btn-contorno" type="button">Salvar rascunho</button>
+      <button class="btn btn-primaria" type="button">Emitir parecer <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg></button>
+    </div>
+  </div>
+</div>
+
+<script src="../sistema/tema.js"></script>
+<script>
+  (function () {
+    var barra = document.querySelector('.comando'), main = document.querySelector('main');
+    if (!barra || !main) return;
+    function ajustar() { main.style.paddingBottom = (barra.offsetHeight + 28) + 'px'; }
+    ajustar(); window.addEventListener('resize', ajustar);
+  })();
+</script>
+</body>
+</html>
