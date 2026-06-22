@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Comissões</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Comissões — ARQUÉTIPO: lista (variante cards)
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+
+     Comissões permanentes/temporárias/CPIs (2.3). Variante "cards" da
+     lista (≠ master-detail dos vereadores): cada comissão é um cartão
+     com tipo (chip+texto), presidente, avatares dos membros empilhados,
+     matérias aguardando parecer e próxima reunião. Reusa chips, avatares,
+     .card. Escopo = instituição.
+     ============================================================ */
+
+  .pg-cab { padding: 1.5rem 0 0; display: grid; grid-template-columns: 1fr auto; gap: 0.8rem 1.4rem; align-items: end; }
+  .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
+  .pg-cab .sub { font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
+
+  .segs { display: inline-flex; background: var(--surface); border: 1px solid var(--linha); border-radius: 999px; padding: 3px; margin: 1.2rem 0 0; flex-wrap: wrap; }
+  .segs button { font-family: var(--corpo); font-size: var(--t-13); font-weight: 600; color: var(--texto-2); background: none; border: none; border-radius: 999px; padding: 0.4rem 0.95rem; min-height: 40px; cursor: pointer; }
+  .segs button[aria-pressed="true"] { background: var(--acao); color: var(--acao-texto); }
+
+  .grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 1rem; margin: 1.2rem 0 0; }
+  .com { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.2rem 1.3rem; display: flex; flex-direction: column; gap: 0.8rem; }
+  .com-top { display: flex; align-items: flex-start; gap: 0.7rem; }
+  .com-sigla { width: 46px; height: 46px; border-radius: 12px; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--display); font-weight: 800; font-size: var(--t-13); color: #fff; background: var(--jade); }
+  .com-top .tt { flex: 1; min-width: 0; }
+  .com-top .tt h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); margin: 0; line-height: 1.25; }
+  .com-top .tt .tipo { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.68rem; font-weight: 600; font-family: var(--mono); text-transform: uppercase; border-radius: 999px; padding: 0.1rem 0.5rem; margin-top: 0.35rem; }
+  .tp-perm { color: var(--marca); background: color-mix(in srgb, var(--marca) 9%, var(--surface)); border: 1px solid color-mix(in srgb, var(--marca) 30%, transparent); }
+  .tp-cpi { color: #fff; background: var(--telha-fundo); }
+
+  .com-pres { display: flex; align-items: center; gap: 0.55rem; font-size: var(--t-13); color: var(--texto-2); }
+  .com-pres .av { width: 28px; height: 28px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 0.66rem; color: #fff; }
+  .com-pres b { color: var(--texto); font-weight: 600; }
+
+  .com-membros { display: flex; align-items: center; gap: 0.5rem; }
+  .pilha { display: flex; }
+  .pilha .m { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--surface); margin-left: -8px; display: grid; place-items: center; font-family: var(--mono); font-size: 0.6rem; font-weight: 600; color: #fff; }
+  .pilha .m:first-child { margin-left: 0; }
+  .com-membros span { font-size: var(--t-12); color: var(--texto-2); }
+
+  .com-rod { display: flex; align-items: center; gap: 0.7rem; padding-top: 0.8rem; border-top: 1px solid var(--linha); }
+  .com-rod .pend { display: inline-flex; align-items: center; gap: 0.35rem; font-size: var(--t-13); font-weight: 600; }
+  .com-rod .pend.tem { color: var(--aviso-texto); } .com-rod .pend.zero { color: var(--texto-2); }
+  .com-rod .pend svg { flex: 0 0 auto; }
+  .com-rod .prox { margin-left: auto; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .com-rod .abrir { color: var(--marca); }
+
+  @media (max-width: 560px) { .pg-cab { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+
+<header class="topo">
+  <div class="envelope topo-grade">
+    <div class="marca">
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div>
+        <p class="marca-nome">O Plenário</p>
+        <p class="marca-orgao">Câmara Municipal de Fortaleza</p>
+      </div>
+    </div>
+    <div class="topo-sep" aria-hidden="true"></div>
+    <span class="eyebrow" style="align-self:center">Cadastros · Comissões</span>
+    <div class="topo-dir">
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+      <span class="presidente">
+        <span class="avatar" aria-hidden="true">AM</span>
+        <span class="quem"><b>Ana Moreira</b><span>Administração</span></span>
+      </span>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope">
+  <div class="pg-cab">
+    <div>
+      <span class="eyebrow">Cadastros estruturais</span>
+      <h1>Comissões</h1>
+      <p class="sub">Permanentes e temporárias. A composição define quem analisa cada matéria.</p>
+    </div>
+    <button class="btn btn-primaria btn-mini" type="button">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      Nova comissão
+    </button>
+  </div>
+
+  <div class="segs" role="group" aria-label="Filtrar comissões">
+    <button type="button" aria-pressed="true">Todas</button>
+    <button type="button" aria-pressed="false">Permanentes</button>
+    <button type="button" aria-pressed="false">Temporárias</button>
+    <button type="button" aria-pressed="false">CPIs</button>
+  </div>
+
+  <div class="grade">
+
+    <article class="com">
+      <div class="com-top">
+        <span class="com-sigla" style="background:var(--jade)" aria-hidden="true">CCJ</span>
+        <div class="tt"><h2>Constituição, Justiça e Redação</h2><span class="tipo tp-perm">permanente</span></div>
+      </div>
+      <div class="com-pres"><span class="av" style="background:var(--cobalto)" aria-hidden="true">HP</span>Presidente <b>Helena Past</b></div>
+      <div class="com-membros">
+        <span class="pilha" aria-hidden="true"><span class="m" style="background:var(--cobalto)">HP</span><span class="m" style="background:var(--telha)">CT</span><span class="m" style="background:var(--jade-claro)">JS</span><span class="m" style="background:#7A4FA0">RM</span><span class="m" style="background:var(--jade)">AM</span></span>
+        <span>5 membros</span>
+      </div>
+      <div class="com-rod">
+        <span class="pend tem"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>3 aguardando parecer</span>
+        <span class="prox">reunião 22/06</span>
+      </div>
+    </article>
+
+    <article class="com">
+      <div class="com-top">
+        <span class="com-sigla" style="background:var(--cobalto-fundo)" aria-hidden="true">EDU</span>
+        <div class="tt"><h2>Educação, Cultura e Esporte</h2><span class="tipo tp-perm">permanente</span></div>
+      </div>
+      <div class="com-pres"><span class="av" style="background:var(--jade-claro)" aria-hidden="true">JS</span>Presidente <b>João Sá</b></div>
+      <div class="com-membros">
+        <span class="pilha" aria-hidden="true"><span class="m" style="background:var(--jade-claro)">JS</span><span class="m" style="background:var(--cobalto)">HP</span><span class="m" style="background:#9C6B1E">FD</span></span>
+        <span>3 membros</span>
+      </div>
+      <div class="com-rod">
+        <span class="pend tem"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>1 aguardando parecer</span>
+        <span class="prox">reunião 15/06</span>
+      </div>
+    </article>
+
+    <article class="com">
+      <div class="com-top">
+        <span class="com-sigla" style="background:var(--jade)" aria-hidden="true">FIN</span>
+        <div class="tt"><h2>Finanças e Orçamento</h2><span class="tipo tp-perm">permanente</span></div>
+      </div>
+      <div class="com-pres"><span class="av" style="background:var(--telha)" aria-hidden="true">CT</span>Presidente <b>Carla Tavares</b></div>
+      <div class="com-membros">
+        <span class="pilha" aria-hidden="true"><span class="m" style="background:var(--telha)">CT</span><span class="m" style="background:var(--jade)">AM</span><span class="m" style="background:var(--cobalto-fundo)">LB</span></span>
+        <span>3 membros</span>
+      </div>
+      <div class="com-rod">
+        <span class="pend zero"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>sem pendências</span>
+        <span class="prox">reunião 19/06</span>
+      </div>
+    </article>
+
+    <article class="com">
+      <div class="com-top">
+        <span class="com-sigla" style="background:var(--jade-claro)" aria-hidden="true">MA</span>
+        <div class="tt"><h2>Meio Ambiente e Desenvolvimento Urbano</h2><span class="tipo tp-perm">permanente</span></div>
+      </div>
+      <div class="com-pres"><span class="av" style="background:var(--cobalto-fundo)" aria-hidden="true">LB</span>Presidente <b>Lúcia Brito</b></div>
+      <div class="com-membros">
+        <span class="pilha" aria-hidden="true"><span class="m" style="background:var(--cobalto-fundo)">LB</span><span class="m" style="background:var(--cobalto)">HP</span><span class="m" style="background:var(--jade-claro)">JS</span></span>
+        <span>3 membros</span>
+      </div>
+      <div class="com-rod">
+        <span class="pend tem"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>2 aguardando parecer</span>
+        <span class="prox">reunião 23/06</span>
+      </div>
+    </article>
+
+    <article class="com">
+      <div class="com-top">
+        <span class="com-sigla" style="background:var(--telha-fundo)" aria-hidden="true">CPI</span>
+        <div class="tt"><h2>CPI da Iluminação Pública</h2><span class="tipo tp-cpi">temporária · CPI</span></div>
+      </div>
+      <div class="com-pres"><span class="av" style="background:#9C6B1E" aria-hidden="true">FD</span>Presidente <b>Fernando Dias</b></div>
+      <div class="com-membros">
+        <span class="pilha" aria-hidden="true"><span class="m" style="background:#9C6B1E">FD</span><span class="m" style="background:var(--telha)">CT</span><span class="m" style="background:var(--cobalto)">HP</span></span>
+        <span>3 membros · prazo 90 dias</span>
+      </div>
+      <div class="com-rod">
+        <span class="pend zero"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M9 18V5l12-2v13"/><path d="M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/></svg>em diligências</span>
+        <span class="prox">oitiva 25/06</span>
+      </div>
+    </article>
+
+    <article class="com">
+      <div class="com-top">
+        <span class="com-sigla" style="background:var(--cobalto)" aria-hidden="true">SAÚ</span>
+        <div class="tt"><h2>Saúde e Assistência Social</h2><span class="tipo tp-perm">permanente</span></div>
+      </div>
+      <div class="com-pres"><span class="av" style="background:var(--jade)" aria-hidden="true">AM</span>Presidente <b>Antônio Moraes</b></div>
+      <div class="com-membros">
+        <span class="pilha" aria-hidden="true"><span class="m" style="background:var(--jade)">AM</span><span class="m" style="background:var(--telha)">CT</span><span class="m" style="background:var(--cobalto-fundo)">LB</span></span>
+        <span>3 membros</span>
+      </div>
+      <div class="com-rod">
+        <span class="pend zero"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>sem pendências</span>
+        <span class="prox">reunião 18/06</span>
+      </div>
+    </article>
+
+  </div>
+  <div style="height:1.5rem"></div>
+</main>
+
+<script src="../sistema/tema.js"></script>
+</body>
+</html>
