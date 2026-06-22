@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Moderação de comentários</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Moderação de comentários — ARQUÉTIPO: lista (interna)
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+     Painel de moderação (6.3): o servidor revisa comentários do cidadão
+     antes de irem ao público (Lei 13.460 + anti-abuso). Aprovar = fácil;
+     rejeitar = deliberado (exige motivo; cidadão é avisado). Denunciados
+     têm prioridade. O ato entra na trilha de auditoria (append-only).
+     ============================================================ */
+  .pg-cab { padding: 1.5rem 0 0; }
+  .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.3rem 0 0; }
+  .pg-cab .sub { font-size: var(--t-16); color: var(--texto-2); margin: 0.5rem 0 0; max-width: 64ch; line-height: 1.5; }
+
+  .resumo { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 0.8rem; margin: 1.2rem 0 0; }
+  .rcard { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); padding: 0.9rem 1.1rem; }
+  .rcard b { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: var(--texto); display: block; line-height: 1; font-variant-numeric: tabular-nums; }
+  .rcard.alerta b { color: var(--acento-texto); }
+  .rcard span { font-size: var(--t-13); color: var(--texto-2); display: block; margin-top: 0.3rem; }
+
+  .abas { display: flex; gap: 0.4rem; flex-wrap: wrap; margin: 1.4rem 0 0; border-bottom: 1px solid var(--linha); }
+  .aba { font-size: var(--t-13); font-weight: 600; color: var(--texto-2); background: none; border: none; border-bottom: 2px solid transparent; padding: 0.6rem 0.5rem; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem; min-height: 44px; }
+  .aba[aria-selected="true"] { color: var(--marca); border-bottom-color: var(--marca); }
+  .aba .cnt { font-family: var(--mono); font-size: var(--t-12); background: var(--surface-2); border: 1px solid var(--linha); border-radius: 999px; padding: 0.05rem 0.45rem; color: var(--texto-2); }
+  .aba[aria-selected="true"] .cnt { color: var(--marca); border-color: color-mix(in srgb,var(--marca) 40%,transparent); }
+
+  .fila { display: grid; gap: 0.9rem; margin: 1.2rem 0 0; }
+  .cm { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; }
+  .cm.denuncia { border-color: color-mix(in srgb,var(--telha) 45%,var(--linha)); }
+  .cm-cab { display: flex; align-items: center; gap: 0.7rem; padding: 0.85rem 1.1rem; border-bottom: 1px solid var(--linha); flex-wrap: wrap; }
+  .cm-cab .av { width: 32px; height: 32px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 0.66rem; color: #fff; }
+  .cm-cab .quem b { font-size: var(--t-13); color: var(--texto); font-weight: 600; display: block; line-height: 1.2; }
+  .cm-cab .quem span { font-size: var(--t-12); color: var(--texto-2); }
+  .cm-cab .verif { display: inline-flex; align-items: center; gap: 0.25rem; font-size: var(--t-12); color: #15634A; } [data-tema="escuro"] .cm-cab .verif { color: #58C99E; }
+  .cm-cab .sobre { margin-left: auto; font-size: var(--t-12); color: var(--texto-2); text-align: right; }
+  .cm-cab .sobre a { color: var(--marca); font-weight: 600; text-decoration: none; } .cm-cab .sobre a:hover { text-decoration: underline; }
+  .flag { display: inline-flex; align-items: center; gap: 0.3rem; font-size: var(--t-12); font-weight: 600; color: var(--acento-texto); background: var(--surface-2); border: 1px solid color-mix(in srgb,var(--telha) 45%,transparent); border-radius: 999px; padding: 0.12rem 0.55rem; }
+  .flag svg { width: 12px; height: 12px; }
+
+  .cm-corpo { padding: 1rem 1.2rem; }
+  .cm-corpo p { font-size: var(--t-16); color: var(--texto); line-height: 1.55; margin: 0; }
+  .cm-rod { display: flex; align-items: center; gap: 0.6rem; padding: 0.8rem 1.2rem; border-top: 1px solid var(--linha); flex-wrap: wrap; background: var(--surface-2); }
+  .cm-rod .quando { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .cm-rod .acoes { margin-left: auto; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  .btn-rejeitar { background: transparent; color: var(--acento-texto); border-color: color-mix(in srgb,var(--telha) 50%,transparent); }
+  .btn-rejeitar:hover { background: var(--surface); border-color: var(--telha); }
+
+  /* form de rejeição (motivo obrigatório) */
+  .rejeitar-form { padding: 1rem 1.2rem; border-top: 1px dashed var(--linha); background: color-mix(in srgb,var(--telha) 5%,var(--surface)); }
+  .rejeitar-form h4 { font-family: var(--display); font-weight: 600; font-size: var(--t-13); color: var(--texto); margin: 0 0 0.6rem; }
+  .motivos { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  .motivo { font-size: var(--t-12); font-weight: 600; color: var(--texto-2); background: var(--surface); border: 1px solid var(--linha); border-radius: 999px; padding: 0.4rem 0.85rem; cursor: pointer; min-height: 40px; }
+  .motivo[aria-pressed="true"] { color: #fff; background: var(--telha-fundo); border-color: var(--telha-fundo); }
+  .rejeitar-form .aviso { display: flex; align-items: center; gap: 0.4rem; margin: 0.8rem 0 0.8rem; font-size: var(--t-12); color: var(--texto-2); }
+  .rejeitar-form .aviso svg { color: var(--marca); flex: 0 0 auto; }
+  .rejeitar-form .form-acoes { display: flex; gap: 0.5rem; }
+
+  .nota-pol { display: flex; align-items: flex-start; gap: 0.6rem; margin: 1.4rem 0 0; padding: 0.9rem 1.1rem; background: color-mix(in srgb, var(--marca) 6%, var(--surface)); border: 1px solid color-mix(in srgb, var(--marca) 26%, var(--linha)); border-radius: var(--raio); font-size: var(--t-13); color: var(--texto-2); line-height: 1.5; }
+  .nota-pol svg { color: var(--marca); flex: 0 0 auto; margin-top: 2px; }
+  .nota-pol b { color: var(--texto); font-weight: 600; }
+
+  @media (max-width: 560px) { .cm-cab .sobre { margin-left: 0; text-align: left; width: 100%; } }
+</style>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+<header class="topo">
+  <div class="envelope topo-grade">
+    <div class="marca">
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div><p class="marca-nome">O Plenário</p><p class="marca-orgao">Câmara Municipal de Fortaleza</p></div>
+    </div>
+    <div class="topo-sep" aria-hidden="true"></div>
+    <span class="eyebrow" style="align-self:center">Participação · Moderação</span>
+    <div class="topo-dir">
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+      <span class="presidente"><span class="avatar" aria-hidden="true">PC</span><span class="quem"><b>Paula Coêlho</b><span>Comunicação</span></span></span>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope">
+  <div class="pg-cab">
+    <span class="eyebrow">Participação cidadã</span>
+    <h1>Moderação de comentários</h1>
+    <p class="sub">Comentários do portal aguardam revisão antes de aparecer publicamente. Aprove o que respeita as regras; rejeite com motivo — o cidadão é avisado.</p>
+  </div>
+
+  <div class="resumo">
+    <div class="rcard"><b>23</b><span>aguardando revisão</span></div>
+    <div class="rcard alerta"><b>2</b><span>denunciados por usuários</span></div>
+    <div class="rcard"><b>4h</b><span>tempo médio de fila</span></div>
+    <div class="rcard"><b>312</b><span>aprovados este mês</span></div>
+  </div>
+
+  <div class="abas" role="tablist" aria-label="Filtrar comentários">
+    <button class="aba" role="tab" aria-selected="true">Pendentes <span class="cnt">23</span></button>
+    <button class="aba" role="tab" aria-selected="false">Denunciados <span class="cnt">2</span></button>
+    <button class="aba" role="tab" aria-selected="false">Aprovados</button>
+    <button class="aba" role="tab" aria-selected="false">Rejeitados</button>
+  </div>
+
+  <div class="fila">
+
+    <article class="cm denuncia">
+      <div class="cm-cab">
+        <span class="av" style="background:var(--telha)" aria-hidden="true">AL</span>
+        <div class="quem"><b>Antônio L.</b><span class="verif"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>gov.br</span></div>
+        <span class="flag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 21V4h13l-2 4 2 4H4"/></svg>3 denúncias</span>
+        <span class="sobre">em <a href="ficha-materia-publica.html">PL 042/2026</a><br>Hortas comunitárias</span>
+      </div>
+      <div class="cm-corpo">
+        <p>Isso é uma vergonha, esses vereadores não fazem nada e ainda querem [trecho sinalizado por usuários]…</p>
+      </div>
+      <div class="rejeitar-form">
+        <h4>Motivo da rejeição</h4>
+        <div class="motivos" role="group" aria-label="Motivo da rejeição">
+          <button class="motivo" type="button" aria-pressed="true">Ofensa pessoal</button>
+          <button class="motivo" type="button" aria-pressed="false">Discurso de ódio</button>
+          <button class="motivo" type="button" aria-pressed="false">Spam</button>
+          <button class="motivo" type="button" aria-pressed="false">Fora do tema</button>
+          <button class="motivo" type="button" aria-pressed="false">Conteúdo ilegal</button>
+        </div>
+        <p class="aviso"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>O autor será avisado do motivo. A decisão fica registrada na trilha de auditoria.</p>
+        <div class="form-acoes">
+          <button class="btn btn-encerrar btn-mini" type="button">Confirmar rejeição</button>
+          <button class="btn btn-fantasma btn-mini" type="button">Cancelar</button>
+        </div>
+      </div>
+    </article>
+
+    <article class="cm">
+      <div class="cm-cab">
+        <span class="av" style="background:var(--jade)" aria-hidden="true">MS</span>
+        <div class="quem"><b>Marina S.</b><span class="verif"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>gov.br</span></div>
+        <span class="sobre">em <a href="ficha-materia-publica.html">PL 042/2026</a><br>Hortas comunitárias</span>
+      </div>
+      <div class="cm-corpo">
+        <p>Excelente iniciativa! Só sugiro que o programa inclua acompanhamento técnico da Secretaria de Agricultura para orientar quem nunca plantou.</p>
+      </div>
+      <div class="cm-rod">
+        <span class="quando">há 35 min</span>
+        <div class="acoes">
+          <button class="btn btn-contorno btn-mini btn-rejeitar" type="button"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>Rejeitar</button>
+          <button class="btn btn-primaria btn-mini" type="button"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>Aprovar e publicar</button>
+        </div>
+      </div>
+    </article>
+
+    <article class="cm">
+      <div class="cm-cab">
+        <span class="av" style="background:var(--cobalto)" aria-hidden="true">JF</span>
+        <div class="quem"><b>João F.</b><span class="verif"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>gov.br</span></div>
+        <span class="sobre">em <a href="ficha-materia-publica.html">PL 022/2026</a><br>Energia solar</span>
+      </div>
+      <div class="cm-corpo">
+        <p>Quanto vai custar isso para o município? Gostaria de ver o impacto orçamentário antes de a Câmara aprovar. Tem como publicar esse estudo?</p>
+      </div>
+      <div class="cm-rod">
+        <span class="quando">há 1 h</span>
+        <div class="acoes">
+          <button class="btn btn-contorno btn-mini btn-rejeitar" type="button"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>Rejeitar</button>
+          <button class="btn btn-primaria btn-mini" type="button"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>Aprovar e publicar</button>
+        </div>
+      </div>
+    </article>
+
+  </div>
+
+  <div class="nota-pol">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg>
+    <span><b>Política de moderação.</b> Comentários são rejeitados apenas por ofensa pessoal, discurso de ódio, spam, fuga do tema ou conteúdo ilegal — nunca por discordância de opinião. Toda decisão fica na trilha de auditoria e o autor é notificado do motivo, podendo recorrer pela Ouvidoria.</span>
+  </div>
+  <div style="height:1.6rem"></div>
+</main>
+<script src="../sistema/tema.js"></script>
+</body>
+</html>

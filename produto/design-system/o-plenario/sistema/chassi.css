@@ -127,9 +127,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .btn-primaria, .btn-primario { background: var(--acao); color: var(--acao-texto); box-shadow: 0 10px 22px -16px rgba(12,83,64,.9); }
 .btn-primaria:hover, .btn-primario:hover { background: var(--acao-hover); }
 
-/* encerrar — ação destrutiva/terminal (telha) */
-.btn-encerrar { background: var(--telha); color: #fff; box-shadow: 0 10px 22px -14px rgba(217,84,43,.9); }
-.btn-encerrar:hover { background: var(--telha-fundo); }
+/* encerrar — ação destrutiva/terminal (telha-fundo p/ AA: branco s/ telha = 4.0; s/ telha-fundo = 5.44, §5.1) */
+.btn-encerrar { background: var(--telha-fundo); color: #fff; box-shadow: 0 10px 22px -14px rgba(217,84,43,.9); }
+.btn-encerrar:hover { background: #9E3819; }
 
 /* contorno — secundária */
 .btn-contorno { background: transparent; color: var(--texto); border-color: var(--linha); }
