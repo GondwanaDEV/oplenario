@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dados abertos — Câmara Municipal de Fortaleza</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Dados abertos — ARQUÉTIPO: leitura pública (lista)
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+     Catálogo de datasets para download (5.11). Superfície PÚBLICA.
+     Cada dataset: formato (CSV/JSON/API por chip), última atualização,
+     download. Nota da API. Reaplica superfície pública + lista.
+     ============================================================ */
+  .pub-topo { background: var(--surface); border-bottom: 1px solid var(--linha); }
+  .pub-topo-in { display: flex; align-items: center; gap: 1rem; padding: 0.9rem 0; flex-wrap: wrap; }
+  .brasao-casa { display: flex; align-items: center; gap: 0.7rem; }
+  .brasao-casa .br { width: 40px; height: 40px; border-radius: 10px; flex: 0 0 auto; }
+  .brasao-casa b { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); line-height: 1.1; display: block; }
+  .brasao-casa span { font-size: var(--t-12); color: var(--texto-2); }
+  .pub-topo .dir { margin-left: auto; display: flex; align-items: center; gap: 0.7rem; }
+  .nav-pub { display: flex; gap: 0.3rem; }
+  .nav-pub a { font-size: var(--t-13); font-weight: 600; color: var(--texto-2); text-decoration: none; padding: 0.5rem 0.7rem; border-radius: 8px; }
+  .nav-pub a:hover { color: var(--texto); }
+
+  .hero { padding: 2rem 0 0.4rem; }
+  .hero h1 { font-family: var(--display); font-weight: 800; font-size: clamp(1.9rem, 5vw, var(--t-40)); letter-spacing: -0.02em; color: var(--texto); margin: 0.3rem 0 0; line-height: 1.05; }
+  .hero p { font-size: var(--t-16); color: var(--texto-2); margin: 0.6rem 0 0; max-width: 62ch; }
+
+  .api { display: flex; align-items: center; gap: 0.9rem; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1rem 1.2rem; margin: 1.3rem 0 0; flex-wrap: wrap; }
+  .api .ic { width: 40px; height: 40px; border-radius: 10px; flex: 0 0 auto; display: grid; place-items: center; color: #fff; background: var(--cobalto-fundo); }
+  .api .tx { flex: 1; min-width: 200px; } .api .tx b { font-size: var(--t-13); color: var(--texto); display: block; } .api .tx span { font-size: var(--t-12); color: var(--texto-2); }
+  .api code { font-family: var(--mono); font-size: var(--t-12); background: var(--surface-2); border: 1px solid var(--linha); border-radius: 6px; padding: 0.2rem 0.5rem; color: var(--acento-texto); }
+
+  .lista { display: grid; gap: 0.8rem; margin: 1.3rem 0 0; }
+  .ds { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.1rem 1.3rem; display: grid; grid-template-columns: 1fr auto; gap: 0.5rem 1rem; align-items: center; }
+  .ds h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); margin: 0; }
+  .ds p { font-size: var(--t-13); color: var(--texto-2); margin: 0.25rem 0 0; }
+  .ds .meta { display: flex; align-items: center; gap: 0.4rem 0.8rem; flex-wrap: wrap; margin-top: 0.5rem; }
+  .fmt { font-family: var(--mono); font-size: 0.66rem; font-weight: 600; border-radius: 4px; padding: 0.08rem 0.4rem; border: 1px solid var(--linha); color: var(--texto-2); background: var(--surface-2); }
+  .ds .quando { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .ds .baixar { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 600; font-size: var(--t-13); color: var(--acao-texto); background: var(--acao); border-radius: var(--raio-sm); padding: 0.55rem 0.95rem; min-height: 42px; text-decoration: none; white-space: nowrap; }
+  .ds .baixar:hover { background: var(--acao-hover); }
+
+  .rodape { margin-top: 2.4rem; padding: 1.4rem 0; border-top: 1px solid var(--linha); font-size: var(--t-12); color: var(--texto-2); }
+  @media (max-width: 560px) { .ds { grid-template-columns: 1fr; } .ds .baixar { justify-self: start; } }
+</style>
+</head>
+<body class="superficie-publica">
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+<header class="pub-topo">
+  <div class="envelope pub-topo-in">
+    <div class="brasao-casa">
+      <svg class="br" viewBox="0 0 34 34" role="img" aria-label="Câmara Municipal de Fortaleza"><rect width="34" height="34" rx="9" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div><b>Câmara Municipal de Fortaleza</b><span>Transparência</span></div>
+    </div>
+    <div class="dir">
+      <nav class="nav-pub" aria-label="Seções públicas">
+        <a href="portal-cidadao.html">Início</a><a href="portal-materias.html">Matérias</a><a href="transparencia-fiscal.html">Fiscal</a>
+      </nav>
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope">
+  <div class="hero">
+    <span class="eyebrow">Dado público é de todos</span>
+    <h1>Dados abertos</h1>
+    <p>Baixe os dados da Câmara em formato aberto, ou consuma direto pela API. Atualizados automaticamente, livres para usar.</p>
+  </div>
+
+  <div class="api">
+    <span class="ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg></span>
+    <div class="tx"><b>API pública de dados</b><span>Documentação aberta, sem chave para leitura.</span></div>
+    <code>GET /api/v1/proposicoes</code>
+    <a class="fmt" href="#" style="text-decoration:none;color:var(--marca);font-weight:600;padding:0.4rem 0.7rem">Ver documentação →</a>
+  </div>
+
+  <div class="lista">
+    <div class="ds">
+      <div>
+        <h2>Proposições e tramitação</h2>
+        <p>Todas as matérias, autores, espécie e situação atual.</p>
+        <div class="meta"><span class="fmt">CSV</span><span class="fmt">JSON</span><span class="fmt">API</span><span class="quando">atualizado hoje</span></div>
+      </div>
+      <a class="baixar" href="#"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12M8 11l4 4 4-4M4 21h16"/></svg>Baixar</a>
+    </div>
+
+    <div class="ds">
+      <div>
+        <h2>Votações nominais</h2>
+        <p>Como cada vereador votou em cada matéria.</p>
+        <div class="meta"><span class="fmt">CSV</span><span class="fmt">JSON</span><span class="fmt">API</span><span class="quando">atualizado ontem</span></div>
+      </div>
+      <a class="baixar" href="#"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12M8 11l4 4 4-4M4 21h16"/></svg>Baixar</a>
+    </div>
+
+    <div class="ds">
+      <div>
+        <h2>Despesas e empenhos</h2>
+        <p>Execução orçamentária do órgão, por categoria e credor.</p>
+        <div class="meta"><span class="fmt">CSV</span><span class="fmt">JSON</span><span class="quando">atualizado 01/06</span></div>
+      </div>
+      <a class="baixar" href="#"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12M8 11l4 4 4-4M4 21h16"/></svg>Baixar</a>
+    </div>
+
+    <div class="ds">
+      <div>
+        <h2>Presença em sessões</h2>
+        <p>Frequência dos vereadores por sessão plenária.</p>
+        <div class="meta"><span class="fmt">CSV</span><span class="fmt">API</span><span class="quando">atualizado hoje</span></div>
+      </div>
+      <a class="baixar" href="#"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12M8 11l4 4 4-4M4 21h16"/></svg>Baixar</a>
+    </div>
+
+    <div class="ds">
+      <div>
+        <h2>Legislação consolidada</h2>
+        <p>Acervo de leis e normas em vigor, com metadados.</p>
+        <div class="meta"><span class="fmt">JSON</span><span class="fmt">XML</span><span class="quando">atualizado 17/06</span></div>
+      </div>
+      <a class="baixar" href="#"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12M8 11l4 4 4-4M4 21h16"/></svg>Baixar</a>
+    </div>
+  </div>
+
+  <div class="rodape">Dados sob licença aberta (CC-BY). Câmara Municipal de Fortaleza · Plataforma O Plenário</div>
+</main>
+<script src="../sistema/tema.js"></script>
+</body>
+</html>
