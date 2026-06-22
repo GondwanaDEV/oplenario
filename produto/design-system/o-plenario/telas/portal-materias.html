@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Matérias em tramitação — Câmara Municipal de Fortaleza</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Portal · matérias — ARQUÉTIPO: leitura pública (lista)
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+
+     A vitrine cidadã das matérias (5.2). Superfície PÚBLICA white-label
+     (body.superficie-publica): a Câmara lidera; "O Plenário" recua. Lista
+     pública com busca + filtros simples; cada matéria em LINGUAGEM SIMPLES
+     + status com azulejo-mini (a assinatura) + autor → ficha pública.
+     Sem cadastro p/ consultar. Complementa o portal-home.
+     ============================================================ */
+
+  .pub-topo { background: var(--surface); border-bottom: 1px solid var(--linha); }
+  .pub-topo-in { display: flex; align-items: center; gap: 1rem; padding: 0.9rem 0; flex-wrap: wrap; }
+  .brasao-casa { display: flex; align-items: center; gap: 0.7rem; }
+  .brasao-casa .br { width: 40px; height: 40px; border-radius: 10px; flex: 0 0 auto; }
+  .brasao-casa b { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); line-height: 1.1; display: block; }
+  .brasao-casa span { font-size: var(--t-12); color: var(--texto-2); }
+  .pub-topo .dir { margin-left: auto; display: flex; align-items: center; gap: 0.7rem; }
+  .nav-pub { display: flex; gap: 0.3rem; }
+  .nav-pub a { font-size: var(--t-13); font-weight: 600; color: var(--texto-2); text-decoration: none; padding: 0.5rem 0.7rem; border-radius: 8px; }
+  .nav-pub a[aria-current="page"] { color: var(--marca); background: color-mix(in srgb, var(--marca) 8%, transparent); }
+  .nav-pub a:hover { color: var(--texto); }
+
+  .hero { padding: 2rem 0 1.2rem; }
+  .hero h1 { font-family: var(--display); font-weight: 800; font-size: clamp(1.9rem, 5vw, var(--t-40)); letter-spacing: -0.02em; color: var(--texto); margin: 0.3rem 0 0; line-height: 1.05; }
+  .hero p { font-size: var(--t-16); color: var(--texto-2); margin: 0.6rem 0 0; max-width: 60ch; }
+
+  .busca-grande { display: flex; align-items: center; gap: 0.6rem; background: var(--surface); border: 1px solid color-mix(in srgb, var(--texto-2) 45%, var(--linha)); border-radius: 999px; padding: 0.6rem 1.1rem; min-height: 52px; max-width: 560px; margin: 1.2rem 0 0; }
+  .busca-grande svg { color: var(--texto-2); flex: 0 0 auto; }
+  .busca-grande input { border: none; background: none; outline: none; font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); width: 100%; }
+
+  .filtros { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 1.1rem 0 0; }
+  .fchip { font-size: var(--t-13); font-weight: 600; color: var(--texto-2); background: var(--surface); border: 1px solid var(--linha); border-radius: 999px; padding: 0.4rem 0.9rem; min-height: 40px; cursor: pointer; }
+  .fchip[aria-pressed="true"] { color: var(--acao-texto); background: var(--acao); border-color: var(--acao); }
+
+  .lista { display: grid; gap: 0.9rem; margin: 1.4rem 0 0; }
+  .mat { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.2rem 1.4rem; display: grid; gap: 0.7rem; }
+  .mat-top { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }
+  .mat-num { font-family: var(--mono); font-size: var(--t-13); color: var(--acento-texto); font-weight: 600; }
+  .mat-chip { font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.15rem 0.6rem; margin-left: auto; }
+  .ch-tram { color: var(--cobalto); background: color-mix(in srgb, var(--cobalto) 9%, var(--surface)); border: 1px solid color-mix(in srgb, var(--cobalto) 30%, transparent); }
+  .ch-lei { color: #15634A; background: color-mix(in srgb, #2C8A66 14%, var(--surface)); border: 1px solid color-mix(in srgb, #2C8A66 36%, transparent); }
+  /* cores de marca fixas precisam clarear no escuro (senão escuro-sobre-escuro) */
+  [data-tema="escuro"] .ch-tram { color: var(--foco); }
+  [data-tema="escuro"] .ch-lei { color: #58C99E; }
+  .mat h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); margin: 0; line-height: 1.2; }
+  .mat h2 a { color: var(--texto); text-decoration: none; }
+  .mat h2 a:hover { text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--marca) 40%, transparent); }
+  .mat .simples { font-size: var(--t-16); color: var(--texto-2); line-height: 1.5; margin: 0; }
+  /* faixa de azulejo mini (status da tramitação) */
+  .azmini { display: flex; gap: 3px; }
+  .azmini i { width: 26px; height: 8px; border-radius: 3px; position: relative; overflow: hidden; background: var(--linha); }
+  .azmini i.on { background: color-mix(in srgb, var(--azc) 32%, transparent); }
+  .azmini i.on::after { content:""; position:absolute; inset:0; background: radial-gradient(circle at 0% 100%, var(--azc) 0 62%, transparent 62%); }
+  .azmini i:nth-child(1){ --azc: var(--jade); } .azmini i:nth-child(2){ --azc: var(--cobalto); }
+  .azmini i:nth-child(3){ --azc: var(--amarelo-traco); } .azmini i:nth-child(4){ --azc: var(--jade-claro); }
+  .mat-rod { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; font-size: var(--t-13); color: var(--texto-2); }
+  .mat-rod .autor { display: inline-flex; align-items: center; gap: 0.4rem; }
+  .mat-rod .autor .av { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 0.6rem; color: #fff; }
+  .mat-rod .ver { margin-left: auto; font-weight: 600; color: var(--marca); text-decoration: none; }
+  .mat-rod .ver:hover { text-decoration: underline; }
+
+  .rodape { margin-top: 2.4rem; padding: 1.6rem 0; border-top: 1px solid var(--linha); display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+  .rodape .plat { margin-left: auto; display: inline-flex; align-items: center; gap: 0.45rem; font-size: var(--t-12); color: var(--texto-2); }
+  .rodape .plat .sig { width: 16px; height: 16px; }
+
+  @media (max-width: 560px) { .mat-chip { margin-left: 0; } }
+</style>
+</head>
+<body class="superficie-publica">
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+
+<header class="pub-topo">
+  <div class="envelope pub-topo-in">
+    <div class="brasao-casa">
+      <svg class="br" viewBox="0 0 34 34" role="img" aria-label="Câmara Municipal de Fortaleza"><rect width="34" height="34" rx="9" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div><b>Câmara Municipal de Fortaleza</b><span>Transparência</span></div>
+    </div>
+    <div class="dir">
+      <nav class="nav-pub" aria-label="Seções públicas">
+        <a href="portal-cidadao.html">Início</a>
+        <a href="#" aria-current="page">Matérias</a>
+        <a href="legislacao.html">Legislação</a>
+        <a href="ouvidoria.html">Ouvidoria</a>
+      </nav>
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope">
+  <div class="hero">
+    <span class="eyebrow">O que a Câmara está decidindo</span>
+    <h1>Matérias em tramitação</h1>
+    <p>Acompanhe os projetos em discussão na Câmara, em linguagem clara. Sem cadastro — é tudo público.</p>
+    <div class="busca-grande">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="search" placeholder="Buscar por tema, número ou autor…" aria-label="Buscar matéria" />
+    </div>
+    <div class="filtros" role="group" aria-label="Filtrar matérias">
+      <button class="fchip" type="button" aria-pressed="true">Todas</button>
+      <button class="fchip" type="button" aria-pressed="false">Em tramitação</button>
+      <button class="fchip" type="button" aria-pressed="false">Viraram lei</button>
+      <button class="fchip" type="button" aria-pressed="false">Meio ambiente</button>
+      <button class="fchip" type="button" aria-pressed="false">Saúde</button>
+    </div>
+  </div>
+
+  <div class="lista">
+
+    <article class="mat">
+      <div class="mat-top">
+        <span class="mat-num">PL 042/2026</span>
+        <span class="mat-chip ch-tram">em comissão</span>
+      </div>
+      <h2><a href="ficha-materia.html">Hortas comunitárias em terrenos públicos</a></h2>
+      <p class="simples">Cria um programa para a Prefeitura ceder terrenos públicos parados para a comunidade plantar hortas — comida fresca e área verde no bairro.</p>
+      <div class="azmini" role="img" aria-label="Tramitação: protocolada e em comissão; falta plenário e sanção">
+        <i class="on"></i><i class="on"></i><i></i><i></i>
+      </div>
+      <div class="mat-rod">
+        <span class="autor"><span class="av" style="background:var(--cobalto)" aria-hidden="true">HP</span>Ver. Helena Past</span>
+        <a class="ver" href="ficha-materia.html">Ver e comentar →</a>
+      </div>
+    </article>
+
+    <article class="mat">
+      <div class="mat-top">
+        <span class="mat-num">PL 022/2026</span>
+        <span class="mat-chip ch-tram">com o prefeito</span>
+      </div>
+      <h2><a href="ficha-materia.html">Incentivo à energia solar no município</a></h2>
+      <p class="simples">Aprovado pela Câmara. Cria incentivos para quem instalar painéis solares. Agora aguarda a sanção do Executivo para virar lei.</p>
+      <div class="azmini" role="img" aria-label="Tramitação: protocolada, em comissão e aprovada em plenário; falta sanção">
+        <i class="on"></i><i class="on"></i><i class="on"></i><i></i>
+      </div>
+      <div class="mat-rod">
+        <span class="autor"><span class="av" style="background:var(--telha)" aria-hidden="true">CT</span>Ver. Carla Tavares</span>
+        <a class="ver" href="ficha-materia.html">Ver e comentar →</a>
+      </div>
+    </article>
+
+    <article class="mat">
+      <div class="mat-top">
+        <span class="mat-num">Lei 11.402/2026</span>
+        <span class="mat-chip ch-lei">virou lei</span>
+      </div>
+      <h2><a href="ficha-materia.html">Semana municipal da economia solidária</a></h2>
+      <p class="simples">Já é lei. Institui uma semana anual para feiras e atividades de cooperativas e empreendimentos solidários do município.</p>
+      <div class="azmini" role="img" aria-label="Tramitação concluída: virou lei">
+        <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i>
+      </div>
+      <div class="mat-rod">
+        <span class="autor"><span class="av" style="background:var(--jade-claro)" aria-hidden="true">RM</span>Ver. Rafael Melo</span>
+        <a class="ver" href="ficha-materia.html">Ver a lei →</a>
+      </div>
+    </article>
+
+    <article class="mat">
+      <div class="mat-top">
+        <span class="mat-num">PL 038/2026</span>
+        <span class="mat-chip ch-tram">em comissão</span>
+      </div>
+      <h2><a href="ficha-materia.html">Acessibilidade em prédios e praças públicas</a></h2>
+      <p class="simples">Exige rampas, piso tátil e sinalização acessível em equipamentos públicos municipais, novos e reformados.</p>
+      <div class="azmini" role="img" aria-label="Tramitação: protocolada e em comissão; falta plenário e sanção">
+        <i class="on"></i><i class="on"></i><i></i><i></i>
+      </div>
+      <div class="mat-rod">
+        <span class="autor"><span class="av" style="background:var(--jade)" aria-hidden="true">CT</span>Ver. Carlos Tavares</span>
+        <a class="ver" href="ficha-materia.html">Ver e comentar →</a>
+      </div>
+    </article>
+
+  </div>
+
+  <div class="rodape">
+    <span style="font-size:var(--t-12);color:var(--texto-2)">Câmara Municipal de Fortaleza · Transparência</span>
+    <span class="plat">
+      <svg class="sig" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      Plataforma O Plenário
+    </span>
+  </div>
+</main>
+
+<script src="../sistema/tema.js"></script>
+</body>
+</html>
