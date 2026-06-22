@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Exportar dados da Câmara</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Exportar dados — ARQUÉTIPO: config / admin
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+     Portabilidade/saída do ente (9.6) — a promessa de "sem lock-in" +
+     direito de portabilidade. O que está incluído + formato + ação.
+     Reaplica os cards de seção (do Config da Câmara). Honesto: a saída
+     é sua; nada de aprisionamento.
+     ============================================================ */
+  .pg-cab { padding: 1.5rem 0 0; }
+  .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.3rem 0 0; }
+  .pg-cab .sub { font-size: var(--t-16); color: var(--texto-2); margin: 0.5rem 0 0; max-width: 64ch; line-height: 1.5; }
+
+  .promessa { display: flex; align-items: center; gap: 0.9rem; background: color-mix(in srgb, var(--marca) 6%, var(--surface)); border: 1px solid color-mix(in srgb, var(--marca) 28%, var(--linha)); border-radius: var(--raio); padding: 1rem 1.2rem; margin: 1.3rem 0 0; }
+  .promessa .ic { width: 40px; height: 40px; border-radius: 10px; flex: 0 0 auto; display: grid; place-items: center; color: #fff; background: var(--jade); }
+  .promessa b { font-size: var(--t-13); color: var(--texto); display: block; } .promessa span { font-size: var(--t-13); color: var(--texto-2); }
+
+  .card { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.3rem 1.4rem; margin: 1.2rem 0 0; }
+  .card h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); margin: 0 0 0.3rem; }
+  .card .aj { font-size: var(--t-13); color: var(--texto-2); margin: 0 0 1.1rem; }
+
+  .inclui { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.7rem; }
+  .inclui .it { display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 0.8rem; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); }
+  .inclui .it svg { color: var(--marca); flex: 0 0 auto; }
+  .inclui .it b { font-size: var(--t-13); color: var(--texto); font-weight: 600; display: block; } .inclui .it span { font-size: var(--t-12); color: var(--texto-2); }
+
+  .opt { display: flex; gap: 0.7rem; align-items: flex-start; padding: 0.9rem 0; border-top: 1px solid var(--linha); }
+  .opt:first-of-type { border-top: none; }
+  .opt input { margin-top: 3px; width: 18px; height: 18px; accent-color: var(--marca); flex: 0 0 auto; }
+  .opt .t b { font-size: var(--t-13); color: var(--texto); display: block; } .opt .t span { font-size: var(--t-12); color: var(--texto-2); }
+
+  .acao-linha { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-top: 1.2rem; }
+  .acao-linha .nota { font-size: var(--t-12); color: var(--texto-2); display: flex; align-items: center; gap: 0.4rem; }
+  .acao-linha .nota svg { color: var(--marca); flex: 0 0 auto; }
+
+  .ultima { display: flex; align-items: center; gap: 0.7rem; font-size: var(--t-13); color: var(--texto-2); margin-top: 0.9rem; padding-top: 0.9rem; border-top: 1px dashed var(--linha); flex-wrap: wrap; }
+  .ultima .mono { font-family: var(--mono); }
+  .ultima a { color: var(--marca); font-weight: 600; }
+</style>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+<header class="topo">
+  <div class="envelope topo-grade">
+    <div class="marca">
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div><p class="marca-nome">O Plenário</p><p class="marca-orgao">Câmara Municipal de Fortaleza</p></div>
+    </div>
+    <div class="topo-sep" aria-hidden="true"></div>
+    <span class="eyebrow" style="align-self:center">Administração · Dados do ente</span>
+    <div class="topo-dir">
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+      <span class="presidente"><span class="avatar" aria-hidden="true">AM</span><span class="quem"><b>Ana Moreira</b><span>Administração</span></span></span>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope">
+  <div class="pg-cab">
+    <span class="eyebrow">Portabilidade e saída</span>
+    <h1>Exportar os dados da Câmara</h1>
+    <p class="sub">Os dados são da Câmara, não da plataforma. Você pode levar tudo embora quando quiser, em formato aberto — sem aprisionamento.</p>
+  </div>
+
+  <div class="promessa">
+    <span class="ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+    <div><b>Sem lock-in</b><span>A exportação é completa e em padrões abertos — pronta para migrar para outro sistema.</span></div>
+  </div>
+
+  <div class="card">
+    <h2>O que vai no pacote</h2>
+    <p class="aj">A exportação completa inclui todo o acervo do mandato corrente e dos anteriores.</p>
+    <div class="inclui">
+      <div class="it"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg><div><b>Proposições e tramitação</b><span>com versões e anexos</span></div></div>
+      <div class="it"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg><div><b>Sessões, atas e votações</b><span>incl. áudio das sessões</span></div></div>
+      <div class="it"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg><div><b>Cadastros e estrutura</b><span>vereadores, comissões, mesa</span></div></div>
+      <div class="it"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg><div><b>Documentos e protocolo</b><span>arquivos e numeração</span></div></div>
+      <div class="it"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg><div><b>Legislação consolidada</b><span>texto e histórico</span></div></div>
+      <div class="it"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg><div><b>Trilha de auditoria</b><span>quem fez o quê e quando</span></div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Formato</h2>
+    <fieldset style="border:none;padding:0;margin:0">
+      <legend class="sr-only">Formato da exportação</legend>
+      <label class="opt"><input type="radio" name="fmt" checked /><span class="t"><b>Pacote completo (dados abertos)</b><span>JSON + CSV + os binários (PDF, áudio) num único arquivo .zip. Reimportável.</span></span></label>
+      <label class="opt"><input type="radio" name="fmt" /><span class="t"><b>Somente metadados</b><span>JSON/CSV sem os binários — mais leve, para análise.</span></span></label>
+    </fieldset>
+    <div class="acao-linha">
+      <button class="btn btn-primaria" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12M8 11l4 4 4-4M4 21h16"/></svg>Gerar exportação</button>
+      <span class="nota"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>Pode levar alguns minutos; avisamos quando estiver pronto.</span>
+    </div>
+    <div class="ultima"><span>Última exportação: <span class="mono">02/05/2026</span> · pacote completo (1,8 GB).</span><a href="#">Baixar de novo</a></div>
+  </div>
+</main>
+<script src="../sistema/tema.js"></script>
+</body>
+</html>
