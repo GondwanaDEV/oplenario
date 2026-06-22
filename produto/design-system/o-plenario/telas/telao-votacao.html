@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="escuro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Telão de votação</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Telão de votação — ARQUÉTIPO: display (projeção)
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+
+     A projeção na parede do plenário durante a VOTAÇÃO NOMINAL (4.2/4.3).
+     EXCEÇÃO JUSTIFICADA ao dual-theme: o telão é SEMPRE escuro (uma
+     projeção numa sala iluminada — o modo claro lavaria a imagem). Sem
+     chrome interativo, sem toggle: é read-only, glanceável a 15 metros.
+     Tipografia ENORME, contraste extremo, voto por ícone+cor+nome (nunca
+     só cor). Placar nominal ao vivo + faixa de azulejo (assinatura) +
+     resultado. É o "output" da cabine (sessao-ao-vivo) projetado.
+     ============================================================ */
+
+  html, body { height: 100%; }
+  body { background: var(--jade-fundo); color: #F1ECDD; overflow: hidden; display: flex; flex-direction: column; }
+  .telao { flex: 1; display: flex; flex-direction: column; padding: clamp(1.2rem, 3vw, 2.4rem); max-width: 1600px; margin: 0 auto; width: 100%; }
+
+  /* topo */
+  .t-topo { display: flex; align-items: center; gap: 1rem; }
+  .t-topo .marca-simbolo { width: 48px; height: 48px; flex: 0 0 auto; }
+  .t-topo .casa { font-family: var(--display); font-weight: 700; font-size: clamp(1rem, 2vw, 1.4rem); color: #F1ECDD; line-height: 1.1; }
+  .t-topo .casa span { display: block; font-family: var(--mono); font-size: 0.8rem; color: rgba(241,236,221,.7); font-weight: 400; text-transform: uppercase; letter-spacing: .1em; }
+  .t-vivo { margin-left: auto; display: inline-flex; align-items: center; gap: 0.6rem; font-family: var(--mono); font-size: clamp(0.9rem, 1.6vw, 1.15rem); font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #FFD9CB; }
+  .t-vivo .pulso { width: 14px; height: 14px; border-radius: 50%; background: var(--telha); box-shadow: 0 0 0 0 rgba(217,84,43,.7); animation: pulso 1.6s infinite; }
+  @keyframes pulso { 0% { box-shadow: 0 0 0 0 rgba(217,84,43,.6);} 70% { box-shadow: 0 0 0 16px rgba(217,84,43,0);} 100% { box-shadow:0 0 0 0 rgba(217,84,43,0);} }
+
+  /* matéria */
+  .t-materia { margin: clamp(1rem, 2.5vw, 2rem) 0 0; }
+  .t-materia .num { font-family: var(--mono); font-size: clamp(1rem, 2vw, 1.4rem); color: var(--amarelo); font-weight: 600; }
+  .t-materia h1 { font-family: var(--display); font-weight: 800; font-size: clamp(1.8rem, 4.5vw, 3.4rem); letter-spacing: -0.02em; color: #fff; margin: 0.2rem 0 0; line-height: 1.05; }
+  .t-materia .fase { font-size: clamp(1rem, 2vw, 1.4rem); color: rgba(241,236,221,.82); margin: 0.5rem 0 0; }
+
+  /* faixa de azulejo (assinatura) */
+  .faixa { height: 12px; display: flex; border-radius: 6px; overflow: hidden; margin: clamp(0.8rem,2vw,1.4rem) 0; }
+  .faixa span { flex: 1; position: relative; overflow: hidden; }
+  .faixa span::after { content:""; position:absolute; inset:0; background: radial-gradient(circle at 0% 100%, var(--az) 0 72%, transparent 72%); }
+  .faixa .a { background: rgba(22,120,92,.4); --az: var(--jade-claro); }
+  .faixa .b { background: rgba(30,95,168,.4); --az: #3F86D6; }
+  .faixa .c { background: rgba(232,178,58,.4); --az: var(--amarelo); }
+  .faixa .d { background: rgba(217,84,43,.4); --az: var(--telha); }
+
+  .t-meio { flex: 1; display: grid; grid-template-columns: 300px 1fr; gap: clamp(1rem, 2.5vw, 2rem); min-height: 0; }
+
+  /* placar grande */
+  .placar { display: flex; flex-direction: column; gap: clamp(0.6rem, 1.5vw, 1rem); }
+  .pl { border-radius: var(--raio-lg); padding: clamp(0.8rem, 1.8vw, 1.3rem) clamp(1rem,2vw,1.5rem); display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+  .pl .rot { font-family: var(--display); font-weight: 700; font-size: clamp(1.1rem, 2vw, 1.6rem); display: inline-flex; align-items: center; gap: 0.5rem; }
+  .pl .nn { font-family: var(--display); font-weight: 800; font-size: clamp(2.4rem, 6vw, 4.4rem); line-height: 1; font-variant-numeric: tabular-nums; }
+  .pl-sim { background: rgba(22,120,92,.22); border: 2px solid var(--jade-claro); color: #8FE6C2; }
+  .pl-nao { background: rgba(217,84,43,.2); border: 2px solid var(--telha); color: #FFB59C; }
+  .pl-abs { background: rgba(241,236,221,.07); border: 2px solid rgba(241,236,221,.28); color: #F1ECDD; }
+  .pl-meta { font-family: var(--mono); font-size: clamp(0.85rem,1.6vw,1.1rem); color: rgba(241,236,221,.78); text-align: center; padding-top: 0.4rem; }
+  .pl-meta b { color: #fff; }
+
+  /* grade nominal dos vereadores */
+  .nominal { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); grid-auto-rows: min-content; gap: clamp(0.4rem, 1vw, 0.7rem); align-content: start; overflow: hidden; }
+  .vt { display: flex; align-items: center; gap: 0.6rem; background: rgba(241,236,221,.05); border: 1px solid rgba(241,236,221,.12); border-radius: 10px; padding: 0.5rem 0.7rem; }
+  .vt .mk { width: 26px; height: 26px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; }
+  .vt .mk-sim { background: var(--jade-claro); color: #06150F; }
+  .vt .mk-nao { background: var(--telha); color: #fff; }
+  .vt .mk-abs { background: rgba(241,236,221,.22); color: #F1ECDD; }
+  .vt .mk-aguarda { background: transparent; border: 2px dashed rgba(241,236,221,.4); color: rgba(241,236,221,.6); }
+  .vt .vn { min-width: 0; line-height: 1.1; }
+  .vt .vn b { font-size: clamp(0.85rem, 1.5vw, 1.05rem); color: #fff; font-weight: 600; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .vt .vn span { font-family: var(--mono); font-size: 0.72rem; color: rgba(241,236,221,.65); }
+  .vt.aguardando { opacity: .72; }
+
+  @media (max-width: 880px) {
+    body { overflow: auto; }
+    .t-meio { grid-template-columns: 1fr; }
+    .placar { flex-direction: row; flex-wrap: wrap; }
+    .pl { flex: 1; flex-direction: column; align-items: center; text-align: center; gap: 0.2rem; }
+  }
+</style>
+</head>
+<body>
+<main class="telao" role="region" aria-label="Telão de votação ao vivo" aria-live="polite">
+  <div class="t-topo">
+    <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+    <div class="casa">Câmara Municipal de Fortaleza<span>15ª Sessão Ordinária</span></div>
+    <span class="t-vivo"><span class="pulso" aria-hidden="true"></span>Votação aberta</span>
+  </div>
+
+  <div class="t-materia">
+    <span class="num">PL 022/2026</span>
+    <h1>Política municipal de incentivo à energia solar</h1>
+    <p class="fase">2ª votação · maioria simples · presentes 18 de 21</p>
+  </div>
+
+  <div class="faixa" aria-hidden="true"><span class="a"></span><span class="b"></span><span class="c"></span><span class="d"></span></div>
+
+  <div class="t-meio">
+    <!-- placar -->
+    <div class="placar">
+      <div class="pl pl-sim"><span class="rot"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>Sim</span><span class="nn">12</span></div>
+      <div class="pl pl-nao"><span class="rot"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>Não</span><span class="nn">3</span></div>
+      <div class="pl pl-abs"><span class="rot"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M5 12h14"/></svg>Abst.</span><span class="nn">0</span></div>
+      <p class="pl-meta">faltam votar <b>3</b> · quórum <b>18/21</b></p>
+    </div>
+
+    <!-- grade nominal -->
+    <div class="nominal" aria-label="Votos nominais">
+      <div class="vt"><span class="mk mk-sim" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span><span class="vn"><b>Antônio Moraes</b><span>PSB · Sim</span></span></div>
+      <div class="vt"><span class="mk mk-sim" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span><span class="vn"><b>Helena Past</b><span>PT · Sim</span></span></div>
+      <div class="vt"><span class="mk mk-sim" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span><span class="vn"><b>Carla Tavares</b><span>PDT · Sim</span></span></div>
+      <div class="vt"><span class="mk mk-nao" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></span><span class="vn"><b>João Sá</b><span>MDB · Não</span></span></div>
+      <div class="vt"><span class="mk mk-sim" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span><span class="vn"><b>Lúcia Brito</b><span>PCdoB · Sim</span></span></div>
+      <div class="vt"><span class="mk mk-nao" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></span><span class="vn"><b>Fernando Dias</b><span>REP · Não</span></span></div>
+      <div class="vt"><span class="mk mk-sim" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span><span class="vn"><b>Beatriz Rocha</b><span>PSB · Sim</span></span></div>
+      <div class="vt"><span class="mk mk-sim" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span><span class="vn"><b>Marcos Lima</b><span>PT · Sim</span></span></div>
+      <div class="vt"><span class="mk mk-sim" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span><span class="vn"><b>Sônia Alves</b><span>PDT · Sim</span></span></div>
+      <div class="vt"><span class="mk mk-nao" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></span><span class="vn"><b>Paulo Nunes</b><span>PL · Não</span></span></div>
+      <div class="vt"><span class="mk mk-sim" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span><span class="vn"><b>Teresa Gomes</b><span>PV · Sim</span></span></div>
+      <div class="vt"><span class="mk mk-sim" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span><span class="vn"><b>Rui Barros</b><span>MDB · Sim</span></span></div>
+      <div class="vt"><span class="mk mk-sim" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span><span class="vn"><b>Ana Castro</b><span>PSB · Sim</span></span></div>
+      <div class="vt"><span class="mk mk-sim" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span><span class="vn"><b>Diego Matos</b><span>PT · Sim</span></span></div>
+      <div class="vt"><span class="mk mk-sim" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span><span class="vn"><b>Clara Pinto</b><span>PDT · Sim</span></span></div>
+      <div class="vt aguardando"><span class="mk mk-aguarda" aria-hidden="true">·</span><span class="vn"><b>Hugo Reis</b><span>PP · aguardando</span></span></div>
+      <div class="vt aguardando"><span class="mk mk-aguarda" aria-hidden="true">·</span><span class="vn"><b>Vera Luz</b><span>PSDB · aguardando</span></span></div>
+      <div class="vt aguardando"><span class="mk mk-aguarda" aria-hidden="true">·</span><span class="vn"><b>Iara Melo</b><span>PCdoB · aguardando</span></span></div>
+    </div>
+  </div>
+</main>
+<!-- sem tema.js: o telão é single-mode escuro (projeção). Todas as cores
+     são invariantes da marca; nenhum token semântico de tema é usado. -->
+</body>
+</html>
