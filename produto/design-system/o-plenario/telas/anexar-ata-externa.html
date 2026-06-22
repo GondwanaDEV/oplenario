@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Anexar ata externa</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Anexar ata externa — ARQUÉTIPO: balcão / upload
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+     Decisão v1.7 (4.11): anexar ata produzida FORA do sistema (histórica
+     na migração, ou sessão gravada externamente). Upload validado →
+     identificar a sessão → assinar com ICP → imutável + livro de atas +
+     trilha. Honesto: proveniência externa marcada; imutável após assinar.
+     ============================================================ */
+  .pg { max-width: 900px; }
+  .pg-cab { padding: 1.5rem 0 0; }
+  .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.3rem 0 0; }
+  .pg-cab .sub { font-size: var(--t-16); color: var(--texto-2); margin: 0.5rem 0 0; max-width: 62ch; line-height: 1.5; }
+
+  .grade { display: grid; grid-template-columns: 1.3fr 1fr; gap: 1.1rem; margin: 1.3rem 0 0; align-items: start; }
+  @media (max-width: 800px) { .grade { grid-template-columns: 1fr; } }
+
+  .bloco { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.2rem 1.3rem; }
+  .bloco h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); margin: 0 0 0.9rem; }
+
+  .campo { margin: 0 0 1rem; }
+  .campo label { display: block; font-size: var(--t-13); font-weight: 600; color: var(--texto); margin: 0 0 0.35rem; }
+  .campo label .req { color: var(--acento-texto); }
+  .campo select, .campo input[type="text"], .campo input[type="date"] { width: 100%; font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); background: var(--surface-2); border: 1px solid color-mix(in srgb,var(--texto-2) 50%,var(--linha)); border-radius: var(--raio-sm); padding: 0.6rem 0.75rem; min-height: 44px; }
+  .campo .ajuda { font-size: var(--t-12); color: var(--texto-2); margin: 0.3rem 0 0; }
+  .dois { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+  @media (max-width: 460px) { .dois { grid-template-columns: 1fr; } }
+
+  /* zona de upload */
+  .upload { border: 2px dashed color-mix(in srgb,var(--marca) 40%,var(--linha)); border-radius: var(--raio); background: color-mix(in srgb,var(--marca) 4%,var(--surface-2)); padding: 1.5rem 1.2rem; text-align: center; }
+  .upload .ic { width: 48px; height: 48px; border-radius: 12px; margin: 0 auto 0.7rem; display: grid; place-items: center; color: #fff; background: var(--jade); }
+  .upload b { font-size: var(--t-16); color: var(--texto); display: block; }
+  .upload span { font-size: var(--t-13); color: var(--texto-2); }
+  .upload .btn { margin-top: 0.9rem; }
+  .tipos { font-size: var(--t-12); color: var(--texto-2); margin: 0.8rem 0 0; }
+
+  /* arquivo carregado (validado) */
+  .arquivo { display: flex; align-items: center; gap: 0.8rem; padding: 0.9rem 1rem; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio); margin: 0.9rem 0 0; }
+  .arquivo .fic { width: 40px; height: 40px; border-radius: 9px; flex: 0 0 auto; display: grid; place-items: center; color: #fff; background: var(--telha); }
+  .arquivo .nm { flex: 1; min-width: 0; } .arquivo .nm b { font-size: var(--t-13); color: var(--texto); font-weight: 600; display: block; } .arquivo .nm span { font-size: var(--t-12); color: var(--texto-2); }
+  .arquivo .ok { display: inline-flex; align-items: center; gap: 0.3rem; font-size: var(--t-12); font-weight: 600; color: #15634A; } [data-tema="escuro"] .arquivo .ok { color: #58C99E; }
+  .arquivo .rem { background: none; border: 1px solid var(--linha); color: var(--texto-2); cursor: pointer; border-radius: 7px; width: 32px; height: 32px; display: grid; place-items: center; flex: 0 0 auto; }
+
+  /* checagens de validação */
+  .checks { display: grid; gap: 0.45rem; margin: 0.9rem 0 0; }
+  .chk { display: flex; align-items: center; gap: 0.5rem; font-size: var(--t-13); color: var(--texto-2); }
+  .chk svg { color: #15634A; flex: 0 0 auto; } [data-tema="escuro"] .chk svg { color: #58C99E; }
+
+  /* aviso de imutabilidade + proveniência */
+  .aviso { display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.9rem 1.1rem; background: color-mix(in srgb,var(--cobalto) 7%,var(--surface)); border: 1px solid color-mix(in srgb,var(--cobalto) 26%,var(--linha)); border-radius: var(--raio); font-size: var(--t-13); color: var(--texto-2); line-height: 1.5; margin: 0 0 1rem; }
+  .aviso svg { color: var(--cobalto); flex: 0 0 auto; margin-top: 2px; } [data-tema="escuro"] .aviso svg { color: var(--foco); }
+  .aviso b { color: var(--texto); }
+  .prov { display: inline-flex; align-items: center; gap: 0.35rem; font-size: var(--t-12); font-weight: 600; color: var(--aviso-texto); background: color-mix(in srgb,var(--amarelo) 16%,var(--surface)); border: 1px solid color-mix(in srgb,var(--amarelo-traco) 45%,transparent); border-radius: 999px; padding: 0.15rem 0.6rem; }
+
+  /* assinatura ICP no aside */
+  .icp { display: flex; align-items: center; gap: 0.7rem; padding: 0.85rem 1rem; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio); margin: 0 0 1rem; }
+  .icp .ic { width: 36px; height: 36px; border-radius: 9px; flex: 0 0 auto; display: grid; place-items: center; color: #fff; background: var(--cobalto); }
+  .icp b { font-size: var(--t-13); color: var(--texto); display: block; } .icp span { font-size: var(--t-12); color: var(--texto-2); }
+</style>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+<header class="topo">
+  <div class="envelope topo-grade">
+    <div class="marca">
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div><p class="marca-nome">O Plenário</p><p class="marca-orgao">Câmara Municipal de Fortaleza</p></div>
+    </div>
+    <div class="topo-sep" aria-hidden="true"></div>
+    <span class="eyebrow" style="align-self:center">Atas · Anexar externa</span>
+    <div class="topo-dir">
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+      <span class="presidente"><span class="avatar" aria-hidden="true">MA</span><span class="quem"><b>Marcos Aguiar</b><span>Secretaria</span></span></span>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope pg" style="padding-bottom:88px">
+  <div class="pg-cab">
+    <span class="eyebrow">Livro de atas</span>
+    <h1>Anexar ata externa</h1>
+    <p class="sub">Para atas produzidas fora do sistema — sessões antigas na migração ou registros feitos por outro meio. O documento entra no livro de atas com a proveniência marcada.</p>
+  </div>
+
+  <div class="grade">
+    <div class="col-form">
+      <div class="bloco">
+        <h2>Documento</h2>
+        <div class="upload">
+          <span class="ic" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg></span>
+          <b>Arraste o arquivo da ata ou selecione</b>
+          <span>PDF/A preferencial · até 50 MB</span>
+          <div><button class="btn btn-contorno btn-mini" type="button">Selecionar arquivo</button></div>
+          <p class="tipos">Aceita PDF, PDF/A e DOCX. Arquivos são verificados antes de anexar.</p>
+        </div>
+
+        <div class="arquivo">
+          <span class="fic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6"/></svg></span>
+          <div class="nm"><b>ata-sessao-ordinaria-2019-03-14.pdf</b><span>PDF/A · 1,2 MB</span></div>
+          <span class="ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>Validado</span>
+          <button class="rem" type="button" aria-label="Remover arquivo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>
+        <div class="checks">
+          <div class="chk"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>Formato aceito (PDF/A) e abre sem erros</div>
+          <div class="chk"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>Livre de conteúdo executável</div>
+          <div class="chk"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>Texto pesquisável (OCR detectado)</div>
+        </div>
+      </div>
+
+      <div class="bloco" style="margin-top:1.1rem">
+        <h2>A que se refere</h2>
+        <div class="campo">
+          <label for="sessao">Sessão <span class="req" aria-hidden="true">*</span></label>
+          <select id="sessao">
+            <option>Sessão Ordinária — 14/03/2019</option>
+            <option>Vincular a uma sessão existente…</option>
+            <option>Ata avulsa / histórica (sem sessão no sistema)</option>
+          </select>
+          <p class="ajuda">Se a sessão não existir no sistema, registre como ata histórica.</p>
+        </div>
+        <div class="dois">
+          <div class="campo"><label for="data">Data da sessão <span class="req" aria-hidden="true">*</span></label><input id="data" type="date" value="2019-03-14" /></div>
+          <div class="campo"><label for="tipo">Tipo</label>
+            <select id="tipo"><option>Ordinária</option><option>Extraordinária</option><option>Solene</option><option>Especial</option></select></div>
+        </div>
+        <div class="campo">
+          <label for="prov">Proveniência (observação)</label>
+          <input id="prov" type="text" placeholder="Ex.: digitalizada do livro físico nº 12, fls. 33–35" />
+          <p class="ajuda">Registre a origem do documento para o histórico.</p>
+        </div>
+      </div>
+    </div>
+
+    <aside class="col-aside">
+      <div class="bloco">
+        <h2>Antes de anexar</h2>
+        <div class="aviso">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+          <span><b>A ata fica imutável.</b> Depois de assinada e anexada, não pode ser editada nem removida — apenas retificada por novo ato. Entra no livro de atas e na trilha de auditoria.</span>
+        </div>
+        <p style="font-size:var(--t-13);color:var(--texto-2);margin:0 0 0.8rem;line-height:1.5">No livro, esta ata aparece marcada como <span class="prov"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg>proveniência externa</span> para distinguir das atas geradas pelo sistema.</p>
+        <div class="icp">
+          <span class="ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8h16v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5z"/></svg></span>
+          <div><b>Assinatura ICP-Brasil</b><span>Marcos Aguiar · Secretaria</span></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<div class="comando">
+  <div class="envelope comando-grade">
+    <div class="comando-ctx"><b>Ata externa · Ordinária 14/03/2019</b><span>arquivo validado · proveniência registrada</span></div>
+    <div class="comando-acoes">
+      <button class="btn btn-contorno" type="button">Cancelar</button>
+      <button class="btn btn-primaria" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 21l3.5-1 11-11-2.5-2.5-11 11L3 21zM14 6.5 17.5 10"/></svg>Assinar e anexar</button>
+    </div>
+  </div>
+</div>
+<script src="../sistema/tema.js"></script>
+</body>
+</html>
