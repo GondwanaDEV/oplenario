@@ -1,0 +1,173 @@
+# O Plenário — Inventário de telas
+
+> Mapa do que **desenhar** para escalar o design system ao catálogo completo
+> (**113 features / 12 módulos**, fonte: [`produto/13-decomposicao-features-v1.md`](../../13-decomposicao-features-v1.md)).
+> As 113 features **não** viram 113 telas: muitas são backend, padrões transversais ou embutidas
+> noutra superfície. Colapsam em **~30 telas distintas**, das quais **4 já estão feitas** (as que
+> decidem a compra). Este doc prioriza as restantes.
+>
+> Arquétipos e regras de composição: [`PADROES-DE-COMPOSICAO.md`](./PADROES-DE-COMPOSICAO.md).
+> Biblioteca: [`componentes.html`](./componentes.html).
+
+## 0. Como ler
+
+**Arquétipo** (forma da tela — ver PADROES §2): `cockpit` · `cabine` (ao vivo) · `balcão` (servidor
+produz artefato) · `pública` (portal white-label) · `lista` (tabela filtrável) · `ficha` (detalhe) ·
+`wizard` (multi-passo) · `config` (admin) · `calendário` · `display` (telão).
+
+**Cobertura:** ✅ feito · ⬜ a desenhar · 🔩 backend/sem tela própria · ⤵ embutido noutra tela.
+
+**Prioridade de design:** **ALTA** (fecha fluxo central, aposta de produto, ou momento-matador de
+POC) · **MÉDIA** (paridade institucional, admin) · **BAIXA** (diferível, nicho, operador-facing).
+
+---
+
+## 1. Matriz por módulo
+
+### 16.1 — Identidade, Perfis e Auditoria
+| Feature | Tela / destino | Arquétipo | Cob. | Prio. |
+|---|---|---|---|---|
+| 1.1 Auth passkey/senha/TOTP | **Login / MFA** | config/auth | ⬜ | MÉDIA |
+| 1.2 SSO gov.br (cidadão) | login do portal | ⤵ pública | ⤵ | — |
+| 1.4 RBAC por perfil | admin do ente | ⤵ | ⤵ | — |
+| 1.6 Trilha de auditoria | **Auditoria / trilha** | lista | ⬜ | MÉDIA |
+| 1.8 Área admin do ente (usuários/vínculos/reset MFA) | **Admin do ente — usuários** | lista+config | ⬜ | MÉDIA |
+| 1.9 Config do ente + branding white-label | **Config do ente / branding** | config | ⬜ | MÉDIA |
+| 1.3/1.5/1.7/1.10 | infra/embutido | 🔩/⤵ | — | — |
+
+### 16.2 — Cadastros Estruturais
+| Feature | Tela | Arquétipo | Cob. | Prio. |
+|---|---|---|---|---|
+| 2.1 Vereadores (mandato, filiação, licença) | **Cadastro de vereadores** | lista+ficha | ⬜ | MÉDIA |
+| 2.2 Mesa Diretora | **Mesa Diretora** | config | ⬜ | MÉDIA |
+| 2.3 Comissões / CPIs | **Comissões** | lista+ficha | ⬜ | MÉDIA |
+| 2.6 Calendário + recesso | **Calendário institucional** | calendário | ⬜ | MÉDIA |
+| 2.4 Legislaturas · 2.5 Blocos/frentes | cadastros menores | lista/config | ⬜ | BAIXA |
+
+### 16.3 — Processo Legislativo (coração)
+| Feature | Tela | Arquétipo | Cob. | Prio. |
+|---|---|---|---|---|
+| 3.1 Protocolo de proposições · 3.16 espécies próprias · 3.18 numeração | **Protocolo / nova proposição** | wizard | ⬜ | ALTA |
+| 3.11 Copiloto de redação (IA) · 3.2 emendas · 3.4 versionamento · 3.17 coautoria | **Editor de proposição + copiloto** | balcão+IA | ⬜ | ALTA |
+| 3.3 Tramitação configurável · 3.7 distribuição a comissões | **Tramitação (board)** = 11.3 | cockpit/board | ⬜ | ALTA |
+| 3.5 Pareceres de comissão | **Parecer** | balcão | ⬜ | MÉDIA |
+| 3.13 Autógrafo · 3.14 sanção/veto · 3.15 promulgação/publicação · 3.20 | **Pós-aprovação (sanção→lei)** | ficha/tracking | ⬜ | MÉDIA |
+| 3.22 Expediente — geração de docs · 3.23 protocolo geral | **Expediente** | balcão | ✅ | — |
+| 3.6/3.8/3.9/3.10/3.12/3.19/3.21 | embutidos (ficha, busca, assinatura, anexos) | ⤵ | — | — |
+
+### 16.4 — Sessões Plenárias
+| Feature | Tela | Arquétipo | Cob. | Prio. |
+|---|---|---|---|---|
+| 4.17 Mesa de condução ao vivo · 4.4 quórum · 4.6 tribuna · 4.16 incidentes | **Sessão ao vivo** | cabine | ✅ | — |
+| 4.1 Pauta · 4.14 tipos de sessão | **Montagem de pauta** | balcão | ⬜ | ALTA |
+| 4.15 Convocação + edital + ciência | **Convocação de sessão** | wizard | ⬜ | ALTA |
+| 4.12 Transcrição · 4.13 Ata-IA · 8.5 revisão humana | **Revisão de ata-IA** | balcão+IA | ⬜ | ALTA |
+| 4.2 Painel eletrônico (telão) · 4.3 votação | **Telão de votação** | display | ⬜ | MÉDIA |
+| 4.21 Livro de atas · 4.11 anexar ata | **Livro de atas** | lista+ficha | ⬜ | MÉDIA |
+| 4.18 Audiência pública · 4.19 Julgamento de contas | variantes de pauta/votação | ⤵ | ⬜ | BAIXA |
+| 4.5/4.7-4.10/4.20 | presença, captação, caption | 🔩/⤵ | — | — |
+
+### 16.5 — Transparência e Portal Público
+| Feature | Tela | Arquétipo | Cob. | Prio. |
+|---|---|---|---|---|
+| 5.1 Portal white-label (casco) · 5.4 resumo IA · 5.6 timeline | **Portal — home** | pública | ✅ | — |
+| 5.2 Publicação · acompanhamento → **lista pública + ficha pública + página do vereador + agenda** | **Portal — navegação** | pública/lista/ficha | ⬜ | MÉDIA |
+| 5.8 Legislação consolidada | **Legislação consolidada** | pública/lista | ⬜ | MÉDIA |
+| 5.9 Transparência fiscal · 5.11 dados abertos | **Transparência / dados abertos** | pública | ⬜ | BAIXA |
+| 5.10 Portal do titular LGPD | (no portal) | pública | ✅ | — |
+| 5.3/5.5/5.7/5.12 | a11y, notificação, artefato, DOM | ⤵/🔩 | — | — |
+
+### 16.6 — Participação Cidadã
+| Feature | Tela | Arquétipo | Cob. | Prio. |
+|---|---|---|---|---|
+| 6.1 e-SIC amplo + prazo LAI | (no portal) | pública | ✅ | — |
+| 6.2 Ouvidoria 13.460 + Carta de Serviços | **Ouvidoria** | pública+form | ⬜ | MÉDIA |
+| 6.3 Comentários públicos | embutido na ficha pública | ⤵ | — | — |
+
+### 16.7 — Experiência para Vereador (Aposta 2)
+| Feature | Tela | Arquétipo | Cob. | Prio. |
+|---|---|---|---|---|
+| 7.2 Dashboard pessoal · 7.5 estatísticas · 7.3 assinatura 2 toques | **Dashboard do vereador (PWA)** | cockpit (mobile) | ⬜ | ALTA |
+| 7.1 PWA shell · 7.4 push | casca + notificação | ⤵ | — | — |
+
+### 16.8 — Camada de Confiança (IA)
+| Feature | Tela | Arquétipo | Cob. | Prio. |
+|---|---|---|---|---|
+| 8.1-8.5 citação/incerteza/log/reportar/revisão | **padrão transversal** (camada de IA) | ⤵ | ✅* | — |
+| 8.6 Observabilidade do modelo | console do operador | 🔩 | ⬜ | BAIXA |
+
+*o padrão de confiança da IA está provado no Portal e documentado na galeria; reusa-se onde houver IA.
+
+### 16.9 — Migração
+| Feature | Tela | Arquétipo | Cob. | Prio. |
+|---|---|---|---|---|
+| 9.6 Portabilidade / saída (dump do ente) | **Exportar dados do ente** | config | ⬜ | BAIXA |
+| 9.1-9.5 | ingestão/conectores | 🔩 | — | — |
+
+### 16.10 — Operação, SLA e Compliance
+| Feature | Tela | Arquétipo | Cob. | Prio. |
+|---|---|---|---|---|
+| 10.4 Motor de compliance (status) · 10.5 remessa TCE | (na saúde institucional dos Painéis) | ⤵ cockpit | ✅* | — |
+| 10.3 Status page pública | **Status page** | pública simples | ⬜ | BAIXA |
+| 10.1/10.2 | SLA/plantão | 🔩 | — | — |
+
+*o status do TCE-CE é o herói dos Painéis; a *geração* do arquivo de remessa segue `[GAP]` de layout.
+
+### 16.11 — Painéis, Pendências e Notificações (read-model)
+| Feature | Tela | Arquétipo | Cob. | Prio. |
+|---|---|---|---|---|
+| 11.4 Dashboard institucional · 11.1 prazos | **Painéis da Mesa** | cockpit | ✅ | — |
+| 11.2 Caixa de pendências "minhas tarefas hoje" | **Minhas pendências** | cockpit/lista | ⬜ | ALTA |
+| 11.3 Painel de tramitação (board) | = Tramitação (3.3) | cockpit/board | ⬜ | ALTA |
+| 11.8 Espelho / ficha da matéria | **Ficha da matéria** | ficha | ⬜ | ALTA |
+| 11.6 Central de notificações | **Central de notificações** | lista/inbox | ⬜ | MÉDIA |
+| 11.5 Busca global · 11.7 exportação PDF/CSV | embutidos (busca + componente) | ⤵ | — | — |
+
+### 16.12 — Console do Operador SaaS (supratenant)
+| Feature | Tela | Arquétipo | Cob. | Prio. |
+|---|---|---|---|---|
+| 12.1-12.8 registry/billing/flags/grant/auditoria | **Console do operador** (várias) | cockpit+lista+config | ⬜ | BAIXA |
+
+> Operador-facing, fora da fronteira tenant-facing — não decide compra; design diferido.
+
+---
+
+## 2. Roadmap de telas a desenhar (priorizado)
+
+**✅ Prontas (4 — as que decidem a compra, 3 públicos cobertos):**
+Sessão ao vivo · Expediente · Portal do Cidadão (home+e-SIC+LGPD) · Painéis da Mesa.
+
+**🟥 ALTA — fecham os fluxos centrais, as 3 apostas e a POC do servidor (8):**
+1. **Lista/tabela filtrável** (arquétipo-base; proposições internas 3.x/11.5/11.7) — *destrava dezenas de telas de gestão; primeiro a desenhar.*
+2. **Editor de proposição + copiloto IA** (3.11/3.1/3.2/3.4/3.16/3.17) — coração + **Aposta 1**.
+3. **Ficha da matéria / espelho** (11.8/3.4/3.6/3.19) — servidor imprime, jurídico cita.
+4. **Tramitação — board/kanban** (3.3/3.7/11.3) — onde está cada proposição.
+5. **Minhas pendências / tarefas de hoje** (11.2) — momento-matador da POC do servidor.
+6. **Montagem de pauta + Convocação** (4.1/4.14/4.15) — sem isso a sessão ao vivo não tem origem.
+7. **Revisão de ata-IA** (4.13/4.12/8.5) — **Aposta 1**; produtividade + confiança.
+8. **Dashboard do vereador (PWA)** (7.2/7.5/7.3) — **Aposta 2**; mobile-first.
+
+**🟧 MÉDIA — paridade institucional + administração (≈11):**
+Login/MFA (1.1) · Admin do ente — usuários (1.8) · Config do ente/branding (1.9) · Auditoria (1.6) ·
+Cadastro de vereadores (2.1) · Comissões (2.3) · Mesa Diretora (2.2) · Calendário institucional (2.6) ·
+Pareceres (3.5) · Pós-aprovação sanção→lei (3.13-3.15) · Livro de atas (4.21) · Telão de votação (4.2) ·
+Central de notificações (11.6) · Ouvidoria (6.2) · Portal — navegação/lista/ficha pública (5.2) ·
+Legislação consolidada (5.8).
+
+**🟩 BAIXA — diferível / nicho / operador (≈8):**
+Audiência pública (4.18) · Julgamento de contas (4.19) · Transparência fiscal (5.9) · Dados abertos (5.11) ·
+Status page (10.3) · Exportar dados do ente (9.6) · Console do operador (12.x) · cadastros menores (2.4/2.5).
+
+---
+
+## 3. Cobertura — resumo
+
+- **~30 telas distintas** cobrem as 113 features (o resto é backend/embutido/transversal).
+- **4 prontas** (cabine · balcão · pública · cockpit) — os 4 arquétipos-herói, 3 públicos.
+- **8 ALTA · ~11 MÉDIA · ~8 BAIXA** a desenhar.
+- **Arquétipos ainda sem prova** (próximo a materializar, Eixo 2): **lista/tabela filtrável**,
+  **ficha/detalhe**, **wizard**, **config/admin**. As telas ALTA #1–#5 exercem justamente esses 4 —
+  então **desenhar lista → ficha → wizard → config** entrega os arquétipos E as telas de maior valor
+  ao mesmo tempo.
+- **Sequência recomendada:** lista filtrável (1) → ficha da matéria (3) → editor+copiloto (2) →
+  tramitação board (4) → minhas pendências (5) → pauta+convocação (6) → ata-IA (7) → dashboard vereador (8).
