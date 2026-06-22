@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Calendário institucional</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Calendário institucional — ARQUÉTIPO: calendário
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+
+     A agenda da Casa (2.6): sessões, reuniões de comissão, audiências,
+     prazos. Prova o arquétipo calendário (grade de mês + agenda lateral).
+     Evento por COR + RÓTULO de texto (nunca só cor). Hoje destacado.
+     Prazo do TCE leva nota [GAP] (regra em homologação). Reusa chips e
+     o padrão de rail.
+     ============================================================ */
+
+  .pg-cab { padding: 1.4rem 0 0; display: grid; grid-template-columns: 1fr auto; gap: 0.8rem 1.4rem; align-items: end; }
+  .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
+  .mes-nav { display: flex; align-items: center; gap: 0.5rem; }
+  .mes-nav .seta { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--linha); background: var(--surface); color: var(--texto); display: grid; place-items: center; cursor: pointer; }
+  .mes-nav .seta:hover { border-color: var(--texto-2); }
+  .mes-nav .atual { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); min-width: 9.5rem; text-align: center; }
+
+  .legenda { display: flex; gap: 0.5rem 1rem; flex-wrap: wrap; margin: 1.1rem 0 0; }
+  .lg { display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--t-12); color: var(--texto-2); }
+  .lg .pt { width: 12px; height: 12px; border-radius: 3px; flex: 0 0 auto; }
+  .pt-sessao { background: var(--jade); } .pt-comissao { background: var(--cobalto); }
+  .pt-audiencia { background: var(--amarelo-traco); } .pt-prazo { background: var(--telha); }
+
+  .grade { display: grid; grid-template-columns: 1fr 312px; gap: 1.4rem; align-items: start; margin: 1.1rem 0 0; }
+
+  /* calendário */
+  .cal { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; }
+  .cal-dows { display: grid; grid-template-columns: repeat(7, 1fr); background: var(--surface-2); border-bottom: 1px solid var(--linha); }
+  .cal-dows span { font-family: var(--mono); font-size: var(--t-12); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--texto-2); text-align: center; padding: 0.6rem 0; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+  .dia { min-height: 104px; border-right: 1px solid var(--linha); border-bottom: 1px solid var(--linha); padding: 0.4rem; display: flex; flex-direction: column; gap: 0.25rem; }
+  .dia:nth-child(7n) { border-right: none; }
+  .dia.fora { background: color-mix(in srgb, var(--surface-2) 60%, transparent); }
+  .dia .n { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); align-self: flex-start; padding: 0.1rem 0.35rem; border-radius: 6px; }
+  .dia.fora .n { color: color-mix(in srgb, var(--texto-2) 60%, transparent); }
+  .dia.hoje .n { background: var(--acao); color: var(--acao-texto); font-weight: 700; }
+  .ev { font-size: 0.72rem; font-weight: 600; line-height: 1.2; border-radius: 5px; padding: 0.15rem 0.35rem; color: #fff; display: flex; align-items: center; gap: 0.25rem; cursor: pointer; }
+  .ev .hh { font-family: var(--mono); font-weight: 500; opacity: .9; }
+  .ev-sessao { background: var(--jade); } .ev-comissao { background: var(--cobalto-fundo); }
+  /* âmbar é cor CLARA → fundo amarelo brilhante (invariante) + texto
+     escuro (branco sobre âmbar, ou texto escuro sobre âmbar-médio, falham) */
+  .ev-audiencia { background: var(--amarelo); color: #2E2102; } .ev-prazo { background: var(--telha-fundo); }
+  .ev-mais { font-size: 0.7rem; color: var(--texto-2); padding: 0 0.35rem; }
+
+  /* agenda lateral */
+  .rail { display: grid; gap: 1rem; }
+  .rcard { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.1rem 1.2rem; }
+  .rcard > h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.9rem; }
+  .ag { display: grid; grid-template-columns: auto 1fr; gap: 0.2rem 0.8rem; padding: 0.7rem 0; border-top: 1px solid var(--linha); }
+  .ag:first-of-type { border-top: none; padding-top: 0; }
+  .ag .data { text-align: center; }
+  .ag .data b { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--marca); display: block; line-height: 1; }
+  .ag .data span { font-family: var(--mono); font-size: 0.6rem; text-transform: uppercase; color: var(--texto-2); }
+  .ag .info b { font-size: var(--t-13); color: var(--texto); display: block; }
+  .ag .info .meta { font-size: var(--t-12); color: var(--texto-2); display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+  .ag .info .tipo { font-size: 0.62rem; font-weight: 600; font-family: var(--mono); text-transform: uppercase; border-radius: 4px; padding: 0.05rem 0.3rem; color: #fff; }
+  .t-sessao { background: var(--jade); } .t-comissao { background: var(--cobalto-fundo); }
+  .t-audiencia { background: var(--amarelo); color: #2E2102; } .t-prazo { background: var(--telha-fundo); }
+  .nota-gap { font-size: var(--t-12); color: var(--texto-2); margin: 0.6rem 0 0; line-height: 1.4; }
+  .nota-gap .tag { font-family: var(--mono); font-size: 0.6rem; letter-spacing: .04em; text-transform: uppercase; color: var(--aviso-texto); border: 1px solid color-mix(in srgb, var(--amarelo-traco) 45%, transparent); border-radius: 4px; padding: 0.05rem 0.3rem; }
+
+  @media (max-width: 920px) { .grade { grid-template-columns: 1fr; } .dia { min-height: 78px; } }
+  @media (max-width: 560px) { .pg-cab { grid-template-columns: 1fr; } .dia .ev .hh { display: none; } }
+</style>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+
+<header class="topo">
+  <div class="envelope topo-grade">
+    <div class="marca">
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div>
+        <p class="marca-nome">O Plenário</p>
+        <p class="marca-orgao">Câmara Municipal de Fortaleza</p>
+      </div>
+    </div>
+    <div class="topo-sep" aria-hidden="true"></div>
+    <span class="eyebrow" style="align-self:center">Cadastros · Calendário</span>
+    <div class="topo-dir">
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+      <span class="presidente">
+        <span class="avatar" aria-hidden="true">RC</span>
+        <span class="quem"><b>Rita Campos</b><span>Servidora legislativa</span></span>
+      </span>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope">
+  <div class="pg-cab">
+    <div>
+      <span class="eyebrow">Calendário institucional</span>
+      <h1>Agenda da Casa</h1>
+    </div>
+    <div class="mes-nav">
+      <button class="seta" type="button" aria-label="Mês anterior"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+      <span class="atual">Junho de 2026</span>
+      <button class="seta" type="button" aria-label="Próximo mês"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+    </div>
+  </div>
+
+  <div class="legenda" aria-hidden="true">
+    <span class="lg"><span class="pt pt-sessao"></span>Sessão plenária</span>
+    <span class="lg"><span class="pt pt-comissao"></span>Comissão</span>
+    <span class="lg"><span class="pt pt-audiencia"></span>Audiência pública</span>
+    <span class="lg"><span class="pt pt-prazo"></span>Prazo</span>
+  </div>
+
+  <div class="grade">
+    <!-- CALENDÁRIO -->
+    <div class="cal">
+      <div class="cal-dows" aria-hidden="true">
+        <span>Dom</span><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span>
+      </div>
+      <div class="cal-grid" role="grid" aria-label="Junho de 2026">
+        <!-- semana 1 -->
+        <div class="dia fora"><span class="n">31</span></div>
+        <div class="dia"><span class="n">1</span></div>
+        <div class="dia"><span class="n">2</span></div>
+        <div class="dia"><span class="n">3</span><span class="ev ev-sessao"><span class="hh">14h</span>12ª Ordinária</span></div>
+        <div class="dia"><span class="n">4</span><span class="ev ev-comissao"><span class="hh">10h</span>CCJ</span></div>
+        <div class="dia"><span class="n">5</span></div>
+        <div class="dia"><span class="n">6</span></div>
+        <!-- semana 2 -->
+        <div class="dia"><span class="n">7</span></div>
+        <div class="dia"><span class="n">8</span></div>
+        <div class="dia"><span class="n">9</span></div>
+        <div class="dia"><span class="n">10</span><span class="ev ev-sessao"><span class="hh">14h</span>13ª Ordinária</span></div>
+        <div class="dia"><span class="n">11</span><span class="ev ev-audiencia"><span class="hh">9h</span>Mobilidade</span></div>
+        <div class="dia"><span class="n">12</span></div>
+        <div class="dia"><span class="n">13</span></div>
+        <!-- semana 3 -->
+        <div class="dia"><span class="n">14</span></div>
+        <div class="dia"><span class="n">15</span><span class="ev ev-comissao"><span class="hh">10h</span>Educação</span></div>
+        <div class="dia"><span class="n">16</span></div>
+        <div class="dia"><span class="n">17</span><span class="ev ev-sessao"><span class="hh">14h</span>14ª Ordinária</span></div>
+        <div class="dia"><span class="n">18</span></div>
+        <div class="dia"><span class="n">19</span></div>
+        <div class="dia"><span class="n">20</span></div>
+        <!-- semana 4 -->
+        <div class="dia"><span class="n">21</span></div>
+        <div class="dia hoje"><span class="n">22</span><span class="ev ev-comissao"><span class="hh">10h</span>CCJ · PL 042</span></div>
+        <div class="dia"><span class="n">23</span></div>
+        <div class="dia"><span class="n">24</span><span class="ev ev-sessao"><span class="hh">14h</span>15ª Ordinária</span></div>
+        <div class="dia"><span class="n">25</span></div>
+        <div class="dia"><span class="n">26</span><span class="ev ev-sessao"><span class="hh">14h</span>16ª Ordinária</span></div>
+        <div class="dia"><span class="n">27</span></div>
+        <!-- semana 5 -->
+        <div class="dia"><span class="n">28</span></div>
+        <div class="dia"><span class="n">29</span><span class="ev ev-prazo">Remessa TCE</span></div>
+        <div class="dia"><span class="n">30</span></div>
+        <div class="dia fora"><span class="n">1</span></div>
+        <div class="dia fora"><span class="n">2</span></div>
+        <div class="dia fora"><span class="n">3</span></div>
+        <div class="dia fora"><span class="n">4</span></div>
+      </div>
+    </div>
+
+    <!-- AGENDA LATERAL -->
+    <aside class="rail" aria-label="Próximos eventos">
+      <div class="rcard">
+        <h2>Próximos</h2>
+
+        <div class="ag">
+          <div class="data"><b>24</b><span>jun</span></div>
+          <div class="info"><b>15ª Sessão Ordinária</b><div class="meta"><span class="tipo t-sessao">sessão</span> 14h · Plenário</div></div>
+        </div>
+        <div class="ag">
+          <div class="data"><b>26</b><span>jun</span></div>
+          <div class="info"><b>16ª Sessão Ordinária</b><div class="meta"><span class="tipo t-sessao">sessão</span> 14h · Plenário</div></div>
+        </div>
+        <div class="ag">
+          <div class="data"><b>29</b><span>jun</span></div>
+          <div class="info"><b>Remessa mensal ao TCE-CE</b><div class="meta"><span class="tipo t-prazo">prazo</span> fim da janela</div></div>
+        </div>
+
+        <p class="nota-gap"><span class="tag">[GAP]</span> A data da remessa do TCE é regra em homologação — confirme no calendário oficial do Tribunal.</p>
+      </div>
+
+      <div class="rcard">
+        <h2>Recesso</h2>
+        <div class="ag">
+          <div class="data"><b>jul</b><span>2026</span></div>
+          <div class="info"><b>Recesso legislativo</b><div class="meta">conforme o Regimento Interno</div></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+  <div style="height:1.5rem"></div>
+</main>
+
+<script src="../sistema/tema.js"></script>
+</body>
+</html>
