@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Revisar ata gerada por IA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Revisar ata-IA — ARQUÉTIPO: balcão + IA
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+
+     2ª grande tela de IA-trust (4.13 ata · 8.5 ASR). A IA transcreveu
+     a sessão e redigiu a ata; o servidor REVISA, corrige e ASSUME a
+     responsabilidade ao aprovar. A ata é ilha-PAPEL. ASSINATURA: os
+     trechos de BAIXA CONFIANÇA da IA ficam marcados no papel e
+     ancorados ao ÁUDIO (a IA mostra a fonte = o trecho da gravação).
+     Camada de confiança obrigatória. INTEGRIDADE: números de votação
+     extraídos pela IA levam "confira com o placar oficial" — o placar
+     (da sessão ao vivo) é a autoridade, não a transcrição.
+     ============================================================ */
+
+  .doc-cab { padding: 1.4rem 0 0; display: grid; grid-template-columns: 1fr auto; gap: 0.8rem 1.4rem; align-items: end; }
+  .doc-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
+  .doc-cab .sub { font-size: var(--t-13); color: var(--texto-2); margin: 0.4rem 0 0; }
+  .doc-meta { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; justify-content: flex-end; }
+  .chip { display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.28rem 0.7rem; border: 1px solid transparent; white-space: nowrap; }
+  .chip-ia { color: var(--cobalto); background: color-mix(in srgb, var(--cobalto) 9%, var(--surface)); border-color: color-mix(in srgb, var(--cobalto) 32%, transparent); }
+  [data-tema="escuro"] .chip-ia { color: var(--foco); border-color: color-mix(in srgb, var(--foco) 38%, transparent); }
+  .chip-rev { color: var(--aviso-texto); background: color-mix(in srgb, var(--amarelo) 16%, var(--surface)); border-color: color-mix(in srgb, var(--amarelo-traco) 50%, transparent); }
+
+  .estudio { display: grid; grid-template-columns: minmax(0, 1fr) 366px; gap: 1.5rem; align-items: start; margin: 1.4rem 0 0; }
+
+  /* === ILHA-PAPEL: a ata === */
+  .papel { background: var(--papel); color: var(--papel-texto); border: 1px solid var(--papel-linha); border-radius: var(--raio); box-shadow: var(--sombra-papel); padding: clamp(1.4rem, 3vw, 2.4rem); position: relative; font-size: 1.0rem; line-height: 1.75; }
+  .papel .folha-topo { text-align: center; border-bottom: 1px solid var(--papel-linha); padding-bottom: 0.9rem; margin-bottom: 1.4rem; }
+  .papel .folha-topo .casa { font-family: var(--display); font-weight: 700; font-size: var(--t-13); letter-spacing: .02em; color: var(--papel-texto); text-transform: uppercase; display: block; }
+  .papel .folha-topo .tit { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--papel-texto); margin: 0.3rem 0 0; }
+  .papel .secao-ata { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--papel-marca); margin: 1.5rem 0 0.5rem; font-weight: 600; }
+  .papel p { margin: 0 0 0.9rem; }
+
+  /* marca de baixa confiança da IA — dotada + nº sobrescrito (não só cor) */
+  mark.baixa { background: color-mix(in srgb, var(--amarelo) 22%, transparent); color: var(--papel-texto); border-bottom: 2px dotted #9A6A0C; border-radius: 2px; padding: 0 1px; cursor: pointer; }
+  mark.baixa sup { font-family: var(--mono); font-size: 0.6rem; font-weight: 700; color: #6E5009; margin-left: 1px; }
+  mark.baixa:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
+
+  /* === RAIL: IA + áudio === */
+  .rail { display: grid; gap: 1.1rem; position: sticky; top: 76px; }
+  .ia-cabe { background: var(--surface); border: 1px solid var(--linha); border-top: 3px solid var(--cobalto); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1rem 1.1rem; }
+  [data-tema="escuro"] .ia-cabe { border-top-color: var(--foco); }
+  .ia-cabe .marca-ia { display: flex; align-items: center; gap: 0.55rem; }
+  .ia-cabe .glifo { width: 30px; height: 30px; border-radius: 8px; flex: 0 0 auto; display: grid; place-items: center; color: #fff; background: var(--cobalto); }
+  [data-tema="escuro"] .ia-cabe .glifo { background: var(--cobalto-fundo); }
+  .ia-cabe b { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); display: block; line-height: 1.1; }
+  .ia-cabe .marca-ia span { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .ia-cabe .confianca { font-size: var(--t-12); color: var(--texto-2); margin: 0.8rem 0 0; line-height: 1.45; border-top: 1px solid var(--linha); padding-top: 0.7rem; }
+  .ia-cabe .confianca b { display: inline; font-family: var(--corpo); font-size: var(--t-12); color: var(--texto); }
+
+  /* player de áudio (a fonte) */
+  .player { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1rem 1.1rem; }
+  .player h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.8rem; }
+  .player .controles { display: flex; align-items: center; gap: 0.7rem; }
+  .player .play { width: 42px; height: 42px; border-radius: 50%; flex: 0 0 auto; background: var(--acao); color: var(--acao-texto); border: none; display: grid; place-items: center; cursor: pointer; }
+  .player .play:hover { background: var(--acao-hover); }
+  .player .trilha-wrap { flex: 1; min-width: 0; }
+  .player .trilha { position: relative; height: 6px; border-radius: 3px; background: var(--linha); }
+  .player .preenche { position: absolute; left: 0; top: 0; bottom: 0; width: 38%; background: var(--marca); border-radius: 3px; }
+  .player .cabeca { position: absolute; left: 38%; top: 50%; width: 12px; height: 12px; border-radius: 50%; background: var(--marca); transform: translate(-50%, -50%); box-shadow: 0 0 0 3px var(--surface); }
+  .player .marc { position: absolute; top: 50%; width: 8px; height: 8px; border-radius: 50%; background: #9A6A0C; transform: translate(-50%, -50%); border: 1.5px solid var(--surface); }
+  .player .tempos { display: flex; justify-content: space-between; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin-top: 0.5rem; }
+
+  /* pontos a confirmar (ancorados ao texto + áudio) */
+  .confirmar { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; }
+  .confirmar > h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0; padding: 0.85rem 1.1rem 0.5rem; display: flex; align-items: center; gap: 0.5rem; }
+  .confirmar > h2 .qt { margin-left: auto; color: var(--texto-2); }
+  .pc { padding: 0.8rem 1.1rem; border-top: 1px solid var(--linha); }
+  .pc .pc-top { display: flex; align-items: center; gap: 0.5rem; }
+  /* texto sobre fundo amarelo-sobre-surface usa o token (surface vira
+     escuro no tema escuro → texto precisa clarear p/ manter AA) */
+  .pc .selo-n { width: 20px; height: 20px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--mono); font-size: 0.62rem; font-weight: 700; color: var(--aviso-texto); border: 1.5px solid var(--amarelo-traco); background: color-mix(in srgb, var(--amarelo) 16%, var(--surface)); }
+  .pc .tipo { font-size: var(--t-12); font-weight: 600; color: var(--texto); }
+  .pc .ouvir { margin-left: auto; font-family: var(--mono); font-size: var(--t-12); color: var(--cobalto); background: none; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 0.3rem; }
+  [data-tema="escuro"] .pc .ouvir { color: var(--foco); }
+  .pc .ouvir:hover { text-decoration: underline; }
+  .pc .trecho { font-size: var(--t-13); color: var(--texto); margin: 0.5rem 0 0; line-height: 1.45; }
+  .pc .trecho .sug { font-weight: 600; }
+  .pc .nota-fonte { font-size: var(--t-12); color: var(--texto-2); margin: 0.45rem 0 0; }
+  .pc .acoes { display: flex; gap: 0.5rem; margin-top: 0.65rem; flex-wrap: wrap; }
+
+  @media (max-width: 1040px) {
+    .estudio { grid-template-columns: 1fr; }
+    .rail { position: static; top: auto; }
+  }
+  @media (max-width: 560px) { .doc-cab { grid-template-columns: 1fr; } .doc-meta { justify-content: flex-start; } }
+</style>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+
+<header class="topo">
+  <div class="envelope topo-grade">
+    <div class="marca">
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div>
+        <p class="marca-nome">O Plenário</p>
+        <p class="marca-orgao">Câmara Municipal de Fortaleza</p>
+      </div>
+    </div>
+    <div class="topo-sep" aria-hidden="true"></div>
+    <span class="eyebrow" style="align-self:center">Sessão plenária · Ata</span>
+    <div class="topo-dir">
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+      <span class="presidente">
+        <span class="avatar" aria-hidden="true">RC</span>
+        <span class="quem"><b>Rita Campos</b><span>Servidora legislativa</span></span>
+      </span>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope">
+  <div class="doc-cab">
+    <div>
+      <span class="eyebrow">Revisar ata</span>
+      <h1>Ata da 14ª Sessão Ordinária</h1>
+      <p class="sub">Rascunho gerado por IA a partir da gravação de 17/06/2026. Revise os pontos marcados antes de aprovar.</p>
+    </div>
+    <div class="doc-meta">
+      <span class="chip chip-ia">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4z"/></svg>
+        Rascunho de IA
+      </span>
+      <span class="chip chip-rev">3 pontos a confirmar</span>
+    </div>
+  </div>
+
+  <div class="estudio">
+    <!-- ============ ATA (papel) ============ -->
+    <section aria-label="Texto da ata">
+      <article class="papel">
+        <div class="folha-topo">
+          <span class="casa">Câmara Municipal de Fortaleza</span>
+          <p class="tit">Ata da 14ª Sessão Ordinária</p>
+        </div>
+
+        <p class="secao-ata">Abertura</p>
+        <p>Aos dezessete dias do mês de junho de dois mil e vinte e seis, às quatorze horas, reuniu-se a Câmara Municipal de Fortaleza, em sua sede, sob a presidência do Vereador Antônio Moraes. Verificada a presença de <mark class="baixa" tabindex="0" aria-describedby="pc-1">dezenove<sup>1</sup></mark> dos vinte e um vereadores, havendo número regimental, o Presidente declarou aberta a sessão.</p>
+
+        <p class="secao-ata">Expediente</p>
+        <p>Foi lida e aprovada, sem ressalvas, a ata da 13ª sessão. A Secretaria deu conhecimento das correspondências recebidas e do Requerimento de Informações nº 230/2026.</p>
+
+        <p class="secao-ata">Ordem do Dia</p>
+        <p>Em segunda votação, o Projeto de Lei nº 022/2026, que institui a política municipal de incentivo à energia solar, foi <strong>aprovado</strong> por <mark class="baixa" tabindex="0" aria-describedby="pc-2">quinze votos a quatro<sup>2</sup></mark>, após manifestação favorável da Vereadora Carla Tavares.</p>
+        <p>O Projeto de Lei Complementar nº 003/2026, que altera o Código de Posturas, teve a discussão adiada a pedido do relator, para a sessão seguinte.</p>
+
+        <p class="secao-ata">Encerramento</p>
+        <p>Nada mais havendo a tratar, o Presidente agradeceu a presença de todos e encerrou a sessão às <mark class="baixa" tabindex="0" aria-describedby="pc-3">dezesseis horas e quarenta e dois minutos<sup>3</sup></mark>, da qual se lavrou a presente ata.</p>
+      </article>
+    </section>
+
+    <!-- ============ RAIL ============ -->
+    <aside class="rail" aria-label="Origem por IA e pontos a confirmar">
+      <!-- confiança -->
+      <div class="ia-cabe">
+        <div class="marca-ia">
+          <span class="glifo" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4z"/></svg></span>
+          <span><b>Ata gerada por IA</b><span>transcrição da gravação · revisar</span></span>
+        </div>
+        <p class="confianca"><b>A IA pode errar nomes, números e horários.</b> Os trechos marcados em amarelo têm baixa confiança — ouça o áudio e confirme. A ata só vale depois da sua aprovação.</p>
+      </div>
+
+      <!-- player -->
+      <div class="player">
+        <h2>Gravação da sessão</h2>
+        <div class="controles">
+          <button class="play" type="button" aria-label="Reproduzir a gravação"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button>
+          <div class="trilha-wrap">
+            <div class="trilha" role="img" aria-label="Linha do tempo da gravação, 1h42min, posição atual 39 minutos; 3 marcadores de baixa confiança">
+              <div class="preenche"></div>
+              <span class="marc" style="left:22%" title="Ponto 1"></span>
+              <span class="marc" style="left:54%" title="Ponto 2"></span>
+              <span class="marc" style="left:92%" title="Ponto 3"></span>
+              <div class="cabeca"></div>
+            </div>
+            <div class="tempos"><span>39:12</span><span>1:42:05</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- pontos a confirmar -->
+      <div class="confirmar">
+        <h2>Pontos a confirmar <span class="qt">3</span></h2>
+
+        <div class="pc" id="pc-1">
+          <div class="pc-top">
+            <span class="selo-n" aria-hidden="true">1</span>
+            <span class="tipo">Quórum de abertura</span>
+            <button class="ouvir" type="button"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>00:38</button>
+          </div>
+          <p class="trecho">A IA ouviu <span class="sug">“dezenove”</span> presentes. Confira a lista de presença registrada na sessão.</p>
+          <p class="nota-fonte">Fonte: a lista de chamada é a autoridade, não o áudio.</p>
+          <div class="acoes">
+            <button class="btn btn-primaria btn-mini" type="button">Confirmar</button>
+            <button class="btn btn-contorno btn-mini" type="button">Corrigir</button>
+          </div>
+        </div>
+
+        <div class="pc" id="pc-2">
+          <div class="pc-top">
+            <span class="selo-n" aria-hidden="true">2</span>
+            <span class="tipo">Resultado de votação</span>
+            <button class="ouvir" type="button"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>55:20</button>
+          </div>
+          <p class="trecho">A IA transcreveu <span class="sug">“quinze a quatro”</span> no PL 022/2026.</p>
+          <p class="nota-fonte">Confira com o <strong>placar oficial</strong> da votação — ele é a fonte do resultado, não a transcrição.</p>
+          <div class="acoes">
+            <button class="btn btn-primaria btn-mini" type="button">Usar o placar (15 × 4)</button>
+            <button class="btn btn-contorno btn-mini" type="button">Corrigir</button>
+          </div>
+        </div>
+
+        <div class="pc" id="pc-3">
+          <div class="pc-top">
+            <span class="selo-n" aria-hidden="true">3</span>
+            <span class="tipo">Horário de encerramento</span>
+            <button class="ouvir" type="button"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>1:41:50</button>
+          </div>
+          <p class="trecho">A IA ouviu <span class="sug">“16h42”</span>. O sistema registrou o encerramento às 16h40.</p>
+          <div class="acoes">
+            <button class="btn btn-primaria btn-mini" type="button">Usar 16h40 (registro)</button>
+            <button class="btn btn-contorno btn-mini" type="button">Manter 16h42</button>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+  <div style="height:1rem"></div>
+</main>
+
+<!-- ===== BARRA DE COMANDO ===== -->
+<div class="comando" role="region" aria-label="Ações da ata">
+  <div class="envelope comando-grade">
+    <div class="comando-ctx"><b>14ª Sessão Ordinária · ata em revisão</b><span>3 pontos a confirmar antes de aprovar</span></div>
+    <div class="comando-acoes">
+      <button class="btn btn-fantasma" type="button">Baixar rascunho</button>
+      <button class="btn btn-contorno" type="button">Salvar revisão</button>
+      <button class="btn btn-primaria" type="button">
+        Aprovar e publicar ata
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="../sistema/tema.js"></script>
+<script>
+  (function () {
+    var barra = document.querySelector('.comando'), main = document.querySelector('main');
+    if (!barra || !main) return;
+    function ajustar() { main.style.paddingBottom = (barra.offsetHeight + 28) + 'px'; }
+    ajustar(); window.addEventListener('resize', ajustar);
+  })();
+</script>
+</body>
+</html>
