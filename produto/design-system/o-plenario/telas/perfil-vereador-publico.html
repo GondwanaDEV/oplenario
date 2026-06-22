@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Vereadora Helena Past — Câmara Municipal de Fortaleza</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Perfil PÚBLICO do vereador — ARQUÉTIPO: leitura pública
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+     A vista cidadã do vereador (5.2): perfil INSTITUCIONAL publicado pela
+     Câmara p/ transparência — autoria, votos públicos, presença, agenda
+     institucional. NÃO é gabinete (escopo = instituição). Assinatura =
+     cinta de azulejo do cabeçalho. Honesto: voto secreto não individua-
+     lizado; presença = registro oficial.
+     ============================================================ */
+  .pub-topo { background: var(--surface); border-bottom: 1px solid var(--linha); }
+  .pub-topo-in { display: flex; align-items: center; gap: 1rem; padding: 0.9rem 0; flex-wrap: wrap; }
+  .brasao-casa { display: flex; align-items: center; gap: 0.7rem; }
+  .brasao-casa .br { width: 40px; height: 40px; border-radius: 10px; flex: 0 0 auto; }
+  .brasao-casa b { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); line-height: 1.1; display: block; }
+  .brasao-casa span { font-size: var(--t-12); color: var(--texto-2); }
+  .pub-topo .dir { margin-left: auto; display: flex; align-items: center; gap: 0.7rem; }
+  .nav-pub { display: flex; gap: 0.3rem; }
+  .nav-pub a { font-size: var(--t-13); font-weight: 600; color: var(--texto-2); text-decoration: none; padding: 0.5rem 0.7rem; border-radius: 8px; }
+  .nav-pub a:hover { color: var(--texto); }
+
+  .migalha { font-size: var(--t-13); color: var(--texto-2); margin: 1.2rem 0 0; display: flex; align-items: center; gap: 0.4rem; }
+  .migalha a { color: var(--marca); font-weight: 600; text-decoration: none; } .migalha a:hover { text-decoration: underline; }
+
+  /* ---- cabeçalho do perfil (cinta de azulejo = assinatura) ---- */
+  .perfil-cab { position: relative; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; margin: 0.6rem 0 0; }
+  .cinta { height: 10px; display: flex; }
+  .cinta i { flex: 1; position: relative; overflow: hidden; }
+  .cinta i::after { content:""; position:absolute; inset:0; background: radial-gradient(circle at 18% 120%, var(--c) 0 58%, transparent 58%); }
+  .cinta i:nth-child(4n+1){ --c: var(--jade); background: color-mix(in srgb,var(--jade) 26%,var(--surface)); }
+  .cinta i:nth-child(4n+2){ --c: var(--cobalto); background: color-mix(in srgb,var(--cobalto) 26%,var(--surface)); }
+  .cinta i:nth-child(4n+3){ --c: var(--amarelo-traco); background: color-mix(in srgb,var(--amarelo) 26%,var(--surface)); }
+  .cinta i:nth-child(4n+4){ --c: var(--telha); background: color-mix(in srgb,var(--telha) 26%,var(--surface)); }
+  .perfil-corpo { display: flex; align-items: flex-start; gap: 1.2rem; padding: 1.3rem 1.5rem 1.5rem; flex-wrap: wrap; }
+  .perfil-foto { width: 84px; height: 84px; border-radius: 18px; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--display); font-weight: 800; font-size: 1.8rem; color: #fff; background: var(--cobalto); margin-top: -42px; border: 4px solid var(--surface); }
+  .perfil-id { min-width: 0; flex: 1 1 240px; }
+  .perfil-id h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
+  .perfil-id .papel { font-size: var(--t-16); color: var(--texto-2); margin: 0.2rem 0 0; }
+  .perfil-tags { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.7rem 0 0; }
+  .ptag { font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.2rem 0.7rem; background: var(--surface-2); border: 1px solid var(--linha); color: var(--texto-2); }
+  .ptag.mesa { color: var(--acento-texto); border-color: color-mix(in srgb,var(--telha) 40%,transparent); }
+  .perfil-cta { margin-left: auto; display: flex; gap: 0.6rem; align-self: center; flex-wrap: wrap; }
+
+  /* ---- números públicos (transparência) ---- */
+  .nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 0.8rem; margin: 1.2rem 0 0; }
+  .num-card { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); padding: 1rem 1.1rem; }
+  .num-card b { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: var(--texto); display: block; line-height: 1; font-variant-numeric: tabular-nums; }
+  .num-card span { font-size: var(--t-13); color: var(--texto-2); display: block; margin-top: 0.3rem; }
+  .num-card .nota { font-size: var(--t-12); color: var(--texto-2); }
+
+  .secao { margin: 2rem 0 0; }
+  .secao h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); margin: 0 0 0.8rem; }
+  .secao .h-nota { font-size: var(--t-13); color: var(--texto-2); font-weight: 400; }
+
+  /* matérias de autoria */
+  .mlista { display: grid; gap: 0.7rem; }
+  .mrow { display: flex; align-items: center; gap: 0.9rem; padding: 0.9rem 1.1rem; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); text-decoration: none; }
+  .mrow:hover { border-color: var(--texto-2); }
+  .mrow .num { font-family: var(--mono); font-size: var(--t-12); color: var(--acento-texto); font-weight: 600; flex: 0 0 auto; }
+  .mrow .tit { min-width: 0; flex: 1; } .mrow .tit b { font-size: var(--t-13); color: var(--texto); font-weight: 600; display: block; line-height: 1.25; }
+  .azmini { display: flex; gap: 3px; flex: 0 0 auto; }
+  .azmini i { width: 22px; height: 7px; border-radius: 3px; position: relative; overflow: hidden; background: var(--linha); }
+  .azmini i.on { background: color-mix(in srgb, var(--azc) 32%, transparent); }
+  .azmini i.on::after { content:""; position:absolute; inset:0; background: radial-gradient(circle at 0% 100%, var(--azc) 0 62%, transparent 62%); }
+  .azmini i:nth-child(1){ --azc: var(--jade); } .azmini i:nth-child(2){ --azc: var(--cobalto); }
+  .azmini i:nth-child(3){ --azc: var(--amarelo-traco); } .azmini i:nth-child(4){ --azc: var(--jade-claro); }
+
+  /* como votou (só votos públicos) */
+  .votos { display: grid; gap: 0.5rem; }
+  .voto { display: flex; align-items: center; gap: 0.9rem; padding: 0.8rem 1.1rem; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-sm); }
+  .voto .tit { flex: 1; min-width: 0; font-size: var(--t-13); color: var(--texto); }
+  .voto .tit span { display: block; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .vchip { font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.18rem 0.7rem; display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; }
+  .vchip svg { width: 13px; height: 13px; }
+  .v-sim { color: #15634A; background: color-mix(in srgb,#2C8A66 14%,var(--surface)); border: 1px solid color-mix(in srgb,#2C8A66 38%,transparent); } [data-tema="escuro"] .v-sim { color: #58C99E; }
+  .v-nao { color: var(--acento-texto); background: var(--surface-2); border: 1px solid color-mix(in srgb,var(--telha) 50%,transparent); }
+  .v-abs { color: var(--texto-2); background: var(--surface-2); border: 1px solid var(--linha); }
+  .nota-secao { display: flex; align-items: flex-start; gap: 0.5rem; margin: 0.9rem 0 0; font-size: var(--t-12); color: var(--texto-2); line-height: 1.5; }
+  .nota-secao svg { color: var(--marca); flex: 0 0 auto; margin-top: 2px; }
+
+  /* agenda pública (institucional) */
+  .agenda { display: grid; gap: 0.6rem; }
+  .ag { display: flex; align-items: center; gap: 1rem; padding: 0.9rem 1.1rem; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); }
+  .ag .data { text-align: center; flex: 0 0 auto; width: 52px; }
+  .ag .data b { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--texto); display: block; line-height: 1; }
+  .ag .data span { font-family: var(--mono); font-size: var(--t-12); color: var(--acento-texto); text-transform: uppercase; }
+  .ag .sep { width: 3px; align-self: stretch; border-radius: 3px; background: var(--azc, var(--jade)); }
+  .ag .desc b { font-size: var(--t-13); color: var(--texto); font-weight: 600; display: block; } .ag .desc span { font-size: var(--t-12); color: var(--texto-2); }
+  .ag .hora { margin-left: auto; font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); }
+
+  /* contato institucional */
+  .contato { display: flex; align-items: flex-start; gap: 0.7rem; padding: 1rem 1.2rem; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio); font-size: var(--t-13); color: var(--texto-2); line-height: 1.5; }
+  .contato svg { color: var(--marca); flex: 0 0 auto; margin-top: 2px; }
+  .contato b { color: var(--texto); }
+  .contato a { color: var(--marca); font-weight: 600; text-decoration: none; } .contato a:hover { text-decoration: underline; }
+
+  .rodape { margin-top: 2.6rem; padding: 1.6rem 0; border-top: 1px solid var(--linha); display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+  .rodape .plat { margin-left: auto; display: inline-flex; align-items: center; gap: 0.45rem; font-size: var(--t-12); color: var(--texto-2); }
+  .rodape .plat .sig { width: 16px; height: 16px; }
+</style>
+</head>
+<body class="superficie-publica">
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+
+<header class="pub-topo">
+  <div class="envelope pub-topo-in">
+    <div class="brasao-casa">
+      <svg class="br" viewBox="0 0 34 34" role="img" aria-label="Câmara Municipal de Fortaleza"><rect width="34" height="34" rx="9" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div><b>Câmara Municipal de Fortaleza</b><span>Transparência</span></div>
+    </div>
+    <div class="dir">
+      <nav class="nav-pub" aria-label="Seções públicas">
+        <a href="portal-cidadao.html">Início</a>
+        <a href="portal-materias.html">Matérias</a>
+        <a href="legislacao.html">Legislação</a>
+        <a href="ouvidoria.html">Ouvidoria</a>
+      </nav>
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope">
+  <nav class="migalha" aria-label="Trilha"><a href="portal-materias.html">Matérias</a><span aria-hidden="true">›</span><span>Vereadora Helena Past</span></nav>
+
+  <div class="perfil-cab">
+    <div class="cinta" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="perfil-corpo">
+      <span class="perfil-foto" aria-hidden="true">HP</span>
+      <div class="perfil-id">
+        <h1>Helena Past</h1>
+        <p class="papel">Vereadora · 19ª Legislatura (2025–2028)</p>
+        <div class="perfil-tags">
+          <span class="ptag">Partido Verde</span>
+          <span class="ptag">Bloco da Maioria</span>
+          <span class="ptag mesa">2ª Secretária da Mesa</span>
+          <span class="ptag">Comissão de Meio Ambiente</span>
+        </div>
+      </div>
+      <div class="perfil-cta">
+        <a class="btn btn-contorno btn-mini" href="#"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>Acompanhar</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="nums">
+    <div class="num-card"><b>14</b><span>matérias de autoria<br><span class="nota">na legislatura atual</span></span></div>
+    <div class="num-card"><b>96%</b><span>presença em sessões<br><span class="nota">registro oficial</span></span></div>
+    <div class="num-card"><b>3</b><span>viraram lei</span></div>
+    <div class="num-card"><b>2</b><span>comissões</span></div>
+  </div>
+
+  <section class="secao">
+    <h2>Matérias de autoria</h2>
+    <div class="mlista">
+      <a class="mrow" href="ficha-materia-publica.html">
+        <span class="num">PL 042/2026</span>
+        <span class="tit"><b>Hortas comunitárias em terrenos públicos</b></span>
+        <span class="azmini" role="img" aria-label="Em comissão"><i class="on"></i><i class="on"></i><i></i><i></i></span>
+      </a>
+      <a class="mrow" href="ficha-materia-publica.html">
+        <span class="num">PL 015/2026</span>
+        <span class="tit"><b>Coleta seletiva nas escolas municipais</b></span>
+        <span class="azmini" role="img" aria-label="Aprovada em plenário; aguarda sanção"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span>
+      </a>
+      <a class="mrow" href="ficha-materia-publica.html">
+        <span class="num">Lei 11.388/2025</span>
+        <span class="tit"><b>Arborização obrigatória em novos loteamentos</b></span>
+        <span class="azmini" role="img" aria-label="Virou lei"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span>
+      </a>
+    </div>
+  </section>
+
+  <section class="secao">
+    <h2>Como votou <span class="h-nota">· votações públicas recentes</span></h2>
+    <div class="votos">
+      <div class="voto"><span class="tit">Incentivo à energia solar no município<span>PL 022/2026 · 18/05/2026</span></span><span class="vchip v-sim"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>A favor</span></div>
+      <div class="voto"><span class="tit">Reajuste da tarifa de estacionamento rotativo<span>PL 009/2026 · 06/05/2026</span></span><span class="vchip v-nao"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>Contra</span></div>
+      <div class="voto"><span class="tit">Denominação de logradouro público<span>PDL 004/2026 · 29/04/2026</span></span><span class="vchip v-abs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 12h14"/></svg>Absteve-se</span></div>
+    </div>
+    <p class="nota-secao"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>Apenas votações abertas e nominais são individualizadas. Votações secretas, quando previstas no regimento, não mostram o voto de cada vereador.</p>
+  </section>
+
+  <section class="secao">
+    <h2>Agenda pública</h2>
+    <div class="agenda">
+      <div class="ag"><div class="data"><b>18</b><span>jun</span></div><div class="sep" style="--azc:var(--cobalto)" aria-hidden="true"></div><div class="desc"><b>Sessão Ordinária nº 42</b><span>Plenário · pauta publicada</span></div><span class="hora">14h00</span></div>
+      <div class="ag"><div class="data"><b>20</b><span>jun</span></div><div class="sep" style="--azc:var(--jade)" aria-hidden="true"></div><div class="desc"><b>Comissão de Meio Ambiente</b><span>análise de pareceres</span></div><span class="hora">10h00</span></div>
+      <div class="ag"><div class="data"><b>24</b><span>jun</span></div><div class="sep" style="--azc:var(--amarelo-traco)" aria-hidden="true"></div><div class="desc"><b>Audiência pública — plano de arborização</b><span>aberta à população</span></div><span class="hora">09h00</span></div>
+    </div>
+    <p class="nota-secao"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>Compromissos institucionais (sessões, comissões e audiências). Datas podem mudar conforme a pauta da Casa.</p>
+  </section>
+
+  <section class="secao">
+    <h2>Contato institucional</h2>
+    <div class="contato">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 4h16v16H4z"/><path d="m4 6 8 6 8-6"/></svg>
+      <span>Para falar com a vereadora sobre assuntos da Câmara, use os canais oficiais: <b>Protocolo Geral</b> da Casa ou a <a href="ouvidoria.html">Ouvidoria</a>. Pedidos de informação pública seguem pelo <a href="portal-cidadao.html">e-SIC</a>.</span>
+    </div>
+  </section>
+
+  <div class="rodape">
+    <span style="font-size:var(--t-12);color:var(--texto-2)">Câmara Municipal de Fortaleza · Transparência</span>
+    <span class="plat">
+      <svg class="sig" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      Plataforma O Plenário
+    </span>
+  </div>
+</main>
+
+<script src="../sistema/tema.js"></script>
+</body>
+</html>
