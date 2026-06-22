@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Notificações</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Notificações — ARQUÉTIPO: lista / inbox
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+
+     Inbox do usuário (11.6). Aplica o padrão de fila (de Minhas
+     pendências), agora com estados lido/não-lido (ponto + negrito +
+     leve tinta — nunca só cor), agrupamento temporal e filtros por
+     tipo. Cada notificação linka a tela relevante. Read-model + ação
+     leve (marcar como lida). Reusa chips, segmentos, ícones por tipo.
+     ============================================================ */
+
+  .pg-cab { padding: 1.5rem 0 0; display: grid; grid-template-columns: 1fr auto; gap: 0.8rem 1.4rem; align-items: end; }
+  .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; display: flex; align-items: center; gap: 0.6rem; }
+  .pg-cab h1 .badge { font-family: var(--mono); font-size: var(--t-13); font-weight: 600; color: #fff; background: var(--telha-fundo); border-radius: 999px; padding: 0.1rem 0.55rem; }
+  .pg-cab .sub { font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
+
+  .segs { display: inline-flex; background: var(--surface); border: 1px solid var(--linha); border-radius: 999px; padding: 3px; margin: 1.2rem 0 0; flex-wrap: wrap; }
+  .segs button { font-family: var(--corpo); font-size: var(--t-13); font-weight: 600; color: var(--texto-2); background: none; border: none; border-radius: 999px; padding: 0.4rem 0.95rem; min-height: 40px; cursor: pointer; }
+  .segs button[aria-pressed="true"] { background: var(--acao); color: var(--acao-texto); }
+
+  .grupo { margin: 1.6rem 0 0; }
+  .grupo > h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.5rem; }
+  .lista { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; }
+
+  .nt { display: grid; grid-template-columns: 40px 1fr auto; gap: 0.3rem 0.9rem; align-items: start; padding: 0.9rem 1.1rem; border-top: 1px solid var(--linha); position: relative; }
+  .nt:first-child { border-top: none; }
+  .nt.nao-lida { background: color-mix(in srgb, var(--marca) 5%, var(--surface)); }
+  .nt.nao-lida::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--marca); }
+
+  .nt-ic { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; flex: 0 0 auto; color: var(--marca); background: color-mix(in srgb, var(--marca) 10%, var(--surface-2)); }
+  .nt-ic.prazo { color: var(--aviso-texto); background: color-mix(in srgb, var(--amarelo) 16%, var(--surface-2)); }
+  .nt-ic.sessao { color: var(--cobalto); background: color-mix(in srgb, var(--cobalto) 10%, var(--surface-2)); }
+  [data-tema="escuro"] .nt-ic.sessao { color: var(--foco); }
+  .nt-ic.sistema { color: var(--texto-2); background: var(--surface-2); }
+
+  .nt-mid { min-width: 0; }
+  .nt-mid h3 { font-family: var(--corpo); font-weight: 500; font-size: var(--t-16); color: var(--texto); margin: 0; line-height: 1.3; }
+  .nt.nao-lida .nt-mid h3 { font-weight: 700; }
+  .nt-mid p { font-size: var(--t-13); color: var(--texto-2); margin: 0.25rem 0 0; line-height: 1.4; }
+  .nt-mid p .mat { font-family: var(--mono); font-size: var(--t-12); color: var(--acento-texto); }
+  .nt-mid .ir { display: inline-flex; align-items: center; gap: 0.3rem; font-family: var(--corpo); font-weight: 600; font-size: var(--t-13); color: var(--marca); text-decoration: none; margin-top: 0.5rem; }
+  .nt-mid .ir:hover { text-decoration: underline; }
+
+  .nt-dir { display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; flex: 0 0 auto; }
+  .nt-quando { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); white-space: nowrap; }
+  .nt-lida { background: none; border: 1px solid var(--linha); color: var(--texto-2); border-radius: 7px; width: 30px; height: 30px; display: grid; place-items: center; cursor: pointer; }
+  .nt-lida:hover { color: var(--marca); border-color: var(--marca); }
+  .nt-ponto { width: 9px; height: 9px; border-radius: 50%; background: var(--marca); margin: 10px 10px 0 0; }
+
+  @media (max-width: 620px) {
+    .nt { grid-template-columns: 36px 1fr; }
+    .nt-dir { grid-column: 2; flex-direction: row; align-items: center; justify-content: space-between; width: 100%; }
+    .nt-ic { width: 36px; height: 36px; }
+  }
+</style>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+
+<header class="topo">
+  <div class="envelope topo-grade">
+    <div class="marca">
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div>
+        <p class="marca-nome">O Plenário</p>
+        <p class="marca-orgao">Câmara Municipal de Fortaleza</p>
+      </div>
+    </div>
+    <div class="topo-sep" aria-hidden="true"></div>
+    <span class="eyebrow" style="align-self:center">Meu trabalho</span>
+    <div class="topo-dir">
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+      <span class="presidente">
+        <span class="avatar" aria-hidden="true">RC</span>
+        <span class="quem"><b>Rita Campos</b><span>Servidora legislativa</span></span>
+      </span>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope">
+  <div class="pg-cab">
+    <div>
+      <span class="eyebrow">Central de notificações</span>
+      <h1>Notificações <span class="badge" aria-label="4 não lidas">4</span></h1>
+      <p class="sub">O que mudou no que é seu — prazos, tramitação, sessões e sistema.</p>
+    </div>
+    <button class="btn btn-contorno btn-mini" type="button">Marcar todas como lidas</button>
+  </div>
+
+  <div class="segs" role="group" aria-label="Filtrar por tipo">
+    <button type="button" aria-pressed="true">Tudo</button>
+    <button type="button" aria-pressed="false">Não lidas</button>
+    <button type="button" aria-pressed="false">Prazos</button>
+    <button type="button" aria-pressed="false">Tramitação</button>
+    <button type="button" aria-pressed="false">Sessões</button>
+  </div>
+
+  <!-- HOJE -->
+  <section class="grupo" aria-label="Hoje">
+    <h2>Hoje</h2>
+    <div class="lista">
+
+      <article class="nt nao-lida">
+        <span class="nt-ic prazo" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+        <div class="nt-mid">
+          <h3>A remessa ao TCE-CE vence em 5 dias</h3>
+          <p>A janela de envio da prestação de contas do mês fecha em breve. Confira e envie.</p>
+          <a class="ir" href="minhas-pendencias.html">Abrir a remessa <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+        </div>
+        <div class="nt-dir"><span class="nt-quando">há 1h</span><span class="nt-ponto" role="img" aria-label="Não lida"></span></div>
+      </article>
+
+      <article class="nt nao-lida">
+        <span class="nt-ic sessao" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+        <div class="nt-mid">
+          <h3>Pauta da 15ª Sessão Ordinária publicada</h3>
+          <p>Quarta, 24/06, 14h. Você foi convocada com 3 matérias na ordem do dia.</p>
+          <a class="ir" href="pauta-convocacao.html">Ver a pauta <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+        </div>
+        <div class="nt-dir"><span class="nt-quando">há 3h</span><span class="nt-ponto" role="img" aria-label="Não lida"></span></div>
+      </article>
+
+      <article class="nt nao-lida">
+        <span class="nt-ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"/><path d="M9 13h6"/></svg></span>
+        <div class="nt-mid">
+          <h3>Parecer da CCJ chegou no <span class="mat">PL 042/2026</span></h3>
+          <p>O relator apresentou parecer favorável às Hortas Comunitárias. A matéria pode ir à pauta.</p>
+          <a class="ir" href="ficha-materia.html">Abrir a ficha <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+        </div>
+        <div class="nt-dir"><span class="nt-quando">há 5h</span><span class="nt-ponto" role="img" aria-label="Não lida"></span></div>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- ESTA SEMANA -->
+  <section class="grupo" aria-label="Esta semana">
+    <h2>Esta semana</h2>
+    <div class="lista">
+
+      <article class="nt nao-lida">
+        <span class="nt-ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4z"/></svg></span>
+        <div class="nt-mid">
+          <h3>A ata da 14ª sessão foi gerada pela IA</h3>
+          <p>O rascunho está pronto para sua revisão. Há 3 pontos marcados para confirmar.</p>
+          <a class="ir" href="ata-revisao.html">Revisar a ata <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+        </div>
+        <div class="nt-dir"><span class="nt-quando">ontem</span><span class="nt-ponto" role="img" aria-label="Não lida"></span></div>
+      </article>
+
+      <article class="nt">
+        <span class="nt-ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7Z"/></svg></span>
+        <div class="nt-mid">
+          <h3>Você designou o <span class="mat">PL 053/2026</span> à comissão</h3>
+          <p>O despacho foi registrado e a matéria seguiu para distribuição.</p>
+        </div>
+        <div class="nt-dir"><span class="nt-quando">3 dias</span><button class="nt-lida" type="button" aria-label="Marcar como não lida"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg></button></div>
+      </article>
+
+      <article class="nt">
+        <span class="nt-ic sistema" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6l-8-4Z"/></svg></span>
+        <div class="nt-mid">
+          <h3>Novo dispositivo acessou sua conta</h3>
+          <p>Acesso por passkey em Fortaleza/CE. Se não foi você, revise sua segurança.</p>
+          <a class="ir" href="#">Ver acessos <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+        </div>
+        <div class="nt-dir"><span class="nt-quando">4 dias</span><button class="nt-lida" type="button" aria-label="Marcar como não lida"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg></button></div>
+      </article>
+
+    </div>
+  </section>
+  <div style="height:1.5rem"></div>
+</main>
+
+<script src="../sistema/tema.js"></script>
+</body>
+</html>
