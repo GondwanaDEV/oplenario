@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Transparência fiscal — Câmara Municipal de Fortaleza</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Transparência fiscal — ARQUÉTIPO: leitura pública + charts
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+     O órgão publica os próprios gastos (5.9). Superfície PÚBLICA. Charts
+     HONESTOS: barras horizontais com rótulo + valor (sem donut/KPI-card).
+     Valores ilustrativos levam nota [GAP] + link à fonte oficial.
+     ============================================================ */
+  .pub-topo { background: var(--surface); border-bottom: 1px solid var(--linha); }
+  .pub-topo-in { display: flex; align-items: center; gap: 1rem; padding: 0.9rem 0; flex-wrap: wrap; }
+  .brasao-casa { display: flex; align-items: center; gap: 0.7rem; }
+  .brasao-casa .br { width: 40px; height: 40px; border-radius: 10px; flex: 0 0 auto; }
+  .brasao-casa b { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); line-height: 1.1; display: block; }
+  .brasao-casa span { font-size: var(--t-12); color: var(--texto-2); }
+  .pub-topo .dir { margin-left: auto; display: flex; align-items: center; gap: 0.7rem; }
+  .nav-pub { display: flex; gap: 0.3rem; }
+  .nav-pub a { font-size: var(--t-13); font-weight: 600; color: var(--texto-2); text-decoration: none; padding: 0.5rem 0.7rem; border-radius: 8px; }
+  .nav-pub a:hover { color: var(--texto); }
+
+  .hero { padding: 2rem 0 0.4rem; }
+  .hero h1 { font-family: var(--display); font-weight: 800; font-size: clamp(1.9rem, 5vw, var(--t-40)); letter-spacing: -0.02em; color: var(--texto); margin: 0.3rem 0 0; line-height: 1.05; }
+  .hero p { font-size: var(--t-16); color: var(--texto-2); margin: 0.6rem 0 0; max-width: 60ch; }
+  .periodo { display: inline-flex; align-items: center; gap: 0.5rem; margin: 1rem 0 0; font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); }
+  .periodo b { color: var(--texto); }
+
+  .resumo { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin: 1.3rem 0 0; }
+  .rz { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.1rem 1.2rem; }
+  .rz .t { font-size: var(--t-13); color: var(--texto-2); }
+  .rz b { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: var(--texto); display: block; margin-top: 0.2rem; }
+  .rz .pct { font-family: var(--mono); font-size: var(--t-12); color: var(--marca); }
+
+  .card { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.3rem 1.4rem; margin: 1.3rem 0 0; }
+  .card h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); margin: 0 0 0.3rem; }
+  .card .aj { font-size: var(--t-13); color: var(--texto-2); margin: 0 0 1.2rem; }
+
+  /* chart de barras horizontal (honesto) */
+  .barras { display: grid; gap: 0.9rem; }
+  .br-linha { display: grid; grid-template-columns: 160px 1fr auto; gap: 0.8rem; align-items: center; }
+  .br-linha .lbl { font-size: var(--t-13); color: var(--texto); font-weight: 600; }
+  .br-linha .trilho { height: 22px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--linha); overflow: hidden; position: relative; }
+  .br-linha .preenche { display: block; height: 100%; border-radius: 5px; }
+  .br-linha .val { font-family: var(--mono); font-size: var(--t-13); color: var(--texto); white-space: nowrap; }
+  .b-pessoal .preenche { background: var(--jade); }
+  .b-custeio .preenche { background: var(--cobalto-fundo); }
+  .b-diarias .preenche { background: var(--amarelo-traco); }
+  .b-invest .preenche { background: var(--jade-claro); }
+  /* no escuro, fills de marca ficam escuros demais p/ 3:1 vs o trilho
+     escuro → clarear (barra é gráfico de dado, exige 3:1) */
+  [data-tema="escuro"] .b-pessoal .preenche { background: var(--marca); }
+  [data-tema="escuro"] .b-custeio .preenche { background: var(--foco); }
+  [data-tema="escuro"] .b-diarias .preenche { background: var(--amarelo); }
+  [data-tema="escuro"] .b-invest .preenche { background: #5FB89A; }
+
+  .nota-gap { font-size: var(--t-12); color: var(--texto-2); margin: 1.2rem 0 0; border-top: 1px dashed var(--linha); padding-top: 0.8rem; display: flex; gap: 0.5rem; align-items: flex-start; }
+  .nota-gap .tag { font-family: var(--mono); font-size: 0.6rem; letter-spacing: .04em; text-transform: uppercase; color: var(--aviso-texto); border: 1px solid color-mix(in srgb, var(--amarelo-traco) 45%, transparent); border-radius: 4px; padding: 0.05rem 0.3rem; flex: 0 0 auto; }
+  .nota-gap a { color: var(--marca); font-weight: 600; }
+
+  .rodape { margin-top: 2.4rem; padding: 1.4rem 0; border-top: 1px solid var(--linha); font-size: var(--t-12); color: var(--texto-2); }
+  @media (max-width: 620px) { .br-linha { grid-template-columns: 1fr; gap: 0.3rem; } .br-linha .val { justify-self: start; } }
+</style>
+</head>
+<body class="superficie-publica">
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+<header class="pub-topo">
+  <div class="envelope pub-topo-in">
+    <div class="brasao-casa">
+      <svg class="br" viewBox="0 0 34 34" role="img" aria-label="Câmara Municipal de Fortaleza"><rect width="34" height="34" rx="9" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div><b>Câmara Municipal de Fortaleza</b><span>Transparência</span></div>
+    </div>
+    <div class="dir">
+      <nav class="nav-pub" aria-label="Seções públicas">
+        <a href="portal-cidadao.html">Início</a><a href="portal-materias.html">Matérias</a><a href="legislacao.html">Legislação</a>
+      </nav>
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope">
+  <div class="hero">
+    <span class="eyebrow">As contas da Casa</span>
+    <h1>Transparência fiscal</h1>
+    <p>Quanto e em quê a Câmara gasta. Tudo público, atualizado todo mês, com link para o dado de origem.</p>
+    <span class="periodo">Período: <b>jan–mai 2026</b> · exercício corrente</span>
+  </div>
+
+  <div class="resumo">
+    <div class="rz"><span class="t">Despesa empenhada</span><b>R$ 18,4 mi</b><span class="pct">61% do orçamento anual</span></div>
+    <div class="rz"><span class="t">Despesa paga</span><b>R$ 16,9 mi</b><span class="pct">92% do empenhado</span></div>
+    <div class="rz"><span class="t">Repasse recebido</span><b>R$ 30,1 mi</b><span class="pct">duodécimo</span></div>
+  </div>
+
+  <div class="card">
+    <h2>Despesa por categoria</h2>
+    <p class="aj">No período jan–mai 2026. Barras proporcionais ao valor.</p>
+    <div class="barras" role="img" aria-label="Despesa por categoria: pessoal 12,6 milhões; custeio 3,8 milhões; investimento 1,3 milhão; diárias 0,7 milhão">
+      <div class="br-linha b-pessoal"><span class="lbl">Pessoal e encargos</span><span class="trilho"><span class="preenche" style="width:100%"></span></span><span class="val">R$ 12,6 mi</span></div>
+      <div class="br-linha b-custeio"><span class="lbl">Custeio e serviços</span><span class="trilho"><span class="preenche" style="width:30%"></span></span><span class="val">R$ 3,8 mi</span></div>
+      <div class="br-linha b-invest"><span class="lbl">Investimento</span><span class="trilho"><span class="preenche" style="width:10%"></span></span><span class="val">R$ 1,3 mi</span></div>
+      <div class="br-linha b-diarias"><span class="lbl">Diárias e passagens</span><span class="trilho"><span class="preenche" style="width:6%"></span></span><span class="val">R$ 0,7 mi</span></div>
+    </div>
+    <p class="nota-gap"><span class="tag">[GAP]</span> Valores ilustrativos para o protótipo. No produto, cada número vem do empenho e abre o detalhe no <a href="dados-abertos.html">portal de dados abertos</a>.</p>
+  </div>
+
+  <div class="card">
+    <h2>Despesa paga, mês a mês</h2>
+    <p class="aj">Evolução da despesa paga no exercício.</p>
+    <div class="barras" role="img" aria-label="Despesa paga por mês: janeiro 3,1; fevereiro 3,3; março 3,5; abril 3,4; maio 3,6 milhões">
+      <div class="br-linha b-custeio"><span class="lbl">Janeiro</span><span class="trilho"><span class="preenche" style="width:86%"></span></span><span class="val">R$ 3,1 mi</span></div>
+      <div class="br-linha b-custeio"><span class="lbl">Fevereiro</span><span class="trilho"><span class="preenche" style="width:92%"></span></span><span class="val">R$ 3,3 mi</span></div>
+      <div class="br-linha b-custeio"><span class="lbl">Março</span><span class="trilho"><span class="preenche" style="width:97%"></span></span><span class="val">R$ 3,5 mi</span></div>
+      <div class="br-linha b-custeio"><span class="lbl">Abril</span><span class="trilho"><span class="preenche" style="width:94%"></span></span><span class="val">R$ 3,4 mi</span></div>
+      <div class="br-linha b-custeio"><span class="lbl">Maio</span><span class="trilho"><span class="preenche" style="width:100%"></span></span><span class="val">R$ 3,6 mi</span></div>
+    </div>
+  </div>
+
+  <div class="rodape">Câmara Municipal de Fortaleza · Transparência · Plataforma O Plenário</div>
+</main>
+<script src="../sistema/tema.js"></script>
+</body>
+</html>
