@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Legislaturas e blocos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Legislaturas e blocos — ARQUÉTIPO: lista / config
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+     Cadastros menores (2.4/2.5): legislaturas (período/status) + blocos
+     e frentes (líder/membros) numa só tela de admin. Reaplica os cards
+     de seção + linhas de lista. Escopo = instituição.
+     ============================================================ */
+  .pg-cab { padding: 1.5rem 0 0; }
+  .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.3rem 0 0; }
+  .pg-cab .sub { font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
+
+  .card { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; margin: 1.2rem 0 0; }
+  .card-cab { display: flex; align-items: center; gap: 1rem; padding: 1.1rem 1.3rem; border-bottom: 1px solid var(--linha); }
+  .card-cab h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); margin: 0; }
+  .card-cab .add { margin-left: auto; }
+
+  .row { display: grid; grid-template-columns: auto 1fr auto auto; gap: 0.3rem 1rem; align-items: center; padding: 0.9rem 1.3rem; border-top: 1px solid var(--linha); }
+  .row:first-child { border-top: none; }
+  .row .ic { width: 36px; height: 40px; border-radius: 5px; flex: 0 0 auto; background: var(--surface-2); border-left: 3px solid var(--marca); display: grid; place-items: center; font-family: var(--mono); font-size: 0.6rem; font-weight: 600; color: var(--marca); text-align: center; line-height: 1.1; }
+  .row .mid b { font-size: var(--t-13); color: var(--texto); font-weight: 600; display: block; } .row .mid span { font-size: var(--t-12); color: var(--texto-2); }
+  .row .quando { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); white-space: nowrap; }
+  .chip { font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.12rem 0.6rem; white-space: nowrap; }
+  .ch-cor { color: #15634A; background: color-mix(in srgb, #2C8A66 15%, var(--surface)); border: 1px solid color-mix(in srgb, #2C8A66 38%, transparent); } [data-tema="escuro"] .ch-cor { color: #58C99E; }
+  .ch-enc { color: var(--texto-2); background: var(--surface-2); border: 1px solid var(--linha); font-family: var(--mono); font-weight: 500; }
+  .row .av { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 0.6rem; color: #fff; flex: 0 0 auto; }
+  .row .lider { display: inline-flex; align-items: center; gap: 0.45rem; font-size: var(--t-13); color: var(--texto-2); } .row .lider b { color: var(--texto); font-weight: 600; }
+  .u-menu { background: none; border: 1px solid var(--linha); color: var(--texto-2); cursor: pointer; border-radius: 7px; width: 32px; height: 32px; display: grid; place-items: center; }
+  .u-menu:hover { color: var(--texto); border-color: var(--texto-2); }
+
+  @media (max-width: 620px) { .row { grid-template-columns: auto 1fr auto; } }
+</style>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+<header class="topo">
+  <div class="envelope topo-grade">
+    <div class="marca">
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div><p class="marca-nome">O Plenário</p><p class="marca-orgao">Câmara Municipal de Fortaleza</p></div>
+    </div>
+    <div class="topo-sep" aria-hidden="true"></div>
+    <span class="eyebrow" style="align-self:center">Cadastros · Estrutura</span>
+    <div class="topo-dir">
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+      <span class="presidente"><span class="avatar" aria-hidden="true">AM</span><span class="quem"><b>Ana Moreira</b><span>Administração</span></span></span>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope">
+  <div class="pg-cab">
+    <span class="eyebrow">Cadastros estruturais</span>
+    <h1>Legislaturas e blocos</h1>
+    <p class="sub">A moldura institucional: os mandatos coletivos no tempo e os agrupamentos políticos.</p>
+  </div>
+
+  <!-- LEGISLATURAS -->
+  <div class="card">
+    <div class="card-cab">
+      <h2>Legislaturas</h2>
+      <button class="btn btn-contorno btn-mini add" type="button">Nova legislatura</button>
+    </div>
+    <div class="row">
+      <span class="ic" aria-hidden="true">19ª</span>
+      <div class="mid"><b>19ª Legislatura</b><span>21 vereadores · Mesa 2025–2026</span></div>
+      <span class="quando">2025 – 2028</span>
+      <span class="chip ch-cor">corrente</span>
+    </div>
+    <div class="row">
+      <span class="ic" aria-hidden="true" style="border-left-color:var(--texto-2);color:var(--texto-2)">18ª</span>
+      <div class="mid"><b>18ª Legislatura</b><span>21 vereadores</span></div>
+      <span class="quando">2021 – 2024</span>
+      <span class="chip ch-enc">encerrada</span>
+    </div>
+    <div class="row">
+      <span class="ic" aria-hidden="true" style="border-left-color:var(--texto-2);color:var(--texto-2)">17ª</span>
+      <div class="mid"><b>17ª Legislatura</b><span>21 vereadores</span></div>
+      <span class="quando">2017 – 2020</span>
+      <span class="chip ch-enc">encerrada</span>
+    </div>
+  </div>
+
+  <!-- BLOCOS E FRENTES -->
+  <div class="card">
+    <div class="card-cab">
+      <h2>Blocos e frentes</h2>
+      <button class="btn btn-contorno btn-mini add" type="button">Novo bloco</button>
+    </div>
+    <div class="row">
+      <span class="ic" aria-hidden="true">BL</span>
+      <div class="mid"><b>Bloco da Maioria</b><span>4 partidos</span></div>
+      <span class="lider"><span class="av" style="background:var(--telha)" aria-hidden="true">CT</span>Líder <b>Carla Tavares</b></span>
+      <button class="u-menu" type="button" aria-label="Ações do Bloco da Maioria"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>
+    </div>
+    <div class="row">
+      <span class="ic" aria-hidden="true">BL</span>
+      <div class="mid"><b>Bloco de Oposição</b><span>3 partidos</span></div>
+      <span class="lider"><span class="av" style="background:var(--cobalto)" aria-hidden="true">JS</span>Líder <b>João Sá</b></span>
+      <button class="u-menu" type="button" aria-label="Ações do Bloco de Oposição"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>
+    </div>
+    <div class="row">
+      <span class="ic" aria-hidden="true" style="border-left-color:var(--jade-claro);color:var(--jade-claro)">FP</span>
+      <div class="mid"><b>Frente Parlamentar Ambiental</b><span>frente temática · 8 membros</span></div>
+      <span class="lider"><span class="av" style="background:var(--cobalto-fundo)" aria-hidden="true">LB</span>Coord. <b>Lúcia Brito</b></span>
+      <button class="u-menu" type="button" aria-label="Ações da Frente Parlamentar Ambiental"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>
+    </div>
+  </div>
+  <div style="height:1.5rem"></div>
+</main>
+<script src="../sistema/tema.js"></script>
+</body>
+</html>
