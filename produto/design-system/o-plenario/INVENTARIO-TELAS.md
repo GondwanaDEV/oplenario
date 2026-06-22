@@ -137,15 +137,15 @@ POC) · **MÉDIA** (paridade institucional, admin) · **BAIXA** (diferível, nic
 **✅ Prontas (4 — as que decidem a compra, 3 públicos cobertos):**
 Sessão ao vivo · Expediente · Portal do Cidadão (home+e-SIC+LGPD) · Painéis da Mesa.
 
-**🟥 ALTA — fecham os fluxos centrais, as 3 apostas e a POC do servidor (8):**
-1. ✅ **Lista/tabela filtrável** — FEITO (`telas/proposicoes.html`): arquétipo-base provado (proposições 3.x/11.5/11.7) com filtros, ordenação, seleção em massa, paginação, vazio e azulejo-mini por linha. *Destrava dezenas de telas de gestão.*
-2. **Editor de proposição + copiloto IA** (3.11/3.1/3.2/3.4/3.16/3.17) — coração + **Aposta 1**.
-3. ✅ **Ficha da matéria / espelho** — FEITO (`telas/ficha-materia.html`): arquétipo ficha/detalhe (11.8/3.4/3.6/3.19) com azulejo herói (tramitação completa), abas ARIA, linha do tempo, LexML/URN. Servidor imprime, jurídico cita.
-4. **Tramitação — board/kanban** (3.3/3.7/11.3) — onde está cada proposição.
-5. **Minhas pendências / tarefas de hoje** (11.2) — momento-matador da POC do servidor.
-6. **Montagem de pauta + Convocação** (4.1/4.14/4.15) — sem isso a sessão ao vivo não tem origem.
-7. **Revisão de ata-IA** (4.13/4.12/8.5) — **Aposta 1**; produtividade + confiança.
-8. **Dashboard do vereador (PWA)** (7.2/7.5/7.3) — **Aposta 2**; mobile-first.
+**🟥 ALTA — fecham os fluxos centrais, as 3 apostas e a POC do servidor — ✅ TODAS FEITAS (8):**
+1. ✅ **Lista/tabela filtrável** (`telas/proposicoes.html`): proposições 3.x/11.5/11.7 — filtros, ordenação, seleção em massa, paginação, vazio, azulejo-mini por linha. *Destrava dezenas de telas de gestão.*
+2. ✅ **Editor de proposição + copiloto IA** (`telas/editor-proposicao.html`, 3.11/3.1/3.2/3.4/3.16/3.17) — coração + **Aposta 1**. Ilha-papel + copiloto ancorado ao artigo; técnica legislativa (LC 95/1998); camada de confiança.
+3. ✅ **Ficha da matéria / espelho** (`telas/ficha-materia.html`, 11.8/3.4/3.6/3.19) — azulejo herói (tramitação completa), abas ARIA, linha do tempo, LexML/URN.
+4. ✅ **Tramitação — board** (`telas/tramitacao-board.html`, 3.3/3.7/11.3) — read-model de status (não kanban editável: tramitação avança por ato), azulejo por coluna.
+5. ✅ **Minhas pendências** (`telas/minhas-pendencias.html`, 11.2) — fila de ação por urgência, anel de prazo no item do TCE, conecta as telas-irmãs.
+6. ✅ **Montagem de pauta + Convocação** (`telas/pauta-convocacao.html`, 4.1/4.14/4.15) — pauta reordenável (editorial) + convocação como ilha-papel (antecedência `[Regimento]`).
+7. ✅ **Revisão de ata-IA** (`telas/ata-revisao.html`, 4.13/4.12/8.5) — **Aposta 1**; trechos de baixa confiança ancorados ao áudio; placar oficial > transcrição.
+8. ✅ **Dashboard do vereador (PWA)** (`telas/vereador-app.html`, 7.2/7.5/7.3) — **Aposta 2**; mobile-first, herói = votação ao vivo, bottom tab bar.
 
 **🟧 MÉDIA — paridade institucional + administração (≈11):**
 Login/MFA (1.1) · Admin do ente — usuários (1.8) · Config do ente/branding (1.9) · Auditoria (1.6) ·
@@ -163,13 +163,14 @@ Status page (10.3) · Exportar dados do ente (9.6) · Console do operador (12.x)
 ## 3. Cobertura — resumo
 
 - **~30 telas distintas** cobrem as 113 features (o resto é backend/embutido/transversal).
-- **4 prontas** (cabine · balcão · pública · cockpit) — os 4 arquétipos-herói, 3 públicos.
-- **8 ALTA · ~11 MÉDIA · ~8 BAIXA** a desenhar.
 - **Os 8 arquétipos estão PROVADOS** ✅ (cabine · balcão · pública · cockpit + lista · ficha · wizard ·
-  config). O design system está **totalmente escafoldado**; o que resta é **aplicar** os arquétipos para
-  preencher o catálogo (telas reais) + formalizar as guidelines (Eixo 4).
-- **Telas-herói feitas (7):** Sessão ao vivo · Expediente · Portal do Cidadão · Painéis da Mesa ·
-  Proposições (lista) · Ficha da matéria · Nova proposição (wizard) · Config da Câmara.
-- **Próximas telas reais (aplicam arquétipos provados) — sequência:** editor+copiloto (balcão+IA) →
-  tramitação board (cockpit) → minhas pendências (cockpit/lista) → pauta+convocação (balcão/wizard) →
-  ata-IA (balcão+IA) → dashboard vereador (cockpit mobile) → MÉDIA (cadastros, login, notificações…).
+  config). O design system está **totalmente escafoldado**.
+- **✅ ALTA = 100% (8/8)** · **~11 MÉDIA · ~8 BAIXA** a desenhar.
+- **Telas feitas (14):** Sessão ao vivo · Expediente · Portal do Cidadão · Painéis da Mesa ·
+  Proposições (lista) · Ficha da matéria · Nova proposição (wizard) · Config da Câmara · **Editor+copiloto ·
+  Tramitação board · Minhas pendências · Pauta+convocação · Revisão de ata-IA · App do vereador (PWA)**.
+  Os 3 públicos decisores cobertos; as 3 apostas de produto materializadas.
+- **Eixo 4 (guidelines-checklist)** fechado: [`GUIDELINES-CHECKLIST.md`](./GUIDELINES-CHECKLIST.md) = gate de revisão.
+- **Resta (aplicação, não invenção):** as ~11 MÉDIA (login/MFA, admin usuários, cadastros, livro de atas,
+  central de notificações, ouvidoria, navegação pública, legislação consolidada, pareceres, sanção→lei,
+  telão) + ~8 BAIXA. Todas reusam arquétipos já provados.
