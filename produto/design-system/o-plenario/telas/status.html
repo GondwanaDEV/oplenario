@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Status do sistema — O Plenário</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Status do sistema — ARQUÉTIPO: leitura pública (simples)
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+     Estado dos sistemas (10.3). Status global + componentes (operacional
+     / degradado / fora por ícone+texto, nunca só cor) + uptime +
+     histórico de incidentes. Superfície pública mínima.
+     ============================================================ */
+  body { display: flex; flex-direction: column; min-height: 100vh; }
+  .st-topo { display: flex; align-items: center; gap: 0.7rem; padding: 1rem 0; }
+  .st-topo .marca-simbolo { width: 32px; height: 32px; flex: 0 0 auto; }
+  .st-topo b { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); }
+  .st-topo b span { font-weight: 400; color: var(--texto-2); }
+  .st-topo .tema-btn { margin-left: auto; }
+
+  .banner { background: var(--surface); border: 1px solid color-mix(in srgb, #2C8A66 40%, var(--linha)); border-left: 4px solid #2C8A66; border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.4rem 1.5rem; display: flex; align-items: center; gap: 1rem; margin: 0.6rem 0 0; }
+  .banner .ic { width: 44px; height: 44px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; color: #fff; background: #2C8A66; }
+  .banner b { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--texto); display: block; line-height: 1.1; }
+  .banner span { font-size: var(--t-13); color: var(--texto-2); }
+
+  .comp { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; margin: 1.2rem 0 0; }
+  .cl { display: grid; grid-template-columns: 1fr auto auto; gap: 0.4rem 1.2rem; align-items: center; padding: 0.95rem 1.2rem; border-top: 1px solid var(--linha); }
+  .cl:first-child { border-top: none; }
+  .cl .nm { font-size: var(--t-13); font-weight: 600; color: var(--texto); }
+  .cl .up { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .cl .st { display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--t-12); font-weight: 600; }
+  .cl .st .dot { width: 9px; height: 9px; border-radius: 50%; }
+  .st-ok { color: #15634A; } .st-ok .dot { background: #2C8A66; } [data-tema="escuro"] .st-ok { color: #58C99E; }
+  .st-deg { color: var(--aviso-texto); } .st-deg .dot { background: var(--amarelo-traco); }
+
+  .hist { margin: 1.6rem 0 0; }
+  .hist h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.8rem; }
+  .inc { border-left: 2px solid var(--linha); padding: 0 0 1rem 1rem; position: relative; }
+  .inc::before { content:""; position: absolute; left: -5px; top: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--texto-2); }
+  .inc.res::before { background: #2C8A66; }
+  .inc .d { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .inc b { font-size: var(--t-13); color: var(--texto); display: block; margin-top: 0.15rem; }
+  .inc p { font-size: var(--t-13); color: var(--texto-2); margin: 0.25rem 0 0; line-height: 1.5; }
+  .inc .tag { display: inline-block; font-family: var(--mono); font-size: 0.62rem; font-weight: 600; text-transform: uppercase; color: #15634A; border: 1px solid color-mix(in srgb, #2C8A66 40%, transparent); border-radius: 4px; padding: 0.05rem 0.35rem; margin-top: 0.4rem; }
+  [data-tema="escuro"] .inc .tag { color: #58C99E; }
+
+  .rodape { margin-top: auto; padding: 1.6rem 0 1.2rem; border-top: 1px solid var(--linha); font-size: var(--t-12); color: var(--texto-2); }
+</style>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+<main id="conteudo" class="envelope">
+  <div class="st-topo">
+    <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+    <b>O Plenário <span>· status do sistema</span></b>
+    <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+      <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+      <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+      <span class="tema-rotulo">Claro</span>
+    </button>
+  </div>
+
+  <div class="banner">
+    <span class="ic" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12l5 5L20 6"/></svg></span>
+    <div><b>Todos os sistemas operacionais</b><span>Atualizado há 1 minuto · janela de manutenção: domingos, 2h–4h</span></div>
+  </div>
+
+  <div class="comp" aria-label="Estado dos componentes">
+    <div class="cl"><span class="nm">Portal público e e-SIC</span><span class="up">99,98% / 90 dias</span><span class="st st-ok"><span class="dot" aria-hidden="true"></span>Operacional</span></div>
+    <div class="cl"><span class="nm">Sessão ao vivo e votação</span><span class="up">99,95% / 90 dias</span><span class="st st-ok"><span class="dot" aria-hidden="true"></span>Operacional</span></div>
+    <div class="cl"><span class="nm">API de dados abertos</span><span class="up">99,90% / 90 dias</span><span class="st st-deg"><span class="dot" aria-hidden="true"></span>Lentidão</span></div>
+    <div class="cl"><span class="nm">Painel interno e tramitação</span><span class="up">99,99% / 90 dias</span><span class="st st-ok"><span class="dot" aria-hidden="true"></span>Operacional</span></div>
+    <div class="cl"><span class="nm">Geração de documentos</span><span class="up">99,97% / 90 dias</span><span class="st st-ok"><span class="dot" aria-hidden="true"></span>Operacional</span></div>
+  </div>
+
+  <div class="hist">
+    <h2>Incidentes recentes</h2>
+    <div class="inc">
+      <span class="d">Hoje · 08h12</span>
+      <b>Lentidão na API de dados abertos</b>
+      <p>Tempo de resposta acima do normal em consultas grandes. Equipe investigando; demais serviços não afetados.</p>
+      <span class="tag" style="color:var(--aviso-texto);border-color:color-mix(in srgb,var(--amarelo-traco) 45%,transparent)">Em andamento</span>
+    </div>
+    <div class="inc res">
+      <span class="d">08/06 · 14h40 → 15h05</span>
+      <b>Indisponibilidade breve do portal</b>
+      <p>O portal ficou indisponível por 25 minutos durante atualização. Restabelecido. Nenhum dado perdido.</p>
+      <span class="tag">Resolvido</span>
+    </div>
+    <div class="inc res">
+      <span class="d">21/05 · janela de manutenção</span>
+      <b>Atualização programada</b>
+      <p>Manutenção planejada, sem impacto a usuários.</p>
+      <span class="tag">Resolvido</span>
+    </div>
+  </div>
+
+  <div class="rodape">Status operado pela plataforma O Plenário · histórico completo dos últimos 90 dias.</div>
+</main>
+<script src="../sistema/tema.js"></script>
+</body>
+</html>
