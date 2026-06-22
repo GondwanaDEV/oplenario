@@ -37,7 +37,7 @@ arquétipo e herda dele a estrutura, em vez de reinventar layout.
 | **Cabine ao vivo** | Operação em tempo real: placar-ilha + hemiciclo + faixa de azulejo + comando | Sessão ao vivo (4.17) | ✅ provado |
 | **Balcão de trabalho** | Servidor produz um artefato: painel de entrada + **ilha-papel** ao vivo + comando | Expediente (3.22) | ✅ provado |
 | **Leitura pública** | Porta da rua white-label: hero + busca + cartões; mais ar, mobile-first | Portal do Cidadão (5.x/6.1) | ✅ provado |
-| **Lista/tabela filtrável** | Coleção com filtros, ordenação, ações em massa, paginação, vazio | — | ⬜ a desenhar (maior volume) |
+| **Lista/tabela filtrável** | Coleção com filtros, ordenação, ações em massa, paginação, vazio | Proposições (3.x/11.5/11.7) | ✅ provado |
 | **Ficha/detalhe** | Um registro a fundo: cabeçalho + abas/seções + trilha + ações | espelho da matéria (11.8) | ⬜ a desenhar |
 | **Wizard / multi-passo** | Fluxo guiado com indicador de etapa e voltar | tramitação, protocolo | ⬜ a desenhar |
 | **Config / admin** | Formulários de ajuste agrupados, com salvar/descartar | admin do ente (1.8/1.9) | ⬜ a desenhar |

@@ -138,7 +138,7 @@ POC) · **MÉDIA** (paridade institucional, admin) · **BAIXA** (diferível, nic
 Sessão ao vivo · Expediente · Portal do Cidadão (home+e-SIC+LGPD) · Painéis da Mesa.
 
 **🟥 ALTA — fecham os fluxos centrais, as 3 apostas e a POC do servidor (8):**
-1. **Lista/tabela filtrável** (arquétipo-base; proposições internas 3.x/11.5/11.7) — *destrava dezenas de telas de gestão; primeiro a desenhar.*
+1. ✅ **Lista/tabela filtrável** — FEITO (`telas/proposicoes.html`): arquétipo-base provado (proposições 3.x/11.5/11.7) com filtros, ordenação, seleção em massa, paginação, vazio e azulejo-mini por linha. *Destrava dezenas de telas de gestão.*
 2. **Editor de proposição + copiloto IA** (3.11/3.1/3.2/3.4/3.16/3.17) — coração + **Aposta 1**.
 3. **Ficha da matéria / espelho** (11.8/3.4/3.6/3.19) — servidor imprime, jurídico cita.
 4. **Tramitação — board/kanban** (3.3/3.7/11.3) — onde está cada proposição.
@@ -165,9 +165,9 @@ Status page (10.3) · Exportar dados do ente (9.6) · Console do operador (12.x)
 - **~30 telas distintas** cobrem as 113 features (o resto é backend/embutido/transversal).
 - **4 prontas** (cabine · balcão · pública · cockpit) — os 4 arquétipos-herói, 3 públicos.
 - **8 ALTA · ~11 MÉDIA · ~8 BAIXA** a desenhar.
-- **Arquétipos ainda sem prova** (próximo a materializar, Eixo 2): **lista/tabela filtrável**,
+- **Arquétipos ainda sem prova** (próximo a materializar, Eixo 2): ~~lista/tabela filtrável~~ ✅,
   **ficha/detalhe**, **wizard**, **config/admin**. As telas ALTA #1–#5 exercem justamente esses 4 —
-  então **desenhar lista → ficha → wizard → config** entrega os arquétipos E as telas de maior valor
+  então **desenhar ~~lista~~ → ficha → wizard → config** entrega os arquétipos E as telas de maior valor
   ao mesmo tempo.
 - **Sequência recomendada:** lista filtrável (1) → ficha da matéria (3) → editor+copiloto (2) →
   tramitação board (4) → minhas pendências (5) → pauta+convocação (6) → ata-IA (7) → dashboard vereador (8).
