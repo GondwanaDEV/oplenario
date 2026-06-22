@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Tramitação · quadro de estágios</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Tramitação — ARQUÉTIPO: cockpit (quadro)
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+
+     Quadro de estágios da tramitação (3.3/3.7/11.3). INTEGRIDADE DE
+     DESIGN: tramitação NÃO é kanban de arrastar — uma matéria avança
+     por ATOS (despacho, parecer, votação), não por drag. Então o
+     quadro é um READ-MODEL de status: cartões clicáveis → ficha;
+     ação por cartão = registrar a movimentação correta. As colunas
+     são os estágios, cada uma com UM azulejo (a faixa da tramitação
+     verticalizada = a assinatura). A ousadia mora no azulejo; o resto
+     é disciplina densa de servidor.
+     ============================================================ */
+
+  .pg-cab { padding: 1.4rem 0 0; display: grid; grid-template-columns: 1fr auto; gap: 0.8rem 1.4rem; align-items: end; }
+  .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
+  .pg-cab .leitura { font-size: var(--t-13); color: var(--texto-2); margin: 0.4rem 0 0; max-width: 60ch; }
+  .pg-cab .leitura b { color: var(--texto); font-weight: 600; }
+
+  /* alternador de vista (quadro/lista) — tabs ARIA */
+  .vistas { display: inline-flex; background: var(--surface); border: 1px solid var(--linha); border-radius: 999px; padding: 3px; }
+  .vistas button { font-family: var(--corpo); font-size: var(--t-13); font-weight: 600; color: var(--texto-2); background: none; border: none; border-radius: 999px; padding: 0.4rem 0.9rem; min-height: 40px; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem; }
+  .vistas button[aria-selected="true"] { background: var(--acao); color: var(--acao-texto); }
+  .vistas button svg { flex: 0 0 auto; }
+
+  /* faixa de filtros */
+  .filtros { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; margin: 1.2rem 0 0; }
+  .filtro { display: inline-flex; align-items: center; gap: 0.45rem; font-size: var(--t-13); font-weight: 600; color: var(--texto); background: var(--surface); border: 1px solid var(--linha); border-radius: 999px; padding: 0.45rem 0.85rem; min-height: 40px; cursor: pointer; }
+  .filtro:hover { border-color: var(--texto-2); }
+  .filtro .cv { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .filtro svg { color: var(--texto-2); flex: 0 0 auto; }
+  .busca { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 52%, var(--linha)); border-radius: 999px; padding: 0.35rem 0.9rem; min-height: 40px; min-width: 220px; }
+  .busca svg { color: var(--texto-2); flex: 0 0 auto; }
+  .busca input { border: none; background: none; outline: none; font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); width: 100%; }
+  .busca input::placeholder { color: var(--texto-2); }
+
+  /* ===== QUADRO ===== */
+  .board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(282px, 1fr); gap: 1rem; margin: 1.3rem 0 0; overflow-x: auto; padding-bottom: 0.6rem; scroll-snap-type: x proximity; }
+  .board:focus-visible { outline: 3px solid var(--foco); outline-offset: 4px; border-radius: var(--raio); }
+  .coluna { scroll-snap-align: start; display: flex; flex-direction: column; min-width: 0; }
+
+  .col-cabe { display: flex; align-items: center; gap: 0.6rem; padding: 0 0.2rem 0.7rem; position: sticky; top: 0; }
+  /* azulejo da coluna — quarto-de-círculo de Bulcão (a assinatura) */
+  .azulejo-col { width: 22px; height: 22px; border-radius: 4px; flex: 0 0 auto; position: relative; overflow: hidden; }
+  .azulejo-col::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 0% 100%, var(--az) 0 62%, transparent 62%); }
+  .az-jade { background: color-mix(in srgb, var(--jade) 22%, transparent); --az: var(--jade); }
+  .az-cobalto { background: color-mix(in srgb, var(--cobalto) 22%, transparent); --az: var(--cobalto); }
+  .az-amarelo { background: color-mix(in srgb, var(--amarelo) 30%, transparent); --az: var(--amarelo-traco); }
+  .az-telha { background: color-mix(in srgb, var(--telha) 22%, transparent); --az: var(--telha); }
+  .az-verde { background: color-mix(in srgb, var(--jade-claro) 24%, transparent); --az: var(--jade-claro); }
+  [data-tema="escuro"] .az-amarelo { --az: var(--amarelo); }
+  .col-cabe .tit { font-family: var(--display); font-weight: 700; font-size: var(--t-13); color: var(--texto); letter-spacing: .01em; }
+  .col-cabe .cnt { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin-left: auto; background: var(--surface); border: 1px solid var(--linha); border-radius: 999px; padding: 0.05rem 0.5rem; }
+
+  .col-corpo { display: flex; flex-direction: column; gap: 0.7rem; background: color-mix(in srgb, var(--surface) 60%, transparent); border: 1px solid var(--linha); border-radius: var(--raio); padding: 0.7rem; min-height: 80px; flex: 1; }
+
+  /* ===== cartão de matéria ===== */
+  .mat { background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); box-shadow: var(--sombra); padding: 0.8rem 0.85rem; display: grid; gap: 0.5rem; }
+  .mat-topo { display: flex; align-items: center; gap: 0.5rem; }
+  .mat-num { font-family: var(--mono); font-weight: 600; font-size: var(--t-12); color: var(--acento-texto); }
+  .mat-menu { margin-left: auto; background: none; border: none; color: var(--texto-2); cursor: pointer; border-radius: 6px; width: 30px; height: 30px; display: grid; place-items: center; flex: 0 0 auto; }
+  .mat-menu:hover { background: var(--surface); color: var(--texto); }
+  .mat h3 { font-family: var(--corpo); font-weight: 600; font-size: var(--t-13); line-height: 1.35; margin: 0; }
+  .mat h3 a { color: var(--texto); text-decoration: none; }
+  .mat h3 a:hover { text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--marca) 40%, transparent); text-underline-offset: 2px; }
+  .mat-pe { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+  .mat-rel { display: flex; align-items: center; gap: 0.4rem; margin-left: auto; }
+  .mat-rel .av { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 0.6rem; color: #fff; background: var(--jade-claro); flex: 0 0 auto; }
+  .mat-rel span { font-size: var(--t-12); color: var(--texto-2); }
+
+  .selo { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.7rem; font-weight: 600; border-radius: 999px; padding: 0.12rem 0.5rem; border: 1px solid transparent; white-space: nowrap; }
+  .selo-esp { font-family: var(--mono); font-weight: 500; color: var(--texto-2); background: var(--surface); border-color: var(--linha); }
+  .selo-prazo { color: var(--aviso-texto); background: color-mix(in srgb, var(--amarelo) 16%, var(--surface)); border-color: color-mix(in srgb, var(--amarelo-traco) 45%, transparent); }
+  .selo-urg { color: #fff; background: var(--telha-fundo); }
+  .selo-prazo svg, .selo-urg svg { flex: 0 0 auto; }
+
+  /* cartão "vazio/contagem" das concluídas */
+  .col-resumo { font-size: var(--t-13); color: var(--texto-2); text-align: center; padding: 1rem 0.5rem; }
+  .col-resumo b { display: block; font-family: var(--display); font-size: var(--t-28); color: var(--marca); font-weight: 800; }
+  .col-resumo a { color: var(--acento-texto); font-size: var(--t-12); font-family: var(--mono); }
+
+  @media (max-width: 720px) {
+    .pg-cab { grid-template-columns: 1fr; }
+    .busca { margin-left: 0; width: 100%; }
+  }
+</style>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+
+<header class="topo">
+  <div class="envelope topo-grade">
+    <div class="marca">
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div>
+        <p class="marca-nome">O Plenário</p>
+        <p class="marca-orgao">Câmara Municipal de Fortaleza</p>
+      </div>
+    </div>
+    <div class="topo-sep" aria-hidden="true"></div>
+    <span class="eyebrow" style="align-self:center">Processo legislativo · Tramitação</span>
+    <div class="topo-dir">
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+      <span class="presidente">
+        <span class="avatar" aria-hidden="true">RC</span>
+        <span class="quem"><b>Rita Campos</b><span>Servidora legislativa</span></span>
+      </span>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope">
+  <div class="pg-cab">
+    <div>
+      <span class="eyebrow">Visão da Casa</span>
+      <h1>Tramitação</h1>
+      <p class="leitura">Onde cada matéria está agora. <b>Mover uma matéria registra o ato correspondente</b> (despacho, parecer, votação) — não se arrasta etapa.</p>
+    </div>
+    <div class="vistas" role="tablist" aria-label="Modo de visualização">
+      <button role="tab" aria-selected="true" type="button">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="6" height="18" rx="1"/><rect x="10" y="3" width="6" height="12" rx="1"/><rect x="17" y="3" width="4" height="8" rx="1"/></svg>
+        Quadro
+      </button>
+      <button role="tab" aria-selected="false" type="button">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+        Lista
+      </button>
+    </div>
+  </div>
+
+  <!-- filtros -->
+  <div class="filtros">
+    <button class="filtro" type="button">Legislatura <span class="cv">2025–2028</span> <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+    <button class="filtro" type="button">Comissão <span class="cv">todas</span> <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+    <button class="filtro" type="button">Espécie <span class="cv">todas</span> <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+    <button class="filtro" type="button"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Mais filtros</button>
+    <div class="busca">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="search" placeholder="Buscar matéria, autor, nº…" aria-label="Buscar matéria" />
+    </div>
+  </div>
+
+  <!-- ===== QUADRO ===== -->
+  <div class="board" role="region" aria-label="Quadro de tramitação por estágio (rolagem horizontal)" tabindex="0">
+
+    <!-- Protocolo -->
+    <section class="coluna" aria-label="Protocolo · 3 matérias">
+      <div class="col-cabe">
+        <span class="azulejo-col az-jade" aria-hidden="true"></span>
+        <span class="tit">Protocolo</span>
+        <span class="cnt">3</span>
+      </div>
+      <div class="col-corpo">
+        <article class="mat">
+          <div class="mat-topo"><span class="mat-num">PL 053/2026</span><button class="mat-menu" type="button" aria-label="Ações da matéria PL 053/2026"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></div>
+          <h3><a href="ficha-materia.html">Dispõe sobre hortas escolares na rede municipal de ensino</a></h3>
+          <div class="mat-pe"><span class="selo selo-esp">PL</span><span class="mat-rel"><span class="av" aria-hidden="true">RM</span><span>Ver. R. Melo</span></span></div>
+        </article>
+        <article class="mat">
+          <div class="mat-topo"><span class="mat-num">REQ 230/2026</span><button class="mat-menu" type="button" aria-label="Ações da matéria REQ 230/2026"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></div>
+          <h3><a href="ficha-materia.html">Requerimento de informações sobre a coleta seletiva</a></h3>
+          <div class="mat-pe"><span class="selo selo-esp">REQ</span><span class="mat-rel"><span class="av" aria-hidden="true">JS</span><span>Ver. J. Sá</span></span></div>
+        </article>
+        <article class="mat">
+          <div class="mat-topo"><span class="mat-num">MOC 045/2026</span><button class="mat-menu" type="button" aria-label="Ações da matéria MOC 045/2026"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></div>
+          <h3><a href="ficha-materia.html">Moção de aplauso aos agentes comunitários de saúde</a></h3>
+          <div class="mat-pe"><span class="selo selo-esp">MOÇÃO</span><span class="mat-rel"><span class="av" aria-hidden="true">HP</span><span>Ver. H. Past</span></span></div>
+        </article>
+      </div>
+    </section>
+
+    <!-- Comissões -->
+    <section class="coluna" aria-label="Comissões · 4 matérias">
+      <div class="col-cabe">
+        <span class="azulejo-col az-cobalto" aria-hidden="true"></span>
+        <span class="tit">Comissões</span>
+        <span class="cnt">4</span>
+      </div>
+      <div class="col-corpo">
+        <article class="mat">
+          <div class="mat-topo"><span class="mat-num">PL 042/2026</span><button class="mat-menu" type="button" aria-label="Ações da matéria PL 042/2026"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></div>
+          <h3><a href="ficha-materia.html">Institui o Programa Municipal de Hortas Comunitárias</a></h3>
+          <div class="mat-pe">
+            <span class="selo selo-esp">PL</span>
+            <span class="selo selo-prazo"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Parecer CCJ vence em 3 dias</span>
+            <span class="mat-rel"><span class="av" aria-hidden="true">AM</span><span>Rel. A. Moraes</span></span>
+          </div>
+        </article>
+        <article class="mat">
+          <div class="mat-topo"><span class="mat-num">PL 038/2026</span><button class="mat-menu" type="button" aria-label="Ações da matéria PL 038/2026"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></div>
+          <h3><a href="ficha-materia.html">Acessibilidade em equipamentos públicos municipais</a></h3>
+          <div class="mat-pe"><span class="selo selo-esp">PL</span><span class="mat-rel"><span class="av" aria-hidden="true">CT</span><span>Rel. C. Tavares</span></span></div>
+        </article>
+        <article class="mat">
+          <div class="mat-topo"><span class="mat-num">PLC 007/2026</span><button class="mat-menu" type="button" aria-label="Ações da matéria PLC 007/2026"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></div>
+          <h3><a href="ficha-materia.html">Reforma do plano de cargos dos servidores da Câmara</a></h3>
+          <div class="mat-pe">
+            <span class="selo selo-esp">PLC</span>
+            <span class="selo selo-urg"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>Urgência</span>
+            <span class="mat-rel"><span class="av" aria-hidden="true">AM</span><span>Rel. A. Moraes</span></span>
+          </div>
+        </article>
+        <article class="mat">
+          <div class="mat-topo"><span class="mat-num">PDL 012/2026</span><button class="mat-menu" type="button" aria-label="Ações da matéria PDL 012/2026"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></div>
+          <h3><a href="ficha-materia.html">Susta ato do Executivo sobre tarifa de transporte</a></h3>
+          <div class="mat-pe"><span class="selo selo-esp">PDL</span><span class="mat-rel"><span class="av" aria-hidden="true">JS</span><span>Rel. J. Sá</span></span></div>
+        </article>
+      </div>
+    </section>
+
+    <!-- Pronta para pauta -->
+    <section class="coluna" aria-label="Pronta para pauta · 2 matérias">
+      <div class="col-cabe">
+        <span class="azulejo-col az-amarelo" aria-hidden="true"></span>
+        <span class="tit">Pronta p/ pauta</span>
+        <span class="cnt">2</span>
+      </div>
+      <div class="col-corpo">
+        <article class="mat">
+          <div class="mat-topo"><span class="mat-num">PL 029/2026</span><button class="mat-menu" type="button" aria-label="Ações da matéria PL 029/2026"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></div>
+          <h3><a href="ficha-materia.html">Cria o programa de arborização de vias e praças</a></h3>
+          <div class="mat-pe"><span class="selo selo-esp">PL</span><span class="mat-rel"><span class="av" aria-hidden="true">RM</span><span>2 pareceres ✓</span></span></div>
+        </article>
+        <article class="mat">
+          <div class="mat-topo"><span class="mat-num">PL 031/2026</span><button class="mat-menu" type="button" aria-label="Ações da matéria PL 031/2026"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></div>
+          <h3><a href="ficha-materia.html">Denomina logradouro público no bairro Messejana</a></h3>
+          <div class="mat-pe"><span class="selo selo-esp">PL</span><span class="mat-rel"><span class="av" aria-hidden="true">HP</span><span>parecer ✓</span></span></div>
+        </article>
+      </div>
+    </section>
+
+    <!-- Em Plenário -->
+    <section class="coluna" aria-label="Em Plenário · 2 matérias">
+      <div class="col-cabe">
+        <span class="azulejo-col az-telha" aria-hidden="true"></span>
+        <span class="tit">Em Plenário</span>
+        <span class="cnt">2</span>
+      </div>
+      <div class="col-corpo">
+        <article class="mat">
+          <div class="mat-topo"><span class="mat-num">PL 022/2026</span><button class="mat-menu" type="button" aria-label="Ações da matéria PL 022/2026"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></div>
+          <h3><a href="ficha-materia.html">Política municipal de incentivo à energia solar</a></h3>
+          <div class="mat-pe"><span class="selo selo-esp">PL</span><span class="selo selo-prazo">2ª votação hoje</span><span class="mat-rel"><span class="av" aria-hidden="true">CT</span><span>pauta de hoje</span></span></div>
+        </article>
+        <article class="mat">
+          <div class="mat-topo"><span class="mat-num">PLC 003/2026</span><button class="mat-menu" type="button" aria-label="Ações da matéria PLC 003/2026"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></div>
+          <h3><a href="ficha-materia.html">Altera o Código de Posturas do Município</a></h3>
+          <div class="mat-pe"><span class="selo selo-esp">PLC</span><span class="mat-rel"><span class="av" aria-hidden="true">AM</span><span>em discussão</span></span></div>
+        </article>
+      </div>
+    </section>
+
+    <!-- Concluídas -->
+    <section class="coluna" aria-label="Concluídas neste ano · 18 matérias">
+      <div class="col-cabe">
+        <span class="azulejo-col az-verde" aria-hidden="true"></span>
+        <span class="tit">Concluídas</span>
+        <span class="cnt">18</span>
+      </div>
+      <div class="col-corpo">
+        <article class="mat">
+          <div class="mat-topo"><span class="mat-num">PL 014/2026</span><button class="mat-menu" type="button" aria-label="Ações da matéria PL 014/2026"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></div>
+          <h3><a href="ficha-materia.html">Semana municipal da economia solidária</a></h3>
+          <div class="mat-pe"><span class="selo selo-esp">Lei 11.402</span><span class="mat-rel"><span>sancionada</span></span></div>
+        </article>
+        <div class="col-resumo">
+          <b>18</b>
+          neste ano legislativo
+          <div><a href="#">ver todas as concluídas →</a></div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+  <div style="height:1rem"></div>
+</main>
+
+<!-- ===== BARRA DE COMANDO ===== -->
+<div class="comando" role="region" aria-label="Ações da tramitação">
+  <div class="envelope comando-grade">
+    <div class="comando-ctx"><b>29 matérias em curso · 18 concluídas</b><span>legislatura 2025–2028 · atualizado agora</span></div>
+    <div class="comando-acoes">
+      <button class="btn btn-contorno" type="button">Exportar quadro</button>
+      <a class="btn btn-primaria" href="protocolo.html">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        Nova proposição
+      </a>
+    </div>
+  </div>
+</div>
+
+<script src="../sistema/tema.js"></script>
+<script>
+  (function () {
+    var barra = document.querySelector('.comando'), main = document.querySelector('main');
+    if (!barra || !main) return;
+    function ajustar() { main.style.paddingBottom = (barra.offsetHeight + 28) + 'px'; }
+    ajustar(); window.addEventListener('resize', ajustar);
+  })();
+</script>
+</body>
+</html>
