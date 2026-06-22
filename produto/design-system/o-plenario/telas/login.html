@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Acesso ao sistema</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Login / MFA — ARQUÉTIPO: auth (cartão centrado)
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+
+     Acesso institucional (servidor/vereador; o cidadão entra por
+     gov.br no portal). Coerente com a stack (§22.5): PASSKEY-PRIMÁRIO
+     — a tela lidera com passkey (biometria/chave), e-mail+senha+TOTP
+     são alternativa. White-label: a CÂMARA lidera a marca; "O Plenário"
+     recua ao rodapé. Assinatura = faixa de azulejo no topo do cartão.
+     Uma ação primária (passkey). Diferencial vs. login gov genérico.
+     ============================================================ */
+
+  body { min-height: 100vh; display: grid; place-items: center; padding: 1.5rem; }
+  .auth-tema { position: fixed; top: 1rem; right: 1rem; z-index: 5; }
+
+  .cartao { width: 100%; max-width: 416px; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-lg); box-shadow: var(--sombra-alta); overflow: hidden; }
+
+  /* faixa de azulejo — assinatura (Bulcão, 4 cores da marca) */
+  .faixa { height: 8px; display: flex; }
+  .faixa span { flex: 1; position: relative; overflow: hidden; }
+  .faixa span::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 0% 100%, var(--az) 0 70%, transparent 70%); }
+  .faixa .a { background: color-mix(in srgb, var(--jade) 30%, transparent); --az: var(--jade); }
+  .faixa .b { background: color-mix(in srgb, var(--cobalto) 30%, transparent); --az: var(--cobalto); }
+  .faixa .c { background: color-mix(in srgb, var(--amarelo) 36%, transparent); --az: var(--amarelo-traco); }
+  .faixa .d { background: color-mix(in srgb, var(--telha) 30%, transparent); --az: var(--telha); }
+
+  .corpo { padding: 1.6rem clamp(1.3rem, 5vw, 1.9rem) 1.8rem; }
+
+  .casa { display: flex; align-items: center; gap: 0.7rem; }
+  .casa .brasao { width: 42px; height: 42px; border-radius: 11px; flex: 0 0 auto; }
+  .casa b { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); line-height: 1.15; display: block; }
+  .casa span { font-size: var(--t-12); color: var(--texto-2); }
+
+  .titulo { margin: 1.4rem 0 0; }
+  .titulo h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-21); letter-spacing: -0.01em; color: var(--texto); margin: 0; }
+  .titulo p { font-size: var(--t-13); color: var(--texto-2); margin: 0.3rem 0 0; }
+
+  /* passkey = ação primária, grande */
+  .passkey { width: 100%; margin: 1.3rem 0 0; min-height: 56px; flex-direction: column; gap: 0.15rem; padding: 0.7rem; }
+  /* hierarquia por tamanho/peso, não por reduzir contraste (82% falhava
+     AA no escuro) — usa o token cheio */
+  .passkey .sub { font-family: var(--corpo); font-weight: 500; font-size: var(--t-12); color: var(--acao-texto); }
+  .passkey svg { margin-bottom: 0.1rem; }
+
+  .ou { display: flex; align-items: center; gap: 0.8rem; margin: 1.4rem 0; color: var(--texto-2); font-size: var(--t-12); font-family: var(--mono); text-transform: uppercase; letter-spacing: .08em; }
+  .ou::before, .ou::after { content: ""; flex: 1; height: 1px; background: var(--linha); }
+
+  .campo { display: grid; gap: 0.35rem; margin: 0 0 0.9rem; }
+  .campo label { font-size: var(--t-13); font-weight: 600; color: var(--texto); }
+  .campo .wrap { position: relative; display: flex; }
+  .campo input { font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 55%, var(--linha)); border-radius: var(--raio-sm); padding: 0.7rem 0.8rem; min-height: 48px; width: 100%; }
+  .campo input::placeholder { color: var(--texto-2); }
+  .ver-senha { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--texto-2); cursor: pointer; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 7px; }
+  .ver-senha:hover { color: var(--texto); background: var(--surface); }
+  .linha-senha { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem; }
+  .linha-senha a { font-size: var(--t-12); color: var(--acento-texto); text-decoration: none; }
+  .linha-senha a:hover { text-decoration: underline; }
+
+  .entrar { width: 100%; margin-top: 0.4rem; }
+
+  .mfa-nota { display: flex; align-items: flex-start; gap: 0.5rem; margin: 1.1rem 0 0; padding: 0.7rem 0.8rem; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); font-size: var(--t-12); color: var(--texto-2); line-height: 1.45; }
+  .mfa-nota svg { color: var(--marca); flex: 0 0 auto; margin-top: 1px; }
+  .mfa-nota b { color: var(--texto); font-weight: 600; }
+
+  .rodape { margin-top: 1.5rem; text-align: center; }
+  .rodape .plat { display: inline-flex; align-items: center; gap: 0.45rem; font-size: var(--t-12); color: var(--texto-2); }
+  .rodape .plat .sig { width: 18px; height: 18px; }
+  .rodape .links { margin-top: 0.6rem; font-size: var(--t-12); }
+  .rodape .links a { color: var(--texto-2); text-decoration: none; }
+  .rodape .links a:hover { color: var(--texto); text-decoration: underline; }
+  .rodape .sep { color: var(--linha); margin: 0 0.5rem; }
+</style>
+</head>
+<body>
+<div class="auth-tema">
+  <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+    <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+    <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+    <span class="tema-rotulo">Claro</span>
+  </button>
+</div>
+
+<main class="cartao">
+  <div class="faixa" aria-hidden="true"><span class="a"></span><span class="b"></span><span class="c"></span><span class="d"></span></div>
+  <div class="corpo">
+    <div class="casa">
+      <svg class="brasao" viewBox="0 0 34 34" role="img" aria-label="Câmara Municipal de Fortaleza"><rect width="34" height="34" rx="9" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <span><b>Câmara Municipal de Fortaleza</b><span>Acesso ao sistema</span></span>
+    </div>
+
+    <div class="titulo">
+      <h1>Entrar</h1>
+      <p>Servidores e vereadores. O cidadão acessa o portal público.</p>
+    </div>
+
+    <form onsubmit="return false">
+      <button class="btn btn-primaria passkey" type="button">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 18v3h6v-2.5h2.5V16H13l1.5-1.5a5 5 0 1 0-2-2L2 18Z"/><circle cx="16.5" cy="9.5" r="1" fill="currentColor"/></svg>
+        Entrar com passkey
+        <span class="sub">biometria ou chave de segurança</span>
+      </button>
+
+      <div class="ou">ou use e-mail</div>
+
+      <div class="campo">
+        <label for="email">E-mail funcional</label>
+        <input id="email" type="email" autocomplete="username" placeholder="nome@fortaleza.ce.leg.br" />
+      </div>
+
+      <div class="campo">
+        <div class="linha-senha">
+          <label for="senha">Senha</label>
+          <a href="#">Esqueci a senha</a>
+        </div>
+        <div class="wrap">
+          <input id="senha" type="password" autocomplete="current-password" placeholder="Sua senha" />
+          <button class="ver-senha" type="button" id="toggle-senha" aria-label="Mostrar senha" aria-pressed="false">
+            <svg id="olho" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <button class="btn btn-contorno entrar" type="button">Entrar</button>
+
+      <p class="mfa-nota">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6l-8-4Z"/><path d="M9 12l2 2 4-4"/></svg>
+        <span>Com e-mail e senha, pediremos seu <b>segundo fator</b> (código do app autenticador) no próximo passo.</span>
+      </p>
+    </form>
+
+    <div class="rodape">
+      <span class="plat">
+        <svg class="sig" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+        Plataforma <b style="font-weight:600;color:var(--texto)">O Plenário</b>
+      </span>
+      <div class="links">
+        <a href="#">Ajuda</a><span class="sep" aria-hidden="true">·</span><a href="#">Status do sistema</a><span class="sep" aria-hidden="true">·</span><a href="#">Privacidade</a>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="../sistema/tema.js"></script>
+<script>
+  (function () {
+    var b = document.getElementById('toggle-senha'), s = document.getElementById('senha');
+    if (!b || !s) return;
+    b.addEventListener('click', function () {
+      var mostrar = s.type === 'password';
+      s.type = mostrar ? 'text' : 'password';
+      b.setAttribute('aria-pressed', String(mostrar));
+      b.setAttribute('aria-label', mostrar ? 'Ocultar senha' : 'Mostrar senha');
+    });
+  })();
+</script>
+</body>
+</html>
