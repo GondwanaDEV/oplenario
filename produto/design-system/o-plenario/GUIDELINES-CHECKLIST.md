@@ -70,6 +70,8 @@ Em conflito, o código prevalece sobre este doc.
 | **Texto secundário/âmbar sobre `--papel-2`** | `--papel-2` é mais escuro no **escuro** → ~4.0 | escureça o texto (`mix toward --papel-texto`; tag âmbar → `#6E5009`). |
 | **`--acento-texto` sobre o `body`** | **4.6** (piso AA, passa raspando) | ok — mas não empilhe sobre fundo mais escuro sem remedir. |
 | **Amarelo cheio (`--amarelo`) como traço/borda de alerta** | < 3:1 sobre claro | use **`--amarelo-traco`** (#B07D14) p/ a borda; texto âmbar = `--aviso-texto`. |
+| **Pílula/badge âmbar com texto** (sessão, calendário) | branco-sobre-âmbar ≈ 2–4; texto-escuro-sobre-`--amarelo-traco`(médio) ≈ 4.3 | âmbar é cor CLARA → fundo **`--amarelo`** (#E8B23A brilhante, invariante) + **texto escuro** (#2E2102) = ~8 nos dois temas. Nunca branco sobre âmbar. |
+| **Texto-marca sobre tinta da própria marca** (`color-mix(marca, surface)`) | a tinta levanta o fundo → ~4.4 no escuro | use `--surface-2` puro de fundo; o acento de marca vai na borda. |
 
 ## 6. Integridade de domínio (não inventar mecânica)
 

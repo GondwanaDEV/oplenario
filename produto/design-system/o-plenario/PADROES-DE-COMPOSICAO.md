@@ -41,9 +41,12 @@ arquétipo e herda dele a estrutura, em vez de reinventar layout.
 | **Ficha/detalhe** | Um registro a fundo: cabeçalho + abas/seções + trilha + ações | Ficha da matéria (11.8) | ✅ provado |
 | **Wizard / multi-passo** | Fluxo guiado com indicador de etapa e voltar | Nova proposição (3.1) | ✅ provado |
 | **Config / admin** | Formulários de ajuste agrupados, com salvar/descartar | Config da Câmara (1.9) | ✅ provado |
+| **Display / projeção** | Telão read-only, glanceável a distância, SEMPRE escuro, tipo enorme | Telão de votação (4.2) | ✅ provado |
+| **Calendário** | Grade de mês + agenda lateral; evento por cor+rótulo | Calendário institucional (2.6) | ✅ provado |
 
-Os 4 primeiros estão materializados nas telas-herói; os 4 últimos são o trabalho de **Eixo 2** do
-escalonamento. O cruzamento arquétipo × feature está em [`INVENTARIO-TELAS.md`](./INVENTARIO-TELAS.md).
+**Os 10 arquétipos estão provados.** Toda tela do catálogo (113 features / 12 módulos) tem uma forma
+de referência; o que resta é **aplicar**. O cruzamento arquétipo × feature está em
+[`INVENTARIO-TELAS.md`](./INVENTARIO-TELAS.md).
 
 ---
 

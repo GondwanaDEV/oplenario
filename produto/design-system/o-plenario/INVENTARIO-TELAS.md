@@ -163,14 +163,16 @@ Status page (10.3) · Exportar dados do ente (9.6) · Console do operador (12.x)
 ## 3. Cobertura — resumo
 
 - **~30 telas distintas** cobrem as 113 features (o resto é backend/embutido/transversal).
-- **Os 8 arquétipos estão PROVADOS** ✅ (cabine · balcão · pública · cockpit + lista · ficha · wizard ·
-  config). O design system está **totalmente escafoldado**.
-- **✅ ALTA = 100% (8/8)** · **~11 MÉDIA · ~8 BAIXA** a desenhar.
-- **Telas feitas (14):** Sessão ao vivo · Expediente · Portal do Cidadão · Painéis da Mesa ·
-  Proposições (lista) · Ficha da matéria · Nova proposição (wizard) · Config da Câmara · **Editor+copiloto ·
-  Tramitação board · Minhas pendências · Pauta+convocação · Revisão de ata-IA · App do vereador (PWA)**.
-  Os 3 públicos decisores cobertos; as 3 apostas de produto materializadas.
+- **Os 10 arquétipos estão PROVADOS** ✅ (cabine · balcão · pública · cockpit · lista · ficha · wizard ·
+  config · **display** · **calendário**). Toda tela do catálogo tem forma de referência.
+- **✅ ALTA = 100% (8/8)** · **MÉDIA 7/~13** · **~8 BAIXA**.
+- **Telas feitas (21):** Sessão ao vivo · Expediente · Portal do Cidadão · Painéis da Mesa ·
+  Proposições · Ficha da matéria · Nova proposição · Config da Câmara · Editor+copiloto · Tramitação board ·
+  Minhas pendências · Pauta+convocação · Revisão de ata-IA · App do vereador (PWA) · **Login/MFA ·
+  Central de notificações · Cadastro de vereadores · Livro de atas · Ouvidoria · Telão de votação ·
+  Calendário institucional**. Os 3 públicos cobertos; as 3 apostas materializadas.
 - **Eixo 4 (guidelines-checklist)** fechado: [`GUIDELINES-CHECKLIST.md`](./GUIDELINES-CHECKLIST.md) = gate de revisão.
-- **Resta (aplicação, não invenção):** as ~11 MÉDIA (login/MFA, admin usuários, cadastros, livro de atas,
-  central de notificações, ouvidoria, navegação pública, legislação consolidada, pareceres, sanção→lei,
-  telão) + ~8 BAIXA. Todas reusam arquétipos já provados.
+- **Resta (aplicação pura, não invenção):** MÉDIA restantes — Admin do ente/usuários (1.8) · Comissões/Mesa
+  (2.2/2.3) · Pareceres (3.5) · Pós-aprovação sanção→lei (3.13-15) · Portal navegação/lista/ficha pública
+  (5.2) · Legislação consolidada (5.8) — + ~8 BAIXA. Todas reusam arquétipos já provados; rodar o
+  `GUIDELINES-CHECKLIST` em cada.
