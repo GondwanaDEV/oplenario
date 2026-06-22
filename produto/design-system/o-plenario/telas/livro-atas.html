@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Livro de atas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Livro de atas — ARQUÉTIPO: lista + ficha (papel)
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+
+     O "livro" literal (4.21): a ata mais recente ABERTA como ilha-papel
+     (read-only, com selo de aprovação — o output aprovado do fluxo de
+     ata-revisao) + a lombada das atas anteriores como lista abaixo
+     (sessão/data/status/ação). Reusa --papel-* e as linhas de lista.
+     Integridade: a ata só consta no livro depois de APROVADA.
+     ============================================================ */
+
+  .pg-cab { padding: 1.5rem 0 0; display: grid; grid-template-columns: 1fr auto; gap: 0.8rem 1.4rem; align-items: end; }
+  .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
+  .pg-cab .sub { font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
+  .filtros { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  .filtro { display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--t-13); font-weight: 600; color: var(--texto); background: var(--surface); border: 1px solid var(--linha); border-radius: 999px; padding: 0.4rem 0.85rem; min-height: 40px; cursor: pointer; }
+  .filtro .cv { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .filtro svg { color: var(--texto-2); }
+
+  .secao-tit { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--acento-texto); margin: 1.6rem 0 0.7rem; }
+
+  /* ata aberta (ilha-papel read-only) */
+  .papel { background: var(--papel); color: var(--papel-texto); border: 1px solid var(--papel-linha); border-radius: var(--raio); box-shadow: var(--sombra-papel); padding: clamp(1.4rem, 3vw, 2.2rem); position: relative; font-size: 1.0rem; line-height: 1.7; }
+  .papel .selo-ap { position: absolute; top: 1.2rem; right: 1.2rem; display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); font-weight: 600; color: #15634A; border: 1.5px solid #2C8A66; border-radius: 999px; padding: 0.2rem 0.6rem; transform: rotate(2deg); }
+  .papel .folha-topo { text-align: center; border-bottom: 1px solid var(--papel-linha); padding-bottom: 0.9rem; margin-bottom: 1.3rem; }
+  .papel .folha-topo .casa { font-family: var(--display); font-weight: 700; font-size: var(--t-13); letter-spacing: .02em; color: var(--papel-texto); text-transform: uppercase; display: block; }
+  .papel .folha-topo .tit { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--papel-texto); margin: 0.3rem 0 0; }
+  .papel .secao-ata { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--papel-marca); margin: 1.2rem 0 0.4rem; font-weight: 600; }
+  .papel p { margin: 0 0 0.8rem; }
+  .papel .assina { margin-top: 1.4rem; padding-top: 1rem; border-top: 1px solid var(--papel-linha); display: flex; gap: 2rem; flex-wrap: wrap; }
+  .papel .assina .firma { font-size: var(--t-12); color: var(--papel-texto-2); }
+  .papel .assina .firma b { display: block; color: var(--papel-texto); font-weight: 600; font-size: var(--t-13); border-top: 1px solid var(--papel-linha); padding-top: 0.3rem; margin-top: 1.2rem; }
+  .papel-acoes { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1.1rem; }
+
+  /* lombada (lista de atas anteriores) */
+  .livro { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; }
+  .ata-row { display: grid; grid-template-columns: auto 1fr auto auto auto; gap: 0.4rem 1rem; align-items: center; padding: 0.85rem 1.1rem; border-top: 1px solid var(--linha); }
+  .ata-row:first-child { border-top: none; }
+  /* fundo do lombo = surface-2 puro: a tinta de marca levantava o fundo
+     e derrubava o contraste do texto-marca no escuro (4.44). A borda
+     esquerda jade já dá o acento de "lombada". */
+  .ata-row .lomb { width: 36px; height: 44px; border-radius: 4px; flex: 0 0 auto; background: var(--surface-2); border-left: 3px solid var(--marca); display: grid; place-items: center; font-family: var(--mono); font-size: var(--t-12); font-weight: 600; color: var(--marca); }
+  .ata-row .ar-mid b { font-size: var(--t-13); color: var(--texto); font-weight: 600; display: block; }
+  .ata-row .ar-mid span { font-size: var(--t-12); color: var(--texto-2); }
+  .ata-row .quando { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); white-space: nowrap; }
+  .schip { font-size: 0.68rem; font-weight: 600; font-family: var(--mono); border-radius: 999px; padding: 0.12rem 0.55rem; white-space: nowrap; }
+  .schip-pub { color: #15634A; background: color-mix(in srgb, #2C8A66 16%, var(--surface)); border: 1px solid color-mix(in srgb, #2C8A66 38%, transparent); }
+  [data-tema="escuro"] .schip-pub { color: #58C99E; }
+  .schip-rev { color: var(--aviso-texto); background: color-mix(in srgb, var(--amarelo) 16%, var(--surface)); border: 1px solid color-mix(in srgb, var(--amarelo-traco) 45%, transparent); }
+  .ata-row .ler { display: inline-flex; align-items: center; gap: 0.3rem; font-family: var(--corpo); font-weight: 600; font-size: var(--t-13); color: var(--marca); text-decoration: none; }
+  .ata-row .ler:hover { text-decoration: underline; }
+
+  @media (max-width: 640px) {
+    .pg-cab { grid-template-columns: 1fr; }
+    .ata-row { grid-template-columns: auto 1fr auto; }
+    .ata-row .quando { grid-column: 2; }
+  }
+</style>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+
+<header class="topo">
+  <div class="envelope topo-grade">
+    <div class="marca">
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div>
+        <p class="marca-nome">O Plenário</p>
+        <p class="marca-orgao">Câmara Municipal de Fortaleza</p>
+      </div>
+    </div>
+    <div class="topo-sep" aria-hidden="true"></div>
+    <span class="eyebrow" style="align-self:center">Sessão plenária · Atas</span>
+    <div class="topo-dir">
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+      <span class="presidente">
+        <span class="avatar" aria-hidden="true">RC</span>
+        <span class="quem"><b>Rita Campos</b><span>Servidora legislativa</span></span>
+      </span>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope">
+  <div class="pg-cab">
+    <div>
+      <span class="eyebrow">Livro de atas</span>
+      <h1>Atas das sessões</h1>
+      <p class="sub">O registro oficial. Uma ata entra no livro apenas depois de aprovada em sessão.</p>
+    </div>
+    <div class="filtros">
+      <button class="filtro" type="button">Ano <span class="cv">2026</span> <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+      <button class="filtro" type="button">Tipo <span class="cv">todas</span> <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+    </div>
+  </div>
+
+  <!-- ATA ABERTA (papel) -->
+  <h2 class="secao-tit">Última ata publicada</h2>
+  <article class="papel" aria-label="Ata da 13ª Sessão Ordinária">
+    <span class="selo-ap"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>Aprovada · 17/06/2026</span>
+    <div class="folha-topo">
+      <span class="casa">Câmara Municipal de Fortaleza</span>
+      <p class="tit">Ata da 13ª Sessão Ordinária</p>
+    </div>
+    <p class="secao-ata">Abertura</p>
+    <p>Aos dez dias do mês de junho de dois mil e vinte e seis, às quatorze horas, reuniu-se a Câmara Municipal de Fortaleza sob a presidência do Vereador Antônio Moraes, com a presença de vinte dos vinte e um vereadores. Havendo quórum, declarou-se aberta a sessão.</p>
+    <p class="secao-ata">Ordem do Dia</p>
+    <p>Foram apreciadas e aprovadas as matérias constantes da pauta, com destaque para o Projeto de Lei nº 014/2026, aprovado por unanimidade. As demais deliberações constam do apenso desta ata.</p>
+    <p class="secao-ata">Encerramento</p>
+    <p>Nada mais havendo a tratar, o Presidente encerrou a sessão às dezesseis horas e vinte minutos, lavrando-se a presente ata, que vai assinada pela Mesa.</p>
+    <div class="assina">
+      <span class="firma">Presidente<b>Antônio Moraes</b></span>
+      <span class="firma">1ª Secretária<b>Helena Past</b></span>
+    </div>
+    <div class="papel-acoes">
+      <button class="btn btn-primaria btn-mini" type="button"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12M8 11l4 4 4-4M4 21h16"/></svg>Baixar PDF</button>
+      <button class="btn btn-contorno btn-mini" type="button">Ver no portal</button>
+    </div>
+  </article>
+
+  <!-- LOMBADA (atas anteriores) -->
+  <h2 class="secao-tit">Atas anteriores</h2>
+  <div class="livro">
+
+    <div class="ata-row">
+      <span class="lomb" aria-hidden="true">12ª</span>
+      <div class="ar-mid"><b>12ª Sessão Ordinária</b><span>quórum 21/21 · 4 deliberações</span></div>
+      <span class="quando">03/06/2026</span>
+      <span class="schip schip-pub">publicada</span>
+      <a class="ler" href="#">Ler</a>
+    </div>
+
+    <div class="ata-row">
+      <span class="lomb" aria-hidden="true">11ª</span>
+      <div class="ar-mid"><b>11ª Sessão Ordinária</b><span>quórum 19/21 · 6 deliberações</span></div>
+      <span class="quando">27/05/2026</span>
+      <span class="schip schip-pub">publicada</span>
+      <a class="ler" href="#">Ler</a>
+    </div>
+
+    <div class="ata-row">
+      <span class="lomb" aria-hidden="true">3ªE</span>
+      <div class="ar-mid"><b>3ª Sessão Extraordinária</b><span>quórum 18/21 · 1 deliberação</span></div>
+      <span class="quando">22/05/2026</span>
+      <span class="schip schip-pub">publicada</span>
+      <a class="ler" href="#">Ler</a>
+    </div>
+
+    <div class="ata-row">
+      <span class="lomb" aria-hidden="true">10ª</span>
+      <div class="ar-mid"><b>10ª Sessão Ordinária</b><span>aguardando aprovação na próxima sessão</span></div>
+      <span class="quando">20/05/2026</span>
+      <span class="schip schip-rev">em revisão</span>
+      <a class="ler" href="ata-revisao.html">Revisar</a>
+    </div>
+
+  </div>
+  <div style="height:1.5rem"></div>
+</main>
+
+<script src="../sistema/tema.js"></script>
+</body>
+</html>
