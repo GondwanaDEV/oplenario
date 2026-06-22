@@ -47,7 +47,7 @@ POC) · **MÉDIA** (paridade institucional, admin) · **BAIXA** (diferível, nic
 ### 16.3 — Processo Legislativo (coração)
 | Feature | Tela | Arquétipo | Cob. | Prio. |
 |---|---|---|---|---|
-| 3.1 Protocolo de proposições · 3.16 espécies próprias · 3.18 numeração | **Protocolo / nova proposição** | wizard | ⬜ | ALTA |
+| 3.1 Protocolo de proposições · 3.16 espécies próprias · 3.18 numeração | **Protocolo / nova proposição** (`telas/protocolo.html`) | wizard | ✅ | — |
 | 3.11 Copiloto de redação (IA) · 3.2 emendas · 3.4 versionamento · 3.17 coautoria | **Editor de proposição + copiloto** | balcão+IA | ⬜ | ALTA |
 | 3.3 Tramitação configurável · 3.7 distribuição a comissões | **Tramitação (board)** = 11.3 | cockpit/board | ⬜ | ALTA |
 | 3.5 Pareceres de comissão | **Parecer** | balcão | ⬜ | MÉDIA |
@@ -166,7 +166,7 @@ Status page (10.3) · Exportar dados do ente (9.6) · Console do operador (12.x)
 - **4 prontas** (cabine · balcão · pública · cockpit) — os 4 arquétipos-herói, 3 públicos.
 - **8 ALTA · ~11 MÉDIA · ~8 BAIXA** a desenhar.
 - **Arquétipos ainda sem prova** (próximo a materializar, Eixo 2): ~~lista/tabela filtrável~~ ✅,
-  ~~ficha/detalhe~~ ✅, **wizard**, **config/admin**. As telas ALTA #1–#5 exercem justamente esses 4 —
+  ~~ficha/detalhe~~ ✅, ~~wizard~~ ✅, **config/admin** (único restante). As telas ALTA #1–#5 exercem esses 4 —
   então **desenhar ~~lista~~ → ficha → wizard → config** entrega os arquétipos E as telas de maior valor
   ao mesmo tempo.
 - **Sequência recomendada:** lista filtrável (1) → ficha da matéria (3) → editor+copiloto (2) →
