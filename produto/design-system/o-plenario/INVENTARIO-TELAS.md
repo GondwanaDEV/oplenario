@@ -165,8 +165,8 @@ Status page (10.3) · Exportar dados do ente (9.6) · Console do operador (12.x)
 - **~30 telas distintas** cobrem as 113 features (o resto é backend/embutido/transversal).
 - **Os 10 arquétipos estão PROVADOS** ✅ (cabine · balcão · pública · cockpit · lista · ficha · wizard ·
   config · **display** · **calendário**). Toda tela do catálogo tem forma de referência.
-- **✅ ALTA = 100% (8/8)** · **✅ MÉDIA = 100% (13/13)** · **✅ BAIXA = 100% (8/8)** — **35 telas.**
-- ⚠️ **Auditoria de completude (22/06) achou 13 GAPS** que o roadmap ALTA/MÉDIA/BAIXA não capturava — a cobertura é alta (~90%) mas **não é 100%**. Ver `§4 — Gaps da auditoria`.
+- **✅ ALTA = 100% (8/8)** · **✅ MÉDIA = 100% (13/13)** · **✅ BAIXA = 100% (8/8)** + **✅ 12 telas de fechamento de gaps** — **47 telas.**
+- ✅ **Auditoria de completude (22/06): os 13 GAPS foram FECHADOS** (12 telas novas). Coberturas fracas remanescentes = backlog de profundidade dentro de telas já cobertas (não ausências). Ver `§4`.
 - **Telas feitas (27):** Sessão ao vivo · Expediente · Portal do Cidadão · Painéis da Mesa ·
   Proposições · Ficha da matéria · Nova proposição · Config da Câmara · Editor+copiloto · Tramitação board ·
   Minhas pendências · Pauta+convocação · Revisão de ata-IA · App do vereador (PWA) · Login/MFA ·
@@ -178,29 +178,43 @@ Status page (10.3) · Exportar dados do ente (9.6) · Console do operador (12.x)
   (`julgamento-contas.html`) · Transparência fiscal (`transparencia-fiscal.html`) · Dados abertos
   (`dados-abertos.html`) · Status page (`status.html`) · Exportar dados do ente (`exportar-dados.html`) ·
   Console do operador SaaS (`console-operador.html`) · Cadastros menores (`cadastros-menores.html`).
-- As 35 telas cobrem a maior parte das 113 features, mas a **auditoria de 22/06 (§4)** mostrou que
-  o roadmap por tier deixou **13 GAPS** passarem — sobretudo **trilha de auditoria do tenant**, a
-  **camada pública navegável** (ficha pública da matéria + perfil do vereador + comentários/moderação)
-  e o **lado do vereador** (coautoria, assinatura 2-toques, estatísticas). Fechá-los é o que resta do design.
+- **✅ 12 telas de fechamento de gaps (22/06):** trilha de auditoria · ficha pública da matéria · perfil
+  público do vereador · moderação de comentários · autoria+apoiamento · assinatura 2-toques · estatísticas
+  do vereador · anexar ata externa · legendas ao vivo (LBI) · entrar com gov.br · câmara no console
+  (flags+grant+auditoria) · observabilidade da IA. **Com isso os 13 GAPS da auditoria fecham** — a camada
+  pública navegável, o lado do vereador (Aposta 2) e a confiança operacional (auditoria, IA-ops) materializados.
+  O que resta é **profundidade** (§4), não ausência: o design do catálogo está cobrindo as 113 features.
 
 ---
 
-## 4. Gaps da auditoria (22/06) — o que o roadmap por tier não capturou
+## 4. Gaps da auditoria (22/06) — ✅ TODOS OS 13 FECHADOS (rodada de 22/06)
 
-Auditoria independente cruzou as 113 features × as 35 telas (abrindo o HTML, não confiando no inventário)
-e achou **13 GAPS** (features sem tela e sem embutimento) + ~13 coberturas fracas. Verificados contra as telas.
+Auditoria independente cruzou as 113 features × as 35 telas (abrindo o HTML) e achou **13 GAPS**
+(features sem tela e sem embutimento) + ~13 coberturas fracas. **Os 13 GAPS foram fechados** com 12 telas
+novas (catálogo 35 → **47 telas**), cada uma rodando o `GUIDELINES-CHECKLIST` + AA medida nos 2 temas.
 
-**🔴 GAPS tenant-facing (9 — decidem POC/conformidade/apostas), em prioridade:**
-1. **1.6 Trilha de auditoria** — sem tela de consulta "quem/o quê/quando/de onde" (só exportável). Jurídico procura; é `[DIF]` (Invariante 10). Arquétipo lista/tabela.
-2. **Ficha PÚBLICA da matéria** — `ficha-materia.html` é interna (`class="topo"`); `portal-materias` linka "Ver e comentar" mas o destino público não existe. Arquétipo pública/ficha.
-3. **Perfil/página pública do vereador + agenda pública** — vista cidadã do vereador inexistente (cobre 5.2).
-4. **6.3 Comentários públicos + painel de moderação** — só link "comentar"; sem UI nem fila de moderação.
-5. **3.17 Coautoria/subscrição/apoiamento** — autoria singular em tudo; passo "Autoria" do wizard não materializado. JTBD do vereador (Aposta 2).
-6. **7.3 Assinatura em 2 toques** — `[DIF]` âncora da Aposta 2; sem fluxo (toca 3.10 ICP).
-7. **7.5 Estatísticas pessoais do vereador** — `[DIF][RM]` sem materialização (proposições por status, presença, métricas).
-8. **4.11 Anexar ata externa** (decisão v1.7) — sem tela de upload+ICP+imutabilidade.
-9. **4.20 Closed-caption** (LBI) · **1.2 SSO gov.br** (entrada do cidadão) — menores.
+**✅ GAPS tenant-facing (9) — fechados:**
+1. **1.6 Trilha de auditoria** → `trilha-auditoria.html` (lista; selo encadeado append-only, Invariante 10).
+2. **Ficha PÚBLICA da matéria** → `ficha-materia-publica.html` (pública/ficha; faixa de azulejo + resumo IA + comentários); `portal-materias` reapontada.
+3. **Perfil público do vereador + agenda** → `perfil-vereador-publico.html` (pública; institucional, não gabinete).
+4. **6.3 Comentários + moderação** → UI pública na ficha + `moderacao-comentarios.html` (fila de moderação).
+5. **3.17 Coautoria/apoiamento** → `autoria-apoiamento.html` (passo do wizard; coautores + apoiamento mínimo).
+6. **7.3 Assinatura em 2 toques** → `assinatura-2-toques.html` (app do vereador; ilha-papel + folha biométrica).
+7. **7.5 Estatísticas do vereador** → `vereador-estatisticas.html` (app; charts honestos).
+8. **4.11 Anexar ata externa** → `anexar-ata-externa.html` (upload validado + ICP + imutável + proveniência).
+9. **4.20 Closed-caption** → `legendas-ao-vivo.html` (LBI) · **1.2 SSO gov.br** → `entrar-govbr.html` (cidadão).
 
-**🔴 GAPS operador-facing (4 — BAIXA, mas reais):** 12.3 feature flags · 12.5 auditoria do operador · 12.7 grant de suporte LGPD · 8.6 observabilidade do modelo de IA.
+**✅ GAPS operador-facing (4) — fechados:** 12.3 flags + 12.5 auditoria do operador + 12.7 grant LGPD →
+`console-operador-tenant.html`; 8.6 observabilidade do modelo de IA → `observabilidade-ia.html`.
 
-**Coberturas fracas (✅/⤵ mas só de raspão):** 2.2 Mesa Diretora (só "cargo" na ficha) · 3.4 versionamento (sem histórico navegável) · 3.6 apensação (sem UI) · 3.10 assinatura ICP (só rótulo) · 3.16 espécies sem-sanção/Emenda à LOM 2/3 (não distintas do PL) · 3.20 registro de publicação · 4.3 voto secreto · 4.5 presença append-only · 5.5 acompanhar proposição (cidadão) · 6.2 Carta de Serviços · 12.2 billing · 12.6 observabilidade cross-tenant.
+**Fix de chassi nesta rodada:** `.btn-encerrar` usava branco s/ `--telha` = 4.0 (falha AA latente) →
+`--telha-fundo` = 5.44 (§5.1), melhora `sessao-ao-vivo` + `moderacao`.
+
+**Coberturas fracas remanescentes (depth, NÃO gaps — a feature já tem cobertura):** vários foram **reforçados**
+por estas telas — 5.5 acompanhar (agora na ficha pública), 3.10 ICP (assinatura-2-toques + anexar-ata),
+4.3 voto secreto (nota honesta no perfil), 12.6 observ. cross-tenant (observabilidade-ia). Seguem como
+**backlog de profundidade dentro de telas já cobertas** (incrementos, não ausências): 2.2 Mesa Diretora ·
+3.4 versionamento (diff navegável) · 3.6 apensação (UI) · 3.16 espécies (Decreto Leg./Resolução/Emenda à LOM
+distintas do PL no editor) · 3.20 registro de publicação · 4.5 presença append-only · 6.2 Carta de Serviços
+(13.460, página pública) · 12.2 billing (detalhe de faturas no console). Nenhum "passou batido" — são
+aprofundamentos de telas existentes, candidatos a uma próxima rodada de polimento se um cliente pedir.

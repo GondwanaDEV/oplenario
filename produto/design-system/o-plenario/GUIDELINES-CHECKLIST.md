@@ -72,6 +72,8 @@ Em conflito, o código prevalece sobre este doc.
 | **Amarelo cheio (`--amarelo`) como traço/borda de alerta** | < 3:1 sobre claro | use **`--amarelo-traco`** (#B07D14) p/ a borda; texto âmbar = `--aviso-texto`. |
 | **Pílula/badge âmbar com texto** (sessão, calendário) | branco-sobre-âmbar ≈ 2–4; texto-escuro-sobre-`--amarelo-traco`(médio) ≈ 4.3 | âmbar é cor CLARA → fundo **`--amarelo`** (#E8B23A brilhante, invariante) + **texto escuro** (#2E2102) = ~8 nos dois temas. Nunca branco sobre âmbar. |
 | **Texto-marca sobre tinta da própria marca** (`color-mix(marca, surface)`) | a tinta levanta o fundo → ~4.4 no escuro | use `--surface-2` puro de fundo; o acento de marca vai na borda. |
+| **Preenchimento de gráfico com cor de marca ESCURA sobre trilho escuro** (barras: jade/cobalto/telha sobre `--surface`) | no **escuro** o fill escuro fica < 3:1 vs o trilho → ~1.5–2.5 | override `[data-tema="escuro"]` clareando o fill (jade→`#43BD93`/`#2C8A66`, cobalto→`--foco`, telha→`#F0794B`). Já aconteceu em transparencia-fiscal + estatísticas. |
+| **Branco sobre `--telha` em botão** (`.btn-encerrar`) | era 4.0 (corrigido no chassi 22/06) | **já resolvido**: o chassi usa `--telha-fundo` (5.44). Não reintroduzir `var(--telha)` como fundo de texto branco. |
 
 ## 6. Integridade de domínio (não inventar mecânica)
 

@@ -69,7 +69,14 @@ Padrões já provados que vivem inline numa ou mais telas. Marcados como `receit
 | **Bottom tab bar** (mobile/PWA) | **app do vereador** | 1 | nova; ≤5 itens ícone+rótulo, `aria-current`; promover ao 2º mobile |
 | **Player de áudio** (a fonte do ASR) | **ata** | 1 | nova; timeline + playhead + marcadores; promover se outra tela tocar gravação |
 | **Reordenar acessível** (handles + setas teclado) | **pauta** | 1 | nova; `aria-disabled` nas pontas; só onde a ordem é editorial |
-| **Nota [GAP] / [Regimento]** | painéis, **pendências**, **pauta**, **ata** | 4 | **promover** — "regra em homologação / varia por câmara" |
+| **Nota [GAP] / [Regimento]** | painéis, **pendências**, **pauta**, **ata**, **autoria**, **anexar-ata** | 6 | **promover** — "regra em homologação / varia por câmara" |
+| **Faixa de azulejo da tramitação** (etapas + datas) | **ficha pública**, **perfil vereador** (mini), portal-materias (mini) | 3 | **promover** — stepper de azulejo (feita/atual/pendente); honesto nas datas futuras |
+| **Selo encadeado / auditoria append-only** | **trilha-auditoria**, **console-operador-tenant** | 2 | **promover** — linha de evento (quando·ator·ação·objeto·selo) + nota de imutabilidade |
+| **Passos do wizard** (indicador 1..n) | **autoria-apoiamento** (+ expediente/nova proposição) | 2 | **promover** — bolas feita/atual + traços; `aria-current="step"` |
+| **Switch (toggle on/off)** | **console-operador-tenant** (flags) | 1 | nova; estado por cor **+ rótulo** (Ativado/Desativado) + `role="switch"`/`aria-checked` |
+| **Botão gov.br oficial** | **entrar-govbr**, ficha pública (compor comentário) | 2 | **promover** — azul #1351B4 + wordmark gov.br/amarelo; branco 7.33 / amarelo 4.88 AA |
+| **Faixa de legenda (closed-caption)** | **legendas-ao-vivo** | 1 | nova; banda fixa-escura tipo-TV (não tematiza), texto grande, controles de tamanho (LBI) |
+| **Folha de confirmação (sheet) 2-toques** | **assinatura-2-toques** | 1 | nova; scrim + sheet biométrica; revisar→confirmar; nota de validade jurídica |
 
 ---
 
