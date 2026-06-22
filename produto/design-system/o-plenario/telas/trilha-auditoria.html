@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Trilha de auditoria</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Trilha de auditoria — ARQUÉTIPO: lista / tabela
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+     Trilha de auditoria do ente (1.6) — o livro-razão IMUTÁVEL:
+     quem · o quê · quando · de onde. Append-only (Invariante 10).
+     Assinatura = o SELO ENCADEADO (cada evento ligado ao anterior).
+     Para o jurídico/risco: a prova de integridade na POC.
+     Escopo = instituição. Read-only; nada se edita ou apaga.
+     ============================================================ */
+  .pg-cab { padding: 1.5rem 0 0; }
+  .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.3rem 0 0; }
+  .pg-cab .sub { font-size: var(--t-16); color: var(--texto-2); margin: 0.5rem 0 0; max-width: 66ch; line-height: 1.5; }
+
+  /* ---- selo de integridade (a assinatura) ---- */
+  .lacre { display: flex; align-items: center; gap: 0.9rem; background: var(--palco-bg); color: var(--palco-texto); border-radius: var(--raio); padding: 1rem 1.2rem; margin: 1.3rem 0 0; box-shadow: var(--sombra); }
+  .lacre .selo-ic { width: 42px; height: 42px; border-radius: 11px; flex: 0 0 auto; display: grid; place-items: center; color: var(--palco-bg); background: var(--amarelo); }
+  .lacre .lc-t b { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--palco-texto); display: block; }
+  .lacre .lc-t span { font-size: var(--t-13); color: var(--palco-texto-2); }
+  .lacre .lc-cadeia { margin-left: auto; text-align: right; font-family: var(--mono); }
+  .lacre .lc-cadeia b { font-size: var(--t-16); color: var(--palco-texto); font-variant-numeric: tabular-nums; display: block; }
+  .lacre .lc-cadeia span { font-size: var(--t-12); color: var(--palco-texto-2); }
+  @media (max-width: 560px) { .lacre .lc-cadeia { display: none; } }
+
+  /* ---- barra de filtros ---- */
+  .filtros { display: flex; align-items: flex-end; gap: 0.8rem; flex-wrap: wrap; margin: 1.2rem 0 0; }
+  .campo { display: flex; flex-direction: column; gap: 0.3rem; }
+  .campo label { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; color: var(--texto-2); text-transform: uppercase; }
+  .campo select, .campo input { font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 58%, var(--linha)); border-radius: var(--raio-sm); padding: 0.55rem 0.7rem; min-height: 44px; }
+  .campo.busca { flex: 1 1 200px; min-width: 160px; }
+  .filtros .espaco { margin-left: auto; }
+
+  .resumo-linha { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin: 1.1rem 0 0.2rem; font-size: var(--t-13); color: var(--texto-2); }
+  .resumo-linha b { color: var(--texto); font-weight: 600; }
+  .resumo-linha .imut { display: inline-flex; align-items: center; gap: 0.35rem; font-size: var(--t-12); color: var(--acento-texto); }
+
+  /* ---- a trilha (lista append-only) ---- */
+  .trilha { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; margin: 0.6rem 0 0; }
+  .ev { display: grid; grid-template-columns: 132px 1.4fr auto 1.6fr 150px 34px; gap: 0.3rem 1rem; align-items: center; padding: 0.85rem 1.2rem; border-top: 1px solid var(--linha); position: relative; }
+  .ev:first-child { border-top: none; }
+  .ev .quando b { font-family: var(--mono); font-size: var(--t-13); color: var(--texto); font-variant-numeric: tabular-nums; display: block; }
+  .ev .quando span { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .ev .ator { display: flex; align-items: center; gap: 0.55rem; min-width: 0; }
+  .ev .ator .av { width: 30px; height: 30px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 0.62rem; color: #fff; }
+  .ev .ator .nm { min-width: 0; } .ev .ator .nm b { font-size: var(--t-13); font-weight: 600; color: var(--texto); display: block; line-height: 1.2; } .ev .ator .nm span { font-size: var(--t-12); color: var(--texto-2); }
+
+  .acao { display: inline-flex; align-items: center; gap: 0.35rem; font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.18rem 0.6rem; white-space: nowrap; border: 1px solid transparent; }
+  .acao svg { width: 13px; height: 13px; flex: 0 0 auto; }
+  .a-criou { color: #15634A; background: color-mix(in srgb, #2C8A66 14%, var(--surface)); border-color: color-mix(in srgb, #2C8A66 38%, transparent); } [data-tema="escuro"] .a-criou { color: #58C99E; }
+  .a-editou { color: var(--foco); background: color-mix(in srgb, var(--foco) 13%, var(--surface)); border-color: color-mix(in srgb, var(--foco) 40%, transparent); }
+  .a-aprovou { color: #15634A; background: color-mix(in srgb, #2C8A66 14%, var(--surface)); border-color: color-mix(in srgb, #2C8A66 38%, transparent); } [data-tema="escuro"] .a-aprovou { color: #58C99E; }
+  .a-removeu { color: var(--acento-texto); background: var(--surface-2); border-color: color-mix(in srgb, var(--telha) 52%, transparent); }
+  .a-exportou { color: var(--aviso-texto); background: color-mix(in srgb, var(--amarelo) 16%, var(--surface)); border-color: color-mix(in srgb, var(--amarelo-traco) 45%, transparent); }
+  .a-entrou { color: var(--texto-2); background: var(--surface-2); border-color: var(--linha); }
+
+  .ev .obj { min-width: 0; } .ev .obj b { font-size: var(--t-13); color: var(--texto); font-weight: 600; display: block; line-height: 1.25; } .ev .obj span { font-size: var(--t-12); color: var(--texto-2); }
+  .ev .obj b a { color: var(--marca); text-decoration: none; } .ev .obj b a:hover { text-decoration: underline; }
+  .ev .origem { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); line-height: 1.3; }
+  .ev .origem .selo { color: var(--acento-texto); }
+  .ev .mais { background: none; border: 1px solid var(--linha); color: var(--texto-2); cursor: pointer; border-radius: 7px; width: 32px; height: 32px; display: grid; place-items: center; }
+  .ev .mais:hover { color: var(--texto); border-color: var(--texto-2); }
+
+  /* detalhe expansível (antes → depois de uma edição) */
+  .ev-det { grid-column: 1 / -1; margin: 0.6rem 0 0; padding: 0.85rem 1rem; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; }
+  .ev-det .col h4 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); margin: 0 0 0.35rem; }
+  .ev-det .col p { font-size: var(--t-13); color: var(--texto); margin: 0; line-height: 1.45; }
+  .ev-det .antes p { color: var(--texto-2); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--telha) 60%, transparent); }
+  .ev-det .selo-row { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.5rem; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); border-top: 1px dashed var(--linha); padding-top: 0.6rem; }
+  .ev-det .selo-row .selo { color: var(--acento-texto); }
+  @media (max-width: 560px) { .ev-det { grid-template-columns: 1fr; } }
+
+  /* rodapé honesto */
+  .nota-imut { display: flex; align-items: flex-start; gap: 0.6rem; margin: 1.2rem 0 0; padding: 0.9rem 1.1rem; background: color-mix(in srgb, var(--marca) 6%, var(--surface)); border: 1px solid color-mix(in srgb, var(--marca) 26%, var(--linha)); border-radius: var(--raio); font-size: var(--t-13); color: var(--texto-2); line-height: 1.5; }
+  .nota-imut svg { color: var(--marca); flex: 0 0 auto; margin-top: 2px; }
+  .nota-imut b { color: var(--texto); font-weight: 600; }
+
+  @media (max-width: 860px) {
+    .ev { grid-template-columns: 1fr auto; gap: 0.5rem 0.8rem; }
+    .ev .quando { order: 1; } .ev .acao { order: 2; justify-self: end; }
+    .ev .ator { order: 3; } .ev .obj { order: 4; grid-column: 1 / -1; }
+    .ev .origem { order: 5; grid-column: 1 / -1; } .ev .mais { order: 6; position: absolute; top: 0.85rem; right: 1.2rem; }
+  }
+</style>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+<header class="topo">
+  <div class="envelope topo-grade">
+    <div class="marca">
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div><p class="marca-nome">O Plenário</p><p class="marca-orgao">Câmara Municipal de Fortaleza</p></div>
+    </div>
+    <div class="topo-sep" aria-hidden="true"></div>
+    <span class="eyebrow" style="align-self:center">Administração · Auditoria</span>
+    <div class="topo-dir">
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+      <span class="presidente"><span class="avatar" aria-hidden="true">RC</span><span class="quem"><b>Renata Costa</b><span>Procuradoria</span></span></span>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope">
+  <div class="pg-cab">
+    <span class="eyebrow">Registro de integridade</span>
+    <h1>Trilha de auditoria</h1>
+    <p class="sub">Cada ato no sistema fica registrado — quem fez, o quê, quando e de onde. A trilha é somente-leitura e encadeada: não se edita nem se apaga.</p>
+  </div>
+
+  <div class="lacre" role="status" aria-label="Estado da cadeia de integridade">
+    <span class="selo-ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>
+    <div class="lc-t"><b>Cadeia íntegra</b><span>Cada evento traz um selo encadeado ao anterior — qualquer alteração quebraria a sequência.</span></div>
+    <div class="lc-cadeia"><b>1.284.907</b><span>eventos selados</span></div>
+  </div>
+
+  <form class="filtros" aria-label="Filtrar a trilha" onsubmit="return false">
+    <div class="campo"><label for="f-per">Período</label>
+      <select id="f-per"><option>Últimos 7 dias</option><option selected>Últimos 30 dias</option><option>Este ano</option><option>Intervalo personalizado…</option></select></div>
+    <div class="campo"><label for="f-ator">Ator</label>
+      <select id="f-ator"><option selected>Todos</option><option>Servidores</option><option>Vereadores</option><option>Cidadãos (portal)</option><option>Operador da plataforma</option></select></div>
+    <div class="campo"><label for="f-acao">Ação</label>
+      <select id="f-acao"><option selected>Todas</option><option>Criou</option><option>Editou</option><option>Aprovou / assinou</option><option>Removeu / revogou</option><option>Exportou</option><option>Entrou / saiu</option></select></div>
+    <div class="campo"><label for="f-obj">Objeto</label>
+      <select id="f-obj"><option selected>Tudo</option><option>Proposições</option><option>Sessões e atas</option><option>Cadastros</option><option>Documentos</option><option>Configurações</option></select></div>
+    <div class="campo busca"><label for="f-q">Buscar</label>
+      <input id="f-q" type="search" placeholder="Nome, nº da matéria, IP…" /></div>
+    <button class="btn btn-primaria btn-mini espaco" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12M8 11l4 4 4-4M4 21h16"/></svg>Exportar trilha</button>
+  </form>
+
+  <div class="resumo-linha">
+    <span><b>248</b> eventos em <b>Últimos 30 dias</b></span>
+    <span aria-hidden="true">·</span>
+    <span class="imut"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>somente-leitura</span>
+  </div>
+
+  <div class="trilha" aria-label="Eventos de auditoria">
+    <div class="ev">
+      <div class="quando"><b>15/06/2026</b><span>14:32:07</span></div>
+      <div class="ator"><span class="av" style="background:var(--jade)" aria-hidden="true">MA</span><span class="nm"><b>Marcos Aguiar</b><span>Servidor · Legislativo</span></span></div>
+      <span class="acao a-aprovou"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>Aprovou</span>
+      <div class="obj"><b><a href="#">PL 118/2026</a></b><span>parecer da CCJ registrado</span></div>
+      <div class="origem">189.45.x.x<br><span class="selo">selo a7f3·9c21</span></div>
+      <button class="mais" type="button" aria-label="Detalhes do evento das 14:32"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+    </div>
+
+    <div class="ev">
+      <div class="quando"><b>15/06/2026</b><span>11:08:55</span></div>
+      <div class="ator"><span class="av" style="background:var(--cobalto)" aria-hidden="true">CT</span><span class="nm"><b>Carla Tavares</b><span>Vereadora</span></span></div>
+      <span class="acao a-editou"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z"/></svg>Editou</span>
+      <div class="obj"><b><a href="#">PL 121/2026</a></b><span>ementa alterada antes do protocolo</span></div>
+      <div class="origem">177.92.x.x<br><span class="selo">selo b2e8·4d70</span></div>
+      <button class="mais" type="button" aria-expanded="true" aria-label="Recolher detalhes do evento das 11:08"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="transform:rotate(180deg)"><path d="M6 9l6 6 6-6"/></svg></button>
+      <div class="ev-det">
+        <div class="col antes"><h4>Antes</h4><p>"Dispõe sobre arborização de vias."</p></div>
+        <div class="col"><h4>Depois</h4><p>"Dispõe sobre a arborização de vias públicas e áreas verdes urbanas."</p></div>
+        <div class="selo-row"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span>selo <span class="selo">b2e8·4d70</span> · encadeado a <span class="selo">a7f3·9c21</span></span></div>
+      </div>
+    </div>
+
+    <div class="ev">
+      <div class="quando"><b>15/06/2026</b><span>09:41:02</span></div>
+      <div class="ator"><span class="av" style="background:var(--jade-claro)" aria-hidden="true">RC</span><span class="nm"><b>Renata Costa</b><span>Procuradoria</span></span></div>
+      <span class="acao a-exportou"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 3v12M8 11l4 4 4-4M4 21h16"/></svg>Exportou</span>
+      <div class="obj"><b>Trilha de auditoria</b><span>período 01–31/05 · pacote completo</span></div>
+      <div class="origem">200.18.x.x<br><span class="selo">selo c0a1·7f33</span></div>
+      <button class="mais" type="button" aria-label="Detalhes do evento das 09:41"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+    </div>
+
+    <div class="ev">
+      <div class="quando"><b>14/06/2026</b><span>17:55:48</span></div>
+      <div class="ator"><span class="av" style="background:var(--jade)" aria-hidden="true">MA</span><span class="nm"><b>Marcos Aguiar</b><span>Servidor · Legislativo</span></span></div>
+      <span class="acao a-criou"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Criou</span>
+      <div class="obj"><b><a href="#">Sessão Ordinária nº 42</a></b><span>convocada para 18/06, 14h</span></div>
+      <div class="origem">189.45.x.x<br><span class="selo">selo d9b4·2e58</span></div>
+      <button class="mais" type="button" aria-label="Detalhes do evento das 17:55"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+    </div>
+
+    <div class="ev">
+      <div class="quando"><b>14/06/2026</b><span>16:20:11</span></div>
+      <div class="ator"><span class="av" style="background:#6E5A8A" aria-hidden="true">OP</span><span class="nm"><b>Operador · Suporte</b><span>Plataforma O Plenário</span></span></div>
+      <span class="acao a-entrou"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>Acessou</span>
+      <div class="obj"><b>Acesso de suporte autorizado</b><span>concedido por Renata Costa · expira em 24h</span></div>
+      <div class="origem">selo do grant<br><span class="selo">e4c7·8a09</span></div>
+      <button class="mais" type="button" aria-label="Detalhes do evento das 16:20"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+    </div>
+
+    <div class="ev">
+      <div class="quando"><b>13/06/2026</b><span>10:14:39</span></div>
+      <div class="ator"><span class="av" style="background:var(--telha)" aria-hidden="true">AM</span><span class="nm"><b>Ana Moreira</b><span>Administração</span></span></div>
+      <span class="acao a-removeu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 7h14M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>Revogou</span>
+      <div class="obj"><b>Acesso de usuário</b><span>perfil de estagiário desligado</span></div>
+      <div class="origem">189.45.x.x<br><span class="selo">selo f1d2·6b44</span></div>
+      <button class="mais" type="button" aria-label="Detalhes do evento das 10:14"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+    </div>
+  </div>
+
+  <div class="nota-imut">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+    <span><b>Por que isto importa.</b> A trilha é append-only: registros não podem ser editados nem apagados, nem por administradores. Cada evento é selado e encadeado ao anterior, de modo que qualquer adulteração quebraria a sequência e ficaria evidente. É a prova de integridade que a Procuradoria e o controle interno usam em auditorias.</span>
+  </div>
+  <div style="height:1.6rem"></div>
+</main>
+<script src="../sistema/tema.js"></script>
+</body>
+</html>
