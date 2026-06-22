@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ouvidoria — Câmara Municipal de Fortaleza</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Ouvidoria — ARQUÉTIPO: leitura pública + form
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+
+     Superfície PÚBLICA white-label (body.superficie-publica): a CÂMARA
+     lidera; "O Plenário" recua ao rodapé. Ouvidoria da Lei 13.460/2017
+     (Código de Defesa do Usuário de Serviços Públicos): manifestação
+     com PRAZO DE RESPOSTA garantido por lei (30 dias, prorrogável +30 —
+     art. 16/17). Opção de anonimato com nota HONESTA das implicações.
+     Tipos como cartões-rádio. Carta de Serviços + acompanhar protocolo.
+     A lei é real e citável — não é [GAP].
+     ============================================================ */
+
+  .ov-topo { background: var(--surface); border-bottom: 1px solid var(--linha); }
+  .ov-topo-in { display: flex; align-items: center; gap: 1rem; padding: 0.9rem 0; flex-wrap: wrap; }
+  .brasao-casa { display: flex; align-items: center; gap: 0.7rem; }
+  .brasao-casa .br { width: 40px; height: 40px; border-radius: 10px; flex: 0 0 auto; }
+  .brasao-casa b { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); line-height: 1.1; display: block; }
+  .brasao-casa span { font-size: var(--t-12); color: var(--texto-2); }
+  .ov-topo .dir { margin-left: auto; display: flex; align-items: center; gap: 0.7rem; }
+  .nav-pub { display: flex; gap: 0.3rem; }
+  .nav-pub a { font-size: var(--t-13); font-weight: 600; color: var(--texto-2); text-decoration: none; padding: 0.5rem 0.7rem; border-radius: 8px; }
+  .nav-pub a[aria-current="page"] { color: var(--marca); background: color-mix(in srgb, var(--marca) 8%, transparent); }
+  .nav-pub a:hover { color: var(--texto); }
+
+  .hero { padding: 2.2rem 0 1.4rem; }
+  .hero .eyebrow { color: var(--acento-texto); }
+  .hero h1 { font-family: var(--display); font-weight: 800; font-size: clamp(2rem, 5vw, var(--t-40)); letter-spacing: -0.02em; color: var(--texto); margin: 0.4rem 0 0; line-height: 1.05; }
+  .hero p { font-size: var(--t-16); color: var(--texto-2); margin: 0.7rem 0 0; max-width: 60ch; }
+  .lei-faixa { display: inline-flex; align-items: center; gap: 0.55rem; margin: 1.1rem 0 0; padding: 0.55rem 0.9rem; background: color-mix(in srgb, var(--marca) 7%, var(--surface)); border: 1px solid color-mix(in srgb, var(--marca) 28%, var(--linha)); border-radius: 999px; font-size: var(--t-13); color: var(--texto); }
+  .lei-faixa svg { color: var(--marca); flex: 0 0 auto; }
+  .lei-faixa b { font-weight: 600; }
+
+  .grade { display: grid; grid-template-columns: 1fr 320px; gap: 1.6rem; align-items: start; margin: 0.6rem 0 0; }
+
+  .form-card { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-lg); box-shadow: var(--sombra); padding: 1.5rem clamp(1.2rem, 4vw, 1.8rem); }
+  .form-card h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); margin: 0 0 0.3rem; }
+  .form-card .ajuda { font-size: var(--t-13); color: var(--texto-2); margin: 0 0 1.3rem; }
+
+  fieldset { border: none; margin: 0 0 1.3rem; padding: 0; }
+  legend { font-size: var(--t-13); font-weight: 600; color: var(--texto); margin-bottom: 0.6rem; padding: 0; }
+  .tipos { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.6rem; }
+  .tipo { position: relative; }
+  .tipo input { position: absolute; opacity: 0; pointer-events: none; }
+  .tipo label { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.8rem; border: 1.5px solid var(--linha); border-radius: var(--raio); cursor: pointer; background: var(--surface-2); height: 100%; }
+  .tipo label .ic { color: var(--marca); }
+  .tipo label b { font-size: var(--t-13); color: var(--texto); font-weight: 600; }
+  .tipo label span { font-size: var(--t-12); color: var(--texto-2); line-height: 1.35; }
+  .tipo input:checked + label { border-color: var(--marca); background: color-mix(in srgb, var(--marca) 7%, var(--surface-2)); box-shadow: inset 0 0 0 1px var(--marca); }
+  .tipo input:focus-visible + label { outline: 3px solid var(--foco); outline-offset: 2px; }
+
+  .campo { display: grid; gap: 0.35rem; margin: 0 0 1.1rem; }
+  .campo label { font-size: var(--t-13); font-weight: 600; color: var(--texto); }
+  .campo .req { color: var(--acento-texto); }
+  .campo input, .campo textarea { font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 55%, var(--linha)); border-radius: var(--raio-sm); padding: 0.7rem 0.8rem; min-height: 48px; width: 100%; }
+  .campo textarea { min-height: 120px; resize: vertical; line-height: 1.55; }
+  .campo .dica { font-size: var(--t-12); color: var(--texto-2); }
+
+  .anexo { display: flex; align-items: center; gap: 0.6rem; padding: 0.8rem 1rem; border: 1px dashed color-mix(in srgb, var(--marca) 35%, var(--linha)); border-radius: var(--raio-sm); color: var(--texto-2); font-size: var(--t-13); cursor: pointer; background: color-mix(in srgb, var(--marca) 4%, var(--surface-2)); }
+  .anexo svg { color: var(--marca); flex: 0 0 auto; }
+
+  /* identificação / anonimato */
+  .ident { border: 1px solid var(--linha); border-radius: var(--raio); overflow: hidden; margin: 0 0 1.3rem; }
+  .ident .op { display: flex; gap: 0.7rem; padding: 0.9rem 1rem; border-top: 1px solid var(--linha); align-items: flex-start; cursor: pointer; }
+  .ident .op:first-child { border-top: none; }
+  .ident .op input { margin-top: 3px; flex: 0 0 auto; width: 18px; height: 18px; accent-color: var(--marca); }
+  .ident .op .t b { font-size: var(--t-13); color: var(--texto); display: block; }
+  .ident .op .t span { font-size: var(--t-12); color: var(--texto-2); line-height: 1.4; }
+
+  .enviar-linha { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+  .enviar-linha .protege { font-size: var(--t-12); color: var(--texto-2); display: flex; align-items: center; gap: 0.4rem; }
+  .enviar-linha .protege svg { color: var(--marca); flex: 0 0 auto; }
+
+  /* rail */
+  .rail { display: grid; gap: 1rem; }
+  .rcard { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.1rem 1.2rem; }
+  .rcard h3 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.7rem; }
+  .rcard p { font-size: var(--t-13); color: var(--texto-2); margin: 0.3rem 0; line-height: 1.5; }
+  .prazo-lista { list-style: none; margin: 0.3rem 0 0; padding: 0; display: grid; gap: 0.6rem; }
+  .prazo-lista li { display: flex; gap: 0.6rem; font-size: var(--t-13); color: var(--texto); }
+  .prazo-lista .nn { font-family: var(--mono); font-weight: 600; color: var(--marca); flex: 0 0 auto; }
+  .rcard .acompanhar { display: flex; gap: 0.5rem; margin-top: 0.6rem; }
+  .rcard .acompanhar input { flex: 1; min-width: 0; font-family: var(--mono); font-size: var(--t-13); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 50%, var(--linha)); border-radius: var(--raio-sm); padding: 0.5rem 0.6rem; min-height: 42px; color: var(--texto); }
+  .ouvidor { display: flex; align-items: center; gap: 0.6rem; }
+  .ouvidor .av { width: 40px; height: 40px; border-radius: 50%; background: var(--jade); color: #fff; display: grid; place-items: center; font-family: var(--display); font-weight: 700; flex: 0 0 auto; }
+  .ouvidor b { font-size: var(--t-13); color: var(--texto); display: block; }
+  .ouvidor span { font-size: var(--t-12); color: var(--texto-2); }
+
+  .rodape { margin-top: 2.5rem; padding: 1.6rem 0; border-top: 1px solid var(--linha); display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+  .rodape .plat { display: inline-flex; align-items: center; gap: 0.45rem; font-size: var(--t-12); color: var(--texto-2); margin-left: auto; }
+  .rodape .plat .sig { width: 16px; height: 16px; }
+
+  @media (max-width: 880px) { .grade { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body class="superficie-publica">
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+
+<header class="ov-topo">
+  <div class="envelope ov-topo-in">
+    <div class="brasao-casa">
+      <svg class="br" viewBox="0 0 34 34" role="img" aria-label="Câmara Municipal de Fortaleza"><rect width="34" height="34" rx="9" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div><b>Câmara Municipal de Fortaleza</b><span>Ouvidoria</span></div>
+    </div>
+    <div class="dir">
+      <nav class="nav-pub" aria-label="Seções públicas">
+        <a href="portal-cidadao.html">Início</a>
+        <a href="#" aria-current="page">Ouvidoria</a>
+        <a href="#">Carta de Serviços</a>
+      </nav>
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope">
+  <div class="hero">
+    <span class="eyebrow">Ouvidoria</span>
+    <h1>Fale com a Câmara.</h1>
+    <p>Registre uma reclamação, denúncia, sugestão, elogio ou solicitação sobre os serviços da Casa. Sua manifestação é encaminhada à Ouvidoria e tem prazo de resposta.</p>
+    <span class="lei-faixa">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6l-8-4Z"/><path d="M9 12l2 2 4-4"/></svg>
+      Direito garantido pela <b>Lei nº 13.460/2017</b> — prazo de resposta de até 30 dias, prorrogável uma vez.
+    </span>
+  </div>
+
+  <div class="grade">
+    <!-- FORM -->
+    <form class="form-card" onsubmit="return false">
+      <h2>Nova manifestação</h2>
+      <p class="ajuda">Quanto mais específica, mais rápido conseguimos encaminhar e responder.</p>
+
+      <fieldset>
+        <legend>Tipo de manifestação <span class="req" aria-hidden="true">*</span></legend>
+        <div class="tipos">
+          <div class="tipo">
+            <input type="radio" name="tipo" id="t-recl" checked />
+            <label for="t-recl"><span class="ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span><b>Reclamação</b><span>algo não funcionou como deveria</span></label>
+          </div>
+          <div class="tipo">
+            <input type="radio" name="tipo" id="t-den" />
+            <label for="t-den"><span class="ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><b>Denúncia</b><span>irregularidade ou conduta indevida</span></label>
+          </div>
+          <div class="tipo">
+            <input type="radio" name="tipo" id="t-sug" />
+            <label for="t-sug"><span class="ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12c.7.7 1 1.5 1 2h6c0-.5.3-1.3 1-2a7 7 0 0 0-4-12Z"/></svg></span><b>Sugestão</b><span>uma ideia para melhorar</span></label>
+          </div>
+          <div class="tipo">
+            <input type="radio" name="tipo" id="t-elo" />
+            <label for="t-elo"><span class="ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 10v11M2 13v6a2 2 0 0 0 2 2h12.5a2 2 0 0 0 2-1.7l1.3-8A2 2 0 0 0 18 9h-5l1-4a2 2 0 0 0-2-2L7 10Z"/></svg></span><b>Elogio</b><span>um serviço que foi bem prestado</span></label>
+          </div>
+          <div class="tipo">
+            <input type="radio" name="tipo" id="t-sol" />
+            <label for="t-sol"><span class="ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></svg></span><b>Solicitação</b><span>uma providência ou serviço</span></label>
+          </div>
+        </div>
+      </fieldset>
+
+      <div class="campo">
+        <label for="assunto">Assunto <span class="req" aria-hidden="true">*</span></label>
+        <input id="assunto" type="text" placeholder="Resuma em uma frase" />
+      </div>
+
+      <div class="campo">
+        <label for="desc">Descrição <span class="req" aria-hidden="true">*</span></label>
+        <textarea id="desc" placeholder="Conte o que aconteceu: o quê, quando e onde. Inclua o que ajudar a entender."></textarea>
+        <span class="dica">Não inclua senhas ou dados de terceiros sem necessidade.</span>
+      </div>
+
+      <div class="campo">
+        <label for="anexo-in">Anexo (opcional)</label>
+        <label class="anexo" for="anexo-in">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          Anexar foto ou documento (até 10 MB)
+        </label>
+        <input id="anexo-in" type="file" class="sr-only" />
+      </div>
+
+      <fieldset class="ident" style="margin-top:0.3rem">
+        <legend class="sr-only">Como deseja se identificar</legend>
+        <label class="op">
+          <input type="radio" name="ident" checked />
+          <span class="t"><b>Identificar-me</b><span>Você acompanha a resposta e pode receber retorno individual. Seus dados ficam protegidos pela LGPD.</span></span>
+        </label>
+        <label class="op">
+          <input type="radio" name="ident" />
+          <span class="t"><b>Manifestar sem me identificar</b><span>Permitido por lei. Sem identificação, não há retorno individual — você acompanha apenas pelo número de protocolo.</span></span>
+        </label>
+      </fieldset>
+
+      <div class="enviar-linha">
+        <button class="btn btn-primaria" type="button">Enviar manifestação</button>
+        <span class="protege">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+          Tratado conforme a LGPD.
+        </span>
+      </div>
+    </form>
+
+    <!-- RAIL -->
+    <aside class="rail" aria-label="Prazos, acompanhamento e ouvidor">
+      <div class="rcard">
+        <h3>O que acontece depois</h3>
+        <ul class="prazo-lista">
+          <li><span class="nn">1.</span> Você recebe um <b>número de protocolo</b> na hora.</li>
+          <li><span class="nn">2.</span> A Ouvidoria responde em até <b>30 dias</b>.</li>
+          <li><span class="nn">3.</span> O prazo pode ser prorrogado <b>uma vez</b>, com justificativa (Lei 13.460, art. 16/17).</li>
+        </ul>
+      </div>
+
+      <div class="rcard">
+        <h3>Acompanhar manifestação</h3>
+        <p>Já tem um protocolo? Veja o andamento.</p>
+        <div class="acompanhar">
+          <input type="text" placeholder="2026/000000" aria-label="Número do protocolo" />
+          <button class="btn btn-contorno btn-mini" type="button">Ver</button>
+        </div>
+      </div>
+
+      <div class="rcard">
+        <h3>Ouvidor responsável</h3>
+        <div class="ouvidor">
+          <span class="av" aria-hidden="true">PO</span>
+          <div><b>Paulo Oliveira</b><span>Ouvidor-Geral da Câmara</span></div>
+        </div>
+        <p style="margin-top:0.7rem">Atendimento presencial: térreo, sala 3 · seg a sex, 8h–17h.</p>
+      </div>
+    </aside>
+  </div>
+
+  <div class="rodape">
+    <span style="font-size:var(--t-12);color:var(--texto-2)">Câmara Municipal de Fortaleza · Ouvidoria</span>
+    <span class="plat">
+      <svg class="sig" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      Plataforma O Plenário
+    </span>
+  </div>
+</main>
+
+<script src="../sistema/tema.js"></script>
+</body>
+</html>
