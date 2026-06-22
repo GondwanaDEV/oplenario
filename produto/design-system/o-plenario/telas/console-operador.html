@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Console do operador</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Console do operador — ARQUÉTIPO: cockpit + lista
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+     SUPRATENANT (12.x): o operador SaaS gere as câmaras-tenant. Marca =
+     "O Plenário · Operação" (não uma câmara). Métricas + tabela de
+     tenants (plano/status/atividade/ações). Reaplica a tabela (de Admin
+     usuários) + métricas-cockpit. Operador-facing, fora da fronteira tenant.
+     ============================================================ */
+  .pg-cab { padding: 1.5rem 0 0; display: grid; grid-template-columns: 1fr auto; gap: 0.8rem 1.4rem; align-items: end; }
+  .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
+  .pg-cab .sub { font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
+
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1rem; margin: 1.3rem 0 0; }
+  .mt { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.1rem 1.2rem; }
+  .mt .t { font-size: var(--t-13); color: var(--texto-2); }
+  .mt b { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: var(--texto); display: block; margin-top: 0.2rem; }
+  .mt .d { font-family: var(--mono); font-size: var(--t-12); color: var(--marca); }
+  .mt .d.neg { color: var(--acento-texto); }
+
+  .barra { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; margin: 1.3rem 0 0; }
+  .filtro { display: inline-flex; align-items: center; gap: 0.45rem; font-size: var(--t-13); font-weight: 600; color: var(--texto); background: var(--surface); border: 1px solid var(--linha); border-radius: 999px; padding: 0.45rem 0.85rem; min-height: 40px; cursor: pointer; }
+  .filtro .cv { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .busca { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 52%, var(--linha)); border-radius: 999px; padding: 0.35rem 0.9rem; min-height: 40px; min-width: 220px; }
+  .busca svg { color: var(--texto-2); flex: 0 0 auto; }
+  .busca input { border: none; background: none; outline: none; font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); width: 100%; }
+
+  .tabela-card { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; margin: 1.1rem 0 0; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { font-family: var(--mono); font-size: var(--t-12); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); text-align: left; padding: 0.8rem 1.1rem; background: var(--surface-2); border-bottom: 1px solid var(--linha); white-space: nowrap; }
+  tbody td { padding: 0.85rem 1.1rem; border-top: 1px solid var(--linha); vertical-align: middle; font-size: var(--t-13); color: var(--texto); }
+  tbody tr:hover { background: var(--surface-2); }
+  .cam { display: flex; align-items: center; gap: 0.7rem; }
+  .cam .uf { width: 34px; height: 34px; border-radius: 8px; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--mono); font-weight: 600; font-size: var(--t-12); color: #fff; background: var(--jade); }
+  .cam b { font-weight: 600; color: var(--texto); display: block; line-height: 1.2; } .cam span { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .plano { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .st { display: inline-flex; align-items: center; gap: 0.35rem; font-size: var(--t-12); font-weight: 600; }
+  .st .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .st-ativa { color: #15634A; } .st-ativa .dot { background: #2C8A66; } [data-tema="escuro"] .st-ativa { color: #58C99E; }
+  .st-trial { color: var(--cobalto); } .st-trial .dot { background: var(--cobalto); } [data-tema="escuro"] .st-trial { color: var(--foco); } [data-tema="escuro"] .st-trial .dot { background: var(--foco); }
+  .st-susp { color: var(--aviso-texto); } .st-susp .dot { background: var(--amarelo-traco); }
+  .mrr { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--texto); }
+  .ativ { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); white-space: nowrap; }
+  .u-menu { background: none; border: 1px solid var(--linha); color: var(--texto-2); cursor: pointer; border-radius: 7px; width: 34px; height: 34px; display: grid; place-items: center; }
+  .u-menu:hover { color: var(--texto); border-color: var(--texto-2); }
+
+  @media (max-width: 820px) { .pg-cab { grid-template-columns: 1fr; } thead { display: none; } table, tbody, tr, td { display: block; width: 100%; } tbody tr { padding: 0.5rem 0.3rem; } tbody td { border: none; padding: 0.25rem 0.6rem; } }
+</style>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+<header class="topo">
+  <div class="envelope topo-grade">
+    <div class="marca">
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div><p class="marca-nome">O Plenário</p><p class="marca-orgao">Operação · console</p></div>
+    </div>
+    <div class="topo-sep" aria-hidden="true"></div>
+    <span class="eyebrow" style="align-self:center">Supratenant</span>
+    <div class="topo-dir">
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+      <span class="presidente"><span class="avatar" aria-hidden="true">OP</span><span class="quem"><b>Operação</b><span>O Plenário</span></span></span>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope">
+  <div class="pg-cab">
+    <div>
+      <span class="eyebrow">Console do operador</span>
+      <h1>Câmaras na plataforma</h1>
+      <p class="sub">Visão supratenant. Cada câmara é um tenant isolado — você opera, ela é dona dos dados.</p>
+    </div>
+    <button class="btn btn-primaria btn-mini" type="button">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      Provisionar câmara
+    </button>
+  </div>
+
+  <div class="metrics">
+    <div class="mt"><span class="t">Câmaras ativas</span><b>37</b><span class="d">+4 no trimestre</span></div>
+    <div class="mt"><span class="t">Em trial</span><b>5</b><span class="d">2 perto de converter</span></div>
+    <div class="mt"><span class="t">MRR</span><b>R$ 312 mil</b><span class="d">+8% no mês</span></div>
+    <div class="mt"><span class="t">Churn (90 dias)</span><b>0</b><span class="d">nenhuma saída</span></div>
+  </div>
+
+  <div class="barra">
+    <button class="filtro" type="button">Status <span class="cv">todas</span></button>
+    <button class="filtro" type="button">Plano <span class="cv">todos</span></button>
+    <button class="filtro" type="button">UF <span class="cv">todas</span></button>
+    <div class="busca">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="search" placeholder="Buscar câmara…" aria-label="Buscar câmara" />
+    </div>
+  </div>
+
+  <div class="tabela-card">
+    <table>
+      <caption class="sr-only">Câmaras-tenant com plano, status, MRR, atividade e ações</caption>
+      <thead><tr><th scope="col">Câmara</th><th scope="col">Plano</th><th scope="col">Status</th><th scope="col">MRR</th><th scope="col">Atividade</th><th scope="col"><span class="sr-only">Ações</span></th></tr></thead>
+      <tbody>
+        <tr>
+          <td><div class="cam"><span class="uf" style="background:var(--jade)" aria-hidden="true">CE</span><span><b>Câmara de Fortaleza</b><span>fortaleza.ce</span></span></div></td>
+          <td class="plano">Suite · 21 vagas</td>
+          <td><span class="st st-ativa"><span class="dot" aria-hidden="true"></span>Ativa</span></td>
+          <td class="mrr">R$ 18.400</td>
+          <td class="ativ">sessão hoje</td>
+          <td><button class="u-menu" type="button" aria-label="Ações da Câmara de Fortaleza"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></td>
+        </tr>
+        <tr>
+          <td><div class="cam"><span class="uf" style="background:var(--cobalto)" aria-hidden="true">CE</span><span><b>Câmara de Caucaia</b><span>caucaia.ce</span></span></div></td>
+          <td class="plano">Legislativo · 17 vagas</td>
+          <td><span class="st st-ativa"><span class="dot" aria-hidden="true"></span>Ativa</span></td>
+          <td class="mrr">R$ 9.200</td>
+          <td class="ativ">há 2 dias</td>
+          <td><button class="u-menu" type="button" aria-label="Ações da Câmara de Caucaia"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></td>
+        </tr>
+        <tr>
+          <td><div class="cam"><span class="uf" style="background:var(--jade-claro)" aria-hidden="true">CE</span><span><b>Câmara de Sobral</b><span>sobral.ce</span></span></div></td>
+          <td class="plano">Legislativo · 15 vagas</td>
+          <td><span class="st st-trial"><span class="dot" aria-hidden="true"></span>Trial · 12 dias</span></td>
+          <td class="mrr">—</td>
+          <td class="ativ">migrando dados</td>
+          <td><button class="u-menu" type="button" aria-label="Ações da Câmara de Sobral"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></td>
+        </tr>
+        <tr>
+          <td><div class="cam"><span class="uf" style="background:#9C6B1E" aria-hidden="true">RN</span><span><b>Câmara de Mossoró</b><span>mossoro.rn</span></span></div></td>
+          <td class="plano">Suite · 23 vagas</td>
+          <td><span class="st st-susp"><span class="dot" aria-hidden="true"></span>Inadimplente</span></td>
+          <td class="mrr">R$ 11.800</td>
+          <td class="ativ">há 6 dias</td>
+          <td><button class="u-menu" type="button" aria-label="Ações da Câmara de Mossoró"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></td>
+        </tr>
+        <tr>
+          <td><div class="cam"><span class="uf" style="background:var(--cobalto-fundo)" aria-hidden="true">PB</span><span><b>Câmara de Campina Grande</b><span>campinagrande.pb</span></span></div></td>
+          <td class="plano">Suite · 23 vagas</td>
+          <td><span class="st st-ativa"><span class="dot" aria-hidden="true"></span>Ativa</span></td>
+          <td class="mrr">R$ 12.600</td>
+          <td class="ativ">há 4h</td>
+          <td><button class="u-menu" type="button" aria-label="Ações da Câmara de Campina Grande"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div style="height:1.5rem"></div>
+</main>
+<script src="../sistema/tema.js"></script>
+</body>
+</html>
