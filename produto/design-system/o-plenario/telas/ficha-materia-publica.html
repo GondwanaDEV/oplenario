@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PL 042/2026 — Hortas comunitárias · Câmara Municipal de Fortaleza</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Ficha PÚBLICA da matéria — ARQUÉTIPO: leitura pública / ficha
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+     A página que o cidadão abre em "Ver e comentar" (5.2/5.5/6.3).
+     Superfície PÚBLICA white-label: a Câmara lidera; "O Plenário" recua.
+     Assinatura = a FAIXA DE AZULEJO da tramitação, expandida com datas.
+     A autoridade é o texto oficial; o resumo simples leva a camada de
+     confiança da IA. Comentários são públicos e MODERADOS (honesto).
+     ============================================================ */
+  .pub-topo { background: var(--surface); border-bottom: 1px solid var(--linha); }
+  .pub-topo-in { display: flex; align-items: center; gap: 1rem; padding: 0.9rem 0; flex-wrap: wrap; }
+  .brasao-casa { display: flex; align-items: center; gap: 0.7rem; }
+  .brasao-casa .br { width: 40px; height: 40px; border-radius: 10px; flex: 0 0 auto; }
+  .brasao-casa b { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); line-height: 1.1; display: block; }
+  .brasao-casa span { font-size: var(--t-12); color: var(--texto-2); }
+  .pub-topo .dir { margin-left: auto; display: flex; align-items: center; gap: 0.7rem; }
+  .nav-pub { display: flex; gap: 0.3rem; }
+  .nav-pub a { font-size: var(--t-13); font-weight: 600; color: var(--texto-2); text-decoration: none; padding: 0.5rem 0.7rem; border-radius: 8px; }
+  .nav-pub a[aria-current="page"] { color: var(--marca); background: color-mix(in srgb, var(--marca) 8%, transparent); }
+  .nav-pub a:hover { color: var(--texto); }
+
+  .migalha { font-size: var(--t-13); color: var(--texto-2); margin: 1.2rem 0 0; display: flex; align-items: center; gap: 0.4rem; }
+  .migalha a { color: var(--marca); font-weight: 600; text-decoration: none; } .migalha a:hover { text-decoration: underline; }
+
+  .ficha-cab { margin: 0.6rem 0 0; }
+  .ficha-cab .linha-id { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+  .ficha-cab .num { font-family: var(--mono); font-size: var(--t-13); font-weight: 600; color: var(--acento-texto); }
+  .estado-chip { font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.18rem 0.7rem; display: inline-flex; align-items: center; gap: 0.35rem; }
+  .estado-chip svg { width: 13px; height: 13px; }
+  .ec-tram { color: var(--cobalto); background: color-mix(in srgb, var(--cobalto) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--cobalto) 34%, transparent); }
+  [data-tema="escuro"] .ec-tram { color: var(--foco); }
+  .ficha-cab h1 { font-family: var(--display); font-weight: 800; font-size: clamp(1.7rem, 4.5vw, var(--t-40)); letter-spacing: -0.02em; color: var(--texto); margin: 0.5rem 0 0; line-height: 1.08; }
+
+  /* ---- A FAIXA DE AZULEJO DA TRAMITAÇÃO (assinatura) ---- */
+  .tram { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.3rem 1.4rem 1.5rem; margin: 1.3rem 0 0; }
+  .tram h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 1.1rem; }
+  .faixa { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 0; }
+  .etapa { position: relative; padding-top: 30px; text-align: center; }
+  /* o azulejo de cada etapa */
+  .etapa .az { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 34px; height: 16px; border-radius: 4px; background: var(--linha); overflow: hidden; }
+  .etapa.feita .az, .etapa.atual .az { background: color-mix(in srgb, var(--azc) 30%, transparent); }
+  .etapa.feita .az::after, .etapa.atual .az::after { content:""; position:absolute; inset:0; background: radial-gradient(circle at 12% 100%, var(--azc) 0 60%, transparent 60%); }
+  .etapa.feita { --azc: var(--jade); } .etapa.atual { --azc: var(--cobalto); }
+  /* conector */
+  .etapa::before { content:""; position: absolute; top: 7px; left: -50%; width: 100%; height: 2px; background: var(--linha); z-index: 0; }
+  .etapa:first-child::before { display: none; }
+  .etapa.feita::before, .etapa.atual::before { background: color-mix(in srgb, var(--jade) 45%, var(--linha)); }
+  .etapa.atual .az { box-shadow: 0 0 0 3px color-mix(in srgb, var(--cobalto) 40%, transparent); }
+  .etapa .et-nome { font-size: var(--t-13); font-weight: 600; color: var(--texto-2); display: block; }
+  .etapa.feita .et-nome, .etapa.atual .et-nome { color: var(--texto); }
+  .etapa.atual .et-nome::after { content:" · agora"; font-family: var(--mono); font-weight: 500; font-size: var(--t-12); color: var(--foco); }
+  .etapa .et-data { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); display: block; margin-top: 2px; }
+  .tram-nota { display: flex; align-items: center; gap: 0.4rem; margin: 1.2rem 0 0; font-size: var(--t-12); color: var(--texto-2); }
+  .tram-nota svg { color: var(--amarelo-traco); flex: 0 0 auto; } [data-tema="escuro"] .tram-nota svg { color: var(--amarelo); }
+  @media (max-width: 620px) { .etapa .et-nome { font-size: var(--t-12); } .etapa.atual .et-nome::after { content:""; } }
+
+  /* ---- ação: acompanhar (5.5) ---- */
+  .acomp { display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; margin: 1.2rem 0 0; padding: 1rem 1.2rem; background: color-mix(in srgb, var(--marca) 6%, var(--surface)); border: 1px solid color-mix(in srgb, var(--marca) 26%, var(--linha)); border-radius: var(--raio); }
+  .acomp .t { font-size: var(--t-13); color: var(--texto-2); } .acomp .t b { color: var(--texto); font-weight: 600; display: block; font-family: var(--display); }
+  .acomp .btn { margin-left: auto; }
+
+  /* ---- seções de conteúdo ---- */
+  .secao { margin: 2rem 0 0; }
+  .secao > h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); margin: 0 0 0.8rem; }
+
+  /* resumo simples + camada de confiança da IA */
+  .simples-bloco { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; }
+  .ia-tarja { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1.1rem; background: color-mix(in srgb, var(--cobalto) 8%, var(--surface)); border-bottom: 1px solid color-mix(in srgb, var(--cobalto) 22%, var(--linha)); font-size: var(--t-12); color: var(--texto-2); }
+  .ia-tarja .pt { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 600; color: var(--cobalto); } [data-tema="escuro"] .ia-tarja .pt { color: var(--foco); }
+  .ia-tarja .rev { margin-left: auto; display: inline-flex; align-items: center; gap: 0.35rem; }
+  .ia-tarja .rev svg { color: #2C8A66; } [data-tema="escuro"] .ia-tarja .rev svg { color: #58C99E; }
+  .simples-corpo { padding: 1.2rem 1.3rem; }
+  .simples-corpo p { font-size: var(--t-16); color: var(--texto); line-height: 1.6; margin: 0 0 0.8rem; } .simples-corpo p:last-child { margin: 0; }
+  .ia-rod { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; padding: 0.7rem 1.3rem; border-top: 1px solid var(--linha); font-size: var(--t-12); color: var(--texto-2); }
+  .ia-rod a { color: var(--marca); font-weight: 600; text-decoration: none; } .ia-rod a:hover { text-decoration: underline; }
+  .ia-rod .reportar { margin-left: auto; display: inline-flex; align-items: center; gap: 0.3rem; }
+
+  /* documentos oficiais (a autoridade) */
+  .docs { display: grid; gap: 0.6rem; }
+  .doc { display: flex; align-items: center; gap: 0.8rem; padding: 0.85rem 1rem; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-sm); text-decoration: none; }
+  .doc:hover { border-color: var(--texto-2); }
+  .doc .ic { width: 36px; height: 36px; border-radius: 8px; flex: 0 0 auto; display: grid; place-items: center; color: #fff; background: var(--telha); }
+  .doc .nm { min-width: 0; } .doc .nm b { font-size: var(--t-13); color: var(--texto); font-weight: 600; display: block; } .doc .nm span { font-size: var(--t-12); color: var(--texto-2); }
+  .doc .meta { margin-left: auto; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); white-space: nowrap; }
+
+  /* autor */
+  .autor-card { display: flex; align-items: center; gap: 0.9rem; padding: 1rem 1.2rem; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); }
+  .autor-card .av { width: 48px; height: 48px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: #fff; background: var(--cobalto); }
+  .autor-card .nm b { font-family: var(--display); font-size: var(--t-16); color: var(--texto); display: block; } .autor-card .nm span { font-size: var(--t-13); color: var(--texto-2); }
+  .autor-card .ver { margin-left: auto; font-weight: 600; color: var(--marca); text-decoration: none; font-size: var(--t-13); } .autor-card .ver:hover { text-decoration: underline; }
+
+  /* participação / comentários (6.3) */
+  .part-regras { display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.9rem 1.1rem; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); font-size: var(--t-13); color: var(--texto-2); line-height: 1.5; margin: 0 0 1.1rem; }
+  .part-regras svg { color: var(--marca); flex: 0 0 auto; margin-top: 2px; }
+  .part-regras b { color: var(--texto); font-weight: 600; }
+  .compor { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); padding: 1rem 1.2rem; margin: 0 0 1.4rem; }
+  .compor label { display: block; font-size: var(--t-13); font-weight: 600; color: var(--texto); margin: 0 0 0.4rem; }
+  .compor textarea { width: 100%; min-height: 80px; resize: vertical; font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 50%, var(--linha)); border-radius: var(--raio-sm); padding: 0.7rem 0.8rem; }
+  .compor-rod { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; margin-top: 0.7rem; }
+  .compor-rod .ident { font-size: var(--t-12); color: var(--texto-2); display: inline-flex; align-items: center; gap: 0.4rem; }
+  .compor-rod .ident svg { color: var(--cobalto); } [data-tema="escuro"] .compor-rod .ident svg { color: var(--foco); }
+  .compor-rod .btn { margin-left: auto; }
+
+  .coment { display: grid; gap: 1rem; }
+  .cmt { display: grid; grid-template-columns: auto 1fr; gap: 0.8rem; }
+  .cmt .av { width: 36px; height: 36px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: var(--t-13); color: #fff; }
+  .cmt .corpo { min-width: 0; }
+  .cmt .cmt-cab { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+  .cmt .cmt-cab b { font-size: var(--t-13); color: var(--texto); font-weight: 600; }
+  .cmt .cmt-cab .quando { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .cmt .cmt-cab .verif { display: inline-flex; align-items: center; gap: 0.25rem; font-size: var(--t-12); color: #15634A; } [data-tema="escuro"] .cmt .cmt-cab .verif { color: #58C99E; }
+  .cmt p { font-size: var(--t-16); color: var(--texto); line-height: 1.55; margin: 0.25rem 0 0; }
+  .cmt .acoes { display: flex; gap: 0.9rem; margin-top: 0.4rem; }
+  .cmt .acoes button { background: none; border: none; cursor: pointer; font-family: var(--corpo); font-size: var(--t-12); color: var(--texto-2); display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0; }
+  .cmt .acoes button:hover { color: var(--texto); }
+
+  .rodape { margin-top: 2.6rem; padding: 1.6rem 0; border-top: 1px solid var(--linha); display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+  .rodape .plat { margin-left: auto; display: inline-flex; align-items: center; gap: 0.45rem; font-size: var(--t-12); color: var(--texto-2); }
+  .rodape .plat .sig { width: 16px; height: 16px; }
+</style>
+</head>
+<body class="superficie-publica">
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+
+<header class="pub-topo">
+  <div class="envelope pub-topo-in">
+    <div class="brasao-casa">
+      <svg class="br" viewBox="0 0 34 34" role="img" aria-label="Câmara Municipal de Fortaleza"><rect width="34" height="34" rx="9" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div><b>Câmara Municipal de Fortaleza</b><span>Transparência</span></div>
+    </div>
+    <div class="dir">
+      <nav class="nav-pub" aria-label="Seções públicas">
+        <a href="portal-cidadao.html">Início</a>
+        <a href="portal-materias.html" aria-current="page">Matérias</a>
+        <a href="legislacao.html">Legislação</a>
+        <a href="ouvidoria.html">Ouvidoria</a>
+      </nav>
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope">
+  <nav class="migalha" aria-label="Trilha"><a href="portal-materias.html">Matérias</a><span aria-hidden="true">›</span><span>PL 042/2026</span></nav>
+
+  <div class="ficha-cab">
+    <div class="linha-id">
+      <span class="num">PL 042/2026</span>
+      <span class="estado-chip ec-tram"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Em comissão</span>
+    </div>
+    <h1>Hortas comunitárias em terrenos públicos</h1>
+  </div>
+
+  <section class="tram" aria-label="Tramitação da matéria">
+    <h2>Onde este projeto está</h2>
+    <div class="faixa">
+      <div class="etapa feita">
+        <span class="az" aria-hidden="true"></span>
+        <span class="et-nome">Protocolada</span>
+        <span class="et-data">12/03/2026</span>
+      </div>
+      <div class="etapa atual">
+        <span class="az" aria-hidden="true"></span>
+        <span class="et-nome">Em comissão</span>
+        <span class="et-data">desde 02/04</span>
+      </div>
+      <div class="etapa">
+        <span class="az" aria-hidden="true"></span>
+        <span class="et-nome">Plenário</span>
+        <span class="et-data">a definir</span>
+      </div>
+      <div class="etapa">
+        <span class="az" aria-hidden="true"></span>
+        <span class="et-nome">Sanção</span>
+        <span class="et-data">—</span>
+      </div>
+      <div class="etapa">
+        <span class="az" aria-hidden="true"></span>
+        <span class="et-nome">Virou lei</span>
+        <span class="et-data">—</span>
+      </div>
+    </div>
+    <p class="tram-nota"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>As datas das próximas etapas dependem da pauta e do regimento — não são fixas.</p>
+  </section>
+
+  <div class="acomp">
+    <div class="t"><b>Quer acompanhar?</b>Avisamos a cada novo passo desta matéria, sem custo.</div>
+    <button class="btn btn-primaria" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>Acompanhar esta matéria</button>
+  </div>
+
+  <section class="secao">
+    <h2>O que este projeto faz</h2>
+    <div class="simples-bloco">
+      <div class="ia-tarja">
+        <span class="pt"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 7 18.2l1.9-5.8L4 8.8h6.1z"/></svg>Resumo gerado por IA</span>
+        <span class="rev"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>revisado por servidor da Câmara</span>
+      </div>
+      <div class="simples-corpo">
+        <p>Este projeto cria um programa em que a Prefeitura pode ceder terrenos públicos que estão parados para que moradores cultivem hortas comunitárias — produzindo alimento fresco e criando área verde no bairro.</p>
+        <p>A cessão seria temporária e gratuita, com regras de uso definidas pela Prefeitura. O projeto ainda está em discussão nas comissões e pode mudar antes da votação.</p>
+      </div>
+      <div class="ia-rod">
+        <span>Resumo em linguagem simples a partir do <a href="#">texto oficial do projeto</a>.</span>
+        <button class="reportar" type="button" style="background:none;border:none;cursor:pointer;font-family:var(--corpo);color:var(--marca);font-weight:600"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>Reportar erro no resumo</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="secao">
+    <h2>Texto e documentos oficiais</h2>
+    <div class="docs">
+      <a class="doc" href="#"><span class="ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6"/></svg></span><span class="nm"><b>Texto do projeto (PL 042/2026)</b><span>versão protocolada</span></span><span class="meta">PDF · 184 KB</span></a>
+      <a class="doc" href="#"><span class="ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6"/></svg></span><span class="nm"><b>Justificativa do autor</b><span>anexa ao projeto</span></span><span class="meta">PDF · 96 KB</span></a>
+      <a class="doc" href="#"><span class="ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6"/></svg></span><span class="nm"><b>Parecer da Comissão de Meio Ambiente</b><span>favorável, com emendas</span></span><span class="meta">PDF · 142 KB</span></a>
+    </div>
+  </section>
+
+  <section class="secao">
+    <h2>Quem propôs</h2>
+    <div class="autor-card">
+      <span class="av" aria-hidden="true">HP</span>
+      <div class="nm"><b>Helena Past</b><span>Vereadora · 2ª autora: Carla Tavares</span></div>
+      <a class="ver" href="perfil-vereador-publico.html">Ver perfil →</a>
+    </div>
+  </section>
+
+  <section class="secao" aria-label="Participação cidadã">
+    <h2>O que a população está dizendo</h2>
+    <div class="part-regras">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <span><b>Espaço público e moderado.</b> Os comentários ficam visíveis para todos e passam por moderação da Câmara antes de aparecer. Respeite as regras de convivência: sem ofensas, discurso de ódio ou conteúdo ilegal.</span>
+    </div>
+
+    <div class="compor">
+      <label for="cmt">Deixe seu comentário</label>
+      <textarea id="cmt" placeholder="Escreva de forma respeitosa o que pensa sobre este projeto…"></textarea>
+      <div class="compor-rod">
+        <span class="ident"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8h16v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5z"/></svg>Para comentar, identifique-se com a conta gov.br.</span>
+        <button class="btn btn-primaria btn-mini" type="button">Entrar com gov.br e comentar</button>
+      </div>
+    </div>
+
+    <div class="coment">
+      <div class="cmt">
+        <span class="av" style="background:var(--jade)" aria-hidden="true">JM</span>
+        <div class="corpo">
+          <div class="cmt-cab"><b>Joana M.</b><span class="verif"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>gov.br</span><span class="quando">há 2 dias</span></div>
+          <p>Apoio demais. No meu bairro tem dois terrenos abandonados que viram só mato e lixo. Seria ótimo virar horta.</p>
+          <div class="acoes"><button type="button"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 10v11M18 10l-2 11H7V10l5-7a2 2 0 0 1 2 2v5z"/></svg>Útil (24)</button><button type="button">Responder</button></div>
+        </div>
+      </div>
+      <div class="cmt">
+        <span class="av" style="background:var(--telha)" aria-hidden="true">RS</span>
+        <div class="corpo">
+          <div class="cmt-cab"><b>Ricardo S.</b><span class="verif"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>gov.br</span><span class="quando">há 4 dias</span></div>
+          <p>Boa ideia, mas quem cuida da manutenção e da água? Espero que o regulamento deixe isso claro antes de aprovar.</p>
+          <div class="acoes"><button type="button"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 10v11M18 10l-2 11H7V10l5-7a2 2 0 0 1 2 2v5z"/></svg>Útil (11)</button><button type="button">Responder</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="rodape">
+    <span style="font-size:var(--t-12);color:var(--texto-2)">Câmara Municipal de Fortaleza · Transparência</span>
+    <span class="plat">
+      <svg class="sig" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      Plataforma O Plenário
+    </span>
+  </div>
+</main>
+
+<script src="../sistema/tema.js"></script>
+</body>
+</html>
