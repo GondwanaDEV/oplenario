@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Vereadores</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Vereadores — ARQUÉTIPO: lista + ficha (master-detail)
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+
+     Cadastro de vereadores (2.1). Combina os dois arquétipos provados:
+     lista à esquerda (linhas selecionáveis, busca/filtro) + ficha do
+     selecionado à direita (mandato, filiação, comissões, contato,
+     estatísticas). Status (ativo/licenciado) por chip com ícone+texto,
+     nunca só cor. Escopo = instituição (a câmara como Casa), não gabinete.
+     ============================================================ */
+
+  .pg-cab { padding: 1.4rem 0 0; display: grid; grid-template-columns: 1fr auto; gap: 0.8rem 1.4rem; align-items: end; }
+  .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
+  .pg-cab .sub { font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
+
+  .md { display: grid; grid-template-columns: 340px 1fr; gap: 1.4rem; align-items: start; margin: 1.3rem 0 0; }
+
+  /* lista (master) */
+  .lista-card { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; }
+  .busca { display: flex; align-items: center; gap: 0.5rem; padding: 0.7rem 0.9rem; border-bottom: 1px solid var(--linha); }
+  .busca svg { color: var(--texto-2); flex: 0 0 auto; }
+  .busca input { border: none; background: none; outline: none; font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); width: 100%; }
+  .busca input::placeholder { color: var(--texto-2); }
+  .v-rows { max-height: 70vh; overflow-y: auto; }
+  .v-row { display: flex; align-items: center; gap: 0.7rem; width: 100%; text-align: left; padding: 0.7rem 0.9rem; border: none; border-top: 1px solid var(--linha); background: none; cursor: pointer; }
+  .v-row:first-child { border-top: none; }
+  .v-row:hover { background: var(--surface-2); }
+  .v-row[aria-current="true"] { background: color-mix(in srgb, var(--marca) 8%, var(--surface)); box-shadow: inset 3px 0 0 var(--marca); }
+  .v-av { width: 38px; height: 38px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: var(--t-13); color: #fff; }
+  .v-mid { min-width: 0; flex: 1; }
+  .v-mid b { font-size: var(--t-13); color: var(--texto); font-weight: 600; display: block; line-height: 1.2; }
+  .v-mid span { font-size: var(--t-12); color: var(--texto-2); }
+  .v-lic { font-family: var(--mono); font-size: 0.6rem; font-weight: 600; text-transform: uppercase; color: var(--aviso-texto); border: 1px solid color-mix(in srgb, var(--amarelo-traco) 45%, transparent); border-radius: 4px; padding: 0.05rem 0.3rem; flex: 0 0 auto; }
+
+  /* ficha (detail) */
+  .ficha { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; }
+  .ficha-topo { display: flex; align-items: center; gap: 1rem; padding: 1.3rem 1.4rem; border-bottom: 1px solid var(--linha); flex-wrap: wrap; }
+  .ficha-topo .big-av { width: 64px; height: 64px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: #fff; }
+  .ficha-topo .qa { flex: 1; min-width: 0; }
+  .ficha-topo .qa h2 { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--texto); margin: 0; }
+  .ficha-topo .qa .cargo { font-size: var(--t-13); color: var(--texto-2); margin: 0.2rem 0 0; }
+  .chip { display: inline-flex; align-items: center; gap: 0.35rem; font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.2rem 0.6rem; border: 1px solid transparent; }
+  .chip-ativo { color: #15634A; background: color-mix(in srgb, #2C8A66 15%, var(--surface)); border-color: color-mix(in srgb, #2C8A66 40%, transparent); }
+  [data-tema="escuro"] .chip-ativo { color: #58C99E; }
+
+  .ficha-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--linha); }
+  .stat { background: var(--surface); padding: 1rem 1.2rem; }
+  .stat b { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: var(--marca); display: block; line-height: 1; }
+  .stat span { font-size: var(--t-12); color: var(--texto-2); }
+
+  .ficha-corpo { padding: 1.3rem 1.4rem; }
+  .bloco + .bloco { margin-top: 1.3rem; }
+  .bloco h3 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.7rem; }
+  .dl { display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 1rem; margin: 0; }
+  .dl dt { font-size: var(--t-13); color: var(--texto-2); }
+  .dl dd { font-size: var(--t-13); color: var(--texto); margin: 0; font-weight: 500; }
+  .dl dd.mono { font-family: var(--mono); }
+  .tags { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+  .tag { font-size: var(--t-12); color: var(--texto); background: var(--surface-2); border: 1px solid var(--linha); border-radius: 999px; padding: 0.2rem 0.65rem; }
+  .tag.pres { border-color: color-mix(in srgb, var(--marca) 35%, var(--linha)); color: var(--marca); font-weight: 600; }
+  .ficha-acoes { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1.4rem; }
+
+  @media (max-width: 920px) {
+    .md { grid-template-columns: 1fr; }
+    .v-rows { max-height: none; }
+    .ficha-grid { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (max-width: 520px) {
+    .pg-cab { grid-template-columns: 1fr; }
+    .ficha-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+
+<header class="topo">
+  <div class="envelope topo-grade">
+    <div class="marca">
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div>
+        <p class="marca-nome">O Plenário</p>
+        <p class="marca-orgao">Câmara Municipal de Fortaleza</p>
+      </div>
+    </div>
+    <div class="topo-sep" aria-hidden="true"></div>
+    <span class="eyebrow" style="align-self:center">Cadastros · Vereadores</span>
+    <div class="topo-dir">
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+      <span class="presidente">
+        <span class="avatar" aria-hidden="true">AM</span>
+        <span class="quem"><b>Ana Moreira</b><span>Administração</span></span>
+      </span>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope">
+  <div class="pg-cab">
+    <div>
+      <span class="eyebrow">Cadastros estruturais</span>
+      <h1>Vereadores</h1>
+      <p class="sub">21 vagas · legislatura 2025–2028. Mandato, filiação, comissões e licenças.</p>
+    </div>
+    <button class="btn btn-primaria btn-mini" type="button">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      Novo vereador
+    </button>
+  </div>
+
+  <div class="md">
+    <!-- MASTER: lista -->
+    <div class="lista-card">
+      <div class="busca">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input type="search" placeholder="Buscar vereador ou partido…" aria-label="Buscar vereador" />
+      </div>
+      <div class="v-rows" role="listbox" aria-label="Vereadores">
+        <button class="v-row" role="option" aria-selected="false">
+          <span class="v-av" style="background:var(--jade)" aria-hidden="true">AM</span>
+          <span class="v-mid"><b>Antônio Moraes</b><span>PSB · Presidente da Mesa</span></span>
+        </button>
+        <button class="v-row" role="option" aria-selected="true" aria-current="true">
+          <span class="v-av" style="background:var(--cobalto)" aria-hidden="true">HP</span>
+          <span class="v-mid"><b>Helena Past</b><span>PT · 1ª Secretária</span></span>
+        </button>
+        <button class="v-row" role="option" aria-selected="false">
+          <span class="v-av" style="background:var(--telha)" aria-hidden="true">CT</span>
+          <span class="v-mid"><b>Carla Tavares</b><span>PDT · líder de bancada</span></span>
+        </button>
+        <button class="v-row" role="option" aria-selected="false">
+          <span class="v-av" style="background:var(--jade-claro)" aria-hidden="true">JS</span>
+          <span class="v-mid"><b>João Sá</b><span>MDB · vereador</span></span>
+        </button>
+        <button class="v-row" role="option" aria-selected="false">
+          <span class="v-av" style="background:#7A4FA0" aria-hidden="true">RM</span>
+          <span class="v-mid"><b>Rafael Melo</b><span>PSDB · vereador</span></span>
+          <span class="v-lic">licença</span>
+        </button>
+        <button class="v-row" role="option" aria-selected="false">
+          <span class="v-av" style="background:var(--cobalto-fundo)" aria-hidden="true">LB</span>
+          <span class="v-mid"><b>Lúcia Brito</b><span>PCdoB · vereadora</span></span>
+        </button>
+        <button class="v-row" role="option" aria-selected="false">
+          <span class="v-av" style="background:#9C6B1E" aria-hidden="true">FD</span>
+          <span class="v-mid"><b>Fernando Dias</b><span>Republicanos · vereador</span></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- DETAIL: ficha -->
+    <div class="ficha" aria-label="Ficha de Helena Past">
+      <div class="ficha-topo">
+        <span class="big-av" style="background:var(--cobalto)" aria-hidden="true">HP</span>
+        <div class="qa">
+          <h2>Helena Past</h2>
+          <p class="cargo">PT · 1ª Secretária da Mesa Diretora</p>
+        </div>
+        <span class="chip chip-ativo">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>
+          Mandato ativo
+        </span>
+      </div>
+
+      <div class="ficha-grid">
+        <div class="stat"><b>12</b><span>proposições</span></div>
+        <div class="stat"><b>3</b><span>comissões</span></div>
+        <div class="stat"><b>96%</b><span>presença</span></div>
+      </div>
+
+      <div class="ficha-corpo">
+        <div class="bloco">
+          <h3>Mandato</h3>
+          <dl class="dl">
+            <dt>Legislatura</dt><dd class="mono">2025–2028</dd>
+            <dt>Posse</dt><dd class="mono">01/01/2025</dd>
+            <dt>Filiação</dt><dd>Partido dos Trabalhadores (PT)</dd>
+            <dt>Cargo na Mesa</dt><dd>1ª Secretária</dd>
+          </dl>
+        </div>
+
+        <div class="bloco">
+          <h3>Comissões</h3>
+          <div class="tags">
+            <span class="tag pres">Constituição e Justiça · presidente</span>
+            <span class="tag">Educação</span>
+            <span class="tag">Meio Ambiente</span>
+          </div>
+        </div>
+
+        <div class="bloco">
+          <h3>Contato institucional</h3>
+          <dl class="dl">
+            <dt>Gabinete</dt><dd class="mono">Sala 14 · 2º andar</dd>
+            <dt>E-mail</dt><dd class="mono">helena.past@fortaleza.ce.leg.br</dd>
+          </dl>
+        </div>
+
+        <div class="ficha-acoes">
+          <a class="btn btn-primaria btn-mini" href="proposicoes.html">Ver proposições</a>
+          <button class="btn btn-contorno btn-mini" type="button">Editar cadastro</button>
+          <button class="btn btn-fantasma btn-mini" type="button">Registrar licença</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="height:1.5rem"></div>
+</main>
+
+<script src="../sistema/tema.js"></script>
+</body>
+</html>
