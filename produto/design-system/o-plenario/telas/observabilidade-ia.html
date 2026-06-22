@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Observabilidade da IA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Observabilidade da IA — ARQUÉTIPO: cockpit (operador)
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+     Painel de IA-ops (8.6): confiança operacional no nível da plataforma
+     + governança da porta de IA (§22.8). Volume, latência p95, custo,
+     fallback; por recurso e por provedor (ASR/embeddings self-host + LLM
+     de fronteira atrás de porta vendor-agnóstica). Charts HONESTOS.
+     Honesto: monitorada, com fallback; a revisão humana é a autoridade.
+     ============================================================ */
+  .pg-cab { padding: 1.5rem 0 0; }
+  .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
+  .pg-cab .sub { font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
+
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 0.9rem; margin: 1.3rem 0 0; }
+  .mt { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1rem 1.1rem; }
+  .mt .t { font-size: var(--t-12); color: var(--texto-2); }
+  .mt b { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: var(--texto); display: block; margin-top: 0.15rem; font-variant-numeric: tabular-nums; }
+  .mt .d { font-family: var(--mono); font-size: var(--t-12); color: var(--marca); }
+  .mt.alerta b { color: var(--acento-texto); }
+
+  .grade { display: grid; grid-template-columns: 1.2fr 1fr; gap: 1.1rem; margin: 1.5rem 0 0; align-items: start; }
+  @media (max-width: 860px) { .grade { grid-template-columns: 1fr; } }
+  .bloco { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.2rem 1.3rem; }
+  .bloco h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); margin: 0 0 0.2rem; }
+  .bloco .aj { font-size: var(--t-12); color: var(--texto-2); margin: 0 0 1rem; }
+
+  /* por recurso: linhas com latência p95 (barra honesta) */
+  .rec { display: grid; grid-template-columns: 1fr auto; gap: 0.2rem 0.8rem; align-items: center; padding: 0.7rem 0; border-top: 1px solid var(--linha); }
+  .rec:first-of-type { border-top: none; }
+  .rec .nm { font-size: var(--t-13); color: var(--texto); font-weight: 600; }
+  .rec .nm span { display: block; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); font-weight: 400; }
+  .rec .p95 { font-family: var(--mono); font-size: var(--t-13); color: var(--texto); font-variant-numeric: tabular-nums; }
+  .rec .bar { grid-column: 1 / -1; height: 8px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--linha); overflow: hidden; }
+  .rec .bar i { display: block; height: 100%; border-radius: 4px; background: var(--cobalto); }
+  [data-tema="escuro"] .rec .bar i { background: var(--foco); }
+
+  /* provedores / modelos */
+  .prov { display: flex; align-items: center; gap: 0.8rem; padding: 0.8rem 0; border-top: 1px solid var(--linha); }
+  .prov:first-of-type { border-top: none; }
+  .prov .ic { width: 36px; height: 36px; border-radius: 9px; flex: 0 0 auto; display: grid; place-items: center; color: #fff; }
+  .prov .nm { flex: 1; min-width: 0; } .prov .nm b { font-size: var(--t-13); color: var(--texto); font-weight: 600; display: block; } .prov .nm span { font-size: var(--t-12); color: var(--texto-2); }
+  .prov .lat { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); text-align: right; white-space: nowrap; }
+  .pst { display: inline-flex; align-items: center; gap: 0.3rem; font-size: var(--t-12); font-weight: 600; }
+  .pst .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .pst-ok { color: #15634A; } .pst-ok .dot { background: #2C8A66; } [data-tema="escuro"] .pst-ok { color: #58C99E; }
+  .pst-deg { color: var(--aviso-texto); } .pst-deg .dot { background: var(--amarelo-traco); }
+
+  /* volume 24h (barras) */
+  .vol { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; align-items: end; height: 88px; margin: 0.6rem 0 0; }
+  .vbar { background: var(--jade-claro); border-radius: 3px 3px 0 0; min-height: 4px; }
+  [data-tema="escuro"] .vbar { background: #43BD93; }
+  .vol-leg { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 0.6rem; color: var(--texto-2); margin-top: 0.4rem; }
+
+  .gov { display: flex; align-items: flex-start; gap: 0.6rem; margin: 1.4rem 0 0; padding: 0.95rem 1.2rem; background: color-mix(in srgb,var(--marca) 6%,var(--surface)); border: 1px solid color-mix(in srgb,var(--marca) 26%,var(--linha)); border-radius: var(--raio); font-size: var(--t-13); color: var(--texto-2); line-height: 1.5; }
+  .gov svg { color: var(--marca); flex: 0 0 auto; margin-top: 2px; }
+  .gov b { color: var(--texto); }
+</style>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+<header class="topo">
+  <div class="envelope topo-grade">
+    <div class="marca">
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div><p class="marca-nome">O Plenário</p><p class="marca-orgao">Operação · console</p></div>
+    </div>
+    <div class="topo-sep" aria-hidden="true"></div>
+    <span class="eyebrow" style="align-self:center">IA · Observabilidade</span>
+    <div class="topo-dir">
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+      <span class="presidente"><span class="avatar" aria-hidden="true">OP</span><span class="quem"><b>Operação</b><span>O Plenário</span></span></span>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope">
+  <div class="pg-cab">
+    <span class="eyebrow">Console do operador</span>
+    <h1>Observabilidade da IA</h1>
+    <p class="sub">Saúde dos modelos que alimentam o copiloto — em todas as câmaras. A IA sugere; o servidor revisa e assume.</p>
+  </div>
+
+  <div class="metrics">
+    <div class="mt"><span class="t">Requisições · 24h</span><b>48,2 mil</b><span class="d">+6% vs. ontem</span></div>
+    <div class="mt"><span class="t">Latência p95</span><b>1,9 s</b><span class="d">dentro do alvo</span></div>
+    <div class="mt"><span class="t">Custo · mês</span><b>R$ 7.840</b><span class="d">R$ 0,16/câmara·dia</span></div>
+    <div class="mt alerta"><span class="t">Taxa de fallback</span><b>0,7%</b><span class="d">provedor alternativo</span></div>
+    <div class="mt"><span class="t">Erros · 24h</span><b>0,02%</b><span class="d">11 de 48,2 mil</span></div>
+  </div>
+
+  <div class="grade">
+    <div class="bloco">
+      <h2>Por recurso</h2>
+      <p class="aj">Volume e latência p95 de cada uso da IA nas últimas 24h.</p>
+      <div class="rec"><span class="nm">Resumo em linguagem simples<span>22,1 mil chamadas</span></span><span class="p95">1,2 s</span><span class="bar"><i style="width:40%"></i></span></div>
+      <div class="rec"><span class="nm">Revisão de ata (ASR + edição)<span>1,3 mil chamadas</span></span><span class="p95">3,4 s</span><span class="bar"><i style="width:90%"></i></span></div>
+      <div class="rec"><span class="nm">Redação assistida<span>8,6 mil chamadas</span></span><span class="p95">2,1 s</span><span class="bar"><i style="width:62%"></i></span></div>
+      <div class="rec"><span class="nm">Busca semântica<span>16,2 mil chamadas</span></span><span class="p95">0,4 s</span><span class="bar"><i style="width:18%"></i></span></div>
+    </div>
+
+    <div class="bloco">
+      <h2>Provedores</h2>
+      <p class="aj">Atrás de porta vendor-agnóstica; o LLM de fronteira é trocável sem refatorar.</p>
+      <div class="prov">
+        <span class="ic" style="background:var(--jade)" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5v14"/></svg></span>
+        <div class="nm"><b>ASR de áudio</b><span>self-host · transcrição</span></div>
+        <div class="lat"><span class="pst pst-ok"><span class="dot" aria-hidden="true"></span>Operacional</span><br>p95 3,4 s</div>
+      </div>
+      <div class="prov">
+        <span class="ic" style="background:var(--cobalto)" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M3 12h3M18 12h3M12 3v3M12 18v3"/></svg></span>
+        <div class="nm"><b>Embeddings · pgvector</b><span>self-host · busca semântica</span></div>
+        <div class="lat"><span class="pst pst-ok"><span class="dot" aria-hidden="true"></span>Operacional</span><br>p95 0,4 s</div>
+      </div>
+      <div class="prov">
+        <span class="ic" style="background:var(--jade-claro)" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 7 18.2l1.9-5.8L4 8.8h6.1z"/></svg></span>
+        <div class="nm"><b>LLM de fronteira</b><span>porta vendor-agnóstica · geração</span></div>
+        <div class="lat"><span class="pst pst-deg"><span class="dot" aria-hidden="true"></span>Lentidão</span><br>p95 2,3 s</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bloco" style="margin-top:1.1rem">
+    <h2>Volume nas últimas 24 horas</h2>
+    <p class="aj">Requisições por hora, todas as câmaras.</p>
+    <div class="vol" role="img" aria-label="Volume por hora nas últimas 24 horas, pico no início da tarde">
+      <span class="vbar" style="height:30%"></span><span class="vbar" style="height:22%"></span><span class="vbar" style="height:18%"></span><span class="vbar" style="height:15%"></span><span class="vbar" style="height:20%"></span><span class="vbar" style="height:38%"></span><span class="vbar" style="height:55%"></span><span class="vbar" style="height:62%"></span><span class="vbar" style="height:70%"></span><span class="vbar" style="height:78%"></span><span class="vbar" style="height:85%"></span><span class="vbar" style="height:72%"></span><span class="vbar" style="height:60%"></span><span class="vbar" style="height:90%"></span><span class="vbar" style="height:100%"></span><span class="vbar" style="height:88%"></span><span class="vbar" style="height:76%"></span><span class="vbar" style="height:64%"></span><span class="vbar" style="height:50%"></span><span class="vbar" style="height:40%"></span><span class="vbar" style="height:32%"></span><span class="vbar" style="height:26%"></span><span class="vbar" style="height:22%"></span><span class="vbar" style="height:28%"></span>
+    </div>
+    <div class="vol-leg"><span>00h</span><span>06h</span><span>12h</span><span>18h</span><span>agora</span></div>
+  </div>
+
+  <div class="gov">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg>
+    <span><b>A IA é monitorada, não autônoma.</b> Quando um provedor falha ou fica lento, o tráfego cai para um alternativo (fallback). Nenhuma saída de IA vira ato oficial sem revisão e aprovação de um servidor — a fonte é a autoridade, não o modelo. Dados pessoais seguem a política de tratamento da porta de IA.</span>
+  </div>
+  <div style="height:1.6rem"></div>
+</main>
+<script src="../sistema/tema.js"></script>
+</body>
+</html>
