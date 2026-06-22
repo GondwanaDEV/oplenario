@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Pós-aprovação: sanção até lei</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Pós-aprovação — ARQUÉTIPO: ficha / tracking
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+
+     A matéria aprovada percorre o pipeline até virar lei (3.13-15):
+     Autógrafo → Executivo → Sanção/Veto → Promulgação → Publicação.
+     Hero = pipeline-stepper com azulejo por etapa (a assinatura
+     verticalizada). Anel do prazo do Executivo (nota [LOM]: varia por
+     município). Detalhes do autógrafo e da lei resultante. Reusa
+     azulejo, anel de prazo, filas de detalhe.
+     ============================================================ */
+
+  .pg-cab { padding: 1.4rem 0 0; }
+  .pg-cab .crumb { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .pg-cab .crumb a { color: var(--acento-texto); text-decoration: none; }
+  .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.3rem 0 0; }
+  .pg-cab .sub { font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
+
+  /* pipeline-stepper com azulejo */
+  .pipe { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.4rem 1.5rem; margin: 1.3rem 0 0; overflow-x: auto; }
+  .pipe-trilha { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(120px, 1fr); gap: 0; min-width: 640px; }
+  .et { display: flex; flex-direction: column; gap: 0.5rem; position: relative; padding-top: 1.1rem; }
+  /* azulejo de Bulcão por etapa */
+  .et .az { width: 100%; height: 10px; border-radius: 4px; position: relative; overflow: hidden; }
+  .et .az::after { content:""; position:absolute; inset:0; background: radial-gradient(circle at 0% 100%, var(--azc) 0 66%, transparent 66%); }
+  .et.feita .az { background: color-mix(in srgb, var(--azc) 35%, transparent); }
+  .et.atual .az { background: color-mix(in srgb, var(--azc) 35%, transparent); }
+  .et.futura .az { background: var(--linha); --azc: var(--linha); }
+  .et:nth-child(1) { --azc: var(--jade); } .et:nth-child(2) { --azc: var(--cobalto); }
+  .et:nth-child(3) { --azc: var(--amarelo-traco); } .et:nth-child(4) { --azc: var(--jade-claro); }
+  .et:nth-child(5) { --azc: var(--telha); }
+  .et .mk { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-family: var(--mono); font-size: var(--t-12); font-weight: 700; flex: 0 0 auto; }
+  .et.feita .mk { background: var(--acao); color: var(--acao-texto); }
+  .et.atual .mk { background: var(--surface-2); color: var(--marca); border: 2px solid var(--marca); }
+  .et.futura .mk { background: var(--surface-2); color: var(--texto-2); border: 1px solid var(--linha); }
+  .et b { font-size: var(--t-13); color: var(--texto); font-weight: 600; line-height: 1.2; }
+  .et.futura b { color: var(--texto-2); }
+  .et span { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .et.atual span { color: var(--acento-texto); font-weight: 600; }
+
+  .grade { display: grid; grid-template-columns: 1fr 320px; gap: 1.4rem; align-items: start; margin: 1.3rem 0 0; }
+
+  .card { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.2rem 1.3rem; }
+  .card + .card { margin-top: 1rem; }
+  .card h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.8rem; }
+  .dl { display: grid; grid-template-columns: auto 1fr; gap: 0.55rem 1rem; margin: 0; }
+  .dl dt { font-size: var(--t-13); color: var(--texto-2); }
+  .dl dd { font-size: var(--t-13); color: var(--texto); margin: 0; font-weight: 500; }
+  .dl dd.mono { font-family: var(--mono); }
+  .doc-link { display: inline-flex; align-items: center; gap: 0.45rem; font-weight: 600; font-size: var(--t-13); color: var(--marca); text-decoration: none; margin-top: 0.9rem; }
+  .doc-link svg { flex: 0 0 auto; }
+  .doc-link:hover { text-decoration: underline; }
+
+  /* anel do prazo */
+  .prazo-card { text-align: center; }
+  .anel { width: 96px; height: 96px; margin: 0.4rem auto 0; position: relative; display: grid; place-items: center; }
+  .anel svg { transform: rotate(-90deg); }
+  .anel .trilho { stroke: var(--linha); } .anel .arco { stroke: var(--amarelo-traco); stroke-linecap: round; }
+  .anel .val { position: absolute; inset: 0; display: grid; place-items: center; line-height: 1; }
+  .anel .val b { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: var(--texto); }
+  .anel .val span { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .prazo-card p { font-size: var(--t-13); color: var(--texto-2); margin: 0.8rem 0 0; line-height: 1.5; }
+  .nota-gap { font-size: var(--t-12); color: var(--texto-2); margin: 0.7rem 0 0; border-top: 1px dashed var(--linha); padding-top: 0.6rem; }
+  .nota-gap .tag { font-family: var(--mono); font-size: 0.6rem; letter-spacing: .04em; text-transform: uppercase; color: var(--aviso-texto); border: 1px solid color-mix(in srgb, var(--amarelo-traco) 45%, transparent); border-radius: 4px; padding: 0.05rem 0.3rem; }
+
+  .acoes { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1rem; }
+
+  @media (max-width: 900px) { .grade { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+
+<header class="topo">
+  <div class="envelope topo-grade">
+    <div class="marca">
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div>
+        <p class="marca-nome">O Plenário</p>
+        <p class="marca-orgao">Câmara Municipal de Fortaleza</p>
+      </div>
+    </div>
+    <div class="topo-sep" aria-hidden="true"></div>
+    <span class="eyebrow" style="align-self:center">Processo legislativo · Pós-aprovação</span>
+    <div class="topo-dir">
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+      <span class="presidente">
+        <span class="avatar" aria-hidden="true">RC</span>
+        <span class="quem"><b>Rita Campos</b><span>Servidora legislativa</span></span>
+      </span>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope">
+  <div class="pg-cab">
+    <span class="crumb"><a href="proposicoes.html">Proposições</a> · <a href="ficha-materia.html">PL 022/2026</a> · Pós-aprovação</span>
+    <h1>Da aprovação à lei</h1>
+    <p class="sub">PL 022/2026 — Política municipal de incentivo à energia solar. Aprovado em 2ª votação; agora com o Executivo.</p>
+  </div>
+
+  <!-- PIPELINE -->
+  <div class="pipe">
+    <div class="pipe-trilha" role="list" aria-label="Etapas da sanção">
+      <div class="et feita" role="listitem">
+        <div class="az" aria-hidden="true"></div>
+        <span class="mk" aria-hidden="true">✓</span>
+        <b>Autógrafo</b><span>17/06 · gerado</span>
+      </div>
+      <div class="et atual" role="listitem" aria-current="step">
+        <div class="az" aria-hidden="true"></div>
+        <span class="mk" aria-hidden="true">2</span>
+        <b>No Executivo</b><span>desde 18/06</span>
+      </div>
+      <div class="et futura" role="listitem">
+        <div class="az" aria-hidden="true"></div>
+        <span class="mk" aria-hidden="true">3</span>
+        <b>Sanção ou veto</b><span>aguarda</span>
+      </div>
+      <div class="et futura" role="listitem">
+        <div class="az" aria-hidden="true"></div>
+        <span class="mk" aria-hidden="true">4</span>
+        <b>Promulgação</b><span>—</span>
+      </div>
+      <div class="et futura" role="listitem">
+        <div class="az" aria-hidden="true"></div>
+        <span class="mk" aria-hidden="true">5</span>
+        <b>Publicação</b><span>vira lei</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="grade">
+    <div>
+      <div class="card">
+        <h2>Autógrafo</h2>
+        <dl class="dl">
+          <dt>Texto aprovado</dt><dd>Autógrafo nº 022/2026</dd>
+          <dt>Gerado em</dt><dd class="mono">17/06/2026</dd>
+          <dt>Enviado ao Executivo</dt><dd class="mono">18/06/2026 · ofício 214</dd>
+          <dt>Recebido</dt><dd class="mono">18/06/2026</dd>
+        </dl>
+        <a class="doc-link" href="#"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"/></svg>Abrir o autógrafo (PDF)</a>
+      </div>
+
+      <div class="card">
+        <h2>Quando a lei nascer</h2>
+        <dl class="dl">
+          <dt>Espécie</dt><dd>Lei ordinária</dd>
+          <dt>Número previsto</dt><dd class="mono">a definir na promulgação</dd>
+          <dt>Vigência</dt><dd>na data da publicação</dd>
+        </dl>
+        <p style="font-size:var(--t-13);color:var(--texto-2);margin:0.8rem 0 0;line-height:1.5">Se houver veto, total ou parcial, a matéria retorna à Câmara para apreciação do veto antes da promulgação.</p>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card prazo-card">
+        <h2>Prazo do Executivo</h2>
+        <span class="anel" role="img" aria-label="9 de 15 dias úteis restantes para sanção ou veto">
+          <svg width="96" height="96" viewBox="0 0 96 96" aria-hidden="true">
+            <circle class="trilho" cx="48" cy="48" r="40" fill="none" stroke-width="8"/>
+            <circle class="arco" cx="48" cy="48" r="40" fill="none" stroke-width="8" stroke-dasharray="251.3" stroke-dashoffset="100" />
+          </svg>
+          <span class="val"><b>9</b><span>dias úteis</span></span>
+        </span>
+        <p>Restam para o Executivo sancionar ou vetar. Sem manifestação no prazo, a lei pode ser promulgada pela Câmara.</p>
+        <p class="nota-gap"><span class="tag">[LOM]</span> O prazo de sanção é o da Lei Orgânica do Município — confira o artigo aplicável (varia por câmara).</p>
+        <div class="acoes">
+          <button class="btn btn-contorno btn-mini" type="button">Registrar retorno</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+  <div style="height:1.5rem"></div>
+</main>
+
+<script src="../sistema/tema.js"></script>
+</body>
+</html>
