@@ -165,7 +165,7 @@ Status page (10.3) · Exportar dados do ente (9.6) · Console do operador (12.x)
 - **~30 telas distintas** cobrem as 113 features (o resto é backend/embutido/transversal).
 - **Os 10 arquétipos estão PROVADOS** ✅ (cabine · balcão · pública · cockpit · lista · ficha · wizard ·
   config · **display** · **calendário**). Toda tela do catálogo tem forma de referência.
-- **✅ ALTA = 100% (8/8)** · **✅ MÉDIA = 100% (13/13)** · **~8 BAIXA** (nicho/operador, diferível).
+- **✅ ALTA = 100% (8/8)** · **✅ MÉDIA = 100% (13/13)** · **✅ BAIXA = 100% (8/8)** — **CATÁLOGO COMPLETO: 35 telas.**
 - **Telas feitas (27):** Sessão ao vivo · Expediente · Portal do Cidadão · Painéis da Mesa ·
   Proposições · Ficha da matéria · Nova proposição · Config da Câmara · Editor+copiloto · Tramitação board ·
   Minhas pendências · Pauta+convocação · Revisão de ata-IA · App do vereador (PWA) · Login/MFA ·
@@ -173,7 +173,10 @@ Status page (10.3) · Exportar dados do ente (9.6) · Console do operador (12.x)
   Calendário institucional · **Admin usuários · Comissões · Parecer · Pós-aprovação · Portal-matérias ·
   Legislação consolidada**. Os 3 públicos cobertos; as 3 apostas materializadas.
 - **Eixo 4 (guidelines-checklist)** fechado: [`GUIDELINES-CHECKLIST.md`](./GUIDELINES-CHECKLIST.md) = gate de revisão.
-- **Resta só a tier BAIXA** (explicitamente diferível/nicho/operador): Audiência pública (4.18) · Julgamento
-  de contas (4.19) · Transparência fiscal (5.9) · Dados abertos (5.11) · Status page (10.3) · Exportar
-  dados do ente (9.6) · Console do operador SaaS (12.x) · cadastros menores (2.4/2.5). Todas reaplicam
-  arquétipos provados; rodar o `GUIDELINES-CHECKLIST` em cada.
+- **✅ BAIXA feita (8):** Audiência pública (`audiencia-publica.html`) · Julgamento de contas
+  (`julgamento-contas.html`) · Transparência fiscal (`transparencia-fiscal.html`) · Dados abertos
+  (`dados-abertos.html`) · Status page (`status.html`) · Exportar dados do ente (`exportar-dados.html`) ·
+  Console do operador SaaS (`console-operador.html`) · Cadastros menores (`cadastros-menores.html`).
+- **NADA RESTA do catálogo de design.** As 35 telas cobrem todas as ~30 telas distintas das 113 features
+  (o resto é backend/embutido/transversal). O que segue é **engenharia** (materializar o front real a
+  partir destas maquetes + o backend), fora da fronteira do design.
