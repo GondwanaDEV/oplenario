@@ -27,6 +27,8 @@ Disciplinas derivadas: schema versionado em todo lugar (OpenAPI no síncrono, sc
 
 gRPC explicitamente avaliado e descartado para a V1: ganho marginal dado o volume de chamadas, ferramental e codegen viram custo desnecessário, ergonomia HTTP/JSON com OpenAPI casa melhor com a separação core ↔ presentation (Invariante 5) e com a futura exposição como API pública na V2.
 
+**Segurança de transporte da fronteira (§22.9 Eixo 11, v1.40).** O canal carrega **áudio bruto + dado pessoal antes do filtro**, então transporte cifrado é obrigatório, não opcional. Intra-cluster (satélite de IA self-hosted) = **TLS server-side via CA interna + `NetworkPolicy`** na V1 (mesh/mTLS bilateral diferido à Rota D); para o **frontier LLM externo** (Eixo 10) = TLS público do vendor + API key, **não** mTLS bilateral, **condicional ao modo** (externo vs self-host). A soberania do prompt que cruza a fronteira nacional é **`[GAP]` regulatório** (LGPD art.33 + DPA de não-treino), decidido na passada jurídica — **não** "transporte resolvido".
+
 ## 22.3.3 Fluxo de domain events — buses separados com eventos de integração
 
 **Buses lógicos separados.** Core tem seu bus interno (eventos de domínio para coordenação entre bounded contexts internos, schema interno, evolui livremente). Plataforma de IA tem o dela. A fronteira passa por **eventos de integração** — conjunto explícito, pequeno, versionado, com contrato deliberado.
