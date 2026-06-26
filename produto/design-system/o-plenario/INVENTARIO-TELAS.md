@@ -218,3 +218,133 @@ por estas telas — 5.5 acompanhar (agora na ficha pública), 3.10 ICP (assinatu
 distintas do PL no editor) · 3.20 registro de publicação · 4.5 presença append-only · 6.2 Carta de Serviços
 (13.460, página pública) · 12.2 billing (detalhe de faturas no console). Nenhum "passou batido" — são
 aprofundamentos de telas existentes, candidatos a uma próxima rodada de polimento se um cliente pedir.
+
+> **Correção (§5, 26/06):** a **6.2 Carta de Serviços** foi mis-arquivada aqui — é **ausência real**
+> (link MORTO em `ouvidoria.html`/`portal-cidadao.html`, tela publicada), não profundidade diferível.
+> Promovida a tela-nova no §5. As demais (2.2/3.4/3.6/3.16/3.20/4.5/12.2) seguem profundidade demand-pulled.
+
+---
+
+## 5. Delta de design pós-fundações (reconciliação 26/06)
+
+> O catálogo de 47 telas (§1–§4) foi congelado em **22/06**, ancorado em `produto/13`+`14` (113 features).
+> Desde então decidiu-se muito: as auditorias **`produto/16`** (rodada 2), **`produto/17`+`18`** (classes de
+> gate) e a **`produto/19`** (camada de atenção, ~67 features), mais as **5 fundações** (doc-mestre v1.40–v1.44).
+> Esta §5 reconcilia esse delta contra o catálogo. Workflow de 10 agentes (6 leitores + síntese + 3 lentes
+> adversariais), correções da crítica dobradas, **enquadramento confirmado pelo Emilio (26/06)**.
+
+### 5.0 A virada de enquadramento
+
+**"O que há de novo" NÃO é um catálogo de telas novas.** O grosso do delta é **retrofit de telas que já
+existem** + **1 receita transversal**. Números honestos (pós-crítica):
+
+- **0 telas novas** para a camada de atenção — é re-articulação das homes existentes.
+- **~16 telas existentes mudam de premissa** — o esforço REAL (cada uma = redesign + AA 2 temas + commit).
+- **1 tela nova no núcleo confirmado:** Grant de suporte lado-ente.
+- **~8 "telas novas" + profundidades = backlog pré-existente, demand-pulled** pela régua §15 — não é "o novo".
+
+**Disciplina de origem:** só `produto/19` (camada de atenção) está **confirmado** pelo Emilio. As auditorias
+`produto/16-18` são **auditorias de completude** — backlog candidato, gatilho = cliente validado (régua §15),
+não escopo herdado. A §5 não reabre auditoria; traduz o confirmado + o candidato em ação de design.
+
+### 5.1 A camada de atenção — AMBOS, mas ZERO tela nova
+
+É (1) uma **receita de chassi** — o **cartão de sinal** `{ator · gravidade⟂prazo · UMA ação · deep-link}`,
+hoje copiado inline em 3-4 formas (`minhas-pendencias` `.item`, `vereador-app` `.card`, fila de `paineis-mesa`)
+→ vira componente; e (2) a **re-articulação das 4 homes que já existem**. **NÃO substitui** `minhas-pendencias`
+nem `notificacoes`: `minhas-pendencias` vira a **home do servidor** (cabeçalho situational acima da fila);
+`notificacoes` fica **distinta** como inbox/insumo.
+
+**Regra de fronteira (cravada pela crítica) — o mesmo sinal não pode aparecer em 3 lugares para a mesma pessoa:**
+- O sinal **ACIONÁVEL** vive só na **fila/home**; esvazia por **evento de conclusão** (parecer dado, remessa
+  aceita), **não** por botão "feito" — microcopy ensina ("sai sozinho quando o parecer for registrado").
+- O **inbox** (`notificacoes`) mostra só a classe **informativa/insumo**; única ação = **marcar lido**. Nunca
+  um cartão acionável que "completa".
+- O **sino** conta a **fila**, não fila+inbox. O dedup do motor é cross-PESSOA (sem duplo-push entre
+  servidor/jurídico/Mesa); a regra acima é o dedup cross-SUPERFÍCIE da mesma pessoa.
+- **Contrato de altitude** entre as duas homes-cockpit: `minhas-pendencias` = saúde do MEU trabalho (individual,
+  acionável); `paineis-mesa` = vitrine institucional + prova de risco (leitura, política). Cabeçalhos situational
+  devem diferir em conteúdo e altitude — não duas peles do mesmo grid.
+
+### 5.2 Núcleo confirmado do 1º push (Fase A + B + C)
+
+**Fase A — promover ao chassi (`sistema/chassi.css` + `componentes.html`), ANTES das homes:**
+- **Cartão de sinal** — UM componente parametrizado por variante (informativo `countdown` ↔ **FALHA**
+  `ação-requerida`, token telha/`--telha-fundo` só na variante crítica). **NÃO** dois componentes: FALHA é a
+  instância de gravidade-crítica do sinal; "multi-destinatário" é roteamento do motor (backend), não eixo visual.
+- Receitas **≥2 usos já provadas** (gatilho de promoção já disparou): azulejo da tramitação, ilha-papel, chips,
+  campos, `.card`, faixa de tramitação, selo encadeado, passos do wizard, botão gov.br, camada de confiança IA.
+- **NÃO promover ainda** o *estado degradado de IA* nem a *FALHA* como peça pré-fabricada **antes do 1º uso** —
+  regra do projeto (`PADROES §1`: promove no **2º uso real**). Constrói-se como receita numa superfície primeiro.
+
+**Fase B — retrofit barato (0 tela nova, maior retorno por hora):**
+- **Estado degradado de IA (R-IA-1)** em `editor-proposicao` (1º — validar nos 2 temas), depois `ata-revisao`,
+  `portal-cidadao`, busca (`proposicoes`/`legislacao`), `legendas-ao-vivo`. **Não é um componente único:** só o
+  **banner honesto** + o **contrato "IA-off = o ato legislativo fecha sem ela"** é transversal; o **fallback é
+  por-superfície** (editor desabilita o rail + "siga redigindo"; ata cai para anexação manual; portal esconde o
+  resumo com nota; busca cai para textual não-IA com aviso). **`legendas-ao-vivo` tem piso LEGAL (LBI Lei
+  13.146)** — fallback explícito não-silencioso (handoff a estenógrafo / alerta de perda de acessibilidade),
+  nunca "indisponível" mudo. **R-IA-1 NÃO depende do failover (#4)** — consome eventos de falha já existentes
+  (`TranscricaoFalhou`/`ResumoFalhou`); entra independente da fundação fast-follow.
+- **Camada de atenção nas 4 homes:** `minhas-pendencias` → home do servidor (cabeçalho situational + priorização
+  2D gravidade⟂prazo, a seção "Sem prazo" deixa de ser catch-all); `notificacoes` → classe de FALHA distinta +
+  dedup (regra §5.1); `vereador-app` → 2º estado fora-de-sessão + ciência 1-toque + chip de estado do voto;
+  `paineis-mesa` → ver abaixo.
+- **`paineis-mesa` (HERO aprovado):** o verde **"A Casa está em dia" continua canônico e o default da demo**; o
+  cartão de FALHA é **pele condicional do MESMO placar** (ramo telha já antecipado no SVG `:435`), renderizado só
+  quando há falha real — **nunca faixa fixa nova** (não inverter a 1ª impressão de venda). + lente **gated do
+  jurídico** (3º decisor): cartões de risco (incidente LGPD, grant ativo) como recorte por papel, não faixa fixa.
+
+**Fase C — a 1 tela nova do núcleo:**
+- **Grant de suporte lado-ente** (nova; espelho de `console-operador-tenant.html`; arquétipo cockpit) — o
+  admin_ente/DPO aprova/nega/revoga/audita o acesso de suporte com escopo+prazo (reusa selo encadeado). Exposição
+  LGPD **viva no go-live**: hoje o grant é renderizado 100% pela ótica do operador; "a câmara autoriza" é só texto.
+
+### 5.3 Mudanças de premissa nas telas existentes (o esforço real)
+
+| Tela | O que muda (núcleo V1) |
+|---|---|
+| `paineis-mesa` | verde canônico + cartão FALHA condicional (nunca fixo) + lente jurídica gated + engajamento como **número bruto** (sem série/donut) |
+| `minhas-pendencias` | vira **home do servidor**: cabeçalho situational + priorização 2D + esvaziar por evento + tipos novos (expediente recebido, adiados C31, ciência) |
+| `notificacoes` | **confirmada distinta** (não vira módulo): classe FALHA + dedup; "lido" mora só aqui |
+| `vereador-app` | 2º estado fora-de-sessão + ciência 1-toque (prova) + chip de voto (pendente→enviado→confirmado) |
+| `editor-proposicao` | IA-degradada + (depois) campo de tema, badge de regime, seletor de espécies |
+| `ata-revisao` | IA-degradada (→ anexação manual) + (fast-follow) selo de proveniência de vendor ao signatário |
+| `portal-cidadao` | recibo de protocolo no ato + link VIVO p/ Carta de Serviços + agenda pública + IA-degradada no resumo |
+| `pauta-convocacao` | roster de ciência (enviado/entregue/**ciente**/bounce) + adiados reaparecendo (C31) + badge de regime |
+| `sessao-ao-vivo`/`telao` | **V1: estado de EMPATE + verificação/recontagem (ato nomeado) + presença append-only**; Expediente-ao-vivo e ata-anterior-ao-vivo = fast-follow |
+| `console-operador` | handoff operador→1º admin (C03) + semântica de lifecycle (suspensão preserva portal/e-SIC, LAI) |
+| `console-operador-tenant` | premissa muda ao exigir a tela-espelho lado-ente (Fase C) |
+| `config-ente` | aba Privacidade/LGPD (ROPA) operável pelo DPO |
+| `admin-usuarios` | menu três-pontinhos → ações reais (reset-MFA dual, papel com vigência, vínculo) master-detail |
+| `tramitacao-board` / `pos-aprovacao` | badge de regime (C40, correção do motor) / encaminhamento externo + status "atendido" (C64) |
+| `status.html` | **JÁ feito (v1.44)** — mock de uptime → "plataforma em implantação" |
+
+### 5.4 Backlog demand-pulled (re-entra item-a-item pela régua §15)
+
+Não é "o novo" — é candidato das auditorias, gatilho = cliente validado:
+- **Esteira de remessa TCE:** V1 = **estado-rejeitada + ação inline "reenviar"** sobre a superfície existente (o
+  cartão de FALHA já carrega o deep-link). **Detalhe + wizard de reenvio + fila cross-competência = diferidos**
+  (códigos de erro do TCE são `[GAP]`, zero rejeição real observada, V1 = 1 câmara/cadência mensal).
+- **Ciência da convocação:** V1 = roster simples (enviado/entregue) + 1-toque (prova primária, Fund.#3). O
+  **quórum-de-ciência derivado** que gateia validade-de-sessão + prazo-mínimo computado = **diferido** (spec da
+  prova que a LOM exige é `[GAP]`).
+- **Voto offline (PWA):** V1 = só o **chip de estado**. Service-worker + background-sync + reconciliação =
+  fast-follow (cenário de voto remoto/móvel não-validado; a votação V1 é no recinto) — e é o **maior risco de
+  dimensionamento oculto** (CONC-1, deferido ao chat de stack).
+- **Novas telas demand-pulled:** Incidente de dados ANPD (forma da máquina entra quando o jurídico do edital
+  pedir; prazo ANPD `[GAP]`) · Carta de Serviços 13.460 (puxar cedo — link morto em tela publicada) · Agenda
+  pública (forma **pública/lista**, não grade de calendário) · Expediente recebido/correspondência (cotidiano de
+  maior volume) · cockpit-comissão · home-cockpit-admin · progresso/diff de migração operador.
+- **Profundidade conhecida (§4):** espécies no editor (3.16) · diff de versões (3.4) · apensação (3.6) · presença
+  (4.5) · Mesa Diretora (2.2) · registro DOM (3.20) · billing (12.2).
+- **Acoplados (segurar até a dependência aterrar):** onboarding DNS self-serve de e-mail (acoplado ao white-label
+  diferido) · selo de proveniência de vendor (acoplado ao failover não-materializado).
+
+### 5.5 `[GAP]` e dependências (não desenhar à frente do conteúdo)
+
+Códigos de erro do TCE (esteira de remessa) · prazo ANPD (incidente) · regra de desempate/voto de qualidade
+(empate) · natureza da prova de ciência que a LOM exige · efeito legal de cada estado de lifecycle do tenant ·
+esquema URN/LexML por espécie (bloqueia o schema legislativo) · formato de origem SAPL/checksum (migração) ·
+conteúdo da Carta de Serviços (por câmara) · turnos/quórum por espécie (`[Regimento]`) · definição de "hora
+poupada" (PRD) · lista de vendors de IA elegíveis (art.33). **A FORMA da UI entra; o CONTEÚDO não se inventa.**
