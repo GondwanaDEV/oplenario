@@ -264,6 +264,41 @@
   .dica-mesa { width: 100%; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); padding-bottom: 0.55rem; display: flex; align-items: center; gap: 0.45rem; }
   .dica-mesa svg { color: var(--acento-texto); flex: 0 0 auto; }
 
+  /* ============== camada de atenção: estado FALHA condicional + lente do jurídico ============== */
+  /* tira de demonstração (scaffolding de design, não é chrome de produto) */
+  .demo-strip { display: flex; align-items: center; gap: 0.5rem 1.2rem; flex-wrap: wrap; margin: clamp(1.2rem, 3vw, 2rem) 0 0; padding: 0.5rem 0.8rem; border: 1px dashed color-mix(in srgb, var(--texto-2) 45%, transparent); border-radius: var(--raio-sm); background: color-mix(in srgb, var(--texto-2) 5%, transparent); font-family: var(--mono); font-size: var(--t-12); color: var(--texto); }
+  .demo-strip .grp { display: inline-flex; align-items: center; gap: 0.5rem; }
+  .demo-strip .seg { display: inline-flex; border: 1px solid var(--linha); border-radius: 999px; overflow: hidden; }
+  .demo-strip .seg button { font: inherit; padding: 0.3rem 0.8rem; min-height: 32px; border: none; background: var(--surface-2); color: var(--texto); cursor: pointer; }
+  .demo-strip .seg button[aria-pressed="true"] { background: var(--texto); color: var(--surface); }
+
+  /* swap de valores: o MESMO placar re-skinnado (verde continua o default) */
+  .v-falha { display: none; }
+  body.estado-falha .v-ok { display: none; }
+  body.estado-falha .v-falha { display: inline; }
+  /* troca o bloco de título do herói — verde é o canônico/default */
+  .saude-falha { display: none; }
+  body.estado-falha .saude-emdia { display: none; }
+  body.estado-falha .saude-falha { display: block; }
+  .saude-falha h1 em { color: #FFB59A; }
+  /* re-skin telha: ênfase só na coluna Vencidas (não inverte a 1ª impressão — é o mesmo placar) */
+  body.estado-falha .ob-risco { background: color-mix(in srgb, var(--telha) 18%, transparent); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--telha) 55%, transparent); }
+  body.estado-falha .ob-risco .n { color: #FFB59A; }
+  body.estado-falha .ob-dia .n { color: var(--palco-texto); }
+  .placar-nota .v-falha svg { color: #FFB59A; }
+
+  /* lente do jurídico: recorte por PAPEL (não faixa fixa) — prova de risco coberto */
+  .juridico-cut { display: none; grid-template-columns: repeat(2, 1fr); gap: 0.7rem; margin: 1.4rem 0 0; }
+  body.lente-juridico .juridico-cut { display: grid; }
+  .risco-card { display: flex; flex-direction: column; gap: 0.25rem; background: var(--palco-inset); border: 1px solid var(--palco-linha); border-left: 3px solid #8FE3C6; border-radius: var(--raio-sm); padding: 0.85rem 0.95rem; }
+  .risco-card.atencao { border-left-color: var(--amarelo); }
+  .risco-card .rc-top { display: flex; align-items: center; gap: 0.45rem; font-family: var(--mono); font-size: var(--t-12); text-transform: uppercase; letter-spacing: .05em; color: var(--palco-texto-2); }
+  .risco-card .rc-top svg { flex: 0 0 auto; color: #8FE3C6; }
+  .risco-card.atencao .rc-top svg { color: var(--amarelo); }
+  .risco-card .rc-v { font-weight: 600; font-size: var(--t-16); color: var(--palco-texto); margin-top: 0.15rem; }
+  .risco-card .rc-meta { font-family: var(--mono); font-size: var(--t-12); color: var(--palco-texto-2); line-height: 1.4; }
+  .risco-card a { color: #8FE3C6; font-weight: 600; text-underline-offset: 3px; }
+
   /* ============== RESPONSIVO ============== */
   @media (max-width: 1040px) {
     .cockpit { grid-template-columns: 1fr; }
@@ -365,11 +400,33 @@
   <main id="conteudo" class="envelope">
 
     <!-- ============== 2 · HERO — ILHA-PLACAR DA SAÚDE INSTITUCIONAL ============== -->
+    <!-- tira de demonstração: estado do placar (verde = canônico/default) + lente por papel -->
+    <div class="demo-strip" role="group" aria-label="Demonstração de design: estado e lente do painel">
+      <span class="grp"><span>Estado:</span>
+        <span class="seg">
+          <button type="button" data-estado="ok" aria-pressed="true">Em dia</button>
+          <button type="button" data-estado="falha" aria-pressed="false">Com falha</button>
+        </span>
+      </span>
+      <span class="grp"><span>Lente:</span>
+        <span class="seg">
+          <button type="button" data-lente="mesa" aria-pressed="true">Mesa</button>
+          <button type="button" data-lente="juridico" aria-pressed="false">Jurídico</button>
+        </span>
+      </span>
+    </div>
+
     <section class="saude" aria-labelledby="saude-titulo">
       <div class="saude-corpo">
         <p class="eyebrow">Saúde institucional · prestação de contas da Mesa</p>
-        <h1 id="saude-titulo">A Casa está em dia com o <em>TCE&#8209;CE</em>.</h1>
-        <p class="saude-sub">Nenhum apontamento pendente. As obrigações são <b>monitoradas pelo motor de prazo</b>, e cada cumprimento fica registrado numa trilha auditável — a prova que o controle pede.</p>
+        <div class="saude-emdia">
+          <h1 id="saude-titulo">A Casa está em dia com o <em>TCE&#8209;CE</em>.</h1>
+          <p class="saude-sub">Nenhum apontamento pendente. As obrigações são <b>monitoradas pelo motor de prazo</b>, e cada cumprimento fica registrado numa trilha auditável — a prova que o controle pede.</p>
+        </div>
+        <div class="saude-falha">
+          <h1>Uma obrigação venceu o prazo no <em>TCE&#8209;CE</em>.</h1>
+          <p class="saude-sub">O motor detectou <b>1 remessa vencida</b> e abriu o caminho de regularização. As outras 11 obrigações seguem em dia — a falha está <b>isolada e rastreada</b>, com a trilha auditável intacta. Aja antes que vire apontamento.</p>
+        </div>
 
         <div class="saude-grade">
           <!-- placar de obrigações do TCE -->
@@ -384,7 +441,7 @@
                   <svg class="gl" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6" fill="#8FE3C6"/><path d="M4 7.2l2 2 4-4.4" stroke="#0A4334" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
                   Em dia
                 </p>
-                <p class="n">11</p>
+                <p class="n"><span class="v-ok">11</span><span class="v-falha">11</span></p>
                 <p class="est">conformes</p>
               </div>
               <div class="ob-col ob-vencer">
@@ -392,21 +449,21 @@
                   <svg class="gl" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1.5L13 12H1z" fill="#E8B23A"/><path d="M7 5.5v3M7 10h.01" stroke="#4A3608" stroke-width="1.5" stroke-linecap="round"/></svg>
                   A vencer
                 </p>
-                <p class="n">1</p>
-                <p class="est">remessa de maio</p>
+                <p class="n"><span class="v-ok">1</span><span class="v-falha">0</span></p>
+                <p class="est"><span class="v-ok">remessa de maio</span><span class="v-falha">nenhuma</span></p>
               </div>
               <div class="ob-col ob-risco">
                 <p class="rotulo">
                   <svg class="gl" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1l1.7 1.7H11.3V5.3L13 7l-1.7 1.7v2.6H8.7L7 13l-1.7-1.7H2.7V8.7L1 7l1.7-1.7V2.7h2.6z" fill="#F2A488"/><path d="M5 5l4 4M9 5l-4 4" stroke="#5A1E10" stroke-width="1.3" stroke-linecap="round"/></svg>
                   Vencidas
                 </p>
-                <p class="n">0</p>
-                <p class="est">nada em atraso</p>
+                <p class="n"><span class="v-ok">0</span><span class="v-falha">1</span></p>
+                <p class="est"><span class="v-ok">nada em atraso</span><span class="v-falha">remessa de maio</span></p>
               </div>
             </div>
             <p class="placar-nota">
               <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden="true"><circle cx="6.5" cy="6.5" r="5.5" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M6.5 3.5v3.2l2 1.3" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round"/></svg>
-              Reavaliado pelo motor há 2 min · histórico append-only
+              <span class="v-ok">Reavaliado pelo motor há 2 min · histórico append-only</span><span class="v-falha">Motor detectou a falha há 2 min · regularização registrada na trilha</span>
             </p>
           </div>
 
@@ -470,6 +527,20 @@
           <div class="selo-cont">
             <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><rect x="3" y="2.5" width="12" height="13" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6 6h6M6 9h6M6 12h3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
             <div><span class="t">Prova de compliance</span><span class="v"><a href="#">Ver a trilha de cumprimento →</a></span></div>
+          </div>
+        </div>
+
+        <!-- lente do jurídico: recorte por papel (só na lente) — prova de risco coberto, não faixa fixa -->
+        <div class="juridico-cut" aria-label="Recorte do jurídico: risco coberto">
+          <div class="risco-card">
+            <span class="rc-top"><svg width="15" height="15" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 1.5l6 2.2v4.1c0 4-2.6 6.4-6 7.7-3.4-1.3-6-3.7-6-7.7V3.7z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M6.2 9l2 2 3.6-4" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Incidentes LGPD</span>
+            <span class="rc-v">Nenhum incidente aberto</span>
+            <span class="rc-meta">Último teste de restauração há 6 dias · Encarregado/DPO designado · <a href="#">ver registro de operações (ROPA)</a></span>
+          </div>
+          <div class="risco-card atencao">
+            <span class="rc-top"><svg width="15" height="15" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M9 5v4.2l2.6 1.6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>Acesso de suporte (grant)</span>
+            <span class="rc-v">1 grant ativo</span>
+            <span class="rc-meta">Escopo: leitura de logs · expira em 2 dias · autorizado pelo DPO · <a href="#">revisar / revogar</a></span>
           </div>
         </div>
       </div>
@@ -876,6 +947,22 @@
       function ajustar() { main.style.paddingBottom = (barra.offsetHeight + 28) + 'px'; }
       ajustar();
       window.addEventListener('resize', ajustar);
+    })();
+
+    /* ---- Tira de demonstração: estado do placar (verde=default) + lente por papel ---- */
+    (function () {
+      var strip = document.querySelector('.demo-strip');
+      if (!strip) return;
+      strip.addEventListener('click', function (e) {
+        var btn = e.target.closest('button[data-estado], button[data-lente]');
+        if (!btn) return;
+        if (btn.dataset.estado) document.body.classList.toggle('estado-falha', btn.dataset.estado === 'falha');
+        if (btn.dataset.lente) document.body.classList.toggle('lente-juridico', btn.dataset.lente === 'juridico');
+        var attr = btn.dataset.estado ? 'estado' : 'lente';
+        btn.parentElement.querySelectorAll('button[data-' + attr + ']').forEach(function (b) {
+          b.setAttribute('aria-pressed', String(b === btn));
+        });
+      });
     })();
   </script>
 

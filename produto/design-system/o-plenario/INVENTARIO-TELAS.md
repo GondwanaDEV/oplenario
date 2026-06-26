@@ -352,7 +352,17 @@ nem `notificacoes`: `minhas-pendencias` vira a **home do servidor** (cabeçalho 
     **"Ciente · registrado hoje, 09:14"** = a prova com data/hora). AA 2 temas (voto-tracker 6.69–8.93 no palco ·
     fora-hero estado 4.50/4.87, h2 13.63/10.97, resumo 6.25/5.96 · ciência ci-top 5.82/5.53 — cobalto clareado no
     escuro, h3 14.86/9.19, ciente 8.15/4.84).
-  - **Resta (1/4):** `paineis-mesa` → ver abaixo (HERO de venda aprovado — pele FALHA condicional, nunca faixa fixa).
+  - ✅ **`paineis-mesa` FEITO (26/06)** — 4ª e última das 4 (**HERO de venda aprovado** — feito com disciplina máxima).
+    O **verde "A Casa está em dia" continua o canônico/default byte-a-byte** (estado sem classe = render idêntico ao
+    aprovado). A **FALHA é pele condicional do MESMO placar** (toggle de demo "Em dia↔Com falha"): re-skin que troca
+    h1/sub para "Uma obrigação venceu o prazo" e re-skinna o placar (Em dia 11 · A vencer 1→0 · **Vencidas 0→1** com
+    ênfase telha na coluna) — **nunca faixa fixa nova, não inverte a 1ª impressão**; o "12 ativas" e a estrutura são os
+    mesmos. **Lente do jurídico** (toggle "Mesa↔Jurídico") = **recorte por papel** (não faixa fixa): 2 cartões de prova
+    de risco coberto — "Incidentes LGPD: nenhum aberto" (DPO/ROPA/restore) e "Acesso de suporte: 1 grant ativo"
+    (escopo/expira/revogar). AA 2 temas (falha-h1 9.53/10.26 · falha-sub 6.96/7.42 · risco-card 6.09–8.80 · demo
+    14.43/15.51). **Com isto a camada de atenção fecha (4/4) e o núcleo de retrofit da Fase B está completo.**
+- **Fase B = R-IA-1 (5/5) + camada de atenção nas 4 homes (4/4) — COMPLETA (26/06).** Resta só a **Fase C** (1 tela
+  nova: grant de suporte lado-ente, abaixo).
 - **`paineis-mesa` (HERO aprovado):** o verde **"A Casa está em dia" continua canônico e o default da demo**; o
   cartão de FALHA é **pele condicional do MESMO placar** (ramo telha já antecipado no SVG `:435`), renderizado só
   quando há falha real — **nunca faixa fixa nova** (não inverter a 1ª impressão de venda). + lente **gated do
