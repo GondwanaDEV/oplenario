@@ -292,7 +292,12 @@ nem `notificacoes`: `minhas-pendencias` vira a **home do servidor** (cabeçalho 
   alternáveis por **tira de demonstração** (scaffolding marcado, preserva o herói da Aposta 1). AA medida nos 2 temas
   (banner 15.51/12.62 · borda-atenção 4.92/9.23 · contrato 5.12–15.51 · chip 7.54/5.90). **Achado §5.1:** pílula
   selecionada cheia com `--marca`+branco falha no escuro (2.35) → invertida p/ `--texto/--surface` (`GUIDELINES §5.1`).
-- **Próximas superfícies de R-IA-1:** `ata-revisao`,
+- ✅ **R-IA-1 em `ata-revisao` FEITO (26/06)** — 2ª superfície. Fallback **distinto** (a IA redige a ata inteira → IA-off
+  = sem rascunho): cai para **ata manual** (painel de ata-ausente em `--surface` temático, não a ilha-papel creme, p/
+  os botões passarem AA; "Redigir manualmente" / "Anexar ata externa") + banner `.sinal` + contrato (gravação preservada,
+  placar oficial é a fonte, votações/presença não dependem da IA). **Honestidade periférica:** chips "Rascunho de IA"/"3
+  pontos" somem e o comando "Aprovar" desabilita no IA-off (não há ata). AA 2 temas (banner 15.51/12.62 · borda 4.92/9.23).
+- **Próximas superfícies de R-IA-1:**
   `portal-cidadao`, busca (`proposicoes`/`legislacao`), `legendas-ao-vivo`. **Não é um componente único:** só o
   **banner honesto** + o **contrato "IA-off = o ato legislativo fecha sem ela"** é transversal; o **fallback é
   por-superfície** (editor desabilita o rail + "siga redigindo"; ata cai para anexação manual; portal esconde o
