@@ -72,6 +72,18 @@
   .anel .val b { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: var(--texto); }
   .anel .val span { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
   .prazo-card p { font-size: var(--t-13); color: var(--texto-2); margin: 0.8rem 0 0; line-height: 1.5; }
+
+  /* encaminhamento externo (Req./Ind. → órgão externo) com status até "atendido" (C64) */
+  .enc-item { display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.75rem 0; border-top: 1px solid var(--linha); }
+  .enc-item:first-of-type { border-top: none; padding-top: 0.2rem; }
+  .enc-item .ei-mid { flex: 1; min-width: 0; }
+  .enc-item .ei-mid .num { font-family: var(--mono); font-size: var(--t-12); color: var(--acento-texto); }
+  .enc-item .ei-mid p { font-size: var(--t-13); color: var(--texto); margin: 0.1rem 0 0; line-height: 1.3; }
+  .enc-item .ei-mid .dest { font-size: var(--t-12); color: var(--texto-2); margin-top: 0.2rem; display: block; }
+  .enc-est { font-family: var(--mono); font-size: 0.64rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; border-radius: 999px; padding: 0.22rem 0.55rem; white-space: nowrap; flex: 0 0 auto; }
+  .enc-atendido { color: #15634A; background: color-mix(in srgb, var(--marca) 9%, var(--surface)); border: 1px solid color-mix(in srgb, var(--marca) 32%, transparent); }
+  [data-tema="escuro"] .enc-atendido { color: #58C99E; }
+  .enc-aguarda { color: var(--aviso-texto); background: color-mix(in srgb, var(--amarelo) 14%, var(--surface)); border: 1px solid color-mix(in srgb, var(--amarelo-traco) 42%, transparent); }
   .nota-gap { font-size: var(--t-12); color: var(--texto-2); margin: 0.7rem 0 0; border-top: 1px dashed var(--linha); padding-top: 0.6rem; }
   .nota-gap .tag { font-family: var(--mono); font-size: 0.6rem; letter-spacing: .04em; text-transform: uppercase; color: var(--aviso-texto); border: 1px solid color-mix(in srgb, var(--amarelo-traco) 45%, transparent); border-radius: 4px; padding: 0.05rem 0.3rem; }
 
@@ -167,6 +179,27 @@
           <dt>Vigência</dt><dd>na data da publicação</dd>
         </dl>
         <p style="font-size:var(--t-13);color:var(--texto-2);margin:0.8rem 0 0;line-height:1.5">Se houver veto, total ou parcial, a matéria retorna à Câmara para apreciação do veto antes da promulgação.</p>
+      </div>
+
+      <div class="card">
+        <h2>Encaminhamentos externos</h2>
+        <p style="font-size:var(--t-13);color:var(--texto-2);margin:0 0 0.9rem;line-height:1.5">Requerimentos e indicações aprovados seguem a um órgão externo. A Câmara acompanha até a resposta — o ciclo só fecha em <b style="color:var(--texto);font-weight:600">atendido</b>.</p>
+        <div class="enc-item">
+          <div class="ei-mid">
+            <span class="num">IND 120/2026</span>
+            <p>Recuperação do calçamento da Av. Beira-Mar</p>
+            <span class="dest">→ Secretaria de Infraestrutura · ofício 198 · enviado 12/06 · resposta em 20/06</span>
+          </div>
+          <span class="enc-est enc-atendido">Atendido</span>
+        </div>
+        <div class="enc-item">
+          <div class="ei-mid">
+            <span class="num">REQ 198/2026</span>
+            <p>Informações sobre o contrato de coleta seletiva</p>
+            <span class="dest">→ Prefeitura Municipal · ofício 205 · enviado 15/06 · prazo de resposta corre</span>
+          </div>
+          <span class="enc-est enc-aguarda">Aguardando</span>
+        </div>
       </div>
     </div>
 

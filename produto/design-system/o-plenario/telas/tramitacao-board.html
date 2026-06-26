@@ -85,6 +85,8 @@
   .selo-prazo { color: var(--aviso-texto); background: color-mix(in srgb, var(--amarelo) 16%, var(--surface)); border-color: color-mix(in srgb, var(--amarelo-traco) 45%, transparent); }
   .selo-urg { color: #fff; background: var(--telha-fundo); }
   .selo-prazo svg, .selo-urg svg { flex: 0 0 auto; }
+  /* badge de regime de tramitação (C40 — regime calculado pelo motor, explícito no cartão) */
+  .selo-regime { font-family: var(--mono); font-weight: 600; color: var(--texto-2); background: var(--surface); border: 1px dashed color-mix(in srgb, var(--texto-2) 48%, var(--linha)); }
 
   /* cartão "vazio/contagem" das concluídas */
   .col-resumo { font-size: var(--t-13); color: var(--texto-2); text-align: center; padding: 1rem 0.5rem; }
@@ -198,6 +200,7 @@
           <h3><a href="ficha-materia.html">Institui o Programa Municipal de Hortas Comunitárias</a></h3>
           <div class="mat-pe">
             <span class="selo selo-esp">PL</span>
+            <span class="selo selo-regime">ordinário</span>
             <span class="selo selo-prazo"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Parecer CCJ vence em 3 dias</span>
             <span class="mat-rel"><span class="av" aria-hidden="true">AM</span><span>Rel. A. Moraes</span></span>
           </div>
@@ -205,7 +208,7 @@
         <article class="mat">
           <div class="mat-topo"><span class="mat-num">PL 038/2026</span><button class="mat-menu" type="button" aria-label="Ações da matéria PL 038/2026"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></div>
           <h3><a href="ficha-materia.html">Acessibilidade em equipamentos públicos municipais</a></h3>
-          <div class="mat-pe"><span class="selo selo-esp">PL</span><span class="mat-rel"><span class="av" aria-hidden="true">CT</span><span>Rel. C. Tavares</span></span></div>
+          <div class="mat-pe"><span class="selo selo-esp">PL</span><span class="selo selo-regime">ordinário</span><span class="mat-rel"><span class="av" aria-hidden="true">CT</span><span>Rel. C. Tavares</span></span></div>
         </article>
         <article class="mat">
           <div class="mat-topo"><span class="mat-num">PLC 007/2026</span><button class="mat-menu" type="button" aria-label="Ações da matéria PLC 007/2026"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></div>

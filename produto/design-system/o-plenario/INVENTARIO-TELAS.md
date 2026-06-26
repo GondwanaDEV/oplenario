@@ -397,7 +397,7 @@ nem `notificacoes`: `minhas-pendencias` vira a **home do servidor** (cabeçalho 
 | `console-operador-tenant` | premissa muda ao exigir a tela-espelho lado-ente (Fase C) |
 | `config-ente` | ✅ **FEITO (26/06)** — aba **Privacidade · LGPD** operável pelo DPO: cartão do Encarregado + **ROPA** (3 operações com base legal/categorias/retenção + "registrar nova") + Direitos do titular (prazo `[GAP]`) + link p/ `grant-suporte-ente` |
 | `admin-usuarios` | ✅ **FEITO (26/06)** — menu três-pontinhos vira **dropdown de ações reais**: **Redefinir MFA** (dupla aprovação) · **Papel e vigência** (expira na data) · **Vínculo com a Casa** (ativar/suspender/encerrar c/ data) · **Desativar acesso** (perigo) — cada ação com a semântica em microcopy; toggle acessível (aria-expanded/Esc/clique-fora) |
-| `tramitacao-board` / `pos-aprovacao` | badge de regime (C40, correção do motor) / encaminhamento externo + status "atendido" (C64) |
+| `tramitacao-board` / `pos-aprovacao` | ✅ **FEITO (26/06)** — board: **badge de regime** (C40, regime do motor explícito no cartão: ordinário/urgência) · pos-aprovacao: card **Encaminhamentos externos** (Req./Ind. → órgão externo) com status até **"Atendido"** (C64; "o ciclo só fecha em atendido") |
 | `status.html` | **JÁ feito (v1.44)** — mock de uptime → "plataforma em implantação" |
 
 ### 5.4 Backlog demand-pulled (re-entra item-a-item pela régua §15)
