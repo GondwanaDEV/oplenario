@@ -131,6 +131,31 @@
   [data-tema="escuro"] .voto-pill-abs { color: var(--foco); }
   .voto-pill-abs .g { background: var(--cobalto); }
 
+  /* tira de demonstração: cenário do placar (maioria ↔ empate) — scaffolding */
+  .demo-strip { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin: 0 0 0.9rem; padding: 0.45rem 0.7rem; border: 1px dashed var(--palco-linha); border-radius: var(--raio-sm); background: var(--palco-inset); font-family: var(--mono); font-size: var(--t-12); color: var(--palco-texto); }
+  .demo-strip .seg { display: inline-flex; border: 1px solid var(--palco-linha); border-radius: 999px; overflow: hidden; }
+  .demo-strip .seg button { font: inherit; padding: 0.3rem 0.8rem; min-height: 32px; border: none; background: transparent; color: var(--palco-texto-2); cursor: pointer; }
+  .demo-strip .seg button[aria-pressed="true"] { background: #FFE3D6; color: var(--palco-bg); }
+
+  /* swap maioria ↔ empate: o MESMO placar (números via spans, barra via CSS) */
+  .v-empate { display: none; }
+  body.cenario-empate .v-maioria { display: none; }
+  body.cenario-empate .v-empate { display: inline; }
+  .seg-sim { width: 58%; } .seg-nao { width: 29%; } .seg-abs { width: 6.5%; } .seg-falta { width: 6.5%; }
+  body.cenario-empate .seg-sim { width: 48.4%; } body.cenario-empate .seg-nao { width: 48.4%; }
+  body.cenario-empate .seg-abs { width: 3.2%; } body.cenario-empate .seg-falta { width: 0; }
+  body.cenario-empate .voto-sim .n, body.cenario-empate .voto-nao .n { color: #FFE3D6; }
+  .empate-nota { display: none; font-family: var(--mono); font-size: var(--t-12); color: #fff; background: rgba(217,84,43,.32); border: 1px solid rgba(217,84,43,.5); padding: 0.25rem 0.6rem; border-radius: 999px; align-items: center; gap: 0.4rem; }
+  body.cenario-empate .empate-nota { display: inline-flex; }
+  body.cenario-empate .maioria .faltam { display: none; }
+
+  /* presença append-only + ato nomeado de verificação/recontagem */
+  .presenca-log { margin: 0.7rem 0 0; font-size: var(--t-12); color: var(--texto-2); display: flex; align-items: flex-start; gap: 0.4rem; line-height: 1.4; }
+  .presenca-log svg { flex: 0 0 auto; color: var(--marca); margin-top: 1px; }
+  .presenca-log a { color: var(--acento-texto); font-weight: 600; }
+  .ato-nota { margin: 0.8rem 0 0; padding: 0.55rem 0.7rem; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); font-size: var(--t-12); color: var(--texto-2); display: flex; align-items: flex-start; gap: 0.4rem; line-height: 1.4; }
+  .ato-nota svg { flex: 0 0 auto; color: var(--acento-texto); margin-top: 1px; }
+
   /* ============== 4 · RAIL ============== */
   .quorum-num { display: flex; align-items: baseline; gap: 0.5rem; }
   .quorum-num b { font-family: var(--display); font-weight: 800; font-size: var(--t-40); letter-spacing: -0.02em; color: var(--marca); line-height: 1; font-variant-numeric: tabular-nums; }
@@ -310,31 +335,42 @@
 
         <div class="votacao" role="group" aria-labelledby="placar-titulo">
           <p class="eyebrow" id="placar-titulo">Placar em tempo real</p>
+
+          <!-- tira de demonstração: alterna o cenário do placar (scaffolding de design) -->
+          <div class="demo-strip" role="group" aria-label="Demonstração de design: cenário do placar">
+            <span>Demonstração · cenário:</span>
+            <span class="seg">
+              <button type="button" data-cenario="maioria" aria-pressed="true">Maioria</button>
+              <button type="button" data-cenario="empate" aria-pressed="false">Empate</button>
+            </span>
+          </div>
+
           <div class="placar">
             <div class="voto-col voto-sim">
               <p class="rotulo"><span class="ponto" style="background:#16785C;"></span>Sim</p>
-              <p class="n" aria-live="polite">18</p>
+              <p class="n" aria-live="polite"><span class="v-maioria">18</span><span class="v-empate">15</span></p>
             </div>
             <div class="voto-col voto-nao">
               <p class="rotulo"><span class="ponto" style="background:#D9542B;"></span>Não</p>
-              <p class="n" aria-live="polite">9</p>
+              <p class="n" aria-live="polite"><span class="v-maioria">9</span><span class="v-empate">15</span></p>
             </div>
             <div class="voto-col voto-abs">
               <p class="rotulo"><span class="ponto" style="background:#E8B23A;"></span>Abstenção</p>
-              <p class="n" aria-live="polite">2</p>
+              <p class="n" aria-live="polite"><span class="v-maioria">2</span><span class="v-empate">1</span></p>
             </div>
           </div>
 
-          <div class="barra-votos" role="img" aria-label="Sim 18, Não 9, Abstenção 2, faltam votar 2 de 31 presentes.">
-            <span class="seg-sim" style="width:58.0%"></span>
-            <span class="seg-nao" style="width:29.0%"></span>
-            <span class="seg-abs" style="width:6.5%"></span>
-            <span class="seg-falta" style="width:6.5%"></span>
+          <div class="barra-votos" role="img" aria-label="Distribuição dos votos sobre os presentes.">
+            <span class="seg-sim"></span>
+            <span class="seg-nao"></span>
+            <span class="seg-abs"></span>
+            <span class="seg-falta"></span>
           </div>
 
           <div class="maioria">
             <span class="alvo">Maioria absoluta exigida: <b>22 votos</b> · 31 de 43 presentes</span>
             <span class="faltam">Faltam 4 votos Sim · 2 ainda não votaram</span>
+            <span class="empate-nota"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>Empate 15 × 15 — desempate pelo Regimento (voto de qualidade da presidência ou rejeição) · <b>[Regimento]</b></span>
           </div>
         </div>
 
@@ -387,6 +423,10 @@
               <span><i style="background:var(--acao);"></i>Presentes 31</span>
               <span><i style="background:var(--linha);"></i>Ausentes 12</span>
             </div>
+            <p class="presenca-log">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+              <span>Chamada e cada entrada/saída ficam em <b>registro append-only</b>, com hora — a presença não se edita nem se apaga. <a href="trilha-auditoria.html">Ver registro da chamada →</a></span>
+            </p>
           </div>
         </section>
 
@@ -462,10 +502,15 @@
               <button class="inc-btn" type="button"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3.5M8 11h.01" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Questão de ordem</button>
               <button class="inc-btn" type="button"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 8s2-3.5 5.5-3.5S13.5 8 13.5 8s-2 3.5-5.5 3.5S2.5 8 2.5 8z" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="1.6" fill="currentColor"/></svg>Pedido de vista</button>
               <button class="inc-btn" type="button"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l2.4 2.4L13 4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Verificação de quórum</button>
+              <button class="inc-btn" type="button"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8a6 6 0 0 1 10-4.5L13 5M13 2v3h-3" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 8a6 6 0 0 1-10 4.5L3 11M3 14v-3h3" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Recontagem de votos</button>
               <button class="inc-btn" type="button"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="3" width="11" height="3" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="2.5" y="10" width="11" height="3" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>Votação em bloco</button>
               <button class="inc-btn" type="button"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2l1.6 3.6 3.9.4-2.9 2.6.8 3.8L8 11l-3.4 1.8.8-3.8L2.5 6l3.9-.4z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>Regime de urgência</button>
               <button class="inc-btn" type="button"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>Retirada de pauta</button>
             </div>
+            <p class="ato-nota">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+              <span>Toda verificação ou <b>recontagem vira ato nomeado</b> — registrado, datado e selado no histórico da sessão. O resultado declarado vale sobre a contagem provisória.</span>
+            </p>
           </div>
         </section>
 
@@ -535,6 +580,20 @@
           svg.appendChild(c);
           idx++;
         }
+      });
+    })();
+
+    /* ---- Tira de demonstração: alterna o cenário do placar (maioria ↔ empate) ---- */
+    (function () {
+      var strip = document.querySelector('.demo-strip');
+      if (!strip) return;
+      strip.addEventListener('click', function (e) {
+        var btn = e.target.closest('button[data-cenario]');
+        if (!btn) return;
+        document.body.classList.toggle('cenario-empate', btn.dataset.cenario === 'empate');
+        strip.querySelectorAll('button[data-cenario]').forEach(function (b) {
+          b.setAttribute('aria-pressed', String(b === btn));
+        });
       });
     })();
 
