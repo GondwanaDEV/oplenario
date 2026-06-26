@@ -10,7 +10,7 @@
   timestamptz (nunca timestamp sem zona), de modo que toda leitura de Timestamp e' um Instant."
   (:require [next.jdbc.prepare :as prepare]
             [next.jdbc.result-set :as rs])
-  (:import (java.sql PreparedStatement Timestamp)
+  (:import (java.sql Date PreparedStatement Timestamp)
            (java.time Instant ZoneOffset)))
 
 (set! *warn-on-reflection* true)
@@ -29,4 +29,9 @@
 (extend-protocol rs/ReadableColumn
   Timestamp
   (read-column-by-label [v _label] (.toInstant ^Timestamp v))
-  (read-column-by-index [v _rsmeta _idx] (.toInstant ^Timestamp v)))
+  (read-column-by-index [v _rsmeta _idx] (.toInstant ^Timestamp v))
+  ;; `date` (sem hora/zona) <-> java.time.LocalDate. pgjdbc liga LocalDate->date nativamente na ida
+  ;; (setObject); na volta devolve java.sql.Date (irmao de Timestamp, dispatch proprio) -> .toLocalDate.
+  Date
+  (read-column-by-label [v _label] (.toLocalDate ^Date v))
+  (read-column-by-index [v _rsmeta _idx] (.toLocalDate ^Date v)))
