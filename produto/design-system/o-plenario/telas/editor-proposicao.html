@@ -134,6 +134,37 @@
   [data-tema="escuro"] .ferr-ia svg { color: var(--foco); }
   .ferr-sep { width: 1px; height: 24px; background: var(--linha); margin: 0 0.2rem; }
 
+  /* ---------------- R-IA-1: estado degradado do copiloto ----------------
+     Contrato TRANSVERSAL (vale para toda superfície de IA): IA-off NÃO trava
+     o ato legislativo. O servidor segue redigindo e protocola normal; o rail
+     desabilita com banho HONESTO (reusa .sinal do chassi — a camada de
+     atenção, gravidade=atenção pois é recuperável, não FALHA do trabalho).
+     Fallback POR-SUPERFÍCIE (aqui): rail off + pinos da margem pausados +
+     "Pedir ao copiloto" inerte. "Enviar para protocolo" permanece ATIVO. */
+  .copiloto-ativo, .copiloto-off { display: grid; gap: 1rem; }
+  .estudio[data-ia="off"]   .copiloto-ativo { display: none; }
+  .estudio[data-ia="ativo"] .copiloto-off   { display: none; }
+  .estudio[data-ia="off"] .pino   { display: none; }
+  .estudio[data-ia="off"] .ferr-ia { opacity: 0.5; pointer-events: none; }
+
+  .off-contrato { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 0.95rem 1.1rem; }
+  .off-contrato h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.7rem; }
+  .off-contrato ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+  .off-contrato li { display: grid; grid-template-columns: 1.3rem 1fr; gap: 0.55rem; font-size: var(--t-13); color: var(--texto); line-height: 1.45; align-items: start; }
+  .off-contrato li svg { color: #15634A; flex: 0 0 auto; margin-top: 2px; }
+  [data-tema="escuro"] .off-contrato li svg { color: #58C99E; }
+  .off-contrato li b { font-weight: 600; }
+  .off-nota { font-size: var(--t-12); color: var(--texto-2); margin: 0.75rem 0 0; border-top: 1px dashed var(--linha); padding-top: 0.6rem; line-height: 1.45; }
+
+  /* tira de demonstração: scaffolding de design (prova os 2 estados), não chrome de produto */
+  .demo-strip { display: flex; align-items: center; gap: 0.6rem 0.9rem; flex-wrap: wrap; margin: 1.1rem 0 0; padding: 0.55rem 0.8rem; border: 1px dashed var(--linha); border-radius: var(--raio-sm); background: var(--surface-2); }
+  .demo-strip .rot { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); }
+  .demo-strip .seg { display: inline-flex; border: 1px solid var(--linha); border-radius: 999px; overflow: hidden; background: var(--surface); }
+  .demo-strip .seg button { font-family: var(--corpo); font-size: var(--t-12); font-weight: 600; color: var(--texto-2); background: none; border: none; padding: 0.35rem 0.85rem; min-height: 34px; cursor: pointer; }
+  .demo-strip .seg button + button { border-left: 1px solid var(--linha); }
+  /* preenchimento invertido = AA robusto nos 2 temas (jade clareia no escuro → branco-s/-claro falha; §5.1) */
+  .demo-strip .seg button[aria-pressed="true"] { background: var(--texto); color: var(--surface); }
+
   @media (max-width: 1040px) {
     .estudio { grid-template-columns: 1fr; }
     .copiloto { position: static; top: auto; }
@@ -191,7 +222,15 @@
     </div>
   </div>
 
-  <div class="estudio">
+  <div class="demo-strip" role="group" aria-label="Demonstração de design: estado do copiloto">
+    <span class="rot">Demonstração · estado do copiloto</span>
+    <span class="seg">
+      <button type="button" data-ia="ativo" aria-pressed="true">IA ativa</button>
+      <button type="button" data-ia="off" aria-pressed="false">IA indisponível</button>
+    </span>
+  </div>
+
+  <div class="estudio" data-ia="ativo">
     <!-- ================= ILHA-PAPEL: o texto normativo ================= -->
     <section aria-label="Texto da proposição">
       <div class="ferramentas" role="toolbar" aria-label="Ferramentas de redação">
@@ -242,6 +281,7 @@
 
     <!-- ================= COPILOTO ================= -->
     <aside class="copiloto" aria-label="Copiloto legislativo">
+     <div class="copiloto-ativo">
       <!-- cabeçalho do copiloto com governança/confiança -->
       <div class="cop-cabe">
         <div class="marca-ia">
@@ -322,6 +362,51 @@
         </ul>
         <p class="ressalva">A IA aponta candidatas; a vigência e a aplicabilidade ao caso são sua responsabilidade.</p>
       </div>
+     </div><!-- /.copiloto-ativo -->
+
+     <!-- ===== R-IA-1: copiloto indisponível (fallback honesto, não trava o ato) ===== -->
+     <div class="copiloto-off">
+      <div class="sinal sinal-atencao" role="status">
+        <span class="sinal-ic ia" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 2l20 20"/><path d="M17.5 19H9a7 7 0 0 1-6.71-9M5.6 5.6A7 7 0 0 1 20 9c1.7 0 3 1.3 3 3a4 4 0 0 1-1.3 2.9"/></svg>
+        </span>
+        <div class="sinal-corpo">
+          <p class="sinal-titulo">Copiloto indisponível agora</p>
+          <p class="sinal-ctx">O serviço de IA não respondeu. <b>Isso não interrompe sua redação</b> — o copiloto é um apoio, não um passo do processo.</p>
+          <div class="sinal-meta">
+            <span class="chip chip-neutro">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+              última análise há 4 min
+            </span>
+          </div>
+        </div>
+        <div class="sinal-acao">
+          <button class="btn btn-contorno btn-mini" type="button">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v5h-5"/></svg>
+            Tentar de novo
+          </button>
+        </div>
+      </div>
+
+      <div class="off-contrato">
+        <h2>O que segue funcionando</h2>
+        <ul>
+          <li>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>
+            <span>Você redige, salva e <b>envia para protocolo</b> normalmente.</span>
+          </li>
+          <li>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>
+            <span>As conferências de técnica legislativa (LC 95/1998) <b>voltam</b> assim que o copiloto reconectar.</span>
+          </li>
+          <li>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>
+            <span>Nada do texto já escrito se perde.</span>
+          </li>
+        </ul>
+        <p class="off-nota">As observações da IA na margem ficam pausadas — os marcadores reaparecem ao reconectar. Nenhuma sugestão é cravada sem sua revisão.</p>
+      </div>
+     </div><!-- /.copiloto-off -->
     </aside>
   </div>
   <div style="height:1rem"></div>
@@ -350,6 +435,19 @@
     if (!barra || !main) return;
     function ajustar() { main.style.paddingBottom = (barra.offsetHeight + 28) + 'px'; }
     ajustar(); window.addEventListener('resize', ajustar);
+  })();
+
+  /* demonstração de design: alterna IA ativa ↔ indisponível (R-IA-1) */
+  (function () {
+    var estudio = document.querySelector('.estudio');
+    var segs = document.querySelectorAll('.demo-strip .seg button');
+    if (!estudio || !segs.length) return;
+    segs.forEach(function (b) {
+      b.addEventListener('click', function () {
+        estudio.dataset.ia = b.dataset.ia;
+        segs.forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+      });
+    });
   })();
 </script>
 </body>

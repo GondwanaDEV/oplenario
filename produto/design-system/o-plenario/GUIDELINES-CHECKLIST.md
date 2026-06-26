@@ -75,6 +75,7 @@ Em conflito, o código prevalece sobre este doc.
 | **Preenchimento de gráfico com cor de marca ESCURA sobre trilho escuro** (barras: jade/cobalto/telha sobre `--surface`) | no **escuro** o fill escuro fica < 3:1 vs o trilho → ~1.5–2.5 | override `[data-tema="escuro"]` clareando o fill (jade→`#43BD93`/`#2C8A66`, cobalto→`--foco`, telha→`#F0794B`). Já aconteceu em transparencia-fiscal + estatísticas. |
 | **Branco sobre `--telha` em botão** (`.btn-encerrar`) | era 4.0 (corrigido no chassi 22/06) | **já resolvido**: o chassi usa `--telha-fundo` (5.44). Não reintroduzir `var(--telha)` como fundo de texto branco. |
 | **`.merge` (campo mesclado) sobre `--papel` no escuro** (`--merge` #B9421F + `--merge-fundo`) | **3.72** no escuro (`--papel` mais cremoso + tinta laranja) | **mitigado** pelo sublinhado de 2px (`--merge`) = sinal gráfico ≥3, não-cor. Token compartilhado por 4 telas — **passe futuro de token** (escurecer `--merge` no escuro), não re-tonalizar num commit de promoção. Medido na Fase A §5.2. |
+| **Pílula/segmento SELECIONADO preenchido com `--marca` + texto branco** (toggle, segmented control) | **2.35** no **escuro** (o jade `--marca` clareia no escuro → branco-sobre-claro falha) | preenchimento **invertido**: fundo `var(--texto)` + texto `var(--surface)` — contrasta nos 2 temas (15.51 claro / 12.62 escuro). Não usar cor de marca como fundo de texto branco em estado selecionado. Medido na Fase B §5.2 (toggle de demo do editor). |
 
 ## 6. Integridade de domínio (não inventar mecânica)
 

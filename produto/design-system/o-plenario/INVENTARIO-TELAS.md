@@ -283,8 +283,16 @@ nem `notificacoes`: `minhas-pendencias` vira a **home do servidor** (cabeçalho 
 - **Achado AA registrado:** `.ilha-papel .merge` no escuro = 3.72 (token `--merge` herdado; sublinhado 2px é o
   sinal gráfico) — candidato a um passe futuro de token (`GUIDELINES §5.1`), não re-tonalizado num commit de promoção.
 
-**Fase B — retrofit barato (0 tela nova, maior retorno por hora):**
-- **Estado degradado de IA (R-IA-1)** em `editor-proposicao` (1º — validar nos 2 temas), depois `ata-revisao`,
+**Fase B — retrofit barato (0 tela nova, maior retorno por hora) — EM CURSO (26/06):**
+- ✅ **R-IA-1 em `editor-proposicao` FEITO (26/06)** — 1ª superfície, **cravou o padrão transversal**: banner honesto
+  reusa o **`.sinal` do chassi** (gravidade=**atenção**, não crítico — IA-off é recuperável, não FALHA do trabalho)
+  + **contrato visível** ("o que segue funcionando": redige/salva/**protocola** normal; técnica legislativa LC 95/1998
+  volta ao reconectar; nada se perde). Fallback **por-superfície**: rail desabilita, pinos da margem pausam,
+  "Pedir ao copiloto" inerte — **"Enviar para protocolo" permanece ATIVO** (o contrato). Estados Ativo↔Indisponível
+  alternáveis por **tira de demonstração** (scaffolding marcado, preserva o herói da Aposta 1). AA medida nos 2 temas
+  (banner 15.51/12.62 · borda-atenção 4.92/9.23 · contrato 5.12–15.51 · chip 7.54/5.90). **Achado §5.1:** pílula
+  selecionada cheia com `--marca`+branco falha no escuro (2.35) → invertida p/ `--texto/--surface` (`GUIDELINES §5.1`).
+- **Próximas superfícies de R-IA-1:** `ata-revisao`,
   `portal-cidadao`, busca (`proposicoes`/`legislacao`), `legendas-ao-vivo`. **Não é um componente único:** só o
   **banner honesto** + o **contrato "IA-off = o ato legislativo fecha sem ela"** é transversal; o **fallback é
   por-superfície** (editor desabilita o rail + "siga redigindo"; ata cai para anexação manual; portal esconde o
