@@ -221,6 +221,49 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   .sinal-acao { flex-basis: 100%; justify-content: flex-end; margin-top: 0.2rem; }
 }
 
+/* ============== FAIXA DE AZULEJO DA TRAMITAÇÃO — A ASSINATURA ==============
+   Motivo à la Athos Bulcão: cada peça é uma ETAPA e o estado é REAL, não
+   decorativo (concluída = peça cheia na paleta; em curso = quarto-de-círculo
+   amarelo Marajó; pendente = "concreto" tracejado). A ousadia mora aqui —
+   e só aqui. Era receita em 6 telas. Três leituras com a mesma gramática:
+   tramitação · ciclo de e-SIC · ciclo de obrigação de compliance. A11y: a
+   faixa inteira é um role="img" com aria-label descrevendo cada etapa —
+   cor nunca é o único sinal. A forma "stepper" (faixa de tramitação) = a
+   faixa + .az-passos (rótulos) + datas honestas nas etapas futuras. */
+.azulejo { display: flex; align-items: center; gap: 0; flex-wrap: wrap; }
+.az-peca { --peca: var(--jade); position: relative; width: 64px; height: 64px; border-radius: 10px; flex: 0 0 auto; overflow: hidden; }
+.az-peca::after { content: ""; position: absolute; inset: 0; }
+/* cor por ETAPA (semântica), nunca por posição no DOM */
+.az-jade      { --peca: var(--jade); }
+.az-cobalto   { --peca: var(--cobalto); }
+.az-telha     { --peca: var(--telha); }
+.az-jadeclaro { --peca: var(--jade-claro); }
+.az-amarelo   { --peca: var(--amarelo); }
+.az-feita { background: var(--peca); }
+.az-feita::after { background: radial-gradient(circle at 0% 100%, color-mix(in srgb, #fff 42%, var(--peca)) 0 48%, transparent 48%); }
+.az-curso { background: color-mix(in srgb, var(--amarelo) 20%, var(--surface)); border: 1px solid color-mix(in srgb, var(--amarelo) 60%, var(--linha)); }
+.az-curso::after { background: radial-gradient(circle at 0% 100%, var(--amarelo) 0 48%, transparent 48%); }
+.az-pend { background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--texto-2) 12%, transparent) 6px 7px); border: 1px dashed var(--linha); }
+.az-pend::after { background: radial-gradient(circle at 0% 100%, color-mix(in srgb, var(--texto-2) 14%, transparent) 0 48%, transparent 48%); }
+.az-con { width: 18px; height: 4px; background: var(--linha); flex: 0 0 auto; }
+.az-con.feito { background: color-mix(in srgb, var(--jade) 55%, var(--linha)); }
+.az-passos { display: flex; gap: 0; flex-wrap: wrap; margin: 0.5rem 0 0; }
+.az-passo { width: 64px; font-size: var(--t-12); color: var(--texto-2); text-align: center; }
+.az-passo + .az-passo { margin-left: 18px; }
+
+/* ============== ILHAS QUE NÃO TEMATIZAM ==============
+   Quando O CONTEÚDO é a coisa, a superfície fica fixa e o tema vira moldura.
+   Inversão proposital: o PLACAR (votação / saúde institucional) é ilha
+   ESCURA nos dois temas (é um telão); o DOCUMENTO (ofício/edital/ata) é ilha
+   de PAPEL nos dois temas (papel é claro mesmo no escuro — candeeiro).
+   Tokens --palco-* / --papel-* vivem em tokens.css. Era receita em
+   sessão/painéis/app (palco) e expediente/editor/ata/convocação (papel). */
+.ilha-palco { background: var(--palco-bg); color: var(--palco-texto); border-radius: var(--raio); padding: 1.2rem 1.3rem; }
+.ilha-palco .rotulo { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .12em; text-transform: uppercase; color: var(--palco-texto-2); }
+.ilha-palco .numero { font-family: var(--mono); font-weight: 600; font-size: var(--t-40); }
+.ilha-papel { background: var(--papel); color: var(--papel-texto); border: 1px solid var(--papel-linha); border-radius: var(--raio); padding: 1.2rem 1.3rem; box-shadow: var(--sombra-papel); }
+.ilha-papel .merge { color: var(--merge); border-bottom: 2px solid var(--merge); background: var(--merge-fundo); padding: 0 2px; }
+
 /* ============== MOVIMENTO REDUZIDO (base) ============== */
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }

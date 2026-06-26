@@ -71,32 +71,10 @@
   .specimen { border-bottom: 1px dashed var(--linha); padding: 0.7rem 0; display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
   .specimen .meta { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); flex: 0 0 120px; }
 
-  /* ---- PADRÕES DE SUPERFÍCIE (receitas; ainda vivem nas telas) ---- */
-  /* faixa de azulejo da tramitação (A ASSINATURA · motivo de Athos Bulcão) */
-  .azulejo { display: flex; align-items: center; gap: 0; flex-wrap: wrap; }
-  .az-peca { --peca: var(--jade); position: relative; width: 64px; height: 64px; border-radius: 10px; flex: 0 0 auto; overflow: hidden; }
-  /* o quarto-de-círculo de Bulcão em TODA peça — a geometria que define a assinatura */
-  .az-peca::after { content: ""; position: absolute; inset: 0; }
-  /* cor por ETAPA (semântica), nunca por posição no DOM */
-  .az-jade      { --peca: var(--jade); }
-  .az-cobalto   { --peca: var(--cobalto); }
-  .az-telha     { --peca: var(--telha); }
-  .az-jadeclaro { --peca: var(--jade-claro); }
-  .az-amarelo   { --peca: var(--amarelo); }
-  /* concluída: peça cheia + quarto de Bulcão num tom claro da mesma família */
-  .az-feita { background: var(--peca); }
-  .az-feita::after { background: radial-gradient(circle at 0% 100%, color-mix(in srgb, #fff 42%, var(--peca)) 0 48%, transparent 48%); }
-  /* em curso: o quarto-de-círculo aberto em amarelo Marajó sobre "concreto" claro */
-  .az-curso { background: color-mix(in srgb, var(--amarelo) 20%, var(--surface)); border: 1px solid color-mix(in srgb, var(--amarelo) 60%, var(--linha)); }
-  .az-curso::after { background: radial-gradient(circle at 0% 100%, var(--amarelo) 0 48%, transparent 48%); }
-  /* pendente: "concreto" tracejado, o quarto apenas insinuado */
-  .az-pend { background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--texto-2) 12%, transparent) 6px 7px); border: 1px dashed var(--linha); }
-  .az-pend::after { background: radial-gradient(circle at 0% 100%, color-mix(in srgb, var(--texto-2) 14%, transparent) 0 48%, transparent 48%); }
-  .az-con { width: 18px; height: 4px; background: var(--linha); flex: 0 0 auto; }
-  .az-con.feito { background: color-mix(in srgb, var(--jade) 55%, var(--linha)); }
-  .az-passos { display: flex; gap: 0; flex-wrap: wrap; margin: 0.5rem 0 0; }
-  .az-passo { width: 64px; font-size: var(--t-12); color: var(--texto-2); text-align: center; }
-  .az-passo + .az-passo { margin-left: 18px; }
+  /* ---- PADRÕES DE SUPERFÍCIE ---- */
+  /* azulejo · ilhas · chips · cartão de sinal: PROMOVIDOS ao chassi
+     (sistema/chassi.css). Permanecem aqui como receita só: anel, nota [GAP],
+     campo e bloco de IA. */
 
   /* anel de prazo (donut honesto) */
   .anel-demo { width: 96px; height: 96px; }
@@ -124,13 +102,6 @@
   [data-tema="escuro"] .ia-selo { color: var(--foco); }
   .ia-rodape { display: flex; gap: 1rem; flex-wrap: wrap; margin: 0.6rem 0 0; font-size: var(--t-12); color: var(--texto-2); }
   .ia-rodape a { color: var(--marca); }
-
-  /* mini-palco / mini-papel para amostra das ilhas */
-  .ilha-palco { background: var(--palco-bg); color: var(--palco-texto); border-radius: var(--raio); padding: 1.2rem 1.3rem; }
-  .ilha-palco .rotulo { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .12em; text-transform: uppercase; color: var(--palco-texto-2); }
-  .ilha-palco .numero { font-family: var(--mono); font-weight: 600; font-size: var(--t-40); }
-  .ilha-papel { background: var(--papel); color: var(--papel-texto); border: 1px solid var(--papel-linha); border-radius: var(--raio); padding: 1.2rem 1.3rem; box-shadow: var(--sombra-papel); }
-  .ilha-papel .merge { color: var(--merge); border-bottom: 2px solid var(--merge); background: var(--merge-fundo); padding: 0 2px; }
 
   /* topo/comando demonstrados estáticos (sem fixar) */
   .demo-estatico .comando { position: static; box-shadow: none; border-radius: var(--raio); border: 1px solid var(--linha); }
@@ -446,7 +417,7 @@
 
       <!-- ===================== AZULEJO ===================== -->
       <section class="secao" id="azulejo">
-        <h2>Faixa de azulejo da tramitação <span class="fonte-tag receita">a assinatura</span></h2>
+        <h2>Faixa de azulejo da tramitação <span class="fonte-tag chassi">a assinatura</span></h2>
         <p class="legenda">A ousadia mora aqui — e só aqui. Um módulo à la <b>Athos Bulcão</b> em que <b>cada peça é uma etapa</b> e o estado é <b>real, não decorativo</b>: concluída = peça cheia na paleta; em curso = quarto-de-círculo amarelo Marajó; pendente = "concreto" tracejado. Tem <b>três leituras</b> com a mesma gramática: (1) tramitação da proposição, (2) ciclo do pedido de e-SIC, (3) ciclo de uma obrigação de compliance.</p>
         <div class="demo">
           <div class="azulejo" role="img" aria-label="Tramitação: Protocolo concluído, Comissões concluído, 1º turno em curso, 2º turno pendente, Sanção pendente">
@@ -463,7 +434,8 @@
         <div class="ficha">
           <span class="quando"><b>Quando:</b> qualquer processo com etapas ordenadas e estado verificável.</span>
           <span><b>A11y:</b> a faixa inteira é um <code>role="img"</code> com <code>aria-label</code> que descreve o estado de cada etapa — cor nunca é o único sinal.</span>
-          <span class="fonte-tag receita">vive em 3 telas · promover como componente parametrizado (próximo passo)</span>
+          <span><b>Stepper:</b> a forma "faixa de tramitação" = a faixa + <code>.az-passos</code> (rótulos) + datas honestas nas etapas futuras.</span>
+          <span class="fonte-tag chassi">chassi.css (.azulejo · .az-*)</span>
         </div>
       </section>
 
@@ -482,7 +454,7 @@
             <p style="margin:.5rem 0 0">À <span class="merge">Sra. Lúcia Andrade</span>, Secretária do Meio Ambiente.</p>
           </div>
         </div>
-        <div class="ficha"><span class="fonte-tag chassi">tokens.css (--palco-* · --papel-*)</span></div>
+        <div class="ficha"><span class="fonte-tag chassi">chassi.css (.ilha-palco · .ilha-papel) + tokens.css (--palco-* · --papel-*)</span></div>
       </section>
 
       <!-- ===================== ANEL ===================== -->
