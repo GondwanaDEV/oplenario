@@ -388,7 +388,7 @@ nem `notificacoes`: `minhas-pendencias` vira a **home do servidor** (cabeçalho 
 | `minhas-pendencias` | vira **home do servidor**: cabeçalho situational + priorização 2D + esvaziar por evento + tipos novos (expediente recebido, adiados C31, ciência) |
 | `notificacoes` | **confirmada distinta** (não vira módulo): classe FALHA + dedup; "lido" mora só aqui |
 | `vereador-app` | 2º estado fora-de-sessão + ciência 1-toque (prova) + chip de voto (pendente→enviado→confirmado) |
-| `editor-proposicao` | IA-degradada + (depois) campo de tema, badge de regime, seletor de espécies |
+| `editor-proposicao` | ✅ **FEITO (26/06)** — IA-degradada (Fase B) **+ ficha técnica**: seletor de **espécie** (PL/PLC/Resolução/Decreto Leg./Emenda LOM/Req./Ind./Moção) + **tema** (alimenta busca/Carta) + **badge de regime** (ordinário/urgência) com nota "a IA sugere, você confirma" |
 | `ata-revisao` | IA-degradada (→ anexação manual) + (fast-follow) selo de proveniência de vendor ao signatário |
 | `portal-cidadao` | recibo de protocolo no ato + link VIVO p/ Carta de Serviços + agenda pública + IA-degradada no resumo |
 | `pauta-convocacao` | ✅ **FEITO (26/06)** — roster de ciência (enviado/entregue/**ciente**/bounce, com reenviar no bounce; fecha o loop da ciência 1-toque do `vereador-app`) + adiado **C31** (badge "adiado · 1ª vez") + **badge de regime** (ordinário/urgência) |

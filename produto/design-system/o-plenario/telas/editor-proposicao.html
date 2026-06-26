@@ -30,6 +30,21 @@
   .doc-cab .titulo h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.25rem 0 0; line-height: 1.1; }
   .doc-cab .titulo .sub { font-size: var(--t-13); color: var(--texto-2); margin: 0.45rem 0 0; }
   .doc-cab .titulo .sub b { color: var(--texto); font-weight: 600; }
+
+  /* ficha técnica da proposição: espécie + tema + regime */
+  .doc-ficha { display: flex; gap: 0.8rem 1.5rem; flex-wrap: wrap; align-items: flex-end; margin: 1rem 0 0; padding: 0.95rem 1.1rem; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); }
+  .ficha-campo { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+  .ficha-campo label { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .05em; text-transform: uppercase; color: var(--texto-2); }
+  .ficha-campo select { font-family: var(--corpo); font-size: var(--t-14); color: var(--texto); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 50%, var(--linha)); border-radius: var(--raio-sm); padding: 0.5rem 0.7rem; min-height: 42px; cursor: pointer; }
+  .regime-badge { display: inline-flex; align-items: center; gap: 0.35rem; font-family: var(--mono); font-size: var(--t-13); font-weight: 600; border-radius: 999px; padding: 0.4rem 0.8rem; min-height: 42px; box-sizing: border-box; }
+  .regime-badge svg { flex: 0 0 auto; }
+  .regime-ordinario { color: var(--texto-2); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 45%, var(--linha)); }
+  .regime-urgencia { color: #fff; background: var(--telha-fundo); border: 1px solid var(--telha-fundo); }
+  .ficha-regime-wrap { display: flex; align-items: center; gap: 0.5rem; }
+  .ficha-regime-wrap .troca { font-family: var(--corpo); font-size: var(--t-12); font-weight: 600; color: var(--acento-texto); background: none; border: none; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; padding: 0; }
+  .ficha-nota { flex-basis: 100%; font-size: var(--t-12); color: var(--texto-2); margin: 0.2rem 0 0; display: flex; align-items: flex-start; gap: 0.4rem; line-height: 1.4; }
+  .ficha-nota svg { flex: 0 0 auto; color: var(--cobalto); margin-top: 1px; }
+  [data-tema="escuro"] .ficha-nota svg { color: var(--foco); }
   .doc-meta { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; justify-content: flex-end; }
 
   .chip { display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.28rem 0.7rem; border: 1px solid transparent; white-space: nowrap; }
@@ -220,6 +235,49 @@
         Salvo há 12s
       </span>
     </div>
+  </div>
+
+  <!-- ficha técnica: espécie + tema + regime (alimentam o documento, a tramitação e a busca) -->
+  <div class="doc-ficha" role="group" aria-label="Ficha técnica da proposição">
+    <div class="ficha-campo">
+      <label for="f-especie">Espécie</label>
+      <select id="f-especie">
+        <option selected>Projeto de Lei</option>
+        <option>Projeto de Lei Complementar</option>
+        <option>Projeto de Resolução</option>
+        <option>Projeto de Decreto Legislativo</option>
+        <option>Emenda à Lei Orgânica</option>
+        <option>Requerimento</option>
+        <option>Indicação</option>
+        <option>Moção</option>
+      </select>
+    </div>
+    <div class="ficha-campo">
+      <label for="f-tema">Tema</label>
+      <select id="f-tema">
+        <option selected>Meio ambiente</option>
+        <option>Saúde</option>
+        <option>Educação</option>
+        <option>Mobilidade urbana</option>
+        <option>Assistência social</option>
+        <option>Administração e finanças</option>
+        <option>Segurança alimentar</option>
+      </select>
+    </div>
+    <div class="ficha-campo">
+      <label for="f-regime">Regime de tramitação</label>
+      <span class="ficha-regime-wrap">
+        <span class="regime-badge regime-ordinario" id="f-regime">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          Ordinário
+        </span>
+        <button class="troca" type="button">pedir urgência</button>
+      </span>
+    </div>
+    <p class="ficha-nota">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4z"/></svg>
+      <span>A espécie define o rito e o quórum; o tema alimenta a busca e a Carta de Serviços; o regime ajusta os prazos. A IA sugere a espécie pela ementa, mas <b>quem confirma é você</b>.</span>
+    </p>
   </div>
 
   <div class="demo-strip" role="group" aria-label="Demonstração de design: estado do copiloto">
