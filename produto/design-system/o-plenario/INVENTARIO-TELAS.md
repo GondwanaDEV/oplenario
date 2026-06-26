@@ -297,6 +297,11 @@ nem `notificacoes`: `minhas-pendencias` vira a **home do servidor** (cabeçalho 
   os botões passarem AA; "Redigir manualmente" / "Anexar ata externa") + banner `.sinal` + contrato (gravação preservada,
   placar oficial é a fonte, votações/presença não dependem da IA). **Honestidade periférica:** chips "Rascunho de IA"/"3
   pontos" somem e o comando "Aprovar" desabilita no IA-off (não há ata). AA 2 temas (banner 15.51/12.62 · borda 4.92/9.23).
+- ✅ **R-IA-1 em `portal-cidadao` FEITO (26/06)** — 3ª superfície, pública/white-label. Fallback **mínimo e honesto**:
+  só o **resumo em linguagem simples** é IA → no IA-off ele vira **nota âmbar** ("resumo indisponível; volta ao
+  reconectar"), e **todo o factual permanece** — a faixa de azulejo da tramitação, ref/autoria/"Em votação", permalink
+  URN e **"Ler o texto completo"** (a autoridade). O link "Achou um erro no resumo?" some. Reforça o contrato: a IA é
+  assistiva, o ato oficial prevalece. AA 2 temas (nota 15.51/12.62 · borda âmbar 3.63/6.95 ✓≥3 · "ler texto" 9.02/5.72).
 - **Próximas superfícies de R-IA-1:**
   `portal-cidadao`, busca (`proposicoes`/`legislacao`), `legendas-ao-vivo`. **Não é um componente único:** só o
   **banner honesto** + o **contrato "IA-off = o ato legislativo fecha sem ela"** é transversal; o **fallback é
