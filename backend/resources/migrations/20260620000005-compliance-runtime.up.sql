@@ -19,12 +19,14 @@ CREATE TABLE IF NOT EXISTS compliance.prazo_dominio_ativo (
 );
 -- sweep do runtime (§22.7.7): varre obrigacoes ABERTAS por ente/prazo. Index PARCIAL nao indexa as ja
 -- encerradas (cumprida|dispensada|cancelada), que crescem sem limite mas nunca sao relidas no caminho quente.
+--;;
 CREATE INDEX IF NOT EXISTS idx_prazo_dominio_ativo_sweep
   ON compliance.prazo_dominio_ativo (ente_id, vence_em)
   WHERE estado IN ('pendente', 'vencida');
 
 -- §22.7.7: compliance_avaliacao APPEND-ONLY = a prova de compliance (Invariante 10). Sem UPDATE/DELETE.
 -- Sabor CONTINUO e veredito 'inaplicavel' NAO materializam obrigacao -> obrigacao_id NULL.
+--;;
 CREATE TABLE IF NOT EXISTS compliance.compliance_avaliacao (
   id                  uuid PRIMARY KEY,
   ente_id             uuid NOT NULL,
@@ -39,8 +41,10 @@ CREATE TABLE IF NOT EXISTS compliance.compliance_avaliacao (
 );
 -- dois acessos de leitura: historico de UMA obrigacao; e auditoria por template (regra continua / painel) numa
 -- tabela append-only que cresce sem limite -> Seq Scan sem estes indices.
+--;;
 CREATE INDEX IF NOT EXISTS idx_compliance_avaliacao_obrigacao
   ON compliance.compliance_avaliacao (ente_id, obrigacao_id, avaliado_em);
+--;;
 CREATE INDEX IF NOT EXISTS idx_compliance_avaliacao_ente_template
   ON compliance.compliance_avaliacao (ente_id, template_chave, avaliado_em DESC);
 
@@ -48,6 +52,7 @@ CREATE INDEX IF NOT EXISTS idx_compliance_avaliacao_ente_template
 -- o ESTADO de submissao evolui via UPDATE no ciclo (rascunho -> ... -> aceita|rejeitada). Binario no objeto_store; aqui so metadados + ponteiro.
 -- Costura: remessa_enviada(ente, sistema, competencia) = EXISTS linha estado='aceita'. Rejeicao NAO cumpre a obrigacao
 -- (Invariante 10: o registro do artefato/versao nao e apagado nem sobrescrito).
+--;;
 CREATE TABLE IF NOT EXISTS compliance.remessa_gerada (
   id                  uuid PRIMARY KEY,
   ente_id             uuid NOT NULL,
@@ -66,6 +71,7 @@ CREATE TABLE IF NOT EXISTS compliance.remessa_gerada (
   UNIQUE (ente_id, template_chave, competencia, versao)     -- §22.7.8: re-emissao = nova versao
 );
 -- costura remessa_enviada: so a linha 'aceita' importa. Index PARCIAL numa tabela que acumula versoes/estados intermediarios.
+--;;
 CREATE INDEX IF NOT EXISTS idx_remessa_gerada_costura
   ON compliance.remessa_gerada (ente_id, sistema, competencia)
   WHERE estado = 'aceita';

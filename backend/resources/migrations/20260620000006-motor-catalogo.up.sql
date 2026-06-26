@@ -17,6 +17,7 @@ CREATE SCHEMA IF NOT EXISTS motor;
 -- (regra federal/tribunal_de_contas e lei uniforme central; copia-la por ~1.500 entes seria insustentavel — S2).
 -- Versionada por COPIA INTEGRAL (§22.4 eixo C): mudar a regra = nova versao, a anterior vira 'superada'.
 -- ===========================================================================
+--;;
 CREATE TABLE IF NOT EXISTS motor.template_compliance (
   id                     uuid PRIMARY KEY,
   chave_template         text NOT NULL,                                  -- id logico estavel (ex.: "remessa_mensal_sim"), constante entre versoes
@@ -45,6 +46,7 @@ CREATE TABLE IF NOT EXISTS motor.template_compliance (
 );
 -- resolucao "quais regras deste regime": index por (dominio, chave_dominio). NAO comeca por ente_id
 -- — e tabela de DOMINIO (excecao consciente a §22.2, justificada por S2 — §22.7.6 disciplina derivada).
+--;;
 CREATE INDEX IF NOT EXISTS idx_template_compliance_dominio
   ON motor.template_compliance (dominio, chave_dominio)
   WHERE estado_versao = 'vigente';
@@ -57,6 +59,7 @@ CREATE INDEX IF NOT EXISTS idx_template_compliance_dominio
 -- UNICA tabela TENANT no schema 'motor' (as outras 4 sao dominio): RLS + particao hash(ente_id) = politica
 -- global de tenancy (deferida, como na …0005); isolamento por filtro de query + guard ate la (§22.10 l.1276).
 -- ===========================================================================
+--;;
 CREATE TABLE IF NOT EXISTS motor.compliance_regra_tenant (
   id                  uuid PRIMARY KEY,
   ente_id             uuid NOT NULL,                                      -- guard cross-schema -> admin_sistema.ente (§22.10); sem FK
@@ -80,6 +83,7 @@ CREATE TABLE IF NOT EXISTS motor.compliance_regra_tenant (
 );
 -- sweep de re-validacao INVERSO: dado um template (versao superada / bump de registry), achar os bindings
 -- ativos que precisam re-validar (parcial em 'ativa' — opt-out inativo nao re-valida).
+--;;
 CREATE INDEX IF NOT EXISTS idx_compliance_regra_tenant_template
   ON motor.compliance_regra_tenant (template_chave)
   WHERE ativa;
@@ -89,6 +93,7 @@ CREATE INDEX IF NOT EXISTS idx_compliance_regra_tenant_template
 -- o _ativo de runtime mora em compliance, §22.7.7). Override por Oficio Circular (S3 "prazo deslizante"):
 -- append-only + flag 'vigente'. Lido pelo builtin prazo_vigente(dominio, tipo, competencia). DOMINIO, sem ente_id.
 -- ===========================================================================
+--;;
 CREATE TABLE IF NOT EXISTS motor.prazo_dominio_vigente (
   id             uuid PRIMARY KEY,
   dominio        text NOT NULL,                                          -- federal|tribunal_de_contas
@@ -105,9 +110,11 @@ CREATE TABLE IF NOT EXISTS motor.prazo_dominio_vigente (
 -- UNIQUE via INDICE com COALESCE: chave_dominio e NULL p/ federal, e no Postgres NULL != NULL faria a
 -- constraint inline DEIXAR PASSAR duplicatas federais. Sentinela '' nunca colide com jurisdicao real.
 -- (a) cada fonte e uma linha (append-only do deslize por Oficio Circular):
+--;;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_prazo_dominio_vigente_fonte
   ON motor.prazo_dominio_vigente (dominio, COALESCE(chave_dominio, ''), tipo_prazo, chave_periodo, fonte);
 -- (b) exatamente UMA vigente por (dominio,chave_dominio,tipo_prazo,chave_periodo) — invariante do "deslizante":
+--;;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_prazo_dominio_vigente_unico
   ON motor.prazo_dominio_vigente (dominio, COALESCE(chave_dominio, ''), tipo_prazo, chave_periodo)
   WHERE vigente;
@@ -116,6 +123,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_prazo_dominio_vigente_unico
 -- B4 (§22.7.6): calendario_feriado — feriados nacional + municipal, lidos por proximo_dia_util/soma_dias_uteis.
 -- DOMINIO, sem ente_id. municipio_id cruza por guard p/ cadastros.municipios (sem FK cross-schema). Moveis ja resolvidas na carga.
 -- ===========================================================================
+--;;
 CREATE TABLE IF NOT EXISTS motor.calendario_feriado (
   id            uuid PRIMARY KEY,
   jurisdicao    text NOT NULL,                                           -- nacional|municipal
@@ -129,6 +137,7 @@ CREATE TABLE IF NOT EXISTS motor.calendario_feriado (
 -- UNIQUE via INDICE com COALESCE: municipio_id e NULL p/ feriado nacional, e NULL != NULL deixaria passar
 -- dois nacionais na mesma data. Sentinela nil-uuid nunca colide com municipio real. Serve TAMBEM de index
 -- de lookup (proximo_dia_util/soma_dias_uteis) -> dispensa um index separado redundante.
+--;;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_calendario_feriado_unico
   ON motor.calendario_feriado (jurisdicao, COALESCE(municipio_id, '00000000-0000-0000-0000-000000000000'::uuid), data);
 
@@ -137,6 +146,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_calendario_feriado_unico
 -- funcoes de relacao = declarados EM CODIGO, nao tabela). Da referente ao registry_versao_ref de B1 e
 -- dirige o passe de re-validacao no deploy quando uma assinatura muda. DOMINIO, sem ente_id.
 -- ===========================================================================
+--;;
 CREATE TABLE IF NOT EXISTS motor.registry_catalogo_versao (
   id          uuid PRIMARY KEY,
   versao      text NOT NULL,                                             -- a chave carimbada (ex.: "registry-v1@2026-06-20" = oplenario.motor.catalogo/CATALOGO-VERSAO)

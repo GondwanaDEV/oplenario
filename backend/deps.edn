@@ -11,6 +11,7 @@
         metosin/malli                           {:mvn/version "0.16.4"}
         metosin/jsonista                        {:mvn/version "0.3.10"}
         migratus/migratus                       {:mvn/version "1.5.4"}
+        ch.qos.logback/logback-classic          {:mvn/version "1.5.6"}   ; backend SLF4J — logging real (Inv.7); mata o warning NOP
         com.taoensso/carmine                    {:mvn/version "3.4.1"}} ; client Redis-protocol (Valkey)
  :aliases
  {:dev  {:extra-paths ["dev" "test"]}

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Logging do core (Inv.7). Nivel WARN por padrao p/ saida limpa de teste; app loggers sobem p/
+     INFO por override quando precisar. Tuning fino (estruturado/JSON + ente_id em todo sinal, Inv.8) e' F7. -->
+<configuration>
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n</pattern>
+    </encoder>
+  </appender>
+  <root level="WARN">
+    <appender-ref ref="CONSOLE"/>
+  </root>
+</configuration>
