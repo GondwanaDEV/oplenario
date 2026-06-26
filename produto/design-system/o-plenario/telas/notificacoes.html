@@ -59,6 +59,19 @@
   .nt-lida:hover { color: var(--marca); border-color: var(--marca); }
   .nt-ponto { width: 9px; height: 9px; border-radius: 50%; background: var(--marca); margin: 10px 10px 0 0; }
 
+  /* dedup §5.1: a inbox acompanha; o acionável vive na fila (minhas-pendencias). "Lido" mora só aqui. */
+  .dedup-nota { display: flex; align-items: flex-start; gap: 0.5rem; font-size: var(--t-13); color: var(--texto-2); margin: 1rem 0 0; padding: 0.6rem 0.8rem; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); line-height: 1.45; }
+  .dedup-nota svg { flex: 0 0 auto; color: var(--texto-2); margin-top: 1px; }
+  .dedup-nota a { color: var(--acento-texto); font-weight: 600; }
+
+  /* classe FALHA do sistema — distinta do não-lido: informa a falha; a RECUPERAÇÃO vive na home, não aqui */
+  .nt.falha { background: color-mix(in srgb, var(--telha) 6%, var(--surface)); }
+  .nt.falha::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--telha); }
+  .nt-ic.falha { color: var(--acento-texto); background: color-mix(in srgb, var(--telha) 15%, var(--surface-2)); }
+  [data-tema="escuro"] .nt-ic.falha { color: var(--telha-claro, #F0794B); }
+  .nt-falha-tag { display: inline-flex; align-items: center; gap: 0.3rem; font-family: var(--mono); font-size: 0.64rem; letter-spacing: .06em; text-transform: uppercase; font-weight: 600; color: var(--acento-texto); border: 1px solid color-mix(in srgb, var(--telha) 45%, transparent); border-radius: 4px; padding: 0.12rem 0.42rem; margin: 0 0 0.4rem; }
+  .nt-falha-tag::before { content: ""; width: 6px; height: 6px; border-radius: 2px; background: var(--telha); flex: 0 0 auto; }
+
   @media (max-width: 620px) {
     .nt { grid-template-columns: 36px 1fr; }
     .nt-dir { grid-column: 2; flex-direction: row; align-items: center; justify-content: space-between; width: 100%; }
@@ -98,8 +111,8 @@
   <div class="pg-cab">
     <div>
       <span class="eyebrow">Central de notificações</span>
-      <h1>Notificações <span class="badge" aria-label="4 não lidas">4</span></h1>
-      <p class="sub">O que mudou no que é seu — prazos, tramitação, sessões e sistema.</p>
+      <h1>Notificações <span class="badge" aria-label="6 não lidas">6</span></h1>
+      <p class="sub">O que mudou no que é seu — falhas, prazos, tramitação, sessões e sistema.</p>
     </div>
     <button class="btn btn-contorno btn-mini" type="button">Marcar todas como lidas</button>
   </div>
@@ -107,15 +120,45 @@
   <div class="segs" role="group" aria-label="Filtrar por tipo">
     <button type="button" aria-pressed="true">Tudo</button>
     <button type="button" aria-pressed="false">Não lidas</button>
+    <button type="button" aria-pressed="false">Falhas</button>
     <button type="button" aria-pressed="false">Prazos</button>
     <button type="button" aria-pressed="false">Tramitação</button>
     <button type="button" aria-pressed="false">Sessões</button>
   </div>
 
+  <p class="dedup-nota">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 8v4m0 4h.01"/><circle cx="12" cy="12" r="9"/></svg>
+    <span>Aqui você <b>acompanha</b> — o que exige sua ação fica em <a href="minhas-pendencias.html">Minhas pendências</a> e some de lá sozinho quando o ato é concluído. “Lido” mora só aqui; o sino conta a sua fila, não esta lista.</span>
+  </p>
+
   <!-- HOJE -->
   <section class="grupo" aria-label="Hoje">
     <h2>Hoje</h2>
     <div class="lista">
+
+      <!-- classe FALHA: informa a falha de sistema; a recuperação vive na home/editor -->
+      <article class="nt falha nao-lida">
+        <span class="nt-ic falha" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+        <div class="nt-mid">
+          <span class="nt-falha-tag">Falha</span>
+          <h3>A transcrição da 14ª sessão foi interrompida</h3>
+          <p>O serviço de IA caiu durante a gravação; o rascunho da ata não foi gerado. A <b>gravação está íntegra</b> — você pode redigir a ata manualmente ou tentar de novo quando o serviço voltar.</p>
+          <a class="ir" href="ata-revisao.html">Resolver na ata <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+        </div>
+        <div class="nt-dir"><span class="nt-quando">há 20min</span><span class="nt-ponto" role="img" aria-label="Não lida"></span></div>
+      </article>
+
+      <!-- classe FALHA: remessa rejeitada pelo TCE -->
+      <article class="nt falha nao-lida">
+        <span class="nt-ic falha" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6"/><path d="m15 3 6 6M21 3l-6 6" /></svg></span>
+        <div class="nt-mid">
+          <span class="nt-falha-tag">Falha</span>
+          <h3>O TCE-CE rejeitou a última remessa</h3>
+          <p>A remessa de prestação de contas voltou com 2 inconsistências de validação. A <b>janela ainda está aberta</b> — corrija e reenvie para cumprir o prazo.</p>
+          <a class="ir" href="minhas-pendencias.html">Corrigir a remessa <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+        </div>
+        <div class="nt-dir"><span class="nt-quando">há 40min</span><span class="nt-ponto" role="img" aria-label="Não lida"></span></div>
+      </article>
 
       <article class="nt nao-lida">
         <span class="nt-ic prazo" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>

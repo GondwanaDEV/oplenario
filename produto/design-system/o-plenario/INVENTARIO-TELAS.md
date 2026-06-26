@@ -338,8 +338,14 @@ nem `notificacoes`: `minhas-pendencias` vira a **home do servidor** (cabeçalho 
     **expediente recebido** ("distribuir documentos"), e seção **"Para ciência"** (acusar ciência em 1 toque, "não
     conclui o ato"). AA 2 temas (lede 14.41/15.51 · sub 7.11/7.83 · gchips 5.12–8.50 · bordas-gravidade legal 3.42/9.23,
     reg 3.77/4.46, **adm 8.50/7.59** — jade sólido, corrigido de 1.40 a 55%-alpha · res-ciência 5.41/5.71).
-  - **Restam (3/4):** `notificacoes` → classe de FALHA distinta + dedup (regra §5.1); `vereador-app` → 2º estado
-    fora-de-sessão + ciência 1-toque + chip de estado do voto; `paineis-mesa` → ver abaixo.
+  - ✅ **`notificacoes` FEITO (26/06)** — 2ª das 4. **Classe FALHA distinta** (telha: acento + tag + ícone, vs o
+    não-lido jade) para falhas de sistema — transcrição interrompida (consumidor R-IA-1) e remessa rejeitada pelo TCE;
+    **informa a falha, a recuperação vive na home/editor** (deep-link "Resolver na ata"/"Corrigir a remessa"), nunca
+    completa o ato aqui. **Dedup §5.1 cravado** em nota de cabeçalho ("aqui você acompanha; o acionável fica em Minhas
+    pendências e some de lá sozinho; 'lido' mora só aqui; o sino conta a sua fila, não esta lista") + filtro "Falhas".
+    AA 2 temas (dedup 7.54/5.90 · falha-tag 4.76/5.33 · acento-telha 3.50/3.71 ✓≥3 · h3 14.42/12.00 · deep-link 7.91/6.32).
+  - **Restam (2/4):** `vereador-app` → 2º estado fora-de-sessão + ciência 1-toque + chip de estado do voto;
+    `paineis-mesa` → ver abaixo.
 - **`paineis-mesa` (HERO aprovado):** o verde **"A Casa está em dia" continua canônico e o default da demo**; o
   cartão de FALHA é **pele condicional do MESMO placar** (ramo telha já antecipado no SVG `:435`), renderizado só
   quando há falha real — **nunca faixa fixa nova** (não inverter a 1ª impressão de venda). + lente **gated do
