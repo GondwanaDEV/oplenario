@@ -22,4 +22,6 @@
   :test {:extra-paths ["test/unit" "test/integration" "test/e2e"]
          :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}
                        clj-kondo/clj-kondo {:mvn/version "2026.05.25"}} ; analise p/ o import-lint (§22.10)
-         :main-opts   ["-m" "kaocha.runner"]}}}
+         :main-opts   ["-m" "kaocha.runner"]}
+  :build {:deps      {io.github.clojure/tools.build {:mvn/version "0.10.5"}}
+          :ns-default build}}}

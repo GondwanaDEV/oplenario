@@ -1,0 +1,6 @@
+target
+.cpcache
+.clj-kondo/.cache
+test
+docker-compose.yml
+STRUCTURE.md
