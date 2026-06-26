@@ -390,7 +390,7 @@ nem `notificacoes`: `minhas-pendencias` vira a **home do servidor** (cabeçalho 
 | `vereador-app` | 2º estado fora-de-sessão + ciência 1-toque (prova) + chip de voto (pendente→enviado→confirmado) |
 | `editor-proposicao` | ✅ **FEITO (26/06)** — IA-degradada (Fase B) **+ ficha técnica**: seletor de **espécie** (PL/PLC/Resolução/Decreto Leg./Emenda LOM/Req./Ind./Moção) + **tema** (alimenta busca/Carta) + **badge de regime** (ordinário/urgência) com nota "a IA sugere, você confirma" |
 | `ata-revisao` | IA-degradada (→ anexação manual) + (fast-follow) selo de proveniência de vendor ao signatário |
-| `portal-cidadao` | recibo de protocolo no ato + link VIVO p/ Carta de Serviços + agenda pública + IA-degradada no resumo |
+| `portal-cidadao` | ✅ **FEITO (26/06)** — IA-degradada no resumo (Fase B) + **recibo de protocolo no ato** (nº + recibo na hora = marco do prazo) + card **Agenda pública** (próximas sessões/audiências) + card **Carta de Serviços** (13.460, prazos por serviço) na navegação cívica |
 | `pauta-convocacao` | ✅ **FEITO (26/06)** — roster de ciência (enviado/entregue/**ciente**/bounce, com reenviar no bounce; fecha o loop da ciência 1-toque do `vereador-app`) + adiado **C31** (badge "adiado · 1ª vez") + **badge de regime** (ordinário/urgência) |
 | `sessao-ao-vivo`/`telao` | ✅ **FEITO (26/06)** — estado de **EMPATE** (re-skin condicional do mesmo placar: 15×15 + nota telha "desempate pelo Regimento" `[Regimento]`) + **recontagem** como incidente/ato nomeado (selado no histórico) + **presença append-only** (chamada/entradas/saídas não se editam). Expediente-ao-vivo e ata-anterior-ao-vivo = fast-follow |
 | `console-operador` | handoff operador→1º admin (C03) + semântica de lifecycle (suspensão preserva portal/e-SIC, LAI) |

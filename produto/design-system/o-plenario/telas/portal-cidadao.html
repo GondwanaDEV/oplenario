@@ -205,6 +205,12 @@
   .azulejo-pedido text.pendente { fill: var(--texto-2); opacity: .62; }
 
   .balcao-acoes { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 1.3rem 0 0; }
+  /* recibo de protocolo no ato — a prova de que pediu */
+  .recibo-nota { display: flex; align-items: flex-start; gap: 0.55rem; margin: 1rem 0 0; padding: 0.75rem 0.9rem; background: color-mix(in srgb, var(--marca) 7%, var(--surface)); border: 1px solid color-mix(in srgb, var(--marca) 28%, var(--linha)); border-left: 3px solid var(--marca); border-radius: var(--raio-sm); font-size: var(--t-13); color: var(--texto); line-height: 1.5; }
+  .recibo-nota svg { flex: 0 0 auto; color: var(--marca); margin-top: 1px; }
+  [data-tema="escuro"] .recibo-nota svg { color: var(--jade-claro); }
+  .recibo-nota b { font-weight: 600; }
+  .recibo-nota .prot { font-family: var(--mono); color: var(--acento-texto); }
   .recurso-nota { font-size: var(--t-13); color: var(--texto-2); margin: 0.95rem 0 0; display: flex; align-items: flex-start; gap: 0.5rem; }
   .recurso-nota a { font-weight: 600; }
   .recurso-nota svg { color: var(--texto-2); flex: 0 0 auto; margin-top: 2px; }
@@ -563,6 +569,10 @@
               </a>
               <a class="btn btn-contorno" href="#">Acompanhar pelo número</a>
             </div>
+            <p class="recibo-nota">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+              <span>Ao enviar, você recebe <b>na hora</b> um número de protocolo e um <b>recibo</b> (ex.: <span class="prot">2026/00489</span>) — a prova de que pediu e o <b>marco em que o prazo começa a contar</b>. O recibo chega também por e-mail.</span>
+            </p>
             <p class="recurso-nota">
               <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true"><path d="M9 3L4.5 7.5 9 12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
               <span>Não concordou com a resposta? Você pode <a href="#">recorrer</a> — o pedido vai a uma nova instância de revisão.</span>
@@ -636,6 +646,17 @@
             <span class="ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 20 20"><rect x="3" y="3" width="6" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="3" width="6" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="3" y="11" width="6" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M11 14h6M14 11v6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
             <b>Dados abertos</b>
             <span>Baixe os dados da Câmara em formato aberto, prontos para reusar.</span>
+          </a>
+          <a href="#" id="agenda">
+            <span class="ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 20 20"><rect x="3" y="4.5" width="14" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3 8h14M7 2.5v3M13 2.5v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="7" cy="11.5" r="1" fill="currentColor"/><circle cx="10.5" cy="11.5" r="1" fill="currentColor"/></svg></span>
+            <b>Agenda pública</b>
+            <span>As próximas sessões, audiências públicas e prazos abertos — com aviso quando uma matéria sua entra em pauta.</span>
+            <span class="prazo-tag">Próxima: 16ª Ordinária · qui, 14h</span>
+          </a>
+          <a href="#" id="carta-servicos">
+            <span class="ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 20 20"><path d="M5 2.5h7l3 3V17a.5.5 0 0 1-.5.5H5A.5.5 0 0 1 4.5 17V3A.5.5 0 0 1 5 2.5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M11.5 2.5V6h3.5M7 10h6M7 13h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
+            <b>Carta de Serviços</b>
+            <span>O que a Câmara oferece ao cidadão, com requisitos, canais e <b>prazos de cada serviço</b> — exigência da Lei 13.460.</span>
           </a>
         </nav>
       </section>
