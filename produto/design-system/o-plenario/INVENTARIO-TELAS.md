@@ -268,14 +268,20 @@ nem `notificacoes`: `minhas-pendencias` vira a **home do servidor** (cabeçalho 
 
 ### 5.2 Núcleo confirmado do 1º push (Fase A + B + C)
 
-**Fase A — promover ao chassi (`sistema/chassi.css` + `componentes.html`), ANTES das homes:**
-- **Cartão de sinal** — UM componente parametrizado por variante (informativo `countdown` ↔ **FALHA**
-  `ação-requerida`, token telha/`--telha-fundo` só na variante crítica). **NÃO** dois componentes: FALHA é a
-  instância de gravidade-crítica do sinal; "multi-destinatário" é roteamento do motor (backend), não eixo visual.
-- Receitas **≥2 usos já provadas** (gatilho de promoção já disparou): azulejo da tramitação, ilha-papel, chips,
-  campos, `.card`, faixa de tramitação, selo encadeado, passos do wizard, botão gov.br, camada de confiança IA.
-- **NÃO promover ainda** o *estado degradado de IA* nem a *FALHA* como peça pré-fabricada **antes do 1º uso** —
-  regra do projeto (`PADROES §1`: promove no **2º uso real**). Constrói-se como receita numa superfície primeiro.
+**Fase A — promover ao chassi (`sistema/chassi.css` + `componentes.html`), ANTES das homes — ✅ FEITA (26/06):**
+- ✅ **Cartão de sinal** (`.sinal`) — UM componente parametrizado por gravidade (informativo ↔ **crítico/FALHA**,
+  telha só na variante crítica). Absorve as 3 formas inline (`minhas-pendencias .item` · `vereador-app .card` ·
+  `paineis-mesa .fila-item`). Fronteira §5.2 documentada na galeria: o sinal acionável esvazia por evento, não
+  por botão "feito". Commit `98223b8`.
+- ✅ **Receitas ≥2 usos** promovidas: **azulejo** (faixa + stepper de tramitação), **ilha-palco**, **ilha-papel**,
+  **chips** (família unificada + `.chip-cheio`), **selo encadeado**, **passos do wizard**, **botão gov.br**.
+  Commits `5b35750` (azulejo+ilhas) · `9dea3ad` (selo+wizard+gov.br). AA medida nos 2 temas com flush em cada leva.
+- **Não promovidas** (2ª leva, deixadas como receita): camada de confiança IA, campos, `.card`, anel de prazo,
+  nota [GAP]. E **respeitado `PADROES §1`**: o *estado degradado de IA* e a *FALHA de sistema* **não** foram
+  pré-fabricados — a variante crítica do `.sinal` é o tier de "ação requerida", e essas aplicações se constroem
+  por-superfície no 1º uso real (Fase B).
+- **Achado AA registrado:** `.ilha-papel .merge` no escuro = 3.72 (token `--merge` herdado; sublinhado 2px é o
+  sinal gráfico) — candidato a um passe futuro de token (`GUIDELINES §5.1`), não re-tonalizado num commit de promoção.
 
 **Fase B — retrofit barato (0 tela nova, maior retorno por hora):**
 - **Estado degradado de IA (R-IA-1)** em `editor-proposicao` (1º — validar nos 2 temas), depois `ata-revisao`,

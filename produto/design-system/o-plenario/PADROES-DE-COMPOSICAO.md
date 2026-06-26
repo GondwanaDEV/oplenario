@@ -55,14 +55,21 @@ de referência; o que resta é **aplicar**. O cruzamento arquétipo × feature e
 Padrões já provados que vivem inline numa ou mais telas. Marcados como `receita` na galeria. A coluna
 **usos** dispara a promoção (≥2 ⇒ promover ao chassi).
 
+> **✅ Fase A do INVENTARIO §5.2 (26/06) — promovidos ao chassi:** o NOVO **cartão de sinal**,
+> mais **azulejo** (faixa + stepper de tramitação), **ilha-palco**, **ilha-papel**, **chips**,
+> **selo encadeado**, **passos do wizard** e **botão gov.br**. Saíram do `<style>` da galeria (ou
+> nasceram no chassi) e agora vivem em `sistema/chassi.css`, documentados em `componentes.html`. AA
+> medida nos 2 temas. As telas-fonte migram para o chassi nos seus próprios redesigns (Fase B), não aqui.
+
 | Receita | Onde vive | Usos | Promoção |
 |---|---|---|---|
-| **Faixa de azulejo** (assinatura) | sessão, portal, painéis, ficha, board (coluna), proposições (mini) | 6 | **promover já** — componente SVG parametrizado (estado × cor por etapa); a galeria tem a demo fiel |
+| **Cartão de sinal** (camada de atenção) | minhas-pendencias `.item`, vereador-app `.card`, paineis-mesa `.fila-item` | 3 | ✅ **chassi.css** — `.sinal` parametrizado por gravidade (informativo↔crítico/FALHA); telha só na crítica; DNA `ator·gravidade⟂prazo·UMA ação·deep-link` |
+| **Faixa de azulejo** (assinatura) | sessão, portal, painéis, ficha, board (coluna), proposições (mini) | 6 | ✅ **chassi.css** — `.azulejo`/`.az-*` (estado real × cor por etapa); `role="img"`+`aria-label` |
 | **Camada de confiança da IA** | portal, **editor**, **ata**, protocolo | 4 | **PROMOVER JÁ** — obrigatória onde houver IA (rótulo "gerado por IA" + revisão humana + fonte + reportar erro). Ver `GUIDELINES-CHECKLIST §3`. |
-| **Ilha-palco** (telão escuro) | sessão, painéis, **app do vereador** | 3 | **promover** — tokens `--palco-*` já no chassi; falta o componente de moldura |
-| **Ilha-papel** (documento) | expediente, **editor**, **ata**, **convocação** | 4 | **PROMOVER** — `--papel-*` no chassi; ⚠ texto secundário sobre `--papel-2` escurece no escuro (`GUIDELINES §5.1`) |
+| **Ilha-palco** (telão escuro) | sessão, painéis, **app do vereador** | 3 | ✅ **chassi.css** — `.ilha-palco` (+ tokens `--palco-*`) |
+| **Ilha-papel** (documento) | expediente, **editor**, **ata**, **convocação** | 4 | ✅ **chassi.css** — `.ilha-papel` (+ tokens `--papel-*`); ⚠ `.merge` no escuro = 3.72 (sublinhado 2px = sinal gráfico; `GUIDELINES §5.1`, passe futuro de token) |
 | **Anel de prazo** (donut honesto) | portal, painéis, **pendências** | 3 | **promover** — parametrizar por fração + rótulo + token de cor por urgência |
-| **Chips de status / prazo / semáforo** | painéis, portal, **board**, **pendências**, **app** | 5 | **PROMOVER** — `chip-ok/alerta/risco/prazo/urgência` ícone+texto; `--aviso-texto`; branco sobre telha → `--telha-fundo` |
+| **Chips de status / prazo / semáforo** | painéis, portal, **board**, **pendências**, **app** | 5 | ✅ **chassi.css** — `.chip` + `ok/alerta/risco/info/neutro` + `.chip-cheio` (crítica preenchida); ícone+texto; branco só sobre `--telha-fundo` |
 | **Pino/marca ancorada ↔ painel** (IA lê ESTE conteúdo) | **editor** (artigo↔check), **ata** (trecho↔áudio) | 2 | **promover** — âncora bidirecional texto↔observação; `aria-describedby` |
 | **Campos de formulário** | expediente, protocolo, **pauta**, **config**, galeria | 5 | **promover** com estados (foco/erro/ajuda/disabled); borda ≥3:1 (`58% mix`) |
 | **Cartão `.card`/`.bloco`** (cabeça+corpo) | painéis, board, pendências, pauta, app | 5+ | **promover** — cartão padrão de listas/fichas/cockpits |
@@ -70,11 +77,11 @@ Padrões já provados que vivem inline numa ou mais telas. Marcados como `receit
 | **Player de áudio** (a fonte do ASR) | **ata** | 1 | nova; timeline + playhead + marcadores; promover se outra tela tocar gravação |
 | **Reordenar acessível** (handles + setas teclado) | **pauta** | 1 | nova; `aria-disabled` nas pontas; só onde a ordem é editorial |
 | **Nota [GAP] / [Regimento]** | painéis, **pendências**, **pauta**, **ata**, **autoria**, **anexar-ata** | 6 | **promover** — "regra em homologação / varia por câmara" |
-| **Faixa de azulejo da tramitação** (etapas + datas) | **ficha pública**, **perfil vereador** (mini), portal-materias (mini) | 3 | **promover** — stepper de azulejo (feita/atual/pendente); honesto nas datas futuras |
-| **Selo encadeado / auditoria append-only** | **trilha-auditoria**, **console-operador-tenant** | 2 | **promover** — linha de evento (quando·ator·ação·objeto·selo) + nota de imutabilidade |
-| **Passos do wizard** (indicador 1..n) | **autoria-apoiamento** (+ expediente/nova proposição) | 2 | **promover** — bolas feita/atual + traços; `aria-current="step"` |
+| **Faixa de azulejo da tramitação** (etapas + datas) | **ficha pública**, **perfil vereador** (mini), portal-materias (mini) | 3 | ✅ **chassi.css** — a forma stepper = `.azulejo` + `.az-passos` (rótulos) + datas honestas nas etapas futuras |
+| **Selo encadeado / auditoria append-only** | **trilha-auditoria**, **console-operador-tenant** | 2 | ✅ **chassi.css** — `.lacre`/`.trilha`/`.ev`/`.nota-imut`; ação reusa os chips |
+| **Passos do wizard** (indicador 1..n) | **autoria-apoiamento** (+ expediente/nova proposição) | 2 | ✅ **chassi.css** — `.passos`/`.bola`/`.traco`; `aria-current="step"` |
 | **Switch (toggle on/off)** | **console-operador-tenant** (flags) | 1 | nova; estado por cor **+ rótulo** (Ativado/Desativado) + `role="switch"`/`aria-checked` |
-| **Botão gov.br oficial** | **entrar-govbr**, ficha pública (compor comentário) | 2 | **promover** — azul #1351B4 + wordmark gov.br/amarelo; branco 7.33 / amarelo 4.88 AA |
+| **Botão gov.br oficial** | **entrar-govbr**, ficha pública (compor comentário) | 2 | ✅ **chassi.css** — `.govbr` (marca oficial, não tematiza); branco 7.33 / amarelo 4.88 AA |
 | **Faixa de legenda (closed-caption)** | **legendas-ao-vivo** | 1 | nova; banda fixa-escura tipo-TV (não tematiza), texto grande, controles de tamanho (LBI) |
 | **Folha de confirmação (sheet) 2-toques** | **assinatura-2-toques** | 1 | nova; scrim + sheet biométrica; revisar→confirmar; nota de validade jurídica |
 
@@ -95,8 +102,11 @@ Padrões já provados que vivem inline numa ou mais telas. Marcados como `receit
 
 - **Os 8 arquétipos estão provados e as 8 telas ALTA feitas** (Fase E). Gate de revisão formalizado em
   [`GUIDELINES-CHECKLIST.md`](./GUIDELINES-CHECKLIST.md) (Eixo 4).
-- **Promover a 1ª leva ao chassi parametrizado** — as ≥4-usos primeiro: camada de IA, azulejo, ilha-papel,
-  chips, campos de formulário, `.card`. Documentar cada uma na galeria (`componentes.html`).
+- ✅ **Fase A (26/06) FEITA** — promovidos ao chassi: **cartão de sinal** (novo), azulejo (+ stepper),
+  ilha-palco, ilha-papel, chips, selo encadeado, passos do wizard, botão gov.br. Documentados na galeria.
+  **Resta promover** (2ª leva): camada de IA, campos de formulário, `.card`, anel de prazo, nota [GAP].
+- **Fase B (próxima):** retrofit das telas-fonte para consumirem o chassi (esvazia o CSS inline duplicado)
+  + a camada de atenção nas 4 homes + estado degradado de IA (R-IA-1) por-superfície. Ver `INVENTARIO §5.2`.
 - **Telas MÉDIA** (login/MFA, admin usuários, cadastros, livro de atas, notificações, ouvidoria, navegação
   pública…) — todas **aplicam** arquétipos provados; rodar o `GUIDELINES-CHECKLIST` em cada uma.
 - Manter este registro e o `INVENTARIO-TELAS.md` em dia conforme as telas reais nascerem.
