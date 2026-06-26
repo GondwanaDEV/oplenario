@@ -172,6 +172,9 @@
       <a href="#ilhas">Ilhas: palco · papel</a>
       <a href="#anel">Anel de prazo</a>
       <a href="#ia">Camada de confiança da IA</a>
+      <a href="#selo">Selo encadeado</a>
+      <a href="#wizard">Passos do wizard</a>
+      <a href="#govbr">Botão gov.br</a>
     </nav>
 
     <main id="conteudo">
@@ -491,6 +494,74 @@
           </div>
         </div>
         <div class="ficha"><span class="fonte-tag receita">receita (Portal) · padrão obrigatório onde houver IA pública</span></div>
+      </section>
+
+      <!-- ===================== SELO ENCADEADO ===================== -->
+      <section class="secao" id="selo">
+        <h2>Selo encadeado · auditoria append-only <span class="fonte-tag chassi">chassi.css</span></h2>
+        <p class="legenda">A <b>prova de integridade</b> (Invariante 10): uma trilha <b>append-only</b> em que cada evento é <b>quando · ator · ação · objeto · selo</b>. O <code>.lacre</code> (ilha escura + selo + contador de cadeia) anuncia que o registro é encadeado e imutável; a <code>.nota-imut</code> explica honestamente o que isso significa. Os tipos de ação <b>reusam a família de chips</b>.</p>
+        <div class="demo" style="background:var(--bg);display:grid;gap:0.8rem">
+          <div class="lacre">
+            <span class="selo-ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 5v6c0 5 3.4 8.6 8 10 4.6-1.4 8-5 8-10V5z"/><path d="M9 12l2 2 4-4"/></svg></span>
+            <span class="lc-t"><b>Registro encadeado</b><span>cada evento sela o anterior · verificável</span></span>
+            <span class="lc-cadeia"><b>1.482</b><span>eventos na cadeia</span></span>
+          </div>
+          <div class="trilha">
+            <div class="ev">
+              <span class="quando"><b>26/06 14:08</b><span>RC</span></span>
+              <span class="chip chip-ok">criou</span>
+              <span class="obj"><b><a href="#">PL 042/2026</a></b><span>Hortas Comunitárias</span></span>
+              <span class="selo">#a17f…3b</span>
+            </div>
+            <div class="ev">
+              <span class="quando"><b>26/06 14:21</b><span>RC</span></span>
+              <span class="chip chip-info">editou</span>
+              <span class="obj"><b>Ementa</b><span>ajuste de redação (art. 1º)</span></span>
+              <span class="selo">#c930…8e</span>
+            </div>
+            <div class="ev">
+              <span class="quando"><b>26/06 15:02</b><span>SL</span></span>
+              <span class="chip chip-alerta">exportou</span>
+              <span class="obj"><b>Remessa TCE · maio</b><span>pacote conferido</span></span>
+              <span class="selo">#4f2a…d1</span>
+            </div>
+          </div>
+          <p class="nota-imut"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 8.6 8 10 4.6-1.4 8-5 8-10V5z"/></svg><span><b>Imutável por construção.</b> Eventos não se editam nem se apagam — uma correção é um <b>novo</b> evento que referencia o anterior. O selo encadeia cada registro ao seu antecessor; quebrar a cadeia é detectável.</span></p>
+        </div>
+        <div class="ficha"><span class="fonte-tag chassi">chassi.css (.lacre · .trilha · .ev · .nota-imut)</span></div>
+      </section>
+
+      <!-- ===================== PASSOS DO WIZARD ===================== -->
+      <section class="secao" id="wizard">
+        <h2>Passos do wizard <span class="fonte-tag chassi">chassi.css</span></h2>
+        <p class="legenda">Indicador de etapa para fluxos guiados (nova proposição, autoria/apoiamento, convocação). Bolas <b>feita · atual · pendente</b> + traços; <code>aria-current="step"</code> no passo atual. Em mobile colapsa para mostrar só o passo atual.</p>
+        <div class="demo">
+          <ol class="passos" aria-label="Etapas: Dados (feita), Autoria (feita), Apoiamento (atual), Revisão (pendente)">
+            <li class="feito"><span class="bola" aria-hidden="true">✓</span><span>Dados</span></li>
+            <span class="traco ok" aria-hidden="true"></span>
+            <li class="feito"><span class="bola" aria-hidden="true">✓</span><span>Autoria</span></li>
+            <span class="traco" aria-hidden="true"></span>
+            <li class="atual" aria-current="step"><span class="bola" aria-hidden="true">3</span><span>Apoiamento</span></li>
+            <span class="traco" aria-hidden="true"></span>
+            <li><span class="bola" aria-hidden="true">4</span><span>Revisão</span></li>
+          </ol>
+        </div>
+        <div class="ficha">
+          <span><b>A11y:</b> a lista tem <code>aria-label</code> com o estado de cada passo; <code>aria-current="step"</code> marca o atual — não depende só de cor.</span>
+          <span class="fonte-tag chassi">chassi.css (.passos · .bola · .traco)</span>
+        </div>
+      </section>
+
+      <!-- ===================== BOTÃO GOV.BR ===================== -->
+      <section class="secao" id="govbr">
+        <h2>Botão gov.br <span class="fonte-tag chassi">chassi.css · marca oficial</span></h2>
+        <p class="legenda">Entrada do <b>cidadão</b> pela identidade federal. Usa a <b>marca oficial</b> do gov.br e <b>não tematiza</b> (azul <code>#1351B4</code> + wordmark amarelo <code>#FFCD07</code>). Contrastes da marca: branco s/ azul = <b>7.33</b>; amarelo s/ azul = <b>4.88</b> (AA).</p>
+        <div class="demo" style="max-width:360px">
+          <button class="govbr" type="button">
+            Entrar com <span class="wm">gov<b>.br</b></span>
+          </button>
+        </div>
+        <div class="ficha"><span class="fonte-tag chassi">chassi.css (.govbr)</span></div>
       </section>
 
       <p style="color:var(--texto-2);font-size:var(--t-13);border-top:1px solid var(--linha);padding-top:1.2rem">

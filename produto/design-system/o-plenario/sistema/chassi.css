@@ -264,6 +264,64 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .ilha-papel { background: var(--papel); color: var(--papel-texto); border: 1px solid var(--papel-linha); border-radius: var(--raio); padding: 1.2rem 1.3rem; box-shadow: var(--sombra-papel); }
 .ilha-papel .merge { color: var(--merge); border-bottom: 2px solid var(--merge); background: var(--merge-fundo); padding: 0 2px; }
 
+/* ============== SELO ENCADEADO / AUDITORIA APPEND-ONLY ==============
+   A prova de integridade (Invariante 10): trilha append-only onde cada
+   evento é { quando · ator · ação · objeto · selo }. Era receita em
+   trilha-auditoria + console-operador-tenant. O .lacre (cabeçalho-ilha
+   escura + selo amarelo + contador de cadeia) anuncia "este registro é
+   encadeado e imutável"; a .nota-imut explica honestamente o que isso
+   significa. Os tipos de ação reusam a FAMÍLIA DE CHIPS (criou→chip-ok,
+   editou→chip-info, removeu→chip-risco, exportou→chip-alerta). */
+.lacre { display: flex; align-items: center; gap: 0.9rem; background: var(--palco-bg); color: var(--palco-texto); border-radius: var(--raio); padding: 1rem 1.2rem; box-shadow: var(--sombra); }
+.lacre .selo-ic { width: 42px; height: 42px; border-radius: 11px; flex: 0 0 auto; display: grid; place-items: center; color: var(--palco-bg); background: var(--amarelo); }
+.lacre .lc-t b { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--palco-texto); display: block; }
+.lacre .lc-t span { font-size: var(--t-13); color: var(--palco-texto-2); }
+.lacre .lc-cadeia { margin-left: auto; text-align: right; font-family: var(--mono); }
+.lacre .lc-cadeia b { font-size: var(--t-16); color: var(--palco-texto); font-variant-numeric: tabular-nums; display: block; }
+.lacre .lc-cadeia span { font-size: var(--t-12); color: var(--palco-texto-2); }
+@media (max-width: 560px) { .lacre .lc-cadeia { display: none; } }
+
+.trilha { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; }
+.ev { display: grid; grid-template-columns: 132px auto 1fr auto; gap: 0.3rem 1rem; align-items: center; padding: 0.85rem 1.2rem; border-top: 1px solid var(--linha); }
+.ev:first-child { border-top: none; }
+.ev .quando b { font-family: var(--mono); font-size: var(--t-13); color: var(--texto); font-variant-numeric: tabular-nums; display: block; }
+.ev .quando span { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+.ev .obj { min-width: 0; }
+.ev .obj b { font-size: var(--t-13); color: var(--texto); font-weight: 600; display: block; line-height: 1.25; }
+.ev .obj span { font-size: var(--t-12); color: var(--texto-2); }
+.ev .obj b a { color: var(--marca); text-decoration: none; }
+.ev .obj b a:hover { text-decoration: underline; }
+.ev .selo { font-family: var(--mono); font-size: var(--t-12); color: var(--acento-texto); white-space: nowrap; }
+@media (max-width: 620px) { .ev { grid-template-columns: 1fr auto; } .ev .quando, .ev .obj { grid-column: 1 / -1; } }
+
+.nota-imut { display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.9rem 1.1rem; background: color-mix(in srgb, var(--marca) 6%, var(--surface)); border: 1px solid color-mix(in srgb, var(--marca) 26%, var(--linha)); border-radius: var(--raio); font-size: var(--t-13); color: var(--texto-2); line-height: 1.5; }
+.nota-imut svg { color: var(--marca); flex: 0 0 auto; margin-top: 2px; }
+.nota-imut b { color: var(--texto); font-weight: 600; }
+
+/* ============== PASSOS DO WIZARD (indicador 1..n) ==============
+   Fluxo guiado: bolas feita/atual/pendente + traços. Era receita em
+   autoria-apoiamento (+ expediente/nova proposição). aria-current="step"
+   no passo atual; em mobile colapsa para mostrar só o passo atual. */
+.passos { display: flex; align-items: center; gap: 0; list-style: none; padding: 0; margin: 0; flex-wrap: wrap; }
+.passos li { display: flex; align-items: center; gap: 0.5rem; font-size: var(--t-13); color: var(--texto-2); }
+.passos li .bola { width: 26px; height: 26px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--mono); font-size: var(--t-12); font-weight: 600; background: var(--surface-2); border: 1px solid var(--linha); color: var(--texto-2); }
+.passos li.feito .bola { background: var(--jade); border-color: var(--jade); color: #fff; }
+.passos li.atual .bola { background: var(--cobalto); border-color: var(--cobalto); color: #fff; }
+.passos li.atual { color: var(--texto); font-weight: 600; }
+.passos .traco { width: 28px; height: 2px; background: var(--linha); margin: 0 0.5rem; }
+.passos .traco.ok { background: color-mix(in srgb, var(--jade) 50%, var(--linha)); }
+@media (max-width: 640px) { .passos li span { display: none; } .passos li.atual span { display: inline; } }
+
+/* ============== BOTÃO GOV.BR (oficial) ==============
+   Marca oficial do gov.br — NÃO tematiza (azul #1351B4 + wordmark
+   amarelo #FFCD07, proporções da marca). Branco s/ azul = 7.33;
+   amarelo s/ azul = 4.88 (AA). Era receita em entrar-govbr + ficha
+   pública. Login do cidadão / compor comentário no portal. */
+.govbr { width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.6rem; min-height: 56px; border-radius: var(--raio-sm); border: none; cursor: pointer; background: #1351B4; color: #fff; font-family: var(--corpo); font-weight: 700; font-size: var(--t-16); }
+.govbr:hover { background: #0C3D8C; }
+.govbr .wm { font-family: var(--display); font-weight: 800; letter-spacing: -0.02em; }
+.govbr .wm b { color: #FFCD07; font-weight: 800; }
+
 /* ============== MOVIMENTO REDUZIDO (base) ============== */
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
