@@ -40,6 +40,30 @@
   .secao-card > h2 { font-family: var(--display); font-weight: 600; font-size: var(--t-21); color: var(--texto); margin: 0 0 0.2rem; }
   .secao-card > .desc { color: var(--texto-2); font-size: var(--t-13); margin: 0 0 1.2rem; }
 
+  /* ---- painel Privacidade/LGPD (ROPA) ---- */
+  .secao-card h3 { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); margin: 1.4rem 0 0.2rem; }
+  .secao-card h3 + .desc { margin-bottom: 0.8rem; }
+  .dpo-card { display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; background: color-mix(in srgb, var(--cobalto) 6%, var(--surface-2)); border: 1px solid color-mix(in srgb, var(--cobalto) 25%, var(--linha)); border-radius: var(--raio-sm); padding: 0.9rem 1rem; }
+  [data-tema="escuro"] .dpo-card { background: color-mix(in srgb, var(--foco) 9%, var(--surface-2)); }
+  .dpo-card .ava { width: 42px; height: 42px; border-radius: 11px; flex: 0 0 auto; display: grid; place-items: center; background: var(--cobalto); color: #fff; font-family: var(--mono); font-weight: 700; }
+  .dpo-card .dx { min-width: 0; }
+  .dpo-card .dx b { font-size: var(--t-14); color: var(--texto); display: block; } .dpo-card .dx span { font-size: var(--t-12); color: var(--texto-2); }
+  .dpo-card .lgpd-link { margin-left: auto; display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--t-13); font-weight: 600; color: var(--acento-texto); text-decoration: none; }
+  .dpo-card .lgpd-link:hover { text-decoration: underline; }
+  [data-tema="escuro"] .dpo-card .lgpd-link { color: #FBA083; }
+  .ropa { display: grid; gap: 0.6rem; }
+  .ropa-item { border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.85rem 1rem; background: var(--surface-2); }
+  .ropa-item .ri-top { display: flex; align-items: center; gap: 0.6rem; }
+  .ropa-item .ri-fin { font-weight: 600; font-size: var(--t-14); color: var(--texto); }
+  .ropa-item .ri-base { margin-left: auto; font-family: var(--mono); font-size: 0.64rem; text-transform: uppercase; letter-spacing: .05em; color: var(--cobalto); border: 1px solid color-mix(in srgb, var(--cobalto) 32%, transparent); border-radius: 4px; padding: 0.1rem 0.42rem; white-space: nowrap; }
+  [data-tema="escuro"] .ropa-item .ri-base { color: var(--foco); border-color: color-mix(in srgb, var(--foco) 38%, transparent); }
+  .ropa-item .ri-meta { display: flex; gap: 0.3rem 1.2rem; flex-wrap: wrap; margin-top: 0.5rem; font-size: var(--t-12); color: var(--texto-2); }
+  .ropa-item .ri-meta b { color: var(--texto); font-weight: 600; }
+  .ropa-add { display: inline-flex; align-items: center; gap: 0.4rem; margin-top: 0.7rem; font-family: var(--corpo); font-weight: 600; font-size: var(--t-13); color: var(--marca); background: color-mix(in srgb, var(--marca) 7%, var(--surface)); border: 1px dashed color-mix(in srgb, var(--marca) 40%, var(--linha)); border-radius: var(--raio-sm); padding: 0.55rem 0.9rem; min-height: 42px; cursor: pointer; }
+  .titular-nota { display: flex; align-items: flex-start; gap: 0.5rem; margin: 0.4rem 0 0; padding: 0.7rem 0.85rem; background: color-mix(in srgb, var(--amarelo) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--amarelo-traco) 40%, transparent); border-radius: var(--raio-sm); font-size: var(--t-13); color: var(--texto); line-height: 1.45; }
+  .titular-nota svg { flex: 0 0 auto; color: var(--aviso-texto); margin-top: 1px; }
+  .titular-nota .tag { font-family: var(--mono); font-size: 0.6rem; letter-spacing: .04em; text-transform: uppercase; color: var(--aviso-texto); border: 1px solid color-mix(in srgb, var(--amarelo-traco) 50%, transparent); border-radius: 4px; padding: 0.02rem 0.3rem; }
+
   /* upload de brasão */
   .brasao-linha { display: flex; gap: 1.2rem; align-items: center; flex-wrap: wrap; padding: 0 0 1.2rem; border-bottom: 1px solid var(--linha); margin: 0 0 1.2rem; }
   .brasao-atual { width: 72px; height: 72px; border-radius: var(--raio-sm); border: 1px solid var(--linha); background: var(--surface-2); display: grid; place-items: center; flex: 0 0 auto; }
@@ -119,6 +143,7 @@
       <a href="#" aria-current="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg> Identidade</a>
       <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16v12H4zM4 7l8 6 8-6"/></svg> Contatos e canais</a>
       <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> Transparência</a>
+      <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg> Privacidade · LGPD</a>
       <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5M16 11l2 2 4-4"/></svg> Usuários e perfis</a>
       <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 5h16v14H4zM8 3v4M16 3v4M4 10h16"/></svg> Sessões</a>
     </nav>
@@ -186,6 +211,45 @@
           <span class="txt"><b>Transparência fiscal do órgão</b><span>Publica remuneração, diárias e contratos da casa (art. 8º LAI).</span></span>
           <label class="switch"><input type="checkbox" checked aria-label="Transparência fiscal do órgão" /><span class="trilho" aria-hidden="true"></span><span class="bola" aria-hidden="true"></span></label>
         </div>
+      </section>
+
+      <!-- ===== Privacidade / LGPD — operável pelo DPO ===== -->
+      <section class="secao-card" aria-labelledby="s-lgpd">
+        <h2 id="s-lgpd">Privacidade e proteção de dados</h2>
+        <p class="desc">O Encarregado responde pelos dados pessoais tratados pela Câmara. Aqui ficam o registro de operações (ROPA), os direitos do titular e o acesso de suporte.</p>
+
+        <div class="dpo-card">
+          <span class="ava" aria-hidden="true">RC</span>
+          <div class="dx">
+            <b>Renata Costa — Encarregada de Dados (DPO)</b>
+            <span>encarregado@cmfor.ce.gov.br · contato publicado na Carta de Serviços</span>
+          </div>
+          <a class="lgpd-link" href="grant-suporte-ente.html">Acesso de suporte <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+        </div>
+
+        <h3>Registro de operações de tratamento (ROPA)</h3>
+        <p class="desc">As atividades que tratam dados pessoais, com base legal, categorias e retenção. Mantê-lo atualizado é dever do Encarregado.</p>
+        <div class="ropa">
+          <div class="ropa-item">
+            <div class="ri-top"><span class="ri-fin">Pedidos de informação (e-SIC)</span><span class="ri-base">Obrigação legal</span></div>
+            <div class="ri-meta"><span>Categorias: <b>identificação, contato, conteúdo do pedido</b></span><span>Retenção: <b>5 anos</b></span><span>Base: <b>LAI 12.527</b></span></div>
+          </div>
+          <div class="ropa-item">
+            <div class="ri-top"><span class="ri-fin">Comentários públicos em proposições</span><span class="ri-base">Consentimento</span></div>
+            <div class="ri-meta"><span>Categorias: <b>nome, comentário</b></span><span>Retenção: <b>enquanto publicado</b></span><span>Revogável pelo titular</span></div>
+          </div>
+          <div class="ropa-item">
+            <div class="ri-top"><span class="ri-fin">Cadastro de vereadores e servidores</span><span class="ri-base">Execução de contrato</span></div>
+            <div class="ri-meta"><span>Categorias: <b>funcionais, institucionais</b></span><span>Retenção: <b>prazo legal do vínculo</b></span></div>
+          </div>
+        </div>
+        <button class="ropa-add" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Registrar nova operação</button>
+
+        <h3>Direitos do titular</h3>
+        <p class="titular-nota">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
+          <span>Pedidos de acesso, correção ou exclusão chegam pelo <b>Portal do titular</b> e são respondidos pelo Encarregado. O <b>prazo de resposta</b> varia por norma interna — <span class="tag">[GAP]</span> confira no cadastro da Casa, não é fixado pela plataforma.</span>
+        </p>
       </section>
     </div>
   </div>

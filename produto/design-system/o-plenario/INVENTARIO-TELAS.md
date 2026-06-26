@@ -395,7 +395,7 @@ nem `notificacoes`: `minhas-pendencias` vira a **home do servidor** (cabeçalho 
 | `sessao-ao-vivo`/`telao` | ✅ **FEITO (26/06)** — estado de **EMPATE** (re-skin condicional do mesmo placar: 15×15 + nota telha "desempate pelo Regimento" `[Regimento]`) + **recontagem** como incidente/ato nomeado (selado no histórico) + **presença append-only** (chamada/entradas/saídas não se editam). Expediente-ao-vivo e ata-anterior-ao-vivo = fast-follow |
 | `console-operador` | handoff operador→1º admin (C03) + semântica de lifecycle (suspensão preserva portal/e-SIC, LAI) |
 | `console-operador-tenant` | premissa muda ao exigir a tela-espelho lado-ente (Fase C) |
-| `config-ente` | aba Privacidade/LGPD (ROPA) operável pelo DPO |
+| `config-ente` | ✅ **FEITO (26/06)** — aba **Privacidade · LGPD** operável pelo DPO: cartão do Encarregado + **ROPA** (3 operações com base legal/categorias/retenção + "registrar nova") + Direitos do titular (prazo `[GAP]`) + link p/ `grant-suporte-ente` |
 | `admin-usuarios` | menu três-pontinhos → ações reais (reset-MFA dual, papel com vigência, vínculo) master-detail |
 | `tramitacao-board` / `pos-aprovacao` | badge de regime (C40, correção do motor) / encaminhamento externo + status "atendido" (C64) |
 | `status.html` | **JÁ feito (v1.44)** — mock de uptime → "plataforma em implantação" |
