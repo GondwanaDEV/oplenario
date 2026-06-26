@@ -104,11 +104,8 @@
   .anel-demo .arco { fill: none; stroke: var(--acao); stroke-width: 9; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; }
   .anel-demo .centro { font-family: var(--mono); font-weight: 600; fill: var(--texto); }
 
-  /* chips / tags / pills */
-  .chip { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); letter-spacing: .03em; padding: 0.28rem 0.65rem; border-radius: 999px; border: 1px solid var(--linha); color: var(--texto-2); }
-  .chip-ok { color: var(--marca); border-color: color-mix(in srgb, var(--marca) 45%, transparent); background: color-mix(in srgb, var(--marca) 10%, transparent); }
-  .chip-alerta { color: var(--aviso-texto); border-color: color-mix(in srgb, var(--amarelo) 65%, transparent); background: color-mix(in srgb, var(--amarelo) 18%, transparent); }
-  .chip-risco { color: var(--acento-texto); border-color: color-mix(in srgb, var(--acento-texto) 45%, transparent); background: color-mix(in srgb, var(--acento-texto) 10%, transparent); }
+  /* chips · cartão de sinal — PROMOVIDOS ao chassi (sistema/chassi.css).
+     A galeria os consome de lá; nada de cópia local. */
 
   /* nota [GAP] — disciplina de regra em homologação */
   .nota-gap { display: flex; gap: 0.6rem; align-items: flex-start; font-size: var(--t-13); color: var(--texto-2); border: 1px dashed color-mix(in srgb, var(--amarelo) 60%, var(--linha)); background: color-mix(in srgb, var(--amarelo) 8%, transparent); border-radius: var(--raio-sm); padding: 0.7rem 0.9rem; }
@@ -198,6 +195,7 @@
       <a href="#barras">Barras: topo · comando</a>
       <a href="#campos">Campos de formulário</a>
       <a href="#chips">Chips · tags · nota [GAP]</a>
+      <a href="#sinal">Cartão de sinal</a>
       <span class="grupo">Padrões de composição</span>
       <a href="#azulejo">Faixa de azulejo</a>
       <a href="#ilhas">Ilhas: palco · papel</a>
@@ -383,12 +381,67 @@
           <span class="chip chip-ok">● Em dia</span>
           <span class="chip chip-alerta">▲ A vencer</span>
           <span class="chip chip-risco">■ Vencida</span>
+          <span class="chip chip-info">✦ IA · revisar</span>
+          <span class="chip chip-neutro">tramitação</span>
           <span class="chip">○ Neutro</span>
+          <span class="chip chip-risco chip-cheio">Vence hoje</span>
         </div>
         <div class="demo">
           <p class="nota-gap"><b>[GAP]</b><span>Prazos e datas do TCE-CE exibidos são <b>ilustrativos</b> — regra em homologação. A tela mostra a forma e o status da obrigação, não conteúdo regulatório cravado.</span></p>
         </div>
-        <div class="ficha"><span class="fonte-tag receita">receita (Painéis/Portal) · candidata a chassi</span></div>
+        <div class="ficha">
+          <span class="quando"><b>Família:</b> <code>ok · alerta · risco · info · neutro</code> (tint, texto+forma) + <code>.chip-cheio</code> (ênfase crítica preenchida).</span>
+          <span><b>A11y:</b> sempre forma/ícone + texto; <code>.chip-cheio.chip-risco</code> = branco s/ <code>--telha-fundo</code> (5.44), nunca s/ <code>--telha</code> (4.0).</span>
+          <span class="fonte-tag chassi">chassi.css</span>
+        </div>
+      </section>
+
+      <!-- ===================== CARTÃO DE SINAL ===================== -->
+      <section class="secao" id="sinal">
+        <h2>Cartão de sinal <span class="fonte-tag chassi">chassi.css</span></h2>
+        <p class="legenda">A unidade da <b>camada de atenção</b>: um item de fila com DNA fixo — <b>ator/ícone · gravidade⟂prazo · UMA ação · deep-link</b>. <b>Um só componente</b>, parametrizado por <b>gravidade</b>: do <b>informativo</b> (acompanhar um prazo) ao <b>crítico/FALHA</b> (ação requerida). A <b>telha entra só na variante crítica</b>. Absorve as três formas hoje copiadas inline em <code>minhas-pendencias</code>, <code>vereador-app</code> e <code>paineis-mesa</code>.</p>
+
+        <div class="demo" style="display:grid;gap:0.7rem;background:var(--bg)">
+          <!-- informativo (default) -->
+          <article class="sinal">
+            <span class="sinal-ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7Z"/></svg></span>
+            <div class="sinal-corpo">
+              <h3 class="sinal-titulo">Despachar o PL 042/2026 à CCJ</h3>
+              <p class="sinal-ctx"><span class="mat">PL 042/2026</span> — Hortas Comunitárias. Encaminhar à comissão para parecer.</p>
+              <div class="sinal-meta"><span class="chip chip-neutro">até sexta</span><span class="chip chip-neutro">tramitação</span></div>
+            </div>
+            <div class="sinal-acao"><button class="btn btn-contorno btn-mini" type="button">Despachar</button></div>
+          </article>
+
+          <!-- atenção (a vencer) -->
+          <article class="sinal sinal-atencao">
+            <span class="sinal-ic atencao" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6"/></svg></span>
+            <div class="sinal-corpo">
+              <span class="chip chip-alerta">▲ Prazo legal · em 5 dias</span>
+              <h3 class="sinal-titulo">Conferir e enviar a remessa mensal ao TCE-CE</h3>
+              <p class="sinal-ctx">O sistema montou o pacote; falta a conferência e o envio.</p>
+            </div>
+            <div class="sinal-acao"><button class="btn btn-primaria btn-mini" type="button">Abrir remessa</button></div>
+          </article>
+
+          <!-- crítico / FALHA (ação requerida) -->
+          <article class="sinal sinal-critico">
+            <span class="sinal-ic critico" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+            <div class="sinal-corpo">
+              <span class="chip chip-risco chip-cheio">Vence hoje · 18h</span>
+              <h3 class="sinal-titulo">Revisar a ata da 14ª sessão antes da publicação</h3>
+              <p class="sinal-ctx">Rascunho gerado por IA aguardando sua conferência.</p>
+            </div>
+            <div class="sinal-acao"><a class="btn btn-primaria btn-mini" href="telas/ata-revisao.html">Revisar ata</a></div>
+          </article>
+        </div>
+
+        <div class="ficha">
+          <span class="quando"><b>Quando:</b> qualquer fila de "o que eu/a Mesa preciso fazer". <b>UMA</b> ação por item.</span>
+          <span><b>Fronteira (§5.2):</b> o sinal acionável vive só na fila/home e <b>esvazia por evento de conclusão</b> — não há botão "feito".</span>
+          <span><b>FALHA:</b> a variante crítica é o tier de "ação requerida". O estado degradado de IA e a falha de sistema são <b>aplicações</b> dela, construídas por-superfície no 1º uso real (não pré-fabricadas).</span>
+          <span class="fonte-tag chassi">chassi.css (.sinal · .sinal-atencao · .sinal-critico)</span>
+        </div>
       </section>
 
       <!-- ===================== AZULEJO ===================== -->

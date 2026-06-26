@@ -152,6 +152,75 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .comando-ctx span { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
 .comando-acoes { margin-left: auto; display: flex; gap: 0.6rem; flex-wrap: wrap; }
 
+/* ============== CHIPS · TAGS · SEMÁFORO ==============
+   Status sempre com forma/ícone + texto — cor NUNCA é o único sinal.
+   Família única (era receita em 5 telas: painéis · portal · board ·
+   pendências · app). Tons "tint" (texto colorido + fundo translúcido +
+   borda) que passam AA nos dois temas via tokens derivados
+   (--aviso-texto clareia no escuro; --acento-texto p/ telha legível).
+   A telha só preenche na ênfase crítica (.chip-cheio.chip-risco), com
+   branco sobre --telha-fundo (5.44, §5.1) — nunca sobre --telha (4.0). */
+.chip {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  font-family: var(--mono); font-size: var(--t-12); letter-spacing: .03em;
+  padding: 0.28rem 0.65rem; border-radius: 999px;
+  border: 1px solid var(--linha); color: var(--texto-2);
+}
+.chip svg { flex: 0 0 auto; }
+.chip-ok     { color: var(--marca);        border-color: color-mix(in srgb, var(--marca) 45%, transparent);        background: color-mix(in srgb, var(--marca) 10%, transparent); }
+.chip-alerta { color: var(--aviso-texto);  border-color: color-mix(in srgb, var(--amarelo) 65%, transparent);      background: color-mix(in srgb, var(--amarelo) 18%, var(--surface)); }
+.chip-risco  { color: var(--acento-texto); border-color: color-mix(in srgb, var(--acento-texto) 45%, transparent); background: color-mix(in srgb, var(--telha) 9%, var(--surface)); }
+.chip-info   { color: var(--cobalto);      border-color: color-mix(in srgb, var(--cobalto) 38%, transparent);      background: color-mix(in srgb, var(--cobalto) 9%, var(--surface)); }
+[data-tema="escuro"] .chip-info { color: var(--foco); border-color: color-mix(in srgb, var(--foco) 42%, transparent); }
+.chip-neutro { color: var(--texto-2); background: var(--surface-2); border-color: var(--linha); }
+/* ênfase forte da gravidade crítica — o ÚNICO chip preenchido. Branco
+   sobre --telha-fundo = 5.44 (jamais sobre --telha = 4.0). */
+.chip-cheio.chip-risco { color: #fff; background: var(--telha-fundo); border-color: transparent; }
+
+/* ============== CARTÃO DE SINAL (.sinal) — a camada de atenção ==============
+   UM item de fila parametrizado por GRAVIDADE: informativo (countdown,
+   baixa) ↔ crítico/FALHA (ação requerida, alta). Absorve as 3 formas hoje
+   copiadas inline (minhas-pendencias .item · vereador-app .card ·
+   paineis-mesa .fila-item). DNA: { ator/ícone · gravidade⟂prazo · UMA
+   ação · deep-link }.
+   • A telha entra SÓ na variante crítica (bordo telha; chip-cheio = ênfase).
+   • Regra de fronteira (§5.2): o sinal ACIONÁVEL vive na fila/home e
+     esvazia por EVENTO de conclusão — não há botão "feito".
+   • A FALHA de sistema e o estado degradado de IA são APLICAÇÕES da
+     variante crítica, construídas por-superfície no 1º uso real
+     (PADROES §1) — não pré-fabricadas como peça aqui. */
+.sinal {
+  display: flex; align-items: center; gap: 0.7rem 1rem; flex-wrap: wrap;
+  background: var(--surface); border: 1px solid var(--linha);
+  border-left-width: 4px; border-left-color: var(--linha);   /* informativo (default) */
+  border-radius: var(--raio); box-shadow: var(--sombra);
+  padding: 0.95rem 1.1rem;
+}
+.sinal-atencao { border-left-color: var(--amarelo-traco); }  /* a vencer / esta semana */
+.sinal-critico { border-left-color: var(--telha); }          /* vence hoje / ação requerida (FALHA) */
+
+/* ícone/ator opcional */
+.sinal-ic { width: 44px; height: 44px; border-radius: 11px; flex: 0 0 auto; display: grid; place-items: center; color: var(--marca); background: color-mix(in srgb, var(--marca) 10%, var(--surface-2)); }
+.sinal-ic.ia { color: var(--cobalto); background: color-mix(in srgb, var(--cobalto) 10%, var(--surface-2)); }
+[data-tema="escuro"] .sinal-ic.ia { color: var(--foco); }
+.sinal-ic.atencao { color: var(--aviso-texto);  background: color-mix(in srgb, var(--amarelo) 16%, var(--surface-2)); }
+.sinal-ic.critico { color: var(--acento-texto); background: color-mix(in srgb, var(--telha) 12%, var(--surface-2)); }
+
+/* corpo */
+.sinal-corpo { flex: 1 1 240px; min-width: 0; }
+.sinal-titulo { font-family: var(--corpo); font-weight: 600; font-size: var(--t-16); color: var(--texto); margin: 0; line-height: 1.3; }
+.sinal-ctx { font-size: var(--t-13); color: var(--texto-2); margin: 0.25rem 0 0; }
+.sinal-ctx .mat { font-family: var(--mono); font-size: var(--t-12); color: var(--acento-texto); }
+.sinal-meta { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin: 0.5rem 0 0; }
+.sinal-corpo > .chip:first-child { margin-bottom: 0.35rem; }
+
+/* ação (deep-link) — uma só; anel de prazo opcional à esquerda dela */
+.sinal-acao { flex: 0 0 auto; margin-left: auto; display: flex; align-items: center; gap: 0.7rem; }
+
+@media (max-width: 720px) {
+  .sinal-acao { flex-basis: 100%; justify-content: flex-end; margin-top: 0.2rem; }
+}
+
 /* ============== MOVIMENTO REDUZIDO (base) ============== */
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
