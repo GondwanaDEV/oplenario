@@ -326,10 +326,20 @@ nem `notificacoes`: `minhas-pendencias` vira a **home do servidor** (cabeçalho 
   13.146)** — fallback explícito não-silencioso (handoff a estenógrafo / alerta de perda de acessibilidade),
   nunca "indisponível" mudo. **R-IA-1 NÃO depende do failover (#4)** — consome eventos de falha já existentes
   (`TranscricaoFalhou`/`ResumoFalhou`); entra independente da fundação fast-follow.
-- **Camada de atenção nas 4 homes:** `minhas-pendencias` → home do servidor (cabeçalho situational + priorização
-  2D gravidade⟂prazo, a seção "Sem prazo" deixa de ser catch-all); `notificacoes` → classe de FALHA distinta +
-  dedup (regra §5.1); `vereador-app` → 2º estado fora-de-sessão + ciência 1-toque + chip de estado do voto;
-  `paineis-mesa` → ver abaixo.
+- **Camada de atenção nas 4 homes** (em curso):
+  - ✅ **`minhas-pendencias` → home do servidor FEITO (26/06)** — 1ª das 4. Cabeçalho **situational** na altitude
+    "o MEU trabalho" (lede: "Dois atos vencem hoje e a janela do TCE fecha em 5 dias. Nada está atrasado." — distinto
+    da altitude institucional de `paineis-mesa`, honra o contrato de altitude §5.1) + **priorização 2D**: a **borda
+    do item = gravidade** (legal âmbar ⟂ regimental telha ⟂ administrativa jade) e a **seção = prazo** (vence hoje →
+    prazo legal → esta semana → no seu ritmo), com gchip de gravidade redundante ao lado. A seção "Sem prazo" **deixa
+    de ser depósito** → vira **"No seu ritmo"** com razão explícita ("rotina sem prazo legal/regimental, depende da sua
+    iniciativa"). **Esvazia por EVENTO** cravado em microcopy global ("cada item sai sozinho quando o ato é concluído;
+    não há botão 'feito'") — regra §5.1. **Tipos novos** materializados: adiado **C31** ("REQ voltou para a pauta"),
+    **expediente recebido** ("distribuir documentos"), e seção **"Para ciência"** (acusar ciência em 1 toque, "não
+    conclui o ato"). AA 2 temas (lede 14.41/15.51 · sub 7.11/7.83 · gchips 5.12–8.50 · bordas-gravidade legal 3.42/9.23,
+    reg 3.77/4.46, **adm 8.50/7.59** — jade sólido, corrigido de 1.40 a 55%-alpha · res-ciência 5.41/5.71).
+  - **Restam (3/4):** `notificacoes` → classe de FALHA distinta + dedup (regra §5.1); `vereador-app` → 2º estado
+    fora-de-sessão + ciência 1-toque + chip de estado do voto; `paineis-mesa` → ver abaixo.
 - **`paineis-mesa` (HERO aprovado):** o verde **"A Casa está em dia" continua canônico e o default da demo**; o
   cartão de FALHA é **pele condicional do MESMO placar** (ramo telha já antecipado no SVG `:435`), renderizado só
   quando há falha real — **nunca faixa fixa nova** (não inverter a 1ª impressão de venda). + lente **gated do
