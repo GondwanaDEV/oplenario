@@ -391,7 +391,7 @@ nem `notificacoes`: `minhas-pendencias` vira a **home do servidor** (cabeçalho 
 | `editor-proposicao` | IA-degradada + (depois) campo de tema, badge de regime, seletor de espécies |
 | `ata-revisao` | IA-degradada (→ anexação manual) + (fast-follow) selo de proveniência de vendor ao signatário |
 | `portal-cidadao` | recibo de protocolo no ato + link VIVO p/ Carta de Serviços + agenda pública + IA-degradada no resumo |
-| `pauta-convocacao` | roster de ciência (enviado/entregue/**ciente**/bounce) + adiados reaparecendo (C31) + badge de regime |
+| `pauta-convocacao` | ✅ **FEITO (26/06)** — roster de ciência (enviado/entregue/**ciente**/bounce, com reenviar no bounce; fecha o loop da ciência 1-toque do `vereador-app`) + adiado **C31** (badge "adiado · 1ª vez") + **badge de regime** (ordinário/urgência) |
 | `sessao-ao-vivo`/`telao` | **V1: estado de EMPATE + verificação/recontagem (ato nomeado) + presença append-only**; Expediente-ao-vivo e ata-anterior-ao-vivo = fast-follow |
 | `console-operador` | handoff operador→1º admin (C03) + semântica de lifecycle (suspensão preserva portal/e-SIC, LAI) |
 | `console-operador-tenant` | premissa muda ao exigir a tela-espelho lado-ente (Fase C) |

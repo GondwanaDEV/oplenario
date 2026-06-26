@@ -104,6 +104,35 @@
   .conv .dest { margin: 0.8rem 0 0; display: flex; align-items: center; gap: 0.5rem; font-size: var(--t-13); color: var(--papel-texto); }
   .conv .dest svg { color: var(--papel-marca); flex: 0 0 auto; }
 
+  /* badge de regime de tramitação + adiado (C31) */
+  .reg-regime { color: var(--texto-2); background: var(--surface); border: 1px dashed color-mix(in srgb, var(--texto-2) 50%, var(--linha)); }
+  .reg-adiado { color: var(--aviso-texto); background: color-mix(in srgb, var(--amarelo) 15%, var(--surface)); border: 1px solid color-mix(in srgb, var(--amarelo-traco) 45%, transparent); }
+  [data-tema="escuro"] .reg-adiado { color: var(--amarelo); }
+
+  /* roster de ciência: o servidor acompanha quem recebeu/deu ciência da convocação */
+  .roster { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.1rem 1.2rem; }
+  .roster h3 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.2rem; }
+  .roster .ros-aj { font-size: var(--t-12); color: var(--texto-2); margin: 0 0 0.8rem; line-height: 1.4; }
+  .ros-barra { display: flex; height: 8px; border-radius: 5px; overflow: hidden; background: var(--surface-2); margin-bottom: 0.7rem; }
+  .ros-barra span { display: block; }
+  .ros-ciente { background: var(--jade-claro); } [data-tema="escuro"] .ros-ciente { background: var(--marca); }
+  .ros-entregue { background: var(--cobalto); } [data-tema="escuro"] .ros-entregue { background: var(--foco); }
+  .ros-enviado { background: color-mix(in srgb, var(--texto-2) 45%, var(--surface-2)); }
+  .ros-bounce { background: var(--telha); }
+  .ros-leg { display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem 0.8rem; margin-bottom: 0.8rem; }
+  .ros-leg .lg { display: flex; align-items: center; gap: 0.4rem; font-size: var(--t-12); color: var(--texto-2); }
+  .ros-leg .lg b { font-family: var(--mono); color: var(--texto); }
+  .ros-leg .lg .pt { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
+  .ros-v { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0; border-top: 1px solid var(--linha); font-size: var(--t-13); }
+  .ros-v:first-of-type { border-top: none; }
+  .ros-v .nome { flex: 1; min-width: 0; color: var(--texto); }
+  .ros-v .est { font-family: var(--mono); font-size: var(--t-12); display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; }
+  .ros-v .est .pt { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+  .ros-v .est.e-ciente { color: #15634A; } [data-tema="escuro"] .ros-v .est.e-ciente { color: #58C99E; }
+  .ros-v .est.e-bounce { color: var(--acento-texto); }
+  .ros-v .reenviar { font-family: var(--corpo); font-size: var(--t-12); font-weight: 600; color: var(--acento-texto); background: none; border: none; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; padding: 0; }
+  .ros-rod { margin: 0.7rem 0 0; padding-top: 0.7rem; border-top: 1px solid var(--linha); font-size: var(--t-12); color: var(--texto-2); }
+
   @media (max-width: 980px) {
     .balcao { grid-template-columns: 1fr; }
     .rail { position: static; top: auto; }
@@ -227,7 +256,7 @@
             <div class="pi-mid">
               <span class="num">PL 029/2026</span>
               <h4>Cria o programa de arborização de vias e praças</h4>
-              <div class="regs"><span class="reg reg-vot">2ª votação</span><span class="reg reg-quor">maioria simples</span></div>
+              <div class="regs"><span class="reg reg-regime">ordinário</span><span class="reg reg-vot">2ª votação</span><span class="reg reg-quor">maioria simples</span><span class="reg reg-adiado" title="Adiada na 14ª sessão; retorna por força regimental (C31)">adiado · 1ª vez</span></div>
             </div>
             <button class="pi-rem" type="button" aria-label="Remover da pauta"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
           </div>
@@ -255,7 +284,7 @@
             <div class="pi-mid">
               <span class="num">PL 031/2026</span>
               <h4>Denomina logradouro público no bairro Messejana</h4>
-              <div class="regs"><span class="reg reg-vot">votação única</span><span class="reg reg-quor">maioria simples</span></div>
+              <div class="regs"><span class="reg reg-regime">ordinário</span><span class="reg reg-vot">votação única</span><span class="reg reg-quor">maioria simples</span></div>
             </div>
             <button class="pi-rem" type="button" aria-label="Remover da pauta"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
           </div>
@@ -296,6 +325,29 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg>
           <span><b>21 vereadores</b> serão notificados no app e por e-mail.</span>
         </p>
+      </div>
+
+      <!-- roster de ciência: acompanhamento de quem recebeu/deu ciência (fecha o loop da ciência 1-toque do app) -->
+      <div class="roster" aria-label="Ciência da convocação">
+        <h3>Ciência da convocação</h3>
+        <p class="ros-aj">Da convocação anterior (14ª). Atualiza sozinho conforme cada vereador é notificado e dá ciência no app.</p>
+        <div class="ros-barra" role="img" aria-label="14 deram ciência, 4 entregues, 2 enviados, 1 e-mail retornou — de 21">
+          <span class="ros-ciente" style="width:66.6%"></span>
+          <span class="ros-entregue" style="width:19%"></span>
+          <span class="ros-enviado" style="width:9.5%"></span>
+          <span class="ros-bounce" style="width:4.8%"></span>
+        </div>
+        <div class="ros-leg">
+          <span class="lg"><span class="pt ros-ciente" aria-hidden="true"></span>Ciente <b>14</b></span>
+          <span class="lg"><span class="pt ros-entregue" aria-hidden="true"></span>Entregue <b>4</b></span>
+          <span class="lg"><span class="pt ros-enviado" aria-hidden="true"></span>Enviado <b>2</b></span>
+          <span class="lg"><span class="pt ros-bounce" aria-hidden="true"></span>Retornou <b>1</b></span>
+        </div>
+        <div class="ros-v"><span class="nome">Helena Past</span><span class="est e-ciente"><span class="pt ros-ciente" aria-hidden="true"></span>ciente · 09:14</span></div>
+        <div class="ros-v"><span class="nome">Sérgio Lopes</span><span class="est e-ciente"><span class="pt ros-ciente" aria-hidden="true"></span>ciente · ontem</span></div>
+        <div class="ros-v"><span class="nome">Marina Diniz</span><span class="est"><span class="pt ros-entregue" aria-hidden="true"></span>entregue</span></div>
+        <div class="ros-v"><span class="nome">João Bezerra</span><span class="est e-bounce"><span class="pt ros-bounce" aria-hidden="true"></span>e-mail voltou</span><button class="reenviar" type="button">reenviar</button></div>
+        <p class="ros-rod">A ciência fica registrada com data e hora — é a prova de convocação regular. Quem não deu ciência continua notificado no app.</p>
       </div>
     </aside>
   </div>
