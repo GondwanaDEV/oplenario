@@ -62,6 +62,40 @@
   .ia-nota b { color: var(--texto); }
   .ia-nota a { color: var(--marca); font-weight: 600; text-decoration: none; } .ia-nota a:hover { text-decoration: underline; }
 
+  /* R-IA-1 (piso LEGAL LBI 13.146): ASR parou → NUNCA silenciar. A própria
+     faixa de legenda fala (handoff humano) + banner CRÍTICO (telha) com
+     recurso de acessibilidade. Gravidade crítica, não atenção: perder
+     legenda ao vivo é evento legal, não mero degradê de conforto. */
+  #conteudo[data-ia="off"]   .cc-vivo,
+  #conteudo[data-ia="off"]   .ia-nota,
+  #conteudo[data-ia="off"]   .cc-ativada   { display: none; }
+  #conteudo[data-ia="ativo"] .cc-off,
+  #conteudo[data-ia="ativo"] .cc-alerta,
+  #conteudo[data-ia="ativo"] .cc-interromp { display: none; }
+
+  /* a faixa de legenda fala (alto contraste sobre a banda quase-preta) */
+  .cc-off { display: flex; gap: 0.85rem; align-items: flex-start; }
+  .cc-off .ic { color: #F2A53C; flex: 0 0 auto; margin-top: 3px; }
+  .cc-off .tit { font-size: clamp(1.3rem, 3.4vw, 1.55rem); font-weight: 700; color: #FFFFFF; margin: 0; line-height: 1.25; }
+  .cc-off .sub { font-size: clamp(0.98rem, 2.2vw, 1.06rem); color: #CBD6CF; margin: 0.45rem 0 0; line-height: 1.45; }
+
+  .cc-toggle .sw.off { background: var(--linha); }
+  .cc-toggle .sw.off::after { left: 2px; }
+  /* texto de alto contraste: a cor NÃO é o sinal único (o switch apagado + o banner crítico já marcam) */
+  .cc-interromp { color: var(--texto); font-weight: 700; }
+
+  /* banner crítico no fluxo (--surface temático) — reusa o .sinal do chassi */
+  .cc-alerta { margin: 1.1rem 0 0; }
+  .cc-alerta .lbi { display: block; margin-top: 3px; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); font-weight: 400; }
+
+  /* tira de demonstração: scaffolding de design (prova os 2 estados), não chrome de produto */
+  .demo-strip { display: flex; align-items: center; gap: 0.6rem 0.9rem; flex-wrap: wrap; margin: 1.1rem 0 0; padding: 0.55rem 0.8rem; border: 1px dashed var(--linha); border-radius: var(--raio-sm); background: var(--surface-2); }
+  .demo-strip .rot { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); }
+  .demo-strip .seg { display: inline-flex; border: 1px solid var(--linha); border-radius: 999px; overflow: hidden; background: var(--surface); }
+  .demo-strip .seg button { font-family: var(--corpo); font-size: var(--t-12); font-weight: 600; color: var(--texto-2); background: none; border: none; padding: 0.35rem 0.85rem; min-height: 34px; cursor: pointer; }
+  .demo-strip .seg button + button { border-left: 1px solid var(--linha); }
+  .demo-strip .seg button[aria-pressed="true"] { background: var(--texto); color: var(--surface); }
+
   /* transcrição corrida */
   .transc { margin: 1.6rem 0 0; }
   .transc h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.8rem; }
@@ -99,11 +133,19 @@
   </div>
 </header>
 
-<main id="conteudo" class="envelope">
+<main id="conteudo" class="envelope" data-ia="ativo">
   <div class="hero">
     <span class="vivo"><span class="pulso" aria-hidden="true"></span>Ao vivo agora</span>
     <h1>15ª Sessão Ordinária</h1>
     <p class="ctx">Discussão do PL 022/2026 — Incentivo à energia solar · com legendas em tempo real</p>
+  </div>
+
+  <div class="demo-strip" role="group" aria-label="Demonstração de design: estado das legendas por IA">
+    <span class="rot">Demonstração · legendas por IA (ASR)</span>
+    <span class="seg">
+      <button type="button" data-ia="ativo" aria-pressed="true">IA ativa</button>
+      <button type="button" data-ia="off" aria-pressed="false">IA indisponível</button>
+    </span>
   </div>
 
   <div class="palco" role="img" aria-label="Transmissão de vídeo da sessão ao vivo">
@@ -113,13 +155,22 @@
   </div>
 
   <section class="cc" aria-label="Legendas em tempo real" aria-live="polite">
-    <span class="quem"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 12 0v1"/></svg>Ver. Carla Tavares</span>
-    <p class="ccline">…por isso este projeto é importante: ele reduz a conta de luz das famílias e ainda incentiva a geração de energia limpa no município.</p>
-    <p class="ccline prev">Senhor presidente, peço a palavra para discutir a matéria.</p>
+    <div class="cc-vivo">
+      <span class="quem"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 12 0v1"/></svg>Ver. Carla Tavares</span>
+      <p class="ccline">…por isso este projeto é importante: ele reduz a conta de luz das famílias e ainda incentiva a geração de energia limpa no município.</p>
+      <p class="ccline prev">Senhor presidente, peço a palavra para discutir a matéria.</p>
+    </div>
+    <div class="cc-off" role="alert">
+      <span class="ic" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+      <div>
+        <p class="tit">Legendas automáticas interrompidas</p>
+        <p class="sub">O reconhecimento de voz parou. Acionamos a <b style="color:#fff">legendagem humana</b> — a transmissão da sessão continua. Reconecta automaticamente assim que o serviço voltar.</p>
+      </div>
+    </div>
   </section>
 
   <div class="cc-bar">
-    <span class="cc-toggle"><span class="sw" role="img" aria-label="Legendas ativadas"></span>Legendas ativadas</span>
+    <span class="cc-toggle"><span class="sw" role="img" aria-label="Legendas ativadas"></span><span class="cc-ativada">Legendas ativadas</span><span class="cc-interromp">Legendas interrompidas</span></span>
     <span class="cc-size" role="group" aria-label="Tamanho da legenda">
       <span>Tamanho</span>
       <button type="button" aria-label="Diminuir">A−</button>
@@ -131,6 +182,25 @@
   <div class="ia-nota">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 7 18.2l1.9-5.8L4 8.8h6.1z"/></svg>
     <span><b>Legendas geradas automaticamente.</b> A transcrição em tempo real usa reconhecimento de voz e pode conter erros ou atrasos. O registro oficial da sessão é a <a href="livro-atas.html">ata aprovada</a>, não a legenda.</span>
+  </div>
+
+  <!-- ===== R-IA-1: piso LBI — banner crítico, recurso de acessibilidade ===== -->
+  <div class="sinal sinal-critico cc-alerta" role="status">
+    <span class="sinal-ic critico" aria-hidden="true">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9v6h4l5 4V5L7 9H3z"/><path d="M16 9.4a3 3 0 0 1 0 5.2"/><path d="M2 2l20 20" stroke-width="1.8"/></svg>
+    </span>
+    <div class="sinal-corpo">
+      <p class="sinal-titulo">Acessibilidade em contingência
+        <span class="lbi">Legendagem ao vivo é garantia da LBI (Lei 13.146) — esta interrupção é tratada como incidente, não como indisponibilidade comum.</span>
+      </p>
+      <p class="sinal-ctx">A legendagem humana foi acionada. A sessão segue transmitida; o registro oficial é a <b>ata aprovada</b>.</p>
+    </div>
+    <div class="sinal-acao">
+      <button class="btn btn-contorno btn-mini" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+        Relatar perda de acessibilidade
+      </button>
+    </div>
   </div>
 
   <section class="transc">
@@ -150,5 +220,22 @@
 </main>
 
 <script src="../sistema/tema.js"></script>
+<script>
+  /* demonstração de design: alterna legendas por IA ativas ↔ interrompidas (R-IA-1, piso LBI) */
+  (function () {
+    var main = document.getElementById('conteudo');
+    var sw = document.querySelector('.cc-toggle .sw');
+    var segs = document.querySelectorAll('.demo-strip .seg button');
+    if (!main || !segs.length) return;
+    segs.forEach(function (b) {
+      b.addEventListener('click', function () {
+        var off = b.dataset.ia === 'off';
+        main.dataset.ia = b.dataset.ia;
+        if (sw) { sw.classList.toggle('off', off); sw.setAttribute('aria-label', off ? 'Legendas interrompidas' : 'Legendas ativadas'); }
+        segs.forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+      });
+    });
+  })();
+</script>
 </body>
 </html>

@@ -302,7 +302,16 @@ nem `notificacoes`: `minhas-pendencias` vira a **home do servidor** (cabeçalho 
   reconectar"), e **todo o factual permanece** — a faixa de azulejo da tramitação, ref/autoria/"Em votação", permalink
   URN e **"Ler o texto completo"** (a autoridade). O link "Achou um erro no resumo?" some. Reforça o contrato: a IA é
   assistiva, o ato oficial prevalece. AA 2 temas (nota 15.51/12.62 · borda âmbar 3.63/6.95 ✓≥3 · "ler texto" 9.02/5.72).
-- **Próximas superfícies de R-IA-1:**
+- ✅ **R-IA-1 em `legendas-ao-vivo` FEITO (26/06)** — 4ª superfície, **a de maior gravidade (piso LEGAL LBI 13.146)**.
+  Fallback **crítico (telha), NUNCA silencioso**: a própria faixa de legenda **fala** ("Legendas automáticas
+  interrompidas — acionamos a legendagem humana; a transmissão continua"), o switch apaga + rótulo vira "Legendas
+  interrompidas", e um **banner crítico `.sinal-critico`** traz a nota LBI (incidente, não indisponibilidade comum) +
+  contrato (legendagem humana acionada, a ata é o registro oficial) + **recurso "Relatar perda de acessibilidade"**.
+  Distinção provada: gravidade **crítica** aqui vs **atenção** nas outras 3. AA 2 temas (banda 19.4/12.99 · banner
+  15.51/12.62 · borda telha 4.46 ✓≥3 · rótulo 13.94 — corrigido de 3.28: cor não é sinal único, `--texto` + switch + banner).
+- **Última superfície de R-IA-1 (mecânica, pendente):** busca textual não-IA em `proposicoes`/`legislacao` (cai para
+  busca por texto com aviso). **Próximo grande bloco da Fase B:** camada de atenção nas 4 homes (`minhas-pendencias`
+  → home do servidor · `notificacoes` classe FALHA + dedup · `vereador-app` 2º estado · `paineis-mesa` pele FALHA condicional).
   `portal-cidadao`, busca (`proposicoes`/`legislacao`), `legendas-ao-vivo`. **Não é um componente único:** só o
   **banner honesto** + o **contrato "IA-off = o ato legislativo fecha sem ela"** é transversal; o **fallback é
   por-superfície** (editor desabilita o rail + "siga redigindo"; ata cai para anexação manual; portal esconde o
