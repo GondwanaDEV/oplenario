@@ -368,10 +368,17 @@ nem `notificacoes`: `minhas-pendencias` vira a **home do servidor** (cabeçalho 
   quando há falha real — **nunca faixa fixa nova** (não inverter a 1ª impressão de venda). + lente **gated do
   jurídico** (3º decisor): cartões de risco (incidente LGPD, grant ativo) como recorte por papel, não faixa fixa.
 
-**Fase C — a 1 tela nova do núcleo:**
-- **Grant de suporte lado-ente** (nova; espelho de `console-operador-tenant.html`; arquétipo cockpit) — o
-  admin_ente/DPO aprova/nega/revoga/audita o acesso de suporte com escopo+prazo (reusa selo encadeado). Exposição
-  LGPD **viva no go-live**: hoje o grant é renderizado 100% pela ótica do operador; "a câmara autoriza" é só texto.
+**Fase C — a 1 tela nova do núcleo — ✅ FEITA (26/06):**
+- ✅ **`grant-suporte-ente.html`** (nova; espelho **invertido** de `console-operador-tenant.html`; arquétipo cockpit).
+  Lá "a câmara autoriza" é **promessa**; aqui o **Encarregado/DPO autoriza de fato**. Três blocos: (1) **Pedido de
+  acesso** = a decisão viva — card com escopo (módulo + dados mascarados) + motivo + prazo (24h) + **Aprovar / Negar**,
+  e a pele do card alterna por `data-estado` (pendente âmbar → concedido jade com **anel de prazo + Revogar** →
+  encerrado); (2) **garantias sob controle do DPO** (você autoriza · expira sozinho · mascarado · auditado aqui) +
+  rodapé Encarregado/base legal art. 7º/ROPA; (3) **trilha de selo ENCADEADO** (reusa o padrão de `trilha-auditoria`:
+  `.lacre` "Cadeia íntegra" + cada evento com tag Concedido/Negado/Revogado e `selo X ↳ encadeia a Y`). Link
+  "revisar/revogar" da lente jurídico de `paineis-mesa` reaponta p/ cá (fecha o loop LGPD). AA 2 temas (lede
+  15.51/12.62 · pd-mask 5.12/5.61 · lacre-palco 6.96–10.26 · selo 5.12/5.61 · tags 7.11/6.86 · rod-link 5.44/4.83).
+  **Com isto a Fase C fecha — e o núcleo confirmado do §5 (Fase A promoções + Fase B retrofit + Fase C tela nova) está COMPLETO.**
 
 ### 5.3 Mudanças de premissa nas telas existentes (o esforço real)
 

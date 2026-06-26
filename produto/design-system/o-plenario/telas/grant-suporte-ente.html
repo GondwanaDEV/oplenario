@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Acesso de suporte · Privacidade da Câmara</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Acesso de suporte (lado-ENTE) — ARQUÉTIPO: cockpit (DPO/admin)
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+     Espelho de console-operador-tenant.html, invertido: lá "a câmara
+     autoriza" é promessa; AQUI o Encarregado/DPO da câmara AUTORIZA de
+     fato — aprova/nega o pedido (escopo + prazo), revoga o ativo, e lê a
+     trilha de selo ENCADEADO (reusa o padrão de trilha-auditoria). A
+     exposição LGPD do grant (12.7) passa a ser viva, não texto.
+     ============================================================ */
+  .pg-cab { display: flex; align-items: center; gap: 0.9rem; margin: 1.4rem 0 0; flex-wrap: wrap; }
+  .pg-cab .ic { width: 48px; height: 48px; border-radius: 12px; flex: 0 0 auto; display: grid; place-items: center; color: #fff; background: var(--jade); }
+  .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0; line-height: 1.1; }
+  .pg-cab .meta { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .pg-lede { font-size: var(--t-16); color: var(--texto); max-width: 70ch; margin: 0.9rem 0 0; line-height: 1.5; }
+  .pg-lede b { font-weight: 700; }
+
+  .secao { margin: 1.8rem 0 0; }
+  .secao > h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); margin: 0 0 0.2rem; }
+  .secao > .aj { font-size: var(--t-13); color: var(--texto-2); margin: 0 0 0.9rem; }
+
+  /* ===== o grant (peça de confiança) — agora com a DECISÃO do DPO ===== */
+  .grant { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; }
+  /* topo muda de pele conforme o estado do pedido */
+  .grant-top { display: flex; align-items: center; gap: 0.9rem; padding: 1.1rem 1.3rem; border-bottom: 1px solid var(--linha); }
+  .grant-top .ic { width: 44px; height: 44px; border-radius: 11px; flex: 0 0 auto; display: grid; place-items: center; color: #fff; }
+  .grant-top .estado b { font-family: var(--display); font-size: var(--t-16); color: var(--texto); display: block; }
+  .grant-top .estado span { font-size: var(--t-13); color: var(--texto-2); }
+  .grant-top .acao { margin-left: auto; display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; }
+  .grant-top .acao .v-pendente, .grant-top .acao .v-concedido { display: inline-flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; }
+  /* pele PENDENTE = atenção âmbar (precisa da sua decisão) */
+  .gv-pendente .grant-top { background: color-mix(in srgb, var(--amarelo) 12%, var(--surface)); border-bottom-color: color-mix(in srgb, var(--amarelo-traco) 40%, var(--linha)); }
+  .gv-pendente .grant-top .ic { background: var(--amarelo); color: #2E2102; }
+  /* pele CONCEDIDO = jade */
+  .gv-concedido .grant-top { background: color-mix(in srgb, var(--marca) 7%, var(--surface)); border-bottom-color: color-mix(in srgb, var(--marca) 22%, var(--linha)); }
+  .gv-concedido .grant-top .ic { background: var(--jade); }
+  /* pele NEGADO/REVOGADO = telha */
+  .gv-negado .grant-top .ic, .gv-revogado .grant-top .ic { background: var(--telha-fundo); }
+
+  .grant-corpo { padding: 1.1rem 1.3rem; }
+  /* as views do card alternam por data-estado */
+  .grant[data-estado="pendente"] .v-concedido, .grant[data-estado="pendente"] .v-fim,
+  .grant[data-estado="concedido"] .v-pendente, .grant[data-estado="concedido"] .v-fim,
+  .grant[data-estado="negado"] .v-pendente, .grant[data-estado="negado"] .v-concedido,
+  .grant[data-estado="revogado"] .v-pendente, .grant[data-estado="revogado"] .v-concedido { display: none; }
+
+  /* detalhe do pedido (escopo + prazo + base legal) */
+  .pedido-grade { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.9rem 1.4rem; }
+  .pd { min-width: 0; }
+  .pd .r { display: flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); letter-spacing: .05em; text-transform: uppercase; color: var(--texto-2); margin: 0 0 0.25rem; }
+  .pd .r svg { flex: 0 0 auto; color: var(--marca); }
+  .pd .v { font-size: var(--t-14); color: var(--texto); line-height: 1.4; }
+  .pd .v b { font-weight: 600; }
+  .pd .v .mask { font-family: var(--mono); font-size: var(--t-12); color: var(--acento-texto); }
+  @media (max-width: 620px) { .pedido-grade { grid-template-columns: 1fr; } }
+
+  /* anel de prazo do acesso concedido */
+  .acesso-vivo { display: flex; align-items: center; gap: 1rem; }
+  .acesso-vivo .anel { width: 60px; height: 60px; position: relative; flex: 0 0 auto; }
+  .acesso-vivo .anel svg { width: 60px; height: 60px; transform: rotate(-90deg); display: block; }
+  .acesso-vivo .anel .trilho { fill: none; stroke: var(--linha); stroke-width: 6; }
+  .acesso-vivo .anel .arco { fill: none; stroke: var(--jade-claro); stroke-width: 6; stroke-linecap: round; }
+  [data-tema="escuro"] .acesso-vivo .anel .arco { stroke: var(--marca); }
+  .acesso-vivo .anel .c { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; font-family: var(--display); font-weight: 800; font-size: var(--t-16); color: var(--marca); }
+  .acesso-vivo .ax b { font-size: var(--t-14); color: var(--texto); display: block; }
+  .acesso-vivo .ax span { font-size: var(--t-13); color: var(--texto-2); }
+
+  .fim-nota { display: flex; align-items: flex-start; gap: 0.5rem; font-size: var(--t-13); color: var(--texto-2); line-height: 1.45; }
+  .fim-nota svg { flex: 0 0 auto; color: var(--texto-2); margin-top: 2px; }
+
+  /* garantias (mirror das promessas, agora sob controle do DPO) */
+  .prin { display: grid; gap: 0.55rem; }
+  .prin .li { display: flex; align-items: flex-start; gap: 0.55rem; font-size: var(--t-13); color: var(--texto-2); line-height: 1.45; }
+  .prin .li svg { color: var(--marca); flex: 0 0 auto; margin-top: 2px; }
+  .prin .li b { color: var(--texto); }
+  .dpo-rod { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin: 1rem 0 0; padding-top: 0.9rem; border-top: 1px solid var(--linha); font-size: var(--t-13); color: var(--texto-2); }
+  .dpo-rod b { color: var(--texto); }
+  .dpo-rod a { color: var(--acento-texto); font-weight: 600; }
+
+  /* ===== trilha de acessos: SELO ENCADEADO (reusa o padrão de trilha-auditoria) ===== */
+  .lacre { display: flex; align-items: center; gap: 0.9rem; background: var(--palco-bg); color: var(--palco-texto); border-radius: var(--raio); padding: 1rem 1.2rem; margin: 0 0 0.9rem; }
+  .lacre .selo-ic { width: 42px; height: 42px; border-radius: 11px; flex: 0 0 auto; display: grid; place-items: center; color: var(--palco-bg); background: var(--amarelo); }
+  .lacre .lc-t b { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--palco-texto); display: block; }
+  .lacre .lc-t span { font-size: var(--t-13); color: var(--palco-texto-2); }
+  .lacre .lc-cadeia { margin-left: auto; text-align: right; font-family: var(--mono); }
+  .lacre .lc-cadeia b { font-size: var(--t-16); color: var(--palco-texto); font-variant-numeric: tabular-nums; display: block; }
+  .lacre .lc-cadeia span { font-size: var(--t-12); color: var(--palco-texto-2); }
+  @media (max-width: 560px) { .lacre .lc-cadeia { display: none; } }
+
+  .audit { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; }
+  .ev { display: grid; grid-template-columns: 118px 1fr auto; gap: 0.2rem 1rem; align-items: start; padding: 0.85rem 1.3rem; border-top: 1px solid var(--linha); }
+  .ev:first-child { border-top: none; }
+  .ev .q { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .ev .o b { font-size: var(--t-13); color: var(--texto); font-weight: 600; }
+  .ev .o span { font-size: var(--t-12); color: var(--texto-2); display: block; margin-top: 1px; }
+  .ev .o .acao-tag { display: inline-flex; align-items: center; gap: 0.3rem; font-family: var(--mono); font-size: 0.64rem; letter-spacing: .05em; text-transform: uppercase; font-weight: 600; border-radius: 4px; padding: 0.1rem 0.4rem; border: 1px solid transparent; margin-bottom: 0.2rem; }
+  .acao-conced { color: #15634A; border-color: color-mix(in srgb, var(--marca) 40%, transparent); } [data-tema="escuro"] .acao-conced { color: #58C99E; }
+  .acao-revog { color: var(--acento-texto); border-color: color-mix(in srgb, var(--telha) 42%, transparent); }
+  .acao-negado { color: var(--texto-2); border-color: var(--linha); }
+  /* o selo encadeado: selo atual + elo ao anterior */
+  .ev .cadeia { font-family: var(--mono); font-size: var(--t-12); text-align: right; white-space: nowrap; }
+  .ev .cadeia .selo { color: var(--acento-texto); }
+  .ev .cadeia .elo { display: block; color: var(--texto-2); font-size: 0.66rem; margin-top: 2px; }
+  .audit .rod { padding: 0.8rem 1.3rem; border-top: 1px solid var(--linha); background: var(--surface-2); font-size: var(--t-12); color: var(--texto-2); display: flex; align-items: center; gap: 0.5rem; }
+  .audit .rod svg { color: var(--marca); flex: 0 0 auto; }
+  .audit .rod a { color: var(--acento-texto); font-weight: 600; text-decoration: none; } .audit .rod a:hover { text-decoration: underline; }
+  @media (max-width: 620px) { .ev { grid-template-columns: 1fr; } .ev .q { order: -1; } .ev .cadeia { text-align: left; } }
+</style>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+<header class="topo">
+  <div class="envelope topo-grade">
+    <div class="marca">
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <div><p class="marca-nome">O Plenário</p><p class="marca-orgao">Câmara de Fortaleza</p></div>
+    </div>
+    <div class="topo-sep" aria-hidden="true"></div>
+    <span class="eyebrow" style="align-self:center">Privacidade · LGPD</span>
+    <div class="topo-dir">
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+      <span class="presidente"><span class="avatar" aria-hidden="true">RC</span><span class="quem"><b>Renata Costa</b><span>Encarregada de Dados (DPO)</span></span></span>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope" style="max-width:980px">
+  <div class="pg-cab">
+    <span class="ic" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>
+    <div>
+      <h1>Acesso de suporte</h1>
+      <span class="meta">Câmara de Fortaleza · controle do Encarregado de Dados</span>
+    </div>
+  </div>
+  <p class="pg-lede">O suporte do O Plenário <b>não vê dados pessoais da Câmara sem a sua autorização</b>. Cada pedido passa por você — com escopo e prazo definidos — e tudo fica registrado numa trilha que não se edita nem se apaga.</p>
+
+  <!-- ===== 1 · PEDIDO PENDENTE: a decisão do DPO (aqui "a câmara autoriza" vira ato) ===== -->
+  <section class="secao">
+    <h2>Pedido de acesso</h2>
+    <p class="aj">Um pedido de suporte aguarda a sua decisão. Aprovar concede acesso temporário e mascarado; negar mantém o suporte sem ver dados pessoais.</p>
+
+    <div class="grant" data-estado="pendente" id="grant">
+      <div class="grant-top gv-pendente">
+        <span class="ic" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        </span>
+        <div class="estado">
+          <span class="v-pendente"><b>Pedido aguardando sua decisão</b><span>Solicitado há 8 min · expira sem resposta em 4h</span></span>
+          <span class="v-concedido"><b>Acesso concedido</b><span>Aprovado por você · expira automaticamente</span></span>
+          <span class="v-fim"><b>Pedido encerrado</b><span>O suporte segue sem acesso a dados pessoais</span></span>
+        </div>
+        <div class="acao">
+          <span class="v-pendente">
+            <button class="btn btn-contorno btn-mini" type="button" data-act="negar">Negar</button>
+            <button class="btn btn-primaria btn-mini" type="button" data-act="aprovar">Aprovar acesso</button>
+          </span>
+          <span class="v-concedido">
+            <button class="btn btn-contorno btn-mini" type="button" data-act="revogar">Revogar agora</button>
+          </span>
+        </div>
+      </div>
+      <div class="grant-corpo">
+        <!-- VIEW: pedido pendente -->
+        <div class="v-pendente">
+          <div class="pedido-grade">
+            <div class="pd">
+              <p class="r"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 12 0v1"/></svg>Quem solicita</p>
+              <p class="v"><b>Marcos Lima</b> · Suporte técnico, O Plenário · matrícula OP-2231</p>
+            </div>
+            <div class="pd">
+              <p class="r"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>Motivo declarado</p>
+              <p class="v">Investigar a <b>rejeição da remessa de maio</b> ao TCE-CE (chamado #4821).</p>
+            </div>
+            <div class="pd">
+              <p class="r"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>Escopo do acesso</p>
+              <p class="v">Módulo de compliance — remessa de maio. <span class="mask">Dados pessoais permanecem mascarados.</span></p>
+            </div>
+            <div class="pd">
+              <p class="r"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Prazo solicitado</p>
+              <p class="v"><b>24 horas</b>, expirando sozinho. Você pode revogar antes a qualquer momento.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- VIEW: acesso concedido (anel de prazo + revogar) -->
+        <div class="v-concedido">
+          <div class="acesso-vivo">
+            <span class="anel" role="img" aria-label="Acesso expira em cerca de 24 horas">
+              <svg viewBox="0 0 60 60" aria-hidden="true"><circle class="trilho" cx="30" cy="30" r="26"/><circle class="arco" cx="30" cy="30" r="26" stroke-dasharray="163.4" stroke-dashoffset="8"/></svg>
+              <span class="c">24h</span>
+            </span>
+            <div class="ax">
+              <b>Marcos Lima tem acesso ao módulo de compliance</b>
+              <span>Escopo: remessa de maio · dados pessoais mascarados · expira hoje, 16:20</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- VIEW: encerrado (negado/revogado) -->
+        <div class="v-fim">
+          <p class="fim-nota">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>
+            <span>Decisão registrada na trilha abaixo, com selo. O suporte continua podendo operar <b>metadados</b> (sem dados pessoais) para manter o serviço no ar.</span>
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 2 · AS SUAS GARANTIAS (controle do DPO) ===== -->
+  <section class="secao">
+    <h2>O que está sob o seu controle</h2>
+    <p class="aj">As regras valem para todo pedido — não há exceção silenciosa.</p>
+    <div class="grant">
+      <div class="grant-corpo">
+        <div class="prin">
+          <div class="li"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg><span><b>Você autoriza cada acesso.</b> Nenhum dado pessoal é visto pelo suporte sem a sua aprovação explícita — registrada em seu nome.</span></div>
+          <div class="li"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span><b>Expira sozinho.</b> O acesso termina no prazo que você define (padrão 24h) e pode ser <b>revogado a qualquer momento</b>, sem aviso prévio.</span></div>
+          <div class="li"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg><span><b>Mascarado por padrão.</b> Dados pessoais aparecem ocultos; qualquer exibição necessária ao atendimento é registrada à parte.</span></div>
+          <div class="li"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span><b>Tudo é auditado aqui.</b> Cada pedido, aprovação, acesso e revogação entra na trilha encadeada da Câmara — a sua, não a do fornecedor.</span></div>
+        </div>
+        <div class="dpo-rod">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 12 0v1"/></svg>
+          <span>Encarregada de Dados: <b>Renata Costa</b> · base legal LGPD art. 7º · <a href="#">registro de operações (ROPA)</a></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 3 · TRILHA DE ACESSOS: SELO ENCADEADO ===== -->
+  <section class="secao">
+    <h2>Trilha de acessos de suporte</h2>
+    <p class="aj">Somente-leitura e encadeada: cada selo referencia o anterior, então qualquer alteração quebraria a sequência.</p>
+
+    <div class="lacre" role="status" aria-label="Estado da cadeia de integridade">
+      <span class="selo-ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>
+      <div class="lc-t"><b>Cadeia íntegra</b><span>Cada acesso de suporte traz um selo encadeado ao anterior.</span></div>
+      <div class="lc-cadeia"><b>1.284.907</b><span>eventos selados</span></div>
+    </div>
+
+    <div class="audit">
+      <div class="ev">
+        <span class="q">14/06 · 16:20</span>
+        <div class="o"><span class="acao-tag acao-revog">Revogado</span><b>Acesso de suporte revogado</b><span>por Renata Costa (DPO) · após 1h12 de uso · chamado #4790</span></div>
+        <div class="cadeia"><span>selo <span class="selo">e4c7·8a09</span></span><span class="elo">↳ encadeia a 33cd</span></div>
+      </div>
+      <div class="ev">
+        <span class="q">14/06 · 15:08</span>
+        <div class="o"><span class="acao-tag acao-conced">Concedido</span><b>Acesso de suporte aprovado</b><span>por Renata Costa (DPO) · escopo: módulo de sessão · prazo 24h · mascarado</span></div>
+        <div class="cadeia"><span>selo <span class="selo">a1b2·33cd</span></span><span class="elo">↳ encadeia a 0a12</span></div>
+      </div>
+      <div class="ev">
+        <span class="q">09/06 · 10:44</span>
+        <div class="o"><span class="acao-tag acao-negado">Negado</span><b>Pedido de acesso negado</b><span>por Renata Costa (DPO) · motivo insuficiente · suporte seguiu sem dados pessoais</span></div>
+        <div class="cadeia"><span>selo <span class="selo">77ef·0a12</span></span><span class="elo">↳ encadeia a 7c41</span></div>
+      </div>
+      <div class="rod">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+        Append-only. <a href="trilha-auditoria.html">Ver na trilha completa da Câmara →</a>
+      </div>
+    </div>
+  </section>
+  <div style="height:1.6rem"></div>
+</main>
+
+<script src="../sistema/tema.js"></script>
+<script>
+  /* decisão do DPO: aprovar / negar / revogar muda o estado do card (mock) */
+  (function () {
+    var grant = document.getElementById('grant');
+    if (!grant) return;
+    grant.addEventListener('click', function (e) {
+      var btn = e.target.closest('button[data-act]');
+      if (!btn) return;
+      var a = btn.dataset.act;
+      var estado = a === 'aprovar' ? 'concedido' : (a === 'negar' ? 'negado' : 'revogado');
+      grant.dataset.estado = estado;
+      grant.querySelector('.grant-top').className = 'grant-top gv-' + estado;
+    });
+  })();
+</script>
+</body>
+</html>
