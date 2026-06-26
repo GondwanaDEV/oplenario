@@ -2,7 +2,9 @@
   "Component do pool de conexoes (HikariCP): start abre, stop fecha. O datasource injetado e' o
   que o db/ de cada modulo recebe (next.jdbc/HoneySQL) — sempre schema-qualified (§22.10: nunca
   search_path global, que vazaria entre modulos no pool compartilhado)."
-  (:require [com.stuartsierra.component :as component])
+  (:require [com.stuartsierra.component :as component]
+            ;; carrega as extensoes Instant<->timestamptz no processo (data layer, carry F0.3).
+            [oplenario.kernel.db-tipos])
   (:import (com.zaxxer.hikari HikariConfig HikariDataSource)))
 
 (set! *warn-on-reflection* true)
