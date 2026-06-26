@@ -2,7 +2,7 @@
   "Persistencia de vereador + mandato (entidade com estado, §22.5 eixo C) + licenca + suplencia.
   Funcoes sobre a `tx` do tenant (RLS isola)."
   (:require [next.jdbc :as jdbc]
-            [oplenario.cadastros.db.comum :as comum]))
+            [oplenario.kernel.db-util :as comum]))
 
 (set! *warn-on-reflection* true)
 

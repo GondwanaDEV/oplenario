@@ -2,7 +2,7 @@
   "Persistencia das tabelas de REFERENCIA/DOMINIO do cadastros (sem ente_id): municipios (IBGE),
   tribunal_de_contas (E2) e jurisdicao_camara (E1). Lidas dentro da tx do tenant (mesmo schema)."
   (:require [next.jdbc :as jdbc]
-            [oplenario.cadastros.db.comum :as comum]))
+            [oplenario.kernel.db-util :as comum]))
 
 (set! *warn-on-reflection* true)
 

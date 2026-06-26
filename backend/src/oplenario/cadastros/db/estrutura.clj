@@ -2,7 +2,7 @@
   "Persistencia da estrutura institucional do tenant: ente (perfil 1:1), legislatura, sessao_legislativa.
   Funcoes sobre a `tx` do tenant (RLS isola). next.jdbc parametrizado, schema-qualified (§22.10)."
   (:require [next.jdbc :as jdbc]
-            [oplenario.cadastros.db.comum :as comum]))
+            [oplenario.kernel.db-util :as comum]))
 
 (set! *warn-on-reflection* true)
 

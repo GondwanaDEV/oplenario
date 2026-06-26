@@ -2,7 +2,7 @@
   "Persistencia de comissao (a Mesa Diretora e' tipo='mesa') + cargos nomeados + membership.
   Funcoes sobre a `tx` do tenant (RLS isola)."
   (:require [next.jdbc :as jdbc]
-            [oplenario.cadastros.db.comum :as comum]))
+            [oplenario.kernel.db-util :as comum]))
 
 (set! *warn-on-reflection* true)
 

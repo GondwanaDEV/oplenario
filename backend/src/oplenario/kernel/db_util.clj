@@ -1,6 +1,6 @@
-(ns oplenario.cadastros.db.comum
-  "Helpers do db/ do cadastros. As funcoes db/ recebem a `tx` ja no contexto do tenant (com-tenant*) —
-  a RLS isola; reference tables (sem ente_id) sao lidas na MESMA tx (mesmo schema, sem JOIN cross-schema)."
+(ns oplenario.kernel.db-util
+  "Helpers de data layer compartilhados (kernel — nao importa modulo, §22.10). A conversao da linha do
+  next.jdbc (chaves namespaced snake :tabela/coluna_snake) para o mapa de dominio (kebab, sem namespace)."
   (:require [clojure.string :as str]))
 
 (set! *warn-on-reflection* true)
