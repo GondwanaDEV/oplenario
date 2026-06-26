@@ -1,28 +1,63 @@
-# stack local/test (§22.9 Eixo 5: Docker em todo deploy local/test)
+# Stack local do projeto (§22.9 Eixo 5: Docker em todo deploy local/test).
+# Rodar:  docker compose up --build         (portas do host via .env — ver .env.example)
+# Auth:   docker compose --profile auth up   (sobe o Keycloak; F0 nao usa, fica de fora por padrao)
+# O servico `migrate` aplica as migrations e sai antes do `app` (serve nao migra — §22.9, evita
+# corrida de migration entre replicas). O `app` so sobe depois do Postgres saudavel + migrate ok.
+name: oplenario
+
 services:
   postgres:
     image: postgres:16
     environment: { POSTGRES_USER: oplenario, POSTGRES_PASSWORD: dev, POSTGRES_DB: oplenario }
-    ports: ["5432:5432"]
+    ports: ["${OPLENARIO_PG_PORT:-5432}:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oplenario -d oplenario"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
   valkey:
     image: valkey/valkey:8
-    ports: ["6379:6379"]
+    ports: ["${OPLENARIO_VALKEY_PORT:-6379}:6379"]
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
   minio:
     image: minio/minio
     command: server /data --console-address ":9001"
     environment: { MINIO_ROOT_USER: oplenario, MINIO_ROOT_PASSWORD: dev12345 }
-    ports: ["9000:9000", "9001:9001"]
+    ports:
+      - "${OPLENARIO_MINIO_PORT:-9000}:9000"
+      - "${OPLENARIO_MINIO_CONSOLE_PORT:-9001}:9001"
+
   keycloak:
     image: quay.io/keycloak/keycloak:26.0.0
     command: start-dev
     environment: { KEYCLOAK_ADMIN: admin, KEYCLOAK_ADMIN_PASSWORD: admin }
-    ports: ["8080:8080"]
-  app:
+    ports: ["${OPLENARIO_KEYCLOAK_PORT:-8080}:8080"]
+    profiles: ["auth"]
+
+  migrate:
+    image: oplenario-backend:local
     build: .
-    depends_on: [postgres, valkey, minio, keycloak]
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      DATABASE_URL: "jdbc:postgresql://postgres:5432/oplenario"
+    command: ["migrate"]
+    restart: "no"
+
+  app:
+    image: oplenario-backend:local
+    build: .
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrate:  { condition: service_completed_successfully }
     environment:
       DATABASE_URL: "jdbc:postgresql://postgres:5432/oplenario"
       VALKEY_URI: "redis://valkey:6379"
       MINIO_ENDPOINT: "http://minio:9000"
-      KEYCLOAK_URL: "http://keycloak:8080"
-    ports: ["8888:8888"]
+    ports: ["${OPLENARIO_APP_PORT:-8888}:8888"]
