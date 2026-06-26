@@ -232,6 +232,18 @@ CREATE TABLE IF NOT EXISTS cadastros.comissao_membro (
 --;;
 CREATE INDEX IF NOT EXISTS idx_comissao_membro_comissao ON cadastros.comissao_membro (ente_id, comissao_id);
 --;;
+-- INTEGRIDADE ANTI-FAIL-OPEN (review F1.2 #1): no maximo UMA Mesa Diretora EFETIVADA ativa por ente num
+-- dado periodo. Sem isto, duas linhas tipo='mesa' com vigencia sobreposta fariam mesa-vigente-id (e logo
+-- presidente-da-mesa?/quem_exerce_presidencia) escolher a Mesa ERRADA por heuristica -> concessao indevida.
+-- Staging (efetivado_em IS NULL) fica de fora ate efetivar. Requer btree_gist p/ o '=' no GiST.
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+--;;
+ALTER TABLE cadastros.comissao ADD CONSTRAINT uq_uma_mesa_ativa
+  EXCLUDE USING gist (
+    ente_id WITH =,
+    daterange(vigencia_inicio, COALESCE(vigencia_fim, 'infinity'::date), '[]') WITH &&
+  ) WHERE (tipo = 'mesa' AND efetivado_em IS NOT NULL);
+--;;
 -- indices do LADO FILHO das FKs (o PG nao os cria sozinho): evitam Seq Scan no check de FK e nos joins
 -- filho->pai (review F1.1 M1). Colunas FK anulaveis usam indice PARCIAL (nao indexa NULL).
 CREATE INDEX IF NOT EXISTS idx_sessao_leg_legislatura  ON cadastros.sessao_legislativa (ente_id, legislatura_id);
