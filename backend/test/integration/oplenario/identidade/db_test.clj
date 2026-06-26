@@ -43,9 +43,10 @@
     (let [i (id/por-cpf *ds* cpf)]
       (is (= iid (:id i)) "resolve CPF -> identidade")
       (is (m/validate mod/Identidade i) "identidade bate o model"))
-    (id/vincular-externa! *ds* {:id (random-uuid) :identidade-id iid :provedor "gov_br" :sub "govbr-sub-123"})
-    (is (= iid (id/identidade-por-sub *ds* "gov_br" "govbr-sub-123")) "resolve (gov_br, sub) -> identidade")
-    (is (nil? (id/identidade-por-sub *ds* "gov_br" "inexistente")) "sub desconhecido -> nil")))
+    (let [sub (str "govbr-" (random-uuid))]
+      (id/vincular-externa! *ds* {:id (random-uuid) :identidade-id iid :provedor "gov_br" :sub sub})
+      (is (= iid (id/identidade-por-sub *ds* "gov_br" sub)) "resolve (gov_br, sub) -> identidade"))
+    (is (nil? (id/identidade-por-sub *ds* "gov_br" (str "inexistente-" (random-uuid)))) "sub desconhecido -> nil")))
 
 (deftest cpf-invalido-e-rejeitado
   (is (thrown? AssertionError (id/inserir! *ds* {:id (random-uuid) :cpf "12345678900" :nome "X"}))
@@ -54,15 +55,15 @@
       "CPF de 11 digitos iguais e' rejeitado"))
 
 (deftest broker-govbr-guarda-anti-takeover
-  (let [a (random-uuid) b (random-uuid)]
+  (let [a (random-uuid) b (random-uuid) sub (str "reciclado-" (random-uuid))]
     (id/inserir! *ds* {:id a :cpf (cpf-valido) :nome "Pessoa A"})
     (id/inserir! *ds* {:id b :cpf (cpf-valido) :nome "Pessoa B"})
-    (id/vincular-externa! *ds* {:id (random-uuid) :identidade-id a :provedor "gov_br" :sub "sub-reciclado"})
+    (id/vincular-externa! *ds* {:id (random-uuid) :identidade-id a :provedor "gov_br" :sub sub})
     ;; re-vincular o MESMO sub a outra identidade -> takeover -> LANCA (nao no-op silencioso)
     (is (thrown? Exception
-                 (id/vincular-externa! *ds* {:id (random-uuid) :identidade-id b :provedor "gov_br" :sub "sub-reciclado"}))
+                 (id/vincular-externa! *ds* {:id (random-uuid) :identidade-id b :provedor "gov_br" :sub sub}))
         "re-bind do sub a identidade diferente lanca (anti-takeover)")
-    (is (= a (id/identidade-por-sub *ds* "gov_br" "sub-reciclado")) "o sub segue apontando p/ a identidade original")))
+    (is (= a (id/identidade-por-sub *ds* "gov_br" sub)) "o sub segue apontando p/ a identidade original")))
 
 (deftest split-de-privilegio-dominio-nao-le-cpf
   (id/inserir! *ds* {:id (random-uuid) :cpf (cpf-valido) :nome "Segredo"})
