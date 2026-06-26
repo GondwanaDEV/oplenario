@@ -344,8 +344,15 @@ nem `notificacoes`: `minhas-pendencias` vira a **home do servidor** (cabeçalho 
     completa o ato aqui. **Dedup §5.1 cravado** em nota de cabeçalho ("aqui você acompanha; o acionável fica em Minhas
     pendências e some de lá sozinho; 'lido' mora só aqui; o sino conta a sua fila, não esta lista") + filtro "Falhas".
     AA 2 temas (dedup 7.54/5.90 · falha-tag 4.76/5.33 · acento-telha 3.50/3.71 ✓≥3 · h3 14.42/12.00 · deep-link 7.91/6.32).
-  - **Restam (2/4):** `vereador-app` → 2º estado fora-de-sessão + ciência 1-toque + chip de estado do voto;
-    `paineis-mesa` → ver abaixo.
+  - ✅ **`vereador-app` FEITO (26/06)** — 3ª das 4 (Aposta 2). **2º estado fora-de-sessão** (toggle de demo Em
+    sessão↔Fora): o herói ao-vivo (palco escuro, votação) dá lugar a um **herói calmo jade** ("Sem sessão agora /
+    Tudo em dia, Helena" + próxima sessão), sem inventar urgência. **Chip de ciclo do voto** no herói ao-vivo
+    (pendente→**enviado**→confirmado, com nota "entra no placar oficial — é ele que confirma; pode alterar enquanto
+    aberta" = honra a fonte-é-autoridade do Invariante). **Ciência em 1 toque** (cartão cobalto → "Dar ciência" →
+    **"Ciente · registrado hoje, 09:14"** = a prova com data/hora). AA 2 temas (voto-tracker 6.69–8.93 no palco ·
+    fora-hero estado 4.50/4.87, h2 13.63/10.97, resumo 6.25/5.96 · ciência ci-top 5.82/5.53 — cobalto clareado no
+    escuro, h3 14.86/9.19, ciente 8.15/4.84).
+  - **Resta (1/4):** `paineis-mesa` → ver abaixo (HERO de venda aprovado — pele FALHA condicional, nunca faixa fixa).
 - **`paineis-mesa` (HERO aprovado):** o verde **"A Casa está em dia" continua canônico e o default da demo**; o
   cartão de FALHA é **pele condicional do MESMO placar** (ramo telha já antecipado no SVG `:435`), renderizado só
   quando há falha real — **nunca faixa fixa nova** (não inverter a 1ª impressão de venda). + lente **gated do
