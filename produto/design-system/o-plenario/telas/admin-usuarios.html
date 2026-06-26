@@ -60,6 +60,21 @@
   .u-acesso { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); white-space: nowrap; }
   .u-menu { background: none; border: 1px solid var(--linha); color: var(--texto-2); cursor: pointer; border-radius: 7px; width: 34px; height: 34px; display: grid; place-items: center; }
   .u-menu:hover { color: var(--texto); border-color: var(--texto-2); }
+  .u-menu[aria-expanded="true"] { color: var(--texto); border-color: var(--texto-2); background: var(--surface-2); }
+
+  /* menu de ações reais (três-pontinhos → ações) */
+  .u-acao-wrap { position: relative; display: inline-block; }
+  .u-acoes { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; width: 280px; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-sm); box-shadow: var(--sombra-alta); padding: 0.35rem; text-align: left; }
+  .u-acoes[hidden] { display: none; }
+  .u-acoes > button { display: block; width: 100%; text-align: left; background: none; border: none; border-radius: var(--raio-sm); padding: 0.55rem 0.65rem; cursor: pointer; }
+  .u-acoes > button:hover { background: var(--surface-2); }
+  .u-acoes > button b { display: flex; align-items: center; gap: 0.45rem; font-weight: 600; font-size: var(--t-13); color: var(--texto); }
+  .u-acoes > button b svg { flex: 0 0 auto; color: var(--marca); }
+  .u-acoes > button > span { display: block; font-size: var(--t-12); color: var(--texto-2); margin-top: 0.15rem; padding-left: 1.35rem; line-height: 1.4; }
+  .u-acoes .dual { font-family: var(--mono); font-size: 0.6rem; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; color: var(--cobalto); border: 1px solid color-mix(in srgb, var(--cobalto) 35%, transparent); border-radius: 4px; padding: 0.02rem 0.32rem; margin-left: auto; }
+  [data-tema="escuro"] .u-acoes .dual { color: var(--foco); border-color: color-mix(in srgb, var(--foco) 40%, transparent); }
+  .u-acoes hr { border: none; border-top: 1px solid var(--linha); margin: 0.35rem 0; }
+  .u-acoes .perigo b, .u-acoes .perigo b svg { color: var(--acento-texto); }
 
   .resumo { display: flex; gap: 0.5rem 1.2rem; flex-wrap: wrap; margin: 1rem 0 0; }
   .rz { font-size: var(--t-13); color: var(--texto-2); }
@@ -143,7 +158,30 @@
           <td><span class="perfil pf-serv"><span class="pt" aria-hidden="true"></span>Servidor legislativo</span></td>
           <td><span class="st st-ativo"><span class="dot" aria-hidden="true"></span>Ativo</span></td>
           <td class="u-acesso">há 2 min</td>
-          <td><button class="u-menu" type="button" aria-label="Ações de Rita Campos"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></td>
+          <td>
+            <div class="u-acao-wrap">
+              <button class="u-menu" type="button" id="m-rita" aria-haspopup="true" aria-expanded="false" aria-label="Ações de Rita Campos"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>
+              <div class="u-acoes" role="menu" aria-labelledby="m-rita" hidden>
+                <button role="menuitem" type="button">
+                  <b><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Redefinir MFA<span class="dual">2 aprovações</span></b>
+                  <span>O reset só vale após a confirmação de um segundo administrador — protege contra sequestro de conta.</span>
+                </button>
+                <button role="menuitem" type="button">
+                  <b><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 20v-1a5 5 0 0 1 8-4M15 11l2 2 4-4"/></svg>Papel e vigência</b>
+                  <span>Trocar o perfil e definir <b>até quando vale</b> — uma substituição temporária expira sozinha na data.</span>
+                </button>
+                <button role="menuitem" type="button">
+                  <b><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 17H7a5 5 0 0 1 0-10h2M15 7h2a5 5 0 0 1 0 10h-2M8 12h8"/></svg>Vínculo com a Casa</b>
+                  <span>Ativar, suspender ou encerrar o vínculo, com data — o histórico de atos é preservado.</span>
+                </button>
+                <hr aria-hidden="true">
+                <button role="menuitem" type="button" class="perigo">
+                  <b><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg>Desativar acesso</b>
+                  <span>Bloqueia o login imediatamente; nada do que a pessoa já fez é apagado.</span>
+                </button>
+              </div>
+            </div>
+          </td>
         </tr>
         <tr>
           <td><div class="u-quem"><span class="u-av" style="background:var(--telha)" aria-hidden="true">AM</span><span class="nm"><b>Ana Moreira</b><span>ana.moreira@…leg.br</span></span></div></td>
@@ -187,5 +225,17 @@
 </main>
 
 <script src="../sistema/tema.js"></script>
+<script>
+  /* menu de ações: abre/fecha no três-pontinhos; fecha ao clicar fora ou Esc */
+  (function () {
+    var wrap = document.querySelector('.u-acao-wrap');
+    if (!wrap) return;
+    var btn = wrap.querySelector('.u-menu'), menu = wrap.querySelector('.u-acoes');
+    function set(open) { menu.hidden = !open; btn.setAttribute('aria-expanded', String(open)); }
+    btn.addEventListener('click', function (e) { e.stopPropagation(); set(menu.hidden); });
+    document.addEventListener('click', function (e) { if (!wrap.contains(e.target)) set(false); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') set(false); });
+  })();
+</script>
 </body>
 </html>

@@ -396,7 +396,7 @@ nem `notificacoes`: `minhas-pendencias` vira a **home do servidor** (cabeçalho 
 | `console-operador` | handoff operador→1º admin (C03) + semântica de lifecycle (suspensão preserva portal/e-SIC, LAI) |
 | `console-operador-tenant` | premissa muda ao exigir a tela-espelho lado-ente (Fase C) |
 | `config-ente` | ✅ **FEITO (26/06)** — aba **Privacidade · LGPD** operável pelo DPO: cartão do Encarregado + **ROPA** (3 operações com base legal/categorias/retenção + "registrar nova") + Direitos do titular (prazo `[GAP]`) + link p/ `grant-suporte-ente` |
-| `admin-usuarios` | menu três-pontinhos → ações reais (reset-MFA dual, papel com vigência, vínculo) master-detail |
+| `admin-usuarios` | ✅ **FEITO (26/06)** — menu três-pontinhos vira **dropdown de ações reais**: **Redefinir MFA** (dupla aprovação) · **Papel e vigência** (expira na data) · **Vínculo com a Casa** (ativar/suspender/encerrar c/ data) · **Desativar acesso** (perigo) — cada ação com a semântica em microcopy; toggle acessível (aria-expanded/Esc/clique-fora) |
 | `tramitacao-board` / `pos-aprovacao` | badge de regime (C40, correção do motor) / encaminhamento externo + status "atendido" (C64) |
 | `status.html` | **JÁ feito (v1.44)** — mock de uptime → "plataforma em implantação" |
 
