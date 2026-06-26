@@ -309,8 +309,15 @@ nem `notificacoes`: `minhas-pendencias` vira a **home do servidor** (cabeçalho 
   contrato (legendagem humana acionada, a ata é o registro oficial) + **recurso "Relatar perda de acessibilidade"**.
   Distinção provada: gravidade **crítica** aqui vs **atenção** nas outras 3. AA 2 temas (banda 19.4/12.99 · banner
   15.51/12.62 · borda telha 4.46 ✓≥3 · rótulo 13.94 — corrigido de 3.28: cor não é sinal único, `--texto` + switch + banner).
-- **Última superfície de R-IA-1 (mecânica, pendente):** busca textual não-IA em `proposicoes`/`legislacao` (cai para
-  busca por texto com aviso). **Próximo grande bloco da Fase B:** camada de atenção nas 4 homes (`minhas-pendencias`
+- ✅ **R-IA-1 na busca FEITO (26/06)** — 5ª e última superfície, em `proposicoes` **e** `legislacao` (mesma superfície,
+  2 telas-lista, 1 commit). Fallback **distinto e o mais barato**: o estado **Ativo** ganha um realce **"✦ Busca
+  inteligente"** (chip cobalto = ranqueamento por relevância + linguagem natural, Aposta 1); o IA-off **degrada para
+  correspondência textual literal** + **aviso âmbar** ("Busca inteligente indisponível — mostrando correspondências
+  exatas por número/texto/filtros; **todo o acervo continua pesquisável**"). Honra o contrato (nada some — número e
+  filtros são a **autoridade exata**, a IA só ranqueia) e a fonte-é-autoridade. Alternável por **tira de demonstração**
+  (scaffolding marcado). AA 2 temas (aviso-texto 6.67–7.05 · corpo 14.72–15.55 · borda âmbar 3.42–9.23 ✓≥3 · realce-IA
+  5.34/4.93 — cobalto clareado no escuro p/ ≥4.5 · botão-demo 15.51/12.62). **Com isso o eixo R-IA-1 fecha (5/5).**
+- **Próximo grande bloco da Fase B:** camada de atenção nas 4 homes (`minhas-pendencias`
   → home do servidor · `notificacoes` classe FALHA + dedup · `vereador-app` 2º estado · `paineis-mesa` pele FALHA condicional).
   `portal-cidadao`, busca (`proposicoes`/`legislacao`), `legendas-ao-vivo`. **Não é um componente único:** só o
   **banner honesto** + o **contrato "IA-off = o ato legislativo fecha sem ela"** é transversal; o **fallback é

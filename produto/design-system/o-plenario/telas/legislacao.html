@@ -76,6 +76,22 @@
   .rodape .plat .sig { width: 16px; height: 16px; }
 
   @media (max-width: 620px) { .lei { grid-template-columns: auto 1fr; } .lei .baixar { grid-column: 2; justify-self: start; } }
+
+  /* ---- realce de IA na busca + degradação R-IA-1 ---- */
+  .busca-meta { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin: 0.6rem 0 0; max-width: 560px; }
+  .busca-ia { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); letter-spacing: .03em; color: var(--cobalto); background: color-mix(in srgb, var(--cobalto) 9%, var(--surface)); border: 1px solid color-mix(in srgb, var(--cobalto) 32%, transparent); border-radius: 999px; padding: 0.3rem 0.7rem; min-height: 32px; white-space: nowrap; }
+  [data-tema="escuro"] .busca-ia { color: var(--foco); background: color-mix(in srgb, var(--foco) 12%, var(--surface)); border-color: color-mix(in srgb, var(--foco) 38%, transparent); }
+  .busca-ia svg { flex: 0 0 auto; }
+  body.ia-off .busca-ia { display: none; }
+  .busca-aviso { display: none; gap: 0.55rem; align-items: flex-start; border-left: 3px solid var(--amarelo-traco); background: color-mix(in srgb, var(--amarelo) 9%, var(--surface)); border-radius: var(--raio-sm); padding: 0.6rem 0.8rem; font-size: var(--t-13); color: var(--texto); line-height: 1.45; margin: 0.6rem 0 0; max-width: 560px; }
+  body.ia-off .busca-aviso { display: flex; }
+  .busca-aviso svg { flex: 0 0 auto; color: var(--aviso-texto); margin-top: 2px; }
+  .busca-aviso b { color: var(--aviso-texto); font-weight: 600; }
+  /* tira de demonstração — scaffolding de design, não é chrome de produto */
+  .demo-strip { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin: 1rem 0 0; padding: 0.5rem 0.75rem; border: 1px dashed color-mix(in srgb, var(--texto-2) 45%, transparent); border-radius: var(--raio-sm); background: color-mix(in srgb, var(--texto-2) 5%, transparent); font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); max-width: 560px; }
+  .demo-strip .seg { display: inline-flex; border: 1px solid var(--linha); border-radius: 999px; overflow: hidden; }
+  .demo-strip .seg button { font: inherit; padding: 0.3rem 0.8rem; min-height: 32px; border: none; background: var(--surface); color: var(--texto-2); cursor: pointer; }
+  .demo-strip .seg button[aria-pressed="true"] { background: var(--texto); color: var(--surface); }
 </style>
 </head>
 <body class="superficie-publica">
@@ -111,6 +127,23 @@
     <div class="busca-grande">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
       <input type="search" placeholder="Buscar por número, ano ou assunto…" aria-label="Buscar lei" />
+    </div>
+    <div class="busca-meta">
+      <span class="busca-ia" title="Entende perguntas em linguagem natural e ordena por relevância. Número e tipo são correspondência exata — a IA só ranqueia.">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9l-4.7 1.3L12 15l-1.8-4.7L5.5 9l4.7-1.3z"/></svg>
+        Busca inteligente
+      </span>
+    </div>
+    <div class="busca-aviso" role="status">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+      <span><b>Busca inteligente indisponível.</b> Mostrando correspondências exatas por número, ano e tipo — <b>todas as normas continuam pesquisáveis</b>. A ordenação por relevância volta quando o serviço reconectar.</span>
+    </div>
+    <div class="demo-strip" role="group" aria-label="Demonstração de design: estado da busca inteligente">
+      <span>Demonstração · busca inteligente:</span>
+      <span class="seg">
+        <button type="button" data-ia="ativo" aria-pressed="true">Ativa</button>
+        <button type="button" data-ia="off" aria-pressed="false">Indisponível</button>
+      </span>
     </div>
   </div>
 
@@ -212,5 +245,20 @@
 </main>
 
 <script src="../sistema/tema.js"></script>
+<script>
+  /* tira de demonstração: alterna o estado da busca inteligente (R-IA-1) */
+  (function () {
+    var strip = document.querySelector('.demo-strip');
+    if (!strip) return;
+    strip.addEventListener('click', function (e) {
+      var btn = e.target.closest('button[data-ia]');
+      if (!btn) return;
+      document.body.classList.toggle('ia-off', btn.dataset.ia === 'off');
+      strip.querySelectorAll('button[data-ia]').forEach(function (b) {
+        b.setAttribute('aria-pressed', String(b === btn));
+      });
+    });
+  })();
+</script>
 </body>
 </html>
