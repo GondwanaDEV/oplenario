@@ -1,7 +1,7 @@
 # ADR-0001 — Estrutura de pastas e silhueta de módulo
 
 - **Status:** Aceito · 2026-06-26
-- **Decisor:** Emilio (CTO)
+- **Decisor:** Daouda Traore (CTO)
 - **Fonte canônica:** §22.10 do `documento-mestre-camaras.md` (SSOT). Esta ADR **consolida e fixa** a
   forma vigente após os refactors `refactor(silhueta)` (`34dfeac` dissolução de `port/`; `0fa7d98`
   `schema/`→`wire/in`+`wire/out`). Em conflito, a SSOT (§22.10 + esta ADR) prevalece sobre memória de chat.

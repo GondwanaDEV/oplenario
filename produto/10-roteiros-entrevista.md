@@ -148,5 +148,5 @@ Até lá, `03`/`04` seguem 🟡.
   precárias (o coração do ICP) podem ficar sub-representadas. Mitigar buscando ativamente câmaras que
   ainda usam OBS+YouTube.
 - **Não substitui a POC:** willingness-to-pay declarada ≠ contrato assinado. Q7 dá banda, não preço final.
-- **Execução é humana:** o ECC não pode rodar isto. Sem o Emilio/time agendar, Q5/Q7 ficam abertas e a
+- **Execução é humana:** o ECC não pode rodar isto. Sem o Daouda Traore/time agendar, Q5/Q7 ficam abertas e a
   discovery **não fecha** (`08` §3).

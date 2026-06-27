@@ -48,7 +48,7 @@ indicação/moção, workstream do recebido, classificação temática, agenda p
 
 ---
 
-## 1. Reconciliação dos 4 itens do Emilio
+## 1. Reconciliação dos 4 itens do Daouda Traore
 
 O fundador apontou 4 pendências. Nenhuma é buraco estrutural — cada uma tem cobertura parcial real e uma lacuna de
 profundidade precisa. Honestamente, item por item:
@@ -264,7 +264,7 @@ A capacidade está catalogada e/ou o substrato cravado; falta a profundidade de 
 
 ---
 
-## 4. Já coberto, mas pouco visível (onde o Emilio "não viu")
+## 4. Já coberto, mas pouco visível (onde o Daouda Traore "não viu")
 
 Itens catalogados cuja superfície foi deliberadamente diferida ou cujo substrato já neutraliza o risco que parece
 faltar. Aqui o fundador acha o que procurava:

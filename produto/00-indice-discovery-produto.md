@@ -72,6 +72,6 @@ produto), **T5** (TCE-CE vs DSL — arquitetura). Próximo movimento = decisão 
   migração) — **menor e mais rico**. Decidir se o ICP é volume-barato ou valor-rico. → temas 03/06/08.
   ✅ **RESOLVIDA (`11`F.3 + campo `12`):** ICP = **meio 20–50k hab do NE fora do CE, com gatilho TCE** —
   nem a base grávida-do-grátis, nem o topo SAPL-saturado.
-- **T7 — herói de compra fora do escopo da V1 (campo `12`C + `05`).** ✅ **RESOLVIDA (Emilio, 20/06/2026):
+- **T7 — herói de compra fora do escopo da V1 (campo `12`C + `05`).** ✅ **RESOLVIDA (Daouda Traore, 20/06/2026):
   ata-por-IA ENTRA na V1** como feature-âncora. Cauda a tratar na arquitetura: captação de áudio é parte da
   oferta (§22.6), e o pipeline áudio→transcrição→IA aperta o cronograma de §18. Ver `05`§2.

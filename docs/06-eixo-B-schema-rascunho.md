@@ -65,7 +65,7 @@ on/off + parâmetros do tenant.
 o domínio genuinamente difere (escopo de compartilhamento). ⚑ **Decidido e sinalizado** (não
 perguntado — resolvível com o contexto do produto). Fica registrado em destaque porque divergir de
 um padrão estabelecido, mesmo justificado, é o que a metodologia manda sinalizar; revisável se o
-Emilio discordar na revisão da consolidação.
+Daouda Traore discordar na revisão da consolidação.
 
 Consequência direta: a tabela de **definição** (B1) é tabela de **domínio** (como `municipios`) e
 **não carrega `ente_id`**; a tabela de **binding** (B2) é tabela de **tenant** e carrega `ente_id`

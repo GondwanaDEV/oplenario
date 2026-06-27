@@ -7,7 +7,7 @@
 > segurança, privacidade operacional, confiabilidade, performance, operação/SRE, custo, legal-B2G —
 > e **onde cada requisito já está decidido vs. onde é ponto cego.**
 >
-> **Status (decisão Emilio, 22/06/2026): REGISTRO. Não endereçar agora** — *"guarda essas pendências,
+> **Status (decisão Daouda Traore, 22/06/2026): REGISTRO. Não endereçar agora** — *"guarda essas pendências,
 > futuramente vamos endereçar esses pontos não-funcionais."* Este doc **não toma decisões de
 > arquitetura**; mapeia cobertura e nomeia omissões com proposta de régua §15, para abrir uma passada
 > dedicada depois (sob o protocolo *Confirma?*, porque vários itens reabrem §16/§22 e o §18).

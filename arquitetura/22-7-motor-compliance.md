@@ -218,7 +218,7 @@ a função de relação `remessa_enviada(ente, sistema, competencia)` é a **cos
 rastreada e o artefato — gerar → submeter → aceitar é o que a vira `verdadeiro`, transitando a
 obrigação `pendente → cumprida`.
 
-**Nó central — a spec de layout é DADO, não código nem extensão da DSL (decisão "2b", Emilio).** A
+**Nó central — a spec de layout é DADO, não código nem extensão da DSL (decisão "2b", Daouda Traore).** A
 especificação de qual-campo-de-onde-em-que-formato é um **descritor declarativo próprio**: dado
 versionado por cópia integral como `template_compliance` (§22.7.6), que **reusa o registry de funções de
 relação como fonte dos valores** mas tem seu próprio renderizador. Descartadas: *estender a DSL de
@@ -248,7 +248,7 @@ o Eixo B; reenvio após rejeição é fato comum.
 **Ciclo de vida (enum em código, não template).** `rascunho → validada → submetida → {aceita | rejeitada}`;
 reenvio = nova versão. Universal entre câmaras/regimes → **enum fixo em código**, como o ciclo da
 obrigação (§22.7.7) e as emendas (§22.4 eixo D); a DSL governa asserção/prazo, não ciclo. **Costura
-confirmada (Emilio):** `remessa_enviada` assere a obrigação como **cumprida em `aceita`, não em
+confirmada (Daouda Traore):** `remessa_enviada` assere a obrigação como **cumprida em `aceita`, não em
 `submetida`** — envio rejeitado não cumpre a obrigação regulatória, e perder a janela por rejeição é o
 "incidente inaceitável" que justifica o rigor do motor. O rótulo terminal exato (há "em análise"? aceite
 síncrono?) é `[GAP]` do protocolo do TCE-CE — **único `[GAP]` que toca a *forma*** (não só a folha),

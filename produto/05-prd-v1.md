@@ -17,7 +17,7 @@ transparência real, e há risco de incidente regulatório (TCE). Os incumbentes
 ## 2. Metas e não-metas
 
 **Metas da V1:** entregar os **10 módulos** de §16 em 4 meses (§18), materializando as 3 apostas
-(IA copiloto · UX 3 públicos · confiança operacional). 🔴 **Meta-herói (decisão Emilio, 20/06/2026):**
+(IA copiloto · UX 3 públicos · confiança operacional). 🔴 **Meta-herói (decisão Daouda Traore, 20/06/2026):**
 a **ata automática a partir do áudio** entra na V1 como feature-âncora de entrada — é o nº 1 motivo de
 compra do campo (`12`C) e a arma que vence o SAPL grátis. **Passa a régua de §15** (requisito de cliente
 validado em campo, não escopo especulativo).
@@ -26,7 +26,7 @@ validado em campo, não escopo especulativo).
 administrativa (Rota D, anos 2+); plataforma aberta/APIs públicas (§5 — V2); conectores automáticos de
 migração (§16.9 — satélite). *(A "geração automática de ata" saiu das não-metas — virou meta-herói, ver §2.)*
 
-✅ **T7 RESOLVIDA (decisão Emilio, 20/06/2026): ata-por-IA ENTRA na V1.** Cauda que a decisão puxa, a
+✅ **T7 RESOLVIDA (decisão Daouda Traore, 20/06/2026): ata-por-IA ENTRA na V1.** Cauda que a decisão puxa, a
 tratar no design/arquitetura (não anula a decisão — qualifica-a):
 - **Dependência de áudio (`12`D):** a transcrição só é confiável com captação boa; áudio ruim de plenário
   (microfonia/eco) degrada a IA. → **a captação tem que fazer parte da oferta** (conecta §22.6) — ata-IA

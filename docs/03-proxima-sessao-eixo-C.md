@@ -23,7 +23,7 @@ Resultados possíveis e o que cada um significa:
 
 ## 2. Por que C antes de B (a inversão deliberada)
 
-Decisão registrada do Emilio: **inverter Eixo C à frente do Eixo B**. A lógica é
+Decisão registrada do Daouda Traore: **inverter Eixo C à frente do Eixo B**. A lógica é
 custo-de-erro. Modelar o schema das tabelas de template/regra (Eixo B) sobre uma DSL ainda
 não validada contra requisitos reais é construir sobre fundação não testada. O stress-test
 de templates reais é barato e revela cedo se a forma da DSL está certa. Schema vem depois,

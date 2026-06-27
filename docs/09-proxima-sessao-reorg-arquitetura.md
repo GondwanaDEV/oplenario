@@ -62,7 +62,7 @@ linha* (as linhas abaixo são guia da v1.38 e vão driftar assim que a 1ª extra
 ## O que NÃO mexer (deliberado)
 
 - **Nome `documento-mestre-camaras.md`** — fica (referenciado em CLAUDE.md, memória, `.remember`;
-  versão vive no header, decisão do Emilio). Renomear = churn por zero ganho.
+  versão vive no header, decisão do Daouda Traore). Renomear = churn por zero ganho.
 - **`produto/`** — já está limpo. O `produto/13` (46 KB) é tabela de referência, fora do caminho
   quente do design; split só se virar gargalo.
 - **`docs/0X-rascunho`** — drafts de origem já superseded; no máximo um `docs/rascunhos/` depois.

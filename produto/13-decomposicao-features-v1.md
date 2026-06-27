@@ -48,7 +48,7 @@ de aceitação — isso depende do design (ainda a abrir) e do especialista em r
    *gate de capability de produto*. Esta decomposição já refletia a decisão nova.
 
 2. **✅ Revisão de completude + quick wins incorporados (doc-mestre v1.14, 20/06/2026).** A revisão
-   da lista (a pedido do Emilio) achou um buraco — **zero analytics/painéis** voltados à instituição,
+   da lista (a pedido do Daouda Traore) achou um buraco — **zero analytics/painéis** voltados à instituição,
    apesar de as personas decisoras esperarem métricas (presidente: engajamento; servidor: horas
    poupadas) — e três lacunas de completude. Decisões tomadas: **novo módulo 16.11** (painéis read-model,
    quick wins); **C-1 entra** (fluxo pós-aprovação); **C-2/C-3 entram em versão leve** (artefato de

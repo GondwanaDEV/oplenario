@@ -1,6 +1,6 @@
 # O Plenário — Linguagem Visual
 
-> **Direção escolhida (Emilio, 21/06/2026): "República Luminosa" (Cívico Tropical).**
+> **Direção escolhida (Daouda Traore, 21/06/2026): "República Luminosa" (Cívico Tropical).**
 > Style-tile canônico: [`linguagem-visual.html`](./linguagem-visual.html) (abra no navegador).
 > As direções exploradas e **não** escolhidas ficam em [`opcoes/`](./opcoes/) como registro:
 > `A-modernismo-civico` · `C-pedra-e-bronze` · `D-o-registro`. O v0 descartado vive em
@@ -48,7 +48,7 @@ Três públicos, uma língua: **servidor** (eficiência), **vereador** (dignidad
 
 ## Tema claro e escuro
 
-A plataforma tem **dois modos da mesma língua** (decisão Emilio, 21/06): o **claro** é o concreto
+A plataforma tem **dois modos da mesma língua** (decisão Daouda Traore, 21/06): o **claro** é o concreto
 luminoso sob luz tropical; o **escuro — "a noite de Brasília"** — mantém a paleta de azulejo sobre
 um fundo jade-carvão, com jade/telha/cobalto/amarelo brilhando no escuro. Implementação por **tokens
 semânticos** (`--bg`, `--surface`, `--linha`, `--texto`, `--texto-2`, `--marca`, `--acao`,

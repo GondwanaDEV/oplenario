@@ -7,7 +7,7 @@
 > entra na plataforma, está claro (a) como estão as coisas e (b) o que exige sua atenção AGORA* — **como
 > features, ANTES do design** (o método: funcionalidade primeiro, design depois).
 >
-> **Status (22/06/2026):** modelo **CONFIRMADO pelo Emilio** — E1/E2/E3 + as duas decisões (a)/(b) abaixo.
+> **Status (22/06/2026):** modelo **CONFIRMADO pelo Daouda Traore** — E1/E2/E3 + as duas decisões (a)/(b) abaixo.
 > Produzido por workflow (terreno → modelo → decomposição → crítica adversarial); **5 correções da crítica já
 > dobradas**. Este doc **não grava o SSOT** — é trilha de produto; reabre §16.11 **pontualmente** (sob *Confirma?*)
 > só quando for consolidar no doc-mestre.

@@ -4,7 +4,7 @@
 > (React/Next self-host, §22.9 do documento-mestre), comece por este arquivo. Ele mapeia o que é
 > **fonte de verdade**, o que é **referência**, o que é **alvo de tradução** e o que **ignorar**.
 
-A direção visual foi escolhida pelo Emilio (21/06/2026) e está cravada em
+A direção visual foi escolhida pelo Daouda Traore (21/06/2026) e está cravada em
 [`linguagem-visual.html`](./linguagem-visual.html). Em qualquer conflito, **o que está no código
 de `sistema/` e nos style-tiles canônicos prevalece** sobre prosa.
 

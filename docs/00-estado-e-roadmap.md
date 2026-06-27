@@ -80,7 +80,7 @@ registry central, envelopes por contexto, as 4 disciplinas).
 
 ## 4. Roadmap de §22.7 (eixos)
 
-§22.7 é trabalhada por eixos. Ordem **deliberadamente não-sequencial** (decisão do Emilio):
+§22.7 é trabalhada por eixos. Ordem **deliberadamente não-sequencial** (decisão do Daouda Traore):
 
 | Eixo | Tema | Status |
 |---|---|---|

@@ -2,7 +2,7 @@
 
 Log do **trilho primário** (entrevistas de persona). Par primário de `09`/`11` (que são desk).
 **Proveniência:** respostas das personas A/B/C colhidas com o roteiro `10`, **corroboradas pela pesquisa
-de campo do fundador (~abril/2026, ~2 meses antes de 20/06/2026)** — o Emilio leu todas e atestou que
+de campo do fundador (~abril/2026, ~2 meses antes de 20/06/2026)** — o Daouda Traore leu todas e atestou que
 reproduzem os mesmos pontos levantados nas conversas reais daquela rodada. Tratadas aqui como **evidência
 de campo**. **Convenção:** `[CAMPO]` = confirmado em campo · `[INF]` = inferência · ⚠️ = risco/nuance.
 

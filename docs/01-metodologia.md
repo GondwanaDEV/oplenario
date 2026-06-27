@@ -38,7 +38,7 @@ Dentro de um tópico macro, o trabalho é por **eixos**:
 2. **Debater explicitamente** — comparar opções, trazer o custo de cada uma, descartar as
    inviáveis com razão registrada. Decisões descartadas ficam nomeadas no documento (ex.:
    "gRPC explicitamente avaliado e descartado para a V1 porque…").
-3. **Chegar a decisão confirmada** — Emilio confirma (protocolo "Confirmo" / "Confirma?").
+3. **Chegar a decisão confirmada** — Daouda Traore confirma (protocolo "Confirmo" / "Confirma?").
 4. **Consolidar** — a decisão entra na síntese da subseção. **Item fechado não se relitiga**
    em sessões seguintes.
 
@@ -50,11 +50,11 @@ decisões deferidas e pontos a confirmar.**
 
 ## 4. Protocolo de confirmação
 
-- Emilio **intervém com correções cirúrgicas** e espera **incorporação imediata** — não
+- Daouda Traore **intervém com correções cirúrgicas** e espera **incorporação imediata** — não
   "vou anotar para depois", mas ajuste no mesmo turno.
 - O Claude deve **pedir confirmação antes de prosseguir** quando uma decisão foi tomada
   ("Confirma?"), e seguir só após o "Confirmo".
-- Quando Emilio aponta um erro de framing ou de conteúdo, o ajuste é refletido no texto
+- Quando Daouda Traore aponta um erro de framing ou de conteúdo, o ajuste é refletido no texto
   consolidado, não apenas reconhecido na conversa.
 
 ---
@@ -108,7 +108,7 @@ isto?". Exemplos de disciplinas que se repetem e viram regra geral:
 ## 8. Tom e comunicação
 
 - **Português** em toda sessão técnica.
-- Conciso. Emilio é **intolerante a complexidade desnecessária e a framing rebuscado** —
+- Conciso. Daouda Traore é **intolerante a complexidade desnecessária e a framing rebuscado** —
   vai cortar ornamento e pedir o essencial.
 - Honestidade técnica acima de agradar: trazer o custo real de cada opção, inclusive das que
   o Claude recomendaria.

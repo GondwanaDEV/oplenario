@@ -29,7 +29,7 @@ sourced única combinada no fork (B).
   `ecc:competitive-platform-analysis`, `ecc:market-research`, `deep-research`, busca web.
 - **Trilho PRIMÁRIO (humano-liderado, ECC prepara):** Q5, Q7, Q8 — entrevistas com 5–10 câmaras
   (§13). ✅ **Roteiro entregue em `10-roteiros-entrevista.md`** (triagem ICP + script por persona +
-  bloco Q7 willingness-to-pay/edital + consolidação). Execução (agendar/entrevistar) é do Emilio/time.
+  bloco Q7 willingness-to-pay/edital + consolidação). Execução (agendar/entrevistar) é do Daouda Traore/time.
 
 ## 3. Critério de "discovery completa"
 
@@ -47,7 +47,7 @@ cravado:** câmara de **20–50k hab do NE fora do CE com gatilho TCE ativo**.
 
 **Itens vivos que NÃO travam o lançamento** (saem da pesquisa, entram em produto/arquitetura):
 1. **T7 (novo, `05`/`12`C) — decisão de produto:** a **ata-por-IA** é o herói de compra mas está como
-   não-meta no PRD. Emilio decide se entra na V1. **Mais importante que qualquer desk restante.**
+   não-meta no PRD. Daouda Traore decide se entra na V1. **Mais importante que qualquer desk restante.**
 2. **T5 (cross-track):** "TCE-CE coberto na V1" depende da DSL do motor de compliance (§22.7). Arquitetura.
 3. **Q8/Q9 (P2):** método fino de "tempo economizado" (âncora ~200h/ano já posta, `12`D) e difusão da
    gravação-como-registro — itens vivos, não bloqueadores.

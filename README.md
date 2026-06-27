@@ -32,6 +32,6 @@ está consolidada no documento-mestre, o nome **O Plenário** entrou em §1, e o
 registra o bump. As listas granulares da DSL ficaram parqueadas em §22.7.4 ("a transcrever da
 sessão de origem") — não inventadas.
 
-Próxima ação por decisão do Emilio: **trilha de produto/comercial** (mercado, concorrência, PRD,
+Próxima ação por decisão do Daouda Traore: **trilha de produto/comercial** (mercado, concorrência, PRD,
 posicionamento). A trilha de arquitetura fica em pausa; quando retomar, o próximo eixo é o **C**
 (brief em `docs/03-proxima-sessao-eixo-C.md`), com o pré-requisito já cumprido.

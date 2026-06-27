@@ -231,7 +231,7 @@ aprofundamentos de telas existentes, candidatos a uma próxima rodada de polimen
 > Desde então decidiu-se muito: as auditorias **`produto/16`** (rodada 2), **`produto/17`+`18`** (classes de
 > gate) e a **`produto/19`** (camada de atenção, ~67 features), mais as **5 fundações** (doc-mestre v1.40–v1.44).
 > Esta §5 reconcilia esse delta contra o catálogo. Workflow de 10 agentes (6 leitores + síntese + 3 lentes
-> adversariais), correções da crítica dobradas, **enquadramento confirmado pelo Emilio (26/06)**.
+> adversariais), correções da crítica dobradas, **enquadramento confirmado pelo Daouda Traore (26/06)**.
 
 ### 5.0 A virada de enquadramento
 
@@ -243,7 +243,7 @@ existem** + **1 receita transversal**. Números honestos (pós-crítica):
 - **1 tela nova no núcleo confirmado:** Grant de suporte lado-ente.
 - **~8 "telas novas" + profundidades = backlog pré-existente, demand-pulled** pela régua §15 — não é "o novo".
 
-**Disciplina de origem:** só `produto/19` (camada de atenção) está **confirmado** pelo Emilio. As auditorias
+**Disciplina de origem:** só `produto/19` (camada de atenção) está **confirmado** pelo Daouda Traore. As auditorias
 `produto/16-18` são **auditorias de completude** — backlog candidato, gatilho = cliente validado (régua §15),
 não escopo herdado. A §5 não reabre auditoria; traduz o confirmado + o candidato em ação de design.
 
