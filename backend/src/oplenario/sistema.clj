@@ -6,7 +6,8 @@
   (:require [com.stuartsierra.component :as component]
             [oplenario.cadastros.components.repositorio :as repo-cadastros]
             [oplenario.identidade.components.repositorio :as repo-identidade]
-            [oplenario.kernel.components.datasource :as datasource]))
+            [oplenario.kernel.components.datasource :as datasource]
+            [oplenario.motor.components.repositorio :as repo-motor]))
 
 (defn novo-sistema
   "Monta o sistema a partir do config carregado. Cresce por agregacao conforme os modulos chegam."
@@ -14,4 +15,5 @@
   (component/system-map
    :datasource      (datasource/datasource config)
    :repo-cadastros  (component/using (repo-cadastros/repositorio) [:datasource])
-   :repo-identidade (component/using (repo-identidade/repositorio) [:datasource])))
+   :repo-identidade (component/using (repo-identidade/repositorio) [:datasource])
+   :repo-motor      (component/using (repo-motor/repositorio) [:datasource])))
