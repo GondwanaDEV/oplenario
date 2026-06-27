@@ -46,6 +46,26 @@
      :obrigacoes (vec (vals (:obrigacoes @eng)))
      :eventos    (:eventos @eng)}))
 
+(defn politica-dsl
+  "Compila uma expressao DSL de politica (booleana) num predicado `(fn [ator recurso] -> bool)` — o
+  seam que `kernel/autorizacao/check!` roda na camada FINA (§22.5 eixo E). disciplina 5: a politica usa
+  o MESMO avaliador do motor e o MESMO registry de fatos (resolver-para sobre a tx do tenant). `ator` e
+  `recurso` entram no `amb` (acesso a campo: `ator.identidade`, `recurso.autor`); fatos de relacao
+  (`é_o_próprio`, `tem_mandato_vigente`, …) resolvem por nome. A politica declarativa MORA no modulo
+  dono do recurso (so o mecanismo aqui). Expressao nao-booleana / fato-sem-fn = lanca; o `check!`
+  traduz lance -> negacao (quem nao decide, NEGA). Sem prazo/obrigacao: politica e' avaliacao pura.
+
+  `arg-map`: :registro (RegistroFatos) :tx (tx do tenant p/ os fatos) :expr (fonte da expressao DSL)
+  :agora (LocalDate/Instant — default de `hoje()`/`agora()`)."
+  [{:keys [registro tx expr agora]}]
+  (let [no (nuc/parse-expr expr)
+        resolver (rf/resolver-para registro tx)]
+    (fn [ator recurso]
+      (let [amb {"ator" ator "recurso" recurso}
+            ctx {:estado (rt/estado) :agora agora :fonte (atom nil)
+                 :resolver resolver :ente-id (:ente-id ator)}]
+        (boolean (rt/avaliar no amb ctx))))))
+
 ;; [SEAMs ainda NAO estabilizados — F5 (Compliance/remessa)]
 ;; - regras-aplicaveis(repo-motor, ente) : resolve POR ESCOPO juntando motor.template_compliance +
 ;;   motor.compliance_regra_tenant (mesmo schema, sem cross-schema JOIN, §22.10) — a orquestracao do
