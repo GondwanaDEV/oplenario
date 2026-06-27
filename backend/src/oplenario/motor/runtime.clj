@@ -125,15 +125,21 @@
     (quot (+ (numerator x) (dec (denominator x))) (denominator x))   ; ceil exato p/ ratio positivo
     (long x)))
 
-(defn- prazo-vigente-lookup [ctx jurisdicao tipo comp]
+(defn- prazo-vigente-lookup
+  "Builtin own-schema: a linha 'vigente' p/ (dominio, chave-dominio, tipo, periodo). `chave-dominio` é o
+  1º arg do DSL (ex.: \"TCE-CE\"); `dominio` vem do ctx (a regra). Duas fontes: db-backed (`:prazo-fonte`
+  injetada pelo seam `motor/avaliar` — lê motor.prazo_dominio_vigente) ou fixture (`:estado :prazos`)."
+  [ctx chave-dominio tipo comp]
   (let [chave (comp-chave comp)
-        achados (filter #(and (= (:jurisdicao %) jurisdicao) (= (:tipo-prazo %) tipo)
-                              (= (:chave-periodo %) chave) (:vigente %))
-                        (:prazos (:estado ctx)))]
-    (when (empty? achados)
-      (throw (ex-info (str "prazo_vigente: sem prazo p/ " jurisdicao "/" tipo "/" chave " [GAP de conteúdo]") {:erro :runtime})))
-    (reset! (:fonte ctx) (:fonte (first achados)))       ; captura p/ prazo_fonte_ref (S1/S3)
-    (:data-limite (first achados))))
+        achado (if-let [pf (:prazo-fonte ctx)]
+                 (pf (:dominio ctx) chave-dominio tipo chave)                  ; {:data-limite :fonte} | nil
+                 (first (filter #(and (= (:jurisdicao %) chave-dominio) (= (:tipo-prazo %) tipo)
+                                      (= (:chave-periodo %) chave) (:vigente %))
+                                (:prazos (:estado ctx)))))]
+    (when (nil? achado)
+      (throw (ex-info (str "prazo_vigente: sem prazo p/ " chave-dominio "/" tipo "/" chave " [GAP de conteúdo]") {:erro :runtime})))
+    (reset! (:fonte ctx) (:fonte achado))                ; captura p/ prazo_fonte_ref (S1/S3)
+    (:data-limite achado)))
 
 (defn- a-chamada [no amb ctx]
   (let [args (mapv #(avaliar % amb ctx) (:args no))
@@ -152,9 +158,13 @@
       "fracao" (/ (nth args 0) (nth args 1))             ; EXATO — ratio Clojure, nunca float
       "dias" {:duracao-dias (nth args 0)}                ; construtor de Duracao
       "prazo_vigente" (prazo-vigente-lookup ctx (nth args 0) (nth args 1) (nth args 2))
-      "parametro_tenant" (let [binding (get (:bindings st) (:ente-id ctx) {})]
-                           (if (contains? binding (nth args 0)) (get binding (nth args 0))
-                               (throw (ex-info (str "parametro_tenant: " (pr-str (nth args 0)) " não configurado p/ " (:ente-id ctx)) {:erro :runtime}))))
+      "parametro_tenant" (let [chave (nth args 0)
+                               ;; db-backed (:param-fonte, lê motor.compliance_regra_tenant) ou fixture
+                               achado (if-let [pf (:param-fonte ctx)] (pf chave)
+                                          (let [b (get (:bindings st) (:ente-id ctx) {})]
+                                            (when (contains? b chave) [(get b chave)])))]
+                           (if (some? achado) (first achado)
+                               (throw (ex-info (str "parametro_tenant: " (pr-str chave) " não configurado p/ " (:ente-id ctx)) {:erro :runtime}))))
       ;; ---- FATO RESOLVIDO (sai do motor, §2/§3): tudo com forma de DOMÍNIO → o :resolver injetado
       ;;      (RegistroFatos do host). O motor chama por NOME; nunca importa o módulo (§22.10). ----
       ((:resolver ctx) nome args))))
@@ -190,11 +200,14 @@
 (def ^:private LIMIAR-A-VENCER-DIAS 5)   ; "a vencer" = derivação de LEITURA, não estado persistido
 
 (defn motor
-  "Engine atom. O resolvedor (registry injetado) e o ente-id corrente entram aqui — `avaliar-regra!`
-  os repassa ao `ctx`. 2-arg = sem fatos de domínio (só builtins; resolver-vazio)."
-  ([estado agora] (motor estado agora resolver-vazio nil))
-  ([estado agora resolver ente-id]
+  "Engine atom. O resolvedor (registry injetado), o ente-id corrente e — opcional — as fontes db-backed
+  dos builtins own-schema (`:prazo-fonte`/`:param-fonte`, injetadas pelo seam `motor/avaliar`) entram
+  aqui; `avaliar-regra!` os repassa ao `ctx`. Sem fontes → fixture (`:estado`). 2-arg = só builtins."
+  ([estado agora] (motor estado agora resolver-vazio nil nil))
+  ([estado agora resolver ente-id] (motor estado agora resolver ente-id nil))
+  ([estado agora resolver ente-id {:keys [prazo-fonte param-fonte]}]
    (atom {:estado estado :agora agora :resolver resolver :ente-id ente-id
+          :prazo-fonte prazo-fonte :param-fonte param-fonte
           :obrigacoes {} :avaliacoes [] :eventos [] :contexto {} :seq 0})))
 
 (defn- next-id! [eng prefixo]
@@ -218,7 +231,9 @@
   ([eng regra reg-ver amb objeto-tipo objeto-id origem]
    (let [st (:estado @eng) agora (:agora @eng)
          ente-id (:ente-id @eng)                          ; a Casa = o tenant (não vem do amb)
-         ctx {:estado st :agora agora :fonte (atom nil) :resolver (:resolver @eng) :ente-id ente-id}]
+         ctx {:estado st :agora agora :fonte (atom nil) :resolver (:resolver @eng) :ente-id ente-id
+              :prazo-fonte (:prazo-fonte @eng) :param-fonte (:param-fonte @eng)
+              :dominio (:dominio regra)}]               ; domínio da regra → resolução db do prazo_vigente
      (if-not (avaliar (parse-memo (:aplica-quando regra)) amb ctx)
        ;; aplica_quando=falso -> inaplicável (não materializa)
        (auditar! eng ente-id nil (:template regra) reg-ver "inaplicavel" (:severidade regra) origem "aplica_quando=falso")
