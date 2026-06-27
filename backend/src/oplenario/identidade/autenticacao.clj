@@ -4,7 +4,7 @@
   (dentro de com-tenant*; RLS isola). Fail-closed: sem vinculo ativo -> nil (sem sessao). O `ator`
   bate a forma de kernel/autorizacao ({:identidade-id :ente-id :papeis ...}).
 
-  A VERIFICACAO do token (assinatura/exp/issuer) e' do IdP port (kernel/port/idp); aqui as claims ja
+  A VERIFICACAO do token (assinatura/exp/issuer) e' do IdP port (kernel/components/idp); aqui as claims ja
   vem verificadas. Os fluxos VIVOS — login passkey, broker gov.br, provisionamento de realm-por-tenant,
   e os interceptors Pedestal que chamam isto — sao infra-gated (Keycloak vivo + credencial gov.br +
   rotas F3) -> carry F1.4. Este e' o seam estavel, testavel contra o DB real."

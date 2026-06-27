@@ -4,7 +4,6 @@
   (:require [clojure.test :refer [deftest is use-fixtures]]
             [com.stuartsierra.component :as component]
             [oplenario.config :as config]
-            [oplenario.kernel.port.objeto-store :as port]
             [oplenario.kernel.components.objeto-store :as objeto-store]))
 
 (def ^:dynamic *store* nil)
@@ -17,11 +16,11 @@
 (deftest guardar-obter-remover-round-trip
   (let [chave    (str "teste/" (random-uuid) ".txt")
         conteudo (.getBytes "ata da sessao de quarta" "UTF-8")]
-    (is (= chave (port/guardar! *store* chave conteudo "text/plain")) "guardar devolve a chave")
-    (is (= "ata da sessao de quarta" (String. ^bytes (port/obter *store* chave) "UTF-8"))
+    (is (= chave (objeto-store/guardar! *store* chave conteudo "text/plain")) "guardar devolve a chave")
+    (is (= "ata da sessao de quarta" (String. ^bytes (objeto-store/obter *store* chave) "UTF-8"))
         "obter devolve o conteudo guardado")
-    (port/remover! *store* chave)
-    (is (nil? (port/obter *store* chave)) "apos remover, obter devolve nil")))
+    (objeto-store/remover! *store* chave)
+    (is (nil? (objeto-store/obter *store* chave)) "apos remover, obter devolve nil")))
 
 (deftest obter-chave-inexistente-devolve-nil
-  (is (nil? (port/obter *store* (str "nao-existe/" (random-uuid)))) "chave ausente -> nil (nao excecao)"))
+  (is (nil? (objeto-store/obter *store* (str "nao-existe/" (random-uuid)))) "chave ausente -> nil (nao excecao)"))

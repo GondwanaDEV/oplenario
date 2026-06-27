@@ -1,15 +1,20 @@
 (ns oplenario.kernel.components.objeto-store
-  "Component do object store: client S3 (MinIO SDK — fala com QUALQUER endpoint S3-compativel, §22.9).
-  start cria o client + garante o bucket; implementa kernel.port.objeto-store. NAO seto
-  *warn-on-reflection* aqui de proposito: o SDK e' fluent-builder (hint em cada passo deixaria
-  ilegivel) e tudo aqui e' I/O dominado por rede — a reflexao e' negligivel."
+  "Object store S3-compativel (§22.9: audio de sessao, anexos, artefatos de remessa, PII pre-filtro).
+  PROTOCOLO + RECORD co-localizados (sem pasta port/): o protocolo ObjetoStore e' o contrato trocavel;
+  ObjetoStoreS3 (MinIO SDK) e' a impl, fala com QUALQUER endpoint S3-compativel. Stuart Sierra Component:
+  start cria o client + garante o bucket; stop fecha. NAO seto *warn-on-reflection* de proposito: o SDK
+  e' fluent-builder (hint em cada passo deixaria ilegivel) e tudo aqui e' I/O dominado por rede."
   (:require [com.stuartsierra.component :as component]
-            [clojure.tools.logging :as log]
-            [oplenario.kernel.port.objeto-store :as port])
+            [clojure.tools.logging :as log])
   (:import (io.minio MinioClient PutObjectArgs GetObjectArgs RemoveObjectArgs
                      MakeBucketArgs BucketExistsArgs)
            (io.minio.errors ErrorResponseException)
            (java.io ByteArrayInputStream)))
+
+(defprotocol ObjetoStore
+  (guardar! [this chave bytes content-type] "Guarda o blob (byte-array) sob `chave`; devolve a chave.")
+  (obter    [this chave] "Devolve os bytes do blob (byte-array), ou nil se ausente.")
+  (remover! [this chave] "Remove o blob da `chave`."))
 
 (defrecord ObjetoStoreS3 [config client bucket]
   component/Lifecycle
@@ -29,7 +34,7 @@
       (try (.close client) (catch Exception _ nil)))
     (assoc this :client nil :bucket nil))
 
-  port/ObjetoStore
+  ObjetoStore
   (guardar! [_ chave bytes content-type]
     ;; ByteArrayInputStream nao precisa close (close() e' no-op); o SDK le sincrono antes de retornar.
     (.putObject client

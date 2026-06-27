@@ -1,3 +1,3 @@
 (ns oplenario.kernel.components.cache)
 
-;; Component: client Valkey -> implementa kernel.port.cache (Carmine)
+;; Component: client Valkey -> protocolo + impl (Carmine/Valkey) co-localizados aqui

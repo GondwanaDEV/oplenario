@@ -1,3 +1,3 @@
-(ns oplenario.legislativo.diplomat.producer)
+(ns oplenario.legislativo.diplomat.producers)
 
 ;; outbound: emite eventos (via kernel.eventos -> outbox)

@@ -1,7 +1,7 @@
 # oplenario.compliance
 
 Módulo (bounded context §22.2) — **dono da execução do compliance por tenant**. Mesma silhueta de
-`legislativo` (§22.10): `schema/ models/ adapters/ db/ port/ events/ logic controllers diplomat/ relacoes components`.
+`legislativo` (§22.10): `schema/ models/ adapters/ db/ events/ logic controllers relacoes diplomat/(http/in·http/out·consumers·producers) components — sem pasta port/`.
 
 ## Tabelas (schema `compliance`, migration `…0005`)
 - **`prazo_dominio_ativo`** — obrigação materializada com prazo (§22.7.7). **Polimórfica** (`objeto_tipo`/`objeto_id`,
