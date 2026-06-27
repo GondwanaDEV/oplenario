@@ -6,41 +6,42 @@
   presidente da Mesa em DD/MM/AAAA?' tem resposta consultando a vigencia naquela data, nao a de hoje.
   O default now()/hoje e' aplicado pela camada que chama (motor/controller); aqui `data` e' explicito
   (puro/testavel). Recebem a `tx` do tenant (RLS isola; ente=1:1 -> a Casa corrente). Tudo intra-schema
-  cadastros (sem JOIN cross-schema, §22.10); a resolucao 'usuario' e' por identidade_id (CPF, disc.1)."
-  (:require [next.jdbc :as jdbc]))
+  cadastros (sem JOIN cross-schema, §22.10); a resolucao 'usuario' e' por identidade_id (CPF, disc.1).
+  HoneySQL; os JOINs casam tambem ente_id (defesa em profundidade, redundante com a FORCE RLS)."
+  (:require [honey.sql :as sql]
+            [next.jdbc :as jdbc]))
 
 (set! *warn-on-reflection* true)
 
 (defn- existe?
-  ;; `sql` DEVE ser literal estatico (concatenado em SQL); nunca passar valor de usuario aqui — os
-  ;; valores vao SEMPRE por `params` (placeholders ?). Os JOINs casam tambem ente_id (defesa em
-  ;; profundidade: a RLS ja isola cada lado, mas o predicado redundante nao depende de FORCE RLS).
-  [tx sql params]
-  (boolean (jdbc/execute-one! tx (into [(str "SELECT 1 AS x WHERE EXISTS (" sql ")")] params))))
+  "Roda `query` (mapa HoneySQL com :from/:join/:where) como SELECT 1 ... LIMIT 1 e devolve boolean."
+  [tx query]
+  (boolean (jdbc/execute-one! tx (sql/format (assoc query :select [1] :limit 1)))))
 
 (defn tem-mandato-vigente?
   "A identidade tem mandato em estado 'vigente' cuja vigencia cobre `data`?"
   [tx identidade-id data]
   (existe? tx
-    "SELECT 1 FROM cadastros.mandato m JOIN cadastros.vereador v ON v.id = m.vereador_id AND v.ente_id = m.ente_id
-     WHERE v.identidade_id = ? AND m.estado = 'vigente'
-       AND m.vigencia_inicio <= ? AND (m.vigencia_fim IS NULL OR m.vigencia_fim >= ?)"
-    [identidade-id data data]))
+    {:from [[:cadastros.mandato :m]]
+     :join [[:cadastros.vereador :v] [:and [:= :v.id :m.vereador_id] [:= :v.ente_id :m.ente_id]]]
+     :where [:and [:= :v.identidade_id identidade-id] [:= :m.estado "vigente"]
+             [:<= :m.vigencia_inicio data] [:or [:is :m.vigencia_fim nil] [:>= :m.vigencia_fim data]]]}))
 
 (defn membro-de-comissao?
   [tx identidade-id comissao-id data]
   (existe? tx
-    "SELECT 1 FROM cadastros.comissao_membro cm JOIN cadastros.vereador v ON v.id = cm.vereador_id AND v.ente_id = cm.ente_id
-     WHERE v.identidade_id = ? AND cm.comissao_id = ?
-       AND cm.vigencia_inicio <= ? AND (cm.vigencia_fim IS NULL OR cm.vigencia_fim >= ?)"
-    [identidade-id comissao-id data data]))
+    {:from [[:cadastros.comissao_membro :cm]]
+     :join [[:cadastros.vereador :v] [:and [:= :v.id :cm.vereador_id] [:= :v.ente_id :cm.ente_id]]]
+     :where [:and [:= :v.identidade_id identidade-id] [:= :cm.comissao_id comissao-id]
+             [:<= :cm.vigencia_inicio data] [:or [:is :cm.vigencia_fim nil] [:>= :cm.vigencia_fim data]]]}))
 
 (defn- tem-cargo-na-comissao? [tx identidade-id comissao-id cargos data]
   (existe? tx
-    (str "SELECT 1 FROM cadastros.comissao_cargo cc JOIN cadastros.vereador v ON v.id = cc.vereador_id AND v.ente_id = cc.ente_id
-          WHERE v.identidade_id = ? AND cc.comissao_id = ? AND cc.cargo = ANY(?)
-            AND cc.vigencia_inicio <= ? AND (cc.vigencia_fim IS NULL OR cc.vigencia_fim >= ?)")
-    [identidade-id comissao-id (into-array String cargos) data data]))
+    {:from [[:cadastros.comissao_cargo :cc]]
+     :join [[:cadastros.vereador :v] [:and [:= :v.id :cc.vereador_id] [:= :v.ente_id :cc.ente_id]]]
+     :where [:and [:= :v.identidade_id identidade-id] [:= :cc.comissao_id comissao-id]
+             [:= :cc.cargo [:any [:lift (into-array String cargos)]]]
+             [:<= :cc.vigencia_inicio data] [:or [:is :cc.vigencia_fim nil] [:>= :cc.vigencia_fim data]]]}))
 
 (defn presidente-de-comissao?
   [tx identidade-id comissao-id data]
@@ -49,8 +50,10 @@
 (defn- mesa-vigente-id [tx data]
   (:comissao/id
    (jdbc/execute-one! tx
-     ["SELECT id FROM cadastros.comissao WHERE tipo = 'mesa' AND vigencia_inicio <= ?
-       AND (vigencia_fim IS NULL OR vigencia_fim >= ?) ORDER BY vigencia_inicio DESC LIMIT 1" data data])))
+     (sql/format {:select [:id] :from [:cadastros.comissao]
+                  :where [:and [:= :tipo "mesa"] [:<= :vigencia_inicio data]
+                          [:or [:is :vigencia_fim nil] [:>= :vigencia_fim data]]]
+                  :order-by [[:vigencia_inicio :desc]] :limit 1}))))
 
 (defn presidente-da-mesa?
   [tx identidade-id data]
@@ -71,41 +74,43 @@
   (when-let [mesa (mesa-vigente-id tx data)]
     (:vereador/identidade_id
      (jdbc/execute-one! tx
-       ["SELECT v.identidade_id FROM cadastros.comissao_cargo cc JOIN cadastros.vereador v ON v.id = cc.vereador_id AND v.ente_id = cc.ente_id
-         WHERE cc.comissao_id = ? AND cc.cargo = 'presidente'
-           AND cc.vigencia_inicio <= ? AND (cc.vigencia_fim IS NULL OR cc.vigencia_fim >= ?)
-         ORDER BY cc.vigencia_inicio DESC, cc.id LIMIT 1" mesa data data]))))
+       (sql/format {:select [:v.identidade_id] :from [[:cadastros.comissao_cargo :cc]]
+                    :join [[:cadastros.vereador :v] [:and [:= :v.id :cc.vereador_id] [:= :v.ente_id :cc.ente_id]]]
+                    :where [:and [:= :cc.comissao_id mesa] [:= :cc.cargo "presidente"]
+                            [:<= :cc.vigencia_inicio data] [:or [:is :cc.vigencia_fim nil] [:>= :cc.vigencia_fim data]]]
+                    :order-by [[:cc.vigencia_inicio :desc] [:cc.id]] :limit 1})))))
 
 (defn populacao
   "Populacao do municipio do ente corrente (alimenta regras de porte do TCE — §22.7.5)."
   [tx]
   (:municipios/populacao
    (jdbc/execute-one! tx
-     ["SELECT m.populacao FROM cadastros.ente e JOIN cadastros.municipios m ON m.codigo_ibge = e.municipio_ibge"])))
+     (sql/format {:select [:m.populacao] :from [[:cadastros.ente :e]]
+                  :join [[:cadastros.municipios :m] [:= :m.codigo_ibge :e.municipio_ibge]]}))))
 
 (defn membros-da-casa
   "Nº de vereadores com mandato vigente em `data` (base de quorum/maioria — §22.7.5)."
   [tx data]
   (:c (jdbc/execute-one! tx
-        ["SELECT count(DISTINCT m.vereador_id) AS c FROM cadastros.mandato m
-          WHERE m.estado = 'vigente' AND m.vigencia_inicio <= ?
-            AND (m.vigencia_fim IS NULL OR m.vigencia_fim >= ?)" data data])))
+        (sql/format {:select [[[:count [:distinct :m.vereador_id]] :c]] :from [[:cadastros.mandato :m]]
+                     :where [:and [:= :m.estado "vigente"] [:<= :m.vigencia_inicio data]
+                             [:or [:is :m.vigencia_fim nil] [:>= :m.vigencia_fim data]]]}))))
 
 (defn tribunal-competente
   "Codigo do Tribunal de Contas competente do ente (E1, §22.7.9): override por municipio > default da UF.
   Reconcilia o 'UF JOIN' do Eixo B com a §22.10 — e' funcao de relacao intra-schema, nao JOIN cross-schema.
   Retorna nil se nao ha jurisdicao cadastrada p/ a UF/municipio -> o CALLER (motor) trata como ERRO
-  (fail-closed: nao roteia remessa sem tribunal), nunca como 'pula a regra'."
+  (fail-closed: nao roteia remessa sem tribunal), nunca como 'pula a regra'.
+  Precedencia municipio>UF: ORDER BY (j.municipio_ibge IS NULL) ASC = nao-nulo (override) primeiro."
   [tx]
   (:jurisdicao_camara/tribunal_codigo
    (jdbc/execute-one! tx
-     ["SELECT j.tribunal_codigo
-       FROM cadastros.ente e
-       JOIN cadastros.municipios m ON m.codigo_ibge = e.municipio_ibge
-       JOIN cadastros.jurisdicao_camara j
-         ON j.uf = m.uf AND (j.municipio_ibge = e.municipio_ibge OR j.municipio_ibge IS NULL)
-       ORDER BY (j.municipio_ibge IS NOT NULL) DESC
-       LIMIT 1"])))
+     (sql/format {:select [:j.tribunal_codigo] :from [[:cadastros.ente :e]]
+                  :join [[:cadastros.municipios :m] [:= :m.codigo_ibge :e.municipio_ibge]
+                         [:cadastros.jurisdicao_camara :j]
+                         [:and [:= :j.uf :m.uf]
+                          [:or [:= :j.municipio_ibge :e.municipio_ibge] [:is :j.municipio_ibge nil]]]]
+                  :order-by [[[:is :j.municipio_ibge nil] :asc]] :limit 1}))))
 
 ;; Registro das relacoes deste contexto (nome canonico -> fn). A F2 consome isto p/ injetar no motor
 ;; (cada modulo registra suas relacoes no catalogo; o avaliador chama por nome). As assinaturas tipadas

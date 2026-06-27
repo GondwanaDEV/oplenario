@@ -1,7 +1,8 @@
 (ns oplenario.cadastros.db.comissao
   "Persistencia de comissao (a Mesa Diretora e' tipo='mesa') + cargos nomeados + membership.
-  Funcoes sobre a `tx` do tenant (RLS isola)."
-  (:require [next.jdbc :as jdbc]
+  Funcoes sobre a `tx` do tenant (RLS isola). HoneySQL."
+  (:require [honey.sql :as sql]
+            [next.jdbc :as jdbc]
             [oplenario.kernel.db-util :as comum]))
 
 (set! *warn-on-reflection* true)
@@ -10,35 +11,42 @@
   ;; criacao NATIVA nasce efetivada (efetivado_em = now()); import (admin_sistema) e' que estaga. Fundacao #2.
   [tx {:keys [id ente-id nome tipo legislatura-id vigencia-inicio vigencia-fim]}]
   (jdbc/execute-one! tx
-    ["INSERT INTO cadastros.comissao (id, ente_id, nome, tipo, legislatura_id, vigencia_inicio, vigencia_fim, efetivado_em)
-      VALUES (?, ?, ?, ?, ?, ?, ?, now())" id ente-id nome (or tipo "permanente") legislatura-id vigencia-inicio vigencia-fim]))
+    (sql/format {:insert-into :cadastros.comissao
+                 :values [{:id id :ente_id ente-id :nome nome :tipo (or tipo "permanente")
+                           :legislatura_id legislatura-id :vigencia_inicio vigencia-inicio
+                           :vigencia_fim vigencia-fim :efetivado_em [:now]}]})))
 
 (defn buscar [tx id]
   (comum/linha->kebab
-    (jdbc/execute-one! tx ["SELECT id, ente_id, nome, tipo, legislatura_id, vigencia_inicio, vigencia_fim
-                            FROM cadastros.comissao WHERE id = ?" id])))
+    (jdbc/execute-one! tx
+      (sql/format {:select [:id :ente_id :nome :tipo :legislatura_id :vigencia_inicio :vigencia_fim]
+                   :from [:cadastros.comissao] :where [:= :id id]}))))
 
 (defn mesa-vigente
   "A Mesa Diretora vigente em `data` (tipo='mesa', dentro da vigencia). Base de quem_exerce_presidencia (F2)."
   [tx data]
   (comum/linha->kebab
-    (jdbc/execute-one! tx ["SELECT id, ente_id, nome, tipo, legislatura_id, vigencia_inicio, vigencia_fim
-                            FROM cadastros.comissao
-                            WHERE tipo = 'mesa' AND vigencia_inicio <= ?
-                              AND (vigencia_fim IS NULL OR vigencia_fim >= ?)
-                            ORDER BY vigencia_inicio DESC LIMIT 1" data data])))
+    (jdbc/execute-one! tx
+      (sql/format {:select [:id :ente_id :nome :tipo :legislatura_id :vigencia_inicio :vigencia_fim]
+                   :from [:cadastros.comissao]
+                   :where [:and [:= :tipo "mesa"] [:<= :vigencia_inicio data]
+                           [:or [:is :vigencia_fim nil] [:>= :vigencia_fim data]]]
+                   :order-by [[:vigencia_inicio :desc]] :limit 1}))))
 
 (defn inserir-cargo! [tx {:keys [id ente-id comissao-id vereador-id cargo vigencia-inicio vigencia-fim]}]
   (jdbc/execute-one! tx
-    ["INSERT INTO cadastros.comissao_cargo (id, ente_id, comissao_id, vereador_id, cargo, vigencia_inicio, vigencia_fim, efetivado_em)
-      VALUES (?, ?, ?, ?, ?, ?, ?, now())" id ente-id comissao-id vereador-id cargo vigencia-inicio vigencia-fim]))
+    (sql/format {:insert-into :cadastros.comissao_cargo
+                 :values [{:id id :ente_id ente-id :comissao_id comissao-id :vereador_id vereador-id
+                           :cargo cargo :vigencia_inicio vigencia-inicio :vigencia_fim vigencia-fim :efetivado_em [:now]}]})))
 
 (defn inserir-membro! [tx {:keys [id ente-id comissao-id vereador-id vigencia-inicio vigencia-fim]}]
   (jdbc/execute-one! tx
-    ["INSERT INTO cadastros.comissao_membro (id, ente_id, comissao_id, vereador_id, vigencia_inicio, vigencia_fim, efetivado_em)
-      VALUES (?, ?, ?, ?, ?, ?, now())" id ente-id comissao-id vereador-id vigencia-inicio vigencia-fim]))
+    (sql/format {:insert-into :cadastros.comissao_membro
+                 :values [{:id id :ente_id ente-id :comissao_id comissao-id :vereador_id vereador-id
+                           :vigencia_inicio vigencia-inicio :vigencia_fim vigencia-fim :efetivado_em [:now]}]})))
 
 (defn membros [tx comissao-id]
   (comum/linhas->kebab
-    (jdbc/execute! tx ["SELECT id, ente_id, comissao_id, vereador_id, vigencia_inicio, vigencia_fim
-                        FROM cadastros.comissao_membro WHERE comissao_id = ?" comissao-id])))
+    (jdbc/execute! tx
+      (sql/format {:select [:id :ente_id :comissao_id :vereador_id :vigencia_inicio :vigencia_fim]
+                   :from [:cadastros.comissao_membro] :where [:= :comissao_id comissao-id]}))))
