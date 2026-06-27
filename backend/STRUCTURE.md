@@ -3,7 +3,7 @@
 Esqueleto do padrão **ports & adapters (versão Nubank)** consolidado em **§22.10** do documento-mestre.
 
 - `src/oplenario/<ctx>/` — um módulo por bounded context (§22.2). `legislativo/` é o template completo.
-  Camadas: `schema/`(externo→TS) `models/`(interno) `adapters/`(gate) `db/`(funções; next.jdbc+HoneySQL, **sem ORM**)
+  Camadas: `wire/in`·`wire/out`(externo; out→TS) `models/`(interno) `adapters/`(gate) `db/`(funções; next.jdbc+HoneySQL, **sem ORM**)
   `events/` + `logic` `controllers` `relacoes` · `diplomat/`(IO por direção: `http/in` · `http/out` · `consumers` · `producers`)
   · `components`(recursos = `defprotocol`+`defrecord` co-localizados; Stuart Sierra). **Sem pasta `port/`** —
   o protocolo de saída mora no `http/out` (dep de módulo) ou em `components/` (recurso/estratégia).
@@ -14,7 +14,7 @@ Esqueleto do padrão **ports & adapters (versão Nubank)** consolidado em **§22
   migration `…0006` (5 tabelas estáticas do Eixo B §22.7.6). Detalhe em `src/oplenario/motor/README.md`.
 - `src/oplenario/{main,sistema,http}.clj` — host/composição.
 
-Comunicação inter-módulo: **só HTTP (port→http_client→http_server) ou eventos (producer/consumer)**.
+Comunicação inter-módulo: **só HTTP (diplomat/http/out → diplomat/http/in) ou eventos (producers/consumers)**.
 
 ## Rodar
 - Stack: `docker compose up`
@@ -22,7 +22,7 @@ Comunicação inter-módulo: **só HTTP (port→http_client→http_server) ou ev
 
 ## Módulos de projeção (read-models — §22.10)
 - `paineis/` (§16.11 Painéis/Pendências/Notificações) e `tempo_real/` (§22.6 eixo G, fan-out SSE).
-- Silhueta enxuta: `consumer` + `db`(read-model) + `schema`/`models`/`adapters` + `http_server`; **sem** `logic`/`relacoes`. Rebuildáveis do event log.
+- Silhueta enxuta: `consumers` + `db`(read-model) + `wire/`(`in`·`out`)/`models`/`adapters` + `http/in`; **sem** `logic`/`relacoes`. Rebuildáveis do event log.
 - **Exceção (GAP 4):** o **ledger de entrega de notificação** (`paineis.notificacao_entrega`, migration `…0004`) é **durável/idempotente** — e-mail/push que saiu não se re-projeta; a *vista* (sininho/inbox) segue dropável. Três planos do evento: outbox (transporte) / SSE (efêmero) / notificações (durável).
 
 ## Módulo supratenant/operacional (3ª categoria — §22.10)
