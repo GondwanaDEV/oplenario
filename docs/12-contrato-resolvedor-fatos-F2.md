@@ -172,8 +172,8 @@ declarativa mora no módulo dono do recurso** (§22.5 eixo E) — o kernel só r
 | Fatia | Entrega | Modelo/effort |
 |---|---|---|
 | **F2.1** | `motor/db/` real (Repo-Component, ADR-0001 §3-bis) sobre as 5 tabelas do schema `motor`: `template_compliance`, `compliance_regra_tenant`, `prazo_dominio_vigente`, `calendario_feriado`, `registry_catalogo_versao`. `regras-aplicaveis`, `prazo-vigente`, `parametro-tenant` db-backed. | Opus high |
-| **F2.2** | **RegistroFatos** (Component) + `resolver-para` + **assert de costura** catálogo⋈fns no boot + catálogo ganha as assinaturas das relações de F1. **(o contrato — Opus max)** | **Opus max** |
-| **F2.3** | `runtime` split builtin/fato + `motor/avaliar` exposto no `api.clj` (recebe ds/tx + ente + regra; resolve fatos pelo registry). **Escopo db explícito (N10):** "sair do atom" = persistir obrigação/avaliação nas tabelas **de runtime** do schema `compliance` (`prazo_dominio_ativo`/`compliance_avaliacao`, migration 0005) — db próprio dessa fatia, distinto das 5 estáticas de F2.1. | Opus high |
+| **F2.2** | **RegistroFatos** (Component) + `resolver-para` + **assert de costura** catálogo⋈fns no boot + catálogo ganha as assinaturas reais das relações de F1 (ente-less, tipos opacos `IdentidadeId`/`ComissaoId`) + **drop `ente` do DSL** + **rewrite T1/T2/T4/N1/N3/N4** + **runtime split builtin/fato** (forçado: o arity-check da costura exige `populacao()`/`membros_da_casa(Data)` sem `ente`, o que arrasta o split do `a-chamada` — `(:resolver ctx)` p/ fatos, builtins in-engine). **(o contrato — Opus max)** | **Opus max** |
+| **F2.3** | `motor/avaliar` exposto no `api.clj` (recebe ds/tx + ente + regra; resolve fatos pelo registry via `resolver-para`) + **builtins db-backed** (`prazo_vigente` → `motor.prazo_dominio_vigente`; `parametro_tenant` → `motor.compliance_regra_tenant`, via RepoMotor — hoje fixture no `:estado`) + **persistência** "sair do atom" = obrigação/avaliação nas tabelas **de runtime** do schema `compliance` (`prazo_dominio_ativo`/`compliance_avaliacao`, migration 0005). **Carry do review F2.2 (N3):** isolar erro por-regra no re-sweep (try/catch que audita `erro_resolucao` p/ a obrigação e segue o lote) é orquestração de runtime = aqui. | Opus high |
 | **F2.4** | `policy.check` ligado ao avaliador (política = expressão DSL); lint `dominio.acao(args, ator)` exige `policy.check`. | Opus high |
 | **F2.5** | **E2E (M2 "compliance vivo")**: T1 do TCE-CE avalia com `tribunal_competente`/`populacao` reais do `cadastros` (PG); política de auth com `é_autor_de`/`tem_mandato_vigente`. | Opus high |
 
@@ -206,10 +206,18 @@ por estado.
 
 ## 8. Procedência da revisão
 
-Contrato revisado por `ecc:architect` (read-only, contra §22.5.3/§22.7/§22.10) antes de qualquer
-implementação — o gate Opus-max que `docs/11` exige para este nó. Achados **C1** (boot não bootava
-por bijeção estrita) e **C2** (ArityException no E2E pelo arg `ente`) eram CRÍTICOS reais;
-reconciliados acima (§1, §4-bis). MAIORES M3–M7 e MENORES N8–N10 incorporados nas seções citadas.
-Pontos afirmados sólidos: invariante de import preservado; `(fn tx & args)` vale p/ todas as fns
-atuais; `prazo_vigente`/`parametro_tenant` corretamente builtins; reuso de `check!` estruturalmente
-correto (política que lança = deny).
+**Contrato (pré-implementação):** revisado por `ecc:architect` (read-only, contra §22.5.3/§22.7/§22.10)
+— o gate Opus-max que `docs/11` exige. Achados **C1** (boot não bootava por bijeção estrita) e **C2**
+(ArityException no E2E pelo arg `ente`) eram CRÍTICOS reais; reconciliados acima (§1, §4-bis). MAIORES
+M3–M7 e MENORES N8–N10 incorporados. Sólidos: import preservado; `prazo_vigente`/`parametro_tenant`
+builtins; reuso de `check!` correto.
+
+**F2.2 (pós-implementação):** revisado por `ecc:architect` + `ecc:clojure-reviewer` (suíte verde,
+112 testes). **Sem CRÍTICOS** — §22.10 preservado (só o host importa módulo), costura genuinamente
+fail-closed e uni-direcional, split builtin/fato e ente-drop completos. **Aplicados:** colisão de nome
+entre módulos no host agora **falha** (`fundir-relacoes`, não `merge` silencioso — fail-closed na borda
+do registry); fn de relação **variádica** rejeitada com erro explícito (relações = aridade fixa,
+crava-se aqui); `resolver-para` captura `:fns` uma vez; snapshot único no re-sweep; teste de **boot do
+Component real**. **Diferidos (com dono):** conformidade de **tipo de retorno** das fns → golden no E2E
+**F2.5** (N1); enforcement de **tenant-scoped/read-only/supratenant-proibido** (M6/N9) → lint de
+**F2.4** (N2); isolamento de erro por-regra no re-sweep → **F2.3** (N3, orquestração de runtime).

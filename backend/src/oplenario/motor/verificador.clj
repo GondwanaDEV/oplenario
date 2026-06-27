@@ -174,8 +174,9 @@
     (when-not (#{"bloqueante" "aviso"} (:severidade env))
       (swap! erros conj (str "severidade inválida: " (pr-str (:severidade env)) " (bloqueante|aviso)")))
 
-    ;; 2) ambiente de tipos: parâmetros + `ente` implícito
-    (let [tipos-env (atom {"ente" (t/Registro "Ente")})]
+    ;; 2) ambiente de tipos: só os parâmetros declarados. `ente` SAIU (§4-bis): a Casa é a `tx`,
+    ;; não um Registro do DSL — `populacao()`/`membros_da_casa(data)` não tomam `ente`.
+    (let [tipos-env (atom {})]
       (doseq [[nome tnome] (:parametros env)]
         (let [tp (cat/resolver-tipo-nome tnome)]
           (if (nil? tp)

@@ -44,8 +44,11 @@
   (is (= 6 (rt/eval-expr "fracao(2,3) * 9")) "2/3·9 == 6 exato (ratio)"))
 
 (deftest runtime-deadline-bound
-  (let [eng (rt/motor (estado-t1) (rt/ldate 2026 6 19))
-        amb {"ente" (rt/ente "cmf" 2700000 43) "competencia" (rt/competencia 2026 5)}
+  (let [remessas (atom #{})        ; fato `remessa_enviada` resolvido pelo registry (fixture), não pelo amb
+        eng (rt/motor (estado-t1) (rt/ldate 2026 6 19)
+                      (rt/resolver-fixture {"remessa_enviada" (fn [s c] (contains? @remessas [s (rt/comp-chave c)]))})
+                      "cmf")
+        amb {"competencia" (rt/competencia 2026 5)}
         regra (nuc/carregar-envelope tpl/T1)
         av (rt/avaliar-regra! eng regra cat/CATALOGO-VERSAO amb "competencia" "2026-05")
         obrig (get (:obrigacoes @eng) chave-cmf)]
@@ -54,7 +57,7 @@
     (is (= (rt/ldate 2026 6 30) (:vence-em obrig)) "vence_em = prazo vigente")
     (is (= "IN 04/2019" (:prazo-fonte-ref obrig)) "prazo_fonte_ref carimbado")
     ;; envia a remessa e reavalia (mesmo objeto → idempotente)
-    (swap! eng update-in [:estado :remessas] conj ["cmf" "SIM" "2026-05"])
+    (swap! remessas conj ["SIM" "2026-05"])
     (let [av2 (rt/avaliar-regra! eng regra cat/CATALOGO-VERSAO amb "competencia" "2026-05")
           obrig2 (get (:obrigacoes @eng) chave-cmf)]
       (is (= "conforme" (:veredito av2)) "após envio → conforme")
@@ -66,25 +69,29 @@
 (deftest runtime-continua
   (let [r (v/verificar-template (nuc/carregar-envelope tpl/CONTINUA))]
     (is (= "VALIDA" (:status r)) (str "regra contínua é VALIDA erros=" (:erros r))))
-  (let [eng (rt/motor (rt/estado) (rt/ldate 2026 6 19))
+  (let [eng (rt/motor (rt/estado) (rt/ldate 2026 6 19)
+                      (rt/resolver-fixture {"publicada_no_portal" (fn [d] (:publicada d))}) "cmf")
         despesa (rt/ato-despesa "d1" (rt/ldate 2026 6 10) false)
         av (rt/avaliar-regra! eng (nuc/carregar-envelope tpl/CONTINUA) cat/CATALOGO-VERSAO
-                              {"ente" (rt/ente "cmf" 2700000 43) "despesa" despesa} "despesa" "d1")]
+                              {"despesa" despesa} "despesa" "d1")]
     (is (= 0 (count (:obrigacoes @eng))) "contínua NÃO materializa obrigação")
     (is (nil? (:obrigacao-id av)) "contínua gera avaliação sem obrigacao_id")
     (is (= "nao_conforme" (:veredito av)) "despesa não publicada → nao_conforme")))
 
 (deftest runtime-aplica-quando
-  (let [eng (rt/motor (rt/estado) (rt/ldate 2026 6 19))
+  (let [eng (rt/motor (rt/estado) (rt/ldate 2026 6 19)
+                      (rt/resolver-fixture {"populacao" (fn [] 8000)
+                                            "publicada_no_portal" (fn [d] (:publicada d))}) "vila_pequena")
         despesa (rt/ato-despesa "d9" (rt/ldate 2026 6 10) false)
         av (rt/avaliar-regra! eng (nuc/carregar-envelope tpl/T2) cat/CATALOGO-VERSAO
-                              {"ente" (rt/ente "vila_pequena" 8000 9) "despesa" despesa} "despesa" "d9")]
+                              {"despesa" despesa} "despesa" "d9")]
     (is (= "inaplicavel" (:veredito av)) "população ≤10k → inaplicavel")
     (is (= 0 (count (:obrigacoes @eng))) "inaplicável não materializa obrigação")))
 
 (deftest s3-restamp-circular
-  (let [eng (rt/motor (estado-t1) (rt/ldate 2026 6 19))
-        amb {"ente" (rt/ente "cmf" 2700000 43) "competencia" (rt/competencia 2026 5)}
+  (let [eng (rt/motor (estado-t1) (rt/ldate 2026 6 19)
+                      (rt/resolver-fixture {"remessa_enviada" (fn [_s _c] false)}) "cmf")
+        amb {"competencia" (rt/competencia 2026 5)}
         regra (nuc/carregar-envelope tpl/T1)]
     (rt/avaliar-regra! eng regra cat/CATALOGO-VERSAO amb "competencia" "2026-05")
     (let [n-antes (count (:avaliacoes @eng))]
@@ -97,9 +104,9 @@
         (is (> (count (:avaliacoes @eng)) n-antes) "auditoria só cresce (append-only)")))))
 
 (deftest s3-cumprida-nao-move
-  (let [est (update (estado-t1) :remessas conj ["cmf" "SIM" "2026-05"])   ; já enviada → vai cumprir
-        eng (rt/motor est (rt/ldate 2026 6 19))
-        amb {"ente" (rt/ente "cmf" 2700000 43) "competencia" (rt/competencia 2026 5)}]
+  (let [eng (rt/motor (estado-t1) (rt/ldate 2026 6 19)
+                      (rt/resolver-fixture {"remessa_enviada" (fn [_s _c] true)}) "cmf")   ; já enviada → vai cumprir
+        amb {"competencia" (rt/competencia 2026 5)}]
     (rt/avaliar-regra! eng (nuc/carregar-envelope tpl/T1) cat/CATALOGO-VERSAO amb "competencia" "2026-05")
     (let [obrig (get (:obrigacoes @eng) chave-cmf)
           venc-antes (:vence-em obrig)]
