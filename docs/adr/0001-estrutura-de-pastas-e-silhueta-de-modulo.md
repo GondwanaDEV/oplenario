@@ -41,13 +41,22 @@ pelo" que o §22.2 alerta) e quebrando a fronteira core↔apresentação (Inv. 5
 | **`wire/in`** · **`wire/out`** | representação **EXTERNA** (contrato de borda, Malli). `in` = entrada (request / evento consumido); `out` = saída (resposta / evento emitido) — **`wire/out` gera os tipos TS** do front (Eixo 8). |
 | **`models/`** | representação **INTERNA** (domínio), Malli. |
 | **`adapters/`** | o **gate** `wire↔models`, **sempre atravessado**: valida, traduz, filtra. |
-| **`db/`** | persistência: **funções** sobre a `tx` do tenant (next.jdbc + HoneySQL, **schema-qualified**). |
+| **`db/`** | persistência: **funções** sobre a `tx` do tenant (next.jdbc + HoneySQL, **schema-qualified**). É a **IMPL** atrás do Repo-Component (ver §3-bis) — o controller não chama `db/` direto. |
 | **`events/`** | eventos publicados/consumidos (nome + schema Malli do payload). |
 | **`relacoes/`** | funções de relação que o ctx é dono (§22.5.3) → registry do motor (DSL/authz). |
 | `logic` | núcleo **puro** (regras, máquinas de estado; zero I/O). |
 | `controllers` | orquestração **impura** (coordena logic + db + components). |
 | **`diplomat/`** | fronteira de IO por **DIREÇÃO**: `http/in` (server, rotas-dado Pedestal) · `http/out` (client p/ outro módulo — **protocolo + impl co-localizados**) · `consumers` (inbound eventos) · `producers` (outbound eventos). |
 | **`components`** | Stuart Sierra (`Lifecycle` + `using`). **Todo recurso externo é um Component com `defprotocol` + `defrecord` co-localizados** (datasource, cache, objeto_store, idp, inferência, http-clients, serializadores/transportes) → trocável por config, fakeável em teste. |
+
+### 3-bis. O BANCO é disponibilizado como Stuart Sierra Component (Repo-Component)
+Todo recurso externo é Component — **inclusive o banco**. Cada módulo tem um **Repo-Component** em
+`components/` (`defprotocol Repo<Modulo>` + `defrecord Repo<Modulo>Pg`) que **segura o `:datasource`**
+(injetado via `using`) e **expõe as AÇÕES do banco** como métodos do protocolo, **tenant-aware** (trata
+`com-tenant*` por dentro; `transacao` compõe várias ações numa única tx). O `db/` (funções sobre `tx`,
+HoneySQL) é a **impl** atrás do protocolo. **O controller depende do Repo-Component, nunca do `db/`
+direto** → o banco é trocável/fakeável como `cache`/`objeto_store`/`idp`. *(Supratenant — ex.: CPF —
+roda sobre o `:ds` direto, sem `com-tenant*`.)*
 
 ### 4. NÃO existe pasta `port/`
 O protocolo de uma dependência de saída **mora junto de quem o implementa**: no `diplomat/http/out`
@@ -95,8 +104,10 @@ A forma não depende de disciplina humana — é **verificada por máquina, falh
 - **`schema/` único / `wire/` único** — perde a distinção entrada↔saída que o front e o versionamento de
   contrato pedem. **Descartado** em favor de `wire/in` + `wire/out` (`0fa7d98`).
 - **ORM (Toucan2 etc.)** — esconde o SQL, incompatível com a disciplina de RLS/tenant. **Descartado.**
-- **`db` sob `diplomat`** (Nubank estrito) — o §22.10 manteve `db/` no topo de propósito (testa contra
-  Postgres real, sem fake-DB). **Mantido** como divergência consciente.
+- **`db/` como funções soltas chamadas direto pelo controller** (forma original do §22.10: "db não é
+  port") — **revertido**: viola "todo recurso = Component". Agora o `db/` é a **impl** e o acesso é via
+  **Repo-Component** (§3-bis); segue testando contra Postgres real (o Repo não é um fake — é o ponto de
+  injeção). `db/` permanece no topo (não sob `diplomat`) por ser a impl, não uma porta de I/O remota.
 - **Largar a raiz `oplenario.*`** — namespaces de 1 segmento colidem com libs. **Descartado.**
 
 ---
