@@ -33,6 +33,19 @@ Dentro do módulo: **`adapters/` só é chamado pelo `diplomat/`** (núcleo `con
 - Migration própria: `20260620000003-admin-sistema.*` (schema + registry `ente`). Refs a `admin_sistema.ente` de outros módulos cruzam por **guard de serviço**, nunca FK/JOIN cross-schema.
 
 ## TODO (deferido p/ implementação — validação ecc)
+- **Carries do F3.7 (eixo G — votação, 28/06; review ecc clojure+database):** `votacoes`+`votos` (nominal,
+  append-only, UNIQUE por vereador)+`votos_secretos` (anônimo, sem `vereador_id`/`created_by` — sigilo no
+  schema), todas NÃO-particionadas; quórum verificado por **aritmética exata** (`logic/resultado-votacao`,
+  inteiros, sem float). **(eixo G → F4)** eventos `Votacao*` (Aberta/VotoRegistrado/Encerrada) + **fan-out
+  real-time** do `VotoRegistrado` (sessão nominal ao vivo) = F4 (mesma infra de bus-consumer da integração do
+  parecer). **(eixo G → motor, gated)** a verificação de quórum como **regra DECLARATIVA por matéria** via
+  DSL do motor = mesmo gate do type-check dos agregadores do parecer; hoje a aritmética vive em `logic`
+  (pura/correta). **(eixo G → regimento [GAP])** a BASE exata do quórum por tipo (Casa vs votos válidos vs
+  presentes) é detalhe regimental — default defensável hoje. **(eixo G → F4)** prevenção de **voto-duplo no
+  SECRETO** é procedimental (presença/cédula) — `votos_secretos` não liga voto→votante por design.
+  **Aplicado:** clojure-MAJOR (`apurar` via `linhas->kebab`, robusto vs. namespace por-tabela), 2 MENOR
+  (guard de terminal em `encerrar!` + doc de `votos-da-votacao`); DB-MAJOR (FK same-tenant + índice em
+  `votacao_corrige_id`, anti cross-tenant), DB-MENOR (remove `idx_votos_votacao` redundante c/ a UNIQUE).
 - **Carries do F3.6b (eixo F — texto do parecer + votos divergentes, 28/06; review ecc clojure+database):**
   `parecer_texto_versao` espelha o eixo B (append-only no conteúdo, híbrido inline/URI, promoção
   rascunho→vigente que reaponta `pareceres.texto_vigente_versao_id`), **não-particionada**; `parecer_voto_divergente`
