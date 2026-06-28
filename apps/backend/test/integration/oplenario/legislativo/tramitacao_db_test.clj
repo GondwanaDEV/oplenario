@@ -85,6 +85,25 @@
                    (fn [tx] (jdbc/execute-one! tx ["UPDATE legislativo.proposicao_transicao_historico SET gatilho = 'hack' WHERE id = ?" @hid]))))
         "historico de transicao e' append-only (sem UPDATE/DELETE)")))
 
+(deftest criar-transicao-rejeita-guard-mal-formado
+  ;; Inv.4: o guard mal-escrito NAO persiste — a falha de tramitacao sai do caminho critico (rejeitada
+  ;; na config, nao no meio do fluxo). criar-transicao! gateia via motor/validar-guarda.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (random-uuid)]
+          (tram/criar-template! tx {:id tid :ente-id ente :chave "rito" :versao 1
+                                    :nome "Rito [FIXTURE]" :estado-inicial "protocolada"})
+          (is (thrown? Exception
+                       (tram/criar-transicao! tx {:id (random-uuid) :ente-id ente :template-id tid
+                                                  :de-estado "protocolada" :para-estado "em_comissoes"
+                                                  :gatilho "despachar" :guarda "( falso" :ordem 1}))
+              "guard que nao parseia e' rejeitado no save")
+          (is (some? (tram/criar-transicao! tx {:id (random-uuid) :ente-id ente :template-id tid
+                                                :de-estado "protocolada" :para-estado "em_comissoes"
+                                                :gatilho "despachar" :guarda "verdadeiro" :ordem 2}))
+              "guard bem-formado persiste normalmente"))))))
+
 (deftest rls-isola-template-cross-tenant
   (let [a (random-uuid) b (random-uuid) tid (atom nil)]
     (tenancy/com-tenant* *ds* a (fn [tx] (reset! tid (montar-template! tx a))))

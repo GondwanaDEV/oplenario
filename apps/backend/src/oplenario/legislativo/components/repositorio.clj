@@ -6,7 +6,8 @@
   (:require [oplenario.kernel.tenancy :as tenancy]
             [oplenario.legislativo.db.proposicao :as proposicao]
             [oplenario.legislativo.db.texto-versao :as texto]
-            [oplenario.legislativo.db.tramitacao :as tram]))
+            [oplenario.legislativo.db.tramitacao :as tram]
+            [oplenario.legislativo.diplomat.producers :as producers]))
 
 (defprotocol RepoLegislativo
   (transacao [this ente-id f] "Roda (f tx) numa UNICA tx do tenant — compoe acoes atomicamente.")
@@ -27,7 +28,7 @@
   (transicionar! [this ente-id registro args] "Engine: guard via motor + historico + muda estado, 1 tx.")
   (historico-da-proposicao [this ente-id proposicao-id]))
 
-(defrecord RepoLegislativoPg [datasource]
+(defrecord RepoLegislativoPg [datasource bus]
   RepoLegislativo
   (transacao [_ ente-id f] (tenancy/com-tenant* (:ds datasource) ente-id f))
   (protocolar! [this ente-id p] (transacao this ente-id #(proposicao/protocolar! % p)))
@@ -42,10 +43,24 @@
   (criar-template! [this ente-id t] (transacao this ente-id #(tram/criar-template! % (assoc t :ente-id ente-id))))
   (criar-estado! [this ente-id e] (transacao this ente-id #(tram/criar-estado! % (assoc e :ente-id ente-id))))
   (criar-transicao! [this ente-id tr] (transacao this ente-id #(tram/criar-transicao! % (assoc tr :ente-id ente-id))))
-  (transicionar! [this ente-id registro args] (transacao this ente-id #(tram/transicionar! % (assoc args :registro registro :ente-id ente-id))))
+  ;; eixo C / F3.3b: ENGINE + emissao do evento de dominio na MESMA tx do tenant (atomicidade
+  ;; outbox-com-o-ato §22.9 E2 — o `proposicao.transicionou` so existe se a transicao commitou; guard
+  ;; que bloqueia = sem transicao = sem evento). E' o Repo (composer de tx) quem casa ato+emissao.
+  (transicionar! [this ente-id registro args]
+    (transacao this ente-id
+      (fn [tx]
+        (let [r (tram/transicionar! tx (assoc args :registro registro :ente-id ente-id))]
+          (when (:transicionou? r)
+            (producers/emitir-transicionou! bus tx ente-id
+              ;; :ator-id so entra quando ha ator (acao anonima omite a chave — contrato {:optional true})
+              (cond-> {:proposicao-id (:proposicao-id args) :template-id (:template-id args)
+                       :de (:de r) :para (:para r) :gatilho (:gatilho args)
+                       :transicao-id (:transicao-id r)}
+                (:ator-id args) (assoc :ator-id (:ator-id args)))))
+          r))))
   (historico-da-proposicao [this ente-id pid] (transacao this ente-id #(tram/historico-da-proposicao % ente-id pid))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."
   []
-  (->RepoLegislativoPg nil))
+  (->RepoLegislativoPg nil nil))

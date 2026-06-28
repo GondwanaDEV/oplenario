@@ -10,6 +10,7 @@
             [oplenario.identidade.relacoes.identidade :as rel-identidade]
             [oplenario.legislativo.components.repositorio :as repo-legislativo]
             [oplenario.kernel.components.datasource :as datasource]
+            [oplenario.kernel.outbox :as outbox]
             [oplenario.motor.components.registro-fatos :as registro-fatos]
             [oplenario.motor.components.repositorio :as repo-motor]))
 
@@ -30,9 +31,12 @@
   [config]
   (component/system-map
    :datasource      (datasource/datasource config)
+   ;; EventBus (producer): grava no shared.outbox na tx do ato. Stateless (sem Lifecycle); os Repo que
+   ;; emitem eventos de dominio o recebem via `using`. O relay/consumidor (drenar) e' fiado na F4.
+   :bus             (outbox/bus)
    :repo-cadastros  (component/using (repo-cadastros/repositorio) [:datasource])
    :repo-identidade (component/using (repo-identidade/repositorio) [:datasource])
-   :repo-legislativo (component/using (repo-legislativo/repositorio) [:datasource])
+   :repo-legislativo (component/using (repo-legislativo/repositorio) [:datasource :bus])
    :repo-motor      (component/using (repo-motor/repositorio) [:datasource])
    ;; o host É a fronteira (§22.10): importa as `relacoes` dos módulos e as injeta no registry do motor.
    ;; O motor chama por nome (resolver-para), nunca importa o módulo. Sem :datasource — a `tx` do tenant

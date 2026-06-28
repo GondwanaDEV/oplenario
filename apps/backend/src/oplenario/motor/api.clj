@@ -3,7 +3,8 @@
   §22.10: 'kernel/motor nunca importam um modulo'; o motor e BIBLIOTECA compartilhada (coracao
   dos 4 usos da DSL — tramitacao, autorizacao, plenario, compliance), nao servico HTTP. O compliance
   OPERA este seam: materializa obrigacao/audita avaliacao nas SUAS tabelas (schema compliance, §22.7.7)."
-  (:require [oplenario.motor.components.registro-fatos :as rf]
+  (:require [clojure.string :as str]
+            [oplenario.motor.components.registro-fatos :as rf]
             [oplenario.motor.components.repositorio :as rm]
             [oplenario.motor.nucleo :as nuc]
             [oplenario.motor.runtime :as rt]
@@ -15,6 +16,26 @@
   :registry-versao-ref}. So VALIDA grava forma_compilada como 'vigente' em motor.template_compliance."
   [fonte-yaml]
   (v/verificar-template (nuc/carregar-envelope fonte-yaml)))
+
+(defn validar-guarda
+  "Save-time (Inv.4 / disciplina 5) do GUARD de uma transicao de tramitacao (§22.4 eixo C): tira a falha
+  de tramitacao do caminho critico — um regimento com guard mal-escrito e' REJEITADO na config, nunca no
+  meio de um fluxo. `fonte` nil/em-branco = guard ausente (sempre passa) = VALIDA. Devolve
+  {:status \"VALIDA\"|\"INVALIDA\" :erros [<msg>]}.
+
+  ESCOPO F3.3b = validacao SINTATICA (parseia como expressao DSL — o `guarda-dsl` faria o mesmo parse no
+  runtime; antecipa-lo p/ o save move a falha p/ a config). Type-check estatico COMPLETO (a expressao tipa
+  p/ Booleano contra o vocabulario de tramitacao — registros `proposicao`/`contexto`) e' [CARRY]: depende
+  da catalogacao do eixo C no registry (analogo a §22.7.5 p/ compliance); sem isso o type-checker nao
+  conhece esses registros. Ate la, o parse e' a rede; o runtime ainda avalia o tipo ao disparar."
+  [fonte]
+  (if (str/blank? fonte)
+    {:status "VALIDA" :erros []}
+    (try
+      (nuc/parse-expr fonte)
+      {:status "VALIDA" :erros []}
+      (catch clojure.lang.ExceptionInfo e
+        {:status "INVALIDA" :erros [(ex-message e)]}))))
 
 (defn avaliar
   "Seam de avaliacao (F2.3) — avalia UMA regra `vigente` contra fatos REAIS, fora do atom-fixture:

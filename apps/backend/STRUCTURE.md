@@ -33,6 +33,18 @@ Dentro do módulo: **`adapters/` só é chamado pelo `diplomat/`** (núcleo `con
 - Migration própria: `20260620000003-admin-sistema.*` (schema + registry `ente`). Refs a `admin_sistema.ente` de outros módulos cruzam por **guard de serviço**, nunca FK/JOIN cross-schema.
 
 ## TODO (deferido p/ implementação — validação ecc)
+- **Carries do F3.3b (eixo C — emissão + guard-gate, 28/06; review ecc clojure+database incorporada):**
+  (eixo C / catálogo) **type-check estático COMPLETO do guard** no save — hoje `motor/validar-guarda` é
+  só SINTÁTICO (parse); o type-check vs `Booleano` exige catalogar o vocabulário de tramitação (registros
+  `proposicao`/`contexto`) no registry do motor (análogo a §22.7.5 p/ compliance). (eixo C) **integridade
+  referencial dos estados**: `template_transicao.{de_estado,para_estado}` e `template_tramitacao.estado_inicial`
+  são texto livre p/ `template_estado.chave` SEM FK/CHECK — adicionar validação no save (ou FK composta
+  `(ente_id,template_id,chave)`) p/ barrar transição p/ estado inexistente (slice de autoria de template).
+  (DB, nova migration) `proposicao_transicao_historico.lote_id` + índice de staging são **inertes** (append-only
+  nunca estagia) — remover; e o trigger BEFORE-ROW append-only exige **PG≥13** em tabela particionada (stack
+  CloudNativePG PG14+ OK; considerar piso de versão no tooling de migration). (DIFERIDO de F3.3a, ainda aberto)
+  `proposicao_prazo_ativo` (materialização de prazo de tramitação — overlap com `prazo_dominio_ativo` §22.7.7,
+  candidato a F5) + **action-handlers ricos** (a `:acao` da transição é gravada/retornada mas não executa).
 - **Carries da auditoria ampla (F3 hardening, 28/06):** (MAJOR) `kernel/tenancy/com-correcao-auditada*` com authz — único caminho a setar o GUC `app.correcao_auditada` (hoje só o teste seta; o lint barra src fora do kernel) — construir junto do fluxo de correção; fiar `outbox-relay`+`scheduler` no `sistema.clj` + teste de boot do system-map (F4); `GRANT SELECT` nas tabelas `motor.*` p/ `oplenario_app` na migration de F5. (MENOR) `db/vinculo` `criar!`→`inserir!` (consistência); `legislativo/models` alias `CriadoEm`; `parse-memo` limitado (motor, pré-F5); `main` shutdown-hook em try/catch; `verificador` atom→`reduce`; `membros-da-casa` `ente_id` explícito; senha `oplenario_pool` literal na migration 0009 → placeholder (pré-prod); strip de CPF no `wire/out` de identidade (FE0); `ex-info` de `municipio-slug` sem o nome cru (F7 logs).
 - `relacoes/` → registro no catálogo do `motor` (depende da dobra do `motor-dsl-clj`).
 - `policy.clj` por módulo (política declarativa; mecânica em `kernel/autorizacao`).
