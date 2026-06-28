@@ -21,11 +21,28 @@
        (filter #(contains? pastas-proibidas (.getName ^File %)))
        (mapv #(.getPath ^File %))))
 
+(defn- adapters-planos-sob
+  "Arquivos .clj cujo diretorio-PAI se chama `adapters` — i.e., adapter direto sob adapters/, FORA de
+  in/ ou out/ (ADR-0001 §3: o gate e' dividido por direcao, espelhando wire/ e diplomat/)."
+  [raiz]
+  (->> (file-seq (io/file raiz))
+       (filter #(.isFile ^File %))
+       (filter #(str/ends-with? (.getName ^File %) ".clj"))
+       (filter #(= "adapters" (.getName (.getParentFile ^File %))))
+       (mapv #(.getPath ^File %))))
+
 (deftest sem-pasta-port-ou-schema-no-src
   (let [ofensores (proibidas-sob "src/oplenario")]
     (is (empty? ofensores)
         (str "estrutura-lint (ADR-0001): pasta proibida reapareceu. `port/` foi dissolvida (protocolo "
              "co-localizado em components/ ou diplomat/http/out) e `schema/` virou wire/in + wire/out. "
+             "Ofensores: " (pr-str ofensores)))))
+
+(deftest adapters-divididos-por-direcao
+  (let [ofensores (adapters-planos-sob "src/oplenario")]
+    (is (empty? ofensores)
+        (str "estrutura-lint (ADR-0001 §3): adapter deve viver em adapters/in/ ou adapters/out/, nunca "
+             "direto sob adapters/ (gate dividido por direcao: in valida/coage, out projeta/filtra). "
              "Ofensores: " (pr-str ofensores)))))
 
 (deftest lint-tem-dentes
@@ -35,9 +52,15 @@
       (.mkdirs (io/file base "mod" "port"))         ; ofensor
       (.mkdirs (io/file base "mod" "wire" "in"))    ; legitimo
       (.mkdirs (io/file base "mod" "components"))   ; legitimo
-      (let [achadas (proibidas-sob (.getPath base))]
+      (.mkdirs (io/file base "mod" "adapters" "in"))     ; legitimo (adapter por direcao)
+      (spit (io/file base "mod" "adapters" "plano.clj") "(ns x)")        ; ofensor: adapter plano
+      (spit (io/file base "mod" "adapters" "in" "ok.clj") "(ns y)")      ; legitimo: sob in/
+      (let [achadas (proibidas-sob (.getPath base))
+            planos  (adapters-planos-sob (.getPath base))]
         (is (some #(str/ends-with? % (str File/separator "port")) achadas) "detecta a pasta port/ sintetica")
         (is (not-any? #(str/includes? % "wire") achadas) "nao acusa wire/")
-        (is (not-any? #(str/includes? % "components") achadas) "nao acusa components/"))
+        (is (not-any? #(str/includes? % "components") achadas) "nao acusa components/")
+        (is (some #(str/ends-with? % "plano.clj") planos) "detecta adapter plano sob adapters/")
+        (is (not-any? #(str/includes? % (str File/separator "in" File/separator)) planos) "nao acusa adapters/in/"))
       (finally
         (doseq [^File f (reverse (file-seq base))] (.delete f))))))

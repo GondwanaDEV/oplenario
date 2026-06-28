@@ -3,7 +3,7 @@
 Esqueleto do padrão **ports & adapters (versão Nubank)** consolidado em **§22.10** do documento-mestre.
 
 - `src/oplenario/<ctx>/` — um módulo por bounded context (§22.2). `legislativo/` é o template completo.
-  Camadas: `wire/in`·`wire/out`(externo; out→TS) `models/`(interno) `adapters/`(gate) `db/`(funções; next.jdbc+HoneySQL, **sem ORM**)
+  Camadas: `wire/in`·`wire/out`(externo; out→TS) `models/`(interno) `adapters/in`·`adapters/out`(gate por direção: in valida/coage, out projeta/filtra) `db/`(funções; next.jdbc+HoneySQL, **sem ORM**)
   `events/` + `logic` `controllers` `relacoes` · `diplomat/`(IO por direção: `http/in` · `http/out` · `consumers` · `producers`)
   · `components`(recursos = `defprotocol`+`defrecord` co-localizados; Stuart Sierra). **Sem pasta `port/`** —
   o protocolo de saída mora no `http/out` (dep de módulo) ou em `components/` (recurso/estratégia).

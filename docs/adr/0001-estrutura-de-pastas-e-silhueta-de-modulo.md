@@ -4,8 +4,9 @@
 - **Decisor:** Daouda Traore (CTO)
 - **Fonte canônica:** §22.10 do `documento-mestre-camaras.md` (SSOT). Esta ADR **consolida e fixa** a
   forma vigente após os refactors `refactor(silhueta)` (`34dfeac` dissolução de `port/`; `0fa7d98`
-  `schema/`→`wire/in`+`wire/out`). Em conflito, a SSOT (§22.10 + esta ADR) prevalece sobre memória de chat.
-- **Aplica-se a:** todo código novo do backend (`backend/`) durante toda a vida da plataforma.
+  `schema/`→`wire/in`+`wire/out`; **2026-06-28 `adapters/`→`adapters/in`+`adapters/out`**). Em conflito,
+  a SSOT (§22.10 + esta ADR) prevalece sobre memória de chat.
+- **Aplica-se a:** todo código novo do backend (`apps/backend/`) durante toda a vida da plataforma.
 
 ## Contexto
 
@@ -24,11 +25,13 @@ pelo" que o §22.2 alerta) e quebrando a fronteira core↔apresentação (Inv. 5
 | `documento-mestre-camaras.md` + `arquitetura/` | **SSOT** — decisões consolidadas (§1–24); `arquitetura/` = §22 densa. Prevalece. |
 | `docs/` (+ `docs/adr/`) | discovery: rascunhos por eixo, plano de execução, **ADRs**. |
 | `produto/` | produto/comercial: PRD, features, NFRs, GTM + `design-system/`. |
-| `backend/` | engenharia (o monólito Clojure). |
-| `frontend/` | (futuro — Track FE0: Next self-host + o TS gerado). |
+| `apps/backend/` | engenharia (o monólito Clojure). |
+| `apps/frontend/` | (futuro — Track FE0: Next self-host + o TS gerado). |
+| `apps/mobile/` | (futuro — Flutter; diferido, PWA-first na V1). |
+| `prototipos/` | referência histórica (motor-dsl, governanca-ia); não é produto. |
 
 ### 2. Backend — raiz de namespace e host
-- Raiz de namespace **`oplenario.*`** mantida (`backend/src/oplenario/...`). O `oplenario` sob `src/` é
+- Raiz de namespace **`oplenario.*`** mantida (`apps/backend/src/oplenario/...`). O `oplenario` sob `src/` é
   o segmento-raiz do namespace (convenção Clojure anti-colisão), **não** repetição da pasta do workspace.
 - `kernel/` = compartilhado **puro**; `motor/` = lib da DSL de regras (§22.7); `codegen/` = build tool;
   `{main,sistema,http,config,migracao}.clj` = host/composição. **`kernel` e `motor` NUNCA importam um módulo.**
@@ -40,7 +43,7 @@ pelo" que o §22.2 alerta) e quebrando a fronteira core↔apresentação (Inv. 5
 |---|---|
 | **`wire/in`** · **`wire/out`** | representação **EXTERNA** (contrato de borda, Malli). `in` = entrada (request / evento consumido); `out` = saída (resposta / evento emitido) — **`wire/out` gera os tipos TS** do front (Eixo 8). |
 | **`models/`** | representação **INTERNA** (domínio), Malli. |
-| **`adapters/`** | o **gate** `wire↔models`, **sempre atravessado**: valida, traduz, filtra. |
+| **`adapters/in`** · **`adapters/out`** | o **gate** `wire↔models`, **sempre atravessado**, dividido por DIREÇÃO (espelha `wire/` e `diplomat/`). `in` = `wire/in → models` (valida, coage, defende a entrada); `out` = `models → wire/out` (projeta e **FILTRA campos sensíveis** na saída — a defesa anti-vazamento, ex.: CPF, mora no `out`). |
 | **`db/`** | persistência: **funções** sobre a `tx` do tenant (next.jdbc + HoneySQL, **schema-qualified**). É a **IMPL** atrás do Repo-Component (ver §3-bis) — o controller não chama `db/` direto. |
 | **`events/`** | eventos publicados/consumidos (nome + schema Malli do payload). |
 | **`relacoes/`** | funções de relação que o ctx é dono (§22.5.3) → registry do motor (DSL/authz). |
@@ -80,8 +83,9 @@ brigaria com o controle explícito de conexão/role/GUC da RLS (`kernel/tenancy/
 
 A forma não depende de disciplina humana — é **verificada por máquina, falha o build**:
 
-1. **`estrutura-lint`** (`backend/test/unit/oplenario/estrutura_lint_test.clj`): varre `src/` e **falha**
-   se reaparecer uma pasta `port/` ou `schema/` (decisões 4 e 5). Tem teste-de-dentes (prova que detecta).
+1. **`estrutura-lint`** (`apps/backend/test/unit/oplenario/estrutura_lint_test.clj`): varre `src/` e **falha**
+   se reaparecer uma pasta `port/` ou `schema/` (decisões 4 e 5), **ou se houver `.clj` direto sob `adapters/`
+   fora de `in/`/`out/`** (decisão 3). Tem teste-de-dentes (prova que detecta).
 2. **`import-lint`** (`arquitetura_test.clj`, já existente): clj-kondo sobre a matriz §22.10 — módulo
    nunca importa outro módulo; `kernel`/`motor` nunca importam módulo. Falha o build em violação.
 3. **`migracoes-lint`**: `timestamptz` sempre (companheiro da convenção de tipos).
@@ -103,6 +107,10 @@ A forma não depende de disciplina humana — é **verificada por máquina, falh
   Component; manter a pasta dobrava a navegação. **Descartado** (refactor `34dfeac`).
 - **`schema/` único / `wire/` único** — perde a distinção entrada↔saída que o front e o versionamento de
   contrato pedem. **Descartado** em favor de `wire/in` + `wire/out` (`0fa7d98`).
+- **`adapters/` plana (direção única)** — assimétrica com `wire/` e `diplomat/` (ambos divididos por
+  direção) e mistura a tradução de entrada (validar/coagir) com a de saída (projetar/**filtrar campos
+  sensíveis**), que têm postura de segurança distinta. **Descartado** em favor de `adapters/in` +
+  `adapters/out` (2026-06-28; sem custo de migração — camada ainda era 100% stub).
 - **ORM (Toucan2 etc.)** — esconde o SQL, incompatível com a disciplina de RLS/tenant. **Descartado.**
 - **`db/` como funções soltas chamadas direto pelo controller** (forma original do §22.10: "db não é
   port") — **revertido**: viola "todo recurso = Component". Agora o `db/` é a **impl** e o acesso é via
