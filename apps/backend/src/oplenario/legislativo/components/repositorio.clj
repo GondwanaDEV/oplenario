@@ -7,7 +7,9 @@
             [oplenario.legislativo.db.apensacao :as apensacao]
             [oplenario.legislativo.db.emenda :as emenda]
             [oplenario.legislativo.db.parecer :as parecer]
+            [oplenario.legislativo.db.parecer-texto-versao :as parecer-texto]
             [oplenario.legislativo.db.parecer-tramitacao :as parecer-tram]
+            [oplenario.legislativo.db.parecer-voto-divergente :as parecer-voto]
             [oplenario.legislativo.db.proposicao :as proposicao]
             [oplenario.legislativo.db.texto-versao :as texto]
             [oplenario.legislativo.db.tramitacao :as tram]
@@ -49,7 +51,15 @@
   (pareceres-do-objeto [this ente-id objeto-tipo objeto-id] "Pareceres sobre proposicao|emenda (disc.2).")
   (designar-relator! [this ente-id m] "Designa o relator (CAS).")
   (transicionar-parecer! [this ente-id registro args] "Engine do parecer + emite parecer.transicionou, 1 tx.")
-  (historico-do-parecer [this ente-id parecer-id]))
+  (historico-do-parecer [this ente-id parecer-id])
+  ;; eixo F / F3.6b — texto do parecer (eixo B aplicado) + votos divergentes (aux append-only)
+  (nova-versao-parecer! [this ente-id versao] "Cria versao 'rascunho' do texto do parecer (append-only).")
+  (promover-versao-parecer! [this ente-id m] "Promove rascunho->vigente + reaponta o pointer, 1 tx.")
+  (buscar-versao-parecer [this ente-id id])
+  (versoes-do-parecer [this ente-id parecer-id])
+  (texto-vigente-parecer [this ente-id parecer-id])
+  (registrar-voto-divergente! [this ente-id m] "Registra voto vencido (append-only puro).")
+  (votos-divergentes-do-parecer [this ente-id parecer-id]))
 
 (defrecord RepoLegislativoPg [datasource bus]
   RepoLegislativo
@@ -113,7 +123,15 @@
                        :transicao-id (:transicao-id r)}
                 (:ator-id args) (assoc :ator-id (:ator-id args)))))
           r))))
-  (historico-do-parecer [this ente-id pid] (transacao this ente-id #(parecer-tram/historico-do-parecer % ente-id pid))))
+  (historico-do-parecer [this ente-id pid] (transacao this ente-id #(parecer-tram/historico-do-parecer % ente-id pid)))
+  ;; eixo F / F3.6b — texto + votos divergentes. promover! compoe (supersede + vigente + reaponta pointer) 1 tx.
+  (nova-versao-parecer! [this ente-id v] (transacao this ente-id #(parecer-texto/nova-versao! % (assoc v :ente-id ente-id))))
+  (promover-versao-parecer! [this ente-id m] (transacao this ente-id #(parecer-texto/promover! % (assoc m :ente-id ente-id))))
+  (buscar-versao-parecer [this ente-id id] (transacao this ente-id #(parecer-texto/buscar % ente-id id)))
+  (versoes-do-parecer [this ente-id pid] (transacao this ente-id #(parecer-texto/versoes-do-parecer % ente-id pid)))
+  (texto-vigente-parecer [this ente-id pid] (transacao this ente-id #(parecer-texto/vigente % ente-id pid)))
+  (registrar-voto-divergente! [this ente-id m] (transacao this ente-id #(parecer-voto/registrar! % (assoc m :ente-id ente-id))))
+  (votos-divergentes-do-parecer [this ente-id pid] (transacao this ente-id #(parecer-voto/listar-por-parecer % ente-id pid))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

@@ -33,6 +33,17 @@ Dentro do módulo: **`adapters/` só é chamado pelo `diplomat/`** (núcleo `con
 - Migration própria: `20260620000003-admin-sistema.*` (schema + registry `ente`). Refs a `admin_sistema.ente` de outros módulos cruzam por **guard de serviço**, nunca FK/JOIN cross-schema.
 
 ## TODO (deferido p/ implementação — validação ecc)
+- **Carries do F3.6b (eixo F — texto do parecer + votos divergentes, 28/06; review ecc clojure+database):**
+  `parecer_texto_versao` espelha o eixo B (append-only no conteúdo, híbrido inline/URI, promoção
+  rascunho→vigente que reaponta `pareceres.texto_vigente_versao_id`), **não-particionada**; `parecer_voto_divergente`
+  = aux **append-only puro**. **(eixo B / backport)** o trigger de imutabilidade de conteúdo de
+  `proposicao_texto_versao` (mig 0015) **NÃO congela `origem`/`origem_importado_em`** — o trigger do parecer
+  AGORA congela (DB-MENOR); fazer o mesmo na proposição numa **migration de hardening do eixo B** (nova migration,
+  nunca editar a 0015). **(eixo F → F3.6c)** o `voto_relator` na entity + agregadores que consomem os votos
+  divergentes (`pareceres.algum_rejeitou` etc.) entram no F3.6c. **Aplicado:** clojure-MAJOR (pré-check de
+  terminal em `promover!` → erro inspecionável antes do trigger opaco, via `logic/estados-parecer-terminais`),
+  clojure-MENOR1/2 (testes cross-parecer + parecer-terminal), clojure-MENOR3 (`voto` `[:string {:min 1}]`),
+  DB-MENOR (congela `origem`/`origem_importado_em` no trigger do parecer).
 - **Carries do F3.6a (eixo F — parecer, NÚCLEO, 28/06; decisão de reuso do motor por workflow + review ecc):**
   Decisão **(b)** (engine próprio reusando o avaliador DSL + tabelas de template compartilhadas; NÃO generaliza
   o engine do eixo C). **(eixo F / disc.6 §22.4.3)** extrair o **core de transição compartilhado**
