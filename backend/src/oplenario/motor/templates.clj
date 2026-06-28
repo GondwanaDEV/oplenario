@@ -9,7 +9,7 @@ contexto: compliance
 dominio: tribunal_de_contas
 parametros: { competencia: Competencia }
 aplica_quando: verdadeiro
-exige: remessa_enviada(ente, \"SIM\", competencia)
+exige: remessa_enviada(\"SIM\", competencia)
 prazo:
   janela: prazo_vigente(\"TCE-CE\", \"SIM_mensal\", competencia)
   a_partir_de: fim_de(competencia)
@@ -22,7 +22,7 @@ template: transparencia_tempo_real_despesa
 contexto: compliance
 dominio: federal
 parametros: { despesa: AtoDespesa }
-aplica_quando: populacao(ente) > 10000
+aplica_quando: populacao() > 10000
 exige: publicada_no_portal(despesa)
 prazo:
   janela: proximo_dia_util(data_registro_contabil(despesa))
@@ -54,7 +54,7 @@ contexto: compliance
 dominio: ???
 parametros: { votacao: Votacao }
 aplica_quando: votacao.materia == emenda_lom
-exige: votos_favoraveis(votacao) >= arredonda_cima( fracao(2,3) * membros_da_casa(ente) )
+exige: votos_favoraveis(votacao) >= arredonda_cima( fracao(2,3) * membros_da_casa(hoje()) )
 prazo: ???
 severidade: bloqueante
 ")
@@ -68,7 +68,7 @@ contexto: compliance
 dominio: tribunal_de_contas
 parametros: { competencia: Competencia }
 aplica_quando: verdadeiro
-exige: remessa_enviada(ente, 123, competencia)
+exige: remessa_enviada(123, competencia)
 severidade: bloqueante
 referencia_normativa: \"n/a\"
 ")
@@ -90,7 +90,7 @@ contexto: compliance
 dominio: federal
 parametros: { despesa: AtoDespesa }
 aplica_quando: verdadeiro
-exige: populacao(ente)
+exige: populacao()
 severidade: aviso
 referencia_normativa: \"n/a\"
 ")
@@ -100,7 +100,7 @@ template: neg_comparacao_incompativel
 contexto: compliance
 dominio: federal
 parametros: { despesa: AtoDespesa }
-aplica_quando: populacao(ente) > \"muito\"
+aplica_quando: populacao() > \"muito\"
 exige: publicada_no_portal(despesa)
 severidade: aviso
 referencia_normativa: \"n/a\"

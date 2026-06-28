@@ -34,6 +34,14 @@
 (defn enum-t [nome] {:kind :enum :nome nome})   ; 'Enum' colidiria com java.lang.Enum (auto-importado)
 (defn Registro [nome] {:kind :registro :nome nome})
 
+;; ---- escalares OPACOS (id de domínio: uuid) ----
+;; Comparáveis SÓ por ==/!= (igualdade de referência de entidade), nunca aritmética/ordem — o
+;; type-checker já garante isso: opaco não é numérico nem temporal, então > + * 'in' erram; só o
+;; ramo ==/!= (que exige tipos iguais) os aceita. F2: args de identidade/comissão nas relações reais
+;; (tem_mandato_vigente(IdentidadeId,…), é_o_próprio(IdentidadeId,IdentidadeId), §22.7.5/§4-bis).
+(def IDENTIDADE-ID {:kind :opaco :nome "IdentidadeId"})
+(def COMISSAO-ID   {:kind :opaco :nome "ComissaoId"})
+
 ;; ---- predicados de compatibilidade usados pelo type-checker ----
 (def ^:private numericos #{INTEIRO RACIONAL})
 (def ^:private temporais #{DATA INSTANTE})

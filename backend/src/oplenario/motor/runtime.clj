@@ -47,7 +47,8 @@
 ;; Construtores de fixtures (valores de domínio + tabelas-espelho do schema)
 ;; ===========================================================================
 (defn competencia [ano mes] {:ano ano :mes mes})
-(defn ente [id populacao membros] {:id id :populacao populacao :membros membros})
+;; `ente` SAIU como construtor de valor (§4-bis): a Casa é a `tx`/o tenant — não um valor do amb.
+;; populacao()/membros_da_casa(data) resolvem pelo :resolver (registry), não por um Registro Ente.
 (defn ato-despesa [id registro-contabil publicada] {:id id :registro-contabil registro-contabil :publicada publicada})
 (defn ato-legislativo [id tipo publicado promulgacao] {:id id :tipo tipo :publicado publicado :promulgacao promulgacao})
 (defn votacao [id materia favoraveis] {:id id :materia materia :favoraveis favoraveis})
@@ -124,15 +125,21 @@
     (quot (+ (numerator x) (dec (denominator x))) (denominator x))   ; ceil exato p/ ratio positivo
     (long x)))
 
-(defn- prazo-vigente-lookup [ctx jurisdicao tipo comp]
+(defn- prazo-vigente-lookup
+  "Builtin own-schema: a linha 'vigente' p/ (dominio, chave-dominio, tipo, periodo). `chave-dominio` é o
+  1º arg do DSL (ex.: \"TCE-CE\"); `dominio` vem do ctx (a regra). Duas fontes: db-backed (`:prazo-fonte`
+  injetada pelo seam `motor/avaliar` — lê motor.prazo_dominio_vigente) ou fixture (`:estado :prazos`)."
+  [ctx chave-dominio tipo comp]
   (let [chave (comp-chave comp)
-        achados (filter #(and (= (:jurisdicao %) jurisdicao) (= (:tipo-prazo %) tipo)
-                              (= (:chave-periodo %) chave) (:vigente %))
-                        (:prazos (:estado ctx)))]
-    (when (empty? achados)
-      (throw (ex-info (str "prazo_vigente: sem prazo p/ " jurisdicao "/" tipo "/" chave " [GAP de conteúdo]") {:erro :runtime})))
-    (reset! (:fonte ctx) (:fonte (first achados)))       ; captura p/ prazo_fonte_ref (S1/S3)
-    (:data-limite (first achados))))
+        achado (if-let [pf (:prazo-fonte ctx)]
+                 (pf (:dominio ctx) chave-dominio tipo chave)                  ; {:data-limite :fonte} | nil
+                 (first (filter #(and (= (:jurisdicao %) chave-dominio) (= (:tipo-prazo %) tipo)
+                                      (= (:chave-periodo %) chave) (:vigente %))
+                                (:prazos (:estado ctx)))))]
+    (when (nil? achado)
+      (throw (ex-info (str "prazo_vigente: sem prazo p/ " chave-dominio "/" tipo "/" chave " [GAP de conteúdo]") {:erro :runtime})))
+    (reset! (:fonte ctx) (:fonte achado))                ; captura p/ prazo_fonte_ref (S1/S3)
+    (:data-limite achado)))
 
 (defn- a-chamada [no amb ctx]
   (let [args (mapv #(avaliar % amb ctx) (:args no))
@@ -140,6 +147,9 @@
         st (:estado ctx)
         fer (:feriados st)]
     (case nome
+      ;; ---- BUILTINS (in-engine, §2): calendário/aritmética puros, OU leitura do PRÓPRIO schema
+      ;;      `motor` (prazo_vigente → motor.prazo_dominio_vigente; parametro_tenant →
+      ;;      motor.compliance_regra_tenant). O motor é dono dessas tabelas — não é cross-módulo. ----
       ("hoje" "agora") (:agora ctx)
       "fim_de" (fim-de (nth args 0))
       "proximo_dia_util" (prox-dia-util (nth args 0) fer)
@@ -148,34 +158,57 @@
       "fracao" (/ (nth args 0) (nth args 1))             ; EXATO — ratio Clojure, nunca float
       "dias" {:duracao-dias (nth args 0)}                ; construtor de Duracao
       "prazo_vigente" (prazo-vigente-lookup ctx (nth args 0) (nth args 1) (nth args 2))
-      "parametro_tenant" (let [e (get amb "ente")
-                               binding (get (:bindings st) (:id e) {})]
-                           (if (contains? binding (nth args 0)) (get binding (nth args 0))
-                               (throw (ex-info (str "parametro_tenant: " (pr-str (nth args 0)) " não configurado p/ " (:id e)) {:erro :runtime}))))
-      "populacao" (:populacao (nth args 0))
-      "membros_da_casa" (:membros (nth args 0))
-      "remessa_enviada" (let [[e sistema comp] args]
-                          (contains? (:remessas st) [(:id e) sistema (comp-chave comp)]))
-      "publicada_no_portal" (:publicada (nth args 0))
-      "data_registro_contabil" (:registro-contabil (nth args 0))
-      "publicado" (:publicado (nth args 0))
-      "data_promulgacao" (:promulgacao (nth args 0))
-      "votos_favoraveis" (:favoraveis (nth args 0))
-      (throw (ex-info (str "função sem implementação de runtime: " (pr-str nome)) {:erro :runtime})))))
+      "parametro_tenant" (let [chave (nth args 0)
+                               ;; db-backed (:param-fonte, lê motor.compliance_regra_tenant) ou fixture
+                               achado (if-let [pf (:param-fonte ctx)] (pf chave)
+                                          (let [b (get (:bindings st) (:ente-id ctx) {})]
+                                            (when (contains? b chave) [(get b chave)])))]
+                           (if (some? achado) (first achado)
+                               (throw (ex-info (str "parametro_tenant: " (pr-str chave) " não configurado p/ " (:ente-id ctx)) {:erro :runtime}))))
+      ;; ---- FATO RESOLVIDO (sai do motor, §2/§3): tudo com forma de DOMÍNIO → o :resolver injetado
+      ;;      (RegistroFatos do host). O motor chama por NOME; nunca importa o módulo (§22.10). ----
+      ((:resolver ctx) nome args))))
+
+;; ===========================================================================
+;; Resolvedor de fatos (§3/§4): o seam injetado. `resolver-vazio` = sem fatos (fail-closed, p/ exprs
+;; só-builtin); `resolver-fixture` = teste. Em produção é `resolver-para` (motor/components, fecha
+;; sobre a `tx` do tenant + o RegistroFatos). a-chamada chama `((:resolver ctx) nome args)`.
+;; ===========================================================================
+(defn resolver-vazio
+  "Resolvedor sem fatos: todo fato de domínio lança (fail-closed). Default das exprs só-builtin."
+  [nome _args]
+  (throw (ex-info (str "fato sem fn registrada: " (pr-str nome)) {:erro :runtime :nome nome})))
+
+(defn resolver-fixture
+  "Resolvedor de teste: mapa {nome → fn-de-args-de-domínio}. Aplica a fn aos args (sem `tx` — fixture).
+   Espelha o contrato de `resolver-para` sem tocar banco."
+  [m]
+  (fn [nome args]
+    (if-let [f (get m nome)] (apply f args)
+        (throw (ex-info (str "fato sem fn (fixture): " (pr-str nome)) {:erro :runtime :nome nome})))))
 
 (defn eval-expr
-  "Conveniência p/ avaliar uma expressão-string solta (usado nos testes de aritmética)."
+  "Conveniência p/ avaliar uma expressão-string solta (usado nos testes de aritmética). Sem fatos de
+  domínio (resolver-vazio): exercita builtins/aritmética/temporal."
   ([s] (eval-expr s {} (estado) (ldate 2026 6 19)))
-  ([s amb st agora] (avaliar (nuc/parse-expr s) amb {:estado st :agora agora :fonte (atom nil)})))
+  ([s amb st agora]
+   (avaliar (nuc/parse-expr s) amb {:estado st :agora agora :fonte (atom nil) :resolver resolver-vazio :ente-id nil})))
 
 ;; ===========================================================================
 ;; Motor: o loop materializa -> avalia -> monitora -> audita
 ;; ===========================================================================
 (def ^:private LIMIAR-A-VENCER-DIAS 5)   ; "a vencer" = derivação de LEITURA, não estado persistido
 
-(defn motor [estado agora]
-  (atom {:estado estado :agora agora
-         :obrigacoes {} :avaliacoes [] :eventos [] :contexto {} :seq 0}))
+(defn motor
+  "Engine atom. O resolvedor (registry injetado), o ente-id corrente e — opcional — as fontes db-backed
+  dos builtins own-schema (`:prazo-fonte`/`:param-fonte`, injetadas pelo seam `motor/avaliar`) entram
+  aqui; `avaliar-regra!` os repassa ao `ctx`. Sem fontes → fixture (`:estado`). 2-arg = só builtins."
+  ([estado agora] (motor estado agora resolver-vazio nil nil))
+  ([estado agora resolver ente-id] (motor estado agora resolver ente-id nil))
+  ([estado agora resolver ente-id {:keys [prazo-fonte param-fonte]}]
+   (atom {:estado estado :agora agora :resolver resolver :ente-id ente-id
+          :prazo-fonte prazo-fonte :param-fonte param-fonte
+          :obrigacoes {} :avaliacoes [] :eventos [] :contexto {} :seq 0})))
 
 (defn- next-id! [eng prefixo]
   (str prefixo "-" (:seq (swap! eng update :seq inc))))
@@ -197,8 +230,10 @@
    (avaliar-regra! eng regra reg-ver amb objeto-tipo objeto-id "evento"))
   ([eng regra reg-ver amb objeto-tipo objeto-id origem]
    (let [st (:estado @eng) agora (:agora @eng)
-         e (get amb "ente") ente-id (:id e)
-         ctx {:estado st :agora agora :fonte (atom nil)}]
+         ente-id (:ente-id @eng)                          ; a Casa = o tenant (não vem do amb)
+         ctx {:estado st :agora agora :fonte (atom nil) :resolver (:resolver @eng) :ente-id ente-id
+              :prazo-fonte (:prazo-fonte @eng) :param-fonte (:param-fonte @eng)
+              :dominio (:dominio regra)}]               ; domínio da regra → resolução db do prazo_vigente
      (if-not (avaliar (parse-memo (:aplica-quando regra)) amb ctx)
        ;; aplica_quando=falso -> inaplicável (não materializa)
        (auditar! eng ente-id nil (:template regra) reg-ver "inaplicavel" (:severidade regra) origem "aplica_quando=falso")
@@ -278,8 +313,10 @@
                        prazos)
                  (prazo-vigente* jurisdicao tipo-prazo chave-periodo nova-data fonte true))))
   (emitir! eng (str "PrazoDominioDeslizado(" jurisdicao "/" tipo-prazo "/" chave-periodo " -> " nova-data ", " fonte ")"))
-  ;; re-sweep: reavalia obrigações abertas afetadas (origem=sweep)
-  (doseq [[_chave obrig] (:obrigacoes @eng)]
-    (when (and (= (:estado obrig) "pendente") (contains? (:contexto @eng) (:id obrig)))
-      (let [[regra amb] (get (:contexto @eng) (:id obrig))]
-        (avaliar-regra! eng regra cat/CATALOGO-VERSAO amb (:objeto-tipo obrig) (:objeto-id obrig) "sweep")))))
+  ;; re-sweep: reavalia obrigações abertas afetadas (origem=sweep). Um snapshot do engine p/ o lote
+  ;; (single-thread; o snapshot evita reler :contexto a cada iteração e é seguro se virar concorrente).
+  (let [snap @eng]
+    (doseq [[_chave obrig] (:obrigacoes snap)]
+      (when (and (= (:estado obrig) "pendente") (contains? (:contexto snap) (:id obrig)))
+        (let [[regra amb] (get (:contexto snap) (:id obrig))]
+          (avaliar-regra! eng regra cat/CATALOGO-VERSAO amb (:objeto-tipo obrig) (:objeto-id obrig) "sweep"))))))

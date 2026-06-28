@@ -22,16 +22,18 @@
     (when (= 1 (count achados)) (first achados))))
 
 ;; Registros (records) de domínio e campos tipados (acesso ato.tipo, T3/T4).
+;; "Ente" SAIU (§4-bis/C2): a Casa é 1:1 com o tenant — implícita na `tx` (RLS isola); as relações
+;; reais não tomam `ente` (populacao [tx], membros_da_casa [tx data]). Não é parâmetro/arg do DSL.
 (def REGISTROS
-  {"Ente" {}
-   "AtoDespesa" {}
+  {"AtoDespesa" {}
    "AtoLegislativo" {"tipo" (t/enum-t "TipoAtoLegislativo")}
    "Votacao" {"materia" (t/enum-t "Materia")}})
 
 (def ^:private tipos-nomeados
   {"Booleano" t/BOOLEANO "Inteiro" t/INTEIRO "Texto" t/TEXTO "Data" t/DATA
    "Instante" t/INSTANTE "Duracao" t/DURACAO "Racional" t/RACIONAL
-   "Competencia" t/COMPETENCIA "Maioria" t/MAIORIA})
+   "Competencia" t/COMPETENCIA "Maioria" t/MAIORIA
+   "IdentidadeId" t/IDENTIDADE-ID "ComissaoId" t/COMISSAO-ID})
 
 (defn resolver-tipo-nome [nome]
   (or (get tipos-nomeados nome)
@@ -60,12 +62,30 @@
 (def PARAMETROS-TENANT
   {"prazo_publicacao_ato_dias" t/INTEIRO})
 
-;; Funções de relação (expostas pelo contexto dono — §22.7.5 §8.1[b]).
+;; Funções de relação (expostas pelo contexto dono — §22.7.5 §8.1[b]). As assinaturas ESPELHAM os args
+;; de domínio reais das fns de F1 (`cadastros/relacoes`, `identidade/relacoes`): a aridade aqui = aridade
+;; da fn menos a `tx` injetada (§4-bis/M7). O assert de costura do boot (RegistroFatos) casa
+;; fn-registrada ⋈ assinatura :relacao — divergência de aridade/nome NÃO sobe (fail-closed, §1).
+;;
+;; Dois grupos: (a) já têm fn registrada em F1 (cadastros+identidade); (b) "assinatura sem fn" — fato de
+;; módulo futuro (Plenário/F4, compliance-remessa/F5): tipa no save-time, só AVALIA quando o módulo dono
+;; registrar a fn; até lá, fato-sem-fn em runtime = fail-closed (C1).
 (def FUNCOES-RELACAO
   (into {} (map (juxt :nome identity))
-        [(r "populacao" [(t/Registro "Ente")] t/INTEIRO "Cadastros/Ente")
-         (r "membros_da_casa" [(t/Registro "Ente")] t/INTEIRO "Cadastros/Ente")
-         (r "remessa_enviada" [(t/Registro "Ente") t/TEXTO t/COMPETENCIA] t/BOOLEANO "Remessa-tracking")
+        [;; (a) relações reais de F1 — cadastros/relacoes (a Casa = a tx; sem arg `ente`)
+         (r "populacao" [] t/INTEIRO "Cadastros")
+         (r "membros_da_casa" [t/DATA] t/INTEIRO "Cadastros")
+         (r "tribunal_competente" [] t/TEXTO "Cadastros")
+         (r "tem_mandato_vigente" [t/IDENTIDADE-ID t/DATA] t/BOOLEANO "Cadastros")
+         (r "é_membro_de_comissao" [t/IDENTIDADE-ID t/COMISSAO-ID t/DATA] t/BOOLEANO "Cadastros")
+         (r "é_presidente_de_comissao" [t/IDENTIDADE-ID t/COMISSAO-ID t/DATA] t/BOOLEANO "Cadastros")
+         (r "é_presidente_da_mesa" [t/IDENTIDADE-ID t/DATA] t/BOOLEANO "Cadastros")
+         (r "é_secretario_da_mesa" [t/IDENTIDADE-ID t/DATA] t/BOOLEANO "Cadastros")
+         (r "quem_exerce_presidencia" [t/DATA] t/IDENTIDADE-ID "Cadastros")
+         ;; identidade/relacoes — pura (transversal); ignora a tx mas casa a forma (fn tx & args)
+         (r "é_o_próprio" [t/IDENTIDADE-ID t/IDENTIDADE-ID] t/BOOLEANO "Identidade")
+         ;; (b) assinaturas sem fn (módulo futuro) — remessa_enviada perde `ente` (§4-bis)
+         (r "remessa_enviada" [t/TEXTO t/COMPETENCIA] t/BOOLEANO "Compliance-remessa")
          (r "publicada_no_portal" [(t/Registro "AtoDespesa")] t/BOOLEANO "Transparencia")
          (r "data_registro_contabil" [(t/Registro "AtoDespesa")] t/DATA "Execucao/Transparencia")
          (r "publicado" [(t/Registro "AtoLegislativo")] t/BOOLEANO "Atos Legislativos")

@@ -5,8 +5,24 @@
   composicao) PODE requerer modulos — e' aqui que os Repo-Components recebem o :datasource."
   (:require [com.stuartsierra.component :as component]
             [oplenario.cadastros.components.repositorio :as repo-cadastros]
+            [oplenario.cadastros.relacoes.cadastro :as rel-cadastros]
             [oplenario.identidade.components.repositorio :as repo-identidade]
-            [oplenario.kernel.components.datasource :as datasource]))
+            [oplenario.identidade.relacoes.identidade :as rel-identidade]
+            [oplenario.kernel.components.datasource :as datasource]
+            [oplenario.motor.components.registro-fatos :as registro-fatos]
+            [oplenario.motor.components.repositorio :as repo-motor]))
+
+(defn- fundir-relacoes
+  "Funde os mapas {nome → fn} de relação dos módulos FALHANDO em colisão de nome (fail-closed na borda
+  do registry — o `merge` cru descartaria o duplicado em silêncio, a classe de erro que F2 existe p/
+  barrar). Conforme o fanout (F4/F5) adiciona registradores, uma relação copiada p/ o módulo errado
+  NÃO sobe."
+  [& mapas]
+  (reduce (fn [acc m]
+            (when-let [dup (seq (filter (set (keys acc)) (keys m)))]
+              (throw (ex-info "colisão de nome de relação entre módulos (fail-closed)" {:duplicadas (vec dup)})))
+            (merge acc m))
+          {} mapas))
 
 (defn novo-sistema
   "Monta o sistema a partir do config carregado. Cresce por agregacao conforme os modulos chegam."
@@ -14,4 +30,10 @@
   (component/system-map
    :datasource      (datasource/datasource config)
    :repo-cadastros  (component/using (repo-cadastros/repositorio) [:datasource])
-   :repo-identidade (component/using (repo-identidade/repositorio) [:datasource])))
+   :repo-identidade (component/using (repo-identidade/repositorio) [:datasource])
+   :repo-motor      (component/using (repo-motor/repositorio) [:datasource])
+   ;; o host É a fronteira (§22.10): importa as `relacoes` dos módulos e as injeta no registry do motor.
+   ;; O motor chama por nome (resolver-para), nunca importa o módulo. Sem :datasource — a `tx` do tenant
+   ;; entra por-chamada (quem avalia abre a tx via Repo). O `start` roda o assert de costura (fail-closed).
+   :registro-fatos  (registro-fatos/registro-fatos
+                     (fundir-relacoes rel-cadastros/relacoes rel-identidade/relacoes))))
