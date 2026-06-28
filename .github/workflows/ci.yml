@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: backend
+        working-directory: apps/backend
     steps:
       - uses: actions/checkout@v4
 
@@ -32,8 +32,8 @@ jobs:
         with:
           path: |
             ~/.m2
-            backend/.cpcache
-          key: deps-${{ hashFiles('backend/deps.edn') }}
+            apps/backend/.cpcache
+          key: deps-${{ hashFiles('apps/backend/deps.edn') }}
 
       - name: Subir Postgres + MinIO (docker compose)
         run: docker compose up -d postgres minio
