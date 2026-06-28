@@ -20,6 +20,22 @@
   #{"protocolo" "substitutivo" "aplicacao_emenda" "redacao_final" "promulgacao" "importacao_legado"})
 (def estados-versao #{"rascunho" "vigente" "superada" "arquivada"})
 
+;; --- eixo D: emendas. Vocabularios do §22.4 (espelham os CHECK da migration 0017). ---
+(def tipos-emenda
+  #{"modificativa" "supressiva" "aditiva" "substitutiva_total" "substitutiva_parcial" "aglutinativa" "redacao"})
+(def momentos-apresentacao #{"no_prazo" "plenario" "redacao_final"})
+
+(def estados-emenda
+  "Ciclo de vida da emenda — ENUM SIMPLES na propria tabela (§22.4 eixo D): NAO usa o motor de templates
+  porque o ciclo e' universal entre camaras (ao contrario da tramitacao da proposicao, eixo C). Cresce por
+  adicao. V1: apresentada -> admitida -> {aprovada|rejeitada|prejudicada|retirada}."
+  #{"apresentada" "admitida" "aprovada" "rejeitada" "prejudicada" "retirada"})
+
+(def estados-emenda-terminais
+  "Estados terminais da emenda (imutabilidade nivel b): uma vez terminal, a linha so muda sob correcao
+  auditada (trigger compartilhado shared.imut_trava_estado_terminal). Espelha os args do trigger (mig 0017)."
+  #{"aprovada" "rejeitada" "prejudicada" "retirada"})
+
 (def limite-inline-bytes
   "Threshold inline/URI (§22.4 eixo B; calibravel por observabilidade). Acima disso o conteudo vai p/
   o objeto_store e a versao guarda a URI; ate isso, inline na coluna texto_inline."

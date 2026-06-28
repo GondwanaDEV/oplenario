@@ -33,6 +33,17 @@ Dentro do módulo: **`adapters/` só é chamado pelo `diplomat/`** (núcleo `con
 - Migration própria: `20260620000003-admin-sistema.*` (schema + registry `ente`). Refs a `admin_sistema.ente` de outros módulos cruzam por **guard de serviço**, nunca FK/JOIN cross-schema.
 
 ## TODO (deferido p/ implementação — validação ecc)
+- **Carries do F3.4 (eixo D — emendas, 28/06; review ecc clojure+database incorporada):** (eixo D / regimento)
+  **precondição fina de `aprovar!`** — hoje só barra estado terminal (aprova de `apresentada`|`admitida`); exigir
+  `admitida`? trilho rápido p/ emenda de plenário (`momento='plenario'`)? = **[GAP] regimental** deferido ao
+  especialista (§22.4.4), não se crava. (DB/clojure, hardening) `numero_local` por `SELECT MAX+1` tem janela
+  TOCTOU — a UNIQUE `(ente_id,mae,numero_local)` barra (erro não-silencioso, sem retry), **mesmo padrão de
+  `nova-versao!`**; candidato a advisory-lock junto do hardening de F3.2. (DB, quando houver requisito) coerência
+  `autor_tipo`⋈`autor_id` está frouxa de propósito (import/externo usa `autor_texto`) — CHECK só quando regra de
+  cliente exigir. (FE0/wire-in) o XOR inline/uri **não** é validado no model Malli (igual ao `texto-versao`) — vai
+  no `adapters/in` quando o eixo D ganhar `wire/in`+`controllers` (hoje só db+model+repo, como o eixo B). **Aplicado
+  nesta rodada:** CHECK `emenda_aprovada_requer_versao` (DB-C1); `mudar-estado!` recusa `'aprovada'` (DB-M2);
+  `aprovar!` crava proveniência (destructure só do conteúdo do seed, não `merge` — clojure-MAJOR).
 - **Carries do F3.3b (eixo C — emissão + guard-gate, 28/06; review ecc clojure+database incorporada):**
   (eixo C / catálogo) **type-check estático COMPLETO do guard** no save — hoje `motor/validar-guarda` é
   só SINTÁTICO (parse); o type-check vs `Booleano` exige catalogar o vocabulário de tramitação (registros

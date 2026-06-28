@@ -4,6 +4,7 @@
   dentro); o record segura o :datasource (via `using`); o db/ e' a IMPL. O controller depende DESTE
   Component, nunca do db/ direto. `transacao` compoe varias acoes numa UNICA tx do tenant."
   (:require [oplenario.kernel.tenancy :as tenancy]
+            [oplenario.legislativo.db.emenda :as emenda]
             [oplenario.legislativo.db.proposicao :as proposicao]
             [oplenario.legislativo.db.texto-versao :as texto]
             [oplenario.legislativo.db.tramitacao :as tram]
@@ -26,7 +27,13 @@
   (criar-estado! [this ente-id estado])
   (criar-transicao! [this ente-id transicao])
   (transicionar! [this ente-id registro args] "Engine: guard via motor + historico + muda estado, 1 tx.")
-  (historico-da-proposicao [this ente-id proposicao-id]))
+  (historico-da-proposicao [this ente-id proposicao-id])
+  ;; eixo D — emendas
+  (criar-emenda! [this ente-id emenda] "Numera local por mae + insere ('apresentada').")
+  (buscar-emenda [this ente-id id])
+  (emendas-da-proposicao [this ente-id proposicao-mae-id])
+  (mudar-estado-emenda! [this ente-id m] "Ciclo enum simples; CAS + trava terminal.")
+  (aprovar-emenda! [this ente-id m] "Aplica ao texto-mae: cria rascunho + fecha ciclo, 1 tx."))
 
 (defrecord RepoLegislativoPg [datasource bus]
   RepoLegislativo
@@ -58,7 +65,13 @@
                        :transicao-id (:transicao-id r)}
                 (:ator-id args) (assoc :ator-id (:ator-id args)))))
           r))))
-  (historico-da-proposicao [this ente-id pid] (transacao this ente-id #(tram/historico-da-proposicao % ente-id pid))))
+  (historico-da-proposicao [this ente-id pid] (transacao this ente-id #(tram/historico-da-proposicao % ente-id pid)))
+  ;; eixo D / F3.4 — emendas. aprovar! compoe (nova-versao rascunho + muda estado) numa UNICA tx do tenant.
+  (criar-emenda! [this ente-id e] (transacao this ente-id #(emenda/criar! % (assoc e :ente-id ente-id))))
+  (buscar-emenda [this ente-id id] (transacao this ente-id #(emenda/buscar % ente-id id)))
+  (emendas-da-proposicao [this ente-id pid] (transacao this ente-id #(emenda/listar-por-mae % ente-id pid)))
+  (mudar-estado-emenda! [this ente-id m] (transacao this ente-id #(emenda/mudar-estado! % (assoc m :ente-id ente-id))))
+  (aprovar-emenda! [this ente-id m] (transacao this ente-id #(emenda/aprovar! % (assoc m :ente-id ente-id)))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."
