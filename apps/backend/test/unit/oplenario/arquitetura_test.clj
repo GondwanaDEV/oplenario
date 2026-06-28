@@ -40,6 +40,18 @@
                        (and (kernel-ou-motor? from) mt))]  ; (2) kernel/motor -> modulo
          {:from from :to to})))
 
+(defn- adapters-ns? [ns-sym] (re-find #"\.adapters\." (str ns-sym)))
+(defn- diplomat-ns? [ns-sym] (re-find #"\.diplomat\." (str ns-sym)))
+
+(defn- violacoes-adapters
+  "ADR-0001 §3: o gate `adapters/` so e' chamado pelo `diplomat/` — o nucleo (controllers/logic) trabalha
+  em MODELS; a traducao wire<->model acontece SO na borda de IO. Toda ns-usage cujo ALVO e' um `adapters`
+  deve vir de um `diplomat`. (O caso cross-modulo ja e' barrado por violacoes-de.)"
+  [usos]
+  (vec (for [{:keys [from to]} usos
+             :when (and (adapters-ns? to) (not (diplomat-ns? from)))]
+         {:from from :to to})))
+
 (def ^:private analise
   (delay (:analysis (kondo/run! {:lint ["src"] :config {:output {:analysis true}}}))))
 
@@ -64,3 +76,21 @@
     (is (empty? (violacoes-de usos))
         (str "import-lint §22.10 violado (use HTTP/eventos, nunca import direto): "
              (pr-str (violacoes-de usos))))))
+
+(deftest adapters-lint-tem-dentes
+  ;; prova que a regra DETECTA o caller ilegitimo e PERMITE o diplomat.
+  (is (seq (violacoes-adapters [{:from 'oplenario.legislativo.controllers
+                                 :to 'oplenario.legislativo.adapters.in.proposicao}]))
+      "controller->adapters = violacao (adapters so do diplomat)")
+  (is (empty? (violacoes-adapters [{:from 'oplenario.legislativo.diplomat.http.in
+                                    :to 'oplenario.legislativo.adapters.in.proposicao}]))
+      "diplomat->adapters = permitido")
+  (is (empty? (violacoes-adapters [{:from 'oplenario.legislativo.controllers
+                                    :to 'oplenario.legislativo.logic}]))
+      "controller->logic (nao-adapter) = ok"))
+
+(deftest adapters-so-chamados-do-diplomat
+  (let [usos (:namespace-usages @analise)]
+    (is (empty? (violacoes-adapters usos))
+        (str "ADR-0001 §3: adapters/ so podem ser chamados pelo diplomat/ (o nucleo trabalha em models): "
+             (pr-str (violacoes-adapters usos))))))

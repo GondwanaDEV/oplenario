@@ -15,6 +15,7 @@ Esqueleto do padrão **ports & adapters (versão Nubank)** consolidado em **§22
 - `src/oplenario/{main,sistema,http}.clj` — host/composição.
 
 Comunicação inter-módulo: **só HTTP (diplomat/http/out → diplomat/http/in) ou eventos (producers/consumers)**.
+Dentro do módulo: **`adapters/` só é chamado pelo `diplomat/`** (núcleo `controllers`/`logic` trabalha em `models`; tradução wire↔model só na borda) — lint enforça.
 
 ## Rodar
 - Stack: `docker compose up`

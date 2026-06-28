@@ -43,7 +43,7 @@ pelo" que o §22.2 alerta) e quebrando a fronteira core↔apresentação (Inv. 5
 |---|---|
 | **`wire/in`** · **`wire/out`** | representação **EXTERNA** (contrato de borda, Malli). `in` = entrada (request / evento consumido); `out` = saída (resposta / evento emitido) — **`wire/out` gera os tipos TS** do front (Eixo 8). |
 | **`models/`** | representação **INTERNA** (domínio), Malli. |
-| **`adapters/in`** · **`adapters/out`** | o **gate** `wire↔models`, **sempre atravessado**, dividido por DIREÇÃO (espelha `wire/` e `diplomat/`). `in` = `wire/in → models` (valida, coage, defende a entrada); `out` = `models → wire/out` (projeta e **FILTRA campos sensíveis** na saída — a defesa anti-vazamento, ex.: CPF, mora no `out`). |
+| **`adapters/in`** · **`adapters/out`** | o **gate** `wire↔models`, **sempre atravessado**, dividido por DIREÇÃO (espelha `wire/` e `diplomat/`). `in` = `wire/in → models` (valida, coage, defende a entrada); `out` = `models → wire/out` (projeta e **FILTRA campos sensíveis** na saída — a defesa anti-vazamento, ex.: CPF, mora no `out`). **Chamado SÓ pelo `diplomat/`** — o núcleo (`controllers`/`logic`) trabalha em `models`, nunca toca `wire`/`adapters`; a tradução acontece só na borda de IO (lint enforça). |
 | **`db/`** | persistência: **funções** sobre a `tx` do tenant (next.jdbc + HoneySQL, **schema-qualified**). É a **IMPL** atrás do Repo-Component (ver §3-bis) — o controller não chama `db/` direto. |
 | **`events/`** | eventos publicados/consumidos (nome + schema Malli do payload). |
 | **`relacoes/`** | funções de relação que o ctx é dono (§22.5.3) → registry do motor (DSL/authz). |
@@ -87,7 +87,8 @@ A forma não depende de disciplina humana — é **verificada por máquina, falh
    se reaparecer uma pasta `port/` ou `schema/` (decisões 4 e 5), **ou se houver `.clj` direto sob `adapters/`
    fora de `in/`/`out/`** (decisão 3). Tem teste-de-dentes (prova que detecta).
 2. **`import-lint`** (`arquitetura_test.clj`, já existente): clj-kondo sobre a matriz §22.10 — módulo
-   nunca importa outro módulo; `kernel`/`motor` nunca importam módulo. Falha o build em violação.
+   nunca importa outro módulo; `kernel`/`motor` nunca importam módulo; **`adapters/` só é importado pelo
+   `diplomat/`** (decisão 3). Falha o build em violação.
 3. **`migracoes-lint`**: `timestamptz` sempre (companheiro da convenção de tipos).
 4. **CI** (`.github/workflows/ci.yml`) roda `clojure -M:test` → os lints acima barram o merge.
 5. **CLAUDE.md** (handoff lido toda sessão) aponta para esta ADR como autoridade da estrutura.
