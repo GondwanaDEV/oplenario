@@ -50,3 +50,18 @@
     (is (contains? logic/tipos "projeto_lei"))
     (is (contains? logic/tipos "proposta_emenda_lom"))
     (is (not (contains? logic/tipos "lei_promulgada")) "norma promulgada nao e' especie de proposicao (F3.8)")))
+
+;; ---- eixo B: versionamento de texto ----
+(deftest decidir-armazenamento-por-bytes
+  (testing "threshold 32KB em UTF-8 (nao em chars)"
+    (is (= :inline (logic/decidir-armazenamento "texto curto")))
+    (is (= :inline (logic/decidir-armazenamento (apply str (repeat 32768 \a)))) "32768 bytes ASCII = limite (inline)")
+    (is (= :objeto-store (logic/decidir-armazenamento (apply str (repeat 32769 \a)))) "1 byte acima = objeto-store")
+    (is (= :objeto-store (logic/decidir-armazenamento (apply str (repeat 20000 \á))))
+        "multibyte: 20000 'á' = 40000 bytes UTF-8 > limite (conta BYTES, nao chars)")))
+
+(deftest vocabularios-eixo-b-fechados
+  (is (contains? logic/origens-versao "protocolo"))
+  (is (contains? logic/origens-versao "aplicacao_emenda"))
+  (is (= 4 (count logic/estados-versao)))
+  (is (contains? logic/estados-versao "vigente")))

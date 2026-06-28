@@ -15,6 +15,22 @@
     "projeto_decreto_legislativo" "proposta_emenda_lom"
     "indicacao" "requerimento" "mocao"})
 
+;; --- eixo B: versionamento de texto. Vocabularios do §22.4 (espelham os CHECK da migration 0015). ---
+(def origens-versao
+  #{"protocolo" "substitutivo" "aplicacao_emenda" "redacao_final" "promulgacao" "importacao_legado"})
+(def estados-versao #{"rascunho" "vigente" "superada" "arquivada"})
+
+(def limite-inline-bytes
+  "Threshold inline/URI (§22.4 eixo B; calibravel por observabilidade). Acima disso o conteudo vai p/
+  o objeto_store e a versao guarda a URI; ate isso, inline na coluna texto_inline."
+  32768)
+
+(defn decidir-armazenamento
+  "Dado o conteudo (string), decide :inline (<= 32KB em UTF-8) ou :objeto-store (acima). A API do core
+  abstrai a diferenca (quem chama recebe {texto}); esta e' a regra pura de roteamento (§22.4 disc.3)."
+  [^String texto]
+  (if (<= (alength (.getBytes texto "UTF-8")) limite-inline-bytes) :inline :objeto-store))
+
 ;; --- tipo -> vocabulario LexML (ADR-0002 §3). Padrao LexML Brasil/Interlegis. ---
 (def ^:private tipo->lexml-map
   {"projeto_lei"                 "projeto.lei"
