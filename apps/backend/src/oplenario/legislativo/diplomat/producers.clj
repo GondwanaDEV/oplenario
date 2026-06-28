@@ -4,9 +4,16 @@
   so existe se a tx commitou. Chamado pelo Repo-Component, que compoe o ato + a emissao na MESMA tx do
   tenant (§3-bis). A vocabulario/contrato do evento mora em events/; aqui e' so o ATO de emitir."
   (:require [oplenario.kernel.eventos :as eventos]
+            [oplenario.legislativo.events.parecer :as ev-parecer]
             [oplenario.legislativo.events.proposicao :as ev]))
 
 (defn emitir-transicionou!
   "Emite `proposicao.transicionou` no `bus` DENTRO da `tx` corrente. `payload` casa events/TransicionouPayload."
   [bus tx ente-id payload]
   (eventos/emitir! bus tx (ev/transicionou ente-id payload)))
+
+(defn emitir-transicionou-parecer!
+  "Emite `parecer.transicionou` no `bus` DENTRO da `tx` corrente (eixo F). `payload` casa
+  events.parecer/TransicionouPayload."
+  [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-parecer/transicionou ente-id payload)))

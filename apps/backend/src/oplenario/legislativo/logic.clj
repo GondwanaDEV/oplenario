@@ -36,6 +36,10 @@
   auditada (trigger compartilhado shared.imut_trava_estado_terminal). Espelha os args do trigger (mig 0017)."
   #{"aprovada" "rejeitada" "prejudicada" "retirada"})
 
+;; --- eixo F: parecer. O objeto polimorfico (objeto_tipo) sobre o qual o parecer opina (§22.4 disc.2).
+;; Espelha o CHECK da migration 0019. Cresce por adicao (ex.: parecer sobre substitutivo, no futuro). ---
+(def objetos-parecer #{"proposicao" "emenda"})
+
 (def limite-inline-bytes
   "Threshold inline/URI (§22.4 eixo B; calibravel por observabilidade). Acima disso o conteudo vai p/
   o objeto_store e a versao guarda a URI; ate isso, inline na coluna texto_inline."
