@@ -67,6 +67,22 @@
                  :resolver resolver :ente-id (:ente-id ator)}]
         (boolean (rt/avaliar no amb ctx))))))
 
+(defn guarda-dsl
+  "Compila o GUARD de uma transicao de tramitacao (§22.4 eixo C) num predicado `(fn [amb] -> bool)` — o
+  seam que o motor de transicao do legislativo roda. disciplina 5: MESMO avaliador/registry do motor (o
+  `amb` carrega o contexto da transicao — ex.: {\"proposicao\" {...} \"contexto\" {...}}; fatos de relacao
+  resolvem por nome sobre a tx). Expressao nao-booleana / fato-sem-fn = lanca (o motor de transicao trata
+  lance -> guard nega/erro, conforme a politica de quem chama). Sem prazo/obrigacao: avaliacao pura.
+
+  `arg-map`: :registro (RegistroFatos) :tx (tx do tenant) :expr (fonte da expressao DSL) :ente-id
+  :agora (LocalDate/Instant — default de `hoje()`/`agora()`)."
+  [{:keys [registro tx expr agora ente-id]}]
+  (let [no (nuc/parse-expr expr)
+        resolver (rf/resolver-para registro tx)]
+    (fn [amb]
+      (boolean (rt/avaliar no amb {:estado (rt/estado) :agora agora :fonte (atom nil)
+                                   :resolver resolver :ente-id ente-id})))))
+
 ;; [SEAMs ainda NAO estabilizados — F5 (Compliance/remessa)]
 ;; - regras-aplicaveis(repo-motor, ente) : resolve POR ESCOPO juntando motor.template_compliance +
 ;;   motor.compliance_regra_tenant (mesmo schema, sem cross-schema JOIN, §22.10) — a orquestracao do
