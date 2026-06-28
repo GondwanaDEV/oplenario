@@ -8,6 +8,7 @@
             [oplenario.cadastros.relacoes.cadastro :as rel-cadastros]
             [oplenario.identidade.components.repositorio :as repo-identidade]
             [oplenario.identidade.relacoes.identidade :as rel-identidade]
+            [oplenario.legislativo.components.repositorio :as repo-legislativo]
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.motor.components.registro-fatos :as registro-fatos]
             [oplenario.motor.components.repositorio :as repo-motor]))
@@ -31,6 +32,7 @@
    :datasource      (datasource/datasource config)
    :repo-cadastros  (component/using (repo-cadastros/repositorio) [:datasource])
    :repo-identidade (component/using (repo-identidade/repositorio) [:datasource])
+   :repo-legislativo (component/using (repo-legislativo/repositorio) [:datasource])
    :repo-motor      (component/using (repo-motor/repositorio) [:datasource])
    ;; o host É a fronteira (§22.10): importa as `relacoes` dos módulos e as injeta no registry do motor.
    ;; O motor chama por nome (resolver-para), nunca importa o módulo. Sem :datasource — a `tx` do tenant
