@@ -9,7 +9,7 @@ Esqueleto do padrão **ports & adapters (versão Nubank)** consolidado em **§22
   o protocolo de saída mora no `http/out` (dep de módulo) ou em `components/` (recurso/estratégia).
 - `src/oplenario/kernel/` — compartilhado puro (não importa módulo).
 - `src/oplenario/motor/` — o motor de regras (§22.7), **biblioteca compartilhada** (kernel/motor nunca
-  importam módulo). **Dobrado** de `../motor-dsl-clj/`: núcleo DSL real (`tipos/nucleo/catalogo/verificador/
+  importam módulo). **Dobrado** do protótipo `../../prototipos/motor-dsl/`: núcleo DSL real (`tipos/nucleo/catalogo/verificador/
   runtime/templates`) + fachada `api` + persistência stub `db/` (deferida §22.4.4). Schema `motor` na
   migration `…0006` (5 tabelas estáticas do Eixo B §22.7.6). Detalhe em `src/oplenario/motor/README.md`.
 - `src/oplenario/{main,sistema,http}.clj` — host/composição.
