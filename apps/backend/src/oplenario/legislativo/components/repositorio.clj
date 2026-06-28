@@ -6,6 +6,10 @@
   (:require [oplenario.kernel.tenancy :as tenancy]
             [oplenario.legislativo.db.apensacao :as apensacao]
             [oplenario.legislativo.db.emenda :as emenda]
+            [oplenario.legislativo.db.parecer :as parecer]
+            [oplenario.legislativo.db.parecer-texto-versao :as parecer-texto]
+            [oplenario.legislativo.db.parecer-tramitacao :as parecer-tram]
+            [oplenario.legislativo.db.parecer-voto-divergente :as parecer-voto]
             [oplenario.legislativo.db.proposicao :as proposicao]
             [oplenario.legislativo.db.texto-versao :as texto]
             [oplenario.legislativo.db.tramitacao :as tram]
@@ -40,7 +44,22 @@
   (desapensar! [this ente-id m] "UPDATE em desapensada_em (NAO DELETE); CAS + so a ativa desapensa.")
   (buscar-apensacao [this ente-id id])
   (apensadas-ativas [this ente-id principal-id] "Apensadas ativas diretas (nivel 1).")
-  (cadeia-apensacao [this ente-id principal-id] "Cadeia genuina (traversal recursivo, cycle-safe)."))
+  (cadeia-apensacao [this ente-id principal-id] "Cadeia genuina (traversal recursivo, cycle-safe).")
+  ;; eixo F — parecer_comissao (state machine propria governada pelo motor do eixo C)
+  (iniciar-parecer! [this ente-id m] "Cria parecer: estado inicial do template + valida sujeito/objeto.")
+  (buscar-parecer [this ente-id id])
+  (pareceres-do-objeto [this ente-id objeto-tipo objeto-id] "Pareceres sobre proposicao|emenda (disc.2).")
+  (designar-relator! [this ente-id m] "Designa o relator (CAS).")
+  (transicionar-parecer! [this ente-id registro args] "Engine do parecer + emite parecer.transicionou, 1 tx.")
+  (historico-do-parecer [this ente-id parecer-id])
+  ;; eixo F / F3.6b — texto do parecer (eixo B aplicado) + votos divergentes (aux append-only)
+  (nova-versao-parecer! [this ente-id versao] "Cria versao 'rascunho' do texto do parecer (append-only).")
+  (promover-versao-parecer! [this ente-id m] "Promove rascunho->vigente + reaponta o pointer, 1 tx.")
+  (buscar-versao-parecer [this ente-id id])
+  (versoes-do-parecer [this ente-id parecer-id])
+  (texto-vigente-parecer [this ente-id parecer-id])
+  (registrar-voto-divergente! [this ente-id m] "Registra voto vencido (append-only puro).")
+  (votos-divergentes-do-parecer [this ente-id parecer-id]))
 
 (defrecord RepoLegislativoPg [datasource bus]
   RepoLegislativo
@@ -84,7 +103,35 @@
   (desapensar! [this ente-id m] (transacao this ente-id #(apensacao/desapensar! % (assoc m :ente-id ente-id))))
   (buscar-apensacao [this ente-id id] (transacao this ente-id #(apensacao/buscar % ente-id id)))
   (apensadas-ativas [this ente-id pid] (transacao this ente-id #(apensacao/apensadas-ativas % ente-id pid)))
-  (cadeia-apensacao [this ente-id pid] (transacao this ente-id #(apensacao/cadeia % ente-id pid))))
+  (cadeia-apensacao [this ente-id pid] (transacao this ente-id #(apensacao/cadeia % ente-id pid)))
+  ;; eixo F / F3.6a — parecer. transicionar-parecer! compoe ENGINE + emissao do evento na MESMA tx do
+  ;; tenant (atomicidade outbox-com-o-ato §22.9 E2; espelha transicionar! da proposicao). O payload carrega
+  ;; objeto_tipo/objeto_id (do retorno do engine) p/ o consumer da mae em F3.6c.
+  (iniciar-parecer! [this ente-id m] (transacao this ente-id #(parecer/criar! % (assoc m :ente-id ente-id))))
+  (buscar-parecer [this ente-id id] (transacao this ente-id #(parecer/buscar % ente-id id)))
+  (pareceres-do-objeto [this ente-id ot oid] (transacao this ente-id #(parecer/listar-por-objeto % ente-id ot oid)))
+  (designar-relator! [this ente-id m] (transacao this ente-id #(parecer/designar-relator! % (assoc m :ente-id ente-id))))
+  (transicionar-parecer! [this ente-id registro args]
+    (transacao this ente-id
+      (fn [tx]
+        (let [r (parecer-tram/transicionar-parecer! tx (assoc args :registro registro :ente-id ente-id))]
+          (when (:transicionou? r)
+            (producers/emitir-transicionou-parecer! bus tx ente-id
+              (cond-> {:parecer-id (:parecer-id args) :template-id (:template-id args)
+                       :objeto-tipo (:objeto-tipo r) :objeto-id (:objeto-id r)
+                       :de (:de r) :para (:para r) :gatilho (:gatilho args)
+                       :transicao-id (:transicao-id r)}
+                (:ator-id args) (assoc :ator-id (:ator-id args)))))
+          r))))
+  (historico-do-parecer [this ente-id pid] (transacao this ente-id #(parecer-tram/historico-do-parecer % ente-id pid)))
+  ;; eixo F / F3.6b — texto + votos divergentes. promover! compoe (supersede + vigente + reaponta pointer) 1 tx.
+  (nova-versao-parecer! [this ente-id v] (transacao this ente-id #(parecer-texto/nova-versao! % (assoc v :ente-id ente-id))))
+  (promover-versao-parecer! [this ente-id m] (transacao this ente-id #(parecer-texto/promover! % (assoc m :ente-id ente-id))))
+  (buscar-versao-parecer [this ente-id id] (transacao this ente-id #(parecer-texto/buscar % ente-id id)))
+  (versoes-do-parecer [this ente-id pid] (transacao this ente-id #(parecer-texto/versoes-do-parecer % ente-id pid)))
+  (texto-vigente-parecer [this ente-id pid] (transacao this ente-id #(parecer-texto/vigente % ente-id pid)))
+  (registrar-voto-divergente! [this ente-id m] (transacao this ente-id #(parecer-voto/registrar! % (assoc m :ente-id ente-id))))
+  (votos-divergentes-do-parecer [this ente-id pid] (transacao this ente-id #(parecer-voto/listar-por-parecer % ente-id pid))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

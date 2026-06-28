@@ -14,11 +14,17 @@
 (set! *warn-on-reflection* true)
 
 ;; ---- montagem do template (config tenant; usada no onboarding/fixture/import) ----
-(defn criar-template! [tx {:keys [id ente-id chave versao nome estado-inicial template-pai-id]}]
+(defn criar-template!
+  "Persiste um template de tramitacao. `:sujeito` ('proposicao' default | 'parecer') e' o discriminador
+  do tipo de entidade que o template governa (F3.6a): as tabelas de template sao subject-agnosticas, o
+  sujeito e' validado no service do sujeito (ex.: parecer/criar! recusa template de 'proposicao'). Omitir
+  = 'proposicao' (preserva os callers do eixo C)."
+  [tx {:keys [id ente-id chave versao nome estado-inicial sujeito template-pai-id]}]
   (jdbc/execute-one! tx
     (sql/format {:insert-into :legislativo.template_tramitacao
                  :values [{:id id :ente_id ente-id :chave chave :versao (or versao 1) :nome nome
-                           :estado_inicial estado-inicial :template_pai_id template-pai-id :efetivado_em [:now]}]})))
+                           :estado_inicial estado-inicial :sujeito (or sujeito "proposicao")
+                           :template_pai_id template-pai-id :efetivado_em [:now]}]})))
 
 (defn criar-estado! [tx {:keys [id ente-id template-id chave nome terminal ordem]}]
   (jdbc/execute-one! tx

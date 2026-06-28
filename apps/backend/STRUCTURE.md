@@ -33,6 +33,36 @@ Dentro do módulo: **`adapters/` só é chamado pelo `diplomat/`** (núcleo `con
 - Migration própria: `20260620000003-admin-sistema.*` (schema + registry `ente`). Refs a `admin_sistema.ente` de outros módulos cruzam por **guard de serviço**, nunca FK/JOIN cross-schema.
 
 ## TODO (deferido p/ implementação — validação ecc)
+- **Carries do F3.6b (eixo F — texto do parecer + votos divergentes, 28/06; review ecc clojure+database):**
+  `parecer_texto_versao` espelha o eixo B (append-only no conteúdo, híbrido inline/URI, promoção
+  rascunho→vigente que reaponta `pareceres.texto_vigente_versao_id`), **não-particionada**; `parecer_voto_divergente`
+  = aux **append-only puro**. **(eixo B / backport)** o trigger de imutabilidade de conteúdo de
+  `proposicao_texto_versao` (mig 0015) **NÃO congela `origem`/`origem_importado_em`** — o trigger do parecer
+  AGORA congela (DB-MENOR); fazer o mesmo na proposição numa **migration de hardening do eixo B** (nova migration,
+  nunca editar a 0015). **(eixo F → F3.6c)** o `voto_relator` na entity + agregadores que consomem os votos
+  divergentes (`pareceres.algum_rejeitou` etc.) entram no F3.6c. **Aplicado:** clojure-MAJOR (pré-check de
+  terminal em `promover!` → erro inspecionável antes do trigger opaco, via `logic/estados-parecer-terminais`),
+  clojure-MENOR1/2 (testes cross-parecer + parecer-terminal), clojure-MENOR3 (`voto` `[:string {:min 1}]`),
+  DB-MENOR (congela `origem`/`origem_importado_em` no trigger do parecer).
+- **Carries do F3.6a (eixo F — parecer, NÚCLEO, 28/06; decisão de reuso do motor por workflow + review ecc):**
+  Decisão **(b)** (engine próprio reusando o avaliador DSL + tabelas de template compartilhadas; NÃO generaliza
+  o engine do eixo C). **(eixo F / disc.6 §22.4.3)** extrair o **core de transição compartilhado**
+  (proposição+parecer+Mesa) no **3º sujeito** (eleição da Mesa §22.5) — hoje `parecer_tramitacao` e `tramitacao`
+  duplicam ~15 linhas de orquestração (FOR UPDATE + CAS + 1º-guard-que-passa); o comentário cross-ref está nos
+  dois, mas **falta um teste de paridade** (cenário guard+bloqueio idêntico nos 2 engines = alarme de drift se
+  um fix de concorrência cair só num lado). **(eixo F → F3.6b)** `parecer_texto_versao` (padrão eixo B) +
+  `parecer_voto_divergente` (aux append-only). **(eixo F → F3.6c)** os **7 eventos tipados** `ParecerComissao*`
+  (mapeamento `para_estado`→evento) + o **consumer PUSH da mãe** que reavalia (§22.4:26, `diplomat/consumers` é
+  stub) + os **agregadores DSL** (`pareceres.todos_concluidos`/`algum_rejeitou`/…) no RegistroFatos do motor.
+  **(eixo F → DIFERIDO F5)** `ParecerComissaoPrazoVencido` + `prazo_vencido_em_alguma` (materialização automática
+  de prazo — overlap `proposicao_prazo_ativo`/§22.7.7; cross-schema proibido §22.10); o terminal `prazo_vencido`
+  fica alcançável por transição explícita. **(Inv.10/armadilha herdada)** o trigger `imut_trava_estado_terminal`
+  lê TG_ARGV literal, não `template_estado.terminal` — um template que marque terminal fora dos 4 não trava o
+  UPDATE no banco (documentado no comentário do trigger, igual à proposição). **(forward eixo G)** parecer como
+  objeto polimórfico de votação (`objeto_tipo='parecer'`). **Aplicado:** clojure-MAJOR1 (`:id` param em
+  `registrar-transicao!` p/ paridade), clojure-MAJOR2 (tipo-desconhecido ≠ objeto-órfão), clojure-MENOR1 (guard
+  fail-closed p/ parecer inexistente), 2 MENOR de comentário; DB-MAJOR (índice FK `template_id`), DB-MENOR
+  (índice parcial `relator_id`).
 - **Carries do F3.5 (eixo E — apensação, 28/06; review ecc clojure+database incorporada):** (eixo E /
   regimento) **colapso vs cadeia** — hoje `cadeia` é sempre traversal genuíno (não colapsa níveis); se
   é colapso automático universal ou variável por câmara é **[GAP] regimental** deferido (§22.4.4), não

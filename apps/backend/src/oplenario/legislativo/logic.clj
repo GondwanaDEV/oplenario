@@ -36,6 +36,21 @@
   auditada (trigger compartilhado shared.imut_trava_estado_terminal). Espelha os args do trigger (mig 0017)."
   #{"aprovada" "rejeitada" "prejudicada" "retirada"})
 
+;; --- eixo F: parecer. O objeto polimorfico (objeto_tipo) sobre o qual o parecer opina (§22.4 disc.2).
+;; Espelha o CHECK da migration 0019. Cresce por adicao (ex.: parecer sobre substitutivo, no futuro). ---
+(def objetos-parecer #{"proposicao" "emenda"})
+
+(def estados-parecer-terminais
+  "Os 4 desfechos terminais do parecer (§22.4 eixo F) — PISO FIXO da imutabilidade nível (b). Fonte única:
+  espelha os args do trigger `trg_pareceres_imut_estado` (mig 0019). Embora o `estado` seja template-driven,
+  estes 4 são vocabulário cravado do eixo F (os 4 eventos de desfecho). Usado p/ guard de domínio (ex.:
+  `promover!` recusa promover texto de parecer já terminal — erro inspecionável antes de bater no trigger)."
+  #{"aprovado" "rejeitado" "prejudicado" "prazo_vencido"})
+
+;; --- eixo F (F3.6b): proveniencia da versao de texto do PARECER. Espelha o CHECK da migration 0020
+;; (mesma estrategia do eixo B, vocabulario proprio do parecer). estado_versao reusa `estados-versao`. ---
+(def origens-parecer-versao #{"redacao" "substitutivo" "importacao_legado"})
+
 (def limite-inline-bytes
   "Threshold inline/URI (§22.4 eixo B; calibravel por observabilidade). Acima disso o conteudo vai p/
   o objeto_store e a versao guarda a URI; ate isso, inline na coluna texto_inline."
