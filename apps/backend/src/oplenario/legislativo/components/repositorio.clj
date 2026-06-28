@@ -4,6 +4,7 @@
   dentro); o record segura o :datasource (via `using`); o db/ e' a IMPL. O controller depende DESTE
   Component, nunca do db/ direto. `transacao` compoe varias acoes numa UNICA tx do tenant."
   (:require [oplenario.kernel.tenancy :as tenancy]
+            [oplenario.legislativo.db.apensacao :as apensacao]
             [oplenario.legislativo.db.emenda :as emenda]
             [oplenario.legislativo.db.proposicao :as proposicao]
             [oplenario.legislativo.db.texto-versao :as texto]
@@ -33,7 +34,13 @@
   (buscar-emenda [this ente-id id])
   (emendas-da-proposicao [this ente-id proposicao-mae-id])
   (mudar-estado-emenda! [this ente-id m] "Ciclo enum simples; CAS + trava terminal.")
-  (aprovar-emenda! [this ente-id m] "Aplica ao texto-mae: cria rascunho + fecha ciclo, 1 tx."))
+  (aprovar-emenda! [this ente-id m] "Aplica ao texto-mae: cria rascunho + fecha ciclo, 1 tx.")
+  ;; eixo E — apensacao (associacao com historico)
+  (apensar! [this ente-id m] "Apensa apensada->principal (ativa). UNIQUE-ativa + CHECK reflexivo barram.")
+  (desapensar! [this ente-id m] "UPDATE em desapensada_em (NAO DELETE); CAS + so a ativa desapensa.")
+  (buscar-apensacao [this ente-id id])
+  (apensadas-ativas [this ente-id principal-id] "Apensadas ativas diretas (nivel 1).")
+  (cadeia-apensacao [this ente-id principal-id] "Cadeia genuina (traversal recursivo, cycle-safe)."))
 
 (defrecord RepoLegislativoPg [datasource bus]
   RepoLegislativo
@@ -71,7 +78,13 @@
   (buscar-emenda [this ente-id id] (transacao this ente-id #(emenda/buscar % ente-id id)))
   (emendas-da-proposicao [this ente-id pid] (transacao this ente-id #(emenda/listar-por-mae % ente-id pid)))
   (mudar-estado-emenda! [this ente-id m] (transacao this ente-id #(emenda/mudar-estado! % (assoc m :ente-id ente-id))))
-  (aprovar-emenda! [this ente-id m] (transacao this ente-id #(emenda/aprovar! % (assoc m :ente-id ente-id)))))
+  (aprovar-emenda! [this ente-id m] (transacao this ente-id #(emenda/aprovar! % (assoc m :ente-id ente-id))))
+  ;; eixo E / F3.5 — apensacao. Desapensacao = UPDATE (fato persiste); mudanca de principal = 2 atos.
+  (apensar! [this ente-id m] (transacao this ente-id #(apensacao/apensar! % (assoc m :ente-id ente-id))))
+  (desapensar! [this ente-id m] (transacao this ente-id #(apensacao/desapensar! % (assoc m :ente-id ente-id))))
+  (buscar-apensacao [this ente-id id] (transacao this ente-id #(apensacao/buscar % ente-id id)))
+  (apensadas-ativas [this ente-id pid] (transacao this ente-id #(apensacao/apensadas-ativas % ente-id pid)))
+  (cadeia-apensacao [this ente-id pid] (transacao this ente-id #(apensacao/cadeia % ente-id pid))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."
