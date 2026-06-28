@@ -13,6 +13,7 @@
             [oplenario.legislativo.db.proposicao :as proposicao]
             [oplenario.legislativo.db.texto-versao :as texto]
             [oplenario.legislativo.db.tramitacao :as tram]
+            [oplenario.legislativo.db.votacao :as votacao]
             [oplenario.legislativo.diplomat.producers :as producers]))
 
 (defprotocol RepoLegislativo
@@ -59,7 +60,15 @@
   (versoes-do-parecer [this ente-id parecer-id])
   (texto-vigente-parecer [this ente-id parecer-id])
   (registrar-voto-divergente! [this ente-id m] "Registra voto vencido (append-only puro).")
-  (votos-divergentes-do-parecer [this ente-id parecer-id]))
+  (votos-divergentes-do-parecer [this ente-id parecer-id])
+  ;; eixo G — votacao (eventos Votacao*/real-time = carry F4)
+  (abrir-votacao! [this ente-id m] "Abre votacao 'aberta' sobre objeto polimorfico.")
+  (registrar-voto! [this ente-id m] "Voto nominal atribuido (append-only; UNIQUE por vereador).")
+  (registrar-voto-secreto! [this ente-id m] "Voto secreto anonimo (sem vereador_id).")
+  (encerrar-votacao! [this ente-id m] "Apura + computa resultado (quorum exato) + grava snapshot, CAS.")
+  (anular-votacao! [this ente-id m] "Leva a 'anulada' (correcao = nova votacao).")
+  (buscar-votacao [this ente-id id])
+  (votos-da-votacao [this ente-id votacao-id]))
 
 (defrecord RepoLegislativoPg [datasource bus]
   RepoLegislativo
@@ -131,7 +140,15 @@
   (versoes-do-parecer [this ente-id pid] (transacao this ente-id #(parecer-texto/versoes-do-parecer % ente-id pid)))
   (texto-vigente-parecer [this ente-id pid] (transacao this ente-id #(parecer-texto/vigente % ente-id pid)))
   (registrar-voto-divergente! [this ente-id m] (transacao this ente-id #(parecer-voto/registrar! % (assoc m :ente-id ente-id))))
-  (votos-divergentes-do-parecer [this ente-id pid] (transacao this ente-id #(parecer-voto/listar-por-parecer % ente-id pid))))
+  (votos-divergentes-do-parecer [this ente-id pid] (transacao this ente-id #(parecer-voto/listar-por-parecer % ente-id pid)))
+  ;; eixo G / F3.7 — votacao. Sem emissao de evento aqui (Votacao*/real-time = carry F4).
+  (abrir-votacao! [this ente-id m] (transacao this ente-id #(votacao/abrir! % (assoc m :ente-id ente-id))))
+  (registrar-voto! [this ente-id m] (transacao this ente-id #(votacao/registrar-voto! % (assoc m :ente-id ente-id))))
+  (registrar-voto-secreto! [this ente-id m] (transacao this ente-id #(votacao/registrar-voto-secreto! % (assoc m :ente-id ente-id))))
+  (encerrar-votacao! [this ente-id m] (transacao this ente-id #(votacao/encerrar! % (assoc m :ente-id ente-id))))
+  (anular-votacao! [this ente-id m] (transacao this ente-id #(votacao/anular! % (assoc m :ente-id ente-id))))
+  (buscar-votacao [this ente-id id] (transacao this ente-id #(votacao/buscar % ente-id id)))
+  (votos-da-votacao [this ente-id vid] (transacao this ente-id #(votacao/votos-da-votacao % ente-id vid))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

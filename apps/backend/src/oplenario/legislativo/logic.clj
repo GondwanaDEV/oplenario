@@ -51,6 +51,30 @@
 ;; (mesma estrategia do eixo B, vocabulario proprio do parecer). estado_versao reusa `estados-versao`. ---
 (def origens-parecer-versao #{"redacao" "substitutivo" "importacao_legado"})
 
+;; --- eixo G: votacao. Vocabularios (espelham os CHECK da migration 0021). Crescem por adicao. ---
+(def objetos-votacao #{"proposicao" "emenda" "parecer" "requerimento" "redacao_final"})
+(def modalidades-votacao #{"nominal" "simbolica" "secreta"})
+(def quoruns #{"maioria_simples" "maioria_absoluta" "maioria_qualificada_2_3" "maioria_qualificada_3_5"})
+(def estados-votacao #{"aberta" "encerrada" "anulada"})
+(def estados-votacao-terminais #{"encerrada" "anulada"})
+(def tipos-voto #{"sim" "nao" "abstencao"})
+
+(defn resultado-votacao
+  "VERIFICACAO do quorum (§22.4 eixo G) — devolve 'aprovada' | 'rejeitada'. Aritmetica EXATA em INTEIROS
+  (a armadilha do quorum: 2/3*10 em float = 6.6666 e o floor erraria; `quot` acerta). `base-membros` = a
+  composicao da Casa (p/ as maiorias absoluta/qualificada); a maioria simples olha os votos validos.
+  ceil(p*N/q) = (quot (+ p*N (dec q)) q). NOTA: a BASE exata por tipo (Casa vs votos validos vs presentes)
+  e' detalhe REGIMENTAL — default defensavel aqui; refinavel com o especialista (como os templates [GAP])."
+  [quorum-tipo {:keys [sim nao]} base-membros]
+  (let [aprovado?
+        (case quorum-tipo
+          "maioria_simples"         (> sim nao)                                ; mais sim que nao (validos)
+          "maioria_absoluta"        (>= sim (inc (quot base-membros 2)))       ; > metade da Casa
+          "maioria_qualificada_2_3" (>= sim (quot (+ (* 2 base-membros) 2) 3)) ; ceil(2N/3)
+          "maioria_qualificada_3_5" (>= sim (quot (+ (* 3 base-membros) 4) 5)) ; ceil(3N/5)
+          (throw (ex-info "quorum-tipo desconhecido" {:quorum-tipo quorum-tipo})))]
+    (if aprovado? "aprovada" "rejeitada")))
+
 (def limite-inline-bytes
   "Threshold inline/URI (§22.4 eixo B; calibravel por observabilidade). Acima disso o conteudo vai p/
   o objeto_store e a versao guarda a URI; ate isso, inline na coluna texto_inline."
