@@ -34,20 +34,24 @@
                              :ementa ementa :autor_tipo autor-tipo :autor_id autor-id :autor_texto autor-texto
                              :objeto_indicacao objeto-indicacao :destinatario_id destinatario-id
                              :destinatario_texto destinatario-texto :tipo_requerimento tipo-requerimento
-                             :categoria_mocao categoria-mocao
+                             :categoria_mocao categoria-mocao :estado "protocolada"
                              :atributos_especificos (some-> atributos-especificos comum/->jsonb)
                              :created_by created-by :efetivado_em [:now]}]}))
     {:id id :sequencial seq-val :urn-lex urn}))
 
-(defn buscar [tx id]
+;; NOTA: proposicoes e' hash-particionada por ente_id -> toda query inclui ente_id no WHERE (partition
+;; pruning + uso do indice composto; a RLS e' funcao volatil, o planner NAO a usa p/ podar particao).
+(defn buscar [tx ente-id id]
   (linha->proposicao
    (jdbc/execute-one! tx
-     (sql/format {:select colunas :from [:legislativo.proposicoes] :where [:= :id id]}))))
+     (sql/format {:select colunas :from [:legislativo.proposicoes]
+                  :where [:and [:= :ente_id ente-id] [:= :id id]]}))))
 
-(defn listar-por-estado [tx estado]
+(defn listar-por-estado [tx ente-id estado]
   (mapv linha->proposicao
         (jdbc/execute! tx
-          (sql/format {:select colunas :from [:legislativo.proposicoes] :where [:= :estado estado]
+          (sql/format {:select colunas :from [:legislativo.proposicoes]
+                       :where [:and [:= :ente_id ente-id] [:= :estado estado]]
                        :order-by [[:ano :desc] [:sequencial :desc]]}))))
 
 (defn mudar-estado!
@@ -56,12 +60,12 @@
   mesmo estado nao-terminal nao se sobrescrevem em silencio). O trigger trava transicoes a partir de estado
   terminal (exceto correcao auditada). Aqui so o set; o guard de regra/autorizacao e' do controller/motor.
   Lanca em conflito de versao OU row inexistente (0 linhas afetadas)."
-  [tx {:keys [id estado updated-by lock-version]}]
+  [tx {:keys [id ente-id estado updated-by lock-version]}]
   (let [r (jdbc/execute-one! tx
             (sql/format {:update :legislativo.proposicoes
                          :set {:estado estado :updated_by updated-by :atualizado_em [:now]
                                :lock_version [:+ :lock_version 1]}
-                         :where [:and [:= :id id] [:= :lock_version lock-version]]}))]
+                         :where [:and [:= :ente_id ente-id] [:= :id id] [:= :lock_version lock-version]]}))]
     (when (zero? (:next.jdbc/update-count r 0))
       (throw (ex-info "conflito de escrita (lock_version desatualizado) ou proposicao inexistente"
                       {:id id :lock-version lock-version})))

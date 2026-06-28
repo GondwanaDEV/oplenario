@@ -17,9 +17,9 @@
   RepoLegislativo
   (transacao [_ ente-id f] (tenancy/com-tenant* (:ds datasource) ente-id f))
   (protocolar! [this ente-id p] (transacao this ente-id #(proposicao/protocolar! % p)))
-  (buscar-proposicao [this ente-id id] (transacao this ente-id #(proposicao/buscar % id)))
-  (listar-por-estado [this ente-id estado] (transacao this ente-id #(proposicao/listar-por-estado % estado)))
-  (mudar-estado-proposicao! [this ente-id m] (transacao this ente-id #(proposicao/mudar-estado! % m))))
+  (buscar-proposicao [this ente-id id] (transacao this ente-id #(proposicao/buscar % ente-id id)))
+  (listar-por-estado [this ente-id estado] (transacao this ente-id #(proposicao/listar-por-estado % ente-id estado)))
+  (mudar-estado-proposicao! [this ente-id m] (transacao this ente-id #(proposicao/mudar-estado! % (assoc m :ente-id ente-id)))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

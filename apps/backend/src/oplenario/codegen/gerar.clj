@@ -5,8 +5,10 @@
   Default = target/generated-ts/oplenario-tipos.ts (FE0 repontara p/ o pacote do front)."
   (:require [clojure.java.io :as io]
             [oplenario.cadastros.models.cadastro :as cad]
-            [oplenario.codegen.malli-ts :as ts]
-            [oplenario.identidade.models.identidade :as idn]))
+            [oplenario.codegen.malli-ts :as ts]))
+;; NOTA (ADR-0001/§22.10): a fonte CORRETA dos tipos TS e' o `wire/out` (externo, ja filtrado), nao
+;; models/ internos. Provisorio (sem wire/out ainda): so cadastros (sem PII). identidade FORA — o model
+;; Identidade carrega :cpf; exporta-lo vazaria PII no contrato do front. Entra via wire/out sem-CPF (FE0).
 
 (def manifesto
   "Os models internos exportados como tipos do front (1o corte). Ordem deterministica."
@@ -15,11 +17,7 @@
    ["Vereador" cad/Vereador]
    ["Mandato" cad/Mandato]
    ["Comissao" cad/Comissao]
-   ["ComissaoMembro" cad/ComissaoMembro]
-   ["Identidade" idn/Identidade]
-   ["Vinculo" idn/Vinculo]
-   ["UsuarioPapel" idn/UsuarioPapel]
-   ["Consentimento" idn/Consentimento]])
+   ["ComissaoMembro" cad/ComissaoMembro]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))
 

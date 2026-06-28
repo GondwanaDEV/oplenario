@@ -45,11 +45,12 @@
       (sql/format {:select [:id :ente_id :numero :ano_inicio :ano_fim :vigente]
                    :from [:cadastros.legislatura] :where [:= :id id]}))))
 
-(defn legislatura-vigente [tx]
+(defn legislatura-vigente [tx ente-id]
   (comum/linha->kebab
     (jdbc/execute-one! tx
       (sql/format {:select [:id :ente_id :numero :ano_inicio :ano_fim :vigente]
-                   :from [:cadastros.legislatura] :where [:= :vigente true] :limit 1}))))
+                   :from [:cadastros.legislatura]
+                   :where [:and [:= :ente_id ente-id] [:= :vigente true]] :limit 1}))))
 
 ;; ---- sessao legislativa (1..4 dentro da legislatura) ----
 (defn inserir-sessao-legislativa! [tx {:keys [id ente-id legislatura-id numero ano data-inicio data-fim]}]

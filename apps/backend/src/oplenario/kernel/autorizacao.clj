@@ -14,9 +14,11 @@
   {:identidade-id :sistema :papeis #{:sistema} :ente-id nil :sistema? true})
 
 (defn negar!
-  "Lanca a negacao de autorizacao. O interceptor/controller traduz p/ 403 (write + deny vao ao audit, F7)."
-  [razao info]
-  (throw (ex-info "autorizacao negada" (merge {:tipo :autorizacao/negado :razao razao} info))))
+  "Lanca a negacao de autorizacao. O interceptor/controller traduz p/ 403 (write + deny vao ao audit, F7).
+  A aridade-3 preserva a `causa` original (ex-info 3o arg) -> getCause()/stack p/ diagnostico em prod."
+  ([razao info] (negar! razao info nil))
+  ([razao info causa]
+   (throw (ex-info "autorizacao negada" (merge {:tipo :autorizacao/negado :razao razao} info) causa))))
 
 (defn negado?
   "True se `e` e' uma negacao de autorizacao (p/ o interceptor mapear -> 403)."
@@ -62,7 +64,8 @@
   (let [permitido? (try (politica ator recurso)
                         (catch Exception ex
                           (negar! :politica-erro {:acao acao :recurso-tipo (:tipo recurso)
-                                                  :recurso-id (:id recurso) :causa (ex-message ex)})))]
+                                                  :recurso-id (:id recurso) :causa-msg (ex-message ex)
+                                                  :causa-data (ex-data ex)} ex)))]
     (if permitido?
       true
       (negar! :politica {:acao acao :recurso-tipo (:tipo recurso) :recurso-id (:id recurso)

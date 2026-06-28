@@ -30,6 +30,10 @@
   (let [out (gerar/gerar-tudo)]
     (is (str/starts-with? out "// GERADO") "banner de 'nao editar a mao'")
     (is (every? #(str/includes? out (str "export interface " % " {"))
-                ["Ente" "Vereador" "Mandato" "Identidade" "Vinculo" "Consentimento"])
-        "todas as interfaces do manifesto presentes")
+                ["Ente" "Legislatura" "Vereador" "Mandato" "Comissao" "ComissaoMembro"])
+        "todas as interfaces do manifesto (cadastros) presentes")
+    ;; identidade NAO entra no manifesto — o model Identidade carrega :cpf; exporta-lo vazaria PII no
+    ;; contrato do front (so via wire/out sem-CPF, carry FE0). Guarda anti-regressao.
+    (is (not (str/includes? out "export interface Identidade {")) "Identidade (com CPF) NAO vaza nos tipos TS")
+    (is (not (str/includes? out "cpf")) "nenhum campo cpf no contrato do front")
     (is (not (str/includes? out "unknown")) "nenhum tipo caiu em 'unknown' (cobertura do 1o corte basta p/ os models)")))

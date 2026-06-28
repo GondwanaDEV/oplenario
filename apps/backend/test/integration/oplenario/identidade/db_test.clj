@@ -85,11 +85,11 @@
         (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id a :identidade-id iid :papel "presidente_mesa"})))
     (tenancy/com-tenant* *ds* b
       (fn [tx] (vinc/criar! tx {:id (random-uuid) :ente-id b :identidade-id iid :tipo "cidadao"})))
-    (is (= ["vereador"] (mapv :tipo (tenancy/com-tenant* *ds* a (fn [tx] (vinc/vinculos-de tx iid))))) "A ve o vinculo vereador")
-    (is (= #{"vereador" "presidente_mesa"} (tenancy/com-tenant* *ds* a (fn [tx] (vinc/papeis-de tx iid)))) "A ve os 2 papeis")
-    (is (every? #(m/validate mod/Vinculo %) (tenancy/com-tenant* *ds* a (fn [tx] (vinc/vinculos-de tx iid)))) "vinculo bate o model")
-    (is (= ["cidadao"] (mapv :tipo (tenancy/com-tenant* *ds* b (fn [tx] (vinc/vinculos-de tx iid))))) "B ve so o vinculo cidadao")
-    (is (= #{} (tenancy/com-tenant* *ds* b (fn [tx] (vinc/papeis-de tx iid)))) "B nao ve papeis de A (RLS)")))
+    (is (= ["vereador"] (mapv :tipo (tenancy/com-tenant* *ds* a (fn [tx] (vinc/vinculos-de tx a iid))))) "A ve o vinculo vereador")
+    (is (= #{"vereador" "presidente_mesa"} (tenancy/com-tenant* *ds* a (fn [tx] (vinc/papeis-de tx a iid)))) "A ve os 2 papeis")
+    (is (every? #(m/validate mod/Vinculo %) (tenancy/com-tenant* *ds* a (fn [tx] (vinc/vinculos-de tx a iid)))) "vinculo bate o model")
+    (is (= ["cidadao"] (mapv :tipo (tenancy/com-tenant* *ds* b (fn [tx] (vinc/vinculos-de tx b iid))))) "B ve so o vinculo cidadao")
+    (is (= #{} (tenancy/com-tenant* *ds* b (fn [tx] (vinc/papeis-de tx b iid)))) "B nao ve papeis de A (RLS)")))
 
 (deftest consentimento-lgpd-ciclo
   (let [ente (random-uuid) iid (random-uuid) cid (random-uuid)]
@@ -98,10 +98,10 @@
       (fn [tx]
         (vinc/registrar-consentimento! tx {:id cid :ente-id ente :identidade-id iid
                                            :finalidade "notificacao_email" :base-legal "consentimento" :versao-termo "v1"})))
-    (is (= 1 (count (tenancy/com-tenant* *ds* ente (fn [tx] (vinc/consentimentos-ativos tx iid))))) "1 consentimento ativo")
+    (is (= 1 (count (tenancy/com-tenant* *ds* ente (fn [tx] (vinc/consentimentos-ativos tx ente iid))))) "1 consentimento ativo")
     (is (true? (tenancy/com-tenant* *ds* ente (fn [tx] (vinc/revogar-consentimento! tx cid)))) "revogar confirma true")
     (is (false? (tenancy/com-tenant* *ds* ente (fn [tx] (vinc/revogar-consentimento! tx cid)))) "revogar de novo = false (ja revogado)")
-    (is (= 0 (count (tenancy/com-tenant* *ds* ente (fn [tx] (vinc/consentimentos-ativos tx iid))))) "apos revogar, 0 ativos")))
+    (is (= 0 (count (tenancy/com-tenant* *ds* ente (fn [tx] (vinc/consentimentos-ativos tx ente iid))))) "apos revogar, 0 ativos")))
 
 (deftest e-o-proprio-relacao-transversal
   (let [x (random-uuid) y (random-uuid)]

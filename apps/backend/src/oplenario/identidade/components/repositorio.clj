@@ -24,7 +24,10 @@
   (papeis-de [this ente-id identidade-id])
   (registrar-consentimento! [this ente-id consentimento])
   (revogar-consentimento! [this ente-id id])
-  (consentimentos-ativos [this ente-id identidade-id]))
+  (consentimentos-ativos [this ente-id identidade-id])
+  (snapshot-ator [this ente-id identidade-id]
+    "Snapshot de SESSAO numa UNICA tx (vinculo ATIVO + papeis). Devolve {:vinculo-ativo :papeis} ou nil
+    se nao ha vinculo ativo. Composto AQUI (§3-bis) p/ resolver-sessao nao importar db/ direto."))
 
 (defrecord RepoIdentidadePg [datasource]
   RepoIdentidade
@@ -37,13 +40,20 @@
   (identidade-por-sub [_ provedor sub] (id/identidade-por-sub (:ds datasource) provedor sub))
   ;; tenant
   (criar-vinculo! [this ente-id v] (transacao this ente-id #(vinc/criar! % v)))
-  (vinculos-de [this ente-id ident] (transacao this ente-id #(vinc/vinculos-de % ident)))
+  (vinculos-de [this ente-id ident] (transacao this ente-id #(vinc/vinculos-de % ente-id ident)))
   (mudar-estado-vinculo! [this ente-id id estado] (transacao this ente-id #(vinc/mudar-estado! % id estado)))
   (adicionar-papel! [this ente-id p] (transacao this ente-id #(vinc/adicionar-papel! % p)))
-  (papeis-de [this ente-id ident] (transacao this ente-id #(vinc/papeis-de % ident)))
+  (papeis-de [this ente-id ident] (transacao this ente-id #(vinc/papeis-de % ente-id ident)))
   (registrar-consentimento! [this ente-id c] (transacao this ente-id #(vinc/registrar-consentimento! % c)))
   (revogar-consentimento! [this ente-id id] (transacao this ente-id #(vinc/revogar-consentimento! % id)))
-  (consentimentos-ativos [this ente-id ident] (transacao this ente-id #(vinc/consentimentos-ativos % ident))))
+  (consentimentos-ativos [this ente-id ident] (transacao this ente-id #(vinc/consentimentos-ativos % ente-id ident)))
+  (snapshot-ator [this ente-id identidade-id]
+    (transacao this ente-id
+      (fn [tx]
+        (when-let [ativo (->> (vinc/vinculos-de tx ente-id identidade-id)
+                              (filter #(= "ativo" (:estado %)))
+                              first)]
+          {:vinculo-ativo ativo :papeis (vinc/papeis-de tx ente-id identidade-id)})))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

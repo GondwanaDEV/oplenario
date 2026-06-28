@@ -24,11 +24,12 @@
 
 (defn por-identidade
   "O vereador vinculado a uma identidade (CPF) neste ente — base da autorizacao por relacao (F2)."
-  [tx identidade-id]
+  [tx ente-id identidade-id]
   (comum/linha->kebab
     (jdbc/execute-one! tx
       (sql/format {:select [:id :ente_id :identidade_id :nome :nome_parlamentar]
-                   :from [:cadastros.vereador] :where [:= :identidade_id identidade-id]}))))
+                   :from [:cadastros.vereador]
+                   :where [:and [:= :ente_id ente-id] [:= :identidade_id identidade-id]]}))))
 
 ;; ---- mandato ----
 (defn inserir-mandato!
@@ -49,12 +50,13 @@
                  :set {:estado estado :fim_efetivo [:coalesce fim-efetivo :fim_efetivo]}
                  :where [:= :id id]})))
 
-(defn mandatos-do-vereador [tx vereador-id]
+(defn mandatos-do-vereador [tx ente-id vereador-id]
   (comum/linhas->kebab
     (jdbc/execute! tx
       (sql/format {:select [:id :ente_id :vereador_id :legislatura_id :partido :estado :natureza
                             :vigencia_inicio :vigencia_fim :fim_efetivo]
-                   :from [:cadastros.mandato] :where [:= :vereador_id vereador-id]
+                   :from [:cadastros.mandato]
+                   :where [:and [:= :ente_id ente-id] [:= :vereador_id vereador-id]]
                    :order-by [[:vigencia_inicio]]}))))
 
 ;; ---- licenca + suplencia ----

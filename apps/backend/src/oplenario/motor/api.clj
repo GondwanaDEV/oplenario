@@ -27,7 +27,8 @@
 
   `arg-map`: :registro (RegistroFatos started) :repo-motor (RepoMotor started) :tx (tx do tenant p/ os
   fatos) :ente-id :regra (envelope de nucleo/carregar-envelope) :reg-ver :objeto-tipo :objeto-id :amb
-  (valores dos parametros do template) :agora (LocalDate/Instant) :feriados-jurisdicao (default 'nacional')."
+  (valores dos parametros do template) :agora (LocalDate — compliance opera em datas; o runtime lanca se
+  vier outro tipo) :feriados-jurisdicao (default 'nacional')."
   [{:keys [registro repo-motor tx ente-id regra reg-ver objeto-tipo objeto-id amb agora feriados-jurisdicao]}]
   (let [resolver    (rf/resolver-para registro tx)
         prazo-fonte (fn [dominio chave-dominio tipo periodo]

@@ -52,6 +52,26 @@
              :when (and (adapters-ns? to) (not (diplomat-ns? from)))]
          {:from from :to to})))
 
+(defn- modulo-db
+  "\"<mod>\" se o ns e' oplenario.<mod>.db.* (db de um modulo); nil caso contrario. (kernel/db-util nao
+  e' db de modulo.)"
+  [ns-sym]
+  (let [p (str/split (str ns-sym) #"\.")]
+    (when (and (= "oplenario" (first p)) (>= (count p) 4) (modulos (second p)) (= "db" (nth p 2)))
+      (second p))))
+
+(defn- violacoes-db
+  "ADR-0001 §3-bis: o `db/` de um modulo so e' importado pelo SEU Repo-Component (components/) ou por outro
+  `db/` do MESMO modulo. controllers/logic/diplomat/autenticacao nunca tocam db/ direto — vao pelo Repo."
+  [usos]
+  (vec (for [{:keys [from to]} usos
+             :let [mt (modulo-db to)
+                   fp (str/split (str from) #"\.")
+                   from-mod (when (and (= "oplenario" (first fp)) (>= (count fp) 3)) (second fp))
+                   from-camada (when (>= (count fp) 3) (nth fp 2))]
+             :when (and mt (not (and (= from-mod mt) (#{"components" "db"} from-camada))))]
+         {:from from :to to})))
+
 (def ^:private analise
   (delay (:analysis (kondo/run! {:lint ["src"] :config {:output {:analysis true}}}))))
 
@@ -94,3 +114,20 @@
     (is (empty? (violacoes-adapters usos))
         (str "ADR-0001 §3: adapters/ so podem ser chamados pelo diplomat/ (o nucleo trabalha em models): "
              (pr-str (violacoes-adapters usos))))))
+
+(deftest db-lint-tem-dentes
+  ;; prova que a regra DETECTA o caller ilegitimo e PERMITE o Repo-Component / db do mesmo modulo.
+  (is (seq (violacoes-db [{:from 'oplenario.identidade.autenticacao :to 'oplenario.identidade.db.vinculo}]))
+      "autenticacao->db = violacao (db so do Repo-Component)")
+  (is (empty? (violacoes-db [{:from 'oplenario.identidade.components.repositorio :to 'oplenario.identidade.db.vinculo}]))
+      "repositorio->db = permitido")
+  (is (empty? (violacoes-db [{:from 'oplenario.cadastros.db.vereador :to 'oplenario.cadastros.db.estrutura}]))
+      "db->db do MESMO modulo = permitido")
+  (is (empty? (violacoes-db [{:from 'oplenario.legislativo.controllers :to 'oplenario.kernel.db-util}]))
+      "kernel/db-util nao e' db de modulo = ok"))
+
+(deftest db-so-do-repo-component
+  (let [usos (:namespace-usages @analise)]
+    (is (empty? (violacoes-db usos))
+        (str "ADR-0001 §3-bis: db/ de um modulo so e' importado pelo Repo-Component (controller depende do "
+             "Repo, nunca do db/ direto): " (pr-str (violacoes-db usos))))))

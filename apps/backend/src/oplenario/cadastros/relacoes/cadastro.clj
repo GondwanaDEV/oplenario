@@ -81,12 +81,16 @@
                     :order-by [[:cc.vigencia_inicio :desc] [:cc.id]] :limit 1})))))
 
 (defn populacao
-  "Populacao do municipio do ente corrente (alimenta regras de porte do TCE — §22.7.5)."
+  "Populacao do municipio do ente corrente (alimenta regras de porte do TCE — §22.7.5). Fail-LOUD: se o
+  IBGE ainda nao foi semeado (populacao NULL), LANCA — senao 'populacao() > X' viraria false em silencio
+  e a regra de porte seria marcada 'inaplicavel', pulando a auditoria de compliance sem ninguem ver."
   [tx]
-  (:municipios/populacao
-   (jdbc/execute-one! tx
-     (sql/format {:select [:m.populacao] :from [[:cadastros.ente :e]]
-                  :join [[:cadastros.municipios :m] [:= :m.codigo_ibge :e.municipio_ibge]]}))))
+  (or (:municipios/populacao
+       (jdbc/execute-one! tx
+         (sql/format {:select [:m.populacao] :from [[:cadastros.ente :e]]
+                      :join [[:cadastros.municipios :m] [:= :m.codigo_ibge :e.municipio_ibge]]})))
+      (throw (ex-info "populacao: dado ausente (cadastros.municipios.populacao NULL — seed IBGE pendente)"
+                      {:erro :dado-ausente :fato "populacao"}))))
 
 (defn membros-da-casa
   "Nº de vereadores com mandato vigente em `data` (base de quorum/maioria — §22.7.5)."

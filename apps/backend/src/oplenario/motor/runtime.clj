@@ -28,6 +28,15 @@
 (defn- util? [^LocalDate d feriados]
   (and (<= (.getValue (.getDayOfWeek d)) 5) (not (contains? feriados d))))
 
+(defn- data-apos?
+  "a > b para DATAS de compliance (vencimento). Compliance opera em LocalDate; fail-LOUD se vier outro
+  tipo (o hint ^LocalDate cru gerava ClassCastException silenciosa se um Instant chegasse)."
+  [a b]
+  (when-not (and (instance? LocalDate a) (instance? LocalDate b))
+    (throw (ex-info "comparacao de prazo exige LocalDate (compliance usa datas)"
+                    {:a (class a) :b (class b)})))
+  (.isAfter ^LocalDate a ^LocalDate b))
+
 (defn- prox-dia-util [^LocalDate d feriados]
   (loop [x (.plusDays d 1)] (if (util? x feriados) x (recur (.plusDays x 1)))))
 
@@ -276,7 +285,7 @@
                        (emitir! eng (str "ObrigacaoComplianceCumprida(" (:id ob) ")"))
                        (swap! eng update :obrigacoes assoc chave ob) ob)
                      obrig)
-                   (and (= (:estado obrig) "pendente") (.isAfter ^LocalDate agora ^LocalDate (:vence-em obrig)))
+                   (and (= (:estado obrig) "pendente") (data-apos? agora (:vence-em obrig)))
                    (let [ob (assoc obrig :estado "vencida")]
                      (emitir! eng (str "ObrigacaoComplianceVencida(" (:id ob) ")"))
                      (swap! eng update :obrigacoes assoc chave ob) ob)

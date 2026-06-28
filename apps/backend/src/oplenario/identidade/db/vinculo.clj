@@ -17,11 +17,15 @@
 
 (defn vinculos-de
   "Os vinculos da identidade NESTE ente (RLS ja restringe ao tenant). Base do escopo ativo (§22.5 eixo D)."
-  [tx identidade-id]
+  [tx ente-id identidade-id]
   (comum/linhas->kebab
     (jdbc/execute! tx
       (sql/format {:select [:id :ente_id :identidade_id :tipo :estado]
-                   :from [:identidade.vinculo] :where [:= :identidade_id identidade-id]}))))
+                   :from [:identidade.vinculo]
+                   :where [:and [:= :ente_id ente-id] [:= :identidade_id identidade-id]]
+                   ;; ORDER BY determinístico: multi-vínculo ativo NÃO pode escolher vínculo ao acaso
+                   ;; (o :vinculo-ativo-id vai p/ o audit; o mais antigo = âncora estável).
+                   :order-by [[:criado_em :asc] [:id :asc]]}))))
 
 (defn mudar-estado! [tx id estado]
   {:pre [(contains? mod/estados-vinculo estado)]}   ; erro de dominio antes do CHECK do banco virar PSQLException
@@ -37,11 +41,11 @@
 
 (defn papeis-de
   "Conjunto de papeis estaticos da identidade neste ente (o snapshot do token, §22.5.2 eixo D)."
-  [tx identidade-id]
+  [tx ente-id identidade-id]
   (set (map :usuario_papel/papel
             (jdbc/execute! tx
               (sql/format {:select [:papel] :from [:identidade.usuario_papel]
-                           :where [:= :identidade_id identidade-id]})))))
+                           :where [:and [:= :ente_id ente-id] [:= :identidade_id identidade-id]]})))))
 
 ;; ---- consentimento (LGPD, §22.5.2 eixo G) ----
 (defn registrar-consentimento! [tx {:keys [id ente-id identidade-id finalidade base-legal versao-termo]}]
@@ -60,9 +64,9 @@
            (sql/format {:update :identidade.consentimento :set {:revogado_em [:now]}
                         :where [:and [:= :id id] [:is :revogado_em nil]]})))))
 
-(defn consentimentos-ativos [tx identidade-id]
+(defn consentimentos-ativos [tx ente-id identidade-id]
   (comum/linhas->kebab
     (jdbc/execute! tx
       (sql/format {:select [:id :ente_id :identidade_id :finalidade :base_legal :versao_termo]
                    :from [:identidade.consentimento]
-                   :where [:and [:= :identidade_id identidade-id] [:is :revogado_em nil]]}))))
+                   :where [:and [:= :ente_id ente-id] [:= :identidade_id identidade-id] [:is :revogado_em nil]]}))))

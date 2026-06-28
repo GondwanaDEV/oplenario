@@ -13,6 +13,7 @@
             [oplenario.cadastros.relacoes.cadastro :as crel]
             [oplenario.config :as config]
             [oplenario.identidade.autenticacao :as auth]
+            [oplenario.identidade.components.repositorio :as repo-id]
             [oplenario.identidade.db.identidade :as id]
             [oplenario.identidade.db.vinculo :as vinc]
             [oplenario.kernel.components.datasource :as datasource]
@@ -27,6 +28,9 @@
     (let [c (component/start (datasource/datasource (config/carregar)))]
       (migracao/migrar! (:ds c))
       (binding [*ds* (:ds c)] (try (t) (finally (component/stop c)))))))
+
+;; RepoIdentidade sobre o *ds* (resolver-sessao recebe o Repo, nao o ds — §3-bis).
+(defn- repo [] (assoc (repo-id/repositorio) :datasource {:ds *ds*}))
 
 (defn- dv [ds] (let [r (mod (reduce + (map * ds (range (inc (count ds)) 1 -1))) 11)] (if (< r 2) 0 (- 11 r))))
 (defn- cpf-valido [] (let [b (vec (repeatedly 9 #(rand-int 10))) d1 (dv b)] (apply str (concat b [d1 (dv (conj b d1))]))))
@@ -73,7 +77,7 @@
            (tenancy/com-tenant* *ds* (:ente b) (fn [tx] (:nome-oficial (estrutura/buscar-ente tx))))) "Casa B existe")
 
     ;; (2) LOGIN RESOLVIVEL — resolver-sessao monta o ator do vereador em cada Casa
-    (let [ator-a (auth/resolver-sessao *ds* {:identidade-id (:ident a) :ente-id (:ente a)})]
+    (let [ator-a (auth/resolver-sessao (repo) {:identidade-id (:ident a) :ente-id (:ente a)})]
       (is (= "vereador" (:tipo-vinculo ator-a)) "login do vereador na Casa A")
       (is (= #{"vereador" "presidente_mesa"} (:papeis ator-a)) "snapshot de papeis da Casa A"))
 
@@ -95,12 +99,12 @@
         "vereador de A invisivel na Casa B (RLS)")
     (is (false? (tenancy/com-tenant* *ds* (:ente b) (fn [tx] (crel/tem-mandato-vigente? tx (:ident a) ini))))
         "mandato de A nao conta na Casa B")
-    (is (nil? (auth/resolver-sessao *ds* {:identidade-id (:ident a) :ente-id (:ente b)}))
+    (is (nil? (auth/resolver-sessao (repo) {:identidade-id (:ident a) :ente-id (:ente b)}))
         "a identidade de A nao tem sessao na Casa B (sem vinculo)")
 
     ;; (5) MULTI-VINCULO (disc.1) — a MESMA identidade de A vira cidada na Casa B, sem vazar poderes
     (tenancy/com-tenant* *ds* (:ente b)
       (fn [tx] (vinc/criar! tx {:id (random-uuid) :ente-id (:ente b) :identidade-id (:ident a) :tipo "cidadao"})))
-    (let [ator-cidada (auth/resolver-sessao *ds* {:identidade-id (:ident a) :ente-id (:ente b)})]
+    (let [ator-cidada (auth/resolver-sessao (repo) {:identidade-id (:ident a) :ente-id (:ente b)})]
       (is (= "cidadao" (:tipo-vinculo ator-cidada)) "mesma identidade = cidada na Casa B")
       (is (= #{} (:papeis ator-cidada)) "NAO traz os papeis de vereadora de A (permissoes nao vazam entre perfis)"))))

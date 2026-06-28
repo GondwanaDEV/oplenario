@@ -41,7 +41,7 @@
           (is (= 1 (:sequencial rr)) "outro tipo tem contador proprio (escopo tipo:ano)")
           (is (= "urn:lex:br;ce;fortaleza:camara.municipal;projeto.lei:2026;1" (:urn-lex r1))
               "URN/LexML computada no formato do ADR-0002")
-          (let [p (prop/buscar tx (:id r1))]
+          (let [p (prop/buscar tx ente (:id r1))]
             (is (m/validate mod/Proposicao (select-keys p (map (comp keyword name) (keys p))))
                 "a proposicao buscada bate o model interno")
             (is (= "PL 001/2026" (logic/numero-exibicao p)) "numero de exibicao humano")
@@ -62,8 +62,8 @@
 (deftest rls-isola-proposicao-cross-tenant
   (let [a (random-uuid) b (random-uuid) id (random-uuid)]
     (tenancy/com-tenant* *ds* a (fn [tx] (prop/protocolar! tx (pl a {:id id}))))
-    (is (some? (tenancy/com-tenant* *ds* a (fn [tx] (prop/buscar tx id)))) "ente A ve a propria proposicao")
-    (is (nil? (tenancy/com-tenant* *ds* b (fn [tx] (prop/buscar tx id)))) "ente B NAO ve a de A (RLS)")))
+    (is (some? (tenancy/com-tenant* *ds* a (fn [tx] (prop/buscar tx a id)))) "ente A ve a propria proposicao")
+    (is (nil? (tenancy/com-tenant* *ds* b (fn [tx] (prop/buscar tx b id)))) "ente B NAO ve a de A (RLS)")))
 
 (deftest identidade-canonica-e-imutavel
   (let [ente (random-uuid) id (random-uuid)]
@@ -81,28 +81,28 @@
   (let [ente (random-uuid) id (random-uuid)]
     (tenancy/com-tenant* *ds* ente (fn [tx] (prop/protocolar! tx (pl ente {:id id}))))
     (is (thrown? Exception
-                 (tenancy/com-tenant* *ds* ente (fn [tx] (prop/mudar-estado! tx {:id id :estado "em_comissoes" :lock-version 99}))))
+                 (tenancy/com-tenant* *ds* ente (fn [tx] (prop/mudar-estado! tx {:id id :ente-id ente :estado "em_comissoes" :lock-version 99}))))
         "lock_version desatualizada = conflito de escrita (0 linhas), lanca")
-    (tenancy/com-tenant* *ds* ente (fn [tx] (prop/mudar-estado! tx {:id id :estado "em_comissoes" :lock-version 0})))
-    (is (= "em_comissoes" (:estado (tenancy/com-tenant* *ds* ente (fn [tx] (prop/buscar tx id)))))
+    (tenancy/com-tenant* *ds* ente (fn [tx] (prop/mudar-estado! tx {:id id :ente-id ente :estado "em_comissoes" :lock-version 0})))
+    (is (= "em_comissoes" (:estado (tenancy/com-tenant* *ds* ente (fn [tx] (prop/buscar tx ente id)))))
         "lock_version certa muda o estado")))
 
 (deftest estado-terminal-trava-exceto-correcao-auditada
   (let [ente (random-uuid) id (random-uuid)]
     (tenancy/com-tenant* *ds* ente (fn [tx] (prop/protocolar! tx (pl ente {:id id}))))
     ;; protocolada (nao-terminal, lock 0) -> arquivada: passa
-    (tenancy/com-tenant* *ds* ente (fn [tx] (prop/mudar-estado! tx {:id id :estado "arquivada" :lock-version 0})))
-    (is (= "arquivada" (:estado (tenancy/com-tenant* *ds* ente (fn [tx] (prop/buscar tx id))))))
+    (tenancy/com-tenant* *ds* ente (fn [tx] (prop/mudar-estado! tx {:id id :ente-id ente :estado "arquivada" :lock-version 0})))
+    (is (= "arquivada" (:estado (tenancy/com-tenant* *ds* ente (fn [tx] (prop/buscar tx ente id))))))
     ;; mexer numa row JA terminal (lock 1): bloqueado (nivel b)
     (is (thrown? Exception
-                 (tenancy/com-tenant* *ds* ente (fn [tx] (prop/mudar-estado! tx {:id id :estado "protocolada" :lock-version 1}))))
+                 (tenancy/com-tenant* *ds* ente (fn [tx] (prop/mudar-estado! tx {:id id :ente-id ente :estado "protocolada" :lock-version 1}))))
         "UPDATE em estado terminal e' bloqueado")
     ;; sob correcao auditada (GUC): permitido (a row terminal segue com lock 1 — a tx anterior fez rollback)
     (tenancy/com-tenant* *ds* ente
       (fn [tx]
         (jdbc/execute-one! tx ["SELECT set_config('app.correcao_auditada', ?, true)" "correcao-teste-123"])
-        (prop/mudar-estado! tx {:id id :estado "protocolada" :lock-version 1})))
-    (is (= "protocolada" (:estado (tenancy/com-tenant* *ds* ente (fn [tx] (prop/buscar tx id)))))
+        (prop/mudar-estado! tx {:id id :ente-id ente :estado "protocolada" :lock-version 1})))
+    (is (= "protocolada" (:estado (tenancy/com-tenant* *ds* ente (fn [tx] (prop/buscar tx ente id)))))
         "correcao auditada destrava a row terminal")))
 
 (deftest check-por-tipo-exige-atributo-quente

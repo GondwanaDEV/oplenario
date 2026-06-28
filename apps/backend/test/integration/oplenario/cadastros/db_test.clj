@@ -50,7 +50,7 @@
       (fn [tx]
         (let [e (estrutura/buscar-ente tx)
               v (vereador/buscar tx ver)
-              ms (vereador/mandatos-do-vereador tx ver)
+              ms (vereador/mandatos-do-vereador tx ente ver)
               mz (comissao/mesa-vigente tx ini)]
           (is (= "Camara Municipal de Fortaleza" (:nome-oficial e)) "round-trip do ente")
           (is (m/validate mod/Ente (select-keys e [:ente-id :municipio-ibge :nome-oficial :nome-curto :brasao-ref]))

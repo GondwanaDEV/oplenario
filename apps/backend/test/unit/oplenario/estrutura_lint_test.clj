@@ -64,3 +64,20 @@
         (is (not-any? #(str/includes? % (str File/separator "in" File/separator)) planos) "nao acusa adapters/in/"))
       (finally
         (doseq [^File f (reverse (file-seq base))] (.delete f))))))
+
+;; ---- GUC app.correcao_auditada: o desbloqueio da imutabilidade so pode nascer no kernel ----
+;; (ADR-0002 §4b / review de seguranca): setar esse GUC reescreve a identidade canonica de uma proposicao
+;; PUBLICADA. So o kernel (futuro com-correcao-auditada* com authz) pode toca-lo — nunca um controller solto.
+(defn- arquivos-clj-fora-do-kernel []
+  (->> (file-seq (io/file "src/oplenario"))
+       (filter #(.isFile ^File %))
+       (filter #(str/ends-with? (.getName ^File %) ".clj"))
+       (remove #(str/includes? (.getPath ^File %) (str File/separator "kernel" File/separator)))))
+
+(deftest correcao-auditada-so-no-kernel
+  (let [ofensores (for [^File f (arquivos-clj-fora-do-kernel)
+                        :when (str/includes? (slurp f) "app.correcao_auditada")]
+                    (.getPath f))]
+    (is (empty? ofensores)
+        (str "seguranca (ADR-0002 §4b): 'app.correcao_auditada' so pode ser setado no kernel "
+             "(com-correcao-auditada* com authz). Ofensores: " (pr-str (vec ofensores))))))
