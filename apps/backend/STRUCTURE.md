@@ -33,6 +33,18 @@ Dentro do módulo: **`adapters/` só é chamado pelo `diplomat/`** (núcleo `con
 - Migration própria: `20260620000003-admin-sistema.*` (schema + registry `ente`). Refs a `admin_sistema.ente` de outros módulos cruzam por **guard de serviço**, nunca FK/JOIN cross-schema.
 
 ## TODO (deferido p/ implementação — validação ecc)
+- **Carries do F3.5 (eixo E — apensação, 28/06; review ecc clojure+database incorporada):** (eixo E /
+  regimento) **colapso vs cadeia** — hoje `cadeia` é sempre traversal genuíno (não colapsa níveis); se
+  é colapso automático universal ou variável por câmara é **[GAP] regimental** deferido (§22.4.4), não
+  se crava. (DB, hardening project-wide) o **soft-delete via `efetivado_em`→NULL** foi fechado AQUI por
+  trigger bespoke nível (c); o **mesmo vetor existe nas tabelas que usam o helper compartilhado de
+  estado-terminal** (emendas/proposições não guardam `efetivado_em`) — candidato a guarda uniforme num
+  hardening pass. (eixo E) `ato_apensacao_ref`/`ato_desapensacao_ref` são **forward-refs sem FK** (a
+  entidade despacho ainda não existe; mesmo padrão de `origem_ref`). (eixo E) **sem evento de domínio**
+  (a §22.4 eixo E não lista, como o D) e **sem wire/in+controllers** (borda HTTP posterior, como B/D).
+  **Aplicado nesta rodada:** 2 índices FK não-parciais (DB-M1); guarda one-way de `efetivado_em` +
+  teste (DB-M2); `origem_importado_em` no congelado do trigger (DB-m1); `km/Instante` canônico no model
+  (clojure-consistência); comentário de params posicionais + asserção de ciclo exata (2 MENOR).
 - **Carries do F3.4 (eixo D — emendas, 28/06; review ecc clojure+database incorporada):** (eixo D / regimento)
   **precondição fina de `aprovar!`** — hoje só barra estado terminal (aprova de `apresentada`|`admitida`); exigir
   `admitida`? trilho rápido p/ emenda de plenário (`momento='plenario'`)? = **[GAP] regimental** deferido ao
