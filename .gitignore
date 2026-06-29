@@ -12,7 +12,9 @@ target/
 # Node / Next.js (frontend)
 node_modules/
 .next/
-out/
+# `out/` (export estatico do Next) ANCORADO ao app — a regra generica engolia os dirs-fonte adapters/out e
+# wire/out da silhueta ADR-0001 do backend (modulo nao compilava num clone limpo).
+apps/*/out/
 dist/
 
 # Env / segredos
