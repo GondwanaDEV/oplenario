@@ -24,6 +24,21 @@ export interface SessaoOut {
   "motivo-nao-realizada": string | null;
 }
 
+/** GET /sessoes/:id/pauta — oplenario.sessoes.adapters.out.pauta/pauta->wire (internos filtrados). */
+export interface PautaItemOut {
+  id: string;
+  fase: string; // logic/fases-pauta
+  "tipo-item": string; // logic/tipos-item-pauta
+  "proposicao-id"?: string; // presente só p/ "proposicao" (chave omitida nos demais)
+  "texto-descricao"?: string; // presente p/ os demais tipos (chave omitida em "proposicao")
+  ordem: number;
+}
+
+export interface PautaOut {
+  "sessao-id": string;
+  itens: PautaItemOut[];
+}
+
 // ---- payloads dos 7 eventos do canal plenário (= o :dados de cada evento, JSON kebab-case) ----
 
 export interface SessaoTransicionou {

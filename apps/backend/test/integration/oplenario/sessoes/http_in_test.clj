@@ -33,19 +33,35 @@
     (buscar-sessao [_ ente-id id] (busca-fn ente-id id))
     (agendar-sessao! [_ _ente-id m] {:id (:id m) :numero 7})))
 
+(defn- fake-repo-pauta
+  "RepoSessoes fake p/ a rota de pauta (GET /sessoes/:id/pauta): `buscar-sessao` via busca-fn (a authz mora no
+  recurso sessao); `buscar-pauta-por-sessao` devolve `pauta` (ou nil = sessao sem pauta); `listar-itens` devolve
+  `itens`. Impl parcial proposital (so os metodos exercidos pela leitura de pauta)."
+  [busca-fn pauta itens]
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify repo-sessoes/RepoSessoes
+    (buscar-sessao [_ ente-id id] (busca-fn ente-id id))
+    (buscar-pauta-por-sessao [_ _ente-id _sessao-id] pauta)
+    (listar-itens [_ _ente-id _pauta-sessao-id] itens)))
+
 (defn- fake-repo-identidade [papeis]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify repo-id/RepoIdentidade
     (snapshot-ator [_ _ente-id _identidade-id]
       {:vinculo-ativo {:id (random-uuid) :tipo "servidor"} :papeis papeis})))
 
-(defn- service-fn [papeis busca-fn]
+(defn- service-fn*
+  "Monta o service-fn com um RepoSessoes ja construido (deixa cada teste injetar o fake que precisa)."
+  [papeis repo-s]
   (-> (http/servico (config/carregar)
                     (rotas/montar {:idp (idp-dev/idp-dev)
                                    :repo-identidade (fake-repo-identidade papeis)
-                                   :repo-sessoes (fake-repo-sessoes busca-fn)})
+                                   :repo-sessoes repo-s})
                     it/globais)
       ph/create-server ::ph/service-fn))
+
+(defn- service-fn [papeis busca-fn]
+  (service-fn* papeis (fake-repo-sessoes busca-fn)))
 
 (defn- token [ente-id ident-id]
   (json/write-value-as-string {:sub "u" :ente-id (str ente-id) :identidade-id (str ident-id)}))
@@ -94,6 +110,70 @@
         r (pt/response-for (service-fn #{} (fn [e i] (sessao-canonica e i)))
                            :get "/sessoes/nao-e-uuid" :headers (com-bearer (token ente (random-uuid))))]
     (is (= 400 (:status r)) "path-param :id malformado -> 400 (requisicao invalida), nunca 500")))
+
+;; ---------- GET /sessoes/:id/pauta — pauta viva (read; authz herdada da sessao) ----------
+
+(defn- pauta-canonica [ente-id ps-id sessao-id]
+  {:id ps-id :ente-id ente-id :sessao-id sessao-id})
+
+(defn- item-canonico [ente-id ps-id ordem tipo-item proposicao-id texto]
+  {:id (random-uuid) :ente-id ente-id :pauta-sessao-id ps-id :fase "ordem_do_dia"
+   :tipo-item tipo-item :proposicao-id proposicao-id :texto-descricao texto :ordem ordem
+   :ativo true :lock-version 0})
+
+(deftest pauta-da-sessao-200
+  (let [ente (random-uuid) id (random-uuid) ps (random-uuid)
+        prop (random-uuid)
+        itens [(item-canonico ente ps 1 "proposicao" prop nil)
+               (item-canonico ente ps 2 "comunicado" nil "Comunicado da Mesa")]
+        repo (fake-repo-pauta (fn [_ _] (sessao-canonica ente id)) (pauta-canonica ente ps id) itens)
+        r (pt/response-for (service-fn* #{} repo)
+                           :get (str "/sessoes/" id "/pauta") :headers (com-bearer (token ente (random-uuid))))
+        body (ler-json r)]
+    (is (= 200 (:status r)) "GET /sessoes/:id/pauta com token valido -> 200")
+    (is (= (str id) (:sessao-id body)) "a pauta carrega o sessao-id (string)")
+    (is (= 2 (count (:itens body))) "os dois itens ativos voltam")
+    (is (= "proposicao" (:tipo-item (first (:itens body)))))
+    (is (= (str prop) (:proposicao-id (first (:itens body)))) "proposicao-id projetado como string")
+    (is (= "Comunicado da Mesa" (:texto-descricao (second (:itens body)))))
+    (is (not (contains? (first (:itens body)) :lock-version)) "lock-version interno nao vaza")
+    (is (not (contains? (first (:itens body)) :ente-id)) "ente-id nao vaza")
+    (is (not (contains? (first (:itens body)) :pauta-sessao-id)) "pauta-sessao-id interno nao vaza")))
+
+(deftest pauta-da-sessao-sem-pauta-200-vazia
+  (let [ente (random-uuid) id (random-uuid)
+        repo (fake-repo-pauta (fn [_ _] (sessao-canonica ente id)) nil [])
+        r (pt/response-for (service-fn* #{} repo)
+                           :get (str "/sessoes/" id "/pauta") :headers (com-bearer (token ente (random-uuid))))
+        body (ler-json r)]
+    (is (= 200 (:status r)) "sessao existente sem pauta criada -> 200 (pauta opcional)")
+    (is (= [] (:itens body)) "itens vazios quando nao ha pauta")))
+
+(deftest pauta-da-sessao-inexistente-404
+  (let [ente (random-uuid)
+        repo (fake-repo-pauta (fn [_ _] nil) nil [])
+        r (pt/response-for (service-fn* #{} repo)
+                           :get (str "/sessoes/" (random-uuid) "/pauta") :headers (com-bearer (token ente (random-uuid))))]
+    (is (= 404 (:status r)) "sessao inexistente -> 404 (sem sessao nao ha pauta)")))
+
+(deftest pauta-da-sessao-sem-token-401
+  (let [repo (fake-repo-pauta (fn [e i] (sessao-canonica e i)) nil [])
+        r (pt/response-for (service-fn* #{} repo) :get (str "/sessoes/" (random-uuid) "/pauta"))]
+    (is (= 401 (:status r)) "rota herda a cadeia de auth: sem token -> 401")))
+
+(deftest pauta-da-sessao-policy-fina-nega-403
+  (let [ente (random-uuid)
+        repo (fake-repo-pauta (fn [_ id] (sessao-canonica (random-uuid) id)) nil [])
+        r (pt/response-for (service-fn* #{} repo)
+                           :get (str "/sessoes/" (random-uuid) "/pauta") :headers (com-bearer (token ente (random-uuid))))]
+    (is (= 403 (:status r)) "sessao de ente alheio -> policy.check (pode-ver-sessao?) nega -> 403")))
+
+(deftest pauta-da-sessao-id-malformado-400
+  (let [ente (random-uuid)
+        repo (fake-repo-pauta (fn [e i] (sessao-canonica e i)) nil [])
+        r (pt/response-for (service-fn* #{} repo)
+                           :get "/sessoes/nao-e-uuid/pauta" :headers (com-bearer (token ente (random-uuid))))]
+    (is (= 400 (:status r)) "path-param :id malformado -> 400, nunca 500")))
 
 ;; ---------- POST /sessoes — write path (wire/in + adapters/in + authz grossa exige-papel) ----------
 
