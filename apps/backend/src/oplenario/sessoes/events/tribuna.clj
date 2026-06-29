@@ -48,3 +48,29 @@
 
 (defn fala-cronometro [ente-id payload]
   (eventos/evento-validado FalaCronometroPayload fala-cronometro-tipo ente-id payload))
+
+(def inscricao-registrada-tipo "inscricao.registrada")
+
+(def InscricaoRegistradaPayload
+  "Inscricao de orador registrada — atualiza a fila ao vivo (canal plenario/dashboard)."
+  [:map {:closed true}
+   [:inscricao-id :uuid]
+   [:sessao-id :uuid]
+   [:vereador-id :uuid]
+   [:origem-inscricao :string]
+   [:fase :string]
+   [:ordem :int]])
+
+(defn inscricao-registrada [ente-id payload]
+  (eventos/evento-validado InscricaoRegistradaPayload inscricao-registrada-tipo ente-id payload))
+
+(def inscricao-desistida-tipo "inscricao.desistida")
+
+(def InscricaoDesistidaPayload
+  "Inscricao retirada (desistencia) — remove da fila ao vivo."
+  [:map {:closed true}
+   [:inscricao-id :uuid]
+   [:sessao-id :uuid]])
+
+(defn inscricao-desistida [ente-id payload]
+  (eventos/evento-validado InscricaoDesistidaPayload inscricao-desistida-tipo ente-id payload))

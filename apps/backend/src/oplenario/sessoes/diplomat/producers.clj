@@ -4,6 +4,7 @@
   existe se a tx commitou. Chamado pelo Repo-Component, que compoe o ato + a emissao na MESMA tx (§3-bis). O
   vocabulario/contrato mora em events/; aqui e' so o ATO de emitir. Estes eventos sao a fonte do projetor SSE."
   (:require [oplenario.kernel.eventos :as eventos]
+            [oplenario.sessoes.events.gravacao :as ev-gravacao]
             [oplenario.sessoes.events.presenca :as ev-presenca]
             [oplenario.sessoes.events.sessao :as ev-sessao]
             [oplenario.sessoes.events.tribuna :as ev-tribuna]))
@@ -22,3 +23,12 @@
 
 (defn emitir-fala-cronometro! [bus tx ente-id payload]
   (eventos/emitir! bus tx (ev-tribuna/fala-cronometro ente-id payload)))
+
+(defn emitir-inscricao-registrada! [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-tribuna/inscricao-registrada ente-id payload)))
+
+(defn emitir-inscricao-desistida! [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-tribuna/inscricao-desistida ente-id payload)))
+
+(defn emitir-gravacao-segmento-captado! [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-gravacao/segmento-captado ente-id payload)))

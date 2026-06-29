@@ -90,3 +90,37 @@
       (is (= 1 (count evs)) "fala.encerrada emitido")
       (is (re-find #"\"tempo-segundos\":\s*240" (:payload (first evs)))
           "carrega o tempo efetivamente usado (300 - 60 de pausa = 240)"))))
+
+;; ---------- G1b: inscricao.registrada / inscricao.desistida ----------
+
+(deftest inscricao-emite-eventos
+  (let [ente (random-uuid)
+        sid  (agendar! ente)
+        ver  (random-uuid)
+        iid  (random-uuid)]
+    (repo/inscrever! *repo* ente {:id iid :sessao-id sid :vereador-id ver
+                                  :origem-inscricao "pre_sessao_app" :fase "expediente" :created-by (random-uuid)})
+    (let [evs (eventos-por-tipo ente "inscricao.registrada")]
+      (is (= 1 (count evs)) "inscricao.registrada emitido")
+      (is (re-find (re-pattern (str ver)) (:payload (first evs))) "carrega o vereador")
+      (is (re-find #"pre_sessao_app" (:payload (first evs))) "carrega a origem"))
+    (repo/desistir! *repo* ente {:id iid :lock-version 0 :updated-by (random-uuid)})
+    (let [evs (eventos-por-tipo ente "inscricao.desistida")]
+      (is (= 1 (count evs)) "inscricao.desistida emitido")
+      (is (re-find (re-pattern (str sid)) (:payload (first evs))) "carrega a sessao-id (rota do canal)"))))
+
+;; ---------- G1b: gravacao.segmento-captado (fronteira core->IA) ----------
+
+(deftest gravacao-emite-evento
+  (let [ente (random-uuid)
+        sid  (agendar! ente)
+        gid  (random-uuid)]
+    (repo/registrar-segmento! *repo* ente {:id gid :sessao-id sid :iniciou-em t0 :encerrou-em (mais t0 300)
+                                           :motivo-inicio "inicio_sessao" :motivo-fim "fim_sessao"
+                                           :container-bruto-uri "s3://gravacoes/seg.mkv"
+                                           :fonte-ingestao "gravacao_local_pos_sessao"
+                                           :acesso-restrito false :created-by (random-uuid)})
+    (let [evs (eventos-por-tipo ente "gravacao.segmento-captado")]
+      (is (= 1 (count evs)) "gravacao.segmento-captado emitido (fronteira core->IA)")
+      (is (re-find #"s3://gravacoes/seg.mkv" (:payload (first evs))) "carrega o container bruto p/ a IA")
+      (is (re-find #"gravacao_local_pos_sessao" (:payload (first evs))) "carrega a fonte de ingestao"))))

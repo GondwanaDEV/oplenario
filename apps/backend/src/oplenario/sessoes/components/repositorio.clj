@@ -110,14 +110,36 @@
   (criar-justificativa! [this ente-id m] (transacao this ente-id #(presenca/criar-justificativa! % (assoc m :ente-id ente-id))))
   (buscar-justificativa [this ente-id id] (transacao this ente-id #(presenca/buscar-justificativa % ente-id id)))
   (decidir-justificativa! [this ente-id m] (transacao this ente-id #(presenca/decidir-justificativa! % (assoc m :ente-id ente-id))))
-  (registrar-segmento! [this ente-id m] (transacao this ente-id #(gravacao/registrar-segmento! % (assoc m :ente-id ente-id))))
+  (registrar-segmento! [this ente-id m]
+    (transacao this ente-id
+      (fn [tx]
+        (let [r (gravacao/registrar-segmento! tx (assoc m :ente-id ente-id))]
+          ;; fronteira core->IA (§22.3.3): o segmento captado vai p/ o pipeline de transcricao.
+          (producers/emitir-gravacao-segmento-captado! bus tx ente-id
+            (cond-> {:segmento-id (:id m) :container-bruto-uri (:container-bruto-uri m)
+                     :fonte-ingestao (:fonte-ingestao m) :acesso-restrito (boolean (:acesso-restrito m))}
+              (:sessao-id m) (assoc :sessao-id (:sessao-id m))))
+          r))))
   (vincular-segmento! [this ente-id m] (transacao this ente-id #(gravacao/vincular-segmento! % (assoc m :ente-id ente-id))))
   (buscar-segmento [this ente-id id] (transacao this ente-id #(gravacao/buscar % ente-id id)))
   (listar-segmentos-da-sessao [this ente-id sessao-id] (transacao this ente-id #(gravacao/listar-segmentos-da-sessao % ente-id sessao-id)))
-  (inscrever! [this ente-id m] (transacao this ente-id #(tribuna/inscrever! % (assoc m :ente-id ente-id))))
+  (inscrever! [this ente-id m]
+    (transacao this ente-id
+      (fn [tx]
+        (let [r (tribuna/inscrever! tx (assoc m :ente-id ente-id))]
+          (producers/emitir-inscricao-registrada! bus tx ente-id
+            {:inscricao-id (:id m) :sessao-id (:sessao-id m) :vereador-id (:vereador-id m)
+             :origem-inscricao (:origem-inscricao m) :fase (:fase m) :ordem (:ordem r)})
+          r))))
   (buscar-inscricao [this ente-id id] (transacao this ente-id #(tribuna/buscar-inscricao % ente-id id)))
   (listar-inscricoes [this ente-id sessao-id] (transacao this ente-id #(tribuna/listar-inscricoes % ente-id sessao-id)))
-  (desistir! [this ente-id m] (transacao this ente-id #(tribuna/desistir! % (assoc m :ente-id ente-id))))
+  (desistir! [this ente-id m]
+    (transacao this ente-id
+      (fn [tx]
+        (let [sid (:sessao-id (tribuna/buscar-inscricao tx ente-id (:id m)))  ; sessao-id p/ rotear o canal
+              r   (tribuna/desistir! tx (assoc m :ente-id ente-id))]
+          (producers/emitir-inscricao-desistida! bus tx ente-id {:inscricao-id (:id m) :sessao-id sid})
+          r))))
   (iniciar-fala! [this ente-id m]
     (transacao this ente-id
       (fn [tx]
