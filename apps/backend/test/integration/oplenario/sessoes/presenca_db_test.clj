@@ -14,10 +14,12 @@
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.migracao :as migracao]
+            [oplenario.motor.components.registro-fatos :as registro-fatos]
             [oplenario.sessoes.db.presenca :as presenca]
             [oplenario.sessoes.db.sessao :as sessao]
             [oplenario.sessoes.logic :as logic]
-            [oplenario.sessoes.models.presenca :as mod])
+            [oplenario.sessoes.models.presenca :as mod]
+            [oplenario.sessoes.relacoes.presenca :as rel-sessoes])
   (:import (java.time Instant)))
 
 (def ^:dynamic *ds* nil)
@@ -74,10 +76,10 @@
       (fn [tx]
         (let [sid (nova-sessao! tx ente)]
           (ev! tx ente sid ver {:tipo "entrada" :ocorrido-em t10})
-          (is (true? (presenca/esta-presente-em? tx ente sid ver t1030)) "entrada -> presente")
+          (is (true? (rel-sessoes/esta-presente-em? tx sid ver t1030)) "entrada -> presente")
           (ev! tx ente sid ver {:tipo "saida" :ocorrido-em t11})
-          (is (false? (presenca/esta-presente-em? tx ente sid ver t1115)) "saida posterior -> ausente")
-          (is (true? (presenca/esta-presente-em? tx ente sid ver t1030))
+          (is (false? (rel-sessoes/esta-presente-em? tx sid ver t1115)) "saida posterior -> ausente")
+          (is (true? (rel-sessoes/esta-presente-em? tx sid ver t1030))
               "consulta historica: presente em t1030 (antes da saida)")
           (is (= 2 (count (presenca/listar-eventos tx ente sid))) "ambos eventos persistidos (append-only)"))))))
 
@@ -89,14 +91,14 @@
           ;; mesmo instante: painel diz saida, secretaria diz entrada -> manual vence (presente)
           (ev! tx ente sid ver {:tipo "saida" :fonte "painel_eletronico" :ocorrido-em t10})
           (ev! tx ente sid ver {:tipo "entrada" :fonte "manual_secretaria" :ocorrido-em t10})
-          (is (true? (presenca/esta-presente-em? tx ente sid ver t1030))
+          (is (true? (rel-sessoes/esta-presente-em? tx sid ver t1030))
               "manual_secretaria > painel_eletronico no desempate de mesmo instante (via esta-presente?)")
           ;; segundo par: painel > inferida no mesmo instante; e o desempate tem de valer TAMBEM pelo caminho
           ;; do AGREGADOR (ultimos-eventos-q), nao so por esta-presente? — senao quorum incoerente.
           (ev! tx ente sid ver2 {:tipo "entrada" :fonte "inferida_por_voto"  :modalidade "plenario" :ocorrido-em t10})
           (ev! tx ente sid ver2 {:tipo "saida"   :fonte "painel_eletronico"  :modalidade "plenario" :ocorrido-em t10})
-          (is (false? (presenca/esta-presente-em? tx ente sid ver2 t1030)) "painel (saida) > inferida (entrada)")
-          (is (= 1 (presenca/presentes-plenario tx ente sid t1030))
+          (is (false? (rel-sessoes/esta-presente-em? tx sid ver2 t1030)) "painel (saida) > inferida (entrada)")
+          (is (= 1 (rel-sessoes/presentes-plenario tx sid t1030))
               "agregador concorda com a precedencia: so ver presente; ver2 saiu (painel>inferida)"))))))
 
 (deftest agregadores-quorum-por-modalidade
@@ -107,14 +109,14 @@
           (ev! tx ente sid a {:modalidade "plenario" :ocorrido-em t10})
           (ev! tx ente sid b {:modalidade "remoto"   :ocorrido-em t10})
           (ev! tx ente sid c {:modalidade "plenario" :ocorrido-em t10})
-          (is (= 2 (presenca/presentes-plenario tx ente sid t1030)) "A e C presentes no plenario as 10:30")
-          (is (= 1 (presenca/presentes-remoto   tx ente sid t1030)) "B remoto")
+          (is (= 2 (rel-sessoes/presentes-plenario tx sid t1030)) "A e C presentes no plenario as 10:30")
+          (is (= 1 (rel-sessoes/presentes-remoto   tx sid t1030)) "B remoto")
           (ev! tx ente sid c {:tipo "saida" :modalidade "plenario" :ocorrido-em t1040})
-          (is (= 1 (presenca/presentes-plenario tx ente sid t1045)) "C saiu as 10:40 -> so A no plenario as 10:45")
+          (is (= 1 (rel-sessoes/presentes-plenario tx sid t1045)) "C saiu as 10:40 -> so A no plenario as 10:45")
           ;; A muda de modalidade: sai do plenario, entra no remoto, sem perder presenca
           (ev! tx ente sid a {:tipo "mudanca_modalidade" :modalidade "remoto" :ocorrido-em t11})
-          (is (= 0 (presenca/presentes-plenario tx ente sid t1115)) "A migrou; C saiu -> plenario vazio")
-          (is (= 2 (presenca/presentes-remoto   tx ente sid t1115)) "A e B no remoto"))))))
+          (is (= 0 (rel-sessoes/presentes-plenario tx sid t1115)) "A migrou; C saiu -> plenario vazio")
+          (is (= 2 (rel-sessoes/presentes-remoto   tx sid t1115)) "A e B no remoto"))))))
 
 (deftest presenca-e-append-only
   (let [ente (random-uuid) ver (random-uuid)]
@@ -160,3 +162,26 @@
   (is (m/validate mod/JustificativaAusencia
                   {:ente-id (random-uuid) :id (random-uuid) :sessao-id (random-uuid) :vereador-id (random-uuid)
                    :estado "pendente" :motivo "Atestado" :lock-version 0})))
+
+;; ---------- F4.3b: acoplamento a DSL do motor (quorum) ----------
+
+(deftest costura-relacoes-sessoes
+  ;; as fns de relacao do sessoes casam as assinaturas :relacao do catalogo (aridade 3 = SessaoId+Instante+tx).
+  ;; E' o assert que o RegistroFatos roda no boot (fail-closed) — aqui sem subir o sistema.
+  (let [r (registro-fatos/verificar-costura rel-sessoes/relacoes)]
+    (is (:ok r) (str "costura quebrada: " (:erros r)))))
+
+(deftest quorum-alcancado-pelo-motor-por-nome
+  ;; prova viva da F2: o motor alcanca o agregador de quorum POR NOME (resolver-para), nunca por import (§22.10).
+  (let [ente (random-uuid) a (random-uuid) b (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [sid (nova-sessao! tx ente)
+              ;; start intencionalmente omitido — a costura fail-closed do boot e' provada por costura-relacoes-sessoes;
+              ;; aqui prova-se o caminho de RESOLUCAO por nome (resolver-para), nao o assert de boot.
+              registro (registro-fatos/registro-fatos rel-sessoes/relacoes)
+              resolver (registro-fatos/resolver-para registro tx)]
+          (ev! tx ente sid a {:modalidade "plenario" :ocorrido-em t10})
+          (ev! tx ente sid b {:modalidade "remoto"   :ocorrido-em t10})
+          (is (= 1 (resolver "presentes_plenario" [sid t11])) "exatamente A no plenario via resolver")
+          (is (= 1 (resolver "presentes_remoto"   [sid t11])) "exatamente B no remoto via resolver"))))))

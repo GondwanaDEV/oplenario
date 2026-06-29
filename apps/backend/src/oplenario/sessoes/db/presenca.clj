@@ -1,26 +1,15 @@
 (ns oplenario.sessoes.db.presenca
   "Persistencia da PRESENCA (§22.6 eixo C, F4.3a) — funcoes sobre a `tx` do tenant (RLS isola). presenca_evento
-  e' APPEND-ONLY; a presenca CORRENTE e' DERIVADA do ultimo evento por vereador ate um instante (DISTINCT ON
-  vereador ORDER BY ocorrido_em DESC), com o desempate de mesmo instante por precedencia de fonte
-  (manual_secretaria > painel_eletronico > inferida_*). `esta-presente-em?` e os agregadores
-  `presentes-plenario`/`presentes-remoto` sao o insumo do quorum, expostos a DSL do motor em F4.3b.
-  justificativa_ausencia e' ato apartado com state machine (decidir-justificativa! = CAS + transicao validada).
-  HoneySQL schema-qualified; ente_id em toda query."
+  e' APPEND-ONLY (registrar-evento! / listar-eventos = auditoria). A presenca DERIVADA (esta-presente-em? + os
+  agregadores de quorum) vive em sessoes/relacoes/presenca (camada de relacao, F4.3b — ADR-0001 §3-bis: o db/
+  nao e' importado por relacoes; ambos escrevem HoneySQL). justificativa_ausencia e' ato apartado com state
+  machine (decidir-justificativa! = CAS + transicao validada). HoneySQL schema-qualified; ente_id em toda query."
   (:require [honey.sql :as sql]
             [next.jdbc :as jdbc]
             [oplenario.kernel.db-util :as comum]
             [oplenario.sessoes.logic :as logic]))
 
 (set! *warn-on-reflection* true)
-
-;; Ordem canonica do "ultimo evento por vereador" (§22.6 eixo C): mais recente primeiro, desempatando MESMO
-;; instante pela precedencia da fonte (manual>painel>inferida, materializada em `fonte_precedencia` — generated
-;; stored, indexada) e por fim id. UMA constante p/ os dois caminhos (derivacao por vereador e agregadores) —
-;; divergir aqui seria incoerencia de quorum (esta-presente? diz presente, agregador omite).
-(def ^:private ordem-corrente
-  [[:ocorrido_em :desc] [:fonte_precedencia :desc] [:id :desc]])
-
-(def ^:private positivos (vec (sort logic/tipos-presenca-positiva)))
 
 ;; ---------- presenca_evento (append-only) ----------
 
@@ -47,47 +36,6 @@
                   :from [:sessoes.presenca_evento]
                   :where [:and [:= :ente_id ente-id] [:= :sessao_id sessao-id]]
                   :order-by [[:ocorrido_em :asc] [:id :asc]]}))))
-
-(defn- ultimos-eventos-q
-  "Subquery: o ULTIMO evento por vereador ate `instante` (DISTINCT ON vereador), na ordem canonica. Projeta
-  vereador/tipo/modalidade — base dos agregadores de quorum."
-  [ente-id sessao-id instante]
-  {:select-distinct-on [[:vereador_id] :vereador_id :tipo :modalidade]
-   :from [:sessoes.presenca_evento]
-   :where [:and [:= :ente_id ente-id] [:= :sessao_id sessao-id] [:<= :ocorrido_em instante]]
-   :order-by (into [[:vereador_id :asc]] ordem-corrente)})
-
-(defn esta-presente-em?
-  "O vereador esta presente na sessao em `instante`? = o tipo do seu ultimo evento (ate `instante`) e' positivo.
-  Sem evento ate la = ausente. WHERE fixa o vereador -> basta a linha mais recente na ordem canonica (LIMIT 1)."
-  [tx ente-id sessao-id vereador-id instante]
-  (let [row (-> (jdbc/execute-one! tx
-                  (sql/format {:select [:tipo]
-                               :from [:sessoes.presenca_evento]
-                               :where [:and [:= :ente_id ente-id] [:= :sessao_id sessao-id]
-                                       [:= :vereador_id vereador-id] [:<= :ocorrido_em instante]]
-                               :order-by ordem-corrente
-                               :limit 1}))
-                comum/linha->kebab)]
-    (boolean (and row (logic/presente-por-tipo? (:tipo row))))))
-
-(defn- contar-presentes [tx ente-id sessao-id instante modalidade]
-  (-> (jdbc/execute-one! tx
-        (sql/format {:select [[[:count :*] :n]]
-                     :from [[(ultimos-eventos-q ente-id sessao-id instante) :u]]
-                     :where [:and [:in :u.tipo positivos] [:= :u.modalidade modalidade]]}))
-      comum/linha->kebab :n))
-
-(defn presentes-plenario
-  "Quorum presencial: nº de vereadores cujo ultimo evento ate `instante` e' presente em modalidade 'plenario'.
-  Agregador exposto a DSL do motor de votacao (F4.3b)."
-  [tx ente-id sessao-id instante]
-  (contar-presentes tx ente-id sessao-id instante "plenario"))
-
-(defn presentes-remoto
-  "Quorum remoto: idem, modalidade 'remoto'. Agregador exposto a DSL do motor de votacao (F4.3b)."
-  [tx ente-id sessao-id instante]
-  (contar-presentes tx ente-id sessao-id instante "remoto"))
 
 ;; ---------- justificativa_ausencia (ato apartado, state machine) ----------
 

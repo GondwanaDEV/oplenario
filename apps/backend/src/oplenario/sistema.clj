@@ -12,7 +12,8 @@
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.kernel.outbox :as outbox]
             [oplenario.motor.components.registro-fatos :as registro-fatos]
-            [oplenario.motor.components.repositorio :as repo-motor]))
+            [oplenario.motor.components.repositorio :as repo-motor]
+            [oplenario.sessoes.relacoes.presenca :as rel-sessoes]))
 
 (defn- fundir-relacoes
   "Funde os mapas {nome → fn} de relação dos módulos FALHANDO em colisão de nome (fail-closed na borda
@@ -42,4 +43,4 @@
    ;; O motor chama por nome (resolver-para), nunca importa o módulo. Sem :datasource — a `tx` do tenant
    ;; entra por-chamada (quem avalia abre a tx via Repo). O `start` roda o assert de costura (fail-closed).
    :registro-fatos  (registro-fatos/registro-fatos
-                     (fundir-relacoes rel-cadastros/relacoes rel-identidade/relacoes))))
+                     (fundir-relacoes rel-cadastros/relacoes rel-identidade/relacoes rel-sessoes/relacoes))))

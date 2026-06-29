@@ -6,7 +6,8 @@
   (:require [oplenario.kernel.tenancy :as tenancy]
             [oplenario.sessoes.db.pauta :as pauta]
             [oplenario.sessoes.db.presenca :as presenca]
-            [oplenario.sessoes.db.sessao :as sessao]))
+            [oplenario.sessoes.db.sessao :as sessao]
+            [oplenario.sessoes.relacoes.presenca :as rel-presenca]))
 
 (defprotocol RepoSessoes
   (transacao [this ente-id f] "Roda (f tx) numa UNICA tx do tenant — compoe acoes atomicamente.")
@@ -60,9 +61,9 @@
   (versao-publica-corrente [this ente-id pauta-sessao-id] (transacao this ente-id #(pauta/versao-publica-corrente % ente-id pauta-sessao-id)))
   (registrar-presenca! [this ente-id m] (transacao this ente-id #(presenca/registrar-evento! % (assoc m :ente-id ente-id))))
   (listar-presenca [this ente-id sessao-id] (transacao this ente-id #(presenca/listar-eventos % ente-id sessao-id)))
-  (esta-presente? [this ente-id sessao-id vereador-id instante] (transacao this ente-id #(presenca/esta-presente-em? % ente-id sessao-id vereador-id instante)))
-  (presentes-plenario [this ente-id sessao-id instante] (transacao this ente-id #(presenca/presentes-plenario % ente-id sessao-id instante)))
-  (presentes-remoto [this ente-id sessao-id instante] (transacao this ente-id #(presenca/presentes-remoto % ente-id sessao-id instante)))
+  (esta-presente? [this ente-id sessao-id vereador-id instante] (transacao this ente-id #(rel-presenca/esta-presente-em? % sessao-id vereador-id instante)))
+  (presentes-plenario [this ente-id sessao-id instante] (transacao this ente-id #(rel-presenca/presentes-plenario % sessao-id instante)))
+  (presentes-remoto [this ente-id sessao-id instante] (transacao this ente-id #(rel-presenca/presentes-remoto % sessao-id instante)))
   (criar-justificativa! [this ente-id m] (transacao this ente-id #(presenca/criar-justificativa! % (assoc m :ente-id ente-id))))
   (buscar-justificativa [this ente-id id] (transacao this ente-id #(presenca/buscar-justificativa % ente-id id)))
   (decidir-justificativa! [this ente-id m] (transacao this ente-id #(presenca/decidir-justificativa! % (assoc m :ente-id ente-id)))))
