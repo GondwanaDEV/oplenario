@@ -7,6 +7,7 @@
   (:require [oplenario.http :as http]
             [oplenario.interceptors :as it]
             [oplenario.sessoes.adapters.in.sessao :as adapters-in]
+            [oplenario.sessoes.adapters.out.pauta :as adapters-out-pauta]
             [oplenario.sessoes.adapters.out.sessao :as adapters-out]
             [oplenario.sessoes.controllers :as controllers]))
 
@@ -20,6 +21,17 @@
           id   (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
       (if-let [s (controllers/buscar-sessao repo-sessoes ator id)]
         (http/json-resposta 200 (adapters-out/sessao->wire s))
+        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+
+(defn- pauta-handler
+  "GET /sessoes/:id/pauta. adapters/in coage o :id; controller carrega+autoriza a sessao e le a pauta viva;
+  adapters/out projeta. nil (sessao inexistente) -> 404."
+  [repo-sessoes]
+  (fn [req]
+    (let [ator (:ator req)
+          id   (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [p (controllers/pauta-da-sessao repo-sessoes ator id)]
+        (http/json-resposta 200 (adapters-out-pauta/pauta->wire p))
         (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
 
 (defn- agendar-handler
@@ -40,4 +52,5 @@
   [{:keys [auth repo-sessoes]}]
   #{["/sessoes"     :post [auth (it/exige-papel "secretario") it/corpo-json (agendar-handler repo-sessoes)]
      :route-name :sessoes/agendar]
-    ["/sessoes/:id" :get  [auth (buscar-handler repo-sessoes)] :route-name :sessoes/buscar]})
+    ["/sessoes/:id" :get  [auth (buscar-handler repo-sessoes)] :route-name :sessoes/buscar]
+    ["/sessoes/:id/pauta" :get [auth (pauta-handler repo-sessoes)] :route-name :sessoes/pauta]})

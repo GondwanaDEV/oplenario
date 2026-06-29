@@ -24,3 +24,21 @@
    [:aberta-em {:optional true} [:maybe :string]]
    [:encerrada-em {:optional true} [:maybe :string]]
    [:motivo-nao-realizada {:optional true} [:maybe :string]]])
+
+(def PautaItemOut
+  "Projecao publica de um item ATIVO da pauta (§22.6 eixo B). NAO expoe internos (ente-id, pauta-sessao-id,
+  lock-version, ativo). FK-por-tipo: 'proposicao' carrega proposicao-id (string); os demais, texto-descricao."
+  [:map {:closed true}
+   [:id :string]
+   [:fase (km/enum-de logic/fases-pauta)]
+   [:tipo-item (km/enum-de logic/tipos-item-pauta)]
+   [:proposicao-id {:optional true} [:maybe :string]]
+   [:texto-descricao {:optional true} [:maybe :string]]
+   [:ordem :int]])
+
+(def PautaOut
+  "Pauta viva da sessao (resposta de GET /sessoes/:id/pauta) — o sessao-id + os itens ativos em ordem.
+  Pauta opcional: sessao sem pauta criada projeta `itens` vazio."
+  [:map {:closed true}
+   [:sessao-id :string]
+   [:itens [:sequential PautaItemOut]]])
