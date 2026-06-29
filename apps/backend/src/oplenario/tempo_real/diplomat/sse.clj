@@ -59,22 +59,27 @@
 
 (defn- stream-ready
   "stream-ready-fn do Pedestal SSE: roda numa thread por conexao. Faz replay desde o cursor (Last-Event-ID) e
-  poll incremental ate o cliente cair. `send-event` devolve false em canal fechado (>!! em canal closed) — e' o
-  sinal de desconexao; sem evento novo, um heartbeat (CRLF) sonda o mesmo. Fecha o event-channel ao sair."
+  poll incremental ate o cliente cair. CONTRATO do Pedestal (start-dispatch-loop): a app poe MAPAS
+  {:name :data :id} no event-channel — o loop e' quem encoda (chama send-event internamente). Por isso NAO
+  chamamos `sse/send-event` aqui (isso poria o byte-array ja-encodado no canal, e o loop o re-encodaria como
+  `data: [B@...`). `>!!` devolve false em canal fechado (cliente caiu) -> encerra. Sem evento novo, um probe
+  (mapa de data vazia) sonda a conexao. Bug pego no E2E do FE.1 (G3 nao cobriu o glue de wire feliz)."
   [canal-store]
   (fn [event-ch ctx]
     (let [nome-canal (get-in ctx [:request k-canal])
           cursor0    (get-in ctx [:request k-cursor])
           enviar!    (fn [msg]
+                       ;; poe o MAPA no canal (o dispatch loop do Pedestal encoda); true=ok, false=canal fechado
                        (let [{event-name :name :keys [data id]} (adapters-out/mensagem->frame msg)]
-                         (sse/send-event event-ch event-name data id)))]
+                         (async/>!! event-ch {:name event-name :data data :id id})))]
       (try
         (loop [c cursor0]
           (let [[novo vivo?] (controllers/enviar-desde canal-store nome-canal c enviar!)]
             (cond
               (not vivo?) (async/close! event-ch)            ; cliente desconectou (envio falhou) -> encerra
-              ;; nada/algo enviado e canal vivo: heartbeat sonda a conexao e mantem viva; false = caiu -> encerra
-              (false? (async/>!! event-ch sse/CRLF)) (async/close! event-ch)
+              ;; sem evento novo: probe de liveness (mapa de data vazia = linha `data:` que o cliente ignora);
+              ;; false = canal fechado pelo Pedestal na desconexao -> encerra
+              (false? (async/>!! event-ch {:name nil :data "" :id nil})) (async/close! event-ch)
               :else (do (Thread/sleep ^long poll-ms) (recur novo)))))
         (catch InterruptedException _
           (.interrupt (Thread/currentThread))               ; restaura o status de interrupcao (interop Java)
