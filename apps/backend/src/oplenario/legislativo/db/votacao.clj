@@ -14,17 +14,21 @@
 
 (def ^:private colunas
   [:id :ente_id :objeto_tipo :objeto_id :modalidade :quorum_tipo :estado :resultado
-   :total_sim :total_nao :total_abstencao :base_membros :votacao_corrige_id :sessao_id :lock_version])
+   :total_sim :total_nao :total_abstencao :base_membros :votacao_corrige_id
+   :sessao_id :pauta_item_id :lock_version])
 
 (defn abrir!
-  "Abre uma votacao (estado 'aberta') sobre o objeto polimorfico (objeto-tipo,objeto-id). Devolve {:id}."
-  [tx {:keys [id ente-id objeto-tipo objeto-id modalidade quorum-tipo votacao-corrige-id sessao-id created-by]}]
+  "Abre uma votacao (estado 'aberta') sobre o objeto polimorfico (objeto-tipo,objeto-id). `sessao-id` +
+  `pauta-item-id` (ambos forward-ref a sessoes, §22.10) sao CONTEXTO TEMPORAL — a votacao e' sobre a
+  MATERIA (objeto), nao sobre o item (§22.6 eixo B). Devolve {:id}."
+  [tx {:keys [id ente-id objeto-tipo objeto-id modalidade quorum-tipo votacao-corrige-id
+              sessao-id pauta-item-id created-by]}]
   (jdbc/execute-one! tx
     (sql/format {:insert-into :legislativo.votacoes
                  :values [{:id id :ente_id ente-id :objeto_tipo objeto-tipo :objeto_id objeto-id
                            :modalidade modalidade :quorum_tipo quorum-tipo :estado "aberta"
                            :votacao_corrige_id votacao-corrige-id :sessao_id sessao-id
-                           :created_by created-by :efetivado_em [:now]}]}))
+                           :pauta_item_id pauta-item-id :created_by created-by :efetivado_em [:now]}]}))
   {:id id})
 
 (defn registrar-voto!

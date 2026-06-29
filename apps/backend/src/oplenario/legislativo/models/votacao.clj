@@ -23,5 +23,7 @@
    [:base-membros {:optional true} [:maybe :int]]
    ;; correcao = nova votacao apontando a corrigida
    [:votacao-corrige-id {:optional true} [:maybe :uuid]]
+   ;; contexto temporal na sessao (forward-ref §22.10) — votacao e' sobre a materia, nao o item (§22.6 eixo B)
    [:sessao-id {:optional true} [:maybe :uuid]]
+   [:pauta-item-id {:optional true} [:maybe :uuid]]
    [:lock-version :int]])
