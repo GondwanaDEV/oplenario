@@ -12,6 +12,12 @@
   "Coordenada temporal absoluta (java.time.Instant)."
   [:fn {:error/message "deve ser java.time.Instant"} #(instance? Instant %)])
 
+(defn enum-de
+  "[:enum ...] a partir de um conjunto de valores, em ordem estavel (dado de schema; nao chama malli.core).
+  Reusavel pelos wire/ e models/ dos modulos (os enums espelham os vocabularios de logic/ + CHECK das migrations)."
+  [valores]
+  (into [:enum] (sort valores)))
+
 (def Polimorfico
   "Referencia polimorfica (objeto_tipo, objeto_id) — §22.9 Eixo 2; integridade em camadas
   (guard de servico + indice por objeto_tipo + CHECK XOR so nas relacoes quentes)."

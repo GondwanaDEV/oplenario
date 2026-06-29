@@ -4,17 +4,20 @@
   monta /saude (publica) + /eu (auth) + /painel-secretaria (auth + papel). W3 adiciona as rotas-dado de cada
   modulo (com o servidor `using` os Repo). `montar` recebe os deps ja injetados (idp + repo-identidade)."
   (:require [oplenario.http :as http]
-            [oplenario.interceptors :as it]))
+            [oplenario.interceptors :as it]
+            [oplenario.sessoes.diplomat.http.in :as sessoes-http]))
 
 (set! *warn-on-reflection* true)
 
 (defn montar
   "Conjunto de rotas Pedestal (table syntax) a partir dos deps do servidor. `erro`/`cabecalhos` sao GLOBAIS
   (it/globais prepended em http/servico) — nao por rota. Aqui: `autenticacao` resolve o ator; `exige-papel`
-  faz a authz grossa."
-  [{:keys [idp repo-identidade]}]
+  faz a authz grossa. As verticais de modulo (W3+) fundem seus fragmentos de rota (diplomat/http/in/rotas),
+  recebendo o interceptor `auth` compartilhado + o Repo-Component do modulo."
+  [{:keys [idp repo-identidade repo-sessoes]}]
   (let [auth (it/autenticacao idp repo-identidade)]
-    #{["/saude"             :get http/saude :route-name :saude]
-      ["/eu"                :get [auth http/eu] :route-name :eu]
-      ["/painel-secretaria" :get [auth (it/exige-papel "secretario") http/painel-secretaria]
-       :route-name :painel-secretaria]}))
+    (into #{["/saude"             :get http/saude :route-name :saude]
+            ["/eu"                :get [auth http/eu] :route-name :eu]
+            ["/painel-secretaria" :get [auth (it/exige-papel "secretario") http/painel-secretaria]
+             :route-name :painel-secretaria]}
+          (sessoes-http/rotas {:auth auth :repo-sessoes repo-sessoes}))))

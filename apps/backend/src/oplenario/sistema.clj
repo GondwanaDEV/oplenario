@@ -82,7 +82,8 @@
          ;; IdP por ambiente (idp-para = guard: idp-dev so dev/test; prod exige Keycloak, carry F1.4 -> lanca).
          :idp (idp-para config)
          ;; servidor `using` idp + repo-identidade -> a rotas-fn (rotas/montar) monta o interceptor de auth
-         ;; sobre as instancias iniciadas. W3 acrescenta os Repo de modulo ao `using` p/ as rotas-dado.
+         ;; sobre as instancias iniciadas. W3: +repo-sessoes p/ a vertical de rotas de sessoes (o fan-out por
+         ;; modulo acrescenta cada Repo aqui).
          :servidor-http (component/using
                          (http-servidor/servidor-http config rotas/montar)
-                         [:idp :repo-identidade])))
+                         [:idp :repo-identidade :repo-sessoes])))
