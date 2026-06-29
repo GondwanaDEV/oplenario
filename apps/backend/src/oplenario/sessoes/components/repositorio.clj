@@ -8,6 +8,7 @@
             [oplenario.sessoes.db.pauta :as pauta]
             [oplenario.sessoes.db.presenca :as presenca]
             [oplenario.sessoes.db.sessao :as sessao]
+            [oplenario.sessoes.db.tribuna :as tribuna]
             [oplenario.sessoes.relacoes.presenca :as rel-presenca]))
 
 (defprotocol RepoSessoes
@@ -44,7 +45,12 @@
   (registrar-segmento! [this ente-id m] "Grava segmento de gravacao (captura/ingestao); sessao_id opcional (Opcao A).")
   (vincular-segmento! [this ente-id m] "Vincula um segmento a sessao (uma-vez, CAS).")
   (buscar-segmento [this ente-id id])
-  (listar-segmentos-da-sessao [this ente-id sessao-id] "Segmentos da sessao em ordem cronologica (read-model)."))
+  (listar-segmentos-da-sessao [this ente-id sessao-id] "Segmentos da sessao em ordem cronologica (read-model).")
+  ;; §22.6 eixo F — tribuna: inscricao de oradores (intencao)
+  (inscrever! [this ente-id m] "Inscreve um orador (intencao); numera a fila por (sessao, fase). Devolve {:id :ordem}.")
+  (buscar-inscricao [this ente-id id])
+  (listar-inscricoes [this ente-id sessao-id] "Fila de oradores da sessao (por fase + ordem).")
+  (desistir! [this ente-id m] "Move a inscricao para 'desistencia' (terminal) via maquina + CAS."))
 
 (defrecord RepoSessoesPg [datasource bus]
   RepoSessoes
@@ -76,7 +82,11 @@
   (registrar-segmento! [this ente-id m] (transacao this ente-id #(gravacao/registrar-segmento! % (assoc m :ente-id ente-id))))
   (vincular-segmento! [this ente-id m] (transacao this ente-id #(gravacao/vincular-segmento! % (assoc m :ente-id ente-id))))
   (buscar-segmento [this ente-id id] (transacao this ente-id #(gravacao/buscar % ente-id id)))
-  (listar-segmentos-da-sessao [this ente-id sessao-id] (transacao this ente-id #(gravacao/listar-segmentos-da-sessao % ente-id sessao-id))))
+  (listar-segmentos-da-sessao [this ente-id sessao-id] (transacao this ente-id #(gravacao/listar-segmentos-da-sessao % ente-id sessao-id)))
+  (inscrever! [this ente-id m] (transacao this ente-id #(tribuna/inscrever! % (assoc m :ente-id ente-id))))
+  (buscar-inscricao [this ente-id id] (transacao this ente-id #(tribuna/buscar-inscricao % ente-id id)))
+  (listar-inscricoes [this ente-id sessao-id] (transacao this ente-id #(tribuna/listar-inscricoes % ente-id sessao-id)))
+  (desistir! [this ente-id m] (transacao this ente-id #(tribuna/desistir! % (assoc m :ente-id ente-id)))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

@@ -226,3 +226,35 @@
   [fonte]
   (when-not (contains? fontes-ingestao-gravacao fonte)
     (throw (ex-info "fonte de ingestao de gravacao invalida" {:fonte fonte :validas fontes-ingestao-gravacao}))))
+
+;; ---------- §22.6 eixo F — tribuna: inscricao de oradores (F4.5a) ----------
+;; A inscricao e' a camada de INTENCAO (intencao != execucao): pode terminar em `desistencia` SEM gerar fala.
+;; Subordinada a FASE da pauta (reusa `fases-pauta`). Os vocabularios espelham os CHECK da migration 0032.
+
+(def origens-inscricao
+  "Os 4 caminhos pelos quais um orador se inscreve (§22.6 eixo F): pelo app (vereador), pela secretaria,
+  pedido intra-sessao, ou automatica por autoria (o autor da materia entra na fila ao ir a ordem do dia)."
+  #{"pre_sessao_app" "pre_sessao_secretaria" "intra_sessao_pedido" "automatica_por_autoria"})
+
+(def estados-inscricao
+  "Ciclo da intencao: nasce 'inscrita' e pode terminar em 'desistencia' (terminal, sem fala). Nome `estado`
+  (nao `situacao`) p/ alinhar a coluna ao shared.imut_trava_estado_terminal, como justificativa_ausencia."
+  #{"inscrita" "desistencia"})
+
+(def estados-inscricao-terminais #{"desistencia"})
+
+(def transicoes-inscricao
+  "inscrita -> desistencia (terminal). O CHECK da mig 0032 + o terminal-lock trigger espelham."
+  {"inscrita"    #{"desistencia"}
+   "desistencia" #{}})
+
+(defn transicao-inscricao-valida?
+  "A transicao de->para da inscricao e' permitida? (terminal nao sai). Puro."
+  [de para]
+  (contains? (get transicoes-inscricao de #{}) para))
+
+(defn validar-origem-inscricao
+  "Fail-closed: lanca se `origem` de inscricao nao e' um dos 4 caminhos conhecidos."
+  [origem]
+  (when-not (contains? origens-inscricao origem)
+    (throw (ex-info "origem de inscricao invalida" {:origem origem :validas origens-inscricao}))))
