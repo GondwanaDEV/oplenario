@@ -4,6 +4,7 @@
   record segura o :datasource (via `using`); o db/ e' a IMPL. O controller depende DESTE Component, nunca do
   db/ direto. (Eventos de dominio Sessao*/real-time = eixos posteriores do F4.)"
   (:require [oplenario.kernel.tenancy :as tenancy]
+            [oplenario.sessoes.diplomat.producers :as producers]
             [oplenario.sessoes.db.gravacao :as gravacao]
             [oplenario.sessoes.db.pauta :as pauta]
             [oplenario.sessoes.db.presenca :as presenca]
@@ -68,7 +69,18 @@
   RepoSessoes
   (transacao [_ ente-id f] (tenancy/com-tenant* (:ds datasource) ente-id f))
   (agendar-sessao! [this ente-id m] (transacao this ente-id #(sessao/agendar! % (assoc m :ente-id ente-id))))
-  (transicionar-sessao! [this ente-id m] (transacao this ente-id #(sessao/transicionar! % (assoc m :ente-id ente-id))))
+  ;; §22.6 eixo G — compoe o ato + a emissao do evento de tempo real na MESMA tx (atomicidade §22.9 E2).
+  (transicionar-sessao! [this ente-id m]
+    (transacao this ente-id
+      (fn [tx]
+        (let [r (sessao/transicionar! tx (assoc m :ente-id ente-id))]
+          ;; so emite numa MUDANCA real de estado (de != para) — guard explicito contra evento espurio
+          ;; (a maquina hoje lanca em transicao invalida/redundante, mas o contrato fica explicito aqui).
+          (when (not= (:de r) (:para r))
+            (producers/emitir-sessao-transicionou! bus tx ente-id
+              (cond-> {:sessao-id (:id m) :de (:de r) :para (:para r)}
+                (:updated-by m) (assoc :ator-id (:updated-by m)))))
+          r))))
   (buscar-sessao [this ente-id id] (transacao this ente-id #(sessao/buscar % ente-id id)))
   (sessoes-da-legislativa [this ente-id slid] (transacao this ente-id #(sessao/listar-por-sessao-legislativa % ente-id slid)))
   (criar-pauta! [this ente-id m] (transacao this ente-id #(pauta/criar-pauta! % (assoc m :ente-id ente-id))))
@@ -83,7 +95,14 @@
   (buscar-versao [this ente-id id] (transacao this ente-id #(pauta/buscar-versao % ente-id id)))
   (listar-versoes [this ente-id pauta-sessao-id] (transacao this ente-id #(pauta/listar-versoes % ente-id pauta-sessao-id)))
   (versao-publica-corrente [this ente-id pauta-sessao-id] (transacao this ente-id #(pauta/versao-publica-corrente % ente-id pauta-sessao-id)))
-  (registrar-presenca! [this ente-id m] (transacao this ente-id #(presenca/registrar-evento! % (assoc m :ente-id ente-id))))
+  (registrar-presenca! [this ente-id m]
+    (transacao this ente-id
+      (fn [tx]
+        (let [r (presenca/registrar-evento! tx (assoc m :ente-id ente-id))]
+          (producers/emitir-presenca-registrada! bus tx ente-id
+            {:sessao-id (:sessao-id m) :vereador-id (:vereador-id m) :tipo (:tipo m)
+             :modalidade (:modalidade m) :fonte (:fonte m) :ocorrido-em (str (:ocorrido-em m))})
+          r))))
   (listar-presenca [this ente-id sessao-id] (transacao this ente-id #(presenca/listar-eventos % ente-id sessao-id)))
   (esta-presente? [this ente-id sessao-id vereador-id instante] (transacao this ente-id #(rel-presenca/esta-presente-em? % sessao-id vereador-id instante)))
   (presentes-plenario [this ente-id sessao-id instante] (transacao this ente-id #(rel-presenca/presentes-plenario % sessao-id instante)))
@@ -99,9 +118,33 @@
   (buscar-inscricao [this ente-id id] (transacao this ente-id #(tribuna/buscar-inscricao % ente-id id)))
   (listar-inscricoes [this ente-id sessao-id] (transacao this ente-id #(tribuna/listar-inscricoes % ente-id sessao-id)))
   (desistir! [this ente-id m] (transacao this ente-id #(tribuna/desistir! % (assoc m :ente-id ente-id))))
-  (iniciar-fala! [this ente-id m] (transacao this ente-id #(tribuna/iniciar-fala! % (assoc m :ente-id ente-id))))
-  (registrar-evento-cronometro! [this ente-id m] (transacao this ente-id #(tribuna/registrar-evento-cronometro! % (assoc m :ente-id ente-id))))
-  (encerrar-fala! [this ente-id m] (transacao this ente-id #(tribuna/encerrar-fala! % (assoc m :ente-id ente-id))))
+  (iniciar-fala! [this ente-id m]
+    (transacao this ente-id
+      (fn [tx]
+        (let [r (tribuna/iniciar-fala! tx (assoc m :ente-id ente-id))]
+          (producers/emitir-fala-iniciada! bus tx ente-id
+            (cond-> {:fala-id (:id m) :sessao-id (:sessao-id m) :orador-id (:orador-id m)
+                     :tipo-fala (:tipo-fala m) :fase (:fase m) :iniciou-em (str (:iniciou-em m))}
+              (:inscricao-id m) (assoc :inscricao-id (:inscricao-id m))))
+          r))))
+  (registrar-evento-cronometro! [this ente-id m]
+    (transacao this ente-id
+      (fn [tx]
+        (let [r   (tribuna/registrar-evento-cronometro! tx (assoc m :ente-id ente-id))
+              sid (:sessao-id (tribuna/buscar-fala tx ente-id (:fala-id m)))]  ; sessao-id p/ rotear o canal
+          (producers/emitir-fala-cronometro! bus tx ente-id
+            (cond-> {:fala-id (:fala-id m) :sessao-id sid :tipo (:tipo m) :ocorrido-em (str (:ocorrido-em m))}
+              (:segundos-adicionais m) (assoc :segundos-adicionais (:segundos-adicionais m))))
+          r))))
+  (encerrar-fala! [this ente-id m]
+    (transacao this ente-id
+      (fn [tx]
+        (let [r (tribuna/encerrar-fala! tx (assoc m :ente-id ente-id))
+              f (tribuna/buscar-fala tx ente-id (:id m))]
+          (producers/emitir-fala-encerrada! bus tx ente-id
+            {:fala-id (:id m) :sessao-id (:sessao-id f)
+             :tempo-segundos (:tempo-efetivamente-usado-segundos r) :encerrou-em (str (:encerrou-em m))})
+          r))))
   (buscar-fala [this ente-id id] (transacao this ente-id #(tribuna/buscar-fala % ente-id id)))
   (listar-falas-da-sessao [this ente-id sessao-id] (transacao this ente-id #(tribuna/listar-falas-da-sessao % ente-id sessao-id)))
   (listar-apartes [this ente-id fala-pai-id] (transacao this ente-id #(tribuna/listar-apartes % ente-id fala-pai-id)))

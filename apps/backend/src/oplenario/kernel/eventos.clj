@@ -2,7 +2,8 @@
   "EventBus do kernel (§22.10): o envelope do evento de dominio + o protocolo `emitir!`.
   Parte PURA aqui (envelope + idempotency-key, §22.9 E2); a impl que grava no shared.outbox
   na tx corrente e' o producer (F0.2). O kernel nao importa modulo."
-  (:require [oplenario.kernel.ids :as ids]))
+  (:require [malli.core :as m]
+            [oplenario.kernel.ids :as ids]))
 
 (defprotocol EventBus
   (emitir! [bus tx evento]
@@ -22,3 +23,13 @@
    :ente-id         ente-id
    :payload         payload
    :idempotency-key (str (ids/novo-id))})
+
+(defn evento-validado
+  "Constroi o envelope VALIDANDO `payload` contra `schema` (Malli) na fonte: lanca :payload-invalido se nao
+  casa — o shared.outbox (cross-modulo e duravel, §22.9 E2) so recebe evento bem-formado. Reusavel por
+  qualquer modulo que construa eventos com contrato (events/)."
+  [schema tipo ente-id payload]
+  (when-not (m/validate schema payload)
+    (throw (ex-info (str "payload de " tipo " invalido (contrato do evento)")
+                    {:erro :payload-invalido :explain (m/explain schema payload)})))
+  (evento tipo ente-id payload))
