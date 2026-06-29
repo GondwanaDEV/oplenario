@@ -5,6 +5,7 @@
   db/ direto. (Eventos de dominio Sessao*/real-time = eixos posteriores do F4.)"
   (:require [oplenario.kernel.tenancy :as tenancy]
             [oplenario.sessoes.db.pauta :as pauta]
+            [oplenario.sessoes.db.presenca :as presenca]
             [oplenario.sessoes.db.sessao :as sessao]))
 
 (defprotocol RepoSessoes
@@ -27,7 +28,16 @@
   (publicar-versao! [this ente-id m] "Congela a pauta num snapshot canonico (numera local), append-only.")
   (buscar-versao [this ente-id id])
   (listar-versoes [this ente-id pauta-sessao-id])
-  (versao-publica-corrente [this ente-id pauta-sessao-id] "Maior numero_versao com publica=true."))
+  (versao-publica-corrente [this ente-id pauta-sessao-id] "Maior numero_versao com publica=true.")
+  ;; §22.6 eixo C — presenca e quorum (camada de fatos)
+  (registrar-presenca! [this ente-id m] "Grava evento de presenca append-only (entrada/saida/retorno/mudanca).")
+  (listar-presenca [this ente-id sessao-id] "Eventos da sessao em ordem cronologica (auditoria).")
+  (esta-presente? [this ente-id sessao-id vereador-id instante] "Presenca DERIVADA do ultimo evento ate o instante.")
+  (presentes-plenario [this ente-id sessao-id instante] "Quorum presencial em `instante` (insumo da DSL do motor).")
+  (presentes-remoto [this ente-id sessao-id instante] "Quorum remoto em `instante`.")
+  (criar-justificativa! [this ente-id m] "Abre justificativa de ausencia 'pendente' (ato apartado).")
+  (buscar-justificativa [this ente-id id])
+  (decidir-justificativa! [this ente-id m] "aprovada|indeferida (terminal) via maquina + CAS."))
 
 (defrecord RepoSessoesPg [datasource bus]
   RepoSessoes
@@ -47,7 +57,15 @@
   (publicar-versao! [this ente-id m] (transacao this ente-id #(pauta/publicar-versao! % (assoc m :ente-id ente-id))))
   (buscar-versao [this ente-id id] (transacao this ente-id #(pauta/buscar-versao % ente-id id)))
   (listar-versoes [this ente-id pauta-sessao-id] (transacao this ente-id #(pauta/listar-versoes % ente-id pauta-sessao-id)))
-  (versao-publica-corrente [this ente-id pauta-sessao-id] (transacao this ente-id #(pauta/versao-publica-corrente % ente-id pauta-sessao-id))))
+  (versao-publica-corrente [this ente-id pauta-sessao-id] (transacao this ente-id #(pauta/versao-publica-corrente % ente-id pauta-sessao-id)))
+  (registrar-presenca! [this ente-id m] (transacao this ente-id #(presenca/registrar-evento! % (assoc m :ente-id ente-id))))
+  (listar-presenca [this ente-id sessao-id] (transacao this ente-id #(presenca/listar-eventos % ente-id sessao-id)))
+  (esta-presente? [this ente-id sessao-id vereador-id instante] (transacao this ente-id #(presenca/esta-presente-em? % ente-id sessao-id vereador-id instante)))
+  (presentes-plenario [this ente-id sessao-id instante] (transacao this ente-id #(presenca/presentes-plenario % ente-id sessao-id instante)))
+  (presentes-remoto [this ente-id sessao-id instante] (transacao this ente-id #(presenca/presentes-remoto % ente-id sessao-id instante)))
+  (criar-justificativa! [this ente-id m] (transacao this ente-id #(presenca/criar-justificativa! % (assoc m :ente-id ente-id))))
+  (buscar-justificativa [this ente-id id] (transacao this ente-id #(presenca/buscar-justificativa % ente-id id)))
+  (decidir-justificativa! [this ente-id m] (transacao this ente-id #(presenca/decidir-justificativa! % (assoc m :ente-id ente-id)))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

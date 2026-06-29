@@ -124,3 +124,67 @@
   (when (and (= "republicacao" tipo)
              (or (nil? justificativa) (str/blank? justificativa)))
     (throw (ex-info "republicacao exige justificativa" {:tipo tipo}))))
+
+;; ---------- §22.6 eixo C — presenca e quorum (F4.3a) ----------
+;; A presenca corrente nunca e' materializada: e' DERIVADA do ultimo evento por vereador ate um instante.
+;; Os vocabularios espelham os CHECK da migration 0029.
+
+(def tipos-evento-presenca
+  "Eventos de presenca append-only (descartado: presenca binaria; intervalos explicitos)."
+  #{"entrada" "saida" "retorno" "mudanca_modalidade"})
+
+(def modalidades-presenca
+  "Modalidade do vereador no instante do evento. V1 = Nivel 1: remoto e' marcado manualmente (sem integracao
+  de videoconferencia), por isso nao ha enum 'videoconferencia' aqui nem em `fontes-presenca`."
+  #{"plenario" "remoto"})
+
+(def fontes-presenca
+  "Fonte de captura do evento. As inferencias (vereador vota/usa tribuna sem check-in) viram evento concreto."
+  #{"painel_eletronico" "manual_secretaria" "inferida_por_voto" "inferida_por_tribuna"})
+
+(def tipos-presenca-positiva
+  "Tipos cujo ULTIMO evento mantem o vereador PRESENTE; 'saida' e' o unico que tira."
+  #{"entrada" "retorno" "mudanca_modalidade"})
+
+(def precedencia-fonte
+  "Precedencia em conflito de MESMO instante (§22.6 eixo C): manual_secretaria > painel_eletronico > inferida_*.
+  Usada como desempate ao escolher o ultimo evento por vereador (a consulta replica esta ordem em SQL)."
+  {"manual_secretaria" 3 "painel_eletronico" 2 "inferida_por_voto" 1 "inferida_por_tribuna" 1})
+
+(defn presente-por-tipo?
+  "O vereador esta presente se o tipo do seu ultimo evento e' positivo (entrada/retorno/mudanca_modalidade)?"
+  [tipo]
+  (contains? tipos-presenca-positiva tipo))
+
+(defn validar-tipo-evento
+  "Fail-closed: lanca se `tipo` nao esta em tipos-evento-presenca (espelha o CHECK da mig 0029)."
+  [tipo]
+  (when-not (contains? tipos-evento-presenca tipo)
+    (throw (ex-info "tipo de evento de presenca invalido" {:tipo tipo :validos tipos-evento-presenca}))))
+
+(defn validar-modalidade-presenca
+  "Fail-closed: lanca se `modalidade` nao e' plenario|remoto."
+  [modalidade]
+  (when-not (contains? modalidades-presenca modalidade)
+    (throw (ex-info "modalidade de presenca invalida" {:modalidade modalidade :validas modalidades-presenca}))))
+
+(defn validar-fonte
+  "Fail-closed: lanca se `fonte` de captura nao e' conhecida (V1 sem videoconferencia)."
+  [fonte]
+  (when-not (contains? fontes-presenca fonte)
+    (throw (ex-info "fonte de presenca invalida" {:fonte fonte :validas fontes-presenca}))))
+
+;; justificativa de ausencia — ato administrativo apartado, state machine pequena.
+(def estados-justificativa #{"pendente" "aprovada" "indeferida"})
+(def estados-justificativa-terminais #{"aprovada" "indeferida"})
+
+(def transicoes-justificativa
+  "pendente -> aprovada|indeferida (ambos terminais). O CHECK da mig 0029 + o terminal-lock trigger espelham."
+  {"pendente"   #{"aprovada" "indeferida"}
+   "aprovada"   #{}
+   "indeferida" #{}})
+
+(defn transicao-justificativa-valida?
+  "A transicao de->para da justificativa e' permitida? (`de`/`para` = estados; terminais nao saem). Puro."
+  [de para]
+  (contains? (get transicoes-justificativa de #{}) para))
