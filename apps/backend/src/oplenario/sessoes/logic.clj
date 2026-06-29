@@ -64,3 +64,41 @@
 (defn validar-modalidade [modalidade]
   (when (and (some? modalidade) (not (contains? modalidades-sessao modalidade)))
     (throw (ex-info "modalidade de sessao invalida" {:modalidade modalidade}))))
+
+;; ---------- §22.6 eixo B — pauta (F4.2a) ----------
+;; Os vocabularios espelham os CHECK da migration 0027.
+
+(def fases-pauta
+  "Fases da pauta como ATRIBUTO do item (descartado bloco-por-fase como entidade)."
+  #{"expediente" "grande_expediente" "ordem_do_dia" "explicacoes_pessoais" "tribuna_livre_cidadao"})
+
+(def tipos-item-pauta
+  "Tipos de item com enum fechado + FK declarativa por tipo (descartado polimorfismo): so 'proposicao'
+  carrega proposicao_id; os demais carregam texto_descricao."
+  #{"proposicao" "leitura" "comunicado" "homenagem"})
+
+(def tipos-alteracao-pauta
+  "Tipos de alteracao intra-sessao (eixo B), modeladas como eventos append-only."
+  #{"inclusao" "exclusao" "inversao" "retirada_pedido_autor"})
+
+(def tipos-remocao-pauta
+  "Subconjunto de alteracao que TIRA um item da pauta (remover-item!)."
+  #{"exclusao" "retirada_pedido_autor"})
+
+(defn item-requer-proposicao?
+  "So o tipo 'proposicao' aponta a uma materia (proposicao_id); o resto usa texto_descricao."
+  [tipo-item]
+  (= "proposicao" tipo-item))
+
+(defn validar-fase [fase]
+  (when-not (contains? fases-pauta fase)
+    (throw (ex-info "fase de pauta invalida" {:fase fase :validas fases-pauta}))))
+
+(defn validar-tipo-item [tipo-item]
+  (when-not (contains? tipos-item-pauta tipo-item)
+    (throw (ex-info "tipo de item de pauta invalido" {:tipo-item tipo-item :validos tipos-item-pauta}))))
+
+(defn validar-tipo-remocao [tipo]
+  (when-not (contains? tipos-remocao-pauta tipo)
+    (throw (ex-info "tipo de remocao de item invalido (so exclusao|retirada_pedido_autor)"
+                    {:tipo tipo :validos tipos-remocao-pauta}))))
