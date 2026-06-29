@@ -22,7 +22,7 @@
     (if (= "migrate" (first args))
       (do (migrar! cfg)
           (println "[oplenario] migrations aplicadas"))
-      (let [sys (component/start (sistema/novo-sistema cfg))]
+      (let [sys (component/start (sistema/sistema-serve cfg))]
         (.addShutdownHook (Runtime/getRuntime)
                           (Thread. ^Runnable (fn [] (component/stop sys))))
         (println "[oplenario] sistema no ar")

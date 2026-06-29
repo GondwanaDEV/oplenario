@@ -17,6 +17,7 @@
   ([] (carregar (System/getenv)))
   ([env]
    (cond-> (base)
+     (get env "APP_ENV")      (assoc :env (get env "APP_ENV"))
      (get env "DATABASE_URL") (assoc-in [:db :jdbc-url] (get env "DATABASE_URL"))
      (get env "DB_USER")      (assoc-in [:db :user]     (get env "DB_USER"))
      (get env "DB_PASSWORD")  (assoc-in [:db :password] (get env "DB_PASSWORD"))
