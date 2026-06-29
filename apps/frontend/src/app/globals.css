@@ -1,0 +1,10 @@
+/* Fundação de estilo do front (track FE): a "República Luminosa" vem dos artefatos canônicos do
+   design-system, copiados VERBATIM (tokens.css + chassi.css) — o front PORTA, não reinventa. A ordem
+   importa: @import sempre antes de qualquer regra; tokens antes do chassi; o chassi depois do Tailwind
+   para que a base do chassi (body, reset) prevaleça sobre o preflight.
+   NOTA (carry): as fontes vêm hoje do Google Fonts (como as telas HTML). Self-host das fontes (§22.9
+   eixo 8) é refinamento posterior — trocar por next/font sem mudar os nomes de família dos tokens. */
+@import url("https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap");
+@import "tailwindcss";
+@import "./tokens.css";
+@import "./chassi.css";
