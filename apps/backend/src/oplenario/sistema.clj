@@ -9,7 +9,9 @@
             [oplenario.identidade.components.repositorio :as repo-identidade]
             [oplenario.identidade.relacoes.identidade :as rel-identidade]
             [oplenario.legislativo.components.repositorio :as repo-legislativo]
+            [oplenario.http :as oplenario-http]
             [oplenario.kernel.components.datasource :as datasource]
+            [oplenario.kernel.components.http-servidor :as http-servidor]
             [oplenario.kernel.components.outbox-relay :as outbox-relay]
             [oplenario.kernel.outbox :as outbox]
             [oplenario.motor.components.registro-fatos :as registro-fatos]
@@ -59,3 +61,11 @@
    ;; entra por-chamada (quem avalia abre a tx via Repo). O `start` roda o assert de costura (fail-closed).
    :registro-fatos  (registro-fatos/registro-fatos
                      (fundir-relacoes rel-cadastros/relacoes rel-identidade/relacoes rel-sessoes/relacoes)))))
+
+(defn sistema-serve
+  "Sistema do host com o SERVIDOR HTTP (caminho `serve` do main). Separado de `novo-sistema` p/ os testes de
+  boot do dominio (sistema_test/motor/repo/marco) NAO subirem o Jetty (sem bind de porta em teste). W1 serve so
+  /saude; W2/W3 enriquecem as rotas (auth/tenancy + rotas-dado de modulo, com o servidor `using` os Repo)."
+  [config]
+  (assoc (novo-sistema config)
+         :servidor-http (http-servidor/servidor-http config oplenario-http/rotas-saude)))
