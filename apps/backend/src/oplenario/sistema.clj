@@ -37,10 +37,20 @@
 (defn novo-sistema
   "Monta o sistema a partir do config carregado. Cresce por agregacao conforme os modulos chegam."
   [config]
-  ;; §22.6 eixo G — backplane do tempo real: a CanalStore (em memoria, G2; Valkey em G3) e' construida eagerly
-  ;; (sem Lifecycle) p/ que o registro de consumidores do bus feche sobre ela. O relay drena o shared.outbox e
-  ;; despacha aos consumidores do projetor SSE => 'SSE e' projecao do bus interno'.
-  (let [canal-store (tr-comp/canal-store-memoria)
+  ;; §22.6 eixo G — backplane do tempo real: a CanalStore e' construida eagerly p/ que o registro de consumidores
+  ;; do bus feche sobre ELA (a impl Valkey muta a conexao in-place no start, entao a mesma instancia capturada
+  ;; aqui enxerga o pool aberto). Selecao por config: :memoria (dev/teste/1 no) | :valkey (prod multi-replica). O
+  ;; relay drena o shared.outbox e despacha aos consumidores do projetor SSE => 'SSE e' projecao do bus interno'.
+  (let [backplane   (get-in config [:tempo-real :backplane])
+        _           (when-not (#{:memoria :valkey} backplane)
+                      ;; fail-closed (review sec-MINOR-1): um typo (ex.: TEMPO_REAL_BACKPLANE=Valkey -> :Valkey)
+                      ;; cairia em :memoria em silencio — cada replica de prod com store isolado, fan-out perdido
+                      ;; sem erro. Melhor LANCAR no boot.
+                      (throw (ex-info "backplane de tempo real invalido — use :memoria ou :valkey"
+                                      {:backplane backplane})))
+        canal-store (if (= :valkey backplane)
+                      (tr-comp/canal-store-valkey config)
+                      (tr-comp/canal-store-memoria))
         registro    (tr-consumer/registro canal-store)]
    (component/system-map
    :datasource      (datasource/datasource config)
@@ -48,8 +58,10 @@
    ;; emitem eventos de dominio o recebem via `using`.
    :bus             (outbox/bus)
    :canal-store     canal-store
-   ;; relay (lider unico): drena o outbox e despacha ao projetor SSE (registro). Depende de :datasource.
-   :relay           (component/using (outbox-relay/relay {:registro registro}) [:datasource])
+   ;; relay (lider unico): drena o outbox e despacha ao projetor SSE (registro). Depende de :datasource; o
+   ;; :canal-store no `using` NAO e' lido (o registro ja fechou sobre ele) — so impoe a ORDEM de start (o pool
+   ;; Valkey abre antes do relay comecar a publicar).
+   :relay           (component/using (outbox-relay/relay {:registro registro}) [:datasource :canal-store])
    :repo-cadastros  (component/using (repo-cadastros/repositorio) [:datasource])
    :repo-identidade (component/using (repo-identidade/repositorio) [:datasource])
    :repo-legislativo (component/using (repo-legislativo/repositorio) [:datasource :bus])

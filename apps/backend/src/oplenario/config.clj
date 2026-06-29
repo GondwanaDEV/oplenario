@@ -22,6 +22,7 @@
      (get env "DB_USER")      (assoc-in [:db :user]     (get env "DB_USER"))
      (get env "DB_PASSWORD")  (assoc-in [:db :password] (get env "DB_PASSWORD"))
      (get env "VALKEY_URI")       (assoc-in [:valkey :uri]            (get env "VALKEY_URI"))
+     (get env "TEMPO_REAL_BACKPLANE") (assoc-in [:tempo-real :backplane] (keyword (get env "TEMPO_REAL_BACKPLANE")))
      (get env "MINIO_ENDPOINT")   (assoc-in [:objeto-store :endpoint]   (get env "MINIO_ENDPOINT"))
      (get env "MINIO_ACCESS_KEY") (assoc-in [:objeto-store :access-key] (get env "MINIO_ACCESS_KEY"))
      (get env "MINIO_SECRET_KEY") (assoc-in [:objeto-store :secret-key] (get env "MINIO_SECRET_KEY"))
