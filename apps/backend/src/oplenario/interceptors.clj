@@ -5,7 +5,9 @@
   autorizacao -> 403; o resto -> 500. A camada FINA (policy.check in-domain) roda nos controllers (W3+), com o
   recurso carregado. (§22.5: authz avaliada na borda; a tenancy [GUC app.ente_id] e' por-tx no Repo.)"
   (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [io.pedestal.interceptor.chain :as chain]
+            [jsonista.core :as json]
             [oplenario.http :as http]
             [oplenario.identidade.autenticacao :as auten]
             [oplenario.kernel.autorizacao :as authz]
@@ -34,6 +36,52 @@
                 (nega! ctx 401 "token invalido"))
               (nega! ctx 401 "token ausente")))})
 
+(def ^:private max-corpo-bytes
+  "Teto do corpo de request JSON (256 KiB). Barra exaustao de heap por payload unico (review seg W3 MAJOR-1).
+  Dominio de borda (criar/agendar) nao tem corpo grande; uploads vao por outra rota dedicada quando existirem."
+  (* 256 1024))
+
+(defn- ler-limitado
+  "Le o InputStream ate `limite` bytes; estoura :corpo/grande se exceder — nunca aloca alem do teto."
+  ^bytes [^java.io.InputStream in limite]
+  (let [out (java.io.ByteArrayOutputStream.)
+        buf (byte-array 8192)]
+    (loop [total 0]
+      (let [n (.read in buf)]
+        (if (neg? n)
+          (.toByteArray out)
+          (let [t (+ total (long n))]
+            (when (> t (long limite)) (throw (ex-info "corpo grande demais" {:tipo :corpo/grande})))
+            (.write out buf 0 n)
+            (recur t)))))))
+
+(def corpo-json
+  "Interceptor de NEGOCIACAO DE CONTEUDO de entrada (a borda anunciada em W1): parseia o corpo JSON em
+  (:request :json-params) com chaves STRING. So age em content-type application/json com corpo presente
+  (GET/sem-corpo passam direto). Decisoes de seguranca (review W3): (1) corpo limitado a max-corpo-bytes ->
+  413 (anti-DoS de heap); (2) chaves STRING, NUNCA keyword — keyword JSON interna no metaspace e nao e' GC'd,
+  entao chaves arbitrarias do cliente seriam um vazamento permanente (DoS). Cada adapters/in coage so as
+  chaves esperadas p/ keyword. JSON malformado -> 400 fail-closed (nunca 500). Reusavel por toda rota de escrita
+  no fan-out W3+; o Pedestal 0.7 default-interceptors NAO parseia corpo."
+  {:name  ::corpo-json
+   :enter (fn [ctx]
+            (let [req (:request ctx)
+                  ct  (get-in req [:headers "content-type"])]
+              (if (and ct (str/starts-with? ct "application/json") (:body req))
+                (try
+                  (assoc-in ctx [:request :json-params]
+                            (json/read-value (ler-limitado (:body req) max-corpo-bytes)))
+                  (catch clojure.lang.ExceptionInfo e
+                    (if (= :corpo/grande (:tipo (ex-data e)))
+                      (chain/terminate (assoc ctx :response (http/json-resposta 413 {:erro "corpo grande demais"})))
+                      (chain/terminate (assoc ctx :response (http/json-resposta 400 {:erro "json invalido"})))))
+                  (catch Exception e
+                    ;; corpo malformado e' erro de cliente (400), mas nao silencioso: loga p/ distinguir
+                    ;; bad-client de bug de parsing/dependencia (review W3 — sem `catch _` cego).
+                    (log/debug e "corpo JSON invalido na borda; respondendo 400")
+                    (chain/terminate (assoc ctx :response (http/json-resposta 400 {:erro "json invalido"})))))
+                ctx)))})
+
 (defn exige-papel
   "Interceptor de AUTORIZACAO GROSSA: exige o `papel` estatico (STRING — os papeis do snapshot sao strings) no
   ator. Falta -> authz lanca negado? -> o interceptor `erro` mapeia p/ 403. Pressupoe `autenticacao` antes."
@@ -49,13 +97,22 @@
   [ex]
   (or (:exception (ex-data ex)) (ex-cause ex) ex))
 
+(defn- validacao?
+  "True se a excecao (ou sua raiz) e' falha de validacao de borda (adapters/in) -> 400."
+  [ex]
+  (= :validacao/invalido (or (:tipo (ex-data ex)) (:tipo (ex-data (raiz ex))))))
+
 (def erro
-  "Interceptor de ERRO (GLOBAL/outermost via http/servico): negacao de autorizacao -> 403; resto -> 500. Nao
-  vaza detalhe de erro interno no corpo."
+  "Interceptor de ERRO (GLOBAL/outermost via http/servico): validacao de borda -> 400; negacao de autorizacao
+  -> 403; resto -> 500. Nao vaza detalhe de erro interno no corpo."
   {:name  ::erro
    :error (fn [ctx ex]
-            (if (or (authz/negado? ex) (authz/negado? (raiz ex)))
+            (cond
+              (validacao? ex)
+              (assoc ctx :response (http/json-resposta 400 {:erro "requisicao invalida"}))
+              (or (authz/negado? ex) (authz/negado? (raiz ex)))
               (assoc ctx :response (http/json-resposta 403 {:erro "autorizacao negada"}))
+              :else
               (assoc ctx :response (http/json-resposta 500 {:erro "erro interno"}))))})
 
 (def cabecalhos-seguranca

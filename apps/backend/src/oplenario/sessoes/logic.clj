@@ -66,6 +66,19 @@
   (when (and (some? modalidade) (not (contains? modalidades-sessao modalidade)))
     (throw (ex-info "modalidade de sessao invalida" {:modalidade modalidade}))))
 
+;; ---------- §22.5 eixo E — politica da camada FINA (policy.check com o recurso carregado) ----------
+;; A POLITICA declarativa mora no modulo DONO do recurso (ADR-0001). Aqui = fn pura (ator recurso -> bool)
+;; consumida por kernel.autorizacao/check! no controller. Em F2 vira expressao da DSL avaliada pelo MESMO
+;; motor (disciplina 5); esta fn e' o seam estavel.
+
+(defn pode-ver-sessao?
+  "Camada FINA de autorizacao p/ LER uma sessao, com o recurso ja carregado. V1 = defesa-em-profundidade:
+  o tenant do ator tem de bater com o da sessao (a RLS ja escopa a query; isto barra um recurso de outro
+  ente que escape por bug de query/repo — fail-closed). Politicas mais ricas (ex.: restricao de sessao
+  'secreta') plugam aqui sem mudar a borda. Puro."
+  [ator sessao]
+  (= (:ente-id ator) (:ente-id sessao)))
+
 ;; ---------- §22.6 eixo B — pauta (F4.2a) ----------
 ;; Os vocabularios espelham os CHECK da migration 0027.
 

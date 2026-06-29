@@ -1,0 +1,59 @@
+(ns oplenario.sessoes.adapters.in.sessao
+  "Gate de ENTRADA `wire/in -> models` da sessao (§22.10 adapters/in, ADR-0001 §3) — dividido por DIRECAO (sob
+  adapters/in/). Chamado SO pelo diplomat/. Valida e COAGE a representacao externa (JSON: strings) para o
+  dominio (uuid/Instant), defendendo a borda (fail-closed). O nucleo (controllers/logic) so ve `models`."
+  (:require [malli.core :as m]
+            [malli.error :as me]
+            [oplenario.sessoes.wire.in :as wire])
+  (:import (java.time Instant)
+           (java.time.format DateTimeParseException)
+           (java.util UUID)))
+
+(set! *warn-on-reflection* true)
+
+(defn- invalido! [msg info] (throw (ex-info msg (assoc info :tipo :validacao/invalido))))
+
+(def ^:private campos-agendar
+  "As chaves esperadas do corpo (strings — :json-params vem com chaves STRING, sem keyword-interning, review
+  seg W3 MAJOR-2). So estas sao promovidas a keyword; chaves alheias do cliente NAO viram keyword (nem entram)."
+  ["sessao-legislativa-id" "tipo-sessao" "modalidade" "agendada-para"])
+
+(defn- so-esperados
+  "mapa STRING-keyed -> mapa keyword-keyed contendo SO os `campos` presentes (keyword literal, ja internada)."
+  [m campos]
+  (reduce (fn [acc k] (cond-> acc (contains? m k) (assoc (keyword k) (get m k)))) {} campos))
+
+(defn id-param->uuid
+  "Path-param :id (string) -> UUID. Malformado = requisicao invalida (`:validacao/invalido` -> 400 na borda),
+  nunca erro interno (500)."
+  [s]
+  (try
+    (UUID/fromString s)
+    (catch IllegalArgumentException _ (invalido! "id de sessao invalido" {:campo :id}))))
+
+(defn- ->uuid [s campo]
+  (try (UUID/fromString s) (catch IllegalArgumentException _ (invalido! "uuid invalido" {:campo campo}))))
+
+(defn- ->instante [s campo]
+  (when s
+    (try (Instant/parse s) (catch DateTimeParseException _ (invalido! "instante invalido (ISO-8601)" {:campo campo})))))
+
+(defn agendar-sessao->dominio
+  "Corpo externo (wire/in.AgendarSessao) + `ator` -> mapa de dominio p/ Repo/agendar-sessao!. Valida o contrato
+  (fail-closed -> 400), coage uuid/Instant, e INJETA o que nao vem do corpo: `id` (novo), `ente-id` e
+  `created-by` (do ator) — nunca confia no cliente p/ tenant/autoria (§22.5)."
+  [ator wire-in]
+  (when-not (map? wire-in)
+    (invalido! "corpo deve ser objeto JSON" {:campo :corpo}))
+  (let [m (so-esperados wire-in campos-agendar)]
+    ;; valida UMA vez; em falha guarda so os nomes-de-campo humanizados (NUNCA o payload cru — review W3:
+    ;; m/explain embute :value, que vazaria PII do corpo p/ o log quando o F7 fiar logging de erro).
+    (when-let [erros (m/explain wire/AgendarSessao m)]
+      (invalido! "corpo de agendar sessao invalido" {:campos (keys (me/humanize erros))}))
+    {:id                    (random-uuid)
+     :ente-id               (:ente-id ator)
+     :sessao-legislativa-id (->uuid (:sessao-legislativa-id m) :sessao-legislativa-id)
+     :tipo-sessao           (:tipo-sessao m)
+     :modalidade            (:modalidade m)
+     :agendada-para         (->instante (:agendada-para m) :agendada-para)
+     :created-by            (:identidade-id ator)}))
