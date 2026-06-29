@@ -33,6 +33,19 @@ Dentro do módulo: **`adapters/` só é chamado pelo `diplomat/`** (núcleo `con
 - Migration própria: `20260620000003-admin-sistema.*` (schema + registry `ente`). Refs a `admin_sistema.ente` de outros módulos cruzam por **guard de serviço**, nunca FK/JOIN cross-schema.
 
 ## TODO (deferido p/ implementação — validação ecc)
+- **Carries do F4.1 (Sessões eixo A — entidade `sessao`, 28/06; review ecc clojure+database):** **abre o módulo
+  `sessoes`** (1º slice do HERO/M4). `sessoes.sessao` (NÃO-particionada): hierarquia `legislatura→sessao_legislativa`
+  (em `cadastros`, F1) `→sessao` — **`sessao_legislativa_id` é forward-ref uuid SEM FK** (§22.10 proíbe FK
+  cross-schema; integridade via resolver/serviço). Tipo enum + **capabilities desacopladas** (default por tipo
+  + override; defaults regimentais `[GAP]`). Numeração canônica gapless por (ente, sessao_legislativa, tipo)
+  reset por sessão legislativa. State machine `agendada→aberta⇄suspensa→encerrada`/`nao_realizada→arquivada`
+  (`logic/transicoes-sessao`, fail-closed + CAS; `arquivada` trava terminal). **(→ próximos eixos F4)** pauta
+  (B), presença/quórum (C — agregadores `presentes_plenario/remoto` à DSL do motor), votação na sessão (D, reusa
+  o polimórfico do legislativo), tribuna (F), gravação (D §22.3.4), real-time SSE (G). **(→ F4 wire)** eventos de
+  domínio `Sessao*` + bus-consumer + wire/in; `convocação/edital` (§16.13) = slice à parte. **Aplicado:** clojure
+  3 MENOR (remove `blank?` redundante; early-reject de conflito de lock antes da validação de máquina; 2 casos de
+  teste); DB 2 MAJOR (CHECKs de coerência dos marcos temporais com o estado; índice parcial em `agendada_para`
+  hot-path M4) + 2 MENOR (REVOKE USAGE no down; `motivo` não-vazio).
 - **Carries do F3.9b (Expediente — geração de documentos, 28/06; review ecc clojure+database):**
   `documento_modelo` (template configurável por ente, mutável, schema `legislativo`) + `documento` (gerado por
   **merge do domínio** no template via `logic/renderizar-documento` — `{{campo}}` fail-closed em campo
