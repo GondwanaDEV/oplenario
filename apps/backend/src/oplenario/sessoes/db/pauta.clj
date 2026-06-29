@@ -16,6 +16,17 @@
 (def ^:private cols-alteracao
   [:id :ente_id :pauta_sessao_id :pauta_item_id :tipo :justificativa :registrado_em])
 
+(def ^:private cols-versao
+  [:id :ente_id :pauta_sessao_id :numero_versao :tipo_versao :publica :snapshot :justificativa :publicado_em])
+
+(defn- item->snapshot
+  "Projeta um item ativo para o formato canonico do snapshot. Chaves SNAKE_CASE (consistente com o resto do
+  JSONB do codebase — ex.: detalhe {de_ordem} — e com o comentario da migration 0028): o snapshot e' prova
+  append-only consumida por SQL direto/portal, entao a chave persistida tem de ser a canonica do banco."
+  [{:keys [id fase tipo-item proposicao-id texto-descricao ordem]}]
+  {:id id :fase fase :tipo_item tipo-item :proposicao_id proposicao-id
+   :texto_descricao texto-descricao :ordem ordem})
+
 ;; ---------- pauta_sessao (container 1:1) ----------
 
 (defn criar-pauta!
@@ -146,3 +157,67 @@
     (registrar-alteracao! tx {:ente-id ente-id :pauta-sessao-id pauta-sessao-id :pauta-item-id id
                               :tipo tipo :justificativa justificativa :created-by updated-by})
     {:id id :ativo false}))
+
+;; ---------- pauta_sessao_versao (snapshots canonicos, append-only — F4.2b) ----------
+
+(defn- hidratar-versao
+  "Linha -> mapa de dominio com `snapshot` parseado (PGobject jsonb -> vetor de itens kebab). O JSONB guarda
+  chaves snake_case (canonicas do banco); aqui re-kebabizamos cada item p/ a interface de dominio."
+  [linha]
+  (some-> (comum/linha->kebab linha)
+          (update :snapshot #(mapv comum/linha->kebab (comum/jsonb->kw %)))))
+
+(defn- proxima-versao
+  "numero_versao = max+1 da pauta. A UNIQUE(ente_id,pauta_sessao_id,numero_versao) torna a corrida uma
+  violacao de constraint (numero E' identidade aqui, diferente de pauta_item.ordem)."
+  [tx ente-id pauta-sessao-id]
+  (-> (jdbc/execute-one! tx
+        (sql/format {:select [[[:+ [:coalesce [:max :numero_versao] 0] 1] :prox]]
+                     :from [:sessoes.pauta_sessao_versao]
+                     :where [:and [:= :ente_id ente-id] [:= :pauta_sessao_id pauta-sessao-id]]}))
+      :prox))
+
+(defn publicar-versao!
+  "Congela a pauta num snapshot canonico APPEND-ONLY: captura os itens ATIVOS em ordem, numera local
+  (max+1) e insere. `tipo-versao` ∈ publicacao_inicial|republicacao|execucao_final (fail-closed);
+  'republicacao' exige `justificativa` (defesa-em-profundidade — o CHECK da mig 0028 espelha). Devolve
+  {:id :numero-versao}."
+  [tx {:keys [ente-id pauta-sessao-id tipo-versao publica justificativa created-by]}]
+  (logic/validar-tipo-versao tipo-versao)
+  (logic/validar-republicacao tipo-versao justificativa)
+  (let [id    (random-uuid)
+        num   (proxima-versao tx ente-id pauta-sessao-id)
+        itens (mapv item->snapshot (listar-itens tx ente-id pauta-sessao-id))]
+    (jdbc/execute-one! tx
+      (sql/format {:insert-into :sessoes.pauta_sessao_versao
+                   :values [{:id id :ente_id ente-id :pauta_sessao_id pauta-sessao-id :numero_versao num
+                             :tipo_versao tipo-versao :publica (boolean publica)
+                             :snapshot (comum/->jsonb itens) :justificativa justificativa
+                             :created_by created-by :efetivado_em [:now]}]}))
+    {:id id :numero-versao num}))
+
+(defn buscar-versao
+  "Busca uma versao da pauta pelo `id`; nil se inexistente ou de outro tenant (RLS). Snapshot ja hidratado."
+  [tx ente-id id]
+  (hidratar-versao
+   (jdbc/execute-one! tx
+     (sql/format {:select cols-versao :from [:sessoes.pauta_sessao_versao]
+                  :where [:and [:= :ente_id ente-id] [:= :id id]]}))))
+
+(defn listar-versoes
+  "Todas as versoes da pauta, em ordem de numero_versao."
+  [tx ente-id pauta-sessao-id]
+  (mapv hidratar-versao
+        (jdbc/execute! tx
+          (sql/format {:select cols-versao :from [:sessoes.pauta_sessao_versao]
+                       :where [:and [:= :ente_id ente-id] [:= :pauta_sessao_id pauta-sessao-id]]
+                       :order-by [[:numero_versao :asc]]}))))
+
+(defn versao-publica-corrente
+  "A versao corrente do portal = maior numero_versao com publica=true (nil se nenhuma publicada)."
+  [tx ente-id pauta-sessao-id]
+  (hidratar-versao
+   (jdbc/execute-one! tx
+     (sql/format {:select cols-versao :from [:sessoes.pauta_sessao_versao]
+                  :where [:and [:= :ente_id ente-id] [:= :pauta_sessao_id pauta-sessao-id] [:= :publica true]]
+                  :order-by [[:numero_versao :desc]] :limit 1}))))

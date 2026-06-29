@@ -1,7 +1,8 @@
 (ns oplenario.sessoes.logic
   "PURO: regras e maquina de estados da sessao plenaria (§22.6 eixo A). Sem I/O. Capabilities desacopladas
   do tipo (disciplina §22.6.3 nº3): o tipo e' nome regimental, o comportamento e' atributo com default
-  derivado + override auditado. Os vocabularios espelham os CHECK da migration 0026.")
+  derivado + override auditado. Os vocabularios espelham os CHECK da migration 0026."
+  (:require [clojure.string :as str]))
 
 (set! *warn-on-reflection* true)
 
@@ -102,3 +103,24 @@
   (when-not (contains? tipos-remocao-pauta tipo)
     (throw (ex-info "tipo de remocao de item invalido (so exclusao|retirada_pedido_autor)"
                     {:tipo tipo :validos tipos-remocao-pauta}))))
+
+;; ---------- §22.6 eixo B — versionamento canonico da pauta (F4.2b) ----------
+;; A camada viva (item/alteracao) muta; a VERSAO congela a pauta num instante (snapshot jsonb append-only)
+;; = o que o portal do cidadao cita e a prova institucional. O vocabulario espelha o CHECK da migration 0028.
+
+(def tipos-versao-pauta
+  "Tipos de versao canonica: publicacao_inicial (1a publicacao da pauta), republicacao (republicada apos
+  alteracao), execucao_final (a pauta efetivamente executada na sessao, p/ a ata)."
+  #{"publicacao_inicial" "republicacao" "execucao_final"})
+
+(defn validar-tipo-versao [tipo]
+  (when-not (contains? tipos-versao-pauta tipo)
+    (throw (ex-info "tipo de versao de pauta invalido" {:tipo tipo :validos tipos-versao-pauta}))))
+
+(defn validar-republicacao
+  "Republicacao exige justificativa nao-vazia (trilha de auditoria do porque republicou; o CHECK da mig 0028
+  espelha). Demais tipos nao exigem."
+  [tipo justificativa]
+  (when (and (= "republicacao" tipo)
+             (or (nil? justificativa) (str/blank? justificativa)))
+    (throw (ex-info "republicacao exige justificativa" {:tipo tipo}))))

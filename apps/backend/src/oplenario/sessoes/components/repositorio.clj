@@ -22,7 +22,12 @@
   (remover-item! [this ente-id m] "Remocao soft (ativo=false) + LOG, atomico (nunca DELETE).")
   (buscar-item [this ente-id id])
   (listar-itens [this ente-id pauta-sessao-id] "Itens ATIVOS em ordem.")
-  (listar-alteracoes [this ente-id pauta-sessao-id]))
+  (listar-alteracoes [this ente-id pauta-sessao-id])
+  ;; §22.6 eixo B — versionamento canonico (snapshots append-only)
+  (publicar-versao! [this ente-id m] "Congela a pauta num snapshot canonico (numera local), append-only.")
+  (buscar-versao [this ente-id id])
+  (listar-versoes [this ente-id pauta-sessao-id])
+  (versao-publica-corrente [this ente-id pauta-sessao-id] "Maior numero_versao com publica=true."))
 
 (defrecord RepoSessoesPg [datasource bus]
   RepoSessoes
@@ -38,7 +43,11 @@
   (remover-item! [this ente-id m] (transacao this ente-id #(pauta/remover-item! % (assoc m :ente-id ente-id))))
   (buscar-item [this ente-id id] (transacao this ente-id #(pauta/buscar-item % ente-id id)))
   (listar-itens [this ente-id pauta-sessao-id] (transacao this ente-id #(pauta/listar-itens % ente-id pauta-sessao-id)))
-  (listar-alteracoes [this ente-id pauta-sessao-id] (transacao this ente-id #(pauta/listar-alteracoes % ente-id pauta-sessao-id))))
+  (listar-alteracoes [this ente-id pauta-sessao-id] (transacao this ente-id #(pauta/listar-alteracoes % ente-id pauta-sessao-id)))
+  (publicar-versao! [this ente-id m] (transacao this ente-id #(pauta/publicar-versao! % (assoc m :ente-id ente-id))))
+  (buscar-versao [this ente-id id] (transacao this ente-id #(pauta/buscar-versao % ente-id id)))
+  (listar-versoes [this ente-id pauta-sessao-id] (transacao this ente-id #(pauta/listar-versoes % ente-id pauta-sessao-id)))
+  (versao-publica-corrente [this ente-id pauta-sessao-id] (transacao this ente-id #(pauta/versao-publica-corrente % ente-id pauta-sessao-id))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

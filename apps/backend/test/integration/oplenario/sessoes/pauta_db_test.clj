@@ -170,3 +170,98 @@
                  (tenancy/com-tenant* *ds* ente
                    (fn [tx] (jdbc/execute-one! tx ["UPDATE sessoes.pauta_alteracao SET tipo = 'exclusao' WHERE id = ?" @aid]))))
         "pauta_alteracao e' append-only (trigger barra UPDATE)")))
+
+;; ================= F4.2b — pauta_sessao_versao (snapshots canonicos) =================
+;; A camada viva (item/alteracao) muta; a VERSAO congela a pauta num instante = o que o portal cita / a prova.
+
+(deftest vocabularios-versao
+  (is (contains? logic/tipos-versao-pauta "publicacao_inicial"))
+  (is (contains? logic/tipos-versao-pauta "republicacao"))
+  (is (contains? logic/tipos-versao-pauta "execucao_final"))
+  (is (thrown? Exception (logic/validar-tipo-versao "rascunho"))))
+
+(deftest publica-versao-numera-e-snapshota
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [{:keys [pauta-id]} (nova-pauta! tx ente)]
+          (add! tx ente pauta-id {})
+          (add! tx ente pauta-id {:tipo-item "leitura" :proposicao-id nil :texto-descricao "Oficio 1"})
+          (let [v1 (pauta/publicar-versao! tx {:ente-id ente :pauta-sessao-id pauta-id
+                                               :tipo-versao "publicacao_inicial" :publica true})]
+            (is (= 1 (:numero-versao v1)) "primeira versao = numero 1")
+            (let [lido (pauta/buscar-versao tx ente (:id v1))]
+              (is (= "publicacao_inicial" (:tipo-versao lido)))
+              (is (true? (:publica lido)))
+              (is (= 2 (count (:snapshot lido))) "snapshot congela os 2 itens ativos em ordem")
+              (is (= [1 2] (mapv :ordem (:snapshot lido))) "snapshot mantem a ordem")
+              (is (m/validate mod/PautaVersao lido) "versao bate o model"))))))))
+
+(deftest versao-congela-mesmo-apos-mutar-pauta
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [{:keys [pauta-id]} (nova-pauta! tx ente)
+              a (add! tx ente pauta-id {})]
+          (add! tx ente pauta-id {})
+          (let [v1 (pauta/publicar-versao! tx {:ente-id ente :pauta-sessao-id pauta-id
+                                               :tipo-versao "publicacao_inicial" :publica true})]
+            ;; muta a pauta DEPOIS de publicar
+            (pauta/remover-item! tx {:ente-id ente :id (:id a) :tipo "exclusao" :updated-by nil :lock-version 0})
+            (is (= 1 (count (pauta/listar-itens tx ente pauta-id))) "pauta viva agora tem 1 item")
+            (is (= 2 (count (:snapshot (pauta/buscar-versao tx ente (:id v1)))))
+                "mas o snapshot da v1 segue com 2 (congelado)")))))))
+
+(deftest versao-publica-corrente-segue-maior-numero-publico
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [{:keys [pauta-id]} (nova-pauta! tx ente)]
+          (add! tx ente pauta-id {})
+          (let [v1 (pauta/publicar-versao! tx {:ente-id ente :pauta-sessao-id pauta-id
+                                               :tipo-versao "publicacao_inicial" :publica true})
+                v2 (pauta/publicar-versao! tx {:ente-id ente :pauta-sessao-id pauta-id
+                                               :tipo-versao "execucao_final" :publica false})]
+            (is (= 2 (:numero-versao v2)) "numero local incrementa por pauta")
+            (is (= (:id v1) (:id (pauta/versao-publica-corrente tx ente pauta-id)))
+                "corrente = maior numero com publica=true (v2 nao e' publica)")
+            (is (= 2 (count (pauta/listar-versoes tx ente pauta-id))) "as duas versoes listadas")))))))
+
+(deftest versao-tipo-invalido-barra
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [{:keys [pauta-id]} (nova-pauta! tx ente)]
+          (add! tx ente pauta-id {})
+          (is (thrown? Exception
+                       (pauta/publicar-versao! tx {:ente-id ente :pauta-sessao-id pauta-id
+                                                   :tipo-versao "rascunho" :publica true}))
+              "tipo_versao fora do enum barra (fail-closed)"))))))
+
+(deftest republicacao-exige-justificativa
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [{:keys [pauta-id]} (nova-pauta! tx ente)]
+          (add! tx ente pauta-id {})
+          (is (thrown? Exception
+                       (pauta/publicar-versao! tx {:ente-id ente :pauta-sessao-id pauta-id
+                                                   :tipo-versao "republicacao" :publica true}))
+              "republicacao sem justificativa barra (fail-closed)")
+          (let [v (pauta/publicar-versao! tx {:ente-id ente :pauta-sessao-id pauta-id
+                                              :tipo-versao "republicacao" :publica true
+                                              :justificativa "incluido requerimento urgente"})]
+            (is (some? (:id v)) "republicacao COM justificativa passa")))))))
+
+(deftest versao-append-only
+  (let [ente (random-uuid) vid (atom nil)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [{:keys [pauta-id]} (nova-pauta! tx ente)]
+          (add! tx ente pauta-id {})
+          (reset! vid (:id (pauta/publicar-versao! tx {:ente-id ente :pauta-sessao-id pauta-id
+                                                       :tipo-versao "publicacao_inicial" :publica true}))))))
+    (is (thrown? Exception
+                 (tenancy/com-tenant* *ds* ente
+                   (fn [tx] (jdbc/execute-one! tx ["UPDATE sessoes.pauta_sessao_versao SET publica = false WHERE id = ?" @vid]))))
+        "pauta_sessao_versao e' append-only (trigger barra UPDATE)")))

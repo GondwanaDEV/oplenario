@@ -46,3 +46,16 @@
    [:tipo (enum-de logic/tipos-alteracao-pauta)]
    [:justificativa {:optional true} [:maybe :string]]
    [:registrado-em km/Instante]])
+
+;; F4.2b — versao canonica (snapshot append-only da pauta num instante). `snapshot` = itens congelados.
+(def PautaVersao
+  [:map {:closed true}
+   [:ente-id :uuid]
+   [:id :uuid]
+   [:pauta-sessao-id :uuid]
+   [:numero-versao :int]
+   [:tipo-versao (enum-de logic/tipos-versao-pauta)]
+   [:publica :boolean]
+   [:snapshot [:sequential [:map-of :keyword :any]]]
+   [:justificativa {:optional true} [:maybe :string]]
+   [:publicado-em km/Instante]])
