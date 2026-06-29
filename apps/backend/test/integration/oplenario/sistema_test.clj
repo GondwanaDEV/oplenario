@@ -13,3 +13,10 @@
       (is (= {:um 1} (jdbc/execute-one! (-> sys :datasource :ds) ["SELECT 1 AS um"]))
           "o sistema bootado expoe um datasource conectado ao Postgres")
       (finally (component/stop sys)))))
+
+(deftest backplane-de-tempo-real-invalido-lanca
+  ;; review sec-MINOR-1: um typo em TEMPO_REAL_BACKPLANE (ex.: :Valkey) cairia em :memoria em silencio — cada
+  ;; replica de prod com store isolado. novo-sistema deve LANCAR no boot (antes de qualquer IO).
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"backplane de tempo real invalido"
+        (sistema/novo-sistema (assoc-in (config/carregar) [:tempo-real :backplane] :bogus)))
+      "backplane desconhecido bloqueia o boot (fail-closed)"))

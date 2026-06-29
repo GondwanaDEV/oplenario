@@ -3,6 +3,10 @@
  :db     {:jdbc-url "jdbc:postgresql://localhost:5432/oplenario" :user "oplenario" :password "dev"
           :pool-max-size 10} ; dimensionar contra max_connections do PG / nº de réplicas (deploy)
  :valkey {:uri "redis://localhost:6379"}
+ ;; backplane do tempo real (§22.6 eixo G): :memoria (1 no / dev / teste) | :valkey (multi-no / prod).
+ ;; Override por TEMPO_REAL_BACKPLANE. Prod multi-replica DEVE usar :valkey (a impl em memoria nao compartilha
+ ;; canal entre replicas; cada uma so veria os eventos que ela mesma drenou).
+ :tempo-real {:backplane :memoria}
  :objeto-store {:endpoint "http://localhost:9000" :access-key "oplenario" :secret-key "dev12345" :bucket "oplenario"}
  ;; URL por modulo p/ os http_client (local agora, remoto apos extracao — §22.10)
  :modulos {:cadastros {:base-url "http://localhost:8888"} :identidade {:base-url "http://localhost:8888"}
