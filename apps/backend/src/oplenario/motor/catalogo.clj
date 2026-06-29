@@ -7,7 +7,7 @@
   real (valores de prazo, feriados) é [GAP] de §22.7.5 — aqui só ASSINATURAS/TIPOS."
   (:require [oplenario.motor.tipos :as t]))
 
-(def CATALOGO-VERSAO "registry-v1@2026-06-20")
+(def CATALOGO-VERSAO "registry-v1@2026-06-29")  ; F4.3b: +presentes_plenario/remoto (SessaoId,Instante)->Inteiro
 
 ;; Enums de domínio. Símbolos globalmente únicos no protótipo p/ o literal resolver
 ;; o domínio sem ambiguidade (o catálogo real qualificaria: TipoAtoLegislativo.resolucao).
@@ -33,7 +33,7 @@
   {"Booleano" t/BOOLEANO "Inteiro" t/INTEIRO "Texto" t/TEXTO "Data" t/DATA
    "Instante" t/INSTANTE "Duracao" t/DURACAO "Racional" t/RACIONAL
    "Competencia" t/COMPETENCIA "Maioria" t/MAIORIA
-   "IdentidadeId" t/IDENTIDADE-ID "ComissaoId" t/COMISSAO-ID})
+   "IdentidadeId" t/IDENTIDADE-ID "ComissaoId" t/COMISSAO-ID "SessaoId" t/SESSAO-ID})
 
 (defn resolver-tipo-nome [nome]
   (or (get tipos-nomeados nome)
@@ -84,6 +84,10 @@
          (r "quem_exerce_presidencia" [t/DATA] t/IDENTIDADE-ID "Cadastros")
          ;; identidade/relacoes — pura (transversal); ignora a tx mas casa a forma (fn tx & args)
          (r "é_o_próprio" [t/IDENTIDADE-ID t/IDENTIDADE-ID] t/BOOLEANO "Identidade")
+         ;; sessoes/relacoes (F4.3b §22.6 eixo C) — agregadores de quorum expostos a DSL do motor de votacao.
+         ;; A presenca corrente e' DERIVADA do ultimo evento por vereador ate o instante (sem snapshot).
+         (r "presentes_plenario" [t/SESSAO-ID t/INSTANTE] t/INTEIRO "Sessoes")
+         (r "presentes_remoto"   [t/SESSAO-ID t/INSTANTE] t/INTEIRO "Sessoes")
          ;; (b) assinaturas sem fn (módulo futuro) — remessa_enviada perde `ente` (§4-bis)
          (r "remessa_enviada" [t/TEXTO t/COMPETENCIA] t/BOOLEANO "Compliance-remessa")
          (r "publicada_no_portal" [(t/Registro "AtoDespesa")] t/BOOLEANO "Transparencia")

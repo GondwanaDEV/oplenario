@@ -130,6 +130,54 @@
                    (fn [tx] (jdbc/execute-one! tx ["SELECT vereador_id FROM legislativo.votos_secretos LIMIT 1"]))))
         "votos_secretos NAO tem coluna vereador_id (sigilo estrutural)")))
 
+;; ---------- votacao-na-sessao: contexto de pauta (F4.4a, §22.6 eixo B) ----------
+
+(deftest votacao-carrega-contexto-de-pauta
+  ;; §22.6 eixo B: a votacao aponta a materia via (objeto_tipo,objeto_id); sessao_id + pauta_item_id sao
+  ;; CONTEXTO TEMPORAL (forward-ref a sessoes, §22.10 sem FK). Round-trip + model.
+  (let [ente (random-uuid) sessao (random-uuid) item (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [pid (protocolar! tx ente)
+              {vid :id} (abrir! tx ente pid {:sessao-id sessao :pauta-item-id item})
+              r (votacao/buscar tx ente vid)]
+          (is (= sessao (:sessao-id r)) "votacao carrega a sessao de contexto")
+          (is (= item (:pauta-item-id r)) "votacao carrega o item de pauta de contexto")
+          (is (m/validate mod/Votacao r) "votacao com contexto bate o model"))))))
+
+(deftest item-de-pauta-exige-sessao
+  ;; coerencia (DB-MENOR): pauta_item_id sem sessao_id e' incoerente (item pertence a sessao) -> DB trava.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente (fn [tx] (protocolar! tx ente)))  ; garante schema vivo
+    (is (thrown? Exception
+                 (tenancy/com-tenant* *ds* ente
+                   (fn [tx]
+                     (let [pid (protocolar! tx ente)]
+                       (abrir! tx ente pid {:pauta-item-id (random-uuid)})))))  ; sem :sessao-id
+        "votar sobre item de pauta sem sessao viola votacao_pauta_item_requer_sessao")))
+
+(deftest mesma-materia-votada-em-duas-sessoes
+  ;; §22.6 eixo B: "materia pode ser votada em duas sessoes (1a e 2a discussao), duas votacoes com
+  ;; pauta_item_id diferentes mas mesma proposicao_id". Reusa a votacao do legislativo sem nova mecanica.
+  (let [ente (random-uuid) s1 (random-uuid) s2 (random-uuid) i1 (random-uuid) i2 (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [pid (protocolar! tx ente)
+              {v1 :id} (abrir! tx ente pid {:sessao-id s1 :pauta-item-id i1})
+              {v2 :id} (abrir! tx ente pid {:sessao-id s2 :pauta-item-id i2})]
+          (is (not= v1 v2) "duas votacoes distintas sobre a mesma materia")
+          ;; 1a discussao: aprovada
+          (votar! tx ente v1 "sim") (votar! tx ente v1 "sim") (votar! tx ente v1 "nao")
+          (votacao/encerrar! tx {:id v1 :ente-id ente :base-membros 3 :updated-by nil :lock-version 0})
+          ;; 2a discussao: rejeitada
+          (votar! tx ente v2 "sim") (votar! tx ente v2 "nao") (votar! tx ente v2 "nao")
+          (votacao/encerrar! tx {:id v2 :ente-id ente :base-membros 3 :updated-by nil :lock-version 0})
+          (let [r1 (votacao/buscar tx ente v1) r2 (votacao/buscar tx ente v2)]
+            (is (= (:objeto-id r1) (:objeto-id r2)) "mesma materia (proposicao) nas duas")
+            (is (not= (:pauta-item-id r1) (:pauta-item-id r2)) "itens de pauta distintos")
+            (is (= "aprovada" (:resultado r1)) "1a discussao aprovada")
+            (is (= "rejeitada" (:resultado r2)) "2a discussao rejeitada")))))))
+
 ;; ---------- vocabularios + terminal + correcao ----------
 
 (deftest vocabularios-invalidos-barram
