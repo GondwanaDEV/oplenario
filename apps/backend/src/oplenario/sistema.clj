@@ -9,11 +9,12 @@
             [oplenario.identidade.components.repositorio :as repo-identidade]
             [oplenario.identidade.relacoes.identidade :as rel-identidade]
             [oplenario.legislativo.components.repositorio :as repo-legislativo]
-            [oplenario.http :as oplenario-http]
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.kernel.components.http-servidor :as http-servidor]
+            [oplenario.kernel.components.idp-dev :as idp-dev]
             [oplenario.kernel.components.outbox-relay :as outbox-relay]
             [oplenario.kernel.outbox :as outbox]
+            [oplenario.rotas :as rotas]
             [oplenario.motor.components.registro-fatos :as registro-fatos]
             [oplenario.motor.components.repositorio :as repo-motor]
             [oplenario.sessoes.components.repositorio :as repo-sessoes]
@@ -62,10 +63,26 @@
    :registro-fatos  (registro-fatos/registro-fatos
                      (fundir-relacoes rel-cadastros/relacoes rel-identidade/relacoes rel-sessoes/relacoes)))))
 
+(defn- idp-para
+  "Seleciona a impl do IdP por ambiente — GUARD DE BOOT fail-closed (review de seguranca W2, CRÍTICO): producao
+  EXIGE a impl Keycloak; como ela e' carry F1.4 (indisponivel), `production` LANCA e bloqueia o boot — NUNCA cai
+  no idp-dev (que confia claims sem verificar assinatura). dev/test usam idp-dev."
+  [config]
+  (if (= "production" (:env config))
+    (throw (ex-info "idp-dev proibido em producao e a impl Keycloak e' carry F1.4 (indisponivel) — boot bloqueado"
+                    {:env (:env config)}))
+    (idp-dev/idp-dev)))
+
 (defn sistema-serve
   "Sistema do host com o SERVIDOR HTTP (caminho `serve` do main). Separado de `novo-sistema` p/ os testes de
   boot do dominio (sistema_test/motor/repo/marco) NAO subirem o Jetty (sem bind de porta em teste). W1 serve so
   /saude; W2/W3 enriquecem as rotas (auth/tenancy + rotas-dado de modulo, com o servidor `using` os Repo)."
   [config]
   (assoc (novo-sistema config)
-         :servidor-http (http-servidor/servidor-http config oplenario-http/rotas-saude)))
+         ;; IdP por ambiente (idp-para = guard: idp-dev so dev/test; prod exige Keycloak, carry F1.4 -> lanca).
+         :idp (idp-para config)
+         ;; servidor `using` idp + repo-identidade -> a rotas-fn (rotas/montar) monta o interceptor de auth
+         ;; sobre as instancias iniciadas. W3 acrescenta os Repo de modulo ao `using` p/ as rotas-dado.
+         :servidor-http (component/using
+                         (http-servidor/servidor-http config rotas/montar)
+                         [:idp :repo-identidade])))

@@ -9,7 +9,9 @@
 (defprotocol IdentityProvider
   (verificar-token [idp token]
     "Verifica assinatura/expiracao/issuer de um access token e devolve as CLAIMS cruas (mapa) ou nil
-    se invalido. Fail-closed: token malformado/expirado/assinatura ruim -> nil, nunca claims parciais.")
+    se invalido. Fail-closed: token malformado/expirado/assinatura ruim -> nil, nunca claims parciais.
+    CONTRATO (review W2): erro de INFRA (rede/JWKS indisponivel) deve LANCAR (a borda responde 500), NUNCA
+    devolver nil — nil = 'token invalido' (401), e mascarar degradacao como token ruim e' incorreto.")
   (provisionar-realm! [idp ente-id]
     "Provisiona o realm do tenant `ente-id` (realm-por-tenant). Idempotente. Carry: impl Keycloak.")
   (criar-usuario! [idp ente-id usuario]
