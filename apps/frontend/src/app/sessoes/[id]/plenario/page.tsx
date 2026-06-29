@@ -9,9 +9,10 @@ import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { useTema } from "@/lib/tema";
 import { usePlenario, type EstadoConexao } from "@/lib/use-plenario";
+import { usePauta } from "@/lib/use-pauta";
 import { segundosDecorridos, formatarTempo } from "@/lib/cronometro";
 import type { EstadoPlenario } from "@/lib/plenario-reducer";
-import type { SessaoOut } from "@/lib/contrato";
+import type { SessaoOut, PautaOut } from "@/lib/contrato";
 import "./plenario.css";
 
 const FASES: { chave: string; nome: string }[] = [
@@ -44,12 +45,19 @@ export default function PaginaPlenario() {
   // token de dev: ?token=<json-claims> OU NEXT_PUBLIC_DEV_TOKEN — AMBOS só fora de produção. Em prod a authn
   // vem da sessão (Keycloak, carry F1.4); o guard quebra a render se um token chegar por querystring em prod.
   const tokenQuery = search.get("token");
-  if (process.env.NODE_ENV === "production" && tokenQuery) {
+  // guarda calculada ANTES dos hooks; o throw vai DEPOIS de todas as chamadas (ordem de hooks estável mesmo
+  // que ?token= apareça/suma entre renders em prod — senão a contagem de hooks divergiria). review react HIGH.
+  const tokenInProd = process.env.NODE_ENV === "production" && !!tokenQuery;
+  const token = tokenInProd
+    ? null
+    : tokenQuery ?? (process.env.NODE_ENV !== "production" ? process.env.NEXT_PUBLIC_DEV_TOKEN ?? null : null);
+  const { sessao, estado, conexao, erro } = usePlenario(params.id, token);
+  // pauta viva (GET; re-busca quando a fase muda). Chamado ANTES dos early-returns p/ ordem de hooks estável.
+  const { pauta } = usePauta(params.id, token, estado?.estado ?? null);
+
+  if (tokenInProd) {
     throw new Error("token via querystring desabilitado em produção (authn = sessão Keycloak, carry F1.4).");
   }
-  const token = tokenQuery ?? (process.env.NODE_ENV !== "production" ? process.env.NEXT_PUBLIC_DEV_TOKEN ?? null : null);
-  const { sessao, estado, conexao, erro } = usePlenario(params.id, token);
-
   if (conexao === "erro") {
     return (
       <main className="tela-estado">
@@ -66,10 +74,10 @@ export default function PaginaPlenario() {
       </main>
     );
   }
-  return <Painel sessao={sessao} estado={estado} conexao={conexao} />;
+  return <Painel sessao={sessao} estado={estado} conexao={conexao} pauta={pauta} />;
 }
 
-function Painel({ sessao, estado, conexao }: { sessao: SessaoOut; estado: EstadoPlenario; conexao: EstadoConexao }) {
+function Painel({ sessao, estado, conexao, pauta }: { sessao: SessaoOut; estado: EstadoPlenario; conexao: EstadoConexao; pauta: PautaOut | null }) {
   const agora = useAgora(); // um único relógio p/ a página inteira (review react MEDIUM: evita 2 intervals e drift)
   return (
     <>
@@ -77,7 +85,7 @@ function Painel({ sessao, estado, conexao }: { sessao: SessaoOut; estado: Estado
       <Fases estado={estado.estado} />
       <main className="envelope">
         <div className="cabine">
-          <Palco sessao={sessao} estado={estado} />
+          <Palco sessao={sessao} estado={estado} pauta={pauta} />
           <aside className="rail" aria-label="Estado do plenário ao vivo">
             <Quorum presentes={estado.presentes.length} />
             <Tribuna estado={estado} agora={agora} />
@@ -164,8 +172,23 @@ function Fases({ estado }: { estado: string }) {
   );
 }
 
-function Palco({ sessao, estado }: { sessao: SessaoOut; estado: EstadoPlenario }) {
+const NOME_FASE: Record<string, string> = {
+  expediente: "Expediente",
+  grande_expediente: "Grande Expediente",
+  ordem_do_dia: "Ordem do Dia",
+  explicacoes_pessoais: "Explicações Pessoais",
+  tribuna_livre_cidadao: "Tribuna Livre",
+};
+const NOME_TIPO_ITEM: Record<string, string> = {
+  proposicao: "Proposição",
+  leitura: "Leitura",
+  comunicado: "Comunicado",
+  homenagem: "Homenagem",
+};
+
+function Palco({ sessao, estado, pauta }: { sessao: SessaoOut; estado: EstadoPlenario; pauta: PautaOut | null }) {
   const emCurso = estado.estado === "aberta";
+  const itens = pauta?.itens ?? [];
   return (
     <section className="bloco palco" aria-labelledby="materia-titulo">
       <div className="palco-cabeca">
@@ -178,21 +201,47 @@ function Palco({ sessao, estado }: { sessao: SessaoOut; estado: EstadoPlenario }
         </span>
       </div>
       <h1 id="materia-titulo">
-        {sessao["tipo-sessao"][0].toUpperCase() + sessao["tipo-sessao"].slice(1)} nº {sessao["numero-sequencial"]}
+        {/* capitalização vem do CSS (.palco h1 { text-transform: capitalize }); evita crash se vier "" */}
+        {sessao["tipo-sessao"]} nº {sessao["numero-sequencial"]}
       </h1>
       <p className="palco-autoria">
         Modalidade <b>{sessao.modalidade}</b>
         {sessao["transmite-publica"] ? " · transmissão pública" : " · sessão reservada"}
         {sessao["permite-voto-secreto"] ? " · admite voto secreto" : ""}
       </p>
+
+      <section className="pauta" aria-labelledby="pauta-titulo">
+        <h2 id="pauta-titulo">Pauta da sessão</h2>
+        {itens.length === 0 ? (
+          <p className="pauta-vazia">Nenhum item ativo na pauta {pauta ? "ainda." : "(não publicada)."}</p>
+        ) : (
+          <ol className="pauta-lista">
+            {itens.map((it) => (
+              <li key={it.id} className="pauta-item">
+                <span className="pauta-ordem" aria-hidden="true">{it.ordem}</span>
+                <span className="pauta-corpo">
+                  <span className="pauta-fase">{NOME_FASE[it.fase] ?? it.fase}</span>
+                  <span className="pauta-desc">
+                    {it["tipo-item"] === "proposicao"
+                      ? `${NOME_TIPO_ITEM.proposicao} · matéria vinculada`
+                      : it["texto-descricao"] ?? (NOME_TIPO_ITEM[it["tipo-item"]] ?? it["tipo-item"])}
+                  </span>
+                </span>
+                <span className={`pauta-tag tipo-${it["tipo-item"]}`}>{NOME_TIPO_ITEM[it["tipo-item"]] ?? it["tipo-item"]}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+
       <p className="pendente-integracao">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
           <circle cx="8" cy="8" r="6.5" />
           <path d="M8 5v3.5M8 11h.01" strokeWidth="1.6" strokeLinecap="round" />
         </svg>
         <span>
-          <b>Pauta e placar de votação:</b> integração pendente. As rotas de pauta e o evento de votação ao
-          vivo entram no fan-out W3 — este painel já reflete <b>estado da sessão, quórum, tribuna e inscritos</b> em tempo real.
+          <b>Placar de votação:</b> integração pendente (o evento de votação ao vivo entra no próximo fan-out).
+          A pauta acima é carregada na abertura e a cada mudança de fase; ainda não é empurrada em tempo real.
         </span>
       </p>
     </section>
