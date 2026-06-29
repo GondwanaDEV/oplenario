@@ -5,7 +5,9 @@
   Component, nunca do db/ direto. `transacao` compoe varias acoes numa UNICA tx do tenant."
   (:require [oplenario.kernel.tenancy :as tenancy]
             [oplenario.legislativo.db.apensacao :as apensacao]
+            [oplenario.legislativo.db.autografo :as autografo]
             [oplenario.legislativo.db.emenda :as emenda]
+            [oplenario.legislativo.db.norma :as norma]
             [oplenario.legislativo.db.parecer :as parecer]
             [oplenario.legislativo.db.parecer-texto-versao :as parecer-texto]
             [oplenario.legislativo.db.parecer-tramitacao :as parecer-tram]
@@ -13,6 +15,7 @@
             [oplenario.legislativo.db.proposicao :as proposicao]
             [oplenario.legislativo.db.texto-versao :as texto]
             [oplenario.legislativo.db.tramitacao :as tram]
+            [oplenario.legislativo.db.tramitacao-executiva :as exec]
             [oplenario.legislativo.db.votacao :as votacao]
             [oplenario.legislativo.diplomat.producers :as producers]))
 
@@ -68,7 +71,21 @@
   (encerrar-votacao! [this ente-id m] "Apura + computa resultado (quorum exato) + grava snapshot, CAS.")
   (anular-votacao! [this ente-id m] "Leva a 'anulada' (correcao = nova votacao).")
   (buscar-votacao [this ente-id id])
-  (votos-da-votacao [this ente-id votacao-id]))
+  (votos-da-votacao [this ente-id votacao-id])
+  ;; F3.8a — pos-aprovacao: autografo (artefato legal append-only) + tramitacao no Executivo (sancao/veto)
+  (gerar-autografo! [this ente-id m] "Numera gapless + insere o autografo (append-only); UNIQUE por proposicao.")
+  (buscar-autografo [this ente-id id])
+  (autografo-da-proposicao [this ente-id proposicao-id])
+  (iniciar-tramitacao-executiva! [this ente-id m] "Abre 'aguardando' p/ um autografo (UNIQUE por autografo).")
+  (registrar-resposta-executivo! [this ente-id m] "aguardando -> sancionado|sancao_tacita|vetado; CAS.")
+  (apreciar-veto! [this ente-id m] "vetado -> veto_mantido|veto_derrubado (carimba a votacao do eixo G); CAS.")
+  (buscar-tramitacao-executiva [this ente-id id])
+  (tramitacao-executiva-do-autografo [this ente-id autografo-id])
+  ;; F3.8b — norma promulgada (numeracao canonica + URN-de-norma LexML + publicacao)
+  (promulgar-norma! [this ente-id m] "Numera gapless + URN-de-norma + insere 'promulgada', atomico.")
+  (publicar-norma! [this ente-id m] "promulgada -> publicada (mutacao parcial unica); CAS.")
+  (buscar-norma [this ente-id id])
+  (norma-da-proposicao [this ente-id proposicao-id]))
 
 (defrecord RepoLegislativoPg [datasource bus]
   RepoLegislativo
@@ -148,7 +165,22 @@
   (encerrar-votacao! [this ente-id m] (transacao this ente-id #(votacao/encerrar! % (assoc m :ente-id ente-id))))
   (anular-votacao! [this ente-id m] (transacao this ente-id #(votacao/anular! % (assoc m :ente-id ente-id))))
   (buscar-votacao [this ente-id id] (transacao this ente-id #(votacao/buscar % ente-id id)))
-  (votos-da-votacao [this ente-id vid] (transacao this ente-id #(votacao/votos-da-votacao % ente-id vid))))
+  (votos-da-votacao [this ente-id vid] (transacao this ente-id #(votacao/votos-da-votacao % ente-id vid)))
+  ;; F3.8a — pos-aprovacao. autografo = append-only (artefato legal); tramitacao_executiva = state machine.
+  ;; Apreciacao do veto carrega o id da VOTACAO (eixo G, maioria absoluta) — composicao no controller/sessao.
+  (gerar-autografo! [this ente-id m] (transacao this ente-id #(autografo/gerar! % (assoc m :ente-id ente-id))))
+  (buscar-autografo [this ente-id id] (transacao this ente-id #(autografo/buscar % ente-id id)))
+  (autografo-da-proposicao [this ente-id pid] (transacao this ente-id #(autografo/buscar-por-proposicao % ente-id pid)))
+  (iniciar-tramitacao-executiva! [this ente-id m] (transacao this ente-id #(exec/iniciar! % (assoc m :ente-id ente-id))))
+  (registrar-resposta-executivo! [this ente-id m] (transacao this ente-id #(exec/registrar-resposta! % (assoc m :ente-id ente-id))))
+  (apreciar-veto! [this ente-id m] (transacao this ente-id #(exec/apreciar-veto! % (assoc m :ente-id ente-id))))
+  (buscar-tramitacao-executiva [this ente-id id] (transacao this ente-id #(exec/buscar % ente-id id)))
+  (tramitacao-executiva-do-autografo [this ente-id aid] (transacao this ente-id #(exec/buscar-por-autografo % ente-id aid)))
+  ;; F3.8b — norma. promulgar! compoe (sequencial + URN + insert) na tx; o caller garante o desfecho promulgavel.
+  (promulgar-norma! [this ente-id m] (transacao this ente-id #(norma/promulgar! % (assoc m :ente-id ente-id))))
+  (publicar-norma! [this ente-id m] (transacao this ente-id #(norma/publicar! % (assoc m :ente-id ente-id))))
+  (buscar-norma [this ente-id id] (transacao this ente-id #(norma/buscar % ente-id id)))
+  (norma-da-proposicao [this ente-id pid] (transacao this ente-id #(norma/buscar-por-proposicao % ente-id pid))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

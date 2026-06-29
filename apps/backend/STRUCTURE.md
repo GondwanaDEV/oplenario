@@ -33,6 +33,37 @@ Dentro do módulo: **`adapters/` só é chamado pelo `diplomat/`** (núcleo `con
 - Migration própria: `20260620000003-admin-sistema.*` (schema + registry `ente`). Refs a `admin_sistema.ente` de outros módulos cruzam por **guard de serviço**, nunca FK/JOIN cross-schema.
 
 ## TODO (deferido p/ implementação — validação ecc)
+- **Carries do F3.8b (pós-aprovação — norma promulgada, 28/06; review ecc clojure+database):** `norma`
+  (artefato legal, NÃO-particionada) nasce de um desfecho **promulgável** (`logic/promulgavel?`); **numeração
+  canônica gapless** por (ente, tipo_norma, ano) via `kernel/sequencial`; **URN-de-norma LexML** nasce na
+  promulgação (`logic/urn-norma`, imutável) — forma canônica `urn:lex:br;uf;municipio:tipo:data;numero` (sem
+  `camara.municipal`, ≠ URN da proposição: a lei é do município). Imutabilidade **parcial nível (c)** bespoke
+  (`trg_norma_imut_parcial`, espelha apensação): conteúdo legal congela; só `promulgada→publicada` muta (uma
+  vez). `tipo-proposicao->tipo-norma` fail-closed (indicação/requerimento/moção não viram norma). **(→ F4)**
+  sem eventos (`Norma*`/`Publicacao*`) nem wire/in; a publicação como **feed ao DOM** (artefato oficial) é
+  produto posterior. **(→ eixo B)** o texto promulgado (`origem_versao='promulgacao'`) é forward-ref
+  `texto_versao_id` — o caller cria a versão. **(→ regimento [GAP])** segmento exato de autoridade da URN por
+  espécie (ato da câmara vs lei do município); veto parcial→promulgação parcial. **Aplicado:** clojure-MAJOR
+  (guard `texto-versao-id` em `promulgar!`, simetria c/ `publicar!`), 2 MENOR (guard `numero` nil na URN;
+  model `texto-versao-id` sem `{:optional true}`); DB-MAJOR (CHECK **bicondicional** `norma_publicacao_coerente`
+  — fecha a janela de 'promulgada' com `publicado_em` preenchido via os campos mutáveis do trigger).
+- **Carries do F3.8a (pós-aprovação — autógrafo + sanção/veto, 28/06; review ecc clojure+database):**
+  `autografo` (artefato legal **append-only puro**, numerado gapless por ente/ano via `kernel/sequencial`,
+  UNIQUE por proposição) + `tramitacao_executiva` (state machine sanção/veto: `aguardando` → {`sancionado`|
+  `sancao_tacita`|`vetado`}; `vetado` → {`veto_mantido`|`veto_derrubado`}; trava terminal nível b). Apreciação
+  do veto **reusa a votação do eixo G** (maioria absoluta; `veto_votacao_id` FK same-tenant). **(→ F3.8b)** a
+  promulgação (norma + numeração canônica + **URN-de-norma LexML** + publicação) — `logic/promulgavel?` já
+  gate-keeps os 3 desfechos que viram norma. **(→ F5)** o **processamento do prazo** de sanção/veto (sanção
+  tácita ao vencer `prazo_resposta_em`) = worker `prazo_dominio_ativo`, mesmo deferimento do
+  `proposicao_prazo_ativo`. **(→ track cripto/NFR)** assinatura **ICP-Brasil** do autógrafo = `[GAP]`. **(→
+  regimento [GAP])** prazos/base do quórum/veto parcial→promulgação parcial. **(→ F4)** sem eventos de domínio
+  (`Autografo*`/`Sancao*`) ainda; sem wire/in. **Não-adotado (com razão):** CHECK `veto_votacao_id NOT NULL`
+  nos terminais de veto — `veto_mantido` pode ocorrer sem votação registrada na V1 (sobre-restringe o `[GAP]`
+  regimental). **Aplicado:** clojure-M1 (`promulgavel?` puro → `logic`), M2 (guard valida vocabulário do
+  `veto-tipo`), m1 (sets de transição → constantes `logic`), m2 (ordem do require); DB-CRÍTICO
+  (`exec_veto_requer_tipo` cobre os 3 estados de veto, fecha a janela de terminal incoerente), 2 DB-MAJOR
+  (drop de `idx_autografo_proposicao`/`idx_exec_autografo`, redundantes c/ as UNIQUEs), DB-MENOR (CHECK
+  `autografo_efetivado_tem_texto`).
 - **Carries do F3.7 (eixo G — votação, 28/06; review ecc clojure+database):** `votacoes`+`votos` (nominal,
   append-only, UNIQUE por vereador)+`votos_secretos` (anônimo, sem `vereador_id`/`created_by` — sigilo no
   schema), todas NÃO-particionadas; quórum verificado por **aritmética exata** (`logic/resultado-votacao`,
