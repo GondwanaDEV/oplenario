@@ -258,3 +258,68 @@
   [origem]
   (when-not (contains? origens-inscricao origem)
     (throw (ex-info "origem de inscricao invalida" {:origem origem :validas origens-inscricao}))))
+
+;; ---------- §22.6 eixo F — tribuna: fala executada + cronometro (F4.5b) ----------
+;; A FALA e' SEPARADA da inscricao (intencao != execucao). O cronometro NUNCA e' snapshot: e' PROJECAO sobre
+;; eventos append-only; `tempo_efetivamente_usado_segundos` e' computado AO ENCERRAR. Os vocabularios espelham
+;; os CHECK da migration 0033.
+
+(def tipos-fala
+  "Tipos de fala (§22.6 eixo F). Apartes vinculam-se a uma fala principal via fala_pai_id."
+  #{"principal" "aparte" "pela_ordem" "questao_de_ordem" "explicacao_pessoal" "comunicado"})
+
+(def tipos-evento-cronometro
+  "Eventos do cronometro da fala. iniciada/encerrada sao cravados por iniciar-fala!/encerrar-fala!; os demais
+  sao registrados pela Mesa ao vivo."
+  #{"iniciada" "encerrada" "pausada" "retomada" "aparte_concedido" "tempo_adicional_concedido"})
+
+(def tipos-evento-cronometro-manual
+  "Subconjunto que a Mesa registra explicitamente (registrar-evento-cronometro!); iniciada/encerrada sao
+  internos do ciclo da fala."
+  #{"pausada" "retomada" "aparte_concedido" "tempo_adicional_concedido"})
+
+(defn aparte? [tipo-fala] (= "aparte" tipo-fala))
+
+(defn validar-tipo-fala [tipo]
+  (when-not (contains? tipos-fala tipo)
+    (throw (ex-info "tipo de fala invalido" {:tipo tipo :validos tipos-fala}))))
+
+(defn validar-tipo-evento-cronometro-manual [tipo]
+  (when-not (contains? tipos-evento-cronometro-manual tipo)
+    (throw (ex-info "tipo de evento de cronometro invalido (manual)" {:tipo tipo :validos tipos-evento-cronometro-manual}))))
+
+(defn validar-evento-cronometro
+  "Coerencia tipo<->segundos-adicionais (o CHECK da mig 0033 espelha): 'tempo_adicional_concedido' EXIGE
+  segundos-adicionais > 0; os demais tipos proibem o campo."
+  [tipo segundos-adicionais]
+  (validar-tipo-evento-cronometro-manual tipo)
+  (if (= "tempo_adicional_concedido" tipo)
+    (when-not (and (int? segundos-adicionais) (pos? segundos-adicionais))
+      (throw (ex-info "tempo_adicional_concedido exige segundos_adicionais > 0" {:segundos segundos-adicionais})))
+    (when (some? segundos-adicionais)
+      (throw (ex-info "so tempo_adicional_concedido carrega segundos_adicionais" {:tipo tipo})))))
+
+(defn- epoch-s ^long [^java.time.Instant t] (.getEpochSecond t))
+
+(defn tempo-efetivo-segundos
+  "Tempo EFETIVAMENTE usado (segundos) = (encerrou - iniciou) menos a soma dos intervalos pausados. `eventos` =
+  os eventos de cronometro (kebab, com :tipo e :ocorrido-em Instant) — usa os pares pausada->retomada. Aparte e
+  tempo adicional NAO entram no tempo USADO (aparte = marcador; tempo adicional estende o LIMITE regimental, nao
+  o uso). Pura — a base de computar o cronometro ao encerrar (projecao sobre eventos, sem snapshot)."
+  [^java.time.Instant iniciou-em ^java.time.Instant encerrou-em eventos]
+  (let [bruto (- (epoch-s encerrou-em) (epoch-s iniciou-em))
+        [pausado-pares ini-final]
+        (loop [evs (sort-by :ocorrido-em (filter #(#{"pausada" "retomada"} (:tipo %)) eventos))
+               ini nil acc 0]
+          (if-let [e (first evs)]
+            (let [t (:tipo e) o (:ocorrido-em e)]
+              (cond
+                (and (= t "pausada")  (nil? ini))  (recur (rest evs) o acc)
+                (and (= t "retomada") (some? ini)) (recur (rest evs) nil (+ acc (- (epoch-s o) (epoch-s ini))))
+                :else (recur (rest evs) ini acc)))
+            [acc ini]))
+        ;; pausa ABERTA no encerramento (pausada sem retomada): desconta o intervalo [ini-final, encerrou-em] —
+        ;; senao o tempo viria inflado (o orador estava pausado quando a fala encerrou).
+        pausado (cond-> pausado-pares
+                  (some? ini-final) (+ (- (epoch-s encerrou-em) (epoch-s ini-final))))]
+    (max 0 (- bruto pausado))))

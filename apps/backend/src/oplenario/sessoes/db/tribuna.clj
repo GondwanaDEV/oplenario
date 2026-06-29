@@ -86,3 +86,129 @@
       (when (zero? (:next.jdbc/update-count r 0))
         (throw (ex-info "desistir!: conflito de lock_version ou inexistente" {:id id :lock-version lock-version})))
       {:de atual :para "desistencia"})))
+
+;; ---------- fala_executada + cronometro (execucao, F4.5b) ----------
+
+(def ^:private cols-fala
+  [:id :ente_id :sessao_id :inscricao_id :orador_id :tipo_fala :fala_pai_id :fase :proposicao_ref_id
+   :iniciou_em :encerrou_em :tempo_efetivamente_usado_segundos :lock_version])
+
+(def ^:private cols-cronometro
+  [:id :ente_id :fala_id :tipo :ocorrido_em :segundos_adicionais])
+
+(defn- logar-cronometro!
+  "Insere um evento append-only no cronometro da fala (mesma tx do ato). `id` opcional — quando o caller precisa
+  do id de volta (registrar-evento-cronometro!) ele o passa; iniciar/encerrar nao precisam e deixam gerar."
+  [tx {:keys [id ente-id fala-id tipo ocorrido-em segundos-adicionais created-by]}]
+  (jdbc/execute-one! tx
+    (sql/format {:insert-into :sessoes.fala_cronometro_evento
+                 :values [{:id (or id (random-uuid)) :ente_id ente-id :fala_id fala-id :tipo tipo
+                           :ocorrido_em ocorrido-em :segundos_adicionais segundos-adicionais
+                           :created_by created-by :efetivado_em [:now]}]})))
+
+(defn iniciar-fala!
+  "Inicia uma fala (execucao): INSERE a fala (em curso) e LOGA o evento 'iniciada' (ocorrido_em = iniciou-em),
+  atomico. Valida tipo-fala/fase + nil-guard de auditoria (fail-closed); a coerencia aparte<->fala_pai_id e' o
+  CHECK da migration. `inscricao-id`/`fala-pai-id`/`proposicao-ref-id` opcionais. Devolve {:id}."
+  [tx {:keys [id ente-id sessao-id inscricao-id orador-id tipo-fala fala-pai-id fase proposicao-ref-id
+              iniciou-em created-by]}]
+  (logic/validar-tipo-fala tipo-fala)
+  (logic/validar-fase fase)
+  (when (nil? created-by)
+    (throw (ex-info "iniciar-fala!: created-by e' obrigatorio (trilha de quem registrou a fala)" {:id id})))
+  (jdbc/execute-one! tx
+    (sql/format {:insert-into :sessoes.fala_executada
+                 :values [{:id id :ente_id ente-id :sessao_id sessao-id :inscricao_id inscricao-id
+                           :orador_id orador-id :tipo_fala tipo-fala :fala_pai_id fala-pai-id :fase fase
+                           :proposicao_ref_id proposicao-ref-id :iniciou_em iniciou-em
+                           :created_by created-by :efetivado_em [:now]}]}))
+  (logar-cronometro! tx {:ente-id ente-id :fala-id id :tipo "iniciada" :ocorrido-em iniciou-em
+                         :created-by created-by})
+  {:id id})
+
+(defn registrar-evento-cronometro!
+  "Registra um evento MANUAL do cronometro (pausada|retomada|aparte_concedido|tempo_adicional_concedido) —
+  iniciada/encerrada sao do ciclo da fala (iniciar-fala!/encerrar-fala!). Valida tipo + coerencia de
+  segundos_adicionais + nil-guard (fail-closed). Append-only. Devolve {:id}."
+  [tx {:keys [ente-id fala-id tipo ocorrido-em segundos-adicionais created-by]}]
+  (logic/validar-evento-cronometro tipo segundos-adicionais)
+  (when (nil? created-by)
+    (throw (ex-info "registrar-evento-cronometro!: created-by e' obrigatorio (trilha de auditoria)" {:fala-id fala-id})))
+  (let [eid (random-uuid)]
+    (logar-cronometro! tx {:id eid :ente-id ente-id :fala-id fala-id :tipo tipo :ocorrido-em ocorrido-em
+                           :segundos-adicionais segundos-adicionais :created-by created-by})
+    {:id eid}))
+
+(defn buscar-fala
+  "Busca uma fala por id no tenant (RLS via ente-id). Devolve o mapa kebab-case ou nil (not-found)."
+  [tx ente-id id]
+  (comum/linha->kebab
+   (jdbc/execute-one! tx
+     (sql/format {:select cols-fala :from [:sessoes.fala_executada]
+                  :where [:and [:= :ente_id ente-id] [:= :id id]]}))))
+
+(defn listar-falas-da-sessao
+  "Falas da sessao em ordem cronologica de iniciou_em (read-model do painel + ancora de diarizacao)."
+  [tx ente-id sessao-id]
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select cols-fala :from [:sessoes.fala_executada]
+                  :where [:and [:= :ente_id ente-id] [:= :sessao_id sessao-id]]
+                  :order-by [[:iniciou_em :asc] [:id :asc]]}))))
+
+(defn listar-apartes
+  "Apartes de uma fala-mae (reconstroi 'fala principal com apartes'), em ordem cronologica."
+  [tx ente-id fala-pai-id]
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select cols-fala :from [:sessoes.fala_executada]
+                  :where [:and [:= :ente_id ente-id] [:= :fala_pai_id fala-pai-id]]
+                  :order-by [[:iniciou_em :asc] [:id :asc]]}))))
+
+(defn listar-eventos-cronometro
+  "Eventos do cronometro da fala em ordem cronologica (a projecao do cronometro le daqui)."
+  [tx ente-id fala-id]
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select cols-cronometro :from [:sessoes.fala_cronometro_evento]
+                  :where [:and [:= :ente_id ente-id] [:= :fala_id fala-id]]
+                  :order-by [[:ocorrido_em :asc] [:id :asc]]}))))
+
+(defn- fala-para-encerrar
+  "Le a fala p/ encerrar (FOR UPDATE serializa): iniciou_em, encerrou_em, lock. Valida existencia, lock e que a
+  fala AINDA esta em curso (encerrou_em IS NULL) — encerrar duas vezes corromperia o tempo computado."
+  [tx ente-id id lock-version]
+  (let [{:keys [iniciou-em encerrou-em] db-lock :lock-version}
+        (-> (jdbc/execute-one! tx
+              (sql/format {:select [:iniciou_em :encerrou_em :lock_version] :from [:sessoes.fala_executada]
+                           :where [:and [:= :ente_id ente-id] [:= :id id]] :for :update}))
+            comum/linha->kebab)]
+    (when (nil? iniciou-em)
+      (throw (ex-info "encerrar-fala!: fala inexistente" {:id id :ente-id ente-id})))
+    (when (not= db-lock lock-version)
+      (throw (ex-info "encerrar-fala!: conflito de lock_version" {:id id :esperado lock-version :atual db-lock})))
+    (when (some? encerrou-em)
+      (throw (ex-info "encerrar-fala!: fala ja encerrada" {:id id})))
+    iniciou-em))
+
+(defn encerrar-fala!
+  "Encerra a fala: crava encerrou_em + COMPUTA o tempo efetivamente usado a partir dos eventos do cronometro
+  (PROJECAO, nao snapshot) e LOGA o evento 'encerrada', atomico. CAS por lock_version + guard encerrou_em IS NULL
+  (encerra uma vez). nil-guard de auditoria. Devolve {:id :tempo-efetivamente-usado-segundos}."
+  [tx {:keys [ente-id id encerrou-em lock-version updated-by]}]
+  (when (nil? updated-by)
+    (throw (ex-info "encerrar-fala!: updated-by e' obrigatorio (trilha de quem encerrou)" {:id id})))
+  (let [iniciou-em (fala-para-encerrar tx ente-id id lock-version)
+        eventos    (listar-eventos-cronometro tx ente-id id)
+        tempo      (logic/tempo-efetivo-segundos iniciou-em encerrou-em eventos)
+        r (jdbc/execute-one! tx
+            (sql/format {:update :sessoes.fala_executada
+                         :set {:encerrou_em encerrou-em :tempo_efetivamente_usado_segundos tempo
+                               :updated_by updated-by :atualizado_em [:now] :lock_version [:+ :lock_version 1]}
+                         :where [:and [:= :ente_id ente-id] [:= :id id] [:= :lock_version lock-version]
+                                 [:= :encerrou_em nil]]}))]
+    (when (zero? (:next.jdbc/update-count r 0))
+      (throw (ex-info "encerrar-fala!: conflito de lock_version, ja encerrada ou inexistente" {:id id})))
+    (logar-cronometro! tx {:ente-id ente-id :fala-id id :tipo "encerrada" :ocorrido-em encerrou-em
+                           :created-by updated-by})
+    {:id id :tempo-efetivamente-usado-segundos tempo}))

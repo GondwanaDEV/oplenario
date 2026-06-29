@@ -3,10 +3,14 @@
   INTENCAO: `inscricao_oradores` com `origem_inscricao` discriminando os 4 caminhos (pre_sessao_app|
   pre_sessao_secretaria|intra_sessao_pedido|automatica_por_autoria); subordinada a FASE da pauta (reusa o enum
   de fase); vinculo OPCIONAL a `proposicao_ref_id`; pode terminar em `desistencia` (terminal) SEM gerar fala —
-  intencao != execucao. `vereador_id`/`proposicao_ref_id` sao forward-ref (uuid, sem FK cross-schema, §22.10)."
+  intencao != execucao. `vereador_id`/`proposicao_ref_id` sao forward-ref (uuid, sem FK cross-schema, §22.10).
+  F4.5b prova a FALA EXECUTADA (separada da inscricao) + o cronometro como PROJECAO sobre eventos append-only
+  (tempo computado ao encerrar, sem snapshot) + apartes via fala_pai_id."
   (:require [clojure.test :refer [deftest is use-fixtures]]
             [com.stuartsierra.component :as component]
+            [honey.sql]
             [malli.core :as m]
+            [next.jdbc]
             [oplenario.config :as config]
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.kernel.tenancy :as tenancy]
@@ -107,3 +111,136 @@
           (let [lst (tribuna/listar-inscricoes tx ente sid)]
             (is (= 2 (count lst)) "lista as inscricoes da sessao")
             (is (every? #(= sid (:sessao-id %)) lst) "todas da sessao")))))))
+
+;; ============================================================================
+;; F4.5b — FALA EXECUTADA + CRONOMETRO (execucao). A fala e' SEPARADA da inscricao
+;; (intencao != execucao); cronometro = PROJECAO sobre eventos append-only, tempo
+;; computado ao encerrar (sem coluna ticando — disc.5). Apartes via fala_pai_id.
+;; ============================================================================
+
+(def ^:private f0 (java.time.Instant/parse "2026-06-29T14:00:00Z"))
+(defn- mais [^java.time.Instant t s] (.plusSeconds t s))
+
+(defn- iniciar! [tx ente sid extra]
+  (tribuna/iniciar-fala!
+   tx (merge {:id (random-uuid) :ente-id ente :sessao-id sid :orador-id (random-uuid)
+              :tipo-fala "principal" :fase "ordem_do_dia" :iniciou-em f0 :created-by (random-uuid)} extra)))
+
+;; ---------- vocabularios (puros) ----------
+
+(deftest vocabularios-fala
+  (is (thrown? Exception (logic/validar-tipo-fala "cochicho")) "tipo_fala invalido lanca")
+  (is (nil? (logic/validar-tipo-fala "aparte")) "tipo_fala valido")
+  (is (true? (logic/aparte? "aparte")) "aparte e' aparte")
+  (is (false? (logic/aparte? "principal")) "principal nao e' aparte")
+  (is (thrown? Exception (logic/validar-evento-cronometro "tempo_adicional_concedido" nil))
+      "tempo adicional exige segundos")
+  (is (thrown? Exception (logic/validar-evento-cronometro "pausada" 30))
+      "pausada nao carrega segundos_adicionais"))
+
+;; ---------- cronometro PURO: tempo efetivo = elapsed - pausas ----------
+
+(deftest tempo-efetivo-puro
+  (is (= 300 (logic/tempo-efetivo-segundos f0 (mais f0 300) []))
+      "sem pausa: tempo usado = elapsed")
+  (is (= 240 (logic/tempo-efetivo-segundos f0 (mais f0 300)
+                                           [{:tipo "pausada"  :ocorrido-em (mais f0 100)}
+                                            {:tipo "retomada" :ocorrido-em (mais f0 160)}]))
+      "uma pausa de 60s desconta do tempo usado")
+  (is (= 300 (logic/tempo-efetivo-segundos f0 (mais f0 300)
+                                           [{:tipo "aparte_concedido" :ocorrido-em (mais f0 50)}]))
+      "aparte_concedido nao desconta (marcador; cronometro principal segue)")
+  (is (= 200 (logic/tempo-efetivo-segundos f0 (mais f0 300)
+                                           [{:tipo "pausada" :ocorrido-em (mais f0 200)}]))
+      "pausa ABERTA no encerramento (pausada sem retomada) desconta [pausa, encerrou] — nao infla"))
+
+;; ---------- iniciar + buscar + model ----------
+
+(deftest iniciar-e-buscar-fala
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [sid (:id (sessao/agendar! tx {:id (random-uuid) :ente-id ente :sessao-legislativa-id (random-uuid)
+                                            :tipo-sessao "ordinaria" :modalidade "presencial"}))
+              {fid :id} (iniciar! tx ente sid {})
+              r (tribuna/buscar-fala tx ente fid)]
+          (is (= "principal" (:tipo-fala r)) "tipo da fala")
+          (is (= f0 (:iniciou-em r)) "marco de inicio (intervalo p/ diarizacao)")
+          (is (nil? (:encerrou-em r)) "ainda em curso")
+          (is (nil? (:tempo-efetivamente-usado-segundos r)) "tempo so ao encerrar")
+          (is (m/validate mod/FalaExecutada r) "bate o model")
+          (let [evs (tribuna/listar-eventos-cronometro tx ente fid)]
+            (is (= ["iniciada"] (mapv :tipo evs)) "iniciar loga o evento 'iniciada'")))))))
+
+;; ---------- encerrar computa o tempo a partir dos eventos ----------
+
+(deftest encerrar-computa-tempo
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [sid (:id (sessao/agendar! tx {:id (random-uuid) :ente-id ente :sessao-legislativa-id (random-uuid)
+                                            :tipo-sessao "ordinaria" :modalidade "presencial"}))
+              {fid :id} (iniciar! tx ente sid {})]
+          (tribuna/registrar-evento-cronometro! tx {:ente-id ente :fala-id fid :tipo "pausada"
+                                                    :ocorrido-em (mais f0 100) :created-by (random-uuid)})
+          (tribuna/registrar-evento-cronometro! tx {:ente-id ente :fala-id fid :tipo "retomada"
+                                                    :ocorrido-em (mais f0 160) :created-by (random-uuid)})
+          (tribuna/encerrar-fala! tx {:ente-id ente :id fid :encerrou-em (mais f0 300)
+                                      :lock-version 0 :updated-by (random-uuid)})
+          (let [r (tribuna/buscar-fala tx ente fid)]
+            (is (= (mais f0 300) (:encerrou-em r)) "marco de fim cravado")
+            (is (= 240 (:tempo-efetivamente-usado-segundos r)) "tempo = 300 - 60 de pausa, computado ao encerrar")
+            (is (= #{"iniciada" "pausada" "retomada" "encerrada"}
+                   (set (map :tipo (tribuna/listar-eventos-cronometro tx ente fid))))
+                "encerrar loga 'encerrada'"))
+          (is (thrown? Exception (tribuna/encerrar-fala! tx {:ente-id ente :id fid :encerrou-em (mais f0 400)
+                                                             :lock-version 1 :updated-by (random-uuid)}))
+              "encerrar uma fala ja encerrada e' barrado (uma vez)"))))))
+
+;; ---------- apartes via fala_pai_id ----------
+
+(deftest apartes-via-fala-pai
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [sid (:id (sessao/agendar! tx {:id (random-uuid) :ente-id ente :sessao-legislativa-id (random-uuid)
+                                            :tipo-sessao "ordinaria" :modalidade "presencial"}))
+              {pai :id} (iniciar! tx ente sid {})
+              {ap :id} (iniciar! tx ente sid {:tipo-fala "aparte" :fala-pai-id pai :iniciou-em (mais f0 30)})]
+          (is (= [ap] (mapv :id (tribuna/listar-apartes tx ente pai)))
+              "aparte vinculado ao pai via fala_pai_id")
+          (is (thrown? Exception (iniciar! tx ente sid {:tipo-fala "aparte"}))
+              "aparte SEM fala_pai_id viola o CHECK (aparte exige pai)")
+          (is (thrown? Exception (iniciar! tx ente sid {:tipo-fala "principal" :fala-pai-id pai}))
+              "fala nao-aparte COM fala_pai_id viola o CHECK (so aparte tem pai)"))))))
+
+;; ---------- sessao solene: fala SEM inscricao (inscricao_id nullable) ----------
+
+(deftest fala-sem-inscricao-solene
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [sid (:id (sessao/agendar! tx {:id (random-uuid) :ente-id ente :sessao-legislativa-id (random-uuid)
+                                            :tipo-sessao "solene" :modalidade "presencial"}))
+              {fid :id} (iniciar! tx ente sid {:tipo-fala "comunicado"})]
+          (is (nil? (:inscricao-id (tribuna/buscar-fala tx ente fid)))
+              "sessao solene reusa fala_executada com inscricao_id nulo (campos relaxados)"))))))
+
+;; ---------- evento de cronometro e' append-only ----------
+
+(deftest cronometro-evento-append-only
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [sid (:id (sessao/agendar! tx {:id (random-uuid) :ente-id ente :sessao-legislativa-id (random-uuid)
+                                            :tipo-sessao "ordinaria" :modalidade "presencial"}))
+              {fid :id} (iniciar! tx ente sid {})
+              {eid :id} (tribuna/registrar-evento-cronometro! tx {:ente-id ente :fala-id fid :tipo "aparte_concedido"
+                                                                  :ocorrido-em (mais f0 50) :created-by (random-uuid)})]
+          (is (some? eid) "evento gravado")
+          (is (thrown? Exception
+                       (next.jdbc/execute-one!
+                        tx (honey.sql/format {:update :sessoes.fala_cronometro_evento
+                                              :set {:tipo "pausada"}
+                                              :where [:and [:= :ente_id ente] [:= :id eid]]})))
+              "UPDATE no evento de cronometro e' barrado (append-only)"))))))

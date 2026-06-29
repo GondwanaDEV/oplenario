@@ -50,7 +50,15 @@
   (inscrever! [this ente-id m] "Inscreve um orador (intencao); numera a fila por (sessao, fase). Devolve {:id :ordem}.")
   (buscar-inscricao [this ente-id id])
   (listar-inscricoes [this ente-id sessao-id] "Fila de oradores da sessao (por fase + ordem).")
-  (desistir! [this ente-id m] "Move a inscricao para 'desistencia' (terminal) via maquina + CAS."))
+  (desistir! [this ente-id m] "Move a inscricao para 'desistencia' (terminal) via maquina + CAS.")
+  ;; §22.6 eixo F — tribuna: fala executada + cronometro (execucao)
+  (iniciar-fala! [this ente-id m] "Inicia a fala + loga 'iniciada', atomico. Devolve {:id}.")
+  (registrar-evento-cronometro! [this ente-id m] "Evento manual do cronometro (pausada/retomada/aparte/tempo-adicional).")
+  (encerrar-fala! [this ente-id m] "Encerra a fala, COMPUTA o tempo dos eventos + loga 'encerrada' (uma vez, CAS).")
+  (buscar-fala [this ente-id id])
+  (listar-falas-da-sessao [this ente-id sessao-id] "Falas da sessao em ordem cronologica (read-model + diarizacao).")
+  (listar-apartes [this ente-id fala-pai-id] "Apartes de uma fala-mae.")
+  (listar-eventos-cronometro [this ente-id fala-id] "Eventos do cronometro da fala (a projecao le daqui)."))
 
 (defrecord RepoSessoesPg [datasource bus]
   RepoSessoes
@@ -86,7 +94,14 @@
   (inscrever! [this ente-id m] (transacao this ente-id #(tribuna/inscrever! % (assoc m :ente-id ente-id))))
   (buscar-inscricao [this ente-id id] (transacao this ente-id #(tribuna/buscar-inscricao % ente-id id)))
   (listar-inscricoes [this ente-id sessao-id] (transacao this ente-id #(tribuna/listar-inscricoes % ente-id sessao-id)))
-  (desistir! [this ente-id m] (transacao this ente-id #(tribuna/desistir! % (assoc m :ente-id ente-id)))))
+  (desistir! [this ente-id m] (transacao this ente-id #(tribuna/desistir! % (assoc m :ente-id ente-id))))
+  (iniciar-fala! [this ente-id m] (transacao this ente-id #(tribuna/iniciar-fala! % (assoc m :ente-id ente-id))))
+  (registrar-evento-cronometro! [this ente-id m] (transacao this ente-id #(tribuna/registrar-evento-cronometro! % (assoc m :ente-id ente-id))))
+  (encerrar-fala! [this ente-id m] (transacao this ente-id #(tribuna/encerrar-fala! % (assoc m :ente-id ente-id))))
+  (buscar-fala [this ente-id id] (transacao this ente-id #(tribuna/buscar-fala % ente-id id)))
+  (listar-falas-da-sessao [this ente-id sessao-id] (transacao this ente-id #(tribuna/listar-falas-da-sessao % ente-id sessao-id)))
+  (listar-apartes [this ente-id fala-pai-id] (transacao this ente-id #(tribuna/listar-apartes % ente-id fala-pai-id)))
+  (listar-eventos-cronometro [this ente-id fala-id] (transacao this ente-id #(tribuna/listar-eventos-cronometro % ente-id fala-id))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."
