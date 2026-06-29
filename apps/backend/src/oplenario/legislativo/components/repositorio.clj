@@ -6,6 +6,8 @@
   (:require [oplenario.kernel.tenancy :as tenancy]
             [oplenario.legislativo.db.apensacao :as apensacao]
             [oplenario.legislativo.db.autografo :as autografo]
+            [oplenario.legislativo.db.documento :as documento]
+            [oplenario.legislativo.db.documento-modelo :as doc-modelo]
             [oplenario.legislativo.db.emenda :as emenda]
             [oplenario.legislativo.db.norma :as norma]
             [oplenario.legislativo.db.parecer :as parecer]
@@ -91,7 +93,18 @@
   (protocolar-geral! [this ente-id m] "Numera gapless (reinicio anual) + insere no livro do protocolo, atomico.")
   (buscar-protocolo [this ente-id id])
   (protocolos-do-objeto [this ente-id objeto-tipo objeto-id])
-  (protocolos-do-ano [this ente-id ano]))
+  (protocolos-do-ano [this ente-id ano])
+  ;; F3.9b — Expediente: geracao de documentos por modelo (merge do dominio)
+  (criar-modelo! [this ente-id m] "Cria um template de documento (config do tenant).")
+  (buscar-modelo [this ente-id id])
+  (modelo-por-chave [this ente-id chave])
+  (listar-modelos-ativos [this ente-id])
+  (atualizar-modelo! [this ente-id m] "Edita nome/corpo/ativo do modelo (CAS).")
+  (gerar-documento! [this ente-id m] "Renderiza o merge + insere 'rascunho', atomico.")
+  (buscar-documento [this ente-id id])
+  (documentos-do-modelo [this ente-id modelo-id])
+  (editar-documento! [this ente-id m] "Reescreve corpo/assunto enquanto rascunho (CAS).")
+  (emitir-documento! [this ente-id m] "rascunho -> emitido (congela o conteudo); CAS."))
 
 (defrecord RepoLegislativoPg [datasource bus]
   RepoLegislativo
@@ -191,7 +204,18 @@
   (protocolar-geral! [this ente-id m] (transacao this ente-id #(protocolo/protocolar! % (assoc m :ente-id ente-id))))
   (buscar-protocolo [this ente-id id] (transacao this ente-id #(protocolo/buscar % ente-id id)))
   (protocolos-do-objeto [this ente-id ot oid] (transacao this ente-id #(protocolo/buscar-por-objeto % ente-id ot oid)))
-  (protocolos-do-ano [this ente-id ano] (transacao this ente-id #(protocolo/listar-por-ano % ente-id ano))))
+  (protocolos-do-ano [this ente-id ano] (transacao this ente-id #(protocolo/listar-por-ano % ente-id ano)))
+  ;; F3.9b — documentos. gerar! renderiza o merge (logic) + insere rascunho na tx; emitir! congela.
+  (criar-modelo! [this ente-id m] (transacao this ente-id #(doc-modelo/criar! % (assoc m :ente-id ente-id))))
+  (buscar-modelo [this ente-id id] (transacao this ente-id #(doc-modelo/buscar % ente-id id)))
+  (modelo-por-chave [this ente-id chave] (transacao this ente-id #(doc-modelo/buscar-por-chave % ente-id chave)))
+  (listar-modelos-ativos [this ente-id] (transacao this ente-id #(doc-modelo/listar-ativos % ente-id)))
+  (atualizar-modelo! [this ente-id m] (transacao this ente-id #(doc-modelo/atualizar! % (assoc m :ente-id ente-id))))
+  (gerar-documento! [this ente-id m] (transacao this ente-id #(documento/gerar! % (assoc m :ente-id ente-id))))
+  (buscar-documento [this ente-id id] (transacao this ente-id #(documento/buscar % ente-id id)))
+  (documentos-do-modelo [this ente-id mid] (transacao this ente-id #(documento/listar-por-modelo % ente-id mid)))
+  (editar-documento! [this ente-id m] (transacao this ente-id #(documento/editar-rascunho! % (assoc m :ente-id ente-id))))
+  (emitir-documento! [this ente-id m] (transacao this ente-id #(documento/emitir! % (assoc m :ente-id ente-id)))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

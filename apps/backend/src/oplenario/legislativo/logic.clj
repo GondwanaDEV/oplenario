@@ -133,6 +133,31 @@
   #{"proposicao" "documento" "oficio_recebido" "requerimento_cidadao" "processo_administrativo" "outro"})
 (def sentidos-protocolo #{"recebido" "expedido" "interno"})
 
+;; --- F3.9b EXPEDIENTE: geracao de documentos por modelo (feature 3.22). Espelham os CHECK da mig 0025. ---
+(def tipos-documento
+  #{"oficio" "certidao" "requerimento_administrativo" "convite" "mala_direta" "outro"})
+(def estados-documento #{"rascunho" "emitido"})
+(def estados-documento-terminais
+  "Emitido = artefato congelado (imutabilidade b; espelha o arg do trigger trg_documento_imut_estado)."
+  #{"emitido"})
+
+(defn renderizar-documento
+  "MERGE do dominio no template (feature 3.22): substitui cada placeholder {{chave}} pelo valor em `dados`
+  (mapa chave-string -> valor). FAIL-CLOSED: placeholder sem valor correspondente LANCA — um documento legal
+  nao sai com campo nao-preenchido (mesma disciplina da URN). `dados` = FATOS resolvidos UPSTREAM (cadastro
+  etc.), nao JOIN cross-schema (§22.10). Devolve o corpo renderizado."
+  [template dados]
+  (when (nil? template)
+    (throw (ex-info "renderizar-documento: corpo-template nao pode ser nil" {})))
+  ;; '-' no INICIO do character class (literal explicito; evita ler '.-' como range na manutencao).
+  (str/replace template #"\{\{\s*([-\p{Alnum}_.]+)\s*\}\}"
+               (fn [[_ chave]]
+                 (let [v (get dados chave)]
+                   (when (nil? v)
+                     (throw (ex-info "renderizar-documento: placeholder sem valor em dados (campo nao-preenchido)"
+                                     {:chave chave})))
+                   (str v)))))
+
 (def limite-inline-bytes
   "Threshold inline/URI (§22.4 eixo B; calibravel por observabilidade). Acima disso o conteudo vai p/
   o objeto_store e a versao guarda a URI; ate isso, inline na coluna texto_inline."

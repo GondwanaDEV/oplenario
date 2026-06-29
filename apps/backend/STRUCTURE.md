@@ -33,6 +33,19 @@ Dentro do módulo: **`adapters/` só é chamado pelo `diplomat/`** (núcleo `con
 - Migration própria: `20260620000003-admin-sistema.*` (schema + registry `ente`). Refs a `admin_sistema.ente` de outros módulos cruzam por **guard de serviço**, nunca FK/JOIN cross-schema.
 
 ## TODO (deferido p/ implementação — validação ecc)
+- **Carries do F3.9b (Expediente — geração de documentos, 28/06; review ecc clojure+database):**
+  `documento_modelo` (template configurável por ente, mutável, schema `legislativo`) + `documento` (gerado por
+  **merge do domínio** no template via `logic/renderizar-documento` — `{{campo}}` fail-closed em campo
+  não-preenchido; `str/replace` com função = sem injeção de grupo/template, confirmado na review). State
+  machine `rascunho→emitido` (trava terminal b; `dados_merge` jsonb = snapshot de auditoria). Vínculo opcional
+  ao Protocolo Geral via FK same-tenant. **(→ track cripto/NFR)** assinatura **ICP-Brasil** do documento =
+  `[GAP]`. **(→ F4)** sem eventos/wire-in; mala-direta em lote (1 modelo → N documentos) = orquestração do
+  controller. **(→ import/fundação #2)** importar documento já-`emitido` via staging + efetivar o lote dispara
+  a trava terminal e prende a linha — import de terminais insere com `efetivado_em=now` direto (vale p/ TODAS
+  as tabelas trava-terminal; documentado no trigger). **Aplicado:** DB-MAJOR (CHECK `documento_emitido_tem_marca`
+  exige `emitido_em AND emitido_por` — autoria do artefato), 2 DB-MENOR (`corpo <> ''`; nota do trap de import);
+  clojure 4 MENOR (regex `-` no início; `dados_merge` alinhado ao renderizado; guard de no-op em `atualizar!`;
+  guard de template nil). **Com F3.9a+b o Expediente fecha; com isso o F3 (Legislativo) fecha por completo.**
 - **Carries do F3.9a (Expediente — Protocolo Geral, 28/06; review ecc clojure+database):** `protocolo_geral`
   (livro institucional **append-only puro**, NÃO-particionada, schema `legislativo`) — numerador único gapless
   por (ente, ano) via `kernel/sequencial` (reinício anual); objeto **polimórfico** (objeto_tipo/objeto_id, sem
