@@ -33,6 +33,19 @@ Dentro do módulo: **`adapters/` só é chamado pelo `diplomat/`** (núcleo `con
 - Migration própria: `20260620000003-admin-sistema.*` (schema + registry `ente`). Refs a `admin_sistema.ente` de outros módulos cruzam por **guard de serviço**, nunca FK/JOIN cross-schema.
 
 ## TODO (deferido p/ implementação — validação ecc)
+- **Carries do F3.9a (Expediente — Protocolo Geral, 28/06; review ecc clojure+database):** `protocolo_geral`
+  (livro institucional **append-only puro**, NÃO-particionada, schema `legislativo`) — numerador único gapless
+  por (ente, ano) via `kernel/sequencial` (reinício anual); objeto **polimórfico** (objeto_tipo/objeto_id, sem
+  FK, disc.2). **Decisão de módulo:** Expediente no schema `legislativo` (§16.3 agrupa features 3.1-3.23 +
+  protocola proposições daqui) — candidato a extração se crescer (disc.6). **(→ F3.9b)** geração de documentos
+  por modelo (3.22). **(→ carry numeração 3.18)** **reserva/cancelamento** de número exige numerador
+  reservável (≠ gapless-on-commit) — sem requisito validado. **(→ F5/fundação #2)** protocolo de **data
+  histórica** (origem/origem_importado_em via importacao_legado) não parametrizado em `protocolar!`. **(→
+  hardening pré-prod)** índice `(ente_id, protocolado_em)` p/ busca do livro por período (full-scan tolerável
+  no launch). **(→ F4)** sem eventos/wire-in; orquestração "protocolar proposição também cria entrada no PG" é
+  do controller. **Aplicado:** clojure-MAJOR (`buscar-por-objeto` com `objeto-id nil` → `IS NULL`, não
+  `= NULL`); DB-MAJOR (CHECK `protocolo_staging_valido` anti linha-fantasma — append-only a tornaria
+  permanente), DB-MENOR (índice parcial `WHERE objeto_id IS NOT NULL`; CHECK `assunto <> ''`).
 - **Carries do F3.8b (pós-aprovação — norma promulgada, 28/06; review ecc clojure+database):** `norma`
   (artefato legal, NÃO-particionada) nasce de um desfecho **promulgável** (`logic/promulgavel?`); **numeração
   canônica gapless** por (ente, tipo_norma, ano) via `kernel/sequencial`; **URN-de-norma LexML** nasce na

@@ -128,6 +128,11 @@
       (throw (ex-info "especie de proposicao nao produz norma (nao e' ato normativo)"
                       {:tipo-proposicao tipo-proposicao}))))
 
+;; --- F3.9a EXPEDIENTE: Protocolo Geral (§16.3, feature 3.23). Vocabularios espelham os CHECK da mig 0024. ---
+(def objetos-protocolo
+  #{"proposicao" "documento" "oficio_recebido" "requerimento_cidadao" "processo_administrativo" "outro"})
+(def sentidos-protocolo #{"recebido" "expedido" "interno"})
+
 (def limite-inline-bytes
   "Threshold inline/URI (§22.4 eixo B; calibravel por observabilidade). Acima disso o conteudo vai p/
   o objeto_store e a versao guarda a URI; ate isso, inline na coluna texto_inline."

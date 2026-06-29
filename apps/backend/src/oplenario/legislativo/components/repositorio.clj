@@ -13,6 +13,7 @@
             [oplenario.legislativo.db.parecer-tramitacao :as parecer-tram]
             [oplenario.legislativo.db.parecer-voto-divergente :as parecer-voto]
             [oplenario.legislativo.db.proposicao :as proposicao]
+            [oplenario.legislativo.db.protocolo-geral :as protocolo]
             [oplenario.legislativo.db.texto-versao :as texto]
             [oplenario.legislativo.db.tramitacao :as tram]
             [oplenario.legislativo.db.tramitacao-executiva :as exec]
@@ -85,7 +86,12 @@
   (promulgar-norma! [this ente-id m] "Numera gapless + URN-de-norma + insere 'promulgada', atomico.")
   (publicar-norma! [this ente-id m] "promulgada -> publicada (mutacao parcial unica); CAS.")
   (buscar-norma [this ente-id id])
-  (norma-da-proposicao [this ente-id proposicao-id]))
+  (norma-da-proposicao [this ente-id proposicao-id])
+  ;; F3.9a — Expediente: Protocolo Geral (numerador institucional unico, append-only)
+  (protocolar-geral! [this ente-id m] "Numera gapless (reinicio anual) + insere no livro do protocolo, atomico.")
+  (buscar-protocolo [this ente-id id])
+  (protocolos-do-objeto [this ente-id objeto-tipo objeto-id])
+  (protocolos-do-ano [this ente-id ano]))
 
 (defrecord RepoLegislativoPg [datasource bus]
   RepoLegislativo
@@ -180,7 +186,12 @@
   (promulgar-norma! [this ente-id m] (transacao this ente-id #(norma/promulgar! % (assoc m :ente-id ente-id))))
   (publicar-norma! [this ente-id m] (transacao this ente-id #(norma/publicar! % (assoc m :ente-id ente-id))))
   (buscar-norma [this ente-id id] (transacao this ente-id #(norma/buscar % ente-id id)))
-  (norma-da-proposicao [this ente-id pid] (transacao this ente-id #(norma/buscar-por-proposicao % ente-id pid))))
+  (norma-da-proposicao [this ente-id pid] (transacao this ente-id #(norma/buscar-por-proposicao % ente-id pid)))
+  ;; F3.9a — Protocolo Geral. Append-only; numera gapless por ano. Objeto polimorfico (disc.2, sem FK).
+  (protocolar-geral! [this ente-id m] (transacao this ente-id #(protocolo/protocolar! % (assoc m :ente-id ente-id))))
+  (buscar-protocolo [this ente-id id] (transacao this ente-id #(protocolo/buscar % ente-id id)))
+  (protocolos-do-objeto [this ente-id ot oid] (transacao this ente-id #(protocolo/buscar-por-objeto % ente-id ot oid)))
+  (protocolos-do-ano [this ente-id ano] (transacao this ente-id #(protocolo/listar-por-ano % ente-id ano))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."
