@@ -1,0 +1,105 @@
+/* Chrome específico da tela "Painel do plenário ao vivo" — adaptado de
+   produto/design-system/o-plenario/telas/sessao-ao-vivo.html (<style> local). Os tokens + o chassi vêm
+   de globals.css. Aqui só o que é desta superfície (cabine, palco, quórum, tribuna). */
+
+.ao-vivo {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  font-family: var(--mono); font-size: var(--t-13); font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--acento-texto);
+  padding: 0.32rem 0.7rem; border: 1px solid rgba(217, 84, 43, .35); background: rgba(217, 84, 43, .1); border-radius: 999px;
+}
+.ao-vivo.pausada { color: var(--aviso-texto); border-color: color-mix(in srgb, var(--amarelo) 60%, transparent); background: color-mix(in srgb, var(--amarelo) 16%, var(--surface)); }
+.ao-vivo.off { color: var(--texto-2); border-color: var(--linha); background: var(--surface-2); }
+.ao-vivo .pulso { width: 9px; height: 9px; border-radius: 50%; background: var(--telha); flex: 0 0 auto; animation: pulso 1.8s ease-out infinite; }
+@keyframes pulso { 0% { box-shadow: 0 0 0 0 rgba(217, 84, 43, .5); } 70% { box-shadow: 0 0 0 7px rgba(217, 84, 43, 0); } 100% { box-shadow: 0 0 0 0 rgba(217, 84, 43, 0); } }
+
+.sessao-meta { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+.sessao-meta .tipo { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); text-transform: capitalize; }
+.sessao-meta .quando { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); }
+
+.relogio { font-family: var(--mono); font-size: var(--t-21); font-weight: 600; color: var(--marca); letter-spacing: -0.01em; }
+.relogio .rotulo { display: block; font-size: var(--t-12); font-weight: 500; color: var(--texto-2); letter-spacing: .04em; }
+
+/* fase da sessão (estado da máquina) */
+.fases { border-bottom: 1px solid var(--linha); background: var(--surface); }
+.fases-grade { display: flex; align-items: stretch; flex-wrap: wrap; padding: 0; list-style: none; margin: 0; gap: 0.6rem 1.4rem; }
+.fase { display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 0; font-size: var(--t-13); color: var(--texto-2); }
+.fase .ord { font-family: var(--mono); font-size: var(--t-12); width: 22px; height: 22px; flex: 0 0 auto; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid var(--linha); color: var(--texto-2); }
+.fase.feita .ord { background: var(--acao); border-color: var(--acao); color: var(--acao-texto); }
+.fase.atual { color: var(--texto); font-weight: 600; }
+.fase.atual .ord { border-color: var(--telha); color: var(--acento-texto); background: rgba(217, 84, 43, .12); }
+.fase .nome { font-family: var(--display); font-weight: 600; letter-spacing: -0.01em; text-transform: capitalize; }
+
+/* cabine */
+.cabine { display: grid; grid-template-columns: minmax(0, 1fr) 372px; gap: clamp(1rem, 2.4vw, 1.8rem); padding: clamp(1.2rem, 3vw, 2rem) 0 4rem; align-items: start; }
+.rail { display: grid; gap: 1.1rem; position: sticky; top: 84px; }
+
+.bloco { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); }
+.bloco-cabeca { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0.9rem 1.1rem; border-bottom: 1px solid var(--linha); }
+.bloco-cabeca h2 { font-family: var(--display); font-weight: 600; font-size: var(--t-16); letter-spacing: -0.01em; color: var(--texto); margin: 0; }
+.bloco-corpo { padding: 1.1rem; }
+
+/* palco */
+.palco { position: relative; overflow: hidden; }
+.palco::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 5px; background: linear-gradient(90deg, var(--jade) 0 20%, var(--cobalto) 20% 40%, var(--telha) 40% 60%, var(--amarelo) 60% 80%, var(--jade-claro) 80% 100%); }
+.palco-cabeca { padding: 1.4rem 1.4rem 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.item-od { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); }
+.selo-estado { display: inline-flex; align-items: center; gap: 0.45rem; font-family: var(--mono); font-size: var(--t-13); font-weight: 600; text-transform: uppercase; letter-spacing: .07em; padding: 0.3rem 0.7rem; border-radius: 999px; color: #fff; background: var(--telha-fundo); }
+.selo-estado .glifo { width: 8px; height: 8px; border-radius: 50%; background: var(--amarelo); }
+.selo-estado.calmo { color: var(--marca); background: rgba(12, 83, 64, .12); }
+.selo-estado.calmo .glifo { background: var(--jade-claro); }
+.palco h1 { font-family: var(--display); font-weight: 700; font-size: clamp(var(--t-21), 3vw, var(--t-28)); line-height: 1.18; letter-spacing: -0.02em; color: var(--texto); margin: 0.9rem 1.4rem 0.5rem; text-wrap: balance; }
+.palco-autoria { margin: 0 1.4rem 1.2rem; color: var(--texto-2); font-size: var(--t-13); }
+.palco-autoria b { color: var(--texto); font-weight: 600; }
+
+/* aviso honesto: painel cuja rota/evento ainda não foi fiada (W3 fan-out futuro) */
+.pendente-integracao { margin: 0 1.4rem 1.4rem; padding: 1rem 1.1rem; background: color-mix(in srgb, var(--cobalto) 7%, var(--surface)); border: 1px dashed color-mix(in srgb, var(--cobalto) 38%, var(--linha)); border-radius: var(--raio-sm); font-size: var(--t-13); color: var(--texto-2); line-height: 1.5; display: flex; gap: 0.6rem; align-items: flex-start; }
+[data-tema="escuro"] .pendente-integracao { background: color-mix(in srgb, var(--foco) 9%, var(--surface)); }
+.pendente-integracao svg { color: var(--cobalto); flex: 0 0 auto; margin-top: 2px; }
+[data-tema="escuro"] .pendente-integracao svg { color: var(--foco); }
+.pendente-integracao b { color: var(--texto); font-weight: 600; }
+
+/* quórum */
+.quorum-num { display: flex; align-items: baseline; gap: 0.5rem; }
+.quorum-num b { font-family: var(--display); font-weight: 800; font-size: var(--t-40); letter-spacing: -0.02em; color: var(--marca); line-height: 1; font-variant-numeric: tabular-nums; }
+.quorum-num span { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); }
+.hemi { width: 100%; height: auto; display: block; margin: 0.6rem 0 0.2rem; }
+.hemi .presente { fill: var(--acao); }
+.hemi .ausente { fill: var(--linha); }
+.quorum-legenda { display: flex; gap: 1rem; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin-top: 0.3rem; }
+.quorum-legenda i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 0.35rem; vertical-align: -1px; }
+.ok-quorum { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); color: var(--marca); }
+.sem-quorum { color: var(--acento-texto); }
+
+/* tribuna */
+.tribuna-quem { display: flex; align-items: center; gap: 0.7rem; }
+.tribuna-quem .av { width: 40px; height: 40px; background: var(--jade); }
+.tribuna-quem b { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); display: block; line-height: 1.2; }
+.tribuna-quem span { font-size: var(--t-12); color: var(--texto-2); }
+.tribuna-tempo { display: flex; align-items: baseline; justify-content: space-between; margin: 1rem 0 0.4rem; }
+.tribuna-tempo .rotulo { font-family: var(--mono); font-size: var(--t-12); text-transform: uppercase; letter-spacing: .08em; color: var(--texto-2); }
+.tribuna-tempo .timer { font-family: var(--mono); font-weight: 600; font-size: var(--t-28); color: var(--marca); letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.tribuna-tempo .timer.pausado { color: var(--aviso-texto); }
+.tribuna-vazia { color: var(--texto-2); font-size: var(--t-13); }
+.inscritos { margin: 0.9rem 0 0; padding: 0.8rem 0 0; border-top: 1px dashed var(--linha); list-style: none; display: grid; gap: 0.55rem; }
+.inscritos li { display: flex; align-items: center; gap: 0.6rem; font-size: var(--t-13); color: var(--texto-2); }
+.inscritos .ord { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); width: 1.4ch; }
+.inscritos b { color: var(--texto); font-weight: 600; }
+
+/* estados de tela (carregando/erro) */
+.tela-estado { max-width: 520px; margin: 4rem auto; text-align: center; padding: 2rem; }
+.tela-estado h1 { font-family: var(--display); font-size: var(--t-21); color: var(--texto); margin: 0 0 0.5rem; }
+.tela-estado p { color: var(--texto-2); }
+
+@media (max-width: 1040px) {
+  .cabine { grid-template-columns: 1fr; }
+  .rail { position: static; grid-template-columns: 1fr 1fr; }
+  .rail .bloco.larga { grid-column: 1 / -1; }
+}
+@media (max-width: 720px) {
+  .rail { grid-template-columns: 1fr; }
+  .topo-dir { margin-left: 0; width: 100%; justify-content: space-between; flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ao-vivo .pulso { animation: none; }
+}

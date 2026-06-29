@@ -1,0 +1,166 @@
+/* ============================================================
+   O PLENÁRIO · tokens.css — fonte de verdade dos tokens
+   Linguagem: "República Luminosa" (Cívico Tropical) — DOIS MODOS:
+     · claro  = concreto luminoso de Brasília sob luz tropical
+     · escuro = a noite de Brasília (mesma paleta de azulejo;
+                jade-carvão de fundo; jade/telha/cobalto/amarelo
+                brilham no escuro)
+
+   Esta folha é a ÚNICA fonte dos tokens de design. Antes vivia
+   copiada inline em cada tela (~90 linhas × 4) — risco de drift.
+   Toda tela linka este arquivo; nada de redefinir token na tela.
+
+   Camadas:
+     1. :root                       → tokens INVARIANTES de tema
+                                       (paleta-marca, tipografia, geometria)
+     2. :root, [data-tema="claro"]  → semânticos do tema CLARO
+     3. [data-tema="escuro"]        → semânticos do tema ESCURO
+     4. @media (prefers-color-scheme: dark) :root:not([data-tema="claro"])
+                                     → escuro automático (respeita o SO
+                                       quando o usuário não escolheu)
+
+   A paleta-marca do azulejo é FIXA — só superfícies e texto trocam.
+   Spec descritiva: ../LINGUAGEM-VISUAL.md
+   ============================================================ */
+
+:root {
+  /* ---- paleta-marca FIXA (identidade do azulejo · não tematiza) ---- */
+  --jade:         #0C5340;
+  --jade-fundo:   #0A4334;
+  --jade-claro:   #16785C;
+  --telha:        #D9542B;
+  --telha-fundo:  #B9421F;
+  --cobalto:      #1E5FA8;
+  --cobalto-fundo:#184E8A;
+  --amarelo:      #E8B23A;
+
+  /* ---- tipografia ---- */
+  --display: 'Sora', system-ui, sans-serif;
+  --corpo:   'Hanken Grotesk', system-ui, sans-serif;
+  --mono:    'IBM Plex Mono', ui-monospace, monospace;
+
+  /* escala tipográfica: 12 · 13 · 16 · 21 · 28 · 40 · 56 */
+  --t-12: 0.75rem;
+  --t-13: 0.8125rem;
+  --t-16: 1rem;
+  --t-21: 1.3125rem;
+  --t-28: 1.75rem;
+  --t-40: 2.5rem;
+  --t-56: 3.5rem;
+
+  /* ---- geometria ---- */
+  --raio:    14px;
+  --raio-sm: 9px;
+  --raio-lg: 20px;
+  --max:     1360px;   /* superfícies internas; o portal público sobrescreve p/ 1200 */
+
+  /* a marca do PAPEL (Expediente) é jade nos dois temas — o papel é claro */
+  --papel-marca: #0C5340;
+}
+
+/* ====================== TEMA CLARO ====================== */
+:root, [data-tema="claro"] {
+  --bg:        #F1ECDD;
+  --bg-luz:    radial-gradient(120% 80% at 88% -12%, rgba(232,178,58,.14), transparent 55%),
+               radial-gradient(90% 70% at -5% 0%, rgba(30,95,168,.07), transparent 50%);
+  --surface:   #FBF8F0;
+  --surface-2: #FFFFFF;
+  --linha:     #E0D7BF;
+  --texto:     #19211C;
+  --texto-2:   #4C574F;
+  --marca:     #0C5340;
+  --acao:      #0C5340;
+  --acao-hover:#0A4334;
+  --acao-texto:#FFFFFF;
+  --acento-texto: #B9421F;     /* telha legível como texto (passa AA sobre areia) */
+  --foco:      #1E5FA8;
+  --topo-bg:   rgba(241,236,221,.9);
+  --aviso-texto:   #6E5009;    /* texto sobre realce amarelo — versão AA do Marajó (o cheio falha) */
+  --amarelo-traco: #B07D14;    /* traço/borda gráfica de alerta que precisa de 3:1 sobre claro */
+
+  --sombra:      0 1px 0 rgba(25,33,28,.04), 0 18px 40px -28px rgba(12,83,64,.45);
+  --sombra-alta: 0 1px 0 rgba(25,33,28,.05), 0 32px 64px -38px rgba(12,83,64,.55);
+
+  /* --- ilha-PALCO escura (placar da sessão; saúde institucional dos Painéis) --- */
+  --palco-bg:      #0A4334;
+  --palco-texto:   #F1ECDD;
+  --palco-texto-2: rgba(241,236,221,.82);
+  --palco-linha:   rgba(241,236,221,.14);
+  --palco-inset:   rgba(241,236,221,.06);
+
+  /* --- ilha-PAPEL clara (o documento do Expediente) --- */
+  --papel:         #FBF8F0;
+  --papel-2:       #F3EDDD;
+  --papel-texto:   #1B2A20;    /* tinta — quase-preto esverdeado */
+  --papel-texto-2: #586B5E;
+  --papel-linha:   #DCD2B8;
+  --merge:         #B9421F;    /* sublinhado do campo mesclado (AA no papel) */
+  --merge-fundo:   rgba(217,84,43,.10);
+  --sombra-papel:  0 1px 0 rgba(25,33,28,.05), 0 28px 60px -34px rgba(12,83,64,.5);
+}
+
+/* ====================== TEMA ESCURO ===================== */
+[data-tema="escuro"] {
+  --bg:        #0E1A15;
+  --bg-luz:    radial-gradient(120% 80% at 88% -12%, rgba(232,178,58,.08), transparent 55%),
+               radial-gradient(90% 70% at -5% 0%, rgba(24,158,118,.10), transparent 50%);
+  --surface:   #16271F;
+  --surface-2: #1E332A;
+  --linha:     #2C4438;
+  --texto:     #ECE7D6;
+  --texto-2:   #9FB0A4;
+  --marca:     #43BD93;
+  --acao:      #18A074;
+  --acao-hover:#1FB585;
+  --acao-texto:#06150F;
+  --acento-texto: #F0794B;
+  --foco:      #6AA6DE;
+  --topo-bg:   rgba(14,26,21,.88);
+  --aviso-texto:   #E8B23A;    /* no escuro o Marajó cheio já passa AA como texto */
+  --amarelo-traco: #E8B23A;
+
+  --sombra:      0 1px 0 rgba(0,0,0,.2),  0 20px 44px -28px rgba(0,0,0,.6);
+  --sombra-alta: 0 1px 0 rgba(0,0,0,.25), 0 34px 70px -36px rgba(0,0,0,.7);
+
+  /* palco = painel jade saturado, brilha no escuro */
+  --palco-bg:      #0B3A2B;
+  --palco-texto:   #ECE7D6;
+  --palco-texto-2: rgba(236,231,214,.82);
+  --palco-linha:   rgba(236,231,214,.14);
+  --palco-inset:   rgba(236,231,214,.06);
+
+  /* à noite o papel acalma (candeeiro); a tinta segue escura = AA+ */
+  --papel:         #ECE6D4;
+  --papel-2:       #E1D9C2;
+  --papel-texto:   #1B2A20;
+  --papel-texto-2: #586B5E;
+  --papel-linha:   #CFC4A8;
+  --merge:         #B9421F;
+  --merge-fundo:   rgba(185,66,31,.12);
+  --sombra-papel:  0 1px 0 rgba(0,0,0,.25), 0 30px 64px -30px rgba(0,0,0,.7);
+}
+
+/* ============ ESCURO AUTOMÁTICO (segue o SO se o usuário não escolheu) ============
+   ⚠️ MANTER EM PARIDADE com o bloco [data-tema="escuro"] acima — o padrão
+   "respeita o SO + permite override por clique" exige os mesmos valores em
+   dois seletores (um regular, um sob @media; CSS não os combina sem build).
+   Qualquer mudança no escuro deve ser espelhada aqui. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema="claro"]) {
+    --bg:#0E1A15;
+    --bg-luz: radial-gradient(120% 80% at 88% -12%, rgba(232,178,58,.08), transparent 55%),
+              radial-gradient(90% 70% at -5% 0%, rgba(24,158,118,.10), transparent 50%);
+    --surface:#16271F; --surface-2:#1E332A; --linha:#2C4438;
+    --texto:#ECE7D6; --texto-2:#9FB0A4; --marca:#43BD93;
+    --acao:#18A074; --acao-hover:#1FB585; --acao-texto:#06150F;
+    --acento-texto:#F0794B; --foco:#6AA6DE; --topo-bg:rgba(14,26,21,.88);
+    --aviso-texto:#E8B23A; --amarelo-traco:#E8B23A;
+    --sombra:0 1px 0 rgba(0,0,0,.2), 0 20px 44px -28px rgba(0,0,0,.6);
+    --sombra-alta:0 1px 0 rgba(0,0,0,.25), 0 34px 70px -36px rgba(0,0,0,.7);
+    --palco-bg:#0B3A2B; --palco-texto:#ECE7D6; --palco-texto-2:rgba(236,231,214,.82);
+    --palco-linha:rgba(236,231,214,.14); --palco-inset:rgba(236,231,214,.06);
+    --papel:#ECE6D4; --papel-2:#E1D9C2; --papel-texto:#1B2A20;
+    --papel-texto-2:#586B5E; --papel-linha:#CFC4A8; --merge-fundo:rgba(185,66,31,.12);
+    --sombra-papel:0 1px 0 rgba(0,0,0,.25), 0 30px 64px -30px rgba(0,0,0,.7);
+  }
+}
