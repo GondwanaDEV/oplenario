@@ -14,8 +14,8 @@
   CanalStore
   (publicar! [_ canal mensagem]
     (let [r (swap! estado update canal
-                   (fn [{:keys [seq mensagens] :or {seq 0 mensagens []}}]
-                     (let [s (inc seq)]
+                   (fn [{seq-atual :seq :keys [mensagens] :or {seq-atual 0 mensagens []}}]
+                     (let [s (inc seq-atual)]
                        {:seq s :mensagens (conj mensagens (assoc mensagem :seq s))})))]
       {:canal canal :seq (get-in r [canal :seq])}))
   (ler-desde [_ canal apos-seq]
