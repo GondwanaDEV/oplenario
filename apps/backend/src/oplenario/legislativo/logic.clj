@@ -75,6 +75,38 @@
           (throw (ex-info "quorum-tipo desconhecido" {:quorum-tipo quorum-tipo})))]
     (if aprovado? "aprovada" "rejeitada")))
 
+;; --- F3.8 pos-aprovacao (§22.4; doc-mestre L247). Vocabularios espelham os CHECK da migration 0022. ---
+;; F3.8a — tramitacao no Executivo (sancao/veto). Ciclo: aguardando -> {sancionado|sancao_tacita|vetado};
+;; vetado -> {veto_mantido|veto_derrubado}. Rito/prazos exatos = [GAP] regimental (§22.4.4).
+(def estados-executivo
+  #{"aguardando" "sancionado" "sancao_tacita" "vetado" "veto_mantido" "veto_derrubado"})
+
+(def estados-executivo-terminais
+  "Os 4 desfechos terminais da tramitacao executiva (imutabilidade nivel b). Espelha os args do trigger
+  `trg_exec_imut_estado` (mig 0022). 'aguardando'/'vetado' sao intermediarios."
+  #{"sancionado" "sancao_tacita" "veto_mantido" "veto_derrubado"})
+
+(def estados-executivo-promulgaveis
+  "Desfechos em que o projeto VIRA NORMA (promulgavel, F3.8b): sancao expressa, sancao tacita (silencio do
+  Executivo) ou derrubada do veto pela camara. 'veto_mantido' arquiva (nao vira norma); veto parcial ->
+  promulgacao parcial e' [GAP] regimental."
+  #{"sancionado" "sancao_tacita" "veto_derrubado"})
+
+(defn promulgavel?
+  "Predicado PURO: o desfecho da tramitacao no Executivo habilita a promulgacao da norma (F3.8b)?"
+  [estado-executivo]
+  (contains? estados-executivo-promulgaveis estado-executivo))
+
+;; resultados validos de cada transicao da tramitacao executiva (guard fail-closed, fonte unica).
+(def estados-resposta-executivo
+  "aguardando -> resposta do Executivo. sancao expressa | sancao tacita (silencio) | veto."
+  #{"sancionado" "sancao_tacita" "vetado"})
+(def estados-apreciacao-veto
+  "vetado -> apreciacao do veto pela camara (votacao maioria absoluta, eixo G)."
+  #{"veto_mantido" "veto_derrubado"})
+
+(def tipos-veto #{"total" "parcial"})
+
 (def limite-inline-bytes
   "Threshold inline/URI (§22.4 eixo B; calibravel por observabilidade). Acima disso o conteudo vai p/
   o objeto_store e a versao guarda a URI; ate isso, inline na coluna texto_inline."
