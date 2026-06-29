@@ -4,6 +4,7 @@
   record segura o :datasource (via `using`); o db/ e' a IMPL. O controller depende DESTE Component, nunca do
   db/ direto. (Eventos de dominio Sessao*/real-time = eixos posteriores do F4.)"
   (:require [oplenario.kernel.tenancy :as tenancy]
+            [oplenario.sessoes.db.gravacao :as gravacao]
             [oplenario.sessoes.db.pauta :as pauta]
             [oplenario.sessoes.db.presenca :as presenca]
             [oplenario.sessoes.db.sessao :as sessao]
@@ -38,7 +39,12 @@
   (presentes-remoto [this ente-id sessao-id instante] "Quorum remoto em `instante`.")
   (criar-justificativa! [this ente-id m] "Abre justificativa de ausencia 'pendente' (ato apartado).")
   (buscar-justificativa [this ente-id id])
-  (decidir-justificativa! [this ente-id m] "aprovada|indeferida (terminal) via maquina + CAS."))
+  (decidir-justificativa! [this ente-id m] "aprovada|indeferida (terminal) via maquina + CAS.")
+  ;; §22.6 eixo D — gravacao (audio/video)
+  (registrar-segmento! [this ente-id m] "Grava segmento de gravacao (captura/ingestao); sessao_id opcional (Opcao A).")
+  (vincular-segmento! [this ente-id m] "Vincula um segmento a sessao (uma-vez, CAS).")
+  (buscar-segmento [this ente-id id])
+  (listar-segmentos-da-sessao [this ente-id sessao-id] "Segmentos da sessao em ordem cronologica (read-model)."))
 
 (defrecord RepoSessoesPg [datasource bus]
   RepoSessoes
@@ -66,7 +72,11 @@
   (presentes-remoto [this ente-id sessao-id instante] (transacao this ente-id #(rel-presenca/presentes-remoto % sessao-id instante)))
   (criar-justificativa! [this ente-id m] (transacao this ente-id #(presenca/criar-justificativa! % (assoc m :ente-id ente-id))))
   (buscar-justificativa [this ente-id id] (transacao this ente-id #(presenca/buscar-justificativa % ente-id id)))
-  (decidir-justificativa! [this ente-id m] (transacao this ente-id #(presenca/decidir-justificativa! % (assoc m :ente-id ente-id)))))
+  (decidir-justificativa! [this ente-id m] (transacao this ente-id #(presenca/decidir-justificativa! % (assoc m :ente-id ente-id))))
+  (registrar-segmento! [this ente-id m] (transacao this ente-id #(gravacao/registrar-segmento! % (assoc m :ente-id ente-id))))
+  (vincular-segmento! [this ente-id m] (transacao this ente-id #(gravacao/vincular-segmento! % (assoc m :ente-id ente-id))))
+  (buscar-segmento [this ente-id id] (transacao this ente-id #(gravacao/buscar % ente-id id)))
+  (listar-segmentos-da-sessao [this ente-id sessao-id] (transacao this ente-id #(gravacao/listar-segmentos-da-sessao % ente-id sessao-id))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

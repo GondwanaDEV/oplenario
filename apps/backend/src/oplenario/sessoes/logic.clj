@@ -188,3 +188,41 @@
   "A transicao de->para da justificativa e' permitida? (`de`/`para` = estados; terminais nao saem). Puro."
   [de para]
   (contains? (get transicoes-justificativa de #{}) para))
+
+;; ---------- §22.6 eixo D — gravacao (audio/video) da sessao (F4.4b) ----------
+;; `gravacao_segmento` e' unidade TECNICA do arquivo, nao regimental (uma sessao tem 1 segmento tipico mas N
+;; possiveis: reinicio do OBS, divisao manual). Alinhamento com fatos da sessao = por INSTANTE. Os vocabularios
+;; espelham os CHECK da migration 0031.
+
+(def motivos-inicio-gravacao
+  "Por que um segmento de gravacao COMECOU: a sessao iniciou, reinicio apos falha tecnica (OBS caiu), ou
+  divisao manual feita pela camara."
+  #{"inicio_sessao" "reinicio_pos_falha" "divisao_manual"})
+
+(def motivos-fim-gravacao
+  "Por que um segmento TERMINOU: a sessao encerrou, falha tecnica interrompeu, ou divisao manual."
+  #{"fim_sessao" "falha_tecnica" "divisao_manual"})
+
+(def fontes-ingestao-gravacao
+  "Como o arquivo chegou (§22.6 eixo D / §22.3.4). V1 produz so `gravacao_local_pos_sessao` (upload do
+  utilitario CLI/watch folder); os demais existem no enum mas sem fluxo produtor V1 (rtmp/youtube dependem do
+  satelite de captura; importacao_legado entra quando bulk historico voltar)."
+  #{"gravacao_local_pos_sessao" "rtmp_duplicado_ao_vivo" "youtube_api_fallback" "importacao_legado"})
+
+(defn validar-motivo-inicio
+  "Fail-closed: lanca se `motivo` de inicio nao e' conhecido (espelha o CHECK da mig 0031)."
+  [motivo]
+  (when-not (contains? motivos-inicio-gravacao motivo)
+    (throw (ex-info "motivo de inicio de gravacao invalido" {:motivo motivo :validos motivos-inicio-gravacao}))))
+
+(defn validar-motivo-fim
+  "Fail-closed: lanca se `motivo` de fim e' nao-nil e desconhecido. nil e' valido (gravacao ainda aberta)."
+  [motivo]
+  (when (and (some? motivo) (not (contains? motivos-fim-gravacao motivo)))
+    (throw (ex-info "motivo de fim de gravacao invalido" {:motivo motivo :validos motivos-fim-gravacao}))))
+
+(defn validar-fonte-ingestao
+  "Fail-closed: lanca se `fonte` de ingestao nao e' conhecida."
+  [fonte]
+  (when-not (contains? fontes-ingestao-gravacao fonte)
+    (throw (ex-info "fonte de ingestao de gravacao invalida" {:fonte fonte :validas fontes-ingestao-gravacao}))))
