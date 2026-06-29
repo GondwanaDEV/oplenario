@@ -47,3 +47,16 @@
    [:tipo (enum-de logic/tipos-evento-cronometro)]
    [:ocorrido-em km/Instante]
    [:segundos-adicionais {:optional true} [:maybe :int]]])
+
+(def DecisaoMesa
+  "Decisao do presidente sobre questao de ordem (F4.5c) — ato regimental append-only p/ a ata. `fala-id` opcional."
+  [:map {:closed true}
+   [:ente-id :uuid]
+   [:id :uuid]
+   [:sessao-id :uuid]
+   [:fala-id {:optional true} [:maybe :uuid]]
+   [:presidente-id :uuid]
+   [:questao [:string {:min 1}]]
+   [:decisao [:string {:min 1}]]
+   [:fundamentacao {:optional true} [:maybe :string]]
+   [:decidido-em km/Instante]])

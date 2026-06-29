@@ -212,3 +212,42 @@
     (logar-cronometro! tx {:ente-id ente-id :fala-id id :tipo "encerrada" :ocorrido-em encerrou-em
                            :created-by updated-by})
     {:id id :tempo-efetivamente-usado-segundos tempo}))
+
+;; ---------- decisao_mesa (questao de ordem, append-only — F4.5c) ----------
+
+(def ^:private cols-decisao
+  [:id :ente_id :sessao_id :fala_id :presidente_id :questao :decisao :fundamentacao :decidido_em])
+
+(defn registrar-decisao-mesa!
+  "Registra a decisao do presidente sobre questao de ordem (ato regimental p/ a ata, APPEND-ONLY). nil-guard de
+  auditoria em created-by/presidente-id (fail-closed); questao/decisao nao-vazias sao o CHECK da migration.
+  `fala-id` opcional. Devolve {:id}."
+  [tx {:keys [id ente-id sessao-id fala-id presidente-id questao decisao fundamentacao decidido-em created-by]}]
+  (when (nil? created-by)
+    (throw (ex-info "registrar-decisao-mesa!: created-by e' obrigatorio (trilha de auditoria)" {:id id})))
+  (when (nil? presidente-id)
+    (throw (ex-info "registrar-decisao-mesa!: presidente-id e' obrigatorio (quem decidiu)" {:id id})))
+  (jdbc/execute-one! tx
+    (sql/format {:insert-into :sessoes.decisao_mesa
+                 :values [{:id id :ente_id ente-id :sessao_id sessao-id :fala_id fala-id
+                           :presidente_id presidente-id :questao questao :decisao decisao
+                           :fundamentacao fundamentacao :decidido_em decidido-em
+                           :created_by created-by :efetivado_em [:now]}]}))
+  {:id id})
+
+(defn buscar-decisao-mesa
+  "Busca uma decisao da mesa por id no tenant (RLS via ente-id). Devolve o mapa kebab-case ou nil (not-found)."
+  [tx ente-id id]
+  (comum/linha->kebab
+   (jdbc/execute-one! tx
+     (sql/format {:select cols-decisao :from [:sessoes.decisao_mesa]
+                  :where [:and [:= :ente_id ente-id] [:= :id id]]}))))
+
+(defn listar-decisoes-mesa
+  "Decisoes da mesa da sessao em ordem cronologica (composicao da ata)."
+  [tx ente-id sessao-id]
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select cols-decisao :from [:sessoes.decisao_mesa]
+                  :where [:and [:= :ente_id ente-id] [:= :sessao_id sessao-id]]
+                  :order-by [[:decidido_em :asc] [:id :asc]]}))))

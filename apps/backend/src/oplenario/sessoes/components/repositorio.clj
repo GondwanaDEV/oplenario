@@ -58,7 +58,11 @@
   (buscar-fala [this ente-id id])
   (listar-falas-da-sessao [this ente-id sessao-id] "Falas da sessao em ordem cronologica (read-model + diarizacao).")
   (listar-apartes [this ente-id fala-pai-id] "Apartes de uma fala-mae.")
-  (listar-eventos-cronometro [this ente-id fala-id] "Eventos do cronometro da fala (a projecao le daqui)."))
+  (listar-eventos-cronometro [this ente-id fala-id] "Eventos do cronometro da fala (a projecao le daqui).")
+  ;; §22.6 eixo F — tribuna: decisao da mesa (questao de ordem)
+  (registrar-decisao-mesa! [this ente-id m] "Registra a decisao do presidente sobre questao de ordem (ato p/ ata, append-only).")
+  (buscar-decisao-mesa [this ente-id id])
+  (listar-decisoes-mesa [this ente-id sessao-id] "Decisoes da mesa da sessao em ordem cronologica (ata)."))
 
 (defrecord RepoSessoesPg [datasource bus]
   RepoSessoes
@@ -101,7 +105,10 @@
   (buscar-fala [this ente-id id] (transacao this ente-id #(tribuna/buscar-fala % ente-id id)))
   (listar-falas-da-sessao [this ente-id sessao-id] (transacao this ente-id #(tribuna/listar-falas-da-sessao % ente-id sessao-id)))
   (listar-apartes [this ente-id fala-pai-id] (transacao this ente-id #(tribuna/listar-apartes % ente-id fala-pai-id)))
-  (listar-eventos-cronometro [this ente-id fala-id] (transacao this ente-id #(tribuna/listar-eventos-cronometro % ente-id fala-id))))
+  (listar-eventos-cronometro [this ente-id fala-id] (transacao this ente-id #(tribuna/listar-eventos-cronometro % ente-id fala-id)))
+  (registrar-decisao-mesa! [this ente-id m] (transacao this ente-id #(tribuna/registrar-decisao-mesa! % (assoc m :ente-id ente-id))))
+  (buscar-decisao-mesa [this ente-id id] (transacao this ente-id #(tribuna/buscar-decisao-mesa % ente-id id)))
+  (listar-decisoes-mesa [this ente-id sessao-id] (transacao this ente-id #(tribuna/listar-decisoes-mesa % ente-id sessao-id))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

@@ -244,3 +244,75 @@
                                               :set {:tipo "pausada"}
                                               :where [:and [:= :ente_id ente] [:= :id eid]]})))
               "UPDATE no evento de cronometro e' barrado (append-only)"))))))
+
+;; ============================================================================
+;; F4.5c — DECISAO DA MESA (questao de ordem). Ato regimental do presidente sobre
+;; questao de ordem, com efeito juridico -> vai para a ata. APPEND-ONLY puro
+;; (decisao tomada uma vez; disciplina §22.4.3 "atos auditados tem registro proprio").
+;; ============================================================================
+
+(defn- decidir! [tx ente sid extra]
+  (tribuna/registrar-decisao-mesa!
+   tx (merge {:id (random-uuid) :ente-id ente :sessao-id sid :presidente-id (random-uuid)
+              :questao "Procede a questao de ordem sobre o quorum?"
+              :decisao "Indeferida; o quorum esta regular conforme o painel."
+              :decidido-em f0 :created-by (random-uuid)} extra)))
+
+(deftest registrar-e-buscar-decisao-mesa
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [sid (:id (sessao/agendar! tx {:id (random-uuid) :ente-id ente :sessao-legislativa-id (random-uuid)
+                                            :tipo-sessao "ordinaria" :modalidade "presencial"}))
+              {fid :id} (iniciar! tx ente sid {:tipo-fala "questao_de_ordem"})
+              {did :id} (decidir! tx ente sid {:fala-id fid :fundamentacao "Art. 80 do Regimento Interno."})
+              r (tribuna/buscar-decisao-mesa tx ente did)]
+          (is (= fid (:fala-id r)) "vincula a fala de questao de ordem que a motivou")
+          (is (= "Art. 80 do Regimento Interno." (:fundamentacao r)) "fundamentacao opcional registrada")
+          (is (some? (:decisao r)) "a decisao do presidente")
+          (is (m/validate mod/DecisaoMesa r) "bate o model"))))))
+
+(deftest decisao-mesa-sem-fala
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [sid (:id (sessao/agendar! tx {:id (random-uuid) :ente-id ente :sessao-legislativa-id (random-uuid)
+                                            :tipo-sessao "ordinaria" :modalidade "presencial"}))
+              {did :id} (decidir! tx ente sid {})]
+          (is (nil? (:fala-id (tribuna/buscar-decisao-mesa tx ente did)))
+              "decisao da mesa pode existir sem fala registrada (fala_id nullable)"))))))
+
+(deftest decisao-mesa-guards
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [sid (:id (sessao/agendar! tx {:id (random-uuid) :ente-id ente :sessao-legislativa-id (random-uuid)
+                                            :tipo-sessao "ordinaria" :modalidade "presencial"}))]
+          (is (thrown? Exception (decidir! tx ente sid {:created-by nil}))
+              "created-by obrigatorio (trilha de auditoria)")
+          (is (thrown? Exception (decidir! tx ente sid {:presidente-id nil}))
+              "presidente-id obrigatorio (quem decidiu)")
+          (is (thrown? Exception (decidir! tx ente sid {:decisao "   "}))
+              "decisao vazia viola o CHECK")
+          (is (thrown? Exception (decidir! tx ente sid {:questao "   "}))
+              "questao vazia viola o CHECK")
+          (is (thrown? Exception (decidir! tx ente sid {:fala-id (random-uuid)}))
+              "fala_id inexistente viola a FK same-schema"))))))
+
+(deftest decisao-mesa-append-only
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [sid (:id (sessao/agendar! tx {:id (random-uuid) :ente-id ente :sessao-legislativa-id (random-uuid)
+                                            :tipo-sessao "ordinaria" :modalidade "presencial"}))
+              {did :id} (decidir! tx ente sid {:decidido-em f0 :questao "Primeira?"})
+              _ (decidir! tx ente sid {:decidido-em (mais f0 600) :questao "Segunda?"})
+              lst (tribuna/listar-decisoes-mesa tx ente sid)]
+          (is (= 2 (count lst)) "lista as decisoes da sessao")
+          (is (= ["Primeira?" "Segunda?"] (mapv :questao lst)) "ordem cronologica por decidido_em")
+          (is (thrown? Exception
+                       (next.jdbc/execute-one!
+                        tx (honey.sql/format {:update :sessoes.decisao_mesa
+                                              :set {:decisao "alterada"}
+                                              :where [:and [:= :ente_id ente] [:= :id did]]})))
+              "UPDATE numa decisao da mesa e' barrado (append-only: ato regimental imutavel)"))))))
