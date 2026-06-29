@@ -33,6 +33,32 @@ Dentro do módulo: **`adapters/` só é chamado pelo `diplomat/`** (núcleo `con
 - Migration própria: `20260620000003-admin-sistema.*` (schema + registry `ente`). Refs a `admin_sistema.ente` de outros módulos cruzam por **guard de serviço**, nunca FK/JOIN cross-schema.
 
 ## TODO (deferido p/ implementação — validação ecc)
+- **Carries do F3.9b (Expediente — geração de documentos, 28/06; review ecc clojure+database):**
+  `documento_modelo` (template configurável por ente, mutável, schema `legislativo`) + `documento` (gerado por
+  **merge do domínio** no template via `logic/renderizar-documento` — `{{campo}}` fail-closed em campo
+  não-preenchido; `str/replace` com função = sem injeção de grupo/template, confirmado na review). State
+  machine `rascunho→emitido` (trava terminal b; `dados_merge` jsonb = snapshot de auditoria). Vínculo opcional
+  ao Protocolo Geral via FK same-tenant. **(→ track cripto/NFR)** assinatura **ICP-Brasil** do documento =
+  `[GAP]`. **(→ F4)** sem eventos/wire-in; mala-direta em lote (1 modelo → N documentos) = orquestração do
+  controller. **(→ import/fundação #2)** importar documento já-`emitido` via staging + efetivar o lote dispara
+  a trava terminal e prende a linha — import de terminais insere com `efetivado_em=now` direto (vale p/ TODAS
+  as tabelas trava-terminal; documentado no trigger). **Aplicado:** DB-MAJOR (CHECK `documento_emitido_tem_marca`
+  exige `emitido_em AND emitido_por` — autoria do artefato), 2 DB-MENOR (`corpo <> ''`; nota do trap de import);
+  clojure 4 MENOR (regex `-` no início; `dados_merge` alinhado ao renderizado; guard de no-op em `atualizar!`;
+  guard de template nil). **Com F3.9a+b o Expediente fecha; com isso o F3 (Legislativo) fecha por completo.**
+- **Carries do F3.9a (Expediente — Protocolo Geral, 28/06; review ecc clojure+database):** `protocolo_geral`
+  (livro institucional **append-only puro**, NÃO-particionada, schema `legislativo`) — numerador único gapless
+  por (ente, ano) via `kernel/sequencial` (reinício anual); objeto **polimórfico** (objeto_tipo/objeto_id, sem
+  FK, disc.2). **Decisão de módulo:** Expediente no schema `legislativo` (§16.3 agrupa features 3.1-3.23 +
+  protocola proposições daqui) — candidato a extração se crescer (disc.6). **(→ F3.9b)** geração de documentos
+  por modelo (3.22). **(→ carry numeração 3.18)** **reserva/cancelamento** de número exige numerador
+  reservável (≠ gapless-on-commit) — sem requisito validado. **(→ F5/fundação #2)** protocolo de **data
+  histórica** (origem/origem_importado_em via importacao_legado) não parametrizado em `protocolar!`. **(→
+  hardening pré-prod)** índice `(ente_id, protocolado_em)` p/ busca do livro por período (full-scan tolerável
+  no launch). **(→ F4)** sem eventos/wire-in; orquestração "protocolar proposição também cria entrada no PG" é
+  do controller. **Aplicado:** clojure-MAJOR (`buscar-por-objeto` com `objeto-id nil` → `IS NULL`, não
+  `= NULL`); DB-MAJOR (CHECK `protocolo_staging_valido` anti linha-fantasma — append-only a tornaria
+  permanente), DB-MENOR (índice parcial `WHERE objeto_id IS NOT NULL`; CHECK `assunto <> ''`).
 - **Carries do F3.8b (pós-aprovação — norma promulgada, 28/06; review ecc clojure+database):** `norma`
   (artefato legal, NÃO-particionada) nasce de um desfecho **promulgável** (`logic/promulgavel?`); **numeração
   canônica gapless** por (ente, tipo_norma, ano) via `kernel/sequencial`; **URN-de-norma LexML** nasce na
