@@ -33,6 +33,20 @@ Dentro do módulo: **`adapters/` só é chamado pelo `diplomat/`** (núcleo `con
 - Migration própria: `20260620000003-admin-sistema.*` (schema + registry `ente`). Refs a `admin_sistema.ente` de outros módulos cruzam por **guard de serviço**, nunca FK/JOIN cross-schema.
 
 ## TODO (deferido p/ implementação — validação ecc)
+- **Carries do F3.8b (pós-aprovação — norma promulgada, 28/06; review ecc clojure+database):** `norma`
+  (artefato legal, NÃO-particionada) nasce de um desfecho **promulgável** (`logic/promulgavel?`); **numeração
+  canônica gapless** por (ente, tipo_norma, ano) via `kernel/sequencial`; **URN-de-norma LexML** nasce na
+  promulgação (`logic/urn-norma`, imutável) — forma canônica `urn:lex:br;uf;municipio:tipo:data;numero` (sem
+  `camara.municipal`, ≠ URN da proposição: a lei é do município). Imutabilidade **parcial nível (c)** bespoke
+  (`trg_norma_imut_parcial`, espelha apensação): conteúdo legal congela; só `promulgada→publicada` muta (uma
+  vez). `tipo-proposicao->tipo-norma` fail-closed (indicação/requerimento/moção não viram norma). **(→ F4)**
+  sem eventos (`Norma*`/`Publicacao*`) nem wire/in; a publicação como **feed ao DOM** (artefato oficial) é
+  produto posterior. **(→ eixo B)** o texto promulgado (`origem_versao='promulgacao'`) é forward-ref
+  `texto_versao_id` — o caller cria a versão. **(→ regimento [GAP])** segmento exato de autoridade da URN por
+  espécie (ato da câmara vs lei do município); veto parcial→promulgação parcial. **Aplicado:** clojure-MAJOR
+  (guard `texto-versao-id` em `promulgar!`, simetria c/ `publicar!`), 2 MENOR (guard `numero` nil na URN;
+  model `texto-versao-id` sem `{:optional true}`); DB-MAJOR (CHECK **bicondicional** `norma_publicacao_coerente`
+  — fecha a janela de 'promulgada' com `publicado_em` preenchido via os campos mutáveis do trigger).
 - **Carries do F3.8a (pós-aprovação — autógrafo + sanção/veto, 28/06; review ecc clojure+database):**
   `autografo` (artefato legal **append-only puro**, numerado gapless por ente/ano via `kernel/sequencial`,
   UNIQUE por proposição) + `tramitacao_executiva` (state machine sanção/veto: `aguardando` → {`sancionado`|

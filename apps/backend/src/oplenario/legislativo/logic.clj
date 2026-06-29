@@ -107,6 +107,27 @@
 
 (def tipos-veto #{"total" "parcial"})
 
+;; F3.8b — norma promulgada. Vocabularios espelham os CHECK da migration 0023. Crescem por adicao.
+(def tipos-norma #{"lei" "lei_complementar" "resolucao" "decreto_legislativo" "emenda_lom"})
+(def estados-norma #{"promulgada" "publicada"})
+
+(def ^:private tipo-proposicao->tipo-norma-map
+  "Espécie da proposicao -> especie da norma que ela origina na promulgacao. So as 5 espécies LEGISLATIVAS
+  viram norma; indicacao/requerimento/mocao nao produzem ato normativo (fail-closed: lanca)."
+  {"projeto_lei"                 "lei"
+   "projeto_lei_complementar"    "lei_complementar"
+   "projeto_resolucao"           "resolucao"
+   "projeto_decreto_legislativo" "decreto_legislativo"
+   "proposta_emenda_lom"         "emenda_lom"})
+
+(defn tipo-proposicao->tipo-norma
+  "Deriva a especie da norma a partir da especie da proposicao aprovada. Fail-closed: especie sem norma
+  (indicacao/requerimento/mocao) ou desconhecida LANCA (nao se promulga o que nao e' ato normativo)."
+  [tipo-proposicao]
+  (or (get tipo-proposicao->tipo-norma-map tipo-proposicao)
+      (throw (ex-info "especie de proposicao nao produz norma (nao e' ato normativo)"
+                      {:tipo-proposicao tipo-proposicao}))))
+
 (def limite-inline-bytes
   "Threshold inline/URI (§22.4 eixo B; calibravel por observabilidade). Acima disso o conteudo vai p/
   o objeto_store e a versao guarda a URI; ate isso, inline na coluna texto_inline."
@@ -172,6 +193,38 @@
     (throw (ex-info "uf nao pode ser vazia na URN" {:uf uf})))
   (str "urn:lex:br;" (str/lower-case uf) ";" (municipio-slug municipio-nome)
        ":camara.municipal;" (tipo->lexml tipo) ":" ano ";" sequencial))
+
+;; --- tipo-norma -> vocabulario LexML do ATO PROMULGADO (sem 'projeto.', ADR-0002 §3). ---
+(def ^:private tipo-norma->lexml-map
+  {"lei"                 "lei"
+   "lei_complementar"    "lei.complementar"
+   "resolucao"           "resolucao"
+   "decreto_legislativo" "decreto.legislativo"
+   "emenda_lom"          "emenda.lei.organica"})
+
+(defn tipo-norma->lexml
+  "Vocabulario LexML da especie de norma. Fail-closed: especie sem mapeamento lanca."
+  [tipo-norma]
+  (or (get tipo-norma->lexml-map tipo-norma)
+      (throw (ex-info "tipo-norma sem mapeamento LexML" {:tipo-norma tipo-norma}))))
+
+(defn urn-norma
+  "Coordenada publica LexML da NORMA PROMULGADA (ADR-0002 §3) — nasce na promulgacao, imutavel:
+   urn:lex:br;{uf};{municipio-slug}:{tipo-norma-lexml}:{data};{numero}.
+  Forma canonica LexML de legislacao (<jurisdicao>:<tipo>:<data>;<numero>); a jurisdicao 'br;uf;municipio'
+  ja' encerra o municipio como autoridade da lei municipal — por isso, diferente da URN da PROPOSICAO (que
+  carrega 'camara.municipal', o corpo PRODUTOR de um projeto ainda nao-lei), a norma nao repete a autoridade.
+  `data` = data da promulgacao (LocalDate, ISO yyyy-MM-dd). NOTA: o segmento exato de autoridade por especie
+  (ato da camara vs lei do municipio) e' refino LexML/regimental — defensavel aqui, [GAP] como os templates."
+  [{:keys [uf municipio-nome tipo-norma data numero]}]
+  (when (str/blank? uf)
+    (throw (ex-info "uf nao pode ser vazia na URN" {:uf uf})))
+  (when (nil? data)
+    (throw (ex-info "data da promulgacao e' obrigatoria na URN-de-norma" {:data data})))
+  (when (nil? numero)
+    (throw (ex-info "numero e' obrigatorio na URN-de-norma" {:tipo-norma tipo-norma :data data})))
+  (str "urn:lex:br;" (str/lower-case uf) ";" (municipio-slug municipio-nome)
+       ":" (tipo-norma->lexml tipo-norma) ":" data ";" numero))
 
 (defn numero-exibicao
   "Numero que o cidadao le (ex.: 'PL 042/2026'). Template default por sigla + zero-pad 3 (nao trunca

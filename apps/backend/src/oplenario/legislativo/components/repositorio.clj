@@ -7,6 +7,7 @@
             [oplenario.legislativo.db.apensacao :as apensacao]
             [oplenario.legislativo.db.autografo :as autografo]
             [oplenario.legislativo.db.emenda :as emenda]
+            [oplenario.legislativo.db.norma :as norma]
             [oplenario.legislativo.db.parecer :as parecer]
             [oplenario.legislativo.db.parecer-texto-versao :as parecer-texto]
             [oplenario.legislativo.db.parecer-tramitacao :as parecer-tram]
@@ -79,7 +80,12 @@
   (registrar-resposta-executivo! [this ente-id m] "aguardando -> sancionado|sancao_tacita|vetado; CAS.")
   (apreciar-veto! [this ente-id m] "vetado -> veto_mantido|veto_derrubado (carimba a votacao do eixo G); CAS.")
   (buscar-tramitacao-executiva [this ente-id id])
-  (tramitacao-executiva-do-autografo [this ente-id autografo-id]))
+  (tramitacao-executiva-do-autografo [this ente-id autografo-id])
+  ;; F3.8b — norma promulgada (numeracao canonica + URN-de-norma LexML + publicacao)
+  (promulgar-norma! [this ente-id m] "Numera gapless + URN-de-norma + insere 'promulgada', atomico.")
+  (publicar-norma! [this ente-id m] "promulgada -> publicada (mutacao parcial unica); CAS.")
+  (buscar-norma [this ente-id id])
+  (norma-da-proposicao [this ente-id proposicao-id]))
 
 (defrecord RepoLegislativoPg [datasource bus]
   RepoLegislativo
@@ -169,7 +175,12 @@
   (registrar-resposta-executivo! [this ente-id m] (transacao this ente-id #(exec/registrar-resposta! % (assoc m :ente-id ente-id))))
   (apreciar-veto! [this ente-id m] (transacao this ente-id #(exec/apreciar-veto! % (assoc m :ente-id ente-id))))
   (buscar-tramitacao-executiva [this ente-id id] (transacao this ente-id #(exec/buscar % ente-id id)))
-  (tramitacao-executiva-do-autografo [this ente-id aid] (transacao this ente-id #(exec/buscar-por-autografo % ente-id aid))))
+  (tramitacao-executiva-do-autografo [this ente-id aid] (transacao this ente-id #(exec/buscar-por-autografo % ente-id aid)))
+  ;; F3.8b — norma. promulgar! compoe (sequencial + URN + insert) na tx; o caller garante o desfecho promulgavel.
+  (promulgar-norma! [this ente-id m] (transacao this ente-id #(norma/promulgar! % (assoc m :ente-id ente-id))))
+  (publicar-norma! [this ente-id m] (transacao this ente-id #(norma/publicar! % (assoc m :ente-id ente-id))))
+  (buscar-norma [this ente-id id] (transacao this ente-id #(norma/buscar % ente-id id)))
+  (norma-da-proposicao [this ente-id pid] (transacao this ente-id #(norma/buscar-por-proposicao % ente-id pid))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."
