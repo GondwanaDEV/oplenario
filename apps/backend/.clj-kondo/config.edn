@@ -1,2 +1,3 @@
-{:linters {:unused-namespace {:level :warning}}}
+{:linters {:unused-namespace {:level :warning}
+           :shadowed-var      {:level :warning}}}  ; pega shadowing de clojure.core (ex.: name/seq em bindings)
 ;; matriz de import-lint (§22.10) enforcada por test/unit/oplenario/arquitetura_test.clj

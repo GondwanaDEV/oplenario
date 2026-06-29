@@ -10,7 +10,7 @@
             [oplenario.http :as oplenario-http]
             [oplenario.interceptors :as interceptors]))
 
-(defrecord ServidorHttp [config rotas-fn idp repo-identidade repo-sessoes servidor]
+(defrecord ServidorHttp [config rotas-fn idp repo-identidade repo-sessoes canal-store servidor]
   component/Lifecycle
   (start [this]
     (if servidor
