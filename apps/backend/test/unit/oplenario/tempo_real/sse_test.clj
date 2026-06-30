@@ -52,6 +52,18 @@
                (adapters-out/mensagem->frame {:tipo "sessao.transicionou" :seq 1 :dados {:cpf "111"}}))
       "campo sensivel (:cpf) em :dados -> LANCA (bug de produtor), nunca emite o frame"))
 
+(deftest frame-de-voto-nominal-carrega-vereador-e-voto
+  ;; §22.6: o voto NOMINAL e' PUBLICO — o placar nominal mostra quem votou o que. Logo :vereador-id e :voto
+  ;; sao dado publico no fio para a modalidade nominal e NAO podem estar no blocklist cego de campos-proibidos
+  ;; (que e' so p/ campos NUNCA-publicos: cpf/token/senha). O sigilo da SECRETA mora em projecao/dados-publicos
+  ;; (gate ciente de contexto), nao aqui.
+  (let [msg   {:ente-id (random-uuid) :tipo "voto.registrado" :seq 3
+               :dados {:votacao-id "V" :sessao-id "S" :modalidade "nominal" :vereador-id "ver-1" :voto "sim"}}
+        frame (adapters-out/mensagem->frame msg)
+        dados (json/read-value (:data frame) json/keyword-keys-object-mapper)]
+    (is (= "ver-1" (:vereador-id dados)) "voto nominal leva o vereador no fio (placar nominal publico)")
+    (is (= "sim" (:voto dados)) "voto nominal leva o voto no fio")))
+
 ;; ---------- adapters/in: Last-Event-ID fail-soft ----------
 
 (deftest cursor-id-gigante-e-fail-soft

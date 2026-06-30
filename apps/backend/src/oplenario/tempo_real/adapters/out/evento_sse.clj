@@ -17,8 +17,13 @@
   "Campos que NUNCA podem ir no fio do SSE — defesa-em-profundidade (review seg MINOR-3) contra um produtor novo
   que inclua dado sensivel em :dados por engano. O canal plenario so carrega dado publico; um destes presente =
   bug de PRODUTOR -> 500 (nunca emite). A barreira estrutural de longo prazo e' tipar :dados por :tipo (Malli
-  :multi)."
-  #{:cpf :voto :token :senha :hash-senha :hash_senha})
+  :multi).
+  NOTA (§22.6, Slice 2): `:voto`/`:vereador-id` NAO entram aqui — sao CONTEXTUAIS (PUBLICOS no voto nominal: o
+  placar mostra quem votou o que; SIGILOSOS no secreto). Um blocklist cego por NOME de campo nao distingue os
+  dois casos e barraria o placar nominal legitimo. O sigilo do voto secreto mora no gate CIENTE DE CONTEXTO
+  (projecao/dados-publicos, que faz whitelist do tick secreto e falha fechada em modalidade inesperada). Aqui
+  ficam so campos universalmente nao-publicos."
+  #{:cpf :token :senha :hash-senha :hash_senha})
 
 (defn mensagem->frame
   "Mensagem de canal -> frame SSE {:name :data :id}. Barra campo sensivel em :dados (anti-vazamento) e VALIDA

@@ -86,6 +86,25 @@
     (is (= {:votacao-id "V" :sessao-id "S" :modalidade "secreta"} (:dados msg))
         "secreta projeta SO o tick (contador ao vivo): votacao-id, sessao-id, modalidade")))
 
+(deftest abertura-secreta-passa-modalidade
+  ;; votacao.aberta NAO e' voto.registrado: passa direto (sem scrub). Carrega a `modalidade` p/ o cliente
+  ;; trocar o render (placar nominal -> contador). AbertaPayload nao tem identidade — pass-through e' seguro.
+  (let [[msg] (projecao/projetar {:tipo "votacao.aberta" :ente-id "E"
+                                  :payload {:votacao-id "V" :sessao-id "S" :objeto-tipo "proposicao"
+                                            :objeto-id "P" :modalidade "secreta" :quorum-tipo "maioria_simples"}})]
+    (is (= "secreta" (get-in msg [:dados :modalidade])) "a modalidade chega ao cliente (troca o render do placar)")
+    (is (= "proposicao" (get-in msg [:dados :objeto-tipo])) "votacao.aberta passa direto (nao ha identidade a esconder)")))
+
+(deftest voto-registrado-modalidade-inesperada-falha-fechada
+  ;; FAIL-CLOSED (review seg): se um voto.registrado chegar a' projecao com modalidade != nominal/secreta (o
+  ;; contrato VotoRegistradoPayload e' :multi fechado sobre as duas — isto so ocorreria sob violacao de
+  ;; contrato a montante), a projecao LANCA em vez de passar o payload direto e arriscar vazar identidade.
+  (is (thrown? clojure.lang.ExceptionInfo
+               (projecao/projetar {:tipo "voto.registrado" :ente-id "E"
+                                   :payload {:votacao-id "V" :sessao-id "S" :modalidade "eletronica"
+                                             :vereador-id "ver-1" :voto "sim"}}))
+      "voto.registrado com modalidade fora de {nominal,secreta} -> LANCA (nunca pass-through cego)"))
+
 (deftest encerramento-e-agregado-publico
   ;; o resultado AGREGADO e' publico MESMO na secreta (so o voto individual e' sigiloso).
   (let [enc   {:tipo "votacao.encerrada" :ente-id "E"

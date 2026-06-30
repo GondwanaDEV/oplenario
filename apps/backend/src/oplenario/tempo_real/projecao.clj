@@ -9,18 +9,28 @@
   "WHITELIST das chaves do tick de voto SECRETO (§22.6). So o agregado/contador ao vivo — JAMAIS identidade.
   Whitelist (nao blacklist): se uma chave nova surgir no payload secreto, ela e' DESCARTADA por default
   (fail-closed), em vez de vazar ate alguem lembrar de adiciona-la a um dissoc."
-  [:votacao-id :sessao-id :modalidade])
+  #{:votacao-id :sessao-id :modalidade})
 
 (defn- dados-publicos
   "A representacao PUBLICA do payload p/ o canal plenario. Default = o payload tal qual (os eventos de sessao
   ja sao publicos; o voto NOMINAL e' publico por definicao — o placar mostra quem votou o que; o resultado
   AGREGADO do encerramento e' publico mesmo na secreta). SIGILO §22.6 — DEFESA EM PROFUNDIDADE: o contrato do
   evento (uniao discriminada, legislativo/events/votacao.clj) ja barra identidade no ramo secreta ANTES do
-  outbox; esta projecao e' o ULTIMO portao antes do canal — para um `voto.registrado` secreto, WHITELIST so as
-  chaves do tick, de modo que um payload secreto malformado (bug upstream) NAO vaze `:vereador-id`/`:voto`."
+  outbox; esta projecao e' o ULTIMO portao antes do canal.
+   - voto.registrado SECRETO -> WHITELIST so as chaves do tick (um payload secreto malformado nao vaza
+     `:vereador-id`/`:voto`);
+   - voto.registrado NOMINAL  -> pass-through (vereador/voto sao PUBLICOS no placar nominal);
+   - voto.registrado com modalidade INESPERADA (nem nominal nem secreta) -> LANCA. O contrato
+     VotoRegistradoPayload e' um `:multi` fechado sobre {nominal,secreta}, entao isto so ocorre sob violacao
+     de contrato a montante; falhar fechado aqui torna o invariante MACHINE-ENFORCED (nao so comentario) e
+     impede que uma 3a modalidade futura vaze identidade por pass-through cego se alguem esquecer este gate."
   [{:keys [tipo payload]}]
-  (if (and (= tipo "voto.registrado") (= (:modalidade payload) "secreta"))
-    (select-keys payload tick-secreto-chaves)
+  (if (= tipo "voto.registrado")
+    (case (:modalidade payload)
+      "secreta" (select-keys payload tick-secreto-chaves)
+      "nominal" payload
+      (throw (ex-info "voto.registrado com modalidade inesperada (contrato violado a montante)"
+                      {:modalidade (:modalidade payload)})))
     payload))
 
 (defn projetar
