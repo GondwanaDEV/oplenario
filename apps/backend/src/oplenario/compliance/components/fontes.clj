@@ -11,14 +11,16 @@
 (set! *warn-on-reflection* true)
 
 (defprotocol FontesRemessa
-  (buscar-lote [this tx ente-id chave-lote contexto]
+  (buscar-lote [this ente-id chave-lote contexto]
     "Le EM LOTE os N registros do `chave-lote` (ex.: 'despesas') p/ o `contexto` (ex.: {'competencia' ...}),
-     no tenant corrente. Devolve um vetor de mapas (registros) — possivelmente vazio (competencia sem
-     registros e' legitimo). Leitura em lote, nao avaliacao."))
+     no tenant `ente-id`. Devolve um vetor de mapas (registros) — possivelmente vazio (competencia sem
+     registros e' legitimo). Leitura em lote, nao avaliacao. **SEM `tx` de proposito** (review clj m2): a
+     impl de producao e' HTTP-por-modulo (port->http_client, §22.10) — NAO deve segurar uma conexao PG
+     aberta durante I/O de rede (starvation do pool). O Repo resolve os lotes FORA da tx das relacoes."))
 
 (defrecord FontesFixture [lotes]
   FontesRemessa
-  (buscar-lote [_ _tx _ente-id chave-lote _contexto]
+  (buscar-lote [_ _ente-id chave-lote _contexto]
     (get lotes chave-lote [])))
 
 (defn fontes-fixture

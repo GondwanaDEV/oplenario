@@ -11,7 +11,8 @@
 
   O `descritor-sim-fixture` e' ILUSTRATIVO: o layout FISICO do SIM/TCE-CE = [GAP] de conteudo regulatorio
   (campos/ordem/formato/encoding reais), nao inventado aqui — a forma fecha com fixture (disciplina B/C:
-  'a forma nao depende do valor').")
+  'a forma nao depende do valor')."
+  (:require [clojure.string :as str]))
 
 (set! *warn-on-reflection* true)
 
@@ -38,8 +39,14 @@
   (let [[tipo chave] fonte
         v (case tipo
             :contexto (get (:contexto resolvidos) chave)
-            :relacao  (get (:relacoes resolvidos) chave))]
-    (when (nil? v)
+            :relacao  (get (:relacoes resolvidos) chave)
+            ;; tipo de fonte fora do enum do model (descritor nao validado / caminho direto) -> erro
+            ;; ACIONAVEL, nao IllegalArgumentException opaco do `case` (review clj M1).
+            (throw (ex-info "tipo de fonte desconhecido no descritor"
+                            {:campo campo :tipo tipo :validos #{:contexto :relacao}})))]
+    ;; nil OU string vazia/branca = nao resolvido: campo em branco e' tao ruim quanto ausente num
+    ;; artefato regulatorio (o TCE rejeita / le errado) — review sec m2.
+    (when (or (nil? v) (and (string? v) (str/blank? v)))
       (throw (ex-info "campo de remessa nao resolvido" {:campo campo :fonte fonte})))
     [campo v]))
 
@@ -55,7 +62,7 @@
     (mapv (fn [reg]
             (reduce (fn [acc {:keys [campo de]}]
                       (let [v (get reg de)]
-                        (when (nil? v)
+                        (when (or (nil? v) (and (string? v) (str/blank? v)))
                           (throw (ex-info "campo de remessa nao resolvido" {:campo campo :de de})))
                         (assoc acc campo v)))
                     {} colunas))

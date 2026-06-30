@@ -17,16 +17,23 @@
   "Proveniencia de um valor ESCALAR do cabecalho: contexto da geracao ou relacao escalar do registry."
   [:tuple {:title "Fonte"} [:enum :contexto :relacao] [:string {:min 1}]])
 
+(def NomeCampo
+  "Nome de campo de saida = um NCName de XML (letra/_ inicial; depois letra/digito/._-). Restricao de
+  SEGURANCA (review sec M1): o `:campo` vira NOME de tag no serializador — um nome com `<`/`>`/espaco
+  injetaria estrutura no XML regulatorio (artefato mal-formado = janela de envio perdida, §5). A regra fecha
+  o vetor mesmo quando o descritor vier do banco (Invariante 4: descritor e' DADO), nao so no fixture."
+  [:re #"^[a-zA-Z_][a-zA-Z0-9._-]*$"])
+
 (def CampoCabecalho
   "Um campo escalar do cabecalho: nome de saida + de onde sai o valor."
   [:map {:closed true}
-   [:campo [:string {:min 1}]]
+   [:campo NomeCampo]
    [:fonte Fonte]])
 
 (def Coluna
   "Coluna de um registro do lote: campo de saida (`:campo`) <- chave no registro de origem (`:de`)."
   [:map {:closed true}
-   [:campo [:string {:min 1}]]
+   [:campo NomeCampo]
    [:de [:string {:min 1}]]])
 
 (def SecaoRegistros

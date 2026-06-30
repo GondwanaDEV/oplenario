@@ -60,18 +60,33 @@
   (let [h (.digest (MessageDigest/getInstance "SHA-256") b)]
     (str "sha256:" (apply str (map #(format "%02x" (bit-and (int %) 0xff)) h)))))
 
-(defn- coletar-fontes
-  "Caminha o `descritor` e resolve o que ele declara (na `tx` do tenant): :contexto (passado), :relacao
-  (escalar, via `resolver-relacao` injetada — em prod fecha sobre o registry+tx, F5.5; aqui by-call como o
-  motor) e a secao de :registros (read-port EM LOTE via `fontes`). Devolve o mapa `resolvidos` p/ o
-  renderizador puro. NUNCA JOIN cross-schema — cada lote e' um read-port (§22.10/D7)."
-  [tx ente-id descritor contexto resolver-relacao fontes-port]
-  {:contexto contexto
-   :relacoes (into {} (for [{[tipo chave] :fonte} (:cabecalho descritor) :when (= tipo :relacao)]
-                        [chave (resolver-relacao tx chave)]))
-   :lotes    (when-let [sec (:registros descritor)]
-               (let [[_ chave] (:fonte sec)]
-                 {chave (fontes/buscar-lote fontes-port tx ente-id chave contexto)}))})
+(defn- coletar-relacoes
+  "Resolve as relacoes ESCALARES do cabecalho na `tx` do tenant (resolver-relacao consulta o PG com RLS —
+  em prod fecha sobre o registry+tx, F5.5; aqui by-call como o motor). DENTRO da tx."
+  [tx descritor resolver-relacao]
+  (into {} (for [{[tipo chave] :fonte} (:cabecalho descritor) :when (= tipo :relacao)]
+             [chave (resolver-relacao tx chave)])))
+
+(defn- coletar-lotes
+  "Resolve a secao de :registros via read-port EM LOTE (FontesRemessa) — FORA de qualquer tx PG (HTTP
+  cross-modulo, §22.10/D7; nao segura conexao do pool, review clj m2). NUNCA JOIN cross-schema."
+  [fontes-port ente-id descritor contexto]
+  (when-let [sec (:registros descritor)]
+    (let [[_ chave] (:fonte sec)]
+      {chave (fontes/buscar-lote fontes-port ente-id chave contexto)})))
+
+(def ^:private re-competencia #"^\d{4}-(0[1-9]|1[0-2])$")
+(def ^:private re-template-chave #"^[a-zA-Z0-9_-]+$")
+
+(defn- guard-chave-store!
+  "Valida os segmentos do mapa `m` que compoem a chave do objeto_store (review sec m1): um `/` ou `..` em
+  template-chave/competencia quebraria a estrutura do prefixo `remessas/<ente>/<template>/<competencia>/`
+  (rastreabilidade/auditing). ente-id e' UUID da sessao (ancora o tenant); estes dois vem do mapa `m`."
+  [template-chave competencia]
+  (when-not (re-matches re-template-chave (str template-chave))
+    (throw (ex-info "template-chave invalida p/ chave de remessa" {:template-chave template-chave})))
+  (when-not (re-matches re-competencia (str competencia))
+    (throw (ex-info "competencia invalida p/ chave de remessa" {:competencia competencia}))))
 
 (defprotocol RepoCompliance
   (transacao [this ente-id f] "Roda (f tx) numa UNICA tx do tenant — compoe acoes atomicamente.")
@@ -169,17 +184,25 @@
     (transacao this ente-id #(db-aval/listar-da-obrigacao % ente-id obrigacao-id)))
   (gerar-remessa! [this ente-id {:keys [descritor template-chave sistema competencia contexto
                                         resolver-relacao fontes serializador objeto-store registry-versao-ref]}]
-    (let [resolvidos (transacao this ente-id
-                       (fn [tx] (coletar-fontes tx ente-id descritor contexto resolver-relacao fontes)))
-          documento  (ger/renderizar descritor resolvidos)            ; fail-closed: campo nao resolvido LANCA aqui
+    (when-not objeto-store                                            ; infra do kernel; nil = config quebrada (review clj m3)
+      (throw (ex-info "gerar-remessa!: objeto-store ausente no mapa m" {:ente-id ente-id})))
+    (guard-chave-store! template-chave competencia)
+    (let [relacoes   (transacao this ente-id (fn [tx] (coletar-relacoes tx descritor resolver-relacao)))
+          lotes      (coletar-lotes fontes ente-id descritor contexto)  ; FORA da tx (HTTP cross-modulo, m2)
+          documento  (ger/renderizar descritor {:contexto contexto :relacoes relacoes :lotes lotes}) ; fail-closed aqui
           {b :bytes content-type :content-type} (ser/serializar serializador descritor documento)
           hash-conteudo (sha256-hex b)
-          store-ref  (str "remessas/" ente-id "/" template-chave "/" competencia "/" hash-conteudo ".bin")]
-      (os/guardar! objeto-store store-ref b content-type)             ; binario no objeto_store; metadata na tabela
-      (inserir-com-retry! this ente-id
-        {:id (ids/novo-id) :ente-id ente-id :template-chave template-chave :sistema sistema
-         :competencia competencia :spec-layout-versao (:spec-layout-versao descritor)
-         :registry-versao-ref registry-versao-ref :hash hash-conteudo :objeto-store-ref store-ref})))
+          store-ref  (str "remessas/" ente-id "/" template-chave "/" competencia "/" hash-conteudo ".bin")
+          ;; INSERT PRIMEIRO (review clj C1): a linha rascunho e' a ancora/prova. Se o S3 falhar depois, a
+          ;; linha existe com ref resolvivel (detectavel/recuperavel) — nunca um binario orfao irrastreavel;
+          ;; se o INSERT falhar, nenhum byte foi escrito no S3 (estado limpo). store-ref e' content-addressed
+          ;; -> guardar! e' idempotente (re-emissao do mesmo conteudo reescreve bytes identicos).
+          row        (inserir-com-retry! this ente-id
+                       {:id (ids/novo-id) :ente-id ente-id :template-chave template-chave :sistema sistema
+                        :competencia competencia :spec-layout-versao (:spec-layout-versao descritor)
+                        :registry-versao-ref registry-versao-ref :hash hash-conteudo :objeto-store-ref store-ref})]
+      (os/guardar! objeto-store store-ref b content-type)             ; binario no objeto_store apos a ancora
+      row))
   (listar-remessas [this ente-id template-chave competencia]
     (transacao this ente-id #(db-rem/listar % ente-id template-chave competencia)))
   (validar-remessa! [this ente-id id]

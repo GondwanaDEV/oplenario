@@ -24,7 +24,9 @@
                   :where [:and [:= :ente_id ente-id] [:= :id id]]}))))
 
 (defn proxima-versao
-  "A proxima versao p/ (ente, template, competencia): max(versao)+1, ou 1 se nao ha nenhuma. Re-emissao =
+  "SUPERSEDIDA p/ a geracao: use `inserir-versionada!` (computa a versao no proprio INSERT, sem janela
+  TOCTOU). Mantida p/ leitura/diagnostico. A proxima versao p/ (ente, template, competencia): max(versao)+1,
+  ou 1 se nao ha nenhuma. Re-emissao =
   NOVA versao (§22.7.8) — o UNIQUE(ente, template, competencia, versao) impede colisao se duas geracoes
   concorrerem; o caller trata o conflito (re-tenta a proxima)."
   [tx ente-id template-chave competencia]

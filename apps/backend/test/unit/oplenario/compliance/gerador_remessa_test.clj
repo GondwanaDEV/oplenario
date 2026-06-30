@@ -64,6 +64,32 @@
                         (assoc resolvidos-ok :lotes {})))
       "lote ausente -> LANCA"))
 
+;; ---------- (review sec m2) valor "" / branco = nao resolvido (campo em branco no XML regulatorio) ----------
+
+(deftest cabecalho-resolvido-vazio-lanca
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"campo de remessa nao resolvido"
+        (ger/renderizar ger/descritor-sim-fixture (assoc-in resolvidos-ok [:relacoes "nome_ente"] "  ")))
+      "string branca = nao resolvido -> LANCA (artefato regulatorio nao sai com campo em branco)"))
+
+;; ---------- (review clj M1) tipo de fonte fora do enum -> ex-info ACIONAVEL (nao IllegalArgumentException) ----------
+
+(deftest fonte-tipo-desconhecido-lanca
+  (let [desc {:spec-layout-versao "x" :sistema "S" :content-type "text/plain"
+              :cabecalho [{:campo "c" :fonte [:bogus "k"]}]}]
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"tipo de fonte desconhecido"
+          (ger/renderizar desc {:contexto {} :relacoes {} :lotes {}}))
+        "tipo de fonte invalido -> ex-info com contexto, nao o erro opaco do `case`")))
+
+;; ---------- (review sec M1) nome de campo nao-NCName e' REJEITADO pelo model (injecao estrutural XML) ----------
+
+(deftest nome-de-campo-invalido-rejeitado-pelo-model
+  (let [mau (assoc-in ger/descritor-sim-fixture [:cabecalho 0 :campo] "foo><inj")]
+    (is (false? (m/validate mod-desc/DescritorRemessa mau))
+        "campo com `<`/`>` nao bate o model (NomeCampo NCName) — fecha a injecao de tag XML"))
+  (is (false? (m/validate mod-desc/DescritorRemessa
+                          (assoc-in ger/descritor-sim-fixture [:registros :colunas 0 :campo] "a b")))
+      "coluna com espaco tambem e' rejeitada"))
+
 ;; ---------- descritor sem secao de registros: documento com :registros vazio ----------
 
 (deftest descritor-sem-registros-ok

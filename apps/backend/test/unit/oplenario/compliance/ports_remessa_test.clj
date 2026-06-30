@@ -71,7 +71,7 @@
 
 (deftest fontes-fixture-devolve-lote
   (let [f (fontes/fontes-fixture {"despesas" [{"data" "2099-07-05" "valor" "1000,00"}]})
-        lote (fontes/buscar-lote f ::tx (random-uuid) "despesas" {"competencia" "2099-07"})]
+        lote (fontes/buscar-lote f (random-uuid) "despesas" {"competencia" "2099-07"})]
     (is (= [{"data" "2099-07-05" "valor" "1000,00"}] lote) "devolve os N registros do lote (leitura em lote)")
-    (is (= [] (fontes/buscar-lote f ::tx (random-uuid) "inexistente" {}))
+    (is (= [] (fontes/buscar-lote f (random-uuid) "inexistente" {}))
         "lote nao configurado no fixture -> vazio")))

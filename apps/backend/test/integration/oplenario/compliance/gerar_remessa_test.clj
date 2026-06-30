@@ -74,6 +74,31 @@
     (is (empty? (repo-compliance/listar-remessas repo ente "remessa_mensal_sim" "2099-07"))
         "nenhuma remessa foi materializada (a falha veio antes do insert)")))
 
+;; ---------- (review clj C1) INSERT-primeiro: S3 falha apos -> linha rascunho ancorada (sem orfao) ----------
+
+(deftest s3-falha-pos-insert-deixa-rascunho-ancorado
+  (let [repo (:repo-compliance *sys*) ente (random-uuid)
+        os-quebrado (reify os/ObjetoStore
+                      (guardar! [_ _ _ _] (throw (ex-info "S3 indisponivel" {})))
+                      (obter [_ _] nil) (remover! [_ _] nil) (guardar-stream! [_ _ _ _] nil))
+        m (assoc (m-base ente) :objeto-store os-quebrado)]
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"S3 indisponivel"
+          (repo-compliance/gerar-remessa! repo ente m)) "a falha do S3 propaga")
+    (let [rows (repo-compliance/listar-remessas repo ente "remessa_mensal_sim" "2099-07")]
+      (is (= 1 (count rows)) "a linha rascunho foi inserida ANTES do S3 (ancora, nao orfao)")
+      (is (= "rascunho" (:estado (first rows))) "fica em rascunho com objeto_store_ref resolvivel (recuperavel)"))))
+
+;; ---------- (review sec m1) chave do objeto_store rejeita segmento malicioso em template-chave/competencia ----------
+
+(deftest chave-store-rejeita-segmento-malicioso
+  (let [repo (:repo-compliance *sys*) ente (random-uuid)]
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"template-chave invalida"
+          (repo-compliance/gerar-remessa! repo ente (assoc (m-base ente) :template-chave "../outro_tenant")))
+        "template-chave com `/` -> LANCA antes de tocar o store")
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"competencia invalida"
+          (repo-compliance/gerar-remessa! repo ente (assoc (m-base ente) :competencia "2099-07/x")))
+        "competencia fora de AAAA-MM -> LANCA")))
+
 ;; ---------- transicoes do Repo: rascunho -> validada -> submetida -> aceita ----------
 
 (deftest transicoes-do-repo-seguem-o-ciclo
