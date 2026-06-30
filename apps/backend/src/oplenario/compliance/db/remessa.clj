@@ -24,7 +24,9 @@
                   :where [:and [:= :ente_id ente-id] [:= :id id]]}))))
 
 (defn proxima-versao
-  "A proxima versao p/ (ente, template, competencia): max(versao)+1, ou 1 se nao ha nenhuma. Re-emissao =
+  "SUPERSEDIDA p/ a geracao: use `inserir-versionada!` (computa a versao no proprio INSERT, sem janela
+  TOCTOU). Mantida p/ leitura/diagnostico. A proxima versao p/ (ente, template, competencia): max(versao)+1,
+  ou 1 se nao ha nenhuma. Re-emissao =
   NOVA versao (§22.7.8) — o UNIQUE(ente, template, competencia, versao) impede colisao se duas geracoes
   concorrerem; o caller trata o conflito (re-tenta a proxima)."
   [tx ente-id template-chave competencia]
@@ -49,6 +51,33 @@
                             :registry_versao_ref registry-versao-ref :hash hash-conteudo
                             :objeto_store_ref objeto-store-ref}]
                   :returning [:*]}))))
+
+(def ^:private sql-inserir-versionada
+  "INSERT...SELECT que computa a versao (MAX+1) na MESMA instrucao — ATOMICO, fecha o TOCTOU
+  proxima-versao->inserir! (carry F5.3a-1). Concorrencia: duas geracoes simultaneas podem ler o mesmo MAX
+  (READ COMMITTED) e a 2a viola o UNIQUE(ente,template,competencia,versao) com 23505; o Repo re-tenta UMA
+  vez em tx nova (a re-leitura ja' enxerga a versao commitada). RETURNING * devolve a linha (DEFAULTs do
+  banco: estado='rascunho', criado_em). Raw SQL (nao HoneySQL) por legibilidade do scalar-subquery."
+  (str "INSERT INTO compliance.remessa_gerada"
+       " (id, ente_id, template_chave, sistema, competencia, versao,"
+       "  spec_layout_versao, registry_versao_ref, hash, objeto_store_ref)"
+       " SELECT ?, ?, ?, ?, ?, COALESCE(MAX(versao), 0) + 1, ?, ?, ?, ?"
+       " FROM compliance.remessa_gerada"
+       " WHERE ente_id = ? AND template_chave = ? AND competencia = ?"
+       " RETURNING *"))
+
+(defn inserir-versionada!
+  "Materializa uma remessa na PROXIMA versao ATOMICAMENTE (versao = MAX+1 no proprio INSERT...SELECT) —
+  fecha o carry TOCTOU F5.3a-1 (sem janela entre ler a versao e inserir). 23505 em corrida = o caller
+  re-tenta (Repo/gerar-remessa!). Devolve o mapa kebab da remessa criada."
+  [tx {:keys [id ente-id template-chave sistema competencia spec-layout-versao registry-versao-ref
+              objeto-store-ref] hash-conteudo :hash}]
+  (comum/linha->kebab
+   (jdbc/execute-one! tx
+     [sql-inserir-versionada
+      id ente-id template-chave sistema competencia
+      spec-layout-versao registry-versao-ref hash-conteudo objeto-store-ref
+      ente-id template-chave competencia])))
 
 (defn transicionar-estado!
   "CAS de ciclo: transiciona a remessa de `de` -> `para` SOMENTE se ainda esta em `de` (WHERE estado=de) —
