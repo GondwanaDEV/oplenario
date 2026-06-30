@@ -23,6 +23,26 @@
 (def origens-avaliacao #{"evento" "sweep" "sob_demanda"})
 (def severidades #{"bloqueante" "aviso"})
 
+;; ---- ciclo de vida da remessa (enum FIXO em codigo — §22.7.8; nao e' template, como o ciclo da
+;;      obrigacao e as emendas §22.4 eixo D). Universal entre camaras/regimes -> mora aqui, nao em dado. ----
+(def estados-remessa
+  "Ciclo do artefato de remessa (remessa_gerada.estado): rascunho -> validada -> submetida ->
+  {aceita | rejeitada}. Re-emissao apos rejeicao = NOVA versao (nao reabre o ciclo da anterior)."
+  #{"rascunho" "validada" "submetida" "aceita" "rejeitada"})
+
+(def ^:private transicoes-remessa
+  "Grafo de transicoes LEGAIS do ciclo (de -> conjunto de proximos). Aceita/rejeitada nao tem saida
+  (terminais; reenvio = nova versao). Sem retorno no ciclo (a auditoria do ciclo nao se reescreve)."
+  {"rascunho"  #{"validada"}
+   "validada"  #{"submetida"}
+   "submetida" #{"aceita" "rejeitada"}
+   "aceita"    #{}
+   "rejeitada" #{}})
+
+(def ^:private estados-terminais-remessa
+  "Estados terminais do ciclo: o TCE ja' respondeu. Reenvio apos rejeicao = nova VERSAO, nunca muta esta."
+  #{"aceita" "rejeitada"})
+
 ;; ---- estado-de-submissao da remessa que CUMPRE a obrigacao (§22.7.8) ----
 (def ^:private estado-remessa-cumpre "aceita")
 
@@ -71,3 +91,19 @@
   estados intermediarios NAO cumprem."
   [estado-remessa]
   (= estado-remessa estado-remessa-cumpre))
+
+(defn validar-estado-remessa
+  "Guarda de profundidade: lanca se `v` nao e' um estado do ciclo de remessa
+  (rascunho|validada|submetida|aceita|rejeitada)."
+  [v] (validar! estados-remessa "estado de remessa" v))
+
+(defn transicao-remessa-valida?
+  "A transicao `de`->`para` do ciclo da remessa e' legal? (rascunho->validada->submetida->aceita|rejeitada).
+  Terminais (aceita/rejeitada) nao transicionam; sem retorno no ciclo. Pura (so o grafo fixo)."
+  [de para]
+  (contains? (get transicoes-remessa de) para))
+
+(defn remessa-terminal?
+  "O estado da remessa e' terminal (o TCE respondeu)? Reenvio apos rejeicao = nova VERSAO."
+  [estado-remessa]
+  (contains? estados-terminais-remessa estado-remessa))

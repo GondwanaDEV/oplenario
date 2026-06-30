@@ -75,13 +75,15 @@ referencia_normativa: \"prova F2.3\"
   (let [{:keys [datasource repo-motor registro-fatos]} *sys*
         ds (:ds datasource)
         ente (random-uuid)]
-    ;; T1 exige remessa_enviada(...) — assinatura existe no catálogo, mas NENHUMA fn registrada (F5).
-    ;; O resolver-para lança em runtime: fail-closed (nunca avalia errado).
+    ;; CONTINUA exige publicada_no_portal(despesa) — assinatura existe no catálogo, mas NENHUMA fn registrada
+    ;; (módulo `transparencia` futuro). O resolver-para lança em runtime: fail-closed (nunca avalia errado).
+    ;; NOTA: `remessa_enviada` SAIU desta lista na F5.3a — o compliance/relacoes a registra (a costura); o
+    ;; guardião do fail-closed migrou p/ um fato ainda-não-registrado.
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"fato sem fn registrada"
           (tenancy/com-tenant* ds ente
             (fn [tx]
               (motor/avaliar {:registro registro-fatos :repo-motor repo-motor :tx tx :ente-id ente
-                              :regra (nuc/carregar-envelope tpl/T1) :reg-ver "registry-v1@2026-06-20"
-                              :objeto-tipo "competencia" :objeto-id "2026-05"
-                              :amb {"competencia" {:ano 2026 :mes 5}} :agora (LocalDate/of 2026 6 19)}))))
-        "remessa_enviada sem fn → fail-closed")))
+                              :regra (nuc/carregar-envelope tpl/CONTINUA) :reg-ver "registry-v1@2026-06-20"
+                              :objeto-tipo "ato_despesa" :objeto-id "d1"
+                              :amb {"despesa" {:id "d1"}} :agora (LocalDate/of 2026 6 19)}))))
+        "publicada_no_portal sem fn → fail-closed")))

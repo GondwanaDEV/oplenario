@@ -30,8 +30,16 @@ Módulo (bounded context §22.2) — **dono da execução do compliance por tena
   reconcilia o ciclo (`logic/proxima-fase` contra o estado persistido sob `FOR UPDATE`) + audita a
   avaliação **append-only**, tudo na MESMA tx do tenant. O motor dá o veredito + `vence_em`; o compliance
   é dono do ciclo persistido. Wired no `sistema/novo-sistema` (`:repo-compliance`, recebe `registro`+`repo-motor` por-chamada).
-- **A seguir:** F5.2 (escopo `regras-aplicaveis` + sweep), F5.3 (remessa + relação `remessa_enviada`
-  → fecha o T1/M6), F5.4 (eventos/consumers), F5.5 (borda HTTP — painel "a Casa está em dia").
+- **F5.3a — a costura (FEITO, fecha T1/M6).** `logic` ganhou o ciclo da remessa (enum fixo
+  `rascunho|validada|submetida|aceita|rejeitada` + `transicao-remessa-valida?` + `remessa-terminal?`),
+  `models/remessa` (Malli), `db/remessa` (persistência pura: `inserir!`/`proxima-versao`/`transicionar-estado!`
+  CAS/`buscar`/`listar`), e a **relação `remessa_enviada`** (`relacoes/remessa-enviada?` — inline no schema
+  como as do `cadastros`, ADR-0001 §3-bis; só `aceita` cumpre), **registrada no `sistema/fundir-relacoes`**.
+  Com isso o fato que o `avaliar_seam_test` deixara deferido fica **vivo**: o E2E `costura-remessa-cumpre-T1`
+  prova T1 pendente → **cumprida** quando a remessa é aceita (**M6**). O guardião do fail-closed migrou p/ um
+  fato ainda-não-registrado (`publicada_no_portal`).
+- **A seguir:** F5.3b (`gerador_remessa` + ports `Serializador`/`Transporte`/`fontes` — a *forma* com fixture,
+  SIM = `[GAP]`), F5.4 (eventos/consumers), F5.5 (borda HTTP — painel "a Casa está em dia").
 
 ## Fronteiras
 - O **catálogo** (`template`/`regra`, domínio sem `ente_id`) e o **binding por tenant** vivem no `motor`

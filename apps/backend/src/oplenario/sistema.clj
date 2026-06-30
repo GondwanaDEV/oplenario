@@ -7,6 +7,7 @@
             [oplenario.cadastros.components.repositorio :as repo-cadastros]
             [oplenario.cadastros.relacoes.cadastro :as rel-cadastros]
             [oplenario.compliance.components.repositorio :as repo-compliance]
+            [oplenario.compliance.relacoes :as rel-compliance]
             [oplenario.identidade.components.repositorio :as repo-identidade]
             [oplenario.identidade.relacoes.identidade :as rel-identidade]
             [oplenario.legislativo.components.repositorio :as repo-legislativo]
@@ -82,7 +83,8 @@
    ;; O motor chama por nome (resolver-para), nunca importa o módulo. Sem :datasource — a `tx` do tenant
    ;; entra por-chamada (quem avalia abre a tx via Repo). O `start` roda o assert de costura (fail-closed).
    :registro-fatos  (registro-fatos/registro-fatos
-                     (fundir-relacoes rel-cadastros/relacoes rel-identidade/relacoes rel-sessoes/relacoes)))))
+                     (fundir-relacoes rel-cadastros/relacoes rel-identidade/relacoes rel-sessoes/relacoes
+                                      rel-compliance/relacoes)))))
 
 (defn- idp-para
   "Seleciona a impl do IdP por ambiente — GUARD DE BOOT fail-closed (review de seguranca W2, CRÍTICO): producao
