@@ -37,8 +37,11 @@
    [:competencia :string]
    [:versao :int]
    [:estado (km/enum-de logic/estados-remessa)]
-   [:submetida-em {:optional true} [:maybe :string]]
-   [:resposta-em {:optional true} [:maybe :string]]
+   ;; o adapters/out SEMPRE emite estas chaves (nil quando ausente) — chave nunca falta -> NAO `{:optional}`
+   ;; (senao o codegen TS de F1.5 geraria `submetidaEm?: string|null`, sugerindo ausencia que nao ocorre —
+   ;; review clojure M2/Opcao A). Nulavel por valor, presente por chave.
+   [:submetida-em [:maybe :string]]
+   [:resposta-em [:maybe :string]]
    [:criado-em :string]])
 
 (def PainelOut

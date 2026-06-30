@@ -89,7 +89,10 @@
 (defn listar-em-aberto
   "Read-model do painel — 'o que vence' (§16.11): as obrigacoes EM ABERTO (pendente + vencida) do tenant,
   ordenadas por vencimento (a mais urgente primeiro), com TETO `limite` (anti unbounded-read — review sec).
-  Cumprida/dispensada/cancelada NAO entram (so o que ainda exige acao)."
+  Cumprida/dispensada/cancelada NAO entram (so o que ainda exige acao). `[:inline ...]` p/ os dois estados
+  (constantes de codigo, nunca input): casa o predicado do indice parcial idx_prazo_dominio_ativo_sweep
+  (WHERE estado IN ('pendente','vencida')) — placeholder opaco impediria o planner de usa-lo (review database
+  OK/MENOR; mesmo racional do sweep `pendentes-vencidas-ate`)."
   [tx ente-id limite]
   (comum/linhas->kebab
    (jdbc/execute! tx

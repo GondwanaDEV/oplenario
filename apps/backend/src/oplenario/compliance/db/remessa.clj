@@ -109,14 +109,21 @@
                           [:= :competencia competencia]]
                   :order-by [[:versao :asc]]}))))
 
+(def ^:private cols-painel
+  "Colunas do read-model do painel — SUBCONJUNTO publico de `cols` (review sec MÉDIO-1): NAO traz p/ o heap
+  da JVM os ponteiros/proveniencia internos (hash, objeto_store_ref, registry_versao_ref, spec_layout_versao)
+  que o adapters/out descartaria de qualquer forma — defesa-em-profundidade contra log cru / refactor futuro."
+  [:id :ente_id :template_chave :sistema :competencia :versao :estado :submetida_em :resposta_em :criado_em])
+
 (defn listar-recentes
   "Read-model do painel (§16.11): as remessas mais recentes do tenant (todas as competencias/sistemas),
   ordem `criado_em` DESC (id DESC como tiebreaker estavel num empate de timestamp), com TETO `limite`
-  (anti unbounded-read — review sec). E' o pipeline de remessas que a Mesa/juridico le no painel."
+  (anti unbounded-read — review sec). E' o pipeline de remessas que a Mesa/juridico le no painel. Projeta
+  so `cols-painel` (sem os campos internos — review sec MÉDIO-1)."
   [tx ente-id limite]
   (comum/linhas->kebab
    (jdbc/execute! tx
-     (sql/format {:select cols :from [:compliance.remessa_gerada]
+     (sql/format {:select cols-painel :from [:compliance.remessa_gerada]
                   :where [:= :ente_id ente-id]
                   :order-by [[:criado_em :desc] [:id :desc]]
                   :limit limite}))))

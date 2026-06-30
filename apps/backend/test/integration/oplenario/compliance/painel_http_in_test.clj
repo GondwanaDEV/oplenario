@@ -75,7 +75,8 @@
       (is (= 1 (:versao m)))
       (is (not (contains? m :objeto-store-ref)) "o ponteiro interno do store NAO vaza")
       (is (not (contains? m :hash)) "o hash interno NAO vaza")
-      (is (not (contains? m :registry-versao-ref)) "a proveniencia interna NAO vaza"))))
+      (is (not (contains? m :registry-versao-ref)) "a proveniencia interna NAO vaza")
+      (is (not (contains? m :spec-layout-versao)) "a versao do layout (interno) NAO vaza"))))
 
 (deftest painel-sem-papel-403
   (let [r (pt/response-for (service-fn #{"vereador"} (fake-repo-compliance (painel-canonico (random-uuid))))

@@ -67,8 +67,8 @@
 (defn normalizar-resumo
   "Read-model do painel (§16.11): pares crus do db `[{:estado :total}...]` -> mapa keyword 0-FILADO p/ as 5
   fases (pendente|cumprida|vencida|dispensada|cancelada). PURO — garante que o placar sempre tem as cinco
-  chaves (mesmo zeradas; o SQL so devolve estados COM linha). Estado fora do enum LANCA (guarda de
-  profundidade: linha corrompida nao envenena o painel)."
+  chaves (mesmo zeradas; o SQL so devolve estados COM linha). Estado fora do enum LANCA via validar-fase
+  (guarda de profundidade — como os demais validar-* deste ns; linha corrompida nao envenena o painel)."
   [pares]
   (reduce (fn [acc {:keys [estado total]}]
             (validar-fase estado)

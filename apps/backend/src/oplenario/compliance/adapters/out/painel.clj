@@ -41,6 +41,9 @@
              :em-aberto         (mapv obrigacao->wire em-aberto)
              :remessas-recentes (mapv remessa->wire remessas-recentes)}]
     (when-not (m/validate wire/PainelOut out)
+      ;; humanize de schema ANINHADO devolve mapa aninhado (ex.: {:resumo {:pendente [...]}}); guarda o mapa
+      ;; INTEIRO (nao so `keys`, que perderia o sub-campo que falhou) — o erro global LOGA, nao vai ao corpo
+      ;; (review clojure M1).
       (throw (ex-info "projecao do painel viola o contrato PainelOut (bug de servidor)"
-                      {:campos (keys (me/humanize (m/explain wire/PainelOut out)))})))
+                      {:erros (me/humanize (m/explain wire/PainelOut out))})))
     out))
