@@ -25,3 +25,15 @@
    [:tipo (km/enum-de logic/tipos-evento-presenca)]
    [:modalidade (km/enum-de logic/modalidades-presenca)]
    [:ocorrido-em :string]])
+
+(def InscreverOrador
+  "Corpo de POST /sessoes/:id/inscricoes (§22.6 eixo F, tribuna camada de intencao). `vereador-id` = uuid
+  (string); `origem-inscricao` discrimina o caminho (app/secretaria/pedido/autoria) — dado descritivo da fila,
+  validado contra o enum (NAO forcado: sem implicacao de precedencia, diferente da `fonte` de presenca);
+  `fase` reusa as fases-pauta (a tribuna e' subordinada a fase); `proposicao-ref-id` opcional (uuid). NAO carrega
+  autor/tenant (vem do ator) nem `ordem` (numerada server-side). `:closed true` recusa campos extra."
+  [:map {:closed true}
+   [:vereador-id :string]
+   [:origem-inscricao (km/enum-de logic/origens-inscricao)]
+   [:fase (km/enum-de logic/fases-pauta)]
+   [:proposicao-ref-id {:optional true} [:maybe :string]]])

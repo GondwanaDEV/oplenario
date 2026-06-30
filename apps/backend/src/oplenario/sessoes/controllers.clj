@@ -58,6 +58,30 @@
          :fonte "manual_secretaria" :ocorrido-em ocorrido-em :created-by (:identidade-id ator)})
       {:id id})))
 
+(defn inscrever-orador
+  "§22.6 eixo F (tribuna, intencao): inscreve um orador na fila da sessao. Carrega a sessao do tenant do `ator`
+  (nil -> 404 via nil de retorno), roda pode-ver-sessao? (mesma Casa -> 403 fail-closed), e inscreve (a fila e'
+  numerada server-side por sessao+fase). O Repo compoe o ato + emite `inscricao.registrada` (fila ao vivo) na
+  MESMA tx. created-by = o ator. Devolve {:id :ordem} ou nil (sessao inexistente)."
+  [repo-sessoes ator m]
+  (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) (:sessao-id m))]
+    (authz/check! ator :sessao/inscrever-orador sessao logic/pode-ver-sessao?)
+    (repo/inscrever! repo-sessoes (:ente-id ator)
+      (assoc m :id (random-uuid) :created-by (:identidade-id ator)))))
+
+(defn desistir-inscricao
+  "§22.6 eixo F (tribuna, intencao): move uma inscricao para 'desistencia' (terminal). Carrega a sessao do tenant
+  do `ator` (nil -> 404), roda pode-ver-sessao? (mesma Casa -> 403), e desiste (CAS por lock_version + maquina).
+  O Repo compoe o ato + emite `inscricao.desistida` na MESMA tx. desistir!/CAS lanca `:conflito/inscricao`
+  (ja-desistiu / lock-stale / inscricao inexistente; o diplomat mapeia 409). updated-by = o ator. Devolve
+  {:de :para} (+ :inscricao-id) ou nil (sessao inexistente)."
+  [repo-sessoes ator {:keys [sessao-id inscricao-id lock-version]}]
+  (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/desistir-inscricao sessao logic/pode-ver-sessao?)
+    (assoc (repo/desistir! repo-sessoes (:ente-id ator)
+             {:id inscricao-id :lock-version lock-version :updated-by (:identidade-id ator)})
+           :inscricao-id inscricao-id)))
+
 (defn pauta-da-sessao
   "Le a PAUTA VIVA da sessao `id` (UUID) p/ o `ator`. A authz mora no recurso sessao: carrega a sessao e roda
   policy.check (pode-ver-sessao?) ANTES de qualquer leitura de pauta — quem nao pode ver a sessao nao ve a

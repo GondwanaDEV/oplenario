@@ -9,10 +9,12 @@
             [oplenario.sessoes.adapters.in.gravacao :as adapters-in-grav]
             [oplenario.sessoes.adapters.in.presenca :as adapters-in-presenca]
             [oplenario.sessoes.adapters.in.sessao :as adapters-in]
+            [oplenario.sessoes.adapters.in.tribuna :as adapters-in-tribuna]
             [oplenario.sessoes.adapters.out.gravacao :as adapters-out-grav]
             [oplenario.sessoes.adapters.out.pauta :as adapters-out-pauta]
             [oplenario.sessoes.adapters.out.presenca :as adapters-out-presenca]
             [oplenario.sessoes.adapters.out.sessao :as adapters-out]
+            [oplenario.sessoes.adapters.out.tribuna :as adapters-out-tribuna]
             [oplenario.sessoes.controllers :as controllers]))
 
 (set! *warn-on-reflection* true)
@@ -80,6 +82,38 @@
       (if-let [recibo (controllers/registrar-presenca repo-sessoes ator m)]
         (http/json-resposta 201 (adapters-out-presenca/recibo-presenca->wire recibo))
         (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+
+(defn- inscrever-handler
+  "POST /sessoes/:id/inscricoes (§22.6 eixo F, tribuna). adapters/in coage o :id + valida o corpo {vereador-id,
+  origem-inscricao, fase, proposicao-ref-id?}; o controller carrega+autoriza a sessao e inscreve (o Repo emite
+  inscricao.registrada na mesma tx); adapters/out projeta o recibo {:id :ordem}. nil -> 404; sucesso -> 201."
+  [repo-sessoes]
+  (fn [req]
+    (let [ator (:ator req)
+          m    (adapters-in-tribuna/inscrever->dominio (get-in req [:path-params :id]) (:json-params req))]
+      (if-let [recibo (controllers/inscrever-orador repo-sessoes ator m)]
+        (http/json-resposta 201 (adapters-out-tribuna/recibo-inscricao->wire recibo))
+        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+
+(defn- desistir-handler
+  "POST /sessoes/:id/inscricoes/:insc-id/desistir (§22.6 eixo F, tribuna). adapters/in coage os path-params + o
+  corpo {lock-version}; o controller carrega+autoriza a sessao e desiste (CAS + maquina; o Repo emite
+  inscricao.desistida na mesma tx); adapters/out projeta o recibo {:de :para}. nil (sessao inexistente) -> 404;
+  ja-desistiu / lock-stale / inscricao inexistente -> 409 (nao 500). 200 (atualiza, nao cria)."
+  [repo-sessoes]
+  (fn [req]
+    (let [ator (:ator req)
+          m    (adapters-in-tribuna/desistir->dominio (get-in req [:path-params :id])
+                                                      (get-in req [:path-params :insc-id])
+                                                      (:json-params req))]
+      (try
+        (if-let [recibo (controllers/desistir-inscricao repo-sessoes ator m)]
+          (http/json-resposta 200 (adapters-out-tribuna/recibo-desistencia->wire recibo))
+          (http/json-resposta 404 {:erro "sessao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/inscricao (:tipo (ex-data e)))
+            (http/json-resposta 409 {:erro "inscricao ja desistida, inexistente ou lock-version desatualizado"})
+            (throw e)))))))
 
 (defn- pauta-handler
   "GET /sessoes/:id/pauta. adapters/in coage o :id; controller carrega+autoriza a sessao e le a pauta viva;
@@ -178,6 +212,12 @@
     ["/sessoes/:id/presenca" :post
      [auth (it/exige-papel "secretario") it/corpo-json (registrar-presenca-handler repo-sessoes)]
      :route-name :sessoes/registrar-presenca]
+    ["/sessoes/:id/inscricoes" :post
+     [auth (it/exige-papel "secretario") it/corpo-json (inscrever-handler repo-sessoes)]
+     :route-name :sessoes/inscrever-orador]
+    ["/sessoes/:id/inscricoes/:insc-id/desistir" :post
+     [auth (it/exige-papel "secretario") it/corpo-json (desistir-handler repo-sessoes)]
+     :route-name :sessoes/desistir-inscricao]
     ["/sessoes/:id/pauta" :get [auth (pauta-handler repo-sessoes)] :route-name :sessoes/pauta]
     ["/sessoes/:id/gravacao" :get [auth (listar-gravacoes-handler repo-sessoes)] :route-name :sessoes/listar-gravacoes]
     ["/sessoes/:id/gravacao/:seg-id/vincular" :post
