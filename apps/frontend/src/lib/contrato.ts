@@ -96,6 +96,38 @@ export interface InscricaoDesistida {
   "sessao-id": string;
 }
 
+// ---- votação ao vivo (3 eventos; legislativo.events.votacao + projeção §22.6 sigilo) ----
+
+/** votacao.aberta — a Mesa abre a votação sobre a matéria. `modalidade` diz ao painel se mostra placar nominal
+ * (quem votou o quê) ou só contador (secreta). */
+export interface VotacaoAberta {
+  "votacao-id": string;
+  "sessao-id": string;
+  "objeto-tipo": string;
+  "objeto-id": string;
+  modalidade: string; // nominal | secreta | simbolica (no fio do plenário: nominal | secreta)
+  "quorum-tipo": string;
+  "pauta-item-id"?: string | null;
+}
+
+/** voto.registrado — UNIÃO DISCRIMINADA por `modalidade` (sigilo §22.6 cravado no contrato do backend).
+ * NOMINAL carrega vereador+voto (público no placar nominal); SECRETA é um TICK anônimo (só o contador). */
+export type VotoRegistrado =
+  | { "votacao-id": string; "sessao-id": string; modalidade: "nominal"; "vereador-id": string; voto: string }
+  | { "votacao-id": string; "sessao-id": string; modalidade: "secreta" };
+
+/** votacao.encerrada — o resultado AGREGADO (público mesmo na secreta). Totais ausentes na 'simbolica'. */
+export interface VotacaoEncerrada {
+  "votacao-id": string;
+  "sessao-id": string;
+  resultado: string; // aprovada | rejeitada
+  modalidade?: string;
+  "total-sim"?: number | null;
+  "total-nao"?: number | null;
+  "total-abstencao"?: number | null;
+  "base-membros"?: number | null;
+}
+
 /** Evento normalizado do canal plenário: o `tipo` discrimina o `dados`; `seq` = posição monotônica (Last-Event-ID). */
 export type EventoPlenario =
   | { tipo: "sessao.transicionou"; seq: number; dados: SessaoTransicionou }
@@ -104,9 +136,12 @@ export type EventoPlenario =
   | { tipo: "fala.encerrada"; seq: number; dados: FalaEncerrada }
   | { tipo: "fala.cronometro"; seq: number; dados: FalaCronometro }
   | { tipo: "inscricao.registrada"; seq: number; dados: InscricaoRegistrada }
-  | { tipo: "inscricao.desistida"; seq: number; dados: InscricaoDesistida };
+  | { tipo: "inscricao.desistida"; seq: number; dados: InscricaoDesistida }
+  | { tipo: "votacao.aberta"; seq: number; dados: VotacaoAberta }
+  | { tipo: "voto.registrado"; seq: number; dados: VotoRegistrado }
+  | { tipo: "votacao.encerrada"; seq: number; dados: VotacaoEncerrada };
 
-/** Os 7 tipos roteados ao painel — espelho de oplenario.tempo-real.canais/tipos-plenario (fonte única no backend). */
+/** Os 10 tipos roteados ao painel — espelho de oplenario.tempo-real.canais/tipos-plenario (fonte única no backend). */
 export const TIPOS_PLENARIO = [
   "sessao.transicionou",
   "presenca.registrada",
@@ -115,4 +150,7 @@ export const TIPOS_PLENARIO = [
   "fala.cronometro",
   "inscricao.registrada",
   "inscricao.desistida",
+  "votacao.aberta",
+  "voto.registrado",
+  "votacao.encerrada",
 ] as const;
