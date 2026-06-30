@@ -25,7 +25,7 @@
   fronteira core->IA, nao SSE) — roteia p/ []. SIGILO §22.6: a projecao (projecao.clj) e' o ultimo portao
   do voto secreto — o `voto.registrado` secreto vira so contador, nunca identidade."
   #{"sessao.transicionou" "presenca.registrada" "fala.iniciada" "fala.encerrada" "fala.cronometro"
-    "inscricao.registrada" "inscricao.desistida"
+    "inscricao.registrada" "inscricao.desistida" "incidente.registrado"
     "votacao.aberta" "voto.registrado" "votacao.encerrada"})
 
 (defn rotas-do-evento

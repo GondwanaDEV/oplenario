@@ -81,6 +81,12 @@
   [:map {:closed true}
    [:id :string]])
 
+(def IncidenteReciboOut
+  "Recibo do registro de incidente processual (resposta 201 de POST /sessoes/:id/incidentes, §16.13). So o `id`
+  do incidente append-only gravado — confirma ao chamador o ato lavrado p/ a ata. NAO expoe internos."
+  [:map {:closed true}
+   [:id :string]])
+
 (def PautaItemOut
   "Projecao publica de um item ATIVO da pauta (§22.6 eixo B). NAO expoe internos (ente-id, pauta-sessao-id,
   lock-version, ativo). FK-por-tipo: 'proposicao' carrega proposicao-id (string); os demais, texto-descricao."

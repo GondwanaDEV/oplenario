@@ -336,3 +336,33 @@
         pausado (cond-> pausado-pares
                   (some? ini-final) (+ (- (epoch-s encerrou-em) (epoch-s ini-final))))]
     (max 0 (- bruto pausado))))
+
+;; ---------- incidente_processual (§16.13) ----------
+
+(def tipos-incidente
+  "Incidentes processuais que NAO tem casa propria. `questao_de_ordem` vive em decisao_mesa (decisao do
+  presidente, mig 0034) e `retirada_de_pauta` no soft-remove do pauta_item (mig 0027) — por isso ficam FORA
+  deste enum (evita dupla modelagem)."
+  #{"pedido_vista" "verificacao_votacao" "urgencia" "votacao_em_bloco"})
+
+(def resultados-incidente
+  "Disposicao do incidente, deliberada na hora (V1 atomico)."
+  #{"deferido" "indeferido" "prejudicado" "retirado"})
+
+(def tipos-objeto-incidente
+  "Materias que um incidente pode atingir (ref polimorfica forward-ref). BOUNDED (o CHECK da mig 0035 espelha):
+  evita typo mudo no read-model por materia. Aberto a 1 entrada por tipo novo (config-ish)."
+  #{"proposicao" "votacao" "emenda"})
+
+(defn validar-tipo-incidente
+  "Fail-closed: lanca se `tipo` nao e' um incidente processual conhecido (espelha o CHECK da mig 0035 -> evita
+  500 do banco quando barra antes)."
+  [tipo]
+  (when-not (contains? tipos-incidente tipo)
+    (throw (ex-info "tipo de incidente processual invalido" {:tipo tipo :validos tipos-incidente}))))
+
+(defn validar-resultado-incidente
+  "Fail-closed: lanca se `resultado` nao e' uma disposicao conhecida (espelha o CHECK da mig 0035)."
+  [resultado]
+  (when-not (contains? resultados-incidente resultado)
+    (throw (ex-info "resultado de incidente processual invalido" {:resultado resultado :validos resultados-incidente}))))

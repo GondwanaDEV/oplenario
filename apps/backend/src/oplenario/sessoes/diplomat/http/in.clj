@@ -7,11 +7,13 @@
   (:require [oplenario.http :as http]
             [oplenario.interceptors :as it]
             [oplenario.sessoes.adapters.in.gravacao :as adapters-in-grav]
+            [oplenario.sessoes.adapters.in.incidente :as adapters-in-incidente]
             [oplenario.sessoes.adapters.in.pauta :as adapters-in-pauta]
             [oplenario.sessoes.adapters.in.presenca :as adapters-in-presenca]
             [oplenario.sessoes.adapters.in.sessao :as adapters-in]
             [oplenario.sessoes.adapters.in.tribuna :as adapters-in-tribuna]
             [oplenario.sessoes.adapters.out.gravacao :as adapters-out-grav]
+            [oplenario.sessoes.adapters.out.incidente :as adapters-out-incidente]
             [oplenario.sessoes.adapters.out.pauta :as adapters-out-pauta]
             [oplenario.sessoes.adapters.out.presenca :as adapters-out-presenca]
             [oplenario.sessoes.adapters.out.sessao :as adapters-out]
@@ -176,6 +178,20 @@
           m    (adapters-in-tribuna/decisao-mesa->dominio (get-in req [:path-params :id]) (:json-params req))]
       (if-let [recibo (controllers/registrar-decisao-mesa repo-sessoes ator m)]
         (http/json-resposta 201 (adapters-out-tribuna/recibo-decisao-mesa->wire recibo))
+        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+
+(defn- incidente-handler
+  "POST /sessoes/:id/incidentes (§16.13). adapters/in coage o :id + valida o corpo {tipo, resultado, descricao,
+  ocorrido-em, objeto-tipo?, objeto-id?, requerente-id?, deliberacao?} INCL. o enum/nao-vazio/coerencia (-> 400 na
+  borda); o controller carrega+autoriza a sessao, injeta created-by do ator e registra o incidente append-only +
+  emite incidente.registrado (SSE) na mesma tx; adapters/out projeta o recibo {:id}. nil (sessao inexistente) ->
+  404; sucesso -> 201 (cria o ato — append-only, sem 409)."
+  [repo-sessoes]
+  (fn [req]
+    (let [ator (:ator req)
+          m    (adapters-in-incidente/registrar->dominio (get-in req [:path-params :id]) (:json-params req))]
+      (if-let [recibo (controllers/registrar-incidente repo-sessoes ator m)]
+        (http/json-resposta 201 (adapters-out-incidente/recibo-incidente->wire recibo))
         (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
 
 (defn- adicionar-item-handler
@@ -347,6 +363,9 @@
     ["/sessoes/:id/decisoes-mesa" :post
      [auth (it/exige-papel "secretario") it/corpo-json (decisao-mesa-handler repo-sessoes)]
      :route-name :sessoes/registrar-decisao-mesa]
+    ["/sessoes/:id/incidentes" :post
+     [auth (it/exige-papel "secretario") it/corpo-json (incidente-handler repo-sessoes)]
+     :route-name :sessoes/registrar-incidente]
     ["/sessoes/:id/pauta" :get [auth (pauta-handler repo-sessoes)] :route-name :sessoes/pauta]
     ["/sessoes/:id/pauta/itens" :post
      [auth (it/exige-papel "secretario") it/corpo-json (adicionar-item-handler repo-sessoes)]

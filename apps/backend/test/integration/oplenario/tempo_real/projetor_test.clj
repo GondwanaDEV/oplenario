@@ -33,7 +33,10 @@
       "evento de sessao roteia p/ o canal plenario da sessao")
   (is (= []
          (canais/rotas-do-evento {:tipo "gravacao.segmento-captado" :payload {:sessao-id "S"}}))
-      "fronteira core->IA NAO e' SSE (nao roteia)"))
+      "fronteira core->IA NAO e' SSE (nao roteia)")
+  (is (= ["sessao/S/plenario"]
+         (canais/rotas-do-evento {:tipo "incidente.registrado" :payload {:sessao-id "S"}}))
+      "incidente processual (§16.13) roteia p/ o canal plenario (mesa de conducao ao vivo)"))
 
 ;; ---------- PURO: projecao wire/out ----------
 
