@@ -113,7 +113,11 @@
               (or (authz/negado? ex) (authz/negado? (raiz ex)))
               (assoc ctx :response (http/json-resposta 403 {:erro "autorizacao negada"}))
               :else
-              (assoc ctx :response (http/json-resposta 500 {:erro "erro interno"}))))})
+              ;; 500 nao tratado (ex.: drift de projecao adapters/out vs contrato wire — review sec MÉDIO-2):
+              ;; LOGA a excecao no servidor (com a causa/`:campos` na ex-data) antes de devolver o corpo
+              ;; opaco — senao o bug fica invisivel. O corpo NUNCA carrega detalhe interno.
+              (do (log/error ex "erro interno nao tratado na cadeia de borda")
+                  (assoc ctx :response (http/json-resposta 500 {:erro "erro interno"})))))})
 
 (def cabecalhos-seguranca
   "Interceptor de cabecalhos de seguranca (review W2): no-store (respostas de auth nao cacheiam em proxy/browser)

@@ -23,6 +23,15 @@
      (sql/format {:select cols :from [:compliance.remessa_gerada]
                   :where [:and [:= :ente_id ente-id] [:= :id id]]}))))
 
+(defn existe?
+  "A remessa `id` existe no tenant (RLS via ente-id)? Point-lookup pela PK, projeta SO `1` — NAO traz ao
+  heap os ponteiros/proveniencia internos (hash/objeto_store_ref/...) que `buscar` traria (review sec
+  BAIXO; defesa-em-profundidade, como `cols-painel`). Usado pela borda p/ desambiguar 404 vs 409."
+  [tx ente-id id]
+  (some? (jdbc/execute-one! tx
+           (sql/format {:select [[[:inline 1] :existe]] :from [:compliance.remessa_gerada]
+                        :where [:and [:= :ente_id ente-id] [:= :id id]] :limit 1}))))
+
 (defn proxima-versao
   "SUPERSEDIDA p/ a geracao: use `inserir-versionada!` (computa a versao no proprio INSERT, sem janela
   TOCTOU). Mantida p/ leitura/diagnostico. A proxima versao p/ (ente, template, competencia): max(versao)+1,
@@ -108,6 +117,25 @@
                   :where [:and [:= :ente_id ente-id] [:= :template_chave template-chave]
                           [:= :competencia competencia]]
                   :order-by [[:versao :asc]]}))))
+
+(def ^:private cols-painel
+  "Colunas do read-model do painel — SUBCONJUNTO publico de `cols` (review sec MÉDIO-1): NAO traz p/ o heap
+  da JVM os ponteiros/proveniencia internos (hash, objeto_store_ref, registry_versao_ref, spec_layout_versao)
+  que o adapters/out descartaria de qualquer forma — defesa-em-profundidade contra log cru / refactor futuro."
+  [:id :ente_id :template_chave :sistema :competencia :versao :estado :submetida_em :resposta_em :criado_em])
+
+(defn listar-recentes
+  "Read-model do painel (§16.11): as remessas mais recentes do tenant (todas as competencias/sistemas),
+  ordem `criado_em` DESC (id DESC como tiebreaker estavel num empate de timestamp), com TETO `limite`
+  (anti unbounded-read — review sec). E' o pipeline de remessas que a Mesa/juridico le no painel. Projeta
+  so `cols-painel` (sem os campos internos — review sec MÉDIO-1)."
+  [tx ente-id limite]
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select cols-painel :from [:compliance.remessa_gerada]
+                  :where [:= :ente_id ente-id]
+                  :order-by [[:criado_em :desc] [:id :desc]]
+                  :limit limite}))))
 
 ;; NOTA: a COSTURA `remessa_enviada(sistema, competencia)` (so 'aceita' cumpre) NAO mora aqui — e' uma
 ;; funcao de RELACAO (compliance/relacoes), que inlina a query do proprio schema como as do cadastros

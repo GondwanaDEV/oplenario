@@ -1,0 +1,107 @@
+(ns oplenario.compliance.painel-test
+  "INTEGRACAO (PG real) — F5.5a: o read-model do painel 'a Casa esta em dia com o TCE' (§16.11 /
+  paineis-mesa). Reads tenant-wide NOVOS (o db/ ate aqui so tinha leitura por-objeto/por-id): resumo de
+  obrigacoes por estado (o placar 11·1·0), obrigacoes em aberto (o que vence), remessas recentes (o
+  pipeline). + o metodo de composicao do Repo `painel` (uma tx do tenant). Sob FORCE RLS (mig 0009)."
+  (:require [clojure.test :refer [deftest is use-fixtures]]
+            [com.stuartsierra.component :as component]
+            [oplenario.compliance.components.repositorio :as repo-compliance]
+            [oplenario.compliance.db.obrigacao :as db-obr]
+            [oplenario.compliance.db.remessa :as db-rem]
+            [oplenario.config :as config]
+            [oplenario.kernel.tenancy :as tenancy]
+            [oplenario.migracao :as migracao]
+            [oplenario.sistema :as sistema])
+  (:import (java.time LocalDate)))
+
+(def ^:dynamic *sys* nil)
+
+(use-fixtures :once
+  (fn [t]
+    (let [s (component/start (sistema/novo-sistema (config/carregar)))]
+      (migracao/migrar! (:ds (:datasource s)))
+      (binding [*sys* s] (try (t) (finally (component/stop s)))))))
+
+(defn- nova-obrig [ente estado vence-em template]
+  {:id (random-uuid) :ente-id ente :template-chave template :objeto-tipo "competencia"
+   :objeto-id (random-uuid) :vence-em vence-em :prazo-fonte-ref nil :estado estado :cumprida-em nil})
+
+(defn- nova-remessa [ente competencia versao]
+  {:id (random-uuid) :ente-id ente :template-chave "remessa_mensal_sim" :sistema "SIM"
+   :competencia competencia :versao versao :spec-layout-versao "fixture-sim-v0"
+   :registry-versao-ref "registry-v1@2026-06-20" :hash "sha256:abc" :objeto-store-ref "remessas/x.bin"})
+
+;; ---------- resumo-por-estado: COUNT(*) GROUP BY estado, escopado ao tenant ----------
+
+(deftest resumo-conta-por-estado
+  (let [ds (:ds (:datasource *sys*)) ente (random-uuid)]
+    (tenancy/com-tenant* ds ente
+      (fn [tx]
+        (db-obr/inserir! tx (nova-obrig ente "pendente" (LocalDate/of 2099 7 31) "t-a"))
+        (db-obr/inserir! tx (nova-obrig ente "pendente" (LocalDate/of 2099 8 31) "t-b"))
+        (db-obr/inserir! tx (nova-obrig ente "vencida"  (LocalDate/of 2099 1 31) "t-c"))
+        (db-obr/inserir! tx (nova-obrig ente "cumprida" (LocalDate/of 2099 6 30) "t-d"))
+        (let [m (into {} (map (juxt :estado :total)) (db-obr/resumo-por-estado tx ente))]
+          (is (= 2 (get m "pendente")) "2 pendentes")
+          (is (= 1 (get m "vencida"))  "1 vencida")
+          (is (= 1 (get m "cumprida")) "1 cumprida")
+          (is (nil? (get m "cancelada"))
+              "estado sem linha NAO aparece no GROUP BY (o 0-fill mora no logic, nao no SQL)"))))))
+
+;; ---------- listar-em-aberto: pendente+vencida, ordenadas por vencimento (o que vence) ----------
+
+(deftest em-aberto-lista-pendente-e-vencida-por-vencimento
+  (let [ds (:ds (:datasource *sys*)) ente (random-uuid)]
+    (tenancy/com-tenant* ds ente
+      (fn [tx]
+        (db-obr/inserir! tx (nova-obrig ente "pendente" (LocalDate/of 2099 8 31) "t-a"))
+        (db-obr/inserir! tx (nova-obrig ente "vencida"  (LocalDate/of 2099 1 31) "t-b"))
+        (db-obr/inserir! tx (nova-obrig ente "pendente" (LocalDate/of 2099 7 31) "t-c"))
+        (db-obr/inserir! tx (nova-obrig ente "cumprida" (LocalDate/of 2099 6 30) "t-d"))   ; NAO entra
+        (let [abertas (db-obr/listar-em-aberto tx ente 50)]
+          (is (= 3 (count abertas)) "so as 3 em aberto (cumprida fora)")
+          (is (every? #{"pendente" "vencida"} (map :estado abertas)) "so pendente/vencida")
+          (is (= [(LocalDate/of 2099 1 31) (LocalDate/of 2099 7 31) (LocalDate/of 2099 8 31)]
+                 (map :vence-em abertas))
+              "ordenadas por vencimento asc (a mais urgente primeiro)"))))))
+
+(deftest em-aberto-respeita-o-limite
+  (let [ds (:ds (:datasource *sys*)) ente (random-uuid)]
+    (tenancy/com-tenant* ds ente
+      (fn [tx]
+        (dotimes [i 5] (db-obr/inserir! tx (nova-obrig ente "pendente" (LocalDate/of 2099 1 (inc i)) (str "t-" i))))
+        (is (= 2 (count (db-obr/listar-em-aberto tx ente 2))) "o limite (anti unbounded-read) corta o resultado")))))
+
+;; ---------- listar-recentes (remessas): escopo de tenant + limite ----------
+
+(deftest remessas-recentes-escopo-e-limite
+  (let [ds (:ds (:datasource *sys*)) ente (random-uuid) outro (random-uuid)]
+    (tenancy/com-tenant* ds ente
+      (fn [tx]
+        (db-rem/inserir! tx (nova-remessa ente "2099-01" 1))
+        (db-rem/inserir! tx (nova-remessa ente "2099-02" 1))
+        (db-rem/inserir! tx (nova-remessa ente "2099-03" 1))))
+    (tenancy/com-tenant* ds outro
+      (fn [tx] (db-rem/inserir! tx (nova-remessa outro "2099-01" 1))))
+    (tenancy/com-tenant* ds ente
+      (fn [tx]
+        (is (= 3 (count (db-rem/listar-recentes tx ente 10))) "todas as 3 do tenant")
+        (is (= 2 (count (db-rem/listar-recentes tx ente 2))) "o limite corta")
+        (is (every? #(= ente (:ente-id %)) (db-rem/listar-recentes tx ente 10))
+            "RLS + WHERE: nenhuma remessa de outro tenant vaza")))))
+
+;; ---------- Repo/painel: compoe os tres reads numa unica tx do tenant ----------
+
+(deftest painel-compoe-os-tres-reads
+  (let [{:keys [datasource repo-compliance]} *sys* ds (:ds datasource) ente (random-uuid)]
+    (tenancy/com-tenant* ds ente
+      (fn [tx]
+        (db-obr/inserir! tx (nova-obrig ente "pendente" (LocalDate/of 2099 7 31) "t-a"))
+        (db-obr/inserir! tx (nova-obrig ente "cumprida" (LocalDate/of 2099 6 30) "t-b"))
+        (db-rem/inserir! tx (nova-remessa ente "2099-07" 1))))
+    (let [p (repo-compliance/painel repo-compliance ente {})]
+      (is (= {"pendente" 1 "cumprida" 1} (into {} (map (juxt :estado :total)) (:resumo p)))
+          "o resumo (pares crus; o 0-fill e' do logic na borda)")
+      (is (= 1 (count (:em-aberto p))) "1 obrigacao em aberto (a pendente)")
+      (is (= "pendente" (:estado (first (:em-aberto p)))))
+      (is (= 1 (count (:remessas-recentes p))) "1 remessa recente"))))

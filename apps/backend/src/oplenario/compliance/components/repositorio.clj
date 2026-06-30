@@ -101,6 +101,12 @@
      vencimento e' a unica transicao que evento nao dispara; a obrigacao segue nao_conforme ate ser
      cumprida por evento). Idempotente (so move pendente; ja-vencida nao re-transiciona). Devolve
      [{:id :de :para}...] das obrigacoes transicionadas.")
+  (painel [this ente-id opts]
+    "Read-model do painel 'a Casa esta em dia com o TCE' (§16.11): compoe os tres reads tenant-wide numa
+     UNICA tx do tenant (snapshot coerente) — resumo de obrigacoes por estado (placar; pares crus, o 0-fill
+     e' do logic na borda) + obrigacoes em aberto (o que vence) + remessas recentes (pipeline). `opts` =
+     {:limite-em-aberto :limite-remessas} (TETOS server-side, anti unbounded-read). Devolve
+     {:resumo [...] :em-aberto [...] :remessas-recentes [...]}.")
   (buscar-obrigacao [this ente-id id])
   (obrigacoes-do-objeto [this ente-id objeto-tipo objeto-id])
   (avaliacoes-da-obrigacao [this ente-id obrigacao-id])
@@ -112,6 +118,10 @@
      :serializador (SerializadorRemessa) :objeto-store (ObjetoStore) :registry-versao-ref}. Devolve a linha.")
   (listar-remessas [this ente-id template-chave competencia]
     "Historico de (re)emissoes de (ente, template, competencia), por versao.")
+  (remessa-existe? [this ente-id id]
+    "A remessa `id` existe no tenant (RLS escopa por ente)? Existence-check p/ a borda HTTP (F5.5b)
+     desambiguar o nil de uma transicao: existe -> conflito de ciclo (409); ausente -> 404. Projeta so
+     `1` (nao traz colunas sensiveis ao heap — review sec BAIXO). Devolve boolean.")
   (validar-remessa! [this ente-id id] "Transiciona rascunho->validada (CAS guardado por grafo).")
   (submeter-remessa! [this ente-id id] "Transiciona validada->submetida + carimba submetida_em.")
   (registrar-resposta-remessa! [this ente-id id estado]
@@ -177,6 +187,12 @@
                                                  :origem-avaliacao "sweep" :detalhe "vencimento detectado por sweep"})
                          {:id (:id o) :de "pendente" :para "vencida"}))))   ; pendente->vencida: a unica transicao deste sweep
              vec))))
+  (painel [this ente-id {:keys [limite-em-aberto limite-remessas] :or {limite-em-aberto 100 limite-remessas 50}}]
+    (transacao this ente-id
+      (fn [tx]
+        {:resumo             (db-obr/resumo-por-estado tx ente-id)
+         :em-aberto          (db-obr/listar-em-aberto tx ente-id limite-em-aberto)
+         :remessas-recentes  (db-rem/listar-recentes tx ente-id limite-remessas)})))
   (buscar-obrigacao [this ente-id id] (transacao this ente-id #(db-obr/buscar % ente-id id)))
   (obrigacoes-do-objeto [this ente-id objeto-tipo objeto-id]
     (transacao this ente-id #(db-obr/listar-do-objeto % ente-id objeto-tipo objeto-id)))
@@ -205,6 +221,8 @@
       row))
   (listar-remessas [this ente-id template-chave competencia]
     (transacao this ente-id #(db-rem/listar % ente-id template-chave competencia)))
+  (remessa-existe? [this ente-id id]
+    (transacao this ente-id #(db-rem/existe? % ente-id id)))
   (validar-remessa! [this ente-id id]
     (transacao this ente-id #(db-rem/transicionar-estado! % ente-id id "rascunho" "validada" {})))
   (submeter-remessa! [this ente-id id]

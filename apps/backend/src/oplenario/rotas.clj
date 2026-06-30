@@ -3,7 +3,8 @@
   (oplenario.interceptors) — fica separada de http.clj p/ evitar ciclo (http nao conhece interceptors). W2
   monta /saude (publica) + /eu (auth) + /painel-secretaria (auth + papel). W3 adiciona as rotas-dado de cada
   modulo (com o servidor `using` os Repo). `montar` recebe os deps ja injetados (idp + repo-identidade)."
-  (:require [oplenario.http :as http]
+  (:require [oplenario.compliance.diplomat.http.in :as compliance-http]
+            [oplenario.http :as http]
             [oplenario.interceptors :as it]
             [oplenario.legislativo.diplomat.http.in :as legislativo-http]
             [oplenario.sessoes.components.repositorio :as repo-sessoes-comp]
@@ -20,7 +21,7 @@
   (§22.10): so ele cruza modulos — p/ o endpoint SSE (G3) e a vertical de votacao ao vivo (Slice 3, no
   legislativo) injeta `consultar-sessao` (delega ao Repo de sessoes) nos diplomats de tempo_real e legislativo,
   que NAO importam sessoes."
-  [{:keys [idp repo-identidade repo-sessoes repo-legislativo canal-store objeto-store]}]
+  [{:keys [idp repo-identidade repo-sessoes repo-legislativo repo-compliance canal-store objeto-store]}]
   (let [auth (it/autenticacao idp repo-identidade)
         ;; cross-modulo via inversao de dependencia: o host fecha sobre o Repo de sessoes e expoe a consulta-fato
         ;; que o endpoint SSE (G3) E a vertical de votacao ao vivo (F4 Slice 3, no legislativo) precisam p/
@@ -33,4 +34,5 @@
         (into (sessoes-http/rotas {:auth auth :repo-sessoes repo-sessoes :objeto-store objeto-store}))
         (into (legislativo-http/rotas {:auth auth :repo-legislativo repo-legislativo
                                        :consultar-sessao consultar-sessao}))
+        (into (compliance-http/rotas {:auth auth :repo-compliance repo-compliance}))
         (into (tempo-real-sse/rotas {:auth auth :canal-store canal-store :consultar-sessao consultar-sessao})))))

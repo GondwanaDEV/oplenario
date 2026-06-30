@@ -64,6 +64,18 @@
   "Guarda de profundidade: lanca se `v` nao e' uma severidade (bloqueante|aviso)."
   [v] (validar! severidades "severidade" v))
 
+(defn normalizar-resumo
+  "Read-model do painel (§16.11): pares crus do db `[{:estado :total}...]` -> mapa keyword 0-FILADO p/ as 5
+  fases (pendente|cumprida|vencida|dispensada|cancelada). PURO — garante que o placar sempre tem as cinco
+  chaves (mesmo zeradas; o SQL so devolve estados COM linha). Estado fora do enum LANCA via validar-fase
+  (guarda de profundidade — como os demais validar-* deste ns; linha corrompida nao envenena o painel)."
+  [pares]
+  (reduce (fn [acc {:keys [estado total]}]
+            (validar-fase estado)
+            (assoc acc (keyword estado) (long total)))
+          (zipmap (map keyword fases-obrigacao) (repeat 0))
+          pares))
+
 (defn vencido?
   "A obrigacao esta vencida em `agora`? Compliance opera em DATAS (LocalDate), nao instantes — o
   vencimento e' por dia civil. Estritamente APOS o vence_em (o proprio dia do vencimento nao vence).
@@ -107,3 +119,9 @@
   "O estado da remessa e' terminal (o TCE respondeu)? Reenvio apos rejeicao = nova VERSAO."
   [estado-remessa]
   (contains? estados-terminais-remessa estado-remessa))
+
+(defn estado-resposta-tce?
+  "O `s` e' uma resposta do TCE registravel em registrar-resposta (submetida->{aceita|rejeitada})? E'
+  exatamente o conjunto dos estados terminais. A borda (adapters/in) usa este predicado p/ validar o corpo
+  de POST .../resposta — FONTE UNICA do conjunto, nao replicar na borda (review clj M1)."
+  [s] (contains? estados-terminais-remessa s))
