@@ -67,15 +67,19 @@
   [tx {:keys [id ente-id para motivo updated-by lock-version]}]
   (let [{:keys [estado aberta-em] db-lock :lock-version} (estado+lock tx ente-id id)]
     (when (nil? estado)
-      (throw (ex-info "transicionar!: sessao inexistente" {:id id :ente-id ente-id})))
+      ;; :tipo p/ consistencia com os irmaos (review clojure LOW): se a sessao sumir entre o buscar do controller
+      ;; e o FOR UPDATE aqui (TOCTOU; sem DELETE no dominio, na pratica inalcancavel), mapeia 409, nunca 500.
+      (throw (ex-info "transicionar!: sessao inexistente" {:tipo :conflito/transicao :id id :ente-id ente-id})))
     ;; conflito de concorrencia ANTES da validacao de maquina: um caller com lock stale (estado ja avancou)
     ;; recebe "conflito de lock" — diagnostico correto p/ retry — em vez de "transicao invalida" (review F4.1).
     (when (not= db-lock lock-version)
-      (throw (ex-info "transicionar!: conflito de lock_version" {:id id :esperado lock-version :atual db-lock})))
+      (throw (ex-info "transicionar!: conflito de lock_version"
+                      {:tipo :conflito/transicao :id id :esperado lock-version :atual db-lock})))
     (when-not (logic/transicao-valida? estado para)
-      (throw (ex-info "transicionar!: transicao de estado invalida" {:id id :de estado :para para})))
+      (throw (ex-info "transicionar!: transicao de estado invalida"
+                      {:tipo :conflito/transicao :id id :de estado :para para})))
     (when (and (= "nao_realizada" para) (str/blank? motivo))
-      (throw (ex-info "transicionar!: 'nao_realizada' exige motivo" {:id id})))
+      (throw (ex-info "transicionar!: 'nao_realizada' exige motivo" {:tipo :validacao/invalido :id id})))
     (let [sets (cond-> {:estado para :updated_by updated-by :atualizado_em [:now]
                         :lock_version [:+ :lock_version 1]}
                  (and (= "aberta" para) (nil? aberta-em)) (assoc :aberta_em [:now])
@@ -86,5 +90,5 @@
                            :where [:and [:= :ente_id ente-id] [:= :id id] [:= :lock_version lock-version]]}))]
       (when (zero? (:next.jdbc/update-count r 0))
         (throw (ex-info "transicionar!: conflito de lock_version ou sessao inexistente"
-                        {:id id :lock-version lock-version})))
+                        {:tipo :conflito/transicao :id id :lock-version lock-version})))
       {:de estado :para para})))

@@ -25,6 +25,15 @@
    [:encerrada-em {:optional true} [:maybe :string]]
    [:motivo-nao-realizada {:optional true} [:maybe :string]]])
 
+(def TransicaoSessaoOut
+  "Recibo da transicao de estado da sessao (resposta 200 de POST /sessoes/:id/transicao, Mesa de conducao).
+  Carrega a `sessao-id` + o par `de`/`para` (espelha o payload do evento sessao.transicionou). NAO expoe o
+  lock-version. O canal SSE do plenario ja recebeu o mesmo fato pelo evento; este recibo confirma ao chamador."
+  [:map {:closed true}
+   [:sessao-id :string]
+   [:de (km/enum-de logic/estados-sessao)]
+   [:para (km/enum-de logic/estados-sessao)]])
+
 (def PautaItemOut
   "Projecao publica de um item ATIVO da pauta (§22.6 eixo B). NAO expoe internos (ente-id, pauta-sessao-id,
   lock-version, ativo). FK-por-tipo: 'proposicao' carrega proposicao-id (string); os demais, texto-descricao."

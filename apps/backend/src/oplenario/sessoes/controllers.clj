@@ -27,6 +27,20 @@
     (authz/check! ator :sessao/ver s logic/pode-ver-sessao?)
     s))
 
+(defn transicionar-sessao
+  "Mesa de conducao (§22.6 eixo A/G): move o estado da sessao `sessao-id` pela maquina. Carrega a sessao do
+  tenant do `ator` (nil -> 404 via nil de retorno), roda pode-ver-sessao? (mesma Casa -> 403 fail-closed), e
+  transiciona. O Repo compoe o ato + emite `sessao.transicionou` (que o canal SSE do plenario consome) na MESMA
+  tx (atomicidade §22.9 E2). Maquina/CAS lanca `:conflito/transicao` (o diplomat mapeia 409). updated-by = o
+  ator. Devolve {:sessao-id :de :para} ou nil (sessao inexistente)."
+  [repo-sessoes ator {:keys [sessao-id para motivo lock-version]}]
+  (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/conduzir sessao logic/pode-ver-sessao?)
+    (assoc (repo/transicionar-sessao! repo-sessoes (:ente-id ator)
+             {:id sessao-id :para para :motivo motivo :lock-version lock-version
+              :updated-by (:identidade-id ator)})
+           :sessao-id sessao-id)))
+
 (defn pauta-da-sessao
   "Le a PAUTA VIVA da sessao `id` (UUID) p/ o `ator`. A authz mora no recurso sessao: carrega a sessao e roda
   policy.check (pode-ver-sessao?) ANTES de qualquer leitura de pauta — quem nao pode ver a sessao nao ve a
