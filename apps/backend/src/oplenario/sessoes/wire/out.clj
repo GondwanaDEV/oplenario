@@ -42,3 +42,32 @@
   [:map {:closed true}
    [:sessao-id :string]
    [:itens [:sequential PautaItemOut]]])
+
+(def GravacaoReciboOut
+  "Recibo da ingestao de gravacao (resposta 201 de POST /gravacoes). Carrega o `id` do segmento + o
+  `audio-hash` (sha256) p/ o utilitario CLI confirmar integridade/dedup (§22.3.4). NAO expoe a chave interna
+  do store (container-bruto-uri)."
+  [:map {:closed true}
+   [:id :string]
+   [:audio-hash :string]])
+
+(def SegmentoOut
+  "Projecao publica de um segmento de gravacao no read-model do painel (GET /sessoes/:id/gravacao). NAO expoe
+  internos: container-bruto-uri (chave do store), audio-hash, ente-id, lock-version. `audio-disponivel` = se a
+  IA ja extraiu o audio (audio-uri presente)."
+  [:map {:closed true}
+   [:id :string]
+   [:sessao-id {:optional true} [:maybe :string]]
+   [:iniciou-em :string]
+   [:encerrou-em {:optional true} [:maybe :string]]
+   [:motivo-inicio (km/enum-de logic/motivos-inicio-gravacao)]
+   [:motivo-fim {:optional true} [:maybe (km/enum-de logic/motivos-fim-gravacao)]]
+   [:fonte-ingestao (km/enum-de logic/fontes-ingestao-gravacao)]
+   [:acesso-restrito :boolean]
+   [:audio-disponivel :boolean]])
+
+(def SegmentosOut
+  "Read-model dos segmentos de gravacao de uma sessao (GET /sessoes/:id/gravacao)."
+  [:map {:closed true}
+   [:sessao-id :string]
+   [:segmentos [:sequential SegmentoOut]]])

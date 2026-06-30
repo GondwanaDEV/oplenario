@@ -12,6 +12,7 @@
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.kernel.components.http-servidor :as http-servidor]
             [oplenario.kernel.components.idp-dev :as idp-dev]
+            [oplenario.kernel.components.objeto-store :as objeto-store]
             [oplenario.kernel.components.outbox-relay :as outbox-relay]
             [oplenario.kernel.outbox :as outbox]
             [oplenario.rotas :as rotas]
@@ -58,6 +59,9 @@
    ;; emitem eventos de dominio o recebem via `using`.
    :bus             (outbox/bus)
    :canal-store     canal-store
+   ;; §22.6 eixo D / §22.3.4: object store S3/MinIO p/ a ingestao de gravacao (container bruto). Stateful
+   ;; (start abre o client + garante o bucket) — o servidor HTTP o recebe via `using` p/ a rota de ingestao.
+   :objeto-store    (objeto-store/objeto-store config)
    ;; relay (lider unico): drena o outbox e despacha ao projetor SSE (registro). Depende de :datasource; o
    ;; :canal-store no `using` NAO e' lido (o registro ja fechou sobre ele) — so impoe a ORDEM de start (o pool
    ;; Valkey abre antes do relay comecar a publicar).
@@ -99,4 +103,4 @@
          ;; p/ a vertical de votacao ao vivo (rota mora no legislativo; authz herdada da sessao via consultar-sessao).
          :servidor-http (component/using
                          (http-servidor/servidor-http config rotas/montar)
-                         [:idp :repo-identidade :repo-sessoes :repo-legislativo :canal-store])))
+                         [:idp :repo-identidade :repo-sessoes :repo-legislativo :canal-store :objeto-store])))

@@ -20,7 +20,7 @@
   (§22.10): so ele cruza modulos — p/ o endpoint SSE (G3) e a vertical de votacao ao vivo (Slice 3, no
   legislativo) injeta `consultar-sessao` (delega ao Repo de sessoes) nos diplomats de tempo_real e legislativo,
   que NAO importam sessoes."
-  [{:keys [idp repo-identidade repo-sessoes repo-legislativo canal-store]}]
+  [{:keys [idp repo-identidade repo-sessoes repo-legislativo canal-store objeto-store]}]
   (let [auth (it/autenticacao idp repo-identidade)
         ;; cross-modulo via inversao de dependencia: o host fecha sobre o Repo de sessoes e expoe a consulta-fato
         ;; que o endpoint SSE (G3) E a vertical de votacao ao vivo (F4 Slice 3, no legislativo) precisam p/
@@ -30,7 +30,7 @@
           ["/eu"                :get [auth http/eu] :route-name :eu]
           ["/painel-secretaria" :get [auth (it/exige-papel "secretario") http/painel-secretaria]
            :route-name :painel-secretaria]}
-        (into (sessoes-http/rotas {:auth auth :repo-sessoes repo-sessoes}))
+        (into (sessoes-http/rotas {:auth auth :repo-sessoes repo-sessoes :objeto-store objeto-store}))
         (into (legislativo-http/rotas {:auth auth :repo-legislativo repo-legislativo
                                        :consultar-sessao consultar-sessao}))
         (into (tempo-real-sse/rotas {:auth auth :canal-store canal-store :consultar-sessao consultar-sessao})))))
