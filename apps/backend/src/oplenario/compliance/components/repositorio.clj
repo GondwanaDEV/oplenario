@@ -8,12 +8,19 @@
   RepoLegislativo/transicionar! recebe `registro` p/ o engine de tramitacao (precedente F3.3a; o motor e'
   BIBLIOTECA compartilhada, §22.10). A reconciliacao do ciclo (motor->veredito; logic->fase persistida) +
   o ato + a auditoria correm na MESMA tx do tenant (atomicidade da prova de compliance, Invariante 10)."
-  (:require [oplenario.compliance.db.avaliacao :as db-aval]
+  (:require [oplenario.compliance.components.fontes :as fontes]
+            [oplenario.compliance.components.serializador-remessa :as ser]
+            [oplenario.compliance.db.avaliacao :as db-aval]
             [oplenario.compliance.db.obrigacao :as db-obr]
+            [oplenario.compliance.db.remessa :as db-rem]
+            [oplenario.compliance.gerador-remessa :as ger]
             [oplenario.compliance.logic :as logic]
+            [oplenario.kernel.components.objeto-store :as os]
             [oplenario.kernel.ids :as ids]
             [oplenario.kernel.tenancy :as tenancy]
-            [oplenario.motor.api :as motor]))
+            [oplenario.motor.api :as motor])
+  (:import (java.security MessageDigest)
+           (org.postgresql.util PSQLException)))
 
 (defn- reconciliar-obrigacao!
   "Materializa/reconcilia a obrigacao DEADLINE-BOUND (quando o motor a devolveu) na `tx`, RACE-SAFE (C1).
@@ -44,6 +51,28 @@
                                    :cumprida-em (when (= fase "cumprida") [:now])})
               (atualizar (db-obr/buscar-para-reconciliar tx ente-id template objeto-tipo objeto-id))))))))
 
+;; ---------- geracao de remessa (§22.7.8): coleta fontes -> renderiza (puro) -> serializa -> objeto_store -> insere ----------
+
+(defn- sha256-hex
+  "Hash hex SHA-256 do binario, prefixado 'sha256:' — integridade do artefato (metadata imutavel, §22.7.8).
+  bit-and 0xff: byte assinado da JVM nao deve virar 'ffffff..' no hex."
+  [^bytes b]
+  (let [h (.digest (MessageDigest/getInstance "SHA-256") b)]
+    (str "sha256:" (apply str (map #(format "%02x" (bit-and (int %) 0xff)) h)))))
+
+(defn- coletar-fontes
+  "Caminha o `descritor` e resolve o que ele declara (na `tx` do tenant): :contexto (passado), :relacao
+  (escalar, via `resolver-relacao` injetada — em prod fecha sobre o registry+tx, F5.5; aqui by-call como o
+  motor) e a secao de :registros (read-port EM LOTE via `fontes`). Devolve o mapa `resolvidos` p/ o
+  renderizador puro. NUNCA JOIN cross-schema — cada lote e' um read-port (§22.10/D7)."
+  [tx ente-id descritor contexto resolver-relacao fontes-port]
+  {:contexto contexto
+   :relacoes (into {} (for [{[tipo chave] :fonte} (:cabecalho descritor) :when (= tipo :relacao)]
+                        [chave (resolver-relacao tx chave)]))
+   :lotes    (when-let [sec (:registros descritor)]
+               (let [[_ chave] (:fonte sec)]
+                 {chave (fontes/buscar-lote fontes-port tx ente-id chave contexto)}))})
+
 (defprotocol RepoCompliance
   (transacao [this ente-id f] "Roda (f tx) numa UNICA tx do tenant — compoe acoes atomicamente.")
   (avaliar-obrigacao! [this ente-id registro repo-motor m]
@@ -59,7 +88,30 @@
      [{:id :de :para}...] das obrigacoes transicionadas.")
   (buscar-obrigacao [this ente-id id])
   (obrigacoes-do-objeto [this ente-id objeto-tipo objeto-id])
-  (avaliacoes-da-obrigacao [this ente-id obrigacao-id]))
+  (avaliacoes-da-obrigacao [this ente-id obrigacao-id])
+  (gerar-remessa! [this ente-id m]
+    "Gera o ARTEFATO de remessa (§22.7.8): coleta as fontes do `descritor` -> renderiza (puro) -> serializa
+     (port) -> hash -> grava o binario no objeto_store -> insere `remessa_gerada` rascunho VERSIONADO
+     (versao MAX+1 atomica). Fail-closed (campo nao resolvido aborta ANTES de persistir). `m` = {:descritor
+     :template-chave :sistema :competencia :contexto :resolver-relacao (fn [tx nome]) :fontes (FontesRemessa)
+     :serializador (SerializadorRemessa) :objeto-store (ObjetoStore) :registry-versao-ref}. Devolve a linha.")
+  (listar-remessas [this ente-id template-chave competencia]
+    "Historico de (re)emissoes de (ente, template, competencia), por versao.")
+  (validar-remessa! [this ente-id id] "Transiciona rascunho->validada (CAS guardado por grafo).")
+  (submeter-remessa! [this ente-id id] "Transiciona validada->submetida + carimba submetida_em.")
+  (registrar-resposta-remessa! [this ente-id id estado]
+    "Registra a resposta do TCE: submetida->{aceita|rejeitada} + carimba resposta_em. So 'aceita' cumpre a
+     obrigacao (costura remessa_enviada). `estado` != aceita|rejeitada -> LANCA (grafo do ciclo)."))
+
+(defn- inserir-com-retry!
+  "Insere a remessa versionada (versao MAX+1 ATOMICA) re-tentando UMA vez no 23505 — corrida de versao
+  concorrente (carry TOCTOU F5.3a-1). Cada tentativa = tx propria (apos 23505 a tx aborta; a re-leitura
+  do MAX em tx nova ja' enxerga a versao commitada). `id` e' fresco e nunca commitou no ramo perdido."
+  [repo ente-id row-base]
+  (letfn [(inserir [] (transacao repo ente-id #(db-rem/inserir-versionada! % row-base)))]
+    (try (inserir)
+         (catch PSQLException e
+           (if (= "23505" (.getSQLState e)) (inserir) (throw e))))))
 
 (defrecord RepoCompliancePg [datasource]
   RepoCompliance
@@ -114,7 +166,28 @@
   (obrigacoes-do-objeto [this ente-id objeto-tipo objeto-id]
     (transacao this ente-id #(db-obr/listar-do-objeto % ente-id objeto-tipo objeto-id)))
   (avaliacoes-da-obrigacao [this ente-id obrigacao-id]
-    (transacao this ente-id #(db-aval/listar-da-obrigacao % ente-id obrigacao-id))))
+    (transacao this ente-id #(db-aval/listar-da-obrigacao % ente-id obrigacao-id)))
+  (gerar-remessa! [this ente-id {:keys [descritor template-chave sistema competencia contexto
+                                        resolver-relacao fontes serializador objeto-store registry-versao-ref]}]
+    (let [resolvidos (transacao this ente-id
+                       (fn [tx] (coletar-fontes tx ente-id descritor contexto resolver-relacao fontes)))
+          documento  (ger/renderizar descritor resolvidos)            ; fail-closed: campo nao resolvido LANCA aqui
+          {b :bytes content-type :content-type} (ser/serializar serializador descritor documento)
+          hash-conteudo (sha256-hex b)
+          store-ref  (str "remessas/" ente-id "/" template-chave "/" competencia "/" hash-conteudo ".bin")]
+      (os/guardar! objeto-store store-ref b content-type)             ; binario no objeto_store; metadata na tabela
+      (inserir-com-retry! this ente-id
+        {:id (ids/novo-id) :ente-id ente-id :template-chave template-chave :sistema sistema
+         :competencia competencia :spec-layout-versao (:spec-layout-versao descritor)
+         :registry-versao-ref registry-versao-ref :hash hash-conteudo :objeto-store-ref store-ref})))
+  (listar-remessas [this ente-id template-chave competencia]
+    (transacao this ente-id #(db-rem/listar % ente-id template-chave competencia)))
+  (validar-remessa! [this ente-id id]
+    (transacao this ente-id #(db-rem/transicionar-estado! % ente-id id "rascunho" "validada" {})))
+  (submeter-remessa! [this ente-id id]
+    (transacao this ente-id #(db-rem/transicionar-estado! % ente-id id "validada" "submetida" {:submetida-em [:now]})))
+  (registrar-resposta-remessa! [this ente-id id estado]
+    (transacao this ente-id #(db-rem/transicionar-estado! % ente-id id "submetida" estado {:resposta-em [:now]}))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."
