@@ -118,6 +118,10 @@
      :serializador (SerializadorRemessa) :objeto-store (ObjetoStore) :registry-versao-ref}. Devolve a linha.")
   (listar-remessas [this ente-id template-chave competencia]
     "Historico de (re)emissoes de (ente, template, competencia), por versao.")
+  (remessa-existe? [this ente-id id]
+    "A remessa `id` existe no tenant (RLS escopa por ente)? Existence-check p/ a borda HTTP (F5.5b)
+     desambiguar o nil de uma transicao: existe -> conflito de ciclo (409); ausente -> 404. Projeta so
+     `1` (nao traz colunas sensiveis ao heap — review sec BAIXO). Devolve boolean.")
   (validar-remessa! [this ente-id id] "Transiciona rascunho->validada (CAS guardado por grafo).")
   (submeter-remessa! [this ente-id id] "Transiciona validada->submetida + carimba submetida_em.")
   (registrar-resposta-remessa! [this ente-id id estado]
@@ -217,6 +221,8 @@
       row))
   (listar-remessas [this ente-id template-chave competencia]
     (transacao this ente-id #(db-rem/listar % ente-id template-chave competencia)))
+  (remessa-existe? [this ente-id id]
+    (transacao this ente-id #(db-rem/existe? % ente-id id)))
   (validar-remessa! [this ente-id id]
     (transacao this ente-id #(db-rem/transicionar-estado! % ente-id id "rascunho" "validada" {})))
   (submeter-remessa! [this ente-id id]

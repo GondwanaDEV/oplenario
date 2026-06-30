@@ -23,6 +23,15 @@
      (sql/format {:select cols :from [:compliance.remessa_gerada]
                   :where [:and [:= :ente_id ente-id] [:= :id id]]}))))
 
+(defn existe?
+  "A remessa `id` existe no tenant (RLS via ente-id)? Point-lookup pela PK, projeta SO `1` — NAO traz ao
+  heap os ponteiros/proveniencia internos (hash/objeto_store_ref/...) que `buscar` traria (review sec
+  BAIXO; defesa-em-profundidade, como `cols-painel`). Usado pela borda p/ desambiguar 404 vs 409."
+  [tx ente-id id]
+  (some? (jdbc/execute-one! tx
+           (sql/format {:select [[[:inline 1] :existe]] :from [:compliance.remessa_gerada]
+                        :where [:and [:= :ente_id ente-id] [:= :id id]] :limit 1}))))
+
 (defn proxima-versao
   "SUPERSEDIDA p/ a geracao: use `inserir-versionada!` (computa a versao no proprio INSERT, sem janela
   TOCTOU). Mantida p/ leitura/diagnostico. A proxima versao p/ (ente, template, competencia): max(versao)+1,

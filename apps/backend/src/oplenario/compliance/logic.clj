@@ -119,3 +119,9 @@
   "O estado da remessa e' terminal (o TCE respondeu)? Reenvio apos rejeicao = nova VERSAO."
   [estado-remessa]
   (contains? estados-terminais-remessa estado-remessa))
+
+(defn estado-resposta-tce?
+  "O `s` e' uma resposta do TCE registravel em registrar-resposta (submetida->{aceita|rejeitada})? E'
+  exatamente o conjunto dos estados terminais. A borda (adapters/in) usa este predicado p/ validar o corpo
+  de POST .../resposta — FONTE UNICA do conjunto, nao replicar na borda (review clj M1)."
+  [s] (contains? estados-terminais-remessa s))
