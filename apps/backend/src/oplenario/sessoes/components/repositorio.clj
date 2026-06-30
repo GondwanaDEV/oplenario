@@ -22,6 +22,7 @@
   ;; §22.6 eixo B — pauta (camada viva)
   (criar-pauta! [this ente-id m] "Cria a pauta 1:1 da sessao.")
   (buscar-pauta-por-sessao [this ente-id sessao-id])
+  (adicionar-item-na-sessao! [this ente-id m] "Get-or-create do container 1:1 da sessao + insere item, atomico (uma tx).")
   (adicionar-item! [this ente-id m] "Insere item (ordem=max+1) + LOGA inclusao, atomico.")
   (reordenar-item! [this ente-id m] "Move item p/ nova ordem + LOGA inversao, atomico.")
   (remover-item! [this ente-id m] "Remocao soft (ativo=false) + LOG, atomico (nunca DELETE).")
@@ -85,6 +86,20 @@
   (sessoes-da-legislativa [this ente-id slid] (transacao this ente-id #(sessao/listar-por-sessao-legislativa % ente-id slid)))
   (criar-pauta! [this ente-id m] (transacao this ente-id #(pauta/criar-pauta! % (assoc m :ente-id ente-id))))
   (buscar-pauta-por-sessao [this ente-id sessao-id] (transacao this ente-id #(pauta/buscar-pauta-por-sessao % ente-id sessao-id)))
+  ;; get-or-create do container 1:1 + insere o item na MESMA tx (a pauta e' transparente: a borda adiciona item
+  ;; a sessao, nao a um container que o cliente cria a parte). `sessao-id` resolve/cria a pauta; o resto de `m`
+  ;; (id, fase, tipo-item, proposicao-id/texto-descricao, created-by) vai p/ adicionar-item!.
+  (adicionar-item-na-sessao! [this ente-id {:keys [sessao-id created-by] :as m}]
+    (transacao this ente-id
+      (fn [tx]
+        (let [pauta (pauta/garantir-pauta! tx {:ente-id ente-id :sessao-id sessao-id :created-by created-by})]
+          ;; sob READ COMMITTED garantir-pauta! sempre resolve (insere ou re-le o vencedor); o guard cobre um
+          ;; futuro REPEATABLE READ/SERIALIZABLE, onde o re-read poderia nao ver o commit concorrente -> nil ->
+          ;; pauta-sessao-id nil -> NOT NULL nao-controlado (500). Falha controlada em vez disso (review clj).
+          (when-not pauta
+            (throw (ex-info "garantir-pauta!: container nao resolvivel" {:tipo :servidor/erro :sessao-id sessao-id})))
+          (pauta/adicionar-item! tx (-> m (dissoc :sessao-id)
+                                        (assoc :ente-id ente-id :pauta-sessao-id (:id pauta))))))))
   (adicionar-item! [this ente-id m] (transacao this ente-id #(pauta/adicionar-item! % (assoc m :ente-id ente-id))))
   (reordenar-item! [this ente-id m] (transacao this ente-id #(pauta/reordenar-item! % (assoc m :ente-id ente-id))))
   (remover-item! [this ente-id m] (transacao this ente-id #(pauta/remover-item! % (assoc m :ente-id ente-id))))

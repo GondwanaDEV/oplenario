@@ -135,3 +135,24 @@
   [:map {:closed true}
    [:id :string]
    [:sessao-id :string]])
+
+(def PautaItemAdicionadoOut
+  "Recibo da adicao de item a pauta (resposta 201 de POST /sessoes/:id/pauta/itens). `id` do item criado +
+  `ordem` numerada server-side (max+1). NAO expoe internos (pauta-sessao-id, lock-version, ativo)."
+  [:map {:closed true}
+   [:id :string]
+   [:ordem :int]])
+
+(def PautaItemReordenadoOut
+  "Recibo da reordenacao de item (resposta 200 de PATCH /sessoes/:id/pauta/itens/:item-id). `id` do item + o
+  par `de`/`para` (ordem anterior/destino). NAO expoe o lock-version."
+  [:map {:closed true}
+   [:id :string]
+   [:de :int]
+   [:para :int]])
+
+(def PautaItemRemovidoOut
+  "Recibo da remocao SOFT de item (resposta 200 de DELETE /sessoes/:id/pauta/itens/:item-id). So o `id` do item
+  removido — a remocao e' ativo=false (nunca DELETE fisico, Inv.10), detalhe interno nao exposto."
+  [:map {:closed true}
+   [:id :string]])

@@ -7,6 +7,7 @@
   (:require [oplenario.http :as http]
             [oplenario.interceptors :as it]
             [oplenario.sessoes.adapters.in.gravacao :as adapters-in-grav]
+            [oplenario.sessoes.adapters.in.pauta :as adapters-in-pauta]
             [oplenario.sessoes.adapters.in.presenca :as adapters-in-presenca]
             [oplenario.sessoes.adapters.in.sessao :as adapters-in]
             [oplenario.sessoes.adapters.in.tribuna :as adapters-in-tribuna]
@@ -177,6 +178,60 @@
         (http/json-resposta 201 (adapters-out-tribuna/recibo-decisao-mesa->wire recibo))
         (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
 
+(defn- adicionar-item-handler
+  "POST /sessoes/:id/pauta/itens (§22.6 eixo B). adapters/in coage o :id + valida o corpo {fase, tipo-item,
+  proposicao-id? | texto-descricao?} INCL. a FK-por-tipo (-> 400 na borda); o controller carrega+autoriza a
+  sessao e adiciona o item (get-or-create do container 1:1 + insere, atomico); adapters/out projeta o recibo
+  {:id :ordem}. nil (sessao inexistente) -> 404; sucesso -> 201 (cria)."
+  [repo-sessoes]
+  (fn [req]
+    (let [ator (:ator req)
+          m    (adapters-in-pauta/adicionar-item->dominio (get-in req [:path-params :id]) (:json-params req))]
+      (if-let [recibo (controllers/adicionar-item-pauta repo-sessoes ator m)]
+        (http/json-resposta 201 (adapters-out-pauta/recibo-item-adicionado->wire recibo))
+        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+
+(defn- reordenar-item-handler
+  "PATCH /sessoes/:id/pauta/itens/:item-id (§22.6 eixo B). adapters/in coage os path-params + valida o corpo
+  {nova-ordem, lock-version}; o controller carrega+autoriza a sessao, checa que o item e' desta sessao (anti
+  confused-deputy -> 404) e reordena (CAS); adapters/out projeta o recibo {:id :de :para}. nil (sessao/pauta/item
+  ausente) -> 404; lock-stale / item removido -> 409 (nao 500). 200 (atualiza, nao cria)."
+  [repo-sessoes]
+  (fn [req]
+    (let [ator (:ator req)
+          m    (adapters-in-pauta/reordenar-item->dominio (get-in req [:path-params :id])
+                                                          (get-in req [:path-params :item-id])
+                                                          (:json-params req))]
+      (try
+        (if-let [recibo (controllers/reordenar-item-pauta repo-sessoes ator m)]
+          (http/json-resposta 200 (adapters-out-pauta/recibo-reordenacao->wire recibo))
+          (http/json-resposta 404 {:erro "sessao ou item de pauta nao encontrado"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/pauta (:tipo (ex-data e)))
+            (http/json-resposta 409 {:erro "item removido ou lock-version desatualizado"})
+            (throw e)))))))
+
+(defn- remover-item-handler
+  "DELETE /sessoes/:id/pauta/itens/:item-id (§22.6 eixo B). adapters/in coage os path-params + valida o corpo
+  {tipo, justificativa?, lock-version}; o controller carrega+autoriza a sessao, checa que o item e' desta sessao
+  (anti confused-deputy -> 404) e remove SOFT (ativo=false, nunca DELETE fisico — Inv.10; CAS + LOG); adapters/out
+  projeta o recibo {:id}. nil -> 404; lock-stale / ja removido -> 409 (nao 500). 200 (atualiza). O corpo (CAS +
+  classificacao da remocao) chega pelo corpo-json mesmo no DELETE."
+  [repo-sessoes]
+  (fn [req]
+    (let [ator (:ator req)
+          m    (adapters-in-pauta/remover-item->dominio (get-in req [:path-params :id])
+                                                        (get-in req [:path-params :item-id])
+                                                        (:json-params req))]
+      (try
+        (if-let [recibo (controllers/remover-item-pauta repo-sessoes ator m)]
+          (http/json-resposta 200 (adapters-out-pauta/recibo-remocao->wire recibo))
+          (http/json-resposta 404 {:erro "sessao ou item de pauta nao encontrado"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/pauta (:tipo (ex-data e)))
+            (http/json-resposta 409 {:erro "item ja removido ou lock-version desatualizado"})
+            (throw e)))))))
+
 (defn- pauta-handler
   "GET /sessoes/:id/pauta. adapters/in coage o :id; controller carrega+autoriza a sessao e le a pauta viva;
   adapters/out projeta. nil (sessao inexistente) -> 404."
@@ -293,6 +348,15 @@
      [auth (it/exige-papel "secretario") it/corpo-json (decisao-mesa-handler repo-sessoes)]
      :route-name :sessoes/registrar-decisao-mesa]
     ["/sessoes/:id/pauta" :get [auth (pauta-handler repo-sessoes)] :route-name :sessoes/pauta]
+    ["/sessoes/:id/pauta/itens" :post
+     [auth (it/exige-papel "secretario") it/corpo-json (adicionar-item-handler repo-sessoes)]
+     :route-name :sessoes/adicionar-item-pauta]
+    ["/sessoes/:id/pauta/itens/:item-id" :patch
+     [auth (it/exige-papel "secretario") it/corpo-json (reordenar-item-handler repo-sessoes)]
+     :route-name :sessoes/reordenar-item-pauta]
+    ["/sessoes/:id/pauta/itens/:item-id" :delete
+     [auth (it/exige-papel "secretario") it/corpo-json (remover-item-handler repo-sessoes)]
+     :route-name :sessoes/remover-item-pauta]
     ["/sessoes/:id/gravacao" :get [auth (listar-gravacoes-handler repo-sessoes)] :route-name :sessoes/listar-gravacoes]
     ["/sessoes/:id/gravacao/:seg-id/vincular" :post
      [auth (it/exige-papel "secretario") it/corpo-json (vincular-gravacao-handler repo-sessoes)]

@@ -163,6 +163,54 @@
           itens   (when pauta (repo/listar-itens repo-sessoes ente-id (:id pauta)))]
       {:sessao-id id :itens (vec itens)})))
 
+(defn adicionar-item-pauta
+  "§22.6 eixo B (pauta viva): adiciona um item a pauta da sessao. Carrega a sessao do tenant do `ator` (nil ->
+  404), roda pode-ver-sessao? (mesma Casa -> 403 fail-closed). O Repo faz get-or-create do container 1:1 +
+  insere o item na MESMA tx (a pauta e' transparente — a borda adiciona item A SESSAO, nao a um container que o
+  cliente cria a parte). `ordem` e' numerada server-side (max+1). created-by = o ator. Devolve {:id :ordem} ou
+  nil (sessao inexistente)."
+  [repo-sessoes ator m]
+  (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) (:sessao-id m))]
+    (authz/check! ator :sessao/editar-pauta sessao logic/pode-ver-sessao?)
+    (repo/adicionar-item-na-sessao! repo-sessoes (:ente-id ator)
+      (assoc m :id (random-uuid) :created-by (:identidade-id ator)))))
+
+(defn- item-desta-sessao
+  "Resolve o item `item-id` GARANTINDO que pertence A pauta da sessao do path (anti confused-deputy: sem isto, um
+  secretario da Casa reordenaria/removeria item de OUTRA sessao da mesma Casa via a URL desta — espelha o guard
+  fala.sessao-id da tribuna). Devolve o item se a pauta existe E o item e' dela; senao nil (-> 404 no diplomat).
+  pauta_item.pauta_sessao_id e' imutavel pos-criacao (sem TOCTOU entre este check e a mutacao)."
+  [repo-sessoes ente-id sessao-id item-id]
+  (when-let [pauta (repo/buscar-pauta-por-sessao repo-sessoes ente-id sessao-id)]
+    (when-let [item (repo/buscar-item repo-sessoes ente-id item-id)]
+      (when (= (:id pauta) (:pauta-sessao-id item)) item))))
+
+(defn reordenar-item-pauta
+  "§22.6 eixo B: move um item da pauta para `nova-ordem` (CAS por lock_version). Carrega a sessao (nil -> 404),
+  pode-ver-sessao? (mesma Casa -> 403), e checa que o item e' DESTA sessao (item-desta-sessao; mismatch/inexistente
+  -> nil -> 404). reordenar-item! lanca `:conflito/pauta` (lock-stale / item removido; o diplomat mapeia 409).
+  updated-by = o ator. Devolve {:id :de :para} ou nil (sessao/pauta/item ausente)."
+  [repo-sessoes ator {:keys [sessao-id item-id nova-ordem lock-version]}]
+  (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/editar-pauta sessao logic/pode-ver-sessao?)
+    (when (item-desta-sessao repo-sessoes (:ente-id ator) sessao-id item-id)
+      (repo/reordenar-item! repo-sessoes (:ente-id ator)
+        {:id item-id :nova-ordem nova-ordem :lock-version lock-version :updated-by (:identidade-id ator)}))))
+
+(defn remover-item-pauta
+  "§22.6 eixo B: remocao SOFT (ativo=false, nunca DELETE — Inv.10) de um item da pauta, com CAS + LOG. Carrega a
+  sessao (nil -> 404), pode-ver-sessao? (mesma Casa -> 403), e checa que o item e' DESTA sessao (anti
+  confused-deputy -> 404). `tipo` ∈ {exclusao, retirada_pedido_autor} (validado na borda). remover-item! lanca
+  `:conflito/pauta` (lock-stale / ja removido; o diplomat mapeia 409). updated-by = o ator. Devolve {:id :ativo}
+  ou nil (sessao/pauta/item ausente)."
+  [repo-sessoes ator {:keys [sessao-id item-id tipo justificativa lock-version]}]
+  (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/editar-pauta sessao logic/pode-ver-sessao?)
+    (when (item-desta-sessao repo-sessoes (:ente-id ator) sessao-id item-id)
+      (repo/remover-item! repo-sessoes (:ente-id ator)
+        (cond-> {:id item-id :tipo tipo :lock-version lock-version :updated-by (:identidade-id ator)}
+          justificativa (assoc :justificativa justificativa))))))
+
 (defn agendar-sessao
   "Agenda a sessao a partir do mapa de dominio `m` (ja decodificado+validado pelo adapters/in no diplomat). O
   Repo numera+resolve capabilities+insere atomico. Devolve o recibo de dominio {:id :numero}. A authz GROSSA

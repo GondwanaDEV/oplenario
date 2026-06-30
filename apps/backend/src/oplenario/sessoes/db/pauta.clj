@@ -44,6 +44,21 @@
      (sql/format {:select [:id :ente_id :sessao_id] :from [:sessoes.pauta_sessao]
                   :where [:and [:= :ente_id ente-id] [:= :sessao_id sessao-id]]}))))
 
+(defn garantir-pauta!
+  "Get-or-create da pauta 1:1 da sessao, RACE-SAFE na `tx`: caminho comum le a pauta existente; se nil, INSERE
+  com ON CONFLICT (ente_id, sessao_id) DO NOTHING (a UNIQUE 1:1 da migration) e RE-LE — assim dois primeiros-adds
+  concorrentes convergem na MESMA pauta (o perdedor no-opa e re-le a linha do vencedor). O container e' INSERT-only
+  (sem lock_version). Devolve {:id ...} (existente ou recem-criada). Usado pela borda de escrita (adicionar item
+  sem exigir um POST de container separado — a pauta e' transparente, 1:1 com a sessao)."
+  [tx {:keys [ente-id sessao-id created-by]}]
+  (or (buscar-pauta-por-sessao tx ente-id sessao-id)
+      (do (jdbc/execute-one! tx
+            (sql/format {:insert-into :sessoes.pauta_sessao
+                         :values [{:id (random-uuid) :ente_id ente-id :sessao_id sessao-id
+                                   :created_by created-by :efetivado_em [:now]}]
+                         :on-conflict [:ente_id :sessao_id] :do-nothing true}))
+          (buscar-pauta-por-sessao tx ente-id sessao-id))))
+
 ;; ---------- pauta_alteracao (append-only) ----------
 
 (defn- registrar-alteracao!
@@ -119,11 +134,11 @@
                            :where [:and [:= :ente_id ente-id] [:= :id id]] :for :update}))
             comum/linha->kebab)]
     (when (nil? pauta-sessao-id)
-      (throw (ex-info (str op ": item inexistente") {:id id :ente-id ente-id})))
+      (throw (ex-info (str op ": item inexistente") {:tipo :conflito/pauta :id id :ente-id ente-id})))
     (when (not= db-lock lock-version)
-      (throw (ex-info (str op ": conflito de lock_version") {:id id :esperado lock-version :atual db-lock})))
+      (throw (ex-info (str op ": conflito de lock_version") {:tipo :conflito/pauta :id id :esperado lock-version :atual db-lock})))
     (when-not ativo
-      (throw (ex-info (str op ": item ja removido da pauta (ativo=false)") {:id id})))
+      (throw (ex-info (str op ": item ja removido da pauta (ativo=false)") {:tipo :conflito/pauta :id id})))
     row))
 
 (defn- aplicar-item!
@@ -135,7 +150,7 @@
                          :where [:and [:= :ente_id ente-id] [:= :id id] [:= :lock_version lock-version]]}))]
     (when (zero? (:next.jdbc/update-count r 0))
       (throw (ex-info "pauta_item: conflito de lock_version ou item inexistente"
-                      {:id id :lock-version lock-version})))))
+                      {:tipo :conflito/pauta :id id :lock-version lock-version})))))
 
 (defn reordenar-item!
   "Move o item para `nova-ordem` (CAS) e LOGA inversao com {de_ordem, para_ordem}, atomico."
@@ -185,16 +200,16 @@
   [tx {:keys [ente-id pauta-sessao-id tipo-versao publica justificativa created-by]}]
   (logic/validar-tipo-versao tipo-versao)
   (logic/validar-republicacao tipo-versao justificativa)
-  (let [id    (random-uuid)
-        num   (proxima-versao tx ente-id pauta-sessao-id)
-        itens (mapv item->snapshot (listar-itens tx ente-id pauta-sessao-id))]
+  (let [id       (random-uuid)
+        prox-num (proxima-versao tx ente-id pauta-sessao-id)
+        itens    (mapv item->snapshot (listar-itens tx ente-id pauta-sessao-id))]
     (jdbc/execute-one! tx
       (sql/format {:insert-into :sessoes.pauta_sessao_versao
-                   :values [{:id id :ente_id ente-id :pauta_sessao_id pauta-sessao-id :numero_versao num
+                   :values [{:id id :ente_id ente-id :pauta_sessao_id pauta-sessao-id :numero_versao prox-num
                              :tipo_versao tipo-versao :publica (boolean publica)
                              :snapshot (comum/->jsonb itens) :justificativa justificativa
                              :created_by created-by :efetivado_em [:now]}]}))
-    {:id id :numero-versao num}))
+    {:id id :numero-versao prox-num}))
 
 (defn buscar-versao
   "Busca uma versao da pauta pelo `id`; nil se inexistente ou de outro tenant (RLS). Snapshot ja hidratado."
