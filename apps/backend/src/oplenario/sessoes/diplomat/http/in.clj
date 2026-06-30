@@ -7,9 +7,11 @@
   (:require [oplenario.http :as http]
             [oplenario.interceptors :as it]
             [oplenario.sessoes.adapters.in.gravacao :as adapters-in-grav]
+            [oplenario.sessoes.adapters.in.presenca :as adapters-in-presenca]
             [oplenario.sessoes.adapters.in.sessao :as adapters-in]
             [oplenario.sessoes.adapters.out.gravacao :as adapters-out-grav]
             [oplenario.sessoes.adapters.out.pauta :as adapters-out-pauta]
+            [oplenario.sessoes.adapters.out.presenca :as adapters-out-presenca]
             [oplenario.sessoes.adapters.out.sessao :as adapters-out]
             [oplenario.sessoes.controllers :as controllers]))
 
@@ -65,6 +67,19 @@
           (if (= :conflito/transicao (:tipo (ex-data e)))
             (http/json-resposta 409 {:erro "transicao de estado invalida ou lock-version desatualizado"})
             (throw e)))))))
+
+(defn- registrar-presenca-handler
+  "POST /sessoes/:id/presenca (§22.6 eixo C). adapters/in coage o :id + valida o corpo {vereador-id, tipo,
+  modalidade, ocorrido-em}; o controller carrega+autoriza a sessao e grava o evento append-only (a fonte e'
+  forcada = manual_secretaria; o Repo emite presenca.registrada na mesma tx); adapters/out projeta o recibo.
+  nil (sessao inexistente) -> 404; sucesso -> 201 (cria um evento — append-only, sem CAS/409)."
+  [repo-sessoes]
+  (fn [req]
+    (let [ator (:ator req)
+          m    (adapters-in-presenca/registrar-presenca->dominio (get-in req [:path-params :id]) (:json-params req))]
+      (if-let [recibo (controllers/registrar-presenca repo-sessoes ator m)]
+        (http/json-resposta 201 (adapters-out-presenca/recibo-presenca->wire recibo))
+        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
 
 (defn- pauta-handler
   "GET /sessoes/:id/pauta. adapters/in coage o :id; controller carrega+autoriza a sessao e le a pauta viva;
@@ -160,6 +175,9 @@
     ["/sessoes/:id/transicao" :post
      [auth (it/exige-papel "secretario") it/corpo-json (transicionar-handler repo-sessoes)]
      :route-name :sessoes/transicionar]
+    ["/sessoes/:id/presenca" :post
+     [auth (it/exige-papel "secretario") it/corpo-json (registrar-presenca-handler repo-sessoes)]
+     :route-name :sessoes/registrar-presenca]
     ["/sessoes/:id/pauta" :get [auth (pauta-handler repo-sessoes)] :route-name :sessoes/pauta]
     ["/sessoes/:id/gravacao" :get [auth (listar-gravacoes-handler repo-sessoes)] :route-name :sessoes/listar-gravacoes]
     ["/sessoes/:id/gravacao/:seg-id/vincular" :post

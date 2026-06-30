@@ -34,6 +34,13 @@
    [:de (km/enum-de logic/estados-sessao)]
    [:para (km/enum-de logic/estados-sessao)]])
 
+(def PresencaReciboOut
+  "Recibo do registro de presenca (resposta 201 de POST /sessoes/:id/presenca). So o `id` do evento gravado — o
+  canal SSE do plenario ja recebeu o fato (presenca.registrada) p/ o quorum ao vivo; este recibo confirma ao
+  chamador. NAO expoe internos."
+  [:map {:closed true}
+   [:id :string]])
+
 (def PautaItemOut
   "Projecao publica de um item ATIVO da pauta (§22.6 eixo B). NAO expoe internos (ente-id, pauta-sessao-id,
   lock-version, ativo). FK-por-tipo: 'proposicao' carrega proposicao-id (string); os demais, texto-descricao."
