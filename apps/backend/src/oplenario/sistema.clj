@@ -6,6 +6,7 @@
   (:require [com.stuartsierra.component :as component]
             [oplenario.cadastros.components.repositorio :as repo-cadastros]
             [oplenario.cadastros.relacoes.cadastro :as rel-cadastros]
+            [oplenario.compliance.components.repositorio :as repo-compliance]
             [oplenario.identidade.components.repositorio :as repo-identidade]
             [oplenario.identidade.relacoes.identidade :as rel-identidade]
             [oplenario.legislativo.components.repositorio :as repo-legislativo]
@@ -73,6 +74,10 @@
    ;; (sessao/presenca/fala) no shared.outbox na tx do ato; o projetor SSE (G2) os consome.
    :repo-sessoes    (component/using (repo-sessoes/repositorio) [:datasource :bus])
    :repo-motor      (component/using (repo-motor/repositorio) [:datasource])
+   ;; §22.7.7 F5: o compliance OPERA o seam do motor e PERSISTE o ciclo nas suas tabelas (schema compliance).
+   ;; Recebe so :datasource via `using`; o `registro-fatos` + o `repo-motor` entram POR CHAMADA em
+   ;; avaliar-obrigacao! (precedente RepoLegislativo/transicionar! — o motor e' biblioteca, §22.10).
+   :repo-compliance (component/using (repo-compliance/repositorio) [:datasource])
    ;; o host É a fronteira (§22.10): importa as `relacoes` dos módulos e as injeta no registry do motor.
    ;; O motor chama por nome (resolver-para), nunca importa o módulo. Sem :datasource — a `tx` do tenant
    ;; entra por-chamada (quem avalia abre a tx via Repo). O `start` roda o assert de costura (fail-closed).
