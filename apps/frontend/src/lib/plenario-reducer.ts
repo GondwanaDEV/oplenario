@@ -153,10 +153,14 @@ export function aplicarEvento(estado: EstadoPlenario, evento: EventoPlenario): E
       const d = evento.dados;
       // só conta p/ a votação CORRENTE (votos de outra votação / fora de ordem são ignorados).
       if (!base.placar || base.placar.votacaoId !== d["votacao-id"]) return base;
-      if (d.modalidade === "secreta") {
-        // §22.6 SIGILO: tick anônimo — só o contador (sem dedup possível; o transporte entrega cada seq 1x).
+      // §22.6 SIGILO (fail-closed): a modalidade que vale é a da ABERTURA (base.placar.modalidade), não a do
+      // evento individual — que poderia chegar adulterado. Só uma votação aberta NOMINAL grava voto por
+      // vereador; qualquer outra (secreta, ou desconhecida na reconexão) é tick anônimo, e a identidade que
+      // por acaso tenha vindo no fio é DESCARTADA (nunca entra em votosNominais).
+      if (base.placar.modalidade !== "nominal") {
         return { ...base, placar: { ...base.placar, votosSecretos: base.placar.votosSecretos + 1 } };
       }
+      if (!("vereador-id" in d)) return base; // nominal sem identidade: nada a registrar (descarta)
       // nominal: voto por vereador (idempotente por chave; re-voto sobrescreve).
       return {
         ...base,

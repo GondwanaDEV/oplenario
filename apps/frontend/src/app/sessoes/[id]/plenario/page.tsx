@@ -2,8 +2,8 @@
 
 // Painel do plenário ao vivo (HERO M4) — porta produto/design-system/.../sessao-ao-vivo.html ligada às
 // rotas reais: GET /api/sessoes/:id (estado inicial) + SSE /api/sessoes/:id/plenario (eventos). Mostra AO
-// VIVO o que o contrato emite: estado da sessão, quórum/presença, tribuna/cronômetro, inscritos. Pauta e
-// votação ainda não têm rota/evento (W3 fan-out futuro) — marcadas honestamente como integração pendente.
+// VIVO o que o contrato emite: estado da sessão, quórum/presença, tribuna/cronômetro, inscritos, pauta e
+// o placar de votação (votacao.aberta/voto.registrado/votacao.encerrada — sigilo §22.6 no view-model puro).
 
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
@@ -11,7 +11,8 @@ import { useTema } from "@/lib/tema";
 import { usePlenario, type EstadoConexao } from "@/lib/use-plenario";
 import { usePauta } from "@/lib/use-pauta";
 import { segundosDecorridos, formatarTempo } from "@/lib/cronometro";
-import type { EstadoPlenario } from "@/lib/plenario-reducer";
+import type { EstadoPlenario, PlacarVotacao } from "@/lib/plenario-reducer";
+import { derivarPlacar, type VistaNominal, type VistaSecreta } from "@/lib/placar-vista";
 import type { SessaoOut, PautaOut } from "@/lib/contrato";
 import "./plenario.css";
 
@@ -234,17 +235,138 @@ function Palco({ sessao, estado, pauta }: { sessao: SessaoOut; estado: EstadoPle
         )}
       </section>
 
-      <p className="pendente-integracao">
+      <Placar placar={estado.placar} />
+    </section>
+  );
+}
+
+const NOME_VOTO: Record<string, string> = { sim: "Sim", nao: "Não", abstencao: "Abst." };
+
+/** Marca visual do voto (✓ / ✗ / —); o texto do voto fica visível ao lado (a11y), a marca é decorativa. */
+function MarcaVoto({ voto }: { voto: string }) {
+  const d = voto === "sim" ? "M4 10l4 4 8-9" : voto === "nao" ? "M5 5l10 10M15 5L5 15" : "M4 10h12";
+  return (
+    <span className={`mk mk-${voto}`} aria-hidden="true">
+      <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d={d} />
+      </svg>
+    </span>
+  );
+}
+
+/** Placar da votação corrente. §22.6 SIGILO: a NOMINAL mostra quem votou o quê; a SECRETA só o contador.
+ * A escolha do que renderizar mora no view-model puro `derivarPlacar` (testado) — aqui só mapeamento. */
+function Placar({ placar }: { placar: PlacarVotacao | null }) {
+  const v = derivarPlacar(placar);
+  if (v.kind === "nenhuma") return null;
+  // aria-live NÃO fica na section inteira (anunciaria título+grade nominal a cada voto); mora só nos números
+  // que mudam (Tally / contador), que já estão montados desde a abertura — review react MAJOR (a11y).
+  return (
+    <section className="placar-bloco" aria-labelledby="placar-titulo">
+      <div className="placar-cabeca">
+        <h2 id="placar-titulo">Votação {v.encerrada ? "encerrada" : "em curso"}</h2>
+        {v.encerrada && v.resultado ? (
+          <span className={`placar-resultado ${v.resultado}`}>{v.resultado}</span>
+        ) : (
+          <span className="placar-vivo">
+            <span className="pulso" aria-hidden="true" />
+            Aberta
+          </span>
+        )}
+      </div>
+      {v.kind === "nominal" ? <PlacarNominal v={v} /> : <PlacarSecreta v={v} />}
+    </section>
+  );
+}
+
+function Tally({ sim, nao, abstencao }: { sim: number; nao: number; abstencao: number }) {
+  // <dl> exprime rótulo→valor nativamente; aria-atomic faz a AT anunciar "Sim 5, Não 3, Abstenção 1" como
+  // unidade a cada atualização (review react MENOR-2 + a região viva escopada do MAJOR).
+  return (
+    <dl className="placar-tally" aria-label="Contagem de votos" aria-live="polite" aria-atomic="true">
+      <div className="pl-card pl-sim">
+        <dt className="rot">Sim</dt>
+        <dd><b>{sim}</b></dd>
+      </div>
+      <div className="pl-card pl-nao">
+        <dt className="rot">Não</dt>
+        <dd><b>{nao}</b></dd>
+      </div>
+      <div className="pl-card pl-abs">
+        <dt className="rot">Abstenção</dt>
+        <dd><b>{abstencao}</b></dd>
+      </div>
+    </dl>
+  );
+}
+
+function PlacarMeta({ faltam, baseMembros }: { faltam: number | null; baseMembros: number | null }) {
+  if (faltam === null || baseMembros === null) return null;
+  return (
+    <p className="placar-meta">
+      {faltam > 0 ? (
+        <>
+          faltam votar <b>{faltam}</b> de <b>{baseMembros}</b>
+        </>
+      ) : (
+        <>
+          todos os <b>{baseMembros}</b> votaram
+        </>
+      )}
+    </p>
+  );
+}
+
+function PlacarNominal({ v }: { v: VistaNominal }) {
+  return (
+    <>
+      <Tally sim={v.sim} nao={v.nao} abstencao={v.abstencao} />
+      <PlacarMeta faltam={v.faltam} baseMembros={v.baseMembros} />
+      {v.votosParciais && (
+        <p className="placar-parcial">Lista nominal parcial (após reconexão) — a contagem acima é a oficial do servidor.</p>
+      )}
+      {v.votos.length > 0 && (
+        <ul className="placar-nominal" aria-label="Votos nominais">
+          {v.votos.map((it) => (
+            <li key={it.vereadorId} className="vt">
+              <MarcaVoto voto={it.voto} />
+              <span className="vn">
+                {/* só o id (truncado) — não há rota de cadastro p/ nome/partido ainda (mesmo critério da tribuna) */}
+                <b>{it.vereadorId.slice(0, 8)}</b>
+                <span>{NOME_VOTO[it.voto] ?? it.voto}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
+
+function PlacarSecreta({ v }: { v: VistaSecreta }) {
+  return (
+    <>
+      <p className="placar-sigilo">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
-          <circle cx="8" cy="8" r="6.5" />
-          <path d="M8 5v3.5M8 11h.01" strokeWidth="1.6" strokeLinecap="round" />
+          <rect x="3.2" y="7" width="9.6" height="6.5" rx="1.5" />
+          <path d="M5.2 7V5a2.8 2.8 0 0 1 5.6 0v2" />
         </svg>
         <span>
-          <b>Placar de votação:</b> integração pendente (o evento de votação ao vivo entra no próximo fan-out).
-          A pauta acima é carregada na abertura e a cada mudança de fase; ainda não é empurrada em tempo real.
+          <b>Votação secreta.</b> O painel mostra apenas quantos votos foram lançados — nunca quem votou o quê (§22.6).
         </span>
       </p>
-    </section>
+      {v.encerrada && v.totais ? (
+        <>
+          <Tally sim={v.totais.sim} nao={v.totais.nao} abstencao={v.totais.abstencao} />
+          <PlacarMeta faltam={v.faltam} baseMembros={v.baseMembros} />
+        </>
+      ) : (
+        <div className="placar-contador" aria-live="polite" aria-atomic="true">
+          <b>{v.registrados}</b>
+          <span>votos lançados</span>
+        </div>
+      )}
+    </>
   );
 }
 

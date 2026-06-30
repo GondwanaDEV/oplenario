@@ -186,6 +186,19 @@ describe("votação ao vivo — placar (§22.6 sigilo)", () => {
     expect(e.placar?.votosNominais).toEqual({});
   });
 
+  it("§22.6 fail-closed: numa votação ABERTA secreta, um voto que chega com vereador-id NÃO o registra — conta anônimo", () => {
+    // defesa-em-profundidade: a modalidade que vale é a da ABERTURA, não a do evento individual (que poderia
+    // vir adulterado/malformado). A identidade que vazou no fio é DESCARTADA; só o contador anônimo sobe.
+    const e = reduzir(sessao({ estado: "aberta", "permite-voto-secreto": true }), [
+      { tipo: "votacao.aberta", seq: 1, dados: {
+        "votacao-id": "vt1", "sessao-id": "s1", "objeto-tipo": "proposicao", "objeto-id": "p1",
+        modalidade: "secreta", "quorum-tipo": "maioria_absoluta" } },
+      { tipo: "voto.registrado", seq: 2, dados: { "votacao-id": "vt1", "sessao-id": "s1", modalidade: "nominal", "vereador-id": "vd1", voto: "sim" } },
+    ]);
+    expect(e.placar?.votosNominais).toEqual({}); // identidade descartada
+    expect(e.placar?.votosSecretos).toBe(1); // contado anonimamente
+  });
+
   it("ignora voto de uma votação que não é a corrente (votacao-id diferente)", () => {
     const e = reduzir(sessao({ estado: "aberta" }), [
       { tipo: "votacao.aberta", seq: 1, dados: {
