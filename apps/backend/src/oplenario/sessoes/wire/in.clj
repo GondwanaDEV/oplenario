@@ -73,3 +73,18 @@
   [:map {:closed true}
    [:encerrou-em :string]
    [:lock-version :int]])
+
+(def RegistrarDecisaoMesa
+  "Corpo de POST /sessoes/:id/decisoes-mesa (§22.6 eixo F, tribuna): a DECISAO DA MESA sobre questao de ordem
+  (ato regimental p/ a ata, APPEND-ONLY). `questao`/`decisao` = texto OBRIGATORIO e nao-vazio (apos trim — o
+  adapters/in valida -> 400, nunca o CHECK da migration -> 500); `fundamentacao` opcional (se presente, nao-vazia
+  — campo de peso juridico); `decidido-em` = instante de DOMINIO (ISO-8601 string, OBRIGATORIO) em que o
+  presidente decidiu; `fala-id` opcional (uuid — a questao pode ser decidida sem uma fala registrada). NAO carrega
+  `presidente-id` (INJETADO do ator no servidor — um cliente nao forja quem decidiu) nem autor/tenant/sessao-id.
+  `:closed true` recusa campos extra (defesa de borda)."
+  [:map {:closed true}
+   [:questao :string]
+   [:decisao :string]
+   [:decidido-em :string]
+   [:fundamentacao {:optional true} [:maybe :string]]
+   [:fala-id {:optional true} [:maybe :string]]])

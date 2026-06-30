@@ -44,3 +44,9 @@
   [{:keys [id tempo-efetivamente-usado-segundos]}]
   (validado wire/FalaEncerradaOut {:fala-id (->str id) :tempo-segundos tempo-efetivamente-usado-segundos}
             "recibo de encerramento de fala viola o contrato FalaEncerradaOut (bug de servidor)"))
+
+(defn recibo-decisao-mesa->wire
+  "Recibo de dominio {:id uuid} -> DecisaoMesaReciboOut (validado, resposta 201). O `id` da decisao gravada."
+  [{:keys [id]}]
+  (validado wire/DecisaoMesaReciboOut {:id (->str id)}
+            "recibo de decisao da mesa viola o contrato DecisaoMesaReciboOut (bug de servidor)"))

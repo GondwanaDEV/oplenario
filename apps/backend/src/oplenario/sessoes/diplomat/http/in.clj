@@ -163,6 +163,20 @@
             (http/json-resposta 409 {:erro "fala ja encerrada, inexistente ou lock-version desatualizado"})
             (throw e)))))))
 
+(defn- decisao-mesa-handler
+  "POST /sessoes/:id/decisoes-mesa (§22.6 eixo F, tribuna). adapters/in coage o :id + valida o corpo {questao,
+  decisao, decidido-em, fundamentacao?, fala-id?} INCL. o nao-vazio de questao/decisao (-> 400 na borda); o
+  controller carrega+autoriza a sessao, injeta presidente-id/created-by do ator e registra a decisao append-only
+  (sem CAS, sem evento; se fala-id veio, tem de ser desta sessao -> senao 404); adapters/out projeta o recibo
+  {:id}. nil (sessao inexistente / fala alheia) -> 404; sucesso -> 201 (cria o ato — append-only, sem 409)."
+  [repo-sessoes]
+  (fn [req]
+    (let [ator (:ator req)
+          m    (adapters-in-tribuna/decisao-mesa->dominio (get-in req [:path-params :id]) (:json-params req))]
+      (if-let [recibo (controllers/registrar-decisao-mesa repo-sessoes ator m)]
+        (http/json-resposta 201 (adapters-out-tribuna/recibo-decisao-mesa->wire recibo))
+        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+
 (defn- pauta-handler
   "GET /sessoes/:id/pauta. adapters/in coage o :id; controller carrega+autoriza a sessao e le a pauta viva;
   adapters/out projeta. nil (sessao inexistente) -> 404."
@@ -275,6 +289,9 @@
     ["/sessoes/:id/falas/:fala-id/encerrar" :post
      [auth (it/exige-papel "secretario") it/corpo-json (encerrar-fala-handler repo-sessoes)]
      :route-name :sessoes/encerrar-fala]
+    ["/sessoes/:id/decisoes-mesa" :post
+     [auth (it/exige-papel "secretario") it/corpo-json (decisao-mesa-handler repo-sessoes)]
+     :route-name :sessoes/registrar-decisao-mesa]
     ["/sessoes/:id/pauta" :get [auth (pauta-handler repo-sessoes)] :route-name :sessoes/pauta]
     ["/sessoes/:id/gravacao" :get [auth (listar-gravacoes-handler repo-sessoes)] :route-name :sessoes/listar-gravacoes]
     ["/sessoes/:id/gravacao/:seg-id/vincular" :post

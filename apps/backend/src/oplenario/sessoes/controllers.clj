@@ -126,6 +126,28 @@
       (repo/encerrar-fala! repo-sessoes (:ente-id ator)
         {:id fala-id :encerrou-em encerrou-em :lock-version lock-version :updated-by (:identidade-id ator)}))))
 
+(defn registrar-decisao-mesa
+  "§22.6 eixo F (tribuna): registra a DECISAO DA MESA sobre questao de ordem — ato regimental com efeito juridico
+  que vai para a ata. APPEND-ONLY puro: sem CAS, sem evento (a decisao e' tomada uma vez; corrigir = nova
+  decisao). Carrega a sessao do tenant do `ator` (nil -> 404), roda pode-ver-sessao? (mesma Casa -> 403
+  fail-closed). Se `fala-id` veio no corpo, tem de pertencer A ESTA sessao (anti confused-deputy, mesma guarda do
+  cronometro/encerrar: senao um secretario poderia atrelar a decisao a uma fala de OUTRA sessao da mesma Casa) —
+  mismatch/inexistente -> nil -> 404. `presidente-id` e `created-by` sao INJETADOS do ator (um cliente nao forja
+  quem decidiu). `id` gerado server-side (PK NOT NULL). Devolve {:id} ou nil (sessao inexistente / fala alheia).
+  (Refinamento futuro: resolver o presidente REAL da Mesa via relacao é-presidente-da-mesa em vez do ator-operador
+  — carry; hoje presidente-id = o operador autenticado que registrou o ato.)"
+  [repo-sessoes ator {:keys [sessao-id fala-id] :as m}]
+  (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/registrar-decisao-mesa sessao logic/pode-ver-sessao?)
+    ;; fala.sessao-id e' imutavel pos-criacao (nao ha TOCTOU entre o buscar-fala e o insert) — mesma guarda do
+    ;; cronometro/encerrar. fala-id ausente = decisao sem fala associada (regimentalmente valido).
+    (when (or (nil? fala-id)
+              (= sessao-id (:sessao-id (repo/buscar-fala repo-sessoes (:ente-id ator) fala-id))))
+      (repo/registrar-decisao-mesa! repo-sessoes (:ente-id ator)
+        (assoc m :id (random-uuid)
+                 :presidente-id (:identidade-id ator)
+                 :created-by (:identidade-id ator))))))
+
 (defn pauta-da-sessao
   "Le a PAUTA VIVA da sessao `id` (UUID) p/ o `ator`. A authz mora no recurso sessao: carrega a sessao e roda
   policy.check (pode-ver-sessao?) ANTES de qualquer leitura de pauta — quem nao pode ver a sessao nao ve a

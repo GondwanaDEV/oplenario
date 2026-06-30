@@ -2,7 +2,8 @@
   "Gate de ENTRADA `wire/in -> models` da TRIBUNA (§22.10 adapters/in, ADR-0001 §3) — eixo F. Chamado SO pelo
   diplomat/. Valida (fail-closed -> 400) e coage o dominio (uuid). So lê o ALLOWLIST de campos esperados
   (corpo-json = chaves STRING, review W3). ente/autor NAO vem do cliente (vem do `ator`)."
-  (:require [malli.core :as m]
+  (:require [clojure.string :as str]
+            [malli.core :as m]
             [malli.error :as me]
             [oplenario.sessoes.wire.in :as wire])
   (:import (java.time Instant)
@@ -135,3 +136,37 @@
        :fala-id      (->uuid fala-id-str :fala-id)
        :encerrou-em  (->instante (:encerrou-em mp) :encerrou-em)
        :lock-version lv})))
+
+;; ---------- decisao_mesa (questao de ordem, append-only — F4.5c) ----------
+
+(def ^:private campos-decisao ["questao" "decisao" "decidido-em" "fundamentacao" "fala-id"])
+
+(defn- exigir-nao-vazio!
+  "Validacao PURA (so efeito de lancar): espelha na BORDA o CHECK `length(trim(x)) > 0` da migration 0034
+  (fail-closed -> 400, nunca o CHECK -> 500). `s` ja' passou pelo Malli `:string` (nunca nil aqui p/ campo
+  obrigatorio); rejeita vazio/so-espacos. NAO devolve valor util (nao faz trim — o texto vai cru ao dominio)."
+  [s campo]
+  (when (str/blank? s)
+    (invalido! "campo de texto obrigatorio nao pode ser vazio" {:campo campo})))
+
+(defn decisao-mesa->dominio
+  "Path-param `:id` (sessao) + corpo JSON {questao, decisao, decidido-em, fundamentacao?, fala-id?} -> mapa de
+  dominio p/ controllers/registrar-decisao-mesa. Valida o contrato (m/explain, so os NOMES-de-campo no erro —
+  nunca o payload cru, review W3), espelha o CHECK `length(trim)>0` de questao/decisao (e da fundamentacao se
+  presente) na borda (-> 400), coage o Instant (nao-ISO -> 400) e o `fala-id` (uuid; -> 400). `presidente-id` NAO
+  entra aqui — e' injetado do ator no controller (um cliente nao forja quem decidiu)."
+  [sessao-id-str json-params]
+  (when-not (map? json-params)
+    (invalido! "corpo deve ser objeto JSON {questao, decisao, decidido-em}" {:campo :corpo}))
+  (let [mp (so-esperados json-params campos-decisao)]
+    (when-let [erros (m/explain wire/RegistrarDecisaoMesa mp)]
+      (invalido! "corpo de decisao da mesa invalido" {:campos (keys (me/humanize erros))}))
+    (exigir-nao-vazio! (:questao mp) :questao)
+    (exigir-nao-vazio! (:decisao mp) :decisao)
+    (when (some? (:fundamentacao mp)) (exigir-nao-vazio! (:fundamentacao mp) :fundamentacao))
+    (cond-> {:sessao-id   (->uuid sessao-id-str :id)
+             :questao     (:questao mp)
+             :decisao     (:decisao mp)
+             :decidido-em (->instante (:decidido-em mp) :decidido-em)}
+      (:fundamentacao mp) (assoc :fundamentacao (:fundamentacao mp))
+      (:fala-id mp)       (assoc :fala-id (->uuid (:fala-id mp) :fala-id)))))

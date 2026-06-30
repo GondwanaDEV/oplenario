@@ -75,6 +75,12 @@
    [:fala-id :string]
    [:tempo-segundos :int]])
 
+(def DecisaoMesaReciboOut
+  "Recibo do registro da decisao da mesa (resposta 201 de POST /sessoes/:id/decisoes-mesa). So o `id` da decisao
+  append-only gravada — confirma ao chamador o ato lavrado p/ a ata. NAO expoe internos."
+  [:map {:closed true}
+   [:id :string]])
+
 (def PautaItemOut
   "Projecao publica de um item ATIVO da pauta (§22.6 eixo B). NAO expoe internos (ente-id, pauta-sessao-id,
   lock-version, ativo). FK-por-tipo: 'proposicao' carrega proposicao-id (string); os demais, texto-descricao."
