@@ -1,3 +1,70 @@
-(ns oplenario.legislativo.diplomat.http.in)
+(ns oplenario.legislativo.diplomat.http.in
+  "Fronteira de IO HTTP de ENTRADA do legislativo (§22.10 diplomat/http/in, ADR-0001): a vertical da votacao ao
+  vivo (F4 Slice 3) — abrir / registrar voto / encerrar. A rota mora AQUI (legislativo e' o DONO do agregado
+  votacao + da tx que casa ato+emissao, Slice 1), nao no `sessoes` — espelha o SSE `/sessoes/:id/plenario` que
+  mora no `tempo_real` (prefixo de URL != dono do modulo). O diplomat e' a UNICA camada que cruza o gate de
+  borda (adapters/in na entrada, adapters/out na saida); o controller trabalha so em models. A authz e' HERDADA
+  do recurso SESSAO via `consultar-sessao` INJETADA pelo host (legislativo NAO importa sessoes, §22.10): a
+  grossa (exige-papel) na rota, a fina (policy.check/pode-dirigir-votacao?) no controller."
+  (:require [oplenario.http :as http]
+            [oplenario.interceptors :as it]
+            [oplenario.legislativo.adapters.in.votacao :as adapters-in]
+            [oplenario.legislativo.adapters.out.votacao :as adapters-out]
+            [oplenario.legislativo.controllers :as controllers]))
 
-;; inbound: rotas-dado Pedestal + handlers
+(set! *warn-on-reflection* true)
+
+(defn- abrir-handler
+  "POST /sessoes/:id/votacoes. corpo-json -> :json-params; adapters/in valida+coage+injeta id/autor; controller
+  autoriza na sessao (:id) e abre; adapters/out projeta o recibo. nil (sessao inexistente) -> 404."
+  [repo-leg consultar-sessao]
+  (fn [req]
+    (let [ator (:ator req)
+          sid  (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          m    (adapters-in/abrir-votacao->dominio ator (:json-params req))]
+      (if-let [recibo (controllers/abrir-votacao repo-leg consultar-sessao ator sid m)]
+        (http/json-resposta 201 (adapters-out/abertura->wire recibo))
+        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+
+(defn- voto-handler
+  "POST /sessoes/:id/votacoes/:votacao-id/votos. Authz na sessao + amarra votacao<->sessao; dispatch por
+  modalidade no controller. nil (votacao inexistente ou de outra sessao) -> 404."
+  [repo-leg consultar-sessao]
+  (fn [req]
+    (let [ator (:ator req)
+          sid  (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          vid  (adapters-in/id-param->uuid (get-in req [:path-params :votacao-id]))
+          m    (adapters-in/registrar-voto->dominio ator vid (:json-params req))]
+      (if-let [recibo (controllers/registrar-voto repo-leg consultar-sessao ator sid vid m)]
+        (http/json-resposta 201 (adapters-out/voto->wire recibo))
+        (http/json-resposta 404 {:erro "votacao nao encontrada nesta sessao"})))))
+
+(defn- encerrar-handler
+  "POST /sessoes/:id/votacoes/:votacao-id/encerramento. Apura + grava o snapshot (CAS); adapters/out projeta os
+  totais. nil (votacao inexistente ou de outra sessao) -> 404."
+  [repo-leg consultar-sessao]
+  (fn [req]
+    (let [ator (:ator req)
+          sid  (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          vid  (adapters-in/id-param->uuid (get-in req [:path-params :votacao-id]))
+          m    (adapters-in/encerrar-votacao->dominio ator vid (:json-params req))]
+      (if-let [snap (controllers/encerrar-votacao repo-leg consultar-sessao ator sid vid m)]
+        (http/json-resposta 200 (adapters-out/encerramento->wire snap))
+        (http/json-resposta 404 {:erro "votacao nao encontrada nesta sessao"})))))
+
+(defn rotas
+  "Fragmento de rotas da votacao ao vivo (table syntax Pedestal). Recebe o interceptor `auth` (compartilhado), o
+  `repo-legislativo` (Repo-Component do proprio modulo) e `consultar-sessao` (injetada pelo host — cross-modulo
+  p/ a authz herdada da sessao). Todas as acoes EXIGEM a authz GROSSA (papel 'secretario') + corpo-json; a fina
+  decide no controller com a sessao carregada."
+  [{:keys [auth repo-legislativo consultar-sessao]}]
+  (let [papel (it/exige-papel "secretario")]
+    #{["/sessoes/:id/votacoes" :post
+       [auth papel it/corpo-json (abrir-handler repo-legislativo consultar-sessao)]
+       :route-name :legislativo/abrir-votacao]
+      ["/sessoes/:id/votacoes/:votacao-id/votos" :post
+       [auth papel it/corpo-json (voto-handler repo-legislativo consultar-sessao)]
+       :route-name :legislativo/registrar-voto]
+      ["/sessoes/:id/votacoes/:votacao-id/encerramento" :post
+       [auth papel it/corpo-json (encerrar-handler repo-legislativo consultar-sessao)]
+       :route-name :legislativo/encerrar-votacao]}))

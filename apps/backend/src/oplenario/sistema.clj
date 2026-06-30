@@ -95,7 +95,8 @@
          :idp (idp-para config)
          ;; servidor `using` idp + repo-identidade -> a rotas-fn (rotas/montar) monta o interceptor de auth
          ;; sobre as instancias iniciadas. W3: +repo-sessoes p/ a vertical de rotas de sessoes (o fan-out por
-         ;; modulo acrescenta cada Repo aqui). G3: +canal-store p/ o endpoint SSE do painel ao vivo.
+         ;; modulo acrescenta cada Repo aqui). G3: +canal-store p/ o endpoint SSE. F4 Slice 3: +repo-legislativo
+         ;; p/ a vertical de votacao ao vivo (rota mora no legislativo; authz herdada da sessao via consultar-sessao).
          :servidor-http (component/using
                          (http-servidor/servidor-http config rotas/montar)
-                         [:idp :repo-identidade :repo-sessoes :canal-store])))
+                         [:idp :repo-identidade :repo-sessoes :repo-legislativo :canal-store])))
