@@ -82,6 +82,50 @@
              {:id inscricao-id :lock-version lock-version :updated-by (:identidade-id ator)})
            :inscricao-id inscricao-id)))
 
+(defn iniciar-fala
+  "§22.6 eixo F (tribuna, execucao): inicia uma fala numa sessao (intencao != execucao — a fala e' apartada da
+  inscricao). Carrega a sessao do tenant do `ator` (nil -> 404), roda pode-ver-sessao? (mesma Casa -> 403
+  fail-closed), e inicia (o Repo insere a fala + loga 'iniciada' + emite fala.iniciada na MESMA tx). created-by
+  = o ator. Devolve {:id} ou nil (sessao inexistente)."
+  [repo-sessoes ator m]
+  (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) (:sessao-id m))]
+    (authz/check! ator :sessao/iniciar-fala sessao logic/pode-ver-sessao?)
+    (repo/iniciar-fala! repo-sessoes (:ente-id ator)
+      (assoc m :id (random-uuid) :created-by (:identidade-id ator)))))
+
+(defn registrar-evento-cronometro
+  "§22.6 eixo F (tribuna, execucao): registra um evento MANUAL do cronometro de uma fala (pausada/retomada/
+  aparte/tempo-adicional). A authz mora no recurso sessao: carrega a sessao do tenant do `ator` (nil -> 404),
+  roda pode-ver-sessao? (mesma Casa -> 403), e registra (append-only; o Repo emite fala.cronometro na MESMA tx).
+  A fala vive no mesmo tenant (RLS isola). created-by = o ator. Devolve {:id} ou nil (sessao inexistente)."
+  [repo-sessoes ator {:keys [sessao-id fala-id tipo ocorrido-em segundos-adicionais]}]
+  (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/registrar-evento-cronometro sessao logic/pode-ver-sessao?)
+    ;; a authz roda no recurso SESSAO (path :id); a `fala-id` (outro path-param) tem de pertencer A ESTA sessao —
+    ;; senao um secretario da Casa poderia cronometrar uma fala de OUTRA sessao da mesma Casa (confused-deputy,
+    ;; review sec MAJOR). fala.sessao-id e' imutavel pos-criacao (nao ha TOCTOU). Mismatch/inexistente -> 404.
+    (when (= sessao-id (:sessao-id (repo/buscar-fala repo-sessoes (:ente-id ator) fala-id)))
+      (repo/registrar-evento-cronometro! repo-sessoes (:ente-id ator)
+        (cond-> {:fala-id fala-id :tipo tipo :ocorrido-em ocorrido-em :created-by (:identidade-id ator)}
+          segundos-adicionais (assoc :segundos-adicionais segundos-adicionais))))))
+
+(defn encerrar-fala
+  "§22.6 eixo F (tribuna, execucao): encerra uma fala — crava encerrou-em + COMPUTA o tempo efetivo dos eventos
+  do cronometro (projecao). A authz mora no recurso sessao: carrega a sessao do tenant do `ator` (nil -> 404),
+  roda pode-ver-sessao? (mesma Casa -> 403), e encerra (CAS por lock_version + guard encerrou_em IS NULL; o Repo
+  emite fala.encerrada na MESMA tx). encerrar-fala! lanca `:conflito/fala` (ja-encerrada / lock-stale / fala
+  inexistente; o diplomat mapeia 409). updated-by = o ator. Devolve {:id :tempo-efetivamente-usado-segundos} ou
+  nil (sessao inexistente)."
+  [repo-sessoes ator {:keys [sessao-id fala-id encerrou-em lock-version]}]
+  (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/encerrar-fala sessao logic/pode-ver-sessao?)
+    ;; mesma guarda anti-confused-deputy do cronometro: a `fala-id` tem de pertencer A ESTA sessao (review sec
+    ;; MAJOR). fala.sessao-id imutavel pos-criacao. Mismatch/inexistente -> nil de retorno -> 404 (nunca encerra
+    ;; uma fala de outra sessao da mesma Casa).
+    (when (= sessao-id (:sessao-id (repo/buscar-fala repo-sessoes (:ente-id ator) fala-id)))
+      (repo/encerrar-fala! repo-sessoes (:ente-id ator)
+        {:id fala-id :encerrou-em encerrou-em :lock-version lock-version :updated-by (:identidade-id ator)}))))
+
 (defn pauta-da-sessao
   "Le a PAUTA VIVA da sessao `id` (UUID) p/ o `ator`. A authz mora no recurso sessao: carrega a sessao e roda
   policy.check (pode-ver-sessao?) ANTES de qualquer leitura de pauta — quem nao pode ver a sessao nao ve a

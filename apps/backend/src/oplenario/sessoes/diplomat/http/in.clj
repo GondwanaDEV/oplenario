@@ -115,6 +115,54 @@
             (http/json-resposta 409 {:erro "inscricao ja desistida, inexistente ou lock-version desatualizado"})
             (throw e)))))))
 
+(defn- iniciar-fala-handler
+  "POST /sessoes/:id/falas (§22.6 eixo F, tribuna execucao). adapters/in coage o :id + valida o corpo {orador-id,
+  tipo-fala, fase, iniciou-em, ...?}; o controller carrega+autoriza a sessao e inicia a fala (o Repo loga
+  'iniciada' + emite fala.iniciada na mesma tx); adapters/out projeta o recibo {:fala-id}. nil -> 404;
+  sucesso -> 201 (cria)."
+  [repo-sessoes]
+  (fn [req]
+    (let [ator (:ator req)
+          m    (adapters-in-tribuna/iniciar-fala->dominio (get-in req [:path-params :id]) (:json-params req))]
+      (if-let [recibo (controllers/iniciar-fala repo-sessoes ator m)]
+        (http/json-resposta 201 (adapters-out-tribuna/recibo-fala-iniciada->wire recibo))
+        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+
+(defn- cronometro-handler
+  "POST /sessoes/:id/falas/:fala-id/cronometro (§22.6 eixo F). adapters/in coage os path-params + valida o corpo
+  {tipo, ocorrido-em, segundos-adicionais?} INCL. a coerencia tipo<->segundos (-> 400 na borda); o controller
+  carrega+autoriza a sessao e registra o evento append-only (o Repo emite fala.cronometro na mesma tx);
+  adapters/out projeta o recibo {:id}. nil (sessao inexistente) -> 404; sucesso -> 201 (cria evento)."
+  [repo-sessoes]
+  (fn [req]
+    (let [ator (:ator req)
+          m    (adapters-in-tribuna/cronometro->dominio (get-in req [:path-params :id])
+                                                        (get-in req [:path-params :fala-id])
+                                                        (:json-params req))]
+      (if-let [recibo (controllers/registrar-evento-cronometro repo-sessoes ator m)]
+        (http/json-resposta 201 (adapters-out-tribuna/recibo-cronometro->wire recibo))
+        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+
+(defn- encerrar-fala-handler
+  "POST /sessoes/:id/falas/:fala-id/encerrar (§22.6 eixo F). adapters/in coage os path-params + valida o corpo
+  {encerrou-em, lock-version}; o controller carrega+autoriza a sessao e encerra a fala (CAS + computa o tempo
+  dos eventos; o Repo emite fala.encerrada na mesma tx); adapters/out projeta o recibo {:fala-id :tempo-segundos}.
+  nil (sessao inexistente) -> 404; ja-encerrada / lock-stale / fala inexistente -> 409 (nao 500). 200 (atualiza)."
+  [repo-sessoes]
+  (fn [req]
+    (let [ator (:ator req)
+          m    (adapters-in-tribuna/encerrar-fala->dominio (get-in req [:path-params :id])
+                                                           (get-in req [:path-params :fala-id])
+                                                           (:json-params req))]
+      (try
+        (if-let [recibo (controllers/encerrar-fala repo-sessoes ator m)]
+          (http/json-resposta 200 (adapters-out-tribuna/recibo-fala-encerrada->wire recibo))
+          (http/json-resposta 404 {:erro "sessao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/fala (:tipo (ex-data e)))
+            (http/json-resposta 409 {:erro "fala ja encerrada, inexistente ou lock-version desatualizado"})
+            (throw e)))))))
+
 (defn- pauta-handler
   "GET /sessoes/:id/pauta. adapters/in coage o :id; controller carrega+autoriza a sessao e le a pauta viva;
   adapters/out projeta. nil (sessao inexistente) -> 404."
@@ -218,6 +266,15 @@
     ["/sessoes/:id/inscricoes/:insc-id/desistir" :post
      [auth (it/exige-papel "secretario") it/corpo-json (desistir-handler repo-sessoes)]
      :route-name :sessoes/desistir-inscricao]
+    ["/sessoes/:id/falas" :post
+     [auth (it/exige-papel "secretario") it/corpo-json (iniciar-fala-handler repo-sessoes)]
+     :route-name :sessoes/iniciar-fala]
+    ["/sessoes/:id/falas/:fala-id/cronometro" :post
+     [auth (it/exige-papel "secretario") it/corpo-json (cronometro-handler repo-sessoes)]
+     :route-name :sessoes/registrar-evento-cronometro]
+    ["/sessoes/:id/falas/:fala-id/encerrar" :post
+     [auth (it/exige-papel "secretario") it/corpo-json (encerrar-fala-handler repo-sessoes)]
+     :route-name :sessoes/encerrar-fala]
     ["/sessoes/:id/pauta" :get [auth (pauta-handler repo-sessoes)] :route-name :sessoes/pauta]
     ["/sessoes/:id/gravacao" :get [auth (listar-gravacoes-handler repo-sessoes)] :route-name :sessoes/listar-gravacoes]
     ["/sessoes/:id/gravacao/:seg-id/vincular" :post

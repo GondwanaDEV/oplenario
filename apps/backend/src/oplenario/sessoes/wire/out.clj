@@ -56,6 +56,25 @@
    [:de (km/enum-de logic/estados-inscricao)]
    [:para (km/enum-de logic/estados-inscricao)]])
 
+(def FalaReciboOut
+  "Recibo do inicio de fala (resposta 201 de POST /sessoes/:id/falas). So a `fala-id` criada — o canal SSE ja
+  recebeu fala.iniciada; este recibo confirma ao chamador a fala a cronometrar/encerrar a seguir."
+  [:map {:closed true}
+   [:fala-id :string]])
+
+(def CronometroEventoReciboOut
+  "Recibo do registro de evento do cronometro (resposta 201 de .../cronometro). So o `id` do evento append-only
+  gravado — o canal SSE ja recebeu fala.cronometro p/ atualizar o relogio ao vivo; este recibo confirma."
+  [:map {:closed true}
+   [:id :string]])
+
+(def FalaEncerradaOut
+  "Recibo do encerramento de fala (resposta 200 de .../encerrar). Carrega a `fala-id` + o `tempo-segundos`
+  EFETIVAMENTE usado (computado dos eventos do cronometro, projecao). NAO expoe o lock-version."
+  [:map {:closed true}
+   [:fala-id :string]
+   [:tempo-segundos :int]])
+
 (def PautaItemOut
   "Projecao publica de um item ATIVO da pauta (§22.6 eixo B). NAO expoe internos (ente-id, pauta-sessao-id,
   lock-version, ativo). FK-por-tipo: 'proposicao' carrega proposicao-id (string); os demais, texto-descricao."

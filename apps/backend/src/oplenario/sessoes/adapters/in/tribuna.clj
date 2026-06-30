@@ -5,7 +5,9 @@
   (:require [malli.core :as m]
             [malli.error :as me]
             [oplenario.sessoes.wire.in :as wire])
-  (:import (java.util UUID)))
+  (:import (java.time Instant)
+           (java.time.format DateTimeParseException)
+           (java.util UUID)))
 
 (set! *warn-on-reflection* true)
 
@@ -17,6 +19,12 @@
 
 (defn- ->uuid [s campo]
   (try (UUID/fromString s) (catch IllegalArgumentException _ (invalido! "uuid invalido" {:campo campo}))))
+
+(defn- ->instante [s campo]
+  ;; nil-tolerante (espelha adapters/in/presenca): hoje os instantes sao obrigatorios (Malli barra nil antes
+  ;; daqui), mas o contrato fica independente de quem chama — campo :optional viraria nil -> nil, nunca NPE.
+  (when s
+    (try (Instant/parse s) (catch DateTimeParseException _ (invalido! "instante invalido (ISO-8601)" {:campo campo})))))
 
 (def ^:private campos-inscrever ["vereador-id" "origem-inscricao" "fase" "proposicao-ref-id"])
 
@@ -49,3 +57,81 @@
     {:sessao-id     (->uuid sessao-id-str :id)
      :inscricao-id  (->uuid insc-id-str :insc-id)
      :lock-version  lv}))
+
+;; ---------- fala_executada + cronometro (execucao, F4.5b) ----------
+
+(def ^:private campos-iniciar
+  ["orador-id" "tipo-fala" "fase" "iniciou-em" "inscricao-id" "fala-pai-id" "proposicao-ref-id"])
+
+(defn iniciar-fala->dominio
+  "Path-param `:id` (sessao) + corpo JSON {orador-id, tipo-fala, fase, iniciou-em, inscricao-id?, fala-pai-id?,
+  proposicao-ref-id?} -> mapa de dominio p/ controllers/iniciar-fala. Valida o contrato UMA vez (m/explain, so os
+  NOMES-de-campo no erro — nunca o payload cru, review W3), coage os uuids (malformado -> 400) e o Instant
+  (nao-ISO -> 400). Os tres uuids opcionais so entram se presentes."
+  [sessao-id-str json-params]
+  (when-not (map? json-params)
+    (invalido! "corpo deve ser objeto JSON {orador-id, tipo-fala, fase, iniciou-em}" {:campo :corpo}))
+  (let [mp (so-esperados json-params campos-iniciar)]
+    (when-let [erros (m/explain wire/IniciarFala mp)]
+      (invalido! "corpo de iniciar fala invalido" {:campos (keys (me/humanize erros))}))
+    (cond-> {:sessao-id  (->uuid sessao-id-str :id)
+             :orador-id  (->uuid (:orador-id mp) :orador-id)
+             :tipo-fala  (:tipo-fala mp)
+             :fase       (:fase mp)
+             :iniciou-em (->instante (:iniciou-em mp) :iniciou-em)}
+      (:inscricao-id mp)      (assoc :inscricao-id (->uuid (:inscricao-id mp) :inscricao-id))
+      (:fala-pai-id mp)       (assoc :fala-pai-id (->uuid (:fala-pai-id mp) :fala-pai-id))
+      (:proposicao-ref-id mp) (assoc :proposicao-ref-id (->uuid (:proposicao-ref-id mp) :proposicao-ref-id)))))
+
+(def ^:private campos-cronometro ["tipo" "ocorrido-em" "segundos-adicionais"])
+
+(defn- validar-coerencia-cronometro!
+  "Coerencia tipo<->segundos-adicionais (espelha logic/validar-evento-cronometro, mas na BORDA -> 400, nunca o
+  CHECK da mig 0033 -> 500): 'tempo_adicional_concedido' EXIGE segundos > 0; os demais tipos PROIBEM o campo."
+  [tipo seg]
+  (if (= "tempo_adicional_concedido" tipo)
+    ;; `integer?` (nao `int?`): espelha o predicado do schema Malli `:int` (aceita Long E Integer); `int?` so e'
+    ;; Long e barraria um Integer valido (review clj). Tambem nil-guard. Teto int4 = mesma defesa do lock-version
+    ;; (sem ele, Long alem de int4 estoura o driver -> 500, review sec).
+    (when-not (and (integer? seg) (pos? seg) (<= seg Integer/MAX_VALUE))
+      (invalido! "tempo_adicional_concedido exige segundos-adicionais inteiro entre 1 e 2147483647" {:campo :segundos-adicionais}))
+    (when (some? seg)
+      (invalido! "so tempo_adicional_concedido carrega segundos-adicionais" {:campo :segundos-adicionais}))))
+
+(defn cronometro->dominio
+  "Path-params `:id` (sessao) + `:fala-id` (fala) + corpo JSON {tipo, ocorrido-em, segundos-adicionais?} -> mapa
+  de dominio p/ controllers/registrar-evento-cronometro. Valida o contrato (m/explain) + a COERENCIA
+  tipo<->segundos na borda (fail-closed -> 400), coage os uuids e o Instant. `segundos-adicionais` so entra se
+  presente."
+  [sessao-id-str fala-id-str json-params]
+  (when-not (map? json-params)
+    (invalido! "corpo deve ser objeto JSON {tipo, ocorrido-em}" {:campo :corpo}))
+  (let [mp  (so-esperados json-params campos-cronometro)]
+    (when-let [erros (m/explain wire/RegistrarEventoCronometro mp)]
+      (invalido! "corpo de evento de cronometro invalido" {:campos (keys (me/humanize erros))}))
+    (validar-coerencia-cronometro! (:tipo mp) (:segundos-adicionais mp))
+    (cond-> {:sessao-id   (->uuid sessao-id-str :id)
+             :fala-id     (->uuid fala-id-str :fala-id)
+             :tipo        (:tipo mp)
+             :ocorrido-em (->instante (:ocorrido-em mp) :ocorrido-em)}
+      (:segundos-adicionais mp) (assoc :segundos-adicionais (:segundos-adicionais mp)))))
+
+(def ^:private campos-encerrar ["encerrou-em" "lock-version"])
+
+(defn encerrar-fala->dominio
+  "Path-params `:id` (sessao) + `:fala-id` (fala) + corpo JSON {encerrou-em, lock-version} -> mapa de dominio p/
+  controllers/encerrar-fala. Valida o contrato (m/explain) + range int4 do `lock-version` (CAS otimista;
+  fora do range -> 400 fail-closed, NUNCA 500 do CHECK do banco), coage os uuids e o Instant."
+  [sessao-id-str fala-id-str json-params]
+  (when-not (map? json-params)
+    (invalido! "corpo deve ser objeto JSON {encerrou-em, lock-version}" {:campo :corpo}))
+  (let [mp (so-esperados json-params campos-encerrar)]
+    (when-let [erros (m/explain wire/EncerrarFala mp)]
+      (invalido! "corpo de encerrar fala invalido" {:campos (keys (me/humanize erros))}))
+    (let [lv (:lock-version mp)]
+      (when-not (and (<= 0 lv) (<= lv Integer/MAX_VALUE))
+        (invalido! "lock-version invalido (inteiro entre 0 e 2147483647)" {:campo :lock-version}))
+      {:sessao-id    (->uuid sessao-id-str :id)
+       :fala-id      (->uuid fala-id-str :fala-id)
+       :encerrou-em  (->instante (:encerrou-em mp) :encerrou-em)
+       :lock-version lv})))

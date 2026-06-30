@@ -26,3 +26,21 @@
   [{:keys [inscricao-id de para]}]
   (validado wire/DesistenciaInscricaoOut {:inscricao-id (->str inscricao-id) :de de :para para}
             "recibo de desistencia viola o contrato DesistenciaInscricaoOut (bug de servidor)"))
+
+(defn recibo-fala-iniciada->wire
+  "Recibo de dominio {:id uuid} -> FalaReciboOut (validado, resposta 201). O `id` da fala vira `fala-id`."
+  [{:keys [id]}]
+  (validado wire/FalaReciboOut {:fala-id (->str id)}
+            "recibo de inicio de fala viola o contrato FalaReciboOut (bug de servidor)"))
+
+(defn recibo-cronometro->wire
+  "Recibo de dominio {:id uuid} -> CronometroEventoReciboOut (validado, resposta 201). O `id` do evento gravado."
+  [{:keys [id]}]
+  (validado wire/CronometroEventoReciboOut {:id (->str id)}
+            "recibo de evento de cronometro viola o contrato CronometroEventoReciboOut (bug de servidor)"))
+
+(defn recibo-fala-encerrada->wire
+  "Recibo de dominio {:id uuid :tempo-efetivamente-usado-segundos int} -> FalaEncerradaOut (validado, 200)."
+  [{:keys [id tempo-efetivamente-usado-segundos]}]
+  (validado wire/FalaEncerradaOut {:fala-id (->str id) :tempo-segundos tempo-efetivamente-usado-segundos}
+            "recibo de encerramento de fala viola o contrato FalaEncerradaOut (bug de servidor)"))
