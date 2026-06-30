@@ -37,6 +37,13 @@
       (catch clojure.lang.ExceptionInfo e
         {:status "INVALIDA" :erros [(ex-message e)]}))))
 
+(defn comp-chave
+  "Normaliza um valor de Competencia ({:ano :mes}) p/ a chave 'AAAA-MM' — o MESMO formato que o motor usa
+  no prazo/competencia. Reexposto na fachada p/ os modulos que precisam casar a chave (ex.: compliance/relacoes
+  na costura `remessa_enviada`) sem acoplar a um namespace INTERNO do motor (runtime) — review clojure #4."
+  [competencia]
+  (rt/comp-chave competencia))
+
 (defn avaliar
   "Seam de avaliacao (F2.3) — avalia UMA regra `vigente` contra fatos REAIS, fora do atom-fixture:
     - FATOS DE DOMINIO (populacao, tribunal_competente, …) → `resolver-para` sobre o RegistroFatos +

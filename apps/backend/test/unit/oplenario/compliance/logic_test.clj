@@ -50,3 +50,28 @@
   (is (thrown? Exception (logic/validar-origem "magica")) "origem invalida lanca")
   (is (nil? (logic/validar-fase "cumprida")) "fase valida nao lanca")
   (is (thrown? Exception (logic/validar-fase "explodida")) "fase invalida lanca"))
+
+;; ---------- ciclo de vida da remessa (enum FIXO em codigo, §22.7.8) ----------
+
+(deftest estados-remessa-vocabulario
+  (is (= #{"rascunho" "validada" "submetida" "aceita" "rejeitada"} logic/estados-remessa)
+      "o ciclo da remessa: rascunho -> validada -> submetida -> {aceita | rejeitada}")
+  (is (nil? (logic/validar-estado-remessa "submetida")) "estado de remessa valido nao lanca")
+  (is (thrown? Exception (logic/validar-estado-remessa "enviada")) "estado de remessa invalido lanca"))
+
+(deftest transicao-remessa-valida?-segue-o-grafo
+  (is (true?  (logic/transicao-remessa-valida? "rascunho"  "validada"))  "rascunho -> validada")
+  (is (true?  (logic/transicao-remessa-valida? "validada"  "submetida")) "validada -> submetida")
+  (is (true?  (logic/transicao-remessa-valida? "submetida" "aceita"))    "submetida -> aceita")
+  (is (true?  (logic/transicao-remessa-valida? "submetida" "rejeitada")) "submetida -> rejeitada")
+  (is (false? (logic/transicao-remessa-valida? "rascunho"  "submetida")) "nao pula validada")
+  (is (false? (logic/transicao-remessa-valida? "rascunho"  "aceita"))    "nao pula direto p/ aceita")
+  (is (false? (logic/transicao-remessa-valida? "aceita"    "rejeitada")) "terminal nao transiciona (reenvio = nova versao)")
+  (is (false? (logic/transicao-remessa-valida? "rejeitada" "submetida")) "rejeitada e' terminal (reenvio = nova versao)")
+  (is (false? (logic/transicao-remessa-valida? "submetida" "validada"))  "nao volta no ciclo"))
+
+(deftest estados-terminais-remessa-sao-aceita-e-rejeitada
+  (is (true?  (logic/remessa-terminal? "aceita"))    "aceita e' terminal")
+  (is (true?  (logic/remessa-terminal? "rejeitada")) "rejeitada e' terminal")
+  (is (false? (logic/remessa-terminal? "submetida")) "submetida nao e' terminal")
+  (is (false? (logic/remessa-terminal? "rascunho"))  "rascunho nao e' terminal"))
