@@ -147,3 +147,80 @@ describe("ultimoSeq — rastreia o maior seq visto (Last-Event-ID do resume)", (
     expect(e.ultimoSeq).toBe(5);
   });
 });
+
+describe("votação ao vivo — placar (§22.6 sigilo)", () => {
+  it("votacao.aberta cria o placar zerado com a modalidade (nominal)", () => {
+    const e = reduzir(sessao({ estado: "aberta" }), [
+      { tipo: "votacao.aberta", seq: 1, dados: {
+        "votacao-id": "vt1", "sessao-id": "s1", "objeto-tipo": "proposicao", "objeto-id": "p1",
+        modalidade: "nominal", "quorum-tipo": "maioria_simples" } },
+    ]);
+    expect(e.placar).toEqual({
+      votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", encerrada: false,
+      votosNominais: {}, votosSecretos: 0, resultado: null, totais: null, baseMembros: null,
+    });
+  });
+
+  it("voto.registrado nominal grava o voto por vereador (quem votou o quê); re-voto sobrescreve", () => {
+    const e = reduzir(sessao({ estado: "aberta" }), [
+      { tipo: "votacao.aberta", seq: 1, dados: {
+        "votacao-id": "vt1", "sessao-id": "s1", "objeto-tipo": "proposicao", "objeto-id": "p1",
+        modalidade: "nominal", "quorum-tipo": "maioria_simples" } },
+      { tipo: "voto.registrado", seq: 2, dados: { "votacao-id": "vt1", "sessao-id": "s1", modalidade: "nominal", "vereador-id": "vd1", voto: "sim" } },
+      { tipo: "voto.registrado", seq: 3, dados: { "votacao-id": "vt1", "sessao-id": "s1", modalidade: "nominal", "vereador-id": "vd2", voto: "nao" } },
+      { tipo: "voto.registrado", seq: 4, dados: { "votacao-id": "vt1", "sessao-id": "s1", modalidade: "nominal", "vereador-id": "vd1", voto: "abstencao" } },
+    ]);
+    expect(e.placar?.votosNominais).toEqual({ vd1: "abstencao", vd2: "nao" });
+    expect(e.placar?.votosSecretos).toBe(0);
+  });
+
+  it("voto.registrado secreto SÓ incrementa o contador — nunca expõe identidade (sigilo)", () => {
+    const e = reduzir(sessao({ estado: "aberta", "permite-voto-secreto": true }), [
+      { tipo: "votacao.aberta", seq: 1, dados: {
+        "votacao-id": "vt1", "sessao-id": "s1", "objeto-tipo": "proposicao", "objeto-id": "p1",
+        modalidade: "secreta", "quorum-tipo": "maioria_absoluta" } },
+      { tipo: "voto.registrado", seq: 2, dados: { "votacao-id": "vt1", "sessao-id": "s1", modalidade: "secreta" } },
+      { tipo: "voto.registrado", seq: 3, dados: { "votacao-id": "vt1", "sessao-id": "s1", modalidade: "secreta" } },
+    ]);
+    expect(e.placar?.votosSecretos).toBe(2);
+    expect(e.placar?.votosNominais).toEqual({});
+  });
+
+  it("ignora voto de uma votação que não é a corrente (votacao-id diferente)", () => {
+    const e = reduzir(sessao({ estado: "aberta" }), [
+      { tipo: "votacao.aberta", seq: 1, dados: {
+        "votacao-id": "vt1", "sessao-id": "s1", "objeto-tipo": "proposicao", "objeto-id": "p1",
+        modalidade: "nominal", "quorum-tipo": "maioria_simples" } },
+      { tipo: "voto.registrado", seq: 2, dados: { "votacao-id": "OUTRA", "sessao-id": "s1", modalidade: "nominal", "vereador-id": "vd9", voto: "sim" } },
+    ]);
+    expect(e.placar?.votosNominais).toEqual({});
+  });
+
+  it("votacao.encerrada marca encerrada + grava resultado/totais/base (agregado público)", () => {
+    const e = reduzir(sessao({ estado: "aberta" }), [
+      { tipo: "votacao.aberta", seq: 1, dados: {
+        "votacao-id": "vt1", "sessao-id": "s1", "objeto-tipo": "proposicao", "objeto-id": "p1",
+        modalidade: "nominal", "quorum-tipo": "maioria_simples" } },
+      { tipo: "voto.registrado", seq: 2, dados: { "votacao-id": "vt1", "sessao-id": "s1", modalidade: "nominal", "vereador-id": "vd1", voto: "sim" } },
+      { tipo: "votacao.encerrada", seq: 3, dados: {
+        "votacao-id": "vt1", "sessao-id": "s1", resultado: "aprovada", modalidade: "nominal",
+        "total-sim": 6, "total-nao": 3, "total-abstencao": 1, "base-membros": 11 } },
+    ]);
+    expect(e.placar?.encerrada).toBe(true);
+    expect(e.placar?.resultado).toBe("aprovada");
+    expect(e.placar?.totais).toEqual({ sim: 6, nao: 3, abstencao: 1 });
+    expect(e.placar?.baseMembros).toBe(11);
+    expect(e.placar?.votosNominais).toEqual({ vd1: "sim" }); // preserva o nominal acumulado
+  });
+
+  it("votacao.encerrada sem aberta vista (reconexão) constrói o placar do agregado", () => {
+    const e = reduzir(sessao({ estado: "aberta" }), [
+      { tipo: "votacao.encerrada", seq: 9, dados: {
+        "votacao-id": "vt7", "sessao-id": "s1", resultado: "rejeitada", modalidade: "secreta" } },
+    ]);
+    expect(e.placar?.votacaoId).toBe("vt7");
+    expect(e.placar?.encerrada).toBe(true);
+    expect(e.placar?.resultado).toBe("rejeitada");
+    expect(e.placar?.totais).toEqual({ sim: null, nao: null, abstencao: null });
+  });
+});

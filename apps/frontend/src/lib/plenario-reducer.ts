@@ -29,6 +29,22 @@ export interface Inscrito {
   ordem: number;
 }
 
+export type VotoNominal = "sim" | "nao" | "abstencao";
+
+/** Placar da votação corrente (uma por vez no plenário). §22.6 SIGILO: na SECRETA só existe o CONTADOR
+ * (votosSecretos) — JAMAIS voto por vereador; o agregado do encerramento é público mesmo na secreta. */
+export interface PlacarVotacao {
+  votacaoId: string;
+  modalidade: string; // "nominal" | "secreta" (vazio se só vimos o encerramento, sem modalidade no payload)
+  objetoTipo: string | null;
+  encerrada: boolean;
+  votosNominais: Record<string, VotoNominal>; // só NOMINAL: vereadorId -> voto (mostra quem votou o quê)
+  votosSecretos: number; // só SECRETA: contagem de votos registrados (anônimo)
+  resultado: string | null; // "aprovada" | "rejeitada" (do encerramento)
+  totais: { sim: number | null; nao: number | null; abstencao: number | null } | null; // do encerramento
+  baseMembros: number | null; // do encerramento (denominador do quórum)
+}
+
 export interface EstadoPlenario {
   estado: string; // estado da sessão (agendada|aberta|suspensa|encerrada|nao_realizada|arquivada)
   presentes: string[]; // vereador-ids presentes (conjunto; ordem de inserção)
@@ -36,6 +52,7 @@ export interface EstadoPlenario {
   marcosCronometro: MarcoCronometro[]; // marcos da fala EM CURSO (zerados a cada fala.iniciada)
   ultimaFalaEncerrada: { falaId: string; tempoSegundos: number } | null;
   inscritos: Inscrito[]; // fila ordenada por `ordem`
+  placar: PlacarVotacao | null; // votação corrente/última (null = nenhuma votação vista)
   ultimoSeq: number; // maior seq visto — vira o Last-Event-ID no resume
 }
 
@@ -47,6 +64,7 @@ export function estadoInicial(sessao: SessaoOut): EstadoPlenario {
     marcosCronometro: [],
     ultimaFalaEncerrada: null,
     inscritos: [],
+    placar: null,
     ultimoSeq: 0,
   };
 }
@@ -111,6 +129,61 @@ export function aplicarEvento(estado: EstadoPlenario, evento: EventoPlenario): E
 
     case "inscricao.desistida":
       return { ...base, inscritos: base.inscritos.filter((i) => i.inscricaoId !== evento.dados["inscricao-id"]) };
+
+    case "votacao.aberta": {
+      // uma votação por vez no plenário: a abertura SUBSTITUI o placar anterior (zera as contagens).
+      const d = evento.dados;
+      return {
+        ...base,
+        placar: {
+          votacaoId: d["votacao-id"],
+          modalidade: d.modalidade,
+          objetoTipo: d["objeto-tipo"],
+          encerrada: false,
+          votosNominais: {},
+          votosSecretos: 0,
+          resultado: null,
+          totais: null,
+          baseMembros: null,
+        },
+      };
+    }
+
+    case "voto.registrado": {
+      const d = evento.dados;
+      // só conta p/ a votação CORRENTE (votos de outra votação / fora de ordem são ignorados).
+      if (!base.placar || base.placar.votacaoId !== d["votacao-id"]) return base;
+      if (d.modalidade === "secreta") {
+        // §22.6 SIGILO: tick anônimo — só o contador (sem dedup possível; o transporte entrega cada seq 1x).
+        return { ...base, placar: { ...base.placar, votosSecretos: base.placar.votosSecretos + 1 } };
+      }
+      // nominal: voto por vereador (idempotente por chave; re-voto sobrescreve).
+      return {
+        ...base,
+        placar: { ...base.placar, votosNominais: { ...base.placar.votosNominais, [d["vereador-id"]]: d.voto as VotoNominal } },
+      };
+    }
+
+    case "votacao.encerrada": {
+      const d = evento.dados;
+      const mesma = base.placar !== null && base.placar.votacaoId === d["votacao-id"];
+      // mesma votação: preserva o que se acumulou; senão (reconexão sem ter visto a abertura) constrói do agregado.
+      const anterior = mesma ? base.placar! : null;
+      return {
+        ...base,
+        placar: {
+          votacaoId: d["votacao-id"],
+          modalidade: anterior?.modalidade ?? d.modalidade ?? "",
+          objetoTipo: anterior?.objetoTipo ?? null,
+          encerrada: true,
+          votosNominais: anterior?.votosNominais ?? {},
+          votosSecretos: anterior?.votosSecretos ?? 0,
+          resultado: d.resultado,
+          totais: { sim: d["total-sim"] ?? null, nao: d["total-nao"] ?? null, abstencao: d["total-abstencao"] ?? null },
+          baseMembros: d["base-membros"] ?? null,
+        },
+      };
+    }
 
     default:
       return base;
