@@ -9,10 +9,19 @@
   (:import (io.minio MinioClient PutObjectArgs GetObjectArgs RemoveObjectArgs
                      MakeBucketArgs BucketExistsArgs)
            (io.minio.errors ErrorResponseException)
-           (java.io ByteArrayInputStream)))
+           (java.io ByteArrayInputStream InputStream)))
+
+(def ^:private ^:const part-size-bytes
+  "Tamanho de parte do upload multipart de tamanho DESCONHECIDO (objectSize=-1): o minimo S3 (5 MiB). Com
+  isso o stream e' enviado em partes sem materializar o arquivo inteiro em heap (§22.6 gravacao: media pode
+  ter centenas de MB)."
+  (* 5 1024 1024))
 
 (defprotocol ObjetoStore
   (guardar! [this chave bytes content-type] "Guarda o blob (byte-array) sob `chave`; devolve a chave.")
+  (guardar-stream! [this chave in content-type]
+    "Transmite o InputStream `in` (tamanho desconhecido) ao store em partes, sem bufferizar tudo em heap;
+     devolve a chave. O chamador e' dono do ciclo de vida de `in` (fecha apos).")
   (obter    [this chave] "Devolve os bytes do blob (byte-array), ou nil se ausente.")
   (remover! [this chave] "Remove o blob da `chave`."))
 
@@ -41,6 +50,15 @@
                 (-> (PutObjectArgs/builder)
                     (.bucket bucket) (.object chave)
                     (.stream (ByteArrayInputStream. bytes) (long (alength bytes)) -1)
+                    (.contentType content-type)
+                    (.build)))
+    chave)
+  (guardar-stream! [_ chave in content-type]
+    (.putObject client
+                (-> (PutObjectArgs/builder)
+                    (.bucket bucket) (.object chave)
+                    ;; objectSize=-1 + partSize -> upload multipart em streaming (sem heap p/ o arquivo todo)
+                    (.stream ^InputStream in -1 (long part-size-bytes))
                     (.contentType content-type)
                     (.build)))
     chave)
