@@ -109,6 +109,25 @@
       (is (= 1 (count evs)) "inscricao.desistida emitido")
       (is (re-find (re-pattern (str sid)) (:payload (first evs))) "carrega a sessao-id (rota do canal)"))))
 
+;; ---------- §16.13: incidente.registrado (mesa de conducao ao vivo) ----------
+
+(deftest incidente-emite-evento
+  (let [ente (random-uuid)
+        sid  (agendar! ente)
+        prop (random-uuid)]
+    (is (empty? (eventos-por-tipo ente "incidente.registrado")) "nada antes do incidente")
+    (repo/registrar-incidente! *repo* ente {:id (random-uuid) :sessao-id sid :tipo "pedido_vista"
+                                            :resultado "deferido" :descricao "Vista da Prop. 12/2026."
+                                            :objeto-tipo "proposicao" :objeto-id prop
+                                            :ocorrido-em t0 :created-by (random-uuid)})
+    (let [evs (eventos-por-tipo ente "incidente.registrado")]
+      (is (= 1 (count evs)) "incidente.registrado emitido (mesa de conducao ao vivo)")
+      (let [pl (:payload (first evs))]
+        (is (re-find #"pedido_vista" pl) "carrega o tipo do incidente")
+        (is (re-find #"deferido" pl) "carrega o resultado")
+        (is (re-find (re-pattern (str sid)) pl) "carrega a sessao-id (rota do canal plenario)")
+        (is (re-find #"2026-06-29T14:00:00Z" pl) "ocorrido-em como ISO-8601 string")))))
+
 ;; ---------- G1b: gravacao.segmento-captado (fronteira core->IA) ----------
 
 (deftest gravacao-emite-evento

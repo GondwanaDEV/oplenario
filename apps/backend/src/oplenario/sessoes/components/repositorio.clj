@@ -6,6 +6,7 @@
   (:require [oplenario.kernel.tenancy :as tenancy]
             [oplenario.sessoes.diplomat.producers :as producers]
             [oplenario.sessoes.db.gravacao :as gravacao]
+            [oplenario.sessoes.db.incidente :as incidente]
             [oplenario.sessoes.db.pauta :as pauta]
             [oplenario.sessoes.db.presenca :as presenca]
             [oplenario.sessoes.db.sessao :as sessao]
@@ -64,7 +65,11 @@
   ;; §22.6 eixo F — tribuna: decisao da mesa (questao de ordem)
   (registrar-decisao-mesa! [this ente-id m] "Registra a decisao do presidente sobre questao de ordem (ato p/ ata, append-only).")
   (buscar-decisao-mesa [this ente-id id])
-  (listar-decisoes-mesa [this ente-id sessao-id] "Decisoes da mesa da sessao em ordem cronologica (ata)."))
+  (listar-decisoes-mesa [this ente-id sessao-id] "Decisoes da mesa da sessao em ordem cronologica (ata).")
+  ;; §16.13 — incidentes processuais (mesa de conducao ao vivo)
+  (registrar-incidente! [this ente-id m] "Registra incidente processual (append-only) + emite incidente.registrado (SSE) na MESMA tx.")
+  (buscar-incidente [this ente-id id])
+  (listar-incidentes [this ente-id sessao-id] "Incidentes da sessao em ordem cronologica (ata + painel da mesa)."))
 
 (defrecord RepoSessoesPg [datasource bus]
   RepoSessoes
@@ -198,7 +203,22 @@
   (listar-eventos-cronometro [this ente-id fala-id] (transacao this ente-id #(tribuna/listar-eventos-cronometro % ente-id fala-id)))
   (registrar-decisao-mesa! [this ente-id m] (transacao this ente-id #(tribuna/registrar-decisao-mesa! % (assoc m :ente-id ente-id))))
   (buscar-decisao-mesa [this ente-id id] (transacao this ente-id #(tribuna/buscar-decisao-mesa % ente-id id)))
-  (listar-decisoes-mesa [this ente-id sessao-id] (transacao this ente-id #(tribuna/listar-decisoes-mesa % ente-id sessao-id))))
+  (listar-decisoes-mesa [this ente-id sessao-id] (transacao this ente-id #(tribuna/listar-decisoes-mesa % ente-id sessao-id)))
+  ;; §16.13 — compoe o ato append-only + a emissao do evento de tempo real na MESMA tx (atomicidade §22.9 E2):
+  ;; o painel da mesa de conducao reage ao incidente ao vivo (SSE canal plenario).
+  (registrar-incidente! [this ente-id m]
+    (transacao this ente-id
+      (fn [tx]
+        (let [r (incidente/registrar! tx (assoc m :ente-id ente-id))]
+          (producers/emitir-incidente-registrado! bus tx ente-id
+            (cond-> {:incidente-id (:id m) :sessao-id (:sessao-id m) :tipo (:tipo m)
+                     :resultado (:resultado m) :ocorrido-em (str (:ocorrido-em m))}
+              (:objeto-tipo m)   (assoc :objeto-tipo (:objeto-tipo m))
+              (:objeto-id m)     (assoc :objeto-id (:objeto-id m))
+              (:requerente-id m) (assoc :requerente-id (:requerente-id m))))
+          r))))
+  (buscar-incidente [this ente-id id] (transacao this ente-id #(incidente/buscar % ente-id id)))
+  (listar-incidentes [this ente-id sessao-id] (transacao this ente-id #(incidente/listar-da-sessao % ente-id sessao-id))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

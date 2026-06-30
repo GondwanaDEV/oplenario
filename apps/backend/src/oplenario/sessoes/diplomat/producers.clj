@@ -5,6 +5,7 @@
   vocabulario/contrato mora em events/; aqui e' so o ATO de emitir. Estes eventos sao a fonte do projetor SSE."
   (:require [oplenario.kernel.eventos :as eventos]
             [oplenario.sessoes.events.gravacao :as ev-gravacao]
+            [oplenario.sessoes.events.incidente :as ev-incidente]
             [oplenario.sessoes.events.presenca :as ev-presenca]
             [oplenario.sessoes.events.sessao :as ev-sessao]
             [oplenario.sessoes.events.tribuna :as ev-tribuna]))
@@ -35,3 +36,6 @@
 
 (defn emitir-gravacao-segmento-vinculado! [bus tx ente-id payload]
   (eventos/emitir! bus tx (ev-gravacao/segmento-vinculado ente-id payload)))
+
+(defn emitir-incidente-registrado! [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-incidente/registrado ente-id payload)))

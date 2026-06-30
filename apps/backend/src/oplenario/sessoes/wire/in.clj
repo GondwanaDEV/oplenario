@@ -90,6 +90,23 @@
    [:fundamentacao {:optional true} [:maybe :string]]
    [:fala-id {:optional true} [:maybe :string]]])
 
+(def RegistrarIncidente
+  "Corpo de POST /sessoes/:id/incidentes (§16.13): incidente processual (pedido de vista, verificacao de votacao,
+  urgencia, votacao em bloco) — ato regimental p/ a ata, APPEND-ONLY. `tipo`/`resultado` validados contra o enum
+  e `descricao` nao-vazia no adapters/in (-> 400, nunca o CHECK da migration -> 500); `ocorrido-em` = instante de
+  DOMINIO (ISO-8601, OBRIGATORIO); `objeto-tipo`+`objeto-id` opcionais e COERENTES (ambos ou nenhum — a materia
+  que o incidente atinge, forward-ref); `requerente-id` opcional (quem suscitou); `deliberacao` opcional (se
+  presente, nao-vazia). NAO carrega `created-by` (INJETADO do ator). `:closed true` recusa campos extra."
+  [:map {:closed true}
+   [:tipo (km/enum-de logic/tipos-incidente)]
+   [:resultado (km/enum-de logic/resultados-incidente)]
+   [:descricao [:string {:max 4096}]]               ; cap de campo (review sec BAIXO-1); nao-vazio = adapters/in
+   [:ocorrido-em :string]
+   [:objeto-tipo {:optional true} [:maybe (km/enum-de logic/tipos-objeto-incidente)]]
+   [:objeto-id {:optional true} [:maybe :string]]
+   [:requerente-id {:optional true} [:maybe :string]]
+   [:deliberacao {:optional true} [:maybe [:string {:max 4096}]]]])
+
 (def AdicionarItemPauta
   "Corpo de POST /sessoes/:id/pauta/itens (§22.6 eixo B, pauta viva): adiciona um item a pauta 1:1 da sessao.
   `fase` (atributo do item) e `tipo-item` validados contra os enums. FK-por-tipo (espelha o `:fn` de

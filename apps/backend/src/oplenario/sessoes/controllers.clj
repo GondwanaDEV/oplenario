@@ -148,6 +148,19 @@
                  :presidente-id (:identidade-id ator)
                  :created-by (:identidade-id ator))))))
 
+(defn registrar-incidente
+  "§16.13: registra um INCIDENTE PROCESSUAL da sessao (pedido de vista, verificacao de votacao, urgencia, votacao
+  em bloco) — ato regimental APPEND-ONLY p/ a ata + painel da mesa de conducao ao vivo (emite incidente.registrado
+  no SSE, na mesma tx do Repo). Carrega a sessao do tenant do `ator` (nil -> 404), roda pode-ver-sessao? (mesma
+  Casa -> 403 fail-closed). `created-by` INJETADO do ator. `objeto`/`requerente` sao forward-ref (sem checagem
+  cross-module — mesma classe de carry de presenca/tribuna; o ator e' confiavel+auditado). `id` server-side.
+  Devolve {:id} ou nil (sessao inexistente)."
+  [repo-sessoes ator {:keys [sessao-id] :as m}]
+  (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/registrar-incidente sessao logic/pode-ver-sessao?)
+    (repo/registrar-incidente! repo-sessoes (:ente-id ator)
+      (assoc m :id (random-uuid) :created-by (:identidade-id ator)))))
+
 (defn pauta-da-sessao
   "Le a PAUTA VIVA da sessao `id` (UUID) p/ o `ator`. A authz mora no recurso sessao: carrega a sessao e roda
   policy.check (pode-ver-sessao?) ANTES de qualquer leitura de pauta — quem nao pode ver a sessao nao ve a
