@@ -110,4 +110,5 @@
          ;; p/ a vertical de votacao ao vivo (rota mora no legislativo; authz herdada da sessao via consultar-sessao).
          :servidor-http (component/using
                          (http-servidor/servidor-http config rotas/montar)
-                         [:idp :repo-identidade :repo-sessoes :repo-legislativo :canal-store :objeto-store])))
+                         [:idp :repo-identidade :repo-sessoes :repo-legislativo :repo-compliance
+                          :canal-store :objeto-store])))

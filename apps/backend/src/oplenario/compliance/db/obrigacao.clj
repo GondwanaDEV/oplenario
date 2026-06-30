@@ -75,6 +75,30 @@
                   :where [:and [:= :ente_id ente-id] [:= :objeto_tipo objeto-tipo] [:= :objeto_id objeto-id]]
                   :order-by [[:template_chave :asc]]}))))
 
+(defn resumo-por-estado
+  "Read-model do painel (§16.11): COUNT(*) das obrigacoes do tenant agrupadas por `estado` (o placar
+  pendente·cumprida·vencida...). Devolve [{:estado :total}...] — SO os estados COM linha (o 0-fill das
+  fases ausentes mora no logic na borda, nao no SQL). ente_id sempre presente (RLS + escopo)."
+  [tx ente-id]
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select [:estado [[:count :*] :total]] :from [:compliance.prazo_dominio_ativo]
+                  :where [:= :ente_id ente-id]
+                  :group-by [:estado] :order-by [[:estado :asc]]}))))
+
+(defn listar-em-aberto
+  "Read-model do painel — 'o que vence' (§16.11): as obrigacoes EM ABERTO (pendente + vencida) do tenant,
+  ordenadas por vencimento (a mais urgente primeiro), com TETO `limite` (anti unbounded-read — review sec).
+  Cumprida/dispensada/cancelada NAO entram (so o que ainda exige acao)."
+  [tx ente-id limite]
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select cols :from [:compliance.prazo_dominio_ativo]
+                  :where [:and [:= :ente_id ente-id]
+                          [:in :estado [[:inline "pendente"] [:inline "vencida"]]]]
+                  :order-by [[:vence_em :asc] [:id :asc]]
+                  :limit limite}))))
+
 (defn pendentes-vencidas-ate
   "Sweep de vencimento (§22.7.7): obrigacoes PENDENTE estritamente vencidas em `data` (vence_em < data —
   estrito: o proprio dia do vencimento NAO vence), por ente, em ordem de vencimento. So `pendente` (a

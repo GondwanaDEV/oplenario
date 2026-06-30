@@ -109,6 +109,18 @@
                           [:= :competencia competencia]]
                   :order-by [[:versao :asc]]}))))
 
+(defn listar-recentes
+  "Read-model do painel (§16.11): as remessas mais recentes do tenant (todas as competencias/sistemas),
+  ordem `criado_em` DESC (id DESC como tiebreaker estavel num empate de timestamp), com TETO `limite`
+  (anti unbounded-read — review sec). E' o pipeline de remessas que a Mesa/juridico le no painel."
+  [tx ente-id limite]
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select cols :from [:compliance.remessa_gerada]
+                  :where [:= :ente_id ente-id]
+                  :order-by [[:criado_em :desc] [:id :desc]]
+                  :limit limite}))))
+
 ;; NOTA: a COSTURA `remessa_enviada(sistema, competencia)` (so 'aceita' cumpre) NAO mora aqui — e' uma
 ;; funcao de RELACAO (compliance/relacoes), que inlina a query do proprio schema como as do cadastros
 ;; (ADR-0001 §3-bis: o db/ so e' importado pelo Repo-Component; a relacao e' injetada no motor por nome).
