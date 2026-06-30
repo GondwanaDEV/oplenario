@@ -41,6 +41,23 @@
               :updated-by (:identidade-id ator)})
            :sessao-id sessao-id)))
 
+(defn registrar-presenca
+  "§22.6 eixo C: registra um evento de presenca (entrada/saida/retorno/mudanca_modalidade) numa sessao. Carrega
+  a sessao do tenant do `ator` (nil -> 404 via nil de retorno), roda pode-ver-sessao? (mesma Casa -> 403
+  fail-closed), e grava o evento append-only. A `fonte` e' FORCADA = 'manual_secretaria' no servidor: esta borda
+  e' um registro HUMANO de um secretario autenticado, nunca confia em proveniencia do cliente — a fonte alimenta
+  a precedencia de quorum (manual > painel > inferida), entao um cliente nao pode forjar 'painel_eletronico' p/
+  ganhar desempate. O Repo compoe o ato + emite `presenca.registrada` (que alimenta o quorum ao vivo) na MESMA
+  tx (atomicidade §22.9 E2). created-by = o ator. Devolve {:id} ou nil (sessao inexistente)."
+  [repo-sessoes ator {:keys [sessao-id vereador-id tipo modalidade ocorrido-em]}]
+  (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/registrar-presenca sessao logic/pode-ver-sessao?)
+    (let [id (random-uuid)]
+      (repo/registrar-presenca! repo-sessoes (:ente-id ator)
+        {:id id :sessao-id sessao-id :vereador-id vereador-id :tipo tipo :modalidade modalidade
+         :fonte "manual_secretaria" :ocorrido-em ocorrido-em :created-by (:identidade-id ator)})
+      {:id id})))
+
 (defn pauta-da-sessao
   "Le a PAUTA VIVA da sessao `id` (UUID) p/ o `ator`. A authz mora no recurso sessao: carrega a sessao e roda
   policy.check (pode-ver-sessao?) ANTES de qualquer leitura de pauta — quem nao pode ver a sessao nao ve a
