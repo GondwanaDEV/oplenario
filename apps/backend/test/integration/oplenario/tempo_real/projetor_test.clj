@@ -43,6 +43,58 @@
              :dados {:sessao-id "S" :orador-id "O"}}] msgs)
         "uma mensagem por canal, carregando ente-id (defesa-em-profundidade) + tipo + dados")))
 
+;; ---------- PURO: roteamento da VOTACAO (Slice 2 — placar do hemiciclo) ----------
+
+(deftest rotas-da-votacao
+  (is (= ["sessao/S/plenario"]
+         (canais/rotas-do-evento {:tipo "votacao.aberta" :payload {:sessao-id "S"}}))
+      "votacao.aberta roteia p/ o canal plenario da sessao")
+  (is (= ["sessao/S/plenario"]
+         (canais/rotas-do-evento {:tipo "voto.registrado" :payload {:sessao-id "S"}}))
+      "voto.registrado roteia p/ o canal plenario")
+  (is (= ["sessao/S/plenario"]
+         (canais/rotas-do-evento {:tipo "votacao.encerrada" :payload {:sessao-id "S"}}))
+      "votacao.encerrada roteia p/ o canal plenario"))
+
+(deftest votacao-no-registro-do-bus
+  ;; tipos-consumidos DERIVA de tipos-plenario (fonte unica) — os 3 tipos de votacao tem de estar la,
+  ;; senao o roteamento conheceria o evento mas o bus nao o entregaria (drift).
+  (is (every? (set consumer/tipos-consumidos)
+              ["votacao.aberta" "voto.registrado" "votacao.encerrada"])
+      "o projetor consome os 3 eventos de votacao (sem drift entre roteamento e registro no bus)"))
+
+;; ---------- PURO: projecao do PLACAR + SIGILO §22.6 (a armadilha mora AQUI) ----------
+
+(deftest placar-nominal-e-publico
+  (let [voto  {:tipo "voto.registrado" :ente-id "E"
+               :payload {:votacao-id "V" :sessao-id "S" :modalidade "nominal"
+                         :vereador-id "ver-1" :voto "sim"}}
+        [msg] (projecao/projetar voto)]
+    (is (= "ver-1" (get-in msg [:dados :vereador-id])) "voto NOMINAL expoe quem votou (placar nominal)")
+    (is (= "sim" (get-in msg [:dados :voto])) "voto NOMINAL expoe o voto")))
+
+(deftest placar-secreto-e-so-contador
+  ;; DEFESA EM PROFUNDIDADE: o contrato do evento (uniao discriminada, events/votacao.clj) ja barra
+  ;; identidade no ramo secreta ANTES do outbox. Mas a projecao e' o ULTIMO portao antes do canal: mesmo
+  ;; que um tick secreto MALFORMADO carregue identidade (bug upstream), aqui ela e' removida (whitelist).
+  (let [tick-malformado {:tipo "voto.registrado" :ente-id "E"
+                         :payload {:votacao-id "V" :sessao-id "S" :modalidade "secreta"
+                                   :vereador-id "ver-1" :voto "sim"}}
+        [msg]           (projecao/projetar tick-malformado)]
+    (is (nil? (get-in msg [:dados :vereador-id])) "voto SECRETO NUNCA expoe o vereador (sigilo §22.6)")
+    (is (nil? (get-in msg [:dados :voto])) "voto SECRETO NUNCA expoe o voto individual")
+    (is (= {:votacao-id "V" :sessao-id "S" :modalidade "secreta"} (:dados msg))
+        "secreta projeta SO o tick (contador ao vivo): votacao-id, sessao-id, modalidade")))
+
+(deftest encerramento-e-agregado-publico
+  ;; o resultado AGREGADO e' publico MESMO na secreta (so o voto individual e' sigiloso).
+  (let [enc   {:tipo "votacao.encerrada" :ente-id "E"
+               :payload {:votacao-id "V" :sessao-id "S" :resultado "aprovada" :modalidade "secreta"
+                         :total-sim 7 :total-nao 2 :total-abstencao 1 :base-membros 11}}
+        [msg] (projecao/projetar enc)]
+    (is (= "aprovada" (get-in msg [:dados :resultado])) "encerramento carrega o resultado")
+    (is (= 7 (get-in msg [:dados :total-sim])) "encerramento carrega os totais (agregado publico na secreta)")))
+
 ;; ---------- PURO: CanalStore (seq monotonica + replay) ----------
 
 (deftest canal-store-seq-e-replay
