@@ -62,6 +62,28 @@
                        (pauta/criar-pauta! tx {:id (random-uuid) :ente-id ente :sessao-id sessao-id}))
               "segunda pauta na mesma sessao barra (UNIQUE 1:1)"))))))
 
+(deftest garantir-pauta-get-or-create
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [{sid :id} (sessao/agendar! tx {:id (random-uuid) :ente-id ente
+                                             :sessao-legislativa-id (random-uuid) :tipo-sessao "ordinaria"})
+              ;; 1a chamada CRIA a pauta (sessao sem container ainda)
+              p1 (pauta/garantir-pauta! tx {:ente-id ente :sessao-id sid})
+              ;; 2a chamada RE-LE a mesma pauta (idempotente, ON CONFLICT na UNIQUE 1:1)
+              p2 (pauta/garantir-pauta! tx {:ente-id ente :sessao-id sid})]
+          (is (some? (:id p1)) "1a chamada cria e devolve a pauta")
+          (is (= (:id p1) (:id p2)) "2a chamada converge na MESMA pauta (nunca duplica)")
+          (is (= (:id p1) (:id (pauta/buscar-pauta-por-sessao tx ente sid))) "a pauta criada e' a da sessao"))))))
+
+(deftest garantir-pauta-reusa-existente
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [{:keys [sessao-id pauta-id]} (nova-pauta! tx ente)]
+          (is (= pauta-id (:id (pauta/garantir-pauta! tx {:ente-id ente :sessao-id sessao-id})))
+              "pauta ja criada por criar-pauta! e' reusada (nao recria)"))))))
+
 ;; ---------- itens: FK declarativa por tipo + ordem ----------
 
 (deftest adiciona-itens-numera-ordem-e-loga

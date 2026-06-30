@@ -2,7 +2,8 @@
   "Representacao EXTERNA de ENTRADA da sessao (§22.10 wire/in, ADR-0001) — o contrato do corpo de request, em
   tipos JSON (strings). O `adapters/in` valida contra isto e coage p/ o dominio. `:closed true` recusa campos
   extra (defesa de borda); o autor/tenant NAO vem do corpo (vem do `ator` resolvido na auth)."
-  (:require [oplenario.kernel.malli :as km]
+  (:require [clojure.string :as str]
+            [oplenario.kernel.malli :as km]
             [oplenario.sessoes.logic :as logic]))
 
 (def AgendarSessao
@@ -88,3 +89,22 @@
    [:decidido-em :string]
    [:fundamentacao {:optional true} [:maybe :string]]
    [:fala-id {:optional true} [:maybe :string]]])
+
+(def AdicionarItemPauta
+  "Corpo de POST /sessoes/:id/pauta/itens (§22.6 eixo B, pauta viva): adiciona um item a pauta 1:1 da sessao.
+  `fase` (atributo do item) e `tipo-item` validados contra os enums. FK-por-tipo (espelha o `:fn` de
+  models/PautaItem + o CHECK pauta_item_proposicao_coerente da mig 0027, defesa-em-profundidade na borda):
+  'proposicao' EXIGE `proposicao-id` (uuid string) e PROIBE `texto-descricao`; os demais EXIGEM
+  `texto-descricao` nao-vazio (apos trim) e PROIBEM `proposicao-id` — violacao -> 400 na borda, nunca o CHECK
+  -> 500. NAO carrega `ordem` (numerada server-side = max+1) nem autor/tenant/sessao-id. `:closed true`."
+  [:and
+   [:map {:closed true}
+    [:fase (km/enum-de logic/fases-pauta)]
+    [:tipo-item (km/enum-de logic/tipos-item-pauta)]
+    [:proposicao-id {:optional true} [:maybe :string]]
+    [:texto-descricao {:optional true} [:maybe :string]]]
+   [:fn {:error/message "proposicao exige proposicao-id (e sem descricao); demais tipos exigem texto-descricao nao-vazio"}
+    (fn [{:keys [tipo-item proposicao-id texto-descricao]}]
+      (if (logic/item-requer-proposicao? tipo-item)
+        (and (some? proposicao-id) (nil? texto-descricao))
+        (and (nil? proposicao-id) (string? texto-descricao) (not (str/blank? texto-descricao)))))]])
