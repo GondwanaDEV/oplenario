@@ -2,8 +2,10 @@
   "Gate de ENTRADA `wire/in -> models` da sessao (§22.10 adapters/in, ADR-0001 §3) — dividido por DIRECAO (sob
   adapters/in/). Chamado SO pelo diplomat/. Valida e COAGE a representacao externa (JSON: strings) para o
   dominio (uuid/Instant), defendendo a borda (fail-closed). O nucleo (controllers/logic) so ve `models`."
-  (:require [malli.core :as m]
+  (:require [clojure.string :as str]
+            [malli.core :as m]
             [malli.error :as me]
+            [oplenario.sessoes.logic :as logic]
             [oplenario.sessoes.wire.in :as wire])
   (:import (java.time Instant)
            (java.time.format DateTimeParseException)
@@ -57,3 +59,36 @@
      :modalidade            (:modalidade m)
      :agendada-para         (->instante (:agendada-para m) :agendada-para)
      :created-by            (:identidade-id ator)}))
+
+(def ^:private campos-transicao ["para" "motivo" "lock-version"])
+
+(defn transicionar->dominio
+  "Path-param `:id` (sessao, string) + corpo JSON {para, lock-version, motivo?} -> mapa de dominio p/
+  controllers/transicionar-sessao (Mesa de conducao). Coage o uuid (malformado -> 400). Valida na borda
+  (fail-closed -> 400, NUNCA 500 do db): `para` tem de ser um estado CONHECIDO (logic/estados-sessao) — a
+  maquina (transicao VALIDA a partir do estado atual) decide depois no db (-> 409 se proibida); `lock-version`
+  inteiro 0..int4 (teto = int4 da coluna, senao overflow -> 500); `motivo` obrigatorio quando `para` =
+  'nao_realizada'. So le as chaves esperadas (chaves STRING do corpo-json, review W3)."
+  [sessao-id-str json-params]
+  (when-not (map? json-params)
+    (invalido! "corpo deve ser objeto JSON {para, lock-version}" {:campo :corpo}))
+  (let [m      (so-esperados json-params campos-transicao)
+        para   (:para m)
+        motivo (:motivo m)
+        lv     (:lock-version m)]
+    (when-not (contains? logic/estados-sessao para)
+      (invalido! "estado-alvo desconhecido" {:campo :para}))
+    ;; teto ESTRITO < int4-max: o db faz lock_version+1 no CAS — aceitar o proprio MAX_VALUE estouraria o int4
+    ;; (review clojure LOW). A borda casa o range SEGURO da coluna.
+    (when-not (and (integer? lv) (<= 0 lv) (< lv Integer/MAX_VALUE))
+      (invalido! "lock-version ausente ou invalido (inteiro entre 0 e 2147483646)" {:campo :lock-version}))
+    (when (and (= "nao_realizada" para) (str/blank? motivo))
+      (invalido! "transicao p/ 'nao_realizada' exige motivo" {:campo :motivo}))
+    ;; teto de campo livre (defense-in-depth, review sec LOW): motivo vai p/ uma coluna TEXT — barra na borda
+    ;; um string desmesurado de um secretario autenticado (-> 400), sem confiar so no audience.
+    (when (and (string? motivo) (> (count motivo) 2000))
+      (invalido! "motivo longo demais (max 2000)" {:campo :motivo}))
+    {:sessao-id    (->uuid sessao-id-str :id)
+     :para         para
+     :motivo       (when-not (str/blank? motivo) motivo)
+     :lock-version lv}))

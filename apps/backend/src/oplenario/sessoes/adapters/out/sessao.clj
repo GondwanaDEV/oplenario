@@ -43,3 +43,12 @@
   "Recibo de dominio {:id uuid :numero int} -> {:id string :numero-sequencial int} (resposta 201 do POST)."
   [{:keys [id numero]}]
   {:id (->str id) :numero-sequencial numero})
+
+(defn recibo-transicao->wire
+  "Recibo de dominio {:sessao-id uuid :de string :para string} -> TransicaoSessaoOut (validada, resposta 200)."
+  [{:keys [sessao-id de para]}]
+  (let [out {:sessao-id (->str sessao-id) :de de :para para}]
+    (when-not (m/validate wire/TransicaoSessaoOut out)
+      (throw (ex-info "recibo de transicao viola o contrato TransicaoSessaoOut (bug de servidor)"
+                      {:campos (keys (me/humanize (m/explain wire/TransicaoSessaoOut out)))})))
+    out))

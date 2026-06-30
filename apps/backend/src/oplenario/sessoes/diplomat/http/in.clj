@@ -48,6 +48,24 @@
         (http/json-resposta 200 (adapters-out/sessao->wire s))
         (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
 
+(defn- transicionar-handler
+  "POST /sessoes/:id/transicao (Mesa de conducao). adapters/in coage o :id + valida o corpo {para, lock-version,
+  motivo?}; o controller carrega+autoriza a sessao e transiciona (o Repo emite sessao.transicionou na mesma tx);
+  adapters/out projeta o recibo. nil (sessao inexistente) -> 404; transicao invalida pela maquina / lock-stale ->
+  409 (nao 500). 200 (atualiza a sessao existente, nao cria)."
+  [repo-sessoes]
+  (fn [req]
+    (let [ator (:ator req)
+          m    (adapters-in/transicionar->dominio (get-in req [:path-params :id]) (:json-params req))]
+      (try
+        (if-let [recibo (controllers/transicionar-sessao repo-sessoes ator m)]
+          (http/json-resposta 200 (adapters-out/recibo-transicao->wire recibo))
+          (http/json-resposta 404 {:erro "sessao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/transicao (:tipo (ex-data e)))
+            (http/json-resposta 409 {:erro "transicao de estado invalida ou lock-version desatualizado"})
+            (throw e)))))))
+
 (defn- pauta-handler
   "GET /sessoes/:id/pauta. adapters/in coage o :id; controller carrega+autoriza a sessao e le a pauta viva;
   adapters/out projeta. nil (sessao inexistente) -> 404."
@@ -139,6 +157,9 @@
     ["/gravacoes" :post [auth (it/exige-papel "secretario") (ingestao-handler repo-sessoes objeto-store)]
      :route-name :sessoes/ingerir-gravacao]
     ["/sessoes/:id" :get  [auth (buscar-handler repo-sessoes)] :route-name :sessoes/buscar]
+    ["/sessoes/:id/transicao" :post
+     [auth (it/exige-papel "secretario") it/corpo-json (transicionar-handler repo-sessoes)]
+     :route-name :sessoes/transicionar]
     ["/sessoes/:id/pauta" :get [auth (pauta-handler repo-sessoes)] :route-name :sessoes/pauta]
     ["/sessoes/:id/gravacao" :get [auth (listar-gravacoes-handler repo-sessoes)] :route-name :sessoes/listar-gravacoes]
     ["/sessoes/:id/gravacao/:seg-id/vincular" :post
