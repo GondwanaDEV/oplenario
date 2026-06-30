@@ -51,6 +51,12 @@
      + audita a avaliacao (append-only), tudo na MESMA tx. `m` = {:regra (envelope) :reg-ver :objeto-tipo
      :objeto-id :amb :agora (LocalDate) :origem (evento|sweep|sob_demanda) :feriados-jurisdicao?}. Devolve
      {:obrigacao <persistida|nil> :avaliacao {:id :veredito :obrigacao-id}}.")
+  (varrer-vencimentos! [this ente-id hoje]
+    "Sweep de vencimento (§22.7.7 S1): transiciona pendente->vencida as obrigacoes abertas cujo prazo
+     passou em `hoje` (LocalDate) + audita cada (origem='sweep'). PURO por DATA — nao re-roda o motor (o
+     vencimento e' a unica transicao que evento nao dispara; a obrigacao segue nao_conforme ate ser
+     cumprida por evento). Idempotente (so move pendente; ja-vencida nao re-transiciona). Devolve
+     [{:id :de :para}...] das obrigacoes transicionadas.")
   (buscar-obrigacao [this ente-id id])
   (obrigacoes-do-objeto [this ente-id objeto-tipo objeto-id])
   (avaliacoes-da-obrigacao [this ente-id obrigacao-id]))
@@ -84,6 +90,26 @@
                                   :veredito veredito :severidade severidade
                                   :origem-avaliacao origem :detalhe (:detalhe aval-motor)})
           {:obrigacao obrig :avaliacao {:id aval-id :veredito veredito :obrigacao-id (:id obrig)}}))))
+  (varrer-vencimentos! [this ente-id hoje]
+    (transacao this ente-id
+      (fn [tx]
+        ;; o SQL ja' devolve so as candidatas (pendente + estritamente overdue). Por candidata:
+        ;;  (1) carrega a ultima avaliacao p/ a severidade+registry da regra ANTES de transicionar — se
+        ;;      ausente (anomalia: obrigacao sem avaliacao, viola o invariante F5.1), PULA a obrigacao
+        ;;      (isola a anomalia: nao bloqueia o sweep do ente nem cria transicao sem prova — review M1);
+        ;;  (2) CAS `vencer-se-pendente!`: so audita se DE FATO transicionou (nil = corrida perdida p/ um
+        ;;      cumprimento concorrente -> sem auditoria espuria; review CRITICO C1 / clj MAJOR-2).
+        (->> (db-obr/pendentes-vencidas-ate tx ente-id hoje)
+             (keep (fn [o]
+                     (when-let [ult (db-aval/ultima-da-obrigacao tx ente-id (:id o))]
+                       (when (db-obr/vencer-se-pendente! tx ente-id (:id o))
+                         (db-aval/registrar! tx {:id (ids/novo-id) :ente-id ente-id :obrigacao-id (:id o)
+                                                 :template-chave (:template-chave o)
+                                                 :registry-versao-ref (:registry-versao-ref ult)
+                                                 :veredito "nao_conforme" :severidade (or (:severidade ult) "aviso")
+                                                 :origem-avaliacao "sweep" :detalhe "vencimento detectado por sweep"})
+                         {:id (:id o) :de "pendente" :para "vencida"}))))   ; pendente->vencida: a unica transicao deste sweep
+             vec))))
   (buscar-obrigacao [this ente-id id] (transacao this ente-id #(db-obr/buscar % ente-id id)))
   (obrigacoes-do-objeto [this ente-id objeto-tipo objeto-id]
     (transacao this ente-id #(db-obr/listar-do-objeto % ente-id objeto-tipo objeto-id)))

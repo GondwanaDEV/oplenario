@@ -75,17 +75,29 @@
                   :where [:and [:= :ente_id ente-id] [:= :objeto_tipo objeto-tipo] [:= :objeto_id objeto-id]]
                   :order-by [[:template_chave :asc]]}))))
 
-(defn abertas-ate
-  "Sweep (§22.7.7): obrigacoes ABERTAS (pendente|vencida) que vencem ate `data` (inclusive), por ente,
-  em ordem de vencimento (usa o indice parcial idx_prazo_dominio_ativo_sweep). Insumo do loop de sweep (F5.2)."
+(defn pendentes-vencidas-ate
+  "Sweep de vencimento (§22.7.7): obrigacoes PENDENTE estritamente vencidas em `data` (vence_em < data —
+  estrito: o proprio dia do vencimento NAO vence), por ente, em ordem de vencimento. So `pendente` (a
+  unica fase candidata a vencer; ja-vencida nao re-transiciona). `[:inline ...]` p/ o generic plan do PG
+  poder usar o indice parcial idx_prazo_dominio_ativo_sweep (bind param opaco cairia em Seq Scan)."
   [tx ente-id data]
   (comum/linhas->kebab
    (jdbc/execute! tx
      (sql/format {:select cols :from [:compliance.prazo_dominio_ativo]
                   :where [:and [:= :ente_id ente-id]
-                          ;; literais inline (enum fixo de codigo, nunca input): o generic plan do PG
-                          ;; precisa provar que o predicado implica o do indice parcial p/ usa-lo —
-                          ;; com bind params opacos cairia em Seq Scan (review db MAJOR-1).
-                          [:in :estado [[:inline "pendente"] [:inline "vencida"]]]
-                          [:<= :vence_em data]]
+                          [:= :estado [:inline "pendente"]]
+                          [:< :vence_em data]]
                   :order-by [[:vence_em :asc] [:id :asc]]}))))
+
+(defn vencer-se-pendente!
+  "CAS de vencimento: transiciona a obrigacao p/ 'vencida' SOMENTE se ainda esta 'pendente' (WHERE
+  estado='pendente'). Devolve {:id} se transicionou, ou nil se a corrida foi perdida (um `avaliar-obrigacao!`
+  concorrente ja a moveu p/ cumprida/vencida entre o read do sweep e este UPDATE). Mata, na borda do SQL,
+  o clobber 'cumprida'->'vencida' e a auditoria duplicada (review db CRITICO C1 / clj MAJOR-2)."
+  [tx ente-id id]
+  (comum/linha->kebab
+   (jdbc/execute-one! tx
+     (sql/format {:update :compliance.prazo_dominio_ativo
+                  :set {:estado [:inline "vencida"] :atualizado_em [:now]}
+                  :where [:and [:= :ente_id ente-id] [:= :id id] [:= :estado [:inline "pendente"]]]
+                  :returning [:id]}))))

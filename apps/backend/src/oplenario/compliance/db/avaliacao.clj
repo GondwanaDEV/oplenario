@@ -38,6 +38,20 @@
                   :where [:and [:= :ente_id ente-id] [:= :obrigacao_id obrigacao-id]]
                   :order-by [[:avaliado_em :asc] [:id :asc]]}))))
 
+(defn ultima-da-obrigacao
+  "A avaliacao mais recente de UMA obrigacao (nil se ainda nao avaliada). O sweep a usa p/ carregar a
+  `severidade` da regra + o `registry_versao_ref` na audita do vencimento (a obrigacao nao guarda esses
+  campos; a ultima avaliacao e' a fonte fiel). NOTA: o tiebreaker `id DESC` (UUID aleatorio) e' arbitrario
+  num empate de `avaliado_em` (= now() = inicio da tx, constante dentro de uma tx); irrelevante aqui pois
+  esses campos da regra sao estaveis entre avaliacoes proximas. Backward index scan no idx (..., avaliado_em)."
+  [tx ente-id obrigacao-id]
+  {:pre [(some? obrigacao-id)]}
+  (comum/linha->kebab
+   (jdbc/execute-one! tx
+     (sql/format {:select cols :from [:compliance.compliance_avaliacao]
+                  :where [:and [:= :ente_id ente-id] [:= :obrigacao_id obrigacao-id]]
+                  :order-by [[:avaliado_em :desc] [:id :desc]] :limit 1}))))
+
 (defn ultima-do-template
   "A avaliacao mais recente de um template (regra continua / painel). `obrigacao_id` pode ser NULL."
   [tx ente-id template-chave]
