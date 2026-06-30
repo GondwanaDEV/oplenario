@@ -18,11 +18,15 @@
 (defn canal-plenario [sessao-id] (str "sessao/" sessao-id "/plenario"))
 
 (def tipos-plenario
-  "FONTE UNICA dos tipos de evento de sessao que viram mensagem do painel ao vivo (`consumer/tipos-consumidos`
-  deriva DAQUI — evita drift entre roteamento e registro no bus). `gravacao.segmento-captado` NAO entra (e'
-  fronteira core->IA, nao SSE) — roteia p/ []."
+  "FONTE UNICA dos tipos de evento que viram mensagem do painel ao vivo (`consumer/tipos-consumidos`
+  deriva DAQUI — evita drift entre roteamento e registro no bus). Cobre a TRIADE do hemiciclo: conducao da
+  sessao + presenca/quorum, tribuna (fala/inscricao) e o PLACAR DE VOTACAO (votacao.aberta/voto.registrado/
+  votacao.encerrada — emitidos pelo legislativo, §22.6 eixo G). `gravacao.segmento-captado` NAO entra (e'
+  fronteira core->IA, nao SSE) — roteia p/ []. SIGILO §22.6: a projecao (projecao.clj) e' o ultimo portao
+  do voto secreto — o `voto.registrado` secreto vira so contador, nunca identidade."
   #{"sessao.transicionou" "presenca.registrada" "fala.iniciada" "fala.encerrada" "fala.cronometro"
-    "inscricao.registrada" "inscricao.desistida"})
+    "inscricao.registrada" "inscricao.desistida"
+    "votacao.aberta" "voto.registrado" "votacao.encerrada"})
 
 (defn rotas-do-evento
   "Canais que um evento de dominio alimenta. Por ora so o canal plenario da sessao (painel ao vivo); devolve []
