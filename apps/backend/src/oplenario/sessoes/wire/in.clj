@@ -25,3 +25,66 @@
    [:tipo (km/enum-de logic/tipos-evento-presenca)]
    [:modalidade (km/enum-de logic/modalidades-presenca)]
    [:ocorrido-em :string]])
+
+(def InscreverOrador
+  "Corpo de POST /sessoes/:id/inscricoes (§22.6 eixo F, tribuna camada de intencao). `vereador-id` = uuid
+  (string); `origem-inscricao` discrimina o caminho (app/secretaria/pedido/autoria) — dado descritivo da fila,
+  validado contra o enum (NAO forcado: sem implicacao de precedencia, diferente da `fonte` de presenca);
+  `fase` reusa as fases-pauta (a tribuna e' subordinada a fase); `proposicao-ref-id` opcional (uuid). NAO carrega
+  autor/tenant (vem do ator) nem `ordem` (numerada server-side). `:closed true` recusa campos extra."
+  [:map {:closed true}
+   [:vereador-id :string]
+   [:origem-inscricao (km/enum-de logic/origens-inscricao)]
+   [:fase (km/enum-de logic/fases-pauta)]
+   [:proposicao-ref-id {:optional true} [:maybe :string]]])
+
+(def IniciarFala
+  "Corpo de POST /sessoes/:id/falas (§22.6 eixo F, tribuna camada de EXECUCAO). `orador-id` = uuid (string);
+  `tipo-fala` (principal/aparte/pela_ordem/...) validado contra o enum; `fase` reusa as fases-pauta;
+  `iniciou-em` = instante de DOMINIO (ISO-8601 string) em que a fala comecou — OBRIGATORIO (como `ocorrido-em`
+  da presenca: o instante de dominio e' dado, nao conveniencia de servidor). `inscricao-id` (a fala que cumpre
+  uma inscricao), `fala-pai-id` (aparte de uma fala-mae) e `proposicao-ref-id` sao opcionais (uuid). NAO carrega
+  autor/tenant (vem do ator). `:closed true` recusa campos extra."
+  [:map {:closed true}
+   [:orador-id :string]
+   [:tipo-fala (km/enum-de logic/tipos-fala)]
+   [:fase (km/enum-de logic/fases-pauta)]
+   [:iniciou-em :string]
+   [:inscricao-id {:optional true} [:maybe :string]]
+   [:fala-pai-id {:optional true} [:maybe :string]]
+   [:proposicao-ref-id {:optional true} [:maybe :string]]])
+
+(def RegistrarEventoCronometro
+  "Corpo de POST /sessoes/:id/falas/:fala-id/cronometro (§22.6 eixo F). `tipo` so os eventos MANUAIS que a Mesa
+  registra (pausada/retomada/aparte_concedido/tempo_adicional_concedido — iniciada/encerrada sao do ciclo da
+  fala, internos); `ocorrido-em` = instante de dominio (ISO-8601 string, OBRIGATORIO); `segundos-adicionais`
+  opcional (int). A COERENCIA tipo<->segundos (tempo_adicional EXIGE >0; os demais PROIBEM) e' validada no
+  adapters/in (fail-closed -> 400, nunca o CHECK do banco -> 500). `:closed true` recusa campos extra."
+  [:map {:closed true}
+   [:tipo (km/enum-de logic/tipos-evento-cronometro-manual)]
+   [:ocorrido-em :string]
+   [:segundos-adicionais {:optional true} [:maybe :int]]])
+
+(def EncerrarFala
+  "Corpo de POST /sessoes/:id/falas/:fala-id/encerrar (§22.6 eixo F). `encerrou-em` = instante de dominio
+  (ISO-8601 string, OBRIGATORIO) em que a fala terminou — o motor COMPUTA o tempo efetivo dos eventos do
+  cronometro ate aqui; `lock-version` = inteiro 0..int4 (CAS otimista; ausente/fora do range -> 400 fail-closed
+  no adapter, NUNCA 500 do CHECK do banco). NAO carrega o tempo (computado server-side). `:closed true`."
+  [:map {:closed true}
+   [:encerrou-em :string]
+   [:lock-version :int]])
+
+(def RegistrarDecisaoMesa
+  "Corpo de POST /sessoes/:id/decisoes-mesa (§22.6 eixo F, tribuna): a DECISAO DA MESA sobre questao de ordem
+  (ato regimental p/ a ata, APPEND-ONLY). `questao`/`decisao` = texto OBRIGATORIO e nao-vazio (apos trim — o
+  adapters/in valida -> 400, nunca o CHECK da migration -> 500); `fundamentacao` opcional (se presente, nao-vazia
+  — campo de peso juridico); `decidido-em` = instante de DOMINIO (ISO-8601 string, OBRIGATORIO) em que o
+  presidente decidiu; `fala-id` opcional (uuid — a questao pode ser decidida sem uma fala registrada). NAO carrega
+  `presidente-id` (INJETADO do ator no servidor — um cliente nao forja quem decidiu) nem autor/tenant/sessao-id.
+  `:closed true` recusa campos extra (defesa de borda)."
+  [:map {:closed true}
+   [:questao :string]
+   [:decisao :string]
+   [:decidido-em :string]
+   [:fundamentacao {:optional true} [:maybe :string]]
+   [:fala-id {:optional true} [:maybe :string]]])

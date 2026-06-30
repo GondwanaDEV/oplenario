@@ -71,20 +71,22 @@
   [tx {:keys [ente-id id lock-version updated-by]}]
   (when (nil? updated-by)
     (throw (ex-info "desistir!: updated-by e' obrigatorio (trilha de quem registrou a desistencia)" {:id id})))
+  ;; :tipo :conflito/inscricao em TODOS os modos de falha (inexistente / lock-stale / ja-desistiu): a borda HTTP
+  ;; os mapeia a 409 (espelha :conflito/transicao da sessao). Sem o tag, virariam 500 (review da borda F4 eixo A/G).
   (let [{atual :estado db-lock :lock-version} (estado+lock tx ente-id id)]
     (when (nil? atual)
-      (throw (ex-info "desistir!: inscricao inexistente" {:id id :ente-id ente-id})))
+      (throw (ex-info "desistir!: inscricao inexistente" {:tipo :conflito/inscricao :id id :ente-id ente-id})))
     (when (not= db-lock lock-version)
-      (throw (ex-info "desistir!: conflito de lock_version" {:id id :esperado lock-version :atual db-lock})))
+      (throw (ex-info "desistir!: conflito de lock_version" {:tipo :conflito/inscricao :id id :esperado lock-version :atual db-lock})))
     (when-not (logic/transicao-inscricao-valida? atual "desistencia")
-      (throw (ex-info "desistir!: transicao de estado invalida" {:id id :de atual :para "desistencia"})))
+      (throw (ex-info "desistir!: transicao de estado invalida" {:tipo :conflito/inscricao :id id :de atual :para "desistencia"})))
     (let [r (jdbc/execute-one! tx
               (sql/format {:update :sessoes.inscricao_oradores
                            :set {:estado "desistencia" :updated_by updated-by :atualizado_em [:now]
                                  :lock_version [:+ :lock_version 1]}
                            :where [:and [:= :ente_id ente-id] [:= :id id] [:= :lock_version lock-version]]}))]
       (when (zero? (:next.jdbc/update-count r 0))
-        (throw (ex-info "desistir!: conflito de lock_version ou inexistente" {:id id :lock-version lock-version})))
+        (throw (ex-info "desistir!: conflito de lock_version ou inexistente" {:tipo :conflito/inscricao :id id :lock-version lock-version})))
       {:de atual :para "desistencia"})))
 
 ;; ---------- fala_executada + cronometro (execucao, F4.5b) ----------
@@ -176,7 +178,9 @@
 
 (defn- fala-para-encerrar
   "Le a fala p/ encerrar (FOR UPDATE serializa): iniciou_em, encerrou_em, lock. Valida existencia, lock e que a
-  fala AINDA esta em curso (encerrou_em IS NULL) — encerrar duas vezes corromperia o tempo computado."
+  fala AINDA esta em curso (encerrou_em IS NULL) — encerrar duas vezes corromperia o tempo computado.
+  :tipo :conflito/fala em TODOS os modos de falha (inexistente / lock-stale / ja-encerrada): a borda HTTP os
+  mapeia a 409 (espelha :conflito/inscricao da desistencia). Sem o tag, virariam 500 (review da borda F4 eixo F)."
   [tx ente-id id lock-version]
   (let [{:keys [iniciou-em encerrou-em] db-lock :lock-version}
         (-> (jdbc/execute-one! tx
@@ -184,11 +188,11 @@
                            :where [:and [:= :ente_id ente-id] [:= :id id]] :for :update}))
             comum/linha->kebab)]
     (when (nil? iniciou-em)
-      (throw (ex-info "encerrar-fala!: fala inexistente" {:id id :ente-id ente-id})))
+      (throw (ex-info "encerrar-fala!: fala inexistente" {:tipo :conflito/fala :id id :ente-id ente-id})))
     (when (not= db-lock lock-version)
-      (throw (ex-info "encerrar-fala!: conflito de lock_version" {:id id :esperado lock-version :atual db-lock})))
+      (throw (ex-info "encerrar-fala!: conflito de lock_version" {:tipo :conflito/fala :id id :esperado lock-version :atual db-lock})))
     (when (some? encerrou-em)
-      (throw (ex-info "encerrar-fala!: fala ja encerrada" {:id id})))
+      (throw (ex-info "encerrar-fala!: fala ja encerrada" {:tipo :conflito/fala :id id})))
     iniciou-em))
 
 (defn encerrar-fala!
@@ -208,7 +212,7 @@
                          :where [:and [:= :ente_id ente-id] [:= :id id] [:= :lock_version lock-version]
                                  [:= :encerrou_em nil]]}))]
     (when (zero? (:next.jdbc/update-count r 0))
-      (throw (ex-info "encerrar-fala!: conflito de lock_version, ja encerrada ou inexistente" {:id id})))
+      (throw (ex-info "encerrar-fala!: conflito de lock_version, ja encerrada ou inexistente" {:tipo :conflito/fala :id id})))
     (logar-cronometro! tx {:ente-id ente-id :fala-id id :tipo "encerrada" :ocorrido-em encerrou-em
                            :created-by updated-by})
     {:id id :tempo-efetivamente-usado-segundos tempo}))

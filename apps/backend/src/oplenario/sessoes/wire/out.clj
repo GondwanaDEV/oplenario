@@ -41,6 +41,46 @@
   [:map {:closed true}
    [:id :string]])
 
+(def InscricaoReciboOut
+  "Recibo da inscricao de orador (resposta 201 de POST /sessoes/:id/inscricoes). `id` da inscricao + `ordem` na
+  fila (por sessao+fase). O canal SSE ja recebeu inscricao.registrada; este recibo confirma ao chamador."
+  [:map {:closed true}
+   [:id :string]
+   [:ordem :int]])
+
+(def DesistenciaInscricaoOut
+  "Recibo da desistencia de inscricao (resposta 200 de POST /sessoes/:id/inscricoes/:insc-id/desistir). Carrega
+  a `inscricao-id` + o par `de`/`para` (espelha o recibo de transicao da sessao). NAO expoe o lock-version."
+  [:map {:closed true}
+   [:inscricao-id :string]
+   [:de (km/enum-de logic/estados-inscricao)]
+   [:para (km/enum-de logic/estados-inscricao)]])
+
+(def FalaReciboOut
+  "Recibo do inicio de fala (resposta 201 de POST /sessoes/:id/falas). So a `fala-id` criada — o canal SSE ja
+  recebeu fala.iniciada; este recibo confirma ao chamador a fala a cronometrar/encerrar a seguir."
+  [:map {:closed true}
+   [:fala-id :string]])
+
+(def CronometroEventoReciboOut
+  "Recibo do registro de evento do cronometro (resposta 201 de .../cronometro). So o `id` do evento append-only
+  gravado — o canal SSE ja recebeu fala.cronometro p/ atualizar o relogio ao vivo; este recibo confirma."
+  [:map {:closed true}
+   [:id :string]])
+
+(def FalaEncerradaOut
+  "Recibo do encerramento de fala (resposta 200 de .../encerrar). Carrega a `fala-id` + o `tempo-segundos`
+  EFETIVAMENTE usado (computado dos eventos do cronometro, projecao). NAO expoe o lock-version."
+  [:map {:closed true}
+   [:fala-id :string]
+   [:tempo-segundos :int]])
+
+(def DecisaoMesaReciboOut
+  "Recibo do registro da decisao da mesa (resposta 201 de POST /sessoes/:id/decisoes-mesa). So o `id` da decisao
+  append-only gravada — confirma ao chamador o ato lavrado p/ a ata. NAO expoe internos."
+  [:map {:closed true}
+   [:id :string]])
+
 (def PautaItemOut
   "Projecao publica de um item ATIVO da pauta (§22.6 eixo B). NAO expoe internos (ente-id, pauta-sessao-id,
   lock-version, ativo). FK-por-tipo: 'proposicao' carrega proposicao-id (string); os demais, texto-descricao."
