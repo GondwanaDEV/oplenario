@@ -67,7 +67,7 @@
   (texto-vigente-parecer [this ente-id parecer-id])
   (registrar-voto-divergente! [this ente-id m] "Registra voto vencido (append-only puro).")
   (votos-divergentes-do-parecer [this ente-id parecer-id])
-  ;; eixo G — votacao (eventos Votacao*/real-time = carry F4)
+  ;; eixo G — votacao (emite eventos votacao.aberta/voto.registrado/votacao.encerrada = fonte do placar ao vivo, F4)
   (abrir-votacao! [this ente-id m] "Abre votacao 'aberta' sobre objeto polimorfico.")
   (registrar-voto! [this ente-id m] "Voto nominal atribuido (append-only; UNIQUE por vereador).")
   (registrar-voto-secreto! [this ente-id m] "Voto secreto anonimo (sem vereador_id).")
@@ -177,11 +177,64 @@
   (texto-vigente-parecer [this ente-id pid] (transacao this ente-id #(parecer-texto/vigente % ente-id pid)))
   (registrar-voto-divergente! [this ente-id m] (transacao this ente-id #(parecer-voto/registrar! % (assoc m :ente-id ente-id))))
   (votos-divergentes-do-parecer [this ente-id pid] (transacao this ente-id #(parecer-voto/listar-por-parecer % ente-id pid)))
-  ;; eixo G / F3.7 — votacao. Sem emissao de evento aqui (Votacao*/real-time = carry F4).
-  (abrir-votacao! [this ente-id m] (transacao this ente-id #(votacao/abrir! % (assoc m :ente-id ente-id))))
-  (registrar-voto! [this ente-id m] (transacao this ente-id #(votacao/registrar-voto! % (assoc m :ente-id ente-id))))
-  (registrar-voto-secreto! [this ente-id m] (transacao this ente-id #(votacao/registrar-voto-secreto! % (assoc m :ente-id ente-id))))
-  (encerrar-votacao! [this ente-id m] (transacao this ente-id #(votacao/encerrar! % (assoc m :ente-id ente-id))))
+  ;; eixo G / carry F4 — votacao. Compoe o ato + a emissao do evento de TEMPO REAL na MESMA tx do tenant
+  ;; (atomicidade outbox-com-o-ato §22.9 E2; fonte do placar ao vivo, §22.6 eixo G). So emite quando ha
+  ;; sessao-id: a votacao em plenario tem canal (`sessao/{id}/plenario`); o ato administrativo (ex.: apreciacao
+  ;; de veto fora de sessao) nao tem canal p/ rotear -> sem evento. §22.6 SIGILO: o voto secreto e' TICK.
+  (abrir-votacao! [this ente-id m]
+    (transacao this ente-id
+      (fn [tx]
+        (let [r (votacao/abrir! tx (assoc m :ente-id ente-id))]
+          (when (:sessao-id m)
+            (producers/emitir-votacao-aberta! bus tx ente-id
+              (cond-> {:votacao-id (:id m) :sessao-id (:sessao-id m) :objeto-tipo (:objeto-tipo m)
+                       :objeto-id (:objeto-id m) :modalidade (:modalidade m) :quorum-tipo (:quorum-tipo m)}
+                (:pauta-item-id m) (assoc :pauta-item-id (:pauta-item-id m)))))
+          r))))
+  ;; GUARD DE MODALIDADE (defesa-em-profundidade do SIGILO §22.6): o DB nao amarra `votos` a
+  ;; `votacoes.modalidade` — chamar registrar-voto! (nominal) sobre uma votacao SECRETA vazaria a identidade
+  ;; no outbox. Busca a votacao ANTES de escrever, recusa fail-loud o cruzamento de modalidade (a tx rola
+  ;; atras) e REUSA o `v` p/ o sessao-id do roteamento (uma unica leitura).
+  (registrar-voto! [this ente-id m]
+    (transacao this ente-id
+      (fn [tx]
+        (let [v (votacao/buscar tx ente-id (:votacao-id m))]
+          (when (not= "nominal" (:modalidade v))
+            (throw (ex-info "registrar-voto!: votacao nao e' nominal — use registrar-voto-secreto!"
+                            {:erro :modalidade-mismatch :votacao-id (:votacao-id m) :modalidade (:modalidade v)})))
+          (let [r (votacao/registrar-voto! tx (assoc m :ente-id ente-id))]
+            (when (:sessao-id v)
+              (producers/emitir-voto-registrado! bus tx ente-id
+                {:votacao-id (:votacao-id m) :sessao-id (:sessao-id v) :modalidade "nominal"
+                 :vereador-id (:vereador-id m) :voto (:voto m)}))
+            r)))))
+  (registrar-voto-secreto! [this ente-id m]
+    (transacao this ente-id
+      (fn [tx]
+        (let [v (votacao/buscar tx ente-id (:votacao-id m))]
+          (when (not= "secreta" (:modalidade v))
+            (throw (ex-info "registrar-voto-secreto!: votacao nao e' secreta — use registrar-voto!"
+                            {:erro :modalidade-mismatch :votacao-id (:votacao-id m) :modalidade (:modalidade v)})))
+          (let [r (votacao/registrar-voto-secreto! tx (assoc m :ente-id ente-id))]
+            (when (:sessao-id v)
+              ;; §22.6 SIGILO: tick sem identidade nem valor do voto (so o contador ao vivo).
+              (producers/emitir-voto-registrado! bus tx ente-id
+                {:votacao-id (:votacao-id m) :sessao-id (:sessao-id v) :modalidade "secreta"}))
+            r)))))
+  (encerrar-votacao! [this ente-id m]
+    (transacao this ente-id
+      (fn [tx]
+        (let [r (votacao/encerrar! tx (assoc m :ente-id ente-id))
+              v (votacao/buscar tx ente-id (:id m))]  ; snapshot persistido: sessao-id + totais + resultado
+          (when (:sessao-id v)
+            (producers/emitir-votacao-encerrada! bus tx ente-id
+              (cond-> {:votacao-id (:id m) :sessao-id (:sessao-id v) :resultado (:resultado v)
+                       :modalidade (:modalidade v)}
+                (some? (:total-sim v))       (assoc :total-sim (:total-sim v))
+                (some? (:total-nao v))       (assoc :total-nao (:total-nao v))
+                (some? (:total-abstencao v)) (assoc :total-abstencao (:total-abstencao v))
+                (some? (:base-membros v))    (assoc :base-membros (:base-membros v)))))
+          r))))
   (anular-votacao! [this ente-id m] (transacao this ente-id #(votacao/anular! % (assoc m :ente-id ente-id))))
   (buscar-votacao [this ente-id id] (transacao this ente-id #(votacao/buscar % ente-id id)))
   (votos-da-votacao [this ente-id vid] (transacao this ente-id #(votacao/votos-da-votacao % ente-id vid)))

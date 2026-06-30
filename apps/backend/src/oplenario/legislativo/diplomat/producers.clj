@@ -5,7 +5,8 @@
   tenant (§3-bis). A vocabulario/contrato do evento mora em events/; aqui e' so o ATO de emitir."
   (:require [oplenario.kernel.eventos :as eventos]
             [oplenario.legislativo.events.parecer :as ev-parecer]
-            [oplenario.legislativo.events.proposicao :as ev]))
+            [oplenario.legislativo.events.proposicao :as ev]
+            [oplenario.legislativo.events.votacao :as ev-votacao]))
 
 (defn emitir-transicionou!
   "Emite `proposicao.transicionou` no `bus` DENTRO da `tx` corrente. `payload` casa events/TransicionouPayload."
@@ -17,3 +18,21 @@
   events.parecer/TransicionouPayload."
   [bus tx ente-id payload]
   (eventos/emitir! bus tx (ev-parecer/transicionou ente-id payload)))
+
+;; --- eixo G / carry F4 — votacao (fonte do placar ao vivo, §22.6 eixo G). ---
+
+(defn emitir-votacao-aberta!
+  "Emite `votacao.aberta` no `bus` DENTRO da `tx` corrente. `payload` casa events.votacao/AbertaPayload."
+  [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-votacao/aberta ente-id payload)))
+
+(defn emitir-voto-registrado!
+  "Emite `voto.registrado` no `bus` DENTRO da `tx` corrente. `payload` casa events.votacao/VotoRegistradoPayload
+  (uniao discriminada: nominal carrega vereador/voto; secreta e' tick — sigilo §22.6)."
+  [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-votacao/voto-registrado ente-id payload)))
+
+(defn emitir-votacao-encerrada!
+  "Emite `votacao.encerrada` no `bus` DENTRO da `tx` corrente. `payload` casa events.votacao/EncerradaPayload."
+  [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-votacao/encerrada ente-id payload)))
