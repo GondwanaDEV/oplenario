@@ -44,7 +44,7 @@
   (decidir-justificativa! [this ente-id m] "aprovada|indeferida (terminal) via maquina + CAS.")
   ;; §22.6 eixo D — gravacao (audio/video)
   (registrar-segmento! [this ente-id m] "Grava segmento de gravacao (captura/ingestao); sessao_id opcional (Opcao A).")
-  (vincular-segmento! [this ente-id m] "Vincula um segmento a sessao (uma-vez, CAS).")
+  (vincular-segmento! [this ente-id m] "Vincula um segmento a sessao (uma-vez, CAS). `forcar-acesso-restrito` (sigilo §22.6) eleva acesso_restrito; emite gravacao.segmento-vinculado (core->IA) com o sigilo definitivo, atomico.")
   (buscar-segmento [this ente-id id])
   (listar-segmentos-da-sessao [this ente-id sessao-id] "Segmentos da sessao em ordem cronologica (read-model).")
   ;; §22.6 eixo F — tribuna: inscricao de oradores (intencao)
@@ -120,7 +120,17 @@
                      :fonte-ingestao (:fonte-ingestao m) :acesso-restrito (boolean (:acesso-restrito m))}
               (:sessao-id m) (assoc :sessao-id (:sessao-id m))))
           r))))
-  (vincular-segmento! [this ente-id m] (transacao this ente-id #(gravacao/vincular-segmento! % (assoc m :ente-id ente-id))))
+  (vincular-segmento! [this ente-id m]
+    (transacao this ente-id
+      (fn [tx]
+        (let [r   (gravacao/vincular-segmento! tx (assoc m :ente-id ente-id))
+              ;; le o estado pos-vinculo p/ o evento carregar o acesso-restrito DEFINITIVO (re-derivado p/
+              ;; sessao secreta) — a IA reconcilia o sigilo por este evento, nao pelo captado (que no fluxo
+              ;; Opcao A pode ter saido com acesso-restrito=false). Mesma tx do ato (atomicidade §22.9 E2).
+              seg (gravacao/buscar tx ente-id (:id m))]
+          (producers/emitir-gravacao-segmento-vinculado! bus tx ente-id
+            {:segmento-id (:id m) :sessao-id (:sessao-id m) :acesso-restrito (boolean (:acesso-restrito seg))})
+          r))))
   (buscar-segmento [this ente-id id] (transacao this ente-id #(gravacao/buscar % ente-id id)))
   (listar-segmentos-da-sessao [this ente-id sessao-id] (transacao this ente-id #(gravacao/listar-segmentos-da-sessao % ente-id sessao-id)))
   (inscrever! [this ente-id m]

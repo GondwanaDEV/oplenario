@@ -124,3 +124,29 @@
       (is (= 1 (count evs)) "gravacao.segmento-captado emitido (fronteira core->IA)")
       (is (re-find #"s3://gravacoes/seg.mkv" (:payload (first evs))) "carrega o container bruto p/ a IA")
       (is (re-find #"gravacao_local_pos_sessao" (:payload (first evs))) "carrega a fonte de ingestao"))))
+
+;; ---------- gravacao.segmento-vinculado (re-notifica o sigilo a IA no vinculo Opcao A) ----------
+
+(deftest vinculo-de-segmento-emite-evento-com-sigilo-definitivo
+  ;; Opcao A: o segmento e' captado SEM sessao com acesso-restrito=false (captado sai assim a IA). Ao vincular a
+  ;; uma sessao SECRETA, o servidor forca acesso_restrito=true E re-notifica a IA via gravacao.segmento-vinculado
+  ;; carregando o sigilo DEFINITIVO — senao a IA transcreveria audio sigiloso sem saber (review clojure MAJOR).
+  (let [ente (random-uuid)
+        sid  (:id (repo/agendar-sessao! *repo* ente {:id (random-uuid) :sessao-legislativa-id (random-uuid)
+                                                     :tipo-sessao "secreta" :modalidade "presencial"}))
+        gid  (random-uuid)]
+    (repo/registrar-segmento! *repo* ente {:id gid :iniciou-em t0 :encerrou-em (mais t0 300)
+                                           :motivo-inicio "inicio_sessao" :motivo-fim "fim_sessao"
+                                           :container-bruto-uri "s3://gravacoes/seg.mkv"
+                                           :fonte-ingestao "gravacao_local_pos_sessao"
+                                           :acesso-restrito false :created-by (random-uuid)})
+    (is (empty? (eventos-por-tipo ente "gravacao.segmento-vinculado")) "nada antes do vinculo")
+    (repo/vincular-segmento! *repo* ente {:id gid :sessao-id sid :lock-version 0
+                                          :updated-by (random-uuid) :forcar-acesso-restrito true})
+    (let [evs (eventos-por-tipo ente "gravacao.segmento-vinculado")]
+      (is (= 1 (count evs)) "gravacao.segmento-vinculado emitido (core->IA) na MESMA tx do vinculo")
+      (let [pl (:payload (first evs))]
+        (is (re-find (re-pattern (str sid)) pl) "carrega a sessao-id agora vinculada")
+        (is (re-find (re-pattern (str gid)) pl) "carrega o segmento-id")
+        (is (re-find #"\"acesso-restrito\":\s*true" pl)
+            "carrega o acesso-restrito DEFINITIVO (re-derivado true p/ sessao secreta)")))))

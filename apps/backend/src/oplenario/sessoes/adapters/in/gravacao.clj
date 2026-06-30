@@ -46,3 +46,20 @@
      :encerrou-em     (->instante (:encerrou-em qp) :encerrou-em)
      :acesso-restrito (= "true" (:acesso-restrito qp))
      :sessao-id       (when-let [s (:sessao-id qp)] (->uuid s :sessao-id))}))
+
+(defn vincular->dominio
+  "Path params (sessao `:id` + segmento `:seg-id`, strings) + corpo JSON {lock-version} -> mapa de dominio p/
+  controllers/vincular-gravacao (Opcao A pos-upload). Coage os uuids (malformado -> 400) e exige `lock-version`
+  inteiro >= 0 (CAS otimista; ausente/nao-inteiro -> 400 fail-closed, NUNCA 500 do CHECK do banco). O corpo vem
+  do corpo-json com chaves STRING (review W3): so le a chave esperada, nunca confia em chave alheia."
+  [sessao-id-str seg-id-str json-params]
+  (when-not (map? json-params)
+    (invalido! "corpo deve ser objeto JSON com lock-version" {:campo :corpo}))
+  (let [lv (get json-params "lock-version")]
+    ;; teto = Integer/MAX_VALUE: a coluna lock_version e' int4; um Long acima do teto passaria (integer?) mas
+    ;; estouraria no CAS do banco com PSQLException -> 500. Barra na borda (fail-closed -> 400, nunca 500).
+    (when-not (and (integer? lv) (<= 0 lv) (<= lv Integer/MAX_VALUE))
+      (invalido! "lock-version ausente ou invalido (inteiro entre 0 e 2147483647)" {:campo :lock-version}))
+    {:sessao-id    (->uuid sessao-id-str :id)
+     :segmento-id  (->uuid seg-id-str :seg-id)
+     :lock-version lv}))

@@ -125,3 +125,33 @@
         (let [sid (agendar! tx ente)
               {gid :id} (registrar! tx ente {:sessao-id sid :acesso-restrito true})]
           (is (true? (:acesso-restrito (gravacao/buscar tx ente gid))) "gravacao de sessao secreta = restrita"))))))
+
+;; ---------- re-derivacao do sigilo no vinculo Opcao A (sessao secreta) ----------
+
+(deftest vincular-secreta-forca-acesso-restrito
+  ;; sigilo §22.6: segmento INGERIDO sem vinculo com acesso-restrito=false (Opcao A); o RE-vinculo a uma sessao
+  ;; SECRETA tem de elevar acesso_restrito=true (`forcar-acesso-restrito` do controlador) — o flag viaja ao
+  ;; pipeline de IA respeitar o sigilo. Vinculo a sessao NAO-secreta deixa o flag intacto.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [sid (agendar! tx ente)
+              {gid :id} (registrar! tx ente {:acesso-restrito false})] ; SEM vinculo, ingerido aberto (Opcao A)
+          (is (false? (:acesso-restrito (gravacao/buscar tx ente gid))) "nasce aberto (ingestao Opcao A)")
+          (gravacao/vincular-segmento! tx {:ente-id ente :id gid :sessao-id sid :lock-version 0
+                                           :updated-by nil :forcar-acesso-restrito true})
+          (is (true? (:acesso-restrito (gravacao/buscar tx ente gid)))
+              "vinculo a sessao secreta RE-deriva acesso_restrito=true (sigilo)")
+          (is (= sid (:sessao-id (gravacao/buscar tx ente gid))) "vinculo efetivado na mesma operacao"))))))
+
+(deftest vincular-nao-secreta-preserva-flag
+  ;; sessao NAO-secreta: o vinculo nao deve tocar acesso_restrito (forcar-acesso-restrito falsy -> coluna intacta).
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [sid (agendar! tx ente)
+              {gid :id} (registrar! tx ente {:acesso-restrito true})] ; ingerido restrito por outra razao
+          (gravacao/vincular-segmento! tx {:ente-id ente :id gid :sessao-id sid :lock-version 0
+                                           :updated-by nil :forcar-acesso-restrito false})
+          (is (true? (:acesso-restrito (gravacao/buscar tx ente gid)))
+              "vinculo a sessao nao-secreta PRESERVA o acesso_restrito ja gravado (nao reabre o sigilo)"))))))

@@ -55,15 +55,19 @@
 
 (defn vincular-segmento!
   "Vincula o segmento a uma sessao (Opcao A). Vinculo UMA-VEZ: o WHERE sessao_id IS NULL barra re-vincular um
-  ja vinculado (CAS por lock_version tambem). Lanca em conflito/ja-vinculado/inexistente. Devolve {:id :sessao-id}."
-  [tx {:keys [ente-id id sessao-id lock-version updated-by]}]
+  ja vinculado (CAS por lock_version tambem). `forcar-acesso-restrito` (sigilo §22.6): quando a sessao-alvo e'
+  SECRETA o controlador o passa true e o vinculo RE-deriva `acesso_restrito`=true (o flag da ingestao Opcao A
+  pode ter vindo false do cliente) — caso contrario a coluna fica intacta. Lanca em conflito/ja-vinculado/
+  inexistente (`:tipo :conflito/vinculo` -> a borda mapeia 409, nunca 500). Devolve {:id :sessao-id}."
+  [tx {:keys [ente-id id sessao-id lock-version updated-by forcar-acesso-restrito]}]
   (let [r (jdbc/execute-one! tx
             (sql/format {:update :sessoes.gravacao_segmento
-                         :set {:sessao_id sessao-id :updated_by updated-by :atualizado_em [:now]
-                               :lock_version [:+ :lock_version 1]}
+                         :set (cond-> {:sessao_id sessao-id :updated_by updated-by :atualizado_em [:now]
+                                       :lock_version [:+ :lock_version 1]}
+                                forcar-acesso-restrito (assoc :acesso_restrito true))
                          :where [:and [:= :ente_id ente-id] [:= :id id] [:= :lock_version lock-version]
                                  [:= :sessao_id nil]]}))]
     (when (zero? (:next.jdbc/update-count r 0))
       (throw (ex-info "vincular-segmento!: ja vinculada, conflito de lock_version ou inexistente"
-                      {:id id :sessao-id sessao-id :lock-version lock-version})))
+                      {:tipo :conflito/vinculo :id id :sessao-id sessao-id :lock-version lock-version})))
     {:id id :sessao-id sessao-id}))

@@ -92,6 +92,29 @@
             (http/json-resposta 413 {:erro "upload grande demais"})
             (throw e)))))))
 
+(defn- vincular-gravacao-handler
+  "POST /sessoes/:id/gravacao/:seg-id/vincular (Opcao A pos-upload). adapters/in coage os path-params (sessao :id
+  + segmento :seg-id) e valida o corpo {lock-version}; o controller carrega+autoriza a sessao e vincula (uma-vez,
+  CAS), re-derivando o sigilo p/ sessao secreta; adapters/out projeta o recibo. nil (sessao inexistente) -> 404;
+  conflito de CAS / ja-vinculado / lock-stale -> 409 (nao 500). Usa corpo-json (corpo pequeno, ao contrario do
+  upload binario da ingestao)."
+  [repo-sessoes]
+  (fn [req]
+    (let [ator (:ator req)
+          m    (adapters-in-grav/vincular->dominio (get-in req [:path-params :id])
+                                                   (get-in req [:path-params :seg-id])
+                                                   (:json-params req))]
+      (try
+        (if-let [recibo (controllers/vincular-gravacao repo-sessoes ator m)]
+          ;; 200 (nao 201): o vinculo ATUALIZA um segmento ja existente (nao cria recurso) — espelha o
+          ;; encerramento de votacao (update=200), distinto da ingestao (cria=201).
+          (http/json-resposta 200 (adapters-out-grav/recibo-vinculo->wire recibo))
+          (http/json-resposta 404 {:erro "sessao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/vinculo (:tipo (ex-data e)))
+            (http/json-resposta 409 {:erro "segmento ja vinculado ou lock-version desatualizado"})
+            (throw e)))))))
+
 (defn- listar-gravacoes-handler
   "GET /sessoes/:id/gravacao. adapters/in coage o :id; controller carrega+autoriza a sessao e lista os
   segmentos vinculados; adapters/out projeta (filtra internos). nil (sessao inexistente) -> 404."
@@ -117,4 +140,7 @@
      :route-name :sessoes/ingerir-gravacao]
     ["/sessoes/:id" :get  [auth (buscar-handler repo-sessoes)] :route-name :sessoes/buscar]
     ["/sessoes/:id/pauta" :get [auth (pauta-handler repo-sessoes)] :route-name :sessoes/pauta]
-    ["/sessoes/:id/gravacao" :get [auth (listar-gravacoes-handler repo-sessoes)] :route-name :sessoes/listar-gravacoes]})
+    ["/sessoes/:id/gravacao" :get [auth (listar-gravacoes-handler repo-sessoes)] :route-name :sessoes/listar-gravacoes]
+    ["/sessoes/:id/gravacao/:seg-id/vincular" :post
+     [auth (it/exige-papel "secretario") it/corpo-json (vincular-gravacao-handler repo-sessoes)]
+     :route-name :sessoes/vincular-gravacao]})

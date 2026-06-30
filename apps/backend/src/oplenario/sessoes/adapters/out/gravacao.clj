@@ -22,6 +22,12 @@
   (validado wire/GravacaoReciboOut {:id (->str id) :audio-hash audio-hash}
             "recibo de ingestao viola o contrato GravacaoReciboOut (bug de servidor)"))
 
+(defn recibo-vinculo->wire
+  "Recibo de dominio {:id uuid :sessao-id uuid} -> VinculoGravacaoOut (resposta 201 do vinculo Opcao A)."
+  [{:keys [id sessao-id]}]
+  (validado wire/VinculoGravacaoOut {:id (->str id) :sessao-id (->str sessao-id)}
+            "recibo de vinculo viola o contrato VinculoGravacaoOut (bug de servidor)"))
+
 (defn- segmento->wire [s]
   {:id              (->str (:id s))
    :sessao-id       (->str (:sessao-id s))
