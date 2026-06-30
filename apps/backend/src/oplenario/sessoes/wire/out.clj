@@ -71,3 +71,11 @@
   [:map {:closed true}
    [:sessao-id :string]
    [:segmentos [:sequential SegmentoOut]]])
+
+(def VinculoGravacaoOut
+  "Recibo da VINCULACAO de um segmento a uma sessao (resposta 201 de POST /sessoes/:id/gravacao/:seg-id/vincular,
+  Opcao A pos-upload). Carrega o `id` do segmento + a `sessao-id` a que foi vinculado. NAO expoe internos
+  (lock-version, acesso-restrito recalculado, chave do store)."
+  [:map {:closed true}
+   [:id :string]
+   [:sessao-id :string]])

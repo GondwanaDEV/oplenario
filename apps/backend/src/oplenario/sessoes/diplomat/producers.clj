@@ -32,3 +32,6 @@
 
 (defn emitir-gravacao-segmento-captado! [bus tx ente-id payload]
   (eventos/emitir! bus tx (ev-gravacao/segmento-captado ente-id payload)))
+
+(defn emitir-gravacao-segmento-vinculado! [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-gravacao/segmento-vinculado ente-id payload)))

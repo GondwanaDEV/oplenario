@@ -83,6 +83,21 @@
                      :acesso-restrito restrito? :created-by (:identidade-id ator)))
             {:id seg-id :audio-hash hash-hex}))))))
 
+(defn vincular-gravacao
+  "Vincula (Opcao A pos-upload) um segmento ja ingerido a uma sessao. Carrega a SESSAO do tenant do `ator`
+  (nil -> 404 via nil de retorno), roda pode-ver-sessao? (mesma Casa -> 403 fail-closed), e RE-deriva o sigilo:
+  sessao SECRETA forca acesso-restrito=true no vinculo (o flag do cliente na ingestao Opcao A pode ter vindo
+  false — mesmo guard de `ingerir-segmento`). O Repo vincula UMA-VEZ (CAS WHERE sessao_id IS NULL + lock_version);
+  conflito/ja-vinculado/lock-stale -> lanca `:conflito/vinculo` (o diplomat mapeia 409). updated-by = o ator.
+  Devolve o recibo {:id :sessao-id} ou nil (sessao inexistente)."
+  [repo-sessoes ator {:keys [sessao-id segmento-id lock-version]}]
+  (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/ver sessao logic/pode-ver-sessao?)
+    (repo/vincular-segmento! repo-sessoes (:ente-id ator)
+      {:id segmento-id :sessao-id sessao-id :lock-version lock-version
+       :updated-by (:identidade-id ator)
+       :forcar-acesso-restrito (= "secreta" (:tipo-sessao sessao))})))
+
 (defn listar-gravacoes
   "Read-model dos segmentos de gravacao da sessao `id` p/ o painel. A authz mora no recurso sessao: carrega a
   sessao e roda pode-ver-sessao? ANTES de listar. Devolve {:sessao-id :segmentos [...]} ou nil (sessao
