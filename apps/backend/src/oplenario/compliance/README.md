@@ -23,6 +23,16 @@ Módulo (bounded context §22.2) — **dono da execução do compliance por tena
 - **`gerador_remessa`** = renderizador próprio do **descritor declarativo de layout** (dado, dec. 2b — reusa o
   registry como fonte; **não** estende a DSL de avaliação, **não** é código por TCE — honra o Invariante 4).
 
+## Estado de implementação (F5)
+- **F5.1 — runtime sai do atom (FEITO).** `logic` (ciclo enum puro + costura `cumpre-obrigacao?`),
+  `models/{obrigacao,avaliacao}` (Malli), `db/{obrigacao,avaliacao}` (persistência pura), e o
+  **`components/repositorio` `RepoCompliance`** (`avaliar-obrigacao!`) que OPERA `motor/avaliar` +
+  reconcilia o ciclo (`logic/proxima-fase` contra o estado persistido sob `FOR UPDATE`) + audita a
+  avaliação **append-only**, tudo na MESMA tx do tenant. O motor dá o veredito + `vence_em`; o compliance
+  é dono do ciclo persistido. Wired no `sistema/novo-sistema` (`:repo-compliance`, recebe `registro`+`repo-motor` por-chamada).
+- **A seguir:** F5.2 (escopo `regras-aplicaveis` + sweep), F5.3 (remessa + relação `remessa_enviada`
+  → fecha o T1/M6), F5.4 (eventos/consumers), F5.5 (borda HTTP — painel "a Casa está em dia").
+
 ## Fronteiras
 - O **catálogo** (`template`/`regra`, domínio sem `ente_id`) e o **binding por tenant** vivem no `motor`
   (§22.7.6) — chegam com a dobra de `../motor-dsl-clj/` → `src/oplenario/motor/`.
