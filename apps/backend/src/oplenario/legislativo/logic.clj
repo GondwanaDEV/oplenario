@@ -75,6 +75,19 @@
           (throw (ex-info "quorum-tipo desconhecido" {:quorum-tipo quorum-tipo})))]
     (if aprovado? "aprovada" "rejeitada")))
 
+;; --- eixo G / F4 Slice 3: politica da camada FINA p/ DIRIGIR a votacao ao vivo (§22.5 eixo E) ---
+;; A votacao em plenario e' dirigida no contexto de uma SESSAO (recurso de outro modulo, lido via
+;; `consultar-sessao` injetada — legislativo NAO importa sessoes, §22.10). Como o `tempo_real` fez com
+;; `pode-assistir-plenario?`, a politica mora no modulo CONSUMIDOR e opera sobre o mapa de sessao. V1 =
+;; defesa-em-profundidade (mesma Casa); a RLS ja escopa por tenant, isto barra um recurso de outra Casa que
+;; escape por bug de query (fail-closed). Politicas mais ricas (sessao 'aberta', presidencia da Mesa) plugam
+;; aqui sem mudar a borda; em F2 vira expressao da DSL avaliada pelo mesmo motor (disciplina 5). Pura.
+
+(defn pode-dirigir-votacao?
+  "Camada FINA p/ ABRIR/REGISTRAR/ENCERRAR votacao na sessao carregada: o ator e a sessao sao da MESMA Casa."
+  [ator sessao]
+  (= (:ente-id ator) (:ente-id sessao)))
+
 ;; --- F3.8 pos-aprovacao (§22.4; doc-mestre L247). Vocabularios espelham os CHECK da migration 0022. ---
 ;; F3.8a — tramitacao no Executivo (sancao/veto). Ciclo: aguardando -> {sancionado|sancao_tacita|vetado};
 ;; vetado -> {veto_mantido|veto_derrubado}. Rito/prazos exatos = [GAP] regimental (§22.4.4).
