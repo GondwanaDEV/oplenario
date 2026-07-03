@@ -2,7 +2,14 @@
   "Persistencia de 'participacao.prazo_ativo' (forma disc.6, decisao Arch B de F6) — funcoes sobre a `tx` do
   tenant (FORCE RLS isola, mig 0039). HoneySQL schema-qualified; ente_id em TODA query. O prazo evolui por
   UPDATE/CAS (pendente -> cumprida/vencida...), SEM DELETE (Inv.10). O 'anel' e' a leitura single-row por
-  (ente, objeto_tipo, objeto_id), servida pela UNIQUE da mig 0039 (1 probe barato). IMPL atras do RepoParticipacao."
+  (ente, objeto_tipo, objeto_id), servida pela UNIQUE da mig 0039 (1 probe barato). IMPL atras do
+  RepoParticipacao.
+
+  GENERALIZACAO (fast-follow, mig 0042): `prorrogar!` e' a CAS de PRORROGACAO (1x apenas — Lei 13.460 art.
+  10 'por igual periodo'; compartilhada pelas 4 especies de objeto_tipo, nao so ouvidoria). O sweep
+  (`pendentes-vencidas-ate`) compara contra COALESCE(prorrogado_ate, vence_em) — o vencimento EFETIVO
+  (`logic/vencimento-efetivo`) — em vez de vence_em cru; BACKWARD-SAFE porque prorrogado_ate e' sempre NULL
+  nos objetos que nao prorrogam (e-SIC/LGPD em V1), entao o COALESCE degenera p/ vence_em."
   (:require [honey.sql :as sql]
             [next.jdbc :as jdbc]
             [oplenario.kernel.db-util :as comum]))
@@ -53,6 +60,21 @@
                           [:in :estado [[:inline "pendente"] [:inline "vencida"]]]]
                   :returning [:*]}))))
 
+(defn cancelar!
+  "CAS de CANCELAMENTO (Slice 5 fast-follow, sem merito): transiciona o prazo de um objeto p/ 'cancelada'
+  SOMENTE se ainda esta ABERTO (pendente|vencida) — arquivar uma manifestacao SEM merito NAO CUMPRE a
+  obrigacao (nao carimba cumprida_em; espelha `cumprir!`, mas o desfecho e' 'cancelada'). Devolve o mapa
+  kebab se cancelou, ou nil se nao havia prazo aberto (idempotente)."
+  [tx {:keys [ente-id objeto-tipo objeto-id]}]
+  {:pre [(some? ente-id) (some? objeto-id)]}
+  (comum/linha->kebab
+   (jdbc/execute-one! tx
+     (sql/format {:update :participacao.prazo_ativo
+                  :set {:estado "cancelada" :atualizado_em [:now]}
+                  :where [:and [:= :ente_id ente-id] [:= :objeto_tipo objeto-tipo] [:= :objeto_id objeto-id]
+                          [:in :estado [[:inline "pendente"] [:inline "vencida"]]]]
+                  :returning [:*]}))))
+
 ;; ---- sweep de vencimento (F6.3, espelha compliance/db/obrigacao) ----
 
 (def ^:private teto-sweep
@@ -63,15 +85,21 @@
 
 (def ^:private cols-sweep
   "Projecao minima do sweep: so o que o CAS + o evento precisam (id p/ transicionar; objeto_tipo/objeto_id/
-  vence_em p/ o payload de `participacao.prazo.vencido`). Nao traz PII."
-  [:id :objeto_tipo :objeto_id :vence_em])
+  vence_em/prorrogado_ate p/ o payload de `participacao.prazo.vencido` computar o vencimento EFETIVO via
+  `logic/vencimento-efetivo`). Nao traz PII."
+  [:id :objeto_tipo :objeto_id :vence_em :prorrogado_ate])
 
 (defn pendentes-vencidas-ate
-  "Sweep de vencimento (F6.3): os prazos PENDENTE estritamente vencidos em `hoje` (vence_em < hoje — ESTRITO:
-  o proprio dia do vencimento NAO vence, coerente com `logic/dias-restantes` '0 = ultimo dia' ainda valido e
-  com o sweep do compliance), por ente, em ordem de vencimento, com teto. So `pendente` (a unica fase candidata
-  a vencer). `[:inline ...]` p/ o estado e' o que deixa o planner usar o idx parcial idx_prazo_ativo_sweep
-  (WHERE estado IN ('pendente','vencida')) — bind param opaco cairia em Seq Scan (mesmo racional do compliance)."
+  "Sweep de vencimento (F6.3 + generalizacao 0042): os prazos PENDENTE estritamente vencidos em `hoje` —
+  COALESCE(prorrogado_ate, vence_em) < hoje — ESTRITO: o proprio dia do vencimento EFETIVO NAO vence,
+  coerente com `logic/dias-restantes`/`vencido?` '0 = ultimo dia' ainda valido e com o sweep do compliance —
+  por ente, em ordem de vencimento efetivo, com teto. So `pendente` (a unica fase candidata a vencer).
+  `[:inline ...]` p/ o estado e' o que deixa o planner usar o idx parcial idx_prazo_ativo_sweep_efetivo
+  (indice de EXPRESSAO sobre COALESCE(prorrogado_ate, vence_em), mig 0042 — substitui o idx_prazo_ativo_sweep
+  cru da mig 0039, que nao serve nem o filtro nem o ORDER BY de uma expressao; review db) — WHERE estado IN
+  ('pendente','vencida')) — bind param opaco cairia em Seq Scan (mesmo racional do compliance).
+  BACKWARD-SAFE: prorrogado_ate e' NULL nos objetos que nunca prorrogam (e-SIC/LGPD em V1) -> o COALESCE
+  degenera p/ vence_em cru, sem mudar o comportamento ja em producao."
   [tx ente-id hoje]
   {:pre [(some? ente-id) (some? hoje)]}
   (comum/linhas->kebab
@@ -79,8 +107,8 @@
      (sql/format {:select cols-sweep :from [:participacao.prazo_ativo]
                   :where [:and [:= :ente_id ente-id]
                           [:= :estado [:inline "pendente"]]
-                          [:< :vence_em hoje]]
-                  :order-by [[:vence_em :asc] [:id :asc]]
+                          [:< [:coalesce :prorrogado_ate :vence_em] hoje]]
+                  :order-by [[[:coalesce :prorrogado_ate :vence_em] :asc] [:id :asc]]
                   :limit teto-sweep}))))
 
 (defn vencer-se-pendente!
@@ -98,3 +126,20 @@
                   :set {:estado [:inline "vencida"] :atualizado_em [:now]}
                   :where [:and [:= :ente_id ente-id] [:= :id id] [:= :estado [:inline "pendente"]]]
                   :returning [:id]}))))
+
+;; ---- prorrogacao (fast-follow 0042, Lei 13.460 art. 10 — compartilhada por qualquer objeto_tipo) ----
+
+(defn prorrogar!
+  "CAS de PRORROGACAO: seta prorrogado_ate SOMENTE se o prazo AINDA esta 'pendente' E prorrogado_ate AINDA
+  e' nil (`[:is :prorrogado_ate nil]` no WHERE — forca 1x apenas; a 2a tentativa nao casa nenhuma linha).
+  Devolve o mapa kebab (RETURNING *) se prorrogou, ou nil se a corrida foi perdida/ja prorrogado/nao-pendente
+  (o Repo desambigua nil-existente p/ 409, mesmo padrao de responder!/decidir!)."
+  [tx {:keys [ente-id objeto-tipo objeto-id prorrogado-ate]}]
+  {:pre [(some? ente-id) (some? objeto-id) (some? prorrogado-ate)]}
+  (comum/linha->kebab
+   (jdbc/execute-one! tx
+     (sql/format {:update :participacao.prazo_ativo
+                  :set {:prorrogado_ate prorrogado-ate :atualizado_em [:now]}
+                  :where [:and [:= :ente_id ente-id] [:= :objeto_tipo objeto-tipo] [:= :objeto_id objeto-id]
+                          [:= :estado [:inline "pendente"]] [:is :prorrogado_ate nil]]
+                  :returning [:*]}))))

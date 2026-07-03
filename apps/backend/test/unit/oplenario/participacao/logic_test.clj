@@ -15,8 +15,8 @@
 (deftest enums-do-prazo
   (is (= #{"pendente" "cumprida" "vencida" "dispensada" "cancelada"} logic/estados-prazo)
       "ciclo do prazo (forma disc.6)")
-  (is (= #{"pedido_esic" "recurso_esic" "solicitacao_titular"} logic/objeto-tipos-prazo)
-      "objeto_tipo polimorfico do prazo_ativo"))
+  (is (= #{"pedido_esic" "recurso_esic" "solicitacao_titular" "manifestacao_ouvidoria"} logic/objeto-tipos-prazo)
+      "objeto_tipo polimorfico do prazo_ativo (4a especie: manifestacao_ouvidoria, fast-follow ouvidoria)"))
 
 ;; ---------- vence-em: LAI 20 dias corridos sobre o LocalDate do recibo ----------
 
@@ -176,3 +176,115 @@
   (is (= "LGPD-2026-000042" (logic/protocolo-titular 2026 42)))
   (is (not= (logic/protocolo-titular 2026 1) (logic/protocolo-esic 2026 1))
       "protocolo LGPD nao colide com o do e-SIC na leitura humana"))
+
+;; ========================= FAST-FOLLOW: generalizacao de prazo_ativo (prorrogacao) =========================
+
+;; ---------- vencimento-efetivo: COALESCE(prorrogado_ate, vence_em) puro ----------
+
+(deftest vencimento-efetivo-degenera-para-vence-em-sem-prorrogacao
+  (is (= (LocalDate/of 2026 7 23) (logic/vencimento-efetivo {:vence-em (LocalDate/of 2026 7 23) :prorrogado-ate nil}))
+      "sem prorrogado-ate (nil), o efetivo E' o vence-em cru (backward-safe: e-SIC/LGPD nunca prorrogam em V1)"))
+
+(deftest vencimento-efetivo-usa-prorrogado-ate-quando-presente
+  (is (= (LocalDate/of 2026 8 12) (logic/vencimento-efetivo {:vence-em (LocalDate/of 2026 7 23)
+                                                              :prorrogado-ate (LocalDate/of 2026 8 12)}))
+      "com prorrogado-ate setado, o efetivo E' a data prorrogada (nao o vence-em original)"))
+
+;; ========================= FAST-FOLLOW: Slice 5 — Ouvidoria (Lei 13.460/2017) =========================
+
+;; ---------- vocabulario da manifestacao (espelha o CHECK da mig 0042) ----------
+
+(deftest tipos-e-estados-da-manifestacao
+  (is (= #{"reclamacao" "denuncia" "sugestao" "elogio" "solicitacao"} logic/tipos-manifestacao)
+      "os 5 tipos padrao CGU/Lei 13.460")
+  (is (= #{"protocolada" "em_analise" "respondida" "arquivada"} logic/estados-manifestacao)
+      "ciclo visivel da manifestacao de ouvidoria")
+  (is (contains? logic/objeto-tipos-prazo "manifestacao_ouvidoria")
+      "o prazo polimorfico aceita a 4a especie: manifestacao_ouvidoria"))
+
+(deftest transicao-de-manifestacao-valida
+  (is (logic/transicao-manifestacao-valida? "protocolada" "em_analise"))
+  (is (logic/transicao-manifestacao-valida? "protocolada" "respondida"))
+  (is (logic/transicao-manifestacao-valida? "protocolada" "arquivada"))
+  (is (logic/transicao-manifestacao-valida? "em_analise" "respondida"))
+  (is (logic/transicao-manifestacao-valida? "em_analise" "arquivada"))
+  (is (not (logic/transicao-manifestacao-valida? "respondida" "em_analise")) "terminal nao volta")
+  (is (not (logic/transicao-manifestacao-valida? "arquivada" "respondida")) "terminal nao muda"))
+
+(deftest terminal-manifestacao-e-respondida-ou-arquivada
+  (is (logic/terminal-manifestacao? "respondida"))
+  (is (logic/terminal-manifestacao? "arquivada"))
+  (is (not (logic/terminal-manifestacao? "protocolada")))
+  (is (not (logic/terminal-manifestacao? "em_analise"))))
+
+(deftest validadores-da-manifestacao-lancam-fora-do-enum
+  (is (nil? (logic/validar-tipo-manifestacao "reclamacao")))
+  (is (thrown? clojure.lang.ExceptionInfo (logic/validar-tipo-manifestacao "elogio-falso")))
+  (is (nil? (logic/validar-estado-manifestacao "protocolada")))
+  (is (thrown? clojure.lang.ExceptionInfo (logic/validar-estado-manifestacao "cancelada"))))
+
+;; ---------- prazo da ouvidoria: 30 dias (Lei 13.460 art. 10), prorrogavel +30 uma vez ----------
+
+(deftest dias-ouvidoria-e-30-distinto-dos-demais
+  (is (= 30 logic/dias-ouvidoria) "Lei 13.460/2017 art. 10")
+  (is (not= logic/dias-ouvidoria logic/dias-lai-esic))
+  (is (not= logic/dias-ouvidoria logic/dias-titular)))
+
+(deftest vence-em-ouvidoria-soma-30-dias-corridos
+  (is (= (LocalDate/of 2026 8 2) (logic/vence-em-ouvidoria (LocalDate/of 2026 7 3)))
+      "recibo + 30 dias corridos (Lei 13.460 art. 10; [GAP] corridos-vs-uteis)"))
+
+(deftest vence-prorrogado-ouvidoria-soma-30-a-partir-do-vencimento-ORIGINAL
+  (is (= (LocalDate/of 2026 9 1) (logic/vence-prorrogado-ouvidoria (LocalDate/of 2026 8 2)))
+      "+30 a partir do vence_em ORIGINAL (nao ha prorrogado_ate previo — a CAS so permite 1x)"))
+
+;; ---------- protocolo da ouvidoria (namespace OUV- distinto dos demais) ----------
+
+(deftest protocolo-ouvidoria-formata-com-prefixo-proprio
+  (is (= "OUV-2026-000001" (logic/protocolo-ouvidoria 2026 1)))
+  (is (= "OUV-2026-000042" (logic/protocolo-ouvidoria 2026 42)))
+  (is (not= (logic/protocolo-ouvidoria 2026 1) (logic/protocolo-esic 2026 1))
+      "protocolo da ouvidoria nao colide com o do e-SIC na leitura humana"))
+
+;; ========================= SLICE 6: Comentarios/moderacao (feature 6.3) =========================
+
+;; ---------- vocabulario do comentario (espelha o CHECK da mig 0043) ----------
+
+(deftest enums-do-comentario
+  (is (= #{"pendente" "aprovado" "rejeitado"} logic/estados-comentario)
+      "ciclo do comentario (comentario.estado)"))
+
+(deftest acoes-de-moderacao-sao-so-os-2-desfechos
+  (is (= #{"aprovado" "rejeitado"} logic/acoes-moderacao)
+      "a moderacao SO decide aprovar|rejeitar — nunca volta a 'pendente'"))
+
+(deftest motivos-de-rejeicao-sao-os-5-fixos
+  (is (= #{"ofensivo" "spam" "fora-do-tema" "conteudo-ilegal" "dados-pessoais"}
+         logic/motivos-rejeicao-comentario)))
+
+;; ---------- transicoes do comentario ----------
+
+(deftest transicao-de-comentario-valida
+  (is (logic/transicao-comentario-valida? "pendente" "aprovado"))
+  (is (logic/transicao-comentario-valida? "pendente" "rejeitado"))
+  (is (not (logic/transicao-comentario-valida? "aprovado" "rejeitado")) "terminal nao muda")
+  (is (not (logic/transicao-comentario-valida? "rejeitado" "aprovado")) "terminal nao volta")
+  (is (not (logic/transicao-comentario-valida? "pendente" "pendente")) "sem no-op no grafo"))
+
+(deftest terminal-comentario-e-aprovado-ou-rejeitado
+  (is (logic/terminal-comentario? "aprovado"))
+  (is (logic/terminal-comentario? "rejeitado"))
+  (is (not (logic/terminal-comentario? "pendente"))))
+
+;; ---------- validadores (guardas de profundidade) ----------
+
+(deftest validadores-do-comentario-lancam-fora-do-enum
+  (is (nil? (logic/validar-estado-comentario "pendente")))
+  (is (thrown? clojure.lang.ExceptionInfo (logic/validar-estado-comentario "arquivado")))
+  (is (nil? (logic/validar-acao-moderacao "aprovado")))
+  (is (nil? (logic/validar-acao-moderacao "rejeitado")))
+  (is (thrown? clojure.lang.ExceptionInfo (logic/validar-acao-moderacao "pendente"))
+      "acao de moderacao NAO admite 'pendente' — so' os 2 desfechos")
+  (is (nil? (logic/validar-motivo-rejeicao-comentario "spam")))
+  (is (thrown? clojure.lang.ExceptionInfo (logic/validar-motivo-rejeicao-comentario "porque sim"))
+      "motivo fora do vocabulario FIXO dos 5 -> invalido"))
