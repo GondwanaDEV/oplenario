@@ -109,7 +109,18 @@
 (defrecord RepoLegislativoPg [datasource bus]
   RepoLegislativo
   (transacao [_ ente-id f] (tenancy/com-tenant* (:ds datasource) ente-id f))
-  (protocolar! [this ente-id p] (transacao this ente-id #(proposicao/protocolar! % p)))
+  ;; gate eixo H: protocola + EMITE `proposicao.protocolada` (snapshot publico) na MESMA tx (atomicidade
+  ;; outbox-com-o-ato §22.9 E2 — a materia so aparece no portal se o protocolo commitou). O read-model de
+  ;; transparencia projeta deste evento (§22.10: sem import/JOIN cross-modulo).
+  (protocolar! [this ente-id p]
+    (transacao this ente-id
+      (fn [tx]
+        (let [r (proposicao/protocolar! tx p)]
+          (producers/emitir-protocolada! bus tx ente-id
+            {:proposicao-id (:id r) :tipo (:tipo p) :ano (:ano p) :sequencial (:sequencial r)
+             :urn-lex (:urn-lex r) :ementa (:ementa p) :estado "protocolada"
+             :autor-tipo (:autor-tipo p) :autor-texto (:autor-texto p)})
+          r))))
   (buscar-proposicao [this ente-id id] (transacao this ente-id #(proposicao/buscar % ente-id id)))
   (listar-por-estado [this ente-id estado] (transacao this ente-id #(proposicao/listar-por-estado % ente-id estado)))
   (mudar-estado-proposicao! [this ente-id m] (transacao this ente-id #(proposicao/mudar-estado! % (assoc m :ente-id ente-id))))
@@ -250,7 +261,18 @@
   (tramitacao-executiva-do-autografo [this ente-id aid] (transacao this ente-id #(exec/buscar-por-autografo % ente-id aid)))
   ;; F3.8b — norma. promulgar! compoe (sequencial + URN + insert) na tx; o caller garante o desfecho promulgavel.
   (promulgar-norma! [this ente-id m] (transacao this ente-id #(norma/promulgar! % (assoc m :ente-id ente-id))))
-  (publicar-norma! [this ente-id m] (transacao this ente-id #(norma/publicar! % (assoc m :ente-id ente-id))))
+  ;; F3.8b: publica (promulgada -> publicada) + EMITE `norma.publicada` (marco de eficacia) na MESMA tx. Le a
+  ;; norma pos-UPDATE p/ o snapshot publico (publicado_em/veiculo agora preenchidos). Transparencia projeta.
+  (publicar-norma! [this ente-id m]
+    (transacao this ente-id
+      (fn [tx]
+        (let [r (norma/publicar! tx (assoc m :ente-id ente-id))
+              n (norma/buscar tx ente-id (:id r))]
+          (producers/emitir-norma-publicada! bus tx ente-id
+            {:norma-id (:id n) :proposicao-id (:proposicao-id n) :tipo-norma (:tipo-norma n)
+             :numero (:numero n) :ano (:ano n) :urn (:urn n) :ementa (:ementa n)
+             :publicado-em (str (:publicado-em n)) :veiculo-publicacao (:veiculo-publicacao n)})
+          r))))
   (buscar-norma [this ente-id id] (transacao this ente-id #(norma/buscar % ente-id id)))
   (norma-da-proposicao [this ente-id pid] (transacao this ente-id #(norma/buscar-por-proposicao % ente-id pid)))
   ;; F3.9a — Protocolo Geral. Append-only; numera gapless por ano. Objeto polimorfico (disc.2, sem FK).
