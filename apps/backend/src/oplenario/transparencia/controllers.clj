@@ -18,9 +18,10 @@
     (assoc m :norma (repo/norma-da-materia repo-transparencia ente-id proposicao-id))))
 
 (defn listar-normas
-  "Portal: legislacao PUBLICADA as-enacted (normas publicadas, mais recente primeiro)."
-  [repo-transparencia ente-id]
-  (repo/listar-normas repo-transparencia ente-id))
+  "Portal: acervo de legislacao as-enacted (F6c Slice 3). `filtro` = {:tipo :ano :numero} (todos opcionais,
+  ja' coagidos na borda). Sem filtro: mais recente primeiro (compat Slice 1)."
+  [repo-transparencia ente-id filtro]
+  (repo/listar-normas repo-transparencia ente-id filtro))
 
 (defn buscar-norma
   "Uma norma publicada especifica, ou nil."

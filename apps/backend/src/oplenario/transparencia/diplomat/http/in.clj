@@ -42,11 +42,14 @@
         (http/json-resposta 404 {:erro "materia nao encontrada"})))))
 
 (defn- listar-normas-handler
+  "GET /portal/casa/:ente/legislacao(?tipo=&ano=&numero=) — acervo as-enacted (F6c Slice 3). Query-params
+  OPCIONAIS coagidos na borda (ano/numero nao-inteiro -> 400); ausentes -> filtro vazio = compat Slice 1."
   [repo-transparencia resolver-ente-publico]
   (fn [req]
-    (let [ente-id (resolver-ente-publico (get-in req [:path-params :ente]))]
+    (let [ente-id (resolver-ente-publico (get-in req [:path-params :ente]))
+          filtro  (adapters-in/filtro-legislacao (:query-params req))]
       (http/json-resposta 200
-        (adapters-out-norma/->wires (controllers/listar-normas repo-transparencia ente-id))))))
+        (adapters-out-norma/->wires (controllers/listar-normas repo-transparencia ente-id filtro))))))
 
 (defn- buscar-norma-handler
   [repo-transparencia resolver-ente-publico]
