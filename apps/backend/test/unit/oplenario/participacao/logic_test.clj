@@ -38,6 +38,14 @@
   (is (= -2 (logic/dias-restantes (LocalDate/of 2026 7 23) (LocalDate/of 2026 7 25)))
       "vencido: negativo (o sweep de F6.3 e' quem transiciona; aqui e' read puro)"))
 
+;; ---------- vencido?: boundary do sweep (ESTRITO — coerente com dias-restantes '0 = ultimo dia') ----------
+
+(deftest vencido?-e-estrito-no-dia-do-vencimento
+  (is (not (logic/vencido? (LocalDate/of 2026 7 23) (LocalDate/of 2026 7 22))) "vespera: nao vencido")
+  (is (not (logic/vencido? (LocalDate/of 2026 7 23) (LocalDate/of 2026 7 23)))
+      "NO DIA do vencimento: NAO vencido (ultimo dia ainda valido — o sweep so vence vence_em < hoje)")
+  (is (logic/vencido? (LocalDate/of 2026 7 23) (LocalDate/of 2026 7 24)) "dia seguinte: vencido"))
+
 ;; ---------- protocolo: derivado do (ano, sequencial) gapless ----------
 
 (deftest protocolo-formata-ano-e-sequencial

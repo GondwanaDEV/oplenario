@@ -52,3 +52,49 @@
                   :where [:and [:= :ente_id ente-id] [:= :objeto_tipo objeto-tipo] [:= :objeto_id objeto-id]
                           [:in :estado [[:inline "pendente"] [:inline "vencida"]]]]
                   :returning [:*]}))))
+
+;; ---- sweep de vencimento (F6.3, espelha compliance/db/obrigacao) ----
+
+(def ^:private teto-sweep
+  "Teto server-side por passada do sweep (anti unbounded-read, review sec): um ente com muitos prazos overdue
+  dreno em multiplas passadas (cada CAS tira a linha do filtro `pendente` -> a proxima varre o lote seguinte).
+  Idempotente e limitado."
+  1000)
+
+(def ^:private cols-sweep
+  "Projecao minima do sweep: so o que o CAS + o evento precisam (id p/ transicionar; objeto_tipo/objeto_id/
+  vence_em p/ o payload de `participacao.prazo.vencido`). Nao traz PII."
+  [:id :objeto_tipo :objeto_id :vence_em])
+
+(defn pendentes-vencidas-ate
+  "Sweep de vencimento (F6.3): os prazos PENDENTE estritamente vencidos em `hoje` (vence_em < hoje — ESTRITO:
+  o proprio dia do vencimento NAO vence, coerente com `logic/dias-restantes` '0 = ultimo dia' ainda valido e
+  com o sweep do compliance), por ente, em ordem de vencimento, com teto. So `pendente` (a unica fase candidata
+  a vencer). `[:inline ...]` p/ o estado e' o que deixa o planner usar o idx parcial idx_prazo_ativo_sweep
+  (WHERE estado IN ('pendente','vencida')) — bind param opaco cairia em Seq Scan (mesmo racional do compliance)."
+  [tx ente-id hoje]
+  {:pre [(some? ente-id) (some? hoje)]}
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select cols-sweep :from [:participacao.prazo_ativo]
+                  :where [:and [:= :ente_id ente-id]
+                          [:= :estado [:inline "pendente"]]
+                          [:< :vence_em hoje]]
+                  :order-by [[:vence_em :asc] [:id :asc]]
+                  :limit teto-sweep}))))
+
+(defn vencer-se-pendente!
+  "CAS de vencimento: transiciona o prazo p/ 'vencida' + atualizado_em SOMENTE se AINDA esta 'pendente'
+  (WHERE estado='pendente'). Devolve {:id} (RETURNING id — projecao minima, so a truthiness importa ao caller)
+  se transicionou, ou nil se a corrida foi perdida (um cumprimento concorrente — `cumprir!` — ja o moveu p/
+  cumprida entre o read do sweep e este UPDATE; ou uma passada anterior ja o venceu). Mata, na borda do SQL,
+  o re-vencimento e o evento duplicado (idempotencia do sweep). Espelha compliance/db/obrigacao
+  vencer-se-pendente! (mesmo `[:inline \"vencida\"]` no SET, mesmo RETURNING id)."
+  [tx {:keys [ente-id id]}]
+  {:pre [(some? ente-id) (some? id)]}
+  (comum/linha->kebab
+   (jdbc/execute-one! tx
+     (sql/format {:update :participacao.prazo_ativo
+                  :set {:estado [:inline "vencida"] :atualizado_em [:now]}
+                  :where [:and [:= :ente_id ente-id] [:= :id id] [:= :estado [:inline "pendente"]]]
+                  :returning [:id]}))))

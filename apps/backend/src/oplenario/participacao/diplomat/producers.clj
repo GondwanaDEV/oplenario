@@ -5,6 +5,7 @@
   vocabulario/contrato mora em events/; aqui e' so o ATO de emitir."
   (:require [oplenario.kernel.eventos :as eventos]
             [oplenario.participacao.events.pedido-esic :as ev-pedido]
+            [oplenario.participacao.events.prazo :as ev-prazo]
             [oplenario.participacao.events.recurso-esic :as ev-recurso]))
 
 (defn emitir-pedido-protocolado! [bus tx ente-id payload]
@@ -18,3 +19,6 @@
 
 (defn emitir-recurso-decidido! [bus tx ente-id payload]
   (eventos/emitir! bus tx (ev-recurso/decidido ente-id payload)))
+
+(defn emitir-prazo-vencido! [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-prazo/vencido ente-id payload)))

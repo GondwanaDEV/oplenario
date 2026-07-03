@@ -51,7 +51,18 @@
   (pedidos-do-solicitante [this ente-id solicitante-id]
     "'Meus pedidos' — lista os pedidos de um solicitante autenticado (mais recentes primeiro).")
   (prazo-do-objeto [this ente-id objeto-tipo objeto-id]
-    "O 'anel do prazo': leitura single-row do prazo de um objeto."))
+    "O 'anel do prazo': leitura single-row do prazo de um objeto.")
+  (varrer-vencimentos! [this ente-id hoje]
+    "Sweep de vencimento (F6.3/§22.7.7 S1): numa UNICA tx do tenant, transiciona pendente->vencida os prazos
+     abertos cujo `vence_em` passou estritamente em `hoje` (LocalDate) e emite `participacao.prazo.vencido`
+     por transicao (o `acao_no_vencimento` V1) na MESMA tx. PURO por DATA — nao re-roda motor algum (o
+     vencimento e' a unica transicao que evento nao dispara). CAS race-safe (`vencer-se-pendente!`): so
+     emite se DE FATO transicionou (nil = cumprimento concorrente venceu a corrida -> sem evento espurio).
+     Idempotente (a ja-vencida nao re-transiciona). RETORNO PARCIAL por passada: no maximo `teto-sweep` (1000)
+     transicoes por chamada (guarda anti unbounded-read) — o scheduler deve RE-INVOCAR por ente ate a passada
+     voltar VAZIA p/ drenar um backlog > 1000 (ex.: migracao de e-SIC legado; um cron ingenuo de 1 chamada/tick
+     deixa o excedente 'no prazo' no painel por ate 1 tick). Job disparado por scheduler (INFRA, mesma pendencia
+     do sweep do compliance — nao ha worker/cron aqui). Devolve [{:id :objeto-tipo :objeto-id :de :para}...]."))
 
 (defrecord RepoParticipacaoPg [datasource bus]
   RepoParticipacao
@@ -150,7 +161,23 @@
   (pedidos-do-solicitante [this ente-id solicitante-id]
     (transacao this ente-id #(db-pedido/listar-por-solicitante % ente-id solicitante-id)))
   (prazo-do-objeto [this ente-id objeto-tipo objeto-id]
-    (transacao this ente-id #(db-prazo/buscar-do-objeto % ente-id objeto-tipo objeto-id))))
+    (transacao this ente-id #(db-prazo/buscar-do-objeto % ente-id objeto-tipo objeto-id)))
+  (varrer-vencimentos! [this ente-id hoje]
+    (transacao this ente-id
+      (fn [tx]
+        ;; o SQL ja' devolve so as candidatas (pendente + estritamente overdue). Por candidata: CAS
+        ;; `vencer-se-pendente!` — so emite/reporta se DE FATO transicionou (nil = corrida perdida p/ um
+        ;; cumprimento concorrente -> sem evento espurio; idempotente na 2a passada). Emissao na MESMA tx
+        ;; (outbox-com-o-ato, §22.9 E2). Espelha compliance/varrer-vencimentos! (sem a auditoria, que o
+        ;; participacao nao tem — o `acao_no_vencimento` V1 e' so o evento). Datas -> ISO string no payload.
+        (->> (db-prazo/pendentes-vencidas-ate tx ente-id hoje)
+             (keep (fn [p]
+                     (when (db-prazo/vencer-se-pendente! tx {:ente-id ente-id :id (:id p)})
+                       (producers/emitir-prazo-vencido! bus tx ente-id
+                         {:objeto-tipo (:objeto-tipo p) :objeto-id (:objeto-id p) :vence-em (str (:vence-em p))})
+                       {:id (:id p) :objeto-tipo (:objeto-tipo p) :objeto-id (:objeto-id p)
+                        :de "pendente" :para "vencida"})))   ; pendente->vencida: a unica transicao deste sweep
+             vec)))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource + :bus via `using`)."

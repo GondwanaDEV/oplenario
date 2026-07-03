@@ -88,6 +88,15 @@
   [^LocalDate venc ^LocalDate hoje]
   (- (.toEpochDay venc) (.toEpochDay hoje)))
 
+(defn vencido?
+  "Predicado PURO de vencimento: o prazo esta vencido em `hoje`? Vencido ⟺ `hoje` ESTRITAMENTE apos `venc`
+  (equivalente a `dias-restantes < 0`) — o proprio dia do vencimento NAO vence ('0 = ultimo dia', ainda
+  valido). Coerente com `dias-restantes` e com o sweep do compliance (vence_em < data, estrito). `venc` nil =
+  NAO vencido (guarda anti-NPE, espelha o guard sec do compliance/logic vencido?, review sec MEDIO-1). O SQL do
+  sweep (`vencer-se-pendente!` CAS) e' a FONTE DE VERDADE da transicao; este predicado e' so p/ derivacao/teste."
+  [^LocalDate venc ^LocalDate hoje]
+  (boolean (and venc (.isAfter hoje venc))))
+
 (defn vence-em-recurso
   "Data de vencimento do prazo do RECURSO a partir do LocalDate do recibo do recurso (marco de inicio do
   RELOGIO PROPRIO da instancia recursal). DIA-CORRIDO `.plusDays dias-recurso-esic`. [GAP] de conteudo
