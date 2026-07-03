@@ -11,7 +11,8 @@
             [oplenario.participacao.diplomat.http.in :as participacao-http]
             [oplenario.sessoes.components.repositorio :as repo-sessoes-comp]
             [oplenario.sessoes.diplomat.http.in :as sessoes-http]
-            [oplenario.tempo-real.diplomat.sse :as tempo-real-sse]))
+            [oplenario.tempo-real.diplomat.sse :as tempo-real-sse]
+            [oplenario.transparencia.diplomat.http.in :as transparencia-http]))
 
 (set! *warn-on-reflection* true)
 
@@ -24,7 +25,7 @@
   legislativo) injeta `consultar-sessao` (delega ao Repo de sessoes) nos diplomats de tempo_real e legislativo,
   que NAO importam sessoes."
   [{:keys [idp repo-identidade repo-sessoes repo-legislativo repo-compliance repo-participacao
-           canal-store objeto-store]}]
+           repo-transparencia canal-store objeto-store]}]
   (let [auth (it/autenticacao idp repo-identidade)
         ;; F6: relogio de producao (kernel/tempo) p/ o prazo LAI do e-SIC — determinismo em teste vem de
         ;; injetar relogio-fixo direto no fragmento de rotas (participacao-http/rotas). resolver-ente-publico
@@ -46,4 +47,6 @@
         (into (participacao-http/rotas {:auth auth :repo-participacao repo-participacao
                                         :resolver-ente-publico participacao-http/resolver-ente-publico-uuid
                                         :relogio relogio-participacao}))
+        (into (transparencia-http/rotas {:repo-transparencia repo-transparencia
+                                         :resolver-ente-publico transparencia-http/resolver-ente-publico-uuid}))
         (into (tempo-real-sse/rotas {:auth auth :canal-store canal-store :consultar-sessao consultar-sessao})))))

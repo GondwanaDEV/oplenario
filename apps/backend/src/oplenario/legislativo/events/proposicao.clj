@@ -7,6 +7,36 @@
   (:require [malli.core :as m]
             [oplenario.kernel.eventos :as eventos]))
 
+(def protocolada-tipo
+  "Nome do evento emitido no PROTOCOLO da proposicao (gate eixo H). Carrega o SNAPSHOT PUBLICO — o que o
+  read-model do portal (transparencia, §16.5) precisa p/ exibir a materia SEM consultar o legislativo (§22.10:
+  o consumer nao importa nem faz JOIN cross-schema; projeta so do evento). A tramitacao subsequente chega por
+  `proposicao.transicionou` (que so carrega a mudanca de estado)."
+  "proposicao.protocolada")
+
+(def ProtocoladaPayload
+  "Payload de `proposicao.protocolada` — snapshot PUBLICO do ato legislativo no protocolo. So dado publico por
+  natureza (proposicao e' ato publico); SEM autor_id interno (FK do cadastro) — so o autor_texto de exibicao."
+  [:map {:closed true}
+   [:proposicao-id :uuid]
+   [:tipo :string]
+   [:ano :int]
+   [:sequencial :int]
+   [:urn-lex :string]
+   [:ementa :string]
+   [:autor-tipo {:optional true} [:maybe :string]]
+   [:autor-texto {:optional true} [:maybe :string]]
+   [:estado :string]])
+
+(defn protocolada
+  "Constroi o envelope de `proposicao.protocolada` p/ o tenant `ente-id`, VALIDANDO o payload. Lanca
+  :payload-invalido se nao casa — o outbox so recebe evento bem-formado."
+  [ente-id payload]
+  (when-not (m/validate ProtocoladaPayload payload)
+    (throw (ex-info "payload de proposicao.protocolada invalido (contrato do evento)"
+                    {:erro :payload-invalido :explain (m/explain ProtocoladaPayload payload)})))
+  (eventos/evento protocolada-tipo ente-id payload))
+
 (def transicionou-tipo
   "Nome do evento emitido quando a maquina de tramitacao (eixo C) move a proposicao de estado."
   "proposicao.transicionou")

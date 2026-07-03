@@ -4,14 +4,27 @@
   so existe se a tx commitou. Chamado pelo Repo-Component, que compoe o ato + a emissao na MESMA tx do
   tenant (§3-bis). A vocabulario/contrato do evento mora em events/; aqui e' so o ATO de emitir."
   (:require [oplenario.kernel.eventos :as eventos]
+            [oplenario.legislativo.events.norma :as ev-norma]
             [oplenario.legislativo.events.parecer :as ev-parecer]
             [oplenario.legislativo.events.proposicao :as ev]
             [oplenario.legislativo.events.votacao :as ev-votacao]))
+
+(defn emitir-protocolada!
+  "Emite `proposicao.protocolada` no `bus` DENTRO da `tx` corrente (gate eixo H). `payload` casa
+  events/ProtocoladaPayload — o snapshot publico que o portal (transparencia) projeta."
+  [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev/protocolada ente-id payload)))
 
 (defn emitir-transicionou!
   "Emite `proposicao.transicionou` no `bus` DENTRO da `tx` corrente. `payload` casa events/TransicionouPayload."
   [bus tx ente-id payload]
   (eventos/emitir! bus tx (ev/transicionou ente-id payload)))
+
+(defn emitir-norma-publicada!
+  "Emite `norma.publicada` no `bus` DENTRO da `tx` corrente (F3.8b, marco de eficacia). `payload` casa
+  events.norma/PublicadaPayload — o snapshot publico que o portal (transparencia) projeta."
+  [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-norma/publicada ente-id payload)))
 
 (defn emitir-transicionou-parecer!
   "Emite `parecer.transicionou` no `bus` DENTRO da `tx` corrente (eixo F). `payload` casa

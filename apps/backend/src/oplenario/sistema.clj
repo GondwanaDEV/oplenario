@@ -25,7 +25,9 @@
             [oplenario.sessoes.components.repositorio :as repo-sessoes]
             [oplenario.sessoes.relacoes.presenca :as rel-sessoes]
             [oplenario.tempo-real.components :as tr-comp]
-            [oplenario.tempo-real.consumer :as tr-consumer]))
+            [oplenario.tempo-real.consumer :as tr-consumer]
+            [oplenario.transparencia.components.repositorio :as repo-transparencia]
+            [oplenario.transparencia.diplomat.consumers :as transparencia-consumers]))
 
 (defn- fundir-relacoes
   "Funde os mapas {nome → fn} de relação dos módulos FALHANDO em colisão de nome (fail-closed na borda
@@ -56,7 +58,11 @@
         canal-store (if (= :valkey backplane)
                       (tr-comp/canal-store-valkey config)
                       (tr-comp/canal-store-memoria))
-        registro    (tr-consumer/registro canal-store)]
+        ;; §22.10: o relay tem UM registro só — cada projetor FUNDE seus handlers no mesmo mapa {tipo [...]}
+        ;; (outbox/registrar aceita >1 consumidor por tipo). transparencia (F6c Slice 1) e' o 1o projetor
+        ;; POSTGRES (tempo_real projeta na CanalStore, nao no banco); `registrar` so' ADICIONA entradas.
+        registro    (-> (tr-consumer/registro canal-store)
+                        (transparencia-consumers/registrar))]
    (component/system-map
    :datasource      (datasource/datasource config)
    ;; EventBus (producer): grava no shared.outbox na tx do ato. Stateless (sem Lifecycle); os Repo que
@@ -85,6 +91,9 @@
    ;; participacao) + emite `pedido_esic.protocolado` — recebe :datasource + :bus via `using` (emite eventos
    ;; na tx do ato, como legislativo/sessoes).
    :repo-participacao (component/using (repo-participacao/repositorio) [:datasource :bus])
+   ;; F6c (transparencia): SO LEITURA (o portal projeta por consumer/tx do relay, nao por este Repo) — recebe
+   ;; so :datasource via `using`, sem :bus (o modulo nao emite eventos proprios nesta fatia).
+   :repo-transparencia (component/using (repo-transparencia/repositorio) [:datasource])
    ;; o host É a fronteira (§22.10): importa as `relacoes` dos módulos e as injeta no registry do motor.
    ;; O motor chama por nome (resolver-para), nunca importa o módulo. Sem :datasource — a `tx` do tenant
    ;; entra por-chamada (quem avalia abre a tx via Repo). O `start` roda o assert de costura (fail-closed).
@@ -117,4 +126,4 @@
          :servidor-http (component/using
                          (http-servidor/servidor-http config rotas/montar)
                          [:idp :repo-identidade :repo-sessoes :repo-legislativo :repo-compliance
-                          :repo-participacao :canal-store :objeto-store])))
+                          :repo-participacao :repo-transparencia :canal-store :objeto-store])))
