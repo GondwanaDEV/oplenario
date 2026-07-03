@@ -21,7 +21,14 @@
   (reify Relogio
     (agora [_] t)))
 
+(defn hoje-de
+  "Data civil (LocalDate) de um `instante` JA LIDO, na zona dada — prazos legais correm por fuso, nao em UTC.
+  Use esta aridade quando o mesmo ato precisa ANCORAR recibo (Instant) e data (LocalDate) no MESMO instante:
+  ler o relogio uma vez (`agora`) e derivar a data daqui evita duas leituras (e o straddle de meia-noite)."
+  ^LocalDate [^Instant instante ^ZoneId zona]
+  (LocalDate/ofInstant instante zona))
+
 (defn hoje
   "Data civil (LocalDate) do relogio na zona dada — prazos legais correm por fuso, nao em UTC."
   ^LocalDate [r ^ZoneId zona]
-  (LocalDate/ofInstant ^Instant (agora r) zona))
+  (hoje-de (agora r) zona))

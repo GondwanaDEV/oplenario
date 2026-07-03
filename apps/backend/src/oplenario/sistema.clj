@@ -11,6 +11,8 @@
             [oplenario.identidade.components.repositorio :as repo-identidade]
             [oplenario.identidade.relacoes.identidade :as rel-identidade]
             [oplenario.legislativo.components.repositorio :as repo-legislativo]
+            [oplenario.participacao.components.repositorio :as repo-participacao]
+            [oplenario.participacao.relacoes :as rel-participacao]
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.kernel.components.http-servidor :as http-servidor]
             [oplenario.kernel.components.idp-dev :as idp-dev]
@@ -79,12 +81,16 @@
    ;; Recebe so :datasource via `using`; o `registro-fatos` + o `repo-motor` entram POR CHAMADA em
    ;; avaliar-obrigacao! (precedente RepoLegislativo/transicionar! — o motor e' biblioteca, §22.10).
    :repo-compliance (component/using (repo-compliance/repositorio) [:datasource])
+   ;; F6 (participacao): o e-SIC materializa o pedido + o RELOGIO do prazo (Arch B: prazo_ativo no schema
+   ;; participacao) + emite `pedido_esic.protocolado` — recebe :datasource + :bus via `using` (emite eventos
+   ;; na tx do ato, como legislativo/sessoes).
+   :repo-participacao (component/using (repo-participacao/repositorio) [:datasource :bus])
    ;; o host É a fronteira (§22.10): importa as `relacoes` dos módulos e as injeta no registry do motor.
    ;; O motor chama por nome (resolver-para), nunca importa o módulo. Sem :datasource — a `tx` do tenant
    ;; entra por-chamada (quem avalia abre a tx via Repo). O `start` roda o assert de costura (fail-closed).
    :registro-fatos  (registro-fatos/registro-fatos
                      (fundir-relacoes rel-cadastros/relacoes rel-identidade/relacoes rel-sessoes/relacoes
-                                      rel-compliance/relacoes)))))
+                                      rel-compliance/relacoes rel-participacao/relacoes)))))
 
 (defn- idp-para
   "Seleciona a impl do IdP por ambiente — GUARD DE BOOT fail-closed (review de seguranca W2, CRÍTICO): producao
@@ -111,4 +117,4 @@
          :servidor-http (component/using
                          (http-servidor/servidor-http config rotas/montar)
                          [:idp :repo-identidade :repo-sessoes :repo-legislativo :repo-compliance
-                          :canal-store :objeto-store])))
+                          :repo-participacao :canal-store :objeto-store])))
