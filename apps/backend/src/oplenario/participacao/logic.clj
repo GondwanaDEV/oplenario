@@ -298,6 +298,67 @@
   ^LocalDate [^LocalDate vence-em-original]
   (.plusDays vence-em-original (long dias-prorrogacao-ouvidoria)))
 
+;; ========================= SLICE 6: Comentarios/moderacao (feature 6.3) =========================
+;;
+;; Comentario NAO tem protocolo/prazo (nao e' protocolo juridico nem obrigacao com relogio LAI/LGPD/13.460
+;; — e' um comentario de cidadao numa materia). Autor SEMPRE obrigatorio (SEM variante anonima — diferente
+;; da ouvidoria). Dois niveis de vocabulario distintos: `estados-comentario` (o ciclo COMPLETO da linha,
+;; incl. o estado inicial 'pendente') vs `acoes-moderacao` (o que o SERVIDOR pode DECIDIR — so' os 2
+;; desfechos; 'pendente' nunca e' uma ACAO, so' um ESTADO de chegada).
+
+;; ---- ciclo do comentario (comentario.estado) — enum FIXO em codigo (o CHECK da mig 0043 espelha) ----
+(def estados-comentario
+  "Ciclo do comentario. `aprovado`/`rejeitado` sao terminais (trava a linha — trg da mig 0043)."
+  #{"pendente" "aprovado" "rejeitado"})
+
+(def ^:private estados-terminais-comentario
+  "Desfechos do comentario: a moderacao ja decidiu (a linha congela)."
+  #{"aprovado" "rejeitado"})
+
+(def ^:private transicoes-comentario
+  "Grafo de transicoes LEGAIS do comentario (de -> conjunto de proximos). Terminais nao tem saida."
+  {"pendente"  #{"aprovado" "rejeitado"}
+   "aprovado"  #{}
+   "rejeitado" #{}})
+
+;; ---- acoes que a MODERACAO pode tomar — subconjunto de estados-comentario (SEM 'pendente': a moderacao
+;; so' DECIDE um desfecho, nunca devolve a 'pendente') ----
+(def acoes-moderacao
+  "As 2 acoes que o SERVIDOR pode registrar ao moderar (moderacao_comentario.acao, o CHECK da mig 0043
+  espelha). Distinto de `estados-comentario`: nao inclui 'pendente' (nao e' uma decisao, e' o ponto de
+  partida)."
+  #{"aprovado" "rejeitado"})
+
+;; ---- os 5 MOTIVOS de rejeicao — enum FIXO em codigo. TAMBEM checado por CHECK IN no banco (mig 0043,
+;; `comentario_motivo_rejeicao_valido` + `moderacao_comentario_motivo_valido` — defesa-em-profundidade,
+;; espelha `estados-comentario`/`acoes-moderacao` acima). Estender este set exige migration (o CHECK IN
+;; fecha o vocabulario no schema, nao so' em codigo). A validacao do vocabulario fixo mora AQUI + no wire/in
+;; + no CHECK. ----
+(def motivos-rejeicao-comentario
+  "Os 5 motivos padrao de rejeicao de um comentario (moderacao)."
+  #{"ofensivo" "spam" "fora-do-tema" "conteudo-ilegal" "dados-pessoais"})
+
+(defn validar-estado-comentario
+  "Lanca se `v` nao e' estado do comentario (pendente|aprovado|rejeitado)."
+  [v] (validar! estados-comentario "estado de comentario" v))
+
+(defn validar-acao-moderacao
+  "Lanca se `v` nao e' uma acao de moderacao valida (aprovado|rejeitado — NUNCA pendente)."
+  [v] (validar! acoes-moderacao "acao de moderacao de comentario" v))
+
+(defn validar-motivo-rejeicao-comentario
+  "Lanca se `v` nao e' um dos 5 motivos FIXOS de rejeicao."
+  [v] (validar! motivos-rejeicao-comentario "motivo de rejeicao de comentario" v))
+
+(defn terminal-comentario?
+  "O estado do comentario e' terminal (a moderacao ja decidiu)?"
+  [estado] (contains? estados-terminais-comentario estado))
+
+(defn transicao-comentario-valida?
+  "A transicao `de`->`para` do ciclo do comentario e' legal? (pura — so o grafo fixo). Terminais nao transicionam."
+  [de para]
+  (contains? (get transicoes-comentario de) para))
+
 (defn protocolo-ouvidoria
   "Numero de PROTOCOLO humano da manifestacao a partir do (ano, sequencial gapless). Formato
   'OUV-<ano>-<seq 6 digitos>' (ex.: OUV-2026-000001) — namespace distinto de ESIC-/REC-/LGPD- p/ nao colidir."

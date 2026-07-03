@@ -13,8 +13,11 @@
   registro append-only de `db/prorrogacao` + emit, na MESMA tx (aborta sem escrever/emitir se a CAS nao
   transicionou — a 2a tentativa nao deixa rastro espurio)."
   (:require [oplenario.kernel.tenancy :as tenancy]
+            [oplenario.participacao.db.comentario :as db-comentario]
+            [oplenario.participacao.db.denuncia-comentario :as db-denuncia]
             [oplenario.participacao.db.encarregado :as db-encarregado]
             [oplenario.participacao.db.manifestacao-ouvidoria :as db-manifestacao]
+            [oplenario.participacao.db.moderacao-comentario :as db-moderacao]
             [oplenario.participacao.db.pedido-esic :as db-pedido]
             [oplenario.participacao.db.prazo-ativo :as db-prazo]
             [oplenario.participacao.db.prorrogacao :as db-prorrogacao]
@@ -128,7 +131,32 @@
      1x) + INSERT `prorrogacao` (append-only, justificativa) + emit `participacao.prazo.prorrogado`. Se a CAS
      NAO transicionou (nil — ja prorrogado ou nao-pendente), ABORTA sem inserir/emitir (a 2a tentativa nao
      deixa rastro espurio na tabela de auditoria). `m` = {:prorrogacao-id :objeto-tipo :objeto-id :de-data
-     :para-data :justificativa :prorrogado-por :prorrogado-em}. Devolve {:prorrogado-ate} ou nil."))
+     :para-data :justificativa :prorrogado-por :prorrogado-em}. Devolve {:prorrogado-ate} ou nil.")
+  ;; ---- FAST-FOLLOW Slice 6: Comentarios/moderacao (feature 6.3) ----
+  (comentar! [this ente-id m]
+    "UMA tx: INSERT comentario (sempre 'pendente') + emit `comentario.protocolado`. autor-identidade-id
+     INJETADO upstream (nunca do corpo). `m` = {:id :proposicao-id :autor-identidade-id :corpo :created-by}.
+     Devolve {:id :estado}.")
+  (buscar-comentario [this ente-id id]
+    "Comentario por id no tenant. Usada pela borda p/ desambiguar o nil de moderar!/denunciar! (existe ->
+     409/nil-idempotente; ausente -> 404).")
+  (moderar-comentario! [this ente-id m]
+    "SERVIDOR — UMA tx: CAS comentario pendente -> `acao` (nil = ja terminal, aborta sem escrever) + INSERT
+     moderacao_comentario (append-only, a trilha) + emit `comentario.moderado`. `m` = {:id :acao
+     :motivo-rejeicao :moderacao-id :moderado-por :moderado-em}. Devolve {:id :estado} ou nil (comentario ja
+     moderado/inexistente).")
+  (denunciar-comentario! [this ente-id m]
+    "CIDADAO — UMA tx: INSERT denuncia_comentario (append-only, IDEMPOTENTE via ON CONFLICT DO NOTHING) + SE
+     foi a 1a denuncia deste cidadao: CAS `marcar-denunciado!` (so' quando AINDA pendente — nunca colide com
+     o trigger de estado terminal) + emit `comentario.denunciado`. Repeticoes idempotentes NAO reemitem nem
+     re-tentam a CAS. `m` = {:denuncia-id :comentario-id :denunciante-identidade-id :motivo :denunciado-em}.
+     Devolve {:denunciado true} SEMPRE que o comentario existe (o caller upstream ja' confirmou a
+     existencia — ver controllers/denunciar-comentario!).")
+  (comentarios-da-materia [this ente-id proposicao-id]
+    "'comentarios-da-materia' (PUBLICA): SO aprovados de UMA materia, cronologico, com teto. Lista completa,
+     sem paginacao nesta fatia.")
+  (fila-moderacao [this ente-id]
+    "'fila-moderacao' (SERVIDOR): SO pendentes, denunciados PRIMEIRO, depois cronologico, com teto."))
 
 (defrecord RepoParticipacaoPg [datasource bus]
   RepoParticipacao
@@ -378,7 +406,50 @@
           (producers/emitir-prazo-prorrogado! bus tx ente-id
             {:objeto-tipo objeto-tipo :objeto-id objeto-id
              :de-data (str de-data) :para-data (str para-data)})
-          {:prorrogado-ate (:prorrogado-ate prazo)})))))
+          {:prorrogado-ate (:prorrogado-ate prazo)}))))
+  ;; ---- FAST-FOLLOW Slice 6: Comentarios/moderacao (feature 6.3) ----
+  (comentar! [this ente-id {:keys [id proposicao-id autor-identidade-id corpo created-by]}]
+    (transacao this ente-id
+      (fn [tx]
+        (let [com (db-comentario/inserir! tx {:id id :ente-id ente-id :proposicao-id proposicao-id
+                                               :autor-identidade-id autor-identidade-id :corpo corpo
+                                               :created-by created-by})]
+          (producers/emitir-comentario-protocolado! bus tx ente-id
+            {:comentario-id id :proposicao-id proposicao-id})
+          {:id id :estado (:estado com)}))))
+  (buscar-comentario [this ente-id id] (transacao this ente-id #(db-comentario/buscar % ente-id id)))
+  (moderar-comentario! [this ente-id {:keys [id acao motivo-rejeicao moderacao-id moderado-por moderado-em]}]
+    (transacao this ente-id
+      (fn [tx]
+        ;; CAS PRIMEIRO (short-circuit): so grava a trilha/emite se AINDA pendente. nil = ja terminal ->
+        ;; aborta sem inserir nada (a borda desambigua p/ 409).
+        (when-let [com (db-comentario/moderar! tx {:id id :ente-id ente-id :estado acao
+                                                    :motivo-rejeicao motivo-rejeicao})]
+          (db-moderacao/inserir! tx {:id moderacao-id :ente-id ente-id :comentario-id id :acao acao
+                                     :motivo-rejeicao motivo-rejeicao :moderado-por moderado-por
+                                     :moderado-em moderado-em})
+          (producers/emitir-comentario-moderado! bus tx ente-id {:comentario-id id :acao acao})
+          {:id id :estado (:estado com)}))))
+  (denunciar-comentario! [this ente-id {:keys [denuncia-id comentario-id denunciante-identidade-id
+                                               motivo denunciado-em]}]
+    (transacao this ente-id
+      (fn [tx]
+        ;; INSERT idempotente (ON CONFLICT DO NOTHING): nil = repeticao do MESMO cidadao sobre o MESMO
+        ;; comentario (a UNIQUE da mig 0043 ja' tem o registro) -> NAO re-marca a flag nem reemite (evita
+        ;; evento espurio no double-click/retry).
+        (when (db-denuncia/inserir! tx {:id denuncia-id :ente-id ente-id :comentario-id comentario-id
+                                        :denunciante-identidade-id denunciante-identidade-id
+                                        :motivo motivo :denunciado-em denunciado-em})
+          ;; CAS: so' marca `denunciado` se o comentario AINDA esta pendente (nunca toca linha terminal —
+          ;; ver docstring de db/comentario/marcar-denunciado!). nil aqui (ja terminal) NAO e' erro: o
+          ;; registro em denuncia_comentario ja aconteceu, so' a flag de indexacao nao se aplica mais.
+          (db-comentario/marcar-denunciado! tx {:id comentario-id :ente-id ente-id})
+          (producers/emitir-comentario-denunciado! bus tx ente-id {:comentario-id comentario-id}))
+        {:denunciado true})))
+  (comentarios-da-materia [this ente-id proposicao-id]
+    (transacao this ente-id #(db-comentario/listar-aprovados-da-materia % ente-id proposicao-id)))
+  (fila-moderacao [this ente-id]
+    (transacao this ente-id #(db-comentario/listar-fila-moderacao % ente-id))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource + :bus via `using`)."

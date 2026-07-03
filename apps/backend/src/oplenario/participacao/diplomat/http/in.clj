@@ -24,12 +24,28 @@
   — nao ha dono persistido p/ comparar, nem para o proprio autor (controllers/minha-manifestacao ja decide
   isso — a rota so' aplica o nil->404 padrao). (3) GET /portal/casa/:ente/ouvidoria/acompanhar/:protocolo =
   PUBLICA sem `auth`, mesmo mecanismo resolver-ente-publico. (4) POST .../resposta|arquivar|prorrogar =
-  SERVIDOR (auth + exige-papel 'secretario')."
+  SERVIDOR (auth + exige-papel 'secretario').
+
+  As rotas de COMENTARIOS/MODERACAO (FAST-FOLLOW Slice 6, feature 6.3) reusam os MESMOS perfis: (1) POST
+  /portal/materias/:proposicao_id/comentarios = cidadao SO-`auth` (SEM variante anonima — diferente da
+  ouvidoria, autor sempre persiste). (2) GET /portal/casa/:ente/materias/:proposicao_id/comentarios =
+  PUBLICA sem `auth`, so' aprovados (mesmo resolver-ente-publico). (3) POST /portal/comentarios/:id/
+  denunciar = cidadao SO-`auth`, IDEMPOTENTE (nunca 409 numa 2a denuncia). (4) GET /moderacao/comentarios e
+  POST /comentarios/:id/moderar = SERVIDOR (exige-papel 'secretario').
+
+  DECISAO DE ROTEAMENTO (Slice 6): a fila de moderacao vive em `GET /moderacao/comentarios` (NAO
+  `/comentarios/moderacao`) — o router prefix-tree do Pedestal 0.7 nao admite um literal ('moderacao') e um
+  wildcard (':id', de POST /comentarios/:id/moderar) no MESMO nivel de path sob '/comentarios' (mesma
+  limitacao ja documentada abaixo p/ o disambiguador 'casa/'). Trocar a ORDEM dos segmentos evita a colisao
+  sem inventar mais um segmento estatico."
   (:require [oplenario.http :as http]
             [oplenario.interceptors :as it]
             [oplenario.participacao.adapters.in.arquivar-ouvidoria :as adapters-in-arquivar]
+            [oplenario.participacao.adapters.in.comentario :as adapters-in-comentario]
+            [oplenario.participacao.adapters.in.denunciar-comentario :as adapters-in-denunciar]
             [oplenario.participacao.adapters.in.encarregado :as adapters-in-encarregado]
             [oplenario.participacao.adapters.in.manifestacao-ouvidoria :as adapters-in-manifestacao]
+            [oplenario.participacao.adapters.in.moderar-comentario :as adapters-in-moderar]
             [oplenario.participacao.adapters.in.pedido-esic :as adapters-in]
             [oplenario.participacao.adapters.in.prorrogar-ouvidoria :as adapters-in-prorrogar]
             [oplenario.participacao.adapters.in.recurso-esic :as adapters-in-recurso]
@@ -39,8 +55,11 @@
             [oplenario.participacao.adapters.in.solicitacao-titular :as adapters-in-titular]
             [oplenario.participacao.adapters.out.acompanhamento :as adapters-out-acomp]
             [oplenario.participacao.adapters.out.acompanhamento-ouvidoria :as adapters-out-acomp-ouvidoria]
+            [oplenario.participacao.adapters.out.comentario :as adapters-out-comentario]
+            [oplenario.participacao.adapters.out.denuncia-comentario :as adapters-out-denunciar]
             [oplenario.participacao.adapters.out.encarregado :as adapters-out-encarregado]
             [oplenario.participacao.adapters.out.manifestacao-ouvidoria :as adapters-out-manifestacao]
+            [oplenario.participacao.adapters.out.moderacao-comentario :as adapters-out-moderacao]
             [oplenario.participacao.adapters.out.pedido-esic :as adapters-out-pedido]
             [oplenario.participacao.adapters.out.recurso-esic :as adapters-out-recurso]
             [oplenario.participacao.adapters.out.resposta-esic :as adapters-out-resposta]
@@ -248,6 +267,61 @@
       (responder-op #(controllers/prorrogar-manifestacao! repo-participacao relogio (:ator req) id entrada)
                     adapters-out-resposta-ouvidoria/prorrogar-recibo->wire 200))))
 
+;; ========================= FAST-FOLLOW Slice 6: Comentarios/moderacao (feature 6.3) =========================
+
+(defn- comentar-handler
+  "POST /portal/materias/:proposicao_id/comentarios (cidadao, SO-auth — SEM variante anonima). adapters/in
+  coage o corpo (fail-closed 400); o :proposicao_id do path coage p/ UUID (400 se malformado). O controller
+  injeta o autor do ator. 201 com {id, estado} (estado sempre 'pendente')."
+  [repo-participacao]
+  (fn [req]
+    (let [proposicao-id (adapters-in/id-param->uuid (get-in req [:path-params :proposicao_id]))
+          entrada       (adapters-in-comentario/coagir-comentario (:json-params req))
+          r             (controllers/comentar! repo-participacao (:ator req) proposicao-id entrada)]
+      (http/json-resposta 201 (adapters-out-comentario/recibo->wire r)))))
+
+(defn- comentarios-da-materia-handler
+  "GET /portal/casa/:ente/materias/:proposicao_id/comentarios (PUBLICA, sem auth). resolver-ente-publico
+  coage o :ente (-> 400 se malformado); :proposicao_id tambem coage p/ UUID. So' aprovados — adapters/out
+  FILTRA autor/tenant/estado de cada item."
+  [repo-participacao resolver-ente-publico]
+  (fn [req]
+    (let [ente-id       (resolver-ente-publico (get-in req [:path-params :ente]))
+          proposicao-id (adapters-in/id-param->uuid (get-in req [:path-params :proposicao_id]))
+          cs            (controllers/comentarios-da-materia repo-participacao ente-id proposicao-id)]
+      (http/json-resposta 200 (adapters-out-comentario/publicos->wire cs)))))
+
+(defn- denunciar-comentario-handler
+  "POST /portal/comentarios/:id/denunciar (cidadao, SO-auth). Coage o :id do comentario + o corpo
+  {motivo?}. IDEMPOTENTE: nil -> 404 (comentario inexistente); existe -> 200 {denunciado true} SEMPRE
+  (mesmo numa repeticao — nunca 409, denunciar de novo nao e' conflito de negocio)."
+  [repo-participacao relogio]
+  (fn [req]
+    (let [id      (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          entrada (adapters-in-denunciar/coagir-denunciar (:json-params req))]
+      (if-let [r (controllers/denunciar-comentario! repo-participacao relogio (:ator req) id entrada)]
+        (http/json-resposta 200 (adapters-out-denunciar/recibo->wire r))
+        (http/json-resposta 404 {:erro "comentario nao encontrado"})))))
+
+(defn- fila-moderacao-handler
+  "GET /moderacao/comentarios (SERVIDOR, exige-papel). So' pendentes, denunciados primeiro — adapters/out
+  NAO filtra PII (rota interna; o moderador ve o autor)."
+  [repo-participacao]
+  (fn [req]
+    (let [cs (controllers/fila-moderacao repo-participacao (:ator req))]
+      (http/json-resposta 200 (adapters-out-moderacao/fila->wire cs)))))
+
+(defn- moderar-comentario-handler
+  "POST /comentarios/:id/moderar (SERVIDOR, exige-papel). Coage o :id + o corpo {acao, motivo-rejeicao?}
+  (a obrigatoriedade condicional + o vocabulario fixo do motivo sao checados no adapters/in). nil -> 404;
+  ja moderado -> 409."
+  [repo-participacao relogio]
+  (fn [req]
+    (let [id      (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          entrada (adapters-in-moderar/coagir-moderar (:json-params req))]
+      (responder-op #(controllers/moderar-comentario! repo-participacao relogio (:ator req) id entrada)
+                    adapters-out-moderacao/recibo->wire 200))))
+
 (defn rotas
   "Fragmento de rotas do modulo participacao (table syntax Pedestal). Recebe o interceptor `auth`
   (compartilhado), o `repo-participacao` (Repo-Component), o `resolver-ente-publico` (seam do host p/ a rota
@@ -324,4 +398,27 @@
      :route-name :participacao/arquivar-manifestacao]
     ["/ouvidoria/manifestacoes/:id/prorrogar" :post
      [auth (it/exige-papel "secretario") it/corpo-json (prorrogar-manifestacao-handler repo-participacao relogio)]
-     :route-name :participacao/prorrogar-manifestacao]})
+     :route-name :participacao/prorrogar-manifestacao]
+    ;; ---- FAST-FOLLOW Slice 6: Comentarios/moderacao (feature 6.3) ----
+    ;; CIDADAO: comentar (SO-auth, SEM variante anonima). Sob /portal (superficie do cidadao).
+    ["/portal/materias/:proposicao_id/comentarios" :post
+     [auth it/corpo-json (comentar-handler repo-participacao)]
+     :route-name :participacao/comentar]
+    ;; PUBLICA (sem auth): reusa o disambiguador estatico `casa/` (mesmo racional das demais rotas publicas
+    ;; — o router prefix-tree do Pedestal 0.7 nao admite wildcard+literal no mesmo nivel).
+    ["/portal/casa/:ente/materias/:proposicao_id/comentarios" :get
+     [(comentarios-da-materia-handler repo-participacao resolver-ente-publico)]
+     :route-name :participacao/comentarios-da-materia]
+    ;; CIDADAO: denunciar (SO-auth, IDEMPOTENTE). Sob /portal.
+    ["/portal/comentarios/:id/denunciar" :post
+     [auth it/corpo-json (denunciar-comentario-handler repo-participacao relogio)]
+     :route-name :participacao/denunciar-comentario]
+    ;; SERVIDOR (exige-papel "secretario"), FORA de /portal (balcao interno). A fila vive em
+    ;; `/moderacao/comentarios` (NAO `/comentarios/moderacao`) — ver a DECISAO DE ROTEAMENTO na docstring do
+    ;; ns (colisao wildcard/literal do Pedestal 0.7 com POST /comentarios/:id/moderar).
+    ["/moderacao/comentarios" :get
+     [auth (it/exige-papel "secretario") (fila-moderacao-handler repo-participacao)]
+     :route-name :participacao/fila-moderacao]
+    ["/comentarios/:id/moderar" :post
+     [auth (it/exige-papel "secretario") it/corpo-json (moderar-comentario-handler repo-participacao relogio)]
+     :route-name :participacao/moderar-comentario]})

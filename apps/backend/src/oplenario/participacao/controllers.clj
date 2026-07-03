@@ -320,3 +320,58 @@
                :de-data de-data :para-data para-data :justificativa justificativa
                :prorrogado-por (:identidade-id ator) :prorrogado-em agora})
             (em-conflito! "manifestacao ja prorrogada ou prazo nao esta mais pendente" {:manifestacao-id id}))))))
+
+;; ========================= FAST-FOLLOW Slice 6: Comentarios/moderacao (feature 6.3) =========================
+
+(defn comentar!
+  "CIDADAO comenta a `proposicao-id` (rota SO-auth, sem papel — qualquer vinculo comenta). UMA tx no Repo
+  (INSERT pendente + emit). autor E created-by INJETADOS do ator, NUNCA do corpo (anti-forge) — SEM variante
+  anonima (diferente da ouvidoria). Devolve {:id :estado} (estado sempre 'pendente' na criacao)."
+  [repo-participacao ator proposicao-id {:keys [corpo]}]
+  (let [sujeito (:identidade-id ator)]
+    (repo/comentar! repo-participacao (:ente-id ator)
+      {:id (ids/novo-id) :proposicao-id proposicao-id :autor-identidade-id sujeito
+       :corpo corpo :created-by sujeito})))
+
+(defn moderar-comentario!
+  "SERVIDOR modera o comentario `id` (papel exigido na rota). `acao` ja' validada pelo adapters/in
+  (aprovado|rejeitado; motivo-rejeicao obrigatorio+valido quando rejeitado — a borda ja' garantiu isso, aqui
+  so' repassa). UMA tx: CAS pendente->acao + trilha append-only + emit. moderado-por INJETADO do ator. Devolve
+  {:id :estado}, ou nil (comentario inexistente -> 404); se AINDA existe mas ja' e' terminal (CAS falhou),
+  :conflito/participacao (-> 409)."
+  [repo-participacao relogio ator id {:keys [acao motivo-rejeicao]}]
+  (let [ente-id (:ente-id ator)
+        agora   (tempo/agora relogio)]
+    (or (repo/moderar-comentario! repo-participacao ente-id
+          {:id id :acao acao :motivo-rejeicao motivo-rejeicao :moderacao-id (ids/novo-id)
+           :moderado-por (:identidade-id ator) :moderado-em agora})
+        (when (repo/buscar-comentario repo-participacao ente-id id)
+          (em-conflito! "comentario ja moderado (nao ha o que moderar)" {:comentario-id id})))))
+
+(defn denunciar-comentario!
+  "CIDADAO denuncia o comentario `id` (rota SO-auth). Funciona em QUALQUER estado do comentario (a denuncia
+  NAO reabre o CAS de moderacao) — SO' checa que o comentario existe no tenant (ausente -> nil -> 404). A
+  IDEMPOTENCIA (1 denuncia/cidadao/comentario) e' garantida pela UNIQUE no Repo: uma 2a denuncia do MESMO
+  cidadao sobre o MESMO comentario NAO lanca — devolve sucesso normalmente (denunciar de novo nao e' conflito
+  de negocio). denunciante INJETADO do ator. Devolve {:denunciado true} ou nil (comentario inexistente)."
+  [repo-participacao relogio ator id {:keys [motivo]}]
+  (let [ente-id (:ente-id ator)]
+    (when (repo/buscar-comentario repo-participacao ente-id id)
+      (repo/denunciar-comentario! repo-participacao ente-id
+        {:denuncia-id (ids/novo-id) :comentario-id id
+         :denunciante-identidade-id (:identidade-id ator) :motivo motivo
+         :denunciado-em (tempo/agora relogio)}))))
+
+(defn comentarios-da-materia
+  "'comentarios-da-materia' (PUBLICA, sem auth): SO os aprovados da `proposicao-id`, no tenant `ente-id`
+  (resolvido do path na borda; a RLS isola). Devolve a lista de comentarios (linhas cruas do Repo; o
+  adapters/out mapeia+filtra cada item)."
+  [repo-participacao ente-id proposicao-id]
+  (repo/comentarios-da-materia repo-participacao ente-id proposicao-id))
+
+(defn fila-moderacao
+  "'fila-moderacao' (SERVIDOR, papel exigido na rota): SO os pendentes do tenant do `ator`, denunciados
+  primeiro. Devolve a lista (linhas cruas do Repo; o adapters/out mapeia+filtra cada item — rota interna,
+  o servidor PODE ver o autor)."
+  [repo-participacao ator]
+  (repo/fila-moderacao repo-participacao (:ente-id ator)))

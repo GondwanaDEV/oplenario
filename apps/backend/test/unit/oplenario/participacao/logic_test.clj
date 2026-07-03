@@ -245,3 +245,46 @@
   (is (= "OUV-2026-000042" (logic/protocolo-ouvidoria 2026 42)))
   (is (not= (logic/protocolo-ouvidoria 2026 1) (logic/protocolo-esic 2026 1))
       "protocolo da ouvidoria nao colide com o do e-SIC na leitura humana"))
+
+;; ========================= SLICE 6: Comentarios/moderacao (feature 6.3) =========================
+
+;; ---------- vocabulario do comentario (espelha o CHECK da mig 0043) ----------
+
+(deftest enums-do-comentario
+  (is (= #{"pendente" "aprovado" "rejeitado"} logic/estados-comentario)
+      "ciclo do comentario (comentario.estado)"))
+
+(deftest acoes-de-moderacao-sao-so-os-2-desfechos
+  (is (= #{"aprovado" "rejeitado"} logic/acoes-moderacao)
+      "a moderacao SO decide aprovar|rejeitar — nunca volta a 'pendente'"))
+
+(deftest motivos-de-rejeicao-sao-os-5-fixos
+  (is (= #{"ofensivo" "spam" "fora-do-tema" "conteudo-ilegal" "dados-pessoais"}
+         logic/motivos-rejeicao-comentario)))
+
+;; ---------- transicoes do comentario ----------
+
+(deftest transicao-de-comentario-valida
+  (is (logic/transicao-comentario-valida? "pendente" "aprovado"))
+  (is (logic/transicao-comentario-valida? "pendente" "rejeitado"))
+  (is (not (logic/transicao-comentario-valida? "aprovado" "rejeitado")) "terminal nao muda")
+  (is (not (logic/transicao-comentario-valida? "rejeitado" "aprovado")) "terminal nao volta")
+  (is (not (logic/transicao-comentario-valida? "pendente" "pendente")) "sem no-op no grafo"))
+
+(deftest terminal-comentario-e-aprovado-ou-rejeitado
+  (is (logic/terminal-comentario? "aprovado"))
+  (is (logic/terminal-comentario? "rejeitado"))
+  (is (not (logic/terminal-comentario? "pendente"))))
+
+;; ---------- validadores (guardas de profundidade) ----------
+
+(deftest validadores-do-comentario-lancam-fora-do-enum
+  (is (nil? (logic/validar-estado-comentario "pendente")))
+  (is (thrown? clojure.lang.ExceptionInfo (logic/validar-estado-comentario "arquivado")))
+  (is (nil? (logic/validar-acao-moderacao "aprovado")))
+  (is (nil? (logic/validar-acao-moderacao "rejeitado")))
+  (is (thrown? clojure.lang.ExceptionInfo (logic/validar-acao-moderacao "pendente"))
+      "acao de moderacao NAO admite 'pendente' — so' os 2 desfechos")
+  (is (nil? (logic/validar-motivo-rejeicao-comentario "spam")))
+  (is (thrown? clojure.lang.ExceptionInfo (logic/validar-motivo-rejeicao-comentario "porque sim"))
+      "motivo fora do vocabulario FIXO dos 5 -> invalido"))
