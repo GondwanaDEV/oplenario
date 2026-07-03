@@ -56,13 +56,31 @@
      (sql/format {:select cols :from [:transparencia.norma]
                   :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]]}))))
 
-(defn listar-publicadas
-  "Portal PUBLICO — legislacao PUBLICADA as-enacted (feature 16.5): mais recentes primeiro, com teto."
-  [tx ente-id]
+(defn listar
+  "Portal PUBLICO — acervo de legislacao as-enacted (feature 16.5, F6c Slice 3). Filtro OPCIONAL por `:tipo`
+  (especie/tipo_norma), `:ano` e `:numero` — todos EXATOS e combinaveis; chave ausente/nil nao filtra
+  (especie desconhecida -> lista vazia, tolerante). SEM filtro: mais recentes por publicado_em (contrato do
+  Slice 1, preservado). COM qualquer filtro: por (ano DESC, numero DESC) — a ordem natural de 'Lei N/ANO',
+  servida por idx_norma_tipo_numero (ente_id, tipo_norma, ano DESC, numero DESC). Teto em ambos os caminhos.
+  ORDER BY sempre termina em norma_id DESC — desempate ESTAVEL (a PK e' (ente_id, norma_id)): sem ele,
+  empates em (ano,numero) [numeracao reusada entre especies quando se filtra so' por :ano/:numero] ou em
+  publicado_em [lote/mesma data] deixariam a ordem — e QUEM cai na borda do LIMIT — a cargo do plano, e uma
+  norma podia 'sumir/trocar' entre cargas (inaceitavel em dado legal). NOTA de indice: filtro por :ano ou
+  :numero SEM :tipo nao casa o prefixo do indice (tipo_norma e' o 2o nivel) — :numero-so' e' o pior caso
+  (faceta menos seletiva) — e cai em scan intra-tenant; aceitavel: o acervo de UMA camara tem cardinalidade
+  modesta (RLS por ente_id) e o teto limita o custo. O uso comum inclui :tipo (a especie e' a faceta primaria)."
+  [tx ente-id {:keys [tipo ano numero]}]
   {:pre [(some? ente-id)]}
-  (comum/linhas->kebab
-   (jdbc/execute! tx
-     (sql/format {:select cols :from [:transparencia.norma]
-                  :where [:= :ente_id ente-id]
-                  :order-by [[:publicado_em :desc]]
-                  :limit teto-listagem}))))
+  (let [filtros? (or tipo ano numero)
+        where    (cond-> [[:= :ente_id ente-id]]
+                   tipo   (conj [:= :tipo_norma tipo])
+                   ano    (conj [:= :ano ano])
+                   numero (conj [:= :numero numero]))]
+    (comum/linhas->kebab
+     (jdbc/execute! tx
+       (sql/format {:select cols :from [:transparencia.norma]
+                    :where (into [:and] where)
+                    :order-by (if filtros?
+                                [[:ano :desc] [:numero :desc] [:norma_id :desc]]
+                                [[:publicado_em :desc] [:norma_id :desc]])
+                    :limit teto-listagem})))))

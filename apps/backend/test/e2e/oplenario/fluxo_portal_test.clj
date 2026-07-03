@@ -17,14 +17,18 @@
 (def ^:private t0 (Instant/parse "2026-07-03T12:00:00Z"))
 
 (defn- fake-repo
-  [{:keys [buscar-materia listar-materias buscar-norma norma-da-materia listar-normas]}]
+  [{:keys [buscar-materia listar-materias buscar-norma norma-da-materia listar-normas filtro-capturado]}]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify repo-transparencia/RepoTransparencia
     (buscar-materia [_ _ente _pid] buscar-materia)
     (listar-materias [_ _ente _excl] listar-materias)
     (buscar-norma [_ _ente _nid] buscar-norma)
     (norma-da-materia [_ _ente _pid] norma-da-materia)
-    (listar-normas [_ _ente] listar-normas)))
+    ;; F6c Slice 3: 3-aridade (filtro do acervo). `filtro-capturado` (atom opcional) grava o filtro que a
+    ;; borda coagiu — prova a fiacao query-params -> {:tipo :ano :numero} sem tocar no banco.
+    (listar-normas [_ _ente filtro]
+      (when filtro-capturado (reset! filtro-capturado filtro))
+      listar-normas)))
 
 ;; auth no-op só p/ o fragmento de rotas EXPANDIR (as rotas do Slice 1 testadas aqui sao publicas; as do
 ;; Slice 2, que exigem `auth`, coexistem na tabela e precisam de um interceptor nao-nil no expand). O
@@ -94,11 +98,34 @@
 ;; ---------- GET /portal/casa/:ente/legislacao(/:norma_id) ----------
 
 (deftest listar-normas-200
-  (let [repo (fake-repo {:listar-normas [norma-fixture]})
+  (let [cap  (atom :nao-chamado)
+        repo (fake-repo {:listar-normas [norma-fixture] :filtro-capturado cap})
         r    (pt/response-for (service-fn repo) :get (str "/portal/casa/" ente "/legislacao"))
         body (ler-json r)]
     (is (= 200 (:status r)))
-    (is (= "Diario Oficial do Municipio" (:veiculo-publicacao (first body))))))
+    (is (= "Diario Oficial do Municipio" (:veiculo-publicacao (first body))))
+    (is (= {:tipo nil :ano nil :numero nil} @cap) "sem query-params -> filtro vazio (compat Slice 1)")))
+
+;; F6c Slice 3: navegacao do acervo por query-params (especie/ano/numero)
+(deftest listar-normas-repassa-filtro-coagido
+  (let [cap  (atom nil)
+        repo (fake-repo {:listar-normas [norma-fixture] :filtro-capturado cap})
+        r    (pt/response-for (service-fn repo) :get
+               (str "/portal/casa/" ente "/legislacao?tipo=lei&ano=2026&numero=1"))]
+    (is (= 200 (:status r)))
+    (is (= {:tipo "lei" :ano 2026 :numero 1} @cap)
+        "query-params coagidos na borda: ano/numero viram Long; tipo string")))
+
+(deftest listar-normas-ano-malformado-400
+  (let [repo (fake-repo {:listar-normas []})
+        r    (pt/response-for (service-fn repo) :get (str "/portal/casa/" ente "/legislacao?ano=abc"))]
+    (is (= 400 (:status r)) "ano nao-inteiro -> 400 fail-closed (nunca 500)")))
+
+;; review clojure MAJOR: param repetido na URL -> Pedestal entrega VETOR -> antes: ClassCastException -> 500.
+(deftest listar-normas-param-repetido-400
+  (let [repo (fake-repo {:listar-normas []})
+        r    (pt/response-for (service-fn repo) :get (str "/portal/casa/" ente "/legislacao?ano=1&ano=2"))]
+    (is (= 400 (:status r)) "query-param repetido -> 400 fail-closed, NUNCA 500")))
 
 (deftest buscar-norma-200
   (let [repo (fake-repo {:buscar-norma norma-fixture})
