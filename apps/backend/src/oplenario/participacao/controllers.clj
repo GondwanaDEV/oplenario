@@ -22,6 +22,18 @@
   "Proveniencia do prazo (citacao legal). [GAP] de conteudo: corridos-vs-uteis nao cravado (V1 = corridos)."
   "LAI 12.527/2011 art. 11 §1º (20 dias; corridos-vs-uteis [GAP])")
 
+(def ^:private prazo-fonte-recurso
+  "Proveniencia do prazo do RECURSO. [GAP] de conteudo: a autoridade superior/CGU tem prazo PROPRIO na LAI, mas
+  o numero exato nao esta cravado nesta fatia (ver logic/dias-recurso-esic) — default documentado, nao lei."
+  "LAI 12.527/2011 (recurso; prazo da autoridade superior [GAP] — default documentado)")
+
+(defn- em-conflito!
+  "Sinaliza CONFLITO DE CICLO (a borda mapeia p/ 409): a operacao e' incompativel com o estado atual do
+  agregado (pedido ja terminal, recurso ja decidido, pedido nao-recorrivel). Distinto de nil (ausente -> 404)
+  e de authz/negar! (403). Espelha o :conflito/remessa de compliance."
+  [razao info]
+  (throw (ex-info razao (assoc info :tipo :conflito/participacao))))
+
 (defn protocolar-pedido
   "Protocola um pedido e-SIC do `ator` (cidadao). Computa o recibo (Instant = marco do relogio) e o vencimento
   (LAI 20 dias corridos) do relogio INJETADO. UMA tx no Repo (sequencial+pedido+prazo+evento). solicitante e
@@ -75,3 +87,57 @@
   NAO exponha na borda sem um adapters/out que filtre/projete (como pedido->wire faz), senao vaza tenant+PII."
   [repo-participacao ator]
   (repo/pedidos-do-solicitante repo-participacao (:ente-id ator) (:identidade-id ator)))
+
+;; ========================= SLICE 2: responder / recorrer / decidir =========================
+
+(defn responder-pedido!
+  "SERVIDOR responde o pedido `id` (papel exigido na rota). UMA tx no Repo: CAS pedido->respondido + resposta
+  append-only + cumpre o prazo do PEDIDO + emit. respondido-por INJETADO do ator (nunca do corpo). Devolve
+  {:respondida-em} (a borda projeta), ou nil (pedido inexistente -> 404); se o pedido AINDA existe mas ja e'
+  terminal (CAS falhou), :conflito/participacao (-> 409)."
+  [repo-participacao relogio ator id {:keys [corpo]}]
+  (let [ente-id (:ente-id ator)
+        agora   (tempo/agora relogio)]
+    (or (repo/responder-pedido! repo-participacao ente-id
+          {:pedido-id id :resposta-id (ids/novo-id) :corpo corpo
+           :respondido-por (:identidade-id ator) :respondida-em agora})
+        (when (repo/buscar-pedido repo-participacao ente-id id)
+          (em-conflito! "pedido ja respondido/indeferido (nao ha o que responder)" {:pedido-id id})))))
+
+(defn interpor-recurso!
+  "CIDADAO interpoe recurso ao pedido `id` (rota SO-auth, sem papel — LAI: qualquer solicitante recorre). Policy
+  FINA (in-domain, §22.5 eixo E): (a) pedido inexistente no tenant -> nil (404); (b) ator != solicitante do
+  pedido -> authz/negar! (403); (c) pedido NAO-recorrivel (ainda nao respondido/indeferido) -> :conflito (409).
+  So entao UMA tx no Repo (recurso + prazo PROPRIO + emit). O relogio do recurso e' INDEPENDENTE do pedido:
+  recibo/vence derivam de UMA leitura do relogio no ato da interposicao. instancia=1 (1a instancia; multiplas =
+  refino futuro). Devolve {:id :protocolo :recibo-em}."
+  [repo-participacao relogio ator id {:keys [motivo]}]
+  (let [ente-id (:ente-id ator)]
+    (when-let [pedido (repo/buscar-pedido repo-participacao ente-id id)]
+      (when (not= (:solicitante-identidade-id pedido) (:identidade-id ator))
+        (authz/negar! :nao-e-solicitante {:pedido-id id :ator (:identidade-id ator)}))
+      (when-not (logic/pedido-admite-recurso? (:estado pedido))
+        (em-conflito! "pedido nao admite recurso (ainda nao respondido/indeferido)"
+                      {:pedido-id id :estado (:estado pedido)}))
+      (let [agora   (tempo/agora relogio)
+            hoje    (tempo/hoje-de agora zona-civil)
+            ano     (.getYear hoje)
+            vence   (logic/vence-em-recurso hoje)
+            sujeito (:identidade-id ator)]
+        (repo/interpor-recurso! repo-participacao ente-id
+          {:recurso-id (ids/novo-id) :pedido-id id :ano ano :instancia 1 :motivo motivo
+           :recibo-em agora :vence-em vence :prazo-id (ids/novo-id) :base-dias logic/dias-recurso-esic
+           :prazo-fonte-ref prazo-fonte-recurso :created-by sujeito})))))
+
+(defn decidir-recurso!
+  "SERVIDOR decide o recurso `id` (papel exigido na rota). UMA tx: CAS recurso->decidido (+ decidido_em) +
+  resposta append-only(recurso) + cumpre o prazo do RECURSO + emit. respondido-por INJETADO do ator. Devolve
+  {:decidido-em}, ou nil (recurso inexistente -> 404); recurso ja decidido -> :conflito/participacao (409)."
+  [repo-participacao relogio ator id {:keys [corpo]}]
+  (let [ente-id (:ente-id ator)
+        agora   (tempo/agora relogio)]
+    (or (repo/decidir-recurso! repo-participacao ente-id
+          {:recurso-id id :resposta-id (ids/novo-id) :corpo corpo
+           :respondido-por (:identidade-id ator) :respondida-em agora :decidido-em agora})
+        (when (repo/buscar-recurso repo-participacao ente-id id)
+          (em-conflito! "recurso ja decidido" {:recurso-id id})))))

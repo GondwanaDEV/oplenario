@@ -18,3 +18,16 @@
 
 (defn protocolado [ente-id payload]
   (eventos/evento-validado ProtocoladoPayload protocolado-tipo ente-id payload))
+
+(def respondido-tipo "participacao.pedido_esic.respondido")
+
+(def RespondidoPayload
+  "Payload da resposta a um pedido e-SIC (Slice 2). Sem PII (o corpo da resposta fica no banco); so as chaves
+  de rastreamento — pedido, protocolo, e quando foi respondido (fecha o relogio LAI do pedido)."
+  [:map {:closed true}
+   [:pedido-id :uuid]
+   [:protocolo :string]
+   [:respondida-em :string]])  ; ISO-8601 (instante da resposta)
+
+(defn respondido [ente-id payload]
+  (eventos/evento-validado RespondidoPayload respondido-tipo ente-id payload))

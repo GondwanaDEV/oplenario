@@ -36,3 +36,19 @@
    (jdbc/execute-one! tx
      (sql/format {:select cols :from [:participacao.prazo_ativo]
                   :where [:and [:= :ente_id ente-id] [:= :objeto_tipo objeto-tipo] [:= :objeto_id objeto-id]]}))))
+
+(defn cumprir!
+  "CAS de cumprimento (Slice 2): transiciona o prazo de um objeto p/ 'cumprida' + carimba cumprida_em, SOMENTE
+  se ainda esta ABERTO (pendente|vencida) — uma resposta APOS o vencimento (vencida) ainda CUMPRE a obrigacao
+  (carimba o desfecho; a quebra do prazo fica registrada no historico/evento). `[:inline ...]` casa o predicado
+  do idx parcial de sweep. Devolve o mapa kebab se cumpriu, ou nil se nao havia prazo aberto (idempotente —
+  ja-cumprida/cancelada nao re-transiciona). `cumprida-em` INJETADO (relogio do ato) p/ determinismo."
+  [tx {:keys [ente-id objeto-tipo objeto-id cumprida-em]}]
+  {:pre [(some? ente-id) (some? objeto-id) (some? cumprida-em)]}
+  (comum/linha->kebab
+   (jdbc/execute-one! tx
+     (sql/format {:update :participacao.prazo_ativo
+                  :set {:estado "cumprida" :cumprida_em cumprida-em :atualizado_em [:now]}
+                  :where [:and [:= :ente_id ente-id] [:= :objeto_tipo objeto-tipo] [:= :objeto_id objeto-id]
+                          [:in :estado [[:inline "pendente"] [:inline "vencida"]]]]
+                  :returning [:*]}))))

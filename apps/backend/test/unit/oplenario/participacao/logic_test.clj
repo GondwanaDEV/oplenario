@@ -62,3 +62,55 @@
   (is (thrown? clojure.lang.ExceptionInfo (logic/validar-estado-prazo "aberta")))
   (is (nil? (logic/validar-objeto-tipo-prazo "pedido_esic")))
   (is (thrown? clojure.lang.ExceptionInfo (logic/validar-objeto-tipo-prazo "proposicao"))))
+
+;; ========================= SLICE 2: recurso + resposta =========================
+
+;; ---------- vocabulario do recurso (espelha o CHECK da mig 0040) ----------
+
+(deftest enums-do-recurso
+  (is (= #{"protocolado" "decidido"} logic/estados-recurso)
+      "ciclo visivel do recurso (recurso_esic.estado)"))
+
+;; ---------- transicoes do recurso ----------
+
+(deftest transicao-de-recurso-valida
+  (is (logic/transicao-recurso-valida? "protocolado" "decidido"))
+  (is (not (logic/transicao-recurso-valida? "decidido" "protocolado")) "terminal nao volta")
+  (is (not (logic/transicao-recurso-valida? "protocolado" "protocolado")) "sem no-op no grafo"))
+
+(deftest terminal-recurso-so-decidido
+  (is (logic/terminal-recurso? "decidido"))
+  (is (not (logic/terminal-recurso? "protocolado"))))
+
+(deftest validar-estado-recurso-lanca-fora-do-enum
+  (is (nil? (logic/validar-estado-recurso "protocolado")))
+  (is (nil? (logic/validar-estado-recurso "decidido")))
+  (is (thrown? clojure.lang.ExceptionInfo (logic/validar-estado-recurso "arquivado"))))
+
+;; ---------- quais estados do PEDIDO admitem recurso (so os desfechos) ----------
+
+(deftest pedido-admite-recurso-so-nos-desfechos
+  (is (logic/pedido-admite-recurso? "respondido") "respondido admite recurso")
+  (is (logic/pedido-admite-recurso? "indeferido") "indeferido admite recurso")
+  (is (not (logic/pedido-admite-recurso? "protocolado")) "protocolado ainda nao ha o que recorrer")
+  (is (not (logic/pedido-admite-recurso? "em_analise")) "em_analise ainda em curso"))
+
+;; ---------- prazo PROPRIO do recurso (relogio independente do pedido) ----------
+
+(deftest prazo-do-recurso-e-default-documentado-distinto-do-pedido
+  (is (not= logic/dias-recurso-esic logic/dias-lai-esic)
+      "o default do recurso e' deliberadamente != o do pedido (nao mascara a independencia dos relogios; ambos [GAP])"))
+
+(deftest vence-em-recurso-soma-dias-corridos
+  (is (= (LocalDate/of 2026 7 13) (logic/vence-em-recurso (LocalDate/of 2026 7 3)))
+      "recibo do recurso + dias-recurso-esic (10) dias corridos [GAP default]")
+  (is (not= (logic/vence-em (LocalDate/of 2026 7 3)) (logic/vence-em-recurso (LocalDate/of 2026 7 3)))
+      "MESMO recibo: pedido e recurso vencem em datas DISTINTAS (relogios independentes)"))
+
+;; ---------- protocolo do recurso (namespace distinto do pedido) ----------
+
+(deftest protocolo-recurso-formata-com-prefixo-proprio
+  (is (= "REC-2026-000001" (logic/protocolo-recurso 2026 1)))
+  (is (= "REC-2026-000042" (logic/protocolo-recurso 2026 42)))
+  (is (not= (logic/protocolo-recurso 2026 1) (logic/protocolo-esic 2026 1))
+      "protocolo de recurso e de pedido nao colidem na leitura humana"))

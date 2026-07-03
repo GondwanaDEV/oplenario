@@ -13,11 +13,30 @@
   (:require [oplenario.http :as http]
             [oplenario.interceptors :as it]
             [oplenario.participacao.adapters.in.pedido-esic :as adapters-in]
+            [oplenario.participacao.adapters.in.recurso-esic :as adapters-in-recurso]
+            [oplenario.participacao.adapters.in.resposta-esic :as adapters-in-resposta]
             [oplenario.participacao.adapters.out.acompanhamento :as adapters-out-acomp]
             [oplenario.participacao.adapters.out.pedido-esic :as adapters-out-pedido]
+            [oplenario.participacao.adapters.out.recurso-esic :as adapters-out-recurso]
+            [oplenario.participacao.adapters.out.resposta-esic :as adapters-out-resposta]
             [oplenario.participacao.controllers :as controllers]))
 
 (set! *warn-on-reflection* true)
+
+(defn- responder-op
+  "Resposta comum das operacoes de escrita do ciclo (Slice 2): executa `op` (thunk que chama o controller — devolve
+  o mapa de dominio ou nil no ausente/CAS perdido) e desambigua: sucesso -> `status-ok` (adapters/out projeta+
+  filtra via `->wire`); nil -> 404; ExceptionInfo :conflito/participacao -> 409 (nao 500). A validacao de borda
+  (id/corpo) e a authz (403) sobem ANTES/fora daqui ao interceptor global. Espelha compliance/responder-transicao."
+  [op ->wire status-ok]
+  (try
+    (if-let [r (op)]
+      (http/json-resposta status-ok (->wire r))
+      (http/json-resposta 404 {:erro "recurso nao encontrado"}))
+    (catch clojure.lang.ExceptionInfo e
+      (if (= :conflito/participacao (:tipo (ex-data e)))
+        (http/json-resposta 409 {:erro "estado incompativel com a operacao"})
+        (throw e)))))
 
 (def resolver-ente-publico-uuid
   "Seam `resolver-ente-publico` DEFAULT do host (V1): o :ente do path = UUID do ente, coagido fail-closed
@@ -56,6 +75,37 @@
         (http/json-resposta 200 (adapters-out-acomp/acompanhamento->wire acomp))
         (http/json-resposta 404 {:erro "pedido nao encontrado"})))))
 
+(defn- interpor-recurso-handler
+  "POST /portal/esic/pedidos/:id/recursos (CIDADAO, so-auth). Coage o :id do pedido + o corpo {motivo} (400 se
+  malformado). O controller aplica a policy fina (dono -> 403; nao-recorrivel -> 409; ausente -> 404). Sucesso -> 201
+  {protocolo, recibo-em} (prova do relogio proprio do recurso)."
+  [repo-participacao relogio]
+  (fn [req]
+    (let [id      (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          entrada (adapters-in-recurso/coagir-recurso (:json-params req))]
+      (responder-op #(controllers/interpor-recurso! repo-participacao relogio (:ator req) id entrada)
+                    adapters-out-recurso/recibo->wire 201))))
+
+(defn- responder-pedido-handler
+  "POST /esic/pedidos/:id/resposta (SERVIDOR, exige-papel). Coage o :id + o corpo {corpo}. nil -> 404;
+  ja respondido -> 409. Sucesso -> 200 {respondida-em}."
+  [repo-participacao relogio]
+  (fn [req]
+    (let [id      (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          entrada (adapters-in-resposta/coagir-resposta (:json-params req))]
+      (responder-op #(controllers/responder-pedido! repo-participacao relogio (:ator req) id entrada)
+                    adapters-out-resposta/recibo->wire 200))))
+
+(defn- decidir-recurso-handler
+  "POST /esic/recursos/:id/decisao (SERVIDOR, exige-papel). Coage o :id do recurso + o corpo {corpo}. nil -> 404;
+  ja decidido -> 409. Sucesso -> 200 {decidido-em}."
+  [repo-participacao relogio]
+  (fn [req]
+    (let [id      (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          entrada (adapters-in-resposta/coagir-resposta (:json-params req))]
+      (responder-op #(controllers/decidir-recurso! repo-participacao relogio (:ator req) id entrada)
+                    adapters-out-recurso/decisao->wire 200))))
+
 (defn rotas
   "Fragmento de rotas do modulo participacao (table syntax Pedestal). Recebe o interceptor `auth`
   (compartilhado), o `repo-participacao` (Repo-Component), o `resolver-ente-publico` (seam do host p/ a rota
@@ -74,4 +124,17 @@
     ;; propria. (Alternativa: router :linear-search global — descartada, impacto/perf host-wide.)
     ["/portal/casa/:ente/esic/acompanhar/:protocolo" :get
      [(acompanhar-handler repo-participacao relogio resolver-ente-publico)]
-     :route-name :participacao/acompanhar-esic]})
+     :route-name :participacao/acompanhar-esic]
+    ;; ---- Slice 2: ciclo de resposta + recurso ----
+    ;; CIDADAO: interpor recurso (so-auth, sem papel — LAI: qualquer solicitante recorre; a policy fina [dono]
+    ;; mora no controller). Sob /portal (superficie do cidadao).
+    ["/portal/esic/pedidos/:id/recursos" :post
+     [auth it/corpo-json (interpor-recurso-handler repo-participacao relogio)]
+     :route-name :participacao/interpor-recurso]
+    ;; SERVIDOR: responder pedido / decidir recurso (exige-papel "secretario"). FORA de /portal (balcao interno).
+    ["/esic/pedidos/:id/resposta" :post
+     [auth (it/exige-papel "secretario") it/corpo-json (responder-pedido-handler repo-participacao relogio)]
+     :route-name :participacao/responder-pedido]
+    ["/esic/recursos/:id/decisao" :post
+     [auth (it/exige-papel "secretario") it/corpo-json (decidir-recurso-handler repo-participacao relogio)]
+     :route-name :participacao/decidir-recurso]})

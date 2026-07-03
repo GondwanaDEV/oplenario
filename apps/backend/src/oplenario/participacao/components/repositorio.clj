@@ -10,7 +10,10 @@
   (:require [oplenario.kernel.tenancy :as tenancy]
             [oplenario.participacao.db.pedido-esic :as db-pedido]
             [oplenario.participacao.db.prazo-ativo :as db-prazo]
-            [oplenario.participacao.diplomat.producers :as producers]))
+            [oplenario.participacao.db.recurso-esic :as db-recurso]
+            [oplenario.participacao.db.resposta-esic :as db-resposta]
+            [oplenario.participacao.diplomat.producers :as producers])
+  (:import (org.postgresql.util PSQLException)))
 
 (set! *warn-on-reflection* true)
 
@@ -22,6 +25,25 @@
      :solicitante-identidade-id :recibo-em :vence-em :prazo-id :base-dias :prazo-fonte-ref :created-by}.
      Devolve {:id :protocolo :recibo-em}.")
   (buscar-pedido [this ente-id id])
+  (buscar-recurso [this ente-id id]
+    "Recurso por id no tenant. Usado pela borda p/ desambiguar o nil de decidir-recurso! (existe -> 409 de
+     ciclo; ausente -> 404).")
+  (responder-pedido! [this ente-id m]
+    "SERVIDOR — UMA tx: CAS pedido protocolado|em_analise -> respondido (nil = ja terminal, aborta sem escrever)
+     + INSERT resposta_esic(pedido_id) (append-only) + cumpre o prazo do PEDIDO (prazo_ativo -> cumprida) + emit
+     `pedido_esic.respondido` (outbox, mesma tx). `m` = {:pedido-id :resposta-id :corpo :respondido-por
+     :respondida-em}. Devolve {:respondida-em :protocolo} ou nil (pedido ja terminal/inexistente).")
+  (interpor-recurso! [this ente-id m]
+    "CIDADAO — UMA tx: sequencial gapless 'recurso_esic:<ano>' + INSERT recurso_esic (instancia) + INSERT
+     prazo_ativo(objeto_tipo=recurso_esic) pendente com vence_em PROPRIO (relogio independente do pedido) + emit
+     `recurso_esic.protocolado`. A policy (dono + pedido recorrivel) e' guardada UPSTREAM no controller. `m` =
+     {:recurso-id :pedido-id :ano :instancia :motivo :recibo-em :vence-em :prazo-id :base-dias :prazo-fonte-ref
+     :created-by}. Devolve {:id :protocolo :recibo-em}.")
+  (decidir-recurso! [this ente-id m]
+    "SERVIDOR — UMA tx: CAS recurso protocolado -> decidido (+ carimba decidido_em; nil = ja decidido, aborta) +
+     INSERT resposta_esic(recurso_id) (append-only) + cumpre o prazo do RECURSO (prazo_ativo -> cumprida) + emit
+     `recurso_esic.decidido`. `m` = {:recurso-id :resposta-id :corpo :respondido-por :respondida-em :decidido-em}.
+     Devolve {:decidido-em} ou nil (recurso ja decidido/inexistente).")
   (pedido-com-prazo [this ente-id id]
     "Pedido por id + o prazo do objeto (in-schema), numa tx. Devolve {:pedido :prazo} ou nil (inexistente).")
   (acompanhar-por-protocolo [this ente-id protocolo]
@@ -52,6 +74,69 @@
              :recibo-em (str recibo-em) :vence-em (str vence-em)})
           {:id id :protocolo (:protocolo pedido) :recibo-em recibo-em}))))
   (buscar-pedido [this ente-id id] (transacao this ente-id #(db-pedido/buscar % ente-id id)))
+  (buscar-recurso [this ente-id id] (transacao this ente-id #(db-recurso/buscar % ente-id id)))
+  (responder-pedido! [this ente-id {:keys [pedido-id resposta-id corpo respondido-por respondida-em]}]
+    (transacao this ente-id
+      (fn [tx]
+        ;; CAS PRIMEIRO (short-circuit): so escreve a resposta/cumpre o prazo se o pedido AINDA e' respondivel.
+        ;; nil = ja terminal (respondido/indeferido) -> aborta sem inserir nada (a borda desambigua p/ 409).
+        (when-let [pedido (db-pedido/responder! tx {:id pedido-id :ente-id ente-id})]
+          (db-resposta/inserir! tx {:id resposta-id :ente-id ente-id :pedido-id pedido-id :recurso-id nil
+                                    :corpo corpo :respondido-por respondido-por :respondida-em respondida-em})
+          ;; fecha o relogio do PEDIDO (prazo_ativo pedido_esic -> cumprida), cumprida_em = instante do ato.
+          ;; INVARIANTE (Inv.10): o pedido so vira terminal ATOMICO com o fechamento do seu prazo. Se o CAS de
+          ;; cumprimento nao achou prazo ABERTO (pendente|vencida), ha inconsistencia (prazo orfao) — aborta a
+          ;; tx (500 auditavel, tipo != :conflito -> nao 409) em vez de commitar 'respondido' com prazo preso.
+          (when-not (db-prazo/cumprir! tx {:ente-id ente-id :objeto-tipo "pedido_esic" :objeto-id pedido-id
+                                           :cumprida-em respondida-em})
+            (throw (ex-info "prazo do pedido nao estava aberto ao cumprir (invariante de compliance)"
+                            {:tipo :invariante/prazo-orfao :objeto-tipo "pedido_esic" :objeto-id pedido-id})))
+          (producers/emitir-pedido-respondido! bus tx ente-id
+            {:pedido-id pedido-id :protocolo (:protocolo pedido) :respondida-em (str respondida-em)})
+          {:respondida-em respondida-em :protocolo (:protocolo pedido)}))))
+  (interpor-recurso! [this ente-id {:keys [recurso-id pedido-id ano instancia motivo recibo-em vence-em
+                                           prazo-id base-dias prazo-fonte-ref created-by]}]
+    ;; IDEMPOTENCIA: a UNIQUE(ente, pedido, instancia) da mig 0040 barra o double-click/retry do cidadao (o
+    ;; pedido terminal nao muta, entao a policy do controller nao detecta a 2a tentativa). A corrida perdida
+    ;; vira 23505 -> :conflito/participacao (409, nao 500) — mesmo predicado 23505 do compliance/inserir-com-retry!.
+    (try
+      (transacao this ente-id
+        (fn [tx]
+          (let [recurso (db-recurso/inserir! tx {:id recurso-id :ente-id ente-id :pedido-id pedido-id :ano ano
+                                                 :instancia instancia :motivo motivo :recibo-em recibo-em
+                                                 :created-by created-by})]
+            ;; o relogio PROPRIO do recurso comeca atomico com a interposicao: 2a linha de prazo_ativo, vence_em proprio.
+            (db-prazo/inserir! tx {:id prazo-id :ente-id ente-id :objeto-tipo "recurso_esic" :objeto-id recurso-id
+                                   :vence-em vence-em :estado "pendente" :base-dias base-dias
+                                   :prazo-fonte-ref prazo-fonte-ref :created-by created-by})
+            (producers/emitir-recurso-protocolado! bus tx ente-id
+              {:recurso-id recurso-id :pedido-id pedido-id :protocolo (:protocolo recurso)
+               :recibo-em (str recibo-em) :vence-em (str vence-em)})
+            {:id recurso-id :protocolo (:protocolo recurso) :recibo-em recibo-em})))
+      (catch PSQLException e
+        (if (= "23505" (.getSQLState e))
+          (throw (ex-info "recurso ja interposto para este pedido/instancia"
+                          {:tipo :conflito/participacao :pedido-id pedido-id :instancia instancia}))
+          (throw e)))))
+  (decidir-recurso! [this ente-id {:keys [recurso-id resposta-id corpo respondido-por respondida-em decidido-em]}]
+    (transacao this ente-id
+      (fn [tx]
+        ;; CAS protocolado -> decidido, carimbando decidido_em (a CHECK recurso_decidido_coerente exige). nil =
+        ;; ja decidido -> aborta sem escrever (a borda desambigua p/ 409). decidido_em = instante INJETADO (determinismo).
+        (when-let [recurso (db-recurso/transicionar-estado! tx {:id recurso-id :ente-id ente-id
+                                                                :de "protocolado" :para "decidido"
+                                                                :extra {:decidido_em decidido-em}})]
+          (db-resposta/inserir! tx {:id resposta-id :ente-id ente-id :pedido-id nil :recurso-id recurso-id
+                                    :corpo corpo :respondido-por respondido-por :respondida-em respondida-em})
+          ;; INVARIANTE (Inv.10, espelha responder-pedido!): decidir so vira terminal ATOMICO com o fechamento
+          ;; do prazo do RECURSO. Sem prazo aberto = inconsistencia (prazo orfao) -> aborta a tx (500 auditavel).
+          (when-not (db-prazo/cumprir! tx {:ente-id ente-id :objeto-tipo "recurso_esic" :objeto-id recurso-id
+                                           :cumprida-em respondida-em})
+            (throw (ex-info "prazo do recurso nao estava aberto ao cumprir (invariante de compliance)"
+                            {:tipo :invariante/prazo-orfao :objeto-tipo "recurso_esic" :objeto-id recurso-id})))
+          (producers/emitir-recurso-decidido! bus tx ente-id
+            {:recurso-id recurso-id :decidido-em (str (:decidido-em recurso))})
+          {:decidido-em (:decidido-em recurso)}))))
   (pedido-com-prazo [this ente-id id]
     (transacao this ente-id
       (fn [tx]

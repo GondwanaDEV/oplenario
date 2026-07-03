@@ -4,7 +4,17 @@
   existe se a tx commitou). Chamado pelo Repo-Component, que compoe o ato + a emissao na MESMA tx. O
   vocabulario/contrato mora em events/; aqui e' so o ATO de emitir."
   (:require [oplenario.kernel.eventos :as eventos]
-            [oplenario.participacao.events.pedido-esic :as ev-pedido]))
+            [oplenario.participacao.events.pedido-esic :as ev-pedido]
+            [oplenario.participacao.events.recurso-esic :as ev-recurso]))
 
 (defn emitir-pedido-protocolado! [bus tx ente-id payload]
   (eventos/emitir! bus tx (ev-pedido/protocolado ente-id payload)))
+
+(defn emitir-pedido-respondido! [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-pedido/respondido ente-id payload)))
+
+(defn emitir-recurso-protocolado! [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-recurso/protocolado ente-id payload)))
+
+(defn emitir-recurso-decidido! [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-recurso/decidido ente-id payload)))

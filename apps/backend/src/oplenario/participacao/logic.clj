@@ -39,10 +39,41 @@
   titular ganham relogio proprio nas fatias seguintes; o pedido e-SIC e' o desta fatia."
   #{"pedido_esic" "recurso_esic" "solicitacao_titular"})
 
+;; ---- ciclo VISIVEL do RECURSO (recurso_esic.estado) — enum FIXO em codigo (Slice 2) ----
+(def estados-recurso
+  "Ciclo do recurso e-SIC visivel ao cidadao. `decidido` e' terminal (trava a linha — trg_recurso_esic_trava_terminal)."
+  #{"protocolado" "decidido"})
+
+(def ^:private estados-terminais-recurso
+  "Desfecho do recurso: a autoridade ja decidiu (a linha congela)."
+  #{"decidido"})
+
+(def ^:private transicoes-recurso
+  "Grafo de transicoes LEGAIS do recurso (de -> conjunto de proximos). Terminal nao tem saida."
+  {"protocolado" #{"decidido"}
+   "decidido"    #{}})
+
+(def ^:private estados-pedido-recorriveis
+  "Estados do PEDIDO a partir dos quais o cidadao pode INTERPOR recurso: so os DESFECHOS (respondido|indeferido).
+  Recorrer de um pedido ainda em curso (protocolado|em_analise) nao faz sentido — nao ha o que recorrer ainda."
+  #{"respondido" "indeferido"})
+
 ;; ---- matematica do prazo LAI ----
 (def dias-lai-esic
   "Prazo do e-SIC em dias (LAI art. 11 §1º = 20). [GAP]: corridos-vs-uteis nao cravado -> V1 = corridos."
   20)
+
+(def dias-recurso-esic
+  "Prazo (em dias) do RECURSO e-SIC — o relogio PROPRIO da instancia recursal.
+
+  [GAP] DE CONTEUDO: a LAI da a autoridade superior/CGU um prazo PROPRIO no julgamento do recurso, MAS o
+  numero exato NAO esta cravado nesta fatia (varia por instancia/autoridade e por corridos-vs-uteis, o mesmo
+  [GAP] do pedido). O ponto da fatia e' o MECANISMO de RELOGIO INDEPENDENTE (o recurso materializa a 2a linha
+  de prazo_ativo, com vence_em proprio), NAO o valor. V1 = DEFAULT DOCUMENTADO HARDCODED [GAP] — constante de
+  compile-time, AINDA SEM seam de config por ente/env (ajustar exige deploy; fiar a config = carry). Escolhido
+  deliberadamente != 20 do pedido, p/ nao mascarar a independencia dos relogios; confirmar com juridico antes
+  de prod. NAO afirmar este numero como lei."
+  10)
 
 (defn vence-em
   "Data de vencimento do prazo LAI a partir do LocalDate do recibo (marco de inicio do relogio). DIA-CORRIDO:
@@ -57,11 +88,25 @@
   [^LocalDate venc ^LocalDate hoje]
   (- (.toEpochDay venc) (.toEpochDay hoje)))
 
+(defn vence-em-recurso
+  "Data de vencimento do prazo do RECURSO a partir do LocalDate do recibo do recurso (marco de inicio do
+  RELOGIO PROPRIO da instancia recursal). DIA-CORRIDO `.plusDays dias-recurso-esic`. [GAP] de conteudo
+  (ver dias-recurso-esic): o numero e' default documentado, nao lei; o mecanismo (relogio independente do
+  pedido) e' o que a fatia crava."
+  ^LocalDate [^LocalDate recibo-data]
+  (.plusDays recibo-data (long dias-recurso-esic)))
+
 (defn protocolo-esic
   "Numero de PROTOCOLO humano do pedido a partir do (ano, sequencial gapless). Formato estavel
   'ESIC-<ano>-<seq 6 digitos>' (ex.: ESIC-2026-000001). PURO — o sequencial gapless vem do kernel."
   [ano sequencial]
   (format "ESIC-%d-%06d" (long ano) (long sequencial)))
+
+(defn protocolo-recurso
+  "Numero de PROTOCOLO humano do recurso a partir do (ano, sequencial gapless). Formato 'REC-<ano>-<seq 6
+  digitos>' (ex.: REC-2026-000001) — namespace distinto do pedido (ESIC-) p/ nao colidir na leitura humana."
+  [ano sequencial]
+  (format "REC-%d-%06d" (long ano) (long sequencial)))
 
 ;; ---- validadores (guardas de profundidade; espelham os demais validar-* do projeto) ----
 
@@ -82,11 +127,30 @@
   "Lanca se `v` nao e' objeto_tipo de prazo (pedido_esic|recurso_esic|solicitacao_titular)."
   [v] (validar! objeto-tipos-prazo "objeto_tipo de prazo" v))
 
+(defn validar-estado-recurso
+  "Lanca se `v` nao e' estado do recurso (protocolado|decidido)."
+  [v] (validar! estados-recurso "estado de recurso e-SIC" v))
+
 (defn terminal-pedido?
   "O estado do pedido e' terminal (o orgao ja respondeu/indeferiu)?"
   [estado] (contains? estados-terminais-pedido estado))
+
+(defn terminal-recurso?
+  "O estado do recurso e' terminal (a autoridade ja decidiu)?"
+  [estado] (contains? estados-terminais-recurso estado))
 
 (defn transicao-pedido-valida?
   "A transicao `de`->`para` do ciclo do pedido e' legal? (pura — so o grafo fixo). Terminais nao transicionam."
   [de para]
   (contains? (get transicoes-pedido de) para))
+
+(defn transicao-recurso-valida?
+  "A transicao `de`->`para` do ciclo do recurso e' legal? (pura — so o grafo fixo). Terminal nao transiciona."
+  [de para]
+  (contains? (get transicoes-recurso de) para))
+
+(defn pedido-admite-recurso?
+  "O pedido no `estado` dado admite a interposicao de recurso? So os DESFECHOS (respondido|indeferido) —
+  recorrer de um pedido ainda em curso e' conflito (a borda mapeia p/ 409)."
+  [estado]
+  (contains? estados-pedido-recorriveis estado))
