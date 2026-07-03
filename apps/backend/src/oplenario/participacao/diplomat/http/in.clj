@@ -15,20 +15,36 @@
   (qualquer titular pede sobre os PROPRIOS dados, sem papel); GET .../solicitacoes/:id = auth + policy fina (ator
   == titular). (2) POST /lgpd/solicitacoes/:id/resposta e PUT /lgpd/encarregado = SERVIDOR (auth + exige-papel
   'secretario'). (3) GET /portal/casa/:ente/encarregado = PUBLICA sem `auth` — o contato do DPO e' legalmente
-  publico (LGPD art. 41 §1º); mesmo mecanismo resolver-ente-publico + RLS + filtro de saida no adapters/out."
+  publico (LGPD art. 41 §1º); mesmo mecanismo resolver-ente-publico + RLS + filtro de saida no adapters/out.
+
+  As rotas de OUVIDORIA (FAST-FOLLOW Slice 5, Lei 13.460 art. 10) tem um 4o perfil: (1) POST
+  /portal/ouvidoria/manifestacoes = cidadao SO-`auth` (ANONIMA NAO E' SEM-AUTH — a escrita sempre exige
+  token; `anonima?` so decide o que persiste, ver controllers/protocolar-manifestacao!). (2) GET
+  /portal/ouvidoria/manifestacoes/:id = auth + policy fina, MAS devolve 404 (nao 403) quando `anonima=true`
+  — nao ha dono persistido p/ comparar, nem para o proprio autor (controllers/minha-manifestacao ja decide
+  isso — a rota so' aplica o nil->404 padrao). (3) GET /portal/casa/:ente/ouvidoria/acompanhar/:protocolo =
+  PUBLICA sem `auth`, mesmo mecanismo resolver-ente-publico. (4) POST .../resposta|arquivar|prorrogar =
+  SERVIDOR (auth + exige-papel 'secretario')."
   (:require [oplenario.http :as http]
             [oplenario.interceptors :as it]
+            [oplenario.participacao.adapters.in.arquivar-ouvidoria :as adapters-in-arquivar]
             [oplenario.participacao.adapters.in.encarregado :as adapters-in-encarregado]
+            [oplenario.participacao.adapters.in.manifestacao-ouvidoria :as adapters-in-manifestacao]
             [oplenario.participacao.adapters.in.pedido-esic :as adapters-in]
+            [oplenario.participacao.adapters.in.prorrogar-ouvidoria :as adapters-in-prorrogar]
             [oplenario.participacao.adapters.in.recurso-esic :as adapters-in-recurso]
             [oplenario.participacao.adapters.in.resposta-esic :as adapters-in-resposta]
+            [oplenario.participacao.adapters.in.resposta-ouvidoria :as adapters-in-resposta-ouvidoria]
             [oplenario.participacao.adapters.in.resposta-titular :as adapters-in-resposta-titular]
             [oplenario.participacao.adapters.in.solicitacao-titular :as adapters-in-titular]
             [oplenario.participacao.adapters.out.acompanhamento :as adapters-out-acomp]
+            [oplenario.participacao.adapters.out.acompanhamento-ouvidoria :as adapters-out-acomp-ouvidoria]
             [oplenario.participacao.adapters.out.encarregado :as adapters-out-encarregado]
+            [oplenario.participacao.adapters.out.manifestacao-ouvidoria :as adapters-out-manifestacao]
             [oplenario.participacao.adapters.out.pedido-esic :as adapters-out-pedido]
             [oplenario.participacao.adapters.out.recurso-esic :as adapters-out-recurso]
             [oplenario.participacao.adapters.out.resposta-esic :as adapters-out-resposta]
+            [oplenario.participacao.adapters.out.resposta-ouvidoria :as adapters-out-resposta-ouvidoria]
             [oplenario.participacao.adapters.out.solicitacao-titular :as adapters-out-titular]
             [oplenario.participacao.controllers :as controllers]))
 
@@ -170,6 +186,68 @@
           r       (controllers/definir-encarregado! repo-participacao (:ator req) entrada)]
       (http/json-resposta 200 (adapters-out-encarregado/publico->wire r)))))
 
+;; ========================= FAST-FOLLOW Slice 5: Ouvidoria (Lei 13.460/2017 art. 10) =========================
+
+(defn- protocolar-manifestacao-handler
+  "POST /portal/ouvidoria/manifestacoes (cidadao, SO-auth — ANONIMA NAO E' SEM-AUTH). adapters/in coage o
+  corpo (fail-closed 400); o controller decide o que persiste (manifestante/created-by nil quando anonima).
+  201 com {protocolo, recibo-em}."
+  [repo-participacao relogio]
+  (fn [req]
+    (let [entrada (adapters-in-manifestacao/coagir-manifestacao (:json-params req))
+          r       (controllers/protocolar-manifestacao! repo-participacao relogio (:ator req) entrada)]
+      (http/json-resposta 201 (adapters-out-manifestacao/recibo->wire r)))))
+
+(defn- minha-manifestacao-handler
+  "GET /portal/ouvidoria/manifestacoes/:id (manifestante). Policy fina no controller: ANONIMA -> nil SEMPRE
+  (404, mesmo pro proprio autor); NAO-anonima -> ator == manifestante (403 global se nao). Ausente -> 404."
+  [repo-participacao relogio]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [detalhe (controllers/minha-manifestacao repo-participacao (:ator req) relogio id)]
+        (http/json-resposta 200 (adapters-out-manifestacao/manifestacao->wire detalhe))
+        (http/json-resposta 404 {:erro "manifestacao nao encontrada"})))))
+
+(defn- acompanhar-manifestacao-handler
+  "GET /portal/casa/:ente/ouvidoria/acompanhar/:protocolo (PUBLICA, sem auth). resolver-ente-publico coage
+  o :ente (-> 400 se malformado); o controller le sob o tenant (RLS isola). adapters/out FILTRA toda PII."
+  [repo-participacao relogio resolver-ente-publico]
+  (fn [req]
+    (let [ente-id   (resolver-ente-publico (get-in req [:path-params :ente]))
+          protocolo (get-in req [:path-params :protocolo])]
+      (if-let [acomp (controllers/acompanhar-manifestacao-por-protocolo repo-participacao ente-id relogio protocolo)]
+        (http/json-resposta 200 (adapters-out-acomp-ouvidoria/acompanhamento->wire acomp))
+        (http/json-resposta 404 {:erro "manifestacao nao encontrada"})))))
+
+(defn- responder-manifestacao-handler
+  "POST /ouvidoria/manifestacoes/:id/resposta (SERVIDOR, exige-papel). nil -> 404; ja terminal -> 409."
+  [repo-participacao relogio]
+  (fn [req]
+    (let [id      (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          entrada (adapters-in-resposta-ouvidoria/coagir-resposta (:json-params req))]
+      (responder-op #(controllers/responder-manifestacao! repo-participacao relogio (:ator req) id entrada)
+                    adapters-out-resposta-ouvidoria/resposta-recibo->wire 200))))
+
+(defn- arquivar-manifestacao-handler
+  "POST /ouvidoria/manifestacoes/:id/arquivar (SERVIDOR, exige-papel; `motivo` obrigatorio). nil -> 404;
+  ja terminal -> 409."
+  [repo-participacao relogio]
+  (fn [req]
+    (let [id      (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          entrada (adapters-in-arquivar/coagir-arquivar (:json-params req))]
+      (responder-op #(controllers/arquivar-manifestacao! repo-participacao relogio (:ator req) id entrada)
+                    adapters-out-resposta-ouvidoria/arquivar-recibo->wire 200))))
+
+(defn- prorrogar-manifestacao-handler
+  "POST /ouvidoria/manifestacoes/:id/prorrogar (SERVIDOR, exige-papel; `justificativa` obrigatoria).
+  nil -> 404 (manifestacao/prazo inexistente); ja prorrogada/nao-pendente -> 409."
+  [repo-participacao relogio]
+  (fn [req]
+    (let [id      (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          entrada (adapters-in-prorrogar/coagir-prorrogar (:json-params req))]
+      (responder-op #(controllers/prorrogar-manifestacao! repo-participacao relogio (:ator req) id entrada)
+                    adapters-out-resposta-ouvidoria/prorrogar-recibo->wire 200))))
+
 (defn rotas
   "Fragmento de rotas do modulo participacao (table syntax Pedestal). Recebe o interceptor `auth`
   (compartilhado), o `repo-participacao` (Repo-Component), o `resolver-ente-publico` (seam do host p/ a rota
@@ -223,4 +301,27 @@
      :route-name :participacao/responder-solicitacao]
     ["/lgpd/encarregado" :put
      [auth (it/exige-papel "secretario") it/corpo-json (definir-encarregado-handler repo-participacao)]
-     :route-name :participacao/definir-encarregado]})
+     :route-name :participacao/definir-encarregado]
+    ;; ---- FAST-FOLLOW Slice 5: Ouvidoria (Lei 13.460 art. 10) ----
+    ;; CIDADAO: protocolar manifestacao (SO-auth — ANONIMA NAO E' SEM-AUTH, ver docstring do handler).
+    ["/portal/ouvidoria/manifestacoes" :post
+     [auth it/corpo-json (protocolar-manifestacao-handler repo-participacao relogio)]
+     :route-name :participacao/protocolar-manifestacao]
+    ["/portal/ouvidoria/manifestacoes/:id" :get
+     [auth (minha-manifestacao-handler repo-participacao relogio)]
+     :route-name :participacao/minha-manifestacao]
+    ;; PUBLICA (sem auth): reusa o disambiguador estatico `casa/` (mesmo racional de acompanhar-esic/
+    ;; encarregado-publico — o router prefix-tree do Pedestal 0.7 nao admite wildcard+literal no mesmo nivel).
+    ["/portal/casa/:ente/ouvidoria/acompanhar/:protocolo" :get
+     [(acompanhar-manifestacao-handler repo-participacao relogio resolver-ente-publico)]
+     :route-name :participacao/acompanhar-manifestacao]
+    ;; SERVIDOR (exige-papel "secretario"), FORA de /portal (balcao interno).
+    ["/ouvidoria/manifestacoes/:id/resposta" :post
+     [auth (it/exige-papel "secretario") it/corpo-json (responder-manifestacao-handler repo-participacao relogio)]
+     :route-name :participacao/responder-manifestacao]
+    ["/ouvidoria/manifestacoes/:id/arquivar" :post
+     [auth (it/exige-papel "secretario") it/corpo-json (arquivar-manifestacao-handler repo-participacao relogio)]
+     :route-name :participacao/arquivar-manifestacao]
+    ["/ouvidoria/manifestacoes/:id/prorrogar" :post
+     [auth (it/exige-papel "secretario") it/corpo-json (prorrogar-manifestacao-handler repo-participacao relogio)]
+     :route-name :participacao/prorrogar-manifestacao]})

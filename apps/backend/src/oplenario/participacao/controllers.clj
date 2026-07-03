@@ -33,6 +33,11 @@
   logic/dias-titular. Default documentado, nao lei."
   "LGPD 13.709/2018 art. 18/19 (prazo do titular [GAP] — default documentado; contador SEPARADO do e-SIC)")
 
+(def ^:private prazo-fonte-ouvidoria
+  "Proveniencia do prazo da ouvidoria (citacao legal). [GAP] de conteudo: corridos-vs-uteis nao cravado
+  (mesmo GAP do e-SIC/LGPD) — V1 = corridos."
+  "Lei 13.460/2017 art. 10 (30 dias, prorrogavel por igual periodo; corridos-vs-uteis [GAP])")
+
 (defn- em-conflito!
   "Sinaliza CONFLITO DE CICLO (a borda mapeia p/ 409): a operacao e' incompativel com o estado atual do
   agregado (pedido ja terminal, recurso ja decidido, pedido nao-recorrivel). Distinto de nil (ausente -> 404)
@@ -60,9 +65,12 @@
        :created-by sujeito})))
 
 (defn- dias-restantes-do-prazo
-  "dias-restantes do prazo contra o `hoje` do relogio, ou nil quando nao ha prazo ativo (read-derivation pura)."
+  "dias-restantes do prazo contra o `hoje` do relogio, ou nil quando nao ha prazo ativo (read-derivation
+  pura). Usa o vencimento EFETIVO (`logic/vencimento-efetivo`, generalizacao 0042 — COALESCE prorrogado_ate/
+  vence_em): o 'anel' do cidadao ja mostra a data prorrogada. BACKWARD-SAFE p/ e-SIC/LGPD (que nunca
+  prorrogam em V1 — prorrogado_ate e' sempre nil, entao degenera p/ vence_em cru)."
   [relogio prazo]
-  (when prazo (logic/dias-restantes (:vence-em prazo) (tempo/hoje relogio zona-civil))))
+  (when prazo (logic/dias-restantes (logic/vencimento-efetivo prazo) (tempo/hoje relogio zona-civil))))
 
 (defn acompanhar-por-protocolo
   "Andamento PUBLICO de um pedido por protocolo, no tenant `ente-id` (resolvido do path na borda; a RLS isola).
@@ -84,7 +92,7 @@
     (when (not= (:solicitante-identidade-id pedido) (:identidade-id ator))
       (authz/negar! :nao-e-solicitante {:pedido-id id :ator (:identidade-id ator)}))
     (assoc pedido
-           :vence-em       (:vence-em prazo)
+           :vence-em       (logic/vencimento-efetivo prazo)
            :dias-restantes (dias-restantes-do-prazo relogio prazo))))
 
 (defn meus-pedidos
@@ -176,7 +184,7 @@
     (when (not= (:titular-identidade-id solicitacao) (:identidade-id ator))
       (authz/negar! :nao-e-titular {:solicitacao-id id :ator (:identidade-id ator)}))
     (assoc solicitacao
-           :vence-em       (:vence-em prazo)
+           :vence-em       (logic/vencimento-efetivo prazo)
            :dias-restantes (dias-restantes-do-prazo relogio prazo))))
 
 (defn responder-solicitacao!
@@ -208,3 +216,107 @@
   404). NAO devolve interno — o diplomat projeta pelo adapters/out publico (so nome/rotulo/email)."
   [repo-participacao ente-id]
   (repo/buscar-encarregado repo-participacao ente-id))
+
+;; ========================= FAST-FOLLOW Slice 5: Ouvidoria (Lei 13.460/2017 art. 10) =========================
+
+(defn protocolar-manifestacao!
+  "Protocola uma manifestacao de ouvidoria do `ator` (cidadao — rota SO-auth). Computa o recibo (Instant =
+  marco do relogio) e o vencimento (30 dias corridos, Lei 13.460 art. 10) do relogio INJETADO. UMA tx no
+  Repo (sequencial+manifestacao+prazo+evento).
+
+  DECISAO DE ARQUITETURA — anonima NAO e' sem-auth (§22.5: escrita sempre exige ator): a rota EXIGE
+  autenticacao como qualquer escrita do cidadao; `anonima?` so decide SE `manifestante-identidade-id`
+  (E `created-by`, o transversal de auditoria) sao persistidos — quando true, NENHUM dos dois chega ao
+  banco (nil), so' `:anonima true` fica marcado na linha. O ator do request segue existindo apenas p/
+  authz/anti-abuso (rate-limit futuro), nunca alcanca esta escrita. Devolve {:id :protocolo :recibo-em}."
+  [repo-participacao relogio ator {:keys [tipo assunto descricao anonima]}]
+  (let [agora       (tempo/agora relogio)
+        hoje        (tempo/hoje-de agora zona-civil)
+        ano         (.getYear hoje)
+        vence       (logic/vence-em-ouvidoria hoje)
+        anonima?    (boolean anonima)
+        sujeito     (:identidade-id ator)
+        ;; ANONIMA: nem o manifestante nem o created-by (auditoria) chegam ao banco — genuina anonimidade
+        ;; (nao so' "escondida da API"; um SELECT direto tambem nao re-identifica).
+        manifestante (when-not anonima? sujeito)
+        autor        (when-not anonima? sujeito)]
+    (repo/protocolar-manifestacao! repo-participacao (:ente-id ator)
+      {:id (ids/novo-id) :ano ano :tipo tipo :assunto assunto :descricao descricao
+       :anonima anonima? :manifestante-identidade-id manifestante :recibo-em agora :vence-em vence
+       :prazo-id (ids/novo-id) :base-dias logic/dias-ouvidoria :prazo-fonte-ref prazo-fonte-ouvidoria
+       :created-by autor})))
+
+(defn acompanhar-manifestacao-por-protocolo
+  "Andamento PUBLICO de uma manifestacao por protocolo, no tenant `ente-id` (resolvido do path na borda; a
+  RLS isola). Le manifestacao+prazo in-schema (1 tx) e computa dias-restantes (vencimento EFETIVO — mostra a
+  data prorrogada, se houver). Devolve {:protocolo :estado :dias-restantes} ou nil (protocolo inexistente).
+  NAO devolve PII — o diplomat projeta pelo adapters/out publico."
+  [repo-participacao ente-id relogio protocolo]
+  (when-let [{:keys [manifestacao prazo]} (repo/acompanhar-manifestacao-por-protocolo repo-participacao ente-id protocolo)]
+    {:protocolo      (:protocolo manifestacao)
+     :estado         (:estado manifestacao)
+     :dias-restantes (dias-restantes-do-prazo relogio prazo)}))
+
+(defn minha-manifestacao
+  "Detalhe da manifestacao `id` para o proprio MANIFESTANTE (rota autenticada). Policy FINA (§22.5 eixo E):
+
+  ANONIMA -> nil SEMPRE (404), MESMO PARA O PROPRIO AUTOR: nao ha dono persistido p/ comparar (o CHECK
+  manifestacao_anonima_coerente da mig 0042 garante manifestante_identidade_id nil quando anonima) — so' o
+  acompanhamento PUBLICO por protocolo serve manifestacoes anonimas. NAO-anonima: so o DONO le — ator !=
+  manifestante -> authz/negar! (403). Devolve o mapa de detalhe (manifestacao + vence-em EFETIVO +
+  dias-restantes) ou nil (inexistente/anonima -> 404)."
+  [repo-participacao ator relogio id]
+  (when-let [{:keys [manifestacao prazo]} (repo/manifestacao-com-prazo repo-participacao (:ente-id ator) id)]
+    (when-not (:anonima manifestacao)
+      (when (not= (:manifestante-identidade-id manifestacao) (:identidade-id ator))
+        (authz/negar! :nao-e-manifestante {:manifestacao-id id :ator (:identidade-id ator)}))
+      (assoc manifestacao
+             :vence-em       (logic/vencimento-efetivo prazo)
+             :dias-restantes (dias-restantes-do-prazo relogio prazo)))))
+
+(defn responder-manifestacao!
+  "SERVIDOR responde (com merito) a manifestacao `id` (papel exigido na rota). UMA tx no Repo: CAS
+  manifestacao->respondida + resposta append-only + CUMPRE o prazo + emit. respondido-por INJETADO do ator
+  (nunca do corpo). Devolve {:respondida-em} (a borda projeta), ou nil (manifestacao inexistente -> 404); se
+  AINDA existe mas ja e' terminal (CAS falhou), :conflito/participacao (-> 409)."
+  [repo-participacao relogio ator id {:keys [corpo]}]
+  (let [ente-id (:ente-id ator)
+        agora   (tempo/agora relogio)]
+    (or (repo/responder-manifestacao! repo-participacao ente-id
+          {:manifestacao-id id :resposta-id (ids/novo-id) :corpo corpo
+           :respondido-por (:identidade-id ator) :respondida-em agora})
+        (when (repo/buscar-manifestacao repo-participacao ente-id id)
+          (em-conflito! "manifestacao ja respondida/arquivada (nao ha o que responder)" {:manifestacao-id id})))))
+
+(defn arquivar-manifestacao!
+  "SERVIDOR arquiva (SEM merito) a manifestacao `id` (papel exigido na rota; `motivo` obrigatorio no corpo).
+  UMA tx no Repo: CAS manifestacao->arquivada + a justificativa append-only + CANCELA o prazo (NAO cumpre —
+  nao houve merito) + emit. arquivado-por INJETADO do ator. Devolve {:arquivada-em}, ou nil (manifestacao
+  inexistente -> 404); se ja terminal, :conflito/participacao (-> 409)."
+  [repo-participacao relogio ator id {:keys [motivo]}]
+  (let [ente-id (:ente-id ator)
+        agora   (tempo/agora relogio)]
+    (or (repo/arquivar-manifestacao! repo-participacao ente-id
+          {:manifestacao-id id :resposta-id (ids/novo-id) :motivo motivo
+           :arquivado-por (:identidade-id ator) :arquivada-em agora})
+        (when (repo/buscar-manifestacao repo-participacao ente-id id)
+          (em-conflito! "manifestacao ja respondida/arquivada (nao ha o que arquivar)" {:manifestacao-id id})))))
+
+(defn prorrogar-manifestacao!
+  "SERVIDOR prorroga (1x apenas — Lei 13.460 art. 10 'por igual periodo') o prazo da manifestacao `id`
+  (papel exigido na rota; `justificativa` obrigatoria no corpo). Le o prazo ATUAL p/ derivar `de-data`
+  (vence_em ORIGINAL — imutavel; seguro ler fora da tx de escrita) e computar `para-data` (+30 a partir do
+  original, PURO). A CAS no Repo e' quem de fato impede >1 prorrogacao (race-safe); aqui so o calculo.
+  Devolve {:prorrogado-ate}, ou nil (manifestacao/prazo inexistente -> 404); se ja prorrogada ou o prazo nao
+  esta mais pendente, :conflito/participacao (-> 409)."
+  [repo-participacao relogio ator id {:keys [justificativa]}]
+  (let [ente-id (:ente-id ator)]
+    (when-let [prazo (repo/prazo-do-objeto repo-participacao ente-id "manifestacao_ouvidoria" id)]
+      (let [agora     (tempo/agora relogio)
+            de-data   (:vence-em prazo)   ; vence_em ORIGINAL (nao o efetivo — so' ha 1 prorrogacao possivel)
+            para-data (logic/vence-prorrogado-ouvidoria de-data)]
+        (or (repo/prorrogar-manifestacao! repo-participacao ente-id
+              {:prorrogacao-id (ids/novo-id) :objeto-tipo "manifestacao_ouvidoria" :objeto-id id
+               :de-data de-data :para-data para-data :justificativa justificativa
+               :prorrogado-por (:identidade-id ator) :prorrogado-em agora})
+            (em-conflito! "manifestacao ja prorrogada ou prazo nao esta mais pendente" {:manifestacao-id id}))))))

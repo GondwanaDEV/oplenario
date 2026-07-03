@@ -4,6 +4,7 @@
   existe se a tx commitou). Chamado pelo Repo-Component, que compoe o ato + a emissao na MESMA tx. O
   vocabulario/contrato mora em events/; aqui e' so o ATO de emitir."
   (:require [oplenario.kernel.eventos :as eventos]
+            [oplenario.participacao.events.manifestacao-ouvidoria :as ev-manifestacao]
             [oplenario.participacao.events.pedido-esic :as ev-pedido]
             [oplenario.participacao.events.prazo :as ev-prazo]
             [oplenario.participacao.events.recurso-esic :as ev-recurso]
@@ -29,3 +30,17 @@
 
 (defn emitir-solicitacao-titular-respondida! [bus tx ente-id payload]
   (eventos/emitir! bus tx (ev-titular/respondida ente-id payload)))
+
+;; ---- FAST-FOLLOW Slice 5: Ouvidoria (Lei 13.460 art. 10) ----
+
+(defn emitir-manifestacao-protocolada! [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-manifestacao/protocolada ente-id payload)))
+
+(defn emitir-manifestacao-respondida! [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-manifestacao/respondida ente-id payload)))
+
+(defn emitir-manifestacao-arquivada! [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-manifestacao/arquivada ente-id payload)))
+
+(defn emitir-prazo-prorrogado! [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-prazo/prorrogado ente-id payload)))

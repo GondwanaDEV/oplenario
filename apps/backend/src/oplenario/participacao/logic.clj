@@ -35,9 +35,19 @@
   #{"pendente" "cumprida" "vencida" "dispensada" "cancelada"})
 
 (def objeto-tipos-prazo
-  "Objeto polimorfico que um prazo pode monitorar (prazo_ativo.objeto_tipo). Recurso e solicitacao de
-  titular ganham relogio proprio nas fatias seguintes; o pedido e-SIC e' o desta fatia."
-  #{"pedido_esic" "recurso_esic" "solicitacao_titular"})
+  "Objeto polimorfico que um prazo pode monitorar (prazo_ativo.objeto_tipo). `manifestacao_ouvidoria` entra
+  no fast-follow de ouvidoria (mig 0042 estende o CHECK)."
+  #{"pedido_esic" "recurso_esic" "solicitacao_titular" "manifestacao_ouvidoria"})
+
+;; ---- GENERALIZACAO (fast-follow): prorrogacao do prazo (compartilhada pelas 4 especies) ----
+(defn vencimento-efetivo
+  "Read-derivation PURA: o vencimento QUE VALE de um prazo materializado, respeitando prorrogacao —
+  COALESCE(prorrogado-ate, vence-em). Sem prorrogado-ate (nil), DEGENERA para o vence-em cru (backward-safe:
+  e-SIC/LGPD nunca prorrogam em V1, so a ouvidoria usa o mecanismo). Reusar SEMPRE no lugar de `(:vence-em
+  prazo)` cru em toda leitura de vencimento (dias-restantes/vencido?/sweep) — o 'anel' do cidadao ja mostra
+  a data prorrogada."
+  ^LocalDate [{:keys [vence-em prorrogado-ate]}]
+  (or prorrogado-ate vence-em))
 
 ;; ---- ciclo VISIVEL do RECURSO (recurso_esic.estado) — enum FIXO em codigo (Slice 2) ----
 (def estados-recurso
@@ -133,7 +143,7 @@
   [v] (validar! estados-prazo "estado de prazo" v))
 
 (defn validar-objeto-tipo-prazo
-  "Lanca se `v` nao e' objeto_tipo de prazo (pedido_esic|recurso_esic|solicitacao_titular)."
+  "Lanca se `v` nao e' objeto_tipo de prazo (pedido_esic|recurso_esic|solicitacao_titular|manifestacao_ouvidoria)."
   [v] (validar! objeto-tipos-prazo "objeto_tipo de prazo" v))
 
 (defn validar-estado-recurso
@@ -235,3 +245,78 @@
   "A transicao `de`->`para` do ciclo da solicitacao e' legal? (pura — so o grafo fixo). Terminais nao transicionam."
   [de para]
   (contains? (get transicoes-solicitacao-titular de) para))
+
+;; ========================= FAST-FOLLOW: Slice 5 — Ouvidoria (Lei 13.460/2017 art. 10) =========================
+
+;; ---- os 5 TIPOS de manifestacao (padrao CGU/Lei 13.460) — enum FIXO em codigo (o CHECK da mig 0042 espelha) ----
+(def tipos-manifestacao
+  "Os 5 tipos padrao de manifestacao de ouvidoria (Lei 13.460/2017, padrao CGU): reclamacao, denuncia,
+  sugestao, elogio, solicitacao (NAO confundir com pedido_esic — 'solicitacao' aqui e' um TIPO de
+  manifestacao de ouvidoria, ex.: pedido de servico)."
+  #{"reclamacao" "denuncia" "sugestao" "elogio" "solicitacao"})
+
+;; ---- ciclo VISIVEL da manifestacao (manifestacao_ouvidoria.estado) — enum FIXO em codigo ----
+(def estados-manifestacao
+  "Ciclo da manifestacao de ouvidoria. `respondida`/`arquivada` sao terminais (trava a linha — trg da mig
+  0042). `arquivada` NAO e' desfecho de merito (a manifestacao foi encerrada sem resposta de conteudo —
+  o prazo correspondente vira 'cancelada', nao 'cumprida')."
+  #{"protocolada" "em_analise" "respondida" "arquivada"})
+
+(def ^:private estados-terminais-manifestacao
+  "Desfechos da manifestacao: respondida (com merito) OU arquivada (sem merito). A linha congela nos dois."
+  #{"respondida" "arquivada"})
+
+(def ^:private transicoes-manifestacao
+  "Grafo de transicoes LEGAIS da manifestacao (de -> conjunto de proximos). Terminais nao tem saida."
+  {"protocolada" #{"em_analise" "respondida" "arquivada"}
+   "em_analise"  #{"respondida" "arquivada"}
+   "respondida"  #{}
+   "arquivada"   #{}})
+
+;; ---- prazo da ouvidoria: 30 dias, prorrogavel POR IGUAL PERIODO uma unica vez (Lei 13.460 art. 10) ----
+(def dias-ouvidoria
+  "Prazo da manifestacao de ouvidoria em dias (Lei 13.460/2017 art. 10 = 30, prorrogavel por igual periodo
+  mediante justificativa). [GAP] DE CONTEUDO: corridos-vs-uteis nao cravado (mesmo GAP do e-SIC/LGPD) -> V1
+  = DIA-CORRIDO. Distinto dos demais contadores (LAI 20; LGPD [GAP] 15) — nao reusa nenhum dos dois."
+  30)
+
+(def dias-prorrogacao-ouvidoria
+  "A prorrogacao da Lei 13.460 art. 10 e' 'por igual periodo' — MESMO valor de dias-ouvidoria (30), somado
+  a partir do vence_em ORIGINAL (a CAS de prorrogar! so permite 1x; nao ha prorrogado_ate previo a somar)."
+  dias-ouvidoria)
+
+(defn vence-em-ouvidoria
+  "Data de vencimento do prazo da ouvidoria a partir do LocalDate do recibo (marco de inicio do relogio).
+  DIA-CORRIDO `.plusDays 30`. [GAP] de conteudo: NAO afirma dias uteis nem adiciona feriados."
+  ^LocalDate [^LocalDate recibo-data]
+  (.plusDays recibo-data (long dias-ouvidoria)))
+
+(defn vence-prorrogado-ouvidoria
+  "Nova data de vencimento apos a UNICA prorrogacao possivel (Lei 13.460 art. 10: +30 'por igual periodo').
+  Soma a partir do `vence-em-original` (NAO de um prorrogado_ate previo — a CAS de db/prazo-ativo/prorrogar!
+  so admite prorrogar quando prorrogado_ate AINDA e' nil, entao so ha 1 base possivel: a original)."
+  ^LocalDate [^LocalDate vence-em-original]
+  (.plusDays vence-em-original (long dias-prorrogacao-ouvidoria)))
+
+(defn protocolo-ouvidoria
+  "Numero de PROTOCOLO humano da manifestacao a partir do (ano, sequencial gapless). Formato
+  'OUV-<ano>-<seq 6 digitos>' (ex.: OUV-2026-000001) — namespace distinto de ESIC-/REC-/LGPD- p/ nao colidir."
+  [ano sequencial]
+  (format "OUV-%d-%06d" (long ano) (long sequencial)))
+
+(defn validar-tipo-manifestacao
+  "Lanca se `v` nao e' um dos 5 tipos de manifestacao (reclamacao|denuncia|sugestao|elogio|solicitacao)."
+  [v] (validar! tipos-manifestacao "tipo de manifestacao de ouvidoria" v))
+
+(defn validar-estado-manifestacao
+  "Lanca se `v` nao e' estado da manifestacao (protocolada|em_analise|respondida|arquivada)."
+  [v] (validar! estados-manifestacao "estado de manifestacao de ouvidoria" v))
+
+(defn terminal-manifestacao?
+  "O estado da manifestacao e' terminal (ja respondida OU arquivada)?"
+  [estado] (contains? estados-terminais-manifestacao estado))
+
+(defn transicao-manifestacao-valida?
+  "A transicao `de`->`para` do ciclo da manifestacao e' legal? (pura — so o grafo fixo). Terminais nao transicionam."
+  [de para]
+  (contains? (get transicoes-manifestacao de) para))
