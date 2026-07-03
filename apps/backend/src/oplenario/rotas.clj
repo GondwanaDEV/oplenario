@@ -6,7 +6,9 @@
   (:require [oplenario.compliance.diplomat.http.in :as compliance-http]
             [oplenario.http :as http]
             [oplenario.interceptors :as it]
+            [oplenario.kernel.tempo :as tempo]
             [oplenario.legislativo.diplomat.http.in :as legislativo-http]
+            [oplenario.participacao.diplomat.http.in :as participacao-http]
             [oplenario.sessoes.components.repositorio :as repo-sessoes-comp]
             [oplenario.sessoes.diplomat.http.in :as sessoes-http]
             [oplenario.tempo-real.diplomat.sse :as tempo-real-sse]))
@@ -21,8 +23,14 @@
   (§22.10): so ele cruza modulos — p/ o endpoint SSE (G3) e a vertical de votacao ao vivo (Slice 3, no
   legislativo) injeta `consultar-sessao` (delega ao Repo de sessoes) nos diplomats de tempo_real e legislativo,
   que NAO importam sessoes."
-  [{:keys [idp repo-identidade repo-sessoes repo-legislativo repo-compliance canal-store objeto-store]}]
+  [{:keys [idp repo-identidade repo-sessoes repo-legislativo repo-compliance repo-participacao
+           canal-store objeto-store]}]
   (let [auth (it/autenticacao idp repo-identidade)
+        ;; F6: relogio de producao (kernel/tempo) p/ o prazo LAI do e-SIC — determinismo em teste vem de
+        ;; injetar relogio-fixo direto no fragmento de rotas (participacao-http/rotas). resolver-ente-publico
+        ;; = seam da rota PUBLICA (sem ator): mapeia o :ente do path -> ente-id (V1 = UUID coagido fail-closed);
+        ;; o Repo abre com-tenant* com ele e a RLS isola. Slug humano = refino futuro.
+        relogio-participacao (tempo/relogio-sistema)
         ;; cross-modulo via inversao de dependencia: o host fecha sobre o Repo de sessoes e expoe a consulta-fato
         ;; que o endpoint SSE (G3) E a vertical de votacao ao vivo (F4 Slice 3, no legislativo) precisam p/
         ;; autorizar (a RLS escopa por tenant). Os modulos chamam por esta fn, nunca importam sessoes (§22.10).
@@ -35,4 +43,7 @@
         (into (legislativo-http/rotas {:auth auth :repo-legislativo repo-legislativo
                                        :consultar-sessao consultar-sessao}))
         (into (compliance-http/rotas {:auth auth :repo-compliance repo-compliance}))
+        (into (participacao-http/rotas {:auth auth :repo-participacao repo-participacao
+                                        :resolver-ente-publico participacao-http/resolver-ente-publico-uuid
+                                        :relogio relogio-participacao}))
         (into (tempo-real-sse/rotas {:auth auth :canal-store canal-store :consultar-sessao consultar-sessao})))))
