@@ -26,8 +26,13 @@
     (norma-da-materia [_ _ente _pid] norma-da-materia)
     (listar-normas [_ _ente] listar-normas)))
 
+;; auth no-op só p/ o fragmento de rotas EXPANDIR (as rotas do Slice 1 testadas aqui sao publicas; as do
+;; Slice 2, que exigem `auth`, coexistem na tabela e precisam de um interceptor nao-nil no expand). O
+;; comportamento de auth em si e' provado em fluxo_acompanhamento_test.
+(def ^:private auth-noop {:name ::auth-noop :enter identity})
+
 (defn- service-fn [repo]
-  (let [rotas (transparencia-http/rotas {:repo-transparencia repo
+  (let [rotas (transparencia-http/rotas {:auth auth-noop :repo-transparencia repo
                                          :resolver-ente-publico transparencia-http/resolver-ente-publico-uuid})]
     (-> (http/servico (config/carregar) rotas it/globais)
         ph/create-server ::ph/service-fn)))

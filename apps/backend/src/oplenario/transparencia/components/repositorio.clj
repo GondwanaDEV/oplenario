@@ -20,6 +20,7 @@
   aceitavel; travar o barramento do sistema inteiro nao e'."
   (:require [clojure.tools.logging :as log]
             [oplenario.kernel.tenancy :as tenancy]
+            [oplenario.transparencia.db.acompanhamento :as db-acompanhamento]
             [oplenario.transparencia.db.materia :as db-materia]
             [oplenario.transparencia.db.norma :as db-norma])
   (:import (java.time Instant)
@@ -66,7 +67,11 @@
   (listar-materias [this ente-id estados-excluidos] "Portal: materias fora dos `estados-excluidos`.")
   (buscar-norma [this ente-id norma-id] "Uma norma publicada por id, ou nil.")
   (norma-da-materia [this ente-id proposicao-id] "A norma publicada de uma materia, ou nil.")
-  (listar-normas [this ente-id] "Portal: legislacao PUBLICADA as-enacted (nao 'consolidada' — ver db/norma)."))
+  (listar-normas [this ente-id] "Portal: legislacao PUBLICADA as-enacted (nao 'consolidada' — ver db/norma).")
+  ;; F6c Slice 2 — acompanhamento do cidadao (escritas autenticadas; consent-gated)
+  (seguir! [this ente-id m] "UPSERT: cidadao segue a materia (re-seguir reativa). Devolve {:id :estado ...}.")
+  (deixar-de-seguir! [this ente-id m] "Soft-cancel idempotente. Devolve {:id} se cancelou, ou nil (no-op).")
+  (meus-acompanhamentos [this ente-id seguidor-identidade-id] "Materias que o cidadao segue (ativas, c/ cabecalho)."))
 
 (defrecord RepoTransparenciaPg [datasource]
   RepoTransparencia
@@ -75,7 +80,10 @@
   (listar-materias [this ente-id excl] (transacao this ente-id #(db-materia/listar-em-tramitacao % ente-id excl)))
   (buscar-norma [this ente-id nid] (transacao this ente-id #(db-norma/buscar % ente-id nid)))
   (norma-da-materia [this ente-id pid] (transacao this ente-id #(db-norma/buscar-por-proposicao % ente-id pid)))
-  (listar-normas [this ente-id] (transacao this ente-id #(db-norma/listar-publicadas % ente-id))))
+  (listar-normas [this ente-id] (transacao this ente-id #(db-norma/listar-publicadas % ente-id)))
+  (seguir! [this ente-id m] (transacao this ente-id #(db-acompanhamento/seguir! % (assoc m :ente-id ente-id))))
+  (deixar-de-seguir! [this ente-id m] (transacao this ente-id #(db-acompanhamento/deixar-de-seguir! % (assoc m :ente-id ente-id))))
+  (meus-acompanhamentos [this ente-id sid] (transacao this ente-id #(db-acompanhamento/meus-da-materia % ente-id sid))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."
