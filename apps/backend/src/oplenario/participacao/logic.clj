@@ -163,3 +163,75 @@
   recorrer de um pedido ainda em curso e' conflito (a borda mapeia p/ 409)."
   [estado]
   (contains? estados-pedido-recorriveis estado))
+
+;; ========================= SLICE 4: LGPD — solicitacao do titular (contador SEPARADO) =========================
+
+;; ---- os 5 DIREITOS do titular (LGPD 13.709/2018 art. 18) — enum FIXO em codigo (o CHECK da mig 0041 espelha) ----
+(def tipos-solicitacao-titular
+  "Os 5 direitos que o titular pode exercer (solicitacao_titular.tipo). `revogar_consentimento` PODE ser cumprido
+  automaticamente via o modulo identidade (guard futuro do host sobre repo-identidade) — CARRY: em V1 todos os 5
+  tipos sao registrados UNIFORMEMENTE e o DPO processa manual (nada de cross-modulo especulativo agora)."
+  #{"acessar" "corrigir" "eliminar" "com_quem_compartilhado" "revogar_consentimento"})
+
+;; ---- ciclo VISIVEL da solicitacao (solicitacao_titular.estado) — enum FIXO em codigo ----
+(def estados-solicitacao-titular
+  "Ciclo da solicitacao do titular. `respondida`/`indeferida` sao terminais (trava a linha — trg da mig 0041).
+  Feminino (a solicitacao) — distinto do ciclo masculino do pedido e-SIC."
+  #{"protocolada" "em_analise" "respondida" "indeferida"})
+
+(def ^:private estados-terminais-solicitacao-titular
+  "Desfechos da solicitacao: o controlador ja respondeu/indeferiu (a linha congela)."
+  #{"respondida" "indeferida"})
+
+(def ^:private transicoes-solicitacao-titular
+  "Grafo de transicoes LEGAIS da solicitacao (de -> conjunto de proximos). Terminais nao tem saida.
+  [GAP] DE PRODUTO (espelha o e-SIC 'indeferido' da Slice 2): em V1 o unico desfecho PRODUZIDO por codigo e'
+  `respondida` (o servico so tem `responder!`); `indeferida` fica MODELADA no grafo + no CHECK da mig 0041, mas
+  SEM caminho de controller/db que a alcance ainda (estado terminal reservado p/ um 'indeferir' explicito futuro)."
+  {"protocolada" #{"em_analise" "respondida" "indeferida"}
+   "em_analise"  #{"respondida" "indeferida"}
+   "respondida"  #{}
+   "indeferida"  #{}})
+
+;; ---- prazo LGPD: CONTADOR SEPARADO do e-SIC ----
+(def dias-titular
+  "Prazo (em dias) da solicitacao do titular LGPD — o CONTADOR SEPARADO do e-SIC.
+
+  [GAP] DE CONTEUDO: a LGPD (13.709/2018) NAO cravou um prazo unico p/ todas as requisicoes do titular (o art.
+  19 fixa 15 dias so p/ a confirmacao/acesso; outros direitos nao tem numero estatutario unico; e corridos-vs-
+  uteis segue o mesmo [GAP] da LAI). O ponto desta fatia e' o MECANISMO de CONTADOR SEPARADO (a solicitacao
+  materializa a 3a especie de prazo_ativo, com vence_em PROPRIO — nao reusa os 20 dias da LAI), NAO o valor.
+  V1 = DEFAULT DOCUMENTADO HARDCODED — constante de compile-time, AINDA SEM seam de config por ente/env (ajustar
+  exige deploy; fiar a config = carry). Escolhido != 20 do e-SIC p/ nao mascarar que os contadores sao distintos;
+  confirmar com juridico antes de prod. NAO afirmar este numero como lei."
+  15)
+
+(defn vence-em-titular
+  "Data de vencimento do prazo LGPD a partir do LocalDate do recibo (marco de inicio do relogio do titular).
+  DIA-CORRIDO `.plusDays dias-titular` — CONTADOR SEPARADO do e-SIC (reusa a mesma matematica de dia-corrido, nao
+  o mesmo numero). [GAP] de conteudo (ver dias-titular): default documentado, nao lei; sem feriados/dias uteis."
+  ^LocalDate [^LocalDate recibo-data]
+  (.plusDays recibo-data (long dias-titular)))
+
+(defn protocolo-titular
+  "Numero de PROTOCOLO humano da solicitacao do titular a partir do (ano, sequencial gapless). Formato
+  'LGPD-<ano>-<seq 6 digitos>' (ex.: LGPD-2026-000001) — namespace distinto de ESIC-/REC- p/ nao colidir."
+  [ano sequencial]
+  (format "LGPD-%d-%06d" (long ano) (long sequencial)))
+
+(defn validar-tipo-solicitacao-titular
+  "Lanca se `v` nao e' um dos 5 direitos do titular (acessar|corrigir|eliminar|com_quem_compartilhado|revogar_consentimento)."
+  [v] (validar! tipos-solicitacao-titular "tipo de solicitacao do titular" v))
+
+(defn validar-estado-solicitacao-titular
+  "Lanca se `v` nao e' estado da solicitacao (protocolada|em_analise|respondida|indeferida)."
+  [v] (validar! estados-solicitacao-titular "estado de solicitacao do titular" v))
+
+(defn terminal-solicitacao-titular?
+  "O estado da solicitacao e' terminal (o controlador ja respondeu/indeferiu)?"
+  [estado] (contains? estados-terminais-solicitacao-titular estado))
+
+(defn transicao-solicitacao-titular-valida?
+  "A transicao `de`->`para` do ciclo da solicitacao e' legal? (pura — so o grafo fixo). Terminais nao transicionam."
+  [de para]
+  (contains? (get transicoes-solicitacao-titular de) para))

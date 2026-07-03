@@ -6,7 +6,8 @@
   (:require [oplenario.kernel.eventos :as eventos]
             [oplenario.participacao.events.pedido-esic :as ev-pedido]
             [oplenario.participacao.events.prazo :as ev-prazo]
-            [oplenario.participacao.events.recurso-esic :as ev-recurso]))
+            [oplenario.participacao.events.recurso-esic :as ev-recurso]
+            [oplenario.participacao.events.solicitacao-titular :as ev-titular]))
 
 (defn emitir-pedido-protocolado! [bus tx ente-id payload]
   (eventos/emitir! bus tx (ev-pedido/protocolado ente-id payload)))
@@ -22,3 +23,9 @@
 
 (defn emitir-prazo-vencido! [bus tx ente-id payload]
   (eventos/emitir! bus tx (ev-prazo/vencido ente-id payload)))
+
+(defn emitir-solicitacao-titular-protocolada! [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-titular/protocolada ente-id payload)))
+
+(defn emitir-solicitacao-titular-respondida! [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-titular/respondida ente-id payload)))

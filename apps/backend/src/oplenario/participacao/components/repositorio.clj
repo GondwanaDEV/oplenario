@@ -8,10 +8,13 @@
   pedido + o prazo na MESMA tx do recibo (o relogio LAI comeca atomico com o protocolo), e emite o evento no
   outbox na mesma tx (§22.9 E2). Sem cross-schema, sem HTTP cross-modulo (§22.10)."
   (:require [oplenario.kernel.tenancy :as tenancy]
+            [oplenario.participacao.db.encarregado :as db-encarregado]
             [oplenario.participacao.db.pedido-esic :as db-pedido]
             [oplenario.participacao.db.prazo-ativo :as db-prazo]
             [oplenario.participacao.db.recurso-esic :as db-recurso]
             [oplenario.participacao.db.resposta-esic :as db-resposta]
+            [oplenario.participacao.db.resposta-titular :as db-resposta-titular]
+            [oplenario.participacao.db.solicitacao-titular :as db-solicitacao]
             [oplenario.participacao.diplomat.producers :as producers])
   (:import (org.postgresql.util PSQLException)))
 
@@ -62,7 +65,29 @@
      transicoes por chamada (guarda anti unbounded-read) — o scheduler deve RE-INVOCAR por ente ate a passada
      voltar VAZIA p/ drenar um backlog > 1000 (ex.: migracao de e-SIC legado; um cron ingenuo de 1 chamada/tick
      deixa o excedente 'no prazo' no painel por ate 1 tick). Job disparado por scheduler (INFRA, mesma pendencia
-     do sweep do compliance — nao ha worker/cron aqui). Devolve [{:id :objeto-tipo :objeto-id :de :para}...]."))
+     do sweep do compliance — nao ha worker/cron aqui). Devolve [{:id :objeto-tipo :objeto-id :de :para}...].")
+  ;; ---- Slice 4: LGPD — solicitacao do titular (contador SEPARADO) + Encarregado/DPO ----
+  (solicitar-titular! [this ente-id m]
+    "TITULAR — UMA tx: sequencial gapless 'solicitacao_titular:<ano>' + INSERT solicitacao_titular + INSERT
+     prazo_ativo(objeto_tipo=solicitacao_titular) pendente com vence_em PROPRIO (CONTADOR SEPARADO do e-SIC) +
+     emit `solicitacao_titular.protocolada` (outbox, mesma tx). `m` = {:id :ano :tipo :detalhe
+     :titular-identidade-id :recibo-em :vence-em :prazo-id :base-dias :prazo-fonte-ref :created-by}. Devolve
+     {:id :protocolo :recibo-em}.")
+  (buscar-solicitacao-titular [this ente-id id]
+    "Solicitacao do titular por id no tenant. Usada pela borda p/ desambiguar o nil de responder-solicitacao!
+     (existe -> 409 de ciclo; ausente -> 404).")
+  (solicitacao-titular-com-prazo [this ente-id id]
+    "Solicitacao por id + o prazo do objeto (in-schema), numa tx. Devolve {:solicitacao :prazo} ou nil.")
+  (responder-solicitacao! [this ente-id m]
+    "SERVIDOR/Encarregado — UMA tx: CAS solicitacao protocolada|em_analise -> respondida (nil = ja terminal,
+     aborta) + INSERT resposta_titular (append-only) + cumpre o prazo do TITULAR (prazo_ativo -> cumprida) +
+     emit `solicitacao_titular.respondida`. `m` = {:solicitacao-id :resposta-id :corpo :respondido-por
+     :respondida-em}. Devolve {:respondida-em} ou nil (solicitacao ja terminal/inexistente).")
+  (definir-encarregado! [this ente-id m]
+    "SERVIDOR — UPSERT do contato do Encarregado/DPO (1 por ente; ON CONFLICT ente_id). `m` = {:id :nome :rotulo
+     :email :atualizado-por}. Devolve o mapa kebab da linha.")
+  (buscar-encarregado [this ente-id]
+    "O contato PUBLICO do Encarregado/DPO do ente (leitura da rota publica). Devolve o mapa kebab ou nil."))
 
 (defrecord RepoParticipacaoPg [datasource bus]
   RepoParticipacao
@@ -177,7 +202,56 @@
                          {:objeto-tipo (:objeto-tipo p) :objeto-id (:objeto-id p) :vence-em (str (:vence-em p))})
                        {:id (:id p) :objeto-tipo (:objeto-tipo p) :objeto-id (:objeto-id p)
                         :de "pendente" :para "vencida"})))   ; pendente->vencida: a unica transicao deste sweep
-             vec)))))
+             vec))))
+  ;; ---- Slice 4: LGPD — solicitacao do titular + Encarregado ----
+  (solicitar-titular! [this ente-id {:keys [id ano tipo detalhe titular-identidade-id recibo-em vence-em
+                                            prazo-id base-dias prazo-fonte-ref created-by]}]
+    (transacao this ente-id
+      (fn [tx]
+        (let [solic (db-solicitacao/protocolar! tx {:id id :ente-id ente-id :ano ano :tipo tipo
+                                                    :titular-identidade-id titular-identidade-id
+                                                    :detalhe detalhe :recibo-em recibo-em :created-by created-by})]
+          ;; o RELOGIO LGPD comeca atomico com o protocolo (Arch B): prazo pendente sobre a solicitacao, mesma tx.
+          ;; CONTADOR SEPARADO: objeto_tipo='solicitacao_titular', vence_em derivado de dias-titular (nao da LAI).
+          (db-prazo/inserir! tx {:id prazo-id :ente-id ente-id :objeto-tipo "solicitacao_titular" :objeto-id id
+                                 :vence-em vence-em :estado "pendente" :base-dias base-dias
+                                 :prazo-fonte-ref prazo-fonte-ref :created-by created-by})
+          (producers/emitir-solicitacao-titular-protocolada! bus tx ente-id
+            {:solicitacao-id id :protocolo (:protocolo solic) :tipo tipo
+             :recibo-em (str recibo-em) :vence-em (str vence-em)})
+          {:id id :protocolo (:protocolo solic) :recibo-em recibo-em}))))
+  (buscar-solicitacao-titular [this ente-id id]
+    (transacao this ente-id #(db-solicitacao/buscar % ente-id id)))
+  (solicitacao-titular-com-prazo [this ente-id id]
+    (transacao this ente-id
+      (fn [tx]
+        (when-let [solic (db-solicitacao/buscar tx ente-id id)]
+          {:solicitacao solic :prazo (db-prazo/buscar-do-objeto tx ente-id "solicitacao_titular" id)}))))
+  (responder-solicitacao! [this ente-id {:keys [solicitacao-id resposta-id corpo respondido-por respondida-em]}]
+    (transacao this ente-id
+      (fn [tx]
+        ;; CAS PRIMEIRO (short-circuit): so escreve a resposta/cumpre o prazo se a solicitacao AINDA e' respondivel.
+        ;; nil = ja terminal (respondida/indeferida) -> aborta sem inserir nada (a borda desambigua p/ 409).
+        (when-let [solic (db-solicitacao/responder! tx {:id solicitacao-id :ente-id ente-id})]
+          (db-resposta-titular/inserir! tx {:id resposta-id :ente-id ente-id :solicitacao-id solicitacao-id
+                                            :corpo corpo :respondido-por respondido-por :respondida-em respondida-em})
+          ;; INVARIANTE (Inv.10, espelha responder-pedido!): a solicitacao so vira terminal ATOMICO com o
+          ;; fechamento do seu prazo (CONTADOR SEPARADO). Sem prazo aberto = inconsistencia (prazo orfao) -> aborta.
+          (when-not (db-prazo/cumprir! tx {:ente-id ente-id :objeto-tipo "solicitacao_titular"
+                                           :objeto-id solicitacao-id :cumprida-em respondida-em})
+            (throw (ex-info "prazo da solicitacao do titular nao estava aberto ao cumprir (invariante de compliance)"
+                            {:tipo :invariante/prazo-orfao :objeto-tipo "solicitacao_titular"
+                             :objeto-id solicitacao-id})))
+          (producers/emitir-solicitacao-titular-respondida! bus tx ente-id
+            {:solicitacao-id solicitacao-id :respondida-em (str respondida-em)})
+          {:respondida-em respondida-em :protocolo (:protocolo solic)}))))
+  (definir-encarregado! [this ente-id {:keys [id nome rotulo email atualizado-por]}]
+    (transacao this ente-id
+      (fn [tx]
+        (db-encarregado/upsert! tx {:id id :ente-id ente-id :nome nome :rotulo rotulo :email email
+                                    :atualizado-por atualizado-por}))))
+  (buscar-encarregado [this ente-id]
+    (transacao this ente-id #(db-encarregado/buscar % ente-id))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource + :bus via `using`)."

@@ -27,6 +27,12 @@
   o numero exato nao esta cravado nesta fatia (ver logic/dias-recurso-esic) — default documentado, nao lei."
   "LAI 12.527/2011 (recurso; prazo da autoridade superior [GAP] — default documentado)")
 
+(def ^:private prazo-fonte-titular
+  "Proveniencia do prazo LGPD (citacao legal). [GAP] de conteudo: a LGPD nao cravou um numero unico p/ todos os
+  direitos do titular (o art. 19 fixa 15 dias so p/ confirmacao/acesso); CONTADOR SEPARADO do e-SIC — ver
+  logic/dias-titular. Default documentado, nao lei."
+  "LGPD 13.709/2018 art. 18/19 (prazo do titular [GAP] — default documentado; contador SEPARADO do e-SIC)")
+
 (defn- em-conflito!
   "Sinaliza CONFLITO DE CICLO (a borda mapeia p/ 409): a operacao e' incompativel com o estado atual do
   agregado (pedido ja terminal, recurso ja decidido, pedido nao-recorrivel). Distinto de nil (ausente -> 404)
@@ -141,3 +147,64 @@
            :respondido-por (:identidade-id ator) :respondida-em agora :decidido-em agora})
         (when (repo/buscar-recurso repo-participacao ente-id id)
           (em-conflito! "recurso ja decidido" {:recurso-id id})))))
+
+;; ========================= SLICE 4: LGPD — solicitacao do titular + Encarregado/DPO =========================
+
+(defn solicitar-titular!
+  "TITULAR autenticado solicita o exercicio de um direito LGPD (rota SO-auth, sem papel — qualquer titular pede
+  sobre os PROPRIOS dados). Computa o recibo (Instant = marco do relogio LGPD) e o vencimento (dias-titular,
+  CONTADOR SEPARADO do e-SIC) do relogio INJETADO. UMA tx no Repo (sequencial+solicitacao+prazo+evento). titular e
+  created-by INJETADOS do ator, NUNCA do corpo. `detalhe` opcional. Devolve {:id :protocolo :recibo-em}."
+  [repo-participacao relogio ator {:keys [tipo detalhe]}]
+  (let [agora   (tempo/agora relogio)
+        hoje    (tempo/hoje-de agora zona-civil)
+        ano     (.getYear hoje)
+        vence   (logic/vence-em-titular hoje)   ; CONTADOR SEPARADO (dias-titular, nao a LAI 20)
+        sujeito (:identidade-id ator)]
+    (repo/solicitar-titular! repo-participacao (:ente-id ator)
+      {:id (ids/novo-id) :ano ano :tipo tipo :detalhe detalhe
+       :titular-identidade-id sujeito :recibo-em agora :vence-em vence
+       :prazo-id (ids/novo-id) :base-dias logic/dias-titular :prazo-fonte-ref prazo-fonte-titular
+       :created-by sujeito})))
+
+(defn minha-solicitacao
+  "Detalhe da solicitacao `id` para o proprio TITULAR (rota autenticada). Policy FINA (§22.5 eixo E): so o DONO
+  le — ator != titular -> authz/negar! (403). Devolve o mapa de detalhe (solicitacao + prazo + dias-restantes) ou
+  nil (inexistente -> 404). A RLS ja escopa por tenant; esta e' a checagem de propriedade DENTRO do tenant."
+  [repo-participacao ator relogio id]
+  (when-let [{:keys [solicitacao prazo]} (repo/solicitacao-titular-com-prazo repo-participacao (:ente-id ator) id)]
+    (when (not= (:titular-identidade-id solicitacao) (:identidade-id ator))
+      (authz/negar! :nao-e-titular {:solicitacao-id id :ator (:identidade-id ator)}))
+    (assoc solicitacao
+           :vence-em       (:vence-em prazo)
+           :dias-restantes (dias-restantes-do-prazo relogio prazo))))
+
+(defn responder-solicitacao!
+  "SERVIDOR/Encarregado responde a solicitacao `id` (papel exigido na rota). UMA tx no Repo: CAS solicitacao->
+  respondida + resposta append-only + cumpre o prazo do TITULAR + emit. respondido-por INJETADO do ator (nunca do
+  corpo). Devolve {:respondida-em} (a borda projeta), ou nil (solicitacao inexistente -> 404); se ainda existe mas
+  ja e' terminal (CAS falhou), :conflito/participacao (-> 409). (CARRY: o cumprimento AUTOMATIZADO de
+  revogar_consentimento via identidade e' guard futuro do host — em V1 o DPO processa manual, sem cross-modulo.)"
+  [repo-participacao relogio ator id {:keys [corpo]}]
+  (let [ente-id (:ente-id ator)
+        agora   (tempo/agora relogio)]
+    (or (repo/responder-solicitacao! repo-participacao ente-id
+          {:solicitacao-id id :resposta-id (ids/novo-id) :corpo corpo
+           :respondido-por (:identidade-id ator) :respondida-em agora})
+        (when (repo/buscar-solicitacao-titular repo-participacao ente-id id)
+          (em-conflito! "solicitacao do titular ja respondida/indeferida (nao ha o que responder)"
+                        {:solicitacao-id id})))))
+
+(defn definir-encarregado!
+  "SERVIDOR define/atualiza o contato PUBLICO do Encarregado/DPO (papel exigido na rota). UPSERT (1 por ente):
+  a 1a vez cria; as seguintes atualizam a MESMA linha. atualizado-por INJETADO do ator. Devolve o mapa da linha."
+  [repo-participacao ator {:keys [nome rotulo email]}]
+  (repo/definir-encarregado! repo-participacao (:ente-id ator)
+    {:id (ids/novo-id) :nome nome :rotulo rotulo :email email :atualizado-por (:identidade-id ator)}))
+
+(defn encarregado-publico
+  "Contato PUBLICO do Encarregado/DPO do tenant `ente-id` (resolvido do path na borda; a RLS isola). LGPD art. 41
+  §1º: o contato do Encarregado e' de divulgacao publica. Devolve o mapa da linha ou nil (ente sem DPO definido ->
+  404). NAO devolve interno — o diplomat projeta pelo adapters/out publico (so nome/rotulo/email)."
+  [repo-participacao ente-id]
+  (repo/buscar-encarregado repo-participacao ente-id))

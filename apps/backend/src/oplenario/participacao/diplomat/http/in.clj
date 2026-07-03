@@ -9,16 +9,27 @@
   (a LAI diz que QUALQUER um pede; um vinculo cidadao nao tem papel). (2) GET /portal/esic/pedidos/:id = auth +
   policy FINA no controller (ator == solicitante). (3) GET /portal/casa/:ente/esic/acompanhar/:protocolo = PUBLICA
   SEM `auth` — o ente-id resolve do path param via `resolver-ente-publico` (seam do host) e o Repo abre
-  com-tenant* com ele (a RLS ISOLA mesmo sem ator); a saida FILTRA PII no adapters/out."
+  com-tenant* com ele (a RLS ISOLA mesmo sem ator); a saida FILTRA PII no adapters/out.
+
+  As rotas LGPD (Slice 4) REPLICAM os MESMOS tres perfis: (1) POST /portal/lgpd/solicitacoes = titular SO-`auth`
+  (qualquer titular pede sobre os PROPRIOS dados, sem papel); GET .../solicitacoes/:id = auth + policy fina (ator
+  == titular). (2) POST /lgpd/solicitacoes/:id/resposta e PUT /lgpd/encarregado = SERVIDOR (auth + exige-papel
+  'secretario'). (3) GET /portal/casa/:ente/encarregado = PUBLICA sem `auth` — o contato do DPO e' legalmente
+  publico (LGPD art. 41 §1º); mesmo mecanismo resolver-ente-publico + RLS + filtro de saida no adapters/out."
   (:require [oplenario.http :as http]
             [oplenario.interceptors :as it]
+            [oplenario.participacao.adapters.in.encarregado :as adapters-in-encarregado]
             [oplenario.participacao.adapters.in.pedido-esic :as adapters-in]
             [oplenario.participacao.adapters.in.recurso-esic :as adapters-in-recurso]
             [oplenario.participacao.adapters.in.resposta-esic :as adapters-in-resposta]
+            [oplenario.participacao.adapters.in.resposta-titular :as adapters-in-resposta-titular]
+            [oplenario.participacao.adapters.in.solicitacao-titular :as adapters-in-titular]
             [oplenario.participacao.adapters.out.acompanhamento :as adapters-out-acomp]
+            [oplenario.participacao.adapters.out.encarregado :as adapters-out-encarregado]
             [oplenario.participacao.adapters.out.pedido-esic :as adapters-out-pedido]
             [oplenario.participacao.adapters.out.recurso-esic :as adapters-out-recurso]
             [oplenario.participacao.adapters.out.resposta-esic :as adapters-out-resposta]
+            [oplenario.participacao.adapters.out.solicitacao-titular :as adapters-out-titular]
             [oplenario.participacao.controllers :as controllers]))
 
 (set! *warn-on-reflection* true)
@@ -106,6 +117,59 @@
       (responder-op #(controllers/decidir-recurso! repo-participacao relogio (:ator req) id entrada)
                     adapters-out-recurso/decisao->wire 200))))
 
+;; ========================= SLICE 4: LGPD — solicitacao do titular + Encarregado/DPO =========================
+
+(defn- solicitar-titular-handler
+  "POST /portal/lgpd/solicitacoes (TITULAR autenticado, SO-auth — qualquer titular pede sobre os PROPRIOS dados,
+  sem papel). adapters/in coage o corpo {tipo, detalhe?} (fail-closed 400); o controller injeta o titular do ator
+  + o recibo do relogio. 201 com {protocolo, recibo-em} (recibo instantaneo do relogio LGPD)."
+  [repo-participacao relogio]
+  (fn [req]
+    (let [entrada (adapters-in-titular/coagir-solicitar (:json-params req))
+          r       (controllers/solicitar-titular! repo-participacao relogio (:ator req) entrada)]
+      (http/json-resposta 201 (adapters-out-titular/recibo->wire r)))))
+
+(defn- minha-solicitacao-handler
+  "GET /portal/lgpd/solicitacoes/:id (TITULAR). Policy fina no controller (ator == titular -> 403 global). Ausente
+  no tenant -> 404. adapters/out projeta+filtra (sem tenant, sem id do titular)."
+  [repo-participacao relogio]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [detalhe (controllers/minha-solicitacao repo-participacao (:ator req) relogio id)]
+        (http/json-resposta 200 (adapters-out-titular/solicitacao->wire detalhe))
+        (http/json-resposta 404 {:erro "solicitacao nao encontrada"})))))
+
+(defn- encarregado-publico-handler
+  "GET /portal/casa/:ente/encarregado (PUBLICA, sem auth — o contato do DPO e' legalmente publico, LGPD art. 41
+  §1º). resolver-ente-publico coage o :ente (-> 400 se malformado — NUNCA vaza cross-tenant); o controller le sob
+  o tenant (RLS isola). Ausente (ente sem DPO definido) -> 404; presente -> 200 com {nome, rotulo, email} — o
+  adapters/out FILTRA todo interno (ids, atualizado-por, timestamps)."
+  [repo-participacao resolver-ente-publico]
+  (fn [req]
+    (let [ente-id (resolver-ente-publico (get-in req [:path-params :ente]))]
+      (if-let [dpo (controllers/encarregado-publico repo-participacao ente-id)]
+        (http/json-resposta 200 (adapters-out-encarregado/publico->wire dpo))
+        (http/json-resposta 404 {:erro "encarregado nao definido"})))))
+
+(defn- responder-solicitacao-handler
+  "POST /lgpd/solicitacoes/:id/resposta (SERVIDOR, exige-papel). Coage o :id + o corpo {corpo}. nil -> 404;
+  ja respondida -> 409. Sucesso -> 200 {respondida-em}."
+  [repo-participacao relogio]
+  (fn [req]
+    (let [id      (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          entrada (adapters-in-resposta-titular/coagir-resposta (:json-params req))]
+      (responder-op #(controllers/responder-solicitacao! repo-participacao relogio (:ator req) id entrada)
+                    adapters-out-titular/resposta-recibo->wire 200))))
+
+(defn- definir-encarregado-handler
+  "PUT /lgpd/encarregado (SERVIDOR, exige-papel). Coage o corpo {nome, rotulo, email}; o controller injeta o
+  atualizado-por do ator + faz UPSERT (1 por ente). 200 com o contato publico salvo {nome, rotulo, email}."
+  [repo-participacao]
+  (fn [req]
+    (let [entrada (adapters-in-encarregado/coagir-encarregado (:json-params req))
+          r       (controllers/definir-encarregado! repo-participacao (:ator req) entrada)]
+      (http/json-resposta 200 (adapters-out-encarregado/publico->wire r)))))
+
 (defn rotas
   "Fragmento de rotas do modulo participacao (table syntax Pedestal). Recebe o interceptor `auth`
   (compartilhado), o `repo-participacao` (Repo-Component), o `resolver-ente-publico` (seam do host p/ a rota
@@ -137,4 +201,26 @@
      :route-name :participacao/responder-pedido]
     ["/esic/recursos/:id/decisao" :post
      [auth (it/exige-papel "secretario") it/corpo-json (decidir-recurso-handler repo-participacao relogio)]
-     :route-name :participacao/decidir-recurso]})
+     :route-name :participacao/decidir-recurso]
+    ;; ---- Slice 4: LGPD — portal do titular + contato do Encarregado/DPO ----
+    ;; TITULAR: solicitar exercicio de direito (SO-auth, sem papel — qualquer titular pede sobre os PROPRIOS
+    ;; dados). Sob /portal (superficie do cidadao/titular).
+    ["/portal/lgpd/solicitacoes" :post
+     [auth it/corpo-json (solicitar-titular-handler repo-participacao relogio)]
+     :route-name :participacao/solicitar-titular]
+    ["/portal/lgpd/solicitacoes/:id" :get
+     [auth (minha-solicitacao-handler repo-participacao relogio)]
+     :route-name :participacao/minha-solicitacao]
+    ;; PUBLICA (sem auth): contato do Encarregado/DPO e' legalmente publico (LGPD art. 41 §1º). Reusa o
+    ;; disambiguador estatico `casa/` (o :ente cai na subarvore propria; ver a rota de acompanhar acima).
+    ["/portal/casa/:ente/encarregado" :get
+     [(encarregado-publico-handler repo-participacao resolver-ente-publico)]
+     :route-name :participacao/encarregado-publico]
+    ;; SERVIDOR (exige-papel "secretario"), FORA de /portal (balcao interno): responder a solicitacao + definir
+    ;; o contato do Encarregado (upsert 1-por-ente).
+    ["/lgpd/solicitacoes/:id/resposta" :post
+     [auth (it/exige-papel "secretario") it/corpo-json (responder-solicitacao-handler repo-participacao relogio)]
+     :route-name :participacao/responder-solicitacao]
+    ["/lgpd/encarregado" :put
+     [auth (it/exige-papel "secretario") it/corpo-json (definir-encarregado-handler repo-participacao)]
+     :route-name :participacao/definir-encarregado]})

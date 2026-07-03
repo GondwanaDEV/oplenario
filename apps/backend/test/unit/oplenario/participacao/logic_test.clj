@@ -122,3 +122,57 @@
   (is (= "REC-2026-000042" (logic/protocolo-recurso 2026 42)))
   (is (not= (logic/protocolo-recurso 2026 1) (logic/protocolo-esic 2026 1))
       "protocolo de recurso e de pedido nao colidem na leitura humana"))
+
+;; ========================= SLICE 4: LGPD — solicitacao do titular (contador SEPARADO) =========================
+
+;; ---------- vocabulario da solicitacao do titular (espelha o CHECK da mig 0041) ----------
+
+(deftest tipos-e-estados-do-titular
+  (is (= #{"acessar" "corrigir" "eliminar" "com_quem_compartilhado" "revogar_consentimento"}
+         logic/tipos-solicitacao-titular)
+      "os 5 direitos do titular (LGPD art. 18)")
+  (is (= #{"protocolada" "em_analise" "respondida" "indeferida"} logic/estados-solicitacao-titular)
+      "ciclo da solicitacao do titular (state-machine)")
+  (is (contains? logic/objeto-tipos-prazo "solicitacao_titular")
+      "o prazo polimorfico aceita a 3a especie: solicitacao_titular"))
+
+;; ---------- transicoes da solicitacao ----------
+
+(deftest transicao-de-solicitacao-titular-valida
+  (is (logic/transicao-solicitacao-titular-valida? "protocolada" "em_analise"))
+  (is (logic/transicao-solicitacao-titular-valida? "protocolada" "respondida"))
+  (is (logic/transicao-solicitacao-titular-valida? "em_analise" "indeferida"))
+  (is (not (logic/transicao-solicitacao-titular-valida? "respondida" "em_analise")) "terminal nao volta")
+  (is (not (logic/transicao-solicitacao-titular-valida? "indeferida" "respondida")) "terminal nao muda"))
+
+(deftest terminal-solicitacao-titular
+  (is (logic/terminal-solicitacao-titular? "respondida"))
+  (is (logic/terminal-solicitacao-titular? "indeferida"))
+  (is (not (logic/terminal-solicitacao-titular? "protocolada")))
+  (is (not (logic/terminal-solicitacao-titular? "em_analise"))))
+
+(deftest validadores-do-titular-lancam-fora-do-enum
+  (is (nil? (logic/validar-tipo-solicitacao-titular "acessar")))
+  (is (thrown? clojure.lang.ExceptionInfo (logic/validar-tipo-solicitacao-titular "vender")))
+  (is (nil? (logic/validar-estado-solicitacao-titular "protocolada")))
+  (is (thrown? clojure.lang.ExceptionInfo (logic/validar-estado-solicitacao-titular "arquivada"))))
+
+;; ---------- prazo LGPD: CONTADOR SEPARADO do e-SIC ([GAP] de conteudo) ----------
+
+(deftest prazo-do-titular-e-contador-separado-do-esic
+  (is (not= logic/dias-titular logic/dias-lai-esic)
+      "o prazo LGPD ([GAP], default 15) e' um CONTADOR SEPARADO do e-SIC (LAI 20) — nao reusa o mesmo numero"))
+
+(deftest vence-em-titular-soma-dias-corridos
+  (is (= (LocalDate/of 2026 7 18) (logic/vence-em-titular (LocalDate/of 2026 7 3)))
+      "recibo + dias-titular (15) dias corridos [GAP default]")
+  (is (not= (logic/vence-em (LocalDate/of 2026 7 3)) (logic/vence-em-titular (LocalDate/of 2026 7 3)))
+      "MESMO recibo: e-SIC (20) e LGPD (15) vencem em datas DISTINTAS (contadores separados)"))
+
+;; ---------- protocolo do titular (namespace LGPD- distinto de ESIC-/REC-) ----------
+
+(deftest protocolo-titular-formata-com-prefixo-proprio
+  (is (= "LGPD-2026-000001" (logic/protocolo-titular 2026 1)))
+  (is (= "LGPD-2026-000042" (logic/protocolo-titular 2026 42)))
+  (is (not= (logic/protocolo-titular 2026 1) (logic/protocolo-esic 2026 1))
+      "protocolo LGPD nao colide com o do e-SIC na leitura humana"))
