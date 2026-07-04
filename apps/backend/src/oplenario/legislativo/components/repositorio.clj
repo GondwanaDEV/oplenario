@@ -210,10 +210,12 @@
         (let [r (tram/transicionar! tx (assoc args :registro registro :ente-id ente-id))]
           (when (:transicionou? r)
             (producers/emitir-transicionou! bus tx ente-id
-              ;; :ator-id so entra quando ha ator (acao anonima omite a chave — contrato {:optional true})
+              ;; :ator-id so entra quando ha ator (acao anonima omite a chave — contrato {:optional true}).
+              ;; :ocorrido-em (F7 carry): string ISO do Instant real da transicao (RETURNING de
+              ;; registrar-transicao!) — NAO o momento de projecao a jusante.
               (cond-> {:proposicao-id (:proposicao-id args) :template-id (:template-id args)
                        :de (:de r) :para (:para r) :gatilho (:gatilho args)
-                       :transicao-id (:transicao-id r)}
+                       :transicao-id (:transicao-id r) :ocorrido-em (str (:ocorrido-em r))}
                 (:ator-id args) (assoc :ator-id (:ator-id args)))))
           r))))
   (historico-da-proposicao [this ente-id pid] (transacao this ente-id #(tram/historico-da-proposicao % ente-id pid)))

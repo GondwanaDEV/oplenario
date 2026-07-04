@@ -8,7 +8,8 @@
   estados-excluidos do portal publico (o board interno mostra TUDO) + `transicionou_em` (staleness)."
   (:require [honey.sql :as sql]
             [next.jdbc :as jdbc]
-            [oplenario.kernel.db-util :as comum]))
+            [oplenario.kernel.db-util :as comum])
+  (:import (java.time Instant)))
 
 (set! *warn-on-reflection* true)
 
@@ -25,7 +26,17 @@
   "Projeta o snapshot do protocolo (`proposicao.protocolada`). `ON CONFLICT (ente_id,proposicao_id) DO
   NOTHING` (mesmo racional de transparencia/db/materia/inserir! e paineis/db/pendencia/inserir!): cinto-de-
   seguranca contra um futuro redrive/backfill que reemita o MESMO evento com idempotency-key NOVA — sem
-  isto, o redrive lancaria PK-violation e envenenaria o RELAY COMPARTILHADO."
+  isto, o redrive lancaria PK-violation e envenenaria o RELAY COMPARTILHADO.
+
+  `transicionou_em` semeado com `Instant/EPOCH` (review clojure HIGH: NAO usar o DEFAULT now() da coluna,
+  mig 0049) — o protocolo (`ProtocoladaPayload`) nao carrega nenhum instante de dominio p/ semear este campo
+  de forma significativa, entao o valor tem que ser um PLACEHOLDER; usar `now()` (tempo de PROCESSAMENTO)
+  misturava base de relogio com o `:ocorrido-em` (tempo de DOMINIO) que `atualizar-estado!` passou a exigir
+  no gate de monotonicidade — sob backlog do relay (protocolada+transicionou drenados juntos no catch-up), a
+  1a transicao real (`:ocorrido-em` no PASSADO, quando realmente ocorreu) ficava MENOR que o `now()` do
+  catch-up, e o gate `WHERE transicionou_em <= ?` rejeitava a atualizacao legitima — CONGELANDO o estado em
+  silencio, pior que o bug original (sinal impreciso vira ESTADO ERRADO). EPOCH e' SEMPRE <= qualquer
+  `:ocorrido-em` real (nenhuma proposicao tramita antes de 1970), entao a 1a transicao nunca e' rejeitada."
   [tx {:keys [ente-id proposicao-id tipo ano sequencial urn-lex ementa autor-tipo autor-texto estado]}]
   {:pre [(some? ente-id) (some? proposicao-id) (some? tipo) (some? ano) (some? sequencial)
          (some? urn-lex) (some? ementa) (some? estado)]}
@@ -34,7 +45,8 @@
      (sql/format {:insert-into :paineis.tramitacao
                   :values [{:ente_id ente-id :proposicao_id proposicao-id :tipo tipo :ano ano
                             :sequencial sequencial :urn_lex urn-lex :ementa ementa
-                            :autor_tipo autor-tipo :autor_texto autor-texto :estado estado}]
+                            :autor_tipo autor-tipo :autor_texto autor-texto :estado estado
+                            :transicionou_em Instant/EPOCH}]
                   :on-conflict [:ente_id :proposicao_id]
                   :do-nothing []
                   :returning [:*]}))))
@@ -46,30 +58,31 @@
   projetada) devolve nil em vez de lancar — um `throw` aqui rodaria DENTRO da tx do RELAY COMPARTILHADO por
   todos os modulos, fazendo o mesmo evento ser reprocessado para sempre (poison, head-of-line block).
 
-  CARRY (review architect MEDIUM + review database MEDIUM, F7 Slice 2 — severidade CONFIRMADA pelo database:
-  nao depende de reprojecao futura, um backlog COMUM do relay ja basta): `transicionou_em` e' carimbado com
-  `now()` NO MOMENTO DA PROJECAO, nao com o instante real da transicao no dominio. `legislativo.
-  proposicao_transicao_historico.ocorrido_em` JA existe como o timestamp AUTORITATIVO (mig 0016), mas
-  `TransicionouPayload` (legislativo/events/proposicao.clj) NAO o carrega (so' :de/:para/:gatilho/
-  :transicao-id/:ator-id), e o envelope do outbox (kernel/outbox.clj row->evento) tambem nao expoe
-  `criado_em` da linha ao handler. Sob relay saudavel a imprecisao e' de ms — mas QUALQUER atraso de
-  catch-up (deploy, blip de conexao no auto-heal do OutboxRelay, backpressure) faz TODO evento drenado no
-  catch-up carimbar 'agora', fazendo uma materia REALMENTE estagnada ha horas parecer 'acabou de
-  transicionar' bem no momento em que o sinal de estagnacao mais importa (pos-incidente) — sem precisar de
-  nenhuma ferramenta de reprojecao (R-DR) para acontecer. Fix correto exige estender o CONTRATO do evento em
-  `legislativo` (:ocorrido-em em TransicionouPayload, alimentado por `ocorrido_em` que a maquina de
-  tramitacao ja persiste) + gate de monotonicidade aqui (`WHERE transicionou_em <= ?ocorrido-em`, tornando o
-  UPDATE seguro contra redrive fora de ordem tambem) — fora do escopo desta fatia (§22.10: paineis nao
-  deveria precisar mudar um contrato de outro modulo sem decisao propria; `transparencia.materia.
-  atualizado_em` tem a MESMA fragilidade, ali mais tolerada por nao ser o sinal central de nenhuma feature).
-  Registrar como fatia propria em `legislativo` (estender TransicionouPayload) antes de confiar neste board
-  p/ decisao operacional pos-incidente."
-  [tx {:keys [ente-id proposicao-id estado]}]
-  {:pre [(some? ente-id) (some? proposicao-id) (some? estado)]}
+  `transicionou-em` (F7 carry FECHADO — era `now()` no momento da PROJECAO; `legislativo.
+  TransicionouPayload` agora carrega `:ocorrido-em`, o instante REAL da transicao no dominio, RETURNING de
+  `proposicao_transicao_historico.ocorrido_em`) — o board deixa de resetar o sinal de estagnacao sob atraso
+  comum do relay. GATE DE MONOTONICIDADE (`WHERE transicionou_em <= ?transicionou-em`): torna o UPDATE seguro
+  contra um futuro redrive/backfill fora de ordem (R-DR, ainda sem ferramenta) — uma transicao MAIS ANTIGA
+  reentregue apos uma MAIS NOVA ja projetada e' no-op (nunca retrocede o carimbo).
+
+  CARRY (review database MEDIUM-HIGH, nao corrigido aqui — decisao de `legislativo`, nao de `paineis`):
+  `ocorrido_em` usa o DEFAULT `now()` da coluna (mig 0016) — em Postgres, `now()` congela no INICIO da
+  transacao, nao no instante do `SELECT ... FOR UPDATE`/INSERT. Sob CONCORRENCIA REAL na MESMA proposicao
+  (2 transacoes disputando o lock), a transacao que VENCE o lock por ultimo (causal/serialmente DEPOIS) pode
+  ter um `now()` MENOR que a que venceu primeiro (comecou depois, mas foi bloqueada menos tempo) — o gate
+  `<=` rejeitaria a atualizacao CAUSALMENTE mais nova por ter timestamp NUMERICAMENTE mais antigo, deixando
+  `estado` congelado na transicao anterior ate' a PROXIMA transicao (auto-cura na proxima, nunca permanente).
+  A verdade canonica (`legislativo.proposicao.estado`, via CAS de lock_version) NUNCA e' afetada — so' esta
+  VISTA interna, best-effort, pode atrasar sob esta janela estreita. Fix correto = `legislativo` trocar
+  `now()` por `clock_timestamp()` no DEFAULT de `ocorrido_em` (E em `efetivado_em`) — decisao que tambem
+  afeta `historico-da-proposicao` (a prova de auditoria Inv.10), fora do escopo de uma fatia de `paineis`."
+  [tx {:keys [ente-id proposicao-id estado transicionou-em]}]
+  {:pre [(some? ente-id) (some? proposicao-id) (some? estado) (some? transicionou-em)]}
   (let [r (jdbc/execute-one! tx
             (sql/format {:update :paineis.tramitacao
-                         :set {:estado estado :transicionou_em [:now]}
-                         :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]]}))]
+                         :set {:estado estado :transicionou_em transicionou-em}
+                         :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]
+                                 [:<= :transicionou_em transicionou-em]]}))]
     (when-not (zero? (:next.jdbc/update-count r 0))
       {:proposicao-id proposicao-id :estado estado})))
 

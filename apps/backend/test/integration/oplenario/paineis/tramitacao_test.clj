@@ -65,11 +65,66 @@
     (drenar!)
     (emitir! ente "proposicao.transicionou"
              {:proposicao-id (str pid) :template-id (str (random-uuid)) :de "protocolada"
-              :para "em_comissao" :gatilho "manual" :transicao-id (str (random-uuid))})
+              :para "em_comissao" :gatilho "manual" :transicao-id (str (random-uuid))
+              :ocorrido-em "2026-07-05T09:00:00Z"})
     (drenar!)
     (let [[i] (repo/tramitacao-board *repo* ente)]
       (is (= "em_comissao" (:estado i)) "estado atualizado")
       (is (some? (:transicionou-em i)) "carimbo de transicao presente"))))
+
+(deftest primeira-transicao-aplica-mesmo-com-ocorrido-em-no-passado
+  ;; O FIX do review clojure HIGH: `inserir!` semeia `transicionou_em` com Instant/EPOCH (nao mais `now()`
+  ;; da coluna) — sob backlog do relay (protocolada+transicionou drenados juntos no catch-up), a 1a
+  ;; transicao real carrega um `:ocorrido-em` BEM anterior ao momento da projecao; antes do fix, o gate de
+  ;; monotonicidade rejeitava essa atualizacao legitima (congelando o estado). Simula isso emitindo um
+  ;; `:ocorrido-em` no passado distante (muito antes de 'agora', mas depois de EPOCH).
+  (let [ente (random-uuid) pid (random-uuid)]
+    (emitir! ente "proposicao.protocolada" (payload-protocolada {:proposicao-id (str pid)}))
+    (drenar!)
+    (emitir! ente "proposicao.transicionou"
+             {:proposicao-id (str pid) :template-id (str (random-uuid)) :de "protocolada"
+              :para "em_comissao" :gatilho "manual" :transicao-id (str (random-uuid))
+              :ocorrido-em "2020-01-01T00:00:00Z"})
+    (drenar!)
+    (let [[i] (repo/tramitacao-board *repo* ente)]
+      (is (= "em_comissao" (:estado i)) "a 1a transicao aplicou mesmo com ocorrido-em no passado distante")
+      (is (= (java.time.Instant/parse "2020-01-01T00:00:00Z") (:transicionou-em i))))))
+
+(deftest transicao-carrega-o-instante-real-do-dominio-nao-o-de-projecao
+  ;; O FIX do carry (review architect/database MEDIUM da fatia anterior): `transicionou_em` adota
+  ;; :ocorrido-em do EVENTO (o instante real da transicao em legislativo), NAO o momento em que este
+  ;; consumer projeta — mesmo sob atraso do relay, o carimbo carrega a data real.
+  (let [ente (random-uuid) pid (random-uuid)]
+    (emitir! ente "proposicao.protocolada" (payload-protocolada {:proposicao-id (str pid)}))
+    (drenar!)
+    (emitir! ente "proposicao.transicionou"
+             {:proposicao-id (str pid) :template-id (str (random-uuid)) :de "protocolada"
+              :para "em_comissao" :gatilho "manual" :transicao-id (str (random-uuid))
+              :ocorrido-em "2099-07-31T00:00:00Z"})
+    (drenar!)
+    (let [[i] (repo/tramitacao-board *repo* ente)]
+      (is (= (java.time.Instant/parse "2099-07-31T00:00:00Z") (:transicionou-em i))
+          "adotou o instante do EVENTO, nao 'agora' (2099 e' um valor arbitrario distinto de now(), provando que veio do evento)"))))
+
+(deftest transicao-mais-antiga-fora-de-ordem-e-no-op
+  ;; GATE DE MONOTONICIDADE (fix do carry): uma transicao MAIS ANTIGA que chega DEPOIS de uma MAIS NOVA ja
+  ;; projetada (redrive/backfill fora de ordem) nao pode retroceder o carimbo de estagnacao.
+  (let [ente (random-uuid) pid (random-uuid)]
+    (emitir! ente "proposicao.protocolada" (payload-protocolada {:proposicao-id (str pid)}))
+    (drenar!)
+    (emitir! ente "proposicao.transicionou"
+             {:proposicao-id (str pid) :template-id (str (random-uuid)) :de "protocolada"
+              :para "em_pauta" :gatilho "manual" :transicao-id (str (random-uuid))
+              :ocorrido-em "2026-07-10T00:00:00Z"})
+    (drenar!)
+    (emitir! ente "proposicao.transicionou"
+             {:proposicao-id (str pid) :template-id (str (random-uuid)) :de "protocolada"
+              :para "em_comissao" :gatilho "manual" :transicao-id (str (random-uuid))
+              :ocorrido-em "2026-07-05T00:00:00Z"})
+    (drenar!)
+    (let [[i] (repo/tramitacao-board *repo* ente)]
+      (is (= "em_pauta" (:estado i)) "a transicao mais antiga (fora de ordem) NAO sobrescreveu a mais nova")
+      (is (= (java.time.Instant/parse "2026-07-10T00:00:00Z") (:transicionou-em i))))))
 
 (deftest transicao-sem-materia-projetada-nao-lanca
   ;; TOLERANCIA (mesmo racional de transparencia/atualizar-estado! e paineis/pendencia): uma transicao cujo
@@ -78,7 +133,8 @@
   (let [ente (random-uuid)]
     (emitir! ente "proposicao.transicionou"
              {:proposicao-id (str (random-uuid)) :template-id (str (random-uuid)) :de "protocolada"
-              :para "em_comissao" :gatilho "manual" :transicao-id (str (random-uuid))})
+              :para "em_comissao" :gatilho "manual" :transicao-id (str (random-uuid))
+              :ocorrido-em "2026-07-05T09:00:00Z"})
     (drenar!)
     (is (empty? (repo/tramitacao-board *repo* ente)) "nenhum item fantasma foi criado")))
 
@@ -113,11 +169,13 @@
     ;; p2 fica em "protocolada" (grupo alfabeticamente ANTES de "em_comissao").
     (emitir! ente "proposicao.transicionou"
              {:proposicao-id (str p1) :template-id (str (random-uuid)) :de "protocolada"
-              :para "em_comissao" :gatilho "manual" :transicao-id (str (random-uuid))})
+              :para "em_comissao" :gatilho "manual" :transicao-id (str (random-uuid))
+              :ocorrido-em "2026-07-05T09:00:00Z"})
     (drenar!)
     (emitir! ente "proposicao.transicionou"
              {:proposicao-id (str p3) :template-id (str (random-uuid)) :de "protocolada"
-              :para "em_comissao" :gatilho "manual" :transicao-id (str (random-uuid))})
+              :para "em_comissao" :gatilho "manual" :transicao-id (str (random-uuid))
+              :ocorrido-em "2026-07-05T10:00:00Z"})
     (drenar!)
     (let [board (repo/tramitacao-board *repo* ente)]
       (is (= 3 (count board)))
