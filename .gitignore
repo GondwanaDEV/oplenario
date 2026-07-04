@@ -31,3 +31,6 @@ dist/
 .playwright-mcp/
 # a raiz não guarda PNG de fonte — só previews descartáveis de validação
 /*.png
+
+# companheiro visual de brainstorming (superpowers) — mockups de sessão, não é produto
+.superpowers/
