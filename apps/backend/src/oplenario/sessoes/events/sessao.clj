@@ -8,11 +8,18 @@
 (def transicionou-tipo "sessao.transicionou")
 
 (def TransicionouPayload
-  "Transicao OCORRIDA na maquina da sessao (espelha {:de :para} de db/sessao/transicionar!)."
+  "Transicao OCORRIDA na maquina da sessao (espelha {:de :para} de db/sessao/transicionar!). `ocorrido-em`
+  (F7 E3, SLI de janela de sessao — mirror do carry fechado em legislativo/proposicao a5a5532): o instante
+  REAL da transicao no dominio (`sessoes.sessao.atualizado_em`, RETURNING do UPDATE de transicionar!) — nao o
+  momento em que um consumer eventualmente PROJETA o evento. O projetor de SLI (paineis.sli_sessao) carimba
+  aberta_em/encerrada_em/janela DESTE instante; sem ele, so' teria 'agora' (tempo de PROCESSAMENTO), que
+  mente sob qualquer atraso comum do relay (deploy, backpressure) exatamente quando o sinal mais importa.
+  Viaja como STRING ISO (jsonista nao serializa java.time.Instant, mesma disciplina dos demais eventos)."
   [:map {:closed true}
    [:sessao-id :uuid]
    [:de :string]
    [:para :string]
+   [:ocorrido-em :string]
    [:ator-id {:optional true} [:maybe :uuid]]])
 
 (defn transicionou [ente-id payload]

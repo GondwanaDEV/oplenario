@@ -18,3 +18,8 @@
   tenant-wide de `o-que-vence`."
   [repo-paineis ator]
   (repo/tramitacao-board repo-paineis (:ente-id ator)))
+
+(defn sli-sessoes
+  "SLI de janela de sessao (Inv.9, F7 E3) p/ o tenant do `ator`. Mesma authz/escopo tenant-wide."
+  [repo-paineis ator]
+  (repo/sli-sessoes repo-paineis (:ente-id ator)))

@@ -48,7 +48,12 @@
       (let [pl (:payload (first evs))]
         (is (re-find #"agendada" pl) "payload carrega o estado de origem")
         (is (re-find #"aberta" pl) "payload carrega o estado de destino")
-        (is (re-find (re-pattern (str sid)) pl) "payload carrega a sessao-id")))))
+        (is (re-find (re-pattern (str sid)) pl) "payload carrega a sessao-id")
+        ;; F7 E3 (SLI de sessao): o payload carrega o INSTANTE REAL da transicao no dominio (:ocorrido-em,
+        ;; RETURNING de atualizado_em) — nao o momento em que paineis.sli_sessao eventualmente PROJETA o
+        ;; evento (mirror do carry fechado em legislativo, a5a5532). Sem isto, o SLI de janela de sessao
+        ;; carimbaria aberta_em/encerrada_em com o tempo de PROCESSAMENTO, mentindo sob atraso do relay.
+        (is (re-find #"\"ocorrido-em\":\s*\"20\d\d-\d\d-\d\dT" pl) "carrega ocorrido-em como ISO-8601 string")))))
 
 ;; ---------- presenca.registrada ----------
 

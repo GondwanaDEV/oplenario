@@ -84,7 +84,10 @@
           ;; (a maquina hoje lanca em transicao invalida/redundante, mas o contrato fica explicito aqui).
           (when (not= (:de r) (:para r))
             (producers/emitir-sessao-transicionou! bus tx ente-id
-              (cond-> {:sessao-id (:id m) :de (:de r) :para (:para r)}
+              ;; :ocorrido-em (F7 E3): string ISO do Instant real da transicao (RETURNING de atualizado_em em
+              ;; db/sessao/transicionar!) — o SLI de janela de sessao carimba a janela DAQUI, nao do momento
+              ;; de projecao (mirror do legislativo/proposicao).
+              (cond-> {:sessao-id (:id m) :de (:de r) :para (:para r) :ocorrido-em (str (:ocorrido-em r))}
                 (:updated-by m) (assoc :ator-id (:updated-by m)))))
           r))))
   (buscar-sessao [this ente-id id] (transacao this ente-id #(sessao/buscar % ente-id id)))

@@ -36,6 +36,7 @@
             [oplenario.paineis.components.notificacao :as porta]
             [oplenario.paineis.db.notificacao-entrega :as db-notificacao]
             [oplenario.paineis.db.pendencia :as db-pendencia]
+            [oplenario.paineis.db.sli-sessao :as db-sli-sessao]
             [oplenario.paineis.db.tramitacao :as db-tramitacao])
   (:import (java.time Instant LocalDate)
            (java.util UUID)))
@@ -45,6 +46,7 @@
 (def ^:private teto-o-que-vence 100)
 ;; teto POR GRUPO de estado (review database HIGH, F7 Slice 2) — ver docstring de db.tramitacao/listar-board.
 (def ^:private teto-tramitacao-board-por-estado 50)
+(def ^:private teto-sli-sessoes 200)
 
 (defn- protocolar!
   "Aplica inserir! p/ uma das 4 especies de participacao — extrai o campo comum entre os 4 branches
@@ -131,6 +133,13 @@
     "proposicao.transicionou"
     (transicionar-tramitacao! tx ente-id (:proposicao-id payload) (:para payload) (:ocorrido-em payload))
 
+    ;; F7 E3: projeta o ciclo de vida da SESSAO plenaria (F4) na vista de SLI de janela de sessao (Inv.9). O
+    ;; UPSERT e' idempotente + monotonico (ver db/sli-sessao/projetar-transicao!); a 1a transicao de uma
+    ;; sessao INSERE, as seguintes atualizam a janela/estado. `:ocorrido-em` chega STRING ISO -> Instant.
+    "sessao.transicionou"
+    (db-sli-sessao/projetar-transicao! tx {:ente-id ente-id :sessao-id (UUID/fromString (:sessao-id payload))
+                                           :para (:para payload) :ocorrido-em (Instant/parse (:ocorrido-em payload))})
+
     ;; F7 E2: materializa o INTENT de entrega (estado 'pendente') a partir do fan-out de transparencia. NADA
     ;; e' enviado aqui (anti dual-write — ver db.notificacao-entrega); o worker (entregar-pendentes!) envia
     ;; depois. `objeto-id` chega STRING (jsonb) -> UUID; `destinatario` fica STRING (identidade-uuid como texto,
@@ -179,6 +188,7 @@
   (transacao [this ente-id f] "Roda (f tx) numa UNICA tx do tenant (com-tenant*) — leitura interna.")
   (o-que-vence [this ente-id] "Pendencias ABERTAS (pendente|vencido) do tenant, mais urgente primeiro.")
   (tramitacao-board [this ente-id] "TODAS as proposicoes do tenant, agrupadas por estado, mais estagnadas primeiro.")
+  (sli-sessoes [this ente-id] "SLI de janela de sessao (Inv.9): sessoes do tenant, abertas primeiro, concluidas por recencia.")
   (entregar-pendentes! [this ente-id notificador]
     "WORKER de entrega (F7 E2): envia os intents 'pendente' do ledger pelo `notificador` (porta CanalNotificacao)
     e marca enviada/falha. Le' o lote numa tx; ENVIA fora de qualquer tx (efeito externo); marca cada intent
@@ -201,6 +211,7 @@
   (transacao [_ ente-id f] (tenancy/com-tenant* (:ds datasource) ente-id f))
   (o-que-vence [this ente-id] (transacao this ente-id #(db-pendencia/listar-abertas % ente-id teto-o-que-vence)))
   (tramitacao-board [this ente-id] (transacao this ente-id #(db-tramitacao/listar-board % ente-id teto-tramitacao-board-por-estado)))
+  (sli-sessoes [this ente-id] (transacao this ente-id #(db-sli-sessao/listar-sli-sessoes % ente-id teto-sli-sessoes)))
   (entregar-pendentes! [this ente-id notificador]
     (let [pendentes (transacao this ente-id #(db-notificacao/listar-pendentes % ente-id))]
       (doseq [intent pendentes]

@@ -63,7 +63,13 @@
   "Move o estado da sessao para `para` (maquina logic/transicao-valida?, fail-closed) com CAS por lock_version.
   Carimba o marco temporal do alvo: aberta -> aberta_em (so na 1a abertura); encerrada/nao_realizada ->
   encerrada_em; nao_realizada exige `motivo`. Lanca em transicao invalida, conflito de lock ou inexistente.
-  Devolve {:de :para}."
+  Devolve {:de :para :ocorrido-em} — `ocorrido-em` (F7 E3, RETURNING de `atualizado_em`) e' o instante REAL
+  da transicao no dominio, que o evento sessao.transicionou carrega p/ o SLI de janela de sessao (paineis)
+  carimbar a janela DAQUI, nao do momento em que projeta. CARRY (mesmo do legislativo): `atualizado_em` usa
+  o DEFAULT `[:now]`, que em Postgres congela no INICIO da tx — sob concorrencia real na MESMA sessao a
+  ordem numerica pode divergir da causal; a verdade canonica (`sessoes.sessao.estado`, via CAS de
+  lock_version) NUNCA e' afetada, so' a VISTA best-effort do SLI. Fix definitivo (`clock_timestamp()`) e'
+  decisao maior, fora do escopo desta fatia."
   [tx {:keys [id ente-id para motivo updated-by lock-version]}]
   (let [{:keys [estado aberta-em] db-lock :lock-version} (estado+lock tx ente-id id)]
     (when (nil? estado)
@@ -85,10 +91,13 @@
                  (and (= "aberta" para) (nil? aberta-em)) (assoc :aberta_em [:now])
                  (contains? #{"encerrada" "nao_realizada"} para) (assoc :encerrada_em [:now])
                  (= "nao_realizada" para) (assoc :motivo_nao_realizada motivo))
-          r (jdbc/execute-one! tx
-              (sql/format {:update :sessoes.sessao :set sets
-                           :where [:and [:= :ente_id ente-id] [:= :id id] [:= :lock_version lock-version]]}))]
-      (when (zero? (:next.jdbc/update-count r 0))
+          r (comum/linha->kebab
+              (jdbc/execute-one! tx
+                (sql/format {:update :sessoes.sessao :set sets
+                             :where [:and [:= :ente_id ente-id] [:= :id id] [:= :lock_version lock-version]]
+                             :returning [:atualizado_em]})))]
+      ;; com RETURNING, execute-one! devolve a LINHA (ou nil se 0 linhas casaram o WHERE) — nil = conflito.
+      (when (nil? r)
         (throw (ex-info "transicionar!: conflito de lock_version ou sessao inexistente"
                         {:tipo :conflito/transicao :id id :lock-version lock-version})))
-      {:de estado :para para})))
+      {:de estado :para para :ocorrido-em (:atualizado-em r)})))
