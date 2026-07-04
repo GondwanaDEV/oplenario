@@ -3,8 +3,14 @@
   (ADR-0001 §3). O protocolo RepoLegislativo expoe as ACOES (tenant-aware: trata `com-tenant*` por
   dentro); o record segura o :datasource (via `using`); o db/ e' a IMPL. O controller depende DESTE
   Component, nunca do db/ direto. `transacao` compoe varias acoes numa UNICA tx do tenant."
-  (:require [oplenario.kernel.tenancy :as tenancy]
+  (:require [clojure.string :as str]
+            [oplenario.kernel.components.objeto-store :as os]
+            [oplenario.kernel.ids :as ids]
+            [oplenario.kernel.tenancy :as tenancy]
+            [oplenario.legislativo.components.assinador-icp :as assinador-icp]
+            [oplenario.legislativo.components.serializador-publicacao :as ser-pub]
             [oplenario.legislativo.db.apensacao :as apensacao]
+            [oplenario.legislativo.db.artefato-publicacao :as artefato]
             [oplenario.legislativo.db.autografo :as autografo]
             [oplenario.legislativo.db.documento :as documento]
             [oplenario.legislativo.db.documento-modelo :as doc-modelo]
@@ -20,7 +26,10 @@
             [oplenario.legislativo.db.tramitacao :as tram]
             [oplenario.legislativo.db.tramitacao-executiva :as exec]
             [oplenario.legislativo.db.votacao :as votacao]
-            [oplenario.legislativo.diplomat.producers :as producers]))
+            [oplenario.legislativo.diplomat.producers :as producers]
+            [oplenario.legislativo.gerador-publicacao :as ger-pub])
+  (:import (java.security MessageDigest)
+           (org.postgresql.util PSQLException)))
 
 (defprotocol RepoLegislativo
   (transacao [this ente-id f] "Roda (f tx) numa UNICA tx do tenant — compoe acoes atomicamente.")
@@ -104,7 +113,55 @@
   (buscar-documento [this ente-id id])
   (documentos-do-modelo [this ente-id modelo-id])
   (editar-documento! [this ente-id m] "Reescreve corpo/assunto enquanto rascunho (CAS).")
-  (emitir-documento! [this ente-id m] "rascunho -> emitido (congela o conteudo); CAS."))
+  (emitir-documento! [this ente-id m] "rascunho -> emitido (congela o conteudo); CAS.")
+  ;; F6c Slice 4a — artefato de publicacao oficial ('DO-lite', doc-mestre L287). Verdade de dominio do
+  ;; legislativo (§22.10: artefato legal e' do dominio, nao da projecao transparencia — que so' EXIBE, Slice 4b).
+  (gerar-artefato-publicacao! [this ente-id m]
+    "Gera o ARTEFATO oficial de uma norma PUBLICADA (doc-mestre L287): resolve a norma + o texto legal integral
+     -> renderiza (puro) -> serializa (port) -> assina (port ICP STUB, §22.5 eixo F) -> hash -> grava o binario
+     no objeto_store -> insere `artefato_publicacao` VERSIONADO (versao MAX+1 atomica). Fail-closed: norma nao
+     'publicada'/sem texto ou campo nao resolvido ABORTA antes de persistir. `m` = {:norma-id :serializador
+     :assinador :objeto-store :assinado-por?}. Devolve a linha do artefato.")
+  (buscar-artefato-publicacao [this ente-id id])
+  (artefatos-da-norma [this ente-id norma-id] "Artefatos de uma norma, por versao (historico de (re)geracoes)."))
+
+;; ---------- geracao do artefato de publicacao oficial ('DO-lite', doc-mestre L287, F6c Slice 4a):
+;;            resolve a norma publicada + o texto legal -> renderiza (puro) -> serializa+assina (ports STUB) ->
+;;            objeto_store -> insere `artefato_publicacao` versionado (MAX+1 atomico). ----------
+
+(defn- sha256-hex
+  "Hash hex SHA-256 do binario, prefixado 'sha256:' — integridade do artefato. bit-and 0xff: byte assinado da
+  JVM nao vira 'ffffff..' no hex. (Duplica conscientemente o helper de compliance/repositorio — 4 linhas,
+  modulos independentes; consolidar num kernel/hash e' cleanup futuro, nao vale acoplar os modulos agora.)"
+  [^bytes b]
+  (let [h (.digest (MessageDigest/getInstance "SHA-256") b)]
+    (str "sha256:" (apply str (map #(format "%02x" (bit-and (int %) 0xff)) h)))))
+
+(defn- resolver-corpo
+  "Resolve o TEXTO LEGAL integral da versao promulgada da `norma`: inline (texto_inline) direto, ou externalizado
+  (conteudo_uri) via objeto_store. Fail-closed: texto ausente/vazio -> LANCA (documento legal nao sai sem corpo).
+  A ex-data carrega norma-id/texto-versao-id (erro ACIONAVEL — mesma disciplina dos demais throws desta funcao
+  e de gerador-remessa; um texto-versao-id pendente ou blob inacessivel e' triado sem stack-trace)."
+  [norma texto objeto-store]
+  (let [{:keys [texto-inline conteudo-uri]} texto
+        corpo (cond
+                (and (string? texto-inline) (not (str/blank? texto-inline))) texto-inline
+                (and (string? conteudo-uri) (not (str/blank? conteudo-uri)))
+                (when-let [b (os/obter objeto-store conteudo-uri)] (String. ^bytes b "UTF-8"))
+                :else nil)]
+    (when (or (nil? corpo) (str/blank? corpo))
+      (throw (ex-info "gerar-artefato-publicacao!: texto legal da norma nao resolvido"
+                      {:norma-id (:id norma) :texto-versao-id (:texto-versao-id norma)})))
+    corpo))
+
+(defn- inserir-artefato-com-retry!
+  "Insere o artefato versionado (versao MAX+1 ATOMICA) re-tentando UMA vez no 23505 — corrida de versao
+  concorrente (mesma disciplina de compliance/gerar-remessa!, carry F5.3a-1). Cada tentativa = tx propria."
+  [repo ente-id row-base]
+  (letfn [(inserir [] (transacao repo ente-id #(artefato/inserir-versionada! % row-base)))]
+    (try (inserir)
+         (catch PSQLException e
+           (if (= "23505" (.getSQLState e)) (inserir) (throw e))))))
 
 (defrecord RepoLegislativoPg [datasource bus]
   RepoLegislativo
@@ -290,7 +347,49 @@
   (buscar-documento [this ente-id id] (transacao this ente-id #(documento/buscar % ente-id id)))
   (documentos-do-modelo [this ente-id mid] (transacao this ente-id #(documento/listar-por-modelo % ente-id mid)))
   (editar-documento! [this ente-id m] (transacao this ente-id #(documento/editar-rascunho! % (assoc m :ente-id ente-id))))
-  (emitir-documento! [this ente-id m] (transacao this ente-id #(documento/emitir! % (assoc m :ente-id ente-id)))))
+  (emitir-documento! [this ente-id m] (transacao this ente-id #(documento/emitir! % (assoc m :ente-id ente-id))))
+  ;; F6c Slice 4a — artefato de publicacao oficial. Le a norma publicada + texto (tx), resolve o corpo (inline
+  ;; ou objeto_store, FORA da tx), renderiza (puro, fail-closed), serializa+assina (ports), insere VERSIONADO
+  ;; (MAX+1 atomico; INSERT antes do S3 = ancora). SEM evento nesta fatia: a EXIBICAO (transparencia consome +
+  ;; rota publica) e' a Slice 4b (emit+consume juntos, como o Slice 1 fez p/ norma.publicada).
+  (gerar-artefato-publicacao! [this ente-id {:keys [norma-id serializador assinador objeto-store assinado-por]}]
+    (when-not objeto-store (throw (ex-info "gerar-artefato-publicacao!: objeto-store ausente" {:ente-id ente-id})))
+    (when-not serializador (throw (ex-info "gerar-artefato-publicacao!: serializador ausente" {:ente-id ente-id})))
+    (when-not assinador (throw (ex-info "gerar-artefato-publicacao!: assinador ausente" {:ente-id ente-id})))
+    (let [{:keys [norma texto]}
+          (transacao this ente-id
+            (fn [tx]
+              (let [n (norma/buscar tx ente-id norma-id)]
+                (when (nil? n)
+                  (throw (ex-info "gerar-artefato-publicacao!: norma inexistente" {:norma-id norma-id :ente-id ente-id})))
+                (when (not= "publicada" (:estado n))
+                  (throw (ex-info "gerar-artefato-publicacao!: so' se gera artefato de norma 'publicada'"
+                                  {:norma-id norma-id :estado (:estado n)})))
+                (when (nil? (:texto-versao-id n))
+                  (throw (ex-info "gerar-artefato-publicacao!: norma sem texto-versao-id (artefato legal vazio)"
+                                  {:norma-id norma-id})))
+                {:norma n :texto (texto/buscar tx ente-id (:texto-versao-id n))})))
+          corpo     (resolver-corpo norma texto objeto-store)
+          documento (ger-pub/renderizar
+                     {:especie (:tipo-norma norma) :numero (:numero norma) :ano (:ano norma)
+                      :urn (:urn norma) :ementa (:ementa norma)
+                      :publicado-em (str (:publicado-em norma)) :veiculo (:veiculo-publicacao norma)
+                      :corpo corpo})
+          {b :bytes content-type :content-type} (ser-pub/serializar serializador documento)
+          hash-conteudo (sha256-hex b)
+          {:keys [algoritmo assinatura-b64]} (assinador-icp/assinar assinador b)   ; assinatura DESTACADA sobre os bytes
+          ;; store-ref a partir do (:id norma) ECHOADO pelo banco (nao do param cru) — defesa-em-profundidade
+          ;; (review sec LOW): a chave do objeto_store so' usa valores round-tripados+tipados pelo PG (uuid),
+          ;; nunca texto livre do caller. ente-id = UUID da sessao; ambos os segmentos sao uuid canonico.
+          store-ref (str "publicacoes/" ente-id "/" (:id norma) "/" hash-conteudo ".bin")
+          row (inserir-artefato-com-retry! this ente-id
+                {:id (ids/novo-id) :ente-id ente-id :norma-id norma-id :spec-versao (:spec-versao documento)
+                 :content-type content-type :hash hash-conteudo :objeto-store-ref store-ref
+                 :assinatura-algoritmo algoritmo :assinatura-b64 assinatura-b64 :assinado-por assinado-por})]
+      (os/guardar! objeto-store store-ref b content-type)   ; binario no objeto_store APOS a ancora (INSERT-primeiro)
+      row))
+  (buscar-artefato-publicacao [this ente-id id] (transacao this ente-id #(artefato/buscar % ente-id id)))
+  (artefatos-da-norma [this ente-id norma-id] (transacao this ente-id #(artefato/listar-por-norma % ente-id norma-id))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."
