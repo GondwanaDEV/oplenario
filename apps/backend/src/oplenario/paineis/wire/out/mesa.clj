@@ -70,6 +70,12 @@
   [:map {:closed true}
    [:itens [:sequential RelatorPendenteOut]]])
 
+(def CardIndisponivelOut
+  "O sentinel de degradacao por card (§16.11, mesmo formato usado por compliance-tce quando a leitura
+  cross-modulo falha) — a UNIAO de cada card novo com este sentinel e' o que faz mesa->wire aceitar a
+  degradacao sem violar seu proprio contrato fechado."
+  [:map {:closed true} [:indisponivel [:= true]]])
+
 (def MesaOut
   "O dashboard institucional da Mesa (resposta de GET /paineis/mesa, §16.11 item 11.4): o card de compliance
   do TCE (opaco) + os tres rollups do paineis + os 3 cards novos da FE Onda A1 (presenca-resumo/
@@ -83,7 +89,10 @@
    [:tramitacao TramitacaoResumoOut]
    [:pendencias PendenciasResumoOut]
    [:sessoes SessoesResumoOut]
-   [:presenca-resumo PresencaResumoOut]
-   [:esic-cumprimento EsicCumprimentoOut]
-   [:relatores-pendentes RelatoresPendentesOut]
+   ;; os 3 cards novos sao [:or <forma-fechada> CardIndisponivelOut]: ao contrario de :compliance-tce (aberto
+   ;; de proposito), estes tem forma fechada conhecida — a UNIAO com o sentinel e' o que permite a degradacao
+   ;; por card (diplomat/http/in `card-seguro`) sem violar o contrato fechado de cada um (Critical review fix).
+   [:presenca-resumo [:or PresencaResumoOut CardIndisponivelOut]]
+   [:esic-cumprimento [:or EsicCumprimentoOut CardIndisponivelOut]]
+   [:relatores-pendentes [:or RelatoresPendentesOut CardIndisponivelOut]]
    [:lacunas [:sequential :string]]])

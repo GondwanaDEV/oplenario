@@ -72,6 +72,21 @@
     (is (= esic-fake (:esic-cumprimento out)))
     (is (= relatores-fake (:relatores-pendentes out)))))
 
+(deftest cards-novos-toleram-o-sentinel-de-degradacao
+  ;; Critical review finding (A5+A6 combinado): antes desta correcao, embutir {:indisponivel true} sob
+  ;; presenca-resumo/esic-cumprimento/relatores-pendentes violava a forma FECHADA de cada um (diferente de
+  ;; compliance-tce, que e' :map aberto) e fazia mesa->wire lancar — 500 na pagina inteira em vez de
+  ;; degradacao por card. Prova que os 3 cards agora toleram o sentinel, individualmente e em combinacao.
+  (let [sentinel {:indisponivel true}]
+    (is (m/validate wire/MesaOut (mesa/mesa->wire (rollups-fake) card-compliance-fake sentinel esic-fake relatores-fake))
+        "presenca-resumo degradado ainda valida")
+    (is (m/validate wire/MesaOut (mesa/mesa->wire (rollups-fake) card-compliance-fake presenca-fake sentinel relatores-fake))
+        "esic-cumprimento degradado ainda valida")
+    (is (m/validate wire/MesaOut (mesa/mesa->wire (rollups-fake) card-compliance-fake presenca-fake esic-fake sentinel))
+        "relatores-pendentes degradado ainda valida")
+    (is (m/validate wire/MesaOut (mesa/mesa->wire (rollups-fake) card-compliance-fake sentinel sentinel sentinel))
+        "os 3 cards novos degradados simultaneamente ainda validam")))
+
 (deftest lacunas-so-lista-o-que-genuinamente-falta
   (let [{:keys [lacunas]} (mesa/mesa->wire (rollups-fake) card-compliance-fake presenca-fake esic-fake relatores-fake)]
     (is (= #{"ciencia_convocacao" "assinatura_autografo" "incidente_grant_lgpd"} (set lacunas))

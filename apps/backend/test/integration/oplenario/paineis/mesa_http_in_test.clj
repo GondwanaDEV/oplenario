@@ -125,6 +125,25 @@
     (is (= 7 (get-in body [:tramitacao :total])) "os rollups saudaveis do paineis seguem presentes")
     (is (= 5 (get-in body [:pendencias :abertas])))))
 
+(deftest mesa-degrada-o-card-quando-presenca-resumo-falha
+  ;; Critical review finding (A5+A6 combinado): antes da correcao do wire/out (union com CardIndisponivelOut),
+  ;; o sentinel embutido sob um card de forma FECHADA (presenca-resumo/esic-cumprimento/relatores-pendentes)
+  ;; violava o contrato MesaOut e fazia adapters-out-mesa/mesa->wire lancar ex-info — propagando a 500 pro
+  ;; handler inteiro em vez de degradar so' aquele card. Prova que agora GET /paineis/mesa segue 200, com
+  ;; presenca-resumo degradado e o resto da composicao (rollups + outros cards) intacto.
+  (let [presenca-quebrada (fn [_eid] (throw (ex-info "sessoes fora do ar" {})))
+        r (pt/response-for (service-fn #{"secretario"} (fake-repo-paineis rollups-fake) (constantly card-compliance-fake)
+                                       presenca-quebrada (constantly esic-fake) (constantly relatores-fake))
+                           :get "/paineis/mesa" :headers (com-bearer (token (random-uuid) (random-uuid))))
+        body (ler-json r)]
+    (is (= 200 (:status r)) "a falha de presenca-resumo NAO propaga a 500 — a tela degrada")
+    (is (= {:indisponivel true} (:presenca-resumo body)) "card degradado com o sentinel")
+    (is (= card-compliance-fake (:compliance-tce body)) "o card de compliance segue intacto")
+    (is (= 96 (get-in body [:esic-cumprimento :percentual])) "o card de esic segue intacto")
+    (is (= [] (get-in body [:relatores-pendentes :itens])) "o card de relatores segue intacto")
+    (is (= 7 (get-in body [:tramitacao :total])) "os rollups saudaveis do paineis seguem presentes")
+    (is (= 5 (get-in body [:pendencias :abertas])))))
+
 (deftest mesa-ramo-de-producao-compoe-painel-wire-real
   ;; review architect MEDIUM: exercita o seam de PRODUCAO (montar sem override) — painel-wire ->
   ;; controllers/painel -> adapters/out/painel projeta o read-model de dominio num PainelOut valido embutido.
