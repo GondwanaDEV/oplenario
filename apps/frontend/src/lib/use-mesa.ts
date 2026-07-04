@@ -41,11 +41,32 @@ export interface SliSessaoOut {
 
 type Estado = "carregando" | "pronto" | "erro";
 
+// jsonista (backend, apps/backend/src/oplenario/http.clj:json-resposta) serializa keywords Clojure
+// VERBATIM — :por-estado vira a chave JSON literal "por-estado", nunca camelCase. O contrato gerado
+// (contrato-mesa.gen.ts) e todo o código downstream (mesa-vista.ts, componentes B4-B7) já são escritos
+// contra nomes camelCase (porEstado, complianceTce, ...). Sem esta transformação, o acesso por
+// propriedade camelCase resolve pra `undefined` contra um payload real do backend (bug B7b). A
+// transformação é aplicada UMA VEZ aqui, no único ponto em que os 4 endpoints do dashboard são
+// parseados — dependency-free, no mesmo espírito "zero-dep, hand-rolled" do codegen (Task A7).
+function paraCamel(chave: string): string {
+  return chave.replace(/-([a-z0-9])/g, (_, c: string) => c.toUpperCase());
+}
+
+function camelizarChaves(valor: unknown): unknown {
+  if (Array.isArray(valor)) return valor.map(camelizarChaves);
+  if (valor !== null && typeof valor === "object") {
+    return Object.fromEntries(
+      Object.entries(valor as Record<string, unknown>).map(([k, v]) => [paraCamel(k), camelizarChaves(v)]),
+    );
+  }
+  return valor;
+}
+
 async function buscarOuNull<T>(url: string, token: string): Promise<T | null> {
   try {
     const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
     if (!r.ok) return null;
-    return (await r.json()) as T;
+    return camelizarChaves(await r.json()) as T;
   } catch {
     return null;
   }

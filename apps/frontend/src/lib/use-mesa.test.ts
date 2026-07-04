@@ -81,4 +81,43 @@ describe("useMesa", () => {
     expect(result.current.estado).toBe("erro");
     expect(global.fetch).not.toHaveBeenCalled();
   });
+
+  // B7b (bug crítico): jsonista (backend) emite JSON com chaves kebab-case VERBATIM a partir de keywords
+  // Clojure (:por-estado -> "por-estado") — nunca camelCase. Os fixtures acima (mesaFake etc.) são
+  // hand-rolled JÁ em camelCase, o que mascarou o bug: contra um payload REAL do backend, o acesso
+  // `mesa.tramitacao.porEstado` (camelCase, como todo o código downstream já está escrito) resolvia pra
+  // `undefined`. Este teste usa um payload kebab-case realista (inclusive aninhado) pra provar que
+  // buscarOuNull cameliza antes do `as T`.
+  it("payload kebab-case real do backend (jsonista) -> acesso camelCase resolve (não undefined)", async () => {
+    const mesaKebab = {
+      "compliance-tce": { resumo: {}, "em-aberto": [], "remessas-recentes": [] },
+      tramitacao: { total: 47, "por-estado": [{ estado: "protocolada", n: 12 }] },
+      pendencias: { abertas: 8, vencidas: 1, pendentes: 7 },
+      sessoes: { "em-curso": 0, "nao-realizadas": 1, "por-situacao": [] },
+      "presenca-resumo": { "media-percentual": 78, "sessoes-consideradas": 10, "membros-da-casa": 43 },
+      "esic-cumprimento": { "total-encerrados": 49, "cumpridos-no-prazo": 47, percentual: 96 },
+      "relatores-pendentes": { itens: [] },
+      lacunas: ["ciencia_convocacao"],
+    };
+    global.fetch = vi.fn(async (url: string) => {
+      const corpo = url.includes("/paineis/mesa")
+        ? mesaKebab
+        : url.includes("/paineis/tramitacao")
+          ? { itens: [] }
+          : url.includes("/paineis/pendencias")
+            ? { pendencias: [] }
+            : { sessoes: [] };
+      return { ok: true, json: async () => corpo } as Response;
+    }) as unknown as typeof fetch;
+
+    const { result } = renderHook(() => useMesa("tok"));
+    await waitFor(() => expect(result.current.estado).toBe("pronto"));
+    expect(result.current.mesa?.tramitacao.porEstado).toEqual([{ estado: "protocolada", n: 12 }]);
+    expect(result.current.mesa?.complianceTce).toEqual({ resumo: {}, emAberto: [], remessasRecentes: [] });
+    expect(result.current.mesa?.presencaResumo).toEqual({
+      mediaPercentual: 78,
+      sessoesConsideradas: 10,
+      membrosDaCasa: 43,
+    });
+  });
 });
