@@ -108,3 +108,22 @@
       (throw (ex-info "conflito de escrita (lock_version desatualizado) ou parecer inexistente"
                       {:id id :lock-version lock-version})))
     r))
+
+;; ---- fila de relatores pendentes (read-model barato, FE Onda A1 §16.11) ----
+
+(defn relatores-pendentes
+  "Pareceres 'aguardando_designacao' (a designacao de relator ainda nao aconteceu — designar-relator!
+  transiciona daqui p/ 'com_relator'), join com a proposicao p/ mostrar ementa/urn-lex (o objeto e'
+  SEMPRE 'proposicao' nesta fatia — emenda fica fora, YAGNI). Mais antigo primeiro (fila FIFO)."
+  [tx ente-id teto]
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select [:pc.id [:pc.objeto_id :proposicao_id] :p.tipo :p.ano :p.sequencial
+                           :p.urn_lex :p.ementa :pc.criado_em]
+                  :from [[:legislativo.pareceres :pc]]
+                  :join [[:legislativo.proposicoes :p]
+                         [:and [:= :p.id :pc.objeto_id] [:= :p.ente_id :pc.ente_id]]]
+                  :where [:and [:= :pc.ente_id ente-id] [:= :pc.objeto_tipo [:inline "proposicao"]]
+                          [:= :pc.estado [:inline "aguardando_designacao"]]]
+                  :order-by [[:pc.criado_em :asc]]
+                  :limit teto}))))

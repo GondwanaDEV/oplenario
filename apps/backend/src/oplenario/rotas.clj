@@ -49,6 +49,9 @@
         ;; FE Onda A1: cumprimento de prazo do e-SIC injetado no dashboard da Mesa (mesma inversao de
         ;; dependencia; consumido por uma task futura que compoe /paineis/mesa).
         esic-cumprimento (fn [ente-id] (participacao-http/esic-cumprimento-wire repo-participacao ente-id))
+        ;; FE Onda A1: fila de relatores pendentes (self-contained no legislativo — sem cross-modulo);
+        ;; consumido por uma task futura que compoe /paineis/mesa (mesmo padrao de presenca-resumo/esic-cumprimento).
+        relatores-pendentes (fn [ente-id] (legislativo-http/relatores-pendentes-wire repo-legislativo ente-id))
         ;; F7 dashboard da Mesa: o host compoe compliance+paineis por INVERSAO DE DEPENDENCIA (espelha
         ;; consultar-sessao). Fecha sobre o repo de compliance e expoe uma fn (ente-id -> PainelOut projetado)
         ;; que o diplomat de paineis chama — paineis nunca importa compliance (§22.10). Passa pelo diplomat de

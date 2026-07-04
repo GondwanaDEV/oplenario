@@ -179,3 +179,21 @@
         "A ve o proprio parecer")
     (is (empty? (tenancy/com-tenant* *ds* b (fn [tx] (parecer/listar-por-objeto tx b "proposicao" (:pid @ctx)))))
         "B NAO ve o parecer de A (RLS)")))
+
+;; ========================= FE Onda A1: fila de relatores pendentes (§16.11) =========================
+
+(deftest relatores-pendentes-lista-pareceres-aguardando-designacao
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        ;; reusa o fixture de template ja usado pelos demais testes deste arquivo (sujeito='parecer',
+        ;; estado-inicial='aguardando_designacao') — nao reinventa o insert do template_tramitacao.
+        (let [tid (montar-template-parecer! tx ente)
+              pid (:id (prop/protocolar! tx {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026
+                                             :uf "CE" :municipio-nome "Fortaleza" :ementa "Arborização viária"
+                                             :autor-tipo "vereador" :autor-texto "Fulano"}))]
+          (criar-parecer! tx ente tid "proposicao" pid)
+          (let [itens (parecer/relatores-pendentes tx ente 50)]
+            (is (= 1 (count itens)))
+            (is (= pid (:proposicao-id (first itens))))
+            (is (= "Arborização viária" (:ementa (first itens))))))))))

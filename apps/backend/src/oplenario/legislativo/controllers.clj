@@ -59,6 +59,15 @@
           (throw (ex-info "modalidade nao registra votos individuais"
                           {:tipo :validacao/invalido :campos [:modalidade] :modalidade (:modalidade v)})))))))
 
+;; ========================= FE Onda A1: fila de relatores pendentes (§16.11) =========================
+
+(defn relatores-pendentes
+  "Fila de pareceres 'aguardando_designacao' do tenant `ente-id` (leitura tenant-wide, sem ator/policy fina —
+  mesmo contrato de `resumo-presenca`/`esic-cumprimento`). Devolve as linhas cruas (kebab, do db); o
+  adapters/out projeta+valida o contrato RelatoresPendentesOut."
+  [repo-legislativo ente-id]
+  (repo/relatores-pendentes repo-legislativo ente-id))
+
 (defn encerrar-votacao
   "Encerra a votacao `votacao-id` da sessao `sessao-id` (authz na sessao + amarra). `m` carrega o id
   (=votacao-id), lock-version, base-membros e resultado. Devolve o snapshot apurado ou nil se a votacao nao

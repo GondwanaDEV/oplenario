@@ -9,6 +9,7 @@
   (:require [oplenario.http :as http]
             [oplenario.interceptors :as it]
             [oplenario.legislativo.adapters.in.votacao :as adapters-in]
+            [oplenario.legislativo.adapters.out.relator-pendente :as adapters-out-relator]
             [oplenario.legislativo.adapters.out.votacao :as adapters-out]
             [oplenario.legislativo.controllers :as controllers]))
 
@@ -68,3 +69,19 @@
       ["/sessoes/:id/votacoes/:votacao-id/encerramento" :post
        [auth papel it/corpo-json (encerrar-handler repo-legislativo consultar-sessao)]
        :route-name :legislativo/encerrar-votacao]}))
+
+;; ========================= FE Onda A1: fila de relatores pendentes (§16.11) =========================
+
+(defn relatores-pendentes-wire
+  "Ponto de entrada IN-PROCESS da fila de relatores pendentes (FE Onda A1) — gemeo nao-HTTP p/ o host compor
+  o dashboard da Mesa (mirror `painel-wire` de compliance). Passa pelo controller (nunca pelo Repo-Component
+  direto — ADR-0001) + o MESMO gate adapters/out (projeta+valida) que uma rota HTTP usaria.
+
+  CONVENCAO DE AUTHZ (mesmo contrato de `compliance.diplomat.http.in/painel-wire`, `sessoes.diplomat.http.in/
+  presenca-resumo-wire` e `participacao.diplomat.http.in/esic-cumprimento-wire`): esta fn NAO re-verifica
+  papel/permissao; o ENDPOINT COMPONHEDOR e' o unico ponto de enforcement (GET /paineis/mesa, wired numa task
+  posterior, ja' exige papel 'secretario'). QUALQUER novo caller DEVE aplicar o gate 'secretario' antes —
+  senao expoe a fila de relatores pendentes tenant-wide a um papel qualquer. Nao ha lint que force isso: e'
+  convencao, mantida por revisao."
+  [repo-legislativo ente-id]
+  (adapters-out-relator/relatores-pendentes->wire (controllers/relatores-pendentes repo-legislativo ente-id)))

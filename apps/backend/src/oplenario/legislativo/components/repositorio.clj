@@ -76,6 +76,7 @@
   (texto-vigente-parecer [this ente-id parecer-id])
   (registrar-voto-divergente! [this ente-id m] "Registra voto vencido (append-only puro).")
   (votos-divergentes-do-parecer [this ente-id parecer-id])
+  (relatores-pendentes [this ente-id] "Fila de pareceres aguardando designacao de relator (FE Onda A1).")
   ;; eixo G — votacao (emite eventos votacao.aberta/voto.registrado/votacao.encerrada = fonte do placar ao vivo, F4)
   (abrir-votacao! [this ente-id m] "Abre votacao 'aberta' sobre objeto polimorfico.")
   (registrar-voto! [this ente-id m] "Voto nominal atribuido (append-only; UNIQUE por vereador).")
@@ -259,6 +260,8 @@
   (texto-vigente-parecer [this ente-id pid] (transacao this ente-id #(parecer-texto/vigente % ente-id pid)))
   (registrar-voto-divergente! [this ente-id m] (transacao this ente-id #(parecer-voto/registrar! % (assoc m :ente-id ente-id))))
   (votos-divergentes-do-parecer [this ente-id pid] (transacao this ente-id #(parecer-voto/listar-por-parecer % ente-id pid)))
+  ;; FE Onda A1 (§16.11) — read-model barato, tenant-wide, teto fixo 50 (sem paginacao nesta fatia).
+  (relatores-pendentes [this ente-id] (transacao this ente-id #(parecer/relatores-pendentes % ente-id 50)))
   ;; eixo G / carry F4 — votacao. Compoe o ato + a emissao do evento de TEMPO REAL na MESMA tx do tenant
   ;; (atomicidade outbox-com-o-ato §22.9 E2; fonte do placar ao vivo, §22.6 eixo G). So emite quando ha
   ;; sessao-id: a votacao em plenario tem canal (`sessao/{id}/plenario`); o ato administrativo (ex.: apreciacao
