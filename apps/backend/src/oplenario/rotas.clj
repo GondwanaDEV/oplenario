@@ -27,7 +27,8 @@
   legislativo) injeta `consultar-sessao` (delega ao Repo de sessoes) nos diplomats de tempo_real e legislativo,
   que NAO importam sessoes."
   [{:keys [idp repo-identidade repo-sessoes repo-legislativo repo-compliance repo-participacao
-           repo-transparencia repo-paineis repo-cadastros canal-store objeto-store painel-compliance]}]
+           repo-transparencia repo-paineis repo-cadastros canal-store objeto-store painel-compliance
+           presenca-resumo esic-cumprimento relatores-pendentes]}]
   (let [auth (it/autenticacao idp repo-identidade)
         ;; F6: relogio de producao (kernel/tempo) p/ o prazo LAI do e-SIC — determinismo em teste vem de
         ;; injetar relogio-fixo direto no fragmento de rotas (participacao-http/rotas). resolver-ente-publico
@@ -45,13 +46,18 @@
                           (repo-cadastros-comp/membros-da-casa repo-cadastros ente-id
                                                                 (tempo/hoje (tempo/relogio-sistema)
                                                                             (java.time.ZoneId/of "America/Fortaleza"))))
-        presenca-resumo (fn [ente-id] (sessoes-http/presenca-resumo-wire repo-sessoes membros-da-casa ente-id))
+        ;; Override injetavel (mesmo racional de `painel-compliance` — so' serve aos testes DB-free da borda
+        ;; de paineis); em producao `montar` e' chamado sem estas chaves e o `or` fecha sobre o repo real.
+        presenca-resumo (or presenca-resumo
+                            (fn [ente-id] (sessoes-http/presenca-resumo-wire repo-sessoes membros-da-casa ente-id)))
         ;; FE Onda A1: cumprimento de prazo do e-SIC injetado no dashboard da Mesa (mesma inversao de
-        ;; dependencia; consumido por uma task futura que compoe /paineis/mesa).
-        esic-cumprimento (fn [ente-id] (participacao-http/esic-cumprimento-wire repo-participacao ente-id))
+        ;; dependencia; consumido por /paineis/mesa — task A6).
+        esic-cumprimento (or esic-cumprimento
+                             (fn [ente-id] (participacao-http/esic-cumprimento-wire repo-participacao ente-id)))
         ;; FE Onda A1: fila de relatores pendentes (self-contained no legislativo — sem cross-modulo);
-        ;; consumido por uma task futura que compoe /paineis/mesa (mesmo padrao de presenca-resumo/esic-cumprimento).
-        relatores-pendentes (fn [ente-id] (legislativo-http/relatores-pendentes-wire repo-legislativo ente-id))
+        ;; consumido por /paineis/mesa (mesmo padrao de presenca-resumo/esic-cumprimento — task A6).
+        relatores-pendentes (or relatores-pendentes
+                                (fn [ente-id] (legislativo-http/relatores-pendentes-wire repo-legislativo ente-id)))
         ;; F7 dashboard da Mesa: o host compoe compliance+paineis por INVERSAO DE DEPENDENCIA (espelha
         ;; consultar-sessao). Fecha sobre o repo de compliance e expoe uma fn (ente-id -> PainelOut projetado)
         ;; que o diplomat de paineis chama — paineis nunca importa compliance (§22.10). Passa pelo diplomat de
@@ -74,5 +80,8 @@
                                          :resolver-ente-publico transparencia-http/resolver-ente-publico-uuid
                                          :objeto-store objeto-store}))
         (into (paineis-http/rotas {:auth auth :repo-paineis repo-paineis
-                                   :painel-compliance painel-compliance}))
+                                   :painel-compliance painel-compliance
+                                   :presenca-resumo presenca-resumo
+                                   :esic-cumprimento esic-cumprimento
+                                   :relatores-pendentes relatores-pendentes}))
         (into (tempo-real-sse/rotas {:auth auth :canal-store canal-store :consultar-sessao consultar-sessao})))))

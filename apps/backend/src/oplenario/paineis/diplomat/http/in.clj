@@ -36,45 +36,63 @@
     (http/json-resposta 200 (adapters-out-sli-sessao/sli-sessoes->wire
                              (controllers/sli-sessoes repo-paineis (:ator req))))))
 
-(def ^:private card-compliance-indisponivel
-  "Sentinela do card de compliance quando a leitura cross-modulo FALHA (review architect MAJOR: degradacao por
-  CARD, nunca 500 da pagina inteira). E' um mapa aberto valido p/ o `:compliance-tce :map` do MesaOut; o FE o
-  distingue de um PainelOut real pela chave `:indisponivel` (que o PainelOut nunca tem) e mostra 'painel do
-  TCE indisponivel' NAQUELE card, preservando os 3 rollups saudaveis que o paineis possui inteiramente."
+(def ^:private card-generico-indisponivel
+  "Sentinela GENERICO de degradacao por card (review architect MAJOR: degradacao por CARD, nunca 500 da
+  pagina inteira) — reusado pelos 4 cards cross-modulo do dashboard (compliance/presenca/esic/relatores),
+  todos seguindo a MESMA disciplina de tolerancia. E' um mapa aberto valido p/ o `:compliance-tce :map` do
+  MesaOut (aberto de proposito); os outros 3 cards sao tipados fechados no wire/out — a validacao do MesaOut
+  so' passa se a leitura daquele card TIVER sucedido (o sentinel so' e' valido sob `:compliance-tce`). O FE
+  distingue um card real do sentinel pela chave `:indisponivel` (que nenhum card real tem)."
   {:indisponivel true})
+
+(defn- card-seguro
+  "Chama `f` (a fn cross-modulo injetada pelo host: ente-id -> card ja' projetado) e devolve o resultado; em
+  FALHA de leitura (hiccup de infra, bug de projecao daquele modulo), loga e degrada p/ o sentinel generico —
+  NUNCA derruba a pagina inteira por causa de UM card cross-modulo fragil. Generaliza o try/catch que antes
+  vivia inline so' p/ compliance (review architect MAJOR) — mesma disciplina p/ os 4 cards do dashboard.
+  Distincao-chave: o card com DADOS de atraso/pendencia e' problema real do dominio e continua VISIVEL nos
+  valores; so' a FALHA de leitura degrada. `catch Throwable` (nao Exception): um `:pre`/AssertionError na fonte
+  e' Error, nao Exception (mesmo racional do consumer)."
+  [rotulo f ente-id]
+  (try
+    (f ente-id)
+    (catch Throwable e
+      (log/warn e (str "paineis: leitura de " rotulo " falhou no dashboard da Mesa — card degradado, demais cards preservados")
+                {:ente-id ente-id})
+      card-generico-indisponivel)))
 
 (defn- mesa-handler
   "GET /paineis/mesa (F7 dashboard da Mesa, §16.11 item 11.4). COMPOE, nao reprojeta: le' os rollups do proprio
-  paineis (controller -> repo) e o card de compliance via `painel-compliance` — a fn injetada pelo host que
-  fecha sobre o repo de compliance e devolve o PainelOut ja' projetado (inversao de dependencia; paineis nunca
-  importa compliance, §22.10). adapters/out embute o card OPACO + valida o MesaOut.
+  paineis (controller -> repo) e os 4 cards cross-modulo (compliance/presenca/esic/relatores) via fns injetadas
+  pelo host que fecham sobre o repo de cada modulo e devolvem o card ja' projetado (inversao de dependencia;
+  paineis nunca importa compliance/sessoes/participacao/legislativo, §22.10). adapters/out embute os 4 cards
+  OPACOS + valida o MesaOut.
 
-  DEGRADACAO POR CARD (review architect MAJOR): uma FALHA de LEITURA de compliance (hiccup de infra, bug de
-  projecao daquele modulo) NAO derruba a tela — vira o sentinel `card-compliance-indisponivel` naquele card,
-  e os 3 rollups que o paineis possui inteiramente (tramitacao/pendencias/sessoes) seguem carregando. Espelha
-  a disciplina de tolerancia do proprio modulo (repositorio/projetar-evento! catch Throwable) e desacopla a
-  disponibilidade do dashboard do comprador da leitura cross-modulo mais fragil. Distincao-chave: o card com
-  DADOS de atraso (vencidas>0) e' problema real de compliance e continua VISIVEL nos valores; so' a FALHA de
-  leitura degrada. `catch Throwable` (nao Exception): um `:pre`/AssertionError em compliance e' Error, nao
-  Exception (mesmo racional do consumer)."
-  [repo-paineis painel-compliance]
+  DEGRADACAO POR CARD (review architect MAJOR, generalizada aos 4 cards nesta task): uma FALHA de LEITURA de
+  qualquer card cross-modulo NAO derruba a tela — vira o sentinel `card-generico-indisponivel` NAQUELE card
+  (via `card-seguro`), e os demais (incl. os 3 rollups que o paineis possui inteiramente: tramitacao/
+  pendencias/sessoes) seguem carregando. Espelha a disciplina de tolerancia do proprio modulo (repositorio/
+  projetar-evento! catch Throwable) e desacopla a disponibilidade do dashboard da leitura cross-modulo mais
+  fragil."
+  [repo-paineis painel-compliance presenca-resumo esic-cumprimento relatores-pendentes]
   (fn [req]
-    (let [rollups (controllers/dashboard-mesa repo-paineis (:ator req))
-          compliance-card (try
-                            (painel-compliance (:ente-id (:ator req)))
-                            (catch Throwable e
-                              (log/warn e "paineis: leitura de compliance falhou no dashboard da Mesa — card degradado, rollups preservados"
-                                        {:ente-id (:ente-id (:ator req))})
-                              card-compliance-indisponivel))]
-      (http/json-resposta 200 (adapters-out-mesa/mesa->wire rollups compliance-card)))))
+    (let [ente-id (:ente-id (:ator req))
+          rollups (controllers/dashboard-mesa repo-paineis (:ator req))
+          compliance-card (card-seguro "compliance" painel-compliance ente-id)
+          presenca-card (card-seguro "presenca-resumo" presenca-resumo ente-id)
+          esic-card (card-seguro "esic-cumprimento" esic-cumprimento ente-id)
+          relatores-card (card-seguro "relatores-pendentes" relatores-pendentes ente-id)]
+      (http/json-resposta 200 (adapters-out-mesa/mesa->wire rollups compliance-card
+                                                            presenca-card esic-card relatores-card)))))
 
 (defn rotas
   "Fragmento de rotas do modulo paineis (table syntax Pedestal). Recebe o interceptor `auth` (compartilhado)
-  + o `repo-paineis` (Repo-Component) + `painel-compliance` (fn injetada pelo host: ente-id -> PainelOut de
-  compliance, p/ o dashboard da Mesa compor sem cruzar modulo) e devolve as rotas-dado. `oplenario.rotas`
-  funde este fragmento ao conjunto. Authz GROSSA (papel 'secretario' — mesmo papel interno de compliance/
-  sessoes/legislativo/participacao) — os paineis sao tenant-wide read-models, sem recurso unico p/ camada fina."
-  [{:keys [auth repo-paineis painel-compliance]}]
+  + o `repo-paineis` (Repo-Component) + as 4 fns cross-modulo injetadas pelo host (`painel-compliance`,
+  `presenca-resumo`, `esic-cumprimento`, `relatores-pendentes` — cada uma ente-id -> card ja' projetado, p/ o
+  dashboard da Mesa compor sem cruzar modulo) e devolve as rotas-dado. `oplenario.rotas` funde este fragmento
+  ao conjunto. Authz GROSSA (papel 'secretario' — mesmo papel interno de compliance/sessoes/legislativo/
+  participacao) — os paineis sao tenant-wide read-models, sem recurso unico p/ camada fina."
+  [{:keys [auth repo-paineis painel-compliance presenca-resumo esic-cumprimento relatores-pendentes]}]
   (let [papel (it/exige-papel "secretario")]
     #{["/paineis/pendencias" :get [auth papel (pendencias-handler repo-paineis)]
        :route-name :paineis/pendencias]
@@ -82,5 +100,6 @@
        :route-name :paineis/tramitacao]
       ["/paineis/sli/sessoes" :get [auth papel (sli-sessoes-handler repo-paineis)]
        :route-name :paineis/sli-sessoes]
-      ["/paineis/mesa" :get [auth papel (mesa-handler repo-paineis painel-compliance)]
+      ["/paineis/mesa" :get [auth papel (mesa-handler repo-paineis painel-compliance
+                                                       presenca-resumo esic-cumprimento relatores-pendentes)]
        :route-name :paineis/mesa]}))
