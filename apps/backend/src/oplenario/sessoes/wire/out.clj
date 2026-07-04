@@ -162,3 +162,11 @@
   removido — a remocao e' ativo=false (nunca DELETE fisico, Inv.10), detalhe interno nao exposto."
   [:map {:closed true}
    [:id :string]])
+
+(def PresencaResumoOut
+  "Presenca agregada do tenant (§16.11, FE Onda A1 — card 'o que a Casa entregou'). `media-percentual`
+  nil quando nao ha sessao encerrada ainda (0/0 e' indefinido, o FE NAO mostra '0%')."
+  [:map {:closed true}
+   [:media-percentual [:maybe :int]]
+   [:sessoes-consideradas :int]
+   [:membros-da-casa :int]])

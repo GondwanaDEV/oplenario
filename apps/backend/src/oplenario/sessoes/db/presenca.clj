@@ -85,3 +85,48 @@
       (when (zero? (:next.jdbc/update-count r 0))
         (throw (ex-info "decidir-justificativa!: conflito de lock_version ou inexistente" {:id id :lock-version lock-version})))
       {:de atual :para estado})))
+
+;; ---------- presenca agregada (read-model barato, FE Onda A1) ----------
+
+(defn- sessoes-encerradas-recentes
+  "As `teto` sessoes mais RECENTES do tenant com `estado`='encerrada' e encerrada_em carimbado —
+  janela autocontida (nao depende de 'legislativa vigente', que exigiria cruzar cadastros)."
+  [tx ente-id teto]
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select [:id :encerrada_em] :from [:sessoes.sessao]
+                  :where [:and [:= :ente_id ente-id] [:= :estado [:inline "encerrada"]]
+                          [:is-not :encerrada_em nil]]
+                  :order-by [[:encerrada_em :desc]] :limit teto}))))
+
+(def ^:private positivos (vec (sort logic/tipos-presenca-positiva)))
+
+(defn- presentes-na-sessao
+  "Total de vereadores com ULTIMO evento positivo ate' `instante` (qualquer modalidade) — generaliza
+  contar-presentes de sessoes/relacoes/presenca (que filtra por modalidade) p/ o agregado cross-sessao."
+  [tx sessao-id instante]
+  (-> (jdbc/execute-one! tx
+        (sql/format {:select [[[:count :*] :n]]
+                     :from [[{:select-distinct-on [[:vereador_id] :vereador_id :tipo]
+                              :from [:sessoes.presenca_evento]
+                              :where [:and [:= :sessao_id sessao-id] [:<= :ocorrido_em instante]]
+                              :order-by [[:vereador_id :asc] [:ocorrido_em :desc]
+                                         [:fonte_precedencia :desc] [:id :desc]]}
+                             :u]]
+                     :where [:in :u.tipo positivos]}))
+      comum/linha->kebab :n))
+
+(defn resumo-presenca
+  "Presenca agregada (F7/FE Onda A1, barata): media de presenca das ultimas `teto` sessoes ENCERRADAS do
+  tenant. numerador = soma de presentes por sessao; denominador = (n de sessoes) x `membros-da-casa`
+  (resolvido pelo CALLER via cadastros, injecao cross-modulo — este ns nao importa cadastros). Devolve
+  {:media-percentual :sessoes-consideradas :membros-da-casa} — media nil se nao houve sessao encerrada
+  ainda (0/0 e' indefinido, nao 0%)."
+  [tx ente-id membros-da-casa teto]
+  (let [sessoes (sessoes-encerradas-recentes tx ente-id teto)
+        n-sessoes (count sessoes)
+        total-presentes (reduce + 0 (map #(presentes-na-sessao tx (:id %) (:encerrada-em %)) sessoes))]
+    {:media-percentual (when (and (pos? n-sessoes) (pos? membros-da-casa))
+                         (int (Math/round (* 100.0 (/ total-presentes (* n-sessoes membros-da-casa))))))
+     :sessoes-consideradas n-sessoes
+     :membros-da-casa membros-da-casa}))

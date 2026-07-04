@@ -18,6 +18,7 @@
             [oplenario.sessoes.adapters.out.presenca :as adapters-out-presenca]
             [oplenario.sessoes.adapters.out.sessao :as adapters-out]
             [oplenario.sessoes.adapters.out.tribuna :as adapters-out-tribuna]
+            [oplenario.sessoes.components.repositorio :as repo-sessoes-comp]
             [oplenario.sessoes.controllers :as controllers]))
 
 (set! *warn-on-reflection* true)
@@ -380,3 +381,12 @@
     ["/sessoes/:id/gravacao/:seg-id/vincular" :post
      [auth (it/exige-papel "secretario") it/corpo-json (vincular-gravacao-handler repo-sessoes)]
      :route-name :sessoes/vincular-gravacao]})
+
+(defn presenca-resumo-wire
+  "Ponto de entrada IN-PROCESS da presenca agregada (FE Onda A1) — o gemeo nao-HTTP p/ a RAIZ DE COMPOSICAO
+  (o host) compor o dashboard da Mesa do modulo `paineis`. Passa pelo MESMO gate adapters/out (projeta+valida)
+  que uma rota HTTP teria. `membros-da-casa` chega JA RESOLVIDO pelo host (inversao de dependencia sobre
+  `cadastros` — `sessoes` nunca importa `cadastros`, §22.10)."
+  [repo-sessoes membros-da-casa ente-id]
+  (adapters-out-presenca/resumo-presenca->wire
+   (repo-sessoes-comp/resumo-presenca repo-sessoes ente-id (membros-da-casa ente-id))))

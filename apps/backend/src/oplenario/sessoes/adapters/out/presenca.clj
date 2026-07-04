@@ -16,3 +16,13 @@
       (throw (ex-info "recibo de presenca viola o contrato PresencaReciboOut (bug de servidor)"
                       {:campos (keys (me/humanize (m/explain wire/PresencaReciboOut out)))})))
     out))
+
+(defn resumo-presenca->wire
+  "Resumo cru (kebab, do db) -> PresencaResumoOut (validado)."
+  [{:keys [media-percentual sessoes-consideradas membros-da-casa]}]
+  (let [out {:media-percentual media-percentual :sessoes-consideradas sessoes-consideradas
+             :membros-da-casa membros-da-casa}]
+    (when-not (m/validate wire/PresencaResumoOut out)
+      (throw (ex-info "resumo de presenca viola o contrato PresencaResumoOut (bug de servidor)"
+                      {:erros (me/humanize (m/explain wire/PresencaResumoOut out))})))
+    out))

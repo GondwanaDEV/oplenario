@@ -3,7 +3,8 @@
   (oplenario.interceptors) — fica separada de http.clj p/ evitar ciclo (http nao conhece interceptors). W2
   monta /saude (publica) + /eu (auth) + /painel-secretaria (auth + papel). W3 adiciona as rotas-dado de cada
   modulo (com o servidor `using` os Repo). `montar` recebe os deps ja injetados (idp + repo-identidade)."
-  (:require [oplenario.compliance.diplomat.http.in :as compliance-http]
+  (:require [oplenario.cadastros.components.repositorio :as repo-cadastros-comp]
+            [oplenario.compliance.diplomat.http.in :as compliance-http]
             [oplenario.http :as http]
             [oplenario.interceptors :as it]
             [oplenario.kernel.tempo :as tempo]
@@ -26,7 +27,7 @@
   legislativo) injeta `consultar-sessao` (delega ao Repo de sessoes) nos diplomats de tempo_real e legislativo,
   que NAO importam sessoes."
   [{:keys [idp repo-identidade repo-sessoes repo-legislativo repo-compliance repo-participacao
-           repo-transparencia repo-paineis canal-store objeto-store painel-compliance]}]
+           repo-transparencia repo-paineis repo-cadastros canal-store objeto-store painel-compliance]}]
   (let [auth (it/autenticacao idp repo-identidade)
         ;; F6: relogio de producao (kernel/tempo) p/ o prazo LAI do e-SIC — determinismo em teste vem de
         ;; injetar relogio-fixo direto no fragmento de rotas (participacao-http/rotas). resolver-ente-publico
@@ -37,6 +38,14 @@
         ;; que o endpoint SSE (G3) E a vertical de votacao ao vivo (F4 Slice 3, no legislativo) precisam p/
         ;; autorizar (a RLS escopa por tenant). Os modulos chamam por esta fn, nunca importam sessoes (§22.10).
         consultar-sessao (fn [ente-id sessao-id] (repo-sessoes-comp/buscar-sessao repo-sessoes ente-id sessao-id))
+        ;; FE Onda A1: membros-da-casa injetado em sessoes (presenca agregada) — mesma inversao de
+        ;; dependencia de consultar-sessao/painel-compliance; ZoneId fixo (fuso civil, mesmo racional de
+        ;; participacao/controllers.clj).
+        membros-da-casa (fn [ente-id]
+                          (repo-cadastros-comp/membros-da-casa repo-cadastros ente-id
+                                                                (tempo/hoje (tempo/relogio-sistema)
+                                                                            (java.time.ZoneId/of "America/Fortaleza"))))
+        presenca-resumo (fn [ente-id] (sessoes-http/presenca-resumo-wire repo-sessoes membros-da-casa ente-id))
         ;; F7 dashboard da Mesa: o host compoe compliance+paineis por INVERSAO DE DEPENDENCIA (espelha
         ;; consultar-sessao). Fecha sobre o repo de compliance e expoe uma fn (ente-id -> PainelOut projetado)
         ;; que o diplomat de paineis chama — paineis nunca importa compliance (§22.10). Passa pelo diplomat de

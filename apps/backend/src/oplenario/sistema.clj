@@ -136,4 +136,5 @@
          :servidor-http (component/using
                          (http-servidor/servidor-http config rotas/montar)
                          [:idp :repo-identidade :repo-sessoes :repo-legislativo :repo-compliance
-                          :repo-participacao :repo-transparencia :repo-paineis :canal-store :objeto-store])))
+                          :repo-participacao :repo-transparencia :repo-paineis :repo-cadastros
+                          :canal-store :objeto-store])))

@@ -185,3 +185,44 @@
           (ev! tx ente sid b {:modalidade "remoto"   :ocorrido-em t10})
           (is (= 1 (resolver "presentes_plenario" [sid t11])) "exatamente A no plenario via resolver")
           (is (= 1 (resolver "presentes_remoto"   [sid t11])) "exatamente B no remoto via resolver"))))))
+
+;; ---------- presenca agregada (read-model barato, F7/FE Onda A1) ----------
+
+(deftest resumo-presenca-agrega-as-ultimas-10-sessoes-encerradas
+  ;; membros-da-casa chega JA RESOLVIDO do caller (cadastros, injecao cross-modulo — este ns nao importa
+  ;; cadastros, §22.10); aqui e' uma constante fixa (3) que espelha o contrato do adapter/Repo. `antes` fica
+  ;; seguramente no passado relativo ao instante de encerramento (Postgres now(), congelado no INICIO da tx —
+  ;; ver o carry documentado em sessao/transicionar!), sem depender do relogio-de-parede do host de teste.
+  (let [ente (random-uuid)
+        v1 (random-uuid) v2 (random-uuid)
+        antes (.minusSeconds (Instant/now) 3600)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [s1 (nova-sessao! tx ente)
+              s2 (nova-sessao! tx ente)]
+          ;; leva as duas sessoes a 'encerrada' pela maquina real (agendada -> aberta -> encerrada;
+          ;; lock_version 0 -> 1 -> 2), nao ha `inserir!` de baixo nivel neste modulo.
+          (sessao/transicionar! tx {:id s1 :ente-id ente :para "aberta" :lock-version 0})
+          (sessao/transicionar! tx {:id s1 :ente-id ente :para "encerrada" :lock-version 1})
+          (sessao/transicionar! tx {:id s2 :ente-id ente :para "aberta" :lock-version 0})
+          (sessao/transicionar! tx {:id s2 :ente-id ente :para "encerrada" :lock-version 1})
+          ;; s1: v1+v2 presentes (2/3); s2: so v1 presente (1/3) — v3 (o 3o membro) nunca aparece
+          (presenca/registrar-evento! tx {:id (random-uuid) :ente-id ente :sessao-id s1 :vereador-id v1
+                                          :tipo "entrada" :modalidade "plenario" :fonte "manual_secretaria"
+                                          :ocorrido-em antes})
+          (presenca/registrar-evento! tx {:id (random-uuid) :ente-id ente :sessao-id s1 :vereador-id v2
+                                          :tipo "entrada" :modalidade "plenario" :fonte "manual_secretaria"
+                                          :ocorrido-em antes})
+          (presenca/registrar-evento! tx {:id (random-uuid) :ente-id ente :sessao-id s2 :vereador-id v1
+                                          :tipo "entrada" :modalidade "plenario" :fonte "manual_secretaria"
+                                          :ocorrido-em antes})
+          (let [r (presenca/resumo-presenca tx ente 3 10)]
+            (is (= 2 (:sessoes-consideradas r)))
+            (is (= 3 (:membros-da-casa r)))
+            ;; numerador (2+1)=3, denominador 2*3=6 -> 50%
+            (is (= 50 (:media-percentual r)))))))
+    (let [ente2 (random-uuid)]
+      (tenancy/com-tenant* *ds* ente2
+        (fn [tx]
+          (is (nil? (:media-percentual (presenca/resumo-presenca tx ente2 3 10)))
+              "sem sessao encerrada -> media indefinida (nil, nao 0%)"))))))

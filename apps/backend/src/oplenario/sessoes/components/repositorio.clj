@@ -38,6 +38,8 @@
   ;; §22.6 eixo C — presenca e quorum (camada de fatos)
   (registrar-presenca! [this ente-id m] "Grava evento de presenca append-only (entrada/saida/retorno/mudanca).")
   (listar-presenca [this ente-id sessao-id] "Eventos da sessao em ordem cronologica (auditoria).")
+  (resumo-presenca [this ente-id membros-da-casa]
+    "Presenca agregada (F7/FE Onda A1) das ultimas 10 sessoes encerradas do tenant.")
   (esta-presente? [this ente-id sessao-id vereador-id instante] "Presenca DERIVADA do ultimo evento ate o instante.")
   (presentes-plenario [this ente-id sessao-id instante] "Quorum presencial em `instante` (insumo da DSL do motor).")
   (presentes-remoto [this ente-id sessao-id instante] "Quorum remoto em `instante`.")
@@ -136,6 +138,8 @@
              :modalidade (:modalidade m) :fonte (:fonte m) :ocorrido-em (str (:ocorrido-em m))})
           r))))
   (listar-presenca [this ente-id sessao-id] (transacao this ente-id #(presenca/listar-eventos % ente-id sessao-id)))
+  (resumo-presenca [this ente-id membros-da-casa]
+    (transacao this ente-id #(presenca/resumo-presenca % ente-id membros-da-casa 10)))
   (esta-presente? [this ente-id sessao-id vereador-id instante] (transacao this ente-id #(rel-presenca/esta-presente-em? % sessao-id vereador-id instante)))
   (presentes-plenario [this ente-id sessao-id instante] (transacao this ente-id #(rel-presenca/presentes-plenario % sessao-id instante)))
   (presentes-remoto [this ente-id sessao-id instante] (transacao this ente-id #(rel-presenca/presentes-remoto % sessao-id instante)))
