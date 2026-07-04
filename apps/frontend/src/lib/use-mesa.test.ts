@@ -56,4 +56,22 @@ describe("useMesa", () => {
     expect(result.current.tramitacaoItens).toBeNull();
     expect(result.current.mesa?.tramitacao.total).toBe(2);
   });
+
+  it("card relatoresPendentes vem com o sentinel de degradação -> relatoresPendentes vira null", async () => {
+    const mesaComSentinel = { ...mesaFake, relatoresPendentes: { indisponivel: true } };
+    global.fetch = vi.fn(async (url: string) => {
+      const corpo = url.includes("/paineis/mesa")
+        ? mesaComSentinel
+        : url.includes("/paineis/tramitacao")
+          ? { itens: [] }
+          : url.includes("/paineis/pendencias")
+            ? { pendencias: [] }
+            : { sessoes: [] };
+      return { ok: true, json: async () => corpo } as Response;
+    }) as unknown as typeof fetch;
+
+    const { result } = renderHook(() => useMesa("tok"));
+    await waitFor(() => expect(result.current.estado).toBe("pronto"));
+    expect(result.current.relatoresPendentes).toBeNull();
+  });
 });

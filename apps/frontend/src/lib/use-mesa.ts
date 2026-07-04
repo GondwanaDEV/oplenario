@@ -68,12 +68,9 @@ export function useMesa(token: string | null) {
   const [estado, setEstado] = useState<Estado>("carregando");
 
   useEffect(() => {
+    if (!token) return; // caso de erro é derivado no retorno (sem setState síncrono no effect)
     let vivo = true;
     (async () => {
-      if (!token) {
-        setEstado("erro");
-        return;
-      }
       const principal = await buscarOuNull<MesaOut>("/api/paineis/mesa", token);
       if (!vivo) return;
       if (!principal) {
@@ -101,5 +98,16 @@ export function useMesa(token: string | null) {
     };
   }, [token]);
 
+  // caso de erro sem token é derivado aqui (mantém o effect livre de setState síncrono)
+  if (!token) {
+    return {
+      mesa: null,
+      tramitacaoItens: null,
+      pendenciasItens: null,
+      sliSessoes: null,
+      relatoresPendentes: null,
+      estado: "erro" as Estado,
+    };
+  }
   return { mesa, tramitacaoItens, pendenciasItens, sliSessoes, relatoresPendentes, estado };
 }
