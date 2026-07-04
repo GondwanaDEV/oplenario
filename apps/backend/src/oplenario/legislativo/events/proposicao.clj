@@ -43,7 +43,13 @@
 
 (def TransicionouPayload
   "Payload de `proposicao.transicionou` — a transicao OCORRIDA (espelha a linha de
-  proposicao_transicao_historico, a prova duravel da mudanca, Inv.10)."
+  proposicao_transicao_historico, a prova duravel da mudanca, Inv.10). `ocorrido-em` (F7 carry, review
+  architect/database MEDIUM da fatia de paineis/tramitacao-board): o instante REAL da transicao no
+  dominio — `proposicao_transicao_historico.ocorrido_em`, RETURNING da INSERT (mig 0016) — nao o momento em
+  que um consumer eventualmente PROJETA o evento. Sem isto, um projetor de staleness (paineis.tramitacao)
+  so' tinha 'agora' (tempo de processamento) para carimbar, que reseta sob qualquer atraso comum do relay.
+  Viaja como STRING ISO (jsonista nao serializa java.time.Instant, mesma disciplina de :publicado-em/
+  :criado-em nos demais eventos)."
   [:map {:closed true}
    [:proposicao-id :uuid]
    [:template-id :uuid]
@@ -51,6 +57,7 @@
    [:para :string]
    [:gatilho :string]
    [:transicao-id :uuid]
+   [:ocorrido-em :string]
    [:ator-id {:optional true} [:maybe :uuid]]])
 
 (defn transicionou

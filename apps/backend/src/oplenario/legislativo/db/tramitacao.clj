@@ -61,13 +61,18 @@
                    :order-by [[:ordem :asc] [:id :asc]]}))))
 
 (defn registrar-transicao!
-  "Append-only: grava a transicao OCORRIDA no historico (a prova duravel, Inv.10)."
+  "Append-only: grava a transicao OCORRIDA no historico (a prova duravel, Inv.10). RETURNING `ocorrido_em`
+  (F7 carry): o carimbo REAL da transicao, devolvido p/ `transicionar!` incluir no evento de dominio
+  (proposicao.transicionou :ocorrido-em) — a jusante, paineis/tramitacao-board usa isto em vez do momento em
+  que o consumer PROJETA, evitando que atraso comum do relay resete o sinal de estagnacao."
   [tx {:keys [id ente-id proposicao-id template-id de-estado para-estado gatilho contexto ator-id]}]
-  (jdbc/execute-one! tx
-    (sql/format {:insert-into :legislativo.proposicao_transicao_historico
-                 :values [{:id id :ente_id ente-id :proposicao_id proposicao-id :template_id template-id
-                           :de_estado de-estado :para_estado para-estado :gatilho gatilho
-                           :contexto (some-> contexto comum/->jsonb) :ator_id ator-id :efetivado_em [:now]}]})))
+  (comum/linha->kebab
+   (jdbc/execute-one! tx
+     (sql/format {:insert-into :legislativo.proposicao_transicao_historico
+                  :values [{:id id :ente_id ente-id :proposicao_id proposicao-id :template_id template-id
+                            :de_estado de-estado :para_estado para-estado :gatilho gatilho
+                            :contexto (some-> contexto comum/->jsonb) :ator_id ator-id :efetivado_em [:now]}]
+                  :returning [:ocorrido_em]}))))
 
 (defn historico-da-proposicao [tx ente-id proposicao-id]
   (comum/linhas->kebab
@@ -111,11 +116,11 @@
         escolhida (first (filter passa? candidatas))]
     (if-not escolhida
       {:transicionou? false :de estado :gatilho gatilho}
-      (do
-        (registrar-transicao! tx {:id (random-uuid) :ente-id ente-id :proposicao-id proposicao-id
-                                  :template-id template-id :de-estado estado :para-estado (:para-estado escolhida)
-                                  :gatilho gatilho :contexto contexto :ator-id ator-id})
+      (let [{:keys [ocorrido-em]} (registrar-transicao! tx {:id (random-uuid) :ente-id ente-id :proposicao-id proposicao-id
+                                                            :template-id template-id :de-estado estado
+                                                            :para-estado (:para-estado escolhida)
+                                                            :gatilho gatilho :contexto contexto :ator-id ator-id})]
         (proposicao/mudar-estado! tx {:id proposicao-id :ente-id ente-id :estado (:para-estado escolhida)
                                       :updated-by updated-by :lock-version lock-version})
         {:transicionou? true :de estado :para (:para-estado escolhida) :transicao-id (:id escolhida)
-         :acao (:acao escolhida)}))))
+         :acao (:acao escolhida) :ocorrido-em ocorrido-em}))))

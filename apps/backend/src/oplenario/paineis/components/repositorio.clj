@@ -21,8 +21,9 @@
   bloqueando HEAD-OF-LINE todo evento de id maior no bus inteiro (nao so' desta projecao).
 
   TOLERANCIA A PAYLOAD MALFORMADO (review security HIGH): `projetar-evento!` envolve `despachar!` (o `case`
-  de fato, funcao separada — ver sua docstring) num try/catch — `UUID/fromString`/`LocalDate/parse` lancam
-  em string invalida ANTES de qualquer SQL rodar (avaliacao de argumento precede a chamada; nenhum efeito
+  de fato, funcao separada — ver sua docstring) num try/catch — `UUID/fromString`/`LocalDate/parse`/
+  `Instant/parse` lancam em string invalida ANTES de qualquer SQL rodar (avaliacao de argumento precede a
+  chamada; nenhum efeito
   parcial no banco quando o parse falha), entao capturar aqui e' seguro (a tx do relay nao e' abortada — nao
   houve comando SQL nesta branch). Sem este guard, um payload malformado (ex.: um produtor futuro de
   `participacao` gravando 'vence-em' num formato errado — os schemas Malli de origem tipam a data como
@@ -34,7 +35,7 @@
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.paineis.db.pendencia :as db-pendencia]
             [oplenario.paineis.db.tramitacao :as db-tramitacao])
-  (:import (java.time LocalDate)
+  (:import (java.time Instant LocalDate)
            (java.util UUID)))
 
 (set! *warn-on-reflection* true)
@@ -61,10 +62,11 @@
 
 (defn- transicionar-tramitacao!
   "Aplica atualizar-estado! do board e loga se a materia ainda nao existia (redrive fora de ordem / backlog
-  — mesmo racional de fechar! e de transparencia/db/materia/atualizar-estado!)."
-  [tx ente-id proposicao-id-str estado]
+  — mesmo racional de fechar! e de transparencia/db/materia/atualizar-estado!). `ocorrido-em-str` (F7 carry):
+  o instante REAL da transicao (do evento, nao 'agora') — ver docstring de db.tramitacao/atualizar-estado!."
+  [tx ente-id proposicao-id-str estado ocorrido-em-str]
   (or (db-tramitacao/atualizar-estado! tx {:ente-id ente-id :proposicao-id (UUID/fromString proposicao-id-str)
-                                           :estado estado})
+                                           :estado estado :transicionou-em (Instant/parse ocorrido-em-str)})
       (log/warn "paineis: transicao sem materia projetada no board (protocolo ausente?)"
                 {:ente-id ente-id :proposicao-id proposicao-id-str :estado estado})))
 
@@ -125,7 +127,7 @@
                                 :estado (:estado payload)})
 
     "proposicao.transicionou"
-    (transicionar-tramitacao! tx ente-id (:proposicao-id payload) (:para payload))))
+    (transicionar-tramitacao! tx ente-id (:proposicao-id payload) (:para payload) (:ocorrido-em payload))))
 
 (defn projetar-evento!
   "Dispatch por tipo de evento -> a projecao de dominio, DENTRO da `tx` corrente (a do relay). Seta o GUC de
