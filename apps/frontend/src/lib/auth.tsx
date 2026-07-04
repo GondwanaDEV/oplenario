@@ -3,7 +3,12 @@
 // AuthContext: extrai o padrão de token dev (?token=/NEXT_PUBLIC_DEV_TOKEN) que antes vivia inline em
 // sessoes/[id]/plenario/page.tsx — App Shell (FE Onda A1) precisa do MESMO guard em qualquer página
 // interna nova, não só no plenário. Em produção o token via querystring É PROIBIDO (authn real = sessão
-// Keycloak, carry F1.4); o guard lança DEPOIS de todos os hooks (ordem estável).
+// Keycloak, carry F1.4); o guard lança antes de montar os children.
+//
+// CONTRATO DE COMPOSIÇÃO: nunca chame useAuth() no MESMO componente que renderiza seu próprio
+// <AuthProvider> — o Provider ainda não é ancestral do próprio corpo da função que o retorna. Sempre
+// aninhe useAuth() num componente filho (ex.: page.tsx separa PaginaPlenario, que só resolve os params e
+// renderiza <AuthProvider>, de ConteudoPlenario, que chama useAuth() por dentro).
 
 import { createContext, useContext, type ReactNode } from "react";
 
