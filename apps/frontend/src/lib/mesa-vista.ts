@@ -25,6 +25,15 @@ interface ComplianceCard {
   remessasRecentes: unknown[];
 }
 
+// mesa.tramitacao.porEstado é Record<string, unknown>[] no contrato gerado (opaco, mesmo motivo do
+// ComplianceCard acima) — mas o backend sempre emite { estado, n } (confirmado no fixture de
+// mesa-vista.test.ts e no mock de paineis-mesa.html). PipelineLegislativo (Task B7) precisa desses 2
+// campos tipados pra alimentar BarraSegmentada/TabuleiroEstagios; widening local, não touca o gerado.
+interface EstagioResumo {
+  estado: string;
+  n: number;
+}
+
 export interface MesaVistaInput {
   mesa: MesaOut | null;
   tramitacaoItens: ItemBoardOut[] | null;
@@ -43,7 +52,7 @@ export function derivarMesaVista(input: MesaVistaInput) {
       pipeline: {
         estado: "indisponivel" as const,
         comItens: false,
-        porEstado: [] as Record<string, unknown>[],
+        porEstado: [] as EstagioResumo[],
         itens: [] as ItemBoardOut[],
       },
       despachos: {
@@ -91,13 +100,13 @@ export function derivarMesaVista(input: MesaVistaInput) {
         ? {
             estado: "disponivel" as const,
             comItens: true,
-            porEstado: mesa.tramitacao.porEstado,
+            porEstado: mesa.tramitacao.porEstado as unknown as EstagioResumo[],
             itens: tramitacaoItens,
           }
         : {
             estado: "disponivel" as const,
             comItens: false,
-            porEstado: mesa.tramitacao.porEstado,
+            porEstado: mesa.tramitacao.porEstado as unknown as EstagioResumo[],
             itens: [] as ItemBoardOut[],
           },
 

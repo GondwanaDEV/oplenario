@@ -8,7 +8,16 @@
    (contêiner genérico reusado por várias seções do cockpit, primeira vez que aparece nesta página).
    NÃO inclui remessa/azulejo-pedido/continuidade/selos (2ª metade do hero, ainda não implementada) nem
    pipeline/fila/despachos/orgulho (Tasks B7/B8) — futuras tasks APPENDAM a este arquivo em vez de criar
-   o seu próprio, mesma disciplina de plenario.css. */
+   o seu próprio, mesma disciplina de plenario.css.
+
+   Task B7 (PipelineLegislativo + DespachosDaMesa) apendou: .pipeline-board/.estagio* (Task B3's
+   BarraSegmentada/TabuleiroEstagios referenciavam essas classes mas nenhuma task anterior as portou —
+   B3 documentou isso como concern deferido; confirmado por grep antes de portar) + .distribuicao/
+   .barra-dist/.dist-legenda (BarraSegmentada) + .fila/.fila-item/.fila-txt/.nota-gap (DespachosDaMesa).
+   Variantes de urgência do .fila-item da fonte (.f-hoje/.f-semana/.f-livre) NÃO portadas — o componente
+   nunca aplica essas classes (RelatorPendenteOut não tem prazo, só criadoEm; sem dado de urgência não
+   inventamos estado visual, mesmo princípio do §7 do doc-mestre); border-left cai no --linha neutro por
+   default. NÃO inclui orgulho/remessa/azulejo-pedido (Task B8+). */
 
 /* ============== HERO — ILHA-PLACAR DA SAÚDE INSTITUCIONAL ============== */
 .saude { position: relative; overflow: hidden; margin: clamp(1.2rem, 3vw, 2rem) 0 0; background: var(--palco-bg); color: var(--palco-texto); border-radius: var(--raio); box-shadow: var(--sombra); }
@@ -68,7 +77,39 @@
 .prz-noprazo .tag-urg { color: var(--marca); background: rgba(12,83,64,.1); border: 1px solid rgba(12,83,64,.26); }
 [data-tema="escuro"] .prz-noprazo .tag-urg { color: var(--marca); border-color: rgba(67,189,147,.4); background: rgba(67,189,147,.12); }
 
+/* ---- PIPELINE LEGISLATIVO (11.3) — tabuleiro de estágios ---- */
+.pipeline-board { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.7rem; }
+.estagio { background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.85rem 0.8rem; display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; }
+.estagio-cab { display: flex; align-items: center; gap: 0.6rem; }
+.estagio-cab .meta { line-height: 1.1; }
+.estagio-cab .nome { font-family: var(--mono); font-size: var(--t-12); text-transform: uppercase; letter-spacing: .05em; color: var(--texto-2); }
+.estagio-cab .n { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: var(--texto); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.estagio-lista { list-style: none; margin: 0.1rem 0 0; padding: 0.6rem 0 0; border-top: 1px solid var(--linha); display: grid; gap: 0.5rem; }
+.estagio-lista li { line-height: 1.25; }
+.estagio-lista .ref { font-family: var(--mono); font-size: 0.7rem; color: var(--texto-2); }
+.estagio-lista .tit { font-size: var(--t-12); color: var(--texto); display: block; }
+
+.distribuicao { margin: 1.2rem 0 0; }
+.distribuicao .rotulo-d { display: flex; align-items: baseline; justify-content: space-between; gap: 0.8rem; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin: 0 0 0.5rem; }
+.barra-dist { display: flex; height: 26px; border-radius: var(--raio-sm); overflow: hidden; background: var(--bg); border: 1px solid var(--linha); }
+.barra-dist span { display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: var(--t-12); font-weight: 600; color: #fff; min-width: 0; }
+.dist-legenda { display: flex; flex-wrap: wrap; gap: 0.5rem 1.1rem; margin: 0.7rem 0 0; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+.dist-legenda span { display: inline-flex; align-items: center; gap: 0.4rem; }
+.dist-legenda i { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
+
+/* ---- PENDÊNCIAS / DESPACHOS DA MESA (11.2) — fila de ação ---- */
+.fila { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+.fila-item { display: grid; grid-template-columns: 1fr auto; gap: 0.8rem 1rem; align-items: center; padding: 0.8rem 0.95rem; background: var(--surface-2); border: 1px solid var(--linha); border-left-width: 4px; border-radius: var(--raio-sm); }
+.fila-txt { min-width: 0; }
+.fila-txt .tag-p { display: inline-flex; align-items: center; gap: 0.35rem; font-family: var(--mono); font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; padding: 0.18rem 0.5rem; border-radius: 999px; margin-bottom: 0.3rem; color: var(--texto-2); background: var(--bg); border: 1px solid var(--linha); }
+.fila-txt b { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); display: block; line-height: 1.3; }
+.fila-txt .de { font-size: var(--t-13); color: var(--texto-2); }
+.nota-gap { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin: 0.9rem 0 0; display: flex; align-items: flex-start; gap: 0.45rem; line-height: 1.4; }
+
 /* ============== RESPONSIVO ============== */
+@media (max-width: 1040px) {
+  .pipeline-board { grid-template-columns: 1fr 1fr; }
+}
 @media (max-width: 720px) {
   .placar { grid-template-columns: 1fr; }
   .ob-col { display: flex; align-items: center; justify-content: space-between; border-left: 0; border-top: 1px solid var(--palco-linha); }
@@ -77,6 +118,8 @@
   .ob-col .est { display: none; }
   .prazo-item { grid-template-columns: 56px 1fr; }
   .prazo-item .tag-urg { grid-column: 2; justify-self: start; }
+  .pipeline-board { grid-template-columns: 1fr; }
+  .fila-item { grid-template-columns: 1fr; }
 }
 @media (max-width: 460px) {
   .anel-c { width: 56px; height: 56px; }
