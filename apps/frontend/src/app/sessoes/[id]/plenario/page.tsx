@@ -14,6 +14,7 @@ import { segundosDecorridos, formatarTempo } from "@/lib/cronometro";
 import type { EstadoPlenario, PlacarVotacao } from "@/lib/plenario-reducer";
 import { derivarPlacar, type VistaNominal, type VistaSecreta } from "@/lib/placar-vista";
 import type { SessaoOut, PautaOut } from "@/lib/contrato";
+import { AuthProvider, useAuth } from "@/lib/auth";
 import "./plenario.css";
 
 const FASES: { chave: string; nome: string }[] = [
@@ -44,21 +45,22 @@ export default function PaginaPlenario() {
   const params = useParams<{ id: string }>();
   const search = useSearchParams();
   // token de dev: ?token=<json-claims> OU NEXT_PUBLIC_DEV_TOKEN — AMBOS só fora de produção. Em prod a authn
-  // vem da sessão (Keycloak, carry F1.4); o guard quebra a render se um token chegar por querystring em prod.
-  const tokenQuery = search.get("token");
-  // guarda calculada ANTES dos hooks; o throw vai DEPOIS de todas as chamadas (ordem de hooks estável mesmo
-  // que ?token= apareça/suma entre renders em prod — senão a contagem de hooks divergiria). review react HIGH.
-  const tokenInProd = process.env.NODE_ENV === "production" && !!tokenQuery;
-  const token = tokenInProd
-    ? null
-    : tokenQuery ?? (process.env.NODE_ENV !== "production" ? process.env.NEXT_PUBLIC_DEV_TOKEN ?? null : null);
-  const { sessao, estado, conexao, erro } = usePlenario(params.id, token);
-  // pauta viva (GET; re-busca quando a fase muda). Chamado ANTES dos early-returns p/ ordem de hooks estável.
-  const { pauta } = usePauta(params.id, token, estado?.estado ?? null);
+  // vem da sessão (Keycloak, carry F1.4). O guard (AuthContext, src/lib/auth.tsx) lança se um token chegar
+  // por querystring em prod — o AuthProvider não chama nenhum hook próprio, então pode lançar ANTES de montar
+  // o conteúdo sem violar a ordem de hooks deste componente nem a do conteúdo interno (review react HIGH).
+  return (
+    <AuthProvider tokenQuery={search.get("token")}>
+      <ConteudoPlenario id={params.id} />
+    </AuthProvider>
+  );
+}
 
-  if (tokenInProd) {
-    throw new Error("token via querystring desabilitado em produção (authn = sessão Keycloak, carry F1.4).");
-  }
+function ConteudoPlenario({ id }: { id: string }) {
+  const { token } = useAuth();
+  const { sessao, estado, conexao, erro } = usePlenario(id, token);
+  // pauta viva (GET; re-busca quando a fase muda). Chamado ANTES dos early-returns p/ ordem de hooks estável.
+  const { pauta } = usePauta(id, token, estado?.estado ?? null);
+
   if (conexao === "erro") {
     return (
       <main className="tela-estado">
