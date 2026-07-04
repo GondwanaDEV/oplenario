@@ -6,7 +6,9 @@
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is use-fixtures]]
             [com.stuartsierra.component :as component]
+            [jsonista.core :as json]
             [malli.core :as m]
+            [next.jdbc :as jdbc]
             [oplenario.config :as config]
             [oplenario.kernel.components.objeto-store :as os]
             [oplenario.legislativo.components.assinador-icp :as assinador]
@@ -65,6 +67,13 @@
    :assinador (assinador/assinador-stub)
    :objeto-store (:objeto-store *sys*)})
 
+(defn- eventos-por-tipo [ente tipo]
+  (jdbc/execute! (:ds (:datasource *sys*))
+    ["SELECT payload::text AS payload FROM shared.outbox WHERE ente_id = ? AND tipo = ? ORDER BY id" ente tipo]))
+
+(defn- parse-payload [s]
+  (json/read-value s (json/object-mapper {:decode-key-fn keyword})))
+
 (deftest gera-artefato-e-binario-assinado
   (let [repo (:repo-legislativo *sys*) ente (random-uuid)
         nid (preparar-norma! repo ente true)
@@ -81,6 +90,35 @@
         (is (str/includes? txt "LEI N. ") "cabecalho do ato")
         (is (str/includes? txt "Art. 1o Esta Lei dispoe sobre X") "o texto legal integral")
         (is (str/includes? txt "Diario Oficial do Municipio") "o veiculo de publicacao")))))
+
+;; ---------- Slice 4b: emissao de `artefato.publicacao.gerado` DENTRO da tx do INSERT (§22.9 E2). Espelha
+;;            publicar-norma! -> norma.publicada: o evento so' existe se a tx do INSERT commitou. E' o que
+;;            a EXIBICAO (transparencia projeta + rota publica de download) consome. ----------
+
+(deftest emite-artefato-publicacao-gerado-na-tx-do-insert
+  (let [repo (:repo-legislativo *sys*) ente (random-uuid)
+        nid (preparar-norma! repo ente true)
+        r (repo-leg/gerar-artefato-publicacao! repo ente (m-base nid))
+        evs (eventos-por-tipo ente "artefato.publicacao.gerado")]
+    (is (= 1 (count evs)) "1 evento emitido na tx do INSERT do artefato")
+    (let [pl (parse-payload (:payload (first evs)))]
+      (is (= (str nid) (:norma-id pl)) "carrega a norma-id")
+      (is (= (str (:id r)) (:artefato-id pl)) "carrega o artefato-id (a linha inserida)")
+      (is (= 1 (:versao pl)) "carrega a versao materializada")
+      (is (= (:hash r) (:hash pl)) "carrega o hash do binario")
+      (is (= (:objeto-store-ref r) (:objeto-store-ref pl)) "carrega o ponteiro do objeto_store")
+      (is (= "STUB-ICP-v0" (:assinatura-algoritmo pl)) "carrega o algoritmo (stub honesto)")
+      (is (false? (:assinado? pl)) "assinado? false enquanto assinado_por e' nil (stub, Slice 4b/F1.4-carry)")
+      (is (string? (:criado-em pl)) "criado-em como string ISO (sem Instant no jsonb)"))))
+
+(deftest re-geracao-emite-um-evento-por-versao
+  (let [repo (:repo-legislativo *sys*) ente (random-uuid)
+        nid (preparar-norma! repo ente true)]
+    (repo-leg/gerar-artefato-publicacao! repo ente (m-base nid))
+    (repo-leg/gerar-artefato-publicacao! repo ente (m-base nid))
+    (let [versoes (->> (eventos-por-tipo ente "artefato.publicacao.gerado")
+                       (map #(:versao (parse-payload (:payload %)))) sort)]
+      (is (= [1 2] versoes) "um evento por (re)geracao, com a versao correspondente"))))
 
 (deftest re-geracao-incrementa-versao
   (let [repo (:repo-legislativo *sys*) ente (random-uuid)

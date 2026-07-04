@@ -4,6 +4,7 @@
   so existe se a tx commitou. Chamado pelo Repo-Component, que compoe o ato + a emissao na MESMA tx do
   tenant (§3-bis). A vocabulario/contrato do evento mora em events/; aqui e' so o ATO de emitir."
   (:require [oplenario.kernel.eventos :as eventos]
+            [oplenario.legislativo.events.artefato-publicacao :as ev-artefato]
             [oplenario.legislativo.events.norma :as ev-norma]
             [oplenario.legislativo.events.parecer :as ev-parecer]
             [oplenario.legislativo.events.proposicao :as ev]
@@ -31,6 +32,13 @@
   events.parecer/TransicionouPayload."
   [bus tx ente-id payload]
   (eventos/emitir! bus tx (ev-parecer/transicionou ente-id payload)))
+
+(defn emitir-artefato-publicacao-gerado!
+  "Emite `artefato.publicacao.gerado` no `bus` DENTRO da `tx` do INSERT (F6c Slice 4b, §22.9 E2). `payload`
+  casa events.artefato-publicacao/GeradoPayload — o snapshot publico que o portal (transparencia) projeta p/
+  exibir e servir o download."
+  [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-artefato/gerado ente-id payload)))
 
 ;; --- eixo G / carry F4 — votacao (fonte do placar ao vivo, §22.6 eixo G). ---
 

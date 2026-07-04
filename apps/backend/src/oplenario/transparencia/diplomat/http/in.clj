@@ -14,6 +14,7 @@
   (:require [oplenario.http :as http]
             [oplenario.transparencia.adapters.in.portal :as adapters-in]
             [oplenario.transparencia.adapters.out.acompanhamento :as adapters-out-acomp]
+            [oplenario.transparencia.adapters.out.artefato :as adapters-out-artefato]
             [oplenario.transparencia.adapters.out.materia :as adapters-out-materia]
             [oplenario.transparencia.adapters.out.norma :as adapters-out-norma]
             [oplenario.transparencia.controllers :as controllers]))
@@ -60,6 +61,20 @@
         (http/json-resposta 200 (adapters-out-norma/->wire n))
         (http/json-resposta 404 {:erro "norma nao encontrada"})))))
 
+(defn- baixar-artefato-handler
+  "GET /portal/casa/:ente/legislacao/:norma_id/artefato — download BINARIO do artefato de publicacao mais
+  recente (Slice 4b, PUBLICO). :nao-encontrado -> 404; :blob-ausente (ancora-antes-do-blob) -> 500 ALERTA
+  (NUNCA 404 silencioso sobre um documento oficial); :ok -> resposta binaria."
+  [repo-transparencia resolver-ente-publico objeto-store]
+  (fn [req]
+    (let [ente-id  (resolver-ente-publico (get-in req [:path-params :ente]))
+          norma-id (adapters-in/norma-param->uuid (get-in req [:path-params :norma_id]))
+          r        (controllers/baixar-artefato-da-norma repo-transparencia objeto-store ente-id norma-id)]
+      (case (:resultado r)
+        :ok            (adapters-out-artefato/->download r norma-id)
+        :blob-ausente  (http/json-resposta 500 {:erro "artefato temporariamente indisponivel"})
+        :nao-encontrado (http/json-resposta 404 {:erro "artefato nao encontrado"})))))
+
 (defn- seguir-handler
   "POST /portal/materias/:proposicao_id/acompanhar (cidadao, SO-auth). ente-id + seguidor do ATOR; guard de
   existencia da materia no controller (ausente -> nil -> 404). Devolve 201 {estado} (UPSERT; re-seguir 201 tb)."
@@ -91,7 +106,7 @@
   "Fragmento de rotas do modulo transparencia (table syntax Pedestal). Recebe o `repo-transparencia`
   (Repo-Component), o `resolver-ente-publico` (seam do host, rotas publicas do Slice 1) e o interceptor
   `auth` (compartilhado, rotas autenticadas do Slice 2). `oplenario.rotas` funde este fragmento."
-  [{:keys [repo-transparencia resolver-ente-publico auth]}]
+  [{:keys [repo-transparencia resolver-ente-publico auth objeto-store]}]
   #{["/portal/casa/:ente/materias" :get
      [(listar-materias-handler repo-transparencia resolver-ente-publico)]
      :route-name :transparencia/listar-materias]
@@ -104,6 +119,11 @@
     ["/portal/casa/:ente/legislacao/:norma_id" :get
      [(buscar-norma-handler repo-transparencia resolver-ente-publico)]
      :route-name :transparencia/buscar-norma]
+    ;; ---- Slice 4b: download BINARIO do artefato de publicacao (PUBLICO; :norma_id/artefato = literal filho
+    ;;      unico de :norma_id -> sem colisao wildcard+literal no mesmo nivel do prefix-tree Pedestal 0.7) ----
+    ["/portal/casa/:ente/legislacao/:norma_id/artefato" :get
+     [(baixar-artefato-handler repo-transparencia resolver-ente-publico objeto-store)]
+     :route-name :transparencia/baixar-artefato]
     ;; ---- Slice 2: acompanhamento do cidadao (autenticado, SO-auth sem papel) ----
     ["/portal/materias/:proposicao_id/acompanhar" :post
      [auth (seguir-handler repo-transparencia)]

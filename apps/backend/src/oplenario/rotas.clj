@@ -48,5 +48,6 @@
                                         :resolver-ente-publico participacao-http/resolver-ente-publico-uuid
                                         :relogio relogio-participacao}))
         (into (transparencia-http/rotas {:auth auth :repo-transparencia repo-transparencia
-                                         :resolver-ente-publico transparencia-http/resolver-ente-publico-uuid}))
+                                         :resolver-ente-publico transparencia-http/resolver-ente-publico-uuid
+                                         :objeto-store objeto-store}))
         (into (tempo-real-sse/rotas {:auth auth :canal-store canal-store :consultar-sessao consultar-sessao})))))

@@ -155,10 +155,22 @@
     corpo))
 
 (defn- inserir-artefato-com-retry!
-  "Insere o artefato versionado (versao MAX+1 ATOMICA) re-tentando UMA vez no 23505 — corrida de versao
-  concorrente (mesma disciplina de compliance/gerar-remessa!, carry F5.3a-1). Cada tentativa = tx propria."
+  "Insere o artefato versionado (versao MAX+1 ATOMICA) + EMITE `artefato.publicacao.gerado` na MESMA tx do
+  INSERT (F6c Slice 4b; atomicidade outbox-com-o-ato §22.9 E2 — a linha do evento so' existe se o INSERT
+  commitou; espelha publicar-norma! -> norma.publicada). Re-tenta UMA vez no 23505 (corrida de versao
+  concorrente; mesma disciplina de compliance/gerar-remessa!, carry F5.3a-1). Cada tentativa = tx propria:
+  na 1a que colide (23505) TUDO rola atras (o evento tambem), e a 2a re-emite fresco -> 1 evento por artefato."
   [repo ente-id row-base]
-  (letfn [(inserir [] (transacao repo ente-id #(artefato/inserir-versionada! % row-base)))]
+  (letfn [(inserir []
+            (transacao repo ente-id
+              (fn [tx]
+                (let [row (artefato/inserir-versionada! tx row-base)]
+                  (producers/emitir-artefato-publicacao-gerado! (:bus repo) tx ente-id
+                    {:norma-id (:norma-id row) :artefato-id (:id row) :versao (:versao row)
+                     :hash (:hash row) :objeto-store-ref (:objeto-store-ref row)
+                     :content-type (:content-type row) :assinatura-algoritmo (:assinatura-algoritmo row)
+                     :assinado? (some? (:assinado-por row)) :criado-em (str (:criado-em row))})
+                  row))))]
     (try (inserir)
          (catch PSQLException e
            (if (= "23505" (.getSQLState e)) (inserir) (throw e))))))
@@ -348,10 +360,10 @@
   (documentos-do-modelo [this ente-id mid] (transacao this ente-id #(documento/listar-por-modelo % ente-id mid)))
   (editar-documento! [this ente-id m] (transacao this ente-id #(documento/editar-rascunho! % (assoc m :ente-id ente-id))))
   (emitir-documento! [this ente-id m] (transacao this ente-id #(documento/emitir! % (assoc m :ente-id ente-id))))
-  ;; F6c Slice 4a — artefato de publicacao oficial. Le a norma publicada + texto (tx), resolve o corpo (inline
+  ;; F6c Slice 4a/4b — artefato de publicacao oficial. Le a norma publicada + texto (tx), resolve o corpo (inline
   ;; ou objeto_store, FORA da tx), renderiza (puro, fail-closed), serializa+assina (ports), insere VERSIONADO
-  ;; (MAX+1 atomico; INSERT antes do S3 = ancora). SEM evento nesta fatia: a EXIBICAO (transparencia consome +
-  ;; rota publica) e' a Slice 4b (emit+consume juntos, como o Slice 1 fez p/ norma.publicada).
+  ;; (MAX+1 atomico; INSERT antes do S3 = ancora) + EMITE `artefato.publicacao.gerado` na tx do INSERT (Slice
+  ;; 4b, §22.9 E2). A EXIBICAO (transparencia projeta o evento + rota publica de download) consome dai'.
   (gerar-artefato-publicacao! [this ente-id {:keys [norma-id serializador assinador objeto-store assinado-por]}]
     (when-not objeto-store (throw (ex-info "gerar-artefato-publicacao!: objeto-store ausente" {:ente-id ente-id})))
     (when-not serializador (throw (ex-info "gerar-artefato-publicacao!: serializador ausente" {:ente-id ente-id})))

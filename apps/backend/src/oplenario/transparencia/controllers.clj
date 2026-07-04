@@ -1,8 +1,12 @@
 (ns oplenario.transparencia.controllers
   "Orquestracao IMPURA do portal (§22.10 controllers, ADR-0001) — coordena o Repo-Component. As rotas do
   Slice 1 (listar/ficha materia+legislacao) sao PUBLICAS (sem ator). As do Slice 2 (acompanhamento) sao
-  AUTENTICADAS (cidadao): ente-id + seguidor vem do ATOR (nunca do corpo/path — anti-forge)."
-  (:require [oplenario.kernel.ids :as ids]
+  AUTENTICADAS (cidadao): ente-id + seguidor vem do ATOR (nunca do corpo/path — anti-forge). Slice 4b: o
+  download do artefato le' o binario do objeto_store (I/O de blob fica no controller, nao no Repo — o Repo so'
+  resolve o PONTEIRO)."
+  (:require [clojure.tools.logging :as log]
+            [oplenario.kernel.components.objeto-store :as os]
+            [oplenario.kernel.ids :as ids]
             [oplenario.transparencia.components.repositorio :as repo]))
 
 (defn listar-materias
@@ -27,6 +31,26 @@
   "Uma norma publicada especifica, ou nil."
   [repo-transparencia ente-id norma-id]
   (repo/buscar-norma repo-transparencia ente-id norma-id))
+
+(defn baixar-artefato-da-norma
+  "Resolve o artefato de publicacao MAIS RECENTE de uma norma e le' o binario do objeto_store. Discrimina 3
+  desfechos p/ a borda (nunca 404 silencioso sobre um documento OFICIAL):
+   - `:nao-encontrado` (sem ponteiro): a norma nao tem artefato gerado -> 404.
+   - `:blob-ausente` (ponteiro EXISTE mas obter->nil): a ANCORA-antes-do-blob (mig 0046/0047) — a linha foi
+     inserida mas o objeto_store falhou APOS o commit no legislativo. E' condicao de ALERTA (log/error +
+     500), NUNCA 404 (o cidadao nao pode receber 'nao existe' sobre um ato que foi publicado) nem servir
+     lixo. O reconciliador F7 (rascunho-sem-blob) atua na fonte (legislativo).
+   - `:ok`: bytes + content-type + versao p/ a resposta binaria.
+  O I/O de blob mora AQUI (controller impuro), nao no Repo (que so' resolve o ponteiro)."
+  [repo-transparencia objeto-store ente-id norma-id]
+  (if-let [ptr (repo/artefato-mais-recente-da-norma repo-transparencia ente-id norma-id)]
+    (if-let [b (os/obter objeto-store (:objeto-store-ref ptr))]
+      {:resultado :ok :bytes b :content-type (:content-type ptr) :versao (:versao ptr)}
+      (do (log/error "transparencia: artefato de publicacao com ponteiro mas SEM blob no objeto_store"
+                     {:evento :artefato-sem-blob :ente-id ente-id :norma-id norma-id
+                      :artefato-id (:artefato-id ptr) :objeto-store-ref (:objeto-store-ref ptr)})
+          {:resultado :blob-ausente}))
+    {:resultado :nao-encontrado}))
 
 ;; ---------- Slice 2: acompanhamento do cidadao (autenticado; consent-gated) ----------
 
