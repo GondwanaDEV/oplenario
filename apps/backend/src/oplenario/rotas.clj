@@ -26,7 +26,7 @@
   legislativo) injeta `consultar-sessao` (delega ao Repo de sessoes) nos diplomats de tempo_real e legislativo,
   que NAO importam sessoes."
   [{:keys [idp repo-identidade repo-sessoes repo-legislativo repo-compliance repo-participacao
-           repo-transparencia repo-paineis canal-store objeto-store]}]
+           repo-transparencia repo-paineis canal-store objeto-store painel-compliance]}]
   (let [auth (it/autenticacao idp repo-identidade)
         ;; F6: relogio de producao (kernel/tempo) p/ o prazo LAI do e-SIC — determinismo em teste vem de
         ;; injetar relogio-fixo direto no fragmento de rotas (participacao-http/rotas). resolver-ente-publico
@@ -36,7 +36,14 @@
         ;; cross-modulo via inversao de dependencia: o host fecha sobre o Repo de sessoes e expoe a consulta-fato
         ;; que o endpoint SSE (G3) E a vertical de votacao ao vivo (F4 Slice 3, no legislativo) precisam p/
         ;; autorizar (a RLS escopa por tenant). Os modulos chamam por esta fn, nunca importam sessoes (§22.10).
-        consultar-sessao (fn [ente-id sessao-id] (repo-sessoes-comp/buscar-sessao repo-sessoes ente-id sessao-id))]
+        consultar-sessao (fn [ente-id sessao-id] (repo-sessoes-comp/buscar-sessao repo-sessoes ente-id sessao-id))
+        ;; F7 dashboard da Mesa: o host compoe compliance+paineis por INVERSAO DE DEPENDENCIA (espelha
+        ;; consultar-sessao). Fecha sobre o repo de compliance e expoe uma fn (ente-id -> PainelOut projetado)
+        ;; que o diplomat de paineis chama — paineis nunca importa compliance (§22.10). Passa pelo diplomat de
+        ;; compliance (painel-wire), nunca pelo seu adapters/out direto (a lint proibe host->adapters). O
+        ;; override injetavel (`painel-compliance` no arg) so' serve aos testes DB-free da borda de paineis.
+        painel-compliance (or painel-compliance
+                              (fn [ente-id] (compliance-http/painel-wire repo-compliance ente-id)))]
     (-> #{["/saude"             :get http/saude :route-name :saude]
           ["/eu"                :get [auth http/eu] :route-name :eu]
           ["/painel-secretaria" :get [auth (it/exige-papel "secretario") http/painel-secretaria]
@@ -51,5 +58,6 @@
         (into (transparencia-http/rotas {:auth auth :repo-transparencia repo-transparencia
                                          :resolver-ente-publico transparencia-http/resolver-ente-publico-uuid
                                          :objeto-store objeto-store}))
-        (into (paineis-http/rotas {:auth auth :repo-paineis repo-paineis}))
+        (into (paineis-http/rotas {:auth auth :repo-paineis repo-paineis
+                                   :painel-compliance painel-compliance}))
         (into (tempo-real-sse/rotas {:auth auth :canal-store canal-store :consultar-sessao consultar-sessao})))))

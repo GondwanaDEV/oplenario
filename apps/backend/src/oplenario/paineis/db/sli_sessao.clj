@@ -94,6 +94,20 @@
                                           :agendada_para   [:coalesce :excluded.agendada_para :sli_sessao.agendada_para]}
                                  :where [:<= :sli_sessao.transicionou_em :excluded.transicionou_em]}})))
 
+(defn resumo
+  "Rollup do SLI de janela de sessao (F7 dashboard da Mesa, §16.11 / Inv.9): contagem por `estado_atual` do
+  tenant. GROUP BY estado_atual -> [{:estado-atual :n}]; o adapters/out deriva a situacao de negocio e os
+  manchetes (em curso / nao realizadas). Sem teto (cardinalidade = numero de estados da maquina de sessao)."
+  [tx ente-id]
+  {:pre [(some? ente-id)]}
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select [:estado_atual [[:count :*] :n]]
+                  :from [:paineis.sli_sessao]
+                  :where [:= :ente_id ente-id]
+                  :group-by [:estado_atual]
+                  :order-by [[:estado_atual :asc]]}))))
+
 (defn listar-sli-sessoes
   "O SLI de janela de sessao (Inv.9) do tenant: TODAS as sessoes vistas, ABERTAS primeiro (encerrada_em IS
   NULL = as que ainda estao em curso ou possivelmente TRAVADAS — o sinal operacional que o painel existe p/

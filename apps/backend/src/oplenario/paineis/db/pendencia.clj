@@ -89,6 +89,30 @@
     (when-not (zero? (:next.jdbc/update-count r 0))
       {:objeto-tipo objeto-tipo :objeto-id objeto-id :vence-em vence-em})))
 
+(defn resumo
+  "Rollup 'o que vence' (F7 dashboard da Mesa, §16.11): contagem por estado ABERTO do tenant (pendente/
+  vencido). GROUP BY estado -> [{:estado :n}]; o adapters/out deriva abertas/vencidas/pendentes. Sem teto
+  (cardinalidade = 2). Sem aritmetica de data aqui DE PROPOSITO — 'proximas a vencer' e' derivacao de leitura
+  no FE (contra 'hoje') a partir do endpoint de detalhe (/paineis/pendencias), p/ o rollup ser deterministico
+  (sem CURRENT_DATE congelado na tx influenciando a contagem).
+
+  FILTRA `estado IN ('pendente','vencido')` com `[:inline ...]` (review database MAJOR, mesmo racional de
+  listar-abertas): (1) `concluido` nunca e' lido pelo adapters/out (era grupo computado e descartado); (2) sem
+  o predicado, a query nao casa o INDEX PARCIAL idx_pendencia_o_que_vence (mig 0048, `WHERE estado IN
+  ('pendente','vencido')`) e cai p/ scan de TODA a pendencia do tenant — incluindo o `concluido` historico que
+  cresce sem limite (todo e-SIC/LGPD/ouvidoria ja' fechado). `[:inline]` (nao bind param) e' obrigatorio p/ o
+  planner provar o predicado do indice parcial (bind param -> plano generico -> Bitmap Heap Scan)."
+  [tx ente-id]
+  {:pre [(some? ente-id)]}
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select [:estado [[:count :*] :n]]
+                  :from [:paineis.pendencia]
+                  :where [:and [:= :ente_id ente-id]
+                          [:in :estado [[:inline "pendente"] [:inline "vencido"]]]]
+                  :group-by [:estado]
+                  :order-by [[:estado :asc]]}))))
+
 (defn listar-abertas
   "'o que vence' (§16.11): as pendencias ABERTAS (pendente|vencido) do tenant, mais urgente (vencimento mais
   proximo) primeiro; `objeto_id` como desempate deterministico entre vencimentos iguais (mesmo padrao de

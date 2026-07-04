@@ -86,6 +86,21 @@
     (when-not (zero? (:next.jdbc/update-count r 0))
       {:proposicao-id proposicao-id :estado estado})))
 
+(defn resumo
+  "Rollup 'proposicoes por status' (F7 dashboard da Mesa, §16.11): contagem por estado do tenant. GROUP BY
+  estado -> [{:estado :n}], mais numeroso primeiro (`estado` ASC como desempate deterministico). Sem teto (a
+  cardinalidade e' o numero de estados da maquina de tramitacao, dezenas no maximo). O adapters/out soma o
+  total e projeta — nao ha PII nem ponteiro interno numa contagem agregada."
+  [tx ente-id]
+  {:pre [(some? ente-id)]}
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select [:estado [[:count :*] :n]]
+                  :from [:paineis.tramitacao]
+                  :where [:= :ente_id ente-id]
+                  :group-by [:estado]
+                  :order-by [[:n :desc] [:estado :asc]]}))))
+
 (defn listar-board
   "O board (§16.11): TODAS as proposicoes do tenant (sem filtro de estado — diferenca-chave vs. o portal
   publico), agrupadas por `estado` e ordenadas por `transicionou_em` ASC (`proposicao_id` como desempate
