@@ -96,8 +96,10 @@
    ;; participacao) + emite `pedido_esic.protocolado` — recebe :datasource + :bus via `using` (emite eventos
    ;; na tx do ato, como legislativo/sessoes).
    :repo-participacao (component/using (repo-participacao/repositorio) [:datasource :bus])
-   ;; F6c (transparencia): SO LEITURA (o portal projeta por consumer/tx do relay, nao por este Repo) — recebe
-   ;; so :datasource via `using`, sem :bus (o modulo nao emite eventos proprios nesta fatia).
+   ;; F6c (transparencia): a LEITURA do portal + as escritas de acompanhamento vao por este Repo (so' :datasource
+   ;; via `using`). O :bus NAO e' injetado aqui de proposito: o modulo emite `notificacao.requisitada` (F7 E2, o
+   ;; fan-out) no caminho do CONSUMER/relay — repo/fan-out-notificacao! constroi `(outbox/bus)` inline (stateless)
+   ;; na tx do relay, nao no caminho de escrita deste record. Logo a fiacao segue sem :bus, mas o modulo EMITE.
    :repo-transparencia (component/using (repo-transparencia/repositorio) [:datasource])
    ;; F7 (paineis): SO LEITURA (o painel projeta por consumer/tx do relay, nao por este Repo) — recebe so
    ;; :datasource via `using`, sem :bus (o modulo nao emite eventos proprios nesta fatia).

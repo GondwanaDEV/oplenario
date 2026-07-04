@@ -33,6 +33,8 @@
   so' cobre 'nao encontrado', nao 'payload nao parseavel'."
   (:require [clojure.tools.logging :as log]
             [oplenario.kernel.tenancy :as tenancy]
+            [oplenario.paineis.components.notificacao :as porta]
+            [oplenario.paineis.db.notificacao-entrega :as db-notificacao]
             [oplenario.paineis.db.pendencia :as db-pendencia]
             [oplenario.paineis.db.tramitacao :as db-tramitacao])
   (:import (java.time Instant LocalDate)
@@ -127,7 +129,21 @@
                                 :estado (:estado payload)})
 
     "proposicao.transicionou"
-    (transicionar-tramitacao! tx ente-id (:proposicao-id payload) (:para payload) (:ocorrido-em payload))))
+    (transicionar-tramitacao! tx ente-id (:proposicao-id payload) (:para payload) (:ocorrido-em payload))
+
+    ;; F7 E2: materializa o INTENT de entrega (estado 'pendente') a partir do fan-out de transparencia. NADA
+    ;; e' enviado aqui (anti dual-write — ver db.notificacao-entrega); o worker (entregar-pendentes!) envia
+    ;; depois. `objeto-id` chega STRING (jsonb) -> UUID; `destinatario` fica STRING (identidade-uuid como texto,
+    ;; coluna `destinatario text`). Idempotencia da entrega pela chave DETERMINISTICA do payload (ON CONFLICT).
+    "notificacao.requisitada"
+    (db-notificacao/registrar-intent! tx {:ente-id ente-id
+                                          :destinatario (:destinatario-identidade-id payload)
+                                          :canal (:canal payload)
+                                          :idempotency-key (:idempotency-key payload)
+                                          :consent-base (:consent-base payload)
+                                          :assunto (:assunto payload) :corpo (:corpo payload)
+                                          :objeto-tipo (:objeto-tipo payload)
+                                          :objeto-id (UUID/fromString (:objeto-id payload))})))
 
 (defn projetar-evento!
   "Dispatch por tipo de evento -> a projecao de dominio, DENTRO da `tx` corrente (a do relay). Seta o GUC de
@@ -162,13 +178,42 @@
 (defprotocol RepoPaineis
   (transacao [this ente-id f] "Roda (f tx) numa UNICA tx do tenant (com-tenant*) — leitura interna.")
   (o-que-vence [this ente-id] "Pendencias ABERTAS (pendente|vencido) do tenant, mais urgente primeiro.")
-  (tramitacao-board [this ente-id] "TODAS as proposicoes do tenant, agrupadas por estado, mais estagnadas primeiro."))
+  (tramitacao-board [this ente-id] "TODAS as proposicoes do tenant, agrupadas por estado, mais estagnadas primeiro.")
+  (entregar-pendentes! [this ente-id notificador]
+    "WORKER de entrega (F7 E2): envia os intents 'pendente' do ledger pelo `notificador` (porta CanalNotificacao)
+    e marca enviada/falha. Le' o lote numa tx; ENVIA fora de qualquer tx (efeito externo); marca cada intent
+    numa tx CURTA propria (uma falha de envio nao desfaz as marcacoes das anteriores). Devolve {:processados n}.
+
+    CONTRATO DE EXECUCAO — SINGLE-FLIGHT por ente (review database HIGH): a entrega e' AT-LEAST-ONCE por design
+    (um crash pos-envio pre-marca reenvia; ledger.enviada e' best-effort). `listar-pendentes` NAO faz claim
+    (sem FOR UPDATE SKIP LOCKED / estado 'enviando'), entao DUAS invocacoes CONCORRENTES p/ o MESMO ente leriam
+    os mesmos intents e ENVIARIAM em duplicidade (so' o UPDATE final dedup, tarde demais). O worker DEVE rodar
+    single-flight por ente — a mesma disciplina LIDER-UNICO que o relay do outbox ja' assume (sistema.clj: 'relay
+    lider unico'); o agendador (carry infra) o invoca sob leader-election, nao concorrente. Escolhemos o design
+    pendente-only (sem estado 'enviando') DE PROPOSITO: nao ha estado PRESO em crash (um crash deixa 'pendente',
+    re-tentavel; um estado 'enviando' precisaria de um reaper/timeout = mais infra). REMEDIO de scale-out (se um
+    dia N workers concorrentes forem necessarios): claim atomico `UPDATE ... SET estado='enviando' WHERE id IN
+    (SELECT ... FOR UPDATE SKIP LOCKED LIMIT :teto) RETURNING *` + reaper de 'enviando' orfao. YAGNI ate' la'.
+    Seu AGENDAMENTO (cron/loop + leader-election) e' carry infra — aqui a LOGICA de entrega, chamavel e testavel."))
 
 (defrecord RepoPaineisPg [datasource]
   RepoPaineis
   (transacao [_ ente-id f] (tenancy/com-tenant* (:ds datasource) ente-id f))
   (o-que-vence [this ente-id] (transacao this ente-id #(db-pendencia/listar-abertas % ente-id teto-o-que-vence)))
-  (tramitacao-board [this ente-id] (transacao this ente-id #(db-tramitacao/listar-board % ente-id teto-tramitacao-board-por-estado))))
+  (tramitacao-board [this ente-id] (transacao this ente-id #(db-tramitacao/listar-board % ente-id teto-tramitacao-board-por-estado)))
+  (entregar-pendentes! [this ente-id notificador]
+    (let [pendentes (transacao this ente-id #(db-notificacao/listar-pendentes % ente-id))]
+      (doseq [intent pendentes]
+        ;; envio EXTERNO fora da tx (nao-transacional; um throw viraria {:ok? false} na porta, nunca aqui);
+        ;; a marcacao roda numa tx curta por intent — at-least-once (crash pos-envio pre-marca => reenvio).
+        (let [res (porta/enviar! notificador intent)]
+          (transacao this ente-id
+            (fn [tx]
+              (if (:ok? res)
+                (db-notificacao/marcar-enviada! tx {:ente-id ente-id :id (:id intent)})
+                (db-notificacao/marcar-falha! tx {:ente-id ente-id :id (:id intent)
+                                                  :motivo (or (:motivo res) "falha de entrega sem motivo")}))))))
+      {:processados (count pendentes)})))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

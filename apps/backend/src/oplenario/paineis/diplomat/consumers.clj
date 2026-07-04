@@ -21,7 +21,9 @@
    "participacao.solicitacao_titular.respondida" "participacao.manifestacao_ouvidoria.respondida"
    "participacao.manifestacao_ouvidoria.arquivada"
    "participacao.prazo.vencido" "participacao.prazo.prorrogado"
-   "proposicao.protocolada" "proposicao.transicionou"])
+   "proposicao.protocolada" "proposicao.transicionou"
+   ;; F7 E2: o fan-out de transparencia (`notificacao.requisitada`, 1 por seguidor) -> intent no ledger de entrega.
+   "notificacao.requisitada"])
 
 (defn registrar
   "Funde os handlers dos projetores de `paineis` num `registro` EXISTENTE (outbox/registrar por tipo) —

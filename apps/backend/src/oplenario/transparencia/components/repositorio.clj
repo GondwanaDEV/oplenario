@@ -19,15 +19,31 @@
   projecao). Perder uma atualizacao de estado numa projecao (sem verdade propria, re-derivavel) e' um preco
   aceitavel; travar o barramento do sistema inteiro nao e'."
   (:require [clojure.tools.logging :as log]
+            [oplenario.kernel.eventos :as eventos]
+            [oplenario.kernel.outbox :as outbox]
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.transparencia.db.acompanhamento :as db-acompanhamento]
             [oplenario.transparencia.db.artefato-publicacao :as db-artefato]
             [oplenario.transparencia.db.materia :as db-materia]
-            [oplenario.transparencia.db.norma :as db-norma])
+            [oplenario.transparencia.db.norma :as db-norma]
+            [oplenario.transparencia.events.notificacao :as ev-notif]
+            [oplenario.transparencia.logic.notificacao :as logic-notif])
   (:import (java.time Instant)
            (java.util UUID)))
 
 (set! *warn-on-reflection* true)
+
+(def ^:private teto-fanout
+  "Teto de seguidores notificados POR transicao (anti unbounded — uma materia MUITO seguida nao pode explodir
+  a tx do relay COMPARTILHADO com N emissoes). TRADEOFF (review database MEDIUM): e' uma ordem de grandeza
+  acima dos tetos de LEITURA do modulo (100/200/500) DE PROPOSITO — cobertura de ENTREGA (cada seguidor que
+  consentiu deve ser notificado) pesa mais que uma listagem de UI; um teto baixo dropa-silenciosamente cidadaos
+  que consentiram, pior que uma tx um pouco mais longa. O custo (ate' 5000 INSERTs sequenciais num-por-um na tx
+  do relay) e' REAL mas BOUNDADO: o caso tipico e' <10 seguidores, e o relay usa SKIP LOCKED (outros eventos
+  nao ficam bloqueados — so' este evento-gatilho demora). CARRY (o fix estrutural): (a) paginacao por cursor
+  (seguidor_identidade_id, retomavel entre transicoes) elimina o teto e a tx longa; (b) `EventBus/emitir!`
+  aceitar >1 evento (INSERT multi-linha) corta os N round-trips — ambos YAGNI ate' uma materia real exceder."
+  5000)
 
 (defn- uuid-payload
   "Coage `chaves` de `payload` de STRING p/ java.util.UUID. NECESSARIO: o outbox serializa o payload em
@@ -68,6 +84,56 @@
                                  (uuid-payload [:norma-id :artefato-id])
                                  (assoc :ente-id ente-id)
                                  (update :criado-em #(Instant/parse %))))))
+
+(defn fan-out-notificacao!
+  "Consumer do FAN-OUT (F7 E2) — SEGUNDO consumidor de `proposicao.transicionou` (o 1o, projetar-evento!,
+  atualiza materia.estado; ESTE notifica os seguidores). Consumidores independentes = dedup independente por
+  (consumidor, key), cada um na tx do relay. Numa transicao de materia acompanhada, EMITE um
+  `notificacao.requisitada` POR seguidor ATIVO — event-chaining no MESMO outbox/tx (§22.9 E2: as linhas novas
+  commitam com o dedup e o relay as drena nas iteracoes seguintes de `drenar!`); `paineis` materializa a
+  entrega duravel. RENDERIZA aqui (transparencia tem a materia same-schema; paineis e' entrega burra §22.10).
+  Usa `payload.para` (o novo estado, autoritativo do evento) — NAO materia.estado — logo INDEPENDE da ORDEM
+  entre este consumer e projetar-evento! na mesma tx.
+
+  NUNCA lanca (relay COMPARTILHADO — mesmo racional de projetar-evento!): try/catch Throwable envolve TUDO,
+  INCLUSIVE `set-tenant!` (review clojure/security MEDIUM: `set-tenant!` lanca em ente-id nil — e a coluna
+  shared.outbox.ente_id e' NULLABLE, um evento supratenant/malformado propagaria a excecao ao relay se ficasse
+  fora do try; aqui um ente nil e' TOLERADO = log + nil, o evento e' drenado sem envenenar o bus de todos os
+  modulos). TOLERANTE a gap: sem materia projetada (redrive fora de ordem — mas um seguidor so' existe se a
+  materia foi exibida) ou sem seguidores -> nil (nada a emitir).
+
+  SEMANTICA DE FALHA (review database/security LOW/MEDIUM): os payloads por-seguidor sao UNIFORMES (so' variam
+  destinatario/chave, ambos derivados de UUIDs) e validados por Malli `:closed` ANTES de emitir, entao uma
+  falha APP-LEVEL no meio do `doseq` e' praticamente impossivel; uma falha de DRIVER/DB no INSERT do outbox
+  aborta a tx INTEIRA (o `UPDATE processed_at` seguinte do relay falha na tx abortada -> rollback total ->
+  o evento-gatilho re-drena, re-emitindo TODOS os seguidores — nunca um subconjunto commitado). Ou seja: nao
+  ha caminho realista de fan-out PARCIAL-e-commitado; e' tudo-ou-nada por transicao (a 1a emissao so' ocorre
+  apos materia+seguidores lidos com sucesso, e o commit e' atomico com o processed_at do evento-gatilho)."
+  [tx {:keys [ente-id payload]}]
+  (try
+    (tenancy/set-tenant! tx ente-id)
+    (let [pid  (UUID/fromString (:proposicao-id payload))
+          para (:para payload)
+          tid  (:transicao-id payload)]
+      (when-let [materia (db-materia/buscar tx ente-id pid)]
+        (let [{:keys [assunto corpo]} (logic-notif/renderizar materia para)]
+          (doseq [dest (db-acompanhamento/seguidores-ativos tx ente-id pid teto-fanout)
+                  :let [dest-str (str dest)]]
+            (eventos/emitir! (outbox/bus) tx
+              (ev-notif/requisitada
+               ente-id
+               {:destinatario-identidade-id dest-str
+                :canal "email"
+                :consent-base "acompanhamento"
+                :idempotency-key (logic-notif/chave-idempotencia tid dest-str)
+                :assunto assunto
+                :corpo corpo
+                :objeto-tipo "proposicao"
+                :objeto-id (str pid)}))))))
+    (catch Throwable e
+      (log/warn e "transparencia: fan-out de notificacao tolerado (payload malformado ou falha de leitura)"
+                {:ente-id ente-id})
+      nil)))
 
 (defprotocol RepoTransparencia
   (transacao [this ente-id f] "Roda (f tx) numa UNICA tx do tenant (com-tenant*) — leitura publica.")
