@@ -17,7 +17,15 @@
    Variantes de urgência do .fila-item da fonte (.f-hoje/.f-semana/.f-livre) NÃO portadas — o componente
    nunca aplica essas classes (RelatorPendenteOut não tem prazo, só criadoEm; sem dado de urgência não
    inventamos estado visual, mesmo princípio do §7 do doc-mestre); border-left cai no --linha neutro por
-   default. NÃO inclui orgulho/remessa/azulejo-pedido (Task B8+). */
+   default.
+
+   Task B8 (OrgulhoInstitucional + ProximaSessaoRail + LenteJuridico) apendou: .orgulho-corpo/.org-stat
+   (FAIXA DE ORGULHO INSTITUCIONAL, 11.4) + .rail (contêiner sticky da coluna lateral). .nota-gap já
+   existia (B7). LenteJuridico é em-breve por construção (spec §7 — domínio de segurança não modelado
+   ainda) e não porta .juridico-cut/.risco-card da fonte — aquele bloco é o toggle de demonstração de
+   design (lente por papel sobre o MESMO placar do hero), não um card autônomo com dado real hoje; nada
+   a inventar. NÃO inclui remessa/azulejo-pedido/continuidade/selos (2ª metade do hero, ainda não
+   implementada). */
 
 /* ============== HERO — ILHA-PLACAR DA SAÚDE INSTITUCIONAL ============== */
 .saude { position: relative; overflow: hidden; margin: clamp(1.2rem, 3vw, 2rem) 0 0; background: var(--palco-bg); color: var(--palco-texto); border-radius: var(--raio); box-shadow: var(--sombra); }
@@ -106,9 +114,21 @@
 .fila-txt .de { font-size: var(--t-13); color: var(--texto-2); }
 .nota-gap { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin: 0.9rem 0 0; display: flex; align-items: flex-start; gap: 0.45rem; line-height: 1.4; }
 
+/* ---- FAIXA DE ORGULHO INSTITUCIONAL (11.4) — vitrine ---- */
+.orgulho-corpo { display: flex; flex-wrap: wrap; gap: 1.4rem 0; }
+.org-stat { flex: 1 1 200px; padding: 0 1.4rem; border-left: 1px solid var(--linha); min-width: 0; }
+.org-stat:first-child { border-left: 0; padding-left: 0; }
+.org-stat .n { font-family: var(--display); font-weight: 800; font-size: var(--t-40); line-height: 1; letter-spacing: -0.02em; color: var(--texto); font-variant-numeric: tabular-nums; margin: 0; }
+.org-stat .n small { font-family: var(--mono); font-size: var(--t-13); font-weight: 600; color: var(--marca); letter-spacing: 0; margin-left: 0.35rem; }
+.org-stat .rot { font-size: var(--t-13); color: var(--texto-2); margin: 0.4rem 0 0; line-height: 1.35; }
+
+/* ---- coluna lateral (Próxima sessão) ---- */
+.rail { display: grid; gap: 1.1rem; position: sticky; top: 84px; }
+
 /* ============== RESPONSIVO ============== */
 @media (max-width: 1040px) {
   .pipeline-board { grid-template-columns: 1fr 1fr; }
+  .rail { position: static; }
 }
 @media (max-width: 720px) {
   .placar { grid-template-columns: 1fr; }
@@ -120,6 +140,7 @@
   .prazo-item .tag-urg { grid-column: 2; justify-self: start; }
   .pipeline-board { grid-template-columns: 1fr; }
   .fila-item { grid-template-columns: 1fr; }
+  .org-stat { border-left: 0; padding: 0; flex-basis: 100%; }
 }
 @media (max-width: 460px) {
   .anel-c { width: 56px; height: 56px; }
