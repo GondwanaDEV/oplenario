@@ -9,9 +9,19 @@ import type { MesaOut, RelatorPendenteOut } from "./contrato-mesa.gen";
 // complianceTce é opaco no contrato gerado (Record<string, unknown> — a real materialização de
 // domínio §22.7 não é modelada estaticamente ali); esta é a forma esperada quando NÃO é o sentinel de
 // degradação {indisponivel:true}. Leitura local só, nunca exposta como tipo público.
+// emAberto espelha ObrigacaoEmAbertoOut (apps/backend .../compliance/wire/out/painel.clj) — id/vence-em
+// já eram usados aqui; template-chave/objeto-tipo/objeto-id/estado entram agora para que "O que vence"
+// (Task B6) tenha essas chaves tipadas em vez de precisar de type-cast solto no consumidor.
 interface ComplianceCard {
   resumo: Record<string, number>;
-  emAberto: { venceEm: string }[];
+  emAberto: {
+    id: string;
+    templateChave: string;
+    objetoTipo: string;
+    objetoId: string;
+    venceEm: string;
+    estado: string;
+  }[];
   remessasRecentes: unknown[];
 }
 
