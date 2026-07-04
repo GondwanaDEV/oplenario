@@ -49,7 +49,7 @@ type Estado = "carregando" | "pronto" | "erro";
 // transformação é aplicada UMA VEZ aqui, no único ponto em que os 4 endpoints do dashboard são
 // parseados — dependency-free, no mesmo espírito "zero-dep, hand-rolled" do codegen (Task A7).
 function paraCamel(chave: string): string {
-  return chave.replace(/-([a-z0-9])/g, (_, c: string) => c.toUpperCase());
+  return chave.replace(/-+([a-z0-9])/g, (_, c: string) => c.toUpperCase());
 }
 
 function camelizarChaves(valor: unknown): unknown {
