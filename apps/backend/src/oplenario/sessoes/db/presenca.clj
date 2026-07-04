@@ -103,17 +103,19 @@
 
 (defn- presentes-na-sessao
   "Total de vereadores com ULTIMO evento positivo ate' `instante` (qualquer modalidade) — generaliza
-  contar-presentes de sessoes/relacoes/presenca (que filtra por modalidade) p/ o agregado cross-sessao."
-  [tx sessao-id instante]
+  contar-presentes de sessoes/relacoes/presenca (que filtra por modalidade) p/ o agregado cross-sessao.
+  `ente-id` filtra tanto a subquery quanto a contagem externa — defense-in-depth mesmo sob RLS (ente_id em
+  toda query, ver docstring do ns)."
+  [tx ente-id sessao-id instante]
   (-> (jdbc/execute-one! tx
         (sql/format {:select [[[:count :*] :n]]
-                     :from [[{:select-distinct-on [[:vereador_id] :vereador_id :tipo]
+                     :from [[{:select-distinct-on [[:vereador_id] :vereador_id :tipo :ente_id]
                               :from [:sessoes.presenca_evento]
-                              :where [:and [:= :sessao_id sessao-id] [:<= :ocorrido_em instante]]
+                              :where [:and [:= :ente_id ente-id] [:= :sessao_id sessao-id] [:<= :ocorrido_em instante]]
                               :order-by [[:vereador_id :asc] [:ocorrido_em :desc]
                                          [:fonte_precedencia :desc] [:id :desc]]}
                              :u]]
-                     :where [:in :u.tipo positivos]}))
+                     :where [:and [:= :u.ente_id ente-id] [:in :u.tipo positivos]]}))
       comum/linha->kebab :n))
 
 (defn resumo-presenca
@@ -125,7 +127,7 @@
   [tx ente-id membros-da-casa teto]
   (let [sessoes (sessoes-encerradas-recentes tx ente-id teto)
         n-sessoes (count sessoes)
-        total-presentes (reduce + 0 (map #(presentes-na-sessao tx (:id %) (:encerrada-em %)) sessoes))]
+        total-presentes (reduce + 0 (map #(presentes-na-sessao tx ente-id (:id %) (:encerrada-em %)) sessoes))]
     {:media-percentual (when (and (pos? n-sessoes) (pos? membros-da-casa))
                          (int (Math/round (* 100.0 (/ total-presentes (* n-sessoes membros-da-casa))))))
      :sessoes-consideradas n-sessoes

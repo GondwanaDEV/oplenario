@@ -289,3 +289,11 @@
   (when-let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) id)]
     (authz/check! ator :sessao/ver s logic/pode-ver-sessao?)
     {:sessao-id id :segmentos (vec (repo/listar-segmentos-da-sessao repo-sessoes (:ente-id ator) id))}))
+
+(defn resumo-presenca
+  "Read-model da presenca agregada (F7/FE Onda A1), tenant-wide — sem recurso unico p/ camada fina (mesmo
+  contrato de `compliance.controllers/painel`). `membros-da-casa` chega JA RESOLVIDO pelo caller (inversao de
+  dependencia sobre cadastros; este ns nunca importa cadastros, §22.10). Devolve {:media-percentual
+  :sessoes-consideradas :membros-da-casa}."
+  [repo-sessoes ente-id membros-da-casa]
+  (repo/resumo-presenca repo-sessoes ente-id membros-da-casa))

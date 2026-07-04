@@ -18,7 +18,6 @@
             [oplenario.sessoes.adapters.out.presenca :as adapters-out-presenca]
             [oplenario.sessoes.adapters.out.sessao :as adapters-out]
             [oplenario.sessoes.adapters.out.tribuna :as adapters-out-tribuna]
-            [oplenario.sessoes.components.repositorio :as repo-sessoes-comp]
             [oplenario.sessoes.controllers :as controllers]))
 
 (set! *warn-on-reflection* true)
@@ -386,7 +385,13 @@
   "Ponto de entrada IN-PROCESS da presenca agregada (FE Onda A1) — o gemeo nao-HTTP p/ a RAIZ DE COMPOSICAO
   (o host) compor o dashboard da Mesa do modulo `paineis`. Passa pelo MESMO gate adapters/out (projeta+valida)
   que uma rota HTTP teria. `membros-da-casa` chega JA RESOLVIDO pelo host (inversao de dependencia sobre
-  `cadastros` — `sessoes` nunca importa `cadastros`, §22.10)."
+  `cadastros` — `sessoes` nunca importa `cadastros`, §22.10).
+
+  CONVENCAO DE AUTHZ (mesmo contrato de `oplenario.compliance.diplomat.http.in/painel-wire`): esta fn NAO
+  re-verifica papel/permissao; o ENDPOINT COMPONHEDOR e' o unico ponto de enforcement (GET /paineis/mesa,
+  wired numa task posterior, ja' exige papel 'secretario'). QUALQUER novo caller DEVE aplicar o gate
+  'secretario' antes — senao expoe a presenca agregada tenant-wide a um papel qualquer. Nao ha lint que
+  force isso: e' convencao, mantida por revisao."
   [repo-sessoes membros-da-casa ente-id]
   (adapters-out-presenca/resumo-presenca->wire
-   (repo-sessoes-comp/resumo-presenca repo-sessoes ente-id (membros-da-casa ente-id))))
+   (controllers/resumo-presenca repo-sessoes ente-id (membros-da-casa ente-id))))
