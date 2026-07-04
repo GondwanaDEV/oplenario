@@ -123,12 +123,19 @@
   tenant. numerador = soma de presentes por sessao; denominador = (n de sessoes) x `membros-da-casa`
   (resolvido pelo CALLER via cadastros, injecao cross-modulo — este ns nao importa cadastros). Devolve
   {:media-percentual :sessoes-consideradas :membros-da-casa} — media nil se nao houve sessao encerrada
-  ainda (0/0 e' indefinido, nao 0%)."
+  ainda (0/0 e' indefinido, nao 0%). CLAMPED a [0,100] (review final): `membros-da-casa` e' resolvido HOJE,
+  mas o numerador conta presenca de sessoes passadas — se a composicao da Casa mudou (vaga aberta/fechada)
+  a razao crua pode passar de 100%; a vitrine de comprador (§16.11) mostra uma media, nunca 'mais que
+  todo mundo presente'."
   [tx ente-id membros-da-casa teto]
   (let [sessoes (sessoes-encerradas-recentes tx ente-id teto)
         n-sessoes (count sessoes)
         total-presentes (reduce + 0 (map #(presentes-na-sessao tx ente-id (:id %) (:encerrada-em %)) sessoes))]
     {:media-percentual (when (and (pos? n-sessoes) (pos? membros-da-casa))
-                         (int (Math/round (* 100.0 (/ total-presentes (* n-sessoes membros-da-casa))))))
+                         (-> (* 100.0 (/ total-presentes (* n-sessoes membros-da-casa)))
+                             Math/round
+                             int
+                             (max 0)
+                             (min 100)))
      :sessoes-consideradas n-sessoes
      :membros-da-casa membros-da-casa}))

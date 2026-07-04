@@ -226,3 +226,26 @@
         (fn [tx]
           (is (nil? (:media-percentual (presenca/resumo-presenca tx ente2 3 10)))
               "sem sessao encerrada -> media indefinida (nil, nao 0%)"))))))
+
+(deftest resumo-presenca-clampeia-em-100-quando-membros-da-casa-mudou
+  ;; review final: membros-da-casa e' resolvido HOJE mas o numerador conta presenca de sessoes passadas —
+  ;; se a Casa tinha MAIS vereadores no passado (ou o caller passa um denominador desatualizado), a razao
+  ;; crua pode passar de 100%. A vitrine de comprador nunca mostra 'mais que todo mundo presente'.
+  (let [ente (random-uuid)
+        v1 (random-uuid) v2 (random-uuid)
+        antes (.minusSeconds (Instant/now) 3600)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [s1 (nova-sessao! tx ente)]
+          (sessao/transicionar! tx {:id s1 :ente-id ente :para "aberta" :lock-version 0})
+          (sessao/transicionar! tx {:id s1 :ente-id ente :para "encerrada" :lock-version 1})
+          ;; 2 presentes numa sessao, mas membros-da-casa (o denominador, resolvido "hoje") = 1
+          (presenca/registrar-evento! tx {:id (random-uuid) :ente-id ente :sessao-id s1 :vereador-id v1
+                                          :tipo "entrada" :modalidade "plenario" :fonte "manual_secretaria"
+                                          :ocorrido-em antes})
+          (presenca/registrar-evento! tx {:id (random-uuid) :ente-id ente :sessao-id s1 :vereador-id v2
+                                          :tipo "entrada" :modalidade "plenario" :fonte "manual_secretaria"
+                                          :ocorrido-em antes})
+          (let [r (presenca/resumo-presenca tx ente 1 10)]
+            ;; numerador 2, denominador 1*1=1 -> 200% cru, clampeado a 100
+            (is (= 100 (:media-percentual r)))))))))
