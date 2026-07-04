@@ -15,14 +15,23 @@
 
 (def ^:private nome-consumidor "transparencia-portal")
 
+;; F7 E2: SEGUNDO consumidor do modulo — o FAN-OUT de notificacao. Identidade de dedup SEPARADA da projecao
+;; do portal (cada um roda effectively-once por conta propria); consome so' `proposicao.transicionou` (o sinal
+;; "materia acompanhada se moveu") e emite `notificacao.requisitada` por seguidor (ver repo/fan-out-notificacao!).
+(def ^:private nome-consumidor-notificacao "transparencia-notificacao")
+(def ^:private tipos-fan-out ["proposicao.transicionou"])
+
 (def tipos-consumidos
   "FONTE UNICA dos tipos consumidos pelo projetor do portal (evita drift entre `repo/projetar-evento!` e o
   registro no bus, mesmo racional de tempo_real/consumer.clj)."
   ["proposicao.protocolada" "proposicao.transicionou" "norma.publicada" "artefato.publicacao.gerado"])
 
 (defn registrar
-  "Funde os handlers do projetor do portal num `registro` EXISTENTE (outbox/registrar por tipo) — combinavel
-  com o(s) de outro(s) projetor(es) no MESMO relay (ex.: tempo_real). Passado a sistema.clj."
+  "Funde os handlers do modulo num `registro` EXISTENTE (outbox/registrar por tipo) — combinavel com o(s) de
+  outro(s) projetor(es) no MESMO relay (ex.: tempo_real, paineis). Passado a sistema.clj. Registra DOIS
+  consumidores: o projetor do portal (`transparencia-portal`, todos os tipos) e o fan-out de notificacao
+  (`transparencia-notificacao`, so' `proposicao.transicionou`) — nomes distintos = dedup independente."
   [registro]
-  (reduce (fn [reg tipo] (outbox/registrar reg nome-consumidor tipo repo/projetar-evento!))
-          registro tipos-consumidos))
+  (as-> registro reg
+    (reduce (fn [r tipo] (outbox/registrar r nome-consumidor tipo repo/projetar-evento!)) reg tipos-consumidos)
+    (reduce (fn [r tipo] (outbox/registrar r nome-consumidor-notificacao tipo repo/fan-out-notificacao!)) reg tipos-fan-out)))

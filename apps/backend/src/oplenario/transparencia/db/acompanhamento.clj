@@ -46,6 +46,24 @@
                           [:= :seguidor_identidade_id seguidor-identidade-id] [:= :estado [:inline "ativo"]]]
                   :returning [:id]}))))
 
+(defn seguidores-ativos
+  "F7 E2 — a query do FAN-OUT: os `seguidor_identidade_id` que seguem ATIVAMENTE a materia (para notificar numa
+  transicao). Usa o prefixo (ente_id, proposicao_id) do UNIQUE (ente_id, proposicao_id, seguidor) — sem indice
+  adicional (nota da mig 0045). `[:inline \"ativo\"]` = consent-gating por construcao (so' quem consente hoje).
+  Devolve so' os UUIDs (paineis nunca ve 'quem-segue-o-que' — o evento e' 1 por destinatario ja' resolvido).
+  `teto` limita o fan-out por transicao (anti unbounded — uma materia MUITO seguida nao explode a tx do relay)."
+  [tx ente-id proposicao-id teto]
+  {:pre [(some? ente-id) (some? proposicao-id)]}
+  (mapv :seguidor-identidade-id
+        (comum/linhas->kebab
+         (jdbc/execute! tx
+           (sql/format {:select [[:seguidor_identidade_id :seguidor-identidade-id]]
+                        :from :transparencia.acompanhamento
+                        :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]
+                                [:= :estado [:inline "ativo"]]]
+                        :order-by [:seguidor_identidade_id]
+                        :limit teto})))))
+
 (defn meus-da-materia
   "'minhas materias acompanhadas' (por seguidor autenticado): SO' as subscricoes 'ativas' do `seguidor`, com o
   cabecalho da materia (JOIN same-schema), mais recentes primeiro, com teto. `[:inline \"ativo\"]` p/ o
