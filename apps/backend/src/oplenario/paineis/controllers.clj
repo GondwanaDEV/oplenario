@@ -12,3 +12,9 @@
   por RLS). O teto do read e' server-side (no Repo)."
   [repo-paineis ator]
   (repo/o-que-vence repo-paineis (:ente-id ator)))
+
+(defn tramitacao-board
+  "Read-model do board de tramitacao (§16.11, F7 Slice 2) p/ o tenant do `ator`. Mesma authz/escopo
+  tenant-wide de `o-que-vence`."
+  [repo-paineis ator]
+  (repo/tramitacao-board repo-paineis (:ente-id ator)))
