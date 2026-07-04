@@ -156,7 +156,8 @@
     "'comentarios-da-materia' (PUBLICA): SO aprovados de UMA materia, cronologico, com teto. Lista completa,
      sem paginacao nesta fatia.")
   (fila-moderacao [this ente-id]
-    "'fila-moderacao' (SERVIDOR): SO pendentes, denunciados PRIMEIRO, depois cronologico, com teto."))
+    "'fila-moderacao' (SERVIDOR): SO pendentes, denunciados PRIMEIRO, depois cronologico, com teto.")
+  (esic-cumprimento [this ente-id] "Cumprimento de prazo do e-SIC (FE Onda A1, §16.11)."))
 
 (defrecord RepoParticipacaoPg [datasource bus]
   RepoParticipacao
@@ -449,7 +450,8 @@
   (comentarios-da-materia [this ente-id proposicao-id]
     (transacao this ente-id #(db-comentario/listar-aprovados-da-materia % ente-id proposicao-id)))
   (fila-moderacao [this ente-id]
-    (transacao this ente-id #(db-comentario/listar-fila-moderacao % ente-id))))
+    (transacao this ente-id #(db-comentario/listar-fila-moderacao % ente-id)))
+  (esic-cumprimento [this ente-id] (transacao this ente-id #(db-prazo/esic-cumprimento % ente-id))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource + :bus via `using`)."

@@ -143,3 +143,24 @@
                   :where [:and [:= :ente_id ente-id] [:= :objeto_tipo objeto-tipo] [:= :objeto_id objeto-id]
                           [:= :estado [:inline "pendente"]] [:is :prorrogado_ate nil]]
                   :returning [:*]}))))
+
+;; ---- e-SIC cumprimento no prazo (read-model barato, FE Onda A1 §16.11) ----
+
+(defn esic-cumprimento
+  "Cumprimento de prazo do e-SIC (§16.11 'o que a Casa entregou'): dos pedidos JA ENCERRADOS
+  (cumprida|vencida — pendente ainda esta' aberto, nao entra no historico), quantos foram cumpridos
+  DENTRO do prazo (cumprida_em <= vence_em). So' `objeto_tipo`='pedido_esic' (a metrica institucional
+  e' especificamente sobre o e-SIC, LAI; LGPD/ouvidoria tem prazos proprios sem essa cobranca legal
+  identica). `vencida` conta no total-encerrados mas NUNCA no prazo (por definicao — nao ha cumprida_em).
+  1 unica query agregada (sem GROUP BY — sempre devolve 1 linha, mesmo 0/0). `comum/linha->kebab`
+  normaliza os aliases (HoneySQL emite `no_prazo`, com underscore) p/ o mapa de dominio kebab."
+  [tx ente-id]
+  (let [linha (comum/linha->kebab
+               (jdbc/execute-one! tx
+                 (sql/format {:select [[[:count :*] :total]
+                                       [[:count [:case [:and [:= :estado [:inline "cumprida"]]
+                                                        [:<= :cumprida_em :vence_em]] [:inline 1]]] :no-prazo]]
+                              :from [:participacao.prazo_ativo]
+                              :where [:and [:= :ente_id ente-id] [:= :objeto_tipo [:inline "pedido_esic"]]
+                                      [:in :estado [[:inline "cumprida"] [:inline "vencida"]]]]})))]
+    {:total-encerrados (:total linha) :cumpridos-no-prazo (:no-prazo linha)}))

@@ -46,6 +46,9 @@
                                                                 (tempo/hoje (tempo/relogio-sistema)
                                                                             (java.time.ZoneId/of "America/Fortaleza"))))
         presenca-resumo (fn [ente-id] (sessoes-http/presenca-resumo-wire repo-sessoes membros-da-casa ente-id))
+        ;; FE Onda A1: cumprimento de prazo do e-SIC injetado no dashboard da Mesa (mesma inversao de
+        ;; dependencia; consumido por uma task futura que compoe /paineis/mesa).
+        esic-cumprimento (fn [ente-id] (participacao-http/esic-cumprimento-wire repo-participacao ente-id))
         ;; F7 dashboard da Mesa: o host compoe compliance+paineis por INVERSAO DE DEPENDENCIA (espelha
         ;; consultar-sessao). Fecha sobre o repo de compliance e expoe uma fn (ente-id -> PainelOut projetado)
         ;; que o diplomat de paineis chama — paineis nunca importa compliance (§22.10). Passa pelo diplomat de

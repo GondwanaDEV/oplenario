@@ -58,6 +58,7 @@
             [oplenario.participacao.adapters.out.comentario :as adapters-out-comentario]
             [oplenario.participacao.adapters.out.denuncia-comentario :as adapters-out-denunciar]
             [oplenario.participacao.adapters.out.encarregado :as adapters-out-encarregado]
+            [oplenario.participacao.adapters.out.esic-cumprimento :as adapters-out-esic-cumprimento]
             [oplenario.participacao.adapters.out.manifestacao-ouvidoria :as adapters-out-manifestacao]
             [oplenario.participacao.adapters.out.moderacao-comentario :as adapters-out-moderacao]
             [oplenario.participacao.adapters.out.pedido-esic :as adapters-out-pedido]
@@ -422,3 +423,17 @@
     ["/comentarios/:id/moderar" :post
      [auth (it/exige-papel "secretario") it/corpo-json (moderar-comentario-handler repo-participacao relogio)]
      :route-name :participacao/moderar-comentario]})
+
+;; ========================= FE Onda A1: cumprimento de prazo do e-SIC (§16.11) =========================
+
+(defn esic-cumprimento-wire
+  "Ponto de entrada IN-PROCESS do cumprimento e-SIC (FE Onda A1) — gemeo nao-HTTP p/ o host compor o
+  dashboard da Mesa (mirror `painel-wire` de compliance). Passa pelo controller (nunca pelo Repo-Component
+  direto — ADR-0001) + o MESMO gate adapters/out (deriva percentual+valida) que uma rota HTTP usaria.
+
+  CONVENCAO DE AUTHZ (mesmo contrato de `painel-wire`/`consultar-sessao`): esta fn NAO re-verifica papel/
+  permissao; o ENDPOINT COMPONHEDOR e' o unico ponto de enforcement (GET /paineis/mesa, papel 'secretario').
+  QUALQUER novo caller DEVE aplicar o gate antes — senao expoe cumprimento de prazo tenant-wide a um papel
+  qualquer. Nao ha lint que force isso: e' convencao, mantida por revisao."
+  [repo-participacao ente-id]
+  (adapters-out-esic-cumprimento/esic-cumprimento->wire (controllers/esic-cumprimento repo-participacao ente-id)))

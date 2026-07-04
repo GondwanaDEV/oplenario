@@ -375,3 +375,12 @@
   o servidor PODE ver o autor)."
   [repo-participacao ator]
   (repo/fila-moderacao repo-participacao (:ente-id ator)))
+
+;; ========================= FE Onda A1: cumprimento de prazo do e-SIC (§16.11) =========================
+
+(defn esic-cumprimento
+  "Cumprimento de prazo do e-SIC do tenant `ente-id` (resolvido pelo caller — leitura tenant-wide, sem
+  ator/policy fina, espelha `acompanhar-por-protocolo`). Devolve o mapa cru {:total-encerrados
+  :cumpridos-no-prazo} (o adapters/out deriva o percentual e valida o contrato)."
+  [repo-participacao ente-id]
+  (repo/esic-cumprimento repo-participacao ente-id))
