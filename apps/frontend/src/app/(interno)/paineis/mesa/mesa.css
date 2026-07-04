@@ -25,7 +25,13 @@
    ainda) e não porta .juridico-cut/.risco-card da fonte — aquele bloco é o toggle de demonstração de
    design (lente por papel sobre o MESMO placar do hero), não um card autônomo com dado real hoje; nada
    a inventar. NÃO inclui remessa/azulejo-pedido/continuidade/selos (2ª metade do hero, ainda não
-   implementada). */
+   implementada).
+
+   Task B9 (page.tsx — assembly) apendou: .cockpit/.coluna (grid 2-colunas do corpo — "3 · GRID DO
+   COCKPIT" na fonte; nenhuma task de seção anterior possuía esse contêiner porque ele é montado só pela
+   página, não por um componente de seção) + .tela-estado (mesma convenção de
+   sessoes/[id]/plenario/plenario.css — carregando/erro são chrome de página, definido localmente em vez
+   de importar o CSS de outra rota). */
 
 /* ============== HERO — ILHA-PLACAR DA SAÚDE INSTITUCIONAL ============== */
 .saude { position: relative; overflow: hidden; margin: clamp(1.2rem, 3vw, 2rem) 0 0; background: var(--palco-bg); color: var(--palco-texto); border-radius: var(--raio); box-shadow: var(--sombra); }
@@ -125,10 +131,20 @@
 /* ---- coluna lateral (Próxima sessão) ---- */
 .rail { display: grid; gap: 1.1rem; position: sticky; top: 84px; }
 
+/* ============== 3 · GRID DO COCKPIT (page.tsx — Task B9) ============== */
+.cockpit { display: grid; grid-template-columns: minmax(0, 1fr) 372px; gap: clamp(1rem, 2.4vw, 1.6rem); padding: clamp(1.1rem, 2.6vw, 1.6rem) 0 0; align-items: start; }
+.coluna { display: grid; gap: 1.1rem; min-width: 0; }
+
+/* ---- estados de página (carregando/erro) — mesma convenção de plenario.css ---- */
+.tela-estado { max-width: 520px; margin: 4rem auto; text-align: center; padding: 2rem; }
+.tela-estado h1 { font-family: var(--display); font-size: var(--t-21); color: var(--texto); margin: 0 0 0.5rem; }
+.tela-estado p { color: var(--texto-2); }
+
 /* ============== RESPONSIVO ============== */
 @media (max-width: 1040px) {
   .pipeline-board { grid-template-columns: 1fr 1fr; }
   .rail { position: static; }
+  .cockpit { grid-template-columns: 1fr; }
 }
 @media (max-width: 720px) {
   .placar { grid-template-columns: 1fr; }
