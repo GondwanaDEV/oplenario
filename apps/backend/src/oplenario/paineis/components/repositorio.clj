@@ -196,6 +196,12 @@
   (o-que-vence [this ente-id] "Pendencias ABERTAS (pendente|vencido) do tenant, mais urgente primeiro.")
   (tramitacao-board [this ente-id] "TODAS as proposicoes do tenant, agrupadas por estado, mais estagnadas primeiro.")
   (sli-sessoes [this ente-id] "SLI de janela de sessao (Inv.9): sessoes do tenant, abertas primeiro, concluidas por recencia.")
+  (dashboard-mesa [this ente-id]
+    "Rollups do dashboard da Mesa (F7, §16.11 item 11.4): os TRES resumos agregados dos read-models do
+    proprio paineis (tramitacao/pendencias/sessoes por estado), lidos numa UNICA tx do tenant. Devolve
+    {:tramitacao [...] :pendencias [...] :sessoes [...]} (linhas GROUP BY cruas). NAO le' compliance — o card
+    do TCE e' composto na borda (diplomat) via a fn injetada pelo host (inversao de dependencia, nunca
+    reprojecao/JOIN cross-schema §22.10).")
   (entregar-pendentes! [this ente-id notificador]
     "WORKER de entrega (F7 E2): envia os intents 'pendente' do ledger pelo `notificador` (porta CanalNotificacao)
     e marca enviada/falha. Le' o lote numa tx; ENVIA fora de qualquer tx (efeito externo); marca cada intent
@@ -219,6 +225,12 @@
   (o-que-vence [this ente-id] (transacao this ente-id #(db-pendencia/listar-abertas % ente-id teto-o-que-vence)))
   (tramitacao-board [this ente-id] (transacao this ente-id #(db-tramitacao/listar-board % ente-id teto-tramitacao-board-por-estado)))
   (sli-sessoes [this ente-id] (transacao this ente-id #(db-sli-sessao/listar-sli-sessoes % ente-id teto-sli-sessoes)))
+  (dashboard-mesa [this ente-id]
+    (transacao this ente-id
+      (fn [tx]
+        {:tramitacao (db-tramitacao/resumo tx ente-id)
+         :pendencias (db-pendencia/resumo tx ente-id)
+         :sessoes    (db-sli-sessao/resumo tx ente-id)})))
   (entregar-pendentes! [this ente-id notificador]
     (let [pendentes (transacao this ente-id #(db-notificacao/listar-pendentes % ente-id))]
       (doseq [intent pendentes]

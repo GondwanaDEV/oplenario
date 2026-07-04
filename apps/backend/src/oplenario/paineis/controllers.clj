@@ -23,3 +23,10 @@
   "SLI de janela de sessao (Inv.9, F7 E3) p/ o tenant do `ator`. Mesma authz/escopo tenant-wide."
   [repo-paineis ator]
   (repo/sli-sessoes repo-paineis (:ente-id ator)))
+
+(defn dashboard-mesa
+  "Rollups do dashboard da Mesa (F7, §16.11) p/ o tenant do `ator`. Mesma authz/escopo tenant-wide. Devolve
+  so' os rollups do proprio paineis; a COMPOSICAO com o card de compliance acontece na borda (diplomat), que
+  chama a fn injetada pelo host — o controller nunca cruza modulo (§22.10)."
+  [repo-paineis ator]
+  (repo/dashboard-mesa repo-paineis (:ente-id ator)))

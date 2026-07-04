@@ -62,6 +62,22 @@
           estado (adapters-in-remessa/resposta->estado (:json-params req))]
       (responder-transicao #(controllers/registrar-resposta-remessa repo-compliance (:ator req) id estado)))))
 
+(defn painel-wire
+  "Ponto de entrada IN-PROCESS do painel 'a Casa esta em dia com o TCE' (§16.11) — o gemeo nao-HTTP de
+  `painel-handler`, para a RAIZ DE COMPOSICAO (o host) compor o dashboard da Mesa do modulo `paineis` (F7).
+  Passa pelo MESMO gate adapters/out (projeta+filtra+valida) que a rota HTTP — devolve o `PainelOut` ja'
+  saneado (sem ente-id/ponteiros internos), pronto p/ ser embutido OPACO no MesaOut. O host fecha sobre esta
+  fn (fixando `repo-compliance`) e injeta o resultado no diplomat de paineis via inversao de dependencia,
+  espelhando `consultar-sessao` — `paineis` nunca importa compliance (§22.10).
+
+  CONVENCAO DE AUTHZ (review security MINOR — grep-avel): esta fn NAO re-verifica papel/permissao; o ENDPOINT
+  COMPONHEDOR e' o unico ponto de enforcement (GET /paineis/mesa ja' exige papel 'secretario', o MESMO gate de
+  GET /compliance/painel). Mesmo contrato de `consultar-sessao` (F4/G3). QUALQUER novo caller de `painel-wire`
+  (ou da fn `painel-compliance` injetada) DEVE aplicar o gate 'secretario' antes — senao expoe dados de
+  compliance tenant-wide a um papel qualquer. Nao ha lint que force isso: e' convencao, mantida por revisao."
+  [repo-compliance ente-id]
+  (adapters-out-painel/painel->wire (controllers/painel repo-compliance {:ente-id ente-id})))
+
 (defn rotas
   "Fragmento de rotas do modulo compliance (table syntax Pedestal). Recebe o interceptor `auth` (compartilhado)
   + o `repo-compliance` (Repo-Component) e devolve as rotas-dado. `oplenario.rotas` funde este fragmento ao
