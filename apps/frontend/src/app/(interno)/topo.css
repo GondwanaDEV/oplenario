@@ -1,0 +1,15 @@
+/* ============================================================
+   TopoInterno — regras ainda NÃO promovidas ao chassi.css.
+   Copiadas VERBATIM de produto/design-system/o-plenario/telas/paineis-mesa.html
+   (§1 "barra institucional", a superfície "cockpit") — mesma disciplina do FE.1
+   (não inventar CSS; portar do design-system). .topo/.marca/.tema-btn/.avatar já
+   vivem em ../chassi.css; só o que falta mora aqui.
+   ============================================================ */
+
+.area-tag { display: inline-flex; align-items: center; gap: 0.5rem; font-family: var(--mono); font-size: var(--t-13); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--texto); }
+.area-tag svg { color: var(--marca); flex: 0 0 auto; }
+
+.quem-mesa { display: flex; align-items: center; gap: 0.55rem; }
+.quem-mesa .quem { line-height: 1.15; }
+.quem-mesa .quem b { font-weight: 600; font-size: var(--t-13); color: var(--texto); display: block; }
+.quem-mesa .quem span { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
