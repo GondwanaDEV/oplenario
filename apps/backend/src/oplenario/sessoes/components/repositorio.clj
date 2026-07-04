@@ -74,7 +74,16 @@
 (defrecord RepoSessoesPg [datasource bus]
   RepoSessoes
   (transacao [_ ente-id f] (tenancy/com-tenant* (:ds datasource) ente-id f))
-  (agendar-sessao! [this ente-id m] (transacao this ente-id #(sessao/agendar! % (assoc m :ente-id ente-id))))
+  ;; §22.6 eixo G + F7 E3 — compoe o ato de agendar + a emissao de sessao.agendada na MESMA tx (§22.9 E2): o
+  ;; SLI de janela de sessao (paineis) materializa a linha ja' no nascimento da sessao, fechando a cegueira ao
+  ;; no-show silencioso. `ocorrido-em` = instante do ato (efetivado_em, RETURNING) semeia o gate do SLI.
+  (agendar-sessao! [this ente-id m]
+    (transacao this ente-id
+      (fn [tx]
+        (let [r (sessao/agendar! tx (assoc m :ente-id ente-id))]
+          (producers/emitir-sessao-agendada! bus tx ente-id
+            {:sessao-id (:id m) :agendada-para (some-> (:agendada-para m) str) :ocorrido-em (str (:ocorrido-em r))})
+          r))))
   ;; §22.6 eixo G — compoe o ato + a emissao do evento de tempo real na MESMA tx (atomicidade §22.9 E2).
   (transicionar-sessao! [this ente-id m]
     (transacao this ente-id

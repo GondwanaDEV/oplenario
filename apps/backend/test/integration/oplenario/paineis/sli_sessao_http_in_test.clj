@@ -43,6 +43,7 @@
 
 (defn- sessao-encerrada []
   {:sessao-id (random-uuid) :estado-atual "encerrada"
+   :agendada-para (Instant/parse "2026-07-01T13:00:00Z")
    :aberta-em (Instant/parse "2026-07-01T13:00:00Z")
    :encerrada-em (Instant/parse "2026-07-01T15:30:00Z")})   ; 2h30 = 9000s
 
@@ -61,6 +62,7 @@
     (let [s (first (:sessoes body))]
       (is (= "realizada" (:situacao s)) "encerrada -> situacao derivada 'realizada'")
       (is (= 9000 (:duracao-segundos s)) "janela fechada em segundos (2h30)")
+      (is (= "2026-07-01T13:00:00Z" (:agendada-para s)) "agendada-para exposto no wire (p/ o FE derivar no-show)")
       (is (string? (:sessao-id s)) "sessao-id como string")
       (is (not (contains? s :ente-id)) "ente-id (tenant) nao vaza"))))
 

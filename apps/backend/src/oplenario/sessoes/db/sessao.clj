@@ -21,24 +21,28 @@
 (defn agendar!
   "Agenda uma sessao: numera gapless (escopo por sessao legislativa+tipo), resolve capabilities (default do
   tipo + `override` parcial) e insere 'agendada'. `sessao-legislativa-id` = forward-ref a cadastros (sem FK).
-  Devolve {:id :numero}. Valida tipo/modalidade (fail-closed)."
+  Devolve {:id :numero :ocorrido-em} — `ocorrido-em` (F7 E3, RETURNING de `efetivado_em`, o instante do ato de
+  agendar) e' o que o evento sessao.agendada carrega p/ semear `transicionou_em` do SLI (sempre <= qualquer
+  transicao futura -> o gate de monotonicidade absorve a ordem). Valida tipo/modalidade (fail-closed)."
   [tx {:keys [id ente-id sessao-legislativa-id tipo-sessao modalidade agendada-para
               capabilities-override created-by]}]
   (logic/validar-tipo tipo-sessao)
   (logic/validar-modalidade modalidade)
   (let [num  (sequencial/proximo! tx (logic/escopo-numeracao sessao-legislativa-id tipo-sessao))
-        caps (logic/resolver-capabilities tipo-sessao (or capabilities-override {}))]
-    (jdbc/execute-one! tx
-      (sql/format {:insert-into :sessoes.sessao
-                   :values [{:id id :ente_id ente-id :sessao_legislativa_id sessao-legislativa-id
-                             :tipo_sessao tipo-sessao :numero_sequencial num :estado "agendada"
-                             :modalidade (or modalidade "presencial")
-                             :delibera (:delibera caps) :transmite_publica (:transmite-publica caps)
-                             :gera_ata_regimental (:gera-ata-regimental caps)
-                             :permite_voto_secreto (:permite-voto-secreto caps)
-                             :permite_modalidade_remota (:permite-modalidade-remota caps)
-                             :agendada_para agendada-para :created_by created-by :efetivado_em [:now]}]}))
-    {:id id :numero num}))
+        caps (logic/resolver-capabilities tipo-sessao (or capabilities-override {}))
+        row  (comum/linha->kebab
+              (jdbc/execute-one! tx
+                (sql/format {:insert-into :sessoes.sessao
+                             :values [{:id id :ente_id ente-id :sessao_legislativa_id sessao-legislativa-id
+                                       :tipo_sessao tipo-sessao :numero_sequencial num :estado "agendada"
+                                       :modalidade (or modalidade "presencial")
+                                       :delibera (:delibera caps) :transmite_publica (:transmite-publica caps)
+                                       :gera_ata_regimental (:gera-ata-regimental caps)
+                                       :permite_voto_secreto (:permite-voto-secreto caps)
+                                       :permite_modalidade_remota (:permite-modalidade-remota caps)
+                                       :agendada_para agendada-para :created_by created-by :efetivado_em [:now]}]
+                             :returning [:efetivado_em]})))]
+    {:id id :numero num :ocorrido-em (:efetivado-em row)}))
 
 (defn buscar [tx ente-id id]
   (comum/linha->kebab

@@ -44,6 +44,7 @@
   {:sessao-id (->str (:sessao-id s))
    :estado-atual (:estado-atual s)
    :situacao (situacao (:estado-atual s))
+   :agendada-para (->str (:agendada-para s))
    :aberta-em (->str (:aberta-em s))
    :encerrada-em (->str (:encerrada-em s))
    :duracao-segundos (duracao-segundos (:aberta-em s) (:encerrada-em s))})

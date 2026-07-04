@@ -140,6 +140,13 @@
     (db-sli-sessao/projetar-transicao! tx {:ente-id ente-id :sessao-id (UUID/fromString (:sessao-id payload))
                                            :para (:para payload) :ocorrido-em (Instant/parse (:ocorrido-em payload))})
 
+    ;; F7 E3 (carry): o NASCIMENTO da sessao (`sessao.agendada`) materializa a linha ja' no agendamento, p/ o
+    ;; SLI enxergar o no-show silencioso. `:agendada-para` opcional (some-> tolera nil). Mesmo UPSERT/gate.
+    "sessao.agendada"
+    (db-sli-sessao/projetar-agendamento! tx {:ente-id ente-id :sessao-id (UUID/fromString (:sessao-id payload))
+                                             :agendada-para (some-> (:agendada-para payload) Instant/parse)
+                                             :ocorrido-em (Instant/parse (:ocorrido-em payload))})
+
     ;; F7 E2: materializa o INTENT de entrega (estado 'pendente') a partir do fan-out de transparencia. NADA
     ;; e' enviado aqui (anti dual-write — ver db.notificacao-entrega); o worker (entregar-pendentes!) envia
     ;; depois. `objeto-id` chega STRING (jsonb) -> UUID; `destinatario` fica STRING (identidade-uuid como texto,

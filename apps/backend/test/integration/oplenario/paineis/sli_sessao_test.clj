@@ -38,8 +38,50 @@
                (eventos/evento "sessao.transicionou" ente
                  {:sessao-id (str sid) :de de :para para :ocorrido-em ocorrido-em})))))
 
+(defn- emitir-agendamento! [ente sid agendada-para ocorrido-em]
+  (tenancy/com-tenant* *ds* ente
+    (fn [tx] (eventos/emitir! (outbox/bus) tx
+               (eventos/evento "sessao.agendada" ente
+                 {:sessao-id (str sid) :agendada-para agendada-para :ocorrido-em ocorrido-em})))))
+
 (defn- sli-de [ente sid]
   (first (filter #(= sid (:sessao-id %)) (repo/sli-sessoes *repo* ente))))
+
+;; ---------- F7 E3 carry: o agendamento materializa a linha JA' no nascimento (no-show visivel) ----------
+
+(deftest agendamento-materializa-linha-agendada
+  (let [ente (random-uuid) sid (random-uuid)]
+    (emitir-agendamento! ente sid "2026-07-08T13:00:00Z" "2026-07-01T10:00:00Z")
+    (drena-eventos!)
+    (let [s (sli-de ente sid)]
+      (is (some? s) "a sessao aparece no SLI JA' no agendamento (fecha a cegueira ao no-show)")
+      (is (= "agendada" (:estado-atual s)))
+      (is (= (Instant/parse "2026-07-08T13:00:00Z") (:agendada-para s)) "carimba agendada_para (p/ detectar no-show)")
+      (is (nil? (:aberta-em s)) "nunca abriu ainda")
+      (is (nil? (:encerrada-em s)) "nem encerrou"))))
+
+(deftest agendamento-depois-abertura-preserva-agendada-para
+  (let [ente (random-uuid) sid (random-uuid)]
+    (emitir-agendamento! ente sid "2026-07-08T13:00:00Z" "2026-07-01T10:00:00Z")
+    (drena-eventos!)
+    (emitir-transicao! ente sid "agendada" "aberta" "2026-07-08T13:05:00Z")
+    (drena-eventos!)
+    (let [s (sli-de ente sid)]
+      (is (= "aberta" (:estado-atual s)) "a abertura move o estado")
+      (is (= (Instant/parse "2026-07-08T13:00:00Z") (:agendada-para s))
+          "agendada_para PRESERVADO pela transicao (nao esta' no SET de projetar-transicao!)")
+      (is (= (Instant/parse "2026-07-08T13:05:00Z") (:aberta-em s)) "aberta_em carimbado na abertura"))))
+
+(deftest transicao-antes-do-agendamento-nao-retrocede
+  ;; reordenacao rara (redrive fora de ordem): a transicao chega ANTES do agendamento. A linha ja' esta' aberta
+  ;; (transicionou_em maior) -> o agendamento (instante do ato, anterior) e' no-op pelo gate; estado nao retrocede.
+  (let [ente (random-uuid) sid (random-uuid)]
+    (emitir-transicao! ente sid "agendada" "aberta" "2026-07-08T13:05:00Z")
+    (drena-eventos!)
+    (emitir-agendamento! ente sid "2026-07-08T13:00:00Z" "2026-07-01T10:00:00Z")
+    (drena-eventos!)
+    (let [s (sli-de ente sid)]
+      (is (= "aberta" (:estado-atual s)) "o agendamento fora de ordem NAO retrocedeu o estado p/ agendada"))))
 
 ;; ---------- 1a transicao (agendada->aberta) INSERE a linha, carimba aberta_em ----------
 

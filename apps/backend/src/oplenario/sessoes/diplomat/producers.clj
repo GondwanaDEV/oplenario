@@ -10,6 +10,9 @@
             [oplenario.sessoes.events.sessao :as ev-sessao]
             [oplenario.sessoes.events.tribuna :as ev-tribuna]))
 
+(defn emitir-sessao-agendada! [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-sessao/agendada ente-id payload)))
+
 (defn emitir-sessao-transicionou! [bus tx ente-id payload]
   (eventos/emitir! bus tx (ev-sessao/transicionou ente-id payload)))
 

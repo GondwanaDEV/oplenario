@@ -14,6 +14,9 @@
    ;; estado_atual CRU se `sessoes` introduzir um estado novo (fallback deliberado do adapters/out) — NAO
    ;; tratar como enum fechado no consumidor (o switch do FE precisa de um caso default; review clojure MEDIUM).
    [:situacao :string]
+   ;; agendada-para: quando a sessao esta' marcada (do agendamento); o FE deriva o no-show comparando com 'agora'
+   ;; (servidor puro, nao carimba 'atrasada' — mesma disciplina de duracao viva). Nil se nao houver data cravada.
+   [:agendada-para {:optional true} [:maybe :string]]
    [:aberta-em    {:optional true} [:maybe :string]]
    [:encerrada-em {:optional true} [:maybe :string]]
    [:duracao-segundos {:optional true} [:maybe :int]]])

@@ -17,7 +17,7 @@
 (set! *warn-on-reflection* true)
 
 (def ^:private cols
-  [:sessao_id :estado_atual :aberta_em :encerrada_em :transicionou_em])
+  [:sessao_id :estado_atual :agendada_para :aberta_em :encerrada_em :transicionou_em])
 
 (def ^:private teto-sli-absoluto
   "Ceiling absoluto do read (defesa-em-profundidade — `listar-sli-sessoes` recebe `limite` do Repo, mas nunca
@@ -72,6 +72,27 @@
                                             :aberta_em    [:coalesce :sli_sessao.aberta_em :excluded.aberta_em]
                                             :encerrada_em [:coalesce :excluded.encerrada_em :sli_sessao.encerrada_em]}
                                    :where [:<= :sli_sessao.transicionou_em :excluded.transicionou_em]}}))))
+
+(defn projetar-agendamento!
+  "UPSERT do NASCIMENTO da sessao (`sessao.agendada`, F7 E3 carry) na vista de SLI — materializa a linha JA' no
+  agendamento (estado 'agendada', aberta_em/encerrada_em NULL), carimbando `agendada_para` (p/ o painel detectar
+  o no-show: agendada, ja' passou, nunca abriu). `ocorrido-em` = instante do ATO de agendar (efetivado_em),
+  sempre <= transicoes futuras -> o gate de monotonicidade absorve a ordem. Se a 1a transicao ja' chegou
+  (reordenacao rara), a linha ja' tem transicionou_em MAIOR -> este agendamento e' no-op e `agendada_para` fica
+  NULL (mesmo artefato best-effort ja' documentado em projetar-transicao!). `agendada_para` via COALESCE
+  excluded-primeiro; as transicoes seguintes NAO tocam `agendada_para` (nao esta' no SET de projetar-transicao!)
+  -> preservado atraves de abertura/encerramento."
+  [tx {:keys [ente-id sessao-id agendada-para ocorrido-em]}]
+  {:pre [(some? ente-id) (some? sessao-id) (some? ocorrido-em)]}
+  (jdbc/execute-one! tx
+    (sql/format {:insert-into :paineis.sli_sessao
+                 :values [{:ente_id ente-id :sessao_id sessao-id :estado_atual "agendada"
+                           :transicionou_em ocorrido-em :agendada_para agendada-para}]
+                 :on-conflict [:ente_id :sessao_id]
+                 :do-update-set {:fields {:estado_atual    :excluded.estado_atual
+                                          :transicionou_em :excluded.transicionou_em
+                                          :agendada_para   [:coalesce :excluded.agendada_para :sli_sessao.agendada_para]}
+                                 :where [:<= :sli_sessao.transicionou_em :excluded.transicionou_em]}})))
 
 (defn listar-sli-sessoes
   "O SLI de janela de sessao (Inv.9) do tenant: TODAS as sessoes vistas, ABERTAS primeiro (encerrada_em IS

@@ -5,6 +5,24 @@
   G): o canal `sessao/{id}/plenario` reage a abertura/suspensao/encerramento."
   (:require [oplenario.kernel.eventos :as eventos]))
 
+(def agendada-tipo "sessao.agendada")
+
+(def AgendadaPayload
+  "Nascimento da sessao (F7 E3 carry): `agendar!` cria a sessao em 'agendada' e AGORA emite este evento p/ o SLI
+  de janela de sessao (paineis) materializar a linha JA' no agendamento — sem ele, o SLI so' via a sessao a
+  partir da 1a transicao, cego ao no-show 100% silencioso (agendada que nunca sequer foi tocada), que e' o
+  headline failure do proprio Inv.9. `agendada-para` = quando a sessao esta marcada (p/ o painel dizer 'a de
+  quarta nao aconteceu'; opcional — nem toda sessao tem data cravada). `ocorrido-em` = instante do ATO de
+  agendar (`efetivado_em`, RETURNING) — semeia `transicionou_em` do SLI, sempre <= qualquer transicao futura
+  (o gate de monotonicidade absorve a ordem). Instantes viajam como STRING ISO (jsonista nao serializa Instant)."
+  [:map {:closed true}
+   [:sessao-id :uuid]
+   [:agendada-para {:optional true} [:maybe :string]]
+   [:ocorrido-em :string]])
+
+(defn agendada [ente-id payload]
+  (eventos/evento-validado AgendadaPayload agendada-tipo ente-id payload))
+
 (def transicionou-tipo "sessao.transicionou")
 
 (def TransicionouPayload
