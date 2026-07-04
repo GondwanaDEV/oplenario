@@ -15,11 +15,10 @@
 (set! *warn-on-reflection* true)
 
 (def ^:private lacunas-conhecidas
-  "Facetas do dashboard institucional da Mesa (§16.11 item 11.4) ainda NAO materializadas como projecao no
-  paineis — expostas honestamente p/ o FE rotular a vitrine sem sugerir cobertura inexistente (mesma
-  disciplina dos [GAP] infra de F7 E3). Presenca agregada mora em `sessoes` (F4) e engajamento cidadao em
-  `participacao`/`transparencia`; nenhum e' projetado aqui ainda (escopo diferido por default, §15)."
-  ["presenca_agregada" "engajamento_cidadao"])
+  "Facetas do dashboard institucional da Mesa (§16.11 item 11.4) que EXIGEM nova modelagem de dominio
+  (nao materializaveis por query barata) — expostas honestamente p/ o FE rotular sem sugerir cobertura
+  inexistente. presenca_agregada/engajamento_cidadao SAIRAM desta lista na FE Onda A1 (materializados)."
+  ["ciencia_convocacao" "assinatura_autografo" "incidente_grant_lgpd"])
 
 (defn- tramitacao->wire
   "Rollup 'proposicoes por status': linhas {:estado :n} (GROUP BY estado) -> {:total :por-estado}. `total` =
@@ -53,14 +52,15 @@
      :por-situacao (mapv (fn [s] {:situacao s :n (get buckets s)}) (situacao/ordenar (keys buckets)))}))
 
 (defn mesa->wire
-  "Rollups internos + card de compliance (opaco) -> MesaOut (validada). `rollups` = {:tramitacao :pendencias
-  :sessoes} (cada um uma seq de linhas GROUP BY, kebab); `compliance-card` = o PainelOut de compliance ja'
-  projetado (mapa) — embutido verbatim."
-  [rollups compliance-card]
+  "Rollups internos + os 4 cards opacos (compliance/presenca/esic/relatores) -> MesaOut (validada)."
+  [rollups compliance-card presenca-card esic-card relatores-card]
   (let [out {:compliance-tce compliance-card
              :tramitacao (tramitacao->wire (:tramitacao rollups))
              :pendencias (pendencias->wire (:pendencias rollups))
              :sessoes    (sessoes->wire (:sessoes rollups))
+             :presenca-resumo presenca-card
+             :esic-cumprimento esic-card
+             :relatores-pendentes relatores-card
              :lacunas    lacunas-conhecidas}]
     (when-not (m/validate wire/MesaOut out)
       (throw (ex-info "projecao do dashboard da Mesa viola o contrato MesaOut (bug de servidor)"

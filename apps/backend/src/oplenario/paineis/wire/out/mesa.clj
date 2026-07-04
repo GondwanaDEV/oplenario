@@ -38,11 +38,43 @@
    [:nao-realizadas :int]
    [:por-situacao [:sequential [:map {:closed true} [:situacao :string] [:n :int]]]]])
 
+(def PresencaResumoOut
+  "Espelha oplenario.sessoes.wire.out/PresencaResumoOut — reexportado aqui p/ o codegen gerar o campo
+  tipado (paineis nao importa sessoes; a IGUALDADE ESTRUTURAL do schema e' o que o codegen casa por
+  referencia, nao um import Clojure)."
+  [:map {:closed true}
+   [:media-percentual [:maybe :int]]
+   [:sessoes-consideradas :int]
+   [:membros-da-casa :int]])
+
+(def EsicCumprimentoOut
+  "Espelha oplenario.participacao.wire.out.esic-cumprimento/EsicCumprimentoOut."
+  [:map {:closed true}
+   [:total-encerrados :int]
+   [:cumpridos-no-prazo :int]
+   [:percentual [:maybe :int]]])
+
+(def RelatorPendenteOut
+  "Espelha oplenario.legislativo.wire.out.relator-pendente/RelatorPendenteOut."
+  [:map {:closed true}
+   [:id :string]
+   [:proposicao-id :string]
+   [:tipo :string]
+   [:ano :int]
+   [:sequencial :int]
+   [:urn-lex :string]
+   [:ementa :string]
+   [:criado-em :string]])
+
+(def RelatoresPendentesOut
+  [:map {:closed true}
+   [:itens [:sequential RelatorPendenteOut]]])
+
 (def MesaOut
   "O dashboard institucional da Mesa (resposta de GET /paineis/mesa, §16.11 item 11.4): o card de compliance
-  do TCE (opaco, do modulo compliance) + os tres rollups que o paineis compoe dos seus proprios read-models +
-  `lacunas` (facetas do §16.11 ainda nao materializadas — presenca agregada, engajamento cidadao — expostas
-  HONESTAMENTE p/ o FE nao sugerir cobertura que nao existe)."
+  do TCE (opaco) + os tres rollups do paineis + os 3 cards novos da FE Onda A1 (presenca-resumo/
+  esic-cumprimento/relatores-pendentes, cada um embutido opaco — mesmo racional de compliance-tce, cada
+  fonte E' o dono, paineis nao redeclara/reprojeta) + `lacunas` (so' o que genuinamente falta ainda)."
   [:map {:closed true}
    ;; :compliance-tce e' um mapa ABERTO de proposito: OU o PainelOut de compliance (embutido opaco — paineis
    ;; nao redeclara a forma de outro modulo, §22.10) OU o sentinel {:indisponivel true} quando a leitura
@@ -51,4 +83,7 @@
    [:tramitacao TramitacaoResumoOut]
    [:pendencias PendenciasResumoOut]
    [:sessoes SessoesResumoOut]
+   [:presenca-resumo PresencaResumoOut]
+   [:esic-cumprimento EsicCumprimentoOut]
+   [:relatores-pendentes RelatoresPendentesOut]
    [:lacunas [:sequential :string]]])

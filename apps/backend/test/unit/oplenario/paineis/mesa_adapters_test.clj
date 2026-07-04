@@ -1,7 +1,8 @@
 (ns oplenario.paineis.mesa-adapters-test
-  "UNIT (puro, sem DB) — F7 dashboard da Mesa: o gate adapters/out (rollups crus + card de compliance ->
-  MesaOut). Prova a derivacao das contagens (por-estado/situacao + manchetes), o embed OPACO do card de
-  compliance (verbatim, sem reprojecao), as lacunas honestas e a validacao de contrato (drift -> lanca)."
+  "UNIT (puro, sem DB) — F7 dashboard da Mesa: o gate adapters/out (rollups crus + os 4 cards opacos ->
+  MesaOut). Prova a derivacao das contagens (por-estado/situacao + manchetes), o embed OPACO de cada card
+  (compliance/presenca/esic/relatores, verbatim, sem reprojecao), as lacunas honestas (so' o que
+  genuinamente falta) e a validacao de contrato (drift -> lanca)."
   (:require [clojure.test :refer [deftest is]]
             [malli.core :as m]
             [oplenario.paineis.adapters.out.mesa :as mesa]
@@ -20,23 +21,27 @@
    :sessoes    [{:estado-atual "aberta" :n 1} {:estado-atual "encerrada" :n 8}
                 {:estado-atual "arquivada" :n 3} {:estado-atual "nao_realizada" :n 2}]})
 
+(def ^:private presenca-fake {:media-percentual 78 :sessoes-consideradas 10 :membros-da-casa 43})
+(def ^:private esic-fake {:total-encerrados 49 :cumpridos-no-prazo 47 :percentual 96})
+(def ^:private relatores-fake {:itens []})
+
 (deftest mesa-compoe-e-valida-o-contrato
-  (let [out (mesa/mesa->wire (rollups-fake) card-compliance-fake)]
+  (let [out (mesa/mesa->wire (rollups-fake) card-compliance-fake presenca-fake esic-fake relatores-fake)]
     (is (m/validate wire/MesaOut out) "a projecao satisfaz MesaOut")))
 
 (deftest tramitacao-rollup-total-e-por-estado
-  (let [{:keys [tramitacao]} (mesa/mesa->wire (rollups-fake) card-compliance-fake)]
+  (let [{:keys [tramitacao]} (mesa/mesa->wire (rollups-fake) card-compliance-fake presenca-fake esic-fake relatores-fake)]
     (is (= 7 (:total tramitacao)) "total = soma das contagens (5+2)")
     (is (= [{:estado "em_comissao" :n 5} {:estado "protocolada" :n 2}] (:por-estado tramitacao)))))
 
 (deftest pendencias-rollup-so-fases-abertas-no-manchete
-  (let [{:keys [pendencias]} (mesa/mesa->wire (rollups-fake) card-compliance-fake)]
+  (let [{:keys [pendencias]} (mesa/mesa->wire (rollups-fake) card-compliance-fake presenca-fake esic-fake relatores-fake)]
     (is (= 4 (:pendentes pendencias)))
     (is (= 1 (:vencidas pendencias)))
     (is (= 5 (:abertas pendencias)) "abertas = pendentes + vencidas (concluido nao entra)")))
 
 (deftest sessoes-rollup-deriva-situacao-e-acumula
-  (let [{:keys [sessoes]} (mesa/mesa->wire (rollups-fake) card-compliance-fake)
+  (let [{:keys [sessoes]} (mesa/mesa->wire (rollups-fake) card-compliance-fake presenca-fake esic-fake relatores-fake)
         por-sit (into {} (map (juxt :situacao :n) (:por-situacao sessoes)))]
     (is (= 1 (:em-curso sessoes)) "'aberta' -> em_curso")
     (is (= 2 (:nao-realizadas sessoes)) "no-show e' o sinal de SLI (Inv.9)")
@@ -44,18 +49,12 @@
     (is (= 1 (get por-sit "em_curso")))))
 
 (deftest card-de-compliance-embutido-opaco-verbatim
-  (let [out (mesa/mesa->wire (rollups-fake) card-compliance-fake)]
+  (let [out (mesa/mesa->wire (rollups-fake) card-compliance-fake presenca-fake esic-fake relatores-fake)]
     (is (= card-compliance-fake (:compliance-tce out))
         "o card de compliance entra e sai identico (embed opaco, nunca reprojetado)")))
 
-(deftest lacunas-honestas-presentes
-  (let [{:keys [lacunas]} (mesa/mesa->wire (rollups-fake) card-compliance-fake)]
-    (is (contains? (set lacunas) "presenca_agregada"))
-    (is (contains? (set lacunas) "engajamento_cidadao")
-        "facetas ainda nao materializadas expostas p/ o FE rotular com honestidade")))
-
 (deftest tenant-vazio-projeta-zeros
-  (let [out (mesa/mesa->wire {:tramitacao [] :pendencias [] :sessoes []} card-compliance-fake)]
+  (let [out (mesa/mesa->wire {:tramitacao [] :pendencias [] :sessoes []} card-compliance-fake presenca-fake esic-fake relatores-fake)]
     (is (m/validate wire/MesaOut out))
     (is (= 0 (get-in out [:tramitacao :total])))
     (is (= 0 (get-in out [:pendencias :abertas])))
@@ -64,4 +63,16 @@
 
 (deftest drift-de-contrato-lanca
   ;; um card nao-mapa viola MesaOut (:compliance-tce :map) -> adapters/out lanca (nunca corpo malformado).
-  (is (thrown? clojure.lang.ExceptionInfo (mesa/mesa->wire {:tramitacao [] :pendencias [] :sessoes []} "nao-mapa"))))
+  (is (thrown? clojure.lang.ExceptionInfo
+               (mesa/mesa->wire {:tramitacao [] :pendencias [] :sessoes []} "nao-mapa" presenca-fake esic-fake relatores-fake))))
+
+(deftest cards-novos-embutidos-opacos-verbatim
+  (let [out (mesa/mesa->wire (rollups-fake) card-compliance-fake presenca-fake esic-fake relatores-fake)]
+    (is (= presenca-fake (:presenca-resumo out)))
+    (is (= esic-fake (:esic-cumprimento out)))
+    (is (= relatores-fake (:relatores-pendentes out)))))
+
+(deftest lacunas-so-lista-o-que-genuinamente-falta
+  (let [{:keys [lacunas]} (mesa/mesa->wire (rollups-fake) card-compliance-fake presenca-fake esic-fake relatores-fake)]
+    (is (= #{"ciencia_convocacao" "assinatura_autografo" "incidente_grant_lgpd"} (set lacunas))
+        "presenca_agregada/engajamento_cidadao SAIRAM da lista (agora materializados)")))
