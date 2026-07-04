@@ -54,8 +54,9 @@ async function buscarOuNull<T>(url: string, token: string): Promise<T | null> {
 // 3 dos cards de MesaOut (presencaResumo/esicCumprimento/relatoresPendentes) são tipados como unions com
 // CardIndisponivelOut — o sentinel que o backend emite quando a leitura cross-módulo daquele card falha
 // (§16.11). Precisamos distinguir o sentinel do card real antes de acessar campos que só existem no card
-// real; um type guard estrutural (em vez de `as`) mantém isso seguro mesmo se o shape mudar.
-function ehCardIndisponivel(card: unknown): card is CardIndisponivelOut {
+// real; um type guard estrutural (em vez de `as`) mantém isso seguro mesmo se o shape mudar. Exportado
+// para reuso em mesa-vista.ts (mesmo card sentinel reaparece em presencaResumo/esicCumprimento lá).
+export function ehCardIndisponivel(card: unknown): card is CardIndisponivelOut {
   return typeof card === "object" && card !== null && "indisponivel" in card;
 }
 
