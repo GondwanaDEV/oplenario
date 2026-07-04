@@ -21,24 +21,28 @@
 (defn agendar!
   "Agenda uma sessao: numera gapless (escopo por sessao legislativa+tipo), resolve capabilities (default do
   tipo + `override` parcial) e insere 'agendada'. `sessao-legislativa-id` = forward-ref a cadastros (sem FK).
-  Devolve {:id :numero}. Valida tipo/modalidade (fail-closed)."
+  Devolve {:id :numero :ocorrido-em} — `ocorrido-em` (F7 E3, RETURNING de `efetivado_em`, o instante do ato de
+  agendar) e' o que o evento sessao.agendada carrega p/ semear `transicionou_em` do SLI (sempre <= qualquer
+  transicao futura -> o gate de monotonicidade absorve a ordem). Valida tipo/modalidade (fail-closed)."
   [tx {:keys [id ente-id sessao-legislativa-id tipo-sessao modalidade agendada-para
               capabilities-override created-by]}]
   (logic/validar-tipo tipo-sessao)
   (logic/validar-modalidade modalidade)
   (let [num  (sequencial/proximo! tx (logic/escopo-numeracao sessao-legislativa-id tipo-sessao))
-        caps (logic/resolver-capabilities tipo-sessao (or capabilities-override {}))]
-    (jdbc/execute-one! tx
-      (sql/format {:insert-into :sessoes.sessao
-                   :values [{:id id :ente_id ente-id :sessao_legislativa_id sessao-legislativa-id
-                             :tipo_sessao tipo-sessao :numero_sequencial num :estado "agendada"
-                             :modalidade (or modalidade "presencial")
-                             :delibera (:delibera caps) :transmite_publica (:transmite-publica caps)
-                             :gera_ata_regimental (:gera-ata-regimental caps)
-                             :permite_voto_secreto (:permite-voto-secreto caps)
-                             :permite_modalidade_remota (:permite-modalidade-remota caps)
-                             :agendada_para agendada-para :created_by created-by :efetivado_em [:now]}]}))
-    {:id id :numero num}))
+        caps (logic/resolver-capabilities tipo-sessao (or capabilities-override {}))
+        row  (comum/linha->kebab
+              (jdbc/execute-one! tx
+                (sql/format {:insert-into :sessoes.sessao
+                             :values [{:id id :ente_id ente-id :sessao_legislativa_id sessao-legislativa-id
+                                       :tipo_sessao tipo-sessao :numero_sequencial num :estado "agendada"
+                                       :modalidade (or modalidade "presencial")
+                                       :delibera (:delibera caps) :transmite_publica (:transmite-publica caps)
+                                       :gera_ata_regimental (:gera-ata-regimental caps)
+                                       :permite_voto_secreto (:permite-voto-secreto caps)
+                                       :permite_modalidade_remota (:permite-modalidade-remota caps)
+                                       :agendada_para agendada-para :created_by created-by :efetivado_em [:now]}]
+                             :returning [:efetivado_em]})))]
+    {:id id :numero num :ocorrido-em (:efetivado-em row)}))
 
 (defn buscar [tx ente-id id]
   (comum/linha->kebab
@@ -63,7 +67,13 @@
   "Move o estado da sessao para `para` (maquina logic/transicao-valida?, fail-closed) com CAS por lock_version.
   Carimba o marco temporal do alvo: aberta -> aberta_em (so na 1a abertura); encerrada/nao_realizada ->
   encerrada_em; nao_realizada exige `motivo`. Lanca em transicao invalida, conflito de lock ou inexistente.
-  Devolve {:de :para}."
+  Devolve {:de :para :ocorrido-em} — `ocorrido-em` (F7 E3, RETURNING de `atualizado_em`) e' o instante REAL
+  da transicao no dominio, que o evento sessao.transicionou carrega p/ o SLI de janela de sessao (paineis)
+  carimbar a janela DAQUI, nao do momento em que projeta. CARRY (mesmo do legislativo): `atualizado_em` usa
+  o DEFAULT `[:now]`, que em Postgres congela no INICIO da tx — sob concorrencia real na MESMA sessao a
+  ordem numerica pode divergir da causal; a verdade canonica (`sessoes.sessao.estado`, via CAS de
+  lock_version) NUNCA e' afetada, so' a VISTA best-effort do SLI. Fix definitivo (`clock_timestamp()`) e'
+  decisao maior, fora do escopo desta fatia."
   [tx {:keys [id ente-id para motivo updated-by lock-version]}]
   (let [{:keys [estado aberta-em] db-lock :lock-version} (estado+lock tx ente-id id)]
     (when (nil? estado)
@@ -85,10 +95,13 @@
                  (and (= "aberta" para) (nil? aberta-em)) (assoc :aberta_em [:now])
                  (contains? #{"encerrada" "nao_realizada"} para) (assoc :encerrada_em [:now])
                  (= "nao_realizada" para) (assoc :motivo_nao_realizada motivo))
-          r (jdbc/execute-one! tx
-              (sql/format {:update :sessoes.sessao :set sets
-                           :where [:and [:= :ente_id ente-id] [:= :id id] [:= :lock_version lock-version]]}))]
-      (when (zero? (:next.jdbc/update-count r 0))
+          r (comum/linha->kebab
+              (jdbc/execute-one! tx
+                (sql/format {:update :sessoes.sessao :set sets
+                             :where [:and [:= :ente_id ente-id] [:= :id id] [:= :lock_version lock-version]]
+                             :returning [:atualizado_em]})))]
+      ;; com RETURNING, execute-one! devolve a LINHA (ou nil se 0 linhas casaram o WHERE) — nil = conflito.
+      (when (nil? r)
         (throw (ex-info "transicionar!: conflito de lock_version ou sessao inexistente"
                         {:tipo :conflito/transicao :id id :lock-version lock-version})))
-      {:de estado :para para})))
+      {:de estado :para para :ocorrido-em (:atualizado-em r)})))

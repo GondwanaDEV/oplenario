@@ -36,6 +36,22 @@
 (def ^:private t0 (java.time.Instant/parse "2026-06-29T14:00:00Z"))
 (defn- mais [^java.time.Instant t s] (.plusSeconds t s))
 
+;; ---------- sessao.agendada (F7 E3 carry: nascimento da sessao, p/ o SLI enxergar o no-show) ----------
+
+(deftest agendamento-de-sessao-emite-evento
+  (let [ente (random-uuid)
+        agendada-para (java.time.Instant/parse "2026-07-08T13:00:00Z")
+        sid  (:id (repo/agendar-sessao! *repo* ente {:id (random-uuid) :sessao-legislativa-id (random-uuid)
+                                                     :tipo-sessao "ordinaria" :modalidade "presencial"
+                                                     :agendada-para agendada-para}))]
+    (let [evs (eventos-por-tipo ente "sessao.agendada")]
+      (is (= 1 (count evs)) "agendar emite exatamente 1 sessao.agendada")
+      (let [pl (:payload (first evs))]
+        (is (re-find (re-pattern (str sid)) pl) "payload carrega a sessao-id")
+        (is (re-find #"2026-07-08T13:00:00Z" pl) "carrega agendada-para (ISO)")
+        (is (re-find #"\"ocorrido-em\":\s*\"20\d\d-\d\d-\d\dT" pl)
+            "carrega ocorrido-em (instante do ato, RETURNING de efetivado_em) — semeia o gate do SLI")))))
+
 ;; ---------- sessao.transicionou ----------
 
 (deftest transicao-de-sessao-emite-evento
@@ -48,7 +64,12 @@
       (let [pl (:payload (first evs))]
         (is (re-find #"agendada" pl) "payload carrega o estado de origem")
         (is (re-find #"aberta" pl) "payload carrega o estado de destino")
-        (is (re-find (re-pattern (str sid)) pl) "payload carrega a sessao-id")))))
+        (is (re-find (re-pattern (str sid)) pl) "payload carrega a sessao-id")
+        ;; F7 E3 (SLI de sessao): o payload carrega o INSTANTE REAL da transicao no dominio (:ocorrido-em,
+        ;; RETURNING de atualizado_em) — nao o momento em que paineis.sli_sessao eventualmente PROJETA o
+        ;; evento (mirror do carry fechado em legislativo, a5a5532). Sem isto, o SLI de janela de sessao
+        ;; carimbaria aberta_em/encerrada_em com o tempo de PROCESSAMENTO, mentindo sob atraso do relay.
+        (is (re-find #"\"ocorrido-em\":\s*\"20\d\d-\d\d-\d\dT" pl) "carrega ocorrido-em como ISO-8601 string")))))
 
 ;; ---------- presenca.registrada ----------
 

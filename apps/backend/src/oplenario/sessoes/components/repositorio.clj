@@ -74,7 +74,16 @@
 (defrecord RepoSessoesPg [datasource bus]
   RepoSessoes
   (transacao [_ ente-id f] (tenancy/com-tenant* (:ds datasource) ente-id f))
-  (agendar-sessao! [this ente-id m] (transacao this ente-id #(sessao/agendar! % (assoc m :ente-id ente-id))))
+  ;; §22.6 eixo G + F7 E3 — compoe o ato de agendar + a emissao de sessao.agendada na MESMA tx (§22.9 E2): o
+  ;; SLI de janela de sessao (paineis) materializa a linha ja' no nascimento da sessao, fechando a cegueira ao
+  ;; no-show silencioso. `ocorrido-em` = instante do ato (efetivado_em, RETURNING) semeia o gate do SLI.
+  (agendar-sessao! [this ente-id m]
+    (transacao this ente-id
+      (fn [tx]
+        (let [r (sessao/agendar! tx (assoc m :ente-id ente-id))]
+          (producers/emitir-sessao-agendada! bus tx ente-id
+            {:sessao-id (:id m) :agendada-para (some-> (:agendada-para m) str) :ocorrido-em (str (:ocorrido-em r))})
+          r))))
   ;; §22.6 eixo G — compoe o ato + a emissao do evento de tempo real na MESMA tx (atomicidade §22.9 E2).
   (transicionar-sessao! [this ente-id m]
     (transacao this ente-id
@@ -84,7 +93,10 @@
           ;; (a maquina hoje lanca em transicao invalida/redundante, mas o contrato fica explicito aqui).
           (when (not= (:de r) (:para r))
             (producers/emitir-sessao-transicionou! bus tx ente-id
-              (cond-> {:sessao-id (:id m) :de (:de r) :para (:para r)}
+              ;; :ocorrido-em (F7 E3): string ISO do Instant real da transicao (RETURNING de atualizado_em em
+              ;; db/sessao/transicionar!) — o SLI de janela de sessao carimba a janela DAQUI, nao do momento
+              ;; de projecao (mirror do legislativo/proposicao).
+              (cond-> {:sessao-id (:id m) :de (:de r) :para (:para r) :ocorrido-em (str (:ocorrido-em r))}
                 (:updated-by m) (assoc :ator-id (:updated-by m)))))
           r))))
   (buscar-sessao [this ente-id id] (transacao this ente-id #(sessao/buscar % ente-id id)))

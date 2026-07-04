@@ -226,8 +226,9 @@
 
 (defn agendar-sessao
   "Agenda a sessao a partir do mapa de dominio `m` (ja decodificado+validado pelo adapters/in no diplomat). O
-  Repo numera+resolve capabilities+insere atomico. Devolve o recibo de dominio {:id :numero}. A authz GROSSA
-  (papel 'secretario') ja foi exigida na rota; a sessao nova nao tem recurso pre-existente p/ camada fina."
+  Repo numera+resolve capabilities+insere atomico + emite sessao.agendada (F7 E3) na mesma tx. Devolve o recibo
+  de dominio {:id :numero :ocorrido-em} (o `:ocorrido-em` e' interno — o adapters/out expoe so' :id/:numero). A
+  authz GROSSA (papel 'secretario') ja foi exigida na rota; a sessao nova nao tem recurso pre-existente p/ camada fina."
   [repo-sessoes ator m]
   (repo/agendar-sessao! repo-sessoes (:ente-id ator) m))
 

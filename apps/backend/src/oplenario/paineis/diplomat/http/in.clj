@@ -7,6 +7,7 @@
   (:require [oplenario.http :as http]
             [oplenario.interceptors :as it]
             [oplenario.paineis.adapters.out.pendencia :as adapters-out-pendencia]
+            [oplenario.paineis.adapters.out.sli-sessao :as adapters-out-sli-sessao]
             [oplenario.paineis.adapters.out.tramitacao :as adapters-out-tramitacao]
             [oplenario.paineis.controllers :as controllers]))
 
@@ -26,6 +27,13 @@
     (http/json-resposta 200 (adapters-out-tramitacao/tramitacao-board->wire
                              (controllers/tramitacao-board repo-paineis (:ator req))))))
 
+(defn- sli-sessoes-handler
+  "GET /paineis/sli/sessoes. O controller le' o SLI do tenant do ator; adapters/out projeta+deriva+valida."
+  [repo-paineis]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out-sli-sessao/sli-sessoes->wire
+                             (controllers/sli-sessoes repo-paineis (:ator req))))))
+
 (defn rotas
   "Fragmento de rotas do modulo paineis (table syntax Pedestal). Recebe o interceptor `auth` (compartilhado)
   + o `repo-paineis` (Repo-Component) e devolve as rotas-dado. `oplenario.rotas` funde este fragmento ao
@@ -36,4 +44,6 @@
     #{["/paineis/pendencias" :get [auth papel (pendencias-handler repo-paineis)]
        :route-name :paineis/pendencias]
       ["/paineis/tramitacao" :get [auth papel (tramitacao-handler repo-paineis)]
-       :route-name :paineis/tramitacao]}))
+       :route-name :paineis/tramitacao]
+      ["/paineis/sli/sessoes" :get [auth papel (sli-sessoes-handler repo-paineis)]
+       :route-name :paineis/sli-sessoes]}))
