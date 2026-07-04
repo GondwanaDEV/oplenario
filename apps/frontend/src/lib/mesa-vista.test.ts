@@ -64,4 +64,25 @@ describe("derivarMesaVista", () => {
     expect(v.despachos.relator.estado).toBe("disponivel");
     expect(v.despachos.relator.itens).toHaveLength(1);
   });
+
+  it("oQueVence une compliance.emAberto + pendenciasItens e ordena por venceEm crescente", () => {
+    const mesaComEmAberto = {
+      ...mesaBase,
+      complianceTce: {
+        ...mesaBase.complianceTce,
+        emAberto: [{ id: "ob-1", templateChave: "remessa-mensal-pessoal", venceEm: "2026-08-01" }],
+      },
+    };
+    const pendenciasItens = [
+      { objetoTipo: "pedido_esic", objetoId: "p1", protocolo: "ESIC-1", venceEm: "2026-07-10", estado: "pendente" },
+    ];
+    const v = derivarMesaVista({
+      mesa: mesaComEmAberto, tramitacaoItens: [], pendenciasItens, sliSessoes: [], relatoresPendentes: [],
+    });
+    expect(v.oQueVence.estado).toBe("disponivel");
+    expect(v.oQueVence.itens).toHaveLength(2);
+    // pendencia (10/07) vence antes da obrigação de compliance (01/08) -> vem primeiro
+    expect(v.oQueVence.itens[0]).toMatchObject({ origem: "pendencia", venceEm: "2026-07-10" });
+    expect(v.oQueVence.itens[1]).toMatchObject({ origem: "compliance", venceEm: "2026-08-01" });
+  });
 });
