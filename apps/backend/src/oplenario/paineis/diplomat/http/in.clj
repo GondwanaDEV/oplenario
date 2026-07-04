@@ -39,10 +39,11 @@
 (def ^:private card-generico-indisponivel
   "Sentinela GENERICO de degradacao por card (review architect MAJOR: degradacao por CARD, nunca 500 da
   pagina inteira) — reusado pelos 4 cards cross-modulo do dashboard (compliance/presenca/esic/relatores),
-  todos seguindo a MESMA disciplina de tolerancia. E' um mapa aberto valido p/ o `:compliance-tce :map` do
-  MesaOut (aberto de proposito); os outros 3 cards sao tipados fechados no wire/out — a validacao do MesaOut
-  so' passa se a leitura daquele card TIVER sucedido (o sentinel so' e' valido sob `:compliance-tce`). O FE
-  distingue um card real do sentinel pela chave `:indisponivel` (que nenhum card real tem)."
+  todos seguindo a MESMA disciplina de tolerancia. `:compliance-tce` tolera QUALQUER mapa (tipado `:map`
+  aberto no wire/out); os outros 3 cards sao tipados fechados no wire/out, mas cada um e' uma UNIAO
+  `[:or <forma-fechada> CardIndisponivelOut]` (wire/out/mesa.clj) — o sentinel valida contra o segundo ramo
+  da uniao, entao a validacao do MesaOut passa tanto com o card real quanto com o sentinel, nos 4 cards. O
+  FE distingue um card real do sentinel pela chave `:indisponivel` (que nenhum card real tem)."
   {:indisponivel true})
 
 (defn- card-seguro
