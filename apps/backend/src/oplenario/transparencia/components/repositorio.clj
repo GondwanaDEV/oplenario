@@ -21,6 +21,7 @@
   (:require [clojure.tools.logging :as log]
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.transparencia.db.acompanhamento :as db-acompanhamento]
+            [oplenario.transparencia.db.artefato-publicacao :as db-artefato]
             [oplenario.transparencia.db.materia :as db-materia]
             [oplenario.transparencia.db.norma :as db-norma])
   (:import (java.time Instant)
@@ -39,10 +40,11 @@
 
 (defn projetar-evento!
   "Dispatch por tipo de evento -> a projecao de dominio, DENTRO da `tx` corrente (a do relay). Seta o GUC de
-  tenant (sem trocar de role — ver docstring do ns) e escreve em transparencia.materia/norma. `payload` ja
-  chegou com chaves KEYWORD kebab (outbox/jsonb-> usa keyword-keys-object-mapper), casando 1:1 com o que os
-  producers de legislativo construiram (events/{proposicao,norma}.clj) — EXCETO os campos :uuid, que chegam
-  como string (ver docstring de `uuid-payload`)."
+  tenant (sem trocar de role — ver docstring do ns) e escreve em transparencia.materia/norma/artefato_publicacao.
+  `payload` ja chegou com chaves KEYWORD kebab (outbox/jsonb-> usa keyword-keys-object-mapper), casando 1:1 com
+  o que os producers de legislativo construiram (events/{proposicao,norma,artefato-publicacao}.clj) — EXCETO os
+  campos :uuid e os de tempo (:publicado-em/:criado-em), que chegam como string (ver `uuid-payload` e a
+  re-parseacao Instant/parse; docstring de events/norma)."
   [tx {:keys [tipo ente-id payload]}]
   (tenancy/set-tenant! tx ente-id)
   (case tipo
@@ -59,7 +61,13 @@
     (db-norma/inserir! tx (-> payload
                               (uuid-payload [:norma-id :proposicao-id])
                               (assoc :ente-id ente-id)
-                              (update :publicado-em #(Instant/parse %))))))
+                              (update :publicado-em #(Instant/parse %))))
+
+    "artefato.publicacao.gerado"
+    (db-artefato/inserir! tx (-> payload
+                                 (uuid-payload [:norma-id :artefato-id])
+                                 (assoc :ente-id ente-id)
+                                 (update :criado-em #(Instant/parse %))))))
 
 (defprotocol RepoTransparencia
   (transacao [this ente-id f] "Roda (f tx) numa UNICA tx do tenant (com-tenant*) — leitura publica.")
@@ -68,6 +76,9 @@
   (buscar-norma [this ente-id norma-id] "Uma norma publicada por id, ou nil.")
   (norma-da-materia [this ente-id proposicao-id] "A norma publicada de uma materia, ou nil.")
   (listar-normas [this ente-id filtro] "Portal: acervo as-enacted, com filtro opcional {:tipo :ano :numero} (ver db/norma/listar).")
+  ;; F6c Slice 4b — artefato de publicacao oficial (PROJECAO; a rota publica de download resolve o ponteiro daqui)
+  (artefato-mais-recente-da-norma [this ente-id norma-id]
+    "Ponteiro do artefato de publicacao MAIS RECENTE de uma norma (objeto_store_ref + content_type + versao), ou nil.")
   ;; F6c Slice 2 — acompanhamento do cidadao (escritas autenticadas; consent-gated)
   (seguir! [this ente-id m] "UPSERT: cidadao segue a materia (re-seguir reativa). Devolve {:id :estado ...}.")
   (deixar-de-seguir! [this ente-id m] "Soft-cancel idempotente. Devolve {:id} se cancelou, ou nil (no-op).")
@@ -81,6 +92,8 @@
   (buscar-norma [this ente-id nid] (transacao this ente-id #(db-norma/buscar % ente-id nid)))
   (norma-da-materia [this ente-id pid] (transacao this ente-id #(db-norma/buscar-por-proposicao % ente-id pid)))
   (listar-normas [this ente-id filtro] (transacao this ente-id #(db-norma/listar % ente-id filtro)))
+  (artefato-mais-recente-da-norma [this ente-id norma-id]
+    (transacao this ente-id #(db-artefato/mais-recente-por-norma % ente-id norma-id)))
   (seguir! [this ente-id m] (transacao this ente-id #(db-acompanhamento/seguir! % (assoc m :ente-id ente-id))))
   (deixar-de-seguir! [this ente-id m] (transacao this ente-id #(db-acompanhamento/deixar-de-seguir! % (assoc m :ente-id ente-id))))
   (meus-acompanhamentos [this ente-id sid] (transacao this ente-id #(db-acompanhamento/meus-da-materia % ente-id sid))))

@@ -10,6 +10,7 @@
             [oplenario.config :as config]
             [oplenario.http :as http]
             [oplenario.interceptors :as it]
+            [oplenario.kernel.components.objeto-store :as os]
             [oplenario.transparencia.components.repositorio :as repo-transparencia]
             [oplenario.transparencia.diplomat.http.in :as transparencia-http])
   (:import (java.time Instant)))
@@ -17,7 +18,8 @@
 (def ^:private t0 (Instant/parse "2026-07-03T12:00:00Z"))
 
 (defn- fake-repo
-  [{:keys [buscar-materia listar-materias buscar-norma norma-da-materia listar-normas filtro-capturado]}]
+  [{:keys [buscar-materia listar-materias buscar-norma norma-da-materia listar-normas filtro-capturado
+           artefato-ptr]}]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify repo-transparencia/RepoTransparencia
     (buscar-materia [_ _ente _pid] buscar-materia)
@@ -28,18 +30,31 @@
     ;; borda coagiu — prova a fiacao query-params -> {:tipo :ano :numero} sem tocar no banco.
     (listar-normas [_ _ente filtro]
       (when filtro-capturado (reset! filtro-capturado filtro))
-      listar-normas)))
+      listar-normas)
+    ;; F6c Slice 4b: ponteiro do artefato mais recente (a rota de download resolve dai').
+    (artefato-mais-recente-da-norma [_ _ente _nid] artefato-ptr)))
+
+(defn- fake-os
+  "ObjetoStore FAKE (reify): `blobs` = mapa ref->byte-array; `obter` devolve os bytes ou nil (ausente = a
+  ANCORA-antes-do-blob: a linha existe mas o binario nao — condicao de ALERTA da rota, mig 0046/0047)."
+  [blobs]
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify os/ObjetoStore
+    (obter [_ chave] (get blobs chave))))
 
 ;; auth no-op só p/ o fragmento de rotas EXPANDIR (as rotas do Slice 1 testadas aqui sao publicas; as do
 ;; Slice 2, que exigem `auth`, coexistem na tabela e precisam de um interceptor nao-nil no expand). O
 ;; comportamento de auth em si e' provado em fluxo_acompanhamento_test.
 (def ^:private auth-noop {:name ::auth-noop :enter identity})
 
-(defn- service-fn [repo]
-  (let [rotas (transparencia-http/rotas {:auth auth-noop :repo-transparencia repo
-                                         :resolver-ente-publico transparencia-http/resolver-ente-publico-uuid})]
-    (-> (http/servico (config/carregar) rotas it/globais)
-        ph/create-server ::ph/service-fn)))
+(defn- service-fn
+  ([repo] (service-fn repo (fake-os {})))
+  ([repo objeto-store]
+   (let [rotas (transparencia-http/rotas {:auth auth-noop :repo-transparencia repo
+                                          :resolver-ente-publico transparencia-http/resolver-ente-publico-uuid
+                                          :objeto-store objeto-store})]
+     (-> (http/servico (config/carregar) rotas it/globais)
+         ph/create-server ::ph/service-fn))))
 
 (defn- ler-json [r] (json/read-value (:body r) json/keyword-keys-object-mapper))
 
@@ -138,3 +153,42 @@
   (let [repo (fake-repo {:buscar-norma nil})
         r    (pt/response-for (service-fn repo) :get (str "/portal/casa/" ente "/legislacao/" nid))]
     (is (= 404 (:status r)))))
+
+;; ---------- GET /portal/casa/:ente/legislacao/:norma_id/artefato (download BINARIO, Slice 4b) ----------
+
+(def ^:private artefato-ref "publicacoes/ref.bin")
+(def ^:private artefato-ptr-fixture
+  {:norma-id nid :artefato-id (random-uuid) :versao 1 :objeto-store-ref artefato-ref
+   :content-type "text/plain; charset=utf-8" :hash "sha256:abc" :assinatura-algoritmo "STUB-ICP-v0"
+   :assinado false})
+
+(deftest baixar-artefato-200-binario
+  (let [repo (fake-repo {:artefato-ptr artefato-ptr-fixture})
+        os   (fake-os {artefato-ref (.getBytes "LEI N. 1 ... conteudo oficial" "UTF-8")})
+        r    (pt/response-for (service-fn repo os) :get
+               (str "/portal/casa/" ente "/legislacao/" nid "/artefato"))]
+    (is (= 200 (:status r)))
+    (is (= "text/plain; charset=utf-8" (get (:headers r) "Content-Type")) "Content-Type do artefato")
+    (is (re-find #"attachment" (get (:headers r) "Content-Disposition" "")) "download como anexo")
+    (is (= "LEI N. 1 ... conteudo oficial" (:body r)) "serve o binario do objeto_store")))
+
+(deftest baixar-artefato-sem-ponteiro-404
+  (let [repo (fake-repo {:artefato-ptr nil})
+        r    (pt/response-for (service-fn repo (fake-os {})) :get
+               (str "/portal/casa/" ente "/legislacao/" nid "/artefato"))]
+    (is (= 404 (:status r)) "norma sem artefato gerado -> 404")))
+
+;; CARRY 4a/mig 0046: ancora-antes-do-blob. Ponteiro EXISTE mas o objeto_store nao tem o binario (S3 falhou
+;; pos-commit). NUNCA 404 silencioso nem "documento oficial" confiavel — e' ALERTA (500).
+(deftest baixar-artefato-ponteiro-sem-blob-500-alerta
+  (let [repo (fake-repo {:artefato-ptr artefato-ptr-fixture})
+        os   (fake-os {})                          ; ponteiro resolve, mas o ref nao tem blob -> obter=nil
+        r    (pt/response-for (service-fn repo os) :get
+               (str "/portal/casa/" ente "/legislacao/" nid "/artefato"))]
+    (is (= 500 (:status r)) "ponteiro sem blob = ALERTA (500), NUNCA 404 silencioso")))
+
+(deftest baixar-artefato-ente-malformado-400
+  (let [repo (fake-repo {:artefato-ptr artefato-ptr-fixture})
+        r    (pt/response-for (service-fn repo (fake-os {})) :get
+               (str "/portal/casa/nao-e-uuid/legislacao/" nid "/artefato"))]
+    (is (= 400 (:status r)) "ente malformado -> 400 fail-closed")))
