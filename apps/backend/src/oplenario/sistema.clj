@@ -63,8 +63,8 @@
         ;; §22.10: o relay tem UM registro só — cada projetor FUNDE seus handlers no mesmo mapa {tipo [...]}
         ;; (outbox/registrar aceita >1 consumidor por tipo). transparencia (F6c Slice 1) e' o 1o projetor
         ;; POSTGRES (tempo_real projeta na CanalStore, nao no banco); `registrar` so' ADICIONA entradas.
-        ;; paineis (F7 Slice 1) e' o 2o projetor POSTGRES — projeta os relogios de participacao em
-        ;; paineis.pendencia ("o que vence", §16.11).
+        ;; paineis (F7) e' o 2o projetor POSTGRES — projeta os relogios de participacao em paineis.pendencia
+        ;; ("o que vence", §16.11, Slice 1) e os eventos de legislativo em paineis.tramitacao (board, Slice 2).
         registro    (-> (tr-consumer/registro canal-store)
                         (transparencia-consumers/registrar)
                         (paineis-consumers/registrar))]

@@ -229,22 +229,9 @@
             "2a projecao (mesmo pedido-id) = no-op (ON CONFLICT DO NOTHING), NUNCA lanca")))
     (is (= 1 (count (repo/o-que-vence *repo* ente))) "uma unica linha permanece")))
 
-(deftest todo-tipo-consumido-tem-branch-de-projecao
-  ;; DRIFT-GUARD (mesmo racional de transparencia): cada tipo em `tipos-consumidos` (o que o bus ENTREGA)
-  ;; DEVE ter um branch no `case` de despachar! (o que a projecao TRATA) — senao "No matching clause" dentro
-  ;; da tx do relay COMPARTILHADO vira redrive eterno (head-of-line block de TODOS os modulos). Chama
-  ;; `despachar!` DIRETO (nao `projetar-evento!`, review security HIGH): `projetar-evento!` agora tolera
-  ;; QUALQUER excecao (incl. 'No matching clause'), entao testar por ELE mascararia exatamente o drift que
-  ;; este guard existe p/ pegar — `despachar!` e' a fn SEM tolerancia, o alvo certo deste teste.
-  (let [ente (random-uuid)]
-    (doseq [tipo consumers/tipos-consumidos]
-      (tenancy/com-tenant* *ds* ente
-        (fn [tx]
-          (try
-            (repo/despachar! tx ente tipo {})
-            (catch Throwable e
-              (is (not (re-find #"No matching clause" (str (ex-message e))))
-                  (str "tipo consumido sem branch de projecao (drift bus<->case): " tipo)))))))))
+;; drift-guard (`todo-tipo-consumido-tem-branch-de-projecao`) consolidado em consumers_test.clj (review
+;; clojure MEDIUM, F7 Slice 2: vivia duplicado byte-a-byte aqui e em tramitacao_test.clj — o guard e'
+;; MODULO-WIDE (itera `consumers/tipos-consumidos` inteiro), nao por feature; pertence a UM lugar so'.
 
 (deftest projetar-evento-tolera-payload-malformado
   ;; O FIX do security HIGH: um payload com data ILEGIVEL (nao ISO — ex.: um bug de producao futuro em

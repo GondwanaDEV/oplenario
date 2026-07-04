@@ -7,7 +7,8 @@
   `projetar-evento!` e' funcao PLANA (nao um metodo do protocolo/record) — o consumer roda dentro da tx do
   relay, que ja' e' a `tx`; nao ha datasource a abrir (`com-tenant*` seria redundante e trocaria o role, o
   que quebraria o UPDATE seguinte do relay em shared.outbox — mesmo racional de transparencia/repositorio).
-  So' seta o GUC app.ente_id (kernel.tenancy/set-tenant!) e despacha para db/pendencia.
+  So' seta o GUC app.ente_id (kernel.tenancy/set-tenant!) e despacha para db/pendencia (F7 Slice 1, 'o que
+  vence') OU db/tramitacao (F7 Slice 2, board interno) conforme o tipo do evento.
 
   Os TIPOS de evento sao STRINGS LITERAIS, NAO imports de `participacao.events.*` — §22.10 proibe import
   cross-modulo; o nome do evento e' o CONTRATO DE FIACAO do bus, nao um tipo compartilhado (mesmo padrao de
@@ -31,13 +32,16 @@
   so' cobre 'nao encontrado', nao 'payload nao parseavel'."
   (:require [clojure.tools.logging :as log]
             [oplenario.kernel.tenancy :as tenancy]
-            [oplenario.paineis.db.pendencia :as db-pendencia])
+            [oplenario.paineis.db.pendencia :as db-pendencia]
+            [oplenario.paineis.db.tramitacao :as db-tramitacao])
   (:import (java.time LocalDate)
            (java.util UUID)))
 
 (set! *warn-on-reflection* true)
 
 (def ^:private teto-o-que-vence 100)
+;; teto POR GRUPO de estado (review database HIGH, F7 Slice 2) — ver docstring de db.tramitacao/listar-board.
+(def ^:private teto-tramitacao-board-por-estado 50)
 
 (defn- protocolar!
   "Aplica inserir! p/ uma das 4 especies de participacao — extrai o campo comum entre os 4 branches
@@ -54,6 +58,15 @@
                                           :objeto-id (UUID/fromString objeto-id-str)})
       (log/warn "paineis: fechamento sem pendencia projetada (protocolo ausente?)"
                 {:ente-id ente-id :objeto-tipo objeto-tipo :objeto-id objeto-id-str})))
+
+(defn- transicionar-tramitacao!
+  "Aplica atualizar-estado! do board e loga se a materia ainda nao existia (redrive fora de ordem / backlog
+  — mesmo racional de fechar! e de transparencia/db/materia/atualizar-estado!)."
+  [tx ente-id proposicao-id-str estado]
+  (or (db-tramitacao/atualizar-estado! tx {:ente-id ente-id :proposicao-id (UUID/fromString proposicao-id-str)
+                                           :estado estado})
+      (log/warn "paineis: transicao sem materia projetada no board (protocolo ausente?)"
+                {:ente-id ente-id :proposicao-id proposicao-id-str :estado estado})))
 
 (defn despachar!
   "O `case` de fato, SEM tolerancia — lanca em tipo sem branch (`case` sem default: 'No matching clause') OU
@@ -102,37 +115,58 @@
     (or (db-pendencia/atualizar-vence-em! tx {:ente-id ente-id :objeto-tipo (:objeto-tipo payload)
                                               :objeto-id (UUID/fromString (:objeto-id payload))
                                               :vence-em (LocalDate/parse (:para-data payload))})
-        (log/warn "paineis: prorrogacao sem pendencia projetada" {:ente-id ente-id :payload payload}))))
+        (log/warn "paineis: prorrogacao sem pendencia projetada" {:ente-id ente-id :payload payload}))
+
+    "proposicao.protocolada"
+    (db-tramitacao/inserir! tx {:ente-id ente-id :proposicao-id (UUID/fromString (:proposicao-id payload))
+                                :tipo (:tipo payload) :ano (:ano payload) :sequencial (:sequencial payload)
+                                :urn-lex (:urn-lex payload) :ementa (:ementa payload)
+                                :autor-tipo (:autor-tipo payload) :autor-texto (:autor-texto payload)
+                                :estado (:estado payload)})
+
+    "proposicao.transicionou"
+    (transicionar-tramitacao! tx ente-id (:proposicao-id payload) (:para payload))))
 
 (defn projetar-evento!
   "Dispatch por tipo de evento -> a projecao de dominio, DENTRO da `tx` corrente (a do relay). Seta o GUC de
-  tenant (sem trocar de role) e escreve em paineis.pendencia. `payload` ja chegou com chaves KEYWORD kebab
-  (outbox/jsonb-> usa keyword-keys-object-mapper) — EXCETO os campos :uuid e os de data (:vence-em/
-  :para-data), que chegam como string (ver docstring de participacao/events/*). o ENTRY POINT REAL do
-  consumer (§22.10 diplomat/consumers) — NUNCA lanca (review security HIGH — ver docstring do ns): envolve
-  `despachar!` inteiro num try/catch, entao QUALQUER excecao de `despachar!` e' tolerada aqui (log + nil) —
-  payload malformado (UUID/LocalDate invalidos) OU um tipo sem branch de dispatch (drift bus<->case), sem
-  distincao (ambos sao igualmente inaceitaveis dentro do relay compartilhado em producao). A distincao entre
-  as duas causas so' importa p/ o TESTE do drift-guard, que por isso chama `despachar!` DIRETO (nao este fn)
-  — assim o drift ainda e' pego RUIDOSAMENTE em CI, antes de qualquer deploy chegar a rodar este caminho
-  tolerante contra trafego real."
+  tenant (sem trocar de role) e escreve em paineis.pendencia ou paineis.tramitacao. `payload` ja chegou com
+  chaves KEYWORD kebab (outbox/jsonb-> usa keyword-keys-object-mapper) — EXCETO os campos :uuid e os de
+  data (:vence-em/:para-data), que chegam como string (ver docstring de participacao/events/*). o ENTRY
+  POINT REAL do consumer (§22.10 diplomat/consumers) — NUNCA lanca (review security HIGH — ver docstring do
+  ns): envolve `despachar!` inteiro num try/catch, entao QUALQUER excecao de `despachar!` e' tolerada aqui
+  (log + nil) — payload malformado (UUID/LocalDate invalidos) OU um tipo sem branch de dispatch (drift
+  bus<->case), sem distincao (ambos sao igualmente inaceitaveis dentro do relay compartilhado em producao).
+  A distincao entre as duas causas so' importa p/ o TESTE do drift-guard, que por isso chama `despachar!`
+  DIRETO (nao este fn) — assim o drift ainda e' pego RUIDOSAMENTE em CI, antes de qualquer deploy chegar a
+  rodar este caminho tolerante contra trafego real.
+
+  CATCH Throwable, NAO Exception (review security HIGH, F7 Slice 2): as `:pre` de db/pendencia.clj e
+  db/tramitacao.clj lancam `AssertionError` — um `Error`, IRMAO de `Exception` sob `Throwable`, NAO capturado
+  por `(catch Exception ...)`. Um `:pre` falhando (payload com chave ausente/nil que uma validacao Malli
+  upstream deveria ter barrado, mas §22.10 nao garante contrato compartilhado entre modulos) escaparia deste
+  catch e envenenaria o relay exatamente como o caso que este ns existe p/ evitar. CARRY: o mesmo padrao de
+  `:pre` (sem guarda de AssertionError) tambem existe em `transparencia.components.repositorio/
+  projetar-evento!` — que ALEM DISSO nao tem NENHUM try/catch (nem de Exception): um alvo maior p/ correcao
+  futura, fora do escopo deste modulo."
   [tx {:keys [tipo ente-id payload]}]
   (tenancy/set-tenant! tx ente-id)
   (try
     (despachar! tx ente-id tipo payload)
-    (catch Exception e
+    (catch Throwable e
       (log/warn e "paineis: payload malformado ou falha de projecao — evento tolerado, nunca propaga p/ o relay compartilhado"
                 {:tipo tipo :ente-id ente-id})
       nil)))
 
 (defprotocol RepoPaineis
   (transacao [this ente-id f] "Roda (f tx) numa UNICA tx do tenant (com-tenant*) — leitura interna.")
-  (o-que-vence [this ente-id] "Pendencias ABERTAS (pendente|vencido) do tenant, mais urgente primeiro."))
+  (o-que-vence [this ente-id] "Pendencias ABERTAS (pendente|vencido) do tenant, mais urgente primeiro.")
+  (tramitacao-board [this ente-id] "TODAS as proposicoes do tenant, agrupadas por estado, mais estagnadas primeiro."))
 
 (defrecord RepoPaineisPg [datasource]
   RepoPaineis
   (transacao [_ ente-id f] (tenancy/com-tenant* (:ds datasource) ente-id f))
-  (o-que-vence [this ente-id] (transacao this ente-id #(db-pendencia/listar-abertas % ente-id teto-o-que-vence))))
+  (o-que-vence [this ente-id] (transacao this ente-id #(db-pendencia/listar-abertas % ente-id teto-o-que-vence)))
+  (tramitacao-board [this ente-id] (transacao this ente-id #(db-tramitacao/listar-board % ente-id teto-tramitacao-board-por-estado))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."
