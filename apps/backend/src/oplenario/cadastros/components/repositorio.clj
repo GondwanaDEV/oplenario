@@ -7,6 +7,7 @@
   (:require [oplenario.cadastros.db.comissao :as comissao]
             [oplenario.cadastros.db.estrutura :as estrutura]
             [oplenario.cadastros.db.vereador :as vereador]
+            [oplenario.cadastros.relacoes.cadastro :as rel-cadastro]
             [oplenario.kernel.tenancy :as tenancy]))
 
 (defprotocol RepoCadastros
@@ -33,7 +34,10 @@
   (mesa-vigente [this ente-id data])
   (criar-cargo! [this ente-id cargo])
   (criar-membro! [this ente-id membro])
-  (membros-da-comissao [this ente-id comissao-id]))
+  (membros-da-comissao [this ente-id comissao-id])
+  (membros-da-casa [this ente-id data]
+    "Nº de vereadores com mandato vigente em `data` (relacao ja usada pelo motor de regras — F2; exposta
+     aqui p/ o host injetar em outros modulos via inversao de dependencia, §22.10, FE Onda A1)."))
 
 (defrecord RepoCadastrosPg [datasource]
   RepoCadastros
@@ -57,7 +61,8 @@
   (mesa-vigente [this ente-id data] (transacao this ente-id #(comissao/mesa-vigente % data)))
   (criar-cargo! [this ente-id c] (transacao this ente-id #(comissao/inserir-cargo! % c)))
   (criar-membro! [this ente-id m] (transacao this ente-id #(comissao/inserir-membro! % m)))
-  (membros-da-comissao [this ente-id com-id] (transacao this ente-id #(comissao/membros % com-id))))
+  (membros-da-comissao [this ente-id com-id] (transacao this ente-id #(comissao/membros % com-id)))
+  (membros-da-casa [this ente-id data] (transacao this ente-id #(rel-cadastro/membros-da-casa % data))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."
