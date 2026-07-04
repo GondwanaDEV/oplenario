@@ -11,6 +11,8 @@
             [oplenario.identidade.components.repositorio :as repo-identidade]
             [oplenario.identidade.relacoes.identidade :as rel-identidade]
             [oplenario.legislativo.components.repositorio :as repo-legislativo]
+            [oplenario.paineis.components.repositorio :as repo-paineis]
+            [oplenario.paineis.diplomat.consumers :as paineis-consumers]
             [oplenario.participacao.components.repositorio :as repo-participacao]
             [oplenario.participacao.relacoes :as rel-participacao]
             [oplenario.kernel.components.datasource :as datasource]
@@ -61,8 +63,11 @@
         ;; §22.10: o relay tem UM registro só — cada projetor FUNDE seus handlers no mesmo mapa {tipo [...]}
         ;; (outbox/registrar aceita >1 consumidor por tipo). transparencia (F6c Slice 1) e' o 1o projetor
         ;; POSTGRES (tempo_real projeta na CanalStore, nao no banco); `registrar` so' ADICIONA entradas.
+        ;; paineis (F7 Slice 1) e' o 2o projetor POSTGRES — projeta os relogios de participacao em
+        ;; paineis.pendencia ("o que vence", §16.11).
         registro    (-> (tr-consumer/registro canal-store)
-                        (transparencia-consumers/registrar))]
+                        (transparencia-consumers/registrar)
+                        (paineis-consumers/registrar))]
    (component/system-map
    :datasource      (datasource/datasource config)
    ;; EventBus (producer): grava no shared.outbox na tx do ato. Stateless (sem Lifecycle); os Repo que
@@ -94,6 +99,9 @@
    ;; F6c (transparencia): SO LEITURA (o portal projeta por consumer/tx do relay, nao por este Repo) — recebe
    ;; so :datasource via `using`, sem :bus (o modulo nao emite eventos proprios nesta fatia).
    :repo-transparencia (component/using (repo-transparencia/repositorio) [:datasource])
+   ;; F7 (paineis): SO LEITURA (o painel projeta por consumer/tx do relay, nao por este Repo) — recebe so
+   ;; :datasource via `using`, sem :bus (o modulo nao emite eventos proprios nesta fatia).
+   :repo-paineis    (component/using (repo-paineis/repositorio) [:datasource])
    ;; o host É a fronteira (§22.10): importa as `relacoes` dos módulos e as injeta no registry do motor.
    ;; O motor chama por nome (resolver-para), nunca importa o módulo. Sem :datasource — a `tx` do tenant
    ;; entra por-chamada (quem avalia abre a tx via Repo). O `start` roda o assert de costura (fail-closed).
@@ -126,4 +134,4 @@
          :servidor-http (component/using
                          (http-servidor/servidor-http config rotas/montar)
                          [:idp :repo-identidade :repo-sessoes :repo-legislativo :repo-compliance
-                          :repo-participacao :repo-transparencia :canal-store :objeto-store])))
+                          :repo-participacao :repo-transparencia :repo-paineis :canal-store :objeto-store])))
