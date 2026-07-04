@@ -74,4 +74,11 @@ describe("useMesa", () => {
     await waitFor(() => expect(result.current.estado).toBe("pronto"));
     expect(result.current.relatoresPendentes).toBeNull();
   });
+
+  it("sem token -> estado 'erro' já na primeira renderização (sem passar por 'carregando')", () => {
+    global.fetch = vi.fn() as unknown as typeof fetch;
+    const { result } = renderHook(() => useMesa(null));
+    expect(result.current.estado).toBe("erro");
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
 });
