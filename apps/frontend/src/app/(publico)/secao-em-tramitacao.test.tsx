@@ -24,10 +24,12 @@ describe("SecaoEmTramitacao", () => {
     vi.restoreAllMocks();
   });
 
-  it("carregando -> não quebra, não mostra dado", () => {
+  it("carregando -> não quebra, não mostra dado, seção marcada aria-busy (item 5, review A2.1)", () => {
     global.fetch = vi.fn(() => new Promise(() => {})) as unknown as typeof fetch;
     render(<SecaoEmTramitacao ente="fortaleza" />);
     expect(screen.getByRole("heading", { name: "Em tramitação agora" })).toBeTruthy();
+    const secao = document.getElementById("destaque");
+    expect(secao?.getAttribute("aria-busy")).toBe("true");
   });
 
   it("fetch falho -> estado honesto em-breve, nunca 500 global", async () => {
@@ -51,5 +53,6 @@ describe("SecaoEmTramitacao", () => {
     expect(
       screen.getByText("Cria o Programa Municipal de Hortas Comunitárias.").textContent,
     ).toBe("Cria o Programa Municipal de Hortas Comunitárias.");
+    expect(document.getElementById("destaque")?.getAttribute("aria-busy")).toBe("false");
   });
 });

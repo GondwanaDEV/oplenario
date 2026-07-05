@@ -5,6 +5,7 @@
 // tramitação/autoria/permalink continuam visíveis (só o RESUMO é IA — o resto é fato).
 
 import { AzulejoFaixa } from "@/lib/charts/azulejo-faixa";
+import { descreverFaixa } from "@/lib/tramitacao-vista";
 import type { MateriaVista } from "@/lib/materia-vista";
 
 export function DestaqueTramitacao({ destaque, ente }: { destaque: MateriaVista; ente: string }) {
@@ -35,7 +36,7 @@ export function DestaqueTramitacao({ destaque, ente }: { destaque: MateriaVista;
             <p className="rotulo-faixa">Por onde já passou</p>
             <AzulejoFaixa
               estagios={destaque.estagios}
-              rotuloAria={`Tramitação de ${destaque.ref}: ${destaque.situacao}.`}
+              rotuloAria={descreverFaixa(destaque.ref, destaque.estagios)}
             />
           </div>
 

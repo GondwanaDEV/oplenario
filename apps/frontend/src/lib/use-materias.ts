@@ -17,6 +17,21 @@ type Estado = "carregando" | "pronto" | "erro";
 export function useMaterias(ente: string) {
   const [itens, setItens] = useState<MateriaOut[] | null>(null);
   const [estado, setEstado] = useState<Estado>("carregando");
+  const [enteAnterior, setEnteAnterior] = useState(ente);
+
+  // Reset cross-tenant (review A2.1, item 1): sem isto, trocar de `ente` (ex.
+  // /portal/casa/fortaleza -> /portal/casa/aquiraz) mantinha os itens/estado "pronto" da câmara
+  // anterior visíveis até o novo fetch do efeito abaixo resolver. O guard `vivo` do efeito sozinho não
+  // cobre isto: ele só evita escritas fora de ordem de fetches concorrentes, não limpa o estado já
+  // commitado da câmara antiga. Reset DURANTE O RENDER (não dentro do `useEffect`) é o padrão oficial
+  // do React para "storing information from previous renders" — react.dev/reference/react/useState;
+  // `eslint-plugin-react-hooks` v7 (`set-state-in-effect`) proíbe o `setState` síncrono no topo de um
+  // efeito e recomenda exatamente esta forma condicional como alternativa.
+  if (ente !== enteAnterior) {
+    setEnteAnterior(ente);
+    setItens(null);
+    setEstado("carregando");
+  }
 
   useEffect(() => {
     let vivo = true;

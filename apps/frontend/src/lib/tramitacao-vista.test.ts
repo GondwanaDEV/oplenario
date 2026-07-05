@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { derivarTramitacao } from "./tramitacao-vista";
+import { derivarTramitacao, descreverFaixa } from "./tramitacao-vista";
 
 // Task 0.5 (Fatia A2.0, Portal do Cidadão). Vocabulário real confirmado por grep — ver o mapa documentado
 // no topo de tramitacao-vista.ts: `estado` de proposicao é :string LIVRE, template-driven POR CÂMARA
@@ -42,5 +42,38 @@ describe("derivarTramitacao", () => {
     const r = derivarTramitacao("xpto-desconhecido");
     expect(r.estagios).toEqual([{ rotulo: "Protocolo", situacao: "ativo" }]);
     expect(r.rotuloSituacao).toBe("xpto-desconhecido");
+  });
+});
+
+// Task de review A2.1 (item 3, a11y) — `descreverFaixa` monta o rótulo ARIA completo da AzulejoFaixa.
+// `role="img"` esconde os <text> por-estágio do SVG dos leitores de tela; sem isto, AT perde a
+// progressão concluído/atual/pendente que usuários videntes veem no grafismo. Helper puro, testado
+// isoladamente e reusado pelo caller (DestaqueTramitacao) em vez de string-building inline.
+describe("descreverFaixa", () => {
+  it("estado intermediário -> lista concluídos, nomeia o atual, lista os pendentes", () => {
+    const estagios = derivarTramitacao("segundo_turno").estagios;
+    expect(descreverFaixa("PL 042/2026", estagios)).toBe(
+      "Tramitação de PL 042/2026: concluídos Protocolo, Comissões, 1º turno; atual 2º turno; pendente Sanção.",
+    );
+  });
+
+  it("protocolada (início) -> sem concluídos, só atual + pendentes", () => {
+    const estagios = derivarTramitacao("protocolada").estagios;
+    expect(descreverFaixa("PL 001/2026", estagios)).toBe(
+      "Tramitação de PL 001/2026: atual Protocolo; pendente Comissões, 1º turno, 2º turno, Sanção.",
+    );
+  });
+
+  it("aprovada -> tudo concluído, sem cláusula de atual nem de pendente", () => {
+    const estagios = derivarTramitacao("aprovada").estagios;
+    expect(descreverFaixa("PL 007/2026", estagios)).toBe(
+      "Tramitação de PL 007/2026: concluídos Protocolo, Comissões, 1º turno, 2º turno, Sanção.",
+    );
+  });
+
+  it("fail-closed (faixa mínima, estado desconhecido) -> só o estágio único + sua situação, sem throw", () => {
+    const estagios = derivarTramitacao("xpto-desconhecido").estagios;
+    expect(() => descreverFaixa("PL 099/2026", estagios)).not.toThrow();
+    expect(descreverFaixa("PL 099/2026", estagios)).toBe("Tramitação de PL 099/2026: atual Protocolo.");
   });
 });

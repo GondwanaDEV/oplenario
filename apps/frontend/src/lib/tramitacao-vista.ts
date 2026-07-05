@@ -77,3 +77,24 @@ export function derivarTramitacao(estado: string): {
     rotuloSituacao: ROTULO_SITUACAO_POR_ESTADO[estado] ?? estado,
   };
 }
+
+// Review A2.1 (item 3, a11y): rótulo ARIA completo da AzulejoFaixa. `role="img"` no SVG esconde os
+// <text> por-estágio de leitores de tela — sem isto, AT perde a progressão concluído/atual/pendente
+// que usuários videntes veem no grafismo (só sobraria "Tramitação de X: situação."). Agrupa por
+// `situacao` e monta uma cláusula por grupo presente; grupos vazios são omitidos (fail-closed da
+// faixa mínima cai aqui de graça — 1 único estágio ativo vira só a cláusula "atual").
+export function descreverFaixa(ref: string, estagios: EstagioTramitacao[]): string {
+  const rotulosPor = (situacao: EstagioTramitacao["situacao"]) =>
+    estagios.filter((e) => e.situacao === situacao).map((e) => e.rotulo);
+
+  const concluidos = rotulosPor("concluido");
+  const ativos = rotulosPor("ativo");
+  const pendentes = rotulosPor("pendente");
+
+  const clausulas: string[] = [];
+  if (concluidos.length > 0) clausulas.push(`concluídos ${concluidos.join(", ")}`);
+  if (ativos.length > 0) clausulas.push(`${ativos.length > 1 ? "atuais" : "atual"} ${ativos.join(", ")}`);
+  if (pendentes.length > 0) clausulas.push(`pendente ${pendentes.join(", ")}`);
+
+  return clausulas.length > 0 ? `Tramitação de ${ref}: ${clausulas.join("; ")}.` : `Tramitação de ${ref}.`;
+}

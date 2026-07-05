@@ -173,7 +173,7 @@
 .resumo-ia[data-ia="ativo"] .resumo-off { display: none; }
 .resumo-off { display: flex; gap: 0.7rem; align-items: flex-start; padding: 0.95rem 1.05rem; border: 1px solid var(--linha); border-left: 4px solid var(--amarelo-traco); border-radius: var(--raio-sm); background: var(--surface); }
 .resumo-off svg { color: var(--aviso-texto); flex: 0 0 auto; margin-top: 2px; }
-.resumo-off p { font-size: var(--t-14); color: var(--texto); margin: 0; line-height: 1.55; }
+.resumo-off p { font-size: var(--t-13); color: var(--texto); margin: 0; line-height: 1.55; }
 .resumo-off p b { font-weight: 600; }
 
 /* mais em tramitação — a casa em movimento (não só uma matéria) */

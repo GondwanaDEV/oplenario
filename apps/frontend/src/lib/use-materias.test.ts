@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { useMaterias } from "./use-materias";
+import type { MateriaOut } from "./contrato-portal.gen";
 
 // Task 1.3 (Fatia A2.1, Portal do Cidadão) — hook cliente que busca GET /api/portal/casa/{ente}/materias
 // via buscarPublico (0.3). DESVIO do plano (documentado no relatório da fatia): o plano original previa
@@ -47,5 +48,35 @@ describe("useMaterias", () => {
     const { result } = renderHook(() => useMaterias("fortaleza"));
     await waitFor(() => expect(result.current.estado).toBe("pronto"));
     expect(result.current.itens).toEqual([]);
+  });
+
+  it("troca de ente reseta o estado (sem vazamento cross-tenant da câmara anterior)", async () => {
+    const itensFortaleza: MateriaOut[] = [
+      { proposicaoId: "1", tipo: "projeto_lei", ano: 2026, sequencial: 1 } as MateriaOut,
+    ];
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => itensFortaleza })) as unknown as typeof fetch;
+    global.fetch = fetchMock;
+
+    const { result, rerender } = renderHook(({ ente }) => useMaterias(ente), {
+      initialProps: { ente: "fortaleza" },
+    });
+    await waitFor(() => expect(result.current.estado).toBe("pronto"));
+    expect(result.current.itens).toEqual(itensFortaleza);
+
+    // troca para outra câmara com um fetch que fica pendente — se o hook não resetar
+    // sincronamente, o estado/itens de "fortaleza" continuariam visíveis sob "aquiraz".
+    let liberar: () => void = () => {};
+    const pendente = new Promise<{ ok: boolean; json: () => Promise<unknown> }>((res) => {
+      liberar = () => res({ ok: true, json: async () => [] });
+    });
+    global.fetch = vi.fn(() => pendente) as unknown as typeof fetch;
+
+    rerender({ ente: "aquiraz" });
+
+    expect(result.current.estado).toBe("carregando");
+    expect(result.current.itens).toBeNull();
+
+    liberar();
+    await waitFor(() => expect(result.current.estado).toBe("pronto"));
   });
 });

@@ -43,9 +43,11 @@ describe("DestaqueTramitacao", () => {
     expect(screen.getByText(/autoria não informada/i)).toBeTruthy();
   });
 
-  it("renderiza a AzulejoFaixa da tramitação (role=img)", () => {
+  it("renderiza a AzulejoFaixa da tramitação (role=img) com o rótulo ARIA completo (item 3, review A2.1)", () => {
     render(<DestaqueTramitacao destaque={destaque} ente="fortaleza" />);
-    expect(screen.getByRole("img")).toBeTruthy();
+    expect(screen.getByRole("img", {
+      name: "Tramitação de PL 042/2026: concluídos Protocolo, Comissões, 1º turno; atual 2º turno; pendente Sanção.",
+    })).toBeTruthy();
   });
 
   it("mostra o permalink (URN)", () => {
