@@ -199,6 +199,35 @@
 .balcao .lead { font-size: var(--t-16); color: var(--texto-2); margin: 0 0 1.3rem; line-height: 1.55; }
 .balcao .lead b { color: var(--texto); font-weight: 600; }
 
+/* ---- Task 2.1: formulário "Acompanhar pelo número" (e-SIC real) ---- */
+.acompanhar-esic { margin: 0 0 1.2rem; }
+.acompanhar-esic label { display: block; font-size: var(--t-13); font-weight: 600; color: var(--texto); margin: 0 0 0.4rem; }
+.acompanhar-esic-campo { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.acompanhar-esic-campo input {
+  flex: 1 1 12rem; min-width: 0; font-family: var(--corpo); font-size: var(--t-16); color: var(--texto);
+  background: var(--surface-2); border: 1.5px solid var(--linha); border-radius: var(--raio-sm);
+  padding: 0.55rem 0.8rem; min-height: 44px;
+}
+.acompanhar-esic-campo input::placeholder { color: var(--texto-2); }
+.acompanhar-esic-campo input:focus-visible { outline: none; border-color: var(--foco); box-shadow: 0 0 0 4px color-mix(in srgb, var(--foco) 18%, transparent); }
+.acompanhar-esic-campo button { min-height: 44px; }
+
+/* AnelPrazo (src/lib/charts/anel-prazo.tsx) reusado aqui (Task 2.1) — mesmas classes internas do
+   componente (.anel-c/.trilho/.arco/.centro/.d/.u) já estilizadas em mesa.css (escopo próprio daquela
+   rota, não carregado aqui). Reescopado ao tamanho passado pelo prop `tamanho={92}` — sem variante de
+   urgência (a Lei de Acesso não tem 3 faixas de risco como o painel interno, só o prazo corrido): cor
+   fixa de "prazo em curso" (jade-claro no claro / marca no escuro, mesmo par já usado em
+   `.recibo-nota svg`/`.ja-publicado svg` acima). Contraste medido (pixel composto) vs `--bg` (fundo do
+   `.pedido` que o hospeda): 4.59:1 claro / 7.59:1 escuro — acima do piso 3:1 de gráfico. */
+.anel-c { position: relative; width: 92px; height: 92px; flex: 0 0 auto; }
+.anel-c svg { width: 92px; height: 92px; display: block; }
+.anel-c .trilho { fill: none; stroke: var(--linha); stroke-width: 7; }
+.anel-c .arco { fill: none; stroke: var(--jade-claro); stroke-width: 7; }
+[data-tema="escuro"] .anel-c .arco { stroke: var(--marca); }
+.anel-c .centro { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; line-height: 1; }
+.anel-c .d { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--texto); font-variant-numeric: tabular-nums; }
+.anel-c .u { font-family: var(--mono); font-size: 0.68rem; letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); }
+
 .pedido { display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: center; background: var(--bg); border: 1px solid var(--linha); border-radius: var(--raio); padding: 1.1rem 1.15rem; }
 .pedido .num { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
 .pedido .obj { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); margin: 0.25rem 0 0; line-height: 1.3; }
