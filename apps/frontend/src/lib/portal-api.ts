@@ -2,11 +2,24 @@
 // use-mesa.ts, mas para a superfície SEM auth (nenhuma rota autenticada nesta fatia): sem header
 // Authorization, `!ok` ou throw sempre viram `null` — "degradação por seção" (Global Constraints do
 // plano): uma seção com fetch falho/vazio degrada sozinha, nunca derruba a página inteira.
+//
+// `buscarPublico` recebe SEGMENTOS de path (não um `caminho` já concatenado) — review de segurança
+// A2.0: um `caminho` único concatenado direto na URL deixava passar `../` vindo de qualquer segmento
+// não confiável (ex.: um `ente` da URL). Cada segmento é codificado individualmente antes do join.
 
 import { camelizarChaves } from "./boundary";
 
-export async function buscarPublico<T>(caminho: string): Promise<T | null> {
+function codificarSegmento(segmento: string): string {
+  const codificado = encodeURIComponent(segmento);
+  // encodeURIComponent não escapa "."/".." (não são reservados) — sem isso, um segmento igual a ".."
+  // continuaria significando "sobe um nível" quando o navegador resolve a URL relativa, escapando do
+  // prefixo /api/portal/casa/. Só os segmentos puramente de pontos precisam desse reforço.
+  return /^\.+$/.test(codificado) ? codificado.replace(/\./g, "%2E") : codificado;
+}
+
+export async function buscarPublico<T>(...segmentos: string[]): Promise<T | null> {
   try {
+    const caminho = segmentos.map(codificarSegmento).join("/");
     const r = await fetch(`/api/portal/casa/${caminho}`, { cache: "no-store" });
     if (!r.ok) return null;
     return camelizarChaves(await r.json()) as T;

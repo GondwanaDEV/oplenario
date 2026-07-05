@@ -10,12 +10,29 @@
 // (aqui já temos JS/estado, não precisamos do truque puro-CSS). O brasão é um símbolo GENÉRICO — a
 // tela-fonte usa o brasão real de Fortaleza (arte específica de um cliente); sem esse dado por-tenant
 // disponível ainda, um símbolo cívico neutro evita inventar heráldica de terceiros.
+//
+// Nav mobile (review A2.0, item 1): abaixo de 1000px a `<ul class="nav-publica">` inline não cabe —
+// em vez de simplesmente escondê-la (como o CSS fazia antes, deixando os 6 links inalcançáveis), um
+// botão hambúrguer revela/oculta o MESMO <ul> (não duplica a lista) via `aria-expanded`/`aria-controls`
+// + `id` — disclosure pattern padrão. Esc fecha; o botão só aparece <1000px (CSS).
 
+import { useEffect, useState } from "react";
 import { useTema } from "@/lib/tema";
 import "./public.css";
 
 export function BarraInstitucional({ nomeCasa }: { nomeCasa: string }) {
   const { tema, alternar } = useTema();
+  const [navAberta, setNavAberta] = useState(false);
+
+  useEffect(() => {
+    if (!navAberta) return;
+    function aoTeclar(evento: KeyboardEvent) {
+      if (evento.key === "Escape") setNavAberta(false);
+    }
+    document.addEventListener("keydown", aoTeclar);
+    return () => document.removeEventListener("keydown", aoTeclar);
+  }, [navAberta]);
+
   return (
     <header className="topo">
       <div className="envelope topo-grade">
@@ -27,8 +44,18 @@ export function BarraInstitucional({ nomeCasa }: { nomeCasa: string }) {
           </div>
         </div>
 
-        <nav aria-label="Seções do portal">
-          <ul className="nav-publica">
+        <nav aria-label="Seções do portal" className="nav-publica-nav">
+          <button
+            type="button"
+            className="nav-publica-toggle"
+            aria-expanded={navAberta}
+            aria-controls="nav-publica-lista"
+            aria-label={navAberta ? "Fechar menu" : "Abrir menu"}
+            onClick={() => setNavAberta((aberta) => !aberta)}
+          >
+            <span aria-hidden="true">☰</span>
+          </button>
+          <ul id="nav-publica-lista" className="nav-publica" data-aberta={navAberta}>
             <li>
               <a href="#" aria-current="page">
                 Início
@@ -60,7 +87,7 @@ export function BarraInstitucional({ nomeCasa }: { nomeCasa: string }) {
             onClick={alternar}
             title="Alternar tema claro / escuro"
           >
-            {tema === "escuro" ? "☾" : "☀"}
+            <span aria-hidden="true">{tema === "escuro" ? "☾" : "☀"}</span>
             <span className="tema-rotulo">{tema === "escuro" ? "Escuro" : "Claro"}</span>
           </button>
           <a className="govbr-topo" href="#" aria-label="Entrar com conta gov.br">

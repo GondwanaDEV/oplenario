@@ -22,6 +22,7 @@ export default async function PaginaPortalCidadao({
       </a>
       <BarraInstitucional nomeCasa={ente} />
       <main id="conteudo" className="envelope">
+        <h1 className="sr-only">Portal do Cidadão — {ente}</h1>
         <EmBreve
           titulo="Portal do Cidadão"
           motivo="A home do portal (proposições em tramitação, balcões de e-SIC/LGPD e navegação cívica) chega nas próximas fatias — o shell público e a fundação visual já estão de pé."

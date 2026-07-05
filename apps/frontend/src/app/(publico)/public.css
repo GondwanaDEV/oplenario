@@ -31,10 +31,22 @@
 .brasao-nome b { font-family: var(--display); font-weight: 700; font-size: var(--t-16); letter-spacing: -0.01em; color: var(--texto); line-height: 1.12; display: block; }
 .brasao-nome span { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; color: var(--acento-texto); text-transform: uppercase; }
 
-.nav-publica { display: flex; align-items: center; gap: 0.2rem; margin: 0 auto; list-style: none; padding: 0; }
+.nav-publica-nav { position: relative; margin: 0 auto; }
+.nav-publica { display: flex; align-items: center; gap: 0.2rem; list-style: none; padding: 0; margin: 0; }
 .nav-publica a { font-size: var(--t-13); font-weight: 500; color: var(--texto-2); text-decoration: none; padding: 0.5rem 0.7rem; border-radius: var(--raio-sm); white-space: nowrap; transition: color .12s ease, background-color .12s ease; }
 .nav-publica a:hover { color: var(--texto); background: var(--surface); }
 .nav-publica a[aria-current] { color: var(--marca); font-weight: 600; }
+
+/* botão hambúrguer — só existe visualmente <1000px (ver media query); no desktop a <ul> é inline */
+.nav-publica-toggle {
+  display: none; align-items: center; justify-content: center;
+  width: 40px; height: 40px; flex: 0 0 auto;
+  border: 1px solid var(--linha); border-radius: var(--raio-sm);
+  background: var(--surface); color: var(--texto); cursor: pointer;
+  font-size: var(--t-21); line-height: 1;
+}
+.nav-publica-toggle:hover { border-color: var(--foco); }
+.nav-publica-toggle:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
 
 /* link pequeno de entrada gov.br no topo — NÃO é o `.govbr` grande do chassi.css (ver nota no topo). */
 .govbr-topo {
@@ -260,7 +272,15 @@
 
 /* ============== RESPONSIVO ============== */
 @media (max-width: 1000px) {
-  .nav-publica { display: none; }
+  .nav-publica-toggle { display: inline-flex; }
+  .nav-publica {
+    display: none; position: absolute; left: 0; right: 0; top: calc(100% + 0.6rem);
+    flex-direction: column; align-items: stretch; gap: 0.15rem;
+    background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-sm);
+    box-shadow: var(--sombra-alta); padding: 0.5rem; z-index: 40;
+  }
+  .nav-publica[data-aberta="true"] { display: flex; }
+  .nav-publica a { padding: 0.65rem 0.7rem; }
   .topo-grade { gap: 0.7rem 1rem; }
   .brasao-marca { margin-right: auto; }
   .destaque-grade { grid-template-columns: 1fr; }
