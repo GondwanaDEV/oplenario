@@ -344,3 +344,43 @@
 .em-breve-rotulo { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--texto-2); margin: 0 0 0.3rem; }
 .em-breve-titulo { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); margin: 0 0 0.3rem; }
 .em-breve-motivo { font-size: var(--t-13); color: var(--texto-2); margin: 0; line-height: 1.5; }
+
+/* ============== 7 · FICHA DA MATÉRIA (Task 3.2, Fatia A2.3) ==============
+   Porte de ficha-materia-publica.html — reusa .destaque-mat/.tramitacao/.azulejo-faixa/.permalink/
+   .resumo-ia/.resumo-off já existentes (seção 3 acima); aqui só o que é PRÓPRIO da ficha standalone
+   (fora do grid de 2 colunas do card de destaque da home). */
+.migalha { font-size: var(--t-13); color: var(--texto-2); margin: 1.2rem 0 0; display: flex; align-items: center; gap: 0.4rem; }
+.migalha a { color: var(--marca); font-weight: 600; text-decoration: none; }
+.migalha a:hover { text-decoration: underline; }
+
+.ficha-cab { margin: 0.6rem 0 0; }
+.ficha-cab .linha-id { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.ficha-cab .num { font-family: var(--mono); font-size: var(--t-13); font-weight: 600; color: var(--acento-texto); }
+.estado-chip { font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.18rem 0.7rem; display: inline-flex; align-items: center; gap: 0.35rem; color: var(--cobalto); background: color-mix(in srgb, var(--cobalto) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--cobalto) 34%, transparent); }
+[data-tema="escuro"] .estado-chip { color: var(--foco); }
+.ficha-cab h1 { font-family: var(--display); font-weight: 800; font-size: clamp(1.7rem, 4.5vw, var(--t-40)); letter-spacing: -0.02em; color: var(--texto); margin: 0.5rem 0 0; line-height: 1.08; }
+.ficha-cab .autoria { font-size: var(--t-13); color: var(--texto-2); margin: 0.6rem 0 0; }
+.ficha-cab .autoria b { color: var(--texto); font-weight: 600; }
+
+.ficha-tram { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.3rem 1.4rem 1.5rem; margin: 1.3rem 0 0; }
+.ficha-tram h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 1.1rem; }
+
+/* "virou lei" — a norma publicada (ligação matéria->lei; só aparece quando ficha.norma existe). Reusa o
+   par jade-claro/marca de .ja-publicado (mesmo racional visual: aviso positivo, borda tracejada). */
+.norma-publicada { display: flex; align-items: flex-start; gap: 0.7rem; margin: 1.2rem 0 0; padding: 1rem 1.15rem; background: color-mix(in srgb, var(--jade) 7%, var(--surface)); border: 1px solid color-mix(in srgb, var(--jade) 30%, var(--linha)); border-radius: var(--raio); }
+.norma-publicada svg { color: var(--jade-claro); flex: 0 0 auto; margin-top: 2px; }
+[data-tema="escuro"] .norma-publicada svg { color: var(--marca); }
+.norma-publicada b { color: var(--texto); font-weight: 600; display: block; font-family: var(--display); }
+.norma-publicada a { font-family: var(--mono); font-size: var(--t-12); color: var(--marca); word-break: break-all; }
+
+/* comentários aprovados (read-only nesta fatia — sem compor/moderar; a lista pública nunca expõe autor,
+   `participacao/wire/out/comentario.clj` PublicoOut = id/corpo/criado-em SÓ). */
+.part-regras { display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.9rem 1.1rem; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); font-size: var(--t-13); color: var(--texto-2); line-height: 1.5; margin: 0 0 1.1rem; }
+.part-regras svg { color: var(--marca); flex: 0 0 auto; margin-top: 2px; }
+.part-regras b { color: var(--texto); font-weight: 600; }
+.coment { display: grid; gap: 1rem; }
+.cmt { display: grid; grid-template-columns: auto 1fr; gap: 0.8rem; padding: 0.9rem 1rem; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-sm); }
+.cmt .av { width: 32px; height: 32px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; color: var(--texto-2); background: var(--surface-2); border: 1px solid var(--linha); }
+.cmt .corpo { min-width: 0; }
+.cmt .quando { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+.cmt p { font-size: var(--t-16); color: var(--texto); line-height: 1.55; margin: 0.25rem 0 0; }
