@@ -132,7 +132,12 @@
 .azulejo-faixa { width: 100%; height: auto; display: block; }
 .azulejo-faixa text { fill: var(--texto-2); }
 .azulejo-faixa text.ativo { fill: var(--acento-texto); font-weight: 600; }
-.azulejo-faixa text.pendente { fill: var(--texto-2); opacity: .62; }
+/* opacity .88 (não .62 do porte original) — Fatia A2.1 review de contraste: com dado real, o rótulo
+   pendente é texto de verdade (≥1 estágio pendente aparece sempre que uma matéria não está 100% concluída
+   ou arquivada) — opacity .62 media 2.77:1 no claro / 3.78:1 no escuro (falha AA 4.5:1 pra texto normal,
+   medido em pixel composto sobre --bg). .88 mede 4.83:1 (claro) / 6.33:1 (escuro) — ainda visivelmente mais
+   apagado que ativo/concluído (a distinção principal já vem do grafismo do tile — tracejado vs sólido). */
+.azulejo-faixa text.pendente { fill: var(--texto-2); opacity: .88; }
 
 .azulejo-tile--concluido { fill: var(--jade); }
 .azulejo-tile--ativo { fill: var(--bg); stroke: var(--amarelo); stroke-width: 2; }

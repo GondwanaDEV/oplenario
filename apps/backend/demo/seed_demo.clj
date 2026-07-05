@@ -8,16 +8,24 @@
     DATABASE_URL=jdbc:postgresql://localhost:5544/oplenario MINIO_ENDPOINT=http://localhost:9100 \\
       clojure -X:dev seed-demo/base
     ... (abrir o browser na URL impressa) ...
-    DATABASE_URL=... clojure -X:dev seed-demo/eventos"
+    DATABASE_URL=... clojure -X:dev seed-demo/eventos
+    DATABASE_URL=... clojure -X:dev seed-demo/materias   ; Portal do Cidadão (Task 1.4, Fatia A2.1 FE)
+
+  (rodar via `clojure -Sdeps '{:aliases {:seed {:extra-paths [\"demo\"]}}}' -X:seed seed-demo/<fn>` — fora
+  do alias `:dev` porque `dev/user.clj` exige `component.repl` ausente, mesma nota de oplenario-fe-execucao)"
   (:require [com.stuartsierra.component :as component]
             [oplenario.cadastros.db.estrutura :as estrutura]
             [oplenario.cadastros.db.referencia :as referencia]
+            [oplenario.cadastros.relacoes.cadastro :as rel-cad]
             [oplenario.config :as config]
             [oplenario.identidade.db.identidade :as id]
             [oplenario.identidade.db.vinculo :as vinc]
+            [oplenario.identidade.relacoes.identidade :as rel-id]
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.kernel.outbox :as outbox]
             [oplenario.kernel.tenancy :as tenancy]
+            [oplenario.legislativo.components.repositorio :as legislativo-repo]
+            [oplenario.motor.components.registro-fatos :as rf]
             [oplenario.sessoes.components.repositorio :as repo]
             [clojure.edn :as edn])
   (:import (java.time Instant)))
@@ -32,6 +40,7 @@
     (try (f (:ds c)) (finally (component/stop c)))))
 
 (defn- repo-sessoes [ds] (assoc (repo/repositorio) :datasource {:ds ds} :bus (outbox/bus)))
+(defn- repo-legislativo [ds] (legislativo-repo/->RepoLegislativoPg {:ds ds} (outbox/bus)))
 
 (defn base [_]
   (com-ds
@@ -78,3 +87,71 @@
          (repo/iniciar-fala! r ente {:id (random-uuid) :sessao-id sessao :orador-id orad :tipo-fala "principal"
                                      :fase "ordem_do_dia" :iniciou-em (Instant/now) :created-by orad}))
        (println "feito — o painel deve mostrar quórum 7 + tribuna com cronômetro correndo.")))))
+
+;; ---------- Task 1.4 (Fatia A2.1, Portal do Cidadão FE) — matérias variadas p/ o portal público ----------
+
+(def ^:private rito-fixture-transicoes
+  "Rito de 5 passos [FIXTURE] — mesmo disclaimer de tramitacao_db_test/portal_test.clj: NÃO é regulamento
+  real de nenhuma câmara (o regimento real é [GAP], §22.7.5). Espelha o vocabulário ilustrativo que
+  src/lib/tramitacao-vista.ts (FE) já documenta como fixture de demo, só p/ a AzulejoFaixa ter estágios
+  reais p/ exercitar no navegador."
+  [["protocolada" "em_comissoes"] ["em_comissoes" "em_pauta"]
+   ["em_pauta" "segundo_turno"] ["segundo_turno" "em_sancao"] ["em_sancao" "aprovada"]])
+
+(def ^:private materias-seed
+  "6 proposições variadas (tipo + quantos passos avança no rito, ou arquivamento direto) — o suficiente
+  p/ a home do portal (destaque + mais-em-tramitação, Task 1.3) mostrar estágios DIFERENTES da faixa."
+  [{:tipo "projeto_lei" :ementa "Cria o Programa Municipal de Hortas Comunitárias." :autor-texto "Ver.ª Helena Matos" :avancos 3}
+   {:tipo "projeto_lei" :ementa "Arborização viária do entorno da Av. Bezerra de Menezes" :autor-texto "Ver. João Pontes" :avancos 2}
+   {:tipo "projeto_lei_complementar" :ementa "Altera o Código de Posturas do Município" :autor-texto "Ver.ª Cida Ramos" :avancos 1}
+   {:tipo "projeto_lei" :ementa "Denominação de via pública no Bairro Messejana" :autor-texto "Ver. Marcos Frota" :avancos 5}
+   {:tipo "indicacao" :ementa "Solicita reparo de iluminação pública na Praça da Gentilândia" :autor-texto "Ver.ª Helena Matos" :avancos 0
+    :objeto-indicacao "Reparo de iluminação pública"}
+   {:tipo "requerimento" :ementa "Requer informações sobre o Programa de Compostagem" :autor-texto "Ver. Marcos Frota" :arquivar true
+    :tipo-requerimento "informacao"}])
+
+(defn materias
+  "Semente do PORTAL DO CIDADÃO (Task 1.4, Fatia A2.1 FE): protocola as `materias-seed` sob o MESMO ente
+  da demo (ids-file de `base` — rodar `base` primeiro) e avança cada uma um número diferente de passos
+  no rito [FIXTURE] `rito-fixture-transicoes`. Usa o Repo de `legislativo` de VERDADE — `protocolar!`
+  emite `proposicao.protocolada`, `transicionar!` emite `proposicao.transicionou` — o MESMO caminho que
+  a rota pública GET /portal/casa/:ente/materias lê (via a projeção real de `transparencia`, drenada pelo
+  relay do app servido em docker, igual à nota de topo deste ns). NÃO é idempotente (protocola matérias
+  NOVAS a cada chamada, como `eventos` já é p/ presença/tribuna) — rodar uma vez por demo fresca."
+  [_]
+  (com-ds
+   (fn [ds]
+     (let [{:keys [ente ident]} (edn/read-string (slurp ids-file))
+           repo (repo-legislativo ds)
+           reg  (component/start (rf/registro-fatos (merge rel-cad/relacoes rel-id/relacoes)))
+           tid  (random-uuid)]
+       (legislativo-repo/criar-template! repo ente
+         {:id tid :chave "rito_fixture_portal" :versao 1
+          :nome "Rito [FIXTURE] — demo do portal" :estado-inicial "protocolada"})
+       (doseq [ch ["protocolada" "em_comissoes" "em_pauta" "segundo_turno" "em_sancao" "aprovada" "arquivada"]]
+         (legislativo-repo/criar-estado! repo ente
+           {:id (random-uuid) :template-id tid :chave ch :nome ch
+            :terminal (boolean (#{"aprovada" "arquivada"} ch))}))
+       (doseq [[de para] rito-fixture-transicoes]
+         (legislativo-repo/criar-transicao! repo ente
+           {:id (random-uuid) :template-id tid :de-estado de :para-estado para :gatilho "avancar" :guarda nil}))
+       (legislativo-repo/criar-transicao! repo ente
+         {:id (random-uuid) :template-id tid :de-estado "protocolada" :para-estado "arquivada"
+          :gatilho "arquivar" :guarda nil})
+
+       (doseq [{:keys [tipo ementa autor-texto avancos arquivar objeto-indicacao tipo-requerimento]} materias-seed]
+         (let [{pid :id} (legislativo-repo/protocolar! repo ente
+                           {:id (random-uuid) :ente-id ente :tipo tipo :ano 2026 :uf "CE"
+                            :municipio-nome "Fortaleza" :ementa ementa :autor-tipo "vereador"
+                            :autor-texto autor-texto :objeto-indicacao objeto-indicacao
+                            :tipo-requerimento tipo-requerimento})]
+           (if arquivar
+             (legislativo-repo/transicionar! repo ente reg
+               {:proposicao-id pid :template-id tid :gatilho "arquivar" :updated-by ident})
+             (dotimes [_ (or avancos 0)]
+               (legislativo-repo/transicionar! repo ente reg
+                 {:proposicao-id pid :template-id tid :gatilho "avancar" :updated-by ident})))))
+
+       (println "\n=== MATÉRIAS DA DEMO PRONTAS ===")
+       (println "URL: http://localhost:3000/portal/casa/" (str ente))
+       (println "=================================\n")))))
