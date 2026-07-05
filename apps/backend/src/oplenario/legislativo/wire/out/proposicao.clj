@@ -22,6 +22,8 @@
    [:atualizado-em :string]])
 
 (def ListaProposicoesOut
+  "O envelope da resposta de GET /legislativo/proposicoes — a pagina de itens (ProposicaoResumoOut) mais os
+  metadados de paginacao (total do MESMO filtro, pagina e tamanho-pagina efetivos)."
   [:map {:closed true}
    [:itens [:vector ProposicaoResumoOut]]
    [:total :int]

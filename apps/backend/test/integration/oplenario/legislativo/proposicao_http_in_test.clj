@@ -23,14 +23,16 @@
    :atualizado-em (java.time.Instant/parse "2026-05-21T10:00:00Z")})
 
 (defn- fake-repo-legislativo
-  "RepoLegislativo fake: `listar-proposicoes`/`contar-proposicoes` devolvem `itens`/`total`. Impl parcial
-  proposital (so' os metodos exercidos). `filtros-recebidos` (atom) captura o filtro que o controller
-  repassou ao Repo — prova que a coercao da borda chegou intacta."
+  "RepoLegislativo fake: `listar-e-contar-proposicoes` devolve {:itens :total} (review ecc — o metodo unico
+  composto que o controller chama, Onda B Slice 1). Impl parcial proposital (so' o metodo exercido).
+  `filtros-recebidos` (atom) captura o filtro que o controller repassou ao Repo — prova que a coercao da
+  borda chegou intacta."
   [itens total filtros-recebidos]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify repo-leg/RepoLegislativo
-    (listar-proposicoes [_ _ente-id filtro] (reset! filtros-recebidos filtro) itens)
-    (contar-proposicoes [_ _ente-id _filtro] total)))
+    (listar-e-contar-proposicoes [_ _ente-id filtro]
+      (reset! filtros-recebidos filtro)
+      {:itens itens :total total})))
 
 (defn- fake-repo-identidade [papeis]
   #_{:clj-kondo/ignore [:missing-protocol-method]}

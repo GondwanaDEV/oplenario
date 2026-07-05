@@ -56,6 +56,15 @@
 
 ;; ---------- Onda B Slice 1: lista filtravel/ordenavel/paginada do servidor ----------
 
+(def ^:private colunas-resumo
+  "Onda B Slice 1 (review ecc clojure+database) — subconjunto ESTREITO de `colunas` p/ a LISTAGEM: so' o que
+  ProposicaoResumoOut/`resumo->wire` de fato le' (id/tipo/ano/sequencial/urn_lex/ementa/autor_tipo/
+  autor_texto/estado/atualizado_em). NUNCA `atributos_especificos` (jsonb, write-oriented) nem
+  texto_vigente_versao_id/objeto_indicacao/destinatario_*/tipo_requerimento/categoria_mocao — evita o
+  over-fetch e a inconsistencia de decode do jsonb bruto (PGobject) que `linhas->kebab` sozinho nao resolve.
+  `buscar`/`listar-por-estado` continuam com `colunas` (o conjunto cheio) p/ os seus proprios callers."
+  [:id :tipo :ano :sequencial :urn_lex :ementa :autor_tipo :autor_texto :estado :atualizado_em])
+
 (def ^:private colunas-ordenacao
   "Allowlist string(querystring) -> coluna HoneySQL (defesa-em-profundidade: adapters/in ja' rejeitou
   qualquer string fora deste vocabulario -> 400; aqui NUNCA se interpola a string do usuario direto no SQL,
@@ -84,7 +93,7 @@
         dir (if (= "asc" ordenar-dir) :asc :desc)]
     (comum/linhas->kebab
      (jdbc/execute! tx
-       (sql/format {:select colunas :from [:legislativo.proposicoes]
+       (sql/format {:select colunas-resumo :from [:legislativo.proposicoes]
                     :where (into [:and] (where-listagem ente-id filtro))
                     :order-by [[col dir] [:id :asc]]
                     :limit tamanho

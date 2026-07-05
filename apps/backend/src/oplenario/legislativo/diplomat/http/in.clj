@@ -1,11 +1,13 @@
 (ns oplenario.legislativo.diplomat.http.in
-  "Fronteira de IO HTTP de ENTRADA do legislativo (§22.10 diplomat/http/in, ADR-0001): a vertical da votacao ao
-  vivo (F4 Slice 3) — abrir / registrar voto / encerrar. A rota mora AQUI (legislativo e' o DONO do agregado
-  votacao + da tx que casa ato+emissao, Slice 1), nao no `sessoes` — espelha o SSE `/sessoes/:id/plenario` que
-  mora no `tempo_real` (prefixo de URL != dono do modulo). O diplomat e' a UNICA camada que cruza o gate de
-  borda (adapters/in na entrada, adapters/out na saida); o controller trabalha so em models. A authz e' HERDADA
-  do recurso SESSAO via `consultar-sessao` INJETADA pelo host (legislativo NAO importa sessoes, §22.10): a
-  grossa (exige-papel) na rota, a fina (policy.check/pode-dirigir-votacao?) no controller."
+  "Fronteira de IO HTTP de ENTRADA do legislativo (§22.10 diplomat/http/in, ADR-0001): DUAS verticais moram
+  aqui. (1) a votacao ao vivo (F4 Slice 3) — abrir / registrar voto / encerrar. A rota mora AQUI (legislativo
+  e' o DONO do agregado votacao + da tx que casa ato+emissao, Slice 1), nao no `sessoes` — espelha o SSE
+  `/sessoes/:id/plenario` que mora no `tempo_real` (prefixo de URL != dono do modulo). (2) GET
+  /legislativo/proposicoes (Onda B Slice 1) — a listagem tenant-wide de proposicoes, so' o gate grosso (papel
+  'secretario'), sem authz herdada de sessao. O diplomat e' a UNICA camada que cruza o gate de borda
+  (adapters/in na entrada, adapters/out na saida); o controller trabalha so em models. Na vertical de votacao a
+  authz e' HERDADA do recurso SESSAO via `consultar-sessao` INJETADA pelo host (legislativo NAO importa
+  sessoes, §22.10): a grossa (exige-papel) na rota, a fina (policy.check/pode-dirigir-votacao?) no controller."
   (:require [oplenario.http :as http]
             [oplenario.interceptors :as it]
             [oplenario.legislativo.adapters.in.proposicao :as adapters-in-proposicao]
