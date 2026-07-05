@@ -77,6 +77,11 @@
   --topo-bg:   rgba(241,236,221,.9);
   --aviso-texto:   #6E5009;    /* texto sobre realce amarelo — versão AA do Marajó (o cheio falha) */
   --amarelo-traco: #B07D14;    /* traço/borda gráfica de alerta que precisa de 3:1 sobre claro */
+  /* borda de campo de formulário (input/busca) — --linha (~1.3-1.5:1) falha o piso de 3:1 de
+     non-text contrast (SC 1.4.11) para limite de componente de UI; medido (pixel composto) contra
+     AMBOS --surface-2 (preenchimento interno) e --surface/--bg (fundo externo), pior caso reportado:
+     claro 3.62:1 vs --bg. --linha segue reservada a divisores decorativos (não é limite de componente). */
+  --campo-borda:   #807B5E;
 
   --sombra:      0 1px 0 rgba(25,33,28,.04), 0 18px 40px -28px rgba(12,83,64,.45);
   --sombra-alta: 0 1px 0 rgba(25,33,28,.05), 0 32px 64px -38px rgba(12,83,64,.55);
@@ -118,6 +123,8 @@
   --topo-bg:   rgba(14,26,21,.88);
   --aviso-texto:   #E8B23A;    /* no escuro o Marajó cheio já passa AA como texto */
   --amarelo-traco: #E8B23A;
+  /* pior caso reportado no escuro: 3.73:1 vs --surface-2 (o mais próximo em luminância). */
+  --campo-borda:   #698F7D;
 
   --sombra:      0 1px 0 rgba(0,0,0,.2),  0 20px 44px -28px rgba(0,0,0,.6);
   --sombra-alta: 0 1px 0 rgba(0,0,0,.25), 0 34px 70px -36px rgba(0,0,0,.7);
@@ -154,7 +161,7 @@
     --texto:#ECE7D6; --texto-2:#9FB0A4; --marca:#43BD93;
     --acao:#18A074; --acao-hover:#1FB585; --acao-texto:#06150F;
     --acento-texto:#F0794B; --foco:#6AA6DE; --topo-bg:rgba(14,26,21,.88);
-    --aviso-texto:#E8B23A; --amarelo-traco:#E8B23A;
+    --aviso-texto:#E8B23A; --amarelo-traco:#E8B23A; --campo-borda:#698F7D;
     --sombra:0 1px 0 rgba(0,0,0,.2), 0 20px 44px -28px rgba(0,0,0,.6);
     --sombra-alta:0 1px 0 rgba(0,0,0,.25), 0 34px 70px -36px rgba(0,0,0,.7);
     --palco-bg:#0B3A2B; --palco-texto:#ECE7D6; --palco-texto-2:rgba(236,231,214,.82);

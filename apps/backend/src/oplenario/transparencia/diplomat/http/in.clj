@@ -15,6 +15,7 @@
             [oplenario.transparencia.adapters.in.portal :as adapters-in]
             [oplenario.transparencia.adapters.out.acompanhamento :as adapters-out-acomp]
             [oplenario.transparencia.adapters.out.artefato :as adapters-out-artefato]
+            [oplenario.transparencia.adapters.out.ente :as adapters-out-ente]
             [oplenario.transparencia.adapters.out.materia :as adapters-out-materia]
             [oplenario.transparencia.adapters.out.norma :as adapters-out-norma]
             [oplenario.transparencia.controllers :as controllers]))
@@ -25,6 +26,19 @@
   "Seam `resolver-ente-publico` DEFAULT do host (V1): o :ente do path = UUID do ente, coagido fail-closed
   (:validacao/invalido -> 400). Mesmo seam de participacao/diplomat/http/in — fornecido pelo host a `rotas`."
   adapters-in/ente-param->uuid)
+
+(defn- info-ente-handler
+  "GET /portal/casa/:ente — perfil publico MINIMO do ente (nome-oficial/nome-curto), p/ a barra
+  institucional/rodape do portal exibirem o nome real da Casa em vez do UUID cru da rota (FE Onda A2
+  fast-follow). `info-ente` chega INJETADA pelo host (cross-modulo por inversao de dependencia sobre o Repo
+  de cadastros — §22.10, mesmo padrao de consultar-sessao/membros-da-casa/painel-compliance; transparencia
+  nunca importa cadastros). Ente inexistente -> 404 (nunca devolve o UUID como se fosse nome)."
+  [info-ente resolver-ente-publico]
+  (fn [req]
+    (let [ente-id (resolver-ente-publico (get-in req [:path-params :ente]))]
+      (if-let [e (info-ente ente-id)]
+        (http/json-resposta 200 (adapters-out-ente/->wire e))
+        (http/json-resposta 404 {:erro "ente nao encontrado"})))))
 
 (defn- listar-materias-handler
   [repo-transparencia resolver-ente-publico]
@@ -106,8 +120,11 @@
   "Fragmento de rotas do modulo transparencia (table syntax Pedestal). Recebe o `repo-transparencia`
   (Repo-Component), o `resolver-ente-publico` (seam do host, rotas publicas do Slice 1) e o interceptor
   `auth` (compartilhado, rotas autenticadas do Slice 2). `oplenario.rotas` funde este fragmento."
-  [{:keys [repo-transparencia resolver-ente-publico auth objeto-store]}]
-  #{["/portal/casa/:ente/materias" :get
+  [{:keys [repo-transparencia resolver-ente-publico auth objeto-store info-ente]}]
+  #{["/portal/casa/:ente" :get
+     [(info-ente-handler info-ente resolver-ente-publico)]
+     :route-name :transparencia/info-ente]
+    ["/portal/casa/:ente/materias" :get
      [(listar-materias-handler repo-transparencia resolver-ente-publico)]
      :route-name :transparencia/listar-materias]
     ["/portal/casa/:ente/materias/:proposicao_id" :get

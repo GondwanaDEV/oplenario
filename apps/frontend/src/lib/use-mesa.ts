@@ -8,6 +8,7 @@
 // a versão "só contagem" já presente em `mesa`, nunca deriva pra erro de página).
 
 import { useEffect, useState } from "react";
+import { camelizarChaves } from "./boundary";
 import type { CardIndisponivelOut, MesaOut, RelatorPendenteOut } from "./contrato-mesa.gen";
 
 export interface ItemBoardOut {
@@ -41,26 +42,8 @@ export interface SliSessaoOut {
 
 type Estado = "carregando" | "pronto" | "erro";
 
-// jsonista (backend, apps/backend/src/oplenario/http.clj:json-resposta) serializa keywords Clojure
-// VERBATIM — :por-estado vira a chave JSON literal "por-estado", nunca camelCase. O contrato gerado
-// (contrato-mesa.gen.ts) e todo o código downstream (mesa-vista.ts, componentes B4-B7) já são escritos
-// contra nomes camelCase (porEstado, complianceTce, ...). Sem esta transformação, o acesso por
-// propriedade camelCase resolve pra `undefined` contra um payload real do backend (bug B7b). A
-// transformação é aplicada UMA VEZ aqui, no único ponto em que os 4 endpoints do dashboard são
-// parseados — dependency-free, no mesmo espírito "zero-dep, hand-rolled" do codegen (Task A7).
-function paraCamel(chave: string): string {
-  return chave.replace(/-+([a-z0-9])/g, (_, c: string) => c.toUpperCase());
-}
-
-function camelizarChaves(valor: unknown): unknown {
-  if (Array.isArray(valor)) return valor.map(camelizarChaves);
-  if (valor !== null && typeof valor === "object") {
-    return Object.fromEntries(
-      Object.entries(valor as Record<string, unknown>).map(([k, v]) => [paraCamel(k), camelizarChaves(v)]),
-    );
-  }
-  return valor;
-}
+// Boundary kebab->camel: extraído para ./boundary (Task 0.1, Fatia A2.0 — Portal do Cidadão); ver o
+// racional lá (jsonista serializa keywords Clojure VERBATIM, bug B7b).
 
 async function buscarOuNull<T>(url: string, token: string): Promise<T | null> {
   try {

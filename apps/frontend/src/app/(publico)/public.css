@@ -1,0 +1,386 @@
+/* ============================================================
+   O PLENÁRIO · Portal do Cidadão — CSS específico da tela.
+   Porte de produto/design-system/o-plenario/telas/portal-cidadao.html:32-307 (Task 0.6, Fatia A2.0).
+   tokens.css + chassi.css já vêm globais (app/globals.css); aqui só o que é PRÓPRIO desta superfície
+   pública (não duplica .topo/.marca/.tema-btn/.btn/.envelope/.pular/.sr-only — esses já vivem no chassi).
+
+   DUAS DEVIAÇÕES do porte verbatim, documentadas:
+   1) `.govbr` já existe no chassi.css como o BOTÃO OFICIAL grande (full-width, cores fixas da marca
+      gov.br) — um componente diferente do link pequeno da barra institucional que esta tela usa. Para
+      não colidir, o link do topo aqui chama-se `.govbr-topo` (mesmo visual do portal-cidadao.html
+      original, só renomeado).
+   2) `body.superficie-publica` no chassi.css só funciona quando a classe está no <body> — o App Router
+      do Next.js tem UM <body> compartilhado por TODAS as rotas (app/layout.tsx), então (publico)/
+      layout.tsx não pode trocar a classe do <body> por grupo de rotas (mesma observação do plano, Task
+      0.6 Step 1). O conteúdo é envolvido num <div className="superficie-publica"> — as regras abaixo
+      espelham as de chassi.css escopadas a esse container em vez de `body.superficie-publica`.
+   ============================================================ */
+
+/* ---- espelha body.superficie-publica do chassi.css (aqui é um <div>, não o <body>) ---- */
+.superficie-publica { --max: 1200px; line-height: 1.6; }
+.superficie-publica a {
+  color: var(--marca);
+  text-decoration-color: color-mix(in srgb, var(--marca) 35%, transparent);
+  text-underline-offset: 3px;
+}
+.superficie-publica .envelope { padding: 0 clamp(1rem, 4vw, 2rem); }
+
+/* ============== 1 · BARRA INSTITUCIONAL (white-label) ============== */
+.brasao-marca { display: flex; align-items: center; gap: 0.7rem; flex: 0 0 auto; }
+.brasao { width: 40px; height: 40px; flex: 0 0 auto; display: block; }
+.brasao-nome b { font-family: var(--display); font-weight: 700; font-size: var(--t-16); letter-spacing: -0.01em; color: var(--texto); line-height: 1.12; display: block; }
+.brasao-nome span { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; color: var(--acento-texto); text-transform: uppercase; }
+
+.nav-publica-nav { position: relative; margin: 0 auto; }
+.nav-publica { display: flex; align-items: center; gap: 0.2rem; list-style: none; padding: 0; margin: 0; }
+.nav-publica a { font-size: var(--t-13); font-weight: 500; color: var(--texto-2); text-decoration: none; padding: 0.5rem 0.7rem; border-radius: var(--raio-sm); white-space: nowrap; transition: color .12s ease, background-color .12s ease; }
+.nav-publica a:hover { color: var(--texto); background: var(--surface); }
+.nav-publica a[aria-current] { color: var(--marca); font-weight: 600; }
+
+/* botão hambúrguer — só existe visualmente <1000px (ver media query); no desktop a <ul> é inline */
+.nav-publica-toggle {
+  display: none; align-items: center; justify-content: center;
+  width: 40px; height: 40px; flex: 0 0 auto;
+  border: 1px solid var(--linha); border-radius: var(--raio-sm);
+  background: var(--surface); color: var(--texto); cursor: pointer;
+  font-size: var(--t-21); line-height: 1;
+}
+.nav-publica-toggle:hover { border-color: var(--foco); }
+.nav-publica-toggle:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
+
+/* link pequeno de entrada gov.br no topo — NÃO é o `.govbr` grande do chassi.css (ver nota no topo). */
+.govbr-topo {
+  display: inline-flex; align-items: center; gap: 0.45rem;
+  font-family: var(--corpo); font-weight: 600; font-size: var(--t-13);
+  color: var(--texto); background: var(--surface); border: 1px solid var(--linha);
+  border-radius: 999px; padding: 0.42rem 0.85rem; min-height: 40px; cursor: pointer;
+  text-decoration: none; transition: border-color .12s ease, transform .12s ease;
+}
+.govbr-topo:hover { border-color: var(--foco); transform: translateY(-1px); }
+.govbr-topo .g { font-family: var(--display); font-weight: 800; color: var(--cobalto); }
+[data-tema="escuro"] .govbr-topo .g { color: var(--foco); }
+
+/* ============== 2 · CAPA (a porta da rua) ============== */
+.capa { padding: clamp(2.2rem, 6vw, 4.2rem) 0 clamp(1.6rem, 4vw, 2.6rem); }
+.capa-grade { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: clamp(1.4rem, 4vw, 3rem); align-items: end; }
+.capa h1 {
+  font-family: var(--display); font-weight: 800;
+  font-size: clamp(var(--t-28), 6vw, var(--t-56)); line-height: 1.04;
+  letter-spacing: -0.025em; color: var(--texto); margin: 0.5rem 0 0; text-wrap: balance;
+}
+.capa h1 .luz { color: var(--marca); }
+.capa-sub { font-size: clamp(var(--t-16), 2.3vw, var(--t-21)); color: var(--texto-2); margin: 1rem 0 0; max-width: 34ch; line-height: 1.5; }
+
+.agora {
+  display: inline-flex; align-items: center; gap: 0.55rem; text-decoration: none;
+  font-family: var(--mono); font-size: var(--t-13); font-weight: 500; color: var(--acento-texto);
+  padding: 0.34rem 0.8rem; border: 1px solid rgba(217,84,43,.34); background: rgba(217,84,43,.09);
+  border-radius: 999px; transition: border-color .12s ease, transform .12s ease;
+}
+.agora:hover { transform: translateY(-1px); border-color: var(--telha); }
+.agora .pulso { width: 9px; height: 9px; border-radius: 50%; background: var(--telha); flex: 0 0 auto; animation: pulso 1.8s ease-out infinite; }
+@keyframes pulso { 0% { box-shadow: 0 0 0 0 rgba(217,84,43,.5);} 70% { box-shadow: 0 0 0 7px rgba(217,84,43,0);} 100% { box-shadow: 0 0 0 0 rgba(217,84,43,0);} }
+.agora b { color: var(--texto); font-weight: 600; }
+
+/* busca — a entrada única (consultar não exige cadastro) */
+.busca { margin: 1.6rem 0 0; }
+.busca-campo { display: flex; align-items: stretch; gap: 0.5rem; background: var(--surface-2); border: 1.5px solid var(--campo-borda); border-radius: 999px; padding: 0.4rem 0.4rem 0.4rem 1.1rem; box-shadow: var(--sombra); max-width: 40rem; transition: border-color .15s ease, box-shadow .15s ease; }
+.busca-campo:focus-within { border-color: var(--foco); box-shadow: 0 0 0 4px color-mix(in srgb, var(--foco) 18%, transparent); }
+.busca-campo svg { color: var(--texto-2); flex: 0 0 auto; align-self: center; }
+.busca-campo input { flex: 1 1 auto; min-width: 0; border: 0; background: transparent; font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); padding: 0.6rem 0; }
+.busca-campo input::placeholder { color: var(--texto-2); }
+.busca-campo input:focus-visible { outline: none; }
+.busca-enviar { flex: 0 0 auto; border: 0; cursor: pointer; background: var(--acao); color: var(--acao-texto); font-family: var(--corpo); font-weight: 600; font-size: var(--t-16); border-radius: 999px; padding: 0 1.3rem; min-height: 48px; display: inline-flex; align-items: center; gap: 0.5rem; transition: background-color .12s ease, transform .12s ease; }
+.busca-enviar:hover { background: var(--acao-hover); transform: translateY(-1px); }
+.busca-dica { font-size: var(--t-13); color: var(--texto-2); margin: 0.7rem 0 0 0.2rem; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1.1rem 0 0; list-style: none; padding: 0; }
+.chips a { display: inline-flex; align-items: center; gap: 0.45rem; font-size: var(--t-13); font-weight: 500; color: var(--texto); text-decoration: none; background: var(--surface); border: 1px solid var(--linha); border-radius: 999px; padding: 0.45rem 0.85rem; min-height: 38px; transition: border-color .12s ease, transform .12s ease; }
+.chips a:hover { border-color: var(--foco); transform: translateY(-1px); }
+.chips svg { color: var(--marca); flex: 0 0 auto; }
+
+/* selo cívico ao lado da manchete (não decora: é o brasão grande da casa) */
+.capa-selo { flex: 0 0 auto; display: grid; place-items: center; }
+.capa-selo svg { width: clamp(120px, 18vw, 184px); height: auto; display: block; opacity: .96; }
+@media (max-width: 860px) { .capa-selo { display: none; } }
+
+/* ============== 3 · SEÇÕES (destaque / balcões / cívico) ============== */
+.secao { padding: clamp(1.4rem, 4vw, 2.4rem) 0; }
+.secao-cabeca { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin: 0 0 1.1rem; }
+.secao-cabeca h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); letter-spacing: -0.015em; color: var(--texto); margin: 0; }
+.secao-cabeca .ver-todas { font-size: var(--t-13); font-weight: 600; color: var(--marca); text-decoration: none; }
+.secao-cabeca .ver-todas:hover { text-decoration: underline; }
+
+.destaque { position: relative; overflow: hidden; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-lg); box-shadow: var(--sombra-alta); }
+.destaque::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 5px; background: linear-gradient(90deg, var(--jade) 0 20%, var(--cobalto) 20% 40%, var(--telha) 40% 60%, var(--amarelo) 60% 80%, var(--jade-claro) 80% 100%); }
+.destaque-grade { display: grid; grid-template-columns: minmax(0,1.05fr) minmax(0,1fr); }
+.destaque-mat { padding: clamp(1.3rem, 3vw, 1.9rem); border-right: 1px solid var(--linha); }
+.destaque-mat .ref { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); }
+.destaque-mat .selo-sit { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: #fff; background: var(--telha-fundo); padding: 0.26rem 0.62rem; border-radius: 999px; margin-left: 0.5rem; }
+.destaque-mat .selo-sit .g { width: 7px; height: 7px; border-radius: 50%; background: var(--amarelo); }
+.destaque-mat h3 { font-family: var(--display); font-weight: 700; font-size: clamp(var(--t-21), 2.6vw, var(--t-28)); line-height: 1.18; letter-spacing: -0.02em; color: var(--texto); margin: 0.7rem 0 0.5rem; text-wrap: balance; }
+.destaque-mat .autoria { font-size: var(--t-13); color: var(--texto-2); margin: 0 0 1.2rem; }
+.destaque-mat .autoria b { color: var(--texto); font-weight: 600; }
+
+.tramitacao { padding: 1.05rem 1.15rem 0.5rem; background: var(--bg); border: 1px solid var(--linha); border-radius: var(--raio-sm); }
+.tramitacao .rotulo-faixa { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--texto-2); margin: 0 0 0.7rem; display: flex; align-items: center; gap: 0.4rem; }
+
+/* AzulejoFaixa (src/lib/charts/azulejo-faixa.tsx) — o porte parametrizado do SVG original gera classes
+   por SITUAÇÃO (concluido/ativo/pendente), não cor fixa por posição como o markup original hardcoded
+   (portal-cidadao.html:441-445). As regras de texto abaixo são o porte verbatim; as de
+   `.azulejo-tile`/`.azulejo-marca` são NOVAS (Task 0.5), necessárias para o componente generalizado. */
+.azulejo-faixa { width: 100%; height: auto; display: block; }
+.azulejo-faixa text { fill: var(--texto-2); }
+.azulejo-faixa text.ativo { fill: var(--acento-texto); font-weight: 600; }
+/* opacity .88 (não .62 do porte original) — Fatia A2.1 review de contraste: com dado real, o rótulo
+   pendente é texto de verdade (≥1 estágio pendente aparece sempre que uma matéria não está 100% concluída
+   ou arquivada) — opacity .62 media 2.77:1 no claro / 3.78:1 no escuro (falha AA 4.5:1 pra texto normal,
+   medido em pixel composto sobre --bg). .88 mede 4.83:1 (claro) / 6.33:1 (escuro) — ainda visivelmente mais
+   apagado que ativo/concluído (a distinção principal já vem do grafismo do tile — tracejado vs sólido). */
+.azulejo-faixa text.pendente { fill: var(--texto-2); opacity: .88; }
+
+.azulejo-tile--concluido { fill: var(--jade); }
+.azulejo-tile--ativo { fill: var(--bg); stroke: var(--amarelo); stroke-width: 2; }
+.azulejo-tile--pendente { fill: none; stroke: var(--linha); stroke-dasharray: 4 5; }
+.azulejo-marca { fill: var(--papel, #F1ECDD); }
+.azulejo-marca--ativo { fill: var(--amarelo); }
+.azulejo-marca--pendente { stroke: var(--linha); stroke-width: 2; }
+
+.permalink { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin: 1rem 0 0; display: flex; align-items: center; gap: 0.45rem; word-break: break-all; }
+.permalink svg { color: var(--marca); flex: 0 0 auto; }
+
+/* resumo em linguagem simples (IA) + camada de confiança */
+.resumo-ia { padding: clamp(1.3rem, 3vw, 1.9rem); background: var(--surface-2); display: flex; flex-direction: column; }
+.resumo-cab { display: flex; align-items: center; gap: 0.55rem; margin: 0 0 0.2rem; }
+.resumo-cab .selo-ia { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--cobalto-fundo); background: rgba(30,95,168,.1); border: 1px solid rgba(30,95,168,.26); padding: 0.24rem 0.6rem; border-radius: 999px; }
+[data-tema="escuro"] .resumo-cab .selo-ia { color: var(--foco); }
+.resumo-ia h4 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); letter-spacing: -0.015em; color: var(--texto); margin: 0.6rem 0 0.5rem; }
+.resumo-ia p { font-size: var(--t-16); color: var(--texto); margin: 0 0 0.7rem; line-height: 1.62; }
+.resumo-revisao { display: flex; align-items: center; gap: 0.5rem; font-size: var(--t-13); color: var(--texto-2); margin: 0.2rem 0 0; }
+.resumo-revisao svg { color: var(--jade-claro); flex: 0 0 auto; }
+[data-tema="escuro"] .resumo-revisao svg { color: var(--marca); }
+.resumo-rodape { margin-top: auto; padding-top: 1.2rem; display: flex; align-items: center; gap: 1rem 1.2rem; flex-wrap: wrap; }
+.resumo-rodape .reportar { font-size: var(--t-13); color: var(--texto-2); text-decoration: none; display: inline-flex; align-items: center; gap: 0.4rem; }
+.resumo-rodape .reportar:hover { color: var(--acento-texto); }
+.resumo-rodape .reportar svg { flex: 0 0 auto; }
+
+/* R-IA-1: resumo em linguagem simples indisponível. Só o RESUMO é de IA — a tramitação, a autoria, o
+   permalink e "ler o texto completo" são FATO e permanecem. Fallback honesto: esconde o resumo, mantém
+   o texto oficial. */
+.resumo-ia[data-ia="off"]   .resumo-cab,
+.resumo-ia[data-ia="off"]   .resumo-corpo,
+.resumo-ia[data-ia="off"]   .resumo-rodape .reportar { display: none; }
+.resumo-ia[data-ia="ativo"] .resumo-off { display: none; }
+.resumo-off { display: flex; gap: 0.7rem; align-items: flex-start; padding: 0.95rem 1.05rem; border: 1px solid var(--linha); border-left: 4px solid var(--amarelo-traco); border-radius: var(--raio-sm); background: var(--surface); }
+.resumo-off svg { color: var(--aviso-texto); flex: 0 0 auto; margin-top: 2px; }
+.resumo-off p { font-size: var(--t-13); color: var(--texto); margin: 0; line-height: 1.55; }
+.resumo-off p b { font-weight: 600; }
+
+/* mais em tramitação — a casa em movimento (não só uma matéria) */
+.mais-trami { list-style: none; margin: 0.9rem 0 0; padding: 0; display: grid; gap: 0.5rem; }
+.mais-trami a { display: flex; align-items: center; gap: 0.4rem 0.9rem; flex-wrap: wrap; text-decoration: none; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.7rem 1rem; transition: border-color .12s ease, transform .12s ease; }
+.mais-trami a:hover { border-color: var(--foco); transform: translateY(-1px); }
+.mais-trami .mt-ref { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); white-space: nowrap; }
+.mais-trami .mt-tit { font-size: var(--t-13); color: var(--texto); flex: 1 1 55%; min-width: 0; }
+.mais-trami .mt-sit { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); display: inline-flex; align-items: center; gap: 0.4rem; white-space: nowrap; margin-left: auto; }
+.mais-trami .mt-sit i { width: 8px; height: 8px; border-radius: 2px; flex: 0 0 auto; }
+.mais-trami .i-andamento { background: var(--telha); }
+.mais-trami .i-comissao { background: var(--amarelo); }
+.mais-trami .i-feito { background: var(--jade-claro); border-radius: 50%; }
+
+/* ============== 4 · BALCÕES DE DIREITO (e-SIC + LGPD) ============== */
+.balcoes { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(1rem, 2.4vw, 1.6rem); }
+.balcao { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-lg); box-shadow: var(--sombra); padding: clamp(1.3rem, 3vw, 1.9rem); display: flex; flex-direction: column; }
+.balcao > .eyebrow { margin-bottom: 0.5rem; }
+.balcao-esic > .eyebrow { color: var(--acento-texto); }
+.balcao-lgpd > .eyebrow { color: var(--cobalto); }
+[data-tema="escuro"] .balcao-lgpd > .eyebrow { color: var(--foco); }
+.balcao h3 { font-family: var(--display); font-weight: 700; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0 0 0.5rem; }
+.balcao .lead { font-size: var(--t-16); color: var(--texto-2); margin: 0 0 1.3rem; line-height: 1.55; }
+.balcao .lead b { color: var(--texto); font-weight: 600; }
+
+/* ---- Task 2.1: formulário "Acompanhar pelo número" (e-SIC real) ---- */
+.acompanhar-esic { margin: 0 0 1.2rem; }
+.acompanhar-esic label { display: block; font-size: var(--t-13); font-weight: 600; color: var(--texto); margin: 0 0 0.4rem; }
+.acompanhar-esic-campo { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.acompanhar-esic-campo input {
+  flex: 1 1 12rem; min-width: 0; font-family: var(--corpo); font-size: var(--t-16); color: var(--texto);
+  background: var(--surface-2); border: 1.5px solid var(--campo-borda); border-radius: var(--raio-sm);
+  padding: 0.55rem 0.8rem; min-height: 44px;
+}
+.acompanhar-esic-campo input::placeholder { color: var(--texto-2); }
+.acompanhar-esic-campo input:focus-visible { outline: none; border-color: var(--foco); box-shadow: 0 0 0 4px color-mix(in srgb, var(--foco) 18%, transparent); }
+.acompanhar-esic-campo button { min-height: 44px; }
+
+/* AnelPrazo (src/lib/charts/anel-prazo.tsx) reusado aqui (Task 2.1) — mesmas classes internas do
+   componente (.anel-c/.trilho/.arco/.centro/.d/.u) já estilizadas em mesa.css (escopo próprio daquela
+   rota, não carregado aqui). Reescopado ao tamanho passado pelo prop `tamanho={92}` — sem variante de
+   urgência (a Lei de Acesso não tem 3 faixas de risco como o painel interno, só o prazo corrido): cor
+   fixa de "prazo em curso" (jade-claro no claro / marca no escuro, mesmo par já usado em
+   `.recibo-nota svg`/`.ja-publicado svg` acima). Contraste medido (pixel composto) vs `--bg` (fundo do
+   `.pedido` que o hospeda): 4.59:1 claro / 7.59:1 escuro — acima do piso 3:1 de gráfico. */
+.anel-c { position: relative; width: 92px; height: 92px; flex: 0 0 auto; }
+.anel-c svg { width: 92px; height: 92px; display: block; }
+.anel-c .trilho { fill: none; stroke: var(--linha); stroke-width: 7; }
+.anel-c .arco { fill: none; stroke: var(--jade-claro); stroke-width: 7; }
+[data-tema="escuro"] .anel-c .arco { stroke: var(--marca); }
+.anel-c .centro { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; line-height: 1; }
+.anel-c .d { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--texto); font-variant-numeric: tabular-nums; }
+.anel-c .u { font-family: var(--mono); font-size: 0.68rem; letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); }
+
+.pedido { display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: center; background: var(--bg); border: 1px solid var(--linha); border-radius: var(--raio); padding: 1.1rem 1.15rem; }
+.pedido .num { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+.pedido .obj { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); margin: 0.25rem 0 0; line-height: 1.3; }
+.pedido .tipo-obj { font-size: var(--t-13); color: var(--texto-2); margin: 0.3rem 0 0; }
+.pedido .tipo-obj b { color: var(--acento-texto); font-weight: 600; }
+.pedido-legenda { grid-column: 1 / -1; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); display: flex; align-items: center; gap: 0.4rem; }
+.pedido-legenda b { color: var(--texto); font-weight: 600; }
+
+.balcao-acoes { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 1.3rem 0 0; }
+.recibo-nota { display: flex; align-items: flex-start; gap: 0.55rem; margin: 1rem 0 0; padding: 0.75rem 0.9rem; background: color-mix(in srgb, var(--marca) 7%, var(--surface)); border: 1px solid color-mix(in srgb, var(--marca) 28%, var(--linha)); border-left: 3px solid var(--marca); border-radius: var(--raio-sm); font-size: var(--t-13); color: var(--texto); line-height: 1.5; }
+.recibo-nota svg { flex: 0 0 auto; color: var(--marca); margin-top: 1px; }
+[data-tema="escuro"] .recibo-nota svg { color: var(--jade-claro); }
+.recibo-nota b { font-weight: 600; }
+.recibo-nota .prot { font-family: var(--mono); color: var(--acento-texto); }
+.recurso-nota { font-size: var(--t-13); color: var(--texto-2); margin: 0.95rem 0 0; display: flex; align-items: flex-start; gap: 0.5rem; }
+.recurso-nota a { font-weight: 600; }
+.recurso-nota svg { color: var(--texto-2); flex: 0 0 auto; margin-top: 2px; }
+.ja-publicado { margin: 1.1rem 0 0; padding: 0.8rem 0.9rem; background: var(--surface-2); border: 1px dashed var(--linha); border-radius: var(--raio-sm); font-size: var(--t-13); color: var(--texto-2); display: flex; align-items: flex-start; gap: 0.55rem; }
+.ja-publicado svg { color: var(--jade-claro); flex: 0 0 auto; margin-top: 2px; }
+[data-tema="escuro"] .ja-publicado svg { color: var(--marca); }
+.ja-publicado a { font-weight: 600; }
+
+.fronteira { display: flex; align-items: flex-start; gap: 0.55rem; font-size: var(--t-13); color: var(--texto-2); background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.75rem 0.9rem; margin: 0 0 1.2rem; }
+.fronteira svg { color: var(--cobalto); flex: 0 0 auto; margin-top: 2px; }
+[data-tema="escuro"] .fronteira svg { color: var(--foco); }
+.fronteira a { font-weight: 600; }
+
+.direitos { display: grid; grid-template-columns: 1fr 1fr; gap: 0.55rem; list-style: none; margin: 0 0 1.3rem; padding: 0; }
+.direitos li { grid-column: span 1; }
+.direitos li.larga { grid-column: 1 / -1; }
+.direito-btn { width: 100%; display: flex; align-items: center; gap: 0.6rem; text-align: left; font-family: var(--corpo); font-weight: 500; font-size: var(--t-13); color: var(--texto); background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.65rem 0.75rem; min-height: 46px; cursor: pointer; transition: border-color .12s ease, transform .12s ease, background-color .12s ease; }
+.direito-btn:hover { border-color: var(--foco); transform: translateY(-1px); }
+.direito-btn svg { color: var(--cobalto); flex: 0 0 auto; }
+[data-tema="escuro"] .direito-btn svg { color: var(--foco); }
+
+.prazo-lgpd { font-size: var(--t-13); color: var(--texto-2); margin: 0 0 1.2rem; display: flex; align-items: flex-start; gap: 0.5rem; }
+.prazo-lgpd svg { color: var(--cobalto); flex: 0 0 auto; margin-top: 2px; }
+[data-tema="escuro"] .prazo-lgpd svg { color: var(--foco); }
+
+.encarregado { display: flex; align-items: center; gap: 0.8rem; background: var(--bg); border: 1px solid var(--linha); border-radius: var(--raio); padding: 0.9rem 1rem; margin-top: auto; }
+.encarregado .av { width: 42px; height: 42px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: var(--t-13); color: #fff; background: var(--cobalto); }
+[data-tema="escuro"] .encarregado .av { background: var(--cobalto-fundo); }
+.encarregado .quem { line-height: 1.3; min-width: 0; }
+.encarregado .rotulo { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); }
+.encarregado .nome { font-weight: 600; font-size: var(--t-13); color: var(--texto); display: block; }
+.encarregado a { font-family: var(--mono); font-size: var(--t-13); color: var(--marca); word-break: break-all; }
+
+/* ============== 5 · NAVEGAÇÃO CÍVICA ============== */
+.civico { display: grid; grid-template-columns: repeat(4, 1fr); gap: clamp(0.8rem, 1.8vw, 1.1rem); list-style: none; margin: 0; padding: 0; }
+.civico a { display: flex; flex-direction: column; gap: 0.55rem; text-decoration: none; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); padding: 1.15rem 1.15rem 1.25rem; transition: border-color .14s ease, transform .14s ease, box-shadow .14s ease; }
+.civico a:hover { border-color: var(--foco); transform: translateY(-2px); box-shadow: var(--sombra); }
+.civico .ic { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; background: rgba(12,83,64,.09); color: var(--marca); flex: 0 0 auto; }
+[data-tema="escuro"] .civico .ic { background: rgba(67,189,147,.12); }
+.civico b { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); letter-spacing: -0.01em; }
+.civico span { font-size: var(--t-13); color: var(--texto-2); line-height: 1.45; }
+.civico .prazo-tag { font-family: var(--mono); font-size: var(--t-12); color: var(--acento-texto); margin-top: 0.1rem; }
+
+/* ============== 6 · RODAPÉ INSTITUCIONAL ============== */
+.rodape { border-top: 1px solid var(--linha); background: var(--surface); margin-top: clamp(1.5rem, 4vw, 2.5rem); }
+.rodape-grade { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 1.6rem 2rem; padding: clamp(1.8rem, 4vw, 2.6rem) 0 1.4rem; }
+.rodape h5 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--texto-2); margin: 0 0 0.8rem; }
+.rodape-casa b { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); }
+.rodape-casa p { font-size: var(--t-13); color: var(--texto-2); margin: 0.4rem 0 0; line-height: 1.5; }
+.rodape ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.rodape ul a { font-size: var(--t-13); color: var(--texto-2); text-decoration: none; display: inline-flex; align-items: center; gap: 0.45rem; }
+.rodape ul a:hover { color: var(--marca); }
+.rodape ul svg { flex: 0 0 auto; color: var(--jade-claro); }
+[data-tema="escuro"] .rodape ul svg { color: var(--marca); }
+.selo-a11y { display: inline-flex; align-items: center; gap: 0.45rem; font-family: var(--mono); font-size: var(--t-12); font-weight: 600; color: var(--marca); border: 1px solid var(--linha); border-radius: 999px; padding: 0.3rem 0.65rem; }
+.rodape-fim { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; padding: 1rem 0 1.6rem; border-top: 1px solid var(--linha); font-size: var(--t-12); color: var(--texto-2); }
+.rodape-fim .plataforma { display: inline-flex; align-items: center; gap: 0.5rem; }
+.rodape-fim .plataforma svg { width: 18px; height: 18px; }
+.rodape-fim .plataforma b { font-family: var(--display); font-weight: 700; color: var(--marca); }
+
+.btn .cadeado { opacity: .8; }
+
+/* ============== RESPONSIVO ============== */
+@media (max-width: 1000px) {
+  .nav-publica-toggle { display: inline-flex; }
+  .nav-publica {
+    display: none; position: absolute; left: 0; right: 0; top: calc(100% + 0.6rem);
+    flex-direction: column; align-items: stretch; gap: 0.15rem;
+    background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-sm);
+    box-shadow: var(--sombra-alta); padding: 0.5rem; z-index: 40;
+  }
+  .nav-publica[data-aberta="true"] { display: flex; }
+  .nav-publica a { padding: 0.65rem 0.7rem; }
+  .topo-grade { gap: 0.7rem 1rem; }
+  .brasao-marca { margin-right: auto; }
+  .destaque-grade { grid-template-columns: 1fr; }
+  .destaque-mat { border-right: 0; border-bottom: 1px solid var(--linha); }
+  .civico { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 720px) {
+  .capa-grade { grid-template-columns: 1fr; }
+  .balcoes { grid-template-columns: 1fr; }
+  .rodape-grade { grid-template-columns: 1fr; }
+  .pedido { grid-template-columns: 1fr; }
+}
+@media (max-width: 460px) {
+  .civico { grid-template-columns: 1fr; }
+  .direitos { grid-template-columns: 1fr; }
+  .busca-enviar span { display: none; }
+  .busca-enviar { padding: 0 1rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chips a:hover, .civico a:hover, .agora:hover, .direito-btn:hover { transform: none; }
+  .agora .pulso { animation: none; }
+}
+
+/* ============== Task 0.4 — EmBreve (em-breve honesto) ============== */
+.em-breve { padding: 1.1rem 1.2rem; border: 1px dashed var(--linha); border-radius: var(--raio); background: var(--surface-2); }
+.em-breve-rotulo { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--texto-2); margin: 0 0 0.3rem; }
+.em-breve-titulo { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); margin: 0 0 0.3rem; }
+.em-breve-motivo { font-size: var(--t-13); color: var(--texto-2); margin: 0; line-height: 1.5; }
+
+/* ============== 7 · FICHA DA MATÉRIA (Task 3.2, Fatia A2.3) ==============
+   Porte de ficha-materia-publica.html — reusa .destaque-mat/.tramitacao/.azulejo-faixa/.permalink/
+   .resumo-ia/.resumo-off já existentes (seção 3 acima); aqui só o que é PRÓPRIO da ficha standalone
+   (fora do grid de 2 colunas do card de destaque da home). */
+.migalha { font-size: var(--t-13); color: var(--texto-2); margin: 1.2rem 0 0; display: flex; align-items: center; gap: 0.4rem; }
+.migalha a { color: var(--marca); font-weight: 600; text-decoration: none; }
+.migalha a:hover { text-decoration: underline; }
+
+.ficha-cab { margin: 0.6rem 0 0; }
+.ficha-cab .linha-id { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.ficha-cab .num { font-family: var(--mono); font-size: var(--t-13); font-weight: 600; color: var(--acento-texto); }
+.estado-chip { font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.18rem 0.7rem; display: inline-flex; align-items: center; gap: 0.35rem; color: var(--cobalto); background: color-mix(in srgb, var(--cobalto) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--cobalto) 34%, transparent); }
+[data-tema="escuro"] .estado-chip { color: var(--foco); }
+.ficha-cab h1 { font-family: var(--display); font-weight: 800; font-size: clamp(1.7rem, 4.5vw, var(--t-40)); letter-spacing: -0.02em; color: var(--texto); margin: 0.5rem 0 0; line-height: 1.08; }
+.ficha-cab .autoria { font-size: var(--t-13); color: var(--texto-2); margin: 0.6rem 0 0; }
+.ficha-cab .autoria b { color: var(--texto); font-weight: 600; }
+
+.ficha-tram { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.3rem 1.4rem 1.5rem; margin: 1.3rem 0 0; }
+.ficha-tram h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 1.1rem; }
+
+/* "virou lei" — a norma publicada (ligação matéria->lei; só aparece quando ficha.norma existe). Reusa o
+   par jade-claro/marca de .ja-publicado (mesmo racional visual: aviso positivo, borda tracejada). */
+.norma-publicada { display: flex; align-items: flex-start; gap: 0.7rem; margin: 1.2rem 0 0; padding: 1rem 1.15rem; background: color-mix(in srgb, var(--jade) 7%, var(--surface)); border: 1px solid color-mix(in srgb, var(--jade) 30%, var(--linha)); border-radius: var(--raio); }
+.norma-publicada svg { color: var(--jade-claro); flex: 0 0 auto; margin-top: 2px; }
+[data-tema="escuro"] .norma-publicada svg { color: var(--marca); }
+.norma-publicada b { color: var(--texto); font-weight: 600; display: block; font-family: var(--display); }
+.norma-publicada a { font-family: var(--mono); font-size: var(--t-12); color: var(--marca); word-break: break-all; }
+
+/* comentários aprovados (read-only nesta fatia — sem compor/moderar; a lista pública nunca expõe autor,
+   `participacao/wire/out/comentario.clj` PublicoOut = id/corpo/criado-em SÓ). */
+.part-regras { display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.9rem 1.1rem; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); font-size: var(--t-13); color: var(--texto-2); line-height: 1.5; margin: 0 0 1.1rem; }
+.part-regras svg { color: var(--marca); flex: 0 0 auto; margin-top: 2px; }
+.part-regras b { color: var(--texto); font-weight: 600; }
+.coment { display: grid; gap: 1rem; }
+.cmt { display: grid; grid-template-columns: auto 1fr; gap: 0.8rem; padding: 0.9rem 1rem; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-sm); }
+.cmt .av { width: 32px; height: 32px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; color: var(--texto-2); background: var(--surface-2); border: 1px solid var(--linha); }
+.cmt .corpo { min-width: 0; }
+.cmt .quando { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+.cmt p { font-size: var(--t-16); color: var(--texto); line-height: 1.55; margin: 0.25rem 0 0; }

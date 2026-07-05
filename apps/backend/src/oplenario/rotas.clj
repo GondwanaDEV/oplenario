@@ -28,7 +28,7 @@
   que NAO importam sessoes."
   [{:keys [idp repo-identidade repo-sessoes repo-legislativo repo-compliance repo-participacao
            repo-transparencia repo-paineis repo-cadastros canal-store objeto-store painel-compliance
-           presenca-resumo esic-cumprimento relatores-pendentes]}]
+           presenca-resumo esic-cumprimento relatores-pendentes info-ente]}]
   (let [auth (it/autenticacao idp repo-identidade)
         ;; F6: relogio de producao (kernel/tempo) p/ o prazo LAI do e-SIC — determinismo em teste vem de
         ;; injetar relogio-fixo direto no fragmento de rotas (participacao-http/rotas). resolver-ente-publico
@@ -64,7 +64,12 @@
         ;; compliance (painel-wire), nunca pelo seu adapters/out direto (a lint proibe host->adapters). O
         ;; override injetavel (`painel-compliance` no arg) so' serve aos testes DB-free da borda de paineis.
         painel-compliance (or painel-compliance
-                              (fn [ente-id] (compliance-http/painel-wire repo-compliance ente-id)))]
+                              (fn [ente-id] (compliance-http/painel-wire repo-compliance ente-id)))
+        ;; FE Onda A2 fast-follow: nome real do ente injetado no portal publico (barra institucional/rodape
+        ;; mostravam o UUID cru da rota) — mesma inversao de dependencia de consultar-sessao/membros-da-casa;
+        ;; transparencia nunca importa cadastros (§22.10). Ente sem perfil cadastrado -> nil -> 404 na borda.
+        info-ente (or info-ente
+                      (fn [ente-id] (repo-cadastros-comp/buscar-ente repo-cadastros ente-id)))]
     (-> #{["/saude"             :get http/saude :route-name :saude]
           ["/eu"                :get [auth http/eu] :route-name :eu]
           ["/painel-secretaria" :get [auth (it/exige-papel "secretario") http/painel-secretaria]
@@ -78,7 +83,8 @@
                                         :relogio relogio-participacao}))
         (into (transparencia-http/rotas {:auth auth :repo-transparencia repo-transparencia
                                          :resolver-ente-publico transparencia-http/resolver-ente-publico-uuid
-                                         :objeto-store objeto-store}))
+                                         :objeto-store objeto-store
+                                         :info-ente info-ente}))
         (into (paineis-http/rotas {:auth auth :repo-paineis repo-paineis
                                    :painel-compliance painel-compliance
                                    :presenca-resumo presenca-resumo
