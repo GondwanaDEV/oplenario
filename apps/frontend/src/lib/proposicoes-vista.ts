@@ -47,8 +47,8 @@ export type LinhaProposicaoVista = {
 // `estado` é string livre/template-driven por câmara (mesmo aviso de vocabulário de tramitacao-vista.ts)
 // — então esta função é FAIL-CLOSED por construção: qualquer `estado` fora das listas conhecidas cai no
 // default neutro "tram" (nunca lança, nunca vira "aguarda"/"aprovada"/"arquivada" por engano).
-const ESTADOS_APROVADOS = new Set(["aprovada", "sancionada", "promulgada"]);
-const ESTADOS_ARQUIVADOS = new Set(["arquivada"]);
+const ESTADOS_APROVADOS = new Set(["aprovada", "sancionado", "sancao_tacita", "veto_derrubado"]);
+const ESTADOS_ARQUIVADOS = new Set(["arquivada", "rejeitada", "prejudicada", "retirada"]);
 const ESTADOS_AGUARDANDO_PAUTA = new Set(["em_pauta", "aguardando_pauta"]);
 
 export function categorizarSituacao(estado: string): CategoriaSituacao {

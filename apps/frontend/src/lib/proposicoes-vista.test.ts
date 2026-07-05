@@ -68,8 +68,20 @@ describe("categorizarSituacao", () => {
     expect(categorizarSituacao("aprovada")).toBe("aprovada");
   });
 
+  it("estados terminais do ciclo do Executivo (legislativo/logic.clj) categorizam como 'aprovada'", () => {
+    expect(categorizarSituacao("sancionado")).toBe("aprovada");
+    expect(categorizarSituacao("sancao_tacita")).toBe("aprovada");
+    expect(categorizarSituacao("veto_derrubado")).toBe("aprovada");
+  });
+
   it("estado terminal de arquivamento categoriza como 'arquivada'", () => {
     expect(categorizarSituacao("arquivada")).toBe("arquivada");
+  });
+
+  it("estados terminais-negativos (rejeição/votação) categorizam como 'arquivada'", () => {
+    expect(categorizarSituacao("rejeitada")).toBe("arquivada");
+    expect(categorizarSituacao("prejudicada")).toBe("arquivada");
+    expect(categorizarSituacao("retirada")).toBe("arquivada");
   });
 
   it("estado desconhecido (vocabulário livre do tenant) degrada fail-closed para 'tram', nunca lança", () => {
