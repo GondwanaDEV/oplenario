@@ -15,7 +15,7 @@ import { EmBreve } from "@/lib/em-breve";
 export function Capa() {
   return (
     <section className="capa" aria-labelledby="capa-titulo">
-      <div className="capa-grade">
+      <div className="envelope capa-grade">
         <div>
           <EmBreve
             titulo="Sessão ao vivo"

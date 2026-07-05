@@ -1,9 +1,9 @@
 // Rota pública do Portal do Cidadão — GET /portal/casa/{ente}. Server Component: recebe `ente` (o slug
 // da câmara na URL) e monta o shell (barra + rodapé) + as seções reais. Origem: esqueleto (Task 0.6,
 // Fatia A2.0) -> destaque em tramitação (Task 1.3, A2.1) -> balcões e-SIC/LGPD + navegação cívica (Tasks
-// 2.1-2.3, A2.2, esta fatia). `ente` ainda não resolve um nome de exibição real (câmara-por-tenant é
-// [GAP] de fatia futura) — usamos o próprio slug como rótulo, honesto (não inventa um nome bonito para
-// uma câmara que ainda não foi consultada).
+// 2.1-2.3, A2.2) -> nome real da Casa (fast-follow pós-A2: `buscarNomeCasa` resolve o UUID da rota pro
+// nome oficial ANTES do primeiro paint — falha/[GAP] degrada pro próprio slug, honesto, nunca pior que
+// antes deste fix).
 
 import { BarraInstitucional } from "../../../barra-institucional";
 import { RodapeInstitucional } from "../../../rodape-institucional";
@@ -12,6 +12,7 @@ import { SecaoEmTramitacao } from "../../../secao-em-tramitacao";
 import { BalcaoEsic } from "../../../balcao-esic";
 import { BalcaoLgpd } from "../../../balcao-lgpd";
 import { NavegacaoCivica } from "../../../navegacao-civica";
+import { buscarNomeCasa } from "../../../../../lib/portal-api";
 
 export default async function PaginaPortalCidadao({
   params,
@@ -19,12 +20,13 @@ export default async function PaginaPortalCidadao({
   params: Promise<{ ente: string }>;
 }) {
   const { ente } = await params;
+  const nomeCasa = (await buscarNomeCasa(ente))?.nomeOficial ?? ente;
   return (
     <>
       <a className="pular" href="#conteudo">
         Pular para o conteúdo
       </a>
-      <BarraInstitucional ente={ente} nomeCasa={ente} paginaAtual="inicio" />
+      <BarraInstitucional ente={ente} nomeCasa={nomeCasa} paginaAtual="inicio" />
       <main id="conteudo">
         <Capa />
         <div className="envelope">
@@ -49,7 +51,7 @@ export default async function PaginaPortalCidadao({
           <NavegacaoCivica />
         </div>
       </main>
-      <RodapeInstitucional nomeCasa={ente} />
+      <RodapeInstitucional nomeCasa={nomeCasa} />
     </>
   );
 }

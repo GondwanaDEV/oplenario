@@ -7,6 +7,7 @@
 import { BarraInstitucional } from "../../../../../barra-institucional";
 import { RodapeInstitucional } from "../../../../../rodape-institucional";
 import { SecaoFicha } from "../../../../../secao-ficha";
+import { buscarNomeCasa } from "../../../../../../../lib/portal-api";
 
 export default async function PaginaFichaMateria({
   params,
@@ -14,16 +15,17 @@ export default async function PaginaFichaMateria({
   params: Promise<{ ente: string; proposicaoId: string }>;
 }) {
   const { ente, proposicaoId } = await params;
+  const nomeCasa = (await buscarNomeCasa(ente))?.nomeOficial ?? ente;
   return (
     <>
       <a className="pular" href="#conteudo">
         Pular para o conteúdo
       </a>
-      <BarraInstitucional ente={ente} nomeCasa={ente} />
+      <BarraInstitucional ente={ente} nomeCasa={nomeCasa} />
       <main id="conteudo" className="envelope">
         <SecaoFicha ente={ente} proposicaoId={proposicaoId} />
       </main>
-      <RodapeInstitucional nomeCasa={ente} />
+      <RodapeInstitucional nomeCasa={nomeCasa} />
     </>
   );
 }

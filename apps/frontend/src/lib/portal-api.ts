@@ -27,3 +27,23 @@ export async function buscarPublico<T>(...segmentos: string[]): Promise<T | null
     return null;
   }
 }
+
+// `buscarNomeCasa` roda em SERVER COMPONENT (page.tsx), NÃO em client — por isso não pode usar
+// `buscarPublico` (fetch relativo `/api/...`, que só resolve no browser via o rewrite same-origin de
+// next.config.ts). Aqui o fetch é direto ao backend com a MESMA env var (`BACKEND_URL`) que o rewrite usa
+// como alvo — servidor-a-servidor, sem depender de origem de browser. Resolve o nome real da Câmara ANTES
+// do primeiro paint (sem flash de UUID); falha/timeout -> null, e o caller (page.tsx) degrada pro slug cru
+// da URL — nunca pior que o comportamento anterior a este fix.
+const backend = process.env.BACKEND_URL ?? "http://localhost:8888";
+
+export async function buscarNomeCasa(
+  ente: string,
+): Promise<{ nomeOficial: string; nomeCurto?: string } | null> {
+  try {
+    const r = await fetch(`${backend}/portal/casa/${codificarSegmento(ente)}`, { cache: "no-store" });
+    if (!r.ok) return null;
+    return camelizarChaves(await r.json()) as { nomeOficial: string; nomeCurto?: string };
+  } catch {
+    return null;
+  }
+}

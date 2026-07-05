@@ -36,4 +36,14 @@ describe("Capa", () => {
     expect(hrefs).toContain("#destaque");
     expect(hrefs.every((h) => h?.startsWith("#"))).toBe(true);
   });
+
+  it("a grade da capa tem a classe .envelope (margem lateral) — sem ela o conteúdo cola nas bordas da viewport", () => {
+    // Reprodução de bug real (review visual): a .capa-grade sozinha é só grid (sem max-width/padding);
+    // quem centraliza e dá a margem lateral é .envelope (chassi.css). O porte original de
+    // portal-cidadao.html:360 é <div class="envelope capa-grade"> — perder a classe faz o título e o
+    // selo cívico esticarem de ponta a ponta da tela.
+    const { container } = render(<Capa />);
+    const grade = container.querySelector(".capa-grade");
+    expect(grade?.classList.contains("envelope")).toBe(true);
+  });
 });
