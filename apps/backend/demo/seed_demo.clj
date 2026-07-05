@@ -32,6 +32,7 @@
             [oplenario.participacao.components.repositorio :as participacao-repo]
             [oplenario.participacao.controllers :as participacao-controllers]
             [oplenario.sessoes.components.repositorio :as repo]
+            [oplenario.transparencia.components.repositorio :as transparencia-repo]
             [clojure.edn :as edn])
   (:import (java.time Instant)))
 
@@ -47,6 +48,7 @@
 (defn- repo-sessoes [ds] (assoc (repo/repositorio) :datasource {:ds ds} :bus (outbox/bus)))
 (defn- repo-legislativo [ds] (legislativo-repo/->RepoLegislativoPg {:ds ds} (outbox/bus)))
 (defn- repo-participacao [ds] (participacao-repo/->RepoParticipacaoPg {:ds ds} (outbox/bus)))
+(defn- repo-transparencia [ds] (transparencia-repo/->RepoTransparenciaPg {:ds ds}))
 
 (defn base [_]
   (com-ds
@@ -187,6 +189,44 @@
          (println "protocolo:" protocolo)
          (println "URL      : http://localhost:3000/portal/casa/" (str ente) " (busque por" protocolo "no balcão e-SIC)")
          (println "====================================\n"))))))
+
+;; ---------- Task 3.2 (Fatia A2.3, Portal do Cidadão FE) — 1 comentário aprovado p/ a ficha ----------
+
+(defn comentario
+  "Semente da FICHA PÚBLICA (Task 3.2, Fatia A2.3 FE): protocola 1 comentário via o controller REAL
+  (`comentar!`) sobre a matéria 'Hortas comunitárias' (a mesma que `materias` protocola primeiro, sempre o
+  1º item da lista — o destaque da home) e já o MODERA como aprovado (`moderar-comentario!`) — o MESMO
+  caminho que POST /portal/materias/:id/comentarios + POST /comentarios/:id/moderar usam. Exercita
+  GET /portal/casa/:ente/materias/:id/comentarios (lista PÚBLICA, só aprovados) com dado real. Rodar
+  `base` + `materias` primeiro. NÃO idempotente (comenta de novo a cada chamada, como as demais sementes
+  não-upsert deste ns)."
+  [_]
+  (com-ds
+   (fn [ds]
+     (let [{:keys [ente]} (edn/read-string (slurp ids-file))
+           repo-part      (repo-participacao ds)
+           repo-transp    (repo-transparencia ds)
+           cidadao-id     (random-uuid)
+           moderador-id   (random-uuid)
+           ;; a mesma que `materias` protocola primeiro (ementa "Hortas comunitárias") — é o destaque da
+           ;; home (escolherDestaque, FE); comentar nela exercita o click-through inteiro home->ficha.
+           alvo           (->> (transparencia-repo/listar-materias repo-transp ente #{})
+                                (filter #(re-find #"[Hh]ortas" (:ementa %)))
+                                first)
+           pid            (:proposicao-id alvo)]
+       (when-not pid
+         (throw (ex-info "materia 'Hortas comunitarias' nao encontrada — rode seed-demo/materias primeiro" {})))
+       (id/inserir! ds {:id cidadao-id :cpf (cpf-valido) :nome "Cidadão Demo (comentário)"})
+       (id/inserir! ds {:id moderador-id :cpf (cpf-valido) :nome "Servidora moderadora"})
+       (let [{comentario-id :id}
+             (participacao-controllers/comentar! repo-part {:ente-id ente :identidade-id cidadao-id} pid
+               {:corpo "Apoio demais. No meu bairro tem terrenos abandonados que virariam ótimas hortas."})]
+         (participacao-controllers/moderar-comentario! repo-part (tempo/relogio-sistema)
+           {:ente-id ente :identidade-id moderador-id} comentario-id {:acao "aprovado"})
+         (println "\n=== COMENTÁRIO DA DEMO PRONTO (aprovado) ===")
+         (println "proposicao-id:" pid)
+         (println "URL          : http://localhost:3000/portal/casa/" (str ente) "/materias/" (str pid))
+         (println "=============================================\n"))))))
 
 (defn encarregado
   "Semente do BALCÃO LGPD (Task 2.2, Fatia A2.2 FE): define o Encarregado/DPO do MESMO ente da demo via o
