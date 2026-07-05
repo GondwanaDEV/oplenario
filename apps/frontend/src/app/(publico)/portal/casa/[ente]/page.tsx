@@ -35,11 +35,14 @@ export default async function PaginaPortalCidadao({
               <h2 id="balcoes-titulo">Os seus direitos, em dois balcões</h2>
             </div>
             <div className="balcoes">
-              {/* key={ente}: review A2.2 (item 2) — sem isso, navegar câmara A→B mantém o useState local
-                  (protocolo/estado/status) do balcão de A, podendo pintar o resultado de A sobre B. O
-                  key força remount por tenant; ver também a guarda de reentrância em balcao-esic.tsx. */}
-              <BalcaoEsic key={ente} ente={ente} />
-              <BalcaoLgpd key={ente} ente={ente} />
+              {/* key={ente}-prefixado: review A2.2 (item 2) — sem isso, navegar câmara A→B mantém o
+                  useState local (protocolo/estado/status) do balcão de A, podendo pintar o resultado de A
+                  sobre B. O key força remount por tenant; ver também a guarda de reentrância em
+                  balcao-esic.tsx. Prefixo distinto por balcão (review A2.3 item 4): `key={ente}` cru nos
+                  dois irmãos colidia (mesma key em siblings) e disparava o warning de key duplicada do
+                  React. */}
+              <BalcaoEsic key={`esic-${ente}`} ente={ente} />
+              <BalcaoLgpd key={`lgpd-${ente}`} ente={ente} />
             </div>
           </section>
 

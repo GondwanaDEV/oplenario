@@ -30,7 +30,9 @@ function formatarData(iso: string): string {
 export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId: string }) {
   const { ficha, comentarios, estado } = useFicha(ente, proposicaoId);
 
-  if (estado === "carregando") return null;
+  // review A2.3 item 5: affordance de carregamento (consistência com secao-em-tramitacao.tsx) — sem
+  // skeleton, só o `aria-busy` honesto para leitor de tela/testes; nenhum conteúdo visível ainda.
+  if (estado === "carregando") return <div aria-busy="true" />;
 
   if (estado === "erro") {
     return (
@@ -105,7 +107,10 @@ export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId:
           </svg>
           <span>
             <b>Virou lei.</b> Publicada em {formatarData(vista.normaPublicada.publicadoEm)} —{" "}
-            {vista.normaPublicada.urn}
+            <a href={`/api/portal/casa/${ente}/legislacao/${vista.normaPublicada.normaId}/artefato`}>
+              Ver a Lei {vista.normaPublicada.numero}/{vista.normaPublicada.ano} publicada — texto oficial
+            </a>{" "}
+            ({vista.normaPublicada.urn})
           </span>
         </p>
       )}
@@ -149,9 +154,9 @@ export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId:
         ) : vista.comentarios.length === 0 ? (
           <p className="em-breve-motivo">Nenhum comentário aprovado ainda nesta matéria.</p>
         ) : (
-          <div className="coment">
+          <ul className="coment" aria-label="Comentários aprovados">
             {vista.comentarios.map((c) => (
-              <div className="cmt" key={c.id}>
+              <li className="cmt" key={c.id}>
                 <span className="av" aria-hidden="true">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                     <path d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8h16v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5z" />
@@ -161,9 +166,9 @@ export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId:
                   <span className="quando">{formatarData(c.criadoEm)}</span>
                   <p>{c.corpo}</p>
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </section>
     </>

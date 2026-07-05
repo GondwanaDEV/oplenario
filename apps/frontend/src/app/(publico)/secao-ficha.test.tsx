@@ -46,6 +46,13 @@ describe("SecaoFicha", () => {
     vi.restoreAllMocks();
   });
 
+  it("carregando -> aria-busy honesto, sem conteúdo (review A2.3 item 5)", () => {
+    global.fetch = vi.fn(() => new Promise(() => {})) as unknown as typeof fetch; // nunca resolve
+    const { container } = render(<SecaoFicha ente="fortaleza" proposicaoId="p1" />);
+    expect(container.querySelector('[aria-busy="true"]')).toBeTruthy();
+    expect(container.textContent).toBe("");
+  });
+
   it("ficha ausente (404) -> 'matéria não encontrada' honesto, nunca quebra", async () => {
     mockFetch(() => ({ ok: false }));
     render(<SecaoFicha ente="fortaleza" proposicaoId="p1" />);
@@ -84,19 +91,21 @@ describe("SecaoFicha", () => {
     expect(screen.queryByText(/virou lei/i)).toBeNull();
   });
 
-  it("com norma publicada -> mostra o link/URN da norma", async () => {
+  it("com norma publicada -> link REAL para o artefato (texto significativo, não a URN crua; URN some como texto adjacente) — review A2.3 item 3", async () => {
     mockFetch((url) => ({
       ok: true,
       json: async () => (url.endsWith("/comentarios") ? [] : fichaComNormaFake),
     }));
     render(<SecaoFicha ente="fortaleza" proposicaoId="p1" />);
     await waitFor(() => expect(screen.getByText(/virou lei/i)).toBeTruthy());
+    const link = screen.getByRole("link", { name: /ver a lei 1234\/2026 publicada — texto oficial/i });
+    expect(link.getAttribute("href")).toBe("/api/portal/casa/fortaleza/legislacao/n1/artefato");
     expect(screen.getByText(/urn:lex:br;ce;fortaleza:camara.municipal:lei:2026;1234/).textContent).toMatch(
       "urn:lex:br;ce;fortaleza:camara.municipal:lei:2026;1234",
     );
   });
 
-  it("comentários aprovados -> lista read-only (corpo + data, sem autor)", async () => {
+  it("comentários aprovados -> lista read-only (corpo + data, sem autor), marcada como <ul>/<li> — review A2.3 item 2", async () => {
     mockFetch((url) => ({
       ok: true,
       json: async () =>
@@ -106,6 +115,9 @@ describe("SecaoFicha", () => {
     }));
     render(<SecaoFicha ente="fortaleza" proposicaoId="p1" />);
     await waitFor(() => expect(screen.getByText("Apoio o projeto.")).toBeTruthy());
+    const lista = screen.getByRole("list", { name: /comentários aprovados/i });
+    expect(lista.tagName).toBe("UL");
+    expect(lista.querySelectorAll("li.cmt").length).toBe(1);
   });
 
   it("sem comentários aprovados -> estado honesto de vazio (não falha, não some a seção)", async () => {

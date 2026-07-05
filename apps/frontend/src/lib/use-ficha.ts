@@ -21,14 +21,17 @@ export function useFicha(ente: string, proposicaoId: string) {
   const [ficha, setFicha] = useState<FichaOut | null>(null);
   const [comentarios, setComentarios] = useState<ComentarioOut[] | null>(null);
   const [estado, setEstado] = useState<Estado>("carregando");
-  const chave = `${ente}/${proposicaoId}`;
-  const [chaveAnterior, setChaveAnterior] = useState(chave);
+  const [enteAnterior, setEnteAnterior] = useState(ente);
+  const [idAnterior, setIdAnterior] = useState(proposicaoId);
 
   // reset cross-matéria/tenant DURANTE O RENDER (mesmo padrão de use-materias.ts/use-encarregado.ts,
-  // review A2.1 item 1) — a chave reativa aqui é o PAR [ente, proposicaoId]: trocar qualquer um dos dois
-  // (ex. clicar noutra matéria da mesma câmara) precisa limpar o resultado anterior antes do novo fetch.
-  if (chave !== chaveAnterior) {
-    setChaveAnterior(chave);
+  // review A2.1 item 1) — DOIS estados-anterior independentes (review A2.3 item 1: uma chave concatenada
+  // `${ente}/${proposicaoId}` colide quando o `/` aparece dentro de um segmento decodificado, deixando
+  // passar o flash de matéria obsoleta). Trocar qualquer um dos dois (ex. clicar noutra matéria da mesma
+  // câmara) precisa limpar o resultado anterior antes do novo fetch.
+  if (ente !== enteAnterior || proposicaoId !== idAnterior) {
+    setEnteAnterior(ente);
+    setIdAnterior(proposicaoId);
     setFicha(null);
     setComentarios(null);
     setEstado("carregando");

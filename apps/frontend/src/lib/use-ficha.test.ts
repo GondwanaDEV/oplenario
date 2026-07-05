@@ -92,4 +92,30 @@ describe("useFicha", () => {
     liberar();
     await waitFor(() => expect(result.current.estado).toBe("pronto"));
   });
+
+  it("troca de ente com proposicaoId INALTERADO também reseta (dois estados-anterior independentes, review A2.3 item 1 — a chave concatenada `ente/id` colidia entre pares distintos)", async () => {
+    global.fetch = mockFetch(() => ({
+      ok: true,
+      json: async () => ({ "proposicao-id": "p1", tipo: "projeto_lei", ano: 2026, sequencial: 1, estado: "protocolada" }),
+    }));
+
+    const { result, rerender } = renderHook(({ ente, id }) => useFicha(ente, id), {
+      initialProps: { ente: "fortaleza", id: "p1" },
+    });
+    await waitFor(() => expect(result.current.estado).toBe("pronto"));
+
+    let liberar: () => void = () => {};
+    const pendente = new Promise<{ ok: boolean; json: () => Promise<unknown> }>((res) => {
+      liberar = () => res({ ok: true, json: async () => ({}) });
+    });
+    global.fetch = vi.fn(() => pendente) as unknown as typeof fetch;
+
+    rerender({ ente: "sobral", id: "p1" });
+    expect(result.current.estado).toBe("carregando");
+    expect(result.current.ficha).toBeNull();
+    expect(result.current.comentarios).toBeNull();
+
+    liberar();
+    await waitFor(() => expect(result.current.estado).toBe("pronto"));
+  });
 });
