@@ -1,0 +1,12 @@
+-- Onda B Slice 1 (listagem de proposicoes, GET /legislativo/proposicoes): review de database achou que
+-- nenhuma das 3 colunas de ordenacao permitidas (atualizado_em — default, sequencial, ano) tinha indice
+-- de suporte em legislativo.proposicoes. `db/proposicao.clj` monta `:order-by [[col dir] [:id :asc]]`
+-- (tie-break por id p/ paginacao estavel); sem indice, ate' a forma mais comum da chamada — pagina 1,
+-- sem filtro, ordenacao default — cai em Seq Scan + Sort sobre a fatia inteira da particao do tenant.
+--
+-- So' o caminho default (atualizado_em DESC) ganha indice agora: e' o caso quente (nenhum filtro de UI
+-- ainda pede ordenar por sequencial/ano isoladamente; se/quando pedir, entra por migration propria,
+-- mesma logica). CREATE INDEX direto no PARENT particionado (HASH por ente_id, 8 particoes) — mesmo
+-- padrao ja usado em idx_proposicoes_estado (mig 0013): Postgres propaga o indice a todas as particoes,
+-- sem sintaxe partition-aware especial.
+CREATE INDEX IF NOT EXISTS idx_proposicoes_atualizado_em ON legislativo.proposicoes (ente_id, atualizado_em DESC, id);
