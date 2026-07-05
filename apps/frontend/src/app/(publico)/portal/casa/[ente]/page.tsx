@@ -1,17 +1,17 @@
-// Esqueleto da rota pública do Portal do Cidadão (Task 0.6, Fatia A2.0) — GET /portal/casa/{ente}.
-// Server Component: recebe `ente` (o slug da câmara na URL) e monta o shell (barra + rodapé), com um
-// <EmBreve> provisório no corpo — o conteúdo real (destaque/balcões/navegação cívica) entra nas
-// Fatias A2.1-A2.3. `ente` ainda não resolve um nome de exibição real (isso é a Fatia A2.1, via
-// backend) — nesta fatia usamos o próprio slug como rótulo temporário, honesto (não inventa um nome
-// bonito para uma câmara que ainda não foi consultada).
+// Rota pública do Portal do Cidadão — GET /portal/casa/{ente}. Server Component: recebe `ente` (o slug
+// da câmara na URL) e monta o shell (barra + rodapé) + as seções reais. Origem: esqueleto (Task 0.6,
+// Fatia A2.0) -> destaque em tramitação (Task 1.3, A2.1) -> balcões e-SIC/LGPD + navegação cívica (Tasks
+// 2.1-2.3, A2.2, esta fatia). `ente` ainda não resolve um nome de exibição real (câmara-por-tenant é
+// [GAP] de fatia futura) — usamos o próprio slug como rótulo, honesto (não inventa um nome bonito para
+// uma câmara que ainda não foi consultada).
 
-import { EmBreve } from "@/lib/em-breve";
 import { BarraInstitucional } from "../../../barra-institucional";
 import { RodapeInstitucional } from "../../../rodape-institucional";
 import { Capa } from "../../../capa";
 import { SecaoEmTramitacao } from "../../../secao-em-tramitacao";
 import { BalcaoEsic } from "../../../balcao-esic";
 import { BalcaoLgpd } from "../../../balcao-lgpd";
+import { NavegacaoCivica } from "../../../navegacao-civica";
 
 export default async function PaginaPortalCidadao({
   params,
@@ -40,10 +40,7 @@ export default async function PaginaPortalCidadao({
             </div>
           </section>
 
-          <EmBreve
-            titulo="Navegação cívica"
-            motivo="A navegação para Sessões/Transparência/Ouvidoria/Dados abertos/Agenda/Carta de Serviços chega na próxima task (2.3) desta fatia."
-          />
+          <NavegacaoCivica />
         </div>
       </main>
       <RodapeInstitucional nomeCasa={ente} />
