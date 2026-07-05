@@ -130,3 +130,15 @@ Até lá o dev-token cobre as ondas A–C.
 O próximo passo concreto: brainstorm/spec do **Dashboard da Mesa** como primeira fatia (estabelece o app shell +
 charts honestos + a decisão do codegen). Backend pronto hoje (`/paineis/mesa` + detalhes + `/compliance/painel`).
 Depois `writing-plans` → implementação por TDD → review `ecc` → merge → MFE-1 (com A2).
+
+## 10. Estado da Onda A (05/07/2026) — ✅ FECHADA = Marco MFE-1
+
+- **A1 — Dashboard da Mesa: MERGED→main** (`d03797e`, branch `fe-5-dashboard-mesa`). App shell interno + charts honestos.
+- **A2 — Portal do cidadão: COMPLETA na branch `fe-6-portal-cidadao`** (`9ef2f0a`, **NÃO mergeada** — aguarda aprovação).
+  22 commits, 53 arquivos, 196 testes FE verdes. Spec/plano em `docs/superpowers/`. **Escopo Opção A:** shell público
+  white-label + home (`/portal/casa/[ente]`) + ficha, ligados só a rotas de leitura pública reais (F6), em-breve
+  honesto no resto. **Diferido:** fluxos de escrita autenticados (gov.br/Keycloak, carry F1.4) + A2.4 legislação (stretch).
+  Fundações reusáveis para B/C/E: shell público, `buscarPublico` (segmentos encodados, sem Bearer), boundary
+  kebab→camel extraído, codegen `contrato-portal.gen.ts`, primitiva `AzulejoFaixa`, `EmBreve`, token `--campo-borda`.
+- **↳ Marco MFE-1 atingido** (pendente o merge de A2): os 4 públicos têm software rodando contra a API real.
+- **▶ PRÓXIMO após o merge:** Onda B (fluxo diário do servidor) — cada fatia carrega seu fan-out da borda `legislativo`.
