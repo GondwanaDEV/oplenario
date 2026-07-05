@@ -10,6 +10,8 @@ import { BarraInstitucional } from "../../../barra-institucional";
 import { RodapeInstitucional } from "../../../rodape-institucional";
 import { Capa } from "../../../capa";
 import { SecaoEmTramitacao } from "../../../secao-em-tramitacao";
+import { BalcaoEsic } from "../../../balcao-esic";
+import { BalcaoLgpd } from "../../../balcao-lgpd";
 
 export default async function PaginaPortalCidadao({
   params,
@@ -27,9 +29,20 @@ export default async function PaginaPortalCidadao({
         <Capa />
         <div className="envelope">
           <SecaoEmTramitacao ente={ente} />
+
+          <section className="secao" id="balcoes" aria-labelledby="balcoes-titulo">
+            <div className="secao-cabeca">
+              <h2 id="balcoes-titulo">Os seus direitos, em dois balcões</h2>
+            </div>
+            <div className="balcoes">
+              <BalcaoEsic ente={ente} />
+              <BalcaoLgpd ente={ente} />
+            </div>
+          </section>
+
           <EmBreve
-            titulo="Balcões de acesso à informação e navegação cívica"
-            motivo="Os balcões de e-SIC/LGPD e a navegação cívica chegam na próxima fatia (A2.2) — o destaque em tramitação acima já lê dado real."
+            titulo="Navegação cívica"
+            motivo="A navegação para Sessões/Transparência/Ouvidoria/Dados abertos/Agenda/Carta de Serviços chega na próxima task (2.3) desta fatia."
           />
         </div>
       </main>
