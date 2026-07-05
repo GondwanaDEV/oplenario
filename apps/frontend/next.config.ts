@@ -30,6 +30,9 @@ if (process.env.NODE_ENV === "production") {
 }
 
 const nextConfig: NextConfig = {
+  // standalone: runtime da imagem de produção carrega só o server.js + deps podadas, sem
+  // precisar de node_modules completo no container final (§22.9 Eixo 5, Docker em todo deploy).
+  output: "standalone",
   async rewrites() {
     // `fallback` (não array simples = afterFiles): o proxy catch-all roda DEPOIS de todas as rotas do
     // filesystem, INCLUSIVE as dinâmicas. Sem isso, `/api/:path*` (afterFiles) atropelava o Route Handler

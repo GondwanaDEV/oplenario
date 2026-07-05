@@ -36,13 +36,24 @@ Rota: `/sessoes/<id>/plenario?token=<json-claims>` (token de dev = idp-dev; prod
 
 ## Rodar local
 
+**Docker em todo deploy local e de teste (§22.9 Eixo 5) — nada de `npm run dev` solto no host.**
+Stack única, de dentro de `apps/backend/`:
+
 ```bash
-# 1) backend de pé (de apps/backend): docker compose up -d --build  (Pedestal em :8888)
-# 2) front:
-npm install
-npm run dev            # http://localhost:3000  (proxy /api -> :8888)
-npm test               # vitest (lógica pura)
-npm run build && npm run lint
+cd apps/backend && docker compose up -d --build
+```
+
+Sobe `postgres`/`valkey`/`minio` → `migrate` → `app` (Pedestal em `:8888`) → `frontend` (Next dev em
+`:3000`, hot reload via bind-mount do source; `node_modules`/`.next` ficam em volume anônimo pra não
+levar o build nativo do host/macOS pro container Linux). `BACKEND_URL=http://app:8888` (DNS do
+compose) já vem setado — o proxy `/api/*` funciona sem tocar em nada.
+
+Testes/lint/build de dentro do container (sem instalar nada no host):
+
+```bash
+docker compose exec frontend npm test
+docker compose exec frontend npm run lint
+docker compose exec frontend npm run build
 ```
 
 Para o painel funcionar end-to-end é preciso uma sessão existente + um ator com vínculo ativo (seed) e

@@ -65,3 +65,19 @@ services:
       VALKEY_URI: "redis://valkey:6379"
       MINIO_ENDPOINT: "http://minio:9000"
     ports: ["${OPLENARIO_APP_PORT:-8888}:8888"]
+
+  frontend:
+    image: oplenario-frontend:local
+    build:
+      context: ../frontend
+      target: dev
+    depends_on: [app]
+    environment:
+      # nome do service (DNS interno do compose), nao localhost — a rota /api/* do Next proxeia p/ ca.
+      BACKEND_URL: "http://app:8888"
+    volumes:
+      - ../frontend:/app
+      # anonimos: preservam o node_modules/.next instalados na imagem (linux) em vez do host (macOS/arm nativo).
+      - /app/node_modules
+      - /app/.next
+    ports: ["${OPLENARIO_FRONTEND_PORT:-3000}:3000"]
