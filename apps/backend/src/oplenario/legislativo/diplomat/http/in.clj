@@ -8,7 +8,9 @@
   grossa (exige-papel) na rota, a fina (policy.check/pode-dirigir-votacao?) no controller."
   (:require [oplenario.http :as http]
             [oplenario.interceptors :as it]
+            [oplenario.legislativo.adapters.in.proposicao :as adapters-in-proposicao]
             [oplenario.legislativo.adapters.in.votacao :as adapters-in]
+            [oplenario.legislativo.adapters.out.proposicao :as adapters-out-proposicao]
             [oplenario.legislativo.adapters.out.relator-pendente :as adapters-out-relator]
             [oplenario.legislativo.adapters.out.votacao :as adapters-out]
             [oplenario.legislativo.controllers :as controllers]))
@@ -53,6 +55,17 @@
         (http/json-resposta 200 (adapters-out/encerramento->wire snap))
         (http/json-resposta 404 {:erro "votacao nao encontrada nesta sessao"})))))
 
+(defn- listar-proposicoes-handler
+  "GET /legislativo/proposicoes(?busca=&tipo=&estado=&autor-id=&ano=&pagina=&tamanho=&ordenar-por=&ordenar-dir=).
+  Leitura tenant-wide (mesmo contrato de authz de /paineis/*, Onda B Slice 1): adapters/in coage os filtros
+  (fail-closed -> 400); o controller le' do tenant do ator; adapters/out projeta+valida."
+  [repo-leg]
+  (fn [req]
+    (let [ente-id (:ente-id (:ator req))
+          filtro (adapters-in-proposicao/listar-proposicoes->dominio (:query-params req))]
+      (http/json-resposta 200 (adapters-out-proposicao/listar->wire
+                                (controllers/listar-proposicoes repo-leg ente-id filtro))))))
+
 (defn rotas
   "Fragmento de rotas da votacao ao vivo (table syntax Pedestal). Recebe o interceptor `auth` (compartilhado), o
   `repo-legislativo` (Repo-Component do proprio modulo) e `consultar-sessao` (injetada pelo host — cross-modulo
@@ -68,7 +81,9 @@
        :route-name :legislativo/registrar-voto]
       ["/sessoes/:id/votacoes/:votacao-id/encerramento" :post
        [auth papel it/corpo-json (encerrar-handler repo-legislativo consultar-sessao)]
-       :route-name :legislativo/encerrar-votacao]}))
+       :route-name :legislativo/encerrar-votacao]
+      ["/legislativo/proposicoes" :get [auth papel (listar-proposicoes-handler repo-legislativo)]
+       :route-name :legislativo/listar-proposicoes]}))
 
 ;; ========================= FE Onda A1: fila de relatores pendentes (§16.11) =========================
 
