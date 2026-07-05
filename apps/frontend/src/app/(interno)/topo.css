@@ -13,3 +13,8 @@
 .quem-mesa .quem { line-height: 1.15; }
 .quem-mesa .quem b { font-weight: 600; font-size: var(--t-13); color: var(--texto); display: block; }
 .quem-mesa .quem span { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+
+.nav-interna { display: flex; gap: 1rem; margin-left: 0.5rem; }
+.nav-interna a { font-family: var(--mono); font-size: var(--t-13); font-weight: 500; letter-spacing: .02em; color: var(--texto-2); text-decoration: none; padding: 0.3rem 0; border-bottom: 2px solid transparent; }
+.nav-interna a:hover { color: var(--texto); }
+.nav-interna a[aria-current="page"] { color: var(--marca); border-bottom-color: var(--marca); font-weight: 600; }
