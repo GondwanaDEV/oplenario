@@ -11,8 +11,14 @@
 // para ./topo.css aqui. Promover ao chassi.css é decisão do design-system (PADROES-DE-COMPOSICAO.md,
 // gatilho 2º-uso), não deste componente.
 
+import Link from "next/link";
 import { useTema } from "@/lib/tema";
 import "./topo.css";
+
+const DESTINOS_NAV = [
+  { rotulo: "Painéis da Mesa", href: "/paineis/mesa" },
+  { rotulo: "Proposições", href: "/proposicoes" },
+];
 
 export function TopoInterno({ area, ator }: { area: string; ator: { nome: string; papel: string } }) {
   const { tema, alternar } = useTema();
@@ -28,6 +34,17 @@ export function TopoInterno({ area, ator }: { area: string; ator: { nome: string
         </div>
         <div className="topo-sep" aria-hidden="true" />
         <span className="area-tag">{area}</span>
+        <nav className="nav-interna" aria-label="Navegação interna">
+          {DESTINOS_NAV.map((d) => (
+            <Link
+              key={d.href}
+              href={d.href}
+              aria-current={d.rotulo === area ? "page" : undefined}
+            >
+              {d.rotulo}
+            </Link>
+          ))}
+        </nav>
         <div className="topo-dir">
           <button className="tema-btn" type="button" aria-pressed={tema === "escuro"} onClick={alternar} title="Alternar tema claro / escuro">
             {tema === "escuro" ? "☾" : "☀"}

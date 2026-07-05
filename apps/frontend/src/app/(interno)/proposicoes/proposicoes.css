@@ -1,0 +1,112 @@
+/* Chrome específico da lista de Proposições (Onda B Slice 1, §16 arquétipo lista/tabela filtrável) —
+   portado de produto/design-system/o-plenario/telas/proposicoes.html (<style> local, linhas 25-147). Os
+   tokens + o chassi vêm de globals.css (tokens.css + chassi.css, importados globalmente). Aqui só o que é
+   desta superfície.
+
+   Escopo desta fatia (Task 13 — assembly de page.tsx, SÓ LEITURA): porta `.pagina-cab`, `.filtros`,
+   `.filtros-linha`, `.busca`, `.faceta`, `.tabela-wrap`, `table.tabela` (+ thead/tbody), `.num`,
+   `.especie`, `.ementa`, `.autor`, `.atualizada`, `.sit`, `.chip`(+variantes), `.paginacao`, `.pag-nav`,
+   `.vazio` e o responsivo @media(max-width:860px), verbatim da tela-fonte.
+
+   NÃO PORTADO (fora de escopo desta fatia, sem dono ainda): `.cab-acoes` (Nova proposição/Exportar) ·
+   `.filtro-chips`/`.fchip`/`.limpar` (chips de filtro ativo — só há 2 filtros nesta fatia, busca+espécie,
+   sem chips removíveis) · `.busca-ia`/`.busca-aviso` (busca inteligente permanentemente "off" nesta
+   fatia) · `.demo-strip` (scaffolding de design, não é chrome de produto) · `.col-sel`/`.lin-acoes`/
+   `.ico-btn`/`.comando`/`.sel-conta` (seleção em massa e ação por linha ficam fora do escopo — sem barra
+   de seleção renderizada). O componente `AzulejoMini` (Task 9) é um SVG React próprio com classes
+   `.azulejo-mini-bloco--*` — NÃO usa o markup inline `.am`/`.am-*` da tela-fonte (regras substituídas
+   abaixo, no fim do arquivo).
+
+   Adaptação deliberada (não é drift de "verbatim"): `.vazio` na tela-fonte é `display: none` por padrão
+   porque o HTML estático é sempre montado e um script de demo alterna a classe para mostrar o estado —
+   aqui o React já é o toggle (o <div className="vazio"> só é montado quando `linhas.length === 0`), então
+   manter `display: none` deixaria o estado vazio permanentemente invisível mesmo quando renderizado. As
+   demais propriedades são verbatim; só a visibilidade-por-padrão muda.
+
+   `.tela-estado` (carregando/erro) segue a mesma convenção já estabelecida em mesa.css e plenario.css:
+   chrome de página definido localmente em vez de importar o CSS de outra rota (não vem da tela-fonte
+   `proposicoes.html`, que não modela o estado de erro). */
+
+/* ---- cabeçalho de página ---- */
+.pagina-cab { padding: 1.6rem 0 0.4rem; display: flex; align-items: flex-end; gap: 1rem 1.4rem; flex-wrap: wrap; }
+.pagina-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
+.pagina-cab .conta { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); }
+.pagina-cab .conta b { color: var(--marca); font-weight: 600; }
+
+/* ---- barra de filtros ---- */
+.filtros { margin: 1rem 0 0; padding: 0.9rem 1rem; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); display: grid; gap: 0.8rem; }
+.filtros-linha { display: flex; gap: 0.7rem; flex-wrap: wrap; align-items: center; }
+.busca { position: relative; flex: 1 1 280px; min-width: 220px; }
+.busca svg { position: absolute; left: 0.7rem; top: 50%; transform: translateY(-50%); color: var(--texto-2); }
+.busca input { width: 100%; font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 55%, var(--linha)); border-radius: var(--raio-sm); padding: 0.6rem 0.8rem 0.6rem 2.3rem; min-height: 44px; }
+.busca input::placeholder { color: var(--texto-2); }
+
+.faceta { display: inline-flex; align-items: center; gap: 0.4rem; }
+.faceta label { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); }
+.faceta select { font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 55%, var(--linha)); border-radius: var(--raio-sm); padding: 0.5rem 0.6rem; min-height: 40px; cursor: pointer; }
+
+/* ---- tabela ---- */
+.tabela-wrap { margin: 1rem 0 0; border: 1px solid var(--linha); border-radius: var(--raio); overflow: hidden; box-shadow: var(--sombra); background: var(--surface); }
+table.tabela { width: 100%; border-collapse: collapse; }
+.tabela thead th { font-family: var(--mono); font-size: var(--t-12); font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--texto-2); text-align: left; padding: 0.7rem 0.9rem; background: var(--surface-2); border-bottom: 1px solid var(--linha); white-space: nowrap; }
+.tabela thead th.ord button { display: inline-flex; align-items: center; gap: 0.35rem; font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; background: none; border: none; cursor: pointer; padding: 0; }
+.tabela thead th.ord button:hover { color: var(--texto); }
+.tabela thead th .seta { opacity: .4; }
+.tabela thead th[aria-sort="ascending"] .seta, .tabela thead th[aria-sort="descending"] .seta { opacity: 1; color: var(--marca); }
+.tabela tbody td { padding: 0.75rem 0.9rem; border-bottom: 1px solid var(--linha); vertical-align: middle; font-size: var(--t-13); color: var(--texto); }
+.tabela tbody tr:last-child td { border-bottom: none; }
+.tabela tbody tr:hover { background: color-mix(in srgb, var(--marca) 4%, transparent); }
+.tabela tbody tr.sel { background: color-mix(in srgb, var(--cobalto) 9%, transparent); }
+[data-tema="escuro"] .tabela tbody tr.sel { background: color-mix(in srgb, var(--foco) 12%, transparent); }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--marca); font-weight: 600; white-space: nowrap; }
+.especie { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; color: var(--texto-2); }
+.ementa { max-width: 38ch; }
+.ementa a { color: var(--texto); font-weight: 600; text-decoration: none; }
+.ementa a:hover { color: var(--marca); text-decoration: underline; text-underline-offset: 3px; }
+.ementa p { margin: 0.1rem 0 0; color: var(--texto-2); font-size: var(--t-12); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.autor { white-space: nowrap; }
+.atualizada { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); white-space: nowrap; }
+
+/* situação: chip de status + azulejo miniatura (4ª leitura da assinatura) */
+.sit { display: flex; flex-direction: column; gap: 0.35rem; }
+.chip { display: inline-flex; align-items: center; gap: 0.35rem; width: fit-content; font-family: var(--mono); font-size: var(--t-12); letter-spacing: .02em; padding: 0.18rem 0.55rem; border-radius: 999px; border: 1px solid var(--linha); color: var(--texto-2); }
+.chip::before { content: ""; width: 7px; height: 7px; border-radius: 2px; background: currentColor; flex: 0 0 auto; }
+.chip-tram { color: var(--marca); border-color: color-mix(in srgb, var(--marca) 40%, transparent); background: color-mix(in srgb, var(--marca) 8%, transparent); }
+.chip-aguarda { color: var(--aviso-texto); border-color: color-mix(in srgb, var(--amarelo) 60%, transparent); background: color-mix(in srgb, var(--amarelo) 16%, transparent); }
+[data-tema="escuro"] .chip-aguarda { color: var(--amarelo); }
+.chip-aprovada { color: var(--marca); border-color: color-mix(in srgb, var(--marca) 45%, transparent); background: color-mix(in srgb, var(--marca) 12%, transparent); }
+.chip-arquivada { color: var(--texto-2); border-color: var(--linha); background: transparent; }
+
+/* ---- paginação ---- */
+.paginacao { display: flex; align-items: center; gap: 0.6rem; padding: 1rem 0 0; flex-wrap: wrap; }
+.paginacao .info { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+.pag-nav { margin-left: auto; display: flex; gap: 0.3rem; }
+.pag-nav button { min-width: 38px; min-height: 38px; padding: 0 0.6rem; border-radius: var(--raio-sm); border: 1px solid var(--linha); background: var(--surface); color: var(--texto); font-family: var(--mono); font-size: var(--t-13); cursor: pointer; }
+.pag-nav button[aria-current="page"] { background: var(--acao); color: var(--acao-texto); border-color: var(--acao); }
+.pag-nav button:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ---- estado vazio (adaptado: display padrão visível — ver nota de topo do arquivo) ---- */
+.vazio { display: block; text-align: center; padding: 3rem 1rem; color: var(--texto-2); }
+.vazio svg { color: var(--linha); }
+.vazio h2 { font-family: var(--display); font-weight: 600; font-size: var(--t-21); color: var(--texto); margin: 0.8rem 0 0.3rem; }
+.vazio p { margin: 0 auto 1rem; max-width: 42ch; }
+
+/* ---- responsivo: tabela vira cartões empilhados ---- */
+@media (max-width: 860px) {
+  .tabela thead { position: absolute; left: -9999px; }
+  .tabela, .tabela tbody, .tabela tr, .tabela td { display: block; width: 100%; }
+  .tabela tbody tr { border-bottom: 1px solid var(--linha); padding: 0.6rem 0.4rem; position: relative; }
+  .tabela tbody td { border: none; padding: 0.2rem 0.9rem; }
+  .ementa { max-width: none; }
+  .ementa p { white-space: normal; }
+}
+
+/* ---- estado de carregando/erro da página (mesma convenção de mesa.css/plenario.css) ---- */
+.tela-estado { max-width: 520px; margin: 4rem auto; text-align: center; padding: 2rem; }
+.tela-estado h1 { font-family: var(--display); font-size: var(--t-21); color: var(--texto); margin: 0 0 0.5rem; }
+.tela-estado p { color: var(--texto-2); }
+
+/* ---- azulejo miniatura (Task 9, componente React próprio — NÃO é o markup .am/.am-* da tela-fonte) ---- */
+.azulejo-mini-bloco--concluido { fill: var(--jade); }
+.azulejo-mini-bloco--ativo { fill: color-mix(in srgb, var(--amarelo) 55%, var(--surface-2)); stroke: var(--amarelo); stroke-width: 1; }
+.azulejo-mini-bloco--pendente { fill: none; stroke: color-mix(in srgb, var(--texto-2) 40%, transparent); stroke-width: 1; stroke-dasharray: 2 2; }

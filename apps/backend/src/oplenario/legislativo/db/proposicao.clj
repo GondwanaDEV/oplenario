@@ -13,7 +13,7 @@
 (def ^:private colunas
   [:id :ente_id :tipo :ano :sequencial :urn_lex :ementa :autor_tipo :autor_id :autor_texto :estado
    :objeto_indicacao :destinatario_id :destinatario_texto :tipo_requerimento :categoria_mocao
-   :atributos_especificos :texto_vigente_versao_id])
+   :atributos_especificos :texto_vigente_versao_id :atualizado_em])
 
 (defn- linha->proposicao [linha]
   (when linha
@@ -53,6 +53,62 @@
           (sql/format {:select colunas :from [:legislativo.proposicoes]
                        :where [:and [:= :ente_id ente-id] [:= :estado estado]]
                        :order-by [[:ano :desc] [:sequencial :desc]]}))))
+
+;; ---------- Onda B Slice 1: lista filtravel/ordenavel/paginada do servidor ----------
+
+(def ^:private colunas-resumo
+  "Onda B Slice 1 (review ecc clojure+database) — subconjunto ESTREITO de `colunas` p/ a LISTAGEM: so' o que
+  ProposicaoResumoOut/`resumo->wire` de fato le' (id/tipo/ano/sequencial/urn_lex/ementa/autor_tipo/
+  autor_texto/estado/atualizado_em). NUNCA `atributos_especificos` (jsonb, write-oriented) nem
+  texto_vigente_versao_id/objeto_indicacao/destinatario_*/tipo_requerimento/categoria_mocao — evita o
+  over-fetch e a inconsistencia de decode do jsonb bruto (PGobject) que `linhas->kebab` sozinho nao resolve.
+  `buscar`/`listar-por-estado` continuam com `colunas` (o conjunto cheio) p/ os seus proprios callers."
+  [:id :tipo :ano :sequencial :urn_lex :ementa :autor_tipo :autor_texto :estado :atualizado_em])
+
+(def ^:private colunas-ordenacao
+  "Allowlist string(querystring) -> coluna HoneySQL (defesa-em-profundidade: adapters/in ja' rejeitou
+  qualquer string fora deste vocabulario -> 400; aqui NUNCA se interpola a string do usuario direto no SQL,
+  so' se faz o lookup seguro — default 'atualizado_em' se a chave nao bater por algum motivo)."
+  {"atualizado_em" :atualizado_em "sequencial" :sequencial "ano" :ano})
+
+(defn- where-listagem
+  [ente-id {:keys [busca tipo estado autor-id ano]}]
+  (cond-> [[:= :ente_id ente-id]]
+    tipo     (conj [:= :tipo tipo])
+    estado   (conj [:= :estado estado])
+    autor-id (conj [:= :autor_id autor-id])
+    ano      (conj [:= :ano ano])
+    busca    (conj [:or [:ilike :ementa (str "%" busca "%")] [:ilike :urn_lex (str "%" busca "%")]])))
+
+(defn listar
+  "Onda B Slice 1 — lista filtravel/ordenavel/paginada do servidor (fonte da verdade, NAO read-model
+  assincrono). Filtro OPCIONAL e combinavel (chave ausente/nil nao filtra); `busca` e' ILIKE substring
+  case-insensitive em ementa+urn_lex (sem indice novo — volume por-tenant limitado, hash-particionado; vira
+  carry de indice trigram se aparecer lentidao real). Desempate ESTAVEL sempre por :id (mesma disciplina de
+  transparencia/db/norma/listar — paginacao sem desempate fixo pode duplicar/pular linha entre paginas em
+  empate de `ordenar-por`)."
+  [tx ente-id {:keys [pagina tamanho ordenar-por ordenar-dir] :as filtro}]
+  {:pre [(some? ente-id) (pos-int? pagina) (pos-int? tamanho)]}
+  (let [col (get colunas-ordenacao ordenar-por :atualizado_em)
+        dir (if (= "asc" ordenar-dir) :asc :desc)]
+    (comum/linhas->kebab
+     (jdbc/execute! tx
+       (sql/format {:select colunas-resumo :from [:legislativo.proposicoes]
+                    :where (into [:and] (where-listagem ente-id filtro))
+                    :order-by [[col dir] [:id :asc]]
+                    :limit tamanho
+                    :offset (* (dec pagina) tamanho)})))))
+
+(defn contar
+  "Total de linhas do MESMO filtro de conteudo de `listar` (ignora pagina/tamanho/ordenacao — so' a
+  paginacao do wire/out precisa do total)."
+  [tx ente-id filtro]
+  {:pre [(some? ente-id)]}
+  (:total
+   (comum/linha->kebab
+    (jdbc/execute-one! tx
+      (sql/format {:select [[[:count :*] :total]] :from [:legislativo.proposicoes]
+                   :where (into [:and] (where-listagem ente-id filtro))})))))
 
 (defn mudar-estado!
   "Transicao COARSE do estado (a maquina fina e' a tramitacao F3.3). CAS por `lock-version` (compare-and-swap

@@ -1,14 +1,18 @@
 (ns oplenario.legislativo.diplomat.http.in
-  "Fronteira de IO HTTP de ENTRADA do legislativo (§22.10 diplomat/http/in, ADR-0001): a vertical da votacao ao
-  vivo (F4 Slice 3) — abrir / registrar voto / encerrar. A rota mora AQUI (legislativo e' o DONO do agregado
-  votacao + da tx que casa ato+emissao, Slice 1), nao no `sessoes` — espelha o SSE `/sessoes/:id/plenario` que
-  mora no `tempo_real` (prefixo de URL != dono do modulo). O diplomat e' a UNICA camada que cruza o gate de
-  borda (adapters/in na entrada, adapters/out na saida); o controller trabalha so em models. A authz e' HERDADA
-  do recurso SESSAO via `consultar-sessao` INJETADA pelo host (legislativo NAO importa sessoes, §22.10): a
-  grossa (exige-papel) na rota, a fina (policy.check/pode-dirigir-votacao?) no controller."
+  "Fronteira de IO HTTP de ENTRADA do legislativo (§22.10 diplomat/http/in, ADR-0001): DUAS verticais moram
+  aqui. (1) a votacao ao vivo (F4 Slice 3) — abrir / registrar voto / encerrar. A rota mora AQUI (legislativo
+  e' o DONO do agregado votacao + da tx que casa ato+emissao, Slice 1), nao no `sessoes` — espelha o SSE
+  `/sessoes/:id/plenario` que mora no `tempo_real` (prefixo de URL != dono do modulo). (2) GET
+  /legislativo/proposicoes (Onda B Slice 1) — a listagem tenant-wide de proposicoes, so' o gate grosso (papel
+  'secretario'), sem authz herdada de sessao. O diplomat e' a UNICA camada que cruza o gate de borda
+  (adapters/in na entrada, adapters/out na saida); o controller trabalha so em models. Na vertical de votacao a
+  authz e' HERDADA do recurso SESSAO via `consultar-sessao` INJETADA pelo host (legislativo NAO importa
+  sessoes, §22.10): a grossa (exige-papel) na rota, a fina (policy.check/pode-dirigir-votacao?) no controller."
   (:require [oplenario.http :as http]
             [oplenario.interceptors :as it]
+            [oplenario.legislativo.adapters.in.proposicao :as adapters-in-proposicao]
             [oplenario.legislativo.adapters.in.votacao :as adapters-in]
+            [oplenario.legislativo.adapters.out.proposicao :as adapters-out-proposicao]
             [oplenario.legislativo.adapters.out.relator-pendente :as adapters-out-relator]
             [oplenario.legislativo.adapters.out.votacao :as adapters-out]
             [oplenario.legislativo.controllers :as controllers]))
@@ -53,6 +57,17 @@
         (http/json-resposta 200 (adapters-out/encerramento->wire snap))
         (http/json-resposta 404 {:erro "votacao nao encontrada nesta sessao"})))))
 
+(defn- listar-proposicoes-handler
+  "GET /legislativo/proposicoes(?busca=&tipo=&estado=&autor-id=&ano=&pagina=&tamanho=&ordenar-por=&ordenar-dir=).
+  Leitura tenant-wide (mesmo contrato de authz de /paineis/*, Onda B Slice 1): adapters/in coage os filtros
+  (fail-closed -> 400); o controller le' do tenant do ator; adapters/out projeta+valida."
+  [repo-leg]
+  (fn [req]
+    (let [ente-id (:ente-id (:ator req))
+          filtro (adapters-in-proposicao/listar-proposicoes->dominio (:query-params req))]
+      (http/json-resposta 200 (adapters-out-proposicao/listar->wire
+                                (controllers/listar-proposicoes repo-leg ente-id filtro))))))
+
 (defn rotas
   "Fragmento de rotas da votacao ao vivo (table syntax Pedestal). Recebe o interceptor `auth` (compartilhado), o
   `repo-legislativo` (Repo-Component do proprio modulo) e `consultar-sessao` (injetada pelo host — cross-modulo
@@ -68,7 +83,9 @@
        :route-name :legislativo/registrar-voto]
       ["/sessoes/:id/votacoes/:votacao-id/encerramento" :post
        [auth papel it/corpo-json (encerrar-handler repo-legislativo consultar-sessao)]
-       :route-name :legislativo/encerrar-votacao]}))
+       :route-name :legislativo/encerrar-votacao]
+      ["/legislativo/proposicoes" :get [auth papel (listar-proposicoes-handler repo-legislativo)]
+       :route-name :legislativo/listar-proposicoes]}))
 
 ;; ========================= FE Onda A1: fila de relatores pendentes (§16.11) =========================
 
