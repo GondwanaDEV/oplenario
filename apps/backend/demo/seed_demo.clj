@@ -9,7 +9,9 @@
       clojure -X:dev seed-demo/base
     ... (abrir o browser na URL impressa) ...
     DATABASE_URL=... clojure -X:dev seed-demo/eventos
-    DATABASE_URL=... clojure -X:dev seed-demo/materias   ; Portal do Cidadão (Task 1.4, Fatia A2.1 FE)
+    DATABASE_URL=... clojure -X:dev seed-demo/materias      ; Portal do Cidadão (Task 1.4, Fatia A2.1 FE)
+    DATABASE_URL=... clojure -X:dev seed-demo/esic          ; balcão e-SIC (Task 2.1, Fatia A2.2 FE)
+    DATABASE_URL=... clojure -X:dev seed-demo/encarregado   ; balcão LGPD (Task 2.2, Fatia A2.2 FE)
 
   (rodar via `clojure -Sdeps '{:aliases {:seed {:extra-paths [\"demo\"]}}}' -X:seed seed-demo/<fn>` — fora
   do alias `:dev` porque `dev/user.clj` exige `component.repl` ausente, mesma nota de oplenario-fe-execucao)"
@@ -23,9 +25,12 @@
             [oplenario.identidade.relacoes.identidade :as rel-id]
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.kernel.outbox :as outbox]
+            [oplenario.kernel.tempo :as tempo]
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.legislativo.components.repositorio :as legislativo-repo]
             [oplenario.motor.components.registro-fatos :as rf]
+            [oplenario.participacao.components.repositorio :as participacao-repo]
+            [oplenario.participacao.controllers :as participacao-controllers]
             [oplenario.sessoes.components.repositorio :as repo]
             [clojure.edn :as edn])
   (:import (java.time Instant)))
@@ -41,6 +46,7 @@
 
 (defn- repo-sessoes [ds] (assoc (repo/repositorio) :datasource {:ds ds} :bus (outbox/bus)))
 (defn- repo-legislativo [ds] (legislativo-repo/->RepoLegislativoPg {:ds ds} (outbox/bus)))
+(defn- repo-participacao [ds] (participacao-repo/->RepoParticipacaoPg {:ds ds} (outbox/bus)))
 
 (defn base [_]
   (com-ds
@@ -155,3 +161,46 @@
        (println "\n=== MATÉRIAS DA DEMO PRONTAS ===")
        (println "URL: http://localhost:3000/portal/casa/" (str ente))
        (println "=================================\n")))))
+
+;; ---------- Task 2.1/2.2 (Fatia A2.2, Portal do Cidadão FE) — e-SIC + Encarregado/DPO ----------
+
+(defn esic
+  "Semente do BALCÃO E-SIC (Task 2.1, Fatia A2.2 FE): protocola 1 pedido de acesso à informação sob o
+  MESMO ente da demo (ids-file de `base` — rodar `base` primeiro), via o controller REAL
+  (`participacao.controllers/protocolar-pedido`) — o MESMO caminho que POST /portal/esic/pedidos usa. O
+  protocolo devolvido (formato ESIC-<ano>-<seq>, `participacao/logic.clj`) é o que
+  GET /portal/casa/:ente/esic/acompanhar/:protocolo lê de volta — exercita o balcão e-SIC do FE com dado
+  real. NÃO idempotente (protocola um pedido NOVO a cada chamada, como `eventos`/`materias` já são)."
+  [_]
+  (com-ds
+   (fn [ds]
+     (let [{:keys [ente]} (edn/read-string (slurp ids-file))
+           repo       (repo-participacao ds)
+           cidadao-id (random-uuid)]
+       (id/inserir! ds {:id cidadao-id :cpf (cpf-valido) :nome "Cidadão Demo"})
+       (let [{:keys [protocolo]}
+             (participacao-controllers/protocolar-pedido repo (tempo/relogio-sistema)
+               {:ente-id ente :identidade-id cidadao-id}
+               {:assunto "Contratos de tecnologia vigentes"
+                :descricao "Cópia dos contratos de tecnologia vigentes e seus valores"})]
+         (println "\n=== PEDIDO E-SIC DA DEMO PRONTO ===")
+         (println "protocolo:" protocolo)
+         (println "URL      : http://localhost:3000/portal/casa/" (str ente) " (busque por" protocolo "no balcão e-SIC)")
+         (println "====================================\n"))))))
+
+(defn encarregado
+  "Semente do BALCÃO LGPD (Task 2.2, Fatia A2.2 FE): define o Encarregado/DPO do MESMO ente da demo via o
+  controller REAL (`participacao.controllers/definir-encarregado!`) — o MESMO caminho que
+  PUT /lgpd/encarregado usa. IDEMPOTENTE (upsert: 1 linha por ente, pode rodar de novo p/ trocar o
+  contato) — ao contrário de `esic`/`materias`."
+  [_]
+  (com-ds
+   (fn [ds]
+     (let [{:keys [ente ident]} (edn/read-string (slurp ids-file))
+           repo (repo-participacao ds)]
+       (participacao-controllers/definir-encarregado! repo {:ente-id ente :identidade-id ident}
+         {:nome "Mariana Couto" :rotulo "Encarregada de Dados (DPO)"
+          :email "encarregado.dados@cmfor.ce.gov.br"})
+       (println "\n=== ENCARREGADO/DPO DA DEMO PRONTO ===")
+       (println "URL: http://localhost:3000/portal/casa/" (str ente))
+       (println "=======================================\n")))))
