@@ -49,7 +49,7 @@ describe("BalcaoEsic", () => {
     expect(url).toBe("/api/portal/casa/fortaleza/esic/acompanhar/2026%2F00488");
   });
 
-  it("protocolo não encontrado -> mensagem honesta, sem inventar um pedido", async () => {
+  it("protocolo não encontrado -> mensagem honesta, sem inventar um pedido, e sem o rótulo 'em breve'", async () => {
     global.fetch = vi.fn(async () => ({ ok: false, status: 404 })) as unknown as typeof fetch;
 
     render(<BalcaoEsic ente="fortaleza" />);
@@ -58,6 +58,61 @@ describe("BalcaoEsic", () => {
 
     await waitFor(() => expect(screen.getByText(/não encontramos nenhum pedido/i)).toBeTruthy());
     expect(screen.queryByText(/^Pedido nº/)).toBeNull();
+    // Review A2.2 (item 4): "não encontrado" NÃO é mais um <EmBreve> — o aria-label fixo daquele
+    // componente ("{titulo}: em breve") rendia o absurdo "Pedido não encontrado: em breve" (não é um
+    // recurso futuro, é o desfecho de uma busca real).
+    expect(screen.queryByText("Pedido não encontrado")?.textContent).toBe("Pedido não encontrado");
+    expect(screen.queryByLabelText(/pedido não encontrado: em breve/i)).toBeNull();
+  });
+
+  it("o resultado da busca vive dentro de uma única live region (role=status, aria-live=polite)", () => {
+    const { container } = render(<BalcaoEsic ente="fortaleza" />);
+    const regioes = container.querySelectorAll('[aria-live="polite"]');
+    expect(regioes.length).toBe(1);
+    expect(regioes[0].getAttribute("role")).toBe("status");
+  });
+
+  it("o estado 'buscando' também é anunciado dentro da live region (não só o desfecho)", async () => {
+    let resolverFetch!: (v: unknown) => void;
+    global.fetch = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          resolverFetch = resolve;
+        }),
+    ) as unknown as typeof fetch;
+
+    const { container } = render(<BalcaoEsic ente="fortaleza" />);
+    fireEvent.change(screen.getByLabelText(/acompanhar pelo número/i), { target: { value: "2026/00488" } });
+    fireEvent.click(screen.getByRole("button", { name: /acompanhar/i }));
+
+    const regiao = container.querySelector('[aria-live="polite"]');
+    expect(regiao?.textContent).toMatch(/buscando/i);
+
+    resolverFetch({ ok: true, json: async () => ({ protocolo: "2026/00488", estado: "em_analise", "dias-restantes": 9 }) });
+    await waitFor(() => expect(screen.getByText(/pedido nº 2026\/00488/i)).toBeTruthy());
+  });
+
+  it("submeter enquanto já busca (2º Enter) não dispara uma segunda chamada (guarda de reentrância)", async () => {
+    let resolverFetch!: (v: unknown) => void;
+    const fetchMock = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          resolverFetch = resolve;
+        }),
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    render(<BalcaoEsic ente="fortaleza" />);
+    const campo = screen.getByLabelText(/acompanhar pelo número/i);
+    fireEvent.change(campo, { target: { value: "2026/00488" } });
+    const formulario = campo.closest("form") as HTMLFormElement;
+    fireEvent.submit(formulario);
+    fireEvent.submit(formulario);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    resolverFetch({ ok: true, json: async () => ({ protocolo: "2026/00488", estado: "em_analise", "dias-restantes": 9 }) });
+    await waitFor(() => expect(screen.getByText(/pedido nº 2026\/00488/i)).toBeTruthy());
   });
 
   it("submeter vazio não dispara busca (sem fetch)", () => {

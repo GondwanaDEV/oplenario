@@ -14,8 +14,23 @@
 // `buscarPublico` colapsa 404 e falha de rede no mesmo `null` (degradação por seção) — não dá para
 // distinguir "protocolo não existe" de "erro transitório" com a fundação atual; a mensagem cobre os
 // dois casos honestamente, sem afirmar qual dos dois ocorreu.
+//
+// Review A2.2 (item 2): esta tela mantinha protocolo/estado/status em useState local sem reset ao trocar
+// `ente` — navegar câmara A→B podia pintar o resultado de A sobre B (o `aoSubmeter` de A capturava o
+// `ente` de A no closure). O remount por `key={ente}` (em page.tsx) é o fix primário; aqui, defesa em
+// profundidade: (a) guarda de reentrância no topo de `aoSubmeter` — um segundo submit (Enter) enquanto
+// já busca não duplica a chamada; (b) `vivoRef` marca desmonte, para uma resposta tardia não chamar
+// `setState` depois que o componente já saiu (o próprio remount por key já cobre isso, mas o guard não
+// depende dele).
+//
+// Review A2.2 (item 3+4): o resultado da busca (buscando/encontrado/não-encontrado) agora vive dentro de
+// uma ÚNICA `<div role="status" aria-live="polite">` persistente — antes só o "não encontrado" era
+// anunciado (via <EmBreve>) e o sucesso entrava silenciosamente. O "não encontrado" deixou de usar
+// <EmBreve> (cujo aria-label fixo "{titulo}: em breve" rendia o absurdo "Pedido não encontrado: em
+// breve" — não é um recurso futuro, é um resultado de busca) — agora é uma mensagem dedicada, sem "em
+// breve", que já vive dentro da live region acima (não precisa de um role próprio).
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { buscarPublico } from "@/lib/portal-api";
 import { AzulejoFaixa } from "@/lib/charts/azulejo-faixa";
 import { descreverFaixa } from "@/lib/tramitacao-vista";
@@ -30,13 +45,23 @@ export function BalcaoEsic({ ente }: { ente: string }) {
   const [protocolo, setProtocolo] = useState("");
   const [estado, setEstado] = useState<EstadoBusca>("ocioso");
   const [status, setStatus] = useState<AcompanhamentoEsicOut | null>(null);
+  const vivoRef = useRef(true);
+
+  useEffect(() => {
+    vivoRef.current = true;
+    return () => {
+      vivoRef.current = false;
+    };
+  }, []);
 
   async function aoSubmeter(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
+    if (estado === "buscando") return;
     const valor = protocolo.trim();
     if (!valor) return;
     setEstado("buscando");
     const resultado = await buscarPublico<AcompanhamentoEsicOut>(ente, "esic", "acompanhar", valor);
+    if (!vivoRef.current) return;
     if (!resultado) {
       setStatus(null);
       setEstado("nao-encontrado");
@@ -74,46 +99,56 @@ export function BalcaoEsic({ ente }: { ente: string }) {
         </div>
       </form>
 
-      {estado === "nao-encontrado" && (
-        <EmBreve
-          titulo="Pedido não encontrado"
-          motivo="Não encontramos nenhum pedido com esse número. Confira o número de protocolo (o mesmo do recibo) ou tente novamente em instantes."
-        />
-      )}
+      {/* live region ÚNICA e persistente — cobre os 3 desfechos de uma busca (buscando/encontrado/
+          não-encontrado); existir desde o primeiro render (mesmo vazia) é o que garante que leitores de
+          tela observem as trocas de conteúdo dentro dela. */}
+      <div role="status" aria-live="polite">
+        {estado === "buscando" && <p className="sr-only">Buscando o pedido {protocolo.trim()}…</p>}
 
-      {estado === "encontrado" && status && vista && (
-        <>
-          <div className="pedido">
-            <div>
-              <span className="num">Pedido nº {status.protocolo}</span>
-              <p className="tipo-obj">
-                Situação: <b>{vista.rotuloSituacao}</b>
-              </p>
-            </div>
-            {vista.diasRestantes !== null && (
-              <AnelPrazo
-                diasRestantes={vista.diasRestantes}
-                diasTotal={DIAS_TOTAL_LAI}
-                rotulo={`Prazo legal do pedido ${status.protocolo}`}
-                tamanho={92}
-              />
-            )}
-            <p className="pedido-legenda">
-              <span>
-                Prazo da Lei de Acesso: <b>20 dias</b>, prorrogável por mais 10.
-              </span>
+        {estado === "nao-encontrado" && (
+          <div className="em-breve">
+            <p className="em-breve-titulo">Pedido não encontrado</p>
+            <p className="em-breve-motivo">
+              Não encontramos nenhum pedido com esse número. Confira o número de protocolo (o mesmo do
+              recibo) ou tente novamente em instantes.
             </p>
           </div>
+        )}
 
-          <div className="tramitacao">
-            <p className="rotulo-faixa">Situação do pedido</p>
-            <AzulejoFaixa
-              estagios={vista.estagios}
-              rotuloAria={descreverFaixa(`pedido ${status.protocolo}`, vista.estagios)}
-            />
-          </div>
-        </>
-      )}
+        {estado === "encontrado" && status && vista && (
+          <>
+            <div className="pedido">
+              <div>
+                <span className="num">Pedido nº {status.protocolo}</span>
+                <p className="tipo-obj">
+                  Situação: <b>{vista.rotuloSituacao}</b>
+                </p>
+              </div>
+              {vista.diasRestantes !== null && (
+                <AnelPrazo
+                  diasRestantes={vista.diasRestantes}
+                  diasTotal={DIAS_TOTAL_LAI}
+                  rotulo={`Prazo legal do pedido ${status.protocolo}`}
+                  tamanho={92}
+                />
+              )}
+              <p className="pedido-legenda">
+                <span>
+                  Prazo da Lei de Acesso: <b>20 dias</b>, prorrogável por mais 10.
+                </span>
+              </p>
+            </div>
+
+            <div className="tramitacao">
+              <p className="rotulo-faixa">Situação do pedido</p>
+              <AzulejoFaixa
+                estagios={vista.estagios}
+                rotuloAria={descreverFaixa(`pedido ${status.protocolo}`, vista.estagios)}
+              />
+            </div>
+          </>
+        )}
+      </div>
 
       <div className="balcao-acoes">
         <EmBreve

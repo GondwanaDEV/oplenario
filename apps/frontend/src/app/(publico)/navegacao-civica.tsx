@@ -6,6 +6,11 @@
 // candidata; as demais nem isso) — em vez de linkar para uma rota que 404a silenciosamente, os 6 usam
 // <EmBreve> (Global Constraints "sem dado falso" + "prefira em-breve honesto a link morto").
 //
+// Review A2.2 (item 5): a lista era um <nav aria-label="Serviços e transparência"> sem nenhum <a> —
+// landmark de navegação sem destino navegável é falso-positivo para leitor de tela (anuncia "navegação"
+// e entrega 6 cartões inertes). Rebaixado para <ul> simples (a seção-mãe já tem o <h2>/aria-labelledby);
+// promover de volta a <nav> quando pelo menos um cartão virar link real.
+//
 // DESVIO da tela-fonte: dois cartões (Ouvidoria, Agenda) tinham um `.prazo-tag` com um NÚMERO — o de
 // Ouvidoria é uma constante LEGAL (Lei 13.460, resposta em até 30 dias, mesmo racional do prazo de 20
 // dias da LAI no balcão e-SIC: regulação, não dado fabricado por instância) e entra em prosa no motivo;
@@ -48,11 +53,13 @@ export function NavegacaoCivica() {
       <div className="secao-cabeca">
         <h2 id="civico-titulo">Tudo o que a Câmara publica</h2>
       </div>
-      <nav className="civico" aria-label="Serviços e transparência">
+      <ul className="civico">
         {CARTOES.map((c) => (
-          <EmBreve key={c.titulo} titulo={c.titulo} motivo={c.motivo} />
+          <li key={c.titulo}>
+            <EmBreve titulo={c.titulo} motivo={c.motivo} />
+          </li>
         ))}
-      </nav>
+      </ul>
     </section>
   );
 }

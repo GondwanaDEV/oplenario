@@ -35,8 +35,11 @@ export default async function PaginaPortalCidadao({
               <h2 id="balcoes-titulo">Os seus direitos, em dois balcões</h2>
             </div>
             <div className="balcoes">
-              <BalcaoEsic ente={ente} />
-              <BalcaoLgpd ente={ente} />
+              {/* key={ente}: review A2.2 (item 2) — sem isso, navegar câmara A→B mantém o useState local
+                  (protocolo/estado/status) do balcão de A, podendo pintar o resultado de A sobre B. O
+                  key força remount por tenant; ver também a guarda de reentrância em balcao-esic.tsx. */}
+              <BalcaoEsic key={ente} ente={ente} />
+              <BalcaoLgpd key={ente} ente={ente} />
             </div>
           </section>
 

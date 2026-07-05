@@ -84,7 +84,7 @@
 
 /* busca — a entrada única (consultar não exige cadastro) */
 .busca { margin: 1.6rem 0 0; }
-.busca-campo { display: flex; align-items: stretch; gap: 0.5rem; background: var(--surface-2); border: 1.5px solid var(--linha); border-radius: 999px; padding: 0.4rem 0.4rem 0.4rem 1.1rem; box-shadow: var(--sombra); max-width: 40rem; transition: border-color .15s ease, box-shadow .15s ease; }
+.busca-campo { display: flex; align-items: stretch; gap: 0.5rem; background: var(--surface-2); border: 1.5px solid var(--campo-borda); border-radius: 999px; padding: 0.4rem 0.4rem 0.4rem 1.1rem; box-shadow: var(--sombra); max-width: 40rem; transition: border-color .15s ease, box-shadow .15s ease; }
 .busca-campo:focus-within { border-color: var(--foco); box-shadow: 0 0 0 4px color-mix(in srgb, var(--foco) 18%, transparent); }
 .busca-campo svg { color: var(--texto-2); flex: 0 0 auto; align-self: center; }
 .busca-campo input { flex: 1 1 auto; min-width: 0; border: 0; background: transparent; font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); padding: 0.6rem 0; }
@@ -205,7 +205,7 @@
 .acompanhar-esic-campo { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 .acompanhar-esic-campo input {
   flex: 1 1 12rem; min-width: 0; font-family: var(--corpo); font-size: var(--t-16); color: var(--texto);
-  background: var(--surface-2); border: 1.5px solid var(--linha); border-radius: var(--raio-sm);
+  background: var(--surface-2); border: 1.5px solid var(--campo-borda); border-radius: var(--raio-sm);
   padding: 0.55rem 0.8rem; min-height: 44px;
 }
 .acompanhar-esic-campo input::placeholder { color: var(--texto-2); }
@@ -276,7 +276,7 @@
 .encarregado a { font-family: var(--mono); font-size: var(--t-13); color: var(--marca); word-break: break-all; }
 
 /* ============== 5 · NAVEGAÇÃO CÍVICA ============== */
-.civico { display: grid; grid-template-columns: repeat(4, 1fr); gap: clamp(0.8rem, 1.8vw, 1.1rem); }
+.civico { display: grid; grid-template-columns: repeat(4, 1fr); gap: clamp(0.8rem, 1.8vw, 1.1rem); list-style: none; margin: 0; padding: 0; }
 .civico a { display: flex; flex-direction: column; gap: 0.55rem; text-decoration: none; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); padding: 1.15rem 1.15rem 1.25rem; transition: border-color .14s ease, transform .14s ease, box-shadow .14s ease; }
 .civico a:hover { border-color: var(--foco); transform: translateY(-2px); box-shadow: var(--sombra); }
 .civico .ic { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; background: rgba(12,83,64,.09); color: var(--marca); flex: 0 0 auto; }
