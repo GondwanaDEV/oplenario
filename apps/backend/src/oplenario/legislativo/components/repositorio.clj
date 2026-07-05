@@ -36,6 +36,8 @@
   (protocolar! [this ente-id proposicao] "Gate eixo H: numera (gapless) + URN + insere, atomico.")
   (buscar-proposicao [this ente-id id])
   (listar-por-estado [this ente-id estado])
+  (listar-proposicoes [this ente-id filtro] "Onda B Slice 1: leitura filtrada/paginada/ordenada do servidor.")
+  (contar-proposicoes [this ente-id filtro] "Total de linhas do mesmo filtro (paginacao).")
   (mudar-estado-proposicao! [this ente-id m])
   ;; eixo B — versionamento de texto
   (nova-versao! [this ente-id versao] "Cria versao 'rascunho' (conteudo append-only).")
@@ -193,6 +195,8 @@
           r))))
   (buscar-proposicao [this ente-id id] (transacao this ente-id #(proposicao/buscar % ente-id id)))
   (listar-por-estado [this ente-id estado] (transacao this ente-id #(proposicao/listar-por-estado % ente-id estado)))
+  (listar-proposicoes [this ente-id filtro] (transacao this ente-id #(proposicao/listar % ente-id filtro)))
+  (contar-proposicoes [this ente-id filtro] (transacao this ente-id #(proposicao/contar % ente-id filtro)))
   (mudar-estado-proposicao! [this ente-id m] (transacao this ente-id #(proposicao/mudar-estado! % (assoc m :ente-id ente-id))))
   (nova-versao! [this ente-id v] (transacao this ente-id #(texto/nova-versao! % (assoc v :ente-id ente-id))))
   (promover-versao! [this ente-id m] (transacao this ente-id #(texto/promover! % (assoc m :ente-id ente-id))))

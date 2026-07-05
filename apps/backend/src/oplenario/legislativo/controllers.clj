@@ -68,6 +68,15 @@
   [repo-legislativo ente-id]
   (repo/relatores-pendentes repo-legislativo ente-id))
 
+(defn listar-proposicoes
+  "Onda B Slice 1 — leitura tenant-wide (mesmo contrato de authz de `relatores-pendentes`: sem policy fina
+  adicional, so' o gate grosso da rota — papel 'secretario'). `filtro` ja vem coagido pelo adapters/in."
+  [repo-legislativo ente-id filtro]
+  {:itens (repo/listar-proposicoes repo-legislativo ente-id filtro)
+   :total (repo/contar-proposicoes repo-legislativo ente-id filtro)
+   :pagina (:pagina filtro)
+   :tamanho-pagina (:tamanho filtro)})
+
 (defn encerrar-votacao
   "Encerra a votacao `votacao-id` da sessao `sessao-id` (authz na sessao + amarra). `m` carrega o id
   (=votacao-id), lock-version, base-membros e resultado. Devolve o snapshot apurado ou nil se a votacao nao
