@@ -15,6 +15,9 @@
   ;; ente / legislatura / sessao
   (criar-ente! [this ente-id ente])
   (buscar-ente [this ente-id])
+  (uf-e-municipio [this ente-id]
+    "uf + nome do municipio do ente — o FATO que legislativo/protocolar! precisa (injetado pelo host,
+     inversao de dependencia §22.10, Onda B Slice 2).")
   (criar-legislatura! [this ente-id legislatura])
   (buscar-legislatura [this ente-id id])
   (legislatura-vigente [this ente-id])
@@ -44,6 +47,7 @@
   (transacao [_ ente-id f] (tenancy/com-tenant* (:ds datasource) ente-id f))
   (criar-ente! [this ente-id ente] (transacao this ente-id #(estrutura/inserir-ente! % ente)))
   (buscar-ente [this ente-id] (transacao this ente-id estrutura/buscar-ente))
+  (uf-e-municipio [this ente-id] (transacao this ente-id estrutura/uf-e-municipio))
   (criar-legislatura! [this ente-id leg] (transacao this ente-id #(estrutura/inserir-legislatura! % leg)))
   (buscar-legislatura [this ente-id id] (transacao this ente-id #(estrutura/buscar-legislatura % id)))
   (legislatura-vigente [this ente-id] (transacao this ente-id #(estrutura/legislatura-vigente % ente-id)))
