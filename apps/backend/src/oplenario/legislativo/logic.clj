@@ -17,8 +17,16 @@
 
 ;; --- eixo B: versionamento de texto. Vocabularios do §22.4 (espelham os CHECK da migration 0015). ---
 (def origens-versao
-  #{"protocolo" "substitutivo" "aplicacao_emenda" "redacao_final" "promulgacao" "importacao_legado"})
+  #{"protocolo" "substitutivo" "aplicacao_emenda" "redacao_final" "promulgacao" "importacao_legado" "edicao"})
 (def estados-versao #{"rascunho" "vigente" "superada" "arquivada"})
+
+(def autor-tipos
+  "Vocabulario de autor_tipo (espelha o CHECK da migration 20260620000013). 'cidadao' = iniciativa popular."
+  #{"vereador" "mesa" "comissao" "executivo" "cidadao"})
+
+(def estados-proposicao-terminais
+  "Espelha o trigger trg_proposicoes_imut_estado (migration 20260620000013) — guarda o `editar!` (Task 4)."
+  #{"publicada" "arquivada"})
 
 ;; --- eixo D: emendas. Vocabularios do §22.4 (espelham os CHECK da migration 0017). ---
 (def tipos-emenda
