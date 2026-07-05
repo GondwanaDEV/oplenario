@@ -4,7 +4,8 @@
   vocabulario de especies vem de legislativo.logic/tipos (fonte unica; o CHECK do schema 0013 espelha).
   `estado` e' :string (NAO enum fechado) — a maquina fina de tramitacao e' template-driven por camara
   (F3.3), nao um enum cravado. Datas/carimbos seguem kernel/db-tipos. Um arquivo enquanto cabe."
-  (:require [oplenario.legislativo.logic :as logic]))
+  (:require [oplenario.kernel.malli :as km]
+            [oplenario.legislativo.logic :as logic]))
 
 (def Proposicao
   [:map {:closed true}
@@ -21,6 +22,7 @@
    [:autor-id {:optional true} [:maybe :uuid]]
    [:autor-texto {:optional true} [:maybe :string]]
    [:estado :string]
+   [:atualizado-em km/Instante]
    ;; atributos quentes por tipo
    [:objeto-indicacao {:optional true} [:maybe :string]]
    [:destinatario-id {:optional true} [:maybe :uuid]]
