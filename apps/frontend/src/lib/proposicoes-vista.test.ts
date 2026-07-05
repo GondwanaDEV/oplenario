@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { derivarProposicoesVista } from "./proposicoes-vista";
+import { categorizarSituacao, derivarProposicoesVista } from "./proposicoes-vista";
 import type { ProposicaoResumoOut } from "./contrato-legislativo.gen";
 
 const base: ProposicaoResumoOut = {
@@ -44,5 +44,36 @@ describe("derivarProposicoesVista", () => {
 
   it("lista vazia vira lista vazia", () => {
     expect(derivarProposicoesVista([])).toEqual([]);
+  });
+
+  it("expõe a categoria do chip de status junto de rótulo/estágios", () => {
+    const [linha] = derivarProposicoesVista([base]);
+    expect(linha.situacao.categoria).toBe("tram");
+  });
+});
+
+describe("categorizarSituacao", () => {
+  it("estado em andamento (nenhum terminal, nenhuma espera de pauta) categoriza como 'tram'", () => {
+    expect(categorizarSituacao("protocolada")).toBe("tram");
+    expect(categorizarSituacao("em_comissoes")).toBe("tram");
+    expect(categorizarSituacao("primeiro_turno")).toBe("tram");
+  });
+
+  it("estado de espera de pauta categoriza como 'aguarda'", () => {
+    expect(categorizarSituacao("em_pauta")).toBe("aguarda");
+    expect(categorizarSituacao("aguardando_pauta")).toBe("aguarda");
+  });
+
+  it("estado terminal de sucesso categoriza como 'aprovada'", () => {
+    expect(categorizarSituacao("aprovada")).toBe("aprovada");
+  });
+
+  it("estado terminal de arquivamento categoriza como 'arquivada'", () => {
+    expect(categorizarSituacao("arquivada")).toBe("arquivada");
+  });
+
+  it("estado desconhecido (vocabulário livre do tenant) degrada fail-closed para 'tram', nunca lança", () => {
+    expect(() => categorizarSituacao("estado_customizado_do_tenant")).not.toThrow();
+    expect(categorizarSituacao("estado_customizado_do_tenant")).toBe("tram");
   });
 });

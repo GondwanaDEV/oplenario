@@ -8,7 +8,7 @@
 // dono, elas simplesmente não aparecem ainda). A ação "abrir ficha" por linha também não existe ainda
 // (ficha-materia é uma fatia posterior) — cada linha não é clicável.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useProposicoes, type FiltrosProposicoes } from "@/lib/use-proposicoes";
 import { derivarProposicoesVista } from "@/lib/proposicoes-vista";
@@ -31,6 +31,18 @@ export default function PaginaProposicoes() {
   const linhas = dados ? derivarProposicoesVista(dados.itens) : [];
   const totalPaginas = dados ? Math.max(1, Math.ceil(dados.total / dados.tamanhoPagina)) : 1;
 
+  // Busca em texto livre: debounce de 300ms (review ecc:react-reviewer — sem isto, cada tecla digitada
+  // disparava um refetch inteiro via useProposicoes). `buscaBruta` atualiza a cada tecla (input responsivo
+  // ao olho); só depois de 300ms sem novas teclas ela empurra pro `filtros` real que dispara o fetch.
+  // Select de espécie e paginação NÃO passam por aqui — só a digitação é rápida o bastante pra precisar.
+  const [buscaBruta, setBuscaBruta] = useState("");
+  useEffect(() => {
+    const temporizador = setTimeout(() => {
+      setFiltros((f) => ({ ...f, busca: buscaBruta || undefined, pagina: 1 }));
+    }, 300);
+    return () => clearTimeout(temporizador);
+  }, [buscaBruta]);
+
   if (estado === "erro") {
     return (
       <main className="tela-estado">
@@ -49,7 +61,7 @@ export default function PaginaProposicoes() {
             <span className="eyebrow">Acervo legislativo</span>
             <h1>Proposições</h1>
           </div>
-          {dados && (
+          {estado === "pronto" && dados && (
             <span className="conta" aria-live="polite">
               <b>{linhas.length}</b> de {dados.total} matérias
             </span>
@@ -64,13 +76,15 @@ export default function PaginaProposicoes() {
                 id="busca"
                 type="search"
                 placeholder="Buscar por número, ementa ou autor…"
-                onChange={(e) => setFiltros((f) => ({ ...f, busca: e.target.value || undefined, pagina: 1 }))}
+                value={buscaBruta}
+                onChange={(e) => setBuscaBruta(e.target.value)}
               />
             </div>
             <span className="faceta">
               <label htmlFor="f-tipo">Espécie</label>
               <select
                 id="f-tipo"
+                disabled={estado === "carregando"}
                 onChange={(e) => setFiltros((f) => ({ ...f, tipo: e.target.value || undefined, pagina: 1 }))}
               >
                 <option value="">Todas</option>
@@ -119,7 +133,7 @@ export default function PaginaProposicoes() {
                     <td className="autor">{linha.autor}</td>
                     <td>
                       <div className="sit">
-                        <span className="chip">{linha.situacao.rotulo}</span>
+                        <span className={`chip chip-${linha.situacao.categoria}`}>{linha.situacao.rotulo}</span>
                         <AzulejoMini
                           estagios={linha.situacao.estagios}
                           rotuloAria={descreverFaixa(linha.numero, linha.situacao.estagios)}
@@ -142,7 +156,7 @@ export default function PaginaProposicoes() {
             <div className="pag-nav">
               <button
                 type="button"
-                disabled={dados.pagina <= 1}
+                disabled={dados.pagina <= 1 || estado === "carregando"}
                 onClick={() => setFiltros((f) => ({ ...f, pagina: f.pagina - 1 }))}
                 aria-label="Página anterior"
               >
@@ -150,7 +164,7 @@ export default function PaginaProposicoes() {
               </button>
               <button
                 type="button"
-                disabled={dados.pagina >= totalPaginas}
+                disabled={dados.pagina >= totalPaginas || estado === "carregando"}
                 onClick={() => setFiltros((f) => ({ ...f, pagina: f.pagina + 1 }))}
                 aria-label="Próxima página"
               >
