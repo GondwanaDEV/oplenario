@@ -13,7 +13,7 @@
 (def ^:private colunas
   [:id :ente_id :tipo :ano :sequencial :urn_lex :ementa :autor_tipo :autor_id :autor_texto :estado
    :objeto_indicacao :destinatario_id :destinatario_texto :tipo_requerimento :categoria_mocao
-   :atributos_especificos :texto_vigente_versao_id])
+   :atributos_especificos :texto_vigente_versao_id :atualizado_em])
 
 (defn- linha->proposicao [linha]
   (when linha

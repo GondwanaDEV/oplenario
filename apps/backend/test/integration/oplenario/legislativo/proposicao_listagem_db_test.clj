@@ -38,8 +38,10 @@
     (tenancy/com-tenant* *ds* e2 (fn [tx] (protocolar! tx e2)))
     (tenancy/com-tenant* *ds* e1
       (fn [tx]
-        (is (= 1 (count (prop/listar tx e1 filtro-base))) "so' enxerga a proposicao do proprio ente (RLS)")
-        (is (= 1 (prop/contar tx e1 filtro-base)))))))
+        (let [resultado (prop/listar tx e1 filtro-base)]
+          (is (= 1 (count resultado)) "so' enxerga a proposicao do proprio ente (RLS)")
+          (is (some? (:atualizado-em (first resultado))) "atualizado-em vem preenchido (coluna precisa estar em `colunas`)")
+          (is (= 1 (prop/contar tx e1 filtro-base))))))))
 
 (deftest filtro-por-tipo-estado-ano-autor-combinaveis
   (let [ente (random-uuid) autor (random-uuid)]
