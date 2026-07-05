@@ -43,7 +43,6 @@
         :enum (ts-enum (rest forma))
         :maybe (str (ts-tipo nome-por-schema (second forma)) " | null")
         :sequential (str (ts-tipo nome-por-schema (second forma)) "[]")
-        :vector (str (ts-tipo nome-por-schema (second forma)) "[]")
         :or (str/join " | " (map (partial ts-tipo nome-por-schema) (rest forma)))
         := (pr-str (second forma))                 ; [:= true] -> tipo literal TS `true`
         :fn "string"                              ; LocalDate/Instant -> ISO string
