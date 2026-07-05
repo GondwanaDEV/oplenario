@@ -24,7 +24,7 @@ export default async function PaginaPortalCidadao({
       <a className="pular" href="#conteudo">
         Pular para o conteúdo
       </a>
-      <BarraInstitucional nomeCasa={ente} />
+      <BarraInstitucional ente={ente} nomeCasa={ente} paginaAtual="inicio" />
       <main id="conteudo">
         <Capa />
         <div className="envelope">

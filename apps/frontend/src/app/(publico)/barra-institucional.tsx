@@ -15,12 +15,30 @@
 // em vez de simplesmente escondê-la (como o CSS fazia antes, deixando os 6 links inalcançáveis), um
 // botão hambúrguer revela/oculta o MESMO <ul> (não duplica a lista) via `aria-expanded`/`aria-controls`
 // + `id` — disclosure pattern padrão. Esc fecha; o botão só aparece <1000px (CSS).
+//
+// Links ABSOLUTOS ao ente (review final A2, "Important"): os anchors `#sessoes`/`#transparencia`/
+// `#ouvidoria` nunca existiram como seção própria (viraram cards <EmBreve> dentro de `#civico`, via
+// NavegacaoCivica) e `href="#"` no Início não ia a lugar nenhum. Pior: como esta barra também
+// renderiza na ficha (materias/[proposicaoId]/page.tsx), TODO link virava âncora-morta lá (a ficha
+// não tem essas seções na própria página). Corrigido apontando cada item para a home do `ente`
+// (`/portal/casa/${ente}#secao`) — funciona de qualquer página, inclusive a própria home (mesma URL,
+// só rola). IDs reais conferidos nas seções: `#destaque` (secao-em-tramitacao.tsx), `#balcoes`
+// (page.tsx), `#civico` (navegacao-civica.tsx). Convenção de link interno desta pasta é `<a>` puro
+// (ver mais-tramitacao.tsx) — mantido aqui por consistência.
 
 import { useEffect, useState } from "react";
 import { useTema } from "@/lib/tema";
 import "./public.css";
 
-export function BarraInstitucional({ nomeCasa }: { nomeCasa: string }) {
+export function BarraInstitucional({
+  ente,
+  nomeCasa,
+  paginaAtual,
+}: {
+  ente: string;
+  nomeCasa: string;
+  paginaAtual?: "inicio";
+}) {
   const { tema, alternar } = useTema();
   const [navAberta, setNavAberta] = useState(false);
 
@@ -57,24 +75,24 @@ export function BarraInstitucional({ nomeCasa }: { nomeCasa: string }) {
           </button>
           <ul id="nav-publica-lista" className="nav-publica" data-aberta={navAberta}>
             <li>
-              <a href="#" aria-current="page">
+              <a href={`/portal/casa/${ente}`} aria-current={paginaAtual === "inicio" ? "page" : undefined}>
                 Início
               </a>
             </li>
             <li>
-              <a href="#destaque">Proposições</a>
+              <a href={`/portal/casa/${ente}#destaque`}>Proposições</a>
             </li>
             <li>
-              <a href="#sessoes">Sessões</a>
+              <a href={`/portal/casa/${ente}#civico`}>Sessões</a>
             </li>
             <li>
-              <a href="#transparencia">Transparência</a>
+              <a href={`/portal/casa/${ente}#civico`}>Transparência</a>
             </li>
             <li>
-              <a href="#balcoes">Acesso à informação</a>
+              <a href={`/portal/casa/${ente}#balcoes`}>Acesso à informação</a>
             </li>
             <li>
-              <a href="#ouvidoria">Ouvidoria</a>
+              <a href={`/portal/casa/${ente}#civico`}>Ouvidoria</a>
             </li>
           </ul>
         </nav>

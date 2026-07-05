@@ -19,7 +19,7 @@ export default async function PaginaFichaMateria({
       <a className="pular" href="#conteudo">
         Pular para o conteúdo
       </a>
-      <BarraInstitucional nomeCasa={ente} />
+      <BarraInstitucional ente={ente} nomeCasa={ente} />
       <main id="conteudo" className="envelope">
         <SecaoFicha ente={ente} proposicaoId={proposicaoId} />
       </main>
