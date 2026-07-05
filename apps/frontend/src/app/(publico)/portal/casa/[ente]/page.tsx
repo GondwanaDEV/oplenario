@@ -9,6 +9,7 @@ import { EmBreve } from "@/lib/em-breve";
 import { BarraInstitucional } from "../../../barra-institucional";
 import { RodapeInstitucional } from "../../../rodape-institucional";
 import { Capa } from "../../../capa";
+import { SecaoEmTramitacao } from "../../../secao-em-tramitacao";
 
 export default async function PaginaPortalCidadao({
   params,
@@ -25,9 +26,10 @@ export default async function PaginaPortalCidadao({
       <main id="conteudo">
         <Capa />
         <div className="envelope">
+          <SecaoEmTramitacao ente={ente} />
           <EmBreve
-            titulo="Em tramitação agora"
-            motivo="O destaque de proposições em tramitação (lido da listagem pública real) e os balcões de e-SIC/LGPD chegam nas próximas fatias."
+            titulo="Balcões de acesso à informação e navegação cívica"
+            motivo="Os balcões de e-SIC/LGPD e a navegação cívica chegam na próxima fatia (A2.2) — o destaque em tramitação acima já lê dado real."
           />
         </div>
       </main>
