@@ -10,7 +10,8 @@
 
 (def manifesto
   [["ProposicaoResumoOut" proposicao/ProposicaoResumoOut]
-   ["ListaProposicoesOut" proposicao/ListaProposicoesOut]])
+   ["ListaProposicoesOut" proposicao/ListaProposicoesOut]
+   ["ProposicaoDetalheOut" proposicao/ProposicaoDetalheOut]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))
 
