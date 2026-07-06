@@ -60,3 +60,23 @@
 
 (deftest parametro-repetido-400
   (is (invalido? #(adapters/listar-proposicoes->dominio {:busca ["a" "b"]}))))
+
+;; ---------- Onda B Slice 2: criar/editar (corpo JSON) ----------
+
+(deftest criar-proposicao->dominio-injeta-id-e-created-by
+  (let [ator {:identidade-id (random-uuid)}
+        m (adapters/criar-proposicao->dominio ator {"tipo" "projeto_lei" "ano" 2026 "ementa" "X"})]
+    (is (some? (:id m)))
+    (is (= (:identidade-id ator) (:created-by m)))
+    (is (= "projeto_lei" (:tipo m)))))
+
+(deftest criar-proposicao->dominio-corpo-invalido-lanca
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"invalido"
+                        (adapters/criar-proposicao->dominio {:identidade-id (random-uuid)} {"tipo" "lixo"}))))
+
+(deftest editar-proposicao->dominio-usa-id-do-path-e-updated-by-do-ator
+  (let [ator {:identidade-id (random-uuid)} id (random-uuid)
+        m (adapters/editar-proposicao->dominio ator id {"lock-version" 0 "ementa" "Y"})]
+    (is (= id (:id m)))
+    (is (= (:identidade-id ator) (:updated-by m)))
+    (is (= "Y" (:ementa m)))))

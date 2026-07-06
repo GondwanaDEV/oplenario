@@ -1,11 +1,16 @@
 (ns oplenario.legislativo.adapters.in.proposicao
-  "Gate de ENTRADA `wire/in -> models` da leitura de proposicoes (§22.10 adapters/in, ADR-0001, Onda B Slice
-  1). Chamado SO pelo diplomat/. Coage os query-params de GET /legislativo/proposicoes: cada filtro de
+  "Gate de ENTRADA `wire/in -> models` da proposicao (§22.10 adapters/in, ADR-0001). Chamado SO pelo
+  diplomat/. Onda B Slice 1: coage os query-params de GET /legislativo/proposicoes — cada filtro de
   CONTEUDO e' OPCIONAL e TOLERANTE ao valor (ex.: tipo/estado desconhecidos so' nao casam nenhuma linha, nao
   sao 400 — mesmo racional de transparencia/adapters/in/portal/filtro-legislacao); ja' pagina/tamanho/
   ordenacao tem DEFAULT quando AUSENTES mas REJEITAM (400) quando PRESENTES e invalidos — nunca absorvidos
-  em silencio, porque mudam o contrato de paginacao que o FE depende."
-  (:require [clojure.string :as str])
+  em silencio, porque mudam o contrato de paginacao que o FE depende. Onda B Slice 2: valida (fail-closed ->
+  400) e COAGE o corpo JSON de POST/PATCH p/ o dominio (uuid), defendendo a borda; INJETA o que nao vem do
+  corpo — `id` novo (criar) ou do path (editar), `created-by`/`updated-by` sempre do `ator` (§22.5)."
+  (:require [clojure.string :as str]
+            [malli.core :as m]
+            [malli.error :as me]
+            [oplenario.legislativo.wire.in.proposicao :as wire])
   (:import (java.util UUID)))
 
 (set! *warn-on-reflection* true)
@@ -74,3 +79,55 @@
    :tamanho     (query-inteiro-em-faixa (:tamanho query-params) :tamanho tamanho-min tamanho-max tamanho-default)
    :ordenar-por (query-enum (:ordenar-por query-params) :ordenar-por ordenar-por-valores ordenar-por-default)
    :ordenar-dir (query-enum (:ordenar-dir query-params) :ordenar-dir ordenar-dir-valores ordenar-dir-default)})
+
+;; ---------- Onda B Slice 2: criar/editar (corpo JSON, nao query-params) ----------
+
+(def ^:private campos-criar
+  ["tipo" "ano" "ementa" "autor-tipo" "autor-id" "autor-texto" "objeto-indicacao" "destinatario-id"
+   "destinatario-texto" "tipo-requerimento" "categoria-mocao" "texto"])
+(def ^:private campos-editar
+  ["lock-version" "ementa" "autor-tipo" "autor-id" "autor-texto" "objeto-indicacao" "destinatario-id"
+   "destinatario-texto" "tipo-requerimento" "categoria-mocao" "texto"])
+
+(defn- so-esperados
+  "mapa STRING-keyed -> mapa keyword-keyed contendo SO os `campos` presentes (keyword ja internada)."
+  [m campos]
+  (reduce (fn [acc k] (cond-> acc (contains? m k) (assoc (keyword k) (get m k)))) {} campos))
+
+(defn- ->uuid [s campo]
+  (try (UUID/fromString s) (catch IllegalArgumentException _ (invalido! "uuid invalido" {:campo campo}))))
+
+(defn- ->uuid? [s campo] (when (some? s) (->uuid s campo)))
+
+(defn- validar! [schema m msg]
+  (when-let [erros (m/explain schema m)]
+    ;; guarda so os nomes-de-campo humanizados (NUNCA o payload cru — m/explain embute :value = vazaria dado).
+    (invalido! msg {:campos (keys (me/humanize erros))})))
+
+(defn criar-proposicao->dominio
+  "Corpo externo (wire/in.CriarProposicao) + `ator` -> mapa de dominio p/ Repo/protocolar!. Gera `:id` e
+  `:created-by`; `ente-id` vem do ator (o controller injeta) — nunca do cliente (§22.5)."
+  [ator wire-in]
+  (when-not (map? wire-in) (invalido! "corpo deve ser objeto JSON" {:campo :corpo}))
+  (let [m (so-esperados wire-in campos-criar)]
+    (validar! wire/CriarProposicao m "corpo de criar proposicao invalido")
+    {:id (random-uuid) :tipo (:tipo m) :ano (:ano m) :ementa (:ementa m)
+     :autor-tipo (:autor-tipo m) :autor-id (->uuid? (:autor-id m) :autor-id) :autor-texto (:autor-texto m)
+     :objeto-indicacao (:objeto-indicacao m)
+     :destinatario-id (->uuid? (:destinatario-id m) :destinatario-id)
+     :destinatario-texto (:destinatario-texto m) :tipo-requerimento (:tipo-requerimento m)
+     :categoria-mocao (:categoria-mocao m) :texto (:texto m) :created-by (:identidade-id ator)}))
+
+(defn editar-proposicao->dominio
+  "Corpo (wire/in.EditarProposicao) + `ator` + `id` (path, ja' UUID) -> mapa de dominio p/
+  Repo/editar-proposicao!. `id` = o id do path; `updated-by` = o ator — nunca do corpo (§22.5)."
+  [ator id wire-in]
+  (when-not (map? wire-in) (invalido! "corpo deve ser objeto JSON" {:campo :corpo}))
+  (let [m (so-esperados wire-in campos-editar)]
+    (validar! wire/EditarProposicao m "corpo de editar proposicao invalido")
+    {:id id :lock-version (:lock-version m) :ementa (:ementa m) :autor-tipo (:autor-tipo m)
+     :autor-id (->uuid? (:autor-id m) :autor-id) :autor-texto (:autor-texto m)
+     :objeto-indicacao (:objeto-indicacao m)
+     :destinatario-id (->uuid? (:destinatario-id m) :destinatario-id)
+     :destinatario-texto (:destinatario-texto m) :tipo-requerimento (:tipo-requerimento m)
+     :categoria-mocao (:categoria-mocao m) :texto (:texto m) :updated-by (:identidade-id ator)}))
