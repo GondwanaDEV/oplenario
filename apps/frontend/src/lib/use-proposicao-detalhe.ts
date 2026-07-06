@@ -13,12 +13,21 @@ type Estado = "carregando" | "pronto" | "erro";
 export function useProposicaoDetalhe(token: string | null, id: string | null) {
   const [dados, setDados] = useState<ProposicaoDetalheOut | null>(null);
   const [estado, setEstado] = useState<Estado>(id ? "carregando" : "pronto");
+  const [idAnterior, setIdAnterior] = useState(id);
+
+  // Reset ao trocar de `id` (mesmo padrão de use-proposicoes.ts): sem isto, os `dados`/estado "pronto" do
+  // id anterior ficariam visíveis até o novo fetch do efeito abaixo resolver. Reset DURANTE O RENDER (não
+  // dentro do `useEffect`) é o padrão que `eslint-plugin-react-hooks` v7 (`set-state-in-effect`) exige em
+  // vez de um `setState` síncrono no topo do efeito.
+  if (id !== idAnterior) {
+    setIdAnterior(id);
+    setEstado(id ? "carregando" : "pronto");
+  }
 
   useEffect(() => {
     if (!id) return;
     if (!token) return;
     let vivo = true;
-    setEstado("carregando");
     (async () => {
       try {
         const r = await fetch(`/api/legislativo/proposicoes/${id}`, {
