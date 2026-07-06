@@ -68,12 +68,47 @@
       (http/json-resposta 200 (adapters-out-proposicao/listar->wire
                                 (controllers/listar-proposicoes repo-leg ente-id filtro))))))
 
+(defn- criar-proposicao-handler
+  "POST /legislativo/proposicoes. Cria + relê o detalhe (o Repo devolve so' {:id :sequencial :urn-lex})."
+  [repo-leg resolver-municipio]
+  (fn [req]
+    (let [ator (:ator req) ente-id (:ente-id ator)
+          m (adapters-in-proposicao/criar-proposicao->dominio ator (:json-params req))]
+      (controllers/criar-proposicao repo-leg resolver-municipio ente-id m)
+      (let [{:keys [proposicao texto]} (controllers/buscar-proposicao-ficha repo-leg ente-id (:id m))]
+        (http/json-resposta 201 (adapters-out-proposicao/detalhe->wire proposicao texto))))))
+
+(defn- detalhe-proposicao-handler
+  "GET /legislativo/proposicoes/:id."
+  [repo-leg]
+  (fn [req]
+    (let [ente-id (:ente-id (:ator req))
+          id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [{:keys [proposicao texto]} (controllers/buscar-proposicao-ficha repo-leg ente-id id)]
+        (http/json-resposta 200 (adapters-out-proposicao/detalhe->wire proposicao texto))
+        (http/json-resposta 404 {:erro "proposicao nao encontrada"})))))
+
+(defn- editar-proposicao-handler
+  "PATCH /legislativo/proposicoes/:id. Edita + rele' o detalhe; 404 se a proposicao nao resolver mais (mesmo
+  contrato de 404 do GET de detalhe — nunca 500/200-vazio)."
+  [repo-leg]
+  (fn [req]
+    (let [ator (:ator req) ente-id (:ente-id ator)
+          id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          m (adapters-in-proposicao/editar-proposicao->dominio ator id (:json-params req))]
+      (controllers/editar-proposicao repo-leg ente-id m)
+      (if-let [{:keys [proposicao texto]} (controllers/buscar-proposicao-ficha repo-leg ente-id id)]
+        (http/json-resposta 200 (adapters-out-proposicao/detalhe->wire proposicao texto))
+        (http/json-resposta 404 {:erro "proposicao nao encontrada"})))))
+
 (defn rotas
-  "Fragmento de rotas da votacao ao vivo (table syntax Pedestal). Recebe o interceptor `auth` (compartilhado), o
-  `repo-legislativo` (Repo-Component do proprio modulo) e `consultar-sessao` (injetada pelo host — cross-modulo
-  p/ a authz herdada da sessao). Todas as acoes EXIGEM a authz GROSSA (papel 'secretario') + corpo-json; a fina
-  decide no controller com a sessao carregada."
-  [{:keys [auth repo-legislativo consultar-sessao]}]
+  "Fragmento de rotas da votacao ao vivo + proposicoes (table syntax Pedestal). Recebe o interceptor `auth`
+  (compartilhado), o `repo-legislativo` (Repo-Component do proprio modulo), `consultar-sessao` (injetada pelo
+  host — cross-modulo p/ a authz herdada da sessao) e `resolver-municipio` (injetada pelo host — cross-modulo
+  p/ o legislativo computar a URN em protocolar!, Onda B Slice 2, §22.10). Todas as acoes EXIGEM a authz
+  GROSSA (papel 'secretario') + corpo-json nas de escrita; a fina da votacao decide no controller com a
+  sessao carregada."
+  [{:keys [auth repo-legislativo consultar-sessao resolver-municipio]}]
   (let [papel (it/exige-papel "secretario")]
     #{["/sessoes/:id/votacoes" :post
        [auth papel it/corpo-json (abrir-handler repo-legislativo consultar-sessao)]
@@ -85,7 +120,15 @@
        [auth papel it/corpo-json (encerrar-handler repo-legislativo consultar-sessao)]
        :route-name :legislativo/encerrar-votacao]
       ["/legislativo/proposicoes" :get [auth papel (listar-proposicoes-handler repo-legislativo)]
-       :route-name :legislativo/listar-proposicoes]}))
+       :route-name :legislativo/listar-proposicoes]
+      ["/legislativo/proposicoes" :post
+       [auth papel it/corpo-json (criar-proposicao-handler repo-legislativo resolver-municipio)]
+       :route-name :legislativo/criar-proposicao]
+      ["/legislativo/proposicoes/:id" :get [auth papel (detalhe-proposicao-handler repo-legislativo)]
+       :route-name :legislativo/detalhe-proposicao]
+      ["/legislativo/proposicoes/:id" :patch
+       [auth papel it/corpo-json (editar-proposicao-handler repo-legislativo)]
+       :route-name :legislativo/editar-proposicao]}))
 
 ;; ========================= FE Onda A1: fila de relatores pendentes (§16.11) =========================
 

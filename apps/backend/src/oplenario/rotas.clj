@@ -46,6 +46,9 @@
                           (repo-cadastros-comp/membros-da-casa repo-cadastros ente-id
                                                                 (tempo/hoje (tempo/relogio-sistema)
                                                                             (java.time.ZoneId/of "America/Fortaleza"))))
+        ;; Onda B Slice 2: uf/nome-do-municipio do ente, p/ o legislativo computar a URN em protocolar! —
+        ;; mesma inversao de dependencia de consultar-sessao/membros-da-casa/info-ente (§22.10).
+        resolver-municipio (fn [ente-id] (repo-cadastros-comp/uf-e-municipio repo-cadastros ente-id))
         ;; Override injetavel (mesmo racional de `painel-compliance` — so' serve aos testes DB-free da borda
         ;; de paineis); em producao `montar` e' chamado sem estas chaves e o `or` fecha sobre o repo real.
         presenca-resumo (or presenca-resumo
@@ -76,7 +79,8 @@
            :route-name :painel-secretaria]}
         (into (sessoes-http/rotas {:auth auth :repo-sessoes repo-sessoes :objeto-store objeto-store}))
         (into (legislativo-http/rotas {:auth auth :repo-legislativo repo-legislativo
-                                       :consultar-sessao consultar-sessao}))
+                                       :consultar-sessao consultar-sessao
+                                       :resolver-municipio resolver-municipio}))
         (into (compliance-http/rotas {:auth auth :repo-compliance repo-compliance}))
         (into (participacao-http/rotas {:auth auth :repo-participacao repo-participacao
                                         :resolver-ente-publico participacao-http/resolver-ente-publico-uuid
