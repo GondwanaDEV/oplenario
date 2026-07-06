@@ -22,6 +22,7 @@
    [:autor-id {:optional true} [:maybe :uuid]]
    [:autor-texto {:optional true} [:maybe :string]]
    [:estado :string]
+   [:lock-version :int]
    [:atualizado-em km/Instante]
    ;; atributos quentes por tipo
    [:objeto-indicacao {:optional true} [:maybe :string]]
