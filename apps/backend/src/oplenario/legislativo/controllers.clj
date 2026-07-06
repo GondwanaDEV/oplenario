@@ -80,6 +80,29 @@
      :pagina (:pagina filtro)
      :tamanho-pagina (:tamanho filtro)}))
 
+(defn criar-proposicao
+  "Onda B Slice 2 — protocola uma proposicao nova (authz: so' o gate grosso da rota, papel 'secretario',
+  mesmo contrato de listar-proposicoes). `resolver-municipio` (injetado pelo host, cross-modulo p/
+  cadastros) resolve {:uf :municipio-nome} do ente — precondicao de protocolar! (eixo H). Ente sem perfil
+  cadastrado (resolver devolve nil) e' erro de PROVISIONAMENTO, nao de cliente: propaga sem catch (-> 500),
+  nunca mascarado como 400."
+  [repo-legislativo resolver-municipio ente-id m]
+  (let [{:keys [uf municipio-nome]} (resolver-municipio ente-id)]
+    (repo/protocolar! repo-legislativo ente-id (merge m {:uf uf :municipio-nome municipio-nome}))))
+
+(defn buscar-proposicao-ficha
+  "Onda B Slice 2 — detalhe (proposicao + texto vigente inline) p/ a tela de edicao pre-encher. nil se a
+  proposicao nao existe no tenant (-> 404 na borda)."
+  [repo-legislativo ente-id id]
+  (let [{:keys [proposicao texto]} (repo/buscar-proposicao-detalhe repo-legislativo ente-id id)]
+    (when proposicao {:proposicao proposicao :texto (:texto-inline texto)})))
+
+(defn editar-proposicao
+  "Onda B Slice 2 — edita metadados e/ou promove nova versao de texto ('edicao'). Mesmo gate grosso; `m`
+  ja' vem coagido pelo adapters/in."
+  [repo-legislativo ente-id m]
+  (repo/editar-proposicao! repo-legislativo ente-id m))
+
 (defn encerrar-votacao
   "Encerra a votacao `votacao-id` da sessao `sessao-id` (authz na sessao + amarra). `m` carrega o id
   (=votacao-id), lock-version, base-membros e resultado. Devolve o snapshot apurado ou nil se a votacao nao
