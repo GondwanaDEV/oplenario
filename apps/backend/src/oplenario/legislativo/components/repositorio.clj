@@ -198,7 +198,7 @@
           (when (= :objeto-store (logic/decidir-armazenamento corpo))
             (throw (ex-info "texto excede o limite inline (32KB); objeto_store fora do escopo desta fatia"
                             {:tipo :validacao/invalido :campos [:texto]}))))
-        (let [r (proposicao/protocolar! tx p)]
+        (let [r (proposicao/protocolar! tx (assoc p :ente-id ente-id))]
           (when-let [corpo (:texto p)]
             (let [versao-id (random-uuid)]
               (texto/nova-versao! tx {:id versao-id :ente-id ente-id :proposicao-id (:id r)

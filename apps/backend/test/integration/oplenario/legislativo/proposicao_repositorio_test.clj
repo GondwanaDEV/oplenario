@@ -10,6 +10,7 @@
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.kernel.outbox :as outbox]
             [oplenario.legislativo.components.repositorio :as repo]
+            [oplenario.legislativo.controllers :as controllers]
             [oplenario.migracao :as migracao]))
 
 (def ^:dynamic *repo* nil)
@@ -57,3 +58,21 @@
       (is (= "Y" (:ementa proposicao)))
       (is (= "## Art. 1o (rev)" (:texto-inline texto)))
       (is (= "edicao" (:origem-versao texto))))))
+
+(deftest criar-proposicao-via-controller-seta-ente-id
+  ;; Bug 1 (review ecc clojure+database, task 12): `controllers/criar-proposicao` mesclava so' {:uf
+  ;; :municipio-nome} do resolver de municipio no mapa `m`, NUNCA :ente-id — e' o unico dos 3 gates de
+  ;; escrita (protocolar!/editar-proposicao!/mudar-estado-proposicao!) sem o assoc, entao o INSERT real ia
+  ;; com ente_id NULL (viola o NOT NULL de legislativo.proposicoes) -> 500 em toda chamada real de POST
+  ;; /legislativo/proposicoes. Os testes de HTTP nao pegavam porque usam Repo FAKE; os deste arquivo nao
+  ;; pegavam porque chamam `Repo/protocolar!` DIRETO com um mapa ja' contendo :ente-id (bypass do controller
+  ;; — exatamente a lacuna). Este teste vai pelo CONTROLLER (a camada onde o bug realmente vive) contra
+  ;; Postgres real, provando ente_id persistido + a linha visivel via buscar-proposicao sob a RLS do tenant.
+  (let [ente (random-uuid)
+        id (random-uuid)
+        m {:id id :tipo "projeto_lei" :ano 2026 :ementa "X" :created-by (random-uuid)}
+        resolver-municipio (fn [_ente-id] {:uf "CE" :municipio-nome "Fortaleza"})]
+    (controllers/criar-proposicao *repo* resolver-municipio ente m)
+    (let [p (repo/buscar-proposicao *repo* ente id)]
+      (is (some? p) "a proposicao deve estar visivel sob a RLS do tenant `ente`")
+      (is (= ente (:ente-id p))))))

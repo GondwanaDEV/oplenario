@@ -145,7 +145,8 @@
     (when (nil? estado)
       (throw (ex-info "editar!: proposicao inexistente" {:id id :ente-id ente-id})))
     (when (contains? logic/estados-proposicao-terminais estado)
-      (throw (ex-info "editar!: proposicao em estado terminal nao edita" {:id id :estado estado}))))
+      (throw (ex-info "editar!: proposicao em estado terminal nao edita"
+                      {:tipo :validacao/invalido :id id :estado estado}))))
   (let [r (jdbc/execute-one! tx
             (sql/format {:update :legislativo.proposicoes
                          :set (cond-> {:updated_by updated-by :atualizado_em [:now] :lock_version [:+ :lock_version 1]}
@@ -160,5 +161,6 @@
                                 (some? categoria-mocao)    (assoc :categoria_mocao categoria-mocao))
                          :where [:and [:= :ente_id ente-id] [:= :id id] [:= :lock_version lock-version]]}))]
     (when (zero? (:next.jdbc/update-count r 0))
-      (throw (ex-info "editar!: conflito de lock_version ou proposicao inexistente" {:id id :lock-version lock-version})))
+      (throw (ex-info "editar!: conflito de lock_version ou proposicao inexistente"
+                      {:tipo :validacao/invalido :id id :lock-version lock-version})))
     {:id id}))

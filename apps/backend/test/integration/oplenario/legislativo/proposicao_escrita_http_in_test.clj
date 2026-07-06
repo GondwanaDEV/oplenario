@@ -113,6 +113,37 @@
                            :body (json/write-value-as-string {:lock-version 0 :ementa "Y"}))]
     (is (= 200 (:status r)))))
 
+(deftest editar-proposicao-estado-terminal-400
+  ;; Bug 2 (review ecc clojure+database, task 12): `db/proposicao.clj`'s `editar!` lanca "estado terminal"
+  ;; SEM :tipo -> so' :validacao/invalido mapeia p/ 400 no interceptor global `erro`; sem a tag cai no
+  ;; fallback -> 500 opaco (e polui log de servidor) num caminho que e' fluxo normal (CAS de PATCH). Mirrors
+  ;; o shape EXATO que `editar!` produz apos o fix (`:tipo :validacao/invalido` adicionado).
+  (let [ente (random-uuid) id (random-uuid)
+        repo (fake-repo-legislativo
+              {:editar (fn [_m] (throw (ex-info "editar!: proposicao em estado terminal nao edita"
+                                                 {:tipo :validacao/invalido :id id :estado "sancionada"})))
+               :detalhe (fn [_id] {:proposicao (detalhe-canonico ente id) :texto nil})})
+        r (pt/response-for (service-fn #{"secretario"} repo)
+                           :patch (str "/legislativo/proposicoes/" id)
+                           :headers (com-bearer (token ente (random-uuid)))
+                           :body (json/write-value-as-string {:lock-version 0 :ementa "Y"}))]
+    (is (= 400 (:status r)))))
+
+(deftest editar-proposicao-conflito-lock-version-400
+  ;; Bug 2, 2a metade: mesma lacuna no throw de "conflito de lock_version" (o desfecho PRIMARIO/esperado de
+  ;; um PATCH CAS sob concorrencia — dois servidores editando ao mesmo tempo, ou resubmit de cliente
+  ;; obsoleto — nunca deveria ser 500).
+  (let [ente (random-uuid) id (random-uuid)
+        repo (fake-repo-legislativo
+              {:editar (fn [_m] (throw (ex-info "editar!: conflito de lock_version ou proposicao inexistente"
+                                                 {:tipo :validacao/invalido :id id :lock-version 0})))
+               :detalhe (fn [_id] {:proposicao (detalhe-canonico ente id) :texto nil})})
+        r (pt/response-for (service-fn #{"secretario"} repo)
+                           :patch (str "/legislativo/proposicoes/" id)
+                           :headers (com-bearer (token ente (random-uuid)))
+                           :body (json/write-value-as-string {:lock-version 0 :ementa "Y"}))]
+    (is (= 400 (:status r)))))
+
 (deftest editar-proposicao-inexistente-404
   ;; Regressao: o handler deve fazer o pre-check via `buscar-proposicao-ficha` ANTES de chamar
   ;; `editar-proposicao` — sem `:editar` no fake-repo, se o handler chamar `editar-proposicao!` mesmo
