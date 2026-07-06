@@ -27,7 +27,8 @@
             [oplenario.legislativo.db.tramitacao-executiva :as exec]
             [oplenario.legislativo.db.votacao :as votacao]
             [oplenario.legislativo.diplomat.producers :as producers]
-            [oplenario.legislativo.gerador-publicacao :as ger-pub])
+            [oplenario.legislativo.gerador-publicacao :as ger-pub]
+            [oplenario.legislativo.logic :as logic])
   (:import (java.security MessageDigest)
            (org.postgresql.util PSQLException)))
 
@@ -41,6 +42,10 @@
      ecc clojure+database — compoe como `protocolar!`/`transicionar!`; evita `itens`/`total` inconsistentes
      sob escrita concorrente + o round-trip extra de duas tx separadas). Devolve {:itens [...] :total N}.")
   (mudar-estado-proposicao! [this ente-id m])
+  (editar-proposicao! [this ente-id m]
+    "PATCH parcial (CAS) + promove nova versao 'edicao' se :texto presente, 1 tx.")
+  (buscar-proposicao-detalhe [this ente-id id]
+    "{:proposicao ... :texto (a linha de texto/vigente, ou nil)}, uma leitura.")
   ;; eixo B — versionamento de texto
   (nova-versao! [this ente-id versao] "Cria versao 'rascunho' (conteudo append-only).")
   (promover-versao! [this ente-id m] "Promove rascunho->vigente (ato auditado; reaponta o pointer).")
@@ -189,7 +194,18 @@
   (protocolar! [this ente-id p]
     (transacao this ente-id
       (fn [tx]
+        (when-let [corpo (:texto p)]
+          (when (= :objeto-store (logic/decidir-armazenamento corpo))
+            (throw (ex-info "texto excede o limite inline (32KB); objeto_store fora do escopo desta fatia"
+                            {:tipo :validacao/invalido :campos [:texto]}))))
         (let [r (proposicao/protocolar! tx p)]
+          (when-let [corpo (:texto p)]
+            (let [versao-id (random-uuid)]
+              (texto/nova-versao! tx {:id versao-id :ente-id ente-id :proposicao-id (:id r)
+                                       :origem-versao "protocolo" :formato "markdown"
+                                       :texto-inline corpo :created-by (:created-by p)})
+              (texto/promover! tx {:ente-id ente-id :proposicao-id (:id r) :versao-id versao-id
+                                    :updated-by (:created-by p) :lock-version 0})))
           (producers/emitir-protocolada! bus tx ente-id
             {:proposicao-id (:id r) :tipo (:tipo p) :ano (:ano p) :sequencial (:sequencial r)
              :urn-lex (:urn-lex r) :ementa (:ementa p) :estado "protocolada"
@@ -205,6 +221,32 @@
         {:itens (proposicao/listar tx ente-id filtro)
          :total (proposicao/contar tx ente-id filtro)})))
   (mudar-estado-proposicao! [this ente-id m] (transacao this ente-id #(proposicao/mudar-estado! % (assoc m :ente-id ente-id))))
+  ;; Onda B Slice 2: editar-proposicao! compoe (guard nao-terminal + PATCH parcial CAS) + versao 'edicao'
+  ;; opcional numa UNICA tx (mesma disciplina de protocolar! — o texto novo so' e' vigente se o PATCH commitou).
+  (editar-proposicao! [this ente-id m]
+    (transacao this ente-id
+      (fn [tx]
+        (when-let [corpo (:texto m)]
+          (when (= :objeto-store (logic/decidir-armazenamento corpo))
+            (throw (ex-info "texto excede o limite inline (32KB); objeto_store fora do escopo desta fatia"
+                            {:tipo :validacao/invalido :campos [:texto]}))))
+        (let [r (proposicao/editar! tx (assoc m :ente-id ente-id))]
+          (when-let [corpo (:texto m)]
+            (let [versao-id (random-uuid)]
+              (texto/nova-versao! tx {:id versao-id :ente-id ente-id :proposicao-id (:id m)
+                                       :origem-versao "edicao" :formato "markdown"
+                                       :texto-inline corpo :created-by (:updated-by m)})
+              (texto/promover! tx {:ente-id ente-id :proposicao-id (:id m) :versao-id versao-id
+                                    :updated-by (:updated-by m) :lock-version 0})))
+          r))))
+  ;; Onda B Slice 2: leitura composta (proposicao + texto vigente) NUMA UNICA tx — mesmo snapshot MVCC
+  ;; (mesma disciplina de listar-e-contar-proposicoes). Nao lanca quando a proposicao nao existe: devolve
+  ;; {:proposicao nil :texto nil} (o caller/HTTP traduz p/ 404).
+  (buscar-proposicao-detalhe [this ente-id id]
+    (transacao this ente-id
+      (fn [tx]
+        {:proposicao (proposicao/buscar tx ente-id id)
+         :texto (texto/vigente tx ente-id id)})))
   (nova-versao! [this ente-id v] (transacao this ente-id #(texto/nova-versao! % (assoc v :ente-id ente-id))))
   (promover-versao! [this ente-id m] (transacao this ente-id #(texto/promover! % (assoc m :ente-id ente-id))))
   (buscar-versao [this ente-id id] (transacao this ente-id #(texto/buscar % ente-id id)))
