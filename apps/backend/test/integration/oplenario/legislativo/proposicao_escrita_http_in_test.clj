@@ -112,3 +112,15 @@
                            :headers (com-bearer (token ente (random-uuid)))
                            :body (json/write-value-as-string {:lock-version 0 :ementa "Y"}))]
     (is (= 200 (:status r)))))
+
+(deftest editar-proposicao-inexistente-404
+  ;; Regressao: o handler deve fazer o pre-check via `buscar-proposicao-ficha` ANTES de chamar
+  ;; `editar-proposicao` — sem `:editar` no fake-repo, se o handler chamar `editar-proposicao!` mesmo
+  ;; assim, `editar` (nil) sera invocada como fn e o teste estoura (sinal de que a ordem do pre-check
+  ;; esta errada), nunca produzindo silenciosamente um 500 mascarado de "passou".
+  (let [repo (fake-repo-legislativo {:detalhe (fn [_id] {:proposicao nil :texto nil})})
+        r (pt/response-for (service-fn #{"secretario"} repo)
+                           :patch (str "/legislativo/proposicoes/" (random-uuid))
+                           :headers (com-bearer (token (random-uuid) (random-uuid)))
+                           :body (json/write-value-as-string {:lock-version 0 :ementa "Y"}))]
+    (is (= 404 (:status r)))))

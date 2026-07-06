@@ -89,17 +89,23 @@
         (http/json-resposta 404 {:erro "proposicao nao encontrada"})))))
 
 (defn- editar-proposicao-handler
-  "PATCH /legislativo/proposicoes/:id. Edita + rele' o detalhe; 404 se a proposicao nao resolver mais (mesmo
-  contrato de 404 do GET de detalhe — nunca 500/200-vazio)."
+  "PATCH /legislativo/proposicoes/:id. PRE-CHECK via `buscar-proposicao-ficha` ANTES de editar — 404 imediato
+  se a proposicao nao existir (mesmo contrato de 404 do GET de detalhe — nunca 500). Sem o pre-check,
+  `editar-proposicao` alcanca `db/proposicao.clj`'s `editar!`, que lanca `ex-info` SEM `:tipo` assim que acha
+  a linha ausente — o interceptor global de erro (`oplenario.interceptors/erro`) so' mapeia `:validacao/
+  invalido`->400 e `authz/negado?`->403, entao essa excecao cai no fallback generico -> 500 (bug real, achado
+  em review). Apos o pre-check passar, edita + rele' o detalhe p/ o corpo 200."
   [repo-leg]
   (fn [req]
     (let [ator (:ator req) ente-id (:ente-id ator)
-          id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
-          m (adapters-in-proposicao/editar-proposicao->dominio ator id (:json-params req))]
-      (controllers/editar-proposicao repo-leg ente-id m)
-      (if-let [{:keys [proposicao texto]} (controllers/buscar-proposicao-ficha repo-leg ente-id id)]
-        (http/json-resposta 200 (adapters-out-proposicao/detalhe->wire proposicao texto))
-        (http/json-resposta 404 {:erro "proposicao nao encontrada"})))))
+          id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-not (controllers/buscar-proposicao-ficha repo-leg ente-id id)
+        (http/json-resposta 404 {:erro "proposicao nao encontrada"})
+        (let [m (adapters-in-proposicao/editar-proposicao->dominio ator id (:json-params req))]
+          (controllers/editar-proposicao repo-leg ente-id m)
+          (if-let [{:keys [proposicao texto]} (controllers/buscar-proposicao-ficha repo-leg ente-id id)]
+            (http/json-resposta 200 (adapters-out-proposicao/detalhe->wire proposicao texto))
+            (http/json-resposta 404 {:erro "proposicao nao encontrada"})))))))
 
 (defn rotas
   "Fragmento de rotas da votacao ao vivo + proposicoes (table syntax Pedestal). Recebe o interceptor `auth`
