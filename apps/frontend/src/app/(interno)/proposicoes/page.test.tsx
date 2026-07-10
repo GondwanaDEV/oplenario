@@ -50,4 +50,20 @@ describe("PaginaProposicoes", () => {
     renderComProviders("tok-de-teste");
     await waitFor(() => expect(screen.getByText(/não foi possível carregar/i)).toBeTruthy());
   });
+
+  it("renderiza o link 'Nova proposição' apontando para /editor-proposicao (com token preservado)", async () => {
+    global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ itens: [], total: 0, pagina: 1, "tamanho-pagina": 20 }) }) as Response) as unknown as typeof fetch;
+    renderComProviders("tok-de-teste");
+    const link = await screen.findByRole("link", { name: /nova proposição/i });
+    expect(link.getAttribute("href")).toContain("/editor-proposicao");
+    expect(link.getAttribute("href")).toContain("token=tok-de-teste");
+  });
+
+  it("renderiza o link 'Editar' por linha apontando para /editor-proposicao/:id (com token preservado)", async () => {
+    global.fetch = vi.fn(async () => ({ ok: true, json: async () => respostaFake }) as Response) as unknown as typeof fetch;
+    renderComProviders("tok-de-teste");
+    const link = await screen.findByRole("link", { name: /editar pl 42\/2026/i });
+    expect(link.getAttribute("href")).toContain("/editor-proposicao/1");
+    expect(link.getAttribute("href")).toContain("token=tok-de-teste");
+  });
 });

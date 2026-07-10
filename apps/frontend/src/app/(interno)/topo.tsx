@@ -13,6 +13,8 @@
 
 import Link from "next/link";
 import { useTema } from "@/lib/tema";
+import { useAuth } from "@/lib/auth";
+import { comToken } from "@/lib/nav";
 import "./topo.css";
 
 const DESTINOS_NAV = [
@@ -22,6 +24,7 @@ const DESTINOS_NAV = [
 
 export function TopoInterno({ area, ator }: { area: string; ator: { nome: string; papel: string } }) {
   const { tema, alternar } = useTema();
+  const { token } = useAuth();
   return (
     <header className="topo">
       <div className="envelope topo-grade">
@@ -38,7 +41,7 @@ export function TopoInterno({ area, ator }: { area: string; ator: { nome: string
           {DESTINOS_NAV.map((d) => (
             <Link
               key={d.href}
-              href={d.href}
+              href={comToken(d.href, token)}
               aria-current={d.rotulo === area ? "page" : undefined}
             >
               {d.rotulo}

@@ -13,7 +13,7 @@
 (def ^:private colunas
   [:id :ente_id :tipo :ano :sequencial :urn_lex :ementa :autor_tipo :autor_id :autor_texto :estado
    :objeto_indicacao :destinatario_id :destinatario_texto :tipo_requerimento :categoria_mocao
-   :atributos_especificos :texto_vigente_versao_id :atualizado_em])
+   :atributos_especificos :texto_vigente_versao_id :lock_version :atualizado_em])
 
 (defn- linha->proposicao [linha]
   (when linha
@@ -126,3 +126,41 @@
       (throw (ex-info "conflito de escrita (lock_version desatualizado) ou proposicao inexistente"
                       {:id id :lock-version lock-version})))
     r))
+
+(defn- estado+lock [tx ente-id id]
+  (-> (jdbc/execute-one! tx
+        (sql/format {:select [:estado :lock_version] :from [:legislativo.proposicoes]
+                     :where [:and [:= :ente_id ente-id] [:= :id id]] :for :update}))
+      comum/linha->kebab))
+
+(defn editar!
+  "Reescreve metadados (PATCH parcial: so' os campos presentes mudam) de uma proposicao NAO-TERMINAL (CAS
+  por lock-version; SELECT...FOR UPDATE evita corrida entre o guard de estado e o UPDATE). O trigger
+  tambem barra estado terminal (defesa em profundidade); a excecao aqui carrega a causa real. Mesmo padrao
+  de db/documento.clj/editar-rascunho!, mas o guard e' 'nao terminal' (a proposicao nao tem fase rascunho —
+  mutacao livre ate estado terminal, §22.4.3 disc.4), nao 'so rascunho'."
+  [tx {:keys [id ente-id ementa autor-tipo autor-id autor-texto objeto-indicacao destinatario-id
+              destinatario-texto tipo-requerimento categoria-mocao updated-by lock-version]}]
+  (let [{:keys [estado]} (estado+lock tx ente-id id)]
+    (when (nil? estado)
+      (throw (ex-info "editar!: proposicao inexistente" {:id id :ente-id ente-id})))
+    (when (contains? logic/estados-proposicao-terminais estado)
+      (throw (ex-info "editar!: proposicao em estado terminal nao edita"
+                      {:tipo :validacao/invalido :id id :estado estado}))))
+  (let [r (jdbc/execute-one! tx
+            (sql/format {:update :legislativo.proposicoes
+                         :set (cond-> {:updated_by updated-by :atualizado_em [:now] :lock_version [:+ :lock_version 1]}
+                                (some? ementa)             (assoc :ementa ementa)
+                                (some? autor-tipo)         (assoc :autor_tipo autor-tipo)
+                                (some? autor-id)           (assoc :autor_id autor-id)
+                                (some? autor-texto)        (assoc :autor_texto autor-texto)
+                                (some? objeto-indicacao)   (assoc :objeto_indicacao objeto-indicacao)
+                                (some? destinatario-id)    (assoc :destinatario_id destinatario-id)
+                                (some? destinatario-texto) (assoc :destinatario_texto destinatario-texto)
+                                (some? tipo-requerimento)  (assoc :tipo_requerimento tipo-requerimento)
+                                (some? categoria-mocao)    (assoc :categoria_mocao categoria-mocao))
+                         :where [:and [:= :ente_id ente-id] [:= :id id] [:= :lock_version lock-version]]}))]
+    (when (zero? (:next.jdbc/update-count r 0))
+      (throw (ex-info "editar!: conflito de lock_version ou proposicao inexistente"
+                      {:tipo :validacao/invalido :id id :lock-version lock-version})))
+    {:id id}))

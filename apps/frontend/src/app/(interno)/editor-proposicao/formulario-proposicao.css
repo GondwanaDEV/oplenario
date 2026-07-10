@@ -1,0 +1,23 @@
+/* FormularioProposicao (Onda B Slice 2) — page-scoped, mesma disciplina de proposicoes.css: linka a
+   fundação global (tokens.css/chassi.css), não redefine nenhum token, só compõe layout novo.
+   `.ficha-campo`/`.doc-ficha` inspirados no mockup produto/design-system/o-plenario/telas/editor-
+   proposicao.html; `.campo-ementa`/`.campo-texto`/`.ferramentas`/`.comando`/`.form-erro` são novos
+   deste componente — sem promover ao chassi nesta fatia (gatilho de promoção = 2º uso).
+
+   Nota de token: `--erro-texto` NÃO existe em tokens.css (conferido — só há --acento-texto, --aviso-
+   texto, --amarelo-traco no vocabulário semântico de alerta). Para a mensagem de erro do formulário
+   usamos `--acento-texto` (telha legível como texto, já auditado AA em GUIDELINES-CHECKLIST §5.1 —
+   "4.6 (piso AA, passa raspando) — ok mas não empilhe sobre fundo mais escuro sem remedir"), em vez de
+   inventar uma cor nova. */
+.doc-ficha { display: flex; gap: 0.8rem 1.5rem; flex-wrap: wrap; align-items: flex-end; margin: 1rem 0 0; padding: 0.95rem 1.1rem; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); }
+.ficha-campo { display: flex; flex-direction: column; gap: 0.35rem; min-width: 160px; }
+.ficha-campo label { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .05em; text-transform: uppercase; color: var(--texto-2); }
+.ficha-campo select, .ficha-campo input { font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); background: var(--surface-2); border: 1.5px solid var(--campo-borda); border-radius: var(--raio-sm); padding: 0.5rem 0.7rem; min-height: 42px; }
+.campo-ementa, .campo-texto { display: flex; flex-direction: column; gap: 0.4rem; margin: 1.2rem 0; }
+.campo-ementa label, .campo-texto label { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .05em; text-transform: uppercase; color: var(--texto-2); }
+.campo-ementa textarea, .campo-texto textarea { font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); background: var(--surface); border: 1.5px solid var(--campo-borda); border-radius: var(--raio-sm); padding: 0.8rem; line-height: 1.6; }
+.ferramentas { display: flex; gap: 0.4rem; flex-wrap: wrap; margin: 0 0 0.5rem; }
+.ferramentas button { font-size: var(--t-13); font-weight: 600; color: var(--texto-2); background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.4rem 0.7rem; min-height: 38px; cursor: pointer; }
+.ferramentas button:hover { color: var(--texto); border-color: var(--texto-2); }
+.comando { display: flex; justify-content: flex-end; margin: 1.5rem 0; }
+.form-erro { color: var(--acento-texto); background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.7rem 1rem; margin: 0 0 1rem; }

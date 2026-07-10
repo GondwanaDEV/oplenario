@@ -29,3 +29,27 @@
    [:total :int]
    [:pagina :int]
    [:tamanho-pagina :int]])
+
+(def ProposicaoDetalheOut
+  "GET /legislativo/proposicoes/:id (Onda B Slice 2) — a proposicao inteira (nao o resumo estreito da
+  lista) + o texto vigente inline, p/ o form de edicao pre-encher (e a resposta do POST de criacao, com
+  o numero oficial + lock-version iniciais)."
+  [:map {:closed true}
+   [:id :string]
+   [:tipo (km/enum-de logic/tipos)]
+   [:ano :int]
+   [:sequencial :int]
+   [:urn-lex :string]
+   [:ementa :string]
+   [:autor-tipo {:optional true} [:maybe :string]]
+   [:autor-id {:optional true} [:maybe :string]]
+   [:autor-texto {:optional true} [:maybe :string]]
+   [:objeto-indicacao {:optional true} [:maybe :string]]
+   [:destinatario-id {:optional true} [:maybe :string]]
+   [:destinatario-texto {:optional true} [:maybe :string]]
+   [:tipo-requerimento {:optional true} [:maybe :string]]
+   [:categoria-mocao {:optional true} [:maybe :string]]
+   [:estado :string]
+   [:lock-version :int]
+   [:atualizado-em :string]
+   [:texto {:optional true} [:maybe :string]]])

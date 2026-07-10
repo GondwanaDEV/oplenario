@@ -3,13 +3,15 @@
 // Lista de proposições (Onda B Slice 1, §16 arquétipo lista/tabela filtrável) — assembly da rota
 // /proposicoes. Une useAuth (App Shell) + useProposicoes (fetch autenticado + refetch por filtro) +
 // derivarProposicoesVista (view-model puro) + AzulejoMini/descreverFaixa (assinatura de tramitação, já
-// construídos na A2). SÓ LEITURA nesta fatia (spec 2026-07-05): "Nova proposição", "Exportar" e a barra de
-// ações em massa da tela-fonte ficam FORA — nenhum botão morto é renderizado (em vez de simular ações sem
-// dono, elas simplesmente não aparecem ainda). A ação "abrir ficha" por linha também não existe ainda
-// (ficha-materia é uma fatia posterior) — cada linha não é clicável.
+// construídos na A2). "Exportar" e a barra de ações em massa da tela-fonte seguem FORA (sem dono ainda) —
+// só "Nova proposição" (header) e "Editar" por linha (Slice 2, editor-proposicao) foram habilitados. A
+// ação "abrir ficha" por linha também não existe ainda (ficha-materia é uma fatia posterior) — cada linha
+// não é clicável fora da coluna Ações.
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useAuth } from "@/lib/auth";
+import { comToken } from "@/lib/nav";
 import { useProposicoes, type FiltrosProposicoes } from "@/lib/use-proposicoes";
 import { derivarProposicoesVista } from "@/lib/proposicoes-vista";
 import { AzulejoMini } from "@/lib/charts/azulejo-mini";
@@ -66,6 +68,9 @@ export default function PaginaProposicoes() {
               <b>{linhas.length}</b> de {dados.total} matérias
             </span>
           )}
+          <Link href={comToken("/editor-proposicao", token)} className="btn btn-primaria">
+            Nova proposição
+          </Link>
         </div>
 
         <form className="filtros" role="search" aria-label="Filtrar proposições" onSubmit={(e) => e.preventDefault()}>
@@ -122,6 +127,7 @@ export default function PaginaProposicoes() {
                   <th scope="col">Autoria</th>
                   <th scope="col">Situação</th>
                   <th scope="col">Atualizada</th>
+                  <th scope="col">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -141,6 +147,14 @@ export default function PaginaProposicoes() {
                       </div>
                     </td>
                     <td className="atualizada">{new Date(linha.atualizadoEm).toLocaleDateString("pt-BR")}</td>
+                    <td>
+                      <Link
+                        href={comToken(`/editor-proposicao/${encodeURIComponent(linha.id)}`, token)}
+                        aria-label={`Editar ${linha.numero}`}
+                      >
+                        Editar
+                      </Link>
+                    </td>
                   </tr>
                 ))}
               </tbody>

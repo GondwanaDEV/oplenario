@@ -39,3 +39,17 @@
         out (adapters/listar->wire {:itens [linha] :total 1 :pagina 1 :tamanho-pagina 20})]
     (is (m/validate wire/ListaProposicoesOut out))
     (is (nil? (:autor-tipo (first (:itens out)))))))
+
+(deftest detalhe->wire-projeta-e-inclui-texto
+  (let [linha {:id (random-uuid) :tipo "projeto_lei" :ano 2026 :sequencial 1 :urn-lex "urn:x"
+               :ementa "X" :estado "protocolada" :lock-version 0
+               :atualizado-em (java.time.Instant/parse "2026-01-01T00:00:00Z")}
+        out (adapters/detalhe->wire linha "## Art. 1o")]
+    (is (= "## Art. 1o" (:texto out)))
+    (is (string? (:id out)))))
+
+(deftest detalhe->wire-texto-nil-quando-sem-versao-vigente
+  (let [linha {:id (random-uuid) :tipo "projeto_lei" :ano 2026 :sequencial 1 :urn-lex "urn:x"
+               :ementa "X" :estado "protocolada" :lock-version 0
+               :atualizado-em (java.time.Instant/parse "2026-01-01T00:00:00Z")}]
+    (is (nil? (:texto (adapters/detalhe->wire linha nil))))))

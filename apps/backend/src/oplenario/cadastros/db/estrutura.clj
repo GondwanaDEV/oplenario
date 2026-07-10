@@ -29,6 +29,17 @@
       (sql/format {:select [:ente_id :municipio_ibge :nome_oficial :nome_curto :brasao_ref]
                    :from [:cadastros.ente]}))))
 
+(defn uf-e-municipio
+  "uf + nome do municipio do ente CORRENTE (RLS de cadastros.ente escopa ao tenant) — o FATO que
+  legislativo/protocolar! precisa p/ computar a URN (eixo H). Join DENTRO do schema cadastros
+  (municipios+ente, sem cross-schema, §22.10). nil se o ente nao tem perfil cadastrado."
+  [tx]
+  (some-> (jdbc/execute-one! tx
+            (sql/format {:select [:m.uf [:m.nome :municipio_nome]]
+                         :from [[:cadastros.ente :e]]
+                         :join [[:cadastros.municipios :m] [:= :e.municipio_ibge :m.codigo_ibge]]}))
+          comum/linha->kebab))
+
 ;; ---- legislatura ----
 (defn inserir-legislatura!
   ;; criacao NATIVA -> nasce efetivada (efetivado_em = now()); o caminho de import (admin_sistema) e' que
