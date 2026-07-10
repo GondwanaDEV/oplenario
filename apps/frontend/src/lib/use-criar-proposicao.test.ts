@@ -34,11 +34,37 @@ describe("useCriarProposicao", () => {
     expect(JSON.parse(corpoCapturado)).toEqual({ tipo: "projeto_lei", ano: 2026, ementa: "X" });
   });
 
-  it("erro do backend -> estado 'erro' + rejeita a promise", async () => {
+  it("erro do backend -> estado 'erro' + preserva a mensagem especifica (nao clobber com rede)", async () => {
     global.fetch = vi.fn(async () => ({ ok: false, status: 400, json: async () => ({ erro: "invalido" }) }) as Response) as unknown as typeof fetch;
     const { result } = renderHook(() => useCriarProposicao("tok"));
     await expect(result.current.criar({ tipo: "projeto_lei", ano: 2026, ementa: "X" })).rejects.toThrow();
     await waitFor(() => expect(result.current.estado).toBe("erro"));
+    expect(result.current.erro).toBe("invalido");
+  });
+
+  it("falha de rede (fetch rejeita) -> estado 'erro' + mensagem generica", async () => {
+    global.fetch = vi.fn(async () => { throw new TypeError("Failed to fetch"); }) as unknown as typeof fetch;
+    const { result } = renderHook(() => useCriarProposicao("tok"));
+    await expect(result.current.criar({ tipo: "projeto_lei", ano: 2026, ementa: "X" })).rejects.toThrow();
+    await waitFor(() => expect(result.current.estado).toBe("erro"));
+    expect(result.current.erro).toBe("falha de rede — tente novamente");
+  });
+
+  it("bloqueia submissao concorrente (guard de re-entrancia)", async () => {
+    let liberar!: (r: Response) => void;
+    global.fetch = vi.fn(() => new Promise<Response>((res) => { liberar = res; })) as unknown as typeof fetch;
+    const { result } = renderHook(() => useCriarProposicao("tok"));
+    let primeira!: Promise<unknown>;
+    await act(async () => {
+      primeira = result.current.criar({ tipo: "projeto_lei", ano: 2026, ementa: "X" });
+    });
+    // segunda chamada enquanto a primeira ainda esta' em voo -> rejeita sem disparar novo fetch
+    await expect(result.current.criar({ tipo: "projeto_lei", ano: 2026, ementa: "X" })).rejects.toThrow(/andamento/);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      liberar({ ok: true, json: async () => respostaFake } as Response);
+      await primeira;
+    });
   });
 
   it("sem token -> rejeita sem chamar fetch", async () => {

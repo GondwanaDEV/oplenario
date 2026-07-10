@@ -149,7 +149,7 @@ export default function PaginaProposicoes() {
                     <td className="atualizada">{new Date(linha.atualizadoEm).toLocaleDateString("pt-BR")}</td>
                     <td>
                       <Link
-                        href={comToken(`/editor-proposicao/${linha.id}`, token)}
+                        href={comToken(`/editor-proposicao/${encodeURIComponent(linha.id)}`, token)}
                         aria-label={`Editar ${linha.numero}`}
                       >
                         Editar

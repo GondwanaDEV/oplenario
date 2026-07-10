@@ -43,6 +43,10 @@ export function useCriarProposicao(token: string | null) {
   const [estado, setEstado] = useState<Estado>("ocioso");
   const [erro, setErro] = useState<string | null>(null);
   const vivoRef = useRef(true);
+  // Guard de re-entrancia via ref (nao via `estado`, que e' capturado stale no closure): protocolar e'
+  // um POST NAO-idempotente (cria um numero oficial) — um duplo-submit sincrono (ex.: Enter repetido)
+  // criaria duas proposicoes. Defesa independente do botao desabilitado na UI.
+  const enviandoRef = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -54,8 +58,15 @@ export function useCriarProposicao(token: string | null) {
     if (!token) {
       throw new Error("sem token de autenticacao");
     }
+    if (enviandoRef.current) {
+      throw new Error("envio em andamento");
+    }
+    enviandoRef.current = true;
     setEstado("enviando");
     setErro(null);
+    // `tratado` distingue "erro do backend ja' exibido" de "falha de rede crua": sem ele, o catch
+    // sobrescreveria a mensagem especifica (ex.: "conflito", "invalido") com a generica de rede.
+    let tratado = false;
     try {
       const r = await fetch("/api/legislativo/proposicoes", {
         method: "POST",
@@ -65,6 +76,7 @@ export function useCriarProposicao(token: string | null) {
       if (!r.ok) {
         const corpoErro = await r.json().catch(() => null);
         const msg = corpoErro?.erro ?? `falha ao protocolar (status ${r.status})`;
+        tratado = true;
         if (vivoRef.current) {
           setEstado("erro");
           setErro(msg);
@@ -75,8 +87,13 @@ export function useCriarProposicao(token: string | null) {
       if (vivoRef.current) setEstado("ocioso");
       return dados;
     } catch (e) {
-      if (vivoRef.current) setEstado("erro");
+      if (vivoRef.current && !tratado) {
+        setEstado("erro");
+        setErro("falha de rede — tente novamente");
+      }
       throw e;
+    } finally {
+      enviandoRef.current = false;
     }
   }
 

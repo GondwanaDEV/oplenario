@@ -40,6 +40,9 @@ export function useEditarProposicao(token: string | null, id: string) {
   const [estado, setEstado] = useState<Estado>("ocioso");
   const [erro, setErro] = useState<string | null>(null);
   const vivoRef = useRef(true);
+  // Guard de re-entrancia via ref (nao via `estado`, capturado stale no closure): evita duplo-submit
+  // sincrono (ex.: Enter repetido), defesa independente do botao desabilitado na UI.
+  const enviandoRef = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -51,8 +54,15 @@ export function useEditarProposicao(token: string | null, id: string) {
     if (!token) {
       throw new Error("sem token de autenticacao");
     }
+    if (enviandoRef.current) {
+      throw new Error("envio em andamento");
+    }
+    enviandoRef.current = true;
     setEstado("enviando");
     setErro(null);
+    // `tratado` distingue "erro do backend ja' exibido" de "falha de rede crua": sem ele, o catch
+    // sobrescreveria a mensagem especifica (ex.: "conflito", "invalido") com a generica de rede.
+    let tratado = false;
     try {
       const r = await fetch(`/api/legislativo/proposicoes/${id}`, {
         method: "PATCH",
@@ -62,6 +72,7 @@ export function useEditarProposicao(token: string | null, id: string) {
       if (!r.ok) {
         const corpoErro = await r.json().catch(() => null);
         const msg = corpoErro?.erro ?? `falha ao salvar (status ${r.status})`;
+        tratado = true;
         if (vivoRef.current) {
           setEstado("erro");
           setErro(msg);
@@ -72,8 +83,13 @@ export function useEditarProposicao(token: string | null, id: string) {
       if (vivoRef.current) setEstado("ocioso");
       return dados;
     } catch (e) {
-      if (vivoRef.current) setEstado("erro");
+      if (vivoRef.current && !tratado) {
+        setEstado("erro");
+        setErro("falha de rede — tente novamente");
+      }
       throw e;
+    } finally {
+      enviandoRef.current = false;
     }
   }
 

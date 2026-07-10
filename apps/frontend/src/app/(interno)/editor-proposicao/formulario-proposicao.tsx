@@ -7,7 +7,7 @@
 // Uma acao primaria so' (rotulo variavel: "Protocolar" na criacao, "Salvar alterações" na edicao) — nao
 // existe "Salvar rascunho" batendo no backend (spec §2: criar = protocolar! imediato).
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./formulario-proposicao.css";
 
 const ESPECIES = [
@@ -60,15 +60,34 @@ export function FormularioProposicao({
 }) {
   const [valores, setValores] = useState<ValoresFormulario>(valorInicial ?? VAZIO);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const erroRef = useRef<HTMLParagraphElement>(null);
+
+  // Ao surgir um erro, leva o foco (e a rolagem) ao alerta no topo do form — o botao de submit fica no
+  // rodape, muito abaixo do alerta, entao sem isto um usuario de teclado nao percebe o erro que apareceu.
+  useEffect(() => {
+    if (erro) erroRef.current?.focus();
+  }, [erro]);
 
   function inserirNoCursor(snippet: string) {
     const el = textareaRef.current;
     if (!el) return;
-    const inicio = el.selectionStart ?? valores.texto?.length ?? 0;
-    const fim = el.selectionEnd ?? inicio;
-    const atual = valores.texto ?? "";
-    const novo = atual.slice(0, inicio) + snippet + atual.slice(fim);
-    setValores((v) => ({ ...v, texto: novo }));
+    el.focus();
+    // execCommand('insertText') preserva a posicao do cursor E o historico de undo nativo do textarea
+    // (um setValores cru resetaria o caret p/ o fim e seria invisivel ao Ctrl+Z). Dispara um evento
+    // 'input' que o onChange controlado captura, mantendo o estado React em sincronia.
+    let ok = false;
+    try {
+      ok = document.execCommand("insertText", false, snippet);
+    } catch {
+      ok = false;
+    }
+    if (!ok) {
+      // fallback (ambiente sem execCommand, ex.: jsdom): insere via estado, aceitando perda de cursor/undo.
+      const inicio = el.selectionStart ?? valores.texto?.length ?? 0;
+      const fim = el.selectionEnd ?? inicio;
+      const atual = valores.texto ?? "";
+      setValores((v) => ({ ...v, texto: atual.slice(0, inicio) + snippet + atual.slice(fim) }));
+    }
   }
 
   return (
@@ -80,7 +99,7 @@ export function FormularioProposicao({
       }}
     >
       {erro && (
-        <p role="alert" className="form-erro">
+        <p ref={erroRef} tabIndex={-1} role="alert" className="form-erro">
           {erro}
         </p>
       )}
@@ -92,7 +111,18 @@ export function FormularioProposicao({
             id="f-especie"
             value={valores.tipo}
             disabled={bloquearIdentidade}
-            onChange={(e) => setValores((v) => ({ ...v, tipo: e.target.value }))}
+            onChange={(e) =>
+              // Trocar a especie zera os campos condicionais da especie anterior — senao um
+              // objetoIndicacao/tipoRequerimento/categoriaMocao preenchido e depois escondido viajaria
+              // no corpo (corpoKebab so' descarta undefined, nao valor obsoleto-mas-irrelevante).
+              setValores((v) => ({
+                ...v,
+                tipo: e.target.value,
+                objetoIndicacao: undefined,
+                tipoRequerimento: undefined,
+                categoriaMocao: undefined,
+              }))
+            }
           >
             {ESPECIES.map((e) => (
               <option key={e.valor} value={e.valor}>
@@ -106,9 +136,16 @@ export function FormularioProposicao({
           <input
             id="f-ano"
             type="number"
+            min={1900}
+            max={2200}
+            required
             value={valores.ano}
             disabled={bloquearIdentidade}
-            onChange={(e) => setValores((v) => ({ ...v, ano: Number(e.target.value) }))}
+            onChange={(e) => {
+              // Number("") === 0 — sem o guard, esvaziar o campo submeteria ano:0 silenciosamente.
+              const n = Number(e.target.value);
+              setValores((v) => ({ ...v, ano: Number.isNaN(n) ? v.ano : n }));
+            }}
           />
         </div>
         <div className="ficha-campo">
@@ -177,12 +214,13 @@ export function FormularioProposicao({
         <textarea
           id="f-ementa"
           rows={2}
+          required
           value={valores.ementa}
           onChange={(e) => setValores((v) => ({ ...v, ementa: e.target.value }))}
         />
       </div>
 
-      <div className="ferramentas" role="toolbar" aria-label="Ferramentas de redação">
+      <div className="ferramentas" role="group" aria-label="Ferramentas de redação">
         <button type="button" onClick={() => inserirNoCursor("\n\nArt. Nº ")}>
           Inserir artigo
         </button>
