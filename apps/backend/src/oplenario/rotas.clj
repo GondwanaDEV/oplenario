@@ -18,6 +18,17 @@
 
 (set! *warn-on-reflection* true)
 
+(defn resolver-vereador
+  "identidade-id -> vereador-id NESTA Casa — host wiring (§22.5.3, exceção nomeada; mesma forma de
+  `membros-da-casa`/`resolver-municipio` em `montar`). Resolve via o Repo-Component de `cadastros`
+  (`vereador-por-identidade`) e devolve só o `:id`. `nil` quando a identidade não tem cadastro de
+  vereador NESTE ente — não é erro: a borda `/meu` (Onda C1, `legislativo`) trata como painel vazio,
+  nunca 500. O `legislativo` recebe esta fn JÁ RESOLVIDA pelo host (§22.10) — nunca importa `cadastros`.
+  Extraída como defn de topo (em vez de closure só-inline) p/ ser testável direto contra Postgres real,
+  sem subir o sistema inteiro (mesmo racional de `presenca-resumo-wire`/`esic-cumprimento-wire`)."
+  [repo-cadastros ente-id identidade-id]
+  (:id (repo-cadastros-comp/vereador-por-identidade repo-cadastros ente-id identidade-id)))
+
 (defn montar
   "Conjunto de rotas Pedestal (table syntax) a partir dos deps do servidor. `erro`/`cabecalhos` sao GLOBAIS
   (it/globais prepended em http/servico) — nao por rota. Aqui: `autenticacao` resolve o ator; `exige-papel`
