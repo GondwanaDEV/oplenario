@@ -24,6 +24,8 @@ const DESTINOS_NAV = [
   // Onda B Slice 6 — Expediente (gerar documento + Protocolo Geral) é área de topo nova, não sub-rota de
   // Proposições (documento administrativo não é matéria legislativa).
   { rotulo: "Expediente", href: "/expediente" },
+  // Onda C Slice C2 — leitura da pauta de uma sessão agendada + convocação derivada (gated "secretario").
+  { rotulo: "Pauta", href: "/pauta-convocacao" },
 ];
 
 export function TopoInterno({ area, ator }: { area: string; ator: { nome: string; papel: string } }) {

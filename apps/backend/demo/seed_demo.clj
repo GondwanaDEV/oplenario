@@ -295,3 +295,47 @@
          (println "URL          : http://localhost:3000/vereador?token=" (java.net.URLEncoder/encode token "UTF-8"))
          (println "obs.: sem parecer/ciência nesta semente — ':ciencias' vazio (honesto, não [GAP] fingido)")
          (println "=================================\n"))))))
+
+;; ---------- Onda C2 (pauta-convocacao) — secretário com sessão agendada + pauta ----------
+
+(defn secretario
+  "Semente ad-hoc p/ ver /pauta-convocacao end-to-end: identidade+vínculo com papel RBAC 'secretario' (a
+  PRIMEIRA vez que este papel é semeado neste ns — nenhuma outra fn cria) + uma sessão em estado 'agendada'
+  (agendar-sessao! sem transicionar) com 2 itens de pauta (1 expediente 'leitura', 1 ordem_do_dia
+  'proposicao', referenciando uma proposição real recém-protocolada). Ente NOVO, self-contained (não reusa
+  ids-file). NÃO idempotente."
+  [_]
+  (com-ds
+   (fn [ds]
+     (let [ente (random-uuid) ident (random-uuid)
+           r    (repo-sessoes ds)
+           lr   (repo-legislativo ds)]
+       (try (referencia/inserir-municipio! ds {:codigo-ibge "2304400" :nome "Fortaleza" :uf "CE" :capital true :populacao 2703391})
+            (catch Exception _ nil))
+       (id/inserir! ds {:id ident :cpf (cpf-valido) :nome "Secretária Legislativa Demo"})
+       (tenancy/com-tenant* ds ente
+         (fn [tx]
+           (estrutura/inserir-ente! tx {:ente-id ente :municipio-ibge "2304400" :nome-oficial "Câmara Municipal de Fortaleza"})
+           (vinc/criar! tx {:id (random-uuid) :ente-id ente :identidade-id ident :tipo "servidor"})
+           (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente :identidade-id ident :papel "secretario"})))
+       (let [{prop-id :id}
+             (legislativo-repo/protocolar! lr ente
+               {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026 :uf "CE"
+                :municipio-nome "Fortaleza" :ementa "Cria o programa de arborização de vias e praças"
+                :autor-tipo "vereador" :autor-texto "Ver.ª Helena Matos"})
+             sid (:id (repo/agendar-sessao! r ente {:id (random-uuid) :sessao-legislativa-id (random-uuid)
+                                                    :tipo-sessao "ordinaria" :modalidade "presencial"
+                                                    :agendada-para (.plusSeconds (Instant/now) (* 5 86400))}))]
+         (repo/adicionar-item-na-sessao! r ente {:id (random-uuid) :sessao-id sid :fase "expediente"
+                                                 :tipo-item "leitura"
+                                                 :texto-descricao "Leitura e aprovação da ata da sessão anterior"
+                                                 :created-by ident})
+         (repo/adicionar-item-na-sessao! r ente {:id (random-uuid) :sessao-id sid :fase "ordem_do_dia"
+                                                 :tipo-item "proposicao" :proposicao-id prop-id
+                                                 :created-by ident})
+         (let [token (format "{\"identidade-id\":\"%s\",\"ente-id\":\"%s\",\"papeis\":[\"secretario\"]}" ident ente)]
+           (println "\n=== SECRETÁRIA DA DEMO PRONTA (pauta-convocacao) ===")
+           (println "sessao-id (agendada):" sid)
+           (println "token        :" token)
+           (println "URL          : http://localhost:3000/pauta-convocacao?token=" (java.net.URLEncoder/encode token "UTF-8"))
+           (println "======================================================\n")))))))
