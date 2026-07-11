@@ -13,13 +13,20 @@
 ;; autor-texto/ementa em wire/in/proposicao (texto livre de borda, nao ilimitado).
 (def ^:private assunto-max 1000)
 
+;; `dados` (o merge, feature 3.22) e' um campo NOVO (mapa, nao string) sem precedente de bound no wire/in do
+;; modulo (review clojure MENOR): teto defensivo tanto no NUMERO de placeholders quanto no TAMANHO de cada
+;; valor — alimenta `logic/renderizar-documento` (substituicao de {{chave}}), nao ha' razao de negocio p/
+;; um template ter centenas de placeholders ou um valor gigante.
+(def ^:private dados-max-chaves 100)
+(def ^:private dados-valor-max 2000)
+
 (def GerarDocumento
   "Corpo de POST /legislativo/documentos. `modelo-id` obrigatorio (o controller resolve o modelo — tipo-
   documento/corpo-template vem DAI, nao do cliente). `dados` OPCIONAL (default {} no adapters/in)."
   [:map {:closed true}
    [:modelo-id [:string {:min 1 :max 36}]]
    [:assunto [:string {:min 1 :max assunto-max}]]
-   [:dados {:optional true} [:maybe [:map-of :string :string]]]])
+   [:dados {:optional true} [:maybe [:map-of {:max dados-max-chaves} :string [:string {:max dados-valor-max}]]]]])
 
 (def EditarDocumento
   "Corpo de PATCH /legislativo/documentos/:id. PATCH parcial (so' os campos presentes mudam) ENQUANTO

@@ -191,12 +191,11 @@
   "Onda B Slice 6 — leitura agregada p/ a aba 'Gerar documento': {:documento :protocolo}. `:protocolo` vem
   ENRIQUECIDO (numero/ano) SE o documento ja' tiver `protocolo-geral-id` (pos 'Protocolar e numerar'); nil
   enquanto 'rascunho' — o editor nao faz um segundo GET so' pra mostrar o numero apos protocolar. nil
-  (documento inexistente no tenant) -> 404 na borda, mesmo contrato de buscar-parecer-editor."
+  (documento inexistente no tenant) -> 404 na borda, mesmo contrato de buscar-parecer-editor. Delega a
+  `Repo/buscar-documento-para-editor` (review clojure+database MAJOR — NUMA UNICA tx, mesma disciplina de
+  buscar-parecer-editor/buscar-parecer-para-editor; antes eram 2 chamadas publicas do Repo = 2 tx)."
   [repo-legislativo ente-id id]
-  (when-let [documento (repo/buscar-documento repo-legislativo ente-id id)]
-    {:documento documento
-     :protocolo (when-let [pid (:protocolo-geral-id documento)]
-                  (repo/buscar-protocolo repo-legislativo ente-id pid))}))
+  (repo/buscar-documento-para-editor repo-legislativo ente-id id))
 
 (defn editar-documento
   "Onda B Slice 6 — reescreve corpo/assunto de um documento 'rascunho' (CAS). Mesmo gate grosso; `m` ja' vem

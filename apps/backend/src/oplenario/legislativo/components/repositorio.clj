@@ -143,6 +143,12 @@
   (documentos-do-modelo [this ente-id modelo-id])
   (editar-documento! [this ente-id m] "Reescreve corpo/assunto enquanto rascunho (CAS).")
   (emitir-documento! [this ente-id m] "rascunho -> emitido (congela o conteudo); CAS.")
+  (buscar-documento-para-editor [this ente-id id]
+    "Onda B Slice 6 (review clojure+database — consistencia com buscar-parecer-para-editor/
+     ficha-completa-da-proposicao): leitura agregada p/ a aba 'Gerar documento' NUMA UNICA tx (mesmo
+     snapshot MVCC, sem o round-trip extra de duas tx separadas). {:documento :protocolo}. `:protocolo`
+     vem ENRIQUECIDO (numero/ano) SE o documento ja tiver `protocolo-geral-id`; nil enquanto 'rascunho'.
+     nil (documento inexistente no tenant) mesmo contrato de buscar-parecer-para-editor.")
   ;; Onda B Slice 6 — o CTA 'Protocolar e numerar' do Expediente: acao COMPOSTA (protocolo geral + emissao)
   ;; NUMA UNICA tx (mesma disciplina de emitir-parecer!/protocolar!).
   (protocolar-documento! [this ente-id m]
@@ -520,6 +526,16 @@
   (documentos-do-modelo [this ente-id mid] (transacao this ente-id #(documento/listar-por-modelo % ente-id mid)))
   (editar-documento! [this ente-id m] (transacao this ente-id #(documento/editar-rascunho! % (assoc m :ente-id ente-id))))
   (emitir-documento! [this ente-id m] (transacao this ente-id #(documento/emitir! % (assoc m :ente-id ente-id))))
+  ;; Onda B Slice 6 (review clojure+database, MAJOR de consistencia): agrega documento + protocolo (se ja
+  ;; vinculado) NUMA UNICA tx — mesma disciplina de buscar-parecer-para-editor/ficha-completa-da-proposicao.
+  ;; Antes o controller compunha 2 chamadas publicas do Repo (2 tx); agora e' 1 leitura, 1 tx, mesmo snapshot.
+  (buscar-documento-para-editor [this ente-id id]
+    (transacao this ente-id
+      (fn [tx]
+        (when-let [doc (documento/buscar tx ente-id id)]
+          {:documento doc
+           :protocolo (when-let [pid (:protocolo-geral-id doc)]
+                        (protocolo/buscar tx ente-id pid))}))))
   ;; Onda B Slice 6 — 'Protocolar e numerar': COMPOE protocolo-geral/protocolar! (numera gapless, objeto-tipo
   ;; 'documento') + documento/emitir! (rascunho -> emitido, vinculado ao protocolo) NUMA UNICA tx (mesma
   ;; disciplina de protocolar!/emitir-parecer! — nao pode chamar os dois protocolos publicos separadamente,
@@ -528,6 +544,18 @@
   ;; (reusado, nao duplicado): se o documento nao estiver 'rascunho' ou o lock-version nao bater, emitir!
   ;; lanca e a tx INTEIRA rola atras (o numero reservado pelo kernel/sequencial some com o rollback, gapless
   ;; preservado — nao ha' numero "gasto" por uma tentativa que falhou).
+  ;; ACOPLAMENTO IMPLICITO (review database MENOR, registrado explicitamente): o `:assunto` gravado no
+  ;; protocolo e' o snapshot lido AQUI, antes do CAS — so' e' seguro contra uma edicao concorrente porque
+  ;; `editar-rascunho!` SEMPRE incrementa `lock_version` em qualquer mutacao bem-sucedida; se uma edicao
+  ;; concorrente commitar entre esta leitura e o CAS de `emitir!` abaixo, o `lock-version` recebido pelo
+  ;; cliente ja' esta' obsoleto e o CAS LANCA (a tx inteira rola atras, protocolo com assunto obsoleto incluido).
+  ;; Se `editar-rascunho!` algum dia deixar de bumpar `lock_version` em algum caminho, esta protecao some
+  ;; silenciosamente — vale um teste de regressao cross-modulo se isso mudar.
+  ;; GUARD DE INEXISTENCIA (review clojure MENOR): esta excecao NAO carrega `:tipo :validacao/invalido`
+  ;; (mesma convencao, INTENCIONAL, dos guards irmaos em db/documento.clj) — depende do diplomat pre-checar
+  ;; existencia (via `buscar-documento-para-editor`) ANTES de chamar esta acao composta; o unico caller HTTP
+  ;; hoje (`protocolar-documento-handler`) faz esse pre-check. Um caller futuro sem pre-check (job em lote,
+  ;; outro controller) veria 500 opaco em vez de 400 fail-closed.
   (protocolar-documento! [this ente-id {:keys [documento-id ano ator-id lock-version]}]
     (transacao this ente-id
       (fn [tx]
@@ -535,7 +563,7 @@
           (when (nil? doc)
             (throw (ex-info "protocolar-documento!: documento inexistente no tenant"
                             {:documento-id documento-id :ente-id ente-id})))
-          (let [protocolo-id (random-uuid)
+          (let [protocolo-id (ids/novo-id)
                 {:keys [numero]} (protocolo/protocolar! tx
                                     {:id protocolo-id :ente-id ente-id :ano ano :objeto-tipo "documento"
                                      :objeto-id documento-id :sentido "expedido" :assunto (:assunto doc)

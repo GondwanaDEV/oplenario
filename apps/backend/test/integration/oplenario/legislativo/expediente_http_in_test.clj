@@ -43,8 +43,14 @@
     (buscar-modelo [_ _ente-id id] (buscar-modelo id))
     (listar-modelos-ativos [_ _ente-id] (listar-modelos-ativos))
     (gerar-documento! [_ _ente-id m] (gerar-documento! m))
-    (buscar-documento [_ _ente-id id] (buscar-documento id))
-    (buscar-protocolo [_ _ente-id id] (buscar-protocolo id))
+    ;; review clojure+database MAJOR: producao agora agrega documento+protocolo NUMA UNICA chamada do Repo
+    ;; (`buscar-documento-para-editor`, 1 tx) — o fake compoe os MESMOS closures de teste (`buscar-documento`/
+    ;; `buscar-protocolo`) pra nao precisar reescrever os testes, so' o ponto de entrada do protocolo muda.
+    (buscar-documento-para-editor [_ _ente-id id]
+      (when-let [doc (buscar-documento id)]
+        {:documento doc
+         :protocolo (when-let [pid (:protocolo-geral-id doc)]
+                      (buscar-protocolo pid))}))
     (editar-documento! [_ _ente-id m] (editar-documento! m))
     (protocolar-documento! [_ _ente-id m] (protocolar-documento! m))
     (protocolos-do-ano [_ _ente-id ano] (protocolos-do-ano ano))))

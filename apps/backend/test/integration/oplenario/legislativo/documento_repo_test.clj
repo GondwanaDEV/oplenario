@@ -107,3 +107,30 @@
       (is (thrown-with-msg? Exception #"rascunho"
             (repo/protocolar-documento! *repo* ente
               {:documento-id did :ano 2026 :ator-id (random-uuid) :lock-version (:lock-version depois)}))))))
+
+;; ========================= buscar-documento-para-editor (review clojure+database MAJOR: agregacao
+;;                            documento+protocolo NUMA UNICA tx, mesma disciplina de
+;;                            buscar-parecer-para-editor/ficha-completa-da-proposicao) ============
+
+(deftest buscar-documento-para-editor-sem-protocolo-ainda
+  (let [ente (random-uuid) mid (criar-modelo! ente) did (gerar-documento! ente mid)
+        r (repo/buscar-documento-para-editor *repo* ente did)]
+    (is (some? r))
+    (is (= did (:id (:documento r))))
+    (is (= "rascunho" (:estado (:documento r))))
+    (is (nil? (:protocolo r)) "ainda nao protocolado -> sem numero pra mostrar")))
+
+(deftest buscar-documento-para-editor-com-protocolo-vinculado
+  (let [ente (random-uuid) mid (criar-modelo! ente) did (gerar-documento! ente mid)
+        antes (repo/buscar-documento *repo* ente did)
+        resultado-protocolo (repo/protocolar-documento! *repo* ente
+                               {:documento-id did :ano 2026 :ator-id (random-uuid)
+                                :lock-version (:lock-version antes)})
+        r (repo/buscar-documento-para-editor *repo* ente did)]
+    (is (= "emitido" (:estado (:documento r))))
+    (is (some? (:protocolo r)) "protocolo-geral-id presente -> protocolo resolvido junto")
+    (is (= (:protocolo-id resultado-protocolo) (:id (:protocolo r))))
+    (is (= 1 (:numero (:protocolo r))))))
+
+(deftest buscar-documento-para-editor-inexistente-e-nil
+  (is (nil? (repo/buscar-documento-para-editor *repo* (random-uuid) (random-uuid)))))
