@@ -16,16 +16,7 @@ import { useFicha } from "@/lib/use-ficha";
 import { derivarFicha } from "@/lib/ficha-vista";
 import { AzulejoFaixa } from "@/lib/charts/azulejo-faixa";
 import { descreverFaixa } from "@/lib/tramitacao-vista";
-
-function formatarData(iso: string): string {
-  try {
-    return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" }).format(
-      new Date(iso),
-    );
-  } catch {
-    return iso;
-  }
-}
+import { formatarData } from "@/lib/formatar-data";
 
 export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId: string }) {
   const { ficha, comentarios, estado } = useFicha(ente, proposicaoId);

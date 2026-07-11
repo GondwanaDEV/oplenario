@@ -46,6 +46,16 @@
     "PATCH parcial (CAS) + promove nova versao 'edicao' se :texto presente, 1 tx.")
   (buscar-proposicao-detalhe [this ente-id id]
     "{:proposicao ... :texto (a linha de texto/vigente, ou nil)}, uma leitura.")
+  (ficha-completa-da-proposicao [this ente-id id]
+    "Onda B Slice 3 (ficha-materia, leitura interna): {:proposicao :texto :tramitacao :apensadas :emendas
+     :pareceres} NUMA UNICA tx (mesma disciplina de buscar-proposicao-detalhe/listar-e-contar-proposicoes).
+     Sem short-circuit no nil da proposicao (mesmo estilo de buscar-proposicao-detalhe): as demais leituras
+     rodam do mesmo jeito e vem naturalmente vazias. Tetos (review MAJOR fe-9-ficha-materia — o `take`
+     em memoria anterior truncava preservando os MAIS ANTIGOS): 100 p/ tramitacao, 50 p/
+     apensadas/emendas/pareceres, empurrados ao SQL (mesmo padrao teto-fixo-50 de relatores-pendentes) — os
+     4 db/ trazem os N MAIS RECENTES (DESC+LIMIT, revertido a ASC), nunca uma janela [0..N) do resultado
+     cronologico inteiro. Apensadas = so nivel 1 (apensadas-ativas), NAO a cadeia recursiva — decisao de
+     escopo desta fatia.")
   ;; eixo B — versionamento de texto
   (nova-versao! [this ente-id versao] "Cria versao 'rascunho' (conteudo append-only).")
   (promover-versao! [this ente-id m] "Promove rascunho->vigente (ato auditado; reaponta o pointer).")
@@ -247,6 +257,21 @@
       (fn [tx]
         {:proposicao (proposicao/buscar tx ente-id id)
          :texto (texto/vigente tx ente-id id)})))
+  ;; Onda B Slice 3 (ficha-materia): composicao NUMA UNICA tx (mesma disciplina de buscar-proposicao-detalhe).
+  ;; Tetos EMPURRADOS AO SQL (review MAJOR fe-9-ficha-materia — `take` em memoria truncava preservando os
+  ;; MAIS ANTIGOS e descartava os MAIS RECENTES, e ainda pagava o custo de fetch da tabela inteira): cada
+  ;; db/ aceita `limite` e devolve os N MAIS RECENTES (DESC+LIMIT no SQL, revertido a ASC internamente —
+  ;; o contrato de ordem cronologica pro caller e' o MESMO com ou sem limite). 100 tramitacao, 50
+  ;; apensadas/emendas/pareceres (mesmo teto-fixo-50 de relatores-pendentes).
+  (ficha-completa-da-proposicao [this ente-id id]
+    (transacao this ente-id
+      (fn [tx]
+        {:proposicao (proposicao/buscar tx ente-id id)
+         :texto (texto/vigente tx ente-id id)
+         :tramitacao (tram/historico-da-proposicao tx ente-id id 100)
+         :apensadas (apensacao/apensadas-ativas tx ente-id id 50)
+         :emendas (emenda/listar-por-mae tx ente-id id 50)
+         :pareceres (parecer/listar-por-objeto tx ente-id "proposicao" id 50)})))
   (nova-versao! [this ente-id v] (transacao this ente-id #(texto/nova-versao! % (assoc v :ente-id ente-id))))
   (promover-versao! [this ente-id m] (transacao this ente-id #(texto/promover! % (assoc m :ente-id ente-id))))
   (buscar-versao [this ente-id id] (transacao this ente-id #(texto/buscar % ente-id id)))

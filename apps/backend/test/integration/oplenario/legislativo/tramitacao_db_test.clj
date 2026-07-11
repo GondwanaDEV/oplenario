@@ -104,6 +104,42 @@
                                                 :gatilho "despachar" :guarda "verdadeiro" :ordem 2}))
               "guard bem-formado persiste normalmente"))))))
 
+(deftest historico-com-limite-traz-os-mais-recentes-nao-os-mais-antigos
+  ;; review MAJOR fe-9-ficha-materia (repositorio.clj:260/264, db/tramitacao.clj:82): o teto anterior era um
+  ;; `(take 100 ...)` EM MEMORIA sobre o resultado ASC — silenciosamente preservava as transicoes MAIS
+  ;; ANTIGAS e descartava as MAIS RECENTES quando o historico passava do teto (o oposto do que uma ficha
+  ;; viva deveria mostrar), e ainda pagava o fetch da tabela inteira do Postgres so' pra' descartar a
+  ;; maioria depois. Prova: 150 linhas com `ocorrido_em` EXPLICITO e distinto (insert direto — o Postgres
+  ;; congela now() no inicio da tx, entao 150 chamadas a registrar-transicao! na MESMA tx empatariam no
+  ;; MESMO instante e a ordem ASC/DESC ficaria indeterminada); com limite=100 a mais RECENTE (i=149)
+  ;; sobrevive, a mais ANTIGA (i=0) e' descartada, a ordem devolvida continua cronologica ASC (o contrato
+  ;; de ordem e' o MESMO com ou sem limite — so' o conjunto retido muda), e sem limite o comportamento
+  ;; historico (todas as linhas) e' preservado.
+  (let [ente (random-uuid) tid (random-uuid) pid (atom nil)
+        base (java.time.Instant/parse "2026-01-01T00:00:00Z")
+        ocorrido-em (fn [i] (.plusSeconds base i))]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (reset! pid (protocolar! tx ente))
+        (dotimes [i 150]
+          (jdbc/execute-one! tx
+            ["INSERT INTO legislativo.proposicao_transicao_historico
+              (ente_id, id, proposicao_id, template_id, de_estado, para_estado, gatilho, efetivado_em, ocorrido_em)
+              VALUES (?, ?, ?, ?, ?, ?, ?, now(), ?)"
+             ente (random-uuid) @pid tid "de" "para" "gatilho" (ocorrido-em i)]))))
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [todas (tram/historico-da-proposicao tx ente @pid)
+              limitadas (tram/historico-da-proposicao tx ente @pid 100)]
+          (is (= 150 (count todas)) "sem limite: comportamento historico preservado (todas as linhas)")
+          (is (= 100 (count limitadas)) "com limite: o SQL aplica o teto")
+          (is (= (ocorrido-em 149) (:ocorrido-em (last limitadas)))
+              "a transicao MAIS RECENTE (i=149) sobrevive ao corte")
+          (is (not-any? #(= (ocorrido-em 0) (:ocorrido-em %)) limitadas)
+              "a transicao MAIS ANTIGA (i=0) foi descartada — o corte preserva o recente, nao o antigo")
+          (is (= (map ocorrido-em (range 50 150)) (map :ocorrido-em limitadas))
+              "os 100 mais recentes (i=50..149), em ordem cronologica ASC"))))))
+
 (deftest rls-isola-template-cross-tenant
   (let [a (random-uuid) b (random-uuid) tid (atom nil)]
     (tenancy/com-tenant* *ds* a (fn [tx] (reset! tid (montar-template! tx a))))

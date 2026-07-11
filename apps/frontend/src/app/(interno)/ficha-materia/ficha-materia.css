@@ -1,0 +1,90 @@
+/* Chrome específico da Ficha da Matéria (Onda B Slice 3, §16 arquétipo ficha/detalhe) — portado de
+   produto/design-system/o-plenario/telas/ficha-materia.html (<style> local, linhas 24-107). Tokens +
+   chassi vêm de globals.css (tokens.css + chassi.css), importados globalmente.
+
+   `.chip`(+variantes tram/aguarda/aprovada/arquivada) é o MESMO vocabulário/token de
+   proposicoes/proposicoes.css (reuso de convenção, não invenção nova — Task 9 da fatia) — duplicado aqui
+   pela mesma disciplina de escopo-por-rota já estabelecida nesse arquivo (cada superfície porta só o que
+   é seu; nenhuma rota importa o .css de outra rota).
+
+   `.em-breve`/`.em-breve-rotulo`/`.em-breve-titulo`/`.em-breve-motivo` — mesmo texto de
+   (publico)/public.css (o componente <EmBreve> é compartilhado; o CSS é local por rota, mesma disciplina
+   acima). `.tela-estado` — mesma convenção de carregando/erro de proposicoes.css/mesa.css/plenario.css. */
+
+/* ---- trilha (breadcrumb) ---- */
+.trilha { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); padding: 1rem 0 0; display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
+.trilha a { color: var(--texto-2); text-decoration: none; }
+.trilha a:hover { color: var(--marca); }
+.trilha .sep { opacity: .5; }
+.trilha b { color: var(--texto); }
+
+/* ---- cabeçalho da ficha ---- */
+.ficha-cab { padding: 0.6rem 0 0; }
+.ficha-cab .topo-linha { display: flex; gap: 0.7rem; align-items: baseline; flex-wrap: wrap; }
+.ficha-cab .num { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 600; font-size: var(--t-21); color: var(--marca); }
+.ficha-cab .especie { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .06em; text-transform: uppercase; color: var(--texto-2); border: 1px solid var(--linha); border-radius: 999px; padding: 0.15rem 0.6rem; }
+.ficha-cab h1 { font-family: var(--display); font-weight: 800; font-size: clamp(1.6rem, 3.5vw, var(--t-40)); letter-spacing: -0.02em; line-height: 1.08; color: var(--texto); margin: 0.5rem 0 0; max-width: 28ch; }
+.ficha-meta-linha { display: flex; gap: 0.6rem 1.2rem; flex-wrap: wrap; margin: 0.8rem 0 0; font-size: var(--t-13); color: var(--texto-2); }
+.ficha-meta-linha b { color: var(--texto); font-weight: 600; }
+
+.chip { display: inline-flex; align-items: center; gap: 0.4rem; width: fit-content; font-family: var(--mono); font-size: var(--t-12); letter-spacing: .02em; padding: 0.22rem 0.6rem; border-radius: 999px; border: 1px solid var(--linha); color: var(--texto-2); }
+.chip::before { content: ""; width: 7px; height: 7px; border-radius: 2px; background: currentColor; flex: 0 0 auto; }
+.chip-tram { color: var(--marca); border-color: color-mix(in srgb, var(--marca) 40%, transparent); background: color-mix(in srgb, var(--marca) 8%, transparent); }
+.chip-aguarda { color: var(--aviso-texto); border-color: color-mix(in srgb, var(--amarelo) 60%, transparent); background: color-mix(in srgb, var(--amarelo) 16%, transparent); }
+[data-tema="escuro"] .chip-aguarda { color: var(--amarelo); }
+.chip-aprovada { color: var(--marca); border-color: color-mix(in srgb, var(--marca) 45%, transparent); background: color-mix(in srgb, var(--marca) 12%, transparent); }
+.chip-arquivada { color: var(--texto-2); border-color: var(--linha); background: transparent; }
+
+/* ---- faixa de azulejo HERÓI (tramitação completa · leitura primária) ---- */
+.tramitacao { margin: 1.3rem 0 0; padding: 1.3rem 1.4rem; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); }
+.tramitacao .rotulo { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 0.5rem; }
+
+/* ---- corpo: 2 colunas ---- */
+.corpo { display: grid; grid-template-columns: 1fr 320px; gap: 1.6rem; align-items: start; margin: 1.4rem 0 0; }
+
+/* abas */
+.abas { display: flex; gap: 0.2rem; border-bottom: 1px solid var(--linha); flex-wrap: wrap; }
+.aba { font-family: var(--corpo); font-weight: 600; font-size: var(--t-13); color: var(--texto-2); background: none; border: none; border-bottom: 2px solid transparent; padding: 0.6rem 0.8rem; min-height: 44px; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem; }
+.aba:hover { color: var(--texto); }
+.aba[aria-selected="true"] { color: var(--marca); border-bottom-color: var(--marca); }
+.aba .cont { font-family: var(--mono); font-size: var(--t-12); background: var(--surface-2); border: 1px solid var(--linha); border-radius: 999px; padding: 0 0.4rem; }
+.painel { padding: 1.2rem 0 0; }
+.painel[hidden] { display: none; }
+
+/* texto vigente */
+.texto-lei { max-width: 64ch; white-space: pre-wrap; }
+.texto-lei p { margin: 0.6rem 0; color: var(--texto); }
+
+/* linha do tempo (tramitação / pareceres / emendas) */
+.tempo { list-style: none; padding: 0; margin: 0; }
+.tempo li { position: relative; padding: 0 0 1.3rem 1.8rem; border-left: 2px solid var(--linha); }
+.tempo li:last-child { border-left-color: transparent; padding-bottom: 0; }
+.tempo li::before { content: ""; position: absolute; left: -7px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--surface); border: 2px solid var(--marca); }
+.tempo .data { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+.tempo .evt { font-weight: 600; color: var(--texto); margin: 0.1rem 0; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.tempo .quem { font-size: var(--t-13); color: var(--texto-2); }
+
+/* rail */
+.rail { display: grid; gap: 1rem; }
+.card { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.1rem 1.2rem; }
+.card h3 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.8rem; }
+.dl { display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 0.9rem; font-size: var(--t-13); }
+.dl dt { color: var(--texto-2); }
+.dl dd { margin: 0; color: var(--texto); font-weight: 600; text-align: right; }
+.dl dd.mono { font-family: var(--mono); font-weight: 500; }
+.card-acoes { display: grid; gap: 0.5rem; }
+.card-acoes .btn[aria-disabled="true"] { opacity: .55; cursor: not-allowed; }
+.urn { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); word-break: break-all; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.5rem 0.6rem; }
+
+@media (max-width: 920px) { .corpo { grid-template-columns: 1fr; } .rail { order: -1; } }
+
+/* ---- estado vazio honesto (mesmo texto de (publico)/public.css) ---- */
+.em-breve { padding: 1.1rem 1.2rem; border: 1px dashed var(--linha); border-radius: var(--raio); background: var(--surface-2); }
+.em-breve-rotulo { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--texto-2); margin: 0 0 0.3rem; }
+.em-breve-titulo { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); margin: 0 0 0.3rem; }
+.em-breve-motivo { font-size: var(--t-13); color: var(--texto-2); margin: 0; line-height: 1.5; }
+
+/* ---- estado de carregando/erro da página (mesma convenção de proposicoes.css/mesa.css/plenario.css) ---- */
+.tela-estado { max-width: 520px; margin: 4rem auto; text-align: center; padding: 2rem; }
+.tela-estado h1 { font-family: var(--display); font-size: var(--t-21); color: var(--texto); margin: 0 0 0.5rem; }
+.tela-estado p { color: var(--texto-2); }

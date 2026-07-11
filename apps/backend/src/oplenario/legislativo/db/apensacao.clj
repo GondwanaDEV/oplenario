@@ -52,15 +52,21 @@
     r))
 
 (defn apensadas-ativas
-  "As apensadas ATIVAS DIRETAS de um principal (nivel 1 da cadeia)."
-  [tx ente-id principal-id]
-  (comum/linhas->kebab
-   (jdbc/execute! tx
-     (sql/format {:select [:id :apensada_id :apensada_em :motivo_apensacao]
-                  :from [:legislativo.proposicao_apensacao]
-                  :where [:and [:= :ente_id ente-id] [:= :principal_id principal-id]
-                          [:= :desapensada_em nil]]
-                  :order-by [[:apensada_em :asc]]}))))
+  "As apensadas ATIVAS DIRETAS de um principal (nivel 1 da cadeia). Sem `limite`: todas, ASC. Com `limite`
+  (review MAJOR fe-9-ficha-materia): teto empurrado ao SQL (`ORDER BY apensada_em DESC LIMIT limite`) — traz
+  as N mais RECENTES, revertido a ASC antes de devolver (mesmo contrato de ordem, so' o conjunto muda)."
+  ([tx ente-id principal-id] (apensadas-ativas tx ente-id principal-id nil))
+  ([tx ente-id principal-id limite]
+   (let [base {:select [:id :apensada_id :apensada_em :motivo_apensacao]
+               :from [:legislativo.proposicao_apensacao]
+               :where [:and [:= :ente_id ente-id] [:= :principal_id principal-id]
+                       [:= :desapensada_em nil]]}
+         linhas (comum/linhas->kebab
+                  (jdbc/execute! tx
+                    (sql/format (if limite
+                                  (assoc base :order-by [[:apensada_em :desc]] :limit limite)
+                                  (assoc base :order-by [[:apensada_em :asc]])))))]
+     (if limite (vec (reverse linhas)) linhas))))
 
 (defn cadeia
   "Cadeia de apensacao (traversal recursivo, §22.4 eixo E) a partir do principal: as apensadas ativas e

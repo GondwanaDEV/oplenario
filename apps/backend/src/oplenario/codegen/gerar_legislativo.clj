@@ -6,12 +6,20 @@
   Default = target/generated-ts/contrato-legislativo.gen.ts."
   (:require [clojure.java.io :as io]
             [oplenario.codegen.malli-ts :as ts]
+            [oplenario.legislativo.wire.out.ficha-materia :as ficha]
             [oplenario.legislativo.wire.out.proposicao :as proposicao]))
 
 (def manifesto
   [["ProposicaoResumoOut" proposicao/ProposicaoResumoOut]
    ["ListaProposicoesOut" proposicao/ListaProposicoesOut]
-   ["ProposicaoDetalheOut" proposicao/ProposicaoDetalheOut]])
+   ["ProposicaoDetalheOut" proposicao/ProposicaoDetalheOut]
+   ;; Onda B Slice 3 (ficha-materia) — entram DEPOIS de ProposicaoDetalheOut (referencia nomeada casa por
+   ;; igualdade estrutural, mesma disciplina do manifesto de paineis/mesa).
+   ["HistoricoTramitacaoItemOut" ficha/HistoricoTramitacaoItemOut]
+   ["ApensacaoOut" ficha/ApensacaoOut]
+   ["EmendaResumoOut" ficha/EmendaResumoOut]
+   ["ParecerResumoOut" ficha/ParecerResumoOut]
+   ["FichaMateriaOut" ficha/FichaMateriaOut]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))
 
