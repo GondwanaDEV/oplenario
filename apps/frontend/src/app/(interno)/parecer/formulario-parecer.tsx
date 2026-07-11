@@ -67,6 +67,11 @@ export function FormularioParecer({
   // Ajusta o padding-bottom do <main> pra barra .comando fixa nunca cobrir o fim do form — porte do
   // script inline de parecer.html. `document.querySelector('main')` funciona independente de onde
   // `.comando` está aninhado no React tree (fixed escapa o flow de qualquer ancestral sem transform).
+  // ResizeObserver na própria barra (não só `resize` da window) — `.comando-grade`/`.comando-acoes` têm
+  // `flex-wrap: wrap`, e a altura da barra muda por motivos que não disparam `resize`: `mensagemStatus`
+  // pode empurrar `.comando-ctx` pra 2 linhas em viewport estreita, e `bloqueado` remove 2 dos 3 botões.
+  // Sem observar a caixa real, o padding fica stale — conteúdo escondido atrás da barra fixa ou sobra
+  // de espaço morto.
   useEffect(() => {
     const barra = barraRef.current;
     const main = document.querySelector("main");
@@ -75,8 +80,9 @@ export function FormularioParecer({
       (main as HTMLElement).style.paddingBottom = `${(barra as HTMLDivElement).offsetHeight + 28}px`;
     }
     ajustar();
-    window.addEventListener("resize", ajustar);
-    return () => window.removeEventListener("resize", ajustar);
+    const observador = new ResizeObserver(ajustar);
+    observador.observe(barra);
+    return () => observador.disconnect();
   }, []);
 
   function aoClicarSalvarRascunho() {

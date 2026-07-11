@@ -23,8 +23,15 @@ export default function PaginaParecer({ params }: { params: Promise<{ id: string
   const { salvar, estado: estadoRascunho, erro: erroRascunho } = useSalvarRascunhoParecer(token, id);
   const { emitir, estado: estadoEmissao, erro: erroEmissao } = useEmitirParecer(token, id);
   const [mensagemStatus, setMensagemStatus] = useState<string | null>(null);
+  // Cada hook de mutação só limpa o PRÓPRIO `erro` quando ELE inicia um novo envio — não o do outro hook.
+  // Sem rastrear qual foi a última ação, `erroRascunho ?? erroEmissao` mostraria um erro de rascunho já
+  // superado depois de uma emissão bem-sucedida (ou vice-versa). `ultimaAcao` garante que só o erro da
+  // ação mais recente é exibido.
+  const [ultimaAcao, setUltimaAcao] = useState<"rascunho" | "emissao" | null>(null);
+  const erro = ultimaAcao === "rascunho" ? erroRascunho : ultimaAcao === "emissao" ? erroEmissao : null;
 
   async function aoSalvarRascunho(valores: ValoresParecer) {
+    setUltimaAcao("rascunho");
     setMensagemStatus(null);
     try {
       await salvar({ relatorio: valores.relatorio, analise: valores.analise });
@@ -35,6 +42,7 @@ export default function PaginaParecer({ params }: { params: Promise<{ id: string
   }
 
   async function aoEmitir(valores: ValoresParecer) {
+    setUltimaAcao("emissao");
     setMensagemStatus(null);
     if (!dados) return;
     try {
@@ -98,7 +106,7 @@ export default function PaginaParecer({ params }: { params: Promise<{ id: string
             aoEmitir={aoEmitir}
             enviandoRascunho={estadoRascunho === "enviando"}
             enviandoEmissao={estadoEmissao === "enviando"}
-            erro={erroRascunho ?? erroEmissao}
+            erro={erro}
             bloqueado={bloqueado}
             mensagemStatus={mensagemStatus}
           />

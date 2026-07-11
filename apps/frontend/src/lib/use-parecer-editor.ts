@@ -30,6 +30,16 @@ export function useParecerEditor(token: string | null, id: string | null) {
   const [estado, setEstado] = useState<Estado>(id ? "carregando" : "pronto");
   const [idAnterior, setIdAnterior] = useState(id);
   const vivoRef = useRef(true);
+  // Sempre o `id` do render mais recente — lido de dentro de `recarregar` (que roda depois de um await, por
+  // fora do ciclo de render) pra detectar se o `id` mudou enquanto o fetch estava em voo. `recarregar` é
+  // `useCallback`-fechado sobre o `id` de QUANDO FOI CHAMADO; sem este ref ela não tem como saber que ficou
+  // stale (ex.: emitir() dispara recarregar() pro parecer P1, o usuário navega pra P2 antes dela resolver —
+  // sem o guard, a resposta tardia de P1 sobrescreveria os dados de P2 já carregados). Atualizado em efeito
+  // (não durante o render — `react-hooks/refs` recusa escrever `ref.current` no corpo do componente).
+  const idAtualRef = useRef(id);
+  useEffect(() => {
+    idAtualRef.current = id;
+  }, [id]);
 
   // Reset DURANTE O RENDER (não dentro do useEffect) — mesmo padrão de use-proposicao-detalhe.ts.
   if (id !== idAnterior) {
@@ -69,9 +79,11 @@ export function useParecerEditor(token: string | null, id: string | null) {
 
   const recarregar = useCallback(async () => {
     if (!id || !token) return;
+    const idDaChamada = id;
     try {
       const resultado = await buscarParecer(token, id);
       if (!vivoRef.current) return;
+      if (idAtualRef.current !== idDaChamada) return; // `id` mudou enquanto o fetch estava em voo — descarta.
       if (resultado === null) {
         setEstado("erro");
         return;
@@ -79,7 +91,7 @@ export function useParecerEditor(token: string | null, id: string | null) {
       setDados(resultado);
       setEstado("pronto");
     } catch {
-      if (vivoRef.current) setEstado("erro");
+      if (vivoRef.current && idAtualRef.current === idDaChamada) setEstado("erro");
     }
   }, [token, id]);
 
