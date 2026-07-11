@@ -1,0 +1,85 @@
+/* Chrome específico do quadro de Tramitação (Onda B Slice 4, §16 arquétipo cockpit) — portado de
+   produto/design-system/o-plenario/telas/tramitacao-board.html (<style> local). Tokens + chassi vêm de
+   globals.css (tokens.css + chassi.css, importados globalmente); `.envelope`/`.eyebrow`/`.btn`/`.sr-only`
+   já são globais (mesma convenção de proposicoes.css).
+
+   Escopo desta fatia (SÓ LEITURA do quadro): porta `.pg-cab`, `.filtros`, `.busca`, `.faceta`, `.board`,
+   `.coluna`, `.col-cabe`, `.azulejo-col`(+variantes az-*), `.col-corpo`, `.mat`(+`.mat-topo`/`.mat-num`),
+   `.selo`(+`.selo-esp`), verbatim onde aplicável.
+
+   NÃO PORTADO (fora de escopo, sem dado real — ver nota no topo de page.tsx): `.vistas` (tabs
+   quadro/lista — só o quadro é renderizado), `.mat-menu`/`.mat-rel` (menu de ações por cartão e avatar de
+   relator — o payload não tem relator, só autor/proponente), `.selo-prazo`/`.selo-urg`/`.selo-regime`
+   (sem sinal no payload), `.comando` (barra fixa "Exportar quadro" — fora de escopo), `.col-resumo`
+   (cartão-resumo fixo de "concluídas" — aqui a coluna já lista os itens reais que vieram do backend, sem
+   truncar por design).
+
+   NOVO (não existe na tela-fonte): `.mat-autor` (substitui `.mat-rel` — mostra só o texto do autor, sem
+   avatar, honesto sobre não ter um relator real), `.col-vazia` (nota textual quando uma coluna fixa não
+   tem nenhuma matéria — a tela-fonte sempre populava as 5 colunas com fixture, nunca modelou o vazio),
+   `.az-neutro` (a 6ª coluna "Outros", fail-closed, não existe no mockup), `.rodape-contagem` (substitui a
+   barra `.comando` fixa por um rodapé simples — sem "Exportar quadro" nem CTA duplicado). */
+
+/* ---- cabeçalho de página ---- */
+.pg-cab { padding: 1.4rem 0 0; display: grid; grid-template-columns: 1fr auto; gap: 0.8rem 1.4rem; align-items: end; }
+.pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
+.pg-cab .leitura { font-size: var(--t-13); color: var(--texto-2); margin: 0.4rem 0 0; max-width: 60ch; }
+.pg-cab .leitura b { color: var(--texto); font-weight: 600; }
+
+/* ---- faixa de filtros ---- */
+.filtros { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; margin: 1.2rem 0 0; }
+.faceta { display: inline-flex; align-items: center; gap: 0.4rem; }
+.faceta label { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); }
+.faceta select { font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 55%, var(--linha)); border-radius: var(--raio-sm); padding: 0.5rem 0.6rem; min-height: 40px; cursor: pointer; }
+.busca { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 52%, var(--linha)); border-radius: 999px; padding: 0.35rem 0.9rem; min-height: 40px; min-width: 220px; }
+.busca input { border: none; background: none; outline: none; font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); width: 100%; }
+.busca input::placeholder { color: var(--texto-2); }
+
+/* ===== QUADRO ===== */
+.board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(282px, 1fr); gap: 1rem; margin: 1.3rem 0 0; overflow-x: auto; padding-bottom: 0.6rem; scroll-snap-type: x proximity; }
+.board:focus-visible { outline: 3px solid var(--foco); outline-offset: 4px; border-radius: var(--raio); }
+.coluna { scroll-snap-align: start; display: flex; flex-direction: column; min-width: 0; }
+
+.col-cabe { display: flex; align-items: center; gap: 0.6rem; padding: 0 0.2rem 0.7rem; position: sticky; top: 0; }
+/* azulejo da coluna — quarto-de-círculo de Bulcão (a assinatura) */
+.azulejo-col { width: 22px; height: 22px; border-radius: 4px; flex: 0 0 auto; position: relative; overflow: hidden; }
+.azulejo-col::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 0% 100%, var(--az) 0 62%, transparent 62%); }
+.az-jade { background: color-mix(in srgb, var(--jade) 22%, transparent); --az: var(--jade); }
+.az-cobalto { background: color-mix(in srgb, var(--cobalto) 22%, transparent); --az: var(--cobalto); }
+.az-amarelo { background: color-mix(in srgb, var(--amarelo) 30%, transparent); --az: var(--amarelo-traco); }
+.az-telha { background: color-mix(in srgb, var(--telha) 22%, transparent); --az: var(--telha); }
+.az-verde { background: color-mix(in srgb, var(--jade-claro) 24%, transparent); --az: var(--jade-claro); }
+.az-neutro { background: color-mix(in srgb, var(--texto-2) 18%, transparent); --az: var(--texto-2); }
+[data-tema="escuro"] .az-amarelo { --az: var(--amarelo); }
+.col-cabe .tit { font-family: var(--display); font-weight: 700; font-size: var(--t-13); color: var(--texto); letter-spacing: .01em; }
+.col-cabe .cnt { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin-left: auto; background: var(--surface); border: 1px solid var(--linha); border-radius: 999px; padding: 0.05rem 0.5rem; }
+
+.col-corpo { display: flex; flex-direction: column; gap: 0.7rem; background: color-mix(in srgb, var(--surface) 60%, transparent); border: 1px solid var(--linha); border-radius: var(--raio); padding: 0.7rem; min-height: 80px; flex: 1; }
+.col-vazia { font-size: var(--t-13); color: var(--texto-2); text-align: center; padding: 1rem 0.5rem; margin: 0; }
+
+/* ===== cartão de matéria ===== */
+.mat { background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); box-shadow: var(--sombra); padding: 0.8rem 0.85rem; display: grid; gap: 0.5rem; }
+.mat-topo { display: flex; align-items: center; gap: 0.5rem; }
+.mat-num { font-family: var(--mono); font-weight: 600; font-size: var(--t-12); color: var(--acento-texto); }
+.mat h3 { font-family: var(--corpo); font-weight: 600; font-size: var(--t-13); line-height: 1.35; margin: 0; }
+.mat h3 a { color: var(--texto); text-decoration: none; }
+.mat h3 a:hover { text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--marca) 40%, transparent); text-underline-offset: 2px; }
+.mat-pe { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.mat-autor { margin-left: auto; font-size: var(--t-12); color: var(--texto-2); }
+
+.selo { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.7rem; font-weight: 600; border-radius: 999px; padding: 0.12rem 0.5rem; border: 1px solid transparent; white-space: nowrap; }
+.selo-esp { font-family: var(--mono); font-weight: 500; color: var(--texto-2); background: var(--surface); border-color: var(--linha); }
+
+/* ---- rodapé de contagem (substitui a barra fixa .comando fora de escopo) ---- */
+.rodape-contagem { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); text-align: center; margin: 1rem 0 0; }
+.rodape-contagem b { color: var(--marca); font-weight: 600; }
+
+/* ---- estado de carregando/erro da página (mesma convenção de mesa.css/proposicoes.css) ---- */
+.tela-estado { max-width: 520px; margin: 4rem auto; text-align: center; padding: 2rem; }
+.tela-estado h1 { font-family: var(--display); font-size: var(--t-21); color: var(--texto); margin: 0 0 0.5rem; }
+.tela-estado p { color: var(--texto-2); }
+
+@media (max-width: 720px) {
+  .pg-cab { grid-template-columns: 1fr; }
+  .busca { margin-left: 0; width: 100%; }
+}

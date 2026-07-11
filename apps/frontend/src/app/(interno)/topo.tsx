@@ -19,6 +19,7 @@ import "./topo.css";
 
 const DESTINOS_NAV = [
   { rotulo: "Painéis da Mesa", href: "/paineis/mesa" },
+  { rotulo: "Tramitação", href: "/tramitacao" },
   { rotulo: "Proposições", href: "/proposicoes" },
 ];
 
