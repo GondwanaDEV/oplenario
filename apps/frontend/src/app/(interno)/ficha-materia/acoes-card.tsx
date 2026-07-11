@@ -1,18 +1,30 @@
-// AcoesCard — card "Ações" do rail (Onda B Slice 3). Porte de ficha-materia.html:255-271. Nenhuma das 3
-// ações tem backend fiado nesta fatia (Incluir na pauta = módulo pauta; Gerar ficha PDF = exportação;
-// Distribuir a comissão = fluxo de distribuição) — mesma disciplina de BalcaoLgpd (balcao-lgpd.tsx):
-// botões INERTES (disabled + aria-disabled) em vez de fingir que funcionam, com um único <EmBreve>
-// honesto explicando o porquê (Global Constraints "sem dado falso").
+// AcoesCard — card "Ações" do rail (Onda B Slice 3; ganhou "Ver pós-aprovação" na Slice 7). Porte de
+// ficha-materia.html:255-271. Nenhuma das 3 ações originais tem backend fiado ainda (Incluir na pauta =
+// módulo pauta; Gerar ficha PDF = exportação; Distribuir a comissão = fluxo de distribuição) — mesma
+// disciplina de BalcaoLgpd (balcao-lgpd.tsx): botões INERTES (disabled + aria-disabled) em vez de fingir
+// que funcionam, com um único <EmBreve> honesto explicando o porquê (Global Constraints "sem dado falso").
+//
+// "Ver pós-aprovação" (Onda B Slice 7, spec §4) é a ÚNICA ação REAL do card — só aparece quando
+// `proposicao.estado === "aprovada"` (o ponto de entrada da rota /pos-aprovacao/:id; a própria página de
+// destino mostra "Gerar autógrafo" se ainda não existir um, evitando um 2º ponto de decisão aqui).
 
+import Link from "next/link";
 import { EmBreve } from "@/lib/em-breve";
+import { comToken } from "@/lib/nav";
+import type { ProposicaoDetalheOut } from "@/lib/contrato-legislativo.gen";
 
 const ACOES = ["Incluir na pauta", "Gerar ficha PDF", "Distribuir a comissão"];
 
-export function AcoesCard() {
+export function AcoesCard({ proposicao, token }: { proposicao: ProposicaoDetalheOut; token: string | null }) {
   return (
     <div className="card">
       <h3>Ações</h3>
       <div className="card-acoes">
+        {proposicao.estado === "aprovada" && (
+          <Link href={comToken(`/pos-aprovacao/${proposicao.id}`, token)} className="btn btn-contorno">
+            Ver pós-aprovação
+          </Link>
+        )}
         {ACOES.map((rotulo) => (
           <button
             key={rotulo}
