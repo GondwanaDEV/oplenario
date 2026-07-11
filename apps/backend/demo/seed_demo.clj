@@ -18,6 +18,7 @@
   (:require [com.stuartsierra.component :as component]
             [oplenario.cadastros.db.estrutura :as estrutura]
             [oplenario.cadastros.db.referencia :as referencia]
+            [oplenario.cadastros.db.vereador :as vereador-db]
             [oplenario.cadastros.relacoes.cadastro :as rel-cad]
             [oplenario.config :as config]
             [oplenario.identidade.db.identidade :as id]
@@ -34,7 +35,7 @@
             [oplenario.sessoes.components.repositorio :as repo]
             [oplenario.transparencia.components.repositorio :as transparencia-repo]
             [clojure.edn :as edn])
-  (:import (java.time Instant)))
+  (:import (java.time Instant LocalDate)))
 
 (def ids-file "/private/tmp/claude-501/-Users-daoudatraore-oplenario/fb0b8172-5838-4585-9188-536f405b4b01/scratchpad/demo-ids.edn")
 
@@ -244,3 +245,53 @@
        (println "\n=== ENCARREGADO/DPO DA DEMO PRONTO ===")
        (println "URL: http://localhost:3000/portal/casa/" (str ente))
        (println "=======================================\n")))))
+
+;; ---------- Task 7 (Onda C1, home do vereador) — vereadora com mandato + proposição vinculados ----------
+
+(defn vereador
+  "Semente da HOME DO VEREADOR (Onda C1, Task 7): cria uma identidade+cadastro de vereador de VERDADE (não
+  só `autor-texto`, como as `materias-seed` fazem) sob o MESMO ente da demo (ids-file de `base` — rodar
+  `base` primeiro): identidade -> cadastros.vereador -> legislatura vigente (reusa se o ente já tiver uma,
+  senão cria uma nova 2025-2028) -> mandato vigente -> vínculo (`tipo` 'vereador') + papel RBAC estático
+  'vereador' -> protocola 1 proposição com `:autor-tipo 'vereador'`/`:autor-id` = o vereador cadastrado — a
+  PRIMEIRA semente deste ns a linkar de verdade (`materias-seed` só seta `autor-texto`, sem `autor-id`).
+  SEM parecer/ciência nesta rodada (opcional do plano C1, deferido por tempo — `emitir-parecer!` exige
+  template+comissão+registro de fatos, fora do escopo enxuto desta semente); a home mostra ':ciencias'
+  vazio, o que é honesto (nenhuma ciência pendente ainda), não um [GAP] fingido. NÃO idempotente (protocola
+  proposição NOVA e cria vereador NOVO a cada chamada, como `materias`/`esic` já são)."
+  [_]
+  (com-ds
+   (fn [ds]
+     (let [{:keys [ente]} (edn/read-string (slurp ids-file))
+           ident  (random-uuid)
+           ver-id (random-uuid)]
+       (id/inserir! ds {:id ident :cpf (cpf-valido) :nome "Vereadora Demo"})
+       (tenancy/com-tenant* ds ente
+         (fn [tx]
+           (vereador-db/inserir! tx {:id ver-id :ente-id ente :identidade-id ident
+                                     :nome "Vereadora Demo" :nome-parlamentar "Vereadora Demo"})
+           (let [leg-id (or (:id (estrutura/legislatura-vigente tx ente))
+                             (let [novo-id (random-uuid)]
+                               (estrutura/inserir-legislatura! tx
+                                 {:id novo-id :ente-id ente :numero 19 :ano-inicio 2025 :ano-fim 2028 :vigente true})
+                               novo-id))]
+             (vereador-db/inserir-mandato! tx
+               {:id (random-uuid) :ente-id ente :vereador-id ver-id :legislatura-id leg-id
+                :partido "PDT" :estado "vigente" :natureza "titular"
+                :vigencia-inicio (LocalDate/of 2025 1 1)}))
+           (vinc/criar! tx {:id (random-uuid) :ente-id ente :identidade-id ident :tipo "vereador"})
+           (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente :identidade-id ident :papel "vereador"})))
+       (let [repo   (repo-legislativo ds)
+             {prop-id :id}
+             (legislativo-repo/protocolar! repo ente
+               {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026 :uf "CE"
+                :municipio-nome "Fortaleza" :ementa "Institui a Semana Municipal do Voluntariado"
+                :autor-tipo "vereador" :autor-id ver-id})
+             token (format "{\"identidade-id\":\"%s\",\"ente-id\":\"%s\",\"papeis\":[\"vereador\"]}" ident ente)]
+         (println "\n=== VEREADORA DA DEMO PRONTA ===")
+         (println "vereador-id  :" ver-id)
+         (println "proposicao-id:" prop-id)
+         (println "token        :" token)
+         (println "URL          : http://localhost:3000/vereador?token=" (java.net.URLEncoder/encode token "UTF-8"))
+         (println "obs.: sem parecer/ciência nesta semente — ':ciencias' vazio (honesto, não [GAP] fingido)")
+         (println "=================================\n"))))))
