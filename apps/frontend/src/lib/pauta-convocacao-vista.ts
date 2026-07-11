@@ -8,41 +8,9 @@ import type { SliSessaoOut } from "./use-mesa";
 import type { ProposicaoResumoOut } from "./contrato-legislativo.gen";
 import { formatarData, formatarDiaSemana, formatarHora } from "./formatar-data";
 import { formatarNumeroProposicao } from "./proposicoes-vista";
+import type { PautaItemOut, PautaOut, SessaoOut } from "./use-sessao-pauta";
 
-// SessaoOut/PautaItemOut/PautaOut: hand-rolled (mesmo racional de SliSessaoOut em use-mesa.ts — a rota
-// /sessoes ainda não tem codegen Malli→TS). Definidos aqui e reexportados por use-sessao-pauta.ts (Task 5)
-// para não ter 2 declarações divergentes do mesmo shape.
-export interface SessaoOut {
-  id: string;
-  sessaoLegislativaId: string;
-  tipoSessao: string;
-  numeroSequencial: number;
-  estado: string;
-  modalidade: string;
-  delibera: boolean;
-  transmitePublica: boolean;
-  geraAtaRegimental: boolean;
-  permiteVotoSecreto: boolean;
-  permiteModalidadeRemota: boolean;
-  agendadaPara: string | null;
-  abertaEm: string | null;
-  encerradaEm: string | null;
-  motivoNaoRealizada: string | null;
-}
-
-export interface PautaItemOut {
-  id: string;
-  fase: string;
-  tipoItem: string;
-  proposicaoId?: string;
-  textoDescricao?: string;
-  ordem: number;
-}
-
-export interface PautaOut {
-  sessaoId: string;
-  itens: PautaItemOut[];
-}
+export type { PautaItemOut, PautaOut, SessaoOut };
 
 // ---------- seleção da sessão-alvo (decisão assumida 1: auto-seleciona a mais próxima "agendada"; troca
 // manual se houver mais de uma) ----------
