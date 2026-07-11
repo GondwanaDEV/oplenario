@@ -87,4 +87,29 @@ describe("PaginaHomeVereador", () => {
     renderComProviders("tok-de-teste");
     await waitFor(() => expect(screen.getByText("Não foi possível carregar sua home")).toBeTruthy());
   });
+
+  it("estado pronto tem um <h1> (review MAJOR react — a11y: sem isso a árvore de headings pula pro h2)", async () => {
+    global.fetch = vi.fn(async () => ({ ok: true, json: async () => painelFake }) as Response) as unknown as typeof fetch;
+    const { container } = renderComProviders("tok-de-teste");
+    await waitFor(() => expect(screen.getByText("Tudo em dia.")).toBeTruthy());
+    expect(container.querySelector("h1")).not.toBeNull();
+  });
+
+  it("'Dar ciência' falha -> mostra o erro, não lança (unhandled rejection) e reabilita o botão", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => painelFake } as Response) // GET inicial
+      .mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({ erro: "falha ao dar ciência" }) } as Response); // POST acusar falha
+    global.fetch = fetchMock as unknown as typeof fetch;
+    renderComProviders("tok-de-teste");
+
+    await waitFor(() => expect(screen.getByText("Dar ciência")).toBeTruthy());
+    const clique = screen.getByText("Dar ciência").click();
+
+    await waitFor(() => expect(screen.getByText(/Não foi possível registrar a ciência/)).toBeTruthy());
+    // o botão continua ali (a ciência não some) e volta a ficar clicável — nada trava em "enviando" pra sempre.
+    // jest-dom não está instalado neste repo (mesmo padrão de outros testes) — assert DOM cru.
+    expect((screen.getByText("Dar ciência").closest("button") as HTMLButtonElement).disabled).toBe(false);
+    expect(() => clique).not.toThrow();
+  });
 });

@@ -94,11 +94,17 @@ function Brasao() {
   );
 }
 
+// Review react MEDIUM: "Matérias" apontava p/ (interno)/proposicoes — um link REAL, mas que tira o
+// vereador do app shell mobile inteiro (perde topo/tabbar, cai num AuthProvider/TemaProvider e chassi
+// DIFERENTES, desktop-oriented, sem GuardVereador). Desabilitado como os demais tabs ainda não
+// construídos NESTA fatia (honesto: sem uma experiência de matérias PROPRIA do vereador dentro do shell
+// mobile, mostrar o tab como "ativo" prometia uma continuidade que não existe). Candidato de fatia futura:
+// uma rota `(vereador)/materias` própria, ou promover /proposicoes a layout-agnostic.
 const TABS = [
   { rotulo: "Início", href: "/vereador", ativo: true },
   { rotulo: "Pauta", href: null, ativo: false },
   { rotulo: "Votar", href: null, ativo: false },
-  { rotulo: "Matérias", href: "/proposicoes", ativo: true },
+  { rotulo: "Matérias", href: null, ativo: false },
   { rotulo: "Perfil", href: null, ativo: false },
 ] as const;
 

@@ -22,6 +22,9 @@
 .fora-prox .info b { font-size: var(--t-13); color: var(--texto); display: block; }
 .fora-prox .info span { font-size: var(--t-12); color: var(--texto-2); }
 
+/* ===== erro inline (POST /meu/ciencias falhou — review MAJOR react: sem isso o erro era engolido) ===== */
+.erro-inline { font-size: var(--t-13); color: var(--acento-texto); margin: 0.5rem 0 0.7rem; }
+
 /* ===== cartão de ciência em 1 toque (prova com data/hora) ===== */
 .ciencia { background: color-mix(in srgb, var(--cobalto) 7%, var(--surface-2)); border: 1px solid color-mix(in srgb, var(--cobalto) 28%, var(--linha)); border-radius: var(--raio); padding: 0.9rem 1rem; }
 [data-tema="escuro"] .ciencia { background: color-mix(in srgb, var(--foco) 10%, var(--surface-2)); border-color: color-mix(in srgb, var(--foco) 30%, var(--linha)); }

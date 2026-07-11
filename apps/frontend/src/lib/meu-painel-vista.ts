@@ -33,11 +33,14 @@ export interface HomeVereadorVista {
 /**
  * `painel` (MeuPainelOut) + `sessoes` (lista, hoje sempre `[]` — não há endpoint de listagem de sessões
  * ainda, carry) -> a home derivada. `painel`/`sessoes` ausentes (fetch ainda não resolveu) -> estrutura
- * vazia coerente, nunca lança.
+ * vazia coerente, nunca lança. `agoraIso` OPCIONAL (default = o relógio real) — só existe pra manter
+ * `proximaSessaoFutura` genuinamente pura (review react LOW: sem isso, a função lia `new Date()` por
+ * dentro, então "puro, sem relógio" não era literalmente verdade); os testes fixam `agoraIso` explícito.
  */
 export function derivarHome(
   painel: MeuPainelOut | null | undefined,
-  sessoes: SessaoOut[] | null | undefined
+  sessoes: SessaoOut[] | null | undefined,
+  agoraIso: string = new Date().toISOString()
 ): HomeVereadorVista {
   const proposicoes = [...(painel?.proposicoes ?? [])].sort((a, b) =>
     b.atualizadoEm.localeCompare(a.atualizadoEm)
@@ -51,13 +54,12 @@ export function derivarHome(
     minhasProposicoes: proposicoes,
     meusPareceres,
     ciencias: painel?.ciencias ?? [],
-    proximaSessao: proximaSessaoFutura(sessoes ?? []),
+    proximaSessao: proximaSessaoFutura(sessoes ?? [], agoraIso),
   };
 }
 
-/** A sessão agendada de menor data FUTURA (agora em diante); `null` se nenhuma sessão futura agendada. */
-function proximaSessaoFutura(sessoes: SessaoOut[]): SessaoOut | null {
-  const agoraIso = new Date().toISOString();
+/** A sessão agendada de menor data FUTURA (>= `agoraIso`); `null` se nenhuma sessão futura agendada. */
+function proximaSessaoFutura(sessoes: SessaoOut[], agoraIso: string): SessaoOut | null {
   const futuras = sessoes.filter(
     (s): s is SessaoOut & { "agendada-para": string } =>
       s["agendada-para"] != null && s["agendada-para"] > agoraIso
