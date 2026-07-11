@@ -64,6 +64,18 @@
      :vereador-id (->uuid? (:vereador-id m) :vereador-id)
      :created-by  (:identidade-id ator)}))
 
+(def ^:private campos-meu-voto ["voto"])
+
+(defn meu-voto->dominio
+  "Corpo (wire/in.MeuVoto: so' `voto`) + `ator` + `votacao-id` (UUID coagido do path) -> mapa de dominio
+  PARCIAL p/ Repo/registrar-voto! (o controller injeta o `vereador-id` resolvido do ator antes de gravar —
+  este adapter nao o le nem o gera, ele simplesmente nao existe no wire de entrada)."
+  [ator votacao-id wire-in]
+  (when-not (map? wire-in) (invalido! "corpo deve ser objeto JSON" {:campo :corpo}))
+  (let [m (so-esperados wire-in campos-meu-voto)]
+    (validar! wire/MeuVoto m "corpo de meu-voto invalido")
+    {:id (random-uuid) :votacao-id votacao-id :voto (:voto m) :created-by (:identidade-id ator)}))
+
 (defn encerrar-votacao->dominio
   "Corpo (wire/in.EncerrarVotacao) + `ator` + `votacao-id` (UUID coagido do path) -> mapa de dominio p/
   Repo/encerrar-votacao!. `id` = o votacao-id do path; `updated-by` = o ator."

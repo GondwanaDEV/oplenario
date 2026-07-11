@@ -6,7 +6,8 @@
   PROPRIO modulo (que casa ato + emissao do evento de tempo real na MESMA tx, Slice 1)."
   (:require [oplenario.kernel.autorizacao :as authz]
             [oplenario.legislativo.components.repositorio :as repo]
-            [oplenario.legislativo.logic :as logic]))
+            [oplenario.legislativo.logic :as logic]
+            [oplenario.motor.api :as motor]))
 
 (set! *warn-on-reflection* true)
 
@@ -58,6 +59,50 @@
           ;; 'simbolica' (sem apuracao individual) E qualquer modalidade futura -> nao se registra voto aqui.
           (throw (ex-info "modalidade nao registra votos individuais"
                           {:tipo :validacao/invalido :campos [:modalidade] :modalidade (:modalidade v)})))))))
+
+;; ============================ Onda C3: meu-voto (o vereador vota do proprio celular) ============================
+
+(def ^:private expr-mandato-vigente
+  "tem_mandato_vigente(ator.identidade, hoje())")
+
+(def ^:private expr-presente-nesta-sessao
+  "esta_presente_em(recurso.sessao_id, recurso.vereador_id, agora())")
+
+(defn meu-voto
+  "Onda C3 — o vereador vota do PROPRIO celular. `vereador-id` NUNCA vem do corpo (resolvido do ator via
+  `resolver-vereador`, mesmo contrato anti-forja de `acusar-ciencia`). Authz herdada da sessao (mesma Casa,
+  `sessao-autorizada`) + a AMARRA votacao<->sessao (`votacao-na-sessao`), como a rota da Mesa. Por cima,
+  a POLICY FINA (1a producao real de `motor/politica-dsl`, disciplina 5): mandato vigente + presenca
+  registrada NESTA sessao. Os dois fatos rodam em avaliacoes DSL SEPARADAS (`hoje()` e `agora()` compartilham
+  UM so' slot `:agora` no motor — motor/runtime.clj — nao coexistem numa MESMA expressao; ver
+  docs/superpowers/specs/2026-07-11-onda-c-slice3-cockpit-votacao-design.md §3.2) + dois checks TRIVIAIS em
+  Clojure puro (sem DSL: nao sao fatos resolvidos por nome, so' campos ja carregados) — estado 'aberta' e
+  modalidade != 'secreta' (voto secreto NUNCA passa por aqui, mesmo que a policy DSL nao barrasse: e' regra
+  de negocio de borda, nao so' authz). Qualquer falha -> authz/check! lanca -> 403 generico (nunca detalha
+  qual precondicao falhou). Modalidade 'nominal' -> registra (reusa `repo/registrar-voto!`, MESMO caminho da
+  Mesa); qualquer outra (so' 'simbolica' pode chegar aqui, dado o gate acima) -> :validacao/invalido (400).
+  nil (sessao/votacao inexistente ou de outra sessao, OU ator sem cadastro de vereador) -> borda traduz 404."
+  [repo-leg consultar-sessao resolver-vereador registro ator sessao-id votacao-id hoje instante m]
+  (when-let [vereador-id (resolver-vereador (:ente-id ator) (:identidade-id ator))]
+    (when (sessao-autorizada consultar-sessao ator sessao-id)
+      (let [ente-id (:ente-id ator)]
+        (when-let [v (votacao-na-sessao repo-leg ente-id sessao-id votacao-id)]
+          (when (= "secreta" (:modalidade v))
+            (throw (ex-info "voto secreto nao e' registravel pelo proprio celular"
+                            {:tipo :validacao/invalido :campos [:modalidade] :modalidade "secreta"})))
+          (let [ator-dsl {:identidade (:identidade-id ator)}
+                recurso-dsl {:sessao_id (:sessao-id v) :vereador_id vereador-id}]
+            (repo/transacao repo-leg ente-id
+              (fn [tx]
+                (authz/check! ator-dsl :votacao/meu-voto recurso-dsl
+                  (fn [a r]
+                    (and (= "aberta" (:estado v))
+                         ((motor/politica-dsl {:registro registro :tx tx :expr expr-mandato-vigente :agora hoje}) a r)
+                         ((motor/politica-dsl {:registro registro :tx tx :expr expr-presente-nesta-sessao :agora instante}) a r))))))
+            (case (:modalidade v)
+              "nominal" (repo/registrar-voto! repo-leg ente-id (assoc m :vereador-id vereador-id))
+              (throw (ex-info "modalidade nao registra votos individuais"
+                              {:tipo :validacao/invalido :campos [:modalidade] :modalidade (:modalidade v)})))))))))
 
 ;; ========================= FE Onda A1: fila de relatores pendentes (§16.11) =========================
 

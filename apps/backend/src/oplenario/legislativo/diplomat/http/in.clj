@@ -67,6 +67,21 @@
         (http/json-resposta 201 (adapters-out/voto->wire recibo))
         (http/json-resposta 404 {:erro "votacao nao encontrada nesta sessao"})))))
 
+(defn- meu-voto-handler
+  "POST /sessoes/:id/votacoes/:votacao-id/meu-voto (Onda C3, papel 'vereador'). `hoje`/`instante` resolvidos
+  AQUI, na borda (mesmo padrao de emitir-parecer-handler/`agora`) — o controller nao le o relogio."
+  [repo-leg consultar-sessao resolver-vereador registro relogio]
+  (fn [req]
+    (let [ator (:ator req)
+          sid  (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          vid  (adapters-in/id-param->uuid (get-in req [:path-params :votacao-id]))
+          instante (tempo/agora relogio)
+          hoje (tempo/hoje-de instante zona-civil)
+          m    (adapters-in/meu-voto->dominio ator vid (:json-params req))]
+      (if-let [recibo (controllers/meu-voto repo-leg consultar-sessao resolver-vereador registro ator sid vid hoje instante m)]
+        (http/json-resposta 201 (adapters-out/voto->wire recibo))
+        (http/json-resposta 404 {:erro "vereador sem cadastro vinculado, ou sessao/votacao nao encontrada"})))))
+
 (defn- encerrar-handler
   "POST /sessoes/:id/votacoes/:votacao-id/encerramento. Apura + grava o snapshot (CAS); adapters/out projeta os
   totais. nil (votacao inexistente ou de outra sessao) -> 404."
@@ -371,6 +386,9 @@
       ["/sessoes/:id/votacoes/:votacao-id/votos" :post
        [auth papel it/corpo-json (voto-handler repo-legislativo consultar-sessao)]
        :route-name :legislativo/registrar-voto]
+      ["/sessoes/:id/votacoes/:votacao-id/meu-voto" :post
+       [auth papel-vereador it/corpo-json (meu-voto-handler repo-legislativo consultar-sessao resolver-vereador registro relogio)]
+       :route-name :legislativo/meu-voto]
       ["/sessoes/:id/votacoes/:votacao-id/encerramento" :post
        [auth papel it/corpo-json (encerrar-handler repo-legislativo consultar-sessao)]
        :route-name :legislativo/encerrar-votacao]
