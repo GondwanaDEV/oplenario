@@ -239,7 +239,10 @@ Frontend Next.js 16 (App Router, TS, Tailwind 4, React 19, vitest). Postgres rea
 
 ## Self-Review (cobertura vs §11.2/§11.3)
 
-- ✅ "minhas proposições" (Task 2/6/7) · ✅ "meus pareceres" (Task 2) · ✅ "ciências a acusar via inbox in-app"
+- ✅ "minhas proposições" (Task 2/6/7) · ✅ "meus pareceres" — **so' o READ (Task 2) + o view-model (Task 6,
+  `derivarHome().meusPareceres`, testado); a UI (Task 7) NAO renderiza secao propria** (review MEDIUM react,
+  achado pos-merge — `vereador-app.html` tambem nao mostra essa secao no estado fora-de-sessao; registrado
+  aqui como CARRY explicito, nao "coberto") · ✅ "ciências a acusar via inbox in-app"
   (Task 3/7, append-only = prova) · ✅ "próxima sessão" read-only (Task 6/7) · ✅ papel vereador via dev-token
   (Task 1/5) · ✅ §22.10 preservado (host injeta resolver; nada importa `cadastros`) · ✅ anti-forja (Task 4).
 - ⤳ **Movido p/ C3** (decisão 1): confirmar presença do próprio aparelho (write em-sessão).

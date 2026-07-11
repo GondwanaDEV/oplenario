@@ -234,7 +234,7 @@
     (is (nil? (repo-legislativo/acusar-ciencia! *repo-legislativo* ente
                 {:id (random-uuid) :vereador-id vereador-a :evento-ref uuid-inexistente :tipo "parecer_publicado"}))
         "evento-ref inexistente -> nil, nao insere")
-    (is (= [] (:ciencias (repo-legislativo/meu-painel *repo-legislativo* ente vereador-b)))
+    (is (= 1 (count (:ciencias (repo-legislativo/meu-painel *repo-legislativo* ente vereador-b))))
         "o parecer de vereador-b continua PENDENTE de ciencia — a tentativa forjada de vereador-a nao o consumiu")))
 
 (deftest controller-acusar-ciencia-404-quando-evento-ref-nao-pertine-ao-vereador
