@@ -118,3 +118,26 @@ export function filtrarColunasPorBusca(colunas: ColunaBoard[], busca: string): C
     itens: coluna.itens.filter((item) => itemCorrespondeBusca(item, busca)),
   }));
 }
+
+// Filtro client-side por espécie (facetа "Espécie" do quadro) — pura, mesma convenção das demais funções
+// deste módulo (movida de dentro de page.tsx: era lógica de derivação sem nenhuma cobertura de teste).
+// `tipo` é o valor cru do <option> (ex. "projeto_lei"); comparamos contra `especie` já formatada porque é
+// o que ItemDoBoard carrega.
+export function filtrarColunasPorEspecie(colunas: ColunaBoard[], tipo: string, formatarEspecie: (tipo: string) => string): ColunaBoard[] {
+  if (tipo === "") return colunas;
+  const especie = formatarEspecie(tipo);
+  return colunas.map((coluna) => ({
+    ...coluna,
+    itens: coluna.itens.filter((item) => item.especie === especie),
+  }));
+}
+
+// Teto de itens renderizados de uma vez por coluna antes de exigir "mostrar mais" — a coluna "Concluídas"
+// funde 8 estados terminais distintos (ver ESTADOS_APROVADOS/ESTADOS_ARQUIVADOS acima) e cresce sem limite
+// ao longo da legislatura; sem isso o DOM da coluna acumula centenas de cards de uma vez só.
+export const TETO_ITENS_VISIVEIS_POR_COLUNA = 30;
+
+export function paginarColuna(coluna: ColunaBoard, expandida: boolean): ColunaBoard {
+  if (expandida || coluna.itens.length <= TETO_ITENS_VISIVEIS_POR_COLUNA) return coluna;
+  return { ...coluna, itens: coluna.itens.slice(0, TETO_ITENS_VISIVEIS_POR_COLUNA) };
+}

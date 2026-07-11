@@ -19,33 +19,22 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { comToken } from "@/lib/nav";
 import { useTramitacaoBoard } from "@/lib/use-tramitacao-board";
-import { derivarBoard, filtrarColunasPorBusca, type ColunaBoard } from "@/lib/tramitacao-board-vista";
-import { formatarEspecieProposicao } from "@/lib/proposicoes-vista";
+import {
+  derivarBoard,
+  filtrarColunasPorBusca,
+  filtrarColunasPorEspecie,
+  paginarColuna,
+} from "@/lib/tramitacao-board-vista";
+import { formatarEspecieProposicao, TIPOS_PROPOSICAO } from "@/lib/proposicoes-vista";
 import { TopoInterno } from "../topo";
 import "./tramitacao.css";
-
-const TIPOS_CONHECIDOS = [
-  "projeto_lei",
-  "projeto_lei_complementar",
-  "projeto_resolucao",
-  "projeto_decreto_legislativo",
-  "proposta_emenda_lom",
-  "indicacao",
-  "requerimento",
-  "mocao",
-];
-
-function filtrarPorEspecie(colunas: ColunaBoard[], tipo: string): ColunaBoard[] {
-  if (!tipo) return colunas;
-  const especie = formatarEspecieProposicao(tipo);
-  return colunas.map((c) => ({ ...c, itens: c.itens.filter((i) => i.especie === especie) }));
-}
 
 export default function PaginaTramitacao() {
   const { token } = useAuth();
   const { itens, estado } = useTramitacaoBoard(token);
   const [busca, setBusca] = useState("");
   const [tipoFiltro, setTipoFiltro] = useState("");
+  const [colunasExpandidas, setColunasExpandidas] = useState<Record<string, boolean>>({});
 
   if (estado === "erro") {
     return (
@@ -57,7 +46,11 @@ export default function PaginaTramitacao() {
   }
 
   const colunasBrutas = itens ? derivarBoard(itens) : [];
-  const colunas = filtrarPorEspecie(filtrarColunasPorBusca(colunasBrutas, busca), tipoFiltro);
+  const colunasFiltradas = filtrarColunasPorEspecie(
+    filtrarColunasPorBusca(colunasBrutas, busca),
+    tipoFiltro,
+    formatarEspecieProposicao,
+  );
   const totalItens = itens?.length ?? 0;
 
   return (
@@ -83,7 +76,7 @@ export default function PaginaTramitacao() {
             <label htmlFor="f-tipo">Espécie</label>
             <select id="f-tipo" value={tipoFiltro} onChange={(e) => setTipoFiltro(e.target.value)}>
               <option value="">Todas</option>
-              {TIPOS_CONHECIDOS.map((t) => (
+              {TIPOS_PROPOSICAO.map((t) => (
                 <option key={t} value={t}>
                   {formatarEspecieProposicao(t)}
                 </option>
@@ -106,34 +99,48 @@ export default function PaginaTramitacao() {
 
         {estado === "pronto" && (
           <div className="board" role="region" aria-label="Quadro de tramitação por estágio (rolagem horizontal)" tabIndex={0}>
-            {colunas.map((coluna) => (
-              <section key={coluna.chave} className="coluna" aria-label={`${coluna.titulo} · ${coluna.itens.length} matérias`}>
-                <div className="col-cabe">
-                  <span className={`azulejo-col az-${coluna.azulejo}`} aria-hidden="true" />
-                  <span className="tit">{coluna.titulo}</span>
-                  <span className="cnt">{coluna.itens.length}</span>
-                </div>
-                <div className="col-corpo">
-                  {coluna.itens.length === 0 && <p className="col-vazia">Nenhuma matéria.</p>}
-                  {coluna.itens.map((item) => (
-                    <article className="mat" key={item.proposicaoId}>
-                      <div className="mat-topo">
-                        <span className="mat-num">{item.numero}</span>
-                      </div>
-                      <h3>
-                        <Link href={comToken(`/ficha-materia/${encodeURIComponent(item.proposicaoId)}`, token)}>
-                          {item.ementa}
-                        </Link>
-                      </h3>
-                      <div className="mat-pe">
-                        <span className="selo selo-esp">{item.especie}</span>
-                        <span className="mat-autor">{item.autor}</span>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </section>
-            ))}
+            {colunasFiltradas.map((coluna) => {
+              const expandida = colunasExpandidas[coluna.chave] ?? false;
+              const visivel = paginarColuna(coluna, expandida);
+              const restantes = coluna.itens.length - visivel.itens.length;
+              return (
+                <section key={coluna.chave} className="coluna" aria-label={`${coluna.titulo} · ${coluna.itens.length} matérias`}>
+                  <div className="col-cabe">
+                    <span className={`azulejo-col az-${coluna.azulejo}`} aria-hidden="true" />
+                    <h2 className="tit">{coluna.titulo}</h2>
+                    <span className="cnt">{coluna.itens.length}</span>
+                  </div>
+                  <div className="col-corpo">
+                    {coluna.itens.length === 0 && <p className="col-vazia">Nenhuma matéria.</p>}
+                    {visivel.itens.map((item) => (
+                      <article className="mat" key={item.proposicaoId}>
+                        <div className="mat-topo">
+                          <span className="mat-num">{item.numero}</span>
+                        </div>
+                        <h3>
+                          <Link href={comToken(`/ficha-materia/${encodeURIComponent(item.proposicaoId)}`, token)}>
+                            {item.ementa}
+                          </Link>
+                        </h3>
+                        <div className="mat-pe">
+                          <span className="selo selo-esp">{item.especie}</span>
+                          <span className="mat-autor">{item.autor}</span>
+                        </div>
+                      </article>
+                    ))}
+                    {restantes > 0 && (
+                      <button
+                        type="button"
+                        className="col-mais"
+                        onClick={() => setColunasExpandidas((s) => ({ ...s, [coluna.chave]: true }))}
+                      >
+                        Mostrar mais {restantes} matérias
+                      </button>
+                    )}
+                  </div>
+                </section>
+              );
+            })}
           </div>
         )}
 

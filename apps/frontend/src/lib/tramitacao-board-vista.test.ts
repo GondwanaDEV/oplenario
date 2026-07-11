@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { derivarBoard, itemCorrespondeBusca, filtrarColunasPorBusca } from "./tramitacao-board-vista";
+import {
+  derivarBoard,
+  itemCorrespondeBusca,
+  filtrarColunasPorBusca,
+  filtrarColunasPorEspecie,
+  paginarColuna,
+  TETO_ITENS_VISIVEIS_POR_COLUNA,
+} from "./tramitacao-board-vista";
+import { formatarEspecieProposicao } from "./proposicoes-vista";
 import type { ItemBoardOut } from "./contrato-mesa.gen";
 
 // Onda B Slice 4 (tramitacao-board-vista) — agrupa ItemBoardOut (já vem agrupado/ordenado por
@@ -157,5 +165,54 @@ describe("filtrarColunasPorBusca", () => {
   it("busca vazia -> retorna as colunas intactas", () => {
     const colunas = derivarBoard([item({ proposicaoId: "1", estado: "protocolada" })]);
     expect(filtrarColunasPorBusca(colunas, "")).toEqual(colunas);
+  });
+});
+
+describe("filtrarColunasPorEspecie", () => {
+  it("tipo vazio -> retorna as colunas intactas", () => {
+    const colunas = derivarBoard([item({ proposicaoId: "1", estado: "protocolada", tipo: "projeto_lei" })]);
+    expect(filtrarColunasPorEspecie(colunas, "", formatarEspecieProposicao)).toEqual(colunas);
+  });
+
+  it("filtra item a item por espécie formatada, preservando as colunas mesmo vazias", () => {
+    const colunas = derivarBoard([
+      item({ proposicaoId: "1", estado: "protocolada", tipo: "projeto_lei" }),
+      item({ proposicaoId: "2", estado: "protocolada", tipo: "mocao" }),
+    ]);
+    const filtradas = filtrarColunasPorEspecie(colunas, "projeto_lei", formatarEspecieProposicao);
+    const protocolo = filtradas.find((c) => c.titulo === "Protocolo")!;
+    expect(protocolo.itens.map((i) => i.proposicaoId)).toEqual(["1"]);
+    expect(filtradas.find((c) => c.titulo === "Comissões")!.itens).toEqual([]);
+  });
+
+  it("espécie sem nenhuma matéria correspondente -> coluna fica vazia (não descarta a coluna)", () => {
+    const colunas = derivarBoard([item({ proposicaoId: "1", estado: "protocolada", tipo: "projeto_lei" })]);
+    const filtradas = filtrarColunasPorEspecie(colunas, "mocao", formatarEspecieProposicao);
+    expect(filtradas.find((c) => c.titulo === "Protocolo")!.itens).toEqual([]);
+  });
+});
+
+describe("paginarColuna", () => {
+  function colunaComNItens(n: number) {
+    return derivarBoard(
+      Array.from({ length: n }, (_, i) => item({ proposicaoId: `p${i}`, estado: "protocolada" })),
+    ).find((c) => c.titulo === "Protocolo")!;
+  }
+
+  it("abaixo do teto -> retorna a coluna intacta", () => {
+    const coluna = colunaComNItens(TETO_ITENS_VISIVEIS_POR_COLUNA - 1);
+    expect(paginarColuna(coluna, false)).toEqual(coluna);
+  });
+
+  it("acima do teto e não expandida -> trunca no teto", () => {
+    const coluna = colunaComNItens(TETO_ITENS_VISIVEIS_POR_COLUNA + 20);
+    const paginada = paginarColuna(coluna, false);
+    expect(paginada.itens).toHaveLength(TETO_ITENS_VISIVEIS_POR_COLUNA);
+  });
+
+  it("acima do teto e expandida -> retorna todos os itens", () => {
+    const coluna = colunaComNItens(TETO_ITENS_VISIVEIS_POR_COLUNA + 20);
+    const paginada = paginarColuna(coluna, true);
+    expect(paginada.itens).toHaveLength(TETO_ITENS_VISIVEIS_POR_COLUNA + 20);
   });
 });

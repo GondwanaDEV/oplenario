@@ -27,6 +27,10 @@ const ESPECIE_POR_TIPO: Record<string, string> = {
   mocao: "Moção",
 };
 
+// Única fonte do vocabulário de tipos de proposição conhecidos — reusado por qualquer filtro/seletor de
+// espécie (ex.: tramitacao-board-vista.ts) em vez de cada tela manter sua própria lista hardcoded.
+export const TIPOS_PROPOSICAO = Object.keys(ESPECIE_POR_TIPO);
+
 export type CategoriaSituacao = "tram" | "aguarda" | "aprovada" | "arquivada";
 
 // Exportados (Onda B Slice 3, ficha-materia) — o cabeçalho `.ficha-cab` precisa do MESMO formato "SIGLA

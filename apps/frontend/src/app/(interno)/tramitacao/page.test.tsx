@@ -88,4 +88,44 @@ describe("PaginaTramitacao", () => {
     expect(screen.getByText("Institui o Programa Municipal de Hortas Comunitárias")).toBeTruthy();
     expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls.length).toBe(chamadasAntes);
   });
+
+  it("filtro de Espécie mostra só as matérias do tipo selecionado, sem novo round-trip", async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        itens: [
+          itemFake,
+          { ...itemFake, "proposicao-id": "2", tipo: "mocao", ementa: "Moção de aplausos ao time local", "autor-texto": "Ana Melo" },
+        ],
+      }),
+    }) as Response) as unknown as typeof fetch;
+    renderComProviders("tok-de-teste");
+    await waitFor(() => expect(screen.getByText("Institui o Programa Municipal de Hortas Comunitárias")).toBeTruthy());
+    expect(screen.getByText("Moção de aplausos ao time local")).toBeTruthy();
+    const chamadasAntes = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.length;
+
+    fireEvent.change(screen.getByLabelText("Espécie"), { target: { value: "mocao" } });
+
+    await waitFor(() => expect(screen.queryByText("Institui o Programa Municipal de Hortas Comunitárias")).toBeNull());
+    expect(screen.getByText("Moção de aplausos ao time local")).toBeTruthy();
+    expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls.length).toBe(chamadasAntes);
+  });
+
+  it("coluna com mais matérias que o teto mostra 'Mostrar mais' e expande ao clicar", async () => {
+    const itens = Array.from({ length: 35 }, (_, i) => ({
+      ...itemFake,
+      "proposicao-id": `p${i}`,
+      ementa: `Matéria número ${i}`,
+    }));
+    global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ itens }) }) as Response) as unknown as typeof fetch;
+    renderComProviders("tok-de-teste");
+    await waitFor(() => expect(screen.getByText("Matéria número 0")).toBeTruthy());
+
+    expect(screen.queryByText("Matéria número 30")).toBeNull();
+    const botao = screen.getByRole("button", { name: /mostrar mais 5 matérias/i });
+
+    fireEvent.click(botao);
+
+    await waitFor(() => expect(screen.getByText("Matéria número 30")).toBeTruthy());
+  });
 });
