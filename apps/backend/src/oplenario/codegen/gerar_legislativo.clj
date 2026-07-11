@@ -6,9 +6,12 @@
   Default = target/generated-ts/contrato-legislativo.gen.ts."
   (:require [clojure.java.io :as io]
             [oplenario.codegen.malli-ts :as ts]
+            [oplenario.legislativo.wire.out.documento :as documento]
+            [oplenario.legislativo.wire.out.documento-modelo :as documento-modelo]
             [oplenario.legislativo.wire.out.ficha-materia :as ficha]
             [oplenario.legislativo.wire.out.parecer :as parecer]
-            [oplenario.legislativo.wire.out.proposicao :as proposicao]))
+            [oplenario.legislativo.wire.out.proposicao :as proposicao]
+            [oplenario.legislativo.wire.out.protocolo-geral :as protocolo-geral]))
 
 (def manifesto
   [["ProposicaoResumoOut" proposicao/ProposicaoResumoOut]
@@ -24,7 +27,13 @@
    ;; Onda B Slice 5 (editor de parecer) — schema PROPRIO (nao reusa ParecerResumoOut, que e' o resumo
    ;; dentro da ficha da materia).
    ["ObjetoResumoOut" parecer/ObjetoResumoOut]
-   ["ParecerEditorOut" parecer/ParecerEditorOut]])
+   ["ParecerEditorOut" parecer/ParecerEditorOut]
+   ;; Onda B Slice 6 (expediente: documentos + protocolo geral) — schemas PROPRIOS.
+   ["DocumentoOut" documento/DocumentoOut]
+   ["DocumentoModeloOut" documento-modelo/DocumentoModeloOut]
+   ["ListaModelosOut" documento-modelo/ListaModelosOut]
+   ["ProtocoloGeralOut" protocolo-geral/ProtocoloGeralOut]
+   ["LivroProtocoloOut" protocolo-geral/LivroProtocoloOut]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))
 

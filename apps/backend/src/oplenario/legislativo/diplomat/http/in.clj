@@ -15,12 +15,16 @@
   (:require [oplenario.http :as http]
             [oplenario.interceptors :as it]
             [oplenario.kernel.tempo :as tempo]
+            [oplenario.legislativo.adapters.in.documento :as adapters-in-documento]
             [oplenario.legislativo.adapters.in.parecer :as adapters-in-parecer]
             [oplenario.legislativo.adapters.in.proposicao :as adapters-in-proposicao]
             [oplenario.legislativo.adapters.in.votacao :as adapters-in]
+            [oplenario.legislativo.adapters.out.documento :as adapters-out-documento]
+            [oplenario.legislativo.adapters.out.documento-modelo :as adapters-out-documento-modelo]
             [oplenario.legislativo.adapters.out.ficha-materia :as adapters-out-ficha]
             [oplenario.legislativo.adapters.out.parecer :as adapters-out-parecer]
             [oplenario.legislativo.adapters.out.proposicao :as adapters-out-proposicao]
+            [oplenario.legislativo.adapters.out.protocolo-geral :as adapters-out-protocolo]
             [oplenario.legislativo.adapters.out.relator-pendente :as adapters-out-relator]
             [oplenario.legislativo.adapters.out.votacao :as adapters-out]
             [oplenario.legislativo.controllers :as controllers])
@@ -178,6 +182,80 @@
                                      (controllers/buscar-parecer-editor repo-leg ente-id id))))
         (http/json-resposta 404 {:erro "parecer nao encontrado"})))))
 
+;; ========================= Onda B Slice 6: expediente (documentos + protocolo geral) =========================
+
+(defn- listar-modelos-documento-handler
+  "GET /legislativo/documento-modelos (Onda B Slice 6). Seletor da aba 'Gerar documento' — so' os ATIVOS."
+  [repo-leg]
+  (fn [req]
+    (let [ente-id (:ente-id (:ator req))]
+      (http/json-resposta 200 (adapters-out-documento-modelo/modelos->wire
+                                 (controllers/listar-modelos-documento repo-leg ente-id))))))
+
+(defn- gerar-documento-handler
+  "POST /legislativo/documentos. `m` ja' carrega o `:id` novo (gerado pelo adapters/in) — o controller resolve
+  o modelo (404 se inexistente no tenant) e gera; o handler RE-LE pelo mesmo id p/ o corpo 201 completo (mesmo
+  padrao de criar-proposicao-handler)."
+  [repo-leg]
+  (fn [req]
+    (let [ator (:ator req) ente-id (:ente-id ator)
+          m (adapters-in-documento/gerar-documento->dominio ator (:json-params req))]
+      (if (controllers/gerar-documento repo-leg ente-id m)
+        (let [{:keys [documento protocolo]} (controllers/buscar-documento-editor repo-leg ente-id (:id m))]
+          (http/json-resposta 201 (adapters-out-documento/documento->wire documento protocolo)))
+        (http/json-resposta 404 {:erro "modelo de documento nao encontrado"})))))
+
+(defn- detalhe-documento-handler
+  "GET /legislativo/documentos/:id (Onda B Slice 6). nil (documento inexistente ou de outro tenant) -> 404."
+  [repo-leg]
+  (fn [req]
+    (let [ente-id (:ente-id (:ator req))
+          id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [{:keys [documento protocolo]} (controllers/buscar-documento-editor repo-leg ente-id id)]
+        (http/json-resposta 200 (adapters-out-documento/documento->wire documento protocolo))
+        (http/json-resposta 404 {:erro "documento nao encontrado"})))))
+
+(defn- editar-documento-handler
+  "PATCH /legislativo/documentos/:id. PRE-CHECK 404 ANTES de escrever se o documento nao existir (mesmo
+  contrato de salvar-rascunho-parecer-handler — evita a ex-info sem :tipo do db/ cair no fallback 500)."
+  [repo-leg]
+  (fn [req]
+    (let [ator (:ator req) ente-id (:ente-id ator)
+          id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-not (controllers/buscar-documento-editor repo-leg ente-id id)
+        (http/json-resposta 404 {:erro "documento nao encontrado"})
+        (let [m (adapters-in-documento/editar-documento->dominio ator id (:json-params req))]
+          (controllers/editar-documento repo-leg ente-id m)
+          (let [{:keys [documento protocolo]} (controllers/buscar-documento-editor repo-leg ente-id id)]
+            (http/json-resposta 200 (adapters-out-documento/documento->wire documento protocolo))))))))
+
+(defn- protocolar-documento-handler
+  "POST /legislativo/documentos/:id/protocolo — o CTA 'Protocolar e numerar' do mockup. PRE-CHECK 404 (mesmo
+  contrato das rotas irmas). `ano` (kernel/tempo, injetavel em teste) resolve a data civil AQUI, na borda —
+  mesmo padrao de emitir-parecer-handler/`agora`. Documento ja' 'emitido' (re-protocolar) ou lock-version
+  desatualizado -> `:validacao/invalido` no db/documento.clj (Repo/protocolar-documento!) -> 400, nunca 500."
+  [repo-leg relogio]
+  (fn [req]
+    (let [ator (:ator req) ente-id (:ente-id ator)
+          id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          ano (.getYear (tempo/hoje relogio zona-civil))]
+      (if-not (controllers/buscar-documento-editor repo-leg ente-id id)
+        (http/json-resposta 404 {:erro "documento nao encontrado"})
+        (let [m (adapters-in-documento/protocolar-documento->dominio ator id (:json-params req))]
+          (controllers/protocolar-documento repo-leg ente-id ano m)
+          (let [{:keys [documento protocolo]} (controllers/buscar-documento-editor repo-leg ente-id id)]
+            (http/json-resposta 200 (adapters-out-documento/documento->wire documento protocolo))))))))
+
+(defn- protocolo-geral-handler
+  "GET /legislativo/protocolo-geral (Onda B Slice 6, feature 3.23) — o 'Livro do Protocolo Geral' do ano
+  corrente (kernel/tempo, mesmo padrao de protocolar-documento-handler)."
+  [repo-leg relogio]
+  (fn [req]
+    (let [ente-id (:ente-id (:ator req))
+          ano (.getYear (tempo/hoje relogio zona-civil))]
+      (http/json-resposta 200 (adapters-out-protocolo/livro->wire
+                                 (controllers/listar-protocolo-do-ano repo-leg ente-id ano))))))
+
 (defn rotas
   "Fragmento de rotas da votacao ao vivo + proposicoes + editor de parecer (table syntax Pedestal). Recebe o
   interceptor `auth` (compartilhado), o `repo-legislativo` (Repo-Component do proprio modulo),
@@ -218,7 +296,22 @@
        :route-name :legislativo/salvar-rascunho-parecer]
       ["/legislativo/pareceres/:id/emissao" :post
        [auth papel it/corpo-json (emitir-parecer-handler repo-legislativo registro relogio)]
-       :route-name :legislativo/emitir-parecer]}))
+       :route-name :legislativo/emitir-parecer]
+      ["/legislativo/documento-modelos" :get [auth papel (listar-modelos-documento-handler repo-legislativo)]
+       :route-name :legislativo/listar-modelos-documento]
+      ["/legislativo/documentos" :post
+       [auth papel it/corpo-json (gerar-documento-handler repo-legislativo)]
+       :route-name :legislativo/gerar-documento]
+      ["/legislativo/documentos/:id" :get [auth papel (detalhe-documento-handler repo-legislativo)]
+       :route-name :legislativo/detalhe-documento]
+      ["/legislativo/documentos/:id" :patch
+       [auth papel it/corpo-json (editar-documento-handler repo-legislativo)]
+       :route-name :legislativo/editar-documento]
+      ["/legislativo/documentos/:id/protocolo" :post
+       [auth papel it/corpo-json (protocolar-documento-handler repo-legislativo relogio)]
+       :route-name :legislativo/protocolar-documento]
+      ["/legislativo/protocolo-geral" :get [auth papel (protocolo-geral-handler repo-legislativo relogio)]
+       :route-name :legislativo/protocolo-geral]}))
 
 ;; ========================= FE Onda A1: fila de relatores pendentes (§16.11) =========================
 

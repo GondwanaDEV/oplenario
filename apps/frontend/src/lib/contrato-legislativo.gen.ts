@@ -106,3 +106,43 @@ export interface ParecerEditorOut {
   textoEstado: "rascunho" | "vazio" | "vigente";
   textoNumeroVersao?: number | null;
 }
+
+export interface DocumentoOut {
+  id: string;
+  modeloId: string;
+  tipoDocumento: string;
+  assunto: string;
+  corpo: string;
+  estado: string;
+  protocoloGeralId?: string | null;
+  protocoloNumero?: number | null;
+  protocoloAno?: number | null;
+  lockVersion: number;
+  criadoEm: string;
+}
+
+export interface DocumentoModeloOut {
+  id: string;
+  chave: string;
+  nome: string;
+  tipoDocumento: string;
+}
+
+export interface ListaModelosOut {
+  itens: DocumentoModeloOut[];
+}
+
+export interface ProtocoloGeralOut {
+  id: string;
+  numero: number;
+  ano: number;
+  objetoTipo: string;
+  objetoId?: string | null;
+  sentido: string;
+  assunto: string;
+  protocoladoEm: string;
+}
+
+export interface LivroProtocoloOut {
+  itens: ProtocoloGeralOut[];
+}

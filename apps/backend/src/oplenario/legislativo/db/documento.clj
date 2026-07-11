@@ -50,13 +50,18 @@
 
 (defn editar-rascunho!
   "Reescreve o corpo/assunto/protocolo enquanto 'rascunho' (CAS). Guard fail-closed: documento emitido nao
-  edita (o trigger tambem barra, mas a mensagem aqui e' a causa real). Devolve {:id}."
+  edita (o trigger tambem barra, mas a mensagem aqui e' a causa real). `:tipo :validacao/invalido` no guard
+  de estado e no conflito de CAS (nao na inexistencia — essa e' pre-checada pelo diplomat antes de chamar
+  esta fn, mesmo contrato de db/proposicao.clj/editar!): sem a tag, o interceptor global `erro` so' mapeia
+  :validacao/invalido -> 400 e o resto cai no fallback -> 500 opaco, num caminho (CAS perdido por concorrencia,
+  ou reenvio apos emissao) que e' fluxo normal de PATCH, nao bug de servidor. Devolve {:id}."
   [tx {:keys [id ente-id corpo assunto protocolo-geral-id updated-by lock-version]}]
   (let [{:keys [estado]} (estado+lock tx ente-id id)]
     (when (nil? estado)
       (throw (ex-info "editar-rascunho!: documento inexistente" {:id id :ente-id ente-id})))
     (when (not= "rascunho" estado)
-      (throw (ex-info "editar-rascunho!: so se edita um documento 'rascunho'" {:id id :estado estado})))
+      (throw (ex-info "editar-rascunho!: so se edita um documento 'rascunho'"
+                      {:tipo :validacao/invalido :id id :estado estado})))
     (let [r (jdbc/execute-one! tx
               (sql/format {:update :legislativo.documento
                            :set (cond-> {:updated_by updated-by :atualizado_em [:now] :lock_version [:+ :lock_version 1]}
@@ -65,7 +70,8 @@
                                   (some? protocolo-geral-id) (assoc :protocolo_geral_id protocolo-geral-id))
                            :where [:and [:= :ente_id ente-id] [:= :id id] [:= :lock_version lock-version]]}))]
       (when (zero? (:next.jdbc/update-count r 0))
-        (throw (ex-info "editar-rascunho!: conflito de lock_version ou inexistente" {:id id :lock-version lock-version})))
+        (throw (ex-info "editar-rascunho!: conflito de lock_version ou inexistente"
+                        {:tipo :validacao/invalido :id id :lock-version lock-version})))
       {:id id})))
 
 (defn emitir!
@@ -81,7 +87,8 @@
     (when (nil? estado)
       (throw (ex-info "emitir!: documento inexistente" {:id id :ente-id ente-id})))
     (when (not= "rascunho" estado)
-      (throw (ex-info "emitir!: so se emite um documento 'rascunho'" {:id id :estado estado})))
+      (throw (ex-info "emitir!: so se emite um documento 'rascunho'"
+                      {:tipo :validacao/invalido :id id :estado estado})))
     (let [r (jdbc/execute-one! tx
               (sql/format {:update :legislativo.documento
                            :set (cond-> {:estado "emitido" :emitido_em [:now] :emitido_por emitido-por
@@ -89,5 +96,6 @@
                                   (some? protocolo-geral-id) (assoc :protocolo_geral_id protocolo-geral-id))
                            :where [:and [:= :ente_id ente-id] [:= :id id] [:= :lock_version lock-version]]}))]
       (when (zero? (:next.jdbc/update-count r 0))
-        (throw (ex-info "emitir!: conflito de lock_version ou inexistente" {:id id :lock-version lock-version})))
+        (throw (ex-info "emitir!: conflito de lock_version ou inexistente"
+                        {:tipo :validacao/invalido :id id :lock-version lock-version})))
       {:id id :estado "emitido"})))

@@ -163,3 +163,58 @@
           (throw (ex-info "votacao simbolica exige resultado explicito"
                           {:tipo :validacao/invalido :campos [:resultado]})))
         (repo/encerrar-votacao! repo-leg ente-id m)))))
+
+;; ========================= Onda B Slice 6: expediente (documentos + protocolo geral) =========================
+
+(defn listar-modelos-documento
+  "Onda B Slice 6 — modelos ATIVOS do tenant p/ o seletor da aba 'Gerar documento' (mesmo gate grosso das
+  rotas irmas, papel 'secretario', sem policy fina adicional)."
+  [repo-legislativo ente-id]
+  (repo/listar-modelos-ativos repo-legislativo ente-id))
+
+(defn gerar-documento
+  "Onda B Slice 6 — gera um documento a partir de um modelo (feature 3.22, merge do dominio). Busca o modelo
+  PRIMEIRO — `tipo-documento`/`corpo-template` vem DAI, nunca do cliente (o wire/adapters-in ja' fecha essa
+  porta; este controller e' quem RESOLVE o modelo de fato). nil se o modelo nao existe no tenant (-> 404 na
+  borda, mesmo contrato das leituras irmas). `m` ja' vem coagido pelo adapters/in (id/modelo-id/assunto/
+  dados/created-by, com `:id` JA' gerado — o diplomat re-le o documento por esse mesmo id apos o sucesso).
+  `logic/renderizar-documento` (via Repo/gerar-documento!) lanca `:validacao/invalido` (-> 400) se `dados` nao
+  cobrir algum placeholder do template — nunca 500 por um formulario incompleto."
+  [repo-legislativo ente-id m]
+  (when-let [modelo (repo/buscar-modelo repo-legislativo ente-id (:modelo-id m))]
+    (repo/gerar-documento! repo-legislativo ente-id
+                           (merge m {:ente-id ente-id
+                                     :tipo-documento (:tipo-documento modelo)
+                                     :corpo-template (:corpo-template modelo)}))))
+
+(defn buscar-documento-editor
+  "Onda B Slice 6 — leitura agregada p/ a aba 'Gerar documento': {:documento :protocolo}. `:protocolo` vem
+  ENRIQUECIDO (numero/ano) SE o documento ja' tiver `protocolo-geral-id` (pos 'Protocolar e numerar'); nil
+  enquanto 'rascunho' — o editor nao faz um segundo GET so' pra mostrar o numero apos protocolar. nil
+  (documento inexistente no tenant) -> 404 na borda, mesmo contrato de buscar-parecer-editor."
+  [repo-legislativo ente-id id]
+  (when-let [documento (repo/buscar-documento repo-legislativo ente-id id)]
+    {:documento documento
+     :protocolo (when-let [pid (:protocolo-geral-id documento)]
+                  (repo/buscar-protocolo repo-legislativo ente-id pid))}))
+
+(defn editar-documento
+  "Onda B Slice 6 — reescreve corpo/assunto de um documento 'rascunho' (CAS). Mesmo gate grosso; `m` ja' vem
+  coagido pelo adapters/in."
+  [repo-legislativo ente-id m]
+  (repo/editar-documento! repo-legislativo ente-id m))
+
+(defn protocolar-documento
+  "Onda B Slice 6 — o CTA 'Protocolar e numerar' do mockup: numera no Protocolo Geral (objeto-tipo
+  'documento', sentido 'expedido') E emite o documento (rascunho -> emitido), 1 tx (Repo/protocolar-
+  documento!). `ano` e' a data civil RESOLVIDA PELO DIPLOMAT (kernel/tempo — mesmo padrao de
+  emitir-parecer/`agora`); este controller so' junta ao `m` ja' coagido pelo adapters/in (documento-id/
+  lock-version/ator-id)."
+  [repo-legislativo ente-id ano m]
+  (repo/protocolar-documento! repo-legislativo ente-id (assoc m :ano ano)))
+
+(defn listar-protocolo-do-ano
+  "Onda B Slice 6 — o 'Livro do Protocolo Geral' (feature 3.23) do ano corrente, mesmo gate grosso. `ano`
+  resolvido pelo diplomat (kernel/tempo), mesmo padrao de protocolar-documento."
+  [repo-legislativo ente-id ano]
+  (repo/protocolos-do-ano repo-legislativo ente-id ano))

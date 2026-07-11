@@ -166,7 +166,10 @@
   "MERGE do dominio no template (feature 3.22): substitui cada placeholder {{chave}} pelo valor em `dados`
   (mapa chave-string -> valor). FAIL-CLOSED: placeholder sem valor correspondente LANCA — um documento legal
   nao sai com campo nao-preenchido (mesma disciplina da URN). `dados` = FATOS resolvidos UPSTREAM (cadastro
-  etc.), nao JOIN cross-schema (§22.10). Devolve o corpo renderizado."
+  etc.), nao JOIN cross-schema (§22.10). O placeholder-ausente e' `:tipo :validacao/invalido` (Onda B Slice 6
+  — desfecho ESPERADO de um POST /legislativo/documentos com `dados` incompleto, nao bug de servidor; o
+  interceptor global `erro` mapeia -> 400, mesma disciplina de db/documento.clj/editar-rascunho!). Devolve o
+  corpo renderizado."
   [template dados]
   (when (nil? template)
     (throw (ex-info "renderizar-documento: corpo-template nao pode ser nil" {})))
@@ -176,7 +179,7 @@
                  (let [v (get dados chave)]
                    (when (nil? v)
                      (throw (ex-info "renderizar-documento: placeholder sem valor em dados (campo nao-preenchido)"
-                                     {:chave chave})))
+                                     {:tipo :validacao/invalido :chave chave})))
                    (str v)))))
 
 (def limite-inline-bytes
