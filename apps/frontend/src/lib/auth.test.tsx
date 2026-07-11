@@ -7,6 +7,11 @@ function Sonda() {
   return <div data-testid="token">{token ?? "sem-token"}</div>;
 }
 
+function SondaPapeis() {
+  const { papeis } = useAuth();
+  return <div data-testid="papeis">{papeis.join(",")}</div>;
+}
+
 // Node 22 (ERR_INVALID_OBJECT_DEFINE_PROPERTY): process.env exige descriptor com writable+enumerable+
 // configurable TODOS true — o rascunho do brief só passava `configurable`, o que quebra nesta versão de
 // Node (writable/enumerable ficam false por default no Object.defineProperty). Helper local fixa isso
@@ -55,5 +60,35 @@ describe("AuthProvider/useAuth", () => {
       </AuthProvider>
     );
     expect(screen.getByTestId("token").textContent).toBe("sem-token");
+  });
+
+  it("papeis vem do campo 'papeis' do JSON do token", () => {
+    setNodeEnv("test");
+    render(
+      <AuthProvider tokenQuery='{"sub":"u","papeis":["vereador"]}'>
+        <SondaPapeis />
+      </AuthProvider>
+    );
+    expect(screen.getByTestId("papeis").textContent).toBe("vereador");
+  });
+
+  it("papeis vazio quando o token nao tem o campo", () => {
+    setNodeEnv("test");
+    render(
+      <AuthProvider tokenQuery='{"sub":"u"}'>
+        <SondaPapeis />
+      </AuthProvider>
+    );
+    expect(screen.getByTestId("papeis").textContent).toBe("");
+  });
+
+  it("papeis vazio quando nao ha token nenhum", () => {
+    setNodeEnv("test");
+    render(
+      <AuthProvider tokenQuery={null}>
+        <SondaPapeis />
+      </AuthProvider>
+    );
+    expect(screen.getByTestId("papeis").textContent).toBe("");
   });
 });
