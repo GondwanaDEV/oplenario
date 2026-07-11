@@ -114,7 +114,7 @@ export function indexarProposicoesPorId(proposicoes: ProposicaoResumoOut[]): Map
 // página de /proposicoes buscada (teto 100, o máximo do backend) não cobre o total do tenant — nunca finge
 // cobertura completa em silêncio. ----------
 
-const ESTADOS_PRONTAS_PARA_PAUTA = new Set(["em_pauta", "aguardando_pauta"]);
+const ESTADOS_PRONTAS_PARA_PAUTA = new Set(["aguardando_pauta"]);
 
 export interface ProntasForaDaPauta {
   itens: ProposicaoResumoOut[];

@@ -167,6 +167,7 @@ function ConteudoPautaConvocacao({ token }: { token: string | null }) {
             <aside className="rail" aria-label="Disponíveis e convocação">
               <div className="card disp">
                 <h3>Prontas, fora da pauta</h3>
+                {estadoProposicoes === "carregando" && <p role="status">Carregando…</p>}
                 {estadoProposicoes === "erro" && <p className="col-vazia">Não foi possível carregar.</p>}
                 {estadoProposicoes === "pronto" && rail.itens.length === 0 && (
                   <p className="col-vazia">Nenhuma matéria pronta fora da pauta.</p>

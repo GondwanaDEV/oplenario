@@ -150,7 +150,7 @@ describe("derivarProntasForaDaPauta", () => {
   it("filtra por estado 'pronta para pauta' e exclui quem já está na pauta atual", () => {
     const props = [
       proposicao({ id: "p1", estado: "aguardando_pauta" }),
-      proposicao({ id: "p2", estado: "em_pauta" }),
+      proposicao({ id: "p2", estado: "aguardando_pauta" }),
       proposicao({ id: "p3", estado: "em_comissoes" }),
     ];
     const pauta: PautaOut = { sessaoId: "s1", itens: [pautaItem({ id: "i1", fase: "ordem_do_dia", tipoItem: "proposicao", proposicaoId: "p2", ordem: 1 })] };
