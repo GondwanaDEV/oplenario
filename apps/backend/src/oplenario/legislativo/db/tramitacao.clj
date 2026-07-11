@@ -74,15 +74,26 @@
                             :contexto (some-> contexto comum/->jsonb) :ator_id ator-id :efetivado_em [:now]}]
                   :returning [:ocorrido_em]}))))
 
-(defn historico-da-proposicao [tx ente-id proposicao-id]
-  (comum/linhas->kebab
-    (jdbc/execute! tx
-      ;; :contexto incluido (o payload do gatilho — quem/refs externas) p/ a visao de auditoria nao
-      ;; perder a carga da transicao (e' persistido por registrar-transicao!).
-      (sql/format {:select [:id :proposicao_id :template_id :de_estado :para_estado :gatilho :contexto :ator_id :ocorrido_em]
-                   :from [:legislativo.proposicao_transicao_historico]
-                   :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]]
-                   :order-by [[:ocorrido_em :asc]]}))))
+(defn historico-da-proposicao
+  "Sem `limite`: TODO o historico, ASC (comportamento historico, callers existentes preservados). Com
+  `limite` (review MAJOR fe-9-ficha-materia): empurra o teto ao SQL — `ORDER BY ocorrido_em DESC LIMIT
+  limite` aproveita `idx_transicao_hist_proposicao` (ente_id,proposicao_id,ocorrido_em) e traz os N MAIS
+  RECENTES (nao os N mais antigos que um `take` em memoria sobre o resultado ASC descartaria); revertido a
+  ASC antes de devolver — o CONTRATO de ordem (cronologica) e' o MESMO com ou sem limite, so' o conjunto
+  muda (recente-o-bastante em vez de tudo)."
+  ([tx ente-id proposicao-id] (historico-da-proposicao tx ente-id proposicao-id nil))
+  ([tx ente-id proposicao-id limite]
+   ;; :contexto incluido (o payload do gatilho — quem/refs externas) p/ a visao de auditoria nao
+   ;; perder a carga da transicao (e' persistido por registrar-transicao!).
+   (let [base {:select [:id :proposicao_id :template_id :de_estado :para_estado :gatilho :contexto :ator_id :ocorrido_em]
+               :from [:legislativo.proposicao_transicao_historico]
+               :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]]}
+         linhas (comum/linhas->kebab
+                  (jdbc/execute! tx
+                    (sql/format (if limite
+                                  (assoc base :order-by [[:ocorrido_em :desc]] :limit limite)
+                                  (assoc base :order-by [[:ocorrido_em :asc]])))))]
+     (if limite (vec (reverse linhas)) linhas))))
 
 (defn- estado+lock
   "Le estado+lock_version da proposicao SOB FOR UPDATE: serializa transicoes concorrentes na MESMA

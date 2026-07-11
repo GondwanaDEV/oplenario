@@ -1,17 +1,22 @@
 (ns oplenario.legislativo.diplomat.http.in
-  "Fronteira de IO HTTP de ENTRADA do legislativo (§22.10 diplomat/http/in, ADR-0001): DUAS verticais moram
-  aqui. (1) a votacao ao vivo (F4 Slice 3) — abrir / registrar voto / encerrar. A rota mora AQUI (legislativo
-  e' o DONO do agregado votacao + da tx que casa ato+emissao, Slice 1), nao no `sessoes` — espelha o SSE
-  `/sessoes/:id/plenario` que mora no `tempo_real` (prefixo de URL != dono do modulo). (2) GET
-  /legislativo/proposicoes (Onda B Slice 1) — a listagem tenant-wide de proposicoes, so' o gate grosso (papel
-  'secretario'), sem authz herdada de sessao. O diplomat e' a UNICA camada que cruza o gate de borda
-  (adapters/in na entrada, adapters/out na saida); o controller trabalha so em models. Na vertical de votacao a
-  authz e' HERDADA do recurso SESSAO via `consultar-sessao` INJETADA pelo host (legislativo NAO importa
-  sessoes, §22.10): a grossa (exige-papel) na rota, a fina (policy.check/pode-dirigir-votacao?) no controller."
+  "Fronteira de IO HTTP de ENTRADA do legislativo (§22.10 diplomat/http/in, ADR-0001): TRES verticais moram
+  aqui (docstring atualizada — review MENOR fe-9-ficha-materia: a lista estava presa em 'DUAS verticais' e
+  ja' nao refletia a silhueta real das rotas). (1) a votacao ao vivo (F4 Slice 3) — abrir / registrar voto /
+  encerrar. A rota mora AQUI (legislativo e' o DONO do agregado votacao + da tx que casa ato+emissao, Slice
+  1), nao no `sessoes` — espelha o SSE `/sessoes/:id/plenario` que mora no `tempo_real` (prefixo de URL !=
+  dono do modulo). (2) CRUD+detalhe de proposicoes (Onda B Slices 1-2) — listar (tenant-wide, paginado),
+  criar, detalhe, editar (PATCH parcial + versao 'edicao'). (3) ficha da materia (Onda B Slice 3) — leitura
+  agregada cross-eixo (proposicao+texto+tramitacao+apensadas+emendas+pareceres) NUMA rota so'. Todas so' o
+  gate grosso (papel 'secretario'), sem authz herdada de sessao. O diplomat e' a UNICA camada que cruza o
+  gate de borda (adapters/in na entrada, adapters/out na saida); o controller trabalha so em models. Na
+  vertical de votacao a authz e' HERDADA do recurso SESSAO via `consultar-sessao` INJETADA pelo host
+  (legislativo NAO importa sessoes, §22.10): a grossa (exige-papel) na rota, a fina
+  (policy.check/pode-dirigir-votacao?) no controller."
   (:require [oplenario.http :as http]
             [oplenario.interceptors :as it]
             [oplenario.legislativo.adapters.in.proposicao :as adapters-in-proposicao]
             [oplenario.legislativo.adapters.in.votacao :as adapters-in]
+            [oplenario.legislativo.adapters.out.ficha-materia :as adapters-out-ficha]
             [oplenario.legislativo.adapters.out.proposicao :as adapters-out-proposicao]
             [oplenario.legislativo.adapters.out.relator-pendente :as adapters-out-relator]
             [oplenario.legislativo.adapters.out.votacao :as adapters-out]
@@ -88,6 +93,22 @@
         (http/json-resposta 200 (adapters-out-proposicao/detalhe->wire proposicao texto))
         (http/json-resposta 404 {:erro "proposicao nao encontrada"})))))
 
+(defn- ficha-materia-handler
+  "GET /legislativo/proposicoes/:id/ficha (Onda B Slice 3). Mesmo gate grosso das rotas irmas (papel
+  'secretario'); nil (proposicao inexistente ou de outro tenant) -> 404, nunca vaza. O diplomat compoe os
+  DOIS adapters/out (proposicao p/ o cabecalho + ficha-materia p/ o envelope) — adapters/ nunca chama outro
+  adapters/ (ADR-0001 §3). `:texto` ja' chega EXTRAIDO do controller (string/nil — review MENOR
+  fe-9-ficha-materia: o diplomat nunca decide nome de campo do model, so' compoe)."
+  [repo-leg]
+  (fn [req]
+    (let [ente-id (:ente-id (:ator req))
+          id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [{:keys [proposicao texto] :as ficha} (controllers/buscar-ficha-materia repo-leg ente-id id)]
+        (http/json-resposta 200 (adapters-out-ficha/ficha->wire
+                                   (adapters-out-proposicao/detalhe->wire proposicao texto)
+                                   ficha))
+        (http/json-resposta 404 {:erro "proposicao nao encontrada"})))))
+
 (defn- editar-proposicao-handler
   "PATCH /legislativo/proposicoes/:id. PRE-CHECK via `buscar-proposicao-ficha` ANTES de editar — 404 imediato
   se a proposicao nao existir (mesmo contrato de 404 do GET de detalhe — nunca 500). Sem o pre-check,
@@ -132,6 +153,8 @@
        :route-name :legislativo/criar-proposicao]
       ["/legislativo/proposicoes/:id" :get [auth papel (detalhe-proposicao-handler repo-legislativo)]
        :route-name :legislativo/detalhe-proposicao]
+      ["/legislativo/proposicoes/:id/ficha" :get [auth papel (ficha-materia-handler repo-legislativo)]
+       :route-name :legislativo/ficha-materia]
       ["/legislativo/proposicoes/:id" :patch
        [auth papel it/corpo-json (editar-proposicao-handler repo-legislativo)]
        :route-name :legislativo/editar-proposicao]}))

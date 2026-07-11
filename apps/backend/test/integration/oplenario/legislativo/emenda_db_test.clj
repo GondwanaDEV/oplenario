@@ -128,6 +128,29 @@
           (is (= "aplicacao_emenda" (:origem-versao ver)) "origem cravada por aprovar! (override ignorado)")
           (is (= (:id e) (:origem-ref ver)) "origem_ref aponta a emenda (override ignorado)"))))))
 
+(deftest listar-por-mae-com-limite-traz-as-mais-recentes-nao-as-mais-antigas
+  ;; review MAJOR fe-9-ficha-materia: o teto anterior (Repo `take` em memoria sobre o ASC) preservava as
+  ;; emendas de numero_local MAIS BAIXO (mais antigas) e descartava as de numero_local mais alto (mais
+  ;; recentes). Prova: 60 emendas da MESMA mae (numero_local 1..60, ordinal ja' e' cronologico por
+  ;; construcao — nao precisa de timestamp explicito); com limite=50 a de numero_local 60 (mais recente)
+  ;; sobrevive, a de numero_local 1 (mais antiga) e' descartada, ordem ASC preservada.
+  (let [ente (random-uuid) mae (atom nil)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (reset! mae (protocolar! tx ente))
+        (dotimes [_ 60] (emendar! tx ente @mae {}))))
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [todas (em/listar-por-mae tx ente @mae)
+              limitadas (em/listar-por-mae tx ente @mae 50)]
+          (is (= 60 (count todas)) "sem limite: todas as emendas")
+          (is (= 50 (count limitadas)) "com limite: o SQL aplica o teto")
+          (is (= 60 (:numero-local (last limitadas))) "a emenda MAIS RECENTE (numero_local 60) sobrevive")
+          (is (not-any? #(= 1 (:numero-local %)) limitadas)
+              "a emenda MAIS ANTIGA (numero_local 1) foi descartada")
+          (is (= (range 11 61) (map :numero-local limitadas))
+              "as 50 mais recentes (numero_local 11..60), em ordem ASC"))))))
+
 (deftest mudar-estado-cas-e-ciclo
   (let [ente (random-uuid)]
     (tenancy/com-tenant* *ds* ente

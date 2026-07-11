@@ -45,12 +45,20 @@
      (sql/format {:select colunas :from [:legislativo.emendas]
                   :where [:and [:= :ente_id ente-id] [:= :id id]]}))))
 
-(defn listar-por-mae [tx ente-id proposicao-mae-id]
-  (comum/linhas->kebab
-   (jdbc/execute! tx
-     (sql/format {:select colunas :from [:legislativo.emendas]
-                  :where [:and [:= :ente_id ente-id] [:= :proposicao_mae_id proposicao-mae-id]]
-                  :order-by [[:numero_local :asc]]}))))
+(defn listar-por-mae
+  "Sem `limite`: todas, ASC por numero_local. Com `limite` (review MAJOR fe-9-ficha-materia): teto
+  empurrado ao SQL (`ORDER BY numero_local DESC LIMIT limite`) — traz as N MAIS RECENTES (maior numero_local
+  = apresentada por ultimo), revertido a ASC antes de devolver (mesmo contrato de ordem)."
+  ([tx ente-id proposicao-mae-id] (listar-por-mae tx ente-id proposicao-mae-id nil))
+  ([tx ente-id proposicao-mae-id limite]
+   (let [base {:select colunas :from [:legislativo.emendas]
+               :where [:and [:= :ente_id ente-id] [:= :proposicao_mae_id proposicao-mae-id]]}
+         linhas (comum/linhas->kebab
+                  (jdbc/execute! tx
+                    (sql/format (if limite
+                                  (assoc base :order-by [[:numero_local :desc]] :limit limite)
+                                  (assoc base :order-by [[:numero_local :asc]])))))]
+     (if limite (vec (reverse linhas)) linhas))))
 
 (defn mudar-estado!
   "Transicao do ciclo (enum simples) com CAS por `lock-version` (compare-and-swap honesto). O trigger

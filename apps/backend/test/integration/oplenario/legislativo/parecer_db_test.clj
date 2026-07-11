@@ -180,6 +180,39 @@
     (is (empty? (tenancy/com-tenant* *ds* b (fn [tx] (parecer/listar-por-objeto tx b "proposicao" (:pid @ctx)))))
         "B NAO ve o parecer de A (RLS)")))
 
+(deftest listar-por-objeto-com-limite-traz-os-mais-recentes-nao-os-mais-antigos
+  ;; review MAJOR fe-9-ficha-materia (repositorio.clj + db/parecer.clj): o teto anterior era um `take` em
+  ;; memoria sobre o ASC — preservava os pareceres MAIS ANTIGOS, descartava os MAIS RECENTES. Prova: 60
+  ;; pareceres do MESMO objeto com `criado_em` EXPLICITO e distinto (insert direto — `criar!` so' aceita o
+  ;; now() da tx, que empataria as 60 linhas no MESMO instante); com limite=50 o MAIS RECENTE (i=59)
+  ;; sobrevive, o MAIS ANTIGO (i=0) e' descartado (identificados por :id — `colunas` de parecer.clj nao
+  ;; expoe :criado-em na projecao, so' a ORDENACAO usa a coluna)."
+  (let [ente (random-uuid) tid (atom nil) pid (atom nil) ids (atom [])
+        base (java.time.Instant/parse "2026-01-01T00:00:00Z")
+        criado-em (fn [i] (.plusSeconds base i))]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (reset! tid (montar-template-parecer! tx ente))
+        (reset! pid (protocolar! tx ente))
+        (dotimes [i 60]
+          (let [id (random-uuid)]
+            (swap! ids conj id)
+            (jdbc/execute-one! tx
+              ["INSERT INTO legislativo.pareceres
+                (ente_id, id, objeto_tipo, objeto_id, comissao_id, estado, template_id, efetivado_em, criado_em)
+                VALUES (?, ?, 'proposicao', ?, ?, 'aguardando_designacao', ?, now(), ?)"
+               ente id @pid (random-uuid) @tid (criado-em i)])))))
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [todos (parecer/listar-por-objeto tx ente "proposicao" @pid)
+              limitados (parecer/listar-por-objeto tx ente "proposicao" @pid 50)
+              ids-limitados (set (map :id limitados))]
+          (is (= 60 (count todos)) "sem limite: todos os pareceres")
+          (is (= 50 (count limitados)) "com limite: o SQL aplica o teto")
+          (is (contains? ids-limitados (last @ids)) "o parecer MAIS RECENTE (i=59) sobrevive ao corte")
+          (is (not (contains? ids-limitados (first @ids)))
+              "o parecer MAIS ANTIGO (i=0) foi descartado — o corte preserva o recente, nao o antigo"))))))
+
 ;; ========================= FE Onda A1: fila de relatores pendentes (§16.11) =========================
 
 (deftest relatores-pendentes-lista-pareceres-aguardando-designacao

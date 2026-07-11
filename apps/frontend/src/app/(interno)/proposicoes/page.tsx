@@ -4,9 +4,8 @@
 // /proposicoes. Une useAuth (App Shell) + useProposicoes (fetch autenticado + refetch por filtro) +
 // derivarProposicoesVista (view-model puro) + AzulejoMini/descreverFaixa (assinatura de tramitação, já
 // construídos na A2). "Exportar" e a barra de ações em massa da tela-fonte seguem FORA (sem dono ainda) —
-// só "Nova proposição" (header) e "Editar" por linha (Slice 2, editor-proposicao) foram habilitados. A
-// ação "abrir ficha" por linha também não existe ainda (ficha-materia é uma fatia posterior) — cada linha
-// não é clicável fora da coluna Ações.
+// "Nova proposição" (header), "Ver ficha" (Slice 3, ficha-materia) e "Editar" (Slice 2, editor-proposicao)
+// por linha foram habilitados. Cada linha ainda não é clicável fora da coluna Ações (sem row-click).
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -148,6 +147,12 @@ export default function PaginaProposicoes() {
                     </td>
                     <td className="atualizada">{new Date(linha.atualizadoEm).toLocaleDateString("pt-BR")}</td>
                     <td>
+                      <Link
+                        href={comToken(`/ficha-materia/${encodeURIComponent(linha.id)}`, token)}
+                        aria-label={`Ver ficha de ${linha.numero}`}
+                      >
+                        Ver ficha
+                      </Link>{" "}
                       <Link
                         href={comToken(`/editor-proposicao/${encodeURIComponent(linha.id)}`, token)}
                         aria-label={`Editar ${linha.numero}`}

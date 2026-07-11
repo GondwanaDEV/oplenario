@@ -103,6 +103,17 @@
   [repo-legislativo ente-id m]
   (repo/editar-proposicao! repo-legislativo ente-id m))
 
+(defn buscar-ficha-materia
+  "Onda B Slice 3 — ficha completa da materia (proposicao + texto + tramitacao + apensadas + emendas +
+  pareceres), mesmo gate grosso das rotas irmas (papel 'secretario', sem policy fina adicional). nil se a
+  proposicao nao existe no tenant (-> 404 na borda), mesmo contrato de `buscar-proposicao-ficha`. `:texto`
+  sai daqui JA extraido (:texto-inline da linha de dominio, ou nil) — mesma disciplina de
+  `buscar-proposicao-ficha` (review MENOR fe-9-ficha-materia): o CONTROLLER e' quem decide o nome de campo
+  do model, nunca o diplomat/http/in (que so' compoe adapters/out ja' prontos)."
+  [repo-legislativo ente-id id]
+  (let [{:keys [proposicao texto] :as ficha} (repo/ficha-completa-da-proposicao repo-legislativo ente-id id)]
+    (when proposicao (assoc ficha :texto (:texto-inline texto)))))
+
 (defn encerrar-votacao
   "Encerra a votacao `votacao-id` da sessao `sessao-id` (authz na sessao + amarra). `m` carrega o id
   (=votacao-id), lock-version, base-membros e resultado. Devolve o snapshot apurado ou nil se a votacao nao

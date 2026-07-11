@@ -153,6 +153,37 @@
                         ente @aid]))))
         "efetivado_em nao regride a NULL (anti soft-delete via RLS)")))
 
+(deftest apensadas-ativas-com-limite-traz-as-mais-recentes-nao-as-mais-antigas
+  ;; review MAJOR fe-9-ficha-materia (repositorio.clj + db/apensacao.clj): o teto anterior era um `take`
+  ;; em memoria sobre o ASC — preservava as apensacoes MAIS ANTIGAS, descartava as MAIS RECENTES. Prova: 60
+  ;; apensadas ativas do MESMO principal com `apensada_em` EXPLICITO e distinto (insert direto — `apensar!`
+  ;; so' aceita o now() da tx, que empataria as 60 linhas no MESMO instante); com limite=50 a MAIS RECENTE
+  ;; (i=59) sobrevive, a MAIS ANTIGA (i=0) e' descartada, ordem cronologica ASC preservada.
+  (let [ente (random-uuid) principal (atom nil)
+        base (java.time.Instant/parse "2026-01-01T00:00:00Z")
+        apensada-em (fn [i] (.plusSeconds base i))]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (reset! principal (protocolar! tx ente))
+        (dotimes [i 60]
+          (let [ap-id (protocolar! tx ente)]
+            (jdbc/execute-one! tx
+              ["INSERT INTO legislativo.proposicao_apensacao
+                (ente_id, id, principal_id, apensada_id, apensada_em, motivo_apensacao, efetivado_em)
+                VALUES (?, ?, ?, ?, ?, ?, now())"
+               ente (random-uuid) @principal ap-id (apensada-em i) "materia conexa"])))))
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [todas (ap/apensadas-ativas tx ente @principal)
+              limitadas (ap/apensadas-ativas tx ente @principal 50)]
+          (is (= 60 (count todas)) "sem limite: todas as apensadas")
+          (is (= 50 (count limitadas)) "com limite: o SQL aplica o teto")
+          (is (= (apensada-em 59) (:apensada-em (last limitadas))) "a MAIS RECENTE (i=59) sobrevive ao corte")
+          (is (not-any? #(= (apensada-em 0) (:apensada-em %)) limitadas)
+              "a MAIS ANTIGA (i=0) foi descartada — o corte preserva o recente, nao o antigo")
+          (is (= (map apensada-em (range 10 60)) (map :apensada-em limitadas))
+              "as 50 mais recentes (i=10..59), em ordem cronologica ASC"))))))
+
 (deftest desapensar-cas
   (let [ente (random-uuid)]
     (tenancy/com-tenant* *ds* ente

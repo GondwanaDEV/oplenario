@@ -66,4 +66,12 @@ describe("PaginaProposicoes", () => {
     expect(link.getAttribute("href")).toContain("/editor-proposicao/1");
     expect(link.getAttribute("href")).toContain("token=tok-de-teste");
   });
+
+  it("renderiza o link 'Ver ficha' por linha apontando para /ficha-materia/:id (com token preservado)", async () => {
+    global.fetch = vi.fn(async () => ({ ok: true, json: async () => respostaFake }) as Response) as unknown as typeof fetch;
+    renderComProviders("tok-de-teste");
+    const link = await screen.findByRole("link", { name: /ver ficha de pl 42\/2026/i });
+    expect(link.getAttribute("href")).toContain("/ficha-materia/1");
+    expect(link.getAttribute("href")).toContain("token=tok-de-teste");
+  });
 });

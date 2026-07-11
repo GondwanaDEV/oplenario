@@ -29,6 +29,16 @@ const ESPECIE_POR_TIPO: Record<string, string> = {
 
 export type CategoriaSituacao = "tram" | "aguarda" | "aprovada" | "arquivada";
 
+// Exportados (Onda B Slice 3, ficha-materia) — o cabeçalho `.ficha-cab` precisa do MESMO formato "SIGLA
+// sequencial/ano" / rótulo de espécie já usado aqui; reusa em vez de reinventar o mapeamento.
+export function formatarNumeroProposicao(tipo: string, sequencial: number, ano: number): string {
+  return `${SIGLA_POR_TIPO[tipo] ?? tipo} ${sequencial}/${ano}`;
+}
+
+export function formatarEspecieProposicao(tipo: string): string {
+  return ESPECIE_POR_TIPO[tipo] ?? tipo;
+}
+
 export type LinhaProposicaoVista = {
   id: string;
   numero: string;
@@ -60,12 +70,11 @@ export function categorizarSituacao(estado: string): CategoriaSituacao {
 
 export function derivarProposicoesVista(itens: ProposicaoResumoOut[]): LinhaProposicaoVista[] {
   return itens.map((item) => {
-    const sigla = SIGLA_POR_TIPO[item.tipo] ?? item.tipo;
     const { estagios, rotuloSituacao } = derivarTramitacao(item.estado);
     return {
       id: item.id,
-      numero: `${sigla} ${item.sequencial}/${item.ano}`,
-      especie: ESPECIE_POR_TIPO[item.tipo] ?? item.tipo,
+      numero: formatarNumeroProposicao(item.tipo, item.sequencial, item.ano),
+      especie: formatarEspecieProposicao(item.tipo),
       ementa: item.ementa,
       autor: item.autorTexto ?? "—",
       situacao: { rotulo: rotuloSituacao, estagios, categoria: categorizarSituacao(item.estado) },

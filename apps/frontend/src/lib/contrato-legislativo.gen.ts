@@ -40,3 +40,42 @@ export interface ProposicaoDetalheOut {
   atualizadoEm: string;
   texto?: string | null;
 }
+
+export interface HistoricoTramitacaoItemOut {
+  deEstado: string;
+  paraEstado: string;
+  gatilho: string;
+  ocorridoEm: string;
+}
+
+export interface ApensacaoOut {
+  apensadaId: string;
+  apensadaEm: string;
+  motivoApensacao?: string | null;
+}
+
+export interface EmendaResumoOut {
+  id: string;
+  numeroLocal: number;
+  tipoEmenda: string;
+  momentoApresentacao: string;
+  autorTipo?: string | null;
+  autorTexto?: string | null;
+  estado: string;
+}
+
+export interface ParecerResumoOut {
+  id: string;
+  comissaoId: string;
+  relatorId?: string | null;
+  votoRelator?: string | null;
+  estado: string;
+}
+
+export interface FichaMateriaOut {
+  proposicao: ProposicaoDetalheOut;
+  tramitacao: HistoricoTramitacaoItemOut[];
+  apensadas: ApensacaoOut[];
+  emendas: EmendaResumoOut[];
+  pareceres: ParecerResumoOut[];
+}

@@ -72,13 +72,20 @@
                   :where [:and [:= :ente_id ente-id] [:= :id id]]}))))
 
 (defn listar-por-objeto
-  "Pareceres sobre um objeto (proposicao|emenda) — usa idx_pareceres_objeto (comeca por objeto_tipo)."
-  [tx ente-id objeto-tipo objeto-id]
-  (comum/linhas->kebab
-   (jdbc/execute! tx
-     (sql/format {:select colunas :from [:legislativo.pareceres]
-                  :where [:and [:= :ente_id ente-id] [:= :objeto_tipo objeto-tipo] [:= :objeto_id objeto-id]]
-                  :order-by [[:criado_em :asc]]}))))
+  "Pareceres sobre um objeto (proposicao|emenda) — usa idx_pareceres_objeto (comeca por objeto_tipo). Sem
+  `limite`: todos, ASC. Com `limite` (review MAJOR fe-9-ficha-materia): teto empurrado ao SQL (`ORDER BY
+  criado_em DESC LIMIT limite`) — traz os N MAIS RECENTES, revertido a ASC antes de devolver (mesmo
+  contrato de ordem)."
+  ([tx ente-id objeto-tipo objeto-id] (listar-por-objeto tx ente-id objeto-tipo objeto-id nil))
+  ([tx ente-id objeto-tipo objeto-id limite]
+   (let [base {:select colunas :from [:legislativo.pareceres]
+               :where [:and [:= :ente_id ente-id] [:= :objeto_tipo objeto-tipo] [:= :objeto_id objeto-id]]}
+         linhas (comum/linhas->kebab
+                  (jdbc/execute! tx
+                    (sql/format (if limite
+                                  (assoc base :order-by [[:criado_em :desc]] :limit limite)
+                                  (assoc base :order-by [[:criado_em :asc]])))))]
+     (if limite (vec (reverse linhas)) linhas))))
 
 (defn mudar-estado!
   "Transicao COARSE do estado do parecer (a maquina fina e' o motor, via parecer-tramitacao). CAS por
