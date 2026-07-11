@@ -6,12 +6,15 @@
   Default = target/generated-ts/contrato-legislativo.gen.ts."
   (:require [clojure.java.io :as io]
             [oplenario.codegen.malli-ts :as ts]
+            [oplenario.legislativo.wire.out.autografo :as autografo]
             [oplenario.legislativo.wire.out.documento :as documento]
             [oplenario.legislativo.wire.out.documento-modelo :as documento-modelo]
             [oplenario.legislativo.wire.out.ficha-materia :as ficha]
             [oplenario.legislativo.wire.out.parecer :as parecer]
+            [oplenario.legislativo.wire.out.pos-aprovacao :as pos-aprovacao]
             [oplenario.legislativo.wire.out.proposicao :as proposicao]
-            [oplenario.legislativo.wire.out.protocolo-geral :as protocolo-geral]))
+            [oplenario.legislativo.wire.out.protocolo-geral :as protocolo-geral]
+            [oplenario.legislativo.wire.out.tramitacao-executiva :as tramitacao-executiva]))
 
 (def manifesto
   [["ProposicaoResumoOut" proposicao/ProposicaoResumoOut]
@@ -33,7 +36,12 @@
    ["DocumentoModeloOut" documento-modelo/DocumentoModeloOut]
    ["ListaModelosOut" documento-modelo/ListaModelosOut]
    ["ProtocoloGeralOut" protocolo-geral/ProtocoloGeralOut]
-   ["LivroProtocoloOut" protocolo-geral/LivroProtocoloOut]])
+   ["LivroProtocoloOut" protocolo-geral/LivroProtocoloOut]
+   ;; Onda B Slice 7 (pos-aprovacao: autografo + sancao/veto, F3.8a) — entram ANTES de PosAprovacaoOut (o
+   ;; composto referencia os dois primeiros, mesma ordem-referencia-antes-do-composto de ficha-materia).
+   ["AutografoOut" autografo/AutografoOut]
+   ["TramitacaoExecutivaOut" tramitacao-executiva/TramitacaoExecutivaOut]
+   ["PosAprovacaoOut" pos-aprovacao/PosAprovacaoOut]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))
 

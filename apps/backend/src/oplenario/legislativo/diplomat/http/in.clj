@@ -22,10 +22,14 @@
             [oplenario.legislativo.adapters.out.documento :as adapters-out-documento]
             [oplenario.legislativo.adapters.out.documento-modelo :as adapters-out-documento-modelo]
             [oplenario.legislativo.adapters.out.ficha-materia :as adapters-out-ficha]
+            [oplenario.legislativo.adapters.in.pos-aprovacao :as adapters-in-pos-aprovacao]
+            [oplenario.legislativo.adapters.out.autografo :as adapters-out-autografo]
             [oplenario.legislativo.adapters.out.parecer :as adapters-out-parecer]
+            [oplenario.legislativo.adapters.out.pos-aprovacao :as adapters-out-pos-aprovacao]
             [oplenario.legislativo.adapters.out.proposicao :as adapters-out-proposicao]
             [oplenario.legislativo.adapters.out.protocolo-geral :as adapters-out-protocolo]
             [oplenario.legislativo.adapters.out.relator-pendente :as adapters-out-relator]
+            [oplenario.legislativo.adapters.out.tramitacao-executiva :as adapters-out-tramitacao-executiva]
             [oplenario.legislativo.adapters.out.votacao :as adapters-out]
             [oplenario.legislativo.controllers :as controllers])
   (:import (java.time ZoneId)))
@@ -256,6 +260,71 @@
       (http/json-resposta 200 (adapters-out-protocolo/livro->wire
                                  (controllers/listar-protocolo-do-ano repo-leg ente-id ano))))))
 
+;; ========================= Onda B Slice 7: pos-aprovacao (autografo + sancao/veto, F3.8a) =========================
+
+(defn- pos-aprovacao->wire
+  "{:autografo :tramitacao-executiva} (dominio, kebab, nil-aveis) -> PosAprovacaoOut. Chama os DOIS
+  adapters/out irmaos (autografo/tramitacao-executiva) antes de compor — adapters/ nunca chama outro
+  adapters/ (ADR-0001 §3), mesma disciplina de ficha-materia-handler compondo detalhe->wire+ficha->wire."
+  [{:keys [autografo tramitacao-executiva]}]
+  (adapters-out-pos-aprovacao/pos-aprovacao->wire
+    (some-> autografo adapters-out-autografo/autografo->wire)
+    (some-> tramitacao-executiva adapters-out-tramitacao-executiva/tramitacao-executiva->wire)))
+
+(defn- gerar-autografo-handler
+  "POST /legislativo/proposicoes/:id/autografo — 'Gerar autografo e enviar ao Executivo'. `ano` (kernel/
+  tempo, injetavel em teste) resolve o ano civil da geracao AQUI, na borda (mesmo padrao de
+  protocolar-documento-handler/`ano`). nil (proposicao inexistente no tenant) -> 404. Autografo duplicado
+  (guard do controller, mesmo racional de encerrar-votacao) -> :validacao/invalido -> 400 (interceptor
+  global de erro)."
+  [repo-leg resolver-municipio relogio]
+  (fn [req]
+    (let [ator (:ator req) ente-id (:ente-id ator)
+          proposicao-id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          ano (.getYear (tempo/hoje relogio zona-civil))
+          m (adapters-in-pos-aprovacao/gerar-autografo->dominio ator proposicao-id (:json-params req))]
+      (if (controllers/gerar-autografo repo-leg resolver-municipio ente-id ano m)
+        (http/json-resposta 201 (pos-aprovacao->wire
+                                   (controllers/buscar-pos-aprovacao repo-leg ente-id proposicao-id)))
+        (http/json-resposta 404 {:erro "proposicao nao encontrada"})))))
+
+(defn- pos-aprovacao-handler
+  "GET /legislativo/proposicoes/:id/pos-aprovacao. nil (proposicao inexistente no tenant) -> 404."
+  [repo-leg]
+  (fn [req]
+    (let [ente-id (:ente-id (:ator req))
+          proposicao-id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [dados (controllers/buscar-pos-aprovacao repo-leg ente-id proposicao-id)]
+        (http/json-resposta 200 (pos-aprovacao->wire dados))
+        (http/json-resposta 404 {:erro "proposicao nao encontrada"})))))
+
+(defn- registrar-resposta-executivo-handler
+  "POST /legislativo/autografos/:id/resposta — 'Registrar retorno' (path :id = autografo-id). nil (sem
+  tramitacao executiva para este autografo no tenant) -> 404."
+  [repo-leg]
+  (fn [req]
+    (let [ator (:ator req) ente-id (:ente-id ator)
+          autografo-id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          m (adapters-in-pos-aprovacao/registrar-resposta->dominio ator (:json-params req))]
+      (if (controllers/registrar-resposta-executivo repo-leg ente-id autografo-id m)
+        (http/json-resposta 200 (adapters-out-tramitacao-executiva/tramitacao-executiva->wire
+                                   (controllers/buscar-tramitacao-por-autografo repo-leg ente-id autografo-id)))
+        (http/json-resposta 404 {:erro "tramitacao executiva nao encontrada para este autografo"})))))
+
+(defn- apreciar-veto-handler
+  "POST /legislativo/tramitacoes-executivas/:id/apreciacao (path :id = tramitacao-executiva-id, DIRETO).
+  A votacao real e' aberta/encerrada via /sessoes/:id/votacoes* ja' existente (§5 doc-mestre) — esta rota
+  so' carimba o desfecho. nil (tramitacao executiva inexistente no tenant) -> 404."
+  [repo-leg]
+  (fn [req]
+    (let [ator (:ator req) ente-id (:ente-id ator)
+          id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          m (adapters-in-pos-aprovacao/apreciar-veto->dominio ator (:json-params req))]
+      (if (controllers/apreciar-veto repo-leg ente-id id m)
+        (http/json-resposta 200 (adapters-out-tramitacao-executiva/tramitacao-executiva->wire
+                                   (controllers/buscar-tramitacao-executiva repo-leg ente-id id)))
+        (http/json-resposta 404 {:erro "tramitacao executiva nao encontrada"})))))
+
 (defn rotas
   "Fragmento de rotas da votacao ao vivo + proposicoes + editor de parecer (table syntax Pedestal). Recebe o
   interceptor `auth` (compartilhado), o `repo-legislativo` (Repo-Component do proprio modulo),
@@ -311,7 +380,18 @@
        [auth papel it/corpo-json (protocolar-documento-handler repo-legislativo relogio)]
        :route-name :legislativo/protocolar-documento]
       ["/legislativo/protocolo-geral" :get [auth papel (protocolo-geral-handler repo-legislativo relogio)]
-       :route-name :legislativo/protocolo-geral]}))
+       :route-name :legislativo/protocolo-geral]
+      ["/legislativo/proposicoes/:id/autografo" :post
+       [auth papel it/corpo-json (gerar-autografo-handler repo-legislativo resolver-municipio relogio)]
+       :route-name :legislativo/gerar-autografo]
+      ["/legislativo/proposicoes/:id/pos-aprovacao" :get [auth papel (pos-aprovacao-handler repo-legislativo)]
+       :route-name :legislativo/pos-aprovacao]
+      ["/legislativo/autografos/:id/resposta" :post
+       [auth papel it/corpo-json (registrar-resposta-executivo-handler repo-legislativo)]
+       :route-name :legislativo/registrar-resposta-executivo]
+      ["/legislativo/tramitacoes-executivas/:id/apreciacao" :post
+       [auth papel it/corpo-json (apreciar-veto-handler repo-legislativo)]
+       :route-name :legislativo/apreciar-veto]}))
 
 ;; ========================= FE Onda A1: fila de relatores pendentes (§16.11) =========================
 

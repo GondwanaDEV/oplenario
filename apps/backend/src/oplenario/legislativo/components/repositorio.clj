@@ -122,6 +122,16 @@
   (apreciar-veto! [this ente-id m] "vetado -> veto_mantido|veto_derrubado (carimba a votacao do eixo G); CAS.")
   (buscar-tramitacao-executiva [this ente-id id])
   (tramitacao-executiva-do-autografo [this ente-id autografo-id])
+  ;; Onda B Slice 7 — borda do pos-aprovacao: leitura composta + acao composta.
+  (buscar-pos-aprovacao [this ente-id proposicao-id]
+    "{:autografo (nil-ou-map) :tramitacao-executiva (nil-ou-map)} NUMA UNICA tx (mesma disciplina de
+     buscar-ficha-materia/buscar-proposicao-detalhe). Sem short-circuit no nil do autografo — o controller
+     decide 404 vs. corpo parcial (proposicao inexistente vs. proposicao sem autografo ainda).")
+  (gerar-autografo-e-abrir-tramitacao! [this ente-id m]
+    "Compoe autografo/gerar! (numera gapless + insere, append-only) + tramitacao-executiva/iniciar! (abre
+     'aguardando') NUMA UNICA tx — atomico (se iniciar! falhar, gerar! desfaz e o numero reservado pelo
+     kernel/sequencial some com o rollback, gapless preservado; mesmo racional de protocolar-documento!).
+     Devolve {:autografo-id :numero :tramitacao-executiva-id}.")
   ;; F3.8b — norma promulgada (numeracao canonica + URN-de-norma LexML + publicacao)
   (promulgar-norma! [this ente-id m] "Numera gapless + URN-de-norma + insere 'promulgada', atomico.")
   (publicar-norma! [this ente-id m] "promulgada -> publicada (mutacao parcial unica); CAS.")
@@ -494,6 +504,25 @@
   (apreciar-veto! [this ente-id m] (transacao this ente-id #(exec/apreciar-veto! % (assoc m :ente-id ente-id))))
   (buscar-tramitacao-executiva [this ente-id id] (transacao this ente-id #(exec/buscar % ente-id id)))
   (tramitacao-executiva-do-autografo [this ente-id aid] (transacao this ente-id #(exec/buscar-por-autografo % ente-id aid)))
+  ;; Onda B Slice 7 — leitura composta (mesma disciplina de ficha-completa-da-proposicao/
+  ;; buscar-parecer-para-editor): UMA tx, sem short-circuit no nil do autografo (a decisao 404-vs-corpo-
+  ;; parcial e' do controller, que ja' confere a proposicao separadamente).
+  (buscar-pos-aprovacao [this ente-id proposicao-id]
+    (transacao this ente-id
+      (fn [tx]
+        (let [aut (autografo/buscar-por-proposicao tx ente-id proposicao-id)]
+          {:autografo aut
+           :tramitacao-executiva (when aut (exec/buscar-por-autografo tx ente-id (:id aut)))}))))
+  ;; composicao ATOMICA (mesmo racional de protocolar-documento!): gerar! (numera+insere o autografo,
+  ;; append-only) + iniciar! (abre 'aguardando') NA MESMA tx — se iniciar! falhar, gerar! desfaz e o numero
+  ;; reservado pelo kernel/sequencial some com o rollback (gapless preservado).
+  (gerar-autografo-e-abrir-tramitacao! [this ente-id m]
+    (transacao this ente-id
+      (fn [tx]
+        (let [{aut-id :id numero :numero} (autografo/gerar! tx (assoc m :ente-id ente-id))
+              {tram-id :id} (exec/iniciar! tx {:id (random-uuid) :ente-id ente-id :autografo-id aut-id
+                                                :created-by (:created-by m)})]
+          {:autografo-id aut-id :numero numero :tramitacao-executiva-id tram-id}))))
   ;; F3.8b — norma. promulgar! compoe (sequencial + URN + insert) na tx; o caller garante o desfecho promulgavel.
   (promulgar-norma! [this ente-id m] (transacao this ente-id #(norma/promulgar! % (assoc m :ente-id ente-id))))
   ;; F3.8b: publica (promulgada -> publicada) + EMITE `norma.publicada` (marco de eficacia) na MESMA tx. Le a
