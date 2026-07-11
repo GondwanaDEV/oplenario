@@ -146,3 +146,32 @@ export interface ProtocoloGeralOut {
 export interface LivroProtocoloOut {
   itens: ProtocoloGeralOut[];
 }
+
+export interface AutografoOut {
+  id: string;
+  proposicaoId: string;
+  numero: number;
+  ano: number;
+  textoVersaoId?: string | null;
+  destinatarioTexto: string;
+  destinatarioId?: string | null;
+  enviadoEm: string;
+  prazoRespostaEm?: string | null;
+}
+
+export interface TramitacaoExecutivaOut {
+  id: string;
+  autografoId: string;
+  estado: string;
+  vetoTipo?: string | null;
+  vetoRazoes?: string | null;
+  vetoVotacaoId?: string | null;
+  respondidoEm?: string | null;
+  apreciadoEm?: string | null;
+  lockVersion: number;
+}
+
+export interface PosAprovacaoOut {
+  autografo?: AutografoOut | null;
+  tramitacaoExecutiva?: TramitacaoExecutivaOut | null;
+}

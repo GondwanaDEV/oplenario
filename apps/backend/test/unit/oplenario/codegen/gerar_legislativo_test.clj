@@ -12,10 +12,29 @@
   (let [out (gerar-legislativo/gerar-tudo)]
     (is (str/starts-with? out "// GERADO") "banner de 'nao editar a mao'")
     (is (every? #(str/includes? out (str "export interface " % " {"))
-                ["ProposicaoResumoOut" "ListaProposicoesOut" "ProposicaoDetalheOut"])
+                ["ProposicaoResumoOut" "ListaProposicoesOut" "ProposicaoDetalheOut"
+                 "AutografoOut" "TramitacaoExecutivaOut" "PosAprovacaoOut"])
         "todas as interfaces do manifesto do legislativo presentes")
     (is (not (re-find #": unknown;" out))
         "nenhum campo caiu no fallback bare 'unknown'")))
+
+;; ---------- Onda B Slice 7 (pos-aprovacao: autografo + sancao/veto, F3.8a) ----------
+
+(deftest manifesto-inclui-pos-aprovacao-e-na-ordem-referencia-antes-do-composto
+  (is (some #(= "AutografoOut" (first %)) gerar-legislativo/manifesto))
+  (is (some #(= "TramitacaoExecutivaOut" (first %)) gerar-legislativo/manifesto))
+  (is (some #(= "PosAprovacaoOut" (first %)) gerar-legislativo/manifesto))
+  (let [nomes (mapv first gerar-legislativo/manifesto)
+        idx (fn [n] (.indexOf ^java.util.List nomes n))]
+    (is (< (idx "AutografoOut") (idx "PosAprovacaoOut")))
+    (is (< (idx "TramitacaoExecutivaOut") (idx "PosAprovacaoOut")))))
+
+(deftest pos-aprovacao-out-reusa-autografo-e-tramitacao-executiva-por-referencia-nomeada
+  ;; PosAprovacaoOut.autografo/tramitacaoExecutiva devem emitir o NOME da interface (referencia), nao um
+  ;; 'Record<string, unknown>' opaco — confirma que a igualdade estrutural do codegen casou o composto.
+  (let [out (gerar-legislativo/gerar-tudo)]
+    (is (str/includes? out "autografo?: AutografoOut | null;"))
+    (is (str/includes? out "tramitacaoExecutiva?: TramitacaoExecutivaOut | null;"))))
 
 (deftest proposicao-detalhe-out-tem-texto-opcional-e-lock-version
   ;; ProposicaoDetalheOut estende ProposicaoResumoOut com :texto (opcional, pode ser nil) e :lock-version.

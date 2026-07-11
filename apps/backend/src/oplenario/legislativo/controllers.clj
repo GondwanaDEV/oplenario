@@ -217,3 +217,78 @@
   resolvido pelo diplomat (kernel/tempo), mesmo padrao de protocolar-documento."
   [repo-legislativo ente-id ano]
   (repo/protocolos-do-ano repo-legislativo ente-id ano))
+
+;; ========================= Onda B Slice 7: pos-aprovacao (autografo + sancao/veto) =========================
+
+(defn buscar-pos-aprovacao
+  "Onda B Slice 7 — leitura composta {:autografo :tramitacao-executiva} da proposicao `proposicao-id`
+  (mesmo gate grosso das rotas irmas, papel 'secretario', sem policy fina adicional). PRE-CHECK a
+  existencia da proposicao no tenant (mesma disciplina de pre-check de editar-proposicao-handler/
+  protocolar-documento-handler): sem isso, uma proposicao inexistente devolveria {:autografo nil
+  :tramitacao-executiva nil} (200 vazio) em vez de 404 — Repo/buscar-pos-aprovacao NAO checa a proposicao
+  por design (spec: sem short-circuit no nil do autografo; a decisao 404-vs-corpo-parcial e' deste
+  controller). nil (proposicao inexistente no tenant) -> 404 na borda."
+  [repo-legislativo ente-id proposicao-id]
+  (when (:proposicao (repo/buscar-proposicao-detalhe repo-legislativo ente-id proposicao-id))
+    (repo/buscar-pos-aprovacao repo-legislativo ente-id proposicao-id)))
+
+(defn gerar-autografo
+  "Onda B Slice 7 — gera o autografo (numera gapless) + abre a tramitacao executiva 'aguardando' NUMA
+  UNICA tx (Repo/gerar-autografo-e-abrir-tramitacao!). Resolve `destinatario-texto` a partir do municipio
+  do ente ('Prefeito Municipal de <municipio>', reusa `resolver-municipio` — mesmo padrao injetado de
+  criar-proposicao) e `texto-versao-id` da versao VIGENTE da proposicao no momento da geracao
+  (buscar-proposicao-detalhe, mesma leitura de buscar-proposicao-ficha). `ano` vem do diplomat (kernel/
+  tempo, mesmo padrao de protocolar-documento — o ano do AUTOGRAFO e' o ano civil da geracao, escopo do
+  numerador gapless 'autografo:ano', nao necessariamente o ano de protocolo da proposicao).
+
+  GUARD DE DUPLICIDADE (pre-condicao de borda, mesmo racional de encerrar-votacao — vira
+  :validacao/invalido usando um recurso JA carregado, em vez de propagar a excecao opaca do UNIQUE
+  (ente_id, proposicao_id) do db/autografo.clj como 500): uma proposicao que ja' tem autografo lanca ANTES
+  de qualquer escrita nova.
+
+  nil se a proposicao nao existe no tenant (-> 404 na borda). `m` ja' vem coagido pelo adapters/in (id do
+  autografo/prazo-resposta-em/created-by; SEM ano/destinatario-texto/texto-versao-id, injetados aqui)."
+  [repo-legislativo resolver-municipio ente-id ano m]
+  (let [proposicao-id (:proposicao-id m)
+        {:keys [proposicao texto]} (repo/buscar-proposicao-detalhe repo-legislativo ente-id proposicao-id)]
+    (when proposicao
+      (when (repo/autografo-da-proposicao repo-legislativo ente-id proposicao-id)
+        (throw (ex-info "gerar-autografo: a proposicao ja tem autografo (UNIQUE por proposicao)"
+                        {:tipo :validacao/invalido :proposicao-id proposicao-id})))
+      (let [{:keys [municipio-nome]} (resolver-municipio ente-id)]
+        (repo/gerar-autografo-e-abrir-tramitacao! repo-legislativo ente-id
+          (merge m {:ano ano :texto-versao-id (:id texto)
+                    :destinatario-texto (str "Prefeito Municipal de " municipio-nome)}))))))
+
+(defn buscar-tramitacao-executiva
+  "Onda B Slice 7 — busca a tramitacao executiva pelo SEU PROPRIO id (mesmo gate grosso). nil se inexistente
+  no tenant (-> 404 na borda)."
+  [repo-legislativo ente-id id]
+  (repo/buscar-tramitacao-executiva repo-legislativo ente-id id))
+
+(defn buscar-tramitacao-por-autografo
+  "Onda B Slice 7 — resolve a tramitacao executiva DO autografo `autografo-id` (mesmo gate grosso). nil se
+  nao ha tramitacao executiva para este autografo no tenant (-> 404 na borda)."
+  [repo-legislativo ente-id autografo-id]
+  (repo/tramitacao-executiva-do-autografo repo-legislativo ente-id autografo-id))
+
+(defn registrar-resposta-executivo
+  "Onda B Slice 7 — 'Registrar retorno': POST /legislativo/autografos/:id/resposta (path :id =
+  autografo-id). Resolve a tramitacao executiva DESTE autografo e registra a resposta nela (aguardando ->
+  sancionado|sancao_tacita|vetado; CAS por lock-version). `m` ja' vem coagido pelo adapters/in (lock-
+  version/resultado/veto-tipo/veto-razoes/updated-by); este controller injeta o `:id` (o da tramitacao
+  executiva, NUNCA o path cru — o path e' o autografo). nil se nao ha tramitacao executiva para este
+  autografo no tenant (-> 404 na borda, mesmo contrato de buscar-tramitacao-por-autografo)."
+  [repo-legislativo ente-id autografo-id m]
+  (when-let [{:keys [id]} (buscar-tramitacao-por-autografo repo-legislativo ente-id autografo-id)]
+    (repo/registrar-resposta-executivo! repo-legislativo ente-id (assoc m :id id))))
+
+(defn apreciar-veto
+  "Onda B Slice 7 — carimba a apreciacao do veto pela camara: POST /legislativo/tramitacoes-executivas/:id/
+  apreciacao (path :id = tramitacao-executiva-id, DIRETO — ao contrario de registrar-resposta-executivo,
+  aqui nao ha' indireccao por autografo). vetado -> veto_mantido|veto_derrubado (CAS por lock-version). `m`
+  ja' vem coagido pelo adapters/in (lock-version/resultado/veto-votacao-id/updated-by); este controller
+  injeta o `:id` do path. nil se a tramitacao executiva nao existe no tenant (-> 404 na borda)."
+  [repo-legislativo ente-id id m]
+  (when (repo/buscar-tramitacao-executiva repo-legislativo ente-id id)
+    (repo/apreciar-veto! repo-legislativo ente-id (assoc m :id id))))

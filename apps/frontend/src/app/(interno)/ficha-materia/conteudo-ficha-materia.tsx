@@ -81,7 +81,7 @@ export function ConteudoFichaMateria({ id }: { id: string }) {
             </h2>
             <DadosMateriaCard dados={dadosMateria} />
             <IdentidadeLexmlCard urnLex={ficha.proposicao.urnLex} />
-            <AcoesCard />
+            <AcoesCard proposicao={ficha.proposicao} token={token} />
           </aside>
         </div>
       </main>
