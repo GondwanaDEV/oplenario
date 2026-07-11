@@ -24,7 +24,7 @@
     (invalido! msg {:campos (keys (me/humanize erros))})))
 
 (def ^:private campos-rascunho ["relatorio" "analise"])
-(def ^:private campos-emitir ["voto-relator"])
+(def ^:private campos-emitir ["voto-relator" "lock-version"])
 
 (defn salvar-rascunho->dominio
   "Corpo (wire/in.SalvarRascunhoParecer) + `ator` + `parecer-id` (path, ja' UUID) -> mapa de dominio p/
@@ -43,13 +43,19 @@
 
 (defn emitir->dominio
   "Corpo (wire/in.EmitirParecer) + `ator` + `parecer-id` + `template-id` (o controller busca o parecer p/
-  extrair) -> mapa de dominio p/ Repo/emitir-parecer!. `voto-relator` obrigatorio e NAO-BRANCO (o Malli
-  `:min 1` so' barra string vazia — espacos-em-branco viram :validacao/invalido aqui, defesa extra)."
-  [ator parecer-id template-id wire-in]
+  extrair) + `agora` (LocalDate, JA' RESOLVIDO pelo caller via kernel/tempo — review MEDIUM fe-11-parecer:
+  este adapters/in e' traducao PURA wire->dominio, nao le relogio; o diplomat injeta `agora`, mesma
+  disciplina de `oplenario.participacao.controllers` que le o Relogio na borda, nao no meio do parse) ->
+  mapa de dominio p/ Repo/emitir-parecer!. `voto-relator` obrigatorio e NAO-BRANCO (o Malli `:min 1` so'
+  barra string vazia — espacos-em-branco viram :validacao/invalido aqui, defesa extra). `lock-version`
+  (review HIGH fe-11-parecer) e' o valor que o CLIENTE viu no editor — a CAS real acontece no Repo, antes
+  de qualquer escrita."
+  [ator parecer-id template-id agora wire-in]
   (when-not (map? wire-in) (invalido! "corpo deve ser objeto JSON" {:campo :corpo}))
   (let [m (so-esperados wire-in campos-emitir)]
     (validar! wire/EmitirParecer m "corpo de emitir parecer invalido")
     (when (str/blank? (:voto-relator m))
       (invalido! "voto-relator obrigatorio (nao-branco)" {:campos [:voto-relator]}))
     {:parecer-id parecer-id :template-id template-id :gatilho "emitir" :voto-relator (:voto-relator m)
-     :updated-by (:identidade-id ator) :agora (java.time.LocalDate/now) :contexto {}}))
+     :lock-version (:lock-version m)
+     :updated-by (:identidade-id ator) :agora agora :contexto {}}))

@@ -366,9 +366,23 @@
   ;; chamar o protocolo `transicionar-parecer!` diretamente (abriria SUA PROPRIA tx, quebrando a atomicidade
   ;; com promover!/registrar-voto-relator!) — por isso reusa parecer-tram/transicionar-parecer! (db/) +
   ;; producers/emitir-transicionou-parecer! INLINE, o MESMO bloco do impl acima.
-  (emitir-parecer! [this ente-id registro {:keys [parecer-id template-id gatilho voto-relator updated-by agora contexto]}]
+  (emitir-parecer! [this ente-id registro {:keys [parecer-id template-id gatilho voto-relator updated-by agora
+                                                   contexto lock-version]}]
     (transacao this ente-id
       (fn [tx]
+        ;; CAS otimista contra o SNAPSHOT QUE O CLIENTE VIU (review HIGH fe-11-parecer): confere ANTES de
+        ;; qualquer escrita, contra o `lock-version` que veio do corpo — os CAS internos abaixo (promover!/
+        ;; registrar-voto-relator!) releem o valor FRESCO desta MESMA tx pra encadear os proprios passos
+        ;; (isso e' correto: sao escritas NOSSAS, nao concorrentes) e por isso NUNCA veem conflito do ponto
+        ;; de vista do cliente. Zero escritas ainda acontecem se este guard lanca (mesma disciplina do guard
+        ;; de "sem rascunho e sem vigente" logo abaixo).
+        (let [atual (parecer/buscar tx ente-id parecer-id)]
+          (when (nil? atual)
+            (throw (ex-info "emitir-parecer!: parecer inexistente no tenant"
+                            {:parecer-id parecer-id :ente-id ente-id})))
+          (when (not= lock-version (:lock-version atual))
+            (throw (ex-info "conflito de escrita (lock_version desatualizado) ou parecer inexistente"
+                            {:id parecer-id :lock-version lock-version}))))
         (let [rascunho (parecer-texto/rascunho-mais-recente tx ente-id parecer-id)]
           ;; fail-closed (spec Onda B Slice 5): SEM rascunho E SEM vigente ja gravado -> lanca. `and` e'
           ;; short-circuit — a leitura de `vigente` so' roda quando ja' nao ha rascunho.

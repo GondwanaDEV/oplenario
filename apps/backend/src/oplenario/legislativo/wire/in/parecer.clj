@@ -14,6 +14,11 @@
 
 (def EmitirParecer
   "Corpo de POST /legislativo/pareceres/:id/emissao. `voto-relator` e' OBRIGATORIO e nao-branco (vocabulario
-  regimental ABERTO, §22.4.4 — sem enum aqui, como em models/parecer)."
+  regimental ABERTO, §22.4.4 — sem enum aqui, como em models/parecer). `lock-version` e' OBRIGATORIO (review
+  HIGH fe-11-parecer — CAS otimista real, mesmo contrato de wire/in/proposicao.EditarProposicao e
+  wire/in/votacao.EncerrarVotacao): sem ele, o servidor nunca detecta que o parecer mudou entre o GET do
+  editor e o clique em 'Emitir' — os CAS internos da composicao (promover!/registrar-voto-relator!) releem o
+  valor FRESCO da propria tx e sempre CASam contra si mesmos, nunca contra o snapshot que o cliente viu."
   [:map {:closed true}
-   [:voto-relator [:string {:min 1}]]])
+   [:voto-relator [:string {:min 1}]]
+   [:lock-version :int]])

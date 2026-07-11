@@ -89,7 +89,7 @@
     (is (thrown-with-msg? Exception #"nenhum conteudo de texto"
           (repo/emitir-parecer! *repo* ente *registro*
             {:parecer-id pcid :template-id tid :gatilho "emitir" :voto-relator "favoravel"
-             :updated-by nil :agora data :contexto {}})))
+             :updated-by nil :agora data :contexto {} :lock-version 0})))
     (is (empty? (eventos-parecer ente)) "nada emitido — a validacao barrou antes de qualquer escrita")))
 
 (deftest emitir-parecer-com-rascunho-promove-vota-e-transiciona
@@ -99,7 +99,7 @@
                                             :origem-versao "redacao" :formato "markdown"})
     (let [r (repo/emitir-parecer! *repo* ente *registro*
               {:parecer-id pcid :template-id tid :gatilho "emitir" :voto-relator "favoravel"
-               :updated-by nil :agora data :contexto {}})]
+               :updated-by nil :agora data :contexto {} :lock-version 0})]
       (is (= "emitido" (:estado r)) "transicionou (guard nil) — estado final devolvido")
       (is (= "favoravel" (:voto-relator r)))
       (is (some? (:texto-vigente-versao-id r)) "o rascunho foi PROMOVIDO a vigente")
@@ -113,9 +113,29 @@
     ;; promove ANTES de emitir-parecer! — no momento de emitir, ja' nao ha' rascunho (o unico virou vigente).
     (repo/promover-versao-parecer! *repo* ente {:parecer-id pcid :versao-id vid :updated-by nil :lock-version 0})
     (is (nil? (:texto-rascunho (repo/buscar-parecer-para-editor *repo* ente pcid))) "precondicao: sem rascunho")
+    ;; promover-versao-parecer! ja incrementou pareceres.lock_version (o reaponte do pointer) — o lock-version
+    ;; do CLIENTE aqui e' 1, o mesmo que um GET do editor teria devolvido apos a promocao.
     (let [r (repo/emitir-parecer! *repo* ente *registro*
               {:parecer-id pcid :template-id tid :gatilho "emitir" :voto-relator "contrario"
-               :updated-by nil :agora data :contexto {}})]
+               :updated-by nil :agora data :contexto {} :lock-version 1})]
       (is (= "emitido" (:estado r)) "transicionou mesmo sem rascunho novo (o vigente ja existente basta)")
       (is (= "contrario" (:voto-relator r)) "voto seta SEMPRE, mesmo sem promocao de texto novo")
       (is (= 1 (count (eventos-parecer ente)))))))
+
+;; ========================= emitir-parecer! — CAS otimista (review HIGH fe-11-parecer) =========================
+
+(deftest emitir-parecer-com-lock-version-desatualizado-lanca-sem-escrever
+  (let [ente (random-uuid) tid (montar-template! ente) pid (protocolar! ente) pcid (iniciar-parecer! ente tid pid)]
+    (repo/nova-versao-parecer! *repo* ente {:id (random-uuid) :parecer-id pcid
+                                            :texto-inline "## Relatório\n\nR\n\n## Análise\n\nA"
+                                            :origem-versao "redacao" :formato "markdown"})
+    ;; simula outro usuario ja tendo mudado o parecer (designar-relator! incrementa lock_version pra 1) —
+    ;; o cliente ainda manda o lock-version STALE (0, o que ele viu antes dessa mudanca concorrente).
+    (repo/designar-relator! *repo* ente {:id pcid :relator-id (random-uuid) :updated-by nil :lock-version 0})
+    (is (thrown-with-msg? Exception #"conflito de escrita"
+          (repo/emitir-parecer! *repo* ente *registro*
+            {:parecer-id pcid :template-id tid :gatilho "emitir" :voto-relator "favoravel"
+             :updated-by nil :agora data :contexto {} :lock-version 0})))
+    (is (empty? (eventos-parecer ente)) "conflito detectado ANTES de qualquer escrita (nem voto, nem promocao)")
+    (is (nil? (:texto-vigente (repo/buscar-parecer-para-editor *repo* ente pcid)))
+        "o rascunho NAO foi promovido — a CAS barrou antes da promocao")))

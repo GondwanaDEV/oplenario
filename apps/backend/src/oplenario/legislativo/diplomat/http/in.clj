@@ -14,6 +14,7 @@
   (policy.check/pode-dirigir-votacao?) no controller."
   (:require [oplenario.http :as http]
             [oplenario.interceptors :as it]
+            [oplenario.kernel.tempo :as tempo]
             [oplenario.legislativo.adapters.in.parecer :as adapters-in-parecer]
             [oplenario.legislativo.adapters.in.proposicao :as adapters-in-proposicao]
             [oplenario.legislativo.adapters.in.votacao :as adapters-in]
@@ -22,9 +23,14 @@
             [oplenario.legislativo.adapters.out.proposicao :as adapters-out-proposicao]
             [oplenario.legislativo.adapters.out.relator-pendente :as adapters-out-relator]
             [oplenario.legislativo.adapters.out.votacao :as adapters-out]
-            [oplenario.legislativo.controllers :as controllers]))
+            [oplenario.legislativo.controllers :as controllers])
+  (:import (java.time ZoneId)))
 
 (set! *warn-on-reflection* true)
+
+;; fuso civil p/ `agora` (LocalDate) do gatilho de emissao do parecer — prazos/regras do motor operam em
+;; data civil, nao UTC (review MEDIUM fe-11-parecer); mesma constante de participacao.controllers/zona-civil.
+(def ^:private zona-civil (ZoneId/of "America/Fortaleza"))
 
 (defn- abrir-handler
   "POST /sessoes/:id/votacoes. corpo-json -> :json-params; adapters/in valida+coage+injeta id/autor; controller
@@ -157,13 +163,16 @@
 (defn- emitir-parecer-handler
   "POST /legislativo/pareceres/:id/emissao. O TEMPLATE-ID vem do parecer JA' CARREGADO (o adapters/in nao
   tem outra forma de sabe-lo, review de spec) — mesmo pre-check tambem serve de gate 404. `registro`
-  (RegistroFatos do motor) e' injetado pelo host (mesmo componente de transicionar-parecer!)."
-  [repo-leg registro]
+  (RegistroFatos do motor) e' injetado pelo host (mesmo componente de transicionar-parecer!). `relogio`
+  (kernel/tempo, injetavel em teste — review MEDIUM fe-11-parecer) resolve `agora` AQUI, na borda; o
+  adapters/in so' traduz."
+  [repo-leg registro relogio]
   (fn [req]
     (let [ator (:ator req) ente-id (:ente-id ator)
-          id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+          id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          agora (tempo/hoje relogio zona-civil)]
       (if-let [{:keys [parecer]} (controllers/buscar-parecer-editor repo-leg ente-id id)]
-        (let [m (adapters-in-parecer/emitir->dominio ator id (:template-id parecer) (:json-params req))]
+        (let [m (adapters-in-parecer/emitir->dominio ator id (:template-id parecer) agora (:json-params req))]
           (controllers/emitir-parecer repo-leg registro ente-id m)
           (http/json-resposta 200 (adapters-out-parecer/editor->wire
                                      (controllers/buscar-parecer-editor repo-leg ente-id id))))
@@ -173,11 +182,13 @@
   "Fragmento de rotas da votacao ao vivo + proposicoes + editor de parecer (table syntax Pedestal). Recebe o
   interceptor `auth` (compartilhado), o `repo-legislativo` (Repo-Component do proprio modulo),
   `consultar-sessao` (injetada pelo host — cross-modulo p/ a authz herdada da sessao), `resolver-municipio`
-  (injetada pelo host — cross-modulo p/ o legislativo computar a URN em protocolar!, Onda B Slice 2, §22.10)
-  e `registro` (RegistroFatos do motor, injetado pelo host — Onda B Slice 5, o editor de parecer dirige o
-  motor via emitir-parecer!). Todas as acoes EXIGEM a authz GROSSA (papel 'secretario') + corpo-json nas de
-  escrita; a fina da votacao decide no controller com a sessao carregada."
-  [{:keys [auth repo-legislativo consultar-sessao resolver-municipio registro]}]
+  (injetada pelo host — cross-modulo p/ o legislativo computar a URN em protocolar!, Onda B Slice 2, §22.10),
+  `registro` (RegistroFatos do motor, injetado pelo host — Onda B Slice 5, o editor de parecer dirige o
+  motor via emitir-parecer!) e `relogio` (kernel/tempo, injetado pelo host — review MEDIUM fe-11-parecer,
+  mesmo contrato de `participacao-http/rotas`: producao le o relogio do sistema, teste crava o instante).
+  Todas as acoes EXIGEM a authz GROSSA (papel 'secretario') + corpo-json nas de escrita; a fina da votacao
+  decide no controller com a sessao carregada."
+  [{:keys [auth repo-legislativo consultar-sessao resolver-municipio registro relogio]}]
   (let [papel (it/exige-papel "secretario")]
     #{["/sessoes/:id/votacoes" :post
        [auth papel it/corpo-json (abrir-handler repo-legislativo consultar-sessao)]
@@ -206,7 +217,7 @@
        [auth papel it/corpo-json (salvar-rascunho-parecer-handler repo-legislativo)]
        :route-name :legislativo/salvar-rascunho-parecer]
       ["/legislativo/pareceres/:id/emissao" :post
-       [auth papel it/corpo-json (emitir-parecer-handler repo-legislativo registro)]
+       [auth papel it/corpo-json (emitir-parecer-handler repo-legislativo registro relogio)]
        :route-name :legislativo/emitir-parecer]}))
 
 ;; ========================= FE Onda A1: fila de relatores pendentes (§16.11) =========================
