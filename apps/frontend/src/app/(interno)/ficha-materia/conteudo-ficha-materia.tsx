@@ -74,7 +74,7 @@ export function ConteudoFichaMateria({ id }: { id: string }) {
         <FichaCabecalho proposicao={ficha.proposicao} />
 
         <div className="corpo">
-          <FichaMateriaTabs ficha={ficha} />
+          <FichaMateriaTabs ficha={ficha} token={token} />
           <aside className="rail" aria-labelledby="rail-titulo">
             <h2 id="rail-titulo" className="sr-only">
               Dados e ações da matéria

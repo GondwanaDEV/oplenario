@@ -83,8 +83,10 @@ const PARECER_ROTULO_POR_ESTADO: Record<string, string> = {
   prazo_vencido: "Prazo vencido",
 };
 
-const PARECER_APROVADOS = new Set(["aprovado"]);
-const PARECER_ARQUIVADOS = new Set(["rejeitado", "prejudicado", "prazo_vencido"]);
+// Exportados (Onda B Slice 5, parecer-vista.ts): os 4 desfechos terminais do parecer, reusados pelo
+// editor de parecer pra saber quando travar a escrita — mesmo conjunto, nunca duplicado.
+export const PARECER_APROVADOS = new Set(["aprovado"]);
+export const PARECER_ARQUIVADOS = new Set(["rejeitado", "prejudicado", "prazo_vencido"]);
 
 function categorizarParecer(estado: string): CategoriaSituacao {
   if (PARECER_APROVADOS.has(estado)) return "aprovada";

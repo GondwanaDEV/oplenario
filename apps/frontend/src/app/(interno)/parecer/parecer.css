@@ -1,0 +1,29 @@
+/* Chrome de página do editor de parecer (Onda B Slice 5) — porte VERBATIM de
+   produto/design-system/o-plenario/telas/parecer.html (<style> local): `.doc-cab`, `.balcao` (grid
+   2-colunas), `.rail`/`.rcard`/`.dl`/`.dica-lista`. `.chip-prazo` NÃO é portado (ver formulario-parecer.css
+   — sem prazo plumbado nesta fatia, omitido por inteiro). Tokens + chassi vêm de globals.css. */
+
+.doc-cab { padding: 1.4rem 0 0; display: grid; grid-template-columns: 1fr auto; gap: 0.8rem 1.4rem; align-items: end; }
+.doc-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
+.doc-cab .sub { font-size: var(--t-13); color: var(--texto-2); margin: 0.4rem 0 0; }
+.doc-cab .sub b { color: var(--texto); font-weight: 600; }
+
+.balcao { display: grid; grid-template-columns: minmax(0,1fr) 320px; gap: 1.5rem; align-items: start; margin: 1.4rem 0 0; }
+
+.rail { display: grid; gap: 1rem; position: sticky; top: 76px; }
+.rcard { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.1rem 1.2rem; }
+.rcard h3 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.6rem; }
+.rcard .num { font-family: var(--mono); font-size: var(--t-13); color: var(--acento-texto); font-weight: 600; }
+.rcard .ementa { font-size: var(--t-13); color: var(--texto); margin: 0.3rem 0 0.8rem; line-height: 1.5; }
+.rcard a.ir { display: inline-flex; align-items: center; gap: 0.3rem; font-weight: 600; font-size: var(--t-13); color: var(--marca); text-decoration: none; }
+.rcard a.ir:hover { text-decoration: underline; }
+.dl { display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 0.9rem; margin: 0; }
+.dl dt { font-size: var(--t-12); color: var(--texto-2); }
+.dl dd { font-size: var(--t-13); color: var(--texto); margin: 0; font-weight: 500; }
+.dl dd.mono { font-family: var(--mono); }
+.dica-lista { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.5rem; }
+.dica-lista li { font-size: var(--t-13); color: var(--texto-2); display: flex; gap: 0.5rem; align-items: flex-start; }
+.dica-lista svg { color: var(--marca); flex: 0 0 auto; margin-top: 2px; }
+
+@media (max-width: 920px) { .balcao { grid-template-columns: 1fr; } .rail { position: static; top: auto; order: -1; } }
+@media (max-width: 520px) { .doc-cab { grid-template-columns: 1fr; } }

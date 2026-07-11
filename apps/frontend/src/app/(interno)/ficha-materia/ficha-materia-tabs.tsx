@@ -8,14 +8,24 @@
 // AcoesCard/BalcaoLgpd).
 
 import { useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { EmBreve } from "@/lib/em-breve";
 import { derivarTimelineTramitacao, derivarPareceres, derivarEmendas } from "@/lib/ficha-materia-vista";
 import { formatarData } from "@/lib/formatar-data";
+import { comToken } from "@/lib/nav";
 import type { FichaMateriaOut } from "@/lib/contrato-legislativo.gen";
 
 type Aba = { id: string; rotulo: string; contagem?: number };
 
-export function FichaMateriaTabs({ ficha }: { ficha: FichaMateriaOut }) {
+export function FichaMateriaTabs({
+  ficha,
+  token = null,
+}: {
+  ficha: FichaMateriaOut;
+  // token dev opcional (Onda B Slice 5) — só pra preservar ?token= no link "Abrir parecer"; recebido via
+  // prop (não `useAuth()` aqui) porque esta suíte de teste renderiza o componente SEM <AuthProvider>.
+  token?: string | null;
+}) {
   // useMemo: todos os 5 painéis ficam montados simultaneamente (só `hidden` alterna, ver abaixo) — sem
   // isto, o sort()+map() das 3 derivações reroda a cada keypress de navegação das abas (ArrowLeft/Right/
   // Home/End), mesmo quando `ficha` não mudou (achado do review desta fatia).
@@ -146,6 +156,9 @@ export function FichaMateriaTabs({ ficha }: { ficha: FichaMateriaOut }) {
                 <span className="quem">
                   {p.votoRelator ? `Voto do relator: ${p.votoRelator}` : "Sem voto de relator registrado"}
                 </span>
+                <Link className="ir" href={comToken(`/parecer/${p.id}`, token)}>
+                  Abrir parecer
+                </Link>
               </li>
             ))}
           </ul>
