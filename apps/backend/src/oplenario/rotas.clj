@@ -18,6 +18,17 @@
 
 (set! *warn-on-reflection* true)
 
+(defn resolver-vereador
+  "identidade-id -> vereador-id NESTA Casa — host wiring (§22.5.3, exceção nomeada; mesma forma de
+  `membros-da-casa`/`resolver-municipio` em `montar`). Resolve via o Repo-Component de `cadastros`
+  (`vereador-por-identidade`) e devolve só o `:id`. `nil` quando a identidade não tem cadastro de
+  vereador NESTE ente — não é erro: a borda `/meu` (Onda C1, `legislativo`) trata como painel vazio,
+  nunca 500. O `legislativo` recebe esta fn JÁ RESOLVIDA pelo host (§22.10) — nunca importa `cadastros`.
+  Extraída como defn de topo (em vez de closure só-inline) p/ ser testável direto contra Postgres real,
+  sem subir o sistema inteiro (mesmo racional de `presenca-resumo-wire`/`esic-cumprimento-wire`)."
+  [repo-cadastros ente-id identidade-id]
+  (:id (repo-cadastros-comp/vereador-por-identidade repo-cadastros ente-id identidade-id)))
+
 (defn montar
   "Conjunto de rotas Pedestal (table syntax) a partir dos deps do servidor. `erro`/`cabecalhos` sao GLOBAIS
   (it/globais prepended em http/servico) — nao por rota. Aqui: `autenticacao` resolve o ator; `exige-papel`
@@ -53,6 +64,11 @@
         ;; Onda B Slice 2: uf/nome-do-municipio do ente, p/ o legislativo computar a URN em protocolar! —
         ;; mesma inversao de dependencia de consultar-sessao/membros-da-casa/info-ente (§22.10).
         resolver-municipio (fn [ente-id] (repo-cadastros-comp/uf-e-municipio repo-cadastros ente-id))
+        ;; Onda C1: identidade->vereador-id NESTA Casa, injetado na borda /meu do legislativo (mesma
+        ;; inversao de dependencia de resolver-municipio/membros-da-casa; nome DISTINTO do defn de topo
+        ;; `resolver-vereador` p/ nao sombrear — a chave passada a legislativo-http/rotas continua
+        ;; :resolver-vereador).
+        resolver-vereador-fn (fn [ente-id identidade-id] (resolver-vereador repo-cadastros ente-id identidade-id))
         ;; Override injetavel (mesmo racional de `painel-compliance` — so' serve aos testes DB-free da borda
         ;; de paineis); em producao `montar` e' chamado sem estas chaves e o `or` fecha sobre o repo real.
         presenca-resumo (or presenca-resumo
@@ -85,6 +101,7 @@
         (into (legislativo-http/rotas {:auth auth :repo-legislativo repo-legislativo
                                        :consultar-sessao consultar-sessao
                                        :resolver-municipio resolver-municipio
+                                       :resolver-vereador resolver-vereador-fn
                                        :registro registro-fatos
                                        :relogio relogio-producao}))
         (into (compliance-http/rotas {:auth auth :repo-compliance repo-compliance}))
