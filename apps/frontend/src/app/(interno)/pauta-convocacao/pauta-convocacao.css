@@ -1,0 +1,99 @@
+/* Chrome específico da rota Pauta/convocação (Onda C Slice C2) — portado de
+   produto/design-system/o-plenario/telas/pauta-convocacao.html (<style> local). Tokens + chassi vêm de
+   globals.css; `.envelope`/`.eyebrow`/`.sr-only`/`.btn` já são globais.
+
+   Escopo desta fatia (READ PURO — ver a correção de escopo no header do plano/spec): porta `.pg-cab`,
+   `.faceta`, `.card`, `.grupo`(+`.grupo-cab`), `.pauta-item`(+`.ordem-n`/`.pi-mid`), `.disp`(+`.disp-item`/
+   `.di-mid`), `.conv`(ilha-papel + `.edital-cab`/`.antec`/`.dest`), verbatim onde aplicável.
+
+   NÃO PORTADO (fora de escopo — a fatia não tem NENHUMA mutação de pauta): `.tipo-sel` (seletor
+   EDITÁVEL de tipo de sessão — vira label estático em `.pg-cab h1`), `.grade-form`/`.campo` (form de
+   dados da sessão — vira `<dl>` read-only `.dados-sessao`), `.arrasta` (setas de reordenar — sem
+   `lock-version` não há mutação possível), `.pi-rem`/`.disp-add` (botões de remover/adicionar — mutação),
+   `.add-mat`/`.add-linha` (adicionar matéria — mutação), `.regs`/`.reg-*` (badges de votação/quórum/
+   urgência/regime/adiado — `PautaItemOut` não carrega esse metadado, nada a mostrar sem inventar dado),
+   `.roster` (ciência da convocação — sem tabela hoje, ver spec "Escopo OUT"), `.comando` (barra fixa de
+   ações — todas as 3 ações da tela-fonte são mutação: pré-visualizar/salvar rascunho/publicar).
+
+   NOVO (não existe na tela-fonte): `.dados-sessao` (substitui `.grade-form` por leitura), `.col-vazia`
+   (nota textual de grupo/rail vazio — mesma convenção de tramitacao.css), `.rail-truncado` (aviso honesto
+   quando a página de /proposicoes buscada não cobre o total do tenant), `.tela-estado`/`.acesso-restrito`
+   (estados de carregando/erro/guard — mesma convenção das demais páginas (interno)). */
+
+/* ---- cabeçalho de página ---- */
+.pg-cab { padding: 1.4rem 0 0; display: grid; grid-template-columns: 1fr auto; gap: 0.8rem 1.4rem; align-items: end; }
+.pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
+.pg-cab .leitura { font-size: var(--t-13); color: var(--texto-2); margin: 0.4rem 0 0; max-width: 60ch; }
+
+.faceta { display: inline-flex; align-items: center; gap: 0.4rem; }
+.faceta label { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); }
+.faceta select { font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 55%, var(--linha)); border-radius: var(--raio-sm); padding: 0.5rem 0.6rem; min-height: 40px; cursor: pointer; }
+
+/* ---- balcão (pauta + rail) ---- */
+.balcao { display: grid; grid-template-columns: minmax(0,1fr) 360px; gap: 1.5rem; align-items: start; margin: 1.4rem 0 0; }
+
+.card { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.2rem 1.3rem; }
+.card + .card { margin-top: 1.1rem; }
+.card > h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); margin: 0 0 0.2rem; }
+.card > .ajuda { font-size: var(--t-13); color: var(--texto-2); margin: 0 0 1.1rem; }
+
+.dados-sessao { display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 0.8rem; margin: 0; }
+.dados-sessao dt { font-size: var(--t-12); color: var(--texto-2); }
+.dados-sessao dd { font-size: var(--t-13); color: var(--texto); margin: 0; font-weight: 600; }
+
+/* grupos da pauta */
+.grupo { margin-top: 0.4rem; }
+.grupo + .grupo { margin-top: 1.5rem; }
+.grupo-cab { display: flex; align-items: baseline; gap: 0.6rem; border-bottom: 2px solid var(--linha); padding-bottom: 0.5rem; margin-bottom: 0.8rem; }
+.grupo-cab h3 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--acento-texto); margin: 0; }
+.grupo-cab .cont { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin-left: auto; }
+
+.pauta-item { display: grid; grid-template-columns: auto 1fr; gap: 0.6rem 0.8rem; align-items: center; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.6rem 0.7rem; }
+.pauta-item + .pauta-item { margin-top: 0.55rem; }
+.ordem-n { font-family: var(--display); font-weight: 800; font-size: var(--t-16); color: var(--marca); width: 1.5rem; text-align: center; }
+.pi-mid { min-width: 0; }
+.pi-mid .num { font-family: var(--mono); font-size: var(--t-12); color: var(--acento-texto); }
+.pi-mid h4 { font-family: var(--corpo); font-weight: 600; font-size: var(--t-13); color: var(--texto); margin: 0.1rem 0 0; line-height: 1.3; }
+
+.col-vazia { font-size: var(--t-13); color: var(--texto-2); text-align: center; padding: 1rem 0.5rem; margin: 0; }
+
+/* RAIL */
+.rail { display: grid; gap: 1.1rem; position: sticky; top: 76px; }
+
+.disp h3, .conv h3 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.7rem; }
+.disp-item { display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0; border-top: 1px solid var(--linha); }
+.disp-item:first-of-type { border-top: none; }
+.disp-item .di-mid { min-width: 0; flex: 1; }
+.disp-item .di-mid .num { font-family: var(--mono); font-size: var(--t-12); color: var(--acento-texto); }
+.disp-item .di-mid p { font-size: var(--t-13); color: var(--texto); margin: 0.1rem 0 0; line-height: 1.3; }
+.rail-truncado { font-size: var(--t-12); color: var(--texto-2); margin: 0.6rem 0 0; }
+
+/* convocação = ilha-PAPEL (o artefato) */
+.conv { background: var(--papel); color: var(--papel-texto); border: 1px solid var(--papel-linha); border-radius: var(--raio); box-shadow: var(--sombra-papel); padding: 1.1rem 1.2rem; }
+.conv h3 { color: var(--papel-marca); }
+.conv .edital-cab { font-family: var(--display); font-weight: 700; font-size: var(--t-13); color: var(--papel-texto); text-transform: uppercase; letter-spacing: .02em; border-bottom: 1px solid var(--papel-linha); padding-bottom: 0.55rem; margin-bottom: 0.7rem; }
+.conv dl { display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 0.8rem; margin: 0; }
+.conv dt { font-size: var(--t-12); color: var(--papel-texto-2); }
+.conv dd { font-size: var(--t-13); color: var(--papel-texto); margin: 0; font-weight: 600; }
+.conv dd .mono { font-family: var(--mono); }
+.conv .antec { margin: 0.9rem 0 0; padding: 0.6rem 0.7rem; background: var(--papel-2); border-radius: var(--raio-sm); font-size: var(--t-12); color: color-mix(in srgb, var(--papel-texto) 55%, var(--papel-texto-2)); line-height: 1.45; }
+.conv .antec b { color: var(--papel-texto); }
+.conv .antec .tag { font-family: var(--mono); font-size: 0.6rem; letter-spacing: .04em; text-transform: uppercase; color: #6E5009; border: 1px solid #B07D14; border-radius: 4px; padding: 0.02rem 0.3rem; }
+.conv .dest { margin: 0.8rem 0 0; font-size: var(--t-13); color: var(--papel-texto); }
+
+/* ---- estados de carregando/erro/guard (mesma convenção de tramitacao.css / vereador-shell.css) ---- */
+.tela-estado { max-width: 520px; margin: 4rem auto; text-align: center; padding: 2rem; }
+.tela-estado h1 { font-family: var(--display); font-size: var(--t-21); color: var(--texto); margin: 0 0 0.5rem; }
+.tela-estado p { color: var(--texto-2); }
+
+.acesso-restrito { max-width: 460px; margin: 3rem auto; padding: 1.5rem; text-align: center; }
+.acesso-restrito h1 { font-family: var(--display); font-size: var(--t-21); color: var(--texto); }
+.acesso-restrito p { font-size: var(--t-13); color: var(--texto-2); margin-top: 0.5rem; }
+
+@media (max-width: 980px) {
+  .balcao { grid-template-columns: 1fr; }
+  .rail { position: static; top: auto; }
+}
+@media (max-width: 720px) {
+  .pg-cab { grid-template-columns: 1fr; }
+}
