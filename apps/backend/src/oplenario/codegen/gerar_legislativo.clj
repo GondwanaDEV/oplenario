@@ -7,6 +7,7 @@
   (:require [clojure.java.io :as io]
             [oplenario.codegen.malli-ts :as ts]
             [oplenario.legislativo.wire.out.ficha-materia :as ficha]
+            [oplenario.legislativo.wire.out.parecer :as parecer]
             [oplenario.legislativo.wire.out.proposicao :as proposicao]))
 
 (def manifesto
@@ -19,7 +20,11 @@
    ["ApensacaoOut" ficha/ApensacaoOut]
    ["EmendaResumoOut" ficha/EmendaResumoOut]
    ["ParecerResumoOut" ficha/ParecerResumoOut]
-   ["FichaMateriaOut" ficha/FichaMateriaOut]])
+   ["FichaMateriaOut" ficha/FichaMateriaOut]
+   ;; Onda B Slice 5 (editor de parecer) — schema PROPRIO (nao reusa ParecerResumoOut, que e' o resumo
+   ;; dentro da ficha da materia).
+   ["ObjetoResumoOut" parecer/ObjetoResumoOut]
+   ["ParecerEditorOut" parecer/ParecerEditorOut]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))
 

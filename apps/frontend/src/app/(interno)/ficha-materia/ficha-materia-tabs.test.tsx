@@ -48,6 +48,13 @@ describe("FichaMateriaTabs", () => {
     expect(screen.getByText("CCJ")).toBeTruthy();
   });
 
+  it("aba Pareceres: cada item linka pro editor de parecer (Onda B Slice 5), preservando ?token=", () => {
+    render(<FichaMateriaTabs ficha={ficha} token="tok" />);
+    fireEvent.click(screen.getByRole("tab", { name: /pareceres/i }));
+    const link = screen.getByRole("link", { name: /abrir parecer/i }) as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe("/parecer/p1?token=tok");
+  });
+
   it("clique numa aba move o foco do DOM pra ela (roving tabindex não pode desincronizar do foco real)", () => {
     render(<FichaMateriaTabs ficha={ficha} />);
     const abaPareceres = screen.getByRole("tab", { name: /pareceres/i });

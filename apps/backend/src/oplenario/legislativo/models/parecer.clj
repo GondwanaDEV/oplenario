@@ -4,7 +4,8 @@
   :string (NAO enum): e' TEMPLATE-DRIVEN como proposicoes.estado — a maquina vive nas tabelas de template
   (config tenant), nao num enum em codigo. Ref polimorfica (objeto_tipo,objeto_id) p/ proposicao OU emenda
   (disc.2). `voto-relator` e' :string sem enum (vocabulario regimental ABERTO, §22.4.4)."
-  (:require [oplenario.legislativo.logic :as logic]))
+  (:require [oplenario.kernel.malli :as km]
+            [oplenario.legislativo.logic :as logic]))
 
 (defn- enum-de [s] (into [:enum] (sort s)))
 
@@ -25,4 +26,6 @@
    ;; ponteiro p/ a versao de texto vigente do parecer (F3.6b); NULL ate la
    [:texto-vigente-versao-id {:optional true} [:maybe :uuid]]
    ;; concorrencia: exposto p/ o CAS de mudar-estado!/designar-relator!/transicionar-parecer!
-   [:lock-version :int]])
+   [:lock-version :int]
+   ;; Onda B Slice 5: coluna ja existia na migration 0019, so' nao era lida por db/buscar ate agora.
+   [:criado-em km/Instante]])

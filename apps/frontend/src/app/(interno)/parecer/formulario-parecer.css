@@ -1,0 +1,45 @@
+/* FormularioParecer (Onda B Slice 5) — page-scoped, mesma disciplina de formulario-proposicao.css: linka a
+   fundação global (tokens.css/chassi.css via globals.css), não redefine nenhum token. Porte VERBATIM de
+   produto/design-system/o-plenario/telas/parecer.html (<style> local) — só o que é do form-card
+   (`.secao`/`.campo textarea`/`.votos`/`.voto*`). `.balcao`/`.rail`/`.rcard`/`.dl`/`.dica-lista`/`.doc-cab`
+   ficam em ./parecer.css (chrome de página, compartilhado com RailParecer). `.chip-prazo` do mockup NÃO é
+   portado — a fatia não tem prazo/vencimento plumbado pra parecer ainda (§22.7.7 não ligado a pareceres),
+   o chip é omitido por inteiro (Global Constraint "sem dado falso"), não só escondido.
+
+   `.comando` NÃO é redefinido aqui (ao contrário de formulario-proposicao.css, que reusa o NOME da classe
+   só pra um flex-row local de 1 botão) — usa a barra fixa REAL de chassi.css, com as 3 ações do mockup. */
+
+.form-card { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.4rem 1.5rem; }
+.secao { margin: 0 0 1.4rem; }
+.secao:last-child { margin-bottom: 0; }
+.secao > h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.3rem; }
+.secao > .aj { font-size: var(--t-12); color: var(--texto-2); margin: 0 0 0.6rem; }
+.campo textarea { font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 55%, var(--linha)); border-radius: var(--raio-sm); padding: 0.75rem 0.85rem; min-height: 110px; width: 100%; line-height: 1.6; resize: vertical; }
+.campo textarea:disabled { opacity: 0.7; cursor: not-allowed; }
+
+/* voto = a escolha decisiva (cartões-rádio) */
+.votos { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.6rem; }
+.voto { position: relative; }
+.voto input { position: absolute; opacity: 0; pointer-events: none; }
+.voto label { display: flex; align-items: center; gap: 0.6rem; padding: 0.9rem; border: 1.5px solid var(--linha); border-radius: var(--raio); cursor: pointer; background: var(--surface-2); }
+.voto input:disabled + label { cursor: not-allowed; opacity: 0.7; }
+.voto label .ic { width: 30px; height: 30px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; color: #fff; }
+.ve label .ic { background: var(--jade-claro); } .vf label .ic { background: var(--amarelo-traco); } .vc label .ic { background: var(--telha); }
+.voto label b { font-size: var(--t-13); color: var(--texto); }
+.voto input:checked + label { border-color: var(--marca); box-shadow: inset 0 0 0 1px var(--marca); background: color-mix(in srgb, var(--marca) 6%, var(--surface-2)); }
+.ve input:checked + label { border-color: var(--jade-claro); box-shadow: inset 0 0 0 1px var(--jade-claro); }
+.vf input:checked + label { border-color: var(--amarelo-traco); box-shadow: inset 0 0 0 1px var(--amarelo-traco); }
+.vc input:checked + label { border-color: var(--telha); box-shadow: inset 0 0 0 1px var(--telha); }
+.voto input:focus-visible + label { outline: 3px solid var(--foco); outline-offset: 2px; }
+
+/* Pré-visualização — não faz parte do mockup (leitura client-side desta fatia, spec §"Pré-visualizar");
+   reusa o vocabulário visual de .secao, texto em prosa no lugar do textarea. */
+.pre-visualizacao .secao p { font-size: var(--t-16); color: var(--texto); line-height: 1.6; white-space: pre-wrap; margin: 0; }
+
+/* Nota de token (mesma de formulario-proposicao.css): `--erro-texto` não existe em tokens.css — usa-se
+   `--acento-texto` (telha legível como texto, AA auditado em GUIDELINES-CHECKLIST §5.1). */
+.form-erro { color: var(--acento-texto); background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.7rem 1rem; margin: 0 0 1rem; }
+
+@media (max-width: 520px) {
+  .form-card { padding: 1.1rem 1.1rem; }
+}

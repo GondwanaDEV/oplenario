@@ -14,15 +14,23 @@
   (policy.check/pode-dirigir-votacao?) no controller."
   (:require [oplenario.http :as http]
             [oplenario.interceptors :as it]
+            [oplenario.kernel.tempo :as tempo]
+            [oplenario.legislativo.adapters.in.parecer :as adapters-in-parecer]
             [oplenario.legislativo.adapters.in.proposicao :as adapters-in-proposicao]
             [oplenario.legislativo.adapters.in.votacao :as adapters-in]
             [oplenario.legislativo.adapters.out.ficha-materia :as adapters-out-ficha]
+            [oplenario.legislativo.adapters.out.parecer :as adapters-out-parecer]
             [oplenario.legislativo.adapters.out.proposicao :as adapters-out-proposicao]
             [oplenario.legislativo.adapters.out.relator-pendente :as adapters-out-relator]
             [oplenario.legislativo.adapters.out.votacao :as adapters-out]
-            [oplenario.legislativo.controllers :as controllers]))
+            [oplenario.legislativo.controllers :as controllers])
+  (:import (java.time ZoneId)))
 
 (set! *warn-on-reflection* true)
+
+;; fuso civil p/ `agora` (LocalDate) do gatilho de emissao do parecer — prazos/regras do motor operam em
+;; data civil, nao UTC (review MEDIUM fe-11-parecer); mesma constante de participacao.controllers/zona-civil.
+(def ^:private zona-civil (ZoneId/of "America/Fortaleza"))
 
 (defn- abrir-handler
   "POST /sessoes/:id/votacoes. corpo-json -> :json-params; adapters/in valida+coage+injeta id/autor; controller
@@ -128,14 +136,59 @@
             (http/json-resposta 200 (adapters-out-proposicao/detalhe->wire proposicao texto))
             (http/json-resposta 404 {:erro "proposicao nao encontrada"})))))))
 
+(defn- parecer-editor-handler
+  "GET /legislativo/pareceres/:id (Onda B Slice 5). nil (parecer inexistente ou de outro tenant) -> 404."
+  [repo-leg]
+  (fn [req]
+    (let [ente-id (:ente-id (:ator req))
+          id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [dados (controllers/buscar-parecer-editor repo-leg ente-id id)]
+        (http/json-resposta 200 (adapters-out-parecer/editor->wire dados))
+        (http/json-resposta 404 {:erro "parecer nao encontrado"})))))
+
+(defn- salvar-rascunho-parecer-handler
+  "PATCH /legislativo/pareceres/:id. PRE-CHECK 404 ANTES de escrever se o parecer nao existir (mesmo
+  contrato de editar-proposicao-handler — evita a ex-info sem :tipo do db/ cair no fallback 500)."
+  [repo-leg]
+  (fn [req]
+    (let [ator (:ator req) ente-id (:ente-id ator)
+          id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-not (controllers/buscar-parecer-editor repo-leg ente-id id)
+        (http/json-resposta 404 {:erro "parecer nao encontrado"})
+        (let [m (adapters-in-parecer/salvar-rascunho->dominio ator id (:json-params req))]
+          (controllers/salvar-rascunho-parecer repo-leg ente-id m)
+          (http/json-resposta 200 (adapters-out-parecer/editor->wire
+                                     (controllers/buscar-parecer-editor repo-leg ente-id id))))))))
+
+(defn- emitir-parecer-handler
+  "POST /legislativo/pareceres/:id/emissao. O TEMPLATE-ID vem do parecer JA' CARREGADO (o adapters/in nao
+  tem outra forma de sabe-lo, review de spec) — mesmo pre-check tambem serve de gate 404. `registro`
+  (RegistroFatos do motor) e' injetado pelo host (mesmo componente de transicionar-parecer!). `relogio`
+  (kernel/tempo, injetavel em teste — review MEDIUM fe-11-parecer) resolve `agora` AQUI, na borda; o
+  adapters/in so' traduz."
+  [repo-leg registro relogio]
+  (fn [req]
+    (let [ator (:ator req) ente-id (:ente-id ator)
+          id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          agora (tempo/hoje relogio zona-civil)]
+      (if-let [{:keys [parecer]} (controllers/buscar-parecer-editor repo-leg ente-id id)]
+        (let [m (adapters-in-parecer/emitir->dominio ator id (:template-id parecer) agora (:json-params req))]
+          (controllers/emitir-parecer repo-leg registro ente-id m)
+          (http/json-resposta 200 (adapters-out-parecer/editor->wire
+                                     (controllers/buscar-parecer-editor repo-leg ente-id id))))
+        (http/json-resposta 404 {:erro "parecer nao encontrado"})))))
+
 (defn rotas
-  "Fragmento de rotas da votacao ao vivo + proposicoes (table syntax Pedestal). Recebe o interceptor `auth`
-  (compartilhado), o `repo-legislativo` (Repo-Component do proprio modulo), `consultar-sessao` (injetada pelo
-  host — cross-modulo p/ a authz herdada da sessao) e `resolver-municipio` (injetada pelo host — cross-modulo
-  p/ o legislativo computar a URN em protocolar!, Onda B Slice 2, §22.10). Todas as acoes EXIGEM a authz
-  GROSSA (papel 'secretario') + corpo-json nas de escrita; a fina da votacao decide no controller com a
-  sessao carregada."
-  [{:keys [auth repo-legislativo consultar-sessao resolver-municipio]}]
+  "Fragmento de rotas da votacao ao vivo + proposicoes + editor de parecer (table syntax Pedestal). Recebe o
+  interceptor `auth` (compartilhado), o `repo-legislativo` (Repo-Component do proprio modulo),
+  `consultar-sessao` (injetada pelo host — cross-modulo p/ a authz herdada da sessao), `resolver-municipio`
+  (injetada pelo host — cross-modulo p/ o legislativo computar a URN em protocolar!, Onda B Slice 2, §22.10),
+  `registro` (RegistroFatos do motor, injetado pelo host — Onda B Slice 5, o editor de parecer dirige o
+  motor via emitir-parecer!) e `relogio` (kernel/tempo, injetado pelo host — review MEDIUM fe-11-parecer,
+  mesmo contrato de `participacao-http/rotas`: producao le o relogio do sistema, teste crava o instante).
+  Todas as acoes EXIGEM a authz GROSSA (papel 'secretario') + corpo-json nas de escrita; a fina da votacao
+  decide no controller com a sessao carregada."
+  [{:keys [auth repo-legislativo consultar-sessao resolver-municipio registro relogio]}]
   (let [papel (it/exige-papel "secretario")]
     #{["/sessoes/:id/votacoes" :post
        [auth papel it/corpo-json (abrir-handler repo-legislativo consultar-sessao)]
@@ -157,7 +210,15 @@
        :route-name :legislativo/ficha-materia]
       ["/legislativo/proposicoes/:id" :patch
        [auth papel it/corpo-json (editar-proposicao-handler repo-legislativo)]
-       :route-name :legislativo/editar-proposicao]}))
+       :route-name :legislativo/editar-proposicao]
+      ["/legislativo/pareceres/:id" :get [auth papel (parecer-editor-handler repo-legislativo)]
+       :route-name :legislativo/parecer-editor]
+      ["/legislativo/pareceres/:id" :patch
+       [auth papel it/corpo-json (salvar-rascunho-parecer-handler repo-legislativo)]
+       :route-name :legislativo/salvar-rascunho-parecer]
+      ["/legislativo/pareceres/:id/emissao" :post
+       [auth papel it/corpo-json (emitir-parecer-handler repo-legislativo registro relogio)]
+       :route-name :legislativo/emitir-parecer]}))
 
 ;; ========================= FE Onda A1: fila de relatores pendentes (§16.11) =========================
 

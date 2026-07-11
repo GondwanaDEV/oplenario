@@ -13,7 +13,7 @@
 
 (def ^:private colunas
   [:id :ente_id :objeto_tipo :objeto_id :comissao_id :relator_id :voto_relator :estado
-   :template_id :texto_vigente_versao_id :lock_version])
+   :template_id :texto_vigente_versao_id :lock_version :criado_em])
 
 ;; objeto_tipo -> tabela do objeto (p/ a prova de existencia same-tenant; disc.2)
 (def ^:private objeto-tipo->tabela
@@ -109,6 +109,20 @@
   (let [r (jdbc/execute-one! tx
             (sql/format {:update :legislativo.pareceres
                          :set {:relator_id relator-id :updated_by updated-by :atualizado_em [:now]
+                               :lock_version [:+ :lock_version 1]}
+                         :where [:and [:= :ente_id ente-id] [:= :id id] [:= :lock_version lock-version]]}))]
+    (when (zero? (:next.jdbc/update-count r 0))
+      (throw (ex-info "conflito de escrita (lock_version desatualizado) ou parecer inexistente"
+                      {:id id :lock-version lock-version})))
+    r))
+
+(defn registrar-voto-relator!
+  "Registra/atualiza `voto_relator` (CAS por lock_version) — MESMO shape de designar-relator!/mudar-estado!.
+  O voto pode mudar sem reescrever o texto (Onda B Slice 5): ato independente da promocao de versao."
+  [tx {:keys [id ente-id voto-relator updated-by lock-version]}]
+  (let [r (jdbc/execute-one! tx
+            (sql/format {:update :legislativo.pareceres
+                         :set {:voto_relator voto-relator :updated_by updated-by :atualizado_em [:now]
                                :lock_version [:+ :lock_version 1]}
                          :where [:and [:= :ente_id ente-id] [:= :id id] [:= :lock_version lock-version]]}))]
     (when (zero? (:next.jdbc/update-count r 0))

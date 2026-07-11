@@ -28,13 +28,17 @@
   que NAO importam sessoes."
   [{:keys [idp repo-identidade repo-sessoes repo-legislativo repo-compliance repo-participacao
            repo-transparencia repo-paineis repo-cadastros canal-store objeto-store painel-compliance
-           presenca-resumo esic-cumprimento relatores-pendentes info-ente]}]
+           presenca-resumo esic-cumprimento relatores-pendentes info-ente registro-fatos]}]
   (let [auth (it/autenticacao idp repo-identidade)
         ;; F6: relogio de producao (kernel/tempo) p/ o prazo LAI do e-SIC — determinismo em teste vem de
         ;; injetar relogio-fixo direto no fragmento de rotas (participacao-http/rotas). resolver-ente-publico
         ;; = seam da rota PUBLICA (sem ator): mapeia o :ente do path -> ente-id (V1 = UUID coagido fail-closed);
         ;; o Repo abre com-tenant* com ele e a RLS isola. Slug humano = refino futuro.
-        relogio-participacao (tempo/relogio-sistema)
+        ;; relogio de PRODUCAO compartilhado (stateless — le o relogio do sistema a cada chamada, kernel/tempo):
+        ;; participacao (prazo LAI) e legislativo (Onda B Slice 5, `agora` do gatilho de emissao do parecer,
+        ;; review MEDIUM fe-11-parecer) usam a MESMA instancia; determinismo em teste vem de cada fragmento de
+        ;; rotas receber `relogio-fixo` no lugar, direto.
+        relogio-producao (tempo/relogio-sistema)
         ;; cross-modulo via inversao de dependencia: o host fecha sobre o Repo de sessoes e expoe a consulta-fato
         ;; que o endpoint SSE (G3) E a vertical de votacao ao vivo (F4 Slice 3, no legislativo) precisam p/
         ;; autorizar (a RLS escopa por tenant). Os modulos chamam por esta fn, nunca importam sessoes (§22.10).
@@ -80,11 +84,13 @@
         (into (sessoes-http/rotas {:auth auth :repo-sessoes repo-sessoes :objeto-store objeto-store}))
         (into (legislativo-http/rotas {:auth auth :repo-legislativo repo-legislativo
                                        :consultar-sessao consultar-sessao
-                                       :resolver-municipio resolver-municipio}))
+                                       :resolver-municipio resolver-municipio
+                                       :registro registro-fatos
+                                       :relogio relogio-producao}))
         (into (compliance-http/rotas {:auth auth :repo-compliance repo-compliance}))
         (into (participacao-http/rotas {:auth auth :repo-participacao repo-participacao
                                         :resolver-ente-publico participacao-http/resolver-ente-publico-uuid
-                                        :relogio relogio-participacao}))
+                                        :relogio relogio-producao}))
         (into (transparencia-http/rotas {:auth auth :repo-transparencia repo-transparencia
                                          :resolver-ente-publico transparencia-http/resolver-ente-publico-uuid
                                          :objeto-store objeto-store

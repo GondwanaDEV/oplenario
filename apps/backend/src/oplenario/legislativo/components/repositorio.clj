@@ -96,6 +96,15 @@
   (registrar-voto-divergente! [this ente-id m] "Registra voto vencido (append-only puro).")
   (votos-divergentes-do-parecer [this ente-id parecer-id])
   (relatores-pendentes [this ente-id] "Fila de pareceres aguardando designacao de relator (FE Onda A1).")
+  ;; Onda B Slice 5 — borda de edicao/emissao do parecer (agrega leitura p/ o editor + o ato de emitir)
+  (buscar-parecer-para-editor [this ente-id id]
+    "UMA tx: {:parecer :objeto (proposicao, se objeto-tipo='proposicao'; senao nil) :texto-rascunho
+     :texto-vigente}. nil (parecer inexistente) mesmo contrato de buscar-proposicao-detalhe.")
+  (emitir-parecer! [this ente-id registro args]
+    "Promove o rascunho mais recente a vigente (se houver) + registra o voto do relator + tenta
+     transicionar (gatilho recebido, best-effort; MESMO padrao de transicionar-parecer!, `registro` p/
+     o motor), 1 tx. Lanca :validacao/invalido se nao houver NENHUM conteudo de texto (nem rascunho nem
+     vigente ja gravado) — nunca emite parecer vazio. Devolve o estado FINAL do parecer.")
   ;; eixo G — votacao (emite eventos votacao.aberta/voto.registrado/votacao.encerrada = fonte do placar ao vivo, F4)
   (abrir-votacao! [this ente-id m] "Abre votacao 'aberta' sobre objeto polimorfico.")
   (registrar-voto! [this ente-id m] "Voto nominal atribuido (append-only; UNIQUE por vereador).")
@@ -340,6 +349,64 @@
   (votos-divergentes-do-parecer [this ente-id pid] (transacao this ente-id #(parecer-voto/listar-por-parecer % ente-id pid)))
   ;; FE Onda A1 (§16.11) — read-model barato, tenant-wide, teto fixo 50 (sem paginacao nesta fatia).
   (relatores-pendentes [this ente-id] (transacao this ente-id #(parecer/relatores-pendentes % ente-id 50)))
+  ;; Onda B Slice 5 — editor/emissao do parecer. buscar-parecer-para-editor agrega LEITURA (parecer + objeto
+  ;; opcional + texto rascunho/vigente) NUMA UNICA tx (mesma disciplina de ficha-completa-da-proposicao). O
+  ;; objeto e' SEMPRE 'proposicao' nesta fatia (mesma decisao YAGNI de relatores-pendentes — 'emenda' fica
+  ;; fora ate' um requisito de cliente puxar).
+  (buscar-parecer-para-editor [this ente-id id]
+    (transacao this ente-id
+      (fn [tx]
+        (when-let [p (parecer/buscar tx ente-id id)]
+          {:parecer p
+           :objeto (when (= "proposicao" (:objeto-tipo p)) (proposicao/buscar tx ente-id (:objeto-id p)))
+           :texto-rascunho (parecer-texto/rascunho-mais-recente tx ente-id id)
+           :texto-vigente (parecer-texto/vigente tx ente-id id)}))))
+  ;; emitir-parecer! compoe (promove rascunho->vigente se houver + registra voto SEMPRE + tenta transicionar
+  ;; + emite parecer.transicionou na MESMA tx) — espelha transicionar-parecer! (eixo F/F3.6a) mas NAO pode
+  ;; chamar o protocolo `transicionar-parecer!` diretamente (abriria SUA PROPRIA tx, quebrando a atomicidade
+  ;; com promover!/registrar-voto-relator!) — por isso reusa parecer-tram/transicionar-parecer! (db/) +
+  ;; producers/emitir-transicionou-parecer! INLINE, o MESMO bloco do impl acima.
+  (emitir-parecer! [this ente-id registro {:keys [parecer-id template-id gatilho voto-relator updated-by agora
+                                                   contexto lock-version]}]
+    (transacao this ente-id
+      (fn [tx]
+        ;; CAS otimista contra o SNAPSHOT QUE O CLIENTE VIU (review HIGH fe-11-parecer): confere ANTES de
+        ;; qualquer escrita, contra o `lock-version` que veio do corpo — os CAS internos abaixo (promover!/
+        ;; registrar-voto-relator!) releem o valor FRESCO desta MESMA tx pra encadear os proprios passos
+        ;; (isso e' correto: sao escritas NOSSAS, nao concorrentes) e por isso NUNCA veem conflito do ponto
+        ;; de vista do cliente. Zero escritas ainda acontecem se este guard lanca (mesma disciplina do guard
+        ;; de "sem rascunho e sem vigente" logo abaixo).
+        (let [atual (parecer/buscar tx ente-id parecer-id)]
+          (when (nil? atual)
+            (throw (ex-info "emitir-parecer!: parecer inexistente no tenant"
+                            {:parecer-id parecer-id :ente-id ente-id})))
+          (when (not= lock-version (:lock-version atual))
+            (throw (ex-info "conflito de escrita (lock_version desatualizado) ou parecer inexistente"
+                            {:id parecer-id :lock-version lock-version}))))
+        (let [rascunho (parecer-texto/rascunho-mais-recente tx ente-id parecer-id)]
+          ;; fail-closed (spec Onda B Slice 5): SEM rascunho E SEM vigente ja gravado -> lanca. `and` e'
+          ;; short-circuit — a leitura de `vigente` so' roda quando ja' nao ha rascunho.
+          (when (and (nil? rascunho) (nil? (parecer-texto/vigente tx ente-id parecer-id)))
+            (throw (ex-info "emitir-parecer!: nenhum conteudo de texto para emitir"
+                            {:tipo :validacao/invalido :parecer-id parecer-id})))
+          (when rascunho
+            (parecer-texto/promover! tx {:ente-id ente-id :parecer-id parecer-id :versao-id (:id rascunho)
+                                         :updated-by updated-by :lock-version (:lock-version rascunho)})))
+        ;; voto SEMPRE seta (mesmo sem rascunho novo) — re-le' o lock-version POS-promover! (o reaponte do
+        ;; pointer incrementa o lock_version do parecer; usar o valor pre-promover! CASaria contra versao
+        ;; desatualizada e lancaria conflito espurio).
+        (let [{:keys [lock-version]} (parecer/buscar tx ente-id parecer-id)]
+          (parecer/registrar-voto-relator! tx {:id parecer-id :ente-id ente-id :voto-relator voto-relator
+                                               :updated-by updated-by :lock-version lock-version}))
+        (let [r (parecer-tram/transicionar-parecer! tx {:registro registro :ente-id ente-id :parecer-id parecer-id
+                                                         :template-id template-id :gatilho gatilho :agora agora
+                                                         :contexto contexto :updated-by updated-by})]
+          (when (:transicionou? r)
+            (producers/emitir-transicionou-parecer! bus tx ente-id
+              {:parecer-id parecer-id :template-id template-id
+               :objeto-tipo (:objeto-tipo r) :objeto-id (:objeto-id r)
+               :de (:de r) :para (:para r) :gatilho gatilho :transicao-id (:transicao-id r)})))
+        (parecer/buscar tx ente-id parecer-id))))
   ;; eixo G / carry F4 — votacao. Compoe o ato + a emissao do evento de TEMPO REAL na MESMA tx do tenant
   ;; (atomicidade outbox-com-o-ato §22.9 E2; fonte do placar ao vivo, §22.6 eixo G). So emite quando ha
   ;; sessao-id: a votacao em plenario tem canal (`sessao/{id}/plenario`); o ato administrativo (ex.: apreciacao

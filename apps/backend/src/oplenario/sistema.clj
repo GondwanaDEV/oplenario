@@ -133,8 +133,11 @@
          ;; sobre as instancias iniciadas. W3: +repo-sessoes p/ a vertical de rotas de sessoes (o fan-out por
          ;; modulo acrescenta cada Repo aqui). G3: +canal-store p/ o endpoint SSE. F4 Slice 3: +repo-legislativo
          ;; p/ a vertical de votacao ao vivo (rota mora no legislativo; authz herdada da sessao via consultar-sessao).
+         ;; Onda B Slice 5: +:registro-fatos — a 1a rota HTTP do legislativo que dirige o motor (emitir-parecer!,
+         ;; parecer-tram/transicionar-parecer!) precisa do RegistroFatos injetado (mesmo componente que
+         ;; `repo/transicionar-parecer!` ja recebe via chamada direta nos testes de integracao).
          :servidor-http (component/using
                          (http-servidor/servidor-http config rotas/montar)
                          [:idp :repo-identidade :repo-sessoes :repo-legislativo :repo-compliance
                           :repo-participacao :repo-transparencia :repo-paineis :repo-cadastros
-                          :canal-store :objeto-store])))
+                          :canal-store :objeto-store :registro-fatos])))
