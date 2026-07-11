@@ -18,14 +18,19 @@
             [oplenario.rotas :as rotas]))
 
 (defn- fake-repo-legislativo
-  "RepoLegislativo fake (parcial proposital — so' meu-painel/acusar-ciencia!). A AUSENCIA de uma chave e'
-  PROPOSITAL: se o handler chamar o metodo fora de ordem, a chamada nil estoura — sinaliza a regressao em
-  vez de passar silenciosamente."
-  [{:keys [meu-painel acusar-ciencia!]}]
+  "RepoLegislativo fake (parcial proposital — so' meu-painel/acusar-ciencia!/parecer-elegivel-para-ciencia?).
+  A AUSENCIA de uma chave e' PROPOSITAL: se o handler chamar o metodo fora de ordem, a chamada nil estoura —
+  sinaliza a regressao em vez de passar silenciosamente. `parecer-elegivel-para-ciencia?` default TRUE
+  (o caminho feliz historico dos testes de POST /meu/ciencias nao mudou de intencao — so' o teste dedicado
+  ao guard de elegibilidade override para false)."
+  [{:keys [meu-painel acusar-ciencia! parecer-elegivel-para-ciencia?]
+    :or {parecer-elegivel-para-ciencia? (constantly true)}}]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify repo-leg/RepoLegislativo
     (meu-painel [_ ente-id vereador-id] (meu-painel ente-id vereador-id))
-    (acusar-ciencia! [_ ente-id m] (acusar-ciencia! ente-id m))))
+    (acusar-ciencia! [_ ente-id m] (acusar-ciencia! ente-id m))
+    (parecer-elegivel-para-ciencia? [_ ente-id vereador-id evento-ref]
+      (parecer-elegivel-para-ciencia? ente-id vereador-id evento-ref))))
 
 (defn- fake-repo-identidade [papeis]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
@@ -153,6 +158,17 @@
   (let [r (pt/response-for (service-fn #{"vereador"} (fake-repo-legislativo {}) (fn [_e _i] nil))
                            :post "/meu/ciencias" :headers (com-bearer (token (random-uuid) (random-uuid)))
                            :body (json/write-value-as-string {:evento-ref (str (random-uuid)) :tipo "parecer_publicado"}))]
+    (is (= 404 (:status r)))))
+
+(deftest acusar-ciencia-evento-ref-nao-elegivel-404-nunca-insere
+  ;; review CRITICO (clojure+database+security) — evento-ref que nao e' um parecer publicado do PROPRIO
+  ;; vereador (inexistente, ou de outro vereador): 404, e acusar-ciencia! NEM E' CHAMADO (o fake sem
+  ;; :acusar-ciencia! estouraria se o handler chamasse mesmo assim).
+  (let [ente (random-uuid) identidade (random-uuid) vereador (random-uuid) evento (random-uuid)
+        repo (fake-repo-legislativo {:parecer-elegivel-para-ciencia? (fn [_e _v _ev] false)})
+        r (pt/response-for (service-fn #{"vereador"} repo (fn [e i] (when (and (= e ente) (= i identidade)) vereador)))
+                           :post "/meu/ciencias" :headers (com-bearer (token ente identidade))
+                           :body (json/write-value-as-string {:evento-ref (str evento) :tipo "parecer_publicado"}))]
     (is (= 404 (:status r)))))
 
 (deftest acusar-ciencia-corpo-invalido-400

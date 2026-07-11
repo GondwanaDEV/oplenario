@@ -5,7 +5,9 @@
 
 (def AcusarCiencia
   "Corpo de POST /meu/ciencias. `evento-ref` = o id do evento reconhecido (V1: o id do parecer publicado
-  sobre proposicao de minha autoria); `tipo` = o vocabulario aberto do evento (V1: so' 'parecer_publicado')."
+  sobre proposicao de minha autoria); `tipo` = vocabulario FECHADO (review sec MINOR — so' 'parecer_publicado'
+  na V1, mesma disciplina de vocabulario fechado do §22.7; `ciencia_vereador.tipo` no banco continua `text`
+  aberto, a extensibilidade futura e' adicionar valores aqui, nao abrir o schema de borda)."
   [:map {:closed true}
    [:evento-ref [:string {:min 1 :max 36}]]
-   [:tipo [:string {:min 1 :max 100}]]])
+   [:tipo [:enum "parecer_publicado"]]])

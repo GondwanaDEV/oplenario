@@ -196,3 +196,59 @@
   (is (nil? (controllers/acusar-ciencia nil (fn [_ _] nil)
               {:ente-id (random-uuid) :identidade-id (random-uuid)}
               {:id (random-uuid) :evento-ref (random-uuid) :tipo "parecer_publicado"}))))
+
+;; ---------- review CRITICO (clojure+database+security): guard de pertinencia/elegibilidade de evento-ref
+;;            (IDOR/Inv.10 — sem isso, qualquer UUID bem-formado virava prova append-only fabricada).
+
+(deftest parecer-elegivel-para-ciencia-recusa-evento-ref-de-parecer-de-outro-vereador
+  (let [ente (random-uuid) vereador-a (random-uuid) vereador-b (random-uuid)
+        tid (montar-template-parecer! ente)
+        pid-b (protocolar! ente vereador-b)
+        {pcid-b :id} (repo-legislativo/iniciar-parecer! *repo-legislativo* ente
+                       {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id pid-b
+                        :comissao-id (random-uuid) :template-id tid})]
+    (publicar-parecer! ente pcid-b)
+    (is (false? (repo-legislativo/parecer-elegivel-para-ciencia? *repo-legislativo* ente vereador-a pcid-b))
+        "parecer publicado sobre proposicao de OUTRO vereador nao e' elegivel p/ vereador-a")
+    (is (true? (repo-legislativo/parecer-elegivel-para-ciencia? *repo-legislativo* ente vereador-b pcid-b))
+        "controle: o mesmo evento-ref E' elegivel p/ o proprio vereador-b (autor da proposicao)")))
+
+(deftest parecer-elegivel-para-ciencia-recusa-evento-ref-inexistente
+  (let [ente (random-uuid) vereador (random-uuid) uuid-inexistente (random-uuid)]
+    (is (false? (repo-legislativo/parecer-elegivel-para-ciencia? *repo-legislativo* ente vereador uuid-inexistente)))))
+
+(deftest acusar-ciencia-repo-e-o-guard-final-nunca-grava-evento-ref-nao-elegivel
+  ;; defesa em profundidade: mesmo chamando o Repo DIRETO (sem passar pelo controller/pre-check), um
+  ;; evento-ref nao-elegivel (de OUTRO vereador, ou inexistente) nunca insere — acusar-ciencia! reconfirma
+  ;; parecer-elegivel-para-ciencia? na MESMA tx antes de qualquer escrita.
+  (let [ente (random-uuid) vereador-a (random-uuid) vereador-b (random-uuid) uuid-inexistente (random-uuid)
+        tid (montar-template-parecer! ente)
+        pid-b (protocolar! ente vereador-b)
+        {pcid-b :id} (repo-legislativo/iniciar-parecer! *repo-legislativo* ente
+                       {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id pid-b
+                        :comissao-id (random-uuid) :template-id tid})]
+    (publicar-parecer! ente pcid-b)
+    (is (nil? (repo-legislativo/acusar-ciencia! *repo-legislativo* ente
+                {:id (random-uuid) :vereador-id vereador-a :evento-ref pcid-b :tipo "parecer_publicado"}))
+        "evento-ref de parecer de OUTRO vereador -> nil, nao insere")
+    (is (nil? (repo-legislativo/acusar-ciencia! *repo-legislativo* ente
+                {:id (random-uuid) :vereador-id vereador-a :evento-ref uuid-inexistente :tipo "parecer_publicado"}))
+        "evento-ref inexistente -> nil, nao insere")
+    (is (= [] (:ciencias (repo-legislativo/meu-painel *repo-legislativo* ente vereador-b)))
+        "o parecer de vereador-b continua PENDENTE de ciencia — a tentativa forjada de vereador-a nao o consumiu")))
+
+(deftest controller-acusar-ciencia-404-quando-evento-ref-nao-pertine-ao-vereador
+  (let [ente (random-uuid) vereador-a (random-uuid) vereador-b (random-uuid) identidade (random-uuid)
+        tid (montar-template-parecer! ente)
+        pid-b (protocolar! ente vereador-b)
+        {pcid-b :id} (repo-legislativo/iniciar-parecer! *repo-legislativo* ente
+                       {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id pid-b
+                        :comissao-id (random-uuid) :template-id tid})
+        _ (publicar-parecer! ente pcid-b)
+        ator {:ente-id ente :identidade-id identidade}
+        resolver-vereador (fn [e i] (when (and (= e ente) (= i identidade)) vereador-a))]
+    (is (nil? (controllers/acusar-ciencia *repo-legislativo* resolver-vereador ator
+                {:id (random-uuid) :evento-ref pcid-b :tipo "parecer_publicado"}))
+        "evento-ref de parecer de OUTRO vereador -> nil (borda traduz 404), nunca grava")
+    (is (= [] (:ciencias (controllers/meu-painel *repo-legislativo* resolver-vereador ator)))
+        "nada foi inserido em ciencia_vereador para vereador-a")))

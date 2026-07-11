@@ -15,9 +15,11 @@ CREATE TABLE IF NOT EXISTS legislativo.ciencia_vereador (
   UNIQUE (ente_id, vereador_id, evento_ref)
 );
 --;;
--- hot-path "minhas ciencias pendentes" (anti-join em db/meu_painel.clj/ciencias-pendentes).
-CREATE INDEX IF NOT EXISTS idx_ciencia_vereador_vereador ON legislativo.ciencia_vereador (ente_id, vereador_id);
---;;
+-- hot-path "minhas ciencias pendentes" (anti-join em db/meu_painel.clj/ciencias-pendentes) e' servido pelo
+-- INDICE IMPLICITO da propria UNIQUE (ente_id, vereador_id, evento_ref) acima, via leftmost-prefix — um
+-- indice dedicado (ente_id, vereador_id) seria redundante (review database MEDIUM: so' duplicaria escrita
+-- numa tabela append-only sem abrir plano novo nenhum). Nao criar aqui; so' reintroduzir se um EXPLAIN
+-- real mostrar que o prefixo da UNIQUE nao e' escolhido.
 ALTER TABLE legislativo.ciencia_vereador ENABLE ROW LEVEL SECURITY;
 --;;
 ALTER TABLE legislativo.ciencia_vereador FORCE ROW LEVEL SECURITY;

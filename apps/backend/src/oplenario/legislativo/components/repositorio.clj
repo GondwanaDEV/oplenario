@@ -187,7 +187,11 @@
      proposicao de autoria do vereador, ainda nao acusados (Task 3).")
   (acusar-ciencia! [this ente-id m]
     "Task 3 — INSERT append-only idempotente (Inv.10) da ciencia do vereador sobre `evento-ref`. Devolve
-     {:id :ciente-em}."))
+     {:id :ciente-em}. CALLER (controller) confirma `parecer-elegivel-para-ciencia?` antes.")
+  (parecer-elegivel-para-ciencia? [this ente-id vereador-id evento-ref]
+    "Review CRITICO (clojure+database+security) — guard de `acusar-ciencia!`: `evento-ref` e' de fato um
+     parecer publicado sobre proposicao do vereador `vereador-id` neste ente? Sem isso, `acusar-ciencia!`
+     aceitava qualquer UUID sintaticamente valido na prova append-only (Inv.10)."))
 
 ;; ---------- geracao do artefato de publicacao oficial ('DO-lite', doc-mestre L287, F6c Slice 4a):
 ;;            resolve a norma publicada + o texto legal -> renderiza (puro) -> serializa+assina (ports STUB) ->
@@ -659,7 +663,9 @@
         {:proposicoes (meu-painel-db/proposicoes-do-autor tx ente-id vereador-id)
          :pareceres (meu-painel-db/pareceres-do-relator tx ente-id vereador-id)
          :ciencias (meu-painel-db/ciencias-pendentes tx ente-id vereador-id)})))
-  (acusar-ciencia! [this ente-id m] (transacao this ente-id #(meu-painel-db/acusar-ciencia! % (assoc m :ente-id ente-id)))))
+  (acusar-ciencia! [this ente-id m] (transacao this ente-id #(meu-painel-db/acusar-ciencia! % (assoc m :ente-id ente-id))))
+  (parecer-elegivel-para-ciencia? [this ente-id vereador-id evento-ref]
+    (transacao this ente-id #(meu-painel-db/parecer-elegivel-para-ciencia? % ente-id vereador-id evento-ref))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."
