@@ -90,4 +90,29 @@ describe("useGerarAutografo", () => {
     expect(result.current.estado).toBe("erro");
     expect(result.current.erro).toBe("falha de rede — tente novamente");
   });
+
+  it("resolve após unmount -> não faz setState (vivoRef guarda)", async () => {
+    let resolverFetch!: (r: Response) => void;
+    global.fetch = vi.fn(
+      () => new Promise<Response>((resolve) => (resolverFetch = resolve)),
+    ) as unknown as typeof fetch;
+    const { result, unmount } = renderHook(() => useGerarAutografo("tok", "1"));
+
+    let promessa!: Promise<unknown>;
+    act(() => {
+      promessa = result.current.gerar();
+    });
+    unmount();
+
+    const setEstadoSpy = vi.spyOn(console, "error");
+    await act(async () => {
+      resolverFetch({ ok: true, json: async () => respostaFake } as Response);
+      await promessa;
+    });
+
+    // Nenhum warning do React de "state update on unmounted component" — a chamada
+    // resolveu, mas vivoRef.current já era false, então setEstado/setErro não rodaram.
+    expect(setEstadoSpy).not.toHaveBeenCalledWith(expect.stringContaining("unmounted"));
+    setEstadoSpy.mockRestore();
+  });
 });
