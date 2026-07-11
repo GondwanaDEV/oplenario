@@ -32,14 +32,25 @@ alvo, agrupamento por fase, diff pauta-vs-disponíveis) + a página.
 - Rota `(interno)/pauta-convocacao`, guardada por papel `secretario` (mesmo padrão de auth-guard do shell
   interno já usado em `proposicoes`/`tramitacao`/`parecer`).
 - Seleção da sessão-alvo (agendada, auto-escolhida pela mais próxima; troca manual se houver mais de uma).
-- Builder da pauta: grupos **Expediente** e **Ordem do Dia**, reorder por setas (não drag-and-drop — mais
-  acessível/testável, mesma disciplina de a11y do design system), adicionar item (do rail "prontas, fora da
-  pauta"), remover item.
+- **Visualização** da pauta: grupos **Expediente** e **Ordem do Dia**, itens em ordem — **read-only** (ver
+  correção abaixo).
 - Rail "Prontas, fora da pauta": proposições do tenant que ainda não estão em nenhum item ativo da pauta
-  (diff client-side, sem query nova).
+  (diff client-side, sem query nova) — mostrado como **lista informativa**, sem ação de adicionar (a ação
+  exige escrita, ver correção abaixo).
 - Painel de **convocação** como artefato ilha-papel, **client-composed**: tipo de sessão + data/hora (lidos
   da sessão) + contagem de itens por grupo. Nota de antecedência regimental como texto estático rotulado
   `[Regimento]` — sem cravar prazo real.
+
+### Correção pós-investigação técnica (11/07, antes da implementação)
+
+`GET /sessoes/:id/pauta` **não expõe `lock-version`** por design (`wire/out.clj` — "NAO expoe internos...
+lock-version"), mas `PATCH`/`DELETE .../pauta/itens/:item-id` **exigem** `lock-version` no corpo para o CAS
+otimista (`adapters/in/pauta.clj`). Sem o valor atual, o cliente não tem como montar um `PATCH`/`DELETE`
+correto — a única saída seria adivinhar (ex. sempre `0`), o que quebra silenciosamente após a primeira
+edição real. **Builder (adicionar/reordenar/remover item) sai do escopo desta fatia** e vira **read puro**
+(a leitura literal de "Read puro, sem fan-out" em `docs/13` §11.3, mais estrita do que a leitura inicial
+deste spec). O fix (`lock-version` em `PautaItemOut`) é backend de uma linha, mas é fan-out — não entra
+aqui sem decisão explícita.
 
 ## Escopo OUT (registrado — deixado de fora nesta fatia, não descartado)
 
@@ -49,7 +60,8 @@ alvo, agrupamento por fase, diff pauta-vs-disponíveis) + a página.
 | **Campo "local" na convocação** | Não modelado em `Sessao` nem em nenhuma outra tabela hoje. Omitido — não inventado. | Quando o backend ganhar o campo (não há sinal de demanda hoje). |
 | **Roster de ciência da convocação** (quem recebeu/confirmou/deu ciência do edital) | Sem tabela hoje. A `legislativo.ciencia_vereador` (C1) é ciência de **parecer publicado**, semânticamente distinta — não serve pra convocação sem um novo modelo (`sessoes.ciencia_convocacao` ou similar) + evento + fan-out de leitura. Fan-out especulativo, contra a regra-mãe do projeto. | Fatia própria (provável C2b ou junto com C3), se a Mesa precisar rastrear entrega/confirmação de convocação. |
 | **Antecedência regimental calculada** (prazo real por tipo de sessão) | Conteúdo regulatório = `[GAP]` (mesma disciplina do resto do projeto — regimento interno varia por câmara e não foi inserido no motor/DSL ainda). | Quando o conteúdo regimental for cravado (mesmo gate do §22.7.9/§22.4). |
-| **Drag-and-drop de reordenação** | A tela-fonte usa handles de arrastar; a implementação usa setas ↑↓ acessíveis por teclado (mesmo padrão a11y já usado no board de tramitação). Drag continua disponível como *progressive enhancement* futuro, não bloqueia o valor. | Se acessibilidade + valor justificarem, incremento futuro. |
+| **Drag-and-drop de reordenação** | A tela-fonte usa handles de arrastar; setas ↑↓ seriam o substituto acessível, mas ver linha abaixo — nem chega a entrar, pois reordenar em si saiu do escopo. | Junto com o builder, ver linha abaixo. |
+| **Builder — adicionar/reordenar/remover item da pauta** | Achado técnico durante a investigação: `GET /sessoes/:id/pauta` não expõe `lock-version`, mas `PATCH`/`DELETE .../itens/:item-id` exigem `lock-version` pra CAS. Sem o valor atual, o cliente não monta um `PATCH`/`DELETE` correto. C2 vira **read puro** (pauta + convocação em modo visualização); o rail "prontas, fora da pauta" também perde a ação de adicionar (é a mesma escrita). | Fatia própria, depois que `PautaItemOut` ganhar `lock-version` (fix backend de uma linha, mas é fan-out — fora desta fatia sem decisão explícita). |
 
 ## Frontend — estrutura de arquivos (esperada)
 
