@@ -32,3 +32,14 @@ export function formatarHora(iso: string): string {
     return iso;
   }
 }
+
+// formatarDiaSemana — Onda C Slice C2 (pauta-convocacao): nome do dia da semana por extenso, pt-BR.
+const FORMATO_DIA_SEMANA_BR = new Intl.DateTimeFormat("pt-BR", { weekday: "long" });
+
+export function formatarDiaSemana(iso: string): string {
+  try {
+    return FORMATO_DIA_SEMANA_BR.format(new Date(iso));
+  } catch {
+    return iso;
+  }
+}

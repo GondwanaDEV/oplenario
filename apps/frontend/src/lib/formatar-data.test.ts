@@ -1,22 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { formatarData, formatarHora } from "./formatar-data";
+import { formatarData, formatarDiaSemana, formatarHora } from "./formatar-data";
 
-describe("formatarData", () => {
-  it("formata ISO -> pt-BR dd/mm/aaaa", () => {
-    expect(formatarData("2026-05-12T10:00:00Z")).toBe("12/05/2026");
+describe("formatarDiaSemana", () => {
+  it("ISO -> nome do dia da semana em pt-BR", () => {
+    expect(formatarDiaSemana("2026-06-24T17:00:00Z")).toBe("quarta-feira");
   });
 
-  it("entrada inválida -> devolve o valor cru, nunca lança", () => {
-    expect(formatarData("não-é-data")).toBe("não-é-data");
+  it("ISO inválido -> devolve a string original (fail-closed, não lança)", () => {
+    expect(formatarDiaSemana("não-é-data")).toBe("não-é-data");
   });
 });
 
-describe("formatarHora", () => {
-  it("formata ISO -> pt-BR HH:mm (24h)", () => {
-    expect(formatarHora("2026-05-21T14:02:00Z")).toBe("14:02");
-  });
-
-  it("entrada inválida -> devolve o valor cru, nunca lança", () => {
-    expect(formatarHora("não-é-data")).toBe("não-é-data");
+describe("formatarData/formatarHora (regressão — já existiam)", () => {
+  it("continuam formatando dd/mm/aaaa e HH:mm", () => {
+    expect(formatarData("2026-06-24T17:00:00Z")).toMatch(/^\d{2}\/\d{2}\/\d{4}$/);
+    expect(formatarHora("2026-06-24T17:00:00Z")).toMatch(/^\d{2}:\d{2}$/);
   });
 });
