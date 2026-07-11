@@ -43,13 +43,15 @@ Expressão DSL (sintaxe confirmada em `motor/nucleo.clj`: `e`/`ou`/`nao`, compar
 
 ```
 tem_mandato_vigente(ator.identidade, hoje())
-e esta_presente_em(recurso.sessao_id, ator.identidade, hoje())
+e esta_presente_em(recurso.sessao_id, recurso.vereador_id, agora())
 e recurso.estado == "aberta"
 e recurso.modalidade != "secreta"
 ```
 
-- `tem_mandato_vigente` já existe (`cadastros/relacoes/cadastro.clj`), reusado sem alteração.
-- `recurso` = a votação carregada (mesmo shape usado por `sessao-autorizada`/`pode-dirigir-votacao?` hoje).
+- `tem_mandato_vigente` já existe (`cadastros/relacoes/cadastro.clj`), reusado sem alteração. `agora()` (não `hoje()`) no fato de presença — espelha a assinatura já catalogada de `presentes_plenario`/`presentes_remoto` (`[SessaoId, Instante]`), que compara contra `ocorrido_em timestamptz`, não uma data civil.
+- `recurso` = um mapa **construído pelo controller especificamente para a política** (não a votação crua): `{:sessao_id … :estado … :modalidade … :vereador_id …}`. Duas correções descobertas na leitura do código (achados reais, não hipotéticos):
+  1. **kebab vs. underscore:** o tokenizer da DSL (`motor/nucleo.clj`) não aceita hífen em identificador — só letra/dígito/`_`. O acesso a campo faz `(keyword (:campo no))` **literal** sobre o mapa `recurso`; um mapa kebab-case (`:sessao-id`, como a votação carregada normalmente vem do Repo) não bate com `recurso.sessao_id` (`:sessao_id`, com underscore). Todo mapa entregue como `ator`/`recurso` à DSL precisa ser **pré-traduzido para chaves underscore** pelo controller — não é automático.
+  2. **identidade-id vs. vereador-id:** `esta-presente-em?` é indexado por `vereador-id` (chave de `cadastros.vereador`), não por `identidade-id`. Diferente de `tem_mandato_vigente`, que resolve `identidade-id → mandato` **dentro do próprio módulo `cadastros`** (join intra-schema permitido), o módulo `sessoes` não pode fazer esse join (forward-ref sem FK cross-schema, §22.10) — então a expressão não pode ler `ator.identidade` para o fato de presença. Solução: o controller (que já resolve `identidade-id → vereador-id` via `resolver-vereador` para `/meu/painel`/`/meu/ciencias`) faz o mesmo aqui e usa o `vereador-id` resolvido ao montar o `recurso` underscore acima. `ator.identidade` continua servindo só `tem_mandato_vigente`.
 - Falha em qualquer condição → `autz/negar!` → **403 genérico** ("não autorizado a votar"), nunca detalha qual precondição falhou (mesma disciplina de não vazar motivo de autorização usada em outras rotas finas).
 
 ### 3.3 `POST /sessoes/:id/presenca/confirmar` (módulo `sessoes`, papel `vereador`)
