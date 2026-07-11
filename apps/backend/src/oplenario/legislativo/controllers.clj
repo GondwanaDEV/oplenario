@@ -357,11 +357,12 @@
   cadastros; mesma inversao de dependencia de `consultar-sessao`/`resolver-municipio`) que resolve
   identidade-id->vereador-id NESTE ente. Um ator com papel 'vereador' mas SEM cadastro vinculado
   (`resolver-vereador` nil) devolve painel VAZIO — nao lanca: o gate grosso (exige-papel) ja' garantiu o
-  papel, a ausencia de vinculo e' estado de dados, nao falha de autorizacao."
+  papel, a ausencia de vinculo e' estado de dados, nao falha de autorizacao. Onda C3: tambem devolve o
+  `vereador-id` resolvido (bootstrap de identidade p/ o cockpit — ver docstring do wire/out)."
   [repo-legislativo resolver-vereador ator]
   (if-let [vereador-id (resolver-vereador (:ente-id ator) (:identidade-id ator))]
-    (repo/meu-painel repo-legislativo (:ente-id ator) vereador-id)
-    {:proposicoes [] :pareceres [] :ciencias []}))
+    (assoc (repo/meu-painel repo-legislativo (:ente-id ator) vereador-id) :vereador-id vereador-id)
+    {:vereador-id nil :proposicoes [] :pareceres [] :ciencias []}))
 
 (defn acusar-ciencia
   "Onda C1 — 'Dar ciencia' (Task 3): registra a ciencia do vereador ATOR sobre `evento-ref` (anti-forja:

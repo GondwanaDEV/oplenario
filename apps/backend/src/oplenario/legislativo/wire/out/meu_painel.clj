@@ -35,8 +35,10 @@
    [:ementa :string]])
 
 (def MeuPainelOut
-  "A resposta de GET /meu/painel (Onda C1, §11.2/§11.3)."
+  "A resposta de GET /meu/painel (Onda C1, §11.2/§11.3; +vereador-id Onda C3 — bootstrap de identidade p/
+  o cockpit ao vivo interpretar o placar/presenca compartilhados, ambos keyed por vereador-id)."
   [:map {:closed true}
+   [:vereador-id {:optional true} [:maybe :string]]
    [:proposicoes [:sequential ProposicaoResumoMeuPainelOut]]
    [:pareceres [:sequential ParecerResumoMeuPainelOut]]
    [:ciencias [:sequential CienciaPendenteOut]]])

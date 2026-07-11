@@ -19,9 +19,10 @@
    :sequencial sequencial :urn-lex urn-lex :ementa ementa})
 
 (defn meu-painel->wire
-  "{:proposicoes :pareceres :ciencias} (cru, kebab, do db) -> MeuPainelOut (validado)."
-  [{:keys [proposicoes pareceres ciencias]}]
-  (let [out {:proposicoes (mapv proposicao->wire proposicoes)
+  "{:vereador-id :proposicoes :pareceres :ciencias} (cru, kebab, do controller) -> MeuPainelOut (validado)."
+  [{:keys [vereador-id proposicoes pareceres ciencias]}]
+  (let [out {:vereador-id (some-> vereador-id str)
+             :proposicoes (mapv proposicao->wire proposicoes)
              :pareceres (mapv parecer->wire pareceres)
              :ciencias (mapv ciencia->wire ciencias)}]
     (when-not (m/validate wire/MeuPainelOut out)
