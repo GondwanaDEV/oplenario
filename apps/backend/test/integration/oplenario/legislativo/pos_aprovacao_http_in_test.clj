@@ -174,6 +174,13 @@
                            :headers (com-bearer (token (random-uuid) (random-uuid))))]
     (is (= 404 (:status r)))))
 
+(deftest pos-aprovacao-sem-papel-403
+  (let [repo (fake-repo-legislativo {})
+        r (pt/response-for (service-fn #{"vereador"} repo)
+                           :get (str "/legislativo/proposicoes/" (random-uuid) "/pos-aprovacao")
+                           :headers (com-bearer (token (random-uuid) (random-uuid))))]
+    (is (= 403 (:status r)))))
+
 ;; ========================= POST /legislativo/autografos/:id/resposta =========================
 
 (deftest registrar-resposta-sancionado-200
