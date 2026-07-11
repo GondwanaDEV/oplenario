@@ -84,16 +84,14 @@ export function formatarTituloSessao(sessao: SessaoOut): string {
 }
 
 // ---------- agrupamento da pauta por fase (os 5 valores fechados de logic/fases-pauta no backend;
-// "Outras fases" é o catch-all honesto pras 3 fases fora de Expediente/Ordem do Dia — nunca descarta item
-// em silêncio, mesmo princípio da coluna "Outros" de tramitacao-board-vista.ts) ----------
+// "Outras fases" é o catch-all honesto — tudo que não é Expediente/Ordem do Dia cai aqui, nunca descarta
+// item em silêncio, mesmo princípio da coluna "Outros" de tramitacao-board-vista.ts) ----------
 
 export interface GrupoPauta {
   chave: string;
   titulo: string;
   itens: PautaItemOut[];
 }
-
-const FASES_OUTRAS = new Set(["grande_expediente", "explicacoes_pessoais", "tribuna_livre_cidadao"]);
 
 function porOrdem(itens: PautaItemOut[]): PautaItemOut[] {
   return itens.slice().sort((a, b) => a.ordem - b.ordem);
@@ -103,7 +101,7 @@ export function agruparPautaPorFase(pauta: PautaOut | null): GrupoPauta[] {
   const itens = pauta?.itens ?? [];
   const expediente = itens.filter((i) => i.fase === "expediente");
   const ordemDoDia = itens.filter((i) => i.fase === "ordem_do_dia");
-  const outras = itens.filter((i) => FASES_OUTRAS.has(i.fase));
+  const outras = itens.filter((i) => i.fase !== "expediente" && i.fase !== "ordem_do_dia");
   const grupos: GrupoPauta[] = [
     { chave: "expediente", titulo: "Expediente", itens: porOrdem(expediente) },
     { chave: "ordem-do-dia", titulo: "Ordem do Dia", itens: porOrdem(ordemDoDia) },
