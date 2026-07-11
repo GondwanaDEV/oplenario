@@ -1,0 +1,131 @@
+/* Chrome do Expediente (Onda B Slice 6) — porte de produto/design-system/o-plenario/telas/expediente.html
+   (<style> local). Tokens + chassi vêm de globals.css; aqui só o que é específico desta tela: as 4 abas, a
+   bancada de 2 colunas, o `.bloco` genérico (seletor de modelo / preenchimento / merge), o documento em
+   papel (o herói) e o Livro do Protocolo Geral. `.comando`/`.comando-grade`/`.comando-ctx`/`.comando-acoes`
+   NÃO são redefinidos aqui — a barra de ações reusa a barra fixa REAL de chassi.css (mesmo padrão de
+   formulario-parecer.css/formulario-proposicao.css), ver formulario-preenchimento.css. */
+
+/* .em-breve — mesmo bloco duplicado por-rota de ficha-materia.css/public.css (CSS é page-scoped nesta
+   convenção; ver o cabeçalho de ficha-materia.css pro racional completo). Usado pelas 3 sub-abas sem
+   backend (protocolo/modelos/recebidos). */
+.em-breve { padding: 1.1rem 1.2rem; border: 1px dashed var(--linha); border-radius: var(--raio); background: var(--surface-2); }
+.em-breve-rotulo { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--texto-2); margin: 0 0 0.3rem; }
+.em-breve-titulo { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); margin: 0 0 0.3rem; }
+.em-breve-motivo { font-size: var(--t-13); color: var(--texto-2); margin: 0; line-height: 1.5; }
+.expediente-em-breve-wrap { padding: 1.4rem 0; }
+
+/* ============== ABAS DO EXPEDIENTE ============== */
+.abas { border-bottom: 1px solid var(--linha); background: var(--surface); }
+.abas-grade { display: flex; align-items: stretch; gap: 0.2rem; padding: 0; list-style: none; margin: 0; overflow-x: auto; }
+.aba { flex: 0 0 auto; }
+.aba a { display: inline-flex; align-items: center; gap: 0.55rem; padding: 0.85rem 0.95rem; font-family: var(--display); font-weight: 600; font-size: var(--t-13); letter-spacing: -0.01em; color: var(--texto-2); text-decoration: none; border-bottom: 2.5px solid transparent; }
+.aba a:hover { color: var(--texto); }
+.aba.atual a { color: var(--marca); border-bottom-color: var(--telha); }
+
+/* ============== BANCADA (controles + papel) ============== */
+.bancada { display: grid; grid-template-columns: 384px minmax(0,1fr); gap: clamp(1rem, 2.4vw, 1.8rem); padding: clamp(1.2rem, 3vw, 2rem) 0 1.4rem; align-items: start; }
+.controles { display: grid; gap: 1.1rem; }
+
+.bloco { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); }
+.bloco-cabeca { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0.9rem 1.1rem; border-bottom: 1px solid var(--linha); }
+.bloco-cabeca h2 { font-family: var(--display); font-weight: 600; font-size: var(--t-16); letter-spacing: -0.01em; color: var(--texto); margin: 0; }
+.bloco-cabeca .passo { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+.bloco-corpo { padding: 1.1rem; }
+
+/* ---- seletor de modelo ---- */
+.modelos { display: grid; grid-template-columns: 1fr 1fr; gap: 0.55rem; }
+.modelo { display: flex; align-items: center; gap: 0.6rem; text-align: left; cursor: pointer; font-family: var(--corpo); font-weight: 600; font-size: var(--t-13); color: var(--texto); line-height: 1.2; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.65rem 0.7rem; min-height: 48px; }
+.modelo:hover { border-color: var(--foco); }
+.modelo .ico { width: 30px; height: 30px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 8px; background: var(--bg); color: var(--jade-claro); }
+.modelo[aria-pressed="true"] { border-color: var(--acao); background: rgba(12,83,64,.06); box-shadow: inset 0 0 0 1px var(--acao); }
+.modelo[aria-pressed="true"] .ico { background: var(--acao); color: var(--acao-texto); }
+.modelo .marca-sel { margin-left: auto; color: var(--acao); display: none; }
+.modelo[aria-pressed="true"] .marca-sel { display: inline-flex; }
+.modelo:disabled { cursor: not-allowed; opacity: 0.65; }
+.modelo.larga { grid-column: 1 / -1; }
+.modelo-desc { font-weight: 400; color: var(--texto-2); font-size: var(--t-12); }
+
+/* tag "do cadastro"/"merge" (destaque telha) */
+.tag-cadastro { display: inline-flex; align-items: center; gap: 0.3rem; vertical-align: middle; font-family: var(--mono); font-size: 0.6875rem; font-weight: 500; letter-spacing: .04em; color: var(--merge); background: var(--merge-fundo); border: 1px solid rgba(217,84,43,.3); border-radius: 999px; padding: 0.05rem 0.45rem; }
+.tag-cadastro .pin { width: 6px; height: 6px; border-radius: 50%; background: var(--telha); }
+
+/* ---- bloco "campos mesclados" (merge, read-only) ---- */
+.dominio .bloco-cabeca { color: var(--merge); }
+.merge-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.7rem; }
+.merge-lista li { display: grid; grid-template-columns: auto 1fr; gap: 0.2rem 0.7rem; align-items: baseline; }
+.merge-lista .rot { font-family: var(--mono); font-size: var(--t-12); text-transform: uppercase; letter-spacing: .06em; color: var(--texto-2); grid-column: 1 / -1; }
+.merge-lista .val { font-size: var(--t-13); color: var(--texto); font-weight: 500; }
+.merge-lista .val.aberto { color: var(--texto-2); font-style: italic; font-weight: 400; }
+
+/* ============== O DOCUMENTO (papel) ============== */
+.documento-wrap { position: sticky; top: 84px; }
+.documento { position: relative; background: var(--papel); color: var(--papel-texto); border: 1px solid var(--papel-linha); border-radius: var(--raio); box-shadow: var(--sombra-papel); padding: clamp(1.6rem, 3.5vw, 3rem) clamp(1.6rem, 4vw, 3.4rem) clamp(2rem, 4vw, 3rem); font-size: var(--t-16); line-height: 1.7; }
+.documento::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; border-radius: var(--raio) 0 0 var(--raio); background: linear-gradient(180deg, var(--jade) 0%, var(--cobalto) 38%, var(--telha) 70%, var(--amarelo) 100%); }
+.documento-vazio { display: grid; place-items: center; min-height: 260px; text-align: center; color: var(--texto-2); font-size: var(--t-13); }
+.documento-vazio p { max-width: 32ch; margin: 0; }
+
+.carimbo { position: absolute; top: clamp(1rem, 2.5vw, 1.8rem); right: clamp(1rem, 3vw, 2.4rem); transform: rotate(-3deg); text-align: center; border: 2.5px solid var(--telha-fundo); color: var(--telha-fundo); border-radius: 10px; padding: 0.4rem 0.7rem 0.35rem; background: rgba(217,84,43,.05); }
+.carimbo .titulo { font-family: var(--mono); font-size: 0.625rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; display: block; }
+.carimbo .num { font-family: var(--mono); font-size: var(--t-16); font-weight: 600; letter-spacing: .02em; display: block; line-height: 1.2; }
+.carimbo.reservar { border-style: dashed; opacity: .9; }
+.carimbo.reservar .num { font-size: var(--t-13); }
+
+.timbre { text-align: center; padding-bottom: 1.1rem; margin-bottom: 1.4rem; border-bottom: 1.5px solid var(--papel-linha); }
+.timbre .orgao { font-family: var(--display); font-weight: 700; font-size: var(--t-16); letter-spacing: .02em; text-transform: uppercase; color: var(--papel-marca); margin: 0; }
+.timbre .setor { font-family: var(--corpo); font-size: var(--t-13); color: var(--papel-texto-2); margin: 0.15rem 0 0; letter-spacing: .03em; }
+
+.doc-ref { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+.doc-ref .num-of { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--papel-texto); letter-spacing: -0.01em; }
+
+.doc-assunto { margin-bottom: 1.6rem; }
+.doc-assunto b { font-weight: 700; }
+
+.documento p.corpo { margin: 0 0 1.1rem; text-align: justify; }
+
+/* campo mesclado — SUBLINHADO (não é só cor: o tracejado é o sinal, GUIDELINES-CHECKLIST §5.1) */
+.merge { border-bottom: 2px dashed var(--merge); padding-bottom: 1px; text-decoration: none; color: inherit; }
+
+.doc-legenda { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin: 0.9rem 0.2rem 0; }
+.doc-legenda .amostra { border-bottom: 2px dashed var(--merge); color: var(--acento-texto); padding-bottom: 1px; }
+
+/* ============== LIVRO DO PROTOCOLO GERAL ============== */
+.livro { padding-bottom: 1.4rem; }
+.livro .bloco-cabeca { flex-wrap: wrap; }
+.livro .sub { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); font-weight: 400; }
+.tabela-rolagem { overflow-x: auto; }
+table.protocolo { width: 100%; border-collapse: collapse; min-width: 720px; }
+table.protocolo th { font-family: var(--mono); font-size: var(--t-12); text-transform: uppercase; letter-spacing: .06em; color: var(--texto-2); font-weight: 500; text-align: left; padding: 0.7rem 1rem; border-bottom: 1px solid var(--linha); white-space: nowrap; }
+table.protocolo td { padding: 0.8rem 1rem; border-bottom: 1px solid var(--linha); font-size: var(--t-13); color: var(--texto); vertical-align: middle; }
+table.protocolo tr:last-child td { border-bottom: 0; }
+table.protocolo .np { font-family: var(--mono); font-weight: 600; color: var(--marca); white-space: nowrap; }
+table.protocolo .desc { color: var(--texto); }
+table.protocolo .hora { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); white-space: nowrap; }
+
+.tipo-doc { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); font-weight: 500; padding: 0.2rem 0.55rem; border-radius: 999px; white-space: nowrap; border: 1px solid var(--linha); color: var(--texto-2); background: var(--surface-2); }
+.tipo-doc .pt { width: 8px; height: 8px; border-radius: 2px; flex: 0 0 auto; }
+.tipo-doc-jade .pt { background: var(--jade-claro); }
+.tipo-doc-cobalto .pt { background: var(--cobalto); }
+.tipo-doc-amarelo .pt { background: var(--amarelo); }
+.tipo-doc-telha .pt { background: var(--telha); }
+.tipo-doc-neutro .pt { background: var(--texto-2); }
+
+.sentido { display: inline-flex; align-items: center; gap: 0.35rem; font-family: var(--mono); font-size: var(--t-12); font-weight: 600; white-space: nowrap; }
+.sentido-entrada { color: var(--marca); }
+.sentido-saida { color: var(--acento-texto); }
+.sentido-interno { color: var(--texto-2); }
+
+/* ============== RESPONSIVO ============== */
+@media (max-width: 1040px) {
+  .bancada { grid-template-columns: 1fr; }
+  .documento-wrap { position: static; }
+}
+@media (max-width: 720px) {
+  .modelos { grid-template-columns: 1fr; }
+  .documento { padding: 1.4rem 1.2rem 1.6rem; }
+  .carimbo { position: static; transform: none; display: inline-block; margin-bottom: 1rem; }
+  .doc-ref { margin-bottom: 1.1rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+}

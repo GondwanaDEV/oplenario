@@ -17,3 +17,18 @@ export function formatarData(iso: string): string {
     return iso;
   }
 }
+
+// formatarHora — extraído pro Livro do Protocolo Geral (Onda B Slice 6, coluna "Hora"): HH:mm, 24h.
+const FORMATO_HORA_BR = new Intl.DateTimeFormat("pt-BR", {
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+export function formatarHora(iso: string): string {
+  try {
+    return FORMATO_HORA_BR.format(new Date(iso));
+  } catch {
+    return iso;
+  }
+}
