@@ -7,15 +7,21 @@
 .votar-pagina.tela-estado h1 { font-family: var(--display); font-size: var(--t-21); color: var(--texto); }
 .votar-pagina.tela-estado p { font-size: var(--t-13); color: var(--texto-2); }
 
-/* ===== HERÓI: votação ao vivo (ilha-palco escura) ===== */
-.ao-vivo { background: var(--palco-bg); color: var(--palco-texto); border-radius: var(--raio-lg); padding: 1.1rem 1.1rem 1.2rem; box-shadow: var(--sombra-alta); margin-top: 0.5rem; }
-.av-top { display: flex; align-items: center; gap: 0.5rem; }
-.av-vivo { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #FFD9CB; }
-.av-vivo .pulso { width: 9px; height: 9px; border-radius: 50%; background: var(--telha); box-shadow: 0 0 0 0 rgba(217,84,43,.7); animation: votar-pulso 1.8s infinite; }
-.av-vivo.av-off { color: var(--palco-texto-2); }
-.av-vivo.av-off .pulso { display: none; }
+/* ===== HERÓI: votação ao vivo (ilha-palco escura) =====
+   review MEDIUM (revisao final de branch): prefixo `.cockpit-`/`.cav-` (NAO `.ao-vivo`/`.av-*`) — a Mesa's
+   plenario.css já tem uma `.ao-vivo` (badge inline pequena, forma DIFERENTE desta ilha-hero); duas classes
+   globais do MESMO nome com regras incompativeis são um risco real de cascade caso as duas folhas algum dia
+   carreguem juntas (navegação cliente entre /votar e /sessoes/[id]/plenario, prefetch, layout futuro
+   compartilhado). Cada rota tem sua PRÓPRIA folha (convenção já estabelecida — vereador-home.css
+   re-declara .secao-tit em vez de importar de outra pagina); só o PREFIXO de escopo estava faltando aqui. */
+.cockpit-ao-vivo { background: var(--palco-bg); color: var(--palco-texto); border-radius: var(--raio-lg); padding: 1.1rem 1.1rem 1.2rem; box-shadow: var(--sombra-alta); margin-top: 0.5rem; }
+.cav-top { display: flex; align-items: center; gap: 0.5rem; }
+.cav-vivo { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #FFD9CB; }
+.cav-vivo .pulso { width: 9px; height: 9px; border-radius: 50%; background: var(--telha); box-shadow: 0 0 0 0 rgba(217,84,43,.7); animation: votar-pulso 1.8s infinite; }
+.cav-vivo.cav-off { color: var(--palco-texto-2); }
+.cav-vivo.cav-off .pulso { display: none; }
 @keyframes votar-pulso { 0% { box-shadow: 0 0 0 0 rgba(217,84,43,.6); } 70% { box-shadow: 0 0 0 9px rgba(217,84,43,0); } 100% { box-shadow: 0 0 0 0 rgba(217,84,43,0); } }
-@media (prefers-reduced-motion: reduce) { .av-vivo .pulso { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .cav-vivo .pulso { animation: none; } }
 
 .voto-nota { font-size: var(--t-13); color: var(--palco-texto-2); margin: 0.9rem 0 0; line-height: 1.5; }
 .voto-erro { font-size: var(--t-13); color: #FFD9CB; margin: 0.6rem 0 0; font-weight: 600; }

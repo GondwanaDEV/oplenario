@@ -69,7 +69,10 @@
 
 (defn- meu-voto-handler
   "POST /sessoes/:id/votacoes/:votacao-id/meu-voto (Onda C3, papel 'vereador'). `hoje`/`instante` resolvidos
-  AQUI, na borda (mesmo padrao de emitir-parecer-handler/`agora`) — o controller nao le o relogio."
+  AQUI, na borda (mesmo padrao de emitir-parecer-handler/`agora`) — o controller nao le o relogio. Um
+  double-tap/retry do celular (2 requests concorrentes do MESMO vereador) serializa pelo lock `FOR UPDATE`
+  em `registrar-meu-voto!` e o 2o bate no UNIQUE -> `:conflito/voto-duplicado` -> 409 (nunca 500 opaco;
+  mesmo padrao de :conflito/transicao|inscricao|fala neste modulo/sessoes)."
   [repo-leg consultar-sessao resolver-vereador registro relogio]
   (fn [req]
     (let [ator (:ator req)
@@ -78,9 +81,14 @@
           instante (tempo/agora relogio)
           hoje (tempo/hoje-de instante zona-civil)
           m    (adapters-in/meu-voto->dominio ator vid (:json-params req))]
-      (if-let [recibo (controllers/meu-voto repo-leg consultar-sessao resolver-vereador registro ator sid vid hoje instante m)]
-        (http/json-resposta 201 (adapters-out/voto->wire recibo))
-        (http/json-resposta 404 {:erro "vereador sem cadastro vinculado, ou sessao/votacao nao encontrada"})))))
+      (try
+        (if-let [recibo (controllers/meu-voto repo-leg consultar-sessao resolver-vereador registro ator sid vid hoje instante m)]
+          (http/json-resposta 201 (adapters-out/voto->wire recibo))
+          (http/json-resposta 404 {:erro "vereador sem cadastro vinculado, ou sessao/votacao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/voto-duplicado (:tipo (ex-data e)))
+            (http/json-resposta 409 {:erro "voto ja registrado para este vereador nesta votacao"})
+            (throw e)))))))
 
 (defn- encerrar-handler
   "POST /sessoes/:id/votacoes/:votacao-id/encerramento. Apura + grava o snapshot (CAS); adapters/out projeta os

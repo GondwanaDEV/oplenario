@@ -127,6 +127,33 @@
             "o voto persistido carrega o vereador-id RESOLVIDO (identidade->vereador desta Casa), nunca de `m`")))
     (is (some? datasource) "sanity: fixture bindou o sistema")))
 
+;; ---------- 1b: voto duplicado -> :conflito/voto-duplicado (409), NUNCA 500 opaco ----------
+;; review MEDIUM (revisao final de branch, database-reviewer): o 2o voto do MESMO vereador na MESMA
+;; votacao serializa pelo lock `FOR UPDATE` de `registrar-meu-voto!`, re-autoriza (ainda passaria) e so'
+;; entao bate no UNIQUE (ente_id,votacao_id,vereador_id) -> 23505. Antes deste fix, essa excecao NAO era
+;; capturada e vazava como PSQLException crua (500 opaco no `erro` interceptor); agora vira ex-info
+;; `:conflito/voto-duplicado`, que a borda (meu-voto-handler) mapeia -> 409.
+
+(deftest m3-voto-duplicado-mesmo-vereador-nega-com-conflito-nao-500
+  (let [{:keys [repo-legislativo repo-sessoes repo-cadastros registro-fatos]} *sys*
+        {:keys [ente identidade vereador-id]} (seed-casa! {:repo-cadastros repo-cadastros})
+        sid (agendar-sessao! repo-sessoes ente)
+        pid (protocolar-materia! repo-legislativo ente)
+        vid (abrir-votacao! repo-legislativo ente sid pid "nominal")]
+    (registrar-presenca! repo-sessoes ente sid vereador-id ANTES-DO-INSTANTE)
+    (let [ator {:ente-id ente :identidade-id identidade}
+          votar! (fn [] (controllers/meu-voto repo-legislativo (consultar-sessao-fn repo-sessoes)
+                                              (resolver-vereador-fn repo-cadastros) registro-fatos
+                                              ator sid vid HOJE INSTANTE
+                                              {:id (random-uuid) :votacao-id vid :voto "sim" :created-by nil}))]
+      (votar!)
+      (let [ex (try (votar!) nil (catch clojure.lang.ExceptionInfo e e))]
+        (is (some? ex) "o 2o voto do mesmo vereador LANCA (nao silencia, nao duplica)")
+        (is (= :conflito/voto-duplicado (:tipo (ex-data ex)))
+            "vira ex-info :conflito/voto-duplicado (a borda mapeia 409) — nunca uma PSQLException crua")
+        (is (= 1 (count (repo-leg/votos-da-votacao repo-legislativo ente vid)))
+            "so' o 1o voto persistiu — o 2o rolou tx de volta")))))
+
 ;; ---------- 2: NEGA por ausencia (sem evento de presenca nesta sessao) ----------
 
 (deftest m3-nega-por-ausencia

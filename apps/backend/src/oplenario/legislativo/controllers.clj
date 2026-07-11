@@ -96,15 +96,26 @@
           (when (not= "nominal" (:modalidade v))
             (throw (ex-info "modalidade nao registra votos individuais"
                             {:tipo :validacao/invalido :campos [:modalidade] :modalidade (:modalidade v)})))
-          (let [ator-dsl {:identidade (:identidade-id ator)}]
-            (repo/registrar-meu-voto! repo-leg ente-id (assoc m :vereador-id vereador-id)
-              (fn [tx v-fresco]
-                (let [recurso-dsl {:sessao_id (:sessao-id v-fresco) :vereador_id vereador-id}]
-                  (authz/check! ator-dsl :votacao/meu-voto recurso-dsl
-                    (fn [a r]
-                      (and (= "aberta" (:estado v-fresco))
-                           ((motor/politica-dsl {:registro registro :tx tx :expr expr-mandato-vigente :agora hoje}) a r)
-                           ((motor/politica-dsl {:registro registro :tx tx :expr expr-presente-nesta-sessao :agora instante}) a r)))))))))))))
+          (repo/registrar-meu-voto! repo-leg ente-id (assoc m :vereador-id vereador-id)
+            (fn [tx v-fresco]
+              ;; review MAJOR (revisao final de branch): authz/check! recebe o ATOR e o RECURSO REAIS
+              ;; (nao os stand-ins da DSL) — os diagnosticos de NEGACAO do proprio check! leem
+              ;; (:identidade-id ator)/(:tipo recurso)/(:id recurso); passar so' os mapas `_`-keyed da DSL
+              ;; deixava esses campos SEMPRE nil no audit trail da 1a producao real de politica-dsl. Os
+              ;; mapas DSL (chaves `_`, exigencia do tokenizer — motor/nucleo.clj) moram DENTRO do
+              ;; predicado, derivados de `a`/`r`.
+              (authz/check! ator :votacao/meu-voto v-fresco
+                (fn [a r]
+                  ;; review LOW (revisao final de branch): `:ente-id` no ator-dsl — `motor/politica-dsl`
+                  ;; injeta `(:ente-id ator)` no ctx (usado por builtins own-schema, ex.: parametro_tenant);
+                  ;; os 2 fatos daqui (tem_mandato_vigente/esta_presente_em) nao o leem hoje (resolvem so'
+                  ;; via a tx), mas omiti-lo deixaria QUALQUER expressao futura neste call site resolver
+                  ;; ente-id como nil silenciosamente em vez de falhar alto.
+                  (let [ator-dsl {:identidade (:identidade-id a) :ente-id (:ente-id a)}
+                        recurso-dsl {:sessao_id (:sessao-id r) :vereador_id vereador-id}]
+                    (and (= "aberta" (:estado r))
+                         ((motor/politica-dsl {:registro registro :tx tx :expr expr-mandato-vigente :agora hoje}) ator-dsl recurso-dsl)
+                         ((motor/politica-dsl {:registro registro :tx tx :expr expr-presente-nesta-sessao :agora instante}) ator-dsl recurso-dsl))))))))))))
 
 ;; ========================= FE Onda A1: fila de relatores pendentes (§16.11) =========================
 

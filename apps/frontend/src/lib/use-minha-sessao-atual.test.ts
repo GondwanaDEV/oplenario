@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { renderHook, waitFor, act } from "@testing-library/react";
 import { useMinhaSessaoAtual } from "./use-minha-sessao-atual";
 
 describe("useMinhaSessaoAtual", () => {
@@ -49,5 +49,20 @@ describe("useMinhaSessaoAtual", () => {
     const { result } = renderHook(() => useMinhaSessaoAtual(null));
     expect(result.current.estado).toBe("erro");
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("resolve após unmount -> não faz setState (guard `vivo` local, mesmo padrão de use-sli-sessoes)", async () => {
+    let resolverFetch!: (r: Response) => void;
+    global.fetch = vi.fn(
+      () => new Promise<Response>((resolve) => (resolverFetch = resolve)),
+    ) as unknown as typeof fetch;
+    const { unmount } = renderHook(() => useMinhaSessaoAtual("tok"));
+    unmount();
+
+    await act(async () => {
+      resolverFetch({ ok: true, json: async () => ({ "sessao-id": "s1", situacao: "em_curso" }) } as Response);
+    });
+    // sem crash / sem warning de setState pós-unmount — a suíte falharia num warning não-tratado do jsdom
+    // se o guard `vivo` estivesse ausente.
   });
 });

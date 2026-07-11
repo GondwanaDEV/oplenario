@@ -79,6 +79,20 @@ describe("derivarMeuVoto", () => {
     expect(derivarMeuVoto(estado, "v1").ciclo).toBe("secreta");
   });
 
+  it("secreta E encerrada → 'encerrada' vence (a checagem de estado roda ANTES da de modalidade)", () => {
+    // review LOW (revisao final de branch): esta combinação nunca tinha teste dedicado — confirma que a
+    // ordem de precedência (encerrada primeiro) não se inverte silenciosamente no futuro.
+    const estado: EstadoPlenario = {
+      ...BASE,
+      placar: {
+        votacaoId: "vot1", modalidade: "secreta", objetoTipo: "proposicao", encerrada: true,
+        votosNominais: {}, votosSecretos: 3, resultado: "aprovada",
+        totais: { sim: 6, nao: 3, abstencao: 1 }, baseMembros: 11,
+      },
+    };
+    expect(derivarMeuVoto(estado, "v1").ciclo).toBe("encerrada");
+  });
+
   it("votação encerrada → encerrada (mesmo se antes desse voto)", () => {
     const estado: EstadoPlenario = {
       ...BASE,

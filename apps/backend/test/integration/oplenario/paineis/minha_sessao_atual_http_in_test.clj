@@ -45,6 +45,10 @@
   {:sessao-id (random-uuid) :estado-atual "aberta"
    :aberta-em (Instant/parse "2026-07-01T13:00:00Z") :encerrada-em nil})
 
+(defn- sessao-agendada []
+  {:sessao-id (random-uuid) :estado-atual "agendada"
+   :agendada-para (Instant/parse "2026-08-01T13:00:00Z") :aberta-em nil :encerrada-em nil})
+
 ;; ---------- GET /meu/sessao-atual ----------
 
 (deftest minha-sessao-200-com-sessao-viva
@@ -62,6 +66,28 @@
     (is (= 200 (:status r)) "sem nenhuma sessao no tenant -> 200, NUNCA 404 (ausencia e' um estado)")
     (is (nil? (:sessao-id body)))
     (is (nil? (:situacao body)))))
+
+(deftest minha-sessao-ignora-agendada-mesmo-sortida-primeiro-pelo-sli
+  ;; review MAJOR (revisao final de branch): `sli-sessoes` agrupa por `encerrada_em IS NULL` (verdadeiro p/
+  ;; 'aberta' E 'agendada') e ordena esse grupo por `transicionou_em ASC` (mais antiga primeiro — proposito
+  ;; do dashboard da Mesa: sinalizar sessao aberta ha' MAIS TEMPO). Uma sessao 'agendada' criada ANTES da
+  ;; 'aberta' (cenario normal: pauta futura + sessao de hoje) sortiria primeiro nessa ordem — tomar
+  ;; cegamente a PRIMEIRA entrada devolveria a sessao ERRADA (futura, ainda fechada) pro cockpit do
+  ;; celular. O handler tem de FILTRAR p/ estados realmente vivos (aberta/suspensa) antes de escolher.
+  (let [r (pt/response-for (service-fn #{"vereador"} (fake-repo-paineis [(sessao-agendada) (sessao-em-curso)]))
+                           :get "/meu/sessao-atual" :headers (com-bearer (token (random-uuid) (random-uuid))))
+        body (ler-json r)]
+    (is (= 200 (:status r)))
+    (is (= "em_curso" (:situacao body))
+        "mesmo com 'agendada' na frente na lista crua do sli-sessoes, /meu/sessao-atual devolve a VIVA")))
+
+(deftest minha-sessao-so-agendada-devolve-vazio
+  ;; sem NENHUMA sessao realmente viva (so' agendada futura) -> {:sessao-id nil}, nunca a agendada.
+  (let [r (pt/response-for (service-fn #{"vereador"} (fake-repo-paineis [(sessao-agendada)]))
+                           :get "/meu/sessao-atual" :headers (com-bearer (token (random-uuid) (random-uuid))))
+        body (ler-json r)]
+    (is (= 200 (:status r)))
+    (is (nil? (:sessao-id body)) "'agendada' nao conta como 'sessao atual' — so' aberta/suspensa contam")))
 
 (deftest minha-sessao-sem-papel-vereador-403
   (let [r (pt/response-for (service-fn #{"secretario"} (fake-repo-paineis [(sessao-em-curso)]))
