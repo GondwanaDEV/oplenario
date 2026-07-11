@@ -58,6 +58,26 @@
          :fonte "manual_secretaria" :ocorrido-em ocorrido-em :created-by (:identidade-id ator)})
       {:id id})))
 
+(defn confirmar-minha-presenca
+  "Onda C3 — autoatendimento: o vereador confirma a PROPRIA presenca pelo celular. `vereador-id` NUNCA vem
+  do corpo (resolvido do ator via `resolver-vereador`, injetado pelo host — mesmo contrato anti-forja de
+  `legislativo/controllers.clj/acusar-ciencia`). `fonte` e' SEMPRE 'autoatendimento' (nunca do cliente,
+  mesma disciplina de `registrar-presenca` forcando 'manual_secretaria'). `tipo` e' SEMPRE 'entrada':
+  reconfirmar nao corrompe nada (append-only; so' o ULTIMO evento por vereador conta, `esta-presente-em?`),
+  entao um evento extra e' inofensivo — nao ha necessidade de checar 'ja presente' antes de inserir.
+  `modalidade` fixa 'plenario' (V1 = Nivel 1, presenca remota e' so' manual pela Mesa, §22.6). Ator sem
+  cadastro vinculado (`resolver-vereador` nil) -> nil (-> 404, mesmo contrato de /meu/ciencias). Sessao
+  inexistente no tenant -> nil (-> 404). `instante` vem do RELOGIO do servidor (borda), nunca do cliente."
+  [repo-sessoes resolver-vereador ator sessao-id instante]
+  (when-let [vereador-id (resolver-vereador (:ente-id ator) (:identidade-id ator))]
+    (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+      (authz/check! ator :sessao/confirmar-presenca sessao logic/pode-ver-sessao?)
+      (let [id (random-uuid)]
+        (repo/registrar-presenca! repo-sessoes (:ente-id ator)
+          {:id id :sessao-id sessao-id :vereador-id vereador-id :tipo "entrada" :modalidade "plenario"
+           :fonte "autoatendimento" :ocorrido-em instante :created-by (:identidade-id ator)})
+        {:id id}))))
+
 (defn inscrever-orador
   "§22.6 eixo F (tribuna, intencao): inscreve um orador na fila da sessao. Carrega a sessao do tenant do `ator`
   (nil -> 404 via nil de retorno), roda pode-ver-sessao? (mesma Casa -> 403 fail-closed), e inscreve (a fila e'

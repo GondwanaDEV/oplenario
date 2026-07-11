@@ -97,7 +97,8 @@
           ["/eu"                :get [auth http/eu] :route-name :eu]
           ["/painel-secretaria" :get [auth (it/exige-papel "secretario") http/painel-secretaria]
            :route-name :painel-secretaria]}
-        (into (sessoes-http/rotas {:auth auth :repo-sessoes repo-sessoes :objeto-store objeto-store}))
+        (into (sessoes-http/rotas {:auth auth :repo-sessoes repo-sessoes :objeto-store objeto-store
+                                   :resolver-vereador resolver-vereador-fn :relogio relogio-producao}))
         (into (legislativo-http/rotas {:auth auth :repo-legislativo repo-legislativo
                                        :consultar-sessao consultar-sessao
                                        :resolver-municipio resolver-municipio
