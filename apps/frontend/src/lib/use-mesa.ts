@@ -9,20 +9,10 @@
 
 import { useEffect, useState } from "react";
 import { camelizarChaves } from "./boundary";
-import type { CardIndisponivelOut, MesaOut, RelatorPendenteOut } from "./contrato-mesa.gen";
+import type { CardIndisponivelOut, ItemBoardOut, MesaOut, RelatorPendenteOut } from "./contrato-mesa.gen";
 
-export interface ItemBoardOut {
-  proposicaoId: string;
-  tipo: string;
-  ano: number;
-  sequencial: number;
-  urnLex: string;
-  ementa: string;
-  autorTipo?: string | null;
-  autorTexto?: string | null;
-  estado: string;
-  transicionouEm: string;
-}
+export type { ItemBoardOut };
+
 export interface PendenciaOut {
   objetoTipo: string;
   objetoId: string;

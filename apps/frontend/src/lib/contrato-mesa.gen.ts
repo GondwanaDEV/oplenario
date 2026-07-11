@@ -115,3 +115,20 @@ export interface MesaOut {
   relatoresPendentes: RelatoresPendentesOut | CardIndisponivelOut;
   lacunas: string[];
 }
+
+export interface ItemBoardOut {
+  proposicaoId: string;
+  tipo: string;
+  ano: number;
+  sequencial: number;
+  urnLex: string;
+  ementa: string;
+  autorTipo?: string | null;
+  autorTexto?: string | null;
+  estado: string;
+  transicionouEm: string;
+}
+
+export interface TramitacaoBoardOut {
+  itens: ItemBoardOut[];
+}

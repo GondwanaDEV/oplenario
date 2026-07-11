@@ -6,7 +6,8 @@
   (:require [clojure.java.io :as io]
             [oplenario.cadastros.models.cadastro :as cad]
             [oplenario.codegen.malli-ts :as ts]
-            [oplenario.paineis.wire.out.mesa :as mesa-wire]))
+            [oplenario.paineis.wire.out.mesa :as mesa-wire]
+            [oplenario.paineis.wire.out.tramitacao :as tramitacao-wire]))
 ;; NOTA (ADR-0001/§22.10): a fonte CORRETA dos tipos TS e' o `wire/out` (externo, ja filtrado), nao
 ;; models/ internos. cadastros ainda entra via models/ (sem PII, provisorio). identidade FORA — o model
 ;; Identidade carrega :cpf; exporta-lo vazaria PII no contrato do front. Entra via wire/out sem-CPF (FE0).
@@ -33,7 +34,11 @@
    ["RelatorPendenteOut" mesa-wire/RelatorPendenteOut]
    ["RelatoresPendentesOut" mesa-wire/RelatoresPendentesOut]
    ["CardIndisponivelOut" mesa-wire/CardIndisponivelOut]
-   ["MesaOut" mesa-wire/MesaOut]])
+   ["MesaOut" mesa-wire/MesaOut]
+   ;; FE Onda B — board de tramitacao (paineis/wire/out/tramitacao). ItemBoardOut ANTES de
+   ;; TramitacaoBoardOut pro mesmo racional da referencia nomeada acima (campo :itens aninhado).
+   ["ItemBoardOut" tramitacao-wire/ItemBoardOut]
+   ["TramitacaoBoardOut" tramitacao-wire/TramitacaoBoardOut]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))
 
