@@ -19,4 +19,5 @@
    [:protocolo-geral-id {:optional true} [:maybe :uuid]]
    [:emitido-em {:optional true} [:maybe km/Instante]]
    [:emitido-por {:optional true} [:maybe :uuid]]
-   [:lock-version :int]])
+   [:lock-version :int]
+   [:criado-em km/Instante]])

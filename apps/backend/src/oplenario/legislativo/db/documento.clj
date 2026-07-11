@@ -12,7 +12,7 @@
 
 (def ^:private colunas
   [:id :ente_id :modelo_id :tipo_documento :assunto :corpo :estado :protocolo_geral_id
-   :emitido_em :emitido_por :lock_version])
+   :emitido_em :emitido_por :lock_version :criado_em])
 
 (defn gerar!
   "Gera um documento a partir do modelo: renderiza o corpo (merge de `dados` no `corpo-template`), grava o
@@ -70,8 +70,13 @@
 
 (defn emitir!
   "Emite o documento: 'rascunho' -> 'emitido' (carimba emitido_em/por; o trigger congela o conteudo). CAS por
-  lock_version. Guard fail-closed: so se emite um 'rascunho'. Devolve {:id :estado}."
-  [tx {:keys [id ente-id emitido-por updated-by lock-version]}]
+  lock_version. Guard fail-closed: so se emite um 'rascunho'. `protocolo-geral-id` OPCIONAL (Onda B Slice 6):
+  quando a emissao acontece como parte de Repo/protocolar-documento! (o CTA 'Protocolar e numerar' compoe
+  protocolo-geral/protocolar! + este emitir! NUMA SO tx), o vinculo ao Protocolo Geral e' setado na MESMA
+  UPDATE — aditivo, o SET so' inclui a coluna quando o valor vem presente (nil = omitido, mesma disciplina
+  do cond-> em editar-rascunho!); quem emite sem protocolar (nao ha' fluxo assim nesta fatia, mas o contrato
+  fica correto) simplesmente nao passa o campo. Devolve {:id :estado}."
+  [tx {:keys [id ente-id emitido-por updated-by lock-version protocolo-geral-id]}]
   (let [{:keys [estado]} (estado+lock tx ente-id id)]
     (when (nil? estado)
       (throw (ex-info "emitir!: documento inexistente" {:id id :ente-id ente-id})))
@@ -79,8 +84,9 @@
       (throw (ex-info "emitir!: so se emite um documento 'rascunho'" {:id id :estado estado})))
     (let [r (jdbc/execute-one! tx
               (sql/format {:update :legislativo.documento
-                           :set {:estado "emitido" :emitido_em [:now] :emitido_por emitido-por
-                                 :updated_by updated-by :atualizado_em [:now] :lock_version [:+ :lock_version 1]}
+                           :set (cond-> {:estado "emitido" :emitido_em [:now] :emitido_por emitido-por
+                                         :updated_by updated-by :atualizado_em [:now] :lock_version [:+ :lock_version 1]}
+                                  (some? protocolo-geral-id) (assoc :protocolo_geral_id protocolo-geral-id))
                            :where [:and [:= :ente_id ente-id] [:= :id id] [:= :lock_version lock-version]]}))]
       (when (zero? (:next.jdbc/update-count r 0))
         (throw (ex-info "emitir!: conflito de lock_version ou inexistente" {:id id :lock-version lock-version})))

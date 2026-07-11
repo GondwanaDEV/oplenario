@@ -143,6 +143,16 @@
   (documentos-do-modelo [this ente-id modelo-id])
   (editar-documento! [this ente-id m] "Reescreve corpo/assunto enquanto rascunho (CAS).")
   (emitir-documento! [this ente-id m] "rascunho -> emitido (congela o conteudo); CAS.")
+  ;; Onda B Slice 6 — o CTA 'Protocolar e numerar' do Expediente: acao COMPOSTA (protocolo geral + emissao)
+  ;; NUMA UNICA tx (mesma disciplina de emitir-parecer!/protocolar!).
+  (protocolar-documento! [this ente-id m]
+    "Numera o documento no Protocolo Geral (objeto-tipo 'documento', sentido 'expedido') E emite o documento
+     (rascunho -> emitido, vinculado ao protocolo recem-criado), 1 tx (mesmo racional de composicao de
+     emitir-parecer!). `m` = {:documento-id :ano :ator-id :lock-version}. Fail-closed: documento inexistente
+     no tenant lanca ANTES de protocolar (nada e' numerado por engano); documento fora de 'rascunho' ou
+     lock-version desatualizado lanca no guard/CAS de emitir-documento! (a tx inteira rola atras — o numero
+     recem-reservado NAO fica orfao, o kernel/sequencial e' transacional). Devolve {:documento-id
+     :protocolo-numero :protocolo-ano :protocolo-id}.")
   ;; F6c Slice 4a — artefato de publicacao oficial ('DO-lite', doc-mestre L287). Verdade de dominio do
   ;; legislativo (§22.10: artefato legal e' do dominio, nao da projecao transparencia — que so' EXIBE, Slice 4b).
   (gerar-artefato-publicacao! [this ente-id m]
@@ -510,6 +520,29 @@
   (documentos-do-modelo [this ente-id mid] (transacao this ente-id #(documento/listar-por-modelo % ente-id mid)))
   (editar-documento! [this ente-id m] (transacao this ente-id #(documento/editar-rascunho! % (assoc m :ente-id ente-id))))
   (emitir-documento! [this ente-id m] (transacao this ente-id #(documento/emitir! % (assoc m :ente-id ente-id))))
+  ;; Onda B Slice 6 — 'Protocolar e numerar': COMPOE protocolo-geral/protocolar! (numera gapless, objeto-tipo
+  ;; 'documento') + documento/emitir! (rascunho -> emitido, vinculado ao protocolo) NUMA UNICA tx (mesma
+  ;; disciplina de protocolar!/emitir-parecer! — nao pode chamar os dois protocolos publicos separadamente,
+  ;; abriria DUAS tx e quebraria a atomicidade). Le' o documento ANTES (existencia + :assunto, que o
+  ;; protocolo-geral exige NOT NULL) — o guard de ESTADO ('so' rascunho protocola') e' o mesmo de emitir!
+  ;; (reusado, nao duplicado): se o documento nao estiver 'rascunho' ou o lock-version nao bater, emitir!
+  ;; lanca e a tx INTEIRA rola atras (o numero reservado pelo kernel/sequencial some com o rollback, gapless
+  ;; preservado — nao ha' numero "gasto" por uma tentativa que falhou).
+  (protocolar-documento! [this ente-id {:keys [documento-id ano ator-id lock-version]}]
+    (transacao this ente-id
+      (fn [tx]
+        (let [doc (documento/buscar tx ente-id documento-id)]
+          (when (nil? doc)
+            (throw (ex-info "protocolar-documento!: documento inexistente no tenant"
+                            {:documento-id documento-id :ente-id ente-id})))
+          (let [protocolo-id (random-uuid)
+                {:keys [numero]} (protocolo/protocolar! tx
+                                    {:id protocolo-id :ente-id ente-id :ano ano :objeto-tipo "documento"
+                                     :objeto-id documento-id :sentido "expedido" :assunto (:assunto doc)
+                                     :protocolado-por ator-id :created-by ator-id})]
+            (documento/emitir! tx {:id documento-id :ente-id ente-id :emitido-por ator-id :updated-by ator-id
+                                    :lock-version lock-version :protocolo-geral-id protocolo-id})
+            {:documento-id documento-id :protocolo-numero numero :protocolo-ano ano :protocolo-id protocolo-id})))))
   ;; F6c Slice 4a/4b — artefato de publicacao oficial. Le a norma publicada + texto (tx), resolve o corpo (inline
   ;; ou objeto_store, FORA da tx), renderiza (puro, fail-closed), serializa+assina (ports), insere VERSIONADO
   ;; (MAX+1 atomico; INSERT antes do S3 = ancora) + EMITE `artefato.publicacao.gerado` na tx do INSERT (Slice
