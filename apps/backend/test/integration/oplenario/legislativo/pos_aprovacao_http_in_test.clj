@@ -85,7 +85,8 @@
 (deftest gerar-autografo-201
   (let [ente (random-uuid) pid (random-uuid) aid (random-uuid) tid (random-uuid)
         repo (fake-repo-legislativo
-              {:buscar-proposicao-detalhe (fn [_id] {:proposicao (proposicao-canonica ente pid) :texto nil})
+              {:buscar-proposicao-detalhe (fn [_id] {:proposicao (proposicao-canonica ente pid)
+                                                       :texto {:id (random-uuid)}})
                :autografo-da-proposicao (fn [_pid] nil)
                :gerar-autografo-e-abrir-tramitacao! (fn [_m] {:autografo-id aid :numero 1 :tramitacao-executiva-id tid})
                :buscar-pos-aprovacao (fn [_pid] {:autografo (autografo-canonico ente aid pid)
@@ -114,6 +115,20 @@
         repo (fake-repo-legislativo
               {:buscar-proposicao-detalhe (fn [_id] {:proposicao (proposicao-canonica ente pid) :texto nil})
                :autografo-da-proposicao (fn [_pid] (autografo-canonico ente (random-uuid) pid))})
+        r (pt/response-for (service-fn #{"secretario"} repo)
+                           :post (str "/legislativo/proposicoes/" pid "/autografo")
+                           :headers (com-bearer (token ente (random-uuid)))
+                           :body (json/write-value-as-string {}))]
+    (is (= 400 (:status r)))))
+
+(deftest gerar-autografo-sem-texto-vigente-400
+  ;; a proposicao aprovada NUNCA teve texto promovido a vigente (protocolar sem texto e' permitido, Onda B
+  ;; Slice 2) — sem isso o autografo (artefato legal) nasceria vazio; a CHECK do banco
+  ;; (autografo_efetivado_tem_texto) bloquearia como 500 opaco se o controller nao guardasse antes.
+  (let [ente (random-uuid) pid (random-uuid)
+        repo (fake-repo-legislativo
+              {:buscar-proposicao-detalhe (fn [_id] {:proposicao (proposicao-canonica ente pid) :texto nil})
+               :autografo-da-proposicao (fn [_pid] nil)})
         r (pt/response-for (service-fn #{"secretario"} repo)
                            :post (str "/legislativo/proposicoes/" pid "/autografo")
                            :headers (com-bearer (token ente (random-uuid)))

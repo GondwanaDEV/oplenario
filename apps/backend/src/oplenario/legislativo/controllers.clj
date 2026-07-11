@@ -246,6 +246,11 @@
   (ente_id, proposicao_id) do db/autografo.clj como 500): uma proposicao que ja' tem autografo lanca ANTES
   de qualquer escrita nova.
 
+  GUARD DE TEXTO VIGENTE (achado em QA manual pos-merge): protocolar sem texto e' permitido (Onda B
+  Slice 2) — uma proposicao pode chegar a 'aprovada' sem NUNCA ter tido uma versao promovida a vigente.
+  O autografo e' o ARTEFATO LEGAL (nao pode nascer vazio; CHECK autografo_efetivado_tem_texto do banco
+  bloquearia como 500 opaco). Guarda ANTES da escrita, mesmo racional do guard de duplicidade.
+
   nil se a proposicao nao existe no tenant (-> 404 na borda). `m` ja' vem coagido pelo adapters/in (id do
   autografo/prazo-resposta-em/created-by; SEM ano/destinatario-texto/texto-versao-id, injetados aqui)."
   [repo-legislativo resolver-municipio ente-id ano m]
@@ -254,6 +259,9 @@
     (when proposicao
       (when (repo/autografo-da-proposicao repo-legislativo ente-id proposicao-id)
         (throw (ex-info "gerar-autografo: a proposicao ja tem autografo (UNIQUE por proposicao)"
+                        {:tipo :validacao/invalido :proposicao-id proposicao-id})))
+      (when (nil? (:id texto))
+        (throw (ex-info "gerar-autografo: a proposicao nao tem texto vigente (nao ha o que enviar ao Executivo)"
                         {:tipo :validacao/invalido :proposicao-id proposicao-id})))
       (let [{:keys [municipio-nome]} (resolver-municipio ente-id)]
         (repo/gerar-autografo-e-abrir-tramitacao! repo-legislativo ente-id
