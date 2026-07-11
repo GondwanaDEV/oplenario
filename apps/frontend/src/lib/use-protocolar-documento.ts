@@ -48,7 +48,7 @@ export function useProtocolarDocumento(token: string | null, id: string | null) 
     setErro(null);
     let tratado = false;
     try {
-      const r = await fetch(`/api/legislativo/documentos/${id}/protocolo`, {
+      const r = await fetch(`/api/legislativo/documentos/${encodeURIComponent(id)}/protocolo`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify(corpoKebab(corpo)),

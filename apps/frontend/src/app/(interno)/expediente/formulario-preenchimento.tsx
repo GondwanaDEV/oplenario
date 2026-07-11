@@ -20,14 +20,21 @@
 // de um re-sync de estado dentro do componente já montado.
 
 import { useEffect, useRef, useState } from "react";
-import { documentoEhTerminal, rotularEstadoDocumento } from "@/lib/expediente-vista";
+import { documentoEhTerminal, paresParaMapaDados, rotularEstadoDocumento } from "@/lib/expediente-vista";
 import type { DocumentoOut } from "@/lib/contrato-legislativo.gen";
 import "./formulario-preenchimento.css";
 
 export type ValoresGeracao = { assunto: string; dados: Record<string, string> };
 export type ValoresEdicao = { assunto: string; corpo: string };
 
-type ParDados = { chave: string; valor: string };
+type ParDados = { id: string; chave: string; valor: string };
+
+// Key estável por linha, independente da posição — a lista suporta remoção no meio (aoRemoverPar), e usar o
+// índice como key faria o React reaproveitar o nó DOM errado na reconciliação (foco preso na linha errada).
+// `crypto.randomUUID` está disponível em todos os browsers/ambientes de teste alvo deste projeto.
+function criarIdPar(): string {
+  return crypto.randomUUID();
+}
 
 export function FormularioPreenchimento({
   documento,
@@ -54,7 +61,7 @@ export function FormularioPreenchimento({
 }) {
   const [assunto, setAssunto] = useState(documento?.assunto ?? "");
   const [corpo, setCorpo] = useState(documento?.corpo ?? "");
-  const [dadosPares, setDadosPares] = useState<ParDados[]>([{ chave: "", valor: "" }]);
+  const [dadosPares, setDadosPares] = useState<ParDados[]>([{ id: criarIdPar(), chave: "", valor: "" }]);
   const [erroValidacao, setErroValidacao] = useState<string | null>(null);
   const erroRef = useRef<HTMLParagraphElement>(null);
   const barraRef = useRef<HTMLDivElement>(null);
@@ -86,7 +93,7 @@ export function FormularioPreenchimento({
   }
 
   function aoAdicionarPar() {
-    setDadosPares((pares) => [...pares, { chave: "", valor: "" }]);
+    setDadosPares((pares) => [...pares, { id: criarIdPar(), chave: "", valor: "" }]);
   }
 
   function aoRemoverPar(i: number) {
@@ -99,10 +106,7 @@ export function FormularioPreenchimento({
       return;
     }
     setErroValidacao(null);
-    const dados = Object.fromEntries(
-      dadosPares.map(({ chave, valor }) => [chave.trim(), valor]).filter(([chave]) => (chave as string).length > 0),
-    );
-    aoGerar({ assunto, dados });
+    aoGerar({ assunto, dados: paresParaMapaDados(dadosPares) });
   }
 
   function aoClicarSalvarRascunho() {
@@ -140,7 +144,7 @@ export function FormularioPreenchimento({
             <fieldset className="dados-lista">
               <legend>Dados para o modelo (preenche os campos {"{{ }}"} do template)</legend>
               {dadosPares.map((par, i) => (
-                <div className="dados-linha" key={i}>
+                <div className="dados-linha" key={par.id}>
                   <div className="campo">
                     <label htmlFor={`dados-chave-${i}`}>Campo {i + 1}</label>
                     <input

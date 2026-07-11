@@ -114,7 +114,9 @@ export default function PaginaExpediente() {
               </div>
               <div className="bloco-corpo">
                 {estadoModelos === "carregando" && <p role="status">Carregando modelos…</p>}
-                {estadoModelos === "erro" && <p>Não foi possível carregar os modelos de documento.</p>}
+                {estadoModelos === "erro" && (
+                  <p role="status">Não foi possível carregar os modelos de documento.</p>
+                )}
                 {estadoModelos === "pronto" && modelos && (
                   <SeletorModelo
                     modelos={modelos.itens}
@@ -147,7 +149,7 @@ export default function PaginaExpediente() {
         </div>
 
         {estadoLivro === "carregando" && <p role="status">Carregando o Livro do Protocolo Geral…</p>}
-        {estadoLivro === "erro" && <p>Não foi possível carregar o Livro do Protocolo Geral.</p>}
+        {estadoLivro === "erro" && <p role="status">Não foi possível carregar o Livro do Protocolo Geral.</p>}
         {estadoLivro === "pronto" && livro && <TabelaProtocolo itens={livro.itens} />}
       </main>
     </>

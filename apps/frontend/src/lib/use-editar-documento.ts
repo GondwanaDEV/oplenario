@@ -52,7 +52,7 @@ export function useEditarDocumento(token: string | null, id: string | null) {
     setErro(null);
     let tratado = false;
     try {
-      const r = await fetch(`/api/legislativo/documentos/${id}`, {
+      const r = await fetch(`/api/legislativo/documentos/${encodeURIComponent(id)}`, {
         method: "PATCH",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify(corpoKebab(corpo)),
