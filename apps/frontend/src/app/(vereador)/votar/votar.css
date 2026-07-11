@@ -1,0 +1,46 @@
+/* Cockpit de votação do vereador (Onda C3) — porte mobile do bloco `.ao-vivo`/`.votar`/`.placar-mini` de
+   produto/design-system/o-plenario/telas/vereador-app.html. Tokens/chassi já globais (globals.css); a ilha
+   é escura (--palco-*), mesmo racional da cabine ao vivo da Mesa (sessoes/[id]/plenario/plenario.css), mas
+   este markup/CSS é PRÓPRIO (resumo mobile, não o grid nominal completo desktop-oriented da Mesa). */
+
+.votar-pagina.tela-estado { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; text-align: center; gap: 0.5rem; padding: 1.5rem; }
+.votar-pagina.tela-estado h1 { font-family: var(--display); font-size: var(--t-21); color: var(--texto); }
+.votar-pagina.tela-estado p { font-size: var(--t-13); color: var(--texto-2); }
+
+/* ===== HERÓI: votação ao vivo (ilha-palco escura) ===== */
+.ao-vivo { background: var(--palco-bg); color: var(--palco-texto); border-radius: var(--raio-lg); padding: 1.1rem 1.1rem 1.2rem; box-shadow: var(--sombra-alta); margin-top: 0.5rem; }
+.av-top { display: flex; align-items: center; gap: 0.5rem; }
+.av-vivo { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #FFD9CB; }
+.av-vivo .pulso { width: 9px; height: 9px; border-radius: 50%; background: var(--telha); box-shadow: 0 0 0 0 rgba(217,84,43,.7); animation: votar-pulso 1.8s infinite; }
+.av-vivo.av-off { color: var(--palco-texto-2); }
+.av-vivo.av-off .pulso { display: none; }
+@keyframes votar-pulso { 0% { box-shadow: 0 0 0 0 rgba(217,84,43,.6); } 70% { box-shadow: 0 0 0 9px rgba(217,84,43,0); } 100% { box-shadow: 0 0 0 0 rgba(217,84,43,0); } }
+@media (prefers-reduced-motion: reduce) { .av-vivo .pulso { animation: none; } }
+
+.voto-nota { font-size: var(--t-13); color: var(--palco-texto-2); margin: 0.9rem 0 0; line-height: 1.5; }
+.voto-erro { font-size: var(--t-13); color: #FFD9CB; margin: 0.6rem 0 0; font-weight: 600; }
+
+.presenca-cta { margin-top: 0.9rem; display: flex; flex-direction: column; gap: 0.6rem; align-items: flex-start; }
+.presenca-cta .voto-nota { margin: 0; }
+
+.votar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin: 1rem 0 0; }
+.vbtn { font-family: var(--corpo); font-weight: 700; font-size: var(--t-16); border: 1.5px solid transparent; border-radius: var(--raio); padding: 0.85rem 0.5rem; min-height: 56px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.25rem; line-height: 1; }
+.vbtn:disabled { opacity: 0.6; cursor: default; }
+.vbtn-sim { background: var(--jade-claro); color: #fff; }
+.vbtn-sim:hover:not(:disabled) { background: #128a66; }
+/* branco sobre telha pura = 4.0 (falha AA p/ texto não-grande); usa telha-fundo = 5.44 — regra recorrente do sistema (GUIDELINES-CHECKLIST §5.1). */
+.vbtn-nao { background: var(--telha-fundo); color: #fff; }
+.vbtn-nao:hover:not(:disabled) { background: #9E3A1C; }
+.vbtn-abs { background: transparent; color: var(--palco-texto); border-color: var(--palco-linha); }
+.vbtn-abs:hover:not(:disabled) { background: var(--palco-inset); }
+
+.voto-estado { margin: 1rem 0 0; padding: 0.75rem 0.85rem; background: var(--palco-inset); border-radius: var(--raio); border: 1px solid var(--palco-linha); }
+.voto-estado .voto-nota { margin: 0; }
+
+.placar-mini { margin: 1rem 0 0; }
+.placar-mini .barra { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--palco-inset); }
+.placar-mini .seg-sim { background: var(--jade-claro); }
+.placar-mini .seg-nao { background: var(--telha); }
+.placar-mini .leg { display: flex; gap: 1rem; margin-top: 0.5rem; font-size: var(--t-12); color: var(--palco-texto-2); flex-wrap: wrap; }
+.placar-mini .leg b { color: var(--palco-texto); font-family: var(--mono); }
+.placar-mini .leg .parcial { margin-left: auto; }

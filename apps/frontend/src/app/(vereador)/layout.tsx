@@ -9,8 +9,8 @@
 //
 // Chrome persistente (topo compacto + tabbar mobile) mora AQUI (não em page.tsx) — é navegação de app-
 // shell que se repete por toda rota sob (vereador), mesmo racional de TopoInterno em (interno)/topo.tsx.
-// "Pauta"/"Votar"/"Perfil" ainda não têm rota nesta fatia (estado em-sessão = C3) — os tabs ficam
-// desabilitados em vez de linkar para "#" (honesto: não finge cobertura que não existe).
+// "Pauta"/"Perfil" ainda não têm rota nesta fatia — os tabs ficam desabilitados em vez de linkar para "#"
+// (honesto: não finge cobertura que não existe). "Votar" (Onda C3) ganhou rota real.
 
 import { Suspense } from "react";
 import Link from "next/link";
@@ -99,11 +99,12 @@ function Brasao() {
 // DIFERENTES, desktop-oriented, sem GuardVereador). Desabilitado como os demais tabs ainda não
 // construídos NESTA fatia (honesto: sem uma experiência de matérias PROPRIA do vereador dentro do shell
 // mobile, mostrar o tab como "ativo" prometia uma continuidade que não existe). Candidato de fatia futura:
-// uma rota `(vereador)/materias` própria, ou promover /proposicoes a layout-agnostic.
+// uma rota `(vereador)/materias` própria, ou promover /proposicoes a layout-agnostic. "Votar" (Onda C3)
+// ganhou rota real (cockpit ao vivo — confirma presença + vota do próprio celular).
 const TABS = [
   { rotulo: "Início", href: "/vereador", ativo: true },
   { rotulo: "Pauta", href: null, ativo: false },
-  { rotulo: "Votar", href: null, ativo: false },
+  { rotulo: "Votar", href: "/votar", ativo: true },
   { rotulo: "Matérias", href: null, ativo: false },
   { rotulo: "Perfil", href: null, ativo: false },
 ] as const;
