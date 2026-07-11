@@ -15,6 +15,7 @@
   (:require [oplenario.http :as http]
             [oplenario.interceptors :as it]
             [oplenario.kernel.tempo :as tempo]
+            [oplenario.legislativo.adapters.in.ciencia :as adapters-in-ciencia]
             [oplenario.legislativo.adapters.in.documento :as adapters-in-documento]
             [oplenario.legislativo.adapters.in.parecer :as adapters-in-parecer]
             [oplenario.legislativo.adapters.in.proposicao :as adapters-in-proposicao]
@@ -22,6 +23,7 @@
             [oplenario.legislativo.adapters.out.documento :as adapters-out-documento]
             [oplenario.legislativo.adapters.out.documento-modelo :as adapters-out-documento-modelo]
             [oplenario.legislativo.adapters.out.ficha-materia :as adapters-out-ficha]
+            [oplenario.legislativo.adapters.out.meu-painel :as adapters-out-meu-painel]
             [oplenario.legislativo.adapters.in.pos-aprovacao :as adapters-in-pos-aprovacao]
             [oplenario.legislativo.adapters.out.autografo :as adapters-out-autografo]
             [oplenario.legislativo.adapters.out.parecer :as adapters-out-parecer]
@@ -325,18 +327,44 @@
                                    (controllers/buscar-tramitacao-executiva repo-leg ente-id id)))
         (http/json-resposta 404 {:erro "tramitacao executiva nao encontrada"})))))
 
+;; ========================= Onda C1: borda /meu do vereador (home fora-de-sessao) =========================
+
+(defn- meu-painel-handler
+  "GET /meu/painel. Gate grosso 'vereador' na rota; `resolver-vereador` (injetado pelo host) resolve o
+  vereador do proprio ator — anti-forja por construcao (nada no request escolhe 'de quem' e' o painel).
+  Ator sem cadastro vinculado -> painel vazio (200), nunca 404/500 (mesmo contrato do controller)."
+  [repo-leg resolver-vereador]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out-meu-painel/meu-painel->wire
+                               (controllers/meu-painel repo-leg resolver-vereador (:ator req))))))
+
+(defn- acusar-ciencia-handler
+  "POST /meu/ciencias. `vereador-id` NUNCA vem do corpo (adapters/in nem o le); o controller injeta o
+  resolvido do ator. nil (ator sem cadastro vinculado -> `resolver-vereador` nil) -> 404, mesmo contrato de
+  um recurso ausente do proprio ator (nunca 500)."
+  [repo-leg resolver-vereador]
+  (fn [req]
+    (let [m (adapters-in-ciencia/acusar-ciencia->dominio (:json-params req))]
+      (if-let [recibo (controllers/acusar-ciencia repo-leg resolver-vereador (:ator req) m)]
+        (http/json-resposta 201 (adapters-out-meu-painel/acusar-ciencia->wire recibo))
+        (http/json-resposta 404 {:erro "vereador sem cadastro vinculado neste ente"})))))
+
 (defn rotas
-  "Fragmento de rotas da votacao ao vivo + proposicoes + editor de parecer (table syntax Pedestal). Recebe o
-  interceptor `auth` (compartilhado), o `repo-legislativo` (Repo-Component do proprio modulo),
-  `consultar-sessao` (injetada pelo host — cross-modulo p/ a authz herdada da sessao), `resolver-municipio`
-  (injetada pelo host — cross-modulo p/ o legislativo computar a URN em protocolar!, Onda B Slice 2, §22.10),
-  `registro` (RegistroFatos do motor, injetado pelo host — Onda B Slice 5, o editor de parecer dirige o
-  motor via emitir-parecer!) e `relogio` (kernel/tempo, injetado pelo host — review MEDIUM fe-11-parecer,
-  mesmo contrato de `participacao-http/rotas`: producao le o relogio do sistema, teste crava o instante).
-  Todas as acoes EXIGEM a authz GROSSA (papel 'secretario') + corpo-json nas de escrita; a fina da votacao
-  decide no controller com a sessao carregada."
-  [{:keys [auth repo-legislativo consultar-sessao resolver-municipio registro relogio]}]
-  (let [papel (it/exige-papel "secretario")]
+  "Fragmento de rotas da votacao ao vivo + proposicoes + editor de parecer + borda /meu do vereador (table
+  syntax Pedestal). Recebe o interceptor `auth` (compartilhado), o `repo-legislativo` (Repo-Component do
+  proprio modulo), `consultar-sessao` (injetada pelo host — cross-modulo p/ a authz herdada da sessao),
+  `resolver-municipio` (injetada pelo host — cross-modulo p/ o legislativo computar a URN em protocolar!,
+  Onda B Slice 2, §22.10), `resolver-vereador` (injetada pelo host — cross-modulo p/ cadastros, Onda C1,
+  §22.5.3 exceção nomeada — resolve identidade->vereador-id NESTA Casa p/ a borda /meu), `registro`
+  (RegistroFatos do motor, injetado pelo host — Onda B Slice 5, o editor de parecer dirige o motor via
+  emitir-parecer!) e `relogio` (kernel/tempo, injetado pelo host — review MEDIUM fe-11-parecer, mesmo
+  contrato de `participacao-http/rotas`: producao le o relogio do sistema, teste crava o instante).
+  Todas as acoes das verticais de votacao/proposicoes/parecer EXIGEM a authz GROSSA (papel 'secretario') +
+  corpo-json nas de escrita; a fina da votacao decide no controller com a sessao carregada. A borda /meu
+  EXIGE papel 'vereador' (papel DISTINTO — nao 'secretario')."
+  [{:keys [auth repo-legislativo consultar-sessao resolver-municipio resolver-vereador registro relogio]}]
+  (let [papel (it/exige-papel "secretario")
+        papel-vereador (it/exige-papel "vereador")]
     #{["/sessoes/:id/votacoes" :post
        [auth papel it/corpo-json (abrir-handler repo-legislativo consultar-sessao)]
        :route-name :legislativo/abrir-votacao]
@@ -391,7 +419,12 @@
        :route-name :legislativo/registrar-resposta-executivo]
       ["/legislativo/tramitacoes-executivas/:id/apreciacao" :post
        [auth papel it/corpo-json (apreciar-veto-handler repo-legislativo)]
-       :route-name :legislativo/apreciar-veto]}))
+       :route-name :legislativo/apreciar-veto]
+      ["/meu/painel" :get [auth papel-vereador (meu-painel-handler repo-legislativo resolver-vereador)]
+       :route-name :legislativo/meu-painel]
+      ["/meu/ciencias" :post
+       [auth papel-vereador it/corpo-json (acusar-ciencia-handler repo-legislativo resolver-vereador)]
+       :route-name :legislativo/acusar-ciencia]}))
 
 ;; ========================= FE Onda A1: fila de relatores pendentes (§16.11) =========================
 

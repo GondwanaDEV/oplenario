@@ -64,6 +64,11 @@
         ;; Onda B Slice 2: uf/nome-do-municipio do ente, p/ o legislativo computar a URN em protocolar! —
         ;; mesma inversao de dependencia de consultar-sessao/membros-da-casa/info-ente (§22.10).
         resolver-municipio (fn [ente-id] (repo-cadastros-comp/uf-e-municipio repo-cadastros ente-id))
+        ;; Onda C1: identidade->vereador-id NESTA Casa, injetado na borda /meu do legislativo (mesma
+        ;; inversao de dependencia de resolver-municipio/membros-da-casa; nome DISTINTO do defn de topo
+        ;; `resolver-vereador` p/ nao sombrear — a chave passada a legislativo-http/rotas continua
+        ;; :resolver-vereador).
+        resolver-vereador-fn (fn [ente-id identidade-id] (resolver-vereador repo-cadastros ente-id identidade-id))
         ;; Override injetavel (mesmo racional de `painel-compliance` — so' serve aos testes DB-free da borda
         ;; de paineis); em producao `montar` e' chamado sem estas chaves e o `or` fecha sobre o repo real.
         presenca-resumo (or presenca-resumo
@@ -96,6 +101,7 @@
         (into (legislativo-http/rotas {:auth auth :repo-legislativo repo-legislativo
                                        :consultar-sessao consultar-sessao
                                        :resolver-municipio resolver-municipio
+                                       :resolver-vereador resolver-vereador-fn
                                        :registro registro-fatos
                                        :relogio relogio-producao}))
         (into (compliance-http/rotas {:auth auth :repo-compliance repo-compliance}))
