@@ -50,17 +50,21 @@
    :objeto-tipo "proposicao" :objeto-id (random-uuid) :quorum-tipo "maioria_simples" :lock-version 0})
 
 (defn- fake-repo-legislativo
-  "RepoLegislativo fake (parcial proposital — so os metodos que meu-voto exercita). `transacao` so' chama
-  (f nil) — os stubs de fato nao usam a `tx`. `chamadas` (atom []) acumula os `m` de cada registrar-voto!
-  exercido — prova que o Repo NUNCA foi chamado quando o controller deve barrar antes."
+  "RepoLegislativo fake (parcial proposital — so os metodos que meu-voto exercita). `registrar-meu-voto!`
+  espelha a forma REAL (review CRÍTICO — autorizar+escrever numa SO tx): re-busca a votacao (equivalente ao
+  `FOR UPDATE` real, aqui so' uma segunda chamada a `busca-votacao-fn`), roda `autorizar!` (`tx` fake = nil,
+  os stubs de fato nao a usam) ANTES de gravar — se `autorizar!` lanca, o `swap!` abaixo nunca roda.
+  `chamadas` (atom []) acumula os `m` de cada escrita exercida — prova que o Repo NUNCA escreveu quando o
+  controller/authz deve barrar antes."
   [busca-votacao-fn chamadas]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify repo-leg/RepoLegislativo
-    (transacao [_ _ente-id f] (f nil))
     (buscar-votacao [_ _ente-id id] (busca-votacao-fn id))
-    (registrar-voto! [_ _ente-id m]
-      (swap! chamadas conj m)
-      {:id (:id m) :recibo :ok})))
+    (registrar-meu-voto! [_ _ente-id m autorizar!]
+      (let [v (busca-votacao-fn (:votacao-id m))]
+        (autorizar! nil v)
+        (swap! chamadas conj m)
+        {:id (:id m) :recibo :ok}))))
 
 (defn- m-voto [votacao-id]
   {:id (random-uuid) :votacao-id votacao-id :voto "sim" :created-by (random-uuid)})

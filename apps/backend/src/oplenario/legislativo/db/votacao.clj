@@ -55,6 +55,17 @@
      (sql/format {:select colunas :from [:legislativo.votacoes]
                   :where [:and [:= :ente_id ente-id] [:= :id id]]}))))
 
+(defn buscar-com-lock
+  "Como `buscar`, mas sob `SELECT ... FOR UPDATE` — serializa contra `encerrar!` (que tambem toma o lock via
+  `votacao+lock`). Onda C3 (`registrar-meu-voto!`): fecha a janela de corrida entre AUTORIZAR um voto
+  self-service e a Mesa encerrar a MESMA votacao no meio do caminho — so' usar dentro de uma tx que em
+  seguida ESCREVE com base neste snapshot (nunca uma leitura solta)."
+  [tx ente-id id]
+  (comum/linha->kebab
+   (jdbc/execute-one! tx
+     (sql/format {:select colunas :from [:legislativo.votacoes]
+                  :where [:and [:= :ente_id ente-id] [:= :id id]] :for :update}))))
+
 (defn votos-da-votacao
   "Os votos NOMINAIS (atribuidos) da votacao. NOMINAL apenas — voto secreto NAO e' atribuivel por design
   (sigilo no schema; votos_secretos nao tem vereador_id). P/ votacao secreta devolve [] (sem votos nominais)."

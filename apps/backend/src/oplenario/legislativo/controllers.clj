@@ -71,17 +71,20 @@
 (defn meu-voto
   "Onda C3 — o vereador vota do PROPRIO celular. `vereador-id` NUNCA vem do corpo (resolvido do ator via
   `resolver-vereador`, mesmo contrato anti-forja de `acusar-ciencia`). Authz herdada da sessao (mesma Casa,
-  `sessao-autorizada`) + a AMARRA votacao<->sessao (`votacao-na-sessao`), como a rota da Mesa. Por cima,
-  a POLICY FINA (1a producao real de `motor/politica-dsl`, disciplina 5): mandato vigente + presenca
-  registrada NESTA sessao. Os dois fatos rodam em avaliacoes DSL SEPARADAS (`hoje()` e `agora()` compartilham
-  UM so' slot `:agora` no motor — motor/runtime.clj — nao coexistem numa MESMA expressao; ver
-  docs/superpowers/specs/2026-07-11-onda-c-slice3-cockpit-votacao-design.md §3.2) + dois checks TRIVIAIS em
-  Clojure puro (sem DSL: nao sao fatos resolvidos por nome, so' campos ja carregados) — estado 'aberta' e
-  modalidade != 'secreta' (voto secreto NUNCA passa por aqui, mesmo que a policy DSL nao barrasse: e' regra
-  de negocio de borda, nao so' authz). Qualquer falha -> authz/check! lanca -> 403 generico (nunca detalha
-  qual precondicao falhou). Modalidade 'nominal' -> registra (reusa `repo/registrar-voto!`, MESMO caminho da
-  Mesa); qualquer outra (so' 'simbolica' pode chegar aqui, dado o gate acima) -> :validacao/invalido (400).
-  nil (sessao/votacao inexistente ou de outra sessao, OU ator sem cadastro de vereador) -> borda traduz 404."
+  `sessao-autorizada`) + a AMARRA votacao<->sessao (`votacao-na-sessao`), como a rota da Mesa. A modalidade
+  (imutavel pos-abertura) e' checada CEDO contra o `v` pre-tx — 'secreta' NUNCA passa por aqui (voto secreto
+  e' regra de borda, nao so' authz) e so' 'nominal' segue (qualquer outra, ex.: 'simbolica' -> :validacao/
+  invalido antes de tocar o Repo). A escrita de fato passa por `repo/registrar-meu-voto!` (review CRÍTICO:
+  autorizar+escrever precisam da MESMA tx — a versao anterior abria uma tx so' p/ o check e OUTRA, separada,
+  p/ a escrita, deixando uma janela onde a Mesa podia encerrar a votacao no meio do caminho): o Repo re-busca
+  a votacao SOB LOCK (`FOR UPDATE`) dentro da tx, roda o `autorizar!` (este predicado, com a POLICY FINA — 1a
+  producao real de `motor/politica-dsl`, disciplina 5: mandato vigente + presenca registrada NESTA sessao,
+  cada fato em avaliacao DSL SEPARADA — `hoje()`/`agora()` compartilham UM so' slot `:agora` no motor,
+  motor/runtime.clj, nao coexistem numa MESMA expressao; ver docs/superpowers/specs/2026-07-11-onda-c-
+  slice3-cockpit-votacao-design.md §3.2 — + o check trivial de estado 'aberta', tudo contra o snapshot
+  LOCKED, nunca o `v` pre-tx) e so' entao reconfere+insere. Qualquer falha -> authz/check! lanca -> 403
+  generico (nunca detalha qual precondicao falhou). nil (sessao/votacao inexistente ou de outra sessao, OU
+  ator sem cadastro de vereador) -> borda traduz 404."
   [repo-leg consultar-sessao resolver-vereador registro ator sessao-id votacao-id hoje instante m]
   (when-let [vereador-id (resolver-vereador (:ente-id ator) (:identidade-id ator))]
     (when (sessao-autorizada consultar-sessao ator sessao-id)
@@ -90,19 +93,18 @@
           (when (= "secreta" (:modalidade v))
             (throw (ex-info "voto secreto nao e' registravel pelo proprio celular"
                             {:tipo :validacao/invalido :campos [:modalidade] :modalidade "secreta"})))
-          (let [ator-dsl {:identidade (:identidade-id ator)}
-                recurso-dsl {:sessao_id (:sessao-id v) :vereador_id vereador-id}]
-            (repo/transacao repo-leg ente-id
-              (fn [tx]
-                (authz/check! ator-dsl :votacao/meu-voto recurso-dsl
-                  (fn [a r]
-                    (and (= "aberta" (:estado v))
-                         ((motor/politica-dsl {:registro registro :tx tx :expr expr-mandato-vigente :agora hoje}) a r)
-                         ((motor/politica-dsl {:registro registro :tx tx :expr expr-presente-nesta-sessao :agora instante}) a r))))))
-            (case (:modalidade v)
-              "nominal" (repo/registrar-voto! repo-leg ente-id (assoc m :vereador-id vereador-id))
-              (throw (ex-info "modalidade nao registra votos individuais"
-                              {:tipo :validacao/invalido :campos [:modalidade] :modalidade (:modalidade v)})))))))))
+          (when (not= "nominal" (:modalidade v))
+            (throw (ex-info "modalidade nao registra votos individuais"
+                            {:tipo :validacao/invalido :campos [:modalidade] :modalidade (:modalidade v)})))
+          (let [ator-dsl {:identidade (:identidade-id ator)}]
+            (repo/registrar-meu-voto! repo-leg ente-id (assoc m :vereador-id vereador-id)
+              (fn [tx v-fresco]
+                (let [recurso-dsl {:sessao_id (:sessao-id v-fresco) :vereador_id vereador-id}]
+                  (authz/check! ator-dsl :votacao/meu-voto recurso-dsl
+                    (fn [a r]
+                      (and (= "aberta" (:estado v-fresco))
+                           ((motor/politica-dsl {:registro registro :tx tx :expr expr-mandato-vigente :agora hoje}) a r)
+                           ((motor/politica-dsl {:registro registro :tx tx :expr expr-presente-nesta-sessao :agora instante}) a r)))))))))))))
 
 ;; ========================= FE Onda A1: fila de relatores pendentes (§16.11) =========================
 
