@@ -37,3 +37,49 @@
      (sql/format {:select colunas-parecer :from [:legislativo.pareceres]
                   :where [:and [:= :ente_id ente-id] [:= :relator_id vereador-id]]
                   :order-by [[:criado_em :desc] [:id :asc]]}))))
+
+;; ============================ Task 3: ciencia append-only (Inv.10) ============================
+
+(defn ciencias-pendentes
+  "Pareceres PUBLICADOS (texto_vigente_versao_id IS NOT NULL — emitidos, Onda B Slice 5) sobre proposicao
+  de autoria do vereador `vereador-id`, MENOS os ja' acusados (LEFT JOIN anti-join contra
+  ciencia_vereador — decisao assumida #2 do plano C1: ciencia DERIVADA, sem pipeline de notificacao). Join
+  SAME-SCHEMA (legislativo.pareceres <-> legislativo.proposicoes <-> legislativo.ciencia_vereador), nunca
+  cross-modulo (§22.10). `parecer-id` e' o `evento-ref` p/ `acusar-ciencia!` — cada parecer publicado gera
+  no maximo UM item pendente (a UNIQUE e' por parecer, nao por proposicao)."
+  [tx ente-id vereador-id]
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select [[:pc.id :parecer_id] [:p.id :proposicao_id] :p.tipo :p.ano :p.sequencial
+                            :p.urn_lex :p.ementa]
+                  :from [[:legislativo.pareceres :pc]]
+                  :join [[:legislativo.proposicoes :p]
+                         [:and [:= :p.id :pc.objeto_id] [:= :p.ente_id :pc.ente_id]]]
+                  :left-join [[:legislativo.ciencia_vereador :cv]
+                              [:and [:= :cv.ente_id :pc.ente_id] [:= :cv.vereador_id vereador-id]
+                               [:= :cv.evento_ref :pc.id]]]
+                  :where [:and [:= :pc.ente_id ente-id] [:= :pc.objeto_tipo [:inline "proposicao"]]
+                          [:is-not :pc.texto_vigente_versao_id nil]
+                          [:= :p.autor_tipo [:inline "vereador"]] [:= :p.autor_id vereador-id]
+                          [:is :cv.id nil]]
+                  :order-by [[:pc.atualizado_em :desc] [:pc.id :asc]]}))))
+
+(defn acusar-ciencia!
+  "Insere a ciencia do vereador `vereador-id` sobre `evento-ref` (append-only puro, Inv.10) — idempotente
+  por UNIQUE (ente_id, vereador_id, evento_ref). Race-safe (mesmo padrao de compliance/db/obrigacao.clj):
+  INSERT ... ON CONFLICT DO NOTHING RETURNING *; em conflito (corrida OU 2a chamada do mesmo vereador
+  sobre o mesmo evento), re-le a linha JA existente — preserva o `ciente-em` do 1o registro (nao duplica,
+  nao reescreve). Devolve {:id :ciente-em}."
+  [tx {:keys [id ente-id vereador-id evento-ref tipo]}]
+  (let [inserida (jdbc/execute-one! tx
+                   (sql/format {:insert-into :legislativo.ciencia_vereador
+                                :values [{:id id :ente_id ente-id :vereador_id vereador-id
+                                          :evento_ref evento-ref :tipo tipo}]
+                                :on-conflict [:ente_id :vereador_id :evento_ref] :do-nothing true
+                                :returning [:id :ciente_em]}))]
+    (comum/linha->kebab
+     (or inserida
+         (jdbc/execute-one! tx
+           (sql/format {:select [:id :ciente_em] :from [:legislativo.ciencia_vereador]
+                        :where [:and [:= :ente_id ente-id] [:= :vereador_id vereador-id]
+                                [:= :evento_ref evento-ref]]}))))))

@@ -304,7 +304,7 @@
 ;; ========================= Onda C1: borda /meu do vereador (home fora-de-sessao) =========================
 
 (defn meu-painel
-  "Onda C1 — leitura composta 'minhas proposicoes + meus pareceres (+ ciencias, Task 3)' do vereador ATOR
+  "Onda C1 — leitura composta 'minhas proposicoes + meus pareceres + ciencias pendentes' do vereador ATOR
   (anti-forja: SEMPRE o vereador resolvido do proprio ator, nunca um vereador-id arbitrario do request).
   `resolver-vereador` e' a fn injetada pelo HOST (§22.5.3, exceção nomeada — o legislativo NUNCA importa
   cadastros; mesma inversao de dependencia de `consultar-sessao`/`resolver-municipio`) que resolve
@@ -315,3 +315,13 @@
   (if-let [vereador-id (resolver-vereador (:ente-id ator) (:identidade-id ator))]
     (repo/meu-painel repo-legislativo (:ente-id ator) vereador-id)
     {:proposicoes [] :pareceres [] :ciencias []}))
+
+(defn acusar-ciencia
+  "Onda C1 — 'Dar ciencia' (Task 3): registra a ciencia do vereador ATOR sobre `evento-ref` (anti-forja:
+  o `vereador-id` e' SEMPRE o resolvido do proprio ator via `resolver-vereador`, nunca um valor do corpo
+  do request — mesmo contrato de `meu-painel`). `m` ja' vem coagido pelo adapters/in (`evento-ref`/`tipo`/
+  `id` novo). Ator sem cadastro vinculado (`resolver-vereador` nil) -> nil (a borda traduz -> 404, mesmo
+  contrato de um recurso ausente do proprio ator — nunca 500)."
+  [repo-legislativo resolver-vereador ator m]
+  (when-let [vereador-id (resolver-vereador (:ente-id ator) (:identidade-id ator))]
+    (repo/acusar-ciencia! repo-legislativo (:ente-id ator) (assoc m :vereador-id vereador-id))))

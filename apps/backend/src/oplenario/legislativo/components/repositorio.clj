@@ -182,9 +182,12 @@
   (artefatos-da-norma [this ente-id norma-id] "Artefatos de uma norma, por versao (historico de (re)geracoes).")
   ;; Onda C1 — borda /meu do vereador (§11.2/§11.3): leitura composta escopada por autor/relator.
   (meu-painel [this ente-id vereador-id]
-    "Onda C1: {:proposicoes [...] :pareceres [...] :ciencias []} NUMA UNICA tx (mesma disciplina de
-     buscar-proposicao-detalhe/ficha-completa-da-proposicao). `:ciencias` fica vazio nesta task — a Task 3
-     preenche via db/meu-painel/ciencias-pendentes (append-only, ainda inexistente aqui)."))
+    "Onda C1: {:proposicoes [...] :pareceres [...] :ciencias [...]} NUMA UNICA tx (mesma disciplina de
+     buscar-proposicao-detalhe/ficha-completa-da-proposicao). `:ciencias` = pareceres publicados sobre
+     proposicao de autoria do vereador, ainda nao acusados (Task 3).")
+  (acusar-ciencia! [this ente-id m]
+    "Task 3 — INSERT append-only idempotente (Inv.10) da ciencia do vereador sobre `evento-ref`. Devolve
+     {:id :ciente-em}."))
 
 ;; ---------- geracao do artefato de publicacao oficial ('DO-lite', doc-mestre L287, F6c Slice 4a):
 ;;            resolve a norma publicada + o texto legal -> renderiza (puro) -> serializa+assina (ports STUB) ->
@@ -649,13 +652,14 @@
   (buscar-artefato-publicacao [this ente-id id] (transacao this ente-id #(artefato/buscar % ente-id id)))
   (artefatos-da-norma [this ente-id norma-id] (transacao this ente-id #(artefato/listar-por-norma % ente-id norma-id)))
   ;; Onda C1 — leitura composta NUMA UNICA tx (mesmo snapshot MVCC, mesma disciplina de
-  ;; buscar-proposicao-detalhe/buscar-pos-aprovacao). `:ciencias` vazio ate' a Task 3.
+  ;; buscar-proposicao-detalhe/buscar-pos-aprovacao).
   (meu-painel [this ente-id vereador-id]
     (transacao this ente-id
       (fn [tx]
         {:proposicoes (meu-painel-db/proposicoes-do-autor tx ente-id vereador-id)
          :pareceres (meu-painel-db/pareceres-do-relator tx ente-id vereador-id)
-         :ciencias []}))))
+         :ciencias (meu-painel-db/ciencias-pendentes tx ente-id vereador-id)})))
+  (acusar-ciencia! [this ente-id m] (transacao this ente-id #(meu-painel-db/acusar-ciencia! % (assoc m :ente-id ente-id)))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

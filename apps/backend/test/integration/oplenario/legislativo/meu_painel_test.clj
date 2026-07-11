@@ -125,3 +125,74 @@
         ator {:ente-id ente :identidade-id identidade}
         resolver-vereador (fn [e i] (when (and (= e ente) (= i identidade)) vereador))]
     (is (= [pid] (mapv :id (:proposicoes (controllers/meu-painel *repo-legislativo* resolver-vereador ator)))))))
+
+;; ========================= Task 3: ciencia append-only (derivar + acusar) =========================
+
+(defn- publicar-parecer!
+  "Promove o parecer `pcid` a 'vigente' (rascunho->vigente, sem passar pelo motor/gatilho — so' o texto
+  precisa ficar 'publicado' p/ efeito de ciencia). numero_versao 1 -> lock_version novo 0."
+  [ente pcid]
+  (let [{vid :id} (repo-legislativo/nova-versao-parecer! *repo-legislativo* ente
+                    {:id (random-uuid) :parecer-id pcid :origem-versao "redacao"
+                     :texto-inline "Parecer favoravel."})]
+    (repo-legislativo/promover-versao-parecer! *repo-legislativo* ente
+      {:parecer-id pcid :versao-id vid :lock-version 0})))
+
+(deftest ciencias-pendentes-lista-parecer-publicado-sobre-minha-proposicao
+  (let [ente (random-uuid) vereador (random-uuid) outro-relator (random-uuid)
+        tid (montar-template-parecer! ente)
+        pid (protocolar! ente vereador)
+        {pcid :id} (repo-legislativo/iniciar-parecer! *repo-legislativo* ente
+                     {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id pid
+                      :comissao-id (random-uuid) :template-id tid :relator-id outro-relator})]
+    (publicar-parecer! ente pcid)
+    (is (= [pcid] (mapv :parecer-id (:ciencias (repo-legislativo/meu-painel *repo-legislativo* ente vereador))))
+        "parecer publicado sobre proposicao de MINHA autoria aparece p/ ciencia")))
+
+(deftest ciencias-pendentes-nao-lista-parecer-sem-texto-vigente
+  (let [ente (random-uuid) vereador (random-uuid)
+        tid (montar-template-parecer! ente)
+        pid (protocolar! ente vereador)]
+    (repo-legislativo/iniciar-parecer! *repo-legislativo* ente
+      {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id pid
+       :comissao-id (random-uuid) :template-id tid})
+    (is (= [] (:ciencias (repo-legislativo/meu-painel *repo-legislativo* ente vereador)))
+        "sem texto vigente ('nao publicado') nao aparece")))
+
+(deftest acusar-ciencia-remove-do-pendente-e-e-idempotente
+  (let [ente (random-uuid) vereador (random-uuid)
+        tid (montar-template-parecer! ente)
+        pid (protocolar! ente vereador)
+        {pcid :id} (repo-legislativo/iniciar-parecer! *repo-legislativo* ente
+                     {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id pid
+                      :comissao-id (random-uuid) :template-id tid})]
+    (publicar-parecer! ente pcid)
+    (is (= 1 (count (:ciencias (repo-legislativo/meu-painel *repo-legislativo* ente vereador)))))
+    (let [r1 (repo-legislativo/acusar-ciencia! *repo-legislativo* ente
+               {:id (random-uuid) :vereador-id vereador :evento-ref pcid :tipo "parecer_publicado"})]
+      (is (= [] (:ciencias (repo-legislativo/meu-painel *repo-legislativo* ente vereador)))
+          "some do pendente apos acusar")
+      (let [r2 (repo-legislativo/acusar-ciencia! *repo-legislativo* ente
+                 {:id (random-uuid) :vereador-id vereador :evento-ref pcid :tipo "parecer_publicado"})]
+        (is (= (:id r1) (:id r2)) "idempotente: 2a chamada nao duplica, devolve o mesmo registro")
+        (is (= (:ciente-em r1) (:ciente-em r2)) "ciente-em do 1o registro preserva")))))
+
+(deftest controller-acusar-ciencia-anti-forja-usa-vereador-do-ator-nunca-do-corpo
+  (let [ente (random-uuid) vereador (random-uuid) identidade (random-uuid)
+        tid (montar-template-parecer! ente)
+        pid (protocolar! ente vereador)
+        {pcid :id} (repo-legislativo/iniciar-parecer! *repo-legislativo* ente
+                     {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id pid
+                      :comissao-id (random-uuid) :template-id tid})
+        _ (publicar-parecer! ente pcid)
+        ator {:ente-id ente :identidade-id identidade}
+        resolver-vereador (fn [e i] (when (and (= e ente) (= i identidade)) vereador))]
+    (controllers/acusar-ciencia *repo-legislativo* resolver-vereador ator
+      {:id (random-uuid) :evento-ref pcid :tipo "parecer_publicado"})
+    (is (= [] (:ciencias (controllers/meu-painel *repo-legislativo* resolver-vereador ator)))
+        "a ciencia foi registrada p/ o vereador RESOLVIDO do ator, mesmo sem o corpo carregar vereador-id")))
+
+(deftest controller-acusar-ciencia-nil-quando-resolver-vereador-nil
+  (is (nil? (controllers/acusar-ciencia nil (fn [_ _] nil)
+              {:ente-id (random-uuid) :identidade-id (random-uuid)}
+              {:id (random-uuid) :evento-ref (random-uuid) :tipo "parecer_publicado"}))))
