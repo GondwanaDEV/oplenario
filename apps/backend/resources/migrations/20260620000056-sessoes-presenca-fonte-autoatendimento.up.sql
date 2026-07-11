@@ -4,6 +4,10 @@
 -- sempre pode sobrepor um autoatendimento do proprio vereador; autoatendimento vale mais que uma INFERENCIA
 -- (voto/tribuna sem check-in). Precisa DROP+ADD da coluna gerada (Postgres nao altera a expressao de uma
 -- GENERATED ALWAYS AS em ALTER COLUMN) — o indice que a usa precisa ser derrubado antes e recriado depois.
+-- CAVEAT DE DEPLOY (achado do database-reviewer): o ADD COLUMN ... STORED reescreve a tabela inteira sob
+-- ACCESS EXCLUSIVE (bloqueia leitura E escrita) pela duracao inteira da migration, uma unica transacao —
+-- irrelevante em dev/tabela vazia, mas NUNCA rodar esta forma de migration (drop+recria coluna gerada) contra
+-- `presenca_evento` populada durante uma sessao plenaria ao vivo.
 
 DROP INDEX IF EXISTS sessoes.idx_presenca_evento_corrente;
 --;;
