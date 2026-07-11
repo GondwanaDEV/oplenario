@@ -185,7 +185,15 @@ Depois `writing-plans` → implementação por TDD → review `ecc` → merge �
   `(vereador)` mobile-first no `chassi`. **Backend:** borda `GET /meu/proposicoes` · `/meu/pareceres` ·
   `/meu/ciencias` (filtra pelo ator via `é_autor_de`/`é_relator_de`, registry F2 — **sem projeção nova**) +
   endpoint de **acusar ciência** (append-only, registrado com data/hora = a prova). View-models puros (vitest).
-- **C2 — Pauta/convocação.** `pauta-convocacao` sobre `/sessoes/:id/pauta` (**pronto**). Read puro, sem fan-out.
+- **C2 — Pauta/convocação. ✅ MERGED→main (`70b219f`, branch `fe-15-pauta-convocacao`).** `pauta-convocacao`
+  sobre `/sessoes/:id/pauta`. **Escopo read puro por decisão técnica** (não estava no plano original): `GET
+  /sessoes/:id/pauta` não expõe `lock-version`, exigido por `PATCH`/`DELETE .../itens/:id` para o CAS
+  otimista — sem ele o cliente não monta uma mutação correta, então o builder (add/reorder/remover item,
+  editar dados da sessão, roster de ciência da convocação) ficou fora desta fatia (ver spec
+  `docs/superpowers/specs/2026-07-11-onda-c-slice2-pauta-convocacao-design.md`). Zero fan-out — as 4
+  chamadas já existiam. View-models puros + 2 hooks + página, TDD via subagent-driven-development, revisão
+  por task + revisão final de branch inteira (0 Critical/Important). Seed de demo nova
+  (`seed-demo/secretario`) fechou a verificação ao vivo do happy-path.
 - **C3 — Vereador: em sessão (o cockpit ao vivo).** Reusa o SSE do plenário + **endpoint novo**
   `POST /sessoes/:id/votacoes/:vid/meu-voto`: `policy.check` **fina** (mandato vigente + presença registrada +
   votação aberta + modalidade não-secreta-sem-terminal); **`vereador-id` vem do ator, nunca do corpo**
