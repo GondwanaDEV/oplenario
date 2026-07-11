@@ -152,17 +152,19 @@
   #{"plenario" "remoto"})
 
 (def fontes-presenca
-  "Fonte de captura do evento. As inferencias (vereador vota/usa tribuna sem check-in) viram evento concreto."
-  #{"painel_eletronico" "manual_secretaria" "inferida_por_voto" "inferida_por_tribuna"})
+  "Fonte de captura do evento. As inferencias (vereador vota/usa tribuna sem check-in) viram evento concreto.
+  'autoatendimento' (Onda C3) = o proprio vereador confirma a propria presenca pelo celular."
+  #{"painel_eletronico" "manual_secretaria" "autoatendimento" "inferida_por_voto" "inferida_por_tribuna"})
 
 (def tipos-presenca-positiva
   "Tipos cujo ULTIMO evento mantem o vereador PRESENTE; 'saida' e' o unico que tira."
   #{"entrada" "retorno" "mudanca_modalidade"})
 
 (def precedencia-fonte
-  "Precedencia em conflito de MESMO instante (§22.6 eixo C): manual_secretaria > painel_eletronico > inferida_*.
-  Usada como desempate ao escolher o ultimo evento por vereador (a consulta replica esta ordem em SQL)."
-  {"manual_secretaria" 3 "painel_eletronico" 2 "inferida_por_voto" 1 "inferida_por_tribuna" 1})
+  "Precedencia em conflito de MESMO instante (§22.6 eixo C): manual_secretaria > painel_eletronico >
+  autoatendimento > inferida_* (Onda C3). Usada como desempate ao escolher o ultimo evento por vereador (a
+  consulta replica esta ordem em SQL, fonte_precedencia — migration 20260620000056)."
+  {"manual_secretaria" 4 "painel_eletronico" 3 "autoatendimento" 2 "inferida_por_voto" 1 "inferida_por_tribuna" 1})
 
 (defn presente-por-tipo?
   "O vereador esta presente se o tipo do seu ultimo evento e' positivo (entrada/retorno/mudanca_modalidade)?"

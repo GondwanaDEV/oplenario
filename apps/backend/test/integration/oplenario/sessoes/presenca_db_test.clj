@@ -101,6 +101,18 @@
           (is (= 1 (rel-sessoes/presentes-plenario tx sid t1030))
               "agregador concorda com a precedencia: so ver presente; ver2 saiu (painel>inferida)"))))))
 
+(deftest fonte-autoatendimento-materializa-precedencia-2
+  ;; Onda C3: o vereador confirma a propria presenca pelo celular. Precedencia fica ABAIXO de
+  ;; manual_secretaria/painel_eletronico e ACIMA das inferencias (logic/precedencia-fonte, migration 0056).
+  (let [ente (random-uuid) ver (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [sid (nova-sessao! tx ente)
+              {evid :id} (ev! tx ente sid ver {:tipo "entrada" :fonte "autoatendimento" :ocorrido-em t10})]
+          (is (= 2 (:presenca_evento/fonte_precedencia
+                    (jdbc/execute-one! tx ["SELECT fonte_precedencia FROM sessoes.presenca_evento WHERE id=?" evid])))
+              "autoatendimento materializa fonte_precedencia=2"))))))
+
 (deftest agregadores-quorum-por-modalidade
   (let [ente (random-uuid) a (random-uuid) b (random-uuid) c (random-uuid)]
     (tenancy/com-tenant* *ds* ente
