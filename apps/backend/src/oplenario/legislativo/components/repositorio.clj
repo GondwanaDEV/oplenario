@@ -15,6 +15,7 @@
             [oplenario.legislativo.db.documento :as documento]
             [oplenario.legislativo.db.documento-modelo :as doc-modelo]
             [oplenario.legislativo.db.emenda :as emenda]
+            [oplenario.legislativo.db.meu-painel :as meu-painel-db]
             [oplenario.legislativo.db.norma :as norma]
             [oplenario.legislativo.db.parecer :as parecer]
             [oplenario.legislativo.db.parecer-texto-versao :as parecer-texto]
@@ -178,7 +179,12 @@
      'publicada'/sem texto ou campo nao resolvido ABORTA antes de persistir. `m` = {:norma-id :serializador
      :assinador :objeto-store :assinado-por?}. Devolve a linha do artefato.")
   (buscar-artefato-publicacao [this ente-id id])
-  (artefatos-da-norma [this ente-id norma-id] "Artefatos de uma norma, por versao (historico de (re)geracoes)."))
+  (artefatos-da-norma [this ente-id norma-id] "Artefatos de uma norma, por versao (historico de (re)geracoes).")
+  ;; Onda C1 — borda /meu do vereador (§11.2/§11.3): leitura composta escopada por autor/relator.
+  (meu-painel [this ente-id vereador-id]
+    "Onda C1: {:proposicoes [...] :pareceres [...] :ciencias []} NUMA UNICA tx (mesma disciplina de
+     buscar-proposicao-detalhe/ficha-completa-da-proposicao). `:ciencias` fica vazio nesta task — a Task 3
+     preenche via db/meu-painel/ciencias-pendentes (append-only, ainda inexistente aqui)."))
 
 ;; ---------- geracao do artefato de publicacao oficial ('DO-lite', doc-mestre L287, F6c Slice 4a):
 ;;            resolve a norma publicada + o texto legal -> renderiza (puro) -> serializa+assina (ports STUB) ->
@@ -641,7 +647,15 @@
       (os/guardar! objeto-store store-ref b content-type)   ; binario no objeto_store APOS a ancora (INSERT-primeiro)
       row))
   (buscar-artefato-publicacao [this ente-id id] (transacao this ente-id #(artefato/buscar % ente-id id)))
-  (artefatos-da-norma [this ente-id norma-id] (transacao this ente-id #(artefato/listar-por-norma % ente-id norma-id))))
+  (artefatos-da-norma [this ente-id norma-id] (transacao this ente-id #(artefato/listar-por-norma % ente-id norma-id)))
+  ;; Onda C1 — leitura composta NUMA UNICA tx (mesmo snapshot MVCC, mesma disciplina de
+  ;; buscar-proposicao-detalhe/buscar-pos-aprovacao). `:ciencias` vazio ate' a Task 3.
+  (meu-painel [this ente-id vereador-id]
+    (transacao this ente-id
+      (fn [tx]
+        {:proposicoes (meu-painel-db/proposicoes-do-autor tx ente-id vereador-id)
+         :pareceres (meu-painel-db/pareceres-do-relator tx ente-id vereador-id)
+         :ciencias []}))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

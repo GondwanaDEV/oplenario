@@ -300,3 +300,18 @@
   [repo-legislativo ente-id id m]
   (when (repo/buscar-tramitacao-executiva repo-legislativo ente-id id)
     (repo/apreciar-veto! repo-legislativo ente-id (assoc m :id id))))
+
+;; ========================= Onda C1: borda /meu do vereador (home fora-de-sessao) =========================
+
+(defn meu-painel
+  "Onda C1 — leitura composta 'minhas proposicoes + meus pareceres (+ ciencias, Task 3)' do vereador ATOR
+  (anti-forja: SEMPRE o vereador resolvido do proprio ator, nunca um vereador-id arbitrario do request).
+  `resolver-vereador` e' a fn injetada pelo HOST (§22.5.3, exceção nomeada — o legislativo NUNCA importa
+  cadastros; mesma inversao de dependencia de `consultar-sessao`/`resolver-municipio`) que resolve
+  identidade-id->vereador-id NESTE ente. Um ator com papel 'vereador' mas SEM cadastro vinculado
+  (`resolver-vereador` nil) devolve painel VAZIO — nao lanca: o gate grosso (exige-papel) ja' garantiu o
+  papel, a ausencia de vinculo e' estado de dados, nao falha de autorizacao."
+  [repo-legislativo resolver-vereador ator]
+  (if-let [vereador-id (resolver-vereador (:ente-id ator) (:identidade-id ator))]
+    (repo/meu-painel repo-legislativo (:ente-id ator) vereador-id)
+    {:proposicoes [] :pareceres [] :ciencias []}))
