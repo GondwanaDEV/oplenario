@@ -79,3 +79,30 @@ export interface FichaMateriaOut {
   emendas: EmendaResumoOut[];
   pareceres: ParecerResumoOut[];
 }
+
+export interface ObjetoResumoOut {
+  id: string;
+  tipo: string;
+  ano: number;
+  sequencial: number;
+  urnLex: string;
+  ementa: string;
+}
+
+export interface ParecerEditorOut {
+  id: string;
+  objetoTipo: string;
+  objetoId: string;
+  comissaoId: string;
+  relatorId?: string | null;
+  votoRelator?: string | null;
+  estado: string;
+  templateId: string;
+  lockVersion: number;
+  criadoEm: string;
+  objeto?: ObjetoResumoOut | null;
+  relatorio?: string | null;
+  analise?: string | null;
+  textoEstado: "rascunho" | "vazio" | "vigente";
+  textoNumeroVersao?: number | null;
+}

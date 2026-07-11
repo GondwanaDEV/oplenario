@@ -28,7 +28,7 @@
   que NAO importam sessoes."
   [{:keys [idp repo-identidade repo-sessoes repo-legislativo repo-compliance repo-participacao
            repo-transparencia repo-paineis repo-cadastros canal-store objeto-store painel-compliance
-           presenca-resumo esic-cumprimento relatores-pendentes info-ente]}]
+           presenca-resumo esic-cumprimento relatores-pendentes info-ente registro-fatos]}]
   (let [auth (it/autenticacao idp repo-identidade)
         ;; F6: relogio de producao (kernel/tempo) p/ o prazo LAI do e-SIC — determinismo em teste vem de
         ;; injetar relogio-fixo direto no fragmento de rotas (participacao-http/rotas). resolver-ente-publico
@@ -80,7 +80,8 @@
         (into (sessoes-http/rotas {:auth auth :repo-sessoes repo-sessoes :objeto-store objeto-store}))
         (into (legislativo-http/rotas {:auth auth :repo-legislativo repo-legislativo
                                        :consultar-sessao consultar-sessao
-                                       :resolver-municipio resolver-municipio}))
+                                       :resolver-municipio resolver-municipio
+                                       :registro registro-fatos}))
         (into (compliance-http/rotas {:auth auth :repo-compliance repo-compliance}))
         (into (participacao-http/rotas {:auth auth :repo-participacao repo-participacao
                                         :resolver-ente-publico participacao-http/resolver-ente-publico-uuid

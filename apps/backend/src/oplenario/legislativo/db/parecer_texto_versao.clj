@@ -94,3 +94,15 @@
      (sql/format {:select colunas :from [:legislativo.parecer_texto_versao]
                   :where [:and [:= :ente_id ente-id] [:= :parecer_id parecer-id]
                           [:= :estado_versao "vigente"]]}))))
+
+(defn rascunho-mais-recente
+  "A versao 'rascunho' de MAIOR numero_versao do parecer (Onda B Slice 5 — editor busca o rascunho em
+  edicao, se houver). nil se nao houver nenhum rascunho (so' vigente, ou nenhum texto ainda)."
+  [tx ente-id parecer-id]
+  (comum/linha->kebab
+   (jdbc/execute-one! tx
+     (sql/format {:select colunas :from [:legislativo.parecer_texto_versao]
+                  :where [:and [:= :ente_id ente-id] [:= :parecer_id parecer-id]
+                          [:= :estado_versao "rascunho"]]
+                  :order-by [[:numero_versao :desc]]
+                  :limit 1}))))

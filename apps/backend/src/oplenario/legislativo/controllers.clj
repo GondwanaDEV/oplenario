@@ -114,6 +114,30 @@
   (let [{:keys [proposicao texto] :as ficha} (repo/ficha-completa-da-proposicao repo-legislativo ente-id id)]
     (when proposicao (assoc ficha :texto (:texto-inline texto)))))
 
+;; ========================= Onda B Slice 5: editor/emissao do parecer =========================
+
+(defn buscar-parecer-editor
+  "Onda B Slice 5 — leitura agregada p/ o editor de parecer (parecer + objeto + texto rascunho/vigente),
+  mesmo gate grosso das rotas irmas (papel 'secretario', sem policy fina adicional). nil se o parecer nao
+  existe no tenant (-> 404 na borda), mesmo contrato de buscar-ficha-materia/buscar-proposicao-ficha."
+  [repo-legislativo ente-id id]
+  (repo/buscar-parecer-para-editor repo-legislativo ente-id id))
+
+(defn salvar-rascunho-parecer
+  "Onda B Slice 5 — cria uma nova versao 'rascunho' do texto do parecer. `m` ja' vem coagido pelo
+  adapters/in."
+  [repo-legislativo ente-id m]
+  (repo/nova-versao-parecer! repo-legislativo ente-id m))
+
+(defn emitir-parecer
+  "Onda B Slice 5 — promove o rascunho a vigente (se houver) + registra o voto do relator + tenta
+  transicionar (gatilho recebido, best-effort), 1 tx. `registro` (RegistroFatos do motor, injetado pelo
+  host) e' o mesmo que `transicionar-parecer!` ja recebe. `m` ja' vem coagido pelo adapters/in — que ja'
+  carrega o template-id do parecer (o DIPLOMAT o extrai antes de chamar o adapters/in; este controller nao
+  decide template-id de outra forma)."
+  [repo-legislativo registro ente-id m]
+  (repo/emitir-parecer! repo-legislativo ente-id registro m))
+
 (defn encerrar-votacao
   "Encerra a votacao `votacao-id` da sessao `sessao-id` (authz na sessao + amarra). `m` carrega o id
   (=votacao-id), lock-version, base-membros e resultado. Devolve o snapshot apurado ou nil se a votacao nao
