@@ -34,3 +34,6 @@ dist/
 
 # companheiro visual de brainstorming (superpowers) — mockups de sessão, não é produto
 .superpowers/
+
+# saída do graphify (ferramenta de knowledge-graph local) — não é produto
+graphify-out/
