@@ -71,9 +71,12 @@ Ordem por dependência: `proposicoes` (lista) → `editor-proposicao` (criar/edi
 `pos-aprovacao`. **Copiloto do editor = IA-gated** (porta a UI sem copiloto; o copiloto entra quando a Track IA existir).
 - **↳ Marco MFE-2 — "o servidor trabalha o dia"** (protocolar→tramitar→ficha→parecer navegável).
 
-### Onda C — vereador PWA + condução da sessão
-- `vereador-app` (PWA, Aposta 2 — instalável, Web Push §22.9 eixo 9), `pauta-convocacao` (backend de pauta pronto).
-- **↳ Marco MFE-3 — "o vereador no bolso"**.
+### Onda C — vereador (web responsiva enxuta) *(revisada 11/07 — ver §11)*
+- **Reescopada:** `vereador-app` como **rota web responsiva** dentro do app Next existente (não PWA cerimonial,
+  não Flutter) + `pauta-convocacao`. A cerimônia PWA (manifest/service worker/Web Push) e o nativo (Flutter,
+  `apps/mobile/`) ficam **diferidos atrás de gatilho** (§11). O trabalho de valor é o **fan-out de backend**
+  (borda `/meu/*`, endpoint `meu-voto`, ciência) — que serve web hoje e nativo amanhã, igual.
+- **↳ Marco MFE-3 — "o vereador no bolso"** (vota do celular na sessão ao vivo, via web responsiva).
 
 ### Onda D — entrada real + cadastros *(gated: Keycloak vivo = fundação infra)*
 `login`, `entrar-govbr`, `cadastro-vereadores`, `comissoes`, `admin-usuarios`. **Bloqueada pela fundação de auth
@@ -105,7 +108,7 @@ Até lá o dev-token cobre as ondas A–C.
 |---|---|---|
 | **MFE-1 — os 4 públicos têm software** | Onda A | plenário ✓ + dashboard da Mesa + portal cidadão rodando contra a API real |
 | **MFE-2 — o servidor trabalha o dia** | Onda B | protocolar→tramitar→ficha→parecer navegável |
-| **MFE-3 — o vereador no bolso** | Onda C | PWA do vereador instalável + push |
+| **MFE-3 — o vereador no bolso** | Onda C | vereador vota do celular na sessão ao vivo (web responsiva; PWA/nativo diferidos, §11) |
 | **MFE-4 — entrada real** | Onda D | login gov.br/passkey + cadastro sob Keycloak vivo |
 
 ## 7. Verificação (por fatia)
@@ -120,7 +123,9 @@ Até lá o dev-token cobre as ondas A–C.
 
 - **Track IA é satélite** (`docs/11` §Decisões): o FE porta a UI sem a peça de IA (copiloto/ata/legendas/resumo)
   e a liga quando a Track IA entregar. Não bloqueia as ondas A–C.
-- **PWA-first** (§22.9 eixo 9): Next responsivo + Web Push; RN/Expo diferido.
+- **Client mobile diferido além do responsivo** (revisão 11/07, §11): a V1 entrega o vereador como **web
+  responsiva**; a cerimônia PWA (manifest/SW/Web Push) e o nativo (Flutter) ficam parqueados atrás de gatilho
+  de cliente validado. O §22.9 dizia "PWA-first"; a leitura enxuta é "web responsiva primeiro, PWA/nativo sob demanda".
 - **Ordem é guia, não trava:** puxa-se por valor de demo; uma fatia pode ser repriorizada se um cliente pedir.
 - **Backend fan-out (Onda B+) entra na branch da fatia FE** (a borda `legislativo`/`cadastros` nasce com o
   consumidor), respeitando a regra-mãe (nada de fan-out especulativo).
@@ -142,3 +147,66 @@ Depois `writing-plans` → implementação por TDD → review `ecc` → merge �
   kebab→camel extraído, codegen `contrato-portal.gen.ts`, primitiva `AzulejoFaixa`, `EmBreve`, token `--campo-borda`.
 - **↳ Marco MFE-1 atingido** (pendente o merge de A2): os 4 públicos têm software rodando contra a API real.
 - **▶ PRÓXIMO após o merge:** Onda B (fluxo diário do servidor) — cada fatia carrega seu fan-out da borda `legislativo`.
+
+## 11. Onda C — revisão enxuta (decisão Daouda, 11/07/2026)
+
+> **Substitui o esboço da §4 "Onda C — vereador PWA".** Decisão tomada: **não investir em PWA cerimonial nem
+> partir para Flutter agora** — entregar o vereador como **web responsiva** e diferir client mobile pesado atrás
+> de gatilho. Motivo curto: os buracos que faziam a Onda C valer a pena são de **backend** (existem PWA/Flutter,
+> igual); a casca do vereador é **barata** porque pega carona no SSE do plenário já portado; e nativo é **aditivo**
+> (o web continua obrigatório p/ servidor/Mesa/jurídico/cidadão), caro (3º stack/design-port/codegen/pipeline) e
+> sem cliente validado pedindo (§15 + §22.9 dizia nativo diferido). O "faz duas vezes" custa pouco justo porque a
+> 1ª vez (web) é quase de graça e serve de spec vivo p/ o nativo futuro.
+
+### 11.1 Estado real do backend (auditado 11/07)
+
+| Precisa | Existe hoje? | Consequência p/ a Onda C |
+|---|---|---|
+| SSE do plenário (placar/presença/tribuna) | ✅ **portado** (`/sessoes/[id]/plenario`) | "Em sessão" é ~80% releitura mobile — reusa `use-plenario`/`placar-vista` |
+| Pauta da próxima sessão | ✅ `/sessoes/:id/pauta` (+itens) | `pauta-convocacao` = read puro, sem fan-out |
+| **Voto do vereador pelo próprio aparelho** | ❌ toda escrita `/sessoes/*` exige `papel "secretario"`; voto carrega `vereador-id` no corpo (Mesa registra) | **fan-out novo** = 1 endpoint + 1 evento |
+| **Superfície "meu"** (minhas proposições/pareceres/ciências) | ❌ `/paineis/pendencias` é tenant-wide, gated à Mesa | **fan-out novo** = borda `/meu/*` filtrada por relação do ator |
+| Identidade do vereador (papel `vereador` + `vereador-id` no ator) | ⚠️ dev-token `?token=` cobre; Keycloak vivo = carry Onda D | dev-token codifica papel `vereador` — **não** bloqueia C |
+| Web Push / subscription | ❌ port de entrega = carry F7 | **fora de escopo** — ciência é **inbox in-app** |
+
+### 11.2 Escopo IN / OUT
+
+- **IN:** rota web responsiva do vereador — **Fora de sessão** (home: minhas proposições, ciências a acusar via
+  inbox in-app, próxima sessão, confirmar presença do próprio aparelho) e **Em sessão** (cockpit ao vivo sobre o
+  SSE existente: votar Sim/Não com ciclo pendente→enviado→confirmado ancorado no **placar oficial**, sigilo §22.6
+  por construção); `pauta-convocacao`; assinatura em 2 toques com **UX contra `assinador` stub** (`'STUB-ICP-v0'`,
+  o mesmo da F6c) + trilha de auditoria real.
+- **OUT (diferido atrás de gatilho — §11.5):** manifest/service worker/instalável, **Web Push**, offline shell,
+  **Flutter/`apps/mobile/`**, biometria/WebAuthn/assinatura ICP real (carry Onda D).
+
+### 11.3 Fatias (cada uma = branch → TDD → review `ecc` → merge; fan-out de backend na própria branch)
+
+- **C1 — Vereador: fora de sessão (a home).** Estende `AuthContext` p/ papel `vereador` (dev-token). Layout
+  `(vereador)` mobile-first no `chassi`. **Backend:** borda `GET /meu/proposicoes` · `/meu/pareceres` ·
+  `/meu/ciencias` (filtra pelo ator via `é_autor_de`/`é_relator_de`, registry F2 — **sem projeção nova**) +
+  endpoint de **acusar ciência** (append-only, registrado com data/hora = a prova). View-models puros (vitest).
+- **C2 — Pauta/convocação.** `pauta-convocacao` sobre `/sessoes/:id/pauta` (**pronto**). Read puro, sem fan-out.
+- **C3 — Vereador: em sessão (o cockpit ao vivo).** Reusa o SSE do plenário + **endpoint novo**
+  `POST /sessoes/:id/votacoes/:vid/meu-voto`: `policy.check` **fina** (mandato vigente + presença registrada +
+  votação aberta + modalidade não-secreta-sem-terminal); **`vereador-id` vem do ator, nunca do corpo**
+  (anti-forja); evento append-only; sigilo por construção (kind secreta sem campo `votos`, fail-closed — padrão
+  já provado no placar FE). Confirmar presença do próprio aparelho. **Segurança é o eixo quente** (voto = ato jurídico).
+- **C4 — Assinatura 2 toques.** `assinatura-2-toques` contra `assinador` **stub** + trilha de auditoria real.
+  Cripto/biometria real = **fast-follow da Onda D**.
+
+### 11.4 Verificação e marco
+
+- Por fatia: `vitest` (view-models/reducers puros) + `tsc`/`eslint`/`next build` limpos; **paridade visual**
+  lado-a-lado com a tela-fonte nos 2 temas (`GUIDELINES-CHECKLIST.md`, pixel composto); revisão `ecc`
+  **react-reviewer + security-reviewer**; e2e vivo (Playwright) no caminho SSE/voto. Backend novo: TDD +
+  `ecc` **clojure + security + database** contra Postgres real.
+- **↳ Marco MFE-3 — "o vereador no bolso":** o vereador vota do próprio celular na sessão ao vivo, vê o que é
+  seu e acusa ciência — **por web responsiva**, sem PWA nem app de loja.
+
+### 11.5 Gatilho de PWA/Flutter (parqueado, não descartado)
+
+Reabrir client mobile pesado quando **um** for concreto (não hipotético): (a) cliente validado/licitação **exige**
+app na loja como critério; (b) push confiável ao vereador vira must-have e a fragilidade do Web Push no iOS
+bloqueia de fato; (c) assinatura biométrica nativa vira requisito jurídico/comercial de um contrato na mesa.
+Aí Flutter se faz **uma vez, bem**, com o design system estável, `/meu/*` e `meu-voto` já provados em produção
+pelo web, e público pagante do outro lado. Até lá, `apps/mobile/` segue vazio por decisão.
