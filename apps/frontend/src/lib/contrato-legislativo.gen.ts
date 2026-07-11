@@ -175,3 +175,45 @@ export interface PosAprovacaoOut {
   autografo?: AutografoOut | null;
   tramitacaoExecutiva?: TramitacaoExecutivaOut | null;
 }
+
+export interface ProposicaoResumoMeuPainelOut {
+  id: string;
+  tipo: string;
+  ano: number;
+  sequencial: number;
+  urnLex: string;
+  ementa: string;
+  estado: string;
+  atualizadoEm: string;
+}
+
+export interface ParecerResumoMeuPainelOut {
+  id: string;
+  objetoTipo: string;
+  objetoId: string;
+  comissaoId: string;
+  estado: string;
+  votoRelator: string | null;
+  criadoEm: string;
+}
+
+export interface CienciaPendenteOut {
+  parecerId: string;
+  proposicaoId: string;
+  tipo: string;
+  ano: number;
+  sequencial: number;
+  urnLex: string;
+  ementa: string;
+}
+
+export interface MeuPainelOut {
+  proposicoes: ProposicaoResumoMeuPainelOut[];
+  pareceres: ParecerResumoMeuPainelOut[];
+  ciencias: CienciaPendenteOut[];
+}
+
+export interface AcusarCienciaOut {
+  id: string;
+  cienteEm: string;
+}

@@ -10,6 +10,7 @@
             [oplenario.legislativo.wire.out.documento :as documento]
             [oplenario.legislativo.wire.out.documento-modelo :as documento-modelo]
             [oplenario.legislativo.wire.out.ficha-materia :as ficha]
+            [oplenario.legislativo.wire.out.meu-painel :as meu-painel]
             [oplenario.legislativo.wire.out.parecer :as parecer]
             [oplenario.legislativo.wire.out.pos-aprovacao :as pos-aprovacao]
             [oplenario.legislativo.wire.out.proposicao :as proposicao]
@@ -41,7 +42,14 @@
    ;; composto referencia os dois primeiros, mesma ordem-referencia-antes-do-composto de ficha-materia).
    ["AutografoOut" autografo/AutografoOut]
    ["TramitacaoExecutivaOut" tramitacao-executiva/TramitacaoExecutivaOut]
-   ["PosAprovacaoOut" pos-aprovacao/PosAprovacaoOut]])
+   ["PosAprovacaoOut" pos-aprovacao/PosAprovacaoOut]
+   ;; Onda C1 (borda /meu do vereador) — schemas PROPRIOS (proposicao/parecer resumos ENXUTOS, distintos
+   ;; dos irmaos de ficha-materia/editor — so' os campos que o painel do vereador mostra).
+   ["ProposicaoResumoMeuPainelOut" meu-painel/ProposicaoResumoMeuPainelOut]
+   ["ParecerResumoMeuPainelOut" meu-painel/ParecerResumoMeuPainelOut]
+   ["CienciaPendenteOut" meu-painel/CienciaPendenteOut]
+   ["MeuPainelOut" meu-painel/MeuPainelOut]
+   ["AcusarCienciaOut" meu-painel/AcusarCienciaOut]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))
 
