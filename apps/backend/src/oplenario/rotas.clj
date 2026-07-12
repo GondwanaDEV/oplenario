@@ -42,7 +42,7 @@
   [{:keys [idp repo-identidade repo-sessoes repo-legislativo repo-compliance repo-participacao
            repo-transparencia repo-paineis repo-cadastros canal-store objeto-store painel-compliance
            presenca-resumo esic-cumprimento relatores-pendentes info-ente registro-fatos
-           ente-existe? keycloak]}]
+           ente-existe? keycloak sessao]}]
   (let [auth (it/autenticacao idp repo-identidade)
         ;; F6: relogio de producao (kernel/tempo) p/ o prazo LAI do e-SIC — determinismo em teste vem de
         ;; injetar relogio-fixo direto no fragmento de rotas (participacao-http/rotas). resolver-ente-publico
@@ -104,7 +104,12 @@
         ;; `keycloak` = o bloco :keycloak da config (realm-prefixo/base-url-publico/web-client-id) que
         ;; auth-in usa p/ montar a resposta de descoberta. Injetavel p/ os testes DB-free da borda;
         ;; em producao cai no default carregado do config.edn+env (mesmo racional dos demais seams `or`).
-        keycloak (or keycloak (:keycloak (config/carregar)))]
+        keycloak (or keycloak (:keycloak (config/carregar)))
+        ;; Onda D Slice 2 Task 4: POST /auth/sessoes (mint) precisa do bloco :sessao da config
+        ;; (:absoluta-h/:ociosa-min) — mesmo padrao `or` de `keycloak`/`ente-existe?` acima (fallback pra
+        ;; config/carregar aqui no HOST; auth-http/rotas recebe ja' resolvido, nunca chama config/carregar
+        ;; ela mesma).
+        sessao (or sessao (:sessao (config/carregar)))]
     (-> #{["/saude"             :get http/saude :route-name :saude]
           ["/eu"                :get [auth http/eu] :route-name :eu]
           ["/painel-secretaria" :get [auth (it/exige-papel "secretario") http/painel-secretaria]
@@ -131,4 +136,6 @@
                                    :esic-cumprimento esic-cumprimento
                                    :relatores-pendentes relatores-pendentes}))
         (into (tempo-real-sse/rotas {:auth auth :canal-store canal-store :consultar-sessao consultar-sessao}))
-        (into (auth-http/rotas {:ente-existe? ente-existe? :keycloak keycloak})))))
+        (into (auth-http/rotas {:ente-existe? ente-existe? :keycloak keycloak
+                                :idp idp :repo-identidade repo-identidade
+                                :relogio relogio-producao :sessao sessao})))))

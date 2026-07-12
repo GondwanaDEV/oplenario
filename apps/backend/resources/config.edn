@@ -19,6 +19,13 @@
             :web-client-id "oplenario-web"
             :redirect-uris ["http://localhost:3000/api/auth/callback"]
             :web-origins ["http://localhost:3000"]}
+ ;; Onda D Slice 2 Task 4: teto absoluto + janela de ociosidade da sessao opaca (POST /auth/sessoes mint).
+ ;; CARRY: `:ociosa-min` 30 == 1800s = o default HARDCODED `sessao-janela-ociosa-seg` do Repo de identidade
+ ;; (oplenario.identidade.components.repositorio) — sao HOJE duas fontes do MESMO numero que so' concordam
+ ;; por convencao (o mint crava o `ocioso-ate` inicial a partir DAQUI; o Repo desliza a MESMA janela em cada
+ ;; resolve a partir do SEU proprio default). Mudar um sem o outro dessincroniza; reconciliar fazendo o Repo
+ ;; ler este valor em vez de ter default proprio.
+ :sessao {:absoluta-h 12 :ociosa-min 30}
  ;; URL por modulo p/ os http_client (local agora, remoto apos extracao — §22.10)
  :modulos {:cadastros {:base-url "http://localhost:8888"} :identidade {:base-url "http://localhost:8888"}
            :legislativo {:base-url "http://localhost:8888"} :sessoes {:base-url "http://localhost:8888"}

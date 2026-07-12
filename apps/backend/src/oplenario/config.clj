@@ -36,4 +36,6 @@
      (get env "KEYCLOAK_JWKS_CACHE_TTL_S") (assoc-in [:keycloak :jwks-cache-ttl-s]
                                                       (Integer/parseInt (get env "KEYCLOAK_JWKS_CACHE_TTL_S")))
      (get env "KEYCLOAK_WEB_CLIENT_ID")    (assoc-in [:keycloak :web-client-id]    (get env "KEYCLOAK_WEB_CLIENT_ID"))
-     (get env "KEYCLOAK_BASE_URL_PUBLICO") (assoc-in [:keycloak :base-url-publico] (get env "KEYCLOAK_BASE_URL_PUBLICO")))))
+     (get env "KEYCLOAK_BASE_URL_PUBLICO") (assoc-in [:keycloak :base-url-publico] (get env "KEYCLOAK_BASE_URL_PUBLICO"))
+     (get env "SESSAO_ABSOLUTA_H")  (assoc-in [:sessao :absoluta-h] (Integer/parseInt (get env "SESSAO_ABSOLUTA_H")))
+     (get env "SESSAO_OCIOSA_MIN")  (assoc-in [:sessao :ociosa-min] (Integer/parseInt (get env "SESSAO_OCIOSA_MIN"))))))
