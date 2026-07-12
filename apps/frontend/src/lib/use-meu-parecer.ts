@@ -65,5 +65,7 @@ export function useMeuParecer(token: string | null, id: string | null) {
     setEstado(d ? "pronto" : "erro");
   }, [token, id]);
 
+  if (!id) return { dados: null, estado: "pronto" as Estado, recarregar };
+  if (!token) return { dados: null, estado: "erro" as Estado, recarregar };
   return { dados, estado, recarregar };
 }

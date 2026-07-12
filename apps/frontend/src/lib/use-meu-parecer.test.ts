@@ -49,10 +49,10 @@ describe("useMeuParecer", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it("sem token -> nao chama fetch (fica 'carregando')", () => {
+  it("sem token -> 'erro' sem chamar fetch", () => {
     global.fetch = vi.fn() as unknown as typeof fetch;
     const { result } = renderHook(() => useMeuParecer(null, "p1"));
-    expect(result.current.estado).toBe("carregando");
+    expect(result.current.estado).toBe("erro");
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
