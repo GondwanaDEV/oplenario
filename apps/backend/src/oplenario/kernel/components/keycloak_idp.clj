@@ -81,7 +81,15 @@
   (contrato do port, review W2) — a ORDEM dos catches importa: em Java/Clojure `catch` casa por
   subclasse, entao NetworkException (subclasse de SigningKeyNotFoundException no SDK auth0) TEM que ter
   sua propria clausula ANTES da clausula generica de SigningKeyNotFoundException, senao cairia la' e
-  viraria nil silenciosamente — mascarando degradacao de infra como 'token invalido'."
+  viraria nil silenciosamente — mascarando degradacao de infra como 'token invalido'.
+  RateLimitReachedException NAO e' subclasse de SigningKeyNotFoundException (estende JwkException
+  diretamente) entao sua posicao relativa a essa clausula nao afeta a corretude — mas segue explicita e
+  ANTES por clareza/simetria com a outra excecao de infra.
+  IllegalArgumentException tambem e' capturada -> nil: um token VALIDAMENTE assinado (issuer+aud+exp+
+  assinatura OK) mas com o claim `identidade-id` que nao parseia como UUID (ex.: mapper mal configurado no
+  realm) e' problema DO TOKEN, nao de infra — sem essa clausula, `UUID/fromString` lancaria sem ser pego
+  por nenhum catch acima e vazaria como excecao nao-tratada (500), violando o mesmo contrato fail-closed
+  que as outras clausulas desta funcao existem para cumprir."
   [{:keys [config jwks-cache jwks-provider-fn]} token]
   (try
     (let [nao-verificado (JWT/decode token)
@@ -107,7 +115,8 @@
     (catch RateLimitReachedException e (throw e))
     (catch SigningKeyNotFoundException _ nil)
     (catch JWTVerificationException _ nil)
-    (catch JWTDecodeException _ nil)))
+    (catch JWTDecodeException _ nil)
+    (catch IllegalArgumentException _ nil)))
 
 ;; ---------------------------------------------------------------------------------------------
 ;; Component

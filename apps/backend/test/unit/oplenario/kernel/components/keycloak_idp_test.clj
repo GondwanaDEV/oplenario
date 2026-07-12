@@ -84,3 +84,94 @@
       (is (= ente-id (:ente-id claims)))
       (is (some? (:sub claims)))
       (is (some? (:exp claims))))))
+
+(deftest assinatura-de-outra-chave-invalida
+  (let [ip (idp-com (fn [_ _] (provider-fixo (jwk-de pub kid)))) ; JWKS publica a chave "pub"...
+        outra-priv ^RSAPrivateKey (.getPrivate (gerar-par-rsa))
+        tok (-> (JWT/create) (.withIssuer ^String iss) (.withKeyId ^String kid)
+                (.withAudience (into-array String [audiencia])) (.withClaim "identidade-id" (str (random-uuid)))
+                (.withExpiresAt (.plusSeconds (Instant/now) 60))
+                (.sign (Algorithm/RSA256 pub outra-priv)))] ; ...mas o token e' assinado por OUTRA privada
+    (is (nil? (idp/verificar-token ip tok)) "assinatura que nao bate com a chave publicada -> nil")))
+
+(deftest token-expirado-invalido
+  (let [ip (idp-com (fn [_ _] (provider-fixo (jwk-de pub kid))))
+        tok (token-valido {:expira-em (.minusSeconds (Instant/now) 60)})]
+    (is (nil? (idp/verificar-token ip tok)) "exp no passado -> nil")))
+
+(deftest alg-none-invalido
+  (let [ip (idp-com (fn [_ _] (provider-fixo (jwk-de pub kid))))
+        tok (-> (JWT/create) (.withIssuer ^String iss) (.withKeyId ^String kid)
+                (.withAudience (into-array String [audiencia]))
+                (.withExpiresAt (.plusSeconds (Instant/now) 60))
+                (.sign (Algorithm/none)))]
+    (is (nil? (idp/verificar-token ip tok)) "alg:none nunca bate com o RS256 exigido -> nil")))
+
+(deftest confusao-de-algoritmo-hs256-invalida
+  (let [ip (idp-com (fn [_ _] (provider-fixo (jwk-de pub kid))))
+        ;; ataque classico: assina HS256 usando os bytes da chave PUBLICA como segredo HMAC.
+        segredo (.getEncoded pub)
+        tok (-> (JWT/create) (.withIssuer ^String iss) (.withKeyId ^String kid)
+                (.withAudience (into-array String [audiencia]))
+                (.withExpiresAt (.plusSeconds (Instant/now) 60))
+                (.sign (Algorithm/HMAC256 ^bytes segredo)))]
+    (is (nil? (idp/verificar-token ip tok)) "confusao RS256<->HS256 -> nil (algoritmo do verifier e' sempre RS256)")))
+
+(deftest issuer-fora-da-allowlist-invalido
+  (let [ip (idp-com (fn [_ _] (provider-fixo (jwk-de pub kid))))
+        tok (token-valido {:issuer "http://evil.example.com/realms/ente-forjado"})]
+    (is (nil? (idp/verificar-token ip tok)) "issuer fora do padrao base-url/realm-prefixo -> nil, ANTES de tocar JWKS")))
+
+(deftest issuer-com-uuid-invalido-na-allowlist
+  (let [ip (idp-com (fn [_ _] (provider-fixo (jwk-de pub kid))))
+        tok (token-valido {:issuer (str base-url "/realms/" realm-prefixo "nao-e-uuid")})]
+    (is (nil? (idp/verificar-token ip tok)) "sufixo pos-prefixo que nao e' UUID valido -> nil")))
+
+(deftest audiencia-errada-invalida
+  (let [ip (idp-com (fn [_ _] (provider-fixo (jwk-de pub kid))))
+        tok (token-valido {:audience "outro-client"})]
+    (is (nil? (idp/verificar-token ip tok)) "aud diferente do configurado -> nil")))
+
+(deftest kid-desconhecido-na-jwks-e-invalido
+  (let [ip (idp-com (fn [_ _] (provider-sem-chave)))
+        tok (token-valido {})]
+    (is (nil? (idp/verificar-token ip tok)) "kid nao encontrado na JWKS publicada -> nil (token invalido)")))
+
+(deftest erro-de-rede-na-jwks-propaga
+  (let [ip (idp-com (fn [_ _] (provider-com-erro-de-rede)))
+        tok (token-valido {})]
+    (is (thrown? NetworkException (idp/verificar-token ip tok))
+        "falha de INFRA (JWKS fora do ar) PROPAGA — nunca vira nil (contrato do port, review W2)")))
+
+(deftest rate-limit-na-jwks-propaga
+  (let [ip (idp-com (fn [_ _] (provider-rate-limited)))
+        tok (token-valido {})]
+    (is (thrown? RateLimitReachedException (idp/verificar-token ip tok))
+        "rate-limit tambem e' degradacao de infra, nao 'token invalido'")))
+
+(deftest token-malformado-invalido
+  (let [ip (idp-com (fn [_ _] (provider-fixo (jwk-de pub kid))))]
+    (is (nil? (idp/verificar-token ip "isto-nao-e-um-jwt")) "token que nao decodifica -> nil, sem lancar")))
+
+(deftest identidade-id-ausente-fica-nil
+  (let [ip (idp-com (fn [_ _] (provider-fixo (jwk-de pub kid))))
+        tok (-> (JWT/create) (.withIssuer ^String iss) (.withKeyId ^String kid)
+                (.withAudience (into-array String [audiencia]))
+                (.withExpiresAt (.plusSeconds (Instant/now) 60))
+                (.sign (Algorithm/RSA256 pub ^RSAPrivateKey priv)))]
+    (is (nil? (:identidade-id (idp/verificar-token ip tok)))
+        "claim identidade-id ausente -> :identidade-id nil no mapa de claims (nao lanca; resolver-sessao ja' trata nil)")))
+
+(deftest identidade-id-malformado-invalido
+  (let [ip (idp-com (fn [_ _] (provider-fixo (jwk-de pub kid))))
+        ;; token VALIDAMENTE assinado (issuer/aud/exp/assinatura todos OK) mas o claim identidade-id nao
+        ;; parseia como UUID (ex.: mapper mal configurado no realm) — achado desta revisao: sem catch de
+        ;; IllegalArgumentException isso vazava como excecao nao-tratada (500) em vez de nil (401),
+        ;; violando o mesmo contrato fail-closed que as outras clausulas do catch existem para cumprir.
+        tok (-> (JWT/create) (.withIssuer ^String iss) (.withKeyId ^String kid)
+                (.withAudience (into-array String [audiencia]))
+                (.withClaim "identidade-id" "nao-e-um-uuid")
+                (.withExpiresAt (.plusSeconds (Instant/now) 60))
+                (.sign (Algorithm/RSA256 pub ^RSAPrivateKey priv)))]
+    (is (nil? (idp/verificar-token ip tok))
+        "claim identidade-id que nao parseia como UUID -> nil, nao excecao nao-tratada")))
