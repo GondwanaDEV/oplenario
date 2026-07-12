@@ -19,6 +19,23 @@
   (let [h (get-in req [:headers "authorization"])]
     (when (and h (str/starts-with? h "Bearer ")) (subs h 7))))
 
+(defn cookie-sessao
+  "Extrai o valor do cookie `sessao` do header CRU `Cookie` do request (RFC 6265: pares `nome=valor`
+  separados por `; `). PURA — le so `(:headers req)`, sem IO. Home aqui (nao no modulo identidade) por ser
+  preocupacao CROSS-CUTTING do host, mesmo racional do `bearer` acima (que faz o mesmo p/ Authorization) —
+  reusada pelo logout handler PUBLICO de identidade (Onda D Slice 2 Task 5, `apagar-sessao!` no cookie sem
+  exigir interceptor) E sera' reusada pelo interceptor `sessao-cookie` (Task 6, ainda nao construido) sem
+  duplicar o parsing. Sem header -> nil. `sessao=` ausente entre os pares -> nil. Par `sessao=` com valor
+  VAZIO -> nil (trata como ausente; um cookie sessao='' nunca e' um segredo valido). Multiplos cookies no
+  mesmo header (qualquer ordem) -> encontra o par certo."
+  [req]
+  (when-let [h (get-in req [:headers "cookie"])]
+    (some (fn [par]
+            (when (str/starts-with? par "sessao=")
+              (let [v (subs par (count "sessao="))]
+                (when-not (str/blank? v) v))))
+          (map str/trim (str/split h #";")))))
+
 (defn- nega! [ctx status razao]
   (chain/terminate (assoc ctx :response (http/json-resposta status {:erro razao}))))
 

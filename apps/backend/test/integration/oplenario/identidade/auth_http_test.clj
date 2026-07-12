@@ -82,15 +82,16 @@
     (verificar-token [_ token] (verificar-token-fn token))))
 
 (defn- fake-repo-identidade
-  "RepoIdentidade fake — SO `snapshot-ator` (usado por `resolver-sessao`) e `criar-sessao!` importam aqui. A
-  AUSENCIA proposital de uma chave faz a chamada fora-de-ordem estourar (NPE/CCE) em vez de passar
-  silenciosamente — sinaliza regressao de ordem na cadeia de confianca (mesmo racional de
-  expediente-http-in-test/fake-repo-legislativo)."
-  [{:keys [snapshot-ator criar-sessao!]}]
+  "RepoIdentidade fake — SO `snapshot-ator` (usado por `resolver-sessao`), `criar-sessao!` e `apagar-sessao!`
+  (Task 5 — logout) importam aqui. A AUSENCIA proposital de uma chave faz a chamada fora-de-ordem estourar
+  (NPE/CCE) em vez de passar silenciosamente — sinaliza regressao de ordem na cadeia de confianca (mesmo
+  racional de expediente-http-in-test/fake-repo-legislativo)."
+  [{:keys [snapshot-ator criar-sessao! apagar-sessao!]}]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify repo-id/RepoIdentidade
     (snapshot-ator [_ ente-id identidade-id] (snapshot-ator ente-id identidade-id))
-    (criar-sessao! [_ sessao] (criar-sessao! sessao))))
+    (criar-sessao! [_ sessao] (criar-sessao! sessao))
+    (apagar-sessao! [_ segredo] (apagar-sessao! segredo))))
 
 (defn- vinculo-ativo-fixture [] {:vinculo-ativo {:id (random-uuid) :tipo "servidor"} :papeis #{}})
 
@@ -174,3 +175,69 @@
     (is (= ente-real (:ente-id @recebido)) "ente-id da sessao = ISSUER verificado, nao o corpo")
     (is (not= iid-forjado (:identidade-id @recebido)) "o identidade-id FORJADO no corpo nunca alcancou a sessao")
     (is (not= ente-forjado (:ente-id @recebido)) "o ente-id FORJADO no corpo nunca alcancou a sessao")))
+
+;; ========================= DELETE /auth/sessoes (Task 5 — logout) =========================
+;; Rota PUBLICA (decisao desta sessao: T6/interceptor de cookie ainda nao existe, ver docstring do ns) — o
+;; handler le o cookie `sessao` DIRETO via `it/cookie-sessao` e chama `apagar-sessao!` incondicional.
+;; Idempotente por desenho: 204 sempre, com ou sem cookie — logout de uma sessao inexistente e' sucesso.
+
+(deftest logout-com-cookie-apaga-e-204
+  (let [segredo "segredo-cru-do-cookie"
+        chamou-com (atom nil)
+        repo (fake-repo-identidade {:apagar-sessao! (fn [s] (reset! chamou-com s))})
+        r (pt/response-for (service-fn {:repo-identidade repo})
+                           :delete "/auth/sessoes"
+                           :headers {"cookie" (str "sessao=" segredo)})]
+    (is (= 204 (:status r)) "cookie presente -> apaga e devolve 204")
+    (is (= segredo @chamou-com) "apagar-sessao! foi chamado com o SEGREDO CRU exato do cookie")))
+
+(deftest logout-sem-cookie-204-idempotente
+  (let [chamou (atom false)
+        repo (fake-repo-identidade {:apagar-sessao! (fn [_] (reset! chamou true))})
+        r (pt/response-for (service-fn {:repo-identidade repo})
+                           :delete "/auth/sessoes")]
+    (is (= 204 (:status r)) "sem cookie -> 204 tambem (idempotente; NUNCA 401 -- deslogar de nada e' sucesso)")
+    (is (not= 401 (:status r)))
+    (is (false? @chamou) "apagar-sessao! NUNCA chamado quando nao ha cookie -- nada pra apagar")))
+
+(deftest logout-cookie-entre-outros-apaga-so-o-certo
+  ;; Prova end-to-end que a rota reusa o parsing multi-cookie de `it/cookie-sessao` (nao um regex ad-hoc
+  ;; local) -- mesmo cenario da unit de baixo, mas exercitado pela borda HTTP inteira.
+  (let [segredo "abc123"
+        chamou-com (atom nil)
+        repo (fake-repo-identidade {:apagar-sessao! (fn [s] (reset! chamou-com s))})
+        r (pt/response-for (service-fn {:repo-identidade repo})
+                           :delete "/auth/sessoes"
+                           :headers {"cookie" (str "outra=xyz; sessao=" segredo "; terceira=qqq")})]
+    (is (= 204 (:status r)))
+    (is (= segredo @chamou-com) "so o par sessao=... foi extraido, mesmo cercado de outros cookies")))
+
+;; ========================= `it/cookie-sessao` (helper puro, unit) =========================
+;; Vive em `oplenario.interceptors` (home cross-cutting do host — ver docstring la'), reusavel por esta rota
+;; (Task 5) e pelo futuro interceptor de cookie (Task 6). Testado aqui porque e' o consumidor atual; a T6
+;; podera' escrever units proprias tambem quando o interceptor existir.
+
+(deftest cookie-sessao-extrai-de-header-com-um-cookie-so
+  (is (= "abc" (it/cookie-sessao {:headers {"cookie" "sessao=abc"}}))))
+
+(deftest cookie-sessao-extrai-de-header-multi-cookie-sessao-primeiro
+  (is (= "abc" (it/cookie-sessao {:headers {"cookie" "sessao=abc; outra=xyz"}}))))
+
+(deftest cookie-sessao-extrai-de-header-multi-cookie-sessao-por-ultimo
+  (is (= "abc" (it/cookie-sessao {:headers {"cookie" "outra=xyz; sessao=abc"}}))))
+
+(deftest cookie-sessao-ignora-espacos-entre-pares
+  (is (= "abc" (it/cookie-sessao {:headers {"cookie" "outra=xyz;   sessao=abc  ;   terceira=qqq"}}))))
+
+(deftest cookie-sessao-nil-quando-sessao-ausente
+  (is (nil? (it/cookie-sessao {:headers {"cookie" "outra=xyz; terceira=qqq"}}))))
+
+(deftest cookie-sessao-nil-quando-header-ausente
+  (is (nil? (it/cookie-sessao {:headers {}}))))
+
+(deftest cookie-sessao-nil-quando-valor-vazio
+  (is (nil? (it/cookie-sessao {:headers {"cookie" "sessao="}}))))
+
+(deftest cookie-sessao-nao-confunde-cookie-de-nome-parecido
+  ;; "outra-sessao=xyz" NAO deve ser lido como o par "sessao=" (prefixo estrito, nao substring).
+  (is (nil? (it/cookie-sessao {:headers {"cookie" "outra-sessao=xyz"}}))))

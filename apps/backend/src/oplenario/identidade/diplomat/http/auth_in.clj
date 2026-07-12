@@ -25,7 +25,19 @@
   `erro` (500) — NUNCA vira 401 (mascarar degradacao de infra como token ruim seria incorreto, contrato do
   port `oplenario.kernel.components.idp`). Rota PUBLICA (sem `auth` — este ato CRIA a sessao, nao ha sessao
   ainda pra exigir). `criar-sessao!` agora vive NO MESMO protocolo `RepoIdentidade` (Task 2 fundiu os metodos
-  de sessao — nao ha `repo-sessao` separado)."
+  de sessao — nao ha `repo-sessao` separado).
+
+  TASK 5 — DELETE /auth/sessoes (logout): destroi a sessao opaca (DELETE por hash, `apagar-sessao!`, Task 2)
+  p/ que um cookie roubado/velho pare de resolver. DECISAO desta sessao (desvio deliberado do brief
+  original, que dizia 'atras do interceptor de cookie da T6'): a T6 (o interceptor `sessao-cookie`) AINDA
+  NAO existe — vem DEPOIS desta task. Em vez de bloquear Task 5 numa dependencia futura, a rota le o cookie
+  DIRETO no handler via `it/cookie-sessao` (helper novo, PURO, em `oplenario.interceptors` — home cross-
+  cutting do host, nao do modulo; ver docstring la'). Isso desacopla T5 de T6 e ainda deixa o helper pronto
+  p/ T6 reusar (DRY) quando o interceptor for construido. Rota PUBLICA (sem `auth`) — nao exige sessao
+  valida p/ aceitar o DELETE. IDEMPOTENTE por desenho: sem cookie -> 204 (NUNCA 401 — deslogar de uma
+  sessao inexistente/ja-expirada e' SUCESSO de UX, nao erro; um cliente com sessao ja vencida ainda precisa
+  conseguir limpar o proprio estado). Cookie presente -> `apagar-sessao!` incondicional (o DELETE por hash
+  ja e' idempotente — segredo que nao bate com nenhuma linha e' no-op, nao erro)."
   (:require [clojure.string :as str]
             [oplenario.http :as http]
             [oplenario.identidade.autenticacao :as auten]
@@ -118,12 +130,26 @@
             (http/json-resposta 401 {:erro "sem vinculo ativo"}))
           (http/json-resposta 401 {:erro "token invalido"}))))))
 
+(defn- logout-handler
+  "DELETE /auth/sessoes (Task 5) — le o cookie `sessao` DIRETO do request (`it/cookie-sessao`; ver docstring
+  do ns p/ a decisao de nao depender do interceptor de cookie da T6, que ainda nao existe) e, se presente,
+  `apagar-sessao!` incondicional. Sem cookie -> 204 sem tocar o Repo (idempotente; nunca 401). Cookie
+  presente mas ja invalido/expirado/de outra sessao -> tambem 204 (o DELETE por hash e' idempotente,
+  Task 2 — segredo que nao bate com nenhuma linha e' no-op, nao erro). Corpo VAZIO (nao json-resposta —
+  204 nao carrega corpo por contrato HTTP)."
+  [repo-identidade]
+  (fn [req]
+    (when-let [segredo (it/cookie-sessao req)]
+      (repo/apagar-sessao! repo-identidade segredo))
+    {:status 204 :headers {} :body nil}))
+
 (defn rotas
   "Fragmento de rotas do modulo identidade (table syntax Pedestal). Recebe `ente-existe?`/`keycloak` (Task 3,
-  ver docstring do ns) e `idp`/`repo-identidade`/`relogio`/`sessao` (Task 4 — mint). `sessao` = o mapa
-  `:sessao` da config (`:absoluta-h`/`:ociosa-min`), JA RESOLVIDO pelo host (`oplenario.rotas/montar`, mesmo
-  padrao do `keycloak` injetado em Task 3 — o fallback pra `config/carregar` vive LA, nao aqui).
-  `oplenario.rotas` funde este fragmento."
+  ver docstring do ns), `idp`/`repo-identidade`/`relogio`/`sessao` (Task 4 — mint), e reusa
+  `repo-identidade` p/ o logout (Task 5 — `apagar-sessao!` ja vive no mesmo `RepoIdentidade`, sem repo
+  separado). `sessao` = o mapa `:sessao` da config (`:absoluta-h`/`:ociosa-min`), JA RESOLVIDO pelo host
+  (`oplenario.rotas/montar`, mesmo padrao do `keycloak` injetado em Task 3 — o fallback pra
+  `config/carregar` vive LA, nao aqui). `oplenario.rotas` funde este fragmento."
   [{:keys [ente-existe? keycloak idp repo-identidade relogio sessao]}]
   #{["/auth/descoberta/:ente" :get
      [(descoberta-handler ente-existe? keycloak)]
@@ -132,4 +158,9 @@
      ;; PUBLICA (sem `auth`) — este POST CRIA a sessao; nao ha sessao ainda pra exigir. `it/corpo-json`
      ;; parseia o corpo em (:json-params req) com chaves STRING (mesmo mecanismo de toda rota de escrita).
      [it/corpo-json (mint-handler idp repo-identidade relogio sessao)]
-     :route-name :identidade/mint-sessao]})
+     :route-name :identidade/mint-sessao]
+    ["/auth/sessoes" :delete
+     ;; PUBLICA (sem `auth`) — decisao desta sessao, ver docstring do ns (Task 5): T6 (interceptor de
+     ;; cookie) ainda nao existe, o handler le o cookie direto via `it/cookie-sessao`.
+     [(logout-handler repo-identidade)]
+     :route-name :identidade/logout-sessao]})
