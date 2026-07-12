@@ -42,6 +42,7 @@
 (def IDENTIDADE-ID {:kind :opaco :nome "IdentidadeId"})
 (def COMISSAO-ID   {:kind :opaco :nome "ComissaoId"})
 (def SESSAO-ID     {:kind :opaco :nome "SessaoId"})    ; F4.3b: agregadores de quorum (presentes_*(SessaoId,Instante))
+(def VEREADOR-ID   {:kind :opaco :nome "VereadorId"})    ; C3: esta_presente_em(SessaoId,VereadorId,Instante)
 
 ;; ---- predicados de compatibilidade usados pelo type-checker ----
 (def ^:private numericos #{INTEIRO RACIONAL})

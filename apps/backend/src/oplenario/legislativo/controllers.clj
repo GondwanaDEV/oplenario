@@ -6,7 +6,8 @@
   PROPRIO modulo (que casa ato + emissao do evento de tempo real na MESMA tx, Slice 1)."
   (:require [oplenario.kernel.autorizacao :as authz]
             [oplenario.legislativo.components.repositorio :as repo]
-            [oplenario.legislativo.logic :as logic]))
+            [oplenario.legislativo.logic :as logic]
+            [oplenario.motor.api :as motor]))
 
 (set! *warn-on-reflection* true)
 
@@ -58,6 +59,63 @@
           ;; 'simbolica' (sem apuracao individual) E qualquer modalidade futura -> nao se registra voto aqui.
           (throw (ex-info "modalidade nao registra votos individuais"
                           {:tipo :validacao/invalido :campos [:modalidade] :modalidade (:modalidade v)})))))))
+
+;; ============================ Onda C3: meu-voto (o vereador vota do proprio celular) ============================
+
+(def ^:private expr-mandato-vigente
+  "tem_mandato_vigente(ator.identidade, hoje())")
+
+(def ^:private expr-presente-nesta-sessao
+  "esta_presente_em(recurso.sessao_id, recurso.vereador_id, agora())")
+
+(defn meu-voto
+  "Onda C3 — o vereador vota do PROPRIO celular. `vereador-id` NUNCA vem do corpo (resolvido do ator via
+  `resolver-vereador`, mesmo contrato anti-forja de `acusar-ciencia`). Authz herdada da sessao (mesma Casa,
+  `sessao-autorizada`) + a AMARRA votacao<->sessao (`votacao-na-sessao`), como a rota da Mesa. A modalidade
+  (imutavel pos-abertura) e' checada CEDO contra o `v` pre-tx — 'secreta' NUNCA passa por aqui (voto secreto
+  e' regra de borda, nao so' authz) e so' 'nominal' segue (qualquer outra, ex.: 'simbolica' -> :validacao/
+  invalido antes de tocar o Repo). A escrita de fato passa por `repo/registrar-meu-voto!` (review CRÍTICO:
+  autorizar+escrever precisam da MESMA tx — a versao anterior abria uma tx so' p/ o check e OUTRA, separada,
+  p/ a escrita, deixando uma janela onde a Mesa podia encerrar a votacao no meio do caminho): o Repo re-busca
+  a votacao SOB LOCK (`FOR UPDATE`) dentro da tx, roda o `autorizar!` (este predicado, com a POLICY FINA — 1a
+  producao real de `motor/politica-dsl`, disciplina 5: mandato vigente + presenca registrada NESTA sessao,
+  cada fato em avaliacao DSL SEPARADA — `hoje()`/`agora()` compartilham UM so' slot `:agora` no motor,
+  motor/runtime.clj, nao coexistem numa MESMA expressao; ver docs/superpowers/specs/2026-07-11-onda-c-
+  slice3-cockpit-votacao-design.md §3.2 — + o check trivial de estado 'aberta', tudo contra o snapshot
+  LOCKED, nunca o `v` pre-tx) e so' entao reconfere+insere. Qualquer falha -> authz/check! lanca -> 403
+  generico (nunca detalha qual precondicao falhou). nil (sessao/votacao inexistente ou de outra sessao, OU
+  ator sem cadastro de vereador) -> borda traduz 404."
+  [repo-leg consultar-sessao resolver-vereador registro ator sessao-id votacao-id hoje instante m]
+  (when-let [vereador-id (resolver-vereador (:ente-id ator) (:identidade-id ator))]
+    (when (sessao-autorizada consultar-sessao ator sessao-id)
+      (let [ente-id (:ente-id ator)]
+        (when-let [v (votacao-na-sessao repo-leg ente-id sessao-id votacao-id)]
+          (when (= "secreta" (:modalidade v))
+            (throw (ex-info "voto secreto nao e' registravel pelo proprio celular"
+                            {:tipo :validacao/invalido :campos [:modalidade] :modalidade "secreta"})))
+          (when (not= "nominal" (:modalidade v))
+            (throw (ex-info "modalidade nao registra votos individuais"
+                            {:tipo :validacao/invalido :campos [:modalidade] :modalidade (:modalidade v)})))
+          (repo/registrar-meu-voto! repo-leg ente-id (assoc m :vereador-id vereador-id)
+            (fn [tx v-fresco]
+              ;; review MAJOR (revisao final de branch): authz/check! recebe o ATOR e o RECURSO REAIS
+              ;; (nao os stand-ins da DSL) — os diagnosticos de NEGACAO do proprio check! leem
+              ;; (:identidade-id ator)/(:tipo recurso)/(:id recurso); passar so' os mapas `_`-keyed da DSL
+              ;; deixava esses campos SEMPRE nil no audit trail da 1a producao real de politica-dsl. Os
+              ;; mapas DSL (chaves `_`, exigencia do tokenizer — motor/nucleo.clj) moram DENTRO do
+              ;; predicado, derivados de `a`/`r`.
+              (authz/check! ator :votacao/meu-voto v-fresco
+                (fn [a r]
+                  ;; review LOW (revisao final de branch): `:ente-id` no ator-dsl — `motor/politica-dsl`
+                  ;; injeta `(:ente-id ator)` no ctx (usado por builtins own-schema, ex.: parametro_tenant);
+                  ;; os 2 fatos daqui (tem_mandato_vigente/esta_presente_em) nao o leem hoje (resolvem so'
+                  ;; via a tx), mas omiti-lo deixaria QUALQUER expressao futura neste call site resolver
+                  ;; ente-id como nil silenciosamente em vez de falhar alto.
+                  (let [ator-dsl {:identidade (:identidade-id a) :ente-id (:ente-id a)}
+                        recurso-dsl {:sessao_id (:sessao-id r) :vereador_id vereador-id}]
+                    (and (= "aberta" (:estado r))
+                         ((motor/politica-dsl {:registro registro :tx tx :expr expr-mandato-vigente :agora hoje}) ator-dsl recurso-dsl)
+                         ((motor/politica-dsl {:registro registro :tx tx :expr expr-presente-nesta-sessao :agora instante}) ator-dsl recurso-dsl))))))))))))
 
 ;; ========================= FE Onda A1: fila de relatores pendentes (§16.11) =========================
 
@@ -310,11 +368,12 @@
   cadastros; mesma inversao de dependencia de `consultar-sessao`/`resolver-municipio`) que resolve
   identidade-id->vereador-id NESTE ente. Um ator com papel 'vereador' mas SEM cadastro vinculado
   (`resolver-vereador` nil) devolve painel VAZIO — nao lanca: o gate grosso (exige-papel) ja' garantiu o
-  papel, a ausencia de vinculo e' estado de dados, nao falha de autorizacao."
+  papel, a ausencia de vinculo e' estado de dados, nao falha de autorizacao. Onda C3: tambem devolve o
+  `vereador-id` resolvido (bootstrap de identidade p/ o cockpit — ver docstring do wire/out)."
   [repo-legislativo resolver-vereador ator]
   (if-let [vereador-id (resolver-vereador (:ente-id ator) (:identidade-id ator))]
-    (repo/meu-painel repo-legislativo (:ente-id ator) vereador-id)
-    {:proposicoes [] :pareceres [] :ciencias []}))
+    (assoc (repo/meu-painel repo-legislativo (:ente-id ator) vereador-id) :vereador-id vereador-id)
+    {:vereador-id nil :proposicoes [] :pareceres [] :ciencias []}))
 
 (defn acusar-ciencia
   "Onda C1 — 'Dar ciencia' (Task 3): registra a ciencia do vereador ATOR sobre `evento-ref` (anti-forja:

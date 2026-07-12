@@ -8,6 +8,7 @@
             [oplenario.http :as http]
             [oplenario.interceptors :as it]
             [oplenario.paineis.adapters.out.mesa :as adapters-out-mesa]
+            [oplenario.paineis.adapters.out.minha-sessao-atual :as adapters-out-minha-sessao-atual]
             [oplenario.paineis.adapters.out.pendencia :as adapters-out-pendencia]
             [oplenario.paineis.adapters.out.sli-sessao :as adapters-out-sli-sessao]
             [oplenario.paineis.adapters.out.tramitacao :as adapters-out-tramitacao]
@@ -34,6 +35,16 @@
   [repo-paineis]
   (fn [req]
     (http/json-resposta 200 (adapters-out-sli-sessao/sli-sessoes->wire
+                             (controllers/sli-sessoes repo-paineis (:ator req))))))
+
+(defn- minha-sessao-atual-handler
+  "GET /meu/sessao-atual (Onda C3, papel 'vereador'). Reusa a MESMA leitura tenant-wide de `sli-sessoes`
+  (sem recurso unico p/ camada fina — mesmo escopo authz das demais rotas deste modulo) e projeta so' a
+  PRIMEIRA entrada (ja' ordenada 'em curso primeiro'). Sem sessao viva -> 200 {:sessao-id nil :situacao nil}
+  (nunca 404 — ausencia de sessao e' um ESTADO do cockpit do celular, nao um erro)."
+  [repo-paineis]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out-minha-sessao-atual/minha-sessao-atual->wire
                              (controllers/sli-sessoes repo-paineis (:ator req))))))
 
 (def ^:private card-generico-indisponivel
@@ -92,9 +103,12 @@
   `presenca-resumo`, `esic-cumprimento`, `relatores-pendentes` — cada uma ente-id -> card ja' projetado, p/ o
   dashboard da Mesa compor sem cruzar modulo) e devolve as rotas-dado. `oplenario.rotas` funde este fragmento
   ao conjunto. Authz GROSSA (papel 'secretario' — mesmo papel interno de compliance/sessoes/legislativo/
-  participacao) — os paineis sao tenant-wide read-models, sem recurso unico p/ camada fina."
+  participacao) — os paineis sao tenant-wide read-models, sem recurso unico p/ camada fina. `GET
+  /meu/sessao-atual` (Onda C3) e' a UNICA excecao — gate 'vereador' (o cockpit do celular descobre a
+  sessao viva sem o papel secretario), reusando a MESMA leitura de `sli-sessoes`."
   [{:keys [auth repo-paineis painel-compliance presenca-resumo esic-cumprimento relatores-pendentes]}]
-  (let [papel (it/exige-papel "secretario")]
+  (let [papel (it/exige-papel "secretario")
+        papel-vereador (it/exige-papel "vereador")]
     #{["/paineis/pendencias" :get [auth papel (pendencias-handler repo-paineis)]
        :route-name :paineis/pendencias]
       ["/paineis/tramitacao" :get [auth papel (tramitacao-handler repo-paineis)]
@@ -103,4 +117,6 @@
        :route-name :paineis/sli-sessoes]
       ["/paineis/mesa" :get [auth papel (mesa-handler repo-paineis painel-compliance
                                                        presenca-resumo esic-cumprimento relatores-pendentes)]
-       :route-name :paineis/mesa]}))
+       :route-name :paineis/mesa]
+      ["/meu/sessao-atual" :get [auth papel-vereador (minha-sessao-atual-handler repo-paineis)]
+       :route-name :paineis/minha-sessao-atual]}))

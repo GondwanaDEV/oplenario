@@ -69,9 +69,9 @@
   [tx sessao-id instante]
   (contar-presentes tx sessao-id instante "remoto"))
 
-;; nome canonico (= assinatura no catalogo) -> fn de relacao (tx, sessao-id, instante) -> Inteiro. Apenas os
-;; agregadores entram no DSL; `esta-presente-em?` e' relacao-de-leitura usada pelo Repo/UI (sem tipo opaco de
-;; pessoa no DSL na V1 — vide §22.6 eixo C: sao os AGREGADORES que se expoem ao motor de votacao).
+;; nome canonico (= assinatura no catalogo) -> fn de relacao. C3: esta_presente_em passou a expor a relacao de
+;; LEITURA tambem a DSL (nao so os agregadores) — a policy fina do meu-voto (legislativo) resolve por ela.
 (def relacoes
   {"presentes_plenario" presentes-plenario
-   "presentes_remoto"   presentes-remoto})
+   "presentes_remoto"   presentes-remoto
+   "esta_presente_em"   esta-presente-em?})

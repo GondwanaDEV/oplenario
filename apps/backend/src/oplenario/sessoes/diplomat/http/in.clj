@@ -6,6 +6,7 @@
   via `rotas`). A authz GROSSA (exige-papel) entra na rota; a FINA (policy.check) roda no controller."
   (:require [oplenario.http :as http]
             [oplenario.interceptors :as it]
+            [oplenario.kernel.tempo :as tempo]
             [oplenario.sessoes.adapters.in.gravacao :as adapters-in-grav]
             [oplenario.sessoes.adapters.in.incidente :as adapters-in-incidente]
             [oplenario.sessoes.adapters.in.pauta :as adapters-in-pauta]
@@ -85,6 +86,20 @@
       (if-let [recibo (controllers/registrar-presenca repo-sessoes ator m)]
         (http/json-resposta 201 (adapters-out-presenca/recibo-presenca->wire recibo))
         (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+
+(defn- confirmar-presenca-handler
+  "POST /sessoes/:id/presenca/confirmar (Onda C3, papel 'vereador'). Sem corpo — `vereador-id` resolvido do
+  ator (anti-forja), `fonte`/`tipo`/`modalidade` fixos no controller, `ocorrido-em` = o relogio do servidor
+  (nunca do cliente). Reusa o MESMO wire/out de recibo que a rota da Mesa (`recibo-presenca->wire`, so
+  {:id}). nil (sessao inexistente OU ator sem cadastro de vereador) -> 404."
+  [repo-sessoes resolver-vereador relogio]
+  (fn [req]
+    (let [ator (:ator req)
+          sid  (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          instante (tempo/agora relogio)]
+      (if-let [recibo (controllers/confirmar-minha-presenca repo-sessoes resolver-vereador ator sid instante)]
+        (http/json-resposta 201 (adapters-out-presenca/recibo-presenca->wire recibo))
+        (http/json-resposta 404 {:erro "sessao nao encontrada, ou vereador sem cadastro vinculado neste ente"})))))
 
 (defn- inscrever-handler
   "POST /sessoes/:id/inscricoes (§22.6 eixo F, tribuna). adapters/in coage o :id + valida o corpo {vereador-id,
@@ -328,11 +343,15 @@
 
 (defn rotas
   "Fragmento de rotas do modulo (table syntax Pedestal). Recebe o interceptor `auth` (compartilhado), o
-  `repo-sessoes` (Repo-Component) + o `objeto-store` (p/ a ingestao de gravacao) e devolve as rotas-dado.
-  `oplenario.rotas` funde este fragmento ao conjunto. POST exige a authz GROSSA (papel 'secretario'); a
-  ingestao NAO usa corpo-json (o corpo e' binario); GET so autentica (a camada fina decide no controller)."
-  [{:keys [auth repo-sessoes objeto-store]}]
-  #{["/sessoes"     :post [auth (it/exige-papel "secretario") it/corpo-json (agendar-handler repo-sessoes)]
+  `repo-sessoes` (Repo-Component) + o `objeto-store` (p/ a ingestao de gravacao) + `resolver-vereador`/
+  `relogio` (Onda C3, borda self-service `/presenca/confirmar` — identidade->vereador-id + relogio do
+  servidor, injetados pelo host por inversao de dependencia) e devolve as rotas-dado. `oplenario.rotas` funde
+  este fragmento ao conjunto. POST exige a authz GROSSA (papel 'secretario', exceto `/presenca/confirmar`
+  que exige 'vereador'); a ingestao NAO usa corpo-json (o corpo e' binario); GET so autentica (a camada fina
+  decide no controller)."
+  [{:keys [auth repo-sessoes objeto-store resolver-vereador relogio]}]
+  (let [papel-vereador (it/exige-papel "vereador")]
+   #{["/sessoes"     :post [auth (it/exige-papel "secretario") it/corpo-json (agendar-handler repo-sessoes)]
      :route-name :sessoes/agendar]
     ;; ingestao no TOPO (nao /sessoes/...): o segmento e' agnostico de sessao (Opcao A) e isto evita a colisao
     ;; de roteamento literal-vs-param com /sessoes/:id (o param sombrearia o POST -> 404).
@@ -345,6 +364,9 @@
     ["/sessoes/:id/presenca" :post
      [auth (it/exige-papel "secretario") it/corpo-json (registrar-presenca-handler repo-sessoes)]
      :route-name :sessoes/registrar-presenca]
+    ["/sessoes/:id/presenca/confirmar" :post
+     [auth papel-vereador (confirmar-presenca-handler repo-sessoes resolver-vereador relogio)]
+     :route-name :sessoes/confirmar-minha-presenca]
     ["/sessoes/:id/inscricoes" :post
      [auth (it/exige-papel "secretario") it/corpo-json (inscrever-handler repo-sessoes)]
      :route-name :sessoes/inscrever-orador]
@@ -379,7 +401,7 @@
     ["/sessoes/:id/gravacao" :get [auth (listar-gravacoes-handler repo-sessoes)] :route-name :sessoes/listar-gravacoes]
     ["/sessoes/:id/gravacao/:seg-id/vincular" :post
      [auth (it/exige-papel "secretario") it/corpo-json (vincular-gravacao-handler repo-sessoes)]
-     :route-name :sessoes/vincular-gravacao]})
+     :route-name :sessoes/vincular-gravacao]}))
 
 (defn presenca-resumo-wire
   "Ponto de entrada IN-PROCESS da presenca agregada (FE Onda A1) — o gemeo nao-HTTP p/ a RAIZ DE COMPOSICAO

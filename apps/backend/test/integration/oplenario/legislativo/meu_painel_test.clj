@@ -116,15 +116,18 @@
   ;; nem chega a ser tocado: `repo-legislativo` passado como nil comprova que nao ha chamada nesse ramo).
   (let [ator {:ente-id (random-uuid) :identidade-id (random-uuid)}
         resolver-vereador (fn [_ente-id _identidade-id] nil)]
-    (is (= {:proposicoes [] :pareceres [] :ciencias []}
+    (is (= {:vereador-id nil :proposicoes [] :pareceres [] :ciencias []}
            (controllers/meu-painel nil resolver-vereador ator)))))
 
 (deftest controller-meu-painel-delega-ao-repo-quando-resolver-vereador-resolve
   (let [ente (random-uuid) vereador (random-uuid) identidade (random-uuid)
         pid (protocolar! ente vereador)
         ator {:ente-id ente :identidade-id identidade}
-        resolver-vereador (fn [e i] (when (and (= e ente) (= i identidade)) vereador))]
-    (is (= [pid] (mapv :id (:proposicoes (controllers/meu-painel *repo-legislativo* resolver-vereador ator)))))))
+        resolver-vereador (fn [e i] (when (and (= e ente) (= i identidade)) vereador))
+        painel (controllers/meu-painel *repo-legislativo* resolver-vereador ator)]
+    (is (= [pid] (mapv :id (:proposicoes painel))))
+    (is (= vereador (:vereador-id painel))
+        "Onda C3: o controller devolve o proprio vereador-id resolvido junto do painel")))
 
 ;; ========================= Task 3: ciencia append-only (derivar + acusar) =========================
 

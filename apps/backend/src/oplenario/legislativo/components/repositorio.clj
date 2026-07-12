@@ -110,6 +110,11 @@
   (abrir-votacao! [this ente-id m] "Abre votacao 'aberta' sobre objeto polimorfico.")
   (registrar-voto! [this ente-id m] "Voto nominal atribuido (append-only; UNIQUE por vereador).")
   (registrar-voto-secreto! [this ente-id m] "Voto secreto anonimo (sem vereador_id).")
+  (registrar-meu-voto! [this ente-id m autorizar!]
+    "Onda C3 — vota do proprio celular: numa SO tx, re-busca a votacao COM LOCK (`FOR UPDATE`, fecha a
+     janela de corrida com `encerrar-votacao!`), roda `(autorizar! tx v-fresco)` (o predicado authz/policy —
+     DEVE lancar em negacao, nunca so' devolver false), reconfere estado 'aberta' + modalidade 'nominal'
+     contra o snapshot LOCKED (nao o `v` pre-tx do controller) e so' entao insere.")
   (encerrar-votacao! [this ente-id m] "Apura + computa resultado (quorum exato) + grava snapshot, CAS.")
   (anular-votacao! [this ente-id m] "Leva a 'anulada' (correcao = nova votacao).")
   (buscar-votacao [this ente-id id])
@@ -490,6 +495,40 @@
               (producers/emitir-voto-registrado! bus tx ente-id
                 {:votacao-id (:votacao-id m) :sessao-id (:sessao-id v) :modalidade "secreta"}))
             r)))))
+  ;; Onda C3 (review CRÍTICO fe-17-cockpit-votacao): a autorizacao (mandato+presenca, motor/politica-dsl)
+  ;; PRECISA da MESMA tx da escrita — senao a janela entre autorizar e escrever deixa a Mesa encerrar a
+  ;; votacao no meio do caminho (achado independente de 2 revisores). `autorizar!` roda AQUI, DENTRO da tx,
+  ;; contra o snapshot LOCKED (`FOR UPDATE`) — nao o `v` pre-tx que o controller carregou so' p/ a amarra
+  ;; votacao<->sessao e o guard trivial de 'secreta'.
+  ;; review MEDIUM (revisao final de branch): um double-tap/retry do proprio celular (ou 2 requests
+  ;; concorrentes do MESMO vereador) serializa pelo lock `FOR UPDATE` e so' o 2o bate no UNIQUE
+  ;; (ente_id,votacao_id,vereador_id) — 23505 -> :conflito/voto-duplicado (409), mesmo predicado 23505 de
+  ;; participacao/interpor-recurso! e compliance/inserir-com-retry! (nunca deixar virar 500 opaco).
+  (registrar-meu-voto! [this ente-id m autorizar!]
+    (try
+      (transacao this ente-id
+        (fn [tx]
+          (let [v (votacao/buscar-com-lock tx ente-id (:votacao-id m))]
+            (when (nil? v)
+              (throw (ex-info "registrar-meu-voto!: votacao inexistente" {:votacao-id (:votacao-id m)})))
+            (autorizar! tx v)
+            (when (not= "aberta" (:estado v))
+              (throw (ex-info "registrar-meu-voto!: votacao nao esta aberta"
+                              {:votacao-id (:votacao-id m) :estado (:estado v)})))
+            (when (not= "nominal" (:modalidade v))
+              (throw (ex-info "registrar-meu-voto!: votacao nao e' nominal — use o caminho da Mesa"
+                              {:votacao-id (:votacao-id m) :modalidade (:modalidade v)})))
+            (let [r (votacao/registrar-voto! tx (assoc m :ente-id ente-id))]
+              (when (:sessao-id v)
+                (producers/emitir-voto-registrado! bus tx ente-id
+                  {:votacao-id (:votacao-id m) :sessao-id (:sessao-id v) :modalidade "nominal"
+                   :vereador-id (:vereador-id m) :voto (:voto m)}))
+              r))))
+      (catch PSQLException e
+        (if (= "23505" (.getSQLState e))
+          (throw (ex-info "voto ja registrado para este vereador nesta votacao"
+                          {:tipo :conflito/voto-duplicado :votacao-id (:votacao-id m)}))
+          (throw e)))))
   (encerrar-votacao! [this ente-id m]
     (transacao this ente-id
       (fn [tx]

@@ -24,6 +24,14 @@
    [:voto (km/enum-de logic/tipos-voto)]
    [:vereador-id {:optional true} [:maybe :string]]])
 
+(def MeuVoto
+  "Corpo de POST /sessoes/:id/votacoes/:votacao-id/meu-voto (Onda C3). SO' `voto` — `vereador-id` NAO existe
+  neste contrato (nem opcional): e' resolvido do ator no controller, anti-forja por construcao — a mesma
+  disciplina estrutural do sigilo em `votos_secretos` (§22.6), so' que aqui o campo simplesmente nao existe
+  na FORMA do contrato, em vez de ser descartado depois de chegar."
+  [:map {:closed true}
+   [:voto (km/enum-de logic/tipos-voto)]])
+
 (def EncerrarVotacao
   "Corpo de POST /sessoes/:id/votacoes/:votacao-id/encerramento. `lock-version` p/ o CAS; `base-membros` =
   composicao da Casa (p/ as maiorias absoluta/qualificada); `resultado` so na modalidade 'simbolica' (aclamacao

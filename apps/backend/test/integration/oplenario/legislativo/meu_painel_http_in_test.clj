@@ -72,10 +72,13 @@
         repo (fake-repo-legislativo
               {:meu-painel (fn [e v] (reset! chamado-com {:ente e :vereador v}) (painel-fake))})
         r (pt/response-for (service-fn #{"vereador"} repo (fn [e i] (when (and (= e ente) (= i identidade)) vereador)))
-                           :get "/meu/painel" :headers (com-bearer (token ente identidade)))]
+                           :get "/meu/painel" :headers (com-bearer (token ente identidade)))
+        corpo (ler-json r)]
     (is (= 200 (:status r)))
     (is (= {:ente ente :vereador vereador} @chamado-com)
-        "o vereador-id chamado no Repo e' SEMPRE o resolvido do ator (identidade->vereador), nunca outro")))
+        "o vereador-id chamado no Repo e' SEMPRE o resolvido do ator (identidade->vereador), nunca outro")
+    (is (= (str vereador) (:vereador-id corpo))
+        "Onda C3: o wire devolve o proprio vereador-id resolvido (bootstrap de identidade p/ o cockpit)")))
 
 (deftest meu-painel-vazio-quando-resolver-vereador-nil-nunca-500
   ;; ator com papel 'vereador' mas sem cadastro vinculado neste ente -> painel vazio (200), o Repo NEM E'
@@ -84,7 +87,7 @@
                            :get "/meu/painel" :headers (com-bearer (token (random-uuid) (random-uuid))))
         corpo (ler-json r)]
     (is (= 200 (:status r)))
-    (is (= {:proposicoes [] :pareceres [] :ciencias []} corpo))))
+    (is (= {:vereador-id nil :proposicoes [] :pareceres [] :ciencias []} corpo))))
 
 (deftest meu-painel-sem-papel-vereador-403
   (doseq [papeis [#{"secretario"} #{"cidadao"}]]

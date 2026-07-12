@@ -10,6 +10,7 @@
             [io.pedestal.http :as ph]
             [io.pedestal.test :as pt]
             [jsonista.core :as json]
+            [oplenario.cadastros.components.repositorio :as repo-cadastros-comp]
             [oplenario.config :as config]
             [oplenario.http :as http]
             [oplenario.identidade.components.repositorio :as repo-id]
@@ -46,6 +47,29 @@
                     (rotas/montar {:idp (idp-dev/idp-dev)
                                    :repo-identidade (fake-repo-identidade papeis)
                                    :repo-sessoes repo-s
+                                   :objeto-store nil})
+                    it/globais)
+      ph/create-server ::ph/service-fn))
+
+(defn- fake-repo-cadastros
+  "So' o metodo exercido por `resolver-vereador` (host, rotas.clj) — `vereador-por-identidade` — mesmo
+  fake de `meu-painel-http-in-test`. `resolver` (fn de teste ente-id/identidade-id -> vereador-id | nil)
+  devolve DIRETO o vereador-id; este fake embrulha em {:id ...} p/ casar o contrato real."
+  [resolver]
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify repo-cadastros-comp/RepoCadastros
+    (vereador-por-identidade [_ ente-id identidade-id]
+      (when-let [v (resolver ente-id identidade-id)] {:id v}))))
+
+(defn- service-fn-confirmar
+  "Onda C3 — variante de `service-fn*` que tambem injeta `repo-cadastros` (p/ `resolver-vereador`), exercida
+  so' pelos testes de `POST /sessoes/:id/presenca/confirmar` (`/presenca` classico nao usa resolver-vereador)."
+  [papeis repo-s resolver-vereador]
+  (-> (http/servico (config/carregar)
+                    (rotas/montar {:idp (idp-dev/idp-dev)
+                                   :repo-identidade (fake-repo-identidade papeis)
+                                   :repo-sessoes repo-s
+                                   :repo-cadastros (fake-repo-cadastros resolver-vereador)
                                    :objeto-store nil})
                     it/globais)
       ph/create-server ::ph/service-fn))
@@ -194,4 +218,73 @@
                            :headers (com-json (token ente (random-uuid)))
                            :body (corpo {"vereador-id" (str (random-uuid)) "tipo" "entrada"
                                          "modalidade" "plenario" "ocorrido-em" ocorrido}))]
+    (is (= 400 (:status r)) "sessao :id malformado no path -> 400, nunca 500")))
+
+;; ---------- POST /sessoes/:id/presenca/confirmar (Onda C3, autoatendimento) ----------
+
+(defn- url-confirmar [sid] (str "/sessoes/" sid "/presenca/confirmar"))
+
+(deftest confirmar-presenca-201
+  (let [ente (random-uuid) sid (random-uuid) identidade (random-uuid) vid (random-uuid)
+        cap (atom nil)
+        repo-s (fake-repo-sessoes (fn [_ id] (sessao-canonica ente id)) cap)
+        r (pt/response-for (service-fn-confirmar #{"vereador"} repo-s (fn [_ _] vid))
+                           :post (url-confirmar sid)
+                           :headers (com-json (token ente identidade)))
+        body (ler-json r)]
+    (is (= 201 (:status r)) "papel vereador + sessao da mesma Casa + cadastro vinculado -> 201")
+    (is (= (str (:id @cap)) (:id body)) "o recibo carrega o id do evento gravado")
+    (is (= sid (:sessao-id @cap)) "o Repo recebeu a sessao-id (uuid coagido do path)")
+    (is (= vid (:vereador-id @cap)) "o Repo recebeu o vereador-id RESOLVIDO do ator, nunca do corpo")
+    (is (= "entrada" (:tipo @cap)) "tipo FORCADO = entrada (reconfirmar e' inofensivo, append-only)")
+    (is (= "plenario" (:modalidade @cap)) "modalidade FORCADA = plenario (V1 = Nivel 1)")
+    (is (= "autoatendimento" (:fonte @cap)) "fonte FORCADA = autoatendimento (autoatendimento do proprio vereador)")
+    (is (some? (:ocorrido-em @cap)) "o instante veio do relogio do servidor, nao do cliente (sem corpo)")
+    (is (some? (:created-by @cap)) "o Repo recebeu created-by (do ator, nunca do cliente)")))
+
+(deftest confirmar-presenca-sem-papel-vereador-403
+  (let [ente (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ _] nil) (atom nil))
+        r (pt/response-for (service-fn-confirmar #{"secretario"} repo-s (fn [_ _] (random-uuid)))
+                           :post (url-confirmar (random-uuid))
+                           :headers (com-json (token ente (random-uuid))))]
+    (is (= 403 (:status r)) "ator sem papel 'vereador' -> authz grossa nega -> 403 (gate e' papel-vereador, nao papel)")))
+
+(deftest confirmar-presenca-sem-cadastro-vinculado-404
+  (let [ente (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ id] (sessao-canonica ente id)) (atom nil))
+        r (pt/response-for (service-fn-confirmar #{"vereador"} repo-s (fn [_ _] nil))
+                           :post (url-confirmar (random-uuid))
+                           :headers (com-json (token ente (random-uuid))))]
+    (is (= 404 (:status r)) "resolver-vereador nil (ator sem cadastro de vereador neste ente) -> 404")))
+
+(deftest confirmar-presenca-sessao-inexistente-404
+  (let [ente (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ _] nil) (atom nil))
+        r (pt/response-for (service-fn-confirmar #{"vereador"} repo-s (fn [_ _] (random-uuid)))
+                           :post (url-confirmar (random-uuid))
+                           :headers (com-json (token ente (random-uuid))))]
+    (is (= 404 (:status r)) "sessao inexistente no tenant -> 404")))
+
+(deftest confirmar-presenca-casa-alheia-403
+  (let [ente (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ id] (sessao-canonica (random-uuid) id)) (atom nil))
+        r (pt/response-for (service-fn-confirmar #{"vereador"} repo-s (fn [_ _] (random-uuid)))
+                           :post (url-confirmar (random-uuid))
+                           :headers (com-json (token ente (random-uuid))))]
+    (is (= 403 (:status r)) "sessao de ente alheio -> pode-ver-sessao? nega -> 403")))
+
+(deftest confirmar-presenca-sem-token-401
+  (let [repo-s (fake-repo-sessoes (fn [_ _] nil) (atom nil))
+        r (pt/response-for (service-fn-confirmar #{"vereador"} repo-s (fn [_ _] (random-uuid)))
+                           :post (url-confirmar (random-uuid))
+                           :headers {"Content-Type" "application/json"})]
+    (is (= 401 (:status r)) "rota herda a cadeia de auth: sem token -> 401 (fail-closed)")))
+
+(deftest confirmar-presenca-id-malformado-400
+  (let [ente (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ id] (sessao-canonica ente id)) (atom nil))
+        r (pt/response-for (service-fn-confirmar #{"vereador"} repo-s (fn [_ _] (random-uuid)))
+                           :post "/sessoes/nao-e-uuid/presenca/confirmar"
+                           :headers (com-json (token ente (random-uuid))))]
     (is (= 400 (:status r)) "sessao :id malformado no path -> 400, nunca 500")))
