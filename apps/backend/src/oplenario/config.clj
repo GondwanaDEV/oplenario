@@ -34,4 +34,6 @@
      (get env "KEYCLOAK_ADMIN_USUARIO")   (assoc-in [:keycloak :admin-usuario]   (get env "KEYCLOAK_ADMIN_USUARIO"))
      (get env "KEYCLOAK_ADMIN_SENHA")     (assoc-in [:keycloak :admin-senha]     (get env "KEYCLOAK_ADMIN_SENHA"))
      (get env "KEYCLOAK_JWKS_CACHE_TTL_S") (assoc-in [:keycloak :jwks-cache-ttl-s]
-                                                      (Integer/parseInt (get env "KEYCLOAK_JWKS_CACHE_TTL_S"))))))
+                                                      (Integer/parseInt (get env "KEYCLOAK_JWKS_CACHE_TTL_S")))
+     (get env "KEYCLOAK_WEB_CLIENT_ID")    (assoc-in [:keycloak :web-client-id]    (get env "KEYCLOAK_WEB_CLIENT_ID"))
+     (get env "KEYCLOAK_BASE_URL_PUBLICO") (assoc-in [:keycloak :base-url-publico] (get env "KEYCLOAK_BASE_URL_PUBLICO")))))

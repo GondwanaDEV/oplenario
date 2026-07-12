@@ -5,7 +5,9 @@
   modulo (com o servidor `using` os Repo). `montar` recebe os deps ja injetados (idp + repo-identidade)."
   (:require [oplenario.cadastros.components.repositorio :as repo-cadastros-comp]
             [oplenario.compliance.diplomat.http.in :as compliance-http]
+            [oplenario.config :as config]
             [oplenario.http :as http]
+            [oplenario.identidade.diplomat.http.auth-in :as auth-http]
             [oplenario.interceptors :as it]
             [oplenario.kernel.tempo :as tempo]
             [oplenario.legislativo.diplomat.http.in :as legislativo-http]
@@ -39,7 +41,8 @@
   que NAO importam sessoes."
   [{:keys [idp repo-identidade repo-sessoes repo-legislativo repo-compliance repo-participacao
            repo-transparencia repo-paineis repo-cadastros canal-store objeto-store painel-compliance
-           presenca-resumo esic-cumprimento relatores-pendentes info-ente registro-fatos]}]
+           presenca-resumo esic-cumprimento relatores-pendentes info-ente registro-fatos
+           ente-existe? keycloak]}]
   (let [auth (it/autenticacao idp repo-identidade)
         ;; F6: relogio de producao (kernel/tempo) p/ o prazo LAI do e-SIC — determinismo em teste vem de
         ;; injetar relogio-fixo direto no fragmento de rotas (participacao-http/rotas). resolver-ente-publico
@@ -92,7 +95,16 @@
         ;; mostravam o UUID cru da rota) — mesma inversao de dependencia de consultar-sessao/membros-da-casa;
         ;; transparencia nunca importa cadastros (§22.10). Ente sem perfil cadastrado -> nil -> 404 na borda.
         info-ente (or info-ente
-                      (fn [ente-id] (repo-cadastros-comp/buscar-ente repo-cadastros ente-id)))]
+                      (fn [ente-id] (repo-cadastros-comp/buscar-ente repo-cadastros ente-id)))
+        ;; Onda D Slice 2 Task 3: identidade/auth-in (GET /auth/descoberta/:ente, rota PUBLICA pre-login)
+        ;; precisa saber se o ente existe — mesma inversao de dependencia sobre cadastros de
+        ;; info-ente/resolver-municipio/membros-da-casa; identidade nunca importa cadastros (§22.10).
+        ente-existe? (or ente-existe?
+                         (fn [ente-id] (some? (repo-cadastros-comp/buscar-ente repo-cadastros ente-id))))
+        ;; `keycloak` = o bloco :keycloak da config (realm-prefixo/base-url-publico/web-client-id) que
+        ;; auth-in usa p/ montar a resposta de descoberta. Injetavel p/ os testes DB-free da borda;
+        ;; em producao cai no default carregado do config.edn+env (mesmo racional dos demais seams `or`).
+        keycloak (or keycloak (:keycloak (config/carregar)))]
     (-> #{["/saude"             :get http/saude :route-name :saude]
           ["/eu"                :get [auth http/eu] :route-name :eu]
           ["/painel-secretaria" :get [auth (it/exige-papel "secretario") http/painel-secretaria]
@@ -118,4 +130,5 @@
                                    :presenca-resumo presenca-resumo
                                    :esic-cumprimento esic-cumprimento
                                    :relatores-pendentes relatores-pendentes}))
-        (into (tempo-real-sse/rotas {:auth auth :canal-store canal-store :consultar-sessao consultar-sessao})))))
+        (into (tempo-real-sse/rotas {:auth auth :canal-store canal-store :consultar-sessao consultar-sessao}))
+        (into (auth-http/rotas {:ente-existe? ente-existe? :keycloak keycloak})))))
