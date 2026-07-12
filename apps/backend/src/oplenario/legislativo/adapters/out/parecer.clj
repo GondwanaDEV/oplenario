@@ -64,5 +64,8 @@
                :objeto (when objeto (objeto->wire objeto))
                :relatorio relatorio :analise analise
                :texto-estado texto-estado
-               :texto-numero-versao (:numero-versao fonte)}
+               :texto-numero-versao (:numero-versao fonte)
+               :assinatura-algoritmo (:assinatura-algoritmo texto-vigente)
+               :assinado-por (->str (:assinado-por texto-vigente))
+               :assinado-em (->str (:assinado-em texto-vigente))}
               "editor de parecer")))

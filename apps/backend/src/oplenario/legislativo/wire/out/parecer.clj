@@ -38,4 +38,9 @@
    [:relatorio {:optional true} [:maybe :string]]
    [:analise {:optional true} [:maybe :string]]
    [:texto-estado (km/enum-de #{"rascunho" "vigente" "vazio"})]
-   [:texto-numero-versao {:optional true} [:maybe :int]]])
+   [:texto-numero-versao {:optional true} [:maybe :int]]
+   ;; Onda C4 (feature 7.3) — assinatura da versao VIGENTE (nunca do rascunho, que ainda nao foi assinado).
+   ;; `assinatura-b64` NAO exposta (sem uso de UI; o valor bruto so' interessa ao backend/prova).
+   [:assinatura-algoritmo {:optional true} [:maybe :string]]
+   [:assinado-por {:optional true} [:maybe :string]]
+   [:assinado-em {:optional true} [:maybe :string]]])
