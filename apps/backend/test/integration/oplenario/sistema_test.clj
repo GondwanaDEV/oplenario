@@ -47,3 +47,15 @@
 (deftest idp-para-dev-usa-idp-dev
   (is (instance? oplenario.kernel.components.idp_dev.IdpDev (#'sistema/idp-para {:env "dev"}))
       "dev segue no idp-dev (confia claims sem verificar assinatura — nunca fora de dev/test)"))
+
+(deftest idp-para-env-nao-reconhecido-usa-keycloak
+  ;; Achado da revisao final de branco (Onda D Slice 1): o predicado antigo so' usava o KeycloakIdp
+  ;; real p/ "production"/"staging" literais e caia em idp-dev p/ QUALQUER outro valor de :env, incl.
+  ;; um typo ("producton") ou um :env ausente (default e' "dev" em config.edn) — auth-bypass silencioso
+  ;; se esse caminho fosse alcancavel fora de dev/test. O predicado invertido (dev/test = whitelist p/
+  ;; idp-dev) fecha isso: um :env nao-reconhecido cai no KeycloakIdp real (fail-safe — falha tentando
+  ;; falar com um Keycloak de verdade, nunca aceita claims forjadas sem assinatura). Esta prova falharia
+  ;; contra o predicado antigo (que so' testava a whitelist de "production"/"staging").
+  (is (instance? oplenario.kernel.components.keycloak_idp.KeycloakIdp
+                 (#'sistema/idp-para {:env "producton" :keycloak keycloak-config-fake}))
+      "um :env nao-reconhecido/typo usa o KeycloakIdp real, nunca o idp-dev (fail-safe)"))

@@ -113,12 +113,15 @@
                                       rel-compliance/relacoes rel-participacao/relacoes)))))
 
 (defn- idp-para
-  "Seleciona a impl do IdP por ambiente. producao/staging usam o KeycloakIdp real (Onda D Slice 1);
-  dev/test seguem no idp-dev (confia em claims sem verificar assinatura — nunca usar fora de dev/test)."
+  "Seleciona a impl do IdP por ambiente. dev/test usam idp-dev (confia em claims sem verificar
+  assinatura — NUNCA usar fora de dev/test); qualquer outro valor de :env (incl. nao-reconhecido/
+  ausente) usa o KeycloakIdp real — default fail-safe: um :env mal configurado deve falhar tentando
+  falar com um Keycloak real, nunca aceitar login forjado silenciosamente (achado da revisao final
+  de branco da Onda D Slice 1)."
   [config]
-  (if (#{"production" "staging"} (:env config))
-    (keycloak-idp/keycloak-idp (:keycloak config))
-    (idp-dev/idp-dev)))
+  (if (#{"dev" "test"} (:env config))
+    (idp-dev/idp-dev)
+    (keycloak-idp/keycloak-idp (:keycloak config))))
 
 (defn sistema-serve
   "Sistema do host com o SERVIDOR HTTP (caminho `serve` do main). Separado de `novo-sistema` p/ os testes de
@@ -126,7 +129,8 @@
   /saude; W2/W3 enriquecem as rotas (auth/tenancy + rotas-dado de modulo, com o servidor `using` os Repo)."
   [config]
   (assoc (novo-sistema config)
-         ;; IdP por ambiente (idp-para: production/staging = KeycloakIdp real; dev/test = idp-dev).
+         ;; IdP por ambiente (idp-para: dev/test = idp-dev; qualquer outro :env, incl. nao-reconhecido,
+         ;; = KeycloakIdp real — default fail-safe).
          :idp (idp-para config)
          ;; servidor `using` idp + repo-identidade -> a rotas-fn (rotas/montar) monta o interceptor de auth
          ;; sobre as instancias iniciadas. W3: +repo-sessoes p/ a vertical de rotas de sessoes (o fan-out por
