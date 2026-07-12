@@ -194,11 +194,19 @@ Depois `writing-plans` → implementação por TDD → review `ecc` → merge �
   chamadas já existiam. View-models puros + 2 hooks + página, TDD via subagent-driven-development, revisão
   por task + revisão final de branch inteira (0 Critical/Important). Seed de demo nova
   (`seed-demo/secretario`) fechou a verificação ao vivo do happy-path.
-- **C3 — Vereador: em sessão (o cockpit ao vivo).** Reusa o SSE do plenário + **endpoint novo**
-  `POST /sessoes/:id/votacoes/:vid/meu-voto`: `policy.check` **fina** (mandato vigente + presença registrada +
-  votação aberta + modalidade não-secreta-sem-terminal); **`vereador-id` vem do ator, nunca do corpo**
-  (anti-forja); evento append-only; sigilo por construção (kind secreta sem campo `votos`, fail-closed — padrão
-  já provado no placar FE). Confirmar presença do próprio aparelho. **Segurança é o eixo quente** (voto = ato jurídico).
+- **C3 — Vereador: em sessão (o cockpit ao vivo). ✅ MERGED→main (`8e208af`, branch `fe-17-cockpit-votacao`) — fecha o Marco MFE-3.**
+  Reusa o SSE do plenário (mesmo `usePlenario`/`placar-vista` da Mesa, nenhum estado paralelo) + **2 endpoints
+  novos**: `POST /sessoes/:id/presenca/confirmar` (autoatendimento — nova fonte de presença, precedência
+  abaixo de manual/painel) e `POST /sessoes/:id/votacoes/:vid/meu-voto` — 1ª produção real de
+  `motor/politica-dsl` para authz (`policy.check` **fina**: mandato vigente + presença registrada + votação
+  aberta + modalidade não-secreta, `hoje()`/`agora()` em avaliações DSL SEPARADAS); **`vereador-id` vem do
+  ator, nunca do corpo** (anti-forja); sigilo por construção (kind secreta sem campo `votos`, fail-closed —
+  padrão já provado no placar FE). `GET /meu/sessao-atual` (descoberta da sessão viva) + `vereador-id` em
+  `GET /meu/painel` (bootstrap de identidade). 10 tasks TDD, revisão por task + revisão final de branch
+  inteira (5 revisores em paralelo: clojure/security/database + react/security) — 1 CRÍTICO (authz-check e
+  escrita do voto em transações separadas, corrigido com `FOR UPDATE` na mesma tx), 2 MAJOR e 3 HIGH
+  corrigidos com testes de regressão dedicados. 1168 testes backend / 582 frontend verdes; verificado ao
+  vivo no navegador contra o stack real (Postgres+SSE), 2 temas, happy-path completo.
 - **C4 — Assinatura 2 toques.** `assinatura-2-toques` contra `assinador` **stub** + trilha de auditoria real.
   Cripto/biometria real = **fast-follow da Onda D**.
 
