@@ -33,6 +33,7 @@
             [oplenario.legislativo.adapters.out.relator-pendente :as adapters-out-relator]
             [oplenario.legislativo.adapters.out.tramitacao-executiva :as adapters-out-tramitacao-executiva]
             [oplenario.legislativo.adapters.out.votacao :as adapters-out]
+            [oplenario.legislativo.components.assinador-icp :as assinador-icp]
             [oplenario.legislativo.controllers :as controllers])
   (:import (java.time ZoneId)))
 
@@ -194,11 +195,8 @@
                                      (controllers/buscar-parecer-editor repo-leg ente-id id))))))))
 
 (defn- emitir-parecer-handler
-  "POST /legislativo/pareceres/:id/emissao. O TEMPLATE-ID vem do parecer JA' CARREGADO (o adapters/in nao
-  tem outra forma de sabe-lo, review de spec) — mesmo pre-check tambem serve de gate 404. `registro`
-  (RegistroFatos do motor) e' injetado pelo host (mesmo componente de transicionar-parecer!). `relogio`
-  (kernel/tempo, injetavel em teste — review MEDIUM fe-11-parecer) resolve `agora` AQUI, na borda; o
-  adapters/in so' traduz."
+  "POST /legislativo/pareceres/:id/emissao. Onda C4: constroi o assinador STUB inline (mesmo padrao de
+  gerar-artefato-publicacao!) — a assinatura acontece dentro de Repo/emitir-parecer!, nao aqui."
   [repo-leg registro relogio]
   (fn [req]
     (let [ator (:ator req) ente-id (:ente-id ator)
@@ -206,9 +204,39 @@
           agora (tempo/hoje relogio zona-civil)]
       (if-let [{:keys [parecer]} (controllers/buscar-parecer-editor repo-leg ente-id id)]
         (let [m (adapters-in-parecer/emitir->dominio ator id (:template-id parecer) agora (:json-params req))]
-          (controllers/emitir-parecer repo-leg registro ente-id m)
+          (controllers/emitir-parecer repo-leg registro (assinador-icp/assinador-stub) ente-id m)
           (http/json-resposta 200 (adapters-out-parecer/editor->wire
                                      (controllers/buscar-parecer-editor repo-leg ente-id id))))
+        (http/json-resposta 404 {:erro "parecer nao encontrado"})))))
+
+(defn- meu-parecer-editor-handler
+  "GET /meu/pareceres/:id (Onda C4, feature 7.3). Gate grosso 'vereador' na rota; gate de posse
+  (relator-do-parecer?) no controller — 404 sem distinguir 'nao existe' de 'nao e' seu' (mesmo contrato de
+  acusar-ciencia-handler)."
+  [repo-leg resolver-vereador]
+  (fn [req]
+    (let [ator (:ator req)
+          id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [dados (controllers/meu-parecer-editor repo-leg resolver-vereador ator id)]
+        (http/json-resposta 200 (adapters-out-parecer/editor->wire dados))
+        (http/json-resposta 404 {:erro "parecer nao encontrado"})))))
+
+(defn- meu-emitir-parecer-handler
+  "POST /meu/pareceres/:id/emissao (Onda C4) — 'assinar em 2 toques'. Mesmo gate de posse de
+  meu-parecer-editor-handler ANTES de tentar emitir; o TEMPLATE-ID vem do parecer JA' CARREGADO por
+  meu-parecer-editor (mesmo pre-check tambem serve de gate 404 — mesmo padrao de emitir-parecer-handler)."
+  [repo-leg registro relogio resolver-vereador]
+  (fn [req]
+    (let [ator (:ator req)
+          id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          agora (tempo/hoje relogio zona-civil)]
+      (if-let [{:keys [parecer]} (controllers/meu-parecer-editor repo-leg resolver-vereador ator id)]
+        (let [m (adapters-in-parecer/emitir->dominio ator id (:template-id parecer) agora (:json-params req))]
+          (if (controllers/meu-emitir-parecer repo-leg registro (assinador-icp/assinador-stub)
+                                              resolver-vereador ator id m)
+            (http/json-resposta 200 (adapters-out-parecer/editor->wire
+                                       (controllers/meu-parecer-editor repo-leg resolver-vereador ator id)))
+            (http/json-resposta 404 {:erro "parecer nao encontrado"})))
         (http/json-resposta 404 {:erro "parecer nao encontrado"})))))
 
 ;; ========================= Onda B Slice 6: expediente (documentos + protocolo geral) =========================
@@ -450,7 +478,12 @@
        :route-name :legislativo/meu-painel]
       ["/meu/ciencias" :post
        [auth papel-vereador it/corpo-json (acusar-ciencia-handler repo-legislativo resolver-vereador)]
-       :route-name :legislativo/acusar-ciencia]}))
+       :route-name :legislativo/acusar-ciencia]
+      ["/meu/pareceres/:id" :get [auth papel-vereador (meu-parecer-editor-handler repo-legislativo resolver-vereador)]
+       :route-name :legislativo/meu-parecer-editor]
+      ["/meu/pareceres/:id/emissao" :post
+       [auth papel-vereador it/corpo-json (meu-emitir-parecer-handler repo-legislativo registro relogio resolver-vereador)]
+       :route-name :legislativo/meu-emitir-parecer]}))
 
 ;; ========================= FE Onda A1: fila de relatores pendentes (§16.11) =========================
 

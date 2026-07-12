@@ -92,6 +92,15 @@
                                 [:is-not :pc.texto_vigente_versao_id nil]
                                 [:= :p.autor_tipo [:inline "vereador"]] [:= :p.autor_id vereador-id]]}))))
 
+(defn relator-do-parecer?
+  "Onda C4 (feature 7.3) — ownership guard: `vereador-id` e' de fato o relator do parecer `parecer-id`
+  neste ente? Mesmo racional de `parecer-elegivel-para-ciencia?` (legislativo/db/parecer.clj) — guard
+  FINAL antes de qualquer leitura/escrita vereador-scoped sobre um parecer que pode nao ser seu."
+  [tx ente-id vereador-id parecer-id]
+  (some? (jdbc/execute-one! tx
+           (sql/format {:select [:id] :from [:legislativo.pareceres]
+                        :where [:and [:= :ente_id ente-id] [:= :id parecer-id] [:= :relator_id vereador-id]]}))))
+
 (defn acusar-ciencia!
   "Insere a ciencia do vereador `vereador-id` sobre `evento-ref` (append-only puro, Inv.10) — idempotente
   por UNIQUE (ente_id, vereador_id, evento_ref). Race-safe (mesmo padrao de compliance/db/obrigacao.clj):

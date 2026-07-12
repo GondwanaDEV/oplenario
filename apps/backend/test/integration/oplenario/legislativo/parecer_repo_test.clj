@@ -12,7 +12,9 @@
             [oplenario.identidade.relacoes.identidade :as rel-id]
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.kernel.outbox :as outbox]
+            [oplenario.legislativo.components.assinador-icp :as assinador-icp]
             [oplenario.legislativo.components.repositorio :as repo]
+            [oplenario.legislativo.db.parecer-texto-versao :as ptxt]
             [oplenario.migracao :as migracao]
             [oplenario.motor.components.registro-fatos :as rf])
   (:import (java.time LocalDate)))
@@ -85,3 +87,61 @@
           r (repo/transicionar-parecer! *repo* ente *registro* {:parecer-id pcid :template-id tid :gatilho "bloquear" :agora data})]
       (is (false? (:transicionou? r)) "guard 'falso' bloqueia")
       (is (= antes (count (eventos-parecer ente))) "transicao bloqueada NAO emite evento"))))
+
+(deftest emitir-parecer-assina-quando-ha-rascunho
+  (let [ente (random-uuid)
+        tid  (montar-template-parecer! ente)
+        pid  (protocolar! ente)
+        {pcid :id} (repo/iniciar-parecer! *repo* ente {:id (random-uuid) :objeto-tipo "proposicao"
+                                                       :objeto-id pid :comissao-id (random-uuid) :template-id tid})
+        relator (random-uuid)]
+    (repo/nova-versao-parecer! *repo* ente {:id (random-uuid) :parecer-id pcid :origem-versao "redacao"
+                                            :texto-inline "## Parecer\nFavoravel." :created-by relator})
+    (repo/emitir-parecer! *repo* ente *registro*
+      {:parecer-id pcid :template-id tid :gatilho "designar" :voto-relator "favoravel"
+       :lock-version 0 :updated-by relator :agora data :contexto {}
+       :assinador (assinador-icp/assinador-stub)})
+    (let [vigente (ptxt/vigente *ds* ente pcid)]
+      (is (= "STUB-ICP-v0" (:assinatura-algoritmo vigente)) "assinada com o algoritmo stub")
+      (is (some? (:assinatura-b64 vigente)))
+      (is (= relator (:assinado-por vigente)) "assinado-por = o mesmo updated-by, nao um campo novo")
+      (is (some? (:assinado-em vigente))))))
+
+(deftest emitir-parecer-sem-rascunho-nao-reassina-vigente
+  (let [ente (random-uuid)
+        tid  (montar-template-parecer! ente)
+        pid  (protocolar! ente)
+        {pcid :id} (repo/iniciar-parecer! *repo* ente {:id (random-uuid) :objeto-tipo "proposicao"
+                                                       :objeto-id pid :comissao-id (random-uuid) :template-id tid})
+        relator (random-uuid)]
+    (repo/nova-versao-parecer! *repo* ente {:id (random-uuid) :parecer-id pcid :origem-versao "redacao"
+                                            :texto-inline "## Parecer\nFavoravel." :created-by relator})
+    (repo/emitir-parecer! *repo* ente *registro*
+      {:parecer-id pcid :template-id tid :gatilho "designar" :voto-relator "favoravel"
+       :lock-version 0 :updated-by relator :agora data :contexto {}
+       :assinador (assinador-icp/assinador-stub)})
+    (let [vigente-1 (ptxt/vigente *ds* ente pcid)
+          {:keys [lock-version]} (repo/buscar-proposicao *repo* ente pid) ;; no-op leitura p/ nao quebrar se import mudar
+          parecer-atual (:parecer (repo/buscar-parecer-para-editor *repo* ente pcid))]
+      ;; 2a chamada de emitir-parecer! (retry do gatilho "bloquear", guard=falso -> nao transiciona) SEM
+      ;; novo rascunho: o vigente ja existente NAO deve ser reassinado (mesmo assinatura-b64/assinado-em).
+      (repo/emitir-parecer! *repo* ente *registro*
+        {:parecer-id pcid :template-id tid :gatilho "bloquear" :voto-relator "favoravel"
+         :lock-version (:lock-version parecer-atual) :updated-by relator :agora data :contexto {}
+         :assinador (assinador-icp/assinador-stub)})
+      (let [vigente-2 (ptxt/vigente *ds* ente pcid)]
+        (is (= (:assinatura-b64 vigente-1) (:assinatura-b64 vigente-2)) "mesma assinatura — nao reassinou")
+        (is (= (:assinado-em vigente-1) (:assinado-em vigente-2)) "mesmo carimbo — nao regravou")))))
+
+(deftest relator-do-parecer-so-o-relator-designado
+  (let [ente (random-uuid)
+        tid  (montar-template-parecer! ente)
+        pid  (protocolar! ente)
+        relator (random-uuid)
+        outro   (random-uuid)
+        {pcid :id} (repo/iniciar-parecer! *repo* ente {:id (random-uuid) :objeto-tipo "proposicao"
+                                                       :objeto-id pid :comissao-id (random-uuid) :template-id tid
+                                                       :relator-id relator})]
+    (is (true? (repo/relator-do-parecer? *repo* ente relator pcid)))
+    (is (false? (repo/relator-do-parecer? *repo* ente outro pcid)) "outro vereador nao e' o relator")
+    (is (false? (repo/relator-do-parecer? *repo* ente relator (random-uuid))) "parecer inexistente -> false")))

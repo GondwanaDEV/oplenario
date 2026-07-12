@@ -188,13 +188,33 @@
   (repo/nova-versao-parecer! repo-legislativo ente-id m))
 
 (defn emitir-parecer
-  "Onda B Slice 5 — promove o rascunho a vigente (se houver) + registra o voto do relator + tenta
-  transicionar (gatilho recebido, best-effort), 1 tx. `registro` (RegistroFatos do motor, injetado pelo
-  host) e' o mesmo que `transicionar-parecer!` ja recebe. `m` ja' vem coagido pelo adapters/in — que ja'
-  carrega o template-id do parecer (o DIPLOMAT o extrai antes de chamar o adapters/in; este controller nao
-  decide template-id de outra forma)."
-  [repo-legislativo registro ente-id m]
-  (repo/emitir-parecer! repo-legislativo ente-id registro m))
+  "Onda B Slice 5 (+Onda C4: assinatura) — promove o rascunho a vigente (se houver, assinando-o —
+  Repo/emitir-parecer!) + registra o voto do relator + tenta transicionar (gatilho recebido, best-effort),
+  1 tx. `registro` (RegistroFatos do motor, injetado pelo host) e' o mesmo que `transicionar-parecer!` ja
+  recebe. `assinador` (porta AssinadorICP, construida pelo diplomat — mesmo padrao de
+  gerar-artefato-publicacao!) e' repassado pro Repo dentro do mapa de args, nunca guardado aqui."
+  [repo-legislativo registro assinador ente-id m]
+  (repo/emitir-parecer! repo-legislativo ente-id registro (assoc m :assinador assinador)))
+
+(defn meu-parecer-editor
+  "Onda C4 (feature 7.3) — leitura do parecer p/ o vereador-relator (mesmo agregado do editor desktop),
+  GATE DE POSSE: so' devolve se o vereador ATOR e' de fato o relator deste parecer. Anti-forja: vereador-id
+  SEMPRE resolvido do proprio ator (mesmo contrato de meu-painel/acusar-ciencia), nunca de path/corpo. nil
+  (ator sem cadastro vinculado OU nao e' o relator OU parecer inexistente) -> nil — a borda traduz -> 404,
+  sem distinguir motivo (mesmo contrato de parecer-elegivel-para-ciencia?)."
+  [repo-legislativo resolver-vereador ator id]
+  (when-let [vereador-id (resolver-vereador (:ente-id ator) (:identidade-id ator))]
+    (when (repo/relator-do-parecer? repo-legislativo (:ente-id ator) vereador-id id)
+      (repo/buscar-parecer-para-editor repo-legislativo (:ente-id ator) id))))
+
+(defn meu-emitir-parecer
+  "Onda C4 — 'assinar em 2 toques': o vereador-relator emite (=assina) o PROPRIO parecer. MESMO gate de
+  posse de meu-parecer-editor, ANTES de delegar pro Repo (que faz promover+voto+transicao+assinatura) —
+  posse negada NUNCA chega a chamar emitir-parecer! (nil -> a borda traduz -> 404)."
+  [repo-legislativo registro assinador resolver-vereador ator id m]
+  (when-let [vereador-id (resolver-vereador (:ente-id ator) (:identidade-id ator))]
+    (when (repo/relator-do-parecer? repo-legislativo (:ente-id ator) vereador-id id)
+      (repo/emitir-parecer! repo-legislativo (:ente-id ator) registro (assoc m :assinador assinador)))))
 
 (defn encerrar-votacao
   "Encerra a votacao `votacao-id` da sessao `sessao-id` (authz na sessao + amarra). `m` carrega o id

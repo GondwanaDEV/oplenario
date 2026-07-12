@@ -11,6 +11,7 @@
             [oplenario.identidade.relacoes.identidade :as rel-id]
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.kernel.outbox :as outbox]
+            [oplenario.legislativo.components.assinador-icp :as assinador-icp]
             [oplenario.legislativo.components.repositorio :as repo]
             [oplenario.migracao :as migracao]
             [oplenario.motor.components.registro-fatos :as rf])
@@ -99,7 +100,8 @@
                                             :origem-versao "redacao" :formato "markdown"})
     (let [r (repo/emitir-parecer! *repo* ente *registro*
               {:parecer-id pcid :template-id tid :gatilho "emitir" :voto-relator "favoravel"
-               :updated-by nil :agora data :contexto {} :lock-version 0})]
+               :updated-by nil :agora data :contexto {} :lock-version 0
+               :assinador (assinador-icp/assinador-stub)})]
       (is (= "emitido" (:estado r)) "transicionou (guard nil) — estado final devolvido")
       (is (= "favoravel" (:voto-relator r)))
       (is (some? (:texto-vigente-versao-id r)) "o rascunho foi PROMOVIDO a vigente")

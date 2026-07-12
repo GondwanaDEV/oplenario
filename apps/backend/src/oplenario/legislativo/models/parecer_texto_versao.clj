@@ -2,7 +2,8 @@
   "Representacao INTERNA (dominio) da versao de texto do PARECER — Malli (§22.10 models/, eixo F / F3.6b).
   MESMA estrategia do eixo B (models/texto-versao): conteudo append-only hibrido inline/URI, `estado-versao`
   e' a mutacao controlada (promocao). Enums de legislativo.logic (os CHECK da migration 0020 espelham)."
-  (:require [oplenario.legislativo.logic :as logic]))
+  (:require [oplenario.kernel.malli :as km]
+            [oplenario.legislativo.logic :as logic]))
 
 (defn- enum-de [s] (into [:enum] (sort s)))
 
@@ -22,4 +23,11 @@
    [:conteudo-uri {:optional true} [:maybe :string]]
    [:hash-conteudo {:optional true} [:maybe :string]]
    ;; concorrencia: exposto p/ o CAS de promover!
-   [:lock-version :int]])
+   [:lock-version :int]
+   ;; assinatura em 2 toques (Onda C4, feature 7.3) — NULL ate' `promover!` receber `assinatura-algoritmo`
+   ;; preenchido (so' a versao que vira vigente por esse caminho e' assinada; mesmo padrao de
+   ;; models/artefato-publicacao, mas aqui de fato opcional — a maioria das versoes nunca e' assinada).
+   [:assinatura-algoritmo {:optional true} [:maybe :string]]
+   [:assinatura-b64 {:optional true} [:maybe :string]]
+   [:assinado-por {:optional true} [:maybe :uuid]]
+   [:assinado-em {:optional true} [:maybe km/Instante]]])

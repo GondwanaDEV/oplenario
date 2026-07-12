@@ -72,3 +72,26 @@
                :texto-rascunho nil :texto-vigente nil})]
     (is (m/validate wire/ParecerEditorOut out))
     (is (nil? (:objeto out)))))
+
+(deftest editor->wire-inclui-assinatura-do-texto-vigente
+  (let [saida (adapters/editor->wire
+                {:parecer {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id (random-uuid)
+                           :comissao-id (random-uuid) :estado "apresentado" :template-id (random-uuid)
+                           :lock-version 1 :criado-em (java.time.Instant/now)}
+                 :objeto nil :texto-rascunho nil
+                 :texto-vigente {:texto-inline "## Relatório\n\nX\n\n## Análise\n\nY" :numero-versao 1
+                                 :assinatura-algoritmo "STUB-ICP-v0" :assinado-por (random-uuid)
+                                 :assinado-em (java.time.Instant/now)}})]
+    (is (= "STUB-ICP-v0" (:assinatura-algoritmo saida)))
+    (is (some? (:assinado-por saida)))
+    (is (some? (:assinado-em saida)))))
+
+(deftest editor->wire-assinatura-nil-quando-fonte-e-rascunho
+  (let [saida (adapters/editor->wire
+                {:parecer {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id (random-uuid)
+                           :comissao-id (random-uuid) :estado "com_relator" :template-id (random-uuid)
+                           :lock-version 1 :criado-em (java.time.Instant/now)}
+                 :objeto nil
+                 :texto-rascunho {:texto-inline "## Relatório\n\nX" :numero-versao 2}
+                 :texto-vigente nil})]
+    (is (nil? (:assinatura-algoritmo saida)) "rascunho em edicao nunca esta assinado")))
