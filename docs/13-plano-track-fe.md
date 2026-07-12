@@ -207,8 +207,17 @@ Depois `writing-plans` → implementação por TDD → review `ecc` → merge �
   escrita do voto em transações separadas, corrigido com `FOR UPDATE` na mesma tx), 2 MAJOR e 3 HIGH
   corrigidos com testes de regressão dedicados. 1168 testes backend / 582 frontend verdes; verificado ao
   vivo no navegador contra o stack real (Postgres+SSE), 2 temas, happy-path completo.
-- **C4 — Assinatura 2 toques.** `assinatura-2-toques` contra `assinador` **stub** + trilha de auditoria real.
-  Cripto/biometria real = **fast-follow da Onda D**.
+- **C4 — Assinatura 2 toques. ✅ MERGED→main (`9ced861`, 12/07/2026; branch `fe-18-assinatura-parecer`
+  fechada) — FECHA O MARCO MFE-3 POR COMPLETO.** `assinatura-2-toques` contra `assinador` **stub**
+  (`STUB-ICP-v0`); "assinar = emitir" (sem estado novo) — `Repo/emitir-parecer!` assina ao promover
+  rascunho, exposto via as leituras já existentes (`ParecerEditorOut`). Rota nova `/meu/pareceres/:id`
+  (GET/emissão), gate `papel-vereador` + guard de posse `relator-do-parecer?`. 13 tasks TDD + revisão por
+  task + revisão final de branco inteira (Opus): "Ready to merge: Yes", 0 Critical. 2 CRÍTICOS reais
+  achados e corrigidos estruturalmente (hook travando com token nulo; página podia assinar com voto
+  fabricado — fechado com 3º estado `"sem-voto"` no view-model). Verificado ao vivo no browser (2 temas)
+  contra o stack real, incl. confirmação server-side da assinatura. Detalhe completo em
+  [[oplenario-fe-execucao]]. Cripto/biometria real = **fast-follow da Onda D** (já marcado `[GAP]` no
+  código, na cópia da tela de confirmação).
 
 ### 11.4 Verificação e marco
 
