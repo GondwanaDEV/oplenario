@@ -14,7 +14,9 @@
         org.clojure/tools.logging               {:mvn/version "1.3.0"}   ; fachada de logging (-> SLF4J -> logback)
         ch.qos.logback/logback-classic          {:mvn/version "1.5.6"}   ; backend SLF4J — logging real (Inv.7); mata o warning NOP
         io.minio/minio                          {:mvn/version "8.5.12"}  ; client S3 (object storage S3-compativel, §22.9)
-        com.taoensso/carmine                    {:mvn/version "3.4.1"}} ; client Redis-protocol (Valkey)
+        com.taoensso/carmine                    {:mvn/version "3.4.1"}   ; client Redis-protocol (Valkey)
+        com.auth0/java-jwt                      {:mvn/version "4.4.0"}   ; verificacao JWT RS256 (Onda D Slice 1)
+        com.auth0/jwks-rsa                       {:mvn/version "0.22.1"}} ; JWKS cache+rate-limit por-issuer
  :aliases
  {:dev  {:extra-paths ["dev" "test"]}
   ;; os dirs de suite SAO raizes de classpath (ns oplenario.* sob test/unit, nao test/unit.oplenario.*);

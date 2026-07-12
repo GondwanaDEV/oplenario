@@ -27,4 +27,11 @@
      (get env "MINIO_ACCESS_KEY") (assoc-in [:objeto-store :access-key] (get env "MINIO_ACCESS_KEY"))
      (get env "MINIO_SECRET_KEY") (assoc-in [:objeto-store :secret-key] (get env "MINIO_SECRET_KEY"))
      (get env "MINIO_BUCKET")     (assoc-in [:objeto-store :bucket]     (get env "MINIO_BUCKET"))
-     (get env "HTTP_PORT")        (assoc-in [:http :port]             (Integer/parseInt (get env "HTTP_PORT"))))))
+     (get env "HTTP_PORT")        (assoc-in [:http :port]             (Integer/parseInt (get env "HTTP_PORT")))
+     (get env "KEYCLOAK_BASE_URL")        (assoc-in [:keycloak :base-url]        (get env "KEYCLOAK_BASE_URL"))
+     (get env "KEYCLOAK_REALM_PREFIXO")   (assoc-in [:keycloak :realm-prefixo]   (get env "KEYCLOAK_REALM_PREFIXO"))
+     (get env "KEYCLOAK_AUDIENCIA")       (assoc-in [:keycloak :audiencia]       (get env "KEYCLOAK_AUDIENCIA"))
+     (get env "KEYCLOAK_ADMIN_USUARIO")   (assoc-in [:keycloak :admin-usuario]   (get env "KEYCLOAK_ADMIN_USUARIO"))
+     (get env "KEYCLOAK_ADMIN_SENHA")     (assoc-in [:keycloak :admin-senha]     (get env "KEYCLOAK_ADMIN_SENHA"))
+     (get env "KEYCLOAK_JWKS_CACHE_TTL_S") (assoc-in [:keycloak :jwks-cache-ttl-s]
+                                                      (Integer/parseInt (get env "KEYCLOAK_JWKS_CACHE_TTL_S"))))))
