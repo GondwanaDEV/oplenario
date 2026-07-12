@@ -101,6 +101,19 @@
             (is (nil? (:assinatura-algoritmo r)))
             (is (nil? (:assinado-em r)))))))))
 
+(deftest versao-assinada-bate-o-model
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [pcid (novo-parecer! tx ente)
+              v1   (nova-versao! tx ente pcid {})]
+          (ptxt/promover! tx {:ente-id ente :parecer-id pcid :versao-id (:id v1) :updated-by nil :lock-version 0
+                              :assinatura-algoritmo "STUB-ICP-v0" :assinatura-b64 "YWJj"
+                              :assinado-por (random-uuid)})
+          (let [r (ptxt/buscar tx ente (:id v1))]
+            (is (m/validate mod-txt/ParecerTextoVersao r)
+                "versao assinada bate o model interno (:closed true recusaria campo desconhecido)")))))))
+
 (deftest promover-rejeita-versao-de-outro-parecer
   ;; review F3.6b clojure-MENOR (regressão do eixo B MAJOR-1): o parecer_id no WHERE do CAS impede
   ;; promover uma versao de OUTRO parecer via parecer-id diferente.
