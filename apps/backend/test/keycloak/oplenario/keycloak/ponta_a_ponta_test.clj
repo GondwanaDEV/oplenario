@@ -91,23 +91,39 @@
                   (.build))
             (HttpResponse$BodyHandlers/ofString)))
 
+;; --- limpeza: o teste provisiona um realm real no Keycloak compartilhado de dev; sem isto
+;; cada corrida deixa realm+client+user acumulando ate' esgotar o container (ja' aconteceu).
+;; Chamada crua na admin-API (nao existe -- e nao deve existir -- teardown no protocolo IdentityProvider).
+(defn- apagar-realm-teste! [^HttpClient http token realm]
+  (.send http (-> (HttpRequest/newBuilder)
+                  (.uri (URI/create (str base-url "/admin/realms/" realm)))
+                  (.header "Authorization" (str "Bearer " token))
+                  (.DELETE)
+                  (.build))
+            (HttpResponse$BodyHandlers/ofString)))
+
 (deftest realm-provisionado-token-real-vira-ator
   (let [ente (random-uuid)
         iid (random-uuid)
         ip (component/start (kc/keycloak-idp kc-config))
-        {:keys [realm]} (idp/provisionar-realm! ip ente)
-        {:keys [keycloak-user-id]} (idp/criar-usuario! ip ente {:identidade-id iid :nome "Vereadora E2E" :email "e2e@example.com"})
-        http (http!)
-        admin-tok (admin-token-teste! http)]
-    (habilitar-direct-grant-para-teste! http admin-tok realm)
-    (setar-senha-teste! http admin-tok realm keycloak-user-id "senha-teste-123")
-    (seed-vinculo! ente iid ["vereador"])
-    (let [token (minerar-token-teste! http realm (str iid) "senha-teste-123")
-          claims (idp/verificar-token ip token)
-          ator (auth/resolver-sessao (repo) claims)]
-      (is (some? claims) "o token real do realm provisionado verifica com sucesso")
-      (is (= iid (:identidade-id claims)))
-      (is (= ente (:ente-id claims)))
-      (is (= iid (:identidade-id ator)) "resolver-sessao produz um ator a partir das claims verificadas")
-      (is (= "vereador" (:tipo-vinculo ator))))
-    (component/stop ip)))
+        {:keys [realm]} (idp/provisionar-realm! ip ente)]
+    (try
+      (let [{:keys [keycloak-user-id]} (idp/criar-usuario! ip ente {:identidade-id iid :nome "Vereadora E2E" :email "e2e@example.com"})
+            http (http!)
+            admin-tok (admin-token-teste! http)]
+        (habilitar-direct-grant-para-teste! http admin-tok realm)
+        (setar-senha-teste! http admin-tok realm keycloak-user-id "senha-teste-123")
+        (seed-vinculo! ente iid ["vereador"])
+        (let [token (minerar-token-teste! http realm (str iid) "senha-teste-123")
+              claims (idp/verificar-token ip token)
+              ator (auth/resolver-sessao (repo) claims)]
+          (is (some? claims) "o token real do realm provisionado verifica com sucesso")
+          (is (= iid (:identidade-id claims)))
+          (is (= ente (:ente-id claims)))
+          (is (= iid (:identidade-id ator)) "resolver-sessao produz um ator a partir das claims verificadas")
+          (is (= "vereador" (:tipo-vinculo ator)))))
+      (finally
+        (let [http (http!)
+              admin-tok (admin-token-teste! http)]
+          (apagar-realm-teste! http admin-tok realm))
+        (component/stop ip)))))
