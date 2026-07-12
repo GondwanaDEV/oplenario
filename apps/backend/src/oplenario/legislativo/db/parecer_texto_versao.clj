@@ -12,7 +12,8 @@
 
 (def ^:private colunas
   [:id :ente_id :parecer_id :numero_versao :origem_versao :origem_ref :origem_tipo :estado_versao
-   :formato :texto_inline :conteudo_uri :hash_conteudo :lock_version])
+   :formato :texto_inline :conteudo_uri :hash_conteudo :lock_version
+   :assinatura_algoritmo :assinatura_b64 :assinado_por :assinado_em])
 
 (defn nova-versao!
   "Insere uma versao NOVA do texto do parecer em 'rascunho'. numero_versao = proximo ordinal local do
@@ -38,8 +39,12 @@
   "Promove `versao-id` a 'vigente' (ato auditado): supersede a vigente anterior do parecer, marca a alvo
   como vigente (CAS por lock-version, com parecer_id no WHERE p/ a versao TER de pertencer a este parecer)
   e reaponta pareceres.texto_vigente_versao_id — na MESMA tx. Lanca em conflito de versao OU versao
-  inexistente neste parecer OU parecer filtrado."
-  [tx {:keys [ente-id parecer-id versao-id updated-by lock-version]}]
+  inexistente neste parecer OU parecer filtrado. Onda C4: quando `assinatura-algoritmo` vem preenchido
+  (o caller ja assinou os bytes do texto-inline — Repo/emitir-parecer!), grava a assinatura NA MESMA
+  UPDATE que marca vigente (uma escrita, nao duas); `assinado-em` e' sempre `now()` do banco, nunca vem
+  do app (mesmo padrao de artefato_publicacao)."
+  [tx {:keys [ente-id parecer-id versao-id updated-by lock-version
+              assinatura-algoritmo assinatura-b64 assinado-por]}]
   ;; guard de dominio (review F3.6b clojure-MAJOR): parecer em estado terminal tem o texto CONGELADO — o
   ;; reaponte do pointer (passo 3, UPDATE em pareceres) seria barrado pelo trg_pareceres_imut_estado com
   ;; uma PSQLException opaca. Antecipa com erro inspecionavel (e' o mesmo congelamento, so legivel).
@@ -58,8 +63,13 @@
                          [:= :estado_versao "vigente"] [:<> :id versao-id]]}))
   (let [r (jdbc/execute-one! tx
             (sql/format {:update :legislativo.parecer_texto_versao
-                         :set {:estado_versao "vigente" :updated_by updated-by :atualizado_em [:now]
-                               :lock_version [:+ :lock_version 1]}
+                         :set (cond-> {:estado_versao "vigente" :updated_by updated-by :atualizado_em [:now]
+                                       :lock_version [:+ :lock_version 1]}
+                                assinatura-algoritmo
+                                (assoc :assinatura_algoritmo assinatura-algoritmo
+                                       :assinatura_b64 assinatura-b64
+                                       :assinado_por assinado-por
+                                       :assinado_em [:now]))
                          :where [:and [:= :ente_id ente-id] [:= :parecer_id parecer-id]
                                  [:= :id versao-id] [:= :lock_version lock-version]]}))]
     (when (zero? (:next.jdbc/update-count r 0))
