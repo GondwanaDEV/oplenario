@@ -9,22 +9,24 @@
 // esse carry fechar, então o card "próxima sessão" mostra o estado honesto "sem sessão agendada" em vez de
 // fingir dado que não existe.
 
+import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { useMeuPainel } from "@/lib/use-meu-painel";
 import { useAcusarCiencia } from "@/lib/use-acusar-ciencia";
 import { derivarHome, type HomeVereadorVista } from "@/lib/meu-painel-vista";
 import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
-import type { CienciaPendenteOut, ProposicaoResumoMeuPainelOut } from "@/lib/contrato-legislativo.gen";
+import { comToken } from "@/lib/nav";
+import type {
+  CienciaPendenteOut,
+  ParecerResumoMeuPainelOut,
+  ProposicaoResumoMeuPainelOut,
+} from "@/lib/contrato-legislativo.gen";
 import "./vereador-home.css";
 
 export default function PaginaHomeVereador() {
   const { token } = useAuth();
   const { dados, estado, recarregar } = useMeuPainel(token);
   const { acusar, estado: estadoCiencia, erro: erroCiencia } = useAcusarCiencia(token);
-  // `vista.meusPareceres` (Task 6) é lido pelo view-model e testado, mas esta tela NAO renderiza uma seção
-  // própria para ele (review MEDIUM react, achado pós-merge) — `vereador-app.html` (fonte do design) também
-  // não mostra "meus pareceres" no estado fora-de-sessão; registrado como CARRY explícito no plano da fatia,
-  // não fingido como coberto.
   const vista = derivarHome(dados, []);
 
   if (estado === "erro") {
@@ -100,6 +102,15 @@ export default function PaginaHomeVereador() {
         </section>
       )}
 
+      {vista.meusPareceres.aguardando.length > 0 && (
+        <section aria-label="Meus pareceres">
+          <h2 className="secao-tit">Meus pareceres</h2>
+          {vista.meusPareceres.aguardando.map((p) => (
+            <CartaoParecer key={p.id} parecer={p} token={token} />
+          ))}
+        </section>
+      )}
+
       <h2 className="secao-tit">Suas proposições</h2>
       {vista.minhasProposicoes.length === 0 ? (
         <p className="vazio">Nenhuma proposição sua ainda.</p>
@@ -169,6 +180,22 @@ function CartaoCiencia({
         <button className="btn btn-primaria btn-mini" type="button" onClick={onDarCiencia} disabled={enviando}>
           Dar ciência
         </button>
+      </div>
+    </article>
+  );
+}
+
+function CartaoParecer({ parecer, token }: { parecer: ParecerResumoMeuPainelOut; token: string | null }) {
+  return (
+    <article className="card">
+      <h3>Parecer em {parecer.estado.replaceAll("_", " ")}</h3>
+      <div className="card-acao">
+        {/* Rota REAL (Task 11): o grupo (vereador) não entra na URL -> /parecer/:id/assinar. `comToken`
+            preserva o ?token= de dev entre navegações internas — mesmo padrão do tabbar (layout.tsx) e do
+            router.push de volta em parecer/[id]/assinar/page.tsx; sem ele o clique perderia o token dev. */}
+        <Link className="btn btn-primaria btn-mini" href={comToken(`/parecer/${parecer.id}/assinar`, token)}>
+          Revisar e assinar
+        </Link>
       </div>
     </article>
   );

@@ -88,6 +88,31 @@ describe("PaginaHomeVereador", () => {
     await waitFor(() => expect(screen.getByText("Não foi possível carregar sua home")).toBeTruthy());
   });
 
+  it("mostra a seção Meus pareceres com link para a página de assinatura", async () => {
+    const painelComParecer = {
+      ...painelFake,
+      pareceres: [
+        {
+          id: "p1", "objeto-tipo": "proposicao", "objeto-id": "o1", "comissao-id": "c1",
+          estado: "com_relator", "voto-relator": null, "criado-em": "2026-07-11T00:00:00Z",
+        },
+      ],
+    };
+    global.fetch = vi.fn(async () => ({ ok: true, json: async () => painelComParecer }) as Response) as unknown as typeof fetch;
+    renderComProviders("tok-de-teste");
+
+    await waitFor(() => expect(screen.getByText(/Meus pareceres/i)).toBeTruthy());
+    // jest-dom não está instalado neste repo (mesmo padrão dos outros testes deste arquivo) — assert DOM cru.
+    // Rota REAL confirmada em Task 11 (apps/frontend/src/app/(vereador)/parecer/[id]/assinar/page.tsx): o
+    // grupo de rota `(vereador)` não entra na URL, então é `/parecer/:id/assinar`, NUNCA
+    // `/vereador/parecer/:id/assinar`. `comToken` preserva o `?token=` de dev entre navegações internas —
+    // MESMO padrão de layout.tsx (tabbar) e do `router.push` de volta em assinar/page.tsx; sem isso o link
+    // perderia o token dev no clique e a página de assinatura cairia no guard de auth.
+    expect((screen.getByRole("link", { name: /assinar/i }) as HTMLAnchorElement).getAttribute("href")).toBe(
+      "/parecer/p1/assinar?token=tok-de-teste"
+    );
+  });
+
   it("estado pronto tem um <h1> (review MAJOR react — a11y: sem isso a árvore de headings pula pro h2)", async () => {
     global.fetch = vi.fn(async () => ({ ok: true, json: async () => painelFake }) as Response) as unknown as typeof fetch;
     const { container } = renderComProviders("tok-de-teste");
