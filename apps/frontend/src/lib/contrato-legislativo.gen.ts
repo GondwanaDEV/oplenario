@@ -105,6 +105,9 @@ export interface ParecerEditorOut {
   analise?: string | null;
   textoEstado: "rascunho" | "vazio" | "vigente";
   textoNumeroVersao?: number | null;
+  assinaturaAlgoritmo?: string | null;
+  assinadoPor?: string | null;
+  assinadoEm?: string | null;
 }
 
 export interface DocumentoOut {
