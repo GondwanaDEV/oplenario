@@ -132,3 +132,16 @@
       (let [vigente-2 (ptxt/vigente *ds* ente pcid)]
         (is (= (:assinatura-b64 vigente-1) (:assinatura-b64 vigente-2)) "mesma assinatura — nao reassinou")
         (is (= (:assinado-em vigente-1) (:assinado-em vigente-2)) "mesmo carimbo — nao regravou")))))
+
+(deftest relator-do-parecer-so-o-relator-designado
+  (let [ente (random-uuid)
+        tid  (montar-template-parecer! ente)
+        pid  (protocolar! ente)
+        relator (random-uuid)
+        outro   (random-uuid)
+        {pcid :id} (repo/iniciar-parecer! *repo* ente {:id (random-uuid) :objeto-tipo "proposicao"
+                                                       :objeto-id pid :comissao-id (random-uuid) :template-id tid
+                                                       :relator-id relator})]
+    (is (true? (repo/relator-do-parecer? *repo* ente relator pcid)))
+    (is (false? (repo/relator-do-parecer? *repo* ente outro pcid)) "outro vereador nao e' o relator")
+    (is (false? (repo/relator-do-parecer? *repo* ente relator (random-uuid))) "parecer inexistente -> false")))

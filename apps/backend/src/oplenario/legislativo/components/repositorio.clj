@@ -196,7 +196,9 @@
   (parecer-elegivel-para-ciencia? [this ente-id vereador-id evento-ref]
     "Review CRITICO (clojure+database+security) — guard de `acusar-ciencia!`: `evento-ref` e' de fato um
      parecer publicado sobre proposicao do vereador `vereador-id` neste ente? Sem isso, `acusar-ciencia!`
-     aceitava qualquer UUID sintaticamente valido na prova append-only (Inv.10)."))
+     aceitava qualquer UUID sintaticamente valido na prova append-only (Inv.10).")
+  (relator-do-parecer? [this ente-id vereador-id parecer-id]
+    "Onda C4 — o vereador `vereador-id` e' o relator do parecer `parecer-id` neste ente?"))
 
 ;; ---------- geracao do artefato de publicacao oficial ('DO-lite', doc-mestre L287, F6c Slice 4a):
 ;;            resolve a norma publicada + o texto legal -> renderiza (puro) -> serializa+assina (ports STUB) ->
@@ -710,7 +712,9 @@
          :ciencias (meu-painel-db/ciencias-pendentes tx ente-id vereador-id)})))
   (acusar-ciencia! [this ente-id m] (transacao this ente-id #(meu-painel-db/acusar-ciencia! % (assoc m :ente-id ente-id))))
   (parecer-elegivel-para-ciencia? [this ente-id vereador-id evento-ref]
-    (transacao this ente-id #(meu-painel-db/parecer-elegivel-para-ciencia? % ente-id vereador-id evento-ref))))
+    (transacao this ente-id #(meu-painel-db/parecer-elegivel-para-ciencia? % ente-id vereador-id evento-ref)))
+  (relator-do-parecer? [this ente-id vereador-id parecer-id]
+    (transacao this ente-id #(meu-painel-db/relator-do-parecer? % ente-id vereador-id parecer-id))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."
