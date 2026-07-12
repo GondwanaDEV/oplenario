@@ -58,4 +58,4 @@ jobs:
         env:
           DATABASE_URL: jdbc:postgresql://localhost:5432/oplenario
           MINIO_ENDPOINT: http://localhost:9000
-        run: clojure -M:test --skip :e2e
+        run: clojure -M:test --skip :e2e --skip :keycloak

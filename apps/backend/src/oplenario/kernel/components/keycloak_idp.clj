@@ -10,12 +10,14 @@
   java.net.http tambem — hint em cada passo deixaria ilegivel (mesmo racional de objeto_store.clj)."
   (:require [clojure.string :as str]
             [com.stuartsierra.component :as component]
+            [jsonista.core :as json]
             [oplenario.kernel.components.idp :as idp])
   (:import (com.auth0.jwk JwkProviderBuilder JwkException SigningKeyNotFoundException NetworkException RateLimitReachedException)
            (com.auth0.jwt JWT)
            (com.auth0.jwt.algorithms Algorithm)
            (com.auth0.jwt.exceptions JWTVerificationException JWTDecodeException)
-           (java.net.http HttpClient)
+           (java.net URI URLEncoder)
+           (java.net.http HttpClient HttpRequest HttpRequest$BodyPublishers HttpResponse HttpResponse$BodyHandlers)
            (java.security.interfaces RSAPublicKey)
            (java.time Duration)
            (java.util.concurrent TimeUnit)
@@ -133,6 +135,159 @@
     (catch ClassCastException _ nil)))
 
 ;; ---------------------------------------------------------------------------------------------
+;; Admin API (provisionamento) — java.net.http + jsonista, sem lib HTTP nova.
+;; ---------------------------------------------------------------------------------------------
+
+(defn- body->json [m] (json/write-value-as-string m))
+(defn- json->body [s] (when (seq s) (json/read-value s json/keyword-keys-object-mapper)))
+
+(defn- admin-token!
+  "Token admin via ROPC no realm master, client PUBLICO builtin `admin-cli` (KEYCLOAK_ADMIN/_PASSWORD do
+  docker-compose dev — nao existe client confidential dedicado, confirmado contra o Keycloak 26 real).
+  SEM CACHE nesta fatia: provisionamento e' operacao administrativa rara, nao hot-path (YAGNI; cache de
+  token admin fica carry se o volume justificar)."
+  [{:keys [base-url admin-usuario admin-senha]} ^HttpClient http-client]
+  (let [corpo (str "grant_type=password&client_id=admin-cli"
+                   "&username=" (URLEncoder/encode ^String admin-usuario "UTF-8")
+                   "&password=" (URLEncoder/encode ^String admin-senha "UTF-8"))
+        req (-> (HttpRequest/newBuilder)
+                (.uri (URI/create (str base-url "/realms/master/protocol/openid-connect/token")))
+                (.header "Content-Type" "application/x-www-form-urlencoded")
+                (.POST (HttpRequest$BodyPublishers/ofString corpo))
+                (.build))
+        resp (.send http-client req (HttpResponse$BodyHandlers/ofString))]
+    (if (= 200 (.statusCode resp))
+      (:access_token (json->body (.body resp)))
+      (throw (ex-info "keycloak-idp: falha ao obter token admin (infra)"
+                       {:status (.statusCode resp) :corpo (.body resp)})))))
+
+(defn- admin-req!
+  "Requisicao autenticada ao admin-API. `metodo` = :get/:post/:put/:delete. Devolve {:status :corpo :headers}."
+  [^HttpClient http-client token metodo caminho corpo-map base-url]
+  (let [builder (-> (HttpRequest/newBuilder)
+                    (.uri (URI/create (str base-url caminho)))
+                    (.header "Authorization" (str "Bearer " token))
+                    (.header "Content-Type" "application/json"))
+        req (case metodo
+              :get    (.GET builder)
+              :post   (.POST builder (HttpRequest$BodyPublishers/ofString (body->json corpo-map)))
+              :put    (.PUT builder (HttpRequest$BodyPublishers/ofString (body->json corpo-map)))
+              :delete (.DELETE builder))
+        resp (.send http-client (.build req) (HttpResponse$BodyHandlers/ofString))]
+    {:status (.statusCode resp) :corpo (json->body (.body resp)) :headers (.headers resp)}))
+
+(defn- declarar-atributo-identidade!
+  "GET o User Profile atual do realm, ACRESCENTA `identidade-id` (se ainda ausente) e PUT de volta. NUNCA
+  reescreve do zero — Keycloak 26 tem 'unmanaged attributes' desligado por default em realms novos: um
+  atributo nao-declarado e' SILENCIOSAMENTE DESCARTADO na escrita do usuario (achado real, verificado
+  contra o Keycloak 26 vivo — sem isto, criar-usuario! perderia o identidade-id sem erro nenhum)."
+  [http-client token base-url realm]
+  (let [{:keys [status corpo]} (admin-req! http-client token :get (str "/admin/realms/" realm "/users/profile") nil base-url)]
+    (when-not (= 200 status) (throw (ex-info "keycloak-idp: falha ao ler o user-profile (infra)" {:status status})))
+    (when-not (some #(= "identidade-id" (:name %)) (:attributes corpo))
+      (let [novo (update corpo :attributes conj
+                         {:name "identidade-id" :displayName "Identidade (identidade-id)"
+                          :multivalued false
+                          :permissions {:view ["admin"] :edit ["admin"]}
+                          :validations {}})
+            {:keys [status corpo]} (admin-req! http-client token :put (str "/admin/realms/" realm "/users/profile") novo base-url)]
+        (when-not (= 200 status)
+          (throw (ex-info "keycloak-idp: falha ao declarar o atributo identidade-id (infra)" {:status status :corpo corpo})))))))
+
+(defn- provisionar-realm-impl
+  [{:keys [config http-client]} ente-id]
+  (let [{:keys [base-url realm-prefixo audiencia]} config
+        realm (str realm-prefixo ente-id)
+        token (admin-token! config http-client)
+        {:keys [status]} (admin-req! http-client token :get (str "/admin/realms/" realm) nil base-url)]
+    (when (= 404 status)
+      (let [{:keys [status corpo]} (admin-req! http-client token :post "/admin/realms"
+                                               {:realm realm :enabled true} base-url)]
+        (when-not (= 201 status)
+          (throw (ex-info "keycloak-idp: falha ao criar o realm (infra)" {:status status :corpo corpo})))))
+    (declarar-atributo-identidade! http-client token base-url realm)
+    (let [{:keys [status corpo]} (admin-req! http-client token :get
+                                             (str "/admin/realms/" realm "/clients?clientId=" audiencia) nil base-url)
+          existe-client? (and (= 200 status) (seq corpo))]
+      (when-not existe-client?
+        (let [{:keys [status corpo]}
+              (admin-req! http-client token :post (str "/admin/realms/" realm "/clients")
+                          {:clientId audiencia :publicClient true :standardFlowEnabled true
+                           :directAccessGrantsEnabled false
+                           :protocolMappers
+                           [{:name "identidade-id" :protocol "openid-connect"
+                             :protocolMapper "oidc-usermodel-attribute-mapper"
+                             :config {"user.attribute" "identidade-id" "claim.name" "identidade-id"
+                                      "jsonType.label" "String" "access.token.claim" "true"}}
+                            {:name "audiencia-propria" :protocol "openid-connect"
+                             :protocolMapper "oidc-audience-mapper"
+                             :config {"included.client.audience" audiencia "access.token.claim" "true"}}]}
+                          base-url)]
+          (when-not (= 201 status)
+            (throw (ex-info "keycloak-idp: falha ao criar o client (infra)" {:status status :corpo corpo}))))))
+    {:realm realm}))
+
+(defn- nome->first-last
+  "Deriva firstName/lastName do `nome` (Keycloak 26 EXIGE os 2 no User Profile default p/ role 'user' —
+  achado real: sem eles, o login falha com 'Account is not fully set up'). Nome de 1 palavra so' repete
+  como sobrenome (nao ha' um 2o campo pra inventar)."
+  [nome]
+  (let [partes (str/split (str/trim nome) #"\s+" 2)]
+    (if (= 2 (count partes)) partes [(first partes) (first partes)])))
+
+(defn- criar-usuario-impl
+  [{:keys [config http-client]} ente-id {:keys [identidade-id nome email]}]
+  (let [{:keys [base-url realm-prefixo]} config
+        realm (str realm-prefixo ente-id)
+        token (admin-token! config http-client)
+        [primeiro ultimo] (nome->first-last nome)
+        {:keys [status corpo headers]}
+        (admin-req! http-client token :post (str "/admin/realms/" realm "/users")
+                    {:username (str identidade-id)
+                     :enabled true
+                     ;; emailVerified=true e' [GAP] pre-prod: o bootstrap real e' e-mail de uso unico
+                     ;; (carry F6, sem SMTP ainda) — marcar verificado aqui evita travar o 1o login em
+                     ;; dev/integracao enquanto esse fluxo nao existe.
+                     :emailVerified true
+                     :email email
+                     :firstName primeiro
+                     :lastName ultimo
+                     :attributes {:identidade-id [(str identidade-id)]}}
+                    base-url)]
+    (when-not (= 201 status)
+      (throw (ex-info "keycloak-idp: falha ao criar usuario (infra)" {:status status :corpo corpo})))
+    (let [location (.firstValue headers "location")]
+      {:keycloak-user-id (when (.isPresent location) (last (str/split (.get location) #"/")))})))
+
+(defn- buscar-usuario-por-identidade
+  [http-client token base-url realm identidade-id]
+  (let [{:keys [status corpo]}
+        (admin-req! http-client token :get
+                    (str "/admin/realms/" realm "/users?q=identidade-id:" identidade-id) nil base-url)]
+    (when-not (= 200 status) (throw (ex-info "keycloak-idp: falha ao buscar usuario (infra)" {:status status})))
+    (first corpo)))
+
+(def ^:private tipos-credencial-mfa #{"otp" "webauthn" "webauthn-passwordless"})
+
+(defn- resetar-mfa-impl
+  [{:keys [config http-client]} ente-id identidade-id]
+  (let [{:keys [base-url realm-prefixo]} config
+        realm (str realm-prefixo ente-id)
+        token (admin-token! config http-client)]
+    (if-let [{kc-id :id} (buscar-usuario-por-identidade http-client token base-url realm identidade-id)]
+      (let [{:keys [status corpo]}
+            (admin-req! http-client token :get (str "/admin/realms/" realm "/users/" kc-id "/credentials") nil base-url)]
+        (when-not (= 200 status) (throw (ex-info "keycloak-idp: falha ao listar credenciais (infra)" {:status status})))
+        (doseq [{:keys [id type]} corpo :when (tipos-credencial-mfa type)]
+          (let [{:keys [status]}
+                (admin-req! http-client token :delete
+                            (str "/admin/realms/" realm "/users/" kc-id "/credentials/" id) nil base-url)]
+            (when-not (= 204 status)
+              (throw (ex-info "keycloak-idp: falha ao remover credencial MFA (infra)" {:status status :credencial-id id})))))
+        {:identidade-id identidade-id :removidas (count (filter (comp tipos-credencial-mfa :type) corpo))})
+      (throw (ex-info "keycloak-idp: identidade sem usuario neste realm" {:ente-id ente-id :identidade-id identidade-id})))))
+
+;; ---------------------------------------------------------------------------------------------
 ;; Component
 ;; ---------------------------------------------------------------------------------------------
 
@@ -147,9 +302,9 @@
 
   idp/IdentityProvider
   (verificar-token [this token] (verificar-token* this token))
-  (provisionar-realm! [_ _ente-id] (throw (ex-info "provisionar-realm!: nao implementado nesta task" {})))
-  (criar-usuario! [_ _ente-id _usuario] (throw (ex-info "criar-usuario!: nao implementado nesta task" {})))
-  (resetar-mfa! [_ _ente-id _identidade-id] (throw (ex-info "resetar-mfa!: nao implementado nesta task" {}))))
+  (provisionar-realm! [this ente-id] (provisionar-realm-impl this ente-id))
+  (criar-usuario! [this ente-id usuario] (criar-usuario-impl this ente-id usuario))
+  (resetar-mfa! [this ente-id identidade-id] (resetar-mfa-impl this ente-id identidade-id)))
 
 (defn keycloak-idp
   "Cria o Component KeycloakIdp (NAO-iniciado — chame component/start). `config` = o mapa `:keycloak` do

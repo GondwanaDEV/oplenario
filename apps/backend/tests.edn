@@ -1,4 +1,5 @@
 #kaocha/v1
 {:tests [{:id :unit        :test-paths ["test/unit"]}
          {:id :integration :test-paths ["test/integration"]}
-         {:id :e2e         :test-paths ["test/e2e"]}]}
+         {:id :e2e         :test-paths ["test/e2e"]}
+         {:id :keycloak    :test-paths ["test/keycloak"]}]}
