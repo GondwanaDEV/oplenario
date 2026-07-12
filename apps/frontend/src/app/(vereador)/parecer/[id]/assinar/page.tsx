@@ -57,9 +57,14 @@ export default function PaginaAssinarParecer() {
   const situacao = deriveEstadoAssinatura(dados);
 
   async function confirmar() {
-    if (!dados) return;
+    // FIX (review CRÍTICO): NUNCA fabricar um voto ausente. `situacao === "pronto-pra-revisar"` (única
+    // condição que renderiza o CTA que abre esta sheet) já garante `dados.votoRelator` truthy via
+    // `deriveEstadoAssinatura` — este guard é defesa em profundidade (TS narrowing), não o gate real; se
+    // ele disparar mesmo assim, a chamada é silenciosamente abortada em vez de assinar uma conclusão que o
+    // relator nunca escolheu (ato irreversível — ver docstring de assinatura-vista.ts).
+    if (!dados || !dados.votoRelator) return;
     try {
-      await emitir({ votoRelator: dados.votoRelator ?? "favoravel", lockVersion: dados.lockVersion });
+      await emitir({ votoRelator: dados.votoRelator, lockVersion: dados.lockVersion });
       setSheetAberta(false);
       router.push(comToken("/vereador", token));
     } catch {
@@ -118,6 +123,13 @@ export default function PaginaAssinarParecer() {
               A assinatura fica <b>registrada</b>, com data e hora.
             </p>
           </div>
+
+          {situacao === "sem-voto" && (
+            <p className="vazio">
+              Ainda falta registrar a conclusão (voto) do relator no editor — volte lá para completar antes
+              de assinar.
+            </p>
+          )}
         </>
       )}
 
