@@ -18,6 +18,7 @@
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.kernel.components.http-servidor :as http-servidor]
             [oplenario.kernel.components.idp-dev :as idp-dev]
+            [oplenario.kernel.components.keycloak-idp :as keycloak-idp]
             [oplenario.kernel.components.objeto-store :as objeto-store]
             [oplenario.kernel.components.outbox-relay :as outbox-relay]
             [oplenario.kernel.outbox :as outbox]
@@ -112,13 +113,11 @@
                                       rel-compliance/relacoes rel-participacao/relacoes)))))
 
 (defn- idp-para
-  "Seleciona a impl do IdP por ambiente — GUARD DE BOOT fail-closed (review de seguranca W2, CRÍTICO): producao
-  EXIGE a impl Keycloak; como ela e' carry F1.4 (indisponivel), `production` LANCA e bloqueia o boot — NUNCA cai
-  no idp-dev (que confia claims sem verificar assinatura). dev/test usam idp-dev."
+  "Seleciona a impl do IdP por ambiente. producao/staging usam o KeycloakIdp real (Onda D Slice 1);
+  dev/test seguem no idp-dev (confia em claims sem verificar assinatura — nunca usar fora de dev/test)."
   [config]
-  (if (= "production" (:env config))
-    (throw (ex-info "idp-dev proibido em producao e a impl Keycloak e' carry F1.4 (indisponivel) — boot bloqueado"
-                    {:env (:env config)}))
+  (if (#{"production" "staging"} (:env config))
+    (keycloak-idp/keycloak-idp (:keycloak config))
     (idp-dev/idp-dev)))
 
 (defn sistema-serve
@@ -127,7 +126,7 @@
   /saude; W2/W3 enriquecem as rotas (auth/tenancy + rotas-dado de modulo, com o servidor `using` os Repo)."
   [config]
   (assoc (novo-sistema config)
-         ;; IdP por ambiente (idp-para = guard: idp-dev so dev/test; prod exige Keycloak, carry F1.4 -> lanca).
+         ;; IdP por ambiente (idp-para: production/staging = KeycloakIdp real; dev/test = idp-dev).
          :idp (idp-para config)
          ;; servidor `using` idp + repo-identidade -> a rotas-fn (rotas/montar) monta o interceptor de auth
          ;; sobre as instancias iniciadas. W3: +repo-sessoes p/ a vertical de rotas de sessoes (o fan-out por
