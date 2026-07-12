@@ -411,7 +411,7 @@
   ;; com promover!/registrar-voto-relator!) — por isso reusa parecer-tram/transicionar-parecer! (db/) +
   ;; producers/emitir-transicionou-parecer! INLINE, o MESMO bloco do impl acima.
   (emitir-parecer! [this ente-id registro {:keys [parecer-id template-id gatilho voto-relator updated-by agora
-                                                   contexto lock-version]}]
+                                                   contexto lock-version assinador]}]
     (transacao this ente-id
       (fn [tx]
         ;; CAS otimista contra o SNAPSHOT QUE O CLIENTE VIU (review HIGH fe-11-parecer): confere ANTES de
@@ -433,9 +433,15 @@
           (when (and (nil? rascunho) (nil? (parecer-texto/vigente tx ente-id parecer-id)))
             (throw (ex-info "emitir-parecer!: nenhum conteudo de texto para emitir"
                             {:tipo :validacao/invalido :parecer-id parecer-id})))
+          ;; Onda C4 (feature 7.3): so' assina quando HA rascunho sendo promovido AGORA — nunca reassina
+          ;; uma versao ja vigente de uma chamada anterior (spec §3, "sem rascunho, so' vigente").
           (when rascunho
-            (parecer-texto/promover! tx {:ente-id ente-id :parecer-id parecer-id :versao-id (:id rascunho)
-                                         :updated-by updated-by :lock-version (:lock-version rascunho)})))
+            (let [{:keys [algoritmo assinatura-b64]}
+                  (assinador-icp/assinar assinador (.getBytes ^String (:texto-inline rascunho) "UTF-8"))]
+              (parecer-texto/promover! tx {:ente-id ente-id :parecer-id parecer-id :versao-id (:id rascunho)
+                                           :updated-by updated-by :lock-version (:lock-version rascunho)
+                                           :assinatura-algoritmo algoritmo :assinatura-b64 assinatura-b64
+                                           :assinado-por updated-by}))))
         ;; voto SEMPRE seta (mesmo sem rascunho novo) — re-le' o lock-version POS-promover! (o reaponte do
         ;; pointer incrementa o lock_version do parecer; usar o valor pre-promover! CASaria contra versao
         ;; desatualizada e lancaria conflito espurio).
