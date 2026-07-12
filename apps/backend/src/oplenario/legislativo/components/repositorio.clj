@@ -438,6 +438,10 @@
           ;; Onda C4 (feature 7.3): so' assina quando HA rascunho sendo promovido AGORA — nunca reassina
           ;; uma versao ja vigente de uma chamada anterior (spec §3, "sem rascunho, so' vigente").
           (when rascunho
+            ;; assume `texto-inline` SEMPRE populado (pareceres nesta fatia nunca usam `conteudo-uri` — o
+            ;; editor nao produz esse caminho pra parecer). Se isso mudar, resolver o corpo do MESMO jeito
+            ;; que a leitura de proposicao acima (linha ~221: texto-inline > conteudo-uri via objeto-store),
+            ;; nao so' trocar o `.getBytes` aqui.
             (let [{:keys [algoritmo assinatura-b64]}
                   (assinador-icp/assinar assinador (.getBytes ^String (:texto-inline rascunho) "UTF-8"))]
               (parecer-texto/promover! tx {:ente-id ente-id :parecer-id parecer-id :versao-id (:id rascunho)

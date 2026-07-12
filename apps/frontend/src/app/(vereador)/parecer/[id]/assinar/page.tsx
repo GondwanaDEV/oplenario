@@ -166,6 +166,10 @@ export default function PaginaAssinarParecer() {
                 Cancelar
               </button>
             </div>
+            {/* [GAP] esta copy descreve assinatura ICP-Brasil/biometria REAIS; hoje o backend produz
+                'STUB-ICP-v0' (assinador_icp.clj/assinador-stub) e a "biometria" acima é mock local, sem
+                WebAuthn/ICP-Brasil por trás. Uma assinatura criptográfica de verdade PRECISA existir antes
+                desta tela ir a um vereador real em produção — gate = fast-follow Onda D (já decidido). */}
             <p className="legal">
               Ao confirmar, você assina digitalmente este documento. A assinatura tem validade e não pode
               ser desfeita.
