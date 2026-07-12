@@ -33,6 +33,10 @@ services:
       - "${OPLENARIO_MINIO_PORT:-9000}:9000"
       - "${OPLENARIO_MINIO_CONSOLE_PORT:-9001}:9001"
 
+  # Auth: docker compose --profile auth up (sobe o Keycloak; adapter real desde Onda D Slice 1).
+  # 1o boot demora ~3-5min (Quarkus augmentation + schema do banco embutido) -- espere o healthcheck,
+  # nao assuma pronto so' porque o container "started". Porta 8080 pode colidir com outro projeto local
+  # -- use OPLENARIO_KEYCLOAK_PORT (+ KEYCLOAK_BASE_URL do app apontando pra' mesma porta) se precisar.
   keycloak:
     image: quay.io/keycloak/keycloak:26.0.0
     command: start-dev
