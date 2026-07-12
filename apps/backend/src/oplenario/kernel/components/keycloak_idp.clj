@@ -11,7 +11,7 @@
   (:require [clojure.string :as str]
             [com.stuartsierra.component :as component]
             [oplenario.kernel.components.idp :as idp])
-  (:import (com.auth0.jwk JwkProviderBuilder SigningKeyNotFoundException NetworkException RateLimitReachedException)
+  (:import (com.auth0.jwk JwkProviderBuilder JwkException SigningKeyNotFoundException NetworkException RateLimitReachedException)
            (com.auth0.jwt JWT)
            (com.auth0.jwt.algorithms Algorithm)
            (com.auth0.jwt.exceptions JWTVerificationException JWTDecodeException)
@@ -89,7 +89,19 @@
   assinatura OK) mas com o claim `identidade-id` que nao parseia como UUID (ex.: mapper mal configurado no
   realm) e' problema DO TOKEN, nao de infra — sem essa clausula, `UUID/fromString` lancaria sem ser pego
   por nenhum catch acima e vazaria como excecao nao-tratada (500), violando o mesmo contrato fail-closed
-  que as outras clausulas desta funcao existem para cumprir."
+  que as outras clausulas desta funcao existem para cumprir.
+  JwkException (generica) tambem e' capturada -> nil, e TEM que vir DEPOIS de SigningKeyNotFoundException
+  nesta lista pela mesma razao de subclasse explicada acima: `InvalidPublicKeyException` (lancada por
+  `Jwk/.getPublicKey` quando o `kid` do atacante resolve para uma entrada REAL da JWKS cujo tipo de chave
+  nao e' RSA, ou esta de outra forma malformada) estende `JwkException` DIRETAMENTE, nao
+  `SigningKeyNotFoundException` — sem esta clausula generica ela vazava como excecao nao-tratada (500).
+  Como `JwkException` e' superclasse tanto de `SigningKeyNotFoundException`/`NetworkException` quanto de
+  `RateLimitReachedException`, colocar esta clausula ANTES delas roubaria as duas clausulas de propagacao
+  de infra e as faria virar nil silenciosamente — por isso ela fica POR ULTIMO entre as clausulas de
+  JwkException, nunca antes. ClassCastException e' uma segunda linha de defesa: mesmo quando
+  `.getPublicKey` retorna com sucesso, se a chave da JWKS nao for RSA o cast implicito do type-hint
+  `^RSAPublicKey` no `let` pode lancar em vez de `InvalidPublicKeyException` — mesmo contrato fail-closed,
+  mesmo motivo de existir."
   [{:keys [config jwks-cache jwks-provider-fn]} token]
   (try
     (let [nao-verificado (JWT/decode token)
@@ -114,9 +126,11 @@
     (catch NetworkException e (throw e))
     (catch RateLimitReachedException e (throw e))
     (catch SigningKeyNotFoundException _ nil)
+    (catch JwkException _ nil)
     (catch JWTVerificationException _ nil)
     (catch JWTDecodeException _ nil)
-    (catch IllegalArgumentException _ nil)))
+    (catch IllegalArgumentException _ nil)
+    (catch ClassCastException _ nil)))
 
 ;; ---------------------------------------------------------------------------------------------
 ;; Component

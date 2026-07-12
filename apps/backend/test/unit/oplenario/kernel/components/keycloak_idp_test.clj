@@ -53,6 +53,13 @@
 (defn- provider-rate-limited []
   (reify JwkProvider (get [_ _kid] (throw (RateLimitReachedException. 5000)))))
 
+(defn- provider-com-chave-invalida []
+  ;; JWK REAL (nao um mock que lanca) cujo "kty" nao e' RSA/EC — `Jwk/.getPublicKey` lanca
+  ;; `InvalidPublicKeyException` (subclasse DIRETA de `JwkException`, nao de `SigningKeyNotFoundException`)
+  ;; quando o kid do atacante resolve p/ uma entrada REAL da JWKS cujo tipo de chave nao e' suportado.
+  (reify JwkProvider
+    (get [_ _kid] (Jwk/fromValues {"kty" "oct" "kid" kid "use" "sig" "alg" "RS256"}))))
+
 (defn- idp-com [jwks-provider-fn]
   (component/start
    (kc/keycloak-idp {:base-url base-url :realm-prefixo realm-prefixo :audiencia audiencia
@@ -148,6 +155,13 @@
         tok (token-valido {})]
     (is (thrown? RateLimitReachedException (idp/verificar-token ip tok))
         "rate-limit tambem e' degradacao de infra, nao 'token invalido'")))
+
+(deftest kid-aponta-para-chave-nao-rsa-invalido
+  (let [ip (idp-com (fn [_ _] (provider-com-chave-invalida)))
+        tok (token-valido {})]
+    (is (nil? (idp/verificar-token ip tok))
+        "kid resolve p/ entrada REAL da JWKS cujo tipo de chave nao e' RSA (InvalidPublicKeyException,
+        subclasse direta de JwkException) -> nil, nao excecao nao-tratada (500)")))
 
 (deftest token-malformado-invalido
   (let [ip (idp-com (fn [_ _] (provider-fixo (jwk-de pub kid))))]
