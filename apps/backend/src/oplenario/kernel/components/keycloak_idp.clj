@@ -194,9 +194,24 @@
         (when-not (= 200 status)
           (throw (ex-info "keycloak-idp: falha ao declarar o atributo identidade-id (infra)" {:status status :corpo corpo})))))))
 
+(defn- garantir-client!
+  "GET-then-create idempotente de um client no realm: consulta por `client-id`; se ja existe, no-op; senao
+  POST do `payload`. Compartilhado pelos clients de audiencia (API) e web (PKCE publico) — a unica coisa
+  que difere entre eles e' o payload, entao a mecanica idempotente vive aqui uma vez so."
+  [http-client token base-url realm client-id payload]
+  (let [{:keys [status corpo]} (admin-req! http-client token :get
+                                           (str "/admin/realms/" realm "/clients?clientId=" client-id) nil base-url)
+        existe-client? (and (= 200 status) (seq corpo))]
+    (when-not existe-client?
+      (let [{:keys [status corpo]} (admin-req! http-client token :post
+                                               (str "/admin/realms/" realm "/clients") payload base-url)]
+        (when-not (= 201 status)
+          (throw (ex-info "keycloak-idp: falha ao criar o client (infra)"
+                          {:status status :corpo corpo :client-id client-id})))))))
+
 (defn- provisionar-realm-impl
   [{:keys [config http-client]} ente-id]
-  (let [{:keys [base-url realm-prefixo audiencia]} config
+  (let [{:keys [base-url realm-prefixo audiencia web-client-id redirect-uris web-origins]} config
         realm (str realm-prefixo ente-id)
         token (admin-token! config http-client)
         {:keys [status]} (admin-req! http-client token :get (str "/admin/realms/" realm) nil base-url)]
@@ -206,25 +221,24 @@
         (when-not (= 201 status)
           (throw (ex-info "keycloak-idp: falha ao criar o realm (infra)" {:status status :corpo corpo})))))
     (declarar-atributo-identidade! http-client token base-url realm)
-    (let [{:keys [status corpo]} (admin-req! http-client token :get
-                                             (str "/admin/realms/" realm "/clients?clientId=" audiencia) nil base-url)
-          existe-client? (and (= 200 status) (seq corpo))]
-      (when-not existe-client?
-        (let [{:keys [status corpo]}
-              (admin-req! http-client token :post (str "/admin/realms/" realm "/clients")
-                          {:clientId audiencia :publicClient true :standardFlowEnabled true
-                           :directAccessGrantsEnabled false
-                           :protocolMappers
-                           [{:name "identidade-id" :protocol "openid-connect"
-                             :protocolMapper "oidc-usermodel-attribute-mapper"
-                             :config {"user.attribute" "identidade-id" "claim.name" "identidade-id"
-                                      "jsonType.label" "String" "access.token.claim" "true"}}
-                            {:name "audiencia-propria" :protocol "openid-connect"
-                             :protocolMapper "oidc-audience-mapper"
-                             :config {"included.client.audience" audiencia "access.token.claim" "true"}}]}
-                          base-url)]
-          (when-not (= 201 status)
-            (throw (ex-info "keycloak-idp: falha ao criar o client (infra)" {:status status :corpo corpo}))))))
+    ;; Client de audiencia (API): valida o access-token; carrega o mapper de identidade-id + a audiencia propria.
+    (garantir-client! http-client token base-url realm audiencia
+                      {:clientId audiencia :publicClient true :standardFlowEnabled true
+                       :directAccessGrantsEnabled false
+                       :protocolMappers
+                       [{:name "identidade-id" :protocol "openid-connect"
+                         :protocolMapper "oidc-usermodel-attribute-mapper"
+                         :config {"user.attribute" "identidade-id" "claim.name" "identidade-id"
+                                  "jsonType.label" "String" "access.token.claim" "true"}}
+                        {:name "audiencia-propria" :protocol "openid-connect"
+                         :protocolMapper "oidc-audience-mapper"
+                         :config {"included.client.audience" audiencia "access.token.claim" "true"}}]})
+    ;; Client web (PKCE publico): o navegador troca o code no BFF; sem client-secret, sem grant direto de senha.
+    (garantir-client! http-client token base-url realm web-client-id
+                      {:clientId web-client-id :publicClient true :standardFlowEnabled true
+                       :directAccessGrantsEnabled false
+                       :redirectUris redirect-uris :webOrigins web-origins
+                       :attributes {"pkce.code.challenge.method" "S256"}})
     {:realm realm}))
 
 (defn- nome->first-last

@@ -2,8 +2,15 @@
   "Unit (sem rede): verificar-token contra um par de chaves RSA sintetico + JwkProvider FAKE injetado
   (inversao de dependencia — §5 do design). Cobre a borda de seguranca exaustivamente: assinatura valida/
   invalida, expiracao, confusao de algoritmo, issuer fora da allowlist, kid desconhecido, erro de infra
-  PROPAGA (nao vira nil)."
-  (:require [clojure.test :refer [deftest is testing]]
+  PROPAGA (nao vira nil).
+
+  Tambem cobre `provisionar-realm-impl` (Task 7, Onda D Slice 2) — payload/idempotencia do client publico
+  `oplenario-web` (PKCE S256), SEM rede/Keycloak vivo (live gated no T18). `admin-token!`/`admin-req!` sao
+  privadas (defn-) — redefinidas via `with-redefs-fn` + `#'` (var-quote bypassa a checagem de
+  visibilidade; a forma direta `with-redefs` nao compila contra var privada de outro ns, mesma razao pela
+  qual `sistema_test.clj` chama `idp-para` via `#'sistema/idp-para`)."
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
             [com.stuartsierra.component :as component]
             [oplenario.kernel.components.idp :as idp]
             [oplenario.kernel.components.keycloak-idp :as kc])
@@ -189,3 +196,69 @@
                 (.sign (Algorithm/RSA256 pub ^RSAPrivateKey priv)))]
     (is (nil? (idp/verificar-token ip tok))
         "claim identidade-id que nao parseia como UUID -> nil, nao excecao nao-tratada")))
+
+;; ---------------------------------------------------------------------------------------------
+;; provisionar-realm-impl — client publico oplenario-web (PKCE S256), Task 7
+;; ---------------------------------------------------------------------------------------------
+
+(def ^:private config-provisionamento
+  {:base-url base-url :realm-prefixo realm-prefixo :audiencia audiencia
+   :admin-usuario "admin" :admin-senha "admin" :jwks-cache-ttl-s 600
+   :web-client-id "oplenario-web"
+   :redirect-uris ["http://localhost:3000/api/auth/callback"]
+   :web-origins ["http://localhost:3000"]})
+
+(defn- fake-admin-req!
+  "Fake de `admin-req!` — captura toda chamada em `chamadas` (atom, vetor de {:metodo :caminho :corpo}) e
+  responde por convencao: GET raiz do realm (`/admin/realms/<realm>`, sem sufixo) -> 200 (realm ja
+  existe, pula a criacao); GET .../users/profile -> 200 com identidade-id JA declarado (pula o PUT); GET
+  .../clients?clientId=X -> 200 com [] (nao existe) ou [{...}] (existe), conforme `clients-existentes`
+  (set de clientId); POST/PUT -> sucesso (201/200)."
+  [chamadas clients-existentes]
+  (fn [_http-client _token metodo caminho corpo-map _base-url]
+    (swap! chamadas conj {:metodo metodo :caminho caminho :corpo corpo-map})
+    (cond
+      (str/ends-with? caminho "/users/profile")
+      {:status 200 :corpo {:attributes [{:name "identidade-id"}]}}
+
+      (re-matches #"/admin/realms/[^/]+" caminho)
+      {:status 200 :corpo {}}
+
+      (str/includes? caminho "/clients?clientId=")
+      (let [client-id (subs caminho (+ (str/index-of caminho "clientId=") (count "clientId=")))]
+        (if (contains? clients-existentes client-id)
+          {:status 200 :corpo [{:id "existing-id" :clientId client-id}]}
+          {:status 200 :corpo []}))
+
+      (= metodo :post) {:status 201 :corpo {}}
+      (= metodo :put)  {:status 200 :corpo {}}
+      :else            {:status 200 :corpo {}})))
+
+(defn- provisionar-capturando!
+  "Roda `provisionar-realm-impl` (privada) com `admin-token!`/`admin-req!` fakes, devolve o vetor de
+  chamadas capturadas ao `admin-req!`."
+  [clients-existentes]
+  (let [chamadas (atom [])]
+    (with-redefs-fn {#'kc/admin-token! (fn [_config _http-client] "fake-token")
+                      #'kc/admin-req!   (fake-admin-req! chamadas clients-existentes)}
+      (fn [] (#'kc/provisionar-realm-impl {:config config-provisionamento :http-client nil} ente-id)))
+    @chamadas))
+
+(defn- post-do-client [chamadas client-id]
+  (some #(when (and (= :post (:metodo %)) (= client-id (:clientId (:corpo %)))) %) chamadas))
+
+(deftest provisionar-realm-cria-client-web-publico-pkce
+  (let [chamadas (provisionar-capturando! #{})
+        post-web (post-do-client chamadas "oplenario-web")]
+    (testing "POST de criacao do client oplenario-web com payload PKCE correto"
+      (is (some? post-web) "esperava um POST de client com clientId oplenario-web")
+      (is (true? (:publicClient (:corpo post-web))))
+      (is (true? (:standardFlowEnabled (:corpo post-web))))
+      (is (false? (:directAccessGrantsEnabled (:corpo post-web))))
+      (is (= "S256" (get-in post-web [:corpo :attributes "pkce.code.challenge.method"])))
+      (is (seq (:redirectUris (:corpo post-web))) "redirectUris nao-vazio"))))
+
+(deftest provisionar-realm-idempotente-nao-recria-client-web
+  (let [chamadas (provisionar-capturando! #{"oplenario-web" "oplenario-backend"})]
+    (testing "client oplenario-web ja existe -> nenhum POST de criacao"
+      (is (nil? (post-do-client chamadas "oplenario-web"))))))
