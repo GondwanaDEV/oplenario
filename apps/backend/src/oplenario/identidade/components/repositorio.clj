@@ -70,7 +70,8 @@
 
 (defn repositorio
   "Cria o Component (recebe :datasource via `using`). Aridade-1 seta a janela de deslize de ociosidade da
-  sessao (segundos); aridade-0 default 1800s/30min (CARRY: reconciliar com `:sessao :ociosa-min` — ver
-  docstring do ns)."
+  sessao (segundos) — `sistema/montar` injeta `(* 60 (:sessao :ociosa-min config))`, mesma fonte que o mint
+  usa p/ o ocioso-ate inicial (fonte unica). Aridade-0 default 1800s/30min = fallback só p/ testes que
+  constroem o repo direto sem config."
   ([] (repositorio 1800))
   ([sessao-janela-ociosa-seg] (->RepoIdentidadePg nil sessao-janela-ociosa-seg)))

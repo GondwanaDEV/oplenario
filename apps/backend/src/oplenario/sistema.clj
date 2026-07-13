@@ -83,7 +83,12 @@
    ;; Valkey abre antes do relay comecar a publicar).
    :relay           (component/using (outbox-relay/relay {:registro registro}) [:datasource :canal-store])
    :repo-cadastros  (component/using (repo-cadastros/repositorio) [:datasource])
-   :repo-identidade (component/using (repo-identidade/repositorio) [:datasource])
+   ;; janela de ociosidade da sessao vem do config (:sessao :ociosa-min) — o mint computa o ocioso-ate
+   ;; inicial do mesmo config, e o resolver desliza usando ESTE valor: fonte unica (senao o slide da 1a
+   ;; request autenticada silenciosamente reverteria p/ o default 1800s, anulando um SESSAO_OCIOSA_MIN
+   ;; customizado — inclusive um aperto de seguranca). Review whole-branch, achado clojure #1.
+   :repo-identidade (component/using (repo-identidade/repositorio (* 60 (or (get-in config [:sessao :ociosa-min]) 30)))
+                                     [:datasource])
    :repo-legislativo (component/using (repo-legislativo/repositorio) [:datasource :bus])
    ;; §22.6 eixo G: o Repo de sessoes recebe :bus — os caminhos de escrita emitem os eventos de tempo real
    ;; (sessao/presenca/fala) no shared.outbox na tx do ato; o projetor SSE (G2) os consome.

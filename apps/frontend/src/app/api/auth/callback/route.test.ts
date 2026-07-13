@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { receberCallback as GET } from "./route";
 
 const ORIGIN = "http://localhost:3000";
@@ -59,6 +59,16 @@ function findCookie(resp: Response, name: string): string | undefined {
 }
 
 describe("GET /api/auth/callback — troca code por token (PKCE), minta sessão opaca, seta cookie", () => {
+  // Hermético: KEYCLOAK_INTERNAL_URL (split-horizon do BFF, T17) tem prioridade sobre pkce.baseUrl no
+  // token-exchange. Em dev/CI o container do frontend pode tê-lo setado no ambiente — desliga aqui p/ os
+  // testes do caminho de fallback (baseUrl da descoberta) serem determinísticos independente do ambiente.
+  beforeEach(() => {
+    vi.stubEnv("KEYCLOAK_INTERNAL_URL", undefined as unknown as string);
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("state mismatch → 400 e NUNCA chama o endpoint de token (ordem CSRF antes de tocar no code)", async () => {
     const fetchImpl = fetchHappyPath();
     const resp = await GET(
@@ -265,5 +275,19 @@ describe("GET /api/auth/callback — troca code por token (PKCE), minta sessão 
       vi.unstubAllEnvs();
       expect(process.env.NODE_ENV).toBe(orig);
     }
+  });
+
+  it("KEYCLOAK_INTERNAL_URL (split-horizon T17) tem prioridade sobre pkce.baseUrl no token-exchange", async () => {
+    vi.stubEnv("KEYCLOAK_INTERNAL_URL", "http://keycloak:8080");
+    const fetchImpl = fetchHappyPath();
+    await GET(req(`/api/auth/callback?code=auth-code-123&state=state-xyz`), { fetchImpl });
+    const tokenCall = fetchImpl.mock.calls.find(([url]) =>
+      url.toString().includes("/protocol/openid-connect/token"),
+    );
+    expect(tokenCall).toBeTruthy();
+    // troca server-side usa o host INTERNO do compose, não o baseUrl público da descoberta (localhost:8090)
+    expect(tokenCall![0].toString()).toBe(
+      `http://keycloak:8080/realms/${REALM}/protocol/openid-connect/token`,
+    );
   });
 });
