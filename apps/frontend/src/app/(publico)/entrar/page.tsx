@@ -7,11 +7,25 @@
 // Atalho dev-token (mesmo guard de next.config.ts/middleware.ts: NODE_ENV !== "production"): é uma NOTA
 // informativa, não um link funcional — o dev-token se anexa como `?token=` na URL da PÁGINA PROTEGIDA que
 // se quer acessar (ver src/lib/auth.tsx), não em /entrar.
+//
+// `?erro=login` (fast-follow, mesma sessão de Task 12): o login handler (app/api/auth/login/route.ts)
+// falha fechado redirecionando pra CÁ quando a descoberta do tenant dá 404/rede/erro — sem isso, quem
+// chegava aqui via login falho via a MESMA cópia genérica de sempre, sem indicação de que algo deu
+// errado. `mensagemErroEntrada` (lib/entrar-erro.ts) deriva a mensagem; aqui só decide renderizar.
+// Server Component: `searchParams` é Promise (Next 16 App Router) — mesmo padrão de entrar/[ente]/page.tsx.
 
 import "./entrar.css";
 import { SeloPlenario } from "./selo-plenario";
+import { mensagemErroEntrada } from "@/lib/entrar-erro";
 
-export default function PaginaEntrarPlaceholder() {
+export default async function PaginaEntrarPlaceholder({
+  searchParams,
+}: {
+  searchParams: Promise<{ erro?: string }>;
+}) {
+  const { erro } = await searchParams;
+  const mensagemErro = mensagemErroEntrada(erro);
+
   return (
     <div className="entrar-pagina">
       <main className="entrar-cartao">
@@ -23,6 +37,13 @@ export default function PaginaEntrarPlaceholder() {
         </div>
         <div className="entrar-corpo">
           <SeloPlenario tamanho={44} className="entrar-selo" />
+
+          {mensagemErro && (
+            <div className="entrar-erro" role="alert">
+              {mensagemErro}
+            </div>
+          )}
+
           <div className="entrar-titulo">
             <h1>Acesse pela URL da sua Câmara</h1>
             <p>
