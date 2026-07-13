@@ -57,6 +57,18 @@ describe("apiFetch — boundary único de auth (Onda D Slice 2, Fase 3)", () => 
     expect(h.get("authorization")).toBe("Bearer tok-123");
   });
 
+  it("modo real (sem token): descarta Authorization forjado pelo caller (o boundary é a única autoridade)", async () => {
+    const fetchImpl = fetchMock();
+    await apiFetch(
+      "/api/legislativo/proposicoes",
+      { headers: { Authorization: "Bearer leaked" } },
+      { fetchImpl },
+    );
+    const [, init] = fetchImpl.mock.calls[0]!;
+    const h = new Headers(init!.headers);
+    expect(h.has("authorization")).toBe(false);
+  });
+
   it("devolve a Response do fetch injetado (o caller consome normalmente)", async () => {
     const fetchImpl = vi.fn<FetchFn>(async () => new Response(JSON.stringify({ ok: true }), { status: 201 }));
     const resp = await apiFetch("/api/x", {}, { fetchImpl });
