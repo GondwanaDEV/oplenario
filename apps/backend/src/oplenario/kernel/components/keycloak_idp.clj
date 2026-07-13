@@ -238,7 +238,19 @@
                       {:clientId web-client-id :publicClient true :standardFlowEnabled true
                        :directAccessGrantsEnabled false
                        :redirectUris redirect-uris :webOrigins web-origins
-                       :attributes {"pkce.code.challenge.method" "S256"}})
+                       :attributes {"pkce.code.challenge.method" "S256"}
+                       ;; MESMOS mappers do client de audiencia: o token PKCE tem de carregar `identidade-id`
+                       ;; E a audiencia `oplenario-backend`, senao verificar-token (.withAudience + claim
+                       ;; identidade-id) rejeita -> "token invalido" no mint. O login real usa ESTE client,
+                       ;; entao sem os mappers o loop inteiro falha no mint (achado T17).
+                       :protocolMappers
+                       [{:name "identidade-id" :protocol "openid-connect"
+                         :protocolMapper "oidc-usermodel-attribute-mapper"
+                         :config {"user.attribute" "identidade-id" "claim.name" "identidade-id"
+                                  "jsonType.label" "String" "access.token.claim" "true"}}
+                        {:name "audiencia-backend" :protocol "openid-connect"
+                         :protocolMapper "oidc-audience-mapper"
+                         :config {"included.client.audience" audiencia "access.token.claim" "true"}}]})
     {:realm realm}))
 
 (defn- nome->first-last

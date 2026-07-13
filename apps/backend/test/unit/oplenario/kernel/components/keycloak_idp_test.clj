@@ -256,7 +256,20 @@
       (is (true? (:standardFlowEnabled (:corpo post-web))))
       (is (false? (:directAccessGrantsEnabled (:corpo post-web))))
       (is (= "S256" (get-in post-web [:corpo :attributes "pkce.code.challenge.method"])))
-      (is (seq (:redirectUris (:corpo post-web))) "redirectUris nao-vazio"))))
+      (is (seq (:redirectUris (:corpo post-web))) "redirectUris nao-vazio"))
+    (testing "o token PKCE tem de carregar identidade-id + a audiencia do backend (achado T17): sem estes
+              mappers o verificar-token do backend (.withAudience + claim identidade-id) rejeita o token
+              do login real -> 'token invalido' no mint"
+      (let [mappers (:protocolMappers (:corpo post-web))
+            por-mapper (into {} (map (juxt :protocolMapper identity) mappers))
+            id-mapper (get por-mapper "oidc-usermodel-attribute-mapper")
+            aud-mapper (get por-mapper "oidc-audience-mapper")]
+        (is (some? id-mapper) "esperava o mapper de atributo identidade-id no client web")
+        (is (= "identidade-id" (get-in id-mapper [:config "claim.name"])))
+        (is (= "true" (get-in id-mapper [:config "access.token.claim"])))
+        (is (some? aud-mapper) "esperava o mapper de audiencia no client web")
+        (is (= "oplenario-backend" (get-in aud-mapper [:config "included.client.audience"]))
+            "a audiencia injetada tem de ser a do backend (:audiencia da config)")))))
 
 (deftest provisionar-realm-idempotente-nao-recria-client-web
   (let [chamadas (provisionar-capturando! #{"oplenario-web" "oplenario-backend"})]
