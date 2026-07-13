@@ -1,0 +1,128 @@
+// Callback OIDC (Authorization Code + PKCE, client público, sem client_secret): valida `state`
+// contra o cookie `pkce` (proteção CSRF do próprio fluxo, ver `resolveRedirectPath`/ADR do login),
+// troca `code` por um access_token junto ao Keycloak do tenant (realm/baseUrl/clientId vieram do
+// cookie — o Keycloak devolve só code+state, nunca o ente; T8 já resolveu a descoberta) e minta a
+// sessão opaca no backend (`POST /auth/sessoes`, T4/T5). O access_token do Keycloak NUNCA chega ao
+// navegador — só o `segredo` opaco que o mint devolve, e só como cookie httpOnly.
+//
+// Ordem de segurança (INEGOCIÁVEL, não reordenar): 1) ler code/state/cookie; 2) comparar state ANTES
+// de tocar no code (CSRF); 3) trocar code→token; 4) mintar sessão; 5) setar cookie + limpar pkce +
+// redirecionar. Cada etapa falha fechado (401/502) sem vazar o token adiante.
+
+import { NextRequest, NextResponse } from "next/server";
+import { resolveAppOrigin } from "../appOrigin";
+import { resolveRedirectPath } from "../redirect";
+
+interface PkcePayload {
+  codeVerifier: string;
+  state: string;
+  redirectPath: string;
+  realm: string;
+  baseUrl: string;
+  clientId: string;
+}
+
+function paraLogin(origin: string): NextResponse {
+  return NextResponse.redirect(new URL("/api/auth/login", origin));
+}
+
+// GET é um wrapper fino com a assinatura EXATA que o Next.js espera (sem 2º parâmetro) — mesmo
+// padrão de login/route.ts e src/lib/sse-proxy.ts: a lógica testável fica numa função à parte,
+// injetável por opts, que o Route Handler apenas invoca.
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  return receberCallback(request);
+}
+
+export async function receberCallback(
+  request: NextRequest,
+  opts?: { backend?: string; fetchImpl?: typeof fetch },
+): Promise<NextResponse> {
+  // `opts.backend`/`opts.fetchImpl` são injeção de dependência só de teste; em produção seriam
+  // superfície de SSRF (mesmo guard de src/lib/sse-proxy.ts e login/route.ts).
+  if (opts?.backend && process.env.NODE_ENV === "production") {
+    throw new Error("opts.backend não é permitido fora de ambiente de teste");
+  }
+
+  const appOrigin = resolveAppOrigin(request);
+  const code = request.nextUrl.searchParams.get("code");
+  const state = request.nextUrl.searchParams.get("state");
+  const pkceCookie = request.cookies.get("pkce")?.value;
+  if (!code || !state || !pkceCookie) {
+    return paraLogin(appOrigin);
+  }
+
+  let pkce: PkcePayload;
+  try {
+    pkce = JSON.parse(pkceCookie) as PkcePayload;
+  } catch {
+    return paraLogin(appOrigin);
+  }
+
+  // Comparar `state` ANTES de qualquer uso do `code` — proteção CSRF do fluxo OIDC. Nada de rede,
+  // nada de fetch, acontece antes desta checagem.
+  if (state !== pkce.state) {
+    return new NextResponse("state inválido", { status: 400 });
+  }
+
+  const backend = opts?.backend ?? process.env.BACKEND_URL ?? "http://localhost:8888";
+  const f = opts?.fetchImpl ?? fetch;
+  const kcBase = process.env.KEYCLOAK_INTERNAL_URL ?? pkce.baseUrl;
+
+  let accessToken: string;
+  try {
+    const tokenResp = await f(
+      `${kcBase}/realms/${pkce.realm}/protocol/openid-connect/token`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        // Client PÚBLICO (PKCE S256, sem client_secret) — oplenario-web foi provisionado
+        // publicClient=true (T7); jamais incluir client_secret aqui.
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          client_id: pkce.clientId,
+          code,
+          redirect_uri: `${appOrigin}/api/auth/callback`,
+          code_verifier: pkce.codeVerifier,
+        }),
+        cache: "no-store",
+      },
+    );
+    if (!tokenResp.ok) {
+      return new NextResponse("falha na troca de code por token", { status: 401 });
+    }
+    ({ access_token: accessToken } = (await tokenResp.json()) as { access_token: string });
+  } catch {
+    return new NextResponse("Keycloak indisponível", { status: 502 });
+  }
+
+  let segredo: string;
+  try {
+    const sessaoResp = await f(`${backend}/auth/sessoes`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token: accessToken }),
+      cache: "no-store",
+    });
+    if (!sessaoResp.ok) {
+      return new NextResponse("backend rejeitou o token", { status: 401 });
+    }
+    ({ sessao: segredo } = (await sessaoResp.json()) as { sessao: string });
+  } catch {
+    return new NextResponse("backend indisponível", { status: 502 });
+  }
+  // A partir daqui `accessToken` nunca é referenciado de novo — só `segredo` (opaco) segue adiante.
+
+  const safeRedirectPath = resolveRedirectPath(pkce.redirectPath, appOrigin);
+  const response = NextResponse.redirect(new URL(safeRedirectPath, appOrigin));
+  response.cookies.set("sessao", segredo, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    maxAge: 12 * 3600,
+    path: "/",
+  });
+  // O cookie pkce foi SETADO com path "/api/auth" (login/route.ts) — delete precisa da MESMA tupla
+  // (nome, path); um delete com path "/" (default) não limpa um cookie escopado a "/api/auth".
+  response.cookies.delete({ name: "pkce", path: "/api/auth" });
+  return response;
+}

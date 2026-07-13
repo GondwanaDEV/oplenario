@@ -12,7 +12,13 @@ export function resolveRedirectPath(candidate: string | null, origin: string): s
   if (!candidate) return "/";
   try {
     const resolved = new URL(candidate, origin);
-    return resolved.origin === origin ? candidate : "/";
+    if (resolved.origin !== origin) return "/";
+    // Devolve a forma CANONICALIZADA (pathname+search+hash já resolvidos pelo parser WHATWG), não
+    // o texto bruto de `candidate` — o texto bruto é o que foi validado, não necessariamente o que
+    // é seguro redirecionar; usar a forma resolvida fecha a distância entre "o que validamos" e "o
+    // que usamos" (T9 callback consome isto do cookie pkce, onde o texto bruto nunca foi
+    // re-examinado por outro código).
+    return `${resolved.pathname}${resolved.search}${resolved.hash}`;
   } catch {
     return "/";
   }
