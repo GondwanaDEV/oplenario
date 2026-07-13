@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
+import { semCredencial } from "./modo";
 
 export type VotoNominalIn = "sim" | "nao" | "abstencao";
 export type MeuVotoOut = { id: string };
@@ -25,7 +26,7 @@ export function useMeuVoto(token: string | null) {
   }, []);
 
   async function votar(sessaoId: string, votacaoId: string, voto: VotoNominalIn): Promise<MeuVotoOut> {
-    if (!token) {
+    if (semCredencial(token)) {
       throw new Error("sem token de autenticacao");
     }
     if (enviandoRef.current) {
@@ -37,7 +38,7 @@ export function useMeuVoto(token: string | null) {
     let tratado = false;
     try {
       const r = await apiFetch(`/api/sessoes/${sessaoId}/votacoes/${votacaoId}/meu-voto`, {
-        token,
+        token: token ?? undefined,
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ voto }),

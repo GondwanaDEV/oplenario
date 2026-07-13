@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { FichaMateriaOut } from "./contrato-legislativo.gen";
+import { semCredencial } from "./modo";
 
 type Estado = "carregando" | "pronto" | "erro";
 
@@ -25,12 +26,12 @@ export function useFichaMateria(token: string | null, id: string | null) {
 
   useEffect(() => {
     if (!id) return;
-    if (!token) return;
+    if (semCredencial(token)) return;
     let vivo = true;
     (async () => {
       try {
         const r = await apiFetch(`/api/legislativo/proposicoes/${encodeURIComponent(id)}/ficha`, {
-          token,
+          token: token ?? undefined,
           cache: "no-store",
         });
         if (!vivo) return;
@@ -50,6 +51,6 @@ export function useFichaMateria(token: string | null, id: string | null) {
   }, [token, id]);
 
   if (!id) return { dados: null, estado: "pronto" as Estado };
-  if (!token) return { dados: null, estado: "erro" as Estado };
+  if (semCredencial(token)) return { dados: null, estado: "erro" as Estado };
   return { dados, estado };
 }

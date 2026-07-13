@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
+import { semCredencial } from "./modo";
 
 export type ConfirmarPresencaOut = { id: string };
 
@@ -25,7 +26,7 @@ export function useConfirmarPresenca(token: string | null) {
   }, []);
 
   async function confirmar(sessaoId: string): Promise<ConfirmarPresencaOut> {
-    if (!token) {
+    if (semCredencial(token)) {
       throw new Error("sem token de autenticacao");
     }
     if (enviandoRef.current) {
@@ -37,7 +38,7 @@ export function useConfirmarPresenca(token: string | null) {
     let tratado = false;
     try {
       const r = await apiFetch(`/api/sessoes/${sessaoId}/presenca/confirmar`, {
-        token,
+        token: token ?? undefined,
         method: "POST",
       });
       if (!r.ok) {

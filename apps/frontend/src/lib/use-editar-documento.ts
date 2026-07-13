@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { DocumentoOut } from "./contrato-legislativo.gen";
+import { semCredencial } from "./modo";
 
 export type EditarDocumentoIn = { lockVersion: number; corpo?: string; assunto?: string };
 
@@ -39,7 +40,7 @@ export function useEditarDocumento(token: string | null, id: string | null) {
   }, []);
 
   async function editar(corpo: EditarDocumentoIn): Promise<DocumentoOut> {
-    if (!token) {
+    if (semCredencial(token)) {
       throw new Error("sem token de autenticacao");
     }
     if (!id) {
@@ -54,7 +55,7 @@ export function useEditarDocumento(token: string | null, id: string | null) {
     let tratado = false;
     try {
       const r = await apiFetch(`/api/legislativo/documentos/${encodeURIComponent(id)}`, {
-        token,
+        token: token ?? undefined,
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(corpoKebab(corpo)),

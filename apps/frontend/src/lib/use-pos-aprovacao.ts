@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { PosAprovacaoOut } from "./contrato-legislativo.gen";
+import { semCredencial } from "./modo";
 
 type Estado = "carregando" | "pronto" | "erro";
 
@@ -26,12 +27,12 @@ export function usePosAprovacao(token: string | null, proposicaoId: string | nul
 
   useEffect(() => {
     if (!proposicaoId) return;
-    if (!token) return;
+    if (semCredencial(token)) return;
     let vivo = true;
     (async () => {
       try {
         const r = await apiFetch(`/api/legislativo/proposicoes/${encodeURIComponent(proposicaoId)}/pos-aprovacao`, {
-          token,
+          token: token ?? undefined,
           cache: "no-store",
         });
         if (!vivo) return;
@@ -51,6 +52,6 @@ export function usePosAprovacao(token: string | null, proposicaoId: string | nul
   }, [token, proposicaoId]);
 
   if (!proposicaoId) return { dados: null, estado: "pronto" as Estado };
-  if (!token) return { dados: null, estado: "erro" as Estado };
+  if (semCredencial(token)) return { dados: null, estado: "erro" as Estado };
   return { dados, estado };
 }

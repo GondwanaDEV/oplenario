@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { ProposicaoDetalheOut } from "./contrato-legislativo.gen";
+import { semCredencial } from "./modo";
 
 export type CriarProposicaoIn = {
   tipo: string;
@@ -56,7 +57,7 @@ export function useCriarProposicao(token: string | null) {
   }, []);
 
   async function criar(corpo: CriarProposicaoIn): Promise<ProposicaoDetalheOut> {
-    if (!token) {
+    if (semCredencial(token)) {
       throw new Error("sem token de autenticacao");
     }
     if (enviandoRef.current) {
@@ -70,7 +71,7 @@ export function useCriarProposicao(token: string | null) {
     let tratado = false;
     try {
       const r = await apiFetch("/api/legislativo/proposicoes", {
-        token,
+        token: token ?? undefined,
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(corpoKebab(corpo)),

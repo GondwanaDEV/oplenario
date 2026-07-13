@@ -13,13 +13,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { ParecerEditorOut } from "./contrato-legislativo.gen";
+import { semCredencial } from "./modo";
 
 type Estado = "carregando" | "pronto" | "erro";
 
 // null = 404/erro HTTP (não distingue do "não encontrado" — mesmo contrato dos GETs irmãos).
-async function buscarParecer(token: string, id: string): Promise<ParecerEditorOut | null> {
+async function buscarParecer(token: string | null, id: string): Promise<ParecerEditorOut | null> {
   const r = await apiFetch(`/api/legislativo/pareceres/${encodeURIComponent(id)}`, {
-    token,
+    token: token ?? undefined,
     cache: "no-store",
   });
   if (!r.ok) return null;
@@ -57,7 +58,7 @@ export function useParecerEditor(token: string | null, id: string | null) {
 
   useEffect(() => {
     if (!id) return;
-    if (!token) return;
+    if (semCredencial(token)) return;
     let vivo = true;
     (async () => {
       try {
@@ -79,7 +80,7 @@ export function useParecerEditor(token: string | null, id: string | null) {
   }, [token, id]);
 
   const recarregar = useCallback(async () => {
-    if (!id || !token) return;
+    if (!id || semCredencial(token)) return;
     const idDaChamada = id;
     try {
       const resultado = await buscarParecer(token, id);
@@ -97,6 +98,6 @@ export function useParecerEditor(token: string | null, id: string | null) {
   }, [token, id]);
 
   if (!id) return { dados: null, estado: "pronto" as Estado, recarregar };
-  if (!token) return { dados: null, estado: "erro" as Estado, recarregar };
+  if (semCredencial(token)) return { dados: null, estado: "erro" as Estado, recarregar };
   return { dados, estado, recarregar };
 }

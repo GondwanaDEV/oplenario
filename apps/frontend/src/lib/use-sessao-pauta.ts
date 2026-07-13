@@ -10,6 +10,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
+import { semCredencial } from "./modo";
 
 export interface SessaoOut {
   id: string;
@@ -64,13 +65,16 @@ export function useSessaoPauta(token: string | null, sessaoId: string | null) {
   }
 
   useEffect(() => {
-    if (!token || !sessaoId) return;
+    if (semCredencial(token) || !sessaoId) return;
     let vivo = true;
     (async () => {
       try {
         const [rSessao, rPauta] = await Promise.all([
-          apiFetch(`/api/sessoes/${encodeURIComponent(sessaoId)}`, { token, cache: "no-store" }),
-          apiFetch(`/api/sessoes/${encodeURIComponent(sessaoId)}/pauta`, { token, cache: "no-store" }),
+          apiFetch(`/api/sessoes/${encodeURIComponent(sessaoId)}`, { token: token ?? undefined, cache: "no-store" }),
+          apiFetch(`/api/sessoes/${encodeURIComponent(sessaoId)}/pauta`, {
+            token: token ?? undefined,
+            cache: "no-store",
+          }),
         ]);
         if (!vivo) return;
         if (!rSessao.ok || !rPauta.ok) {
@@ -91,7 +95,7 @@ export function useSessaoPauta(token: string | null, sessaoId: string | null) {
     };
   }, [token, sessaoId]);
 
-  if (!token) {
+  if (semCredencial(token)) {
     return { sessao: null, pauta: null, estado: "erro" as Estado };
   }
   return { sessao, pauta, estado };

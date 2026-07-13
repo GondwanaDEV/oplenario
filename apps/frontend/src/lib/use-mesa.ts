@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { CardIndisponivelOut, ItemBoardOut, MesaOut, RelatorPendenteOut } from "./contrato-mesa.gen";
+import { semCredencial } from "./modo";
 
 export type { ItemBoardOut };
 
@@ -36,9 +37,9 @@ type Estado = "carregando" | "pronto" | "erro";
 // Boundary kebab->camel: extraído para ./boundary (Task 0.1, Fatia A2.0 — Portal do Cidadão); ver o
 // racional lá (jsonista serializa keywords Clojure VERBATIM, bug B7b).
 
-async function buscarOuNull<T>(url: string, token: string): Promise<T | null> {
+async function buscarOuNull<T>(url: string, token: string | null): Promise<T | null> {
   try {
-    const r = await apiFetch(url, { token, cache: "no-store" });
+    const r = await apiFetch(url, { token: token ?? undefined, cache: "no-store" });
     if (!r.ok) return null;
     return camelizarChaves(await r.json()) as T;
   } catch {
@@ -64,7 +65,7 @@ export function useMesa(token: string | null) {
   const [estado, setEstado] = useState<Estado>("carregando");
 
   useEffect(() => {
-    if (!token) return; // caso de erro é derivado no retorno (sem setState síncrono no effect)
+    if (semCredencial(token)) return; // caso de erro é derivado no retorno (sem setState síncrono no effect)
     let vivo = true;
     (async () => {
       const principal = await buscarOuNull<MesaOut>("/api/paineis/mesa", token);
@@ -95,7 +96,7 @@ export function useMesa(token: string | null) {
   }, [token]);
 
   // caso de erro sem token é derivado aqui (mantém o effect livre de setState síncrono)
-  if (!token) {
+  if (semCredencial(token)) {
     return {
       mesa: null,
       tramitacaoItens: null,

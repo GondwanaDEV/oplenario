@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
+import { semCredencial } from "./modo";
 
 export type MinhaSessaoAtualOut = { sessaoId: string | null; situacao: string | null };
 
@@ -17,11 +18,11 @@ export function useMinhaSessaoAtual(token: string | null) {
   const [estado, setEstado] = useState<Estado>("carregando");
 
   useEffect(() => {
-    if (!token) return;
+    if (semCredencial(token)) return;
     let vivo = true;
     (async () => {
       try {
-        const r = await apiFetch("/api/meu/sessao-atual", { token, cache: "no-store" });
+        const r = await apiFetch("/api/meu/sessao-atual", { token: token ?? undefined, cache: "no-store" });
         if (!vivo) return;
         if (!r.ok) {
           setEstado("erro");
@@ -39,6 +40,6 @@ export function useMinhaSessaoAtual(token: string | null) {
     };
   }, [token]);
 
-  if (!token) return { sessaoId: null, situacao: null, estado: "erro" as Estado };
+  if (semCredencial(token)) return { sessaoId: null, situacao: null, estado: "erro" as Estado };
   return { sessaoId: dados?.sessaoId ?? null, situacao: dados?.situacao ?? null, estado };
 }

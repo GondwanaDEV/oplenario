@@ -8,12 +8,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { ParecerEditorOut } from "./contrato-legislativo.gen";
+import { semCredencial } from "./modo";
 
 type Estado = "carregando" | "pronto" | "erro";
 
-async function buscarMeuParecer(token: string, id: string): Promise<ParecerEditorOut | null> {
+async function buscarMeuParecer(token: string | null, id: string): Promise<ParecerEditorOut | null> {
   const r = await apiFetch(`/api/meu/pareceres/${encodeURIComponent(id)}`, {
-    token,
+    token: token ?? undefined,
     cache: "no-store",
   });
   if (!r.ok) return null;
@@ -44,7 +45,7 @@ export function useMeuParecer(token: string | null, id: string | null) {
 
   useEffect(() => {
     if (!id) return;
-    if (!token) return;
+    if (semCredencial(token)) return;
     let vivo = true;
     setEstado("carregando");
     buscarMeuParecer(token, id).then((d) => {
@@ -59,7 +60,7 @@ export function useMeuParecer(token: string | null, id: string | null) {
   }, [token, id]);
 
   const recarregar = useCallback(async () => {
-    if (!token || !id) return;
+    if (semCredencial(token) || !id) return;
     const d = await buscarMeuParecer(token, id);
     if (!vivoRef.current || idAtualRef.current !== id) return;
     setDados(d);
@@ -67,6 +68,6 @@ export function useMeuParecer(token: string | null, id: string | null) {
   }, [token, id]);
 
   if (!id) return { dados: null, estado: "pronto" as Estado, recarregar };
-  if (!token) return { dados: null, estado: "erro" as Estado, recarregar };
+  if (semCredencial(token)) return { dados: null, estado: "erro" as Estado, recarregar };
   return { dados, estado, recarregar };
 }
