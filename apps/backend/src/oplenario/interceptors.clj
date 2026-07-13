@@ -10,6 +10,7 @@
             [jsonista.core :as json]
             [oplenario.http :as http]
             [oplenario.identidade.autenticacao :as auten]
+            [oplenario.identidade.components.repositorio :as repo]
             [oplenario.kernel.autorizacao :as authz]
             [oplenario.kernel.components.idp :as idp]))
 
@@ -40,18 +41,26 @@
   (chain/terminate (assoc ctx :response (http/json-resposta status {:erro razao}))))
 
 (defn autenticacao
-  "Interceptor de AUTENTICACAO (§22.5 eixo D). Sem token / token invalido / sem vinculo ativo -> 401 + termina
-  (fail-closed). Sucesso -> `ator` em (:request :ator) p/ os interceptors/handlers seguintes."
+  "Interceptor de AUTENTICACAO (§22.5 eixo D). PRECEDENCIA: sessao de COOKIE primeiro (login real, Onda D
+  Slice 2); senao BEARER (dev-token/servico — mantido vivo). Sem credencial / invalido / sem vinculo -> 401
+  (fail-closed). Sucesso -> `ator` em (:request :ator). A sessao de cookie roda `resolver-sessao` A CADA
+  request (authz viva: vinculo revogado derruba a sessao na hora, nao espera a expiracao do cookie)."
   [idp repo-identidade]
   {:name  ::autenticacao
    :enter (fn [ctx]
-            (if-let [tok (bearer (:request ctx))]
-              (if-let [claims (idp/verificar-token idp tok)]
+            (if-let [seg (cookie-sessao (:request ctx))]
+              (if-let [claims (repo/resolver-sessao-por-segredo repo-identidade seg)]  ; {:identidade-id :ente-id} ou nil
                 (if-let [ator (auten/resolver-sessao repo-identidade claims)]
                   (assoc-in ctx [:request :ator] ator)
                   (nega! ctx 401 "sem vinculo ativo"))
-                (nega! ctx 401 "token invalido"))
-              (nega! ctx 401 "token ausente")))})
+                (nega! ctx 401 "sessao invalida"))
+              (if-let [tok (bearer (:request ctx))]
+                (if-let [claims (idp/verificar-token idp tok)]
+                  (if-let [ator (auten/resolver-sessao repo-identidade claims)]
+                    (assoc-in ctx [:request :ator] ator)
+                    (nega! ctx 401 "sem vinculo ativo"))
+                  (nega! ctx 401 "token invalido"))
+                (nega! ctx 401 "sem credencial"))))})
 
 (def ^:private max-corpo-bytes
   "Teto do corpo de request JSON (256 KiB). Barra exaustao de heap por payload unico (review seg W3 MAJOR-1).
