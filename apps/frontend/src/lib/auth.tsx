@@ -17,6 +17,8 @@
 // ou token malformado -> [] (fail-closed: sem papel nenhum, nunca assume acesso).
 
 import { createContext, useContext, type ReactNode } from "react";
+import { modoReal } from "./modo";
+import { useEu } from "./use-eu";
 
 function papeisDoToken(token: string | null): string[] {
   if (!token) return [];
@@ -53,4 +55,15 @@ export function useAuth() {
   const ctx = useContext(AuthCtx);
   if (!ctx) throw new Error("useAuth fora de AuthProvider");
   return ctx;
+}
+
+// usePapeis (Onda D Slice 2, Task 16): papéis EFETIVOS p/ guardas de UI (não-autoritativas — o 401/403 do
+// backend segue sendo o portão real). No modo dev vêm do token (síncrono, já "pronto" no primeiro render).
+// No modo real (cookie, token=null) vêm de GET /eu (assíncrono); enquanto carrega, estado='carregando' e a
+// guarda deve SEGURAR o render (não mostrar "Acesso restrito" antes do /eu responder — evita o flash).
+export function usePapeis(): { papeis: string[]; estado: "carregando" | "pronto" | "erro" } {
+  const { token, papeis } = useAuth();
+  const eu = useEu(token); // hook chamado sempre; no-op (não busca) em modo dev
+  if (modoReal()) return { papeis: eu.papeis ?? [], estado: eu.estado };
+  return { papeis, estado: "pronto" };
 }

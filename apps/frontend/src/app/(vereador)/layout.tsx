@@ -15,7 +15,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { AuthProvider, useAuth } from "@/lib/auth";
+import { AuthProvider, useAuth, usePapeis } from "@/lib/auth";
 import { TemaProvider, useTema } from "@/lib/tema";
 import { comToken } from "@/lib/nav";
 import "./vereador-shell.css";
@@ -40,7 +40,10 @@ function LeitorToken({ children }: { children: React.ReactNode }) {
 }
 
 export function GuardVereador({ children }: { children: React.ReactNode }) {
-  const { papeis } = useAuth();
+  const { papeis, estado } = usePapeis();
+  // Modo real: enquanto /eu ainda não respondeu, não decide nada — evita piscar "Acesso restrito" antes da
+  // resposta chegar (a authz real é sempre server-side de qualquer forma; isto é só UX).
+  if (estado === "carregando") return null;
   if (!papeis.includes("vereador")) {
     return (
       <main className="acesso-restrito">
