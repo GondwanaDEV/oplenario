@@ -8,6 +8,7 @@
 // a versão "só contagem" já presente em `mesa`, nunca deriva pra erro de página).
 
 import { useEffect, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { CardIndisponivelOut, ItemBoardOut, MesaOut, RelatorPendenteOut } from "./contrato-mesa.gen";
 
@@ -37,7 +38,7 @@ type Estado = "carregando" | "pronto" | "erro";
 
 async function buscarOuNull<T>(url: string, token: string): Promise<T | null> {
   try {
-    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+    const r = await apiFetch(url, { token, cache: "no-store" });
     if (!r.ok) return null;
     return camelizarChaves(await r.json()) as T;
   } catch {

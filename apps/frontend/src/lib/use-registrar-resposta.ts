@@ -8,6 +8,7 @@
 // o autógrafo em si não muda ao registrar a resposta).
 
 import { useEffect, useRef, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { TramitacaoExecutivaOut } from "./contrato-legislativo.gen";
 
@@ -59,9 +60,10 @@ export function useRegistrarResposta(token: string | null, autografoId: string |
     setErro(null);
     let tratado = false;
     try {
-      const r = await fetch(`/api/legislativo/autografos/${encodeURIComponent(autografoId)}/resposta`, {
+      const r = await apiFetch(`/api/legislativo/autografos/${encodeURIComponent(autografoId)}/resposta`, {
+        token,
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(corpoKebab(corpo)),
       });
       if (!r.ok) {

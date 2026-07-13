@@ -30,10 +30,9 @@ describe("useProtocoloLivro", () => {
     expect(result.current.estado).toBe("carregando");
     await waitFor(() => expect(result.current.estado).toBe("pronto"));
     expect(result.current.dados?.itens[0].objetoTipo).toBe("documento");
-    expect(global.fetch).toHaveBeenCalledWith(
-      "/api/legislativo/protocolo-geral",
-      expect.objectContaining({ headers: { Authorization: "Bearer tok" } }),
-    );
+    const chamada = vi.mocked(global.fetch).mock.calls[0];
+    expect(chamada[0]).toBe("/api/legislativo/protocolo-geral");
+    expect(new Headers(chamada[1]?.headers).get("Authorization")).toBe("Bearer tok");
   });
 
   it("sem token -> 'erro' sem chamar fetch", () => {

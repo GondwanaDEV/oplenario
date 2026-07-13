@@ -5,6 +5,7 @@
 // pelo Last-Event-ID. Todo o IO mora aqui; a lógica de estado é o reducer testado (plenario-reducer).
 
 import { useEffect, useRef, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import type { EventoPlenario, SessaoOut } from "./contrato";
 import { TIPOS_PLENARIO } from "./contrato";
 import { aplicarEvento, estadoInicial, type EstadoPlenario } from "./plenario-reducer";
@@ -55,8 +56,8 @@ export function usePlenario(sessaoId: string, token: string | null) {
     (async () => {
       // 1) estado inicial
       try {
-        const resp = await fetch(`/api/sessoes/${sessaoId}`, {
-          headers: { Authorization: `Bearer ${token}` },
+        const resp = await apiFetch(`/api/sessoes/${sessaoId}`, {
+          token,
           signal: controller.signal,
           cache: "no-store",
         });

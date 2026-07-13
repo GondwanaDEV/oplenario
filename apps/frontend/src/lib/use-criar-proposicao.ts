@@ -7,6 +7,7 @@
 // `useEffect` de cleanup dedicado, ja' que `criar` e' funcao imperativa (nao um efeito auto-disparado).
 
 import { useEffect, useRef, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { ProposicaoDetalheOut } from "./contrato-legislativo.gen";
 
@@ -68,9 +69,10 @@ export function useCriarProposicao(token: string | null) {
     // sobrescreveria a mensagem especifica (ex.: "conflito", "invalido") com a generica de rede.
     let tratado = false;
     try {
-      const r = await fetch("/api/legislativo/proposicoes", {
+      const r = await apiFetch("/api/legislativo/proposicoes", {
+        token,
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(corpoKebab(corpo)),
       });
       if (!r.ok) {

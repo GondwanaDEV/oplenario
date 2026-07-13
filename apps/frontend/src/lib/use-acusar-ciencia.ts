@@ -6,6 +6,7 @@
 // carrega `evento-ref`/`tipo`).
 
 import { useEffect, useRef, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { AcusarCienciaOut } from "./contrato-legislativo.gen";
 
@@ -37,9 +38,10 @@ export function useAcusarCiencia(token: string | null) {
     setErro(null);
     let tratado = false;
     try {
-      const r = await fetch("/api/meu/ciencias", {
+      const r = await apiFetch("/api/meu/ciencias", {
+        token,
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ "evento-ref": corpo.eventoRef, tipo: corpo.tipo }),
       });
       if (!r.ok) {

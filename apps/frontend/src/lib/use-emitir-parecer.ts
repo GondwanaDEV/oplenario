@@ -8,6 +8,7 @@
 // não-branco e o CAS de fato.
 
 import { useEffect, useRef, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { ParecerEditorOut } from "./contrato-legislativo.gen";
 
@@ -47,9 +48,10 @@ export function useEmitirParecer(token: string | null, id: string) {
     setErro(null);
     let tratado = false;
     try {
-      const r = await fetch(`/api/legislativo/pareceres/${id}/emissao`, {
+      const r = await apiFetch(`/api/legislativo/pareceres/${id}/emissao`, {
+        token,
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(corpoKebab(corpo)),
       });
       if (!r.ok) {

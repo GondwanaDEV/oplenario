@@ -8,6 +8,7 @@
 // honesta de sessão-alvo, tratada pela página.
 
 import { useEffect, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 
 export interface SessaoOut {
@@ -68,14 +69,8 @@ export function useSessaoPauta(token: string | null, sessaoId: string | null) {
     (async () => {
       try {
         const [rSessao, rPauta] = await Promise.all([
-          fetch(`/api/sessoes/${encodeURIComponent(sessaoId)}`, {
-            headers: { Authorization: `Bearer ${token}` },
-            cache: "no-store",
-          }),
-          fetch(`/api/sessoes/${encodeURIComponent(sessaoId)}/pauta`, {
-            headers: { Authorization: `Bearer ${token}` },
-            cache: "no-store",
-          }),
+          apiFetch(`/api/sessoes/${encodeURIComponent(sessaoId)}`, { token, cache: "no-store" }),
+          apiFetch(`/api/sessoes/${encodeURIComponent(sessaoId)}/pauta`, { token, cache: "no-store" }),
         ]);
         if (!vivo) return;
         if (!rSessao.ok || !rPauta.ok) {

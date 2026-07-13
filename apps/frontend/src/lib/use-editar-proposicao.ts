@@ -5,6 +5,7 @@
 // cleanup dedicado (ver use-criar-proposicao.ts).
 
 import { useEffect, useRef, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { ProposicaoDetalheOut } from "./contrato-legislativo.gen";
 
@@ -64,9 +65,10 @@ export function useEditarProposicao(token: string | null, id: string) {
     // sobrescreveria a mensagem especifica (ex.: "conflito", "invalido") com a generica de rede.
     let tratado = false;
     try {
-      const r = await fetch(`/api/legislativo/proposicoes/${id}`, {
+      const r = await apiFetch(`/api/legislativo/proposicoes/${id}`, {
+        token,
         method: "PATCH",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(corpoKebab(corpo)),
       });
       if (!r.ok) {

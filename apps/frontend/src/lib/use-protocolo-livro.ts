@@ -5,6 +5,7 @@
 // Mirror exato de use-documento-modelos.ts.
 
 import { useEffect, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { LivroProtocoloOut } from "./contrato-legislativo.gen";
 
@@ -19,10 +20,7 @@ export function useProtocoloLivro(token: string | null) {
     let vivo = true;
     (async () => {
       try {
-        const r = await fetch("/api/legislativo/protocolo-geral", {
-          headers: { Authorization: `Bearer ${token}` },
-          cache: "no-store",
-        });
+        const r = await apiFetch("/api/legislativo/protocolo-geral", { token, cache: "no-store" });
         if (!vivo) return;
         if (!r.ok) {
           setEstado("erro");

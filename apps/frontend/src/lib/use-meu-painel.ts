@@ -10,16 +10,14 @@
 // em erro) é melhoria futura, não o comportamento atual.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { MeuPainelOut } from "./contrato-legislativo.gen";
 
 type Estado = "carregando" | "pronto" | "erro";
 
 async function buscarPainel(token: string): Promise<MeuPainelOut | null> {
-  const r = await fetch("/api/meu/painel", {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-  });
+  const r = await apiFetch("/api/meu/painel", { token, cache: "no-store" });
   if (!r.ok) return null;
   return camelizarChaves(await r.json()) as MeuPainelOut;
 }

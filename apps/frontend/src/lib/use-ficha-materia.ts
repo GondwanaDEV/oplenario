@@ -5,6 +5,7 @@
 // eslint-plugin-react-hooks v7 `set-state-in-effect` em vez de setState síncrono dentro do useEffect).
 
 import { useEffect, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { FichaMateriaOut } from "./contrato-legislativo.gen";
 
@@ -28,8 +29,8 @@ export function useFichaMateria(token: string | null, id: string | null) {
     let vivo = true;
     (async () => {
       try {
-        const r = await fetch(`/api/legislativo/proposicoes/${encodeURIComponent(id)}/ficha`, {
-          headers: { Authorization: `Bearer ${token}` },
+        const r = await apiFetch(`/api/legislativo/proposicoes/${encodeURIComponent(id)}/ficha`, {
+          token,
           cache: "no-store",
         });
         if (!vivo) return;

@@ -5,14 +5,15 @@
 // UNICA diferenca e' a URL (borda /meu, gate 'vereador' + posse — legislativo/diplomat/http/in.clj).
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { ParecerEditorOut } from "./contrato-legislativo.gen";
 
 type Estado = "carregando" | "pronto" | "erro";
 
 async function buscarMeuParecer(token: string, id: string): Promise<ParecerEditorOut | null> {
-  const r = await fetch(`/api/meu/pareceres/${encodeURIComponent(id)}`, {
-    headers: { Authorization: `Bearer ${token}` },
+  const r = await apiFetch(`/api/meu/pareceres/${encodeURIComponent(id)}`, {
+    token,
     cache: "no-store",
   });
   if (!r.ok) return null;

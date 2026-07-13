@@ -6,6 +6,7 @@
 // detalhe") — aqui ela é a chamada PRINCIPAL da página, não um enriquecimento best-effort.
 
 import { useEffect, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { ItemBoardOut, TramitacaoBoardOut } from "./contrato-mesa.gen";
 
@@ -20,10 +21,7 @@ export function useTramitacaoBoard(token: string | null) {
     let vivo = true;
     (async () => {
       try {
-        const r = await fetch("/api/paineis/tramitacao", {
-          headers: { Authorization: `Bearer ${token}` },
-          cache: "no-store",
-        });
+        const r = await apiFetch("/api/paineis/tramitacao", { token, cache: "no-store" });
         if (!vivo) return;
         if (!r.ok) {
           setEstado("erro");

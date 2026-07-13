@@ -8,14 +8,15 @@
 // `protocolo-numero`/`protocolo-ano`, o componente refaz o GET pra ter certeza em vez de assumir.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { DocumentoOut } from "./contrato-legislativo.gen";
 
 type Estado = "carregando" | "pronto" | "erro";
 
 async function buscarDocumento(token: string, id: string): Promise<DocumentoOut | null> {
-  const r = await fetch(`/api/legislativo/documentos/${encodeURIComponent(id)}`, {
-    headers: { Authorization: `Bearer ${token}` },
+  const r = await apiFetch(`/api/legislativo/documentos/${encodeURIComponent(id)}`, {
+    token,
     cache: "no-store",
   });
   if (!r.ok) return null;

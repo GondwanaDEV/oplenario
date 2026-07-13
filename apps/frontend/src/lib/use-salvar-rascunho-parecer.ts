@@ -7,6 +7,7 @@
 // wire/in.SalvarRascunhoParecer), então o corpo vai cru, sem filtro de `undefined`.
 
 import { useEffect, useRef, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { ParecerEditorOut } from "./contrato-legislativo.gen";
 
@@ -38,9 +39,10 @@ export function useSalvarRascunhoParecer(token: string | null, id: string) {
     setErro(null);
     let tratado = false;
     try {
-      const r = await fetch(`/api/legislativo/pareceres/${id}`, {
+      const r = await apiFetch(`/api/legislativo/pareceres/${id}`, {
+        token,
         method: "PATCH",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(corpo),
       });
       if (!r.ok) {

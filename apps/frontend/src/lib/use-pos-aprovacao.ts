@@ -6,6 +6,7 @@
 // o mesmo contrato genérico dos outros hooks-por-id do módulo.
 
 import { useEffect, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { PosAprovacaoOut } from "./contrato-legislativo.gen";
 
@@ -29,8 +30,8 @@ export function usePosAprovacao(token: string | null, proposicaoId: string | nul
     let vivo = true;
     (async () => {
       try {
-        const r = await fetch(`/api/legislativo/proposicoes/${encodeURIComponent(proposicaoId)}/pos-aprovacao`, {
-          headers: { Authorization: `Bearer ${token}` },
+        const r = await apiFetch(`/api/legislativo/proposicoes/${encodeURIComponent(proposicaoId)}/pos-aprovacao`, {
+          token,
           cache: "no-store",
         });
         if (!vivo) return;

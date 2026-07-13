@@ -5,6 +5,7 @@
 // cada mudança de filtro (busca/tipo/estado/ano/página/ordenação).
 
 import { useEffect, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { ListaProposicoesOut } from "./contrato-legislativo.gen";
 
@@ -54,8 +55,8 @@ export function useProposicoes(token: string | null, filtros: FiltrosProposicoes
     let vivo = true;
     (async () => {
       try {
-        const r = await fetch(`/api/legislativo/proposicoes?${montarQuerystring(filtros)}`, {
-          headers: { Authorization: `Bearer ${token}` },
+        const r = await apiFetch(`/api/legislativo/proposicoes?${montarQuerystring(filtros)}`, {
+          token,
           cache: "no-store",
         });
         if (!vivo) return;

@@ -4,6 +4,7 @@
 // use-acusar-ciencia.ts. `vereador-id` nunca vem do cliente; o corpo só carrega `voto`.
 
 import { useEffect, useRef, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 
 export type VotoNominalIn = "sim" | "nao" | "abstencao";
@@ -35,9 +36,10 @@ export function useMeuVoto(token: string | null) {
     setErro(null);
     let tratado = false;
     try {
-      const r = await fetch(`/api/sessoes/${sessaoId}/votacoes/${votacaoId}/meu-voto`, {
+      const r = await apiFetch(`/api/sessoes/${sessaoId}/votacoes/${votacaoId}/meu-voto`, {
+        token,
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ voto }),
       });
       if (!r.ok) {

@@ -10,6 +10,7 @@
 // pelos dois caminhos (efeito de carga + `recarregar` imperativo) — não duplica a chamada de rede.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { ParecerEditorOut } from "./contrato-legislativo.gen";
 
@@ -17,8 +18,8 @@ type Estado = "carregando" | "pronto" | "erro";
 
 // null = 404/erro HTTP (não distingue do "não encontrado" — mesmo contrato dos GETs irmãos).
 async function buscarParecer(token: string, id: string): Promise<ParecerEditorOut | null> {
-  const r = await fetch(`/api/legislativo/pareceres/${encodeURIComponent(id)}`, {
-    headers: { Authorization: `Bearer ${token}` },
+  const r = await apiFetch(`/api/legislativo/pareceres/${encodeURIComponent(id)}`, {
+    token,
     cache: "no-store",
   });
   if (!r.ok) return null;

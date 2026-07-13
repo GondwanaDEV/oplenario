@@ -6,6 +6,7 @@
 // contra a chamada prematura de qualquer jeito — defesa em profundidade, mesmo espírito do guard de token).
 
 import { useEffect, useRef, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { DocumentoOut } from "./contrato-legislativo.gen";
 
@@ -52,9 +53,10 @@ export function useEditarDocumento(token: string | null, id: string | null) {
     setErro(null);
     let tratado = false;
     try {
-      const r = await fetch(`/api/legislativo/documentos/${encodeURIComponent(id)}`, {
+      const r = await apiFetch(`/api/legislativo/documentos/${encodeURIComponent(id)}`, {
+        token,
         method: "PATCH",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(corpoKebab(corpo)),
       });
       if (!r.ok) {

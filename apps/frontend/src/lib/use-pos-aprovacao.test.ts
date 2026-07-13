@@ -36,10 +36,9 @@ describe("usePosAprovacao", () => {
     await waitFor(() => expect(result.current.estado).toBe("pronto"));
     expect(result.current.dados?.autografo?.destinatarioTexto).toBe("Prefeitura Municipal");
     expect(result.current.dados?.tramitacaoExecutiva?.estado).toBe("aguardando");
-    expect(global.fetch).toHaveBeenCalledWith(
-      "/api/legislativo/proposicoes/1/pos-aprovacao",
-      expect.objectContaining({ headers: { Authorization: "Bearer tok" } }),
-    );
+    const chamada = vi.mocked(global.fetch).mock.calls[0];
+    expect(chamada[0]).toBe("/api/legislativo/proposicoes/1/pos-aprovacao");
+    expect(new Headers(chamada[1]?.headers).get("Authorization")).toBe("Bearer tok");
   });
 
   it("autografo ausente -> {autografo: null}, sem lançar", async () => {
@@ -57,10 +56,9 @@ describe("usePosAprovacao", () => {
     ) as unknown as typeof fetch;
     const { result } = renderHook(() => usePosAprovacao("tok", "a/b?c"));
     await waitFor(() => expect(result.current.estado).toBe("pronto"));
-    expect(global.fetch).toHaveBeenCalledWith(
-      "/api/legislativo/proposicoes/a%2Fb%3Fc/pos-aprovacao",
-      expect.objectContaining({ headers: { Authorization: "Bearer tok" } }),
-    );
+    const chamada = vi.mocked(global.fetch).mock.calls[0];
+    expect(chamada[0]).toBe("/api/legislativo/proposicoes/a%2Fb%3Fc/pos-aprovacao");
+    expect(new Headers(chamada[1]?.headers).get("Authorization")).toBe("Bearer tok");
   });
 
   it("proposicaoId nulo -> 'pronto' sem chamar fetch", () => {

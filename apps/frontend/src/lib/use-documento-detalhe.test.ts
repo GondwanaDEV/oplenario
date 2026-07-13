@@ -39,10 +39,9 @@ describe("useDocumentoDetalhe", () => {
     expect(result.current.estado).toBe("carregando");
     await waitFor(() => expect(result.current.estado).toBe("pronto"));
     expect(result.current.dados?.tipoDocumento).toBe("oficio");
-    expect(global.fetch).toHaveBeenCalledWith(
-      "/api/legislativo/documentos/d1",
-      expect.objectContaining({ headers: { Authorization: "Bearer tok" } }),
-    );
+    const chamada = vi.mocked(global.fetch).mock.calls[0];
+    expect(chamada[0]).toBe("/api/legislativo/documentos/d1");
+    expect(new Headers(chamada[1]?.headers).get("Authorization")).toBe("Bearer tok");
   });
 
   it("sem token, com id -> 'erro' sem chamar fetch", () => {

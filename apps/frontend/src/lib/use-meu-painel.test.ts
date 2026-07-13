@@ -18,10 +18,9 @@ describe("useMeuPainel", () => {
     expect(result.current.estado).toBe("carregando");
     await waitFor(() => expect(result.current.estado).toBe("pronto"));
     expect(result.current.dados?.proposicoes[0].urnLex).toBe("urn:lex:fixture");
-    expect(global.fetch).toHaveBeenCalledWith(
-      "/api/meu/painel",
-      expect.objectContaining({ headers: { Authorization: "Bearer tok" } }),
-    );
+    const chamada = vi.mocked(global.fetch).mock.calls[0];
+    expect(chamada[0]).toBe("/api/meu/painel");
+    expect(new Headers(chamada[1]?.headers).get("Authorization")).toBe("Bearer tok");
   });
 
   it("sem token -> 'erro' sem chamar fetch", () => {

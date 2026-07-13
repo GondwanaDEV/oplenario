@@ -5,6 +5,7 @@
 // do cliente (a borda resolve do ator, anti-forja por construção).
 
 import { useEffect, useRef, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 
 export type ConfirmarPresencaOut = { id: string };
@@ -35,9 +36,9 @@ export function useConfirmarPresenca(token: string | null) {
     setErro(null);
     let tratado = false;
     try {
-      const r = await fetch(`/api/sessoes/${sessaoId}/presenca/confirmar`, {
+      const r = await apiFetch(`/api/sessoes/${sessaoId}/presenca/confirmar`, {
+        token,
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
       });
       if (!r.ok) {
         const corpoErro = await r.json().catch(() => null);

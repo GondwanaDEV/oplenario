@@ -5,6 +5,7 @@
 // que é quando a pauta tende a mudar de forma observável. Mesmo padrão de auth/validação do use-plenario.
 
 import { useEffect, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import type { PautaOut } from "./contrato";
 
 const ID_VALIDO = /^[a-zA-Z0-9_-]{1,128}$/;
@@ -22,8 +23,8 @@ export function usePauta(sessaoId: string, token: string | null, fase: string | 
     let vivo = true;
     (async () => {
       try {
-        const resp = await fetch(`/api/sessoes/${sessaoId}/pauta`, {
-          headers: { Authorization: `Bearer ${token}` },
+        const resp = await apiFetch(`/api/sessoes/${sessaoId}/pauta`, {
+          token,
           signal: controller.signal,
           cache: "no-store",
         });
