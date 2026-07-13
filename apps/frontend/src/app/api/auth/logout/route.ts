@@ -6,15 +6,14 @@
 // mesmo com o backend fora do ar ou já deslogado (backend T5 já é idempotente: DELETE por hash
 // sem match é no-op, não erro).
 //
-// RP-logout no Keycloak (end-session) fica FORA desta rota, por desenho, não por esquecimento:
-// diferente do callback (T9), que recebe realm/base-url/client-id via o cookie `pkce`, o logout
-// roda DEPOIS que esse cookie já foi apagado (T9 limpa `pkce` ao mintar a sessão) — e o cookie
-// `sessao` carrega só o segredo OPACO (§2 das shared-decisions), sem `ente`/`realm`. O backend
-// (T5, `DELETE /auth/sessoes`) também não devolve nada úteis (204 sem corpo). Sem uma fonte de
-// tenant disponível NESTA rota, montar a URL de end-session exigiria inventar plumbing fora do
-// escopo desta task (nova rota de "session info", ou um cookie de tenant de vida mais longa que o
-// `pkce`) — CONCERN para o controller, não decisão unilateral aqui. Por ora: encerra local e
-// redireciona para `/entrar` (a tela pública de login).
+// RP-logout no Keycloak (end-session): o cookie `sessao` carrega só o segredo OPACO (§2 das
+// shared-decisions) e o `pkce` (única fonte de realm/base-url/client-id) já foi apagado pelo
+// callback (T9) ao mintar a sessão — então esta rota não tem de onde ler o tenant sozinha. Fonte:
+// o cookie companheiro `sessao_kc`, setado pelo callback no MESMO passo em que `sessao` é setado,
+// com os 3 valores PÚBLICOS de descoberta (`GET /auth/descoberta/:ente`, sem auth — nunca segredo
+// nem access_token). Se `sessao_kc` estiver ausente (ex.: sessão pré-existente antes desta feature)
+// ou os valores não passarem na validação abaixo, o logout cai no fallback local (`/entrar`) — o
+// logout nunca quebra e nunca monta uma URL a partir de um valor não confiável.
 import { NextRequest, NextResponse } from "next/server";
 import { resolveAppOrigin } from "../appOrigin";
 
@@ -24,6 +23,58 @@ import { resolveAppOrigin } from "../appOrigin";
 // `gerar-segredo`) — 43 chars de `[A-Za-z0-9_-]`; o teto abaixo é generoso o bastante para nunca
 // barrar um segredo real.
 const SEGREDO_VALIDO = /^[A-Za-z0-9_-]{1,128}$/;
+
+// Mesma defesa em profundidade para o cookie `sessao_kc`: embora seja httpOnly e escrito pelo
+// próprio callback a partir da descoberta confiável, não interpolamos valores de cookie numa URL
+// de redirect sem validar a forma primeiro — um cookie forjado (ou um bug futuro) não deve virar
+// um redirect para esquema/host arbitrário.
+const REALM_VALIDO = /^ente-[0-9a-f-]{36}$/i;
+const CLIENT_ID_VALIDO = /^[A-Za-z0-9_-]{1,64}$/;
+
+interface SessaoKcPayload {
+  baseUrl: string;
+  realm: string;
+  clientId: string;
+}
+
+function baseUrlValido(v: unknown): v is string {
+  if (typeof v !== "string") return false;
+  try {
+    const u = new URL(v);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function lerSessaoKc(raw: string | undefined): SessaoKcPayload | null {
+  if (!raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  const { baseUrl, realm, clientId } = parsed as Record<string, unknown>;
+  if (!baseUrlValido(baseUrl)) return null;
+  if (typeof realm !== "string" || !REALM_VALIDO.test(realm)) return null;
+  if (typeof clientId !== "string" || !CLIENT_ID_VALIDO.test(clientId)) return null;
+  return { baseUrl, realm, clientId };
+}
+
+function urlLogoutLocal(request: NextRequest): URL {
+  return new URL("/entrar", resolveAppOrigin(request));
+}
+
+function urlLogoutKc(request: NextRequest, payload: SessaoKcPayload): URL {
+  const url = new URL(
+    `${payload.baseUrl}/realms/${payload.realm}/protocol/openid-connect/logout`,
+  );
+  url.searchParams.set("client_id", payload.clientId);
+  url.searchParams.set("post_logout_redirect_uri", resolveAppOrigin(request));
+  return url;
+}
 
 // POST é um wrapper fino com a assinatura EXATA que o Next.js espera (sem 2º parâmetro) — mesmo
 // padrão de login/route.ts e callback/route.ts: a lógica testável fica numa função à parte,
@@ -60,9 +111,13 @@ export async function encerrarSessao(
     }
   }
 
-  const response = NextResponse.redirect(new URL("/entrar", resolveAppOrigin(request)));
-  // O cookie `sessao` foi SETADO com path "/" (callback/route.ts) — delete precisa da MESMA tupla
-  // (nome, path).
+  const sessaoKc = lerSessaoKc(request.cookies.get("sessao_kc")?.value);
+  const destino = sessaoKc ? urlLogoutKc(request, sessaoKc) : urlLogoutLocal(request);
+
+  const response = NextResponse.redirect(destino);
+  // Os cookies `sessao` e `sessao_kc` foram SETADOS com path "/" (callback/route.ts) — delete
+  // precisa da MESMA tupla (nome, path). Ambos são limpos SEMPRE, em todo caminho (KC ou local).
   response.cookies.delete({ name: "sessao", path: "/" });
+  response.cookies.delete({ name: "sessao_kc", path: "/" });
   return response;
 }

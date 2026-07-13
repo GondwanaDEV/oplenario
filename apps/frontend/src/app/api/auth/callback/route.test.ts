@@ -123,11 +123,30 @@ describe("GET /api/auth/callback — troca code por token (PKCE), minta sessão 
     expect(pkceCookie).toBeTruthy();
     expect(pkceCookie).toMatch(/Path=\/api\/auth/i);
 
+    // Cookie companheiro sessao_kc: carrega SÓ os valores públicos de descoberta (baseUrl/realm/
+    // clientId), lidos do MESMO cookie pkce já em escopo — nada de refetch. httpOnly/secure/lax,
+    // path=/, mesma vida do cookie sessao (para sobreviver até o logout).
+    const sessaoKcCookie = findCookie(resp, "sessao_kc");
+    expect(sessaoKcCookie).toBeTruthy();
+    expect(sessaoKcCookie).toMatch(/HttpOnly/i);
+    expect(sessaoKcCookie).toMatch(/Secure/i);
+    expect(sessaoKcCookie).toMatch(/SameSite=Lax/i);
+    expect(sessaoKcCookie).toMatch(/Path=\//);
+    expect(sessaoKcCookie).toMatch(/Max-Age=43200/i);
+    const sessaoKcValueMatch = sessaoKcCookie!.match(/^sessao_kc=([^;]+)/);
+    expect(sessaoKcValueMatch).toBeTruthy();
+    const sessaoKcParsed = JSON.parse(decodeURIComponent(sessaoKcValueMatch![1]));
+    expect(sessaoKcParsed).toEqual({ baseUrl: BASE_URL, realm: REALM, clientId: CLIENT_ID });
+
     // O access_token do KC NUNCA aparece em nenhum header/cookie/corpo que chega ao navegador.
     const allSetCookie = setCookies(resp).join("\n");
     expect(allSetCookie).not.toContain(ACCESS_TOKEN);
     const bodyText = await resp.clone().text().catch(() => "");
     expect(bodyText).not.toContain(ACCESS_TOKEN);
+
+    // sessao_kc NÃO carrega segredo/access_token — só os 3 campos públicos de descoberta.
+    expect(sessaoKcCookie).not.toContain(ACCESS_TOKEN);
+    expect(sessaoKcCookie).not.toContain(SEGREDO);
   });
 
   it("redirectPath não-same-origin no cookie pkce → redireciona para o default '/'", async () => {

@@ -4,11 +4,15 @@ import { encerrarSessao as POST } from "./route";
 
 const ORIGIN = "http://localhost:3000";
 const SEGREDO = "segredo-opaco-da-sessao-abc123_XYZ";
+const ENTE = "11111111-1111-1111-1111-111111111111";
+const REALM = `ente-${ENTE}`;
+const BASE_URL = "http://localhost:8090";
+const CLIENT_ID = "oplenario-web";
 
 type FetchFn = (url: string | URL | Request, init?: RequestInit) => Promise<Response>;
 const fetchMock = (impl: FetchFn) => vi.fn<FetchFn>(impl);
 
-function req(opts?: { sessao?: string | null }) {
+function req(opts?: { sessao?: string | null; sessaoKc?: Record<string, unknown> | string | null }) {
   const request = new NextRequest(new URL("/api/auth/logout", ORIGIN), { method: "POST" });
   if (opts?.sessao !== undefined) {
     if (opts.sessao !== null) {
@@ -16,6 +20,13 @@ function req(opts?: { sessao?: string | null }) {
     }
   } else {
     request.cookies.set("sessao", SEGREDO);
+  }
+  if (opts?.sessaoKc !== undefined) {
+    if (opts.sessaoKc !== null) {
+      const value =
+        typeof opts.sessaoKc === "string" ? opts.sessaoKc : JSON.stringify(opts.sessaoKc);
+      request.cookies.set("sessao_kc", value);
+    }
   }
   return request;
 }
@@ -99,5 +110,83 @@ describe("POST /api/auth/logout — encerra sessão no backend + limpa cookie lo
       vi.unstubAllEnvs();
       expect(process.env.NODE_ENV).toBe(orig);
     }
+  });
+});
+
+describe("POST /api/auth/logout — RP-logout no Keycloak via cookie companheiro sessao_kc", () => {
+  it("cookie sessao_kc válido → redireciona para o end-session do KC (client_id + post_logout_redirect_uri), limpa AMBOS os cookies", async () => {
+    const fetchImpl = fetchMock(async () => new Response(null, { status: 204 }));
+    const resp = await POST(
+      req({ sessaoKc: { baseUrl: BASE_URL, realm: REALM, clientId: CLIENT_ID } }),
+      { fetchImpl },
+    );
+
+    expect(resp.status).toBeGreaterThanOrEqual(300);
+    expect(resp.status).toBeLessThan(400);
+    const location = new URL(resp.headers.get("location")!);
+    expect(location.origin).toBe(BASE_URL);
+    expect(location.pathname).toBe(`/realms/${REALM}/protocol/openid-connect/logout`);
+    expect(location.searchParams.get("client_id")).toBe(CLIENT_ID);
+    expect(location.searchParams.get("post_logout_redirect_uri")).toBe(ORIGIN);
+
+    const sessaoCookie = findCookie(resp, "sessao");
+    expect(sessaoCookie).toBeTruthy();
+    expect(sessaoCookie).toMatch(/Path=\//);
+    const sessaoKcCookie = findCookie(resp, "sessao_kc");
+    expect(sessaoKcCookie).toBeTruthy();
+    expect(sessaoKcCookie).toMatch(/Path=\//);
+  });
+
+  it("cookie sessao_kc AUSENTE → cai no fallback local /entrar, limpa AMBOS os cookies", async () => {
+    const fetchImpl = fetchMock(async () => new Response(null, { status: 204 }));
+    const resp = await POST(req({ sessaoKc: null }), { fetchImpl });
+
+    const location = new URL(resp.headers.get("location")!);
+    expect(location.origin).toBe(ORIGIN);
+    expect(location.pathname).toBe("/entrar");
+
+    expect(findCookie(resp, "sessao")).toBeTruthy();
+    expect(findCookie(resp, "sessao_kc")).toBeTruthy();
+  });
+
+  it("cookie sessao_kc ADULTERADO (baseUrl com esquema perigoso) → NUNCA monta URL a partir dele, cai no fallback local /entrar", async () => {
+    const fetchImpl = fetchMock(async () => new Response(null, { status: 204 }));
+    const resp = await POST(
+      req({
+        sessaoKc: { baseUrl: "javascript:alert(1)", realm: REALM, clientId: CLIENT_ID },
+      }),
+      { fetchImpl },
+    );
+
+    const location = new URL(resp.headers.get("location")!);
+    expect(location.origin).toBe(ORIGIN);
+    expect(location.pathname).toBe("/entrar");
+    expect(findCookie(resp, "sessao")).toBeTruthy();
+    expect(findCookie(resp, "sessao_kc")).toBeTruthy();
+  });
+
+  it("cookie sessao_kc ADULTERADO (realm fora do formato ente-<uuid>) → cai no fallback local /entrar", async () => {
+    const fetchImpl = fetchMock(async () => new Response(null, { status: 204 }));
+    const resp = await POST(
+      req({
+        sessaoKc: { baseUrl: BASE_URL, realm: "not-a-realm", clientId: CLIENT_ID },
+      }),
+      { fetchImpl },
+    );
+
+    const location = new URL(resp.headers.get("location")!);
+    expect(location.origin).toBe(ORIGIN);
+    expect(location.pathname).toBe("/entrar");
+    expect(findCookie(resp, "sessao")).toBeTruthy();
+    expect(findCookie(resp, "sessao_kc")).toBeTruthy();
+  });
+
+  it("cookie sessao_kc com JSON inválido (não-JSON) → cai no fallback local /entrar", async () => {
+    const fetchImpl = fetchMock(async () => new Response(null, { status: 204 }));
+    const resp = await POST(req({ sessaoKc: "isto-nao-e-json" }), { fetchImpl });
+
+    const location = new URL(resp.headers.get("location")!);
+    expect(location.origin).toBe(ORIGIN);
+    expect(location.pathname).toBe("/entrar");
   });
 });

@@ -8,6 +8,13 @@
 // Ordem de segurança (INEGOCIÁVEL, não reordenar): 1) ler code/state/cookie; 2) comparar state ANTES
 // de tocar no code (CSRF); 3) trocar code→token; 4) mintar sessão; 5) setar cookie + limpar pkce +
 // redirecionar. Cada etapa falha fechado (401/502) sem vazar o token adiante.
+//
+// Cookie companheiro `sessao_kc`: o cookie `pkce` (única fonte de realm/baseUrl/clientId) é limpo
+// AQUI mesmo, ao mintar a sessão — então o logout (T10), que roda bem depois, não teria de onde ler
+// esses valores para montar o RP-logout do Keycloak. Solução (decisão do controller): setar, no
+// MESMO passo em que `sessao` é setado, um cookie companheiro `sessao_kc` só com os 3 valores
+// PÚBLICOS de descoberta (`GET /auth/descoberta/:ente`, sem auth) — nunca o access_token nem o
+// segredo da sessão. httpOnly/secure/lax, mesma vida (12h) do cookie `sessao`.
 
 import { NextRequest, NextResponse } from "next/server";
 import { resolveAppOrigin } from "../appOrigin";
@@ -121,6 +128,19 @@ export async function receberCallback(
     maxAge: 12 * 3600,
     path: "/",
   });
+  // Companheiro de `sessao`: só os 3 valores públicos de descoberta, lidos do cookie `pkce` JÁ em
+  // escopo (sem refetch). Nunca o access_token, nunca o segredo da sessão.
+  response.cookies.set(
+    "sessao_kc",
+    JSON.stringify({ baseUrl: pkce.baseUrl, realm: pkce.realm, clientId: pkce.clientId }),
+    {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      maxAge: 12 * 3600,
+      path: "/",
+    },
+  );
   // O cookie pkce foi SETADO com path "/api/auth" (login/route.ts) — delete precisa da MESMA tupla
   // (nome, path); um delete com path "/" (default) não limpa um cookie escopado a "/api/auth".
   response.cookies.delete({ name: "pkce", path: "/api/auth" });
