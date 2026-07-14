@@ -52,6 +52,17 @@
     (is (validacao-invalida? #(a/registrar-mandato->dominio ATOR ver {"legislatura-id" (str (random-uuid)) "natureza" "prefeito" "vigencia-inicio" "2025-01-01"}))
         "natureza fora do enum -> invalido")))
 
+(deftest mandato-vigencia-fim-antes-do-inicio-e-invalido
+  (let [ver (random-uuid) leg (random-uuid)]
+    (is (validacao-invalida?
+          #(a/registrar-mandato->dominio ATOR ver {"legislatura-id" (str leg) "natureza" "titular"
+                                                    "vigencia-inicio" "2025-06-01" "vigencia-fim" "2025-01-01"}))
+        "vigencia-fim anterior a vigencia-inicio -> 400, nunca 500 no daterange do db/")
+    (is (= (LocalDate/of 2025 1 1)
+           (:vigencia-inicio (a/registrar-mandato->dominio ATOR ver {"legislatura-id" (str leg) "natureza" "titular"
+                                                                     "vigencia-inicio" "2025-01-01" "vigencia-fim" "2025-06-01"})))
+        "vigencia-fim apos vigencia-inicio continua valido (caminho feliz preservado)")))
+
 ;; ---- licenca ----
 (deftest licenca-coage-inicio-e-injeta-id-ente
   (let [m (a/registrar-licenca->dominio ATOR {"inicio" "2026-03-01" "motivo" "saude"})]

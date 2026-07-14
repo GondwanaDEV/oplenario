@@ -23,7 +23,7 @@ describe("useRegistrarMandato", () => {
     await act(async () => {
       dados = await result.current.registrar({
         legislaturaId: "leg-1",
-        natureza: "eleito",
+        natureza: "titular",
         vigenciaInicio: "2025-01-01",
       });
     });
@@ -33,7 +33,7 @@ describe("useRegistrarMandato", () => {
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body)).toEqual({
       "legislatura-id": "leg-1",
-      natureza: "eleito",
+      natureza: "titular",
       "vigencia-inicio": "2025-01-01",
     }); // partido e vigenciaFim undefined são filtrados
   });
@@ -42,7 +42,7 @@ describe("useRegistrarMandato", () => {
     const { result } = renderHook(() => useRegistrarMandato("tok", null));
     await act(async () => {
       await expect(
-        result.current.registrar({ legislaturaId: "leg-1", natureza: "eleito", vigenciaInicio: "2025-01-01" }),
+        result.current.registrar({ legislaturaId: "leg-1", natureza: "titular", vigenciaInicio: "2025-01-01" }),
       ).rejects.toThrow();
     });
     expect(fetchMock).not.toHaveBeenCalled();

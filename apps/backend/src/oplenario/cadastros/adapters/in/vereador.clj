@@ -57,11 +57,15 @@
   (when-not (map? wire-in) (invalido! "corpo deve ser objeto JSON" {:campo :corpo}))
   (let [mm (keywordizar wire-in)]
     (validar! wire/RegistrarMandato mm "corpo de registrar mandato invalido")
-    {:id (random-uuid) :ente-id (:ente-id ator) :vereador-id vereador-id
-     :legislatura-id (->uuid! (:legislatura-id mm) :legislatura-id)
-     :partido (:partido mm) :estado "vigente" :natureza (:natureza mm)
-     :vigencia-inicio (->data! (:vigencia-inicio mm) :vigencia-inicio)
-     :vigencia-fim (->data! (:vigencia-fim mm) :vigencia-fim)}))
+    (let [inicio (->data! (:vigencia-inicio mm) :vigencia-inicio)
+          fim (->data! (:vigencia-fim mm) :vigencia-fim)]
+      (when (and (some? inicio) (some? fim) (.isBefore ^LocalDate fim inicio))
+        (invalido! "vigencia-fim nao pode ser anterior a vigencia-inicio" {:campos [:vigencia-fim]}))
+      {:id (random-uuid) :ente-id (:ente-id ator) :vereador-id vereador-id
+       :legislatura-id (->uuid! (:legislatura-id mm) :legislatura-id)
+       :partido (:partido mm) :estado "vigente" :natureza (:natureza mm)
+       :vigencia-inicio inicio
+       :vigencia-fim fim})))
 
 (defn registrar-licenca->dominio [ator wire-in]
   (when-not (map? wire-in) (invalido! "corpo deve ser objeto JSON" {:campo :corpo}))
