@@ -50,3 +50,22 @@
     (jdbc/execute! tx
       (sql/format {:select [:id :ente_id :comissao_id :vereador_id :vigencia_inicio :vigencia_fim]
                    :from [:cadastros.comissao_membro] :where [:= :comissao_id comissao-id]}))))
+
+(defn comissoes-do-vereador
+  "Comissoes vigentes em `data` de que o vereador e' membro, com o cargo nomeado (se houver)."
+  [tx ente-id vereador-id data]
+  (comum/linhas->kebab
+    (jdbc/execute! tx
+      (sql/format
+        {:select [:c.nome :c.tipo [:cc.cargo :cargo]]
+         :from [[:cadastros.comissao_membro :cm]]
+         :join [[:cadastros.comissao :c] [:and [:= :c.id :cm.comissao_id] [:= :c.ente_id :cm.ente_id]]]
+         :left-join [[:cadastros.comissao_cargo :cc]
+                     [:and [:= :cc.comissao_id :cm.comissao_id] [:= :cc.vereador_id :cm.vereador_id]
+                      [:= :cc.ente_id :cm.ente_id]
+                      [:<= :cc.vigencia_inicio data]
+                      [:or [:is :cc.vigencia_fim nil] [:>= :cc.vigencia_fim data]]]]
+         :where [:and [:= :cm.ente_id ente-id] [:= :cm.vereador_id vereador-id]
+                 [:<= :cm.vigencia_inicio data]
+                 [:or [:is :cm.vigencia_fim nil] [:>= :cm.vigencia_fim data]]]
+         :order-by [[:c.nome :asc]]}))))

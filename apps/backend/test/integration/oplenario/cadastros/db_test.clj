@@ -127,6 +127,32 @@
           (is (= "PT" (:partido mv))))
         (is (nil? (vereador/mandato-vigente tx ente vc hoje)) "Carla sem mandato -> mandato-vigente nil")))))
 
+(deftest comissoes-do-vereador-inclui-cargo-nomeado
+  (let [ente (random-uuid)
+        leg  (random-uuid)
+        ver  (random-uuid)
+        cj   (random-uuid)
+        edu  (random-uuid)
+        ini  (LocalDate/parse "2025-01-01")
+        hoje (LocalDate/parse "2026-07-14")]
+    (seed-municipio!)
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (estrutura/inserir-ente! tx {:ente-id ente :municipio-ibge "2304400" :nome-oficial "Camara de Teste"})
+        (estrutura/inserir-legislatura! tx {:id leg :ente-id ente :numero 20 :ano-inicio 2025 :ano-fim 2028 :vigente true})
+        (vereador/inserir! tx {:id ver :ente-id ente :nome "Diana" :nome-parlamentar "Diana Vereadora"})
+        (comissao/inserir! tx {:id cj :ente-id ente :nome "Constituição e Justiça" :tipo "permanente" :legislatura-id leg :vigencia-inicio ini})
+        (comissao/inserir! tx {:id edu :ente-id ente :nome "Educação" :tipo "permanente" :legislatura-id leg :vigencia-inicio ini})
+        (comissao/inserir-membro! tx {:id (random-uuid) :ente-id ente :comissao-id cj :vereador-id ver :vigencia-inicio ini})
+        (comissao/inserir-cargo! tx {:id (random-uuid) :ente-id ente :comissao-id cj :vereador-id ver :cargo "presidente" :vigencia-inicio ini})
+        (comissao/inserir-membro! tx {:id (random-uuid) :ente-id ente :comissao-id edu :vereador-id ver :vigencia-inicio ini})))
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [cs (comissao/comissoes-do-vereador tx ente ver hoje)]
+          (is (= #{"Constituição e Justiça" "Educação"} (set (map :nome cs))))
+          (is (= "presidente" (:cargo (first (filter #(= "Constituição e Justiça" (:nome %)) cs)))))
+          (is (nil? (:cargo (first (filter #(= "Educação" (:nome %)) cs))))))))))
+
 (deftest carimbo-criado-em-volta-como-instant
   (let [ente (random-uuid)]
     (seed-municipio!)
