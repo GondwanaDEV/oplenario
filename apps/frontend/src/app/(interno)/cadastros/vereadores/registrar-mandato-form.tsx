@@ -77,11 +77,12 @@ export function RegistrarMandatoForm({
       <div className="campo">
         <label htmlFor="rm-natureza">Natureza*</label>
         <select id="rm-natureza" value={natureza} onChange={(e) => setNatureza(e.target.value)}
-                aria-invalid={tocado && !!erros.natureza}>
+                aria-invalid={tocado && !!erros.natureza}
+                aria-describedby={erros.natureza ? "rm-natureza-erro" : undefined}>
           <option value="titular">Titular</option>
           <option value="suplencia">Suplência</option>
         </select>
-        {tocado && erros.natureza && <p role="alert" className="campo-erro">{erros.natureza}</p>}
+        {tocado && erros.natureza && <p id="rm-natureza-erro" role="alert" className="campo-erro">{erros.natureza}</p>}
       </div>
       <div className="campo">
         <label htmlFor="rm-inicio">Início da vigência*</label>
