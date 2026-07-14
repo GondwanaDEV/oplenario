@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import PaginaVereadores from "./page";
 import { AuthProvider } from "@/lib/auth";
 import { TemaProvider } from "@/lib/tema";
@@ -10,9 +10,16 @@ import { TemaProvider } from "@/lib/tema";
 // (useSearchParams/useRouter), necessária porque esta é a 1ª página a ler `?v=` fora de uma rota dinâmica
 // ([id]) — mesmo precedente de (vereador)/parecer/[id]/assinar/page.test.tsx, que mockou next/navigation
 // pela mesma razão (nenhum Router real montado no teste).
-const { routerReplace } = vi.hoisted(() => ({ routerReplace: vi.fn() }));
+//
+// `buscaParamsAtual` fica mutável (não uma constante fixa) para o teste de deep-link (?v=<id>) poder trocar
+// o retorno de `useSearchParams` ANTES do render, sem precisar de um 2º `vi.mock` — os demais testes usam o
+// default (nenhum `v=` na URL).
+const { routerReplace, buscaParamsAtual } = vi.hoisted(() => ({
+  routerReplace: vi.fn(),
+  buscaParamsAtual: { valor: new URLSearchParams() },
+}));
 vi.mock("next/navigation", () => ({
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => buscaParamsAtual.valor,
   useRouter: () => ({ replace: routerReplace, push: vi.fn() }),
 }));
 
@@ -92,6 +99,7 @@ describe("PaginaVereadores", () => {
     cleanup();
     vi.restoreAllMocks();
     routerReplace.mockClear();
+    buscaParamsAtual.valor = new URLSearchParams();
   });
 
   it("mostra a lista e seleciona o 1º vereador automaticamente, sincronizando ?v= na URL", async () => {
@@ -125,6 +133,16 @@ describe("PaginaVereadores", () => {
     );
   });
 
+  it("deep-link ?v=<id> existente na URL seleciona aquele vereador ao montar", async () => {
+    buscaParamsAtual.valor = new URLSearchParams("v=v2");
+    global.fetch = fetchMockPara(fichas);
+    renderComProviders("tok-de-teste");
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Rafael Melo" })).toBeTruthy());
+    expect(screen.getByRole("option", { name: /Rafael Melo/i }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.queryByRole("heading", { name: "Helena Past" })).toBeNull();
+  });
+
   it("proposições e presença mostram 'Em breve' (nunca um número fabricado); comissões mostra a contagem real", async () => {
     global.fetch = fetchMockPara(fichas);
     renderComProviders("tok-de-teste");
@@ -134,15 +152,40 @@ describe("PaginaVereadores", () => {
     expect(screen.getByText("2")).toBeTruthy();
   });
 
-  it("as ações do cadastro (novo/editar/licença) ficam desabilitadas, com Em breve explicando por quê", async () => {
+  it("as ações do cadastro (novo/editar/ver proposições/licença) ficam desabilitadas, com Em breve explicando por quê", async () => {
     global.fetch = fetchMockPara(fichas);
     renderComProviders("tok-de-teste");
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy());
 
     expect((screen.getByRole("button", { name: /novo vereador/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /ver proposições/i }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: /editar cadastro/i }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: /registrar licença/i }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("ArrowDown/ArrowUp no listbox move a seleção e chamam router.replace com o próximo id", async () => {
+    global.fetch = fetchMockPara(fichas);
+    renderComProviders("tok-de-teste");
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy());
+    routerReplace.mockClear();
+
+    const linhaHelena = screen.getByRole("option", { name: /Helena Past/i });
+    linhaHelena.focus();
+    fireEvent.keyDown(linhaHelena, { key: "ArrowDown" });
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Rafael Melo" })).toBeTruthy());
+    const linhaRafael = screen.getByRole("option", { name: /Rafael Melo/i });
+    expect(linhaRafael.getAttribute("aria-selected")).toBe("true");
+    await waitFor(() =>
+      expect(routerReplace).toHaveBeenCalledWith(expect.stringContaining("v=v2"))
+    );
+
+    fireEvent.keyDown(linhaRafael, { key: "ArrowUp" });
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy());
+    expect(screen.getByRole("option", { name: /Helena Past/i }).getAttribute("aria-selected")).toBe("true");
   });
 
   it("comissão com cargo 'presidente' aparece destacada na ficha", async () => {

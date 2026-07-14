@@ -74,7 +74,7 @@ export default function PaginaVereadores() {
     if (efetivoId && efetivoId !== vDaUrl) {
       router.replace(hrefComSelecao(efetivoId, token));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- router é estável (useRouter, Next App Router); demais deps são o gatilho real
   }, [estadoLista, efetivoId, vDaUrl, token]);
 
   const { dados: ficha, estado: estadoFicha } = useVereadorFicha(token, efetivoId);
@@ -137,10 +137,16 @@ export default function PaginaVereadores() {
             type="button"
             disabled
             aria-disabled="true"
-            title="Cadastro de vereadores é somente leitura nesta fatia."
+            aria-describedby="vereador-novo-em-breve"
           >
             Novo vereador
           </button>
+          <div id="vereador-novo-em-breve" className="sr-only">
+            <EmBreve
+              titulo="Novo vereador"
+              motivo="Cadastro de vereadores é somente leitura nesta fatia — o cadastro por escrita chega em outra fatia."
+            />
+          </div>
         </div>
 
         <div className="md">
@@ -186,7 +192,6 @@ export default function PaginaVereadores() {
                       role="option"
                       className="v-row"
                       aria-selected={selecionada}
-                      aria-current={selecionada ? "true" : undefined}
                       tabIndex={i === indiceAtivo ? 0 : -1}
                       onClick={() => selecionarIndice(i)}
                       onKeyDown={(e) => aoTeclar(e, i)}
@@ -227,13 +232,14 @@ export default function PaginaVereadores() {
           ) : (
             <div className="ficha" aria-label={`Ficha de ${nomeExibicao(ficha)}`}>
               <div className="ficha-topo">
-                <span
-                  className="big-av"
-                  style={{ background: avatar(nomeExibicao(ficha), ficha.id).cor }}
-                  aria-hidden="true"
-                >
-                  {avatar(nomeExibicao(ficha), ficha.id).iniciais}
-                </span>
+                {(() => {
+                  const av = avatar(nomeExibicao(ficha), ficha.id);
+                  return (
+                    <span className="big-av" style={{ background: av.cor }} aria-hidden="true">
+                      {av.iniciais}
+                    </span>
+                  );
+                })()}
                 <div className="qa">
                   <h2>{nomeExibicao(ficha)}</h2>
                   <p className="cargo">
