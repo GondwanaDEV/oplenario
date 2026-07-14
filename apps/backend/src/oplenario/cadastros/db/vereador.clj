@@ -59,6 +59,45 @@
                    :where [:and [:= :ente_id ente-id] [:= :vereador_id vereador-id]]
                    :order-by [[:vigencia_inicio]]}))))
 
+(defn mandato-vigente
+  "O mandato do vereador que COBRE `data` pela vigencia (qualquer estado — licenciado ainda e' o corrente).
+   O mais recente se houver mais de um. nil se nenhum cobre `data`."
+  [tx ente-id vereador-id data]
+  (comum/linha->kebab
+    (jdbc/execute-one! tx
+      (sql/format {:select [:id :vereador_id :legislatura_id :partido :estado :natureza
+                            :vigencia_inicio :vigencia_fim :fim_efetivo]
+                   :from [:cadastros.mandato]
+                   :where [:and [:= :ente_id ente-id] [:= :vereador_id vereador-id]
+                           [:<= :vigencia_inicio data]
+                           [:or [:is :vigencia_fim nil] [:>= :vigencia_fim data]]]
+                   :order-by [[:vigencia_inicio :desc]] :limit 1}))))
+
+(defn listar
+  "Lista de vereadores da Casa com o mandato que cobre `data` (partido/estado) e o cargo na Mesa vigente.
+   Vereador sem mandato corrente aparece so' com o nome (estado-mandato/partido nil). Ordena por nome."
+  [tx ente-id data]
+  (comum/linhas->kebab
+    (jdbc/execute! tx
+      (sql/format
+        {:select [:v.id :v.nome :v.nome_parlamentar :m.partido
+                  [:m.estado :estado_mandato] [:cc.cargo :cargo_mesa]]
+         :from [[:cadastros.vereador :v]]
+         :left-join [[:cadastros.mandato :m]
+                     [:and [:= :m.vereador_id :v.id] [:= :m.ente_id :v.ente_id]
+                      [:<= :m.vigencia_inicio data]
+                      [:or [:is :m.vigencia_fim nil] [:>= :m.vigencia_fim data]]]
+                     [:cadastros.comissao :mesa]
+                     [:and [:= :mesa.tipo "mesa"] [:= :mesa.ente_id :v.ente_id]
+                      [:<= :mesa.vigencia_inicio data]
+                      [:or [:is :mesa.vigencia_fim nil] [:>= :mesa.vigencia_fim data]]]
+                     [:cadastros.comissao_cargo :cc]
+                     [:and [:= :cc.comissao_id :mesa.id] [:= :cc.vereador_id :v.id] [:= :cc.ente_id :v.ente_id]
+                      [:<= :cc.vigencia_inicio data]
+                      [:or [:is :cc.vigencia_fim nil] [:>= :cc.vigencia_fim data]]]]
+         :where [:= :v.ente_id ente-id]
+         :order-by [[:v.nome :asc]]}))))
+
 ;; ---- licenca + suplencia ----
 (defn inserir-licenca! [tx {:keys [id ente-id mandato-id mandato-suplente-id inicio fim motivo]}]
   (jdbc/execute-one! tx

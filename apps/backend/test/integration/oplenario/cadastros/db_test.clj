@@ -87,6 +87,46 @@
                (referencia/inserir-jurisdicao! *ds* {:id (random-uuid) :uf "SP" :municipio-ibge nil :tribunal-codigo "TCE-SP"}))
       "dois defaults da MESMA UF colidem (COALESCE(municipio,'*') = unico por UF)"))
 
+(deftest listar-devolve-vereadores-com-mandato-vigente-e-mesa
+  (let [ente (random-uuid)
+        leg  (random-uuid)
+        va   (random-uuid) vb (random-uuid) vc (random-uuid)
+        ma   (random-uuid) mb (random-uuid)
+        mesa (random-uuid)
+        ini  (LocalDate/parse "2025-01-01")
+        hoje (LocalDate/parse "2026-07-14")]
+    (seed-municipio!)
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (estrutura/inserir-ente! tx {:ente-id ente :municipio-ibge "2304400" :nome-oficial "Camara de Teste"})
+        (estrutura/inserir-legislatura! tx {:id leg :ente-id ente :numero 20 :ano-inicio 2025 :ano-fim 2028 :vigente true})
+        (vereador/inserir! tx {:id va :ente-id ente :nome "Ana" :nome-parlamentar "Ana Vereadora"})
+        (vereador/inserir! tx {:id vb :ente-id ente :nome "Bruno" :nome-parlamentar "Bruno Vereador"})
+        (vereador/inserir! tx {:id vc :ente-id ente :nome "Carla" :nome-parlamentar "Carla Vereadora"})
+        (vereador/inserir-mandato! tx {:id ma :ente-id ente :vereador-id va :legislatura-id leg :partido "PT"
+                                       :estado "vigente" :vigencia-inicio ini})
+        (vereador/inserir-mandato! tx {:id mb :ente-id ente :vereador-id vb :legislatura-id leg :partido "PSDB"
+                                       :estado "licenciado" :vigencia-inicio ini})
+        ;; Carla (vc) fica sem mandato -> deve aparecer no listar so' com o nome (LEFT JOIN).
+        (comissao/inserir! tx {:id mesa :ente-id ente :nome "Mesa Diretora" :tipo "mesa" :legislatura-id leg :vigencia-inicio ini})
+        (comissao/inserir-cargo! tx {:id (random-uuid) :ente-id ente :comissao-id mesa :vereador-id va :cargo "presidente" :vigencia-inicio ini})))
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [rows (vereador/listar tx ente hoje)]
+          (is (= ["Ana" "Bruno" "Carla"] (map :nome rows)) "ordenado por nome")
+          (is (= "vigente"    (:estado-mandato (first rows))))
+          (is (= "PT"         (:partido (first rows))))
+          (is (= "presidente" (:cargo-mesa (first rows))) "Ana e' presidente da Mesa vigente")
+          (is (= "licenciado" (:estado-mandato (second rows))))
+          (is (= "PSDB"       (:partido (second rows))))
+          (is (nil? (:cargo-mesa (second rows))) "Bruno nao tem cargo na Mesa")
+          (is (nil? (:estado-mandato (nth rows 2))) "Carla sem mandato -> nil, mas aparece")
+          (is (nil? (:partido (nth rows 2)))))
+        (let [mv (vereador/mandato-vigente tx ente va hoje)]
+          (is (= "vigente" (:estado mv)) "mandato-vigente cobre `hoje` pela vigencia")
+          (is (= "PT" (:partido mv))))
+        (is (nil? (vereador/mandato-vigente tx ente vc hoje)) "Carla sem mandato -> mandato-vigente nil")))))
+
 (deftest carimbo-criado-em-volta-como-instant
   (let [ente (random-uuid)]
     (seed-municipio!)
