@@ -1,0 +1,48 @@
+import { describe, expect, it } from "vitest";
+import {
+  validarNovoVereador, validarEditar, validarMandato, validarLicenca,
+} from "./cadastro-vereadores-forms";
+
+describe("validarNovoVereador", () => {
+  it("exige nome não-branco", () => {
+    expect(validarNovoVereador({ nome: "" }).valido).toBe(false);
+    expect(validarNovoVereador({ nome: "   " }).valido).toBe(false);
+    expect(validarNovoVereador({ nome: "Helena" }).valido).toBe(true);
+  });
+  it("mensagem de erro em pt-BR", () => {
+    expect(validarNovoVereador({ nome: "" }).erros.nome).toMatch(/nome/i);
+  });
+});
+
+describe("validarEditar", () => {
+  it("exige ao menos um campo preenchido", () => {
+    expect(validarEditar({}).valido).toBe(false);
+    expect(validarEditar({ nome: "", nomeParlamentar: "" }).valido).toBe(false);
+    expect(validarEditar({ nomeParlamentar: "Apelido" }).valido).toBe(true);
+  });
+  it("nome preenchido não pode ser branco", () => {
+    expect(validarEditar({ nome: "  " }).valido).toBe(false);
+  });
+});
+
+describe("validarMandato", () => {
+  const ok = { legislaturaId: "abc", natureza: "titular", vigenciaInicio: "2025-01-01" };
+  it("caminho feliz", () => expect(validarMandato(ok).valido).toBe(true));
+  it("exige legislatura", () => expect(validarMandato({ ...ok, legislaturaId: "" }).valido).toBe(false));
+  it("exige natureza válida", () => expect(validarMandato({ ...ok, natureza: "" }).valido).toBe(false));
+  it("data de início inválida reprova", () => expect(validarMandato({ ...ok, vigenciaInicio: "01/01/2025" }).valido).toBe(false));
+  it("fim antes do início reprova", () =>
+    expect(validarMandato({ ...ok, vigenciaFim: "2024-01-01" }).valido).toBe(false));
+  it("fim vazio é aceito (mandato em aberto)", () =>
+    expect(validarMandato({ ...ok, vigenciaFim: "" }).valido).toBe(true));
+});
+
+describe("validarLicenca", () => {
+  it("exige início válido", () => {
+    expect(validarLicenca({ inicio: "" }).valido).toBe(false);
+    expect(validarLicenca({ inicio: "amanhã" }).valido).toBe(false);
+    expect(validarLicenca({ inicio: "2026-03-01" }).valido).toBe(true);
+  });
+  it("fim antes do início reprova", () =>
+    expect(validarLicenca({ inicio: "2026-03-01", fim: "2026-02-01" }).valido).toBe(false));
+});
