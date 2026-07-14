@@ -57,3 +57,31 @@
     (is (= ficha (controllers/ficha-vereador repo ente id HOJE))
         "devolve exatamente a ficha composta que o Repo montou (sem tocar/transformar)")
     (is (= [[:ficha-vereador ente id HOJE]] @chamadas))))
+
+;; ---------- Task 5: pass-throughs de escrita ----------
+
+(deftest criar-vereador-passa-adiante-e-devolve-id
+  (let [ente (random-uuid) chamadas (atom [])
+        m {:id (random-uuid) :ente-id ente :nome "Ana"}
+        repo #_{:clj-kondo/ignore [:missing-protocol-method]}
+             (reify repo-cadastros/RepoCadastros
+               (criar-vereador! [_ e mm] (swap! chamadas conj [:criar e mm]) {:next.jdbc/update-count 1}))]
+    (is (= {:id (:id m)} (controllers/criar-vereador repo ente m)) "devolve {:id} com o id gerado")
+    (is (= [[:criar ente m]] @chamadas) "repassou ente-id + dominio sem alteracao")))
+
+(deftest editar-vereador-passa-o-update-count
+  (let [ente (random-uuid) id (random-uuid)
+        repo #_{:clj-kondo/ignore [:missing-protocol-method]}
+             (reify repo-cadastros/RepoCadastros
+               (atualizar-vereador! [_ _ _ _] 1))]
+    (is (= 1 (controllers/editar-vereador repo ente id {:nome "X"})))))
+
+(deftest registrar-mandato-e-licenca-sao-pass-through
+  (let [ente (random-uuid) ver (random-uuid) hoje (LocalDate/of 2026 7 14)
+        repo #_{:clj-kondo/ignore [:missing-protocol-method]}
+             (reify repo-cadastros/RepoCadastros
+               (registrar-mandato! [_ _ m] {:id (:id m)})
+               (registrar-licenca! [_ _ _ l _] {:id (:id l)}))
+        m {:id (random-uuid) :vereador-id ver} l {:id (random-uuid)}]
+    (is (= {:id (:id m)} (controllers/registrar-mandato repo ente m)))
+    (is (= {:id (:id l)} (controllers/registrar-licenca repo ente ver l hoje)))))
