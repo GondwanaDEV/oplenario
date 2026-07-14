@@ -4,6 +4,7 @@
   monta /saude (publica) + /eu (auth) + /painel-secretaria (auth + papel). W3 adiciona as rotas-dado de cada
   modulo (com o servidor `using` os Repo). `montar` recebe os deps ja injetados (idp + repo-identidade)."
   (:require [oplenario.cadastros.components.repositorio :as repo-cadastros-comp]
+            [oplenario.cadastros.diplomat.http.in :as cadastros-http]
             [oplenario.compliance.diplomat.http.in :as compliance-http]
             [oplenario.config :as config]
             [oplenario.http :as http]
@@ -122,6 +123,7 @@
                                        :registro registro-fatos
                                        :relogio relogio-producao}))
         (into (compliance-http/rotas {:auth auth :repo-compliance repo-compliance}))
+        (into (cadastros-http/rotas {:auth auth :repo-cadastros repo-cadastros :relogio relogio-producao}))
         (into (participacao-http/rotas {:auth auth :repo-participacao repo-participacao
                                         :resolver-ente-publico participacao-http/resolver-ente-publico-uuid
                                         :relogio relogio-producao}))
