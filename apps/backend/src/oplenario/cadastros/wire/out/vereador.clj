@@ -47,3 +47,9 @@
    [:nome-parlamentar {:optional true} [:maybe :string]]
    [:mandato {:optional true} [:maybe MandatoVigenteOut]]
    [:comissoes [:sequential ComissaoDoVereadorOut]]])
+
+(def ListaVereadoresOut
+  "O envelope da resposta de GET /cadastros/vereadores — mapa fechado (espaco p/ metadata futura; nunca o
+  array cru na raiz), espelhando o handler `listar-handler` em `diplomat/http/in.clj` (Eixo 8, Task 6)."
+  [:map {:closed true}
+   [:vereadores [:sequential VereadorLinhaOut]]])
