@@ -221,3 +221,29 @@
         (estrutura/inserir-ente! tx {:ente-id ente :municipio-ibge "2304400" :nome-oficial "X"})
         (let [linha (jdbc/execute-one! tx ["SELECT criado_em FROM cadastros.ente"])]
           (is (instance? Instant (:ente/criado_em linha)) "timestamptz volta como Instant (db-tipos)"))))))
+
+(deftest exclude-rejeita-mandato-vigente-sobreposto
+  ;; Slice 4: a escrita interativa pode criar sobreposicao (a leitura da Slice 3 nao podia). O EXCLUDE e' a
+  ;; REDE — dois mandatos 'vigente' efetivados do MESMO vereador com vigencias que se tocam sao rejeitados.
+  (let [ente (random-uuid) leg (random-uuid) ver (random-uuid)
+        ini (LocalDate/parse "2025-01-01")]
+    (seed-municipio!)
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (estrutura/inserir-ente! tx {:ente-id ente :municipio-ibge "2304400" :nome-oficial "Camara EXCLUDE"})
+        (estrutura/inserir-legislatura! tx {:id leg :ente-id ente :numero 20 :ano-inicio 2025 :ano-fim 2028 :vigente true})
+        (vereador/inserir! tx {:id ver :ente-id ente :nome "Ana"})
+        (vereador/inserir-mandato! tx {:id (random-uuid) :ente-id ente :vereador-id ver :legislatura-id leg
+                                       :estado "vigente" :vigencia-inicio ini})))
+    (is (thrown? Exception
+          (tenancy/com-tenant* *ds* ente
+            (fn [tx]
+              (vereador/inserir-mandato! tx {:id (random-uuid) :ente-id ente :vereador-id ver :legislatura-id leg
+                                             :estado "vigente" :vigencia-inicio ini}))))
+        "2o mandato 'vigente' sobreposto do mesmo vereador -> EXCLUDE rejeita")
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        ;; um mandato 'licenciado' sobreposto NAO viola (o WHERE do EXCLUDE so' cobre estado='vigente').
+        (is (some? (vereador/inserir-mandato! tx {:id (random-uuid) :ente-id ente :vereador-id ver :legislatura-id leg
+                                                  :estado "licenciado" :vigencia-inicio ini}))
+            "mandato 'licenciado' sobreposto e' permitido (fora do predicado do EXCLUDE)")))))
