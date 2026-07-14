@@ -30,3 +30,27 @@ export function validarDescobertaKc(
   if (typeof clientId !== "string" || !CLIENT_ID_VALIDO.test(clientId)) return null;
   return { baseUrl, realm, clientId };
 }
+
+// Host-pin defensivo (defesa em profundidade): o baseUrl do cookie sessao_kc é browser-facing e vem da
+// descoberta (base-url-publico, confiável na origem), mas NÃO é autoridade. Como o Plenário roda UM Keycloak
+// realm-per-tenant, um único origin público é legítimo — se KEYCLOAK_PUBLIC_URL estiver setado, o origin do
+// baseUrl DEVE bater (senão é cookie forjado -> trata como ausente -> logout local). Sem a env (dev antigo),
+// não pina (mantém o comportamento atual); a env é OBRIGATÓRIA em produção (fail-fast em next.config.ts).
+export function baseUrlPinado(baseUrl: string): boolean {
+  const pin = process.env.KEYCLOAK_PUBLIC_URL;
+  if (!pin) return true; // sem pin configurado (dev): não restringe
+  try {
+    const bate = new URL(baseUrl).origin === new URL(pin).origin;
+    if (!bate) {
+      // Origin do cookie != KC oficial: cookie forjado OU misconfig (KEYCLOAK_PUBLIC_URL divergindo do
+      // base-url-publico da descoberta). Nos dois casos o RP-logout degrada p/ local em silêncio — logamos
+      // p/ tornar um misconfig de prod OBSERVÁVEL (o segundo caso rejeitaria todo logout legítimo do KC sem
+      // erro nem sinal). Sem interpolar o valor não-confiável do cookie (evita log injection).
+      console.warn("logout: origin de sessao_kc.baseUrl não confere com KEYCLOAK_PUBLIC_URL — RP-logout cai no local");
+    }
+    return bate;
+  } catch {
+    console.warn("logout: sessao_kc.baseUrl malformado — RP-logout cai no local");
+    return false;
+  }
+}

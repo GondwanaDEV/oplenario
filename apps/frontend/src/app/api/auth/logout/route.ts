@@ -14,9 +14,14 @@
 // nem access_token). Se `sessao_kc` estiver ausente (ex.: sessão pré-existente antes desta feature)
 // ou os valores não passarem na validação abaixo, o logout cai no fallback local (`/entrar`) — o
 // logout nunca quebra e nunca monta uma URL a partir de um valor não confiável.
+//
+// Host-pin (defesa em profundidade adicional, Onda D Slice 2b): mesmo validado em forma, o baseUrl do
+// cookie não é autoridade — um cookie forjado poderia apontar p/ qualquer host https e virar open-redirect
+// no RP-logout. Como o Plenário roda UM Keycloak realm-per-tenant, pinamos o origin do baseUrl contra
+// `KEYCLOAK_PUBLIC_URL` (`baseUrlPinado`, ../kc-cookie) — sem bater, trata como cookie ausente (logout local).
 import { NextRequest, NextResponse } from "next/server";
 import { resolveAppOrigin } from "../appOrigin";
-import { validarDescobertaKc } from "../kc-cookie";
+import { baseUrlPinado, validarDescobertaKc } from "../kc-cookie";
 
 // Defesa em profundidade antes de interpolar o valor do cookie no header `cookie` enviado ao
 // backend (o cookie é HttpOnly, mas isso só bloqueia acesso via JS — não impede um Cookie header
@@ -26,7 +31,9 @@ import { validarDescobertaKc } from "../kc-cookie";
 const SEGREDO_VALIDO = /^[A-Za-z0-9_-]{1,128}$/;
 
 // A validação da forma do `sessao_kc` (realm/baseUrl/clientId) vive em `../kc-cookie` (compartilhada com o
-// callback) — não interpolamos valores de cookie numa URL de redirect sem validar primeiro.
+// callback) — não interpolamos valores de cookie numa URL de redirect sem validar primeiro. Depois da
+// validação de forma, `baseUrlPinado` aplica o host-pin (defesa adicional): mesmo um baseUrl bem-formado
+// só é aceito se o origin bater com `KEYCLOAK_PUBLIC_URL` (quando a env está setada).
 type SessaoKcPayload = NonNullable<ReturnType<typeof validarDescobertaKc>>;
 
 function lerSessaoKc(raw: string | undefined): SessaoKcPayload | null {
@@ -38,13 +45,19 @@ function lerSessaoKc(raw: string | undefined): SessaoKcPayload | null {
     return null;
   }
   if (typeof parsed !== "object" || parsed === null) return null;
-  return validarDescobertaKc(parsed as Record<string, unknown>);
+  const payload = validarDescobertaKc(parsed as Record<string, unknown>);
+  if (!payload) return null;
+  if (!baseUrlPinado(payload.baseUrl)) return null; // origin não bate com o KC oficial -> logout local
+  return payload;
 }
 
 function urlLogoutLocal(request: NextRequest): URL {
   return new URL("/entrar", resolveAppOrigin(request));
 }
 
+// Monta o end-session URL do Keycloak a partir do baseUrl PÚBLICO do cookie sessao_kc — já validado em
+// forma (validarDescobertaKc) E pinado contra KEYCLOAK_PUBLIC_URL (lerSessaoKc, host-pin), então é seguro
+// interpolar aqui.
 function urlLogoutKc(request: NextRequest, payload: SessaoKcPayload): URL {
   const url = new URL(
     `${payload.baseUrl}/realms/${payload.realm}/protocol/openid-connect/logout`,

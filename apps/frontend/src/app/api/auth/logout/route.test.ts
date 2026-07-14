@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { encerrarSessao as POST } from "./route";
 
 const ORIGIN = "http://localhost:3000";
@@ -114,6 +114,16 @@ describe("POST /api/auth/logout — encerra sessão no backend + limpa cookie lo
 });
 
 describe("POST /api/auth/logout — RP-logout no Keycloak via cookie companheiro sessao_kc", () => {
+  // Hermético: estes casos assumem KEYCLOAK_PUBLIC_URL AUSENTE (baseUrlPinado não restringe). Cravamos o
+  // unset explicitamente p/ não depender do env global — se um setup futuro setar a env, o pin rejeitaria
+  // o BASE_URL de teste (localhost:8090) e degradaria p/ local, quebrando estes casos silenciosamente.
+  beforeEach(() => {
+    vi.stubEnv("KEYCLOAK_PUBLIC_URL", undefined as unknown as string);
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("cookie sessao_kc válido → redireciona para o end-session do KC (client_id + post_logout_redirect_uri), limpa AMBOS os cookies", async () => {
     const fetchImpl = fetchMock(async () => new Response(null, { status: 204 }));
     const resp = await POST(
@@ -188,5 +198,60 @@ describe("POST /api/auth/logout — RP-logout no Keycloak via cookie companheiro
     const location = new URL(resp.headers.get("location")!);
     expect(location.origin).toBe(ORIGIN);
     expect(location.pathname).toBe("/entrar");
+  });
+});
+
+describe("POST /api/auth/logout — host-pin do RP-logout (KEYCLOAK_PUBLIC_URL, Onda D Slice 2b)", () => {
+  // Hermético: KEYCLOAK_PUBLIC_URL não pode vazar entre testes (mesmo padrão do callback/route.test.ts).
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("com KEYCLOAK_PUBLIC_URL setado, sessao_kc com origin DIFERENTE (mas válido em forma) → NÃO redireciona pro host forjado, cai no fallback local, limpa os 2 cookies", async () => {
+    vi.stubEnv("KEYCLOAK_PUBLIC_URL", "http://keycloak:8080");
+    const fetchImpl = fetchMock(async () => new Response(null, { status: 204 }));
+    const resp = await POST(
+      req({
+        sessaoKc: { baseUrl: "https://evil.example", realm: REALM, clientId: CLIENT_ID },
+      }),
+      { fetchImpl },
+    );
+
+    const location = new URL(resp.headers.get("location")!);
+    expect(location.origin).toBe(ORIGIN);
+    expect(location.pathname).toBe("/entrar");
+    expect(findCookie(resp, "sessao")).toBeTruthy();
+    expect(findCookie(resp, "sessao_kc")).toBeTruthy();
+  });
+
+  it("com KEYCLOAK_PUBLIC_URL setado, sessao_kc com origin BATENDO → RP-logout normal (comportamento atual preservado)", async () => {
+    vi.stubEnv("KEYCLOAK_PUBLIC_URL", "http://keycloak:8080");
+    const fetchImpl = fetchMock(async () => new Response(null, { status: 204 }));
+    const resp = await POST(
+      req({
+        sessaoKc: { baseUrl: "http://keycloak:8080", realm: REALM, clientId: CLIENT_ID },
+      }),
+      { fetchImpl },
+    );
+
+    const location = new URL(resp.headers.get("location")!);
+    expect(location.origin).toBe("http://keycloak:8080");
+    expect(location.pathname).toBe(`/realms/${REALM}/protocol/openid-connect/logout`);
+    expect(location.searchParams.get("client_id")).toBe(CLIENT_ID);
+    expect(findCookie(resp, "sessao")).toBeTruthy();
+    expect(findCookie(resp, "sessao_kc")).toBeTruthy();
+  });
+
+  it("sem KEYCLOAK_PUBLIC_URL setado (undefined) → o pin não restringe: baseUrl válido qualquer segue pro RP-logout (comportamento dev atual preservado)", async () => {
+    vi.stubEnv("KEYCLOAK_PUBLIC_URL", undefined as unknown as string);
+    const fetchImpl = fetchMock(async () => new Response(null, { status: 204 }));
+    const resp = await POST(
+      req({ sessaoKc: { baseUrl: BASE_URL, realm: REALM, clientId: CLIENT_ID } }),
+      { fetchImpl },
+    );
+
+    const location = new URL(resp.headers.get("location")!);
+    expect(location.origin).toBe(BASE_URL);
+    expect(location.pathname).toBe(`/realms/${REALM}/protocol/openid-connect/logout`);
   });
 });

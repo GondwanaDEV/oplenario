@@ -85,6 +85,12 @@ services:
       # resolve pro KC tanto no browser (host) quanto nos containers.
       KEYCLOAK_BASE_URL_PUBLICO: "http://keycloak:8080"
     ports: ["${OPLENARIO_APP_PORT:-8888}:8888"]
+    # ── Login PKCE REAL (perfil `auth`) ──────────────────────────────────────────────────────────
+    # Requer: (1) /etc/hosts com `127.0.0.1 keycloak` — browser E containers precisam resolver o MESMO
+    #   host `keycloak` p/ o issuer do token bater com o JWKS alcançável do container;
+    # (2) subir com `OPLENARIO_APP_ENV=production docker compose --profile auth up -d` — liga o
+    #   KeycloakIdp real (o dev-token deixa de valer nesse modo, é o esperado).
+    # No modo dev normal (sem `--profile auth`) o dev-token continua valendo.
 
   frontend:
     image: oplenario-frontend:local
@@ -104,6 +110,10 @@ services:
       # o redirectUri registrado no client (http://localhost:3000/...) -> KC rejeita "Invalid redirect_uri".
       # Login (authorize) e callback (token-exchange) usam o MESMO helper -> redirect_uri identico byte-a-byte.
       APP_ORIGIN: "http://localhost:3000"
+      # Onda D Slice 2b: host-pin do RP-logout. O baseUrl do cookie sessao_kc (browser-facing) é validado
+      # contra ESTE origin — mesmo host público que a descoberta devolve (base-url-publico). Um cookie forjado
+      # com outro host cai no logout local em vez de redirecionar p/ fora.
+      KEYCLOAK_PUBLIC_URL: "http://keycloak:8080"
     volumes:
       - ../frontend:/app
       # anonimos: preservam o node_modules/.next instalados na imagem (linux) em vez do host (macOS/arm nativo).

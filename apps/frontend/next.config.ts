@@ -18,6 +18,9 @@ if (process.env.NODE_ENV === "production") {
   if (!process.env.KEYCLOAK_INTERNAL_URL) {
     throw new Error("KEYCLOAK_INTERNAL_URL é obrigatório em produção (token-exchange server-side; sem ela cairia no baseUrl do cookie).");
   }
+  if (!process.env.KEYCLOAK_PUBLIC_URL) {
+    throw new Error("KEYCLOAK_PUBLIC_URL é obrigatório em produção (host-pin do RP-logout; sem ela o baseUrl do cookie sessao_kc não é restringido -> open-redirect no logout via cookie forjado).");
+  }
 }
 
 // Proxy same-origin /api/* -> backend (§22.10): o front e a API ficam atrás da MESMA origem (em prod, o
