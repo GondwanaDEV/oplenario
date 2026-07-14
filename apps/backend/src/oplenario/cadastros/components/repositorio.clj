@@ -58,12 +58,12 @@
   (legislatura-vigente [this ente-id] (transacao this ente-id #(estrutura/legislatura-vigente % ente-id)))
   (criar-sessao-legislativa! [this ente-id s] (transacao this ente-id #(estrutura/inserir-sessao-legislativa! % s)))
   (criar-vereador! [this ente-id v] (transacao this ente-id #(vereador/inserir! % v)))
-  (buscar-vereador [this ente-id id] (transacao this ente-id #(vereador/buscar % id)))
+  (buscar-vereador [this ente-id id] (transacao this ente-id #(vereador/buscar % ente-id id)))
   (listar-vereadores [this ente-id data] (transacao this ente-id #(vereador/listar % ente-id data)))
   (ficha-vereador [this ente-id id data]
     (transacao this ente-id
       (fn [tx]
-        (when-let [v (vereador/buscar tx id)]
+        (when-let [v (vereador/buscar tx ente-id id)]
           (let [m (vereador/mandato-vigente tx ente-id id data)
                 leg (when (:legislatura-id m) (estrutura/buscar-legislatura tx (:legislatura-id m)))
                 cs (comissao/comissoes-do-vereador tx ente-id id data)]

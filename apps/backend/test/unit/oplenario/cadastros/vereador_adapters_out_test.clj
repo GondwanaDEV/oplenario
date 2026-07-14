@@ -51,6 +51,18 @@
 (deftest lista->wire-vazia
   (is (= [] (adapters/lista->wire []))))
 
+(deftest lista-envelope->wire-valida-o-envelope-inteiro
+  (let [row {:id (random-uuid) :nome "Carla" :nome-parlamentar nil
+             :partido nil :estado-mandato nil :cargo-mesa nil}
+        out (adapters/lista-envelope->wire [row])]
+    (is (m/validate wire/ListaVereadoresOut out) "o envelope {:vereadores [...]} satisfaz o contrato inteiro")
+    (is (= 1 (count (:vereadores out))))))
+
+(deftest lista-envelope->wire-lanca-quando-linha-drifta
+  (is (thrown? clojure.lang.ExceptionInfo
+               (adapters/lista-envelope->wire [{:id (random-uuid) :nome nil}]))
+      "linha sem :nome viola VereadorLinhaOut -> lanca (bug de servidor -> 500, nunca corpo malformado)"))
+
 (deftest ficha->wire-lanca-quando-nome-ausente
   (is (thrown? clojure.lang.ExceptionInfo
                (adapters/ficha->wire {:vereador {:id (random-uuid) :nome nil}

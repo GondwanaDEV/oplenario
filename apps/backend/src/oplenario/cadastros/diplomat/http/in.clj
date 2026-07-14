@@ -22,12 +22,13 @@
 
 (defn- listar-handler
   "GET /cadastros/vereadores. Envelope {:vereadores [VereadorLinhaOut ...]} — mapa fechado, espaco p/
-  metadata futura (nunca o array cru na raiz)."
+  metadata futura (nunca o array cru na raiz). O corpo 200 e' o envelope INTEIRO validado contra
+  wire/ListaVereadoresOut (`lista-envelope->wire`), nao montado inline aqui."
   [repo relogio]
   (fn [req]
     (let [ente-id (:ente-id (:ator req))
           hoje (tempo/hoje-de (tempo/agora relogio) zona-civil)]
-      (http/json-resposta 200 {:vereadores (adapters/lista->wire (controllers/listar-vereadores repo ente-id hoje))}))))
+      (http/json-resposta 200 (adapters/lista-envelope->wire (controllers/listar-vereadores repo ente-id hoje))))))
 
 (defn- ficha-handler
   "GET /cadastros/vereadores/:id. `id` invalido (nao-UUID) -> `parse-uuid` nil -> mesmo caminho 404 do
@@ -50,6 +51,6 @@
   [{:keys [auth repo-cadastros relogio]}]
   (let [papel (it/exige-papel "secretario")]
     #{["/cadastros/vereadores"     :get [auth papel (listar-handler repo-cadastros relogio)]
-       :route-name :cadastros-vereadores-listar]
+       :route-name :cadastros/listar-vereadores]
       ["/cadastros/vereadores/:id" :get [auth papel (ficha-handler repo-cadastros relogio)]
-       :route-name :cadastros-vereador-ficha]}))
+       :route-name :cadastros/ficha-vereador]}))

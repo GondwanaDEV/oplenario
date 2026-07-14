@@ -95,8 +95,8 @@
         (is (= 12300000 (crel/populacao tx)) "B: populacao de Sao Paulo")))
 
     ;; (4) ISOLAMENTO CROSS-TENANT — a identidade/vereador de A NAO aparece na Casa B
-    (is (nil? (tenancy/com-tenant* *ds* (:ente b) (fn [tx] (vereador/buscar tx (:vereador a)))))
-        "vereador de A invisivel na Casa B (RLS)")
+    (is (nil? (tenancy/com-tenant* *ds* (:ente b) (fn [tx] (vereador/buscar tx (:ente a) (:vereador a)))))
+        "vereador de A invisivel na Casa B (RLS), mesmo pedindo ente-id=A explicito (defesa em profundidade)")
     (is (false? (tenancy/com-tenant* *ds* (:ente b) (fn [tx] (crel/tem-mandato-vigente? tx (:ident a) ini))))
         "mandato de A nao conta na Casa B")
     (is (nil? (auth/resolver-sessao (repo) {:identidade-id (:ident a) :ente-id (:ente b)}))

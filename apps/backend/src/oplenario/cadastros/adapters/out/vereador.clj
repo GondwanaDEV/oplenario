@@ -25,10 +25,18 @@
             "linha de vereador"))
 
 (defn lista->wire
-  "Seq de linhas (dominio, `Repo/listar-vereadores`) -> seq de VereadorLinhaOut validado. O envelope
-  {:vereadores [...]} e' responsabilidade da rota (Task 5), nao deste adapter."
+  "Seq de linhas (dominio, `Repo/listar-vereadores`) -> seq de VereadorLinhaOut validado. Uso interno de
+  `lista-envelope->wire`; mantida publica por compat de teste unitario."
   [rows]
   (mapv linha->wire rows))
+
+(defn lista-envelope->wire
+  "Seq de linhas -> o ENVELOPE {:vereadores [...]} de GET /cadastros/vereadores, validado inteiro contra
+  wire/ListaVereadoresOut (nao so' cada linha) — mesmo precedente de `paineis/adapters/out/pendencia`
+  `o-que-vence->wire`: drift de campo e' bug de servidor -> 500, nunca resposta malformada. A borda HTTP
+  chama ISTO como corpo 200, nunca monta o envelope inline."
+  [rows]
+  (validado wire/ListaVereadoresOut {:vereadores (lista->wire rows)} "envelope de lista de vereadores"))
 
 (defn- cargo-mesa-de
   "A entrada de `comissoes` cujo tipo e' a Mesa Diretora fornece o cargo-mesa — nunca o mandato."

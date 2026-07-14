@@ -49,7 +49,7 @@
     (tenancy/com-tenant* *ds* ente
       (fn [tx]
         (let [e (estrutura/buscar-ente tx)
-              v (vereador/buscar tx ver)
+              v (vereador/buscar tx ente ver)
               ms (vereador/mandatos-do-vereador tx ente ver)
               mz (comissao/mesa-vigente tx ini)]
           (is (= "Camara Municipal de Fortaleza" (:nome-oficial e)) "round-trip do ente")
@@ -66,8 +66,9 @@
 (deftest rls-isola-cadastro-cross-tenant
   (let [a (random-uuid) b (random-uuid) va (random-uuid)]
     (tenancy/com-tenant* *ds* a (fn [tx] (vereador/inserir! tx {:id va :ente-id a :nome "Vereador de A"})))
-    (is (some? (tenancy/com-tenant* *ds* a (fn [tx] (vereador/buscar tx va)))) "ente A ve o proprio vereador")
-    (is (nil? (tenancy/com-tenant* *ds* b (fn [tx] (vereador/buscar tx va)))) "ente B NAO ve o vereador de A (RLS)")))
+    (is (some? (tenancy/com-tenant* *ds* a (fn [tx] (vereador/buscar tx a va)))) "ente A ve o proprio vereador")
+    (is (nil? (tenancy/com-tenant* *ds* b (fn [tx] (vereador/buscar tx a va))))
+        "ente B NAO ve o vereador de A (RLS), mesmo pedindo ente-id=A explicito na tx de B (defesa em profundidade)")))
 
 (deftest with-check-bloqueia-vereador-cross-tenant
   (let [a (random-uuid) b (random-uuid)]
@@ -126,6 +127,65 @@
           (is (= "vigente" (:estado mv)) "mandato-vigente cobre `hoje` pela vigencia")
           (is (= "PT" (:partido mv))))
         (is (nil? (vereador/mandato-vigente tx ente vc hoje)) "Carla sem mandato -> mandato-vigente nil")))))
+
+(deftest listar-deduplica-quando-mandatos-se-sobrepoem
+  ;; Sem DB constraint que impeca vigencias sobrepostas, um vereador pode ter DUAS linhas de `mandato`
+  ;; cobrindo `hoje` simultaneamente. `listar` DEVE devolver UMA linha so' (LEFT JOIN LATERAL com
+  ;; tie-break deterministico), nunca duplicar o vereador por FAN-OUT do LEFT JOIN plano.
+  (let [ente (random-uuid)
+        leg  (random-uuid)
+        va   (random-uuid)
+        ma   (random-uuid) mb (random-uuid)
+        ini  (LocalDate/parse "2025-01-01")
+        hoje (LocalDate/parse "2026-07-14")]
+    (seed-municipio!)
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (estrutura/inserir-ente! tx {:ente-id ente :municipio-ibge "2304400" :nome-oficial "Camara de Teste"})
+        (estrutura/inserir-legislatura! tx {:id leg :ente-id ente :numero 20 :ano-inicio 2025 :ano-fim 2028 :vigente true})
+        (vereador/inserir! tx {:id va :ente-id ente :nome "Ana" :nome-parlamentar "Ana Vereadora"})
+        ;; DOIS mandatos com o MESMO vigencia_inicio, ambos cobrindo `hoje` (sobreposicao real, sem constraint).
+        (vereador/inserir-mandato! tx {:id ma :ente-id ente :vereador-id va :legislatura-id leg :partido "PT"
+                                       :estado "vigente" :vigencia-inicio ini})
+        (vereador/inserir-mandato! tx {:id mb :ente-id ente :vereador-id va :legislatura-id leg :partido "PSDB"
+                                       :estado "licenciado" :vigencia-inicio ini})))
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [rows (vereador/listar tx ente hoje)
+              ;; ORDER BY vigencia_inicio DESC, id [ASC] LIMIT 1 -> em empate de vigencia, o MENOR id vence.
+              vencedor (if (neg? (compare (str ma) (str mb))) {:partido "PT" :estado "vigente"} {:partido "PSDB" :estado "licenciado"})]
+          (is (= 1 (count rows)) "UMA linha so' por vereador, mesmo com dois mandatos sobrepostos (dedup LATERAL)")
+          (is (= (:partido vencedor) (:partido (first rows))) "o vencedor deterministico (id menor) prevalece")
+          (is (= (:estado vencedor) (:estado-mandato (first rows)))))))))
+
+(deftest mandato-vigente-tie-break-deterministico-por-id
+  ;; DOIS mandatos com o MESMO vigencia_inicio cobrindo `hoje` -> `mandato-vigente` precisa de resultado
+  ;; ESTAVEL (nao arbitrario do plano de execucao). Tie-break secundario por :id (mesmo criterio de
+  ;; `quem-exerce-presidencia`).
+  (let [ente (random-uuid)
+        leg  (random-uuid)
+        va   (random-uuid)
+        ma   (random-uuid) mb (random-uuid)
+        ini  (LocalDate/parse "2025-01-01")
+        hoje (LocalDate/parse "2026-07-14")]
+    (seed-municipio!)
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (estrutura/inserir-ente! tx {:ente-id ente :municipio-ibge "2304400" :nome-oficial "Camara de Teste"})
+        (estrutura/inserir-legislatura! tx {:id leg :ente-id ente :numero 20 :ano-inicio 2025 :ano-fim 2028 :vigente true})
+        (vereador/inserir! tx {:id va :ente-id ente :nome "Ana" :nome-parlamentar "Ana Vereadora"})
+        (vereador/inserir-mandato! tx {:id ma :ente-id ente :vereador-id va :legislatura-id leg :partido "PT"
+                                       :estado "vigente" :vigencia-inicio ini})
+        (vereador/inserir-mandato! tx {:id mb :ente-id ente :vereador-id va :legislatura-id leg :partido "PSDB"
+                                       :estado "licenciado" :vigencia-inicio ini})))
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [mv (vereador/mandato-vigente tx ente va hoje)
+              ;; ORDER BY vigencia_inicio DESC, id [ASC] LIMIT 1 -> em empate de vigencia, o MENOR id vence.
+              vencedor-id (if (neg? (compare (str ma) (str mb))) ma mb)]
+          (is (= vencedor-id (:id mv)) "o :id menor (ORDER BY vigencia_inicio DESC, id) vence deterministicamente")
+          ;; roda de novo p/ provar estabilidade (nao e' so' sorte de UM plano de execucao).
+          (is (= vencedor-id (:id (vereador/mandato-vigente tx ente va hoje)))))))))
 
 (deftest comissoes-do-vereador-inclui-cargo-nomeado
   (let [ente (random-uuid)
