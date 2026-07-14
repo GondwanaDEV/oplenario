@@ -290,4 +290,28 @@ describe("GET /api/auth/callback — troca code por token (PKCE), minta sessão 
       `http://keycloak:8080/realms/${REALM}/protocol/openid-connect/token`,
     );
   });
+
+  it("pkce com realm forjado (path-injection) → re-login e NUNCA chama o token endpoint (validação de forma)", async () => {
+    const fetchImpl = fetchHappyPath();
+    const resp = await GET(
+      req(`/api/auth/callback?code=abc&state=state-xyz`, {
+        pkce: pkcePayload({ realm: "ente-x/../../evil" }),
+      }),
+      { fetchImpl },
+    );
+    expect(new URL(resp.headers.get("location")!).pathname).toBe("/api/auth/login");
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("pkce com baseUrl de esquema não-http → re-login (fail-closed)", async () => {
+    const fetchImpl = fetchHappyPath();
+    const resp = await GET(
+      req(`/api/auth/callback?code=abc&state=state-xyz`, {
+        pkce: pkcePayload({ baseUrl: "javascript:alert(1)" }),
+      }),
+      { fetchImpl },
+    );
+    expect(new URL(resp.headers.get("location")!).pathname).toBe("/api/auth/login");
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
 });

@@ -16,6 +16,7 @@
 // logout nunca quebra e nunca monta uma URL a partir de um valor não confiável.
 import { NextRequest, NextResponse } from "next/server";
 import { resolveAppOrigin } from "../appOrigin";
+import { validarDescobertaKc } from "../kc-cookie";
 
 // Defesa em profundidade antes de interpolar o valor do cookie no header `cookie` enviado ao
 // backend (o cookie é HttpOnly, mas isso só bloqueia acesso via JS — não impede um Cookie header
@@ -24,28 +25,9 @@ import { resolveAppOrigin } from "../appOrigin";
 // barrar um segredo real.
 const SEGREDO_VALIDO = /^[A-Za-z0-9_-]{1,128}$/;
 
-// Mesma defesa em profundidade para o cookie `sessao_kc`: embora seja httpOnly e escrito pelo
-// próprio callback a partir da descoberta confiável, não interpolamos valores de cookie numa URL
-// de redirect sem validar a forma primeiro — um cookie forjado (ou um bug futuro) não deve virar
-// um redirect para esquema/host arbitrário.
-const REALM_VALIDO = /^ente-[0-9a-f-]{36}$/i;
-const CLIENT_ID_VALIDO = /^[A-Za-z0-9_-]{1,64}$/;
-
-interface SessaoKcPayload {
-  baseUrl: string;
-  realm: string;
-  clientId: string;
-}
-
-function baseUrlValido(v: unknown): v is string {
-  if (typeof v !== "string") return false;
-  try {
-    const u = new URL(v);
-    return u.protocol === "http:" || u.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
+// A validação da forma do `sessao_kc` (realm/baseUrl/clientId) vive em `../kc-cookie` (compartilhada com o
+// callback) — não interpolamos valores de cookie numa URL de redirect sem validar primeiro.
+type SessaoKcPayload = NonNullable<ReturnType<typeof validarDescobertaKc>>;
 
 function lerSessaoKc(raw: string | undefined): SessaoKcPayload | null {
   if (!raw) return null;
@@ -56,11 +38,7 @@ function lerSessaoKc(raw: string | undefined): SessaoKcPayload | null {
     return null;
   }
   if (typeof parsed !== "object" || parsed === null) return null;
-  const { baseUrl, realm, clientId } = parsed as Record<string, unknown>;
-  if (!baseUrlValido(baseUrl)) return null;
-  if (typeof realm !== "string" || !REALM_VALIDO.test(realm)) return null;
-  if (typeof clientId !== "string" || !CLIENT_ID_VALIDO.test(clientId)) return null;
-  return { baseUrl, realm, clientId };
+  return validarDescobertaKc(parsed as Record<string, unknown>);
 }
 
 function urlLogoutLocal(request: NextRequest): URL {

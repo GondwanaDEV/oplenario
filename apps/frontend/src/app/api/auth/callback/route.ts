@@ -19,6 +19,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveAppOrigin } from "../appOrigin";
 import { resolveRedirectPath } from "../redirect";
+import { validarDescobertaKc } from "../kc-cookie";
 
 interface PkcePayload {
   codeVerifier: string;
@@ -62,6 +63,13 @@ export async function receberCallback(
   try {
     pkce = JSON.parse(pkceCookie) as PkcePayload;
   } catch {
+    return paraLogin(appOrigin);
+  }
+
+  // Valida a FORMA dos campos de descoberta ANTES de interpolá-los no token-exchange server-side: `realm`
+  // entra no PATH da URL do token (não passa por URLSearchParams -> path-injection se forjado); baseUrl/
+  // clientId idem. Mesma disciplina do logout (../kc-cookie). Fail-closed -> re-login. (revisão whole-branch)
+  if (!validarDescobertaKc(pkce)) {
     return paraLogin(appOrigin);
   }
 
