@@ -6,6 +6,7 @@
   Default = target/generated-ts/contrato-cadastros.gen.ts."
   (:require [clojure.java.io :as io]
             [oplenario.codegen.malli-ts :as ts]
+            [oplenario.cadastros.wire.out.legislatura :as legislatura]
             [oplenario.cadastros.wire.out.vereador :as vereador]))
 
 (def manifesto
@@ -13,7 +14,8 @@
    ["ComissaoDoVereadorOut" vereador/ComissaoDoVereadorOut]
    ["MandatoVigenteOut" vereador/MandatoVigenteOut]
    ["VereadorFichaOut" vereador/VereadorFichaOut]
-   ["ListaVereadoresOut" vereador/ListaVereadoresOut]])
+   ["ListaVereadoresOut" vereador/ListaVereadoresOut]
+   ["LegislaturaVigenteOut" legislatura/LegislaturaVigenteOut]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))
 
