@@ -6,9 +6,12 @@
   transparencia/participacao — V1 sem slug humano), coagido fail-closed AQUI (identidade nao pode importar o
   seam de outro modulo — §22.10 — replica a mesma forma localmente).
 
-  `ente-existe?` chega INJETADA pelo host (cross-modulo por inversao de dependencia sobre o Repo de cadastros —
-  mesmo padrao de consultar-sessao/membros-da-casa/info-ente em oplenario.rotas/montar; identidade NUNCA importa
-  cadastros). Ente inexistente -> 404 fail-closed (nunca vaza o realm/URL de um tenant que nao existe).
+  `info-ente` (fn ente-id -> ente-map|nil) chega INJETADA pelo host (cross-modulo por inversao de dependencia
+  sobre o Repo de cadastros — mesmo padrao de consultar-sessao/membros-da-casa em oplenario.rotas/montar;
+  identidade NUNCA importa cadastros). Existencia = `(some? (info-ente id))`; ente inexistente -> 404
+  fail-closed (nunca vaza o realm/URL de um tenant que nao existe). A resposta 200 tambem devolve o nome
+  PUBLICO do ente (`nome-oficial`/`nome-curto`, mesma convencao de EnteOut da transparencia — nada sensivel)
+  p/ o FE mostrar 'Entrar em <Camara>' na tela de login.
 
   Distinto do mint de token pos-callback (Task 4): la' o ente-id vem do ISSUER do token VERIFICADO (nunca do
   path/corpo — anti-forge). Aqui e' o INVERSO por desenho: e' descoberta pre-auth, nao ha token ainda pra
@@ -62,17 +65,22 @@
       (throw (ex-info "ente invalido" {:tipo :validacao/invalido :campo :ente})))))
 
 (defn- descoberta-handler
-  "GET /auth/descoberta/:ente — resolve o realm/base-url-publico/client-id do tenant p/ o FE comecar o PKCE.
-  `ente-existe?` fail-closed -> 404 antes de devolver qualquer metadado do tenant."
-  [ente-existe? keycloak]
+  "GET /auth/descoberta/:ente — resolve realm/base-url-publico/client-id + nome PUBLICO do tenant p/ o FE
+  comecar o PKCE e exibir o nome da Casa. `info-ente` (fn ente-id -> ente-map|nil) chega INJETADA pelo host
+  (inversao de dependencia sobre cadastros — §22.10, identidade nunca importa cadastros). nil -> 404
+  fail-closed antes de devolver qualquer metadado. So expoe nome PUBLICO (nome-oficial/nome-curto), nada
+  sensivel — mesma convencao de EnteOut da transparencia."
+  [info-ente keycloak]
   (fn [req]
     (let [ente-id (ente-param->uuid (get-in req [:path-params :ente]))]
-      (if (ente-existe? ente-id)
+      (if-let [e (info-ente ente-id)]
         (http/json-resposta 200
-          {:ente-id   (str ente-id)
-           :realm     (str (:realm-prefixo keycloak) ente-id)
-           :base-url  (:base-url-publico keycloak)
-           :client-id (:web-client-id keycloak)})
+          {:ente-id      (str ente-id)
+           :realm        (str (:realm-prefixo keycloak) ente-id)
+           :base-url     (:base-url-publico keycloak)
+           :client-id    (:web-client-id keycloak)
+           :nome-oficial (:nome-oficial e)
+           :nome-curto   (:nome-curto e)})
         (http/json-resposta 404 {:erro "ente nao encontrado"})))))
 
 (def ^:private max-token-chars
@@ -144,15 +152,15 @@
     {:status 204 :headers {} :body nil}))
 
 (defn rotas
-  "Fragmento de rotas do modulo identidade (table syntax Pedestal). Recebe `ente-existe?`/`keycloak` (Task 3,
+  "Fragmento de rotas do modulo identidade (table syntax Pedestal). Recebe `info-ente`/`keycloak` (Task 3,
   ver docstring do ns), `idp`/`repo-identidade`/`relogio`/`sessao` (Task 4 — mint), e reusa
   `repo-identidade` p/ o logout (Task 5 — `apagar-sessao!` ja vive no mesmo `RepoIdentidade`, sem repo
   separado). `sessao` = o mapa `:sessao` da config (`:absoluta-h`/`:ociosa-min`), JA RESOLVIDO pelo host
   (`oplenario.rotas/montar`, mesmo padrao do `keycloak` injetado em Task 3 — o fallback pra
   `config/carregar` vive LA, nao aqui). `oplenario.rotas` funde este fragmento."
-  [{:keys [ente-existe? keycloak idp repo-identidade relogio sessao]}]
+  [{:keys [info-ente keycloak idp repo-identidade relogio sessao]}]
   #{["/auth/descoberta/:ente" :get
-     [(descoberta-handler ente-existe? keycloak)]
+     [(descoberta-handler info-ente keycloak)]
      :route-name :identidade/descoberta]
     ["/auth/sessoes" :post
      ;; PUBLICA (sem `auth`) — este POST CRIA a sessao; nao ha sessao ainda pra exigir. `it/corpo-json`

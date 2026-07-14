@@ -8,11 +8,12 @@
   {:sessao <segredo>}; e o teste-INVARIANTE — corpo com `:ente-id`/`:identidade-id` FORJADOS e' ignorado, a
   sessao minted usa SO o `ente-id`/`identidade-id` do claims VERIFICADO (o issuer), nunca o corpo HTTP.
 
-  GET /auth/descoberta/:ente: prova a silhueta de borda end-to-end (`ente-existe?` seam injetada ->
-  realm/base-url/client-id da config `:keycloak`), o 404 de ente inexistente e o 400 de UUID invalido. Rota
-  PUBLICA (sem auth — e' descoberta PRE-login, o FE ainda nao tem token pra comecar o PKCE). DB-free:
-  `ente-existe?`/`idp`/`repo-identidade` FAKE injetados via `montar` (mesmo racional/precedente de
-  info-ente-http-in-test/mesa-http-in-test — seam cross-modulo por inversao de dependencia, §22.10)."
+  GET /auth/descoberta/:ente: prova a silhueta de borda end-to-end (`info-ente` seam injetada ->
+  realm/base-url/client-id + nome PUBLICO do ente da config `:keycloak`), o 404 de ente inexistente
+  (existencia = `(some? (info-ente id))`) e o 400 de UUID invalido. Rota PUBLICA (sem auth — e' descoberta
+  PRE-login, o FE ainda nao tem token pra comecar o PKCE). DB-free: `info-ente`/`idp`/`repo-identidade` FAKE
+  injetados via `montar` (mesmo racional/precedente de info-ente-http-in-test/mesa-http-in-test — seam
+  cross-modulo por inversao de dependencia, §22.10)."
   (:require [clojure.test :refer [deftest is]]
             [io.pedestal.http :as ph]
             [io.pedestal.test :as pt]
@@ -26,16 +27,17 @@
             [oplenario.rotas :as rotas]))
 
 (defn- service-fn
-  "`ente-existe?` default permissivo (so as rotas de descoberta usam); `idp` default idp-dev
-  (confianca-total, so' as rotas de mint fazem o fake substituir); `repo-identidade` default nil (as rotas
-  de descoberta nao o tocam)."
-  [{:keys [ente-existe? idp repo-identidade]
-    :or   {ente-existe? (constantly true)
-           idp          (idp-dev/idp-dev)}}]
+  "`info-ente` default permissivo (so as rotas de descoberta usam) — devolve um ente-map fixture (nunca nil,
+  p/ os testes que nao exercitam o 404 passarem sem stub); `idp` default idp-dev (confianca-total, so' as
+  rotas de mint fazem o fake substituir); `repo-identidade` default nil (as rotas de descoberta nao o
+  tocam)."
+  [{:keys [info-ente idp repo-identidade]
+    :or   {info-ente (constantly {:nome-oficial "Câmara de Teste" :nome-curto "Câmara"})
+           idp       (idp-dev/idp-dev)}}]
   (-> (http/servico (config/carregar)
                     (rotas/montar {:idp idp
                                    :repo-identidade repo-identidade
-                                   :ente-existe? ente-existe?})
+                                   :info-ente info-ente})
                     it/globais)
       ph/create-server ::ph/service-fn))
 
@@ -46,18 +48,28 @@
 (deftest descoberta-200-resolve-realm-base-url-client-id
   (let [ente (random-uuid)
         chamou-com (atom nil)
-        ente-existe? (fn [eid] (reset! chamou-com eid) true)
-        r (pt/response-for (service-fn {:ente-existe? ente-existe?}) :get (str "/auth/descoberta/" ente))
+        info-ente (fn [eid] (reset! chamou-com eid) {:nome-oficial "X" :nome-curto "X"})
+        r (pt/response-for (service-fn {:info-ente info-ente}) :get (str "/auth/descoberta/" ente))
         body (ler-json r)]
     (is (= 200 (:status r)) "GET /auth/descoberta/:ente (sem auth — descoberta pre-login) -> 200")
-    (is (= ente @chamou-com) "ente-existe? foi chamada com o ente-id resolvido do path")
+    (is (= ente @chamou-com) "info-ente foi chamada com o ente-id resolvido do path")
     (is (= (str ente) (:ente-id body)))
     (is (= (str "ente-" ente) (:realm body)) "realm = realm-prefixo da config + ente-id")
     (is (= "http://localhost:8090" (:base-url body)) "base-url PUBLICO da config (nao o :base-url interno)")
     (is (= "oplenario-web" (:client-id body)) "client-id PUBLICO da config")))
 
+(deftest descoberta-200-inclui-nome-publico-do-ente
+  (let [info-ente (constantly {:nome-oficial "Câmara Municipal de Fortaleza" :nome-curto "Câmara de Fortaleza"})
+        r (pt/response-for (service-fn {:info-ente info-ente}) :get (str "/auth/descoberta/" (random-uuid)))
+        body (ler-json r)]
+    (is (= 200 (:status r)))
+    (is (= "Câmara Municipal de Fortaleza" (:nome-oficial body))
+        "nome-oficial do info-ente stubado aparece na resposta de descoberta")
+    (is (= "Câmara de Fortaleza" (:nome-curto body))
+        "nome-curto do info-ente stubado aparece na resposta de descoberta")))
+
 (deftest descoberta-404-quando-ente-nao-existe
-  (let [r (pt/response-for (service-fn {:ente-existe? (constantly false)}) :get (str "/auth/descoberta/" (random-uuid)))
+  (let [r (pt/response-for (service-fn {:info-ente (constantly nil)}) :get (str "/auth/descoberta/" (random-uuid)))
         body (ler-json r)]
     (is (= 404 (:status r)) "ente inexistente -> 404 fail-closed (nunca vaza realm de tenant que nao existe)")
     (is (= "ente nao encontrado" (:erro body)))))
