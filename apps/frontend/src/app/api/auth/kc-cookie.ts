@@ -30,3 +30,18 @@ export function validarDescobertaKc(
   if (typeof clientId !== "string" || !CLIENT_ID_VALIDO.test(clientId)) return null;
   return { baseUrl, realm, clientId };
 }
+
+// Host-pin defensivo (defesa em profundidade): o baseUrl do cookie sessao_kc é browser-facing e vem da
+// descoberta (base-url-publico, confiável na origem), mas NÃO é autoridade. Como o Plenário roda UM Keycloak
+// realm-per-tenant, um único origin público é legítimo — se KEYCLOAK_PUBLIC_URL estiver setado, o origin do
+// baseUrl DEVE bater (senão é cookie forjado -> trata como ausente -> logout local). Sem a env (dev antigo),
+// não pina (mantém o comportamento atual); a env é OBRIGATÓRIA em produção (fail-fast em next.config.ts).
+export function baseUrlPinado(baseUrl: string): boolean {
+  const pin = process.env.KEYCLOAK_PUBLIC_URL;
+  if (!pin) return true; // sem pin configurado (dev): não restringe
+  try {
+    return new URL(baseUrl).origin === new URL(pin).origin;
+  } catch {
+    return false;
+  }
+}
