@@ -31,6 +31,10 @@ describe("validarMandato", () => {
   it("exige legislatura", () => expect(validarMandato({ ...ok, legislaturaId: "" }).valido).toBe(false));
   it("exige natureza válida", () => expect(validarMandato({ ...ok, natureza: "" }).valido).toBe(false));
   it("data de início inválida reprova", () => expect(validarMandato({ ...ok, vigenciaInicio: "01/01/2025" }).valido).toBe(false));
+  it("data de início com overflow de dia reprova (2025-02-30)", () =>
+    expect(validarMandato({ ...ok, vigenciaInicio: "2025-02-30" }).valido).toBe(false));
+  it("data de início com overflow de mês reprova (2025-13-40)", () =>
+    expect(validarMandato({ ...ok, vigenciaInicio: "2025-13-40" }).valido).toBe(false));
   it("fim antes do início reprova", () =>
     expect(validarMandato({ ...ok, vigenciaFim: "2024-01-01" }).valido).toBe(false));
   it("fim vazio é aceito (mandato em aberto)", () =>
@@ -43,6 +47,10 @@ describe("validarLicenca", () => {
     expect(validarLicenca({ inicio: "amanhã" }).valido).toBe(false);
     expect(validarLicenca({ inicio: "2026-03-01" }).valido).toBe(true);
   });
+  it("data de início com overflow de dia reprova (2025-02-30)", () =>
+    expect(validarLicenca({ inicio: "2025-02-30" }).valido).toBe(false));
   it("fim antes do início reprova", () =>
     expect(validarLicenca({ inicio: "2026-03-01", fim: "2026-02-01" }).valido).toBe(false));
+  it("fim vazio é aceito (licença em aberto)", () =>
+    expect(validarLicenca({ inicio: "2026-03-01", fim: "" }).valido).toBe(true));
 });

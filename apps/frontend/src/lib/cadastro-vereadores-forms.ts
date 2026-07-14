@@ -12,7 +12,9 @@ function dataISO(s: string): Date | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
   const d = new Date(`${s}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return null;
-  // round-trip guard: `new Date` normaliza overflow (13 -> jan do ano seguinte); exigimos igualdade.
+  // O check de NaN acima barra overflow de mês/formato (mês 13 vira Invalid Date). O round-trip
+  // abaixo barra overflow de DIA: `new Date` normaliza silenciosamente (2025-02-30 -> 2025-03-02),
+  // então exigimos igualdade de string p/ pegar essa normalização silenciosa.
   return d.toISOString().slice(0, 10) === s ? d : null;
 }
 
