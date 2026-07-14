@@ -15,20 +15,26 @@
 // `efetivoId` (ele deriva da lista completa, não da lista filtrada) — a ficha aberta sobrevive a um filtro
 // que a esconda da lista visível.
 //
-// Escrita (Novo vereador / Editar cadastro / Registrar licença) é OUTRA fatia (cadastro é somente-leitura
-// aqui) — os 3 CTAs ficam `disabled`/`aria-disabled`, com um único <EmBreve> explicando por quê (mesma
-// disciplina de AcoesCard, ficha-materia/acoes-card.tsx). Proposições/presença por vereador também não têm
-// backend nesta fatia — nunca um número fabricado nos stat tiles: "—" + nota "Em breve"; só Comissões usa
-// contagem REAL (ficha.comissoes.length).
+// Escrita (Novo vereador / Editar cadastro / Registrar mandato / Registrar licença — Task 9) já tem
+// backend fiado nesta fatia: os 4 forms (novo-vereador-form.tsx e companhia) abrem como painel INLINE (não
+// modal — evita o carry de focus-trap da C4) abaixo das ações que os disparam. "Ver proposições" segue
+// deferido (backend de proposições por vereador não existe ainda) com seu próprio <EmBreve>. Proposições/
+// presença por vereador também não têm backend nesta fatia — nunca um número fabricado nos stat tiles: "—"
+// e nota "Em breve"; só Comissões usa contagem REAL (ficha.comissoes.length).
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { useVereadores } from "@/lib/use-vereadores";
 import { useVereadorFicha } from "@/lib/use-vereador-ficha";
+import { useLegislaturaVigente } from "@/lib/use-legislatura-vigente";
 import { avatar, estadoChip, filtrar, selecaoInicial } from "@/lib/cadastro-vereadores-vista";
 import { formatarData } from "@/lib/formatar-data";
 import { EmBreve } from "@/lib/em-breve";
+import { NovoVereadorForm } from "./novo-vereador-form";
+import { EditarVereadorForm } from "./editar-vereador-form";
+import { RegistrarMandatoForm } from "./registrar-mandato-form";
+import { RegistrarLicencaForm } from "./registrar-licenca-form";
 import type { MandatoVigenteOut } from "@/lib/contrato-cadastros.gen";
 import { TopoInterno } from "../../topo";
 import "./cadastro-vereadores.css";
@@ -56,7 +62,13 @@ export default function PaginaVereadores() {
   const searchParams = useSearchParams();
   const vDaUrl = searchParams.get("v");
 
-  const { dados: linhas, estado: estadoLista } = useVereadores(token);
+  // `versao` (Task 9) é um token de refetch puro: a página o incrementa depois de uma escrita bem-sucedida
+  // (criar/editar vereador, registrar mandato/licença) pra forçar useVereadores/useVereadorFicha a se
+  // refazerem — nenhum dos dois hooks tem um jeito próprio de "refetch", então isto entra nas deps deles.
+  const [versao, setVersao] = useState(0);
+  const [painel, setPainel] = useState<null | "novo" | "editar" | "mandato" | "licenca">(null);
+
+  const { dados: linhas, estado: estadoLista } = useVereadores(token, versao);
   const [busca, setBusca] = useState("");
   const linhasFiltradas = filtrar(linhas, busca);
 
@@ -77,7 +89,26 @@ export default function PaginaVereadores() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- router é estável (useRouter, Next App Router); demais deps são o gatilho real
   }, [estadoLista, efetivoId, vDaUrl, token]);
 
-  const { dados: ficha, estado: estadoFicha } = useVereadorFicha(token, efetivoId);
+  const { dados: ficha, estado: estadoFicha } = useVereadorFicha(token, efetivoId, versao);
+  const { dados: legislaturaVigente } = useLegislaturaVigente(token);
+
+  // troca de vereador selecionado fecha qualquer painel de edição/mandato/licença aberto (evita deixar um
+  // form stale apontando pro vereador anterior) — o painel "novo" fica de fora: ele não depende de
+  // `efetivoId` nenhum (ainda não existe vereador ao criar) e sobrevive à seleção automática do 1º da lista
+  // que acontece enquanto o painel de criação está aberto. Reset DURANTE O RENDER (não dentro de um
+  // useEffect) — mesmo idioma de use-vereador-ficha.ts, exigido por eslint-plugin-react-hooks v7
+  // `set-state-in-effect`.
+  const [efetivoIdAnterior, setEfetivoIdAnterior] = useState(efetivoId);
+  if (efetivoId !== efetivoIdAnterior) {
+    setEfetivoIdAnterior(efetivoId);
+    setPainel((p) => (p === "novo" ? p : null));
+  }
+
+  function aoConcluir(id: string) {
+    setPainel(null);
+    setSelecionadoManual(id); // seleciona o vereador afetado
+    setVersao((v) => v + 1); // dispara refetch de lista + ficha
+  }
 
   const indiceSelecionado = linhasFiltradas.findIndex((l) => l.id === efetivoId);
   const indiceAtivo = indiceSelecionado === -1 ? 0 : indiceSelecionado;
@@ -135,19 +166,17 @@ export default function PaginaVereadores() {
           <button
             className="btn btn-primaria btn-mini"
             type="button"
-            disabled
-            aria-disabled="true"
-            aria-describedby="vereador-novo-em-breve"
+            onClick={() => setPainel("novo")}
           >
             Novo vereador
           </button>
-          <div id="vereador-novo-em-breve" className="sr-only">
-            <EmBreve
-              titulo="Novo vereador"
-              motivo="Cadastro de vereadores é somente leitura nesta fatia — o cadastro por escrita chega em outra fatia."
-            />
-          </div>
         </div>
+
+        {painel === "novo" && (
+          <div className="painel-cad">
+            <NovoVereadorForm token={token} onSucesso={aoConcluir} onCancelar={() => setPainel(null)} />
+          </div>
+        )}
 
         <div className="md">
           {/* MASTER: lista */}
@@ -322,35 +351,73 @@ export default function PaginaVereadores() {
                     type="button"
                     disabled
                     aria-disabled="true"
-                    aria-describedby="vereador-acoes-em-breve"
+                    aria-describedby="vereador-proposicoes-em-breve"
                   >
                     Ver proposições
                   </button>
                   <button
                     className="btn btn-contorno btn-mini"
                     type="button"
-                    disabled
-                    aria-disabled="true"
-                    aria-describedby="vereador-acoes-em-breve"
+                    onClick={() => setPainel("editar")}
                   >
                     Editar cadastro
                   </button>
                   <button
+                    className="btn btn-contorno btn-mini"
+                    type="button"
+                    onClick={() => setPainel("mandato")}
+                  >
+                    Registrar mandato
+                  </button>
+                  <button
                     className="btn btn-fantasma btn-mini"
                     type="button"
-                    disabled
-                    aria-disabled="true"
-                    aria-describedby="vereador-acoes-em-breve"
+                    disabled={ficha.mandato?.estado !== "vigente"}
+                    title={ficha.mandato?.estado !== "vigente" ? "Requer um mandato vigente." : undefined}
+                    onClick={() => setPainel("licenca")}
                   >
                     Registrar licença
                   </button>
                 </div>
-                <div id="vereador-acoes-em-breve">
+                <div id="vereador-proposicoes-em-breve">
                   <EmBreve
-                    titulo="Ações do cadastro"
-                    motivo="Editar cadastro, registrar licença e ver as proposições do vereador ainda não têm o backend fiado nesta fatia — o cadastro é somente leitura por enquanto."
+                    titulo="Ver proposições"
+                    motivo="Proposições por vereador ainda não têm o backend fiado nesta fatia."
                   />
                 </div>
+
+                {painel === "editar" && (
+                  <div className="painel-cad">
+                    <EditarVereadorForm
+                      token={token}
+                      vereadorId={ficha.id}
+                      inicial={{ nome: ficha.nome, nomeParlamentar: ficha.nomeParlamentar }}
+                      onSucesso={aoConcluir}
+                      onCancelar={() => setPainel(null)}
+                    />
+                  </div>
+                )}
+                {painel === "mandato" && (
+                  <div className="painel-cad">
+                    <RegistrarMandatoForm
+                      token={token}
+                      vereadorId={ficha.id}
+                      legislatura={legislaturaVigente}
+                      onSucesso={aoConcluir}
+                      onCancelar={() => setPainel(null)}
+                    />
+                  </div>
+                )}
+                {painel === "licenca" && (
+                  <div className="painel-cad">
+                    <RegistrarLicencaForm
+                      token={token}
+                      vereadorId={ficha.id}
+                      onSucesso={aoConcluir}
+                      onCancelar={() => setPainel(null)}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           )}

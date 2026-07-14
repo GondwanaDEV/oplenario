@@ -14,6 +14,9 @@
 //
 // Degrada independentemente de useVereadores: um 404/erro aqui nunca deriva pra erro da lista (hooks
 // separados, chamadas separadas).
+//
+// `versao` (Task 9) é o mesmo token de refetch de useVereadores.ts — a página o incrementa após uma
+// escrita (editar/mandato/licença) pra forçar a ficha a se refazer; não é usado no corpo do fetch.
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "./api-fetch";
@@ -23,7 +26,7 @@ import { semCredencial } from "./modo";
 
 type Estado = "carregando" | "pronto" | "erro";
 
-export function useVereadorFicha(token: string | null, id: string | null) {
+export function useVereadorFicha(token: string | null, id: string | null, versao = 0) {
   const [dados, setDados] = useState<VereadorFichaOut | null>(null);
   const [estado, setEstado] = useState<Estado>(id ? "carregando" : "pronto");
   const [idAnterior, setIdAnterior] = useState(id);
@@ -60,7 +63,7 @@ export function useVereadorFicha(token: string | null, id: string | null) {
     return () => {
       vivo = false;
     };
-  }, [token, id]);
+  }, [token, id, versao]);
 
   if (!id) return { dados: null, estado: "pronto" as Estado };
   if (semCredencial(token)) return { dados: null, estado: "erro" as Estado };
