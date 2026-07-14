@@ -25,6 +25,11 @@
   ;; vereador / mandato / licenca / suplencia
   (criar-vereador! [this ente-id vereador])
   (buscar-vereador [this ente-id id])
+  (listar-vereadores [this ente-id data]
+    "Vereadores da Casa com mandato+cargo-na-Mesa vigentes em `data` (Task 1, `vereador/listar`).")
+  (ficha-vereador [this ente-id id data]
+    "Leitura composta NUMA UNICA tx (mesma disciplina de ficha-completa-da-proposicao):
+     {:vereador :mandato :legislatura :comissoes}, ou nil se o vereador nao existe.")
   (vereador-por-identidade [this ente-id identidade-id])
   (criar-mandato! [this ente-id mandato])
   (mudar-estado-mandato! [this ente-id mandato])
@@ -53,7 +58,16 @@
   (legislatura-vigente [this ente-id] (transacao this ente-id #(estrutura/legislatura-vigente % ente-id)))
   (criar-sessao-legislativa! [this ente-id s] (transacao this ente-id #(estrutura/inserir-sessao-legislativa! % s)))
   (criar-vereador! [this ente-id v] (transacao this ente-id #(vereador/inserir! % v)))
-  (buscar-vereador [this ente-id id] (transacao this ente-id #(vereador/buscar % id)))
+  (buscar-vereador [this ente-id id] (transacao this ente-id #(vereador/buscar % ente-id id)))
+  (listar-vereadores [this ente-id data] (transacao this ente-id #(vereador/listar % ente-id data)))
+  (ficha-vereador [this ente-id id data]
+    (transacao this ente-id
+      (fn [tx]
+        (when-let [v (vereador/buscar tx ente-id id)]
+          (let [m (vereador/mandato-vigente tx ente-id id data)
+                leg (when (:legislatura-id m) (estrutura/buscar-legislatura tx (:legislatura-id m)))
+                cs (comissao/comissoes-do-vereador tx ente-id id data)]
+            {:vereador v :mandato m :legislatura leg :comissoes cs})))))
   (vereador-por-identidade [this ente-id ident] (transacao this ente-id #(vereador/por-identidade % ente-id ident)))
   (criar-mandato! [this ente-id m] (transacao this ente-id #(vereador/inserir-mandato! % m)))
   (mudar-estado-mandato! [this ente-id m] (transacao this ente-id #(vereador/mudar-estado! % m)))

@@ -1,0 +1,93 @@
+/* Chrome específico do Cadastro de Vereadores (Task 9, arquétipo master-detail) — portado de
+   produto/design-system/o-plenario/telas/cadastro-vereadores.html (<style> local, linhas 24-83). Tokens +
+   chassi vêm de globals.css (tokens.css + chassi.css, importados globalmente); aqui só o que é desta
+   superfície. Mesma disciplina de proposicoes.css/ficha-materia.css (CSS é page-scoped neste repo).
+
+   Adaptação deliberada (não é drift de "verbatim"): a tela-fonte define seu PRÓPRIO `.chip`/`.chip-ativo`
+   local. Aqui reusamos a família `.chip`/.chip-ok/.chip-alerta/.chip-neutro que já vive em chassi.css
+   (mesma família usada por proposicoes.css) em vez de duplicar — `estadoChip()` (Task 7) já devolve um tom
+   ativo/licenca/neutro que mapeia 1:1 pras 3 variantes existentes, sem introduzir uma 4ª família de chip só
+   pra esta tela (viés de consistência disciplinar, CLAUDE.md §4).
+
+   Também NÃO portado: os ícones inline SVG do card de busca/chips da tela-fonte (checkmark do chip-ativo,
+   lupa da busca) — a lupa é mantida (ajuda a achar o campo), o checkmark do chip foi descartado porque o
+   texto do rótulo ("Mandato ativo") já é o sinal (cor nunca é o único sinal, mas aqui nem cor sozinha é:
+   é texto distinto por tom). */
+
+/* ---- cabeçalho de página ---- */
+.pg-cab { padding: 1.6rem 0 0.4rem; display: flex; align-items: flex-end; gap: 0.8rem 1.4rem; flex-wrap: wrap; }
+.pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
+.pg-cab .sub { font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
+
+/* ---- grade master-detail ---- */
+.md { display: grid; grid-template-columns: 340px 1fr; gap: 1.4rem; align-items: start; margin: 1.3rem 0 0; }
+
+/* ---- lista (master) ---- */
+.lista-card { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; }
+.busca { display: flex; align-items: center; gap: 0.5rem; padding: 0.7rem 0.9rem; border-bottom: 1px solid var(--linha); }
+.busca svg { color: var(--texto-2); flex: 0 0 auto; }
+.busca input { border: none; background: none; outline: none; font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); width: 100%; min-height: 32px; }
+.busca input::placeholder { color: var(--texto-2); }
+.busca input:focus-visible { outline: none; border-color: var(--foco); box-shadow: 0 0 0 4px color-mix(in srgb, var(--foco) 18%, transparent); }
+.v-rows { max-height: 70vh; overflow-y: auto; }
+.v-row { display: flex; align-items: center; gap: 0.7rem; width: 100%; text-align: left; padding: 0.7rem 0.9rem; border: none; border-top: 1px solid var(--linha); background: none; cursor: pointer; }
+.v-row:first-child { border-top: none; }
+.v-row:hover { background: var(--surface-2); }
+.v-row[aria-selected="true"] { background: color-mix(in srgb, var(--marca) 8%, var(--surface)); box-shadow: inset 3px 0 0 var(--marca); }
+.v-av { width: 38px; height: 38px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: var(--t-13); color: #fff; }
+.v-mid { min-width: 0; flex: 1; }
+.v-mid b { font-size: var(--t-13); color: var(--texto); font-weight: 600; display: block; line-height: 1.2; }
+.v-mid span { font-size: var(--t-12); color: var(--texto-2); }
+.v-lic { font-family: var(--mono); font-size: 0.6rem; font-weight: 600; text-transform: uppercase; color: var(--aviso-texto); border: 1px solid color-mix(in srgb, var(--amarelo-traco) 45%, transparent); border-radius: 4px; padding: 0.05rem 0.3rem; flex: 0 0 auto; }
+
+/* ---- ficha (detail) ---- */
+.ficha { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; }
+.ficha-topo { display: flex; align-items: center; gap: 1rem; padding: 1.3rem 1.4rem; border-bottom: 1px solid var(--linha); flex-wrap: wrap; }
+.ficha-topo .big-av { width: 64px; height: 64px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: #fff; }
+.ficha-topo .qa { flex: 1; min-width: 0; }
+.ficha-topo .qa h2 { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--texto); margin: 0; }
+.ficha-topo .qa .cargo { font-size: var(--t-13); color: var(--texto-2); margin: 0.2rem 0 0; }
+
+.ficha-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--linha); }
+.stat { background: var(--surface); padding: 1rem 1.2rem; }
+.stat b { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: var(--marca); display: block; line-height: 1; }
+.stat span { font-size: var(--t-12); color: var(--texto-2); }
+/* estatística sem backend fiado nesta fatia: nunca um número, "—" + nota "Em breve" honesta */
+.stat-em-breve b { color: var(--texto-2); }
+.stat-nota { display: block; font-family: var(--mono); font-size: 0.65rem; letter-spacing: .06em; text-transform: uppercase; color: var(--texto-2); margin-top: 0.15rem; }
+
+.ficha-corpo { padding: 1.3rem 1.4rem; }
+.bloco + .bloco { margin-top: 1.3rem; }
+.bloco h3 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.7rem; }
+.dl { display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 1rem; margin: 0; }
+.dl dt { font-size: var(--t-13); color: var(--texto-2); }
+.dl dd { font-size: var(--t-13); color: var(--texto); margin: 0; font-weight: 500; }
+.dl dd.mono { font-family: var(--mono); }
+.tags { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.tag { font-size: var(--t-12); color: var(--texto); background: var(--surface-2); border: 1px solid var(--linha); border-radius: 999px; padding: 0.2rem 0.65rem; }
+.tag.pres { border-color: color-mix(in srgb, var(--marca) 35%, var(--linha)); color: var(--marca); font-weight: 600; }
+.tag-vazio { font-size: var(--t-13); color: var(--texto-2); }
+.ficha-acoes { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1.4rem; }
+
+/* ---- estados honestos (carregando/erro/vazio) — mesma convenção de proposicoes.css/mesa.css ---- */
+.tela-estado { max-width: 520px; margin: 4rem auto; text-align: center; padding: 2rem; }
+.tela-estado h1 { font-family: var(--display); font-size: var(--t-21); color: var(--texto); margin: 0 0 0.5rem; }
+.tela-estado p { color: var(--texto-2); }
+.secao-vazia, .secao-erro { padding: 1.6rem 1.4rem; color: var(--texto-2); font-size: var(--t-13); }
+.secao-erro { color: var(--acento-texto); }
+
+/* ---- Em breve (honesto — mesmo bloco duplicado por-rota de ficha-materia.css/expediente.css) ---- */
+.em-breve { padding: 1.1rem 1.2rem; border: 1px dashed var(--linha); border-radius: var(--raio); background: var(--surface-2); }
+.em-breve-rotulo { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--texto-2); margin: 0 0 0.3rem; }
+.em-breve-titulo { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); margin: 0 0 0.3rem; }
+.em-breve-motivo { font-size: var(--t-13); color: var(--texto-2); margin: 0; line-height: 1.5; }
+
+@media (max-width: 920px) {
+  .md { grid-template-columns: 1fr; }
+  .v-rows { max-height: none; }
+  .ficha-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 520px) {
+  .pg-cab { grid-template-columns: 1fr; }
+  .ficha-grid { grid-template-columns: 1fr; }
+}

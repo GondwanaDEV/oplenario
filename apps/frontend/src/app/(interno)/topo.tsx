@@ -26,6 +26,8 @@ const DESTINOS_NAV = [
   { rotulo: "Expediente", href: "/expediente" },
   // Onda C Slice C2 — leitura da pauta de uma sessão agendada + convocação derivada (gated "secretario").
   { rotulo: "Pauta", href: "/pauta-convocacao" },
+  // Cadastro de Vereadores (Task 9) — cadastros estruturais, área de topo nova (arquétipo master-detail).
+  { rotulo: "Vereadores", href: "/cadastros/vereadores" },
 ];
 
 export function TopoInterno({ area, ator }: { area: string; ator: { nome: string; papel: string } }) {

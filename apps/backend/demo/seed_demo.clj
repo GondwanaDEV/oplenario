@@ -16,6 +16,7 @@
   (rodar via `clojure -Sdeps '{:aliases {:seed {:extra-paths [\"demo\"]}}}' -X:seed seed-demo/<fn>` — fora
   do alias `:dev` porque `dev/user.clj` exige `component.repl` ausente, mesma nota de oplenario-fe-execucao)"
   (:require [com.stuartsierra.component :as component]
+            [oplenario.cadastros.db.comissao :as comissao-db]
             [oplenario.cadastros.db.estrutura :as estrutura]
             [oplenario.cadastros.db.referencia :as referencia]
             [oplenario.cadastros.db.vereador :as vereador-db]
@@ -39,7 +40,7 @@
             [clojure.edn :as edn])
   (:import (java.time Instant LocalDate)))
 
-(def ids-file "/private/tmp/claude-501/-Users-daoudatraore-oplenario/fb0b8172-5838-4585-9188-536f405b4b01/scratchpad/demo-ids.edn")
+(def ids-file "/demo-scratch/demo-ids.edn")
 
 (defn- dv [ds] (let [r (mod (reduce + (map * ds (range (inc (count ds)) 1 -1))) 11)] (if (< r 2) 0 (- 11 r))))
 (defn- cpf-valido [] (let [b (vec (repeatedly 9 #(rand-int 10))) d1 (dv b)] (apply str (concat b [d1 (dv (conj b d1))]))))
@@ -247,6 +248,87 @@
        (println "\n=== ENCARREGADO/DPO DA DEMO PRONTO ===")
        (println "URL: http://localhost:3000/portal/casa/" (str ente))
        (println "=======================================\n")))))
+
+;; ---------- fe-19-cadastro-vereadores — 5 vereadores + mandatos + comissões (lista/ficha) ----------
+
+(defn vereadores
+  "Semente do CADASTRO DE VEREADORES (branch fe-19-cadastro-vereadores): popula GET /cadastros/vereadores
+  (lista) e GET /cadastros/vereadores/:id (ficha) com dado REAL sob o MESMO ente da demo (ids-file de
+  `base` — rodar `base` primeiro), via os insert fns REAIS de `cadastros.db.{estrutura,vereador,comissao}`
+  (o mesmo caminho que os controllers leem). Cria: 1 legislatura vigente (reusa se o ente já tiver uma,
+  como `vereador` já faz) cobrindo hoje · 5 vereadores (\"Ana Ribeiro\", \"Bruno Sales\", \"Carla Nunes\",
+  \"Diego Alves\", \"Elena Costa\") · 4 mandatos (3 'vigente' com partidos diferentes PT/PSDB/PL + 1
+  'licenciado' PDT; a 5ª — Elena Costa — fica SEM mandato de propósito, p/ exercitar o caso de
+  estado-mandato nil na lista) · 1 comissão 'mesa' (Mesa Diretora) com Ana Ribeiro 'presidente' · 1
+  comissão 'permanente' (Comissão de Constituição e Justiça) com Bruno/Carla/Diego membros e Bruno
+  'presidente' (p/ a ficha mostrar o destaque de presidente + uma contagem de comissões real).
+
+  Também concede à identidade `ident` da demo (\"Secretária da Mesa\", criada por `base` só com vínculo
+  tipo 'servidor', sem papel RBAC nenhum) o papel estático 'secretario' via
+  `identidade.db.vinculo/adicionar-papel!` — as rotas de `cadastros/diplomat/http/in` exigem
+  `it/exige-papel \"secretario\"` (autorização GROSSA, `kernel/autorizacao`) e o papel vem do SNAPSHOT em
+  `identidade.usuario_papel` (resolvido em `resolver-sessao`), NÃO do texto do token nem do `tipo` do
+  vínculo — sem este `adicionar-papel!`, GET /cadastros/vereadores devolveria 403 mesmo autenticado como o
+  ator de `base`. `adicionar-papel!` é idempotente (ON CONFLICT DO NOTHING), então esta parte é segura de
+  rodar de novo; o resto (vereadores/mandatos/comissões) NÃO é — protocola linhas NOVAS a cada chamada,
+  como `materias`/`esic`/`vereador` já são. Rodar uma vez por demo fresca."
+  [_]
+  (com-ds
+   (fn [ds]
+     (let [{:keys [ente ident]} (edn/read-string (slurp ids-file))
+           hoje   (LocalDate/of 2025 1 1)
+           nomes  ["Ana Ribeiro" "Bruno Sales" "Carla Nunes" "Diego Alves" "Elena Costa"]
+           ver-ids (vec (repeatedly 5 random-uuid))
+           [id-ana id-bruno id-carla id-diego _id-elena] ver-ids]
+       (tenancy/com-tenant* ds ente
+         (fn [tx]
+           ;; papel RBAC 'secretario' p/ o ator de `base` passar o gate das rotas de cadastros/vereadores
+           (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente :identidade-id ident :papel "secretario"})
+
+           (let [leg-existente (estrutura/legislatura-vigente tx ente)
+                 leg-id (or (:id leg-existente)
+                            (let [novo-id (random-uuid)]
+                              (estrutura/inserir-legislatura! tx
+                                {:id novo-id :ente-id ente :numero 19 :ano-inicio 2025 :ano-fim 2028 :vigente true})
+                              novo-id))]
+
+             (doseq [[nome vid] (map vector nomes ver-ids)]
+               (vereador-db/inserir! tx {:id vid :ente-id ente :nome nome :nome-parlamentar nome}))
+
+             ;; mandatos: 3 vigentes (partidos diferentes) + 1 licenciado; Elena Costa fica sem mandato
+             (doseq [[vid partido] [[id-ana "PT"] [id-bruno "PSDB"] [id-carla "PL"]]]
+               (vereador-db/inserir-mandato! tx
+                 {:id (random-uuid) :ente-id ente :vereador-id vid :legislatura-id leg-id
+                  :partido partido :estado "vigente" :natureza "titular" :vigencia-inicio hoje}))
+             (vereador-db/inserir-mandato! tx
+               {:id (random-uuid) :ente-id ente :vereador-id id-diego :legislatura-id leg-id
+                :partido "PDT" :estado "licenciado" :natureza "titular" :vigencia-inicio hoje})
+
+             ;; Mesa Diretora — Ana Ribeiro presidente
+             (let [mesa-id (random-uuid)]
+               (comissao-db/inserir! tx {:id mesa-id :ente-id ente :nome "Mesa Diretora" :tipo "mesa"
+                                         :legislatura-id leg-id :vigencia-inicio hoje})
+               (comissao-db/inserir-cargo! tx {:id (random-uuid) :ente-id ente :comissao-id mesa-id
+                                               :vereador-id id-ana :cargo "presidente" :vigencia-inicio hoje}))
+
+             ;; Comissão permanente — CCJ: Bruno (presidente) + Carla + Diego membros
+             (let [ccj-id (random-uuid)]
+               (comissao-db/inserir! tx {:id ccj-id :ente-id ente :nome "Comissão de Constituição e Justiça"
+                                         :tipo "permanente" :legislatura-id leg-id :vigencia-inicio hoje})
+               (doseq [vid [id-bruno id-carla id-diego]]
+                 (comissao-db/inserir-membro! tx {:id (random-uuid) :ente-id ente :comissao-id ccj-id
+                                                  :vereador-id vid :vigencia-inicio hoje}))
+               (comissao-db/inserir-cargo! tx {:id (random-uuid) :ente-id ente :comissao-id ccj-id
+                                               :vereador-id id-bruno :cargo "presidente" :vigencia-inicio hoje})))))
+       (let [token (format "{\"identidade-id\":\"%s\",\"ente-id\":\"%s\"}" ident ente)]
+         (println "\n=== VEREADORES DA DEMO PRONTOS (fe-19-cadastro-vereadores) ===")
+         (println "ente-id  :" (str ente))
+         (println "token    :" token)
+         (println "Ana Ribeiro (PT, vigente, presidente da Mesa) / Bruno Sales (PSDB, vigente, presidente da CCJ) /")
+         (println "Carla Nunes (PL, vigente, membro CCJ) / Diego Alves (PDT, licenciado, membro CCJ) /")
+         (println "Elena Costa (sem mandato)")
+         (println "URL      : http://localhost:3000/cadastros/vereadores?token=" (java.net.URLEncoder/encode token "UTF-8"))
+         (println "================================================================\n"))))))
 
 ;; ---------- Task 7 (Onda C1, home do vereador) — vereadora com mandato + proposição vinculados ----------
 
