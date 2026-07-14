@@ -7,7 +7,7 @@ import { derivarVistaEntrada } from "./entrar-vista";
 // uuid malformado; 404 ente desconhecido.
 
 describe("derivarVistaEntrada", () => {
-  it("200 com corpo válido (forma real do backend hoje, sem nome) -> ok, extrai ente-id", () => {
+  it("200 sem nenhum campo de nome -> ok, extrai ente-id, nome null (heading neutro)", () => {
     const vista = derivarVistaEntrada({
       status: 200,
       corpo: { "ente-id": "abc-123", realm: "ente-abc-123", "base-url": "http://x", "client-id": "oplenario-web" },
@@ -15,7 +15,28 @@ describe("derivarVistaEntrada", () => {
     expect(vista).toEqual({ estado: "ok", enteId: "abc-123", nome: null });
   });
 
-  it("200 com `nome` (forward-compat — campo que o backend pode vir a adicionar) -> usa o nome", () => {
+  it("200 com `nome-curto` e `nome-oficial` (forma real do backend, Slice 2b) -> prefere o curto", () => {
+    const vista = derivarVistaEntrada({
+      status: 200,
+      corpo: {
+        "ente-id": "abc-123",
+        "nome-curto": "Câmara de Foo",
+        "nome-oficial": "Câmara Municipal de Foo",
+      },
+    });
+    expect(vista.estado).toBe("ok");
+    expect(vista.nome).toBe("Câmara de Foo");
+  });
+
+  it("200 só com `nome-oficial` (sem `nome-curto`) -> cai no oficial", () => {
+    const vista = derivarVistaEntrada({
+      status: 200,
+      corpo: { "ente-id": "abc-123", "nome-oficial": "Câmara Municipal de Bar" },
+    });
+    expect(vista.nome).toBe("Câmara Municipal de Bar");
+  });
+
+  it("200 com `nome` (alias legado, fallback defensivo) -> usa o nome", () => {
     const vista = derivarVistaEntrada({
       status: 200,
       corpo: { "ente-id": "abc-123", nome: "Câmara de Exemplo" },
@@ -23,7 +44,7 @@ describe("derivarVistaEntrada", () => {
     expect(vista.nome).toBe("Câmara de Exemplo");
   });
 
-  it("200 com `nome-camara` (variante de chave) -> usa como fallback do nome", () => {
+  it("200 com `nome-camara` (variante de chave legada) -> usa como fallback do nome", () => {
     const vista = derivarVistaEntrada({
       status: 200,
       corpo: { "ente-id": "abc-123", "nome-camara": "Câmara X" },
