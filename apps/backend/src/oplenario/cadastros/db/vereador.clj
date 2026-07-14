@@ -35,6 +35,21 @@
                    :from [:cadastros.vereador]
                    :where [:and [:= :ente_id ente-id] [:= :identidade_id identidade-id]]}))))
 
+(defn atualizar!
+  "UPDATE de nome/nome-parlamentar da linha EFETIVADA do vereador. So' seta as chaves PRESENTES em `campos`
+   (:nome / :nome-parlamentar) — um PATCH parcial nunca zera o campo que o cliente nao mandou. Devolve o
+   update-count (0 = linha inexistente/outro-tenant, ja' filtrada pela RLS). Defesa em profundidade: casa
+   ente_id explicito + efetivado_em NOT NULL (a RLS ja' esconde staging, isto e' cinto-e-suspensorio)."
+  [tx ente-id id campos]
+  (let [set-map (cond-> {}
+                  (contains? campos :nome)             (assoc :nome (:nome campos))
+                  (contains? campos :nome-parlamentar) (assoc :nome_parlamentar (:nome-parlamentar campos)))
+        r (jdbc/execute-one! tx
+            (sql/format {:update :cadastros.vereador
+                         :set set-map
+                         :where [:and [:= :ente_id ente-id] [:= :id id] [:is-not :efetivado_em nil]]}))]
+    (:next.jdbc/update-count r)))
+
 ;; ---- mandato ----
 (defn inserir-mandato!
   [tx {:keys [id ente-id vereador-id legislatura-id partido estado natureza
@@ -78,6 +93,34 @@
                            [:<= :vigencia_inicio data]
                            [:or [:is :vigencia_fim nil] [:>= :vigencia_fim data]]]
                    :order-by [[:vigencia_inicio :desc] [:id]] :limit 1}))))
+
+(defn mandato-vigente-de-vereador
+  "O mandato com estado='vigente' que COBRE `data` (p/ a licenca resolver o alvo). nil se nenhum — cobre
+   'sem mandato vigente' E 'ja' licenciado' (um licenciado tem estado != 'vigente'). Tie-break por :id."
+  [tx ente-id vereador-id data]
+  (comum/linha->kebab
+    (jdbc/execute-one! tx
+      (sql/format {:select [:id :vereador_id :estado :vigencia_inicio :vigencia_fim]
+                   :from [:cadastros.mandato]
+                   :where [:and [:= :ente_id ente-id] [:= :vereador_id vereador-id]
+                           [:= :estado "vigente"]
+                           [:<= :vigencia_inicio data]
+                           [:or [:is :vigencia_fim nil] [:>= :vigencia_fim data]]]
+                   :order-by [[:vigencia_inicio :desc] [:id]] :limit 1}))))
+
+(defn mandato-sobreposto?
+  "True se JA' existe mandato 'vigente' efetivado do vereador cuja vigencia sobrepoe [inicio, fim] (fim nil
+   = aberto = 'infinity'). Guard app-level (UX 409); o EXCLUDE (migration ...59) e' a rede. SQL cru
+   parametrizado — o operador `&&` de daterange e' direto assim (o db_test ja' usa SQL cru p/ casos pontuais)."
+  [tx ente-id vereador-id inicio fim]
+  (some?
+    (jdbc/execute-one! tx
+      ["SELECT 1 FROM cadastros.mandato
+        WHERE ente_id = ? AND vereador_id = ? AND estado = 'vigente' AND efetivado_em IS NOT NULL
+          AND daterange(vigencia_inicio, COALESCE(vigencia_fim, 'infinity'::date), '[]')
+              && daterange(?::date, COALESCE(?::date, 'infinity'::date), '[]')
+        LIMIT 1"
+       ente-id vereador-id inicio fim])))
 
 (defn listar
   "Lista de vereadores da Casa com o mandato que cobre `data` (partido/estado) e o cargo na Mesa vigente.
