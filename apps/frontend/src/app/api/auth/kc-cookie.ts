@@ -40,8 +40,17 @@ export function baseUrlPinado(baseUrl: string): boolean {
   const pin = process.env.KEYCLOAK_PUBLIC_URL;
   if (!pin) return true; // sem pin configurado (dev): não restringe
   try {
-    return new URL(baseUrl).origin === new URL(pin).origin;
+    const bate = new URL(baseUrl).origin === new URL(pin).origin;
+    if (!bate) {
+      // Origin do cookie != KC oficial: cookie forjado OU misconfig (KEYCLOAK_PUBLIC_URL divergindo do
+      // base-url-publico da descoberta). Nos dois casos o RP-logout degrada p/ local em silêncio — logamos
+      // p/ tornar um misconfig de prod OBSERVÁVEL (o segundo caso rejeitaria todo logout legítimo do KC sem
+      // erro nem sinal). Sem interpolar o valor não-confiável do cookie (evita log injection).
+      console.warn("logout: origin de sessao_kc.baseUrl não confere com KEYCLOAK_PUBLIC_URL — RP-logout cai no local");
+    }
+    return bate;
   } catch {
+    console.warn("logout: sessao_kc.baseUrl malformado — RP-logout cai no local");
     return false;
   }
 }

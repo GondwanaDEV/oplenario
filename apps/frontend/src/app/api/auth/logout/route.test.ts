@@ -114,6 +114,16 @@ describe("POST /api/auth/logout — encerra sessão no backend + limpa cookie lo
 });
 
 describe("POST /api/auth/logout — RP-logout no Keycloak via cookie companheiro sessao_kc", () => {
+  // Hermético: estes casos assumem KEYCLOAK_PUBLIC_URL AUSENTE (baseUrlPinado não restringe). Cravamos o
+  // unset explicitamente p/ não depender do env global — se um setup futuro setar a env, o pin rejeitaria
+  // o BASE_URL de teste (localhost:8090) e degradaria p/ local, quebrando estes casos silenciosamente.
+  beforeEach(() => {
+    vi.stubEnv("KEYCLOAK_PUBLIC_URL", undefined as unknown as string);
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("cookie sessao_kc válido → redireciona para o end-session do KC (client_id + post_logout_redirect_uri), limpa AMBOS os cookies", async () => {
     const fetchImpl = fetchMock(async () => new Response(null, { status: 204 }));
     const resp = await POST(
