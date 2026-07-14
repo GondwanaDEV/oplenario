@@ -8,8 +8,10 @@
 // atribuição, sem round-trip extra.
 
 import { useEffect, useRef, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { PosAprovacaoOut } from "./contrato-legislativo.gen";
+import { semCredencial } from "./modo";
 
 export type GerarAutografoIn = { prazoRespostaEm?: string };
 
@@ -40,7 +42,7 @@ export function useGerarAutografo(token: string | null, proposicaoId: string | n
   }, []);
 
   async function gerar(corpo: GerarAutografoIn = {}): Promise<PosAprovacaoOut> {
-    if (!token) {
+    if (semCredencial(token)) {
       throw new Error("sem token de autenticacao");
     }
     if (!proposicaoId) {
@@ -54,9 +56,10 @@ export function useGerarAutografo(token: string | null, proposicaoId: string | n
     setErro(null);
     let tratado = false;
     try {
-      const r = await fetch(`/api/legislativo/proposicoes/${encodeURIComponent(proposicaoId)}/autografo`, {
+      const r = await apiFetch(`/api/legislativo/proposicoes/${encodeURIComponent(proposicaoId)}/autografo`, {
+        token: token ?? undefined,
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(corpoKebab(corpo)),
       });
       if (!r.ok) {

@@ -5,8 +5,10 @@
 // cada mudança de filtro (busca/tipo/estado/ano/página/ordenação).
 
 import { useEffect, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { ListaProposicoesOut } from "./contrato-legislativo.gen";
+import { semCredencial } from "./modo";
 
 export type FiltrosProposicoes = {
   busca?: string;
@@ -50,12 +52,12 @@ export function useProposicoes(token: string | null, filtros: FiltrosProposicoes
   }
 
   useEffect(() => {
-    if (!token) return; // caso de erro sem token é derivado no retorno (sem setState síncrono no effect)
+    if (semCredencial(token)) return; // caso de erro sem token é derivado no retorno (sem setState síncrono no effect)
     let vivo = true;
     (async () => {
       try {
-        const r = await fetch(`/api/legislativo/proposicoes?${montarQuerystring(filtros)}`, {
-          headers: { Authorization: `Bearer ${token}` },
+        const r = await apiFetch(`/api/legislativo/proposicoes?${montarQuerystring(filtros)}`, {
+          token: token ?? undefined,
           cache: "no-store",
         });
         if (!vivo) return;
@@ -75,7 +77,7 @@ export function useProposicoes(token: string | null, filtros: FiltrosProposicoes
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `chave` já resume `filtros` por valor
   }, [token, chave]);
 
-  if (!token) {
+  if (semCredencial(token)) {
     return { dados: null, estado: "erro" as Estado };
   }
   return { dados, estado };

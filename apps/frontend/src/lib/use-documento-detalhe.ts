@@ -8,14 +8,16 @@
 // `protocolo-numero`/`protocolo-ano`, o componente refaz o GET pra ter certeza em vez de assumir.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { DocumentoOut } from "./contrato-legislativo.gen";
+import { semCredencial } from "./modo";
 
 type Estado = "carregando" | "pronto" | "erro";
 
-async function buscarDocumento(token: string, id: string): Promise<DocumentoOut | null> {
-  const r = await fetch(`/api/legislativo/documentos/${encodeURIComponent(id)}`, {
-    headers: { Authorization: `Bearer ${token}` },
+async function buscarDocumento(token: string | null, id: string): Promise<DocumentoOut | null> {
+  const r = await apiFetch(`/api/legislativo/documentos/${encodeURIComponent(id)}`, {
+    token: token ?? undefined,
     cache: "no-store",
   });
   if (!r.ok) return null;
@@ -49,7 +51,7 @@ export function useDocumentoDetalhe(token: string | null, id: string | null) {
 
   useEffect(() => {
     if (!id) return;
-    if (!token) return;
+    if (semCredencial(token)) return;
     let vivo = true;
     (async () => {
       try {
@@ -71,7 +73,7 @@ export function useDocumentoDetalhe(token: string | null, id: string | null) {
   }, [token, id]);
 
   const recarregar = useCallback(async () => {
-    if (!id || !token) return;
+    if (!id || semCredencial(token)) return;
     const idDaChamada = id;
     try {
       const resultado = await buscarDocumento(token, id);
@@ -89,6 +91,6 @@ export function useDocumentoDetalhe(token: string | null, id: string | null) {
   }, [token, id]);
 
   if (!id) return { dados: null, estado: "pronto" as Estado, recarregar };
-  if (!token) return { dados: null, estado: "erro" as Estado, recarregar };
+  if (semCredencial(token)) return { dados: null, estado: "erro" as Estado, recarregar };
   return { dados, estado, recarregar };
 }

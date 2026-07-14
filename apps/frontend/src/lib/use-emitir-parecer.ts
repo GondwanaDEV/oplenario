@@ -8,8 +8,10 @@
 // não-branco e o CAS de fato.
 
 import { useEffect, useRef, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { ParecerEditorOut } from "./contrato-legislativo.gen";
+import { semCredencial } from "./modo";
 
 export type EmitirParecerIn = { votoRelator: string; lockVersion: number };
 
@@ -36,7 +38,7 @@ export function useEmitirParecer(token: string | null, id: string) {
   }, []);
 
   async function emitir(corpo: EmitirParecerIn): Promise<ParecerEditorOut> {
-    if (!token) {
+    if (semCredencial(token)) {
       throw new Error("sem token de autenticacao");
     }
     if (enviandoRef.current) {
@@ -47,9 +49,10 @@ export function useEmitirParecer(token: string | null, id: string) {
     setErro(null);
     let tratado = false;
     try {
-      const r = await fetch(`/api/legislativo/pareceres/${id}/emissao`, {
+      const r = await apiFetch(`/api/legislativo/pareceres/${id}/emissao`, {
+        token: token ?? undefined,
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(corpoKebab(corpo)),
       });
       if (!r.ok) {

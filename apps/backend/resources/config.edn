@@ -9,8 +9,23 @@
  ;; canal entre replicas; cada uma so veria os eventos que ela mesma drenou).
  :tempo-real {:backplane :memoria}
  :objeto-store {:endpoint "http://localhost:9000" :access-key "oplenario" :secret-key "dev12345" :bucket "oplenario"}
- :keycloak {:base-url "http://localhost:8080" :realm-prefixo "ente-" :audiencia "oplenario-backend"
-            :admin-usuario "admin" :admin-senha "admin" :jwks-cache-ttl-s 600}
+ ;; :base-url e' o backend-interno (falado entre containers docker); :base-url-publico e' o BROWSER-facing
+ ;; (dev KC --profile auth mapeia p/ o host porta 8090) — GET /auth/descoberta/:ente devolve o publico, nunca
+ ;; o interno (o browser nao resolve "keycloak" via docker DNS). :web-client-id/:redirect-uris/:web-origins =
+ ;; superficie de config do client publico PKCE (Onda D Slice 2; provisionamento = Task 7).
+ :keycloak {:base-url "http://localhost:8080" :base-url-publico "http://localhost:8090"
+            :realm-prefixo "ente-" :audiencia "oplenario-backend"
+            :admin-usuario "admin" :admin-senha "admin" :jwks-cache-ttl-s 600
+            :web-client-id "oplenario-web"
+            :redirect-uris ["http://localhost:3000/api/auth/callback"]
+            :web-origins ["http://localhost:3000"]}
+ ;; Onda D Slice 2 Task 4: teto absoluto + janela de ociosidade da sessao opaca (POST /auth/sessoes mint).
+ ;; CARRY: `:ociosa-min` 30 == 1800s = o default HARDCODED `sessao-janela-ociosa-seg` do Repo de identidade
+ ;; (oplenario.identidade.components.repositorio) — sao HOJE duas fontes do MESMO numero que so' concordam
+ ;; por convencao (o mint crava o `ocioso-ate` inicial a partir DAQUI; o Repo desliza a MESMA janela em cada
+ ;; resolve a partir do SEU proprio default). Mudar um sem o outro dessincroniza; reconciliar fazendo o Repo
+ ;; ler este valor em vez de ter default proprio.
+ :sessao {:absoluta-h 12 :ociosa-min 30}
  ;; URL por modulo p/ os http_client (local agora, remoto apos extracao — §22.10)
  :modulos {:cadastros {:base-url "http://localhost:8888"} :identidade {:base-url "http://localhost:8888"}
            :legislativo {:base-url "http://localhost:8888"} :sessoes {:base-url "http://localhost:8888"}

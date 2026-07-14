@@ -36,7 +36,7 @@ describe("useTramitacaoBoard", () => {
     }) as unknown as typeof fetch;
     renderHook(() => useTramitacaoBoard("tok-abc"));
     await waitFor(() => expect(headersCapturados).toBeDefined());
-    expect((headersCapturados as Record<string, string>).Authorization).toBe("Bearer tok-abc");
+    expect(new Headers(headersCapturados).get("Authorization")).toBe("Bearer tok-abc");
   });
 
   it("falha de rede -> estado 'erro'", async () => {

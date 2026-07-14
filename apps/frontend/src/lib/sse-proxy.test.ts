@@ -69,6 +69,13 @@ describe("proxiarPlenario — Route Handler que faz proxy de SSE com stream real
     expect(resp.headers.get("x-accel-buffering")).toBe("no");
   });
 
+  it("encaminha o header cookie ao upstream (backend first-party confiável; interceptor T6 lê só sessao)", async () => {
+    const fetchImpl = fetchMock(async () => new Response(corpoStream(), { status: 200 }));
+    await proxiarPlenario(req({ cookie: "sessao=abc" }), "s1", { fetchImpl });
+    const h = new Headers(fetchImpl.mock.calls[0]![1]!.headers);
+    expect(h.get("cookie")).toBe("sessao=abc");
+  });
+
   it("repassa o AbortSignal do request ao upstream (cliente desconecta -> upstream aborta)", async () => {
     const fetchImpl = fetchMock(async () => new Response(corpoStream(), { status: 200 }));
     const r = req({ authorization: "Bearer x" });

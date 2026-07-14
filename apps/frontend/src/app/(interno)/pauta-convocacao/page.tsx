@@ -14,7 +14,7 @@
 // primeira, porque é a primeira rota (interno) restrita a um papel específico.
 
 import { useState } from "react";
-import { useAuth } from "@/lib/auth";
+import { useAuth, usePapeis } from "@/lib/auth";
 import { useSliSessoes } from "@/lib/use-sli-sessoes";
 import { useSessaoPauta } from "@/lib/use-sessao-pauta";
 import { useProposicoes } from "@/lib/use-proposicoes";
@@ -35,7 +35,11 @@ import { TopoInterno } from "../topo";
 import "./pauta-convocacao.css";
 
 export default function PaginaPautaConvocacao() {
-  const { token, papeis } = useAuth();
+  const { token } = useAuth();
+  const { papeis, estado } = usePapeis();
+  // Modo real: segura enquanto /eu não respondeu (evita piscar "Acesso restrito" antes da resposta — mesmo
+  // racional de GuardVereador em (vereador)/layout.tsx).
+  if (estado === "carregando") return null;
   if (!papeis.includes("secretario")) {
     return (
       <main className="acesso-restrito">

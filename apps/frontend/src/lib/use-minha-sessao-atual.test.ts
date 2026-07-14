@@ -35,7 +35,7 @@ describe("useMinhaSessaoAtual", () => {
     }) as unknown as typeof fetch;
     renderHook(() => useMinhaSessaoAtual("tok-abc"));
     await waitFor(() => expect(headersCapturados).toBeDefined());
-    expect((headersCapturados as Record<string, string>).Authorization).toBe("Bearer tok-abc");
+    expect(new Headers(headersCapturados).get("Authorization")).toBe("Bearer tok-abc");
   });
 
   it("falha de rede -> estado 'erro'", async () => {
@@ -64,5 +64,24 @@ describe("useMinhaSessaoAtual", () => {
     });
     // sem crash / sem warning de setState pós-unmount — a suíte falharia num warning não-tratado do jsdom
     // se o guard `vivo` estivesse ausente.
+  });
+
+  // T14b: prova do modo REAL (produção) — sem token no cliente, a sessão é o cookie httpOnly; o hook NÃO
+  // aborta (semCredencial(null) é false sob modoReal()) e o fetch É disparado normalmente.
+  it("modo real (NODE_ENV=production) + token null -> busca mesmo assim (cookie decide)", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    try {
+      global.fetch = vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ "sessao-id": "s1", situacao: "em_curso" }),
+      }) as Response) as unknown as typeof fetch;
+
+      const { result } = renderHook(() => useMinhaSessaoAtual(null));
+      await waitFor(() => expect(result.current.estado).toBe("pronto"));
+      expect(global.fetch).toHaveBeenCalled();
+      expect(result.current.sessaoId).toBe("s1");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

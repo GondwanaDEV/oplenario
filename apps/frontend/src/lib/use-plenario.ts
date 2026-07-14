@@ -5,8 +5,10 @@
 // pelo Last-Event-ID. Todo o IO mora aqui; a lógica de estado é o reducer testado (plenario-reducer).
 
 import { useEffect, useRef, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import type { EventoPlenario, SessaoOut } from "./contrato";
 import { TIPOS_PLENARIO } from "./contrato";
+import { semCredencial } from "./modo";
 import { aplicarEvento, estadoInicial, type EstadoPlenario } from "./plenario-reducer";
 import { consumirSse } from "./sse";
 
@@ -35,7 +37,7 @@ export function usePlenario(sessaoId: string, token: string | null) {
   const idValido = ID_VALIDO.test(sessaoId);
 
   useEffect(() => {
-    if (!token || !idValido) return; // casos de erro são derivados no retorno (sem setState síncrono no effect)
+    if (semCredencial(token) || !idValido) return; // casos de erro são derivados no retorno (sem setState síncrono no effect)
     const controller = new AbortController();
     let vivo = true;
 
@@ -55,8 +57,8 @@ export function usePlenario(sessaoId: string, token: string | null) {
     (async () => {
       // 1) estado inicial
       try {
-        const resp = await fetch(`/api/sessoes/${sessaoId}`, {
-          headers: { Authorization: `Bearer ${token}` },
+        const resp = await apiFetch(`/api/sessoes/${sessaoId}`, {
+          token: token ?? undefined,
           signal: controller.signal,
           cache: "no-store",
         });
@@ -111,7 +113,7 @@ export function usePlenario(sessaoId: string, token: string | null) {
   }, [sessaoId, token, idValido]);
 
   // casos de erro derivados (mantêm o effect livre de setState síncrono)
-  if (!token) return { sessao: null, estado: null, conexao: "erro" as EstadoConexao, erro: "Sem credencial de sessão (token)." };
+  if (semCredencial(token)) return { sessao: null, estado: null, conexao: "erro" as EstadoConexao, erro: "Sem credencial de sessão (token)." };
   if (!idValido) return { sessao: null, estado: null, conexao: "erro" as EstadoConexao, erro: "Identificador de sessão inválido." };
   return { sessao, estado, conexao, erro };
 }

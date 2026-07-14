@@ -10,16 +10,15 @@
 // em erro) é melhoria futura, não o comportamento atual.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { MeuPainelOut } from "./contrato-legislativo.gen";
+import { semCredencial } from "./modo";
 
 type Estado = "carregando" | "pronto" | "erro";
 
-async function buscarPainel(token: string): Promise<MeuPainelOut | null> {
-  const r = await fetch("/api/meu/painel", {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-  });
+async function buscarPainel(token: string | null): Promise<MeuPainelOut | null> {
+  const r = await apiFetch("/api/meu/painel", { token: token ?? undefined, cache: "no-store" });
   if (!r.ok) return null;
   return camelizarChaves(await r.json()) as MeuPainelOut;
 }
@@ -44,7 +43,7 @@ export function useMeuPainel(token: string | null) {
   }, []);
 
   useEffect(() => {
-    if (!token) return; // caso de erro sem token é derivado no retorno (sem setState síncrono no effect)
+    if (semCredencial(token)) return; // caso de erro sem token é derivado no retorno (sem setState síncrono no effect)
     let vivo = true;
     (async () => {
       try {
@@ -66,7 +65,7 @@ export function useMeuPainel(token: string | null) {
   }, [token]);
 
   const recarregar = useCallback(async () => {
-    if (!token) return;
+    if (semCredencial(token)) return;
     const tokenDaChamada = token;
     try {
       const resultado = await buscarPainel(token);
@@ -83,6 +82,6 @@ export function useMeuPainel(token: string | null) {
     }
   }, [token]);
 
-  if (!token) return { dados: null, estado: "erro" as Estado, recarregar };
+  if (semCredencial(token)) return { dados: null, estado: "erro" as Estado, recarregar };
   return { dados, estado, recarregar };
 }

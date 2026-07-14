@@ -35,10 +35,9 @@ describe("useParecerEditor", () => {
     await waitFor(() => expect(result.current.estado).toBe("pronto"));
     expect(result.current.dados?.comissaoId).toBe("c1");
     expect(result.current.dados?.objeto?.urnLex).toBe("urn:x");
-    expect(global.fetch).toHaveBeenCalledWith(
-      "/api/legislativo/pareceres/p1",
-      expect.objectContaining({ headers: { Authorization: "Bearer tok" } }),
-    );
+    const chamada = vi.mocked(global.fetch).mock.calls[0];
+    expect(chamada[0]).toBe("/api/legislativo/pareceres/p1");
+    expect(new Headers(chamada[1]?.headers).get("Authorization")).toBe("Bearer tok");
   });
 
   it("id nulo -> 'pronto' sem chamar fetch", () => {

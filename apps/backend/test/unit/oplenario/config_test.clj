@@ -31,16 +31,23 @@
                              "KEYCLOAK_AUDIENCIA" "oplenario-teste"
                              "KEYCLOAK_ADMIN_USUARIO" "root"
                              "KEYCLOAK_ADMIN_SENHA" "segredo"
-                             "KEYCLOAK_JWKS_CACHE_TTL_S" "120"})]
+                             "KEYCLOAK_JWKS_CACHE_TTL_S" "120"
+                             "KEYCLOAK_WEB_CLIENT_ID" "web-teste"
+                             "KEYCLOAK_BASE_URL_PUBLICO" "http://localhost:9091"})]
     (is (= "http://localhost:9090" (get-in c [:keycloak :base-url])))
     (is (= "casa-" (get-in c [:keycloak :realm-prefixo])))
     (is (= "oplenario-teste" (get-in c [:keycloak :audiencia])))
     (is (= "root" (get-in c [:keycloak :admin-usuario])))
     (is (= "segredo" (get-in c [:keycloak :admin-senha])))
-    (is (= 120 (get-in c [:keycloak :jwks-cache-ttl-s])))))
+    (is (= 120 (get-in c [:keycloak :jwks-cache-ttl-s])))
+    (is (= "web-teste" (get-in c [:keycloak :web-client-id])) "KEYCLOAK_WEB_CLIENT_ID sobrepoe o client id publico")
+    (is (= "http://localhost:9091" (get-in c [:keycloak :base-url-publico]))
+        "KEYCLOAK_BASE_URL_PUBLICO sobrepoe a URL browser-facing")))
 
 (deftest keycloak-defaults-sem-override
   (let [c (config/carregar {})]
     (is (= "ente-" (get-in c [:keycloak :realm-prefixo])))
     (is (= "oplenario-backend" (get-in c [:keycloak :audiencia])))
-    (is (pos? (get-in c [:keycloak :jwks-cache-ttl-s])))))
+    (is (pos? (get-in c [:keycloak :jwks-cache-ttl-s])))
+    (is (= "oplenario-web" (get-in c [:keycloak :web-client-id])) "client id publico default do edn")
+    (is (= "http://localhost:8090" (get-in c [:keycloak :base-url-publico])) "base-url publico default do edn")))

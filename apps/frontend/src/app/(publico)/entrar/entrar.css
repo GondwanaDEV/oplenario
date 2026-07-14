@@ -1,0 +1,74 @@
+/* ============================================================
+   O PLENÁRIO · /entrar e /entrar/[ente] — arquétipo "auth" (cartão centrado).
+   Porte do MESMO arquétipo de produto/design-system/o-plenario/telas/login.html — já validado AA nos 2
+   temas (tier MÉDIA, commit `1b35ef8`). Reusa .btn/.btn-primaria/.tema-btn do chassi.css GLOBAL (já
+   auditados; não redefinidos aqui). A moldura própria (.entrar-cartao/.entrar-faixa/.entrar-corpo) é a
+   MESMA CSS verbatim do .cartao/.faixa/.corpo do login.html (só renomeada com prefixo `entrar-` p/ não
+   colidir com outras telas que também usem `.cartao`/`.faixa` genéricos).
+
+   Diferença estrutural sobre o login.html: aquela tela tinha um formulário de e-mail/senha/passkey — a
+   autenticação REAL aqui é Authorization Code + PKCE contra o Keycloak do tenant (T7/T8); esta tela só
+   valida a Câmara (via descoberta) e oferece o link "Entrar", sem formulário de credenciais próprio.
+
+   AA (§5.1 GUIDELINES-CHECKLIST): `.entrar-erro`/`.entrar-dev-nota` reusam VERBATIM o par
+   `background: var(--surface-2)` + `color: var(--texto-2)` de `.mfa-nota` do login.html (já auditado nos
+   2 temas) — nenhuma cor nova introduzida.
+   ============================================================ */
+
+.entrar-pagina {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: clamp(1.2rem, 5vw, 2.5rem) 1rem;
+}
+
+.entrar-cartao {
+  width: 100%;
+  max-width: 416px;
+  background: var(--surface);
+  border: 1px solid var(--linha);
+  border-radius: var(--raio-lg);
+  box-shadow: var(--sombra-alta);
+  overflow: hidden;
+}
+
+/* faixa de azulejo — assinatura (Bulcão, 4 cores da marca). CSS verbatim de login.html:31-37. */
+.entrar-faixa { height: 8px; display: flex; }
+.entrar-faixa span { flex: 1; position: relative; overflow: hidden; }
+.entrar-faixa span::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 0% 100%, var(--az) 0 70%, transparent 70%); }
+.entrar-faixa .a { background: color-mix(in srgb, var(--jade) 30%, transparent); --az: var(--jade); }
+.entrar-faixa .b { background: color-mix(in srgb, var(--cobalto) 30%, transparent); --az: var(--cobalto); }
+.entrar-faixa .c { background: color-mix(in srgb, var(--amarelo) 36%, transparent); --az: var(--amarelo-traco); }
+.entrar-faixa .d { background: color-mix(in srgb, var(--telha) 30%, transparent); --az: var(--telha); }
+
+.entrar-corpo { padding: 1.8rem clamp(1.3rem, 5vw, 1.9rem) 2rem; text-align: center; }
+.entrar-selo { margin: 0 auto; display: block; }
+
+.entrar-titulo { margin-top: 1.1rem; }
+.entrar-titulo h1 {
+  font-family: var(--display); font-weight: 800; font-size: var(--t-21);
+  letter-spacing: -0.01em; color: var(--texto); margin: 0;
+}
+.entrar-titulo p {
+  font-size: var(--t-13); color: var(--texto-2); margin: 0.5rem 0 0; line-height: 1.5;
+}
+.entrar-titulo code {
+  font-family: var(--mono); font-size: 0.92em; color: var(--texto);
+  background: var(--surface-2); padding: 0.05em 0.35em; border-radius: 4px;
+}
+
+.entrar-acao { width: 100%; margin-top: 1.5rem; min-height: 52px; }
+
+/* mesmo par de tokens de .mfa-nota do login.html (já auditado nos 2 temas — §5.1). */
+.entrar-erro, .entrar-dev-nota {
+  margin-top: 1.4rem; padding: 0.7rem 0.8rem;
+  background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm);
+  font-size: var(--t-12); color: var(--texto-2); line-height: 1.5; text-align: left;
+}
+.entrar-dev-nota { font-family: var(--mono); }
+.entrar-dev-nota code { font-family: inherit; color: var(--texto); }
+
+.entrar-rodape { margin-top: 1.6rem; text-align: center; }
+.entrar-rodape .plat { display: inline-flex; align-items: center; gap: 0.45rem; font-size: var(--t-12); color: var(--texto-2); }
+.entrar-rodape .plat b { font-weight: 600; color: var(--texto); }
+.entrar-rodape .sig { width: 18px; height: 18px; flex: 0 0 auto; }

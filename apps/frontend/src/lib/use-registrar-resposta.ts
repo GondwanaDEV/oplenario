@@ -8,8 +8,10 @@
 // o autógrafo em si não muda ao registrar a resposta).
 
 import { useEffect, useRef, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { TramitacaoExecutivaOut } from "./contrato-legislativo.gen";
+import { semCredencial } from "./modo";
 
 export type RegistrarRespostaIn = {
   lockVersion: number;
@@ -45,7 +47,7 @@ export function useRegistrarResposta(token: string | null, autografoId: string |
   }, []);
 
   async function registrar(corpo: RegistrarRespostaIn): Promise<TramitacaoExecutivaOut> {
-    if (!token) {
+    if (semCredencial(token)) {
       throw new Error("sem token de autenticacao");
     }
     if (!autografoId) {
@@ -59,9 +61,10 @@ export function useRegistrarResposta(token: string | null, autografoId: string |
     setErro(null);
     let tratado = false;
     try {
-      const r = await fetch(`/api/legislativo/autografos/${encodeURIComponent(autografoId)}/resposta`, {
+      const r = await apiFetch(`/api/legislativo/autografos/${encodeURIComponent(autografoId)}/resposta`, {
+        token: token ?? undefined,
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(corpoKebab(corpo)),
       });
       if (!r.ok) {

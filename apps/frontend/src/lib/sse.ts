@@ -1,6 +1,10 @@
-// SSE sobre fetch (não EventSource): o endpoint /sessoes/:id/plenario exige header Authorization, e o
-// EventSource nativo do browser NÃO suporta headers. fetch + ReadableStream suporta header + Last-Event-ID
-// no resume. `extrairFrames` é o parser PURO (testado em sse.test.ts); `consumirSse` faz o IO.
+// SSE sobre fetch (não EventSource): o EventSource nativo do browser NÃO suporta headers/cookie custom.
+// fetch + ReadableStream suporta header + Last-Event-ID no resume. `extrairFrames` é o parser PURO (testado
+// em sse.test.ts); `consumirSse` faz o IO, roteado pelo boundary único `apiFetch` (Onda D Slice 2): modo
+// real (sem token) -> sem Authorization, cookie `sessao` rideia via credentials same-origin; modo dev (com
+// token) -> Authorization: Bearer.
+
+import { apiFetch } from "./api-fetch";
 
 export interface FrameSse {
   event?: string;
@@ -48,15 +52,14 @@ export function extrairFrames(buffer: string): { frames: FrameSse[]; resto: stri
  */
 export async function consumirSse(
   url: string,
-  opts: { token: string; signal?: AbortSignal; lastEventId?: string; aoFrame: (f: FrameSse) => void },
+  opts: { token?: string | null; signal?: AbortSignal; lastEventId?: string; aoFrame: (f: FrameSse) => void },
 ): Promise<void> {
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${opts.token}`,
-    Accept: "text/event-stream",
-  };
-  if (opts.lastEventId) headers["Last-Event-ID"] = opts.lastEventId;
-
-  const resp = await fetch(url, { headers, signal: opts.signal, cache: "no-store" });
+  const resp = await apiFetch(url, {
+    token: opts.token ?? undefined,
+    headers: { Accept: "text/event-stream", ...(opts.lastEventId ? { "Last-Event-ID": opts.lastEventId } : {}) },
+    signal: opts.signal,
+    cache: "no-store",
+  });
   if (!resp.ok || !resp.body) throw new Error(`SSE ${resp.status}`);
 
   const reader = resp.body.getReader();

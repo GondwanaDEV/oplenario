@@ -5,8 +5,10 @@
 // diferenca e' a URL (borda /meu, gate 'vereador' + posse).
 
 import { useEffect, useRef, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { ParecerEditorOut } from "./contrato-legislativo.gen";
+import { semCredencial } from "./modo";
 
 export type EmitirParecerIn = { votoRelator: string; lockVersion: number };
 
@@ -33,7 +35,7 @@ export function useMeuEmitirParecer(token: string | null, id: string) {
   }, []);
 
   async function emitir(corpo: EmitirParecerIn): Promise<ParecerEditorOut> {
-    if (!token) {
+    if (semCredencial(token)) {
       throw new Error("sem token de autenticacao");
     }
     if (enviandoRef.current) {
@@ -44,9 +46,10 @@ export function useMeuEmitirParecer(token: string | null, id: string) {
     setErro(null);
     let tratado = false;
     try {
-      const r = await fetch(`/api/meu/pareceres/${id}/emissao`, {
+      const r = await apiFetch(`/api/meu/pareceres/${id}/emissao`, {
+        token: token ?? undefined,
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(corpoKebab(corpo)),
       });
       if (!r.ok) {

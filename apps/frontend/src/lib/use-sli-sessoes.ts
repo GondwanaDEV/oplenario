@@ -6,7 +6,9 @@
 // de use-mesa.ts (mesmo tipo, evita 2ª definição divergente).
 
 import { useEffect, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
+import { semCredencial } from "./modo";
 import type { SliSessaoOut } from "./use-mesa";
 
 export type { SliSessaoOut };
@@ -18,14 +20,11 @@ export function useSliSessoes(token: string | null) {
   const [estado, setEstado] = useState<Estado>("carregando");
 
   useEffect(() => {
-    if (!token) return;
+    if (semCredencial(token)) return;
     let vivo = true;
     (async () => {
       try {
-        const r = await fetch("/api/paineis/sli/sessoes", {
-          headers: { Authorization: `Bearer ${token}` },
-          cache: "no-store",
-        });
+        const r = await apiFetch("/api/paineis/sli/sessoes", { token: token ?? undefined, cache: "no-store" });
         if (!vivo) return;
         if (!r.ok) {
           setEstado("erro");
@@ -44,7 +43,7 @@ export function useSliSessoes(token: string | null) {
     };
   }, [token]);
 
-  if (!token) {
+  if (semCredencial(token)) {
     return { sessoes: null, estado: "erro" as Estado };
   }
   return { sessoes, estado };

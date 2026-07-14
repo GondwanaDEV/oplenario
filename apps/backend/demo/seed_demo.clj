@@ -25,6 +25,8 @@
             [oplenario.identidade.db.vinculo :as vinc]
             [oplenario.identidade.relacoes.identidade :as rel-id]
             [oplenario.kernel.components.datasource :as datasource]
+            [oplenario.kernel.components.idp :as idp]
+            [oplenario.kernel.components.keycloak-idp :as keycloak-idp]
             [oplenario.kernel.outbox :as outbox]
             [oplenario.kernel.tempo :as tempo]
             [oplenario.kernel.tenancy :as tenancy]
@@ -339,3 +341,45 @@
            (println "token        :" token)
            (println "URL          : http://localhost:3000/pauta-convocacao?token=" (java.net.URLEncoder/encode token "UTF-8"))
            (println "======================================================\n")))))))
+
+(defn login-kc
+  "T17 (Onda D Slice 2): provisiona uma Casa completa + o realm Keycloak + um usuario com o atributo
+  identidade-id, p/ PROVAR o login PKCE ao vivo no browser. Rodar com KEYCLOAK_BASE_URL=http://keycloak:8080
+  (o container efemero do seed alcanca o KC pelo DNS do compose, nao por localhost). Cria: ente + identidade
+  + vinculo servidor + papeis (vereador+secretario) + sessao ABERTA/publica; provisiona o realm (declara o
+  atributo identidade-id + cria o client publico oplenario-web PKCE) + cria o usuario KC (username =
+  identidade-id). A SENHA e' setada num passo separado via admin-API (o kc-user-id impresso abaixo)."
+  [_]
+  (com-ds
+   (fn [ds]
+     (let [ente (random-uuid) ident (random-uuid)
+           r    (repo-sessoes ds)
+           idp  (component/start (keycloak-idp/keycloak-idp (:keycloak (config/carregar))))]
+       (try
+         (try (referencia/inserir-municipio! ds {:codigo-ibge "2304400" :nome "Fortaleza" :uf "CE" :capital true :populacao 2703391})
+              (catch Exception _ nil))
+         (id/inserir! ds {:id ident :cpf (cpf-valido) :nome "Helena Matos"})
+         (tenancy/com-tenant* ds ente
+           (fn [tx]
+             (estrutura/inserir-ente! tx {:ente-id ente :municipio-ibge "2304400" :nome-oficial "Câmara Municipal de Fortaleza"})
+             (vinc/criar! tx {:id (random-uuid) :ente-id ente :identidade-id ident :tipo "servidor"})
+             (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente :identidade-id ident :papel "vereador"})
+             (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente :identidade-id ident :papel "secretario"})))
+         (let [sid (:id (repo/agendar-sessao! r ente {:id (random-uuid) :sessao-legislativa-id (random-uuid)
+                                                      :tipo-sessao "ordinaria" :modalidade "presencial"}))]
+           (repo/transicionar-sessao! r ente {:id sid :para "aberta" :updated-by ident :lock-version 0})
+           (idp/provisionar-realm! idp ente)
+           (let [{:keys [keycloak-user-id]} (idp/criar-usuario! idp ente {:identidade-id ident
+                                                                          :nome "Helena Matos"
+                                                                          :email "helena@example.org"})
+                 realm (str (:realm-prefixo (:keycloak (config/carregar))) ente)]
+             (println "\n=== LOGIN KC PRONTO (T17) ===")
+             (println "ente-id     :" (str ente))
+             (println "sessao-id   :" (str sid))
+             (println "realm       :" realm)
+             (println "kc-user-id  :" keycloak-user-id)
+             (println "username    :" (str ident) " (= identidade-id)")
+             (println "ENTRAR      : http://localhost:3000/entrar/" (str ente))
+             (println "PLENARIO    : http://localhost:3000/sessoes/" (str sid) "/plenario")
+             (println "=============================\n")))
+         (finally (component/stop idp)))))))

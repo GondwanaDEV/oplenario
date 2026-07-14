@@ -55,10 +55,9 @@ describe("useFichaMateria", () => {
     expect(result.current.dados?.proposicao.urnLex).toBe("urn:x");
     expect(result.current.dados?.tramitacao[0]?.deEstado).toBe("protocolada");
     expect(result.current.dados?.tramitacao[0]?.paraEstado).toBe("em_comissoes");
-    expect(global.fetch).toHaveBeenCalledWith(
-      "/api/legislativo/proposicoes/1/ficha",
-      expect.objectContaining({ headers: { Authorization: "Bearer tok" } }),
-    );
+    const chamada = vi.mocked(global.fetch).mock.calls[0];
+    expect(chamada[0]).toBe("/api/legislativo/proposicoes/1/ficha");
+    expect(new Headers(chamada[1]?.headers).get("Authorization")).toBe("Bearer tok");
   });
 
   it("id com caracteres especiais -> encodeURIComponent na URL do fetch", async () => {
@@ -67,10 +66,9 @@ describe("useFichaMateria", () => {
     ) as unknown as typeof fetch;
     const { result } = renderHook(() => useFichaMateria("tok", "a/b?c"));
     await waitFor(() => expect(result.current.estado).toBe("pronto"));
-    expect(global.fetch).toHaveBeenCalledWith(
-      "/api/legislativo/proposicoes/a%2Fb%3Fc/ficha",
-      expect.objectContaining({ headers: { Authorization: "Bearer tok" } }),
-    );
+    const chamada = vi.mocked(global.fetch).mock.calls[0];
+    expect(chamada[0]).toBe("/api/legislativo/proposicoes/a%2Fb%3Fc/ficha");
+    expect(new Headers(chamada[1]?.headers).get("Authorization")).toBe("Bearer tok");
   });
 
   it("id nulo -> 'pronto' sem chamar fetch", () => {

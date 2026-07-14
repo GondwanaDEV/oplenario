@@ -5,7 +5,9 @@
 // do cliente (a borda resolve do ator, anti-forja por construção).
 
 import { useEffect, useRef, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
+import { semCredencial } from "./modo";
 
 export type ConfirmarPresencaOut = { id: string };
 
@@ -24,7 +26,7 @@ export function useConfirmarPresenca(token: string | null) {
   }, []);
 
   async function confirmar(sessaoId: string): Promise<ConfirmarPresencaOut> {
-    if (!token) {
+    if (semCredencial(token)) {
       throw new Error("sem token de autenticacao");
     }
     if (enviandoRef.current) {
@@ -35,9 +37,9 @@ export function useConfirmarPresenca(token: string | null) {
     setErro(null);
     let tratado = false;
     try {
-      const r = await fetch(`/api/sessoes/${sessaoId}/presenca/confirmar`, {
+      const r = await apiFetch(`/api/sessoes/${sessaoId}/presenca/confirmar`, {
+        token: token ?? undefined,
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
       });
       if (!r.ok) {
         const corpoErro = await r.json().catch(() => null);

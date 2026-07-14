@@ -10,6 +10,7 @@
             [jsonista.core :as json]
             [oplenario.http :as http]
             [oplenario.identidade.autenticacao :as auten]
+            [oplenario.identidade.components.repositorio :as repo]
             [oplenario.kernel.autorizacao :as authz]
             [oplenario.kernel.components.idp :as idp]))
 
@@ -19,22 +20,47 @@
   (let [h (get-in req [:headers "authorization"])]
     (when (and h (str/starts-with? h "Bearer ")) (subs h 7))))
 
+(defn cookie-sessao
+  "Extrai o valor do cookie `sessao` do header CRU `Cookie` do request (RFC 6265: pares `nome=valor`
+  separados por `; `). PURA — le so `(:headers req)`, sem IO. Home aqui (nao no modulo identidade) por ser
+  preocupacao CROSS-CUTTING do host, mesmo racional do `bearer` acima (que faz o mesmo p/ Authorization) —
+  reusada pelo logout handler PUBLICO de identidade (Onda D Slice 2 Task 5, `apagar-sessao!` no cookie sem
+  exigir interceptor) E sera' reusada pelo interceptor `sessao-cookie` (Task 6, ainda nao construido) sem
+  duplicar o parsing. Sem header -> nil. `sessao=` ausente entre os pares -> nil. Par `sessao=` com valor
+  VAZIO -> nil (trata como ausente; um cookie sessao='' nunca e' um segredo valido). Multiplos cookies no
+  mesmo header (qualquer ordem) -> encontra o par certo."
+  [req]
+  (when-let [h (get-in req [:headers "cookie"])]
+    (some (fn [par]
+            (when (str/starts-with? par "sessao=")
+              (let [v (subs par (count "sessao="))]
+                (when-not (str/blank? v) v))))
+          (map str/trim (str/split h #";")))))
+
 (defn- nega! [ctx status razao]
   (chain/terminate (assoc ctx :response (http/json-resposta status {:erro razao}))))
 
 (defn autenticacao
-  "Interceptor de AUTENTICACAO (§22.5 eixo D). Sem token / token invalido / sem vinculo ativo -> 401 + termina
-  (fail-closed). Sucesso -> `ator` em (:request :ator) p/ os interceptors/handlers seguintes."
+  "Interceptor de AUTENTICACAO (§22.5 eixo D). PRECEDENCIA: sessao de COOKIE primeiro (login real, Onda D
+  Slice 2); senao BEARER (dev-token/servico — mantido vivo). Sem credencial / invalido / sem vinculo -> 401
+  (fail-closed). Sucesso -> `ator` em (:request :ator). A sessao de cookie roda `resolver-sessao` A CADA
+  request (authz viva: vinculo revogado derruba a sessao na hora, nao espera a expiracao do cookie)."
   [idp repo-identidade]
   {:name  ::autenticacao
    :enter (fn [ctx]
-            (if-let [tok (bearer (:request ctx))]
-              (if-let [claims (idp/verificar-token idp tok)]
+            (if-let [seg (cookie-sessao (:request ctx))]
+              (if-let [claims (repo/resolver-sessao-por-segredo repo-identidade seg)]  ; {:identidade-id :ente-id} ou nil
                 (if-let [ator (auten/resolver-sessao repo-identidade claims)]
                   (assoc-in ctx [:request :ator] ator)
                   (nega! ctx 401 "sem vinculo ativo"))
-                (nega! ctx 401 "token invalido"))
-              (nega! ctx 401 "token ausente")))})
+                (nega! ctx 401 "sessao invalida"))
+              (if-let [tok (bearer (:request ctx))]
+                (if-let [claims (idp/verificar-token idp tok)]
+                  (if-let [ator (auten/resolver-sessao repo-identidade claims)]
+                    (assoc-in ctx [:request :ator] ator)
+                    (nega! ctx 401 "sem vinculo ativo"))
+                  (nega! ctx 401 "token invalido"))
+                (nega! ctx 401 "sem credencial"))))})
 
 (def ^:private max-corpo-bytes
   "Teto do corpo de request JSON (256 KiB). Barra exaustao de heap por payload unico (review seg W3 MAJOR-1).

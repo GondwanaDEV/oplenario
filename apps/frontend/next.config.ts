@@ -6,6 +6,20 @@ if (process.env.NODE_ENV === "production" && process.env.NEXT_PUBLIC_DEV_TOKEN) 
   throw new Error("NEXT_PUBLIC_DEV_TOKEN não deve existir em produção — authn vem da sessão Keycloak (carry F1.4).");
 }
 
+// Fail-fast em produção (revisão whole-branch, converge sec#1+ts#1): sem APP_ORIGIN o BFF cai p/
+// request.nextUrl.origin (o Host header, spoofável) como âncora de validação do redirect pós-login —
+// tornaria o check same-origin tautológico -> open redirect. Sem KEYCLOAK_INTERNAL_URL o callback cai p/
+// pkce.baseUrl (valor de cookie) no token-exchange server-side -> SSRF se o cookie for forjado. Ambos são
+// obrigatórios em prod; o deploy QUEBRA se faltarem (auto-enforça o carry, mesmo padrão do dev-token acima).
+if (process.env.NODE_ENV === "production") {
+  if (!process.env.APP_ORIGIN) {
+    throw new Error("APP_ORIGIN é obrigatório em produção (âncora do redirect pós-login; sem ela o Host header vira baseline).");
+  }
+  if (!process.env.KEYCLOAK_INTERNAL_URL) {
+    throw new Error("KEYCLOAK_INTERNAL_URL é obrigatório em produção (token-exchange server-side; sem ela cairia no baseUrl do cookie).");
+  }
+}
+
 // Proxy same-origin /api/* -> backend (§22.10): o front e a API ficam atrás da MESMA origem (em prod, o
 // reverse-proxy; em dev, este rewrite). Mata CORS e deixa o SSE fluir pela mesma origem. BACKEND_URL
 // sobrescreve o alvo (default = o Pedestal local em :8888, resources/config.edn).

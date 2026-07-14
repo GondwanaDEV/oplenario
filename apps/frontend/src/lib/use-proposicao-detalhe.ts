@@ -5,8 +5,10 @@
 // idioma de useProposicoes (guard `vivo` contra unmount).
 
 import { useEffect, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { ProposicaoDetalheOut } from "./contrato-legislativo.gen";
+import { semCredencial } from "./modo";
 
 type Estado = "carregando" | "pronto" | "erro";
 
@@ -26,12 +28,12 @@ export function useProposicaoDetalhe(token: string | null, id: string | null) {
 
   useEffect(() => {
     if (!id) return;
-    if (!token) return;
+    if (semCredencial(token)) return;
     let vivo = true;
     (async () => {
       try {
-        const r = await fetch(`/api/legislativo/proposicoes/${id}`, {
-          headers: { Authorization: `Bearer ${token}` },
+        const r = await apiFetch(`/api/legislativo/proposicoes/${id}`, {
+          token: token ?? undefined,
           cache: "no-store",
         });
         if (!vivo) return;
@@ -51,6 +53,6 @@ export function useProposicaoDetalhe(token: string | null, id: string | null) {
   }, [token, id]);
 
   if (!id) return { dados: null, estado: "pronto" as Estado };
-  if (!token) return { dados: null, estado: "erro" as Estado };
+  if (semCredencial(token)) return { dados: null, estado: "erro" as Estado };
   return { dados, estado };
 }

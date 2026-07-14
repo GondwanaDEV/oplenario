@@ -6,8 +6,10 @@
 // (defesa em profundidade — a UI só mostra o botão depois que o documento existe).
 
 import { useEffect, useRef, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { DocumentoOut } from "./contrato-legislativo.gen";
+import { semCredencial } from "./modo";
 
 export type ProtocolarDocumentoIn = { lockVersion: number };
 
@@ -34,7 +36,7 @@ export function useProtocolarDocumento(token: string | null, id: string | null) 
   }, []);
 
   async function protocolar(corpo: ProtocolarDocumentoIn): Promise<DocumentoOut> {
-    if (!token) {
+    if (semCredencial(token)) {
       throw new Error("sem token de autenticacao");
     }
     if (!id) {
@@ -48,9 +50,10 @@ export function useProtocolarDocumento(token: string | null, id: string | null) 
     setErro(null);
     let tratado = false;
     try {
-      const r = await fetch(`/api/legislativo/documentos/${encodeURIComponent(id)}/protocolo`, {
+      const r = await apiFetch(`/api/legislativo/documentos/${encodeURIComponent(id)}/protocolo`, {
+        token: token ?? undefined,
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(corpoKebab(corpo)),
       });
       if (!r.ok) {

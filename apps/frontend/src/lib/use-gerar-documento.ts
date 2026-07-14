@@ -6,8 +6,10 @@
 // aninhado, então as chaves de `dados` (nomes de placeholder do template, arbitrários) chegam intactas.
 
 import { useEffect, useRef, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { DocumentoOut } from "./contrato-legislativo.gen";
+import { semCredencial } from "./modo";
 
 export type GerarDocumentoIn = { modeloId: string; assunto: string; dados?: Record<string, string> };
 
@@ -38,7 +40,7 @@ export function useGerarDocumento(token: string | null) {
   }, []);
 
   async function gerar(corpo: GerarDocumentoIn): Promise<DocumentoOut> {
-    if (!token) {
+    if (semCredencial(token)) {
       throw new Error("sem token de autenticacao");
     }
     if (enviandoRef.current) {
@@ -49,9 +51,10 @@ export function useGerarDocumento(token: string | null) {
     setErro(null);
     let tratado = false;
     try {
-      const r = await fetch("/api/legislativo/documentos", {
+      const r = await apiFetch("/api/legislativo/documentos", {
+        token: token ?? undefined,
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(corpoKebab(corpo)),
       });
       if (!r.ok) {

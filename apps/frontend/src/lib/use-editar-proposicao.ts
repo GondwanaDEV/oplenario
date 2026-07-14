@@ -5,8 +5,10 @@
 // cleanup dedicado (ver use-criar-proposicao.ts).
 
 import { useEffect, useRef, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { ProposicaoDetalheOut } from "./contrato-legislativo.gen";
+import { semCredencial } from "./modo";
 
 export type EditarProposicaoIn = {
   lockVersion: number;
@@ -51,7 +53,7 @@ export function useEditarProposicao(token: string | null, id: string) {
   }, []);
 
   async function editar(corpo: EditarProposicaoIn): Promise<ProposicaoDetalheOut> {
-    if (!token) {
+    if (semCredencial(token)) {
       throw new Error("sem token de autenticacao");
     }
     if (enviandoRef.current) {
@@ -64,9 +66,10 @@ export function useEditarProposicao(token: string | null, id: string) {
     // sobrescreveria a mensagem especifica (ex.: "conflito", "invalido") com a generica de rede.
     let tratado = false;
     try {
-      const r = await fetch(`/api/legislativo/proposicoes/${id}`, {
+      const r = await apiFetch(`/api/legislativo/proposicoes/${id}`, {
+        token: token ?? undefined,
         method: "PATCH",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(corpoKebab(corpo)),
       });
       if (!r.ok) {

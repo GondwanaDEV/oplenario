@@ -8,7 +8,10 @@
 // `fallback` (não afterFiles) p/ este handler vencer. É também production-correct: em prod o /api é reverse-proxy.
 //
 // SSRF: `backend` vem de env (BACKEND_URL, validada no next.config em produção), nunca do request; o path é
-// fixo (/sessoes/<id>/plenario) e o `id` é validado antes de compor a URL. Só 3 headers atravessam.
+// fixo (/sessoes/<id>/plenario) e o `id` é validado antes de compor a URL. 4 headers atravessam: Authorization
+// (modo dev), cookie (modo real — o cookie `sessao` viaja same-origin browser->Next, mas o fetch do Node no
+// hop Next->backend NÃO repassa cookie sozinho; o backend é first-party confiável e o interceptor T6 só lê
+// o cookie `sessao`), Last-Event-ID (validado) e Accept/Accept-Encoding.
 
 const ID_VALIDO = /^[a-zA-Z0-9_-]{1,128}$/;
 // O backend emite o `id:` do SSE como o seq monotônico (inteiro). Validar antes de repassar bloqueia
@@ -42,6 +45,8 @@ export async function proxiarPlenario(
   });
   const auth = req.headers.get("authorization");
   if (auth) headers.set("Authorization", auth);
+  const cookie = req.headers.get("cookie");
+  if (cookie) headers.set("cookie", cookie);
   const lastEventId = req.headers.get("last-event-id");
   if (lastEventId && LAST_EVENT_ID_VALIDO.test(lastEventId)) headers.set("Last-Event-ID", lastEventId);
 

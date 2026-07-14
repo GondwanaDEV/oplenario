@@ -6,8 +6,10 @@
 // detalhe") — aqui ela é a chamada PRINCIPAL da página, não um enriquecimento best-effort.
 
 import { useEffect, useState } from "react";
+import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { ItemBoardOut, TramitacaoBoardOut } from "./contrato-mesa.gen";
+import { semCredencial } from "./modo";
 
 type Estado = "carregando" | "pronto" | "erro";
 
@@ -16,14 +18,11 @@ export function useTramitacaoBoard(token: string | null) {
   const [estado, setEstado] = useState<Estado>("carregando");
 
   useEffect(() => {
-    if (!token) return; // caso de erro sem token é derivado no retorno (sem setState síncrono no effect)
+    if (semCredencial(token)) return; // caso de erro sem token é derivado no retorno (sem setState síncrono no effect)
     let vivo = true;
     (async () => {
       try {
-        const r = await fetch("/api/paineis/tramitacao", {
-          headers: { Authorization: `Bearer ${token}` },
-          cache: "no-store",
-        });
+        const r = await apiFetch("/api/paineis/tramitacao", { token: token ?? undefined, cache: "no-store" });
         if (!vivo) return;
         if (!r.ok) {
           setEstado("erro");
@@ -43,7 +42,7 @@ export function useTramitacaoBoard(token: string | null) {
   }, [token]);
 
   // caso de erro sem token é derivado aqui (mantém o effect livre de setState síncrono)
-  if (!token) {
+  if (semCredencial(token)) {
     return { itens: null, estado: "erro" as Estado };
   }
   return { itens, estado };

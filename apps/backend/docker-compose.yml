@@ -68,6 +68,22 @@ services:
       DB_PASSWORD: "oplenario_dev_pool"
       VALKEY_URI: "redis://valkey:6379"
       MINIO_ENDPOINT: "http://minio:9000"
+      # Onda D Slice 2 (T17): split-horizon do Keycloak. base-url INTERNO = DNS do compose (o app resolve
+      # `keycloak` p/ o container; localhost dentro do container seria o proprio app). Este e' o URL do
+      # allowlist de issuer + fetch de JWKS — e o issuer dos tokens fica `http://keycloak:8080/realms/...`
+      # (a sessao e' mintada pelo token-exchange server-side, que tb usa este host). base-url-PUBLICO =
+      # o que a descoberta devolve pro BROWSER redirecionar (host, porta mapeada do KC).
+      # Onda D Slice 2 (T17): seletor do IdP (sistema/idp-para). dev/test => idp-dev (confia no dev-token
+      # claims-JSON, `?token=`); qualquer outro valor => KeycloakIdp REAL (verifica JWT/JWKS). Default `dev`
+      # preserva o stack normal (dev-token). Rodar o perfil `auth` com OPLENARIO_APP_ENV=production p/ ligar
+      # o IdP real e provar o login PKCE ao vivo (o dev-token deixa de valer nesse modo — e' o esperado).
+      APP_ENV: "${OPLENARIO_APP_ENV:-dev}"
+      KEYCLOAK_BASE_URL: "http://keycloak:8080"
+      # PUBLICO = mesmo host `keycloak:8080` (o /etc/hosts do dev mapeia keycloak->127.0.0.1). Assim o issuer
+      # do token (derivado do host que o browser usou) fica http://keycloak:8080/... — IGUAL ao base-url
+      # interno -> passa no allowlist E o JWKS e' alcancavel do container (DNS do compose). Unico nome que
+      # resolve pro KC tanto no browser (host) quanto nos containers.
+      KEYCLOAK_BASE_URL_PUBLICO: "http://keycloak:8080"
     ports: ["${OPLENARIO_APP_PORT:-8888}:8888"]
 
   frontend:
@@ -79,6 +95,15 @@ services:
     environment:
       # nome do service (DNS interno do compose), nao localhost — a rota /api/* do Next proxeia p/ ca.
       BACKEND_URL: "http://app:8888"
+      # Onda D Slice 2 (T17): o callback BFF troca `code`->token SERVER-SIDE; usa o DNS interno do compose
+      # (o browser autorizou em localhost:8080, mas o container nao resolve localhost como o KC). Casa com
+      # o KEYCLOAK_BASE_URL do app -> issuer consistente (http://keycloak:8080/realms/...).
+      KEYCLOAK_INTERNAL_URL: "http://keycloak:8080"
+      # Onda D Slice 2 (T17): origin publica canonica p/ montar o redirect_uri do PKCE. Sem isto o Next dev
+      # em container cai p/ request.nextUrl.origin = http://0.0.0.0:3000 (bind do server), que NAO casa com
+      # o redirectUri registrado no client (http://localhost:3000/...) -> KC rejeita "Invalid redirect_uri".
+      # Login (authorize) e callback (token-exchange) usam o MESMO helper -> redirect_uri identico byte-a-byte.
+      APP_ORIGIN: "http://localhost:3000"
     volumes:
       - ../frontend:/app
       # anonimos: preservam o node_modules/.next instalados na imagem (linux) em vez do host (macOS/arm nativo).
