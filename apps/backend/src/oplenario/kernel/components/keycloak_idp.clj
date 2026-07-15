@@ -306,30 +306,6 @@
   (let [partes (str/split (str/trim nome) #"\s+" 2)]
     (if (= 2 (count partes)) partes [(first partes) (first partes)])))
 
-(defn- criar-usuario-impl
-  [{:keys [config http-client]} ente-id {:keys [identidade-id nome email]}]
-  (let [{:keys [base-url realm-prefixo]} config
-        realm (str realm-prefixo ente-id)
-        token (admin-token! config http-client)
-        [primeiro ultimo] (nome->first-last nome)
-        {:keys [status corpo headers]}
-        (admin-req! http-client token :post (str "/admin/realms/" realm "/users")
-                    {:username (str identidade-id)
-                     :enabled true
-                     ;; emailVerified=true e' [GAP] pre-prod: o bootstrap real e' e-mail de uso unico
-                     ;; (carry F6, sem SMTP ainda) — marcar verificado aqui evita travar o 1o login em
-                     ;; dev/integracao enquanto esse fluxo nao existe.
-                     :emailVerified true
-                     :email email
-                     :firstName primeiro
-                     :lastName ultimo
-                     :attributes {:identidade-id [(str identidade-id)]}}
-                    base-url)]
-    (when-not (= 201 status)
-      (throw (ex-info "keycloak-idp: falha ao criar usuario (infra)" {:status status :corpo corpo})))
-    (let [location (.firstValue headers "location")]
-      {:keycloak-user-id (when (.isPresent location) (last (str/split (.get location) #"/")))})))
-
 (defn- buscar-usuario-por-identidade
   [http-client token base-url realm identidade-id]
   (let [{:keys [status corpo]}
@@ -337,6 +313,34 @@
                     (str "/admin/realms/" realm "/users?q=identidade-id:" identidade-id) nil base-url)]
     (when-not (= 200 status) (throw (ex-info "keycloak-idp: falha ao buscar usuario (infra)" {:status status})))
     (first corpo)))
+
+(defn- criar-usuario-impl
+  "GET-then-create (idempotente, mesma forma de garantir-client!/provisionar-realm-impl): re-provisionar a
+  MESMA identidade-id no MESMO ente devolve o usuario ja existente em vez de lancar em 409 'User exists
+  with same email'. Nasce com a required action de passkey: o KC OBRIGA o cadastro antes de qualquer acao
+  (§22.5.2 eixo F). emailVerified NAO e' mais forcado a true — o [GAP] existia so' porque nao havia SMTP
+  configurado no realm (Task 2 fechou isso); agora o KC verifica de verdade via o fluxo de e-mail."
+  [{:keys [config http-client]} ente-id {:keys [identidade-id nome email]}]
+  (let [{:keys [base-url realm-prefixo]} config
+        realm (str realm-prefixo ente-id)
+        token (admin-token! config http-client)]
+    (if-let [existente (buscar-usuario-por-identidade http-client token base-url realm identidade-id)]
+      {:keycloak-user-id (:id existente)}
+      (let [[primeiro ultimo] (nome->first-last nome)
+            {:keys [status corpo headers]}
+            (admin-req! http-client token :post (str "/admin/realms/" realm "/users")
+                        {:username (str identidade-id)
+                         :enabled true
+                         :email email
+                         :firstName primeiro
+                         :lastName ultimo
+                         :requiredActions ["webauthn-register-passwordless"]
+                         :attributes {:identidade-id [(str identidade-id)]}}
+                        base-url)]
+        (when-not (= 201 status)
+          (throw (ex-info "keycloak-idp: falha ao criar usuario (infra)" {:status status :corpo corpo})))
+        (let [location (.firstValue headers "location")]
+          {:keycloak-user-id (when (.isPresent location) (last (str/split (.get location) #"/")))})))))
 
 (def ^:private tipos-credencial-mfa #{"otp" "webauthn" "webauthn-passwordless"})
 

@@ -142,3 +142,37 @@
         (is (= "mailpit" (get-in r [:smtpServer :host]))
             "realm aponta p/ o servidor de e-mail — quem envia o convite e' o KC, nao a app"))
       (finally (component/stop idp)))))
+
+;; ---------------------------------------------------------------------------------------------
+;; criar-usuario-idempotente-e-exige-passkey (Task 3) — GET cru do usuario pelo mesmo `q=identidade-id:`
+;; que `buscar-usuario-por-identidade` usa em producao. Ao contrario da RealmRepresentation (ver
+;; `realm-representation` acima), a UserRepresentation JA carrega `requiredActions`/`emailVerified` num
+;; unico GET — sem divisao de endpoint.
+;; ---------------------------------------------------------------------------------------------
+
+(defn- usuario-representation
+  "GET cru do usuario do `ente-id` pela `identidade-id`, mesma query (`q=identidade-id:`) que
+  `buscar-usuario-por-identidade` usa em producao. Le' base-url/realm-prefixo do PROPRIO config do
+  `idp` (mesmo racional de `realm-representation`)."
+  [idp ente-id identidade-id]
+  (let [{kc-base-url :base-url realm-prefixo :realm-prefixo} (:config idp)
+        realm (str realm-prefixo ente-id)
+        http (http!)
+        token (admin-token-teste! http kc-base-url)]
+    (first (admin-get-teste! http token kc-base-url
+                             (str "/admin/realms/" realm "/users?q=identidade-id:" identidade-id)))))
+
+(deftest criar-usuario-idempotente-e-exige-passkey
+  (let [ente (random-uuid) ident (random-uuid)
+        _ (idp/provisionar-realm! *idp* ente)
+        u1 (idp/criar-usuario! *idp* ente {:identidade-id ident :nome "Helena Matos"
+                                           :email "helena@camara.local"})
+        u2 (idp/criar-usuario! *idp* ente {:identidade-id ident :nome "Helena Matos"
+                                           :email "helena@camara.local"})]
+    (is (= (:keycloak-user-id u1) (:keycloak-user-id u2))
+        "get-or-create: re-provisionar devolve o MESMO usuario (hoje lanca em != 201)")
+    (let [r (usuario-representation *idp* ente ident)]
+      (is (= ["webauthn-register-passwordless"] (:requiredActions r))
+          "nasce obrigado a cadastrar passkey antes de qualquer acao (§22.5.2 eixo F)")
+      (is (false? (:emailVerified r))
+          "emailVerified=true era [GAP] por nao haver SMTP; agora ha' — o KC verifica de verdade"))))
