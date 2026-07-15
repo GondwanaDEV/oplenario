@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import PaginaVereadores from "./page";
 import { AuthProvider } from "@/lib/auth";
 import { TemaProvider } from "@/lib/tema";
@@ -100,7 +100,13 @@ const legislaturaVigenteFake = { id: "leg-1", numero: 19, "ano-inicio": 2025, "a
 // legislatura vigente (necessária pro form de mandato renderizar os campos em vez do estado "sem
 // legislatura"). `mandato409` simula o conflito de domínio real do backend
 // (`diplomat/http/in.clj` -> `:conflito/mandato-sobreposto` -> 409 `{:erro "..."}`).
-function fetchMockComEscrita(mapaFichas: Record<string, unknown>, opts: { mandato409?: boolean } = {}) {
+// `identidadeVinculada409` (Task 11) simula o 3º passo de "conceder acesso" nunca sendo alcançado: o
+// passo 2 (PATCH .../identidade) responde 409 como o backend faria pra uma identidade já ligada a OUTRO
+// vereador nesta Casa (`:conflito/identidade-ja-vinculada`, cadastros/diplomat/http/in.clj).
+function fetchMockComEscrita(
+  mapaFichas: Record<string, unknown>,
+  opts: { mandato409?: boolean; identidadeVinculada409?: boolean } = {},
+) {
   return vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
     if (method === "GET" && url === "/api/cadastros/vereadores") {
@@ -129,6 +135,22 @@ function fetchMockComEscrita(mapaFichas: Record<string, unknown>, opts: { mandat
     }
     if (method === "POST" && (/\/mandatos$/.test(url) || /\/licencas$/.test(url))) {
       return { ok: true, json: async () => ({ id: "novo-registro" }) } as Response;
+    }
+    // Task 11 — os 3 passos de "conceder acesso" (identidade -> ligar cadastro -> conceder acesso).
+    if (method === "POST" && url === "/api/identidade/identidades") {
+      return { ok: true, status: 201, json: async () => ({ "identidade-id": "id-9" }) } as Response;
+    }
+    if (method === "PATCH" && /\/identidade$/.test(url) && opts.identidadeVinculada409) {
+      return {
+        ok: false, status: 409,
+        json: async () => ({ erro: "identidade ja vinculada a outro vereador nesta Casa" }),
+      } as Response;
+    }
+    if (method === "PATCH" && /\/identidade$/.test(url)) {
+      return { ok: true, status: 200, json: async () => ({ id: "v1", "identidade-id": "id-9" }) } as Response;
+    }
+    if (method === "POST" && url === "/api/identidade/acessos") {
+      return { ok: true, status: 201, json: async () => ({ "vinculo-id": "vin-1", convite: "enviado" }) } as Response;
     }
     return { ok: false, status: 404 } as Response;
   });
@@ -329,5 +351,82 @@ describe("PaginaVereadores", () => {
     renderComProviders("tok-de-teste");
 
     await waitFor(() => expect(screen.getByText(/não foi possível carregar/i)).toBeTruthy());
+  });
+
+  // --- Task 11: "Conceder acesso" só existe pra quem tem o papel admin_ente ---
+
+  it("sem o papel admin_ente (ex.: secretário) o botão 'Conceder acesso' nem aparece", async () => {
+    global.fetch = fetchMockPara(fichas);
+    renderComProviders("tok-de-teste"); // token não-JSON -> papeisDoToken devolve [] (fail-closed)
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy());
+    expect(screen.queryByRole("button", { name: /conceder acesso/i })).toBeNull();
+  });
+
+  it("com o papel admin_ente o botão 'Conceder acesso' aparece e abre o form", async () => {
+    const fetchMock = fetchMockComEscrita(fichas);
+    global.fetch = fetchMock as unknown as typeof fetch;
+    renderComProviders('{"sub":"u","papeis":["admin_ente"]}');
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /conceder acesso/i }));
+    const form = await screen.findByRole("form", { name: /^conceder acesso$/i });
+    // o nome do vereador é EXIBIDO no form (confirmação de quem recebe o acesso), não pedido como campo —
+    // só CPF e e-mail são inputs.
+    expect(within(form).getByText("Helena Past")).toBeTruthy();
+    expect(within(form).queryAllByRole("textbox").length + within(form).queryAllByRole("spinbutton").length)
+      .toBeLessThanOrEqual(2); // CPF + e-mail, nada mais
+  });
+
+  it("Conceder acesso: submeter CPF+e-mail válidos dispara os 3 passos NA ORDEM (acesso por último) e fecha o painel", async () => {
+    const fetchMock = fetchMockComEscrita(fichas);
+    global.fetch = fetchMock as unknown as typeof fetch;
+    renderComProviders('{"sub":"u","papeis":["admin_ente"]}');
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /conceder acesso/i }));
+    const form = await screen.findByRole("form", { name: /^conceder acesso$/i });
+
+    fireEvent.change(screen.getByLabelText(/^cpf/i), { target: { value: "529.982.247-25" } });
+    fireEvent.change(screen.getByLabelText(/e-mail institucional/i), { target: { value: "helena@camara.local" } });
+    fireEvent.submit(form);
+
+    await waitFor(() => {
+      const chamouAcessos = fetchMock.mock.calls.some(([url]) => url === "/api/identidade/acessos");
+      expect(chamouAcessos).toBe(true);
+    });
+
+    // a ordem real das 3 chamadas de "conceder acesso" (ignora as chamadas GET de carregamento da página)
+    const chamadasDoFluxo = fetchMock.mock.calls
+      .map(([url, init]) => [url, (init as RequestInit | undefined)?.method])
+      .filter(([url]) => typeof url === "string" && (url.includes("/identidade") || url === "/api/identidade/acessos"));
+    expect(chamadasDoFluxo).toEqual([
+      ["/api/identidade/identidades", "POST"],
+      ["/api/cadastros/vereadores/v1/identidade", "PATCH"],
+      ["/api/identidade/acessos", "POST"],
+    ]);
+
+    // painel fecha (voltou ao estado sem form aberto)
+    await waitFor(() => expect(screen.queryByRole("form", { name: /^conceder acesso$/i })).toBeNull());
+  });
+
+  it("Conceder acesso: 409 no passo 2 (identidade já vinculada a outro vereador) aparece como alerta e o passo 3 nunca dispara", async () => {
+    const fetchMock = fetchMockComEscrita(fichas, { identidadeVinculada409: true });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    renderComProviders('{"sub":"u","papeis":["admin_ente"]}');
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /conceder acesso/i }));
+    const form = await screen.findByRole("form", { name: /^conceder acesso$/i });
+
+    fireEvent.change(screen.getByLabelText(/^cpf/i), { target: { value: "52998224725" } });
+    fireEvent.change(screen.getByLabelText(/e-mail institucional/i), { target: { value: "helena@camara.local" } });
+    fireEvent.submit(form);
+
+    await waitFor(() => expect(screen.getByText(/identidade ja vinculada a outro vereador/i)).toBeTruthy());
+    const chamouAcessos = fetchMock.mock.calls.some(([url]) => url === "/api/identidade/acessos");
+    expect(chamouAcessos).toBe(false);
+    // a página não quebrou, o form segue montado pro admin_ente corrigir e tentar de novo
+    expect(screen.getByRole("form", { name: /^conceder acesso$/i })).toBeTruthy();
   });
 });

@@ -24,7 +24,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useAuth } from "@/lib/auth";
+import { useAuth, usePapeis } from "@/lib/auth";
 import { useVereadores } from "@/lib/use-vereadores";
 import { useVereadorFicha } from "@/lib/use-vereador-ficha";
 import { useLegislaturaVigente } from "@/lib/use-legislatura-vigente";
@@ -35,6 +35,7 @@ import { NovoVereadorForm } from "./novo-vereador-form";
 import { EditarVereadorForm } from "./editar-vereador-form";
 import { RegistrarMandatoForm } from "./registrar-mandato-form";
 import { RegistrarLicencaForm } from "./registrar-licenca-form";
+import { ConcederAcessoForm } from "./conceder-acesso-form";
 import type { MandatoVigenteOut } from "@/lib/contrato-cadastros.gen";
 import { TopoInterno } from "../../topo";
 import "./cadastro-vereadores.css";
@@ -58,6 +59,13 @@ function hrefComSelecao(id: string, token: string | null): string {
 
 export default function PaginaVereadores() {
   const { token } = useAuth();
+  // `admin_ente` (Task 11) — guarda só o botão/painel "Conceder acesso" (ligar identidade + abrir a
+  // porta), não a página inteira: o resto do cadastro (criar/editar/mandato/licença) segue aberto a
+  // `secretario`, o papel que já governa as outras rotas desta página no backend. Enquanto `estado` não é
+  // "pronto" (modo real aguardando GET /eu), o botão fica ESCONDIDO, não desabilitado — evita mostrar e
+  // depois sumir a ação de um admin_ente real (flash), mesmo racional de pauta-convocacao/page.tsx.
+  const { papeis, estado: estadoPapeis } = usePapeis();
+  const podeConcederAcesso = estadoPapeis === "pronto" && papeis.includes("admin_ente");
   const router = useRouter();
   const searchParams = useSearchParams();
   const vDaUrl = searchParams.get("v");
@@ -66,7 +74,7 @@ export default function PaginaVereadores() {
   // (criar/editar vereador, registrar mandato/licença) pra forçar useVereadores/useVereadorFicha a se
   // refazerem — nenhum dos dois hooks tem um jeito próprio de "refetch", então isto entra nas deps deles.
   const [versao, setVersao] = useState(0);
-  const [painel, setPainel] = useState<null | "novo" | "editar" | "mandato" | "licenca">(null);
+  const [painel, setPainel] = useState<null | "novo" | "editar" | "mandato" | "licenca" | "acesso">(null);
 
   const { dados: linhas, estado: estadoLista } = useVereadores(token, versao);
   const [busca, setBusca] = useState("");
@@ -378,6 +386,15 @@ export default function PaginaVereadores() {
                   >
                     Registrar licença
                   </button>
+                  {podeConcederAcesso && (
+                    <button
+                      className="btn btn-contorno btn-mini"
+                      type="button"
+                      onClick={() => setPainel("acesso")}
+                    >
+                      Conceder acesso
+                    </button>
+                  )}
                 </div>
                 <div id="vereador-proposicoes-em-breve">
                   <EmBreve
@@ -413,6 +430,17 @@ export default function PaginaVereadores() {
                     <RegistrarLicencaForm
                       token={token}
                       vereadorId={ficha.id}
+                      onSucesso={aoConcluir}
+                      onCancelar={() => setPainel(null)}
+                    />
+                  </div>
+                )}
+                {painel === "acesso" && podeConcederAcesso && (
+                  <div className="painel-cad">
+                    <ConcederAcessoForm
+                      token={token}
+                      vereadorId={ficha.id}
+                      nome={nomeExibicao(ficha)}
                       onSucesso={aoConcluir}
                       onCancelar={() => setPainel(null)}
                     />
