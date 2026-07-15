@@ -35,6 +35,17 @@
                    ;; (o :vinculo-ativo-id vai p/ o audit; o mais antigo = âncora estável).
                    :order-by [[:criado_em :asc] [:id :asc]]}))))
 
+(defn estado-de
+  "Leitura ESTREITA (so' :estado) do vinculo pelo id. Usada por `conceder-acesso!` (repositorio component,
+  Task 12 achado seguranca) pra checar, LOGO apos o UPSERT de `criar!`, se o vinculo canonico segue ativo
+  antes de conceder papeis e prosseguir pro Keycloak — `criar!` e' idempotente por (ente,identidade,tipo)
+  e o `:do-update-set` de proposito NUNCA toca `:estado` (Task 7), entao re-conceder a um vinculo suspenso
+  nao reativa (fail-closed, correto); o que faltava era o CALLER perceber isso antes de mandar convite."
+  [tx id]
+  (:vinculo/estado
+   (jdbc/execute-one! tx
+     (sql/format {:select [:estado] :from [:identidade.vinculo] :where [:= :id id]}))))
+
 (defn mudar-estado! [tx id estado]
   {:pre [(contains? mod/estados-vinculo estado)]}   ; erro de dominio antes do CHECK do banco virar PSQLException
   (jdbc/execute-one! tx

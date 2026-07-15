@@ -71,6 +71,19 @@
       (is (= "Helena Matos" (:nome r)) "devolve o nome")
       (is (not (contains? r :cpf)) "a linha NAO carrega :cpf — estruturalmente impossivel de vazar daqui"))))
 
+(deftest existe-e-leitura-estreita-booleana
+  ;; Review Task 12 IMPORTANT: o guard `identidade-existe?` (rotas.clj, backa PATCH
+  ;; /cadastros/vereadores/:id/identidade) so' precisa de um booleano — `id/existe?` prova true E false
+  ;; (nao vacuamente verdadeiro por default) e que o Repo-Component (`repo/identidade-existe?`, usado
+  ;; pelo host) devolve o mesmo booleano, nao um mapa com :nome/:cpf.
+  (let [iid (random-uuid) inexistente (random-uuid)
+        repo (repo-identidade)]
+    (id/inserir! *ds* {:id iid :cpf (cpf-valido) :nome "Existe De Verdade"})
+    (is (true? (id/existe? *ds* iid)) "identidade real -> true")
+    (is (false? (id/existe? *ds* inexistente)) "uuid aleatorio, nunca inserido -> false (nao vacuamente true)")
+    (is (true? (repo/identidade-existe? repo iid)) "o Repo-Component devolve o mesmo booleano")
+    (is (false? (repo/identidade-existe? repo inexistente)) "e false pro inexistente tambem, via o Repo-Component")))
+
 (deftest cpf-invalido-e-rejeitado
   (is (thrown? AssertionError (id/inserir! *ds* {:id (random-uuid) :cpf "12345678900" :nome "X"}))
       "CPF com digito verificador invalido e' rejeitado")
@@ -145,3 +158,26 @@
         "idempotente por (ente,identidade,tipo): repetir devolve o vinculo CANONICO, nao duplica nem estoura")
     (is (= 1 (count (repo/vinculos-de repo ente ident))) "um vinculo, nao dois")
     (is (= #{"vereador"} (repo/papeis-de repo ente ident)) "papel concedido")))
+
+(deftest re-conceder-a-vinculo-suspenso-lanca-conflito
+  ;; Task 12 achado seguranca: reconceder acesso a um vinculo SUSPENSO nao pode devolver 201 nem prosseguir
+  ;; pro Keycloak — `repo/conceder-acesso!` tem que LANCAR antes de tocar papeis, pra o handler HTTP saber
+  ;; parar antes de mandar o convite. Prova as DUAS pontas: o throw acontece de fato (nao vacuo) E o estado
+  ;; do vinculo/papeis segue intocado apos o throw (a tx deu rollback de verdade).
+  (let [ente (random-uuid)
+        ident (:id (criar-identidade-fixture! (cpf-valido) "Helena Suspensa"))
+        repo (repo-identidade)
+        v {:id (random-uuid) :ente-id ente :identidade-id ident :tipo "vereador" :estado "ativo"}
+        {:keys [vinculo-id]} (repo/conceder-acesso! repo ente v ["vereador"])]
+    (repo/mudar-estado-vinculo! repo ente vinculo-id "suspenso")
+    (is (thrown? clojure.lang.ExceptionInfo
+                (repo/conceder-acesso! repo ente (assoc v :id (random-uuid)) ["vereador" "presidente_mesa"]))
+        "re-conceder a um vinculo suspenso LANCA — nao devolve {:vinculo-id ...} como se tivesse funcionado")
+    (try
+      (repo/conceder-acesso! repo ente (assoc v :id (random-uuid)) ["vereador" "presidente_mesa"])
+      (catch clojure.lang.ExceptionInfo e
+        (is (= :conflito/vinculo-nao-ativo (:tipo (ex-data e))) "o tipo do conflito e' o que o handler HTTP espera mapear pra 409")))
+    (is (= "suspenso" (:estado (first (repo/vinculos-de repo ente ident))))
+        "o vinculo CONTINUA suspenso apos o throw — nao houve reativacao de lado")
+    (is (= #{"vereador"} (repo/papeis-de repo ente ident))
+        "o papel extra ('presidente_mesa') do 2o conceder-acesso! NAO foi persistido — a tx deu rollback de verdade, nao so' o retorno que falhou")))

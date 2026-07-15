@@ -53,6 +53,20 @@
     (nome-por-id [_ id] {:id id :cpf cpf-valido :nome "Helena Matos"})
     (conceder-acesso! [_ e v p] (swap! capturado conj [:conceder-acesso e v p]) {:vinculo-id (random-uuid)})))
 
+(defn- fake-repo-identidade-vinculo-suspenso
+  "Task 12 achado seguranca: `conceder-acesso!` lanca `:conflito/vinculo-nao-ativo` (o mesmo que
+  `RepoIdentidadePg` real lancaria, review Task 12) — prova que o handler HTTP mapeia pra 409 SEM chegar
+  no Keycloak. `nome-por-id` fica registrado no `capturado` de proposito: se o handler algum dia mover a
+  ordem (chamar nome-por-id ou os metodos do idp ANTES do catch), esta assercao passa a pegar isso."
+  [capturado]
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify repo-id/RepoIdentidade
+    (snapshot-ator [_ _e _i] {:vinculo-ativo {:id (random-uuid) :tipo "servidor"} :papeis #{"admin_ente"}})
+    (nome-por-id [_ id] (swap! capturado conj [:nome-por-id id]) {:id id :nome "Helena Matos"})
+    (conceder-acesso! [_ e v p]
+      (swap! capturado conj [:conceder-acesso e v p])
+      (throw (ex-info "vinculo existente nao esta ativo" {:tipo :conflito/vinculo-nao-ativo})))))
+
 (defn- ->uuid [s] (when s (java.util.UUID/fromString s)))
 
 (defn- fake-idp [capturado & {:keys [convidar-lanca? convidar-lanca-inexistente?]}]
@@ -85,6 +99,15 @@
                     (rotas/montar {:idp (fake-idp capturado :convidar-lanca? convidar-lanca?
                                                    :convidar-lanca-inexistente? convidar-lanca-inexistente?)
                                    :repo-identidade (fake-repo-identidade papeis capturado)})
+                    it/globais)
+      ph/create-server ::ph/service-fn))
+
+(defn- service-fn-vinculo-suspenso
+  "Variante de `service-fn` (Task 12) com `repo-identidade` que sempre lanca :conflito/vinculo-nao-ativo."
+  [capturado]
+  (-> (http/servico (config/carregar)
+                    (rotas/montar {:idp (fake-idp capturado)
+                                   :repo-identidade (fake-repo-identidade-vinculo-suspenso capturado)})
                     it/globais)
       ph/create-server ::ph/service-fn))
 
@@ -138,6 +161,24 @@
         "DB ANTES do Keycloak: se o KC cair, sobra vinculo sem credencial = ninguem entra (fail-closed)")
     (is (not (re-find (re-pattern cpf-valido) (pr-str @cap)))
         "o CPF do registro da identidade NUNCA entra no payload do Keycloak (IMPORTANT-2) — mesmo o fake `nome-por-id` devolvendo :cpf de proposito, o handler so' repassa :nome")))
+
+(deftest conceder-acesso-a-vinculo-suspenso-409-sem-mandar-convite
+  ;; Task 12 achado seguranca: reconceder acesso a alguem suspenso NAO pode devolver 201 nem mandar o
+  ;; convite de verdade — a assercao decisiva e' a AUSENCIA de [:nome-por-id ...]/[:provisionar-realm
+  ;; ...]/[:criar-usuario ...]/[:convidar ...] em @cap, nao so' o status 409 (um 409 com o e-mail ja'
+  ;; enviado ainda seria o primitivo de phishing/harassment que este fix fecha).
+  (let [cap (atom [])
+        r (pt/response-for (service-fn-vinculo-suspenso cap)
+                           :post "/identidade/acessos"
+                           :headers (com-bearer (token (random-uuid) (random-uuid)))
+                           :body (json/write-value-as-string
+                                  {:identidade-id (str (random-uuid)) :tipo "vereador"
+                                   :papeis ["vereador"] :email "helena@camara.local"}))]
+    (is (= 409 (:status r)) "409, nao 201 — a reativacao nao aconteceu de verdade")
+    (is (= [:conceder-acesso] (mapv first @cap))
+        "SO' o conceder-acesso (que lancou) foi tocado — nome-por-id e os 3 passos do Keycloak (realm/usuario/convite) NUNCA rodaram: o convite nao foi enviado")
+    (is (re-find #"reativar" (:erro (ler-json r)))
+        "a mensagem explica que reativar e' operacao separada, sem prometer uma rota que nao existe")))
 
 (deftest conceder-acesso-keycloak-fora-do-ar-500
   (let [cap (atom [])

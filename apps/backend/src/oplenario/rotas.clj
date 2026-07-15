@@ -101,11 +101,13 @@
                       (fn [ente-id] (repo-cadastros-comp/buscar-ente repo-cadastros ente-id)))
         ;; Onda D Slice 5 Task 9: guard de SERVICO — cadastros NUNCA importa identidade (§22.10) e nao ha'
         ;; FK cross-schema em cadastros.vereador.identidade_id (so' GUARD ref). O host injeta a existencia
-        ;; via o Repo-Component de identidade (`identidade-por-id`, SUPRATENANT); mesma inversao de
+        ;; via o Repo-Component de identidade (`identidade-existe?`, SUPRATENANT); mesma inversao de
         ;; dependencia de info-ente/consultar-sessao/resolver-municipio. Override injetavel p/ os testes
-        ;; DB-free da borda de cadastros.
+        ;; DB-free da borda de cadastros. Review Task 12 IMPORTANT: usa a leitura ESTREITA
+        ;; `repo/identidade-existe?` (SELECT 1), NAO `identidade-por-id` — este guard so' precisa de um
+        ;; booleano e nao deveria materializar CPF+nome so' pra jogar os dois fora.
         identidade-existe? (or identidade-existe?
-                               (fn [ident-id] (some? (repo-identidade-comp/identidade-por-id repo-identidade ident-id))))
+                               (fn [ident-id] (repo-identidade-comp/identidade-existe? repo-identidade ident-id)))
         ;; Onda D Slice 2 Task 3: identidade/auth-in (GET /auth/descoberta/:ente, rota PUBLICA pre-login)
         ;; reusa este MESMO `info-ente` (existencia = `(some? (info-ente id))`) — inversao de dependencia
         ;; sobre cadastros, mesma forma de resolver-municipio/membros-da-casa; identidade nunca importa

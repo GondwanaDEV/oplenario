@@ -43,32 +43,40 @@
   `ator` (o admin_ente que esta' chamando — ver docstring do ns); `nome-por-id` e' a leitura ESTREITA
   (sem :cpf) de proposito, ver docstring do ns (review Task 8 IMPORTANT-2b).
 
-  Reconceder acesso a um vinculo SUSPENSO (`:estado \"suspenso\"`) NAO reativa (MINOR-1, review Task 8):
+  Reconceder acesso a um vinculo SUSPENSO (`:estado \"suspenso\"`) NAO reativa (Task 7, deliberado):
   `repo/conceder-acesso!` -> `vinc/criar!` faz UPSERT por (ente,identidade,tipo) e o `:do-update-set` so'
-  toca `:tipo`, nunca `:estado` (decisao deliberada da Task 7 — suspensao so' sai por
-  `mudar-estado-vinculo!`, nunca de-lado por um re-conceder). Ou seja: este handler passa `:estado
-  \"ativo\"` no INSERT, mas num conflito o UPDATE ignora esse campo -> a resposta 201 + 'convite enviado'
-  E' HONESTA sobre o convite (o e-mail sai de verdade) mas NAO sobre reativacao — o vinculo continua
-  suspenso e `resolver-sessao` continua recusando login. Fail-closed (nao e' vulnerabilidade), mas quem
-  chamar este endpoint pra 'desbloquear' alguem precisa saber que isso e' job de
-  `mudar-estado-vinculo!`, nao deste endpoint."
+  toca `:tipo`, nunca `:estado` — suspensao so' sai por `mudar-estado-vinculo!`, nunca de-lado por um
+  re-conceder. Fail-closed no BANCO desde a Task 7; a Task 12 fechou o buraco de SEGURANCA que sobrava: o
+  proprio `repo/conceder-acesso!` agora LANCA `:conflito/vinculo-nao-ativo` (dentro da mesma tx, antes de
+  tocar papeis) quando o vinculo canonico nao ficou ativo — capturado AQUI, LOCALMENTE (mesmo padrao de
+  `cadastros/diplomat/http/in.clj`'s `ligar-identidade-handler`; `:conflito/*` NAO e' mapeado no
+  interceptor global `erro`) -> 409, ANTES de qualquer chamada ao Keycloak. Sem isso, um admin_ente
+  tentando reinstaurar alguem suspenso receberia 201 + 'convite enviado' — uma mentira num controle de
+  acesso — e o endpoint virava um primitivo de envio de convite sem limite contra uma pessoa suspensa. O
+  409 explica que reativar e' operacao SEPARADA (job de `mudar-estado-vinculo!`) sem prometer uma rota
+  HTTP que ainda nao existe (esse gap segue sendo escalado a parte)."
   [repo-identidade idp-comp]
   (fn [req]
     (let [ator (:ator req) ente-id (:ente-id ator)
-          {:keys [identidade-id tipo papeis email]} (adapters-in/conceder-acesso->dominio ator (:json-params req))
-          ;; identidade-id vem do wire, validado contra o schema (adapters-in) mas nao contra o banco
-          ;; ainda; `vinculo.identidade_id REFERENCES identidade.identidade(id)` faz `conceder-acesso!`
-          ;; (que roda ANTES, logo acima) falhar por FK antes que `nome-por-id` pudesse ver um id
-          ;; inexistente — por isso `nome` abaixo nunca precisa tratar nil aqui (MINOR-2, review Task 8).
-          r (repo/conceder-acesso! repo-identidade ente-id
-                                   {:id (random-uuid) :ente-id ente-id :identidade-id identidade-id
-                                    :tipo tipo :estado "ativo"}
-                                   papeis)
-          nome (:nome (repo/nome-por-id repo-identidade identidade-id))]
-      (idp/provisionar-realm! idp-comp ente-id)
-      (idp/criar-usuario! idp-comp ente-id {:identidade-id identidade-id :nome nome :email email})
-      (idp/convidar! idp-comp ente-id identidade-id)
-      (http/json-resposta 201 {:vinculo-id (str (:vinculo-id r)) :convite "enviado"}))))
+          {:keys [identidade-id tipo papeis email]} (adapters-in/conceder-acesso->dominio ator (:json-params req))]
+      (try
+        (let [;; identidade-id vem do wire, validado contra o schema (adapters-in) mas nao contra o banco
+              ;; ainda; `vinculo.identidade_id REFERENCES identidade.identidade(id)` faz `conceder-acesso!`
+              ;; (que roda ANTES, logo abaixo) falhar por FK antes que `nome-por-id` pudesse ver um id
+              ;; inexistente — por isso `nome` abaixo nunca precisa tratar nil aqui (MINOR-2, review Task 8).
+              r (repo/conceder-acesso! repo-identidade ente-id
+                                       {:id (random-uuid) :ente-id ente-id :identidade-id identidade-id
+                                        :tipo tipo :estado "ativo"}
+                                       papeis)
+              nome (:nome (repo/nome-por-id repo-identidade identidade-id))]
+          (idp/provisionar-realm! idp-comp ente-id)
+          (idp/criar-usuario! idp-comp ente-id {:identidade-id identidade-id :nome nome :email email})
+          (idp/convidar! idp-comp ente-id identidade-id)
+          (http/json-resposta 201 {:vinculo-id (str (:vinculo-id r)) :convite "enviado"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/vinculo-nao-ativo (:tipo (ex-data e)))
+            (http/json-resposta 409 {:erro "vinculo suspenso — reativar e' uma operacao separada, nao este endpoint"})
+            (throw e)))))))
 
 (defn- reenviar-convite-handler
   "POST /identidade/acessos/:identidade-id/convite. So' reenvia (o KC invalida o codigo anterior). O e-mail

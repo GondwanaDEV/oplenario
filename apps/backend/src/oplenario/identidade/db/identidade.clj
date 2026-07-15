@@ -42,6 +42,18 @@
     (jdbc/execute-one! conn
       (sql/format {:select [:id :nome] :from [:identidade.identidade] :where [:= :id id]}))))
 
+(defn existe?
+  "Leitura ESTREITA (nem :nome, nem :cpf — so' um booleano) — usada pelo guard `identidade-existe?`
+  default de `rotas.clj`, que backa `PATCH /cadastros/vereadores/:id/identidade` e so' precisa saber SE
+  a identidade existe, nada mais (review Task 12 IMPORTANT: o guard reusava `identidade-por-id`, que
+  materializa CPF+nome e descarta os dois — o mesmo anti-padrao que `nome-por-id` foi criado pra
+  eliminar POR CONSTRUCAO no caminho vizinho do Keycloak; `existe?` faz o mesmo aqui, `SELECT 1 ... LIMIT
+  1`, nunca traz a linha inteira pra memoria)."
+  [conn id]
+  (boolean
+   (jdbc/execute-one! conn
+     (sql/format {:select [1] :from [:identidade.identidade] :where [:= :id id] :limit 1}))))
+
 (defn identidade-por-sub
   "Resolve (provedor, sub) -> identidade_id. Base do login cidadao via gov.br (F1.4)."
   [conn provedor sub]
