@@ -9,11 +9,19 @@
 (set! *warn-on-reflection* true)
 
 ;; ---- vinculo ----
-(defn criar! [tx {:keys [id ente-id identidade-id tipo estado]}]
-  (jdbc/execute-one! tx
-    (sql/format {:insert-into :identidade.vinculo
-                 :values [{:id id :ente_id ente-id :identidade_id identidade-id
-                           :tipo tipo :estado (or estado "ativo")}]})))
+(defn criar!
+  "Cria o vinculo. Idempotente por (ente_id, identidade_id, tipo) — RETORNA o id CANONICO (o existente, em
+  caso de conflito); o caller DEVE usar este id, nao o que passou (mesma disciplina de db/identidade/inserir!).
+  DO UPDATE (no-op sobre `tipo`) em vez de DO NOTHING: DO NOTHING nao devolveria RETURNING na colisao."
+  [tx {:keys [id ente-id identidade-id tipo estado]}]
+  (:vinculo/id
+   (jdbc/execute-one! tx
+     (sql/format {:insert-into :identidade.vinculo
+                  :values [{:id id :ente_id ente-id :identidade_id identidade-id
+                            :tipo tipo :estado (or estado "ativo")}]
+                  :on-conflict [:ente_id :identidade_id :tipo]
+                  :do-update-set {:tipo :excluded.tipo}
+                  :returning [:id]}))))
 
 (defn vinculos-de
   "Os vinculos da identidade NESTE ente (RLS ja restringe ao tenant). Base do escopo ativo (§22.5 eixo D)."

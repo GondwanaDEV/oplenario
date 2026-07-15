@@ -35,6 +35,10 @@
   (registrar-consentimento! [this ente-id consentimento])
   (revogar-consentimento! [this ente-id id])
   (consentimentos-ativos [this ente-id identidade-id])
+  (conceder-acesso! [this ente-id vinculo papeis]
+    "Vinculo + papeis numa UNICA tx (§22.5 eixo D). Idempotente. E' o passo que ABRE A PORTA — por isso
+    e' o ULTIMO do fluxo de provisionamento (spec §4.2 'acesso por ultimo'): antes dele, resolver-sessao
+    nao acha vinculo ativo e ninguem entra.")
   (snapshot-ator [this ente-id identidade-id]
     "Snapshot de SESSAO numa UNICA tx (vinculo ATIVO + papeis). Devolve {:vinculo-ativo :papeis} ou nil
     se nao ha vinculo ativo. Composto AQUI (§3-bis) p/ resolver-sessao nao importar db/ direto."))
@@ -60,6 +64,14 @@
   (registrar-consentimento! [this ente-id c] (transacao this ente-id #(vinc/registrar-consentimento! % c)))
   (revogar-consentimento! [this ente-id id] (transacao this ente-id #(vinc/revogar-consentimento! % id)))
   (consentimentos-ativos [this ente-id ident] (transacao this ente-id #(vinc/consentimentos-ativos % ente-id ident)))
+  (conceder-acesso! [this ente-id v papeis]
+    (transacao this ente-id
+      (fn [tx]
+        (let [vinculo-id (vinc/criar! tx v)]
+          (doseq [p papeis]
+            (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente-id
+                                       :identidade-id (:identidade-id v) :papel p}))
+          {:vinculo-id vinculo-id}))))
   (snapshot-ator [this ente-id identidade-id]
     (transacao this ente-id
       (fn [tx]

@@ -7,6 +7,7 @@
             [malli.core :as m]
             [next.jdbc :as jdbc]
             [oplenario.config :as config]
+            [oplenario.identidade.components.repositorio :as repo]
             [oplenario.identidade.db.identidade :as id]
             [oplenario.identidade.db.vinculo :as vinc]
             [oplenario.identidade.models.identidade :as mod]
@@ -33,6 +34,18 @@
         d1 (dv base)
         d2 (dv (conj base d1))]
     (apply str (concat base [d1 d2]))))
+
+(defn- criar-identidade-fixture!
+  "Fixture: cria a identidade supratenant (sobre *ds*) e devolve {:id ...} — envelope de mapa p/
+  combinar com o padrao dos demais helpers do modulo (id/inserir! ja devolve so o uuid canonico)."
+  [cpf nome]
+  {:id (id/inserir! *ds* {:id (random-uuid) :cpf cpf :nome nome})})
+
+(defn- repo-identidade
+  "O Repo-Component (ADR-0001 §3) construido sobre o *ds* do teste — mesmo padrao dos demais testes de
+  integracao do modulo (autenticacao-test, repo-test)."
+  []
+  (assoc (repo/repositorio) :datasource {:ds *ds*}))
 
 (deftest identidade-supratenant-round-trip-e-broker-govbr
   (let [iid (random-uuid) cpf (cpf-valido)
@@ -110,3 +123,15 @@
     (is (false? (rel/e-o-proprio? nil nil)) "ator nil -> falso (fail-closed)")
     (is (true? (rel/e-o-proprio? :tx-ignorada x x)) "assinatura com tx (motor) ignora a tx")
     (is (= #{"é_o_próprio"} (set (keys rel/relacoes))) "registro expoe a relacao transversal")))
+
+(deftest conceder-acesso-idempotente-numa-tx
+  (let [ente (random-uuid)
+        ident (:id (criar-identidade-fixture! (cpf-valido) "Helena Matos"))
+        repo (repo-identidade)
+        v {:id (random-uuid) :ente-id ente :identidade-id ident :tipo "vereador" :estado "ativo"}
+        r1 (repo/conceder-acesso! repo ente v ["vereador"])
+        r2 (repo/conceder-acesso! repo ente (assoc v :id (random-uuid)) ["vereador"])]
+    (is (= (:vinculo-id r1) (:vinculo-id r2))
+        "idempotente por (ente,identidade,tipo): repetir devolve o vinculo CANONICO, nao duplica nem estoura")
+    (is (= 1 (count (repo/vinculos-de repo ente ident))) "um vinculo, nao dois")
+    (is (= #{"vereador"} (repo/papeis-de repo ente ident)) "papel concedido")))
