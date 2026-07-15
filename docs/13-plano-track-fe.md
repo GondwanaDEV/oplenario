@@ -78,11 +78,33 @@ Ordem por dependência: `proposicoes` (lista) → `editor-proposicao` (criar/edi
   (borda `/meu/*`, endpoint `meu-voto`, ciência) — que serve web hoje e nativo amanhã, igual.
 - **↳ Marco MFE-3 — "o vereador no bolso"** (vota do celular na sessão ao vivo, via web responsiva).
 
-### Onda D — entrada real + cadastros *(gated: Keycloak vivo = fundação infra)*
-`login`, `entrar-govbr`, `cadastro-vereadores`, `comissoes`, `admin-usuarios`. **Bloqueada pela fundação de auth
-viva** (F1.4-carry: Keycloak realm-por-tenant/gov.br/passkey + interceptors Pedestal) + borda de cadastros.
-Até lá o dev-token cobre as ondas A–C.
-- **↳ Marco MFE-4 — "entrada real"** (login gov.br/passkey + cadastro sob RLS).
+### Onda D — entrada real + cadastros ✅ *(Marco MFE-4 FECHADO em 15/07/2026)*
+`login`, `entrar-govbr`, `cadastro-vereadores`, `comissoes`, `admin-usuarios`. Era **bloqueada pela fundação de
+auth viva** (F1.4-carry: Keycloak realm-por-tenant/gov.br/passkey + interceptors Pedestal) + borda de cadastros;
+o dev-token cobriu as ondas A–C até aqui.
+- **↳ Marco MFE-4 — "entrada real"** (login + cadastro sob RLS) — **FECHADO** pela Slice 5 (`ef8a72c`).
+
+**Decomposição (12/07/2026):** "fundação de auth viva" não é um bloco único — decompõe em subsistemas
+independentes, cada um sua própria fatia: **D1 adapter Keycloak de tenant** (`verificar-token` JWKS +
+provisionamento — substitui `idp-dev` no boot) · D2 passkey/WebAuthn (fator primário §22.5) · D3 broker
+gov.br (cidadão) · D4 IdP do operador (`admin_sistema`, hoje stub vazio) · e, fora de Onda D mas destravado
+por D1, a assinatura ICP-Brasil real (hoje `STUB-ICP-v0`). As telas FE (`login`/`entrar-govbr`/cadastros)
+consomem D1+D2/D3 conforme forem entrando — nenhuma tela é a primeira fatia.
+
+**Estado por subsistema (15/07/2026):**
+- **D1 — adapter Keycloak de tenant: ✅ ENTREGUE** (`0fb7bc5`, 12/07). Spec
+  `docs/superpowers/specs/2026-07-12-onda-d-slice1-keycloak-idp-design.md`; plano
+  `docs/superpowers/plans/2026-07-12-onda-d-slice1-keycloak-idp.md` (5 tasks TDD). Verificado ao vivo
+  contra um Keycloak 26 real (`--profile auth`) antes de escrever o plano — achou 4 correções reais que
+  o spec original não previa (User Profile de atributo, `aud` default, admin ROPC, firstName/lastName
+  obrigatórios). Em cima dele vieram as Slices 2 (login PKCE, `53504a7`) · 2b (hardening, `f6e1c10`) ·
+  3 (cadastro read-only, `a267bf8`) · 4 (cadastro escrita, `337a204`) · 5 (identidade do vereador, `ef8a72c`).
+- **D2 — passkey/WebAuthn: parcial.** O realm já **exige** a required action no 1º acesso (provado ao vivo);
+  o registro efetivo da passkey segue **carry de ambiente** (WebAuthn exige secure context — ver
+  [[oplenario-proxima-sessao]]).
+- **D3 — broker gov.br: aberto.** Recomendação de rumo: vem **depois** da fatia de revogação + `vinculo_id`
+  em `usuario_papel` — o vínculo cidadão torna real o bug latente "papéis sobrevivem ao vínculo".
+- **D4 — IdP do operador (`admin_sistema`): aberto** (stub vazio).
 
 ### Onda E — cauda
 `transparencia-fiscal`, `dados-abertos`, `status`, `console-operador`(+tenant), `livro-atas`, `calendario`,
