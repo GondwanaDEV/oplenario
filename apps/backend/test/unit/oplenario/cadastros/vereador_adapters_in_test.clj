@@ -34,6 +34,17 @@
   (is (= {:nome-parlamentar "Apelido"} (a/editar-vereador->dominio {"nome-parlamentar" "Apelido"})))
   (is (validacao-invalida? #(a/editar-vereador->dominio {"nome" "  "})) "nome presente e em branco -> invalido"))
 
+(deftest editar-esvaziar-nome-parlamentar-vira-nil
+  ;; Limpar o apelido: campo presente-mas-branco = alteracao valida; chave fica presente (contains? true)
+  ;; p/ atualizar! escrever, mas o VALOR e' nil -> NULL no banco, nunca "".
+  (let [m (a/editar-vereador->dominio {"nome-parlamentar" ""})]
+    (is (contains? m :nome-parlamentar) "chave presente -> atualizar! escreve a coluna")
+    (is (nil? (:nome-parlamentar m)) "branco vira nil (NULL), nunca string vazia")))
+
+(deftest criar-nome-parlamentar-branco-vira-nil
+  (is (nil? (:nome-parlamentar (a/criar-vereador->dominio ATOR {"nome" "So Nome" "nome-parlamentar" "  "})))
+      "apelido em branco na criacao tambem normaliza p/ nil"))
+
 ;; ---- mandato ----
 (deftest mandato-coage-datas-e-uuid-e-injeta-estado-vigente
   (let [ver (random-uuid) leg (random-uuid)

@@ -36,12 +36,18 @@
 (defn- ->uuid! [s campo]
   (or (parse-uuid s) (invalido! "identificador invalido" {:campos [campo]})))
 
+(defn- ->nil-se-branco
+  "nome_parlamentar e' um nome real OU NULL — nunca string vazia. Limpar o apelido (mandar \"\") vira nil."
+  [s]
+  (when-not (str/blank? s) s))
+
 (defn criar-vereador->dominio [ator wire-in]
   (when-not (map? wire-in) (invalido! "corpo deve ser objeto JSON" {:campo :corpo}))
   (let [mm (keywordizar wire-in)]
     (validar! wire/CriarVereador mm "corpo de criar vereador invalido")
     (when (str/blank? (:nome mm)) (invalido! "nome obrigatorio (nao-branco)" {:campos [:nome]}))
-    {:id (random-uuid) :ente-id (:ente-id ator) :nome (:nome mm) :nome-parlamentar (:nome-parlamentar mm)}))
+    {:id (random-uuid) :ente-id (:ente-id ator) :nome (:nome mm)
+     :nome-parlamentar (->nil-se-branco (:nome-parlamentar mm))}))
 
 (defn editar-vereador->dominio [wire-in]
   (when-not (map? wire-in) (invalido! "corpo deve ser objeto JSON" {:campo :corpo}))
@@ -51,7 +57,11 @@
       (invalido! "informe ao menos um campo (nome ou nome-parlamentar)" {:campos [:nome :nome-parlamentar]}))
     (when (and (contains? mm :nome) (str/blank? (:nome mm)))
       (invalido! "nome nao pode ser vazio" {:campos [:nome]}))
-    (select-keys mm [:nome :nome-parlamentar])))
+    ;; PATCH parcial: SO' as chaves presentes (contains?), pra atualizar! nunca zerar o que o cliente omitiu.
+    ;; nome-parlamentar presente-mas-branco = limpar o apelido -> nil (NULL no banco), nao "".
+    (cond-> {}
+      (contains? mm :nome)             (assoc :nome (:nome mm))
+      (contains? mm :nome-parlamentar) (assoc :nome-parlamentar (->nil-se-branco (:nome-parlamentar mm))))))
 
 (defn registrar-mandato->dominio [ator vereador-id wire-in]
   (when-not (map? wire-in) (invalido! "corpo deve ser objeto JSON" {:campo :corpo}))

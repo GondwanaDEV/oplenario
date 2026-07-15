@@ -62,12 +62,14 @@
                            :fim_efetivo fim-efetivo :efetivado_em [:now]}]})))
 
 (defn mudar-estado!
-  "Transicao de estado do mandato (cassacao/renuncia/licenca/...). fim-efetivo opcional."
-  [tx {:keys [id estado fim-efetivo]}]
+  "Transicao de estado do mandato (cassacao/renuncia/licenca/...). fim-efetivo opcional. Defesa em
+  profundidade: casa ente_id explicito no WHERE (a RLS ja' filtra o tenant — cinto-e-suspensorio, mesmo
+  padrao de atualizar!)."
+  [tx ente-id {:keys [id estado fim-efetivo]}]
   (jdbc/execute-one! tx
     (sql/format {:update :cadastros.mandato
                  :set {:estado estado :fim_efetivo [:coalesce fim-efetivo :fim_efetivo]}
-                 :where [:= :id id]})))
+                 :where [:and [:= :ente_id ente-id] [:= :id id]]})))
 
 (defn mandatos-do-vereador [tx ente-id vereador-id]
   (comum/linhas->kebab

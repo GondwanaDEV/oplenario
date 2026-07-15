@@ -31,10 +31,13 @@ export function validarNovoVereador(v: { nome: string }): Resultado<{ nome?: str
 
 export function validarEditar(v: { nome?: string; nomeParlamentar?: string }): Resultado<{ nome?: string; geral?: string }> {
   const erros: { nome?: string; geral?: string } = {};
-  const temNome = !branco(v.nome);
-  const temParlamentar = !branco(v.nomeParlamentar);
-  if (!temNome && !temParlamentar) erros.geral = "Preencha ao menos um campo para salvar.";
-  if (v.nome !== undefined && v.nome !== "" && branco(v.nome)) erros.nome = "O nome não pode ficar em branco.";
+  // "Mudou" = campo PRESENTE no PATCH (mesmo contrato `contains?` do backend adapters/in), não "não-branco":
+  // esvaziar o nome parlamentar (limpar o apelido) É uma alteração válida — mandá-lo como "" limpa o campo.
+  // Só o `nome` (obrigatório) não pode ser esvaziado.
+  const mudouNome = v.nome !== undefined;
+  const mudouParlamentar = v.nomeParlamentar !== undefined;
+  if (!mudouNome && !mudouParlamentar) erros.geral = "Preencha ao menos um campo para salvar.";
+  if (mudouNome && branco(v.nome)) erros.nome = "O nome não pode ficar em branco.";
   return fechar(erros);
 }
 
