@@ -119,10 +119,15 @@
 
 (defn- idp-para
   "Seleciona a impl do IdP por ambiente. dev/test usam idp-dev (confia em claims sem verificar
-  assinatura — NUNCA usar fora de dev/test); qualquer outro valor de :env (incl. nao-reconhecido/
-  ausente) usa o KeycloakIdp real — default fail-safe: um :env mal configurado deve falhar tentando
+  assinatura — NUNCA usar fora de dev/test); qualquer outro valor de :env (incl. nao-reconhecido,
+  vazio ou AUSENTE) usa o KeycloakIdp real — fail-safe: um :env mal configurado deve falhar tentando
   falar com um Keycloak real, nunca aceitar login forjado silenciosamente (achado da revisao final
-  de branco da Onda D Slice 1)."
+  de branco da Onda D Slice 1).
+
+  O caso AUSENTE so' e' de fato coberto desde que o `:env` do config.edn deixou de ter default \"dev\":
+  enquanto tinha, este predicado nunca via a ausencia — via \"dev\", e ligava o idp-dev num deploy que
+  simplesmente esquecesse de setar APP_ENV. O whitelist aqui e' metade do fail-safe; a outra metade e'
+  o config nao inventar um valor. Modo dev = opt-in explicito, nos dois lados."
   [config]
   (if (#{"dev" "test"} (:env config))
     (idp-dev/idp-dev)

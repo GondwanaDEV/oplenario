@@ -54,7 +54,7 @@ describe("GuardVereador (modo real — papéis via /eu)", () => {
   });
 
   it("renderiza os children quando /eu devolve o papel 'vereador'", async () => {
-    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_APP_ENV", "production");
     global.fetch = vi.fn(
       async () => ({ ok: true, json: async () => ({ ator: { papeis: ["vereador"] } }) }) as Response
     ) as unknown as typeof fetch;
@@ -73,7 +73,7 @@ describe("GuardVereador (modo real — papéis via /eu)", () => {
   });
 
   it("bloqueia quando /eu devolve papéis sem 'vereador'", async () => {
-    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_APP_ENV", "production");
     global.fetch = vi.fn(
       async () => ({ ok: true, json: async () => ({ ator: { papeis: ["secretario"] } }) }) as Response
     ) as unknown as typeof fetch;
@@ -91,7 +91,7 @@ describe("GuardVereador (modo real — papéis via /eu)", () => {
   });
 
   it("enquanto /eu ainda não respondeu, não renderiza children NEM 'Acesso restrito' (sem flash)", () => {
-    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_APP_ENV", "production");
     const resposta: Response = { ok: true, json: async () => ({ ator: { papeis: ["vereador"] } }) } as Response;
     const resolveFns: Array<(r: Response) => void> = [];
     const pendente = new Promise<Response>((resolve) => resolveFns.push(resolve));

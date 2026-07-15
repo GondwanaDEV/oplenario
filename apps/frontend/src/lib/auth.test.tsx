@@ -12,27 +12,19 @@ function SondaPapeis() {
   return <div data-testid="papeis">{papeis.join(",")}</div>;
 }
 
-// Node 22 (ERR_INVALID_OBJECT_DEFINE_PROPERTY): process.env exige descriptor com writable+enumerable+
-// configurable TODOS true — o rascunho do brief só passava `configurable`, o que quebra nesta versão de
-// Node (writable/enumerable ficam false por default no Object.defineProperty). Helper local fixa isso
-// preservando a mesma intenção do teste (forçar NODE_ENV por caso, restaurar no afterEach).
-function setNodeEnv(value: string | undefined) {
-  Object.defineProperty(process.env, "NODE_ENV", { value, writable: true, enumerable: true, configurable: true });
-}
-
+// O modo de auth vem de NEXT_PUBLIC_APP_ENV (fonte única, ver modo.ts) — NÃO mais do NODE_ENV. A suíte
+// roda com "test" (vitest.config.ts) = modo dev; os casos de modo real sobrepõem por teste. Isto elimina o
+// helper setNodeEnv/Object.defineProperty que existia aqui: vi.stubEnv basta p/ uma env comum.
 describe("AuthProvider/useAuth", () => {
-  const originalEnv = process.env.NODE_ENV;
   afterEach(() => {
     // sem `test.globals: true` no vitest.config.ts, o auto-cleanup embutido do @testing-library/react
     // (que depende de `afterEach` global) não se registra sozinho — cleanup() manual evita vazar render
-    // entre os 3 casos (o "sem-token" veria 2 nós <div data-testid="token"> sem isso).
+    // entre os casos (o "sem-token" veria 2 nós <div data-testid="token"> sem isso).
     cleanup();
-    setNodeEnv(originalEnv);
     vi.unstubAllEnvs();
   });
 
-  it("lê o token da querystring fora de produção", () => {
-    setNodeEnv("test");
+  it("lê o token da querystring no modo dev", () => {
     render(
       <AuthProvider tokenQuery='{"sub":"u"}'>
         <Sonda />
@@ -41,19 +33,43 @@ describe("AuthProvider/useAuth", () => {
     expect(screen.getByTestId("token").textContent).toBe('{"sub":"u"}');
   });
 
-  it("bloqueia token via querystring em produção (lança)", () => {
-    setNodeEnv("production");
+  it("bloqueia token via querystring no modo real (lança)", () => {
+    vi.stubEnv("NEXT_PUBLIC_APP_ENV", "production");
     expect(() =>
       render(
         <AuthProvider tokenQuery='{"sub":"u"}'>
           <Sonda />
         </AuthProvider>
       )
-    ).toThrow(/produção/);
+    ).toThrow(/modo real/);
+  });
+
+  it("bloqueia token via querystring quando a env de modo está AUSENTE (default seguro)", () => {
+    // a MESMA fonte de verdade de modoReal(): sem NEXT_PUBLIC_APP_ENV o guard tem de fechar, mesmo com
+    // NODE_ENV="development" (é o caso do `next dev` apontado p/ um backend em APP_ENV=production).
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("NEXT_PUBLIC_APP_ENV", undefined);
+    expect(() =>
+      render(
+        <AuthProvider tokenQuery='{"sub":"u"}'>
+          <Sonda />
+        </AuthProvider>
+      )
+    ).toThrow(/modo real/);
+  });
+
+  it("no modo real sem tokenQuery -> token null (o cookie decide, nem NEXT_PUBLIC_DEV_TOKEN vale)", () => {
+    vi.stubEnv("NEXT_PUBLIC_APP_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_DEV_TOKEN", '{"sub":"forjado"}');
+    render(
+      <AuthProvider tokenQuery={null}>
+        <Sonda />
+      </AuthProvider>
+    );
+    expect(screen.getByTestId("token").textContent).toBe("sem-token");
   });
 
   it("sem token nenhum -> null", () => {
-    setNodeEnv("test");
     render(
       <AuthProvider tokenQuery={null}>
         <Sonda />
@@ -63,7 +79,6 @@ describe("AuthProvider/useAuth", () => {
   });
 
   it("papeis vem do campo 'papeis' do JSON do token", () => {
-    setNodeEnv("test");
     render(
       <AuthProvider tokenQuery='{"sub":"u","papeis":["vereador"]}'>
         <SondaPapeis />
@@ -73,7 +88,6 @@ describe("AuthProvider/useAuth", () => {
   });
 
   it("papeis vazio quando o token nao tem o campo", () => {
-    setNodeEnv("test");
     render(
       <AuthProvider tokenQuery='{"sub":"u"}'>
         <SondaPapeis />
@@ -83,7 +97,6 @@ describe("AuthProvider/useAuth", () => {
   });
 
   it("papeis vazio quando nao ha token nenhum", () => {
-    setNodeEnv("test");
     render(
       <AuthProvider tokenQuery={null}>
         <SondaPapeis />

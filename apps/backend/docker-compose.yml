@@ -115,6 +115,13 @@ services:
     environment:
       # nome do service (DNS interno do compose), nao localhost — a rota /api/* do Next proxeia p/ ca.
       BACKEND_URL: "http://app:8888"
+      # MODO DE AUTH DO FE (src/lib/modo.ts) — MESMA variavel que alimenta o APP_ENV do service `app` acima,
+      # de proposito: as duas pontas TEM de andar juntas. `OPLENARIO_APP_ENV=production docker compose up`
+      # poe backend E frontend em modo real de uma vez (o dev-token deixa de valer nos dois). Default `dev`
+      # preserva o stack normal. Sem isto o FE decidia o modo pelo NODE_ENV do BUILD (`next dev` =>
+      # "development" => modo dev sempre), e o caminho de producao do FE era inexercitavel localmente:
+      # com o backend em APP_ENV=production e cookie de sessao VALIDO, os hooks abortavam antes de buscar.
+      NEXT_PUBLIC_APP_ENV: "${OPLENARIO_APP_ENV:-dev}"
       # Onda D Slice 2 (T17): o callback BFF troca `code`->token SERVER-SIDE; usa o DNS interno do compose
       # (o browser autorizou em localhost:8080, mas o container nao resolve localhost como o KC). Casa com
       # o KEYCLOAK_BASE_URL do app -> issuer consistente (http://keycloak:8080/realms/...).

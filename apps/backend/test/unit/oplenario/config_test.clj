@@ -10,6 +10,18 @@
         "sem env, jdbc-url vem do config.edn")
     (is (= 8888 (get-in c [:http :port])) "porta default do edn")))
 
+(deftest sem-app-env-o-env-fica-ausente
+  ;; O config NAO inventa um ambiente. O default era "dev", e "dev" liga o idp-dev (JWT nao-assinado) em
+  ;; `sistema/idp-para` — logo um deploy que esquecesse APP_ENV nascia com a auth aberta. O fail-safe do
+  ;; idp-para so' cobre valor DESCONHECIDO; a AUSENCIA nunca chegava la' (chegava "dev"). Sem default, a
+  ;; ausencia flui ate' o idp-para como nil e cai no KeycloakIdp real. Modo dev = opt-in explicito.
+  (let [c (config/carregar {})]
+    (is (nil? (:env c)) "sem APP_ENV o :env fica nil — o config nao inventa 'dev'")))
+
+(deftest app-env-sobrepoe-o-env
+  (is (= "dev" (:env (config/carregar {"APP_ENV" "dev"}))) "APP_ENV explicito e' a UNICA fonte do :env")
+  (is (= "production" (:env (config/carregar {"APP_ENV" "production"})))))
+
 (deftest env-sobrepoe-jdbc-url
   (let [c (config/carregar {"DATABASE_URL" "jdbc:postgresql://localhost:5544/oplenario"})]
     (is (= "jdbc:postgresql://localhost:5544/oplenario" (get-in c [:db :jdbc-url]))
