@@ -367,10 +367,30 @@
 ;; ---------------------------------------------------------------------------------------------
 
 (defn- convidar-impl
-  "Stub temporario para compilar — impl real (envio do codigo de uso unico ao e-mail institucional) e' a
-  Task 4."
-  [_ _ente-id _identidade-id]
-  (throw (ex-info "convidar!: nao implementado (Task 4)" {:tipo :idp/nao-implementado})))
+  "PUT execute-actions-email: o KC gera o codigo de uso unico, envia ao e-mail institucional e, no resgate,
+  OBRIGA o cadastro do passkey antes de qualquer acao. lifespan = janela do codigo (12h — cobre posse de
+  legislatura em dia util sem virar credencial standing, §22.5.2 eixo F).
+  `client-id` = `:web-client-id` do config (nao `:audiencia`): e' o client PKCE publico com redirectUris
+  registrados, o mesmo que o navegador usa no login normal — o link do e-mail precisa de um client com
+  destino de redirect valido; `:audiencia` (client de API, sem redirectUris) nao serve pra isso. O brief
+  original citava um `:client-id` que nao existe no config.edn (so' ha' `:audiencia`/`:web-client-id`)."
+  [{:keys [config http-client]} ente-id identidade-id]
+  (let [{:keys [base-url realm-prefixo web-client-id]} config
+        realm (str realm-prefixo ente-id)
+        token (admin-token! config http-client)
+        usuario (buscar-usuario-por-identidade http-client token base-url realm identidade-id)]
+    (when-not usuario
+      (throw (ex-info "keycloak-idp: usuario inexistente no realm — nao ha' quem convidar"
+                      {:tipo :idp/usuario-inexistente})))
+    (let [{:keys [status corpo]}
+          (admin-req! http-client token :put
+                      (str "/admin/realms/" realm "/users/" (:id usuario)
+                           "/execute-actions-email?client_id=" web-client-id "&lifespan=43200")
+                      ["webauthn-register-passwordless"]
+                      base-url)]
+      (when-not (= 204 status)
+        (throw (ex-info "keycloak-idp: falha ao enviar convite (infra)" {:status status :corpo corpo})))
+      true)))
 
 (defrecord KeycloakIdp [config jwks-provider-fn jwks-cache http-client]
   component/Lifecycle
