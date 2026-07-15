@@ -21,6 +21,9 @@
   (criar-identidade! [this identidade] "CPF -> id canonico (idempotente).")
   (identidade-por-cpf [this cpf])
   (identidade-por-id [this id])
+  (nome-por-id [this id]
+    "Leitura ESTREITA (so' :nome, sem :cpf) — pra caminhos que nao devem ver CPF (ex.: provisionar
+    usuario no IdP). Review Task 8 IMPORTANT-2b: nao reusar `identidade-por-id` aqui de proposito.")
   (vincular-externa! [this vinculo-externo] "Liga sub gov.br -> identidade (anti-takeover).")
   (identidade-por-sub [this provedor sub])
   (criar-sessao! [this sessao] "Sessao opaca de login (custodia BFF): gera+INSERT o hash, devolve o SEGREDO CRU.")
@@ -50,6 +53,7 @@
   (criar-identidade! [_ identidade] (id/inserir! (:ds datasource) identidade))
   (identidade-por-cpf [_ cpf] (id/por-cpf (:ds datasource) cpf))
   (identidade-por-id [_ id] (id/por-id (:ds datasource) id))
+  (nome-por-id [_ id] (id/nome-por-id (:ds datasource) id))
   (vincular-externa! [_ ve] (id/vincular-externa! (:ds datasource) ve))
   (identidade-por-sub [_ provedor sub] (id/identidade-por-sub (:ds datasource) provedor sub))
   (criar-sessao! [_ sessao] (sess/inserir! (:ds datasource) sessao))

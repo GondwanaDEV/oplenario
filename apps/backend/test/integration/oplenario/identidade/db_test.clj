@@ -61,6 +61,16 @@
       (is (= iid (id/identidade-por-sub *ds* "gov_br" sub)) "resolve (gov_br, sub) -> identidade"))
     (is (nil? (id/identidade-por-sub *ds* "gov_br" (str "inexistente-" (random-uuid)))) "sub desconhecido -> nil")))
 
+(deftest nome-por-id-nao-le-cpf
+  ;; review Task 8 IMPORTANT-2b: `nome-por-id` (usado por conceder-acesso-handler pra provisionar o
+  ;; usuario no Keycloak) tem que ser uma leitura ESTREITA de verdade — sem :cpf na linha devolvida, nao
+  ;; so' por convencao de destructuring no caller.
+  (let [iid (random-uuid) cpf (cpf-valido)]
+    (id/inserir! *ds* {:id iid :cpf cpf :nome "Helena Matos"})
+    (let [r (id/nome-por-id *ds* iid)]
+      (is (= "Helena Matos" (:nome r)) "devolve o nome")
+      (is (not (contains? r :cpf)) "a linha NAO carrega :cpf — estruturalmente impossivel de vazar daqui"))))
+
 (deftest cpf-invalido-e-rejeitado
   (is (thrown? AssertionError (id/inserir! *ds* {:id (random-uuid) :cpf "12345678900" :nome "X"}))
       "CPF com digito verificador invalido e' rejeitado")

@@ -32,6 +32,16 @@
     (jdbc/execute-one! conn
       (sql/format {:select [:id :cpf :nome] :from [:identidade.identidade] :where [:= :id id]}))))
 
+(defn nome-por-id
+  "Leitura ESTREITA (so' :nome) — usada por caminhos que precisam so' do nome (ex.: provisionar usuario
+  Keycloak) e NAO devem materializar CPF em memoria (review Task 8 IMPORTANT-2b: seguranca estrutural,
+  nao incidental — um `(merge {...} identidade)` futuro sobre `por-id` vazaria CPF pro payload do IdP;
+  este caminho torna isso impossivel por construcao)."
+  [conn id]
+  (comum/linha->kebab
+    (jdbc/execute-one! conn
+      (sql/format {:select [:id :nome] :from [:identidade.identidade] :where [:= :id id]}))))
+
 (defn identidade-por-sub
   "Resolve (provedor, sub) -> identidade_id. Base do login cidadao via gov.br (F1.4)."
   [conn provedor sub]
