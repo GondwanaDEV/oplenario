@@ -37,3 +37,11 @@ export interface VereadorFichaOut {
 export interface ListaVereadoresOut {
   vereadores: VereadorLinhaOut[];
 }
+
+export interface LegislaturaVigenteOut {
+  id: string;
+  numero: number;
+  anoInicio: number;
+  anoFim: number;
+  vigente: boolean;
+}

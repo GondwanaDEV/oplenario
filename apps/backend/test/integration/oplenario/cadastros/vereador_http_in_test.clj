@@ -116,3 +116,88 @@
                            :get (str "/cadastros/vereadores/" (random-uuid))
                            :headers (com-bearer (token (random-uuid) (random-uuid))))]
     (is (= 403 (:status r)))))
+
+;; ---------- Task 6: escritas + legislatura-vigente ----------
+
+(defn- fake-repo-escrita
+  "RepoCadastros fake com as escritas + legislatura-vigente. Cada fn devolve o que o teste precisa; use nil
+  p/ 404 e (throw (ex-info ... {:tipo :conflito/...})) p/ 409."
+  [{:keys [criar editar mandato licenca leg]}]
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify repo-cad/RepoCadastros
+    (criar-vereador!    [_ _ _]     (or criar {:next.jdbc/update-count 1}))
+    (atualizar-vereador! [_ _ _ _]  (if (some? editar) editar 1))
+    (registrar-mandato! [_ _ m]     (if (fn? mandato) (mandato m) mandato))
+    (registrar-licenca! [_ _ _ l _] (if (fn? licenca) (licenca l) licenca))
+    (legislatura-vigente [_ _]      leg)))
+
+(defn- post [service tok path body]
+  ;; "Content-Type" CAPITALIZADO — o mock de `io.pedestal.test` (getContentType) le' a chave EXATA
+  ;; `Content-Type`, case-sensitive (mesmo precedente de proposicao-escrita-http-in-test/com-bearer);
+  ;; minuscula silenciosamente vira corpo vazio (`it/corpo-json` nao dispara -> :json-params nil -> 400).
+  (pt/response-for service :post path
+    :headers (assoc (com-bearer tok) "Content-Type" "application/json")
+    :body (json/write-value-as-string body)))
+(defn- patch* [service tok path body]
+  (pt/response-for service :patch path
+    :headers (assoc (com-bearer tok) "Content-Type" "application/json")
+    :body (json/write-value-as-string body)))
+
+(deftest criar-vereador-201
+  (let [ente (random-uuid)
+        r (post (service-fn #{"secretario"} (fake-repo-escrita {}))
+                (token ente (random-uuid)) "/cadastros/vereadores" {:nome "Nova Vereadora"})]
+    (is (= 201 (:status r)))
+    (is (string? (:id (ler-json r))) "devolve {:id}")))
+
+(deftest criar-vereador-corpo-invalido-400
+  (let [r (post (service-fn #{"secretario"} (fake-repo-escrita {}))
+                (token (random-uuid) (random-uuid)) "/cadastros/vereadores" {:nome-parlamentar "sem nome"})]
+    (is (= 400 (:status r)) "sem :nome -> adapters/in lanca :validacao/invalido -> 400")))
+
+(deftest criar-vereador-sem-papel-403
+  (let [r (post (service-fn #{"vereador"} (fake-repo-escrita {}))
+                (token (random-uuid) (random-uuid)) "/cadastros/vereadores" {:nome "X"})]
+    (is (= 403 (:status r)))))
+
+(deftest editar-vereador-200-e-404
+  (let [tok (token (random-uuid) (random-uuid))]
+    (is (= 200 (:status (patch* (service-fn #{"secretario"} (fake-repo-escrita {:editar 1}))
+                                tok (str "/cadastros/vereadores/" (random-uuid)) {:nome "Novo"}))))
+    (is (= 404 (:status (patch* (service-fn #{"secretario"} (fake-repo-escrita {:editar 0}))
+                                tok (str "/cadastros/vereadores/" (random-uuid)) {:nome "Novo"}))))
+    (is (= 404 (:status (patch* (service-fn #{"secretario"} (fake-repo-escrita {:editar 1}))
+                                tok "/cadastros/vereadores/nao-uuid" {:nome "Novo"})))
+        ":id malformado -> 404, nunca 500")))
+
+(deftest registrar-mandato-201-404-409
+  (let [tok (token (random-uuid) (random-uuid)) ver (random-uuid)
+        corpo {:legislatura-id (str (random-uuid)) :natureza "titular" :vigencia-inicio "2025-01-01"}
+        sobrepoe (fn [_] (throw (ex-info "x" {:tipo :conflito/mandato-sobreposto})))]
+    (is (= 201 (:status (post (service-fn #{"secretario"} (fake-repo-escrita {:mandato (fn [m] {:id (:id m)})}))
+                              tok (str "/cadastros/vereadores/" ver "/mandatos") corpo))))
+    (is (= 404 (:status (post (service-fn #{"secretario"} (fake-repo-escrita {:mandato nil}))
+                              tok (str "/cadastros/vereadores/" ver "/mandatos") corpo))))
+    (is (= 409 (:status (post (service-fn #{"secretario"} (fake-repo-escrita {:mandato sobrepoe}))
+                              tok (str "/cadastros/vereadores/" ver "/mandatos") corpo))))))
+
+(deftest registrar-licenca-201-404-409
+  (let [tok (token (random-uuid) (random-uuid)) ver (random-uuid)
+        corpo {:inicio "2026-03-01"}
+        sem-vigente (fn [_] (throw (ex-info "x" {:tipo :conflito/sem-mandato-vigente})))]
+    (is (= 201 (:status (post (service-fn #{"secretario"} (fake-repo-escrita {:licenca (fn [l] {:id (:id l)})}))
+                              tok (str "/cadastros/vereadores/" ver "/licencas") corpo))))
+    (is (= 404 (:status (post (service-fn #{"secretario"} (fake-repo-escrita {:licenca nil}))
+                              tok (str "/cadastros/vereadores/" ver "/licencas") corpo))))
+    (is (= 409 (:status (post (service-fn #{"secretario"} (fake-repo-escrita {:licenca sem-vigente}))
+                              tok (str "/cadastros/vereadores/" ver "/licencas") corpo))))))
+
+(deftest legislatura-vigente-200-e-404
+  (let [tok (token (random-uuid) (random-uuid))
+        leg {:id (random-uuid) :numero 19 :ano-inicio 2025 :ano-fim 2028 :vigente true}]
+    (let [r (pt/response-for (service-fn #{"secretario"} (fake-repo-escrita {:leg leg}))
+                             :get "/cadastros/legislatura-vigente" :headers (com-bearer tok))]
+      (is (= 200 (:status r)))
+      (is (= 19 (:numero (ler-json r)))))
+    (is (= 404 (:status (pt/response-for (service-fn #{"secretario"} (fake-repo-escrita {:leg nil}))
+                                         :get "/cadastros/legislatura-vigente" :headers (com-bearer tok)))))))

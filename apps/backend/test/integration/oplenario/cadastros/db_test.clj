@@ -221,3 +221,80 @@
         (estrutura/inserir-ente! tx {:ente-id ente :municipio-ibge "2304400" :nome-oficial "X"})
         (let [linha (jdbc/execute-one! tx ["SELECT criado_em FROM cadastros.ente"])]
           (is (instance? Instant (:ente/criado_em linha)) "timestamptz volta como Instant (db-tipos)"))))))
+
+(deftest exclude-rejeita-mandato-vigente-sobreposto
+  ;; Slice 4: a escrita interativa pode criar sobreposicao (a leitura da Slice 3 nao podia). O EXCLUDE e' a
+  ;; REDE — dois mandatos 'vigente' efetivados do MESMO vereador com vigencias que se tocam sao rejeitados.
+  (let [ente (random-uuid) leg (random-uuid) ver (random-uuid)
+        ini (LocalDate/parse "2025-01-01")]
+    (seed-municipio!)
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (estrutura/inserir-ente! tx {:ente-id ente :municipio-ibge "2304400" :nome-oficial "Camara EXCLUDE"})
+        (estrutura/inserir-legislatura! tx {:id leg :ente-id ente :numero 20 :ano-inicio 2025 :ano-fim 2028 :vigente true})
+        (vereador/inserir! tx {:id ver :ente-id ente :nome "Ana"})
+        (vereador/inserir-mandato! tx {:id (random-uuid) :ente-id ente :vereador-id ver :legislatura-id leg
+                                       :estado "vigente" :vigencia-inicio ini})))
+    (is (thrown? Exception
+          (tenancy/com-tenant* *ds* ente
+            (fn [tx]
+              (vereador/inserir-mandato! tx {:id (random-uuid) :ente-id ente :vereador-id ver :legislatura-id leg
+                                             :estado "vigente" :vigencia-inicio ini}))))
+        "2o mandato 'vigente' sobreposto do mesmo vereador -> EXCLUDE rejeita")
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        ;; um mandato 'licenciado' sobreposto NAO viola (o WHERE do EXCLUDE so' cobre estado='vigente').
+        (is (some? (vereador/inserir-mandato! tx {:id (random-uuid) :ente-id ente :vereador-id ver :legislatura-id leg
+                                                  :estado "licenciado" :vigencia-inicio ini}))
+            "mandato 'licenciado' sobreposto e' permitido (fora do predicado do EXCLUDE)")))))
+
+(deftest atualizar-troca-nome-e-nome-parlamentar
+  (let [ente (random-uuid) ver (random-uuid)]
+    (seed-municipio!)
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (estrutura/inserir-ente! tx {:ente-id ente :municipio-ibge "2304400" :nome-oficial "X"})
+        (vereador/inserir! tx {:id ver :ente-id ente :nome "Antigo" :nome-parlamentar "Velho"})
+        (is (= 1 (vereador/atualizar! tx ente ver {:nome "Novo" :nome-parlamentar "Zé Novo"})) "1 linha atualizada")
+        (let [v (vereador/buscar tx ente ver)]
+          (is (= "Novo" (:nome v)))
+          (is (= "Zé Novo" (:nome-parlamentar v))))
+        ;; UPDATE parcial: so' :nome-parlamentar (mantem :nome)
+        (vereador/atualizar! tx ente ver {:nome-parlamentar "Só Apelido"})
+        (let [v (vereador/buscar tx ente ver)]
+          (is (= "Novo" (:nome v)) ":nome preservado num PATCH que so' mandou :nome-parlamentar")
+          (is (= "Só Apelido" (:nome-parlamentar v))))
+        (is (= 0 (vereador/atualizar! tx ente (random-uuid) {:nome "X"})) "id inexistente -> 0 linhas")))))
+
+(deftest mandato-vigente-de-vereador-so-pega-estado-vigente
+  (let [ente (random-uuid) leg (random-uuid) ver (random-uuid)
+        ini (LocalDate/parse "2025-01-01") hoje (LocalDate/parse "2026-07-14")]
+    (seed-municipio!)
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (estrutura/inserir-ente! tx {:ente-id ente :municipio-ibge "2304400" :nome-oficial "X"})
+        (estrutura/inserir-legislatura! tx {:id leg :ente-id ente :numero 20 :ano-inicio 2025 :ano-fim 2028 :vigente true})
+        (vereador/inserir! tx {:id ver :ente-id ente :nome "Ana"})
+        (vereador/inserir-mandato! tx {:id (random-uuid) :ente-id ente :vereador-id ver :legislatura-id leg
+                                       :estado "vigente" :vigencia-inicio ini})
+        (let [mv (vereador/mandato-vigente-de-vereador tx ente ver hoje)]
+          (is (= "vigente" (:estado mv)))
+          (is (some? (:id mv))))
+        ;; um vereador SEM mandato vigente -> nil
+        (is (nil? (vereador/mandato-vigente-de-vereador tx ente (random-uuid) hoje)))))))
+
+(deftest mandato-sobreposto-detecta-overlap-de-vigente
+  (let [ente (random-uuid) leg (random-uuid) ver (random-uuid)
+        ini (LocalDate/parse "2025-01-01")]
+    (seed-municipio!)
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (estrutura/inserir-ente! tx {:ente-id ente :municipio-ibge "2304400" :nome-oficial "X"})
+        (estrutura/inserir-legislatura! tx {:id leg :ente-id ente :numero 20 :ano-inicio 2025 :ano-fim 2028 :vigente true})
+        (vereador/inserir! tx {:id ver :ente-id ente :nome "Ana"})
+        (vereador/inserir-mandato! tx {:id (random-uuid) :ente-id ente :vereador-id ver :legislatura-id leg
+                                       :estado "vigente" :vigencia-inicio ini})  ; aberto (fim nil)
+        (is (true?  (vereador/mandato-sobreposto? tx ente ver (LocalDate/parse "2026-01-01") nil))
+            "novo intervalo dentro do aberto -> sobrepoe")
+        (is (false? (vereador/mandato-sobreposto? tx ente (random-uuid) (LocalDate/parse "2026-01-01") nil))
+            "outro vereador -> nao sobrepoe")))))

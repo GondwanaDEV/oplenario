@@ -5,6 +5,9 @@
 // boundary.ts, estados carregando/pronto/erro, cleanup por `vivo` (abort-safe), caso sem token derivado no
 // retorno (nunca setState síncrono dentro do effect, exigido por eslint-plugin-react-hooks v7
 // `set-state-in-effect`).
+//
+// `versao` (Task 9) é um token de refetch puro — a página o incrementa depois de uma escrita bem-sucedida
+// (criar/editar vereador) pra forçar a lista a se refazer; o valor em si não é usado no corpo do fetch.
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "./api-fetch";
@@ -14,7 +17,7 @@ import { semCredencial } from "./modo";
 
 type Estado = "carregando" | "pronto" | "erro";
 
-export function useVereadores(token: string | null) {
+export function useVereadores(token: string | null, versao = 0) {
   const [dados, setDados] = useState<VereadorLinhaOut[]>([]);
   const [estado, setEstado] = useState<Estado>("carregando");
 
@@ -40,7 +43,7 @@ export function useVereadores(token: string | null) {
     return () => {
       vivo = false;
     };
-  }, [token]);
+  }, [token, versao]);
 
   // caso de erro sem token é derivado aqui (mantém o effect livre de setState síncrono)
   if (semCredencial(token)) {

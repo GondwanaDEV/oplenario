@@ -94,6 +94,46 @@ function fetchMockPara(mapaFichas: Record<string, unknown>) {
   }) as unknown as typeof fetch;
 }
 
+const legislaturaVigenteFake = { id: "leg-1", numero: 19, "ano-inicio": 2025, "ano-fim": 2028, vigente: true };
+
+// Mirror de fetchMockPara + as rotas de ESCRITA (Task 9): POST criar/mandato/licença por method+path, e a
+// legislatura vigente (necessária pro form de mandato renderizar os campos em vez do estado "sem
+// legislatura"). `mandato409` simula o conflito de domínio real do backend
+// (`diplomat/http/in.clj` -> `:conflito/mandato-sobreposto` -> 409 `{:erro "..."}`).
+function fetchMockComEscrita(mapaFichas: Record<string, unknown>, opts: { mandato409?: boolean } = {}) {
+  return vi.fn(async (url: string, init?: RequestInit) => {
+    const method = init?.method ?? "GET";
+    if (method === "GET" && url === "/api/cadastros/vereadores") {
+      return { ok: true, json: async () => listaFake } as Response;
+    }
+    if (method === "GET" && url === "/api/cadastros/legislatura-vigente") {
+      return { ok: true, status: 200, json: async () => legislaturaVigenteFake } as Response;
+    }
+    if (method === "GET") {
+      const m = /^\/api\/cadastros\/vereadores\/(.+)$/.exec(url);
+      if (m) {
+        const id = decodeURIComponent(m[1]);
+        const ficha = mapaFichas[id];
+        if (!ficha) return { ok: false, status: 404 } as Response;
+        return { ok: true, json: async () => ficha } as Response;
+      }
+    }
+    if (method === "POST" && url === "/api/cadastros/vereadores") {
+      return { ok: true, json: async () => ({ id: "v3" }) } as Response;
+    }
+    if (method === "POST" && /\/mandatos$/.test(url) && opts.mandato409) {
+      return {
+        ok: false, status: 409,
+        json: async () => ({ erro: "ja existe mandato vigente sobreposto para este vereador" }),
+      } as Response;
+    }
+    if (method === "POST" && (/\/mandatos$/.test(url) || /\/licencas$/.test(url))) {
+      return { ok: true, json: async () => ({ id: "novo-registro" }) } as Response;
+    }
+    return { ok: false, status: 404 } as Response;
+  });
+}
+
 describe("PaginaVereadores", () => {
   afterEach(() => {
     cleanup();
@@ -152,16 +192,89 @@ describe("PaginaVereadores", () => {
     expect(screen.getByText("2")).toBeTruthy();
   });
 
-  it("as ações do cadastro (novo/editar/ver proposições/licença) ficam desabilitadas, com Em breve explicando por quê", async () => {
+  it("Novo vereador/Editar cadastro/Registrar mandato ficam habilitados; Ver proposições segue deferido (Em breve); Registrar licença só habilita com mandato vigente", async () => {
     global.fetch = fetchMockPara(fichas);
     renderComProviders("tok-de-teste");
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy());
 
-    expect((screen.getByRole("button", { name: /novo vereador/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /novo vereador/i }) as HTMLButtonElement).disabled).toBe(false);
     expect((screen.getByRole("button", { name: /ver proposições/i }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: /editar cadastro/i }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: /registrar licença/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /editar cadastro/i }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("button", { name: /registrar mandato/i }) as HTMLButtonElement).disabled).toBe(false);
+    // Helena (v1) tem mandato "vigente" -> licença habilitada
+    expect((screen.getByRole("button", { name: /registrar licença/i }) as HTMLButtonElement).disabled).toBe(false);
+
+    // Rafael (v2) está "licenciado" -> licença desabilitada, com o motivo no title
+    fireEvent.click(screen.getByRole("option", { name: /Rafael Melo/i }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Rafael Melo" })).toBeTruthy());
+    const btnLicenca = screen.getByRole("button", { name: /registrar licença/i }) as HTMLButtonElement;
+    expect(btnLicenca.disabled).toBe(true);
+    expect(btnLicenca.title).toMatch(/mandato vigente/i);
+  });
+
+  it("abrir 'Novo vereador' revela o form; submeter nome válido POSTa e refaz o fetch da lista", async () => {
+    const fetchMock = fetchMockComEscrita(fichas);
+    global.fetch = fetchMock as unknown as typeof fetch;
+    renderComProviders("tok-de-teste");
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: /novo vereador/i }));
+    const form = await screen.findByRole("form", { name: /^novo vereador$/i });
+
+    const chamadasListaAntes = fetchMock.mock.calls.filter(
+      ([url, init]) => url === "/api/cadastros/vereadores" && init?.method === undefined,
+    ).length;
+
+    fireEvent.change(screen.getByLabelText("Nome*"), { target: { value: "Nova Vereadora Teste" } });
+    fireEvent.submit(form);
+
+    await waitFor(() => {
+      const chamouPost = fetchMock.mock.calls.some(
+        ([url, init]) => url === "/api/cadastros/vereadores" && init?.method === "POST",
+      );
+      expect(chamouPost).toBe(true);
+    });
+
+    await waitFor(() => {
+      const chamadasListaDepois = fetchMock.mock.calls.filter(
+        ([url, init]) => url === "/api/cadastros/vereadores" && init?.method === undefined,
+      ).length;
+      expect(chamadasListaDepois).toBeGreaterThan(chamadasListaAntes);
+    });
+  });
+
+  it("Novo vereador: submit fica desabilitado quando o nome está em branco após tocar", async () => {
+    global.fetch = fetchMockPara(fichas);
+    renderComProviders("tok-de-teste");
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: /novo vereador/i }));
+    const form = await screen.findByRole("form", { name: /^novo vereador$/i });
+    fireEvent.submit(form); // toca o form sem preencher o nome
+
+    await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
+    expect((screen.getByRole("button", { name: /criar vereador/i }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("Registrar mandato: um 409 do servidor (mandato sobreposto) aparece como alerta inline, sem quebrar", async () => {
+    const fetchMock = fetchMockComEscrita(fichas, { mandato409: true });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    renderComProviders("tok-de-teste");
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: /registrar mandato/i }));
+    const form = await screen.findByRole("form", { name: /^registrar mandato$/i });
+
+    fireEvent.change(screen.getByLabelText(/início da vigência/i), { target: { value: "2025-06-01" } });
+    fireEvent.submit(form);
+
+    await waitFor(() => expect(screen.getByText(/mandato vigente sobreposto/i)).toBeTruthy());
+    // a página não quebrou: a ficha de Helena segue montada
+    expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy();
   });
 
   it("ArrowDown/ArrowUp no listbox move a seleção e chamam router.replace com o próximo id", async () => {

@@ -79,4 +79,13 @@ describe("useVereadores", () => {
     await waitFor(() => expect(result.current.estado).toBe("pronto"));
     expect(result.current.dados).toEqual([]);
   });
+
+  it("refaz o fetch quando `versao` muda (Task 9 — refetch após escrita)", async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ vereadores: [] }) }) as Response);
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const { rerender } = renderHook(({ v }: { v: number }) => useVereadores("tok", v), { initialProps: { v: 0 } });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    rerender({ v: 1 });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+  });
 });

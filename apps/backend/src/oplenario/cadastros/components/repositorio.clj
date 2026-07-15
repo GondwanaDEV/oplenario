@@ -36,6 +36,14 @@
   (mandatos-do-vereador [this ente-id vereador-id])
   (criar-licenca! [this ente-id licenca])
   (criar-suplencia! [this ente-id suplencia])
+  (atualizar-vereador! [this ente-id id campos]
+    "UPDATE parcial de nome/nome-parlamentar da linha efetivada. Devolve update-count (0 = inexistente).")
+  (registrar-mandato! [this ente-id mandato]
+    "INSERT de mandato 'vigente' numa tx: 404 (nil) se vereador/legislatura ausente; throws
+     :conflito/mandato-sobreposto se ja' ha' vigente sobreposto (guard + a rede EXCLUDE); senao {:id}.")
+  (registrar-licenca! [this ente-id vereador-id licenca data]
+    "Licenca record-only numa tx: 404 (nil) se vereador ausente; throws :conflito/sem-mandato-vigente se
+     nao ha' mandato vigente cobrindo `data`; senao INSERT licenca + UPDATE mandato.estado='licenciado' -> {:id}.")
   ;; comissao / cargo / membro
   (criar-comissao! [this ente-id comissao])
   (buscar-comissao [this ente-id id])
@@ -74,6 +82,28 @@
   (mandatos-do-vereador [this ente-id ver-id] (transacao this ente-id #(vereador/mandatos-do-vereador % ente-id ver-id)))
   (criar-licenca! [this ente-id l] (transacao this ente-id #(vereador/inserir-licenca! % l)))
   (criar-suplencia! [this ente-id s] (transacao this ente-id #(vereador/inserir-suplencia! % s)))
+  (atualizar-vereador! [this ente-id id campos]
+    (transacao this ente-id #(vereador/atualizar! % ente-id id campos)))
+  (registrar-mandato! [this ente-id m]
+    (transacao this ente-id
+      (fn [tx]
+        (cond
+          (nil? (vereador/buscar tx ente-id (:vereador-id m)))                 nil
+          (nil? (estrutura/buscar-legislatura tx (:legislatura-id m)))         nil
+          (vereador/mandato-sobreposto? tx ente-id (:vereador-id m)
+                                        (:vigencia-inicio m) (:vigencia-fim m))
+          (throw (ex-info "mandato vigente sobreposto" {:tipo :conflito/mandato-sobreposto}))
+          :else (do (vereador/inserir-mandato! tx m) {:id (:id m)})))))
+  (registrar-licenca! [this ente-id vereador-id l data]
+    (transacao this ente-id
+      (fn [tx]
+        (if (nil? (vereador/buscar tx ente-id vereador-id))
+          nil
+          (if-let [mv (vereador/mandato-vigente-de-vereador tx ente-id vereador-id data)]
+            (do (vereador/inserir-licenca! tx (assoc l :mandato-id (:id mv)))
+                (vereador/mudar-estado! tx {:id (:id mv) :estado "licenciado"})
+                {:id (:id l)})
+            (throw (ex-info "sem mandato vigente para licenciar" {:tipo :conflito/sem-mandato-vigente})))))))
   (criar-comissao! [this ente-id c] (transacao this ente-id #(comissao/inserir! % c)))
   (buscar-comissao [this ente-id id] (transacao this ente-id #(comissao/buscar % id)))
   (mesa-vigente [this ente-id data] (transacao this ente-id #(comissao/mesa-vigente % data)))

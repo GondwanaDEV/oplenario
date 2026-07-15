@@ -91,3 +91,30 @@
   .pg-cab { grid-template-columns: 1fr; }
   .ficha-grid { grid-template-columns: 1fr; }
 }
+
+/* ---- forms de escrita (Task 9 — novo/editar/mandato/licença) ----
+   Painel INLINE (não modal, evita o carry de focus-trap da C4); mesma disciplina de `.campo`/`.entrada` de
+   formulario-preenchimento.css, mas com nomes curtos próprios desta superfície (`.form-cad`/`.campo`)
+   porque o CSS é page-scoped neste repo. `.campo-erro` usa `--aviso-texto` (AA amber, não
+   `--acento-texto`/telha — aqui é validação de campo, não erro de sistema) e a borda do campo usa
+   `--campo-borda` (contraste ≥3:1 auditado em tokens.css). */
+.painel-cad { margin: 1rem 0 0; }
+.form-cad {
+  background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio);
+  box-shadow: var(--sombra); padding: 1.1rem 1.3rem; display: flex; flex-direction: column; gap: 0.9rem;
+  max-width: 480px;
+}
+.form-cad .campo { display: flex; flex-direction: column; gap: 0.35rem; }
+.form-cad .campo label,
+.form-cad .campo > span:first-child { font-family: var(--display); font-weight: 600; font-size: var(--t-13); color: var(--texto); }
+.form-cad .campo input,
+.form-cad .campo select {
+  font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); background: var(--surface-2);
+  border: 1.5px solid var(--campo-borda); border-radius: var(--raio-sm); padding: 0.55rem 0.7rem; min-height: 40px;
+}
+.form-cad .campo input:disabled,
+.form-cad .campo select:disabled { opacity: 0.65; cursor: not-allowed; }
+.form-cad .campo input:focus-visible,
+.form-cad .campo select:focus-visible { outline: none; border-color: var(--foco); box-shadow: 0 0 0 4px color-mix(in srgb, var(--foco) 18%, transparent); }
+.campo-erro { font-size: var(--t-12); color: var(--aviso-texto); margin: 0; }
+.form-acoes { display: flex; gap: 0.6rem; flex-wrap: wrap; }
