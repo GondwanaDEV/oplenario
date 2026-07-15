@@ -27,3 +27,10 @@
    [:inicio [:string {:min 1}]]
    [:fim {:optional true} [:maybe :string]]
    [:motivo {:optional true} [:maybe :string]]])
+
+(def LigarIdentidade
+  "Onda D Slice 5 Task 9 — passo (2) do provisionamento (ligar vereador->identidade). `identidade-id` E'
+   o corpo de proposito aqui (ao contrario de CriarVereador/etc, onde ref cross-modulo NUNCA vem do corpo):
+   esta rota EXISTE pra receber esse id, gated `admin_ente` (ligar identidade e' parte de conceder acesso)."
+  [:map {:closed true}
+   [:identidade-id [:string {:min 1}]]])

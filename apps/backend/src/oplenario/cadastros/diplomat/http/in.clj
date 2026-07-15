@@ -103,6 +103,38 @@
             (http/json-resposta 409 {:erro "vereador sem mandato vigente para licenciar"})
             (throw e)))))))
 
+(defn- ligar-identidade-handler
+  "PATCH /cadastros/vereadores/:id/identidade (Onda D Slice 5 Task 9). Gated `admin_ente` (NAO
+  'secretario', ver `rotas` abaixo): ligar identidade e' parte de CONCEDER ACESSO — um 'secretario' pode
+  cadastrar um vereador mas nunca deveria poder ligar a PROPRIA identidade a esse cadastro e votar.
+
+  `identidade-existe?` e' o guard de SERVICO injetado pelo host (mesma forma de `info-ente`) — `cadastros`
+  nunca importa `identidade` (§22.10) e nao ha' FK cross-schema (`identidade_id` e' so' um GUARD ref, ver
+  a migration `...0010-cadastros`) p/ garantir a referencia no banco. O adapters/in roda INCONDICIONAL no
+  `let` (mesmo padrao de editar-vereador-handler acima) — corpo invalido (`identidade-id` que nao parseia
+  UUID) -> 400 mesmo que `:id` do path TAMBEM seja invalido (validacao tem precedencia). Com o corpo valido:
+  `id` do path invalido -> 404 (mesmo contrato das outras rotas deste arquivo, nunca 500); senao
+  identidade-existe? -> 404 (a mesma resposta do vereador inexistente, nao vaza qual dos dois faltou).
+  Conflito (identidade ja' ligada a OUTRO vereador nesta Casa, indice UNIQUE parcial) -> 409 capturado
+  LOCALMENTE (mesmo padrao de registrar-mandato-handler/registrar-licenca-handler acima)."
+  [repo identidade-existe?]
+  (fn [req]
+    (let [ente-id (:ente-id (:ator req))
+          id (parse-uuid (get-in req [:path-params :id]))
+          ident (adapters-in/ligar-identidade->dominio (:json-params req))]
+      (cond
+        (nil? id) (http/json-resposta 404 {:erro "vereador nao encontrado"})
+        (not (identidade-existe? ident)) (http/json-resposta 404 {:erro "identidade nao encontrada"})
+        :else
+        (try
+          (if (pos? (controllers/ligar-identidade repo ente-id id ident))
+            (http/json-resposta 200 {:id (str id) :identidade-id (str ident)})
+            (http/json-resposta 404 {:erro "vereador nao encontrado"}))
+          (catch clojure.lang.ExceptionInfo e
+            (if (= :conflito/identidade-ja-vinculada (:tipo (ex-data e)))
+              (http/json-resposta 409 {:erro "identidade ja vinculada a outro vereador nesta Casa"})
+              (throw e))))))))
+
 (defn- legislatura-vigente-handler
   "GET /cadastros/legislatura-vigente. Sem legislatura vigente -> 404 (nunca corpo vazio 200)."
   [repo]
@@ -113,13 +145,16 @@
         (http/json-resposta 404 {:erro "nenhuma legislatura vigente"})))))
 
 (defn rotas
-  "Fragmento de rotas da leitura de vereadores (table syntax Pedestal). Recebe o interceptor `auth`
-  (compartilhado), o `repo-cadastros` (Repo-Component do proprio modulo) e o `relogio` (kernel/tempo,
-  injetado pelo host — producao le o relogio do sistema, teste crava o instante; mesmo contrato de
-  `legislativo-http/rotas`/`participacao-http/rotas`). Ambas as rotas EXIGEM a authz grossa (papel
-  'secretario')."
-  [{:keys [auth repo-cadastros relogio]}]
-  (let [papel (it/exige-papel "secretario")]
+  "Fragmento de rotas de vereadores (table syntax Pedestal). Recebe o interceptor `auth` (compartilhado), o
+  `repo-cadastros` (Repo-Component do proprio modulo), o `relogio` (kernel/tempo, injetado pelo host —
+  producao le o relogio do sistema, teste crava o instante; mesmo contrato de `legislativo-http/rotas`/
+  `participacao-http/rotas`) e `identidade-existe?` (Onda D Slice 5 Task 9 — guard de SERVICO injetado
+  pelo host, mesma forma de `info-ente`; `cadastros` nunca importa `identidade`, §22.10). Todas as rotas
+  EXIGEM authz grossa — a maioria papel 'secretario', MAS `/identidade` exige `admin_ente` (ligar
+  identidade e' parte de CONCEDER ACESSO, nao de cadastro; ver docstring de `ligar-identidade-handler`)."
+  [{:keys [auth repo-cadastros relogio identidade-existe?]}]
+  (let [papel (it/exige-papel "secretario")
+        papel-admin-ente (it/exige-papel "admin_ente")]
     #{["/cadastros/vereadores"     :get [auth papel (listar-handler repo-cadastros relogio)]
        :route-name :cadastros/listar-vereadores]
       ["/cadastros/vereadores/:id" :get [auth papel (ficha-handler repo-cadastros relogio)]
@@ -134,5 +169,8 @@
       ["/cadastros/vereadores/:id/licencas" :post
        [auth papel it/corpo-json (registrar-licenca-handler repo-cadastros relogio)]
        :route-name :cadastros/registrar-licenca]
+      ["/cadastros/vereadores/:id/identidade" :patch
+       [auth papel-admin-ente it/corpo-json (ligar-identidade-handler repo-cadastros identidade-existe?)]
+       :route-name :cadastros/ligar-identidade]
       ["/cadastros/legislatura-vigente" :get [auth papel (legislatura-vigente-handler repo-cadastros)]
        :route-name :cadastros/legislatura-vigente]}))

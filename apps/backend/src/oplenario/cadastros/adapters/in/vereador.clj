@@ -83,3 +83,12 @@
     (validar! wire/RegistrarLicenca mm "corpo de registrar licenca invalido")
     {:id (random-uuid) :ente-id (:ente-id ator)
      :inicio (->data! (:inicio mm) :inicio) :fim (->data! (:fim mm) :fim) :motivo (:motivo mm)}))
+
+(defn ligar-identidade->dominio
+  "Task 9 (Onda D Slice 5) — coage `identidade-id` do corpo pra UUID (`:validacao/invalido` -> 400 se
+   ausente/mal-formado, mesmo caminho de ->uuid! usado em registrar-mandato->dominio p/ legislatura-id)."
+  [wire-in]
+  (when-not (map? wire-in) (invalido! "corpo deve ser objeto JSON" {:campo :corpo}))
+  (let [mm (keywordizar wire-in)]
+    (validar! wire/LigarIdentidade mm "corpo de ligar identidade invalido")
+    (->uuid! (:identidade-id mm) :identidade-id)))

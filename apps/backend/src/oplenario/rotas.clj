@@ -8,6 +8,7 @@
             [oplenario.compliance.diplomat.http.in :as compliance-http]
             [oplenario.config :as config]
             [oplenario.http :as http]
+            [oplenario.identidade.components.repositorio :as repo-identidade-comp]
             [oplenario.identidade.diplomat.http.auth-in :as auth-http]
             [oplenario.identidade.diplomat.http.in :as identidade-http]
             [oplenario.interceptors :as it]
@@ -44,7 +45,7 @@
   [{:keys [idp repo-identidade repo-sessoes repo-legislativo repo-compliance repo-participacao
            repo-transparencia repo-paineis repo-cadastros canal-store objeto-store painel-compliance
            presenca-resumo esic-cumprimento relatores-pendentes info-ente registro-fatos
-           keycloak sessao]}]
+           keycloak sessao identidade-existe?]}]
   (let [auth (it/autenticacao idp repo-identidade)
         ;; F6: relogio de producao (kernel/tempo) p/ o prazo LAI do e-SIC — determinismo em teste vem de
         ;; injetar relogio-fixo direto no fragmento de rotas (participacao-http/rotas). resolver-ente-publico
@@ -98,6 +99,13 @@
         ;; transparencia nunca importa cadastros (§22.10). Ente sem perfil cadastrado -> nil -> 404 na borda.
         info-ente (or info-ente
                       (fn [ente-id] (repo-cadastros-comp/buscar-ente repo-cadastros ente-id)))
+        ;; Onda D Slice 5 Task 9: guard de SERVICO — cadastros NUNCA importa identidade (§22.10) e nao ha'
+        ;; FK cross-schema em cadastros.vereador.identidade_id (so' GUARD ref). O host injeta a existencia
+        ;; via o Repo-Component de identidade (`identidade-por-id`, SUPRATENANT); mesma inversao de
+        ;; dependencia de info-ente/consultar-sessao/resolver-municipio. Override injetavel p/ os testes
+        ;; DB-free da borda de cadastros.
+        identidade-existe? (or identidade-existe?
+                               (fn [ident-id] (some? (repo-identidade-comp/identidade-por-id repo-identidade ident-id))))
         ;; Onda D Slice 2 Task 3: identidade/auth-in (GET /auth/descoberta/:ente, rota PUBLICA pre-login)
         ;; reusa este MESMO `info-ente` (existencia = `(some? (info-ente id))`) — inversao de dependencia
         ;; sobre cadastros, mesma forma de resolver-municipio/membros-da-casa; identidade nunca importa
@@ -124,7 +132,8 @@
                                        :registro registro-fatos
                                        :relogio relogio-producao}))
         (into (compliance-http/rotas {:auth auth :repo-compliance repo-compliance}))
-        (into (cadastros-http/rotas {:auth auth :repo-cadastros repo-cadastros :relogio relogio-producao}))
+        (into (cadastros-http/rotas {:auth auth :repo-cadastros repo-cadastros :relogio relogio-producao
+                                     :identidade-existe? identidade-existe?}))
         (into (participacao-http/rotas {:auth auth :repo-participacao repo-participacao
                                         :resolver-ente-publico participacao-http/resolver-ente-publico-uuid
                                         :relogio relogio-producao}))
