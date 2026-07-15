@@ -78,6 +78,27 @@
         resp (.send http req (HttpResponse$BodyHandlers/ofString))]
     (json/read-value (.body resp) json/keyword-keys-object-mapper)))
 
+(defn- admin-put-teste! [^HttpClient http token kc-base-url caminho corpo]
+  (let [req (-> (HttpRequest/newBuilder)
+                (.uri (URI/create (str kc-base-url caminho)))
+                (.header "Authorization" (str "Bearer " token))
+                (.header "Content-Type" "application/json")
+                (.PUT (HttpRequest$BodyPublishers/ofString (json/write-value-as-string corpo)))
+                (.build))]
+    (.send http req (HttpResponse$BodyHandlers/ofString))))
+
+(defn- desabilitar-passkey-teste!
+  "PUT cru que forca a required action de passkey de volta a `enabled:false` — usado SO' pra provar
+  causalidade em `realm-habilita-passkey-e-smtp` (ver comentario la'): sem isto, checar `enabled:true`
+  depois de `provisionar-realm!` provaria apenas o default de fabrica do Keycloak (que ja nasce
+  habilitado nesta imagem), nao o efeito do nosso `habilitar-passkey!`."
+  [http token kc-base-url realm]
+  (admin-put-teste! http token kc-base-url
+                     (str "/admin/realms/" realm "/authentication/required-actions/webauthn-register-passwordless")
+                     {:alias "webauthn-register-passwordless" :name "Webauthn Register Passwordless"
+                      :providerId "webauthn-register-passwordless" :enabled false :defaultAction false
+                      :priority 30 :config {}}))
+
 (defn- realm-representation
   "GET cru da RealmRepresentation do KC p/ o realm do `ente-id` — le' o base-url/realm-prefixo do PROPRIO
   config do `idp` (nao do base-url do modulo de teste), pra' inspecionar exatamente o realm que
@@ -100,12 +121,24 @@
         idp (component/start (kc/keycloak-idp (:keycloak (config/carregar))))]
     (try
       (idp/provisionar-realm! idp ente)
+      ;; Prova de causalidade: o default de fabrica desta required action VARIA por versao/modo de import
+      ;; do Keycloak (nesta imagem, 26.0.0 start-dev, ela ja nasce enabled:true) — entao so' checar
+      ;; enabled:true agora provaria o default do servidor, nao o efeito do NOSSO codigo (passaria
+      ;; identico com `habilitar-passkey!` deletado). Forca-se o estado OPOSTO por fora e chama-se
+      ;; `provisionar-realm!` de novo (idempotente) — se ele flipar de volta pra true, e' o nosso PUT.
+      (let [{kc-base-url :base-url realm-prefixo :realm-prefixo} (:config idp)
+            realm (str realm-prefixo ente)
+            http (http!)
+            token (admin-token-teste! http kc-base-url)]
+        (desabilitar-passkey-teste! http token kc-base-url realm))
+      (idp/provisionar-realm! idp ente)
       (let [r (realm-representation idp ente)]
         (is (true? (->> (:requiredActions r)
                         (filter #(= "webauthn-register-passwordless" (:alias %)))
                         first :enabled))
-            "passkey vem DESABILITADA de fabrica no KC — provisionar-realm! precisa habilitar, senao marcar
-             o usuario com ela e' silenciosamente ignorado")
+            "provisionar-realm! precisa AFIRMAR o estado habilitado, independente do default do KC —
+             provado aqui forcando o oposto por fora antes de chamar de novo (idempotente); senao marcar
+             o usuario com a required action seria silenciosamente ignorado")
         (is (= "mailpit" (get-in r [:smtpServer :host]))
             "realm aponta p/ o servidor de e-mail — quem envia o convite e' o KC, nao a app"))
       (finally (component/stop idp)))))

@@ -210,28 +210,47 @@
                           {:status status :corpo corpo :client-id client-id})))))))
 
 (defn- habilitar-passkey!
-  "A required action de passkey vem DESABILITADA de fabrica no Keycloak; sem isto, marcar o usuario com ela
-  e' silenciosamente ignorado (mesma armadilha do User Profile, ver declarar-atributo-identidade!).
-  Idempotente: PUT do mesmo estado nao falha."
+  "Garante que a required action de passkey fique habilitada no realm; sem isto, marcar o usuario com ela
+  e' silenciosamente ignorado (mesma armadilha do User Profile, ver declarar-atributo-identidade!). O
+  default de fabrica desta required action VARIA por versao/modo de import do Keycloak — achado real:
+  contra o Keycloak 26.0.0 (`start-dev`) ela ja nasce `enabled:true` num realm recem-criado, contrariando
+  a premissa original deste design. Por isso afirmamos o estado desejado idempotentemente (PUT do mesmo
+  estado nao falha) em vez de depender do default de qualquer versao especifica. Erro de infra LANCA —
+  nunca segue em frente com o realm parcialmente configurado."
   [http-client token base-url realm]
-  (admin-req! http-client token :put
-              (str "/admin/realms/" realm "/authentication/required-actions/webauthn-register-passwordless")
-              {:alias "webauthn-register-passwordless" :name "Webauthn Register Passwordless"
-               :providerId "webauthn-register-passwordless" :enabled true :defaultAction false
-               :priority 30 :config {}}
-              base-url))
+  (let [{:keys [status corpo]}
+        (admin-req! http-client token :put
+                    (str "/admin/realms/" realm "/authentication/required-actions/webauthn-register-passwordless")
+                    {:alias "webauthn-register-passwordless" :name "Webauthn Register Passwordless"
+                     :providerId "webauthn-register-passwordless" :enabled true :defaultAction false
+                     :priority 30 :config {}}
+                    base-url)]
+    (when-not (= 204 status)
+      (throw (ex-info "keycloak-idp: falha ao habilitar a required action de passkey (infra)"
+                      {:status status :corpo corpo})))))
 
 (defn- configurar-smtp!
   "Aponta o realm p/ o relay. Quem envia o convite e' o Keycloak — p/ nos e' config, nao codigo (nao
-  confundir com o carry F6, que e' o e-mail TRANSACIONAL da app). Prod = relay BR (§22.9 Eixo 12)."
+  confundir com o carry F6, que e' o e-mail TRANSACIONAL da app). Prod = relay BR (§22.9 Eixo 12).
+  PUT PARCIAL (so' :realm + :smtpServer no corpo) em vez do padrao GET-then-merge de
+  declarar-atributo-identidade! — testado empiricamente contra o Keycloak 26 vivo (suite completa,
+  incluindo criacao de client/usuario no MESMO realm logo em seguida): ao contrario do User Profile (que
+  descarta atributo nao-declarado por causa de 'unmanaged attributes' desligado), um PUT parcial na raiz
+  do realm NAO zera os demais campos omitidos. Se uma versao futura do KC mudar esse comportamento,
+  convergir p/ GET-then-merge. Erro de infra LANCA — nunca segue em frente com o realm parcialmente
+  configurado."
   [http-client token base-url realm {:keys [host port from ssl starttls auth usuario senha]}]
-  (admin-req! http-client token :put (str "/admin/realms/" realm)
-              {:realm realm
-               :smtpServer (cond-> {:host host :port (str port) :from from
-                                    :ssl (str (boolean ssl)) :starttls (str (boolean starttls))
-                                    :auth (str (boolean auth))}
-                             auth (assoc :user usuario :password senha))}
-              base-url))
+  (let [{:keys [status corpo]}
+        (admin-req! http-client token :put (str "/admin/realms/" realm)
+                    {:realm realm
+                     :smtpServer (cond-> {:host host :port (str port) :from from
+                                          :ssl (str (boolean ssl)) :starttls (str (boolean starttls))
+                                          :auth (str (boolean auth))}
+                                   auth (assoc :user usuario :password senha))}
+                    base-url)]
+    (when-not (= 204 status)
+      (throw (ex-info "keycloak-idp: falha ao configurar o SMTP do realm (infra)"
+                      {:status status :corpo corpo})))))
 
 (defn- provisionar-realm-impl
   [{:keys [config http-client]} ente-id]
