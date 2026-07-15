@@ -317,6 +317,12 @@
 ;; Component
 ;; ---------------------------------------------------------------------------------------------
 
+(defn- convidar-impl
+  "Stub temporario para compilar — impl real (envio do codigo de uso unico ao e-mail institucional) e' a
+  Task 4."
+  [_ _ente-id _identidade-id]
+  (throw (ex-info "convidar!: nao implementado (Task 4)" {:tipo :idp/nao-implementado})))
+
 (defrecord KeycloakIdp [config jwks-provider-fn jwks-cache http-client]
   component/Lifecycle
   (start [this]
@@ -330,6 +336,7 @@
   (verificar-token [this token] (verificar-token* this token))
   (provisionar-realm! [this ente-id] (provisionar-realm-impl this ente-id))
   (criar-usuario! [this ente-id usuario] (criar-usuario-impl this ente-id usuario))
+  (convidar! [this ente-id identidade-id] (convidar-impl this ente-id identidade-id))
   (resetar-mfa! [this ente-id identidade-id] (resetar-mfa-impl this ente-id identidade-id)))
 
 (defn keycloak-idp
