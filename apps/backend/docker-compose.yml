@@ -44,6 +44,20 @@ services:
     ports: ["${OPLENARIO_KEYCLOAK_PORT:-8080}:8080"]
     profiles: ["auth"]
 
+  # Captura de e-mail em dev/CI: o Keycloak manda o convite p/ ca' e nada sai p/ o mundo.
+  # Caixa em http://localhost:${OPLENARIO_MAILPIT_PORT:-8025}. API: /api/v1/messages.
+  mailpit:
+    image: axllent/mailpit:v1.20
+    ports:
+      - "${OPLENARIO_MAILPIT_PORT:-8025}:8025"   # UI/API
+      - "${OPLENARIO_SMTP_PORT:-1025}:1025"      # SMTP
+    profiles: ["auth"]
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   migrate:
     image: oplenario-backend:local
     build: .
