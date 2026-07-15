@@ -209,9 +209,33 @@
           (throw (ex-info "keycloak-idp: falha ao criar o client (infra)"
                           {:status status :corpo corpo :client-id client-id})))))))
 
+(defn- habilitar-passkey!
+  "A required action de passkey vem DESABILITADA de fabrica no Keycloak; sem isto, marcar o usuario com ela
+  e' silenciosamente ignorado (mesma armadilha do User Profile, ver declarar-atributo-identidade!).
+  Idempotente: PUT do mesmo estado nao falha."
+  [http-client token base-url realm]
+  (admin-req! http-client token :put
+              (str "/admin/realms/" realm "/authentication/required-actions/webauthn-register-passwordless")
+              {:alias "webauthn-register-passwordless" :name "Webauthn Register Passwordless"
+               :providerId "webauthn-register-passwordless" :enabled true :defaultAction false
+               :priority 30 :config {}}
+              base-url))
+
+(defn- configurar-smtp!
+  "Aponta o realm p/ o relay. Quem envia o convite e' o Keycloak — p/ nos e' config, nao codigo (nao
+  confundir com o carry F6, que e' o e-mail TRANSACIONAL da app). Prod = relay BR (§22.9 Eixo 12)."
+  [http-client token base-url realm {:keys [host port from ssl starttls auth usuario senha]}]
+  (admin-req! http-client token :put (str "/admin/realms/" realm)
+              {:realm realm
+               :smtpServer (cond-> {:host host :port (str port) :from from
+                                    :ssl (str (boolean ssl)) :starttls (str (boolean starttls))
+                                    :auth (str (boolean auth))}
+                             auth (assoc :user usuario :password senha))}
+              base-url))
+
 (defn- provisionar-realm-impl
   [{:keys [config http-client]} ente-id]
-  (let [{:keys [base-url realm-prefixo audiencia web-client-id redirect-uris web-origins]} config
+  (let [{:keys [base-url realm-prefixo audiencia web-client-id redirect-uris web-origins smtp]} config
         realm (str realm-prefixo ente-id)
         token (admin-token! config http-client)
         {:keys [status]} (admin-req! http-client token :get (str "/admin/realms/" realm) nil base-url)]
@@ -221,6 +245,8 @@
         (when-not (= 201 status)
           (throw (ex-info "keycloak-idp: falha ao criar o realm (infra)" {:status status :corpo corpo})))))
     (declarar-atributo-identidade! http-client token base-url realm)
+    (habilitar-passkey! http-client token base-url realm)
+    (configurar-smtp! http-client token base-url realm smtp)
     ;; Client de audiencia (API): valida o access-token; carrega o mapper de identidade-id + a audiencia propria.
     (garantir-client! http-client token base-url realm audiencia
                       {:clientId audiencia :publicClient true :standardFlowEnabled true
