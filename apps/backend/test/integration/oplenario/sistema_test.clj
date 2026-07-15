@@ -51,11 +51,43 @@
 (deftest idp-para-env-nao-reconhecido-usa-keycloak
   ;; Achado da revisao final de branco (Onda D Slice 1): o predicado antigo so' usava o KeycloakIdp
   ;; real p/ "production"/"staging" literais e caia em idp-dev p/ QUALQUER outro valor de :env, incl.
-  ;; um typo ("producton") ou um :env ausente (default e' "dev" em config.edn) — auth-bypass silencioso
-  ;; se esse caminho fosse alcancavel fora de dev/test. O predicado invertido (dev/test = whitelist p/
-  ;; idp-dev) fecha isso: um :env nao-reconhecido cai no KeycloakIdp real (fail-safe — falha tentando
-  ;; falar com um Keycloak de verdade, nunca aceita claims forjadas sem assinatura). Esta prova falharia
-  ;; contra o predicado antigo (que so' testava a whitelist de "production"/"staging").
+  ;; um typo ("producton") — auth-bypass silencioso se esse caminho fosse alcancavel fora de dev/test.
+  ;; O predicado invertido (dev/test = whitelist p/ idp-dev) fecha isso: um :env nao-reconhecido cai no
+  ;; KeycloakIdp real (fail-safe — falha tentando falar com um Keycloak de verdade, nunca aceita claims
+  ;; forjadas sem assinatura). Esta prova falharia contra o predicado antigo (que so' testava a whitelist
+  ;; de "production"/"staging").
   (is (instance? oplenario.kernel.components.keycloak_idp.KeycloakIdp
                  (#'sistema/idp-para {:env "producton" :keycloak keycloak-config-fake}))
       "um :env nao-reconhecido/typo usa o KeycloakIdp real, nunca o idp-dev (fail-safe)"))
+
+(deftest idp-para-env-ausente-ou-vazio-usa-keycloak
+  ;; O fail-safe do predicado cobre valor DESCONHECIDO; estes dois casos cobrem valor AUSENTE e VAZIO —
+  ;; um `APP_ENV=` no deploy (variavel declarada sem valor) assoca "" ao :env, e um config sem a chave
+  ;; deixa :env nil. Nenhum dos dois pode ligar o idp-dev.
+  (is (instance? oplenario.kernel.components.keycloak_idp.KeycloakIdp
+                 (#'sistema/idp-para {:keycloak keycloak-config-fake}))
+      ":env ausente usa o KeycloakIdp real")
+  (is (instance? oplenario.kernel.components.keycloak_idp.KeycloakIdp
+                 (#'sistema/idp-para {:env "" :keycloak keycloak-config-fake}))
+      ":env vazio usa o KeycloakIdp real"))
+
+(deftest config-sem-app-env-nao-liga-o-idp-dev
+  ;; O BURACO do 'fail-safe': o predicado de idp-para so' protegia contra um :env desconhecido, mas o
+  ;; config.edn ENTREGAVA "dev" quando APP_ENV nao vinha do ambiente — logo o caminho de AUSENCIA (deploy
+  ;; que esquece de setar APP_ENV) chegava em idp-para ja' com "dev" na mao e ligava o idp-dev, que confia
+  ;; em JWT NAO-ASSINADO (claims-JSON cru via ?token=). Todo `exige-papel` desabava: qualquer um forja
+  ;; claims, cross-tenant inclusive. Default invertido: sem APP_ENV => IdP real; modo dev = opt-in explicito.
+  (let [cfg (assoc (config/carregar {}) :keycloak keycloak-config-fake)]
+    (is (instance? oplenario.kernel.components.keycloak_idp.KeycloakIdp
+                   (#'sistema/idp-para cfg))
+        "config carregado SEM APP_ENV usa o KeycloakIdp real, nunca o idp-dev")))
+
+(deftest config-com-app-env-dev-liga-o-idp-dev
+  ;; A contraparte: o fluxo de dev nao pode quebrar — APP_ENV explicito segue ligando o idp-dev (e' o que
+  ;; o docker-compose faz, `APP_ENV: "${OPLENARIO_APP_ENV:-dev}"`).
+  (is (instance? oplenario.kernel.components.idp_dev.IdpDev
+                 (#'sistema/idp-para (config/carregar {"APP_ENV" "dev"})))
+      "APP_ENV=dev explicito segue no idp-dev (opt-in)")
+  (is (instance? oplenario.kernel.components.idp_dev.IdpDev
+                 (#'sistema/idp-para (config/carregar {"APP_ENV" "test"})))
+      "APP_ENV=test explicito segue no idp-dev (opt-in)"))

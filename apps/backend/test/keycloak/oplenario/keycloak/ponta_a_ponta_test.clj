@@ -91,6 +91,22 @@
                   (.build))
             (HttpResponse$BodyHandlers/ofString)))
 
+;; --- o usuario nasce devendo passkey (requiredActions ["webauthn-register-passwordless"], §22.5.2 eixo
+;; F, Task 3): sem descarregar essa acao o Keycloak recusa ROPC ("account is not fully set up") mesmo com
+;; senha valida. Este teste prova a mecanica token->ator, nao o bootstrap de 1o acesso -- o mesmo
+;; racional de setar-senha-teste! acima (que ja' fura o bootstrap real de e-mail de uso unico so' para
+;; poder logar). Descarregar a required-action aqui e' o mesmo gesto, pela mesma razao.
+(defn- limpar-required-actions-teste! [^HttpClient http token realm kc-user-id]
+  (let [resp (.send http (-> (HttpRequest/newBuilder)
+                             (.uri (URI/create (str base-url "/admin/realms/" realm "/users/" kc-user-id)))
+                             (.header "Authorization" (str "Bearer " token)) (.header "Content-Type" "application/json")
+                             (.PUT (HttpRequest$BodyPublishers/ofString "{\"requiredActions\":[]}"))
+                             (.build))
+                       (HttpResponse$BodyHandlers/ofString))]
+    (when-not (= 204 (.statusCode resp))
+      (throw (ex-info "ponta-a-ponta-teste: falha ao limpar required-actions (infra)"
+                       {:status (.statusCode resp) :corpo (.body resp)})))))
+
 ;; --- limpeza: o teste provisiona um realm real no Keycloak compartilhado de dev; sem isto
 ;; cada corrida deixa realm+client+user acumulando ate' esgotar o container (ja' aconteceu).
 ;; Chamada crua na admin-API (nao existe -- e nao deve existir -- teardown no protocolo IdentityProvider).
@@ -113,6 +129,7 @@
             admin-tok (admin-token-teste! http)]
         (habilitar-direct-grant-para-teste! http admin-tok realm)
         (setar-senha-teste! http admin-tok realm keycloak-user-id "senha-teste-123")
+        (limpar-required-actions-teste! http admin-tok realm keycloak-user-id)
         (seed-vinculo! ente iid ["vereador"])
         (let [token (minerar-token-teste! http realm (str iid) "senha-teste-123")
               claims (idp/verificar-token ip token)

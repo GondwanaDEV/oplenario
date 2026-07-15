@@ -39,6 +39,11 @@
   [repo-cadastros ente-id vereador-id l data]
   (repo/registrar-licenca! repo-cadastros ente-id vereador-id l data))
 
+(defn ligar-identidade
+  "Pass-through: update-count (0 -> 404 no diplomat) | throws :conflito/identidade-ja-vinculada (409)."
+  [repo-cadastros ente-id id identidade-id]
+  (repo/ligar-identidade! repo-cadastros ente-id id identidade-id))
+
 (defn legislatura-vigente
   "A legislatura vigente da Casa (p/ o seletor do form de mandato), ou nil."
   [repo-cadastros ente-id]

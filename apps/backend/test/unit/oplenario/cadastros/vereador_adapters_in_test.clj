@@ -85,3 +85,16 @@
 
 (deftest licenca-sem-inicio-e-invalido
   (is (validacao-invalida? #(a/registrar-licenca->dominio ATOR {"motivo" "sem data"}))))
+
+;; ---- ligar identidade (Task 9, review IMPORTANT-3: faltava o unitario deste adapter) ----
+(deftest ligar-identidade-coage-identidade-id-para-uuid
+  (let [ident (random-uuid)]
+    (is (= ident (a/ligar-identidade->dominio {"identidade-id" (str ident)}))
+        "devolve so' o uuid coagido, nao um mapa (unico campo do contrato)")))
+
+(deftest ligar-identidade-sem-ou-com-uuid-invalido-e-invalido
+  (is (validacao-invalida? #(a/ligar-identidade->dominio {})) "corpo sem identidade-id -> invalido")
+  (is (validacao-invalida? #(a/ligar-identidade->dominio {"identidade-id" "nao-e-um-uuid"}))
+      "identidade-id que nao parseia como uuid -> invalido")
+  (is (validacao-invalida? #(a/ligar-identidade->dominio {"identidade-id" (str (random-uuid)) "extra" "forja"}))
+      ":closed recusa campo fora do contrato"))

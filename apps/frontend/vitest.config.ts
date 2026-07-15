@@ -11,6 +11,11 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "jsdom",
+    // NEXT_PUBLIC_APP_ENV: o modo de auth do FE tem default REAL (src/lib/modo.ts) — modo dev é opt-in
+    // explícito, como no backend (APP_ENV). A suíte declara "test" p/ a maioria dos casos exercitar o modo
+    // dev (token síncrono, sem /eu); quem prova o modo real sobrepõe com vi.stubEnv por teste. Sem isto o
+    // default seguro colocaria a suíte inteira em modo real — que é a intenção do default, não da suíte.
+    env: { NEXT_PUBLIC_APP_ENV: "test" },
   },
   resolve: {
     alias: {

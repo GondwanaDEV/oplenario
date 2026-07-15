@@ -30,12 +30,17 @@
 
 (defn- fake-repo-cadastros
   "RepoCadastros fake: `listar-vereadores` devolve `linhas`; `ficha-vereador` devolve `ficha` (ou nil, p/
-  simular 404). Impl parcial proposital (so' os 2 metodos exercidos pela borda desta task)."
-  [linhas ficha]
-  #_{:clj-kondo/ignore [:missing-protocol-method]}
-  (reify repo-cad/RepoCadastros
-    (listar-vereadores [_ _ente-id _data] linhas)
-    (ficha-vereador [_ _ente-id _id _data] ficha)))
+  simular 404). `ligar` (Task 9, opcional): numero (update-count de `ligar-identidade!`, default 1 = sucesso)
+  ou fn de 0 args (p/ simular o throw de :conflito/identidade-ja-vinculada — mesmo padrao de `mandato`/
+  `licenca` em `fake-repo-escrita` abaixo). Impl parcial proposital (so' os metodos exercidos pela borda
+  desta task)."
+  ([linhas ficha] (fake-repo-cadastros linhas ficha nil))
+  ([linhas ficha ligar]
+   #_{:clj-kondo/ignore [:missing-protocol-method]}
+   (reify repo-cad/RepoCadastros
+     (listar-vereadores [_ _ente-id _data] linhas)
+     (ficha-vereador [_ _ente-id _id _data] ficha)
+     (ligar-identidade! [_ _ente-id _id _identidade-id] (if (fn? ligar) (ligar) (or ligar 1))))))
 
 (defn- fake-repo-identidade [papeis]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
@@ -43,11 +48,15 @@
     (snapshot-ator [_ _ente-id _identidade-id]
       {:vinculo-ativo {:id (random-uuid) :tipo "servidor"} :papeis papeis})))
 
-(defn- service-fn [papeis repo-c]
+(defn- service-fn
+  "`opts` (Task 9, variadico): overrides adicionais p/ `rotas/montar` — ex. `:identidade-existe?` (guard de
+  servico da rota /identidade, mesma forma dos demais overrides injetaveis do host)."
+  [papeis repo-c & {:as opts}]
   (-> (http/servico (config/carregar)
-                    (rotas/montar {:idp (idp-dev/idp-dev)
-                                   :repo-identidade (fake-repo-identidade papeis)
-                                   :repo-cadastros repo-c})
+                    (rotas/montar (merge {:idp (idp-dev/idp-dev)
+                                          :repo-identidade (fake-repo-identidade papeis)
+                                          :repo-cadastros repo-c}
+                                         opts))
                     it/globais)
       ph/create-server ::ph/service-fn))
 
@@ -191,6 +200,84 @@
                               tok (str "/cadastros/vereadores/" ver "/licencas") corpo))))
     (is (= 409 (:status (post (service-fn #{"secretario"} (fake-repo-escrita {:licenca sem-vigente}))
                               tok (str "/cadastros/vereadores/" ver "/licencas") corpo))))))
+
+;; ---------- Task 9: PATCH /cadastros/vereadores/:id/identidade ----------
+
+(deftest ligar-identidade-200
+  (let [ente (random-uuid) vid (random-uuid) ident (random-uuid)
+        r (patch* (service-fn #{"admin_ente"} (fake-repo-cadastros [] nil)
+                              :identidade-existe? (constantly true))
+                  (token ente (random-uuid)) (str "/cadastros/vereadores/" vid "/identidade")
+                  {:identidade-id (str ident)})]
+    (is (= 200 (:status r)))
+    (is (= (str ident) (:identidade-id (ler-json r))) "devolve o id ligado")))
+
+(deftest ligar-identidade-sem-admin-ente-403
+  (let [r (patch* (service-fn #{"secretario"} (fake-repo-cadastros [] nil)
+                              :identidade-existe? (constantly true))
+                  (token (random-uuid) (random-uuid)) (str "/cadastros/vereadores/" (random-uuid) "/identidade")
+                  {:identidade-id (str (random-uuid))})]
+    (is (= 403 (:status r)) "ligar identidade e' parte de conceder acesso — nao e' do secretario")))
+
+(deftest ligar-identidade-guard-inexistente-404
+  (let [r (patch* (service-fn #{"admin_ente"} (fake-repo-cadastros [] nil)
+                              :identidade-existe? (constantly false))
+                  (token (random-uuid) (random-uuid)) (str "/cadastros/vereadores/" (random-uuid) "/identidade")
+                  {:identidade-id (str (random-uuid))})]
+    (is (= 404 (:status r))
+        "guard de servico: sem FK cross-schema, a existencia da identidade e' checada por seam do host")
+    (is (= "vereador ou identidade nao encontrada" (:erro (ler-json r)))
+        "mensagem generica (review IMPORTANT-2)")))
+
+(deftest ligar-identidade-id-invalido-e-identidade-inexistente-sao-indistinguiveis-404
+  ;; Review Task 9 IMPORTANT-2: `identidade-existe?` resolve pra `identidade-por-id`, que e' SUPRATENANT
+  ;; (sem escopo de ente_id) — um `admin_ente` de QUALQUER Casa poderia usar o TEXTO do erro como oraculo
+  ;; pra descobrir se um `identidade-id` chutado existe em algum lugar do sistema. Prova a propriedade que
+  ;; importa: as duas causas de 404 (path :id malformado vs. identidade que o guard nao reconhece) tem
+  ;; a MESMA resposta byte-a-byte, entao a resposta nao vaza qual das duas faltou.
+  (let [ident (str (random-uuid))
+        r-id-invalido (patch* (service-fn #{"admin_ente"} (fake-repo-cadastros [] nil)
+                                          :identidade-existe? (constantly true))
+                              (token (random-uuid) (random-uuid)) "/cadastros/vereadores/nao-uuid/identidade"
+                              {:identidade-id ident})
+        r-identidade-ausente (patch* (service-fn #{"admin_ente"} (fake-repo-cadastros [] nil)
+                                                 :identidade-existe? (constantly false))
+                                     (token (random-uuid) (random-uuid))
+                                     (str "/cadastros/vereadores/" (random-uuid) "/identidade")
+                                     {:identidade-id ident})]
+    (is (= 404 (:status r-id-invalido) (:status r-identidade-ausente)))
+    (is (= (:body r-id-invalido) (:body r-identidade-ausente))
+        "mesmo corpo de resposta pras duas causas -> nenhuma delas e' distinguivel pelo cliente")))
+
+(deftest ligar-identidade-vereador-inexistente-404
+  (let [r (patch* (service-fn #{"admin_ente"} (fake-repo-cadastros [] nil 0) ; update-count 0
+                              :identidade-existe? (constantly true))
+                  (token (random-uuid) (random-uuid)) (str "/cadastros/vereadores/" (random-uuid) "/identidade")
+                  {:identidade-id (str (random-uuid))})]
+    (is (= 404 (:status r)) "vereador inexistente/de-outro-tenant -> update-count 0 -> 404")))
+
+(deftest ligar-identidade-conflito-409
+  (let [conflito (fn [] (throw (ex-info "x" {:tipo :conflito/identidade-ja-vinculada})))
+        r (patch* (service-fn #{"admin_ente"} (fake-repo-cadastros [] nil conflito)
+                              :identidade-existe? (constantly true))
+                  (token (random-uuid) (random-uuid)) (str "/cadastros/vereadores/" (random-uuid) "/identidade")
+                  {:identidade-id (str (random-uuid))})]
+    (is (= 409 (:status r))
+        "identidade ja ligada a OUTRO vereador nesta Casa -> 409 LOCAL, nunca 500")))
+
+(deftest ligar-identidade-id-invalido-404
+  (let [r (patch* (service-fn #{"admin_ente"} (fake-repo-cadastros [] nil)
+                              :identidade-existe? (constantly true))
+                  (token (random-uuid) (random-uuid)) "/cadastros/vereadores/nao-uuid/identidade"
+                  {:identidade-id (str (random-uuid))})]
+    (is (= 404 (:status r)) ":id do path nao-UUID -> 404, nunca 500")))
+
+(deftest ligar-identidade-corpo-invalido-400
+  (let [r (patch* (service-fn #{"admin_ente"} (fake-repo-cadastros [] nil)
+                              :identidade-existe? (constantly true))
+                  (token (random-uuid) (random-uuid)) (str "/cadastros/vereadores/" (random-uuid) "/identidade")
+                  {:identidade-id "nao-e-um-uuid"})]
+    (is (= 400 (:status r)) "identidade-id que nao parseia como UUID -> 400 (adapters/in)")))
 
 (deftest legislatura-vigente-200-e-404
   (let [tok (token (random-uuid) (random-uuid))

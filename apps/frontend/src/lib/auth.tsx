@@ -2,8 +2,9 @@
 
 // AuthContext: extrai o padrão de token dev (?token=/NEXT_PUBLIC_DEV_TOKEN) que antes vivia inline em
 // sessoes/[id]/plenario/page.tsx — App Shell (FE Onda A1) precisa do MESMO guard em qualquer página
-// interna nova, não só no plenário. Em produção o token via querystring É PROIBIDO (authn real = sessão
-// Keycloak, carry F1.4); o guard lança antes de montar os children.
+// interna nova, não só no plenário. No MODO REAL de auth (modo.ts — não mais "NODE_ENV=production") o token
+// via querystring É PROIBIDO (authn real = sessão Keycloak, carry F1.4); o guard lança antes de montar os
+// children.
 //
 // CONTRATO DE COMPOSIÇÃO: nunca chame useAuth() no MESMO componente que renderiza seu próprio
 // <AuthProvider> — o Provider ainda não é ancestral do próprio corpo da função que o retorna. Sempre
@@ -40,13 +41,18 @@ export function AuthProvider({
   children: ReactNode;
   tokenQuery: string | null;
 }) {
-  const tokenInProd = process.env.NODE_ENV === "production" && !!tokenQuery;
-  const token = tokenInProd
-    ? null
-    : tokenQuery ?? (process.env.NODE_ENV !== "production" ? process.env.NEXT_PUBLIC_DEV_TOKEN ?? null : null);
+  // MESMA fonte de verdade do resto do FE (modo.ts) — este guard lia `NODE_ENV === "production"` por conta
+  // própria, o que eram duas contas do mesmo fato podendo divergir: um `next dev` apontado p/ um backend em
+  // APP_ENV=production tinha modoReal() de um lado e "não-produção" do outro, e o dev-token seguia aceito
+  // no FE de um deploy real. Um só sinal, resolvido em modo.ts.
+  const emModoReal = modoReal();
+  const tokenNoModoReal = emModoReal && !!tokenQuery;
+  const token = emModoReal ? null : tokenQuery ?? process.env.NEXT_PUBLIC_DEV_TOKEN ?? null;
 
-  if (tokenInProd) {
-    throw new Error("token via querystring desabilitado em produção (authn = sessão Keycloak, carry F1.4).");
+  if (tokenNoModoReal) {
+    throw new Error(
+      "token via querystring desabilitado no modo real de auth (authn = sessão Keycloak, carry F1.4).",
+    );
   }
   return <AuthCtx.Provider value={{ token, papeis: papeisDoToken(token) }}>{children}</AuthCtx.Provider>;
 }

@@ -16,6 +16,7 @@
   (rodar via `clojure -Sdeps '{:aliases {:seed {:extra-paths [\"demo\"]}}}' -X:seed seed-demo/<fn>` — fora
   do alias `:dev` porque `dev/user.clj` exige `component.repl` ausente, mesma nota de oplenario-fe-execucao)"
   (:require [com.stuartsierra.component :as component]
+            [jsonista.core :as json]
             [oplenario.cadastros.db.comissao :as comissao-db]
             [oplenario.cadastros.db.estrutura :as estrutura]
             [oplenario.cadastros.db.referencia :as referencia]
@@ -38,7 +39,9 @@
             [oplenario.sessoes.components.repositorio :as repo]
             [oplenario.transparencia.components.repositorio :as transparencia-repo]
             [clojure.edn :as edn])
-  (:import (java.time Instant LocalDate)))
+  (:import (java.net URI)
+           (java.net.http HttpClient HttpRequest HttpRequest$BodyPublishers HttpResponse HttpResponse$BodyHandlers)
+           (java.time Instant LocalDate)))
 
 (def ids-file "/demo-scratch/demo-ids.edn")
 
@@ -464,4 +467,117 @@
              (println "ENTRAR      : http://localhost:3000/entrar/" (str ente))
              (println "PLENARIO    : http://localhost:3000/sessoes/" (str sid) "/plenario")
              (println "=============================\n")))
+         (finally (component/stop idp)))))))
+
+;; ---------- Onda D Slice 5 (identidade do vereador, Tier 2) — admin_ente concede acesso a um vereador ----------
+
+;; --- helpers de admin-API do Keycloak (mesmo racional de `setar-senha-teste!`/`limpar-required-actions-teste!`
+;; em test/keycloak/oplenario/keycloak/ponta_a_ponta_test.clj:85-108 — `demo/` nao pode requerer `test/`,
+;; entao replicados aqui verbatim na forma, so' parametrizados por base-url/credenciais em vez de hardcode).
+(defn- admin-token-kc! [^HttpClient http base-url admin-usuario admin-senha]
+  (let [corpo (str "grant_type=password&client_id=admin-cli&username=" admin-usuario "&password=" admin-senha)
+        req (-> (HttpRequest/newBuilder) (.uri (URI/create (str base-url "/realms/master/protocol/openid-connect/token")))
+                (.header "Content-Type" "application/x-www-form-urlencoded")
+                (.POST (HttpRequest$BodyPublishers/ofString corpo)) (.build))
+        resp (.send http req (HttpResponse$BodyHandlers/ofString))]
+    (get (json/read-value (.body resp) json/keyword-keys-object-mapper) :access_token)))
+
+(defn- setar-senha-kc! [^HttpClient http base-url token realm kc-user-id senha]
+  (.send http (-> (HttpRequest/newBuilder)
+                  (.uri (URI/create (str base-url "/admin/realms/" realm "/users/" kc-user-id "/reset-password")))
+                  (.header "Authorization" (str "Bearer " token)) (.header "Content-Type" "application/json")
+                  (.PUT (HttpRequest$BodyPublishers/ofString
+                         (str "{\"type\":\"password\",\"value\":\"" senha "\",\"temporary\":false}")))
+                  (.build))
+            (HttpResponse$BodyHandlers/ofString)))
+
+(defn- limpar-required-actions-kc! [^HttpClient http base-url token realm kc-user-id]
+  (let [resp (.send http (-> (HttpRequest/newBuilder)
+                             (.uri (URI/create (str base-url "/admin/realms/" realm "/users/" kc-user-id)))
+                             (.header "Authorization" (str "Bearer " token)) (.header "Content-Type" "application/json")
+                             (.PUT (HttpRequest$BodyPublishers/ofString "{\"requiredActions\":[]}"))
+                             (.build))
+                       (HttpResponse$BodyHandlers/ofString))]
+    (when-not (= 204 (.statusCode resp))
+      (throw (ex-info "seed-demo/slice5: falha ao limpar required-actions do admin (infra)"
+                       {:status (.statusCode resp) :corpo (.body resp)})))))
+
+(defn slice5
+  "Semente da Onda D Slice 5 (identidade do vereador, Tier 2): planta o TERRENO p/ provar AO VIVO no browser
+  o fluxo em que um admin_ente concede acesso a um vereador JA' CADASTRADO (POST /identidade/acessos,
+  `identidade.diplomat.http.in/conceder-acesso-handler`) — o vereador recebe convite por e-mail (Mailpit em
+  dev) e registra passkey pelo fluxo REAL do Keycloak (§22.5.2 eixo F). A PROPRIA concessao e' o gesto que
+  se faz AO VIVO na UI (escolher um vereador na lista + confirmar) — este seed nao a antecipa. Cria:
+    - ente 'Câmara Municipal de Fortaleza' (município Fortaleza, idempotente igual `login-kc`/`vereadores`);
+    - identidade ADMIN 'Helena Matos', vínculo tipo 'servidor', com DOIS papéis RBAC: 'admin_ente' (abre
+      POST /identidade/acessos, a rota que concede) + 'secretario' (abre GET /cadastros/vereadores, a lista
+      onde o admin escolhe o alvo — sem este papel a lista devolveria 403, mesmo racional de `vereadores`);
+    - 1 legislatura vigente + 3 vereadores em cadastros.vereador SEM identidade vinculada
+      (identidade-id NULL) e com mandato vigente cobrindo hoje — os ALVOS da concessão;
+    - provisiona o realm do ente + cria o usuário Keycloak do ADMIN (mesmo passo de `login-kc`).
+
+  FURA O BOOTSTRAP DE PROPÓSITO, SÓ PARA O ADMIN: `criar-usuario!` faz nascer com a required action
+  'webauthn-register-passwordless' — sem passkey ninguem loga so' com senha. Como o admin NAO e' o sujeito
+  da prova (quem prova convite+passkey e' o VEREADOR, via a concessão feita na UI), este seed seta a senha
+  dele direto pela admin-API do Keycloak e descarrega essa required action (mesmo gesto de
+  `setar-senha-teste!`/`limpar-required-actions-teste!` do `ponta_a_ponta_test.clj`, pelo mesmo racional:
+  furar SÓ o bootstrap de quem não é o sujeito do teste/demo). O VEREADOR fica intocado — nasce SEM
+  identidade nenhuma; só a ganha quando o admin concede acesso na UI, aí sim pelo fluxo real de convite +
+  passkey.
+
+  NÃO idempotente (ente/identidade/vereadores NOVOS a cada chamada, como as demais sementes não-upsert)."
+  [_]
+  (com-ds
+   (fn [ds]
+     (let [ente    (random-uuid) ident (random-uuid)
+           cfg     (config/carregar)
+           kc-cfg  (:keycloak cfg)
+           {:keys [base-url admin-usuario admin-senha realm-prefixo]} kc-cfg
+           idp     (component/start (keycloak-idp/keycloak-idp kc-cfg))
+           http    (HttpClient/newHttpClient)
+           hoje    (LocalDate/of 2025 1 1)
+           nomes   ["Ana Ribeiro" "Bruno Sales" "Carla Nunes"]
+           ver-ids (vec (repeatedly 3 random-uuid))]
+       (try
+         (try (referencia/inserir-municipio! ds {:codigo-ibge "2304400" :nome "Fortaleza" :uf "CE" :capital true :populacao 2703391})
+              (catch Exception _ nil))
+         (id/inserir! ds {:id ident :cpf (cpf-valido) :nome "Helena Matos"})
+         (tenancy/com-tenant* ds ente
+           (fn [tx]
+             (estrutura/inserir-ente! tx {:ente-id ente :municipio-ibge "2304400" :nome-oficial "Câmara Municipal de Fortaleza"})
+             (vinc/criar! tx {:id (random-uuid) :ente-id ente :identidade-id ident :tipo "servidor"})
+             (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente :identidade-id ident :papel "admin_ente"})
+             (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente :identidade-id ident :papel "secretario"})
+
+             (let [leg-id (random-uuid)]
+               (estrutura/inserir-legislatura! tx
+                 {:id leg-id :ente-id ente :numero 19 :ano-inicio 2025 :ano-fim 2028 :vigente true})
+               (doseq [[nome vid] (map vector nomes ver-ids)]
+                 (vereador-db/inserir! tx {:id vid :ente-id ente :nome nome :nome-parlamentar nome})
+                 (vereador-db/inserir-mandato! tx
+                   {:id (random-uuid) :ente-id ente :vereador-id vid :legislatura-id leg-id
+                    :partido "PDT" :estado "vigente" :natureza "titular" :vigencia-inicio hoje})))))
+
+         (idp/provisionar-realm! idp ente)
+         (let [{:keys [keycloak-user-id]} (idp/criar-usuario! idp ente {:identidade-id ident
+                                                                        :nome "Helena Matos"
+                                                                        :email "helena@example.org"})
+               realm (str realm-prefixo ente)
+               admin-tok (admin-token-kc! http base-url admin-usuario admin-senha)]
+           ;; SO' o admin — ver docstring acima (o vereador fica intocado).
+           (limpar-required-actions-kc! http base-url admin-tok realm keycloak-user-id)
+           (setar-senha-kc! http base-url admin-tok realm keycloak-user-id "senha-teste-123")
+
+           (println "\n=== SLICE 5 PRONTO ===")
+           (println "ente-id     :" (str ente))
+           (println "realm       :" realm)
+           (println "kc-user-id  :" keycloak-user-id)
+           (println "username    :" (str ident) " (= identidade-id do admin)")
+           (println "senha       : senha-teste-123")
+           (println "vereadores (alvos da concessao — SEM identidade vinculada):")
+           (doseq [[nome vid] (map vector nomes ver-ids)]
+             (println "  -" nome ":" (str vid)))
+           (println "ENTRAR      : http://localhost:3000/entrar/" (str ente))
+           (println "VEREADORES  : http://localhost:3000/cadastros/vereadores")
+           (println "=======================\n"))
          (finally (component/stop idp)))))))

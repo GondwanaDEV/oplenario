@@ -8,7 +8,8 @@
             [oplenario.cadastros.db.estrutura :as estrutura]
             [oplenario.cadastros.db.vereador :as vereador]
             [oplenario.cadastros.relacoes.cadastro :as rel-cadastro]
-            [oplenario.kernel.tenancy :as tenancy]))
+            [oplenario.kernel.tenancy :as tenancy])
+  (:import (org.postgresql.util PSQLException)))
 
 (defprotocol RepoCadastros
   (transacao [this ente-id f] "Roda (f tx) numa UNICA tx do tenant — compoe varias acoes atomicamente.")
@@ -38,6 +39,10 @@
   (criar-suplencia! [this ente-id suplencia])
   (atualizar-vereador! [this ente-id id campos]
     "UPDATE parcial de nome/nome-parlamentar da linha efetivada. Devolve update-count (0 = inexistente).")
+  (ligar-identidade! [this ente-id id identidade-id]
+    "Liga vereador -> identidade. Passo (2) do provisionamento; NAO concede acesso (spec §4.2). Devolve
+     update-count (0 = vereador inexistente/de-outro-tenant); throws :conflito/identidade-ja-vinculada se
+     a identidade ja' estiver ligada a OUTRO vereador nesta Casa (indice UNIQUE parcial, 23505).")
   (registrar-mandato! [this ente-id mandato]
     "INSERT de mandato 'vigente' numa tx: 404 (nil) se vereador/legislatura ausente; throws
      :conflito/mandato-sobreposto se ja' ha' vigente sobreposto (guard + a rede EXCLUDE); senao {:id}.")
@@ -84,6 +89,17 @@
   (criar-suplencia! [this ente-id s] (transacao this ente-id #(vereador/inserir-suplencia! % s)))
   (atualizar-vereador! [this ente-id id campos]
     (transacao this ente-id #(vereador/atualizar! % ente-id id campos)))
+  (ligar-identidade! [this ente-id id identidade-id]
+    ;; 23505 do indice UNIQUE parcial (ente_id,identidade_id) WHERE identidade_id IS NOT NULL -> conflito
+    ;; de dominio (409, nunca 500) — mesmo predicado 23505 de participacao/interpor-recurso! e
+    ;; legislativo/registrar-voto!.
+    (try
+      (transacao this ente-id #(vereador/ligar-identidade! % ente-id id identidade-id))
+      (catch PSQLException e
+        (if (= "23505" (.getSQLState e))
+          (throw (ex-info "identidade ja vinculada a outro vereador nesta Casa"
+                          {:tipo :conflito/identidade-ja-vinculada :id id :identidade-id identidade-id}))
+          (throw e)))))
   (registrar-mandato! [this ente-id m]
     (transacao this ente-id
       (fn [tx]

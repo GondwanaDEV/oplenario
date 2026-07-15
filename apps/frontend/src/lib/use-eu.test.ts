@@ -8,7 +8,7 @@ describe("useEu", () => {
     vi.unstubAllEnvs();
   });
 
-  it("modo dev (NODE_ENV=test) -> não busca /api/eu, estado 'pronto' direto, papeis null", () => {
+  it("modo dev (NEXT_PUBLIC_APP_ENV=test) -> não busca /api/eu, estado 'pronto' direto, papeis null", () => {
     global.fetch = vi.fn() as unknown as typeof fetch;
     const { result } = renderHook(() => useEu("algum-token"));
     expect(result.current.estado).toBe("pronto");
@@ -17,7 +17,7 @@ describe("useEu", () => {
   });
 
   it("modo real -> busca /api/eu e extrai ator.papeis", async () => {
-    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_APP_ENV", "production");
     global.fetch = vi.fn(
       async () => ({ ok: true, json: async () => ({ ator: { papeis: ["vereador", "secretario"] } }) }) as Response
     ) as unknown as typeof fetch;
@@ -31,7 +31,7 @@ describe("useEu", () => {
   });
 
   it("modo real + resposta não-ok -> papeis [], estado 'erro' (fail-closed)", async () => {
-    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_APP_ENV", "production");
     global.fetch = vi.fn(async () => ({ ok: false, status: 401 }) as Response) as unknown as typeof fetch;
 
     const { result } = renderHook(() => useEu(null));
@@ -40,7 +40,7 @@ describe("useEu", () => {
   });
 
   it("modo real + resposta malformada (sem ator.papeis) -> papeis [], estado 'erro'", async () => {
-    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_APP_ENV", "production");
     global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({}) }) as Response) as unknown as typeof fetch;
 
     const { result } = renderHook(() => useEu(null));

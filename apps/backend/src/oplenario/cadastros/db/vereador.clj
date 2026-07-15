@@ -35,6 +35,22 @@
                    :from [:cadastros.vereador]
                    :where [:and [:= :ente_id ente-id] [:= :identidade_id identidade-id]]}))))
 
+(defn ligar-identidade!
+  "Liga o vereador a' identidade (Onda D Slice 5 Task 9 — passo (2) do provisionamento; GUARD ref, sem FK
+   cross-schema, §22.10 — a existencia de `identidade-id` e' checada pelo guard de servico injetado na
+   borda, nunca aqui). `ente_id` no WHERE alem da RLS (defesa em profundidade, mesmo padrao de atualizar!/
+   mudar-estado!). Idempotente (re-ligar a MESMA identidade e' um no-op valido). Devolve o update-count (0 =
+   vereador inexistente/de-outro-tenant). Colisao com o indice UNIQUE parcial (outro vereador desta Casa ja'
+   ligado a esta identidade) sobe como PSQLException 23505 — o Repo (components/repositorio.clj) converte
+   p/ :conflito/identidade-ja-vinculada, nunca tratada aqui (mesmo padrao de inserir-mandato!/
+   registrar-mandato!)."
+  [tx ente-id id identidade-id]
+  (:next.jdbc/update-count
+   (jdbc/execute-one! tx
+     (sql/format {:update :cadastros.vereador
+                  :set {:identidade_id identidade-id}
+                  :where [:and [:= :ente_id ente-id] [:= :id id]]}))))
+
 (defn atualizar!
   "UPDATE de nome/nome-parlamentar da linha EFETIVADA do vereador. So' seta as chaves PRESENTES em `campos`
    (:nome / :nome-parlamentar) — um PATCH parcial nunca zera o campo que o cliente nao mandou. Devolve o

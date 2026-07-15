@@ -68,3 +68,42 @@ export function validarLicenca(v: { inicio: string; fim?: string }): Resultado<{
   }
   return fechar(erros);
 }
+
+// Conceder acesso (Onda D Slice 5, Task 11) — CPF e e-mail institucional. `apenasDigitos` é exportado
+// porque o form precisa da MESMA normalização antes de enviar o corpo (o backend exige `^\d{11}$`
+// estrito, sem pontuação — identidade/wire/in/acesso.clj `CriarIdentidade`); validar e enviar têm que
+// concordar sobre o que é "o CPF", senão um valor passa na validação do form e falha no POST.
+export function apenasDigitos(s: string): string {
+  return s.replace(/\D/g, "");
+}
+
+// Dígito verificador (mesmo algoritmo do backend, identidade/models/identidade.clj `valido-cpf?`): pega
+// erro de digitação óbvio ANTES do round-trip que gastaria o passo 1 (criar identidade) à toa. O
+// cliente NUNCA é a única autoridade — o servidor revalida do mesmo jeito.
+function digitoVerificador(digitos: number[], pesos: number[]): number {
+  const soma = digitos.reduce((acc, d, i) => acc + d * pesos[i], 0);
+  const resto = soma % 11;
+  return resto < 2 ? 0 : 11 - resto;
+}
+
+function cpfValido(cpfBruto: string): boolean {
+  const d = apenasDigitos(cpfBruto);
+  if (!/^\d{11}$/.test(d)) return false;
+  if (/^(\d)\1{10}$/.test(d)) return false; // 11 dígitos iguais: formato passa, CPF não existe
+  const digitos = d.split("").map(Number);
+  return (
+    digitos[9] === digitoVerificador(digitos.slice(0, 9), [10, 9, 8, 7, 6, 5, 4, 3, 2]) &&
+    digitos[10] === digitoVerificador(digitos.slice(0, 10), [11, 10, 9, 8, 7, 6, 5, 4, 3, 2])
+  );
+}
+
+function emailValido(email: string): boolean {
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim());
+}
+
+export function validarConcederAcesso(v: { cpf: string; email: string }): Resultado<{ cpf?: string; email?: string }> {
+  const erros: { cpf?: string; email?: string } = {};
+  if (branco(v.cpf) || !cpfValido(v.cpf)) erros.cpf = "CPF inválido.";
+  if (branco(v.email) || !emailValido(v.email)) erros.email = "E-mail inválido.";
+  return fechar(erros);
+}

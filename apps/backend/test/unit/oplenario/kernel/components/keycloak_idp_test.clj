@@ -206,14 +206,18 @@
    :admin-usuario "admin" :admin-senha "admin" :jwks-cache-ttl-s 600
    :web-client-id "oplenario-web"
    :redirect-uris ["http://localhost:3000/api/auth/callback"]
-   :web-origins ["http://localhost:3000"]})
+   :web-origins ["http://localhost:3000"]
+   :smtp {:host "mailpit" :port 1025 :from "nao-responda@oplenario.local"
+          :ssl false :starttls false :auth false}})
 
 (defn- fake-admin-req!
   "Fake de `admin-req!` — captura toda chamada em `chamadas` (atom, vetor de {:metodo :caminho :corpo}) e
   responde por convencao: GET raiz do realm (`/admin/realms/<realm>`, sem sufixo) -> 200 (realm ja
-  existe, pula a criacao); GET .../users/profile -> 200 com identidade-id JA declarado (pula o PUT); GET
+  existe, pula a criacao); PUT nessa mesma raiz (configurar-smtp!) -> 204 (convencao real do KC, ver
+  Task 2); GET .../users/profile -> 200 com identidade-id JA declarado (pula o PUT); GET
   .../clients?clientId=X -> 200 com [] (nao existe) ou [{...}] (existe), conforme `clients-existentes`
-  (set de clientId); POST/PUT -> sucesso (201/200)."
+  (set de clientId); POST -> 201; PUT generico (ex.: habilitar-passkey!) -> 204 — status REAIS
+  confirmados empiricamente contra o Keycloak 26 vivo (curl direto), nao um chute de #{200 204}."
   [chamadas clients-existentes]
   (fn [_http-client _token metodo caminho corpo-map _base-url]
     (swap! chamadas conj {:metodo metodo :caminho caminho :corpo corpo-map})
@@ -222,7 +226,7 @@
       {:status 200 :corpo {:attributes [{:name "identidade-id"}]}}
 
       (re-matches #"/admin/realms/[^/]+" caminho)
-      {:status 200 :corpo {}}
+      (if (= metodo :get) {:status 200 :corpo {}} {:status 204 :corpo {}})
 
       (str/includes? caminho "/clients?clientId=")
       (let [client-id (subs caminho (+ (str/index-of caminho "clientId=") (count "clientId=")))]
@@ -231,7 +235,30 @@
           {:status 200 :corpo []}))
 
       (= metodo :post) {:status 201 :corpo {}}
-      (= metodo :put)  {:status 200 :corpo {}}
+      (= metodo :put)  {:status 204 :corpo {}}
+      :else            {:status 200 :corpo {}})))
+
+(defn- fake-admin-req-com-falha!
+  "Como `fake-admin-req!`, mas o PUT cujo caminho bate em `caminho-alvo?` devolve uma falha de infra
+  (status 400) em vez do sucesso convencional — usado p/ provar que `habilitar-passkey!`/
+  `configurar-smtp!` PROPAGAM o erro (LANCAM) em vez de engolir e seguir em frente com o realm
+  parcialmente configurado."
+  [caminho-alvo?]
+  (fn [_http-client _token metodo caminho _corpo-map _base-url]
+    (cond
+      (and (= metodo :put) (caminho-alvo? caminho))
+      {:status 400 :corpo {:erro "falha simulada"}}
+
+      (str/ends-with? caminho "/users/profile")
+      {:status 200 :corpo {:attributes [{:name "identidade-id"}]}}
+
+      (re-matches #"/admin/realms/[^/]+" caminho)
+      (if (= metodo :get) {:status 200 :corpo {}} {:status 204 :corpo {}})
+
+      (str/includes? caminho "/clients?clientId=") {:status 200 :corpo []}
+
+      (= metodo :post) {:status 201 :corpo {}}
+      (= metodo :put)  {:status 204 :corpo {}}
       :else            {:status 200 :corpo {}})))
 
 (defn- provisionar-capturando!
@@ -275,3 +302,55 @@
   (let [chamadas (provisionar-capturando! #{"oplenario-web" "oplenario-backend"})]
     (testing "client oplenario-web ja existe -> nenhum POST de criacao"
       (is (nil? (post-do-client chamadas "oplenario-web"))))))
+
+;; ---------------------------------------------------------------------------------------------
+;; habilitar-passkey!/configurar-smtp! (Task 2, fix wave) — prova de CAUSALIDADE + falha de infra.
+;;
+;; O Keycloak 26.0.0 vivo (start-dev) ja nasce com `webauthn-register-passwordless` `enabled:true` por
+;; default (achado real, ver task-2-report.md) — entao um teste de integracao que so' checa
+;; `:enabled true` DEPOIS de `provisionar-realm!` provaria um default do KC, nao o efeito do nosso codigo
+;; (passaria identico com `habilitar-passkey!` deletado). Aqui, em vez disso, capturamos as chamadas
+;; que `provisionar-realm-impl` de fato emite e afirmamos o PUT + o corpo desejado diretamente —
+;; deterministico, nao depende de nenhum default mutavel de servidor.
+;; ---------------------------------------------------------------------------------------------
+
+(defn- put-cujo-caminho-termina-em [chamadas sufixo]
+  (some #(when (and (= :put (:metodo %)) (str/ends-with? (:caminho %) sufixo)) %) chamadas))
+
+(defn- put-na-raiz-do-realm [chamadas]
+  (some #(when (and (= :put (:metodo %)) (re-matches #"/admin/realms/[^/]+" (:caminho %))) %) chamadas))
+
+(deftest provisionar-realm-emite-put-habilitando-a-required-action-de-passkey
+  (let [chamadas (provisionar-capturando! #{})
+        put-passkey (put-cujo-caminho-termina-em
+                     chamadas "/authentication/required-actions/webauthn-register-passwordless")]
+    (is (some? put-passkey) "esperava um PUT na required-action de passkey")
+    (is (true? (:enabled (:corpo put-passkey)))
+        "o PUT tem de afirmar o estado habilitado, independente do default de fabrica do KC")))
+
+(deftest provisionar-realm-emite-put-configurando-o-smtp-do-realm
+  (let [chamadas (provisionar-capturando! #{})
+        put-smtp (put-na-raiz-do-realm chamadas)]
+    (is (some? put-smtp) "esperava um PUT na raiz do realm com smtpServer")
+    (is (= "mailpit" (get-in put-smtp [:corpo :smtpServer :host]))
+        "realm aponta p/ o servidor de e-mail configurado — quem envia o convite e' o KC, nao a app")))
+
+(deftest habilitar-passkey-com-falha-de-infra-lanca
+  (with-redefs-fn {#'kc/admin-token! (fn [_config _http-client] "fake-token")
+                    #'kc/admin-req!  (fake-admin-req-com-falha!
+                                       #(str/ends-with? % "/authentication/required-actions/webauthn-register-passwordless"))}
+    (fn []
+      (is (thrown? clojure.lang.ExceptionInfo
+                   (#'kc/provisionar-realm-impl {:config config-provisionamento :http-client nil} ente-id))
+          "PUT que falha ao habilitar a required action de passkey tem de LANCAR — erro de infra nunca
+           segue em frente com o realm parcialmente configurado"))))
+
+(deftest configurar-smtp-com-falha-de-infra-lanca
+  (with-redefs-fn {#'kc/admin-token! (fn [_config _http-client] "fake-token")
+                    #'kc/admin-req!  (fake-admin-req-com-falha!
+                                       #(re-matches #"/admin/realms/[^/]+" %))}
+    (fn []
+      (is (thrown? clojure.lang.ExceptionInfo
+                   (#'kc/provisionar-realm-impl {:config config-provisionamento :http-client nil} ente-id))
+          "PUT que falha ao configurar o SMTP do realm tem de LANCAR — erro de infra nunca segue em
+           frente com o realm parcialmente configurado"))))

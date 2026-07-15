@@ -68,8 +68,8 @@ describe("useMinhaSessaoAtual", () => {
 
   // T14b: prova do modo REAL (produção) — sem token no cliente, a sessão é o cookie httpOnly; o hook NÃO
   // aborta (semCredencial(null) é false sob modoReal()) e o fetch É disparado normalmente.
-  it("modo real (NODE_ENV=production) + token null -> busca mesmo assim (cookie decide)", async () => {
-    vi.stubEnv("NODE_ENV", "production");
+  it("modo real (NEXT_PUBLIC_APP_ENV=production) + token null -> busca mesmo assim (cookie decide)", async () => {
+    vi.stubEnv("NEXT_PUBLIC_APP_ENV", "production");
     try {
       global.fetch = vi.fn(async () => ({
         ok: true,

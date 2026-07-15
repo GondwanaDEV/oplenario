@@ -16,6 +16,12 @@
     "Provisiona o realm do tenant `ente-id` (realm-por-tenant). Idempotente. Carry: impl Keycloak.")
   (criar-usuario! [idp ente-id usuario]
     "Cria o usuario no realm do tenant (enrollment); MFA obrigatorio na 1a sessao (§22.5.2 eixo F).")
+  (convidar! [idp ente-id identidade-id]
+    "Dispara o BOOTSTRAP de 1o acesso: o IdP envia codigo de uso unico ao e-mail institucional, que abre
+    a sessao e OBRIGA o cadastro de passkey antes de qualquer acao (§22.5.2 eixo F). Operacao PROPRIA (nao
+    dobrada em criar-usuario!) porque 'reenviar convite' e' acao de produto separada. Idempotente: reenviar
+    invalida o codigo anterior. O e-mail sai do IdP, NAO da aplicacao — nao confundir com o carry F6
+    (e-mail transacional da app). Erro de infra LANCA (borda -> 500), nunca devolve false.")
   (resetar-mfa! [idp ente-id identidade-id]
     "Reset de fator (ato auditado, nunca autoatendido p/ servidor/vereador — §22.5.2 eixo F)."))
 

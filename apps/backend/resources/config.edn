@@ -1,5 +1,12 @@
-{:env    "dev"                        ; "dev"|"test"|"production"|"staging" (override APP_ENV) — so' dev/test usam
-                                       ; idp-dev; qualquer outro valor usa o KeycloakIdp real (fail-safe)
+{:env    nil                          ; "dev"|"test"|"production"|"staging" — SEMPRE do ambiente (APP_ENV); sem default.
+                                      ; So' dev/test ligam o idp-dev (que confia em JWT NAO-ASSINADO); QUALQUER outro
+                                      ; valor — inclusive AUSENTE ("" ou nil, que e' este default) — usa o KeycloakIdp
+                                      ; real. O modo dev e' opt-in EXPLICITO (docker-compose seta APP_ENV).
+                                      ; Este default era "dev", e o "fail-safe" de `sistema/idp-para` (§ um :env
+                                      ; desconhecido cai no IdP real) NAO protegia contra isso: quem deployasse sem
+                                      ; setar APP_ENV nao chegava em idp-para com um valor desconhecido — chegava com
+                                      ; "dev" na mao, e todo `exige-papel` desabava (claims forjaveis, cross-tenant
+                                      ; inclusive). Fail-safe de verdade = ausencia tambem falha p/ o lado seguro.
  :http   {:port 8888}
  :db     {:jdbc-url "jdbc:postgresql://localhost:5432/oplenario" :user "oplenario" :password "dev"
           :pool-max-size 10} ; dimensionar contra max_connections do PG / nº de réplicas (deploy)
@@ -18,7 +25,12 @@
             :admin-usuario "admin" :admin-senha "admin" :jwks-cache-ttl-s 600
             :web-client-id "oplenario-web"
             :redirect-uris ["http://localhost:3000/api/auth/callback"]
-            :web-origins ["http://localhost:3000"]}
+            :web-origins ["http://localhost:3000"]
+            ;; Onda D Slice 5 Task 2: p/ onde o realm provisionado aponta o smtpServer -- quem ENVIA o
+            ;; convite/e-mails de uso-unico e' o proprio Keycloak (config de realm), nao a app (nao
+            ;; confundir com o carry F6 do e-mail TRANSACIONAL da app). Mailpit em dev/test.
+            :smtp {:host "mailpit" :port 1025 :from "nao-responda@oplenario.local"
+                   :ssl false :starttls false :auth false}}
  ;; Onda D Slice 2 Task 4: teto absoluto + janela de ociosidade da sessao opaca (POST /auth/sessoes mint).
  ;; CARRY: `:ociosa-min` 30 == 1800s = o default HARDCODED `sessao-janela-ociosa-seg` do Repo de identidade
  ;; (oplenario.identidade.components.repositorio) — sao HOJE duas fontes do MESMO numero que so' concordam

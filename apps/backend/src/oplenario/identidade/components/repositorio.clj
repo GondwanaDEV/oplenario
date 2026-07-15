@@ -21,6 +21,13 @@
   (criar-identidade! [this identidade] "CPF -> id canonico (idempotente).")
   (identidade-por-cpf [this cpf])
   (identidade-por-id [this id])
+  (nome-por-id [this id]
+    "Leitura ESTREITA (so' :nome, sem :cpf) — pra caminhos que nao devem ver CPF (ex.: provisionar
+    usuario no IdP). Review Task 8 IMPORTANT-2b: nao reusar `identidade-por-id` aqui de proposito.")
+  (identidade-existe? [this id]
+    "Leitura ESTREITA (booleano, nem :nome nem :cpf) — guard default de `rotas.clj` pro
+    PATCH /cadastros/vereadores/:id/identidade. Review Task 12 IMPORTANT: nao reusar `identidade-por-id`
+    (nem `nome-por-id`) aqui de proposito, mesmo principio de minimizacao de dado materializado.")
   (vincular-externa! [this vinculo-externo] "Liga sub gov.br -> identidade (anti-takeover).")
   (identidade-por-sub [this provedor sub])
   (criar-sessao! [this sessao] "Sessao opaca de login (custodia BFF): gera+INSERT o hash, devolve o SEGREDO CRU.")
@@ -35,6 +42,10 @@
   (registrar-consentimento! [this ente-id consentimento])
   (revogar-consentimento! [this ente-id id])
   (consentimentos-ativos [this ente-id identidade-id])
+  (conceder-acesso! [this ente-id vinculo papeis]
+    "Vinculo + papeis numa UNICA tx (§22.5 eixo D). Idempotente. E' o passo que ABRE A PORTA — por isso
+    e' o ULTIMO do fluxo de provisionamento (spec §4.2 'acesso por ultimo'): antes dele, resolver-sessao
+    nao acha vinculo ativo e ninguem entra.")
   (snapshot-ator [this ente-id identidade-id]
     "Snapshot de SESSAO numa UNICA tx (vinculo ATIVO + papeis). Devolve {:vinculo-ativo :papeis} ou nil
     se nao ha vinculo ativo. Composto AQUI (§3-bis) p/ resolver-sessao nao importar db/ direto."))
@@ -46,6 +57,8 @@
   (criar-identidade! [_ identidade] (id/inserir! (:ds datasource) identidade))
   (identidade-por-cpf [_ cpf] (id/por-cpf (:ds datasource) cpf))
   (identidade-por-id [_ id] (id/por-id (:ds datasource) id))
+  (nome-por-id [_ id] (id/nome-por-id (:ds datasource) id))
+  (identidade-existe? [_ id] (id/existe? (:ds datasource) id))
   (vincular-externa! [_ ve] (id/vincular-externa! (:ds datasource) ve))
   (identidade-por-sub [_ provedor sub] (id/identidade-por-sub (:ds datasource) provedor sub))
   (criar-sessao! [_ sessao] (sess/inserir! (:ds datasource) sessao))
@@ -60,6 +73,22 @@
   (registrar-consentimento! [this ente-id c] (transacao this ente-id #(vinc/registrar-consentimento! % c)))
   (revogar-consentimento! [this ente-id id] (transacao this ente-id #(vinc/revogar-consentimento! % id)))
   (consentimentos-ativos [this ente-id ident] (transacao this ente-id #(vinc/consentimentos-ativos % ente-id ident)))
+  (conceder-acesso! [this ente-id v papeis]
+    (transacao this ente-id
+      (fn [tx]
+        (let [vinculo-id (vinc/criar! tx v)]
+          ;; Task 12 achado seguranca: `criar!` e' UPSERT idempotente que NUNCA toca `:estado` (Task 7,
+          ;; deliberado) — re-conceder a um vinculo suspenso fica corretamente fail-closed no BANCO, mas
+          ;; sem este check o caller (handler HTTP) nao teria como saber e mandaria convite + 201 como se
+          ;; tivesse reativado. Lanca AQUI, dentro da mesma tx e ANTES de adicionar papeis, pra a tx
+          ;; inteira dar rollback (nao sobra papel concedido a um vinculo que continua fechado).
+          (when-not (= "ativo" (vinc/estado-de tx vinculo-id))
+            (throw (ex-info "vinculo existente nao esta ativo — reative via mudar-estado-vinculo! antes de conceder acesso"
+                            {:tipo :conflito/vinculo-nao-ativo :vinculo-id vinculo-id})))
+          (doseq [p papeis]
+            (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente-id
+                                       :identidade-id (:identidade-id v) :papel p}))
+          {:vinculo-id vinculo-id}))))
   (snapshot-ator [this ente-id identidade-id]
     (transacao this ente-id
       (fn [tx]

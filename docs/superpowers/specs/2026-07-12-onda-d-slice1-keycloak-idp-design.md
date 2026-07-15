@@ -157,7 +157,10 @@ Idempotência em todos: re-provisionar realm/usuário existente não falha nem d
 
 ### 3.6 Convenção de realm e claims (decisão a cravar)
 
-- **Nome do realm:** `ente-<ente-id-uuid>`. Um realm por Ente (§22.5.1 realm-por-tenant). Simples,
+- **Nome do realm:** `ente-<ente-id-uuid>`. Um realm por Ente (§22.9 Eixo 6 ponto 2, revisto na v1.45 —
+  a citação original desta linha, "§22.5.1 realm-por-tenant", era **âncora fabricada**: a §22.5 não
+  menciona realm em nenhum ponto, e a v1.22 do Eixo 6 decidira o oposto. Reconciliado na v1.45, que
+  ratifica realm-por-ente pela razão de segurança abaixo e crava o gate de escala). Simples,
   determinístico, sem tabela de mapeamento extra — o issuer já codifica o tenant.
 - **`identidade-id` no token:** protocol mapper de atributo de usuário → claim `identidade-id` (nossa
   identidade supratenant). `sub` do Keycloak é o id do usuário no realm (por-realm, não é o nosso).

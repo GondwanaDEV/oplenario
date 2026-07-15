@@ -209,9 +209,52 @@
           (throw (ex-info "keycloak-idp: falha ao criar o client (infra)"
                           {:status status :corpo corpo :client-id client-id})))))))
 
+(defn- habilitar-passkey!
+  "Garante que a required action de passkey fique habilitada no realm; sem isto, marcar o usuario com ela
+  e' silenciosamente ignorado (mesma armadilha do User Profile, ver declarar-atributo-identidade!). O
+  default de fabrica desta required action VARIA por versao/modo de import do Keycloak — achado real:
+  contra o Keycloak 26.0.0 (`start-dev`) ela ja nasce `enabled:true` num realm recem-criado, contrariando
+  a premissa original deste design. Por isso afirmamos o estado desejado idempotentemente (PUT do mesmo
+  estado nao falha) em vez de depender do default de qualquer versao especifica. Erro de infra LANCA —
+  nunca segue em frente com o realm parcialmente configurado."
+  [http-client token base-url realm]
+  (let [{:keys [status corpo]}
+        (admin-req! http-client token :put
+                    (str "/admin/realms/" realm "/authentication/required-actions/webauthn-register-passwordless")
+                    {:alias "webauthn-register-passwordless" :name "Webauthn Register Passwordless"
+                     :providerId "webauthn-register-passwordless" :enabled true :defaultAction false
+                     :priority 30 :config {}}
+                    base-url)]
+    (when-not (= 204 status)
+      (throw (ex-info "keycloak-idp: falha ao habilitar a required action de passkey (infra)"
+                      {:status status :corpo corpo})))))
+
+(defn- configurar-smtp!
+  "Aponta o realm p/ o relay. Quem envia o convite e' o Keycloak — p/ nos e' config, nao codigo (nao
+  confundir com o carry F6, que e' o e-mail TRANSACIONAL da app). Prod = relay BR (§22.9 Eixo 12).
+  PUT PARCIAL (so' :realm + :smtpServer no corpo) em vez do padrao GET-then-merge de
+  declarar-atributo-identidade! — testado empiricamente contra o Keycloak 26 vivo (suite completa,
+  incluindo criacao de client/usuario no MESMO realm logo em seguida): ao contrario do User Profile (que
+  descarta atributo nao-declarado por causa de 'unmanaged attributes' desligado), um PUT parcial na raiz
+  do realm NAO zera os demais campos omitidos. Se uma versao futura do KC mudar esse comportamento,
+  convergir p/ GET-then-merge. Erro de infra LANCA — nunca segue em frente com o realm parcialmente
+  configurado."
+  [http-client token base-url realm {:keys [host port from ssl starttls auth usuario senha]}]
+  (let [{:keys [status corpo]}
+        (admin-req! http-client token :put (str "/admin/realms/" realm)
+                    {:realm realm
+                     :smtpServer (cond-> {:host host :port (str port) :from from
+                                          :ssl (str (boolean ssl)) :starttls (str (boolean starttls))
+                                          :auth (str (boolean auth))}
+                                   auth (assoc :user usuario :password senha))}
+                    base-url)]
+    (when-not (= 204 status)
+      (throw (ex-info "keycloak-idp: falha ao configurar o SMTP do realm (infra)"
+                      {:status status :corpo corpo})))))
+
 (defn- provisionar-realm-impl
   [{:keys [config http-client]} ente-id]
-  (let [{:keys [base-url realm-prefixo audiencia web-client-id redirect-uris web-origins]} config
+  (let [{:keys [base-url realm-prefixo audiencia web-client-id redirect-uris web-origins smtp]} config
         realm (str realm-prefixo ente-id)
         token (admin-token! config http-client)
         {:keys [status]} (admin-req! http-client token :get (str "/admin/realms/" realm) nil base-url)]
@@ -221,6 +264,8 @@
         (when-not (= 201 status)
           (throw (ex-info "keycloak-idp: falha ao criar o realm (infra)" {:status status :corpo corpo})))))
     (declarar-atributo-identidade! http-client token base-url realm)
+    (habilitar-passkey! http-client token base-url realm)
+    (configurar-smtp! http-client token base-url realm smtp)
     ;; Client de audiencia (API): valida o access-token; carrega o mapper de identidade-id + a audiencia propria.
     (garantir-client! http-client token base-url realm audiencia
                       {:clientId audiencia :publicClient true :standardFlowEnabled true
@@ -261,30 +306,6 @@
   (let [partes (str/split (str/trim nome) #"\s+" 2)]
     (if (= 2 (count partes)) partes [(first partes) (first partes)])))
 
-(defn- criar-usuario-impl
-  [{:keys [config http-client]} ente-id {:keys [identidade-id nome email]}]
-  (let [{:keys [base-url realm-prefixo]} config
-        realm (str realm-prefixo ente-id)
-        token (admin-token! config http-client)
-        [primeiro ultimo] (nome->first-last nome)
-        {:keys [status corpo headers]}
-        (admin-req! http-client token :post (str "/admin/realms/" realm "/users")
-                    {:username (str identidade-id)
-                     :enabled true
-                     ;; emailVerified=true e' [GAP] pre-prod: o bootstrap real e' e-mail de uso unico
-                     ;; (carry F6, sem SMTP ainda) — marcar verificado aqui evita travar o 1o login em
-                     ;; dev/integracao enquanto esse fluxo nao existe.
-                     :emailVerified true
-                     :email email
-                     :firstName primeiro
-                     :lastName ultimo
-                     :attributes {:identidade-id [(str identidade-id)]}}
-                    base-url)]
-    (when-not (= 201 status)
-      (throw (ex-info "keycloak-idp: falha ao criar usuario (infra)" {:status status :corpo corpo})))
-    (let [location (.firstValue headers "location")]
-      {:keycloak-user-id (when (.isPresent location) (last (str/split (.get location) #"/")))})))
-
 (defn- buscar-usuario-por-identidade
   [http-client token base-url realm identidade-id]
   (let [{:keys [status corpo]}
@@ -292,6 +313,34 @@
                     (str "/admin/realms/" realm "/users?q=identidade-id:" identidade-id) nil base-url)]
     (when-not (= 200 status) (throw (ex-info "keycloak-idp: falha ao buscar usuario (infra)" {:status status})))
     (first corpo)))
+
+(defn- criar-usuario-impl
+  "GET-then-create (idempotente, mesma forma de garantir-client!/provisionar-realm-impl): re-provisionar a
+  MESMA identidade-id no MESMO ente devolve o usuario ja existente em vez de lancar em 409 'User exists
+  with same email'. Nasce com a required action de passkey: o KC OBRIGA o cadastro antes de qualquer acao
+  (§22.5.2 eixo F). emailVerified NAO e' mais forcado a true — o [GAP] existia so' porque nao havia SMTP
+  configurado no realm (Task 2 fechou isso); agora o KC verifica de verdade via o fluxo de e-mail."
+  [{:keys [config http-client]} ente-id {:keys [identidade-id nome email]}]
+  (let [{:keys [base-url realm-prefixo]} config
+        realm (str realm-prefixo ente-id)
+        token (admin-token! config http-client)]
+    (if-let [existente (buscar-usuario-por-identidade http-client token base-url realm identidade-id)]
+      {:keycloak-user-id (:id existente)}
+      (let [[primeiro ultimo] (nome->first-last nome)
+            {:keys [status corpo headers]}
+            (admin-req! http-client token :post (str "/admin/realms/" realm "/users")
+                        {:username (str identidade-id)
+                         :enabled true
+                         :email email
+                         :firstName primeiro
+                         :lastName ultimo
+                         :requiredActions ["webauthn-register-passwordless"]
+                         :attributes {:identidade-id [(str identidade-id)]}}
+                        base-url)]
+        (when-not (= 201 status)
+          (throw (ex-info "keycloak-idp: falha ao criar usuario (infra)" {:status status :corpo corpo})))
+        (let [location (.firstValue headers "location")]
+          {:keycloak-user-id (when (.isPresent location) (last (str/split (.get location) #"/")))})))))
 
 (def ^:private tipos-credencial-mfa #{"otp" "webauthn" "webauthn-passwordless"})
 
@@ -317,6 +366,32 @@
 ;; Component
 ;; ---------------------------------------------------------------------------------------------
 
+(defn- convidar-impl
+  "PUT execute-actions-email: o KC gera o codigo de uso unico, envia ao e-mail institucional e, no resgate,
+  OBRIGA o cadastro do passkey antes de qualquer acao. lifespan = janela do codigo (12h — cobre posse de
+  legislatura em dia util sem virar credencial standing, §22.5.2 eixo F).
+  `client-id` = `:web-client-id` do config (nao `:audiencia`): e' o client PKCE publico com redirectUris
+  registrados, o mesmo que o navegador usa no login normal — o link do e-mail precisa de um client com
+  destino de redirect valido; `:audiencia` (client de API, sem redirectUris) nao serve pra isso. O brief
+  original citava um `:client-id` que nao existe no config.edn (so' ha' `:audiencia`/`:web-client-id`)."
+  [{:keys [config http-client]} ente-id identidade-id]
+  (let [{:keys [base-url realm-prefixo web-client-id]} config
+        realm (str realm-prefixo ente-id)
+        token (admin-token! config http-client)
+        usuario (buscar-usuario-por-identidade http-client token base-url realm identidade-id)]
+    (when-not usuario
+      (throw (ex-info "keycloak-idp: usuario inexistente no realm — nao ha' quem convidar"
+                      {:tipo :idp/usuario-inexistente})))
+    (let [{:keys [status corpo]}
+          (admin-req! http-client token :put
+                      (str "/admin/realms/" realm "/users/" (:id usuario)
+                           "/execute-actions-email?client_id=" web-client-id "&lifespan=43200")
+                      ["webauthn-register-passwordless"]
+                      base-url)]
+      (when-not (= 204 status)
+        (throw (ex-info "keycloak-idp: falha ao enviar convite (infra)" {:status status :corpo corpo})))
+      true)))
+
 (defrecord KeycloakIdp [config jwks-provider-fn jwks-cache http-client]
   component/Lifecycle
   (start [this]
@@ -330,6 +405,7 @@
   (verificar-token [this token] (verificar-token* this token))
   (provisionar-realm! [this ente-id] (provisionar-realm-impl this ente-id))
   (criar-usuario! [this ente-id usuario] (criar-usuario-impl this ente-id usuario))
+  (convidar! [this ente-id identidade-id] (convidar-impl this ente-id identidade-id))
   (resetar-mfa! [this ente-id identidade-id] (resetar-mfa-impl this ente-id identidade-id)))
 
 (defn keycloak-idp

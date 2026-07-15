@@ -35,8 +35,8 @@ jobs:
             apps/backend/.cpcache
           key: deps-${{ hashFiles('apps/backend/deps.edn') }}
 
-      - name: Subir Postgres + MinIO (docker compose)
-        run: docker compose up -d postgres minio
+      - name: Subir Postgres + MinIO + Keycloak + Mailpit (docker compose)
+        run: docker compose --profile auth up -d postgres minio keycloak mailpit
 
       - name: Esperar Postgres ficar pronto
         run: |
@@ -54,8 +54,28 @@ jobs:
           done
           echo "MinIO nao subiu a tempo"; exit 1
 
-      - name: Testes (unit + integracao) — import-lint + leak 3-dim + authz sao gates
+      - name: Esperar Keycloak ficar pronto
+        run: |
+          # 1o boot faz Quarkus augmentation — pode levar minutos. Nao assumir pronto pelo "started".
+          for i in $(seq 1 90); do
+            curl -sf http://localhost:8080/realms/master >/dev/null && exit 0
+            sleep 4
+          done
+          echo "Keycloak nao subiu a tempo"; exit 1
+
+      - name: Esperar Mailpit ficar pronto
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8025/readyz && exit 0
+            sleep 2
+          done
+          echo "Mailpit nao subiu a tempo"; exit 1
+
+      - name: Testes (unit + integracao + keycloak) — import-lint + leak 3-dim + authz sao gates
         env:
           DATABASE_URL: jdbc:postgresql://localhost:5432/oplenario
           MINIO_ENDPOINT: http://localhost:9000
-        run: clojure -M:test --skip :e2e --skip :keycloak
+          KEYCLOAK_BASE_URL: http://localhost:8080
+          KEYCLOAK_SMTP_HOST: mailpit
+          MAILPIT_URL: http://localhost:8025
+        run: clojure -M:test --skip :e2e
