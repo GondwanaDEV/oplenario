@@ -225,7 +225,29 @@
                   (token (random-uuid) (random-uuid)) (str "/cadastros/vereadores/" (random-uuid) "/identidade")
                   {:identidade-id (str (random-uuid))})]
     (is (= 404 (:status r))
-        "guard de servico: sem FK cross-schema, a existencia da identidade e' checada por seam do host")))
+        "guard de servico: sem FK cross-schema, a existencia da identidade e' checada por seam do host")
+    (is (= "vereador ou identidade nao encontrada" (:erro (ler-json r)))
+        "mensagem generica (review IMPORTANT-2)")))
+
+(deftest ligar-identidade-id-invalido-e-identidade-inexistente-sao-indistinguiveis-404
+  ;; Review Task 9 IMPORTANT-2: `identidade-existe?` resolve pra `identidade-por-id`, que e' SUPRATENANT
+  ;; (sem escopo de ente_id) — um `admin_ente` de QUALQUER Casa poderia usar o TEXTO do erro como oraculo
+  ;; pra descobrir se um `identidade-id` chutado existe em algum lugar do sistema. Prova a propriedade que
+  ;; importa: as duas causas de 404 (path :id malformado vs. identidade que o guard nao reconhece) tem
+  ;; a MESMA resposta byte-a-byte, entao a resposta nao vaza qual das duas faltou.
+  (let [ident (str (random-uuid))
+        r-id-invalido (patch* (service-fn #{"admin_ente"} (fake-repo-cadastros [] nil)
+                                          :identidade-existe? (constantly true))
+                              (token (random-uuid) (random-uuid)) "/cadastros/vereadores/nao-uuid/identidade"
+                              {:identidade-id ident})
+        r-identidade-ausente (patch* (service-fn #{"admin_ente"} (fake-repo-cadastros [] nil)
+                                                 :identidade-existe? (constantly false))
+                                     (token (random-uuid) (random-uuid))
+                                     (str "/cadastros/vereadores/" (random-uuid) "/identidade")
+                                     {:identidade-id ident})]
+    (is (= 404 (:status r-id-invalido) (:status r-identidade-ausente)))
+    (is (= (:body r-id-invalido) (:body r-identidade-ausente))
+        "mesmo corpo de resposta pras duas causas -> nenhuma delas e' distinguivel pelo cliente")))
 
 (deftest ligar-identidade-vereador-inexistente-404
   (let [r (patch* (service-fn #{"admin_ente"} (fake-repo-cadastros [] nil 0) ; update-count 0

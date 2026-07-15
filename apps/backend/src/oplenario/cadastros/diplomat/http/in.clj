@@ -113,18 +113,21 @@
   a migration `...0010-cadastros`) p/ garantir a referencia no banco. O adapters/in roda INCONDICIONAL no
   `let` (mesmo padrao de editar-vereador-handler acima) — corpo invalido (`identidade-id` que nao parseia
   UUID) -> 400 mesmo que `:id` do path TAMBEM seja invalido (validacao tem precedencia). Com o corpo valido:
-  `id` do path invalido -> 404 (mesmo contrato das outras rotas deste arquivo, nunca 500); senao
-  identidade-existe? -> 404 (a mesma resposta do vereador inexistente, nao vaza qual dos dois faltou).
-  Conflito (identidade ja' ligada a OUTRO vereador nesta Casa, indice UNIQUE parcial) -> 409 capturado
-  LOCALMENTE (mesmo padrao de registrar-mandato-handler/registrar-licenca-handler acima)."
+  `id` do path invalido OU identidade-existe? falso -> a MESMA mensagem 404 (review Task 9 IMPORTANT-2:
+  `identidade-por-id` e' SUPRATENANT — sem colapsar, um `admin_ente` de QUALQUER Casa poderia usar o texto
+  do erro como oraculo pra descobrir, por tentativa, se um `identidade-id` chutado existe em algum lugar
+  do sistema; mesmo raciocinio ja' aplicado em registrar-mandato-handler, que colapsa vereador/legislatura
+  ausentes em \"vereador ou legislatura nao encontrada\"). Conflito (identidade ja' ligada a OUTRO vereador
+  nesta Casa, indice UNIQUE parcial) -> 409 capturado LOCALMENTE (mesmo padrao de registrar-mandato-handler/
+  registrar-licenca-handler acima)."
   [repo identidade-existe?]
   (fn [req]
     (let [ente-id (:ente-id (:ator req))
           id (parse-uuid (get-in req [:path-params :id]))
           ident (adapters-in/ligar-identidade->dominio (:json-params req))]
       (cond
-        (nil? id) (http/json-resposta 404 {:erro "vereador nao encontrado"})
-        (not (identidade-existe? ident)) (http/json-resposta 404 {:erro "identidade nao encontrada"})
+        (or (nil? id) (not (identidade-existe? ident)))
+        (http/json-resposta 404 {:erro "vereador ou identidade nao encontrada"})
         :else
         (try
           (if (pos? (controllers/ligar-identidade repo ente-id id ident))

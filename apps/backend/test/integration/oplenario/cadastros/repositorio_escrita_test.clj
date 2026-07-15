@@ -103,6 +103,28 @@
     (is (= 1 (repo/atualizar-vereador! *repo* ente ver {:nome "Carla Nova"})) "linha existente -> update-count 1")
     (is (= 0 (repo/atualizar-vereador! *repo* ente (random-uuid) {:nome "X"})) "id desconhecido -> update-count 0")))
 
+(deftest ligar-identidade-recusa-mesma-identidade-em-dois-vereadores-da-casa
+  ;; Review Task 9 IMPORTANT-3: o unico teste de 409 pre-existente (`ligar-identidade-conflito-409` em
+  ;; vereador-http-in-test) usa um Repo FAKE que joga o ex-info pronto — prova so' que o diplomat converte
+  ;; ex-info -> 409 (padrao ja' provado antes desta task). Este teste roda contra Postgres REAL e exercita
+  ;; o caminho novo de fato: `(catch PSQLException e (.getSQLState e) "23505")` em components/repositorio.clj
+  ;; + o indice UNIQUE parcial `idx_vereador_identidade_unica` (migration ...0060) que o sustenta.
+  (let [ente (random-uuid) ver-a (random-uuid) ver-b (random-uuid) ident (random-uuid)]
+    (seed-municipio!)
+    (repo/transacao *repo* ente
+      (fn [tx]
+        (estrutura/inserir-ente! tx {:ente-id ente :municipio-ibge "2304400" :nome-oficial "Camara Escrita"})
+        (vereador/inserir! tx {:id ver-a :ente-id ente :nome "Ana"})
+        (vereador/inserir! tx {:id ver-b :ente-id ente :nome "Bia"})))
+    (is (= 1 (repo/ligar-identidade! *repo* ente ver-a ident)) "1a ligacao: update-count 1, sem colisao")
+    (let [ex (try (repo/ligar-identidade! *repo* ente ver-b ident)
+                  nil
+                  (catch clojure.lang.ExceptionInfo e e))]
+      (is (some? ex) "2o vereador da MESMA Casa tentando a MESMA identidade lanca excecao (23505 real)")
+      (is (= :conflito/identidade-ja-vinculada (:tipo (ex-data ex)))))
+    (is (= 0 (repo/ligar-identidade! *repo* ente (random-uuid) (random-uuid)))
+        "vereador-id desconhecido -> update-count 0 (404), nao colisao")))
+
 (deftest escrita-isola-cross-tenant
   (let [ente-a (random-uuid) ente-b (random-uuid) leg (random-uuid) ver (random-uuid)
         ini (LocalDate/parse "2025-01-01")]
