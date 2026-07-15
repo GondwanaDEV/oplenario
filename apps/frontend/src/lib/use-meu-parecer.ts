@@ -43,17 +43,23 @@ export function useMeuParecer(token: string | null, id: string | null) {
     };
   }, []);
 
+  // Efeito de carga: fetch INLINE (async IIFE, sem setState síncrono no corpo — o reset p/ "carregando" já
+  // acontece no render acima ao trocar `id`). Idêntico ao mirror use-parecer-editor.ts; a limpeza `vivo`
+  // descarta a resposta se o `id` mudar ou o componente desmontar durante o fetch.
   useEffect(() => {
     if (!id) return;
     if (semCredencial(token)) return;
     let vivo = true;
-    setEstado("carregando");
-    buscarMeuParecer(token, id).then((d) => {
-      if (!vivo || !vivoRef.current) return;
-      if (idAtualRef.current !== id) return;
-      setDados(d);
-      setEstado(d ? "pronto" : "erro");
-    });
+    (async () => {
+      try {
+        const resultado = await buscarMeuParecer(token, id);
+        if (!vivo) return;
+        setDados(resultado);
+        setEstado(resultado ? "pronto" : "erro");
+      } catch {
+        if (vivo) setEstado("erro");
+      }
+    })();
     return () => {
       vivo = false;
     };

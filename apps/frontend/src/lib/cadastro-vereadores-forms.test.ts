@@ -23,6 +23,10 @@ describe("validarEditar", () => {
   it("nome preenchido não pode ser branco", () => {
     expect(validarEditar({ nome: "  " }).valido).toBe(false);
   });
+  it("permite esvaziar o nome parlamentar (limpar o apelido, sem tocar no nome)", () => {
+    // Presença do campo (mesmo "") = alteração; distingue de `{}` (nada mudou → inválido).
+    expect(validarEditar({ nomeParlamentar: "" }).valido).toBe(true);
+  });
 });
 
 describe("validarMandato", () => {
