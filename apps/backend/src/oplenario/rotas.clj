@@ -9,6 +9,7 @@
             [oplenario.config :as config]
             [oplenario.http :as http]
             [oplenario.identidade.diplomat.http.auth-in :as auth-http]
+            [oplenario.identidade.diplomat.http.in :as identidade-http]
             [oplenario.interceptors :as it]
             [oplenario.kernel.tempo :as tempo]
             [oplenario.legislativo.diplomat.http.in :as legislativo-http]
@@ -139,4 +140,5 @@
         (into (tempo-real-sse/rotas {:auth auth :canal-store canal-store :consultar-sessao consultar-sessao}))
         (into (auth-http/rotas {:info-ente info-ente :keycloak keycloak
                                 :idp idp :repo-identidade repo-identidade
-                                :relogio relogio-producao :sessao sessao})))))
+                                :relogio relogio-producao :sessao sessao}))
+        (into (identidade-http/rotas {:auth auth :repo-identidade repo-identidade :idp idp})))))
