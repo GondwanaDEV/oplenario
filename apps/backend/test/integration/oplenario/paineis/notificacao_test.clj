@@ -146,3 +146,28 @@
         (is (= "smtp indisponivel" (:notificacao_entrega/falha_motivo linha)) "registra o motivo")
         (is (nil? (:notificacao_entrega/enviada_em linha)) "sem enviada_em em falha")))))
 
+;; ---------- Onda E fatia 1: roteamento por canal (spec §4.3) ----------
+
+(deftest notificacao-in-app-nao-entra-no-ledger-de-email
+  ;; criterio de aceitacao 7: uma notificacao com canal "in_app" NAO vira intent de entrega de e-mail —
+  ;; senao o worker `entregar-pendentes!` tentaria mandar e-mail de uma mensagem que so' vive na inbox.
+  (let [ente (random-uuid)]
+    (emitir! ente "notificacao.requisitada"
+             {:destinatario-identidade-id (str (random-uuid)) :canal "in_app"
+              :consent-base "vinculo" :idempotency-key (str "k-" (random-uuid))
+              :categoria "norma_publicada" :assunto "A sua proposicao virou lei"
+              :corpo "corpo" :objeto-tipo "proposicao" :objeto-id (str (random-uuid))})
+    (drenar!)
+    (is (empty? (ledger ente)) "canal in_app -> nenhum intent no ledger de entrega de e-mail")))
+
+(deftest notificacao-email-continua-entrando-no-ledger
+  ;; a guarda tem DENTES nos dois sentidos: o canal legitimo segue projetando (nao vira no-op geral).
+  (let [ente (random-uuid)]
+    (emitir! ente "notificacao.requisitada"
+             {:destinatario-identidade-id (str (random-uuid)) :canal "email"
+              :consent-base "acompanhamento" :idempotency-key (str "k-" (random-uuid))
+              :assunto "Movimentacao" :corpo "corpo"
+              :objeto-tipo "proposicao" :objeto-id (str (random-uuid))})
+    (drenar!)
+    (is (= 1 (count (ledger ente))) "canal email -> intent 'pendente' no ledger, como antes")))
+

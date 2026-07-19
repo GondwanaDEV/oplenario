@@ -74,6 +74,30 @@
       (log/warn "paineis: transicao sem materia projetada no board (protocolo ausente?)"
                 {:ente-id ente-id :proposicao-id proposicao-id-str :estado estado})))
 
+(def ^:private canal-email
+  "O UNICO canal que o ledger de ENTREGA (notificacao_entrega) materializa. Onda E fatia 1: o mesmo evento
+  `notificacao.requisitada` passou a carregar tambem `in_app` (inbox interna, projetada por
+  `projetar-inbox!` numa tabela propria). Cada projetor trata APENAS o seu canal (spec §4.3); sem esta
+  guarda o worker `entregar-pendentes!` tentaria enviar e-mail de uma notificacao que nunca teve endereco."
+  "email")
+
+(defn- registrar-intent-de-email!
+  "Materializa o intent de entrega SO' quando o canal e' 'email'. Outro canal -> log/debug + nil (nunca
+  lanca, nunca grava): nao e' erro, e' um evento endereçado a OUTRO projetor do mesmo modulo."
+  [tx ente-id payload]
+  (if (= canal-email (:canal payload))
+    (db-notificacao/registrar-intent! tx {:ente-id ente-id
+                                          :destinatario (:destinatario-identidade-id payload)
+                                          :canal (:canal payload)
+                                          :idempotency-key (:idempotency-key payload)
+                                          :consent-base (:consent-base payload)
+                                          :assunto (:assunto payload) :corpo (:corpo payload)
+                                          :objeto-tipo (:objeto-tipo payload)
+                                          :objeto-id (UUID/fromString (:objeto-id payload))})
+    (do (log/debug "paineis: notificacao de outro canal ignorada pelo ledger de e-mail"
+                   {:ente-id ente-id :canal (:canal payload)})
+        nil)))
+
 (defn despachar!
   "O `case` de fato, SEM tolerancia — lanca em tipo sem branch (`case` sem default: 'No matching clause') OU
   em payload malformado (UUID/LocalDate invalidos). PUBLICA (nao `defn-`) DE PROPOSITO: e' o alvo direto do
@@ -151,15 +175,10 @@
     ;; e' enviado aqui (anti dual-write — ver db.notificacao-entrega); o worker (entregar-pendentes!) envia
     ;; depois. `objeto-id` chega STRING (jsonb) -> UUID; `destinatario` fica STRING (identidade-uuid como texto,
     ;; coluna `destinatario text`). Idempotencia da entrega pela chave DETERMINISTICA do payload (ON CONFLICT).
+    ;; Onda E fatia 1: ROTEAMENTO POR CANAL — este branch cuida SO' de `email`. A inbox (`in_app`) e' um
+    ;; SEGUNDO consumidor registrado (`paineis-inbox`, `projetar-inbox!`), com dedup independente.
     "notificacao.requisitada"
-    (db-notificacao/registrar-intent! tx {:ente-id ente-id
-                                          :destinatario (:destinatario-identidade-id payload)
-                                          :canal (:canal payload)
-                                          :idempotency-key (:idempotency-key payload)
-                                          :consent-base (:consent-base payload)
-                                          :assunto (:assunto payload) :corpo (:corpo payload)
-                                          :objeto-tipo (:objeto-tipo payload)
-                                          :objeto-id (UUID/fromString (:objeto-id payload))})))
+    (registrar-intent-de-email! tx ente-id payload)))
 
 (defn projetar-evento!
   "Dispatch por tipo de evento -> a projecao de dominio, DENTRO da `tx` corrente (a do relay). Seta o GUC de
