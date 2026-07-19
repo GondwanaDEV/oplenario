@@ -7,8 +7,11 @@
             [next.jdbc :as jdbc]
             [oplenario.config :as config]
             [oplenario.kernel.components.datasource :as datasource]
+            [oplenario.kernel.eventos :as eventos]
+            [oplenario.kernel.outbox :as outbox]
             [oplenario.kernel.tenancy :as tenancy]
-            [oplenario.migracao :as migracao]))
+            [oplenario.migracao :as migracao]
+            [oplenario.paineis.diplomat.consumers :as paineis-consumers]))
 
 (def ^:dynamic *ds* nil)
 
@@ -68,3 +71,62 @@
                   VALUES (?, ?, ?, 'norma_publicada', 'a', 'c', 'proposicao', ?, 'k-forjada')"
                  (random-uuid) ente-b (random-uuid) (random-uuid)]))))
         "WITH CHECK barra gravar linha de OUTRO ente mesmo com o GUC do proprio")))
+
+;; ---------- Task 4: o PROJETOR da inbox (2o consumidor de `notificacao.requisitada`) ----------
+
+(defn- drenar! []
+  (outbox/drenar! *ds* (paineis-consumers/registrar {})))
+
+(defn- emitir! [ente payload]
+  (tenancy/com-tenant* *ds* ente
+    (fn [tx] (eventos/emitir! (outbox/bus) tx
+               (eventos/evento "notificacao.requisitada" ente payload)))))
+
+(defn- caixa [ente]
+  (tenancy/com-tenant* *ds* ente
+    (fn [tx] (jdbc/execute! tx ["SELECT destinatario_identidade_id, categoria, assunto, corpo,
+                                        objeto_tipo, objeto_id, idempotency_key, lida_em
+                                 FROM paineis.notificacao_caixa ORDER BY criado_em"]))))
+
+(defn- payload-in-app [dest chave]
+  {:destinatario-identidade-id (str dest) :canal "in_app" :consent-base "vinculo"
+   :idempotency-key chave :categoria "norma_publicada"
+   :assunto "A sua proposicao virou lei" :corpo "Lei 3/2026 — Dispoe sobre X."
+   :objeto-tipo "proposicao" :objeto-id (str (random-uuid))})
+
+(deftest projeta-in-app-na-inbox
+  (let [ente (random-uuid) dest (random-uuid)]
+    (emitir! ente (payload-in-app dest "k-inbox-1"))
+    (drenar!)
+    (let [linhas (caixa ente)]
+      (is (= 1 (count linhas)))
+      (let [l (first linhas)]
+        (is (= dest (:notificacao_caixa/destinatario_identidade_id l)))
+        (is (= "norma_publicada" (:notificacao_caixa/categoria l)))
+        (is (= "A sua proposicao virou lei" (:notificacao_caixa/assunto l)))
+        (is (= "proposicao" (:notificacao_caixa/objeto_tipo l)))
+        (is (nil? (:notificacao_caixa/lida_em l)) "nasce nao lida")))))
+
+(deftest projecao-e-idempotente-no-redrive
+  ;; criterio de aceitacao 1: re-executar o MESMO evento logico nao cria uma segunda notificacao.
+  (let [ente (random-uuid) dest (random-uuid) p (payload-in-app dest "k-inbox-repetida")]
+    (emitir! ente p) (drenar!)
+    (emitir! ente p) (drenar!)  ; envelope NOVO (idempotency-key do envelope e' aleatoria) -> o consumer roda
+    (is (= 1 (count (caixa ente))) "a UNIQUE (ente_id, idempotency_key) torna a 2a projecao um no-op")))
+
+(deftest canal-email-nao-entra-na-inbox
+  (let [ente (random-uuid)]
+    (emitir! ente (assoc (payload-in-app (random-uuid) "k-email") :canal "email"))
+    (drenar!)
+    (is (empty? (caixa ente)) "cada projetor trata so' o seu canal (spec §4.3)")))
+
+(deftest payload-malformado-nao-envenena-o-relay
+  ;; o relay e' COMPARTILHADO: um payload ruim tem de ser tolerado (log + nil), nunca propagado.
+  (let [ente (random-uuid)]
+    (emitir! ente (assoc (payload-in-app (random-uuid) "k-ruim") :objeto-id "nao-e-uuid"))
+    (is (some? (drenar!)) "drenar! nao lanca")
+    (is (empty? (caixa ente)) "nada foi gravado")
+    ;; e o bus segue drenando o PROXIMO evento normalmente
+    (emitir! ente (payload-in-app (random-uuid) "k-depois"))
+    (drenar!)
+    (is (= 1 (count (caixa ente))) "o evento seguinte projeta — o relay nao travou")))

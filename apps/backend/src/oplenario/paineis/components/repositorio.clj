@@ -34,6 +34,7 @@
   (:require [clojure.tools.logging :as log]
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.paineis.components.notificacao :as porta]
+            [oplenario.paineis.db.notificacao-caixa :as db-caixa]
             [oplenario.paineis.db.notificacao-entrega :as db-notificacao]
             [oplenario.paineis.db.pendencia :as db-pendencia]
             [oplenario.paineis.db.sli-sessao :as db-sli-sessao]
@@ -208,6 +209,41 @@
     (catch Throwable e
       (log/warn e "paineis: payload malformado ou falha de projecao — evento tolerado, nunca propaga p/ o relay compartilhado"
                 {:tipo tipo :ente-id ente-id})
+      nil)))
+
+(def ^:private canal-in-app
+  "O UNICO canal que a INBOX materializa (espelho de `canal-email`; spec §4.3)."
+  "in_app")
+
+(defn projetar-inbox!
+  "Handler do SEGUNDO consumidor do modulo (`paineis-inbox`, mesma disciplina de
+  `transparencia/fan-out-notificacao!`): projeta `notificacao.requisitada` de canal `in_app` na
+  `paineis.notificacao_caixa`. Identidade de dedup SEPARADA da do projetor de entrega — cada um roda
+  effectively-once por conta propria, entao a inbox nao depende da ordem nem do sucesso do ledger de e-mail.
+
+  NUNCA lanca (o relay e' COMPARTILHADO por todos os modulos — um throw aqui trava a fila de todo mundo):
+  try/catch Throwable envolve TUDO, INCLUSIVE `set-tenant!` (que lanca em ente-id nil, e a coluna
+  shared.outbox.ente_id e' NULLABLE). `catch Throwable`, nao Exception: as `:pre` de db/ lancam
+  AssertionError, que e' Error. Payload malformado (objeto-id nao-UUID) -> log + nil, evento drenado.
+
+  Canal != in_app -> no-op silencioso (o evento e' de outro projetor, nao e' erro)."
+  [tx {:keys [ente-id payload]}]
+  (try
+    (tenancy/set-tenant! tx ente-id)
+    (when (= canal-in-app (:canal payload))
+      (db-caixa/inserir! tx {:ente-id ente-id
+                             :destinatario-identidade-id (UUID/fromString
+                                                          (:destinatario-identidade-id payload))
+                             ;; `categoria` e' OPCIONAL no contrato do evento (o produtor do cidadao nao a
+                             ;; manda); um in-app sem categoria cai em "sistema" em vez de violar o NOT NULL.
+                             :categoria (or (:categoria payload) "sistema")
+                             :assunto (:assunto payload) :corpo (:corpo payload)
+                             :objeto-tipo (:objeto-tipo payload)
+                             :objeto-id (UUID/fromString (:objeto-id payload))
+                             :idempotency-key (:idempotency-key payload)}))
+    (catch Throwable e
+      (log/warn e "paineis: projecao da inbox tolerada (payload malformado ou falha de escrita)"
+                {:ente-id ente-id})
       nil)))
 
 (defprotocol RepoPaineis
