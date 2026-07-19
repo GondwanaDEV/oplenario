@@ -16,6 +16,26 @@
 - **Frontend em modo dev** (`NEXT_PUBLIC_APP_ENV=dev`), stack já de pé nas portas: frontend :3000, backend :8888, Postgres :5544.
 - **Verde-local é o critério #1;** CI é best-effort na mesma fatia.
 - Português nos nomes de teste e mensagens, seguindo o resto do FE.
+- **NUNCA mutar um mount vivo (guardrail aprendido, 2026-07-19):** os containers efêmeros (Playwright, seed) **não** podem bind-montar `apps/frontend`/`apps/backend` e mutá-los (`rm -rf node_modules`, escritas que o dev server observa). O compose monta `../frontend:/app` para o `next dev`; um `rm -rf node_modules` num container efêmero **derruba o frontend**. Montar só o necessário e manter deps em **volume de container**.
+
+## REVISÃO — Task 1 (Opção A, aprovada 2026-07-19) — JÁ IMPLEMENTADA E VERDE
+
+A Task 1 original (commit `c7bbf8f`) estava **verde-falso** e foi **reshapeada** (commit `1ceea06`). O harness agora é **auto-contido**:
+
+- `apps/frontend/e2e/` é um **projeto Node isolado** com `package.json` próprio contendo **só `@playwright/test@1.49.0`** (sem `next` na árvore → **sem ERESOLVE**; o conflito de peer vinha de instalar o Playwright junto do `next` no mesmo package.json).
+- `playwright.config.ts` vive **dentro** de `e2e/` (`testDir: "."`).
+- `node_modules` do harness fica num **volume de container** (`oplenario_e2e_nm`); o host nunca é escrito.
+- `apps/frontend/package.json`/lock **revertidos ao pristino** (sem `@playwright/test`).
+- **Comando canônico** (da raiz do repo), verde de estado limpo (`1 passed`):
+  ```bash
+  docker run --rm --network host -e PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
+    -v "$PWD/apps/frontend/e2e:/e2e" -v oplenario_e2e_nm:/e2e/node_modules -w /e2e \
+    mcr.microsoft.com/playwright:v1.49.0-noble \
+    sh -c "npm ci --ignore-scripts && npx playwright test"
+  ```
+  (`--ignore-scripts`: o postinstall do Playwright trava neste ambiente e os browsers já vêm na imagem.)
+
+**Tasks 2–4 herdam este comando/design:** a config já está em `e2e/`; specs importam de `./seed` como antes; o seed da Task 2 roda em container efêmero **sem mutar o mount** e grava o `ente_id` em `apps/frontend/e2e/.artifacts/` (gitignored). A Task 4 (CI) usa o mesmo comando canônico. Onde as steps abaixo disserem `-v "$PWD/apps/frontend:/work"` + `npm ci` no package.json do frontend, **substituir** pelo comando canônico acima.
 
 ---
 
