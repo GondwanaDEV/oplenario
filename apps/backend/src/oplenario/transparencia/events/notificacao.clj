@@ -17,11 +17,12 @@
   `assunto`/`corpo` sao renderizados de info PUBLICA (ementa + estado, ja' no portal). O evento (outbox duravel,
   cross-modulo) e o ledger nunca guardam contato real — a resolucao UUID->e-mail + o envio sao carry infra.
 
-  ONDA E (fatia 1, pendente): o vocabulario VAI CRESCER — `canal` vai admitir \"in_app\" e `categoria`
-  (opcional) sera' adicionada. O contrato seguira' :closed; a inbox interna (`paineis.notificacao_caixa`)
-  sera' um SEGUNDO projetor do MESMO evento, com tabela propria. Futuramente, `legislativo` tera' uma
-  COPIA deste schema (events/notificacao.clj) porque §22.10 proibe import cross-modulo — o drift sera'
-  barrado por um teste futuro `eventos-notificacao-contrato-test` (nao existe ainda nesta sessao)."
+  ONDA E (fatia 1): o vocabulario ja' cresceu AQUI — `canal` admite \"in_app\" e `categoria` (opcional)
+  entrou; o contrato segue :closed. O resto da fatia ainda NAO existe: a inbox interna
+  (`paineis.notificacao_caixa`) sera' um SEGUNDO projetor do MESMO evento, com tabela propria, e
+  `legislativo` ganhara' uma COPIA deste schema (events/notificacao.clj) porque §22.10 proibe import
+  cross-modulo — o drift entre as duas sera' barrado por `eventos-notificacao-contrato-test`, teste que
+  ainda esta' por escrever."
   (:require [malli.core :as m]
             [oplenario.kernel.eventos :as eventos]))
 
@@ -37,10 +38,10 @@
    ;; viaja como STRING no jsonb do outbox (jsonista nao tem modulo UUID — mesma disciplina dos demais eventos).
    [:destinatario-identidade-id :string]
    ;; canal de entrega. "email" (fan-out do cidadao, F7 E2) | "in_app" (inbox interna, Onda E fatia 1).
-   ;; Cada PROJETOR VAI TRATAR APENAS o seu canal (spec §4.3): o ledger de entrega ignorara' != "email";
-   ;; a inbox ignorara' != "in_app" (TRABALHO PENDENTE Onda E fatia 1: handler em repositorio.clj nao
-   ;; filtra por canal ainda, e projetor de inbox nao existe). Sem isso o worker `entregar-pendentes!`
-   ;; tentaria mandar e-mail de um in_app, lo que e' um bug que sera' prevenido pelo filtro.
+   ;; Cada PROJETOR devera' tratar APENAS o seu canal (spec §4.3): o ledger de entrega ignora != "email";
+   ;; a inbox ignora != "in_app". AINDA NAO IMPLEMENTADO: o handler em `paineis/components/repositorio.clj`
+   ;; chama `registrar-intent!` sem olhar o canal, e o projetor da inbox nao existe. Enquanto o filtro nao
+   ;; entrar, nenhum produtor pode emitir "in_app" — o worker `entregar-pendentes!` tentaria mandar e-mail dele.
    [:canal :string]
    ;; base de consentimento (mig 0004.consent_base): "acompanhamento" — o proprio ato de seguir e' o opt-in
    ;; (§22.5, consent-gated). O fan-out so' emite p/ seguidor 'ativo' -> consent-gating por construcao.
