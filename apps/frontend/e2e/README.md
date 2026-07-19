@@ -67,8 +67,44 @@ imagem `mcr.microsoft.com/playwright:v1.49.0-noble`. Se subir a versão do pacot
 da imagem junto (e vice-versa) — os dois têm que casar, senão o teste falha em
 `browserType.launch: Executable doesn't exist`.
 
+## Seed do Portal do Cidadão (Task 2)
+
+O `seed-smoke.spec.ts` exercita o Portal com dado real: um `ente` semeado via `seed_demo.clj`
+(o mesmo código do backend, zero SQL cru). Isso é feito em **dois passos separados**, não um só:
+
+1. **`./semear.sh`** — roda no HOST, dispara 3 containers efêmeros de `clojure:temurin-21-tools-deps`
+   na ordem obrigatória `base` → `materias` → `encarregado` (`materias`/`encarregado` leem o
+   `.artifacts/demo-ids.edn` que `base` escreve — sem `base` primeiro eles falham). Escreve
+   `.artifacts/demo-ids.edn` (EDN cru do seed) no host via o mount `.artifacts:/demo-scratch`.
+2. **`./global-setup.ts`** (chamado pelo Playwright via `globalSetup` na config) — **não semeia**;
+   só lê/valida `.artifacts/demo-ids.edn`, extrai o `:ente` (regex, sem dependência de parser EDN)
+   e normaliza para `.artifacts/ente.json`, que `seed.ts` (`lerEnteId()`) expõe aos specs. Se
+   `demo-ids.edn` não existir, falha alto pedindo pra rodar `./semear.sh` primeiro — nada de
+   fallback silencioso.
+
+**Por que dois passos e não um `globalSetup` que chama `docker run` direto:** o `globalSetup` roda
+DENTRO do container `mcr.microsoft.com/playwright`, que não tem CLI do docker. Montar
+`/var/run/docker.sock` não bastaria (falta o binário `docker`) e instalar `docker.io` a cada run é
+caro e frágil. Então quem semeia é o HOST (`semear.sh`), e o `globalSetup` só consome o resultado.
+
+Cada mount/flag do `semear.sh` corrige uma armadilha real (mesmo racional do smoke acima):
+`apps/backend:ro` + `CLJ_CACHE=/tmp/cpcache` honram o guardrail de nunca mutar o mount vivo (senão o
+tools-deps escreveria `.cpcache/` dentro de `apps/backend`); `oplenario_e2e_m2:/root/.m2` mantém o
+cache Maven em volume de container; `--network host` alcança postgres :5544 / minio :9100 / valkey
+:6379 da stack já de pé. `deps.edn` do backend fica intocado — o `-Sdeps` inline já resolve.
+
+### Rodar tudo (comando canônico)
+
+Da **raiz do repositório**:
+
+```bash
+./apps/frontend/e2e/rodar.sh
+```
+
+Isso chama `semear.sh` e depois o mesmo comando canônico do smoke (Task 1) — os dois specs rodam
+juntos (`smoke.spec.ts` + `seed-smoke.spec.ts`).
+
 ## Próximas tasks (harness)
 
-Task 2 reintroduz `globalSetup` (seed via `seed_demo.clj`, também em container efêmero, sem
-mutar mount vivo) e persiste o `ente_id` em `.artifacts/`. Esta task (Task 1) só tem o smoke
-de "o portal responde e o app monta" contra a stack de pé, sem dado semeado.
+Encerrada a Task 2. Próxima task (se houver) segue o plano em
+`docs/superpowers/plans/2026-07-17-fe-e2e-portal-publico.md`.
