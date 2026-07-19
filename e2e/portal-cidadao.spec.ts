@@ -33,8 +33,11 @@ test.describe("Portal do Cidadão — e2e", () => {
     // banco (buscarNomeCasa em page.tsx), não um placeholder hardcoded. `<header className="topo">` e
     // `<footer className="rodape">` não estão aninhados em nenhum landmark que os demoveria, então
     // mantêm os papéis implícitos banner/contentinfo.
-    await expect(page.getByRole("banner")).toContainText(/Câmara|Camara/);
-    await expect(page.getByRole("contentinfo")).toContainText(/Câmara|Camara/);
+    // M10 (revisão final): o nome semeado real é fixo (`seed_demo.clj` -> "Câmara Municipal de
+    // Fortaleza") — checar o literal é estritamente mais forte que a regex genérica `/Câmara|Camara/`
+    // (que passaria mesmo se o white-label mostrasse o nome ERRADO de outra câmara).
+    await expect(page.getByRole("banner")).toContainText("Câmara Municipal de Fortaleza");
+    await expect(page.getByRole("contentinfo")).toContainText("Câmara Municipal de Fortaleza");
 
     // assert #2: a matéria semeada renderizada por inteiro — identificador (ref), estado da
     // tramitação, URN/LexML e a faixa de azulejo visível. `DestaqueTramitacao` NÃO é o único
@@ -49,6 +52,18 @@ test.describe("Portal do Cidadão — e2e", () => {
     const materia = page.getByRole("article").filter({ hasText: /[A-Z]+ \d+\/\d{4}/ });
     await expect(materia).toBeVisible();
     await expect(materia).toContainText(/urn:lex:br/);
+    // M11 (revisão final): o assert #2 não checava título/ementa da matéria, que a §4.2 da spec pede
+    // explicitamente. `seed-demo/materias` sempre protocola as MESMAS 6 ementas fixas (`materias-seed`
+    // em seed_demo.clj); o destaque é `itens[0]` da listagem ordenada por `[:ano :desc][:sequencial :desc]`
+    // e o `sequencial` é gapless POR TIPO (`kernel/sequencial`, escopo "tipo:ano") — como 4 das 6 matérias
+    // têm tipos diferentes (indicacao/requerimento/projeto_lei_complementar têm sequencial=1 cada, sem
+    // relação com a ordem de protocolo global), qual delas empata e vence o desempate não é uma garantia
+    // documentada do SQL. Em vez de fixar qual das 6 é a destacada (frágil), a alternância abaixo cobre
+    // as 6 ementas conhecidas — qualquer que seja o destaque, o assert prova que ementa REAL do seed
+    // apareceu, não um vazio/placeholder.
+    await expect(materia).toContainText(
+      /Hortas Comunitárias|Arborização viária|Código de Posturas|Denominação de via pública|iluminação pública na Praça da Gentilândia|Programa de Compostagem/,
+    );
     // estado da tramitação: o rótulo vem de `ROTULO_SITUACAO_POR_ESTADO`/os dois terminais
     // (Aprovado/Arquivada) de tramitacao-vista.ts — não fixamos qual estado específico o seed vai
     // sortear como destaque (é o `itens[0]`, "mais recente primeiro" do backend), só que ALGUM rótulo
@@ -71,7 +86,15 @@ test.describe("Portal do Cidadão — e2e", () => {
     await expect(page.getByText(/Não foi possível carregar o contato do Encarregado/)).toHaveCount(0);
     // positivo: o contato real do Encarregado (email) apareceu — não é só ausência do erro, é presença
     // do dado real que o seed_demo.clj/seed-demo/encarregado escreveu.
-    await expect(page.locator(".encarregado")).toContainText("@");
+    // M8 (revisão final): trocado o único seletor por classe CSS do spec por um role-based. Confirmado
+    // contra o DOM real (`apps/frontend/src/app/(publico)/balcao-lgpd.tsx`): o card do Encarregado é
+    // `<div className="encarregado">` DENTRO do `<article className="balcao balcao-lgpd"
+    // aria-labelledby="lgpd-titulo">`, com `<a href={`mailto:${encarregado.email}`}>{encarregado.email}</a>`
+    // — âncora `mailto:` real, não texto solto. "dados pessoais" (do heading "Os seus dados pessoais" +
+    // do parágrafo-lead) só aparece no balcão LGPD entre os 3 `<article>` da página, então
+    // `.filter({ hasText })` desambigua sem precisar de `.locator(".encarregado")`.
+    const balcaoLgpd = page.getByRole("article").filter({ hasText: /dados pessoais/ });
+    await expect(balcaoLgpd.getByRole("link", { name: /@/ })).toBeVisible();
 
     // assert #6: os placeholders honestos existem ("Em breve") — é contrato de produto (EmBreve, Global
     // Constraints "sem dado falso"), não bug. `EmBreve` renderiza `<p class="em-breve-rotulo">Em

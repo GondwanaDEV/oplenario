@@ -1,6 +1,6 @@
 import { defineConfig } from "@playwright/test";
 
-// Harness isolado: este projeto vive por conta propria em apps/frontend/e2e/ com seu
+// Harness isolado: este projeto vive por conta propria em e2e/ (raiz do repo) com seu
 // proprio package.json (so @playwright/test), rodado dentro do container oficial do
 // Playwright. Nao depende dos node_modules do frontend Next.js nem muta o mount vivo.
 export default defineConfig({
