@@ -31,7 +31,7 @@ Valem para **todas** as tasks. Não repetidas dentro de cada uma.
     clojure -M:test --focus <ns> --reporter documentation
   ```
   A suíte inteira: trocar `--focus <ns>` por `--skip :e2e --skip :keycloak`.
-  Lint: trocar o comando final por `clojure -M:test -m clj-kondo.main --lint src test demo`.
+  Lint (baseline medido em 6fd68c2: errors 0, warnings 30 — julgar por DELTA, não por zero absoluto): trocar o comando final por `clojure -Sdeps '{:deps {clj-kondo/clj-kondo {:mvn/version "2026.05.25"}}}' -M -m clj-kondo.main --lint src test demo`.
   As fixtures chamam `migracao/migrar!`, que exige o role OWNER `oplenario` (é o da `DATABASE_URL` acima), **não** `oplenario_pool`.
 
   **Testes do frontend:** `docker exec oplenario-frontend-1 npx vitest run <arquivo>`.
@@ -1753,7 +1753,7 @@ Valem para **todas** as tasks. Não repetidas dentro de cada uma.
     -e MINIO_ENDPOINT='http://minio:9000' -e VALKEY_URI='redis://valkey:6379' \
     clojure:temurin-21-tools-deps clojure -M:test --skip :e2e --skip :keycloak --reporter documentation
   docker run --rm -v "$(pwd)":/app -w /app/apps/backend -v oplenario_backend_m2:/root/.m2 \
-    clojure:temurin-21-tools-deps clojure -M:test -m clj-kondo.main --lint src test demo
+    clojure:temurin-21-tools-deps clojure -Sdeps '{:deps {clj-kondo/clj-kondo {:mvn/version "2026.05.25"}}}' -M -m clj-kondo.main --lint src test demo
   ```
   Esperado: 0 failures; `linting took Nms, errors: 0, warnings: 0`.
 
@@ -2877,7 +2877,7 @@ Valem para **todas** as tasks. Não repetidas dentro de cada uma.
     -e MINIO_ENDPOINT='http://minio:9000' -e VALKEY_URI='redis://valkey:6379' \
     clojure:temurin-21-tools-deps clojure -M:test --skip :e2e --skip :keycloak --reporter documentation
   docker run --rm -v "$(pwd)":/app -w /app/apps/backend -v oplenario_backend_m2:/root/.m2 \
-    clojure:temurin-21-tools-deps clojure -M:test -m clj-kondo.main --lint src test demo
+    clojure:temurin-21-tools-deps clojure -Sdeps '{:deps {clj-kondo/clj-kondo {:mvn/version "2026.05.25"}}}' -M -m clj-kondo.main --lint src test demo
   # frontend — arquivo a arquivo (nunca a suíte inteira de uma vez)
   docker exec oplenario-frontend-1 npx vitest run src/lib/notificacoes-vista.test.ts
   docker exec oplenario-frontend-1 npx vitest run src/lib/use-minhas-notificacoes.test.ts
