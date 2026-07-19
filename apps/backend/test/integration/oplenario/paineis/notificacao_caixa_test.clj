@@ -130,3 +130,35 @@
     (emitir! ente (payload-in-app (random-uuid) "k-depois"))
     (drenar!)
     (is (= 1 (count (caixa ente))) "o evento seguinte projeta — o relay nao travou")))
+
+;; ---------- Correcao (achado 2): prova a escolha de `catch Throwable` (nao `Exception`) ----------
+;;
+;; O teste acima (`payload-malformado-nao-envenena-o-relay`) so' exercita `:objeto-id "nao-e-uuid"`, que
+;; lanca `IllegalArgumentException` — uma `Exception` comum, ANTES de qualquer SQL. Passaria identico com
+;; um catch de `Exception`; nao prova nada sobre a escolha de `Throwable` que a docstring de
+;; `projetar-inbox!` justifica. Os dois casos abaixo fecham essa lacuna.
+
+(deftest payload-sem-idempotency-key-prova-o-catch-throwable
+  ;; (a) a `:pre` de inserir! lanca `AssertionError` — um `Error`, IRMAO de `Exception` sob `Throwable`,
+  ;; NAO capturado por `(catch Exception ...)`. Este e' o caso que de fato prova o `Throwable`.
+  (let [ente (random-uuid)]
+    (emitir! ente (dissoc (payload-in-app (random-uuid) "k-sem-chave") :idempotency-key))
+    (is (some? (drenar!)) "drenar! nao lanca mesmo com AssertionError (Error) dentro do handler")
+    (is (empty? (caixa ente)) "nada foi gravado — a :pre barrou antes do INSERT")))
+
+(deftest payload-com-not-null-nulo-nao-envenena-o-relay
+  ;; (b) Achado 1: `assunto` e' NOT NULL na tabela (mig 0062), mas a `:pre` de `inserir!` nao a checava.
+  ;; ANTES da correcao do achado 1, este teste fica VERMELHO: o payload chega ao INSERT, viola NOT NULL
+  ;; (SQLSTATE 23502), a tx do relay fica ABORTADA, e o UPDATE seguinte do proprio relay (marcar
+  ;; processed_at) lanca "current transaction is aborted" por CIMA do catch Throwable do handler — engolir
+  ;; a excecao nao desfaz uma tx ja abortada. DEPOIS da correcao (a `:pre` passa a cobrir toda NOT NULL
+  ;; vinda do payload), a falha vira AssertionError ANTES de qualquer SQL: nao ha tx para abortar, e o
+  ;; catch Throwable do handler funciona como esperado.
+  (let [ente (random-uuid)]
+    (emitir! ente (assoc (payload-in-app (random-uuid) "k-assunto-nulo") :assunto nil))
+    (is (some? (drenar!)) "drenar! nao lanca — a :pre barra antes do SQL, a tx nunca aborta")
+    (is (empty? (caixa ente)) "nada foi gravado")
+    ;; e o bus segue drenando o PROXIMO evento normalmente
+    (emitir! ente (payload-in-app (random-uuid) "k-depois-assunto-nulo"))
+    (drenar!)
+    (is (= 1 (count (caixa ente))) "o evento seguinte projeta — o relay nao travou")))

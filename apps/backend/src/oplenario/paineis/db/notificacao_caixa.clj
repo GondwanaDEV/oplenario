@@ -14,10 +14,23 @@
 (defn inserir!
   "Projeta uma notificacao in-app na inbox. `ON CONFLICT (ente_id, idempotency_key) DO NOTHING`: a chave
   DETERMINISTICA do payload torna redrive/backfill um no-op (criterio de aceitacao 1). Devolve a linha
-  inserida, ou nil se ja' existia — NUNCA lanca 23505 (envenenaria o relay compartilhado)."
+  inserida, ou nil se ja' existia — NUNCA lanca 23505 (envenenaria o relay compartilhado).
+
+  A `:pre` abaixo cobre TODAS as colunas NOT NULL de `paineis.notificacao_caixa` (mig 0062) que vem do
+  payload — `id`/`criado_em` tem DEFAULT, `lida_em` e' nullable, o resto (ente_id, destinatario_identidade_id,
+  categoria, assunto, corpo, objeto_tipo, objeto_id, idempotency_key) e' NOT NULL sem default. Isso NAO e'
+  preciosismo: em Postgres um comando que erra deixa a TRANSACAO em estado abortado; engolir a excecao no
+  catch do handler (`projetar-inbox!`) nao desfaz isso. Se um campo NOT NULL chegasse nil ate' aqui, o
+  INSERT abaixo violaria 23502 DENTRO da tx do relay COMPARTILHADO — o UPDATE seguinte do proprio relay
+  (marcar `processed_at`, ver `kernel/outbox.clj`) lancaria por cima do catch com \"current transaction is
+  aborted\", a tx do relay faria rollback, e o evento voltaria PENDENTE para ser repescado (e falhar de novo)
+  no proximo tick — redrive eterno + head-of-line block do bus inteiro. Checando aqui, a falha vira
+  `AssertionError` ANTES de qualquer SQL rodar: nenhuma tx foi tocada, e `AssertionError` e' `Error` — irmao
+  de `Exception` sob `Throwable`, ja' capturado pelo `catch Throwable` do handler, sem abortar nada."
   [tx {:keys [ente-id destinatario-identidade-id categoria assunto corpo objeto-tipo objeto-id
               idempotency-key]}]
-  {:pre [(some? ente-id) (some? destinatario-identidade-id) (some? categoria) (some? idempotency-key)]}
+  {:pre [(some? ente-id) (some? destinatario-identidade-id) (some? categoria) (some? assunto)
+         (some? corpo) (some? objeto-tipo) (some? objeto-id) (some? idempotency-key)]}
   (comum/linha->kebab
    (jdbc/execute-one! tx
      (sql/format {:insert-into :paineis.notificacao_caixa
