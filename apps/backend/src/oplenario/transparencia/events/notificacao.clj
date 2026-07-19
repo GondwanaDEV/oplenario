@@ -15,7 +15,12 @@
 
   SEM PII DURAVEL: `destinatario-identidade-id` e' o UUID de identidade (handle pseudonimo), NAO e-mail/nome/CPF.
   `assunto`/`corpo` sao renderizados de info PUBLICA (ementa + estado, ja' no portal). O evento (outbox duravel,
-  cross-modulo) e o ledger nunca guardam contato real — a resolucao UUID->e-mail + o envio sao carry infra."
+  cross-modulo) e o ledger nunca guardam contato real — a resolucao UUID->e-mail + o envio sao carry infra.
+
+  ONDA E (fatia 1): o vocabulario cresceu — `canal` admite \"in_app\" e `categoria` (opcional) entrou. O
+  contrato segue :closed; a inbox interna (`paineis.notificacao_caixa`) e' um SEGUNDO projetor do MESMO
+  evento, com tabela propria. `legislativo` tem uma COPIA deste schema (events/notificacao.clj) porque
+  §22.10 proibe import cross-modulo — o drift entre as duas e' barrado por `eventos-notificacao-contrato-test`."
   (:require [malli.core :as m]
             [oplenario.kernel.eventos :as eventos]))
 
@@ -30,7 +35,9 @@
    ;; o seguidor a notificar (identidade UUID — handle pseudonimo, resolvido do acompanhamento; NAO e' PII).
    ;; viaja como STRING no jsonb do outbox (jsonista nao tem modulo UUID — mesma disciplina dos demais eventos).
    [:destinatario-identidade-id :string]
-   ;; canal de entrega. "email" nesta fatia (push depois — o ledger.canal ja' aceita ambos, mig 0004).
+   ;; canal de entrega. "email" (fan-out do cidadao, F7 E2) | "in_app" (inbox interna, Onda E fatia 1).
+   ;; Cada PROJETOR trata APENAS o seu canal (spec §4.3): o ledger de entrega ignora != "email"; a inbox
+   ;; ignora != "in_app". Sem isso o worker `entregar-pendentes!` tentaria mandar e-mail de um in-app.
    [:canal :string]
    ;; base de consentimento (mig 0004.consent_base): "acompanhamento" — o proprio ato de seguir e' o opt-in
    ;; (§22.5, consent-gated). O fan-out so' emite p/ seguidor 'ativo' -> consent-gating por construcao.
@@ -43,7 +50,10 @@
    ;; rastreabilidade OPACA (ref polimorfica, mesma convencao de paineis.pendencia): o QUE a notificacao trata.
    ;; "proposicao"/proposicao-id nesta fatia — opaco p/ paineis (nao acopla a legislativo).
    [:objeto-tipo :string]
-   [:objeto-id :string]])
+   [:objeto-id :string]
+   ;; classe da MENSAGEM (spec D5: "falha" e' categoria de dominio, nao estado de entrega). OPCIONAL de
+   ;; proposito — o produtor do cidadao (F7 E2) nao a manda e nao deve ser tocado por esta fatia.
+   [:categoria {:optional true} :string]])
 
 (defn requisitada
   "Constroi o envelope de `notificacao.requisitada` p/ o tenant `ente-id`, VALIDANDO o payload contra o
