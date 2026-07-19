@@ -37,9 +37,9 @@ test.describe("Portal do Cidadão — e2e", () => {
     await expect(page.getByRole("contentinfo")).toContainText(/Câmara|Camara/);
 
     // assert #2: a matéria semeada renderizada por inteiro — identificador (ref), estado da
-    // tramitação, URN/LexML e a faixa de azulejo visível. `DestaqueTramitacao` é o único
-    // `<article>` da página (a lista "mais em tramitação" usa `<ul>/<li>`), então o filtro por texto é
-    // defesa extra, não estritamente necessário — mantido por clareza de intenção.
+    // tramitação, URN/LexML e a faixa de azulejo visível. `DestaqueTramitacao` NÃO é o único
+    // `<article>` da página — os balcões e-SIC e LGPD também são `<article>` — então o
+    // `.filter({ hasText: ... })` é o que desambigua o destaque dos demais, não defesa extra.
     //
     // DIVERGÊNCIA do ponto de partida: `derivarRef` faz `padStart(3, "0")` no sequencial (ex.
     // "PL 003/2026", não "PL 3/2026") — a regex `\d+` do brief já cobre isso, sem mudança necessária.

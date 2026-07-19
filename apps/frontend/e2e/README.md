@@ -69,8 +69,9 @@ da imagem junto (e vice-versa) — os dois têm que casar, senão o teste falha 
 
 ## Seed do Portal do Cidadão (Task 2)
 
-O `seed-smoke.spec.ts` exercita o Portal com dado real: um `ente` semeado via `seed_demo.clj`
-(o mesmo código do backend, zero SQL cru). Isso é feito em **dois passos separados**, não um só:
+O `portal-cidadao.spec.ts` (Task 3; sucessor do `seed-smoke.spec.ts` da Task 2, removido) exercita o
+Portal com dado real: um `ente` semeado via `seed_demo.clj` (o mesmo código do backend, zero SQL
+cru). Isso é feito em **dois passos separados**, não um só:
 
 1. **`./semear.sh`** — roda no HOST, dispara 3 containers efêmeros de `clojure:temurin-21-tools-deps`
    na ordem obrigatória `base` → `materias` → `encarregado` (`materias`/`encarregado` leem o
@@ -93,18 +94,49 @@ tools-deps escreveria `.cpcache/` dentro de `apps/backend`); `oplenario_e2e_m2:/
 cache Maven em volume de container; `--network host` alcança postgres :5544 / minio :9100 / valkey
 :6379 da stack já de pé. `deps.edn` do backend fica intocado — o `-Sdeps` inline já resolve.
 
-### Rodar tudo (comando canônico)
+### Rodar tudo (comando canônico único)
 
-Da **raiz do repositório**:
+Da **raiz do repositório**, com a stack docker já de pé:
 
 ```bash
 ./apps/frontend/e2e/rodar.sh
 ```
 
-Isso chama `semear.sh` e depois o mesmo comando canônico do smoke (Task 1) — os dois specs rodam
-juntos (`smoke.spec.ts` + `seed-smoke.spec.ts`).
+Isso chama `semear.sh` (semeia os 3 fixtures) e depois roda o Playwright no mesmo comando canônico
+do smoke (Task 1) — os dois specs atuais rodam juntos: `smoke.spec.ts` + `portal-cidadao.spec.ts`.
+Este é o comando único e canônico do harness; os comandos manuais das seções acima existem só para
+depurar cada passo isoladamente.
 
-## Próximas tasks (harness)
+## CI — carry (não implementado)
 
-Encerrada a Task 2. Próxima task (se houver) segue o plano em
-`docs/superpowers/plans/2026-07-17-fe-e2e-portal-publico.md`.
+**Este harness não tem job de CI.** Decisão do controller (Task 4), não esquecimento:
+
+- **Motivo:** o repositório **não tem remote configurado** (`git remote -v` devolve vazio). O
+  `.github/workflows/ci.yml` existente nunca rodou uma única vez — nenhuma Action já foi executada
+  neste repo. Escrever uma job de e2e agora seria **inverificável**: não há como confirmar que ela
+  passa (ou que o YAML nem sequer está bem formado) sem um remote que dispare a Action. Este projeto
+  já foi mordido por exatamente esse padrão ("verde falso" commitado sem nunca ter rodado) na Task 1
+  — não repetir.
+- **O que a job precisaria fazer, quando houver remote** (esboço **não verificado** — nunca rodou,
+  não tratar como funcionando):
+  1. Subir a stack (`cd apps/backend && docker compose up -d --build`);
+  2. Esperar `postgres`, `app` (`:8888`) e `frontend` (`:3000`) responderem (a compose já tem
+     healthcheck do `postgres`; `app`/`frontend` precisariam de um poll HTTP explícito na job);
+  3. Rodar `./apps/frontend/e2e/semear.sh`;
+  4. Rodar o container do Playwright (o mesmo comando de `rodar.sh`, sem o passo de seed que o passo
+     3 já fez).
+- **Diferença de portas em CI:** sem `.env`, a compose usa os defaults dela — postgres `5432`, minio
+  `9000`, app `8888`, frontend `3000` — enquanto este ambiente de dev usa `5544`/`9100` (postgres/minio)
+  via `.env`. Por isso `semear.sh` teve as portas de postgres/minio **parametrizadas por env var**
+  (`OPLENARIO_PG_PORT`, `OPLENARIO_MINIO_PORT`), com default = o valor que este dev já usa (5544/9100)
+  — uma CI futura sem `.env` exportaria `OPLENARIO_PG_PORT=5432 OPLENARIO_MINIO_PORT=9000` antes de
+  chamar o script. Essa parametrização **foi feita e verificada localmente** (ver abaixo); o que falta
+  é só o esboço de job acima, que segue não verificado.
+- **Critério #1 (verde local) já está cumprido** — comando verificado, rodado da raiz do repositório
+  com a stack de pé:
+
+  ```bash
+  ./apps/frontend/e2e/rodar.sh
+  ```
+
+  Esperado: 3 seeds `ok` (`base`/`materias`/`encarregado`) seguidos de `2 passed` do Playwright.

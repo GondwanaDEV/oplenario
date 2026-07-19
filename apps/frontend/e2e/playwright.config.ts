@@ -12,7 +12,7 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   fullyParallel: false,
   // Task 2 (achado real): com o default de workers (paralelo entre arquivos de spec), o
-  // `smoke.spec.ts` (rota "/") e o `seed-smoke.spec.ts` (rota "/portal/casa/[ente]", nova) compilam
+  // `smoke.spec.ts` (rota "/") e o `portal-cidadao.spec.ts` (rota "/portal/casa/[ente]", nova) compilam
   // a FRIO ao mesmo tempo sob o `next dev`/turbopack — competem por CPU e o segundo estoura os 30s
   // de timeout. `workers: 1` serializa TODOS os arquivos (não só os testes dentro de um arquivo, que
   // já era o efeito de `fullyParallel: false`) — cada rota compila sem concorrência.
