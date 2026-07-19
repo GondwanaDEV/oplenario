@@ -1,0 +1,12 @@
+{
+  "name": "oplenario-e2e",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Harness de browser-e2e (Playwright) do Portal do Cidadao — projeto isolado, sem dependencia do frontend Next.js.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.49.0"
+  }
+}
