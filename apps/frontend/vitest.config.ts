@@ -16,6 +16,8 @@ export default defineConfig({
     // dev (token síncrono, sem /eu); quem prova o modo real sobrepõe com vi.stubEnv por teste. Sem isto o
     // default seguro colocaria a suíte inteira em modo real — que é a intenção do default, não da suíte.
     env: { NEXT_PUBLIC_APP_ENV: "test" },
+    // Sobe o teto do `waitFor`/`findBy*` do Testing Library — ver o porquê medido em vitest.setup.ts.
+    setupFiles: ["./vitest.setup.ts"],
   },
   resolve: {
     alias: {

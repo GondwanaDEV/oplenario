@@ -29,5 +29,41 @@ export default async function globalSetup(): Promise<void> {
     throw new Error(`Não foi possível extrair ":ente #uuid ..." de ${DEMO_IDS_PATH}. Conteúdo lido: ${edn}`);
   }
 
-  fs.writeFileSync(ENTE_JSON_PATH, JSON.stringify({ enteId: match[1] }, null, 2));
+  const enteId = match[1];
+  fs.writeFileSync(ENTE_JSON_PATH, JSON.stringify({ enteId }, null, 2));
+
+  await aquecerRotas(enteId);
+}
+
+const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
+
+/**
+ * Aquece as rotas que os specs visitam, EM SÉRIE, antes de qualquer teste rodar.
+ *
+ * Por quê: o frontend roda em `next dev` (Turbopack), que compila cada rota sob demanda no 1º acesso.
+ * Sem aquecimento, dois specs que abrem rotas diferentes ao mesmo tempo disparam duas compilações a
+ * frio concorrentes, competem por CPU e estouram o `timeout` de 30s do teste. A defesa anterior era
+ * `workers: 1` na config, que serializa a suíte INTEIRA para sempre — cura o sintoma e cobra o preço
+ * em toda rodada futura. Aquecer aqui paga o custo da compilação uma vez, fora do relógio dos testes,
+ * e devolve o paralelismo.
+ *
+ * Falha ALTO se o servidor não responder (o problema é a stack estar fora do ar, e o diagnóstico aqui
+ * é muito melhor do que um `net::ERR_ABORTED` dentro de um teste). Status HTTP não-2xx NÃO derruba: os
+ * specs é que julgam o conteúdo — aqui só interessa que a rota tenha compilado.
+ */
+async function aquecerRotas(enteId: string): Promise<void> {
+  for (const rota of ["/", `/portal/casa/${enteId}`]) {
+    const url = `${BASE_URL}${rota}`;
+    try {
+      // Janela larga de propósito: compilação a frio de uma rota nova pode passar de 20s numa máquina
+      // carregada. Este tempo sai do setup, não do orçamento de nenhum teste.
+      const resp = await fetch(url, { signal: AbortSignal.timeout(90_000) });
+      console.log(`[e2e] rota aquecida: ${rota} (${resp.status})`);
+    } catch (erro) {
+      throw new Error(
+        `Falha ao aquecer ${url} — a stack está de pé? ` +
+          `(frontend em :3000, via 'docker compose up -d' em apps/backend)\nCausa: ${String(erro)}`,
+      );
+    }
+  }
 }
