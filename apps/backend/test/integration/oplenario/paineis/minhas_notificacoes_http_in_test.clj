@@ -114,10 +114,28 @@
     (is (= 404 (:status r)) "criterio 4: id de outro destinatario -> 404, nunca 200 silencioso")))
 
 (deftest marcar-lida-id-malformado-404
-  (let [r (pt/response-for (service-fn #{"vereador"} (fake-repo-marcacao (atom nil) nil))
+  ;; nao basta o status: se o `if-let` do `id-param->uuid` (adapters/in) fosse removido e a string crua
+  ;; passasse adiante, o fake abaixo devolveria nil incondicionalmente e o teste continuaria verde sem
+  ;; provar nada. `visto` prova que o repo NUNCA e' chamado — o id malformado tem de curto-circuitar
+  ;; no adapters/in, antes de qualquer SQL.
+  (let [visto (atom nil)
+        r (pt/response-for (service-fn #{"vereador"} (fake-repo-marcacao visto nil))
                            :post "/meu/notificacoes/nao-e-uuid/lida"
                            :headers (com-bearer (token (random-uuid) (random-uuid))))]
-    (is (= 404 (:status r)) "id que nao parseia = recurso inexistente (nao vaza nada, nunca 500)")))
+    (is (= 404 (:status r)) "id que nao parseia = recurso inexistente (nao vaza nada, nunca 500)")
+    (is (nil? @visto) "curto-circuita no adapters/in — id malformado nunca chega ao repo/SQL")))
+
+(deftest marcar-lida-sem-papel-tambem-200
+  ;; espelho de `minhas-notificacoes-sem-papel-tambem-200` (linha 76), agora para o POST: a rota e' auth
+  ;; apenas (spec §4.5) — qualquer identidade autenticada marca a PROPRIA notificacao como lida, mesmo sem
+  ;; papel de vereador. Sem este teste, um gate de papel acrescentado por engano a esta rota nao ficaria
+  ;; vermelho em lugar nenhum.
+  (let [id (random-uuid)
+        r (pt/response-for (service-fn #{} (fake-repo-marcacao (atom nil)
+                                             {:id id :lida-em (Instant/parse "2026-07-19T13:00:00Z")}))
+                           :post (str "/meu/notificacoes/" id "/lida")
+                           :headers (com-bearer (token (random-uuid) (random-uuid))))]
+    (is (= 200 (:status r)) "sem papel nenhum -> ainda 200 (o escopo e' de POSSE, nao de cargo)")))
 
 (deftest marcar-lida-sem-token-401
   (let [r (pt/response-for (service-fn #{"vereador"} (fake-repo-marcacao (atom nil) nil))

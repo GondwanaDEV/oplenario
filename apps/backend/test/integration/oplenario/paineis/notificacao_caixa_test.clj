@@ -227,5 +227,12 @@
           "a notificacao do outro continua NAO lida"))))
 
 (deftest marcar-lida-id-inexistente-e-nil
-  (is (nil? (paineis-repo/marcar-notificacao-lida! *paineis* (random-uuid)
-              {:id (random-uuid) :destinatario-identidade-id (random-uuid)}))))
+  ;; nao basta random/random contra um banco vazio — qualquer implementacao que devolva nil passaria, e o
+  ;; teste nao se distinguiria de "nada foi inserido". Insere a linha em OUTRO ente e usa o id CERTO com o
+  ;; ente errado: isso prova o recorte de tenant no WHERE, nao so' a ausencia de dado.
+  (let [ente-a (random-uuid) ente-b (random-uuid) dest (random-uuid)]
+    (inserir! ente-a dest "k-inexistente-tenant")
+    (let [id (id-da-unica ente-a dest)]
+      (is (nil? (paineis-repo/marcar-notificacao-lida! *paineis* ente-b
+                  {:id id :destinatario-identidade-id dest}))
+          "id existe de fato — so' que em OUTRO ente; o WHERE de tenant barra, nao so' a ausencia de dado"))))
