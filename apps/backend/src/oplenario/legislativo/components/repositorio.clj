@@ -759,13 +759,14 @@
         (if-let [vereador-id (proposicao/autor-vereador-da-proposicao tx ente-id pid)]
           (if-let [identidade-id (resolver-identidade-do-vereador tx ente-id vereador-id)]
             (let [{:keys [assunto corpo]} (logic-notif/renderizar payload)
-                  dest (str identidade-id)]
+                  dest (str identidade-id)
+                  categoria "norma_publicada"]
               (producers/emitir-notificacao-requisitada! (outbox/bus) tx ente-id
                 {:destinatario-identidade-id dest
                  :canal "in_app"
                  :consent-base "vinculo"
-                 :idempotency-key (logic-notif/chave-idempotencia nid dest)
-                 :categoria "norma_publicada"
+                 :idempotency-key (logic-notif/chave-idempotencia nid categoria dest)
+                 :categoria categoria
                  :assunto assunto
                  :corpo corpo
                  :objeto-tipo "proposicao"

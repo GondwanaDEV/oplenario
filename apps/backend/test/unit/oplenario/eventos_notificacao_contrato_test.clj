@@ -11,7 +11,14 @@
             [oplenario.transparencia.events.notificacao :as transp]))
 
 (deftest o-nome-do-evento-e-o-mesmo
-  (is (= transp/requisitada-tipo leg/requisitada-tipo "notificacao.requisitada")))
+  ;; DOIS asserts separados de proposito (achado de review: `(is (= a b "msg"))` e' `=` de aridade 3, nao
+  ;; uma comparacao com mensagem — mais forte por acidente, nao por intencao). O 1o prova que as duas COPIAS
+  ;; nao driftaram (o motivo deste ns existir); o 2o ancora o valor esperado, pra um typo nos DOIS produtores
+  ;; ao mesmo tempo (fora do alcance do 1o assert) nao passar em silencio.
+  (is (= transp/requisitada-tipo leg/requisitada-tipo)
+      "as duas copias do NOME do evento (transparencia x legislativo) nao driftaram")
+  (is (= "notificacao.requisitada" leg/requisitada-tipo)
+      "o nome e' o contrato de fiacao esperado por `paineis` (o consumidor), nao um valor arbitrario"))
 
 (deftest os-dois-payloads-sao-estruturalmente-iguais
   (is (= transp/RequisitadaPayload leg/RequisitadaPayload)

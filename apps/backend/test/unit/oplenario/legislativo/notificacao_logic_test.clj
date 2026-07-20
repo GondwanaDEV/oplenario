@@ -10,11 +10,18 @@
    :urn "urn:lex:br;ceara;fortaleza:municipal:lei:2026-06-28;3"})
 
 (deftest chave-e-deterministica
-  (let [nid (random-uuid) dest (str (random-uuid))]
-    (is (= (logic/chave-idempotencia nid dest) (logic/chave-idempotencia nid dest))
-        "mesma (norma, destinatario) -> mesma chave (redrive vira no-op no ON CONFLICT)")
-    (is (not= (logic/chave-idempotencia nid dest) (logic/chave-idempotencia nid (str (random-uuid))))
-        "destinatarios diferentes -> chaves diferentes")))
+  (let [nid (random-uuid) categoria "norma_publicada" dest (str (random-uuid))]
+    (is (= (logic/chave-idempotencia nid categoria dest) (logic/chave-idempotencia nid categoria dest))
+        "mesma (norma, categoria, destinatario) -> mesma chave (redrive vira no-op no ON CONFLICT)")
+    (is (not= (logic/chave-idempotencia nid categoria dest) (logic/chave-idempotencia nid categoria (str (random-uuid))))
+        "destinatarios diferentes -> chaves diferentes")
+    (is (not= (logic/chave-idempotencia nid categoria dest) (logic/chave-idempotencia (random-uuid) categoria dest))
+        "normas diferentes -> chaves diferentes (o eixo que o ON CONFLICT (ente_id, idempotency_key) protege
+         de verdade — uma implementacao que concatenasse sem separador/sem norma-id passaria pelos dois
+         asserts acima e so' quebraria aqui)")
+    (is (not= (logic/chave-idempotencia nid categoria dest) (logic/chave-idempotencia nid "norma_revogada" dest))
+        "categorias diferentes -> chaves diferentes (achado 4: um 2o motivo sobre a MESMA norma ao MESMO
+         destinatario nao pode colidir e ser engolido pelo ON CONFLICT DO NOTHING)")))
 
 (deftest renderiza-assunto-e-corpo-publicos
   (let [{:keys [assunto corpo]} (logic/renderizar norma)]
