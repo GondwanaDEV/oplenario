@@ -11,15 +11,18 @@
             [oplenario.kernel.outbox :as outbox]
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.migracao :as migracao]
+            [oplenario.paineis.components.repositorio :as paineis-repo]
             [oplenario.paineis.diplomat.consumers :as paineis-consumers]))
 
 (def ^:dynamic *ds* nil)
+(def ^:dynamic *paineis* nil)
 
 (use-fixtures :once
   (fn [t]
     (let [c (component/start (datasource/datasource (config/carregar)))]
       (migracao/migrar! (:ds c))
-      (binding [*ds* (:ds c)]
+      (binding [*ds*      (:ds c)
+                *paineis* (paineis-repo/->RepoPaineisPg c)]
         (try (t) (finally (component/stop c)))))))
 
 (defn- inserir! [ente destinatario chave]
@@ -162,3 +165,38 @@
     (emitir! ente (payload-in-app (random-uuid) "k-depois-assunto-nulo"))
     (drenar!)
     (is (= 1 (count (caixa ente))) "o evento seguinte projeta — o relay nao travou")))
+
+;; ---------- Task 6: leitura "as minhas notificacoes" ----------
+
+(defn- semear! [ente dest n]
+  (dotimes [i n] (inserir! ente dest (str "k-leitura-" i))))
+
+(deftest minhas-notificacoes-so-traz-as-do-proprio-destinatario
+  (let [ente (random-uuid) eu (random-uuid) outro (random-uuid)]
+    (semear! ente eu 2)
+    (inserir! ente outro "k-do-outro")
+    (let [{:keys [notificacoes nao-lidas]} (paineis-repo/minhas-notificacoes *paineis* ente eu)]
+      (is (= 2 (count notificacoes)) "criterio 4: so' as minhas — a do outro ator nunca aparece")
+      (is (= 2 nao-lidas) "contagem de nao lidas")
+      (is (every? #(= eu (:destinatario-identidade-id %)) notificacoes)))))
+
+(deftest minhas-notificacoes-vazio
+  (let [{:keys [notificacoes nao-lidas]} (paineis-repo/minhas-notificacoes *paineis* (random-uuid) (random-uuid))]
+    (is (= [] notificacoes) "criterio 3: lista vazia")
+    (is (= 0 nao-lidas) "criterio 3: contagem 0")))
+
+(deftest minhas-notificacoes-mais-recentes-primeiro-com-teto-no-sql
+  (let [ente (random-uuid) eu (random-uuid)]
+    (semear! ente eu 55)
+    (let [{:keys [notificacoes nao-lidas]} (paineis-repo/minhas-notificacoes *paineis* ente eu)]
+      (is (= 50 (count notificacoes)) "teto 50 aplicado no SQL (LIMIT), nunca em Clojure depois do fetch")
+      (is (= 55 nao-lidas) "a contagem NAO e' limitada pelo teto — a UI nunca mente sobre o que existe")
+      (is (apply >= (map (comp #(.toEpochMilli ^java.time.Instant %) :criado-em) notificacoes))
+          "mais recentes primeiro"))))
+
+(deftest isolamento-de-tenant-na-leitura
+  (let [ente-a (random-uuid) ente-b (random-uuid) eu (random-uuid)]
+    (inserir! ente-a eu "k-tenant-a")
+    (is (= 1 (count (:notificacoes (paineis-repo/minhas-notificacoes *paineis* ente-a eu)))))
+    (is (= 0 (count (:notificacoes (paineis-repo/minhas-notificacoes *paineis* ente-b eu))))
+        "criterio 5: a MESMA identidade em outra Casa nao ve' nada")))

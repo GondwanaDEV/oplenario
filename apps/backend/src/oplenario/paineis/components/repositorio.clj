@@ -272,7 +272,11 @@
     re-tentavel; um estado 'enviando' precisaria de um reaper/timeout = mais infra). REMEDIO de scale-out (se um
     dia N workers concorrentes forem necessarios): claim atomico `UPDATE ... SET estado='enviando' WHERE id IN
     (SELECT ... FOR UPDATE SKIP LOCKED LIMIT :teto) RETURNING *` + reaper de 'enviando' orfao. YAGNI ate' la'.
-    Seu AGENDAMENTO (cron/loop + leader-election) e' carry infra — aqui a LOGICA de entrega, chamavel e testavel."))
+    Seu AGENDAMENTO (cron/loop + leader-election) e' carry infra — aqui a LOGICA de entrega, chamavel e testavel.")
+  (minhas-notificacoes [this ente-id destinatario-identidade-id]
+    "Inbox do PROPRIO ator (Onda E fatia 1): {:notificacoes [...] :nao-lidas n} numa UNICA tx do tenant
+     (mesma disciplina de dashboard-mesa). O escopo por destinatario esta' no WHERE do SQL, junto do
+     tenant — a authz fina desta rota NAO e' de papel, e' de posse."))
 
 (defrecord RepoPaineisPg [datasource]
   RepoPaineis
@@ -298,7 +302,12 @@
                 (db-notificacao/marcar-enviada! tx {:ente-id ente-id :id (:id intent)})
                 (db-notificacao/marcar-falha! tx {:ente-id ente-id :id (:id intent)
                                                   :motivo (or (:motivo res) "falha de entrega sem motivo")}))))))
-      {:processados (count pendentes)})))
+      {:processados (count pendentes)}))
+  (minhas-notificacoes [this ente-id destinatario-identidade-id]
+    (transacao this ente-id
+      (fn [tx]
+        {:notificacoes (db-caixa/listar-do-destinatario tx ente-id destinatario-identidade-id)
+         :nao-lidas    (db-caixa/contar-nao-lidas tx ente-id destinatario-identidade-id)}))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

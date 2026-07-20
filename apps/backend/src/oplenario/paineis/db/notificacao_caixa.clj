@@ -42,3 +42,39 @@
                   :on-conflict [:ente_id :idempotency_key]
                   :do-nothing true
                   :returning [:id]}))))
+
+(def ^:private teto-inbox
+  "Teto RIGIDO da inbox (spec §4.5). SEM PAGINACAO nesta fatia, de proposito: a resposta declara a
+  contagem TOTAL de nao lidas, entao a UI nunca mente sobre o que existe. Paginacao entra quando um
+  usuario real passar do teto. O teto e' aplicado no SQL (`:limit`), NUNCA em Clojure depois do fetch —
+  cortar em memoria descarta os itens MAIS RECENTES (armadilha que ja' mordeu o projeto na F3)."
+  50)
+
+(def ^:private colunas
+  [:id :destinatario_identidade_id :categoria :assunto :corpo :objeto_tipo :objeto_id :criado_em :lida_em])
+
+(defn listar-do-destinatario
+  "As notificacoes DO PROPRIO ator, mais recentes primeiro (`:id` asc como desempate estavel, mesma
+  disciplina de db/proposicao/listar). `destinatario-identidade-id` vem SEMPRE do `(:ator req)` — nunca
+  de path/query/corpo. Usa idx_notificacao_caixa_destinatario (mig 0062)."
+  [tx ente-id destinatario-identidade-id]
+  {:pre [(some? ente-id) (some? destinatario-identidade-id)]}
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select colunas :from :paineis.notificacao_caixa
+                  :where [:and [:= :ente_id ente-id]
+                          [:= :destinatario_identidade_id destinatario-identidade-id]]
+                  :order-by [[:criado_em :desc] [:id :asc]]
+                  :limit teto-inbox}))))
+
+(defn contar-nao-lidas
+  "Contagem TOTAL de nao lidas do ator — NAO limitada pelo teto da listagem (e' justamente o numero que
+  impede a UI de mentir quando ha' mais de 50). Usa o indice PARCIAL idx_notificacao_caixa_nao_lidas."
+  [tx ente-id destinatario-identidade-id]
+  {:pre [(some? ente-id) (some? destinatario-identidade-id)]}
+  (:c (comum/linha->kebab
+       (jdbc/execute-one! tx
+         (sql/format {:select [[[:count :*] :c]] :from :paineis.notificacao_caixa
+                      :where [:and [:= :ente_id ente-id]
+                              [:= :destinatario_identidade_id destinatario-identidade-id]
+                              [:is :lida_em nil]]})))))
