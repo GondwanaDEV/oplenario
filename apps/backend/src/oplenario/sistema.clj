@@ -11,6 +11,7 @@
             [oplenario.identidade.components.repositorio :as repo-identidade]
             [oplenario.identidade.relacoes.identidade :as rel-identidade]
             [oplenario.legislativo.components.repositorio :as repo-legislativo]
+            [oplenario.legislativo.diplomat.consumers :as legislativo-consumers]
             [oplenario.paineis.components.repositorio :as repo-paineis]
             [oplenario.paineis.diplomat.consumers :as paineis-consumers]
             [oplenario.participacao.components.repositorio :as repo-participacao]
@@ -66,9 +67,16 @@
         ;; POSTGRES (tempo_real projeta na CanalStore, nao no banco); `registrar` so' ADICIONA entradas.
         ;; paineis (F7) e' o 2o projetor POSTGRES — projeta os relogios de participacao em paineis.pendencia
         ;; ("o que vence", §16.11, Slice 1) e os eventos de legislativo em paineis.tramitacao (board, Slice 2).
+        ;; Onda E fatia 1: `legislativo` entra como produtor da notificacao interna (2o consumidor do proprio
+        ;; `norma.publicada`). O resolvedor vereador->identidade e' INJETADO aqui (inversao de dependencia,
+        ;; §22.10 — legislativo nunca importa cadastros) e recebe a `tx` DO RELAY, entao nao depende de
+        ;; nenhum component ja' iniciado no momento em que este registro e' montado.
+        resolver-identidade-do-vereador (fn [tx ente-id vereador-id]
+                                          (repo-cadastros/identidade-do-vereador-em-tx tx ente-id vereador-id))
         registro    (-> (tr-consumer/registro canal-store)
                         (transparencia-consumers/registrar)
-                        (paineis-consumers/registrar))]
+                        (paineis-consumers/registrar)
+                        (legislativo-consumers/registrar resolver-identidade-do-vereador))]
    (component/system-map
    :datasource      (datasource/datasource config)
    ;; EventBus (producer): grava no shared.outbox na tx do ato. Stateless (sem Lifecycle); os Repo que

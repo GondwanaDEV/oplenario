@@ -132,3 +132,12 @@
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."
   []
   (->RepoCadastrosPg nil))
+
+(defn identidade-do-vereador-em-tx
+  "vereador-id -> identidade-id NESTA Casa, na `tx` JA' ABERTA do chamador (Onda E fatia 1). Fn PLANA (nao
+  metodo do protocolo) de proposito: o chamador e' um consumer do relay, que ja' esta' dentro de uma tx —
+  abrir `com-tenant*` aqui seria redundante e trocaria o role, quebrando o UPDATE seguinte do relay em
+  shared.outbox (mesmo racional de `projetar-evento!`). Devolve nil quando o vereador nao existe neste ente
+  ou nao tem identidade vinculada — o consumer trata como 'nao notifica', nunca como erro."
+  [tx ente-id vereador-id]
+  (:identidade-id (vereador/buscar tx ente-id vereador-id)))
