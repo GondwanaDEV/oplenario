@@ -7,6 +7,7 @@
   (:require [clojure.tools.logging :as log]
             [oplenario.http :as http]
             [oplenario.interceptors :as it]
+            [oplenario.paineis.adapters.in.notificacao :as adapters-in-notificacao]
             [oplenario.paineis.adapters.out.mesa :as adapters-out-mesa]
             [oplenario.paineis.adapters.out.minha-sessao-atual :as adapters-out-minha-sessao-atual]
             [oplenario.paineis.adapters.out.notificacao :as adapters-out-notificacao]
@@ -107,6 +108,18 @@
     (http/json-resposta 200 (adapters-out-notificacao/minhas-notificacoes->wire
                              (controllers/minhas-notificacoes repo-paineis (:ator req))))))
 
+(defn- marcar-lida-handler
+  "POST /meu/notificacoes/:id/lida (Onda E fatia 1). Gate `auth` apenas (mesmo racional do GET). O
+  destinatario e' SEMPRE o do ator; o `:id` do path e' o UNICO dado do cliente. Id malformado, inexistente
+  OU de outro destinatario -> 404, sem distincao (nunca 200 silencioso, nunca vaza existencia)."
+  [repo-paineis]
+  (fn [req]
+    (if-let [id (adapters-in-notificacao/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [recibo (controllers/marcar-lida repo-paineis (:ator req) id)]
+        (http/json-resposta 200 (adapters-out-notificacao/marcar-lida->wire recibo))
+        (http/json-resposta 404 {:erro "notificacao nao encontrada"}))
+      (http/json-resposta 404 {:erro "notificacao nao encontrada"}))))
+
 (defn rotas
   "Fragmento de rotas do modulo paineis (table syntax Pedestal). Recebe o interceptor `auth` (compartilhado)
   + o `repo-paineis` (Repo-Component) + as 4 fns cross-modulo injetadas pelo host (`painel-compliance`,
@@ -132,4 +145,6 @@
       ["/meu/sessao-atual" :get [auth papel-vereador (minha-sessao-atual-handler repo-paineis)]
        :route-name :paineis/minha-sessao-atual]
       ["/meu/notificacoes" :get [auth (minhas-notificacoes-handler repo-paineis)]
-       :route-name :paineis/minhas-notificacoes]}))
+       :route-name :paineis/minhas-notificacoes]
+      ["/meu/notificacoes/:id/lida" :post [auth (marcar-lida-handler repo-paineis)]
+       :route-name :paineis/marcar-notificacao-lida]}))

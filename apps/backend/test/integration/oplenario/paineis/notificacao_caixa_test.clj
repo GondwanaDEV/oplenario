@@ -200,3 +200,32 @@
     (is (= 1 (count (:notificacoes (paineis-repo/minhas-notificacoes *paineis* ente-a eu)))))
     (is (= 0 (count (:notificacoes (paineis-repo/minhas-notificacoes *paineis* ente-b eu))))
         "criterio 5: a MESMA identidade em outra Casa nao ve' nada")))
+
+;; ---------- Task 7: marcar como lida ----------
+
+(defn- id-da-unica [ente dest]
+  (:id (first (:notificacoes (paineis-repo/minhas-notificacoes *paineis* ente dest)))))
+
+(deftest marcar-lida-e-idempotente
+  (let [ente (random-uuid) eu (random-uuid)]
+    (inserir! ente eu "k-lida")
+    (let [id (id-da-unica ente eu)
+          r1 (paineis-repo/marcar-notificacao-lida! *paineis* ente {:id id :destinatario-identidade-id eu})
+          r2 (paineis-repo/marcar-notificacao-lida! *paineis* ente {:id id :destinatario-identidade-id eu})]
+      (is (some? (:lida-em r1)) "1a chamada carimba")
+      (is (= (:lida-em r1) (:lida-em r2))
+          "criterio 6: 2a chamada nao muda lida_em nem devolve erro (COALESCE preserva o 1o carimbo)")
+      (is (= 0 (:nao-lidas (paineis-repo/minhas-notificacoes *paineis* ente eu))) "sai da contagem"))))
+
+(deftest marcar-lida-de-outro-destinatario-e-nil
+  (let [ente (random-uuid) eu (random-uuid) outro (random-uuid)]
+    (inserir! ente outro "k-do-outro-2")
+    (let [id (id-da-unica ente outro)]
+      (is (nil? (paineis-repo/marcar-notificacao-lida! *paineis* ente {:id id :destinatario-identidade-id eu}))
+          "criterio 4: nem com o id em maos — o guard de posse esta' no MESMO WHERE do tenant")
+      (is (nil? (:lida-em (first (:notificacoes (paineis-repo/minhas-notificacoes *paineis* ente outro)))))
+          "a notificacao do outro continua NAO lida"))))
+
+(deftest marcar-lida-id-inexistente-e-nil
+  (is (nil? (paineis-repo/marcar-notificacao-lida! *paineis* (random-uuid)
+              {:id (random-uuid) :destinatario-identidade-id (random-uuid)}))))

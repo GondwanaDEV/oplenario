@@ -78,3 +78,24 @@
                       :where [:and [:= :ente_id ente-id]
                               [:= :destinatario_identidade_id destinatario-identidade-id]
                               [:is :lida_em nil]]})))))
+
+(defn marcar-lida!
+  "Marca a notificacao como lida. IDEMPOTENTE por `COALESCE(lida_em, now())`: a 2a chamada re-grava o
+  MESMO carimbo (nao move a data) e devolve o mesmo recibo — criterio de aceitacao 6.
+
+  POR QUE COALESCE, e nao `WHERE lida_em IS NULL` (a forma literal da spec §4.5): com o WHERE, a 2a
+  chamada atualizaria 0 linhas e a borda nao teria como distinguir 'ja' lida' de 'nao existe / nao e'
+  sua' — devolveria 404 para uma operacao legitima. Com COALESCE, update-count 0 significa EXATAMENTE
+  uma coisa: a linha nao existe OU nao e' do ator. O efeito visivel e' o mesmo (o carimbo nunca se move).
+
+  ANTI-CONFUSED-DEPUTY: `destinatario_identidade_id` esta' no MESMO WHERE do `ente_id` — marcar a
+  notificacao de outra pessoa nao e' possivel nem com o id adivinhado. Devolve {:id :lida-em} ou nil."
+  [tx {:keys [ente-id id destinatario-identidade-id]}]
+  {:pre [(some? ente-id) (some? id) (some? destinatario-identidade-id)]}
+  (comum/linha->kebab
+   (jdbc/execute-one! tx
+     (sql/format {:update :paineis.notificacao_caixa
+                  :set {:lida_em [:coalesce :lida_em [:now]]}
+                  :where [:and [:= :ente_id ente-id] [:= :id id]
+                          [:= :destinatario_identidade_id destinatario-identidade-id]]
+                  :returning [:id :lida_em]}))))

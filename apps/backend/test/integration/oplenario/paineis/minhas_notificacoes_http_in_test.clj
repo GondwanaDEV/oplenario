@@ -84,3 +84,42 @@
   (let [r (pt/response-for (service-fn #{"vereador"} (fake-repo-paineis (atom nil) {:notificacoes [] :nao-lidas 0}))
                            :get "/meu/notificacoes")]
     (is (= 401 (:status r)) "fail-closed: sem credencial -> 401")))
+
+;; ---------- Task 7: POST /meu/notificacoes/:id/lida ----------
+
+(defn- fake-repo-marcacao
+  "RepoPaineis fake para POST: guarda o `m` recebido e devolve `resultado` (ou nil = nao e' sua/inexistente)."
+  [visto resultado]
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify repo-paineis/RepoPaineis
+    (marcar-notificacao-lida! [_ ente-id m] (reset! visto [ente-id m]) resultado)))
+
+(deftest marcar-lida-200
+  (let [ente (random-uuid) eu (random-uuid) id (random-uuid) visto (atom nil)
+        r (pt/response-for (service-fn #{"vereador"} (fake-repo-marcacao visto {:id id :lida-em (Instant/parse "2026-07-19T13:00:00Z")}))
+                           :post (str "/meu/notificacoes/" id "/lida")
+                           :headers (com-bearer (token ente eu)))
+        body (ler-json r)]
+    (is (= 200 (:status r)))
+    (is (= ente (first @visto)))
+    (is (= eu (:destinatario-identidade-id (second @visto)))
+        "o destinatario e' o do ATOR, nunca do path")
+    (is (= (str id) (:id body)))
+    (is (= "2026-07-19T13:00:00Z" (:lida-em body)))))
+
+(deftest marcar-lida-de-outro-ator-404
+  (let [r (pt/response-for (service-fn #{"vereador"} (fake-repo-marcacao (atom nil) nil))
+                           :post (str "/meu/notificacoes/" (random-uuid) "/lida")
+                           :headers (com-bearer (token (random-uuid) (random-uuid))))]
+    (is (= 404 (:status r)) "criterio 4: id de outro destinatario -> 404, nunca 200 silencioso")))
+
+(deftest marcar-lida-id-malformado-404
+  (let [r (pt/response-for (service-fn #{"vereador"} (fake-repo-marcacao (atom nil) nil))
+                           :post "/meu/notificacoes/nao-e-uuid/lida"
+                           :headers (com-bearer (token (random-uuid) (random-uuid))))]
+    (is (= 404 (:status r)) "id que nao parseia = recurso inexistente (nao vaza nada, nunca 500)")))
+
+(deftest marcar-lida-sem-token-401
+  (let [r (pt/response-for (service-fn #{"vereador"} (fake-repo-marcacao (atom nil) nil))
+                           :post (str "/meu/notificacoes/" (random-uuid) "/lida"))]
+    (is (= 401 (:status r)))))

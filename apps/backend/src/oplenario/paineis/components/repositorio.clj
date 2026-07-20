@@ -276,7 +276,10 @@
   (minhas-notificacoes [this ente-id destinatario-identidade-id]
     "Inbox do PROPRIO ator (Onda E fatia 1): {:notificacoes [...] :nao-lidas n} numa UNICA tx do tenant
      (mesma disciplina de dashboard-mesa). O escopo por destinatario esta' no WHERE do SQL, junto do
-     tenant — a authz fina desta rota NAO e' de papel, e' de posse."))
+     tenant — a authz fina desta rota NAO e' de papel, e' de posse.")
+  (marcar-notificacao-lida! [this ente-id m]
+    "Marca como lida a notificacao `(:id m)` do destinatario `(:destinatario-identidade-id m)` — guard de
+     posse no MESMO WHERE do tenant. Idempotente; devolve {:id :lida-em} ou nil (inexistente/nao e' sua)."))
 
 (defrecord RepoPaineisPg [datasource]
   RepoPaineis
@@ -307,7 +310,9 @@
     (transacao this ente-id
       (fn [tx]
         {:notificacoes (db-caixa/listar-do-destinatario tx ente-id destinatario-identidade-id)
-         :nao-lidas    (db-caixa/contar-nao-lidas tx ente-id destinatario-identidade-id)}))))
+         :nao-lidas    (db-caixa/contar-nao-lidas tx ente-id destinatario-identidade-id)})))
+  (marcar-notificacao-lida! [this ente-id m]
+    (transacao this ente-id #(db-caixa/marcar-lida! % (assoc m :ente-id ente-id)))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."
