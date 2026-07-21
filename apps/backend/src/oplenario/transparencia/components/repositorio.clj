@@ -206,10 +206,22 @@
   (deixar-de-seguir! [this ente-id m] "Soft-cancel idempotente. Devolve {:id} se cancelou, ou nil (no-op).")
   (meus-acompanhamentos [this ente-id seguidor-identidade-id] "Materias que o cidadao segue (ativas, c/ cabecalho).")
   ;; Onda E fatia 2 — perfil PUBLICO do vereador (leitura COMPOSTA numa UNICA tx, mesma disciplina de
-  ;; legislativo/ficha-completa-da-proposicao: as quatro leituras veem o MESMO snapshot MVCC, entao o
-  ;; numero-card 'viraram lei' nunca discorda da lista de autoria exibida ao lado dele).
+  ;; legislativo/ficha-completa-da-proposicao). O QUE A TX DE FATO ENTREGA (correcao F3a da revisao Task 3
+  ;; — a afirmacao anterior, "as leituras veem o MESMO snapshot MVCC, entao o numero-card nunca discorda da
+  ;; lista", era FALSA): uma UNICA conexao, um UNICO contexto de tenant (o GUC app.ente_id setado uma vez) e
+  ;; um UNICO round-trip. NAO um snapshot congelado: `transacao` -> kernel/tenancy/com-tenant* chama
+  ;; `jdbc/with-transaction` SEM mapa de opcoes e o HikariConfig (kernel/components/datasource) nunca seta
+  ;; transaction-isolation, entao o nivel efetivo e' READ COMMITTED — em que CADA statement toma um snapshot
+  ;; NOVO. Com o relay committando projecoes entre os statements, uma divergencia card-vs-lista E' alcancavel;
+  ;; e' uma janela ESTREITA que se auto-cura na proxima carga, nao uma garantia.
+  ;; CARRY DELIBERADO: congelar o snapshot exigiria um `com-tenant-leitura*` no kernel com
+  ;; `:isolation :repeatable-read :read-only true`. Fora do escopo desta fatia — o kernel e' COMPARTILHADO e
+  ;; o mesmo overclaim existe em legislativo/components/repositorio (ficha-completa-da-proposicao, o
+  ;; precedente citado); corrigir so' aqui criaria inconsistencia entre os dois.
   (perfil-parlamentar [this ente-id vereador-id]
-    "{:materias :normas-de-autoria :votos :presenca} do vereador no read-model publico (sem identidade)."))
+    "{:materias :materias-total :normas-de-autoria :votos :presenca} do vereador no read-model publico
+     (sem identidade). `:materias` vem truncada no teto de `listar-por-autor`; `:materias-total` e' o
+     universo INTEIRO do mesmo filtro — sem ele a borda nao sabe que truncou."))
 
 (defrecord RepoTransparenciaPg [datasource]
   RepoTransparencia
@@ -228,6 +240,7 @@
     (transacao this ente-id
       (fn [tx]
         {:materias          (db-materia/listar-por-autor tx ente-id vid)
+         :materias-total    (db-materia/contar-por-autor tx ente-id vid)
          :normas-de-autoria (db-materia/contar-normas-por-autor tx ente-id vid)
          :votos             (db-parlamentar/votos-do-vereador tx ente-id vid nil)
          :presenca          (db-parlamentar/resumo-presenca tx ente-id vid)}))))

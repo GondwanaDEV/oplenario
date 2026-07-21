@@ -91,7 +91,26 @@
                   :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]]}))))
 
 (defn listar-por-autor
-  "Materias de AUTORIA de um vereador (Onda E fatia 2, perfil publico), mais recentes primeiro.
+  "Materias de AUTORIA de um vereador (Onda E fatia 2, perfil publico), por NUMERACAO DECRESCENTE.
+
+  ORDEM (revisao Task 3, F1/F3c) — dizer 'mais recentes primeiro' seria falso: ordena-se por
+  (ano DESC, sequencial DESC), e `sequencial` e' um contador POR ESPECIE (escopo 'tipo:ano',
+  legislativo/db/proposicao), entao a ordem NAO e' cronologica ENTRE especies — um requerimento
+  nº 240/2026 de fevereiro vem antes de um projeto de lei nº 3/2026 de novembro. Ordem cronologica REAL
+  nao e' possivel hoje: `transparencia.materia` so' tem `projetado_em` (tempo de PROJECAO, nao de
+  protocolo — a mesma armadilha ja' registrada como carry em `transicionou_em`), e obtê-la exigiria
+  migration + `:ocorrido-em` no payload de `proposicao.protocolada`. CARRY, nao esta fatia.
+
+  DESEMPATE (achado F1): a terceira chave `proposicao_id DESC` NAO e' decorativa. `sequencial` e' gapless
+  por escopo 'tipo:ano', logo NAO e' unico por (ente, ano): 'requerimento 12/2026' e 'projeto_lei 12/2026'
+  empatam INTEGRALMENTE nas duas primeiras chaves, e sem uma terceira a ordem passa a depender do plano de
+  execucao (Index Scan vs Seq Scan+Sort) — a lista publica troca de ordem entre dois carregamentos sem nada
+  ter mudado. Mesmo precedente de `db/parlamentar/votos-do-vereador` (achado M-6 da Task 2). Custo medido:
+  o planner mantem o Index Scan em idx_materia_autor com Incremental Sort (Presorted Key: ano, sequencial),
+  ~0,26ms em 5.000 linhas — nao justifica alargar o indice nem migration.
+
+  TETO: `teto-listagem` (200) trunca. Quem exibe precisa do `contar-por-autor` ao lado para saber que
+  truncou (ver docstring de la').
 
   DOIS filtros, nao um:
   - `autor_id = ?` — so' materia COM o elo. O acervo protocolado ANTES da mig 0063 tem `autor_id` NULL e
@@ -115,16 +134,38 @@
      (sql/format {:select cols :from [:transparencia.materia]
                   :where [:and [:= :ente_id ente-id] [:= :autor_id autor-id]
                           [:= :autor_tipo "vereador"]]
-                  :order-by [[:ano :desc] [:sequencial :desc]]
+                  :order-by [[:ano :desc] [:sequencial :desc] [:proposicao_id :desc]]
                   :limit teto-listagem}))))
+
+(defn contar-por-autor
+  "Quantas materias de autoria parlamentar DESTE vereador existem — SEM teto (revisao Task 3, F2). Existe
+  porque `listar-por-autor` trunca em `teto-listagem`: sem este numero, a resposta do perfil nao carrega
+  NENHUM sinal de truncamento e a borda nao tem como dizer 'mostrando 200 de 260'. MESMO par de filtros
+  de `listar-por-autor` (autor_id + autor_tipo='vereador'), senao o proprio total mentiria sobre o que a
+  lista contem. Paginacao por cursor (que dispensaria o par lista+total) e' CARRY, nao esta fatia."
+  [tx ente-id autor-id]
+  {:pre [(some? ente-id) (some? autor-id)]}
+  (:contagem
+   (comum/linha->kebab
+    (jdbc/execute-one! tx
+      (sql/format {:select [[[:count :*] :contagem]]
+                   :from [:transparencia.materia]
+                   :where [:and [:= :ente_id ente-id] [:= :autor_id autor-id]
+                           [:= :autor_tipo "vereador"]]})))))
 
 (defn contar-normas-por-autor
   "Numero-card 'viraram lei' do perfil publico: quantas materias DESTE autor ja' tem norma publicada. JOIN
   same-schema (transparencia.materia x transparencia.norma — nao e' cross-schema, §22.10 preservado).
 
   Mesmo par de filtros de `listar-por-autor`, pelo MESMO motivo (achado N-1): um card 'viraram lei' que
-  contasse materia de autoria 'executivo' so' porque o `autor_id` sobreviveu creditaria ao vereador uma lei
-  que nao e' dele. Card e lista precisam contar o MESMO universo — divergencia entre eles e' bug visivel."
+  contasse materia de autoria 'executivo' (ou 'comissao') so' porque o `autor_id` sobreviveu creditaria ao
+  vereador uma lei que nao e' dele.
+
+  Card e lista usam o MESMO PREDICADO de autoria, mas NAO o mesmo universo (correcao F3b da revisao Task 3
+  — a afirmacao anterior, 'contam o MESMO universo', era falsa): esta contagem NAO tem teto e
+  `listar-por-autor` tem (200). Um vereador com 260 materias, 15 delas ja' lei e fora das 200 primeiras,
+  ve um card '15 viraram lei' sobre uma lista onde nenhuma das 15 aparece. E' exatamente por isso que
+  `contar-por-autor` (-> `:materias-total`) existe: e' o sinal que permite a borda dizer que truncou."
   [tx ente-id autor-id]
   {:pre [(some? ente-id) (some? autor-id)]}
   (:contagem

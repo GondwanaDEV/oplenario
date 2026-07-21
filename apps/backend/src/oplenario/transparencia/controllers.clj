@@ -53,10 +53,14 @@
     {:resultado :nao-encontrado}))
 
 (defn perfil-parlamentar
-  "Perfil PUBLICO do vereador no read-model (Onda E fatia 2): {:materias :normas-de-autoria :votos
-  :presenca}, numa UNICA tx (ver o metodo homonimo do Repo). NAO inclui a identidade (nome/mandato/
-  comissoes) — essa chega na BORDA, injetada pelo host sobre o Repo de `cadastros` (§22.10: `transparencia`
-  nunca importa outro modulo de dominio). Rota PUBLICA: sem ator, `ente-id` resolvido do path publico."
+  "Perfil PUBLICO do vereador no read-model (Onda E fatia 2): {:materias :materias-total :normas-de-autoria
+  :votos :presenca}, numa UNICA tx (ver o metodo homonimo do Repo — incluindo o que essa tx garante e o que
+  NAO garante sob READ COMMITTED). `:materias` vem TRUNCADA no teto do read-model e `:materias-total` diz
+  quantas existem no mesmo filtro: a borda usa o par para exibir 'mostrando N de M' em vez de fingir acervo
+  completo (o card 'viraram lei' nao tem teto e pode contar materia que ficou fora da lista). NAO inclui a
+  identidade (nome/mandato/comissoes) — essa chega na BORDA, injetada pelo host sobre o Repo de `cadastros`
+  (§22.10: `transparencia` nunca importa outro modulo de dominio). Rota PUBLICA: sem ator, `ente-id`
+  resolvido do path publico."
   [repo-transparencia ente-id vereador-id]
   (repo/perfil-parlamentar repo-transparencia ente-id vereador-id))
 

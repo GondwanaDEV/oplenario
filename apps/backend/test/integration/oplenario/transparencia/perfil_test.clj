@@ -29,7 +29,8 @@
             [oplenario.transparencia.components.repositorio :as transparencia-repo]
             [oplenario.transparencia.controllers :as controllers]
             [oplenario.transparencia.diplomat.consumers :as consumers])
-  (:import (java.time LocalDate)))
+  (:import (java.time LocalDate)
+           (java.util UUID)))
 
 (def ^:dynamic *ds* nil)
 (def ^:dynamic *repo-legislativo* nil)
@@ -125,6 +126,31 @@
                    :numero 7 :ano 2026 :urn (str "urn:lex:norma:" pid) :ementa "Fixture norma"
                    :publicado-em "2026-06-28T12:00:00Z" :veiculo-publicacao "Diario Oficial do Municipio"}}))))
 
+(defn- projetar-lote!
+  "Semeia `n` materias de autoria do vereador numa UNICA tx, pelo mesmo `projetar-evento!` que o consumer
+  chama. Existe para exceder o TETO de `listar-por-autor` (200) sem 200 round-trips pelo relay — e' o unico
+  jeito de provar que `:materias-total` conta o universo INTEIRO, e nao as linhas devolvidas."
+  [ente vereador n]
+  (tenancy/com-tenant* *ds* ente
+    (fn [tx]
+      (doseq [i (range n)]
+        (transparencia-repo/projetar-evento! tx
+          {:tipo "proposicao.protocolada" :ente-id ente
+           :payload {:proposicao-id (str (random-uuid)) :tipo "projeto_lei" :ano 2026 :sequencial (inc i)
+                     :urn-lex (str "urn:lex:lote:" ente ":" i) :ementa (str "Materia de lote " i)
+                     :estado "protocolada" :autor-tipo "vereador" :autor-id (str vereador)}})))))
+
+(defn- comparar-uuid-pg
+  "Ordem que o POSTGRES da' a valores `uuid`: byte a byte SEM SINAL. NAO usar `java.util.UUID/compareTo` —
+  ele compara os dois longs COM SINAL, entao inverte o resultado sempre que o bit 63 de uma das metades
+  difere (metade dos pares aleatorios). Este comparador e' o que permite prever a ordem de desempate por
+  `proposicao_id DESC` sem depender de sorte."
+  [^UUID a ^UUID b]
+  (let [m (Long/compareUnsigned (.getMostSignificantBits a) (.getMostSignificantBits b))]
+    (if (zero? m)
+      (Long/compareUnsigned (.getLeastSignificantBits a) (.getLeastSignificantBits b))
+      m)))
+
 ;; ---------- o caso feliz: as quatro leituras compostas ----------
 
 (deftest perfil-parlamentar-compoe-as-quatro-leituras
@@ -138,6 +164,7 @@
       (presenca! ente (random-uuid) vereador "presente")
       (let [p (controllers/perfil-parlamentar *repo-transparencia* ente vereador)]
         (is (= 1 (count (:materias p))) "a materia de autoria aparece")
+        (is (= 1 (:materias-total p)) "o total do universo (sem teto) acompanha a lista")
         (is (= pid (:proposicao-id (first (:materias p)))))
         (is (= "Hortas comunitarias" (:ementa (first (:materias p)))))
         (is (= 0 (:normas-de-autoria p)) "nada virou lei ainda")
@@ -151,6 +178,7 @@
     (let [ente (random-uuid)
           p    (controllers/perfil-parlamentar *repo-transparencia* ente (random-uuid))]
       (is (empty? (:materias p)))
+      (is (= 0 (:materias-total p)))
       (is (= 0 (:normas-de-autoria p)))
       (is (empty? (:votos p)))
       (is (= 0 (:sessoes-presente (:presenca p))))
@@ -175,18 +203,26 @@
 ;; ---------- (b) regressao do achado N-1 ----------
 
 (deftest materia-com-autor-id-mas-autor-tipo-nao-vereador-nao-aparece
-  (testing "autoria que virou 'executivo' com autor_id sobrevivente NAO conta como autoria do vereador"
+  (testing "autoria que virou 'executivo' OU 'comissao' com autor_id sobrevivente NAO e' autoria do vereador"
     (let [ente      (random-uuid)
           vereador  (random-uuid)
           pid-ok    (protocolar! ente "Autoria parlamentar legitima"
                                  {:autor-tipo "vereador" :autor-id vereador :autor-texto "Helena Past"})
-          pid-exec  (random-uuid)]
+          pid-exec  (random-uuid)
+          pid-com   (random-uuid)]
       (drenar!)
       (projetar-materia! ente pid-exec {:autor-tipo "executivo" :autor-id (str vereador)
                                         :autor-texto "Prefeitura" :ementa "Autoria virou executivo"})
+      ;; O predicado tem que ser IGUALDADE a 'vereador', nao "qualquer coisa menos executivo": o vocabulario
+      ;; da coluna e' ('vereador','mesa','comissao','executivo','cidadao') (mig 0013). Com so' o distrator
+      ;; 'executivo', degradar o filtro para [:<> :autor_tipo "executivo"] passaria despercebido — e creditar
+      ;; ato de COMISSAO a um vereador e' a mesma classe de erro do achado N-1.
+      (projetar-materia! ente pid-com {:autor-tipo "comissao" :autor-id (str vereador)
+                                       :autor-texto "Comissao de Financas" :ementa "Autoria virou comissao"})
       (let [p (controllers/perfil-parlamentar *repo-transparencia* ente vereador)]
         (is (= 1 (count (:materias p)))
-            "a de autoria 'executivo' e' filtrada — so' a parlamentar legitima permanece")
+            "as de autoria 'executivo'/'comissao' sao filtradas — so' a parlamentar legitima permanece")
+        (is (= 1 (:materias-total p)) "o total tambem so' conta a autoria parlamentar")
         (is (= pid-ok (:proposicao-id (first (:materias p)))))))))
 
 ;; ---------- (c) acervo legado sem elo ----------
@@ -211,12 +247,18 @@
     (let [ente     (random-uuid)
           vereador (random-uuid)
           outro    (random-uuid)
+          ;; Ordem de PROTOCOLO deliberadamente OPOSTA a ordem esperada de exibicao: o mais ANTIGO
+          ;; (2025) entra primeiro, entao a ordem fisica/insercao das linhas nao pode ser confundida
+          ;; com a ordem que o ORDER BY produz.
           pid-lei  (protocolar! ente "Virou lei"
-                                {:autor-tipo "vereador" :autor-id vereador :autor-texto "Helena Past"})
-          _sem-lei (protocolar! ente "Ainda tramitando"
-                                {:autor-tipo "vereador" :autor-id vereador :autor-texto "Helena Past"})
+                                {:ano 2025 :autor-tipo "vereador" :autor-id vereador
+                                 :autor-texto "Helena Past"})
+          pid-nova (protocolar! ente "Ainda tramitando"
+                                {:ano 2026 :autor-tipo "vereador" :autor-id vereador
+                                 :autor-texto "Helena Past"})
           pid-outro (random-uuid)
-          pid-exec  (random-uuid)]
+          pid-exec  (random-uuid)
+          pid-com   (random-uuid)]
       (publicar-norma! ente pid-lei "Virou lei")
       (drenar!)
       ;; distrator 1: norma publicada de OUTRO vereador
@@ -227,10 +269,53 @@
       (projetar-materia! ente pid-exec {:autor-tipo "executivo" :autor-id (str vereador)
                                         :autor-texto "Prefeitura" :ementa "Lei do executivo"})
       (projetar-norma! ente pid-exec)
+      ;; distrator 3: autoria de COMISSAO — o filtro precisa ser IGUALDADE a 'vereador' e nao
+      ;; "diferente de executivo" (vocabulario da coluna tem 5 valores, mig 0013).
+      (projetar-materia! ente pid-com {:autor-tipo "comissao" :autor-id (str vereador)
+                                       :autor-texto "Comissao de Financas" :ementa "Lei da comissao"})
+      (projetar-norma! ente pid-com)
       (let [p (controllers/perfil-parlamentar *repo-transparencia* ente vereador)]
         (is (= 1 (:normas-de-autoria p))
             "so' a materia deste vereador, autoria parlamentar, com norma publicada")
-        (is (= 2 (count (:materias p)))
-            "a lista de autoria segue com as duas parlamentares (a do executivo nao entra)"))
+        (is (= [pid-nova pid-lei] (mapv :proposicao-id (:materias p)))
+            "a lista sai por NUMERACAO decrescente (ano, sequencial) — e so' as parlamentares entram")
+        (is (= 2 (:materias-total p)) "o total do universo bate com a lista quando nao ha truncamento"))
       (is (= 0 (:normas-de-autoria (controllers/perfil-parlamentar *repo-transparencia* (random-uuid) vereador)))
           "outro ente nao ve a contagem"))))
+
+;; ---------- (e) ordem estavel no EMPATE de numeracao ----------
+
+(deftest lista-de-autoria-desempata-por-proposicao-id
+  (testing "duas especies com o MESMO (ano, sequencial) saem em ordem deterministica, nao a do planner"
+    ;; `sequencial` e' gapless por escopo 'tipo:ano' (legislativo/db/proposicao) — logo NAO e' unico por
+    ;; (ente, ano): requerimento 1/2026 e projeto_lei 1/2026 empatam nas DUAS chaves do ORDER BY. Sem uma
+    ;; terceira chave, a ordem da lista publica passa a depender do plano de execucao (Index Scan vs
+    ;; Seq Scan+Sort) e pode trocar entre dois carregamentos sem nada ter mudado.
+    (let [ente          (random-uuid)
+          vereador      (random-uuid)
+          [menor maior] (sort comparar-uuid-pg [(random-uuid) (random-uuid)])
+          autoria       {:autor-tipo "vereador" :autor-id vereador :autor-texto "Helena Past"}]
+      ;; protocola o MENOR primeiro: a ordem de insercao fica oposta a esperada (proposicao_id DESC)
+      (protocolar! ente "Requerimento de informacao"
+                   (merge autoria {:id menor :tipo "requerimento" :tipo-requerimento "informacao"}))
+      (protocolar! ente "Projeto de lei" (merge autoria {:id maior :tipo "projeto_lei"}))
+      (drenar!)
+      (let [p (controllers/perfil-parlamentar *repo-transparencia* ente vereador)]
+        (is (= #{1} (set (map :sequencial (:materias p))))
+            "premissa do caso: as duas materias empatam mesmo em (ano, sequencial)")
+        (is (= [maior menor] (mapv :proposicao-id (:materias p)))
+            "desempate por proposicao_id DESC (ordem UNSIGNED do Postgres, nao a de UUID/compareTo)")))))
+
+;; ---------- (f) truncamento honesto: o teto de 200 vs o total ----------
+
+(deftest materias-total-revela-o-truncamento-do-teto
+  (testing "acima do teto, a lista trunca em 200 e :materias-total ainda diz quantas existem"
+    ;; Sem este sinal, um vereador com 260 materias (15 delas ja' lei, fora das 200 primeiras) recebe um
+    ;; card '15 viraram lei' e uma lista onde nenhuma das 15 aparece — e a borda nao tem como dizer
+    ;; "mostrando 200 de 260". `contar-normas-por-autor` nao tem teto; `listar-por-autor` tem.
+    (let [ente     (random-uuid)
+          vereador (random-uuid)]
+      (projetar-lote! ente vereador 205)
+      (let [p (controllers/perfil-parlamentar *repo-transparencia* ente vereador)]
+        (is (= 200 (count (:materias p))) "a lista para no teto server-side")
+        (is (= 205 (:materias-total p)) "o total conta o universo INTEIRO, nao as linhas devolvidas")))))
