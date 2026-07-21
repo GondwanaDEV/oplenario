@@ -111,8 +111,13 @@
           {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026 :uf "CE" :municipio-nome "Fortaleza"
            :ementa "Legado"})]
     (drenar!)
-    (is (nil? (:autor-id (transparencia-repo/buscar-materia *repo-transparencia* ente pid)))
-        "evento SEM :autor-id (acervo anterior) projeta com autor_id nulo, sem lancar")))
+    ;; review task-1 achado I-2: `(:autor-id nil)` tambem e' nil — sem a materia EXISTIR, a asserção de
+    ;; baixo passaria vazia (falso-positivo se a projecao nao rodasse, ex.: ON CONFLICT DO NOTHING futuro).
+    ;; Mesma disciplina do teste-irmao `protocolar-projeta-a-materia-no-portal`.
+    (let [m (transparencia-repo/buscar-materia *repo-transparencia* ente pid)]
+      (is (some? m) "a materia foi projetada no read-model do portal")
+      (is (nil? (:autor-id m))
+          "evento SEM :autor-id (acervo anterior) projeta com autor_id nulo, sem lancar"))))
 
 ;; ---------- transicionar! (Repo) -> proposicao.transicionou -> materia.estado ----------
 
