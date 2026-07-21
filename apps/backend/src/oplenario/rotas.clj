@@ -45,7 +45,7 @@
   [{:keys [idp repo-identidade repo-sessoes repo-legislativo repo-compliance repo-participacao
            repo-transparencia repo-paineis repo-cadastros canal-store objeto-store painel-compliance
            presenca-resumo esic-cumprimento relatores-pendentes info-ente registro-fatos
-           keycloak sessao identidade-existe?]}]
+           keycloak sessao identidade-existe? ficha-vereador-publica]}]
   (let [auth (it/autenticacao idp repo-identidade)
         ;; F6: relogio de producao (kernel/tempo) p/ o prazo LAI do e-SIC — determinismo em teste vem de
         ;; injetar relogio-fixo direto no fragmento de rotas (participacao-http/rotas). resolver-ente-publico
@@ -108,6 +108,18 @@
         ;; transparencia nunca importa cadastros (§22.10). Ente sem perfil cadastrado -> nil -> 404 na borda.
         info-ente (or info-ente
                       (fn [ente-id] (repo-cadastros-comp/buscar-ente repo-cadastros ente-id)))
+        ;; Onda E fatia 2 (Task 4): a IDENTIDADE do vereador no perfil PUBLICO — irmao de `info-ente`, mesma
+        ;; inversao de dependencia (transparencia nunca importa cadastros, §22.10). `ficha-vereador` e' de
+        ;; aridade 4 e a 4a e' a DATA que decide mandato vigente + comissoes vigentes: usa o mesmo `hoje` no
+        ;; fuso civil de `membros-da-casa` (nao `LocalDate/now` do fuso do container — um deploy em UTC
+        ;; viraria o dia 3h antes e um mandato encerrado ontem ainda apareceria vigente). Vereador
+        ;; inexistente NESTA Casa -> nil -> 404 fail-closed na borda (nunca 200 com perfil vazio).
+        ficha-vereador-publica
+        (or ficha-vereador-publica
+            (fn [ente-id vereador-id]
+              (repo-cadastros-comp/ficha-vereador repo-cadastros ente-id vereador-id
+                                                  (tempo/hoje (tempo/relogio-sistema)
+                                                              (java.time.ZoneId/of "America/Fortaleza")))))
         ;; Onda D Slice 5 Task 9: guard de SERVICO — cadastros NUNCA importa identidade (§22.10) e nao ha'
         ;; FK cross-schema em cadastros.vereador.identidade_id (so' GUARD ref). O host injeta a existencia
         ;; via o Repo-Component de identidade (`identidade-existe?`, SUPRATENANT); mesma inversao de
@@ -152,7 +164,8 @@
         (into (transparencia-http/rotas {:auth auth :repo-transparencia repo-transparencia
                                          :resolver-ente-publico transparencia-http/resolver-ente-publico-uuid
                                          :objeto-store objeto-store
-                                         :info-ente info-ente}))
+                                         :info-ente info-ente
+                                         :ficha-vereador-publica ficha-vereador-publica}))
         (into (paineis-http/rotas {:auth auth :repo-paineis repo-paineis
                                    :painel-compliance painel-compliance
                                    :presenca-resumo presenca-resumo

@@ -26,6 +26,12 @@
 (defn proposicao-param->uuid [s] (->uuid s :proposicao-id))
 (defn norma-param->uuid [s] (->uuid s :norma-id))
 
+(defn vereador-param->uuid
+  "Path-param :vereador_id do perfil publico (Onda E fatia 2) -> UUID. Malformado -> 400, NUNCA 404: um 404
+  para lixo sintatico afirmaria 'este vereador nao existe nesta Casa' sobre algo que nem e' identificador."
+  [s]
+  (->uuid s :vereador-id))
+
 ;; ---------- F6c Slice 3: coercao dos query-params do acervo de legislacao (todos OPCIONAIS) ----------
 
 (def ^:private especie-max 64)       ; teto de tamanho da especie (anti-abuso; qualquer especie real cabe folgado)
