@@ -22,6 +22,12 @@
   [bus tx ente-id payload]
   (eventos/emitir! bus tx (ev/transicionou ente-id payload)))
 
+(defn emitir-editada!
+  "Emite `proposicao.editada` no `bus` DENTRO da `tx` corrente (Task 1-N1). `payload` casa
+  events/EditadaPayload — o snapshot publico pos-PATCH que o portal (transparencia) projeta."
+  [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev/editada ente-id payload)))
+
 (defn emitir-norma-publicada!
   "Emite `norma.publicada` no `bus` DENTRO da `tx` corrente (F3.8b, marco de eficacia). `payload` casa
   events.norma/PublicadaPayload — o snapshot publico que o portal (transparencia) projeta."

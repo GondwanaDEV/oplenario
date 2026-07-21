@@ -59,6 +59,23 @@
       (is (= "## Art. 1o (rev)" (:texto-inline texto)))
       (is (= "edicao" (:origem-versao texto))))))
 
+(deftest editar-autor-tipo-nao-vereador-zera-autor-id
+  ;; Task 1-N1 Peca A (fix do achado N-1): o UPDATE de `editar!` era `some?`-gated — um PATCH
+  ;; {:autor-tipo "executivo"} SEM :autor-id passava incolume e deixava a linha incoerente
+  ;; (executivo, V). Provamos aqui que o par nunca fica incoerente: autor-tipo != "vereador" zera
+  ;; autor_id na MESMA escrita.
+  (let [ente (random-uuid)
+        vereador (random-uuid)
+        r (repo/protocolar! *repo* ente {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026 :uf "CE"
+                                          :municipio-nome "Fortaleza" :ementa "X"
+                                          :autor-tipo "vereador" :autor-id vereador})
+        lock-atual (:lock-version (repo/buscar-proposicao *repo* ente (:id r)))]
+    (repo/editar-proposicao! *repo* ente {:id (:id r) :lock-version lock-atual :autor-tipo "executivo"
+                                          :updated-by (random-uuid)})
+    (let [p (repo/buscar-proposicao *repo* ente (:id r))]
+      (is (= "executivo" (:autor-tipo p)))
+      (is (nil? (:autor-id p)) "o par (autor_tipo, autor_id) nunca fica incoerente na linha"))))
+
 (deftest criar-proposicao-via-controller-seta-ente-id
   ;; Bug 1 (review ecc clojure+database, task 12): `controllers/criar-proposicao` mesclava so' {:uf
   ;; :municipio-nome} do resolver de municipio no mapa `m`, NUNCA :ente-id — e' o unico dos 3 gates de

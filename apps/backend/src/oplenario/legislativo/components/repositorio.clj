@@ -295,6 +295,9 @@
   (mudar-estado-proposicao! [this ente-id m] (transacao this ente-id #(proposicao/mudar-estado! % (assoc m :ente-id ente-id))))
   ;; Onda B Slice 2: editar-proposicao! compoe (guard nao-terminal + PATCH parcial CAS) + versao 'edicao'
   ;; opcional numa UNICA tx (mesma disciplina de protocolar! — o texto novo so' e' vigente se o PATCH commitou).
+  ;; Task 1-N1: EMITE `proposicao.editada` na MESMA tx (atomicidade outbox-com-o-ato §22.9 E2, mesma
+  ;; disciplina de protocolar! -> emitir-protocolada!) — sem isto, qualquer edicao de autoria/ementa
+  ;; ficava invisivel pro portal.
   (editar-proposicao! [this ente-id m]
     (transacao this ente-id
       (fn [tx]
@@ -310,6 +313,12 @@
                                        :texto-inline corpo :created-by (:updated-by m)})
               (texto/promover! tx {:ente-id ente-id :proposicao-id (:id m) :versao-id versao-id
                                     :updated-by (:updated-by m) :lock-version 0})))
+          (producers/emitir-editada! bus tx ente-id
+            {:proposicao-id (:id r) :ementa (:ementa r) :autor-tipo (:autor-tipo r)
+             :autor-texto (:autor-texto r)
+             ;; some-> : (str nil) daria "" e quebraria o UUID/fromString do consumer (mesmo bug corrigido
+             ;; em protocolar! -> emitir-protocolada!, Onda E fatia 2).
+             :autor-id (some-> (:autor-id r) str)})
           r))))
   ;; Onda B Slice 2: leitura composta (proposicao + texto vigente) NUMA UNICA tx — mesmo snapshot MVCC
   ;; (mesma disciplina de listar-e-contar-proposicoes). Nao lanca quando a proposicao nao existe: devolve

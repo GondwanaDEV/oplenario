@@ -170,6 +170,54 @@
       (is (some? (transparencia-repo/buscar-materia *repo-transparencia* ente pid))
           "o evento legitimo POSTERIOR ao orfao projeta normalmente — prova que o gap nao bloqueia o drenar"))))
 
+;; ---------- editar-proposicao! (Repo) -> proposicao.editada -> transparencia.materia (Task 1-N1) ----------
+
+(deftest editar-troca-autor-para-executivo-zera-autor-id-no-portal
+  (let [ente (random-uuid)
+        vereador (random-uuid)
+        {pid :id} (legislativo-repo/protocolar! *repo-legislativo* ente
+                    {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026 :uf "CE"
+                     :municipio-nome "Fortaleza" :ementa "Dispoe sobre autoria"
+                     :autor-tipo "vereador" :autor-id vereador :autor-texto "Helena Past"})]
+    (drenar!)
+    (let [lock-atual (:lock-version (legislativo-repo/buscar-proposicao *repo-legislativo* ente pid))]
+      (legislativo-repo/editar-proposicao! *repo-legislativo* ente
+        {:id pid :lock-version lock-atual :autor-tipo "executivo" :updated-by (random-uuid)}))
+    (drenar!)
+    (let [m (transparencia-repo/buscar-materia *repo-transparencia* ente pid)]
+      (is (= "executivo" (:autor-tipo m)))
+      (is (nil? (:autor-id m)) "a edicao de autoria chega ao portal — o elo antigo e' removido"))))
+
+(deftest editar-so-ementa-preserva-autor-id-no-portal
+  (let [ente (random-uuid)
+        vereador (random-uuid)
+        {pid :id} (legislativo-repo/protocolar! *repo-legislativo* ente
+                    {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026 :uf "CE"
+                     :municipio-nome "Fortaleza" :ementa "Ementa original"
+                     :autor-tipo "vereador" :autor-id vereador :autor-texto "Helena Past"})]
+    (drenar!)
+    (let [lock-atual (:lock-version (legislativo-repo/buscar-proposicao *repo-legislativo* ente pid))]
+      (legislativo-repo/editar-proposicao! *repo-legislativo* ente
+        {:id pid :lock-version lock-atual :ementa "Ementa corrigida" :updated-by (random-uuid)}))
+    (drenar!)
+    (let [m (transparencia-repo/buscar-materia *repo-transparencia* ente pid)]
+      (is (= "Ementa corrigida" (:ementa m)) "a ementa publica muda")
+      (is (= vereador (:autor-id m))
+          "o RETURNING carrega o estado REAL da linha (nao o PATCH parcial) — autor_id sobrevive"))))
+
+(deftest editar-sem-materia-projetada-e-tolerante
+  ;; mesma disciplina de transicao-sem-materia-projetada-e-tolerante: um evento de proposicao anterior
+  ;; ao read-model (ou fora de ordem num redrive) nao pode envenenar o relay COMPARTILHADO.
+  (let [ente (random-uuid) orfao-id (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (is (nil? (transparencia-repo/projetar-evento! tx
+                    {:tipo "proposicao.editada" :ente-id ente
+                     :payload {:proposicao-id (str orfao-id) :ementa "X"}}))
+            "sem materia previa -> nil (tolerante), nunca excecao")))
+    (is (nil? (transparencia-repo/buscar-materia *repo-transparencia* ente orfao-id))
+        "nenhuma materia incompleta e' criada em silencio")))
+
 ;; ---------- promulgar!+publicar! (Repo) -> norma.publicada -> transparencia.norma ----------
 
 (deftest publicar-norma-projeta-a-norma-e-liga-na-ficha

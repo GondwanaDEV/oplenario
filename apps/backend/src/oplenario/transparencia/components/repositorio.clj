@@ -74,6 +74,12 @@
     "proposicao.protocolada"
     (db-materia/inserir! tx (-> payload (uuid-payload [:proposicao-id :autor-id]) (assoc :ente-id ente-id)))
 
+    "proposicao.editada"
+    (let [m (-> payload (uuid-payload [:proposicao-id :autor-id]) (assoc :ente-id ente-id))]
+      (or (db-materia/atualizar-metadados! tx m)
+          (log/warn "transparencia: proposicao.editada sem materia projetada (protocolada ausente?)"
+                    {:ente-id ente-id :proposicao-id (:proposicao-id m)})))
+
     "proposicao.transicionou"
     (let [pid (UUID/fromString (:proposicao-id payload))]
       (or (db-materia/atualizar-estado! tx {:ente-id ente-id :proposicao-id pid :estado (:para payload)})

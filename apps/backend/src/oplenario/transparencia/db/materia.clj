@@ -63,6 +63,24 @@
     (when-not (zero? (:next.jdbc/update-count r 0))
       {:proposicao-id proposicao-id :estado estado})))
 
+(defn atualizar-metadados!
+  "Projeta a edicao (`proposicao.editada`, Task 1-N1): ementa/autor_tipo/autor_texto/autor_id + atualizado_em
+  — o snapshot PUBLICO pos-PATCH, sempre a linha inteira (nunca o PATCH parcial que o cliente mandou no
+  legislativo, ver docstring de db/proposicao/editar!). SEM `some?`-gate de proposito: `autor_id` PRECISA
+  poder virar NULL (autoria deixou de ser parlamentar, Peca A) — um gate aqui reintroduziria exatamente o
+  bug que este evento existe pra corrigir. TOLERANTE (mesmo padrao de atualizar-estado!) se a materia nao
+  existe (UPDATE de 0 linhas) — devolve nil em vez de lancar; o relay e' COMPARTILHADO por todos os modulos,
+  um `throw` aqui travaria HEAD-OF-LINE todo evento de id maior."
+  [tx {:keys [ente-id proposicao-id ementa autor-tipo autor-texto autor-id]}]
+  {:pre [(some? ente-id) (some? proposicao-id) (some? ementa)]}
+  (let [r (jdbc/execute-one! tx
+            (sql/format {:update :transparencia.materia
+                         :set {:ementa ementa :autor_tipo autor-tipo :autor_texto autor-texto
+                               :autor_id autor-id :atualizado_em [:now]}
+                         :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]]}))]
+    (when-not (zero? (:next.jdbc/update-count r 0))
+      {:proposicao-id proposicao-id :ementa ementa})))
+
 (defn buscar
   "Ficha PUBLICA de uma materia (RLS via ente-id). Devolve o mapa kebab-case ou nil."
   [tx ente-id proposicao-id]

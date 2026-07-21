@@ -72,3 +72,34 @@
     (throw (ex-info "payload de proposicao.transicionou invalido (contrato do evento)"
                     {:erro :payload-invalido :explain (m/explain TransicionouPayload payload)})))
   (eventos/evento transicionou-tipo ente-id payload))
+
+(def editada-tipo
+  "Nome do evento emitido no PATCH de metadados da proposicao (Onda B Slice 2 `editar-proposicao!`). Task
+  1-N1 (fix do achado N-1 da revisao da Onda E fatia 2): so' `protocolar!` emitia evento — qualquer edicao
+  de autoria (trocar de vereador, virar autoria nao-parlamentar, corrigir a ementa) ficava invisivel pro
+  read-model publico (transparencia), o portal congelava no estado do protocolo. Carrega o MESMO tipo de
+  snapshot publico de `protocolada-tipo`, so' que pos-edicao."
+  "proposicao.editada")
+
+(def EditadaPayload
+  "Payload de `proposicao.editada` — snapshot PUBLICO pos-PATCH dos campos que o read-model do portal
+  exibe (mesmo vocabulario de ProtocoladaPayload). `ementa` obrigatoria (NOT NULL na linha, sempre presente
+  no RETURNING de db/proposicao/editar!); `autor-tipo`/`autor-texto`/`autor-id` OPCIONAIS e podem chegar
+  `nil` (autoria nao-parlamentar, ou proposicao sem autor-id) — o snapshot e' o ESTADO REAL da linha
+  pos-UPDATE, nunca o PATCH parcial que o cliente mandou. `autor-id` viaja como STRING (jsonb do outbox
+  nao tem modulo UUID), mesma disciplina de ProtocoladaPayload."
+  [:map {:closed true}
+   [:proposicao-id :uuid]
+   [:ementa :string]
+   [:autor-tipo {:optional true} [:maybe :string]]
+   [:autor-texto {:optional true} [:maybe :string]]
+   [:autor-id {:optional true} [:maybe :string]]])
+
+(defn editada
+  "Constroi o envelope de `proposicao.editada` p/ o tenant `ente-id`, VALIDANDO o payload. Lanca
+  :payload-invalido se nao casa — o outbox so recebe evento bem-formado."
+  [ente-id payload]
+  (when-not (m/validate EditadaPayload payload)
+    (throw (ex-info "payload de proposicao.editada invalido (contrato do evento)"
+                    {:erro :payload-invalido :explain (m/explain EditadaPayload payload)})))
+  (eventos/evento editada-tipo ente-id payload))
