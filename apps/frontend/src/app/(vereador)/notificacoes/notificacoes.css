@@ -1,5 +1,5 @@
 /* Inbox do vereador (Onda E fatia 1) — porte de
-   produto/design-system/o-plenario/telas/notificacoes.html (blocos .pg-cab/.grupo/.lista/.nt*/.dedup-nota),
+   produto/design-system/o-plenario/telas/notificacoes.html (blocos .pg-cab, .grupo, .lista, .nt…, .dedup-nota),
    adaptado ao shell mobile do vereador (`.app-vereador` é sempre <=460px — ver ../vereador-shell.css — então
    o breakpoint @620px do original vira a regra ÚNICA aqui, não uma variante). Tokens/chassi já globais
    (globals.css); `.app-topo`/`.tabbar` vivem em ../vereador-shell.css e não são duplicados aqui.

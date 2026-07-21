@@ -581,3 +581,59 @@
            (println "VEREADORES  : http://localhost:3000/cadastros/vereadores")
            (println "=======================\n"))
          (finally (component/stop idp)))))))
+
+;; ---------- Onda E fatia 1 — INBOX interna: "a sua proposicao virou lei" ----------
+
+(defn notificacoes
+  "Semente da INBOX do vereador (Onda E fatia 1). Sob o MESMO ente da demo (ids-file de `base` — rodar
+  `base` primeiro): cria um VEREADOR com identidade propria + vinculo + papel 'vereador', protocola uma
+  proposicao DE AUTORIA DELE e a leva ate' NORMA PUBLICADA usando os Repo de VERDADE. `publicar-norma!`
+  emite `norma.publicada`; o relay do app servido drena, `legislativo` resolve autor->identidade e emite
+  `notificacao.requisitada` (in_app); `paineis` projeta na inbox. Imprime a URL + o token do vereador.
+  NAO e' idempotente (cria uma norma NOVA a cada chamada) — rodar uma vez por demo fresca."
+  [_]
+  (com-ds
+   (fn [ds]
+     (let [{:keys [ente]} (edn/read-string (slurp ids-file))
+           repo (repo-legislativo ds)
+           ident-vereador (random-uuid)
+           vereador-id (random-uuid)]
+       ;; identidade supratenant + vinculo + papel (o ator que vai LER a inbox)
+       (id/inserir! ds {:id ident-vereador :cpf (cpf-valido) :nome "Vereadora Ana Ribeiro"})
+       (tenancy/com-tenant* ds ente
+         (fn [tx]
+           (vinc/criar! tx {:id (random-uuid) :ente-id ente :identidade-id ident-vereador :tipo "vereador"})
+           (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente :identidade-id ident-vereador :papel "vereador"})
+           ;; cadastro institucional do vereador, JA' ligado a' identidade — e' o que o resolvedor
+           ;; injetado (cadastros/identidade-do-vereador-em-tx) vai encontrar.
+           (vereador-db/inserir! tx {:id vereador-id :ente-id ente :identidade-id ident-vereador
+                                     :nome "Ana Ribeiro" :nome-parlamentar "Ana Ribeiro"})))
+       ;; a materia DELA, ate' virar lei
+       (let [{pid :id} (legislativo-repo/protocolar! repo ente
+                         {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026 :uf "CE"
+                          :municipio-nome "Fortaleza"
+                          :ementa "Dispoe sobre as hortas comunitarias urbanas."
+                          :autor-tipo "vereador" :autor-id vereador-id :autor-texto "Ver. Ana Ribeiro"})
+             {aid :id} (legislativo-repo/gerar-autografo! repo ente
+                         {:id (random-uuid) :proposicao-id pid :ano 2026
+                          :texto-versao-id (random-uuid)
+                          :destinatario-texto "Prefeito Municipal de Fortaleza"})
+             {tid :id} (legislativo-repo/iniciar-tramitacao-executiva! repo ente
+                         {:id (random-uuid) :autografo-id aid})]
+         (legislativo-repo/registrar-resposta-executivo! repo ente
+           {:id tid :resultado "sancionado" :updated-by nil :lock-version 0})
+         (let [{nid :id} (legislativo-repo/promulgar-norma! repo ente
+                           {:id (random-uuid) :proposicao-id pid :autografo-id aid :tipo-norma "lei"
+                            :ano 2026 :uf "CE" :municipio-nome "Fortaleza"
+                            :data-promulgacao (LocalDate/of 2026 6 28)
+                            :ementa "Dispoe sobre as hortas comunitarias urbanas."
+                            :texto-versao-id (random-uuid)})]
+           (legislativo-repo/publicar-norma! repo ente
+             {:id nid :veiculo-publicacao "Diario Oficial do Municipio" :updated-by nil :lock-version 0})))
+       (let [token (format "{\"identidade-id\":\"%s\",\"ente-id\":\"%s\",\"papeis\":[\"vereador\"]}" ident-vereador ente)]
+         (println "\n=== INBOX DA DEMO PRONTA ===")
+         (println "identidade-vereador:" (str ident-vereador))
+         (println "token               :" token)
+         (println "Aguarde o relay drenar (~1s) e abra:")
+         (println (str "http://localhost:3000/notificacoes?token=" (java.net.URLEncoder/encode token "UTF-8")))
+         (println "============================\n"))))))

@@ -44,6 +44,22 @@ describe("GuardVereador", () => {
     );
     expect(screen.queryByTestId("conteudo")).toBeNull();
   });
+
+  it("a aba 'Avisos' da tabbar aponta para /notificacoes (Onda E fatia 1 — gap declarado na Task 11)", () => {
+    // Sem esta asserção, trocar o href de "Avisos" no array TABS não deixa nada vermelho.
+    render(
+      <AuthProvider tokenQuery='{"sub":"u","papeis":["vereador"]}'>
+        <TemaProvider>
+          <GuardVereador>
+            <div data-testid="conteudo">home do vereador</div>
+          </GuardVereador>
+        </TemaProvider>
+      </AuthProvider>
+    );
+    const link = screen.getByText("Avisos").closest("a");
+    expect(link).not.toBeNull();
+    expect(link?.getAttribute("href")).toMatch(/^\/notificacoes/);
+  });
 });
 
 describe("GuardVereador (modo real — papéis via /eu)", () => {
