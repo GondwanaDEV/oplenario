@@ -123,10 +123,13 @@
     falsa de autoria de ato legislativo, o pior erro possivel nesta tela.
 
   INDICE (achado M-2): `idx_materia_autor (ente_id, autor_id, ano DESC, sequencial DESC) WHERE autor_id IS
-  NOT NULL` continua servindo — o prefixo de igualdade (ente_id, autor_id) casa e a ordenacao sai do proprio
-  indice, sem sort. `autor_tipo` NAO esta' no indice nem no predicado parcial, entao vira um Filter na
-  heap sobre as poucas linhas ja' restritas ao par (ente, autor): custo desprezivel (a cardinalidade por
-  autor e' de dezenas), e nao justifica alargar o indice."
+  NOT NULL` continua servindo — o prefixo de igualdade (ente_id, autor_id) casa e as DUAS primeiras chaves
+  de ordenacao saem do proprio indice; a terceira (`proposicao_id`) custa um Incremental Sort sobre os
+  grupos ja' presorted, medido acima. (A redacao anterior dizia 'sem sort' — era verdade ANTES do desempate
+  de F1 e deixou de ser por causa dele.) `autor_tipo` NAO esta' no indice nem no predicado parcial, entao
+  vira um Filter na heap sobre as linhas ja' restritas ao par (ente, autor). Para a LISTA isso e' irrelevante
+  (o LIMIT 200 capa o trabalho: ~102 buffers, 0,3ms medidos em acervo de 42k linhas); para `contar-por-autor`,
+  que nao tem teto, NAO e' — ver o carry de indice na docstring de la'."
   [tx ente-id autor-id]
   {:pre [(some? ente-id) (some? autor-id)]}
   (comum/linhas->kebab
@@ -142,7 +145,17 @@
   porque `listar-por-autor` trunca em `teto-listagem`: sem este numero, a resposta do perfil nao carrega
   NENHUM sinal de truncamento e a borda nao tem como dizer 'mostrando 200 de 260'. MESMO par de filtros
   de `listar-por-autor` (autor_id + autor_tipo='vereador'), senao o proprio total mentiria sobre o que a
-  lista contem. Paginacao por cursor (que dispensaria o par lista+total) e' CARRY, nao esta fatia."
+  lista contem. Paginacao por cursor (que dispensaria o par lista+total) e' CARRY, nao esta fatia.
+
+  CUSTO — esta e' a query DOMINANTE do perfil, nao a lista (medido com EXPLAIN ANALYZE em acervo de 42k
+  linhas / 2.000 materias do autor): Bitmap Heap Scan, 978 buffers, ~9,8ms — contra 102 buffers e ~0,3ms
+  da lista, que o LIMIT capa. A causa e' `autor_tipo` estar fora de `idx_materia_autor` (nem coluna, nem
+  predicado parcial), o que impede contagem index-only e forca acesso a heap por linha casada; e sem teto,
+  o custo cresce LINEARMENTE com o acervo do autor. Tolerado nesta fatia (dezenas a centenas de materias
+  por vereador e' o caso real), mas a rota publica da Task 4 e' sem auth e sem cache — CARRY com remedio ja'
+  identificado: migration nova incluindo `autor_tipo` no indice, ou restringindo o predicado parcial a
+  `autor_tipo = 'vereador'`, tornando a contagem index-only. Reavaliar quando a rota existir e der para
+  medir ponta a ponta."
   [tx ente-id autor-id]
   {:pre [(some? ente-id) (some? autor-id)]}
   (:contagem

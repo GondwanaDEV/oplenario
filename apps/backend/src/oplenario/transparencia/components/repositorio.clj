@@ -208,8 +208,9 @@
   ;; Onda E fatia 2 — perfil PUBLICO do vereador (leitura COMPOSTA numa UNICA tx, mesma disciplina de
   ;; legislativo/ficha-completa-da-proposicao). O QUE A TX DE FATO ENTREGA (correcao F3a da revisao Task 3
   ;; — a afirmacao anterior, "as leituras veem o MESMO snapshot MVCC, entao o numero-card nunca discorda da
-  ;; lista", era FALSA): uma UNICA conexao, um UNICO contexto de tenant (o GUC app.ente_id setado uma vez) e
-  ;; um UNICO round-trip. NAO um snapshot congelado: `transacao` -> kernel/tenancy/com-tenant* chama
+  ;; lista", era FALSA): uma UNICA conexao e um UNICO contexto de tenant (o GUC app.ente_id setado uma vez).
+  ;; NAO um round-trip so' — sao CINCO statements (mais BEGIN/SET LOCAL/COMMIT), e quem dimensionar latencia
+  ;; da rota publica precisa contar assim. NAO um snapshot congelado: `transacao` -> kernel/tenancy/com-tenant* chama
   ;; `jdbc/with-transaction` SEM mapa de opcoes e o HikariConfig (kernel/components/datasource) nunca seta
   ;; transaction-isolation, entao o nivel efetivo e' READ COMMITTED — em que CADA statement toma um snapshot
   ;; NOVO. Com o relay committando projecoes entre os statements, uma divergencia card-vs-lista E' alcancavel;

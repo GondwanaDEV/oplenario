@@ -198,7 +198,15 @@
       (drenar!)
       (let [p (controllers/perfil-parlamentar *repo-transparencia* ente-a vereador)]
         (is (= 1 (count (:materias p))) "so' a materia do ente consultado")
-        (is (= pid-a (:proposicao-id (first (:materias p)))))))))
+        (is (= pid-a (:proposicao-id (first (:materias p)))))
+        ;; O total tambem e' escopado. NOTA HONESTA (mesma situacao da mutacao M3 da Task 3): este assert
+        ;; NAO consegue MATAR a remocao de `[:= :ente_id ente-id]` de `contar-por-autor` — o isolamento tem
+        ;; DUAS camadas e a de baixo basta sozinha. `kernel/tenancy/entrar-app!` faz `SET LOCAL ROLE
+        ;; oplenario_app` (NOBYPASSRLS) em TODA tx, entao a policy da mig 0044 aplica mesmo com o pool
+        ;; conectado como dono, e a linha do outro ente e' invisivel de qualquer forma. O predicado
+        ;; explicito e' defesa em profundidade (exigencia do invariante), estruturalmente inalcancavel por
+        ;; teste de caixa-preta. O assert fica porque prende o VALOR do total no cenario multi-tenant.
+        (is (= 1 (:materias-total p)) "o total tambem e' escopado ao ente consultado")))))
 
 ;; ---------- (b) regressao do achado N-1 ----------
 
