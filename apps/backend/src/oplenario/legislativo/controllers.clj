@@ -138,13 +138,44 @@
      :pagina (:pagina filtro)
      :tamanho-pagina (:tamanho filtro)}))
 
+(defn- validar-autor!
+  "Onda E fatia 2 (fix da revisao — achados I-1 + M-1): `autor-id` cru do cliente vira o elo de autoria
+  PUBLICA (transparencia.materia, via protocolar!/emitir-protocolada!) — um UUID so' validado por SHAPE
+  (adapters/in) nao pode virar uma afirmacao publica de autoria sobre um vereador identificado. Roda ANTES
+  do Repo, em `criar-proposicao`/`editar-proposicao`.
+
+  Regra (M-1, decidida aqui): `autor-id` so' e' coerente com `autor-tipo` = \"vereador\" — as outras 4
+  especies do vocabulario (mesa/comissao/executivo/cidadao, `logic/autor-tipos`) se identificam por
+  `autor-texto`, nunca por id, e um `autor-id` associado a uma delas nao pode materializar como se fosse
+  autoria parlamentar. Como `m` e' PARCIAL num PATCH (Onda B Slice 2 — 'so' os campos presentes mudam'), a
+  checagem e' sobre o que VEIO NESTA escrita, nunca sobre o estado anterior da linha: um PATCH que muda
+  `autor-id` sem reafirmar `autor-tipo` \"vereador\" na MESMA chamada e' rejeitado — decisao deliberada de
+  nao ler a linha anterior pra inferir o autor-tipo efetivo (evitaria round-trip extra e abre janela de
+  corrida entre o pre-check e o UPDATE); o cliente reenvia os dois campos juntos ao trocar o autor.
+
+  `vereador-vinculado?` (injetada pelo host, cross-modulo p/ cadastros — mesma inversao de dependencia de
+  `resolver-vereador`/`resolver-municipio`, §22.10) confirma que o UUID e' um cadastro de vereador NESTE
+  ente (`ente-id` do ATOR, nunca do corpo). Lanca `:validacao/invalido` (-> 400, interceptor global `erro`)
+  nos dois casos; NO-OP (nem chama `vereador-vinculado?`) quando `autor-id` esta ausente — a maioria das
+  proposicoes nao tem autor-id."
+  [vereador-vinculado? ente-id {:keys [autor-tipo autor-id]}]
+  (when (some? autor-id)
+    (when (not= "vereador" autor-tipo)
+      (throw (ex-info "autor-id so e valido quando autor-tipo e vereador (na mesma escrita)"
+                      {:tipo :validacao/invalido :campos [:autor-tipo :autor-id]})))
+    (when-not (vereador-vinculado? ente-id autor-id)
+      (throw (ex-info "autor-id nao corresponde a um vereador vinculado a esta Casa"
+                      {:tipo :validacao/invalido :campos [:autor-id]})))))
+
 (defn criar-proposicao
   "Onda B Slice 2 — protocola uma proposicao nova (authz: so' o gate grosso da rota, papel 'secretario',
   mesmo contrato de listar-proposicoes). `resolver-municipio` (injetado pelo host, cross-modulo p/
   cadastros) resolve {:uf :municipio-nome} do ente — precondicao de protocolar! (eixo H). Ente sem perfil
   cadastrado (resolver devolve nil) e' erro de PROVISIONAMENTO, nao de cliente: propaga sem catch (-> 500),
-  nunca mascarado como 400."
-  [repo-legislativo resolver-municipio ente-id m]
+  nunca mascarado como 400. `vereador-vinculado?` (injetada pelo host) valida `autor-id` ANTES do Repo —
+  ver `validar-autor!` (achados I-1/M-1 da review)."
+  [repo-legislativo resolver-municipio vereador-vinculado? ente-id m]
+  (validar-autor! vereador-vinculado? ente-id m)
   (let [{:keys [uf municipio-nome]} (resolver-municipio ente-id)]
     (repo/protocolar! repo-legislativo ente-id (merge m {:uf uf :municipio-nome municipio-nome}))))
 
@@ -157,8 +188,10 @@
 
 (defn editar-proposicao
   "Onda B Slice 2 — edita metadados e/ou promove nova versao de texto ('edicao'). Mesmo gate grosso; `m`
-  ja' vem coagido pelo adapters/in."
-  [repo-legislativo ente-id m]
+  ja' vem coagido pelo adapters/in. `vereador-vinculado?` (injetada pelo host) valida `autor-id` ANTES do
+  Repo, mesmo contrato de `criar-proposicao` — ver `validar-autor!` (achados I-1/M-1 da review)."
+  [repo-legislativo vereador-vinculado? ente-id m]
+  (validar-autor! vereador-vinculado? ente-id m)
   (repo/editar-proposicao! repo-legislativo ente-id m))
 
 (defn buscar-ficha-materia

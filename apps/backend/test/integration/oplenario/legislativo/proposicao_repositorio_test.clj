@@ -71,8 +71,11 @@
   (let [ente (random-uuid)
         id (random-uuid)
         m {:id id :tipo "projeto_lei" :ano 2026 :ementa "X" :created-by (random-uuid)}
-        resolver-municipio (fn [_ente-id] {:uf "CE" :municipio-nome "Fortaleza"})]
-    (controllers/criar-proposicao *repo* resolver-municipio ente m)
+        resolver-municipio (fn [_ente-id] {:uf "CE" :municipio-nome "Fortaleza"})
+        ;; sem :autor-id em `m` -> validar-autor! nem chama esta fn (fix da review, achados I-1/M-1); a
+        ;; constante so' documenta o contrato, nunca e' de fato invocada aqui.
+        vereador-vinculado? (constantly true)]
+    (controllers/criar-proposicao *repo* resolver-municipio vereador-vinculado? ente m)
     (let [p (repo/buscar-proposicao *repo* ente id)]
       (is (some? p) "a proposicao deve estar visivel sob a RLS do tenant `ente`")
       (is (= ente (:ente-id p))))))

@@ -31,12 +31,15 @@
     (snapshot-ator [_ _ente-id _identidade-id] {:vinculo-ativo {:id (random-uuid) :tipo "servidor"} :papeis papeis})))
 
 (defn- fake-repo-cadastros
-  "So' o metodo exercido por `criar-proposicao-handler` (`resolver-municipio`) — os demais nao sao chamados
-  pela rota de escrita de proposicao (DB-free, mesmo racional de fake-repo-legislativo)."
-  [uf municipio-nome]
-  #_{:clj-kondo/ignore [:missing-protocol-method]}
-  (reify repo-cadastros-comp/RepoCadastros
-    (uf-e-municipio [_ _ente-id] {:uf uf :municipio-nome municipio-nome})))
+  "`uf-e-municipio` (exercido por `resolver-municipio`, sempre) + `buscar-vereador` (exercido por
+  `vereador-vinculado?` — fix da review, achados I-1/M-1 — SO' quando o corpo manda `autor-id`;
+  `vereadores-vinculados` e' o conjunto de ids que 'existem' neste ente-fake, default vazio)."
+  ([uf municipio-nome] (fake-repo-cadastros uf municipio-nome #{}))
+  ([uf municipio-nome vereadores-vinculados]
+   #_{:clj-kondo/ignore [:missing-protocol-method]}
+   (reify repo-cadastros-comp/RepoCadastros
+     (uf-e-municipio [_ _ente-id] {:uf uf :municipio-nome municipio-nome})
+     (buscar-vereador [_ _ente-id id] (when (contains? vereadores-vinculados id) {:id id})))))
 
 (defn- service-fn
   "`repo-c` (repo-cadastros) e' opcional — so' e' de fato chamado (via `resolver-municipio`) quando a rota
@@ -87,6 +90,50 @@
                            :headers (com-bearer (token (random-uuid) (random-uuid)))
                            :body (json/write-value-as-string {:tipo "projeto_lei" :ano 2026 :ementa "X"}))]
     (is (= 403 (:status r)))))
+
+;; ---------- fix da review (achados I-1 + M-1): autor-id ponta-a-ponta pela rota real ----------
+
+(deftest criar-proposicao-autor-id-sem-vinculo-nesta-casa-400
+  ;; I-1: autor-id que NAO bate com nenhum cadastro de vereador NESTE ente (via `buscar-vereador` do
+  ;; repo-cadastros injetado) e' rejeitado ANTES de chegar ao Repo/protocolar! — fake-repo-legislativo sem
+  ;; :protocolar estoura se o controller chamar mesmo assim (mesmo racional de editar-proposicao-inexistente-404).
+  (let [ente (random-uuid)
+        repo (fake-repo-legislativo {})
+        repo-c (fake-repo-cadastros "CE" "Fortaleza")
+        r (pt/response-for (service-fn #{"secretario"} repo repo-c)
+                           :post "/legislativo/proposicoes"
+                           :headers (com-bearer (token ente (random-uuid)))
+                           :body (json/write-value-as-string
+                                   {:tipo "projeto_lei" :ano 2026 :ementa "X"
+                                    :autor-tipo "vereador" :autor-id (str (random-uuid))}))]
+    (is (= 400 (:status r)))))
+
+(deftest criar-proposicao-autor-id-com-autor-tipo-nao-vereador-400
+  ;; M-1: autor-id presente com autor-tipo != vereador e' incoerente, mesmo que o id exista no cadastro.
+  (let [ente (random-uuid) vid (random-uuid)
+        repo (fake-repo-legislativo {})
+        repo-c (fake-repo-cadastros "CE" "Fortaleza" #{vid})
+        r (pt/response-for (service-fn #{"secretario"} repo repo-c)
+                           :post "/legislativo/proposicoes"
+                           :headers (com-bearer (token ente (random-uuid)))
+                           :body (json/write-value-as-string
+                                   {:tipo "projeto_lei" :ano 2026 :ementa "X"
+                                    :autor-tipo "executivo" :autor-id (str vid)}))]
+    (is (= 400 (:status r)))))
+
+(deftest criar-proposicao-autor-id-vereador-vinculado-201
+  ;; caminho feliz: autor-id de um vereador que EXISTE neste ente (fake) -> chega ao Repo, protocola.
+  (let [ente (random-uuid) id (random-uuid) vid (random-uuid)
+        repo (fake-repo-legislativo {:protocolar (fn [_p] {:id id :sequencial 1 :urn-lex "urn:x"})
+                                      :detalhe (fn [_id] {:proposicao (detalhe-canonico ente id) :texto nil})})
+        repo-c (fake-repo-cadastros "CE" "Fortaleza" #{vid})
+        r (pt/response-for (service-fn #{"secretario"} repo repo-c)
+                           :post "/legislativo/proposicoes"
+                           :headers (com-bearer (token ente (random-uuid)))
+                           :body (json/write-value-as-string
+                                   {:tipo "projeto_lei" :ano 2026 :ementa "X"
+                                    :autor-tipo "vereador" :autor-id (str vid)}))]
+    (is (= 201 (:status r)))))
 
 (deftest detalhe-proposicao-200
   (let [ente (random-uuid) id (random-uuid)
@@ -155,3 +202,40 @@
                            :headers (com-bearer (token (random-uuid) (random-uuid)))
                            :body (json/write-value-as-string {:lock-version 0 :ementa "Y"}))]
     (is (= 404 (:status r)))))
+
+;; ---------- fix da review (achados I-1 + M-1) no PATCH ----------
+
+(deftest editar-proposicao-autor-id-sem-autor-tipo-vereador-na-mesma-escrita-400
+  ;; M-1: PATCH que muda autor-id SEM reafirmar autor-tipo=vereador na MESMA chamada e' incoerente (decisao
+  ;; deliberada de nao ler a linha anterior — ver docstring de controllers/validar-autor!).
+  (let [ente (random-uuid) id (random-uuid)
+        repo (fake-repo-legislativo {:detalhe (fn [_id] {:proposicao (detalhe-canonico ente id) :texto nil})})
+        r (pt/response-for (service-fn #{"secretario"} repo)
+                           :patch (str "/legislativo/proposicoes/" id)
+                           :headers (com-bearer (token ente (random-uuid)))
+                           :body (json/write-value-as-string {:lock-version 0 :autor-id (str (random-uuid))}))]
+    (is (= 400 (:status r)))))
+
+(deftest editar-proposicao-autor-id-sem-vinculo-nesta-casa-400
+  ;; I-1 no PATCH: autor-tipo=vereador + autor-id que NAO bate com nenhum cadastro deste ente -> 400.
+  (let [ente (random-uuid) id (random-uuid)
+        repo (fake-repo-legislativo {:detalhe (fn [_id] {:proposicao (detalhe-canonico ente id) :texto nil})})
+        repo-c (fake-repo-cadastros "CE" "Fortaleza")
+        r (pt/response-for (service-fn #{"secretario"} repo repo-c)
+                           :patch (str "/legislativo/proposicoes/" id)
+                           :headers (com-bearer (token ente (random-uuid)))
+                           :body (json/write-value-as-string
+                                   {:lock-version 0 :autor-tipo "vereador" :autor-id (str (random-uuid))}))]
+    (is (= 400 (:status r)))))
+
+(deftest editar-proposicao-autor-id-vereador-vinculado-200
+  (let [ente (random-uuid) id (random-uuid) vid (random-uuid)
+        repo (fake-repo-legislativo {:editar (fn [m] {:id (:id m)})
+                                      :detalhe (fn [_id] {:proposicao (detalhe-canonico ente id) :texto nil})})
+        repo-c (fake-repo-cadastros "CE" "Fortaleza" #{vid})
+        r (pt/response-for (service-fn #{"secretario"} repo repo-c)
+                           :patch (str "/legislativo/proposicoes/" id)
+                           :headers (com-bearer (token ente (random-uuid)))
+                           :body (json/write-value-as-string
+                                   {:lock-version 0 :autor-tipo "vereador" :autor-id (str vid)}))]
+    (is (= 200 (:status r)))))

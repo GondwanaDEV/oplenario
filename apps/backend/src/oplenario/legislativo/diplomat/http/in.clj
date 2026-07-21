@@ -116,12 +116,14 @@
                                 (controllers/listar-proposicoes repo-leg ente-id filtro))))))
 
 (defn- criar-proposicao-handler
-  "POST /legislativo/proposicoes. Cria + relê o detalhe (o Repo devolve so' {:id :sequencial :urn-lex})."
-  [repo-leg resolver-municipio]
+  "POST /legislativo/proposicoes. Cria + relê o detalhe (o Repo devolve so' {:id :sequencial :urn-lex}).
+  `vereador-vinculado?` (injetada pelo host) valida `autor-id` no controller (achados I-1/M-1 da review) —
+  incoerente/sem vinculo -> :validacao/invalido, o interceptor global `erro` traduz -> 400."
+  [repo-leg resolver-municipio vereador-vinculado?]
   (fn [req]
     (let [ator (:ator req) ente-id (:ente-id ator)
           m (adapters-in-proposicao/criar-proposicao->dominio ator (:json-params req))]
-      (controllers/criar-proposicao repo-leg resolver-municipio ente-id m)
+      (controllers/criar-proposicao repo-leg resolver-municipio vereador-vinculado? ente-id m)
       (let [{:keys [proposicao texto]} (controllers/buscar-proposicao-ficha repo-leg ente-id (:id m))]
         (http/json-resposta 201 (adapters-out-proposicao/detalhe->wire proposicao texto))))))
 
@@ -157,15 +159,17 @@
   `editar-proposicao` alcanca `db/proposicao.clj`'s `editar!`, que lanca `ex-info` SEM `:tipo` assim que acha
   a linha ausente — o interceptor global de erro (`oplenario.interceptors/erro`) so' mapeia `:validacao/
   invalido`->400 e `authz/negado?`->403, entao essa excecao cai no fallback generico -> 500 (bug real, achado
-  em review). Apos o pre-check passar, edita + rele' o detalhe p/ o corpo 200."
-  [repo-leg]
+  em review). Apos o pre-check passar, edita + rele' o detalhe p/ o corpo 200. `vereador-vinculado?`
+  (injetada pelo host) valida `autor-id` no controller, mesmo contrato de `criar-proposicao-handler`
+  (achados I-1/M-1 da review)."
+  [repo-leg vereador-vinculado?]
   (fn [req]
     (let [ator (:ator req) ente-id (:ente-id ator)
           id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
       (if-not (controllers/buscar-proposicao-ficha repo-leg ente-id id)
         (http/json-resposta 404 {:erro "proposicao nao encontrada"})
         (let [m (adapters-in-proposicao/editar-proposicao->dominio ator id (:json-params req))]
-          (controllers/editar-proposicao repo-leg ente-id m)
+          (controllers/editar-proposicao repo-leg vereador-vinculado? ente-id m)
           (if-let [{:keys [proposicao texto]} (controllers/buscar-proposicao-ficha repo-leg ente-id id)]
             (http/json-resposta 200 (adapters-out-proposicao/detalhe->wire proposicao texto))
             (http/json-resposta 404 {:erro "proposicao nao encontrada"})))))))
@@ -406,14 +410,18 @@
   proprio modulo), `consultar-sessao` (injetada pelo host — cross-modulo p/ a authz herdada da sessao),
   `resolver-municipio` (injetada pelo host — cross-modulo p/ o legislativo computar a URN em protocolar!,
   Onda B Slice 2, §22.10), `resolver-vereador` (injetada pelo host — cross-modulo p/ cadastros, Onda C1,
-  §22.5.3 exceção nomeada — resolve identidade->vereador-id NESTA Casa p/ a borda /meu), `registro`
-  (RegistroFatos do motor, injetado pelo host — Onda B Slice 5, o editor de parecer dirige o motor via
-  emitir-parecer!) e `relogio` (kernel/tempo, injetado pelo host — review MEDIUM fe-11-parecer, mesmo
-  contrato de `participacao-http/rotas`: producao le o relogio do sistema, teste crava o instante).
+  §22.5.3 exceção nomeada — resolve identidade->vereador-id NESTA Casa p/ a borda /meu), `vereador-vinculado?`
+  (injetada pelo host — cross-modulo p/ cadastros, mesma inversao de dependencia; fix da review Onda E
+  fatia 2 achados I-1/M-1 — confirma que um `autor-id` cru do corpo e' um cadastro de vereador NESTE ente
+  antes de virar autoria PUBLICA), `registro` (RegistroFatos do motor, injetado pelo host — Onda B Slice 5,
+  o editor de parecer dirige o motor via emitir-parecer!) e `relogio` (kernel/tempo, injetado pelo host —
+  review MEDIUM fe-11-parecer, mesmo contrato de `participacao-http/rotas`: producao le o relogio do
+  sistema, teste crava o instante).
   Todas as acoes das verticais de votacao/proposicoes/parecer EXIGEM a authz GROSSA (papel 'secretario') +
   corpo-json nas de escrita; a fina da votacao decide no controller com a sessao carregada. A borda /meu
   EXIGE papel 'vereador' (papel DISTINTO — nao 'secretario')."
-  [{:keys [auth repo-legislativo consultar-sessao resolver-municipio resolver-vereador registro relogio]}]
+  [{:keys [auth repo-legislativo consultar-sessao resolver-municipio resolver-vereador vereador-vinculado?
+           registro relogio]}]
   (let [papel (it/exige-papel "secretario")
         papel-vereador (it/exige-papel "vereador")]
     #{["/sessoes/:id/votacoes" :post
@@ -431,14 +439,14 @@
       ["/legislativo/proposicoes" :get [auth papel (listar-proposicoes-handler repo-legislativo)]
        :route-name :legislativo/listar-proposicoes]
       ["/legislativo/proposicoes" :post
-       [auth papel it/corpo-json (criar-proposicao-handler repo-legislativo resolver-municipio)]
+       [auth papel it/corpo-json (criar-proposicao-handler repo-legislativo resolver-municipio vereador-vinculado?)]
        :route-name :legislativo/criar-proposicao]
       ["/legislativo/proposicoes/:id" :get [auth papel (detalhe-proposicao-handler repo-legislativo)]
        :route-name :legislativo/detalhe-proposicao]
       ["/legislativo/proposicoes/:id/ficha" :get [auth papel (ficha-materia-handler repo-legislativo)]
        :route-name :legislativo/ficha-materia]
       ["/legislativo/proposicoes/:id" :patch
-       [auth papel it/corpo-json (editar-proposicao-handler repo-legislativo)]
+       [auth papel it/corpo-json (editar-proposicao-handler repo-legislativo vereador-vinculado?)]
        :route-name :legislativo/editar-proposicao]
       ["/legislativo/pareceres/:id" :get [auth papel (parecer-editor-handler repo-legislativo)]
        :route-name :legislativo/parecer-editor]

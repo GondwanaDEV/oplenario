@@ -75,6 +75,15 @@
         ;; `resolver-vereador` p/ nao sombrear — a chave passada a legislativo-http/rotas continua
         ;; :resolver-vereador).
         resolver-vereador-fn (fn [ente-id identidade-id] (resolver-vereador repo-cadastros ente-id identidade-id))
+        ;; Fix da review Onda E fatia 2 (achados I-1+M-1): autor-id cru do corpo de POST/PATCH proposicao
+        ;; vira o elo de autoria PUBLICA (transparencia.materia) — precisa apontar pra um vereador de
+        ;; verdade NESTE ente antes de virar afirmacao publica. Mesma inversao de dependencia de
+        ;; resolver-vereador/resolver-municipio; reusa `buscar-vereador` (ja' ente-escopado, RLS + filtro
+        ;; explicito) — "vinculo" aqui e' CADASTRO existente neste ente, mesmo contrato fraco de
+        ;; resolver-vereador (nao exige mandato vigente; apertar p/ so' mandato ativo fica de carry se um
+        ;; cliente pedir). `legislativo` recebe so' esta fn ja' resolvida, nunca importa cadastros (§22.10).
+        vereador-vinculado? (fn [ente-id vereador-id]
+                              (some? (repo-cadastros-comp/buscar-vereador repo-cadastros ente-id vereador-id)))
         ;; Override injetavel (mesmo racional de `painel-compliance` — so' serve aos testes DB-free da borda
         ;; de paineis); em producao `montar` e' chamado sem estas chaves e o `or` fecha sobre o repo real.
         presenca-resumo (or presenca-resumo
@@ -131,6 +140,7 @@
                                        :consultar-sessao consultar-sessao
                                        :resolver-municipio resolver-municipio
                                        :resolver-vereador resolver-vereador-fn
+                                       :vereador-vinculado? vereador-vinculado?
                                        :registro registro-fatos
                                        :relogio relogio-producao}))
         (into (compliance-http/rotas {:auth auth :repo-compliance repo-compliance}))
