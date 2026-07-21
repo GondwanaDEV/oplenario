@@ -62,6 +62,21 @@
                   ;; capa de verdade, mesmo precedente de db/materia.clj:listar-em-tramitacao et al.
                   :limit (min (or limite teto-votos) teto-votos)}))))
 
+(defn contar-votos-do-vereador
+  "Universo INTEIRO da secao 'como votou' — o denominador de `votos-do-vereador`, que trunca em
+  `teto-votos` (50). Sem este numero a borda nao tem como dizer 'mostrando 50 de N' e o `:closed` do wire
+  fecha qualquer outra via de o cliente descobrir o truncamento (achado C-4, revisao Task 4). Mesmo par
+  lista+total de `db/materia/listar-por-autor`+`contar-por-autor`. Sem teto de proposito: e' um
+  `count(*)` servido pelo prefixo (ente_id, vereador_id) de `idx_voto_parlamentar_vereador`."
+  [tx ente-id vereador-id]
+  {:pre [(some? ente-id) (some? vereador-id)]}
+  (:contagem
+   (comum/linha->kebab
+    (jdbc/execute-one! tx
+      (sql/format {:select [[[:count :*] :contagem]]
+                   :from [:transparencia.voto_parlamentar]
+                   :where [:and [:= :ente_id ente-id] [:= :vereador_id vereador-id]]})))))
+
 (defn resumo-presenca
   "Numero-card de presenca. Denominador = sessoes do ENTE que tiveram chamada (COUNT DISTINCT sessao_id);
   numerador = as em que este vereador consta 'presente'. Devolve os DOIS numeros — a UI mostra a fracao, nunca

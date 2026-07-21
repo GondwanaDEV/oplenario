@@ -15,9 +15,13 @@
   existe a partir da mig 0063 e a projecao NAO tem replay: materia protocolada antes disso nao aparece em
   perfil nenhum. Sem esta data a UI exibiria uma lista incompleta como se fosse o acervo inteiro.
 
-  TRUNCAMENTO: `:materias` vem truncada no teto do read-model (200) e `:materias-total` diz quantas existem
-  no MESMO filtro. O par e' obrigatorio, nao opcional — e' o que permite a borda dizer 'mostrando 200 de N'
-  em vez de fingir completude (e o que impede o `:closed` de derrubar a resposta em acervo grande).")
+  TRUNCAMENTO: DUAS listas vem truncadas no teto do read-model, e cada uma sai com o seu total.
+  `:materias` para no teto 200 e `:materias-total` diz quantas existem no MESMO filtro; `:votos` para no teto
+  50 (`db/parlamentar/teto-votos`) e `:votos-total` diz quantos existem. O par lista+total e' obrigatorio,
+  nao opcional — e' o que permite a borda dizer 'mostrando 50 de N' em vez de fingir completude (e o que
+  impede o `:closed` de derrubar a resposta em acervo grande). O cap de votos e' 4x menor que o de materias e
+  um mandato de 4 anos o ultrapassa em meses: sem o total, o `:closed` fecharia a unica via de o cliente
+  descobrir o truncamento (achado C-4, revisao Task 4).")
 
 (def ComissaoNome
   "Comissao no perfil publico e' so' o NOME. Cargo dentro da comissao e' informacao de gabinete, nao de
@@ -47,7 +51,9 @@
    [:estado :string]])
 
 (def VotoPublicoOut
-  "Item da secao 'como votou'. `:materia-rotulo`/`:materia-ementa` sao `:maybe` de proposito: o read-model faz
+  "Item da secao 'como votou' — a lista PARA no teto de 50 do read-model (`db/parlamentar/teto-votos`,
+  rigido: o Repo sequer expoe como passar limite maior). Quantos existem no total sai em `:votos-total`, no
+  mapa de cima. `:materia-rotulo`/`:materia-ementa` sao `:maybe` de proposito: o read-model faz
   LEFT JOIN com `transparencia.materia` e a materia pode nao ter sido projetada (gap de projecao, ou objeto de
   votacao que nao e' proposicao). Voto sem rotulo ainda e' informacao publica legitima — melhor exibir 'voto
   em materia nao publicada' que omitir o voto."
@@ -68,9 +74,16 @@
    [:sessoes-com-chamada :int]])
 
 (def PerfilVereadorOut
+  "`:nome-parlamentar` e' `:maybe` porque o APELIDO e' opcional no cadastro: `cadastros.vereador
+  .nome_parlamentar` e' NULLABLE, `cadastros/adapters/in/vereador` limpa `\"\"` para NULL de proposito e o
+  proprio modulo dono declara `[:maybe :string]` na sua rota. Exigir `:string` aqui derrubava o perfil de
+  qualquer vereador sem apelido em 500 PERMANENTE — e, pior, reabria o oraculo de existencia que o handler
+  fecha (200 = existe com apelido · 500 = existe sem apelido · 404 = nao existe). NAO cair em `:nome-civil`
+  aqui: 'apelido' e 'nome civil' sao campos distintos e a UI e' quem decide o fallback — `:nome-civil` e'
+  NOT NULL (achado C-1, revisao Task 4)."
   [:map {:closed true}
    [:vereador-id :string]
-   [:nome-parlamentar :string]
+   [:nome-parlamentar [:maybe :string]]
    [:nome-civil :string]
    [:legislatura [:maybe LegislaturaOut]]
    [:cargo-mesa [:maybe :string]]
@@ -79,5 +92,6 @@
    [:materias-total :int]
    [:normas-de-autoria :int]
    [:votos [:vector VotoPublicoOut]]
+   [:votos-total :int]
    [:presenca PresencaOut]
    [:acervo-com-elo-de-autoria-desde :string]])

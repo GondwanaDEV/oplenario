@@ -62,12 +62,18 @@
 
 (defn ->wire
   "{:vereador :mandato :legislatura :comissoes} (identidade, seam do host) +
-  {:materias :materias-total :normas-de-autoria :votos :presenca} (read-model) -> PerfilVereadorOut.
+  {:materias :materias-total :normas-de-autoria :votos :votos-total :presenca} (read-model)
+  -> PerfilVereadorOut.
 
   `vereador-id` sai da FICHA, nao do path: se o seam devolveu ficha, ele e' a autoridade sobre quem e' este
-  parlamentar nesta Casa."
+  parlamentar nesta Casa.
+
+  `:nome-parlamentar` e' pass-through CRU de proposito — apelido ausente e' NULL de primeira classe no
+  cadastro e sai NULL aqui (o wire e' `:maybe`). Nao ha `(or ... nome)`: o fallback para o nome civil e'
+  decisao de APRESENTACAO, e faze-lo no servidor apagaria a distincao entre 'nao tem apelido' e 'o apelido
+  e' igual ao nome' (achado C-1, revisao Task 4)."
   [{:keys [vereador legislatura comissoes] :as _ficha}
-   {:keys [materias materias-total normas-de-autoria votos presenca] :as _perfil}]
+   {:keys [materias materias-total normas-de-autoria votos votos-total presenca] :as _perfil}]
   (validar!
    {:vereador-id       (->str (:id vereador))
     :nome-parlamentar  (:nome-parlamentar vereador)
@@ -79,6 +85,7 @@
     :materias-total    (or materias-total 0)
     :normas-de-autoria (or normas-de-autoria 0)
     :votos             (mapv voto->wire votos)
+    :votos-total       (or votos-total 0)
     :presenca          {:sessoes-presente    (or (:sessoes-presente presenca) 0)
                         :sessoes-com-chamada (or (:sessoes-com-chamada presenca) 0)}
     :acervo-com-elo-de-autoria-desde acervo-com-elo-de-autoria-desde}))

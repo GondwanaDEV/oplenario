@@ -59,8 +59,12 @@
                 :identidade-id (random-uuid) :ente-id (random-uuid)}
    :mandato    {:partido "PT" :estado "ativo" :natureza "titular"}
    :legislatura {:numero 19 :ano-inicio 2025 :ano-fim 2028}
-   :comissoes  [{:nome "Mesa Diretora" :tipo "mesa" :cargo "1o Secretario"}
-                {:nome "Comissao de Financas" :tipo "permanente" :cargo "membro"}]})
+   ;; ORDEM DELIBERADA (achado N-2, revisao Task 4): a comissao PERMANENTE vem PRIMEIRO e TAMBEM tem cargo.
+   ;; Com a Mesa em primeiro lugar, `(some :cargo comissoes)` — sem o predicado de tipo — devolveria o mesmo
+   ;; "1o Secretario" e o filtro `tipo = "mesa"` ficava sem cobertura. Assim, quem apagar o predicado publica
+   ;; "presidente" (o cargo da comissao de Financas) como cargo de Mesa.
+   :comissoes  [{:nome "Comissao de Financas" :tipo "permanente" :cargo "presidente"}
+                {:nome "Mesa Diretora" :tipo "mesa" :cargo "1o Secretario"}]})
 
 (defn- seam-escopado
   "Seam FAKE de identidade, escopado por (ente, vereador) como o real. `cadastrados` = mapa {[ente ver] ficha}."
@@ -93,15 +97,41 @@
                  :municipio-nome "Fortaleza" :ementa ementa}
                 extra))))
 
-(defn- votar!
-  "Voto NOMINAL pelo caminho REAL (abrir-votacao! + registrar-voto! -> `voto.registrado`)."
-  [ente pid vereador voto]
-  (let [{vid :id} (legislativo-repo/abrir-votacao! *repo-legislativo* ente
-                    {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id pid :sessao-id (random-uuid)
-                     :modalidade "nominal" :quorum-tipo "maioria_simples"})]
-    (legislativo-repo/registrar-voto! *repo-legislativo* ente
-      {:id (random-uuid) :votacao-id vid :vereador-id vereador :voto voto})
-    vid))
+;; Voto NOMINAL pelo caminho REAL, em DOIS passos (antes era um `votar!` unico): o teste de escopo por
+;; vereador (achado C-2) precisa de DOIS vereadores votando na MESMA votacao, o distrator mais forte para o
+;; predicado `v.vereador_id = ?` — a RLS isola por TENANT, nao por vereador.
+(defn- abrir-votacao! [ente pid]
+  (:id (legislativo-repo/abrir-votacao! *repo-legislativo* ente
+         {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id pid :sessao-id (random-uuid)
+          :modalidade "nominal" :quorum-tipo "maioria_simples"})))
+
+(defn- registrar-voto! [ente vid vereador voto]
+  (legislativo-repo/registrar-voto! *repo-legislativo* ente
+    {:id (random-uuid) :votacao-id vid :vereador-id vereador :voto voto}))
+
+(defn- presenca!
+  "Projeta `presenca.registrada` (o modulo `sessoes` nao esta' wireado aqui — o portal so' consome o evento
+  publico; mesmo padrao de portal_test/perfil_test)."
+  [ente sessao vereador tipo]
+  (tenancy/com-tenant* *ds* ente
+    (fn [tx]
+      (transparencia-repo/projetar-evento! tx
+        {:tipo "presenca.registrada" :ente-id ente
+         :payload {:sessao-id (str sessao) :vereador-id (str vereador) :tipo tipo
+                   :modalidade "presencial" :fonte "mesa" :ocorrido-em "2026-05-18T14:00:00Z"}}))))
+
+(defn- projetar-norma!
+  "Semeia `transparencia.norma` para uma materia ja' projetada (a promulgacao REAL exige autografo +
+  tramitacao executiva — mecanica de perfil_test/publicar-norma!, cara demais para o que este teste prova:
+  que `:normas-de-autoria` chega a' BORDA com valor nao-zero)."
+  [ente pid]
+  (tenancy/com-tenant* *ds* ente
+    (fn [tx]
+      (transparencia-repo/projetar-evento! tx
+        {:tipo "norma.publicada" :ente-id ente
+         :payload {:norma-id (str (random-uuid)) :proposicao-id (str pid) :tipo-norma "lei"
+                   :numero 7 :ano 2026 :urn (str "urn:lex:norma:" pid) :ementa "Virou lei"
+                   :publicado-em "2026-06-28T12:00:00Z" :veiculo-publicacao "Diario Oficial do Municipio"}}))))
 
 (defn- projetar-lote!
   "Semeia `n` materias de autoria do vereador numa UNICA tx (o mesmo `projetar-evento!` do consumer) — unico
@@ -125,6 +155,9 @@
           pid      (protocolar! ente "Hortas comunitarias"
                                 {:autor-tipo "vereador" :autor-id vereador :autor-texto "Helena Past"})]
       (drenar!)
+      ;; achado N-3 (revisao Task 4): sem uma norma projetada, `:normas-de-autoria` valia 0 em TODA resposta
+      ;; do arquivo e fixar `0` no adapter sobrevivia — o card "viraram lei" nunca era observado vivo.
+      (projetar-norma! ente pid)
       (let [r    (GET (seam-escopado {[ente vereador] (ficha-fixture vereador)}) ente vereador)
             body (ler-json r)]
         (is (= 200 (:status r)) "rota do portal PUBLICO — sem Authorization, nunca 401")
@@ -132,15 +165,49 @@
         (is (= (str vereador) (:vereador-id body)))
         (is (= "Helena Past" (:nome-parlamentar body)))
         (is (= "Helena Pastore de Andrade" (:nome-civil body)))
+        (is (= {:numero 19 :ano-inicio 2025 :ano-fim 2028} (:legislatura body))
+            "achado N-1: os TRES numeros da legislatura, com o valor — sao todos :int, entao trocar
+             ano-inicio por ano-fim passa pelo Malli e publicaria '19a Legislatura (2028-2025)'")
         (is (= "1o Secretario" (:cargo-mesa body)) "cargo-mesa deriva da comissao tipo 'mesa'")
-        (is (= ["Mesa Diretora" "Comissao de Financas"] (:comissoes body)))
-        (is (vector? (:materias body)))
+        (is (= ["Comissao de Financas" "Mesa Diretora"] (:comissoes body)))
         (is (= [(str pid)] (mapv :proposicao-id (:materias body))))
         (is (= 1 (:materias-total body)))
-        (is (= 0 (:normas-de-autoria body)))
+        (is (= 1 (:normas-de-autoria body)) "o card 'viraram lei' chega a' borda com o valor do read-model")
+        (is (= [] (:votos body)))
+        (is (= 0 (:votos-total body)))
         (is (= {:sessoes-presente 0 :sessoes-com-chamada 0} (:presenca body)))
         (is (string? (:acervo-com-elo-de-autoria-desde body))
             "a data do elo de autoria acompanha a resposta (a UI declara o acervo legado sem elo)")))))
+
+(deftest perfil-de-vereador-sem-apelido-200-com-nome-parlamentar-nulo
+  ;; achado C-1 (CRITICO, revisao Task 4): `cadastros.vereador.nome_parlamentar` e' NULLABLE e o proprio
+  ;; modulo dono declara `[:maybe :string]`. Com `:string` no wire deste lado, o perfil de QUALQUER vereador
+  ;; sem apelido morria em 500 permanente — e o 404 uniforme regredia para um oraculo de existencia de tres
+  ;; estados (200 = existe com apelido · 500 = existe sem apelido · 404 = nao existe) numa rota SEM AUTH.
+  (testing "vereador sem apelido cadastrado -> 200 com :nome-parlamentar null, nunca 500"
+    (let [ente     (random-uuid)
+          vereador (random-uuid)
+          ficha    (assoc-in (ficha-fixture vereador) [:vereador :nome-parlamentar] nil)
+          r        (GET (seam-escopado {[ente vereador] ficha}) ente vereador)
+          body     (ler-json r)]
+      (is (= 200 (:status r)) "apelido ausente e' estado de PRIMEIRA CLASSE do cadastro, nao corrupcao")
+      (is (contains? body :nome-parlamentar) "a chave sai na resposta (o :closed exige o conjunto exato)")
+      (is (nil? (:nome-parlamentar body))
+          "sai NULL cru — o fallback para o nome civil e' decisao da UI, nao do servidor")
+      (is (= "Helena Pastore de Andrade" (:nome-civil body))
+          "o nome civil e' NOT NULL: a UI sempre tem o que exibir"))))
+
+(deftest perfil-sem-mandato-vigente-200-com-legislatura-nula
+  ;; achado N-1 (revisao Task 4): o ramo `nil` de `legislatura->wire` (suplente fora de exercicio, mandato
+  ;; encerrado) nunca era exercitado — o `[:maybe LegislaturaOut]` do wire era letra morta.
+  (testing "ficha sem legislatura vigente -> 200 com :legislatura null"
+    (let [ente     (random-uuid)
+          vereador (random-uuid)
+          ficha    (assoc (ficha-fixture vereador) :legislatura nil)
+          r        (GET (seam-escopado {[ente vereador] ficha}) ente vereador)
+          body     (ler-json r)]
+      (is (= 200 (:status r)))
+      (is (nil? (:legislatura body)) "sem mandato vigente na data, o bloco de legislatura sai nulo"))))
 
 (deftest perfil-nao-vaza-identificador-interno
   (testing "o wire nao carrega ente-id/identidade-id/mandato-id nem chave alguma fora do contrato"
@@ -150,7 +217,7 @@
           body     (ler-json r)]
       (is (= 200 (:status r)))
       (is (= #{:vereador-id :nome-parlamentar :nome-civil :legislatura :cargo-mesa :comissoes
-               :materias :materias-total :normas-de-autoria :votos :presenca
+               :materias :materias-total :normas-de-autoria :votos :votos-total :presenca
                :acervo-com-elo-de-autoria-desde}
              (set (keys body)))
           "conjunto EXATO de chaves — nada a mais (o :closed do Malli e' o guarda em producao)")
@@ -193,16 +260,28 @@
 ;; ---------- 4. sigilo/fidelidade do voto ----------
 
 (deftest perfil-expoe-voto-nominal-ja-projetado-e-nada-alem
-  (testing "a secao 'como votou' publica o voto NOMINAL projetado, com o rotulo da materia, e so' isso"
+  ;; achado C-2 (revisao Task 4): antes, TODO teste de voto semeava UM UNICO vereador no ente. A RLS isola
+  ;; por TENANT, nao por vereador — logo o predicado `v.vereador_id = ?` de `votos-do-vereador` podia ser
+  ;; apagado com a suite verde, e o perfil publico de A passaria a exibir o voto de B como se fosse dele
+  ;; (voto nominal, sem auth, atribuido a' pessoa errada). Aqui B vota na MESMA votacao, no MESMO ente, com
+  ;; voto CONTRARIO — o distrator mais forte possivel para esse predicado.
+  (testing "a secao 'como votou' publica SO' o voto deste vereador, com o rotulo da materia, e nada alem"
     (let [ente     (random-uuid)
           vereador (random-uuid)
+          outro    (random-uuid)
           pid      (protocolar! ente "Hortas comunitarias"
                                 {:autor-tipo "vereador" :autor-id vereador :autor-texto "Helena Past"})
-          votacao  (votar! ente pid vereador "nao")]
+          votacao  (abrir-votacao! ente pid)]
+      (registrar-voto! ente votacao vereador "nao")
+      (registrar-voto! ente votacao outro "sim")
       (drenar!)
       (let [body (ler-json (GET (seam-escopado {[ente vereador] (ficha-fixture vereador)}) ente vereador))
             v    (first (:votos body))]
-        (is (= 1 (count (:votos body))))
+        (is (= 1 (count (:votos body)))
+            "o voto do OUTRO vereador, na mesma votacao e no mesmo ente, nao entra nesta lista")
+        (is (= ["nao"] (mapv :voto (:votos body)))
+            "e o que sai e' o voto de QUEM foi pedido — 'sim' aqui seria atribuicao de voto a' pessoa errada")
+        (is (= 1 (:votos-total body)) "o total tambem e' escopado por vereador, nao pelo ente")
         (is (= (str votacao) (:votacao-id v)))
         (is (= "nao" (:voto v)) "o voto sai como projetado — nao ha reescrita na borda")
         (is (= "projeto_lei 1/2026" (:materia-rotulo v)) "rotulo legivel montado do tipo/sequencial/ano")
@@ -210,6 +289,49 @@
         (is (string? (:ocorrido-em v)))
         (is (= #{:votacao-id :voto :ocorrido-em :materia-rotulo :materia-ementa} (set (keys v)))
             "o item de voto nao carrega vereador-id/ente-id/proposicao-id crus")))))
+
+(deftest votos-total-declara-o-universo-alem-do-teto-de-50
+  ;; achado C-4 (revisao Task 4): `votos-do-vereador` trunca em 50 (teto RIGIDO — o Repo passa `limite nil`),
+  ;; e o wire e' `:closed`: sem `:votos-total` nao havia NENHUMA via de o cliente descobrir o truncamento, e
+  ;; a doutrina "o par lista+total e' obrigatorio" escrita no proprio ns valia so' para `:materias`.
+  ;; Semeadura por `projetar-evento!` (o mesmo do consumer): 52 votacoes pelo relay real seriam 52
+  ;; round-trips para provar aritmetica de teto — mesmo racional de `projetar-lote!`.
+  (testing "acima do teto a lista de votos para em 50 e :votos-total traz o universo inteiro"
+    (let [ente     (random-uuid)
+          vereador (random-uuid)]
+      (tenancy/com-tenant* *ds* ente
+        (fn [tx]
+          (doseq [i (range 52)]
+            (transparencia-repo/projetar-evento! tx
+              {:tipo "voto.registrado" :ente-id ente
+               :payload {:votacao-id (str (random-uuid)) :modalidade "nominal" :vereador-id (str vereador)
+                         :voto "sim" :proposicao-id (str (random-uuid))
+                         :ocorrido-em (format "2026-05-18T14:%02d:00Z" i)}}))))
+      (let [body (ler-json (GET (seam-escopado {[ente vereador] (ficha-fixture vereador)}) ente vereador))]
+        (is (= 50 (count (:votos body))) "a lista para no teto server-side")
+        (is (= 52 (:votos-total body))
+            "sem esta chave o :closed fecharia a unica via de a borda dizer 'mostrando 50 de 52'")))))
+
+(deftest presenca-chega-a-borda-com-numerador-e-denominador-distintos
+  ;; achado C-3 (revisao Task 4): nenhum teste deste arquivo semeava presenca, entao TODA resposta trazia
+  ;; {:sessoes-presente 0 :sessoes-com-chamada 0} — um par SIMETRICO sob troca. Trocar os dois campos no
+  ;; adapter deixava a suite verde e um vereador com 8 presencas em 600 sessoes publicaria "presente em 600
+  ;; de 8 sessoes". Aqui os dois numeros sao DISTINTOS e asseridos separadamente (1 de 3, o mesmo cenario de
+  ;; portal_test, que ate' hoje so' existia uma camada abaixo — chamando `resumo-presenca` direto).
+  (testing "presenca assimetrica sai pela rota com numerador e denominador nos campos certos"
+    (let [ente     (random-uuid)
+          vereador (random-uuid)
+          outro    (random-uuid)]
+      (presenca! ente (random-uuid) vereador "presente")   ; conta nos DOIS
+      (presenca! ente (random-uuid) outro    "presente")   ; so' no denominador (predicado de vereador_id)
+      (presenca! ente (random-uuid) vereador "ausente")    ; so' no denominador (predicado de tipo)
+      (let [body     (ler-json (GET (seam-escopado {[ente vereador] (ficha-fixture vereador)}) ente vereador))
+            presenca (:presenca body)]
+        (is (= 1 (:sessoes-presente presenca))
+            "numerador: so' a sessao em que ESTE vereador consta PRESENTE")
+        (is (= 3 (:sessoes-com-chamada presenca))
+            "denominador: todas as sessoes do ENTE que tiveram chamada — trocar os dois campos inverteria
+             a fracao publicada ('presente em 3 de 1 sessoes')")))))
 
 ;; ---------- 5. truncamento declarado ----------
 

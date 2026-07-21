@@ -209,7 +209,7 @@
   ;; legislativo/ficha-completa-da-proposicao). O QUE A TX DE FATO ENTREGA (correcao F3a da revisao Task 3
   ;; — a afirmacao anterior, "as leituras veem o MESMO snapshot MVCC, entao o numero-card nunca discorda da
   ;; lista", era FALSA): uma UNICA conexao e um UNICO contexto de tenant (o GUC app.ente_id setado uma vez).
-  ;; NAO um round-trip so' — sao CINCO statements (mais BEGIN/SET LOCAL/COMMIT), e quem dimensionar latencia
+  ;; NAO um round-trip so' — sao SEIS statements (mais BEGIN/SET LOCAL/COMMIT), e quem dimensionar latencia
   ;; da rota publica precisa contar assim. NAO um snapshot congelado: `transacao` -> kernel/tenancy/com-tenant* chama
   ;; `jdbc/with-transaction` SEM mapa de opcoes e o HikariConfig (kernel/components/datasource) nunca seta
   ;; transaction-isolation, entao o nivel efetivo e' READ COMMITTED — em que CADA statement toma um snapshot
@@ -220,9 +220,10 @@
   ;; o mesmo overclaim existe em legislativo/components/repositorio (ficha-completa-da-proposicao, o
   ;; precedente citado); corrigir so' aqui criaria inconsistencia entre os dois.
   (perfil-parlamentar [this ente-id vereador-id]
-    "{:materias :materias-total :normas-de-autoria :votos :presenca} do vereador no read-model publico
-     (sem identidade). `:materias` vem truncada no teto de `listar-por-autor`; `:materias-total` e' o
-     universo INTEIRO do mesmo filtro — sem ele a borda nao sabe que truncou."))
+    "{:materias :materias-total :normas-de-autoria :votos :votos-total :presenca} do vereador no read-model
+     publico (sem identidade). DUAS listas truncam e cada uma vem com o seu total: `:materias` no teto de
+     `listar-por-autor` (200) e `:votos` no de `votos-do-vereador` (50) — sem `:materias-total`/`:votos-total`
+     a borda nao sabe que truncou. Sao SEIS statements, nao cinco (achado C-4, revisao Task 4)."))
 
 (defrecord RepoTransparenciaPg [datasource]
   RepoTransparencia
@@ -244,6 +245,7 @@
          :materias-total    (db-materia/contar-por-autor tx ente-id vid)
          :normas-de-autoria (db-materia/contar-normas-por-autor tx ente-id vid)
          :votos             (db-parlamentar/votos-do-vereador tx ente-id vid nil)
+         :votos-total       (db-parlamentar/contar-votos-do-vereador tx ente-id vid)
          :presenca          (db-parlamentar/resumo-presenca tx ente-id vid)}))))
 
 (defn repositorio
