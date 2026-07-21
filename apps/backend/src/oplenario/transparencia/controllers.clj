@@ -52,6 +52,14 @@
           {:resultado :blob-ausente}))
     {:resultado :nao-encontrado}))
 
+(defn perfil-parlamentar
+  "Perfil PUBLICO do vereador no read-model (Onda E fatia 2): {:materias :normas-de-autoria :votos
+  :presenca}, numa UNICA tx (ver o metodo homonimo do Repo). NAO inclui a identidade (nome/mandato/
+  comissoes) — essa chega na BORDA, injetada pelo host sobre o Repo de `cadastros` (§22.10: `transparencia`
+  nunca importa outro modulo de dominio). Rota PUBLICA: sem ator, `ente-id` resolvido do path publico."
+  [repo-transparencia ente-id vereador-id]
+  (repo/perfil-parlamentar repo-transparencia ente-id vereador-id))
+
 ;; ---------- Slice 2: acompanhamento do cidadao (autenticado; consent-gated) ----------
 
 (defn seguir!

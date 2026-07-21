@@ -204,7 +204,12 @@
   ;; F6c Slice 2 — acompanhamento do cidadao (escritas autenticadas; consent-gated)
   (seguir! [this ente-id m] "UPSERT: cidadao segue a materia (re-seguir reativa). Devolve {:id :estado ...}.")
   (deixar-de-seguir! [this ente-id m] "Soft-cancel idempotente. Devolve {:id} se cancelou, ou nil (no-op).")
-  (meus-acompanhamentos [this ente-id seguidor-identidade-id] "Materias que o cidadao segue (ativas, c/ cabecalho)."))
+  (meus-acompanhamentos [this ente-id seguidor-identidade-id] "Materias que o cidadao segue (ativas, c/ cabecalho).")
+  ;; Onda E fatia 2 — perfil PUBLICO do vereador (leitura COMPOSTA numa UNICA tx, mesma disciplina de
+  ;; legislativo/ficha-completa-da-proposicao: as quatro leituras veem o MESMO snapshot MVCC, entao o
+  ;; numero-card 'viraram lei' nunca discorda da lista de autoria exibida ao lado dele).
+  (perfil-parlamentar [this ente-id vereador-id]
+    "{:materias :normas-de-autoria :votos :presenca} do vereador no read-model publico (sem identidade)."))
 
 (defrecord RepoTransparenciaPg [datasource]
   RepoTransparencia
@@ -218,7 +223,14 @@
     (transacao this ente-id #(db-artefato/mais-recente-por-norma % ente-id norma-id)))
   (seguir! [this ente-id m] (transacao this ente-id #(db-acompanhamento/seguir! % (assoc m :ente-id ente-id))))
   (deixar-de-seguir! [this ente-id m] (transacao this ente-id #(db-acompanhamento/deixar-de-seguir! % (assoc m :ente-id ente-id))))
-  (meus-acompanhamentos [this ente-id sid] (transacao this ente-id #(db-acompanhamento/meus-da-materia % ente-id sid))))
+  (meus-acompanhamentos [this ente-id sid] (transacao this ente-id #(db-acompanhamento/meus-da-materia % ente-id sid)))
+  (perfil-parlamentar [this ente-id vid]
+    (transacao this ente-id
+      (fn [tx]
+        {:materias          (db-materia/listar-por-autor tx ente-id vid)
+         :normas-de-autoria (db-materia/contar-normas-por-autor tx ente-id vid)
+         :votos             (db-parlamentar/votos-do-vereador tx ente-id vid nil)
+         :presenca          (db-parlamentar/resumo-presenca tx ente-id vid)}))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

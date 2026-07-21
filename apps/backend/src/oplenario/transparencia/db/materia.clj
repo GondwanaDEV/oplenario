@@ -90,6 +90,53 @@
      (sql/format {:select cols :from [:transparencia.materia]
                   :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]]}))))
 
+(defn listar-por-autor
+  "Materias de AUTORIA de um vereador (Onda E fatia 2, perfil publico), mais recentes primeiro.
+
+  DOIS filtros, nao um:
+  - `autor_id = ?` — so' materia COM o elo. O acervo protocolado ANTES da mig 0063 tem `autor_id` NULL e
+    nao aparece aqui (a projecao nao tem replay — carry da 0044); a UI DIZ isso em vez de fingir acervo
+    completo.
+  - `autor_tipo = 'vereador'` — achado N-1 da revisao da Task 1. `autor_id` e' um elo que pode SOBREVIVER a
+    uma mudanca de especie de autoria (um produtor que emita `proposicao.editada` trocando so' o
+    `autor_tipo`, um redrive de evento legado, ou um backfill). Sem este filtro, materia cuja autoria virou
+    'executivo'/'comissao' continuaria listada como autoria PARLAMENTAR no perfil publico — atribuicao
+    falsa de autoria de ato legislativo, o pior erro possivel nesta tela.
+
+  INDICE (achado M-2): `idx_materia_autor (ente_id, autor_id, ano DESC, sequencial DESC) WHERE autor_id IS
+  NOT NULL` continua servindo — o prefixo de igualdade (ente_id, autor_id) casa e a ordenacao sai do proprio
+  indice, sem sort. `autor_tipo` NAO esta' no indice nem no predicado parcial, entao vira um Filter na
+  heap sobre as poucas linhas ja' restritas ao par (ente, autor): custo desprezivel (a cardinalidade por
+  autor e' de dezenas), e nao justifica alargar o indice."
+  [tx ente-id autor-id]
+  {:pre [(some? ente-id) (some? autor-id)]}
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select cols :from [:transparencia.materia]
+                  :where [:and [:= :ente_id ente-id] [:= :autor_id autor-id]
+                          [:= :autor_tipo "vereador"]]
+                  :order-by [[:ano :desc] [:sequencial :desc]]
+                  :limit teto-listagem}))))
+
+(defn contar-normas-por-autor
+  "Numero-card 'viraram lei' do perfil publico: quantas materias DESTE autor ja' tem norma publicada. JOIN
+  same-schema (transparencia.materia x transparencia.norma — nao e' cross-schema, §22.10 preservado).
+
+  Mesmo par de filtros de `listar-por-autor`, pelo MESMO motivo (achado N-1): um card 'viraram lei' que
+  contasse materia de autoria 'executivo' so' porque o `autor_id` sobreviveu creditaria ao vereador uma lei
+  que nao e' dele. Card e lista precisam contar o MESMO universo — divergencia entre eles e' bug visivel."
+  [tx ente-id autor-id]
+  {:pre [(some? ente-id) (some? autor-id)]}
+  (:contagem
+   (comum/linha->kebab
+    (jdbc/execute-one! tx
+      (sql/format {:select [[[:count :*] :contagem]]
+                   :from [[:transparencia.materia :m]]
+                   :join [[:transparencia.norma :n]
+                          [:and [:= :n.ente_id :m.ente_id] [:= :n.proposicao_id :m.proposicao_id]]]
+                   :where [:and [:= :m.ente_id ente-id] [:= :m.autor_id autor-id]
+                           [:= :m.autor_tipo "vereador"]]})))))
+
 (defn listar-em-tramitacao
   "Portal PUBLICO: materias EXCLUINDO os estados terminais informados (ex.: arquivadas), mais recentes
   primeiro. `estados-excluidos` e' um set de string — vazio lista tudo. Com teto (sem paginacao nesta fatia)."
