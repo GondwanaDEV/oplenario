@@ -132,7 +132,7 @@
                            :headers (com-bearer (token ente (random-uuid)))
                            :body (json/write-value-as-string
                                    {:tipo "projeto_lei" :ano 2026 :ementa "X"
-                                    :autor-tipo "vereador" :autor-id (str vid)}))]
+                                    :autor-tipo "vereador" :autor-id (str vid) :autor-texto "Fulano de Tal"}))]
     (is (= 201 (:status r)))))
 
 (deftest detalhe-proposicao-200
@@ -237,5 +237,5 @@
                            :patch (str "/legislativo/proposicoes/" id)
                            :headers (com-bearer (token ente (random-uuid)))
                            :body (json/write-value-as-string
-                                   {:lock-version 0 :autor-tipo "vereador" :autor-id (str vid)}))]
+                                   {:lock-version 0 :autor-tipo "vereador" :autor-id (str vid) :autor-texto "Fulano de Tal"}))]
     (is (= 200 (:status r)))))

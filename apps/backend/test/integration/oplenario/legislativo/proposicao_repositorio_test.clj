@@ -76,6 +76,24 @@
       (is (= "executivo" (:autor-tipo p)))
       (is (nil? (:autor-id p)) "o par (autor_tipo, autor_id) nunca fica incoerente na linha"))))
 
+(deftest editar-proposicao-conflito-lock-version-lanca-validacao-invalido
+  ;; achado 2 (Task 1-N1 fix2, Menor): a Peca B trocou o guard de conflito de `editar!` de
+  ;; `(zero? (:next.jdbc/update-count r 0))` p/ `(nil? r)` por causa do `:returning`. E' o unico ramo
+  ;; alterado sem teste (a suite so' prova o ramo de SUCESSO — editar-autor-tipo-nao-vereador-zera-autor-id
+  ;; e as demais). Prova, no nivel do Repo-Component (a mesma camada que o controller/HTTP usam), que um
+  ;; `lock-version` DESATUALIZADO ainda lanca `:validacao/invalido` — nao passa silenciosamente, nem
+  ;; estoura NullPointerException tentando ler `:next.jdbc/update-count` de uma linha de RETURNING.
+  (let [ente (random-uuid)
+        r (repo/protocolar! *repo* ente {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026 :uf "CE"
+                                          :municipio-nome "Fortaleza" :ementa "X"})
+        erro (try
+               (repo/editar-proposicao! *repo* ente
+                 {:id (:id r) :lock-version 99 :ementa "Y" :updated-by (random-uuid)})
+               nil
+               (catch clojure.lang.ExceptionInfo e e))]
+    (is (some? erro) "lock-version desatualizado lanca, nao passa silenciosamente")
+    (is (= :validacao/invalido (:tipo (ex-data erro))))))
+
 (deftest criar-proposicao-via-controller-seta-ente-id
   ;; Bug 1 (review ecc clojure+database, task 12): `controllers/criar-proposicao` mesclava so' {:uf
   ;; :municipio-nome} do resolver de municipio no mapa `m`, NUNCA :ente-id — e' o unico dos 3 gates de

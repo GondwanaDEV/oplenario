@@ -78,8 +78,24 @@
         resolver (fn [_ente-id] {:uf "CE" :municipio-nome "Fortaleza"})
         vid (random-uuid)]
     (controllers/criar-proposicao repo resolver sempre-vinculado? (random-uuid)
-      {:id (random-uuid) :tipo "projeto_lei" :autor-tipo "vereador" :autor-id vid})
+      {:id (random-uuid) :tipo "projeto_lei" :autor-tipo "vereador" :autor-id vid :autor-texto "Fulano de Tal"})
     (is (= vid (:autor-id @recebido)))))
+
+;; ---------- achado 1 (Task 1-N1 fix2, Importante): autor-texto obrigatorio quando autor-tipo presente ----------
+
+(deftest editar-proposicao-autor-tipo-sem-autor-texto-400
+  ;; sem isto, editar! zera autor_id (Peca A) mas deixa o autor_texto ANTIGO na linha — o portal exibiria o
+  ;; nome de um vereador sob uma autoria que ja nao e' mais dele.
+  (let [repo (fake-repo :editar (fn [_m] (throw (ex-info "nao deveria chegar aqui" {}))))]
+    (is (invalido? #(controllers/editar-proposicao repo sempre-vinculado? (random-uuid)
+                      {:id (random-uuid) :autor-tipo "executivo"})))))
+
+(deftest editar-proposicao-autor-tipo-com-autor-texto-repassa-ao-repo
+  (let [repo (fake-repo :editar (fn [m] {:id (:id m)}))
+        id (random-uuid)]
+    (is (= {:id id}
+           (controllers/editar-proposicao repo sempre-vinculado? (random-uuid)
+             {:id id :autor-tipo "executivo" :autor-texto "Prefeitura"})))))
 
 (deftest editar-proposicao-autor-id-sem-autor-tipo-vereador-na-mesma-escrita-400
   ;; M-1 no PATCH parcial: decisao explicita (documentada em controllers/validar-autor!) de NAO ler o
@@ -100,7 +116,7 @@
         id (random-uuid) vid (random-uuid)]
     (is (= {:id id}
            (controllers/editar-proposicao repo sempre-vinculado? (random-uuid)
-             {:id id :autor-tipo "vereador" :autor-id vid})))))
+             {:id id :autor-tipo "vereador" :autor-id vid :autor-texto "Fulano de Tal"})))))
 
 (deftest buscar-ficha-materia-nil-quando-nao-existe
   (let [repo (fake-repo :ficha (fn [_id] {:proposicao nil :texto nil :tramitacao [] :apensadas []

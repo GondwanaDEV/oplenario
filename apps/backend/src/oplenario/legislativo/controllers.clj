@@ -139,10 +139,11 @@
      :tamanho-pagina (:tamanho filtro)}))
 
 (defn- validar-autor!
-  "Onda E fatia 2 (fix da revisao — achados I-1 + M-1): `autor-id` cru do cliente vira o elo de autoria
-  PUBLICA (transparencia.materia, via protocolar!/emitir-protocolada!) — um UUID so' validado por SHAPE
-  (adapters/in) nao pode virar uma afirmacao publica de autoria sobre um vereador identificado. Roda ANTES
-  do Repo, em `criar-proposicao`/`editar-proposicao`.
+  "Onda E fatia 2 (fix da revisao — achados I-1 + M-1) + Task 1-N1 fix2 (achado 1, Importante): `autor-id`
+  cru do cliente vira o elo de autoria PUBLICA (transparencia.materia, via protocolar!/emitir-protocolada!/
+  editar-proposicao!->proposicao.editada) — um UUID so' validado por SHAPE (adapters/in) nao pode virar uma
+  afirmacao publica de autoria sobre um vereador identificado. Roda ANTES do Repo, em
+  `criar-proposicao`/`editar-proposicao`.
 
   Regra (M-1, decidida aqui): `autor-id` so' e' coerente com `autor-tipo` = \"vereador\" — as outras 4
   especies do vocabulario (mesa/comissao/executivo/cidadao, `logic/autor-tipos`) se identificam por
@@ -153,12 +154,24 @@
   nao ler a linha anterior pra inferir o autor-tipo efetivo (evitaria round-trip extra e abre janela de
   corrida entre o pre-check e o UPDATE); o cliente reenvia os dois campos juntos ao trocar o autor.
 
+  Regra nova (achado 1, Task 1-N1 fix2, MESMA disciplina — nunca ler a linha anterior): quando `autor-tipo`
+  vem PRESENTE nesta escrita, `autor-texto` tambem tem que vir presente e nao-vazio na MESMA escrita. Sem
+  isto, `db/proposicao.clj editar!` zera o `autor_id` (Peca A da task anterior) mas NAO toca `autor_texto`
+  (`some?`-gated) — um PATCH `{:autor-tipo \"executivo\"}` sem `autor-texto` deixava a linha
+  `(\"executivo\", NULL, \"<nome antigo do vereador>\")`, e `autor_texto` e' campo PUBLICO exibido no
+  portal: o texto obsoleto vira uma afirmacao publica FALSA sobre quem propos. Quem muda a especie de
+  autoria reafirma o nome de exibicao junto — mesma disciplina de `autor-id`.
+
   `vereador-vinculado?` (injetada pelo host, cross-modulo p/ cadastros — mesma inversao de dependencia de
   `resolver-vereador`/`resolver-municipio`, §22.10) confirma que o UUID e' um cadastro de vereador NESTE
   ente (`ente-id` do ATOR, nunca do corpo). Lanca `:validacao/invalido` (-> 400, interceptor global `erro`)
-  nos dois casos; NO-OP (nem chama `vereador-vinculado?`) quando `autor-id` esta ausente — a maioria das
+  em todos os casos; NO-OP (nem chama `vereador-vinculado?`) quando `autor-id` esta ausente — a maioria das
   proposicoes nao tem autor-id."
-  [vereador-vinculado? ente-id {:keys [autor-tipo autor-id]}]
+  [vereador-vinculado? ente-id {:keys [autor-tipo autor-id autor-texto]}]
+  (when (some? autor-tipo)
+    (when (or (nil? autor-texto) (= "" autor-texto))
+      (throw (ex-info "autor-texto e obrigatorio quando autor-tipo vem presente (na mesma escrita)"
+                      {:tipo :validacao/invalido :campos [:autor-tipo :autor-texto]}))))
   (when (some? autor-id)
     (when (not= "vereador" autor-tipo)
       (throw (ex-info "autor-id so e valido quando autor-tipo e vereador (na mesma escrita)"

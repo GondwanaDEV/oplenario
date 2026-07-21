@@ -188,6 +188,28 @@
       (is (= "executivo" (:autor-tipo m)))
       (is (nil? (:autor-id m)) "a edicao de autoria chega ao portal — o elo antigo e' removido"))))
 
+(deftest editar-troca-vereador-v-para-vereador-w-no-portal
+  ;; achado 5 (Task 1-N1 fix2, Menor): o caso de edicao de autoria MAIS COMUM na vida real — corrigir QUAL
+  ;; vereador e' o autor (V -> W), nao so' trocar pra uma especie nao-parlamentar. E' o contrato de fato do
+  ;; perfil publico do vereador (Onda E fatia 2): a materia tem que aparecer na lista de W e sumir da de V.
+  (let [ente (random-uuid)
+        vereador-v (random-uuid)
+        vereador-w (random-uuid)
+        {pid :id} (legislativo-repo/protocolar! *repo-legislativo* ente
+                    {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026 :uf "CE"
+                     :municipio-nome "Fortaleza" :ementa "Dispoe sobre autoria trocada"
+                     :autor-tipo "vereador" :autor-id vereador-v :autor-texto "Fulano V"})]
+    (drenar!)
+    (let [lock-atual (:lock-version (legislativo-repo/buscar-proposicao *repo-legislativo* ente pid))]
+      (legislativo-repo/editar-proposicao! *repo-legislativo* ente
+        {:id pid :lock-version lock-atual :autor-tipo "vereador" :autor-id vereador-w
+         :autor-texto "Ciclana W" :updated-by (random-uuid)}))
+    (drenar!)
+    (let [m (transparencia-repo/buscar-materia *repo-transparencia* ente pid)]
+      (is (= "vereador" (:autor-tipo m)))
+      (is (= vereador-w (:autor-id m)) "o perfil publico do vereador W passa a listar esta materia")
+      (is (= "Ciclana W" (:autor-texto m)) "o nome de exibicao acompanha a troca"))))
+
 (deftest editar-so-ementa-preserva-autor-id-no-portal
   (let [ente (random-uuid)
         vereador (random-uuid)
