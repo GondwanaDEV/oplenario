@@ -11,6 +11,7 @@
   (:require [clojure.test :refer [deftest is use-fixtures]]
             [com.stuartsierra.component :as component]
             [honey.sql :as sql]
+            [jsonista.core :as json]
             [next.jdbc :as jdbc]
             [oplenario.cadastros.relacoes.cadastro :as rel-cad]
             [oplenario.config :as config]
@@ -305,8 +306,71 @@
       (is (= 1 (count votos)) "1 voto publico projetado")
       (is (= "sim" (:voto (first votos))) "o valor do voto foi projetado")
       (is (= vid (:votacao-id (first votos))) "a votacao-id foi projetada")
+      ;; achado I-2 (re-revisao): sem este `is` o fix do producer (`:proposicao-id` derivado de
+      ;; `votacoes.objeto_tipo`/`objeto_id` nos dois call-sites) e' TAUTOLOGICAMENTE nao-coberto — reverte-lo
+      ;; deixava a suite verde, porque a chave e' OPCIONAL no contrato Malli. E' este campo que faz o LEFT JOIN
+      ;; com `transparencia.materia` casar (a secao 'como votou' do perfil publico mostra a ementa).
+      (is (= pid (:proposicao-id (first votos)))
+          "o elo voto->materia foi projetado (objeto_tipo 'proposicao' -> :proposicao-id no evento)")
+      (is (= "Dispoe sobre voto nominal" (:materia-ementa (first votos)))
+          "com :proposicao-id preenchido, o LEFT JOIN com transparencia.materia casa e traz a ementa")
       (is (some? (:ocorrido-em (first votos)))
           "ocorrido-em (tempo de DOMINIO, RETURNING de legislativo.votos.registrado_em) foi projetado"))))
+
+(deftest voto-legado-sem-ocorrido-em-nao-trava-o-relay-compartilhado
+  ;; C-1 (revisao Task 2) — o unico teste que prova o guard `instant-tolerante`. `:ocorrido-em` e' chave NOVA
+  ;; do contrato de `voto.registrado` nominal; eventos JA' gravados no shared.outbox antes da mudanca (deploy
+  ;; rolling, redrive de historico) nao a tem. `outbox/drenar-um!` chama o handler SEM try e o relay
+  ;; COMPARTILHADO faz catch+retry eterno: um `Instant/parse` de nil lancaria e travaria a CABECA DA FILA para
+  ;; sempre, bloqueando todo evento de id maior de TODOS os modulos.
+  ;;
+  ;; Por isso o evento legado entra por INSERT CRU em `shared.outbox` — furar `eventos/evento-validado` e' o
+  ;; ponto: e' exatamente o que um evento gravado sob o contrato ANTIGO e'. (Mesma classe do irmao
+  ;; `gap-de-ordem-nao-trava-o-relay-compartilhado`, que usa o construtor sem validacao.)
+  ;;
+  ;; O assert que MAIS importa e' o (3): um voto BEM-FORMADO com id de outbox MAIOR e' projetado normalmente.
+  ;; Sem ele o teste nao provaria head-of-line — so' 'nao explodiu'.
+  (let [ente            (random-uuid)
+        vereador-legado (random-uuid)
+        vereador-ok     (random-uuid)
+        sessao          (random-uuid)
+        {pid :id} (legislativo-repo/protocolar! *repo-legislativo* ente
+                    {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026 :uf "CE"
+                     :municipio-nome "Fortaleza" :ementa "Dispoe sobre evento legado"})
+        {vid-legado :id} (legislativo-repo/abrir-votacao! *repo-legislativo* ente
+                           {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id pid :sessao-id sessao
+                            :modalidade "nominal" :quorum-tipo "maioria_simples"})
+        {vid-ok :id} (legislativo-repo/abrir-votacao! *repo-legislativo* ente
+                       {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id pid :sessao-id sessao
+                        :modalidade "nominal" :quorum-tipo "maioria_simples"})]
+    ;; (a) o evento LEGADO — payload do contrato ANTIGO (sem :ocorrido-em), gravado direto no outbox.
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (jdbc/execute-one! tx
+          ["INSERT INTO shared.outbox (ente_id, tipo, payload, idempotency_key) VALUES (?, ?, ?::jsonb, ?)"
+           ente "voto.registrado"
+           (json/write-value-as-string {:votacao-id (str vid-legado) :sessao-id (str sessao)
+                                        :modalidade "nominal" :vereador-id (str vereador-legado)
+                                        :voto "sim"})
+           (str (random-uuid))])))
+    ;; (b) o evento POSTERIOR, bem-formado, pelo caminho REAL de escrita — id de outbox MAIOR que o legado.
+    (legislativo-repo/registrar-voto! *repo-legislativo* ente
+      {:id (random-uuid) :votacao-id vid-ok :vereador-id vereador-ok :voto "sim"})
+    ;; (1) nenhuma excecao propaga do relay
+    (is (number? (drenar!))
+        "drenar! atravessa o evento legado sem propagar excecao (o relay nao e' envenenado)")
+    (let [legado (tenancy/com-tenant* *ds* ente
+                   (fn [tx] (db-parlamentar/votos-do-vereador tx ente vereador-legado 10)))
+          ok     (tenancy/com-tenant* *ds* ente
+                   (fn [tx] (db-parlamentar/votos-do-vereador tx ente vereador-ok 10)))]
+      ;; (2) o legado nao projeta linha nenhuma (ocorrido_em e' NOT NULL — nao ha estado parcial honesto)
+      (is (empty? legado) "o evento legado nao projetou voto (tolerado + logado, nunca gravado pela metade)")
+      ;; (3) O PONTO: a cabeca da fila nao travou — o evento POSTERIOR foi projetado
+      (is (= 1 (count ok))
+          "o voto bem-formado POSTERIOR ao legado projeta normalmente — nenhum head-of-line block")
+      (is (= vid-ok (:votacao-id (first ok))))
+      (is (= 1 (contar-votos-do-ente ente))
+          "exatamente 1 linha no ente inteiro: so' a do evento posterior"))))
 
 (deftest voto-secreto-nao-projeta-nada
   ;; SIGILO §22.6: o ramo 'secreta' de VotoRegistradoPayload e' :closed e NEM ADMITE :vereador-id/:voto — o
@@ -345,17 +409,27 @@
 ;; diretamente, mesmo padrao dos testes de tolerancia acima (transicao-sem-materia-projetada-e-tolerante).
 
 (deftest presenca-registrada-projeta-a-presenca-do-vereador
-  (let [ente (random-uuid) vereador (random-uuid) sessao (random-uuid)]
+  ;; re-revisao: com UMA UNICA linha no ente (a do proprio vereador, 'presente') o `CASE` inteiro do numerador
+  ;; podia ser deletado sem falhar — `COUNT(DISTINCT sessao_id)` cru daria o mesmo 1. Aqui ha TRES sessoes com
+  ;; chamada: uma com este vereador PRESENTE, uma com OUTRO vereador (mata o predicado de vereador_id) e uma
+  ;; com este vereador AUSENTE (mata o predicado de tipo). Numerador 1, denominador 3 — os dois predicados do
+  ;; CASE ficam observaveis.
+  (let [ente (random-uuid) vereador (random-uuid) outro (random-uuid)
+        sessao-a (random-uuid) sessao-b (random-uuid) sessao-c (random-uuid)]
     (tenancy/com-tenant* *ds* ente
       (fn [tx]
-        (transparencia-repo/projetar-evento! tx
-          {:tipo "presenca.registrada" :ente-id ente
-           :payload {:sessao-id (str sessao) :vereador-id (str vereador) :tipo "presente"
-                     :modalidade "presencial" :fonte "mesa" :ocorrido-em "2026-05-18T14:00:00Z"}})
+        (doseq [[sessao quem tipo] [[sessao-a vereador "presente"]
+                                    [sessao-b outro    "presente"]
+                                    [sessao-c vereador "ausente"]]]
+          (transparencia-repo/projetar-evento! tx
+            {:tipo "presenca.registrada" :ente-id ente
+             :payload {:sessao-id (str sessao) :vereador-id (str quem) :tipo tipo
+                       :modalidade "presencial" :fonte "mesa" :ocorrido-em "2026-05-18T14:00:00Z"}}))
         (let [resumo (db-parlamentar/resumo-presenca tx ente vereador)]
-          (is (= 1 (:sessoes-presente resumo)) "a presenca do vereador foi projetada")
-          (is (= 1 (:sessoes-com-chamada resumo))
-              "o denominador conta a sessao (do ente) que teve chamada"))))))
+          (is (= 1 (:sessoes-presente resumo))
+              "numerador: so' a sessao em que ESTE vereador consta PRESENTE (nao a do outro, nem a ausencia)")
+          (is (= 3 (:sessoes-com-chamada resumo))
+              "denominador: todas as sessoes do ENTE que tiveram chamada, independente de quem/como"))))))
 
 (deftest presenca-registrada-via-relay-real-projeta-a-presenca
   ;; M-1 (revisao Task 2): o teste-irmao acima chama projetar-evento! DIRETO — apagar "presenca.registrada"
@@ -372,4 +446,6 @@
     (drenar!)
     (let [resumo (tenancy/com-tenant* *ds* ente (fn [tx] (db-parlamentar/resumo-presenca tx ente vereador)))]
       (is (= 1 (:sessoes-presente resumo))
-          "a presenca chegou via o relay REAL (tipos-consumidos + dispatch), nao so' via a fn isolada"))))
+          "a presenca chegou via o relay REAL (tipos-consumidos + dispatch), nao so' via a fn isolada")
+      (is (= 1 (:sessoes-com-chamada resumo))
+          "o denominador tambem conta a sessao chegada pelo relay"))))
