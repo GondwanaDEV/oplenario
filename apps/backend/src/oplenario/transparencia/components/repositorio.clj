@@ -62,6 +62,19 @@
   [payload chaves]
   (reduce (fn [m k] (cond-> m (some? (get m k)) (update k #(UUID/fromString %)))) payload chaves))
 
+(defn- instant-tolerante
+  "Parseia uma string ISO p/ Instant TOLERANDO ausencia/invalidez — nil ou string malformada vira nil, nunca
+  lanca. Achado C-1 (revisao Task 2): `:ocorrido-em` foi ACRESCENTADO ao contrato de `voto.registrado` nominal
+  DEPOIS que eventos ja estavam gravados no `shared.outbox` (deploy rolling, ou qualquer redrive de historico);
+  esses eventos legados nao tem a chave. `Instant/parse` sem guarda contra nil/invalido lanca; `outbox/drenar-um!`
+  chama o handler SEM try (kernel/outbox.clj) e o relay COMPARTILHADO (outbox_relay.clj) faz catch+retry
+  ETERNO — a cabeca da fila trava PARA SEMPRE, bloqueando TODO evento de id maior de TODOS os modulos, nao so'
+  desta projecao (mesmo racional do log/warn tolerante de proposicao.transicionou acima)."
+  [s]
+  (try
+    (some-> s Instant/parse)
+    (catch Exception _ nil)))
+
 (defn projetar-evento!
   "Dispatch por tipo de evento -> a projecao de dominio, DENTRO da `tx` corrente (a do relay). Seta o GUC de
   tenant (sem trocar de role — ver docstring do ns) e escreve em
@@ -103,15 +116,21 @@
     ;; Onda E fatia 2 (perfil publico do vereador). SIGILO: o ramo 'secreta' de VotoRegistradoPayload e'
     ;; :closed e nao carrega :vereador-id — `when-let` sobre a PRESENCA da chave, nao sobre a string de
     ;; modalidade (defesa que nao depende do vocabulario de modalidade permanecer estavel).
+    ;; C-1 (revisao Task 2): `instant-tolerante`, NAO `Instant/parse` cru — `:ocorrido-em` e' chave NOVA no
+    ;; contrato; evento legado no shared.outbox (gravado antes desta mudanca) nao a tem. Sem projecao possivel
+    ;; (a coluna e' NOT NULL — nao ha estado parcial honesto a gravar), loga e TOLERA em vez de lancar.
     "voto.registrado"
     (when-let [vid (:vereador-id payload)]
-      (db-parlamentar/registrar-voto! tx
-        {:ente-id ente-id
-         :votacao-id (UUID/fromString (:votacao-id payload))
-         :vereador-id (UUID/fromString vid)
-         :proposicao-id (some-> (:proposicao-id payload) UUID/fromString)
-         :voto (:voto payload)
-         :ocorrido-em (Instant/parse (:ocorrido-em payload))}))
+      (if-let [ocorrido-em (instant-tolerante (:ocorrido-em payload))]
+        (db-parlamentar/registrar-voto! tx
+          {:ente-id ente-id
+           :votacao-id (UUID/fromString (:votacao-id payload))
+           :vereador-id (UUID/fromString vid)
+           :proposicao-id (some-> (:proposicao-id payload) UUID/fromString)
+           :voto (:voto payload)
+           :ocorrido-em ocorrido-em})
+        (log/warn "transparencia: voto.registrado sem :ocorrido-em valido (evento legado?) — nao projetado"
+                  {:ente-id ente-id :votacao-id (:votacao-id payload)})))
 
     "presenca.registrada"
     (db-parlamentar/registrar-presenca! tx

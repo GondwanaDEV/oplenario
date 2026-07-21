@@ -507,10 +507,18 @@
           (let [r (votacao/registrar-voto! tx (assoc m :ente-id ente-id))]
             (when (:sessao-id v)
               ;; :ocorrido-em (Onda E fatia 2 carry): RETURNING de votacao/registrar-voto! — mesma disciplina
-              ;; de tempo de dominio de proposicao.transicionou.
+              ;; de tempo de dominio de proposicao.transicionou. some-> (revisao Task 2, achado I-1): (str nil)
+              ;; daria "" e o Malli `:string` cru ACEITARIA — fail-open latente que so' estoura la' na frente,
+              ;; no `Instant/parse` do consumer (mesmo envenenamento do C-1, agora por evento NOVO e valido pelo
+              ;; contrato). Com some->, nil aqui vira nil e `evento-validado` recusa a emissao — falha ALTO no
+              ;; producer, nao mascara. :proposicao-id (achado I-2): `v` ja' esta' em maos NESTA tx (mesma
+              ;; leitura usada no guard de modalidade acima) — custo zero; so' preenche quando o objeto votado
+              ;; E' uma proposicao (votacoes tambem admite emenda/parecer/requerimento/redacao_final).
               (producers/emitir-voto-registrado! bus tx ente-id
                 {:votacao-id (:votacao-id m) :sessao-id (:sessao-id v) :modalidade "nominal"
-                 :vereador-id (:vereador-id m) :voto (:voto m) :ocorrido-em (str (:ocorrido-em r))}))
+                 :vereador-id (:vereador-id m) :voto (:voto m)
+                 :proposicao-id (when (= "proposicao" (:objeto-tipo v)) (:objeto-id v))
+                 :ocorrido-em (some-> (:ocorrido-em r) str)}))
             r)))))
   (registrar-voto-secreto! [this ente-id m]
     (transacao this ente-id
@@ -550,9 +558,12 @@
                               {:votacao-id (:votacao-id m) :modalidade (:modalidade v)})))
             (let [r (votacao/registrar-voto! tx (assoc m :ente-id ente-id))]
               (when (:sessao-id v)
+                ;; some-> + :proposicao-id: mesma disciplina de registrar-voto! acima (achados I-1/I-2).
                 (producers/emitir-voto-registrado! bus tx ente-id
                   {:votacao-id (:votacao-id m) :sessao-id (:sessao-id v) :modalidade "nominal"
-                   :vereador-id (:vereador-id m) :voto (:voto m) :ocorrido-em (str (:ocorrido-em r))}))
+                   :vereador-id (:vereador-id m) :voto (:voto m)
+                   :proposicao-id (when (= "proposicao" (:objeto-tipo v)) (:objeto-id v))
+                   :ocorrido-em (some-> (:ocorrido-em r) str)}))
               r))))
       (catch PSQLException e
         (if (= "23505" (.getSQLState e))

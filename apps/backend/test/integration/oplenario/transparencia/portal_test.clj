@@ -10,6 +10,8 @@
   `db.parlamentar` dentro de uma tx do tenant, mesmo padrao dos testes de tolerancia abaixo."
   (:require [clojure.test :refer [deftest is use-fixtures]]
             [com.stuartsierra.component :as component]
+            [honey.sql :as sql]
+            [next.jdbc :as jdbc]
             [oplenario.cadastros.relacoes.cadastro :as rel-cad]
             [oplenario.config :as config]
             [oplenario.identidade.relacoes.identidade :as rel-id]
@@ -23,6 +25,7 @@
             [oplenario.legislativo.db.tramitacao-executiva :as exec]
             [oplenario.migracao :as migracao]
             [oplenario.motor.components.registro-fatos :as rf]
+            [oplenario.sessoes.events.presenca :as ev-presenca]
             [oplenario.transparencia.components.repositorio :as transparencia-repo]
             [oplenario.transparencia.db.parlamentar :as db-parlamentar]
             [oplenario.transparencia.diplomat.consumers :as consumers])
@@ -52,6 +55,17 @@
   mapa {tipo [...]})."
   []
   (outbox/drenar! *ds* (consumers/registrar {})))
+
+(defn- contar-votos-do-ente
+  "Total de linhas em voto_parlamentar para o ENTE inteiro — nao para um vereador especifico (achado M-2,
+  revisao Task 2: consultar um vereador aleatorio que nunca participou de nada e' vazio de qualquer jeito,
+  dispatch presente ou nao; contar por ENTE e' o que de fato distingue 'nada vazou')."
+  [ente-id]
+  (:count (tenancy/com-tenant* *ds* ente-id
+            (fn [tx] (jdbc/execute-one! tx
+                       (sql/format {:select [[[:count :*] :count]]
+                                    :from [:transparencia.voto_parlamentar]
+                                    :where [:= :ente_id ente-id]}))))))
 
 (defn- montar-template!
   "Template MINIMO (2 estados, 1 transicao sem guard) — so' p/ exercitar `proposicao.transicionou`; nao e'
@@ -299,20 +313,31 @@
   ;; consumer nao tem como projetar identidade mesmo que tentasse (garantia de SCHEMA DE EVENTO, nao de um
   ;; `if` no consumer). Prova ponta-a-ponta via o caminho REAL de escrita (registrar-voto-secreto!), nao um
   ;; payload construido a mao.
-  (let [ente     (random-uuid)
-        vereador (random-uuid)
-        sessao   (random-uuid)
+  ;;
+  ;; M-2 (revisao Task 2): a versao anterior so' checava "vazio para um vereador aleatorio" — passaria com o
+  ;; dispatch "voto.registrado" DELETADO por inteiro (o vereador aleatorio nunca votou em nada de qualquer
+  ;; jeito). Este teste registra um voto NOMINAL de verdade NO MESMO ENTE e conta as linhas do ENTE: se o
+  ;; dispatch sumisse, a contagem cairia p/ 0 (deveria ser 1); se o segredo vazasse, subiria p/ 2 (deveria
+  ;; continuar 1) — falha nos dois sentidos, comportamental de verdade.
+  (let [ente          (random-uuid)
+        vereador-nom  (random-uuid)
+        sessao        (random-uuid)
         {pid :id} (legislativo-repo/protocolar! *repo-legislativo* ente
                     {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026 :uf "CE"
                      :municipio-nome "Fortaleza" :ementa "Dispoe sobre voto secreto"})
-        {vid :id} (legislativo-repo/abrir-votacao! *repo-legislativo* ente
-                    {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id pid :sessao-id sessao
-                     :modalidade "secreta" :quorum-tipo "maioria_simples"})]
+        {vid-nom :id} (legislativo-repo/abrir-votacao! *repo-legislativo* ente
+                        {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id pid :sessao-id sessao
+                         :modalidade "nominal" :quorum-tipo "maioria_simples"})
+        {vid-sec :id} (legislativo-repo/abrir-votacao! *repo-legislativo* ente
+                        {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id pid :sessao-id sessao
+                         :modalidade "secreta" :quorum-tipo "maioria_simples"})]
+    (legislativo-repo/registrar-voto! *repo-legislativo* ente
+      {:id (random-uuid) :votacao-id vid-nom :vereador-id vereador-nom :voto "sim"})
     (legislativo-repo/registrar-voto-secreto! *repo-legislativo* ente
-      {:id (random-uuid) :votacao-id vid :voto "sim"})
+      {:id (random-uuid) :votacao-id vid-sec :voto "sim"})
     (drenar!)
-    (is (empty? (tenancy/com-tenant* *ds* ente (fn [tx] (db-parlamentar/votos-do-vereador tx ente vereador 10))))
-        "voto secreto nao materializa nenhuma linha em voto_parlamentar")))
+    (is (= 1 (contar-votos-do-ente ente))
+        "so' o voto NOMINAL materializou em voto_parlamentar — o secreto nao vazou nenhuma linha")))
 
 ;; ---------- presenca.registrada -> transparencia.presenca_parlamentar (Onda E fatia 2) ----------
 ;; `sessoes` nao esta' wireado neste teste (o portal so' consome o evento PUBLICO) — o payload casa
@@ -331,3 +356,20 @@
           (is (= 1 (:sessoes-presente resumo)) "a presenca do vereador foi projetada")
           (is (= 1 (:sessoes-com-chamada resumo))
               "o denominador conta a sessao (do ente) que teve chamada"))))))
+
+(deftest presenca-registrada-via-relay-real-projeta-a-presenca
+  ;; M-1 (revisao Task 2): o teste-irmao acima chama projetar-evento! DIRETO — apagar "presenca.registrada"
+  ;; de tipos-consumidos deixaria a suite inteira verde mesmo assim. Este exercita a fiacao REAL: emite o
+  ;; envelope VALIDADO (sessoes/events/presenca, o mesmo construtor que producao usa) no shared.outbox e
+  ;; drena via consumers/registrar (que so' despacha os tipos listados em tipos-consumidos).
+  (let [ente (random-uuid) vereador (random-uuid) sessao (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (eventos/emitir! (outbox/bus) tx
+          (ev-presenca/registrada ente
+            {:sessao-id sessao :vereador-id vereador :tipo "presente" :modalidade "presencial"
+             :fonte "mesa" :ocorrido-em "2026-05-18T14:00:00Z"}))))
+    (drenar!)
+    (let [resumo (tenancy/com-tenant* *ds* ente (fn [tx] (db-parlamentar/resumo-presenca tx ente vereador)))]
+      (is (= 1 (:sessoes-presente resumo))
+          "a presenca chegou via o relay REAL (tipos-consumidos + dispatch), nao so' via a fn isolada"))))

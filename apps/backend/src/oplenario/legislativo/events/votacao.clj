@@ -39,9 +39,12 @@
   `:vereador-id` + `:voto` (o placar nominal mostra quem votou o que) + `:ocorrido-em` (Onda E fatia 2 carry,
   mesmo racional de `TransicionouPayload`: o instante REAL do voto no dominio — `legislativo.votos.registrado_em`,
   RETURNING do INSERT — nao o momento em que um consumer eventualmente PROJETA o evento; o perfil publico do
-  vereador em `transparencia` ordena 'como votou' por isto). SECRETA: TICK — o mapa fechado NAO admite
-  `:vereador-id`/`:voto`; o cliente so incrementa o contador de votos registrados. (Voto SIMBOLICO/aclamacao nao
-  registra individual — encerra com resultado explicito; por isso so 'nominal'/'secreta' aqui.)"
+  vereador em `transparencia` ordena 'como votou' por isto). `:proposicao-id` (revisao Task 2, achado I-2) e'
+  OPCIONAL/nullable: so' carrega valor quando o objeto votado (polimorfico — `votacoes.objeto_tipo`) E' uma
+  proposicao; para emenda/parecer/requerimento/redacao_final fica nil — o elo 'como votou' -> materia so' faz
+  sentido no primeiro caso. SECRETA: TICK — o mapa fechado NAO admite `:vereador-id`/`:voto`; o cliente so
+  incrementa o contador de votos registrados. (Voto SIMBOLICO/aclamacao nao registra individual — encerra com
+  resultado explicito; por isso so 'nominal'/'secreta' aqui.)"
   [:multi {:dispatch :modalidade}
    ["nominal" [:map {:closed true}
                [:votacao-id :uuid]
@@ -49,6 +52,7 @@
                [:modalidade [:= "nominal"]]
                [:vereador-id :uuid]
                [:voto (enum-de logic/tipos-voto)]
+               [:proposicao-id {:optional true} [:maybe :uuid]]
                [:ocorrido-em :string]]]
    ["secreta" [:map {:closed true}
                [:votacao-id :uuid]

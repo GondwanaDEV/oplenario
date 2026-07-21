@@ -41,8 +41,10 @@
                                  :where [:< :transparencia.presenca_parlamentar.ocorrido_em :excluded.ocorrido_em]}})))
 
 (defn votos-do-vereador
-  "Secao 'como votou': votos PUBLICOS do vereador, mais recentes primeiro, com a ementa da materia (mesmo
-  schema — JOIN permitido, nao e' cross-schema)."
+  "Secao 'como votou': votos PUBLICOS do vereador, mais recentes primeiro (desempate por votacao_id — achado
+  M-6, revisao Task 2: `ocorrido_em` vem de `registrado_em DEFAULT now()`, o instante de INICIO da tx, entao
+  votos proximos podem empatar; sem desempate estavel a ordem fica nao-deterministica assim que a Task 3
+  paginar), com a ementa da materia (mesmo schema — JOIN permitido, nao e' cross-schema)."
   [tx ente-id vereador-id limite]
   {:pre [(some? ente-id) (some? vereador-id)]}
   (comum/linhas->kebab
@@ -54,8 +56,11 @@
                   :left-join [[:transparencia.materia :m]
                               [:and [:= :m.ente_id :v.ente_id] [:= :m.proposicao_id :v.proposicao_id]]]
                   :where [:and [:= :v.ente_id ente-id] [:= :v.vereador_id vereador-id]]
-                  :order-by [[:v.ocorrido_em :desc]]
-                  :limit (or limite teto-votos)}))))
+                  :order-by [[:v.ocorrido_em :desc] [:v.votacao_id :desc]]
+                  ;; achado I-3 (revisao Task 2): teto RIGIDO — `(or limite teto-votos)` deixava o CHAMADOR
+                  ;; passar um limite MAIOR que o teto (so' usava teto-votos quando limite era nil). `min`
+                  ;; capa de verdade, mesmo precedente de db/materia.clj:listar-em-tramitacao et al.
+                  :limit (min (or limite teto-votos) teto-votos)}))))
 
 (defn resumo-presenca
   "Numero-card de presenca. Denominador = sessoes do ENTE que tiveram chamada (COUNT DISTINCT sessao_id);
