@@ -506,9 +506,11 @@
                             {:erro :modalidade-mismatch :votacao-id (:votacao-id m) :modalidade (:modalidade v)})))
           (let [r (votacao/registrar-voto! tx (assoc m :ente-id ente-id))]
             (when (:sessao-id v)
+              ;; :ocorrido-em (Onda E fatia 2 carry): RETURNING de votacao/registrar-voto! — mesma disciplina
+              ;; de tempo de dominio de proposicao.transicionou.
               (producers/emitir-voto-registrado! bus tx ente-id
                 {:votacao-id (:votacao-id m) :sessao-id (:sessao-id v) :modalidade "nominal"
-                 :vereador-id (:vereador-id m) :voto (:voto m)}))
+                 :vereador-id (:vereador-id m) :voto (:voto m) :ocorrido-em (str (:ocorrido-em r))}))
             r)))))
   (registrar-voto-secreto! [this ente-id m]
     (transacao this ente-id
@@ -550,7 +552,7 @@
               (when (:sessao-id v)
                 (producers/emitir-voto-registrado! bus tx ente-id
                   {:votacao-id (:votacao-id m) :sessao-id (:sessao-id v) :modalidade "nominal"
-                   :vereador-id (:vereador-id m) :voto (:voto m)}))
+                   :vereador-id (:vereador-id m) :voto (:voto m) :ocorrido-em (str (:ocorrido-em r))}))
               r))))
       (catch PSQLException e
         (if (= "23505" (.getSQLState e))

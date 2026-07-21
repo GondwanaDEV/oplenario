@@ -26,6 +26,7 @@
             [oplenario.transparencia.db.artefato-publicacao :as db-artefato]
             [oplenario.transparencia.db.materia :as db-materia]
             [oplenario.transparencia.db.norma :as db-norma]
+            [oplenario.transparencia.db.parlamentar :as db-parlamentar]
             [oplenario.transparencia.events.notificacao :as ev-notif]
             [oplenario.transparencia.logic.notificacao :as logic-notif])
   (:import (java.time Instant)
@@ -63,11 +64,12 @@
 
 (defn projetar-evento!
   "Dispatch por tipo de evento -> a projecao de dominio, DENTRO da `tx` corrente (a do relay). Seta o GUC de
-  tenant (sem trocar de role — ver docstring do ns) e escreve em transparencia.materia/norma/artefato_publicacao.
+  tenant (sem trocar de role — ver docstring do ns) e escreve em
+  transparencia.materia/norma/artefato_publicacao/voto_parlamentar/presenca_parlamentar.
   `payload` ja chegou com chaves KEYWORD kebab (outbox/jsonb-> usa keyword-keys-object-mapper), casando 1:1 com
-  o que os producers de legislativo construiram (events/{proposicao,norma,artefato-publicacao}.clj) — EXCETO os
-  campos :uuid e os de tempo (:publicado-em/:criado-em), que chegam como string (ver `uuid-payload` e a
-  re-parseacao Instant/parse; docstring de events/norma)."
+  o que os producers de legislativo/sessoes construiram (events/{proposicao,norma,artefato-publicacao,
+  votacao,presenca}.clj) — EXCETO os campos :uuid e os de tempo (:publicado-em/:criado-em/:ocorrido-em), que
+  chegam como string (ver `uuid-payload` e a re-parseacao Instant/parse; docstring de events/norma)."
   [tx {:keys [tipo ente-id payload]}]
   (tenancy/set-tenant! tx ente-id)
   (case tipo
@@ -96,7 +98,29 @@
     (db-artefato/inserir! tx (-> payload
                                  (uuid-payload [:norma-id :artefato-id])
                                  (assoc :ente-id ente-id)
-                                 (update :criado-em #(Instant/parse %))))))
+                                 (update :criado-em #(Instant/parse %))))
+
+    ;; Onda E fatia 2 (perfil publico do vereador). SIGILO: o ramo 'secreta' de VotoRegistradoPayload e'
+    ;; :closed e nao carrega :vereador-id — `when-let` sobre a PRESENCA da chave, nao sobre a string de
+    ;; modalidade (defesa que nao depende do vocabulario de modalidade permanecer estavel).
+    "voto.registrado"
+    (when-let [vid (:vereador-id payload)]
+      (db-parlamentar/registrar-voto! tx
+        {:ente-id ente-id
+         :votacao-id (UUID/fromString (:votacao-id payload))
+         :vereador-id (UUID/fromString vid)
+         :proposicao-id (some-> (:proposicao-id payload) UUID/fromString)
+         :voto (:voto payload)
+         :ocorrido-em (Instant/parse (:ocorrido-em payload))}))
+
+    "presenca.registrada"
+    (db-parlamentar/registrar-presenca! tx
+      {:ente-id ente-id
+       :sessao-id (UUID/fromString (:sessao-id payload))
+       :vereador-id (UUID/fromString (:vereador-id payload))
+       :tipo (:tipo payload)
+       :modalidade (:modalidade payload)
+       :ocorrido-em (Instant/parse (:ocorrido-em payload))})))
 
 (defn fan-out-notificacao!
   "Consumer do FAN-OUT (F7 E2) — SEGUNDO consumidor de `proposicao.transicionou` (o 1o, projetar-evento!,

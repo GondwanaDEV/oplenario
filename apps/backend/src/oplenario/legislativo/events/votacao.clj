@@ -36,7 +36,10 @@
 
 (def VotoRegistradoPayload
   "Voto computado — UNIAO DISCRIMINADA por `:modalidade` (sigilo §22.6 cravado no contrato). NOMINAL: exige
-  `:vereador-id` + `:voto` (o placar nominal mostra quem votou o que). SECRETA: TICK — o mapa fechado NAO admite
+  `:vereador-id` + `:voto` (o placar nominal mostra quem votou o que) + `:ocorrido-em` (Onda E fatia 2 carry,
+  mesmo racional de `TransicionouPayload`: o instante REAL do voto no dominio — `legislativo.votos.registrado_em`,
+  RETURNING do INSERT — nao o momento em que um consumer eventualmente PROJETA o evento; o perfil publico do
+  vereador em `transparencia` ordena 'como votou' por isto). SECRETA: TICK — o mapa fechado NAO admite
   `:vereador-id`/`:voto`; o cliente so incrementa o contador de votos registrados. (Voto SIMBOLICO/aclamacao nao
   registra individual — encerra com resultado explicito; por isso so 'nominal'/'secreta' aqui.)"
   [:multi {:dispatch :modalidade}
@@ -45,7 +48,8 @@
                [:sessao-id :uuid]
                [:modalidade [:= "nominal"]]
                [:vereador-id :uuid]
-               [:voto (enum-de logic/tipos-voto)]]]
+               [:voto (enum-de logic/tipos-voto)]
+               [:ocorrido-em :string]]]
    ["secreta" [:map {:closed true}
                [:votacao-id :uuid]
                [:sessao-id :uuid]

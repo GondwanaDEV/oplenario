@@ -1,10 +1,13 @@
 (ns oplenario.transparencia.portal-test
-  "INTEGRACAO (PG real) — F6c Slice 1: o portal PUBLICO (§16.5). Prova a cadeia ponta-a-ponta: o Repo de
-  `legislativo` EMITE `proposicao.protocolada`/`proposicao.transicionou`/`norma.publicada` no shared.outbox
-  (na tx do ato); o relay DRENA e despacha ao consumer do portal (`transparencia.diplomat.consumers`), que
-  PROJETA nas tabelas de read-model (mig 0044) — sem import/JOIN cross-modulo (§22.10; o teste, nao sendo
-  modulo, compoe os Repos diretamente, mesmo racional de marco_m2_test). Tambem prova RLS (isolamento
-  cross-tenant) e a leitura publica via o Repo de transparencia."
+  "INTEGRACAO (PG real) — F6c Slice 1 + Onda E fatia 2 (perfil publico do vereador): o portal PUBLICO (§16.5).
+  Prova a cadeia ponta-a-ponta: o Repo de `legislativo` EMITE
+  `proposicao.protocolada`/`proposicao.transicionou`/`norma.publicada`/`voto.registrado` no shared.outbox (na
+  tx do ato); o relay DRENA e despacha ao consumer do portal (`transparencia.diplomat.consumers`), que PROJETA
+  nas tabelas de read-model (mig 0044/0064) — sem import/JOIN cross-modulo (§22.10; o teste, nao sendo modulo,
+  compoe os Repos diretamente, mesmo racional de marco_m2_test). Tambem prova RLS (isolamento cross-tenant) e
+  a leitura publica via o Repo de transparencia. As projecoes de voto/presenca (`db.parlamentar`) ainda nao
+  tem metodo no protocolo RepoTransparencia (so' escrita, via `projetar-evento!`) — os testes leem direto de
+  `db.parlamentar` dentro de uma tx do tenant, mesmo padrao dos testes de tolerancia abaixo."
   (:require [clojure.test :refer [deftest is use-fixtures]]
             [com.stuartsierra.component :as component]
             [oplenario.cadastros.relacoes.cadastro :as rel-cad]
@@ -21,6 +24,7 @@
             [oplenario.migracao :as migracao]
             [oplenario.motor.components.registro-fatos :as rf]
             [oplenario.transparencia.components.repositorio :as transparencia-repo]
+            [oplenario.transparencia.db.parlamentar :as db-parlamentar]
             [oplenario.transparencia.diplomat.consumers :as consumers])
   (:import (java.time LocalDate)))
 
@@ -265,3 +269,65 @@
           norma (transparencia-repo/norma-da-materia *repo-transparencia* ente pid)]
       (is (some? ficha) "a materia continua no portal")
       (is (= nid (:norma-id norma)) "a ficha liga 'proposicao -> lei' (norma-da-materia)"))))
+
+;; ---------- registrar-voto!/registrar-voto-secreto! (Repo legislativo) -> voto.registrado ->
+;;            transparencia.voto_parlamentar (Onda E fatia 2 — perfil publico do vereador) ----------
+
+(deftest voto-nominal-projeta-o-voto-publico-do-vereador
+  (let [ente     (random-uuid)
+        vereador (random-uuid)
+        sessao   (random-uuid)
+        {pid :id} (legislativo-repo/protocolar! *repo-legislativo* ente
+                    {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026 :uf "CE"
+                     :municipio-nome "Fortaleza" :ementa "Dispoe sobre voto nominal"})
+        {vid :id} (legislativo-repo/abrir-votacao! *repo-legislativo* ente
+                    {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id pid :sessao-id sessao
+                     :modalidade "nominal" :quorum-tipo "maioria_simples"})]
+    (legislativo-repo/registrar-voto! *repo-legislativo* ente
+      {:id (random-uuid) :votacao-id vid :vereador-id vereador :voto "sim"})
+    (drenar!)
+    (let [votos (tenancy/com-tenant* *ds* ente
+                  (fn [tx] (db-parlamentar/votos-do-vereador tx ente vereador 10)))]
+      (is (= 1 (count votos)) "1 voto publico projetado")
+      (is (= "sim" (:voto (first votos))) "o valor do voto foi projetado")
+      (is (= vid (:votacao-id (first votos))) "a votacao-id foi projetada")
+      (is (some? (:ocorrido-em (first votos)))
+          "ocorrido-em (tempo de DOMINIO, RETURNING de legislativo.votos.registrado_em) foi projetado"))))
+
+(deftest voto-secreto-nao-projeta-nada
+  ;; SIGILO §22.6: o ramo 'secreta' de VotoRegistradoPayload e' :closed e NEM ADMITE :vereador-id/:voto — o
+  ;; consumer nao tem como projetar identidade mesmo que tentasse (garantia de SCHEMA DE EVENTO, nao de um
+  ;; `if` no consumer). Prova ponta-a-ponta via o caminho REAL de escrita (registrar-voto-secreto!), nao um
+  ;; payload construido a mao.
+  (let [ente     (random-uuid)
+        vereador (random-uuid)
+        sessao   (random-uuid)
+        {pid :id} (legislativo-repo/protocolar! *repo-legislativo* ente
+                    {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026 :uf "CE"
+                     :municipio-nome "Fortaleza" :ementa "Dispoe sobre voto secreto"})
+        {vid :id} (legislativo-repo/abrir-votacao! *repo-legislativo* ente
+                    {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id pid :sessao-id sessao
+                     :modalidade "secreta" :quorum-tipo "maioria_simples"})]
+    (legislativo-repo/registrar-voto-secreto! *repo-legislativo* ente
+      {:id (random-uuid) :votacao-id vid :voto "sim"})
+    (drenar!)
+    (is (empty? (tenancy/com-tenant* *ds* ente (fn [tx] (db-parlamentar/votos-do-vereador tx ente vereador 10))))
+        "voto secreto nao materializa nenhuma linha em voto_parlamentar")))
+
+;; ---------- presenca.registrada -> transparencia.presenca_parlamentar (Onda E fatia 2) ----------
+;; `sessoes` nao esta' wireado neste teste (o portal so' consome o evento PUBLICO) — o payload casa
+;; events.presenca/RegistradaPayload (sessoes/events/presenca.clj), exercitado via `projetar-evento!`
+;; diretamente, mesmo padrao dos testes de tolerancia acima (transicao-sem-materia-projetada-e-tolerante).
+
+(deftest presenca-registrada-projeta-a-presenca-do-vereador
+  (let [ente (random-uuid) vereador (random-uuid) sessao (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (transparencia-repo/projetar-evento! tx
+          {:tipo "presenca.registrada" :ente-id ente
+           :payload {:sessao-id (str sessao) :vereador-id (str vereador) :tipo "presente"
+                     :modalidade "presencial" :fonte "mesa" :ocorrido-em "2026-05-18T14:00:00Z"}})
+        (let [resumo (db-parlamentar/resumo-presenca tx ente vereador)]
+          (is (= 1 (:sessoes-presente resumo)) "a presenca do vereador foi projetada")
+          (is (= 1 (:sessoes-com-chamada resumo))
+              "o denominador conta a sessao (do ente) que teve chamada"))))))
