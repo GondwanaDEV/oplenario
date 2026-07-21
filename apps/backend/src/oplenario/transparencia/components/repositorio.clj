@@ -50,9 +50,16 @@
   jsonb (jsonista) — um java.util.UUID no evento vira string JSON na ida e volta STRING na leitura (jsonb->
   nao tem modulo UUID); um valor string bindado contra uma coluna `uuid` do Postgres lanca (driver nao
   cast implicito: 'column is of type uuid but expression is of type character varying'). `ente-id` do
-  envelope NAO precisa disto — vem de uma coluna SQL nativa (outbox.ente_id), nunca do jsonb."
+  envelope NAO precisa disto — vem de uma coluna SQL nativa (outbox.ente_id), nunca do jsonb.
+
+  Onda E fatia 2: `(some? (get m k))`, NAO so' `contains?` — uma chave OPCIONAL (:autor-id) que o producer
+  emite via `some->` fica PRESENTE no payload com valor `nil` quando o autor nao e' vereador (jsonista nao
+  strippa chave de valor null na serializacao); `contains?` sozinho veria a chave e chamaria
+  `UUID/fromString` num `nil`, lancando NPE. `some?` trata 'chave ausente' e 'chave presente com nil' do
+  mesmo jeito — intocada — que e' o comportamento correto pros dois (evento legado sem a chave E evento
+  novo com autoria nao-parlamentar)."
   [payload chaves]
-  (reduce (fn [m k] (cond-> m (contains? m k) (update k #(UUID/fromString %)))) payload chaves))
+  (reduce (fn [m k] (cond-> m (some? (get m k)) (update k #(UUID/fromString %)))) payload chaves))
 
 (defn projetar-evento!
   "Dispatch por tipo de evento -> a projecao de dominio, DENTRO da `tx` corrente (a do relay). Seta o GUC de
@@ -65,7 +72,7 @@
   (tenancy/set-tenant! tx ente-id)
   (case tipo
     "proposicao.protocolada"
-    (db-materia/inserir! tx (-> payload (uuid-payload [:proposicao-id]) (assoc :ente-id ente-id)))
+    (db-materia/inserir! tx (-> payload (uuid-payload [:proposicao-id :autor-id]) (assoc :ente-id ente-id)))
 
     "proposicao.transicionou"
     (let [pid (UUID/fromString (:proposicao-id payload))]

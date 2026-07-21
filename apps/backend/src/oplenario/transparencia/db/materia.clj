@@ -12,7 +12,7 @@
 (set! *warn-on-reflection* true)
 
 (def ^:private cols
-  [:ente_id :proposicao_id :tipo :ano :sequencial :urn_lex :ementa :autor_tipo :autor_texto :estado
+  [:ente_id :proposicao_id :tipo :ano :sequencial :urn_lex :ementa :autor_tipo :autor_texto :autor_id :estado
    :projetado_em :atualizado_em])
 
 (def ^:private teto-listagem
@@ -28,7 +28,7 @@
   de dominio com uma idempotency-key NOVA (kernel.eventos/evento gera uma por chamada, nao derivada da
   chave de negocio) — sem isto, o redrive lancaria PK-violation e envenenaria o RELAY COMPARTILHADO (ver
   atualizar-estado!)."
-  [tx {:keys [ente-id proposicao-id tipo ano sequencial urn-lex ementa autor-tipo autor-texto estado]}]
+  [tx {:keys [ente-id proposicao-id tipo ano sequencial urn-lex ementa autor-tipo autor-texto autor-id estado]}]
   {:pre [(some? ente-id) (some? proposicao-id) (some? tipo) (some? ano) (some? sequencial)
          (some? urn-lex) (some? ementa) (some? estado)]}
   (comum/linha->kebab
@@ -36,7 +36,7 @@
      (sql/format {:insert-into :transparencia.materia
                   :values [{:ente_id ente-id :proposicao_id proposicao-id :tipo tipo :ano ano
                             :sequencial sequencial :urn_lex urn-lex :ementa ementa
-                            :autor_tipo autor-tipo :autor_texto autor-texto :estado estado}]
+                            :autor_tipo autor-tipo :autor_texto autor-texto :autor_id autor-id :estado estado}]
                   :on-conflict [:ente_id :proposicao_id]
                   :do-nothing []
                   :returning [:*]}))))

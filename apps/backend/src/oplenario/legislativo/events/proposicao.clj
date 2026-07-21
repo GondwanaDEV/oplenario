@@ -16,7 +16,10 @@
 
 (def ProtocoladaPayload
   "Payload de `proposicao.protocolada` — snapshot PUBLICO do ato legislativo no protocolo. So dado publico por
-  natureza (proposicao e' ato publico); SEM autor_id interno (FK do cadastro) — so o autor_texto de exibicao."
+  natureza (proposicao e' ato publico). `autor-id` (Onda E fatia 2) e' o UUID do VEREADOR autor — o elo que o
+  PERFIL PUBLICO do vereador precisa p/ listar 'materias de autoria' sem casar string de nome. Viaja como
+  STRING (jsonb do outbox nao tem modulo UUID); OPCIONAL porque autor pode ser comissao/mesa/executivo/cidadao,
+  que nao tem vereador-id. NAO e' PII: vereador e' ator publico da Casa."
   [:map {:closed true}
    [:proposicao-id :uuid]
    [:tipo :string]
@@ -26,6 +29,7 @@
    [:ementa :string]
    [:autor-tipo {:optional true} [:maybe :string]]
    [:autor-texto {:optional true} [:maybe :string]]
+   [:autor-id {:optional true} [:maybe :string]]
    [:estado :string]])
 
 (defn protocolada

@@ -91,6 +91,29 @@
     (is (empty? (transparencia-repo/listar-materias *repo-transparencia* (random-uuid) #{}))
         "RLS: outro ente nao ve a materia projetada")))
 
+;; ---------- protocolar! com :autor-id -> proposicao.protocolada -> materia.autor_id (Onda E fatia 2) ----------
+
+(deftest protocolar-com-autor-id-projeta-o-elo-autoria-no-portal
+  (let [ente     (random-uuid)
+        vereador (random-uuid)
+        {pid :id}
+        (legislativo-repo/protocolar! *repo-legislativo* ente
+          {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026 :uf "CE" :municipio-nome "Fortaleza"
+           :ementa "Hortas comunitarias" :autor-tipo "vereador" :autor-id vereador :autor-texto "Helena Past"})]
+    (drenar!)
+    (is (= vereador (:autor-id (transparencia-repo/buscar-materia *repo-transparencia* ente pid)))
+        "o elo autoria->vereador (perfil publico) foi projetado no read-model")))
+
+(deftest protocolar-sem-autor-id-legado-projeta-autor-id-nulo
+  (let [ente (random-uuid)
+        {pid :id}
+        (legislativo-repo/protocolar! *repo-legislativo* ente
+          {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026 :uf "CE" :municipio-nome "Fortaleza"
+           :ementa "Legado"})]
+    (drenar!)
+    (is (nil? (:autor-id (transparencia-repo/buscar-materia *repo-transparencia* ente pid)))
+        "evento SEM :autor-id (acervo anterior) projeta com autor_id nulo, sem lancar")))
+
 ;; ---------- transicionar! (Repo) -> proposicao.transicionou -> materia.estado ----------
 
 (deftest transicao-atualiza-o-estado-projetado

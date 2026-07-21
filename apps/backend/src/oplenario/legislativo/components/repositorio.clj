@@ -278,7 +278,10 @@
           (producers/emitir-protocolada! bus tx ente-id
             {:proposicao-id (:id r) :tipo (:tipo p) :ano (:ano p) :sequencial (:sequencial r)
              :urn-lex (:urn-lex r) :ementa (:ementa p) :estado "protocolada"
-             :autor-tipo (:autor-tipo p) :autor-texto (:autor-texto p)})
+             :autor-tipo (:autor-tipo p) :autor-texto (:autor-texto p)
+             ;; some-> : :autor-id e' nulo p/ autoria nao-parlamentar; (str nil) daria "" e quebraria
+             ;; o UUID/fromString do consumer (Onda E fatia 2).
+             :autor-id (some-> (:autor-id p) str)})
           r))))
   (buscar-proposicao [this ente-id id] (transacao this ente-id #(proposicao/buscar % ente-id id)))
   (listar-por-estado [this ente-id estado] (transacao this ente-id #(proposicao/listar-por-estado % ente-id estado)))
