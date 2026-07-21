@@ -34,6 +34,7 @@
   (:require [clojure.tools.logging :as log]
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.paineis.components.notificacao :as porta]
+            [oplenario.paineis.db.notificacao-caixa :as db-caixa]
             [oplenario.paineis.db.notificacao-entrega :as db-notificacao]
             [oplenario.paineis.db.pendencia :as db-pendencia]
             [oplenario.paineis.db.sli-sessao :as db-sli-sessao]
@@ -73,6 +74,30 @@
                                            :estado estado :transicionou-em (Instant/parse ocorrido-em-str)})
       (log/warn "paineis: transicao sem materia projetada no board (protocolo ausente?)"
                 {:ente-id ente-id :proposicao-id proposicao-id-str :estado estado})))
+
+(def ^:private canal-email
+  "O UNICO canal que o ledger de ENTREGA (notificacao_entrega) materializa. Onda E fatia 1: o mesmo evento
+  `notificacao.requisitada` passou a carregar tambem `in_app` (inbox interna, projetada por
+  `projetar-inbox!` numa tabela propria). Cada projetor trata APENAS o seu canal (spec §4.3); sem esta
+  guarda o worker `entregar-pendentes!` tentaria enviar e-mail de uma notificacao que nunca teve endereco."
+  "email")
+
+(defn- registrar-intent-de-email!
+  "Materializa o intent de entrega SO' quando o canal e' 'email'. Outro canal -> log/debug + nil (nunca
+  lanca, nunca grava): nao e' erro, e' um evento endereçado a OUTRO projetor do mesmo modulo."
+  [tx ente-id payload]
+  (if (= canal-email (:canal payload))
+    (db-notificacao/registrar-intent! tx {:ente-id ente-id
+                                          :destinatario (:destinatario-identidade-id payload)
+                                          :canal (:canal payload)
+                                          :idempotency-key (:idempotency-key payload)
+                                          :consent-base (:consent-base payload)
+                                          :assunto (:assunto payload) :corpo (:corpo payload)
+                                          :objeto-tipo (:objeto-tipo payload)
+                                          :objeto-id (UUID/fromString (:objeto-id payload))})
+    (do (log/debug "paineis: notificacao de outro canal ignorada pelo ledger de e-mail"
+                   {:ente-id ente-id :canal (:canal payload)})
+        nil)))
 
 (defn despachar!
   "O `case` de fato, SEM tolerancia — lanca em tipo sem branch (`case` sem default: 'No matching clause') OU
@@ -151,15 +176,10 @@
     ;; e' enviado aqui (anti dual-write — ver db.notificacao-entrega); o worker (entregar-pendentes!) envia
     ;; depois. `objeto-id` chega STRING (jsonb) -> UUID; `destinatario` fica STRING (identidade-uuid como texto,
     ;; coluna `destinatario text`). Idempotencia da entrega pela chave DETERMINISTICA do payload (ON CONFLICT).
+    ;; Onda E fatia 1: ROTEAMENTO POR CANAL — este branch cuida SO' de `email`. A inbox (`in_app`) e' um
+    ;; SEGUNDO consumidor registrado (`paineis-inbox`, `projetar-inbox!`), com dedup independente.
     "notificacao.requisitada"
-    (db-notificacao/registrar-intent! tx {:ente-id ente-id
-                                          :destinatario (:destinatario-identidade-id payload)
-                                          :canal (:canal payload)
-                                          :idempotency-key (:idempotency-key payload)
-                                          :consent-base (:consent-base payload)
-                                          :assunto (:assunto payload) :corpo (:corpo payload)
-                                          :objeto-tipo (:objeto-tipo payload)
-                                          :objeto-id (UUID/fromString (:objeto-id payload))})))
+    (registrar-intent-de-email! tx ente-id payload)))
 
 (defn projetar-evento!
   "Dispatch por tipo de evento -> a projecao de dominio, DENTRO da `tx` corrente (a do relay). Seta o GUC de
@@ -191,6 +211,41 @@
                 {:tipo tipo :ente-id ente-id})
       nil)))
 
+(def ^:private canal-in-app
+  "O UNICO canal que a INBOX materializa (espelho de `canal-email`; spec §4.3)."
+  "in_app")
+
+(defn projetar-inbox!
+  "Handler do SEGUNDO consumidor do modulo (`paineis-inbox`, mesma disciplina de
+  `transparencia/fan-out-notificacao!`): projeta `notificacao.requisitada` de canal `in_app` na
+  `paineis.notificacao_caixa`. Identidade de dedup SEPARADA da do projetor de entrega — cada um roda
+  effectively-once por conta propria, entao a inbox nao depende da ordem nem do sucesso do ledger de e-mail.
+
+  NUNCA lanca (o relay e' COMPARTILHADO por todos os modulos — um throw aqui trava a fila de todo mundo):
+  try/catch Throwable envolve TUDO, INCLUSIVE `set-tenant!` (que lanca em ente-id nil, e a coluna
+  shared.outbox.ente_id e' NULLABLE). `catch Throwable`, nao Exception: as `:pre` de db/ lancam
+  AssertionError, que e' Error. Payload malformado (objeto-id nao-UUID) -> log + nil, evento drenado.
+
+  Canal != in_app -> no-op silencioso (o evento e' de outro projetor, nao e' erro)."
+  [tx {:keys [ente-id payload]}]
+  (try
+    (tenancy/set-tenant! tx ente-id)
+    (when (= canal-in-app (:canal payload))
+      (db-caixa/inserir! tx {:ente-id ente-id
+                             :destinatario-identidade-id (UUID/fromString
+                                                          (:destinatario-identidade-id payload))
+                             ;; `categoria` e' OPCIONAL no contrato do evento (o produtor do cidadao nao a
+                             ;; manda); um in-app sem categoria cai em "sistema" em vez de violar o NOT NULL.
+                             :categoria (or (:categoria payload) "sistema")
+                             :assunto (:assunto payload) :corpo (:corpo payload)
+                             :objeto-tipo (:objeto-tipo payload)
+                             :objeto-id (UUID/fromString (:objeto-id payload))
+                             :idempotency-key (:idempotency-key payload)}))
+    (catch Throwable e
+      (log/warn e "paineis: projecao da inbox tolerada (payload malformado ou falha de escrita)"
+                {:ente-id ente-id})
+      nil)))
+
 (defprotocol RepoPaineis
   (transacao [this ente-id f] "Roda (f tx) numa UNICA tx do tenant (com-tenant*) — leitura interna.")
   (o-que-vence [this ente-id] "Pendencias ABERTAS (pendente|vencido) do tenant, mais urgente primeiro.")
@@ -217,7 +272,14 @@
     re-tentavel; um estado 'enviando' precisaria de um reaper/timeout = mais infra). REMEDIO de scale-out (se um
     dia N workers concorrentes forem necessarios): claim atomico `UPDATE ... SET estado='enviando' WHERE id IN
     (SELECT ... FOR UPDATE SKIP LOCKED LIMIT :teto) RETURNING *` + reaper de 'enviando' orfao. YAGNI ate' la'.
-    Seu AGENDAMENTO (cron/loop + leader-election) e' carry infra — aqui a LOGICA de entrega, chamavel e testavel."))
+    Seu AGENDAMENTO (cron/loop + leader-election) e' carry infra — aqui a LOGICA de entrega, chamavel e testavel.")
+  (minhas-notificacoes [this ente-id destinatario-identidade-id]
+    "Inbox do PROPRIO ator (Onda E fatia 1): {:notificacoes [...] :nao-lidas n} numa UNICA tx do tenant
+     (mesma disciplina de dashboard-mesa). O escopo por destinatario esta' no WHERE do SQL, junto do
+     tenant — a authz fina desta rota NAO e' de papel, e' de posse.")
+  (marcar-notificacao-lida! [this ente-id m]
+    "Marca como lida a notificacao `(:id m)` do destinatario `(:destinatario-identidade-id m)` — guard de
+     posse no MESMO WHERE do tenant. Idempotente; devolve {:id :lida-em} ou nil (inexistente/nao e' sua)."))
 
 (defrecord RepoPaineisPg [datasource]
   RepoPaineis
@@ -243,7 +305,14 @@
                 (db-notificacao/marcar-enviada! tx {:ente-id ente-id :id (:id intent)})
                 (db-notificacao/marcar-falha! tx {:ente-id ente-id :id (:id intent)
                                                   :motivo (or (:motivo res) "falha de entrega sem motivo")}))))))
-      {:processados (count pendentes)})))
+      {:processados (count pendentes)}))
+  (minhas-notificacoes [this ente-id destinatario-identidade-id]
+    (transacao this ente-id
+      (fn [tx]
+        {:notificacoes (db-caixa/listar-do-destinatario tx ente-id destinatario-identidade-id)
+         :nao-lidas    (db-caixa/contar-nao-lidas tx ente-id destinatario-identidade-id)})))
+  (marcar-notificacao-lida! [this ente-id m]
+    (transacao this ente-id #(db-caixa/marcar-lida! % (assoc m :ente-id ente-id)))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

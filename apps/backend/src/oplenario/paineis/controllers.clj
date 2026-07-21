@@ -30,3 +30,18 @@
   chama a fn injetada pelo host — o controller nunca cruza modulo (§22.10)."
   [repo-paineis ator]
   (repo/dashboard-mesa repo-paineis (:ente-id ator)))
+
+(defn minhas-notificacoes
+  "Inbox do PROPRIO `ator` (Onda E fatia 1). Diferente dos demais paineis deste modulo, o escopo NAO e'
+  tenant-wide: e' (tenant, identidade do ator). A identidade vem SEMPRE do ator — nada no request escolhe
+  'de quem' e' a inbox (anti-forja por construcao, mesmo contrato de /meu/painel do legislativo)."
+  [repo-paineis ator]
+  (repo/minhas-notificacoes repo-paineis (:ente-id ator) (:identidade-id ator)))
+
+(defn marcar-lida
+  "Marca uma notificacao do PROPRIO ator como lida (Onda E fatia 1). O destinatario e' SEMPRE o do ator —
+  nunca do path/corpo (anti-forja). nil = inexistente OU de outro destinatario: a borda traduz os DOIS
+  para 404, sem distingui-los (nao vaza existencia)."
+  [repo-paineis ator id]
+  (repo/marcar-notificacao-lida! repo-paineis (:ente-id ator)
+                                 {:id id :destinatario-identidade-id (:identidade-id ator)}))

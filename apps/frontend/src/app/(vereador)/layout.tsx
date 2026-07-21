@@ -104,11 +104,15 @@ function Brasao() {
 // mobile, mostrar o tab como "ativo" prometia uma continuidade que não existe). Candidato de fatia futura:
 // uma rota `(vereador)/materias` própria, ou promover /proposicoes a layout-agnostic. "Votar" (Onda C3)
 // ganhou rota real (cockpit ao vivo — confirma presença + vota do próprio celular).
+// Onda E fatia 1: "Matérias" (placeholder, sem rota própria dentro do shell mobile) cede o lugar a
+// "Avisos" — a inbox ganhou rota real (/notificacoes). NÃO leva contador: o sino/badge de contagem é dos
+// PENDÊNCIAS (dedup §5.1 da tela de design), não das notificações — misturar os dois quebraria a dedup
+// que a própria tela documenta.
 const TABS = [
   { rotulo: "Início", href: "/vereador", ativo: true },
   { rotulo: "Pauta", href: null, ativo: false },
   { rotulo: "Votar", href: "/votar", ativo: true },
-  { rotulo: "Matérias", href: null, ativo: false },
+  { rotulo: "Avisos", href: "/notificacoes", ativo: true },
   { rotulo: "Perfil", href: null, ativo: false },
 ] as const;
 

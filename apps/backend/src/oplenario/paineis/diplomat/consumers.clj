@@ -28,9 +28,31 @@
    ;; materializa a linha no nascimento (fecha a cegueira ao no-show); `transicionou` move a janela/estado.
    "sessao.agendada" "sessao.transicionou"])
 
+;; Onda E fatia 1: SEGUNDO consumidor do modulo — a INBOX interna. Nome DISTINTO = dedup independente por
+;; (consumidor, key), exatamente como `transparencia-portal` x `transparencia-notificacao`. Consome o MESMO
+;; `notificacao.requisitada`, mas so' age no canal `in_app` (ver repo/projetar-inbox!).
+;;
+;; ASSIMETRIA COM `tipos-consumidos` (achado de review, correcao): `despachar!` tem um `case` por tipo, e
+;; `todo-tipo-consumido-tem-branch-de-projecao` (consumers-test) garante que todo tipo em `tipos-consumidos`
+;; tem um branch. `projetar-inbox!` NAO despacha por tipo — ele so' checa `:canal` no payload, presumindo
+;; a FORMA de `notificacao.requisitada` (`:destinatario-identidade-id`/`:objeto-id`/etc.). Se esta lista um
+;; dia crescer para um segundo tipo, nao ha' guard estrutural que force `projetar-inbox!` a aprender a
+;; forma dele — um tipo de payload diferente com canal "in_app" seria processado como se fosse o mesmo
+;; formato (ou barrado silenciosamente pela `:pre` de `db-caixa/inserir!`, tolerado pelo catch Throwable,
+;; sem sinal de drift). A asserção abaixo torna esse ponto de extensão RUIDOSO em vez de silencioso: quebra
+;; o carregamento do ns se alguem acrescentar um tipo aqui sem revisar `projetar-inbox!` primeiro.
+(def ^:private nome-consumidor-inbox "paineis-inbox")
+(def ^:private tipos-inbox ["notificacao.requisitada"])
+
+(assert (= ["notificacao.requisitada"] tipos-inbox)
+        "paineis.diplomat.consumers: tipos-inbox cresceu sem que projetar-inbox! ganhasse dispatch por tipo — ver o comentario acima de tipos-inbox antes de acrescentar um novo tipo aqui.")
+
 (defn registrar
   "Funde os handlers dos projetores de `paineis` num `registro` EXISTENTE (outbox/registrar por tipo) —
-  combinavel com o(s) de outro(s) projetor(es) no MESMO relay (ex.: transparencia, tempo_real)."
+  combinavel com o(s) de outro(s) projetor(es) no MESMO relay. Registra DOIS consumidores: o projetor
+  geral (`paineis`, todos os tipos, incl. o ledger de entrega de e-mail) e a INBOX (`paineis-inbox`, so'
+  `notificacao.requisitada` de canal in_app) — nomes distintos = dedup independente."
   [registro]
-  (reduce (fn [reg tipo] (outbox/registrar reg nome-consumidor tipo repo/projetar-evento!))
-          registro tipos-consumidos))
+  (as-> registro reg
+    (reduce (fn [r tipo] (outbox/registrar r nome-consumidor tipo repo/projetar-evento!)) reg tipos-consumidos)
+    (reduce (fn [r tipo] (outbox/registrar r nome-consumidor-inbox tipo repo/projetar-inbox!)) reg tipos-inbox)))

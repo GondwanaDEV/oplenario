@@ -4,8 +4,10 @@
   dentro); o record segura o :datasource (via `using`); o db/ e' a IMPL. O controller depende DESTE
   Component, nunca do db/ direto. `transacao` compoe varias acoes numa UNICA tx do tenant."
   (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [oplenario.kernel.components.objeto-store :as os]
             [oplenario.kernel.ids :as ids]
+            [oplenario.kernel.outbox :as outbox]
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.legislativo.components.assinador-icp :as assinador-icp]
             [oplenario.legislativo.components.serializador-publicacao :as ser-pub]
@@ -29,8 +31,10 @@
             [oplenario.legislativo.db.votacao :as votacao]
             [oplenario.legislativo.diplomat.producers :as producers]
             [oplenario.legislativo.gerador-publicacao :as ger-pub]
-            [oplenario.legislativo.logic :as logic])
+            [oplenario.legislativo.logic :as logic]
+            [oplenario.legislativo.logic.notificacao :as logic-notif])
   (:import (java.security MessageDigest)
+           (java.util UUID)
            (org.postgresql.util PSQLException)))
 
 (defprotocol RepoLegislativo
@@ -724,3 +728,54 @@
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."
   []
   (->RepoLegislativoPg nil nil))
+
+;; ---------- Onda E fatia 1 — 2o consumidor do proprio `norma.publicada`: notifica o autor vereador ----------
+
+(defn notificar-autor-da-norma!
+  "FABRICA do handler do 2o consumidor de `legislativo` (Onda E fatia 1): recebe o resolvedor injetado
+  pelo HOST e devolve `(fn [tx evento])` registravel no bus.
+
+  `resolver-identidade-do-vereador` = (fn [tx ente-id vereador-id] -> identidade-id | nil). E' o INVERSO do
+  `resolver-vereador` de /meu/painel (§22.5.3, exceção nomeada): `legislativo` NUNCA importa `cadastros`;
+  o host fecha sobre o repo de cadastros e injeta a fn. Recebe a `tx` DO RELAY de proposito — assim a
+  resolucao roda na MESMA transacao/tenant, sem abrir conexao nova nem depender de um datasource ja'
+  iniciado no momento em que o registro de consumidores e' montado (sistema.clj monta o registro ANTES do
+  start dos components).
+
+  FLUXO: proposicao_id -> autor_id (same-schema, autor_tipo='vereador') -> identidade -> emite
+  `notificacao.requisitada` canal 'in_app'. Sem destinatario resolvivel (autor nao e' vereador, ou vereador
+  sem identidade vinculada): NAO notifica, log/debug, segue — silencio honesto, nao erro (spec §4.1).
+
+  NUNCA lanca (o relay e' COMPARTILHADO — mesmo racional de transparencia/fan-out-notificacao!): try/catch
+  Throwable envolve TUDO, inclusive `set-tenant!` (que lanca em ente-id nil, e shared.outbox.ente_id e'
+  NULLABLE) e a validacao Malli do construtor do evento. `Throwable`, nao `Exception`: as `:pre` de db/
+  lancam AssertionError."
+  [resolver-identidade-do-vereador]
+  (fn [tx {:keys [ente-id payload]}]
+    (try
+      (tenancy/set-tenant! tx ente-id)
+      (let [pid (UUID/fromString (:proposicao-id payload))
+            nid (UUID/fromString (:norma-id payload))]
+        (if-let [vereador-id (proposicao/autor-vereador-da-proposicao tx ente-id pid)]
+          (if-let [identidade-id (resolver-identidade-do-vereador tx ente-id vereador-id)]
+            (let [{:keys [assunto corpo]} (logic-notif/renderizar payload)
+                  dest (str identidade-id)
+                  categoria "norma_publicada"]
+              (producers/emitir-notificacao-requisitada! (outbox/bus) tx ente-id
+                {:destinatario-identidade-id dest
+                 :canal "in_app"
+                 :consent-base "vinculo"
+                 :idempotency-key (logic-notif/chave-idempotencia nid categoria dest)
+                 :categoria categoria
+                 :assunto assunto
+                 :corpo corpo
+                 :objeto-tipo "proposicao"
+                 :objeto-id (str pid)}))
+            (log/debug "legislativo: autor vereador sem identidade vinculada — norma publicada nao notificada"
+                       {:ente-id ente-id :vereador-id vereador-id}))
+          (log/debug "legislativo: norma publicada de autor nao-vereador — sem dono nominal a notificar"
+                     {:ente-id ente-id :proposicao-id pid})))
+      (catch Throwable e
+        (log/warn e "legislativo: notificacao do autor tolerada (payload malformado ou falha de leitura)"
+                  {:ente-id ente-id})
+        nil))))

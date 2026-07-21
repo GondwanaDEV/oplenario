@@ -6,6 +6,7 @@
   (:require [oplenario.kernel.eventos :as eventos]
             [oplenario.legislativo.events.artefato-publicacao :as ev-artefato]
             [oplenario.legislativo.events.norma :as ev-norma]
+            [oplenario.legislativo.events.notificacao :as ev-notificacao]
             [oplenario.legislativo.events.parecer :as ev-parecer]
             [oplenario.legislativo.events.proposicao :as ev]
             [oplenario.legislativo.events.votacao :as ev-votacao]))
@@ -52,6 +53,14 @@
   (uniao discriminada: nominal carrega vereador/voto; secreta e' tick — sigilo §22.6)."
   [bus tx ente-id payload]
   (eventos/emitir! bus tx (ev-votacao/voto-registrado ente-id payload)))
+
+(defn emitir-notificacao-requisitada!
+  "Emite `notificacao.requisitada` no `bus` DENTRO da `tx` corrente (Onda E fatia 1). Aqui a `tx` e' a do
+  RELAY (event-chaining, §22.9 E2: a linha nova commita junto com o dedup do evento-gatilho e o relay a
+  drena na iteracao seguinte) — mesma mecanica do fan-out de transparencia. `payload` casa
+  events.notificacao/RequisitadaPayload."
+  [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-notificacao/requisitada ente-id payload)))
 
 (defn emitir-votacao-encerrada!
   "Emite `votacao.encerrada` no `bus` DENTRO da `tx` corrente. `payload` casa events.votacao/EncerradaPayload."

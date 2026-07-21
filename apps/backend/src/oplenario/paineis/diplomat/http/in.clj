@@ -7,8 +7,10 @@
   (:require [clojure.tools.logging :as log]
             [oplenario.http :as http]
             [oplenario.interceptors :as it]
+            [oplenario.paineis.adapters.in.notificacao :as adapters-in-notificacao]
             [oplenario.paineis.adapters.out.mesa :as adapters-out-mesa]
             [oplenario.paineis.adapters.out.minha-sessao-atual :as adapters-out-minha-sessao-atual]
+            [oplenario.paineis.adapters.out.notificacao :as adapters-out-notificacao]
             [oplenario.paineis.adapters.out.pendencia :as adapters-out-pendencia]
             [oplenario.paineis.adapters.out.sli-sessao :as adapters-out-sli-sessao]
             [oplenario.paineis.adapters.out.tramitacao :as adapters-out-tramitacao]
@@ -97,6 +99,27 @@
       (http/json-resposta 200 (adapters-out-mesa/mesa->wire rollups compliance-card
                                                             presenca-card esic-card relatores-card)))))
 
+(defn- minhas-notificacoes-handler
+  "GET /meu/notificacoes (Onda E fatia 1). Gate `auth` APENAS, SEM papel: a notificacao e' endereçada a uma
+  IDENTIDADE, nao a um cargo — exigir 'vereador' deixaria de fora servidores que tambem terao inbox. A
+  authz fina e' de POSSE e mora no WHERE do SQL, junto do tenant."
+  [repo-paineis]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out-notificacao/minhas-notificacoes->wire
+                             (controllers/minhas-notificacoes repo-paineis (:ator req))))))
+
+(defn- marcar-lida-handler
+  "POST /meu/notificacoes/:id/lida (Onda E fatia 1). Gate `auth` apenas (mesmo racional do GET). O
+  destinatario e' SEMPRE o do ator; o `:id` do path e' o UNICO dado do cliente. Id malformado, inexistente
+  OU de outro destinatario -> 404, sem distincao (nunca 200 silencioso, nunca vaza existencia)."
+  [repo-paineis]
+  (fn [req]
+    (if-let [id (adapters-in-notificacao/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [recibo (controllers/marcar-lida repo-paineis (:ator req) id)]
+        (http/json-resposta 200 (adapters-out-notificacao/marcar-lida->wire recibo))
+        (http/json-resposta 404 {:erro "notificacao nao encontrada"}))
+      (http/json-resposta 404 {:erro "notificacao nao encontrada"}))))
+
 (defn rotas
   "Fragmento de rotas do modulo paineis (table syntax Pedestal). Recebe o interceptor `auth` (compartilhado)
   + o `repo-paineis` (Repo-Component) + as 4 fns cross-modulo injetadas pelo host (`painel-compliance`,
@@ -104,8 +127,9 @@
   dashboard da Mesa compor sem cruzar modulo) e devolve as rotas-dado. `oplenario.rotas` funde este fragmento
   ao conjunto. Authz GROSSA (papel 'secretario' — mesmo papel interno de compliance/sessoes/legislativo/
   participacao) — os paineis sao tenant-wide read-models, sem recurso unico p/ camada fina. `GET
-  /meu/sessao-atual` (Onda C3) e' a UNICA excecao — gate 'vereador' (o cockpit do celular descobre a
-  sessao viva sem o papel secretario), reusando a MESMA leitura de `sli-sessoes`."
+  /meu/sessao-atual` (Onda C3) e' outra excecao — gate 'vereador' (o cockpit do celular descobre a
+  sessao viva sem o papel secretario), reusando a MESMA leitura de `sli-sessoes`. `GET /meu/notificacoes`
+  (Onda E) é a única rota do módulo SEM gate de papel — só `auth`; ver a docstring do handler."
   [{:keys [auth repo-paineis painel-compliance presenca-resumo esic-cumprimento relatores-pendentes]}]
   (let [papel (it/exige-papel "secretario")
         papel-vereador (it/exige-papel "vereador")]
@@ -119,4 +143,8 @@
                                                        presenca-resumo esic-cumprimento relatores-pendentes)]
        :route-name :paineis/mesa]
       ["/meu/sessao-atual" :get [auth papel-vereador (minha-sessao-atual-handler repo-paineis)]
-       :route-name :paineis/minha-sessao-atual]}))
+       :route-name :paineis/minha-sessao-atual]
+      ["/meu/notificacoes" :get [auth (minhas-notificacoes-handler repo-paineis)]
+       :route-name :paineis/minhas-notificacoes]
+      ["/meu/notificacoes/:id/lida" :post [auth (marcar-lida-handler repo-paineis)]
+       :route-name :paineis/marcar-notificacao-lida]}))

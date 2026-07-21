@@ -47,6 +47,19 @@
      (sql/format {:select colunas :from [:legislativo.proposicoes]
                   :where [:and [:= :ente_id ente-id] [:= :id id]]}))))
 
+(defn autor-vereador-da-proposicao
+  "Onda E fatia 1: o `autor_id` da proposicao QUANDO o autor e' vereador — a resolucao 'dono nominal' da
+  notificacao interna. SAME-SCHEMA (nunca cruza modulo, §22.10); leitura ESTREITA de proposito (so' o id;
+  nada de ementa/jsonb — quem renderiza e' a norma). Autor de outro tipo (executivo/comissao/mesa) ou
+  proposicao inexistente -> nil, e o consumer simplesmente nao notifica (silencio honesto)."
+  [tx ente-id proposicao-id]
+  (some-> (jdbc/execute-one! tx
+            (sql/format {:select [:autor_id] :from [:legislativo.proposicoes]
+                         :where [:and [:= :ente_id ente-id] [:= :id proposicao-id]
+                                 [:= :autor_tipo [:inline "vereador"]]
+                                 [:is-not :autor_id nil]]}))
+          :proposicoes/autor_id))
+
 (defn listar-por-estado [tx ente-id estado]
   (mapv linha->proposicao
         (jdbc/execute! tx
