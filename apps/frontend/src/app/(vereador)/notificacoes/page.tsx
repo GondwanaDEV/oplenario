@@ -69,7 +69,12 @@ export default function PaginaNotificacoes() {
         o ato é concluído. “Lido” mora só aqui.
       </p>
 
-      {erroMarcacao && <p className="erro-inline">{erroMarcacao}</p>}
+      {/* role="status": sem região viva a falha do POST só existiria em pixel — ver page.test.tsx. */}
+      {erroMarcacao && (
+        <p role="status" className="erro-inline">
+          {erroMarcacao}
+        </p>
+      )}
 
       {vista.vazia && <p className="vazio">Nenhuma notificação por enquanto.</p>}
 

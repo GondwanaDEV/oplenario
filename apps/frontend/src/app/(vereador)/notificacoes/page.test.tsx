@@ -75,4 +75,22 @@ describe("PaginaNotificacoes", () => {
     );
     await waitFor(() => expect(chamadas.filter((c) => c.startsWith("GET")).length).toBeGreaterThan(1));
   });
+
+  // Regressão da revisão adversarial (achado único sobrevivente): a falha do POST era visível na tela
+  // mas MUDA para leitor de tela — parágrafo comum, sem região viva, e o foco fica no botão. WCAG 4.1.3
+  // (Status Messages, AA) — que o "AA nos 2 temas" já medido NÃO cobre: aquilo era contraste.
+  // `role="status"` é a convenção das duas telas irmãs deste shell com a mesma classe
+  // (vereador/page.tsx, parecer/[id]/assinar/page.tsx).
+  it("falha ao marcar como lida é anunciada a leitor de tela (região viva, não só pixel)", async () => {
+    global.fetch = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === "POST") return { ok: false, status: 500 } as Response;
+      return { ok: true, json: async () => umaNaoLida } as Response;
+    }) as unknown as typeof fetch;
+    render(<PaginaNotificacoes />);
+    await waitFor(() => expect(screen.getByText(/virou lei/)).toBeDefined());
+    screen.getByRole("button", { name: /Marcar como lida/ }).click();
+    const aviso = await waitFor(() => screen.getByRole("status"));
+    expect(aviso.className).toContain("erro-inline");
+    expect(aviso.textContent).toBeTruthy();
+  });
 });
