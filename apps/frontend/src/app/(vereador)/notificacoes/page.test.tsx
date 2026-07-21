@@ -36,7 +36,8 @@ describe("PaginaNotificacoes", () => {
     await waitFor(() => expect(screen.getByText(/virou lei/)).toBeDefined());
     expect(screen.getByRole("heading", { level: 2, name: "Hoje" })).toBeDefined();
     expect(screen.getByLabelText("1 não lida")).toBeDefined();
-    expect(screen.getByRole("link", { name: /Abrir a ficha/ }).getAttribute("href")).toContain("/ficha-materia/p1");
+    // Sem destino acessível ao vereador, não se renderiza âncora nenhuma (ver notificacoes-vista.test.ts).
+    expect(screen.queryByRole("link", { name: /Abrir a ficha/ })).toBeNull();
   });
 
   it("não-lida é sinalizada por mais que cor (ponto com rótulo acessível)", async () => {

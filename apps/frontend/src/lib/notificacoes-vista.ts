@@ -50,9 +50,19 @@ const ORDEM: GrupoTemporal[] = ["hoje", "semana", "antes"];
 const MS_HORA = 3_600_000;
 const MS_DIA = 24 * MS_HORA;
 
-/** Rota da tela de destino por tipo de objeto. Tipo desconhecido -> "" (sem link, nunca link quebrado). */
-function hrefDoObjeto(objetoTipo: string, objetoId: string): string {
-  if (objetoTipo === "proposicao") return `/ficha-materia/${objetoId}`;
+/**
+ * Rota da tela de destino por tipo de objeto, DENTRO do shell do vereador.
+ * Sem destino acessível -> "" (sem link, nunca link quebrado).
+ *
+ * Hoje nenhum tipo tem destino: `proposicao` apontava para /ficha-materia/:id, que é tela do shell
+ * do SERVIDOR e cujo endpoint (GET /legislativo/proposicoes/:id/ficha — "leitura interna, servidor")
+ * responde 403 ao papel `vereador`. Provado ao vivo na Task 12. Uma âncora que erra é pior que a
+ * ausência dela, então a inbox informa sem prometer navegação que não existe.
+ *
+ * CARRY: quando a fatia "ficha da minha matéria no shell do vereador" existir, `proposicao` volta a
+ * ter destino aqui — é o único ponto a mudar.
+ */
+function hrefDoObjeto(): string {
   return "";
 }
 
@@ -87,7 +97,7 @@ function paraVista(n: NotificacaoOut, agoraIso: string): NotificacaoVista {
     objetoId: n.objetoId,
     criadoEm: n.criadoEm,
     lida: n.lidaEm != null,
-    href: hrefDoObjeto(n.objetoTipo, n.objetoId),
+    href: hrefDoObjeto(),
     quando: quandoRelativo(n.criadoEm, agoraIso),
   };
 }

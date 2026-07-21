@@ -69,9 +69,13 @@ describe("derivarInbox", () => {
     expect(v.naoLidas).toBe(1);
   });
 
-  it("href aponta para a ficha da matéria (destino do clique)", () => {
+  // Carry declarado: /ficha-materia é tela do shell do SERVIDOR e o endpoint por trás
+  // (GET /legislativo/proposicoes/:id/ficha) nega 403 ao papel `vereador` — provado ao vivo
+  // na Task 12. Enquanto não existir a ficha no shell do vereador, proposição não tem
+  // destino acessível: href "" (sem link) em vez de uma âncora que erra na cara do usuário.
+  it("proposição ainda não tem destino acessível ao vereador (href vazio, não um 403)", () => {
     const v = derivarInbox(dados([n("a", "2026-07-19T09:00:00Z")]), AGORA);
-    expect(v.grupos[0].itens[0].href).toBe("/ficha-materia/pid-a");
+    expect(v.grupos[0].itens[0].href).toBe("");
   });
 
   it("objeto de tipo desconhecido não gera link quebrado", () => {
