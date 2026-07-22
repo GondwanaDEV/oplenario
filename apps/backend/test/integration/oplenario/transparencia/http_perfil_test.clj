@@ -30,9 +30,9 @@
             [oplenario.migracao :as migracao]
             [oplenario.motor.components.registro-fatos :as rf]
             [oplenario.rotas :as rotas]
-            [oplenario.sessoes.logic :as sessoes-logic]
             [oplenario.transparencia.components.repositorio :as transparencia-repo]
-            [oplenario.transparencia.diplomat.consumers :as consumers]))
+            [oplenario.transparencia.diplomat.consumers :as consumers]
+            [oplenario.transparencia.suporte-presenca :as sp]))
 
 (def ^:dynamic *ds* nil)
 (def ^:dynamic *repo-legislativo* nil)
@@ -117,15 +117,10 @@
   'presente'/'presencial'/'mesa', que produtor NENHUM emite, e a suite ficava verde sobre um pipeline
   ficticio — o mecanismo exato que manteve vivo o numerador morto `tipo = 'presente'`."
   [ente sessao vereador tipo]
-  (let [payload {:sessao-id (str sessao) :vereador-id (str vereador) :tipo tipo
-                 :modalidade "plenario" :fonte "manual_secretaria"
-                 :ocorrido-em "2026-05-18T14:00:00Z"}]
-    (doseq [[campo valor validos] [["tipo" tipo sessoes-logic/tipos-evento-presenca]
-                                   ["modalidade" (:modalidade payload) sessoes-logic/modalidades-presenca]
-                                   ["fonte" (:fonte payload) sessoes-logic/fontes-presenca]]]
-      (when-not (contains? validos valor)
-        (throw (ex-info (str "fixture de presenca fora do vocabulario de sessoes: " campo)
-                        {:campo campo :valor valor :validos validos}))))
+  (let [payload (sp/validar-vocabulario!
+                 {:sessao-id (str sessao) :vereador-id (str vereador) :tipo tipo
+                  :modalidade "plenario" :fonte "manual_secretaria"
+                  :ocorrido-em "2026-05-18T14:00:00Z"})]
     (tenancy/com-tenant* *ds* ente
       (fn [tx]
         (transparencia-repo/projetar-evento! tx
@@ -347,6 +342,15 @@
         (is (= 3 (:sessoes-com-chamada presenca))
             "denominador: todas as sessoes do ENTE que tiveram chamada — trocar os dois campos inverteria
              a fracao publicada ('presente em 3 de 1 sessoes')")))))
+
+(deftest fixture-de-presenca-desta-borda-recusa-vocabulario-fora-de-sessoes-logic
+  ;; A trava deste arquivo era uma COPIA inline do guard de perfil_test (drift garantido) e nao tinha
+  ;; assercao nenhuma cabeando-a a' fixture: apagar o `doseq` deixava a suite verde. Agora e' a MESMA fn de
+  ;; `suporte-presenca` dos tres ns, e este caso prova que `presenca!` a chama (o guard lanca ANTES de
+  ;; `com-tenant*` — nao toca o banco).
+  (testing "`presenca!` com o vocabulario morto LANCA em vez de semear pipeline ficticio"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (presenca! (random-uuid) (random-uuid) (random-uuid) "presente")))))
 
 ;; ---------- 5. truncamento declarado ----------
 

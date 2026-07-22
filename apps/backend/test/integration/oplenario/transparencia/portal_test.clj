@@ -29,7 +29,8 @@
             [oplenario.sessoes.events.presenca :as ev-presenca]
             [oplenario.transparencia.components.repositorio :as transparencia-repo]
             [oplenario.transparencia.db.parlamentar :as db-parlamentar]
-            [oplenario.transparencia.diplomat.consumers :as consumers])
+            [oplenario.transparencia.diplomat.consumers :as consumers]
+            [oplenario.transparencia.suporte-presenca :as sp])
   (:import (java.time LocalDate)))
 
 (def ^:dynamic *ds* nil)
@@ -426,9 +427,10 @@
                                     [sessao-c outro    "saida"]]]
           (transparencia-repo/projetar-evento! tx
             {:tipo "presenca.registrada" :ente-id ente
-             :payload {:sessao-id (str sessao) :vereador-id (str quem) :tipo tipo
-                       :modalidade "plenario" :fonte "manual_secretaria"
-                       :ocorrido-em "2026-05-18T14:00:00Z"}}))
+             :payload (sp/validar-vocabulario!
+                       {:sessao-id (str sessao) :vereador-id (str quem) :tipo tipo
+                        :modalidade "plenario" :fonte "manual_secretaria"
+                        :ocorrido-em "2026-05-18T14:00:00Z"})}))
         (let [resumo (db-parlamentar/resumo-presenca tx ente vereador)]
           (is (= 1 (:sessoes-presente resumo))
               "numerador: so' a sessao em que ESTE vereador tem linha (ter linha == compareceu)")
@@ -445,8 +447,9 @@
       (fn [tx]
         (eventos/emitir! (outbox/bus) tx
           (ev-presenca/registrada ente
-            {:sessao-id sessao :vereador-id vereador :tipo "entrada" :modalidade "plenario"
-             :fonte "manual_secretaria" :ocorrido-em "2026-05-18T14:00:00Z"}))))
+            (sp/validar-vocabulario!
+             {:sessao-id sessao :vereador-id vereador :tipo "entrada" :modalidade "plenario"
+              :fonte "manual_secretaria" :ocorrido-em "2026-05-18T14:00:00Z"})))))
     (drenar!)
     (let [resumo (tenancy/com-tenant* *ds* ente (fn [tx] (db-parlamentar/resumo-presenca tx ente vereador)))]
       (is (= 1 (:sessoes-presente resumo))

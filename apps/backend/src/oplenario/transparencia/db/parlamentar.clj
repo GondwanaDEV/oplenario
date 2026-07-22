@@ -90,16 +90,38 @@
   diferente (§22.10 proibe `transparencia` de importar `cadastros`).
 
   NUMERADOR = as sessoes DESSE MESMO conjunto em que ELE tem linha em `presenca_parlamentar`, via
-  `FILTER (WHERE vereador_id = ?)` — os dois agregados sobre o MESMO argumento `sessao_id`. TER LINHA ==
-  COMPARECEU, e a AUSENCIA DE FILTRO POR `tipo` E' DELIBERADA: ausencia nunca e' gravada ('sem evento ate' la'
-  = ausente', `sessoes/relacoes/presenca`), nao existe chamada em lote, e os QUATRO tipos do vocabulario real
-  (entrada|saida|retorno|mudanca_modalidade, `sessoes/logic` + CHECK da mig 0029) implicam que a pessoa foi
-  registrada naquela sessao — inclusive 'saida', que so' existe depois de uma entrada. Ate' a Onda E/fatia 1
-  o predicado aqui era `tipo = 'presente'`, valor que PRODUTOR NENHUM emite: o numerador valia ZERO para todo
-  parlamentar em producao, com o denominador cheio. Nao reintroduzir o filtro sem antes derrubar
+  `FILTER (WHERE vereador_id = ?)`. TER LINHA == COMPARECEU, e a AUSENCIA DE FILTRO POR `tipo` E' DELIBERADA:
+  ausencia nunca e' gravada ('sem evento ate' la' = ausente', `sessoes/relacoes/presenca`), nao existe chamada
+  em lote, e os QUATRO tipos do vocabulario real (entrada|saida|retorno|mudanca_modalidade, `sessoes/logic` +
+  CHECK da mig 0029) sao todos registro de que a pessoa esteve na sessao. Ate' a Onda E/fatia 1 o predicado
+  aqui era `tipo = 'presente'`, valor que PRODUTOR NENHUM emite: o numerador valia ZERO para todo parlamentar
+  em producao, com o denominador cheio. Nao reintroduzir o filtro sem antes derrubar
   `numerador-conta-sessao-cujo-unico-evento-projetado-e-saida` — e' um numero publico e nominal.
 
-  Numerador <= denominador por construcao (mesma tabela, mesmo argumento, predicado so' restringe)."
+  O QUE O PRODUTOR **NAO** GARANTE (revisao da fatia 1 — a versao anterior desta docstring afirmava que
+  'saida so' existe depois de uma entrada', e isso e' FALSO): `sessoes/db/presenca/registrar-evento!` valida
+  SO' os enums de tipo/modalidade/fonte — nao ha check de evento anterior, e a borda da Mesa aceita `tipo` E
+  `vereador-id` do CORPO do cliente. Uma `saida` lancada no nome errado cria linha e conta comparecimento; e
+  `presenca_evento` e' append-only SEM caminho de anulacao/retificacao e sem ferramenta de re-projecao no
+  repo, entao a linha errada e' PERMANENTE. A escolha 'ter linha == compareceu' aceita esse risco de proposito:
+  filtrar por `tipo` nao protegeria contra o caso realmente frequente (misatribuicao de `entrada`, que passa
+  por qualquer filtro) e custaria o bug que acabou de ser corrigido.
+
+  Numerador <= denominador por construcao (mesma tabela, mesmo argumento, predicado so' restringe).
+
+  CUSTO — MEDIDO, nao estimado (42.000 linhas sinteticas = 2.000 sessoes x 21 vereadores, apos
+  `VACUUM ANALYZE`, RLS ativa, papel `oplenario_app`): `Aggregate <- Sort <- Seq Scan`, ~605 buffers,
+  ~12 ms. O plano ANTIGO (`COUNT(DISTINCT CASE ...)`) da' o MESMO shape e o MESMO custo — UM unico no `Sort`
+  nos dois, e a unica diferenca observavel e' a largura da linha ordenada (40 -> 32 bytes, por `tipo` ter
+  saido da projecao). Ou seja: esta fatia foi CORRECAO, nao otimizacao; o carry de custo do I-5 segue ABERTO
+  e so' fecha na fatia 6, reduzindo a CARDINALIDADE ordenada (denominador sobre `sessao_com_chamada`, ~1/21
+  do volume). Corolarios que valem escrever para nao serem re-descobertos: (a) o `Sort` do `COUNT(DISTINCT)`
+  e' interno ao agregado e NUNCA aparece duplicado no `EXPLAIN`, entao 'plano com um unico Sort' e' um gate
+  VAZIO — medir `Buffers` e `Execution Time`; (b) os dois agregados NAO compartilham estado de transicao,
+  porque `find_compatible_pertrans` exige `aggfilter` igual e um deles tem `FILTER` e o outro nao;
+  (c) `count(*) FILTER` no numerador seria equivalente (a PK `(ente_id, sessao_id, vereador_id)` ja' garante
+  no maximo uma linha por sessao para ESTE vereador) e medi-o dentro do ruido — mantido `DISTINCT` porque a
+  fatia 6 reescreve a query inteira e trocar agora so' adicionaria risco sem ganho."
   [tx ente-id vereador-id]
   {:pre [(some? ente-id) (some? vereador-id)]}
   (comum/linha->kebab

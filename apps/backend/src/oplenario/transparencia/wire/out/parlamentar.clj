@@ -68,7 +68,16 @@
   "Os DOIS numeros, nunca um percentual. Um '100%' sobre 1 sessao mente por omissao — a UI so' pode montar a
   fracao se tiver o denominador. CARRY conhecido (I-5 da Task 2): o denominador conta as sessoes do ENTE, nao
   as do MANDATO deste vereador, logo suplente/recem-empossado recebe uma fracao injusta. O numero sai daqui
-  cru; a decisao de EXIBI-LO e' da tela (Task 5), que esta' bloqueada ate' o I-5 fechar."
+  cru; a decisao de EXIBI-LO e' da tela (Task 5), que esta' bloqueada ate' o I-5 fechar.
+
+  O QUE `:sessoes-presente` SIGNIFICA (mudou na fatia 1 do I-5 e o NOME do campo carrega a conotacao antiga):
+  = COMPARECEU, isto e', TEM REGISTRO DE PRESENCA naquela sessao — quem assinou e saiu no primeiro item da
+  pauta conta. NAO e' 'esteve presente o tempo todo': o numerador nao filtra `tipo`, de proposito
+  (`db/parlamentar/resumo-presenca` explica por que). E `:sessoes-com-chamada` sao as sessoes com registro de
+  presenca de ALGUEM — nao 'sessoes realizadas': sessao sem nenhum check-in nao existe no read-model e some
+  dos DOIS lados da fracao. Por isso o rotulo da tela DEVE dizer 'compareceu a X das Y sessoes com registro
+  de presenca', e nunca 'esteve presente em X de Y sessoes realizadas' — a pagina e' publica e NOMINAL, e o
+  rotulo errado afirma sobre uma pessoa algo que o numero nao sustenta."
   [:map {:closed true}
    [:sessoes-presente :int]
    [:sessoes-com-chamada :int]])
