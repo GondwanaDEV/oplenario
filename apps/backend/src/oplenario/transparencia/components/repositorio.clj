@@ -21,6 +21,7 @@
   (:require [clojure.tools.logging :as log]
             [oplenario.kernel.eventos :as eventos]
             [oplenario.kernel.outbox :as outbox]
+            [oplenario.kernel.tempo :as tempo]
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.transparencia.db.acompanhamento :as db-acompanhamento]
             [oplenario.transparencia.db.artefato-publicacao :as db-artefato]
@@ -78,7 +79,9 @@
 (defn projetar-evento!
   "Dispatch por tipo de evento -> a projecao de dominio, DENTRO da `tx` corrente (a do relay). Seta o GUC de
   tenant (sem trocar de role — ver docstring do ns) e escreve em
-  transparencia.materia/norma/artefato_publicacao/voto_parlamentar/presenca_parlamentar.
+  transparencia.materia/norma/artefato_publicacao/voto_parlamentar/presenca_parlamentar/sessao_com_chamada.
+  UM evento pode virar MAIS DE UM statement: `presenca.registrada` escreve DOIS (presenca + companheira),
+  ambos na mesma tx do relay.
   `payload` ja chegou com chaves KEYWORD kebab (outbox/jsonb-> usa keyword-keys-object-mapper), casando 1:1 com
   o que os producers de legislativo/sessoes construiram (events/{proposicao,norma,artefato-publicacao,
   votacao,presenca}.clj) — EXCETO os campos :uuid e os de tempo (:publicado-em/:criado-em/:ocorrido-em), que
@@ -132,14 +135,41 @@
         (log/warn "transparencia: voto.registrado sem :ocorrido-em valido (evento legado?) — nao projetado"
                   {:ente-id ente-id :votacao-id (:votacao-id payload)})))
 
+    ;; Carry I-5 fatia 5: DOIS statements na MESMA tx do relay — o estado por (sessao, vereador) e a
+    ;; COMPANHEIRA `sessao_com_chamada` (uma linha por SESSAO, com a data civil do PRIMEIRO evento dela), que
+    ;; e' o denominador que a fatia 6 vai recortar pela janela de exercicio do mandato. As duas commitam
+    ;; juntas ou nenhuma: um erro de DB no segundo statement aborta a tx inteira, o relay faz rollback e o
+    ;; evento re-drena — nao existe meia-projecao committada.
+    ;;
+    ;; O FUSO APARECE UMA VEZ SO', AQUI: `hoje-de` sobre o MESMO Instant ja' parseado (nao uma segunda
+    ;; leitura de relogio, nao um `AT TIME ZONE` no SQL) — e' o que mata a classe de bug de meia-noite na
+    ;; fronteira da janela. `zona-civil-padrao` e' global e precisa virar atributo do ente antes do primeiro
+    ;; cliente fora do CE (carry escrito na docstring da constante).
+    ;;
+    ;; TOLERANCIA (`instant-tolerante`, mesmo racional do C-1 de voto.registrado logo acima): ate' esta
+    ;; fatia o ramo fazia `Instant/parse` CRU e LANCAVA num payload sem `:ocorrido-em` ou com instante
+    ;; malformado — e um throw aqui trava a cabeca da fila do relay COMPARTILHADO por TODOS os modulos, para
+    ;; sempre (achado HIGH do architect no F6c). O produtor real e' fail-closed (`RegistradaPayload` exige a
+    ;; chave), entao o caminho vivo nao muda; quem chama `projetar-evento!` direto (teste, redrive de payload
+    ;; legado escrito a mao) passa a ser TOLERADO em vez de envenenar o bus. RECORTE HONESTO: a tolerancia
+    ;; cobre SO' o instante — `UUID/fromString` em `:sessao-id`/`:vereador-id` continua lancando com um id
+    ;; malformado, exatamente como em todos os outros ramos deste `case`; nao foi alargado nesta fatia.
     "presenca.registrada"
-    (db-parlamentar/registrar-presenca! tx
-      {:ente-id ente-id
-       :sessao-id (UUID/fromString (:sessao-id payload))
-       :vereador-id (UUID/fromString (:vereador-id payload))
-       :tipo (:tipo payload)
-       :modalidade (:modalidade payload)
-       :ocorrido-em (Instant/parse (:ocorrido-em payload))})))
+    (if-let [ocorrido-em (instant-tolerante (:ocorrido-em payload))]
+      (let [sessao-id (UUID/fromString (:sessao-id payload))]
+        (db-parlamentar/registrar-presenca! tx
+          {:ente-id ente-id
+           :sessao-id sessao-id
+           :vereador-id (UUID/fromString (:vereador-id payload))
+           :tipo (:tipo payload)
+           :modalidade (:modalidade payload)
+           :ocorrido-em ocorrido-em})
+        (db-parlamentar/registrar-sessao-com-chamada! tx
+          {:ente-id ente-id
+           :sessao-id sessao-id
+           :data (tempo/hoje-de ocorrido-em tempo/zona-civil-padrao)}))
+      (log/warn "transparencia: presenca.registrada sem :ocorrido-em valido — nao projetada"
+                {:ente-id ente-id :sessao-id (:sessao-id payload)}))))
 
 (defn fan-out-notificacao!
   "Consumer do FAN-OUT (F7 E2) — SEGUNDO consumidor de `proposicao.transicionou` (o 1o, projetar-evento!,

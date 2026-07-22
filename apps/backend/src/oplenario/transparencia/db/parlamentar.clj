@@ -1,8 +1,10 @@
 (ns oplenario.transparencia.db.parlamentar
   "Persistencia das projecoes de ATUACAO PARLAMENTAR do portal (Onda E fatia 2, mig 0064) — voto PUBLICO e
-  presenca. Funcoes sobre a `tx` corrente (FORCE RLS isola). ESCRITA chamada pelo consumer dentro da tx do
-  relay; LEITURA pelo Repo-Component. Voto SECRETO nunca chega aqui: o payload do evento (uniao discriminada
-  por :modalidade) nem carrega identidade no ramo secreto."
+  presenca — mais a companheira `sessao_com_chamada` (mig 0067, carry I-5 fatia 5), que e' derivada da MESMA
+  torrente de eventos de presenca e existe so' para reduzir a cardinalidade do denominador. Funcoes sobre a
+  `tx` corrente (FORCE RLS isola). ESCRITA chamada pelo consumer dentro da tx do relay; LEITURA pelo
+  Repo-Component. Voto SECRETO nunca chega aqui: o payload do evento (uniao discriminada por :modalidade)
+  nem carrega identidade no ramo secreto."
   (:require [honey.sql :as sql]
             [next.jdbc :as jdbc]
             [oplenario.kernel.db-util :as comum]))
@@ -39,6 +41,44 @@
                  :do-update-set {:fields {:tipo :excluded.tipo :modalidade :excluded.modalidade
                                           :ocorrido_em :excluded.ocorrido_em}
                                  :where [:< :transparencia.presenca_parlamentar.ocorrido_em :excluded.ocorrido_em]}})))
+
+(defn registrar-sessao-com-chamada!
+  "Projeta a COMPANHEIRA `transparencia.sessao_com_chamada` (mig 0067): UMA linha por SESSAO que teve ao menos
+  um registro de presenca de ALGUEM, com a DATA CIVIL dela. Chamada pelo consumer de `presenca.registrada`,
+  na MESMA tx do relay em que `registrar-presenca!` roda — as duas escritas commitam juntas ou nenhuma.
+
+  POR QUE UMA SEGUNDA TABELA. E' a peca que a fatia 6 do carry I-5 gasta: o denominador do numero-card sai de
+  `COUNT(DISTINCT sessao_id)` sobre `presenca_parlamentar` (uma linha por sessao POR VEREADOR, ~21x o volume)
+  para um `count(*)` aqui, servido por range scan em `(ente_id, data)` — que e' tambem o predicado da janela
+  de exercicio do mandato. Ate' a fatia 6 esta tabela NAO TEM LEITOR: sobe primeiro de proposito, para que a
+  troca do denominador seja um commit isolado e bisectavel.
+
+  `LEAST` NO CONFLITO, e nao o gate de monotonicidade de `registrar-presenca!`: aqui o que se quer e' o
+  PRIMEIRO evento da sessao, nao o ultimo. `LEAST` e' idempotente e COMUTATIVO — a data converge para o
+  minimo independentemente da ordem em que o relay drenar os eventos, inclusive num redrive fora de ordem.
+  (O gate `WHERE ocorrido_em <` seria errado aqui: vetaria justamente o evento mais antigo, que e' o que
+  define a data.)
+
+  `data` e' derivada em CLOJURE (`tempo/hoje-de` + `tempo/zona-civil-padrao`) e chega pronta — o fuso NAO
+  aparece no SQL do consumer. O `AT TIME ZONE` que existe no backfill da migration e' o MESMO fuso, mas e'
+  codigo de uma vez so'; o caminho vivo tem um lugar so' de fuso, que e' o pre-requisito de transforma-lo em
+  atributo do ente (carry escrito).
+
+  CUSTO DE ESCRITA — MEDIDO, nao estimado (2.000 eventos = 100 sessoes x 20 vereadores, mesma tx, apos
+  aquecimento, papel oplenario_app com RLS ativa): o UPSERT de presenca custa ~0,364 ms/evento e ESTE custa
+  ~0,342 ms/evento, ou seja o consumer de `presenca.registrada` passa a custar praticamente o DOBRO
+  (+94%) por evento. E' um numero pequeno em absoluto, mas o relay e' SINGLE-FLIGHT e COMPARTILHADO por
+  todos os modulos — o preco e' pago pela fila inteira, nao so' por esta projecao. Aceito de olhos abertos:
+  a alternativa (derivar a mesma linha na LEITURA, a cada request da rota publica anonima e sem cache) e' o
+  custo que a fatia 6 existe para eliminar. O regime de escrita de presenca e' rajada curta durante a sessao
+  (~21 eventos por chamada), nao fluxo continuo."
+  [tx {:keys [ente-id sessao-id data]}]
+  {:pre [(some? ente-id) (some? sessao-id) (some? data)]}
+  (jdbc/execute-one! tx
+    (sql/format {:insert-into :transparencia.sessao_com_chamada
+                 :values [{:ente_id ente-id :sessao_id sessao-id :data data}]
+                 :on-conflict [:ente_id :sessao_id]
+                 :do-update-set {:fields {:data [:least :transparencia.sessao_com_chamada.data :excluded.data]}}})))
 
 (defn votos-do-vereador
   "Secao 'como votou': votos PUBLICOS do vereador, mais recentes primeiro (desempate por votacao_id — achado
