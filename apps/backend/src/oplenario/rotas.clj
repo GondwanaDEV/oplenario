@@ -61,12 +61,13 @@
         ;; autorizar (a RLS escopa por tenant). Os modulos chamam por esta fn, nunca importam sessoes (§22.10).
         consultar-sessao (fn [ente-id sessao-id] (repo-sessoes-comp/buscar-sessao repo-sessoes ente-id sessao-id))
         ;; FE Onda A1: membros-da-casa injetado em sessoes (presenca agregada) — mesma inversao de
-        ;; dependencia de consultar-sessao/painel-compliance; ZoneId fixo (fuso civil, mesmo racional de
-        ;; participacao/controllers.clj).
+        ;; dependencia de consultar-sessao/painel-compliance; fuso civil vindo do kernel
+        ;; (`tempo/zona-civil-padrao`, I-5 fatia 2 — antes era literal aqui), mesmo racional de
+        ;; participacao/controllers.clj.
         membros-da-casa (fn [ente-id]
                           (repo-cadastros-comp/membros-da-casa repo-cadastros ente-id
                                                                 (tempo/hoje (tempo/relogio-sistema)
-                                                                            (java.time.ZoneId/of "America/Fortaleza"))))
+                                                                            tempo/zona-civil-padrao)))
         ;; Onda B Slice 2: uf/nome-do-municipio do ente, p/ o legislativo computar a URN em protocolar! —
         ;; mesma inversao de dependencia de consultar-sessao/membros-da-casa/info-ente (§22.10).
         resolver-municipio (fn [ente-id] (repo-cadastros-comp/uf-e-municipio repo-cadastros ente-id))
@@ -119,7 +120,7 @@
             (fn [ente-id vereador-id]
               (repo-cadastros-comp/ficha-vereador repo-cadastros ente-id vereador-id
                                                   (tempo/hoje (tempo/relogio-sistema)
-                                                              (java.time.ZoneId/of "America/Fortaleza")))))
+                                                              tempo/zona-civil-padrao))))
         ;; Onda D Slice 5 Task 9: guard de SERVICO — cadastros NUNCA importa identidade (§22.10) e nao ha'
         ;; FK cross-schema em cadastros.vereador.identidade_id (so' GUARD ref). O host injeta a existencia
         ;; via o Repo-Component de identidade (`identidade-existe?`, SUPRATENANT); mesma inversao de
