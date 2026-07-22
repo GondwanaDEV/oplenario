@@ -52,6 +52,12 @@
                 *registro-fatos* reg]
         (try (t) (finally (component/stop reg) (component/stop c)))))))
 
+(def ^:private janela-larga
+  "Janela de exercicio que cobre TUDO — o 4o argumento que `resumo-presenca` passou a exigir na fatia 6 do
+  carry I-5. Este ns prova a FIACAO da projecao de presenca (evento -> read-model); o recorte por mandato e'
+  provado em `perfil_test`, que constroi a janela pela defn pura do host."
+  [{:inicio (LocalDate/of 2000 1 1) :fim nil}])
+
 (defn- drenar!
   "Drena o outbox com o registro do projetor do portal (registro fresco por chamada — stateless, so' o
   mapa {tipo [...]})."
@@ -431,11 +437,15 @@
                        {:sessao-id (str sessao) :vereador-id (str quem) :tipo tipo
                         :modalidade "plenario" :fonte "manual_secretaria"
                         :ocorrido-em "2026-05-18T14:00:00Z"})}))
-        (let [resumo (db-parlamentar/resumo-presenca tx ente vereador)]
+        ;; I-5 fatia 6: `resumo-presenca` passou a exigir a JANELA DE EXERCICIO (4o arg). Aqui ela cobre
+        ;; tudo — este ns prova a FIACAO da projecao (evento -> read-model), nao o recorte por mandato
+        ;; (esse e' `perfil_test`). Com `[]` a fn nem tocaria o banco e o teste deixaria de medir a fiacao.
+        (let [resumo (db-parlamentar/resumo-presenca tx ente vereador janela-larga)]
           (is (= 1 (:sessoes-presente resumo))
               "numerador: so' a sessao em que ESTE vereador tem linha (ter linha == compareceu)")
           (is (= 3 (:sessoes-com-chamada resumo))
-              "denominador: todas as sessoes do ENTE que tiveram chamada, independente de quem/como"))))))
+              "denominador: todas as sessoes da JANELA que tiveram chamada, independente de quem/como")
+          (is (true? (:janela-de-exercicio-conhecida resumo))))))))
 
 (deftest presenca-registrada-via-relay-real-projeta-a-presenca
   ;; M-1 (revisao Task 2): o teste-irmao acima chama projetar-evento! DIRETO — apagar "presenca.registrada"
@@ -451,7 +461,8 @@
              {:sessao-id sessao :vereador-id vereador :tipo "entrada" :modalidade "plenario"
               :fonte "manual_secretaria" :ocorrido-em "2026-05-18T14:00:00Z"})))))
     (drenar!)
-    (let [resumo (tenancy/com-tenant* *ds* ente (fn [tx] (db-parlamentar/resumo-presenca tx ente vereador)))]
+    (let [resumo (tenancy/com-tenant* *ds* ente
+                   (fn [tx] (db-parlamentar/resumo-presenca tx ente vereador janela-larga)))]
       (is (= 1 (:sessoes-presente resumo))
           "a presenca chegou via o relay REAL (tipos-consumidos + dispatch), nao so' via a fn isolada")
       (is (= 1 (:sessoes-com-chamada resumo))

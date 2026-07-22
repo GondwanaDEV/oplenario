@@ -54,3 +54,49 @@ export interface AcompanhamentoOuvidoriaOut {
   estado: "arquivada" | "em_analise" | "protocolada" | "respondida";
   diasRestantes: number | null;
 }
+
+export interface LegislaturaOut {
+  numero: number;
+  anoInicio: number;
+  anoFim: number;
+}
+
+export interface MateriaDeAutoriaOut {
+  proposicaoId: string;
+  tipo: string;
+  ano: number;
+  sequencial: number;
+  ementa: string;
+  estado: string;
+}
+
+export interface VotoPublicoOut {
+  votacaoId: string;
+  voto: string;
+  ocorridoEm: string;
+  materiaRotulo: string | null;
+  materiaEmenta: string | null;
+}
+
+export interface PresencaOut {
+  sessoesPresente: number;
+  sessoesComChamada: number;
+  janelaDeExercicioConhecida: boolean;
+}
+
+export interface PerfilVereadorOut {
+  vereadorId: string;
+  nomeParlamentar: string | null;
+  nomeCivil: string;
+  legislatura: LegislaturaOut | null;
+  cargoMesa: string | null;
+  comissoes: string[];
+  materias: MateriaDeAutoriaOut[];
+  materiasTotal: number;
+  normasDeAutoria: number;
+  votos: VotoPublicoOut[];
+  votosTotal: number;
+  presenca: PresencaOut;
+  acervoComEloDeAutoriaDesde: string;
+  presencaProjetadaDesde: string;
+}

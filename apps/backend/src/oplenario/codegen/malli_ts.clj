@@ -6,7 +6,8 @@
 
   Cobertura: :map (+opts :closed) inline OU por REFERENCIA NOMEADA (quando a forma bate igualdade
   estrutural com uma entrada do manifesto), :uuid/:string/[:re ...] -> string, :int -> number,
-  :boolean -> boolean, [:enum ...] -> uniao de literais, [:maybe X] -> X | null, [:sequential X] -> X[],
+  :boolean -> boolean, [:enum ...] -> uniao de literais, [:maybe X] -> X | null,
+  [:sequential X]/[:vector X] -> X[],
   [:or A B ...] -> uniao TS 'A | B' (cada ramo resolvido recursivamente pela mesma referencia nomeada —
   achado da review de A5+A6: os campos de degradacao por card em MesaOut sao [:or <fechado>
   CardIndisponivelOut]), [:= v] -> tipo literal TS (sentinel `{:indisponivel true}`), {:optional true} ->
@@ -42,7 +43,10 @@
         :re "string"
         :enum (ts-enum (rest forma))
         :maybe (str (ts-tipo nome-por-schema (second forma)) " | null")
-        :sequential (str (ts-tipo nome-por-schema (second forma)) "[]")
+        ;; :vector junto de :sequential (I-5 fatia 6): os wire/out do perfil publico do vereador usam
+        ;; [:vector X], que ate' aqui caia no fallback "unknown" — e o proprio gate deste ns
+        ;; (`nenhum campo caiu no fallback bare 'unknown'`) foi quem acusou, ao entrar no manifesto.
+        (:sequential :vector) (str (ts-tipo nome-por-schema (second forma)) "[]")
         :or (str/join " | " (map (partial ts-tipo nome-por-schema) (rest forma)))
         := (pr-str (second forma))                 ; [:= true] -> tipo literal TS `true`
         :fn "string"                              ; LocalDate/Instant -> ISO string

@@ -32,7 +32,8 @@
             [oplenario.rotas :as rotas]
             [oplenario.transparencia.components.repositorio :as transparencia-repo]
             [oplenario.transparencia.diplomat.consumers :as consumers]
-            [oplenario.transparencia.suporte-presenca :as sp]))
+            [oplenario.transparencia.suporte-presenca :as sp])
+  (:import (java.time LocalDate)))
 
 (def ^:dynamic *ds* nil)
 (def ^:dynamic *repo-legislativo* nil)
@@ -67,27 +68,36 @@
    :comissoes  [{:nome "Comissao de Financas" :tipo "permanente" :cargo "presidente"}
                 {:nome "Mesa Diretora" :tipo "mesa" :cargo "1o Secretario"}]})
 
+(def ^:private janela-larga
+  "Janela de exercicio que cobre tudo — o default do seam FAKE. Existe porque a fatia 6 fez a borda CONSUMIR
+  a janela: com `[]` (o que este harness devolvia ate' a fatia 5) todo caso deste ns publicaria 0/0 com
+  `:janela-de-exercicio-conhecida false`, e os asserts de presenca deixariam de medir o que medem. A
+  aritmetica da janela em si e' unit (`oplenario.rotas-janelas-test`) e integracao no controller
+  (`perfil_test`); aqui o que se prova e' que a borda REPASSA a janela e PUBLICA o sinal."
+  [{:inicio (LocalDate/of 2000 1 1) :fim nil}])
+
 (defn- seam-escopado
   "Seam FAKE do host, escopado por (ente, vereador) como o real. `cadastrados` = mapa {[ente ver] ficha}.
 
-  Devolve `{:ficha ... :janelas ...}` — a forma que a I-5 fatia 4 deu ao seam (`ficha-e-janelas-publicas`),
-  em lugar da ficha crua. `:janelas` sai `[]` aqui de proposito: a BORDA ainda nao consome a janela (o host
-  desembrulha `:ficha` ate a fatia 6 trocar o handler), e o que este ns testa e' a fusao identidade+numeros,
-  nao a aritmetica da janela — essa e' unit, em `oplenario.rotas-janelas-test`. Vereador ausente do mapa
-  continua devolvendo nil (o guard de 404 da borda)."
-  [cadastrados]
-  (fn [ente-id vereador-id]
-    (when-let [ficha (get cadastrados [ente-id vereador-id])]
-      {:ficha ficha :janelas []})))
+  Devolve `{:ficha ... :janelas ...}` — a forma que a I-5 fatia 4 deu ao seam (`ficha-e-janelas-publicas`).
+  `janelas` e' o 2o argumento OPCIONAL (default `janela-larga`): os casos de janela vazia passam `[]`.
+  Vereador ausente do mapa continua devolvendo nil (o guard de 404 da borda)."
+  ([cadastrados] (seam-escopado cadastrados janela-larga))
+  ([cadastrados janelas]
+   (fn [ente-id vereador-id]
+     (when-let [ficha (get cadastrados [ente-id vereador-id])]
+       {:ficha ficha :janelas janelas}))))
 
-(defn- service-fn [ficha-e-janelas-publicas]
-  (-> (http/servico (config/carregar)
-                    (rotas/montar {:idp (idp-dev/idp-dev)
-                                   :repo-identidade nil
-                                   :repo-transparencia *repo-transparencia*
-                                   :ficha-e-janelas-publicas ficha-e-janelas-publicas})
-                    it/globais)
-      ph/create-server ::ph/service-fn))
+(defn- service-fn
+  ([ficha-e-janelas-publicas] (service-fn ficha-e-janelas-publicas *repo-transparencia*))
+  ([ficha-e-janelas-publicas repo]
+   (-> (http/servico (config/carregar)
+                     (rotas/montar {:idp (idp-dev/idp-dev)
+                                    :repo-identidade nil
+                                    :repo-transparencia repo
+                                    :ficha-e-janelas-publicas ficha-e-janelas-publicas})
+                     it/globais)
+       ph/create-server ::ph/service-fn)))
 
 (defn- ler-json [r] (json/read-value (:body r) json/keyword-keys-object-mapper))
 
@@ -124,15 +134,16 @@
   `sessoes.logic` (o vocabulario REAL do produtor): ate' a fatia 1 do carry I-5 esta fixture semeava
   'presente'/'presencial'/'mesa', que produtor NENHUM emite, e a suite ficava verde sobre um pipeline
   ficticio — o mecanismo exato que manteve vivo o numerador morto `tipo = 'presente'`."
-  [ente sessao vereador tipo]
-  (let [payload (sp/validar-vocabulario!
-                 {:sessao-id (str sessao) :vereador-id (str vereador) :tipo tipo
-                  :modalidade "plenario" :fonte "manual_secretaria"
-                  :ocorrido-em "2026-05-18T14:00:00Z"})]
-    (tenancy/com-tenant* *ds* ente
-      (fn [tx]
-        (transparencia-repo/projetar-evento! tx
-          {:tipo "presenca.registrada" :ente-id ente :payload payload})))))
+  ([ente sessao vereador tipo] (presenca! ente sessao vereador tipo "2026-05-18T14:00:00Z"))
+  ([ente sessao vereador tipo ocorrido-em]
+   (let [payload (sp/validar-vocabulario!
+                  {:sessao-id (str sessao) :vereador-id (str vereador) :tipo tipo
+                   :modalidade "plenario" :fonte "manual_secretaria"
+                   :ocorrido-em ocorrido-em})]
+     (tenancy/com-tenant* *ds* ente
+       (fn [tx]
+         (transparencia-repo/projetar-evento! tx
+           {:tipo "presenca.registrada" :ente-id ente :payload payload}))))))
 
 (defn- projetar-norma!
   "Semeia `transparencia.norma` para uma materia ja' projetada (a promulgacao REAL exige autografo +
@@ -189,7 +200,9 @@
         (is (= 1 (:normas-de-autoria body)) "o card 'viraram lei' chega a' borda com o valor do read-model")
         (is (= [] (:votos body)))
         (is (= 0 (:votos-total body)))
-        (is (= {:sessoes-presente 0 :sessoes-com-chamada 0} (:presenca body)))
+        (is (= {:sessoes-presente 0 :sessoes-com-chamada 0 :janela-de-exercicio-conhecida true}
+               (:presenca body))
+            "0/0 COM janela conhecida = 'esta' em exercicio e ainda nao houve sessao com chamada'")
         (is (string? (:acervo-com-elo-de-autoria-desde body))
             "a data do elo de autoria acompanha a resposta (a UI declara o acervo legado sem elo)")))))
 
@@ -232,7 +245,7 @@
       (is (= 200 (:status r)))
       (is (= #{:vereador-id :nome-parlamentar :nome-civil :legislatura :cargo-mesa :comissoes
                :materias :materias-total :normas-de-autoria :votos :votos-total :presenca
-               :acervo-com-elo-de-autoria-desde}
+               :acervo-com-elo-de-autoria-desde :presenca-projetada-desde}
              (set (keys body)))
           "conjunto EXATO de chaves — nada a mais (o :closed do Malli e' o guarda em producao)")
       (is (not (contains? body :ente-id)))
@@ -240,13 +253,22 @@
 
 ;; ---------- 2. fail-closed: 404 antes de qualquer leitura de perfil ----------
 
-(deftest perfil-de-vereador-inexistente-404
-  (testing "vereador inexistente -> 404, NUNCA 200 com perfil vazio (insinuaria parlamentar sem atuacao)"
-    (let [r (GET (seam-escopado {}) (random-uuid) (random-uuid))]
+(deftest perfil-de-vereador-inexistente-continua-404-sem-ler-o-perfil
+  ;; I-5 fatia 6: o handler passou a desembrulhar `{:ficha :janelas}` e a repassar a janela ao controller.
+  ;; O guard de 404 continua sendo a EXISTENCIA DA FICHA, e SO' ela — e continua vindo ANTES de qualquer
+  ;; leitura de perfil. O Repo aqui e' um `reify` que EXPLODE em `perfil-parlamentar`: se a ordem inverter
+  ;; (ou se alguem ler o perfil "para decidir" o 404), o teste falha com a excecao em vez de 404.
+  (testing "vereador inexistente -> 404, NUNCA 200 com perfil vazio, e o read-model nem e' consultado"
+    (let [repo-que-explode #_{:clj-kondo/ignore [:missing-protocol-method]}
+                           (reify transparencia-repo/RepoTransparencia
+                             (perfil-parlamentar [_ _ _ _]
+                               (throw (ex-info "o perfil NAO pode ser lido antes do guard de 404" {}))))
+          r (pt/response-for (service-fn (seam-escopado {}) repo-que-explode) :get
+                             (str "/portal/casa/" (random-uuid) "/vereadores/" (random-uuid)))]
       (is (= 404 (:status r)))
       (is (nil? (:materias (ler-json r))) "nao ha corpo de perfil no 404"))))
 
-(deftest perfil-nao-vaza-outro-tenant
+(deftest perfil-nao-vaza-outro-tenant-com-a-janela-injetada
   (testing "vereador cadastrado em OUTRA Casa -> 404 na Casa consultada, e nenhum numero dele sai"
     (let [ente-a   (random-uuid)
           ente-b   (random-uuid)
@@ -257,11 +279,20 @@
                                 {:autor-tipo "vereador" :autor-id vereador :autor-texto "Helena Past"})
           seam     (seam-escopado {[ente-b vereador] (ficha-fixture vereador)})]
       (drenar!)
+      ;; presenca projetada na Casa A, dentro da janela LARGA que o seam devolve para a Casa B: se a janela
+      ;; da Casa B fosse aplicada ao ente do path errado, este numero apareceria na resposta da Casa B.
+      (presenca! ente-a (random-uuid) vereador "entrada")
       (is (some? pid))
       (let [r (GET seam ente-a vereador)]
         (is (= 404 (:status r)) "o seam e' consultado com o ente do PATH — cadastro em outra Casa nao serve")
         (is (nil? (:materias (ler-json r))) "nenhum numero da Casa A vaza sob a identidade da Casa B"))
-      (is (= 200 (:status (GET seam ente-b vereador))) "na propria Casa, o mesmo vereador responde 200"))))
+      (let [r    (GET seam ente-b vereador)
+            body (ler-json r)]
+        (is (= 200 (:status r)) "na propria Casa, o mesmo vereador responde 200")
+        (is (= [] (:materias body)) "e a atuacao dele na Casa A nao vem junto")
+        (is (= {:sessoes-presente 0 :sessoes-com-chamada 0 :janela-de-exercicio-conhecida true}
+               (:presenca body))
+            "a janela da Casa B recorta o read-model DA CASA B — a presenca da Casa A nao atravessa")))))
 
 ;; ---------- 3. borda: coercao fail-closed do path-param ----------
 
@@ -326,16 +357,12 @@
         (is (= 52 (:votos-total body))
             "sem esta chave o :closed fecharia a unica via de a borda dizer 'mostrando 50 de 52'")))))
 
-(deftest presenca-chega-a-borda-com-numerador-e-denominador-distintos
-  ;; achado C-3 (revisao Task 4): nenhum teste deste arquivo semeava presenca, entao TODA resposta trazia
-  ;; {:sessoes-presente 0 :sessoes-com-chamada 0} — um par SIMETRICO sob troca. Trocar os dois campos no
-  ;; adapter deixava a suite verde e um vereador com 8 presencas em 600 sessoes publicaria "presente em 600
-  ;; de 8 sessoes". Aqui os dois numeros sao DISTINTOS e asseridos separadamente (1 de 3, o mesmo cenario de
-  ;; portal_test, que ate' hoje so' existia uma camada abaixo — chamando `resumo-presenca` direto).
-  ;; Onda E / carry I-5 fatia 1: os tres eventos passam ao vocabulario REAL. O terceiro deixou de ser
-  ;; "este vereador AUSENTE" (o predicado de `tipo`, que morreu junto com o literal 'presente' — ausencia
-  ;; nunca e' gravada) e virou uma segunda sessao do OUTRO vereador: a assimetria 1-de-3 continua de pe',
-  ;; agora sustentada SO' pelo predicado que existe de verdade, `vereador_id` no numerador.
+(deftest sessao-de-outro-vereador-conta-no-denominador-e-nao-no-numerador
+  ;; O DISTRATOR que substitui `presenca-chega-a-borda-com-numerador-e-denominador-distintos` (I-5 fatia 6).
+  ;; Duas funcoes: (a) manter os dois numeros DISTINTOS na resposta — um par simetrico sob troca deixaria o
+  ;; adapter publicar "presente em 3 de 1 sessoes" com a suite verde (achado C-3, revisao Task 4); (b) provar
+  ;; que o DENOMINADOR nao tem `vereador_id` no predicado mesmo DEPOIS do recorte por janela — as duas
+  ;; sessoes a que ele faltou continuam contando contra ele, que e' o lado do I-5 que a fatia 6 preserva.
   (testing "presenca assimetrica sai pela rota com numerador e denominador nos campos certos"
     (let [ente     (random-uuid)
           vereador (random-uuid)
@@ -346,10 +373,40 @@
       (let [body     (ler-json (GET (seam-escopado {[ente vereador] (ficha-fixture vereador)}) ente vereador))
             presenca (:presenca body)]
         (is (= 1 (:sessoes-presente presenca))
-            "numerador: so' a sessao em que ESTE vereador consta PRESENTE")
+            "numerador: so' a sessao em que ESTE vereador tem linha")
         (is (= 3 (:sessoes-com-chamada presenca))
-            "denominador: todas as sessoes do ENTE que tiveram chamada — trocar os dois campos inverteria
-             a fracao publicada ('presente em 3 de 1 sessoes')")))))
+            "denominador: todas as sessoes DA JANELA que tiveram chamada de ALGUEM — trocar os dois campos
+             inverteria a fracao publicada ('presente em 3 de 1 sessoes')")
+        (is (true? (:janela-de-exercicio-conhecida presenca)))))))
+
+(deftest borda-publica-janela-de-exercicio-conhecida-e-presenca-projetada-desde
+  ;; Os DOIS campos novos do wire (I-5 fatia 6). Sem `:janela-de-exercicio-conhecida`, o par de inteiros
+  ;; colapsa TRES estados distintos num 0/0 indistinguivel ('sem periodo de exercicio registrado', 'em
+  ;; exercicio e ainda sem sessao', 'faltou a tudo') e a tela e' obrigada a adivinhar sob o nome de uma
+  ;; pessoa. `:presenca-projetada-desde` e' a data em que a projecao de presenca comecou: nao ha replay, e um
+  ;; mandato anterior a ela tem denominador MENOR que a realidade nos dois lados da fracao.
+  (testing "vereador SEM janela de exercicio: 0/0 declarado como desconhecido, e o ente tem sessoes"
+    (let [ente     (random-uuid)
+          vereador (random-uuid)
+          outro    (random-uuid)
+          seam     (seam-escopado {[ente vereador] (ficha-fixture vereador)} [])]
+      (presenca! ente (random-uuid) outro "entrada")
+      (presenca! ente (random-uuid) outro "entrada")
+      (let [body (ler-json (GET seam ente vereador))]
+        (is (= {:sessoes-presente 0 :sessoes-com-chamada 0 :janela-de-exercicio-conhecida false}
+               (:presenca body))
+            "janela vazia NUNCA cai no denominador global como fallback — nem na borda")
+        (is (= "2026-07-20" (:presenca-projetada-desde body))
+            "constante de deploy (mig 0064, quando `presenca_parlamentar` passou a ser projetada), irma de
+             :acervo-com-elo-de-autoria-desde"))))
+  (testing "vereador COM janela: o mesmo par de inteiros, agora declarado como conhecido"
+    (let [ente     (random-uuid)
+          vereador (random-uuid)]
+      (presenca! ente (random-uuid) vereador "entrada")
+      (let [body (ler-json (GET (seam-escopado {[ente vereador] (ficha-fixture vereador)}) ente vereador))]
+        (is (= {:sessoes-presente 1 :sessoes-com-chamada 1 :janela-de-exercicio-conhecida true}
+               (:presenca body)))
+        (is (string? (:presenca-projetada-desde body)) "sai em TODA resposta, nao so' no caso vazio")))))
 
 (deftest fixture-de-presenca-desta-borda-recusa-vocabulario-fora-de-sessoes-logic
   ;; A trava deste arquivo era uma COPIA inline do guard de perfil_test (drift garantido) e nao tinha

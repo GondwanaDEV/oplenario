@@ -274,14 +274,10 @@
                                          :resolver-ente-publico transparencia-http/resolver-ente-publico-uuid
                                          :objeto-store objeto-store
                                          :info-ente info-ente
-                                         ;; I-5 fatia 4: o seam do host ja' devolve {:ficha :janelas}, mas a
-                                         ;; borda de transparencia ainda consome so' a ficha — a fatia 6 e'
-                                         ;; que troca o handler (e passa o mapa inteiro) junto com a
-                                         ;; aridade 4 de `perfil-parlamentar`. Ate la', desembrulha aqui:
-                                         ;; a fatia sobe VERDE e bisectavel, sem seam morto no meio.
-                                         :ficha-vereador-publica
-                                         (fn [ente-id vereador-id]
-                                           (:ficha (ficha-e-janelas-fn ente-id vereador-id)))}))
+                                         ;; I-5 fatia 6: a borda passou a CONSUMIR o mapa inteiro
+                                         ;; ({:ficha :janelas}) — a ficha decide o 404 e a janela recorta o
+                                         ;; denominador de presenca. O host nao desembrulha mais nada.
+                                         :ficha-e-janelas-publicas ficha-e-janelas-fn}))
         (into (paineis-http/rotas {:auth auth :repo-paineis repo-paineis
                                    :painel-compliance painel-compliance
                                    :presenca-resumo presenca-resumo

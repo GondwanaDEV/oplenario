@@ -10,7 +10,9 @@
     (is (str/starts-with? out "// GERADO") "banner de 'nao editar a mao'")
     (is (every? #(str/includes? out (str "export interface " % " {"))
                 ["NormaOut" "MateriaOut" "FichaOut" "EncarregadoOut" "AcompanhamentoEsicOut"
-                 "AcompanhamentoOuvidoriaOut"])
+                 "AcompanhamentoOuvidoriaOut"
+                 "LegislaturaOut" "MateriaDeAutoriaOut" "VotoPublicoOut" "PresencaOut"
+                 "PerfilVereadorOut"])
         "todas as interfaces do manifesto do portal presentes")
     (is (not (re-find #": unknown;" out))
         "nenhum campo caiu no fallback bare 'unknown'")))
@@ -30,6 +32,19 @@
         "AcompanhamentoEsicOut.estado (vocabulario de participacao/logic estados-pedido)")
     (is (str/includes? out "estado: \"arquivada\" | \"em_analise\" | \"protocolada\" | \"respondida\";")
         "AcompanhamentoOuvidoriaOut.estado (vocabulario de participacao/logic estados-manifestacao)")))
+
+(deftest perfil-vereador-out-exporta-os-dois-sinais-de-honestidade-do-i5
+  ;; I-5 fatia 6: a tela (Task 5) e' obrigada, pelo wire, a (a) tratar `janelaDeExercicioConhecida: false`
+  ;; como "sem periodo de exercicio registrado" e nunca como 0%, e (b) declarar `presencaProjetadaDesde`
+  ;; quando o mandato exibido comecar antes dessa data. Se os campos nao chegarem TIPADOS ao front, as duas
+  ;; obrigacoes viram convencao verbal. Este e' o gate.
+  (let [out (gerar-portal/gerar-tudo)]
+    (is (str/includes? out "export interface PresencaOut {\n  sessoesPresente: number;\n  sessoesComChamada: number;\n  janelaDeExercicioConhecida: boolean;\n}\n"))
+    (is (str/includes? out "presenca: PresencaOut;")
+        "referencia nomeada, nao um objeto inlinado — o mesmo racional de FichaOut/NormaOut")
+    (is (str/includes? out "presencaProjetadaDesde: string;"))
+    (is (str/includes? out "acervoComEloDeAutoriaDesde: string;")
+        "as DUAS constantes de recorte de projecao chegam ao front, nao so' a de acervo")))
 
 (deftest encarregado-out-nao-vaza-campos-internos
   ;; EncarregadoOut = EncarregadoPublicoOut (renomeado no manifesto do portal) — so nome/rotulo/email,

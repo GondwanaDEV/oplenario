@@ -11,9 +11,13 @@
   de `VotoRegistradoPayload` nem carrega identidade, entao nao ha o que filtrar aqui. Este contrato nao e' o
   guarda do sigilo (o schema do evento e'), mas tambem nao o reabre.
 
-  HONESTIDADE DE ACERVO: `:acervo-com-elo-de-autoria-desde` sai em TODA resposta. O elo autoria->vereador so'
-  existe a partir da mig 0063 e a projecao NAO tem replay: materia protocolada antes disso nao aparece em
-  perfil nenhum. Sem esta data a UI exibiria uma lista incompleta como se fosse o acervo inteiro.
+  HONESTIDADE DE ACERVO: DUAS constantes de deploy saem em TODA resposta, e cada uma declara o recorte de
+  uma projecao SEM REPLAY. `:acervo-com-elo-de-autoria-desde` — o elo autoria->vereador so' existe a partir
+  da mig 0063, e materia protocolada antes disso nao aparece em perfil nenhum. `:presenca-projetada-desde`
+  (I-5 fatia 6) — `transparencia.presenca_parlamentar` so' existe a partir da mig 0064, entao um mandato
+  iniciado antes dessa data tem denominador MENOR que a realidade nos dois lados da fracao. Sem elas a UI
+  exibiria um recorte parcial como se fosse o acervo inteiro; com o denominador agora recortado por mandato,
+  a segunda deixou de ser cosmetica — a tela DEVE declara-la quando o mandato exibido comecar antes dela.
 
   TRUNCAMENTO: DUAS listas vem truncadas no teto do read-model, e cada uma sai com o seu total.
   `:materias` para no teto 200 e `:materias-total` diz quantas existem no MESMO filtro; `:votos` para no teto
@@ -66,21 +70,31 @@
 
 (def PresencaOut
   "Os DOIS numeros, nunca um percentual. Um '100%' sobre 1 sessao mente por omissao — a UI so' pode montar a
-  fracao se tiver o denominador. CARRY conhecido (I-5 da Task 2): o denominador conta as sessoes do ENTE, nao
-  as do MANDATO deste vereador, logo suplente/recem-empossado recebe uma fracao injusta. O numero sai daqui
-  cru; a decisao de EXIBI-LO e' da tela (Task 5), que esta' bloqueada ate' o I-5 fechar.
+  fracao se tiver o denominador. O servidor NUNCA calcula percentual.
+
+  A FRASE PUBLICADA (I-5 fatia 6 — a que a tela tem de usar, palavra por palavra no sentido): 'compareceu a
+  X das Y sessoes com registro de presenca que a Camara realizou ENQUANTO ESTE VEREADOR ESTAVA EM EXERCICIO
+  DO MANDATO, descontados os periodos de licenca registrados'. O denominador deixou de ser o do ente inteiro:
+  o suplente convocado para 3 sessoes publica '3 de 3', nao '3 de 600'.
+
+  `:janela-de-exercicio-conhecida` E' OBRIGATORIO PARA LER OS OUTROS DOIS. Sem ele, o par de inteiros colapsa
+  TRES estados distintos num 0/0 indistinguivel: 'sem periodo de exercicio registrado' (eleito nao empossado,
+  vereador sem mandato cadastrado), 'em exercicio e ainda nao houve sessao com chamada' e 'faltou a tudo' —
+  e a tela seria obrigada a adivinhar sob o nome de uma pessoa. `false` = a Casa NAO tem periodo de exercicio
+  registrado para este parlamentar; a tela DEVE dizer isso, e JAMAIS '0%'.
 
   O QUE `:sessoes-presente` SIGNIFICA (mudou na fatia 1 do I-5 e o NOME do campo carrega a conotacao antiga):
   = COMPARECEU, isto e', TEM REGISTRO DE PRESENCA naquela sessao — quem assinou e saiu no primeiro item da
   pauta conta. NAO e' 'esteve presente o tempo todo': o numerador nao filtra `tipo`, de proposito
   (`db/parlamentar/resumo-presenca` explica por que). E `:sessoes-com-chamada` sao as sessoes com registro de
-  presenca de ALGUEM — nao 'sessoes realizadas': sessao sem nenhum check-in nao existe no read-model e some
-  dos DOIS lados da fracao. Por isso o rotulo da tela DEVE dizer 'compareceu a X das Y sessoes com registro
-  de presenca', e nunca 'esteve presente em X de Y sessoes realizadas' — a pagina e' publica e NOMINAL, e o
-  rotulo errado afirma sobre uma pessoa algo que o numero nao sustenta."
+  presenca de ALGUEM DENTRO DA JANELA — nao 'sessoes realizadas': sessao sem nenhum check-in nao existe no
+  read-model e some dos DOIS lados da fracao. Por isso o rotulo da tela DEVE dizer 'compareceu a X das Y
+  sessoes com registro de presenca', e nunca 'esteve presente em X de Y sessoes realizadas' — a pagina e'
+  publica e NOMINAL, e o rotulo errado afirma sobre uma pessoa algo que o numero nao sustenta."
   [:map {:closed true}
    [:sessoes-presente :int]
-   [:sessoes-com-chamada :int]])
+   [:sessoes-com-chamada :int]
+   [:janela-de-exercicio-conhecida :boolean]])
 
 (def PerfilVereadorOut
   "`:nome-parlamentar` e' `:maybe` porque o APELIDO e' opcional no cadastro: `cadastros.vereador
@@ -103,4 +117,5 @@
    [:votos [:vector VotoPublicoOut]]
    [:votos-total :int]
    [:presenca PresencaOut]
-   [:acervo-com-elo-de-autoria-desde :string]])
+   [:acervo-com-elo-de-autoria-desde :string]
+   [:presenca-projetada-desde :string]])

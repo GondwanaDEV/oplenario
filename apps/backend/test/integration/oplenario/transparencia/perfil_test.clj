@@ -26,8 +26,10 @@
             [oplenario.legislativo.db.tramitacao-executiva :as exec]
             [oplenario.migracao :as migracao]
             [oplenario.motor.components.registro-fatos :as rf]
+            [oplenario.rotas :as rotas]
             [oplenario.transparencia.components.repositorio :as transparencia-repo]
             [oplenario.transparencia.controllers :as controllers]
+            [oplenario.transparencia.db.parlamentar :as db-parlamentar]
             [oplenario.transparencia.diplomat.consumers :as consumers]
             [oplenario.transparencia.suporte-presenca :as sp])
   (:import (java.time LocalDate)
@@ -95,16 +97,33 @@
   "Projeta `presenca.registrada` (o modulo `sessoes` nao esta' wireado aqui — o portal so' consome o evento
   publico; mesmo padrao de portal_test). `tipo` no vocabulario REAL: entrada|saida|retorno|
   mudanca_modalidade. O payload passa por `suporte-presenca/validar-vocabulario!` (a trava UNICA dos tres ns
-  de teste de presenca) ANTES de tocar o banco — semear vocabulario ficticio LANCA aqui."
-  [ente sessao vereador tipo]
-  (let [payload (sp/validar-vocabulario!
-                 {:sessao-id (str sessao) :vereador-id (str vereador) :tipo tipo
-                  :modalidade "plenario" :fonte "manual_secretaria"
-                  :ocorrido-em "2026-05-18T14:00:00Z"})]
-    (tenancy/com-tenant* *ds* ente
-      (fn [tx]
-        (transparencia-repo/projetar-evento! tx
-          {:tipo "presenca.registrada" :ente-id ente :payload payload})))))
+  de teste de presenca) ANTES de tocar o banco — semear vocabulario ficticio LANCA aqui.
+
+  `ocorrido-em` e' a 5a aridade (I-5 fatia 6): o consumer deriva dele a DATA CIVIL da sessao na companheira
+  `sessao_com_chamada`, e e' essa data que a janela de exercicio recorta. Sem controlar o instante nao ha
+  como semear 'sessao antes da posse' vs 'sessao dentro do mandato'. Default = o valor historico deste ns."
+  ([ente sessao vereador tipo] (presenca! ente sessao vereador tipo "2026-05-18T14:00:00Z"))
+  ([ente sessao vereador tipo ocorrido-em]
+   (let [payload (sp/validar-vocabulario!
+                  {:sessao-id (str sessao) :vereador-id (str vereador) :tipo tipo
+                   :modalidade "plenario" :fonte "manual_secretaria"
+                   :ocorrido-em ocorrido-em})]
+     (tenancy/com-tenant* *ds* ente
+       (fn [tx]
+         (transparencia-repo/projetar-evento! tx
+           {:tipo "presenca.registrada" :ente-id ente :payload payload}))))))
+
+(def ^:private janela-larga
+  "Janela de exercicio que cobre TUDO — o que os casos que nao sao sobre a janela (autoria, votos, teto)
+  precisam para seguir medindo o que sempre mediram. NAO e' o default do sistema: a fatia 6 do I-5 exige
+  janela EXPLICITA em toda chamada, e `[]` significa 'sem periodo de exercicio registrado', nunca 'tudo'."
+  [{:inicio (LocalDate/of 2000 1 1) :fim nil}])
+
+(defn- dia
+  "Instante ISO das 14h UTC (= 11h em America/Fortaleza) do dia civil `aaaa-mm-dd` — longe das duas bordas
+  de meia-noite, para que a data civil derivada pelo consumer seja exatamente `aaaa-mm-dd`."
+  [aaaa-mm-dd]
+  (str aaaa-mm-dd "T14:00:00Z"))
 
 (defn- projetar-materia!
   "Semeia uma materia com uma COMBINACAO de autoria que o produtor real nao emite hoje (ex.: autor_tipo
@@ -167,7 +186,7 @@
       (votar! ente pid vereador)
       (drenar!)
       (presenca! ente (random-uuid) vereador "entrada")
-      (let [p (controllers/perfil-parlamentar *repo-transparencia* ente vereador)]
+      (let [p (controllers/perfil-parlamentar *repo-transparencia* ente vereador janela-larga)]
         (is (= 1 (count (:materias p))) "a materia de autoria aparece")
         (is (= 1 (:materias-total p)) "o total do universo (sem teto) acompanha a lista")
         (is (= pid (:proposicao-id (first (:materias p)))))
@@ -181,7 +200,7 @@
 (deftest perfil-de-vereador-sem-atuacao-e-vazio-mas-bem-formado
   (testing "vereador sem nenhuma atuacao devolve as quatro chaves, nunca nil"
     (let [ente (random-uuid)
-          p    (controllers/perfil-parlamentar *repo-transparencia* ente (random-uuid))]
+          p    (controllers/perfil-parlamentar *repo-transparencia* ente (random-uuid) janela-larga)]
       (is (empty? (:materias p)))
       (is (= 0 (:materias-total p)))
       (is (= 0 (:normas-de-autoria p)))
@@ -201,7 +220,7 @@
           _        (protocolar! ente-b "Materia do ente B"
                                 {:autor-tipo "vereador" :autor-id vereador :autor-texto "Helena Past"})]
       (drenar!)
-      (let [p (controllers/perfil-parlamentar *repo-transparencia* ente-a vereador)]
+      (let [p (controllers/perfil-parlamentar *repo-transparencia* ente-a vereador janela-larga)]
         (is (= 1 (count (:materias p))) "so' a materia do ente consultado")
         (is (= pid-a (:proposicao-id (first (:materias p)))))
         ;; O total tambem e' escopado. NOTA HONESTA (mesma situacao da mutacao M3 da Task 3): este assert
@@ -232,7 +251,7 @@
       ;; ato de COMISSAO a um vereador e' a mesma classe de erro do achado N-1.
       (projetar-materia! ente pid-com {:autor-tipo "comissao" :autor-id (str vereador)
                                        :autor-texto "Comissao de Financas" :ementa "Autoria virou comissao"})
-      (let [p (controllers/perfil-parlamentar *repo-transparencia* ente vereador)]
+      (let [p (controllers/perfil-parlamentar *repo-transparencia* ente vereador janela-larga)]
         (is (= 1 (count (:materias p)))
             "as de autoria 'executivo'/'comissao' sao filtradas — so' a parlamentar legitima permanece")
         (is (= 1 (:materias-total p)) "o total tambem so' conta a autoria parlamentar")
@@ -249,7 +268,7 @@
           pid-nova (protocolar! ente "Materia com elo"
                                 {:autor-tipo "vereador" :autor-id vereador :autor-texto "Helena Past"})]
       (drenar!)
-      (let [p (controllers/perfil-parlamentar *repo-transparencia* ente vereador)]
+      (let [p (controllers/perfil-parlamentar *repo-transparencia* ente vereador janela-larga)]
         (is (= 1 (count (:materias p))) "so' a materia COM o elo autor_id")
         (is (= pid-nova (:proposicao-id (first (:materias p)))))))))
 
@@ -287,13 +306,13 @@
       (projetar-materia! ente pid-com {:autor-tipo "comissao" :autor-id (str vereador)
                                        :autor-texto "Comissao de Financas" :ementa "Lei da comissao"})
       (projetar-norma! ente pid-com)
-      (let [p (controllers/perfil-parlamentar *repo-transparencia* ente vereador)]
+      (let [p (controllers/perfil-parlamentar *repo-transparencia* ente vereador janela-larga)]
         (is (= 1 (:normas-de-autoria p))
             "so' a materia deste vereador, autoria parlamentar, com norma publicada")
         (is (= [pid-nova pid-lei] (mapv :proposicao-id (:materias p)))
             "a lista sai por NUMERACAO decrescente (ano, sequencial) — e so' as parlamentares entram")
         (is (= 2 (:materias-total p)) "o total do universo bate com a lista quando nao ha truncamento"))
-      (is (= 0 (:normas-de-autoria (controllers/perfil-parlamentar *repo-transparencia* (random-uuid) vereador)))
+      (is (= 0 (:normas-de-autoria (controllers/perfil-parlamentar *repo-transparencia* (random-uuid) vereador janela-larga)))
           "outro ente nao ve a contagem"))))
 
 ;; ---------- (e) ordem estavel no EMPATE de numeracao ----------
@@ -313,7 +332,7 @@
                    (merge autoria {:id menor :tipo "requerimento" :tipo-requerimento "informacao"}))
       (protocolar! ente "Projeto de lei" (merge autoria {:id maior :tipo "projeto_lei"}))
       (drenar!)
-      (let [p (controllers/perfil-parlamentar *repo-transparencia* ente vereador)]
+      (let [p (controllers/perfil-parlamentar *repo-transparencia* ente vereador janela-larga)]
         (is (= #{1} (set (map :sequencial (:materias p))))
             "premissa do caso: as duas materias empatam mesmo em (ano, sequencial)")
         (is (= [maior menor] (mapv :proposicao-id (:materias p)))
@@ -329,7 +348,7 @@
     (let [ente     (random-uuid)
           vereador (random-uuid)]
       (projetar-lote! ente vereador 205)
-      (let [p (controllers/perfil-parlamentar *repo-transparencia* ente vereador)]
+      (let [p (controllers/perfil-parlamentar *repo-transparencia* ente vereador janela-larga)]
         (is (= 200 (count (:materias p))) "a lista para no teto server-side")
         (is (= 205 (:materias-total p)) "o total conta o universo INTEIRO, nao as linhas devolvidas")))))
 
@@ -369,7 +388,7 @@
     (let [ente     (random-uuid)
           vereador (random-uuid)]
       (presenca! ente (random-uuid) vereador "entrada")
-      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador))]
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador janela-larga))]
         (is (= 1 (:sessoes-presente p)) "com o vocabulario REAL o numerador deixa de ser zero")
         (is (= 1 (:sessoes-com-chamada p)))))))
 
@@ -384,7 +403,7 @@
     (let [ente     (random-uuid)
           vereador (random-uuid)]
       (presenca! ente (random-uuid) vereador "saida")
-      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador))]
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador janela-larga))]
         (is (= 1 (:sessoes-presente p)) "quem assinou e saiu compareceu")
         (is (= 1 (:sessoes-com-chamada p)))))))
 
@@ -397,7 +416,7 @@
           outro    (random-uuid)]
       (presenca! ente (random-uuid) vereador "entrada")
       (presenca! ente (random-uuid) outro    "entrada")
-      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador))]
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador janela-larga))]
         (is (= 1 (:sessoes-presente p)) "so' a sessao em que ESTE vereador tem linha")
         (is (= 2 (:sessoes-com-chamada p)) "as duas sessoes tiveram chamada")))))
 
@@ -422,24 +441,230 @@
       (presenca! ente sessao-a outro    "entrada")
       (presenca! ente sessao-b vereador "entrada")
       (presenca! ente sessao-c outro    "entrada")
-      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador))]
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador janela-larga))]
         (is (= 2 (:sessoes-presente p))
             "numerador conta SESSOES em que ele tem linha (2), nao 'tem alguma linha' (1)")
         (is (= 3 (:sessoes-com-chamada p))
             "denominador conta SESSOES com chamada (3), nao LINHAS de presenca (4)")))))
 
-(deftest denominador-nesta-fatia-ainda-e-do-ente-inteiro
-  ;; PIN TEMPORARIO — some na fatia 6 do carry I-5. Documenta, em teste, o recorte que esta fatia NAO muda:
-  ;; o denominador e' o ENTE INTEIRO, sem janela de exercicio do mandato. E' precisamente a injustica do I-5
-  ;; (o suplente de 3 sessoes recebe o denominador da legislatura), e ela segue ABERTA depois desta fatia.
-  ;; O lado bom do mesmo recorte, que a fatia 6 preserva de proposito: o faltoso cronico publica '0 de 3', e
-  ;; nao some num '0 de 0'.
-  (testing "vereador sem NENHUMA linha ainda recebe o denominador cheio do ente"
+;; ---------- (h) o denominador RECORTADO PELA JANELA DE EXERCICIO (carry I-5 fatia 6 — fecha o I-5) --------
+;;
+;; A janela chega PRONTA da borda. Os casos abaixo que falam de mandato/licenca a produzem pela MESMA defn
+;; pura do host que a rota usa (`rotas/janelas-de-exercicio`), e nao por um literal escrito aqui: escrever a
+;; janela a mao provaria so' que o SQL sabe filtrar `data`, e deixaria a traducao mandato->janela (que e'
+;; onde moram o `fim-efetivo`, a licenca por stint e o vao entre stints) sem detector NESTE lado.
+;; O ns de teste PODE requerer `oplenario.rotas` e `cadastros` — o import-lint da §22.10 roda so' sobre `src`.
+
+(defn- mandato
+  "Linha de `cadastros.mandato` na forma que `mandatos-do-vereador` devolve (kebab, `date` -> LocalDate).
+  So' as 4 chaves que `janelas-de-exercicio` le — as demais existem no banco e nao interessam aqui."
+  ([id inicio fim] (mandato id inicio fim nil))
+  ([id inicio fim fim-efetivo]
+   {:id id
+    :vigencia-inicio (LocalDate/parse inicio)
+    :vigencia-fim (some-> fim LocalDate/parse)
+    :fim-efetivo (some-> fim-efetivo LocalDate/parse)}))
+
+(defn- licenca
+  "Linha de `cadastros.mandato_licenca` como `licencas-de-mandatos` devolve. `fim` nil = licenca EM CURSO."
+  [mandato-id inicio fim]
+  {:mandato-id mandato-id :inicio (LocalDate/parse inicio) :fim (some-> fim LocalDate/parse)})
+
+(deftest faltoso-cronico-sem-nenhuma-linha-publica-zero-de-denominador-cheio
+  ;; O TESTE CENTRAL da fatia. O denominador NAO pode ter `vereador_id` no predicado: se tiver, o vereador
+  ;; que faltou a tudo some num "0 de 0" (indistinguivel de "nao ha sessoes") em vez de publicar "0 de 12".
+  ;; Falsificavel de proposito: quem meter `vereador_id` no WHERE do denominador derruba este deftest.
+  (testing "vereador em exercicio que nao compareceu a NENHUMA sessao recebe o denominador cheio da janela"
+    (let [ente     (random-uuid)
+          vereador (random-uuid)
+          outro    (random-uuid)
+          janelas  (rotas/janelas-de-exercicio [(mandato (random-uuid) "2025-01-01" "2028-12-31")] [])]
+      (doseq [d ["2026-03-10" "2026-03-17" "2026-03-24"]]
+        (presenca! ente (random-uuid) outro "entrada" (dia d)))
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador janelas))]
+        (is (= 0 (:sessoes-presente p)) "ele nao compareceu a nenhuma")
+        (is (= 3 (:sessoes-com-chamada p))
+            "o denominador conta as sessoes da JANELA DELE, e nao so' aquelas em que ele tem linha")
+        (is (true? (:janela-de-exercicio-conhecida p))
+            "ha' periodo de exercicio registrado — '0 de 3' e' uma afirmacao, nao um vazio")))))
+
+(deftest suplente-de-tres-sessoes-nao-recebe-o-denominador-da-legislatura
+  ;; A INJUSTICA QUE ABRIU O CARRY I-5. Antes da fatia 6 este suplente publicava "3 de 12" (o denominador da
+  ;; Casa inteira) numa pagina publica e NOMINAL. Agora o denominador comeca na convocacao e acaba no fim dela.
+  (testing "convocado para 3 sessoes: 3 de 3, nao 3 do total da Casa"
+    (let [ente     (random-uuid)
+          suplente (random-uuid)
+          titular  (random-uuid)
+          janelas  (rotas/janelas-de-exercicio [(mandato (random-uuid) "2026-04-01" "2026-04-30")] [])]
+      ;; 6 sessoes na Casa; so' 3 caem dentro da convocacao, e o suplente compareceu as 3.
+      (doseq [d ["2026-02-03" "2026-03-03" "2026-05-05"]]
+        (presenca! ente (random-uuid) titular "entrada" (dia d)))
+      (doseq [d ["2026-04-07" "2026-04-14" "2026-04-21"]]
+        (let [s (random-uuid)]
+          (presenca! ente s titular "entrada" (dia d))
+          (presenca! ente s suplente "entrada" (dia d))))
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente suplente janelas))]
+        (is (= 3 (:sessoes-presente p)))
+        (is (= 3 (:sessoes-com-chamada p))
+            "as 3 sessoes fora da convocacao NAO entram — '3 de 6' seria a injustica do I-5 de volta")
+        (is (true? (:janela-de-exercicio-conhecida p)))))))
+
+(deftest empossado-no-meio-nao-conta-sessoes-anteriores-a-posse
+  (testing "o denominador comeca na data da posse, nao no inicio da legislatura"
+    (let [ente     (random-uuid)
+          vereador (random-uuid)
+          outro    (random-uuid)
+          janelas  (rotas/janelas-de-exercicio [(mandato (random-uuid) "2026-06-01" "2028-12-31")] [])]
+      (presenca! ente (random-uuid) outro    "entrada" (dia "2026-05-31"))  ; vespera da posse
+      (presenca! ente (random-uuid) vereador "entrada" (dia "2026-06-01"))  ; o proprio dia da posse
+      (presenca! ente (random-uuid) outro    "entrada" (dia "2026-06-08"))
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador janelas))]
+        (is (= 1 (:sessoes-presente p)))
+        (is (= 2 (:sessoes-com-chamada p))
+            "a sessao da vespera fica fora; a do PROPRIO dia da posse entra (janela INCLUSIVA nos dois lados)")))))
+
+(deftest ex-vereador-usa-janela-historica-mesmo-sem-mandato-vigente
+  ;; A razao de a janela vir de `mandatos-do-vereador` (TODOS os stints) e nunca de `mandato-vigente`
+  ;; (LIMIT 1 em `hoje`, nil para quem saiu): o perfil historico e' justamente onde a janela mais importa.
+  (testing "mandato encerrado em 2024 ainda produz janela — e o denominador e' o daquele periodo"
+    (let [ente     (random-uuid)
+          ex       (random-uuid)
+          atual    (random-uuid)
+          janelas  (rotas/janelas-de-exercicio [(mandato (random-uuid) "2021-01-01" "2024-12-31")] [])]
+      (presenca! ente (random-uuid) ex    "entrada" (dia "2024-11-12"))
+      (presenca! ente (random-uuid) atual "entrada" (dia "2026-03-10"))
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente ex janelas))]
+        (is (= 1 (:sessoes-presente p)))
+        (is (= 1 (:sessoes-com-chamada p)) "a sessao de 2026 nao e' dele — ele nao era mais vereador")
+        (is (true? (:janela-de-exercicio-conhecida p))
+            "ex-vereador TEM periodo de exercicio conhecido — o que nao tem e' mandato vigente")))))
+
+(deftest licenciado-nao-paga-pelas-sessoes-do-periodo-de-licenca
+  (testing "o periodo de licenca e' subtraido do denominador"
+    (let [ente     (random-uuid)
+          vereador (random-uuid)
+          outro    (random-uuid)
+          mid      (random-uuid)
+          janelas  (rotas/janelas-de-exercicio [(mandato mid "2025-01-01" "2028-12-31")]
+                                               [(licenca mid "2026-03-01" "2026-03-31")])]
+      (presenca! ente (random-uuid) vereador "entrada" (dia "2026-02-24"))  ; antes da licenca
+      (presenca! ente (random-uuid) outro    "entrada" (dia "2026-03-10"))  ; DURANTE a licenca
+      (presenca! ente (random-uuid) outro    "entrada" (dia "2026-03-31"))  ; ultimo dia da licenca
+      (presenca! ente (random-uuid) vereador "entrada" (dia "2026-04-07"))  ; depois da licenca
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador janelas))]
+        (is (= 2 (:sessoes-presente p)))
+        (is (= 2 (:sessoes-com-chamada p))
+            "as duas sessoes do periodo de licenca somem dos DOIS lados — '2 de 4' difamaria o licenciado")))))
+
+(deftest cassado-nao-conta-sessoes-posteriores-ao-fim-efetivo
+  ;; `mudar-estado!` carimba `fim_efetivo` e NAO fecha `vigencia_fim`. Sem olhar `fim-efetivo` o cassado
+  ;; seguiria acumulando denominador ate' 2028 — e publicando queda de presenca por sessoes que ocorreram
+  ;; depois de ele deixar a Casa.
+  (testing "a janela fecha em fim-efetivo, e nao no fim nominal da vigencia"
+    (let [ente     (random-uuid)
+          cassado  (random-uuid)
+          outro    (random-uuid)
+          janelas  (rotas/janelas-de-exercicio
+                    [(mandato (random-uuid) "2025-01-01" "2028-12-31" "2026-03-15")] [])]
+      (presenca! ente (random-uuid) cassado "entrada" (dia "2026-03-10"))
+      (presenca! ente (random-uuid) outro   "entrada" (dia "2026-03-20"))
+      (presenca! ente (random-uuid) outro   "entrada" (dia "2026-06-02"))
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente cassado janelas))]
+        (is (= 1 (:sessoes-presente p)))
+        (is (= 1 (:sessoes-com-chamada p))
+            "so' a sessao anterior ao fim efetivo — '1 de 3' contaria faltas de quem ja' nao era vereador")))))
+
+(deftest multiplos-stints-nao-contam-a-mesma-sessao-duas-vezes
+  ;; O denominador e' `count(*)` sobre `sessao_com_chamada` com um OR de intervalos no WHERE. Se dois
+  ;; intervalos se sobrepusessem (ou se o predicado virasse um JOIN com a lista de janelas), a MESMA sessao
+  ;; entraria duas vezes e o denominador ficaria maior que o numero de sessoes que existem.
+  (testing "dois stints que se tocam produzem UM intervalo e a sessao da fronteira conta uma vez so'"
+    (let [ente     (random-uuid)
+          vereador (random-uuid)
+          janelas  (rotas/janelas-de-exercicio [(mandato (random-uuid) "2026-01-01" "2026-03-31")
+                                                (mandato (random-uuid) "2026-03-01" "2026-06-30")]
+                                               [])]
+      (is (= 1 (count janelas)) "premissa do caso: os stints sobrepostos ja' foram fundidos em UM intervalo")
+      (presenca! ente (random-uuid) vereador "entrada" (dia "2026-03-10"))
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador janelas))]
+        (is (= 1 (:sessoes-presente p)) "o numerador tambem nao duplica")
+        (is (= 1 (:sessoes-com-chamada p)) "uma sessao, uma contagem"))
+      (testing "e mesmo com intervalos SOBREPOSTOS crus (sem passar pela normalizacao) a sessao conta uma vez"
+        ;; Detector do shape do predicado: um OR de intervalos num unico WHERE nao pode duplicar linha; um
+        ;; JOIN/UNION ALL contra a lista de janelas duplicaria. O contrato diz que a janela chega normalizada
+        ;; — este caso e' o que garante que a garantia nao depende disso.
+        (let [cruas [{:inicio (LocalDate/parse "2026-01-01") :fim (LocalDate/parse "2026-03-31")}
+                     {:inicio (LocalDate/parse "2026-03-01") :fim (LocalDate/parse "2026-06-30")}]
+              p     (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador cruas))]
+          (is (= 1 (:sessoes-com-chamada p)))
+          (is (= 1 (:sessoes-presente p))))))))
+
+(deftest vao-entre-stints-nao-entra-no-denominador
+  (testing "suplente reconvocado: os meses em que ele NAO era vereador ficam fora dos dois lados"
+    (let [ente     (random-uuid)
+          suplente (random-uuid)
+          titular  (random-uuid)
+          janelas  (rotas/janelas-de-exercicio [(mandato (random-uuid) "2026-02-01" "2026-02-28")
+                                                (mandato (random-uuid) "2026-06-01" "2026-06-30")]
+                                               [])]
+      (is (= 2 (count janelas)) "premissa: dois intervalos DISJUNTOS, o vao entre eles nao e' exercicio")
+      (presenca! ente (random-uuid) suplente "entrada" (dia "2026-02-10"))
+      (presenca! ente (random-uuid) titular  "entrada" (dia "2026-04-14"))  ; no VAO
+      (presenca! ente (random-uuid) suplente "entrada" (dia "2026-06-09"))
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente suplente janelas))]
+        (is (= 2 (:sessoes-presente p)))
+        (is (= 2 (:sessoes-com-chamada p))
+            "a sessao de abril nao entra: fundir os dois stints num intervalo unico a traria de volta")))))
+
+(deftest sem-mandato-devolve-zero-de-zero-com-janela-desconhecida-e-sem-tocar-o-banco
+  ;; Chamado no nivel do `db/` de proposito: o `tx` e' um KEYWORD, nao uma conexao. Se o ramo de janela vazia
+  ;; emitir SQL, o next.jdbc estoura aqui. E' o unico jeito de provar "SEM tocar o banco" — no nivel do
+  ;; controller a tx e' aberta antes, e a economia (uma rota PUBLICA e anonima, sem cache) sumiria do teste.
+  (testing "janelas vazias curto-circuitam a leitura inteira"
+    (let [r (db-parlamentar/resumo-presenca ::tx-envenenada (random-uuid) (random-uuid) [])]
+      (is (= {:sessoes-com-chamada 0 :sessoes-presente 0 :janela-de-exercicio-conhecida false} r)
+          "0/0 declarado como DESCONHECIDO — a tela DEVE dizer 'sem periodo de exercicio registrado'"))))
+
+(deftest janela-vazia-nunca-cai-no-denominador-global-como-fallback
+  ;; A REGRA NEGATIVA. Um `(if (seq janelas) ... <denominador do ente inteiro>)` "defensivo" republicaria o
+  ;; I-5 exatamente na janela em que ninguem esta olhando: o eleito nao empossado receberia o denominador da
+  ;; Casa e um 0% publico e nominal.
+  (testing "com sessoes no ente e janela vazia, o denominador e' 0 — nunca o do ente"
     (let [ente     (random-uuid)
           vereador (random-uuid)
           outro    (random-uuid)]
-      (dotimes [_ 3] (presenca! ente (random-uuid) outro "entrada"))
-      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador))]
-        (is (= 0 (:sessoes-presente p)) "ele nao compareceu a nenhuma")
-        (is (= 3 (:sessoes-com-chamada p))
-            "o denominador NAO tem vereador_id no predicado — o faltoso cronico nao vira '0 de 0'")))))
+      (doseq [d ["2026-03-10" "2026-03-17" "2026-03-24"]]
+        (presenca! ente (random-uuid) outro "entrada" (dia d)))
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador []))]
+        (is (= 0 (:sessoes-com-chamada p)) "o ente TEM 3 sessoes com chamada e nenhuma delas entra")
+        (is (= 0 (:sessoes-presente p)))
+        (is (false? (:janela-de-exercicio-conhecida p))
+            "e o wire diz POR QUE e' zero — sem isso a tela nao distingue 'faltou a tudo' de 'sem mandato'")))))
+
+(deftest numerador-nunca-excede-o-denominador
+  ;; O numerador e' um JOIN com o MESMO conjunto elegivel, entao a desigualdade e' por construcao. O caso que
+  ;; a quebraria e' o numerador ignorando a janela: aqui o vereador tem linha numa sessao FORA da janela.
+  (testing "sessao do vereador fora da janela nao infla o numerador"
+    (let [ente     (random-uuid)
+          vereador (random-uuid)
+          janelas  (rotas/janelas-de-exercicio [(mandato (random-uuid) "2026-06-01" "2026-06-30")] [])]
+      (presenca! ente (random-uuid) vereador "entrada" (dia "2026-01-20"))  ; ANTES da janela
+      (presenca! ente (random-uuid) vereador "entrada" (dia "2026-06-09"))  ; dentro
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador janelas))]
+        (is (= 1 (:sessoes-presente p)) "so' a sessao de dentro da janela")
+        (is (= 1 (:sessoes-com-chamada p)))
+        (is (<= (:sessoes-presente p) (:sessoes-com-chamada p))
+            "numerador <= denominador: '2 de 1' seria uma fracao impossivel numa pagina publica")))))
+
+(deftest vereador-que-entrou-e-saiu-conta-como-comparecimento
+  ;; A ausencia deliberada do filtro por `tipo` sobrevive a fatia 6 (a query foi REESCRITA — se o `tipo`
+  ;; voltasse no caminho, seria aqui). `presenca_parlamentar` guarda o ESTADO ATUAL e quem entrou e saiu
+  ;; termina com `tipo = 'saida'`.
+  (testing "'saida' dentro da janela e' comparecimento"
+    (let [ente     (random-uuid)
+          vereador (random-uuid)
+          janelas  (rotas/janelas-de-exercicio [(mandato (random-uuid) "2026-01-01" "2026-12-31")] [])]
+      (presenca! ente (random-uuid) vereador "saida" (dia "2026-05-18"))
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador janelas))]
+        (is (= 1 (:sessoes-presente p)) "quem assinou e saiu compareceu")
+        (is (= 1 (:sessoes-com-chamada p)))))))

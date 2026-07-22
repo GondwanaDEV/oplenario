@@ -148,20 +148,46 @@
                    :from [:transparencia.voto_parlamentar]
                    :where [:and [:= :ente_id ente-id] [:= :vereador_id vereador-id]]})))))
 
+(defn- predicado-de-janela
+  "OR dos intervalos de exercicio sobre a coluna `data` — INCLUSIVO nos dois lados (`fim` nil = em aberto,
+  logo so' a borda esquerda entra no predicado). UM unico WHERE, nunca um JOIN contra a lista: com OR, dois
+  intervalos sobrepostos nao podem fazer a MESMA sessao contar duas vezes (`multiplos-stints-nao-contam-a
+  -mesma-sessao-duas-vezes` pina isso com janelas cruas, sem passar pela normalizacao do kernel).
+
+  Intervalo com `:inicio` nil nao chega aqui (`kernel/tempo/normalizar-intervalos` e' fail-closed e lanca);
+  se chegasse, `data >= NULL` e' NULL e o ramo simplesmente nao casa — fail-closed tambem neste lado."
+  [janelas]
+  (into [:or]
+        (map (fn [{:keys [inicio fim]}]
+               (if (some? fim)
+                 [:and [:>= :data inicio] [:<= :data fim]]
+                 [:>= :data inicio])))
+        janelas))
+
 (defn resumo-presenca
-  "Numero-card de presenca. Devolve os DOIS numeros — a UI mostra a fracao, nunca um percentual sem
-  denominador (um 100% de 1 sessao mente por omissao).
+  "Numero-card de presenca RECORTADO PELA JANELA DE EXERCICIO (fecha o carry I-5). Devolve os DOIS numeros —
+  a UI mostra a fracao, nunca um percentual sem denominador (um 100% de 1 sessao mente por omissao) — mais
+  `:janela-de-exercicio-conhecida`, que diz se ha' periodo de exercicio registrado.
 
-  DENOMINADOR = sessoes do ENTE INTEIRO que tiveram chamada (COUNT DISTINCT sessao_id). Ele NAO tem
-  `vereador_id` no predicado, e isso e' deliberado nos DOIS sentidos: e' o que faz o faltoso cronico publicar
-  '0 de 40' em vez de sumir num '0 de 0' — e e', ao mesmo tempo, o carry I-5 AINDA ABERTO, porque o
-  denominador tambem nao e' recortado pela janela de exercicio do mandato. Ou seja: HOJE o suplente
-  convocado para 3 sessoes recebe o denominador da legislatura inteira. A janela de mandato entra na fatia 6
-  do plano do I-5; ate' la' o recorte publicado e' o do ente inteiro, e nao ha como esta funcao saber
-  diferente (§22.10 proibe `transparencia` de importar `cadastros`).
+  AS JANELAS CHEGAM PRONTAS DA BORDA. O host as le de `cadastros` (`rotas/janelas-de-exercicio`, sobre
+  `mandatos-do-vereador` + `licencas-de-mandatos`) e as passa como intervalos INCLUSIVOS de data civil,
+  `:fim` nil = em aberto. §22.10: este modulo nunca importa `cadastros` e nao tem como saber o que e' um
+  mandato — para ele isto e' uma lista de intervalos anonimos.
 
-  NUMERADOR = as sessoes DESSE MESMO conjunto em que ELE tem linha em `presenca_parlamentar`, via
-  `FILTER (WHERE vereador_id = ?)`. TER LINHA == COMPARECEU, e a AUSENCIA DE FILTRO POR `tipo` E' DELIBERADA:
+  JANELA VAZIA -> 0/0 com `:janela-de-exercicio-conhecida false` e SEM TOCAR O BANCO. `[]` significa 'sem
+  periodo de exercicio registrado' (vereador sem mandato, eleito nao empossado), e a tela DEVE dizer isso —
+  jamais '0%'. NUNCA cair no denominador do ente inteiro como fallback: seria republicar o I-5 justamente
+  onde ninguem esta' olhando.
+
+  DENOMINADOR = `count(*)` sobre `transparencia.sessao_com_chamada` (mig 0067: UMA linha por sessao que teve
+  ao menos um registro de presenca de ALGUEM) cuja `data` cai em alguma janela. Ele NAO tem `vereador_id` no
+  predicado, e isso e' o coracao da correcao: e' o que faz o faltoso cronico publicar '0 de 40' em vez de
+  sumir num '0 de 0'. Quem meter `vereador_id` aqui derruba
+  `faltoso-cronico-sem-nenhuma-linha-publica-zero-de-denominador-cheio`.
+
+  NUMERADOR = `count(*)` do JOIN entre as linhas DESTE vereador em `presenca_parlamentar` e o MESMO conjunto
+  elegivel. Numerador <= denominador por construcao (as duas PKs garantem unicidade — nenhum `DISTINCT`
+  sobra). TER LINHA == COMPARECEU, e a AUSENCIA DE FILTRO POR `tipo` E' DELIBERADA:
   ausencia nunca e' gravada ('sem evento ate' la' = ausente', `sessoes/relacoes/presenca`), nao existe chamada
   em lote, e os QUATRO tipos do vocabulario real (entrada|saida|retorno|mudanca_modalidade, `sessoes/logic` +
   CHECK da mig 0029) sao todos registro de que a pessoa esteve na sessao. Ate' a Onda E/fatia 1 o predicado
@@ -178,28 +204,44 @@
   filtrar por `tipo` nao protegeria contra o caso realmente frequente (misatribuicao de `entrada`, que passa
   por qualquer filtro) e custaria o bug que acabou de ser corrigido.
 
-  Numerador <= denominador por construcao (mesma tabela, mesmo argumento, predicado so' restringe).
+  O QUE ESTE NUMERO **NAO** E':
+  (a) NAO e' 'sessoes realizadas' — sessao sem NENHUM check-in nao existe no read-model e some dos DOIS
+      lados da fracao (o rotulo da tela tem de dizer 'sessoes com registro de presenca');
+  (b) a data da sessao e' derivada do evento de presenca, nao ha data de sessao em `transparencia` (JOIN
+      cross-schema e' proibido) — ver `registrar-sessao-com-chamada!` para as duas semanticas (linha viva
+      vs. linha de backfill/reconciliador) e a divergencia medida entre elas;
+  (c) a janela vem do estado TRANSACIONAL de `cadastros` no instante da requisicao, NAO de evento
+      projetado: corrigir uma `vigencia_inicio` muda este numero publicado no mesmo segundo, e um replay do
+      outbox nao reproduz o numero de ontem. Mesmo regime, ja' sancionado, de `membros-da-casa` como
+      denominador do painel da Mesa;
+  (d) nada foi projetado antes de `adapters/out/parlamentar/presenca-projetada-desde` e nao ha replay — o
+      denominador de um mandato anterior a essa data e' MENOR que a realidade, dos dois lados.
 
-  CUSTO — MEDIDO, nao estimado (42.000 linhas sinteticas = 2.000 sessoes x 21 vereadores, apos
-  `VACUUM ANALYZE`, RLS ativa, papel `oplenario_app`): `Aggregate <- Sort <- Seq Scan`, ~605 buffers,
-  ~12 ms. O plano ANTIGO (`COUNT(DISTINCT CASE ...)`) da' o MESMO shape e o MESMO custo — UM unico no `Sort`
-  nos dois, e a unica diferenca observavel e' a largura da linha ordenada (40 -> 32 bytes, por `tipo` ter
-  saido da projecao). Ou seja: esta fatia foi CORRECAO, nao otimizacao; o carry de custo do I-5 segue ABERTO
-  e so' fecha na fatia 6, reduzindo a CARDINALIDADE ordenada (denominador sobre `sessao_com_chamada`, ~1/21
-  do volume). Corolarios que valem escrever para nao serem re-descobertos: (a) o `Sort` do `COUNT(DISTINCT)`
-  e' interno ao agregado e NUNCA aparece duplicado no `EXPLAIN`, entao 'plano com um unico Sort' e' um gate
-  VAZIO — medir `Buffers` e `Execution Time`; (b) os dois agregados NAO compartilham estado de transicao,
-  porque `find_compatible_pertrans` exige `aggfilter` igual e um deles tem `FILTER` e o outro nao;
-  (c) `count(*) FILTER` no numerador seria equivalente (a PK `(ente_id, sessao_id, vereador_id)` ja' garante
-  no maximo uma linha por sessao para ESTE vereador) e medi-o dentro do ruido — mantido `DISTINCT` porque a
-  fatia 6 reescreve a query inteira e trocar agora so' adicionaria risco sem ganho."
-  [tx ente-id vereador-id]
+  CUSTO — MEDIDO, nao estimado (42.000 linhas sinteticas = 2.000 sessoes x 21 vereadores + 2.000 linhas na
+  companheira, RLS ativa, papel `oplenario_app`, PG16). Baseline da fatia 1 (denominador global, um
+  `COUNT(DISTINCT)` sobre `presenca_parlamentar`): ~605 buffers / ~12 ms. Depois desta fatia, titular de
+  mandato inteiro (janela cobre as 2.000 sessoes): ~40 buffers / ~1,2 ms — cerca de 15x menos buffers e 10x
+  menos tempo. Suplente de 3 sessoes: ~20 buffers / ~0,15 ms. Vereador sem janela: ZERO statement.
+  A causa do ganho e' CARDINALIDADE, nao indice: o denominador deixou de ordenar 42.000 valores e passou a
+  contar ~1/21 do volume por range scan em `(ente_id, data)`; o numerador le so' as linhas de UM vereador
+  pelo indice `(ente_id, vereador_id, sessao_id)` da mig 0069. Corolario que vale escrever para nao ser
+  re-descoberto: 'plano sem nenhum `Sort`' e' um gate VAZIO — o sort de um agregado `DISTINCT` e' INTERNO e
+  nunca aparece como no do plano. Medir `Buffers` e `Execution Time`."
+  [tx ente-id vereador-id janelas]
   {:pre [(some? ente-id) (some? vereador-id)]}
-  (comum/linha->kebab
-   (jdbc/execute-one! tx
-     (sql/format {:select [[[:count [:distinct :sessao_id]] :sessoes_com_chamada]
-                           [[:filter [:count [:distinct :sessao_id]]
-                             {:where [:= :vereador_id vereador-id]}]
-                            :sessoes_presente]]
-                  :from [:transparencia.presenca_parlamentar]
-                  :where [:= :ente_id ente-id]}))))
+  (if (empty? janelas)
+    {:sessoes-com-chamada 0 :sessoes-presente 0 :janela-de-exercicio-conhecida false}
+    (assoc
+     (comum/linha->kebab
+      (jdbc/execute-one! tx
+        (sql/format
+         {:with [[:elegivel {:select [:sessao_id]
+                             :from [:transparencia.sessao_com_chamada]
+                             :where [:and [:= :ente_id ente-id] (predicado-de-janela janelas)]}]]
+          :select [[{:select [[[:count :*]]] :from [:elegivel]} :sessoes_com_chamada]
+                   [{:select [[[:count :*]]]
+                     :from [[:transparencia.presenca_parlamentar :p]]
+                     :join [[:elegivel :e] [:= :e.sessao_id :p.sessao_id]]
+                     :where [:and [:= :p.ente_id ente-id] [:= :p.vereador_id vereador-id]]}
+                    :sessoes_presente]]})))
+     :janela-de-exercicio-conhecida true)))

@@ -3,7 +3,7 @@
   fatia 2, Task 4) — chamado SO pelo diplomat/.
 
   FUNDE DUAS FONTES que nunca se tocam no dominio:
-  - `ficha` = a IDENTIDADE, vinda de `cadastros` pelo seam `ficha-vereador-publica` INJETADO pelo host
+  - `ficha` = a IDENTIDADE, vinda de `cadastros` pelo seam `ficha-e-janelas-publicas` INJETADO pelo host
     (inversao de dependencia; `transparencia` nunca importa `cadastros` — o `arquitetura_test` quebra se
     importar). Mesma forma que `cadastros/Repo/ficha-vereador` devolve: {:vereador :mandato :legislatura
     :comissoes}. Este ns NAO importa `cadastros/adapters/out/vereador` (seria import cross-modulo E
@@ -24,6 +24,21 @@
   nao tem ferramenta de replay (carry registrado desde a mig 0044). Sai em toda resposta para a UI declarar
   o recorte em vez de exibir uma lista incompleta como se fosse o acervo inteiro. E' CONSTANTE de deploy,
   nao dado de banco — muda so' se um backfill for feito."
+  "2026-07-20")
+
+(def presenca-projetada-desde
+  "Data em que `transparencia.presenca_parlamentar` passou a ser projetada (mig 20260720000064). Irma de
+  `acervo-com-elo-de-autoria-desde`, e pelo mesmo motivo: nao ha ferramenta de re-projecao no repo, entao
+  sessao com chamada ANTERIOR a esta data simplesmente nao existe no read-model.
+
+  ELA PASSOU A IMPORTAR NA FATIA 6 DO I-5. Com o denominador recortado pela janela de exercicio, um mandato
+  que comecou antes desta data recebe um denominador MENOR que a realidade — some dos DOIS lados da fracao,
+  nunca vira falta, mas o '12 de 12' de um mandato de 2021 nao e' o mandato inteiro. Sem este campo a UI nao
+  teria como declarar o recorte, e o `:closed` do wire fecha qualquer outra via de descobri-lo.
+
+  E' CONSTANTE de deploy, nao dado de banco. Se um dia houver backfill de acervo de presenca, e' AQUI que a
+  data muda — e a companheira `sessao_com_chamada` tem reconciliador proprio (mig 0068), que nao recua esta
+  fronteira: ele so' re-deriva o que ja' esta' em `presenca_parlamentar`."
   "2026-07-20")
 
 (defn- ->str [x] (some-> x str))
@@ -86,6 +101,12 @@
     :normas-de-autoria (or normas-de-autoria 0)
     :votos             (mapv voto->wire votos)
     :votos-total       (or votos-total 0)
+    ;; `:janela-de-exercicio-conhecida` passa por `true?` so' para satisfazer o `:boolean` do wire — o
+    ;; read-model SEMPRE devolve o campo (os dois ramos de `resumo-presenca` o escrevem). O default de um
+    ;; nil inesperado e' `false` = "sem periodo de exercicio registrado", que e' o lado seguro: a tela para
+    ;; de exibir fracao em vez de publicar um denominador em que nao se pode confiar.
     :presenca          {:sessoes-presente    (or (:sessoes-presente presenca) 0)
-                        :sessoes-com-chamada (or (:sessoes-com-chamada presenca) 0)}
-    :acervo-com-elo-de-autoria-desde acervo-com-elo-de-autoria-desde}))
+                        :sessoes-com-chamada (or (:sessoes-com-chamada presenca) 0)
+                        :janela-de-exercicio-conhecida (true? (:janela-de-exercicio-conhecida presenca))}
+    :acervo-com-elo-de-autoria-desde acervo-com-elo-de-autoria-desde
+    :presenca-projetada-desde presenca-projetada-desde}))

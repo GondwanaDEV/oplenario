@@ -60,9 +60,16 @@
   completo (o card 'viraram lei' nao tem teto e pode contar materia que ficou fora da lista). NAO inclui a
   identidade (nome/mandato/comissoes) — essa chega na BORDA, injetada pelo host sobre o Repo de `cadastros`
   (§22.10: `transparencia` nunca importa outro modulo de dominio). Rota PUBLICA: sem ator, `ente-id`
-  resolvido do path publico."
-  [repo-transparencia ente-id vereador-id]
-  (repo/perfil-parlamentar repo-transparencia ente-id vereador-id))
+  resolvido do path publico.
+
+  `janelas` (I-5 fatia 6) e' a JANELA DE EXERCICIO do mandato — a lista de intervalos de data civil que
+  recorta o denominador de presenca. Ela chega da BORDA, lida pelo host do estado TRANSACIONAL de
+  `cadastros` no instante da requisicao: NAO e' read-model, NAO e' replay-consistente (corrigir uma
+  `vigencia_inicio` muda o numero publicado no mesmo segundo, sem evento e sem trilha) e NAO passa por
+  este modulo como 'mandato' — aqui sao intervalos anonimos. `[]` significa 'sem periodo de exercicio
+  registrado' e devolve 0/0 declarado; NUNCA e' tratado como 'tudo'."
+  [repo-transparencia ente-id vereador-id janelas]
+  (repo/perfil-parlamentar repo-transparencia ente-id vereador-id janelas))
 
 ;; ---------- Slice 2: acompanhamento do cidadao (autenticado; consent-gated) ----------
 
