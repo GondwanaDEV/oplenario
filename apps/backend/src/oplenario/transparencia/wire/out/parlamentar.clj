@@ -16,8 +16,14 @@
   da mig 0063, e materia protocolada antes disso nao aparece em perfil nenhum. `:presenca-projetada-desde`
   (I-5 fatia 6) — `transparencia.presenca_parlamentar` so' existe a partir da mig 0064, entao um mandato
   iniciado antes dessa data tem denominador MENOR que a realidade nos dois lados da fracao. Sem elas a UI
-  exibiria um recorte parcial como se fosse o acervo inteiro; com o denominador agora recortado por mandato,
-  a segunda deixou de ser cosmetica — a tela DEVE declara-la quando o mandato exibido comecar antes dela.
+  exibiria um recorte parcial como se fosse o acervo inteiro.
+
+  UMA DATA SOZINHA NAO E' AVALIAVEL PELA TELA (achado da revisao da fatia 6, e e' por isso que
+  `PresencaOut` ganhou `:janela-anterior-a-projecao`): este contrato NAO publica nenhuma data da janela de
+  exercicio, e a unica que sai — `LegislaturaOut` — e' a do mandato VIGENTE, logo `nil` justamente para
+  ex-vereador, que e' o perfil em que o recorte mais importa. Comparar `:presenca-projetada-desde` com o
+  periodo exibido era, ate' a revisao, uma obrigacao que a tela nao tinha como cumprir; o booleano derivado
+  faz a comparacao no servidor, onde a janela existe.
 
   TRUNCAMENTO: DUAS listas vem truncadas no teto do read-model, e cada uma sai com o seu total.
   `:materias` para no teto 200 e `:materias-total` diz quantas existem no MESMO filtro; `:votos` para no teto
@@ -82,6 +88,29 @@
   vereador sem mandato cadastrado), 'em exercicio e ainda nao houve sessao com chamada' e 'faltou a tudo' —
   e a tela seria obrigada a adivinhar sob o nome de uma pessoa. `false` = a Casa NAO tem periodo de exercicio
   registrado para este parlamentar; a tela DEVE dizer isso, e JAMAIS '0%'.
+  LIMITE DECLARADO desse `false` (revisao da fatia 6): ele tambem sai quando HA' mandato registrado mas uma
+  licenca consome o stint inteiro (licenca de prazo indeterminado, caminho de primeira classe no cadastro).
+  Nesse caso a frase 'a Casa nao tem periodo de exercicio registrado' e' falsa — e' 'a pessoa esta'
+  licenciada'. O contrato nao distingue os dois hoje; a decisao esta' presa ao carry da licenca irreversivel.
+
+  `:janela-anterior-a-projecao` E' O QUARTO ESTADO (achado da revisao da fatia 6). `true` = parte do periodo
+  de exercicio deste parlamentar e' ANTERIOR a `:presenca-projetada-desde`, ou seja o read-model nao tem
+  dado para aquele trecho e o denominador e' MENOR que a realidade — no limite, um mandato inteiramente
+  anterior a essa data publica 0/0 COM `:janela-de-exercicio-conhecida true`, que sem este campo a tela leria
+  como 'esta' em exercicio e ainda nao houve sessao' ou 'faltou a tudo', as duas falsas, sob o nome de uma
+  pessoa. Com ele a tela tem a ressalva de recorte: 'ha' periodo de exercicio anterior aos dados publicados'.
+  Quem calcula e' o servidor (`adapters/out/parlamentar`), porque a janela NAO sai neste contrato — publicar
+  as datas de exercicio seria expor mandato+licenca em forma direta, e o denominador ja' as expoe demais (ver
+  abaixo). Janela vazia -> `false`: nao ha periodo nenhum a declarar.
+
+  O DENOMINADOR E' UM OBSERVAVEL DERIVADO DE MANDATO+LICENCA, e isso e' consequencia aceita, nao acidente
+  (revisao da fatia 6). Como ele conta so' as sessoes da janela de exercicio, um observador que leia esta
+  rota dia apos dia ve o denominador PARAR de crescer no inicio de uma licenca e voltar a crescer no fim
+  dela — ou seja, o INTERVALO da licenca e' derivavel por diferenca, numa rota publica, anonima e nominal.
+  O MOTIVO da licenca continua protegido (`cadastros` recusa devolve-lo a leitura publica de proposito, por
+  ser dado potencialmente sensivel de saude); o TIMING deixou de estar. E' julgado aceitavel porque licenca
+  de vereador e' ato de plenario publicado — mas e' premissa JURIDICO-INSTITUCIONAL, nao tecnica, e entra na
+  nota de metodologia que a decisao do I-5 ja' pede antes do deploy.
 
   O QUE `:sessoes-presente` SIGNIFICA (mudou na fatia 1 do I-5 e o NOME do campo carrega a conotacao antiga):
   = COMPARECEU, isto e', TEM REGISTRO DE PRESENCA naquela sessao — quem assinou e saiu no primeiro item da
@@ -94,7 +123,8 @@
   [:map {:closed true}
    [:sessoes-presente :int]
    [:sessoes-com-chamada :int]
-   [:janela-de-exercicio-conhecida :boolean]])
+   [:janela-de-exercicio-conhecida :boolean]
+   [:janela-anterior-a-projecao :boolean]])
 
 (def PerfilVereadorOut
   "`:nome-parlamentar` e' `:maybe` porque o APELIDO e' opcional no cadastro: `cadastros.vereador

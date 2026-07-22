@@ -14,8 +14,11 @@
       presenca vazia. A verificacao daquele backfill e' MANUAL (documentada no commit da fatia). REVISAO DA
       FATIA 5: o STATEMENT em si passou a ser testavel — o reconciliador da 0068 e' o mesmo `INSERT..SELECT`,
       e os dois ultimos deftest daqui o extraem do proprio `.up.sql` e o rodam contra dado semeado;
-  (b) `resumo-presenca` continua lendo `presenca_parlamentar` e continua com o denominador do ENTE INTEIRO —
-      o I-5 SEGUE ABERTO ate' a fatia 6.
+  (b) o RECORTE em si. Esta companheira subiu SEM LEITOR na fatia 5 e ganhou o seu leitor na fatia 6:
+      `resumo-presenca` passou a tirar o denominador DAQUI, recortado pela janela de exercicio do mandato —
+      o I-5 esta' FECHADO (nao ha mais denominador do ente inteiro em lugar nenhum). O que este ns continua
+      nao provando e' o recorte, que vive em `perfil_test` (bloco (h)); aqui so' se prova a MANUTENCAO da
+      tabela pelo consumer e o que a migration promete no catalogo.
 
   A semeadura e' pelo caminho do consumer (`projetar-evento!`), nunca INSERT direto no read-model, e dentro
   de `com-tenant*` — que faz `SET LOCAL ROLE oplenario_app` (NOBYPASSRLS) + `app.ente_id`, o mesmo regime do

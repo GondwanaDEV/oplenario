@@ -174,10 +174,23 @@
   `:fim` nil = em aberto. §22.10: este modulo nunca importa `cadastros` e nao tem como saber o que e' um
   mandato — para ele isto e' uma lista de intervalos anonimos.
 
-  JANELA VAZIA -> 0/0 com `:janela-de-exercicio-conhecida false` e SEM TOCAR O BANCO. `[]` significa 'sem
-  periodo de exercicio registrado' (vereador sem mandato, eleito nao empossado), e a tela DEVE dizer isso —
-  jamais '0%'. NUNCA cair no denominador do ente inteiro como fallback: seria republicar o I-5 justamente
-  onde ninguem esta' olhando.
+  JANELA VAZIA (`[]`) -> 0/0 com `:janela-de-exercicio-conhecida false` e SEM TOCAR O BANCO. A tela DEVE
+  dizer 'sem periodo de exercicio registrado' — jamais '0%'. NUNCA cair no denominador do ente inteiro como
+  fallback: seria republicar o I-5 justamente onde ninguem esta' olhando. `[]` chega por DOIS caminhos
+  semanticamente distintos que o wire NAO distingue (limite declarado, revisao da fatia 6):
+  (a) nao ha mandato registrado (vereador sem mandato, eleito nao empossado) — o caso que o texto do wire
+      descreve; e
+  (b) HA' mandato registrado, mas a licenca consome o stint inteiro (`rotas/janelas-de-exercicio` subtrai a
+      licenca do seu proprio stint, e licenca com `fim` nil comecando no primeiro dia zera a janela — e' o
+      CARRY ABERTO da licenca irreversivel). Aqui 'a Casa nao tem periodo de exercicio registrado para este
+      parlamentar' e' FALSO: ela tem, e ele esta' licenciado. Nao ha conserto dentro desta forma sem um
+      terceiro estado no wire, e a decisao disso esta' presa ao carry da licenca.
+  Pinado por `licenca-que-cobre-o-stint-inteiro-tambem-devolve-janela-vazia`.
+
+  `nil` NAO E' `[]`: `janelas` nil so' pode ser erro de FIACAO (o handler destrutura `{:keys [ficha
+  janelas]}` e chave ausente vira nil em silencio), e um bug de servidor nao pode virar afirmacao publica
+  bem-formada sobre uma pessoa — o `:pre` o transforma em 500 opaco. Pinado por
+  `janelas-nil-e-bug-de-servidor-nao-afirmacao-publica`.
 
   DENOMINADOR = `count(*)` sobre `transparencia.sessao_com_chamada` (mig 0067: UMA linha por sessao que teve
   ao menos um registro de presenca de ALGUEM) cuja `data` cai em alguma janela. Ele NAO tem `vereador_id` no
@@ -217,18 +230,38 @@
   (d) nada foi projetado antes de `adapters/out/parlamentar/presenca-projetada-desde` e nao ha replay — o
       denominador de um mandato anterior a essa data e' MENOR que a realidade, dos dois lados.
 
-  CUSTO — MEDIDO, nao estimado (42.000 linhas sinteticas = 2.000 sessoes x 21 vereadores + 2.000 linhas na
-  companheira, RLS ativa, papel `oplenario_app`, PG16). Baseline da fatia 1 (denominador global, um
-  `COUNT(DISTINCT)` sobre `presenca_parlamentar`): ~605 buffers / ~12 ms. Depois desta fatia, titular de
-  mandato inteiro (janela cobre as 2.000 sessoes): ~40 buffers / ~1,2 ms — cerca de 15x menos buffers e 10x
-  menos tempo. Suplente de 3 sessoes: ~20 buffers / ~0,15 ms. Vereador sem janela: ZERO statement.
-  A causa do ganho e' CARDINALIDADE, nao indice: o denominador deixou de ordenar 42.000 valores e passou a
-  contar ~1/21 do volume por range scan em `(ente_id, data)`; o numerador le so' as linhas de UM vereador
-  pelo indice `(ente_id, vereador_id, sessao_id)` da mig 0069. Corolario que vale escrever para nao ser
-  re-descoberto: 'plano sem nenhum `Sort`' e' um gate VAZIO — o sort de um agregado `DISTINCT` e' INTERNO e
-  nunca aparece como no do plano. Medir `Buffers` e `Execution Time`."
+  CUSTO — MEDIDO, nao estimado. UMA BANCADA SO', e ela e' a do cabecalho da mig 0069: 42.000 linhas
+  sinteticas (2.000 sessoes x 21 vereadores) + 2.000 na companheira, RLS ativa, papel `oplenario_app`, PG16,
+  apos `VACUUM ANALYZE`. Baseline da fatia 1 (denominador global, `COUNT(DISTINCT)` sobre
+  `presenca_parlamentar`) RE-MEDIDO nesta bancada: 473 buffers / ~5,5 ms. Titular de mandato inteiro: 50
+  buffers / ~1,1 ms. Suplente de 3 sessoes: 13 buffers / ~0,04 ms. Vereador sem janela: ZERO statement.
+  Ou seja 473 -> 50 buffers (9,5x) e ~5,5 -> ~1,1 ms (5x) contra o baseline desta bancada — ou 10x em tempo
+  contra os ~12 ms que a DECISAO mediu, que sao de OUTRA bancada e nao devem ser misturados com estes
+  numeros (a versao anterior desta docstring publicava um terceiro par, ~605/~40/~20 buffers, que nao e' o
+  desta corrida; a divergencia entre medicoes honestas da mesma query ja' chegou a 70x neste repo, e por
+  isso o numero publicado tem de ser UM).
+  A causa do ganho e' CARDINALIDADE + o indice, nesta ordem: o denominador deixou de ordenar 42.000 valores
+  e passou a contar ~1/21 do volume na companheira (no perfil TITULAR o planner escolhe Seq Scan sobre as
+  30 paginas dela, porque a janela cobre a tabela inteira; no perfil SUPLENTE, Bitmap Index Scan por
+  `(ente_id, data)` — 3 buffers); o numerador le so' as linhas de UM vereador pelo indice
+  `(ente_id, vereador_id, sessao_id)` da mig 0069, sem o qual esta fatia PIORAVA os buffers (473 -> 652).
+  `Heap Fetches: 0` no numerador vale DEPOIS de VACUUM/autovacuum ter setado o visibility map; sob escrita
+  viva do relay (uma chamada em curso) as paginas recem-tocadas dao Heap Fetches > 0, o que e' esperado e
+  nao significa que o indice deixou de ser usado.
+  Corolario que vale escrever para nao ser re-descoberto: 'plano sem nenhum `Sort`' e' um gate VAZIO — o
+  sort de um agregado `DISTINCT` e' INTERNO e nunca aparece como no do plano. Medir `Buffers` e
+  `Execution Time`.
+
+  CLIFF DE ESTATISTICAS (medido, mitigado pela mig 0070): o CTE `elegivel` e' referenciado DUAS vezes, logo
+  o PG12+ o MATERIALIZA — e sem estatisticas nas duas tabelas (o estado exato logo apos o backfill da 0067)
+  o planner poe o CTE Scan no lado INTERNO de um Nested Loop e re-varre o tuplestore por linha externa,
+  medido entre 253 ms e ~940 ms conforme a bancada, contra ~1,1 ms com estatisticas. A mig 0070 roda
+  `ANALYZE` nas duas tabelas no fim da corrente de migrations, que e' antes de o `app` subir. CARRY: trocar
+  o CTE por `NOT MATERIALIZED` some com o cliff inteiro (medido ~11,9 ms sem estatisticas), ao custo de mais
+  buffers no regime COM estatisticas — nao foi feito porque exige a medicao completa nos dois regimes que a
+  decisao do I-5 impoe, e o `ANALYZE` ja' cobre o caso real de deploy."
   [tx ente-id vereador-id janelas]
-  {:pre [(some? ente-id) (some? vereador-id)]}
+  {:pre [(some? ente-id) (some? vereador-id) (some? janelas)]}
   (if (empty? janelas)
     {:sessoes-com-chamada 0 :sessoes-presente 0 :janela-de-exercicio-conhecida false}
     (assoc

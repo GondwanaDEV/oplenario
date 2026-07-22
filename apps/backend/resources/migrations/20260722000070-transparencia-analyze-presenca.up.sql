@@ -1,0 +1,34 @@
+-- Carry I-5, revisao da fatia 6: fecha EM CODIGO o cliff de estatisticas que a 0069 deixou so' no runbook.
+--
+-- O DEFEITO. A leitura de `resumo-presenca` usa um CTE `elegivel` referenciado DUAS vezes (o `count(*)` do
+-- denominador e o JOIN do numerador), e o PG12+ MATERIALIZA um CTE com mais de uma referencia. Sem
+-- estatisticas nas duas tabelas — o estado exato logo apos o backfill da 0067, que insere N linhas numa
+-- tabela recem-criada com `reltuples = -1` — o planner poe o CTE Scan no lado INTERNO de um Nested Loop e
+-- re-varre o tuplestore inteiro a cada linha externa: O(sessoes^2). MEDIDO nos dois lados da revisao,
+-- com autovacuum desligado para simular o instante pos-backfill:
+--
+--   regime                                    | plano                                   | tempo
+--   ------------------------------------------+-----------------------------------------+---------
+--   sem estatisticas (perfil titular)         | Nested Loop + CTE Scan (loops = 2.000)  | 253 ms a ~940 ms
+--   com estatisticas (mesma query, mesma base)| o plano do cabecalho da 0069            | ~1,1 ms
+--
+-- POR QUE ISSO IMPORTA AQUI E NAO SO' NO RUNBOOK: o caminho de deploy sancionado sobe o `app` assim que o
+-- `migrate` termina (`depends_on: service_completed_successfully`), e a rota servida e' a PUBLICA, anonima
+-- e sem cache do perfil do vereador — qualquer pessoa (ou robo) pode repetir o pior caso ate' o proximo
+-- `autovacuum_naptime` (60 s por default). Numa Casa com acervo maior o custo cresce com o quadrado.
+--
+-- POR QUE `ANALYZE` E NAO `VACUUM ANALYZE`: `ANALYZE` E' legal dentro de bloco de transacao (migratus roda
+-- o arquivo inteiro numa tx); `VACUUM` nao e'. `ANALYZE` toma ShareUpdateExclusiveLock — nao bloqueia
+-- leitura nem escrita, so' outro ANALYZE/VACUUM/DDL na mesma tabela. Em base ja' analisada (todo deploy
+-- depois deste) e' custo desprezivel e efeito nenhum; e' uma migration de UMA VEZ que existe para o
+-- primeiro deploy da corrente 0067-0069.
+--
+-- O QUE ISTO **NAO** RESOLVE (recorte honesto): estatistica envelhece. Se uma Casa carregar acervo por
+-- fora (import de legado, restore) sem `ANALYZE`, o mesmo cliff volta — a mitigacao permanente e' o
+-- autovacuum, e este statement so' cobre a janela do deploy. E o conserto ESTRUTURAL (trocar o CTE por
+-- `WITH elegivel AS NOT MATERIALIZED`, medido em ~11,9 ms no regime sem estatisticas) fica NAO feito, com
+-- o motivo escrito: ele muda o plano do regime BOM tambem, e a decisao do I-5 exige medicao completa nos
+-- dois regimes antes de aceitar troca de forma de query.
+ANALYZE transparencia.sessao_com_chamada;
+--;;
+ANALYZE transparencia.presenca_parlamentar;

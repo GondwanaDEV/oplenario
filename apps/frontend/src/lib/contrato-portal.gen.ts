@@ -82,6 +82,7 @@ export interface PresencaOut {
   sessoesPresente: number;
   sessoesComChamada: number;
   janelaDeExercicioConhecida: boolean;
+  janelaAnteriorAProjecao: boolean;
 }
 
 export interface PerfilVereadorOut {

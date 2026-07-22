@@ -256,7 +256,9 @@
     "{:materias :materias-total :normas-de-autoria :votos :votos-total :presenca} do vereador no read-model
      publico (sem identidade). DUAS listas truncam e cada uma vem com o seu total: `:materias` no teto de
      `listar-por-autor` (200) e `:votos` no de `votos-do-vereador` (50) — sem `:materias-total`/`:votos-total`
-     a borda nao sabe que truncou. Sao SEIS statements, nao cinco (achado C-4, revisao Task 4)."))
+     a borda nao sabe que truncou. Sao SEIS statements no caminho comum, nao cinco (achado C-4, revisao
+     Task 4) — e CINCO quando `janelas` e' vazia: `resumo-presenca` curto-circuita e nao emite statement
+     nenhum (ver a docstring dela)."))
 
 (defrecord RepoTransparenciaPg [datasource]
   RepoTransparencia

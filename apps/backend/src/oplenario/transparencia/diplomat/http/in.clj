@@ -115,7 +115,8 @@
       (if-let [{:keys [ficha janelas]} (ficha-e-janelas-publicas ente-id vereador-id)]
         (http/json-resposta 200
           (adapters-out-parlamentar/->wire
-           ficha (controllers/perfil-parlamentar repo-transparencia ente-id vereador-id janelas)))
+           ficha janelas
+           (controllers/perfil-parlamentar repo-transparencia ente-id vereador-id janelas)))
         (http/json-resposta 404 {:erro "vereador nao encontrado"})))))
 
 (defn- seguir-handler

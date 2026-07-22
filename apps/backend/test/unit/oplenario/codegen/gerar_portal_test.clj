@@ -35,11 +35,14 @@
 
 (deftest perfil-vereador-out-exporta-os-dois-sinais-de-honestidade-do-i5
   ;; I-5 fatia 6: a tela (Task 5) e' obrigada, pelo wire, a (a) tratar `janelaDeExercicioConhecida: false`
-  ;; como "sem periodo de exercicio registrado" e nunca como 0%, e (b) declarar `presencaProjetadaDesde`
-  ;; quando o mandato exibido comecar antes dessa data. Se os campos nao chegarem TIPADOS ao front, as duas
-  ;; obrigacoes viram convencao verbal. Este e' o gate.
+  ;; como "sem periodo de exercicio registrado" e nunca como 0%, e (b) exibir a ressalva de recorte quando
+  ;; `janelaAnteriorAProjecao` for true, usando `presencaProjetadaDesde` como texto. Se os campos nao
+  ;; chegarem TIPADOS ao front, as duas obrigacoes viram convencao verbal. Este e' o gate.
+  ;; REVISAO DA FATIA 6: `janelaAnteriorAProjecao` entrou porque a data sozinha era INAVALIAVEL pela tela —
+  ;; o contrato nao publica nenhuma data da janela de exercicio (e nao deve: o denominador ja' expoe o
+  ;; intervalo de licenca por diferenca). A comparacao passou para o servidor.
   (let [out (gerar-portal/gerar-tudo)]
-    (is (str/includes? out "export interface PresencaOut {\n  sessoesPresente: number;\n  sessoesComChamada: number;\n  janelaDeExercicioConhecida: boolean;\n}\n"))
+    (is (str/includes? out "export interface PresencaOut {\n  sessoesPresente: number;\n  sessoesComChamada: number;\n  janelaDeExercicioConhecida: boolean;\n  janelaAnteriorAProjecao: boolean;\n}\n"))
     (is (str/includes? out "presenca: PresencaOut;")
         "referencia nomeada, nao um objeto inlinado — o mesmo racional de FichaOut/NormaOut")
     (is (str/includes? out "presencaProjetadaDesde: string;"))

@@ -200,7 +200,8 @@
         (is (= 1 (:normas-de-autoria body)) "o card 'viraram lei' chega a' borda com o valor do read-model")
         (is (= [] (:votos body)))
         (is (= 0 (:votos-total body)))
-        (is (= {:sessoes-presente 0 :sessoes-com-chamada 0 :janela-de-exercicio-conhecida true}
+        (is (= {:sessoes-presente 0 :sessoes-com-chamada 0 :janela-de-exercicio-conhecida true
+                :janela-anterior-a-projecao true}
                (:presenca body))
             "0/0 COM janela conhecida = 'esta' em exercicio e ainda nao houve sessao com chamada'")
         (is (string? (:acervo-com-elo-de-autoria-desde body))
@@ -290,7 +291,8 @@
             body (ler-json r)]
         (is (= 200 (:status r)) "na propria Casa, o mesmo vereador responde 200")
         (is (= [] (:materias body)) "e a atuacao dele na Casa A nao vem junto")
-        (is (= {:sessoes-presente 0 :sessoes-com-chamada 0 :janela-de-exercicio-conhecida true}
+        (is (= {:sessoes-presente 0 :sessoes-com-chamada 0 :janela-de-exercicio-conhecida true
+                :janela-anterior-a-projecao true}
                (:presenca body))
             "a janela da Casa B recorta o read-model DA CASA B — a presenca da Casa A nao atravessa")))))
 
@@ -393,7 +395,8 @@
       (presenca! ente (random-uuid) outro "entrada")
       (presenca! ente (random-uuid) outro "entrada")
       (let [body (ler-json (GET seam ente vereador))]
-        (is (= {:sessoes-presente 0 :sessoes-com-chamada 0 :janela-de-exercicio-conhecida false}
+        (is (= {:sessoes-presente 0 :sessoes-com-chamada 0 :janela-de-exercicio-conhecida false
+                :janela-anterior-a-projecao false}
                (:presenca body))
             "janela vazia NUNCA cai no denominador global como fallback — nem na borda")
         (is (= "2026-07-20" (:presenca-projetada-desde body))
@@ -404,9 +407,42 @@
           vereador (random-uuid)]
       (presenca! ente (random-uuid) vereador "entrada")
       (let [body (ler-json (GET (seam-escopado {[ente vereador] (ficha-fixture vereador)}) ente vereador))]
-        (is (= {:sessoes-presente 1 :sessoes-com-chamada 1 :janela-de-exercicio-conhecida true}
+        (is (= {:sessoes-presente 1 :sessoes-com-chamada 1 :janela-de-exercicio-conhecida true
+                :janela-anterior-a-projecao true}
                (:presenca body)))
         (is (string? (:presenca-projetada-desde body)) "sai em TODA resposta, nao so' no caso vazio")))))
+
+(deftest borda-declara-janela-anterior-a-projecao-e-a-tela-consegue-avaliar
+  ;; ACHADO da revisao da fatia 6 (MEDIO): `:presenca-projetada-desde` cobrava da tela uma obrigacao que o
+  ;; contrato nao lhe permitia cumprir. `PerfilVereadorOut` e' `:closed` e nao carrega NENHUMA data da janela
+  ;; de exercicio — a unica que sai e' `LegislaturaOut`, que e' a do mandato VIGENTE e vem `nil` justamente
+  ;; para ex-vereador, o perfil historico em que o recorte importa. Resultado: um mandato inteiramente
+  ;; anterior a' projecao publicava "0 de 0" com `janelaDeExercicioConhecida: true` — um QUARTO estado que o
+  ;; wire nao desambiguava e que a tela renderizaria como 'compareceu a 0 de 0' sob o nome de uma pessoa.
+  ;; Agora o servidor faz a comparacao, que e' onde a janela existe.
+  (testing "mandato encerrado ANTES de a projecao existir: 0/0 conhecido, mas declarado como sem cobertura"
+    (let [ente     (random-uuid)
+          ex       (random-uuid)
+          seam     (seam-escopado {[ente ex] (ficha-fixture ex)}
+                                  [{:inicio (LocalDate/of 2021 1 1) :fim (LocalDate/of 2024 12 31)}])
+          body     (ler-json (GET seam ente ex))]
+      (is (= {:sessoes-presente 0 :sessoes-com-chamada 0 :janela-de-exercicio-conhecida true
+              :janela-anterior-a-projecao true}
+             (:presenca body))
+          "sem o 4o campo este 0/0 e' indistinguivel de 'faltou a tudo' e de 'ainda nao houve sessao'")
+      (is (= "2026-07-20" (:presenca-projetada-desde body))
+          "a data continua saindo: e' o texto da ressalva, o booleano e' o gatilho dela")))
+  (testing "mandato que comeca DEPOIS da data de projecao: nada a ressalvar"
+    (let [ente     (random-uuid)
+          vereador (random-uuid)
+          seam     (seam-escopado {[ente vereador] (ficha-fixture vereador)}
+                                  [{:inicio (LocalDate/of 2026 8 1) :fim nil}])]
+      (presenca! ente (random-uuid) vereador "entrada" "2026-08-10T14:00:00Z")
+      (let [body (ler-json (GET seam ente vereador))]
+        (is (= {:sessoes-presente 1 :sessoes-com-chamada 1 :janela-de-exercicio-conhecida true
+                :janela-anterior-a-projecao false}
+               (:presenca body))
+            "toda a janela esta' coberta pelo read-model — a tela NAO deve exibir ressalva de recorte")))))
 
 (deftest fixture-de-presenca-desta-borda-recusa-vocabulario-fora-de-sessoes-logic
   ;; A trava deste arquivo era uma COPIA inline do guard de perfil_test (drift garantido) e nao tinha

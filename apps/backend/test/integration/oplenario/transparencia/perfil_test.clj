@@ -13,8 +13,12 @@
   Os casos que precisam de um estado que o produtor real NAO emite hoje (autoria 'executivo' com `autor_id`
   sobrevivente) entram por `projetar-evento!` com o payload do contrato — ainda o caminho de projecao, so'
   que sem passar pelo outbox."
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str]
+            [clojure.test :refer [deftest is testing use-fixtures]]
             [com.stuartsierra.component :as component]
+            [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as rs]
             [oplenario.cadastros.relacoes.cadastro :as rel-cad]
             [oplenario.config :as config]
             [oplenario.identidade.relacoes.identidade :as rel-id]
@@ -668,3 +672,128 @@
       (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador janelas))]
         (is (= 1 (:sessoes-presente p)) "quem assinou e saiu compareceu")
         (is (= 1 (:sessoes-com-chamada p)))))))
+
+;; ---------- (i) buracos da revisao da fatia 6: as DUAS bordas do predicado, o `nil` de fiacao, o quarto
+;;                estado da janela vazia, e os dois pins de catalogo/migration que nenhum assert
+;;                comportamental enxerga ----------
+
+(deftest sessao-no-ultimo-dia-da-janela-conta
+  ;; ACHADO DE MUTACAO (revisao da fatia 6, MAJOR): trocar `[:<= :data fim]` por `[:< :data fim]` em
+  ;; `predicado-de-janela` sobrevivia ao ns INTEIRO — nenhum dos 10 casos com janela FECHADA semeava uma
+  ;; sessao cuja data fosse exatamente o `:fim` de alguma janela. A decisao publica intervalos INCLUSIVOS
+  ;; nos DOIS lados e a borda ESQUERDA ja' tinha detector (`empossado-no-meio-...`, sessao no PROPRIO dia
+  ;; da posse); esta e' a direita. Em producao a mutacao apaga a sessao do ULTIMO dia de exercicio dos dois
+  ;; lados — e, se a pessoa faltou a ela, so' o denominador cai e a fracao publicada MELHORA (lavagem do
+  ;; faltoso, a mesma classe de defeito que reprovou a Forma C1). No caso de massa e' a ultima sessao do ano
+  ;; em `vigencia_fim = 2028-12-31`, que sairia do denominador dos 21 vereadores de uma vez.
+  (testing "a sessao do PROPRIO dia em que a janela fecha entra nos dois lados da fracao"
+    (let [ente     (random-uuid)
+          cassado  (random-uuid)
+          outro    (random-uuid)
+          janelas  (rotas/janelas-de-exercicio
+                    [(mandato (random-uuid) "2025-01-01" "2028-12-31" "2026-03-15")] [])]
+      (presenca! ente (random-uuid) cassado "entrada" (dia "2026-03-15"))  ; o PROPRIO dia do fim
+      (presenca! ente (random-uuid) outro   "entrada" (dia "2026-03-16"))  ; o dia seguinte
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente cassado janelas))]
+        (is (= 1 (:sessoes-presente p))
+            "o ultimo dia de exercicio e' exercicio — `<` no lugar de `<=` zeraria o numerador aqui")
+        (is (= 1 (:sessoes-com-chamada p))
+            "e o denominador tambem: a sessao do dia seguinte fica fora, a do proprio dia entra")))))
+
+(deftest mandato-em-aberto-nao-conta-sessao-anterior-a-posse
+  ;; ACHADO DE MUTACAO (revisao da fatia 6, MAJOR): o ramo `else` de `predicado-de-janela` (janela EM
+  ;; ABERTO, `:fim` nil) podia perder o `[:>= :data inicio]` inteiro — substitui-lo por `[:= 1 1]` deixava o
+  ;; ns verde. Todos os casos que exercitavam esse ramo usavam `janela-larga` (inicio 2000-01-01), anterior
+  ;; a TODA sessao semeada, entao o `:inicio` era irrelevante. E' o ramo MAIS provavel em producao:
+  ;; `RegistrarMandato` tem `vigencia_fim {:optional true}`, nao ha PATCH de mandato, e a propria docstring
+  ;; de `rotas/janelas-de-exercicio` registra que mandato aberto = janela ABERTA. A mutacao republica o I-5
+  ;; na sua forma original: o suplente empossado em junho recebe o denominador da serie INTEIRA do ente,
+  ;; agora com `:janela-de-exercicio-conhecida true` — o pior estado, porque a tela o apresenta como firme.
+  (testing "janela sem `:fim` continua recortando pela POSSE, nao vira 'tudo'"
+    (let [ente     (random-uuid)
+          vereador (random-uuid)
+          outro    (random-uuid)
+          janelas  (rotas/janelas-de-exercicio [(mandato (random-uuid) "2026-06-01" nil)] [])]
+      (is (= [nil] (mapv :fim janelas)) "premissa do caso: a janela e' a EM ABERTO, nao uma fechada")
+      (presenca! ente (random-uuid) outro    "entrada" (dia "2026-05-31"))  ; vespera da posse
+      (presenca! ente (random-uuid) vereador "entrada" (dia "2026-06-02"))
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador janelas))]
+        (is (= 1 (:sessoes-presente p)))
+        (is (= 1 (:sessoes-com-chamada p))
+            "a sessao da vespera fica fora — sem o `>= inicio` o denominador viraria 2 (o do ente)")))))
+
+(deftest janelas-nil-e-bug-de-servidor-nao-afirmacao-publica
+  ;; ACHADO (revisao da fatia 6, dois revisores): `(empty? janelas)` e' verdadeiro para `[]` E para `nil`,
+  ;; e o `:pre` guardava so' `ente-id`/`vereador-id`. `[]` tem significado de DOMINIO ('sem periodo de
+  ;; exercicio registrado', publicado como tal numa pagina NOMINAL); `nil` so' pode ser erro de FIACAO — o
+  ;; handler destrutura `{:keys [ficha janelas]}` e uma chave ausente vira nil sem ruido. Colapsados, um
+  ;; seam mal montado fazia TODOS os vereadores de TODAS as Casas responderem 200 com 'a Camara nao tem
+  ;; periodo de exercicio registrado para este parlamentar', sem log, sem 500 e sem teste vermelho.
+  (testing "`nil` estoura (500 opaco na borda); `[]` segue sendo o 0/0 declarado"
+    (is (thrown? AssertionError
+                 (db-parlamentar/resumo-presenca ::tx-envenenada (random-uuid) (random-uuid) nil))
+        "ausencia de fiacao NAO pode virar afirmacao publica bem-formada")
+    (is (= {:sessoes-com-chamada 0 :sessoes-presente 0 :janela-de-exercicio-conhecida false}
+           (db-parlamentar/resumo-presenca ::tx-envenenada (random-uuid) (random-uuid) []))
+        "`[]` continua sendo o caminho legitimo — a guarda nova nao o fecha")))
+
+(deftest licenca-que-cobre-o-stint-inteiro-tambem-devolve-janela-vazia
+  ;; ACHADO (revisao da fatia 6, MENOR): `janelas-de-exercicio` devolve `[]` em DOIS casos semanticamente
+  ;; distintos — (a) nao ha mandato registrado e (b) ha mandato, mas a licenca consome o stint inteiro
+  ;; (licenca com `fim` nil comecando no primeiro dia, caminho de PRIMEIRA CLASSE no wire `RegistrarLicenca`).
+  ;; O wire publica os dois como `:janela-de-exercicio-conhecida false` = 'a Casa NAO tem periodo de
+  ;; exercicio registrado', o que e' FALSO no caso (b). Nao ha conserto de codigo aqui — o caso (b) esta'
+  ;; atado ao CARRY ABERTO da licenca irreversivel (decisao do Daouda) — mas ele passa a estar ESCRITO nas
+  ;; duas docstrings e PINADO aqui, em vez de ser um estado que ninguem sabe que existe.
+  (testing "mandato coberto por licenca sem fim: 0/0 declarado desconhecido, e nunca o denominador global"
+    (let [ente     (random-uuid)
+          vereador (random-uuid)
+          outro    (random-uuid)
+          mid      (random-uuid)
+          janelas  (rotas/janelas-de-exercicio [(mandato mid "2026-01-01" "2026-12-31")]
+                                               [(licenca mid "2026-01-01" nil)])]
+      (is (= [] janelas) "premissa: a licenca consome o stint inteiro — mandato EXISTE, exercicio nao")
+      (presenca! ente (random-uuid) outro "entrada" (dia "2026-03-10"))
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador janelas))]
+        (is (= 0 (:sessoes-com-chamada p)) "a sessao do ente nao entra — nada de fallback global")
+        (is (false? (:janela-de-exercicio-conhecida p))
+            "o wire nao distingue 'sem mandato' de 'mandato inteiro sob licenca' — limite declarado")))))
+
+(deftest indice-do-numerador-por-vereador-esta-no-catalogo
+  ;; ACHADO DE MUTACAO (revisao da fatia 6, MEDIO): o `CREATE INDEX` da mig 0069 e' a justificativa
+  ;; economica INTEIRA da fatia (652 -> 50 buffers no perfil titular, medido no proprio commit) e nenhum
+  ;; deftest o observava — contagem nao ve plano, entao apagar o indice deixava os 16 casos verdes. Molde
+  ;; literal do que a fatia 5 ja' criou para a companheira
+  ;; (`companheira-tem-force-rls-e-o-indice-de-data-no-catalogo`). O repo ja' errou de indice DUAS vezes na
+  ;; MESMA tabela (a 0065 criou um que leitor nenhum usava; a 0069 o dropou por redundancia) e migration
+  ;; aplicada e' IMUTAVEL: sem detector, um `DROP INDEX` "de faxina" numa migration futura devolve o
+  ;; numerador ao Seq Scan com a suite inteira verde.
+  (let [indices (map :indexdef
+                     (jdbc/execute! *ds*
+                       ["SELECT indexdef FROM pg_indexes
+                          WHERE schemaname = 'transparencia' AND tablename = 'presenca_parlamentar'"]
+                       {:builder-fn rs/as-unqualified-kebab-maps}))]
+    (is (some #(re-find #"\(ente_id, vereador_id, sessao_id\)" %) indices)
+        "o indice (ente_id, vereador_id, sessao_id) e' a diferenca entre Index Only Scan e Seq Scan no
+         NUMERADOR; trocar por outra forma exige trocar este assert A MAO, com medicao anexada")
+    (is (not-any? #(re-find #"idx_presenca_parlamentar_ente\b" %) indices)
+        "e o (ente_id) puro — prefixo estrito da PK — segue dropado pela 0069, para nao voltar por descuido")))
+
+(deftest migration-analisa-as-duas-tabelas-de-presenca-depois-do-backfill
+  ;; ACHADO (revisao da fatia 6, MEDIO): o cliff de estatisticas pos-deploy estava so' no RUNBOOK. Logo
+  ;; apos o backfill da 0067 (bulk load numa tabela nova, `reltuples` = -1) o planner escolhe Nested Loop
+  ;; com CTE Scan no lado INTERNO — o CTE `elegivel` e' referenciado DUAS vezes, entao o PG12+ o MATERIALIZA
+  ;; e o lado interno re-varre o tuplestore por linha externa. Medido: 253 ms (implementador) e ~940 ms
+  ;; (revisor, bancada maior) contra ~1,1 ms com estatisticas, numa rota PUBLICA, anonima e sem cache, que
+  ;; sobe assim que `migrate` termina (`app depends_on: service_completed_successfully`). O conserto barato
+  ;; e' um `ANALYZE` no fim da corrente de migrations — legal dentro de bloco de transacao, ao contrario de
+  ;; VACUUM. Este teste pina o statement: ele nao tem efeito observavel na suite (o fixture roda `migrar!`
+  ;; com as tabelas vazias) e some sem ruido se alguem o remover.
+  (let [recurso "migrations/20260722000070-transparencia-analyze-presenca.up.sql"
+        arquivo (io/resource recurso)]
+    (is (some? arquivo) (str "migration nao encontrada no classpath: " recurso))
+    (let [corpo (str/upper-case (slurp arquivo))]
+      (is (str/includes? corpo "ANALYZE TRANSPARENCIA.SESSAO_COM_CHAMADA")
+          "sem estatisticas na companheira o CTE materializado vira O(sessoes^2)")
+      (is (str/includes? corpo "ANALYZE TRANSPARENCIA.PRESENCA_PARLAMENTAR")
+          "e sem elas na tabela do numerador o planner nao escolhe o indice da 0069"))))
