@@ -39,7 +39,8 @@
   (hoje-de (agora r) zona))
 
 (def zona-civil-padrao
-  "Zona civil UNICA do sistema. V1 = `America/Fortaleza` (beachhead Fortaleza/NE).
+  "Zona civil do HOST — unico lugar do fuso em `rotas.clj`, NAO do sistema inteiro (`legislativo`,
+  `participacao` e `cadastros` ainda tem literais proprios). V1 = `America/Fortaleza` (beachhead Fortaleza/NE).
 
   O QUE ESTA CONSTANTE RESOLVE: ate aqui o fuso era literal espalhado pelas bordas; o host
   (`rotas.clj`) tinha DOIS. Ter um lugar so' e' o pre-requisito de transformar o fuso em
@@ -57,7 +58,12 @@
 ;; dois lados (mesma semantica do `daterange '[]'` que o EXCLUDE de `cadastros` ja' usa);
 ;; `:fim` nil = em aberto (+infinito). `:inicio` e' OBRIGATORIO e nao-nil: nao existe "desde
 ;; sempre" neste dominio (as colunas de origem — `mandato.vigencia_inicio`, `mandato_licenca.inicio`
-;; — sao NOT NULL). Passar `:inicio` nil e' erro do chamador e estoura aqui, de proposito.
+;; — sao NOT NULL). Passar `:inicio` nil e' erro do chamador e estoura aqui, de proposito: a guarda
+;; fica na PORTA de `normalizar-intervalos`, por onde `subtrair-intervalos` passa os DOIS argumentos.
+;; Sem ela o caso mais provavel do erro (chave lida com o nome errado -> TODOS os :inicio nil) era
+;; fail-OPEN: `{:inicio nil :fim nil}` escapava do descarte de vazios (o `and` curto-circuita em
+;; `(some? fim)`), ordenava em primeiro (nil < tudo em `compare`) e fundia as janelas reais dentro
+;; de si — uma janela de TODO o tempo, sem excecao e sem log.
 
 (defn- fim-em-aberto-ou-nao-antes-de?
   "`data` cabe dentro de `fim` (nil = +infinito)? Inclusivo: `data` = `fim` cabe."
@@ -92,8 +98,15 @@
   outro — com bordas inclusivas, 01-31 e 02-01 sao o mesmo periodo continuo). Devolve um vetor de
   mapas com exatamente `:inicio` e `:fim` (chaves extras do chamador sao DESCARTADAS: intervalo
   fundido nao teria como escolher entre as do original). Um intervalo em aberto (`:fim` nil)
-  absorve todos os posteriores. Pura: nao le relogio nem banco."
+  absorve todos os posteriores. Pura: nao le relogio nem banco.
+
+  FAIL-CLOSED na entrada: elemento sem `:inicio` (ou elemento nil) lanca `ExceptionInfo` — nunca vira
+  a janela infinita `{:inicio nil :fim nil}`, que engoliria as janelas reais em silencio."
   [intervalos]
+  (let [sem-inicio (seq (remove (comp some? :inicio) intervalos))]
+    (when sem-inicio
+      (throw (ex-info "normalizar-intervalos: :inicio nao pode ser nil"
+                      {:intervalo (first sem-inicio)}))))
   (->> intervalos
        (remove intervalo-vazio?)
        (sort-by :inicio)

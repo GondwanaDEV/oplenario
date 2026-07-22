@@ -111,6 +111,79 @@
                                        (iv "2026-03-01" "2026-03-31")]))
       "intervalo em aberto absorve qualquer intervalo posterior"))
 
+(deftest normalizar-funde-fechado-com-aberto-que-chega-depois
+  ;; Ramo em que `fim-ultimo` e' NAO-nil e o `fim` que CHEGA e' nil: a fusao TEM de ficar em aberto.
+  ;; E' a forma exata do suplente que vira titular (stint fechado + mandato em curso). Sem estes
+  ;; asserts, fechar a janela na data do stint anterior passa pela suite inteira (mutante sobrevivia).
+  (is (= [(iv "2025-03-01")]
+         (tempo/normalizar-intervalos [(iv "2025-03-01" "2026-06-30")
+                                       (iv "2026-07-01")]))
+      "stints ADJACENTES em que o segundo esta em aberto: a janela fundida fica EM ABERTO, nao fecha em 06-30")
+  (is (= [(iv "2026-01-01")]
+         (tempo/normalizar-intervalos [(iv "2026-01-01" "2026-06-30")
+                                       (iv "2026-03-01")]))
+      "stints SOBREPOSTOS em que o segundo esta em aberto: idem — o aberto manda"))
+
+(deftest normalizar-nao-funde-atraves-de-vao-de-um-dia
+  ;; Fronteira exata da tolerancia de adjacencia (`fim-ultimo + 1 dia`). O lado que FUNDE ja' esta
+  ;; coberto (01-31 + 02-01); este e' o lado NEGATIVO — relaxar a constante (p.ex. `plusDays 2`)
+  ;; passava por toda a suite e engolia um dia em que a pessoa NAO era vereadora.
+  (is (= [(iv "2026-01-01" "2026-01-31")
+          (iv "2026-02-02" "2026-02-28")]
+         (tempo/normalizar-intervalos [(iv "2026-01-01" "2026-01-31")
+                                       (iv "2026-02-02" "2026-02-28")]))
+      "vao de UM dia (02-01) e' real: os dois intervalos continuam separados"))
+
+(deftest normalizar-intervalo-contido-nao-encolhe-o-continente
+  ;; Distingue `max(fim, fim-ultimo)` de 'devolver sempre o fim que chegou': so' e' visivel quando o
+  ;; intervalo POSTERIOR por :inicio termina ANTES do anterior (esta contido nele).
+  (is (= [(iv "2026-01-01" "2026-12-31")]
+         (tempo/normalizar-intervalos [(iv "2026-01-01" "2026-12-31")
+                                       (iv "2026-03-01" "2026-03-31")]))
+      "intervalo contido some dentro do continente; o fim continua sendo o MAIOR dos dois"))
+
+(deftest subtrair-buraco-de-um-dia-no-meio-nao-e-refundido
+  ;; `subtrair-intervalos` re-normaliza o resultado: se a tolerancia de adjacencia for relaxada, a
+  ;; normalizacao final RE-FUNDE os dois pedacos e desfaz a subtracao sem deixar rastro.
+  (is (= [(iv "2026-01-01" "2026-06-14")
+          (iv "2026-06-16" "2026-12-31")]
+         (tempo/subtrair-intervalos [(iv "2026-01-01" "2026-12-31")]
+                                    [(iv "2026-06-15" "2026-06-15")]))
+      "buraco de UM dia no MEIO parte a janela em duas e as duas partes NAO voltam a se fundir"))
+
+(deftest subtrair-com-varias-janelas-e-varios-buracos
+  ;; O `reduce` sobre os buracos e o `mapcat` sobre os restos so' aparecem com N > 1 dos DOIS lados —
+  ;; que e' exatamente o regime da fatia 4 (N stints x N licencas).
+  (is (= [(iv "2024-01-01" "2024-02-29")
+          (iv "2024-04-01" "2024-06-30")
+          (iv "2026-01-01" "2026-07-31")
+          (iv "2026-09-01" "2026-12-31")]
+         (tempo/subtrair-intervalos [(iv "2024-01-01" "2024-06-30")
+                                     (iv "2026-01-01" "2026-12-31")]
+                                    [(iv "2024-03-01" "2024-03-31")
+                                     (iv "2026-08-01" "2026-08-31")]))
+      "duas janelas disjuntas, um buraco em cada: quatro pedacos, nenhuma janela perdida"))
+
+(deftest intervalo-sem-inicio-estoura-em-vez-de-virar-janela-infinita
+  ;; A forma canonica exige `:inicio` nao-nil. Sem validacao, `{:inicio nil :fim nil}` sobrevivia ao
+  ;; descarte de vazios (curto-circuito em `(some? fim)`), ordenava em PRIMEIRO (nil < tudo) e fundia
+  ;; todo o resto dentro de si: uma janela de TODO o tempo, calada. Fail-open no pior lugar possivel.
+  (is (thrown? clojure.lang.ExceptionInfo
+               (tempo/normalizar-intervalos [{:inicio nil :fim nil}]))
+      "intervalo sem :inicio estoura em vez de virar janela infinita")
+  (is (thrown? clojure.lang.ExceptionInfo
+               (tempo/normalizar-intervalos [(iv "2025-01-01" "2025-12-31") {:inicio nil :fim nil}]))
+      "e nao engole em silencio as janelas reais que vieram junto")
+  (is (thrown? clojure.lang.ExceptionInfo
+               (tempo/normalizar-intervalos [nil]))
+      "elemento nil na colecao cai na mesma porta")
+  (is (thrown? clojure.lang.ExceptionInfo
+               (tempo/subtrair-intervalos [{:inicio nil :fim nil}] []))
+      "subtrair-intervalos normaliza os DOIS argumentos, entao herda a mesma guarda nas janelas")
+  (is (thrown? clojure.lang.ExceptionInfo
+               (tempo/subtrair-intervalos [(iv "2026-01-01" "2026-12-31")] [{:inicio nil :fim nil}]))
+      "... e nos buracos"))
+
 (deftest normalizar-descarta-intervalo-de-inicio-posterior-ao-fim
   (is (= [(iv "2026-01-01" "2026-01-31")]
          (tempo/normalizar-intervalos [(iv "2026-05-01" "2026-04-30")
@@ -131,4 +204,13 @@
   (let [r (tempo/relogio-fixo (Instant/parse "2026-06-26T02:00:00Z"))]
     (is (= (tempo/hoje r (ZoneId/of "America/Fortaleza"))
            (tempo/hoje r tempo/zona-civil-padrao))
-        "mesma data civil derivada do mesmo instante — troca sem mudanca de comportamento")))
+        "mesma data civil derivada do mesmo instante — troca sem mudanca de comportamento"))
+  ;; Os dois asserts acima provam equivalencia de VALOR da constante; nenhum deles toca `rotas.clj`, e
+  ;; portanto nenhum deles quebra se o host voltar a carregar um literal (conflito de merge, copia de
+  ;; deploy piloto fora do CE). O guard de FONTE abaixo e' o unico detector desse modo de regressao —
+  ;; molde do `estrutura-lint-test`, que ja' varre `src/` por caminho relativo ao cwd da suite.
+  (let [fonte (slurp "src/oplenario/rotas.clj")]
+    (is (not (re-find #"ZoneId/of" fonte))
+        "o host nao pode ter literal de fuso: a zona civil vem de `tempo/zona-civil-padrao` (um lugar so' para mudar)")
+    (is (re-find #"tempo/zona-civil-padrao" fonte)
+        "e o host de fato usa a constante do kernel (assert com dentes: nao passa vacuo se o uso sumir)")))
