@@ -143,8 +143,11 @@
     ;;
     ;; O FUSO APARECE UMA VEZ SO', AQUI: `hoje-de` sobre o MESMO Instant ja' parseado (nao uma segunda
     ;; leitura de relogio, nao um `AT TIME ZONE` no SQL) — e' o que mata a classe de bug de meia-noite na
-    ;; fronteira da janela. `zona-civil-padrao` e' global e precisa virar atributo do ente antes do primeiro
-    ;; cliente fora do CE (carry escrito na docstring da constante).
+    ;; fronteira da janela. ESTE e' o SEGUNDO consumidor de `zona-civil-padrao` (o outro e' o host), e o
+    ;; unico que a GRAVA: o valor derivado aqui vira `sessao_com_chamada.data`, coluna PERSISTIDA. Logo
+    ;; promover o fuso a atributo do ente NAO basta — as linhas ja' projetadas continuam com a data civil de
+    ;; America/Fortaleza e nao ha ferramenta de re-projecao no repo (carry escrito na docstring da constante,
+    ;; corrigido na revisao da fatia 5: antes ele so' dizia que a constante e' global).
     ;;
     ;; TOLERANCIA (`instant-tolerante`, mesmo racional do C-1 de voto.registrado logo acima): ate' esta
     ;; fatia o ramo fazia `Instant/parse` CRU e LANCAVA num payload sem `:ocorrido-em` ou com instante

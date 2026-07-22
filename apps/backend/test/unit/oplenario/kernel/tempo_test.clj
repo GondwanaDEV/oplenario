@@ -7,7 +7,9 @@
   `normalizar-intervalos` e `subtrair-intervalos` sobre `{:inicio LocalDate :fim (maybe LocalDate)}`
   INCLUSIVO nos dois lados, `fim` nil = em aberto. Sem banco, sem relogio: aqui nao ha 'mandato'
   nem 'licenca' — o kernel nao conhece modulo (kernel-sem-modulo), so' intervalos anonimos."
-  (:require [clojure.test :refer [deftest is]]
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str]
+            [clojure.test :refer [deftest is]]
             [oplenario.kernel.tempo :as tempo])
   (:import (java.time Instant LocalDate ZoneId)))
 
@@ -233,3 +235,32 @@
         "o host nao pode ter literal de fuso: a zona civil vem de `tempo/zona-civil-padrao` (um lugar so' para mudar)")
     (is (re-find #"tempo/zona-civil-padrao" fonte)
         "e o host de fato usa a constante do kernel (assert com dentes: nao passa vacuo se o uso sumir)")))
+
+(deftest consumidores-de-zona-civil-padrao-estao-DECLARADOS-na-docstring-da-constante
+  ;; Revisao da fatia 5 do carry I-5. A docstring da constante se autodescrevia como "unico lugar do fuso em
+  ;; `rotas.clj`" e enumerava como carry apenas que ela e' global. Desde a mig 0067 as duas metades ficaram
+  ;; falsas: (a) ha' um SEGUNDO consumidor, e ele esta' num MODULO (`transparencia`), nao no host; (b) o valor
+  ;; derivado dela deixou de ser efemero — vira `transparencia.sessao_com_chamada.data`, PERSISTIDA, e o repo
+  ;; nao tem ferramenta de re-projecao (carry conhecido desde o F6c). Quem for fazer o trabalho ja' decidido
+  ;; ("fuso vira atributo do ente antes do primeiro cliente fora do CE") le a docstring, conclui que o raio de
+  ;; impacto e' `rotas.clj`, e deixa para tras as linhas ja' projetadas.
+  ;; Este deftest e' o detector: se um TERCEIRO consumidor aparecer, ele falha e obriga a atualizar o carry.
+  (let [consumidores (->> (file-seq (io/file "src"))
+                          (filter #(.isFile ^java.io.File %))
+                          (map #(.getPath ^java.io.File %))
+                          (filter #(str/ends-with? % ".clj"))
+                          (filter #(str/includes? (slurp %) "zona-civil-padrao"))
+                          (remove #(str/ends-with? % "kernel/tempo.clj"))
+                          set)]
+    (is (= #{"src/oplenario/rotas.clj"                                  ; o host (uso real)
+             "src/oplenario/transparencia/components/repositorio.clj"   ; o consumer de presenca (uso real)
+             "src/oplenario/transparencia/db/parlamentar.clj"}          ; so' cita, na docstring do UPSERT
+           consumidores)
+        "a lista de arquivos de src/ que MENCIONAM o fuso global mudou — atualize a docstring da constante
+         (e este conjunto) ANTES de mergear"))
+  (let [doc (:doc (meta #'tempo/zona-civil-padrao))]
+    (is (re-find #"transparencia" doc)
+        "a docstring tem de nomear o segundo consumidor: ela nao e' mais exclusiva do host")
+    (is (re-find #"sessao_com_chamada" doc)
+        "e tem de dizer que a constante passou a determinar dado PERSISTIDO — trocar o fuso nao reescreve
+         linha ja' projetada, e nao ha re-projecao no repo")))

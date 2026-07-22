@@ -39,8 +39,14 @@
   (hoje-de (agora r) zona))
 
 (def zona-civil-padrao
-  "Zona civil do HOST — unico lugar do fuso em `rotas.clj`, NAO do sistema inteiro (`legislativo`,
-  `participacao` e `cadastros` ainda tem literais proprios). V1 = `America/Fortaleza` (beachhead Fortaleza/NE).
+  "Zona civil compartilhada por DOIS consumidores, NAO do sistema inteiro (`legislativo`, `participacao` e
+  `cadastros` ainda tem literais proprios). V1 = `America/Fortaleza` (beachhead Fortaleza/NE).
+
+  QUEM DEPENDE DELA (a lista e' pinada por
+  `tempo-test/consumidores-de-zona-civil-padrao-estao-DECLARADOS-na-docstring-da-constante`):
+  (a) o HOST, `rotas.clj` — data civil de hoje para decidir mandato/comissao VIGENTE (valor efemero, de
+      request); (b) o CONSUMER de `presenca.registrada` em `transparencia/components/repositorio.clj` — a
+  data civil que vira a coluna `transparencia.sessao_com_chamada.data`.
 
   O QUE ESTA CONSTANTE RESOLVE: ate aqui o fuso era literal espalhado pelas bordas; o host
   (`rotas.clj`) tinha DOIS. Ter um lugar so' e' o pre-requisito de transformar o fuso em
@@ -48,6 +54,12 @@
   O QUE ELA NAO RESOLVE: ela continua GLOBAL. Uma Casa no Acre (UTC-5) ou em Fernando de
   Noronha (UTC-2) tem outra fronteira de dia civil, e isso desloca qual sessao cai em qual
   data — precisa virar coluna do ente antes do primeiro cliente fora do CE (carry escrito).
+  E, DESDE A MIG 0067, um lugar so' para mudar JA' NAO BASTA: esta constante deixou de governar so' valor
+  efemero e passa a determinar dado PERSISTIDO (`sessao_com_chamada.data`, o predicado da janela de exercicio
+  do mandato no numero-card publico de presenca). Promove-la a atributo do ente NAO corrige as linhas ja'
+  projetadas — para uma Casa no Acre, toda sessao noturna ja' gravada fica um dia adiante para sempre. O
+  trabalho tem, portanto, DUAS metades: trocar a fonte do fuso E re-projetar a tabela; a segunda nao existe
+  no repo (nao ha ferramenta de re-projecao, carry conhecido desde o F6c).
   Os fusos literais que sobrevivem em `legislativo`, `participacao` e `cadastros` NAO foram
   migrados nesta fatia: sao bordas de outros modulos, com testes proprios."
   (ZoneId/of "America/Fortaleza"))

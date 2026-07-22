@@ -56,18 +56,48 @@
   `LEAST` NO CONFLITO, e nao o gate de monotonicidade de `registrar-presenca!`: aqui o que se quer e' o
   PRIMEIRO evento da sessao, nao o ultimo. `LEAST` e' idempotente e COMUTATIVO — a data converge para o
   minimo independentemente da ordem em que o relay drenar os eventos, inclusive num redrive fora de ordem.
-  (O gate `WHERE ocorrido_em <` seria errado aqui: vetaria justamente o evento mais antigo, que e' o que
-  define a data.)
+  O gate COPIADO de `registrar-presenca!` (`WHERE ocorrido_em <`) seria errado aqui: vetaria justamente o
+  evento mais antigo, que e' o que define a data.
+
+  MAS HA' GATE, e ele e' outro (revisao da fatia 5): `WHERE excluded.data < data`. Sem ele, `DO UPDATE`
+  executa um UPDATE REAL em TODO evento que nao seja o primeiro da sessao — o Postgres nunca pula um UPDATE
+  por valor identico, grava versao nova de tupla e registro de WAL mesmo quando `LEAST` devolve o que ja'
+  estava la'. Como todos os ~21 eventos de uma chamada colidem na MESMA linha, eram ~20 escritas inuteis por
+  sessao, pagas na tx do relay SINGLE-FLIGHT e COMPARTILHADO, numa tabela cujo unico proposito e' ser barata
+  de VARRER na fatia 6 (pagina suja = nao all-visible = sem index-only scan, que e' literalmente o modo de
+  falha que fez a mig 0065 medir PIOR que o baseline). O gate tem a MESMA semantica do `LEAST` — so' escreve
+  quando o minimo de fato muda — e continua deixando a data RECUAR no redrive fora de ordem
+  (`upsert-da-companheira-nao-reescreve-a-linha-quando-a-data-nao-muda` pina os dois lados, por `ctid`).
+
+  O QUE `LEAST` **NAO** DA' (recorte honesto): ele e' ABSORVENTE. O gate de MAXIMO de `registrar-presenca!`
+  AUTO-CURA um instante errado — o proximo evento, correto e mais novo, sobrescreve. Aqui e' o oposto: um
+  `ocorrido_em` errado para MENOS (evento de fonte `manual_secretaria` com o ano digitado 2025 em vez de
+  2026) fixa a data da sessao PARA SEMPRE, porque nenhum evento posterior passa pelo minimo. `presenca_evento`
+  e' append-only sem anulacao e nao ha re-projecao no repo. E' o carry SENSIBILIDADE A UMA LINHA da decisao
+  do I-5, na sua forma mais aguda: uma linha errada move uma sessao inteira para dentro/fora do denominador
+  de TODOS os vereadores cuja janela cobre aquela data.
 
   `data` e' derivada em CLOJURE (`tempo/hoje-de` + `tempo/zona-civil-padrao`) e chega pronta — o fuso NAO
   aparece no SQL do consumer. O `AT TIME ZONE` que existe no backfill da migration e' o MESMO fuso, mas e'
   codigo de uma vez so'; o caminho vivo tem um lugar so' de fuso, que e' o pre-requisito de transforma-lo em
   atributo do ente (carry escrito).
 
+  DATA BACKFILLADA NAO TEM ESTA SEMANTICA. As linhas escritas pelo backfill da mig 0067 e pelo reconciliador
+  da 0068 nao vem daqui: elas derivam de `min(ocorrido_em) GROUP BY sessao` sobre `presenca_parlamentar`, que
+  NAO e' um log — e' o ESTADO ATUAL por (sessao, vereador), com o MAXIMO por vereador. Ou seja, para essas
+  linhas a data e' a do PRIMEIRO dos ULTIMOS eventos por vereador, que pode ser POSTERIOR a' do primeiro
+  evento (medido: 7 dias, numa sessao suspensa e reaberta). Nao ha conserto dentro desta forma — o log so'
+  existe em `sessoes.presenca_evento` e le-lo daqui seria JOIN cross-schema (§22.10). A divergencia esta'
+  escrita no COMMENT do catalogo (mig 0068) e pinada por
+  `linha-reconstruida-usa-o-primeiro-dos-ULTIMOS-eventos-e-pode-ser-POSTERIOR-a-do-caminho-vivo`.
+
   CUSTO DE ESCRITA — MEDIDO, nao estimado (2.000 eventos = 100 sessoes x 20 vereadores, mesma tx, apos
-  aquecimento, papel oplenario_app com RLS ativa): o UPSERT de presenca custa ~0,364 ms/evento e ESTE custa
-  ~0,342 ms/evento, ou seja o consumer de `presenca.registrada` passa a custar praticamente o DOBRO
-  (+94%) por evento. E' um numero pequeno em absoluto, mas o relay e' SINGLE-FLIGHT e COMPARTILHADO por
+  aquecimento, papel oplenario_app com RLS ativa): o UPSERT de presenca custa ~0,364 ms/evento e ESTE custava
+  ~0,342 ms/evento — o consumer de `presenca.registrada` passava a custar praticamente o DOBRO (+94%) por
+  evento. Com o gate acima o que sobra por evento e' o round-trip JDBC + a busca no indice unico; a ESCRITA
+  (versao de tupla + WAL) so' acontece uma vez por sessao. O `+94%` era o numero do shape SEM gate e nao foi
+  re-medido com a mesma bancada — nao repetir aquele numero como se ainda valesse. E' pequeno em absoluto de
+  qualquer modo, mas o relay e' SINGLE-FLIGHT e COMPARTILHADO por
   todos os modulos — o preco e' pago pela fila inteira, nao so' por esta projecao. Aceito de olhos abertos:
   a alternativa (derivar a mesma linha na LEITURA, a cada request da rota publica anonima e sem cache) e' o
   custo que a fatia 6 existe para eliminar. O regime de escrita de presenca e' rajada curta durante a sessao
@@ -78,7 +108,8 @@
     (sql/format {:insert-into :transparencia.sessao_com_chamada
                  :values [{:ente_id ente-id :sessao_id sessao-id :data data}]
                  :on-conflict [:ente_id :sessao_id]
-                 :do-update-set {:fields {:data [:least :transparencia.sessao_com_chamada.data :excluded.data]}}})))
+                 :do-update-set {:fields {:data [:least :transparencia.sessao_com_chamada.data :excluded.data]}
+                                 :where [:< :excluded.data :transparencia.sessao_com_chamada.data]}})))
 
 (defn votos-do-vereador
   "Secao 'como votou': votos PUBLICOS do vereador, mais recentes primeiro (desempate por votacao_id — achado

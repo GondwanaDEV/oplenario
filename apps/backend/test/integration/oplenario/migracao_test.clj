@@ -46,3 +46,33 @@
         (is (not (re-find #"presente\|ausente" comentario))
             "e NUNCA o par ficticio 'presente|ausente', que produtor nenhum emite"))
       (finally (component/stop c)))))
+
+(deftest comentarios-de-sessao-com-chamada-declaram-a-semantica-real-da-coluna-data
+  ;; Mesma armadilha da 0066, um commit depois e na mesma familia de tabelas (revisao da fatia 5 do carry
+  ;; I-5). `transparencia.sessao_com_chamada.data` NAO e' "a data da sessao": e' (a) a data civil do PRIMEIRO
+  ;; evento de presenca, para a linha projetada AO VIVO, e (b) a do PRIMEIRO dos ULTIMOS eventos POR VEREADOR
+  ;; para a linha vinda do backfill/reconciliador — `presenca_parlamentar` guarda ESTADO por (sessao,
+  ;; vereador), nao log, e o log so' existe em `sessoes.presenca_evento` (JOIN cross-schema proibido). Essa
+  ;; semantica vivia so' em prosa no `.sql` e na docstring: `\d+` mostrava `data | date | not null` e mais
+  ;; nada. E' a coluna que a fatia 6 usa como PREDICADO da janela de mandato num numero publico e nominal —
+  ;; o dominio dela tem de viver no CATALOGO, que e' o que o proximo dev abre.
+  (let [c (component/start (ds/datasource (config/carregar)))]
+    (try
+      (migracao/migrar! (:ds c))
+      (let [tabela (:comentario
+                    (jdbc/execute-one! (:ds c)
+                      ["SELECT obj_description('transparencia.sessao_com_chamada'::regclass, 'pg_class') AS comentario"]))
+            coluna (:comentario
+                    (jdbc/execute-one! (:ds c)
+                      ["SELECT col_description('transparencia.sessao_com_chamada'::regclass,
+                                               (SELECT attnum FROM pg_attribute
+                                                 WHERE attrelid = 'transparencia.sessao_com_chamada'::regclass
+                                                   AND attname = 'data')) AS comentario"]))]
+        (is (some? tabela) "a TABELA precisa de COMMENT: 'sessao com chamada' nao e' 'sessao realizada'")
+        (is (re-find #"NAO e' \"sessao realizada\"" tabela)
+            "a confusao cara e' essa — sessao sem nenhum check-in some dos DOIS lados da fracao")
+        (is (some? coluna) "a coluna `data` precisa de COMMENT — o .sql da 0067 e' imutavel e afirma so' o caso vivo")
+        (is (re-find #"PRIMEIRO evento" coluna) "declara a semantica do caminho VIVO")
+        (is (re-find #"ULTIMOS eventos" coluna)
+            "e declara, em voz alta, que a linha BACKFILLADA/RECONCILIADA tem semantica DIFERENTE e pode ser posterior"))
+      (finally (component/stop c)))))
