@@ -34,6 +34,69 @@
   [repo-cadastros ente-id identidade-id]
   (:id (repo-cadastros-comp/vereador-por-identidade repo-cadastros ente-id identidade-id)))
 
+(defn janelas-de-exercicio
+  "Stints de mandato + licencas -> JANELA DE EXERCICIO: os periodos de data civil em que esta pessoa
+  estava efetivamente no exercicio do mandato (I-5 fatia 4). PURA — sem banco, sem relogio, sem fuso.
+  Entrada = as linhas cruas de `cadastros` (`mandatos-do-vereador` e `licencas-de-mandatos`, ja' em kebab
+  e com colunas `date` como `java.time.LocalDate` — `kernel/db_tipos` faz a ponte, NAO ha cast aqui);
+  saida = a forma canonica do kernel, intervalos INCLUSIVOS dos dois lados com `:fim` nil = em aberto.
+
+  A fatia 6 usa isto como predicado do DENOMINADOR de presenca — e' a correcao do carry I-5, em que o
+  suplente de 3 sessoes recebia o denominador da legislatura inteira.
+
+  TRES decisoes que este corpo carrega, cada uma verificada na fonte de `cadastros`:
+  - fim do stint = `(or fim-efetivo vigencia-fim)`. `mudar-estado!` carimba `fim_efetivo` e NAO fecha
+    `vigencia_fim`: ler so' a vigencia faria o cassado/renunciado/falecido acumular denominador ate o fim
+    nominal da legislatura.
+  - TODOS os stints, nunca `mandato-vigente` (que e' LIMIT 1 na data de hoje e devolve nil p/ ex-vereador,
+    justamente o perfil historico em que a janela mais importa). O vao ENTRE dois stints de um suplente
+    reconvocado nao e' exercicio e nao entra.
+  - as licencas de `cadastros.mandato_licenca` sao SUBTRAIDAS: `registrar-licenca!` so' troca
+    `mandato.estado` e nao fecha a vigencia, entao sem esta subtracao o licenciado paga por sessoes das
+    quais estava legalmente afastado.
+
+  Vereador sem mandato -> `[]`. Vazio aqui significa 'sem periodo de exercicio registrado' e a fatia 6 o
+  publica como tal (0 de 0 + `:janela-de-exercicio-conhecida false`) — NUNCA como fallback p/ o
+  denominador global, que seria republicar o I-5 onde ninguem esta olhando.
+
+  CARRY ABERTO (decisao pendente, revisao da fatia 3): licenca com `fim` nil (\"prazo indeterminado\", caminho
+  de primeira classe no wire `RegistrarLicenca`) fecha a janela na vespera do seu inicio — e `mandato_licenca`
+  NAO tem nenhum caminho de UPDATE no sistema (o unico statement que a toca e' o INSERT de
+  `inserir-licenca!`). Logo o fechamento e' IRREVERSIVEL: quem se licencia sem data de volta e retorna
+  publica 100% de presenca tendo faltado a tudo desde o retorno — a injustica I-5 invertida. As duas saidas
+  (abrir o PATCH de `mandato_licenca.fim`, ou decidir que `fim` nil nao subtrai nada) sao decisao do Daouda;
+  esta fn implementa a semantica ESCRITA na decisao, e o teste
+  `licenca-em-curso-com-fim-nulo-fecha-a-janela-no-inicio-dela` a pina."
+  [mandatos licencas]
+  (tempo/subtrair-intervalos
+   (map (fn [m] {:inicio (:vigencia-inicio m)
+                 :fim (or (:fim-efetivo m) (:vigencia-fim m))})
+        mandatos)
+   (map (fn [l] {:inicio (:inicio l) :fim (:fim l)})
+        licencas)))
+
+(defn ficha-e-janelas-publicas
+  "Seam do host p/ a rota PUBLICA do perfil do vereador: devolve `{:ficha ... :janelas ...}`, ou nil se o
+  vereador nao existe NESTA Casa (§22.10 — `transparencia` nunca importa `cadastros`; recebe esta fn ja'
+  resolvida, mesma inversao de dependencia de `info-ente`/`membros-da-casa`).
+
+  `:ficha` sao as MESMAS 4 chaves que `ficha-vereador` devolvia (`:vereador :mandato :legislatura
+  :comissoes`) — o contrato de `transparencia/adapters/out/parlamentar` nao muda. `:janelas` e' a janela de
+  exercicio (ver `janelas-de-exercicio`).
+
+  UMA unica TRANSACAO (`ficha-e-mandatos-do-vereador`) — a MESMA que ja' rodava como guard de 404. Nao e'
+  custo zero: sao 2 statements a mais que `ficha-vereador` (os stints + as licencas). O que se evita e' um
+  SEGUNDO seam com BEGIN/SET LOCAL/COMMIT proprio numa rota anonima e sem cache.
+
+  FAIL-CLOSED: o guard de 404 continua sendo a EXISTENCIA DA FICHA, e so' ela. Janela vazia NUNCA decide
+  404 — o suplente que ainda nao tomou posse e' um parlamentar real e tem perfil; o que ele nao tem e'
+  periodo de exercicio, e isso a fatia 6 publica explicitamente."
+  [repo-cadastros ente-id vereador-id data]
+  (when-let [composta (repo-cadastros-comp/ficha-e-mandatos-do-vereador
+                       repo-cadastros ente-id vereador-id data)]
+    {:ficha   (select-keys composta [:vereador :mandato :legislatura :comissoes])
+     :janelas (janelas-de-exercicio (:mandatos composta) (:licencas composta))}))
+
 (defn montar
   "Conjunto de rotas Pedestal (table syntax) a partir dos deps do servidor. `erro`/`cabecalhos` sao GLOBAIS
   (it/globais prepended em http/servico) — nao por rota. Aqui: `autenticacao` resolve o ator; `exige-papel`
@@ -45,7 +108,10 @@
   [{:keys [idp repo-identidade repo-sessoes repo-legislativo repo-compliance repo-participacao
            repo-transparencia repo-paineis repo-cadastros canal-store objeto-store painel-compliance
            presenca-resumo esic-cumprimento relatores-pendentes info-ente registro-fatos
-           keycloak sessao identidade-existe? ficha-vereador-publica]}]
+           keycloak sessao identidade-existe?]
+    ;; nome LOCAL distinto da defn de topo `ficha-e-janelas-publicas` p/ nao sombrea-la (mesmo cuidado de
+    ;; `resolver-vereador`/`resolver-vereador-fn`); a chave do mapa segue sendo :ficha-e-janelas-publicas.
+    ficha-e-janelas-override :ficha-e-janelas-publicas}]
   (let [auth (it/autenticacao idp repo-identidade)
         ;; F6: relogio de producao (kernel/tempo) p/ o prazo LAI do e-SIC — determinismo em teste vem de
         ;; injetar relogio-fixo direto no fragmento de rotas (participacao-http/rotas). resolver-ente-publico
@@ -109,18 +175,19 @@
         ;; transparencia nunca importa cadastros (§22.10). Ente sem perfil cadastrado -> nil -> 404 na borda.
         info-ente (or info-ente
                       (fn [ente-id] (repo-cadastros-comp/buscar-ente repo-cadastros ente-id)))
-        ;; Onda E fatia 2 (Task 4): a IDENTIDADE do vereador no perfil PUBLICO — irmao de `info-ente`, mesma
-        ;; inversao de dependencia (transparencia nunca importa cadastros, §22.10). `ficha-vereador` e' de
-        ;; aridade 4 e a 4a e' a DATA que decide mandato vigente + comissoes vigentes: usa o mesmo `hoje` no
-        ;; fuso civil de `membros-da-casa` (nao `LocalDate/now` do fuso do container — um deploy em UTC
-        ;; viraria o dia 3h antes e um mandato encerrado ontem ainda apareceria vigente). Vereador
-        ;; inexistente NESTA Casa -> nil -> 404 fail-closed na borda (nunca 200 com perfil vazio).
-        ficha-vereador-publica
-        (or ficha-vereador-publica
+        ;; Onda E fatia 2 (Task 4) + I-5 fatia 4: a IDENTIDADE do vereador no perfil PUBLICO **mais** a
+        ;; JANELA DE EXERCICIO do mandato — irmao de `info-ente`, mesma inversao de dependencia
+        ;; (transparencia nunca importa cadastros, §22.10). A `data` e' a 4a aridade e decide mandato
+        ;; vigente + comissoes vigentes: usa o mesmo `hoje` no fuso civil de `membros-da-casa` (nao
+        ;; `LocalDate/now` do fuso do container — um deploy em UTC viraria o dia 3h antes e um mandato
+        ;; encerrado ontem ainda apareceria vigente). Vereador inexistente NESTA Casa -> nil -> 404
+        ;; fail-closed na borda (nunca 200 com perfil vazio); janela vazia NAO e' 404.
+        ficha-e-janelas-fn
+        (or ficha-e-janelas-override
             (fn [ente-id vereador-id]
-              (repo-cadastros-comp/ficha-vereador repo-cadastros ente-id vereador-id
-                                                  (tempo/hoje (tempo/relogio-sistema)
-                                                              tempo/zona-civil-padrao))))
+              (ficha-e-janelas-publicas repo-cadastros ente-id vereador-id
+                                        (tempo/hoje (tempo/relogio-sistema)
+                                                    tempo/zona-civil-padrao))))
         ;; Onda D Slice 5 Task 9: guard de SERVICO — cadastros NUNCA importa identidade (§22.10) e nao ha'
         ;; FK cross-schema em cadastros.vereador.identidade_id (so' GUARD ref). O host injeta a existencia
         ;; via o Repo-Component de identidade (`identidade-existe?`, SUPRATENANT); mesma inversao de
@@ -166,7 +233,14 @@
                                          :resolver-ente-publico transparencia-http/resolver-ente-publico-uuid
                                          :objeto-store objeto-store
                                          :info-ente info-ente
-                                         :ficha-vereador-publica ficha-vereador-publica}))
+                                         ;; I-5 fatia 4: o seam do host ja' devolve {:ficha :janelas}, mas a
+                                         ;; borda de transparencia ainda consome so' a ficha — a fatia 6 e'
+                                         ;; que troca o handler (e passa o mapa inteiro) junto com a
+                                         ;; aridade 4 de `perfil-parlamentar`. Ate la', desembrulha aqui:
+                                         ;; a fatia sobe VERDE e bisectavel, sem seam morto no meio.
+                                         :ficha-vereador-publica
+                                         (fn [ente-id vereador-id]
+                                           (:ficha (ficha-e-janelas-fn ente-id vereador-id)))}))
         (into (paineis-http/rotas {:auth auth :repo-paineis repo-paineis
                                    :painel-compliance painel-compliance
                                    :presenca-resumo presenca-resumo

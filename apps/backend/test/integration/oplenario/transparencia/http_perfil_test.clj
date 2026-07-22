@@ -4,7 +4,7 @@
 
   E' a rota de MAIOR risco da fatia: SEM auth (qualquer erro de escopo vaza dado entre Casas), com SIGILO DE
   VOTO em jogo (so' o voto NOMINAL ja' projetado pode sair) e FUNDINDO dois modulos — a identidade vem de
-  `cadastros` por INVERSAO DE DEPENDENCIA (seam `ficha-vereador-publica` injetado pelo host, §22.10:
+  `cadastros` por INVERSAO DE DEPENDENCIA (seam `ficha-e-janelas-publicas` injetado pelo host, §22.10:
   `transparencia` nunca importa `cadastros`), os numeros vem do read-model proprio.
 
   Harness: `rotas/montar` de verdade (mesma silhueta de info_ente_http_in_test) com o Repo de transparencia
@@ -68,16 +68,24 @@
                 {:nome "Mesa Diretora" :tipo "mesa" :cargo "1o Secretario"}]})
 
 (defn- seam-escopado
-  "Seam FAKE de identidade, escopado por (ente, vereador) como o real. `cadastrados` = mapa {[ente ver] ficha}."
-  [cadastrados]
-  (fn [ente-id vereador-id] (get cadastrados [ente-id vereador-id])))
+  "Seam FAKE do host, escopado por (ente, vereador) como o real. `cadastrados` = mapa {[ente ver] ficha}.
 
-(defn- service-fn [ficha-vereador-publica]
+  Devolve `{:ficha ... :janelas ...}` — a forma que a I-5 fatia 4 deu ao seam (`ficha-e-janelas-publicas`),
+  em lugar da ficha crua. `:janelas` sai `[]` aqui de proposito: a BORDA ainda nao consome a janela (o host
+  desembrulha `:ficha` ate a fatia 6 trocar o handler), e o que este ns testa e' a fusao identidade+numeros,
+  nao a aritmetica da janela — essa e' unit, em `oplenario.rotas-janelas-test`. Vereador ausente do mapa
+  continua devolvendo nil (o guard de 404 da borda)."
+  [cadastrados]
+  (fn [ente-id vereador-id]
+    (when-let [ficha (get cadastrados [ente-id vereador-id])]
+      {:ficha ficha :janelas []})))
+
+(defn- service-fn [ficha-e-janelas-publicas]
   (-> (http/servico (config/carregar)
                     (rotas/montar {:idp (idp-dev/idp-dev)
                                    :repo-identidade nil
                                    :repo-transparencia *repo-transparencia*
-                                   :ficha-vereador-publica ficha-vereador-publica})
+                                   :ficha-e-janelas-publicas ficha-e-janelas-publicas})
                     it/globais)
       ph/create-server ::ph/service-fn))
 
