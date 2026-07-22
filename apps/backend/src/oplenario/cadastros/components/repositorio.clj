@@ -31,6 +31,14 @@
   (ficha-vereador [this ente-id id data]
     "Leitura composta NUMA UNICA tx (mesma disciplina de ficha-completa-da-proposicao):
      {:vereador :mandato :legislatura :comissoes}, ou nil se o vereador nao existe.")
+  (ficha-e-mandatos-do-vereador [this ente-id id data]
+    "SUPERCONJUNTO de `ficha-vereador` NA MESMA UNICA tx: {:vereador :mandato :legislatura :comissoes}
+     MAIS {:mandatos :licencas}. nil (e nenhuma leitura extra) se o vereador nao existe neste ente.
+     `:mandatos` = TODOS os stints (`mandatos-do-vereador`), nao so' o que cobre `data` — e' a unica fonte
+     capaz de descrever o ex-vereador, cujo `:mandato` e' nil. `:licencas` = as licencas DESSES mandatos,
+     `{:mandato-id :inicio :fim}` (`fim` nil = em curso). Existe para que a borda publica de transparencia
+     derive a janela de exercicio SEM um segundo round-trip: e' a MESMA tx que ja' rodava como guard de 404.
+     ADITIVO — `ficha-vereador` fica intacto e a rota autenticada de cadastros nao paga por isto.")
   (vereador-por-identidade [this ente-id identidade-id])
   (criar-mandato! [this ente-id mandato])
   (mudar-estado-mandato! [this ente-id mandato])
@@ -81,6 +89,16 @@
                 leg (when (:legislatura-id m) (estrutura/buscar-legislatura tx (:legislatura-id m)))
                 cs (comissao/comissoes-do-vereador tx ente-id id data)]
             {:vereador v :mandato m :legislatura leg :comissoes cs})))))
+  (ficha-e-mandatos-do-vereador [this ente-id id data]
+    (transacao this ente-id
+      (fn [tx]
+        (when-let [v (vereador/buscar tx ente-id id)]
+          (let [m (vereador/mandato-vigente tx ente-id id data)
+                leg (when (:legislatura-id m) (estrutura/buscar-legislatura tx (:legislatura-id m)))
+                cs (comissao/comissoes-do-vereador tx ente-id id data)
+                ms (vereador/mandatos-do-vereador tx ente-id id)
+                ls (vereador/licencas-de-mandatos tx ente-id (mapv :id ms))]
+            {:vereador v :mandato m :legislatura leg :comissoes cs :mandatos ms :licencas ls})))))
   (vereador-por-identidade [this ente-id ident] (transacao this ente-id #(vereador/por-identidade % ente-id ident)))
   (criar-mandato! [this ente-id m] (transacao this ente-id #(vereador/inserir-mandato! % m)))
   (mudar-estado-mandato! [this ente-id m] (transacao this ente-id #(vereador/mudar-estado! % ente-id m)))

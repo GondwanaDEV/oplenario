@@ -182,6 +182,32 @@
          :order-by [[:v.nome :asc]]}))))
 
 ;; ---- licenca + suplencia ----
+(defn licencas-de-mandatos
+  "As licencas registradas de um CONJUNTO de mandatos (I-5 fatia 3 — os buracos a subtrair da janela de
+   exercicio). Servido pelo `idx_mandato_licenca_mandato (ente_id, mandato_id)` da mig 0010:253.
+
+   `mandato-ids` VAZIO/nil devolve `[]` SEM tocar o banco: alem de `IN ()` ser SQL invalido, o caminho
+   'vereador sem nenhum mandato' e' justamente o que nao deve gastar round-trip numa rota publica anonima.
+
+   Devolve so' `{:mandato-id :inicio :fim}` — `fim` nil e' licenca EM CURSO (aberta), nao ausencia de dado
+   (`mandato_licenca.fim` e' nullable na mig 0010; `inicio` e' `date NOT NULL`). Colunas `date` chegam como
+   `java.time.LocalDate` (`kernel/db_tipos` estende ReadableColumn p/ `java.sql.Date`). NAO devolve
+   `mandato_suplente_id` nem `motivo`: o unico leitor (a janela de exercicio) so' precisa do intervalo, e
+   `motivo` e' dado potencialmente sensivel de saude que nao deve escorrer p/ uma leitura publica.
+
+   Defesa em profundidade: `ente_id` explicito no WHERE alem da RLS (mesmo padrao de `buscar`/`atualizar!`).
+   Ordem deterministica por (inicio, id) — o consumidor normaliza intervalos, mas ordem estavel torna o
+   teste falsificavel."
+  [tx ente-id mandato-ids]
+  (if (empty? mandato-ids)
+    []
+    (comum/linhas->kebab
+      (jdbc/execute! tx
+        (sql/format {:select [:mandato_id :inicio :fim]
+                     :from [:cadastros.mandato_licenca]
+                     :where [:and [:= :ente_id ente-id] [:in :mandato_id (vec mandato-ids)]]
+                     :order-by [[:inicio] [:id]]})))))
+
 (defn inserir-licenca! [tx {:keys [id ente-id mandato-id mandato-suplente-id inicio fim motivo]}]
   (jdbc/execute-one! tx
     (sql/format {:insert-into :cadastros.mandato_licenca
