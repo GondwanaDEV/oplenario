@@ -34,6 +34,15 @@
   [repo-cadastros ente-id identidade-id]
   (:id (repo-cadastros-comp/vereador-por-identidade repo-cadastros ente-id identidade-id)))
 
+(def ^:private teto-de-janelas
+  "Teto de intervalos devolvidos por `janelas-de-exercicio`. Cada janela vira um ramo de OR sobre `data` no
+  WHERE da fatia 6, numa rota PUBLICA, anonima e sem cache; `criar-mandato!` (INSERT direto — o caminho do
+  seed e do import de acervo legado, que carrega `lote_id`) nao limita a QUANTIDADE de stints nao
+  sobrepostos (o EXCLUDE da mig 0059 so' impede SOBREPOSICAO entre mandatos 'vigente'). Convencao da casa:
+  todo predicado de cardinalidade aberta tem teto explicito (2000 na pauta, 5000 no fan-out, 4096 no
+  incidente, 200/50 nas listas deste mesmo perfil)."
+  100)
+
 (defn janelas-de-exercicio
   "Stints de mandato + licencas -> JANELA DE EXERCICIO: os periodos de data civil em que esta pessoa
   estava efetivamente no exercicio do mandato (I-5 fatia 4). PURA — sem banco, sem relogio, sem fuso.
@@ -44,36 +53,68 @@
   A fatia 6 usa isto como predicado do DENOMINADOR de presenca — e' a correcao do carry I-5, em que o
   suplente de 3 sessoes recebia o denominador da legislatura inteira.
 
-  TRES decisoes que este corpo carrega, cada uma verificada na fonte de `cadastros`:
-  - fim do stint = `(or fim-efetivo vigencia-fim)`. `mudar-estado!` carimba `fim_efetivo` e NAO fecha
-    `vigencia_fim`: ler so' a vigencia faria o cassado/renunciado/falecido acumular denominador ate o fim
-    nominal da legislatura.
+  QUATRO decisoes que este corpo carrega, cada uma verificada na fonte de `cadastros`:
+  - a licenca e' subtraida SO' DO SEU PROPRIO STINT (`mandato_licenca.mandato_id`, que a FK
+    `(ente_id, mandato_id)` da mig 0010:160 amarra e que `licencas-de-mandatos` devolve de proposito).
+    Subtrair da UNIAO dos stints — como este corpo fazia ate a revisao da fatia 4 — apaga stint alheio no
+    minuto em que a licenca e' aberta (`fim` nil): `normalizar-intervalos` funde stints adjacentes e o
+    buraco vale ate +infinito, entao uma licenca de 2022 apagava o mandato que a pessoa exerce HOJE.
+    Licenca cujo `mandato-id` nao esta' entre os stints recebidos nao subtrai NADA.
+  - fim do stint = `tempo/menor-fim` de `fim-efetivo` e `vigencia-fim` (nil = em aberto, logo perde de
+    qualquer data), nunca `(or ...)`: `mudar-estado!` grava `fim_efetivo` com `[:coalesce ...]` e sem
+    nenhuma checagem contra `vigencia_fim` (nao ha CHECK na mig 0010 nem trigger), entao uma data digitada
+    posterior ao fim da vigencia ALARGARIA a janela em vez de encurta-la.
   - TODOS os stints, nunca `mandato-vigente` (que e' LIMIT 1 na data de hoje e devolve nil p/ ex-vereador,
     justamente o perfil historico em que a janela mais importa). O vao ENTRE dois stints de um suplente
     reconvocado nao e' exercicio e nao entra.
-  - as licencas de `cadastros.mandato_licenca` sao SUBTRAIDAS: `registrar-licenca!` so' troca
-    `mandato.estado` e nao fecha a vigencia, entao sem esta subtracao o licenciado paga por sessoes das
-    quais estava legalmente afastado.
+  - acima de `teto-de-janelas` intervalos, as janelas MAIS ANTIGAS sao DESCARTADAS (nunca fundidas: fundir
+    contaria os vaos entre stints como exercicio). O efeito na fatia 6 e' o mesmo regime, ja' declarado, de
+    `:presenca-projetada-desde` — o periodo descartado some dos DOIS lados da fracao, nunca vira falta.
 
   Vereador sem mandato -> `[]`. Vazio aqui significa 'sem periodo de exercicio registrado' e a fatia 6 o
   publica como tal (0 de 0 + `:janela-de-exercicio-conhecida false`) — NUNCA como fallback p/ o
   denominador global, que seria republicar o I-5 onde ninguem esta olhando.
 
+  O QUE ESTA FN NAO GARANTE (verificado por grep em `src/`, `demo/` e `resources/`; os tres sao o MESMO
+  buraco — falta caminho de escrita de transicao de mandato em `cadastros`, e os tres viram numero publicado
+  na fatia 6):
+  - `fim_efetivo` NAO e' gravavel por nenhuma rota HTTP: o wire `RegistrarMandato` e' `:closed` e nao tem o
+    campo, e `mudar-estado-mandato!` (o unico que o carimba) nao esta' exposto em
+    `cadastros/diplomat/http/in.clj`. Ou seja, o fechamento do cassado/renunciado/falecido descrito acima
+    esta' CORRETO mas hoje NAO ACONTECE em producao — o ramo so' e' exercitado por teste.
+  - `estado` terminal com `fim_efetivo` nil nao fecha nada: `mudar-estado!` documenta `fim-efetivo` como
+    opcional e o `[:coalesce ...]` preserva NULL. Esta fn IGNORA `estado` de proposito — nao ha data
+    alternativa a usar, e inventar uma (p.ex. `hoje`) quebraria a pureza e congelaria o denominador.
+  - `vigencia_fim` e' `{:optional true}` no wire e nao ha PATCH de mandato: mandato aberto = janela ABERTA,
+    sem auto-cura. O suplente convocado sem data de retorno — o arquetipo que abriu o carry I-5 — recebe
+    `{:fim nil}`, ou seja o denominador global deslocado para a data da convocacao.
+  - as licencas chegam SEM validacao de intervalo: `registrar-licenca->dominio` so' coage as datas (nao
+    exige `fim >= inicio` nem que o intervalo caiba na vigencia do mandato) e nao ha constraint na
+    mig 0010:148. Uma licenca com o ano digitado errado zera a janela — e, como nao existe UPDATE nem
+    DELETE de `mandato_licenca`, o erro nao tem remedio dentro do sistema.
+
   CARRY ABERTO (decisao pendente, revisao da fatia 3): licenca com `fim` nil (\"prazo indeterminado\", caminho
-  de primeira classe no wire `RegistrarLicenca`) fecha a janela na vespera do seu inicio — e `mandato_licenca`
-  NAO tem nenhum caminho de UPDATE no sistema (o unico statement que a toca e' o INSERT de
-  `inserir-licenca!`). Logo o fechamento e' IRREVERSIVEL: quem se licencia sem data de volta e retorna
-  publica 100% de presenca tendo faltado a tudo desde o retorno — a injustica I-5 invertida. As duas saidas
-  (abrir o PATCH de `mandato_licenca.fim`, ou decidir que `fim` nil nao subtrai nada) sao decisao do Daouda;
-  esta fn implementa a semantica ESCRITA na decisao, e o teste
-  `licenca-em-curso-com-fim-nulo-fecha-a-janela-no-inicio-dela` a pina."
+  de primeira classe no wire `RegistrarLicenca`) fecha a janela DAQUELE STINT na vespera do seu inicio — e
+  `mandato_licenca` NAO tem nenhum caminho de UPDATE no sistema (o unico statement que a toca e' o INSERT de
+  `inserir-licenca!`). Logo o fechamento e' IRREVERSIVEL: quem se licencia sem data de volta e retorna DENTRO
+  DO MESMO STINT publica 100% de presenca tendo faltado a tudo desde o retorno — a injustica I-5 invertida.
+  As duas saidas (abrir o PATCH de `mandato_licenca.fim`, ou decidir que `fim` nil nao subtrai nada) sao
+  decisao do Daouda; esta fn implementa a semantica ESCRITA na decisao, e o teste
+  `licenca-em-curso-com-fim-nulo-fecha-a-janela-no-inicio-dela` a pina. (O contorno que o operador tem hoje
+  — registrar um mandato NOVO para representar o retorno — passou a funcionar com a subtracao por stint.)"
   [mandatos licencas]
-  (tempo/subtrair-intervalos
-   (map (fn [m] {:inicio (:vigencia-inicio m)
-                 :fim (or (:fim-efetivo m) (:vigencia-fim m))})
-        mandatos)
-   (map (fn [l] {:inicio (:inicio l) :fim (:fim l)})
-        licencas)))
+  (let [licencas-do-stint (group-by :mandato-id licencas)
+        janelas (tempo/normalizar-intervalos
+                 (mapcat (fn [m]
+                           (tempo/subtrair-intervalos
+                            [{:inicio (:vigencia-inicio m)
+                              :fim (tempo/menor-fim (:fim-efetivo m) (:vigencia-fim m))}]
+                            (map #(select-keys % [:inicio :fim])
+                                 (get licencas-do-stint (:id m)))))
+                         mandatos))]
+    (if (> (count janelas) teto-de-janelas)
+      (vec (take-last teto-de-janelas janelas))
+      janelas)))
 
 (defn ficha-e-janelas-publicas
   "Seam do host p/ a rota PUBLICA do perfil do vereador: devolve `{:ficha ... :janelas ...}`, ou nil se o

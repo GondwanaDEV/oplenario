@@ -65,6 +65,21 @@
 ;; `(some? fim)`), ordenava em primeiro (nil < tudo em `compare`) e fundia as janelas reais dentro
 ;; de si — uma janela de TODO o tempo, sem excecao e sem log.
 
+(defn menor-fim
+  "O MENOR de dois fins de intervalo na forma canonica — `nil` e' +infinito e portanto PERDE de qualquer
+  data (o `LEAST` de SQL, que trata NULL como desconhecido, faria o contrario).
+
+  Existe porque `or` nao compara datas: quem tem duas candidatas a fim (uma nominal e uma de encerramento
+  ANTECIPADO) e escreve `(or antecipada nominal)` esta' dizendo 'prefira a antecipada', e uma antecipada
+  digitada POSTERIOR a nominal passa a ESTENDER o intervalo em vez de encurta-lo. Mora aqui, e nao na borda,
+  porque e' aritmetica de intervalo pura e assim fica testavel sem banco e sem interop no host."
+  [a b]
+  (cond
+    (nil? a) b
+    (nil? b) a
+    (.isBefore ^LocalDate a ^LocalDate b) a
+    :else b))
+
 (defn- fim-em-aberto-ou-nao-antes-de?
   "`data` cabe dentro de `fim` (nil = +infinito)? Inclusivo: `data` = `fim` cabe."
   [^LocalDate data fim]

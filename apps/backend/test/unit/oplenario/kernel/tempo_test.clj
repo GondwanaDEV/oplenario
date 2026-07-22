@@ -41,6 +41,25 @@
 ;; Aritmetica de intervalos de data civil (I-5 fatia 2)
 ;; ---------------------------------------------------------------------------
 
+(deftest menor-fim-escolhe-o-encerramento-mais-CEDO-e-nil-e-mais-tarde-que-tudo
+  ;; Revisao da fatia 4 (achado MENOR): o host fechava o stint com `(or fim-efetivo vigencia-fim)`, que
+  ;; significa "prefira fim-efetivo" e NAO "pegue o menor". `fim_efetivo` e' semanticamente um encerramento
+  ;; ANTECIPADO (cassacao/renuncia/falecimento) e `mudar-estado!` o grava com `[:coalesce ...]` sem nenhuma
+  ;; checagem contra `vigencia_fim` (nao ha CHECK na mig 0010 nem trigger): uma data digitada errada,
+  ;; POSTERIOR ao fim da vigencia, ALARGAVA a janela publicada em vez de encurta-la.
+  (is (= (d "2026-05-20") (tempo/menor-fim (d "2026-05-20") (d "2028-12-31")))
+      "encerramento antecipado ganha do fim nominal")
+  (is (= (d "2028-12-31") (tempo/menor-fim (d "2029-06-30") (d "2028-12-31")))
+      "fim POSTERIOR ao nominal nao estende o intervalo — e' o minimo, nao a preferencia")
+  (is (= (d "2028-12-31") (tempo/menor-fim nil (d "2028-12-31")))
+      "nil = +infinito, entao perde de qualquer data")
+  (is (= (d "2026-05-20") (tempo/menor-fim (d "2026-05-20") nil))
+      "... dos dois lados (mandato em aberto encerrado antecipadamente fecha na data)")
+  (is (nil? (tempo/menor-fim nil nil))
+      "dois em aberto continuam em aberto — nunca um fim inventado")
+  (is (= (d "2026-05-20") (tempo/menor-fim (d "2026-05-20") (d "2026-05-20")))
+      "iguais devolvem a propria data"))
+
 (deftest subtrair-buraco-no-meio-parte-a-janela-em-duas
   (is (= [(iv "2026-01-01" "2026-05-31")
           (iv "2026-07-01" "2026-12-31")]

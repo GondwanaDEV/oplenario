@@ -13,20 +13,29 @@
   aritmetica da janela em si e' unit e vive em `oplenario.rotas-janelas-test`."
   (:require [clojure.test :refer [deftest is use-fixtures]]
             [com.stuartsierra.component :as component]
+            [io.pedestal.http :as ph]
+            [io.pedestal.test :as pt]
+            [jsonista.core :as json]
             [oplenario.cadastros.components.repositorio :as repo-cadastros]
             [oplenario.config :as config]
+            [oplenario.http :as http]
+            [oplenario.interceptors :as it]
             [oplenario.kernel.components.datasource :as datasource]
+            [oplenario.kernel.components.idp-dev :as idp-dev]
             [oplenario.migracao :as migracao]
-            [oplenario.rotas :as rotas])
+            [oplenario.rotas :as rotas]
+            [oplenario.transparencia.components.repositorio :as repo-transparencia])
   (:import (java.time LocalDate)))
 
 (def ^:dynamic *repo* nil)
+(def ^:dynamic *repo-transparencia* nil)
 
 (use-fixtures :once
   (fn [t]
     (let [c (component/start (datasource/datasource (config/carregar)))]
       (migracao/migrar! (:ds c))
-      (binding [*repo* (repo-cadastros/->RepoCadastrosPg c)]
+      (binding [*repo* (repo-cadastros/->RepoCadastrosPg c)
+                *repo-transparencia* (repo-transparencia/->RepoTransparenciaPg c)]
         (try (t) (finally (component/stop c)))))))
 
 (def ^:private hoje (LocalDate/of 2026 7 14))
@@ -109,3 +118,42 @@
              (:janelas r))
           "a janela HISTORICA existe mesmo sem mandato vigente — e' o detector de origem: quem 'simplificar'
            derivando a janela de `:mandato` (LIMIT 1 em hoje) devolve [] aqui e o ex-vereador vira 0/0"))))
+
+;; ---------------------------------------------------------------------------
+;; a closure de PRODUCAO do seam (revisao da fatia 4 — achado do revisor de mutacao)
+;; ---------------------------------------------------------------------------
+
+(defn- service-fn
+  "Borda REAL montada SEM a chave `:ficha-e-janelas-publicas` — ou seja, caindo no ramo `or` de `montar`,
+  a closure de PRODUCAO. Todos os demais ns que sobem esta rota (`http_perfil_test`) INJETAM o seam e
+  portanto nunca a executam."
+  []
+  (-> (http/servico (config/carregar)
+                    (rotas/montar {:idp (idp-dev/idp-dev)
+                                   :repo-identidade nil
+                                   :repo-cadastros *repo*
+                                   :repo-transparencia *repo-transparencia*})
+                    it/globais)
+      ph/create-server ::ph/service-fn))
+
+(deftest borda-publica-usa-a-closure-de-producao-do-seam-com-os-argumentos-na-ordem-certa
+  ;; O par (a) ordem `repo ente-id vereador-id`, (b) aridade 2 exposta ao diplomat e (c) o desembrulho de
+  ;; `:ficha` na linha que passa o seam a `transparencia-http/rotas` nao tinha NENHUM detector: inverter
+  ;; `ente-id`/`vereador-id` ali deixava a suite inteira verde e devolvia 404 para 100% dos vereadores de
+  ;; todas as Casas em producao (a tx abriria `com-tenant*` com o UUID do vereador e a RLS nao devolveria
+  ;; linha). Nao ha e2e nem chamada de FE cobrindo esta rota — a tela e' Onda E e ainda nao existe.
+  (let [ente (random-uuid)
+        ver-id (random-uuid)
+        ;; mandato EM ABERTO desde 2020: cobre `hoje` seja qual for a data em que a suite rodar (a closure
+        ;; de producao le o relogio do sistema no fuso civil, nao a `hoje` cravada deste ns).
+        _ (semear-vereador! ente ver-id [{:vigencia-inicio (LocalDate/of 2020 1 1)}])
+        svc (service-fn)
+        r (pt/response-for svc :get (str "/portal/casa/" ente "/vereadores/" ver-id))
+        body (json/read-value (:body r) json/keyword-keys-object-mapper)]
+    (is (= 200 (:status r))
+        "vereador semeado NESTA Casa responde 200 pela closure de producao — se os argumentos estiverem
+         trocados, a RLS nao acha linha e isto vira 404")
+    (is (= "Otavio B" (:nome-parlamentar body))
+        "e a identidade veio de `cadastros` pelo seam, nao de um fake")
+    (is (= 404 (:status (pt/response-for svc :get (str "/portal/casa/" (random-uuid) "/vereadores/" ver-id))))
+        "o MESMO vereador visto de outra Casa e' 404 — o escopo por ente atravessa a borda inteira")))

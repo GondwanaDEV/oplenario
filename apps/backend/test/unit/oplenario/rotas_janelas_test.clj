@@ -23,13 +23,34 @@
   [inicio fim]
   {:inicio (d inicio) :fim (when fim (d fim))})
 
+(def ^:private vocabulario-de-mandato
+  "Dominio REAL de `cadastros.mandato.estado` e `.natureza`, EXTRAIDO do CHECK da mig 0010 — nao redigitado
+  aqui. Revisao da fatia 4 (achado MENOR, 3 revisores): a fixture semeava `:natureza \"suplente\"`, valor que
+  o CHECK recusa (`titular|suplencia`) e que o wire `RegistrarMandato` nao tipa. Passava porque
+  `janelas-de-exercicio` nao le `natureza` — o MESMO mecanismo (fixture verde sobre vocabulario ficticio) que
+  manteve vivo por meses o numerador morto `tipo = 'presente'` e que a fatia 1 gastou uma fatia inteira para
+  matar em `transparencia/suporte_presenca`."
+  (let [ddl (slurp "resources/migrations/20260620000010-cadastros.up.sql")
+        valores (fn [coluna]
+                  (let [[_ lista] (re-find (re-pattern (str "CHECK \\(" coluna " IN \\(([^)]*)\\)\\)")) ddl)]
+                    (set (map second (re-seq #"'([^']+)'" (or lista ""))))))]
+    {:estado (valores "estado") :natureza (valores "natureza")}))
+
 (defn- mandato
   "Linha de `cadastros.mandato` como `mandatos-do-vereador` a devolve (kebab; colunas `date` ja' chegam
-  como `java.time.LocalDate` por `kernel/db_tipos`)."
+  como `java.time.LocalDate` por `kernel/db_tipos`). FAIL-CLOSED no vocabulario: `:estado`/`:natureza` fora
+  do CHECK da mig 0010 estouram AQUI, para que nenhum deftest deste ns declare como real um valor que o
+  banco recusaria (`23514 check_violation` na hora em que alguem promover a fixture para integracao)."
   [m]
-  (merge {:id (random-uuid) :estado "vigente" :natureza "titular" :partido "PDT"
-          :vigencia-inicio nil :vigencia-fim nil :fim-efetivo nil}
-         m))
+  (let [linha (merge {:id (random-uuid) :estado "vigente" :natureza "titular" :partido "PDT"
+                      :vigencia-inicio nil :vigencia-fim nil :fim-efetivo nil}
+                     m)]
+    (doseq [campo [:estado :natureza]]
+      (when-not (contains? (get vocabulario-de-mandato campo) (get linha campo))
+        (throw (ex-info "fixture de mandato fora do vocabulario real de cadastros.mandato"
+                        {:campo campo :valor (get linha campo)
+                         :dominio (get vocabulario-de-mandato campo)}))))
+    linha))
 
 (defn- licenca [m]
   (merge {:mandato-id (random-uuid) :inicio nil :fim nil} m))
@@ -48,7 +69,7 @@
 
 (deftest janela-de-suplente-e-so-o-periodo-da-convocacao
   (let [js (rotas/janelas-de-exercicio
-            [(mandato {:natureza "suplente"
+            [(mandato {:natureza "suplencia"
                        :vigencia-inicio (d "2026-03-01") :vigencia-fim (d "2026-04-30")})]
             [])]
     (is (= [(iv "2026-03-01" "2026-04-30")] js)
@@ -70,13 +91,14 @@
     (is (not= (d "2028-12-31") (:fim (first js))))))
 
 (deftest janela-de-licenciado-nao-inclui-o-periodo-da-licenca
-  (is (= [(iv "2025-01-01" "2025-05-31") (iv "2025-09-01" nil)]
-         (rotas/janelas-de-exercicio
-          [(mandato {:vigencia-inicio (d "2025-01-01") :vigencia-fim nil})]
-          [(licenca {:inicio (d "2025-06-01") :fim (d "2025-08-31")})]))
-      "`registrar-licenca!` so' troca `mandato.estado` e NAO fecha a vigencia: sem subtrair o intervalo da
-       propria `mandato_licenca`, o licenciado por 3 meses paga por sessoes das quais estava afastado.
-       Bordas INCLUSIVAS: a janela morre na vespera (05-31) e renasce no dia seguinte (09-01)"))
+  (let [man-id (random-uuid)]
+    (is (= [(iv "2025-01-01" "2025-05-31") (iv "2025-09-01" nil)]
+           (rotas/janelas-de-exercicio
+            [(mandato {:id man-id :vigencia-inicio (d "2025-01-01") :vigencia-fim nil})]
+            [(licenca {:mandato-id man-id :inicio (d "2025-06-01") :fim (d "2025-08-31")})]))
+        "`registrar-licenca!` so' troca `mandato.estado` e NAO fecha a vigencia: sem subtrair o intervalo da
+         propria `mandato_licenca`, o licenciado por 3 meses paga por sessoes das quais estava afastado.
+         Bordas INCLUSIVAS: a janela morre na vespera (05-31) e renasce no dia seguinte (09-01)")))
 
 (deftest licenca-em-curso-com-fim-nulo-fecha-a-janela-no-inicio-dela
   ;; CARRY ABERTO (revisao da fatia 3, decisao pendente do Daouda): `mandato_licenca.fim` nao tem NENHUM
@@ -85,11 +107,85 @@
   ;; presenca tendo faltado a tudo desde o retorno. Esta fatia implementa a semantica ESCRITA na decisao
   ;; (buraco aberto a' direita); a saida (b) — "licenca com `fim` nil NAO subtrai nada" — inverteria este
   ;; deftest e e' decisao do Daouda, nao da execucao.
-  (is (= [(iv "2025-01-01" "2026-02-09")]
+  (let [man-id (random-uuid)]
+    (is (= [(iv "2025-01-01" "2026-02-09")]
+           (rotas/janelas-de-exercicio
+            [(mandato {:id man-id :vigencia-inicio (d "2025-01-01") :vigencia-fim nil})]
+            [(licenca {:mandato-id man-id :inicio (d "2026-02-10") :fim nil})]))
+        "buraco em aberto (`fim` nil = licenca em curso) fecha a janela na VESPERA do seu inicio")))
+
+;; ---------------------------------------------------------------------------
+;; a licenca pertence a UM stint (revisao da fatia 4 — achado MAJOR dos 3 revisores)
+;; ---------------------------------------------------------------------------
+
+(deftest licenca-aberta-de-stint-antigo-nao-apaga-o-mandato-seguinte-do-reeleito
+  ;; O corpo original descartava o `:mandato-id` que `licencas-de-mandatos` devolve DE PROPOSITO (fatia 3) e
+  ;; subtraia a licenca da UNIAO de todos os stints. Como `normalizar-intervalos` funde stints adjacentes,
+  ;; uma licenca com `fim` nil (caminho de PRIMEIRA CLASSE no wire `RegistrarLicenca`, e sem nenhum UPDATE
+  ;; no sistema que a feche) apagava tudo dali para frente — inclusive o mandato que a pessoa exerce HOJE.
+  ;; Superficie 100% HTTP: POST mandatos (2021-2024) -> POST licencas sem `fim` -> POST mandatos (2025-...),
+  ;; que nada bloqueia (o EXCLUDE da mig 0059 so' incide sobre estado='vigente' e o licenciado nao e').
+  (let [stint-1 (random-uuid)
+        js (rotas/janelas-de-exercicio
+            [(mandato {:id stint-1 :estado "concluido"
+                       :vigencia-inicio (d "2021-01-01") :vigencia-fim (d "2024-12-31")})
+             (mandato {:vigencia-inicio (d "2025-01-01") :vigencia-fim (d "2028-12-31")})]
+            [(licenca {:mandato-id stint-1 :inicio (d "2022-06-01") :fim nil})])]
+    (is (= [(iv "2021-01-01" "2022-05-31") (iv "2025-01-01" "2028-12-31")] js)
+        "a licenca corta SO' o stint a que pertence; o mandato CORRENTE do reeleito sobrevive inteiro")
+    (is (= 2 (count js))
+        "antes da correcao saia UMA janela (2021-01-01..2022-05-31) e o mandato de hoje sumia — na fatia 6
+         isso publica, em pagina publica e nominal, a presenca congelada de um mandato que acabou")))
+
+(deftest licenca-nao-corta-stint-sobreposto-de-outro-mandato
+  ;; Variante sem reeleicao e com licenca do stint LICENCIADO: o retorno so' e' representavel criando um
+  ;; mandato NOVO (nao ha UPDATE de `mandato_licenca.fim` nem rota que devolva `mandato.estado` a 'vigente'),
+  ;; e ele SOBREPOE o antigo. Com a subtracao global, o stint do retorno era apagado por inteiro.
+  (let [stint-a (random-uuid)]
+    (is (= [(iv "2025-01-01" "2026-02-28") (iv "2026-09-01" "2028-12-31")]
+           (rotas/janelas-de-exercicio
+            [(mandato {:id stint-a :estado "licenciado"
+                       :vigencia-inicio (d "2025-01-01") :vigencia-fim (d "2028-12-31")})
+             (mandato {:vigencia-inicio (d "2026-09-01") :vigencia-fim (d "2028-12-31")})]
+            [(licenca {:mandato-id stint-a :inicio (d "2026-03-01") :fim nil})]))
+        "o stint do RETORNO nao e' tocado pela licenca do stint licenciado")))
+
+(deftest licenca-de-mandato-que-nao-esta-na-lista-nao-subtrai-nada
+  (is (= [(iv "2025-01-01" nil)]
          (rotas/janelas-de-exercicio
           [(mandato {:vigencia-inicio (d "2025-01-01") :vigencia-fim nil})]
-          [(licenca {:inicio (d "2026-02-10") :fim nil})]))
-      "buraco em aberto (`fim` nil = licenca em curso) fecha a janela na VESPERA do seu inicio"))
+          [(licenca {:mandato-id (random-uuid) :inicio (d "2025-06-01") :fim (d "2025-08-31")})]))
+      "buraco orfao (mandato-id fora do conjunto de stints) e' IGNORADO — nunca aplicado 'a toa' sobre
+       qualquer janela, que e' exatamente o que o corpo antigo fazia com TODAS as licencas"))
+
+(deftest fim-do-stint-e-o-MENOR-entre-fim-efetivo-e-vigencia-fim
+  ;; `(or fim-efetivo vigencia-fim)` e' "prefira fim-efetivo", nao "pegue o menor" — e `mudar-estado!` grava
+  ;; `fim_efetivo` sem nenhuma checagem contra `vigencia_fim` (sem CHECK na mig 0010, sem trigger).
+  (is (= [(iv "2021-01-01" "2024-12-31")]
+         (rotas/janelas-de-exercicio
+          [(mandato {:estado "concluido"
+                     :vigencia-inicio (d "2021-01-01") :vigencia-fim (d "2024-12-31")
+                     :fim-efetivo (d "2025-06-30")})]
+          []))
+      "um `fim_efetivo` POSTERIOR ao fim da vigencia (ano digitado errado num import) nao pode ALARGAR a
+       janela: cobraria do ex-vereador sessoes de um periodo em que ele nao estava em exercicio, e o
+       numerador nao cresce junto — a fracao publicada cairia sem que ele tivesse faltado a nada"))
+
+(deftest teto-de-janelas-trunca-mantendo-as-mais-recentes
+  ;; Convencao da casa: todo predicado de cardinalidade aberta em rota publica tem teto explicito (cap 2000
+  ;; na pauta, 5000 no fan-out, 4096 no incidente, 200/50 nas listas deste mesmo perfil). Cada janela vira um
+  ;; ramo de OR no WHERE da fatia 6, numa rota anonima e sem cache; `criar-mandato!` (INSERT direto, usado
+  ;; pelo seed e pelo import de acervo legado) nao limita quantidade de stints nao-sobrepostos.
+  (let [stints (for [ano (range 1800 1960)]                 ; 160 stints disjuntos (2 anos de vao entre eles)
+                 (mandato {:estado "concluido"
+                           :vigencia-inicio (d (str ano "-01-01"))
+                           :vigencia-fim (d (str ano "-06-30"))}))
+        js (rotas/janelas-de-exercicio stints [])]
+    (is (= 100 (count js)) "teto de 100 janelas")
+    (is (= (iv "1959-01-01" "1959-06-30") (last js))
+        "trunca as MAIS ANTIGAS: o perfil publico fica com o periodo recente, e o descarte e' declarado na
+         docstring — nunca funde os stints num intervalo unico, que contaria os vaos como exercicio")
+    (is (= (iv "1860-01-01" "1860-06-30") (first js)))))
 
 (deftest multiplos-stints-viram-intervalos-disjuntos-sem-o-vao-entre-eles
   (let [js (rotas/janelas-de-exercicio
@@ -113,6 +209,22 @@
 ;; ---------------------------------------------------------------------------
 ;; guards de FONTE (o que nenhum assert comportamental consegue falsificar)
 ;; ---------------------------------------------------------------------------
+
+(deftest fixture-de-mandato-recusa-vocabulario-fora-do-check-de-cadastros
+  ;; Guard com DENTES para o achado MENOR da revisao (`:natureza "suplente"`): sem ele, nenhum assert deste
+  ;; ns falsifica um valor inventado, porque `janelas-de-exercicio` nao le `natureza` nem `estado`. O dominio
+  ;; e' LIDO da migration, nao redigitado — se o CHECK mudar e a fixture nao, e' aqui que se descobre.
+  (is (= #{"vigente" "licenciado" "cassado" "renunciado" "falecido" "concluido"}
+         (:estado vocabulario-de-mandato))
+      "o dominio saiu mesmo do CHECK da mig 0010 (assert nao-vacuo: regex que pare de casar devolve #{})")
+  (is (= #{"titular" "suplencia"} (:natureza vocabulario-de-mandato))
+      "`suplente` NAO existe em lugar nenhum do sistema — nem no CHECK, nem no enum do wire RegistrarMandato")
+  (is (thrown? clojure.lang.ExceptionInfo (mandato {:natureza "suplente"}))
+      "a fixture estoura no valor exato que a revisao encontrou")
+  (is (thrown? clojure.lang.ExceptionInfo (mandato {:estado "ativo"}))
+      "... e em qualquer outro fora do CHECK")
+  (is (some? (mandato {:natureza "suplencia" :estado "licenciado"}))
+      "e nao e' fail-closed cego: o vocabulario real passa"))
 
 (deftest janela-recebe-localdate-porque-kernel-db-tipos-ja-converte-a-coluna-date
   ;; A decisao original mandava a fatia 4 normalizar `java.sql.Date` -> `LocalDate`. E' FALSO que o pgjdbc
