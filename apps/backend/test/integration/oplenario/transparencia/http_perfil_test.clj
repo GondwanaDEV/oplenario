@@ -30,6 +30,7 @@
             [oplenario.migracao :as migracao]
             [oplenario.motor.components.registro-fatos :as rf]
             [oplenario.rotas :as rotas]
+            [oplenario.sessoes.logic :as sessoes-logic]
             [oplenario.transparencia.components.repositorio :as transparencia-repo]
             [oplenario.transparencia.diplomat.consumers :as consumers]))
 
@@ -111,14 +112,24 @@
 
 (defn- presenca!
   "Projeta `presenca.registrada` (o modulo `sessoes` nao esta' wireado aqui — o portal so' consome o evento
-  publico; mesmo padrao de portal_test/perfil_test)."
+  publico; mesmo padrao de portal_test/perfil_test). `tipo`, `modalidade` e `fonte` sao TRAVADOS contra
+  `sessoes.logic` (o vocabulario REAL do produtor): ate' a fatia 1 do carry I-5 esta fixture semeava
+  'presente'/'presencial'/'mesa', que produtor NENHUM emite, e a suite ficava verde sobre um pipeline
+  ficticio — o mecanismo exato que manteve vivo o numerador morto `tipo = 'presente'`."
   [ente sessao vereador tipo]
-  (tenancy/com-tenant* *ds* ente
-    (fn [tx]
-      (transparencia-repo/projetar-evento! tx
-        {:tipo "presenca.registrada" :ente-id ente
-         :payload {:sessao-id (str sessao) :vereador-id (str vereador) :tipo tipo
-                   :modalidade "presencial" :fonte "mesa" :ocorrido-em "2026-05-18T14:00:00Z"}}))))
+  (let [payload {:sessao-id (str sessao) :vereador-id (str vereador) :tipo tipo
+                 :modalidade "plenario" :fonte "manual_secretaria"
+                 :ocorrido-em "2026-05-18T14:00:00Z"}]
+    (doseq [[campo valor validos] [["tipo" tipo sessoes-logic/tipos-evento-presenca]
+                                   ["modalidade" (:modalidade payload) sessoes-logic/modalidades-presenca]
+                                   ["fonte" (:fonte payload) sessoes-logic/fontes-presenca]]]
+      (when-not (contains? validos valor)
+        (throw (ex-info (str "fixture de presenca fora do vocabulario de sessoes: " campo)
+                        {:campo campo :valor valor :validos validos}))))
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (transparencia-repo/projetar-evento! tx
+          {:tipo "presenca.registrada" :ente-id ente :payload payload})))))
 
 (defn- projetar-norma!
   "Semeia `transparencia.norma` para uma materia ja' projetada (a promulgacao REAL exige autografo +
@@ -318,13 +329,17 @@
   ;; adapter deixava a suite verde e um vereador com 8 presencas em 600 sessoes publicaria "presente em 600
   ;; de 8 sessoes". Aqui os dois numeros sao DISTINTOS e asseridos separadamente (1 de 3, o mesmo cenario de
   ;; portal_test, que ate' hoje so' existia uma camada abaixo — chamando `resumo-presenca` direto).
+  ;; Onda E / carry I-5 fatia 1: os tres eventos passam ao vocabulario REAL. O terceiro deixou de ser
+  ;; "este vereador AUSENTE" (o predicado de `tipo`, que morreu junto com o literal 'presente' — ausencia
+  ;; nunca e' gravada) e virou uma segunda sessao do OUTRO vereador: a assimetria 1-de-3 continua de pe',
+  ;; agora sustentada SO' pelo predicado que existe de verdade, `vereador_id` no numerador.
   (testing "presenca assimetrica sai pela rota com numerador e denominador nos campos certos"
     (let [ente     (random-uuid)
           vereador (random-uuid)
           outro    (random-uuid)]
-      (presenca! ente (random-uuid) vereador "presente")   ; conta nos DOIS
-      (presenca! ente (random-uuid) outro    "presente")   ; so' no denominador (predicado de vereador_id)
-      (presenca! ente (random-uuid) vereador "ausente")    ; so' no denominador (predicado de tipo)
+      (presenca! ente (random-uuid) vereador "entrada")   ; conta nos DOIS
+      (presenca! ente (random-uuid) outro    "entrada")   ; so' no denominador (predicado de vereador_id)
+      (presenca! ente (random-uuid) outro    "saida")     ; so' no denominador (idem)
       (let [body     (ler-json (GET (seam-escopado {[ente vereador] (ficha-fixture vereador)}) ente vereador))
             presenca (:presenca body)]
         (is (= 1 (:sessoes-presente presenca))

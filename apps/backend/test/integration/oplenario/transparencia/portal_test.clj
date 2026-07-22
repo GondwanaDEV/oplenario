@@ -409,25 +409,29 @@
 ;; diretamente, mesmo padrao dos testes de tolerancia acima (transicao-sem-materia-projetada-e-tolerante).
 
 (deftest presenca-registrada-projeta-a-presenca-do-vereador
-  ;; re-revisao: com UMA UNICA linha no ente (a do proprio vereador, 'presente') o `CASE` inteiro do numerador
-  ;; podia ser deletado sem falhar — `COUNT(DISTINCT sessao_id)` cru daria o mesmo 1. Aqui ha TRES sessoes com
-  ;; chamada: uma com este vereador PRESENTE, uma com OUTRO vereador (mata o predicado de vereador_id) e uma
-  ;; com este vereador AUSENTE (mata o predicado de tipo). Numerador 1, denominador 3 — os dois predicados do
-  ;; CASE ficam observaveis.
+  ;; re-revisao: com UMA UNICA linha no ente (a do proprio vereador) o predicado do numerador podia ser
+  ;; deletado sem falhar — `COUNT(DISTINCT sessao_id)` cru daria o mesmo 1. Aqui ha TRES sessoes com chamada:
+  ;; uma com ESTE vereador e DUAS so' com o outro, que matam o predicado `vereador_id`. Numerador 1,
+  ;; denominador 3.
+  ;; Onda E / carry I-5 fatia 1: o vocabulario passa ao REAL de `sessoes` (entrada|saida|retorno|
+  ;; mudanca_modalidade, plenario|remoto, manual_secretaria) — 'presente'/'ausente'/'presencial'/'mesa'
+  ;; NUNCA existiram no produtor, e o distrator de terceiro caso deixou de ser "ausente" (que o produtor nao
+  ;; grava: ausencia e' a AUSENCIA de linha) e virou uma segunda sessao do OUTRO vereador.
   (let [ente (random-uuid) vereador (random-uuid) outro (random-uuid)
         sessao-a (random-uuid) sessao-b (random-uuid) sessao-c (random-uuid)]
     (tenancy/com-tenant* *ds* ente
       (fn [tx]
-        (doseq [[sessao quem tipo] [[sessao-a vereador "presente"]
-                                    [sessao-b outro    "presente"]
-                                    [sessao-c vereador "ausente"]]]
+        (doseq [[sessao quem tipo] [[sessao-a vereador "entrada"]
+                                    [sessao-b outro    "entrada"]
+                                    [sessao-c outro    "saida"]]]
           (transparencia-repo/projetar-evento! tx
             {:tipo "presenca.registrada" :ente-id ente
              :payload {:sessao-id (str sessao) :vereador-id (str quem) :tipo tipo
-                       :modalidade "presencial" :fonte "mesa" :ocorrido-em "2026-05-18T14:00:00Z"}}))
+                       :modalidade "plenario" :fonte "manual_secretaria"
+                       :ocorrido-em "2026-05-18T14:00:00Z"}}))
         (let [resumo (db-parlamentar/resumo-presenca tx ente vereador)]
           (is (= 1 (:sessoes-presente resumo))
-              "numerador: so' a sessao em que ESTE vereador consta PRESENTE (nao a do outro, nem a ausencia)")
+              "numerador: so' a sessao em que ESTE vereador tem linha (ter linha == compareceu)")
           (is (= 3 (:sessoes-com-chamada resumo))
               "denominador: todas as sessoes do ENTE que tiveram chamada, independente de quem/como"))))))
 
@@ -441,8 +445,8 @@
       (fn [tx]
         (eventos/emitir! (outbox/bus) tx
           (ev-presenca/registrada ente
-            {:sessao-id sessao :vereador-id vereador :tipo "presente" :modalidade "presencial"
-             :fonte "mesa" :ocorrido-em "2026-05-18T14:00:00Z"}))))
+            {:sessao-id sessao :vereador-id vereador :tipo "entrada" :modalidade "plenario"
+             :fonte "manual_secretaria" :ocorrido-em "2026-05-18T14:00:00Z"}))))
     (drenar!)
     (let [resumo (tenancy/com-tenant* *ds* ente (fn [tx] (db-parlamentar/resumo-presenca tx ente vereador)))]
       (is (= 1 (:sessoes-presente resumo))

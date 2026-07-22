@@ -78,17 +78,35 @@
                    :where [:and [:= :ente_id ente-id] [:= :vereador_id vereador-id]]})))))
 
 (defn resumo-presenca
-  "Numero-card de presenca. Denominador = sessoes do ENTE que tiveram chamada (COUNT DISTINCT sessao_id);
-  numerador = as em que este vereador consta 'presente'. Devolve os DOIS numeros — a UI mostra a fracao, nunca
-  um percentual sem denominador (um 100% de 1 sessao mente por omissao)."
+  "Numero-card de presenca. Devolve os DOIS numeros — a UI mostra a fracao, nunca um percentual sem
+  denominador (um 100% de 1 sessao mente por omissao).
+
+  DENOMINADOR = sessoes do ENTE INTEIRO que tiveram chamada (COUNT DISTINCT sessao_id). Ele NAO tem
+  `vereador_id` no predicado, e isso e' deliberado nos DOIS sentidos: e' o que faz o faltoso cronico publicar
+  '0 de 40' em vez de sumir num '0 de 0' — e e', ao mesmo tempo, o carry I-5 AINDA ABERTO, porque o
+  denominador tambem nao e' recortado pela janela de exercicio do mandato. Ou seja: HOJE o suplente
+  convocado para 3 sessoes recebe o denominador da legislatura inteira. A janela de mandato entra na fatia 6
+  do plano do I-5; ate' la' o recorte publicado e' o do ente inteiro, e nao ha como esta funcao saber
+  diferente (§22.10 proibe `transparencia` de importar `cadastros`).
+
+  NUMERADOR = as sessoes DESSE MESMO conjunto em que ELE tem linha em `presenca_parlamentar`, via
+  `FILTER (WHERE vereador_id = ?)` — os dois agregados sobre o MESMO argumento `sessao_id`. TER LINHA ==
+  COMPARECEU, e a AUSENCIA DE FILTRO POR `tipo` E' DELIBERADA: ausencia nunca e' gravada ('sem evento ate' la'
+  = ausente', `sessoes/relacoes/presenca`), nao existe chamada em lote, e os QUATRO tipos do vocabulario real
+  (entrada|saida|retorno|mudanca_modalidade, `sessoes/logic` + CHECK da mig 0029) implicam que a pessoa foi
+  registrada naquela sessao — inclusive 'saida', que so' existe depois de uma entrada. Ate' a Onda E/fatia 1
+  o predicado aqui era `tipo = 'presente'`, valor que PRODUTOR NENHUM emite: o numerador valia ZERO para todo
+  parlamentar em producao, com o denominador cheio. Nao reintroduzir o filtro sem antes derrubar
+  `numerador-conta-sessao-cujo-unico-evento-projetado-e-saida` — e' um numero publico e nominal.
+
+  Numerador <= denominador por construcao (mesma tabela, mesmo argumento, predicado so' restringe)."
   [tx ente-id vereador-id]
   {:pre [(some? ente-id) (some? vereador-id)]}
   (comum/linha->kebab
    (jdbc/execute-one! tx
      (sql/format {:select [[[:count [:distinct :sessao_id]] :sessoes_com_chamada]
-                           [[:count [:distinct [:case [:and [:= :vereador_id vereador-id]
-                                                            [:= :tipo "presente"]]
-                                                :sessao_id :else nil]]]
+                           [[:filter [:count [:distinct :sessao_id]]
+                             {:where [:= :vereador_id vereador-id]}]
                             :sessoes_presente]]
                   :from [:transparencia.presenca_parlamentar]
                   :where [:= :ente_id ente-id]}))))

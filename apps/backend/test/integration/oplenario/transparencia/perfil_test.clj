@@ -26,6 +26,7 @@
             [oplenario.legislativo.db.tramitacao-executiva :as exec]
             [oplenario.migracao :as migracao]
             [oplenario.motor.components.registro-fatos :as rf]
+            [oplenario.sessoes.logic :as sessoes-logic]
             [oplenario.transparencia.components.repositorio :as transparencia-repo]
             [oplenario.transparencia.controllers :as controllers]
             [oplenario.transparencia.diplomat.consumers :as consumers])
@@ -90,16 +91,34 @@
       {:id (random-uuid) :votacao-id vid :vereador-id vereador :voto "sim"})
     vid))
 
+(defn- validar-vocabulario-de-presenca!
+  "Trava a FIXTURE contra o vocabulario REAL de `sessoes` — a fonte do evento. Ate' a Onda E fatia 1 os
+  helpers deste arquivo semeavam `tipo \"presente\"`, `modalidade \"presencial\"` e `fonte \"mesa\"`: TRES
+  valores que produtor nenhum emite (`sessoes/logic`, espelhando os CHECK da mig 0029). Passavam porque
+  `RegistradaPayload` tipa os tres como `:string` cru e o consumer de `transparencia` copia `:tipo` sem
+  validar enum — a suite inteira de presenca ficava verde sobre um pipeline FICTICIO, e foi assim que o
+  numerador morto (`tipo = 'presente'`) sobreviveu. Aqui a fixture LANCA em vez de deixar passar."
+  [{:keys [tipo modalidade fonte]}]
+  (doseq [[campo valor validos] [["tipo" tipo sessoes-logic/tipos-evento-presenca]
+                                 ["modalidade" modalidade sessoes-logic/modalidades-presenca]
+                                 ["fonte" fonte sessoes-logic/fontes-presenca]]]
+    (when-not (contains? validos valor)
+      (throw (ex-info (str "fixture de presenca fora do vocabulario de sessoes: " campo)
+                      {:campo campo :valor valor :validos validos})))))
+
 (defn- presenca!
   "Projeta `presenca.registrada` (o modulo `sessoes` nao esta' wireado aqui — o portal so' consome o evento
-  publico; mesmo padrao de portal_test)."
+  publico; mesmo padrao de portal_test). `tipo` no vocabulario REAL: entrada|saida|retorno|
+  mudanca_modalidade."
   [ente sessao vereador tipo]
-  (tenancy/com-tenant* *ds* ente
-    (fn [tx]
-      (transparencia-repo/projetar-evento! tx
-        {:tipo "presenca.registrada" :ente-id ente
-         :payload {:sessao-id (str sessao) :vereador-id (str vereador) :tipo tipo
-                   :modalidade "presencial" :fonte "mesa" :ocorrido-em "2026-05-18T14:00:00Z"}}))))
+  (let [payload {:sessao-id (str sessao) :vereador-id (str vereador) :tipo tipo
+                 :modalidade "plenario" :fonte "manual_secretaria"
+                 :ocorrido-em "2026-05-18T14:00:00Z"}]
+    (validar-vocabulario-de-presenca! payload)
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (transparencia-repo/projetar-evento! tx
+          {:tipo "presenca.registrada" :ente-id ente :payload payload})))))
 
 (defn- projetar-materia!
   "Semeia uma materia com uma COMBINACAO de autoria que o produtor real nao emite hoje (ex.: autor_tipo
@@ -161,7 +180,7 @@
                                 {:autor-tipo "vereador" :autor-id vereador :autor-texto "Helena Past"})]
       (votar! ente pid vereador)
       (drenar!)
-      (presenca! ente (random-uuid) vereador "presente")
+      (presenca! ente (random-uuid) vereador "entrada")
       (let [p (controllers/perfil-parlamentar *repo-transparencia* ente vereador)]
         (is (= 1 (count (:materias p))) "a materia de autoria aparece")
         (is (= 1 (:materias-total p)) "o total do universo (sem teto) acompanha a lista")
@@ -327,3 +346,80 @@
       (let [p (controllers/perfil-parlamentar *repo-transparencia* ente vereador)]
         (is (= 200 (count (:materias p))) "a lista para no teto server-side")
         (is (= 205 (:materias-total p)) "o total conta o universo INTEIRO, nao as linhas devolvidas")))))
+
+;; ---------- (g) o numerador de presenca: vocabulario real de `sessoes` (Onda E, carry I-5 fatia 1) ----------
+
+(deftest fixture-de-presenca-recusa-vocabulario-fora-de-sessoes-logic
+  (testing "a fixture trava contra `sessoes.logic` — semear o vocabulario ficticio antigo LANCA"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (validar-vocabulario-de-presenca!
+                  {:tipo "presente" :modalidade "plenario" :fonte "manual_secretaria"}))
+        "'presente' NUNCA foi emitido por produtor nenhum — e' exatamente o valor do numerador morto")
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (validar-vocabulario-de-presenca!
+                  {:tipo "entrada" :modalidade "presencial" :fonte "manual_secretaria"}))
+        "'presencial' nao esta' em modalidades-presenca (plenario|remoto)")
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (validar-vocabulario-de-presenca!
+                  {:tipo "entrada" :modalidade "plenario" :fonte "mesa"}))
+        "'mesa' nao esta' em fontes-presenca (manual_secretaria|painel_eletronico|...)")
+    (is (nil? (validar-vocabulario-de-presenca!
+               {:tipo "entrada" :modalidade "plenario" :fonte "manual_secretaria"}))
+        "o vocabulario REAL passa — a trava nao e' um `throw` incondicional")))
+
+(deftest numerador-com-vocabulario-real-de-sessoes-deixa-de-ser-zero
+  ;; A REGRESSAO DO BUG MORTO. O numerador comparava `tipo = 'presente'`, valor que produtor nenhum emite
+  ;; (`sessoes/logic/tipos-evento-presenca` = entrada|saida|retorno|mudanca_modalidade, espelhando o CHECK da
+  ;; mig 0029) — logo `sessoes_presente` valia ZERO para TODO parlamentar em producao, com o denominador
+  ;; cheio. Este teste so' pode passar se o predicado de `tipo` tiver morrido.
+  (testing "sessao com 'entrada' projetada conta no numerador"
+    (let [ente     (random-uuid)
+          vereador (random-uuid)]
+      (presenca! ente (random-uuid) vereador "entrada")
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador))]
+        (is (= 1 (:sessoes-presente p)) "com o vocabulario REAL o numerador deixa de ser zero")
+        (is (= 1 (:sessoes-com-chamada p)))))))
+
+(deftest numerador-conta-sessao-cujo-unico-evento-projetado-e-saida
+  ;; PINA A AUSENCIA DELIBERADA DO FILTRO POR `tipo`. `presenca_parlamentar` guarda o ESTADO ATUAL por
+  ;; (sessao, vereador) e o UPSERT mantem o evento de maior `ocorrido_em`: quem entrou e saiu termina a sessao
+  ;; com `tipo = 'saida'`. Ausencia NUNCA e' gravada (`sessoes/relacoes/presenca`: "sem evento ate' la =
+  ;; ausente") e nao existe chamada em lote — entao TER LINHA == COMPARECEU, e 'saida' e' comparecimento.
+  ;; Se um dev futuro "consertar" o codigo reintroduzindo `WHERE tipo IN (...positivos)`, este teste quebra
+  ;; ANTES de o numero publico mudar em silencio.
+  (testing "o vereador que entrou e saiu compareceu — 'saida' nao e' falta"
+    (let [ente     (random-uuid)
+          vereador (random-uuid)]
+      (presenca! ente (random-uuid) vereador "saida")
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador))]
+        (is (= 1 (:sessoes-presente p)) "quem assinou e saiu compareceu")
+        (is (= 1 (:sessoes-com-chamada p)))))))
+
+(deftest numerador-nao-conta-sessao-em-que-so-outro-vereador-tem-linha
+  ;; O distrator do predicado `vereador_id` no NUMERADOR: a RLS isola por TENANT, nao por vereador. Sem o
+  ;; predicado, a presenca do colega vira presenca deste — numa pagina publica e NOMINAL.
+  (testing "sessao em que so' o OUTRO vereador tem linha entra no denominador, nunca no numerador"
+    (let [ente     (random-uuid)
+          vereador (random-uuid)
+          outro    (random-uuid)]
+      (presenca! ente (random-uuid) vereador "entrada")
+      (presenca! ente (random-uuid) outro    "entrada")
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador))]
+        (is (= 1 (:sessoes-presente p)) "so' a sessao em que ESTE vereador tem linha")
+        (is (= 2 (:sessoes-com-chamada p)) "as duas sessoes tiveram chamada")))))
+
+(deftest denominador-nesta-fatia-ainda-e-do-ente-inteiro
+  ;; PIN TEMPORARIO — some na fatia 6 do carry I-5. Documenta, em teste, o recorte que esta fatia NAO muda:
+  ;; o denominador e' o ENTE INTEIRO, sem janela de exercicio do mandato. E' precisamente a injustica do I-5
+  ;; (o suplente de 3 sessoes recebe o denominador da legislatura), e ela segue ABERTA depois desta fatia.
+  ;; O lado bom do mesmo recorte, que a fatia 6 preserva de proposito: o faltoso cronico publica '0 de 3', e
+  ;; nao some num '0 de 0'.
+  (testing "vereador sem NENHUMA linha ainda recebe o denominador cheio do ente"
+    (let [ente     (random-uuid)
+          vereador (random-uuid)
+          outro    (random-uuid)]
+      (dotimes [_ 3] (presenca! ente (random-uuid) outro "entrada"))
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador))]
+        (is (= 0 (:sessoes-presente p)) "ele nao compareceu a nenhuma")
+        (is (= 3 (:sessoes-com-chamada p))
+            "o denominador NAO tem vereador_id no predicado — o faltoso cronico nao vira '0 de 0'")))))
