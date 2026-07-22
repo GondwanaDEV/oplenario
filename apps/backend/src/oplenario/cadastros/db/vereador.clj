@@ -196,8 +196,14 @@
    `motivo` e' dado potencialmente sensivel de saude que nao deve escorrer p/ uma leitura publica.
 
    Defesa em profundidade: `ente_id` explicito no WHERE alem da RLS (mesmo padrao de `buscar`/`atualizar!`).
-   Ordem deterministica por (inicio, id) — o consumidor normaliza intervalos, mas ordem estavel torna o
-   teste falsificavel."
+   Nenhum teste COMPORTAMENTAL consegue falsificar esse predicado — a RLS (FORCE + policy sobre o GUC
+   `app.ente_id`) ja' bloqueia o cross-tenant em qualquer formato de tx, e a mutacao `[:= 1 1]` deixa o ns
+   verde; quem o pina e' o guard de FONTE `licencas-de-mandatos-tem-ente-id-explicito-no-where`.
+
+   Ordem deterministica por (inicio, id): o consumidor previsto (`kernel/tempo/normalizar-intervalos`)
+   ordena e nao depende dela, mas a ordem e' pinada por assercao em
+   `ficha-e-mandatos-devolve-licencas-do-vereador-e-nenhuma-de-outro` (duas licencas inseridas fora de
+   ordem) — remover o `:order-by` fica vermelho."
   [tx ente-id mandato-ids]
   (if (empty? mandato-ids)
     []

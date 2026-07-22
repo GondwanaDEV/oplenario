@@ -37,7 +37,10 @@
      `:mandatos` = TODOS os stints (`mandatos-do-vereador`), nao so' o que cobre `data` — e' a unica fonte
      capaz de descrever o ex-vereador, cujo `:mandato` e' nil. `:licencas` = as licencas DESSES mandatos,
      `{:mandato-id :inicio :fim}` (`fim` nil = em curso). Existe para que a borda publica de transparencia
-     derive a janela de exercicio SEM um segundo round-trip: e' a MESMA tx que ja' rodava como guard de 404.
+     derive a janela de exercicio SEM uma segunda TRANSACAO (e sem um segundo seam com BEGIN/SET LOCAL/
+     COMMIT proprio numa rota anonima sem cache): e' a MESMA tx que ja' rodava como guard de 404. NAO e'
+     custo zero — sao 2 statements a mais que `ficha-vereador` (`mandatos-do-vereador` + a licenca; 1 a
+     mais quando o vereador nao tem mandato nenhum, pelo curto-circuito de lista vazia).
      ADITIVO — `ficha-vereador` fica intacto e a rota autenticada de cadastros nao paga por isto.")
   (vereador-por-identidade [this ente-id identidade-id])
   (criar-mandato! [this ente-id mandato])

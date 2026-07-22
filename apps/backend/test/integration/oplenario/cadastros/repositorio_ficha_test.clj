@@ -103,11 +103,22 @@
     (semear-mandato! ente leg-id ver-id {:id stint :estado "concluido"
                                          :vigencia-inicio (LocalDate/of 2021 1 1)
                                          :vigencia-fim (LocalDate/of 2024 12 31)})
+    ;; A licenca vive num stint que `mandato-vigente` NAO devolve (ele e' nil aqui). E' o unico detector
+    ;; do ELO `:mandatos` -> `:licencas`: uma versao que passasse so' o mandato corrente a
+    ;; `licencas-de-mandatos` devolveria [] e a fatia 6 cobraria do ex-vereador as sessoes das quais ele
+    ;; estava legalmente afastado — a propria injustica I-5, republicada em silencio.
+    (repo/criar-licenca! *repo* ente {:id (random-uuid) :ente-id ente :mandato-id stint
+                                      :inicio (LocalDate/of 2022 6 1) :fim (LocalDate/of 2022 12 31)
+                                      :motivo "saude"})
     (let [r (repo/ficha-e-mandatos-do-vereador *repo* ente ver-id hoje)]
       (is (some? (:vereador r)) "ex-vereador ainda existe como pessoa")
       (is (nil? (:mandato r)) "nenhum mandato cobre hoje")
       (is (= [stint] (map :id (:mandatos r)))
-          "o stint historico continua vindo — e' a UNICA fonte da janela do ex-vereador"))))
+          "o stint historico continua vindo — e' a UNICA fonte da janela do ex-vereador")
+      (is (= [stint] (map :mandato-id (:licencas r)))
+          "a licenca do stint HISTORICO e' a unica fonte da subtracao da janela do ex-vereador")
+      (is (= [(LocalDate/of 2022 6 1)] (map :inicio (:licencas r)))
+          "e ela volta com o intervalo, nao so' com o id"))))
 
 (deftest ficha-e-mandatos-devolve-licencas-do-vereador-e-nenhuma-de-outro
   (let [ente (random-uuid) leg-id (random-uuid)
@@ -120,6 +131,11 @@
     (repo/criar-vereador! *repo* ente {:id ver-b :ente-id ente :nome "Joao"})
     (semear-mandato! ente leg-id ver-a {:id man-a :vigencia-inicio (LocalDate/of 2025 1 1)})
     (semear-mandato! ente leg-id ver-b {:id man-b :vigencia-inicio (LocalDate/of 2025 1 1)})
+    ;; INSERIDA PRIMEIRO de proposito, com `inicio` POSTERIOR: sem o `:order-by [[:inicio] [:id]]` o
+    ;; retorno tende a sair na ordem fisica do heap (= ordem de insercao) e a assercao de ordem abaixo
+    ;; falha. E' o unico detector da clausula.
+    (repo/criar-licenca! *repo* ente {:id (random-uuid) :ente-id ente :mandato-id man-a
+                                      :inicio (LocalDate/of 2026 1 10) :fim nil :motivo "particular"})
     (repo/criar-licenca! *repo* ente {:id lic-a :ente-id ente :mandato-id man-a
                                       :inicio (LocalDate/of 2025 3 1) :fim (LocalDate/of 2025 5 31)
                                       :motivo "saude"})
@@ -127,10 +143,29 @@
                                       :inicio (LocalDate/of 2025 4 1) :fim nil :motivo "particular"})
     (let [r (repo/ficha-e-mandatos-do-vereador *repo* ente ver-a hoje)
           ls (:licencas r)]
-      (is (= 1 (count ls)) "so' a licenca do mandato DESTE vereador")
-      (is (= man-a (:mandato-id (first ls))))
-      (is (= (LocalDate/of 2025 3 1) (:inicio (first ls))) "coluna `date` chega como LocalDate")
-      (is (= (LocalDate/of 2025 5 31) (:fim (first ls)))))))
+      (is (= 2 (count ls)) "so' as licencas dos mandatos DESTE vereador (a de `ver-b` fica de fora)")
+      (is (= [man-a man-a] (map :mandato-id ls)))
+      (is (= [(LocalDate/of 2025 3 1) (LocalDate/of 2026 1 10)] (map :inicio ls))
+          "ordem deterministica por (inicio, id) — inseridas fora de ordem de proposito; e coluna `date` chega como LocalDate")
+      (is (= (LocalDate/of 2025 5 31) (:fim (first ls))))
+      (is (nil? (:fim (second ls)))
+          "licenca EM CURSO chega com `fim` nil, nao normalizado p/ data nenhuma: e' o buraco ABERTO a' direita que a fatia 4 subtrai")
+      (is (= #{:mandato-id :inicio :fim} (set (keys (first ls))))
+          "a linha NUNCA carrega :motivo (dado potencialmente de saude) nem :mandato-suplente-id p/ o caminho da rota publica anonima"))))
+
+(deftest licencas-de-mandatos-tem-ente-id-explicito-no-where
+  ;; A RLS (FORCE + policy comparando com o GUC `app.ente_id`) ja' bloqueia o cross-tenant em QUALQUER
+  ;; formato de tx, e por isso NENHUM teste comportamental consegue discriminar a presenca do predicado
+  ;; explicito — provado por mutacao (`[:= :ente_id ente-id]` -> `[:= 1 1]` deixa o ns inteiro verde). O
+  ;; guard de FONTE abaixo e' o unico detector da defesa em profundidade que a docstring declara — molde do
+  ;; `estrutura-lint-test` / `zona-civil-padrao-e-a-mesma-usada-pelo-seam-de-ficha`. Importa porque este
+  ;; repo ja' chama `db/vereador` de dentro de uma tx do relay que seta so' o GUC e NAO troca de role
+  ;; (`identidade-do-vereador-em-tx`), contexto em que o predicado deixa de ser cinto-e-suspensorio.
+  (let [fonte (slurp "src/oplenario/cadastros/db/vereador.clj")
+        corpo (second (re-find #"(?s)\(defn licencas-de-mandatos(.*?)\n\(defn " fonte))]
+    (is (some? corpo) "a fn `licencas-de-mandatos` continua existindo em db/vereador.clj (assert com dentes)")
+    (is (re-find #"\[:= :ente_id ente-id\]" corpo)
+        "o WHERE casa `ente_id` explicito alem da RLS — remover isso nao pode passar verde")))
 
 (deftest licencas-de-mandatos-com-lista-vazia-nao-toca-o-banco
   ;; `tx` nil: se a fn emitisse SQL, next.jdbc estouraria. Alem de evitar `IN ()` invalido, prova que o
