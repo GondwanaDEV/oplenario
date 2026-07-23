@@ -92,6 +92,19 @@
     (is (= [[:registrar-mandato ente m] [:registrar-licenca ente ver l hoje]] @chamadas)
         "repassou ente-id + demais args sem alteracao, para os dois metodos")))
 
+(deftest reassumir-mandato-e-pass-through
+  (let [ente (random-uuid) ver (random-uuid) volta (LocalDate/of 2026 4 10) man (random-uuid)
+        chamadas (atom [])
+        repo #_{:clj-kondo/ignore [:missing-protocol-method]}
+             (reify repo-cadastros/RepoCadastros
+               (reassumir-mandato! [_ e v dia]
+                 (swap! chamadas conj [:reassumir e v dia])
+                 {:id man :fim (.minusDays dia 1)}))]
+    (is (= {:id man :fim (LocalDate/of 2026 4 9)} (controllers/reassumir-mandato repo ente ver volta))
+        "devolve o que o Repo devolve — o -1 dia e' do Repo, o controller nao calcula nada")
+    (is (= [[:reassumir ente ver volta]] @chamadas)
+        "repassa `reassumiu-em` CRU (o dia da VOLTA), nunca ja' decrementado")))
+
 ;; ---------- legislatura-vigente: pass-through ----------
 
 (deftest legislatura-vigente-devolve-o-que-o-repo-devolve

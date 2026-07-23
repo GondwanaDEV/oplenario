@@ -131,13 +131,14 @@
 (defn- fake-repo-escrita
   "RepoCadastros fake com as escritas + legislatura-vigente. Cada fn devolve o que o teste precisa; use nil
   p/ 404 e (throw (ex-info ... {:tipo :conflito/...})) p/ 409."
-  [{:keys [criar editar mandato licenca leg]}]
+  [{:keys [criar editar mandato licenca leg reassuncao]}]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify repo-cad/RepoCadastros
     (criar-vereador!    [_ _ _]     (or criar {:next.jdbc/update-count 1}))
     (atualizar-vereador! [_ _ _ _]  (if (some? editar) editar 1))
     (registrar-mandato! [_ _ m]     (if (fn? mandato) (mandato m) mandato))
     (registrar-licenca! [_ _ _ l _] (if (fn? licenca) (licenca l) licenca))
+    (reassumir-mandato! [_ _ _ dia] (if (fn? reassuncao) (reassuncao dia) reassuncao))
     (legislatura-vigente [_ _]      leg)))
 
 (defn- post [service tok path body]
@@ -200,6 +201,46 @@
                               tok (str "/cadastros/vereadores/" ver "/licencas") corpo))))
     (is (= 409 (:status (post (service-fn #{"secretario"} (fake-repo-escrita {:licenca sem-vigente}))
                               tok (str "/cadastros/vereadores/" ver "/licencas") corpo))))))
+
+;; ---------- Reassuncao: POST /cadastros/vereadores/:id/reassuncao ----------
+
+(deftest reassumir-mandato-200-404-409
+  ;; 200 (nao 201): a reassuncao nao CRIA recurso — fecha linhas existentes e transiciona o mandato
+  ;; (mesmo precedente de editar-vereador-handler/ligar-identidade-handler, ambos 200).
+  (let [tok (token (random-uuid) (random-uuid)) ver (random-uuid)
+        corpo {:reassumiu-em "2026-04-10"}
+        path (str "/cadastros/vereadores/" ver "/reassuncao")
+        conflito (fn [tipo] (fn [_] (throw (ex-info "x" {:tipo tipo}))))
+        r200 (post (service-fn #{"secretario"}
+                     (fake-repo-escrita {:reassuncao (fn [dia] {:id ver :fim (.minusDays ^java.time.LocalDate dia 1)})}))
+                   tok path corpo)]
+    (is (= 200 (:status r200)))
+    (is (= "2026-04-09" (:fim (ler-json r200)))
+        "o corpo devolve o `fim` GRAVADO (D-1), stringificado — LocalDate cru estouraria no jsonista")
+    (is (= 404 (:status (post (service-fn #{"secretario"} (fake-repo-escrita {:reassuncao nil}))
+                              tok path corpo)))
+        "vereador inexistente/de-outro-tenant -> 404")
+    (is (= 404 (:status (post (service-fn #{"secretario"} (fake-repo-escrita {:reassuncao {:id ver}}))
+                              tok "/cadastros/vereadores/nao-uuid/reassuncao" corpo)))
+        ":id malformado -> 404, nunca 500")
+    (doseq [tipo [:conflito/sem-mandato-licenciado :conflito/retorno-anterior-ao-inicio
+                  :conflito/mandato-sobreposto]]
+      (is (= 409 (:status (post (service-fn #{"secretario"} (fake-repo-escrita {:reassuncao (conflito tipo)}))
+                                tok path corpo)))
+          (str tipo " -> 409")))))
+
+(deftest reassumir-mandato-corpo-invalido-400-e-sem-papel-403
+  (let [ver (random-uuid) path (str "/cadastros/vereadores/" ver "/reassuncao")
+        repo (fake-repo-escrita {:reassuncao {:id ver :fim (java.time.LocalDate/of 2026 4 9)}})]
+    (is (= 400 (:status (post (service-fn #{"secretario"} repo)
+                              (token (random-uuid) (random-uuid)) path {})))
+        "sem :reassumiu-em -> :validacao/invalido -> 400")
+    (is (= 400 (:status (post (service-fn #{"secretario"} repo)
+                              (token (random-uuid) (random-uuid)) path {:reassumiu-em "10/04/2026"})))
+        "data malformada -> 400 pela borda, nunca 500")
+    (is (= 403 (:status (post (service-fn #{"vereador"} repo)
+                              (token (random-uuid) (random-uuid)) path {:reassumiu-em "2026-04-10"})))
+        "quem nao pode licenciar tambem nao pode reassumir (MESMO papel de /licencas)")))
 
 ;; ---------- Task 9: PATCH /cadastros/vereadores/:id/identidade ----------
 

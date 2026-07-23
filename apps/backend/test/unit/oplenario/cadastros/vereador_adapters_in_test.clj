@@ -98,3 +98,21 @@
       "identidade-id que nao parseia como uuid -> invalido")
   (is (validacao-invalida? #(a/ligar-identidade->dominio {"identidade-id" (str (random-uuid)) "extra" "forja"}))
       ":closed recusa campo fora do contrato"))
+
+;; ---- reassuncao de mandato ----
+(deftest reassuncao-coage-reassumiu-em-para-localdate
+  (is (= (LocalDate/of 2026 4 10) (a/reassumir-mandato->dominio {"reassumiu-em" "2026-04-10"}))
+      "devolve so' a data coagida (mesma forma de ligar-identidade->dominio, que devolve so' o uuid) — a
+       aritmetica do -1 dia mora no Repo, nunca aqui"))
+
+(deftest reassuncao-sem-data-ou-com-data-malformada-e-invalido
+  (is (validacao-invalida? #(a/reassumir-mandato->dominio {})) "corpo sem reassumiu-em -> invalido")
+  (is (validacao-invalida? #(a/reassumir-mandato->dominio {"reassumiu-em" ""}))
+      "string vazia nao e' data ({:min 1} do wire)")
+  ;; buraco de cobertura herdado das outras rotas de data: nenhum teste mandava data MALFORMADA.
+  (is (validacao-invalida? #(a/reassumir-mandato->dominio {"reassumiu-em" "10/04/2026"}))
+      "data em formato brasileiro -> 400, nunca 500 no LocalDate/parse")
+  (is (validacao-invalida? #(a/reassumir-mandato->dominio {"reassumiu-em" "2026-13-45"}))
+      "data sintaticamente ISO mas inexistente -> 400")
+  (is (validacao-invalida? #(a/reassumir-mandato->dominio {"reassumiu-em" "2026-04-10" "vereador-id" "forja"}))
+      ":closed recusa campo fora do contrato (anti-forja)"))

@@ -126,6 +126,53 @@
                            [:or [:is :vigencia_fim nil] [:>= :vigencia_fim data]]]
                    :order-by [[:vigencia_inicio :desc] [:id]] :limit 1}))))
 
+(defn mandato-licenciado-de-vereador
+  "O mandato com estado='licenciado' que COBRE `data` (p/ a REASSUNCAO resolver o alvo). nil se nenhum —
+   e' esse nil que impede a ressurreicao: um mandato 'cassado'/'renunciado'/'falecido' NUNCA aparece aqui,
+   entao nenhum POST de reassuncao consegue anular uma cassacao. Tie-break por :id.
+
+   Espelho DELIBERADO de `mandato-vigente-de-vereador` (mesma cobertura por vigencia, mesmo ORDER BY),
+   e NAO uma generalizacao das duas com o estado por parametro: cada uma carrega na docstring o PORQUE do
+   estado que busca (aqui, 'quem esta' fora e vai voltar'; la', 'quem esta' dentro e vai sair'), e e' isso
+   que impede o proximo leitor de trocar uma pela outra num refactor de aparencia inocente."
+  [tx ente-id vereador-id data]
+  (comum/linha->kebab
+    (jdbc/execute-one! tx
+      (sql/format {:select [:id :vereador_id :estado :vigencia_inicio :vigencia_fim]
+                   :from [:cadastros.mandato]
+                   :where [:and [:= :ente_id ente-id] [:= :vereador_id vereador-id]
+                           [:= :estado "licenciado"]
+                           [:<= :vigencia_inicio data]
+                           [:or [:is :vigencia_fim nil] [:>= :vigencia_fim data]]]
+                   :order-by [[:vigencia_inicio :desc] [:id]] :limit 1}))))
+
+(defn encerrar-licencas-abertas!
+  "Fecha em `fim` TODAS as licencas AINDA ABERTAS (`fim IS NULL`) do mandato. Devolve o update-count.
+   PRIMEIRO e unico UPDATE de `cadastros.mandato_licenca` no sistema — ate' esta fatia a tabela so' tinha
+   INSERT, e por isso o fechamento da janela de exercicio era irreversivel. O GRANT da mig 0010:290 ja'
+   cobre UPDATE (nao ha DELETE — Inv. 10), entao nao ha migration aqui.
+
+   `fim` e' a VESPERA da reassuncao (`reassumiu-em` menos 1 dia) — quem calcula e' o Repo. A convencao vem
+   do kernel: `tempo/subtrair-intervalos` e' INCLUSIVO nos dois lados e `subtrair-um` fecha o resto a
+   esquerda em `(.minusDays b-inicio 1)`. Gravar aqui o proprio dia da volta comeria esse dia da janela
+   PUBLICA de exercicio de todo mundo — um erro de um dia por licenca, silencioso, num numero nominal.
+
+   `inicio <= fim` no WHERE e' o que torna a reassuncao FAIL-CLOSED contra 'voltei antes de sair': a linha
+   simplesmente nao casa (nem grava um intervalo invertido, que nao tem CHECK que o barre na mig 0010), e o
+   Repo detecta a sobra relendo. Fecha TODAS as abertas, nao uma: duas licencas abertas simultaneas nao
+   deveriam existir, mas se existirem por defeito de dado antigo, lancar aqui deixaria o mandato preso para
+   sempre — e a aritmetica de janela subtrai a uniao dos intervalos de qualquer jeito.
+
+   Defesa em profundidade: `ente_id` explicito no WHERE alem da RLS (mesmo padrao de `mudar-estado!`/
+   `atualizar!`)."
+  [tx ente-id mandato-id fim]
+  (:next.jdbc/update-count
+   (jdbc/execute-one! tx
+     (sql/format {:update :cadastros.mandato_licenca
+                  :set {:fim fim}
+                  :where [:and [:= :ente_id ente-id] [:= :mandato_id mandato-id]
+                          [:is :fim nil] [:<= :inicio fim]]}))))
+
 (defn mandato-sobreposto?
   "True se JA' existe mandato 'vigente' efetivado do vereador cuja vigencia sobrepoe [inicio, fim] (fim nil
    = aberto = 'infinity'). Guard app-level (UX 409); o EXCLUDE (migration ...59) e' a rede. SQL cru
