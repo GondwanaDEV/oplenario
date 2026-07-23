@@ -8,9 +8,12 @@
   `meu-voto-handler` no legislativo, review MEDIUM fe-11-parecer) — o controller nunca le o relogio. `id` do
   path e' um UUID coagido AQUI (`parse-uuid`); um path param que nao parseia (nem um vereador de outro
   tenant, nem um id mal formado) -> 404 uniforme, NUNCA 500 (mesmo contrato de 404 das rotas irmas de
-  legislativo). Conflitos de dominio (`:conflito/mandato-sobreposto`, `:conflito/sem-mandato-vigente`) sao
-  capturados LOCALMENTE em cada handler de escrita -> 409 (nunca sobem ao interceptor global `erro`, que so'
-  sabe mapear `:validacao/invalido` -> 400)."
+  legislativo). Conflitos de dominio (`:conflito/mandato-sobreposto`, `:conflito/sem-mandato-vigente`,
+  `:conflito/sem-mandato-licenciado`, `:conflito/retorno-anterior-ao-inicio`) sao capturados LOCALMENTE em
+  cada handler de escrita -> 409 (nunca sobem ao interceptor global `erro`, que so' sabe mapear
+  `:validacao/invalido` -> 400). A REASSUNCAO (`POST .../reassuncao`) fecha o par de `/licencas`: sem ela
+  `mandato_licenca` nao tinha UPDATE nenhum, a janela de exercicio publica congelava para sempre e o mandato
+  ficava 'licenciado' bloqueando a proxima licenca."
   (:require [oplenario.cadastros.adapters.in.vereador :as adapters-in]
             [oplenario.cadastros.adapters.out.legislatura :as adapters-leg]
             [oplenario.cadastros.adapters.out.vereador :as adapters]
@@ -103,6 +106,38 @@
             (http/json-resposta 409 {:erro "vereador sem mandato vigente para licenciar"})
             (throw e)))))))
 
+(def ^:private conflitos-de-reassuncao
+  "Os tres conflitos de dominio da reassuncao -> a mensagem 409 de cada um. Mapa (e nao um `if` encadeado)
+  porque sao tres e cresceriam mal em cadeia; o `throw` do `else` continua sendo a regra da casa: o handler
+  NUNCA engole ex-info que nao reconhece."
+  {:conflito/sem-mandato-licenciado    "vereador sem mandato licenciado para reassumir"
+   :conflito/retorno-anterior-ao-inicio "data de reassuncao anterior ao inicio da licenca em curso"
+   :conflito/mandato-sobreposto        "reabrir este mandato sobreporia outro mandato vigente do vereador"})
+
+(defn- reassumir-mandato-handler
+  "POST /cadastros/vereadores/:id/reassuncao. Fecha as licencas abertas do mandato na VESPERA de
+  `reassumiu-em` e devolve o mandato a 'vigente' — o inverso de `/licencas`, e no MESMO papel ('secretario'):
+  quem licencia reassume.
+
+  200, nao 201: nenhum recurso e' criado (mesmo precedente de editar-vereador-handler/ligar-identidade-handler,
+  as duas outras escritas do modulo que so' transicionam). A data sai STRINGIFICADA — `json-resposta` usa o
+  ObjectMapper padrao do jsonista, que nao serializa `java.time.LocalDate` (mesma razao do `->str` em
+  adapters/out/vereador). NAO le o relogio: a data e' do corpo, porque a reassuncao e' um FATO DATADO que a
+  secretaria registra depois (o retorno de ontem, o de semana passada), nunca 'agora'."
+  [repo]
+  (fn [req]
+    (let [id (parse-uuid (get-in req [:path-params :id]))
+          ente-id (:ente-id (:ator req))
+          dia (adapters-in/reassumir-mandato->dominio (:json-params req))]
+      (try
+        (if-let [r (and id (controllers/reassumir-mandato repo ente-id id dia))]
+          (http/json-resposta 200 {:id (str (:id r)) :fim (str (:fim r))})
+          (http/json-resposta 404 {:erro "vereador nao encontrado"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if-let [msg (conflitos-de-reassuncao (:tipo (ex-data e)))]
+            (http/json-resposta 409 {:erro msg})
+            (throw e)))))))
+
 (defn- ligar-identidade-handler
   "PATCH /cadastros/vereadores/:id/identidade (Onda D Slice 5 Task 9). Gated `admin_ente` (NAO
   'secretario', ver `rotas` abaixo): ligar identidade e' parte de CONCEDER ACESSO — um 'secretario' pode
@@ -172,6 +207,9 @@
       ["/cadastros/vereadores/:id/licencas" :post
        [auth papel it/corpo-json (registrar-licenca-handler repo-cadastros relogio)]
        :route-name :cadastros/registrar-licenca]
+      ["/cadastros/vereadores/:id/reassuncao" :post
+       [auth papel it/corpo-json (reassumir-mandato-handler repo-cadastros)]
+       :route-name :cadastros/reassumir-mandato]
       ["/cadastros/vereadores/:id/identidade" :patch
        [auth papel-admin-ente it/corpo-json (ligar-identidade-handler repo-cadastros identidade-existe?)]
        :route-name :cadastros/ligar-identidade]

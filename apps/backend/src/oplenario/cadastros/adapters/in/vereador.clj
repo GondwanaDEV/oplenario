@@ -84,6 +84,17 @@
     {:id (random-uuid) :ente-id (:ente-id ator)
      :inicio (->data! (:inicio mm) :inicio) :fim (->data! (:fim mm) :fim) :motivo (:motivo mm)}))
 
+(defn reassumir-mandato->dominio
+  "Corpo da reassuncao -> a LocalDate do dia da VOLTA. Devolve so' a data (nao um mapa), mesma forma de
+   `ligar-identidade->dominio`: e' o unico campo do contrato, e o Repo recebe `ente-id`/`vereador-id` do
+   ator/path. NAO faz a aritmetica do -1 dia — ela mora no Repo, junto do UPDATE que a usa, para que exista
+   UMA fonte da convencao de borda inclusiva e nao duas."
+  [wire-in]
+  (when-not (map? wire-in) (invalido! "corpo deve ser objeto JSON" {:campo :corpo}))
+  (let [mm (keywordizar wire-in)]
+    (validar! wire/ReassumirMandato mm "corpo de reassumir mandato invalido")
+    (->data! (:reassumiu-em mm) :reassumiu-em)))
+
 (defn ligar-identidade->dominio
   "Task 9 (Onda D Slice 5) — coage `identidade-id` do corpo pra UUID (`:validacao/invalido` -> 400 se
    ausente/mal-formado, mesmo caminho de ->uuid! usado em registrar-mandato->dominio p/ legislatura-id)."

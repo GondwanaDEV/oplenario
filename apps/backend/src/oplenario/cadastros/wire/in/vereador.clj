@@ -28,6 +28,15 @@
    [:fim {:optional true} [:maybe :string]]
    [:motivo {:optional true} [:maybe :string]]])
 
+(def ReassumirMandato
+  "O campo e' `reassumiu-em` = o dia em que a pessoa VOLTOU A EXERCER, NUNCA 'ultimo dia da licenca'. Duas
+   razoes, e as duas importam: (a) e' o que a secretaria da Casa sabe ('ele reassumiu no dia 10'), nao a
+   vespera; (b) a aritmetica de janela do kernel e' INCLUSIVA nos dois lados, entao o servidor grava
+   `fim = reassumiu-em - 1` — pedir a vespera ao cliente empurraria esse -1 para fora do servidor, onde
+   ninguem o testa."
+  [:map {:closed true}
+   [:reassumiu-em [:string {:min 1}]]])
+
 (def LigarIdentidade
   "Onda D Slice 5 Task 9 — passo (2) do provisionamento (ligar vereador->identidade). `identidade-id` E'
    o corpo de proposito aqui (ao contrario de CriarVereador/etc, onde ref cross-modulo NUNCA vem do corpo):
