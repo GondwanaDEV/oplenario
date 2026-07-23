@@ -151,7 +151,18 @@
   por lock-version; SELECT...FOR UPDATE evita corrida entre o guard de estado e o UPDATE). O trigger
   tambem barra estado terminal (defesa em profundidade); a excecao aqui carrega a causa real. Mesmo padrao
   de db/documento.clj/editar-rascunho!, mas o guard e' 'nao terminal' (a proposicao nao tem fase rascunho —
-  mutacao livre ate estado terminal, §22.4.3 disc.4), nao 'so rascunho'."
+  mutacao livre ate estado terminal, §22.4.3 disc.4), nao 'so rascunho'.
+
+  Task 1-N1 Peca A: quando `autor-tipo` VEM PRESENTE nesta escrita e nao e' \"vereador\", zera `autor_id`
+  na MESMA linha — sem isto o par (autor_tipo, autor_id) podia ficar incoerente (ex.: PATCH so' de
+  autor-tipo p/ \"executivo\" deixava o autor_id antigo de vereador na linha), pois o `some?`-gate nao tem
+  como EXPRESSAR 'zerar este campo'. `validar-autor!` (controller) ja garante o sentido inverso (autor-id
+  presente => autor-tipo = vereador nesta escrita); os dois juntos fecham a coerencia nos dois sentidos —
+  autoria e' PUBLICA (transparencia.materia.autor-id), nao pode sobrar elo morto pro portal.
+
+  Task 1-N1 Peca B: `:returning` devolve o estado POS-UPDATE dos campos publicos (ementa/autor_tipo/
+  autor_id/autor_texto) — o Repo-Component usa este RETORNO (nao o PATCH parcial recebido) pra montar o
+  payload de `proposicao.editada`: um PATCH so' de ementa nao sabe quem e' o autor atual, so' a linha sabe."
   [tx {:keys [id ente-id ementa autor-tipo autor-id autor-texto objeto-indicacao destinatario-id
               destinatario-texto tipo-requerimento categoria-mocao updated-by lock-version]}]
   (let [{:keys [estado]} (estado+lock tx ente-id id)]
@@ -166,14 +177,19 @@
                                 (some? ementa)             (assoc :ementa ementa)
                                 (some? autor-tipo)         (assoc :autor_tipo autor-tipo)
                                 (some? autor-id)           (assoc :autor_id autor-id)
+                                (and (some? autor-tipo)
+                                     (not= "vereador" autor-tipo)) (assoc :autor_id nil)
                                 (some? autor-texto)        (assoc :autor_texto autor-texto)
                                 (some? objeto-indicacao)   (assoc :objeto_indicacao objeto-indicacao)
                                 (some? destinatario-id)    (assoc :destinatario_id destinatario-id)
                                 (some? destinatario-texto) (assoc :destinatario_texto destinatario-texto)
                                 (some? tipo-requerimento)  (assoc :tipo_requerimento tipo-requerimento)
                                 (some? categoria-mocao)    (assoc :categoria_mocao categoria-mocao))
-                         :where [:and [:= :ente_id ente-id] [:= :id id] [:= :lock_version lock-version]]}))]
-    (when (zero? (:next.jdbc/update-count r 0))
+                         :where [:and [:= :ente_id ente-id] [:= :id id] [:= :lock_version lock-version]]
+                         :returning [:id :ementa :autor_tipo :autor_id :autor_texto]}))]
+    ;; :returning faz o UPDATE devolver a LINHA (nao {:next.jdbc/update-count N}) — nil e' o sinal de
+    ;; 0-linhas-afetadas (mesmo padrao de paineis/db/notificacao_caixa/marcar-lida!).
+    (when (nil? r)
       (throw (ex-info "editar!: conflito de lock_version ou proposicao inexistente"
                       {:tipo :validacao/invalido :id id :lock-version lock-version})))
-    {:id id}))
+    (comum/linha->kebab r)))

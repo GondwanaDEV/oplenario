@@ -18,6 +18,7 @@
             [oplenario.transparencia.adapters.out.ente :as adapters-out-ente]
             [oplenario.transparencia.adapters.out.materia :as adapters-out-materia]
             [oplenario.transparencia.adapters.out.norma :as adapters-out-norma]
+            [oplenario.transparencia.adapters.out.parlamentar :as adapters-out-parlamentar]
             [oplenario.transparencia.controllers :as controllers]))
 
 (set! *warn-on-reflection* true)
@@ -89,6 +90,35 @@
         :blob-ausente  (http/json-resposta 500 {:erro "artefato temporariamente indisponivel"})
         :nao-encontrado (http/json-resposta 404 {:erro "artefato nao encontrado"})))))
 
+(defn- perfil-vereador-handler
+  "GET /portal/casa/:ente/vereadores/:vereador_id — perfil PUBLICO do vereador (Onda E fatia 2, SEM auth).
+
+  DUAS fontes fundidas na borda: a IDENTIDADE **e a JANELA DE EXERCICIO DO MANDATO** vem de
+  `ficha-e-janelas-publicas`, INJETADA pelo host sobre o Repo de `cadastros` (inversao de dependencia
+  §22.10, mesmo padrao de `info-ente` — transparencia nunca importa cadastros); os NUMEROS vem do
+  read-model proprio, agora RECORTADOS por essa janela (I-5 fatia 6).
+
+  A JANELA NAO DECIDE NADA ALEM DO RECORTE. Janela vazia e' um estado legitimo (suplente que ainda nao
+  tomou posse e' um parlamentar real e tem perfil): o read-model devolve 0/0 com
+  `:janela-de-exercicio-conhecida false` e a resposta e' 200. Quem decide 404 e' so' a ficha.
+
+  FAIL-CLOSED no 404: vereador inexistente — ou cadastrado em OUTRA Casa, ja' que o seam e' consultado com o
+  `ente-id` resolvido do PATH — devolve 404 ANTES de qualquer leitura de perfil. Nunca 200 com perfil vazio:
+  isso insinuaria um parlamentar real sem nenhuma atuacao, o que e' difamatorio. A ordem importa duplamente:
+  o guard tambem impede que numeros DESTA Casa saiam sob a identidade de outra. E o read-model so' e' lido
+  no caminho 200 — `perfil-de-vereador-inexistente-continua-404-sem-ler-o-perfil` injeta um Repo que explode
+  em `perfil-parlamentar` justamente para que a ordem nao possa inverter em silencio."
+  [repo-transparencia resolver-ente-publico ficha-e-janelas-publicas]
+  (fn [req]
+    (let [ente-id     (resolver-ente-publico (get-in req [:path-params :ente]))
+          vereador-id (adapters-in/vereador-param->uuid (get-in req [:path-params :vereador_id]))]
+      (if-let [{:keys [ficha janelas]} (ficha-e-janelas-publicas ente-id vereador-id)]
+        (http/json-resposta 200
+          (adapters-out-parlamentar/->wire
+           ficha janelas
+           (controllers/perfil-parlamentar repo-transparencia ente-id vereador-id janelas)))
+        (http/json-resposta 404 {:erro "vereador nao encontrado"})))))
+
 (defn- seguir-handler
   "POST /portal/materias/:proposicao_id/acompanhar (cidadao, SO-auth). ente-id + seguidor do ATOR; guard de
   existencia da materia no controller (ausente -> nil -> 404). Devolve 201 {estado} (UPSERT; re-seguir 201 tb)."
@@ -120,7 +150,7 @@
   "Fragmento de rotas do modulo transparencia (table syntax Pedestal). Recebe o `repo-transparencia`
   (Repo-Component), o `resolver-ente-publico` (seam do host, rotas publicas do Slice 1) e o interceptor
   `auth` (compartilhado, rotas autenticadas do Slice 2). `oplenario.rotas` funde este fragmento."
-  [{:keys [repo-transparencia resolver-ente-publico auth objeto-store info-ente]}]
+  [{:keys [repo-transparencia resolver-ente-publico auth objeto-store info-ente ficha-e-janelas-publicas]}]
   #{["/portal/casa/:ente" :get
      [(info-ente-handler info-ente resolver-ente-publico)]
      :route-name :transparencia/info-ente]
@@ -141,6 +171,11 @@
     ["/portal/casa/:ente/legislacao/:norma_id/artefato" :get
      [(baixar-artefato-handler repo-transparencia resolver-ente-publico objeto-store)]
      :route-name :transparencia/baixar-artefato]
+    ;; ---- Onda E fatia 2: perfil PUBLICO do vereador (`vereadores` e' mais um literal no MESMO nivel de
+    ;;      `materias`/`legislacao` — literais entre si nao colidem no prefix-tree, so' wildcard+literal) ----
+    ["/portal/casa/:ente/vereadores/:vereador_id" :get
+     [(perfil-vereador-handler repo-transparencia resolver-ente-publico ficha-e-janelas-publicas)]
+     :route-name :transparencia/perfil-vereador]
     ;; ---- Slice 2: acompanhamento do cidadao (autenticado, SO-auth sem papel) ----
     ["/portal/materias/:proposicao_id/acompanhar" :post
      [auth (seguir-handler repo-transparencia)]

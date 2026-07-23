@@ -11,7 +11,8 @@
             [oplenario.participacao.wire.out.acompanhamento-ouvidoria :as ac-ouv]
             [oplenario.participacao.wire.out.encarregado :as encarregado]
             [oplenario.transparencia.wire.out.materia :as materia]
-            [oplenario.transparencia.wire.out.norma :as norma]))
+            [oplenario.transparencia.wire.out.norma :as norma]
+            [oplenario.transparencia.wire.out.parlamentar :as parlamentar]))
 
 (def manifesto
   "NormaOut ANTES de MateriaOut/FichaOut (referencia nomeada: FichaOut aninha NormaOut em :norma —
@@ -24,7 +25,18 @@
    ["FichaOut" materia/FichaOut]
    ["EncarregadoOut" encarregado/EncarregadoPublicoOut]
    ["AcompanhamentoEsicOut" ac-esic/AcompanhamentoOut]
-   ["AcompanhamentoOuvidoriaOut" ac-ouv/AcompanhamentoOuvidoriaOut]])
+   ["AcompanhamentoOuvidoriaOut" ac-ouv/AcompanhamentoOuvidoriaOut]
+   ;; Onda E fatia 2 / carry I-5 fatia 6 — perfil PUBLICO do vereador. Os 4 tipos aninhados vem ANTES de
+   ;; PerfilVereadorOut pelo mesmo racional de NormaOut/FichaOut (referencia nomeada por igualdade
+   ;; estrutural). ENTRARAM AGORA, e nao na Task 4: o wire deste perfil nunca esteve no manifesto, entao o
+   ;; criterio "codegen re-emitido" das fatias anteriores era vacuo — o .ts do portal nao tinha o perfil.
+   ;; A tela (Task 5) desbloqueou com esta fatia e precisa dos DOIS campos novos
+   ;; (janelaDeExercicioConhecida, presencaProjetadaDesde) tipados, nao adivinhados.
+   ["LegislaturaOut" parlamentar/LegislaturaOut]
+   ["MateriaDeAutoriaOut" parlamentar/MateriaDeAutoriaOut]
+   ["VotoPublicoOut" parlamentar/VotoPublicoOut]
+   ["PresencaOut" parlamentar/PresencaOut]
+   ["PerfilVereadorOut" parlamentar/PerfilVereadorOut]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))
 

@@ -1,0 +1,51 @@
+-- Carry I-5, fatia 6: o indice que o NUMERADOR recortado passou a precisar, e a limpeza do que sobrou.
+--
+-- (1) DROP `idx_presenca_parlamentar_ente (ente_id)` — LIMPEZA DE INDICE REDUNDANTE, nao troca de leitor.
+--     A premissa original do plano ("ele perde o unico leitor quando `vereador_id` entra no WHERE") esta'
+--     errada nos dois sentidos: `(ente_id)` e' PREFIXO ESTRITO da chave primaria
+--     `(ente_id, sessao_id, vereador_id)`, ou seja ja' nasceu redundante na mig 0065; e, com estatisticas
+--     reais, o planner nunca o escolhe (mede-se Seq Scan ou index-only pela propria PK). Ele so' custa
+--     escrita na tx do relay e espaco.
+--
+-- (2) CREATE `idx_presenca_parlamentar_vereador_sessao (ente_id, vereador_id, sessao_id)` — COVERING do
+--     numerador. Depois desta fatia o numerador deixou de varrer a tabela inteira: ele le' so' as linhas de
+--     UM vereador (~1/21 do volume) e faz JOIN com o conjunto elegivel pela `sessao_id`. As TRES colunas do
+--     predicado e do JOIN estao na chave, entao o acesso e' INDEX-ONLY (Heap Fetches: 0). O prefixo
+--     `(ente_id, vereador_id)` recupera, de quebra, o que a mig 0065 dropou.
+--     NOME NOVO de proposito: reusar `idx_presenca_parlamentar_vereador` colidiria com o que o
+--     `20260721000065.down.sql` recria num rollback profundo.
+--
+-- MEDIDO ANTES DE CRIAR (exigencia da propria decisao do I-5: "medir antes de criar indice, para nao
+-- repetir a mig 0065 com outro nome"). Bancada: 42.000 linhas sinteticas (2.000 sessoes x 21 vereadores)
+-- + 2.000 linhas na companheira, papel `oplenario_app`, RLS ativa, PG16, apos VACUUM ANALYZE:
+--
+--   perfil                                   | buffers | Execution Time
+--   -----------------------------------------+---------+----------------
+--   baseline da fatia 1 (denominador global)  |   473   |  ~5,5 ms
+--   titular de mandato inteiro, SEM este idx  |   652   |  ~3,2 ms   <- numerador em Seq Scan (622 buffers)
+--   titular de mandato inteiro, COM este idx  |    50   |  ~1,1 ms   <- Index Only Scan, Heap Fetches 0
+--   suplente de 3 sessoes,      COM este idx  |    13   |  ~0,04 ms
+--   vereador sem janela de exercicio          |     0   |  0 (nenhum statement e' emitido)
+--
+-- Sem o indice a fatia 6 REDUZIA o tempo e PIORAVA os buffers (473 -> 652): o denominador ficou barato, mas
+-- o numerador passou a varrer a tabela toda para achar as linhas de um vereador. Com ele, 473 -> 50.
+--
+-- O QUE NAO FOI CRIADO, e por que: o carry "o indice (ente_id, data) da companheira nao cobre `sessao_id`"
+-- foi MEDIDO e NAO se confirmou como problema — no perfil suplente o ramo do CTE custa 3 buffers
+-- (Bitmap Index Scan + heap), e no perfil titular o planner escolhe Seq Scan sobre 30 buffers porque a
+-- janela cobre a tabela inteira. Um `(ente_id, data) INCLUDE (sessao_id)` nao compraria nada mensuravel;
+-- fica NAO feito, com o motivo escrito.
+--
+-- JANELA DE MANUTENCAO (mesmo tom das migs 0067/0068): `DROP INDEX` sem CONCURRENTLY toma
+-- AccessExclusiveLock, e migratus roda o arquivo inteiro numa transacao. `presenca_parlamentar` e' lida
+-- pela rota PUBLICA do perfil do vereador e escrita pelo relay — as duas bloqueiam na janela. E' rapido
+-- (drop de indice + criacao sobre uma tabela pequena), mas nao deployar no meio de sessao.
+--
+-- CLIFF CONHECIDO, sem conserto aqui: logo apos um bulk load (o backfill da 0067) e ANTES de o autovacuum
+-- rodar ANALYZE, o planner nao tem `reltuples` e escolhe Nested Loop com CTE Scan no lado interno —
+-- medido em 253 ms para o perfil titular, contra ~1,1 ms com estatisticas. Rodar `ANALYZE` nas duas tabelas
+-- de `transparencia` faz parte do runbook de deploy desta fatia.
+DROP INDEX IF EXISTS transparencia.idx_presenca_parlamentar_ente;
+--;;
+CREATE INDEX IF NOT EXISTS idx_presenca_parlamentar_vereador_sessao
+  ON transparencia.presenca_parlamentar (ente_id, vereador_id, sessao_id);

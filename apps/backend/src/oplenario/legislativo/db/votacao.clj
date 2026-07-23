@@ -33,13 +33,18 @@
 
 (defn registrar-voto!
   "Registra um voto NOMINAL (atribuido). Append-only; a UNIQUE (ente_id,votacao_id,vereador_id) barra voto
-  duplo do mesmo vereador. Devolve {:id}."
+  duplo do mesmo vereador. RETURNING `registrado_em` (Onda E fatia 2 carry, mesmo racional de
+  tramitacao/registrar-transicao!): o carimbo REAL do voto, devolvido p/ o Repo incluir no evento de dominio
+  (voto.registrado :ocorrido-em) — a jusante, o perfil publico do vereador em `transparencia` usa isto em vez
+  do momento em que o consumer PROJETA. Devolve {:id :ocorrido-em}."
   [tx {:keys [id ente-id votacao-id vereador-id voto created-by]}]
-  (jdbc/execute-one! tx
-    (sql/format {:insert-into :legislativo.votos
-                 :values [{:id id :ente_id ente-id :votacao_id votacao-id :vereador_id vereador-id
-                           :voto voto :created_by created-by :efetivado_em [:now]}]}))
-  {:id id})
+  (let [r (comum/linha->kebab
+           (jdbc/execute-one! tx
+             (sql/format {:insert-into :legislativo.votos
+                          :values [{:id id :ente_id ente-id :votacao_id votacao-id :vereador_id vereador-id
+                                    :voto voto :created_by created-by :efetivado_em [:now]}]
+                          :returning [:registrado_em]})))]
+    {:id id :ocorrido-em (:registrado-em r)}))
 
 (defn registrar-voto-secreto!
   "Registra um voto SECRETO (anonimo — a tabela nao tem vereador_id/created_by). Append-only. Devolve {:id}."

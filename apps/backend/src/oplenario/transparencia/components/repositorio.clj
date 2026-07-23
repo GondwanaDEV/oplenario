@@ -21,11 +21,13 @@
   (:require [clojure.tools.logging :as log]
             [oplenario.kernel.eventos :as eventos]
             [oplenario.kernel.outbox :as outbox]
+            [oplenario.kernel.tempo :as tempo]
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.transparencia.db.acompanhamento :as db-acompanhamento]
             [oplenario.transparencia.db.artefato-publicacao :as db-artefato]
             [oplenario.transparencia.db.materia :as db-materia]
             [oplenario.transparencia.db.norma :as db-norma]
+            [oplenario.transparencia.db.parlamentar :as db-parlamentar]
             [oplenario.transparencia.events.notificacao :as ev-notif]
             [oplenario.transparencia.logic.notificacao :as logic-notif])
   (:import (java.time Instant)
@@ -50,22 +52,51 @@
   jsonb (jsonista) — um java.util.UUID no evento vira string JSON na ida e volta STRING na leitura (jsonb->
   nao tem modulo UUID); um valor string bindado contra uma coluna `uuid` do Postgres lanca (driver nao
   cast implicito: 'column is of type uuid but expression is of type character varying'). `ente-id` do
-  envelope NAO precisa disto — vem de uma coluna SQL nativa (outbox.ente_id), nunca do jsonb."
+  envelope NAO precisa disto — vem de uma coluna SQL nativa (outbox.ente_id), nunca do jsonb.
+
+  Onda E fatia 2: `(some? (get m k))`, NAO so' `contains?` — uma chave OPCIONAL (:autor-id) que o producer
+  emite via `some->` fica PRESENTE no payload com valor `nil` quando o autor nao e' vereador (jsonista nao
+  strippa chave de valor null na serializacao); `contains?` sozinho veria a chave e chamaria
+  `UUID/fromString` num `nil`, lancando NPE. `some?` trata 'chave ausente' e 'chave presente com nil' do
+  mesmo jeito — intocada — que e' o comportamento correto pros dois (evento legado sem a chave E evento
+  novo com autoria nao-parlamentar)."
   [payload chaves]
-  (reduce (fn [m k] (cond-> m (contains? m k) (update k #(UUID/fromString %)))) payload chaves))
+  (reduce (fn [m k] (cond-> m (some? (get m k)) (update k #(UUID/fromString %)))) payload chaves))
+
+(defn- instant-tolerante
+  "Parseia uma string ISO p/ Instant TOLERANDO ausencia/invalidez — nil ou string malformada vira nil, nunca
+  lanca. Achado C-1 (revisao Task 2): `:ocorrido-em` foi ACRESCENTADO ao contrato de `voto.registrado` nominal
+  DEPOIS que eventos ja estavam gravados no `shared.outbox` (deploy rolling, ou qualquer redrive de historico);
+  esses eventos legados nao tem a chave. `Instant/parse` sem guarda contra nil/invalido lanca; `outbox/drenar-um!`
+  chama o handler SEM try (kernel/outbox.clj) e o relay COMPARTILHADO (outbox_relay.clj) faz catch+retry
+  ETERNO — a cabeca da fila trava PARA SEMPRE, bloqueando TODO evento de id maior de TODOS os modulos, nao so'
+  desta projecao (mesmo racional do log/warn tolerante de proposicao.transicionou acima)."
+  [s]
+  (try
+    (some-> s Instant/parse)
+    (catch Exception _ nil)))
 
 (defn projetar-evento!
   "Dispatch por tipo de evento -> a projecao de dominio, DENTRO da `tx` corrente (a do relay). Seta o GUC de
-  tenant (sem trocar de role — ver docstring do ns) e escreve em transparencia.materia/norma/artefato_publicacao.
+  tenant (sem trocar de role — ver docstring do ns) e escreve em
+  transparencia.materia/norma/artefato_publicacao/voto_parlamentar/presenca_parlamentar/sessao_com_chamada.
+  UM evento pode virar MAIS DE UM statement: `presenca.registrada` escreve DOIS (presenca + companheira),
+  ambos na mesma tx do relay.
   `payload` ja chegou com chaves KEYWORD kebab (outbox/jsonb-> usa keyword-keys-object-mapper), casando 1:1 com
-  o que os producers de legislativo construiram (events/{proposicao,norma,artefato-publicacao}.clj) — EXCETO os
-  campos :uuid e os de tempo (:publicado-em/:criado-em), que chegam como string (ver `uuid-payload` e a
-  re-parseacao Instant/parse; docstring de events/norma)."
+  o que os producers de legislativo/sessoes construiram (events/{proposicao,norma,artefato-publicacao,
+  votacao,presenca}.clj) — EXCETO os campos :uuid e os de tempo (:publicado-em/:criado-em/:ocorrido-em), que
+  chegam como string (ver `uuid-payload` e a re-parseacao Instant/parse; docstring de events/norma)."
   [tx {:keys [tipo ente-id payload]}]
   (tenancy/set-tenant! tx ente-id)
   (case tipo
     "proposicao.protocolada"
-    (db-materia/inserir! tx (-> payload (uuid-payload [:proposicao-id]) (assoc :ente-id ente-id)))
+    (db-materia/inserir! tx (-> payload (uuid-payload [:proposicao-id :autor-id]) (assoc :ente-id ente-id)))
+
+    "proposicao.editada"
+    (let [m (-> payload (uuid-payload [:proposicao-id :autor-id]) (assoc :ente-id ente-id))]
+      (or (db-materia/atualizar-metadados! tx m)
+          (log/warn "transparencia: proposicao.editada sem materia projetada (protocolada ausente?)"
+                    {:ente-id ente-id :proposicao-id (:proposicao-id m)})))
 
     "proposicao.transicionou"
     (let [pid (UUID/fromString (:proposicao-id payload))]
@@ -83,7 +114,65 @@
     (db-artefato/inserir! tx (-> payload
                                  (uuid-payload [:norma-id :artefato-id])
                                  (assoc :ente-id ente-id)
-                                 (update :criado-em #(Instant/parse %))))))
+                                 (update :criado-em #(Instant/parse %))))
+
+    ;; Onda E fatia 2 (perfil publico do vereador). SIGILO: o ramo 'secreta' de VotoRegistradoPayload e'
+    ;; :closed e nao carrega :vereador-id — `when-let` sobre a PRESENCA da chave, nao sobre a string de
+    ;; modalidade (defesa que nao depende do vocabulario de modalidade permanecer estavel).
+    ;; C-1 (revisao Task 2): `instant-tolerante`, NAO `Instant/parse` cru — `:ocorrido-em` e' chave NOVA no
+    ;; contrato; evento legado no shared.outbox (gravado antes desta mudanca) nao a tem. Sem projecao possivel
+    ;; (a coluna e' NOT NULL — nao ha estado parcial honesto a gravar), loga e TOLERA em vez de lancar.
+    "voto.registrado"
+    (when-let [vid (:vereador-id payload)]
+      (if-let [ocorrido-em (instant-tolerante (:ocorrido-em payload))]
+        (db-parlamentar/registrar-voto! tx
+          {:ente-id ente-id
+           :votacao-id (UUID/fromString (:votacao-id payload))
+           :vereador-id (UUID/fromString vid)
+           :proposicao-id (some-> (:proposicao-id payload) UUID/fromString)
+           :voto (:voto payload)
+           :ocorrido-em ocorrido-em})
+        (log/warn "transparencia: voto.registrado sem :ocorrido-em valido (evento legado?) — nao projetado"
+                  {:ente-id ente-id :votacao-id (:votacao-id payload)})))
+
+    ;; Carry I-5 fatia 5: DOIS statements na MESMA tx do relay — o estado por (sessao, vereador) e a
+    ;; COMPANHEIRA `sessao_com_chamada` (uma linha por SESSAO, com a data civil do PRIMEIRO evento dela), que
+    ;; e' o denominador que a fatia 6 vai recortar pela janela de exercicio do mandato. As duas commitam
+    ;; juntas ou nenhuma: um erro de DB no segundo statement aborta a tx inteira, o relay faz rollback e o
+    ;; evento re-drena — nao existe meia-projecao committada.
+    ;;
+    ;; O FUSO APARECE UMA VEZ SO', AQUI: `hoje-de` sobre o MESMO Instant ja' parseado (nao uma segunda
+    ;; leitura de relogio, nao um `AT TIME ZONE` no SQL) — e' o que mata a classe de bug de meia-noite na
+    ;; fronteira da janela. ESTE e' o SEGUNDO consumidor de `zona-civil-padrao` (o outro e' o host), e o
+    ;; unico que a GRAVA: o valor derivado aqui vira `sessao_com_chamada.data`, coluna PERSISTIDA. Logo
+    ;; promover o fuso a atributo do ente NAO basta — as linhas ja' projetadas continuam com a data civil de
+    ;; America/Fortaleza e nao ha ferramenta de re-projecao no repo (carry escrito na docstring da constante,
+    ;; corrigido na revisao da fatia 5: antes ele so' dizia que a constante e' global).
+    ;;
+    ;; TOLERANCIA (`instant-tolerante`, mesmo racional do C-1 de voto.registrado logo acima): ate' esta
+    ;; fatia o ramo fazia `Instant/parse` CRU e LANCAVA num payload sem `:ocorrido-em` ou com instante
+    ;; malformado — e um throw aqui trava a cabeca da fila do relay COMPARTILHADO por TODOS os modulos, para
+    ;; sempre (achado HIGH do architect no F6c). O produtor real e' fail-closed (`RegistradaPayload` exige a
+    ;; chave), entao o caminho vivo nao muda; quem chama `projetar-evento!` direto (teste, redrive de payload
+    ;; legado escrito a mao) passa a ser TOLERADO em vez de envenenar o bus. RECORTE HONESTO: a tolerancia
+    ;; cobre SO' o instante — `UUID/fromString` em `:sessao-id`/`:vereador-id` continua lancando com um id
+    ;; malformado, exatamente como em todos os outros ramos deste `case`; nao foi alargado nesta fatia.
+    "presenca.registrada"
+    (if-let [ocorrido-em (instant-tolerante (:ocorrido-em payload))]
+      (let [sessao-id (UUID/fromString (:sessao-id payload))]
+        (db-parlamentar/registrar-presenca! tx
+          {:ente-id ente-id
+           :sessao-id sessao-id
+           :vereador-id (UUID/fromString (:vereador-id payload))
+           :tipo (:tipo payload)
+           :modalidade (:modalidade payload)
+           :ocorrido-em ocorrido-em})
+        (db-parlamentar/registrar-sessao-com-chamada! tx
+          {:ente-id ente-id
+           :sessao-id sessao-id
+           :data (tempo/hoje-de ocorrido-em tempo/zona-civil-padrao)}))
+      (log/warn "transparencia: presenca.registrada sem :ocorrido-em valido — nao projetada"
+                {:ente-id ente-id :sessao-id (:sessao-id payload)}))))
 
 (defn fan-out-notificacao!
   "Consumer do FAN-OUT (F7 E2) — SEGUNDO consumidor de `proposicao.transicionou` (o 1o, projetar-evento!,
@@ -148,7 +237,28 @@
   ;; F6c Slice 2 — acompanhamento do cidadao (escritas autenticadas; consent-gated)
   (seguir! [this ente-id m] "UPSERT: cidadao segue a materia (re-seguir reativa). Devolve {:id :estado ...}.")
   (deixar-de-seguir! [this ente-id m] "Soft-cancel idempotente. Devolve {:id} se cancelou, ou nil (no-op).")
-  (meus-acompanhamentos [this ente-id seguidor-identidade-id] "Materias que o cidadao segue (ativas, c/ cabecalho)."))
+  (meus-acompanhamentos [this ente-id seguidor-identidade-id] "Materias que o cidadao segue (ativas, c/ cabecalho).")
+  ;; Onda E fatia 2 — perfil PUBLICO do vereador (leitura COMPOSTA numa UNICA tx, mesma disciplina de
+  ;; legislativo/ficha-completa-da-proposicao). O QUE A TX DE FATO ENTREGA (correcao F3a da revisao Task 3
+  ;; — a afirmacao anterior, "as leituras veem o MESMO snapshot MVCC, entao o numero-card nunca discorda da
+  ;; lista", era FALSA): uma UNICA conexao e um UNICO contexto de tenant (o GUC app.ente_id setado uma vez).
+  ;; NAO um round-trip so' — sao SEIS statements (mais BEGIN/SET LOCAL/COMMIT), e quem dimensionar latencia
+  ;; da rota publica precisa contar assim. NAO um snapshot congelado: `transacao` -> kernel/tenancy/com-tenant* chama
+  ;; `jdbc/with-transaction` SEM mapa de opcoes e o HikariConfig (kernel/components/datasource) nunca seta
+  ;; transaction-isolation, entao o nivel efetivo e' READ COMMITTED — em que CADA statement toma um snapshot
+  ;; NOVO. Com o relay committando projecoes entre os statements, uma divergencia card-vs-lista E' alcancavel;
+  ;; e' uma janela ESTREITA que se auto-cura na proxima carga, nao uma garantia.
+  ;; CARRY DELIBERADO: congelar o snapshot exigiria um `com-tenant-leitura*` no kernel com
+  ;; `:isolation :repeatable-read :read-only true`. Fora do escopo desta fatia — o kernel e' COMPARTILHADO e
+  ;; o mesmo overclaim existe em legislativo/components/repositorio (ficha-completa-da-proposicao, o
+  ;; precedente citado); corrigir so' aqui criaria inconsistencia entre os dois.
+  (perfil-parlamentar [this ente-id vereador-id janelas]
+    "{:materias :materias-total :normas-de-autoria :votos :votos-total :presenca} do vereador no read-model
+     publico (sem identidade). DUAS listas truncam e cada uma vem com o seu total: `:materias` no teto de
+     `listar-por-autor` (200) e `:votos` no de `votos-do-vereador` (50) — sem `:materias-total`/`:votos-total`
+     a borda nao sabe que truncou. Sao SEIS statements no caminho comum, nao cinco (achado C-4, revisao
+     Task 4) — e CINCO quando `janelas` e' vazia: `resumo-presenca` curto-circuita e nao emite statement
+     nenhum (ver a docstring dela)."))
 
 (defrecord RepoTransparenciaPg [datasource]
   RepoTransparencia
@@ -162,7 +272,16 @@
     (transacao this ente-id #(db-artefato/mais-recente-por-norma % ente-id norma-id)))
   (seguir! [this ente-id m] (transacao this ente-id #(db-acompanhamento/seguir! % (assoc m :ente-id ente-id))))
   (deixar-de-seguir! [this ente-id m] (transacao this ente-id #(db-acompanhamento/deixar-de-seguir! % (assoc m :ente-id ente-id))))
-  (meus-acompanhamentos [this ente-id sid] (transacao this ente-id #(db-acompanhamento/meus-da-materia % ente-id sid))))
+  (meus-acompanhamentos [this ente-id sid] (transacao this ente-id #(db-acompanhamento/meus-da-materia % ente-id sid)))
+  (perfil-parlamentar [this ente-id vid janelas]
+    (transacao this ente-id
+      (fn [tx]
+        {:materias          (db-materia/listar-por-autor tx ente-id vid)
+         :materias-total    (db-materia/contar-por-autor tx ente-id vid)
+         :normas-de-autoria (db-materia/contar-normas-por-autor tx ente-id vid)
+         :votos             (db-parlamentar/votos-do-vereador tx ente-id vid nil)
+         :votos-total       (db-parlamentar/contar-votos-do-vereador tx ente-id vid)
+         :presenca          (db-parlamentar/resumo-presenca tx ente-id vid janelas)}))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

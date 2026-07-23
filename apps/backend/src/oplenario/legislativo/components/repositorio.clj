@@ -278,7 +278,10 @@
           (producers/emitir-protocolada! bus tx ente-id
             {:proposicao-id (:id r) :tipo (:tipo p) :ano (:ano p) :sequencial (:sequencial r)
              :urn-lex (:urn-lex r) :ementa (:ementa p) :estado "protocolada"
-             :autor-tipo (:autor-tipo p) :autor-texto (:autor-texto p)})
+             :autor-tipo (:autor-tipo p) :autor-texto (:autor-texto p)
+             ;; some-> : :autor-id e' nulo p/ autoria nao-parlamentar; (str nil) daria "" e quebraria
+             ;; o UUID/fromString do consumer (Onda E fatia 2).
+             :autor-id (some-> (:autor-id p) str)})
           r))))
   (buscar-proposicao [this ente-id id] (transacao this ente-id #(proposicao/buscar % ente-id id)))
   (listar-por-estado [this ente-id estado] (transacao this ente-id #(proposicao/listar-por-estado % ente-id estado)))
@@ -292,6 +295,9 @@
   (mudar-estado-proposicao! [this ente-id m] (transacao this ente-id #(proposicao/mudar-estado! % (assoc m :ente-id ente-id))))
   ;; Onda B Slice 2: editar-proposicao! compoe (guard nao-terminal + PATCH parcial CAS) + versao 'edicao'
   ;; opcional numa UNICA tx (mesma disciplina de protocolar! — o texto novo so' e' vigente se o PATCH commitou).
+  ;; Task 1-N1: EMITE `proposicao.editada` na MESMA tx (atomicidade outbox-com-o-ato §22.9 E2, mesma
+  ;; disciplina de protocolar! -> emitir-protocolada!) — sem isto, qualquer edicao de autoria/ementa
+  ;; ficava invisivel pro portal.
   (editar-proposicao! [this ente-id m]
     (transacao this ente-id
       (fn [tx]
@@ -307,6 +313,12 @@
                                        :texto-inline corpo :created-by (:updated-by m)})
               (texto/promover! tx {:ente-id ente-id :proposicao-id (:id m) :versao-id versao-id
                                     :updated-by (:updated-by m) :lock-version 0})))
+          (producers/emitir-editada! bus tx ente-id
+            {:proposicao-id (:id r) :ementa (:ementa r) :autor-tipo (:autor-tipo r)
+             :autor-texto (:autor-texto r)
+             ;; some-> : (str nil) daria "" e quebraria o UUID/fromString do consumer (mesmo bug corrigido
+             ;; em protocolar! -> emitir-protocolada!, Onda E fatia 2).
+             :autor-id (some-> (:autor-id r) str)})
           r))))
   ;; Onda B Slice 2: leitura composta (proposicao + texto vigente) NUMA UNICA tx — mesmo snapshot MVCC
   ;; (mesma disciplina de listar-e-contar-proposicoes). Nao lanca quando a proposicao nao existe: devolve
@@ -494,9 +506,19 @@
                             {:erro :modalidade-mismatch :votacao-id (:votacao-id m) :modalidade (:modalidade v)})))
           (let [r (votacao/registrar-voto! tx (assoc m :ente-id ente-id))]
             (when (:sessao-id v)
+              ;; :ocorrido-em (Onda E fatia 2 carry): RETURNING de votacao/registrar-voto! — mesma disciplina
+              ;; de tempo de dominio de proposicao.transicionou. some-> (revisao Task 2, achado I-1): (str nil)
+              ;; daria "" e o Malli `:string` cru ACEITARIA — fail-open latente que so' estoura la' na frente,
+              ;; no `Instant/parse` do consumer (mesmo envenenamento do C-1, agora por evento NOVO e valido pelo
+              ;; contrato). Com some->, nil aqui vira nil e `evento-validado` recusa a emissao — falha ALTO no
+              ;; producer, nao mascara. :proposicao-id (achado I-2): `v` ja' esta' em maos NESTA tx (mesma
+              ;; leitura usada no guard de modalidade acima) — custo zero; so' preenche quando o objeto votado
+              ;; E' uma proposicao (votacoes tambem admite emenda/parecer/requerimento/redacao_final).
               (producers/emitir-voto-registrado! bus tx ente-id
                 {:votacao-id (:votacao-id m) :sessao-id (:sessao-id v) :modalidade "nominal"
-                 :vereador-id (:vereador-id m) :voto (:voto m)}))
+                 :vereador-id (:vereador-id m) :voto (:voto m)
+                 :proposicao-id (when (= "proposicao" (:objeto-tipo v)) (:objeto-id v))
+                 :ocorrido-em (some-> (:ocorrido-em r) str)}))
             r)))))
   (registrar-voto-secreto! [this ente-id m]
     (transacao this ente-id
@@ -536,9 +558,12 @@
                               {:votacao-id (:votacao-id m) :modalidade (:modalidade v)})))
             (let [r (votacao/registrar-voto! tx (assoc m :ente-id ente-id))]
               (when (:sessao-id v)
+                ;; some-> + :proposicao-id: mesma disciplina de registrar-voto! acima (achados I-1/I-2).
                 (producers/emitir-voto-registrado! bus tx ente-id
                   {:votacao-id (:votacao-id m) :sessao-id (:sessao-id v) :modalidade "nominal"
-                   :vereador-id (:vereador-id m) :voto (:voto m)}))
+                   :vereador-id (:vereador-id m) :voto (:voto m)
+                   :proposicao-id (when (= "proposicao" (:objeto-tipo v)) (:objeto-id v))
+                   :ocorrido-em (some-> (:ocorrido-em r) str)}))
               r))))
       (catch PSQLException e
         (if (= "23505" (.getSQLState e))
