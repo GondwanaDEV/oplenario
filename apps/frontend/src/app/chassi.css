@@ -251,6 +251,16 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .az-passo { width: 64px; font-size: var(--t-12); color: var(--texto-2); text-align: center; }
 .az-passo + .az-passo { margin-left: 18px; }
 
+/* AzulejoMini (src/lib/charts/azulejo-mini.tsx) — a variante compacta da MESMA gramática
+   (concluído sólido · ativo com acento · pendente tracejado), sem <text> por estágio.
+   PROMOVIDA AO CHASSI no 2º uso (PADROES §1): nasceu em proposicoes.css (tabela interna
+   de proposições) e o perfil público do vereador é o segundo — e `proposicoes.css` NÃO é
+   carregada sob `(publico)/`, então o azulejo sairia sem preenchimento nenhum na tela
+   pública. Promover, nunca copiar: duas cópias divergem no primeiro ajuste de token. */
+.azulejo-mini-bloco--concluido { fill: var(--jade); }
+.azulejo-mini-bloco--ativo { fill: color-mix(in srgb, var(--amarelo) 55%, var(--surface-2)); stroke: var(--amarelo); stroke-width: 1; }
+.azulejo-mini-bloco--pendente { fill: none; stroke: color-mix(in srgb, var(--texto-2) 40%, transparent); stroke-width: 1; stroke-dasharray: 2 2; }
+
 /* ============== ILHAS QUE NÃO TEMATIZAM ==============
    Quando O CONTEÚDO é a coisa, a superfície fica fixa e o tema vira moldura.
    Inversão proposital: o PLACAR (votação / saúde institucional) é ilha

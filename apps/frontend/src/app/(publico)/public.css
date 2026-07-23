@@ -384,3 +384,89 @@
 .cmt .corpo { min-width: 0; }
 .cmt .quando { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
 .cmt p { font-size: var(--t-16); color: var(--texto); line-height: 1.55; margin: 0.25rem 0 0; }
+
+/* ============== 8 · PERFIL PÚBLICO DO VEREADOR (Onda E fatia 2, Task 6) ==============
+   Porte de `produto/design-system/o-plenario/telas/perfil-vereador-publico.html`. Só entra aqui o que é
+   PRÓPRIO da tela; o resto reusa o que já existe (.migalha, .em-breve-*, .secao).
+
+   NÃO portado, de propósito:
+     • `.secao` / `.secao h2` do design (margin: 2rem 0 0) — a linha 108 desta folha já define `.secao`
+       com outra geometria, e sobrescrevê-la mudaria TODAS as seções do portal público.
+     • `.rodape` — colide com o rodapé institucional definido na seção 6 desta folha.
+     • `.pub-topo`/`.brasao-casa`/`.nav-pub` — substituídos pela <BarraInstitucional>.
+     • `.azmini` e seus `--azc` — substituídos pelo <AzulejoMini> + as 3 regras promovidas ao chassi.
+       (O `.azmini` do design usa color-mix(--jade 32%, transparent) sobre --surface; no tema escuro
+       --surface é quase da cor do fill e o par ligado/desligado some. GUIDELINES §5.1.)
+     • `.v-sim`/`.v-nao`/`.v-abs` — substituídos por `.chip` + `.chip-ok/.chip-risco/.chip-neutro` do
+       chassi. O `.v-sim` do design crava três hexes literais (#15634A/#2C8A66/#58C99E) e viola
+       GUIDELINES §1 ("não redefine nenhum token"), além de não ter override no escuro.
+     • `.agenda`/`.ag`/`.data`/`.sep`/`.desc`/`.hora` — a seção "Agenda pública" saiu (sem contrato).
+   Contraste desta tela: A MEDIR em pixel composto, nos dois temas (`.mrow .num` e `.ptag.mesa` usam
+   --acento-texto, que passa raspando; os chips de voto precisam de texto ≥4.5 e borda ≥3). */
+
+.perfil-cab { position: relative; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; margin: 0.6rem 0 0; }
+.cinta { height: 10px; display: flex; }
+.cinta i { flex: 1; position: relative; overflow: hidden; }
+.cinta i::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 18% 120%, var(--c) 0 58%, transparent 58%); }
+.cinta i:nth-child(4n+1) { --c: var(--jade); background: color-mix(in srgb, var(--jade) 26%, var(--surface)); }
+.cinta i:nth-child(4n+2) { --c: var(--cobalto); background: color-mix(in srgb, var(--cobalto) 26%, var(--surface)); }
+/* --amarelo-traco (não --amarelo cheio) — amarelo cheio como traço não sustenta contraste. */
+.cinta i:nth-child(4n+3) { --c: var(--amarelo-traco); background: color-mix(in srgb, var(--amarelo) 26%, var(--surface)); }
+.cinta i:nth-child(4n+4) { --c: var(--telha); background: color-mix(in srgb, var(--telha) 26%, var(--surface)); }
+
+.perfil-corpo { display: flex; align-items: flex-start; gap: 1.2rem; padding: 1.3rem 1.5rem 1.5rem; flex-wrap: wrap; }
+/* branco sobre --cobalto (NUNCA sobre --telha cheia, que cai para 4.0 — §5.1). */
+.perfil-foto { width: 84px; height: 84px; border-radius: 18px; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--display); font-weight: 800; font-size: 1.8rem; color: #fff; background: var(--cobalto); margin-top: -42px; border: 4px solid var(--surface); }
+.perfil-id { min-width: 0; flex: 1 1 240px; }
+.perfil-id h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
+/* o nome civil só aparece quando difere do parlamentar — subordinado, nunca do mesmo peso do h1. */
+.perfil-id .nome-civil { font-size: var(--t-13); color: var(--texto-2); margin: 0.25rem 0 0; }
+.perfil-id .papel { font-size: var(--t-16); color: var(--texto-2); margin: 0.2rem 0 0; }
+.perfil-tags { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.7rem 0 0; }
+.perfil-tags:empty { display: none; }
+.ptag { font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.2rem 0.7rem; background: var(--surface-2); border: 1px solid var(--linha); color: var(--texto-2); }
+.ptag.mesa { color: var(--acento-texto); border-color: color-mix(in srgb, var(--telha) 40%, transparent); }
+
+.nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.8rem; margin: 1.2rem 0 0; }
+.num-card { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); padding: 1rem 1.1rem; }
+.num-card b { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: var(--texto); display: block; line-height: 1; font-variant-numeric: tabular-nums; }
+.num-card span { font-size: var(--t-13); color: var(--texto-2); display: block; margin-top: 0.3rem; }
+.num-card .nota { font-size: var(--t-12); color: var(--texto-2); }
+
+/* bloco de presença — forma NOVA (o .num-card de um número não comporta os 4 estados do docs/14 §2, e
+   percentual é proibido). Base: a geometria do .num-card + a voz da .nota-secao. */
+.perfil-presenca .presenca-bloco { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); padding: 1.1rem 1.2rem; }
+.presenca-titulo { font-family: var(--display); font-size: var(--t-16); color: var(--texto); margin: 0; }
+.presenca-texto { font-size: var(--t-16); color: var(--texto); line-height: 1.5; margin: 0.4rem 0 0; }
+.presenca-fracao { font-family: var(--display); font-size: var(--t-28); color: var(--texto); margin: 0; line-height: 1; font-variant-numeric: tabular-nums; }
+.presenca-fracao b { font-weight: 800; }
+.presenca-fracao span { font-family: var(--corpo); font-size: var(--t-16); font-weight: 400; color: var(--texto-2); }
+.presenca-frase { font-size: var(--t-13); color: var(--texto-2); line-height: 1.55; margin: 0.6rem 0 0; }
+.presenca-frase b { color: var(--texto); font-weight: 600; }
+/* h2 das seções DESTA tela — escopado em `.perfil-secao`, nunca em `.secao h2` solto: o portal público
+   inteiro usa `.secao`, e um `.secao h2` global mudaria a home e a ficha da matéria de tabela. */
+.perfil-secao h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); letter-spacing: -0.015em; color: var(--texto); margin: 0 0 1.1rem; }
+
+.mlista { display: grid; gap: 0.7rem; }
+.mrow { display: flex; align-items: center; gap: 0.9rem; padding: 0.9rem 1.1rem; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); text-decoration: none; }
+.mrow:hover { border-color: var(--texto-2); }
+.mrow .num { font-family: var(--mono); font-size: var(--t-12); color: var(--acento-texto); font-weight: 600; flex: 0 0 auto; }
+.mrow .tit { min-width: 0; flex: 1; }
+.mrow .tit b { font-size: var(--t-13); color: var(--texto); font-weight: 600; display: block; line-height: 1.25; }
+
+.votos { display: grid; gap: 0.5rem; }
+.voto { display: flex; align-items: center; gap: 0.9rem; padding: 0.8rem 1.1rem; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-sm); }
+.voto .tit { flex: 1; min-width: 0; font-size: var(--t-13); color: var(--texto); }
+.voto .tit span { display: block; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+
+/* subtítulo da seção "Como votou" — qualificação, não título; peso normal de propósito. */
+.secao .h-nota { font-size: var(--t-13); color: var(--texto-2); font-weight: 400; }
+
+.nota-secao { display: flex; align-items: flex-start; gap: 0.5rem; margin: 0.9rem 0 0; font-size: var(--t-12); color: var(--texto-2); line-height: 1.5; }
+.nota-secao svg { color: var(--marca); flex: 0 0 auto; margin-top: 2px; }
+
+.contato { display: flex; align-items: flex-start; gap: 0.7rem; padding: 1rem 1.2rem; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio); font-size: var(--t-13); color: var(--texto-2); line-height: 1.5; }
+.contato svg { color: var(--marca); flex: 0 0 auto; margin-top: 2px; }
+.contato b { color: var(--texto); }
+.contato a { color: var(--marca); font-weight: 600; text-decoration: none; }
+.contato a:hover { text-decoration: underline; }

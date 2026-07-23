@@ -106,7 +106,8 @@ table.tabela { width: 100%; border-collapse: collapse; }
 .tela-estado h1 { font-family: var(--display); font-size: var(--t-21); color: var(--texto); margin: 0 0 0.5rem; }
 .tela-estado p { color: var(--texto-2); }
 
-/* ---- azulejo miniatura (Task 9, componente React próprio — NÃO é o markup .am/.am-* da tela-fonte) ---- */
-.azulejo-mini-bloco--concluido { fill: var(--jade); }
-.azulejo-mini-bloco--ativo { fill: color-mix(in srgb, var(--amarelo) 55%, var(--surface-2)); stroke: var(--amarelo); stroke-width: 1; }
-.azulejo-mini-bloco--pendente { fill: none; stroke: color-mix(in srgb, var(--texto-2) 40%, transparent); stroke-width: 1; stroke-dasharray: 2 2; }
+/* ---- azulejo miniatura (Task 9, componente React próprio — NÃO é o markup .am/.am-* da tela-fonte)
+   As 3 regras `.azulejo-mini-bloco--*` MUDARAM DE CASA para `src/app/chassi.css` (Onda E fatia 2): o
+   perfil público do vereador é o 2º uso do AzulejoMini e vive sob `(publico)/`, que não carrega esta
+   folha — PADROES §1 manda promover ao chassi no 2º uso, nunca copiar. O componente continua o mesmo
+   e esta tela continua pintada, agora pelo global (`globals.css` importa o chassi). ---- */
