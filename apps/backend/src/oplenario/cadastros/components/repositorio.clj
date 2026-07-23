@@ -9,7 +9,8 @@
             [oplenario.cadastros.db.vereador :as vereador]
             [oplenario.cadastros.relacoes.cadastro :as rel-cadastro]
             [oplenario.kernel.tenancy :as tenancy])
-  (:import (org.postgresql.util PSQLException)))
+  (:import (java.time LocalDate)
+           (org.postgresql.util PSQLException)))
 
 (defprotocol RepoCadastros
   (transacao [this ente-id f] "Roda (f tx) numa UNICA tx do tenant — compoe varias acoes atomicamente.")
@@ -60,6 +61,13 @@
   (registrar-licenca! [this ente-id vereador-id licenca data]
     "Licenca record-only numa tx: 404 (nil) se vereador ausente; throws :conflito/sem-mandato-vigente se
      nao ha' mandato vigente cobrindo `data`; senao INSERT licenca + UPDATE mandato.estado='licenciado' -> {:id}.")
+  (reassumir-mandato! [this ente-id vereador-id reassumiu-em]
+    "REASSUNCAO numa UNICA tx — o inverso exato de `registrar-licenca!`. `reassumiu-em` e' o dia em que a
+     pessoa VOLTOU A EXERCER; a licenca e' fechada na VESPERA dele (ver `encerrar-licencas-abertas!`).
+     404 (nil) se vereador ausente/de-outro-tenant; throws :conflito/sem-mandato-licenciado (409) se nao ha'
+     mandato 'licenciado' cobrindo `reassumiu-em`; :conflito/retorno-anterior-ao-inicio (409) se sobrou
+     licenca aberta depois do UPDATE; :conflito/mandato-sobreposto (409) se reabrir violaria o EXCLUDE.
+     Senao UPDATE das licencas abertas + UPDATE mandato.estado='vigente' -> {:id :fim}.")
   ;; comissao / cargo / membro
   (criar-comissao! [this ente-id comissao])
   (buscar-comissao [this ente-id id])
@@ -141,6 +149,45 @@
                 (vereador/mudar-estado! tx ente-id {:id (:id mv) :estado "licenciado"})
                 {:id (:id l)})
             (throw (ex-info "sem mandato vigente para licenciar" {:tipo :conflito/sem-mandato-vigente})))))))
+  ;; sem `^LocalDate` no arglist: hint de classe em parametro de metodo de protocolo quebra o casamento de
+  ;; assinatura ("Can't find matching method ... leave off hints for auto match"). O hint vai no USO.
+  (reassumir-mandato! [this ente-id vereador-id reassumiu-em]
+    ;; 23P01 do EXCLUDE `uq_mandato_vigente_sem_overlap` (mig 0059) -> conflito de DOMINIO, nunca 500. E'
+    ;; alcancavel de verdade: o contorno que o operador tinha ATE' esta fatia era registrar um mandato NOVO
+    ;; 'vigente' para representar o retorno, e ele sobrepoe o stint licenciado (que fica fora do predicado
+    ;; do EXCLUDE justamente por nao ser 'vigente'). O catch fica FORA da `transacao` — a excecao aborta a
+    ;; tx, entao nao ha o que capturar por dentro (mesmo padrao de `ligar-identidade!` com o 23505).
+    (try
+      (transacao this ente-id
+        (fn [tx]
+          (when (some? (vereador/buscar tx ente-id vereador-id))
+            (let [m (or (vereador/mandato-licenciado-de-vereador tx ente-id vereador-id reassumiu-em)
+                        ;; GUARD ANTI-RESSURREICAO: exigir 'licenciado' e' o que impede que um POST
+                        ;; devolva a 'vigente' um mandato cassado/renunciado/falecido. Note que o guard NAO
+                        ;; e' "existe licenca aberta": a licenca COM data de fim ja' vencida fecha zero
+                        ;; linhas e ainda assim precisa devolver o mandato a 'vigente' — senao quem se
+                        ;; licenciou por 5 dias em 2024 fica sem poder se licenciar de novo para sempre.
+                        (throw (ex-info "sem mandato licenciado para reassumir"
+                                        {:tipo :conflito/sem-mandato-licenciado})))
+                  fim (.minusDays ^LocalDate reassumiu-em 1)]
+              (vereador/encerrar-licencas-abertas! tx ente-id (:id m) fim)
+              ;; RELE p/ detectar sobra: `encerrar-licencas-abertas!` nao casa licenca cujo `inicio` seja
+              ;; POSTERIOR ao `fim` calculado ("voltei antes de sair"). Sem esta checagem o estado flipava
+              ;; para 'vigente' com a licenca ainda ABERTA — o pior dos dois mundos, porque a janela publica
+              ;; continuaria comida enquanto o mandato parecia normal.
+              (when (seq (filter (comp nil? :fim)
+                                 (vereador/licencas-de-mandatos tx ente-id [(:id m)])))
+                (throw (ex-info "reassuncao anterior ao inicio da licenca em curso"
+                                {:tipo :conflito/retorno-anterior-ao-inicio})))
+              ;; seguro: o `:fim_efetivo [:coalesce fim-efetivo :fim_efetivo]` de `mudar-estado!` NUNCA
+              ;; sobrescreve — reassumir nao apaga o `fim_efetivo` de um mandato que ja' o tenha.
+              (vereador/mudar-estado! tx ente-id {:id (:id m) :estado "vigente"})
+              {:id (:id m) :fim fim}))))
+      (catch PSQLException e
+        (if (= "23P01" (.getSQLState e))
+          (throw (ex-info "reabrir este mandato sobreporia outro mandato vigente do mesmo vereador"
+                          {:tipo :conflito/mandato-sobreposto :vereador-id vereador-id}))
+          (throw e)))))
   (criar-comissao! [this ente-id c] (transacao this ente-id #(comissao/inserir! % c)))
   (buscar-comissao [this ente-id id] (transacao this ente-id #(comissao/buscar % id)))
   (mesa-vigente [this ente-id data] (transacao this ente-id #(comissao/mesa-vigente % data)))
