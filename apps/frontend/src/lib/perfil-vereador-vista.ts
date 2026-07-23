@@ -44,6 +44,7 @@ export type IdentidadeVista = {
   papel: string | null; // "19ª Legislatura (2025–2028)" ou null
   cargoMesa: string | null;
   comissoes: string[];
+  comissoesRotulo: string; // rótulo ACESSÍVEL do grupo de chips (WCAG 1.3.1)
   comissoesVazio: string | null;
 };
 
@@ -63,14 +64,17 @@ export type AutoriaVista = {
   votosTotal: number;
   truncamento: string | null;
   vazio: string | null;
-  recorteAcervo: string; // SEMPRE presente
+  recorteAcervo: string; // SEMPRE presente — qualifica a LISTA
+  recorteNumeros: string; // SEMPRE presente — qualifica os CONTADORES, e vai adjacente a eles
 };
 
 export type LinhaVotoVista = {
   votacaoId: string;
-  rotulo: string; // materiaRotulo OU "voto em matéria não publicada"
+  voto: string; // valor CRU do wire (sim|nao|abstencao) — chaveia a FORMA do chip, nunca o texto
+  rotulo: string; // materiaRotulo normalizado OU "voto em matéria não publicada"
   ementa: string | null;
   quando: string; // dd/mm/aaaa
+  subtitulo: string; // "PL 022/2026 · 18/05/2026" — só a data quando o título JÁ é o rótulo
   votoRotulo: string; // "A favor" | "Contra" | "Absteve-se" | valor cru (fail-closed)
   votoClasse: string; // "chip-ok" | "chip-risco" | "chip-neutro"
 };
@@ -108,6 +112,21 @@ const SEM_JANELA_TEXTO =
 // ---- [LITERAL docs/14 §2] em exercício, ainda sem sessão com chamada.
 const SEM_SESSAO = "Ainda não houve sessão com registro de presença neste mandato.";
 
+// ---- [COPY NOVA, derivada de docs/14 §2 (4º caso) + §6] exercício ANTERIOR ao registro eletrônico E
+//      `sessoes-com-chamada = 0` — o ex-vereador de mandato encerrado antes da projeção.
+//      Este é o cruzamento em que as duas frases prontas da nota falham, uma de cada lado:
+//        • a linha 2 da tabela do §2 proíbe "0 de 0" cru SEMPRE que `sessoes-com-chamada = 0` — e a
+//          docstring de `adapters/out/parlamentar.clj` diz, com todas as letras, que sem este sinal "a tela
+//          publicaria 'compareceu a 0 de 0' sob o nome de uma pessoa";
+//        • o parágrafo do 4º caso proíbe ler o MESMO 0/0 como "está em exercício e ainda não houve sessão"
+//          — "ainda não houve" e "neste mandato" descrevem mandato em curso, e este não está.
+//      Daí uma terceira frase, que não afirma nem uma nem a outra. NÃO leva a ressalva do §6 junto: aquela
+//      fala de "o número", e aqui não há número nenhum — o que ela diria já está dito aqui.
+const SEM_SESSAO_ANTERIOR =
+  "O período de exercício deste mandato é anterior ao início do registro eletrônico de presença. " +
+  "Nenhuma sessão com registro de presença cai dentro do período publicado, e por isso não há número " +
+  "a exibir.";
+
 // ---- [LITERAL docs/14 §6] a ressalva. Acompanha a fração, NÃO a substitui.
 const RESSALVA_ANTERIOR_A_PROJECAO =
   "Há período de exercício deste mandato anterior aos dados publicados; o número cobre apenas a parte " +
@@ -129,9 +148,24 @@ const recorteAcervoAutoria = (dataFmt: string) =>
   `Matérias de autoria estão publicadas a partir de ${dataFmt}. Matérias protocoladas antes dessa data ` +
   `não constam desta lista.`;
 
+// ---- [COPY NOVA] o MESMO recorte, dito para os CONTADORES. Não é redundância: `contar-por-autor` e
+//      `contar-normas-por-autor` filtram por `autor_id IS NOT NULL` exatamente como a listagem, e a
+//      migration 0063 não faz replay — um vereador de 5º mandato publica "0 · matérias de autoria" e
+//      "0 · viraram lei" em 28px. A frase da lista fala "desta lista" e fica duas seções abaixo dos cards:
+//      não alcança os números. Fica de fora o card de votos nominais, cujo total é o universo real.
+const recorteNumerosAutoria = (dataFmt: string) =>
+  `Os números de matérias de autoria e de leis cobrem apenas o acervo publicado a partir de ${dataFmt}: ` +
+  `matérias protocoladas antes dessa data não entram nestes totais.`;
+
 // ---- [COPY NOVA] truncamento — o par lista+total é OBRIGATÓRIO no contrato.
+//      A ordem descrita é a ordem REAL do read-model: `transparencia/db/materia.clj` ordena por
+//      (ano DESC, sequencial DESC) e o módulo dono documenta que "dizer 'mais recentes primeiro' seria
+//      falso" — `sequencial` é contador POR ESPÉCIE, então um requerimento de fevereiro vem antes de um
+//      projeto de lei de novembro. Prometer "mais recentes" seria dizer ao leitor que o que ficou fora do
+//      teto é mais antigo do que o que aparece, e não é. (Os VOTOS ordenam por `ocorrido_em` de verdade,
+//      por isso `truncamentoVotos` pode dizer "mais recentes".)
 const truncamentoMaterias = (mostradas: number, total: number) =>
-  `Mostrando as ${mostradas} matérias mais recentes, de ${total} no total.`;
+  `Mostrando ${mostradas} de ${total} matérias, da numeração mais alta para a mais baixa.`;
 const truncamentoVotos = (mostrados: number, total: number) =>
   `Mostrando os ${mostrados} votos mais recentes, de ${total} no total.`;
 
@@ -139,6 +173,11 @@ const truncamentoVotos = (mostrados: number, total: number) =>
 const VAZIO_MATERIAS = "Nenhuma matéria de autoria consta desta lista.";
 const VAZIO_VOTOS = "Ainda não há votos nominais registrados para este vereador.";
 const VAZIO_COMISSOES = "Não há comissões registradas para este vereador.";
+
+// ---- [COPY NOVA] rótulo ACESSÍVEL do grupo de chips (cargo na Mesa + comissões). Sem ele, a relação
+//      "estes são o cargo e as comissões desta pessoa" existe só na diagramação — WCAG 1.3.1. A assimetria
+//      que denunciava a falta: o estado VAZIO ganhava uma frase completa e o estado CHEIO, nada.
+const ROTULO_COMISSOES = "Cargo na Mesa e comissões";
 
 // ---- [do próprio contrato] rótulo do voto cuja matéria não foi projetada. A linha NUNCA é omitida.
 const VOTO_SEM_MATERIA = "voto em matéria não publicada";
@@ -155,27 +194,39 @@ const VOTO_CLASSE: Record<string, string> = {
 /** Resolve o estado de presença. ORDEM DE AVALIAÇÃO É NORMATIVA (docs/14 §9 + §2), primeiro que casa vence:
  *   1º  janelaDeExercicioConhecida — o booleano manda; os inteiros só existem se ele for true (§9: "é lido
  *       antes dos inteiros, sempre"; um nil inesperado já cai em false no adapter).
- *   2º  janelaAnteriorAProjecao — ANTES de sessoesComChamada === 0. Um mandato inteiramente anterior ao
- *       registro eletrônico publica 0/0 COM conhecida=true; lê-lo como "ainda não houve sessão" ou como
- *       "faltou a tudo" é falso sob o nome de uma pessoa (§2, 4º caso — o campo existe só para isso).
- *   3º  sessoesComChamada === 0
- *   4º  a fração
- * Trocar 2º e 3º de lugar reintroduz exatamente o bug que a revisão da fatia 6 fechou. */
+ *   2º  sessoesComChamada === 0 — DENOMINADOR ZERO NUNCA VIRA FRAÇÃO. É proibição absoluta da linha 2 da
+ *       tabela do §2 ("Nunca '0 de 0' cru"), e não é qualificada por `janela-anterior-a-projecao`.
+ *   3º  a fração, com a ressalva do §6 quando `janelaAnteriorAProjecao` — a ressalva é ADITIVA (§2, 4ª
+ *       linha: "a fração MAIS a ressalva"), nunca seletora de ramo.
+ *
+ * A REGRESSÃO QUE ISTO FECHA (revisão adversarial, achado L1-1): `janelaAnteriorAProjecao` era testado
+ * ANTES do denominador zero e caía direto na fração, sem guarda de zero. O ex-vereador de mandato
+ * encerrado antes da projeção — 0/0 com conhecida=true — publicava "0 de 0" e "Compareceu a 0 das 0
+ * sessões…" sob o nome de uma pessoa, que é exatamente o que o campo `janela-anterior-a-projecao` foi
+ * criado para impedir. E não era caso raro: no dia do deploy (§10) TODO vereador em exercício tem janela
+ * iniciada antes de 20/07/2026, então os 21 vereadores da Casa publicariam isso ao mesmo tempo enquanto
+ * nenhuma sessão tivesse sido projetada. O que a ordem antiga protegia — não ler o 0/0 anterior como
+ * "ainda não houve sessão neste mandato" — continua protegido, agora pelo TEXTO do ramo (SEM_SESSAO_
+ * ANTERIOR), não pela ordem dos `if`. */
 export function derivarPresenca(p: PresencaOut, presencaProjetadaDesde: string): PresencaVista {
   const marco = marcoRegistro(formatarDataSimples(presencaProjetadaDesde));
 
   if (!p.janelaDeExercicioConhecida) {
     return { tipo: "sem-janela", titulo: SEM_JANELA_TITULO, texto: SEM_JANELA_TEXTO, marco };
   }
-  if (p.janelaAnteriorAProjecao) {
-    return fracao(p, RESSALVA_ANTERIOR_A_PROJECAO, marco);
-  }
   if (p.sessoesComChamada === 0) {
-    return { tipo: "sem-sessao", texto: SEM_SESSAO, marco, ata: ATA_DOCUMENTO_DE_FE };
+    return {
+      tipo: "sem-sessao",
+      texto: p.janelaAnteriorAProjecao ? SEM_SESSAO_ANTERIOR : SEM_SESSAO,
+      marco,
+      ata: ATA_DOCUMENTO_DE_FE,
+    };
   }
-  return fracao(p, null, marco);
+  return fracao(p, p.janelaAnteriorAProjecao ? RESSALVA_ANTERIOR_A_PROJECAO : null, marco);
 }
 
+/** SÓ é chamada com `sessoesComChamada > 0` — o guarda está no único caller, logo acima, e o [INV-12] o
+ *  trava. `FRASE_A` nunca pode ser construída com total = 0. */
 function fracao(p: PresencaOut, ressalva: string | null, marco: string): PresencaVista {
   return {
     tipo: "fracao",
@@ -242,7 +293,14 @@ export function derivarIdentidade(p: PerfilVereadorOut): IdentidadeVista {
     cargoMesa: p.cargoMesa,
     // sem filtrar e SEM CONTADOR: o contrato não expõe o `tipo` de cada comissão, então a entrada da Mesa
     // não é identificável e um "N comissões" contaria a Mesa duas vezes (falso). Carry: expor `tipo`.
-    comissoes: p.comissoes,
+    // DEDUPLICADO: `[:vector :string]` não garante unicidade e a origem (`cadastros/db/comissao.clj`,
+    // `comissoes-do-vereador`) faz LEFT JOIN com `comissao_cargo` SEM `DISTINCT` — e não há UNIQUE em
+    // (ente_id, comissao_id, vereador_id) nem EXCLUDE de vigências sobrepostas (só a Mesa ativa tem um).
+    // Dois cargos vigentes na mesma comissão multiplicam a linha e o adapter faz `(mapv :nome ...)` cru:
+    // sairiam dois chips idênticos e uma colisão de `key` no React. Deduplicar é decisão de APRESENTAÇÃO,
+    // logo mora aqui; `Set` preserva a ordem de primeira aparição. Carry: `DISTINCT` no SQL de origem.
+    comissoes: [...new Set(p.comissoes)],
+    comissoesRotulo: ROTULO_COMISSOES,
     comissoesVazio: p.comissoes.length === 0 ? VAZIO_COMISSOES : null,
   };
 }
@@ -272,19 +330,48 @@ export function derivarAutoria(p: PerfilVereadorOut, ente: string): AutoriaVista
         : null,
     vazio: p.materias.length === 0 ? VAZIO_MATERIAS : null,
     // SEMPRE, nunca condicional: é a linha que impede `materiasTotal: 0` / `normasDeAutoria: 0` de virar a
-    // afirmação falsa "este vereador não é autor de nada".
+    // afirmação falsa "este vereador não é autor de nada". Por isso são DUAS: uma para a lista e outra
+    // para os contadores, cada uma renderizada ADJACENTE ao que qualifica (o JSX não pode escolher).
     recorteAcervo: recorteAcervoAutoria(formatarDataSimples(p.acervoComEloDeAutoriaDesde)),
+    recorteNumeros: recorteNumerosAutoria(formatarDataSimples(p.acervoComEloDeAutoriaDesde)),
   };
 }
 
+/** Forma EXATA em que o wire monta `materia-rotulo`: `adapters/out/parlamentar.clj` faz
+ *  `(str tipo " " sequencial "/" ano)` — o tipo CRU do domínio (`projeto_lei`, minúsculas com `_`) e o
+ *  sequencial SEM zero-padding. Os grupos são exatamente o que `derivarRef` precisa. */
+const FORMA_ROTULO_DO_WIRE = /^([a-z][a-z_]*) (\d+)\/(\d{4})$/;
+
+/** Reconstitui a referência canônica ("PL 022/2026") a partir do rótulo cru do wire.
+ *  POR QUE AQUI: publicado como vem, o voto exibia `projeto_lei 22/2026` enquanto a MESMA proposição
+ *  aparecia como `PL 022/2026` na seção "Matérias de autoria" logo acima — duas grafias na mesma página,
+ *  e uma delas é vocabulário interno de banco numa superfície pública e nominal. `derivarRef` é a mesma
+ *  função que a lista usa, então as duas seções não podem divergir de novo.
+ *  FAIL-CLOSED: o que não casar com a forma sai CRU (inclusive o fallback "voto em matéria não publicada").
+ *  CARRY (conserto de raiz, exige codegen): expor `materia-tipo`/`materia-sequencial`/`materia-ano` em
+ *  `VotoPublicoOut` — os três já são lidos em `db/parlamentar.clj:124` — e montar por `derivarRef` direto,
+ *  sem passar por string. Enquanto isso, isto é reconstituição de forma documentada, não adivinhação. */
+function normalizarRotuloMateria(rotulo: string): string {
+  const m = FORMA_ROTULO_DO_WIRE.exec(rotulo);
+  if (!m) return rotulo;
+  return derivarRef({ tipo: m[1], sequencial: Number(m[2]), ano: Number(m[3]) });
+}
+
 function linhaVoto(v: VotoPublicoOut): LinhaVotoVista {
+  // a linha NUNCA é omitida quando a matéria não foi projetada — omitir voto é editar o histórico de
+  // uma pessoa. O que falta é o rótulo da matéria, e é isso que a copy diz.
+  const rotulo = v.materiaRotulo ? normalizarRotuloMateria(v.materiaRotulo) : VOTO_SEM_MATERIA;
+  const quando = formatarData(v.ocorridoEm); // Instant com hora — aqui `formatarData` é o correto.
   return {
     votacaoId: v.votacaoId,
-    // a linha NUNCA é omitida quando a matéria não foi projetada — omitir voto é editar o histórico de
-    // uma pessoa. O que falta é o rótulo da matéria, e é isso que a copy diz.
-    rotulo: v.materiaRotulo ?? VOTO_SEM_MATERIA,
+    voto: v.voto,
+    rotulo,
     ementa: v.materiaEmenta,
-    quando: formatarData(v.ocorridoEm), // Instant com hora — aqui `formatarData` é o correto.
+    quando,
+    // `materia-rotulo` e `materia-ementa` vêm do MESMO LEFT JOIN e caem nulos JUNTOS. O título da linha é
+    // `ementa ?? rotulo`; sem esta resolução aqui, a sublinha repetia o fallback e a linha saía com
+    // "voto em matéria não publicada" impresso duas vezes — inclusive para o leitor de tela.
+    subtitulo: v.materiaEmenta ? `${rotulo} · ${quando}` : quando,
     votoRotulo: VOTO_ROTULO[v.voto] ?? v.voto,
     votoClasse: VOTO_CLASSE[v.voto] ?? "chip-neutro",
   };

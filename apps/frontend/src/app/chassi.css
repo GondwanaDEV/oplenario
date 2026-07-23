@@ -256,10 +256,23 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
    PROMOVIDA AO CHASSI no 2º uso (PADROES §1): nasceu em proposicoes.css (tabela interna
    de proposições) e o perfil público do vereador é o segundo — e `proposicoes.css` NÃO é
    carregada sob `(publico)/`, então o azulejo sairia sem preenchimento nenhum na tela
-   pública. Promover, nunca copiar: duas cópias divergem no primeiro ajuste de token. */
-.azulejo-mini-bloco--concluido { fill: var(--jade); }
-.azulejo-mini-bloco--ativo { fill: color-mix(in srgb, var(--amarelo) 55%, var(--surface-2)); stroke: var(--amarelo); stroke-width: 1; }
-.azulejo-mini-bloco--pendente { fill: none; stroke: color-mix(in srgb, var(--texto-2) 40%, transparent); stroke-width: 1; stroke-dasharray: 2 2; }
+   pública. Promover, nunca copiar: duas cópias divergem no primeiro ajuste de token.
+
+   CONTRASTE (WCAG 1.4.11, objeto gráfico = 3:1; medido par a par contra o fundo REAL das duas
+   superfícies em que o azulejo mini vive hoje — `.mrow` do perfil público e a linha da tabela de
+   proposições, ambas `--surface`, e `--surface-2` na variante clara de card):
+     • concluído: era `--jade` (token da paleta-marca, INVARIANTE — não tematiza). Sobre `--surface` do
+       tema escuro (#16271F) media 1,73 — verde escuro sobre verde escuro, o azulejo sumia e "concluído"
+       ficava indistinguível de "pendente" (1,31 entre si). Passa a `--marca`, que É tematizado: no CLARO
+       é o mesmo #0C5340 (8,50 — zero regressão em /proposicoes) e no ESCURO é #43BD93 (6,65).
+     • ativo: o traço era `--amarelo` cheio (1,82 sobre claro — a linha exata do GUIDELINES §5.1 "amarelo
+       cheio como traço não sustenta contraste"). Passa a `--amarelo-traco` (3,42 claro / 8,08 escuro).
+     • pendente: o traço a 40% de `--texto-2` media 1,89 (claro) e 2,27 (escuro). Passa a 70% (3,47 / 4,11).
+   A distinção ENTRE estados não depende só de cor: concluído é preenchimento sólido, ativo é
+   preenchimento + traço contínuo, pendente é sem preenchimento + traço TRACEJADO (forma, não matiz). */
+.azulejo-mini-bloco--concluido { fill: var(--marca); }
+.azulejo-mini-bloco--ativo { fill: color-mix(in srgb, var(--amarelo) 55%, var(--surface-2)); stroke: var(--amarelo-traco); stroke-width: 1; }
+.azulejo-mini-bloco--pendente { fill: none; stroke: color-mix(in srgb, var(--texto-2) 70%, transparent); stroke-width: 1; stroke-dasharray: 2 2; }
 
 /* ============== ILHAS QUE NÃO TEMATIZAM ==============
    Quando O CONTEÚDO é a coisa, a superfície fica fixa e o tema vira moldura.

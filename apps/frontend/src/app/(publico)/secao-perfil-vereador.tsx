@@ -20,6 +20,7 @@
 //   • Card de "96% presença" — percentual é proibido pelo §9 da nota, e um `.num-card` de um número não
 //     comporta os quatro estados. Virou a seção `.perfil-presenca`, redesenhada.
 
+import type { ReactNode } from "react";
 import { usePerfilVereador } from "@/lib/use-perfil-vereador";
 import { derivarPerfil } from "@/lib/perfil-vereador-vista";
 import { AzulejoMini } from "@/lib/charts/azulejo-mini";
@@ -39,20 +40,65 @@ const ICONE_INFO = (
   </svg>
 );
 
+/** Forma do chip de voto, além da cor e do rótulo textual — é o SVG do `.vchip` da tela-fonte
+ *  (`perfil-vereador-publico.html`), que o `.chip` do chassi já prevê (`.chip svg { flex: 0 0 auto }`).
+ *  Por que ele volta: sob `(publico)/` a folha `proposicoes.css` NÃO é carregada, e é lá que mora o
+ *  `.chip::before` (o quadradinho 7×7 que dá forma ao chip nas telas internas) — sem o SVG, este é o único
+ *  chip do sistema sem NENHUM sinal de forma, e em P&B os três votos viram a mesma pílula.
+ *  Chaveado pelo VOTO cru (não pela classe): fora do trio, nenhum ícone — fail-closed, nunca um ✓ chutado. */
+const ICONE_VOTO: Record<string, ReactNode> = {
+  sim: (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} aria-hidden="true">
+      <path d="M5 12l5 5L20 6" />
+    </svg>
+  ),
+  nao: (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} aria-hidden="true">
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  ),
+  abstencao: (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} aria-hidden="true">
+      <path d="M6 12h12" />
+    </svg>
+  ),
+};
+
 export function SecaoPerfilVereador({ ente, vereadorId }: { ente: string; vereadorId: string }) {
   const { perfil, estado } = usePerfilVereador(ente, vereadorId);
 
-  // sem skeleton, só o `aria-busy` honesto (consistência com secao-ficha.tsx): nada visível ainda.
-  if (estado === "carregando") return <div aria-busy="true" />;
+  // NENHUMA string de destino nasce crua no JSX: `ente` vem do path param JÁ DECODIFICADO pelo Next, e a
+  // vista codifica o dela (`encodeURIComponent`) desde a Task 5. Três hrefs escritos aqui interpolavam o
+  // valor cru — na mesma árvore, o link da matéria saía `%2F` e a trilha saía com `/` de verdade. O ramo
+  // que mais importa é o de ERRO logo abaixo: é justamente ele que renderiza quando o `ente` é malformado
+  // (o backend coage para UUID e devolve 400), e ali um `../../` cru resolveria para FORA do portal.
+  const hrefPortal = `/portal/casa/${encodeURIComponent(ente)}`;
+
+  // sem skeleton (consistência com secao-ficha.tsx): nada VISÍVEL ainda. Mas `aria-busy` num <div> vazio
+  // não anuncia coisa nenhuma — é atributo de estado, e sem região viva nem nome acessível o leitor de tela
+  // encontra um <main> mudo. A região viva entra aqui, com texto em `.sr-only`, e o ramo de erro reusa o
+  // MESMO nó raiz (<div role="status">) para que a troca seja uma MUTAÇÃO dentro de região preexistente —
+  // região criada junto com o conteúdo costuma não ser anunciada por NVDA/JAWS.
+  if (estado === "carregando") {
+    return (
+      <div role="status" aria-live="polite" aria-busy="true">
+        <span className="sr-only">Carregando o perfil do vereador…</span>
+      </div>
+    );
+  }
 
   if (estado === "erro") {
     return (
-      <div className="em-breve" role="status">
-        <p className="em-breve-titulo">Vereador não encontrado</p>
+      <div className="em-breve" role="status" aria-live="polite">
+        {/* o título NÃO decide entre as duas causas: `buscarPublico` colapsa 404 e falha de rede no mesmo
+            `null` e a borda NÃO PODE afirmar qual ocorreu (é o que o hook documenta). "Vereador não
+            encontrado" afirmava a inexistência de uma pessoa que pode existir e estar em exercício — e o
+            título é o elemento de maior peso visual, lido isolado. */}
+        <p className="em-breve-titulo">Não foi possível exibir este perfil</p>
         <p className="em-breve-motivo">
           Não encontramos este perfil — o link pode estar incorreto, ou pode ter sido uma instabilidade
           passageira. Tente novamente em instantes ou volte à{" "}
-          <a href={`/portal/casa/${ente}`}>página inicial do portal</a>.
+          <a href={hrefPortal}>página inicial do portal</a>.
         </p>
       </div>
     );
@@ -67,7 +113,7 @@ export function SecaoPerfilVereador({ ente, vereadorId }: { ente: string; veread
       {/* trilha honesta: o pai de um perfil NÃO é a lista de matérias, e não existe índice público de
           vereadores — a única subida verdadeira é a home do portal. */}
       <nav className="migalha" aria-label="Trilha">
-        <a href={`/portal/casa/${ente}`}>Início</a>
+        <a href={hrefPortal}>Início</a>
         <span aria-hidden="true">›</span>
         <span>{identidade.nome}</span>
       </nav>
@@ -96,14 +142,20 @@ export function SecaoPerfilVereador({ ente, vereadorId }: { ente: string; veread
             <h1>{identidade.nome}</h1>
             {identidade.nomeSecundario && <p className="nome-civil">{identidade.nomeSecundario}</p>}
             {identidade.papel && <p className="papel">{identidade.papel}</p>}
-            <div className="perfil-tags">
-              {identidade.cargoMesa && <span className="ptag mesa">{identidade.cargoMesa}</span>}
-              {identidade.comissoes.map((c) => (
-                <span className="ptag" key={c}>
-                  {c}
-                </span>
-              ))}
-            </div>
+            {/* LISTA rotulada, não `<span>` soltos: a relação "isto é o cargo na Mesa e as comissões que
+                esta pessoa integra" existia só na diagramação (WCAG 1.3.1), e o leitor de tela recebia os
+                nomes crus encostados no texto da legislatura — enquanto o estado VAZIO ganhava uma frase
+                completa. O rótulo do grupo vem da vista, como toda copy desta tela. */}
+            {(identidade.cargoMesa || identidade.comissoes.length > 0) && (
+              <ul className="perfil-tags" aria-label={identidade.comissoesRotulo}>
+                {identidade.cargoMesa && <li className="ptag mesa">{identidade.cargoMesa}</li>}
+                {identidade.comissoes.map((c) => (
+                  <li className="ptag" key={c}>
+                    {c}
+                  </li>
+                ))}
+              </ul>
+            )}
             {identidade.comissoesVazio && <p className="nota-secao">{identidade.comissoesVazio}</p>}
           </div>
         </div>
@@ -125,6 +177,14 @@ export function SecaoPerfilVereador({ ente, vereadorId }: { ente: string; veread
           <span>votos nominais</span>
         </div>
       </div>
+      {/* a declaração de recorte fica AQUI, no mesmo bloco dos números que ela qualifica — não duas seções
+          abaixo. Os dois primeiros contadores sofrem o MESMO corte da lista (`autor_id IS NOT NULL`, sem
+          replay na mig 0063): sem esta linha, "0 · matérias de autoria" em 28px lê como "esta pessoa não é
+          autora de nada", que é falso para todo mandato anterior ao deploy. */}
+      <p className="nota-secao">
+        {ICONE_INFO}
+        {autoria.recorteNumeros}
+      </p>
 
       <section className="secao perfil-secao perfil-presenca" aria-labelledby="presenca-titulo">
         <h2 id="presenca-titulo">Presença em sessões</h2>
@@ -209,14 +269,17 @@ export function SecaoPerfilVereador({ ente, vereadorId }: { ente: string; veread
           <div className="votos">
             {votos.linhas.map((v) => (
               <div className="voto" key={v.votacaoId}>
+                {/* título = ementa; quando a matéria não foi projetada o título JÁ é o rótulo de fallback,
+                    e a sublinha vira só a data (a vista resolve isso — repetir a frase era o defeito). */}
                 <span className="tit">
                   {v.ementa ?? v.rotulo}
-                  <span>
-                    {v.rotulo} · {v.quando}
-                  </span>
+                  <span>{v.subtitulo}</span>
                 </span>
-                {/* chip do chassi: cor NUNCA é o único sinal — o rótulo textual vai junto. */}
-                <span className={`chip ${v.votoClasse}`}>{v.votoRotulo}</span>
+                {/* chip do chassi: cor NUNCA é o único sinal — forma (SVG) + rótulo textual vão junto. */}
+                <span className={`chip ${v.votoClasse}`}>
+                  {ICONE_VOTO[v.voto]}
+                  {v.votoRotulo}
+                </span>
               </div>
             ))}
           </div>
@@ -255,7 +318,7 @@ export function SecaoPerfilVereador({ ente, vereadorId }: { ente: string; veread
           <span>
             Para tratar de assuntos da Câmara, use os canais oficiais: o <b>Protocolo Geral</b> da Casa ou a{" "}
             <b>Ouvidoria</b>. Pedidos de informação pública seguem pelo{" "}
-            <a href={`/portal/casa/${ente}#esic-titulo`}>e-SIC</a>.
+            <a href={`${hrefPortal}#esic-titulo`}>e-SIC</a>.
           </span>
         </div>
       </section>

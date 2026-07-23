@@ -31,11 +31,18 @@ const presencaBase: PresencaOut = {
   janelaAnteriorAProjecao: false,
 };
 
-// os QUATRO estados do §2 da nota, na ordem em que `derivarPresenca` os resolve.
-const QUATRO_ESTADOS: PresencaOut[] = [
+// Os quatro estados do §2 da nota MAIS as duas combinações que a revisão adversarial cobrou: o 0/0 de
+// mandato inteiramente anterior à projeção (que publicava "0 de 0" — achado L1-1) e a combinação
+// conhecida=false + anterior=true, que hoje é inalcançável porque os dois booleanos derivam da MESMA lista
+// `janelas` no adapter, mas essa garantia mora em OUTRO módulo e não é contrato do wire (achado T5-11).
+// Toda varredura de invariante roda sobre a matriz inteira, não sobre o caminho feliz.
+const ESTADOS_DE_PRESENCA: PresencaOut[] = [
   { ...presencaBase, janelaDeExercicioConhecida: false },
+  { ...presencaBase, janelaDeExercicioConhecida: false, janelaAnteriorAProjecao: true },
   { ...presencaBase, janelaAnteriorAProjecao: true },
   { ...presencaBase, sessoesPresente: 0, sessoesComChamada: 0 },
+  { ...presencaBase, sessoesPresente: 0, sessoesComChamada: 0, janelaAnteriorAProjecao: true },
+  { ...presencaBase, sessoesPresente: 0, sessoesComChamada: 0, janelaDeExercicioConhecida: false },
   presencaBase,
 ];
 
@@ -63,13 +70,19 @@ const perfilBase: PerfilVereadorOut = {
       votacaoId: "vt1",
       voto: "sim",
       ocorridoEm: "2026-05-18T14:00:00Z",
-      materiaRotulo: "PL 022/2026",
+      // valor REAL do wire, não o já formatado: `adapters/out/parlamentar.clj` monta
+      // `(str tipo " " sequencial "/" ano)` com o tipo CRU do domínio e sem zero-padding — provado pelo
+      // teste de integração `http_perfil_test.clj` ("projeto_lei 1/2026"). Uma fixture com "PL 022/2026"
+      // é vocabulário fictício e mantinha o defeito de exibição invisível (achado L2-1).
+      materiaRotulo: "projeto_lei 22/2026",
       materiaEmenta: "Incentivo à energia solar no município",
     },
   ],
   votosTotal: 1,
   presenca: presencaBase,
-  acervoComEloDeAutoriaDesde: "2026-07-20",
+  // As DUAS constantes de deploy com valores DIFERENTES de propósito (achado T5-05): iguais, uma trocada
+  // pela outra em `derivarPerfil` passava despercebida, e é o único ponto que fia as duas.
+  acervoComEloDeAutoriaDesde: "2025-03-04",
   presencaProjetadaDesde: "2026-07-20",
 };
 
@@ -137,7 +150,12 @@ describe("derivarPresenca", () => {
     expect(afirmacao).not.toContain("%");
   });
 
-  it("[INV-8] mandato inteiramente anterior à projeção não vira 'ainda não houve sessão'", () => {
+  it("[INV-8] mandato inteiramente anterior à projeção não vira 'ainda não houve sessão' NEM '0 de 0'", () => {
+    // O ex-vereador de mandato encerrado antes do registro eletrônico responde 0/0 com
+    // `janela-de-exercicio-conhecida = true` (é o caso que o campo `janela-anterior-a-projecao` existe para
+    // marcar — `adapters/out/parlamentar.clj`). As DUAS leituras prontas da nota são falsas aqui: o §2 4º
+    // caso proíbe ler como "ainda não houve sessão neste mandato", e a linha 2 da tabela do §2 proíbe "0 de
+    // 0" cru sempre que `sessoes-com-chamada = 0`. Por isso o texto próprio — e NUNCA a fração.
     const v = derivarPresenca(
       {
         sessoesPresente: 0,
@@ -147,9 +165,55 @@ describe("derivarPresenca", () => {
       },
       DATA_PROJECAO,
     );
-    expect(v.tipo).toBe("fracao");
-    if (v.tipo !== "fracao") throw new Error("ramo errado");
-    expect(v.ressalva).not.toBeNull();
+    expect(v.tipo).toBe("sem-sessao");
+    if (v.tipo !== "sem-sessao") throw new Error("ramo errado");
+    expect(v.texto).toBe(
+      "O período de exercício deste mandato é anterior ao início do registro eletrônico de presença. " +
+        "Nenhuma sessão com registro de presença cai dentro do período publicado, e por isso não há número " +
+        "a exibir.",
+    );
+    expect(v.texto).not.toBe("Ainda não houve sessão com registro de presença neste mandato.");
+    expect("presente" in v).toBe(false);
+    expect("total" in v).toBe(false);
+  });
+
+  it("[INV-13] o booleano manda: conhecida=false vence o denominador zero e a ressalva (§9, ordem 1º)", () => {
+    // §9: "`janela-de-exercicio-conhecida` é lido antes dos inteiros, SEMPRE". Nenhuma fixture cruzava
+    // conhecida=false com os outros dois sinais, então trocar o 1º `if` de lugar passava verde (T5-11).
+    for (const anterior of [true, false]) {
+      const v = derivarPresenca(
+        {
+          sessoesPresente: 0,
+          sessoesComChamada: 0,
+          janelaDeExercicioConhecida: false,
+          janelaAnteriorAProjecao: anterior,
+        },
+        DATA_PROJECAO,
+      );
+      expect(v.tipo).toBe("sem-janela");
+    }
+  });
+
+  it("[INV-12] NENHUM estado produz a frase do §1 com denominador zero ('das 0 sessões')", () => {
+    // A regra que o achado L1-1 quebrou: a fração só existe com denominador > 0. Varre a matriz inteira
+    // (inclusive os 0/0) porque o defeito nasceu de uma ORDEM de `if`, não de uma fórmula.
+    for (const p of ESTADOS_DE_PRESENCA) {
+      const varredura = textosDePresenca(derivarPresenca(p, DATA_PROJECAO)).join(" ");
+      expect(varredura).not.toContain("das 0 sessões");
+      expect(varredura).not.toContain("0 de 0");
+    }
+    for (const anterior of [true, false]) {
+      const v = derivarPresenca(
+        {
+          sessoesPresente: 0,
+          sessoesComChamada: 0,
+          janelaDeExercicioConhecida: true,
+          janelaAnteriorAProjecao: anterior,
+        },
+        DATA_PROJECAO,
+      );
+      expect(v.tipo).not.toBe("fracao");
+    }
   });
 
   it("janela anterior à projeção acrescenta a ressalva do §6 SEM substituir a fração", () => {
@@ -208,7 +272,7 @@ describe("derivarPresenca", () => {
   });
 
   it("[INV-1] presença nunca produz percentual, em nenhum dos quatro estados", () => {
-    for (const p of QUATRO_ESTADOS) {
+    for (const p of ESTADOS_DE_PRESENCA) {
       const v = derivarPresenca(p, DATA_PROJECAO);
       expect(textosDePresenca(v).join(" ")).not.toContain("%");
       expect("percentual" in v).toBe(false);
@@ -216,7 +280,7 @@ describe("derivarPresenca", () => {
   });
 
   it("[INV-7] rótulo proibido 'sessões realizadas'/'esteve presente' não aparece em nenhum estado", () => {
-    for (const p of QUATRO_ESTADOS) {
+    for (const p of ESTADOS_DE_PRESENCA) {
       const varredura = semAcento(textosDePresenca(derivarPresenca(p, DATA_PROJECAO)).join(" "));
       expect(varredura).not.toContain("sessoes realizadas");
       expect(varredura).not.toContain("esteve presente");
@@ -224,14 +288,26 @@ describe("derivarPresenca", () => {
   });
 
   it("[INV-10] todo estado de presença remete à ata como documento de fé", () => {
-    for (const p of QUATRO_ESTADOS) {
-      const varredura = textosDePresenca(derivarPresenca(p, DATA_PROJECAO)).join(" ").toLowerCase();
-      expect(varredura).toContain("ata");
+    // `toContain("ata")` era TAUTOLÓGICO: "ata" é substring de "data", e o `marco` — que vai nos quatro
+    // ramos — termina em "…anteriores a essa data não constam…". Dava para apagar toda a remissão à ata
+    // sem o teste acusar. A varredura agora é por PALAVRA isolada, e cada ramo tem a asserção literal do
+    // texto que carrega a remissão.
+    for (const p of ESTADOS_DE_PRESENCA) {
+      const v = derivarPresenca(p, DATA_PROJECAO);
+      expect(textosDePresenca(v).join(" ")).toMatch(/\bata\b/);
+      if (v.tipo === "sem-janela") {
+        expect(v.texto).toContain("disponível na ata correspondente");
+      } else {
+        expect(v.ata).toBe(
+          "O documento de fé é a ata de cada sessão. Este número é um resumo derivado dos registros; " +
+            "divergência entre ele e a ata resolve-se pela ata.",
+        );
+      }
     }
   });
 
   it("todo estado exibe o marco do registro eletrônico com a data VINDA DA RESPOSTA", () => {
-    for (const p of QUATRO_ESTADOS) {
+    for (const p of ESTADOS_DE_PRESENCA) {
       const v = derivarPresenca(p, "2026-09-01");
       expect(v.marco).toContain("01/09/2026");
       expect(v.marco).not.toContain("20/07/2026");
@@ -324,6 +400,38 @@ describe("derivarIdentidade", () => {
     expect(derivarIdentidade({ ...perfilBase, nomeParlamentar: "Helena" }).iniciais).toBe("H");
     expect(derivarIdentidade(perfilBase).iniciais).not.toContain("1");
   });
+
+  it("nome com 3+ palavras respeita o teto de 2 caracteres (primeira e última), que é o caso NORMAL", () => {
+    // Nome civil brasileiro tem 4-5 palavras; a caixa do avatar (.perfil-foto, 84px) é dimensionada para
+    // dois caracteres. Sem este caso, `palavras.map(w => w[0]).join("")` passava verde e "José Carlos da
+    // Silva Nogueira" sairia como "JCDSN" (achado T5-09).
+    expect(derivarIdentidade({ ...perfilBase, nomeParlamentar: null }).iniciais).toBe("HM");
+    const longo = derivarIdentidade({
+      ...perfilBase,
+      nomeParlamentar: null,
+      nomeCivil: "José Carlos da Silva Nogueira",
+    });
+    expect(longo.iniciais).toBe("JN");
+    expect(longo.iniciais.length).toBeLessThanOrEqual(2);
+  });
+
+  it("nome de comissão repetido não duplica o chip (o SQL de origem não faz DISTINCT)", () => {
+    // `cadastros/db/comissao.clj` faz LEFT JOIN com `comissao_cargo` SEM `DISTINCT` e não há UNIQUE em
+    // (ente_id, comissao_id, vereador_id): dois cargos vigentes na mesma comissão multiplicam a linha e o
+    // adapter faz `(mapv :nome ...)` cru. Deduplicar é decisão de APRESENTAÇÃO e mora aqui (achado L2-3).
+    const r = derivarIdentidade({
+      ...perfilBase,
+      comissoes: ["Comissão de Justiça", "Comissão de Justiça", "Comissão de Finanças"],
+    });
+    expect(r.comissoes).toEqual(["Comissão de Justiça", "Comissão de Finanças"]);
+  });
+
+  it("o grupo de chips tem rótulo próprio — a relação 'isto é cargo + comissões' não pode viver só na diagramação", () => {
+    // WCAG 1.3.1: a fileira de pílulas é percebida como grupo visualmente; sem rótulo, o leitor de tela
+    // recebe quatro itens de naturezas diferentes numa sequência plana (achado A11Y-2). A copy nasce aqui,
+    // não no JSX.
+    expect(derivarIdentidade(perfilBase).comissoesRotulo).toBe("Cargo na Mesa e comissões");
+  });
 });
 
 describe("derivarAutoria", () => {
@@ -331,22 +439,40 @@ describe("derivarAutoria", () => {
     const r = derivarAutoria({ ...perfilBase, materias: [], materiasTotal: 0 }, "fortaleza");
     expect(r.linhas).toEqual([]);
     expect(r.vazio).toBe("Nenhuma matéria de autoria consta desta lista.");
-    expect(r.recorteAcervo).toContain("20/07/2026");
+    expect(r.recorteAcervo).toContain("04/03/2025");
     expect(r.truncamento).toBeNull();
   });
 
   it("declaração de recorte do acervo aparece SEMPRE, com a data vinda da resposta", () => {
-    const r = derivarAutoria({ ...perfilBase, acervoComEloDeAutoriaDesde: "2025-03-04" }, "fortaleza");
+    const r = derivarAutoria({ ...perfilBase, acervoComEloDeAutoriaDesde: "2024-11-30" }, "fortaleza");
     expect(r.recorteAcervo).toBe(
-      "Matérias de autoria estão publicadas a partir de 04/03/2025. Matérias protocoladas antes dessa " +
+      "Matérias de autoria estão publicadas a partir de 30/11/2024. Matérias protocoladas antes dessa " +
         "data não constam desta lista.",
     );
     expect(r.vazio).toBeNull();
   });
 
-  it("materiasTotal maior que a lista -> linha de truncamento 'mostrando N de M'", () => {
+  it("os CONTADORES ganham declaração de recorte própria, adjacente a eles (não só a lista)", () => {
+    // `contar-por-autor`/`contar-normas-por-autor` filtram por `autor_id IS NOT NULL` — o MESMO corte da
+    // lista, e sem replay na mig 0063. Um vereador de 5º mandato publica "0 · matérias de autoria" e
+    // "0 · viraram lei" em 28px; a única frase que relativizava isso falava "desta lista" e ficava duas
+    // seções abaixo dos cards (achado L1-3).
+    const r = derivarAutoria(perfilBase, "fortaleza");
+    expect(r.recorteNumeros).toBe(
+      "Os números de matérias de autoria e de leis cobrem apenas o acervo publicado a partir de " +
+        "04/03/2025: matérias protocoladas antes dessa data não entram nestes totais.",
+    );
+  });
+
+  it("materiasTotal maior que a lista -> truncamento que descreve a ORDEM REAL, nunca 'mais recentes'", () => {
+    // `transparencia/db/materia.clj` ordena por (ano DESC, sequencial DESC) e o próprio módulo dono
+    // documenta: "dizer 'mais recentes primeiro' seria falso" — `sequencial` é contador POR ESPÉCIE, então
+    // um requerimento de fevereiro vem antes de um PL de novembro (achado L1-2).
     const r = derivarAutoria({ ...perfilBase, materiasTotal: 137 }, "fortaleza");
-    expect(r.truncamento).toBe("Mostrando as 1 matérias mais recentes, de 137 no total.");
+    expect(r.truncamento).toBe(
+      "Mostrando 1 de 137 matérias, da numeração mais alta para a mais baixa.",
+    );
+    expect(r.truncamento).not.toMatch(/recente/i);
     expect(r.materiasTotal).toBe(137);
   });
 
@@ -406,6 +532,41 @@ describe("derivarVotos", () => {
     expect(r.linhas[0].ementa).toBeNull();
   });
 
+  it("voto sem matéria projetada não repete o rótulo de fallback: a sublinha vira só a data", () => {
+    // `materia-rotulo` e `materia-ementa` vêm do MESMO LEFT JOIN, então caem nulos JUNTOS. Com título
+    // `ementa ?? rotulo` e sublinha `rotulo · quando`, o fallback saía impresso duas vezes na mesma linha
+    // (achados L2-2 / A11Y-5 / L6-3). O par título+sublinha é resolvido aqui, não no JSX.
+    const semMateria = derivarVotos({
+      ...perfilBase,
+      votos: [{ ...perfilBase.votos[0], materiaRotulo: null, materiaEmenta: null }],
+    }).linhas[0];
+    expect(semMateria.subtitulo).toBe("18/05/2026");
+    expect(semMateria.subtitulo).not.toContain("voto em matéria não publicada");
+
+    const comMateria = derivarVotos(perfilBase).linhas[0];
+    expect(comMateria.subtitulo).toBe("PL 022/2026 · 18/05/2026");
+  });
+
+  it("o rótulo da matéria votada sai na MESMA grafia da lista de autoria (o wire manda o enum cru)", () => {
+    // O backend monta `(str tipo " " sequencial "/" ano)` — "projeto_lei 22/2026", tipo cru de banco e sem
+    // zero-padding. Publicado assim, a mesma proposição aparecia com duas grafias na mesma página (achado
+    // L2-1). Fail-closed: formato inesperado sai CRU, nunca lança.
+    expect(derivarVotos(perfilBase).linhas[0].rotulo).toBe("PL 022/2026");
+    const exotico = derivarVotos({
+      ...perfilBase,
+      votos: [
+        { ...perfilBase.votos[0], votacaoId: "a", materiaRotulo: "requerimento 7/2026" },
+        { ...perfilBase.votos[0], votacaoId: "b", materiaRotulo: "vocabulario_de_tenant 3/2026" },
+        { ...perfilBase.votos[0], votacaoId: "c", materiaRotulo: "forma inesperada" },
+      ],
+      votosTotal: 3,
+    });
+    const por = Object.fromEntries(exotico.linhas.map((l) => [l.votacaoId, l.rotulo]));
+    expect(por.a).toBe("REQ 007/2026");
+    expect(por.b).toBe("VOCABULARIO_DE_TENANT 003/2026");
+    expect(por.c).toBe("forma inesperada");
+  });
+
   it("voto fora do vocabulário sim/nao/abstencao -> rótulo cru e chip neutro (fail-closed, não lança)", () => {
     const r = derivarVotos({
       ...perfilBase,
@@ -434,7 +595,12 @@ describe("derivarVotos", () => {
     const r = derivarVotos(entrada);
     expect(r.linhas.map((l) => l.votacaoId)).toEqual(["recente", "meio", "antigo"]);
     expect(votos.map((v) => v.votacaoId)).toEqual(["antigo", "recente", "meio"]);
-    expect(r.linhas[0].quando).toMatch(/^\d{2}\/\d{2}\/\d{4}$/);
+    // VALOR, não só forma (achado T5-10): a regex `^\d{2}\/\d{2}\/\d{4}$` sobrevivia a um deslocamento de
+    // um dia ou ao campo errado. 14:00Z fica no mesmo dia civil em qualquer fuso do Brasil.
+    // CARRY conhecido: `formatarData` usa o fuso do RUNTIME (Intl sem `timeZone`), então um instante perto
+    // da meia-noite UTC rende dias diferentes no container e no navegador do cidadão em America/Fortaleza.
+    // Fixar o fuso é decisão de plataforma (kernel/tempo já cravou America/Fortaleza no backend).
+    expect(r.linhas.map((l) => l.quando)).toEqual(["18/05/2026", "06/05/2026", "29/04/2026"]);
   });
 });
 
@@ -447,5 +613,16 @@ describe("derivarPerfil", () => {
     expect(v.votos.linhas.length).toBe(1);
     expect(v.autoria.normasDeAutoria).toBe(3);
     expect(v.autoria.votosTotal).toBe(1);
+  });
+
+  it("cada bloco recebe a SUA constante de deploy — presença não come a data do acervo, nem o contrário", () => {
+    // As duas são strings independentes no contrato e podem divergir (um backfill de acervo move só uma).
+    // `derivarPerfil` é o ÚNICO ponto que as fia, e trocar uma pela outra passava verde (achado T5-05).
+    const v = derivarPerfil(perfilBase, "fortaleza");
+    expect(v.presenca.marco).toContain("20/07/2026");
+    expect(v.presenca.marco).not.toContain("04/03/2025");
+    expect(v.autoria.recorteAcervo).toContain("04/03/2025");
+    expect(v.autoria.recorteAcervo).not.toContain("20/07/2026");
+    expect(v.autoria.recorteNumeros).toContain("04/03/2025");
   });
 });

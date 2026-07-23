@@ -422,7 +422,9 @@
 /* o nome civil só aparece quando difere do parlamentar — subordinado, nunca do mesmo peso do h1. */
 .perfil-id .nome-civil { font-size: var(--t-13); color: var(--texto-2); margin: 0.25rem 0 0; }
 .perfil-id .papel { font-size: var(--t-16); color: var(--texto-2); margin: 0.2rem 0 0; }
-.perfil-tags { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.7rem 0 0; }
+/* <ul> de verdade (WCAG 1.3.1: o grupo de chips é uma LISTA rotulada, não `span` soltos) — daí o reset de
+   marcador/recuo, que o `flex` sozinho não faz. */
+.perfil-tags { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.7rem 0 0; list-style: none; padding: 0; }
 .perfil-tags:empty { display: none; }
 .ptag { font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.2rem 0.7rem; background: var(--surface-2); border: 1px solid var(--linha); color: var(--texto-2); }
 .ptag.mesa { color: var(--acento-texto); border-color: color-mix(in srgb, var(--telha) 40%, transparent); }
@@ -468,5 +470,16 @@
 .contato { display: flex; align-items: flex-start; gap: 0.7rem; padding: 1rem 1.2rem; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio); font-size: var(--t-13); color: var(--texto-2); line-height: 1.5; }
 .contato svg { color: var(--marca); flex: 0 0 auto; margin-top: 2px; }
 .contato b { color: var(--texto); }
-.contato a { color: var(--marca); font-weight: 600; text-decoration: none; }
-.contato a:hover { text-decoration: underline; }
+/* SUBLINHADO EM REPOUSO, não só no :hover. Link dentro de prosa corrida só pode dispensar o sublinhado se
+   contrastar ≥3:1 com o texto AO REDOR (WCAG 1.4.1 / técnica G183); medido: `--marca` contra `--texto-2`
+   dá 1,20 no claro e 1,03 no escuro — ou seja, para quem não distingue verde de cinza, "e-SIC" era só mais
+   uma palavra em negrito, indistinguível de "Protocolo Geral"/"Ouvidoria", que são `<b>` e NÃO são links.
+   O `:hover` não serve de pista para teclado, e o `:focus-visible` do chassi dá contorno, não sublinhado.
+   O hover passa a REFORÇAR (espessura) em vez de "fazer aparecer". */
+.contato a { color: var(--marca); font-weight: 600; text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--marca) 45%, transparent); text-underline-offset: 3px; }
+.contato a:hover { text-decoration-color: var(--marca); text-decoration-thickness: 2px; }
+/* mesmo motivo, no card de degradação: `.em-breve-motivo` é prosa e o `<a>` dela herdava `none` do
+   preflight do Tailwind (a regra base `.superficie-publica a` define cor e offset, mas nunca
+   `text-decoration-line`). CARRY registrado: corrigir a regra BASE alcança todos os links em prosa do
+   portal de uma vez — está fora do escopo desta fatia porque mexeria em telas que ela não tocou. */
+.em-breve-motivo a { text-decoration: underline; text-underline-offset: 3px; }

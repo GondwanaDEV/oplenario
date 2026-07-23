@@ -141,4 +141,40 @@ describe("usePerfilVereador", () => {
     liberar();
     await waitFor(() => expect(result.current.estado).toBe("pronto"));
   });
+
+  it("resposta fora de ordem: a do vereador ANTERIOR chega depois e NÃO sobrescreve o perfil atual", async () => {
+    // Os dois testes de troca de parâmetro acima só provam o RESET SÍNCRONO do render — em ambos a
+    // primeira resposta já resolveu antes da troca. A guarda `if (!vivo) return` do efeito, que existe
+    // para impedir escrita fora de ordem, não tinha teste nenhum: removê-la passava verde. É ela que
+    // impede "presença, autoria e votos de v1 exibidos sob a URL e o nome de v2".
+    // (Hoje a rota pública não tem navegação soft — todo link do portal é âncora crua, então a troca de
+    // parâmetro sem remontagem não ocorre em produção. O teste guarda a GUARDA, para que ela não seja
+    // apagada por parecer supérflua no dia em que um <Link> entrar aqui.)
+    let liberarV1: () => void = () => {};
+    const respostaV1 = new Promise<{ ok: boolean; json: () => Promise<unknown> }>((res) => {
+      liberarV1 = () =>
+        res({ ok: true, json: async () => ({ ...perfilWire, "nome-parlamentar": "ANTIGO V1" }) });
+    });
+    let chamada = 0;
+    global.fetch = vi.fn(() => {
+      chamada += 1;
+      return chamada === 1
+        ? respostaV1
+        : Promise.resolve({
+            ok: true,
+            json: async () => ({ ...perfilWire, "nome-parlamentar": "NOVO V2" }),
+          });
+    }) as unknown as typeof fetch;
+
+    const { result, rerender } = renderHook(({ id }) => usePerfilVereador("fortaleza", id), {
+      initialProps: { id: "v1" },
+    });
+    rerender({ id: "v2" }); // troca ANTES de v1 responder
+    await waitFor(() => expect(result.current.perfil?.nomeParlamentar).toBe("NOVO V2"));
+
+    liberarV1(); // a resposta lenta do vereador anterior chega agora
+    await new Promise((r) => setTimeout(r, 0));
+    expect(result.current.perfil?.nomeParlamentar).toBe("NOVO V2");
+    expect(result.current.estado).toBe("pronto");
+  });
 });
