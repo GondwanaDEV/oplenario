@@ -131,13 +131,20 @@
 (defn- fake-repo-escrita
   "RepoCadastros fake com as escritas + legislatura-vigente. Cada fn devolve o que o teste precisa; use nil
   p/ 404 e (throw (ex-info ... {:tipo :conflito/...})) p/ 409."
-  [{:keys [criar editar mandato licenca leg]}]
+  [{:keys [criar editar mandato licenca leg reassuncao capturadas]}]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify repo-cad/RepoCadastros
     (criar-vereador!    [_ _ _]     (or criar {:next.jdbc/update-count 1}))
     (atualizar-vereador! [_ _ _ _]  (if (some? editar) editar 1))
     (registrar-mandato! [_ _ m]     (if (fn? mandato) (mandato m) mandato))
     (registrar-licenca! [_ _ _ l _] (if (fn? licenca) (licenca l) licenca))
+    ;; `capturadas` (atom, opcional): o fake dos DOIS primeiros argumentos era `_ _`, entao o wiring
+    ;; handler->controller->Repo de `ente-id`/`vereador-id` — dois UUIDs homogeneos, trocaveis por
+    ;; copy-paste sem erro de tipo — nao tinha detector nenhum. Trocados, a RLS esconderia tudo e a rota
+    ;; responderia 404 para todo mundo, com a suite verde.
+    (reassumir-mandato! [_ ente-id vereador-id dia]
+      (when capturadas (swap! capturadas conj [ente-id vereador-id dia]))
+      (if (fn? reassuncao) (reassuncao dia) reassuncao))
     (legislatura-vigente [_ _]      leg)))
 
 (defn- post [service tok path body]
@@ -200,6 +207,100 @@
                               tok (str "/cadastros/vereadores/" ver "/licencas") corpo))))
     (is (= 409 (:status (post (service-fn #{"secretario"} (fake-repo-escrita {:licenca sem-vigente}))
                               tok (str "/cadastros/vereadores/" ver "/licencas") corpo))))))
+
+;; ---------- Reassuncao: POST /cadastros/vereadores/:id/reassuncao ----------
+
+(deftest reassumir-mandato-200-404-409
+  ;; 200 (nao 201): a reassuncao nao CRIA recurso — fecha linhas existentes e transiciona o mandato
+  ;; (mesmo precedente de editar-vereador-handler/ligar-identidade-handler, ambos 200).
+  (let [tok (token (random-uuid) (random-uuid)) ver (random-uuid)
+        ;; `man` DISTINTO de `ver`: o `:id` do corpo e' o do MANDATO reaberto (`{:id (:id m)}` no Repo),
+        ;; nao o do vereador do path. Redigitar `ver` nos dois papeis tornava o campo indistinguivel — um
+        ;; refactor "obvio" p/ `(str id)` (o id do path, ja' em escopo) passaria verde e a tela navegaria
+        ;; para a entidade errada.
+        man (random-uuid)
+        corpo {:reassumiu-em "2026-04-10"}
+        path (str "/cadastros/vereadores/" ver "/reassuncao")
+        conflito (fn [tipo] (fn [_] (throw (ex-info "x" {:tipo tipo}))))
+        r200 (post (service-fn #{"secretario"}
+                     (fake-repo-escrita {:reassuncao (fn [dia] {:id man :fim (.minusDays ^java.time.LocalDate dia 1)})}))
+                   tok path corpo)]
+    (is (= 200 (:status r200)))
+    (is (= (str man) (:id (ler-json r200)))
+        "o `:id` do corpo e' o do MANDATO reaberto, nunca o do vereador do path")
+    (is (= "2026-04-09" (:fim (ler-json r200)))
+        "o corpo devolve o `fim` GRAVADO (D-1), stringificado — LocalDate cru estouraria no jsonista")
+    (is (= 404 (:status (post (service-fn #{"secretario"} (fake-repo-escrita {:reassuncao nil}))
+                              tok path corpo)))
+        "vereador inexistente/de-outro-tenant -> 404")
+    (is (= 404 (:status (post (service-fn #{"secretario"} (fake-repo-escrita {:reassuncao {:id ver}}))
+                              tok "/cadastros/vereadores/nao-uuid/reassuncao" corpo)))
+        ":id malformado -> 404, nunca 500")
+    (doseq [tipo [:conflito/sem-mandato-licenciado :conflito/retorno-anterior-ao-inicio
+                  :conflito/mandato-sobreposto]]
+      (is (= 409 (:status (post (service-fn #{"secretario"} (fake-repo-escrita {:reassuncao (conflito tipo)}))
+                                tok path corpo)))
+          (str tipo " -> 409")))))
+
+(deftest reassumir-mandato-corpo-invalido-400-e-sem-papel-403
+  (let [ver (random-uuid) path (str "/cadastros/vereadores/" ver "/reassuncao")
+        repo (fake-repo-escrita {:reassuncao {:id ver :fim (java.time.LocalDate/of 2026 4 9)}})]
+    (is (= 400 (:status (post (service-fn #{"secretario"} repo)
+                              (token (random-uuid) (random-uuid)) path {})))
+        "sem :reassumiu-em -> :validacao/invalido -> 400")
+    (is (= 400 (:status (post (service-fn #{"secretario"} repo)
+                              (token (random-uuid) (random-uuid)) path {:reassumiu-em "10/04/2026"})))
+        "data malformada -> 400 pela borda, nunca 500")
+    (is (= 403 (:status (post (service-fn #{"vereador"} repo)
+                              (token (random-uuid) (random-uuid)) path {:reassumiu-em "2026-04-10"})))
+        "quem nao pode licenciar tambem nao pode reassumir (MESMO papel de /licencas)")
+    (is (= 400 (:status (post (service-fn #{"secretario"} repo)
+                              (token (random-uuid) (random-uuid)) path {:reassumiu-em "2999-01-01"})))
+        "data FUTURA -> 400: gravaria `fim = 2998-12-31` numa linha que nenhum UPDATE alcanca depois")
+    (is (= 400 (:status (post (service-fn #{"secretario"} repo)
+                              (token (random-uuid) (random-uuid)) path {:reassumiu-em "+10000000-01-01"})))
+        "ISO de ano ESTENDIDO parseia em LocalDate e estoura no driver (22008) -> tem de morrer na borda")))
+
+(deftest reassuncao-repassa-ente-do-token-e-vereador-do-path-nessa-ordem
+  ;; `ente-id` e `vereador-id` sao dois UUIDs homogeneos: troca-los e' type-clean e o Malli `:closed` nao
+  ;; ve nada. Em producao a tx abriria com o uuid do VEREADOR como tenant, a RLS esconderia tudo e TODA
+  ;; reassuncao viraria 404 — funcionalidade nascendo morta com CI verde.
+  (let [ente (random-uuid) ver (random-uuid) man (random-uuid)
+        capturadas (atom [])
+        r (post (service-fn #{"secretario"}
+                  (fake-repo-escrita {:capturadas capturadas
+                                      :reassuncao {:id man :fim (java.time.LocalDate/of 2026 4 9)}}))
+                (token ente (random-uuid)) (str "/cadastros/vereadores/" ver "/reassuncao")
+                {:reassumiu-em "2026-04-10"})]
+    (is (= 200 (:status r)))
+    (is (= [[ente ver (java.time.LocalDate/of 2026 4 10)]] @capturadas)
+        "ente-id do TOKEN, vereador-id do PATH e a data CRUA do corpo — nessa ordem")))
+
+(deftest reassuncao-sem-licenca-encerrada-devolve-fim-nulo
+  ;; O Repo devolve `:fim` nil quando o UPDATE casou ZERO linhas (licenca ja' vencida — caminho de primeira
+  ;; classe). O corpo tem de dizer `null`, nao a string vazia de `(str nil)` e muito menos uma data que nao
+  ;; existe em nenhuma linha do banco: uma tela que ecoe isso publicaria "licenca encerrada em D-1" sobre um
+  ;; afastamento que terminou anos antes.
+  (let [ver (random-uuid) man (random-uuid)
+        r (post (service-fn #{"secretario"} (fake-repo-escrita {:reassuncao {:id man :fim nil}}))
+                (token (random-uuid) (random-uuid)) (str "/cadastros/vereadores/" ver "/reassuncao")
+                {:reassumiu-em "2026-04-10"})
+        body (ler-json r)]
+    (is (= 200 (:status r)))
+    (is (contains? body :fim) "o campo continua no contrato")
+    (is (nil? (:fim body)) "e vale null — nunca \"\" nem uma vespera fabricada")))
+
+(deftest registrar-licenca-com-inicio-futuro-400
+  ;; `registrar-licenca!` flipa `mandato.estado` p/ 'licenciado' no instante do POST: uma licenca que so'
+  ;; comeca daqui a semanas tiraria o vereador do exercicio HOJE (a policy de `meu-voto` exige mandato
+  ;; vigente) e o prenderia num estado que a reassuncao — com teto em `hoje` — nao alcanca.
+  (let [ver (random-uuid) tok (token (random-uuid) (random-uuid))
+        repo (fake-repo-escrita {:licenca (fn [l] {:id (:id l)})})
+        path (str "/cadastros/vereadores/" ver "/licencas")]
+    (is (= 400 (:status (post (service-fn #{"secretario"} repo) tok path {:inicio "2999-03-01"})))
+        "licenca que ainda nao comecou -> 400")
+    (is (= 201 (:status (post (service-fn #{"secretario"} repo) tok path {:inicio "2024-03-01"})))
+        "licenca retroativa segue de primeira classe")))
 
 ;; ---------- Task 9: PATCH /cadastros/vereadores/:id/identidade ----------
 

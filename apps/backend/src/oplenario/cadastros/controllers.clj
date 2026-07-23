@@ -39,6 +39,13 @@
   [repo-cadastros ente-id vereador-id l data]
   (repo/registrar-licenca! repo-cadastros ente-id vereador-id l data))
 
+(defn reassumir-mandato
+  "Pass-through: {:id :fim} | nil (404) | throws :conflito/sem-mandato-licenciado,
+  :conflito/retorno-anterior-ao-inicio, :conflito/mandato-sobreposto (409). `reassumiu-em` vai CRU (o dia
+  da volta) — o -1 dia e' do Repo."
+  [repo-cadastros ente-id vereador-id reassumiu-em]
+  (repo/reassumir-mandato! repo-cadastros ente-id vereador-id reassumiu-em))
+
 (defn ligar-identidade
   "Pass-through: update-count (0 -> 404 no diplomat) | throws :conflito/identidade-ja-vinculada (409)."
   [repo-cadastros ente-id id identidade-id]
