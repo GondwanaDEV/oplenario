@@ -33,6 +33,19 @@ export function formatarHora(iso: string): string {
   }
 }
 
+// formatarDataSimples — Onda E fatia 2 (perfil público do vereador). SÓ para as constantes de deploy
+// DATE-ONLY do contrato (`acervo-com-elo-de-autoria-desde`, `presenca-projetada-desde`: "2026-07-20").
+// NÃO usar `formatarData` aqui: `new Date("2026-07-20")` é parseado como MEIA-NOITE UTC e, formatado no
+// fuso do beachhead (America/Fortaleza, UTC−3), volta um dia — a página publicaria "19/07/2026" como marco
+// do registro eletrônico. O container roda em UTC, então o bug passaria batido no teste e só apareceria no
+// cidadão. Numa página que declara publicamente o corte do acervo, errar um dia é errar o corte. Por isso
+// aqui não há `Date` nenhum: é recorte textual puro, fuso-independente por construção.
+// Fail-closed: formato inesperado sai CRU, nunca lança, nunca inventa data.
+export function formatarDataSimples(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
+}
+
 // formatarDiaSemana — Onda C Slice C2 (pauta-convocacao): nome do dia da semana por extenso, pt-BR.
 const FORMATO_DIA_SEMANA_BR = new Intl.DateTimeFormat("pt-BR", { weekday: "long" });
 
