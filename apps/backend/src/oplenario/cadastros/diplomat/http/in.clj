@@ -96,7 +96,7 @@
     (let [ator (:ator req) ente-id (:ente-id ator)
           id (parse-uuid (get-in req [:path-params :id]))
           hoje (tempo/hoje-de (tempo/agora relogio) zona-civil)
-          l (adapters-in/registrar-licenca->dominio ator (:json-params req))]
+          l (adapters-in/registrar-licenca->dominio ator hoje (:json-params req))]
       (try
         (if-let [r (and id (controllers/registrar-licenca repo ente-id id l hoje))]
           (http/json-resposta 201 r)
@@ -122,16 +122,21 @@
   200, nao 201: nenhum recurso e' criado (mesmo precedente de editar-vereador-handler/ligar-identidade-handler,
   as duas outras escritas do modulo que so' transicionam). A data sai STRINGIFICADA — `json-resposta` usa o
   ObjectMapper padrao do jsonista, que nao serializa `java.time.LocalDate` (mesma razao do `->str` em
-  adapters/out/vereador). NAO le o relogio: a data e' do corpo, porque a reassuncao e' um FATO DATADO que a
-  secretaria registra depois (o retorno de ontem, o de semana passada), nunca 'agora'."
-  [repo]
+  adapters/out/vereador) — e `fim` sai `null`, nunca a string \"\", quando NENHUMA licenca foi encerrada
+  (o Repo devolve `:fim` nil nesse caso; `(str nil)` daria \"\"). A data da VOLTA e' do corpo, porque a
+  reassuncao e' um FATO DATADO que a secretaria registra depois (o retorno de ontem, o de semana passada),
+  nunca 'agora' — mas o `relogio` entra assim mesmo, como TETO: fato datado e' no passado, e uma data
+  futura gravaria na licenca um `fim` que nenhum caminho de escrita alcanca depois (ver
+  `reassumir-mandato->dominio`)."
+  [repo relogio]
   (fn [req]
     (let [id (parse-uuid (get-in req [:path-params :id]))
           ente-id (:ente-id (:ator req))
-          dia (adapters-in/reassumir-mandato->dominio (:json-params req))]
+          hoje (tempo/hoje-de (tempo/agora relogio) zona-civil)
+          dia (adapters-in/reassumir-mandato->dominio hoje (:json-params req))]
       (try
         (if-let [r (and id (controllers/reassumir-mandato repo ente-id id dia))]
-          (http/json-resposta 200 {:id (str (:id r)) :fim (str (:fim r))})
+          (http/json-resposta 200 {:id (str (:id r)) :fim (some-> (:fim r) str)})
           (http/json-resposta 404 {:erro "vereador nao encontrado"}))
         (catch clojure.lang.ExceptionInfo e
           (if-let [msg (conflitos-de-reassuncao (:tipo (ex-data e)))]
@@ -208,7 +213,7 @@
        [auth papel it/corpo-json (registrar-licenca-handler repo-cadastros relogio)]
        :route-name :cadastros/registrar-licenca]
       ["/cadastros/vereadores/:id/reassuncao" :post
-       [auth papel it/corpo-json (reassumir-mandato-handler repo-cadastros)]
+       [auth papel it/corpo-json (reassumir-mandato-handler repo-cadastros relogio)]
        :route-name :cadastros/reassumir-mandato]
       ["/cadastros/vereadores/:id/identidade" :patch
        [auth papel-admin-ente it/corpo-json (ligar-identidade-handler repo-cadastros identidade-existe?)]

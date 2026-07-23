@@ -134,7 +134,18 @@
    Espelho DELIBERADO de `mandato-vigente-de-vereador` (mesma cobertura por vigencia, mesmo ORDER BY),
    e NAO uma generalizacao das duas com o estado por parametro: cada uma carrega na docstring o PORQUE do
    estado que busca (aqui, 'quem esta' fora e vai voltar'; la', 'quem esta' dentro e vai sair'), e e' isso
-   que impede o proximo leitor de trocar uma pela outra num refactor de aparencia inocente."
+   que impede o proximo leitor de trocar uma pela outra num refactor de aparencia inocente.
+
+   `FOR UPDATE` (o que este espelho tem A MAIS que o irmao): esta leitura e' o GUARD de uma transicao de
+   estado que a mesma tx vai escrever, e `com-tenant*` abre a tx sem `:isolation` = READ COMMITTED, em que
+   cada statement tira snapshot novo — sem o lock, duas reassuncoes concorrentes leem o MESMO 'licenciado',
+   a perdedora fecha ZERO linhas (o `fim IS NULL` do UPDATE e' reavaliado depois do lock de linha), nao acha
+   sobra na releitura e devolve SUCESSO com um `fim` que nunca foi gravado — publicando na janela de
+   exercicio a data do vencedor arbitrario. Com o lock, a perdedora espera o COMMIT, rele' a linha ja'
+   'vigente' e cai em :conflito/sem-mandato-licenciado. Mesma forma de `legislativo/db/tramitacao`,
+   `votacao`, `emenda`, `compliance/db/obrigacao` e `sessoes/db/pauta` — toda transicao de estado da casa
+   trava a linha que vai escrever. Pinado por `mandato-licenciado-de-vereador-trava-a-linha-que-vai-escrever`
+   (o detector e' o BLOQUEIO: sem `FOR UPDATE` o SELECT passa direto por uma linha que outra tx segura)."
   [tx ente-id vereador-id data]
   (comum/linha->kebab
     (jdbc/execute-one! tx
@@ -144,7 +155,8 @@
                            [:= :estado "licenciado"]
                            [:<= :vigencia_inicio data]
                            [:or [:is :vigencia_fim nil] [:>= :vigencia_fim data]]]
-                   :order-by [[:vigencia_inicio :desc] [:id]] :limit 1}))))
+                   :order-by [[:vigencia_inicio :desc] [:id]] :limit 1
+                   :for :update}))))
 
 (defn encerrar-licencas-abertas!
   "Fecha em `fim` TODAS as licencas AINDA ABERTAS (`fim IS NULL`) do mandato. Devolve o update-count.
@@ -159,7 +171,9 @@
 
    `inicio <= fim` no WHERE e' o que torna a reassuncao FAIL-CLOSED contra 'voltei antes de sair': a linha
    simplesmente nao casa (nem grava um intervalo invertido, que nao tem CHECK que o barre na mig 0010), e o
-   Repo detecta a sobra relendo. Fecha TODAS as abertas, nao uma: duas licencas abertas simultaneas nao
+   Repo detecta a sobra relendo — e' por isso que o update-count IMPORTA e nao pode ser descartado: o Repo
+   so' lanca quando NENHUMA linha fechou, senao a licenca ainda-nao-iniciada que sobra prenderia o mandato
+   (ver `reassumir-mandato!`). Fecha TODAS as abertas, nao uma: duas licencas abertas simultaneas nao
    deveriam existir, mas se existirem por defeito de dado antigo, lancar aqui deixaria o mandato preso para
    sempre — e a aritmetica de janela subtrai a uniao dos intervalos de qualquer jeito.
 

@@ -7,6 +7,10 @@
 
 (def ^:private ATOR {:ente-id (random-uuid) :identidade-id (random-uuid)})
 
+;; `hoje` CRAVADO (as duas rotas com teto de data o recebem da borda, resolvido pelo relogio injetado) —
+;; nenhum teste deste ns le o relogio do sistema.
+(def ^:private HOJE (LocalDate/of 2026 7 22))
+
 (defn- validacao-invalida? [f]
   (try (f) false
     (catch clojure.lang.ExceptionInfo e (= :validacao/invalido (:tipo (ex-data e))))))
@@ -76,7 +80,7 @@
 
 ;; ---- licenca ----
 (deftest licenca-coage-inicio-e-injeta-id-ente
-  (let [m (a/registrar-licenca->dominio ATOR {"inicio" "2026-03-01" "motivo" "saude"})]
+  (let [m (a/registrar-licenca->dominio ATOR HOJE {"inicio" "2026-03-01" "motivo" "saude"})]
     (is (uuid? (:id m)))
     (is (= (:ente-id ATOR) (:ente-id m)))
     (is (= (LocalDate/of 2026 3 1) (:inicio m)))
@@ -84,7 +88,19 @@
     (is (= "saude" (:motivo m)))))
 
 (deftest licenca-sem-inicio-e-invalido
-  (is (validacao-invalida? #(a/registrar-licenca->dominio ATOR {"motivo" "sem data"}))))
+  (is (validacao-invalida? #(a/registrar-licenca->dominio ATOR HOJE {"motivo" "sem data"}))))
+
+(deftest licenca-com-inicio-posterior-a-hoje-e-invalido
+  ;; `registrar-licenca!` flipa `mandato.estado` p/ 'licenciado' no INSTANTE do POST e nao ha agendador que
+  ;; faca esse flip esperar o inicio: aceitar licenca que so' comeca daqui a semanas tira o vereador do
+  ;; exercicio HOJE (a policy de `meu-voto` exige mandato vigente) e o prende num estado que a reassuncao
+  ;; nao alcanca.
+  (is (validacao-invalida? #(a/registrar-licenca->dominio ATOR HOJE {"inicio" "2026-09-01"}))
+      "licenca que ainda nao comecou -> 400 na borda, nunca um mandato 'licenciado' antecipado")
+  (is (= HOJE (:inicio (a/registrar-licenca->dominio ATOR HOJE {"inicio" "2026-07-22"})))
+      "comecar HOJE e' valido (a borda e' inclusiva)")
+  (is (= (LocalDate/of 2024 3 1) (:inicio (a/registrar-licenca->dominio ATOR HOJE {"inicio" "2024-03-01"})))
+      "licenca RETROATIVA continua de primeira classe — e' o caso comum da secretaria"))
 
 ;; ---- ligar identidade (Task 9, review IMPORTANT-3: faltava o unitario deste adapter) ----
 (deftest ligar-identidade-coage-identidade-id-para-uuid
@@ -101,18 +117,44 @@
 
 ;; ---- reassuncao de mandato ----
 (deftest reassuncao-coage-reassumiu-em-para-localdate
-  (is (= (LocalDate/of 2026 4 10) (a/reassumir-mandato->dominio {"reassumiu-em" "2026-04-10"}))
+  (is (= (LocalDate/of 2026 4 10) (a/reassumir-mandato->dominio HOJE {"reassumiu-em" "2026-04-10"}))
       "devolve so' a data coagida (mesma forma de ligar-identidade->dominio, que devolve so' o uuid) — a
        aritmetica do -1 dia mora no Repo, nunca aqui"))
 
 (deftest reassuncao-sem-data-ou-com-data-malformada-e-invalido
-  (is (validacao-invalida? #(a/reassumir-mandato->dominio {})) "corpo sem reassumiu-em -> invalido")
-  (is (validacao-invalida? #(a/reassumir-mandato->dominio {"reassumiu-em" ""}))
+  (is (validacao-invalida? #(a/reassumir-mandato->dominio HOJE {})) "corpo sem reassumiu-em -> invalido")
+  (is (validacao-invalida? #(a/reassumir-mandato->dominio HOJE {"reassumiu-em" ""}))
       "string vazia nao e' data ({:min 1} do wire)")
   ;; buraco de cobertura herdado das outras rotas de data: nenhum teste mandava data MALFORMADA.
-  (is (validacao-invalida? #(a/reassumir-mandato->dominio {"reassumiu-em" "10/04/2026"}))
+  (is (validacao-invalida? #(a/reassumir-mandato->dominio HOJE {"reassumiu-em" "10/04/2026"}))
       "data em formato brasileiro -> 400, nunca 500 no LocalDate/parse")
-  (is (validacao-invalida? #(a/reassumir-mandato->dominio {"reassumiu-em" "2026-13-45"}))
+  (is (validacao-invalida? #(a/reassumir-mandato->dominio HOJE {"reassumiu-em" "2026-13-45"}))
       "data sintaticamente ISO mas inexistente -> 400")
-  (is (validacao-invalida? #(a/reassumir-mandato->dominio {"reassumiu-em" "2026-04-10" "vereador-id" "forja"}))
+  (is (validacao-invalida? #(a/reassumir-mandato->dominio HOJE {"reassumiu-em" "2026-04-10" "vereador-id" "forja"}))
       ":closed recusa campo fora do contrato (anti-forja)"))
+
+(deftest data-com-ano-estendido-e-invalido-na-borda-nunca-500-no-driver
+  ;; `LocalDate/parse` ACEITA o ISO de ano estendido com sinal: "+10000000-01-01" nao lanca
+  ;; DateTimeParseException, atravessa a borda e so' estoura no bind do driver como PSQLException 22008
+  ;; (`date out of range`) — que nao e' ExceptionInfo, nao casa em nenhum catch de conflito e vira 500.
+  (doseq [hostil ["+10000000-01-01" "+999999999-12-31" "-999999999-01-01" "10000000-01-01"]]
+    (is (validacao-invalida? #(a/reassumir-mandato->dominio HOJE {"reassumiu-em" hostil}))
+        (str hostil " -> 400 na borda"))
+    (is (validacao-invalida? #(a/registrar-licenca->dominio ATOR HOJE {"inicio" hostil}))
+        (str hostil " -> 400 tambem em /licencas (o helper e' o mesmo)"))
+    (is (validacao-invalida?
+          #(a/registrar-mandato->dominio ATOR (random-uuid) {"legislatura-id" (str (random-uuid))
+                                                            "natureza" "titular" "vigencia-inicio" hostil}))
+        (str hostil " -> 400 tambem em /mandatos"))))
+
+(deftest reassuncao-com-data-futura-e-invalido
+  ;; Fato datado e' no PASSADO. Sem o teto, um "2999" digitado no lugar de "2029" grava `fim = 2998-12-31`
+  ;; na licenca aberta — linha que nenhum caminho de escrita alcanca depois (o unico UPDATE so' casa
+  ;; `fim IS NULL`, nao ha DELETE nem PATCH) — enquanto o mandato volta a 'vigente' e conta no quorum de
+  ;; hoje: a pagina publica passa a dizer "exercicio de 2999 em diante".
+  (is (validacao-invalida? #(a/reassumir-mandato->dominio HOJE {"reassumiu-em" "2999-01-01"}))
+      "data futura -> 400, e a licenca segue ABERTA (fail-closed)")
+  (is (validacao-invalida? #(a/reassumir-mandato->dominio HOJE {"reassumiu-em" "2026-07-23"}))
+      "amanha ja' e' futuro")
+  (is (= HOJE (a/reassumir-mandato->dominio HOJE {"reassumiu-em" "2026-07-22"}))
+      "voltar HOJE e' o caminho normal — o teto e' inclusivo"))

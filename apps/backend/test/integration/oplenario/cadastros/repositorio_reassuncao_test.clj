@@ -21,6 +21,7 @@
   recomposicao do teste: e' a janela publicada que precisa ficar certa, nao a coluna."
   (:require [clojure.test :refer [deftest is use-fixtures]]
             [com.stuartsierra.component :as component]
+            [next.jdbc :as jdbc]
             [oplenario.cadastros.components.repositorio :as repo]
             [oplenario.cadastros.db.estrutura :as estrutura]
             [oplenario.cadastros.db.referencia :as referencia]
@@ -94,6 +95,34 @@
   (repo/registrar-licenca! *repo* ente ver
     {:id (random-uuid) :ente-id ente :inicio inicio :fim fim :motivo "motivo"} inicio))
 
+(defn- inserir-licenca-crua!
+  "INSERT direto de licenca, sem passar por `registrar-licenca!` (que exige mandato 'vigente' e flipa o
+  estado). E' o caminho do IMPORT de acervo legado (`criar-licenca!`) e o unico jeito de semear os estados
+  que a borda nao produz — duas licencas abertas no mesmo stint, ou uma licenca aberta que ainda nao
+  comecou."
+  [ente mandato-id inicio fim]
+  (repo/transacao *repo* ente
+    (fn [tx]
+      (vereador/inserir-licenca! tx {:id (random-uuid) :ente-id ente :mandato-id mandato-id
+                                     :inicio inicio :fim fim :motivo "motivo"}))))
+
+(defn- segurar-linha-do-mandato!
+  "Abre uma tx que trava a linha do mandato com `SELECT ... FOR UPDATE` e a mantem aberta ate' o `liberar`
+  ser entregue. Devolve `[segurando liberar fim-da-tx]` — o teste espera `segurando` antes de disparar os
+  concorrentes. E' o unico jeito de por DUAS reassuncoes EM VOO ao mesmo tempo de forma deterministica:
+  sem a barreira, a segunda so' comecaria depois de a primeira commitar e o teste degeneraria em execucao
+  serial (que passa com ou sem o lock)."
+  [ente mandato-id]
+  (let [segurando (promise) liberar (promise)
+        tx-fut (future
+                 (repo/transacao *repo* ente
+                   (fn [tx]
+                     (jdbc/execute-one! tx ["SELECT id FROM cadastros.mandato WHERE ente_id = ? AND id = ? FOR UPDATE"
+                                            ente mandato-id])
+                     (deliver segurando true)
+                     (deref liberar 20000 :timeout))))]
+    [segurando liberar tx-fut]))
+
 ;; ---------------------------------------------------------------------------
 ;; a decisao de semantica (o unico teste que pina o -1 dia)
 ;; ---------------------------------------------------------------------------
@@ -156,20 +185,34 @@
       (is (= "vigente" (estado! ente ver mandato)))
       (is (= [{:mandato-id mandato :inicio (d "2024-03-01") :fim (d "2024-03-05")}]
              (licencas! ente mandato))
-          "a licenca ja' vencida fica INTACTA — o UPDATE so' casa `fim IS NULL`"))))
+          "a licenca ja' vencida fica INTACTA — o UPDATE so' casa `fim IS NULL`")
+      ;; `:fim` e' um FATO GRAVADO, nao a aritmetica local: aqui o UPDATE casou ZERO linhas, entao anunciar
+      ;; 2026-07-21 seria publicar uma data que nao existe em nenhuma linha de `mandato_licenca` (e a borda
+      ;; a serializa direto no corpo do 200).
+      (is (nil? (:fim r))
+          "nenhuma licenca encerrada -> `fim` nil; a licenca desta pessoa terminou em 2024-03-05")
+      (is (empty? (filter #(= (d "2026-07-21") (:fim %)) (licencas! ente mandato)))
+          "e nenhuma linha do banco tem a vespera calculada"))))
 
 ;; ---------------------------------------------------------------------------
 ;; os guards (o que a rota NAO pode deixar acontecer)
 ;; ---------------------------------------------------------------------------
 
-(deftest reassumir-mandato-cassado-nao-ressuscita-o-mandato
-  (let [{:keys [ente ver mandato]} (semear-casa-com-mandato! (d "2025-01-01") "cassado")
-        ex (try (repo/reassumir-mandato! *repo* ente ver (d "2026-07-22"))
-                nil
-                (catch clojure.lang.ExceptionInfo e e))]
-    (is (some? ex) "sem o guard de `licenciado`, anular uma cassacao seria um POST")
-    (is (= :conflito/sem-mandato-licenciado (:tipo (ex-data ex))))
-    (is (= "cassado" (estado! ente ver mandato)) "cassado/renunciado/falecido seguem terminais")))
+(deftest reassumir-mandato-em-estado-nao-licenciado-nao-ressuscita-o-mandato
+  ;; O guard e' o literal `[:= :estado "licenciado"]` de `mandato-licenciado-de-vereador` — um predicado
+  ;; trivialmente alargavel num refactor ("renunciante que voltou atras"). Pinar SO' 'cassado' deixava os
+  ;; outros tres terminais do CHECK da mig 0010 passarem por mutacao; 'concluido' e' o mais perigoso dos
+  ;; quatro, porque e' o estado NORMAL de fim de legislatura, nao um evento raro. 'vigente' entra na lista
+  ;; p/ fechar tambem "reassumir quem nunca saiu".
+  (doseq [estado ["cassado" "renunciado" "falecido" "concluido" "vigente"]]
+    (let [{:keys [ente ver mandato]} (semear-casa-com-mandato! (d "2025-01-01") estado)
+          ex (try (repo/reassumir-mandato! *repo* ente ver (d "2026-07-22"))
+                  nil
+                  (catch clojure.lang.ExceptionInfo e e))]
+      (is (some? ex) (str "sem o guard de `licenciado`, um POST reabriria o mandato " estado))
+      (is (= :conflito/sem-mandato-licenciado (:tipo (ex-data ex))) estado)
+      (is (= estado (estado! ente ver mandato))
+          (str "so' 'licenciado' e' reassumivel — " estado " segue intacto")))))
 
 (deftest reassumir-antes-do-inicio-da-licenca-nao-muda-estado-nem-fecha-licenca
   (let [{:keys [ente ver mandato]} (semear-casa-com-mandato! (d "2026-01-01"))]
@@ -218,4 +261,121 @@
                   (catch clojure.lang.ExceptionInfo e e))]
       (is (some? ex) "a colisao com o EXCLUDE sobe como conflito de dominio, nunca como PSQLException crua")
       (is (= :conflito/mandato-sobreposto (:tipo (ex-data ex)))))
-    (is (= "licenciado" (estado! ente ver mandato)) "e a tx reverteu inteira")))
+    (is (= "licenciado" (estado! ente ver mandato)) "e a tx reverteu inteira")
+    ;; ATOMICIDADE DE VERDADE: este e' o UNICO caso em que `encerrar-licencas-abertas!` de fato GRAVA e a tx
+    ;; aborta DEPOIS (o 23P01 vem do `mudar-estado!`, o passo seguinte). Ler so' `estado` nao prova nada —
+    ;; ele continuaria "licenciado" mesmo sem rollback nenhum, porque foi justamente o UPDATE de `estado`
+    ;; que falhou. Quem discrimina "extrai o UPDATE da licenca pra uma tx propria" e' a licenca ABERTA.
+    (is (= [{:mandato-id mandato :inicio (d "2026-03-01") :fim nil}] (licencas! ente mandato))
+        "a licenca continua ABERTA: o 23P01 aborta a tx INTEIRA, inclusive o UPDATE que ja' gravara")))
+;; (a janela publica NAO serve de detector aqui: o mandato B do contorno ja' publica [2026-04-10, aberto]
+;;  por conta propria, entao ela fica identica com e sem o rollback. Quem discrimina e' a licenca acima.)
+
+;; ---------------------------------------------------------------------------
+;; licenca aberta que NAO comecou (dado de import/legado) e duas abertas no mesmo stint
+;; ---------------------------------------------------------------------------
+
+(deftest reassuncao-fecha-TODAS-as-licencas-abertas-do-stint-nao-so-a-mais-recente
+  ;; "Fecha TODAS as abertas, nao uma" e' regra ESCRITA na docstring de `encerrar-licencas-abertas!` e nao
+  ;; tinha cobertura: nenhum teste semeava duas abertas. Duas abertas nao nascem por `registrar-licenca!`
+  ;; (que exige mandato 'vigente'), mas nascem por INSERT direto — import de acervo legado, e tambem por
+  ;; dois POSTs concorrentes de /licencas (o SELECT do mandato la' tambem nao trava a linha).
+  (let [{:keys [ente ver mandato]} (semear-casa-com-mandato! (d "2026-01-01"))]
+    (licenciar! ente ver (d "2026-03-01") nil)
+    (inserir-licenca-crua! ente mandato (d "2026-03-15") nil)
+    (repo/reassumir-mandato! *repo* ente ver (d "2026-04-10"))
+    (is (= [(d "2026-04-09") (d "2026-04-09")] (mapv :fim (licencas! ente mandato)))
+        "as DUAS fecham na vespera — fechar so' a mais recente deixaria a outra aberta e o mandato preso")
+    (is (= "vigente" (estado! ente ver mandato)))
+    (is (= [(iv "2026-01-01" "2026-02-28") (iv "2026-04-10" nil)] (janelas! ente ver (d "2026-12-31")))
+        "e a janela publica reabre no dia da volta")))
+
+(deftest licenca-aberta-que-so-comeca-depois-da-volta-nao-trava-a-reassuncao
+  ;; O guard de sobra e' "voltei antes de sair" — e ele nao pode confundir com "ha uma licenca FUTURA
+  ;; planejada". A pergunta que separa os dois casos e' o update-count: se ALGUMA licenca em curso fechou,
+  ;; a volta e' um fato real e a licenca que ainda nao comecou apenas segue subtraindo a PROPRIA janela
+  ;; futura. Lancar aqui prenderia o mandato em 'licenciado' para sempre (a unica data aceita seria
+  ;; posterior ao inicio da licenca futura — e o teto de `hoje` da borda nem deixa chegar la').
+  (let [{:keys [ente ver mandato]} (semear-casa-com-mandato! (d "2026-01-01"))]
+    (licenciar! ente ver (d "2026-03-01") nil)
+    (inserir-licenca-crua! ente mandato (d "2026-09-01") nil)
+    (let [r (repo/reassumir-mandato! *repo* ente ver (d "2026-04-10"))]
+      (is (= (d "2026-04-09") (:fim r)) "a licenca EM CURSO fecha na vespera")
+      (is (= "vigente" (estado! ente ver mandato)) "e o mandato volta a 'vigente' — nao fica preso")
+      (is (= [{:mandato-id mandato :inicio (d "2026-03-01") :fim (d "2026-04-09")}
+              {:mandato-id mandato :inicio (d "2026-09-01") :fim nil}]
+             (licencas! ente mandato))
+          "a licenca que ainda nao comecou fica INTACTA e aberta")
+      (is (= [(iv "2026-01-01" "2026-02-28") (iv "2026-04-10" "2026-08-31")]
+             (janelas! ente ver (d "2026-12-31")))
+          "e segue subtraindo a propria janela futura, que e' a semantica correta"))))
+
+;; ---------------------------------------------------------------------------
+;; concorrencia: o par ler-mandato -> escrever tem de ser atomico
+;; ---------------------------------------------------------------------------
+
+(deftest mandato-licenciado-de-vereador-trava-a-linha-que-vai-escrever
+  ;; `com-tenant*` abre a tx sem `:isolation` = READ COMMITTED: cada statement tira snapshot novo, entao o
+  ;; par "leio o mandato licenciado -> escrevo" NAO e' atomico sem o lock. Todas as outras transicoes de
+  ;; estado do repo (legislativo/tramitacao, votacao, emenda, compliance/obrigacao, sessoes/pauta) tomam
+  ;; `SELECT ... FOR UPDATE` nesta mesma forma. O detector e' o BLOQUEIO: com o lock o SELECT espera a tx
+  ;; que segura a linha; sem ele devolve na hora.
+  (let [{:keys [ente ver mandato]} (semear-casa-com-mandato! (d "2026-01-01"))]
+    (licenciar! ente ver (d "2026-03-01") nil)
+    (let [[segurando liberar tx-fut] (segurar-linha-do-mandato! ente mandato)
+          _ (is (true? (deref segurando 20000 false)) "a tx da barreira abriu e segura a linha")
+          leu (promise)]
+      (future (repo/transacao *repo* ente
+                (fn [tx] (deliver leu (vereador/mandato-licenciado-de-vereador tx ente ver (d "2026-04-10"))))))
+      (is (= :bloqueado (deref leu 2000 :bloqueado))
+          "o SELECT do mandato BLOQUEIA enquanto outra tx segura a linha — sem `FOR UPDATE` ele passa direto")
+      (deliver liberar true)
+      @tx-fut
+      (is (= mandato (:id (deref leu 20000 nil)))
+          "liberada a barreira, a leitura completa normalmente (o lock atrasa, nao quebra)"))))
+
+(deftest duas-reassuncoes-concorrentes-do-mesmo-mandato-so-uma-vence
+  ;; Sem o lock, as duas leem o MESMO 'licenciado'; a perdedora fecha ZERO linhas (o WHERE `fim IS NULL` e'
+  ;; reavaliado apos o lock de linha), rele' sem sobra e devolve SUCESSO com um `fim` que nunca foi gravado
+  ;; — enquanto a janela PUBLICA reabre na data do OUTRO. Com o lock, a perdedora rele' 'vigente' e recusa.
+  (let [{:keys [ente ver mandato]} (semear-casa-com-mandato! (d "2026-01-01"))]
+    (licenciar! ente ver (d "2026-03-01") nil)
+    (let [[segurando liberar tx-fut] (segurar-linha-do-mandato! ente mandato)
+          _ (is (true? (deref segurando 20000 false)) "a barreira abriu")
+          tentar (fn [dia] (future (try (repo/reassumir-mandato! *repo* ente ver (d dia))
+                                        (catch clojure.lang.ExceptionInfo e e))))
+          t1 (tentar "2026-06-20")
+          t2 (tentar "2026-04-10")]
+      ;; as duas precisam estar EM VOO antes de qualquer uma commitar — sem esta espera o teste degeneraria
+      ;; em execucao serial, que passa com ou sem o lock.
+      (Thread/sleep 800)
+      (deliver liberar true)
+      @tx-fut
+      (let [rs [(deref t1 20000 :timeout) (deref t2 20000 :timeout)]
+            vencedoras (filter map? rs)
+            recusas (filter #(instance? clojure.lang.ExceptionInfo %) rs)]
+        (is (= 1 (count vencedoras)) "exatamente UMA reassuncao vence")
+        (is (= 1 (count recusas)) "a outra NAO pode devolver sucesso")
+        (is (= :conflito/sem-mandato-licenciado (:tipo (ex-data (first recusas))))
+            "a perdedora rele' o mandato ja' 'vigente' e recusa, em vez de anunciar um `fim` fantasma")
+        (is (= (:fim (first (licencas! ente mandato))) (:fim (first vencedoras)))
+            "e o `fim` devolvido pela vencedora e' exatamente o que ficou no banco")))))
+
+;; ---------------------------------------------------------------------------
+;; guard de FONTE (o predicado que nenhum teste comportamental falsifica)
+;; ---------------------------------------------------------------------------
+
+(deftest encerrar-licencas-abertas-tem-ente-id-e-fim-nulo-explicitos-no-where
+  ;; Molde do irmao `licencas-de-mandatos-tem-ente-id-explicito-no-where` (repositorio_ficha_test.clj): a
+  ;; RLS mascara o predicado `ente_id` em qualquer tx aberta por `com-tenant*`, entao nenhum teste
+  ;; comportamental o discrimina. Aqui vale MAIS que no irmao — este e' o unico caminho de ESCRITA da
+  ;; tabela, e o repo ja' chama `db/vereador` de dentro de uma tx do relay que so' seta o GUC
+  ;; (`identidade-do-vereador-em-tx`). `fim IS NULL` entra no mesmo guard: remove-lo reescreveria licencas
+  ;; JA' FECHADAS, e nenhum teste atual pega isso de forma dirigida.
+  (let [fonte (slurp "src/oplenario/cadastros/db/vereador.clj")
+        corpo (second (re-find #"(?s)\(defn encerrar-licencas-abertas!(.*?)\n\(defn " fonte))]
+    (is (some? corpo) "a fn `encerrar-licencas-abertas!` continua existindo em db/vereador.clj")
+    (is (re-find #"\[:= :ente_id ente-id\]" corpo)
+        "o WHERE do UNICO UPDATE de mandato_licenca casa `ente_id` explicito alem da RLS")
+    (is (re-find #"\[:is :fim nil\]" corpo)
+        "e so' toca licenca ABERTA — sem isso o UPDATE reescreveria licenca ja' encerrada")))

@@ -65,9 +65,10 @@
     "REASSUNCAO numa UNICA tx — o inverso exato de `registrar-licenca!`. `reassumiu-em` e' o dia em que a
      pessoa VOLTOU A EXERCER; a licenca e' fechada na VESPERA dele (ver `encerrar-licencas-abertas!`).
      404 (nil) se vereador ausente/de-outro-tenant; throws :conflito/sem-mandato-licenciado (409) se nao ha'
-     mandato 'licenciado' cobrindo `reassumiu-em`; :conflito/retorno-anterior-ao-inicio (409) se sobrou
-     licenca aberta depois do UPDATE; :conflito/mandato-sobreposto (409) se reabrir violaria o EXCLUDE.
-     Senao UPDATE das licencas abertas + UPDATE mandato.estado='vigente' -> {:id :fim}.")
+     mandato 'licenciado' cobrindo `reassumiu-em`; :conflito/retorno-anterior-ao-inicio (409) se NENHUMA
+     licenca fechou e ainda ha' aberta; :conflito/mandato-sobreposto (409) se reabrir violaria o EXCLUDE.
+     Senao UPDATE das licencas abertas + UPDATE mandato.estado='vigente' -> {:id :fim}, com `:fim` = a
+     vespera GRAVADA ou nil quando o UPDATE casou zero linhas (licenca ja' vencida).")
   ;; comissao / cargo / membro
   (criar-comissao! [this ente-id comissao])
   (buscar-comissao [this ente-id id])
@@ -169,20 +170,33 @@
                         ;; licenciou por 5 dias em 2024 fica sem poder se licenciar de novo para sempre.
                         (throw (ex-info "sem mandato licenciado para reassumir"
                                         {:tipo :conflito/sem-mandato-licenciado})))
-                  fim (.minusDays ^LocalDate reassumiu-em 1)]
-              (vereador/encerrar-licencas-abertas! tx ente-id (:id m) fim)
+                  fim (.minusDays ^LocalDate reassumiu-em 1)
+                  encerradas (vereador/encerrar-licencas-abertas! tx ente-id (:id m) fim)]
               ;; RELE p/ detectar sobra: `encerrar-licencas-abertas!` nao casa licenca cujo `inicio` seja
-              ;; POSTERIOR ao `fim` calculado ("voltei antes de sair"). Sem esta checagem o estado flipava
-              ;; para 'vigente' com a licenca ainda ABERTA — o pior dos dois mundos, porque a janela publica
-              ;; continuaria comida enquanto o mandato parecia normal.
-              (when (seq (filter (comp nil? :fim)
-                                 (vereador/licencas-de-mandatos tx ente-id [(:id m)])))
+              ;; POSTERIOR ao `fim` calculado. Sem esta checagem o estado flipava para 'vigente' com a
+              ;; licenca ainda ABERTA — o pior dos dois mundos, porque a janela publica continuaria comida
+              ;; enquanto o mandato parecia normal.
+              ;;
+              ;; O `zero?` e' o que separa os DOIS estados que "sobrou aberta" mistura, e que o dado sozinho
+              ;; nao distingue: (a) "voltei antes de sair" — a UNICA licenca aberta comeca depois da volta,
+              ;; nada fechou, a data e' invalida -> 409 fail-closed; (b) "ha' tambem uma licenca que ainda
+              ;; nao comecou" — a licenca EM CURSO fechou (`encerradas` > 0), e a futura apenas segue
+              ;; subtraindo a PROPRIA janela, que e' a semantica correta. Sem o `zero?`, (b) lancava e o
+              ;; mandato ficava preso em 'licenciado' sem remedio — exatamente o que a docstring de
+              ;; `encerrar-licencas-abertas!` diz nao querer.
+              (when (and (zero? encerradas)
+                         (seq (filter (comp nil? :fim)
+                                      (vereador/licencas-de-mandatos tx ente-id [(:id m)]))))
                 (throw (ex-info "reassuncao anterior ao inicio da licenca em curso"
                                 {:tipo :conflito/retorno-anterior-ao-inicio})))
               ;; seguro: o `:fim_efetivo [:coalesce fim-efetivo :fim_efetivo]` de `mudar-estado!` NUNCA
               ;; sobrescreve — reassumir nao apaga o `fim_efetivo` de um mandato que ja' o tenha.
               (vereador/mudar-estado! tx ente-id {:id (:id m) :estado "vigente"})
-              {:id (:id m) :fim fim}))))
+              ;; `:fim` e' um FATO GRAVADO, nao a aritmetica local: ZERO linhas fechadas (licenca ja' vencida
+              ;; — caminho de primeira classe) devolve nil, e a borda serializa `null`. Anunciar a vespera
+              ;; calculada faria a tela dizer "licenca encerrada em D-1" sobre uma licenca que terminou anos
+              ;; antes, e mascararia a reassuncao perdedora de uma corrida como se tivesse gravado algo.
+              {:id (:id m) :fim (when (pos? encerradas) fim)}))))
       (catch PSQLException e
         (if (= "23P01" (.getSQLState e))
           (throw (ex-info "reabrir este mandato sobreporia outro mandato vigente do mesmo vereador"

@@ -88,20 +88,25 @@
   - `vigencia_fim` e' `{:optional true}` no wire e nao ha PATCH de mandato: mandato aberto = janela ABERTA,
     sem auto-cura. O suplente convocado sem data de retorno — o arquetipo que abriu o carry I-5 — recebe
     `{:fim nil}`, ou seja o denominador global deslocado para a data da convocacao.
-  - as licencas chegam SEM validacao de intervalo: `registrar-licenca->dominio` so' coage as datas (nao
-    exige `fim >= inicio` nem que o intervalo caiba na vigencia do mandato) e nao ha constraint na
-    mig 0010:148. Uma licenca com o ano digitado errado zera a janela — e, como nao existe UPDATE nem
-    DELETE de `mandato_licenca`, o erro nao tem remedio dentro do sistema.
+  - as licencas chegam com validacao de intervalo PARCIAL: `registrar-licenca->dominio` recusa `inicio`
+    posterior a `hoje` (licenca nao pode COMECAR no futuro — o flip de `mandato.estado` e' imediato e nao
+    ha agendador), mas nao exige `fim >= inicio` nem que o intervalo caiba na vigencia do mandato, e nao ha
+    constraint na mig 0010:148. Uma licenca com o ANO de `fim` digitado errado ainda zera a janela: ha'
+    UPDATE de `fim` (a reassuncao, abaixo), mas ele so' casa `fim IS NULL`, e nao ha DELETE (Inv. 10) nem
+    PATCH de licenca — entao licenca ja' FECHADA com data errada segue sem remedio dentro do sistema.
 
-  CARRY ABERTO (decisao pendente, revisao da fatia 3): licenca com `fim` nil (\"prazo indeterminado\", caminho
-  de primeira classe no wire `RegistrarLicenca`) fecha a janela DAQUELE STINT na vespera do seu inicio — e
-  `mandato_licenca` NAO tem nenhum caminho de UPDATE no sistema (o unico statement que a toca e' o INSERT de
-  `inserir-licenca!`). Logo o fechamento e' IRREVERSIVEL: quem se licencia sem data de volta e retorna DENTRO
-  DO MESMO STINT publica 100% de presenca tendo faltado a tudo desde o retorno — a injustica I-5 invertida.
-  As duas saidas (abrir o PATCH de `mandato_licenca.fim`, ou decidir que `fim` nil nao subtrai nada) sao
-  decisao do Daouda; esta fn implementa a semantica ESCRITA na decisao, e o teste
-  `licenca-em-curso-com-fim-nulo-fecha-a-janela-no-inicio-dela` a pina. (O contorno que o operador tem hoje
-  — registrar um mandato NOVO para representar o retorno — passou a funcionar com a subtracao por stint.)"
+  CARRY FECHADO (reassuncao de mandato): licenca com `fim` nil (\"prazo indeterminado\", caminho de primeira
+  classe no wire `RegistrarLicenca`) fecha a janela DAQUELE STINT na vespera do seu inicio, e isso DEIXOU de
+  ser irreversivel — `cadastros` passou a expor `POST /cadastros/vereadores/:id/reassuncao`
+  (`RepoCadastros/reassumir-mandato!`), que fecha as licencas abertas do stint na VESPERA de `reassumiu-em`
+  (`db/vereador/encerrar-licencas-abertas!` — o PRIMEIRO e unico UPDATE de `mandato_licenca` do sistema) e
+  devolve `mandato.estado` a 'vigente'. A convencao do -1 dia existe porque `subtrair-intervalos` e' inclusivo
+  dos dois lados; quem a pina contra ESTA fn e' o teste
+  `reassumir-em-D-fecha-a-licenca-em-D-menos-1-e-o-dia-D-conta-como-exercicio`. `reassumiu-em` tem teto em
+  `hoje` na borda: uma data futura gravaria um `fim` que nenhum caminho de escrita alcanca depois.
+  NAO use mais o contorno antigo (registrar um mandato NOVO 'vigente' para representar o retorno): o stint
+  licenciado fica fora do predicado do EXCLUDE da mig 0059, entao o mandato novo entra — mas a reassuncao
+  seguinte daquele stint passa a colidir (23P01 -> :conflito/mandato-sobreposto, 409)."
   [mandatos licencas]
   (let [licencas-do-stint (group-by :mandato-id licencas)
         janelas (tempo/normalizar-intervalos
