@@ -97,14 +97,17 @@
          {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id materia-id
           :modalidade modalidade :quorum-tipo "maioria_simples" :sessao-id sessao-id})))
 
-(defn- registrar-presenca! [repo-sessoes ente sessao-id vereador-id ocorrido-em]
-  (repo-sess/registrar-presenca! repo-sessoes ente
-    {:id (random-uuid) :sessao-id sessao-id :vereador-id vereador-id :tipo "entrada" :modalidade "plenario"
-     :fonte "autoatendimento" :ocorrido-em ocorrido-em}))
-
 (def ^:private HOJE (LocalDate/of 2026 7 11))
 (def ^:private INSTANTE (Instant/parse "2026-07-11T12:00:00Z"))
 (def ^:private ANTES-DO-INSTANTE (Instant/parse "2026-07-11T11:00:00Z"))
+
+(defn- registrar-presenca! [repo-sessoes ente sessao-id vereador-id ocorrido-em]
+  ;; `agora` = INSTANTE (o mesmo relogio cravado que o resto do teste usa): o gate de janela do registro de
+  ;; presenca (Etapa 2 da chamada) exige o teto do relogio do servidor. A sessao aqui esta `agendada` (nunca
+  ;; foi aberta), entao nao ha limite inferior — so' o "nao pode ser futuro".
+  (repo-sess/registrar-presenca! repo-sessoes ente
+    {:id (random-uuid) :sessao-id sessao-id :vereador-id vereador-id :tipo "entrada" :modalidade "plenario"
+     :fonte "autoatendimento" :ocorrido-em ocorrido-em :agora INSTANTE}))
 
 ;; ---------- 1: happy path — mandato vigente + presenca registrada -> registra o voto ----------
 

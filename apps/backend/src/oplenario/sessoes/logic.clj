@@ -420,6 +420,87 @@
                         {:tipo :servidor/erro :sessao-id (:id sessao) :estado (:estado sessao)})))
     agora))
 
+;; ---------- §22.6 eixo C — o GATE de ESCRITA de presenca (Etapa 2 da chamada) ----------
+;; A leitura acima congela o instante de uma sessao que fechou. Isso protege a CHAMADA, nao o BANCO: sem o
+;; gate abaixo, o sistema aceitava gravar `presenca_evento` numa sessao ja encerrada, e como o quorum e'
+;; DERIVADO do ultimo evento por vereador, o quorum de uma votacao JA REALIZADA mudava depois do fato. A ata
+;; passava a divergir do banco sem trilha que as reconciliasse.
+
+(def estados-sessao-aceita-presenca
+  "ALLOWLIST dos estados em que uma escrita de presenca e' aceita — o complemento exato de
+  `estados-sessao-fechada` sobre `estados-sessao` (a particao e' pinada por teste).
+
+  E' ALLOWLIST, e nao `(not (contains? estados-sessao-fechada estado))`, por fail-closed: um estado NOVO no
+  vocabulario (ou uma string corrompida/nil vinda de uma linha que nao devia existir) cai na RECUSA sozinho.
+  A forma por complemento aceitaria o desconhecido, que e' exatamente o caso em que ninguem pensou.
+
+  `agendada` ENTRA: a chamada que apura quorum PRECEDE a abertura da sessao — recusa-la deixaria a Mesa sem
+  como provar que havia quorum para abrir."
+  #{"agendada" "aberta" "suspensa"})
+
+(defn aceita-registro-de-presenca?
+  "PURO. O `estado` da sessao aceita uma escrita de presenca? (fail-closed: desconhecido/nil -> false)."
+  [estado]
+  (contains? estados-sessao-aceita-presenca estado))
+
+(defn motivo-recusa-de-presenca
+  "PURO. `nil` = pode gravar. Senao, a RAZAO da recusa (keyword), na ordem em que importam:
+
+    :estado-nao-aceita-presenca   a sessao ja fechou (ou esta num estado que ninguem classificou)
+    :instante-no-futuro           o fato declarado ainda nao aconteceu pelo relogio do servidor
+    :instante-antes-da-abertura   o fato e' anterior a `aberta_em` — retroage para fora da vida da sessao
+    :instante-apos-o-encerramento o fato e' posterior a `encerrada_em`
+
+  RECUSA, nunca CLAMP. Grudar a hora declarada no limite da janela produz um registro que PARECE bom e
+  mente sobre quando o fato ocorreu — pior que a recusa, porque o operador nao fica sabendo.
+
+  O limite inferior so' existe DEPOIS que a sessao abriu (`aberta_em` nulo enquanto `agendada`): registrar
+  presenca anterior a abertura e' legitimo e se faz com a sessao ainda `agendada`. Depois de aberta, a
+  janela e' a verdade — enquanto nao existir um tipo de evento de RETIFICACAO, back-dating para fora dela e'
+  indistinguivel de falsificacao.
+
+  O ramo `:instante-apos-o-encerramento` e' segunda tranca: o CHECK `sessao_encerrada_em_exige_estado` (mig
+  0026) impede uma sessao VIVA de ter `encerrada_em`, logo ele e' inalcancavel hoje pelo banco. Fica para o
+  dia em que a allowlist crescer e a janela virar o unico limite.
+
+  `instante` e `agora` sao `java.time.Instant` (o data layer devolve timestamptz como Instant,
+  kernel/db-tipos) e sao comparados por `compare` — Comparable, sem interop e sem reflexao. Ambos sao
+  PRE-CONDICAO nao-nil: quem chama garante (a ausencia e' bug de servidor, nao conflito do usuario)."
+  [sessao instante agora]
+  (cond
+    (not (aceita-registro-de-presenca? (:estado sessao)))              :estado-nao-aceita-presenca
+    (pos? (compare instante agora))                                    :instante-no-futuro
+    (and (:aberta-em sessao)
+         (neg? (compare instante (:aberta-em sessao))))                :instante-antes-da-abertura
+    (and (:encerrada-em sessao)
+         (pos? (compare instante (:encerrada-em sessao))))             :instante-apos-o-encerramento
+    :else nil))
+
+(defn mensagem-de-recusa-de-presenca
+  "PURO. A mensagem ACIONAVEL que vai no corpo do 409 — em portugues, dizendo o LIMITE violado (nao so' que
+  houve violacao) e o que fazer. Fica aqui, e nao no diplomat, porque a razao da recusa e' regra de dominio:
+  a borda so' repassa. Nao carrega dado de pessoa (so' estado e instantes da sessao), entao e' seguro
+  devolver ao cliente."
+  [motivo sessao agora]
+  (case motivo
+    :estado-nao-aceita-presenca
+    (str "a sessao esta '" (:estado sessao) "' e nao aceita mais registro de presenca. "
+         "So' se registra presenca com a sessao agendada, aberta ou suspensa — mudar a presenca agora "
+         "alteraria o quorum de votacoes ja realizadas. Corrija pela ata.")
+
+    :instante-no-futuro
+    (str "o instante informado e' posterior ao relogio do servidor (" agora "). "
+         "Registre o fato depois que ele ocorrer.")
+
+    :instante-antes-da-abertura
+    (str "o instante informado e' anterior a abertura da sessao (" (:aberta-em sessao) "). "
+         "Presenca anterior a abertura tem de ser registrada antes de abrir a sessao.")
+
+    :instante-apos-o-encerramento
+    (str "o instante informado e' posterior ao encerramento da sessao (" (:encerrada-em sessao) ").")
+
+    (str "registro de presenca recusado para esta sessao (" (name motivo) ").")))
+
 ;; ---------- §22.6 eixo D — gravacao (audio/video) da sessao (F4.4b) ----------
 ;; `gravacao_segmento` e' unidade TECNICA do arquivo, nao regimental (uma sessao tem 1 segmento tipico mas N
 ;; possiveis: reinicio do OBS, divisao manual). Alinhamento com fatos da sessao = por INSTANTE. Os vocabularios

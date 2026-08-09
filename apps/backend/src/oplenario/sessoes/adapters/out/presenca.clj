@@ -9,9 +9,14 @@
 (set! *warn-on-reflection* true)
 
 (defn recibo-presenca->wire
-  "Recibo de dominio {:id uuid} -> PresencaReciboOut (validado, resposta 201)."
-  [{:keys [id]}]
-  (let [out {:id (some-> id str)}]
+  "Recibo de dominio {:id uuid :ocorrido-em Instant :registrado-em Instant} -> PresencaReciboOut (validado,
+  resposta 201). Instantes -> ISO string. Os dois carimbos sao OBRIGATORIOS no contrato: um recibo sem
+  `registrado-em` deixaria o cliente sem como distinguir a hora do fato da hora da digitacao, e o Malli
+  fecha essa porta aqui (nil -> 500 de bug de servidor, nunca 201 com o par pela metade)."
+  [{:keys [id ocorrido-em registrado-em]}]
+  (let [out {:id (some-> id str)
+             :ocorrido-em (some-> ocorrido-em str)
+             :registrado-em (some-> registrado-em str)}]
     (when-not (m/validate wire/PresencaReciboOut out)
       (throw (ex-info "recibo de presenca viola o contrato PresencaReciboOut (bug de servidor)"
                       {:campos (keys (me/humanize (m/explain wire/PresencaReciboOut out)))})))

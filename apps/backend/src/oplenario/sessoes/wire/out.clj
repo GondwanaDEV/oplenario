@@ -35,11 +35,20 @@
    [:para (km/enum-de logic/estados-sessao)]])
 
 (def PresencaReciboOut
-  "Recibo do registro de presenca (resposta 201 de POST /sessoes/:id/presenca). So o `id` do evento gravado — o
-  canal SSE do plenario ja recebeu o fato (presenca.registrada) p/ o quorum ao vivo; este recibo confirma ao
-  chamador. NAO expoe internos."
+  "Recibo do registro de presenca (resposta 201 de POST /sessoes/:id/presenca e de /presenca/confirmar). O `id`
+  do evento gravado + os DOIS carimbos de tempo. O canal SSE do plenario ja recebeu o fato
+  (presenca.registrada) p/ o quorum ao vivo; este recibo confirma ao chamador. NAO expoe internos.
+
+  `ocorrido-em` = a hora do FATO (o instante de DOMINIO, ecoado como o servidor o aceitou — util justamente
+  porque o servidor pode RECUSAR uma hora fora da janela da sessao); `registrado-em` = a hora do REGISTRO
+  (carimbo de AUDIT do banco, quando o sistema soube). Os dois viajam juntos porque, enquanto nao existir um
+  tipo de evento de RETIFICACAO, esse par e' a UNICA forma de o juridico distinguir 'o vereador saiu as 15h'
+  de 'o servidor corrigiu as 17h um registro das 15h'. Espelha `desde`/`registrado-em` de LinhaChamadaOut —
+  o mesmo par, na leitura."
   [:map {:closed true}
-   [:id :string]])
+   [:id :string]
+   [:ocorrido-em :string]
+   [:registrado-em :string]])
 
 (def InscricaoReciboOut
   "Recibo da inscricao de orador (resposta 201 de POST /sessoes/:id/inscricoes). `id` da inscricao + `ordem` na

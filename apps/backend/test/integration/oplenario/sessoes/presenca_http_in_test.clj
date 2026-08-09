@@ -17,7 +17,8 @@
             [oplenario.interceptors :as it]
             [oplenario.kernel.components.idp-dev :as idp-dev]
             [oplenario.rotas :as rotas]
-            [oplenario.sessoes.components.repositorio :as repo-sessoes]))
+            [oplenario.sessoes.components.repositorio :as repo-sessoes])
+  (:import (java.time Instant)))
 
 (defn- sessao-canonica
   "Sessao como buscar-sessao devolve (kebab) — so o que a authz fina (pode-ver-sessao? = mesma Casa) le."
@@ -26,14 +27,32 @@
 
 (defn- fake-repo-sessoes
   "RepoSessoes fake (parcial): `buscar-sessao` resolve a sessao; `registrar-presenca!` GRAVA o mapa recebido em
-  `capturado` (p/ provar vereador-id/tipo/modalidade/ocorrido-em/fonte/created-by passados ao Repo) e ECOA {:id}."
+  `capturado` (p/ provar vereador-id/tipo/modalidade/ocorrido-em/fonte/created-by/agora passados ao Repo) e ECOA
+  o recibo NO FORMATO DO REPO REAL — {:id :ocorrido-em :registrado-em}. Ecoar so' {:id} manteria este ns verde
+  enquanto o wire real (PresencaReciboOut, :closed) exige os dois carimbos: fake que inventa o formato de saida
+  e' a mesma armadilha do fixture que redigita vocabulario alheio."
   [busca-fn capturado]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify repo-sessoes/RepoSessoes
     (buscar-sessao [_ ente-id id] (busca-fn ente-id id))
     (registrar-presenca! [_ ente-id m]
       (reset! capturado (assoc m :ente-id ente-id))
-      {:id (:id m)})))
+      ;; `registrado-em` e' carimbo do BANCO (default now()); o fake devolve um instante distinto do
+      ;; `ocorrido-em` justamente porque o par so' tem valor se os dois puderem divergir.
+      {:id (:id m) :ocorrido-em (:ocorrido-em m) :registrado-em (Instant/parse "2026-06-30T15:00:00Z")})))
+
+(defn- fake-repo-sessoes-que-recusa
+  "RepoSessoes fake cujo `registrar-presenca!` LANCA a recusa do gate (`:conflito/sessao-nao-aceita-presenca`,
+  o que o Repo real faz dentro da tx quando a sessao ja fechou ou a hora esta fora da janela). Aqui se prova
+  so' a TRADUCAO da borda (409 + mensagem repassada); que o gate exista e recuse de fato e' o que o
+  presenca-gate-estado-test prova contra o Postgres."
+  [busca-fn msg]
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify repo-sessoes/RepoSessoes
+    (buscar-sessao [_ ente-id id] (busca-fn ente-id id))
+    (registrar-presenca! [_ _ente-id m]
+      (throw (ex-info msg {:tipo :conflito/sessao-nao-aceita-presenca :motivo :estado-nao-aceita-presenca
+                           :sessao-id (:sessao-id m) :estado "encerrada"})))))
 
 (defn- fake-repo-identidade [papeis]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
@@ -104,7 +123,34 @@
     (is (= "plenario" (:modalidade @cap)) "o Repo recebeu a modalidade")
     (is (= ocorrido (str (:ocorrido-em @cap))) "o Repo recebeu o instante de DOMINIO (ocorrido-em)")
     (is (= "manual_secretaria" (:fonte @cap)) "fonte FORCADA = manual_secretaria (registro humano autenticado)")
-    (is (some? (:created-by @cap)) "o Repo recebeu created-by (do ator, nunca do cliente)")))
+    (is (some? (:created-by @cap)) "o Repo recebeu created-by (do ator, nunca do cliente)")
+    (is (some? (:agora @cap))
+        "o Repo recebeu `agora` (relogio do SERVIDOR, injetado na borda) — e' o teto do clamp da hora declarada")
+    (is (= ocorrido (:ocorrido-em body)) "o recibo devolve a hora do FATO")
+    (is (= "2026-06-30T15:00:00Z" (:registrado-em body))
+        "o recibo devolve a hora do REGISTRO — o par (fato, registro) e' o que separa 'saiu as 15h' de 'digitaram as 17h'")))
+
+(deftest presenca-sessao-que-nao-aceita-registro-409
+  (let [ente (random-uuid)
+        msg "a sessao esta 'encerrada' e nao aceita mais registro de presenca. Corrija pela ata."
+        repo-s (fake-repo-sessoes-que-recusa (fn [_ id] (sessao-canonica ente id)) msg)
+        r (pt/response-for (service-fn* #{"secretario"} repo-s)
+                           :post (url (random-uuid))
+                           :headers (com-json (token ente (random-uuid)))
+                           :body (corpo {"vereador-id" (str (random-uuid)) "tipo" "entrada"
+                                         "modalidade" "plenario" "ocorrido-em" ocorrido}))]
+    (is (= 409 (:status r)) "recusa do gate -> 409 (nao 403: nao e' permissao; nao 400: o corpo esta bem formado)")
+    (is (= msg (:erro (ler-json r))) "a mensagem ACIONAVEL do dominio chega ao cliente, nao um 409 mudo")))
+
+(deftest confirmar-presenca-sessao-que-nao-aceita-registro-409
+  (let [ente (random-uuid)
+        msg "a sessao esta 'encerrada' e nao aceita mais registro de presenca. Corrija pela ata."
+        repo-s (fake-repo-sessoes-que-recusa (fn [_ id] (sessao-canonica ente id)) msg)
+        r (pt/response-for (service-fn-confirmar #{"vereador"} repo-s (fn [_ _] (random-uuid)))
+                           :post (str "/sessoes/" (random-uuid) "/presenca/confirmar")
+                           :headers (com-json (token ente (random-uuid))))]
+    (is (= 409 (:status r)) "a porta self-service traduz a MESMA recusa — nao e' bypass nem 500")
+    (is (= msg (:erro (ler-json r))))))
 
 (deftest presenca-fonte-do-cliente-ignorada-201
   ;; mesmo se o cliente mandar uma `fonte` (ex.: painel_eletronico p/ ganhar precedencia indevida), a borda a

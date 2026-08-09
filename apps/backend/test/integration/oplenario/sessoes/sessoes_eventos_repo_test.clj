@@ -77,9 +77,11 @@
   (let [ente (random-uuid)
         sid  (agendar! ente)
         ver  (random-uuid)]
+    ;; `agora` = t0: o gate de janela (Etapa 2 da chamada) exige o teto do relogio do servidor; a sessao esta
+    ;; `agendada`, entao nao ha limite inferior a satisfazer aqui.
     (repo/registrar-presenca! *repo* ente {:id (random-uuid) :sessao-id sid :vereador-id ver
                                            :tipo "entrada" :modalidade "plenario" :fonte "manual_secretaria"
-                                           :ocorrido-em t0 :created-by (random-uuid)})
+                                           :ocorrido-em t0 :agora t0 :created-by (random-uuid)})
     (let [evs (eventos-por-tipo ente "presenca.registrada")]
       (is (= 1 (count evs)) "1 evento de presenca")
       (let [pl (:payload (first evs))]

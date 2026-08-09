@@ -37,7 +37,10 @@
   (listar-versoes [this ente-id pauta-sessao-id])
   (versao-publica-corrente [this ente-id pauta-sessao-id] "Maior numero_versao com publica=true.")
   ;; §22.6 eixo C — presenca e quorum (camada de fatos)
-  (registrar-presenca! [this ente-id m] "Grava evento de presenca append-only (entrada/saida/retorno/mudanca).")
+  (registrar-presenca! [this ente-id m]
+    "Grava evento de presenca append-only (entrada/saida/retorno/mudanca). `m` exige `:ocorrido-em` (o fato) e
+     `:agora` (o relogio ja lido na borda): o GATE de estado + a janela da hora rodam DENTRO desta tx. Recusa
+     lanca `:conflito/sessao-nao-aceita-presenca` (a borda mapeia 409). Devolve {:id :ocorrido-em :registrado-em}.")
   (listar-presenca [this ente-id sessao-id] "Eventos da sessao em ordem cronologica (auditoria).")
   (presenca-corrente [this ente-id sessao-id instante]
     "Ultimo evento de CADA vereador da sessao ate' `instante` (uma linha por vereador) — insumo cru da CHAMADA.")
@@ -139,14 +142,33 @@
   (buscar-versao [this ente-id id] (transacao this ente-id #(pauta/buscar-versao % ente-id id)))
   (listar-versoes [this ente-id pauta-sessao-id] (transacao this ente-id #(pauta/listar-versoes % ente-id pauta-sessao-id)))
   (versao-publica-corrente [this ente-id pauta-sessao-id] (transacao this ente-id #(pauta/versao-publica-corrente % ente-id pauta-sessao-id)))
-  (registrar-presenca! [this ente-id m]
+  ;; O GATE DE ESTADO + a JANELA DA HORA rodam DENTRO desta tx, sobre a sessao lida AQUI com `FOR SHARE` —
+  ;; nunca sobre a leitura que o controller fez antes para a authz. Com a checagem na leitura anterior, a
+  ;; Mesa encerrava a sessao entre a checagem e o INSERT e o evento entrava assim mesmo, mudando o quorum de
+  ;; uma votacao ja realizada. E' o mesmo defeito ("sessao stale entre transacoes") que a Etapa 1 fechou na
+  ;; leitura da chamada; aqui ele fecha na ESCRITA.
+  (registrar-presenca! [this ente-id {:keys [sessao-id ocorrido-em agora] :as m}]
     (transacao this ente-id
       (fn [tx]
-        (let [r (presenca/registrar-evento! tx (assoc m :ente-id ente-id))]
-          (producers/emitir-presenca-registrada! bus tx ente-id
-            {:sessao-id (:sessao-id m) :vereador-id (:vereador-id m) :tipo (:tipo m)
-             :modalidade (:modalidade m) :fonte (:fonte m) :ocorrido-em (str (:ocorrido-em m))})
-          r))))
+        ;; ausencia de instante/relogio e' bug de servidor (a borda sempre os fornece), nao conflito do
+        ;; usuario: 500 opaco em vez de um 409 que mandaria o operador corrigir o que nao e' dele.
+        (when (or (nil? ocorrido-em) (nil? agora))
+          (throw (ex-info "registrar-presenca!: ocorrido-em e agora sao obrigatorios (gate de janela)"
+                          {:tipo :servidor/erro :sessao-id sessao-id})))
+        (let [s (sessao/janela-para-registro tx ente-id sessao-id)]
+          (when (nil? s)
+            (throw (ex-info "registrar-presenca!: sessao inexistente neste ente"
+                            {:tipo :conflito/sessao-nao-aceita-presenca :motivo :sessao-inexistente
+                             :sessao-id sessao-id})))
+          (when-let [motivo (logic/motivo-recusa-de-presenca s ocorrido-em agora)]
+            (throw (ex-info (logic/mensagem-de-recusa-de-presenca motivo s agora)
+                            {:tipo :conflito/sessao-nao-aceita-presenca :motivo motivo
+                             :sessao-id sessao-id :estado (:estado s)})))
+          (let [r (presenca/registrar-evento! tx (assoc m :ente-id ente-id))]
+            (producers/emitir-presenca-registrada! bus tx ente-id
+              {:sessao-id (:sessao-id m) :vereador-id (:vereador-id m) :tipo (:tipo m)
+               :modalidade (:modalidade m) :fonte (:fonte m) :ocorrido-em (str (:ocorrido-em m))})
+            r)))))
   (listar-presenca [this ente-id sessao-id] (transacao this ente-id #(presenca/listar-eventos % ente-id sessao-id)))
   (presenca-corrente [this ente-id sessao-id instante]
     (transacao this ente-id #(presenca/presenca-corrente % ente-id sessao-id instante)))

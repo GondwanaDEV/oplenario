@@ -49,15 +49,23 @@
   e' um registro HUMANO de um secretario autenticado, nunca confia em proveniencia do cliente — a fonte alimenta
   a precedencia de quorum (manual > painel > inferida), entao um cliente nao pode forjar 'painel_eletronico' p/
   ganhar desempate. O Repo compoe o ato + emite `presenca.registrada` (que alimenta o quorum ao vivo) na MESMA
-  tx (atomicidade §22.9 E2). created-by = o ator. Devolve {:id} ou nil (sessao inexistente)."
-  [repo-sessoes ator {:keys [sessao-id vereador-id tipo modalidade ocorrido-em]}]
+  tx (atomicidade §22.9 E2). created-by = o ator.
+
+  `agora` (o relogio do servidor, ja lido na borda) e' o TETO da hora declarada. Ele vem por parametro, e nao
+  de `Instant/now` aqui dentro, pela mesma razao de sempre: relogio e' dependencia injetada (§22.6) e sem isso
+  o teste do clamp seria uma aposta sobre o relogio do container. O GATE de estado + a janela NAO rodam neste
+  ns: rodam dentro da tx do Repo (a leitura de authz e a escrita sao transacoes diferentes — checar aqui
+  deixaria a janela em que a Mesa encerra a sessao entre uma e outra).
+
+  Devolve {:id :ocorrido-em :registrado-em} ou nil (sessao inexistente). Recusa do gate lanca
+  `:conflito/sessao-nao-aceita-presenca` (o diplomat mapeia 409)."
+  [repo-sessoes ator {:keys [sessao-id vereador-id tipo modalidade ocorrido-em]} agora]
   (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
     (authz/check! ator :sessao/registrar-presenca sessao logic/pode-ver-sessao?)
-    (let [id (random-uuid)]
-      (repo/registrar-presenca! repo-sessoes (:ente-id ator)
-        {:id id :sessao-id sessao-id :vereador-id vereador-id :tipo tipo :modalidade modalidade
-         :fonte "manual_secretaria" :ocorrido-em ocorrido-em :created-by (:identidade-id ator)})
-      {:id id})))
+    (repo/registrar-presenca! repo-sessoes (:ente-id ator)
+      {:id (random-uuid) :sessao-id sessao-id :vereador-id vereador-id :tipo tipo :modalidade modalidade
+       :fonte "manual_secretaria" :ocorrido-em ocorrido-em :agora agora
+       :created-by (:identidade-id ator)})))
 
 (defn confirmar-minha-presenca
   "Onda C3 — autoatendimento: o vereador confirma a PROPRIA presenca pelo celular. `vereador-id` NUNCA vem
@@ -68,16 +76,20 @@
   entao um evento extra e' inofensivo — nao ha necessidade de checar 'ja presente' antes de inserir.
   `modalidade` fixa 'plenario' (V1 = Nivel 1, presenca remota e' so' manual pela Mesa, §22.6). Ator sem
   cadastro vinculado (`resolver-vereador` nil) -> nil (-> 404, mesmo contrato de /meu/ciencias). Sessao
-  inexistente no tenant -> nil (-> 404). `instante` vem do RELOGIO do servidor (borda), nunca do cliente."
+  inexistente no tenant -> nil (-> 404). `instante` vem do RELOGIO do servidor (borda), nunca do cliente.
+
+  O MESMO gate de estado da borda da Mesa vale aqui (ele mora na tx do Repo, entao nao ha como uma das duas
+  portas escapar): deixar a self-service aberta seria o mesmo buraco por outra fechadura — um vereador
+  'confirmando presenca' numa sessao encerrada mudaria o quorum de uma votacao ja realizada. Como `instante`
+  E' o relogio do servidor, o clamp da hora e' trivialmente satisfeito nesta porta; o que morde e' o estado."
   [repo-sessoes resolver-vereador ator sessao-id instante]
   (when-let [vereador-id (resolver-vereador (:ente-id ator) (:identidade-id ator))]
     (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
       (authz/check! ator :sessao/confirmar-presenca sessao logic/pode-ver-sessao?)
-      (let [id (random-uuid)]
-        (repo/registrar-presenca! repo-sessoes (:ente-id ator)
-          {:id id :sessao-id sessao-id :vereador-id vereador-id :tipo "entrada" :modalidade "plenario"
-           :fonte "autoatendimento" :ocorrido-em instante :created-by (:identidade-id ator)})
-        {:id id}))))
+      (repo/registrar-presenca! repo-sessoes (:ente-id ator)
+        {:id (random-uuid) :sessao-id sessao-id :vereador-id vereador-id :tipo "entrada" :modalidade "plenario"
+         :fonte "autoatendimento" :ocorrido-em instante :agora instante
+         :created-by (:identidade-id ator)}))))
 
 (defn inscrever-orador
   "§22.6 eixo F (tribuna, intencao): inscreve um orador na fila da sessao. Carrega a sessao do tenant do `ator`

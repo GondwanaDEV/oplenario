@@ -78,28 +78,46 @@
   "POST /sessoes/:id/presenca (§22.6 eixo C). adapters/in coage o :id + valida o corpo {vereador-id, tipo,
   modalidade, ocorrido-em}; o controller carrega+autoriza a sessao e grava o evento append-only (a fonte e'
   forcada = manual_secretaria; o Repo emite presenca.registrada na mesma tx); adapters/out projeta o recibo.
-  nil (sessao inexistente) -> 404; sucesso -> 201 (cria um evento — append-only, sem CAS/409)."
-  [repo-sessoes]
+  nil (sessao inexistente) -> 404; sucesso -> 201 (cria um evento — append-only, sem CAS).
+
+  409 quando o Repo recusa (`:conflito/sessao-nao-aceita-presenca`): sessao que ja fechou, ou hora declarada
+  fora da janela da sessao / no futuro. E' 409 e nao 403 (nao e' falta de permissao — o mesmo secretario podia
+  ter gravado isto ha' um minuto) e nao 400 (o corpo esta bem formado; o que mudou foi o ESTADO do recurso).
+  A mensagem vem do dominio (`logic/mensagem-de-recusa-de-presenca`) porque so' ele sabe qual limite foi
+  violado; e' texto nosso, sem dado de pessoa. Qualquer outro `:tipo` re-lanca (500 opaco, fail-closed)."
+  [repo-sessoes relogio]
   (fn [req]
     (let [ator (:ator req)
           m    (adapters-in-presenca/registrar-presenca->dominio (get-in req [:path-params :id]) (:json-params req))]
-      (if-let [recibo (controllers/registrar-presenca repo-sessoes ator m)]
-        (http/json-resposta 201 (adapters-out-presenca/recibo-presenca->wire recibo))
-        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+      (try
+        (if-let [recibo (controllers/registrar-presenca repo-sessoes ator m (tempo/agora relogio))]
+          (http/json-resposta 201 (adapters-out-presenca/recibo-presenca->wire recibo))
+          (http/json-resposta 404 {:erro "sessao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/sessao-nao-aceita-presenca (:tipo (ex-data e)))
+            (http/json-resposta 409 {:erro (ex-message e)})
+            (throw e)))))))
 
 (defn- confirmar-presenca-handler
   "POST /sessoes/:id/presenca/confirmar (Onda C3, papel 'vereador'). Sem corpo — `vereador-id` resolvido do
   ator (anti-forja), `fonte`/`tipo`/`modalidade` fixos no controller, `ocorrido-em` = o relogio do servidor
-  (nunca do cliente). Reusa o MESMO wire/out de recibo que a rota da Mesa (`recibo-presenca->wire`, so
-  {:id}). nil (sessao inexistente OU ator sem cadastro de vereador) -> 404."
+  (nunca do cliente). Reusa o MESMO wire/out de recibo que a rota da Mesa (`recibo-presenca->wire`).
+  nil (sessao inexistente OU ator sem cadastro de vereador) -> 404.
+
+  O MESMO 409 da rota da Mesa: uma porta self-service sem o gate seria o buraco por outra fechadura."
   [repo-sessoes resolver-vereador relogio]
   (fn [req]
     (let [ator (:ator req)
           sid  (adapters-in/id-param->uuid (get-in req [:path-params :id]))
           instante (tempo/agora relogio)]
-      (if-let [recibo (controllers/confirmar-minha-presenca repo-sessoes resolver-vereador ator sid instante)]
-        (http/json-resposta 201 (adapters-out-presenca/recibo-presenca->wire recibo))
-        (http/json-resposta 404 {:erro "sessao nao encontrada, ou vereador sem cadastro vinculado neste ente"})))))
+      (try
+        (if-let [recibo (controllers/confirmar-minha-presenca repo-sessoes resolver-vereador ator sid instante)]
+          (http/json-resposta 201 (adapters-out-presenca/recibo-presenca->wire recibo))
+          (http/json-resposta 404 {:erro "sessao nao encontrada, ou vereador sem cadastro vinculado neste ente"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/sessao-nao-aceita-presenca (:tipo (ex-data e)))
+            (http/json-resposta 409 {:erro (ex-message e)})
+            (throw e)))))))
 
 (defn- inscrever-handler
   "POST /sessoes/:id/inscricoes (§22.6 eixo F, tribuna). adapters/in coage o :id + valida o corpo {vereador-id,
@@ -385,7 +403,7 @@
      [auth (it/exige-papel "secretario") it/corpo-json (transicionar-handler repo-sessoes)]
      :route-name :sessoes/transicionar]
     ["/sessoes/:id/presenca" :post
-     [auth (it/exige-papel "secretario") it/corpo-json (registrar-presenca-handler repo-sessoes)]
+     [auth (it/exige-papel "secretario") it/corpo-json (registrar-presenca-handler repo-sessoes relogio)]
      :route-name :sessoes/registrar-presenca]
     ["/sessoes/:id/presenca/confirmar" :post
      [auth papel-vereador (confirmar-presenca-handler repo-sessoes resolver-vereador relogio)]

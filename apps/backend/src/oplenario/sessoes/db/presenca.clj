@@ -15,17 +15,23 @@
 
 (defn registrar-evento!
   "Grava um evento de presenca (append-only). `ocorrido-em` = instante de DOMINIO (quando ocorreu); o
-  efetivado_em=now() e' o instante de AUDIT. Valida tipo/modalidade/fonte (fail-closed). Devolve {:id}."
+  efetivado_em=now() e' o instante de AUDIT. Valida tipo/modalidade/fonte (fail-closed).
+
+  Devolve {:id :ocorrido-em :registrado-em} — os DOIS carimbos, por RETURNING (o `registrado_em` e' DEFAULT
+  do banco; le-lo de volta e' a unica forma de o recibo dizer a verdade sem uma segunda consulta). O par
+  existe no contrato porque, enquanto nao houver um tipo de evento de RETIFICACAO, e' o unico jeito de o
+  juridico distinguir 'o vereador saiu as 15h' de 'a secretaria digitou as 17h um registro das 15h'."
   [tx {:keys [id ente-id sessao-id vereador-id tipo modalidade fonte ocorrido-em created-by]}]
   (logic/validar-tipo-evento tipo)
   (logic/validar-modalidade-presenca modalidade)
   (logic/validar-fonte fonte)
-  (jdbc/execute-one! tx
-    (sql/format {:insert-into :sessoes.presenca_evento
-                 :values [{:id id :ente_id ente-id :sessao_id sessao-id :vereador_id vereador-id
-                           :tipo tipo :modalidade modalidade :fonte fonte :ocorrido_em ocorrido-em
-                           :created_by created-by :efetivado_em [:now]}]}))
-  {:id id})
+  (comum/linha->kebab
+   (jdbc/execute-one! tx
+     (sql/format {:insert-into :sessoes.presenca_evento
+                  :values [{:id id :ente_id ente-id :sessao_id sessao-id :vereador_id vereador-id
+                            :tipo tipo :modalidade modalidade :fonte fonte :ocorrido_em ocorrido-em
+                            :created_by created-by :efetivado_em [:now]}]
+                  :returning [:id :ocorrido_em :registrado_em]}))))
 
 (defn listar-eventos
   "Todos os eventos da sessao em ordem cronologica (auditoria; a presenca corrente e' derivada, nao listada)."
