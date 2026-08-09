@@ -166,6 +166,44 @@
   consulta replica esta ordem em SQL, fonte_precedencia — migration 20260620000056)."
   {"manual_secretaria" 4 "painel_eletronico" 3 "autoatendimento" 2 "inferida_por_voto" 1 "inferida_por_tribuna" 1})
 
+;; ---------- a ORDEM canonica do "ultimo evento por vereador" (UMA so, para todos os caminhos) ----------
+;; Isto e' DADO (mapa/vetor HoneySQL), nao I/O: nenhuma conexao, nenhum efeito — o ns segue puro. Mora aqui
+;; porque ha' DOIS consumidores em camadas que nao podem se importar (ADR-0001 §3-bis: `db/` nao e' importado
+;; por `relacoes/`), e ambos ja' dependem deste ns:
+;;   - `sessoes/relacoes/presenca` — o caminho que o MOTOR de votacao alcanca por nome (quorum da policy);
+;;   - `sessoes/db/presenca`       — o caminho do agregado publicado no dashboard da Mesa.
+;; Enquanto a ordem era transcrita a mao nos dois lugares, divergir era um `git blame` de distancia: a TELA
+;; diria um quorum e a POLICY usaria outro na MESMA sessao. Uma fonte so' fecha a porta.
+
+(def ordem-ultimo-evento
+  "Ordem canonica do 'ultimo evento por vereador': mais recente primeiro, desempatando MESMO instante pela
+  precedencia da fonte (manual>painel>autoatendimento>inferida, materializada em `fonte_precedencia` —
+  generated stored, indexada) e por fim `id`. NAO leva `vereador_id`: quem particiona (DISTINCT ON) ou fixa
+  o vereador (WHERE) o antepoe."
+  [[:ocorrido_em :desc] [:fonte_precedencia :desc] [:id :desc]])
+
+(def projecao-ultimo-evento-padrao
+  "Projecao default da subquery: o que os agregadores de quorum precisam."
+  [:vereador_id :tipo :modalidade])
+
+(defn ultimos-eventos-por-vereador-q
+  "Subquery (mapa HoneySQL puro): o ULTIMO evento por vereador na sessao ate' `:instante`, um por vereador
+  (DISTINCT ON vereador na `ordem-ultimo-evento`).
+
+  `:ente-id` e' OPCIONAL — e' o que permite os dois consumidores conviverem sem mudar comportamento: a camada
+  de RELACAO nao carrega `ente` na assinatura (a Casa = a tx, FORCE RLS isola) e o omite; a camada `db/` o
+  passa como defense-in-depth (ente_id em toda query, ver a docstring daquele ns). Presente ou ausente, a
+  ORDEM e' a mesma — e' esse o ponto.
+
+  `:projecao` default = `projecao-ultimo-evento-padrao`; quem filtra a query externa por outra coluna (ex.:
+  `ente_id`) tem de pedi-la aqui, senao ela nao existe na subquery."
+  [{:keys [sessao-id instante ente-id projecao]}]
+  {:select-distinct-on (into [[:vereador_id]] (or projecao projecao-ultimo-evento-padrao))
+   :from [:sessoes.presenca_evento]
+   :where (into (if (some? ente-id) [:and [:= :ente_id ente-id]] [:and])
+                [[:= :sessao_id sessao-id] [:<= :ocorrido_em instante]])
+   :order-by (into [[:vereador_id :asc]] ordem-ultimo-evento)})
+
 (defn presente-por-tipo?
   "O vereador esta presente se o tipo do seu ultimo evento e' positivo (entrada/retorno/mudanca_modalidade)?"
   [tipo]

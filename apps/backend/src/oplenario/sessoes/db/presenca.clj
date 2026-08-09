@@ -105,15 +105,17 @@
   "Total de vereadores com ULTIMO evento positivo ate' `instante` (qualquer modalidade) — generaliza
   contar-presentes de sessoes/relacoes/presenca (que filtra por modalidade) p/ o agregado cross-sessao.
   `ente-id` filtra tanto a subquery quanto a contagem externa — defense-in-depth mesmo sob RLS (ente_id em
-  toda query, ver docstring do ns)."
+  toda query, ver docstring do ns).
+
+  A subquery vem da fonte CANONICA (`logic/ultimos-eventos-por-vereador-q`), a mesma que o caminho do motor
+  de votacao usa: a ordem de desempate do 'ultimo evento por vereador' era transcrita a mao aqui, e divergir
+  dela faria a TELA anunciar um quorum e a POLICY usar outro na MESMA sessao."
   [tx ente-id sessao-id instante]
   (-> (jdbc/execute-one! tx
         (sql/format {:select [[[:count :*] :n]]
-                     :from [[{:select-distinct-on [[:vereador_id] :vereador_id :tipo :ente_id]
-                              :from [:sessoes.presenca_evento]
-                              :where [:and [:= :ente_id ente-id] [:= :sessao_id sessao-id] [:<= :ocorrido_em instante]]
-                              :order-by [[:vereador_id :asc] [:ocorrido_em :desc]
-                                         [:fonte_precedencia :desc] [:id :desc]]}
+                     :from [[(logic/ultimos-eventos-por-vereador-q
+                              {:sessao-id sessao-id :instante instante :ente-id ente-id
+                               :projecao [:vereador_id :tipo :ente_id]})
                              :u]]
                      :where [:and [:= :u.ente_id ente-id] [:in :u.tipo positivos]]}))
       comum/linha->kebab :n))
