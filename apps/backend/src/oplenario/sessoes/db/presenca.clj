@@ -37,6 +37,33 @@
                   :where [:and [:= :ente_id ente-id] [:= :sessao_id sessao-id]]
                   :order-by [[:ocorrido_em :asc] [:id :asc]]}))))
 
+(defn presenca-corrente
+  "O ULTIMO evento de presenca de CADA vereador da sessao ate' `instante` — uma linha por vereador
+  (DISTINCT ON), o insumo cru da CHAMADA. Nao confundir com `listar-eventos`: aquele e' a AUDITORIA (todos os
+  eventos, append-only), este e' o estado corrente derivado. A presenca corrente nunca e' materializada.
+
+  A subquery vem da fonte CANONICA (`logic/ultimos-eventos-por-vereador-q`), a mesma de `presentes-na-sessao`
+  aqui e dos agregadores de `relacoes/presenca` que o motor de votacao alcanca por nome. Transcrever a ordem
+  de desempate a mao aqui seria a TERCEIRA copia — e a fatia que fechou essa porta existiu porque divergir
+  fazia a TELA anunciar um quorum e a POLICY usar outro na MESMA sessao. A chamada e' justamente a tela.
+
+  A PROJECAO e' mais larga que a dos agregadores porque a chamada mostra mais que 'presente s/n':
+  `fonte` distingue o que a Mesa marcou do que o vereador confirmou pelo celular (e e' o que sustenta a
+  precedencia visivel), e `ocorrido_em` (instante de DOMINIO) e `registrado_em` (AUDIT) sao tempos
+  diferentes que a ata precisa separar — 'entrou as 10h' nao e' 'a secretaria digitou as 11h'.
+
+  Indice: `idx_presenca_evento_corrente (ente_id, sessao_id, vereador_id, ocorrido_em DESC,
+  fonte_precedencia DESC, id DESC)` casa o WHERE e o ORDER BY inteiros (IndexScan+Unique, sem Sort). O
+  INCLUDE cobre so' (tipo, modalidade), entao `fonte`/`registrado_em` custam a visita ao heap que os
+  agregadores nao pagam — tradeoff aceito: sao as linhas de UMA sessao (dezenas), nao um agregado
+  cross-sessao, e sem esses campos a chamada nao existe."
+  [tx ente-id sessao-id instante]
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format (logic/ultimos-eventos-por-vereador-q
+                  {:sessao-id sessao-id :instante instante :ente-id ente-id
+                   :projecao [:vereador_id :tipo :modalidade :fonte :ocorrido_em :registrado_em]})))))
+
 ;; ---------- justificativa_ausencia (ato apartado, state machine) ----------
 
 (defn criar-justificativa!
@@ -54,6 +81,27 @@
      (sql/format {:select [:id :ente_id :sessao_id :vereador_id :estado :motivo :decidido_por :decidido_em :lock_version]
                   :from [:sessoes.justificativa_ausencia]
                   :where [:and [:= :ente_id ente-id] [:= :id id]]}))))
+
+(defn listar-justificativas-da-sessao
+  "As justificativas de ausencia da sessao — o TERCEIRO insumo da chamada (cadastro + evento + este ato). E'
+  por linha de vereador, nao um agregado: a derivacao precisa saber se a justificativa daquele vereador esta
+  `aprovada` (ausencia justificada) ou ainda `pendente`, que e' um estado PROPRIO — publicar 'ausente' sobre
+  uma justificativa que a Mesa ainda nao apreciou e' acusacao falsa que vai para a ata.
+
+  `lock_version` entra na projecao porque a borda que DECIDE (Etapa 2) faz CAS com ele; sem devolve-lo aqui
+  a tela precisaria de uma segunda leitura por linha so' para poder deferir. `motivo` e' texto da propria
+  justificativa (nao ha' dado de terceiro aqui) e o consumidor da chamada e' a Mesa, nao o portal publico.
+
+  Servida pelo `idx_justificativa_ausencia_sessao (ente_id, sessao_id)` (mig 0029), que casa o WHERE inteiro.
+  Ordem deterministica por `vereador_id` — a chamada e' conferida linha a linha e nao pode reordenar entre
+  dois carregamentos."
+  [tx ente-id sessao-id]
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select [:id :vereador_id :estado :motivo :decidido_por :decidido_em :lock_version]
+                  :from [:sessoes.justificativa_ausencia]
+                  :where [:and [:= :ente_id ente-id] [:= :sessao_id sessao-id]]
+                  :order-by [[:vereador_id :asc]]}))))
 
 (defn- estado+lock [tx ente-id id]
   (-> (jdbc/execute-one! tx

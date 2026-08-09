@@ -242,6 +242,60 @@
          :where [:= :v.ente_id ente-id]
          :order-by [[:v.nome :asc]]}))))
 
+(defn roster-da-casa
+  "Os vereadores que COMPOEM a Casa em `data` — um por linha, com a identidade que a CHAMADA mostra (nome,
+   nome parlamentar, partido) e o estado do mandato. Ordena por nome (a chamada e' lida em voz alta e
+   conferida linha a linha; ordem instavel entre dois carregamentos e' erro de conferencia).
+
+   POR QUE NAO E' `listar` COM UM PARAMETRO: `listar` existe para a tela de CADASTRO e por isso parte de
+   `cadastros.vereador` com LEFT JOIN — devolve TODO vereador ja' registrado no ente, inclusive o cassado, o
+   renunciado, o que nunca foi empossado e o suplente que nunca foi convocado, cada um com `estado_mandato`
+   nil. E' o comportamento certo la' e o errado aqui: consumida pela chamada, uma Casa de 21 cadeiras
+   listaria 40 nomes. O JOIN aqui e' INNER e o mandato e' filtrado por `estado='vigente'`, entao quem nao
+   compoe a Casa nao produz linha — nao ha' filtro app-side depois, que e' onde a divergencia costuma nascer.
+
+   O PREDICADO E' O MESMO de `relacoes/cadastro.clj` (`tem-mandato-vigente?` / `membros-da-casa`):
+   `estado = 'vigente'` E `vigencia_inicio <= data AND (vigencia_fim IS NULL OR vigencia_fim >= data)`.
+   Isto nao e' coincidencia de escrita e nao pode virar: `membros-da-casa` e' o DENOMINADOR que o motor de
+   votacao usa para decidir se ha' quorum, e estas linhas sao o conjunto sobre o qual a presenca e' contada.
+   Se os dois predicados se separarem, a Mesa le' um numero no telao e a policy decide por outro na MESMA
+   votacao. O `t10-roster-tem-exatamente-as-linhas-que-membros-da-casa-conta` (integracao) e' o cruzado que
+   pina os dois lados.
+
+   O LICENCIADO FICA DE FORA (`estado='licenciado'` != `'vigente'`): durante a licenca quem compoe a Casa e'
+   o suplente, que entra aqui pelo mandato PROPRIO. Contar os dois inflaria o denominador e faria uma sessao
+   legitima parecer sem quorum. Consequencia a conhecer: com este roster o estado `:licenciado` de
+   `sessoes/logic/estado-de-presenca` nao e' alcancavel — mostrar o licenciado na tela (fora da contagem) e'
+   uma leitura ADICIONAL, nao um relaxamento deste predicado.
+
+   `data` e' parametro, nunca `hoje` implicito (disciplina §22.5.3 disc.5): uma chamada e' relida meses
+   depois, e resolver a composicao em 'hoje' faria a ata de junho aparecer com a Casa de julho.
+
+   O LEFT JOIN LATERAL de `listar` vira JOIN LATERAL mas continua LATERAL pelo mesmo motivo dela: escolhe UM
+   vencedor deterministico (mais recente por vigencia_inicio, tie-break por id) e garante uma linha por
+   vereador. O EXCLUDE `uq_mandato_vigente_sem_overlap` (mig 0059) hoje ja' impede dois mandatos 'vigente'
+   sobrepostos do mesmo vereador, mas ele so' cobre linhas EFETIVADAS — o LATERAL e' o que mantem a garantia
+   independente disso. Nao traz o cargo na Mesa (a 2a LATERAL de `listar`): a chamada nao usa, e seria um
+   segundo subplano por vereador num hot-path de sessao ao vivo."
+  [tx ente-id data]
+  (comum/linhas->kebab
+    (jdbc/execute! tx
+      (sql/format
+        {:select [[:v.id :vereador_id] :v.nome :v.nome_parlamentar :m.partido [:m.estado :estado_mandato]]
+         :from [[:cadastros.vereador :v]]
+         :join [[[:lateral
+                  {:select [:mm.partido :mm.estado]
+                   :from [[:cadastros.mandato :mm]]
+                   :where [:and [:= :mm.vereador_id :v.id] [:= :mm.ente_id :v.ente_id]
+                           [:= :mm.estado "vigente"]
+                           [:<= :mm.vigencia_inicio data]
+                           [:or [:is :mm.vigencia_fim nil] [:>= :mm.vigencia_fim data]]]
+                   :order-by [[:mm.vigencia_inicio :desc] [:mm.id]]
+                   :limit 1}]
+                 :m] true]
+         :where [:= :v.ente_id ente-id]
+         :order-by [[:v.nome :asc]]}))))
+
 ;; ---- licenca + suplencia ----
 (defn licencas-de-mandatos
   "As licencas registradas de um CONJUNTO de mandatos (I-5 fatia 3 — os buracos a subtrair da janela de

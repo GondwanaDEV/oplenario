@@ -38,6 +38,13 @@
   ;; §22.6 eixo C — presenca e quorum (camada de fatos)
   (registrar-presenca! [this ente-id m] "Grava evento de presenca append-only (entrada/saida/retorno/mudanca).")
   (listar-presenca [this ente-id sessao-id] "Eventos da sessao em ordem cronologica (auditoria).")
+  (presenca-corrente [this ente-id sessao-id instante]
+    "Ultimo evento de CADA vereador da sessao ate' `instante` (uma linha por vereador) — insumo cru da CHAMADA.")
+  (listar-justificativas [this ente-id sessao-id] "Justificativas de ausencia da sessao (3o insumo da chamada).")
+  (chamada-da-sessao [this ente-id sessao-id instante]
+    "As TRES leituras da chamada (sessao + presenca corrente + justificativas) numa UNICA tx do tenant.
+     nil se a sessao nao existe neste ente (a borda traduz em 404). O roster de `cadastros` NAO entra aqui:
+     e' outro modulo, resolvido por seam no host (§22.10).")
   (resumo-presenca [this ente-id membros-da-casa]
     "Presenca agregada (F7/FE Onda A1) das ultimas 10 sessoes encerradas do tenant.")
   (esta-presente? [this ente-id sessao-id vereador-id instante] "Presenca DERIVADA do ultimo evento ate o instante.")
@@ -138,6 +145,22 @@
              :modalidade (:modalidade m) :fonte (:fonte m) :ocorrido-em (str (:ocorrido-em m))})
           r))))
   (listar-presenca [this ente-id sessao-id] (transacao this ente-id #(presenca/listar-eventos % ente-id sessao-id)))
+  (presenca-corrente [this ente-id sessao-id instante]
+    (transacao this ente-id #(presenca/presenca-corrente % ente-id sessao-id instante)))
+  (listar-justificativas [this ente-id sessao-id]
+    (transacao this ente-id #(presenca/listar-justificativas-da-sessao % ente-id sessao-id)))
+  ;; UMA tx por request (molde de `adicionar-item-na-sessao!`, e o oposto do que `controllers/pauta-da-sessao`
+  ;; faz com tres tx separadas). Aqui a atomicidade nao e' luxo: em tres tx, um vereador pode entrar no
+  ;; plenario entre a leitura dos eventos e a das justificativas e sair na tela PRESENTE *e* com ausencia
+  ;; justificada — uma chamada que nunca existiu em nenhum instante real, publicada em ata. O curto-circuito
+  ;; no `when-let` tambem evita as duas leituras quando a sessao nao existe.
+  (chamada-da-sessao [this ente-id sessao-id instante]
+    (transacao this ente-id
+      (fn [tx]
+        (when-let [s (sessao/buscar tx ente-id sessao-id)]
+          {:sessao s
+           :presencas (presenca/presenca-corrente tx ente-id sessao-id instante)
+           :justificativas (presenca/listar-justificativas-da-sessao tx ente-id sessao-id)}))))
   (resumo-presenca [this ente-id membros-da-casa]
     (transacao this ente-id #(presenca/resumo-presenca % ente-id membros-da-casa 10)))
   (esta-presente? [this ente-id sessao-id vereador-id instante] (transacao this ente-id #(rel-presenca/esta-presente-em? % sessao-id vereador-id instante)))
