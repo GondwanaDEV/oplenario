@@ -335,3 +335,32 @@
    [:linhas [:sequential LinhaChamadaOut]]
    [:quorum ChamadaQuorumOut]
    [:chamadas-conduzidas [:sequential ChamadaConduzidaOut]]])
+
+;; ---------- §22.6 eixo C — a leitura MAGRA de quorum (Etapa 4a) ----------
+
+(def QuorumSessaoOut
+  "So' os NUMEROS do quorum de uma sessao (resposta de GET /sessoes/:id/quorum, Etapa 4a). E' `ChamadaOut`
+  MENOS `linhas` e MENOS `chamadas-conduzidas` — o mesmo `quorum` (ChamadaQuorumOut, produzido pelo mesmo
+  `logic/contar-quorum`) e os mesmos carimbos que o situam no tempo.
+
+  EXISTE POR AUTHZ, nao por payload. `GET /sessoes/:id/chamada` exige o papel 'secretario' na borda porque a
+  sua resposta e' NOMINAL e carrega o `motivo` da justificativa — que pode ser dado de saude (LGPD). Mas o
+  painel do plenario (o telao) abre pelo SSE `/sessoes/:id/plenario`, que nao exige papel algum: quem ve o
+  telao tomava 403 na unica rota que sabia o DENOMINADOR, e a tela mostrava 'N presentes' sem 'de M'.
+  Ampliar a chamada nominal para esse publico levaria o `motivo` junto; emitir uma segunda conta de quorum
+  daria duas aritmeticas da composicao da Casa para a mesma sessao (o defeito que as Etapas 1 e 2 gastaram
+  uma revisao cada para matar). Este contrato e' a terceira saida: MESMA conta, MENOS campos.
+
+  `:closed true` nao e' decoracao aqui — `adapters/out` valida contra ele, entao um campo nominal que
+  reapareca nesta projecao por descuido vira erro de servidor, nao vazamento silencioso.
+
+  Nao carrega `chamadas-conduzidas` de proposito: aquele ato expoe `conduzida-por` (a identidade de quem
+  conduziu), que nao e' necessario para contar cabecas."
+  [:map {:closed true}
+   [:sessao-id :string]
+   [:sessao-estado (km/enum-de logic/estados-sessao)]
+   [:instante :string]
+   [:data-de-composicao :string]
+   [:composicao-resolvida-em :string]
+   [:sem-registro-de-presenca :boolean]
+   [:quorum ChamadaQuorumOut]])

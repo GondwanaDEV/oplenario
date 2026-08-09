@@ -145,3 +145,28 @@
       (throw (ex-info "chamada viola o contrato ChamadaOut (bug de servidor)"
                       {:erros (me/humanize (m/explain wire/ChamadaOut out))})))
     out))
+
+;; ---------- §22.6 eixo C — a leitura MAGRA de quorum (Etapa 4a) ----------
+
+(defn quorum-sessao->wire
+  "O quorum MAGRO de dominio (`sessoes.controllers/quorum-da-sessao`) -> QuorumSessaoOut (validado). Mesmos
+  carimbos e MESMO bloco `quorum` de `chamada->wire`; sem `linhas` e sem `chamadas-conduzidas`.
+
+  A projecao e' feita CAMPO A CAMPO (nunca `dissoc` sobre a chamada inteira): com `dissoc`, um campo nominal
+  acrescentado a `ChamadaOut` amanha passaria a viajar nesta rota por omissao — a lista de exclusao teria de
+  ser mantida a mao, e ninguem lembraria. Assim o default e' NAO expor, e o `:closed true` do contrato
+  transforma qualquer descuido em erro de servidor em vez de vazamento."
+  [{:keys [sessao-id sessao-estado instante data-de-composicao composicao-resolvida-em
+           sem-registro-de-presenca quorum]}]
+  (let [out {:sessao-id (str sessao-id)
+             :sessao-estado sessao-estado
+             :instante (str instante)
+             :data-de-composicao (str data-de-composicao)
+             :composicao-resolvida-em (str composicao-resolvida-em)
+             :sem-registro-de-presenca (boolean sem-registro-de-presenca)
+             :quorum (select-keys quorum [:presentes-plenario :presentes-remoto :membros-da-casa
+                                          :presencas-fora-do-roster])}]
+    (when-not (m/validate wire/QuorumSessaoOut out)
+      (throw (ex-info "quorum viola o contrato QuorumSessaoOut (bug de servidor)"
+                      {:erros (me/humanize (m/explain wire/QuorumSessaoOut out))})))
+    out))

@@ -617,6 +617,26 @@
          ;; sozinho e' cego a essa diferenca (os dois casos produzem zero linhas nele).
          :chamadas-conduzidas (vec chamadas-conduzidas)}))))
 
+(defn quorum-da-sessao
+  "A leitura MAGRA de quorum (Etapa 4a): os NUMEROS da chamada, sem uma linha nominal sequer.
+
+  E' literalmente `chamada-da-sessao` com um `select-keys` na saida — e essa e' a decisao, nao um atalho de
+  implementacao. Escrever aqui uma consulta propria de contagem daria a MESMA sessao duas aritmeticas da
+  composicao da Casa, que e' o defeito que a Etapa 1 (uniao roster+presencas orfas) e a Etapa 2 (denominador
+  congelado do ato de chamada) gastaram uma revisao cada para matar. Reusando a funcao inteira, os dois
+  numeros nao podem divergir: nao ha' um segundo lugar onde divergir. O custo (resolver o roster e derivar
+  as linhas para depois descarta-las) e' o mesmo do GET da chamada e paga essa garantia.
+
+  Herda tambem, de graca, a authz FINA (`pode-ver-sessao?` sobre a sessao lida na MESMA tx), o `instante`
+  congelado de sessao encerrada e o 409 acionavel de sessao sem data marcada.
+
+  Devolve {:sessao-id :sessao-estado :instante :data-de-composicao :composicao-resolvida-em
+  :sem-registro-de-presenca :quorum} ou nil (sessao inexistente -> 404 no diplomat)."
+  [repo-sessoes roster-da-casa ator sessao-id relogio]
+  (some-> (chamada-da-sessao repo-sessoes roster-da-casa ator sessao-id relogio)
+          (select-keys [:sessao-id :sessao-estado :instante :data-de-composicao :composicao-resolvida-em
+                        :sem-registro-de-presenca :quorum])))
+
 ;; ---------- §22.6 eixo C — o ATO da CHAMADA CONDUZIDA (Etapa 2d) ----------
 
 (defn registrar-chamada-conduzida
