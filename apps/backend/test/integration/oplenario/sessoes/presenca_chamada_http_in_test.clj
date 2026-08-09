@@ -132,7 +132,8 @@
     (is (= registrado (:registrado-em l1)))
     (is (= "ausente-justificativa-pendente" (:estado l2))
         "justificativa pendente e' um estado PROPRIO, nao :ausente")
-    (is (= {:estado "pendente" :motivo "Atestado medico"} (:justificativa l2)))
+    (is (= {:estado "pendente" :motivo "Atestado medico" :decidido-em nil} (:justificativa l2))
+        "pendente -> `decidido-em` nil (espelha o CHECK justificativa_decisao_coerente)")
     (is (nil? (:justificativa l1)) "vereador sem justificativa -> nil, nunca omitido/erro")
     (is (= {:presentes-plenario 1 :presentes-remoto 0 :membros-da-casa 2 :presencas-fora-do-roster 0}
            (:quorum body)))))
@@ -246,3 +247,31 @@
         r (pt/response-for (service-fn* #{"secretario"} repo-s nil)
                            :get "/sessoes/nao-e-uuid/chamada" :headers (com-auth (token ente (random-uuid))))]
     (is (= 400 (:status r)) "sessao :id malformado no path -> 400, nunca 500")))
+
+;; ---------- REGRESSAO: a chamada de uma sessao ENCERRADA muda quando a Mesa decide depois ----------
+
+(deftest justificativa-decidida-depois-expoe-quando-foi-decidida
+  ;; MEDIO. `chamada-da-sessao` CONGELA o instante da presenca mas le' a justificativa no estado CORRENTE —
+  ;; e' o efeito desejado (a Mesa aprecia a falta dias depois da sessao). Sem `decidido-em`, porem, a leitura
+  ;; de uma sessao encerrada mudava de conteudo ao longo do tempo sem nenhum sinal: a ata impressa de 12/03
+  ;; dizia "ausente", a tela de 21/03 dizia "ausente-justificado", com o MESMO `instante` congelado, e o
+  ;; juridico nao tinha como saber qual das duas envelheceu. O dado ja vinha do Repo e era descartado na
+  ;; projecao.
+  (let [ente (random-uuid) sid (random-uuid) v (random-uuid)
+        decidido "2026-03-20T18:00:00Z"
+        roster-fn (fn [_ _] [{:vereador-id v :nome "Ana" :nome-parlamentar nil :partido "PDT"
+                              :estado-mandato "vigente" :cargo-mesa nil}])
+        repo-s (fake-repo-sessoes
+                (fn [_ id] (sessao-aberta ente id))
+                (fn [_ _ _]
+                  {:presencas []
+                   :justificativas [{:id (random-uuid) :vereador-id v :estado "aprovada"
+                                     :motivo "Atestado medico" :decidido-por (random-uuid)
+                                     :decidido-em (Instant/parse decidido) :lock-version 1}]}))
+        r (pt/response-for (service-fn* #{"secretario"} repo-s roster-fn)
+                           :get (url sid) :headers (com-auth (token ente (random-uuid))))
+        linha (first (:linhas (ler-json r)))]
+    (is (= 200 (:status r)))
+    (is (= "ausente-justificado" (:estado linha)))
+    (is (= decidido (:decidido-em (:justificativa linha)))
+        "a resposta diz QUANDO a Mesa decidiu — e' o que reconcilia a tela com a ata impressa")))

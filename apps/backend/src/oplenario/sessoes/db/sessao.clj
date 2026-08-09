@@ -50,6 +50,28 @@
      (sql/format {:select colunas :from [:sessoes.sessao]
                   :where [:and [:= :ente_id ente-id] [:= :id id]]}))))
 
+(defn janela-para-registro
+  "Estado + janela (`aberta_em`/`encerrada_em`) da sessao, com LOCK COMPARTILHADO da linha (`FOR SHARE`).
+  Insumo do GATE de escrita de presenca (`logic/motivo-recusa-de-presenca`), sempre lido DENTRO da tx que
+  escreve. Devolve o mapa kebab ou nil (sessao inexistente neste ente).
+
+  O `FOR SHARE` nao e' zelo: sem ele o gate seria um TOCTOU dentro da propria tx. Sob READ COMMITTED, entre
+  este SELECT e o INSERT em `presenca_evento` uma tx concorrente pode COMMITAR o encerramento da sessao, e o
+  evento entra numa sessao ja fechada — o defeito exato que esta fatia fecha, so' que numa janela mais
+  estreita. `FOR SHARE` bloqueia o `SELECT ... FOR UPDATE` de `transicionar!` ate' o commit desta tx; na
+  ordem inversa, este SELECT espera e (por EvalPlanQual) re-le a linha JA encerrada. Sem inversao de ordem
+  de lock entre os dois caminhos (ambos travam a sessao primeiro), logo sem deadlock."
+  [tx ente-id id]
+  (comum/linha->kebab
+   (jdbc/execute-one! tx
+     ;; `agendada_para` entra na projecao (revisao da Etapa 2): o PISO da janela deixou de ser `aberta_em` e
+     ;; passou a ser o DIA CIVIL da sessao (`logic/piso-da-janela-de-presenca`), que sai de `aberta_em` OU de
+     ;; `agendada_para` — sem esta coluna, uma sessao ainda `agendada` ficaria sem piso nenhum, que era
+     ;; exatamente o buraco apontado (o estado em que a chamada de quorum acontece).
+     (sql/format {:select [:id :estado :aberta_em :encerrada_em :agendada_para] :from [:sessoes.sessao]
+                  :where [:and [:= :ente_id ente-id] [:= :id id]]
+                  :for :share}))))
+
 (defn listar-por-sessao-legislativa [tx ente-id sessao-legislativa-id]
   (comum/linhas->kebab
    (jdbc/execute! tx

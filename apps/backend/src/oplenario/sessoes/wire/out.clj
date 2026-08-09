@@ -35,11 +35,79 @@
    [:para (km/enum-de logic/estados-sessao)]])
 
 (def PresencaReciboOut
-  "Recibo do registro de presenca (resposta 201 de POST /sessoes/:id/presenca). So o `id` do evento gravado — o
-  canal SSE do plenario ja recebeu o fato (presenca.registrada) p/ o quorum ao vivo; este recibo confirma ao
-  chamador. NAO expoe internos."
+  "Recibo do registro de presenca (resposta 201 de POST /sessoes/:id/presenca e de /presenca/confirmar). O `id`
+  do evento gravado + os DOIS carimbos de tempo. O canal SSE do plenario ja recebeu o fato
+  (presenca.registrada) p/ o quorum ao vivo; este recibo confirma ao chamador. NAO expoe internos.
+
+  `ocorrido-em` = a hora do FATO (o instante de DOMINIO, ecoado como o servidor o aceitou — util justamente
+  porque o servidor pode RECUSAR uma hora fora da janela da sessao); `registrado-em` = a hora do REGISTRO
+  (carimbo de AUDIT do banco, quando o sistema soube). Os dois viajam juntos porque, enquanto nao existir um
+  tipo de evento de RETIFICACAO, esse par e' a UNICA forma de o juridico distinguir 'o vereador saiu as 15h'
+  de 'o servidor corrigiu as 17h um registro das 15h'. Espelha `desde`/`registrado-em` de LinhaChamadaOut —
+  o mesmo par, na leitura."
   [:map {:closed true}
-   [:id :string]])
+   [:id :string]
+   [:ocorrido-em :string]
+   [:registrado-em :string]])
+
+(def PresencaLoteReciboOut
+  "Resposta 201 de POST /sessoes/:id/presenca/lote (Etapa 2c). Os N recibos do lote, na MESMA ORDEM dos
+  `registros` do corpo (o cliente casa `recibos[i]` com `registros[i]` por posicao — o lote inteiro entrou
+  numa unica transacao, entao a ordem e' estavel e nao ha' recibo parcial). Cada recibo e' o MESMO shape de
+  PresencaReciboOut: o lote agrega N atos, nao inventa um vocabulario de saida novo."
+  [:map {:closed true}
+   [:recibos [:sequential PresencaReciboOut]]])
+
+;; ---------- §22.6 eixo C — justificativa de ausencia (Etapa 2 da chamada) ----------
+;; Estes tres contratos EXPOEM `lock-version`, e sao a excecao consciente a regra do cabecalho deste ns. A
+;; razao: aqui o token de CAS nao e' interno — e' PARTE DO PROTOCOLO da decisao (PATCH .../decisao exige o
+;; lock que o cliente leu). Sem devolve-lo, a tela precisaria de uma leitura extra por linha so' para poder
+;; deferir, e a alternativa (aceitar decisao sem CAS) e' a que perde a decisao de um membro da Mesa em
+;; silencio. Mesmo desenho de `legislativo/wire/out/documento` e `.../parecer`.
+;; `motivo` viaja nestes contratos e SO' nestes: rotas autenticadas, papel exigido na borda, e nenhum evento
+;; de dominio o carrega (LGPD — pode ser dado de saude).
+
+(def JustificativaAbertaOut
+  "Recibo da abertura de justificativa (resposta 201 de POST /sessoes/:id/justificativas e de
+  POST /sessoes/:id/minha-justificativa). Devolve o recurso criado com o estado ('pendente' — quem abre nao decide) e ja'
+  com o `lock-version`, p/ a Mesa poder decidir sem uma segunda leitura. NAO ecoa o `motivo`: o cliente
+  acabou de envia-lo, e nao ha' ganho em fazer dado sensivel trafegar de volta."
+  [:map {:closed true}
+   [:id :string]
+   [:sessao-id :string]
+   [:vereador-id :string]
+   [:estado (km/enum-de logic/estados-justificativa)]
+   [:lock-version :int]])
+
+(def LinhaJustificativaOut
+  "Uma linha de GET /sessoes/:id/justificativas — o ato apartado por vereador, com o token de CAS.
+  `decidido-por`/`decidido-em` sao nil enquanto 'pendente' e NOT NULL depois (CHECK
+  justificativa_decisao_coerente da mig 0029), entao a nulidade aqui e' o espelho fiel do estado."
+  [:map {:closed true}
+   [:id :string]
+   [:vereador-id :string]
+   [:estado (km/enum-de logic/estados-justificativa)]
+   [:motivo :string]
+   [:decidido-por [:maybe :string]]
+   [:decidido-em [:maybe :string]]
+   [:lock-version :int]])
+
+(def JustificativasOut
+  "Resposta de GET /sessoes/:id/justificativas (papel 'secretario'): as justificativas da sessao, em ordem
+  deterministica por `vereador-id` (a Mesa confere linha a linha e a lista nao pode reordenar entre dois
+  carregamentos). NAO e' read-model publico — `motivo` pode ser dado de saude."
+  [:map {:closed true}
+   [:sessao-id :string]
+   [:justificativas [:sequential LinhaJustificativaOut]]])
+
+(def JustificativaDecididaOut
+  "Recibo da decisao (resposta 200 de PATCH /sessoes/:id/justificativas/:jid/decisao). Carrega a
+  `justificativa-id` + o par `de`/`para` — espelha `TransicaoSessaoOut`/`DesistenciaInscricaoOut`, os outros
+  dois recibos de maquina de estados do modulo. NAO ecoa o motivo."
+  [:map {:closed true}
+   [:justificativa-id :string]
+   [:de (km/enum-de logic/estados-justificativa)]
+   [:para (km/enum-de logic/estados-justificativa)]])
 
 (def InscricaoReciboOut
   "Recibo da inscricao de orador (resposta 201 de POST /sessoes/:id/inscricoes). `id` da inscricao + `ordem` na
@@ -202,7 +270,16 @@
    [:registrado-em [:maybe :string]]
    [:justificativa [:maybe [:map {:closed true}
                             [:estado (km/enum-de logic/estados-justificativa)]
-                            [:motivo :string]]]]])
+                            [:motivo :string]
+                            ;; `decidido-em` (revisao da Etapa 2): a chamada CONGELA o instante da presenca,
+                            ;; mas le' a justificativa no estado CORRENTE — e' o efeito desejado (a Mesa
+                            ;; aprecia a falta dias DEPOIS da sessao). Sem este campo, porem, reabrir a
+                            ;; chamada de uma sessao encerrada devolvia um estado diferente do da ata
+                            ;; impressa, com o MESMO `instante` congelado e nenhum sinal de quando mudou: o
+                            ;; juridico via divergencia e nao tinha como saber qual das duas envelheceu. Com
+                            ;; ele, a tela marca "justificada apos o encerramento, em <data>" e as duas
+                            ;; reconciliam. nil enquanto 'pendente' (CHECK justificativa_decisao_coerente).
+                            [:decidido-em [:maybe :string]]]]]])
 
 (def ChamadaQuorumOut
   "A contagem de quorum DESTA chamada (§22.6 eixo C) — numerador (presentes por modalidade) e denominador
@@ -217,6 +294,24 @@
    [:membros-da-casa :int]
    [:presencas-fora-do-roster :int]])
 
+;; ---------- §22.6 eixo C — o ATO da CHAMADA CONDUZIDA (Etapa 2d) ----------
+
+(def ChamadaConduzidaOut
+  "Um ATO de chamada conduzida (Etapa 2d): quando foi conduzida, quem conduziu, e quantos membros a Casa
+  tinha NAQUELE instante (`membros-da-casa`, o denominador CONGELADO — pode diferir do quorum atual se a
+  composicao mudou entre uma chamada e outra na MESMA sessao). Usada em DOIS lugares com o MESMO shape
+  (`recibo-presenca->wire`/`recibos-presenca-lote->wire` sao o precedente): o recibo de
+  `POST /sessoes/:id/chamada` (201) e cada item da lista `ChamadaOut.chamadas-conduzidas`. Existe para
+  DISTINGUIR 'ninguem chamou ainda' (lista vazia) de 'a chamada ocorreu e a Casa toda faltou' (lista
+  nao-vazia com zero presentes) — o read-model de presenca_evento sozinho e' cego a essa diferenca (os dois
+  casos produzem zero linhas nele)."
+  [:map {:closed true}
+   [:id :string]
+   [:conduzida-por :string]
+   [:membros-da-casa :int]
+   [:ocorrido-em :string]
+   [:registrado-em :string]])
+
 (def ChamadaOut
   "A CHAMADA da sessao (resposta de GET /sessoes/:id/chamada, §22.6 eixo C). `data-de-composicao` e' a data
   civil que resolveu QUEM compoe a Casa (`aberta-em` se a sessao ja abriu, senao `agendada-para` — nunca
@@ -227,7 +322,9 @@
   corrente: 'agora' enquanto a sessao esta aberta/suspensa; `encerrada-em` (congelado) se ja fechou.
   `sem-registro-de-presenca` = true quando NENHUM vereador tem QUALQUER evento na sessao inteira — distinto
   de uma linha individual `:ausente` (que so' diz que AQUELE vereador nao tem evento; a Casa toda pode ter
-  registro e um so' faltar)."
+  registro e um so' faltar). `chamadas-conduzidas` (Etapa 2d) e' o que desambigua ESSE `sem-registro-de-
+  presenca=true`: vazio = 'ninguem conduziu a chamada ainda'; nao-vazio = 'a chamada aconteceu e a Casa toda
+  faltou'."
   [:map {:closed true}
    [:sessao-id :string]
    [:sessao-estado (km/enum-de logic/estados-sessao)]
@@ -236,4 +333,5 @@
    [:composicao-resolvida-em :string]
    [:sem-registro-de-presenca :boolean]
    [:linhas [:sequential LinhaChamadaOut]]
-   [:quorum ChamadaQuorumOut]])
+   [:quorum ChamadaQuorumOut]
+   [:chamadas-conduzidas [:sequential ChamadaConduzidaOut]]])

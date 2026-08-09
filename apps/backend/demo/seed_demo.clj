@@ -91,9 +91,12 @@
            vers     (repeatedly 7 random-uuid)]
        (println "injetando presenças (entrada) ...")
        (doseq [v vers]
-         (repo/registrar-presenca! r ente {:id (random-uuid) :sessao-id sessao :vereador-id v
-                                           :tipo "entrada" :modalidade "plenario" :fonte "manual_secretaria"
-                                           :ocorrido-em (Instant/now) :created-by v})
+         ;; `ocorrido-em` e `agora` sao o MESMO instante lido uma vez: o gate de janela recusa hora futura, e
+         ;; duas leituras separadas do relogio poderiam inverter a ordem entre elas.
+         (let [t (Instant/now)]
+           (repo/registrar-presenca! r ente {:id (random-uuid) :sessao-id sessao :vereador-id v
+                                             :tipo "entrada" :modalidade "plenario" :fonte "manual_secretaria"
+                                             :ocorrido-em t :agora t :created-by v}))
          (Thread/sleep 600))
        (println "inscrição + início de fala (tribuna) ...")
        (let [orad (first vers)]

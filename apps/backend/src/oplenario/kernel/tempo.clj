@@ -48,7 +48,13 @@
       request); (b) o CONSUMER de `presenca.registrada` em `transparencia/components/repositorio.clj` — a
   data civil que vira a coluna `transparencia.sessao_com_chamada.data`; (c) `sessoes/controllers.clj` — a
   CHAMADA (§22.6 eixo C, fatia 1b-WIRE): a DATA DE REFERENCIA do roster (`aberta-em`/`agendada-para` da
-  propria sessao -> data civil), tambem valor efemero de request, nunca persistido.
+  propria sessao -> data civil), tambem valor efemero de request, nunca persistido; (d)
+  `sessoes/logic.clj` — o PISO da janela de ESCRITA de presenca (§22.6 eixo C, revisao da Etapa 2):
+  `piso-da-janela-de-presenca` recusa um `ocorrido-em` que nao caia no DIA CIVIL da sessao. Este quarto
+  consumidor e' o de MAIOR raio de dano se o fuso estiver errado — nao deforma um relatorio, RECUSA uma
+  escrita: numa Casa a oeste (UTC-5), uma presenca legitima registrada de madrugada cairia fora do dia
+  calculado em Fortaleza e voltaria 409 no meio da chamada ao vivo. E' mais um argumento para o fuso virar
+  atributo do ente antes do primeiro cliente fora do CE.
 
   O QUE ESTA CONSTANTE RESOLVE: ate aqui o fuso era literal espalhado pelas bordas; o host
   (`rotas.clj`) tinha DOIS. Ter um lugar so' e' o pre-requisito de transformar o fuso em

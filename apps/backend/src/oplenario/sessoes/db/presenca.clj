@@ -15,17 +15,52 @@
 
 (defn registrar-evento!
   "Grava um evento de presenca (append-only). `ocorrido-em` = instante de DOMINIO (quando ocorreu); o
-  efetivado_em=now() e' o instante de AUDIT. Valida tipo/modalidade/fonte (fail-closed). Devolve {:id}."
+  efetivado_em=now() e' o instante de AUDIT. Valida tipo/modalidade/fonte (fail-closed).
+
+  Devolve {:id :ocorrido-em :registrado-em} — os DOIS carimbos, por RETURNING (o `registrado_em` e' DEFAULT
+  do banco; le-lo de volta e' a unica forma de o recibo dizer a verdade sem uma segunda consulta). O par
+  existe no contrato porque, enquanto nao houver um tipo de evento de RETIFICACAO, e' o unico jeito de o
+  juridico distinguir 'o vereador saiu as 15h' de 'a secretaria digitou as 17h um registro das 15h'."
   [tx {:keys [id ente-id sessao-id vereador-id tipo modalidade fonte ocorrido-em created-by]}]
   (logic/validar-tipo-evento tipo)
   (logic/validar-modalidade-presenca modalidade)
   (logic/validar-fonte fonte)
-  (jdbc/execute-one! tx
-    (sql/format {:insert-into :sessoes.presenca_evento
-                 :values [{:id id :ente_id ente-id :sessao_id sessao-id :vereador_id vereador-id
-                           :tipo tipo :modalidade modalidade :fonte fonte :ocorrido_em ocorrido-em
-                           :created_by created-by :efetivado_em [:now]}]}))
-  {:id id})
+  (comum/linha->kebab
+   (jdbc/execute-one! tx
+     (sql/format {:insert-into :sessoes.presenca_evento
+                  :values [{:id id :ente_id ente-id :sessao_id sessao-id :vereador_id vereador-id
+                            :tipo tipo :modalidade modalidade :fonte fonte :ocorrido_em ocorrido-em
+                            :created_by created-by :efetivado_em [:now]}]
+                  :returning [:id :ocorrido_em :registrado_em]}))))
+
+(defn registrar-lote!
+  "Grava N eventos de presenca (append-only) NUM UNICO statement `INSERT ... VALUES` multi-linha (Etapa 2c) —
+  a atomicidade real vem de rodar dentro da MESMA `tx` que o caller (Repo-Component) ja abre para o lote
+  inteiro (o gate de estado/janela roda ANTES de qualquer INSERT); este statement unico e' so' a forma mais
+  barata de inserir N linhas, nao o mecanismo de atomicidade.
+
+  Valida tipo/modalidade/fonte de TODO `registros` ANTES do INSERT (fail-closed sobre o lote inteiro, nao so'
+  a primeira linha ruim — um `doseq` que parasse na 2a linha ruim ainda teria inserido a 1a).
+
+  Devolve os recibos na MESMA ORDEM de `registros` — casados por `:id` (gerado pelo caller, um por linha) e
+  NAO pela ordem crua do RETURNING: Postgres tipicamente preserva a ordem do VALUES num INSERT simples sem
+  ON CONFLICT, mas casar por `:id` nao depende dessa garantia implicita."
+  [tx ente-id sessao-id registros]
+  (doseq [{:keys [tipo modalidade fonte]} registros]
+    (logic/validar-tipo-evento tipo)
+    (logic/validar-modalidade-presenca modalidade)
+    (logic/validar-fonte fonte))
+  (let [linhas (comum/linhas->kebab
+                (jdbc/execute! tx
+                  (sql/format {:insert-into :sessoes.presenca_evento
+                               :values (mapv (fn [{:keys [id vereador-id tipo modalidade fonte ocorrido-em created-by]}]
+                                               {:id id :ente_id ente-id :sessao_id sessao-id :vereador_id vereador-id
+                                                :tipo tipo :modalidade modalidade :fonte fonte :ocorrido_em ocorrido-em
+                                                :created_by created-by :efetivado_em [:now]})
+                                             registros)
+                               :returning [:id :ocorrido_em :registrado_em]})))
+        por-id (into {} (map (juxt :id identity)) linhas)]
+    (mapv (fn [{:keys [id]}] (por-id id)) registros)))
 
 (defn listar-eventos
   "Todos os eventos da sessao em ordem cronologica (auditoria; a presenca corrente e' derivada, nao listada)."
@@ -66,14 +101,40 @@
 
 ;; ---------- justificativa_ausencia (ato apartado, state machine) ----------
 
+(defn buscar-justificativa-do-vereador
+  "A justificativa daquele vereador NAQUELA sessao (a UNIQUE (ente, sessao, vereador) garante no maximo uma),
+  ou nil. Existe p/ o 409 da abertura ser ACIONAVEL — devolver o id da que ja' existe, em vez de so' dizer
+  'conflito' e deixar a tela sem para onde mandar o operador. Servida pelo indice UNIQUE da mig 0029."
+  [tx ente-id sessao-id vereador-id]
+  (comum/linha->kebab
+   (jdbc/execute-one! tx
+     (sql/format {:select [:id :estado :lock_version]
+                  :from [:sessoes.justificativa_ausencia]
+                  :where [:and [:= :ente_id ente-id] [:= :sessao_id sessao-id]
+                          [:= :vereador_id vereador-id]]}))))
+
 (defn criar-justificativa!
-  "Cria a justificativa de ausencia 'pendente' (a UNIQUE barra segunda p/ o mesmo vereador na sessao). Devolve {:id}."
+  "Cria a justificativa de ausencia 'pendente'. Devolve {:id :estado :lock-version} por RETURNING — o
+  `lock_version` e' DEFAULT do banco, e le-lo de volta e' o que permite ao 201 ja' entregar o token de CAS
+  (a Mesa decide sem uma segunda leitura) sem que a borda ADIVINHE o zero.
+
+  DUAS camadas contra a duplicata, e elas nao sao redundantes:
+    - a UNIQUE (ente_id, sessao_id, vereador_id) da mig 0029 e' a GARANTIA (checar-e-inserir sozinho e' uma
+      corrida: duas requisicoes simultaneas leem 'nao existe' e as duas inserem);
+    - o pre-check aqui e' a MENSAGEM (o 23505 nao diz QUAL linha colidiu, e depois dele a tx esta abortada —
+      nao da' para consultar). Ele perde a corrida em silencio e tudo bem: quem perde cai no 23505, que o
+      Repo-Component traduz na mesma tag `:conflito/justificativa`, so' sem o id da existente."
   [tx {:keys [id ente-id sessao-id vereador-id motivo created-by]}]
-  (jdbc/execute-one! tx
-    (sql/format {:insert-into :sessoes.justificativa_ausencia
-                 :values [{:id id :ente_id ente-id :sessao_id sessao-id :vereador_id vereador-id
-                           :estado "pendente" :motivo motivo :created_by created-by :efetivado_em [:now]}]}))
-  {:id id})
+  (when-let [existente (buscar-justificativa-do-vereador tx ente-id sessao-id vereador-id)]
+    (throw (ex-info (logic/mensagem-de-recusa-de-justificativa :ja-existe)
+                    {:tipo :conflito/justificativa :motivo :ja-existe
+                     :justificativa-id (:id existente) :estado (:estado existente)})))
+  (comum/linha->kebab
+   (jdbc/execute-one! tx
+     (sql/format {:insert-into :sessoes.justificativa_ausencia
+                  :values [{:id id :ente_id ente-id :sessao_id sessao-id :vereador_id vereador-id
+                            :estado "pendente" :motivo motivo :created_by created-by :efetivado_em [:now]}]
+                  :returning [:id :estado :lock_version]}))))
 
 (defn buscar-justificativa [tx ente-id id]
   (comum/linha->kebab
@@ -111,8 +172,12 @@
 
 (defn decidir-justificativa!
   "Decide a justificativa: estado alvo aprovada|indeferida (terminal), via maquina logic/transicao-justificativa-valida?
-  (fail-closed) com CAS por lock_version, carimbando decisor + instante. Lanca em estado-alvo invalido, transicao
-  invalida, conflito de lock ou inexistente. Devolve {:de :para}."
+  (fail-closed) com CAS por lock_version, carimbando decisor + instante. Devolve {:de :para}.
+
+  TODO modo de falha do USUARIO usa a MESMA tag `:tipo :conflito/justificativa` (inexistente, lock stale,
+  transicao invalida) — e' isso que permite ao handler HTTP fazer um `catch` unico -> 409, sem uma arvore de
+  tags por caso. Estado-alvo fora dos terminais e `decidido-por` nil sao BUG DE SERVIDOR (a borda ja' os
+  barra): ficam sem tag, viram 500 opaco, que e' o certo — nao ha' nada que o operador possa corrigir."
   [tx {:keys [ente-id id estado decidido-por lock-version]}]
   (when-not (contains? logic/estados-justificativa-terminais estado)
     (throw (ex-info "decidir-justificativa!: estado alvo deve ser aprovada|indeferida" {:estado estado})))
@@ -120,18 +185,23 @@
     (throw (ex-info "decidir-justificativa!: decidido-por e' obrigatorio (trilha de quem decidiu)" {:id id})))
   (let [{atual :estado db-lock :lock-version} (estado+lock tx ente-id id)]
     (when (nil? atual)
-      (throw (ex-info "decidir-justificativa!: justificativa inexistente" {:id id :ente-id ente-id})))
+      (throw (ex-info (logic/mensagem-de-recusa-de-justificativa :inexistente)
+                      {:tipo :conflito/justificativa :motivo :inexistente :id id :ente-id ente-id})))
     (when (not= db-lock lock-version)
-      (throw (ex-info "decidir-justificativa!: conflito de lock_version" {:id id :esperado lock-version :atual db-lock})))
+      (throw (ex-info (logic/mensagem-de-recusa-de-justificativa :lock-stale)
+                      {:tipo :conflito/justificativa :motivo :lock-stale :id id})))
     (when-not (logic/transicao-justificativa-valida? atual estado)
-      (throw (ex-info "decidir-justificativa!: transicao de estado invalida" {:id id :de atual :para estado})))
+      (throw (ex-info (logic/mensagem-de-recusa-de-justificativa :transicao-invalida)
+                      {:tipo :conflito/justificativa :motivo :transicao-invalida :id id :de atual :para estado})))
     (let [r (jdbc/execute-one! tx
               (sql/format {:update :sessoes.justificativa_ausencia
                            :set {:estado estado :decidido_por decidido-por :decidido_em [:now]
                                  :updated_by decidido-por :atualizado_em [:now] :lock_version [:+ :lock_version 1]}
                            :where [:and [:= :ente_id ente-id] [:= :id id] [:= :lock_version lock-version]]}))]
+      ;; rede de seguranca redundante (corrida entre o `estado+lock` FOR UPDATE e o UPDATE) — mesma tag.
       (when (zero? (:next.jdbc/update-count r 0))
-        (throw (ex-info "decidir-justificativa!: conflito de lock_version ou inexistente" {:id id :lock-version lock-version})))
+        (throw (ex-info (logic/mensagem-de-recusa-de-justificativa :lock-stale)
+                        {:tipo :conflito/justificativa :motivo :lock-stale :id id :lock-version lock-version})))
       {:de atual :para estado})))
 
 ;; ---------- presenca agregada (read-model barato, FE Onda A1) ----------
