@@ -240,7 +240,96 @@
                         :limit 1}]
                       :cc] true]
          :where [:= :v.ente_id ente-id]
-         :order-by [[:v.nome :asc]]}))))
+         ;; desempate por id: `nome` NAO e' unico (homonimia e' comum em camara municipal — o que distingue
+         ;; e' o nome parlamentar). Sem ele o Postgres nao garante ordem relativa entre linhas de mesma
+         ;; chave de sort e o plano pode mudar entre duas execucoes identicas: o secretario que confere a
+         ;; lista impressa contra a tela marca o vereador errado, e a ata sai com a presenca do homonimo.
+         :order-by [[:v.nome :asc] [:v.id :asc]]}))))
+
+(defn roster-da-casa
+  "Os vereadores que COMPOEM a Casa em `data` — um por linha, com a identidade que a CHAMADA mostra (nome,
+   nome parlamentar, partido) e o estado do mandato. Ordena por nome (a chamada e' lida em voz alta e
+   conferida linha a linha; ordem instavel entre dois carregamentos e' erro de conferencia).
+
+   POR QUE NAO E' `listar` COM UM PARAMETRO: `listar` existe para a tela de CADASTRO e por isso parte de
+   `cadastros.vereador` com LEFT JOIN — devolve TODO vereador ja' registrado no ente, inclusive o cassado, o
+   renunciado, o que nunca foi empossado e o suplente que nunca foi convocado, cada um com `estado_mandato`
+   nil. E' o comportamento certo la' e o errado aqui: consumida pela chamada, uma Casa de 21 cadeiras
+   listaria 40 nomes. O JOIN aqui e' INNER e o mandato e' filtrado por estado + janela, entao quem nao tem
+   assento nao produz linha — nao ha' filtro app-side depois, que e' onde a divergencia costuma nascer.
+
+   O PREDICADO DE JANELA E' O MESMO de `relacoes/cadastro.clj` (`tem-mandato-vigente?`/`membros-da-casa`):
+   `vigencia_inicio <= data AND (vigencia_fim IS NULL OR vigencia_fim >= data)`; o de ESTADO e' um
+   superconjunto deliberado (`vigente` + `licenciado`, ver abaixo).
+   Isto nao e' coincidencia de escrita e nao pode virar: `membros-da-casa` e' o DENOMINADOR que o motor de
+   votacao usa para decidir se ha' quorum, e estas linhas sao o conjunto sobre o qual a presenca e' contada.
+   Se os dois predicados se separarem, a Mesa le' um numero no telao e a policy decide por outro na MESMA
+   votacao. O `t10-roster-tem-exatamente-as-linhas-que-membros-da-casa-conta` (integracao) e' o cruzado que
+   pina os dois lados.
+
+   O LICENCIADO APARECE, MARCADO, E FICA FORA DO DENOMINADOR (revisao da Etapa 1 da chamada). O predicado
+   do mandato e' `estado IN ('vigente','licenciado')`, mas quem COMPOE a Casa para efeito de quorum segue
+   sendo so' o vigente: `sessoes/logic/contar-quorum` remove `:licenciado` de `membros-da-casa`, entao o
+   denominador continua identico a `membros-da-casa` de `relacoes/cadastro.clj` (o cruzado T10 pina isso
+   comparando as linhas MENOS os licenciados). Por que a linha precisa existir: enquanto o roster so'
+   devolvia vigentes, o estado `:licenciado` e o sinalizador `inconsistencia-cadastro` de
+   `sessoes/logic/estado-de-presenca` eram INALCANCAVEIS por dado real — o alarme 'o cadastro diz
+   licenciado mas ele esta no plenario', que so' existe para o servidor ir consertar o cadastro, nunca
+   dispararia em producao (e os testes unitarios daquele ramo cobriam caminho que a borda nao produzia).
+
+   `data` e' parametro, nunca `hoje` implicito (disciplina §22.5.3 disc.5): uma chamada e' relida meses
+   depois, e resolver a composicao em 'hoje' faria a ata de junho aparecer com a Casa de julho.
+
+   O LEFT JOIN LATERAL de `listar` vira JOIN LATERAL mas continua LATERAL pelo mesmo motivo dela: escolhe UM
+   vencedor deterministico (mais recente por vigencia_inicio, tie-break por id) e garante uma linha por
+   vereador. O EXCLUDE `uq_mandato_vigente_sem_overlap` (mig 0059) hoje ja' impede dois mandatos 'vigente'
+   sobrepostos do mesmo vereador, mas ele so' cobre linhas EFETIVADAS — o LATERAL e' o que mantem a garantia
+   independente disso.
+
+   TRAZ o cargo na Mesa (2a LEFT JOIN LATERAL, COPIA LITERAL da de `listar`): a fatia 1b-WIRE da chamada
+   precisa dele (LinhaChamadaOut.cargo-mesa, p/ o telao distinguir o presidente/secretario na lista) — a
+   decisao anterior de omitir por custo de um segundo subplano por vereador num hot-path ao vivo NAO se
+   sustenta mais: a chamada e' lida uma vez por abertura de sessao, nao a cada evento de presenca, e o
+   plano e' o MESMO da tela de cadastro (`listar`) que ja' paga este custo."
+  [tx ente-id data]
+  (comum/linhas->kebab
+    (jdbc/execute! tx
+      (sql/format
+        {:select [[:v.id :vereador_id] :v.nome :v.nome_parlamentar :m.partido [:m.estado :estado_mandato]
+                  [:cc.cargo :cargo_mesa]]
+         :from [[:cadastros.vereador :v]]
+         :join [[[:lateral
+                  {:select [:mm.partido :mm.estado]
+                   :from [[:cadastros.mandato :mm]]
+                   :where [:and [:= :mm.vereador_id :v.id] [:= :mm.ente_id :v.ente_id]
+                           [:in :mm.estado ["vigente" "licenciado"]]
+                           [:<= :mm.vigencia_inicio data]
+                           [:or [:is :mm.vigencia_fim nil] [:>= :mm.vigencia_fim data]]]
+                   ;; 'vigente' vence 'licenciado' quando os dois cobrem a data (o EXCLUDE da mig 0059 so'
+                   ;; barra dois VIGENTES sobrepostos): quem tem mandato vigente nao e' licenciado.
+                   :order-by [[[:case [:= :mm.estado "vigente"] 0 :else 1]]
+                              [:mm.vigencia_inicio :desc] [:mm.id]]
+                   :limit 1}]
+                 :m] true]
+         :left-join [[[:lateral
+                       {:select [:cc2.cargo]
+                        :from [[:cadastros.comissao_cargo :cc2]]
+                        :join [[:cadastros.comissao :mesa2]
+                               [:and [:= :mesa2.id :cc2.comissao_id] [:= :mesa2.tipo "mesa"] [:= :mesa2.ente_id :v.ente_id]
+                                [:<= :mesa2.vigencia_inicio data]
+                                [:or [:is :mesa2.vigencia_fim nil] [:>= :mesa2.vigencia_fim data]]]]
+                        :where [:and [:= :cc2.vereador_id :v.id] [:= :cc2.ente_id :v.ente_id]
+                                [:<= :cc2.vigencia_inicio data]
+                                [:or [:is :cc2.vigencia_fim nil] [:>= :cc2.vigencia_fim data]]]
+                        :order-by [[:cc2.vigencia_inicio :desc] [:cc2.id]]
+                        :limit 1}]
+                      :cc] true]
+         :where [:= :v.ente_id ente-id]
+         ;; desempate por id: `nome` NAO e' unico (homonimia e' comum em camara municipal — o que distingue
+         ;; e' o nome parlamentar). Sem ele o Postgres nao garante ordem relativa entre linhas de mesma
+         ;; chave de sort e o plano pode mudar entre duas execucoes identicas: o secretario que confere a
+         ;; lista impressa contra a tela marca o vereador errado, e a ata sai com a presenca do homonimo.
+         :order-by [[:v.nome :asc] [:v.id :asc]]}))))
 
 ;; ---- licenca + suplencia ----
 (defn licencas-de-mandatos

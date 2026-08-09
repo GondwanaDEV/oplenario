@@ -180,6 +180,13 @@
                           (repo-cadastros-comp/membros-da-casa repo-cadastros ente-id
                                                                 (tempo/hoje (tempo/relogio-sistema)
                                                                             tempo/zona-civil-padrao)))
+        ;; §22.6 eixo C (fatia 1b-WIRE): a CHAMADA precisa do roster NUMA DATA QUE NAO E' HOJE (a data da
+        ;; sessao sendo lida, resolvida pelo controller de sessoes a partir da propria sessao) — por isso
+        ;; a aridade leva `data` como parametro, ao contrario de `membros-da-casa`/`resolver-vereador-fn`
+        ;; acima (que fecham 'hoje' aqui dentro): reabrir a chamada de uma sessao do mes passado com 'hoje'
+        ;; fechado no seam mostraria a composicao de HOJE, nao a de entao. Mesma inversao de dependencia
+        ;; sobre cadastros (sessoes nunca importa cadastros, §22.10); irmao LITERAL de membros-da-casa.
+        roster-da-casa-fn (fn [ente-id data] (repo-cadastros-comp/roster-da-casa repo-cadastros ente-id data))
         ;; Onda B Slice 2: uf/nome-do-municipio do ente, p/ o legislativo computar a URN em protocolar! —
         ;; mesma inversao de dependencia de consultar-sessao/membros-da-casa/info-ente (§22.10).
         resolver-municipio (fn [ente-id] (repo-cadastros-comp/uf-e-municipio repo-cadastros ente-id))
@@ -261,7 +268,8 @@
           ["/painel-secretaria" :get [auth (it/exige-papel "secretario") http/painel-secretaria]
            :route-name :painel-secretaria]}
         (into (sessoes-http/rotas {:auth auth :repo-sessoes repo-sessoes :objeto-store objeto-store
-                                   :resolver-vereador resolver-vereador-fn :relogio relogio-producao}))
+                                   :resolver-vereador resolver-vereador-fn :relogio relogio-producao
+                                   :roster-da-casa roster-da-casa-fn}))
         (into (legislativo-http/rotas {:auth auth :repo-legislativo repo-legislativo
                                        :consultar-sessao consultar-sessao
                                        :resolver-municipio resolver-municipio

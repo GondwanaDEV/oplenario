@@ -46,7 +46,9 @@
   `tempo-test/consumidores-de-zona-civil-padrao-estao-DECLARADOS-na-docstring-da-constante`):
   (a) o HOST, `rotas.clj` — data civil de hoje para decidir mandato/comissao VIGENTE (valor efemero, de
       request); (b) o CONSUMER de `presenca.registrada` em `transparencia/components/repositorio.clj` — a
-  data civil que vira a coluna `transparencia.sessao_com_chamada.data`.
+  data civil que vira a coluna `transparencia.sessao_com_chamada.data`; (c) `sessoes/controllers.clj` — a
+  CHAMADA (§22.6 eixo C, fatia 1b-WIRE): a DATA DE REFERENCIA do roster (`aberta-em`/`agendada-para` da
+  propria sessao -> data civil), tambem valor efemero de request, nunca persistido.
 
   O QUE ESTA CONSTANTE RESOLVE: ate aqui o fuso era literal espalhado pelas bordas; o host
   (`rotas.clj`) tinha DOIS. Ter um lugar so' e' o pre-requisito de transformar o fuso em

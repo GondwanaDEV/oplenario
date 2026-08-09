@@ -170,3 +170,70 @@
    [:media-percentual [:maybe :int]]
    [:sessoes-consideradas :int]
    [:membros-da-casa :int]])
+
+;; ---------- §22.6 eixo C — a CHAMADA (resposta de GET /sessoes/:id/chamada) ----------
+
+(def LinhaChamadaOut
+  "Uma linha da CHAMADA (§22.6 eixo C). `estado` e' o vocabulario PROPRIO da chamada
+  (`logic/estados-chamada`) — keyword no dominio (sem CHECK de banco que o espelhe: e' DERIVADO, nao
+  persistido), string aqui via `(map name ...)` (a serializacao JSON exige string). `inconsistencia-cadastro`
+  = o cadastro contradiz o fato observado (licenciado-mas-presente, ou evento de quem nao tem assento) — e'
+  o UNICO canal pelo qual esse conflito chega ao servidor que pode corrigi-lo (`logic/estado-de-presenca`),
+  por isso fica no contrato (nao e' detalhe de tela a se perder). `sem-assento` = a linha nao veio do roster
+  (evento de vereador que `cadastros` nao situa na Casa naquela data): ela CONTA no numerador do quorum,
+  porque e' o que o motor de votacao conta, e por isso `nome` e' nullable (nao ha' identidade a exibir).
+  `desde`/`fonte`/`registrado-em` vem do ULTIMO evento de presenca do vereador
+  (todos nil se ele nao tem nenhum na sessao): `desde` = o instante de DOMINIO (`ocorrido-em`, quando
+  ENTROU/SAIU de fato); `registrado-em` = o instante de AUDIT (quando o evento foi DIGITADO) — sao tempos
+  diferentes que a ata precisa distinguir ('entrou as 10h' != 'a secretaria digitou as 11h'). `justificativa`
+  so' expoe {:estado :motivo}: o `id`/`lock-version` da decisao sao insumo da Etapa 2 (decidir), que esta
+  borda de LEITURA nao serve."
+  [:map {:closed true}
+   [:vereador-id :string]
+   [:nome [:maybe :string]]
+   [:nome-parlamentar [:maybe :string]]
+   [:partido [:maybe :string]]
+   [:cargo-mesa [:maybe :string]]
+   [:estado (km/enum-de (map name logic/estados-chamada))]
+   [:inconsistencia-cadastro :boolean]
+   [:sem-assento :boolean]
+   [:desde [:maybe :string]]
+   [:fonte [:maybe (km/enum-de logic/fontes-presenca)]]
+   [:registrado-em [:maybe :string]]
+   [:justificativa [:maybe [:map {:closed true}
+                            [:estado (km/enum-de logic/estados-justificativa)]
+                            [:motivo :string]]]]])
+
+(def ChamadaQuorumOut
+  "A contagem de quorum DESTA chamada (§22.6 eixo C) — numerador (presentes por modalidade) e denominador
+  (`membros-da-casa`, que EXCLUI licenciados E linhas sem assento: `logic/contar-quorum`;
+  `presencas-fora-do-roster` publica quantas linhas sem assento entraram — e' por isso que os presentes
+  PODEM passar de `membros-da-casa`, e a desigualdade e' o sintoma visivel de cadastro furado).
+  Distinto de `PresencaResumoOut`: aquele
+  e' MEDIA cross-sessao (F7/Onda A1); este e' a contagem literal desta chamada, num instante."
+  [:map {:closed true}
+   [:presentes-plenario :int]
+   [:presentes-remoto :int]
+   [:membros-da-casa :int]
+   [:presencas-fora-do-roster :int]])
+
+(def ChamadaOut
+  "A CHAMADA da sessao (resposta de GET /sessoes/:id/chamada, §22.6 eixo C). `data-de-composicao` e' a data
+  civil que resolveu QUEM compoe a Casa (`aberta-em` se a sessao ja abriu, senao `agendada-para` — nunca
+  'hoje' implicito: reabrir a chamada de uma sessao do mes passado nao pode mostrar a composicao de hoje).
+  `composicao-resolvida-em` e' o instante de AUDIT em que este calculo RODOU (o relogio do servidor no
+  momento da leitura, distinto de `instante`). Os dois juntos sao o que permite a folha (Etapa 5) e a ata
+  futura serem FIEIS em vez de readivinhar a composicao. `instante` e' o instante de AVALIACAO da presenca
+  corrente: 'agora' enquanto a sessao esta aberta/suspensa; `encerrada-em` (congelado) se ja fechou.
+  `sem-registro-de-presenca` = true quando NENHUM vereador tem QUALQUER evento na sessao inteira — distinto
+  de uma linha individual `:ausente` (que so' diz que AQUELE vereador nao tem evento; a Casa toda pode ter
+  registro e um so' faltar)."
+  [:map {:closed true}
+   [:sessao-id :string]
+   [:sessao-estado (km/enum-de logic/estados-sessao)]
+   [:instante :string]
+   [:data-de-composicao :string]
+   [:composicao-resolvida-em :string]
+   [:sem-registro-de-presenca :boolean]
+   [:linhas [:sequential LinhaChamadaOut]]
+   [:quorum ChamadaQuorumOut]])

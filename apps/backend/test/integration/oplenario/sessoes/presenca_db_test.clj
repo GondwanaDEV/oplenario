@@ -130,6 +130,56 @@
           (is (= 0 (rel-sessoes/presentes-plenario tx sid t1115)) "A migrou; C saiu -> plenario vazio")
           (is (= 2 (rel-sessoes/presentes-remoto   tx sid t1115)) "A e B no remoto"))))))
 
+;; ---------- a ORDEM canonica do "ultimo evento por vereador" e' UMA so ----------
+
+(deftest ordem-do-ultimo-evento-e-a-mesma-no-motor-e-no-dashboard
+  ;; REDE DE SEGURANCA (fatia 1a): existem DOIS caminhos que derivam "o ultimo evento por vereador":
+  ;;   (a) sessoes/relacoes/presenca — `presentes-plenario`/`presentes-remoto`/`esta-presente-em?`, o caminho
+  ;;       que o MOTOR de votacao alcanca por nome (quorum da policy);
+  ;;   (b) sessoes/db/presenca/presentes-na-sessao — o caminho do AGREGADO publicado no dashboard da Mesa.
+  ;; Se a ordem de desempate divergir entre os dois, a TELA diz um quorum e a POLICY usa outro na MESMA
+  ;; sessao — o pior bug possivel nesta area. Este teste ancora os numeros dos dois caminhos no MESMO dado.
+  (let [ente (random-uuid)
+        a (random-uuid) b (random-uuid) c (random-uuid) d (random-uuid) e (random-uuid) f (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [sid (nova-sessao! tx ente)
+              t1020 (Instant/parse "2026-06-20T10:20:00Z")
+              db-presentes #(#'presenca/presentes-na-sessao tx ente sid %)]
+          ;; A: presente no plenario. B: presente no remoto. C: entrou e saiu (ausente as 10:30).
+          (ev! tx ente sid a {:modalidade "plenario" :ocorrido-em t10})
+          (ev! tx ente sid b {:modalidade "remoto"   :ocorrido-em t10})
+          (ev! tx ente sid c {:modalidade "plenario" :ocorrido-em t10})
+          (ev! tx ente sid c {:tipo "saida" :modalidade "plenario" :ocorrido-em t1020})
+          ;; D: conflito de MESMO instante — inferida diz saida, manual diz entrada -> manual vence -> presente.
+          (ev! tx ente sid d {:tipo "saida"   :fonte "inferida_por_voto" :modalidade "plenario" :ocorrido-em t10})
+          (ev! tx ente sid d {:tipo "entrada" :fonte "manual_secretaria" :modalidade "plenario" :ocorrido-em t10})
+          ;; E: o inverso — painel diz entrada, manual diz saida -> manual vence -> AUSENTE. E' este caso que
+          ;; separa "ordena por fonte_precedencia" de "ordena so por ocorrido_em/id" nos dois caminhos.
+          (ev! tx ente sid e {:tipo "entrada" :fonte "painel_eletronico" :modalidade "plenario" :ocorrido-em t10})
+          (ev! tx ente sid e {:tipo "saida"   :fonte "manual_secretaria" :modalidade "plenario" :ocorrido-em t10})
+
+          (is (= 2 (rel-sessoes/presentes-plenario tx sid t1030)) "plenario: A e D (C saiu, E perdeu p/ manual)")
+          (is (= 1 (rel-sessoes/presentes-remoto   tx sid t1030)) "remoto: B")
+          (is (= 3 (db-presentes t1030)) "o caminho do dashboard conta os MESMOS 3 (qualquer modalidade)")
+          (is (= (+ (rel-sessoes/presentes-plenario tx sid t1030)
+                    (rel-sessoes/presentes-remoto   tx sid t1030))
+                 (db-presentes t1030))
+              "motor e dashboard nao podem divergir")
+
+          ;; F: empate TOTAL (mesmo instante, MESMA fonte) — quem vence e' o id, e a ordenacao de uuid do
+          ;; Postgres nao e' a do java.util.UUID: nao da p/ prever o vencedor daqui. O que TEM de valer e' que
+          ;; os TRES caminhos escolham o MESMO evento.
+          (ev! tx ente sid f {:tipo "entrada" :modalidade "plenario" :ocorrido-em t10})
+          (ev! tx ente sid f {:tipo "saida"   :modalidade "plenario" :ocorrido-em t10})
+          (let [f-presente? (rel-sessoes/esta-presente-em? tx sid f t1030)
+                plen (rel-sessoes/presentes-plenario tx sid t1030)
+                remo (rel-sessoes/presentes-remoto   tx sid t1030)]
+            (is (= (+ 3 (if f-presente? 1 0)) (+ plen remo))
+                "desempate por id: o agregador escolhe o mesmo evento que esta-presente-em?")
+            (is (= (+ plen remo) (db-presentes t1030))
+                "desempate por id: o dashboard escolhe o mesmo evento que o motor")))))))
+
 (deftest presenca-e-append-only
   (let [ente (random-uuid) ver (random-uuid)]
     (tenancy/com-tenant* *ds* ente

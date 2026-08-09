@@ -330,6 +330,26 @@
             (http/json-resposta 409 {:erro "segmento ja vinculado ou lock-version desatualizado"})
             (throw e)))))))
 
+(defn- chamada-handler
+  "GET /sessoes/:id/chamada (§22.6 eixo C). adapters/in coage o :id; o controller carrega+autoriza a sessao,
+  resolve a data de referencia (roster) + o instante de avaliacao (presenca), cruza roster x presenca
+  corrente x justificativas (`roster-da-casa`, seam injetado do host sobre cadastros) e deriva estado+quorum
+  por vereador; adapters/out projeta. nil (sessao inexistente) -> 404. Sessao agendada SEM data marcada
+  (`agendada-para` e' opcional na API e nullable na coluna) -> 409 ACIONAVEL, nunca o 500 'erro interno' do
+  interceptor global: quem agendou sem marcar a data precisa saber que e' isso que falta."
+  [repo-sessoes roster-da-casa relogio]
+  (fn [req]
+    (let [ator (:ator req)
+          id   (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (try
+        (if-let [chamada (controllers/chamada-da-sessao repo-sessoes roster-da-casa ator id relogio)]
+          (http/json-resposta 200 (adapters-out-presenca/chamada->wire chamada))
+          (http/json-resposta 404 {:erro "sessao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/sessao-sem-data (:tipo (ex-data e)))
+            (http/json-resposta 409 {:erro "sessao sem data marcada: informe a data da sessao antes de fazer a chamada"})
+            (throw e)))))))
+
 (defn- listar-gravacoes-handler
   "GET /sessoes/:id/gravacao. adapters/in coage o :id; controller carrega+autoriza a sessao e lista os
   segmentos vinculados; adapters/out projeta (filtra internos). nil (sessao inexistente) -> 404."
@@ -345,11 +365,14 @@
   "Fragmento de rotas do modulo (table syntax Pedestal). Recebe o interceptor `auth` (compartilhado), o
   `repo-sessoes` (Repo-Component) + o `objeto-store` (p/ a ingestao de gravacao) + `resolver-vereador`/
   `relogio` (Onda C3, borda self-service `/presenca/confirmar` — identidade->vereador-id + relogio do
-  servidor, injetados pelo host por inversao de dependencia) e devolve as rotas-dado. `oplenario.rotas` funde
-  este fragmento ao conjunto. POST exige a authz GROSSA (papel 'secretario', exceto `/presenca/confirmar`
-  que exige 'vereador'); a ingestao NAO usa corpo-json (o corpo e' binario); GET so autentica (a camada fina
-  decide no controller)."
-  [{:keys [auth repo-sessoes objeto-store resolver-vereador relogio]}]
+  servidor, injetados pelo host por inversao de dependencia) + `roster-da-casa` (§22.6 eixo C, borda da
+  CHAMADA — `[ente-id data]` -> as linhas da Casa em `data`, seam injetado do host sobre `cadastros`; este
+  ns nunca importa cadastros, §22.10) e devolve as rotas-dado. `oplenario.rotas` funde este fragmento ao
+  conjunto. POST exige a authz GROSSA (papel 'secretario', exceto `/presenca/confirmar` que exige
+  'vereador'); a ingestao NAO usa corpo-json (o corpo e' binario); GET so autentica (a camada fina decide no
+  controller) — EXCETO `/chamada`, que exige 'secretario' na borda (leitura operacional da Mesa de conducao,
+  nao um read-model publico)."
+  [{:keys [auth repo-sessoes objeto-store resolver-vereador relogio roster-da-casa]}]
   (let [papel-vereador (it/exige-papel "vereador")]
    #{["/sessoes"     :post [auth (it/exige-papel "secretario") it/corpo-json (agendar-handler repo-sessoes)]
      :route-name :sessoes/agendar]
@@ -367,6 +390,9 @@
     ["/sessoes/:id/presenca/confirmar" :post
      [auth papel-vereador (confirmar-presenca-handler repo-sessoes resolver-vereador relogio)]
      :route-name :sessoes/confirmar-minha-presenca]
+    ["/sessoes/:id/chamada" :get
+     [auth (it/exige-papel "secretario") (chamada-handler repo-sessoes roster-da-casa relogio)]
+     :route-name :sessoes/chamada]
     ["/sessoes/:id/inscricoes" :post
      [auth (it/exige-papel "secretario") it/corpo-json (inscrever-handler repo-sessoes)]
      :route-name :sessoes/inscrever-orador]

@@ -29,6 +29,11 @@
   (buscar-vereador [this ente-id id])
   (listar-vereadores [this ente-id data]
     "Vereadores da Casa com mandato+cargo-na-Mesa vigentes em `data` (Task 1, `vereador/listar`).")
+  (roster-da-casa [this ente-id data]
+    "ADITIVO (`listar-vereadores` e `membros-da-casa` ficam INTACTOS): as LINHAS dos vereadores que compoem
+     a Casa em `data` — o mesmo predicado de mandato vigente que `membros-da-casa` CONTA, exposto como
+     conjunto. E' o insumo do roster da CHAMADA; `listar-vereadores` nao serve (devolve todo vereador
+     cadastrado, inclusive sem mandato). Ver `vereador/roster-da-casa` p/ o porque completo.")
   (ficha-vereador [this ente-id id data]
     "Leitura composta NUMA UNICA tx (mesma disciplina de ficha-completa-da-proposicao):
      {:vereador :mandato :legislatura :comissoes}, ou nil se o vereador nao existe.")
@@ -93,6 +98,7 @@
   (criar-vereador! [this ente-id v] (transacao this ente-id #(vereador/inserir! % v)))
   (buscar-vereador [this ente-id id] (transacao this ente-id #(vereador/buscar % ente-id id)))
   (listar-vereadores [this ente-id data] (transacao this ente-id #(vereador/listar % ente-id data)))
+  (roster-da-casa [this ente-id data] (transacao this ente-id #(vereador/roster-da-casa % ente-id data)))
   (ficha-vereador [this ente-id id data]
     (transacao this ente-id
       (fn [tx]

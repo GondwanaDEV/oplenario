@@ -18,11 +18,10 @@
 
 (set! *warn-on-reflection* true)
 
-;; Ordem canonica do "ultimo evento por vereador": mais recente primeiro, desempatando MESMO instante pela
-;; precedencia da fonte (manual>painel>inferida, materializada em `fonte_precedencia` — generated stored,
-;; indexada) e por fim id. UMA constante p/ todos os caminhos — divergir seria incoerencia de quorum.
-(def ^:private ordem-corrente
-  [[:ocorrido_em :desc] [:fonte_precedencia :desc] [:id :desc]])
+;; A ordem canonica do "ultimo evento por vereador" e a subquery que a aplica vivem em `sessoes/logic`
+;; (`ordem-ultimo-evento` / `ultimos-eventos-por-vereador-q`) — sao dado puro, e sao compartilhadas com
+;; `sessoes/db/presenca` (o caminho do dashboard da Mesa), que nao pode importar esta camada (ADR-0001
+;; §3-bis). UMA fonte p/ todos os caminhos — divergir seria incoerencia de quorum entre a tela e a policy.
 
 (def ^:private positivos (vec (sort logic/tipos-presenca-positiva)))
 
@@ -36,25 +35,19 @@
                                :from [:sessoes.presenca_evento]
                                :where [:and [:= :sessao_id sessao-id] [:= :vereador_id vereador-id]
                                        [:<= :ocorrido_em instante]]
-                               :order-by ordem-corrente
+                               :order-by logic/ordem-ultimo-evento
                                :limit 1}))
                 comum/linha->kebab)]
     (boolean (and row (logic/presente-por-tipo? (:tipo row))))))
 
-(defn- ultimos-eventos-q
-  "Subquery: o ULTIMO evento por vereador ate `instante` (DISTINCT ON vereador), na ordem canonica. Projeta
-  vereador/tipo/modalidade — base dos agregadores de quorum. RLS isola a Casa (sem filtro `ente_id`: a
-  assinatura de relacao nao carrega `ente`)."
-  [sessao-id instante]
-  {:select-distinct-on [[:vereador_id] :vereador_id :tipo :modalidade]
-   :from [:sessoes.presenca_evento]
-   :where [:and [:= :sessao_id sessao-id] [:<= :ocorrido_em instante]]
-   :order-by (into [[:vereador_id :asc]] ordem-corrente)})
-
-(defn- contar-presentes [tx sessao-id instante modalidade]
+(defn- contar-presentes
+  "Conta os vereadores cujo ULTIMO evento ate `instante` e' positivo na `modalidade`. A subquery vem da fonte
+  canonica (`logic/ultimos-eventos-por-vereador-q`), sem `:ente-id`: a assinatura de relacao nao carrega
+  `ente` (RLS isola a Casa)."
+  [tx sessao-id instante modalidade]
   (-> (jdbc/execute-one! tx
         (sql/format {:select [[[:count :*] :n]]
-                     :from [[(ultimos-eventos-q sessao-id instante) :u]]
+                     :from [[(logic/ultimos-eventos-por-vereador-q {:sessao-id sessao-id :instante instante}) :u]]
                      :where [:and [:in :u.tipo positivos] [:= :u.modalidade modalidade]]}))
       comum/linha->kebab :n))
 

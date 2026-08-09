@@ -166,6 +166,44 @@
   consulta replica esta ordem em SQL, fonte_precedencia — migration 20260620000056)."
   {"manual_secretaria" 4 "painel_eletronico" 3 "autoatendimento" 2 "inferida_por_voto" 1 "inferida_por_tribuna" 1})
 
+;; ---------- a ORDEM canonica do "ultimo evento por vereador" (UMA so, para todos os caminhos) ----------
+;; Isto e' DADO (mapa/vetor HoneySQL), nao I/O: nenhuma conexao, nenhum efeito — o ns segue puro. Mora aqui
+;; porque ha' DOIS consumidores em camadas que nao podem se importar (ADR-0001 §3-bis: `db/` nao e' importado
+;; por `relacoes/`), e ambos ja' dependem deste ns:
+;;   - `sessoes/relacoes/presenca` — o caminho que o MOTOR de votacao alcanca por nome (quorum da policy);
+;;   - `sessoes/db/presenca`       — o caminho do agregado publicado no dashboard da Mesa.
+;; Enquanto a ordem era transcrita a mao nos dois lugares, divergir era um `git blame` de distancia: a TELA
+;; diria um quorum e a POLICY usaria outro na MESMA sessao. Uma fonte so' fecha a porta.
+
+(def ordem-ultimo-evento
+  "Ordem canonica do 'ultimo evento por vereador': mais recente primeiro, desempatando MESMO instante pela
+  precedencia da fonte (manual>painel>autoatendimento>inferida, materializada em `fonte_precedencia` —
+  generated stored, indexada) e por fim `id`. NAO leva `vereador_id`: quem particiona (DISTINCT ON) ou fixa
+  o vereador (WHERE) o antepoe."
+  [[:ocorrido_em :desc] [:fonte_precedencia :desc] [:id :desc]])
+
+(def projecao-ultimo-evento-padrao
+  "Projecao default da subquery: o que os agregadores de quorum precisam."
+  [:vereador_id :tipo :modalidade])
+
+(defn ultimos-eventos-por-vereador-q
+  "Subquery (mapa HoneySQL puro): o ULTIMO evento por vereador na sessao ate' `:instante`, um por vereador
+  (DISTINCT ON vereador na `ordem-ultimo-evento`).
+
+  `:ente-id` e' OPCIONAL — e' o que permite os dois consumidores conviverem sem mudar comportamento: a camada
+  de RELACAO nao carrega `ente` na assinatura (a Casa = a tx, FORCE RLS isola) e o omite; a camada `db/` o
+  passa como defense-in-depth (ente_id em toda query, ver a docstring daquele ns). Presente ou ausente, a
+  ORDEM e' a mesma — e' esse o ponto.
+
+  `:projecao` default = `projecao-ultimo-evento-padrao`; quem filtra a query externa por outra coluna (ex.:
+  `ente_id`) tem de pedi-la aqui, senao ela nao existe na subquery."
+  [{:keys [sessao-id instante ente-id projecao]}]
+  {:select-distinct-on (into [[:vereador_id]] (or projecao projecao-ultimo-evento-padrao))
+   :from [:sessoes.presenca_evento]
+   :where (into (if (some? ente-id) [:and [:= :ente_id ente-id]] [:and])
+                [[:= :sessao_id sessao-id] [:<= :ocorrido_em instante]])
+   :order-by (into [[:vereador_id :asc]] ordem-ultimo-evento)})
+
 (defn presente-por-tipo?
   "O vereador esta presente se o tipo do seu ultimo evento e' positivo (entrada/retorno/mudanca_modalidade)?"
   [tipo]
@@ -203,6 +241,184 @@
   "A transicao de->para da justificativa e' permitida? (`de`/`para` = estados; terminais nao saem). Puro."
   [de para]
   (contains? (get transicoes-justificativa de #{}) para))
+
+(defn validar-estado-justificativa
+  "Fail-closed: lanca se `estado` nao e' pendente|aprovada|indeferida (espelha o CHECK da mig 0029)."
+  [estado]
+  (when-not (contains? estados-justificativa estado)
+    (throw (ex-info "estado de justificativa invalido" {:estado estado :validos estados-justificativa}))))
+
+;; ---------- §22.6 eixo C — a CHAMADA: derivacao PURA do estado por vereador ----------
+;; A chamada e' a leitura que o servidor projeta no telao e que a policy de quorum consulta. Ela cruza TRES
+;; fontes que nunca se materializam juntas: o roster do cadastro (quem e' membro, e se esta licenciado), o
+;; ULTIMO evento de presenca (o fato observado — `ultimos-eventos-por-vereador-q` acima e' quem o busca) e a
+;; justificativa de ausencia (ato administrativo apartado). Aqui e' tudo puro: quem le' o banco e' outra camada.
+
+(def estados-chamada
+  "Os 6 estados possiveis de um vereador na chamada. `:ausente-justificativa-pendente` e' um estado PROPRIO —
+  nao um sinonimo de `:ausente`. A Mesa ainda nao decidiu; publicar 'ausente' (que a Casa le' como
+  injustificada) e' acusacao falsa contra o vereador, e e' o tipo de erro que so aparece em ata."
+  #{:presente-plenario :presente-remoto :ausente :ausente-justificado
+    :ausente-justificativa-pendente :licenciado})
+
+(def estados-chamada-presentes
+  "Os estados que contam como PRESENTE (numerador do quorum). O restante nao conta — inclusive `:licenciado`,
+  que tambem sai do denominador."
+  #{:presente-plenario :presente-remoto})
+
+(def estados-mandato-cadastro
+  "Vocabulario de `cadastros.mandato.estado` — ESPELHO do CHECK da migration 20260620000010-cadastros.
+  `sessoes` NAO pode importar `cadastros` (import-lint §22.10: comunicacao so por HTTP/eventos); o roster
+  chega por SEAM injetado no host ja' com este vocabulario CRU, e espelhar e' a unica forma disponivel.
+  Espelhar nao e' REDIGITAR de memoria: um valor proximo-mas-errado (o classico `\"suplente\"` por
+  `\"suplencia\"`) nao quebra nada — deixa a tela publicando zero em silencio por meses. Por isso a validacao
+  e' fail-closed: estado desconhecido EXPLODE. Se `cadastros` acrescentar um estado, este set fica
+  desatualizado e a chamada para de responder — que e' o comportamento desejado (alguem conserta hoje)."
+  #{"vigente" "licenciado" "cassado" "renunciado" "falecido" "concluido"})
+
+(def estado-mandato-licenciado
+  "O unico estado de mandato que a chamada trata de forma especial (§22.6 eixo C). Os demais nao alteram a
+  derivacao: cassado/renunciado/falecido/concluido descrevem mandato ENCERRADO — quem monta o roster ja' os
+  filtra pela janela de vigencia, e se um escapar ele e' derivado como qualquer outro membro (o que a
+  contagem revela, em vez de esconder)."
+  "licenciado")
+
+(defn validar-estado-mandato
+  "Fail-closed: lanca se `estado` de mandato e' nao-nil e forasteiro ao vocabulario de `cadastros`. `nil` e'
+  LEGITIMO e passa: o roster vem de LEFT JOIN LATERAL e devolve nil quando nenhum mandato cobre a data."
+  [estado]
+  (when (and (some? estado) (not (contains? estados-mandato-cadastro estado)))
+    (throw (ex-info "estado de mandato desconhecido no roster da chamada"
+                    {:estado estado :validos estados-mandato-cadastro}))))
+
+(defn estado-de-presenca
+  "PURO. Deriva o estado da chamada de UM vereador a partir das tres fontes. Devolve
+  `{:estado <de estados-chamada> :inconsistencia-cadastro <boolean>}`.
+
+  A PRECEDENCIA, escrita e nao inferida:
+    1. licenciado (cadastro)            -> `:licenciado`
+    2. ultimo evento POSITIVO            -> `:presente-plenario` | `:presente-remoto` (a modalidade decide)
+    3. justificativa `aprovada`          -> `:ausente-justificado`
+    4. justificativa `pendente`          -> `:ausente-justificativa-pendente`
+    5. nada disso                        -> `:ausente`
+
+  CASO ESPECIAL (o degrau 1 cede ao 2): licenciado COM evento positivo => o vereador esta PRESENTE e
+  `:inconsistencia-cadastro` vem `true`. O fato observado vence o cadastro — ele entrou no plenario, esta
+  la'. E a contradicao nao se esconde: numa Casa recem-migrada (licenca que ninguem encerrou no sistema
+  antigo, reassuncao nao registrada) esse sinalizador e' exatamente o que o servidor precisa ver para ir
+  consertar o cadastro. Silenciar o conflito escolhendo um dos lados e' o que produz um quorum errado
+  defensavel-no-papel.
+
+  Evento NEGATIVO (`saida`) nao contradiz licenca nenhuma — so o fato positivo contradiz.
+
+  `ultimo-evento` = mapa com `:tipo`/`:modalidade` (nil se o vereador nao tem evento na sessao);
+  `justificativa` = mapa com `:estado` (nil se nao ha). Todos os vocabularios sao validados fail-closed."
+  [roster-linha ultimo-evento justificativa]
+  (validar-estado-mandato (:estado-mandato roster-linha))
+  (when (some? ultimo-evento)
+    (validar-tipo-evento (:tipo ultimo-evento))
+    (validar-modalidade-presenca (:modalidade ultimo-evento)))
+  (when (some? justificativa)
+    (validar-estado-justificativa (:estado justificativa)))
+  (let [licenciado? (= estado-mandato-licenciado (:estado-mandato roster-linha))
+        presente?   (and (some? ultimo-evento) (presente-por-tipo? (:tipo ultimo-evento)))
+        estado      (cond
+                      presente?  (if (= "remoto" (:modalidade ultimo-evento))
+                                   :presente-remoto
+                                   :presente-plenario)
+                      licenciado? :licenciado
+                      (= "aprovada" (:estado justificativa)) :ausente-justificado
+                      (= "pendente" (:estado justificativa)) :ausente-justificativa-pendente
+                      :else :ausente)]
+    {:estado estado
+     :inconsistencia-cadastro (boolean (and licenciado? presente?))}))
+
+(defn derivar-linha-chamada
+  "PURO. A linha da chamada de um vereador = a identidade do roster + o estado derivado. Corresponde ao model
+  `sessoes.models.presenca/LinhaChamada`. A identidade vem CRUA do roster (nome, nome parlamentar, partido):
+  `sessoes` nao inventa dado de `cadastros`, so o repassa. `:sem-assento` e' false aqui por definicao (a
+  linha NASCEU do roster); o campo existe em toda linha, uniforme, para o mapa nunca ter forma variavel."
+  [roster-linha ultimo-evento justificativa]
+  (merge (select-keys roster-linha [:vereador-id :nome :nome-parlamentar :partido])
+         {:sem-assento false}
+         (estado-de-presenca roster-linha ultimo-evento justificativa)))
+
+(defn derivar-linha-sem-assento
+  "PURO. A linha de uma PRESENCA cujo vereador NAO tem assento no roster da data (§22.6 eixo C, revisao da
+  Etapa 1). Existe por um motivo estrutural, nao cosmetico: o quorum que o MOTOR de votacao resolve por nome
+  (`relacoes/presenca/presentes-plenario|remoto`) conta sobre `presenca_evento` SOZINHO — nenhum join a
+  mandato, e a coluna `vereador_id` nao tem FK. Se a chamada cruzasse roster x eventos e DESCARTASSE o que
+  sobra, a tela e a policy passariam a contar conjuntos diferentes na mesma votacao: o defeito que a fatia
+  1a fechou uma camada abaixo, reaberto aqui.
+
+  Entao a presenca orfa vira linha: derivada pela MESMA regra (o fato observado manda), marcada
+  `:sem-assento true` e `:inconsistencia-cadastro true`. Ela CONTA no numerador (para casar com o motor) e
+  NAO conta no denominador (`contar-quorum`) — ninguem ganha cadeira por ter um evento. A identidade vem
+  nil: `sessoes` nao tem de onde inventar nome de quem `cadastros` nao conhece naquela data.
+
+  Como acontece na pratica: mandato cuja janela nao cobre a data (suplente convocado para amanha, vereador
+  cujo mandato encerrou ontem), acervo migrado com licenca que ninguem encerrou, ou simplesmente um id
+  digitado errado pela secretaria — `registrar-presenca` nao valida mandato."
+  [presenca justificativa]
+  (-> (derivar-linha-chamada {:vereador-id (:vereador-id presenca) :nome nil :nome-parlamentar nil
+                              :partido nil :estado-mandato nil}
+                             presenca justificativa)
+      (assoc :sem-assento true :inconsistencia-cadastro true)))
+
+(defn contar-quorum
+  "PURO. Contagem de quorum sobre as linhas JA derivadas (`derivar-linha-chamada` /
+  `derivar-linha-sem-assento`) — nunca sobre eventos crus, para que a tela e a policy contem o mesmo
+  conjunto.
+
+  `:membros-da-casa` e' o DENOMINADOR e exclui DOIS conjuntos:
+    - os licenciados: durante a licenca o vereador nao compoe a Casa para efeito de quorum (quem compoe e' o
+      suplente, que entra no roster com mandato proprio). Contar o licenciado inflaria o denominador e faria
+      uma sessao legitima parecer sem quorum.
+    - as linhas SEM ASSENTO: um evento de presenca nao cria cadeira. Elas contam no numerador (o motor as
+      conta) mas nao no denominador — e' por isso que `presentes` PODE passar de `membros-da-casa`. Essa
+      desigualdade e' o sintoma visivel de cadastro furado, e e' melhor que ela apareca do que ser
+      normalizada em silencio.
+
+  O licenciado-com-evento-positivo (a inconsistencia acima) NAO fica de fora: ele foi derivado como
+  presente, entao conta nos dois lados — numerador e denominador. E' o unico tratamento coerente: quem esta
+  no plenario esta na Casa.
+
+  `:presencas-fora-do-roster` e' fail-loud: publica QUANTAS linhas sem assento entraram nesta chamada, para
+  a Mesa nao precisar somar de cabeca para descobrir que a tela e a policy divergem do cadastro."
+  [linhas]
+  {:presentes-plenario (count (filter #(= :presente-plenario (:estado %)) linhas))
+   :presentes-remoto   (count (filter #(= :presente-remoto (:estado %)) linhas))
+   :membros-da-casa    (count (remove #(or (= :licenciado (:estado %)) (:sem-assento %)) linhas))
+   :presencas-fora-do-roster (count (filter :sem-assento linhas))})
+
+;; ---------- §22.6 eixo C — o INSTANTE em que a chamada avalia a presenca ----------
+;; PURO e aqui (nao no controller) por uma razao de corretude, nao de organizacao: o instante tem de ser
+;; derivado da MESMA leitura da sessao que a leitura da presenca usa — quem le' a sessao e' o Repo, dentro
+;; da tx. Calcular no controller a partir de uma leitura ANTERIOR deixa a janela em que a Mesa encerra a
+;; sessao no meio do request e a chamada avalia 'agora' uma sessao que ja fechou.
+
+(def estados-sessao-fechada
+  "Estados em que a sessao JA fechou — a chamada tem de congelar no instante em que ela fechou (um evento
+  inferido/registrado DEPOIS nao pode mudar uma chamada que ja foi para a ata). O CHECK
+  `sessao_encerrada_em_obrigatoria` da mig 0026 cobria so' 'encerrada'/'nao_realizada'; a migration 0071
+  (revisao da Etapa 1) estendeu-o a 'arquivada' — antes disso o banco aceitava uma linha arquivada SEM
+  carimbo de encerramento, e a derivacao abaixo e' o cinto de seguranca que sobrou dela."
+  #{"encerrada" "nao_realizada" "arquivada"})
+
+(defn instante-de-avaliacao
+  "PURO. O INSTANTE em que a presenca corrente e' avaliada: `agora` (o relogio ja lido, injetado) enquanto a
+  sessao esta viva (agendada/aberta/suspensa — a chamada de uma sessao ao vivo e' sempre 'agora');
+  `encerrada-em` (congelado) quando ja fechou.
+
+  FAIL-CLOSED: sessao fechada sem `encerrada-em` LANCA. Um nil aqui viraria `ocorrido_em <= NULL` na
+  consulta -> zero linhas -> uma chamada FABRICADA (a Casa inteira ausente, quorum zero) servida como
+  leitura legitima e publicada em ata. Melhor a rota cair do que a ata mentir."
+  [sessao agora]
+  (if (contains? estados-sessao-fechada (:estado sessao))
+    (or (:encerrada-em sessao)
+        (throw (ex-info "sessao fechada sem encerrada-em: sem instante de avaliacao p/ a chamada"
+                        {:tipo :servidor/erro :sessao-id (:id sessao) :estado (:estado sessao)})))
+    agora))
 
 ;; ---------- §22.6 eixo D — gravacao (audio/video) da sessao (F4.4b) ----------
 ;; `gravacao_segmento` e' unidade TECNICA do arquivo, nao regimental (uma sessao tem 1 segmento tipico mas N

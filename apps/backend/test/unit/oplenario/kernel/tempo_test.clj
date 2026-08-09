@@ -254,7 +254,8 @@
                           set)]
     (is (= #{"src/oplenario/rotas.clj"                                  ; o host (uso real)
              "src/oplenario/transparencia/components/repositorio.clj"   ; o consumer de presenca (uso real)
-             "src/oplenario/transparencia/db/parlamentar.clj"}          ; so' cita, na docstring do UPSERT
+             "src/oplenario/transparencia/db/parlamentar.clj"           ; so' cita, na docstring do UPSERT
+             "src/oplenario/sessoes/controllers.clj"}                   ; a CHAMADA, fatia 1b-WIRE (uso real)
            consumidores)
         "a lista de arquivos de src/ que MENCIONAM o fuso global mudou — atualize a docstring da constante
          (e este conjunto) ANTES de mergear"))
