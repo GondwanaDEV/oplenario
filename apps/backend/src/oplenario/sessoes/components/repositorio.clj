@@ -5,6 +5,7 @@
   db/ direto. (Eventos de dominio Sessao*/real-time = eixos posteriores do F4.)"
   (:require [oplenario.kernel.tenancy :as tenancy]
             [oplenario.sessoes.diplomat.producers :as producers]
+            [oplenario.sessoes.db.chamada :as chamada]
             [oplenario.sessoes.db.gravacao :as gravacao]
             [oplenario.sessoes.db.incidente :as incidente]
             [oplenario.sessoes.db.pauta :as pauta]
@@ -53,11 +54,19 @@
     "Ultimo evento de CADA vereador da sessao ate' `instante` (uma linha por vereador) — insumo cru da CHAMADA.")
   (listar-justificativas [this ente-id sessao-id] "Justificativas de ausencia da sessao (3o insumo da chamada).")
   (chamada-da-sessao [this ente-id sessao-id agora]
-    "As TRES leituras da chamada (sessao + presenca corrente + justificativas) numa UNICA tx do tenant, com o
-     INSTANTE de avaliacao resolvido DENTRO dela a partir da sessao fresca (`logic/instante-de-avaliacao`,
-     recebendo `agora` = o relogio ja lido pelo controller). Devolve {:sessao :instante :presencas
-     :justificativas}, ou nil se a sessao nao existe neste ente (a borda traduz em 404). O roster de
-     `cadastros` NAO entra aqui: e' outro modulo, resolvido por seam no host (§22.10).")
+    "As QUATRO leituras da chamada (sessao + presenca corrente + justificativas + atos de chamada conduzida)
+     numa UNICA tx do tenant, com o INSTANTE de avaliacao resolvido DENTRO dela a partir da sessao fresca
+     (`logic/instante-de-avaliacao`, recebendo `agora` = o relogio ja lido pelo controller). Devolve {:sessao
+     :instante :presencas :justificativas :chamadas-conduzidas}, ou nil se a sessao nao existe neste ente (a
+     borda traduz em 404). O roster de `cadastros` NAO entra aqui: e' outro modulo, resolvido por seam no
+     host (§22.10).")
+  (registrar-chamada-conduzida! [this ente-id m]
+    "Registra o ATO de chamada conduzida (Etapa 2d): o MESMO gate de estado+janela de `registrar-presenca!`
+     roda DENTRO desta tx, sobre a sessao lida AQUI com `FOR SHARE` — nao sobre a leitura de authz do
+     controller. `m` exige `:membros-da-casa` (o denominador CONGELADO, ja' resolvido pelo caller via roster)
+     e `:agora` (o relogio ja lido na borda). Recusa lanca `:conflito/chamada` (a borda mapeia 409). Devolve
+     {:id :ocorrido-em :registrado-em}.")
+  (listar-chamadas-conduzidas [this ente-id sessao-id] "Os atos de chamada da sessao, em ordem cronologica.")
   (resumo-presenca [this ente-id membros-da-casa]
     "Presenca agregada (F7/FE Onda A1) das ultimas 10 sessoes encerradas do tenant.")
   (esta-presente? [this ente-id sessao-id vereador-id instante] "Presenca DERIVADA do ultimo evento ate o instante.")
@@ -234,7 +243,34 @@
             {:sessao s
              :instante instante
              :presencas (presenca/presenca-corrente tx ente-id sessao-id instante)
-             :justificativas (presenca/listar-justificativas-da-sessao tx ente-id sessao-id)})))))
+             :justificativas (presenca/listar-justificativas-da-sessao tx ente-id sessao-id)
+             ;; Etapa 2d: o QUARTO insumo, na MESMA tx (evita o TOCTOU de uma 4a leitura a parte) — os atos
+             ;; registrados de chamada conduzida. `sem-registro-de-presenca` (derivado so' de `:presencas`)
+             ;; nao muda de significado; e' `:chamadas-conduzidas` que desambigua "ninguem chamou" de "a
+             ;; chamada aconteceu e todos faltaram".
+             :chamadas-conduzidas (chamada/listar-da-sessao tx ente-id sessao-id)})))))
+  ;; MESMO desenho de `registrar-presenca!` (gate + janela DENTRO da tx, sobre a sessao lida AQUI com `FOR
+  ;; SHARE`): conduzir a chamada e' o MESMO tipo de escrita — um fato contra o quorum de uma sessao, que nao
+  ;; pode entrar depois que ela fechou. `:conflito/chamada` e' tag PROPRIA (nao reusa
+  ;; `:conflito/sessao-nao-aceita-presenca`): convencao do modulo e' 1 tag por RECURSO (transicao/inscricao/
+  ;; pauta/fala/vinculo/justificativa), e o ato de chamada e' um recurso proprio, nao presenca.
+  (registrar-chamada-conduzida! [this ente-id {:keys [sessao-id ocorrido-em agora] :as m}]
+    (transacao this ente-id
+      (fn [tx]
+        (when (or (nil? ocorrido-em) (nil? agora))
+          (throw (ex-info "registrar-chamada-conduzida!: ocorrido-em e agora sao obrigatorios (gate de janela)"
+                          {:tipo :servidor/erro :sessao-id sessao-id})))
+        (let [s (sessao/janela-para-registro tx ente-id sessao-id)]
+          (when (nil? s)
+            (throw (ex-info "registrar-chamada-conduzida!: sessao inexistente neste ente"
+                            {:tipo :conflito/chamada :motivo :sessao-inexistente :sessao-id sessao-id})))
+          (when-let [motivo (logic/motivo-recusa-de-presenca s ocorrido-em agora)]
+            (throw (ex-info (logic/mensagem-de-recusa-de-chamada motivo s agora)
+                            {:tipo :conflito/chamada :motivo motivo
+                             :sessao-id sessao-id :estado (:estado s)})))
+          (chamada/registrar! tx (assoc m :ente-id ente-id))))))
+  (listar-chamadas-conduzidas [this ente-id sessao-id]
+    (transacao this ente-id #(chamada/listar-da-sessao % ente-id sessao-id)))
   (resumo-presenca [this ente-id membros-da-casa]
     (transacao this ente-id #(presenca/resumo-presenca % ente-id membros-da-casa 10)))
   (esta-presente? [this ente-id sessao-id vereador-id instante] (transacao this ente-id #(rel-presenca/esta-presente-em? % sessao-id vereador-id instante)))

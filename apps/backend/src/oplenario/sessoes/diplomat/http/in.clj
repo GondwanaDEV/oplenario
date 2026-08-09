@@ -480,6 +480,27 @@
             (http/json-resposta 409 {:erro "sessao sem data marcada: informe a data da sessao antes de fazer a chamada"})
             (throw e)))))))
 
+(defn- conduzir-chamada-handler
+  "POST /sessoes/:id/chamada (§22.6 eixo C, Etapa 2d, papel 'secretario'). Sem corpo — `conduzida-por` = o
+  ator (anti-forja, mesmo contrato de `confirmar-presenca-handler`), `membros-da-casa` congelado pelo
+  controller (MESMA fonte do roster que `GET .../chamada` usa), `ocorrido-em` = o relogio do servidor (nunca
+  do cliente). adapters/in nao entra (nao ha' corpo a coagir, so' o `:id` do path). Sucesso -> 201
+  (append-only, sem CAS). nil (sessao inexistente) -> 404. 409 (`:conflito/chamada`) quando o Repo recusa
+  (sessao ja fechou) — mesmo padrao do gate de presenca, mensagem propria do recurso."
+  [repo-sessoes roster-da-casa relogio]
+  (fn [req]
+    (let [ator (:ator req)
+          id   (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (try
+        (if-let [recibo (controllers/registrar-chamada-conduzida repo-sessoes roster-da-casa ator id
+                                                                  (tempo/agora relogio))]
+          (http/json-resposta 201 (adapters-out-presenca/chamada-conduzida->wire recibo))
+          (http/json-resposta 404 {:erro "sessao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/chamada (:tipo (ex-data e)))
+            (http/json-resposta 409 {:erro (ex-message e)})
+            (throw e)))))))
+
 (defn- listar-gravacoes-handler
   "GET /sessoes/:id/gravacao. adapters/in coage o :id; controller carrega+autoriza a sessao e lista os
   segmentos vinculados; adapters/out projeta (filtra internos). nil (sessao inexistente) -> 404."
@@ -529,6 +550,12 @@
     ["/sessoes/:id/chamada" :get
      [auth (it/exige-papel "secretario") (chamada-handler repo-sessoes roster-da-casa relogio)]
      :route-name :sessoes/chamada]
+    ;; MESMO path do GET acima, metodo diferente — Pedestal despacha por (path, metodo); nao ha' o risco de
+    ;; sombreamento literal-vs-param ja' documentado em `/gravacoes`/`/minha-justificativa` (nao existe filho
+    ;; `:param` sob `/chamada`). Precedente de dois metodos no MESMO path: `/pauta/itens/:item-id` (PATCH+DELETE).
+    ["/sessoes/:id/chamada" :post
+     [auth (it/exige-papel "secretario") (conduzir-chamada-handler repo-sessoes roster-da-casa relogio)]
+     :route-name :sessoes/conduzir-chamada]
     ;; A justificativa tem DUAS portas de abertura, e nao uma que aceite os dois papeis: e' o mesmo desenho
     ;; ja' provado em presenca (`/presenca` da Mesa vs `/presenca/confirmar` do vereador). Numa rota unica o
     ;; significado de `vereador-id` no corpo passaria a depender do PAPEL do ator, e quem tivesse os dois

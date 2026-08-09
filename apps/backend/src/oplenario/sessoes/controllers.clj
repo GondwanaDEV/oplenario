@@ -536,7 +536,7 @@
   [repo-sessoes roster-da-casa ator sessao-id relogio]
   (let [ente-id (:ente-id ator)
         agora   (tempo/agora relogio)]
-    (when-let [{:keys [sessao instante presencas justificativas]}
+    (when-let [{:keys [sessao instante presencas justificativas chamadas-conduzidas]}
                (repo/chamada-da-sessao repo-sessoes ente-id sessao-id agora)]
       (authz/check! ator :sessao/ver sessao logic/pode-ver-sessao?)
       (let [data                  (data-de-referencia sessao)
@@ -562,4 +562,34 @@
          :composicao-resolvida-em agora
          :sem-registro-de-presenca (empty? presencas)
          :linhas linhas
-         :quorum (logic/contar-quorum linhas)}))))
+         :quorum (logic/contar-quorum linhas)
+         ;; Etapa 2d: distingue "ninguem conduziu a chamada ainda" (vazio) de "a chamada aconteceu e a Casa
+         ;; toda faltou" (nao-vazio + `:sem-registro-de-presenca` true) — o read-model de presenca_evento
+         ;; sozinho e' cego a essa diferenca (os dois casos produzem zero linhas nele).
+         :chamadas-conduzidas (vec chamadas-conduzidas)}))))
+
+;; ---------- §22.6 eixo C — o ATO da CHAMADA CONDUZIDA (Etapa 2d) ----------
+
+(defn registrar-chamada-conduzida
+  "Registra o ATO de que a chamada foi CONDUZIDA (Etapa 2d): distingue 'ninguem chamou ainda' de 'chamou, e a
+  Casa toda estava ausente' — `presenca_evento` sozinho produz zero linhas nos dois casos. Carrega a sessao
+  do tenant do `ator` (nil -> 404 via nil de retorno), roda pode-ver-sessao? (mesma Casa -> 403 fail-closed).
+  `conduzida-por` = o ator (nunca do cliente — nao ha' corpo nesta rota). `membros-da-casa` = o DENOMINADOR
+  CONGELADO, resolvido pela MESMA fonte que `chamada-da-sessao` usa: `roster-da-casa` na data de referencia
+  DESTA sessao (`data-de-referencia`, privada deste ns) + `logic/membros-da-casa-do-roster` — NUNCA uma conta
+  a parte (review §22.6: divergir aqui reabriria o defeito que a Etapa 1 fechou). `ocorrido-em` = o relogio do
+  servidor (`agora`, ja' lido na borda), nunca do cliente — o clamp da hora e' trivialmente satisfeito (mesmo
+  contrato de `confirmar-minha-presenca`); o que morde e' so' o ESTADO da sessao, checado DENTRO da tx do
+  Repo. Devolve {:id :ocorrido-em :registrado-em :conduzida-por :membros-da-casa} ou nil (sessao inexistente
+  -> 404). Recusa lanca `:conflito/chamada` (o diplomat mapeia 409)."
+  [repo-sessoes roster-da-casa ator sessao-id agora]
+  (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/conduzir-chamada sessao logic/pode-ver-sessao?)
+    (let [data    (data-de-referencia sessao)
+          roster  (roster-da-casa (:ente-id ator) data)
+          membros (logic/membros-da-casa-do-roster roster)]
+      (merge (repo/registrar-chamada-conduzida! repo-sessoes (:ente-id ator)
+               {:id (random-uuid) :sessao-id sessao-id :conduzida-por (:identidade-id ator)
+                :membros-da-casa membros :ocorrido-em agora :agora agora
+                :created-by (:identidade-id ator)})
+             {:conduzida-por (:identidade-id ator) :membros-da-casa membros}))))

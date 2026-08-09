@@ -108,11 +108,28 @@
    :justificativa (when justificativa
                     {:estado (:estado justificativa) :motivo (:motivo justificativa)})})
 
+;; ---------- §22.6 eixo C — o ATO da CHAMADA CONDUZIDA (Etapa 2d) ----------
+
+(defn chamada-conduzida->wire
+  "Um ato de dominio {:id :conduzida-por :membros-da-casa :ocorrido-em :registrado-em} -> ChamadaConduzidaOut
+  (validado). MESMO shape usado no recibo de `POST /sessoes/:id/chamada` (201) e em cada item de
+  `ChamadaOut.chamadas-conduzidas` — o ato nao inventa vocabulario de saida novo entre os dois lugares
+  (precedente: `recibo-presenca->wire` reusado dentro de `recibos-presenca-lote->wire`)."
+  [{:keys [id conduzida-por membros-da-casa ocorrido-em registrado-em]}]
+  (validar! wire/ChamadaConduzidaOut
+            {:id (some-> id str)
+             :conduzida-por (some-> conduzida-por str)
+             :membros-da-casa membros-da-casa
+             :ocorrido-em (some-> ocorrido-em str)
+             :registrado-em (some-> registrado-em str)}
+            "recibo de chamada conduzida"))
+
 (defn chamada->wire
   "A CHAMADA de dominio (`sessoes.controllers/chamada-da-sessao`) -> ChamadaOut (validado). Instantes/data ->
-  ISO string; `linhas` projetadas uma a uma; `quorum` ja chega no shape de ChamadaQuorumOut (contar-quorum)."
+  ISO string; `linhas` projetadas uma a uma; `quorum` ja chega no shape de ChamadaQuorumOut (contar-quorum);
+  `chamadas-conduzidas` (Etapa 2d) projetada item a item por `chamada-conduzida->wire`."
   [{:keys [sessao-id sessao-estado instante data-de-composicao composicao-resolvida-em
-           sem-registro-de-presenca linhas quorum]}]
+           sem-registro-de-presenca linhas quorum chamadas-conduzidas]}]
   (let [out {:sessao-id (str sessao-id)
              :sessao-estado sessao-estado
              :instante (str instante)
@@ -121,7 +138,8 @@
              :sem-registro-de-presenca (boolean sem-registro-de-presenca)
              :linhas (mapv linha-chamada->wire linhas)
              :quorum (select-keys quorum [:presentes-plenario :presentes-remoto :membros-da-casa
-                                          :presencas-fora-do-roster])}]
+                                          :presencas-fora-do-roster])
+             :chamadas-conduzidas (mapv chamada-conduzida->wire chamadas-conduzidas)}]
     (when-not (m/validate wire/ChamadaOut out)
       (throw (ex-info "chamada viola o contrato ChamadaOut (bug de servidor)"
                       {:erros (me/humanize (m/explain wire/ChamadaOut out))})))

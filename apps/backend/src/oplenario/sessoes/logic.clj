@@ -718,3 +718,54 @@
   [resultado]
   (when-not (contains? resultados-incidente resultado)
     (throw (ex-info "resultado de incidente processual invalido" {:resultado resultado :validos resultados-incidente}))))
+
+;; ---------- §22.6 eixo C — o ATO da CHAMADA CONDUZIDA (Etapa 2d) ----------
+;; `presenca_evento` sozinho so' grava QUEM APARECEU: "ninguem registrou nada ainda" e "a chamada foi feita e
+;; a Casa inteira faltou" produzem as MESMAS zero linhas — indistinguiveis, o que contamina a folha da sessao
+;; (Etapa 5) e a apuracao de assiduidade (Etapa 6). O ato abaixo e' o registro de que a chamada ACONTECEU:
+;; quando, quem conduziu, e quantos membros a Casa tinha NAQUELE instante (o denominador CONGELADO). Ver o
+;; cabecalho da migration 0072 para o porque de uma tabela propria em vez de estender `incidente_processual`.
+
+(defn membros-da-casa-do-roster
+  "PURO. O denominador do quorum (`:membros-da-casa`) que `roster` (as linhas cruas do seam `roster-da-casa`)
+  produziria — a MESMA regra de `contar-quorum` (exclui licenciados), aplicada ANTES de qualquer evento de
+  presenca existir. Reusa `derivar-linha-chamada` (com `ultimo-evento`/`justificativa` nil: so' o cadastro
+  importa aqui) + `contar-quorum` — NUNCA uma conta em SQL a parte, pela MESMA razao que `ultimos-eventos-
+  por-vereador-q` existe: duas aritmeticas de composicao da Casa no repo e' o defeito que a Etapa 1 gastou uma
+  revisao inteira matando. Usada para CONGELAR o denominador no ato da chamada conduzida."
+  [roster]
+  (:membros-da-casa (contar-quorum (mapv #(derivar-linha-chamada % nil nil) roster))))
+
+(defn validar-membros-da-casa
+  "Fail-closed: lanca se `n` nao e' um inteiro >= 0 (espelha o CHECK `membros_da_casa >= 0` da mig 0072). Nao
+  ha' um 'vocabulario' aqui (nao e' um enum — este ato nao introduz nenhum CHECK de texto) mas a MESMA
+  disciplina de validar ANTES do banco vale: um denominador negativo e' bug de servidor (nunca deveria sair
+  de `membros-da-casa-do-roster`), nao um dado de cliente a recusar com mensagem acionavel."
+  [n]
+  (when-not (and (integer? n) (>= n 0))
+    (throw (ex-info "membros-da-casa invalido (deve ser inteiro >= 0)" {:membros-da-casa n}))))
+
+(defn mensagem-de-recusa-de-chamada
+  "PURO. A mensagem ACIONAVEL do 409 ao CONDUZIR a chamada (Etapa 2d, `POST /sessoes/:id/chamada`) — MESMO
+  gate de estado+janela de `motivo-recusa-de-presenca` (conduzir a chamada e' o MESMO tipo de fato que
+  registrar presenca: um ato contra o quorum de uma sessao, que nao pode ser escrito depois que ela fechou —
+  fatia 2a), so' com a REDACAO do recurso certo (nao fala de 'presenca'). Como `ocorrido-em` desta rota e'
+  sempre o relogio do servidor (nunca do cliente, mesmo contrato de `confirmar-minha-presenca`), na pratica
+  so' `:estado-nao-aceita-presenca` e' alcancavel; os demais ramos ficam de cinto de seguranca."
+  [motivo sessao agora]
+  (case motivo
+    :estado-nao-aceita-presenca
+    (str "a sessao esta '" (:estado sessao) "' e nao aceita mais a conducao da chamada. "
+         "So' se conduz a chamada com a sessao agendada, aberta ou suspensa — refaze-la agora alteraria "
+         "o quorum de votacoes ja realizadas.")
+
+    :instante-no-futuro
+    (str "o instante da chamada e' posterior ao relogio do servidor (" agora ").")
+
+    :instante-antes-da-abertura
+    (str "o instante da chamada e' anterior a abertura da sessao (" (:aberta-em sessao) ").")
+
+    :instante-apos-o-encerramento
+    (str "o instante da chamada e' posterior ao encerramento da sessao (" (:encerrada-em sessao) ").")
+
+    (str "conducao de chamada recusada para esta sessao (" (name motivo) ").")))

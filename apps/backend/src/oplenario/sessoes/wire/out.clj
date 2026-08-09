@@ -285,6 +285,24 @@
    [:membros-da-casa :int]
    [:presencas-fora-do-roster :int]])
 
+;; ---------- §22.6 eixo C — o ATO da CHAMADA CONDUZIDA (Etapa 2d) ----------
+
+(def ChamadaConduzidaOut
+  "Um ATO de chamada conduzida (Etapa 2d): quando foi conduzida, quem conduziu, e quantos membros a Casa
+  tinha NAQUELE instante (`membros-da-casa`, o denominador CONGELADO — pode diferir do quorum atual se a
+  composicao mudou entre uma chamada e outra na MESMA sessao). Usada em DOIS lugares com o MESMO shape
+  (`recibo-presenca->wire`/`recibos-presenca-lote->wire` sao o precedente): o recibo de
+  `POST /sessoes/:id/chamada` (201) e cada item da lista `ChamadaOut.chamadas-conduzidas`. Existe para
+  DISTINGUIR 'ninguem chamou ainda' (lista vazia) de 'a chamada ocorreu e a Casa toda faltou' (lista
+  nao-vazia com zero presentes) — o read-model de presenca_evento sozinho e' cego a essa diferenca (os dois
+  casos produzem zero linhas nele)."
+  [:map {:closed true}
+   [:id :string]
+   [:conduzida-por :string]
+   [:membros-da-casa :int]
+   [:ocorrido-em :string]
+   [:registrado-em :string]])
+
 (def ChamadaOut
   "A CHAMADA da sessao (resposta de GET /sessoes/:id/chamada, §22.6 eixo C). `data-de-composicao` e' a data
   civil que resolveu QUEM compoe a Casa (`aberta-em` se a sessao ja abriu, senao `agendada-para` — nunca
@@ -295,7 +313,9 @@
   corrente: 'agora' enquanto a sessao esta aberta/suspensa; `encerrada-em` (congelado) se ja fechou.
   `sem-registro-de-presenca` = true quando NENHUM vereador tem QUALQUER evento na sessao inteira — distinto
   de uma linha individual `:ausente` (que so' diz que AQUELE vereador nao tem evento; a Casa toda pode ter
-  registro e um so' faltar)."
+  registro e um so' faltar). `chamadas-conduzidas` (Etapa 2d) e' o que desambigua ESSE `sem-registro-de-
+  presenca=true`: vazio = 'ninguem conduziu a chamada ainda'; nao-vazio = 'a chamada aconteceu e a Casa toda
+  faltou'."
   [:map {:closed true}
    [:sessao-id :string]
    [:sessao-estado (km/enum-de logic/estados-sessao)]
@@ -304,4 +324,5 @@
    [:composicao-resolvida-em :string]
    [:sem-registro-de-presenca :boolean]
    [:linhas [:sequential LinhaChamadaOut]]
-   [:quorum ChamadaQuorumOut]])
+   [:quorum ChamadaQuorumOut]
+   [:chamadas-conduzidas [:sequential ChamadaConduzidaOut]]])
