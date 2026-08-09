@@ -21,9 +21,13 @@
   (:import (java.time Instant)))
 
 (defn- sessao-canonica
-  "Sessao como buscar-sessao devolve (kebab) — so o que a authz fina (pode-ver-sessao? = mesma Casa) le."
+  "Sessao como buscar-sessao devolve (kebab). Alem do que a authz fina le' (pode-ver-sessao? = mesma Casa),
+  carrega `agendada-para`: a revisao da Etapa 2 passou a validar o `vereador-id` contra o ROSTER da Casa na
+  DATA DE REFERENCIA da sessao, e sem nenhum marco de data a rota cai em `:conflito/sessao-sem-data` (que e'
+  outro caso, testado a parte). A data casa com o `ocorrido` usado nos corpos abaixo."
   [ente-id id]
-  {:id id :ente-id ente-id :estado "aberta" :tipo-sessao "ordinaria"})
+  {:id id :ente-id ente-id :estado "aberta" :tipo-sessao "ordinaria"
+   :agendada-para (Instant/parse "2026-06-30T13:00:00Z")})
 
 (defn- fake-repo-sessoes
   "RepoSessoes fake (parcial): `buscar-sessao` resolve a sessao; `registrar-presenca!` GRAVA o mapa recebido em
@@ -60,35 +64,41 @@
     (snapshot-ator [_ _ente-id _identidade-id]
       {:vinculo-ativo {:id (random-uuid) :tipo "servidor"} :papeis papeis})))
 
+(defn- fake-repo-cadastros
+  "Os DOIS metodos que o host resolve sobre `cadastros` e injeta em `sessoes` por seam:
+  `vereador-por-identidade` (o `resolver-vereador` da porta self-service) e `roster-da-casa` (o gate de
+  ASSENTO, que a revisao da Etapa 2 passou a aplicar TAMBEM as escritas de presenca).
+
+  `roster` e' a lista de vereador-ids que compoem a Casa — e' o fixture inteiro do gate: quem nao esta nela
+  toma 409 `:sem-assento`. Por isso o default e' VAZIO e cada teste declara quem tem cadeira: um default
+  permissivo manteria verde justamente a rota que aceitava qualquer UUID."
+  [resolver roster]
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify repo-cadastros-comp/RepoCadastros
+    (vereador-por-identidade [_ ente-id identidade-id]
+      (when-let [v (resolver ente-id identidade-id)] {:id v}))
+    (roster-da-casa [_ _ente-id _data] (mapv (fn [v] {:vereador-id v}) roster))))
+
 (defn- service-fn*
-  [papeis repo-s]
+  [papeis repo-s & {:keys [roster] :or {roster []}}]
   (-> (http/servico (config/carregar)
                     (rotas/montar {:idp (idp-dev/idp-dev)
                                    :repo-identidade (fake-repo-identidade papeis)
                                    :repo-sessoes repo-s
+                                   :repo-cadastros (fake-repo-cadastros (constantly nil) roster)
                                    :objeto-store nil})
                     it/globais)
       ph/create-server ::ph/service-fn))
 
-(defn- fake-repo-cadastros
-  "So' o metodo exercido por `resolver-vereador` (host, rotas.clj) — `vereador-por-identidade` — mesmo
-  fake de `meu-painel-http-in-test`. `resolver` (fn de teste ente-id/identidade-id -> vereador-id | nil)
-  devolve DIRETO o vereador-id; este fake embrulha em {:id ...} p/ casar o contrato real."
-  [resolver]
-  #_{:clj-kondo/ignore [:missing-protocol-method]}
-  (reify repo-cadastros-comp/RepoCadastros
-    (vereador-por-identidade [_ ente-id identidade-id]
-      (when-let [v (resolver ente-id identidade-id)] {:id v}))))
-
 (defn- service-fn-confirmar
-  "Onda C3 — variante de `service-fn*` que tambem injeta `repo-cadastros` (p/ `resolver-vereador`), exercida
-  so' pelos testes de `POST /sessoes/:id/presenca/confirmar` (`/presenca` classico nao usa resolver-vereador)."
-  [papeis repo-s resolver-vereador]
+  "Onda C3 — variante de `service-fn*` com o `resolver-vereador` exercido, usada so' pelos testes de
+  `POST /sessoes/:id/presenca/confirmar`."
+  [papeis repo-s resolver-vereador & {:keys [roster] :or {roster []}}]
   (-> (http/servico (config/carregar)
                     (rotas/montar {:idp (idp-dev/idp-dev)
                                    :repo-identidade (fake-repo-identidade papeis)
                                    :repo-sessoes repo-s
-                                   :repo-cadastros (fake-repo-cadastros resolver-vereador)
+                                   :repo-cadastros (fake-repo-cadastros resolver-vereador roster)
                                    :objeto-store nil})
                     it/globais)
       ph/create-server ::ph/service-fn))
@@ -109,7 +119,7 @@
   (let [ente (random-uuid) sid (random-uuid) vid (random-uuid)
         cap (atom nil)
         repo-s (fake-repo-sessoes (fn [_ id] (sessao-canonica ente id)) cap)
-        r (pt/response-for (service-fn* #{"secretario"} repo-s)
+        r (pt/response-for (service-fn* #{"secretario"} repo-s :roster [vid])
                            :post (url sid)
                            :headers (com-json (token ente (random-uuid)))
                            :body (corpo {"vereador-id" (str vid) "tipo" "entrada"
@@ -131,13 +141,15 @@
         "o recibo devolve a hora do REGISTRO — o par (fato, registro) e' o que separa 'saiu as 15h' de 'digitaram as 17h'")))
 
 (deftest presenca-sessao-que-nao-aceita-registro-409
-  (let [ente (random-uuid)
+  (let [ente (random-uuid) vid (random-uuid)
         msg "a sessao esta 'encerrada' e nao aceita mais registro de presenca. Corrija pela ata."
         repo-s (fake-repo-sessoes-que-recusa (fn [_ id] (sessao-canonica ente id)) msg)
-        r (pt/response-for (service-fn* #{"secretario"} repo-s)
+        ;; `vid` COM assento de proposito: o que este teste prova e' a traducao da recusa do GATE DE ESTADO.
+        ;; Sem assento, a recusa que chegaria seria a do gate de assento — outra mensagem, outro achado.
+        r (pt/response-for (service-fn* #{"secretario"} repo-s :roster [vid])
                            :post (url (random-uuid))
                            :headers (com-json (token ente (random-uuid)))
-                           :body (corpo {"vereador-id" (str (random-uuid)) "tipo" "entrada"
+                           :body (corpo {"vereador-id" (str vid) "tipo" "entrada"
                                          "modalidade" "plenario" "ocorrido-em" ocorrido}))]
     (is (= 409 (:status r)) "recusa do gate -> 409 (nao 403: nao e' permissao; nao 400: o corpo esta bem formado)")
     (is (= msg (:erro (ler-json r))) "a mensagem ACIONAVEL do dominio chega ao cliente, nao um 409 mudo")))
@@ -145,8 +157,9 @@
 (deftest confirmar-presenca-sessao-que-nao-aceita-registro-409
   (let [ente (random-uuid)
         msg "a sessao esta 'encerrada' e nao aceita mais registro de presenca. Corrija pela ata."
+        vid (random-uuid)
         repo-s (fake-repo-sessoes-que-recusa (fn [_ id] (sessao-canonica ente id)) msg)
-        r (pt/response-for (service-fn-confirmar #{"vereador"} repo-s (fn [_ _] (random-uuid)))
+        r (pt/response-for (service-fn-confirmar #{"vereador"} repo-s (fn [_ _] vid) :roster [vid])
                            :post (str "/sessoes/" (random-uuid) "/presenca/confirmar")
                            :headers (com-json (token ente (random-uuid))))]
     (is (= 409 (:status r)) "a porta self-service traduz a MESMA recusa — nao e' bypass nem 500")
@@ -155,13 +168,13 @@
 (deftest presenca-fonte-do-cliente-ignorada-201
   ;; mesmo se o cliente mandar uma `fonte` (ex.: painel_eletronico p/ ganhar precedencia indevida), a borda a
   ;; IGNORA (so-esperados nao a inclui) e o servidor forca manual_secretaria — integridade de proveniencia.
-  (let [ente (random-uuid) sid (random-uuid)
+  (let [ente (random-uuid) sid (random-uuid) vid (random-uuid)
         cap (atom nil)
         repo-s (fake-repo-sessoes (fn [_ id] (sessao-canonica ente id)) cap)
-        r (pt/response-for (service-fn* #{"secretario"} repo-s)
+        r (pt/response-for (service-fn* #{"secretario"} repo-s :roster [vid])
                            :post (url sid)
                            :headers (com-json (token ente (random-uuid)))
-                           :body (corpo {"vereador-id" (str (random-uuid)) "tipo" "entrada"
+                           :body (corpo {"vereador-id" (str vid) "tipo" "entrada"
                                          "modalidade" "plenario" "ocorrido-em" ocorrido
                                          "fonte" "painel_eletronico"}))]
     (is (= 201 (:status r)) "corpo com `fonte` espuria ainda passa (campo alheio e' filtrado)")
@@ -274,7 +287,7 @@
   (let [ente (random-uuid) sid (random-uuid) identidade (random-uuid) vid (random-uuid)
         cap (atom nil)
         repo-s (fake-repo-sessoes (fn [_ id] (sessao-canonica ente id)) cap)
-        r (pt/response-for (service-fn-confirmar #{"vereador"} repo-s (fn [_ _] vid))
+        r (pt/response-for (service-fn-confirmar #{"vereador"} repo-s (fn [_ _] vid) :roster [vid])
                            :post (url-confirmar sid)
                            :headers (com-json (token ente identidade)))
         body (ler-json r)]

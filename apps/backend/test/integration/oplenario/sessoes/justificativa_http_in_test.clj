@@ -372,3 +372,42 @@
     (is (= 403 (:status r))
         (str "403 = o router ENTREGOU o request ao gate de papel. 404 aqui significa que "
              (url-minha sid) " ficou inalcancavel — o param irmao voltou a sombrear o literal."))))
+
+;; ---------- REGRESSAO: o impedimento "ninguem e' juiz em causa propria" FALHAVA ABERTO ----------
+
+(deftest decidir-a-propria-justificativa-e-negada-mesmo-sem-vinculo-de-identidade
+  ;; MAJOR (security). O guard era `(and meu-vereador-id (= meu-vereador-id (:vereador-id j)))`.
+  ;; `resolver-vereador` casa por `cadastros.vereador.identidade_id`, e esse vinculo e' um ato SEPARADO,
+  ;; `admin_ente`-gated — NULL e' o estado PADRAO. Com o `and`, um membro da Casa com credencial de
+  ;; 'secretario' e sem vinculo resolvivel deferia a PROPRIA falta com um PATCH: a falta sumia da apuracao
+  ;; de assiduidade, que e' o insumo do art. 55 CF / LOM e do desconto de jeton. Impossibilidade de AVALIAR
+  ;; o impedimento tem de NEGAR.
+  (let [ente (random-uuid) sid (random-uuid) jid (random-uuid) v (random-uuid)
+        cap (atom nil)
+        repo-s (fake-repo-sessoes :justificativa (pendente sid v) :cap cap)
+        r (pt/response-for (service-fn* #{"secretario" "vereador"} repo-s :resolver (constantly nil))
+                           :patch (url-decisao sid jid)
+                           :headers (com-json (token ente (random-uuid)))
+                           :body (corpo {"estado" "aprovada" "lock-version" 0}))]
+    (is (= 403 (:status r)) "ator com papel 'vereador' e SEM vinculo resolvivel -> negado, nao 200")
+    (is (nil? @cap) "a decisao nao chegou ao Repo — o estado e' TERMINAL e nao ha' rota de reabertura")))
+
+(deftest decidir-a-propria-justificativa-com-vinculo-continua-negada
+  (let [ente (random-uuid) sid (random-uuid) jid (random-uuid) v (random-uuid)
+        repo-s (fake-repo-sessoes :justificativa (pendente sid v))
+        r (pt/response-for (service-fn* #{"secretario"} repo-s :resolver (constantly v))
+                           :patch (url-decisao sid jid)
+                           :headers (com-json (token ente (random-uuid)))
+                           :body (corpo {"estado" "aprovada" "lock-version" 0}))]
+    (is (= 403 (:status r)) "o caminho que ja funcionava continua funcionando (nao-regressao)")))
+
+(deftest servidor-sem-papel-vereador-e-sem-vinculo-continua-podendo-decidir
+  ;; o fail-closed nao pode fechar a porta do caso NORMAL: o servidor da secretaria nao e' membro da Casa,
+  ;; nao carrega o papel 'vereador', e e' exatamente quem lanca a decisao que a Mesa tomou.
+  (let [ente (random-uuid) sid (random-uuid) jid (random-uuid) v (random-uuid)
+        repo-s (fake-repo-sessoes :justificativa (pendente sid v))
+        r (pt/response-for (service-fn* #{"secretario"} repo-s :resolver (constantly nil))
+                           :patch (url-decisao sid jid)
+                           :headers (com-json (token ente (random-uuid)))
+                           :body (corpo {"estado" "aprovada" "lock-version" 0}))]
+    (is (= 200 (:status r)))))

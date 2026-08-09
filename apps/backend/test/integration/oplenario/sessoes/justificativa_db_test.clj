@@ -309,7 +309,7 @@
         ;; um evento de presenca de OUTRO vereador garante que o outbox NAO esta vazio: um guard que varre
         ;; zero linhas passaria por acidente e nao provaria nada.
         outro (vereador-com-mandato! ente leg "Bruno")
-        _     (controllers/registrar-presenca *repo-s* (ator ente)
+        _     (controllers/registrar-presenca *repo-s* (fn [_e _d] [{:vereador-id outro}]) (ator ente)
                 {:sessao-id sid :vereador-id outro :tipo "entrada" :modalidade "plenario" :ocorrido-em t0}
                 agora)
         j     (abrir! ente sid v motivo-sensivel)

@@ -74,6 +74,20 @@
             (http/json-resposta 409 {:erro "transicao de estado invalida ou lock-version desatualizado"})
             (throw e)))))))
 
+(defn- resposta-conflito-presenca
+  "Traduz `:conflito/sessao-nao-aceita-presenca` -> 409 com a mensagem DO DOMINIO, propagando o que a ex-data
+  carrega para a recusa ser ACIONAVEL: `vereador-id` (qual linha reprovou) e `indice` (a POSICAO da linha no
+  lote — o cliente casa `recibos[i]` com `registros[i]` por posicao).
+
+  Antes disso, o Repo ja enriquecia a ex-data com `:vereador-id` e a borda o DESCARTAVA: um 409 de lote de 21
+  nomes dizia so' 'o instante informado ...', sem dizer qual dos 21, e o secretario fazia busca binaria
+  reenviando sublotes ao vivo. Espelha `resposta-conflito-justificativa`, escrita com o mesmo racional."
+  [e]
+  (let [d (ex-data e)]
+    (http/json-resposta 409 (cond-> {:erro (ex-message e)}
+                              (:vereador-id d) (assoc :vereador-id (str (:vereador-id d)))
+                              (:indice d)      (assoc :indice (:indice d))))))
+
 (defn- registrar-presenca-handler
   "POST /sessoes/:id/presenca (§22.6 eixo C). adapters/in coage o :id + valida o corpo {vereador-id, tipo,
   modalidade, ocorrido-em}; o controller carrega+autoriza a sessao e grava o evento append-only (a fonte e'
@@ -84,18 +98,23 @@
   fora da janela da sessao / no futuro. E' 409 e nao 403 (nao e' falta de permissao — o mesmo secretario podia
   ter gravado isto ha' um minuto) e nao 400 (o corpo esta bem formado; o que mudou foi o ESTADO do recurso).
   A mensagem vem do dominio (`logic/mensagem-de-recusa-de-presenca`) porque so' ele sabe qual limite foi
-  violado; e' texto nosso, sem dado de pessoa. Qualquer outro `:tipo` re-lanca (500 opaco, fail-closed)."
-  [repo-sessoes relogio]
+  violado; e' texto nosso, sem dado de pessoa. Qualquer outro `:tipo` re-lanca (500 opaco, fail-closed).
+
+  O `roster-da-casa` chega aqui (revisao) porque o `vereador-id` do corpo passou a ser validado contra a
+  composicao da Casa na data da sessao — sem isso a rota gravava qualquer UUID como presente."
+  [repo-sessoes roster-da-casa relogio]
   (fn [req]
     (let [ator (:ator req)
           m    (adapters-in-presenca/registrar-presenca->dominio (get-in req [:path-params :id]) (:json-params req))]
       (try
-        (if-let [recibo (controllers/registrar-presenca repo-sessoes ator m (tempo/agora relogio))]
+        (if-let [recibo (controllers/registrar-presenca repo-sessoes roster-da-casa ator m (tempo/agora relogio))]
           (http/json-resposta 201 (adapters-out-presenca/recibo-presenca->wire recibo))
           (http/json-resposta 404 {:erro "sessao nao encontrada"}))
         (catch clojure.lang.ExceptionInfo e
-          (if (= :conflito/sessao-nao-aceita-presenca (:tipo (ex-data e)))
-            (http/json-resposta 409 {:erro (ex-message e)})
+          (case (:tipo (ex-data e))
+            :conflito/sessao-nao-aceita-presenca (resposta-conflito-presenca e)
+            :conflito/sessao-sem-data
+            (http/json-resposta 409 {:erro "sessao sem data marcada: informe a data da sessao antes de registrar presenca"})
             (throw e)))))))
 
 (defn- registrar-presenca-lote-handler
@@ -107,19 +126,23 @@
   com os N recibos, na ordem do corpo.
 
   409 quando o Repo recusa (`:conflito/sessao-nao-aceita-presenca`) — MESMA semantica do POST unitario,
-  aplicada ao lote inteiro: nenhuma linha entrou."
-  [repo-sessoes relogio]
+  aplicada ao lote inteiro: nenhuma linha entrou. O corpo do 409 diz QUAL linha reprovou (`vereador-id` +
+  `indice`), senao a tela nao consegue destaca-la num lote de dezenas de nomes."
+  [repo-sessoes roster-da-casa relogio]
   (fn [req]
     (let [ator (:ator req)
           m    (adapters-in-presenca/registrar-presenca-lote->dominio
                 (get-in req [:path-params :id]) (:json-params req))]
       (try
-        (if-let [recibos (controllers/registrar-presenca-lote repo-sessoes ator m (tempo/agora relogio))]
+        (if-let [recibos (controllers/registrar-presenca-lote repo-sessoes roster-da-casa ator m
+                                                             (tempo/agora relogio))]
           (http/json-resposta 201 (adapters-out-presenca/recibos-presenca-lote->wire recibos))
           (http/json-resposta 404 {:erro "sessao nao encontrada"}))
         (catch clojure.lang.ExceptionInfo e
-          (if (= :conflito/sessao-nao-aceita-presenca (:tipo (ex-data e)))
-            (http/json-resposta 409 {:erro (ex-message e)})
+          (case (:tipo (ex-data e))
+            :conflito/sessao-nao-aceita-presenca (resposta-conflito-presenca e)
+            :conflito/sessao-sem-data
+            (http/json-resposta 409 {:erro "sessao sem data marcada: informe a data da sessao antes de registrar presenca"})
             (throw e)))))))
 
 (defn- confirmar-presenca-handler
@@ -128,19 +151,24 @@
   (nunca do cliente). Reusa o MESMO wire/out de recibo que a rota da Mesa (`recibo-presenca->wire`).
   nil (sessao inexistente OU ator sem cadastro de vereador) -> 404.
 
-  O MESMO 409 da rota da Mesa: uma porta self-service sem o gate seria o buraco por outra fechadura."
-  [repo-sessoes resolver-vereador relogio]
+  O MESMO 409 da rota da Mesa: uma porta self-service sem o gate seria o buraco por outra fechadura — e isso
+  passou a valer tambem para o gate de ASSENTO (ter cadastro nao e' ter cadeira na data; um ex-vereador
+  continua resolvendo por identidade)."
+  [repo-sessoes roster-da-casa resolver-vereador relogio]
   (fn [req]
     (let [ator (:ator req)
           sid  (adapters-in/id-param->uuid (get-in req [:path-params :id]))
           instante (tempo/agora relogio)]
       (try
-        (if-let [recibo (controllers/confirmar-minha-presenca repo-sessoes resolver-vereador ator sid instante)]
+        (if-let [recibo (controllers/confirmar-minha-presenca repo-sessoes roster-da-casa resolver-vereador
+                                                             ator sid instante)]
           (http/json-resposta 201 (adapters-out-presenca/recibo-presenca->wire recibo))
           (http/json-resposta 404 {:erro "sessao nao encontrada, ou vereador sem cadastro vinculado neste ente"}))
         (catch clojure.lang.ExceptionInfo e
-          (if (= :conflito/sessao-nao-aceita-presenca (:tipo (ex-data e)))
-            (http/json-resposta 409 {:erro (ex-message e)})
+          (case (:tipo (ex-data e))
+            :conflito/sessao-nao-aceita-presenca (resposta-conflito-presenca e)
+            :conflito/sessao-sem-data
+            (http/json-resposta 409 {:erro "sessao sem data marcada: informe a data da sessao antes de confirmar presenca"})
             (throw e)))))))
 
 ;; ---------- §22.6 eixo C — justificativa de ausencia (Etapa 2 da chamada) ----------
@@ -482,11 +510,16 @@
 
 (defn- conduzir-chamada-handler
   "POST /sessoes/:id/chamada (§22.6 eixo C, Etapa 2d, papel 'secretario'). Sem corpo — `conduzida-por` = o
-  ator (anti-forja, mesmo contrato de `confirmar-presenca-handler`), `membros-da-casa` congelado pelo
-  controller (MESMA fonte do roster que `GET .../chamada` usa), `ocorrido-em` = o relogio do servidor (nunca
-  do cliente). adapters/in nao entra (nao ha' corpo a coagir, so' o `:id` do path). Sucesso -> 201
-  (append-only, sem CAS). nil (sessao inexistente) -> 404. 409 (`:conflito/chamada`) quando o Repo recusa
-  (sessao ja fechou) — mesmo padrao do gate de presenca, mensagem propria do recurso."
+  ator (anti-forja, mesmo contrato de `confirmar-presenca-handler`), `membros-da-casa` congelado DENTRO da
+  tx do Repo (sobre a mesma uniao que `GET .../chamada` publica), `ocorrido-em` = o relogio do servidor
+  (nunca do cliente). adapters/in nao entra (nao ha' corpo a coagir, so' o `:id` do path).
+
+  201 quando o ato foi CRIADO; 200 quando foi um REENVIO deduplicado (`:ja-registrado`, duplo clique dentro
+  de `logic/janela-de-deduplicacao-de-chamada`) — o corpo e' o ato existente, no MESMO shape. A distincao
+  importa: a rota nao tem corpo, entao sem ela o cliente nao consegue diferenciar 'registrei agora' de 'ja
+  estava registrado', e a alternativa era gravar um segundo ato num append-only que nao pode ser desfeito.
+  nil (sessao inexistente) -> 404. 409 (`:conflito/chamada`) quando o Repo recusa: sessao ja fechou, Casa
+  sem nenhum mandato vigente na data (denominador zero), ou teto de atos por sessao."
   [repo-sessoes roster-da-casa relogio]
   (fn [req]
     (let [ator (:ator req)
@@ -494,11 +527,16 @@
       (try
         (if-let [recibo (controllers/registrar-chamada-conduzida repo-sessoes roster-da-casa ator id
                                                                   (tempo/agora relogio))]
-          (http/json-resposta 201 (adapters-out-presenca/chamada-conduzida->wire recibo))
+          (http/json-resposta (if (:ja-registrado recibo) 200 201)
+                              (adapters-out-presenca/chamada-conduzida->wire recibo))
           (http/json-resposta 404 {:erro "sessao nao encontrada"}))
         (catch clojure.lang.ExceptionInfo e
-          (if (= :conflito/chamada (:tipo (ex-data e)))
-            (http/json-resposta 409 {:erro (ex-message e)})
+          (case (:tipo (ex-data e))
+            :conflito/chamada (http/json-resposta 409 {:erro (ex-message e)})
+            ;; `data-de-referencia` roda no controller para resolver o roster: sessao sem data nenhuma cai
+            ;; aqui, e e' o MESMO 409 acionavel que o GET da chamada ja devolvia.
+            :conflito/sessao-sem-data
+            (http/json-resposta 409 {:erro "sessao sem data marcada: informe a data da sessao antes de conduzir a chamada"})
             (throw e)))))))
 
 (defn- listar-gravacoes-handler
@@ -536,16 +574,16 @@
      [auth (it/exige-papel "secretario") it/corpo-json (transicionar-handler repo-sessoes)]
      :route-name :sessoes/transicionar]
     ["/sessoes/:id/presenca" :post
-     [auth (it/exige-papel "secretario") it/corpo-json (registrar-presenca-handler repo-sessoes relogio)]
+     [auth (it/exige-papel "secretario") it/corpo-json (registrar-presenca-handler repo-sessoes roster-da-casa relogio)]
      :route-name :sessoes/registrar-presenca]
     ["/sessoes/:id/presenca/confirmar" :post
-     [auth papel-vereador (confirmar-presenca-handler repo-sessoes resolver-vereador relogio)]
+     [auth papel-vereador (confirmar-presenca-handler repo-sessoes roster-da-casa resolver-vereador relogio)]
      :route-name :sessoes/confirmar-minha-presenca]
     ;; `/lote` e' outro literal-sibling de `presenca` (junto de `confirmar`) — sem filho `:param` sob
     ;; `/presenca`, nao ha' o risco de sombreamento literal-vs-param ja documentado em `/gravacoes` e em
     ;; `/minha-justificativa` (prefix-tree do Pedestal so' sombreia quando um `:param` irmao existe).
     ["/sessoes/:id/presenca/lote" :post
-     [auth (it/exige-papel "secretario") it/corpo-json (registrar-presenca-lote-handler repo-sessoes relogio)]
+     [auth (it/exige-papel "secretario") it/corpo-json (registrar-presenca-lote-handler repo-sessoes roster-da-casa relogio)]
      :route-name :sessoes/registrar-presenca-lote]
     ["/sessoes/:id/chamada" :get
      [auth (it/exige-papel "secretario") (chamada-handler repo-sessoes roster-da-casa relogio)]

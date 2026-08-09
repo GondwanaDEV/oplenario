@@ -255,13 +255,16 @@
     (is (= #{"src/oplenario/rotas.clj"                                  ; o host (uso real)
              "src/oplenario/transparencia/components/repositorio.clj"   ; o consumer de presenca (uso real)
              "src/oplenario/transparencia/db/parlamentar.clj"           ; so' cita, na docstring do UPSERT
-             "src/oplenario/sessoes/controllers.clj"}                   ; a CHAMADA, fatia 1b-WIRE (uso real)
+             "src/oplenario/sessoes/controllers.clj"                     ; a CHAMADA, fatia 1b-WIRE (uso real)
+             "src/oplenario/sessoes/logic.clj"}                          ; o PISO da janela de presenca (uso real)
            consumidores)
         "a lista de arquivos de src/ que MENCIONAM o fuso global mudou — atualize a docstring da constante
          (e este conjunto) ANTES de mergear"))
   (let [doc (:doc (meta #'tempo/zona-civil-padrao))]
     (is (re-find #"transparencia" doc)
         "a docstring tem de nomear o segundo consumidor: ela nao e' mais exclusiva do host")
+    (is (re-find #"piso-da-janela-de-presenca" doc)
+        "e tem de nomear o quarto consumidor: um fuso errado ali RECUSA escrita, nao so' deforma relatorio")
     (is (re-find #"sessao_com_chamada" doc)
         "e tem de dizer que a constante passou a determinar dado PERSISTIDO — trocar o fuso nao reescreve
          linha ja' projetada, e nao ha re-projecao no repo")))

@@ -54,8 +54,13 @@
 (defn- reg [vid tipo ocorrido]
   {:vereador-id vid :tipo tipo :modalidade "plenario" :ocorrido-em ocorrido})
 
-(defn- registrar-lote! [ente sid registros agora]
-  (controllers/registrar-presenca-lote *repo* (ator ente) {:sessao-id sid :registros registros} agora))
+(defn- registrar-lote!
+  "O seam `roster-da-casa` da' cadeira a TODA linha do lote: este ns testa a atomicidade e o gate de
+  estado/janela, nao o gate de assento (esse tem ns proprio)."
+  [ente sid registros agora]
+  (controllers/registrar-presenca-lote
+    *repo* (fn [_e _d] (mapv (fn [r] {:vereador-id (:vereador-id r)}) registros))
+    (ator ente) {:sessao-id sid :registros registros} agora))
 
 (defn- conflito-de-presenca
   "Roda `f`, exige `:conflito/sessao-nao-aceita-presenca` e devolve {:msg :dados}. Falha se nada for lancado."

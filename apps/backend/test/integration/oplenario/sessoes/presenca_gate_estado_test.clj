@@ -23,7 +23,8 @@
             [oplenario.migracao :as migracao]
             [oplenario.sessoes.adapters.out.presenca :as adapters-out]
             [oplenario.sessoes.components.repositorio :as repo]
-            [oplenario.sessoes.controllers :as controllers])
+            [oplenario.sessoes.controllers :as controllers]
+            [oplenario.sessoes.logic :as logic])
   (:import (java.time Instant)))
 
 (def ^:dynamic *ds* nil)
@@ -39,9 +40,15 @@
 
 (defn- ator [ente] {:ente-id ente :identidade-id (random-uuid)})
 
-(defn- agendar! [ente]
+(defn- agendar!
+  "`agendada-para` = AGORA (nao um literal): desde a revisao da Etapa 2 ela resolve duas coisas — a DATA DE
+  REFERENCIA do roster (gate de assento) e o DIA CIVIL que e' o piso da janela. Ancorar no relogio do
+  container mantem os instantes deste ns (todos derivados de `aberta_em`, carimbada pelo banco) dentro do
+  mesmo dia civil; um literal de junho colocaria o piso a meses de distancia e o teste viraria outra coisa."
+  [ente]
   (:id (repo/agendar-sessao! *repo* ente {:id (random-uuid) :sessao-legislativa-id (random-uuid)
-                                          :tipo-sessao "ordinaria" :modalidade "presencial"})))
+                                          :tipo-sessao "ordinaria" :modalidade "presencial"
+                                          :agendada-para (Instant/now)})))
 
 (defn- transicionar! [ente sid para lock]
   (repo/transicionar-sessao! *repo* ente (cond-> {:id sid :para para :updated-by (random-uuid) :lock-version lock}
@@ -59,8 +66,15 @@
       (:n (jdbc/execute-one! tx ["SELECT count(*) AS n FROM sessoes.presenca_evento WHERE ente_id = ? AND sessao_id = ?"
                                  ente sid])))))
 
+(defn- roster-com
+  "O seam `roster-da-casa` que a revisao da Etapa 2 passou a exigir tambem nas escritas de presenca. Este ns
+  testa o gate de ESTADO/JANELA, entao o vereador SEMPRE tem cadeira aqui — o gate de assento e' testado
+  a parte (`presenca-lote-http-in-test/lote-com-uuid-fora-do-roster-409-e-nenhuma-linha-grava`)."
+  [& vereador-ids]
+  (fn [_ente _data] (mapv (fn [v] {:vereador-id v}) vereador-ids)))
+
 (defn- registrar! [ente sid vereador-id ocorrido-em agora]
-  (controllers/registrar-presenca *repo* (ator ente)
+  (controllers/registrar-presenca *repo* (roster-com vereador-id) (ator ente)
     {:sessao-id sid :vereador-id vereador-id :tipo "entrada" :modalidade "plenario" :ocorrido-em ocorrido-em}
     agora))
 
@@ -117,7 +131,7 @@
         vid (random-uuid)
         instante (.plusSeconds ^Instant aberta-em 3600)
         r (conflito-de-presenca
-           #(controllers/confirmar-minha-presenca *repo* (fn [_ _] vid) (ator ente) sid instante))]
+           #(controllers/confirmar-minha-presenca *repo* (roster-com vid) (fn [_ _] vid) (ator ente) sid instante))]
     (is (str/includes? (:msg r) "encerrada"))
     (is (zero? (linhas-de-presenca ente sid))
         "a porta self-service do vereador nao e' um bypass do gate da Mesa")))
@@ -152,18 +166,48 @@
 ;; ---------- G7: o CLAMP da hora declarada ----------
 
 (deftest g7-instante-fora-da-janela-da-sessao-e-recusado
+  ;; REVISAO da Etapa 2: o piso deixou de ser `aberta_em` e passou a ser o DIA CIVIL da sessao. Chegar ANTES
+  ;; do martelo e' o caso NORMAL da chamada (a folha de presenca registra horas de chegada), e recusa-lo
+  ;; tornava a hora real irregistravel — ver `g7b`. O que o piso barra e' o fato de OUTRO DIA. O teto ganhou
+  ;; `logic/tolerancia-de-relogio` (skew browser/JVM/Postgres), entao o "futuro" tem de passar dela.
   (let [ente (random-uuid)
         sid (agendar! ente)
         aberta-em (abrir! ente sid)
         agora (.plusSeconds ^Instant aberta-em 3600)
-        antes-da-abertura (.minusSeconds ^Instant aberta-em 600)
-        no-futuro (.plusSeconds ^Instant agora 600)]
-    (let [r (conflito-de-presenca #(registrar! ente sid (random-uuid) antes-da-abertura agora))]
-      (is (= :instante-antes-da-abertura (:motivo (:dados r)))))
-    (is (zero? (linhas-de-presenca ente sid)) "nada gravado no caso 'antes da abertura'")
+        outro-dia (.minusSeconds ^Instant aberta-em (* 3 86400))
+        no-futuro (.plusSeconds ^Instant agora (+ 600 (.toSeconds logic/tolerancia-de-relogio)))]
+    (let [r (conflito-de-presenca #(registrar! ente sid (random-uuid) outro-dia agora))]
+      (is (= :instante-fora-do-dia-da-sessao (:motivo (:dados r)))))
+    (is (zero? (linhas-de-presenca ente sid)) "nada gravado no caso 'de outro dia'")
     (let [r (conflito-de-presenca #(registrar! ente sid (random-uuid) no-futuro agora))]
       (is (= :instante-no-futuro (:motivo (:dados r)))))
     (is (zero? (linhas-de-presenca ente sid)) "nada gravado no caso 'no futuro'")))
+
+(deftest g7b-chegada-anterior-a-abertura-no-MESMO-dia-e-gravada
+  ;; REGRESSAO do achado MAJOR: com o piso em `aberta_em`, a hora de quem chegou 12 min antes do martelo
+  ;; voltava 409 — e no `POST /presenca/lote` a PRIMEIRA linha assim recusava a chamada inteira. Sem evento
+  ;; de retificacao, a unica saida do secretario era redigitar a hora da abertura em todos: falsificar o
+  ;; fato observado para caber num gate feito contra falsificacao.
+  (let [ente (random-uuid)
+        sid (agendar! ente)
+        aberta-em (abrir! ente sid)
+        chegada (.minusSeconds ^Instant aberta-em 720)
+        agora (.plusSeconds ^Instant aberta-em 180)
+        recibo (registrar! ente sid (random-uuid) chegada agora)]
+    (is (some? (:id recibo)))
+    (is (= chegada (:ocorrido-em recibo)) "a hora REAL de chegada foi gravada, nao a do martelo")
+    (is (= 1 (linhas-de-presenca ente sid)))))
+
+(deftest g7c-skew-pequeno-do-relogio-do-cliente-nao-recusa
+  ;; REGRESSAO do achado MEDIO: `ocorrido-em` vem do browser, `agora` da JVM, `aberta_em` do Postgres — tres
+  ;; relogios comparados com desigualdade estrita. Uma estacao adiantada em segundos derrubava a chamada.
+  (let [ente (random-uuid)
+        sid (agendar! ente)
+        aberta-em (abrir! ente sid)
+        agora (.plusSeconds ^Instant aberta-em 60)
+        adiantado (.plusSeconds ^Instant agora 40)]
+    (is (some? (:id (registrar! ente sid (random-uuid) adiantado agora))))
+    (is (= 1 (linhas-de-presenca ente sid)))))
 
 ;; ---------- G8: o par (hora do fato, hora do registro) chega ao wire ----------
 

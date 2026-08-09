@@ -106,7 +106,8 @@
    :fonte fonte
    :registrado-em (some-> registrado-em str)
    :justificativa (when justificativa
-                    {:estado (:estado justificativa) :motivo (:motivo justificativa)})})
+                    {:estado (:estado justificativa) :motivo (:motivo justificativa)
+                     :decidido-em (some-> (:decidido-em justificativa) str)})})
 
 ;; ---------- §22.6 eixo C — o ATO da CHAMADA CONDUZIDA (Etapa 2d) ----------
 

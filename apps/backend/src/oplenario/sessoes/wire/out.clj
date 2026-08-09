@@ -270,7 +270,16 @@
    [:registrado-em [:maybe :string]]
    [:justificativa [:maybe [:map {:closed true}
                             [:estado (km/enum-de logic/estados-justificativa)]
-                            [:motivo :string]]]]])
+                            [:motivo :string]
+                            ;; `decidido-em` (revisao da Etapa 2): a chamada CONGELA o instante da presenca,
+                            ;; mas le' a justificativa no estado CORRENTE — e' o efeito desejado (a Mesa
+                            ;; aprecia a falta dias DEPOIS da sessao). Sem este campo, porem, reabrir a
+                            ;; chamada de uma sessao encerrada devolvia um estado diferente do da ata
+                            ;; impressa, com o MESMO `instante` congelado e nenhum sinal de quando mudou: o
+                            ;; juridico via divergencia e nao tinha como saber qual das duas envelheceu. Com
+                            ;; ele, a tela marca "justificada apos o encerramento, em <data>" e as duas
+                            ;; reconciliam. nil enquanto 'pendente' (CHECK justificativa_decisao_coerente).
+                            [:decidido-em [:maybe :string]]]]]])
 
 (def ChamadaQuorumOut
   "A contagem de quorum DESTA chamada (§22.6 eixo C) — numerador (presentes por modalidade) e denominador

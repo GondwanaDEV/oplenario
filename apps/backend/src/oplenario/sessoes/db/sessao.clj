@@ -64,7 +64,11 @@
   [tx ente-id id]
   (comum/linha->kebab
    (jdbc/execute-one! tx
-     (sql/format {:select [:id :estado :aberta_em :encerrada_em] :from [:sessoes.sessao]
+     ;; `agendada_para` entra na projecao (revisao da Etapa 2): o PISO da janela deixou de ser `aberta_em` e
+     ;; passou a ser o DIA CIVIL da sessao (`logic/piso-da-janela-de-presenca`), que sai de `aberta_em` OU de
+     ;; `agendada_para` — sem esta coluna, uma sessao ainda `agendada` ficaria sem piso nenhum, que era
+     ;; exatamente o buraco apontado (o estado em que a chamada de quorum acontece).
+     (sql/format {:select [:id :estado :aberta_em :encerrada_em :agendada_para] :from [:sessoes.sessao]
                   :where [:and [:= :ente_id ente-id] [:= :id id]]
                   :for :share}))))
 

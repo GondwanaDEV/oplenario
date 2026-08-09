@@ -14,7 +14,8 @@
             [oplenario.sessoes.db.tribuna :as tribuna]
             [oplenario.sessoes.logic :as logic]
             [oplenario.sessoes.relacoes.presenca :as rel-presenca])
-  (:import (org.postgresql.util PSQLException)))
+  (:import (java.time Instant)
+           (org.postgresql.util PSQLException)))
 
 (defprotocol RepoSessoes
   (transacao [this ente-id f] "Roda (f tx) numa UNICA tx do tenant — compoe acoes atomicamente.")
@@ -63,9 +64,13 @@
   (registrar-chamada-conduzida! [this ente-id m]
     "Registra o ATO de chamada conduzida (Etapa 2d): o MESMO gate de estado+janela de `registrar-presenca!`
      roda DENTRO desta tx, sobre a sessao lida AQUI com `FOR SHARE` — nao sobre a leitura de authz do
-     controller. `m` exige `:membros-da-casa` (o denominador CONGELADO, ja' resolvido pelo caller via roster)
-     e `:agora` (o relogio ja lido na borda). Recusa lanca `:conflito/chamada` (a borda mapeia 409). Devolve
-     {:id :ocorrido-em :registrado-em}.")
+     controller. `m` exige `:roster` (as linhas cruas do seam, resolvidas na data de referencia pelo
+     controller) e `:agora` (o relogio ja lido na borda). O DENOMINADOR CONGELADO e' computado AQUI DENTRO,
+     sobre a mesma uniao que `chamada-da-sessao` publica — nunca recebido pronto do caller (revisao: a conta
+     roster-only divergia da tela e o registro e' append-only). Recusa lanca `:conflito/chamada` (a borda
+     mapeia 409), inclusive por denominador zero e por teto de atos. Um REENVIO dentro de
+     `logic/janela-de-deduplicacao-de-chamada` devolve o ato existente com `:ja-registrado true` (a borda
+     responde 200). Devolve {:id :ocorrido-em :registrado-em :membros-da-casa}.")
   (listar-chamadas-conduzidas [this ente-id sessao-id] "Os atos de chamada da sessao, em ordem cronologica.")
   (resumo-presenca [this ente-id membros-da-casa]
     "Presenca agregada (F7/FE Onda A1) das ultimas 10 sessoes encerradas do tenant.")
@@ -208,14 +213,19 @@
                             {:tipo :conflito/sessao-nao-aceita-presenca :motivo :sessao-inexistente
                              :sessao-id sessao-id})))
           ;; UMA linha reprovada recusa o LOTE INTEIRO — nenhum INSERT roda antes desta checagem terminar.
-          (when-let [{:keys [motivo registro]}
-                     (some (fn [r] (when-let [mo (logic/motivo-recusa-de-presenca s (:ocorrido-em r) agora)]
-                                     {:motivo mo :registro r}))
-                           registros)]
+          ;; O INDICE da linha entra na ex-data junto do `vereador-id` (revisao): o cliente casa
+          ;; `recibos[i]` com `registros[i]` por POSICAO, entao sem o indice a tela nao consegue destacar a
+          ;; linha e o secretario faz busca binaria reenviando sublotes, ao vivo, com o plenario esperando.
+          (when-let [{:keys [motivo registro indice]}
+                     (first (keep-indexed
+                             (fn [i r]
+                               (when-let [mo (logic/motivo-recusa-de-presenca s (:ocorrido-em r) agora)]
+                                 {:motivo mo :registro r :indice i}))
+                             registros))]
             (throw (ex-info (logic/mensagem-de-recusa-de-presenca motivo s agora)
                             {:tipo :conflito/sessao-nao-aceita-presenca :motivo motivo
                              :sessao-id sessao-id :estado (:estado s)
-                             :vereador-id (:vereador-id registro)})))
+                             :vereador-id (:vereador-id registro) :indice indice})))
           (let [recibos (presenca/registrar-lote! tx ente-id sessao-id registros)]
             (doseq [{:keys [vereador-id tipo modalidade fonte ocorrido-em]} registros]
               (producers/emitir-presenca-registrada! bus tx ente-id
@@ -254,11 +264,14 @@
   ;; pode entrar depois que ela fechou. `:conflito/chamada` e' tag PROPRIA (nao reusa
   ;; `:conflito/sessao-nao-aceita-presenca`): convencao do modulo e' 1 tag por RECURSO (transicao/inscricao/
   ;; pauta/fala/vinculo/justificativa), e o ato de chamada e' um recurso proprio, nao presenca.
-  (registrar-chamada-conduzida! [this ente-id {:keys [sessao-id ocorrido-em agora] :as m}]
+  (registrar-chamada-conduzida! [this ente-id {:keys [sessao-id conduzida-por roster ocorrido-em agora] :as m}]
     (transacao this ente-id
       (fn [tx]
         (when (or (nil? ocorrido-em) (nil? agora))
           (throw (ex-info "registrar-chamada-conduzida!: ocorrido-em e agora sao obrigatorios (gate de janela)"
+                          {:tipo :servidor/erro :sessao-id sessao-id})))
+        (when (nil? roster)
+          (throw (ex-info "registrar-chamada-conduzida!: roster e' obrigatorio (denominador congelado)"
                           {:tipo :servidor/erro :sessao-id sessao-id})))
         (let [s (sessao/janela-para-registro tx ente-id sessao-id)]
           (when (nil? s)
@@ -268,7 +281,39 @@
             (throw (ex-info (logic/mensagem-de-recusa-de-chamada motivo s agora)
                             {:tipo :conflito/chamada :motivo motivo
                              :sessao-id sessao-id :estado (:estado s)})))
-          (chamada/registrar! tx (assoc m :ente-id ente-id))))))
+          ;; DEDUPLICACAO antes de qualquer conta: um REENVIO (duplo clique) devolve o ato que ja existe.
+          ;; `:ja-registrado` sobe ate' a borda, que responde 200 em vez de 201 — o cliente distingue
+          ;; "registrei agora" de "ja estava registrado" sem que um ato falso entre num append-only.
+          (if-let [existente (chamada/ato-recente-do-ator tx ente-id sessao-id conduzida-por
+                                                          (.minus ^Instant ocorrido-em
+                                                                  logic/janela-de-deduplicacao-de-chamada))]
+            (assoc existente :ja-registrado true)
+            (do
+              (when (>= (chamada/contar-da-sessao tx ente-id sessao-id) logic/teto-de-atos-de-chamada)
+                (throw (ex-info (logic/mensagem-de-recusa-de-chamada :teto-de-atos s agora)
+                                {:tipo :conflito/chamada :motivo :teto-de-atos :sessao-id sessao-id})))
+              ;; O DENOMINADOR CONGELADO sai DAQUI, da mesma tx e da MESMA uniao que `chamada-da-sessao`
+              ;; publica (roster x presenca corrente x justificativas) — nao de uma conta roster-only no
+              ;; controller. Computa-lo la' fora dava um numero que DIVERGIA da tela no caso do licenciado
+              ;; com evento positivo, e o congelado e' append-only: o numero errado nao podia ser corrigido,
+              ;; so' acompanhado de outro. `ocorrido-em` e' o instante de avaliacao (a sessao esta viva — o
+              ;; gate acima ja' garantiu — logo `instante-de-avaliacao` seria exatamente ele).
+              (let [presencas (presenca/presenca-corrente tx ente-id sessao-id ocorrido-em)
+                    justs     (presenca/listar-justificativas-da-sessao tx ente-id sessao-id)
+                    membros   (logic/membros-da-casa-da-chamada roster presencas justs)]
+                ;; FAIL-CLOSED no denominador ZERO. O precedente do mesmo eixo e' `instante-de-avaliacao`,
+                ;; que escolheu LANCAR em vez de servir uma chamada fabricada ("melhor a rota cair do que a
+                ;; ata mentir"). Aqui a chamada fabricada seria GRAVADA e imutavel: quorum impossivel /
+                ;; divisao por zero a jusante (folha da sessao, apuracao de assiduidade), sem caminho de
+                ;; reparo. O zero segue aceito no CHECK do banco como piso estrutural — o que se recusa e' o
+                ;; ATO. Causa tipica: data da sessao digitada com o ano errado, ou acervo de mandatos ainda
+                ;; nao migrado.
+                (when (zero? membros)
+                  (throw (ex-info (logic/mensagem-de-recusa-de-chamada :casa-sem-membros s agora)
+                                  {:tipo :conflito/chamada :motivo :casa-sem-membros :sessao-id sessao-id})))
+                (chamada/registrar! tx (-> m
+                                           (dissoc :roster)
+                                           (assoc :ente-id ente-id :membros-da-casa membros))))))))))
   (listar-chamadas-conduzidas [this ente-id sessao-id]
     (transacao this ente-id #(chamada/listar-da-sessao % ente-id sessao-id)))
   (resumo-presenca [this ente-id membros-da-casa]

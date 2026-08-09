@@ -1,8 +1,14 @@
 (ns oplenario.sessoes.logic
   "PURO: regras e maquina de estados da sessao plenaria (§22.6 eixo A). Sem I/O. Capabilities desacopladas
   do tipo (disciplina §22.6.3 nº3): o tipo e' nome regimental, o comportamento e' atributo com default
-  derivado + override auditado. Os vocabularios espelham os CHECK da migration 0026."
-  (:require [clojure.string :as str]))
+  derivado + override auditado. Os vocabularios espelham os CHECK da migration 0026.
+
+  Requer `kernel/tempo` SO' pela zona civil (§22.6 eixo C: o piso da janela de presenca e' o DIA CIVIL da
+  sessao, e dia civil nao existe sem fuso). Continua PURO — `zona-civil-padrao` e' uma constante, nao um
+  relogio; nenhum instante e' LIDO aqui."
+  (:require [clojure.string :as str]
+            [oplenario.kernel.tempo :as tempo])
+  (:import (java.time Duration Instant ZoneId)))
 
 (set! *warn-on-reflection* true)
 
@@ -422,6 +428,50 @@
    :membros-da-casa    (count (remove #(or (= :licenciado (:estado %)) (:sem-assento %)) linhas))
    :presencas-fora-do-roster (count (filter :sem-assento linhas))})
 
+(defn derivar-linhas-da-chamada
+  "PURO. A UNIAO que a chamada publica, derivada de uma vez so': as linhas do ROSTER (cada uma cruzada com o
+  seu ultimo evento e a sua justificativa) MAIS as linhas SEM ASSENTO (presencas cujo vereador o roster da
+  data nao contem), estas no fim e ordenadas por id.
+
+  Devolve `[{:linha <derivada> :roster-linha <ou nil> :evento <ultimo evento / a propria presenca, ou nil>
+  :justificativa <ou nil>} ...]` — a linha derivada e as TRES FONTES que a produziram. O controller precisa
+  das fontes para acrescentar o que a derivacao nao carrega (`cargo-mesa`, `desde`, `fonte`,
+  `registrado-em`); quem so' quer contar quorum usa `(map :linha ...)`.
+
+  EXISTE POR CORRETUDE, nao por organizacao. Antes desta funcao, a uniao era montada no controller (para a
+  LEITURA) e o denominador do ATO de chamada conduzida saia de uma segunda conta, roster-only. As duas
+  DIVERGIAM no caso que `estado-de-presenca` documenta como real: o licenciado COM evento positivo e'
+  derivado PRESENTE e entra no denominador ('quem esta no plenario esta na Casa'), mas a conta roster-only o
+  via `:licenciado` e o tirava. A mesma sessao passava a ter duas aritmeticas da composicao da Casa — uma na
+  tela, outra congelada num registro APPEND-ONLY que ninguem pode corrigir. E' o defeito que a Etapa 1
+  gastou uma revisao inteira matando, reaberto pela porta do ato."
+  [roster presencas justificativas]
+  (let [presenca-por-ver      (into {} (map (juxt :vereador-id identity)) presencas)
+        justificativa-por-ver (into {} (map (juxt :vereador-id identity)) justificativas)
+        com-assento           (into #{} (map :vereador-id) roster)
+        do-roster (mapv (fn [rl]
+                          (let [ev (get presenca-por-ver (:vereador-id rl))
+                                j  (get justificativa-por-ver (:vereador-id rl))]
+                            {:linha (derivar-linha-chamada rl ev j)
+                             :roster-linha rl :evento ev :justificativa j}))
+                        roster)
+        sem-assento (->> presencas
+                         (remove #(contains? com-assento (:vereador-id %)))
+                         (sort-by #(str (:vereador-id %)))
+                         (mapv (fn [p]
+                                 (let [j (get justificativa-por-ver (:vereador-id p))]
+                                   {:linha (derivar-linha-sem-assento p j)
+                                    :roster-linha nil :evento p :justificativa j}))))]
+    (into do-roster sem-assento)))
+
+(defn membros-da-casa-da-chamada
+  "PURO. O DENOMINADOR do quorum (`:membros-da-casa`) sobre a MESMA uniao que a leitura publica — o unico
+  numero que pode ser congelado no ato de chamada conduzida sem mentir. Substitui a antiga
+  `membros-da-casa-do-roster`, que passava `nil` como evento/justificativa e por isso divergia (ver
+  `derivar-linhas-da-chamada`)."
+  [roster presencas justificativas]
+  (:membros-da-casa (contar-quorum (mapv :linha (derivar-linhas-da-chamada roster presencas justificativas)))))
+
 ;; ---------- §22.6 eixo C — o INSTANTE em que a chamada avalia a presenca ----------
 ;; PURO e aqui (nao no controller) por uma razao de corretude, nao de organizacao: o instante tem de ser
 ;; derivado da MESMA leitura da sessao que a leitura da presenca usa — quem le' a sessao e' o Repo, dentro
@@ -474,21 +524,61 @@
   [estado]
   (contains? estados-sessao-aceita-presenca estado))
 
-(defn motivo-recusa-de-presenca
-  "PURO. `nil` = pode gravar. Senao, a RAZAO da recusa (keyword), na ordem em que importam:
+(def ^Duration tolerancia-de-relogio
+  "A folga do LIMITE SUPERIOR da janela (`instante > agora`). Existe porque a desigualdade compara relogios
+  de MAQUINAS DIFERENTES: `ocorrido-em` vem do browser da secretaria, `agora` do relogio da JVM da aplicacao
+  e `aberta_em`/`encerrada_em` do `now()` do Postgres. Uma estacao de trabalho adiantada em segundos —
+  situacao corriqueira em camara pequena sem sincronismo de dominio — fazia TODA linha da chamada ao vivo
+  voltar 409 `:instante-no-futuro`, com uma mensagem citando 'o relogio do servidor', que nao e' o relogio
+  que o operador ve. Cinco minutos e' folga de skew, nao licenca para declarar fato futuro: o proposito do
+  limite (recusar o que ainda nao aconteceu) sobrevive, e o ramo continua alcancavel (teste R3)."
+  ^Duration (Duration/ofMinutes 5))
 
-    :estado-nao-aceita-presenca   a sessao ja fechou (ou esta num estado que ninguem classificou)
-    :instante-no-futuro           o fato declarado ainda nao aconteceu pelo relogio do servidor
-    :instante-antes-da-abertura   o fato e' anterior a `aberta_em` — retroage para fora da vida da sessao
-    :instante-apos-o-encerramento o fato e' posterior a `encerrada_em`
+(defn piso-da-janela-de-presenca
+  "PURO. O LIMITE INFERIOR da janela: o inicio do DIA CIVIL da sessao (fuso `tempo/zona-civil-padrao`),
+  derivado do MESMO marco que resolve a composicao da Casa (`aberta-em` se a sessao ja abriu, senao
+  `agendada-para` — a regra de `controllers/data-de-referencia`). `nil` quando a sessao nao tem nenhum dos
+  dois marcos: sem data nao ha' dia civil a partir do qual medir, e inventar um piso seria pior.
+
+  POR QUE NAO `aberta_em` (a forma anterior, corrigida na revisao): a chamada de uma camara e' conduzida COM
+  a sessao ja aberta, e as horas que ela registra sao as de CHEGADA — anteriores ao martelo, por definicao.
+  Com o piso em `aberta_em`, a hora real de quem chegou as 13:48 numa sessao aberta as 14:00 era
+  IRREGISTRAVEL, e no `POST /presenca/lote` a primeira linha reprovada recusava a chamada inteira. Como nao
+  existe evento de RETIFICACAO, a unica saida do secretario no plenario era redigitar a hora do martelo em
+  todos — falsificar o fato observado para caber num gate que existia para impedir falsificacao.
+
+  O dia civil preserva o invariante que importa (o fato tem de ser DAQUELA sessao, nao de outro dia) e vale
+  TAMBEM para `agendada`, que antes era o unico estado sem piso nenhum — e e' justamente o estado em que a
+  chamada de quorum acontece."
+  ^Instant [sessao]
+  (when-let [^Instant marco (or (:aberta-em sessao) (:agendada-para sessao))]
+    (-> (tempo/hoje-de marco ^ZoneId tempo/zona-civil-padrao)
+        (.atStartOfDay ^ZoneId tempo/zona-civil-padrao)
+        .toInstant)))
+
+(def motivos-do-gate-de-presenca
+  "O VOCABULARIO fechado que `motivo-recusa-de-presenca` produz — a fonte unica para as DUAS tabelas de
+  mensagem (`mensagem-de-recusa-de-presenca` e `mensagem-de-recusa-de-chamada`), que sao `case` sobre ele e
+  degradariam em silencio num fallback generico se um motivo novo entrasse so' no `cond`. O teste
+  `r5-todo-motivo-do-gate-tem-mensagem-propria-nas-duas-bordas` exige que todo membro deste set produza
+  mensagem distinta do fallback nas duas; `r5-o-set-e-exatamente-o-que-o-gate-produz` fecha a outra direcao.
+  Mesmo padrao de `vocabulario-de-estado-e-particionado`."
+  #{:estado-nao-aceita-presenca
+    :instante-no-futuro
+    :instante-fora-do-dia-da-sessao
+    :instante-apos-o-encerramento})
+
+(defn motivo-recusa-de-presenca
+  "PURO. `nil` = pode gravar. Senao, a RAZAO da recusa (keyword de `motivos-do-gate-de-presenca`), na ordem
+  em que importam:
+
+    :estado-nao-aceita-presenca     a sessao ja fechou (ou esta num estado que ninguem classificou)
+    :instante-no-futuro             o fato declarado ainda nao aconteceu (alem da `tolerancia-de-relogio`)
+    :instante-fora-do-dia-da-sessao o fato e' de OUTRO dia civil que nao o da sessao
+    :instante-apos-o-encerramento   o fato e' posterior a `encerrada_em`
 
   RECUSA, nunca CLAMP. Grudar a hora declarada no limite da janela produz um registro que PARECE bom e
   mente sobre quando o fato ocorreu — pior que a recusa, porque o operador nao fica sabendo.
-
-  O limite inferior so' existe DEPOIS que a sessao abriu (`aberta_em` nulo enquanto `agendada`): registrar
-  presenca anterior a abertura e' legitimo e se faz com a sessao ainda `agendada`. Depois de aberta, a
-  janela e' a verdade — enquanto nao existir um tipo de evento de RETIFICACAO, back-dating para fora dela e'
-  indistinguivel de falsificacao.
 
   O ramo `:instante-apos-o-encerramento` e' segunda tranca: o CHECK `sessao_encerrada_em_exige_estado` (mig
   0026) impede uma sessao VIVA de ter `encerrada_em`, logo ele e' inalcancavel hoje pelo banco. Fica para o
@@ -497,12 +587,12 @@
   `instante` e `agora` sao `java.time.Instant` (o data layer devolve timestamptz como Instant,
   kernel/db-tipos) e sao comparados por `compare` — Comparable, sem interop e sem reflexao. Ambos sao
   PRE-CONDICAO nao-nil: quem chama garante (a ausencia e' bug de servidor, nao conflito do usuario)."
-  [sessao instante agora]
+  [sessao ^Instant instante ^Instant agora]
   (cond
     (not (aceita-registro-de-presenca? (:estado sessao)))              :estado-nao-aceita-presenca
-    (pos? (compare instante agora))                                    :instante-no-futuro
-    (and (:aberta-em sessao)
-         (neg? (compare instante (:aberta-em sessao))))                :instante-antes-da-abertura
+    (pos? (compare instante (.plus agora tolerancia-de-relogio)))      :instante-no-futuro
+    (when-let [piso (piso-da-janela-de-presenca sessao)]
+      (neg? (compare instante piso)))                                  :instante-fora-do-dia-da-sessao
     (and (:encerrada-em sessao)
          (pos? (compare instante (:encerrada-em sessao))))             :instante-apos-o-encerramento
     :else nil))
@@ -511,7 +601,11 @@
   "PURO. A mensagem ACIONAVEL que vai no corpo do 409 — em portugues, dizendo o LIMITE violado (nao so' que
   houve violacao) e o que fazer. Fica aqui, e nao no diplomat, porque a razao da recusa e' regra de dominio:
   a borda so' repassa. Nao carrega dado de pessoa (so' estado e instantes da sessao), entao e' seguro
-  devolver ao cliente."
+  devolver ao cliente.
+
+  Cobre `motivos-do-gate-de-presenca` MAIS `:sem-assento`, que nao sai do gate puro (decidir se o vereador
+  compoe a Casa exige o roster, que so' o controller alcanca pelo seam) mas cuja mensagem e' regra de
+  dominio igual as outras — deixa-la na borda espalharia a redacao do 409 por dois lugares."
   [motivo sessao agora]
   (case motivo
     :estado-nao-aceita-presenca
@@ -520,15 +614,21 @@
          "alteraria o quorum de votacoes ja realizadas. Corrija pela ata.")
 
     :instante-no-futuro
-    (str "o instante informado e' posterior ao relogio do servidor (" agora "). "
-         "Registre o fato depois que ele ocorrer.")
+    (str "o instante informado e' posterior ao relogio do servidor (" agora ") alem da tolerancia de "
+         (.toMinutes tolerancia-de-relogio) " min. Registre o fato depois que ele ocorrer — e confira o "
+         "relogio desta estacao de trabalho, que pode estar adiantado.")
 
-    :instante-antes-da-abertura
-    (str "o instante informado e' anterior a abertura da sessao (" (:aberta-em sessao) "). "
-         "Presenca anterior a abertura tem de ser registrada antes de abrir a sessao.")
+    :instante-fora-do-dia-da-sessao
+    (str "o instante informado nao cai no dia desta sessao (a partir de " (piso-da-janela-de-presenca sessao)
+         "). Presenca de outro dia pertence a outra sessao — confira a data digitada.")
 
     :instante-apos-o-encerramento
     (str "o instante informado e' posterior ao encerramento da sessao (" (:encerrada-em sessao) ").")
+
+    :sem-assento
+    (str "este vereador nao compoe a Casa na data desta sessao. Um evento de presenca nao cria cadeira: "
+         "a linha entraria no quorum que o motor de votacao conta e no read-model publico sem que a "
+         "chamada saiba de quem e'. Confira o id enviado, ou o mandato em cadastros.")
 
     (str "registro de presenca recusado para esta sessao (" (name motivo) ").")))
 
@@ -726,21 +826,31 @@
 ;; quando, quem conduziu, e quantos membros a Casa tinha NAQUELE instante (o denominador CONGELADO). Ver o
 ;; cabecalho da migration 0072 para o porque de uma tabela propria em vez de estender `incidente_processual`.
 
-(defn membros-da-casa-do-roster
-  "PURO. O denominador do quorum (`:membros-da-casa`) que `roster` (as linhas cruas do seam `roster-da-casa`)
-  produziria — a MESMA regra de `contar-quorum` (exclui licenciados), aplicada ANTES de qualquer evento de
-  presenca existir. Reusa `derivar-linha-chamada` (com `ultimo-evento`/`justificativa` nil: so' o cadastro
-  importa aqui) + `contar-quorum` — NUNCA uma conta em SQL a parte, pela MESMA razao que `ultimos-eventos-
-  por-vereador-q` existe: duas aritmeticas de composicao da Casa no repo e' o defeito que a Etapa 1 gastou uma
-  revisao inteira matando. Usada para CONGELAR o denominador no ato da chamada conduzida."
-  [roster]
-  (:membros-da-casa (contar-quorum (mapv #(derivar-linha-chamada % nil nil) roster))))
+(def teto-de-atos-de-chamada
+  "Quantos atos de chamada conduzida uma sessao aceita. A tabela e' APPEND-ONLY e a mig 0072 concede
+  `SELECT, INSERT` (sem DELETE) alem de instalar `trg_chamada_conduzida_append_only` — uma vez inserida, a
+  linha NAO SAI por nenhum caminho da aplicacao. Sem teto, a rota (bodyless, sem rate limit) deixava um
+  `secretario` inflar `GET /sessoes/:id/chamada` — o endpoint do telao do M4 — ate' o OOM de um monolito
+  COMPARTILHADO por todos os tenants, e o dano era IRREVERSIVEL. Reconduzir a chamada legitimamente sao
+  unidades por sessao (apos suspensao, ou reverificacao a pedido da Mesa); 50 e' folga de duas ordens de
+  grandeza. E' a convencao ja declarada em `rotas.clj` ('todo predicado de cardinalidade aberta tem teto
+  explicito') aplicada onde faltava."
+  50)
+
+(def ^Duration janela-de-deduplicacao-de-chamada
+  "Janela em que um SEGUNDO `POST /sessoes/:id/chamada` do MESMO ator e' lido como REENVIO, nao como
+  reconducao: devolve o ato existente (200) em vez de criar outro. A rota nao tem corpo, entao o cliente nao
+  tem como sinalizar 'e' o mesmo ato' — e sem isto um duplo clique num plenario com Wi-Fi ruim gravava dois
+  atos, fazendo a folha da sessao registrar uma reverificacao de quorum que nao aconteceu, num registro que
+  nao pode ser desfeito. 30s separa o duplo clique da reconducao real (que leva minutos: a Mesa reabre a
+  chamada, chama os nomes)."
+  ^Duration (Duration/ofSeconds 30))
 
 (defn validar-membros-da-casa
   "Fail-closed: lanca se `n` nao e' um inteiro >= 0 (espelha o CHECK `membros_da_casa >= 0` da mig 0072). Nao
   ha' um 'vocabulario' aqui (nao e' um enum — este ato nao introduz nenhum CHECK de texto) mas a MESMA
   disciplina de validar ANTES do banco vale: um denominador negativo e' bug de servidor (nunca deveria sair
-  de `membros-da-casa-do-roster`), nao um dado de cliente a recusar com mensagem acionavel."
+  de `membros-da-casa-da-chamada`), nao um dado de cliente a recusar com mensagem acionavel."
   [n]
   (when-not (and (integer? n) (>= n 0))
     (throw (ex-info "membros-da-casa invalido (deve ser inteiro >= 0)" {:membros-da-casa n}))))
@@ -762,10 +872,22 @@
     :instante-no-futuro
     (str "o instante da chamada e' posterior ao relogio do servidor (" agora ").")
 
-    :instante-antes-da-abertura
-    (str "o instante da chamada e' anterior a abertura da sessao (" (:aberta-em sessao) ").")
+    :instante-fora-do-dia-da-sessao
+    (str "o instante da chamada nao cai no dia desta sessao (a partir de "
+         (piso-da-janela-de-presenca sessao) ").")
 
     :instante-apos-o-encerramento
     (str "o instante da chamada e' posterior ao encerramento da sessao (" (:encerrada-em sessao) ").")
+
+    ;; FORA de `motivos-do-gate-de-presenca`: nasce no Repo, sobre o denominador ja computado, nao na janela.
+    :casa-sem-membros
+    (str "a Casa nao tem nenhum mandato vigente na data desta sessao — o ato registraria um denominador de "
+         "quorum ZERO num registro que nao pode ser corrigido. Confira a data da sessao e a composicao em "
+         "cadastros antes de conduzir a chamada.")
+
+    :teto-de-atos
+    (str "esta sessao ja registrou o maximo de " teto-de-atos-de-chamada " conducoes de chamada. "
+         "Reconduzir a chamada e' ato excepcional (apos suspensao, ou reverificacao a pedido da Mesa) — "
+         "se o limite foi atingido de verdade, o caso e' de suporte, nao de mais um POST.")
 
     (str "conducao de chamada recusada para esta sessao (" (name motivo) ").")))

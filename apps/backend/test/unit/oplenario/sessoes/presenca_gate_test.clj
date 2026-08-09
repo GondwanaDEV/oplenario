@@ -64,8 +64,8 @@
       "aberta as 10h, evento as 11h, agora 12h -> nada a recusar")
   (is (nil? (logic/motivo-recusa-de-presenca (sessao "aberta" :aberta-em t10) t10 t12))
       "o proprio instante de abertura e' aceito (borda inclusiva)")
-  (is (nil? (logic/motivo-recusa-de-presenca (sessao "agendada") t09 t12))
-      "sessao ainda `agendada` nao tem aberta_em: o unico limite inferior e' inexistente"))
+  (is (nil? (logic/motivo-recusa-de-presenca (sessao "agendada" :agendada-para t10) t09 t12))
+      "sessao ainda `agendada`: o piso sai de `agendada_para`, e 9h cabe no dia dela"))
 
 (deftest janela-recusa-estado-que-nao-aceita
   (is (= :estado-nao-aceita-presenca
@@ -79,10 +79,18 @@
   (is (nil? (logic/motivo-recusa-de-presenca (sessao "aberta" :aberta-em t10) t11 t11))
       "o instante == agora e' aceito (borda inclusiva)"))
 
-(deftest janela-recusa-instante-antes-da-abertura
-  (is (= :instante-antes-da-abertura
-         (logic/motivo-recusa-de-presenca (sessao "aberta" :aberta-em t10) t09 t12))
-      "sessao aberta as 10h nao recebe presenca datada das 9h — retroagir a janela e' falsificar o fato"))
+(deftest janela-aceita-chegada-anterior-a-abertura-no-mesmo-dia
+  ;; REVISAO da Etapa 2 (achado MAJOR): antes, o piso era `aberta_em` e este caso era RECUSADO
+  ;; (`:instante-antes-da-abertura`). Mas a chamada e' conduzida COM a sessao aberta e registra horas de
+  ;; CHEGADA — anteriores ao martelo por definicao. O piso virou o DIA CIVIL da sessao.
+  (is (nil? (logic/motivo-recusa-de-presenca (sessao "aberta" :aberta-em t10 :agendada-para t09) t09 t12))
+      "aberta as 10h recebe presenca datada das 9h do MESMO dia: e' o caso normal da chamada ao vivo"))
+
+(deftest janela-recusa-instante-de-outro-dia
+  (is (= :instante-fora-do-dia-da-sessao
+         (logic/motivo-recusa-de-presenca (sessao "aberta" :aberta-em t10)
+                                          (Instant/parse "2026-06-25T09:00:00Z") t12))
+      "o piso continua existindo: barra o fato de OUTRO dia, que e' o que era indistinguivel de falsificacao"))
 
 (deftest janela-recusa-instante-apos-o-encerramento
   ;; Segunda tranca: hoje o CHECK `sessao_encerrada_em_exige_estado` (mig 0026) impede uma sessao VIVA de
@@ -99,9 +107,9 @@
     (is (string? msg))
     (is (str/includes? msg "encerrada") "a mensagem nomeia o estado ATUAL da sessao"))
   (let [s (sessao "aberta" :aberta-em t10)]
-    (is (str/includes? (logic/mensagem-de-recusa-de-presenca :instante-antes-da-abertura s t12)
-                       "2026-06-30T10:00:00Z")
-        "a mensagem mostra o limite violado, nao so' que houve violacao")
+    (is (str/includes? (logic/mensagem-de-recusa-de-presenca :instante-fora-do-dia-da-sessao s t12)
+                       (str (logic/piso-da-janela-de-presenca s)))
+        "a mensagem mostra o limite violado (o inicio do dia civil), nao so' que houve violacao")
     (is (str/includes? (logic/mensagem-de-recusa-de-presenca :instante-no-futuro s t12)
                        "2026-06-30T12:00:00Z")
         "a mensagem mostra o relogio do servidor")))
