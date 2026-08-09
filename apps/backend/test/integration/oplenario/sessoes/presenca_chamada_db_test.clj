@@ -187,6 +187,10 @@
         r (repo/chamada-da-sessao *repo* ente sid t11)]
     (is (= sid (:id (:sessao r))) "a sessao vem junto — e' o guard de 404 da borda")
     (is (= "agendada" (:estado (:sessao r))))
+    ;; revisao da Etapa 1: o INSTANTE tambem sai daqui, resolvido DENTRO da tx a partir desta sessao
+    ;; (sessao viva -> o `agora` recebido). Resolve-lo no controller, de uma leitura anterior, deixava a
+    ;; janela em que a sessao e' encerrada no meio do request e a chamada avalia 'agora' o que ja fechou.
+    (is (= t11 (:instante r)) "sessao viva -> instante = o 'agora' que o controller passou")
     (is (= [a] (mapv :vereador-id (:presencas r))))
     (is (= [b] (mapv :vereador-id (:justificativas r))))
     ;; os metodos granulares tambem existem no protocolo (o motor/outras bordas leem um lado so').

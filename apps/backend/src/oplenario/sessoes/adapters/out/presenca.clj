@@ -31,7 +31,7 @@
   "Uma LinhaChamada de dominio (`sessoes.controllers/linha-da-chamada`) -> LinhaChamadaOut. `estado` e'
   keyword no dominio (`logic/estados-chamada`, sem CHECK que o espelhe) -> string via `name`. Instantes
   (`desde`/`registrado-em`) -> ISO string ou nil."
-  [{:keys [vereador-id nome nome-parlamentar partido cargo-mesa estado inconsistencia-cadastro
+  [{:keys [vereador-id nome nome-parlamentar partido cargo-mesa estado inconsistencia-cadastro sem-assento
            desde fonte registrado-em justificativa]}]
   {:vereador-id (str vereador-id)
    :nome nome
@@ -40,6 +40,7 @@
    :cargo-mesa cargo-mesa
    :estado (name estado)
    :inconsistencia-cadastro (boolean inconsistencia-cadastro)
+   :sem-assento (boolean sem-assento)
    :desde (some-> desde str)
    :fonte fonte
    :registrado-em (some-> registrado-em str)
@@ -58,7 +59,8 @@
              :composicao-resolvida-em (str composicao-resolvida-em)
              :sem-registro-de-presenca (boolean sem-registro-de-presenca)
              :linhas (mapv linha-chamada->wire linhas)
-             :quorum (select-keys quorum [:presentes-plenario :presentes-remoto :membros-da-casa])}]
+             :quorum (select-keys quorum [:presentes-plenario :presentes-remoto :membros-da-casa
+                                          :presencas-fora-do-roster])}]
     (when-not (m/validate wire/ChamadaOut out)
       (throw (ex-info "chamada viola o contrato ChamadaOut (bug de servidor)"
                       {:erros (me/humanize (m/explain wire/ChamadaOut out))})))

@@ -15,7 +15,8 @@
             [oplenario.interceptors :as it]
             [oplenario.kernel.components.idp-dev :as idp-dev]
             [oplenario.rotas :as rotas]
-            [oplenario.sessoes.components.repositorio :as repo-sessoes])
+            [oplenario.sessoes.components.repositorio :as repo-sessoes]
+            [oplenario.sessoes.logic :as logic])
   (:import (java.time Instant)))
 
 (def ^:private aberta-em (Instant/parse "2026-06-30T13:00:00Z"))
@@ -31,13 +32,18 @@
    :agendada-para agendada-para :aberta-em aberta-em :encerrada-em encerrada-em})
 
 (defn- fake-repo-sessoes
-  "RepoSessoes fake (parcial): `buscar-sessao` resolve a sessao (para authz + resolver data/instante);
-  `chamada-da-sessao` devolve {:presencas :justificativas} (o controller ja tem a sessao da 1a leitura)."
+  "RepoSessoes fake (parcial): `chamada-da-sessao` e' a UNICA leitura da chamada e devolve
+  {:sessao :instante :presencas :justificativas} — a sessao sai da MESMA leitura que a presenca (uma tx), e
+  o `instante` e' resolvido DELA por `logic/instante-de-avaliacao`, como o Repo real faz por dentro da tx.
+  `busca-fn` continua sendo a fonte da sessao (nil -> 404)."
   [busca-fn chamada-fn]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify repo-sessoes/RepoSessoes
     (buscar-sessao [_ ente-id id] (busca-fn ente-id id))
-    (chamada-da-sessao [_ ente-id id instante] (chamada-fn ente-id id instante))))
+    (chamada-da-sessao [_ ente-id id agora]
+      (when-let [s (busca-fn ente-id id)]
+        (merge {:sessao s :instante (logic/instante-de-avaliacao s agora)}
+               (chamada-fn ente-id id agora))))))
 
 (defn- fake-repo-cadastros-roster
   "RepoCadastros fake (parcial): so' `roster-da-casa` — o unico metodo que o seam de `rotas.clj` exercita
@@ -91,7 +97,8 @@
     (is (every? #(= "ausente" (:estado %)) (:linhas body))
         "sem evento nenhum, todo vereador vigente deriva :ausente")
     (is (= "presidente" (:cargo-mesa (second (:linhas body)))) "cargo-mesa do roster passa para a linha")
-    (is (= {:presentes-plenario 0 :presentes-remoto 0 :membros-da-casa 2} (:quorum body)))
+    (is (= {:presentes-plenario 0 :presentes-remoto 0 :membros-da-casa 2 :presencas-fora-do-roster 0}
+           (:quorum body)))
     (is (some? (:data-de-composicao body)) "data-de-composicao presente")
     (is (some? (:composicao-resolvida-em body)) "composicao-resolvida-em presente")))
 
@@ -127,7 +134,36 @@
         "justificativa pendente e' um estado PROPRIO, nao :ausente")
     (is (= {:estado "pendente" :motivo "Atestado medico"} (:justificativa l2)))
     (is (nil? (:justificativa l1)) "vereador sem justificativa -> nil, nunca omitido/erro")
-    (is (= {:presentes-plenario 1 :presentes-remoto 0 :membros-da-casa 2} (:quorum body)))))
+    (is (= {:presentes-plenario 1 :presentes-remoto 0 :membros-da-casa 2 :presencas-fora-do-roster 0}
+           (:quorum body)))))
+
+;; ---------- REVISAO Etapa 1 (MAJOR): evento de quem nao esta no roster NAO some da resposta ----------
+
+(deftest chamada-publica-a-presenca-sem-assento-em-vez-de-descarta-la
+  (let [ente (random-uuid) sid (random-uuid) dentro (random-uuid) fora (random-uuid)
+        roster-fn (fn [_ _] [{:vereador-id dentro :nome "Ana" :nome-parlamentar nil :partido "PDT"
+                              :estado-mandato "vigente" :cargo-mesa nil}])
+        repo-s (fake-repo-sessoes
+                (fn [_ id] (sessao-aberta ente id))
+                (fn [_ _ _]
+                  {:presencas [{:vereador-id dentro :tipo "entrada" :modalidade "plenario"
+                                :fonte "manual_secretaria" :ocorrido-em aberta-em :registrado-em aberta-em}
+                               {:vereador-id fora :tipo "entrada" :modalidade "plenario"
+                                :fonte "manual_secretaria" :ocorrido-em aberta-em :registrado-em aberta-em}]
+                   :justificativas []}))
+        r (pt/response-for (service-fn* #{"secretario"} repo-s roster-fn)
+                           :get (url sid) :headers (com-auth (token ente (random-uuid))))
+        body (ler-json r)
+        orfa (first (filter :sem-assento (:linhas body)))]
+    (is (= 200 (:status r)))
+    (is (= 2 (count (:linhas body))) "o evento de quem nao tem cadeira PRODUZ linha, nao vira descarte mudo")
+    (is (= (str fora) (:vereador-id orfa)))
+    (is (= "presente-plenario" (:estado orfa)))
+    (is (true? (:inconsistencia-cadastro orfa)))
+    (is (nil? (:nome orfa)) "identidade desconhecida -> nil honesto, nunca um nome inventado")
+    (is (= {:presentes-plenario 2 :presentes-remoto 0 :membros-da-casa 1 :presencas-fora-do-roster 1}
+           (:quorum body))
+        "numerador = o que o motor conta (2); denominador = so' as cadeiras (1); e o desvio e' PUBLICADO")))
 
 ;; ---------- T14: multi-tenant ----------
 
@@ -170,7 +206,8 @@
     (is (= "2026-06-30T18:00:00Z" (:instante body)) "sessao encerrada -> instante CONGELADO em encerrada-em")
     (is (string? (:data-de-composicao body)) "data-de-composicao presente e nao-nula")
     (is (string? (:composicao-resolvida-em body)) "composicao-resolvida-em presente e nao-nula")
-    (is (= #{:presentes-plenario :presentes-remoto :membros-da-casa} (set (keys (:quorum body))))
+    (is (= #{:presentes-plenario :presentes-remoto :membros-da-casa :presencas-fora-do-roster}
+           (set (keys (:quorum body))))
         "quorum e' o shape fechado esperado")))
 
 ;; ---------- T17: authz da rota ----------
@@ -186,6 +223,22 @@
         r (pt/response-for (service-fn* #{"vereador"} repo-s nil)
                            :get (url (random-uuid)) :headers (com-auth (token ente (random-uuid))))]
     (is (= 403 (:status r)) "ator sem papel 'secretario' -> authz grossa nega -> 403 (nunca chega ao controller)")))
+
+;; ---------- REVISAO Etapa 1 (MAJOR): sessao agendada SEM data marcada nao pode virar 500 ----------
+;; `wire/in/AgendarSessao` declara `agendada-para` OPCIONAL e a coluna e' nullable (mig 0026): POST /sessoes
+;; sem data e' um caminho NORMAL da API. A chamada dessa sessao caia em `ex-info :servidor/erro` -> 500
+;; "erro interno" — a secretaria que agendou nao consegue abrir a chamada e nao recebe indicacao nenhuma.
+
+(deftest chamada-de-sessao-agendada-sem-data-marcada-409-acionavel
+  (let [ente (random-uuid) sid (random-uuid)
+        sem-data {:id sid :ente-id ente :estado "agendada" :tipo-sessao "ordinaria"
+                  :agendada-para nil :aberta-em nil :encerrada-em nil}
+        repo-s (fake-repo-sessoes (fn [_ _] sem-data) (fn [_ _ _] {:presencas [] :justificativas []}))
+        r (pt/response-for (service-fn* #{"secretario"} repo-s (fn [_ _] []))
+                           :get (url sid) :headers (com-auth (token ente (random-uuid))))]
+    (is (= 409 (:status r)) "sessao sem marco temporal nenhum -> 409 acionavel, NUNCA 500 generico")
+    (is (re-find #"data" (:erro (ler-json r)))
+        "a mensagem diz o que fazer (marcar a data), em vez de 'erro interno'")))
 
 (deftest chamada-id-malformado-400
   (let [ente (random-uuid)

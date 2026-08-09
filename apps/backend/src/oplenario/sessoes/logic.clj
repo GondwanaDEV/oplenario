@@ -336,26 +336,89 @@
 (defn derivar-linha-chamada
   "PURO. A linha da chamada de um vereador = a identidade do roster + o estado derivado. Corresponde ao model
   `sessoes.models.presenca/LinhaChamada`. A identidade vem CRUA do roster (nome, nome parlamentar, partido):
-  `sessoes` nao inventa dado de `cadastros`, so o repassa."
+  `sessoes` nao inventa dado de `cadastros`, so o repassa. `:sem-assento` e' false aqui por definicao (a
+  linha NASCEU do roster); o campo existe em toda linha, uniforme, para o mapa nunca ter forma variavel."
   [roster-linha ultimo-evento justificativa]
   (merge (select-keys roster-linha [:vereador-id :nome :nome-parlamentar :partido])
+         {:sem-assento false}
          (estado-de-presenca roster-linha ultimo-evento justificativa)))
 
-(defn contar-quorum
-  "PURO. Contagem de quorum sobre as linhas JA derivadas (`derivar-linha-chamada`) — nunca sobre eventos
-  crus, para que a tela e a policy contem o mesmo conjunto.
+(defn derivar-linha-sem-assento
+  "PURO. A linha de uma PRESENCA cujo vereador NAO tem assento no roster da data (§22.6 eixo C, revisao da
+  Etapa 1). Existe por um motivo estrutural, nao cosmetico: o quorum que o MOTOR de votacao resolve por nome
+  (`relacoes/presenca/presentes-plenario|remoto`) conta sobre `presenca_evento` SOZINHO — nenhum join a
+  mandato, e a coluna `vereador_id` nao tem FK. Se a chamada cruzasse roster x eventos e DESCARTASSE o que
+  sobra, a tela e a policy passariam a contar conjuntos diferentes na mesma votacao: o defeito que a fatia
+  1a fechou uma camada abaixo, reaberto aqui.
 
-  `:membros-da-casa` e' o DENOMINADOR e exclui os licenciados: durante a licenca o vereador nao compoe a
-  Casa para efeito de quorum (quem compoe e' o suplente, que entra no roster com mandato proprio). Contar o
-  licenciado inflaria o denominador e faria uma sessao legitima parecer sem quorum.
+  Entao a presenca orfa vira linha: derivada pela MESMA regra (o fato observado manda), marcada
+  `:sem-assento true` e `:inconsistencia-cadastro true`. Ela CONTA no numerador (para casar com o motor) e
+  NAO conta no denominador (`contar-quorum`) — ninguem ganha cadeira por ter um evento. A identidade vem
+  nil: `sessoes` nao tem de onde inventar nome de quem `cadastros` nao conhece naquela data.
+
+  Como acontece na pratica: mandato cuja janela nao cobre a data (suplente convocado para amanha, vereador
+  cujo mandato encerrou ontem), acervo migrado com licenca que ninguem encerrou, ou simplesmente um id
+  digitado errado pela secretaria — `registrar-presenca` nao valida mandato."
+  [presenca justificativa]
+  (-> (derivar-linha-chamada {:vereador-id (:vereador-id presenca) :nome nil :nome-parlamentar nil
+                              :partido nil :estado-mandato nil}
+                             presenca justificativa)
+      (assoc :sem-assento true :inconsistencia-cadastro true)))
+
+(defn contar-quorum
+  "PURO. Contagem de quorum sobre as linhas JA derivadas (`derivar-linha-chamada` /
+  `derivar-linha-sem-assento`) — nunca sobre eventos crus, para que a tela e a policy contem o mesmo
+  conjunto.
+
+  `:membros-da-casa` e' o DENOMINADOR e exclui DOIS conjuntos:
+    - os licenciados: durante a licenca o vereador nao compoe a Casa para efeito de quorum (quem compoe e' o
+      suplente, que entra no roster com mandato proprio). Contar o licenciado inflaria o denominador e faria
+      uma sessao legitima parecer sem quorum.
+    - as linhas SEM ASSENTO: um evento de presenca nao cria cadeira. Elas contam no numerador (o motor as
+      conta) mas nao no denominador — e' por isso que `presentes` PODE passar de `membros-da-casa`. Essa
+      desigualdade e' o sintoma visivel de cadastro furado, e e' melhor que ela apareca do que ser
+      normalizada em silencio.
 
   O licenciado-com-evento-positivo (a inconsistencia acima) NAO fica de fora: ele foi derivado como
   presente, entao conta nos dois lados — numerador e denominador. E' o unico tratamento coerente: quem esta
-  no plenario esta na Casa."
+  no plenario esta na Casa.
+
+  `:presencas-fora-do-roster` e' fail-loud: publica QUANTAS linhas sem assento entraram nesta chamada, para
+  a Mesa nao precisar somar de cabeca para descobrir que a tela e a policy divergem do cadastro."
   [linhas]
   {:presentes-plenario (count (filter #(= :presente-plenario (:estado %)) linhas))
    :presentes-remoto   (count (filter #(= :presente-remoto (:estado %)) linhas))
-   :membros-da-casa    (count (remove #(= :licenciado (:estado %)) linhas))})
+   :membros-da-casa    (count (remove #(or (= :licenciado (:estado %)) (:sem-assento %)) linhas))
+   :presencas-fora-do-roster (count (filter :sem-assento linhas))})
+
+;; ---------- §22.6 eixo C — o INSTANTE em que a chamada avalia a presenca ----------
+;; PURO e aqui (nao no controller) por uma razao de corretude, nao de organizacao: o instante tem de ser
+;; derivado da MESMA leitura da sessao que a leitura da presenca usa — quem le' a sessao e' o Repo, dentro
+;; da tx. Calcular no controller a partir de uma leitura ANTERIOR deixa a janela em que a Mesa encerra a
+;; sessao no meio do request e a chamada avalia 'agora' uma sessao que ja fechou.
+
+(def estados-sessao-fechada
+  "Estados em que a sessao JA fechou — a chamada tem de congelar no instante em que ela fechou (um evento
+  inferido/registrado DEPOIS nao pode mudar uma chamada que ja foi para a ata). O CHECK
+  `sessao_encerrada_em_obrigatoria` da mig 0026 cobria so' 'encerrada'/'nao_realizada'; a migration 0071
+  (revisao da Etapa 1) estendeu-o a 'arquivada' — antes disso o banco aceitava uma linha arquivada SEM
+  carimbo de encerramento, e a derivacao abaixo e' o cinto de seguranca que sobrou dela."
+  #{"encerrada" "nao_realizada" "arquivada"})
+
+(defn instante-de-avaliacao
+  "PURO. O INSTANTE em que a presenca corrente e' avaliada: `agora` (o relogio ja lido, injetado) enquanto a
+  sessao esta viva (agendada/aberta/suspensa — a chamada de uma sessao ao vivo e' sempre 'agora');
+  `encerrada-em` (congelado) quando ja fechou.
+
+  FAIL-CLOSED: sessao fechada sem `encerrada-em` LANCA. Um nil aqui viraria `ocorrido_em <= NULL` na
+  consulta -> zero linhas -> uma chamada FABRICADA (a Casa inteira ausente, quorum zero) servida como
+  leitura legitima e publicada em ata. Melhor a rota cair do que a ata mentir."
+  [sessao agora]
+  (if (contains? estados-sessao-fechada (:estado sessao))
+    (or (:encerrada-em sessao)
+        (throw (ex-info "sessao fechada sem encerrada-em: sem instante de avaliacao p/ a chamada"
+                        {:tipo :servidor/erro :sessao-id (:id sessao) :estado (:estado sessao)})))
+    agora))
 
 ;; ---------- §22.6 eixo D — gravacao (audio/video) da sessao (F4.4b) ----------
 ;; `gravacao_segmento` e' unidade TECNICA do arquivo, nao regimental (uma sessao tem 1 segmento tipico mas N

@@ -321,34 +321,23 @@
 
 ;; ---------- §22.6 eixo C — a CHAMADA (read-model, GET /sessoes/:id/chamada) ----------
 
-(def ^:private estados-sessao-fechada
-  "Estados em que a sessao JA fechou: `encerrada_em` e' obrigatorio nestes tres pelo CHECK da migration 0026
-  (inclusive `nao_realizada`; `arquivada` chega la' vindo de um dos dois, entao herda o carimbo). A chamada de
-  uma sessao fechada tem de congelar no instante em que ela fechou — um evento inferido/registrado DEPOIS
-  nao pode mudar uma chamada que ja foi para a ata."
-  #{"encerrada" "nao_realizada" "arquivada"})
-
 (defn- data-de-referencia
   "A DATA CIVIL que resolve QUEM compoe a Casa nesta sessao: `aberta-em` se a sessao ja abriu (a Casa que
   efetivamente se reuniu), senao `agendada-para` (a Casa PREVISTA, sessao ainda 'agendada'). Convertida no
   fuso `tempo/zona-civil-padrao` (NUNCA `LocalDate/now` — reabrir a chamada de uma sessao do mes passado
-  mostraria a composicao de HOJE, nao a de entao). Fail-closed: os CHECK da migration 0026 nao deveriam
-  deixar uma sessao existir sem nenhum dos dois marcos — se acontecer mesmo assim (dado legado, bug), a
-  chamada nao inventa uma data, lanca (-> 500, nunca uma composicao adivinhada que vai parar em ata)."
+  mostraria a composicao de HOJE, nao a de entao).
+
+  Sessao sem NENHUM dos dois marcos e' um caminho NORMAL da API, nao dado corrompido: `wire/in/AgendarSessao`
+  declara `agendada-para` OPCIONAL e a coluna e' nullable (mig 0026) — POST /sessoes sem data cria a linha
+  assim. Por isso o erro e' de CONFLITO DE ESTADO, com mensagem acionavel (`:conflito/sessao-sem-data` ->
+  409 no diplomat), e nao um `:servidor/erro` que a borda traduziria em 500 'erro interno': a secretaria que
+  agendou sem marcar a data precisa saber que e' isso que falta. O que continua proibido e' inventar uma
+  data — uma composicao adivinhada vai parar em ata."
   [sessao]
   (if-let [instante (or (:aberta-em sessao) (:agendada-para sessao))]
     (tempo/hoje-de instante tempo/zona-civil-padrao)
-    (throw (ex-info "sessao sem aberta-em nem agendada-para: sem data de referencia p/ a chamada"
-                    {:tipo :servidor/erro :sessao-id (:id sessao)}))))
-
-(defn- instante-de-avaliacao
-  "O INSTANTE em que a presenca corrente e' avaliada: o relogio do SERVIDOR (injetado — determinismo em
-  teste vem de `relogio-fixo`) enquanto a sessao esta viva (agendada/aberta/suspensa — a chamada de uma
-  sessao ao vivo e' sempre 'agora'); `encerrada-em` (congelado) quando ja fechou (`estados-sessao-fechada`)."
-  [sessao relogio]
-  (if (contains? estados-sessao-fechada (:estado sessao))
-    (:encerrada-em sessao)
-    (tempo/agora relogio)))
+    (throw (ex-info "sessao sem data marcada: sem data de referencia p/ a chamada"
+                    {:tipo :conflito/sessao-sem-data :sessao-id (:id sessao)}))))
 
 (defn- linha-da-chamada
   "Uma linha pronta p/ o adapter: a linha DERIVADA (`logic/derivar-linha-chamada` — identidade+estado+
@@ -363,6 +352,18 @@
           :registrado-em (:registrado-em ultimo-evento)
           :justificativa (when justificativa (select-keys justificativa [:estado :motivo]))}))
 
+(defn- linha-sem-assento
+  "A linha de uma presenca ORFA (sem assento no roster da data) pronta p/ o adapter: a derivacao
+  (`logic/derivar-linha-sem-assento`) mais os mesmos campos de evento/justificativa da linha normal.
+  `cargo-mesa` e' nil por construcao — cargo mora na Mesa, e quem nao tem cadeira nao tem cargo."
+  [presenca justificativa]
+  (merge (logic/derivar-linha-sem-assento presenca justificativa)
+         {:cargo-mesa nil
+          :desde (:ocorrido-em presenca)
+          :fonte (:fonte presenca)
+          :registrado-em (:registrado-em presenca)
+          :justificativa (when justificativa (select-keys justificativa [:estado :motivo]))}))
+
 (defn chamada-da-sessao
   "A CHAMADA da sessao `sessao-id` (§22.6 eixo C): cruza o ROSTER da Casa (`roster-da-casa`, seam injetado do
   host sobre `cadastros` — este ns nunca importa cadastros, §22.10), a PRESENCA CORRENTE (ultimo evento por
@@ -371,34 +372,51 @@
   vereador (`logic/derivar-linha-chamada`) e conta o quorum (`logic/contar-quorum`) SOBRE as linhas ja
   derivadas — nunca um recalculo a parte, p/ a tela e a policy nunca contarem numeros diferentes.
 
-  Camada FINA: carrega a sessao do tenant do `ator` (nil -> 404 via nil de retorno), roda `pode-ver-sessao?`
-  (mesma Casa -> 403 fail-closed) ANTES de qualquer leitura de roster/presenca/justificativa. A DATA DE
-  REFERENCIA do roster e o INSTANTE DE AVALIACAO da presenca sao resolvidos AQUI, a partir da propria sessao
-  ja carregada (`data-de-referencia`/`instante-de-avaliacao`) — nunca do cliente, nunca de 'hoje' implicito.
+  Camada FINA: a sessao vem da MESMA leitura que a presenca (`repo/chamada-da-sessao`, uma tx) — nao ha' um
+  `buscar-sessao` antes. E' correcao de revisao, nao economia de round-trip: com a sessao lida numa tx
+  ANTERIOR, a Mesa podia encerrar a sessao no meio do request e a chamada avaliaria 'agora' (estado stale
+  'aberta') uma sessao ja fechada, incluindo um evento POSTERIOR ao encerramento numa chamada que vai para a
+  ata. O `instante` e' resolvido DENTRO da tx, da sessao fresca (`logic/instante-de-avaliacao`); nil de
+  retorno (sessao inexistente neste tenant) -> 404; `pode-ver-sessao?` roda sobre essa mesma sessao, ANTES
+  de qualquer uso do dado lido (a tx ja e' escopada pelo ente do ator, RLS isola a Casa). A DATA DE
+  REFERENCIA do roster sai dela tambem — nunca do cliente, nunca de 'hoje' implicito.
+
+  AS LINHAS SAO A UNIAO, nao a intersecao: as do roster (com presenca/justificativa cruzadas por vereador) e
+  as SEM ASSENTO — presencas cujo vereador o roster da data nao contem. Descartar as segundas era o defeito
+  que a revisao achou: o quorum que o motor de votacao resolve por nome conta sobre `presenca_evento`
+  sozinho, entao a tela e a policy passavam a contar conjuntos diferentes na MESMA votacao. Elas vao no fim
+  da lista, ordenadas por id (o roster ja vem ordenado por nome+id).
 
   `sem-registro-de-presenca` = true quando a sessao nao tem NENHUM evento de presenca (a Casa inteira
   aparece `:ausente` porque ninguem registrou nada ainda, nao porque a Casa faltou). Devolve o mapa de
   dominio pronto p/ `adapters-out-presenca/chamada->wire`, ou nil (sessao inexistente -> 404 no diplomat)."
   [repo-sessoes roster-da-casa ator sessao-id relogio]
-  (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
-    (authz/check! ator :sessao/ver sessao logic/pode-ver-sessao?)
-    (let [ente-id             (:ente-id ator)
-          data                (data-de-referencia sessao)
-          instante            (instante-de-avaliacao sessao relogio)
-          {:keys [presencas justificativas]} (repo/chamada-da-sessao repo-sessoes ente-id sessao-id instante)
-          roster              (roster-da-casa ente-id data)
-          presenca-por-ver    (into {} (map (juxt :vereador-id identity)) presencas)
-          justificativa-por-ver (into {} (map (juxt :vereador-id identity)) justificativas)
-          linhas              (mapv (fn [rl]
-                                       (linha-da-chamada rl
-                                         (get presenca-por-ver (:vereador-id rl))
-                                         (get justificativa-por-ver (:vereador-id rl))))
-                                     roster)]
-      {:sessao-id sessao-id
-       :sessao-estado (:estado sessao)
-       :instante instante
-       :data-de-composicao data
-       :composicao-resolvida-em (tempo/agora relogio)
-       :sem-registro-de-presenca (empty? presencas)
-       :linhas linhas
-       :quorum (logic/contar-quorum linhas)})))
+  (let [ente-id (:ente-id ator)
+        agora   (tempo/agora relogio)]
+    (when-let [{:keys [sessao instante presencas justificativas]}
+               (repo/chamada-da-sessao repo-sessoes ente-id sessao-id agora)]
+      (authz/check! ator :sessao/ver sessao logic/pode-ver-sessao?)
+      (let [data                  (data-de-referencia sessao)
+            roster                (roster-da-casa ente-id data)
+            presenca-por-ver      (into {} (map (juxt :vereador-id identity)) presencas)
+            justificativa-por-ver (into {} (map (juxt :vereador-id identity)) justificativas)
+            com-assento           (into #{} (map :vereador-id) roster)
+            linhas-do-roster      (mapv (fn [rl]
+                                          (linha-da-chamada rl
+                                            (get presenca-por-ver (:vereador-id rl))
+                                            (get justificativa-por-ver (:vereador-id rl))))
+                                        roster)
+            linhas-sem-assento    (->> presencas
+                                       (remove #(contains? com-assento (:vereador-id %)))
+                                       (sort-by #(str (:vereador-id %)))
+                                       (mapv #(linha-sem-assento
+                                                % (get justificativa-por-ver (:vereador-id %)))))
+            linhas                (into linhas-do-roster linhas-sem-assento)]
+        {:sessao-id sessao-id
+         :sessao-estado (:estado sessao)
+         :instante instante
+         :data-de-composicao data
+         :composicao-resolvida-em agora
+         :sem-registro-de-presenca (empty? presencas)
+         :linhas linhas
+         :quorum (logic/contar-quorum linhas)}))))

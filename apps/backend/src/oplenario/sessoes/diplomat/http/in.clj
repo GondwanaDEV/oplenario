@@ -334,14 +334,21 @@
   "GET /sessoes/:id/chamada (§22.6 eixo C). adapters/in coage o :id; o controller carrega+autoriza a sessao,
   resolve a data de referencia (roster) + o instante de avaliacao (presenca), cruza roster x presenca
   corrente x justificativas (`roster-da-casa`, seam injetado do host sobre cadastros) e deriva estado+quorum
-  por vereador; adapters/out projeta. nil (sessao inexistente) -> 404."
+  por vereador; adapters/out projeta. nil (sessao inexistente) -> 404. Sessao agendada SEM data marcada
+  (`agendada-para` e' opcional na API e nullable na coluna) -> 409 ACIONAVEL, nunca o 500 'erro interno' do
+  interceptor global: quem agendou sem marcar a data precisa saber que e' isso que falta."
   [repo-sessoes roster-da-casa relogio]
   (fn [req]
     (let [ator (:ator req)
           id   (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
-      (if-let [chamada (controllers/chamada-da-sessao repo-sessoes roster-da-casa ator id relogio)]
-        (http/json-resposta 200 (adapters-out-presenca/chamada->wire chamada))
-        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+      (try
+        (if-let [chamada (controllers/chamada-da-sessao repo-sessoes roster-da-casa ator id relogio)]
+          (http/json-resposta 200 (adapters-out-presenca/chamada->wire chamada))
+          (http/json-resposta 404 {:erro "sessao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/sessao-sem-data (:tipo (ex-data e)))
+            (http/json-resposta 409 {:erro "sessao sem data marcada: informe a data da sessao antes de fazer a chamada"})
+            (throw e)))))))
 
 (defn- listar-gravacoes-handler
   "GET /sessoes/:id/gravacao. adapters/in coage o :id; controller carrega+autoriza a sessao e lista os

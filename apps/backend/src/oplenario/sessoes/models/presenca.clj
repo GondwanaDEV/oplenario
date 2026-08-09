@@ -28,19 +28,28 @@
   evento — sao coisas distintas: `entrada`/`saida` sao FATOS append-only, `:presente-plenario` e' a
   CONCLUSAO depois de cruzar cadastro + evento + justificativa.
 
-  `inconsistencia-cadastro` = o cadastro diz licenciado mas o vereador esta fisicamente presente. Fica no
-  contrato de dominio (nao e' detalhe de tela) porque e' o unico canal pelo qual esse conflito chega ao
-  servidor que pode corrigi-lo.
+  `inconsistencia-cadastro` = o cadastro e o fato observado se contradizem — ou o cadastro diz licenciado e
+  o vereador esta fisicamente presente, ou existe evento de presenca de quem nao tem assento no roster da
+  data (`sem-assento`). Fica no contrato de dominio (nao e' detalhe de tela) porque e' o unico canal pelo
+  qual esse conflito chega ao servidor que pode corrigi-lo.
 
-  `nome-parlamentar` e `partido` sao nullable na origem (`cadastros.vereador.nome_parlamentar` e o LEFT JOIN
-  LATERAL do mandato podem nao ter linha na data)."
+  `sem-assento` = a linha NAO veio do roster: nasceu de um evento de presenca de vereador que `cadastros`
+  nao situa na Casa naquela data (`logic/derivar-linha-sem-assento`). Ela conta no NUMERADOR do quorum (e'
+  o que o motor de votacao conta) e nao no denominador. Existe para o evento nunca ser descartado em
+  silencio — descarte mudo faz a tela e a policy contarem conjuntos diferentes na mesma votacao.
+
+  `nome` e' nullable POR CAUSA DISSO: a linha sem assento nao tem identidade a exibir (o nome mora em
+  `cadastros`, que nao conhece aquele id na data) e `sessoes` nao inventa dado do modulo vizinho.
+  `nome-parlamentar` e `partido` sao nullable tambem na origem (`cadastros.vereador.nome_parlamentar` e o
+  JOIN LATERAL do mandato podem nao ter linha na data)."
   [:map {:closed true}
    [:vereador-id :uuid]
-   [:nome [:string {:min 1}]]
+   [:nome [:maybe [:string {:min 1}]]]
    [:nome-parlamentar [:maybe :string]]
    [:partido [:maybe :string]]
    [:estado (enum-de logic/estados-chamada)]
-   [:inconsistencia-cadastro :boolean]])
+   [:inconsistencia-cadastro :boolean]
+   [:sem-assento :boolean]])
 
 (def JustificativaAusencia
   [:map {:closed true}

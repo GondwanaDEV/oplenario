@@ -91,11 +91,22 @@
         "sanidade do seed: o produtor real gravou 'licenciado' (nao um vocabulario inventado pelo teste)")
 
     (let [linhas (repo/roster-da-casa *repo* ente hoje)
-          n      (repo/membros-da-casa *repo* ente hoje)]
-      (is (= #{v1 v2 v3} (set (map :vereador-id linhas)))
-          "so' os tres com mandato vigente na data — licenciado, sem-mandato e ex-vereador ficam fora")
-      (is (= n (count linhas))
-          "TESTE CRUZADO: a contagem de linhas do roster e' exatamente membros-da-casa")
+          n      (repo/membros-da-casa *repo* ente hoje)
+          com-cadeira (remove #(= "licenciado" (:estado-mandato %)) linhas)]
+      ;; REVISAO Etapa 1: o LICENCIADO passou a APARECER no roster (com `estado-mandato` = 'licenciado').
+      ;; Sem isso o estado `:licenciado` e o sinalizador `inconsistencia-cadastro` de
+      ;; `sessoes/logic/estado-de-presenca` eram inalcancaveis por dado real — o alarme de "o cadastro diz
+      ;; licenciado mas ele esta no plenario" nunca dispararia em producao. Ele nao entra no DENOMINADOR:
+      ;; `logic/contar-quorum` ja' o remove, e o cruzado abaixo passa a comparar `membros-da-casa` com as
+      ;; linhas MENOS os licenciados — o mesmo predicado, agora com a linha visivel na tela.
+      (is (= #{v1 v2 v3 v4} (set (map :vereador-id linhas)))
+          "os tres vigentes + o licenciado (visivel); sem-mandato e ex-vereador seguem fora")
+      (is (= "licenciado" (:estado-mandato (first (filter #(= v4 (:vereador-id %)) linhas))))
+          "e o licenciado chega MARCADO — e' o que a derivacao le' fail-closed")
+      (is (= #{v1 v2 v3} (set (map :vereador-id com-cadeira)))
+          "quem COMPOE a Casa (denominador) segue sendo so' o mandato vigente")
+      (is (= n (count com-cadeira))
+          "TESTE CRUZADO: as linhas do roster MENOS os licenciados sao exatamente membros-da-casa")
       (is (= 3 n) "e o numero e' o esperado (nao um zero mudo dos dois lados)"))
 
     (is (= [] (repo/roster-da-casa *repo* (random-uuid) hoje)) "RLS: outra Casa nao ve' estes vereadores")))
@@ -127,7 +138,8 @@
       (is (= #{titular suplente} agora) "hoje a composicao e' outra — e' por isso que a data e' parametro"))
 
     ;; o cruzado tambem vale na data historica: nao adianta as linhas serem certas em D-30 se a contagem
-    ;; que o motor usa continuar respondendo pela composicao de hoje.
+    ;; que o motor usa continuar respondendo pela composicao de hoje. (Aqui nao ha licenciado, entao a
+    ;; contagem crua serve; o cruzado com licenca esta em T10.)
     (is (= (repo/membros-da-casa *repo* ente d-30) (count (repo/roster-da-casa *repo* ente d-30))))
     (is (= (repo/membros-da-casa *repo* ente hoje) (count (repo/roster-da-casa *repo* ente hoje))))))
 
@@ -191,3 +203,24 @@
     (let [linhas (repo/roster-da-casa *repo* ente hoje)]
       (is (= ["Ana" "Bruno" "Carla"] (mapv :nome linhas)))
       (is (= 3 (count linhas)) "Bruno tem dois mandatos e UMA linha"))))
+
+;; ---------- REVISAO Etapa 1 (MENOR): homonimos exigem desempate deterministico ----------
+
+(deftest roster-desempata-homonimos-por-id-e-nao-troca-de-ordem
+  ;; `nome` NAO e' unico em `cadastros.vereador` (homonimia e' comum em camara municipal — o que distingue
+  ;; e' o nome parlamentar). Sem desempate, o Postgres nao garante ordem relativa entre linhas de mesma
+  ;; chave de sort e o plano pode mudar entre duas execucoes identicas: o secretario que confere a lista
+  ;; impressa contra a tela marca o vereador errado, e a ata sai com a presenca do homonimo.
+  (let [ente (random-uuid)
+        leg  (casa! ente)
+        h1 (vereador! ente "Antonio Carlos Silva" "Antonio do Bairro")
+        h2 (vereador! ente "Antonio Carlos Silva" "Toninho da Feira")
+        z  (vereador! ente "Zeze")]
+    (mandato! ente leg h1 (LocalDate/of 2025 1 1) nil)
+    (mandato! ente leg h2 (LocalDate/of 2025 1 1) nil)
+    (mandato! ente leg z  (LocalDate/of 2025 1 1) nil)
+    (let [ordens (repeatedly 5 #(mapv :vereador-id (repo/roster-da-casa *repo* ente hoje)))]
+      (is (= 1 (count (set ordens))) "cinco leituras identicas -> UMA unica ordem")
+      (is (= (sort-by str [h1 h2]) (vec (take 2 (first ordens))))
+          "os homonimos saem em ordem de id (desempate explicito), antes de 'Zeze'")
+      (is (= z (last (first ordens)))))))

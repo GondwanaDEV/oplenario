@@ -11,6 +11,7 @@
             [oplenario.sessoes.db.presenca :as presenca]
             [oplenario.sessoes.db.sessao :as sessao]
             [oplenario.sessoes.db.tribuna :as tribuna]
+            [oplenario.sessoes.logic :as logic]
             [oplenario.sessoes.relacoes.presenca :as rel-presenca]))
 
 (defprotocol RepoSessoes
@@ -41,10 +42,12 @@
   (presenca-corrente [this ente-id sessao-id instante]
     "Ultimo evento de CADA vereador da sessao ate' `instante` (uma linha por vereador) — insumo cru da CHAMADA.")
   (listar-justificativas [this ente-id sessao-id] "Justificativas de ausencia da sessao (3o insumo da chamada).")
-  (chamada-da-sessao [this ente-id sessao-id instante]
-    "As TRES leituras da chamada (sessao + presenca corrente + justificativas) numa UNICA tx do tenant.
-     nil se a sessao nao existe neste ente (a borda traduz em 404). O roster de `cadastros` NAO entra aqui:
-     e' outro modulo, resolvido por seam no host (§22.10).")
+  (chamada-da-sessao [this ente-id sessao-id agora]
+    "As TRES leituras da chamada (sessao + presenca corrente + justificativas) numa UNICA tx do tenant, com o
+     INSTANTE de avaliacao resolvido DENTRO dela a partir da sessao fresca (`logic/instante-de-avaliacao`,
+     recebendo `agora` = o relogio ja lido pelo controller). Devolve {:sessao :instante :presencas
+     :justificativas}, ou nil se a sessao nao existe neste ente (a borda traduz em 404). O roster de
+     `cadastros` NAO entra aqui: e' outro modulo, resolvido por seam no host (§22.10).")
   (resumo-presenca [this ente-id membros-da-casa]
     "Presenca agregada (F7/FE Onda A1) das ultimas 10 sessoes encerradas do tenant.")
   (esta-presente? [this ente-id sessao-id vereador-id instante] "Presenca DERIVADA do ultimo evento ate o instante.")
@@ -154,13 +157,18 @@
   ;; plenario entre a leitura dos eventos e a das justificativas e sair na tela PRESENTE *e* com ausencia
   ;; justificada — uma chamada que nunca existiu em nenhum instante real, publicada em ata. O curto-circuito
   ;; no `when-let` tambem evita as duas leituras quando a sessao nao existe.
-  (chamada-da-sessao [this ente-id sessao-id instante]
+  (chamada-da-sessao [this ente-id sessao-id agora]
     (transacao this ente-id
       (fn [tx]
         (when-let [s (sessao/buscar tx ente-id sessao-id)]
-          {:sessao s
-           :presencas (presenca/presenca-corrente tx ente-id sessao-id instante)
-           :justificativas (presenca/listar-justificativas-da-sessao tx ente-id sessao-id)}))))
+          ;; o INSTANTE sai DAQUI, da sessao lida nesta tx — nao de uma leitura anterior no controller.
+          ;; Com a sessao lida antes, uma sessao encerrada no meio do request era avaliada em 'agora' (o
+          ;; estado stale ainda dizia 'aberta') e um evento POSTERIOR ao encerramento entrava na chamada.
+          (let [instante (logic/instante-de-avaliacao s agora)]
+            {:sessao s
+             :instante instante
+             :presencas (presenca/presenca-corrente tx ente-id sessao-id instante)
+             :justificativas (presenca/listar-justificativas-da-sessao tx ente-id sessao-id)})))))
   (resumo-presenca [this ente-id membros-da-casa]
     (transacao this ente-id #(presenca/resumo-presenca % ente-id membros-da-casa 10)))
   (esta-presente? [this ente-id sessao-id vereador-id instante] (transacao this ente-id #(rel-presenca/esta-presente-em? % sessao-id vereador-id instante)))
