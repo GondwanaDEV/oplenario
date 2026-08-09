@@ -242,6 +242,121 @@
   [de para]
   (contains? (get transicoes-justificativa de #{}) para))
 
+(defn validar-estado-justificativa
+  "Fail-closed: lanca se `estado` nao e' pendente|aprovada|indeferida (espelha o CHECK da mig 0029)."
+  [estado]
+  (when-not (contains? estados-justificativa estado)
+    (throw (ex-info "estado de justificativa invalido" {:estado estado :validos estados-justificativa}))))
+
+;; ---------- §22.6 eixo C — a CHAMADA: derivacao PURA do estado por vereador ----------
+;; A chamada e' a leitura que o servidor projeta no telao e que a policy de quorum consulta. Ela cruza TRES
+;; fontes que nunca se materializam juntas: o roster do cadastro (quem e' membro, e se esta licenciado), o
+;; ULTIMO evento de presenca (o fato observado — `ultimos-eventos-por-vereador-q` acima e' quem o busca) e a
+;; justificativa de ausencia (ato administrativo apartado). Aqui e' tudo puro: quem le' o banco e' outra camada.
+
+(def estados-chamada
+  "Os 6 estados possiveis de um vereador na chamada. `:ausente-justificativa-pendente` e' um estado PROPRIO —
+  nao um sinonimo de `:ausente`. A Mesa ainda nao decidiu; publicar 'ausente' (que a Casa le' como
+  injustificada) e' acusacao falsa contra o vereador, e e' o tipo de erro que so aparece em ata."
+  #{:presente-plenario :presente-remoto :ausente :ausente-justificado
+    :ausente-justificativa-pendente :licenciado})
+
+(def estados-chamada-presentes
+  "Os estados que contam como PRESENTE (numerador do quorum). O restante nao conta — inclusive `:licenciado`,
+  que tambem sai do denominador."
+  #{:presente-plenario :presente-remoto})
+
+(def estados-mandato-cadastro
+  "Vocabulario de `cadastros.mandato.estado` — ESPELHO do CHECK da migration 20260620000010-cadastros.
+  `sessoes` NAO pode importar `cadastros` (import-lint §22.10: comunicacao so por HTTP/eventos); o roster
+  chega por SEAM injetado no host ja' com este vocabulario CRU, e espelhar e' a unica forma disponivel.
+  Espelhar nao e' REDIGITAR de memoria: um valor proximo-mas-errado (o classico `\"suplente\"` por
+  `\"suplencia\"`) nao quebra nada — deixa a tela publicando zero em silencio por meses. Por isso a validacao
+  e' fail-closed: estado desconhecido EXPLODE. Se `cadastros` acrescentar um estado, este set fica
+  desatualizado e a chamada para de responder — que e' o comportamento desejado (alguem conserta hoje)."
+  #{"vigente" "licenciado" "cassado" "renunciado" "falecido" "concluido"})
+
+(def estado-mandato-licenciado
+  "O unico estado de mandato que a chamada trata de forma especial (§22.6 eixo C). Os demais nao alteram a
+  derivacao: cassado/renunciado/falecido/concluido descrevem mandato ENCERRADO — quem monta o roster ja' os
+  filtra pela janela de vigencia, e se um escapar ele e' derivado como qualquer outro membro (o que a
+  contagem revela, em vez de esconder)."
+  "licenciado")
+
+(defn validar-estado-mandato
+  "Fail-closed: lanca se `estado` de mandato e' nao-nil e forasteiro ao vocabulario de `cadastros`. `nil` e'
+  LEGITIMO e passa: o roster vem de LEFT JOIN LATERAL e devolve nil quando nenhum mandato cobre a data."
+  [estado]
+  (when (and (some? estado) (not (contains? estados-mandato-cadastro estado)))
+    (throw (ex-info "estado de mandato desconhecido no roster da chamada"
+                    {:estado estado :validos estados-mandato-cadastro}))))
+
+(defn estado-de-presenca
+  "PURO. Deriva o estado da chamada de UM vereador a partir das tres fontes. Devolve
+  `{:estado <de estados-chamada> :inconsistencia-cadastro <boolean>}`.
+
+  A PRECEDENCIA, escrita e nao inferida:
+    1. licenciado (cadastro)            -> `:licenciado`
+    2. ultimo evento POSITIVO            -> `:presente-plenario` | `:presente-remoto` (a modalidade decide)
+    3. justificativa `aprovada`          -> `:ausente-justificado`
+    4. justificativa `pendente`          -> `:ausente-justificativa-pendente`
+    5. nada disso                        -> `:ausente`
+
+  CASO ESPECIAL (o degrau 1 cede ao 2): licenciado COM evento positivo => o vereador esta PRESENTE e
+  `:inconsistencia-cadastro` vem `true`. O fato observado vence o cadastro — ele entrou no plenario, esta
+  la'. E a contradicao nao se esconde: numa Casa recem-migrada (licenca que ninguem encerrou no sistema
+  antigo, reassuncao nao registrada) esse sinalizador e' exatamente o que o servidor precisa ver para ir
+  consertar o cadastro. Silenciar o conflito escolhendo um dos lados e' o que produz um quorum errado
+  defensavel-no-papel.
+
+  Evento NEGATIVO (`saida`) nao contradiz licenca nenhuma — so o fato positivo contradiz.
+
+  `ultimo-evento` = mapa com `:tipo`/`:modalidade` (nil se o vereador nao tem evento na sessao);
+  `justificativa` = mapa com `:estado` (nil se nao ha). Todos os vocabularios sao validados fail-closed."
+  [roster-linha ultimo-evento justificativa]
+  (validar-estado-mandato (:estado-mandato roster-linha))
+  (when (some? ultimo-evento)
+    (validar-tipo-evento (:tipo ultimo-evento))
+    (validar-modalidade-presenca (:modalidade ultimo-evento)))
+  (when (some? justificativa)
+    (validar-estado-justificativa (:estado justificativa)))
+  (let [licenciado? (= estado-mandato-licenciado (:estado-mandato roster-linha))
+        presente?   (and (some? ultimo-evento) (presente-por-tipo? (:tipo ultimo-evento)))
+        estado      (cond
+                      presente?  (if (= "remoto" (:modalidade ultimo-evento))
+                                   :presente-remoto
+                                   :presente-plenario)
+                      licenciado? :licenciado
+                      (= "aprovada" (:estado justificativa)) :ausente-justificado
+                      (= "pendente" (:estado justificativa)) :ausente-justificativa-pendente
+                      :else :ausente)]
+    {:estado estado
+     :inconsistencia-cadastro (boolean (and licenciado? presente?))}))
+
+(defn derivar-linha-chamada
+  "PURO. A linha da chamada de um vereador = a identidade do roster + o estado derivado. Corresponde ao model
+  `sessoes.models.presenca/LinhaChamada`. A identidade vem CRUA do roster (nome, nome parlamentar, partido):
+  `sessoes` nao inventa dado de `cadastros`, so o repassa."
+  [roster-linha ultimo-evento justificativa]
+  (merge (select-keys roster-linha [:vereador-id :nome :nome-parlamentar :partido])
+         (estado-de-presenca roster-linha ultimo-evento justificativa)))
+
+(defn contar-quorum
+  "PURO. Contagem de quorum sobre as linhas JA derivadas (`derivar-linha-chamada`) — nunca sobre eventos
+  crus, para que a tela e a policy contem o mesmo conjunto.
+
+  `:membros-da-casa` e' o DENOMINADOR e exclui os licenciados: durante a licenca o vereador nao compoe a
+  Casa para efeito de quorum (quem compoe e' o suplente, que entra no roster com mandato proprio). Contar o
+  licenciado inflaria o denominador e faria uma sessao legitima parecer sem quorum.
+
+  O licenciado-com-evento-positivo (a inconsistencia acima) NAO fica de fora: ele foi derivado como
+  presente, entao conta nos dois lados — numerador e denominador. E' o unico tratamento coerente: quem esta
+  no plenario esta na Casa."
+  [linhas]
+  {:presentes-plenario (count (filter #(= :presente-plenario (:estado %)) linhas))
+   :presentes-remoto   (count (filter #(= :presente-remoto (:estado %)) linhas))
+   :membros-da-casa    (count (remove #(= :licenciado (:estado %)) linhas))})
+
 ;; ---------- §22.6 eixo D — gravacao (audio/video) da sessao (F4.4b) ----------
 ;; `gravacao_segmento` e' unidade TECNICA do arquivo, nao regimental (uma sessao tem 1 segmento tipico mas N
 ;; possiveis: reinicio do OBS, divisao manual). Alinhamento com fatos da sessao = por INSTANTE. Os vocabularios

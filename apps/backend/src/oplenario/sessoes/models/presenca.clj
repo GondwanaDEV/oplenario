@@ -19,6 +19,29 @@
    [:fonte (enum-de logic/fontes-presenca)]
    [:ocorrido-em km/Instante]])
 
+(def LinhaChamada
+  "A linha da CHAMADA de um vereador (§22.6 eixo C) — representacao de DOMINIO, kebab-case, produzida por
+  `sessoes.logic/derivar-linha-chamada`. NAO e' entidade persistida: a presenca corrente nunca e'
+  materializada (e' derivada do ultimo evento por vereador ate' um instante).
+
+  `estado` usa o vocabulario PROPRIO da chamada (`logic/estados-chamada`, keywords), nao o `tipo` cru do
+  evento — sao coisas distintas: `entrada`/`saida` sao FATOS append-only, `:presente-plenario` e' a
+  CONCLUSAO depois de cruzar cadastro + evento + justificativa.
+
+  `inconsistencia-cadastro` = o cadastro diz licenciado mas o vereador esta fisicamente presente. Fica no
+  contrato de dominio (nao e' detalhe de tela) porque e' o unico canal pelo qual esse conflito chega ao
+  servidor que pode corrigi-lo.
+
+  `nome-parlamentar` e `partido` sao nullable na origem (`cadastros.vereador.nome_parlamentar` e o LEFT JOIN
+  LATERAL do mandato podem nao ter linha na data)."
+  [:map {:closed true}
+   [:vereador-id :uuid]
+   [:nome [:string {:min 1}]]
+   [:nome-parlamentar [:maybe :string]]
+   [:partido [:maybe :string]]
+   [:estado (enum-de logic/estados-chamada)]
+   [:inconsistencia-cadastro :boolean]])
+
 (def JustificativaAusencia
   [:map {:closed true}
    [:ente-id :uuid]
