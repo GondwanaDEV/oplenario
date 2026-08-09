@@ -143,12 +143,36 @@
         v (vereador! ente "Zulmira Rocha" "Zu do Povo")]
     (mandato! ente leg v (LocalDate/of 2025 1 1) nil "PDT")
     (let [l (first (repo/roster-da-casa *repo* ente hoje))]
-      (is (= #{:vereador-id :nome :nome-parlamentar :partido :estado-mandato} (set (keys l))))
+      (is (= #{:vereador-id :nome :nome-parlamentar :partido :estado-mandato :cargo-mesa} (set (keys l))))
       (is (= v (:vereador-id l)))
       (is (= "Zulmira Rocha" (:nome l)))
       (is (= "Zu do Povo" (:nome-parlamentar l)))
       (is (= "PDT" (:partido l)))
-      (is (= "vigente" (:estado-mandato l))))))
+      (is (= "vigente" (:estado-mandato l)))
+      (is (nil? (:cargo-mesa l)) "sem cargo na Mesa cadastrado -> nil, nao erro"))))
+
+;; ---------- cargo na Mesa (fatia 1b-WIRE: LinhaChamadaOut.cargo-mesa) ----------
+
+(deftest roster-traz-cargo-na-mesa-vigente
+  ;; A chamada precisa distinguir o presidente/secretario na lista (telao da Mesa de conducao). So' quem tem
+  ;; CARGO vigente na comissao tipo='mesa' na `data` aparece com `cargo-mesa`; membro comum da Casa (sem
+  ;; cargo) e' nil, nao erro nem string vazia.
+  (let [ente (random-uuid)
+        leg  (casa! ente)
+        presidente (vereador! ente "Presidente da Mesa")
+        comum      (vereador! ente "Vereador Comum")
+        mesa-id (random-uuid)]
+    (mandato! ente leg presidente (LocalDate/of 2025 1 1) nil)
+    (mandato! ente leg comum      (LocalDate/of 2025 1 1) nil)
+    (repo/criar-comissao! *repo* ente {:id mesa-id :ente-id ente :nome "Mesa Diretora" :tipo "mesa"
+                                       :legislatura-id leg :vigencia-inicio (LocalDate/of 2025 1 1)})
+    (repo/criar-cargo! *repo* ente {:id (random-uuid) :ente-id ente :comissao-id mesa-id
+                                    :vereador-id presidente :cargo "presidente"
+                                    :vigencia-inicio (LocalDate/of 2025 1 1)})
+    (let [linhas (into {} (map (juxt :vereador-id identity)) (repo/roster-da-casa *repo* ente hoje))]
+      (is (= "presidente" (:cargo-mesa (get linhas presidente))))
+      (is (nil? (:cargo-mesa (get linhas comum)))
+          "membro da Casa sem cargo na Mesa -> nil (nao um LEFT JOIN vira INNER e some da lista)"))))
 
 (deftest roster-ordena-por-nome-e-nao-repete-vereador
   ;; Ordem por nome: a chamada e' LIDA em voz alta e conferida linha a linha; ordem instavel entre dois

@@ -275,13 +275,19 @@
    vencedor deterministico (mais recente por vigencia_inicio, tie-break por id) e garante uma linha por
    vereador. O EXCLUDE `uq_mandato_vigente_sem_overlap` (mig 0059) hoje ja' impede dois mandatos 'vigente'
    sobrepostos do mesmo vereador, mas ele so' cobre linhas EFETIVADAS — o LATERAL e' o que mantem a garantia
-   independente disso. Nao traz o cargo na Mesa (a 2a LATERAL de `listar`): a chamada nao usa, e seria um
-   segundo subplano por vereador num hot-path de sessao ao vivo."
+   independente disso.
+
+   TRAZ o cargo na Mesa (2a LEFT JOIN LATERAL, COPIA LITERAL da de `listar`): a fatia 1b-WIRE da chamada
+   precisa dele (LinhaChamadaOut.cargo-mesa, p/ o telao distinguir o presidente/secretario na lista) — a
+   decisao anterior de omitir por custo de um segundo subplano por vereador num hot-path ao vivo NAO se
+   sustenta mais: a chamada e' lida uma vez por abertura de sessao, nao a cada evento de presenca, e o
+   plano e' o MESMO da tela de cadastro (`listar`) que ja' paga este custo."
   [tx ente-id data]
   (comum/linhas->kebab
     (jdbc/execute! tx
       (sql/format
-        {:select [[:v.id :vereador_id] :v.nome :v.nome_parlamentar :m.partido [:m.estado :estado_mandato]]
+        {:select [[:v.id :vereador_id] :v.nome :v.nome_parlamentar :m.partido [:m.estado :estado_mandato]
+                  [:cc.cargo :cargo_mesa]]
          :from [[:cadastros.vereador :v]]
          :join [[[:lateral
                   {:select [:mm.partido :mm.estado]
@@ -293,6 +299,19 @@
                    :order-by [[:mm.vigencia_inicio :desc] [:mm.id]]
                    :limit 1}]
                  :m] true]
+         :left-join [[[:lateral
+                       {:select [:cc2.cargo]
+                        :from [[:cadastros.comissao_cargo :cc2]]
+                        :join [[:cadastros.comissao :mesa2]
+                               [:and [:= :mesa2.id :cc2.comissao_id] [:= :mesa2.tipo "mesa"] [:= :mesa2.ente_id :v.ente_id]
+                                [:<= :mesa2.vigencia_inicio data]
+                                [:or [:is :mesa2.vigencia_fim nil] [:>= :mesa2.vigencia_fim data]]]]
+                        :where [:and [:= :cc2.vereador_id :v.id] [:= :cc2.ente_id :v.ente_id]
+                                [:<= :cc2.vigencia_inicio data]
+                                [:or [:is :cc2.vigencia_fim nil] [:>= :cc2.vigencia_fim data]]]
+                        :order-by [[:cc2.vigencia_inicio :desc] [:cc2.id]]
+                        :limit 1}]
+                      :cc] true]
          :where [:= :v.ente_id ente-id]
          :order-by [[:v.nome :asc]]}))))
 

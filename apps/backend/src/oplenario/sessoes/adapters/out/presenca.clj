@@ -26,3 +26,40 @@
       (throw (ex-info "resumo de presenca viola o contrato PresencaResumoOut (bug de servidor)"
                       {:erros (me/humanize (m/explain wire/PresencaResumoOut out))})))
     out))
+
+(defn- linha-chamada->wire
+  "Uma LinhaChamada de dominio (`sessoes.controllers/linha-da-chamada`) -> LinhaChamadaOut. `estado` e'
+  keyword no dominio (`logic/estados-chamada`, sem CHECK que o espelhe) -> string via `name`. Instantes
+  (`desde`/`registrado-em`) -> ISO string ou nil."
+  [{:keys [vereador-id nome nome-parlamentar partido cargo-mesa estado inconsistencia-cadastro
+           desde fonte registrado-em justificativa]}]
+  {:vereador-id (str vereador-id)
+   :nome nome
+   :nome-parlamentar nome-parlamentar
+   :partido partido
+   :cargo-mesa cargo-mesa
+   :estado (name estado)
+   :inconsistencia-cadastro (boolean inconsistencia-cadastro)
+   :desde (some-> desde str)
+   :fonte fonte
+   :registrado-em (some-> registrado-em str)
+   :justificativa (when justificativa
+                    {:estado (:estado justificativa) :motivo (:motivo justificativa)})})
+
+(defn chamada->wire
+  "A CHAMADA de dominio (`sessoes.controllers/chamada-da-sessao`) -> ChamadaOut (validado). Instantes/data ->
+  ISO string; `linhas` projetadas uma a uma; `quorum` ja chega no shape de ChamadaQuorumOut (contar-quorum)."
+  [{:keys [sessao-id sessao-estado instante data-de-composicao composicao-resolvida-em
+           sem-registro-de-presenca linhas quorum]}]
+  (let [out {:sessao-id (str sessao-id)
+             :sessao-estado sessao-estado
+             :instante (str instante)
+             :data-de-composicao (str data-de-composicao)
+             :composicao-resolvida-em (str composicao-resolvida-em)
+             :sem-registro-de-presenca (boolean sem-registro-de-presenca)
+             :linhas (mapv linha-chamada->wire linhas)
+             :quorum (select-keys quorum [:presentes-plenario :presentes-remoto :membros-da-casa])}]
+    (when-not (m/validate wire/ChamadaOut out)
+      (throw (ex-info "chamada viola o contrato ChamadaOut (bug de servidor)"
+                      {:erros (me/humanize (m/explain wire/ChamadaOut out))})))
+    out))
