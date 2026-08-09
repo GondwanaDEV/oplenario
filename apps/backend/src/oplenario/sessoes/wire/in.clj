@@ -27,6 +27,42 @@
    [:modalidade (km/enum-de logic/modalidades-presenca)]
    [:ocorrido-em :string]])
 
+;; ---------- §22.6 eixo C — justificativa de ausencia (ato apartado, Etapa 2 da chamada) ----------
+;; `motivo` e' o unico campo do modulo `sessoes` que pode carregar DADO PESSOAL SENSIVEL (saude: 'internacao',
+;; 'cirurgia', 'tratamento de familiar'). Isso nao muda o SCHEMA — muda o que se faz com ele depois: as rotas
+;; sao todas autenticadas, nenhuma superficie publica o projeta, e NENHUM evento de dominio o carrega no
+;; payload (o outbox e' lido por um relay compartilhado e projetado por outros modulos, `transparencia`
+;; inclusive, que e' PUBLICO). O cap de 4096 e' a convencao da casa p/ campo de texto livre de borda.
+
+(def AbrirJustificativa
+  "Corpo de POST /sessoes/:id/justificativas (papel 'secretario' — a Mesa protocola em nome do vereador, que e'
+  o caso comum na camara real: o vereador liga e o servidor lanca). `vereador-id` = uuid (string) e e' VALIDADO
+  contra o roster da Casa NA DATA DA SESSAO (quem nao tem cadeira nao tem falta a justificar). `motivo` =
+  texto OBRIGATORIO e nao-vazio apos trim (o adapters/in valida -> 400, nunca o CHECK da mig 0029 -> 500). NAO
+  carrega `estado` (nasce sempre 'pendente' — quem abre nao decide) nem autor/tenant. `:closed true`."
+  [:map {:closed true}
+   [:vereador-id :string]
+   [:motivo [:string {:max 4096}]]])
+
+(def AbrirMinhaJustificativa
+  "Corpo de POST /sessoes/:id/minha-justificativa (papel 'vereador' — self-service). O campo `vereador-id`
+  NAO EXISTE aqui, e essa ausencia e' a defesa: o vereador e' resolvido da IDENTIDADE do ator
+  (`resolver-vereador`, mesmo contrato anti-forja de `/presenca/confirmar` e de `/meu/ciencias`), entao nao ha'
+  como um vereador justificar a falta de outro por esta porta. `:closed true`."
+  [:map {:closed true}
+   [:motivo [:string {:max 4096}]]])
+
+(def DecidirJustificativa
+  "Corpo de PATCH /sessoes/:id/justificativas/:jid/decisao (papel 'secretario' — o ato da Mesa). `estado` so'
+  os TERMINAIS (aprovada|indeferida): 'pendente' nao e' uma decisao, e a maquina `logic/transicoes-justificativa`
+  nao tem aresta de volta. `lock-version` = inteiro 0..int4, OBRIGATORIO (CAS otimista; ausente/fora do range ->
+  400 fail-closed no adapter, NUNCA 500 do banco) — sem ele duas pessoas da Mesa decidiriam a mesma falta em
+  sentidos opostos e a ultima escrita venceria em silencio. NAO carrega `decidido-por` (INJETADO do ator: um
+  cliente nao forja quem deferiu). `:closed true`."
+  [:map {:closed true}
+   [:estado (km/enum-de logic/estados-justificativa-terminais)]
+   [:lock-version :int]])
+
 (def InscreverOrador
   "Corpo de POST /sessoes/:id/inscricoes (§22.6 eixo F, tribuna camada de intencao). `vereador-id` = uuid
   (string); `origem-inscricao` discrimina o caminho (app/secretaria/pedido/autoria) — dado descritivo da fila,

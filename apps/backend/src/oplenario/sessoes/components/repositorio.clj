@@ -12,7 +12,8 @@
             [oplenario.sessoes.db.sessao :as sessao]
             [oplenario.sessoes.db.tribuna :as tribuna]
             [oplenario.sessoes.logic :as logic]
-            [oplenario.sessoes.relacoes.presenca :as rel-presenca]))
+            [oplenario.sessoes.relacoes.presenca :as rel-presenca])
+  (:import (org.postgresql.util PSQLException)))
 
 (defprotocol RepoSessoes
   (transacao [this ente-id f] "Roda (f tx) numa UNICA tx do tenant — compoe acoes atomicamente.")
@@ -56,9 +57,13 @@
   (esta-presente? [this ente-id sessao-id vereador-id instante] "Presenca DERIVADA do ultimo evento ate o instante.")
   (presentes-plenario [this ente-id sessao-id instante] "Quorum presencial em `instante` (insumo da DSL do motor).")
   (presentes-remoto [this ente-id sessao-id instante] "Quorum remoto em `instante`.")
-  (criar-justificativa! [this ente-id m] "Abre justificativa de ausencia 'pendente' (ato apartado).")
+  (criar-justificativa! [this ente-id m]
+    "Abre justificativa de ausencia 'pendente' (ato apartado). Devolve {:id :estado :lock-version}. Duplicata
+     p/ o mesmo (sessao, vereador) lanca `:conflito/justificativa` (409) — nunca sobrescreve a existente.")
   (buscar-justificativa [this ente-id id])
-  (decidir-justificativa! [this ente-id m] "aprovada|indeferida (terminal) via maquina + CAS.")
+  (decidir-justificativa! [this ente-id m]
+    "aprovada|indeferida (terminal) via maquina + CAS. Devolve {:de :para}; lock stale / ja terminal /
+     inexistente lancam `:conflito/justificativa` (409).")
   ;; §22.6 eixo D — gravacao (audio/video)
   (registrar-segmento! [this ente-id m] "Grava segmento de gravacao (captura/ingestao); sessao_id opcional (Opcao A).")
   (vincular-segmento! [this ente-id m] "Vincula um segmento a sessao (uma-vez, CAS). `forcar-acesso-restrito` (sigilo §22.6) eleva acesso_restrito; emite gravacao.segmento-vinculado (core->IA) com o sigilo definitivo, atomico.")
@@ -196,7 +201,21 @@
   (esta-presente? [this ente-id sessao-id vereador-id instante] (transacao this ente-id #(rel-presenca/esta-presente-em? % sessao-id vereador-id instante)))
   (presentes-plenario [this ente-id sessao-id instante] (transacao this ente-id #(rel-presenca/presentes-plenario % sessao-id instante)))
   (presentes-remoto [this ente-id sessao-id instante] (transacao this ente-id #(rel-presenca/presentes-remoto % sessao-id instante)))
-  (criar-justificativa! [this ente-id m] (transacao this ente-id #(presenca/criar-justificativa! % (assoc m :ente-id ente-id))))
+  ;; A CORRIDA PERDIDA vem daqui: o pre-check de `db/criar-justificativa!` da' a mensagem acionavel no caso
+  ;; comum, mas duas requisicoes simultaneas leem 'nao existe' e as duas inserem — a 2a viola a UNIQUE
+  ;; (ente_id, sessao_id, vereador_id) da mig 0029 e sobe 23505. Traduzir aqui (e nao no db/) segue o
+  ;; precedente do repo (legislativo/participacao/cadastros catcham 23505 no Repo-Component): o catch tem de
+  ;; envolver a TX inteira, porque depois do 23505 a tx esta abortada e nao ha' mais o que consultar dentro
+  ;; dela. Mesma tag do pre-check -> o handler continua com um `catch` unico.
+  (criar-justificativa! [this ente-id m]
+    (try
+      (transacao this ente-id #(presenca/criar-justificativa! % (assoc m :ente-id ente-id)))
+      (catch PSQLException e
+        (if (= "23505" (.getSQLState e))
+          (throw (ex-info (logic/mensagem-de-recusa-de-justificativa :ja-existe)
+                          {:tipo :conflito/justificativa :motivo :ja-existe
+                           :sessao-id (:sessao-id m) :vereador-id (:vereador-id m)}))
+          (throw e)))))
   (buscar-justificativa [this ente-id id] (transacao this ente-id #(presenca/buscar-justificativa % ente-id id)))
   (decidir-justificativa! [this ente-id m] (transacao this ente-id #(presenca/decidir-justificativa! % (assoc m :ente-id ente-id))))
   (registrar-segmento! [this ente-id m]

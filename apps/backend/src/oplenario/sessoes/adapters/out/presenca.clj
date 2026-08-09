@@ -32,6 +32,51 @@
                       {:erros (me/humanize (m/explain wire/PresencaResumoOut out))})))
     out))
 
+;; ---------- justificativa de ausencia (Etapa 2 da chamada) ----------
+
+(defn- validar! [schema out nome]
+  (when-not (m/validate schema out)
+    (throw (ex-info (str nome " viola o contrato de saida (bug de servidor)")
+                    {:campos (keys (me/humanize (m/explain schema out)))})))
+  out)
+
+(defn justificativa-aberta->wire
+  "Recibo de dominio {:id :sessao-id :vereador-id :estado :lock-version} -> JustificativaAbertaOut (validado,
+  resposta 201). NAO projeta `motivo`: o cliente acabou de envia-lo, e dado sensivel que nao precisa voltar
+  nao volta."
+  [{:keys [id sessao-id vereador-id estado lock-version]}]
+  (validar! wire/JustificativaAbertaOut
+            {:id (some-> id str)
+             :sessao-id (some-> sessao-id str)
+             :vereador-id (some-> vereador-id str)
+             :estado estado
+             :lock-version lock-version}
+            "recibo de justificativa"))
+
+(defn- linha-justificativa->wire [{:keys [id vereador-id estado motivo decidido-por decidido-em lock-version]}]
+  {:id (str id)
+   :vereador-id (str vereador-id)
+   :estado estado
+   :motivo motivo
+   :decidido-por (some-> decidido-por str)
+   :decidido-em (some-> decidido-em str)
+   :lock-version lock-version})
+
+(defn justificativas->wire
+  "{:sessao-id :justificativas [...]} de dominio -> JustificativasOut (validado, resposta 200)."
+  [{:keys [sessao-id justificativas]}]
+  (validar! wire/JustificativasOut
+            {:sessao-id (str sessao-id)
+             :justificativas (mapv linha-justificativa->wire justificativas)}
+            "lista de justificativas"))
+
+(defn justificativa-decidida->wire
+  "Recibo de dominio {:justificativa-id :de :para} -> JustificativaDecididaOut (validado, resposta 200)."
+  [{:keys [justificativa-id de para]}]
+  (validar! wire/JustificativaDecididaOut
+            {:justificativa-id (some-> justificativa-id str) :de de :para para}
+            "recibo de decisao de justificativa"))
+
 (defn- linha-chamada->wire
   "Uma LinhaChamada de dominio (`sessoes.controllers/linha-da-chamada`) -> LinhaChamadaOut. `estado` e'
   keyword no dominio (`logic/estados-chamada`, sem CHECK que o espelhe) -> string via `name`. Instantes

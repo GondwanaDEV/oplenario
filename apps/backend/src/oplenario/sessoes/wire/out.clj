@@ -50,6 +50,57 @@
    [:ocorrido-em :string]
    [:registrado-em :string]])
 
+;; ---------- §22.6 eixo C — justificativa de ausencia (Etapa 2 da chamada) ----------
+;; Estes tres contratos EXPOEM `lock-version`, e sao a excecao consciente a regra do cabecalho deste ns. A
+;; razao: aqui o token de CAS nao e' interno — e' PARTE DO PROTOCOLO da decisao (PATCH .../decisao exige o
+;; lock que o cliente leu). Sem devolve-lo, a tela precisaria de uma leitura extra por linha so' para poder
+;; deferir, e a alternativa (aceitar decisao sem CAS) e' a que perde a decisao de um membro da Mesa em
+;; silencio. Mesmo desenho de `legislativo/wire/out/documento` e `.../parecer`.
+;; `motivo` viaja nestes contratos e SO' nestes: rotas autenticadas, papel exigido na borda, e nenhum evento
+;; de dominio o carrega (LGPD — pode ser dado de saude).
+
+(def JustificativaAbertaOut
+  "Recibo da abertura de justificativa (resposta 201 de POST /sessoes/:id/justificativas e de
+  POST /sessoes/:id/minha-justificativa). Devolve o recurso criado com o estado ('pendente' — quem abre nao decide) e ja'
+  com o `lock-version`, p/ a Mesa poder decidir sem uma segunda leitura. NAO ecoa o `motivo`: o cliente
+  acabou de envia-lo, e nao ha' ganho em fazer dado sensivel trafegar de volta."
+  [:map {:closed true}
+   [:id :string]
+   [:sessao-id :string]
+   [:vereador-id :string]
+   [:estado (km/enum-de logic/estados-justificativa)]
+   [:lock-version :int]])
+
+(def LinhaJustificativaOut
+  "Uma linha de GET /sessoes/:id/justificativas — o ato apartado por vereador, com o token de CAS.
+  `decidido-por`/`decidido-em` sao nil enquanto 'pendente' e NOT NULL depois (CHECK
+  justificativa_decisao_coerente da mig 0029), entao a nulidade aqui e' o espelho fiel do estado."
+  [:map {:closed true}
+   [:id :string]
+   [:vereador-id :string]
+   [:estado (km/enum-de logic/estados-justificativa)]
+   [:motivo :string]
+   [:decidido-por [:maybe :string]]
+   [:decidido-em [:maybe :string]]
+   [:lock-version :int]])
+
+(def JustificativasOut
+  "Resposta de GET /sessoes/:id/justificativas (papel 'secretario'): as justificativas da sessao, em ordem
+  deterministica por `vereador-id` (a Mesa confere linha a linha e a lista nao pode reordenar entre dois
+  carregamentos). NAO e' read-model publico — `motivo` pode ser dado de saude."
+  [:map {:closed true}
+   [:sessao-id :string]
+   [:justificativas [:sequential LinhaJustificativaOut]]])
+
+(def JustificativaDecididaOut
+  "Recibo da decisao (resposta 200 de PATCH /sessoes/:id/justificativas/:jid/decisao). Carrega a
+  `justificativa-id` + o par `de`/`para` — espelha `TransicaoSessaoOut`/`DesistenciaInscricaoOut`, os outros
+  dois recibos de maquina de estados do modulo. NAO ecoa o motivo."
+  [:map {:closed true}
+   [:justificativa-id :string]
+   [:de (km/enum-de logic/estados-justificativa)]
+   [:para (km/enum-de logic/estados-justificativa)]])
+
 (def InscricaoReciboOut
   "Recibo da inscricao de orador (resposta 201 de POST /sessoes/:id/inscricoes). `id` da inscricao + `ordem` na
   fila (por sessao+fase). O canal SSE ja recebeu inscricao.registrada; este recibo confirma ao chamador."

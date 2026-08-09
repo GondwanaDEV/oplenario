@@ -376,6 +376,112 @@
           :registrado-em (:registrado-em presenca)
           :justificativa (when justificativa (select-keys justificativa [:estado :motivo]))}))
 
+;; ---------- §22.6 eixo C — a JUSTIFICATIVA DE AUSENCIA (Etapa 2 da chamada) ----------
+;; NAO ha' gate de ESTADO DA SESSAO nestas escritas, e a ausencia e' deliberada — o oposto do que a fatia 2a
+;; fez com a presenca. A justificativa e' um ATO ADMINISTRATIVO APARTADO (a propria mig 0029 a define como
+;; "juizo posterior != fato observado"): o caso NORMAL e' o vereador registrar a doenca DEPOIS da sessao, e a
+;; Mesa apreciar dias depois. Bloquear em sessao encerrada fecharia a porta justamente no momento em que ela
+;; e' usada. O que ela nao pode fazer e' reescrever o passado, e nao faz: a chamada de uma sessao fechada
+;; congela o INSTANTE da presenca (`instante-de-avaliacao`), mas le' o estado CORRENTE da justificativa —
+;; deferir a falta depois e' exatamente o efeito desejado.
+
+(defn- exigir-assento!
+  "Fail-closed: `vereador-id` tem de compor a Casa na DATA DE REFERENCIA da sessao (o mesmo roster que a
+  chamada cruza — seam `roster-da-casa`, injetado do host). Sem isto, a borda da Mesa aceitaria um uuid
+  qualquer no corpo e gravaria uma justificativa que a chamada nunca exibe (a derivacao so' cruza justificativa
+  com linha do roster ou com presenca observada): dado morto, silencioso, e que a Casa so' descobre em ata.
+
+  Lanca `:conflito/justificativa` (409) e nao 400: o corpo esta bem formado — o que nao bate e' a COMPOSICAO
+  da Casa naquela data, que e' estado do sistema, e a correcao e' em `cadastros`, nao no request."
+  [roster-da-casa ente-id sessao vereador-id]
+  (let [data (data-de-referencia sessao)]
+    (when-not (some #(= vereador-id (:vereador-id %)) (roster-da-casa ente-id data))
+      (throw (ex-info (logic/mensagem-de-recusa-de-justificativa :sem-assento)
+                      {:tipo :conflito/justificativa :motivo :sem-assento
+                       :sessao-id (:id sessao) :data-de-composicao data})))))
+
+(defn- abrir-justificativa*
+  "Corpo comum das duas portas de abertura (Mesa e self-service). O que as separa e' a PROCEDENCIA do
+  `vereador-id` — do corpo numa, da identidade do ator na outra —, e essa diferenca fica INTEIRA na borda;
+  daqui para baixo o ato e' o mesmo. Devolve {:id :sessao-id :vereador-id :estado :lock-version} ou nil
+  (sessao inexistente -> 404)."
+  [repo-sessoes roster-da-casa ator sessao-id vereador-id motivo]
+  (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/abrir-justificativa sessao logic/pode-ver-sessao?)
+    (exigir-assento! roster-da-casa (:ente-id ator) sessao vereador-id)
+    (merge {:sessao-id sessao-id :vereador-id vereador-id}
+           (repo/criar-justificativa! repo-sessoes (:ente-id ator)
+             {:id (random-uuid) :sessao-id sessao-id :vereador-id vereador-id :motivo motivo
+              :created-by (:identidade-id ator)}))))
+
+(defn abrir-justificativa
+  "Porta da MESA (papel 'secretario'): protocola a justificativa de ausencia EM NOME de um vereador — o caso
+  comum na camara real (o vereador liga e o servidor lanca). Como o `vereador-id` vem do CORPO, ele passa pelo
+  gate de assento (`exigir-assento!`); a porta self-service nao aceita esse campo de jeito nenhum.
+  Duplicata p/ o mesmo (sessao, vereador) -> `:conflito/justificativa` (409, e a existente fica intacta)."
+  [repo-sessoes roster-da-casa ator {:keys [sessao-id vereador-id motivo]}]
+  (abrir-justificativa* repo-sessoes roster-da-casa ator sessao-id vereador-id motivo))
+
+(defn abrir-minha-justificativa
+  "Porta SELF-SERVICE (papel 'vereador'): o vereador registra a PROPRIA ausencia. `vereador-id` NUNCA vem do
+  corpo — sai da identidade do ator via `resolver-vereador` (seam injetado pelo host), mesmo contrato
+  anti-forja de `confirmar-minha-presenca` e de `/meu/ciencias` do legislativo. Ator sem cadastro de vereador
+  vinculado (`resolver-vereador` nil) -> nil (-> 404). O gate de assento tambem vale aqui: ter cadastro nao e'
+  ter cadeira na data — um ex-vereador continua resolvendo por identidade."
+  [repo-sessoes roster-da-casa resolver-vereador ator {:keys [sessao-id motivo]}]
+  (when-let [vereador-id (resolver-vereador (:ente-id ator) (:identidade-id ator))]
+    (abrir-justificativa* repo-sessoes roster-da-casa ator sessao-id vereador-id motivo)))
+
+(defn justificativas-da-sessao
+  "Read-model das justificativas de ausencia da sessao p/ a Mesa (papel 'secretario' na borda). A authz mora
+  no recurso sessao: carrega a sessao e roda pode-ver-sessao? ANTES de qualquer leitura. Devolve
+  {:sessao-id :justificativas [...]} ou nil (sessao inexistente -> 404).
+
+  NAO e' read-model publico e nao vira um: `motivo` pode ser dado pessoal SENSIVEL (saude). Duas leituras em
+  tx separadas (sessao, justificativas) sao aceitaveis aqui — e' lista de conferencia, nao contagem de quorum
+  (a chamada, que compoe numero, le' as tres fontes numa tx so')."
+  [repo-sessoes ator sessao-id]
+  (when-let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/ver s logic/pode-ver-sessao?)
+    {:sessao-id sessao-id
+     :justificativas (vec (repo/listar-justificativas repo-sessoes (:ente-id ator) sessao-id))}))
+
+(defn decidir-justificativa
+  "O ATO DA MESA: defere ou indefere a justificativa (estados terminais), com CAS por lock_version. Carrega a
+  sessao (nil -> 404), roda pode-ver-sessao? (mesma Casa -> 403) e exige que a justificativa seja DESTA sessao
+  (anti confused-deputy — sem isso a URL de uma sessao decidiria o ato de outra da mesma Casa; espelha o guard
+  `fala.sessao-id` da tribuna e o `item-desta-sessao` da pauta). `justificativa_ausencia.sessao_id` e' imutavel
+  pos-criacao, entao nao ha' TOCTOU entre este check e o UPDATE.
+
+  IMPEDIMENTO — ninguem e' juiz em causa propria: se a identidade do ator resolve para o MESMO vereador da
+  justificativa, a decisao e' NEGADA (403), mesmo que ele tenha o papel 'secretario'. O papel autoriza a
+  CATEGORIA do ato (decidir faltas); nao autoriza decidir a propria. Um servidor que tambem e' vereador existe
+  em camara pequena, e sem esta trava ele deferiria a propria ausencia com um PATCH.
+
+  Lock stale / ja terminal / inexistente -> `:conflito/justificativa` (409). Devolve
+  {:justificativa-id :de :para} ou nil (sessao/justificativa ausente, ou de outra sessao).
+
+  SEM EVENTO DE DOMINIO, e por escolha: o payload deste ato carregaria o vereador e o estado, mas o outbox e'
+  lido por um relay COMPARTILHADO e projetado por outros modulos (inclusive `transparencia`, PUBLICO). A
+  chamada e' derivada NA LEITURA — o painel ao vivo ve a mudanca no proximo GET /chamada, sem que nada
+  atravesse a fronteira de modulo. Se um dia um painel exigir push, o evento entra carregando
+  {justificativa-id, sessao-id, vereador-id, estado} e NUNCA o `motivo`."
+  [repo-sessoes resolver-vereador ator {:keys [sessao-id justificativa-id estado lock-version]}]
+  (let [ente-id (:ente-id ator)]
+    (when-let [sessao (repo/buscar-sessao repo-sessoes ente-id sessao-id)]
+      (authz/check! ator :sessao/decidir-justificativa sessao logic/pode-ver-sessao?)
+      (when-let [j (repo/buscar-justificativa repo-sessoes ente-id justificativa-id)]
+        (when (= sessao-id (:sessao-id j))
+          (let [meu-vereador-id (resolver-vereador ente-id (:identidade-id ator))]
+            (when (and meu-vereador-id (= meu-vereador-id (:vereador-id j)))
+              (authz/negar! :juiz-em-causa-propria
+                            {:acao :sessao/decidir-justificativa :justificativa-id justificativa-id
+                             :ator (:identidade-id ator)})))
+          (assoc (repo/decidir-justificativa! repo-sessoes ente-id
+                   {:id justificativa-id :estado estado :lock-version lock-version
+                    :decidido-por (:identidade-id ator)})
+                 :justificativa-id justificativa-id))))))
+
 (defn chamada-da-sessao
   "A CHAMADA da sessao `sessao-id` (§22.6 eixo C): cruza o ROSTER da Casa (`roster-da-casa`, seam injetado do
   host sobre `cadastros` — este ns nunca importa cadastros, §22.10), a PRESENCA CORRENTE (ultimo evento por

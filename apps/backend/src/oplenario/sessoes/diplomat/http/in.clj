@@ -119,6 +119,94 @@
             (http/json-resposta 409 {:erro (ex-message e)})
             (throw e)))))))
 
+;; ---------- §22.6 eixo C — justificativa de ausencia (Etapa 2 da chamada) ----------
+
+(defn- resposta-conflito-justificativa
+  "Traduz `:conflito/justificativa` -> 409 com a mensagem DO DOMINIO (`logic/mensagem-de-recusa-de-justificativa`,
+  ja' embutida na ex-message) — mesmo contrato do 409 do gate de presenca: so' o dominio sabe qual limite foi
+  violado, e a mensagem e' texto nosso, sem dado de pessoa (NUNCA o `motivo`). Quando o conflito e' 'ja existe',
+  devolve tambem `justificativa-id` para a tela poder ABRIR a existente em vez de so' avisar. Qualquer outro
+  `:tipo` re-lanca (500 opaco, fail-closed)."
+  [e]
+  (let [d (ex-data e)]
+    (http/json-resposta 409 (cond-> {:erro (ex-message e)}
+                              (:justificativa-id d) (assoc :justificativa-id (str (:justificativa-id d)))))))
+
+(defn- abrir-justificativa-handler
+  "POST /sessoes/:id/justificativas (papel 'secretario' — a Mesa protocola em nome do vereador). adapters/in
+  coage o :id + valida o corpo {vereador-id, motivo}; o controller carrega+autoriza a sessao, exige que o
+  vereador tenha assento na data da sessao e cria o ato 'pendente'; adapters/out projeta o recibo. nil (sessao
+  inexistente) -> 404; sem assento / justificativa ja existente -> 409; sucesso -> 201."
+  [repo-sessoes roster-da-casa]
+  (fn [req]
+    (let [ator (:ator req)
+          m    (adapters-in-presenca/abrir-justificativa->dominio (get-in req [:path-params :id])
+                                                                   (:json-params req))]
+      (try
+        (if-let [recibo (controllers/abrir-justificativa repo-sessoes roster-da-casa ator m)]
+          (http/json-resposta 201 (adapters-out-presenca/justificativa-aberta->wire recibo))
+          (http/json-resposta 404 {:erro "sessao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (case (:tipo (ex-data e))
+            :conflito/justificativa (resposta-conflito-justificativa e)
+            :conflito/sessao-sem-data
+            (http/json-resposta 409 {:erro "sessao sem data marcada: informe a data da sessao antes de lancar justificativas"})
+            (throw e)))))))
+
+(defn- abrir-minha-justificativa-handler
+  "POST /sessoes/:id/minha-justificativa (papel 'vereador' — self-service). Corpo so' {motivo}: `vereador-id`
+  NAO existe no allowlist e e' resolvido da IDENTIDADE do ator (anti-forja, mesmo contrato de
+  `/presenca/confirmar`). nil (sessao inexistente OU ator sem cadastro de vereador vinculado) -> 404; sem
+  assento na data / ja existente -> 409; sucesso -> 201."
+  [repo-sessoes roster-da-casa resolver-vereador]
+  (fn [req]
+    (let [ator (:ator req)
+          m    (adapters-in-presenca/abrir-minha-justificativa->dominio (get-in req [:path-params :id])
+                                                                        (:json-params req))]
+      (try
+        (if-let [recibo (controllers/abrir-minha-justificativa repo-sessoes roster-da-casa resolver-vereador ator m)]
+          (http/json-resposta 201 (adapters-out-presenca/justificativa-aberta->wire recibo))
+          (http/json-resposta 404 {:erro "sessao nao encontrada, ou vereador sem cadastro vinculado neste ente"}))
+        (catch clojure.lang.ExceptionInfo e
+          (case (:tipo (ex-data e))
+            :conflito/justificativa (resposta-conflito-justificativa e)
+            :conflito/sessao-sem-data
+            (http/json-resposta 409 {:erro "sessao sem data marcada: informe a data da sessao antes de lancar justificativas"})
+            (throw e)))))))
+
+(defn- listar-justificativas-handler
+  "GET /sessoes/:id/justificativas (papel 'secretario'). adapters/in coage o :id; o controller carrega+autoriza
+  a sessao e lista os atos; adapters/out projeta (com o `lock-version`, que e' insumo da decisao). nil -> 404.
+  Exige papel na BORDA — nao e' read-model publico: `motivo` pode carregar dado de saude (LGPD)."
+  [repo-sessoes]
+  (fn [req]
+    (let [ator (:ator req)
+          id   (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [r (controllers/justificativas-da-sessao repo-sessoes ator id)]
+        (http/json-resposta 200 (adapters-out-presenca/justificativas->wire r))
+        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+
+(defn- decidir-justificativa-handler
+  "PATCH /sessoes/:id/justificativas/:jid/decisao (papel 'secretario' — o ato da Mesa). adapters/in coage os
+  path-params + valida o corpo {estado, lock-version} (so' os terminais; CAS obrigatorio -> 400 se ausente); o
+  controller carrega+autoriza a sessao, exige que o ato seja DESTA sessao, barra o juiz-em-causa-propria (403
+  via kernel/autorizacao) e decide (CAS + maquina). nil (sessao/justificativa ausente ou de outra sessao) ->
+  404; lock-stale / ja terminal / inexistente -> 409 (nao 500). 200 (atualiza o ato, nao cria)."
+  [repo-sessoes resolver-vereador]
+  (fn [req]
+    (let [ator (:ator req)
+          m    (adapters-in-presenca/decidir-justificativa->dominio (get-in req [:path-params :id])
+                                                                     (get-in req [:path-params :jid])
+                                                                     (:json-params req))]
+      (try
+        (if-let [recibo (controllers/decidir-justificativa repo-sessoes resolver-vereador ator m)]
+          (http/json-resposta 200 (adapters-out-presenca/justificativa-decidida->wire recibo))
+          (http/json-resposta 404 {:erro "justificativa nao encontrada nesta sessao"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/justificativa (:tipo (ex-data e)))
+            (resposta-conflito-justificativa e)
+            (throw e)))))))
+
 (defn- inscrever-handler
   "POST /sessoes/:id/inscricoes (§22.6 eixo F, tribuna). adapters/in coage o :id + valida o corpo {vereador-id,
   origem-inscricao, fase, proposicao-ref-id?}; o controller carrega+autoriza a sessao e inscreve (o Repo emite
@@ -411,6 +499,32 @@
     ["/sessoes/:id/chamada" :get
      [auth (it/exige-papel "secretario") (chamada-handler repo-sessoes roster-da-casa relogio)]
      :route-name :sessoes/chamada]
+    ;; A justificativa tem DUAS portas de abertura, e nao uma que aceite os dois papeis: e' o mesmo desenho
+    ;; ja' provado em presenca (`/presenca` da Mesa vs `/presenca/confirmar` do vereador). Numa rota unica o
+    ;; significado de `vereador-id` no corpo passaria a depender do PAPEL do ator, e quem tivesse os dois
+    ;; papeis justificaria a falta de um terceiro pela porta self-service. Duas rotas tornam a regra
+    ;; ESTRUTURAL: na porta self-service o campo nao existe no allowlist do adapters/in.
+    ;;
+    ;; POR QUE `/minha-justificativa` NO NIVEL DA SESSAO, e nao `/justificativas/minha` (que seria o gemeo
+    ;; literal de `/presenca/confirmar`): o prefix-tree do Pedestal NAO resolve literal-vs-param IRMAOS —
+    ;; com `/justificativas/:jid/decisao` no mesmo nivel, `/justificativas/minha` fica INALCANCAVEL (404),
+    ;; provado por repro minima (o param sombreia o literal). E' a MESMA armadilha ja' anotada acima em
+    ;; `/gravacoes`, que so' esta no topo por causa dela. `/presenca/confirmar` escapa porque `presenca` nao
+    ;; tem filho param. Aqui `justificativas` tem (`:jid`), entao a porta self-service sobe um nivel.
+    ["/sessoes/:id/justificativas" :post
+     [auth (it/exige-papel "secretario") it/corpo-json (abrir-justificativa-handler repo-sessoes roster-da-casa)]
+     :route-name :sessoes/abrir-justificativa]
+    ["/sessoes/:id/minha-justificativa" :post
+     [auth papel-vereador it/corpo-json
+      (abrir-minha-justificativa-handler repo-sessoes roster-da-casa resolver-vereador)]
+     :route-name :sessoes/abrir-minha-justificativa]
+    ["/sessoes/:id/justificativas" :get
+     [auth (it/exige-papel "secretario") (listar-justificativas-handler repo-sessoes)]
+     :route-name :sessoes/listar-justificativas]
+    ["/sessoes/:id/justificativas/:jid/decisao" :patch
+     [auth (it/exige-papel "secretario") it/corpo-json
+      (decidir-justificativa-handler repo-sessoes resolver-vereador)]
+     :route-name :sessoes/decidir-justificativa]
     ["/sessoes/:id/inscricoes" :post
      [auth (it/exige-papel "secretario") it/corpo-json (inscrever-handler repo-sessoes)]
      :route-name :sessoes/inscrever-orador]

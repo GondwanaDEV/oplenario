@@ -248,6 +248,37 @@
   (when-not (contains? estados-justificativa estado)
     (throw (ex-info "estado de justificativa invalido" {:estado estado :validos estados-justificativa}))))
 
+(defn mensagem-de-recusa-de-justificativa
+  "PURO. A mensagem ACIONAVEL do 409 da porta da justificativa (Etapa 2 da chamada) — em portugues, dizendo o
+  LIMITE violado e o que fazer. Fica aqui (nao no diplomat) pela mesma razao de
+  `mensagem-de-recusa-de-presenca`: a razao da recusa e' regra de dominio, a borda so' repassa.
+
+  NAO carrega dado de pessoa — em particular NUNCA o `motivo` da justificativa, que pode ser dado de saude
+  (LGPD): a mensagem de erro tambem e' superficie de vazamento, e ela viaja para telas, logs de cliente e
+  bug reports. So' estados e ids tecnicos."
+  [motivo]
+  (case motivo
+    :sem-assento
+    (str "este vereador nao compoe a Casa na data desta sessao. Confira o mandato em cadastros antes de "
+         "lancar a justificativa — uma justificativa sem cadeira nao aparece na chamada.")
+
+    :ja-existe
+    (str "ja existe uma justificativa deste vereador nesta sessao. Abra a existente para acompanhar ou "
+         "decidir; uma segunda justificativa apagaria a trilha do que foi alegado antes.")
+
+    :lock-stale
+    (str "esta justificativa foi decidida por outra pessoa enquanto voce olhava. Recarregue a lista e "
+         "confira a decisao ja registrada.")
+
+    :transicao-invalida
+    (str "esta justificativa ja foi decidida e a decisao e' definitiva. Reverter e' um ato novo da Mesa, "
+         "registrado em ata — nao uma correcao desta.")
+
+    :inexistente
+    "justificativa inexistente nesta Casa."
+
+    (str "operacao recusada sobre a justificativa de ausencia (" (name motivo) ").")))
+
 ;; ---------- §22.6 eixo C — a CHAMADA: derivacao PURA do estado por vereador ----------
 ;; A chamada e' a leitura que o servidor projeta no telao e que a policy de quorum consulta. Ela cruza TRES
 ;; fontes que nunca se materializam juntas: o roster do cadastro (quem e' membro, e se esta licenciado), o
