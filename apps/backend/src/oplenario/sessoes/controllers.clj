@@ -67,6 +67,31 @@
        :fonte "manual_secretaria" :ocorrido-em ocorrido-em :agora agora
        :created-by (:identidade-id ator)})))
 
+(defn registrar-presenca-lote
+  "§22.6 eixo C, Etapa 2c: registra N eventos de presenca DE UMA VEZ (a chamada de uma camara e' UM ato de
+  dezenas de nomes em minutos — POSTs sequenciais deixam meia chamada gravada quando a rede cai no meio).
+  Carrega a sessao do tenant do `ator` (nil -> 404 via nil de retorno), roda pode-ver-sessao? (mesma Casa ->
+  403 fail-closed), e grava o lote NUMA UNICA transacao no Repo (ou tudo entra, ou nada entra — o gate de
+  estado e a janela da hora se aplicam a CADA linha; a primeira reprovada recusa o lote inteiro).
+
+  `fonte` FORCADA = 'manual_secretaria' em CADA linha (mesma disciplina de `registrar-presenca`: e' um
+  registro humano de um secretario autenticado). `id` (por linha) e `created-by` (o ator) sao gerados/
+  injetados AQUI, nunca do cliente — mesmo contrato anti-forja do POST unitario.
+
+  `agora` (o relogio do servidor, ja lido na borda) e' o TETO aplicado a CADA linha do lote; o GATE roda
+  dentro da tx do Repo (nao aqui), sobre a sessao lida fresca la' dentro — nunca sobre esta leitura de authz.
+
+  Devolve [{:id :ocorrido-em :registrado-em} ...] na ordem de `registros`, ou nil (sessao inexistente).
+  Recusa do gate lanca `:conflito/sessao-nao-aceita-presenca` (o diplomat mapeia 409) — nenhuma linha grava."
+  [repo-sessoes ator {:keys [sessao-id registros]} agora]
+  (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/registrar-presenca sessao logic/pode-ver-sessao?)
+    (repo/registrar-presenca-lote! repo-sessoes (:ente-id ator)
+      {:sessao-id sessao-id :agora agora
+       :registros (mapv (fn [r] (assoc r :id (random-uuid) :fonte "manual_secretaria"
+                                        :created-by (:identidade-id ator)))
+                         registros)})))
+
 (defn confirmar-minha-presenca
   "Onda C3 — autoatendimento: o vereador confirma a PROPRIA presenca pelo celular. `vereador-id` NUNCA vem
   do corpo (resolvido do ator via `resolver-vereador`, injetado pelo host — mesmo contrato anti-forja de

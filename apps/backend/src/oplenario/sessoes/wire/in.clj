@@ -27,6 +27,25 @@
    [:modalidade (km/enum-de logic/modalidades-presenca)]
    [:ocorrido-em :string]])
 
+(def ^:const teto-lote-presenca
+  "Teto de LINHAS de POST /sessoes/:id/presenca/lote (Etapa 2c). A chamada de uma camara real tem dezenas de
+  cadeiras, nunca centenas — 200 sobra folga larga sobre o maior legislativo municipal do pais e ainda fecha
+  a porta a um lote de tamanho arbitrario (o corpo-json de 256 KiB ja limita o BYTE, isto limita a LINHA:
+  sem o teto, um corpo minusculo com milhares de linhas curtas ainda passaria pelo limite de bytes)."
+  200)
+
+(def RegistrarPresencaLote
+  "Corpo de POST /sessoes/:id/presenca/lote (§22.6 eixo C, Etapa 2c). A CHAMADA e' UM ato de dezenas de
+  nomes em minutos, numa rede que cai no meio — N POSTs sequenciais e nao-atomicos deixavam meia chamada
+  gravada, sem trilha de que ficou pela metade. `registros` reusa o MESMO shape de RegistrarPresenca (sem
+  sessao-id/fonte, que vem do path/servidor): o lote NAO inventa um segundo vocabulario de entrada.
+
+  `:min 1` — um lote sem linha nao e' um lote, e' um erro de cliente (400, nao um 201 vazio sem sentido).
+  `:max teto-lote-presenca` — acima disso 400 fail-closed: o corpo pode estar perfeitamente bem formado, o
+  que excede e' o TAMANHO. `:closed true` recusa campos extra no nivel do envelope."
+  [:map {:closed true}
+   [:registros [:vector {:min 1 :max teto-lote-presenca} RegistrarPresenca]]])
+
 ;; ---------- §22.6 eixo C — justificativa de ausencia (ato apartado, Etapa 2 da chamada) ----------
 ;; `motivo` e' o unico campo do modulo `sessoes` que pode carregar DADO PESSOAL SENSIVEL (saude: 'internacao',
 ;; 'cirurgia', 'tratamento de familiar'). Isso nao muda o SCHEMA — muda o que se faz com ele depois: as rotas

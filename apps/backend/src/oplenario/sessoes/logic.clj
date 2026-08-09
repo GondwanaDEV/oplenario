@@ -532,6 +532,28 @@
 
     (str "registro de presenca recusado para esta sessao (" (name motivo) ").")))
 
+;; ---------- §22.6 eixo C — o LOTE de registro de presenca (Etapa 2c da chamada) ----------
+;; A chamada de uma camara municipal e' UM ato de dezenas de nomes em minutos, numa rede real que cai no
+;; meio — N POSTs sequenciais e nao-atomicos deixam meia chamada gravada, e ninguem sabe que ficou pela
+;; metade. `POST /sessoes/:id/presenca/lote` grava o lote inteiro NUMA UNICA transacao (tudo ou nada); esta
+;; funcao e' o desempate ANTES de a transacao comecar.
+
+(defn vereador-duplicado-no-lote
+  "PURO. O PRIMEIRO `:vereador-id` que aparece mais de uma vez em `registros` (seq de mapas com
+  `:vereador-id`), ou nil se todos sao unicos.
+
+  Duas linhas do MESMO lote apontando para o MESMO vereador sao uma AMBIGUIDADE, nao um erro de digitacao
+  obvio: pode ser 'saiu e voltou' (dois eventos legitimos, tipos diferentes) ou pode ser a Mesa corrigindo
+  um registro que acabou de errar. A ordem de uma lista JSON nao decide qual das duas leituras vale — RECUSA
+  o lote inteiro (400) e deixa o operador mandar dois POSTs separados se o caso for 'saiu e voltou'."
+  [registros]
+  (loop [vistos #{} regs (seq registros)]
+    (if-let [[{:keys [vereador-id]} & rs] regs]
+      (if (contains? vistos vereador-id)
+        vereador-id
+        (recur (conj vistos vereador-id) rs))
+      nil)))
+
 ;; ---------- §22.6 eixo D — gravacao (audio/video) da sessao (F4.4b) ----------
 ;; `gravacao_segmento` e' unidade TECNICA do arquivo, nao regimental (uma sessao tem 1 segmento tipico mas N
 ;; possiveis: reinicio do OBS, divisao manual). Alinhamento com fatos da sessao = por INSTANTE. Os vocabularios

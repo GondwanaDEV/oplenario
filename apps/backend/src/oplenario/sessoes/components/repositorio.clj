@@ -42,6 +42,12 @@
     "Grava evento de presenca append-only (entrada/saida/retorno/mudanca). `m` exige `:ocorrido-em` (o fato) e
      `:agora` (o relogio ja lido na borda): o GATE de estado + a janela da hora rodam DENTRO desta tx. Recusa
      lanca `:conflito/sessao-nao-aceita-presenca` (a borda mapeia 409). Devolve {:id :ocorrido-em :registrado-em}.")
+  (registrar-presenca-lote! [this ente-id m]
+    "Grava N eventos de presenca (Etapa 2c) NUMA UNICA transacao — ou as N linhas entram, ou nenhuma entra.
+     `m` = {:sessao-id :registros [{:id :vereador-id :tipo :modalidade :fonte :ocorrido-em :created-by} ...]
+     :agora}. O MESMO gate de estado + janela de `registrar-presenca!` vale para CADA linha do lote — a
+     primeira reprovada recusa o lote inteiro, lancando `:conflito/sessao-nao-aceita-presenca` (409), e
+     NENHUMA linha grava. Devolve os N recibos na ordem de `registros`.")
   (listar-presenca [this ente-id sessao-id] "Eventos da sessao em ordem cronologica (auditoria).")
   (presenca-corrente [this ente-id sessao-id instante]
     "Ultimo evento de CADA vereador da sessao ate' `instante` (uma linha por vereador) — insumo cru da CHAMADA.")
@@ -174,6 +180,39 @@
               {:sessao-id (:sessao-id m) :vereador-id (:vereador-id m) :tipo (:tipo m)
                :modalidade (:modalidade m) :fonte (:fonte m) :ocorrido-em (str (:ocorrido-em m))})
             r)))))
+  ;; Etapa 2c — a CHAMADA EM LOTE. MESMO desenho de `registrar-presenca!` (gate + janela DENTRO da tx, sobre a
+  ;; sessao lida AQUI com `FOR SHARE`), estendido a N linhas: a PRIMEIRA linha reprovada recusa o LOTE INTEIRO
+  ;; ANTES de qualquer INSERT — nao ha' "grava as validas e recusa as invalidas". Meia chamada silenciosa e'
+  ;; exatamente o defeito que esta rota existe para matar.
+  (registrar-presenca-lote! [this ente-id {:keys [sessao-id registros agora]}]
+    (transacao this ente-id
+      (fn [tx]
+        (when (or (nil? agora) (empty? registros))
+          (throw (ex-info "registrar-presenca-lote!: agora e um lote nao-vazio sao obrigatorios"
+                          {:tipo :servidor/erro :sessao-id sessao-id})))
+        (when (some #(nil? (:ocorrido-em %)) registros)
+          (throw (ex-info "registrar-presenca-lote!: toda linha do lote exige ocorrido-em"
+                          {:tipo :servidor/erro :sessao-id sessao-id})))
+        (let [s (sessao/janela-para-registro tx ente-id sessao-id)]
+          (when (nil? s)
+            (throw (ex-info "registrar-presenca-lote!: sessao inexistente neste ente"
+                            {:tipo :conflito/sessao-nao-aceita-presenca :motivo :sessao-inexistente
+                             :sessao-id sessao-id})))
+          ;; UMA linha reprovada recusa o LOTE INTEIRO — nenhum INSERT roda antes desta checagem terminar.
+          (when-let [{:keys [motivo registro]}
+                     (some (fn [r] (when-let [mo (logic/motivo-recusa-de-presenca s (:ocorrido-em r) agora)]
+                                     {:motivo mo :registro r}))
+                           registros)]
+            (throw (ex-info (logic/mensagem-de-recusa-de-presenca motivo s agora)
+                            {:tipo :conflito/sessao-nao-aceita-presenca :motivo motivo
+                             :sessao-id sessao-id :estado (:estado s)
+                             :vereador-id (:vereador-id registro)})))
+          (let [recibos (presenca/registrar-lote! tx ente-id sessao-id registros)]
+            (doseq [{:keys [vereador-id tipo modalidade fonte ocorrido-em]} registros]
+              (producers/emitir-presenca-registrada! bus tx ente-id
+                {:sessao-id sessao-id :vereador-id vereador-id :tipo tipo :modalidade modalidade
+                 :fonte fonte :ocorrido-em (str ocorrido-em)}))
+            recibos)))))
   (listar-presenca [this ente-id sessao-id] (transacao this ente-id #(presenca/listar-eventos % ente-id sessao-id)))
   (presenca-corrente [this ente-id sessao-id instante]
     (transacao this ente-id #(presenca/presenca-corrente % ente-id sessao-id instante)))

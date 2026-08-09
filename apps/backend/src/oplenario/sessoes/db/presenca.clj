@@ -33,6 +33,35 @@
                             :created_by created-by :efetivado_em [:now]}]
                   :returning [:id :ocorrido_em :registrado_em]}))))
 
+(defn registrar-lote!
+  "Grava N eventos de presenca (append-only) NUM UNICO statement `INSERT ... VALUES` multi-linha (Etapa 2c) —
+  a atomicidade real vem de rodar dentro da MESMA `tx` que o caller (Repo-Component) ja abre para o lote
+  inteiro (o gate de estado/janela roda ANTES de qualquer INSERT); este statement unico e' so' a forma mais
+  barata de inserir N linhas, nao o mecanismo de atomicidade.
+
+  Valida tipo/modalidade/fonte de TODO `registros` ANTES do INSERT (fail-closed sobre o lote inteiro, nao so'
+  a primeira linha ruim — um `doseq` que parasse na 2a linha ruim ainda teria inserido a 1a).
+
+  Devolve os recibos na MESMA ORDEM de `registros` — casados por `:id` (gerado pelo caller, um por linha) e
+  NAO pela ordem crua do RETURNING: Postgres tipicamente preserva a ordem do VALUES num INSERT simples sem
+  ON CONFLICT, mas casar por `:id` nao depende dessa garantia implicita."
+  [tx ente-id sessao-id registros]
+  (doseq [{:keys [tipo modalidade fonte]} registros]
+    (logic/validar-tipo-evento tipo)
+    (logic/validar-modalidade-presenca modalidade)
+    (logic/validar-fonte fonte))
+  (let [linhas (comum/linhas->kebab
+                (jdbc/execute! tx
+                  (sql/format {:insert-into :sessoes.presenca_evento
+                               :values (mapv (fn [{:keys [id vereador-id tipo modalidade fonte ocorrido-em created-by]}]
+                                               {:id id :ente_id ente-id :sessao_id sessao-id :vereador_id vereador-id
+                                                :tipo tipo :modalidade modalidade :fonte fonte :ocorrido_em ocorrido-em
+                                                :created_by created-by :efetivado_em [:now]})
+                                             registros)
+                               :returning [:id :ocorrido_em :registrado_em]})))
+        por-id (into {} (map (juxt :id identity)) linhas)]
+    (mapv (fn [{:keys [id]}] (por-id id)) registros)))
+
 (defn listar-eventos
   "Todos os eventos da sessao em ordem cronologica (auditoria; a presenca corrente e' derivada, nao listada)."
   [tx ente-id sessao-id]

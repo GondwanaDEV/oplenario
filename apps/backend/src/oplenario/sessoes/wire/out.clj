@@ -50,6 +50,14 @@
    [:ocorrido-em :string]
    [:registrado-em :string]])
 
+(def PresencaLoteReciboOut
+  "Resposta 201 de POST /sessoes/:id/presenca/lote (Etapa 2c). Os N recibos do lote, na MESMA ORDEM dos
+  `registros` do corpo (o cliente casa `recibos[i]` com `registros[i]` por posicao — o lote inteiro entrou
+  numa unica transacao, entao a ordem e' estavel e nao ha' recibo parcial). Cada recibo e' o MESMO shape de
+  PresencaReciboOut: o lote agrega N atos, nao inventa um vocabulario de saida novo."
+  [:map {:closed true}
+   [:recibos [:sequential PresencaReciboOut]]])
+
 ;; ---------- §22.6 eixo C — justificativa de ausencia (Etapa 2 da chamada) ----------
 ;; Estes tres contratos EXPOEM `lock-version`, e sao a excecao consciente a regra do cabecalho deste ns. A
 ;; razao: aqui o token de CAS nao e' interno — e' PARTE DO PROTOCOLO da decisao (PATCH .../decisao exige o

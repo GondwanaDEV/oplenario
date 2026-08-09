@@ -22,6 +22,17 @@
                       {:campos (keys (me/humanize (m/explain wire/PresencaReciboOut out)))})))
     out))
 
+(defn recibos-presenca-lote->wire
+  "N recibos de dominio [{:id :ocorrido-em :registrado-em} ...] (Etapa 2c, POST .../presenca/lote) ->
+  PresencaLoteReciboOut (validado, resposta 201). Reusa a projecao POR LINHA de `recibo-presenca->wire` (o
+  lote nao inventa vocabulario de saida novo) e embrulha em `{:recibos [...]}`, na MESMA ordem recebida."
+  [recibos]
+  (let [out {:recibos (mapv recibo-presenca->wire recibos)}]
+    (when-not (m/validate wire/PresencaLoteReciboOut out)
+      (throw (ex-info "recibos de presenca em lote violam o contrato PresencaLoteReciboOut (bug de servidor)"
+                      {:erros (me/humanize (m/explain wire/PresencaLoteReciboOut out))})))
+    out))
+
 (defn resumo-presenca->wire
   "Resumo cru (kebab, do db) -> PresencaResumoOut (validado)."
   [{:keys [media-percentual sessoes-consideradas membros-da-casa]}]

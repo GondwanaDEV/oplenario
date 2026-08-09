@@ -98,6 +98,30 @@
             (http/json-resposta 409 {:erro (ex-message e)})
             (throw e)))))))
 
+(defn- registrar-presenca-lote-handler
+  "POST /sessoes/:id/presenca/lote (§22.6 eixo C, Etapa 2c). adapters/in coage o :id + valida o corpo
+  {registros: [...]} — MESMO shape do POST unitario por linha, teto de `wire/teto-lote-presenca` linhas
+  (excedido -> 400), vereador repetido no mesmo lote -> 400; o controller carrega+autoriza a sessao e grava o
+  LOTE INTEIRO numa UNICA transacao no Repo (o gate de estado + a janela da hora valem para CADA linha — a
+  primeira reprovada recusa o lote todo, nenhuma linha grava). nil (sessao inexistente) -> 404; sucesso -> 201
+  com os N recibos, na ordem do corpo.
+
+  409 quando o Repo recusa (`:conflito/sessao-nao-aceita-presenca`) — MESMA semantica do POST unitario,
+  aplicada ao lote inteiro: nenhuma linha entrou."
+  [repo-sessoes relogio]
+  (fn [req]
+    (let [ator (:ator req)
+          m    (adapters-in-presenca/registrar-presenca-lote->dominio
+                (get-in req [:path-params :id]) (:json-params req))]
+      (try
+        (if-let [recibos (controllers/registrar-presenca-lote repo-sessoes ator m (tempo/agora relogio))]
+          (http/json-resposta 201 (adapters-out-presenca/recibos-presenca-lote->wire recibos))
+          (http/json-resposta 404 {:erro "sessao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/sessao-nao-aceita-presenca (:tipo (ex-data e)))
+            (http/json-resposta 409 {:erro (ex-message e)})
+            (throw e)))))))
+
 (defn- confirmar-presenca-handler
   "POST /sessoes/:id/presenca/confirmar (Onda C3, papel 'vereador'). Sem corpo — `vereador-id` resolvido do
   ator (anti-forja), `fonte`/`tipo`/`modalidade` fixos no controller, `ocorrido-em` = o relogio do servidor
@@ -496,6 +520,12 @@
     ["/sessoes/:id/presenca/confirmar" :post
      [auth papel-vereador (confirmar-presenca-handler repo-sessoes resolver-vereador relogio)]
      :route-name :sessoes/confirmar-minha-presenca]
+    ;; `/lote` e' outro literal-sibling de `presenca` (junto de `confirmar`) — sem filho `:param` sob
+    ;; `/presenca`, nao ha' o risco de sombreamento literal-vs-param ja documentado em `/gravacoes` e em
+    ;; `/minha-justificativa` (prefix-tree do Pedestal so' sombreia quando um `:param` irmao existe).
+    ["/sessoes/:id/presenca/lote" :post
+     [auth (it/exige-papel "secretario") it/corpo-json (registrar-presenca-lote-handler repo-sessoes relogio)]
+     :route-name :sessoes/registrar-presenca-lote]
     ["/sessoes/:id/chamada" :get
      [auth (it/exige-papel "secretario") (chamada-handler repo-sessoes roster-da-casa relogio)]
      :route-name :sessoes/chamada]

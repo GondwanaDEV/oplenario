@@ -6,6 +6,7 @@
   (:require [clojure.string :as str]
             [malli.core :as m]
             [malli.error :as me]
+            [oplenario.sessoes.logic :as logic]
             [oplenario.sessoes.wire.in :as wire])
   (:import (java.time Instant)
            (java.time.format DateTimeParseException)
@@ -49,6 +50,40 @@
      :tipo        (:tipo m)
      :modalidade  (:modalidade m)
      :ocorrido-em (->instante (:ocorrido-em m) :ocorrido-em)}))
+
+;; ---------- registro de presenca EM LOTE (Etapa 2c da chamada) ----------
+
+(defn registrar-presenca-lote->dominio
+  "Path-param `:id` (sessao) + corpo JSON {registros: [{vereador-id, tipo, modalidade, ocorrido-em}, ...]} ->
+  mapa de dominio {:sessao-id :registros [...]} p/ controllers/registrar-presenca-lote. Reusa a MESMA
+  allowlist/coercao de campo do POST unitario (`campos-presenca`, `->uuid`, `->instante`) LINHA a LINHA — o
+  lote nao inventa um segundo vocabulario de entrada.
+
+  Valida o ENVELOPE inteiro (contagem 1..teto + a forma de CADA linha) contra `wire/RegistrarPresencaLote`
+  NUMA chamada de `m/explain`: teto excedido, lote vazio, ou qualquer linha malformada -> 400 uniforme, ANTES
+  de a coercao de uuid/Instant sequer rodar (fail-closed no nivel mais barato). Vereador repetido dentro do
+  MESMO lote -> 400 (`logic/vereador-duplicado-no-lote`, pura): a ordem de uma lista JSON nao decide qual das
+  duas linhas contraditorias vale."
+  [sessao-id-str json-params]
+  (when-not (map? json-params)
+    (invalido! "corpo deve ser objeto JSON {registros: [...]}" {:campo :corpo}))
+  (let [registros-crus (get json-params "registros")]
+    (when-not (sequential? registros-crus)
+      (invalido! "registros deve ser uma lista de objetos {vereador-id, tipo, modalidade, ocorrido-em}"
+                {:campo :registros}))
+    (let [registros-allowlist (mapv (fn [r] (if (map? r) (so-esperados r campos-presenca) r)) registros-crus)]
+      (when-let [erros (m/explain wire/RegistrarPresencaLote {:registros registros-allowlist})]
+        (invalido! "corpo de registrar presenca em lote invalido" {:campos (keys (me/humanize erros))}))
+      (let [registros (mapv (fn [m] {:vereador-id (->uuid (:vereador-id m) :vereador-id)
+                                      :tipo        (:tipo m)
+                                      :modalidade  (:modalidade m)
+                                      :ocorrido-em (->instante (:ocorrido-em m) :ocorrido-em)})
+                             registros-allowlist)]
+        (when-let [dup (logic/vereador-duplicado-no-lote registros)]
+          (invalido! "vereador repetido no mesmo lote: duas linhas para o mesmo vereador sao ambiguas"
+                    {:campo :vereador-id :vereador-id (str dup)}))
+        {:sessao-id (->uuid sessao-id-str :id)
+         :registros registros}))))
 
 ;; ---------- justificativa de ausencia (Etapa 2 da chamada) ----------
 
