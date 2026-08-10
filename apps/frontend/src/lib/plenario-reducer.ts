@@ -5,6 +5,7 @@
 // a partir de `iniciouEm` + marcos (decisão de §22.6 eixo G — ticks por segundo são descartados no fio).
 
 import type { EventoPlenario, SessaoOut } from "./contrato";
+import type { QuorumSessaoOut } from "./contrato-sessoes.gen";
 
 /** Tipos de evento de presença que marcam PRESENTE (logic/tipos-presenca-positiva); "saida" remove. */
 const PRESENCA_POSITIVA = new Set(["entrada", "retorno", "mudanca_modalidade"]);
@@ -47,7 +48,12 @@ export interface PlacarVotacao {
 
 export interface EstadoPlenario {
   estado: string; // estado da sessão (agendada|aberta|suspensa|encerrada|nao_realizada|arquivada)
-  presentes: string[]; // vereador-ids presentes (conjunto; ordem de inserção)
+  presentes: string[]; // vereador-ids vistos AO VIVO (conjunto; ordem de inserção) — o DELTA sobre `presencaBase`
+  presencaOcorridoEm: Record<string, string>; // vereadorId -> "ocorrido-em" da entrada/retorno que o pôs em `presentes`;
+  // existe só para a reconciliação de `hidratarQuorum` (corte por instante) — nunca lido fora deste módulo.
+  membrosDaCasa: number | null; // denominador do quórum (Etapa 4b: hidratação de GET /sessoes/:id/quorum); null = borda não respondeu ainda / falhou
+  presencaBase: number | null; // numerador "caixa-preta" vindo do snapshot de quórum (sem ids individuais — a rota é MAGRA, §22.6 eixo C)
+  hidratadoEm: string | null; // `instante` do snapshot de quórum — fronteira da reconciliação com os eventos ao vivo
   oradorAtual: OradorAtual | null;
   marcosCronometro: MarcoCronometro[]; // marcos da fala EM CURSO (zerados a cada fala.iniciada)
   ultimaFalaEncerrada: { falaId: string; tempoSegundos: number } | null;
@@ -60,12 +66,56 @@ export function estadoInicial(sessao: SessaoOut): EstadoPlenario {
   return {
     estado: sessao.estado,
     presentes: [],
+    presencaOcorridoEm: {},
+    membrosDaCasa: null,
+    presencaBase: null,
+    hidratadoEm: null,
     oradorAtual: null,
     marcosCronometro: [],
     ultimaFalaEncerrada: null,
     inscritos: [],
     placar: null,
     ultimoSeq: 0,
+  };
+}
+
+/** O numerador do quórum a EXIBIR: a base opaca vinda da hidratação (0 se ainda não hidratado) + os
+ * vereadores vistos ao vivo depois dela (ou todos os vistos, se a hidratação nunca chegou — mesmo
+ * comportamento de antes da Etapa 4b). PURA — page.tsx só chama, nunca refaz esta conta. */
+export function totalPresentes(estado: EstadoPlenario): number {
+  return (estado.presencaBase ?? 0) + estado.presentes.length;
+}
+
+/** Hidrata o quórum a partir do snapshot de `GET /sessoes/:id/quorum` (Etapa 4b) — corrige os dois defeitos
+ * do HERO: dá DENOMINADOR (membrosDaCasa) e semeia o NUMERADOR sem esperar por eventos SSE (recarregar às
+ * 15h uma sessão aberta às 14h mostra a Casa cheia, não zero — o replay do canal tem retenção de 5min e não
+ * cobre isso). PURA — o hook (usePlenario) só despacha.
+ *
+ * RECONCILIAÇÃO com o SSE: a corrida é NORMAL nesta tela — o snapshot (fetch) e os eventos (stream) chegam
+ * em qualquer ordem relativa. A rota é MAGRA (só números, §22.6 eixo C) — não há ids no snapshot, só o
+ * `instante` em que ele foi avaliado no servidor (a mesma semântica de `logic/instante-de-avaliacao`: o
+ * numerador já inclui todo evento com `ocorrido-em` <= esse instante). Regra: eventos de presença com
+ * `ocorrido-em` <= `instante` já estão embutidos na base — contá-los de novo duplicaria; eventos
+ * POSTERIORES não estão, e têm de sobreviver por cima. Isso vale nos dois sentidos de corrida:
+ *   - evento chega DEPOIS de hidratar: barrado na hora, em `aplicarEvento` (mesmo corte por instante).
+ *   - evento chega ANTES de hidratar (já está em `estado.presentes`): podado AQUI, por `presencaOcorridoEm`
+ *     (o único motivo desse mapa existir) — mais velho que o snapshot sai, mais novo fica.
+ * Idempotente (Q7): hidratar de novo com o MESMO snapshot substitui a base pelo mesmo valor — não duplica. */
+export function hidratarQuorum(estado: EstadoPlenario, quorum: QuorumSessaoOut): EstadoPlenario {
+  const instante = quorum.instante;
+  const presentes = estado.presentes.filter((id) => {
+    const ocorridoEm = estado.presencaOcorridoEm[id];
+    return ocorridoEm !== undefined && ocorridoEm > instante;
+  });
+  const presencaOcorridoEm: Record<string, string> = {};
+  for (const id of presentes) presencaOcorridoEm[id] = estado.presencaOcorridoEm[id];
+  return {
+    ...estado,
+    presentes,
+    presencaOcorridoEm,
+    membrosDaCasa: quorum.quorum.membrosDaCasa,
+    presencaBase: quorum.quorum.presentesPlenario + quorum.quorum.presentesRemoto,
+    hidratadoEm: instante,
   };
 }
 
@@ -78,11 +128,32 @@ export function aplicarEvento(estado: EstadoPlenario, evento: EventoPlenario): E
 
     case "presenca.registrada": {
       const v = evento.dados["vereador-id"];
+      const ocorridoEm = evento.dados["ocorrido-em"];
+      // reconciliação com a hidratação (Etapa 4b): um evento <= ao instante do snapshot já está embutido no
+      // numerador que veio da borda — descartado aqui para não contar 2x. Sem hidratação ainda (hidratadoEm
+      // nulo) o corte não se aplica: o evento é aplicado normal e reconciliado depois, em `hidratarQuorum`.
+      if (base.hidratadoEm !== null && ocorridoEm <= base.hidratadoEm) return base;
+
       if (PRESENCA_POSITIVA.has(evento.dados.tipo)) {
-        return base.presentes.includes(v) ? base : { ...base, presentes: [...base.presentes, v] };
+        if (base.presentes.includes(v)) return base;
+        return {
+          ...base,
+          presentes: [...base.presentes, v],
+          presencaOcorridoEm: { ...base.presencaOcorridoEm, [v]: ocorridoEm },
+        };
       }
-      // saida (ou tipo não-positivo) remove
-      return { ...base, presentes: base.presentes.filter((x) => x !== v) };
+      // saida (ou tipo não-positivo)
+      if (base.presentes.includes(v)) {
+        const restante = { ...base.presencaOcorridoEm };
+        delete restante[v];
+        return { ...base, presentes: base.presentes.filter((x) => x !== v), presencaOcorridoEm: restante };
+      }
+      // não estava no delta ao vivo: se já hidratado, presume-se da base opaca do snapshot — decrementa
+      // direto (nunca < 0). Sem hidratação, não há o que decrementar (mesmo comportamento de antes: no-op).
+      if (base.presencaBase !== null) {
+        return { ...base, presencaBase: Math.max(0, base.presencaBase - 1) };
+      }
+      return base;
     }
 
     case "fala.iniciada":

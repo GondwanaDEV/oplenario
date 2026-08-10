@@ -6,10 +6,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "./api-fetch";
+import { camelizarChaves } from "./boundary";
 import type { EventoPlenario, SessaoOut } from "./contrato";
 import { TIPOS_PLENARIO } from "./contrato";
+import type { QuorumSessaoOut } from "./contrato-sessoes.gen";
 import { semCredencial } from "./modo";
-import { aplicarEvento, estadoInicial, type EstadoPlenario } from "./plenario-reducer";
+import { aplicarEvento, estadoInicial, hidratarQuorum, type EstadoPlenario } from "./plenario-reducer";
 import { consumirSse } from "./sse";
 
 export type EstadoConexao = "carregando" | "ao-vivo" | "reconectando" | "erro";
@@ -74,6 +76,22 @@ export function usePlenario(sessaoId: string, token: string | null) {
         setErro(e instanceof Error && /^sessao \d+$/.test(e.message) ? "Sessão indisponível." : "Não foi possível carregar a sessão.");
         return;
       }
+
+      // 1b) hidratação do quórum (Etapa 4b, GET /sessoes/:id/quorum) — BEST-EFFORT, dispara em paralelo ao
+      // SSE (não bloqueia a conexão ao vivo) e NUNCA quebra a tela: rede/403/500 aqui deixam o denominador
+      // nulo e o numerador segue funcionando só pelos eventos SSE (mesmo comportamento de antes da Etapa
+      // 4b). `hidratarQuorum` é PURA e já reconcilia sozinha a corrida com os eventos que chegarem antes/depois.
+      apiFetch(`/api/sessoes/${sessaoId}/quorum`, { token: token ?? undefined, signal: controller.signal, cache: "no-store" })
+        .then(async (resp) => {
+          if (!vivo || !resp.ok) return;
+          const q = camelizarChaves(await resp.json()) as QuorumSessaoOut;
+          if (!vivo) return;
+          setEstado((prev) => (prev ? hidratarQuorum(prev, q) : prev));
+        })
+        .catch(() => {
+          // falha de rede/parse: silenciosa de propósito — não é um erro de PÁGINA (a sessão já carregou),
+          // é um dado a menos que o telão exibe como "denominador ausente" em vez de travar.
+        });
 
       // 2) stream com reconexão por backoff (resume via Last-Event-ID)
       let tentativa = 0;

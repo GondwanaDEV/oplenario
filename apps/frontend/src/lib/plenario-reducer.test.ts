@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { estadoInicial, aplicarEvento, type EstadoPlenario } from "./plenario-reducer";
+import { estadoInicial, aplicarEvento, hidratarQuorum, totalPresentes, type EstadoPlenario } from "./plenario-reducer";
 import type { EventoPlenario, SessaoOut } from "./contrato";
+import type { QuorumSessaoOut } from "./contrato-sessoes.gen";
 
 // ---- fixtures mínimas (forma fiel ao wire) ----
 
@@ -235,5 +236,82 @@ describe("votação ao vivo — placar (§22.6 sigilo)", () => {
     expect(e.placar?.encerrada).toBe(true);
     expect(e.placar?.resultado).toBe("rejeitada");
     expect(e.placar?.totais).toEqual({ sim: null, nao: null, abstencao: null });
+  });
+});
+
+describe("hidratarQuorum — semeadura a partir de GET /sessoes/:id/quorum (Etapa 4b)", () => {
+  // evento de presença com `ocorrido-em` CONFIGURÁVEL (a corrida com a hidratação depende exatamente disso;
+  // o helper `pres` acima fixa sempre o mesmo instante e não serve para estes testes).
+  const presEm = (seq: number, vereador: string, tipo: string, ocorridoEm: string): EventoPlenario => ({
+    tipo: "presenca.registrada",
+    seq,
+    dados: { "sessao-id": "s1", "vereador-id": vereador, tipo, modalidade: "presencial", fonte: "chamada", "ocorrido-em": ocorridoEm },
+  });
+
+  const quorumSnapshot = (over: Partial<QuorumSessaoOut> = {}): QuorumSessaoOut => ({
+    sessaoId: "s1",
+    sessaoEstado: "aberta",
+    instante: "2026-05-21T22:05:00Z",
+    dataDeComposicao: "2026-05-21",
+    composicaoResolvidaEm: "2026-05-21T22:05:00Z",
+    semRegistroDePresenca: false,
+    quorum: { presentesPlenario: 7, presentesRemoto: 0, membrosDaCasa: 21, presencasForaDoRoster: 0 },
+    ...over,
+  });
+
+  it("Q1 — hidratação com 7 presentes e 21 membros: mostra 7 de 21", () => {
+    const e = hidratarQuorum(estadoInicial(sessao({ estado: "aberta" })), quorumSnapshot());
+    expect(totalPresentes(e)).toBe(7);
+    expect(e.membrosDaCasa).toBe(21);
+  });
+
+  it("Q2 — hidratação seguida de presenca.registrada aplica POR CIMA do snapshot: 8 de 21", () => {
+    const hidratado = hidratarQuorum(estadoInicial(sessao({ estado: "aberta" })), quorumSnapshot());
+    const e = aplicarEvento(hidratado, presEm(1, "vNovo", "entrada", "2026-05-21T22:06:00Z"));
+    expect(totalPresentes(e)).toBe(8);
+    expect(e.membrosDaCasa).toBe(21);
+  });
+
+  it("Q3 — evento chegado ANTES da hidratação mas mais VELHO que o snapshot é descartado (não conta 2x)", () => {
+    // corrida normal: o evento SSE chega e é aplicado ANTES da resposta do fetch de /quorum terminar.
+    const antesDaHidratacao = aplicarEvento(
+      estadoInicial(sessao({ estado: "aberta" })),
+      presEm(1, "vAntigo", "entrada", "2026-05-21T22:00:00Z"), // mais velho que o instante do snapshot (22:05)
+    );
+    const e = hidratarQuorum(antesDaHidratacao, quorumSnapshot());
+    expect(totalPresentes(e)).toBe(7); // vAntigo já está embutido no 7 vindo da borda
+  });
+
+  it("Q4 — evento chegado ANTES da hidratação mas POSTERIOR ao instante do snapshot é preservado", () => {
+    const antesDaHidratacao = aplicarEvento(
+      estadoInicial(sessao({ estado: "aberta" })),
+      presEm(1, "vNovo", "entrada", "2026-05-21T22:07:00Z"), // posterior ao instante do snapshot (22:05)
+    );
+    const e = hidratarQuorum(antesDaHidratacao, quorumSnapshot());
+    expect(totalPresentes(e)).toBe(8);
+  });
+
+  it("Q5 — saida após hidratação decrementa corretamente (vereador da base opaca do snapshot)", () => {
+    const hidratado = hidratarQuorum(estadoInicial(sessao({ estado: "aberta" })), quorumSnapshot());
+    const e = aplicarEvento(hidratado, presEm(1, "vQualquer", "saida", "2026-05-21T22:06:00Z"));
+    expect(totalPresentes(e)).toBe(6);
+    expect(e.membrosDaCasa).toBe(21);
+  });
+
+  it("Q6 — hidratação ausente (borda falhou): numerador funciona por eventos ao vivo, denominador nulo", () => {
+    const e = reduzir(sessao({ estado: "aberta" }), [
+      { tipo: "presenca.registrada", seq: 1, dados: { "sessao-id": "s1", "vereador-id": "v1", tipo: "entrada", modalidade: "presencial", fonte: "chamada", "ocorrido-em": "2026-05-21T22:01:00Z" } },
+      { tipo: "presenca.registrada", seq: 2, dados: { "sessao-id": "s1", "vereador-id": "v2", tipo: "entrada", modalidade: "presencial", fonte: "chamada", "ocorrido-em": "2026-05-21T22:01:00Z" } },
+    ]);
+    expect(totalPresentes(e)).toBe(2);
+    expect(e.membrosDaCasa).toBeNull();
+  });
+
+  it("Q7 — hidratar duas vezes (re-fetch) é idempotente, não duplica", () => {
+    const snap = quorumSnapshot();
+    const uma = hidratarQuorum(estadoInicial(sessao({ estado: "aberta" })), snap);
+    const duas = hidratarQuorum(uma, snap);
+    expect(totalPresentes(duas)).toBe(7);
+    expect(duas.membrosDaCasa).toBe(21);
   });
 });

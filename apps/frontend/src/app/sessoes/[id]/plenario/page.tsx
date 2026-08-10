@@ -12,6 +12,7 @@ import { usePlenario, type EstadoConexao } from "@/lib/use-plenario";
 import { usePauta } from "@/lib/use-pauta";
 import { segundosDecorridos, formatarTempo } from "@/lib/cronometro";
 import type { EstadoPlenario, PlacarVotacao } from "@/lib/plenario-reducer";
+import { totalPresentes } from "@/lib/plenario-reducer";
 import { derivarPlacar, type VistaNominal, type VistaSecreta } from "@/lib/placar-vista";
 import type { SessaoOut, PautaOut } from "@/lib/contrato";
 import { AuthProvider, useAuth } from "@/lib/auth";
@@ -90,7 +91,7 @@ function Painel({ sessao, estado, conexao, pauta }: { sessao: SessaoOut; estado:
         <div className="cabine">
           <Palco sessao={sessao} estado={estado} pauta={pauta} />
           <aside className="rail" aria-label="Estado do plenário ao vivo">
-            <Quorum presentes={estado.presentes.length} />
+            <Quorum presentes={totalPresentes(estado)} membrosDaCasa={estado.membrosDaCasa} />
             <Tribuna estado={estado} agora={agora} />
           </aside>
         </div>
@@ -372,8 +373,11 @@ function PlacarSecreta({ v }: { v: VistaSecreta }) {
   );
 }
 
-function Quorum({ presentes }: { presentes: number }) {
+/** `membrosDaCasa` vem da hidratação de GET /sessoes/:id/quorum (Etapa 4b, `hidratarQuorum`) — null enquanto
+ * a borda não respondeu, ou se ela falhar (rede/403/500): a tela nunca trava por isso, só perde o denominador. */
+function Quorum({ presentes, membrosDaCasa }: { presentes: number; membrosDaCasa: number | null }) {
   const ok = presentes > 0;
+  const numero = membrosDaCasa !== null ? `${presentes} de ${membrosDaCasa}` : `${presentes}`;
   return (
     <section className="bloco quorum" aria-labelledby="quorum-titulo">
       <div className="bloco-cabeca">
@@ -382,26 +386,28 @@ function Quorum({ presentes }: { presentes: number }) {
       </div>
       <div className="bloco-corpo">
         <div className="quorum-num">
-          <b>{presentes}</b>
+          <b>{numero}</b>
           <span>vereadores presentes</span>
         </div>
-        <Hemiciclo presentes={presentes} />
+        <Hemiciclo presentes={presentes} membrosDaCasa={membrosDaCasa} />
         <div className="quorum-legenda">
           <span>
             <i style={{ background: "var(--acao)" }} />
             Presentes {presentes}
           </span>
         </div>
-        <p className="palco-autoria" style={{ margin: "0.7rem 0 0", fontSize: "var(--t-12)" }}>
-          Total da Casa: aguardando rota de cadastro (fan-out). Cada presença é registro append-only.
-        </p>
+        {membrosDaCasa === null && (
+          <p className="palco-autoria" style={{ margin: "0.7rem 0 0", fontSize: "var(--t-12)" }}>
+            Total da Casa indisponível no momento. Cada presença é registro append-only.
+          </p>
+        )}
       </div>
     </section>
   );
 }
 
 /** Hemiciclo: distribui `presentes` assentos preenchidos em arcos (porte da geometria da tela HTML). */
-function Hemiciclo({ presentes }: { presentes: number }) {
+function Hemiciclo({ presentes, membrosDaCasa }: { presentes: number; membrosDaCasa: number | null }) {
   const cx = 120;
   const cy = 116;
   const fileiras = [
@@ -417,8 +423,9 @@ function Hemiciclo({ presentes }: { presentes: number }) {
       seats.push({ x: cx + f.r * Math.cos(ang), y: cy - f.r * Math.sin(ang) });
     }
   }
+  const rotulo = membrosDaCasa !== null ? `${presentes} de ${membrosDaCasa} vereadores presentes.` : `${presentes} vereadores presentes.`;
   return (
-    <svg className="hemi" viewBox="0 0 240 130" role="img" aria-label={`${presentes} vereadores presentes.`}>
+    <svg className="hemi" viewBox="0 0 240 130" role="img" aria-label={rotulo}>
       {seats.map((s, i) => (
         <circle key={i} cx={s.x.toFixed(1)} cy={s.y.toFixed(1)} r="4.6" className={i < presentes ? "presente" : "ausente"} />
       ))}
