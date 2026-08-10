@@ -20,6 +20,17 @@ COPY . .
 # BACKEND_URL entra no routes-manifest do rewrite em build time (next.config.ts le no load do config).
 ARG BACKEND_URL=http://app:8888
 ENV BACKEND_URL=$BACKEND_URL
+# As TRES envs que `next.config.ts` EXIGE em producao (APP_ORIGIN, KEYCLOAK_INTERNAL_URL,
+# KEYCLOAK_PUBLIC_URL). Sem elas o `next build` aborta e a imagem `runner` e' inbuildavel — o compose so'
+# builda o alvo `dev`, entao o caminho de producao ficava sem cobertura nenhuma. Os defaults sao os de
+# dev-local (mesmos valores que o compose passa ao servico `frontend`); em deploy real, sobrescrever
+# com --build-arg.
+ARG APP_ORIGIN=http://localhost:3000
+ENV APP_ORIGIN=$APP_ORIGIN
+ARG KEYCLOAK_INTERNAL_URL=http://keycloak:8080
+ENV KEYCLOAK_INTERNAL_URL=$KEYCLOAK_INTERNAL_URL
+ARG KEYCLOAK_PUBLIC_URL=http://keycloak:8080
+ENV KEYCLOAK_PUBLIC_URL=$KEYCLOAK_PUBLIC_URL
 RUN npm run build
 
 # ---- runner: so o standalone + estaticos, sem node_modules/devDeps ----
