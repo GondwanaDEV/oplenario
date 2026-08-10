@@ -138,8 +138,8 @@
              :composicao-resolvida-em (str composicao-resolvida-em)
              :sem-registro-de-presenca (boolean sem-registro-de-presenca)
              :linhas (mapv linha-chamada->wire linhas)
-             :quorum (select-keys quorum [:presentes-plenario :presentes-remoto :membros-da-casa
-                                          :presencas-fora-do-roster])
+             :quorum (select-keys quorum [:presentes-plenario :presentes-remoto :presentes-total
+                                          :membros-da-casa :presencas-fora-do-roster])
              :chamadas-conduzidas (mapv chamada-conduzida->wire chamadas-conduzidas)}]
     (when-not (m/validate wire/ChamadaOut out)
       (throw (ex-info "chamada viola o contrato ChamadaOut (bug de servidor)"
@@ -164,8 +164,8 @@
              :data-de-composicao (str data-de-composicao)
              :composicao-resolvida-em (str composicao-resolvida-em)
              :sem-registro-de-presenca (boolean sem-registro-de-presenca)
-             :quorum (select-keys quorum [:presentes-plenario :presentes-remoto :membros-da-casa
-                                          :presencas-fora-do-roster])}]
+             :quorum (select-keys quorum [:presentes-plenario :presentes-remoto :presentes-total
+                                          :membros-da-casa :presencas-fora-do-roster])}]
     (when-not (m/validate wire/QuorumSessaoOut out)
       (throw (ex-info "quorum viola o contrato QuorumSessaoOut (bug de servidor)"
                       {:erros (me/humanize (m/explain wire/QuorumSessaoOut out))})))

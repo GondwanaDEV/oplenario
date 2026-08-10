@@ -34,13 +34,22 @@
 (def ^:private agendada-para (Instant/parse "2026-06-30T13:00:00Z"))
 (def ^:private encerrada-em (Instant/parse "2026-06-30T18:00:00Z"))
 
+;; `transmite-publica` NAO e' decoracao na fixture: e' a coluna que `tempo-real/logic/plenario-publico?` le'
+;; para recusar a SUBSCRICAO INTEIRA do painel numa sessao secreta, e desde a revisao desta branch e' tambem
+;; o que `logic/pode-ver-quorum-da-sessao?` le'. Uma fixture que a omitisse deixaria o gate novo verde por
+;; acidente (`(true? nil)` = false), que e' o padrao ja' registrado no projeto como "fixture com vocabulario
+;; ficticio". Vem da migration 0026 (`sessoes.sessao.transmite_publica`), via `db/sessao/colunas`.
 (defn- sessao-aberta [ente-id id]
-  {:id id :ente-id ente-id :estado "aberta" :tipo-sessao "ordinaria"
+  {:id id :ente-id ente-id :estado "aberta" :tipo-sessao "ordinaria" :transmite-publica true
    :agendada-para agendada-para :aberta-em aberta-em :encerrada-em nil})
 
 (defn- sessao-encerrada [ente-id id]
-  {:id id :ente-id ente-id :estado "encerrada" :tipo-sessao "ordinaria"
+  {:id id :ente-id ente-id :estado "encerrada" :tipo-sessao "ordinaria" :transmite-publica true
    :agendada-para agendada-para :aberta-em aberta-em :encerrada-em encerrada-em})
+
+(defn- sessao-secreta [ente-id id]
+  {:id id :ente-id ente-id :estado "aberta" :tipo-sessao "secreta" :transmite-publica false
+   :agendada-para agendada-para :aberta-em aberta-em :encerrada-em nil})
 
 (defn- fake-repo-sessoes [busca-fn chamada-fn]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
@@ -156,6 +165,41 @@
                            :get (url (random-uuid)) :headers (com-auth (token ente (random-uuid))))]
     (is (= 404 (:status r)) "sessao que o repo nao acha no tenant do ator -> 404, nem chega a carregar")))
 
+;; ---------- B1b: a FRONTEIRA DA SESSAO SECRETA (revisao adversarial, MAJOR/security) ----------
+;; A Etapa 4a justificou o nivel de authz desta rota pelo publico do TELAO, mas copiou so' METADE da politica
+;; do telao: ficou a parte que ABRE (sem exigir papel) e caiu a parte que FECHA. O SSE
+;; `GET /sessoes/:id/plenario` roda `tempo-real/logic/pode-assistir-plenario?` = mesma-casa? AND
+;; plenario-publico?, e `tempo_real/canais.clj` grava a regra em prosa: "se transmite_publica=false, RECUSAR
+;; a subscricao (403) — nao filtrar por evento". Antes da Etapa 4a, o estado de presenca de uma sessao
+;; SECRETA so' era alcancavel por quem tinha o papel 'secretario' (via `/chamada`); depois dela, passou a ser
+;; alcancavel por QUALQUER vinculo ativo da Casa, que num rito de cassacao reconstroi a serie temporal do
+;; quorum (obstrucao, acordo fechado) por polling. Os tres testes abaixo cravam a politica inteira.
+
+(deftest b1b-sessao-secreta-nega-quem-nao-e-secretario
+  (let [ente (random-uuid) sid (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ id] (sessao-secreta ente id)) chamada-rica)
+        r (pt/response-for (service-fn* #{} repo-s roster-rico)
+                           :get (url sid) :headers (com-auth (token ente (random-uuid))))]
+    (is (= 403 (:status r))
+        "sessao secreta + ator sem papel -> 403, exatamente como no SSE do painel (a rota nova nao pode ser a porta dos fundos)")))
+
+(deftest b1b-sessao-ordinaria-segue-aberta-ao-mesmo-ator
+  ;; A prova de que o aperto acima nao matou a fatia: o MESMO ator sem papel, numa sessao com transmissao
+  ;; publica, continua lendo o quorum — que e' a razao inteira de a rota existir.
+  (let [ente (random-uuid) sid (random-uuid)
+        r (pt/response-for (service-fn* #{} (repo-rico ente) roster-rico)
+                           :get (url sid) :headers (com-auth (token ente (random-uuid))))]
+    (is (= 200 (:status r)) "sessao com transmissao publica + ator sem papel -> 200 (o telao segue funcionando)")))
+
+(deftest b1b-sessao-secreta-continua-visivel-ao-secretario
+  ;; O 'secretario' ja alcancava esse estado por `/chamada` (rota NOMINAL) antes da Etapa 4a — negar-lhe a
+  ;; leitura MAGRA seria apertar mais que a linha de base, sem ganho de sigilo nenhum.
+  (let [ente (random-uuid) sid (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ id] (sessao-secreta ente id)) chamada-rica)
+        r (pt/response-for (service-fn* #{"secretario"} repo-s roster-rico)
+                           :get (url sid) :headers (com-auth (token ente (random-uuid))))]
+    (is (= 200 (:status r)) "a Mesa/secretaria conduz a chamada da sessao secreta — o gate e' de publico, nao de sessao")))
+
 (deftest b1-id-malformado-400
   (let [ente (random-uuid)
         repo-s (fake-repo-sessoes (fn [_ _] nil) (fn [_ _ _] {:presencas [] :justificativas []}))
@@ -187,7 +231,7 @@
         c (ler-json (pt/response-for svc :get (url-chamada sid) :headers (com-auth (token ente ident))))]
     (is (= (:quorum c) (:quorum q))
         "MESMO controller, MESMO logic/contar-quorum — os numeros sao identicos por construcao")
-    (is (= {:presentes-plenario 3 :presentes-remoto 1 :membros-da-casa 3 :presencas-fora-do-roster 1}
+    (is (= {:presentes-plenario 3 :presentes-remoto 1 :presentes-total 4 :membros-da-casa 3 :presencas-fora-do-roster 1}
            (:quorum q))
         "e sao os numeros CERTOS: licenciado fora do denominador, orfao no numerador e sinalizado")
     (is (= (:sem-registro-de-presenca c) (:sem-registro-de-presenca q)))
@@ -205,7 +249,7 @@
         q (ler-json (pt/response-for svc :get (url sid) :headers (com-auth (token ente ident))))
         c (ler-json (pt/response-for svc :get (url-chamada sid) :headers (com-auth (token ente ident))))]
     (is (= (:quorum c) (:quorum q)))
-    (is (= {:presentes-plenario 0 :presentes-remoto 0 :membros-da-casa 3 :presencas-fora-do-roster 0}
+    (is (= {:presentes-plenario 0 :presentes-remoto 0 :presentes-total 0 :membros-da-casa 3 :presencas-fora-do-roster 0}
            (:quorum q)))
     (is (true? (:sem-registro-de-presenca q))
         "o telao precisa distinguir 'a Casa faltou' de 'ninguem registrou nada ainda'")))
@@ -224,7 +268,7 @@
              :sem-registro-de-presenca :quorum}
            (set (keys body)))
         "o contrato e' fechado e MAGRO: so' os numeros e os carimbos que os situam no tempo")
-    (is (= #{:presentes-plenario :presentes-remoto :membros-da-casa :presencas-fora-do-roster}
+    (is (= #{:presentes-plenario :presentes-remoto :presentes-total :membros-da-casa :presencas-fora-do-roster}
            (set (keys (:quorum body))))
         "o bloco de quorum e' o MESMO ChamadaQuorumOut, sem acrescimo")
     (is (nil? (:linhas body)) "nenhuma linha NOMINAL atravessa esta rota")

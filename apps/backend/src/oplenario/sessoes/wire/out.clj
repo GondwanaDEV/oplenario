@@ -291,6 +291,11 @@
   [:map {:closed true}
    [:presentes-plenario :int]
    [:presentes-remoto :int]
+   ;; O NUMERADOR pronto. Existe para o cliente NUNCA somar quorum (revisao adversarial desta branch): o
+   ;; telao pintava `presentes-plenario + presentes-remoto`, uma segunda aritmetica do quorum no ponto mais
+   ;; distante da regra — e uma terceira categoria positiva em `logic/estados-presentes` a subcontaria em
+   ;; silencio, sem erro de tipo e sem teste vermelho.
+   [:presentes-total :int]
    [:membros-da-casa :int]
    [:presencas-fora-do-roster :int]])
 

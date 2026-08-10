@@ -11,8 +11,8 @@ import { useTema } from "@/lib/tema";
 import { usePlenario, type EstadoConexao } from "@/lib/use-plenario";
 import { usePauta } from "@/lib/use-pauta";
 import { segundosDecorridos, formatarTempo } from "@/lib/cronometro";
-import type { EstadoPlenario, PlacarVotacao } from "@/lib/plenario-reducer";
-import { totalPresentes } from "@/lib/plenario-reducer";
+import type { EstadoPlenario, PlacarVotacao, VistaQuorum } from "@/lib/plenario-reducer";
+import { vistaDoQuorum } from "@/lib/plenario-reducer";
 import { derivarPlacar, type VistaNominal, type VistaSecreta } from "@/lib/placar-vista";
 import type { SessaoOut, PautaOut } from "@/lib/contrato";
 import { AuthProvider, useAuth } from "@/lib/auth";
@@ -58,7 +58,9 @@ export default function PaginaPlenario() {
 
 function ConteudoPlenario({ id }: { id: string }) {
   const { token } = useAuth();
-  const { sessao, estado, conexao, erro } = usePlenario(id, token);
+  // `comQuorum` é o TELÃO ligando a hidratação de `GET /sessoes/:id/quorum` — o cockpit do vereador usa o
+  // mesmo hook SEM essa opção (ver a docstring de `usePlenario`).
+  const { sessao, estado, conexao, erro } = usePlenario(id, token, { comQuorum: true });
   // pauta viva (GET; re-busca quando a fase muda). Chamado ANTES dos early-returns p/ ordem de hooks estável.
   const { pauta } = usePauta(id, token, estado?.estado ?? null);
 
@@ -91,7 +93,7 @@ function Painel({ sessao, estado, conexao, pauta }: { sessao: SessaoOut; estado:
         <div className="cabine">
           <Palco sessao={sessao} estado={estado} pauta={pauta} />
           <aside className="rail" aria-label="Estado do plenário ao vivo">
-            <Quorum presentes={totalPresentes(estado)} membrosDaCasa={estado.membrosDaCasa} />
+            <Quorum vista={vistaDoQuorum(estado)} />
             <Tribuna estado={estado} agora={agora} />
           </aside>
         </div>
@@ -373,32 +375,65 @@ function PlacarSecreta({ v }: { v: VistaSecreta }) {
   );
 }
 
-/** `membrosDaCasa` vem da hidratação de GET /sessoes/:id/quorum (Etapa 4b, `hidratarQuorum`) — null enquanto
- * a borda não respondeu, ou se ela falhar (rede/403/500): a tela nunca trava por isso, só perde o denominador. */
-function Quorum({ presentes, membrosDaCasa }: { presentes: number; membrosDaCasa: number | null }) {
-  const ok = presentes > 0;
-  const numero = membrosDaCasa !== null ? `${presentes} de ${membrosDaCasa}` : `${presentes}`;
+/** O bloco de quórum, em TRI-ESTADO explícito (`vistaDoQuorum`).
+ *
+ * A regra que governa este componente: **a tela nunca afirma um número que não sabe.** Antes ela imprimia
+ * `0` em tipografia de destaque quando a borda falhava, com a legenda "Total da Casa indisponível" ao lado —
+ * um telão de projetor dizendo "0 vereadores presentes", com hemiciclo vazio, no plenário cheio e com a
+ * imprensa na galeria. `indisponivel` não carrega número; `carregando` mostra esqueleto (e não o aviso
+ * alarmante, que piscava em toda abertura de página enquanto o fetch estava em voo). */
+function Quorum({ vista }: { vista: VistaQuorum }) {
+  const selo =
+    vista.status === "carregando" ? "Carregando…"
+      : vista.status === "indisponivel" ? "Contagem indisponível"
+        : vista.semRegistro ? "Aguardando chamada" : "Presenças registradas";
   return (
     <section className="bloco quorum" aria-labelledby="quorum-titulo">
       <div className="bloco-cabeca">
         <h2 id="quorum-titulo">Quórum</h2>
-        <span className={`ok-quorum ${ok ? "" : "sem-quorum"}`}>{ok ? "Presenças registradas" : "Aguardando chamada"}</span>
+        {/* o selo deixa de derivar de `presentes > 0` (proxy que dizia "Aguardando chamada" no meio de uma
+            sessão cheia enquanto o snapshot não chegava) e passa a vir de `sem-registro-de-presenca`, que é
+            o campo que o servidor publica exatamente para distinguir "ninguém registrou" de "a Casa faltou" */}
+        <span className={`ok-quorum ${vista.status === "ok" && !vista.semRegistro ? "" : "sem-quorum"}`}>{selo}</span>
       </div>
       <div className="bloco-corpo">
-        <div className="quorum-num">
-          <b>{numero}</b>
-          <span>vereadores presentes</span>
+        {/* o número muda ao vivo: sem `aria-live` a mudança de quórum nunca era anunciada. A região viva é
+            só a frase do quórum — nunca a section inteira (o padrão já adotado com acerto no cockpit). */}
+        <div className="quorum-num" aria-live="polite" aria-atomic="true">
+          {vista.status === "ok" ? (
+            <>
+              <b>{vista.presentes} de {vista.membrosDaCasa}</b>
+              <span>vereadores presentes</span>
+            </>
+          ) : vista.status === "carregando" ? (
+            <>
+              <b aria-hidden="true">—</b>
+              <span>carregando o quórum…</span>
+            </>
+          ) : (
+            <span>Contagem de quórum indisponível no momento.</span>
+          )}
         </div>
-        <Hemiciclo presentes={presentes} membrosDaCasa={membrosDaCasa} />
-        <div className="quorum-legenda">
-          <span>
-            <i style={{ background: "var(--acao)" }} />
-            Presentes {presentes}
-          </span>
-        </div>
-        {membrosDaCasa === null && (
+        <Hemiciclo vista={vista} />
+        {vista.status === "ok" && (
+          <div className="quorum-legenda">
+            <span>
+              <i style={{ background: "var(--acao)" }} />
+              Presentes {vista.presentes}
+            </span>
+          </div>
+        )}
+        {/* `presentes` PODE passar de `membros-da-casa`: uma presença sem assento (suplente cuja janela de
+            mandato não cobre a data) conta no numerador e não no denominador. O servidor publica quantas
+            são, justamente para a Mesa não ter de somar de cabeça diante de uma fração impossível no telão. */}
+        {vista.status === "ok" && vista.foraDoRoster > 0 && (
           <p className="palco-autoria" style={{ margin: "0.7rem 0 0", fontSize: "var(--t-12)" }}>
-            Total da Casa indisponível no momento. Cada presença é registro append-only.
+            Inclui {vista.foraDoRoster} presença(s) fora da composição da Casa nesta data — conferir cadastro.
+          </p>
+        )}
+        {vista.status === "indisponivel" && (
+          <p className="palco-autoria" style={{ margin: "0.7rem 0 0", fontSize: "var(--t-12)" }}>
+            A contagem oficial não respondeu. O painel volta a exibi-la assim que a borda responder.
           </p>
         )}
       </div>
@@ -406,14 +441,24 @@ function Quorum({ presentes, membrosDaCasa }: { presentes: number; membrosDaCasa
   );
 }
 
-/** Hemiciclo: distribui `presentes` assentos preenchidos em arcos (porte da geometria da tela HTML). */
-function Hemiciclo({ presentes, membrosDaCasa }: { presentes: number; membrosDaCasa: number | null }) {
+/** Hemiciclo: os assentos são os da CASA, não 43 fixos.
+ *
+ * A geometria antiga cravava 11+15+17 = 43 cadeiras (o porte de Fortaleza). Num produto SaaS multi-tenant,
+ * toda Casa que não tem 43 via um desenho mentiroso: 7 bolinhas cheias em 43 lê-se "7 de 43" (16%) quando a
+ * Casa de 21 está a 33%; e uma Casa de 55 saturava em 43 sem aviso. Agora o denominador real distribui os
+ * assentos em três fileiras (proporção ~0,26/0,35/0,39 do original), e a geometria decorativa de 43 só
+ * aparece enquanto o denominador não é conhecido. */
+function Hemiciclo({ vista }: { vista: VistaQuorum }) {
   const cx = 120;
   const cy = 116;
+  const total = vista.status === "ok" ? Math.max(1, vista.membrosDaCasa) : 43;
+  const presentes = vista.status === "ok" ? vista.presentes : 0;
+  const n1 = Math.max(1, Math.round(total * 0.256));
+  const n2 = Math.max(1, Math.round(total * 0.349));
   const fileiras = [
-    { r: 46, n: 11 },
-    { r: 68, n: 15 },
-    { r: 90, n: 17 },
+    { r: 46, n: n1 },
+    { r: 68, n: n2 },
+    { r: 90, n: Math.max(1, total - n1 - n2) },
   ];
   const seats: { x: number; y: number }[] = [];
   for (const f of fileiras) {
@@ -423,7 +468,10 @@ function Hemiciclo({ presentes, membrosDaCasa }: { presentes: number; membrosDaC
       seats.push({ x: cx + f.r * Math.cos(ang), y: cy - f.r * Math.sin(ang) });
     }
   }
-  const rotulo = membrosDaCasa !== null ? `${presentes} de ${membrosDaCasa} vereadores presentes.` : `${presentes} vereadores presentes.`;
+  const rotulo =
+    vista.status === "ok"
+      ? `${vista.presentes} de ${vista.membrosDaCasa} vereadores presentes.`
+      : "Contagem de quórum indisponível.";
   return (
     <svg className="hemi" viewBox="0 0 240 130" role="img" aria-label={rotulo}>
       {seats.map((s, i) => (

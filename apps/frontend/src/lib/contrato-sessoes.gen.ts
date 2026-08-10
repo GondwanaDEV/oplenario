@@ -175,6 +175,7 @@ export interface LinhaChamadaOut {
 export interface ChamadaQuorumOut {
   presentesPlenario: number;
   presentesRemoto: number;
+  presentesTotal: number;
   membrosDaCasa: number;
   presencasForaDoRoster: number;
 }

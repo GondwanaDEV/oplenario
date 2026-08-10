@@ -97,7 +97,7 @@
     (is (every? #(= "ausente" (:estado %)) (:linhas body))
         "sem evento nenhum, todo vereador vigente deriva :ausente")
     (is (= "presidente" (:cargo-mesa (second (:linhas body)))) "cargo-mesa do roster passa para a linha")
-    (is (= {:presentes-plenario 0 :presentes-remoto 0 :membros-da-casa 2 :presencas-fora-do-roster 0}
+    (is (= {:presentes-plenario 0 :presentes-remoto 0 :presentes-total 0 :membros-da-casa 2 :presencas-fora-do-roster 0}
            (:quorum body)))
     (is (some? (:data-de-composicao body)) "data-de-composicao presente")
     (is (some? (:composicao-resolvida-em body)) "composicao-resolvida-em presente")))
@@ -135,7 +135,7 @@
     (is (= {:estado "pendente" :motivo "Atestado medico" :decidido-em nil} (:justificativa l2))
         "pendente -> `decidido-em` nil (espelha o CHECK justificativa_decisao_coerente)")
     (is (nil? (:justificativa l1)) "vereador sem justificativa -> nil, nunca omitido/erro")
-    (is (= {:presentes-plenario 1 :presentes-remoto 0 :membros-da-casa 2 :presencas-fora-do-roster 0}
+    (is (= {:presentes-plenario 1 :presentes-remoto 0 :presentes-total 1 :membros-da-casa 2 :presencas-fora-do-roster 0}
            (:quorum body)))))
 
 ;; ---------- REVISAO Etapa 1 (MAJOR): evento de quem nao esta no roster NAO some da resposta ----------
@@ -162,7 +162,7 @@
     (is (= "presente-plenario" (:estado orfa)))
     (is (true? (:inconsistencia-cadastro orfa)))
     (is (nil? (:nome orfa)) "identidade desconhecida -> nil honesto, nunca um nome inventado")
-    (is (= {:presentes-plenario 2 :presentes-remoto 0 :membros-da-casa 1 :presencas-fora-do-roster 1}
+    (is (= {:presentes-plenario 2 :presentes-remoto 0 :presentes-total 2 :membros-da-casa 1 :presencas-fora-do-roster 1}
            (:quorum body))
         "numerador = o que o motor conta (2); denominador = so' as cadeiras (1); e o desvio e' PUBLICADO")))
 
@@ -207,7 +207,7 @@
     (is (= "2026-06-30T18:00:00Z" (:instante body)) "sessao encerrada -> instante CONGELADO em encerrada-em")
     (is (string? (:data-de-composicao body)) "data-de-composicao presente e nao-nula")
     (is (string? (:composicao-resolvida-em body)) "composicao-resolvida-em presente e nao-nula")
-    (is (= #{:presentes-plenario :presentes-remoto :membros-da-casa :presencas-fora-do-roster}
+    (is (= #{:presentes-plenario :presentes-remoto :presentes-total :membros-da-casa :presencas-fora-do-roster}
            (set (keys (:quorum body))))
         "quorum e' o shape fechado esperado")))
 

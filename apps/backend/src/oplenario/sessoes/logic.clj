@@ -85,6 +85,31 @@
   [ator sessao]
   (= (:ente-id ator) (:ente-id sessao)))
 
+(defn pode-ver-quorum-da-sessao?
+  "Camada FINA de `GET /sessoes/:id/quorum` (a leitura MAGRA, Etapa 4a): mesma Casa E (transmissao publica OU
+  papel 'secretario').
+
+  EXISTE PORQUE A ETAPA 4a COPIOU METADE DA POLITICA DO TELAO. A rota magra justificou o seu nivel de authz
+  pelo publico do painel ao vivo, mas o painel roda `tempo-real/logic/pode-assistir-plenario?` = mesma-casa?
+  AND `plenario-publico?` — e so' a primeira metade atravessou. `plenario-publico?` existe exatamente para a
+  sessao SECRETA (`tipos-sessao` da' `transmite-publica false`), e `tempo_real/canais.clj` grava a regra:
+  'se transmite_publica=false, RECUSAR a subscricao (403) — nao filtrar por evento'. Sem esta fn, o estado de
+  presenca de uma sessao secreta — que antes da Etapa 4a so' o papel 'secretario' alcancava, via `/chamada` —
+  passava a ser alcancavel por qualquer vinculo ativo da Casa, e por polling reconstroi a serie temporal do
+  quorum de um rito fechado (quando caiu por obstrucao, quando voltou por acordo).
+
+  A clausula do 'secretario' nao afrouxa nada: ele JA lia esse mesmo estado, e nominalmente, pela rota da
+  chamada. O gate e' de PUBLICO (quem so' assiste ao telao), nao de sessao.
+
+  `(true? ...)` e nao `(not (false? ...))`: sessao sem o campo (fixture pobre, projecao futura incompleta)
+  NEGA — fail-closed, a mesma disciplina de `plenario-publico?`. Pura; le' o snapshot de papeis do ator
+  (§22.5 eixo D) sem importar o kernel — o acesso e' um `contains?` sobre `:papeis`, mesmo predicado de
+  `kernel.autorizacao/tem-papel?`."
+  [ator sessao]
+  (and (pode-ver-sessao? ator sessao)
+       (or (true? (:transmite-publica sessao))
+           (contains? (:papeis ator) "secretario"))))
+
 ;; ---------- §22.6 eixo B — pauta (F4.2a) ----------
 ;; Os vocabularios espelham os CHECK da migration 0027.
 
@@ -402,6 +427,12 @@
                              presenca justificativa)
       (assoc :sem-assento true :inconsistencia-cadastro true)))
 
+(def estados-presentes
+  "Os estados de linha derivada que contam como PRESENTE no NUMERADOR do quorum. FONTE UNICA de proposito:
+  `contar-quorum` deriva `:presentes-total` daqui, para que uma terceira categoria positiva (o dominio ja'
+  distingue varios estados em `derivar-linha-chamada`) nao precise ser lembrada em dois lugares."
+  #{:presente-plenario :presente-remoto})
+
 (defn contar-quorum
   "PURO. Contagem de quorum sobre as linhas JA derivadas (`derivar-linha-chamada` /
   `derivar-linha-sem-assento`) — nunca sobre eventos crus, para que a tela e a policy contem o mesmo
@@ -421,10 +452,17 @@
   no plenario esta na Casa.
 
   `:presencas-fora-do-roster` e' fail-loud: publica QUANTAS linhas sem assento entraram nesta chamada, para
-  a Mesa nao precisar somar de cabeca para descobrir que a tela e a policy divergem do cadastro."
+  a Mesa nao precisar somar de cabeca para descobrir que a tela e a policy divergem do cadastro.
+
+  `:presentes-total` e' o NUMERADOR pronto, e existe por uma razao de corretude que a revisao adversarial
+  desta branch levantou: sem ele, o cliente somava `presentes-plenario + presentes-remoto` para pintar o
+  telao — uma SEGUNDA aritmetica do quorum, no lugar mais distante possivel da regra. No dia em que
+  `estados-presentes` ganhar uma terceira categoria positiva, o servidor passa a contar N e um cliente que
+  soma dois campos subconta em silencio, sem erro de tipo e sem teste vermelho. A soma mora aqui, uma vez."
   [linhas]
   {:presentes-plenario (count (filter #(= :presente-plenario (:estado %)) linhas))
    :presentes-remoto   (count (filter #(= :presente-remoto (:estado %)) linhas))
+   :presentes-total    (count (filter #(estados-presentes (:estado %)) linhas))
    :membros-da-casa    (count (remove #(or (= :licenciado (:estado %)) (:sem-assento %)) linhas))
    :presencas-fora-do-roster (count (filter :sem-assento linhas))})
 

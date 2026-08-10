@@ -519,6 +519,11 @@
   papeis das duas rotas levaria o `motivo` da justificativa (LGPD, pode ser dado de saude) para esse mesmo
   publico; esta rota nao leva nada nominal, entao nao ha' o que filtrar.
 
+  'Sem papel na borda' NAO e' 'sem politica': a camada FINA roda `logic/pode-ver-quorum-da-sessao?`, que e' a
+  politica do telao INTEIRA — mesma Casa E (transmissao publica OU papel 'secretario'). A primeira versao
+  desta rota copiou so' a metade que ABRE e deixou cair a que FECHA, e com isso a presenca de uma sessao
+  SECRETA (que o SSE recusa por politica explicita) ficou legivel por qualquer vinculo ativo da Casa. 403.
+
   Mesmos codigos do GET da chamada, porque e' o MESMO controller por dentro: nil -> 404; sessao agendada sem
   data marcada -> 409 acionavel."
   [repo-sessoes roster-da-casa relogio]
