@@ -2,8 +2,10 @@
   "Unit: o manifesto do codegen do modulo SESSOES (fatia 1b-WIRE, primeira emissao — espelha
   gerar-paineis-test/gerar-portal-test)."
   (:require [clojure.test :refer [deftest is]]
+            [clojure.set :as set]
             [clojure.string :as str]
-            [oplenario.codegen.gerar-sessoes :as gerar-sessoes]))
+            [oplenario.codegen.gerar-sessoes :as gerar-sessoes]
+            [oplenario.sessoes.wire.out :as wire-out]))
 
 (deftest gerar-tudo-emite-todas-as-interfaces-com-banner
   (let [out (gerar-sessoes/gerar-tudo)]
@@ -29,3 +31,44 @@
     (is (str/includes? out "cargoMesa: string | null;"))
     (is (str/includes? out "desde: string | null;"))
     (is (str/includes? out "justificativa: ") "justificativa e' nulavel (map aninhado sem entrada propria no manifesto)")))
+
+;; ---------- B4 (Etapa 4a): o carry do codegen — o .gen.ts nunca tinha sido emitido ----------
+
+(deftest b4-manifesto-cobre-TODO-o-wire-out
+  ;; O gate anti-drift que faltava. O manifesto era escrito a mao e envelheceu em silencio: as Etapas 1 e 2
+  ;; acrescentaram PresencaLoteReciboOut, os quatro contratos de justificativa e ChamadaConduzidaOut ao
+  ;; wire/out sem toca-lo. O sintoma nao era um erro — era `chamadasConduzidas: Record<string, unknown>[]`
+  ;; no arquivo gerado, isto e', o FE perdendo o tipo justamente do dado novo. Comparar o manifesto com
+  ;; `ns-publics` faz o compilador do proximo contrato lembrar por nos.
+  (let [no-wire (->> (ns-publics 'oplenario.sessoes.wire.out)
+                     keys (map name) (filter #(str/ends-with? % "Out")) set)
+        no-manifesto (set (map first gerar-sessoes/manifesto))]
+    (is (= no-wire no-manifesto)
+        (str "manifesto fora de sincronia com wire/out — faltando: "
+             (sort (set/difference no-wire no-manifesto))
+             " / sobrando: " (sort (set/difference no-manifesto no-wire)))))
+  ;; Cobrir o NOME nao basta: a entrada tem de apontar para o var do wire/out, nao para um schema colado no
+  ;; manifesto (que passaria no teste acima e envelheceria em silencio, que e' o defeito que ele existe para
+  ;; pegar). Aferido no contrato novo desta fatia.
+  (is (= wire-out/QuorumSessaoOut (get (into {} gerar-sessoes/manifesto) "QuorumSessaoOut"))
+      "a entrada do manifesto E' o schema do wire/out, nao uma copia"))
+
+(deftest b4-geracao-e-reproduzivel
+  ;; `gerar-tudo` e' pura por construcao, e este teste e' o que impede que deixe de ser (uma ordenacao por
+  ;; hash de mapa em qualquer ponto do caminho produziria um .gen.ts que muda de diff a cada execucao, e o
+  ;; arquivo e' COMMITADO — ruido de diff eterno).
+  (is (= (gerar-sessoes/gerar-tudo) (gerar-sessoes/gerar-tudo))
+      "duas execucoes produzem byte a byte o mesmo arquivo"))
+
+(deftest b4-tipos-que-a-tela-do-telao-consome
+  (let [out (gerar-sessoes/gerar-tudo)]
+    (is (str/includes? out "export interface QuorumSessaoOut {")
+        "a leitura MAGRA de quorum (Etapa 4a) chega tipada ao FE")
+    (is (str/includes? out "quorum: ChamadaQuorumOut;")
+        "e reusa o MESMO bloco de contagem da chamada — nao um segundo shape de quorum no TS")
+    (is (str/includes? out "chamadasConduzidas: ChamadaConduzidaOut[];")
+        "ChamadaConduzidaOut por NOME (antes do carry, caia em Record<string, unknown>[])")
+    (is (str/includes? out "recibos: PresencaReciboOut[];")
+        "o lote de presenca (Etapa 2c) referencia o recibo por nome")
+    (is (str/includes? out "justificativas: LinhaJustificativaOut[];")
+        "a lista de justificativas (Etapa 2) tipada")))

@@ -5,6 +5,7 @@
 // a partir de `iniciouEm` + marcos (decisão de §22.6 eixo G — ticks por segundo são descartados no fio).
 
 import type { EventoPlenario, SessaoOut } from "./contrato";
+import type { QuorumSessaoOut } from "./contrato-sessoes.gen";
 
 /** Tipos de evento de presença que marcam PRESENTE (logic/tipos-presenca-positiva); "saida" remove. */
 const PRESENCA_POSITIVA = new Set(["entrada", "retorno", "mudanca_modalidade"]);
@@ -45,9 +46,48 @@ export interface PlacarVotacao {
   baseMembros: number | null; // do encerramento (denominador do quórum)
 }
 
+/** O QUÓRUM como o SERVIDOR o contou, num instante — copiado, nunca recalculado aqui.
+ *
+ * Todos os campos vêm de `ChamadaQuorumOut`/`QuorumSessaoOut` (`logic/contar-quorum`). O cliente não soma,
+ * não subtrai e não deduz: `presentesTotal` já é o numerador pronto justamente porque somar
+ * `presentesPlenario + presentesRemoto` aqui seria uma SEGUNDA aritmética do quórum, no ponto mais distante
+ * possível da regra — e uma terceira categoria positiva no domínio a subcontaria em silêncio. */
+export interface QuorumDaSessao {
+  presentesTotal: number; // numerador (o servidor já somou)
+  presentesPlenario: number;
+  presentesRemoto: number;
+  membrosDaCasa: number; // denominador — EXCLUI licenciados e linhas sem assento
+  presencasForaDoRoster: number; // fail-loud: por que `presentesTotal` PODE passar de `membrosDaCasa`
+  semRegistroDePresenca: boolean; // "ninguém registrou nada ainda" ≠ "a Casa faltou"
+}
+
+/** Tri-estado honesto da borda de quórum: a tela NUNCA deve afirmar "0 presentes" quando o que ela tem é
+ * "não sei". `carregando` = fetch em voo (esqueleto); `indisponivel` = a borda falhou e nunca houve
+ * snapshot (nenhum número); `ok` = há um snapshot do servidor (ainda que uma re-busca posterior falhe —
+ * degradar, não zerar). */
+export type QuorumStatus = "carregando" | "indisponivel" | "ok";
+
 export interface EstadoPlenario {
   estado: string; // estado da sessão (agendada|aberta|suspensa|encerrada|nao_realizada|arquivada)
-  presentes: string[]; // vereador-ids presentes (conjunto; ordem de inserção)
+  /** vereador-ids vistos AO VIVO pelo SSE (conjunto; ordem de inserção).
+   *
+   * CAMPO COMPARTILHADO, e por isso intocável pela hidratação de quórum: `usePlenario` alimenta DUAS telas,
+   * e `meu-voto-vista.ts` lê este conjunto de forma NOMINAL (`presentes.includes(meuVereadorId)`) para
+   * decidir se o cockpit do vereador oferece o botão de votar. A Etapa 4b redefiniu-o como "delta posterior
+   * ao snapshot" e podava dele quem tivesse evento anterior ao `instante` — o botão de votar sumia no
+   * celular do vereador, com votação nominal aberta. A semântica aqui é, e continua sendo, "quem o SSE
+   * mostrou presente desde que esta página abriu". O numerador do telão NÃO sai daqui (sai de `quorum`). */
+  presentes: string[];
+  /** vereadorId -> epoch ms do `ocorrido-em` do último evento APLICADO a `presentes` para aquele vereador.
+   * Serve só à ORDENAÇÃO nominal (um frame reentregue fora de ordem no resume por Last-Event-ID não pode
+   * ressuscitar um estado já superado) — nunca ao quórum. Comparação NUMÉRICA, jamais textual: ver `instanteMs`. */
+  presencaEm: Record<string, number>;
+  quorum: QuorumDaSessao | null; // o snapshot do servidor; null = ainda não chegou (ou nunca chegou)
+  quorumStatus: QuorumStatus;
+  /** pedido de RE-HIDRATAÇÃO: houve movimento de presença, então o número do servidor pode ter mudado. O
+   * hook observa este sinal e re-busca (debounced — a rajada da chamada vira um punhado de requests);
+   * `hidratarQuorum` o baixa. É o ÚNICO caminho pelo qual o numerador do telão se move. */
+  precisaRehidratar: boolean;
   oradorAtual: OradorAtual | null;
   marcosCronometro: MarcoCronometro[]; // marcos da fala EM CURSO (zerados a cada fala.iniciada)
   ultimaFalaEncerrada: { falaId: string; tempoSegundos: number } | null;
@@ -60,6 +100,10 @@ export function estadoInicial(sessao: SessaoOut): EstadoPlenario {
   return {
     estado: sessao.estado,
     presentes: [],
+    presencaEm: {},
+    quorum: null,
+    quorumStatus: "carregando",
+    precisaRehidratar: false,
     oradorAtual: null,
     marcosCronometro: [],
     ultimaFalaEncerrada: null,
@@ -67,6 +111,98 @@ export function estadoInicial(sessao: SessaoOut): EstadoPlenario {
     placar: null,
     ultimoSeq: 0,
   };
+}
+
+/** Instante ISO-8601 -> epoch ms, ou NaN se não for um instante.
+ *
+ * NUNCA comparar ISO-8601 como TEXTO. A largura da fração NÃO é fixa: `Instant.toString()`
+ * (= `DateTimeFormatter.ISO_INSTANT`, dos dois lados do fio no backend) emite 0, 3, 6 ou 9 dígitos conforme
+ * o valor, e o navegador (`toISOString`) sempre emite 3. Em ASCII '.'(0x2E) < 'Z'(0x5A) < dígito nenhum:
+ * '...07.412Z' comparado com '...07.412683Z' resolve 'Z' > '4' e conclui que o instante MENOR é o MAIOR.
+ * Dentro do mesmo segundo a comparação textual simplesmente inverte a ordem temporal. */
+function instanteMs(iso: unknown): number {
+  return typeof iso === "string" ? Date.parse(iso) : NaN;
+}
+
+const finito = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
+
+/** Valida o snapshot CRU da borda (`camelizarChaves(await resp.json())`, um cast puro sem garantia nenhuma)
+ * e o converte no formato de estado. Devolve null se qualquer campo numérico faltar/derivar.
+ *
+ * Existe porque o cast mentia: um campo ausente virava `undefined` (não `null`), atravessava a guarda
+ * `!== null` da página, e `undefined + undefined = NaN` se propagava até o telão imprimir "NaN de
+ * undefined" — sem exceção nenhuma, porque aritmética com undefined não lança. E `quorum` ausente LANÇAVA,
+ * de dentro de um updater de `setEstado`, que o React pode avaliar na fase de RENDER (derrubando a árvore
+ * em vez de cair no `.catch` do hook). */
+function lerSnapshot(cru: QuorumSessaoOut): QuorumDaSessao | null {
+  const q = cru?.quorum as Partial<QuorumSessaoOut["quorum"]> | undefined;
+  if (!q) return null;
+  if (!finito(q.presentesTotal) || !finito(q.membrosDaCasa)) return null;
+  if (!finito(q.presentesPlenario) || !finito(q.presentesRemoto) || !finito(q.presencasForaDoRoster)) return null;
+  return {
+    presentesTotal: q.presentesTotal,
+    presentesPlenario: q.presentesPlenario,
+    presentesRemoto: q.presentesRemoto,
+    membrosDaCasa: q.membrosDaCasa,
+    presencasForaDoRoster: q.presencasForaDoRoster,
+    semRegistroDePresenca: cru.semRegistroDePresenca === true,
+  };
+}
+
+/** O número que o telão exibe, como um TRI-ESTADO explícito — nunca um `number` que a tela tenha de
+ * interpretar. `indisponivel` não carrega número de propósito: afirmar "0 presentes" quando o que se tem é
+ * "não sei" é a mentira mais cara desta tela (plenário cheio, imprensa na galeria, hemiciclo vazio). */
+export type VistaQuorum =
+  | { status: "carregando" }
+  | { status: "indisponivel" }
+  | { status: "ok"; presentes: number; membrosDaCasa: number; foraDoRoster: number; semRegistro: boolean };
+
+export function vistaDoQuorum(estado: EstadoPlenario): VistaQuorum {
+  if (estado.quorum === null) return { status: estado.quorumStatus === "indisponivel" ? "indisponivel" : "carregando" };
+  const q = estado.quorum;
+  return {
+    status: "ok",
+    presentes: q.presentesTotal,
+    membrosDaCasa: q.membrosDaCasa,
+    foraDoRoster: q.presencasForaDoRoster,
+    semRegistro: q.semRegistroDePresenca,
+  };
+}
+
+/** Atalho para os testes e para a página: o numerador exibido, ou null quando não se sabe. */
+export function numeroDoTelao(estado: EstadoPlenario): number | null {
+  return estado.quorum?.presentesTotal ?? null;
+}
+
+/** Hidrata o quórum a partir do snapshot de `GET /sessoes/:id/quorum`. PURA e TOTAL: nunca lança, nunca
+ * produz NaN, e um snapshot de forma inválida devolve o estado praticamente inalterado (só o status cai
+ * para `indisponivel` se ainda não havia snapshot bom).
+ *
+ * O QUE ELA **NÃO** FAZ, E É O PONTO: não mexe em `presentes` e não funde nada. O numerador do telão é o do
+ * SERVIDOR, e só ele. A Etapa 4b tentou o contrário — somar o delta do SSE sobre uma base OPACA (a rota é
+ * magra, não há ids) — e a revisão adversarial mostrou que essa fusão é indefensável sem identidade:
+ *   - `mudanca_modalidade` move a pessoa de coluna e o servidor mantém o total; o cliente somava +1;
+ *   - uma `saida` re-entregue (at-least-once, com `seq` distinta) decrementava duas vezes um contador cego;
+ *   - um registro RETROATIVO (o domínio o permite: `ocorrido-em` vem do cliente e só o futuro é recusado)
+ *     era descartado para sempre pelo corte por instante;
+ *   - e o próprio corte comparava ISO-8601 como texto, com precisão fracionária variável (ver `instanteMs`).
+ * Sem fusão, os quatro somem por construção: só existe UMA aritmética de quórum, a do servidor, e o telão a
+ * copia. O preço é uma re-busca (barata em payload, debounced no hook); o benefício é que o número do telão
+ * e o número da policy nunca podem divergir — que é a regra que as Etapas 1 e 2 já haviam cravado no
+ * servidor e que a 4b reabriu no cliente. */
+export function hidratarQuorum(estado: EstadoPlenario, cru: QuorumSessaoOut): EstadoPlenario {
+  const snapshot = lerSnapshot(cru);
+  if (snapshot === null) {
+    return { ...estado, quorumStatus: estado.quorum ? "ok" : "indisponivel" };
+  }
+  return { ...estado, quorum: snapshot, quorumStatus: "ok", precisaRehidratar: false };
+}
+
+/** A borda de quórum falhou (rede/403/500/parse). DEGRADA, não zera: se já havia um snapshot bom, ele
+ * continua na tela (um número velho de segundos é melhor que nenhum); se nunca houve, o tri-estado vai para
+ * `indisponivel` e a página deixa de imprimir número. */
+export function falharQuorum(estado: EstadoPlenario): EstadoPlenario {
+  return { ...estado, quorumStatus: estado.quorum ? "ok" : "indisponivel" };
 }
 
 export function aplicarEvento(estado: EstadoPlenario, evento: EventoPlenario): EstadoPlenario {
@@ -78,11 +214,28 @@ export function aplicarEvento(estado: EstadoPlenario, evento: EventoPlenario): E
 
     case "presenca.registrada": {
       const v = evento.dados["vereador-id"];
-      if (PRESENCA_POSITIVA.has(evento.dados.tipo)) {
-        return base.presentes.includes(v) ? base : { ...base, presentes: [...base.presentes, v] };
-      }
-      // saida (ou tipo não-positivo) remove
-      return { ...base, presentes: base.presentes.filter((x) => x !== v) };
+      const emMs = instanteMs(evento.dados["ocorrido-em"]);
+      const aplicadoEm = base.presencaEm[v];
+      // O quórum EXIBIDO nunca se move aqui — quem conta é o SERVIDOR. Todo movimento de presença (inclusive
+      // um retroativo, que o domínio permite de propósito) apenas PEDE uma re-busca; o hook coalesce a
+      // rajada da chamada num punhado de requests. Nenhum evento é descartado em silêncio, que era o defeito.
+      const pedeRebusca = { ...base, precisaRehidratar: true };
+
+      // Guarda de ORDEM (numérica, nunca textual): um frame reentregue fora de ordem no resume por
+      // Last-Event-ID não pode ressuscitar um estado já superado por um evento MAIS NOVO do mesmo vereador.
+      // `<` e não `<=`: `Date.parse` trunca em milissegundos, então dois instantes que só diferem na fração
+      // sub-ms (o servidor emite 6 casas, o navegador 3) EMPATAM aqui — e no empate quem decide é a ordem de
+      // CHEGADA no canal, que é a ordenação do próprio servidor. É exatamente o empate em que a comparação
+      // de texto invertia o tempo ('...412Z' > '...412683Z' porque 'Z' > '4').
+      if (aplicadoEm !== undefined && Number.isFinite(emMs) && emMs < aplicadoEm) return pedeRebusca;
+
+      // O CONJUNTO nominal do SSE — idempotente por construção sob entrega at-least-once (add/remove de
+      // conjunto), e a única coisa que o cockpit do vereador lê. Nenhum contador, nenhuma subtração.
+      const presentes = PRESENCA_POSITIVA.has(evento.dados.tipo)
+        ? base.presentes.includes(v) ? base.presentes : [...base.presentes, v]
+        : base.presentes.filter((x) => x !== v);
+      const presencaEm = Number.isFinite(emMs) ? { ...base.presencaEm, [v]: emMs } : base.presencaEm;
+      return { ...pedeRebusca, presentes, presencaEm };
     }
 
     case "fala.iniciada":

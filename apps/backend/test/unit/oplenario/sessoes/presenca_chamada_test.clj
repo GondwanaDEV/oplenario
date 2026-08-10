@@ -58,7 +58,7 @@
 (deftest t6-licenciado-sem-evento-e-licenciado-e-fica-fora-do-denominador
   (let [linha (logic/derivar-linha-chamada (roster :estado-mandato "licenciado") nil nil)]
     (is (= :licenciado (:estado linha)))
-    (is (= {:presentes-plenario 0 :presentes-remoto 0 :membros-da-casa 0 :presencas-fora-do-roster 0}
+    (is (= {:presentes-plenario 0 :presentes-remoto 0 :presentes-total 0 :membros-da-casa 0 :presencas-fora-do-roster 0}
            (logic/contar-quorum [linha]))
         "licenciado nao entra no denominador do quorum")))
 
@@ -70,7 +70,7 @@
         "o fato observado (ele entrou) vence o cadastro")
     (is (true? (:inconsistencia-cadastro linha))
         "a inconsistencia e' EXIBIDA, nao escondida — numa Casa recem-migrada e' o sinal que o servidor precisa ver")
-    (is (= {:presentes-plenario 1 :presentes-remoto 0 :membros-da-casa 1 :presencas-fora-do-roster 0}
+    (is (= {:presentes-plenario 1 :presentes-remoto 0 :presentes-total 1 :membros-da-casa 1 :presencas-fora-do-roster 0}
            (logic/contar-quorum [linha]))
         "presente de verdade: conta no numerador E no denominador")))
 

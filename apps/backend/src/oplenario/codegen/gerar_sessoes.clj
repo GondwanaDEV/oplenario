@@ -7,7 +7,15 @@
   (PautaOut, SegmentosOut, ChamadaOut), p/ a referencia nomeada casar por igualdade estrutural (mesmo
   racional de ficha-materia/mesa). Roda via:
     clojure -M -m oplenario.codegen.gerar-sessoes [caminho-de-saida]
-  Default = target/generated-ts/contrato-sessoes.gen.ts."
+  Default = target/generated-ts/contrato-sessoes.gen.ts; o repo commita em
+  `apps/frontend/src/lib/contrato-sessoes.gen.ts` (passar o caminho na chamada, como os modulos irmaos).
+
+  O manifesto e' COMPLETO por regra, nao por conveniencia: `gerar-sessoes-test/b4-manifesto-cobre-TODO-o-
+  wire-out` compara esta lista com `ns-publics` do wire/out e falha se as duas divergirem. O gate existe
+  porque a lista envelheceu em silencio uma vez — as Etapas 1 e 2 acrescentaram os contratos de
+  justificativa, o lote de presenca e ChamadaConduzidaOut sem toca-la, e o sintoma nao foi um erro, foi
+  `chamadasConduzidas: Record<string, unknown>[]` no arquivo gerado: o FE perdendo o tipo justamente do dado
+  novo, que e' o que o codegen existe para impedir."
   (:require [clojure.java.io :as io]
             [oplenario.codegen.malli-ts :as ts]
             [oplenario.sessoes.wire.out :as out]))
@@ -15,7 +23,14 @@
 (def manifesto
   [["SessaoOut" out/SessaoOut]
    ["TransicaoSessaoOut" out/TransicaoSessaoOut]
+   ;; PresencaReciboOut ANTES de PresencaLoteReciboOut (campo :recibos aninhado).
    ["PresencaReciboOut" out/PresencaReciboOut]
+   ["PresencaLoteReciboOut" out/PresencaLoteReciboOut]
+   ;; §22.6 eixo C — justificativa de ausencia (Etapa 2). LinhaJustificativaOut ANTES de JustificativasOut.
+   ["JustificativaAbertaOut" out/JustificativaAbertaOut]
+   ["LinhaJustificativaOut" out/LinhaJustificativaOut]
+   ["JustificativasOut" out/JustificativasOut]
+   ["JustificativaDecididaOut" out/JustificativaDecididaOut]
    ["InscricaoReciboOut" out/InscricaoReciboOut]
    ["DesistenciaInscricaoOut" out/DesistenciaInscricaoOut]
    ["FalaReciboOut" out/FalaReciboOut]
@@ -39,7 +54,11 @@
    ;; (campos :linhas/:quorum aninhados).
    ["LinhaChamadaOut" out/LinhaChamadaOut]
    ["ChamadaQuorumOut" out/ChamadaQuorumOut]
-   ["ChamadaOut" out/ChamadaOut]])
+   ["ChamadaConduzidaOut" out/ChamadaConduzidaOut]
+   ["ChamadaOut" out/ChamadaOut]
+   ;; Etapa 4a — a leitura MAGRA de quorum; reusa ChamadaQuorumOut por referencia nomeada (um so' shape de
+   ;; contagem no TS, espelhando a unica aritmetica no servidor).
+   ["QuorumSessaoOut" out/QuorumSessaoOut]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))
 

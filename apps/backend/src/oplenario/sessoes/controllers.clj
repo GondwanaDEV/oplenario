@@ -565,8 +565,14 @@
                     :decidido-por (:identidade-id ator)})
                  :justificativa-id justificativa-id))))))
 
-(defn chamada-da-sessao
-  "A CHAMADA da sessao `sessao-id` (§22.6 eixo C): cruza o ROSTER da Casa (`roster-da-casa`, seam injetado do
+(defn- chamada-da-sessao*
+  "O CORPO da chamada, parametrizado pela POLITICA da camada fina — `chamada-da-sessao` (nominal) e
+  `quorum-da-sessao` (magra) sao os dois chamadores. Parametrizar a politica existe por corretude: as duas
+  leituras publicam o MESMO calculo para PUBLICOS diferentes, e a magra atravessa a fronteira da sessao
+  SECRETA se herdar `pode-ver-sessao?` cru (ver `logic/pode-ver-quorum-da-sessao?`). Duplicar o calculo para
+  variar a authz seria reabrir o defeito que as Etapas 1 e 2 mataram: duas aritmeticas da mesma Casa.
+
+  A CHAMADA da sessao `sessao-id` (§22.6 eixo C): cruza o ROSTER da Casa (`roster-da-casa`, seam injetado do
   host sobre `cadastros` — este ns nunca importa cadastros, §22.10), a PRESENCA CORRENTE (ultimo evento por
   vereador ate' o `instante` resolvido) e as JUSTIFICATIVAS DE AUSENCIA (as duas ultimas numa UNICA tx do
   Repo, `repo/chamada-da-sessao` — evita o TOCTOU de le-las em tx separadas), deriva o estado de cada
@@ -591,12 +597,12 @@
   `sem-registro-de-presenca` = true quando a sessao nao tem NENHUM evento de presenca (a Casa inteira
   aparece `:ausente` porque ninguem registrou nada ainda, nao porque a Casa faltou). Devolve o mapa de
   dominio pronto p/ `adapters-out-presenca/chamada->wire`, ou nil (sessao inexistente -> 404 no diplomat)."
-  [repo-sessoes roster-da-casa ator sessao-id relogio]
+  [repo-sessoes roster-da-casa ator sessao-id relogio acao politica]
   (let [ente-id (:ente-id ator)
         agora   (tempo/agora relogio)]
     (when-let [{:keys [sessao instante presencas justificativas chamadas-conduzidas]}
                (repo/chamada-da-sessao repo-sessoes ente-id sessao-id agora)]
-      (authz/check! ator :sessao/ver sessao logic/pode-ver-sessao?)
+      (authz/check! ator acao sessao politica)
       (let [data   (data-de-referencia sessao)
             roster (roster-da-casa ente-id data)
             ;; A UNIAO (roster + presencas orfas) e a derivacao vem de `logic`, e nao mais montadas aqui:
@@ -616,6 +622,47 @@
          ;; toda faltou" (nao-vazio + `:sem-registro-de-presenca` true) — o read-model de presenca_evento
          ;; sozinho e' cego a essa diferenca (os dois casos produzem zero linhas nele).
          :chamadas-conduzidas (vec chamadas-conduzidas)}))))
+
+(defn chamada-da-sessao
+  "A CHAMADA NOMINAL (`GET /sessoes/:id/chamada`, papel 'secretario' na borda) — o corpo inteiro vive em
+  `chamada-da-sessao*`; aqui so' a POLITICA da camada fina: `pode-ver-sessao?` (mesma Casa). Deliberadamente
+  NAO herda a clausula de sessao secreta de `pode-ver-quorum-da-sessao?`: quem chega aqui ja' passou pelo
+  papel 'secretario' na borda, que e' justamente a excecao daquela clausula — apertar de novo tiraria da
+  Mesa a chamada da sessao secreta, que ela conduz."
+  [repo-sessoes roster-da-casa ator sessao-id relogio]
+  (chamada-da-sessao* repo-sessoes roster-da-casa ator sessao-id relogio
+                      :sessao/ver logic/pode-ver-sessao?))
+
+(defn quorum-da-sessao
+  "A leitura MAGRA de quorum (Etapa 4a): os NUMEROS da chamada, sem uma linha nominal sequer.
+
+  E' literalmente `chamada-da-sessao` com um `select-keys` na saida — e essa e' a decisao, nao um atalho de
+  implementacao. Escrever aqui uma consulta propria de contagem daria a MESMA sessao duas aritmeticas da
+  composicao da Casa, que e' o defeito que a Etapa 1 (uniao roster+presencas orfas) e a Etapa 2 (denominador
+  congelado do ato de chamada) gastaram uma revisao cada para matar. Reusando a funcao inteira, os dois
+  numeros nao podem divergir: nao ha' um segundo lugar onde divergir. O custo (resolver o roster e derivar
+  as linhas para depois descarta-las) e' o mesmo do GET da chamada e paga essa garantia.
+
+  A AUTHZ, essa, NAO e' herdada — e' a unica coisa que a rota magra nao pode copiar da nominal. Ela roda
+  `logic/pode-ver-quorum-da-sessao?` (mesma Casa E (transmissao publica OU papel 'secretario')), e nao
+  `pode-ver-sessao?` cru: sem essa clausula a rota vira a porta dos fundos da sessao SECRETA que o SSE do
+  painel recusa por politica explicita (achado MAJOR da revisao desta branch). Herda de graca o resto — o
+  `instante` congelado de sessao encerrada e o 409 acionavel de sessao sem data marcada.
+
+  CARRY (registrado aqui para nao se perder, revisao MEDIO/security): esta e' hoje a leitura mais CARA do
+  modulo atras da MENOR barreira de authz — resolve o roster inteiro, a presenca corrente e as
+  justificativas para descartar as linhas. Nao ha' rate-limit em lugar nenhum do backend e o interceptor
+  global crava `Cache-Control: no-store`, entao nem proxy amortece. Um cliente escrito a mao (nao o telao,
+  que dispara 1 request por carga + refetch debounced) pode la-la em laco. Mitigacao quando houver infra:
+  1 req/s por (identidade, sessao) -> 429, ou cache de 1s por (ente, sessao) em Valkey.
+
+  Devolve {:sessao-id :sessao-estado :instante :data-de-composicao :composicao-resolvida-em
+  :sem-registro-de-presenca :quorum} ou nil (sessao inexistente -> 404 no diplomat)."
+  [repo-sessoes roster-da-casa ator sessao-id relogio]
+  (some-> (chamada-da-sessao* repo-sessoes roster-da-casa ator sessao-id relogio
+                              :sessao/ver-quorum logic/pode-ver-quorum-da-sessao?)
+          (select-keys [:sessao-id :sessao-estado :instante :data-de-composicao :composicao-resolvida-em
+                        :sem-registro-de-presenca :quorum])))
 
 ;; ---------- §22.6 eixo C — o ATO da CHAMADA CONDUZIDA (Etapa 2d) ----------
 
