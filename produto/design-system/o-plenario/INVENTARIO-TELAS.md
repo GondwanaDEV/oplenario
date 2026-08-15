@@ -416,8 +416,24 @@ Não é "o novo" — é candidato das auditorias, gatilho = cliente validado:
   pedir; prazo ANPD `[GAP]`) · Carta de Serviços 13.460 (puxar cedo — link morto em tela publicada) · Agenda
   pública (forma **pública/lista**, não grade de calendário) · Expediente recebido/correspondência (cotidiano de
   maior volume) · cockpit-comissão · home-cockpit-admin · progresso/diff de migração operador.
-- **Profundidade conhecida (§4):** espécies no editor (3.16) · diff de versões (3.4) · apensação (3.6) · presença
-  (4.5) · Mesa Diretora (2.2) · registro DOM (3.20) · billing (12.2).
+- **Profundidade conhecida (§4):** espécies no editor (3.16) · diff de versões (3.4) · apensação (3.6) ·
+  ~~presença (4.5)~~ **✅ FEITA (15/08) — `telas/chamada.html`** · Mesa Diretora (2.2) · registro DOM (3.20) ·
+  billing (12.2).
+
+  > **`chamada.html` — A chamada · folha de presença da sessão** (rota do produto
+  > `/sessoes/[id]/chamada`, papel `secretario`). Arquétipo **cabine ao vivo** com o palco ocupado
+  > por lista densa; 2ª prova do arquétipo. Assinatura = **hemiciclo vivo ancorado à linha**
+  > (3º uso da receita de âncora → promoção). Cobre os 6 estados de presença, os 4 estados da
+  > folha (em curso · registrada/ao vivo · sessão encerrada somente-leitura · sem composição) e o
+  > canal degradado. **Honestidades que a tela carrega de propósito:** a ordem da chamada é
+  > `[Regimento]` e não se inventa · o quórum de instalação/deliberação é `[Regimento]` e o
+  > denominador vem do servidor, nunca recalculado no cliente · o licenciado aparece na folha mas
+  > **fica fora do denominador** (regra FECHADA em `logic/contar-quorum`: quem compõe a Casa na
+  > licença é o suplente; o `[GAP]` real e estreito é que o suplente não se convoca por aqui) ·
+  > `presencasForaDoRoster` é *fail-loud* e fica
+  > visível · o par (hora do fato, hora do registro) aparece sempre, para o jurídico distinguir
+  > correção de saída real. AA medido: **180 textos × 2 temas × 6 estados = 0 falhas; 18 gráficos
+  > × 2 temas = 0 reprovados; 0 alvos < 44px**.
 - **Acoplados (segurar até a dependência aterrar):** onboarding DNS self-serve de e-mail (acoplado ao white-label
   diferido) · selo de proveniência de vendor (acoplado ao failover não-materializado).
 

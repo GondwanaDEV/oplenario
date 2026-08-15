@@ -32,7 +32,11 @@
     display: inline-flex; align-items: center; gap: 0.5rem;
     font-family: var(--mono); font-size: var(--t-13); font-weight: 600;
     letter-spacing: 0.08em; text-transform: uppercase; color: var(--acento-texto);
-    padding: 0.32rem 0.7rem; border: 1px solid rgba(217,84,43,.35); background: rgba(217,84,43,.1); border-radius: 999px;
+    /* MEDIDO 4.10 no CLARO com o tint de telha (rgba(217,84,43,.1)) sobre a barra: é a armadilha §5.1
+       "--acento-texto sobre o body = 4.6, não empilhe sobre fundo mais escuro sem remedir" acontecendo.
+       --surface (o tom mais claro) devolve 5.12 claro / 5.61 escuro. Achado ao desenhar `chamada.html`,
+       que herdou esta pílula. */
+    padding: 0.32rem 0.7rem; border: 1px solid var(--acento-texto); background: var(--surface); border-radius: 999px;
   }
   .ao-vivo .pulso { width: 9px; height: 9px; border-radius: 50%; background: var(--telha); flex: 0 0 auto; animation: pulso 1.8s ease-out infinite; }
   @keyframes pulso { 0% { box-shadow: 0 0 0 0 rgba(217,84,43,.5);} 70% { box-shadow: 0 0 0 7px rgba(217,84,43,0);} 100% { box-shadow: 0 0 0 0 rgba(217,84,43,0);} }
@@ -129,6 +133,9 @@
   .voto-pill-nao .g { background: var(--telha); }
   .voto-pill-abs { color: var(--cobalto); background: rgba(30,95,168,.12); border: 1px solid rgba(30,95,168,.3); }
   [data-tema="escuro"] .voto-pill-abs { color: var(--foco); }
+  /* MEDIDO 4.37 no escuro com --acento-texto sobre o tint de telha — clareia o texto (o fundo já é
+     translúcido; mexer no fundo mudaria a família de chips inteira). */
+  [data-tema="escuro"] .voto-pill-nao { color: #FA9877; }
   .voto-pill-abs .g { background: var(--cobalto); }
 
   /* tira de demonstração: cenário do placar (maioria ↔ empate) — scaffolding */
@@ -171,7 +178,10 @@
   .tribuna-quem { display: flex; align-items: center; gap: 0.7rem; }
   .tribuna-quem .av { width: 40px; height: 40px; background: var(--jade); }
   .tribuna-quem b { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); display: block; line-height: 1.2; }
-  .tribuna-quem span { font-size: var(--t-12); color: var(--texto-2); }
+  /* `div span` de propósito: `.tribuna-quem span` (0,1,1) derrotava o `color:#fff` de `.avatar`
+     (0,1,0) do chassi e pintava as INICIAIS de cinza sobre o jade — medido 1.20 no claro / 3.96 no
+     escuro. Mesma armadilha de especificidade documentada em GUIDELINES §8 passo 6. */
+  .tribuna-quem div span { font-size: var(--t-12); color: var(--texto-2); }
   .tribuna-tempo { display: flex; align-items: baseline; justify-content: space-between; margin: 1rem 0 0.4rem; }
   .tribuna-tempo .rotulo { font-family: var(--mono); font-size: var(--t-12); text-transform: uppercase; letter-spacing: .08em; color: var(--texto-2); }
   .tribuna-tempo .timer { font-family: var(--mono); font-weight: 600; font-size: var(--t-28); color: var(--marca); letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }

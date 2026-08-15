@@ -75,7 +75,11 @@ Em conflito, o código prevalece sobre este doc.
 | **Preenchimento de gráfico com cor de marca ESCURA sobre trilho escuro** (barras: jade/cobalto/telha sobre `--surface`) | no **escuro** o fill escuro fica < 3:1 vs o trilho → ~1.5–2.5 | override `[data-tema="escuro"]` clareando o fill (jade→`#43BD93`/`#2C8A66`, cobalto→`--foco`, telha→`#F0794B`). Já aconteceu em transparencia-fiscal + estatísticas. |
 | **Branco sobre `--telha` em botão** (`.btn-encerrar`) | era 4.0 (corrigido no chassi 22/06) | **já resolvido**: o chassi usa `--telha-fundo` (5.44). Não reintroduzir `var(--telha)` como fundo de texto branco. |
 | **`.merge` (campo mesclado) sobre `--papel` no escuro** (`--merge` #B9421F + `--merge-fundo`) | **3.72** no escuro (`--papel` mais cremoso + tinta laranja) | **mitigado** pelo sublinhado de 2px (`--merge`) = sinal gráfico ≥3, não-cor. Token compartilhado por 4 telas — **passe futuro de token** (escurecer `--merge` no escuro), não re-tonalizar num commit de promoção. Medido na Fase A §5.2. |
-| **Pílula/segmento SELECIONADO preenchido com `--marca` + texto branco** (toggle, segmented control) | **2.35** no **escuro** (o jade `--marca` clareia no escuro → branco-sobre-claro falha) | preenchimento **invertido**: fundo `var(--texto)` + texto `var(--surface)` — contrasta nos 2 temas (15.51 claro / 12.62 escuro). Não usar cor de marca como fundo de texto branco em estado selecionado. Medido na Fase B §5.2 (toggle de demo do editor). |
+| **Pílula/segmento SELECIONADO preenchido com `--marca` + texto branco** (toggle, segmented control) | **2.35** no **escuro** (o jade `--marca` clareia no escuro → branco-sobre-claro falha) | preenchimento **invertido**: fundo `var(--texto)` + texto `var(--surface)` — contrasta nos 2 temas (15.51 claro / 12.62 escuro). Não usar cor de marca como fundo de texto branco em estado selecionado. Medido na Fase B §5.2 (toggle de demo do editor); **reconfirmado em `chamada` (15.51 / 12.62)**. |
+| **`.avatar` do chassi reusado com FUNDO trocado** (`background: var(--texto-2)` p/ ausentes) | **2.28** no **escuro** — o chassi fixa `color:#fff` (nasceu sobre marca escura) e `--texto-2` **inverte** de claridade (#4C574F → #9FB0A4), virando branco-sobre-claro | `color: var(--surface)`, que inverte junto = **7.11 claro / 6.86 escuro**. Regra geral: ao trocar o FUNDO de um componente herdado, remeça o par nos 2 temas e prefira tokens que invertem em conjunto (`--texto`/`--surface`) a cor literal. Medido em `chamada`. |
+| **`--acento-texto` sobre tint da PRÓPRIA telha dentro da barra `.topo`** (pílula "Ao vivo": texto telha sobre `rgba(217,84,43,.1)`) | **4.10** — é o caso "não empilhe sobre fundo mais escuro sem remedir" acontecendo de fato | fundo `var(--surface)` (o tom mais claro) = **5.12 claro / 5.61 escuro**. ⚠ **`sessao-ao-vivo.html` tem a MESMA pílula com o tint e herda a falha** — corrigir no próximo passe daquela tela. Medido em `chamada`. |
+| **`color` de componente do chassi derrotado por regra de ELEMENTO da tela** (`.tribuna-quem span` sobre `.avatar`) | **1.20** no claro / 3.96 no escuro — as INICIAIS do avatar saíam cinza sobre o jade | a regra da tela é (0,1,1) e o `color:#fff` do componente é (0,1,0): **quem perde é o componente**. Escopar a regra da tela ao que ela realmente quer pintar (`.tribuna-quem div span`). É a mesma armadilha de especificidade do §8 passo 6, aqui com consequência de CONTRASTE. Medido em `sessao-ao-vivo` — passou meses na tela HERO. |
+| **Borda de campo pela receita "58% mix" de `--texto-2`** | **2.68** — a receita documentada em `PADROES §3` enunciava "≥3:1" e prescrevia um mix que não entrega | **78% mix** = 3.0+ nos 2 temas sobre `--surface-2`. Superfície diferente muda o resultado com o mesmo mix: **meça na sua superfície, não confie no número da receita**. Medido em `chamada`. |
 
 ## 6. Integridade de domínio (não inventar mecânica)
 
@@ -99,13 +103,31 @@ Em conflito, o código prevalece sobre este doc.
 
 1. Servir a raiz: `python3 -m http.server 8755`. Abrir a tela linkando `../sistema/`.
 2. Conferir os **dois temas** (toggle ou `data-tema` via DevTools). Verificar que todo `var()` resolve.
-3. **Medir contraste em pixel composto** (compositando o fundo pela cadeia de ancestrais, tratando
+3. 🔴 **DESLIGAR as transições ANTES de qualquer leitura.** Injete
+   `*,*::before,*::after{transition:none!important;animation:none!important}`. O chassi anima
+   `color`/`background-color` (120–250ms) e `getComputedStyle` durante a transição devolve a cor
+   **interpolada** — falha falsa. Medido: 3 componentes corretos reprovaram (2.07 / 2.07 / 1.78)
+   ao lado de 1 falha real, na mesma passada. **O flush de layout não resolve** — ele força
+   reflow, não conclui a transição. Quando um lote reprova junto, suspeite do instrumento antes
+   de consertar os alvos.
+4. **Medir contraste em pixel composto** (compositando o fundo pela cadeia de ancestrais, tratando
    `rgb()` 0–255 **e** `color(srgb …)` 0–1). **Um tema por chamada**, com flush de layout
    (`void document.body.offsetHeight`) após trocar o tema — medir os dois temas numa só passada
    gera leitura defasada para elementos de fundo transparente (artefato conhecido).
-4. Conferir **mobile** (≈390) e **desktop**; telas-herói passam por **crítica adversarial** (workflow)
-   antes do commit.
-5. Só então: commit (uma tela por commit, na branch de design).
+5. **Varrer TODO texto visível, não uma lista curada** — e afirmar o volume inspecionado
+   (ex.: "180 textos × 2 temas × 6 estados = 0 falhas"). Zero achados e "não rodou" têm a mesma
+   saída; só o volume distingue.
+6. **Asserção por ESTADO da tela.** Para cada par mutuamente exclusivo (em curso ↔ registrada,
+   cheia ↔ vazia, editável ↔ somente-leitura), contar os elementos visíveis dos dois grupos e
+   falhar se aparecerem juntos. Uma utilitária `.classe{display:none}` (0,1,0) **perde** para
+   regra de elemento do chassi como `.comando-ctx b{display:block}` (0,1,1) — sintoma real em
+   `chamada`: a folha anunciava uma chamada que não tinha acontecido. Piso: `.x.x` = (0,2,0).
+7. Conferir **mobile** (≈390) e **desktop**. No mobile, verificar também que **nenhum filho
+   escapa da caixa do pai** (`right > clientWidth`) — `overflow:hidden` esconde a rolagem e o
+   controle clipado fica inalcançável, sem produzir scroll horizontal que denuncie. E que a
+   grade da linha tem **placement explícito**: com auto-flow, células sobrando migram para fora
+   da faixa. Telas-herói passam por **crítica adversarial** (workflow) antes do commit.
+8. Só então: commit (uma tela por commit, na branch de design).
 
 ---
 
