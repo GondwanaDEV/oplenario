@@ -12,7 +12,7 @@
      - Layout so' com `block` / `inline-block` / `table` — NUNCA `float` (float atravessando quebra
        de pagina em openhtmltopdf e' fonte conhecida de deriva; ver `.superpowers/sdd/etapa5-folha-brief.md`).
 
-   Este CSS e' usado DUAS vezes pelo mesmo artefato: inline no <style> do HTML canonico (Fatia 2,
+   Este CSS e' usado DUAS vezes pelo mesmo artefato: inline no elemento style do HTML canonico (Fatia 2,
    este entregavel) e, sem nenhuma edicao, como a folha de estilo que o renderizador de PDF consome
    (Fatia 3) — e' o motivo do documento ter de parecer o MESMO nas duas representacoes. Por isso NAO
    ha' `@media print` nem `@media screen`: as regras de `@page` abaixo sao inertes num navegador
@@ -35,34 +35,25 @@
    Ficou com a proposta "DIRECAO DE ARTE", que recusa jade neste documento por inteiro — o papel e' da
    Camara, nao nosso; o nome do sistema aparece uma unica vez, em 7pt, na linha de emissao final.
 
-   TIPOGRAFIA (ver README + comentario de @font-face abaixo): DUAS familias, papel SEMANTICO —
-   serifa = o que a CASA declara (nomes, prosa, motivos, notas); mono = o que a MAQUINA atesta
-   (horas, contagens, enums, identificadores, rotulos de coluna). Nesta fatia usa-se pilha de
-   fallback generico; o @font-face com base64 entra na Fatia 3 (PDF), no ponto marcado abaixo — o
-   MESMO arquivo de fonte serve as duas representacoes, ou elas divergem tipograficamente.
+   TIPOGRAFIA — DECISAO FECHADA NA FATIA 3, NAO A DA FATIA 2 (ver `.superpowers/sdd/etapa5-folha-brief.md`):
+   DUAS familias, papel SEMANTICO — serifa = o que a CASA declara (nomes, prosa, motivos, notas); mono =
+   o que a MAQUINA atesta (horas, contagens, enums, identificadores, rotulos de coluna). A Fatia 2 previa
+   embutir um arquivo .ttf via @font-face (ver historico do arquivo); a Fatia 3 REVERTEU essa decisao:
+   NENHUM arquivo de fonte e' commitado ou embutido. As duas familias usam exclusivamente as 14 fontes-base
+   do formato PDF (Times-Roman/Bold/Italic/BoldItalic, Courier e variantes, Helvetica e variantes) — a
+   MESMA razao de ser das 14 fontes-base e' que a renderizacao delas e' garantida PELA ESPECIFICACAO do
+   formato, nao pelo que a maquina do leitor tem instalado, e WinAnsi/Latin-1 cobre o portugues inteiro (a
+   e i o u com agudo/circunflexo/til/crase, c cedilha). A pilha de cada familia COMECA com o nome "bonito"
+   (ex. "Times New Roman") e cai para o nome base-14 literal (ex. `Times`) antes do generico CSS (`serif`)
+   — o nome bonito nunca resolve nem no navegador (o SO troca por uma fonte instalada equivalente) nem no
+   PDF (openhtmltopdf-pdfbox so' registra os nomes base-14 `Times`/`Courier`/`Helvetica` e os genericos
+   `serif`/`monospace`/`sans-serif` — medido contra a biblioteca real, Fatia 3), entao o segundo elo da
+   pilha e' quem de fato resolve nos dois lugares — ver `.superpowers/sdd/etapa5-folha-brief.md`.
+   CARRY: se um cliente exigir PDF/A (arquivamento), a norma obriga TODA fonte embutida, inclusive
+   base-14 — ai' o embutimento volta. Nao antecipar agora.
 
    Piso absoluto de corpo: 7.5pt. Teto: 17pt (documento juridico nao grita). orphans/widows: 3.
    ============================================================================================ */
-
-/* ---------------------------------------------------------------------------------------------
-   @font-face — PLACEHOLDER da Fatia 3.
-
-   Nesta fatia (Fatia 2) as duas familias usam pilha de fallback generico (linha "font-family"
-   logo abaixo). A Fatia 3 troca CADA declaracao "font-family" desta folha por uma pilha que
-   COMECA com o nome embutido, preservando o fallback como segunda opcao, e insere aqui,
-   ANTES de qualquer regra que use as familias, quatro blocos @font-face (Serif 400, Serif 600,
-   Mono 400, Mono 500) apontando para o MESMO arquivo .ttf que `useFont()` registra no renderizador
-   de PDF (openhtmltopdf exige o binario nos dois caminhos, ou as duas representacoes do artefato
-   deixam de ser bit-a-bit o mesmo documento tipografico). Orcamento: <= 100 KB por face em base64,
-   teto duro 520 KB somando as quatro.
-
-   @font-face {
-     font-family: "FolhaSerif";
-     font-weight: 400;
-     src: url(data:font/ttf;base64,...) format("truetype");
-   }
-   ... (mais 3 blocos: Serif 600, Mono 400, Mono 500)
-   --------------------------------------------------------------------------------------------- */
 
 /* ---------------------------------------------------------------------------------------------
    @page — moldura A4. Inerte em navegador; ativa no PDF (Fatia 3). counter(pages) exige o motor
@@ -90,7 +81,7 @@ html, body, div, table, tr, td, th, p, ul, ol, li, h1, h2 {
 body {
   background-color: #FFFFFF;
   color: #1B2A20;
-  font-family: Georgia, "Times New Roman", serif; /* pilha "FolhaSerif" — ver @font-face acima */
+  font-family: "Times New Roman", Times, serif; /* base-14, sem Georgia — ver nota acima */
   font-size: 9pt;
   line-height: 12.5pt;
   width: 182mm;
@@ -112,11 +103,11 @@ td, th {
 }
 
 .mono {
-  font-family: "Courier New", monospace; /* pilha "FolhaMono" — ver @font-face acima */
+  font-family: "Courier New", Courier, monospace; /* base-14, sem embutimento — ver nota acima */
 }
 
 .serifa {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "Times New Roman", Times, serif;
 }
 
 .caps {
@@ -134,7 +125,7 @@ td, th {
 }
 
 .folha-cabecalho-casa .nome-casa {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "Times New Roman", Times, serif;
   font-weight: bold;
   font-size: 9pt;
   letter-spacing: 0.14em;
@@ -143,7 +134,7 @@ td, th {
 }
 
 .folha-cabecalho-casa .legislatura {
-  font-family: "Courier New", monospace;
+  font-family: "Courier New", Courier, monospace;
   font-size: 7.5pt;
   color: #586B5E;
   margin-top: 1.5mm;
@@ -152,21 +143,32 @@ td, th {
 /* =================================================================================================
    2 — IDENTIFICACAO DO DOCUMENTO (titulo + carimbo de uso restrito + faixa de identificacao)
 
-   HIERARQUIA DE HEADING: `.folha-titulo` e' um <h1> e `.folha-secao-titulo` sao <h2> — nao <div>. Num
-   documento de 14 secoes numeradas isto nao e' formalidade: o MESMO HTML canonico e' servido num
-   <iframe> na tela da Fatia 6, e o atalho de navegacao por heading e' o mecanismo primario de
+   HIERARQUIA DE HEADING: `.folha-titulo` e' a tag h1 e `.folha-secao-titulo` sao a tag h2 — nunca a tag
+   div. Num documento de 14 secoes numeradas isto nao e' formalidade: o MESMO HTML canonico e' servido
+   num elemento iframe na tela da Fatia 6, e o atalho de navegacao por heading e' o mecanismo primario de
    orientacao de quem usa leitor de tela. A aparencia continua toda vinda da CLASSE (o reset acima
    zera margin/padding de h1/h2), entao trocar a tag nao mexe em um milimetro do papel.
 
-   CARRY PARA A FATIA 3 (outline/marcadores do PDF): o juridico que arquiva esta folha procura "secao 8"
-   num visualizador de PDF, e para isso o PDF precisa de outline. O mecanismo do openhtmltopdf NAO foi
-   verificado contra a fonte nesta fatia (a dependencia ainda nao existe no deps.edn) — ha' dois
-   candidatos, o elemento <bookmarks> no <head> e a propriedade CSS -fs-bookmark-level. Fica FORA deste
+   CARRY (outline/marcadores do PDF, ainda ABERTO apos a Fatia 3): o juridico que arquiva esta folha
+   procura "secao 8" num visualizador de PDF, e para isso o PDF precisa de outline. A dependencia ja'
+   existe no deps.edn desde a Fatia 3, mas o mecanismo de outline em si NAO foi exercitado — ha' dois
+   candidatos, o elemento bookmarks dentro do head e a propriedade CSS -fs-bookmark-level. Fica FORA deste
    arquivo ate' ser medido: escrever aqui uma propriedade inventada seria pior que a ausencia, porque
    pareceria resolvido. A hierarquia h1/h2 acima e' o pre-requisito dos DOIS caminhos.
+
+   MEDIDO NA FATIA 3, CONTRA A FONTE: `withHtmlContent` (openhtmltopdf-core, sem modulo de parser
+   lenient publicado no Maven Central para este grupo) usa um parser XML ESTRITO — nao um parser HTML5
+   tolerante. Um sinal de menor-que ou um "e comercial" cru dentro do proprio elemento style (mesmo
+   dentro de comentario CSS) quebra o parse com SAXParseException e o PDF nao nasce. Por isso este
+   arquivo, que e' inlinado LITERAL (comentarios inclusive) no HTML canonico, evita os dois nos
+   comentarios daqui em diante — nomeia a tag em prosa (a tag h1, por exemplo) em vez de citar o angulo.
+   Nao e' estilo; e' o mesmo tipo de restricao dura que motivou CSS 2.1/sem-flex acima, so' que
+   descoberta ao medir a Fatia 3, nao presumida na Fatia 2. Ver `serializador-folha.clj` (DOCTYPE em
+   maiusculas, mesmo motivo) e o relatorio da Fatia 3 (`.superpowers/sdd/etapa5-folha-brief.md`, que
+   registra o achado como correcao contra a fonte).
    ================================================================================================= */
 .folha-titulo {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "Times New Roman", Times, serif;
   font-weight: bold;
   font-size: 17pt;
   text-align: center;
@@ -192,7 +194,7 @@ td, th {
   display: inline-block;
   border: 0.8pt solid #1B2A20;
   padding: 1.5mm 3mm;
-  font-family: "Courier New", monospace;
+  font-family: "Courier New", Courier, monospace;
   font-size: 7pt;
   letter-spacing: 0.06em;
   color: #1B2A20;
@@ -200,7 +202,7 @@ td, th {
 }
 
 .folha-identificacao {
-  font-family: "Courier New", monospace;
+  font-family: "Courier New", Courier, monospace;
   font-size: 7.5pt;
   color: #586B5E;
   text-align: center;
@@ -214,7 +216,7 @@ td, th {
    3 — A SESSAO
    ================================================================================================= */
 .folha-secao-titulo {
-  font-family: "Courier New", monospace;
+  font-family: "Courier New", Courier, monospace;
   font-weight: bold;
   font-size: 8pt;
   letter-spacing: 0.10em;
@@ -238,7 +240,7 @@ td, th {
 }
 
 .tabela-sessao td.rotulo {
-  font-family: "Courier New", monospace;
+  font-family: "Courier New", Courier, monospace;
   font-size: 7pt;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -255,7 +257,7 @@ td, th {
 }
 
 .faixa-nao-realizada .rotulo-motivo {
-  font-family: "Courier New", monospace;
+  font-family: "Courier New", Courier, monospace;
   font-size: 7.5pt;
   color: #586B5E;
   text-transform: uppercase;
@@ -286,13 +288,13 @@ td, th {
 
 .tabela-quorum td.valor-quorum {
   text-align: right;
-  font-family: "Courier New", monospace;
+  font-family: "Courier New", Courier, monospace;
   font-size: 11pt;
   white-space: nowrap;
 }
 
 .nota-quorum {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "Times New Roman", Times, serif;
   font-size: 8pt;
   color: #586B5E;
   line-height: 11pt;
@@ -304,7 +306,7 @@ td, th {
    ================================================================================================= */
 .tabela-atos {
   margin-bottom: 2mm;
-  -fs-table-paginate: paginate; /* ver a nota em .tabela-linhas — SEM esta propriedade, o <thead> existe
+  -fs-table-paginate: paginate; /* ver a nota em .tabela-linhas — SEM esta propriedade, a tag thead existe
                                    no HTML e nao se repete no PDF. As duas pecas (thead + paginate) sao
                                    necessarias juntas; uma sozinha nao faz nada. */
 }
@@ -319,7 +321,7 @@ td, th {
 .tabela-atos col.membros { width: 30%; }
 
 .tabela-atos th {
-  font-family: "Courier New", monospace;
+  font-family: "Courier New", Courier, monospace;
   font-size: 7pt;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -329,7 +331,7 @@ td, th {
 }
 
 .tabela-atos td {
-  font-family: "Courier New", monospace;
+  font-family: "Courier New", Courier, monospace;
   font-size: 8.5pt;
   border-bottom: 0.5pt solid #8C8677;
   padding: 1.3mm 2mm 1.3mm 0;
@@ -360,7 +362,7 @@ td, th {
 }
 
 .tabela-linhas th {
-  font-family: "Courier New", monospace;
+  font-family: "Courier New", Courier, monospace;
   font-size: 7pt;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -391,7 +393,7 @@ td, th {
 }
 
 .tabela-linhas .nome-vereador {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "Times New Roman", Times, serif;
   font-weight: bold;
   font-size: 10pt;
   color: #1B2A20;
@@ -403,24 +405,24 @@ td, th {
    HTML resolve a camada de TEXTO (copiar do PDF, leitor de tela); esta regra resolve a VISUAL. */
 .tabela-linhas .nome-civil {
   display: block;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "Times New Roman", Times, serif;
   font-size: 7.5pt;
   color: #586B5E;
 }
 
 .tabela-linhas td.partido,
 .tabela-linhas td.mesa {
-  font-family: "Courier New", monospace;
+  font-family: "Courier New", Courier, monospace;
   font-size: 8pt;
 }
 
 .tabela-linhas td.situacao {
-  font-family: "Courier New", monospace;
+  font-family: "Courier New", Courier, monospace;
   font-size: 8pt;
 }
 
 .tabela-linhas td.hora {
-  font-family: "Courier New", monospace;
+  font-family: "Courier New", Courier, monospace;
   font-size: 8.5pt;
   text-align: right;
   white-space: nowrap;
@@ -436,7 +438,7 @@ td, th {
   display: inline-block;
   border: 0.8pt solid #B9421F;
   color: #B9421F;
-  font-family: "Courier New", monospace;
+  font-family: "Courier New", Courier, monospace;
   font-size: 7pt;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -445,7 +447,7 @@ td, th {
 }
 
 .folha-secao-texto {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "Times New Roman", Times, serif;
   font-size: 8.5pt;
   line-height: 12pt;
   color: #1B2A20;
@@ -472,7 +474,7 @@ td, th {
 .tabela-serie col.hora { width: 21%; }
 
 .tabela-serie th {
-  font-family: "Courier New", monospace;
+  font-family: "Courier New", Courier, monospace;
   font-size: 7pt;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -486,14 +488,14 @@ td, th {
   border-bottom: 0.5pt solid #8C8677;
   padding: 1.3mm 1.5mm;
   font-size: 8.5pt;
-  font-family: "Courier New", monospace;
+  font-family: "Courier New", Courier, monospace;
 }
 
 .tabela-serie tr.grupo-vereador td {
   border-top: 0.5pt solid #1B2A20;
   border-bottom: none;
   padding-top: 3mm;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "Times New Roman", Times, serif;
   font-weight: bold;
   font-size: 9.5pt;
   color: #1B2A20;
@@ -526,7 +528,7 @@ td, th {
 .tabela-justificativas col.decidido { width: 17%; }
 
 .tabela-justificativas th {
-  font-family: "Courier New", monospace;
+  font-family: "Courier New", Courier, monospace;
   font-size: 7pt;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -544,17 +546,17 @@ td, th {
   border-bottom: 0.5pt solid #8C8677;
   padding: 1.6mm 1.5mm;
   font-size: 9pt;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "Times New Roman", Times, serif;
 }
 
 .tabela-justificativas td.estado {
-  font-family: "Courier New", monospace;
+  font-family: "Courier New", Courier, monospace;
   font-size: 8pt;
   text-transform: uppercase;
 }
 
 .tabela-justificativas td.decidido {
-  font-family: "Courier New", monospace;
+  font-family: "Courier New", Courier, monospace;
   font-size: 8pt;
   text-align: right;
   white-space: nowrap;
@@ -585,7 +587,7 @@ td, th {
 }
 
 .tabela-conferencia .rotulo-assinatura {
-  font-family: "Courier New", monospace;
+  font-family: "Courier New", Courier, monospace;
   font-size: 7pt;
   color: #586B5E;
   margin-top: 1.5mm;
@@ -603,7 +605,7 @@ td, th {
 }
 
 .folha-congelamento .campo {
-  font-family: "Courier New", monospace;
+  font-family: "Courier New", Courier, monospace;
   font-size: 8pt;
   margin-bottom: 1mm;
 }
@@ -627,7 +629,7 @@ td, th {
   margin-bottom: 2.5mm;
   padding-left: 6mm;
   text-indent: -6mm;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "Times New Roman", Times, serif;
   font-size: 8.5pt;
   line-height: 12pt;
   color: #1B2A20;
@@ -635,7 +637,7 @@ td, th {
 }
 
 .nota .num-nota {
-  font-family: "Courier New", monospace;
+  font-family: "Courier New", Courier, monospace;
   font-weight: bold;
   font-size: 8pt;
   color: #1B2A20;
@@ -649,7 +651,7 @@ td, th {
 }
 
 sup.chamada-nota {
-  font-family: "Courier New", monospace;
+  font-family: "Courier New", Courier, monospace;
   font-size: 6.5pt;
 }
 
@@ -660,7 +662,7 @@ sup.chamada-nota {
   margin-top: 6mm;
   padding-top: 2mm;
   border-top: 0.5pt solid #8C8677;
-  font-family: "Courier New", monospace;
+  font-family: "Courier New", Courier, monospace;
   font-size: 7pt;
   color: #586B5E;
   text-align: center;

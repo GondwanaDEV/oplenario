@@ -59,7 +59,11 @@
   EXIBICAO (nunca persistido por este consumidor), mas o de MAIOR raio de dano SILENCIOSO se o fuso
   estivesse errado: e' o mesmo bug desta constante (a data recuando um dia em Fortaleza) que motivou a
   disciplina 'fuso explicito, nunca o default da JVM' descrita aqui, e um documento CONGELADO com hora
-  errada nao tem correcao depois — vira ata.
+  errada nao tem correcao depois — vira ata. (f) `sessoes/components/renderizador-pdf` (Etapa 5 fatia 3) —
+  o `Calendar` de `CreationDate`/`ModificationDate` do PDF congelado vem do MESMO fuso que a hora impressa
+  no papel (item e acima), para o metadado do arquivo e o texto visivel nunca contarem horas diferentes.
+  Nao efemero, nao persistido por este consumidor — mas grava dentro de um artefato binario IMUTAVEL, e o
+  mesmo raio de dano do item (e) se aplica: sem correcao depois de congelado.
 
   O QUE ESTA CONSTANTE RESOLVE: ate aqui o fuso era literal espalhado pelas bordas; o host
   (`rotas.clj`) tinha DOIS. Ter um lugar so' e' o pre-requisito de transformar o fuso em

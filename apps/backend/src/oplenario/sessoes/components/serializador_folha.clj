@@ -492,7 +492,11 @@
          emissao-html)))
 
 (defn- documento-html [documento]
-  (str "<!doctype html>"
+  ;; DOCTYPE em MAIUSCULAS — medido contra a fonte na Fatia 3 (PDF): openhtmltopdf-core usa parser XML
+  ;; estrito p/ `withHtmlContent`, e "<!doctype html>" em minusculas produz SAXParseException ("markup ...
+  ;; preceding the root element must be well-formed"); "<!DOCTYPE html>" e' aceito pelos DOIS caminhos —
+  ;; navegador (case-insensitive por spec HTML5) e o renderizador de PDF. Ver folha.css §TIPOGRAFIA.
+  (str "<!DOCTYPE html>"
        "<html lang=\"pt-BR\">"
        "<head>"
        "<meta charset=\"utf-8\"/>"
