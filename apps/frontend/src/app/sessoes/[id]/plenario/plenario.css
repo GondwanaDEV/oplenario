@@ -6,7 +6,10 @@
   display: inline-flex; align-items: center; gap: 0.5rem;
   font-family: var(--mono); font-size: var(--t-13); font-weight: 600;
   letter-spacing: 0.08em; text-transform: uppercase; color: var(--acento-texto);
-  padding: 0.32rem 0.7rem; border: 1px solid rgba(217, 84, 43, .35); background: rgba(217, 84, 43, .1); border-radius: 999px;
+  /* MEDIDO 4.10 no CLARO com o tint de telha (rgba(217,84,43,.1)) sobre a barra — reprova AA. Armadilha
+     §5.1: --acento-texto sobre o body dá 4.6, empilhar sobre fundo mais escuro derruba. --surface devolve
+     5.12 claro / 5.61 escuro. Corrigido no MOCK em 62f1668; esta cópia de produção ficou para trás. */
+  padding: 0.32rem 0.7rem; border: 1px solid var(--acento-texto); background: var(--surface); border-radius: 999px;
 }
 .ao-vivo.pausada { color: var(--aviso-texto); border-color: color-mix(in srgb, var(--amarelo) 60%, transparent); background: color-mix(in srgb, var(--amarelo) 16%, var(--surface)); }
 .ao-vivo.off { color: var(--texto-2); border-color: var(--linha); background: var(--surface-2); }
@@ -27,7 +30,10 @@
 .fase .ord { font-family: var(--mono); font-size: var(--t-12); width: 22px; height: 22px; flex: 0 0 auto; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid var(--linha); color: var(--texto-2); }
 .fase.feita .ord { background: var(--acao); border-color: var(--acao); color: var(--acao-texto); }
 .fase.atual { color: var(--texto); font-weight: 600; }
-.fase.atual .ord { border-color: var(--telha); color: var(--acento-texto); background: rgba(217, 84, 43, .12); }
+/* MEDIDO 4.42 no CLARO — mesma armadilha da pílula .ao-vivo acima: --acento-texto sobre um wash de
+   telha. Sem o wash (fundo = a própria superfície) a borda continua marcando a fase atual e o número
+   volta a passar. */
+.fase.atual .ord { border-color: var(--telha); color: var(--acento-texto); background: var(--surface); }
 .fase .nome { font-family: var(--display); font-weight: 600; letter-spacing: -0.01em; text-transform: capitalize; }
 
 /* cabine */

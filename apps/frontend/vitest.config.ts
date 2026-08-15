@@ -15,7 +15,12 @@ export default defineConfig({
     // explícito, como no backend (APP_ENV). A suíte declara "test" p/ a maioria dos casos exercitar o modo
     // dev (token síncrono, sem /eu); quem prova o modo real sobrepõe com vi.stubEnv por teste. Sem isto o
     // default seguro colocaria a suíte inteira em modo real — que é a intenção do default, não da suíte.
-    env: { NEXT_PUBLIC_APP_ENV: "test" },
+    // TZ: o fuso da Casa (beachhead Fortaleza), não o do runner. Sem isto a suíte roda em UTC e a classe
+    // inteira de defeito "data ISO sem hora vira meia-noite UTC e recua um dia ao formatar" fica
+    // INVISÍVEL — em UTC o resultado é acidentalmente certo. Foi assim que `formatarData("2026-08-15")`
+    // devolvendo `14/08/2026` em Fortaleza passou despercebido até a verificação em browser (15/08/2026).
+    // Um fuso a oeste cravado faz o teste poder reprovar; UTC faz a asserção não significar nada.
+    env: { NEXT_PUBLIC_APP_ENV: "test", TZ: "America/Fortaleza" },
     // Sobe o teto do `waitFor`/`findBy*` do Testing Library — ver o porquê medido em vitest.setup.ts.
     setupFiles: ["./vitest.setup.ts"],
   },

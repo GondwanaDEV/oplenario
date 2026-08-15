@@ -10,9 +10,18 @@ const FORMATO_DATA_BR = new Intl.DateTimeFormat("pt-BR", {
   year: "numeric",
 });
 
+/** Data SEM hora (`2026-08-15`). O parser de `new Date` trata este formato como meia-noite UTC, e o
+ *  `Intl` formata no fuso LOCAL — em qualquer fuso a oeste de Greenwich o dia recua. Medido em
+ *  `America/Fortaleza` (o fuso do beachhead): `formatarData("2026-08-15")` devolvia `14/08/2026`.
+ *  Achado na verificação em browser da tela de chamada (15/08/2026), onde `data-de-composicao` é
+ *  date-only. Com hora (`...T00:00:00`) o mesmo parser já é local e o resultado sempre foi correto —
+ *  por isso o defeito passou: os 4 chamadores originais que consolidaram este util passam timestamp. */
+const SO_DATA = /^\d{4}-\d{2}-\d{2}$/;
+
 export function formatarData(iso: string): string {
   try {
-    return FORMATO_DATA_BR.format(new Date(iso));
+    // `T00:00:00` sem sufixo de fuso força a interpretação LOCAL — o dia sai como está escrito.
+    return FORMATO_DATA_BR.format(new Date(SO_DATA.test(iso) ? `${iso}T00:00:00` : iso));
   } catch {
     return iso;
   }
