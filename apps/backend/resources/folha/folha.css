@@ -397,7 +397,12 @@ td, th {
   color: #1B2A20;
 }
 
+/* `display: block` e nao margem: o nome civil e' a SEGUNDA LINHA da celula, nao um sufixo do nome
+   parlamentar. Inline, os dois encostavam e o documento imprimia "BrunoBruno Almeida Nogueira" — achado
+   de verificacao em browser, invisivel para a suite (o HTML estava bem-formado). O separador literal no
+   HTML resolve a camada de TEXTO (copiar do PDF, leitor de tela); esta regra resolve a VISUAL. */
 .tabela-linhas .nome-civil {
+  display: block;
   font-family: Georgia, "Times New Roman", serif;
   font-size: 7.5pt;
   color: #586B5E;

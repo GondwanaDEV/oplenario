@@ -320,3 +320,21 @@
     (is (str/includes? html "não cadastrad"))
     (is (str/includes? html "não registrada")
         "legislatura nao resolvida tem de virar texto explicito, nunca celula vazia")))
+
+;; ---------- o nome parlamentar e o nome civil nao podem encostar ----------
+;; Achado de VERIFICACAO EM BROWSER (15/08/2026): o HTML estava bem-formado e a suite verde, e mesmo assim a
+;; folha imprimia "BrunoBruno Almeida Nogueira" — dois <span> irmaos inline sem separador. Num documento
+;; juridico isso le' como erro de cadastro. O conserto tem DUAS camadas e as duas sao testadas aqui: o
+;; separador literal (camada de TEXTO — copiar do PDF, leitor de tela) e o `display: block` (camada VISUAL).
+
+(deftest nome-civil-nao-encosta-no-nome-parlamentar
+  (let [{:keys [html]} (render-str documento-base)]
+    (is (not (str/includes? html "</span><span class=\"nome-civil\">"))
+        "os dois <span> nao podem ser adjacentes sem separador — na camada de texto isso cola os nomes")
+    (is (str/includes? html "</span> <span class=\"nome-civil\">")
+        "tem de haver separador literal entre o nome parlamentar e o nome civil")))
+
+(deftest css-poe-o-nome-civil-em-linha-propria
+  (let [{:keys [html]} (render-str documento-base)]
+    (is (re-find #"\.tabela-linhas \.nome-civil \{[^}]*display:\s*block" html)
+        "o nome civil e' a SEGUNDA LINHA da celula; inline ele encosta no nome parlamentar")))

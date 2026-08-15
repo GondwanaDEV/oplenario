@@ -184,8 +184,13 @@
          "<td class=\"num\">" (if numero (dois-digitos numero) "") "</td>"
          "<td>"
          "<span class=\"nome-vereador\">" nome "</span>"
-         (when civil (str "<span class=\"nome-civil\">" (esc civil) "</span>"))
-         (when inconsistente? "<span class=\"nome-civil\">Cadastro incompleto</span>")
+         ;; O separador literal NAO e' decorativo e nao pode ser trocado por margem de CSS: ele existe para a
+         ;; CAMADA DE TEXTO. Sem ele o documento renderiza certo (o CSS poe `.nome-civil` em bloco) mas quem
+         ;; copia do PDF, ou le com leitor de tela, recebe "BrunoBruno Almeida Nogueira" colado — num
+         ;; documento juridico isso passa por erro de cadastro. Achado de verificacao em BROWSER: nenhum teste
+         ;; de unidade via, porque o HTML estava bem-formado e so' a RENDERIZACAO estava errada.
+         (when civil (str " <span class=\"nome-civil\">" (esc civil) "</span>"))
+         (when inconsistente? " <span class=\"nome-civil\">Cadastro incompleto</span>")
          (when risco? "<div class=\"rotulo-risco\">Sem assento na data</div>")
          "</td>"
          "<td class=\"partido\">" partido "</td>"
