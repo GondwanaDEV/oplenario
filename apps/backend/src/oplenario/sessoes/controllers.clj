@@ -566,6 +566,34 @@
                     :decidido-por (:identidade-id ator)})
                  :justificativa-id justificativa-id))))))
 
+(defn- projetar-chamada
+  "PURO. A PROJECAO da chamada a partir dos insumos JA LIDOS (`:sessao :instante :presencas :justificativas
+  :chamadas-conduzidas` — um unico snapshot do Repo) mais o `roster` da data. Nao toca no banco.
+
+  Existe extraida (Etapa 5 fatia 1, revisao) porque DOIS chamadores precisam da MESMA projecao a partir de
+  leituras diferentes: `chamada-da-sessao*` (que le' `repo/chamada-da-sessao`) e `folha-da-sessao` (que le'
+  `repo/folha-da-sessao`, o mesmo mais a serie). A alternativa — a folha CHAMAR `chamada-da-sessao*` e
+  depois voltar ao banco pelo resto — e' justamente o defeito que a revisao achou: cada chamada ao Repo e'
+  uma tx nova, e o documento saia montado de snapshots diferentes. Aqui a projecao viaja; a leitura, nao."
+  [{:keys [sessao instante presencas justificativas chamadas-conduzidas]} roster data agora]
+  ;; A UNIAO (roster + presencas orfas) e a derivacao vem de `logic`, e nao montadas aqui: e' a MESMA funcao
+  ;; que o Repo usa para congelar o denominador no ato de chamada conduzida. Duas montagens da uniao davam
+  ;; dois denominadores para a mesma sessao (revisao MAJOR).
+  (let [linhas (mapv linha-para-o-adapter
+                     (logic/derivar-linhas-da-chamada roster presencas justificativas))]
+    {:sessao-id (:id sessao)
+     :sessao-estado (:estado sessao)
+     :instante instante
+     :data-de-composicao data
+     :composicao-resolvida-em agora
+     :sem-registro-de-presenca (empty? presencas)
+     :linhas linhas
+     :quorum (logic/contar-quorum linhas)
+     ;; Etapa 2d: distingue "ninguem conduziu a chamada ainda" (vazio) de "a chamada aconteceu e a Casa toda
+     ;; faltou" (nao-vazio + `:sem-registro-de-presenca` true) — o read-model de presenca_evento sozinho e'
+     ;; cego a essa diferenca (os dois casos produzem zero linhas nele).
+     :chamadas-conduzidas (vec chamadas-conduzidas)}))
+
 (defn- chamada-da-sessao*
   "O CORPO da chamada, parametrizado pela POLITICA da camada fina — `chamada-da-sessao` (nominal) e
   `quorum-da-sessao` (magra) sao os dois chamadores. Parametrizar a politica existe por corretude: as duas
@@ -601,28 +629,10 @@
   [repo-sessoes roster-da-casa ator sessao-id relogio acao politica]
   (let [ente-id (:ente-id ator)
         agora   (tempo/agora relogio)]
-    (when-let [{:keys [sessao instante presencas justificativas chamadas-conduzidas]}
-               (repo/chamada-da-sessao repo-sessoes ente-id sessao-id agora)]
+    (when-let [{:keys [sessao] :as lido} (repo/chamada-da-sessao repo-sessoes ente-id sessao-id agora)]
       (authz/check! ator acao sessao politica)
-      (let [data   (data-de-referencia sessao)
-            roster (roster-da-casa ente-id data)
-            ;; A UNIAO (roster + presencas orfas) e a derivacao vem de `logic`, e nao mais montadas aqui:
-            ;; e' a MESMA funcao que o Repo usa para congelar o denominador no ato de chamada conduzida.
-            ;; Duas montagens da uniao davam dois denominadores para a mesma sessao (revisao MAJOR).
-            linhas (mapv linha-para-o-adapter
-                         (logic/derivar-linhas-da-chamada roster presencas justificativas))]
-        {:sessao-id sessao-id
-         :sessao-estado (:estado sessao)
-         :instante instante
-         :data-de-composicao data
-         :composicao-resolvida-em agora
-         :sem-registro-de-presenca (empty? presencas)
-         :linhas linhas
-         :quorum (logic/contar-quorum linhas)
-         ;; Etapa 2d: distingue "ninguem conduziu a chamada ainda" (vazio) de "a chamada aconteceu e a Casa
-         ;; toda faltou" (nao-vazio + `:sem-registro-de-presenca` true) — o read-model de presenca_evento
-         ;; sozinho e' cego a essa diferenca (os dois casos produzem zero linhas nele).
-         :chamadas-conduzidas (vec chamadas-conduzidas)}))))
+      (let [data (data-de-referencia sessao)]
+        (projetar-chamada lido (roster-da-casa ente-id data) data agora)))))
 
 (defn chamada-da-sessao
   "A CHAMADA NOMINAL (`GET /sessoes/:id/chamada`, papel 'secretario' na borda) — o corpo inteiro vive em
@@ -700,7 +710,7 @@
   FECHADA MAIS a SERIE completa de eventos por vereador. NAO ha' congelamento nesta fatia (a linha do banco,
   os dois hashes/refs, e' Fatia 4) — esta funcao devolve o DOCUMENTO puro, formato-agnostico.
 
-  D1 (nao recalcula): reusa `chamada-da-sessao*` (a mesma que serve `chamada-da-sessao` nominal) para
+  D1 (nao recalcula): reusa `projetar-chamada` (a MESMA projecao que serve `chamada-da-sessao` nominal) para
   `:linhas`/`:quorum`/`:chamadas-conduzidas` — nao ha' aqui uma segunda passada por
   `logic/derivar-linhas-da-chamada`/`logic/contar-quorum`. O gate de authz e' o MESMO da chamada NOMINAL
   (`logic/pode-ver-sessao?`, acao propria `:sessao/ver-folha` so' para o audit distinguir): a folha carrega
@@ -711,19 +721,24 @@
   `instante-de-avaliacao` usa para congelar o instante), nunca pelo complemento dos estados 'abertos'
   (complemento aceitaria um estado NOVO e desconhecido — o caso em que ninguem pensou).
 
+  UM SO' SNAPSHOT (correcao de revisao MAJOR): TODAS as leituras vem de `repo/folha-da-sessao`, UMA tx. A
+  forma anterior encadeava quatro chamadas ao Repo (`chamada-da-sessao` + `buscar-sessao` +
+  `serie-de-eventos-da-sessao` + `listar-justificativas`), e cada chamada ao Repo abre uma tx NOVA — quatro
+  snapshots MVCC. A justificativa de ausencia e' um ato APARTADO, sem gate de estado de sessao (e' assim de
+  proposito: a Mesa a decide dias depois), entao ela PODE ser decidida entre a 1a e a 4a leitura: a mesma
+  justificativa saia `pendente` na linha derivada e `aprovada` no bloco cru, no MESMO documento. Um artefato
+  que a Fatia 4 congela em PDF e assina nao pode divergir de si mesmo. Depois do retorno do Repo, este ns
+  NAO volta ao banco: so' os dois seams de `cadastros` (roster e cabecalho), que sao outro modulo e outra
+  tx por definicao de fronteira (§22.10) — e nenhum deles alimenta a aritmetica do quorum.
+
   A SERIE usa a MESMA janela que a chamada: `piso-da-janela-de-presenca` (o dia civil da sessao) como piso,
-  o `:instante` ja' resolvido por `chamada-da-sessao*` (== `instante-de-avaliacao`) como teto. `piso` nil
+  o `:instante` (== `instante-de-avaliacao`) como teto — os dois resolvidos DENTRO da tx do Repo. `piso` nil
   (sessao sem `aberta-em`/`agendada-para` — improvavel numa sessao fechada, mas nao impossivel por CHECK)
   LANCA: sem piso nao ha' janela, e servir a serie sem filtro de piso vazaria eventos de fora da sessao
   para dentro do documento — o mesmo tipo de defeito que `instante-de-avaliacao` recusa a todo custo.
 
-  O SEGUNDO `buscar-sessao` (depois do lido dentro de `chamada-da-sessao*`) e' seguro: `aberta-em`/
-  `agendada-para` sao carimbos que nao mudam depois de setados, e a maquina de estados so' anda PRA FRENTE
-  a partir de fechada (`encerrada|nao_realizada -> arquivada`) — nao ha' corrida que desfaca o D6 ja'
-  verificado. Mesmo padrao de `registrar-chamada-conduzida`, que tambem re-le a sessao.
-
-  `justificativas` vem de `repo/listar-justificativas` (RAW, com `motivo` — LGPD) — as linhas de `chamada`
-  ja' derivaram o ESTADO a partir dela mas NAO carregam o texto do motivo (`LinhaChamada` nao o expoe).
+  `:justificativas` sai CRUA (com `motivo` — LGPD) da mesma leitura que derivou as linhas: as linhas de
+  `chamada` derivaram o ESTADO a partir dela mas NAO carregam o texto do motivo (`LinhaChamada` nao o expoe).
 
   `dados-da-casa` (seam injetado do host sobre `cadastros`, irmao LITERAL de `roster-da-casa`) resolve o
   cabecalho (nome/legislatura) NA DATA de composicao da chamada — nunca 'hoje' fechado dentro do seam.
@@ -731,28 +746,26 @@
   Devolve o DOCUMENTO (`gerador-folha/renderizar`), ou nil (sessao inexistente neste ente -> 404, mesmo
   contrato de `chamada-da-sessao`). Sessao ainda aberta/suspensa/agendada lanca `:conflito/folha-sessao-aberta`."
   [repo-sessoes roster-da-casa dados-da-casa ator sessao-id relogio]
-  (when-let [chamada (chamada-da-sessao* repo-sessoes roster-da-casa ator sessao-id relogio
-                                         :sessao/ver-folha logic/pode-ver-sessao?)]
-    (when-not (contains? logic/estados-sessao-fechada (:sessao-estado chamada))
-      (throw (ex-info "folha-da-sessao: so' sessao FECHADA tem folha"
-                      {:tipo :conflito/folha-sessao-aberta :sessao-id sessao-id
-                       :estado (:sessao-estado chamada)})))
-    (let [ente-id (:ente-id ator)
-          sessao  (repo/buscar-sessao repo-sessoes ente-id sessao-id)
-          piso    (or (logic/piso-da-janela-de-presenca sessao)
-                      (throw (ex-info "folha-da-sessao: sessao fechada sem piso de janela de presenca"
-                                      {:tipo :servidor/erro :sessao-id sessao-id})))
-          teto    (:instante chamada)
-          serie   (logic/agrupar-serie-por-vereador
-                   (repo/serie-de-eventos-da-sessao repo-sessoes ente-id sessao-id piso teto))
-          justificativas (repo/listar-justificativas repo-sessoes ente-id sessao-id)]
-      (gerador-folha/renderizar
-       {:sessao {:id sessao-id :estado (:sessao-estado chamada)
-                 :motivo-nao-realizada (:motivo-nao-realizada sessao)}
-        :instante teto
-        :cabecalho-da-casa (dados-da-casa ente-id (:data-de-composicao chamada))
-        :linhas (:linhas chamada)
-        :quorum (:quorum chamada)
-        :serie serie
-        :justificativas justificativas
-        :atos-de-chamada-conduzida (:chamadas-conduzidas chamada)}))))
+  (let [ente-id (:ente-id ator)
+        agora   (tempo/agora relogio)]
+    (when-let [{:keys [sessao] :as lido} (repo/folha-da-sessao repo-sessoes ente-id sessao-id agora)]
+      (authz/check! ator :sessao/ver-folha sessao logic/pode-ver-sessao?)
+      (when-not (contains? logic/estados-sessao-fechada (:estado sessao))
+        (throw (ex-info "folha-da-sessao: so' sessao FECHADA tem folha"
+                        {:tipo :conflito/folha-sessao-aberta :sessao-id sessao-id
+                         :estado (:estado sessao)})))
+      (when (nil? (:piso lido))
+        (throw (ex-info "folha-da-sessao: sessao fechada sem piso de janela de presenca"
+                        {:tipo :servidor/erro :sessao-id sessao-id})))
+      (let [data    (data-de-referencia sessao)
+            chamada (projetar-chamada lido (roster-da-casa ente-id data) data agora)]
+        (gerador-folha/renderizar
+         {:sessao {:id sessao-id :estado (:estado sessao)
+                   :motivo-nao-realizada (:motivo-nao-realizada sessao)}
+          :instante (:instante chamada)
+          :cabecalho-da-casa (dados-da-casa ente-id (:data-de-composicao chamada))
+          :linhas (:linhas chamada)
+          :quorum (:quorum chamada)
+          :serie (logic/agrupar-serie-por-vereador (:serie lido))
+          :justificativas (:justificativas lido)
+          :atos-de-chamada-conduzida (:chamadas-conduzidas chamada)})))))

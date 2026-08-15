@@ -54,11 +54,6 @@
   (presenca-corrente [this ente-id sessao-id instante]
     "Ultimo evento de CADA vereador da sessao ate' `instante` (uma linha por vereador) — insumo cru da CHAMADA.")
   (listar-justificativas [this ente-id sessao-id] "Justificativas de ausencia da sessao (3o insumo da chamada).")
-  (serie-de-eventos-da-sessao [this ente-id sessao-id piso teto]
-    "A SERIE cronologica de eventos de presenca de CADA vereador, na janela [piso, teto] (a MESMA da
-     chamada — piso/teto ja' resolvidos pelo caller via `logic/piso-da-janela-de-presenca` +
-     `logic/instante-de-avaliacao`). Insumo da FOLHA (Etapa 5 fatia 1); nao confundir com `listar-presenca`
-     (a sessao inteira, sem janela) nem `presenca-corrente` (so' o ultimo evento por vereador).")
   (chamada-da-sessao [this ente-id sessao-id agora]
     "As QUATRO leituras da chamada (sessao + presenca corrente + justificativas + atos de chamada conduzida)
      numa UNICA tx do tenant, com o INSTANTE de avaliacao resolvido DENTRO dela a partir da sessao fresca
@@ -66,6 +61,24 @@
      :instante :presencas :justificativas :chamadas-conduzidas}, ou nil se a sessao nao existe neste ente (a
      borda traduz em 404). O roster de `cadastros` NAO entra aqui: e' outro modulo, resolvido por seam no
      host (§22.10).")
+  (folha-da-sessao [this ente-id sessao-id agora]
+    "As leituras da FOLHA (Etapa 5 fatia 1) numa UNICA tx do tenant: tudo o que `chamada-da-sessao` le'
+     MAIS a SERIE de eventos da janela. Devolve {:sessao :instante :presencas :justificativas
+     :chamadas-conduzidas :piso :serie}, ou nil se a sessao nao existe neste ente (404 na borda).
+
+     E' UM METODO SO' — e nao o controller encadeando `chamada-da-sessao` + `buscar-sessao` +
+     `serie-de-eventos-da-sessao` + `listar-justificativas` — porque cada chamada ao Repo abre uma tx NOVA
+     (`transacao` = `tenancy/com-tenant*` = `jdbc/with-transaction`), e leituras em tx diferentes veem
+     snapshots MVCC diferentes. A justificativa de ausencia e' escrita por um ATO APARTADO, deliberadamente
+     SEM gate de estado de sessao (`controllers`, §JUSTIFICATIVA): a Mesa pode decidi-la no meio do request
+     da folha. Em 4 tx, a MESMA justificativa saia 'pendente' na linha derivada (`:linhas`, lida na 1a) e
+     'aprovada' no bloco cru (`:justificativas`, lida na 4a) — o documento formal, que a Fatia 4 congela em
+     PDF, mentindo contra si mesmo. E' o TOCTOU que `chamada-da-sessao` ja' fechou uma vez (o comentario
+     dela descreve o mesmo defeito com presenca) e que a folha reabria pela porta da composicao.
+
+     `:piso` = `logic/piso-da-janela-de-presenca` da sessao lida AQUI (nil quando ela nao tem marco nenhum);
+     `:serie` so' e' lida quando ha' piso — sem janela nao ha' serie, e o controller e' quem decide se isso
+     e' erro (na folha, e'). O teto e' o mesmo `:instante` da chamada.")
   (registrar-chamada-conduzida! [this ente-id m]
     "Registra o ATO de chamada conduzida (Etapa 2d): o MESMO gate de estado+janela de `registrar-presenca!`
      roda DENTRO desta tx, sobre a sessao lida AQUI com `FOR SHARE` — nao sobre a leitura de authz do
@@ -242,8 +255,6 @@
     (transacao this ente-id #(presenca/presenca-corrente % ente-id sessao-id instante)))
   (listar-justificativas [this ente-id sessao-id]
     (transacao this ente-id #(presenca/listar-justificativas-da-sessao % ente-id sessao-id)))
-  (serie-de-eventos-da-sessao [this ente-id sessao-id piso teto]
-    (transacao this ente-id #(presenca/serie-de-eventos-da-sessao % ente-id sessao-id piso teto)))
   ;; UMA tx por request (molde de `adicionar-item-na-sessao!`, e o oposto do que `controllers/pauta-da-sessao`
   ;; faz com tres tx separadas). Aqui a atomicidade nao e' luxo: em tres tx, um vereador pode entrar no
   ;; plenario entre a leitura dos eventos e a das justificativas e sair na tela PRESENTE *e* com ausencia
@@ -266,6 +277,25 @@
              ;; nao muda de significado; e' `:chamadas-conduzidas` que desambigua "ninguem chamou" de "a
              ;; chamada aconteceu e todos faltaram".
              :chamadas-conduzidas (chamada/listar-da-sessao tx ente-id sessao-id)})))))
+  ;; A FOLHA (Etapa 5 fatia 1) — a MESMA tx unica de `chamada-da-sessao`, mais a SERIE. Nao delega a
+  ;; `chamada-da-sessao` porque delegar abriria uma SEGUNDA tx: o que este metodo existe para impedir e' o
+  ;; documento composto de snapshots diferentes (ver a docstring no protocolo). Toda leitura da folha esta
+  ;; DENTRO deste `fn [tx]`, e nenhuma linha do controller volta ao banco depois.
+  (folha-da-sessao [this ente-id sessao-id agora]
+    (transacao this ente-id
+      (fn [tx]
+        (when-let [s (sessao/buscar tx ente-id sessao-id)]
+          (let [instante (logic/instante-de-avaliacao s agora)
+                piso     (logic/piso-da-janela-de-presenca s)]
+            {:sessao s
+             :instante instante
+             :presencas (presenca/presenca-corrente tx ente-id sessao-id instante)
+             :justificativas (presenca/listar-justificativas-da-sessao tx ente-id sessao-id)
+             :chamadas-conduzidas (chamada/listar-da-sessao tx ente-id sessao-id)
+             :piso piso
+             ;; a janela e' [piso, instante] — o MESMO teto que a presenca corrente acima usou, para a serie
+             ;; nunca mostrar um evento que a linha derivada nao viu.
+             :serie (when piso (presenca/serie-de-eventos-da-sessao tx ente-id sessao-id piso instante))})))))
   ;; MESMO desenho de `registrar-presenca!` (gate + janela DENTRO da tx, sobre a sessao lida AQUI com `FOR
   ;; SHARE`): conduzir a chamada e' o MESMO tipo de escrita — um fato contra o quorum de uma sessao, que nao
   ;; pode entrar depois que ela fechou. `:conflito/chamada` e' tag PROPRIA (nao reusa

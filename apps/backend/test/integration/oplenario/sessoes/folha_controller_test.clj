@@ -192,6 +192,52 @@
         "o quorum do documento nao pode divergir da conta feita por fora — senao a folha tem uma TERCEIRA aritmetica")
     (is (= 1 (:presentes-plenario quorum-independente)) "e o numero e' o esperado, nao um zero mudo dos dois lados")))
 
+;; ---------- UM SO' SNAPSHOT: o documento nao se parte no meio do request (revisao MAJOR) ----------
+
+(deftest documento-e-um-so-snapshot-decisao-de-justificativa-no-meio-do-request-nao-o-parte
+  ;; O DEFEITO que este teste ancora: a folha era composta de QUATRO chamadas ao Repo, e cada chamada ao Repo
+  ;; abre uma tx NOVA (`tenancy/com-tenant*` = `jdbc/with-transaction`) — quatro snapshots MVCC. A decisao da
+  ;; justificativa e' um ato APARTADO, deliberadamente SEM gate de estado de sessao (a Mesa decide dias
+  ;; depois), entao ela cabe INTEIRA entre a 1a e a 4a leitura: a linha derivada saia com a justificativa
+  ;; 'pendente' e o bloco cru do MESMO documento saia 'aprovada'. Um artefato que a Fatia 4 congela em PDF
+  ;; nao pode divergir de si mesmo.
+  ;;
+  ;; Como o teste interleava de forma DETERMINISTICA (sem thread nem sleep): o seam do roster e' o unico
+  ;; ponto do fluxo que o teste alcanca ENTRE as leituras. Ele e' chamado exatamente uma vez em AMBAS as
+  ;; formas (a de 4 tx e a de 1 tx) — o que muda e' o que ja' foi lido quando ele roda. Por isso o teste nao
+  ;; e' vacuo depois da correcao: o escritor concorrente roda e COMMITA nos dois mundos (as duas primeiras
+  ;; asercoes provam isso), e so' a forma de UMA tx sobrevive a ele.
+  (let [ente (random-uuid)
+        leg (casa! ente)
+        v1 (vereador-com-mandato! ente leg "Ana")
+        v2 (vereador-com-mandato! ente leg "Bruno")
+        quem (random-uuid)
+        sid (abrir-e-encerrar! ente (fn [tx sid] (ev! tx ente sid v1 "entrada" "plenario")))
+        {just-id :id lock :lock-version} (repo-sessoes/criar-justificativa! *repo-s* ente
+                                           {:id (random-uuid) :ente-id ente :sessao-id sid :vereador-id v2
+                                            :motivo "atestado medico" :created-by quem})
+        decidiu? (atom false)
+        roster-que-decide-no-meio
+        (fn [ente-id data]
+          (when (compare-and-set! decidiu? false true)
+            (repo-sessoes/decidir-justificativa! *repo-s* ente
+              {:id just-id :estado "aprovada" :decidido-por quem :lock-version lock}))
+          (repo-cadastros/roster-da-casa *repo-c* ente-id data))
+        doc (controllers/folha-da-sessao *repo-s* roster-que-decide-no-meio (dados-da-casa-seam) (ator ente)
+                                         sid (tempo/relogio-fixo (Instant/now)))
+        raw (first (:justificativas doc))
+        linha (first (filter #(= v2 (:vereador-id %)) (:linhas doc)))]
+    (is (true? @decidiu?)
+        "o escritor concorrente TEM de ter rodado — sem isso este teste nao pode reprovar e nao e' cobertura")
+    (is (= "aprovada" (:estado (repo-sessoes/buscar-justificativa *repo-s* ente just-id)))
+        "e a decisao COMMITOU de verdade no banco durante o request, nao foi um no-op silencioso")
+    (is (= (:estado raw) (:estado (:justificativa linha)))
+        "a MESMA justificativa nao pode ter DOIS estados no MESMO documento (bloco cru vs. bloco da linha)")
+    (is (= "pendente" (:estado raw))
+        "o documento inteiro e' o snapshot do inicio do request — a decisao posterior entra na PROXIMA folha")
+    (is (= :ausente-justificativa-pendente (:estado linha))
+        "e o estado DERIVADO da linha conta a MESMA historia que o bloco cru")))
+
 ;; ---------- nao_realizada: o documento carrega o MOTIVO ----------
 
 (deftest sessao-nao-realizada-traz-o-motivo-no-documento
