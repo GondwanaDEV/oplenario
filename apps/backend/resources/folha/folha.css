@@ -151,6 +151,19 @@ td, th {
 
 /* =================================================================================================
    2 — IDENTIFICACAO DO DOCUMENTO (titulo + carimbo de uso restrito + faixa de identificacao)
+
+   HIERARQUIA DE HEADING: `.folha-titulo` e' um <h1> e `.folha-secao-titulo` sao <h2> — nao <div>. Num
+   documento de 14 secoes numeradas isto nao e' formalidade: o MESMO HTML canonico e' servido num
+   <iframe> na tela da Fatia 6, e o atalho de navegacao por heading e' o mecanismo primario de
+   orientacao de quem usa leitor de tela. A aparencia continua toda vinda da CLASSE (o reset acima
+   zera margin/padding de h1/h2), entao trocar a tag nao mexe em um milimetro do papel.
+
+   CARRY PARA A FATIA 3 (outline/marcadores do PDF): o juridico que arquiva esta folha procura "secao 8"
+   num visualizador de PDF, e para isso o PDF precisa de outline. O mecanismo do openhtmltopdf NAO foi
+   verificado contra a fonte nesta fatia (a dependencia ainda nao existe no deps.edn) — ha' dois
+   candidatos, o elemento <bookmarks> no <head> e a propriedade CSS -fs-bookmark-level. Fica FORA deste
+   arquivo ate' ser medido: escrever aqui uma propriedade inventada seria pior que a ausencia, porque
+   pareceria resolvido. A hierarquia h1/h2 acima e' o pre-requisito dos DOIS caminhos.
    ================================================================================================= */
 .folha-titulo {
   font-family: Georgia, "Times New Roman", serif;
@@ -291,6 +304,13 @@ td, th {
    ================================================================================================= */
 .tabela-atos {
   margin-bottom: 2mm;
+  -fs-table-paginate: paginate; /* ver a nota em .tabela-linhas — SEM esta propriedade, o <thead> existe
+                                   no HTML e nao se repete no PDF. As duas pecas (thead + paginate) sao
+                                   necessarias juntas; uma sozinha nao faz nada. */
+}
+
+.tabela-atos thead {
+  display: table-header-group;
 }
 
 .tabela-atos col.hora-fato { width: 20%; }
@@ -432,6 +452,12 @@ td, th {
    ================================================================================================= */
 .tabela-serie {
   margin-bottom: 2mm;
+  -fs-table-paginate: paginate; /* a tabela de SERIE LONGA — a que mais cresce (55 vereadores entrando,
+                                   saindo e retornando). E' a que mais precisa repetir o cabecalho. */
+}
+
+.tabela-serie thead {
+  display: table-header-group;
 }
 
 .tabela-serie col.vereador { width: 29%; }
@@ -482,6 +508,11 @@ td, th {
    ================================================================================================= */
 .tabela-justificativas {
   margin-bottom: 2mm;
+  -fs-table-paginate: paginate;
+}
+
+.tabela-justificativas thead {
+  display: table-header-group;
 }
 
 .tabela-justificativas col.vereador { width: 22%; }

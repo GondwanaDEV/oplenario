@@ -15,7 +15,10 @@
   diretamente vazaria ordem de hash no HTML; a ordem de exibicao segue SEMPRE a ordem de `:linhas` (a mesma
   'ordem cadastrada' que a relacao nominal usa), nunca `(keys serie)`. (b) toda formatacao de data/hora usa o
   fuso CIVIL do sistema (`kernel.tempo/zona-civil-padrao`, America/Fortaleza) explicito — nunca o default da
-  JVM (a data ja recuou um dia em Fortaleza uma vez nesta base por essa omissao).
+  JVM (a data ja recuou um dia em Fortaleza uma vez nesta base por essa omissao). (c) a GEMEA da armadilha
+  de fuso: nenhum numero deste documento passa por `clojure.core/format`, que resolve o Locale pelo default
+  da JVM — ver `dois-digitos`; os formatadores de data/hora fixam `DecimalStyle/STANDARD` pelo mesmo motivo,
+  para que o ambiente (imagem base, node de k8s, dev vs prod) nunca entre nos bytes do artefato congelado.
 
   D1 por HERANCA: este ns nao importa `sessoes.logic` e nao soma/subtrai nada de `:quorum` — os cinco campos
   saem exatamente como chegam em `documento`, um por linha do demonstrativo (bloco 4). Se algum numero de
@@ -37,7 +40,7 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [oplenario.kernel.tempo :as tempo])
-  (:import (java.time.format DateTimeFormatter)))
+  (:import (java.time.format DateTimeFormatter DecimalStyle)))
 
 (set! *warn-on-reflection* true)
 
@@ -62,15 +65,35 @@
   (when (and s (not (str/blank? s)))
     s))
 
+;; ---------- numero — NUNCA `format`, que le' o Locale default da JVM ----------
+
+(defn- dois-digitos
+  "`5` -> \"05\", `12` -> \"12\". NAO usa `(format \"%02d\" n)`: `clojure.core/format` chama `String/format`
+  SEM Locale e cai em `Locale/getDefault(Category/FORMAT)`; sob um Locale de digitos indo-arabicos (medido:
+  `ar-SA` na mesma imagem `clojure:temurin-21-tools-deps` deste repo) `(format \"%02d\" 5)` devolve os bytes
+  `d9 a0 d9 a5`, e nao `30 35` (\"05\"). Isto e' a coluna Nº da relacao nominal: o MESMO `FolhaDocumento`
+  renderizado em dois containers com Locale default diferente sairia com bytes diferentes, e o hash SHA-256
+  que a Fatia 4 congela deixaria de ser reproduzivel. `(str n)` sobre um inteiro e' `Long/toString` — sem
+  Locale, sem DecimalStyle, sem ambiente. Gemea exata da armadilha de fuso que ja custou um bug nesta base."
+  [n]
+  (let [s (str n)]
+    (if (= 1 (count s)) (str "0" s) s)))
+
 ;; ---------- data/hora — SEMPRE no fuso civil do sistema, nunca o default da JVM ----------
+;; `withDecimalStyle STANDARD` e' explicito pelo mesmo motivo de `dois-digitos`: e' o que garante digito
+;; ASCII no `dd/MM/yyyy HH:mm` independentemente do Locale da JVM. Hoje ja' e' o default de
+;; `DateTimeFormatter` (medido sob `ar-SA`: sai `20/06/2026 15:00`), mas o default e' promessa do runtime —
+;; num artefato cujo hash e' a prova de integridade, a invariante fica no codigo, nao no comentario.
 
 (def ^:private formatador-data-hora
   (-> (DateTimeFormatter/ofPattern "dd/MM/yyyy 'às' HH:mm")
-      (.withZone tempo/zona-civil-padrao)))
+      (.withZone tempo/zona-civil-padrao)
+      (.withDecimalStyle DecimalStyle/STANDARD)))
 
 (def ^:private formatador-hora
   (-> (DateTimeFormatter/ofPattern "HH:mm")
-      (.withZone tempo/zona-civil-padrao)))
+      (.withZone tempo/zona-civil-padrao)
+      (.withDecimalStyle DecimalStyle/STANDARD)))
 
 (defn- fmt-data-hora [instante]
   (when instante (.format ^DateTimeFormatter formatador-data-hora instante)))
@@ -158,7 +181,7 @@
         situacao (esc (get rotulo-estado-chamada (:estado linha) (str (:estado linha))))]
     (str "<tr class=\"linha-v\">"
          "<td class=\"conf\"></td>"
-         "<td class=\"num\">" (if numero (format "%02d" numero) "") "</td>"
+         "<td class=\"num\">" (if numero (dois-digitos numero) "") "</td>"
          "<td>"
          "<span class=\"nome-vereador\">" nome "</span>"
          (when civil (str "<span class=\"nome-civil\">" (esc civil) "</span>"))
@@ -174,21 +197,27 @@
          "</td>"
          "</tr>")))
 
-(defn- cabecalho-tabela-linhas [titulo contagem]
-  (str "<tr><th colspan=\"7\" class=\"folha-secao-titulo\" style=\"margin:0;border-bottom:0.8pt solid #1B2A20;padding-bottom:2mm;\">"
+(defn- cabecalho-tabela-linhas
+  "As DUAS linhas do `<thead>`: a faixa de titulo (que atravessa as 7 colunas — `scope=\"colgroup\"`, nao
+  `col`: ela nomeia o BLOCO, nao uma coluna) e a linha de rotulos de coluna (`scope=\"col\"`, cada um). O
+  `scope` importa fora do papel: o MESMO HTML canonico e' servido num `<iframe>` na tela da Fatia 6, e ali
+  ha' leitor de tela navegando celula a celula — sem `scope`, a associacao celula<->cabecalho fica implicita
+  na posicao."
+  [titulo contagem]
+  (str "<tr><th colspan=\"7\" scope=\"colgroup\" class=\"folha-secao-titulo\" style=\"margin:0;border-bottom:0.8pt solid #1B2A20;padding-bottom:2mm;\">"
        (esc titulo) " (" contagem ")</th></tr>"
        "<tr>"
-       "<th class=\"conf\">Conf.</th>"
-       "<th class=\"num\">Nº<sup class=\"chamada-nota\">1</sup></th>"
-       "<th>Vereador</th>"
-       "<th>Partido</th>"
-       "<th>Mesa</th>"
-       "<th>Situação apurada<sup class=\"chamada-nota\">3</sup></th>"
-       "<th>Hora do fato / registro<sup class=\"chamada-nota\">4</sup></th>"
+       "<th scope=\"col\" class=\"conf\">Conf.</th>"
+       "<th scope=\"col\" class=\"num\">Nº<sup class=\"chamada-nota\">1</sup></th>"
+       "<th scope=\"col\">Vereador</th>"
+       "<th scope=\"col\">Partido</th>"
+       "<th scope=\"col\">Mesa</th>"
+       "<th scope=\"col\">Situação apurada<sup class=\"chamada-nota\">3</sup></th>"
+       "<th scope=\"col\">Hora do fato / registro<sup class=\"chamada-nota\">4</sup></th>"
        "</tr>"))
 
 (defn- tabela-relacao-nominal [nominal]
-  (str "<div class=\"folha-secao-titulo\">4 · RELAÇÃO NOMINAL</div>"
+  (str "<h2 class=\"folha-secao-titulo\">4 · RELAÇÃO NOMINAL</h2>"
        "<table class=\"tabela-linhas\">"
        "<colgroup><col class=\"conf\"/><col class=\"ordem\"/><col class=\"vereador\"/>"
        "<col class=\"partido\"/><col class=\"mesa\"/><col class=\"situacao\"/><col class=\"hora\"/></colgroup>"
@@ -201,7 +230,7 @@
 
 (defn- tabela-licenciados [licenciados]
   (when (seq licenciados)
-    (str "<div class=\"folha-secao-titulo\">5 · FORA DO DENOMINADOR — LICENCIADOS<sup class=\"chamada-nota\">2</sup></div>"
+    (str "<h2 class=\"folha-secao-titulo\">5 · FORA DO DENOMINADOR — LICENCIADOS<sup class=\"chamada-nota\">2</sup></h2>"
          "<div class=\"folha-secao-texto\">O vereador licenciado consta desta folha, mas fica fora do total de membros usado na apuração — durante a licença, quem compõe a Casa é o suplente, com mandato próprio.</div>"
          "<table class=\"tabela-linhas\">"
          "<colgroup><col class=\"conf\"/><col class=\"ordem\"/><col class=\"vereador\"/>"
@@ -213,7 +242,7 @@
 
 (defn- tabela-sem-assento [sem-assento]
   (when (seq sem-assento)
-    (str "<div class=\"folha-secao-titulo\">6 · FORA DA COMPOSIÇÃO — PRESENÇAS SEM ASSENTO<sup class=\"chamada-nota\">6</sup></div>"
+    (str "<h2 class=\"folha-secao-titulo\">6 · FORA DA COMPOSIÇÃO — PRESENÇAS SEM ASSENTO<sup class=\"chamada-nota\">6</sup></h2>"
          "<div class=\"folha-secao-texto\">Há registro de presença para quem não consta como vereador com mandato vigente nesta data. Verifique o cadastro da legislatura antes de dar fé aos totais.</div>"
          "<table class=\"tabela-linhas\">"
          "<colgroup><col class=\"conf\"/><col class=\"ordem\"/><col class=\"vereador\"/>"
@@ -242,13 +271,16 @@
 
 (defn- identificacao-html [{:keys [spec-versao sessao instante]}]
   (let [id-curto (subs (str (:id sessao)) 0 8)]
-    (str "<div class=\"folha-titulo\">Folha de presença</div>"
+    (str "<h1 class=\"folha-titulo\">Folha de presença</h1>"
          "<table class=\"folha-carimbo-tabela\"><tr>"
          "<td></td>"
          "<td class=\"celula-restrito\"><span class=\"carimbo-restrito\">Uso restrito · contém dado pessoal</span></td>"
          "</tr></table>"
          "<div class=\"folha-identificacao mono\">"
-         "Sessão " id-curto " · spec " (esc spec-versao) " · presença apurada em " (esc (fmt-data-hora instante))
+         ;; `id-curto` passa por `esc` como qualquer outro valor — a secao 10 (congelamento) ja' o fazia com
+         ;; o MESMO dado, e um valor tratado como seguro-por-tipo num lugar e escapado no outro e' o tipo de
+         ;; heterogeneidade que sobrevive a um refactor que troque `:id` por algo menos garantido que `:uuid`.
+         "Sessão " (esc id-curto) " · spec " (esc spec-versao) " · presença apurada em " (esc (fmt-data-hora instante))
          " · versão numerada atribuída no ato de congelamento desta folha"
          "</div>")))
 
@@ -257,7 +289,7 @@
 (defn- sessao-html [{:keys [sessao instante]}]
   (let [{:keys [estado motivo-nao-realizada]} sessao
         rotulo (get rotulo-estado-sessao estado estado)]
-    (str "<div class=\"folha-secao-titulo\">1 · A SESSÃO</div>"
+    (str "<h2 class=\"folha-secao-titulo\">1 · A SESSÃO</h2>"
          "<table class=\"tabela-sessao\"><colgroup><col class=\"rotulo\"/><col/></colgroup>"
          "<tr><td class=\"rotulo\">Situação da sessão</td><td>" (esc rotulo) "</td></tr>"
          "<tr><td class=\"rotulo\">Presença apurada em</td><td>" (esc (fmt-data-hora instante)) "</td></tr>"
@@ -271,10 +303,14 @@
 ;; ---------- 4 · apuracao do quorum (D1 — verbatim, cada campo sua propria linha) ----------
 
 (defn- quorum-html [quorum]
+  ;; Os cinco valores passam por `esc` mesmo sendo `:int` no schema — a mesma "defesa em profundidade" que o
+  ;; docstring do ns declara. Motivo concreto: `gerador-folha/renderizar` NAO roda `m/validate` no caminho de
+  ;; producao (so' os testes validam contra `FolhaDocumento`), entao o tipo `:int` e' promessa de schema, nao
+  ;; garantia de runtime — e um documento CONGELADO com injecao fica congelado COM a injecao.
   (let [linha (fn [rotulo valor ultima?]
                 (str "<tr" (when ultima? " class=\"ultima\"") "><td>" rotulo "</td>"
-                     "<td class=\"valor-quorum\">" valor "</td></tr>"))]
-    (str "<div class=\"folha-secao-titulo\">2 · APURAÇÃO DO QUÓRUM</div>"
+                     "<td class=\"valor-quorum\">" (esc valor) "</td></tr>"))]
+    (str "<h2 class=\"folha-secao-titulo\">2 · APURAÇÃO DO QUÓRUM</h2>"
          "<table class=\"tabela-quorum\"><colgroup><col class=\"rotulo\"/><col class=\"valor\"/></colgroup>"
          (linha "Presentes no plenário" (:presentes-plenario quorum) false)
          (linha "Presentes em remoto" (:presentes-remoto quorum) false)
@@ -289,21 +325,28 @@
 ;; ---------- 5 · atos de chamada conduzida ----------
 
 (defn- atos-html [atos]
-  (str "<div class=\"folha-secao-titulo\">3 · ATOS DE CHAMADA CONDUZIDA</div>"
+  (str "<h2 class=\"folha-secao-titulo\">3 · ATOS DE CHAMADA CONDUZIDA</h2>"
        (if (seq atos)
+         ;; `<thead>` NAO e' decoracao semantica: e' a UNICA peca que diz ao openhtmltopdf qual linha
+         ;; repetir a cada quebra de pagina (com `-fs-table-paginate` na classe, folha.css). Sem ela, uma
+         ;; Casa de 55 vereadores com sessao longa joga linhas de hora para a pagina seguinte sem nenhum
+         ;; rotulo de coluna acima — hora do fato e hora do registro viram duas colunas indistinguiveis.
          (str "<table class=\"tabela-atos\">"
               "<colgroup><col class=\"hora-fato\"/><col class=\"hora-registro\"/><col class=\"conduzida\"/><col class=\"membros\"/></colgroup>"
-              "<tr><th>Hora do fato<sup class=\"chamada-nota\">4</sup></th>"
-              "<th>Hora do registro<sup class=\"chamada-nota\">4</sup></th>"
-              "<th>Conduzida por (id)</th><th>Membros da Casa no ato</th></tr>"
+              "<thead>"
+              "<tr><th scope=\"col\">Hora do fato<sup class=\"chamada-nota\">4</sup></th>"
+              "<th scope=\"col\">Hora do registro<sup class=\"chamada-nota\">4</sup></th>"
+              "<th scope=\"col\">Conduzida por (id)</th><th scope=\"col\">Membros da Casa no ato</th></tr>"
+              "</thead>"
+              "<tbody>"
               (apply str
                      (map (fn [ato]
                             (str "<tr><td>" (esc (fmt-hora (:ocorrido-em ato))) "</td>"
                                  "<td>" (esc (fmt-hora (:registrado-em ato))) "</td>"
                                  "<td>" (esc (subs (str (:conduzida-por ato)) 0 8)) "</td>"
-                                 "<td>" (:membros-da-casa ato) "</td></tr>"))
+                                 "<td>" (esc (:membros-da-casa ato)) "</td></tr>"))
                           atos))
-              "</table>")
+              "</tbody></table>")
          "<div class=\"folha-secao-texto\">Nenhum ato de chamada conduzida registrado nesta sessão.</div>")
        "<div class=\"folha-secao-texto\">Cada chamada conduzida é um ato datado e imutável; uma chamada não se apaga — corrige-se com outra chamada, por isso pode haver mais de um ato nesta seção. \"Conduzida por\" identifica o operador por id técnico — a resolução do nome não faz parte desta fatia.</div>"))
 
@@ -333,23 +376,34 @@
                               (when (> (count eventos) 1)
                                 [(:vereador-id linha) (get nomes (:vereador-id linha)) eventos])))))]
     (when (seq grupos)
-      (str "<div class=\"folha-secao-titulo\">7 · MOVIMENTAÇÕES DURANTE A SESSÃO</div>"
+      (str "<h2 class=\"folha-secao-titulo\">7 · MOVIMENTAÇÕES DURANTE A SESSÃO</h2>"
            "<div class=\"folha-secao-texto\">Constam aqui apenas os vereadores com mais de um registro nesta sessão. Para os demais, o único registro é o da relação nominal.</div>"
+           ;; Esta e' a tabela de SERIE LONGA — a que mais cresce (55 vereadores entrando, saindo e
+           ;; retornando numa sessao de painel instavel). E' justamente a que nao pode quebrar pagina sem
+           ;; repetir o cabecalho: ver a nota em `atos-html`.
            "<table class=\"tabela-serie\">"
            "<colgroup><col class=\"vereador\"/><col class=\"movimento\"/><col class=\"modalidade\"/><col class=\"fonte\"/><col class=\"hora\"/></colgroup>"
-           "<tr><th>Vereador</th><th>Movimento</th><th>Modalidade</th><th>Origem do registro</th><th>Hora do fato<sup class=\"chamada-nota\">4</sup></th></tr>"
+           "<thead>"
+           "<tr><th scope=\"col\">Vereador</th><th scope=\"col\">Movimento</th><th scope=\"col\">Modalidade</th>"
+           "<th scope=\"col\">Origem do registro</th><th scope=\"col\">Hora do fato<sup class=\"chamada-nota\">4</sup></th></tr>"
+           "</thead>"
+           "<tbody>"
            (apply str (map (fn [[_vid nome eventos]] (eventos-html nome eventos)) grupos))
-           "</table>"))))
+           "</tbody></table>"))))
 
 ;; ---------- 10 · justificativas de ausencia ----------
 
 (defn- justificativas-html [linhas justificativas]
   (let [nomes (mapa-nomes linhas)]
-    (str "<div class=\"folha-secao-titulo\">8 · JUSTIFICATIVAS DE AUSÊNCIA</div>"
+    (str "<h2 class=\"folha-secao-titulo\">8 · JUSTIFICATIVAS DE AUSÊNCIA</h2>"
          (if (seq justificativas)
            (str "<table class=\"tabela-justificativas\">"
                 "<colgroup><col class=\"vereador\"/><col class=\"decisao\"/><col class=\"motivo\"/><col class=\"decidido\"/></colgroup>"
-                "<tr><th>Vereador</th><th>Decisão</th><th>Motivo declarado</th><th>Decidida em</th></tr>"
+                "<thead>"
+                "<tr><th scope=\"col\">Vereador</th><th scope=\"col\">Decisão</th>"
+                "<th scope=\"col\">Motivo declarado</th><th scope=\"col\">Decidida em</th></tr>"
+                "</thead>"
+                "<tbody>"
                 (apply str
                        (map (fn [j]
                               (str "<tr class=\"linha-justificativa\">"
@@ -359,15 +413,19 @@
                                    "<td class=\"decidido\">" (esc (fmt-hora (:decidido-em j))) "</td>"
                                    "</tr>"))
                             justificativas))
-                "</table>")
+                "</tbody></table>")
            "<div class=\"folha-secao-texto\">Nenhuma justificativa registrada nesta sessão.</div>")
          "<div class=\"folha-secao-texto\">Quem lança a justificativa é a Secretaria; quem decide é a Mesa. Justificativa pendente não muda a contagem: o vereador segue fora dos presentes até a Mesa decidir<sup class=\"chamada-nota\">9</sup>.</div>")))
 
 ;; ---------- 11 · conferencia (assinaturas fisicas) ----------
 
 (def ^:private conferencia-html
-  (str "<div class=\"folha-secao-titulo\">9 · CONFERÊNCIA</div>"
-       "<div class=\"folha-secao-texto\">As assinaturas abaixo são físicas. O sistema não as coleta, não as valida e não as guarda<sup class=\"chamada-nota\">7</sup>.</div>"
+  ;; A chamada da nota 8 fica AQUI porque e' aqui que a escolha nao-legal do formato mais aparece: a coluna
+  ;; de conferencia manual e o campo de assinatura ao pe' sao invencao deste sistema, nao exigencia de
+  ;; regimento. A regra do documento (e o comentario de folha.css §13) e' que toda nota tem ponto de
+  ;; chamada — nota empilhada sem citacao no corpo e' rodape que ninguem alcanca.
+  (str "<h2 class=\"folha-secao-titulo\">9 · CONFERÊNCIA</h2>"
+       "<div class=\"folha-secao-texto\">As assinaturas abaixo são físicas. O sistema não as coleta, não as valida e não as guarda<sup class=\"chamada-nota\">7</sup>. A coluna de conferência da relação nominal e os campos de assinatura abaixo são escolha deste sistema, não exigência legal<sup class=\"chamada-nota\">8</sup>.</div>"
        "<table class=\"tabela-conferencia\"><tr>"
        "<td><div class=\"linha-assinatura\"></div><div class=\"rotulo-assinatura\">Secretaria da Casa — nome e matrícula</div></td>"
        "<td><div class=\"linha-assinatura\"></div><div class=\"rotulo-assinatura\">Presidência da Mesa</div></td>"
@@ -377,7 +435,7 @@
 
 (defn- congelamento-html [{:keys [spec-versao sessao]}]
   (str "<div class=\"folha-congelamento\">"
-       "<div class=\"folha-secao-titulo\" style=\"margin-top:0;\">10 · REGISTRO DE CONGELAMENTO</div>"
+       "<h2 class=\"folha-secao-titulo\" style=\"margin-top:0;\">10 · REGISTRO DE CONGELAMENTO</h2>"
        "<div class=\"campo\"><span class=\"rotulo\">Especificação: </span><span class=\"valor\">" (esc spec-versao) "</span></div>"
        "<div class=\"campo\"><span class=\"rotulo\">Sessão: </span><span class=\"valor\">" (esc (subs (str (:id sessao)) 0 8)) "</span></div>"
        "<div class=\"campo\"><span class=\"rotulo\">Versão: </span><span class=\"valor\">atribuída no ato de congelamento — não existe nesta pré-visualização</span></div>"
@@ -388,7 +446,7 @@
 
 (def ^:private notas-html
   (str
-   "<div class=\"folha-secao-titulo\">NOTAS DESTA FOLHA</div>"
+   "<h2 class=\"folha-secao-titulo\">NOTAS DESTA FOLHA</h2>"
    "<div class=\"folha-notas\">"
    "<div class=\"nota\"><span class=\"num-nota\">1</span> Ordem. Os nomes aparecem na ordem cadastrada na Casa. Esta não é, necessariamente, a ordem oficial de chamada — a ordem varia por regimento. A posição de um nome nesta folha não produz efeito regimental.</div>"
    "<div class=\"nota\"><span class=\"num-nota\">2</span> Licença. O vereador licenciado consta desta folha, mas fica fora do total de membros usado na apuração — durante a licença, quem compõe a Casa é o suplente, com mandato próprio. Enquanto o suplente não entrar no cadastro da legislatura, a Casa é apurada com um membro a menos.</div>"

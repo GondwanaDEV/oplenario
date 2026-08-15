@@ -5,9 +5,11 @@
   quorum e' recalculado/derivado, so' repassado verbatim, (d) ordem de `:serie` (map-of) nao pode vazar
   ordem de hash — segue a ordem de `:linhas`, (e) o aviso obrigatorio do STUB-ICP-v0."
   (:require [clojure.java.io :as io]
+            [clojure.set :as set]
             [clojure.string :as str]
             [clojure.test :refer [deftest is]]
-            [oplenario.sessoes.components.serializador-folha :as ser]))
+            [oplenario.sessoes.components.serializador-folha :as ser])
+  (:import (java.util Locale)))
 
 (def ^:private v1 #uuid "00000000-0000-0000-0000-0000000000a1")
 (def ^:private v2 #uuid "00000000-0000-0000-0000-0000000000a2")
@@ -61,6 +63,13 @@
   (let [{conteudo :bytes content-type :content-type} (ser/serializar (ser/serializador-folha-html) documento)]
     {:html (String. ^bytes conteudo "UTF-8") :content-type content-type}))
 
+(defn- marcacao
+  "O HTML SEM o bloco <style> — para contar MARCACAO. O <style> inlina `folha.css` inteiro, comentarios
+  inclusive, e esses comentarios citam tags (`<thead>`, `<h1>`) em prosa: contar sobre o documento cru
+  mediria o comentario junto com a marcacao e daria um verde (ou vermelho) mentiroso."
+  [html]
+  (str/replace html #"(?s)<style>.*?</style>" ""))
+
 ;; ---------- forma basica do resultado ----------
 
 (deftest content-type-e-text-html-utf8
@@ -108,6 +117,93 @@
     (is (< (.indexOf html-a "Ana Souza") (.indexOf html-a "Carlos Dias"))
         "a secao de movimentacoes segue a ordem de :linhas (Ana antes de Carlos), nao a ordem do mapa")))
 
+(defn- sob-locale
+  "Roda `f` com o Locale default da JVM trocado, e RESTAURA no finally (Locale default e' estado global do
+  processo — vazar `ar-SA` para o resto da suite quebraria testes alheios)."
+  [tag f]
+  (let [anterior (Locale/getDefault)]
+    (try
+      (Locale/setDefault (Locale/forLanguageTag tag))
+      (f)
+      (finally (Locale/setDefault anterior)))))
+
+(deftest bytes-nao-dependem-do-locale-default-da-jvm
+  ;; A GEMEA da armadilha de fuso. `(format "%02d" 5)` sob `ar-SA` devolve digitos indo-arabicos (medido
+  ;; nesta imagem: bytes d9 a0 d9 a5, e nao "05") — a coluna Nº da relacao nominal sairia com bytes
+  ;; diferentes conforme o Locale default do container, e o hash SHA-256 que a Fatia 4 congela deixaria de
+  ;; ser reproduzivel. Duas asserções separadas: o conteudo certo E a igualdade bit-a-bit entre ambientes.
+  (let [em-arabe (sob-locale "ar-SA" #(vec (:bytes (ser/serializar (ser/serializador-folha-html) documento-base))))
+        em-ingles (sob-locale "en-US" #(vec (:bytes (ser/serializar (ser/serializador-folha-html) documento-base))))
+        html-arabe (String. (byte-array em-arabe) "UTF-8")]
+    (is (str/includes? html-arabe "<td class=\"num\">01</td>")
+        "o numero de ordem tem de sair em digito ASCII sob QUALQUER Locale default")
+    (is (= em-arabe em-ingles)
+        "mesmo documento, dois Locales default: os bytes tem de ser identicos")))
+
+(deftest data-e-hora-nao-dependem-do-locale-default-da-jvm
+  ;; O par do teste acima para o outro formatador: `DateTimeFormatter` fixa `DecimalStyle/STANDARD`
+  ;; explicitamente, entao "15:00" nao vira digito localizado nem sob `ar-SA`.
+  (let [html (sob-locale "ar-SA" #(:html (render-str documento-base)))]
+    (is (str/includes? html "20/06/2026 às 15:00")
+        "a data/hora do instante de apuracao (fuso America/Fortaleza) em digito ASCII")))
+
+;; ---------- paginacao: TODA tabela de dados repete o cabecalho entre paginas ----------
+
+(deftest toda-tabela-de-dados-tem-thead
+  ;; Duas pecas, ambas necessarias e nenhuma suficiente: `<thead>` no HTML (diz QUAL linha repetir) e
+  ;; `-fs-table-paginate` no CSS (liga a repeticao no openhtmltopdf). Sem as duas, uma sessao longa joga
+  ;; linhas de hora para a pagina seguinte sem nenhum rotulo de coluna acima.
+  (let [doc (assoc documento-base :justificativas
+                    [{:id (random-uuid) :vereador-id v1 :estado "aprovada" :motivo "licenca medica"
+                      :lock-version 1 :decidido-por (random-uuid) :decidido-em instante-2}])
+        html (marcacao (:html (render-str doc)))]
+    ;; 6 tabelas de dados: atos, relacao nominal, licenciados, sem-assento, serie, justificativas.
+    (is (= 6 (count (re-seq #"<thead>" html)))
+        "as 6 tabelas de dados desta folha tem de abrir <thead>")
+    ;; E o <thead> tem de vir ANTES da primeira <tr> de cada uma delas — thead depois do corpo nao repete.
+    (doseq [classe ["tabela-atos" "tabela-linhas" "tabela-serie" "tabela-justificativas"]]
+      (let [abre (count (re-seq (re-pattern (str "<table class=\"" classe "\">")) html))
+            com-thead (count (re-seq (re-pattern (str "(?s)<table class=\"" classe "\">(?:(?!<tr).)*<thead>"))
+                                     html))]
+        (is (pos? abre) (str "a fixture tem de exercitar " classe))
+        (is (= abre com-thead)
+            (str "toda <table class=\"" classe "\"> tem de abrir <thead> antes da primeira <tr>"))))))
+
+(deftest css-liga-a-repeticao-de-cabecalho-em-toda-tabela-de-dados
+  (let [css (slurp (io/resource "folha/folha.css"))]
+    (doseq [classe [".tabela-linhas" ".tabela-atos" ".tabela-serie" ".tabela-justificativas"]]
+      (is (re-find (re-pattern (str "(?s)\\" classe " \\{[^}]*-fs-table-paginate: paginate"))
+                   css)
+          (str classe " tem de declarar -fs-table-paginate: paginate — <thead> sozinho nao repete no PDF")))))
+
+;; ---------- semantica: scope de cabecalho e hierarquia de heading ----------
+
+(deftest todo-th-declara-scope
+  (let [html (marcacao (:html (render-str documento-base)))]
+    ;; `<th[ >]` e nao `<th`: `<th` casaria tambem com `<thead>` e o teste passaria sozinho.
+    (is (pos? (count (re-seq #"<th[ >]" html))))
+    (is (= (count (re-seq #"<th[ >]" html)) (count (re-seq #"scope=" html)))
+        "todo <th> associa-se as suas celulas por `scope` — a tela da Fatia 6 serve este MESMO HTML num iframe")))
+
+(deftest documento-tem-hierarquia-de-heading
+  (let [html (marcacao (:html (render-str documento-base)))]
+    (is (str/includes? html "<h1 class=\"folha-titulo\">Folha de presença</h1>")
+        "o titulo do documento e' <h1>, nao <div>")
+    (is (not (str/includes? html "<div class=\"folha-titulo\"")))
+    (is (not (str/includes? html "<div class=\"folha-secao-titulo\"")))
+    (is (<= 9 (count (re-seq #"<h2 class=\"folha-secao-titulo\"" html)))
+        "cada secao numerada da folha e' um <h2> — e' o que da' navegacao por heading no iframe da Fatia 6")))
+
+;; ---------- notas: nenhuma nota fica sem ponto de chamada ----------
+
+(deftest toda-nota-impressa-e-citada-no-corpo
+  (let [html (marcacao (:html (render-str documento-base)))
+        impressas (set (map second (re-seq #"<span class=\"num-nota\">(\d+)</span>" html)))
+        citadas (set (map second (re-seq #"<sup class=\"chamada-nota\">(\d+)</sup>" html)))]
+    (is (seq impressas))
+    (is (empty? (set/difference impressas citadas))
+        "nota empilhada no rodape sem nenhuma chamada no corpo e' rodape que ninguem alcanca")))
+
 ;; ---------- D1: quorum e' repassado verbatim, nunca recalculado ----------
 
 (deftest todos-os-cinco-campos-do-quorum-aparecem-verbatim
@@ -141,6 +237,29 @@
     (is (not (str/includes? html "\"as pressas\" &")))
     (is (str/includes? html "&quot;as pressas&quot; &amp;"))
     (is (str/includes? html "falta de quorum"))))
+
+(deftest campo-de-quorum-nao-numerico-e-escapado
+  ;; Defesa em profundidade, nao teoria: `gerador-folha/renderizar` NAO valida `FolhaDocumento` com Malli no
+  ;; caminho de producao (so' os testes validam), entao o tipo `:int` do schema e' promessa, nao garantia de
+  ;; runtime. Um bug futuro em `contar-quorum` ou na composicao do controller que ponha string nesses campos
+  ;; nao pode virar injecao — e um documento CONGELADO com injecao fica congelado COM ela.
+  (let [doc (-> documento-base
+                (assoc-in [:quorum :presentes-total] "<img src=x onerror=alert(1)>")
+                (assoc-in [:atos-de-chamada-conduzida 0 :membros-da-casa] "</td><td>injetado"))
+        {:keys [html]} (render-str doc)]
+    (is (not (str/includes? html "<img src=x")))
+    (is (str/includes? html "&lt;img src=x onerror=alert(1)&gt;"))
+    (is (not (str/includes? html "</td><td>injetado")))))
+
+(deftest id-da-sessao-e-escapado-nas-duas-secoes-que-o-imprimem
+  ;; O MESMO dado aparece no bloco 2 (identificacao) e na secao 10 (congelamento). Antes desta correcao um
+  ;; passava por `esc` e o outro nao — heterogeneidade que sobrevive a um refactor que troque `:id` por algo
+  ;; menos garantido que `:uuid`.
+  (let [doc (assoc-in documento-base [:sessao :id] "<script>xx")
+        {:keys [html]} (render-str doc)]
+    (is (not (str/includes? html "<script>")))
+    (is (= 2 (count (re-seq #"&lt;script&gt;" html)))
+        "os DOIS pontos que imprimem o id curto tem de escapar")))
 
 ;; ---------- sessao nao_realizada ----------
 

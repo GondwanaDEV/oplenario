@@ -19,7 +19,12 @@
             [oplenario.sessoes.gerador-folha :as gerador]))
 
 (defn- uid [n]
-  (java.util.UUID/fromString (format "00000000-0000-0000-0000-%012d" n)))
+  ;; `Locale/ROOT` explicito, nao `clojure.core/format`: `format` resolve o Locale pelo default da JVM e sob
+  ;; um Locale de digitos indo-arabicos `%012d` devolve digitos que `UUID/fromString` nao parseia — a
+  ;; geracao do artefato do design-system quebraria conforme o ambiente. Mesma armadilha que o adapter
+  ;; fechou em `dois-digitos`.
+  (java.util.UUID/fromString
+   (String/format java.util.Locale/ROOT "00000000-0000-0000-0000-%012d" (into-array Object [n]))))
 
 (def ^:private sessao-id (uid 900))
 
