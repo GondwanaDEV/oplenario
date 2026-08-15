@@ -419,7 +419,14 @@ function Chamada({
           </section>
 
           <aside className="rail" aria-label="Quórum, justificativas e atos de chamada">
-            <Quorum dados={dados} linhasComAssento={linhasComAssento} destaque={destaque} setDestaque={setDestaque} />
+            <Quorum
+              dados={dados}
+              linhasComAssento={linhasComAssento}
+              destaque={destaque}
+              setDestaque={setDestaque}
+              estadoDe={estadoExibido}
+              aRegistrar={pendentesCount}
+            />
             <JustificativasPainel justificativas={justificativas} dados={dados} onDecidir={onDecidir} />
             <Atos dados={dados} />
           </aside>
@@ -758,11 +765,15 @@ function Quorum({
   linhasComAssento,
   destaque,
   setDestaque,
+  estadoDe,
+  aRegistrar,
 }: {
   dados: ChamadaOut;
   linhasComAssento: LinhaChamadaOut[];
   destaque: string | null;
   setDestaque: (v: string | null) => void;
+  estadoDe: (l: LinhaChamadaOut) => EstadoLinhaChamada;
+  aRegistrar: number;
 }) {
   const total = Math.max(1, linhasComAssento.length);
   // Geometria em `lib/hemiciclo` (pura, testada) — a mesma do telão. Ver o docstring de lá: três
@@ -771,15 +782,31 @@ function Quorum({
     .slice(0, linhasComAssento.length)
     .map((p, i) => ({ ...p, l: linhasComAssento[i] }));
 
+  // O MAPA DE ASSENTOS É A FOLHA, NÃO O INSTRUMENTO DE QUÓRUM (decisão de 15/08/2026).
+  //
+  // Antes, os assentos e a legenda liam `l.estado` CRU do servidor enquanto as linhas da folha já
+  // mostravam a marcação pendente. Resultado medido em browser: a linha dizia "Ana presente", a legenda
+  // dizia "Ausentes 3" e o número dizia "0 de 3" — a mesma tela afirmando três coisas incompatíveis. E
+  // durante toda a fase de marcação o mapa ficava cinza, isto é, peso morto exatamente quando o operador
+  // mais precisa de leitura rápida de "quem ainda não fiz".
+  //
+  // A separação que resolve: o mapa e a legenda seguem `estadoDe` (o que o operador vê na linha); o
+  // NÚMERO e o DENOMINADOR seguem estritamente `dados.quorum`, do servidor. A lei da Etapa 4 é sobre o
+  // número — nunca aplicar delta local a ele — e fica intacta. O que impede o mapa de ser lido como
+  // quórum confirmado é o rótulo "a registrar", visível enquanto houver pendência.
   const legenda = { plenario: 0, remoto: 0, ausentes: 0, licenciados: 0 };
   for (const l of linhasComAssento) {
-    if (l.estado === "presente-plenario") legenda.plenario++;
-    else if (l.estado === "presente-remoto") legenda.remoto++;
-    else if (l.estado === "licenciado") legenda.licenciados++;
+    const e = estadoDe(l);
+    if (e === "presente-plenario") legenda.plenario++;
+    else if (e === "presente-remoto") legenda.remoto++;
+    else if (e === "licenciado") legenda.licenciados++;
     else legenda.ausentes++;
   }
 
-  const rotulo = `${dados.quorum.presentesTotal} de ${dados.quorum.membrosDaCasa} vereadores presentes.`;
+  const rotulo =
+    aRegistrar > 0
+      ? `${dados.quorum.presentesTotal} de ${dados.quorum.membrosDaCasa} vereadores presentes; ${aRegistrar} marcação a registrar.`
+      : `${dados.quorum.presentesTotal} de ${dados.quorum.membrosDaCasa} vereadores presentes.`;
 
   return (
     <section className="bloco quorum" aria-labelledby="quorum-titulo">
@@ -802,7 +829,7 @@ function Quorum({
               cx={s.x.toFixed(1)}
               cy={s.y.toFixed(1)}
               r="6"
-              className={`s-${s.l.estado}${destaque === s.l.vereadorId ? " destaque" : ""}`}
+              className={`s-${estadoDe(s.l)}${destaque === s.l.vereadorId ? " destaque" : ""}`}
               onMouseEnter={() => setDestaque(s.l.vereadorId)}
               onMouseLeave={() => setDestaque(null)}
               onClick={() => {
@@ -812,10 +839,22 @@ function Quorum({
                 alvo?.focus();
               }}
             >
-              <title>{`${nomeDaLinha(s.l)} — ${ROTULO_ESTADO[s.l.estado]}`}</title>
+              <title>{`${nomeDaLinha(s.l)} — ${ROTULO_ESTADO[estadoDe(s.l)]}`}</title>
             </circle>
           ))}
         </svg>
+
+        {/* O marcador que separa a FOLHA do NÚMERO. Sem ele o mapa colorido dentro de um bloco chamado
+            "Quórum" se lê como presença confirmada — que é exatamente o erro que a Etapa 4 reprovou. */}
+        {aRegistrar > 0 && (
+          <p className="a-registrar">
+            <span className="chip chip-alerta">a registrar</span>
+            <span>
+              O mapa acima já mostra {aRegistrar === 1 ? "a sua marcação" : "as suas marcações"}. O número
+              acima é o do servidor e só muda quando você registrar a chamada.
+            </span>
+          </p>
+        )}
 
         <div className="quorum-legenda">
           <span><i style={{ background: "var(--marca)" }} />Plenário {legenda.plenario}</span>
