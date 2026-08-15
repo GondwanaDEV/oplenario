@@ -136,6 +136,45 @@ describe("PaginaChamada", () => {
     expect(enviado).toEqual({ v2: { estadoAlvo: "presente-remoto", desde: expect.any(String) } });
   });
 
+  it("marcação pendente: o MAPA e a LEGENDA acompanham, o NÚMERO do servidor não se mexe", () => {
+    // O defeito que este teste reprova (achado em browser, 15/08/2026): a linha dizia "presente", a
+    // legenda dizia "Ausentes 3" e o número dizia "0 de 3" — a mesma tela em três verdades.
+    mockRetorno(
+      dadosBase({
+        linhas: [vAusente, vCasa, vLicenciado],
+        quorum: { presentesPlenario: 0, presentesRemoto: 0, presentesTotal: 0, membrosDaCasa: 2, presencasForaDoRoster: 0 },
+      }),
+    );
+    render(<PaginaChamada />);
+    const painel = screen.getByRole("region", { name: /Quórum/i });
+
+    // a legenda é partida pelo <i> do marcador de cor -> ler o textContent do painel
+    // vCasa (Teó) já vem presente-plenario do servidor; vAusente (Wilson) vem ausente.
+    expect(painel.textContent).toMatch(/Plenário 1/);
+    expect(painel.textContent).toMatch(/Ausentes 1/);
+    expect(painel.textContent).not.toMatch(/a registrar/i);
+
+    const grupo = screen.getByRole("group", { name: "Presença de Wilson Braga" });
+    fireEvent.click(within(grupo).getByRole("button", { name: "Presente" }));
+
+    // a FOLHA acompanha: Wilson sai de ausente para presente no mapa e na legenda
+    expect(painel.textContent).toMatch(/Plenário 2/);
+    expect(painel.textContent).toMatch(/Ausentes 0/);
+    // o marcador que impede o mapa de ser lido como quórum confirmado
+    expect(painel.textContent).toMatch(/a registrar/i);
+    // e o NÚMERO do servidor segue intocado — a lei da Etapa 4
+    expect(within(painel).getByText("0")).toBeDefined();
+    expect(within(painel).getByText("2")).toBeDefined();
+    expect(registrarChamada).not.toHaveBeenCalled();
+    expect(marcarLinha).not.toHaveBeenCalled();
+  });
+
+  it("sem pendência nenhuma: o marcador 'a registrar' NÃO aparece", () => {
+    mockRetorno(dadosBase());
+    render(<PaginaChamada />);
+    expect(screen.queryByText(/a registrar/i)).toBeNull();
+  });
+
   it("em registrada: marcar um segmento chama marcarLinha na hora", () => {
     mockRetorno(
       dadosBase({
