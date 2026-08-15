@@ -54,7 +54,12 @@
   consumidor e' o de MAIOR raio de dano se o fuso estiver errado — nao deforma um relatorio, RECUSA uma
   escrita: numa Casa a oeste (UTC-5), uma presenca legitima registrada de madrugada cairia fora do dia
   calculado em Fortaleza e voltaria 409 no meio da chamada ao vivo. E' mais um argumento para o fuso virar
-  atributo do ente antes do primeiro cliente fora do CE.
+  atributo do ente antes do primeiro cliente fora do CE. (e) `sessoes/components/serializador-folha` (Etapa
+  5 fatia 2) — formata toda hora/data que o HTML CANONICO da folha de presenca imprime. Valor efemero de
+  EXIBICAO (nunca persistido por este consumidor), mas o de MAIOR raio de dano SILENCIOSO se o fuso
+  estivesse errado: e' o mesmo bug desta constante (a data recuando um dia em Fortaleza) que motivou a
+  disciplina 'fuso explicito, nunca o default da JVM' descrita aqui, e um documento CONGELADO com hora
+  errada nao tem correcao depois — vira ata.
 
   O QUE ESTA CONSTANTE RESOLVE: ate aqui o fuso era literal espalhado pelas bordas; o host
   (`rotas.clj`) tinha DOIS. Ter um lugar so' e' o pre-requisito de transformar o fuso em

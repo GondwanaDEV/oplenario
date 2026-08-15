@@ -1,0 +1,632 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"/><title>Folha de presença</title><style>/* ============================================================================================
+   folha.css — a folha de estilo UNICA da Folha de Presenca (Etapa 5 fatia 2)
+
+   FONTE DE VERDADE DESTE DOCUMENTO. Ver resources/folha/README.md para por que este arquivo NAO
+   importa nada de produto/design-system/ (chassi.css / tokens.css). CSS 2.1 ESTRITO: e' consumido
+   por openhtmltopdf (Fatia 3), que NAO tem motor de layout de navegador — "it is not a web
+   browser". Isso significa, por construcao:
+
+     - SEM flexbox, SEM CSS grid.
+     - SEM custom properties (var()) e SEM color-mix() — todo hex e' LITERAL, repetido onde precisa.
+     - SEM position:fixed/sticky, SEM transform, SEM transition/animation (documento nao tem estado).
+     - Layout so' com `block` / `inline-block` / `table` — NUNCA `float` (float atravessando quebra
+       de pagina em openhtmltopdf e' fonte conhecida de deriva; ver `.superpowers/sdd/etapa5-folha-brief.md`).
+
+   Este CSS e' usado DUAS vezes pelo mesmo artefato: inline no <style> do HTML canonico (Fatia 2,
+   este entregavel) e, sem nenhuma edicao, como a folha de estilo que o renderizador de PDF consome
+   (Fatia 3) — e' o motivo do documento ter de parecer o MESMO nas duas representacoes. Por isso NAO
+   ha' `@media print` nem `@media screen`: as regras de `@page` abaixo sao inertes num navegador
+   (ele as ignora fora do dialogo de impressao) e ativas no PDF — a MESMA folha de estilo produz o
+   comportamento certo nos dois lugares sem se ramificar.
+
+   PALETA (5 hex, todos literais no corpo do arquivo — esta lista e' so' referencia p/ quem le'):
+     #FFFFFF  o papel — fundo da pagina e de toda celula. NUNCA o creme do design-system (`--papel`
+              #FBF8F0): creme gasta toner e baixa contraste em fotocopia. O papel aqui e' o da Casa.
+     #1B2A20  a tinta — texto principal, titulos, valores, fios ESTRUTURAIS de 0.8pt. ~15.8:1/branco.
+     #586B5E  a tinta secundaria — rotulos de coluna, unidades, notas de rodape. ~5.0:1/branco (AA
+              mesmo em corpo pequeno).
+     #8C8677  o fio de linha — separador de linha de tabela, 0.5pt. ~3.2:1/branco (acima do piso
+              grafico de 3:1).
+     #B9421F  o unico acento (telha) — usado em DOIS lugares e so' neles: o rotulo "Sem assento na
+              data" (secao 7) e o fio esquerdo da nota do STUB-ICP (secao 12). Nunca decorativo.
+
+   Divergencia resolvida entre os dois consultores de design (ver relatorio da fatia): a proposta
+   "ESTRUTURA/UX" usava #0C5340 (jade, a marca do fornecedor) em fios estruturais e titulos de secao.
+   Ficou com a proposta "DIRECAO DE ARTE", que recusa jade neste documento por inteiro — o papel e' da
+   Camara, nao nosso; o nome do sistema aparece uma unica vez, em 7pt, na linha de emissao final.
+
+   TIPOGRAFIA (ver README + comentario de @font-face abaixo): DUAS familias, papel SEMANTICO —
+   serifa = o que a CASA declara (nomes, prosa, motivos, notas); mono = o que a MAQUINA atesta
+   (horas, contagens, enums, identificadores, rotulos de coluna). Nesta fatia usa-se pilha de
+   fallback generico; o @font-face com base64 entra na Fatia 3 (PDF), no ponto marcado abaixo — o
+   MESMO arquivo de fonte serve as duas representacoes, ou elas divergem tipograficamente.
+
+   Piso absoluto de corpo: 7.5pt. Teto: 17pt (documento juridico nao grita). orphans/widows: 3.
+   ============================================================================================ */
+
+/* ---------------------------------------------------------------------------------------------
+   @font-face — PLACEHOLDER da Fatia 3.
+
+   Nesta fatia (Fatia 2) as duas familias usam pilha de fallback generico (linha "font-family"
+   logo abaixo). A Fatia 3 troca CADA declaracao "font-family" desta folha por uma pilha que
+   COMECA com o nome embutido, preservando o fallback como segunda opcao, e insere aqui,
+   ANTES de qualquer regra que use as familias, quatro blocos @font-face (Serif 400, Serif 600,
+   Mono 400, Mono 500) apontando para o MESMO arquivo .ttf que `useFont()` registra no renderizador
+   de PDF (openhtmltopdf exige o binario nos dois caminhos, ou as duas representacoes do artefato
+   deixam de ser bit-a-bit o mesmo documento tipografico). Orcamento: <= 100 KB por face em base64,
+   teto duro 520 KB somando as quatro.
+
+   @font-face {
+     font-family: "FolhaSerif";
+     font-weight: 400;
+     src: url(data:font/ttf;base64,...) format("truetype");
+   }
+   ... (mais 3 blocos: Serif 600, Mono 400, Mono 500)
+   --------------------------------------------------------------------------------------------- */
+
+/* ---------------------------------------------------------------------------------------------
+   @page — moldura A4. Inerte em navegador; ativa no PDF (Fatia 3). counter(pages) exige o motor
+   de paginacao do renderizador de PDF — nao existe no HTML canonico, que por isso NAO tenta
+   reproduzir "Pagina X de Y" no corpo (ver README).
+   --------------------------------------------------------------------------------------------- */
+@page {
+  size: A4 portrait;
+  margin: 16mm 14mm 20mm 14mm;
+}
+
+@page :first {
+  margin-top: 14mm;
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Reset minimo — CSS 2.1, sem box-sizing:border-box (openhtmltopdf o suporta, mas a folha inteira
+   e' medida em `mm`/`pt` fixos via table-layout, entao o reset fica so' no essencial).
+   --------------------------------------------------------------------------------------------- */
+html, body, div, table, tr, td, th, p, ul, ol, li, h1, h2 {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: #FFFFFF;
+  color: #1B2A20;
+  font-family: Georgia, "Times New Roman", serif; /* pilha "FolhaSerif" — ver @font-face acima */
+  font-size: 9pt;
+  line-height: 12.5pt;
+  width: 182mm;
+  margin: 0 auto;
+  orphans: 3;
+  widows: 3;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  table-layout: fixed;
+}
+
+td, th {
+  vertical-align: top;
+  text-align: left;
+  padding: 0;
+}
+
+.mono {
+  font-family: "Courier New", monospace; /* pilha "FolhaMono" — ver @font-face acima */
+}
+
+.serifa {
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+.caps {
+  text-transform: uppercase;
+}
+
+/* =================================================================================================
+   1 — CABECALHO DA CASA
+   ================================================================================================= */
+.folha-cabecalho-casa {
+  text-align: center;
+  padding-bottom: 5mm;
+  margin-bottom: 5mm;
+  border-bottom: 0.8pt solid #1B2A20;
+}
+
+.folha-cabecalho-casa .nome-casa {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: bold;
+  font-size: 9pt;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #1B2A20;
+}
+
+.folha-cabecalho-casa .legislatura {
+  font-family: "Courier New", monospace;
+  font-size: 7.5pt;
+  color: #586B5E;
+  margin-top: 1.5mm;
+}
+
+/* =================================================================================================
+   2 — IDENTIFICACAO DO DOCUMENTO (titulo + carimbo de uso restrito + faixa de identificacao)
+   ================================================================================================= */
+.folha-titulo {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: bold;
+  font-size: 17pt;
+  text-align: center;
+  margin-top: 6mm;
+  margin-bottom: 3mm;
+  color: #1B2A20;
+}
+
+.folha-carimbo-tabela {
+  width: 100%;
+  margin-bottom: 3mm;
+}
+
+.folha-carimbo-tabela td {
+  vertical-align: middle;
+}
+
+.folha-carimbo-tabela .celula-restrito {
+  text-align: right;
+}
+
+.carimbo-restrito {
+  display: inline-block;
+  border: 0.8pt solid #1B2A20;
+  padding: 1.5mm 3mm;
+  font-family: "Courier New", monospace;
+  font-size: 7pt;
+  letter-spacing: 0.06em;
+  color: #1B2A20;
+  text-transform: uppercase;
+}
+
+.folha-identificacao {
+  font-family: "Courier New", monospace;
+  font-size: 7.5pt;
+  color: #586B5E;
+  text-align: center;
+  padding: 2mm 0;
+  border-top: 0.5pt solid #8C8677;
+  border-bottom: 0.5pt solid #8C8677;
+  margin-bottom: 6mm;
+}
+
+/* =================================================================================================
+   3 — A SESSAO
+   ================================================================================================= */
+.folha-secao-titulo {
+  font-family: "Courier New", monospace;
+  font-weight: bold;
+  font-size: 8pt;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: #1B2A20;
+  margin-top: 7mm;
+  margin-bottom: 2.5mm;
+}
+
+.tabela-sessao {
+  width: 100%;
+  margin-bottom: 3mm;
+}
+
+.tabela-sessao col.rotulo { width: 38mm; }
+
+.tabela-sessao td {
+  padding: 1mm 0;
+  border-bottom: 0.5pt solid #8C8677;
+  font-size: 10pt;
+}
+
+.tabela-sessao td.rotulo {
+  font-family: "Courier New", monospace;
+  font-size: 7pt;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #586B5E;
+  padding-top: 2mm;
+}
+
+.faixa-nao-realizada {
+  border-top: 0.8pt solid #1B2A20;
+  border-bottom: 0.8pt solid #1B2A20;
+  padding: 3mm 0;
+  margin: 3mm 0;
+  font-size: 11pt;
+}
+
+.faixa-nao-realizada .rotulo-motivo {
+  font-family: "Courier New", monospace;
+  font-size: 7.5pt;
+  color: #586B5E;
+  text-transform: uppercase;
+  margin-bottom: 1.5mm;
+}
+
+/* =================================================================================================
+   4 — APURACAO DO QUORUM (o demonstrativo — 5 parcelas, cada uma sua propria linha, nada derivado)
+   ================================================================================================= */
+.tabela-quorum {
+  width: 100%;
+  border: 0.8pt solid #1B2A20;
+  margin-bottom: 2mm;
+}
+
+.tabela-quorum col.rotulo { width: 60%; }
+.tabela-quorum col.valor { width: 40%; }
+
+.tabela-quorum td {
+  padding: 1.8mm 3mm;
+  border-bottom: 0.5pt solid #8C8677;
+  font-size: 9.5pt;
+}
+
+.tabela-quorum tr.ultima td {
+  border-bottom: none;
+}
+
+.tabela-quorum td.valor-quorum {
+  text-align: right;
+  font-family: "Courier New", monospace;
+  font-size: 11pt;
+  white-space: nowrap;
+}
+
+.nota-quorum {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 8pt;
+  color: #586B5E;
+  line-height: 11pt;
+  margin-bottom: 1.5mm;
+}
+
+/* =================================================================================================
+   5 — ATOS DE CHAMADA CONDUZIDA
+   ================================================================================================= */
+.tabela-atos {
+  margin-bottom: 2mm;
+}
+
+.tabela-atos col.hora-fato { width: 20%; }
+.tabela-atos col.hora-registro { width: 20%; }
+.tabela-atos col.conduzida { width: 30%; }
+.tabela-atos col.membros { width: 30%; }
+
+.tabela-atos th {
+  font-family: "Courier New", monospace;
+  font-size: 7pt;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #586B5E;
+  border-bottom: 0.8pt solid #1B2A20;
+  padding: 1mm 2mm 1.5mm 0;
+}
+
+.tabela-atos td {
+  font-family: "Courier New", monospace;
+  font-size: 8.5pt;
+  border-bottom: 0.5pt solid #8C8677;
+  padding: 1.3mm 2mm 1.3mm 0;
+  page-break-inside: avoid;
+}
+
+/* =================================================================================================
+   6/7/8 — AS TABELAS DE LINHAS (relacao nominal · licenciados · sem-assento) — a MESMA forma
+   ================================================================================================= */
+.tabela-linhas {
+  margin-bottom: 2mm;
+  -fs-table-paginate: paginate; /* extensao openhtmltopdf/Flying Saucer: repete o thead a cada
+                                    pagina no PDF (Fatia 3). Propriedade desconhecida p/ um
+                                    navegador comum — ignorada em silencio, inofensiva no HTML
+                                    canonico. */
+}
+
+.tabela-linhas col.conf { width: 6%; }
+.tabela-linhas col.ordem { width: 6%; }
+.tabela-linhas col.vereador { width: 29%; }
+.tabela-linhas col.partido { width: 9%; }
+.tabela-linhas col.mesa { width: 12%; }
+.tabela-linhas col.situacao { width: 18%; }
+.tabela-linhas col.hora { width: 20%; }
+
+.tabela-linhas thead {
+  display: table-header-group;
+}
+
+.tabela-linhas th {
+  font-family: "Courier New", monospace;
+  font-size: 7pt;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #586B5E;
+  border-bottom: 0.8pt solid #1B2A20;
+  padding: 1mm 1.5mm 1.5mm 1.5mm;
+  text-align: left;
+}
+
+.tabela-linhas th.num,
+.tabela-linhas td.num {
+  text-align: right;
+}
+
+.tabela-linhas tr.linha-v {
+  page-break-inside: avoid;
+}
+
+.tabela-linhas td {
+  border-bottom: 0.5pt solid #8C8677;
+  padding: 1.6mm 1.5mm;
+  font-size: 9pt;
+}
+
+.tabela-linhas td.conf {
+  border: 0.5pt solid #8C8677;
+  width: 10mm;
+}
+
+.tabela-linhas .nome-vereador {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: bold;
+  font-size: 10pt;
+  color: #1B2A20;
+}
+
+.tabela-linhas .nome-civil {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 7.5pt;
+  color: #586B5E;
+}
+
+.tabela-linhas td.partido,
+.tabela-linhas td.mesa {
+  font-family: "Courier New", monospace;
+  font-size: 8pt;
+}
+
+.tabela-linhas td.situacao {
+  font-family: "Courier New", monospace;
+  font-size: 8pt;
+}
+
+.tabela-linhas td.hora {
+  font-family: "Courier New", monospace;
+  font-size: 8.5pt;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tabela-linhas td.hora .rotulo-registro {
+  display: block;
+  color: #586B5E;
+  font-size: 7.5pt;
+}
+
+.rotulo-risco {
+  display: inline-block;
+  border: 0.8pt solid #B9421F;
+  color: #B9421F;
+  font-family: "Courier New", monospace;
+  font-size: 7pt;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.6mm 1.5mm;
+  margin-top: 1mm;
+}
+
+.folha-secao-texto {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 8.5pt;
+  line-height: 12pt;
+  color: #1B2A20;
+  margin-bottom: 2.5mm;
+}
+
+/* =================================================================================================
+   9 — MOVIMENTACOES DURANTE A SESSAO (serie, agrupada por vereador)
+   ================================================================================================= */
+.tabela-serie {
+  margin-bottom: 2mm;
+}
+
+.tabela-serie col.vereador { width: 29%; }
+.tabela-serie col.movimento { width: 15%; }
+.tabela-serie col.modalidade { width: 15%; }
+.tabela-serie col.fonte { width: 20%; }
+.tabela-serie col.hora { width: 21%; }
+
+.tabela-serie th {
+  font-family: "Courier New", monospace;
+  font-size: 7pt;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #586B5E;
+  border-bottom: 0.8pt solid #1B2A20;
+  padding: 1mm 1.5mm 1.5mm 1.5mm;
+  text-align: left;
+}
+
+.tabela-serie td {
+  border-bottom: 0.5pt solid #8C8677;
+  padding: 1.3mm 1.5mm;
+  font-size: 8.5pt;
+  font-family: "Courier New", monospace;
+}
+
+.tabela-serie tr.grupo-vereador td {
+  border-top: 0.5pt solid #1B2A20;
+  border-bottom: none;
+  padding-top: 3mm;
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: bold;
+  font-size: 9.5pt;
+  color: #1B2A20;
+}
+
+.tabela-serie tr.evento-serie {
+  page-break-inside: avoid;
+}
+
+.tabela-serie td.hora {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* =================================================================================================
+   10 — JUSTIFICATIVAS DE AUSENCIA
+   ================================================================================================= */
+.tabela-justificativas {
+  margin-bottom: 2mm;
+}
+
+.tabela-justificativas col.vereador { width: 22%; }
+.tabela-justificativas col.decisao { width: 16%; }
+.tabela-justificativas col.motivo { width: 45%; }
+.tabela-justificativas col.decidido { width: 17%; }
+
+.tabela-justificativas th {
+  font-family: "Courier New", monospace;
+  font-size: 7pt;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #586B5E;
+  border-bottom: 0.8pt solid #1B2A20;
+  padding: 1mm 1.5mm 1.5mm 1.5mm;
+  text-align: left;
+}
+
+.tabela-justificativas tr.linha-justificativa {
+  page-break-inside: avoid;
+}
+
+.tabela-justificativas td {
+  border-bottom: 0.5pt solid #8C8677;
+  padding: 1.6mm 1.5mm;
+  font-size: 9pt;
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+.tabela-justificativas td.estado {
+  font-family: "Courier New", monospace;
+  font-size: 8pt;
+  text-transform: uppercase;
+}
+
+.tabela-justificativas td.decidido {
+  font-family: "Courier New", monospace;
+  font-size: 8pt;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tabela-justificativas td.motivo {
+  font-style: normal;
+}
+
+/* =================================================================================================
+   11 — CONFERENCIA (assinaturas fisicas em branco)
+   ================================================================================================= */
+.tabela-conferencia {
+  margin-top: 8mm;
+  page-break-inside: avoid;
+}
+
+.tabela-conferencia td {
+  width: 50%;
+  padding-right: 8mm;
+}
+
+.tabela-conferencia .linha-assinatura {
+  border-top: 0.5pt solid #1B2A20;
+  width: 62mm;
+  height: 1pt;
+  margin-top: 14mm;
+}
+
+.tabela-conferencia .rotulo-assinatura {
+  font-family: "Courier New", monospace;
+  font-size: 7pt;
+  color: #586B5E;
+  margin-top: 1.5mm;
+}
+
+/* =================================================================================================
+   12 — REGISTRO DE CONGELAMENTO
+   ================================================================================================= */
+.folha-congelamento {
+  border-top: 0.8pt solid #1B2A20;
+  border-bottom: 0.8pt solid #1B2A20;
+  padding: 3mm 0;
+  margin-top: 8mm;
+  margin-bottom: 6mm;
+}
+
+.folha-congelamento .campo {
+  font-family: "Courier New", monospace;
+  font-size: 8pt;
+  margin-bottom: 1mm;
+}
+
+.folha-congelamento .campo .rotulo {
+  color: #586B5E;
+}
+
+.folha-congelamento .campo .valor {
+  color: #1B2A20;
+}
+
+/* =================================================================================================
+   13 — NOTAS DESTA FOLHA (citadas por numero, nunca empilhadas sem chamada)
+   ================================================================================================= */
+.folha-notas {
+  margin-top: 4mm;
+}
+
+.nota {
+  margin-bottom: 2.5mm;
+  padding-left: 6mm;
+  text-indent: -6mm;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 8.5pt;
+  line-height: 12pt;
+  color: #1B2A20;
+  page-break-inside: avoid;
+}
+
+.nota .num-nota {
+  font-family: "Courier New", monospace;
+  font-weight: bold;
+  font-size: 8pt;
+  color: #1B2A20;
+}
+
+.nota.nota-stub {
+  border-left: 2pt solid #B9421F;
+  padding-left: 4mm;
+  margin-left: 2mm;
+  text-indent: 0;
+}
+
+sup.chamada-nota {
+  font-family: "Courier New", monospace;
+  font-size: 6.5pt;
+}
+
+/* =================================================================================================
+   14 — LINHA DE EMISSAO
+   ================================================================================================= */
+.folha-emissao {
+  margin-top: 6mm;
+  padding-top: 2mm;
+  border-top: 0.5pt solid #8C8677;
+  font-family: "Courier New", monospace;
+  font-size: 7pt;
+  color: #586B5E;
+  text-align: center;
+}
+</style></head><body><div class="folha-cabecalho-casa"><div class="nome-casa">Câmara Municipal de Fortaleza</div><div class="legislatura">Legislatura 19ª · 2025–2028</div></div><div class="folha-titulo">Folha de presença</div><table class="folha-carimbo-tabela"><tr><td></td><td class="celula-restrito"><span class="carimbo-restrito">Uso restrito · contém dado pessoal</span></td></tr></table><div class="folha-identificacao mono">Sessão 00000000 · spec folha-sessao-v1 · presença apurada em 14/08/2026 às 20:30 · versão numerada atribuída no ato de congelamento desta folha</div><div class="folha-secao-titulo">1 · A SESSÃO</div><table class="tabela-sessao"><colgroup><col class="rotulo"/><col/></colgroup><tr><td class="rotulo">Situação da sessão</td><td>Sessão encerrada</td></tr><tr><td class="rotulo">Presença apurada em</td><td>14/08/2026 às 20:30</td></tr></table><div class="folha-secao-titulo">2 · APURAÇÃO DO QUÓRUM</div><table class="tabela-quorum"><colgroup><col class="rotulo"/><col class="valor"/></colgroup><tr><td>Presentes no plenário</td><td class="valor-quorum">13</td></tr><tr><td>Presentes em remoto</td><td class="valor-quorum">3</td></tr><tr><td>Total de presentes</td><td class="valor-quorum">16</td></tr><tr><td>Membros da Casa nesta apuração</td><td class="valor-quorum">20</td></tr><tr class="ultima"><td>Presenças fora do roster (sem assento na data)<sup class="chamada-nota">6</sup></td><td class="valor-quorum">1</td></tr></table><div class="nota-quorum">Números apurados pelo sistema no instante indicado acima. Esta folha não recalcula nenhum deles.</div><div class="nota-quorum">Esta folha não informa quórum de instalação nem quórum de deliberação<sup class="chamada-nota">5</sup>.</div><div class="folha-secao-titulo">3 · ATOS DE CHAMADA CONDUZIDA</div><table class="tabela-atos"><colgroup><col class="hora-fato"/><col class="hora-registro"/><col class="conduzida"/><col class="membros"/></colgroup><tr><th>Hora do fato<sup class="chamada-nota">4</sup></th><th>Hora do registro<sup class="chamada-nota">4</sup></th><th>Conduzida por (id)</th><th>Membros da Casa no ato</th></tr><tr><td>18:00</td><td>18:00</td><td>1e602a10</td><td>20</td></tr></table><div class="folha-secao-texto">Cada chamada conduzida é um ato datado e imutável; uma chamada não se apaga — corrige-se com outra chamada, por isso pode haver mais de um ato nesta seção. "Conduzida por" identifica o operador por id técnico — a resolução do nome não faz parte desta fatia.</div><div class="folha-secao-titulo">4 · RELAÇÃO NOMINAL</div><table class="tabela-linhas"><colgroup><col class="conf"/><col class="ordem"/><col class="vereador"/><col class="partido"/><col class="mesa"/><col class="situacao"/><col class="hora"/></colgroup><thead><tr><th colspan="7" class="folha-secao-titulo" style="margin:0;border-bottom:0.8pt solid #1B2A20;padding-bottom:2mm;">Relação nominal (20)</th></tr><tr><th class="conf">Conf.</th><th class="num">Nº<sup class="chamada-nota">1</sup></th><th>Vereador</th><th>Partido</th><th>Mesa</th><th>Situação apurada<sup class="chamada-nota">3</sup></th><th>Hora do fato / registro<sup class="chamada-nota">4</sup></th></tr></thead><tbody><tr class="linha-v"><td class="conf"></td><td class="num">01</td><td><span class="nome-vereador">Bruno</span><span class="nome-civil">Bruno Almeida Nogueira</span></td><td class="partido">PSDB</td><td class="mesa">—</td><td class="situacao">Presente no plenário</td><td class="hora">18:03<span class="rotulo-registro">registro 19:10</span></td></tr><tr class="linha-v"><td class="conf"></td><td class="num">02</td><td><span class="nome-vereador">Carla</span><span class="nome-civil">Carla Duarte Mesquita</span></td><td class="partido">UNIÃO</td><td class="mesa">—</td><td class="situacao">Presente no plenário</td><td class="hora">18:03<span class="rotulo-registro">registro 19:10</span></td></tr><tr class="linha-v"><td class="conf"></td><td class="num">03</td><td><span class="nome-vereador">Daniel</span><span class="nome-civil">Daniel Ferreira Cavalcante</span></td><td class="partido">REPUBLICANOS</td><td class="mesa">—</td><td class="situacao">Presente no plenário</td><td class="hora">18:03<span class="rotulo-registro">registro 19:10</span></td></tr><tr class="linha-v"><td class="conf"></td><td class="num">04</td><td><span class="nome-vereador">Elisa</span><span class="nome-civil">Elisa Gomes Teixeira</span></td><td class="partido">PL</td><td class="mesa">—</td><td class="situacao">Presente no plenário</td><td class="hora">18:03<span class="rotulo-registro">registro 19:10</span></td></tr><tr class="linha-v"><td class="conf"></td><td class="num">05</td><td><span class="nome-vereador">Fábio</span><span class="nome-civil">Fábio Holanda Bezerra</span></td><td class="partido">PSD</td><td class="mesa">—</td><td class="situacao">Presente no plenário</td><td class="hora">18:03<span class="rotulo-registro">registro 19:10</span></td></tr><tr class="linha-v"><td class="conf"></td><td class="num">06</td><td><span class="nome-vereador">Giselle</span><span class="nome-civil">Giselle Ibiapina Rocha</span></td><td class="partido">MDB</td><td class="mesa">—</td><td class="situacao">Presente no plenário</td><td class="hora">19:10<span class="rotulo-registro">registro 19:10</span></td></tr><tr class="linha-v"><td class="conf"></td><td class="num">07</td><td><span class="nome-vereador">Hugo</span><span class="nome-civil">Hugo Junqueira Freire</span></td><td class="partido">PDT</td><td class="mesa">—</td><td class="situacao">Presente no plenário</td><td class="hora">18:03<span class="rotulo-registro">registro 19:10</span></td></tr><tr class="linha-v"><td class="conf"></td><td class="num">08</td><td><span class="nome-vereador">Ivone</span><span class="nome-civil">Ivone Kelly Aragão</span></td><td class="partido">PT</td><td class="mesa">—</td><td class="situacao">Presente no plenário</td><td class="hora">18:03<span class="rotulo-registro">registro 19:10</span></td></tr><tr class="linha-v"><td class="conf"></td><td class="num">09</td><td><span class="nome-vereador">João</span><span class="nome-civil">João Lira Vasconcelos</span></td><td class="partido">PSDB</td><td class="mesa">—</td><td class="situacao">Presente no plenário</td><td class="hora">18:03<span class="rotulo-registro">registro 19:10</span></td></tr><tr class="linha-v"><td class="conf"></td><td class="num">10</td><td><span class="nome-vereador">Karla</span><span class="nome-civil">Karla Menezes Pinheiro</span></td><td class="partido">UNIÃO</td><td class="mesa">—</td><td class="situacao">Presente no plenário</td><td class="hora">18:03<span class="rotulo-registro">registro 19:10</span></td></tr><tr class="linha-v"><td class="conf"></td><td class="num">11</td><td><span class="nome-vereador">Luiz</span><span class="nome-civil">Luiz Otávio Sampaio</span></td><td class="partido">REPUBLICANOS</td><td class="mesa">—</td><td class="situacao">Presente no plenário</td><td class="hora">18:03<span class="rotulo-registro">registro 19:10</span></td></tr><tr class="linha-v"><td class="conf"></td><td class="num">12</td><td><span class="nome-vereador">Marina</span><span class="nome-civil">Marina Nogueira Castro</span></td><td class="partido">PL</td><td class="mesa">—</td><td class="situacao">Presente no plenário</td><td class="hora">19:10<span class="rotulo-registro">registro 19:10</span></td></tr><tr class="linha-v"><td class="conf"></td><td class="num">13</td><td><span class="nome-vereador">Nélson</span><span class="nome-civil">Nélson Oliveira Brito</span></td><td class="partido">PSD</td><td class="mesa">—</td><td class="situacao">Presente em remoto</td><td class="hora">18:03<span class="rotulo-registro">registro 19:10</span></td></tr><tr class="linha-v"><td class="conf"></td><td class="num">14</td><td><span class="nome-vereador">Otávia</span><span class="nome-civil">Otávia Pereira Lins</span></td><td class="partido">MDB</td><td class="mesa">—</td><td class="situacao">Presente em remoto</td><td class="hora">18:03<span class="rotulo-registro">registro 19:10</span></td></tr><tr class="linha-v"><td class="conf"></td><td class="num">15</td><td><span class="nome-vereador">Paulo</span><span class="nome-civil">Paulo Quintino Diógenes</span></td><td class="partido">PDT</td><td class="mesa">—</td><td class="situacao">Presente em remoto</td><td class="hora">18:03<span class="rotulo-registro">registro 19:10</span></td></tr><tr class="linha-v"><td class="conf"></td><td class="num">16</td><td><span class="nome-vereador">Rita</span><span class="nome-civil">Rita Salustiano Neves</span></td><td class="partido">PT</td><td class="mesa">—</td><td class="situacao">Ausente</td><td class="hora">—</td></tr><tr class="linha-v"><td class="conf"></td><td class="num">17</td><td><span class="nome-vereador">Sérgio</span><span class="nome-civil">Sérgio Tavares Uchôa</span></td><td class="partido">PSDB</td><td class="mesa">—</td><td class="situacao">Ausente</td><td class="hora">—</td></tr><tr class="linha-v"><td class="conf"></td><td class="num">18</td><td><span class="nome-vereador">Tânia</span><span class="nome-civil">Tânia Uchôa Ribeiro</span></td><td class="partido">UNIÃO</td><td class="mesa">—</td><td class="situacao">Ausente</td><td class="hora">—</td></tr><tr class="linha-v"><td class="conf"></td><td class="num">19</td><td><span class="nome-vereador">Vicente</span><span class="nome-civil">Vicente Wagner Siqueira</span></td><td class="partido">REPUBLICANOS</td><td class="mesa">—</td><td class="situacao">Ausente — falta justificada</td><td class="hora">—</td></tr><tr class="linha-v"><td class="conf"></td><td class="num">20</td><td><span class="nome-vereador">Yasmin</span><span class="nome-civil">Yasmin Xavier Monteiro</span></td><td class="partido">PL</td><td class="mesa">1ª Secretária</td><td class="situacao">Ausente — justificativa pendente</td><td class="hora">—</td></tr></tbody></table><div class="folha-secao-titulo">5 · FORA DO DENOMINADOR — LICENCIADOS<sup class="chamada-nota">2</sup></div><div class="folha-secao-texto">O vereador licenciado consta desta folha, mas fica fora do total de membros usado na apuração — durante a licença, quem compõe a Casa é o suplente, com mandato próprio.</div><table class="tabela-linhas"><colgroup><col class="conf"/><col class="ordem"/><col class="vereador"/><col class="partido"/><col class="mesa"/><col class="situacao"/><col class="hora"/></colgroup><thead><tr><th colspan="7" class="folha-secao-titulo" style="margin:0;border-bottom:0.8pt solid #1B2A20;padding-bottom:2mm;">Licenciados (1)</th></tr><tr><th class="conf">Conf.</th><th class="num">Nº<sup class="chamada-nota">1</sup></th><th>Vereador</th><th>Partido</th><th>Mesa</th><th>Situação apurada<sup class="chamada-nota">3</sup></th><th>Hora do fato / registro<sup class="chamada-nota">4</sup></th></tr></thead><tbody><tr class="linha-v"><td class="conf"></td><td class="num"></td><td><span class="nome-vereador">Ana</span><span class="nome-civil">Ana Beatriz Correia</span></td><td class="partido">PT</td><td class="mesa">—</td><td class="situacao">Licenciado</td><td class="hora">— não se marca</td></tr></tbody></table><div class="folha-secao-titulo">6 · FORA DA COMPOSIÇÃO — PRESENÇAS SEM ASSENTO<sup class="chamada-nota">6</sup></div><div class="folha-secao-texto">Há registro de presença para quem não consta como vereador com mandato vigente nesta data. Verifique o cadastro da legislatura antes de dar fé aos totais.</div><table class="tabela-linhas"><colgroup><col class="conf"/><col class="ordem"/><col class="vereador"/><col class="partido"/><col class="mesa"/><col class="situacao"/><col class="hora"/></colgroup><thead><tr><th colspan="7" class="folha-secao-titulo" style="margin:0;border-bottom:0.8pt solid #1B2A20;padding-bottom:2mm;">Presenças sem assento (1)</th></tr><tr><th class="conf">Conf.</th><th class="num">Nº<sup class="chamada-nota">1</sup></th><th>Vereador</th><th>Partido</th><th>Mesa</th><th>Situação apurada<sup class="chamada-nota">3</sup></th><th>Hora do fato / registro<sup class="chamada-nota">4</sup></th></tr></thead><tbody><tr class="linha-v"><td class="conf"></td><td class="num"></td><td><span class="nome-vereador">Wellington</span><span class="nome-civil">Wellington Sem Cadeira</span><div class="rotulo-risco">Sem assento na data</div></td><td class="partido">UNIÃO</td><td class="mesa">—</td><td class="situacao">Presente no plenário</td><td class="hora">19:40<span class="rotulo-registro">registro 19:10</span></td></tr></tbody></table><div class="folha-secao-titulo">7 · MOVIMENTAÇÕES DURANTE A SESSÃO</div><div class="folha-secao-texto">Constam aqui apenas os vereadores com mais de um registro nesta sessão. Para os demais, o único registro é o da relação nominal.</div><table class="tabela-serie"><colgroup><col class="vereador"/><col class="movimento"/><col class="modalidade"/><col class="fonte"/><col class="hora"/></colgroup><tr><th>Vereador</th><th>Movimento</th><th>Modalidade</th><th>Origem do registro</th><th>Hora do fato<sup class="chamada-nota">4</sup></th></tr><tr class="grupo-vereador"><td colspan="5">Bruno</td></tr><tr class="evento-serie"><td>Bruno</td><td>Entrada</td><td>Plenário</td><td>Secretaria (manual)</td><td class="hora">18:03</td></tr><tr class="evento-serie"><td>Bruno</td><td>Saída</td><td>Plenário</td><td>Secretaria (manual)</td><td class="hora">19:10</td></tr><tr class="evento-serie"><td>Bruno</td><td>Retorno</td><td>Plenário</td><td>Secretaria (manual)</td><td class="hora">19:40</td></tr><tr class="grupo-vereador"><td colspan="5">Giselle</td></tr><tr class="evento-serie"><td>Giselle</td><td>Entrada</td><td>Remoto</td><td>Autoatendimento</td><td class="hora">18:03</td></tr><tr class="evento-serie"><td>Giselle</td><td>Mudança de modalidade</td><td>Plenário</td><td>Secretaria (manual)</td><td class="hora">19:10</td></tr></table><div class="folha-secao-titulo">8 · JUSTIFICATIVAS DE AUSÊNCIA</div><table class="tabela-justificativas"><colgroup><col class="vereador"/><col class="decisao"/><col class="motivo"/><col class="decidido"/></colgroup><tr><th>Vereador</th><th>Decisão</th><th>Motivo declarado</th><th>Decidida em</th></tr><tr class="linha-justificativa"><td>Vicente</td><td class="estado">Deferida</td><td class="motivo">«Licença médica — atestado anexado ao processo de RH.»</td><td class="decidido">19:10</td></tr><tr class="linha-justificativa"><td>Yasmin</td><td class="estado">Pendente de decisão da Mesa</td><td class="motivo">«Viagem oficial em representação da Casa — aguardando confirmação da agenda.»</td><td class="decidido">—</td></tr></table><div class="folha-secao-texto">Quem lança a justificativa é a Secretaria; quem decide é a Mesa. Justificativa pendente não muda a contagem: o vereador segue fora dos presentes até a Mesa decidir<sup class="chamada-nota">9</sup>.</div><div class="folha-secao-titulo">9 · CONFERÊNCIA</div><div class="folha-secao-texto">As assinaturas abaixo são físicas. O sistema não as coleta, não as valida e não as guarda<sup class="chamada-nota">7</sup>.</div><table class="tabela-conferencia"><tr><td><div class="linha-assinatura"></div><div class="rotulo-assinatura">Secretaria da Casa — nome e matrícula</div></td><td><div class="linha-assinatura"></div><div class="rotulo-assinatura">Presidência da Mesa</div></td></tr></table><div class="folha-congelamento"><div class="folha-secao-titulo" style="margin-top:0;">10 · REGISTRO DE CONGELAMENTO</div><div class="campo"><span class="rotulo">Especificação: </span><span class="valor">folha-sessao-v1</span></div><div class="campo"><span class="rotulo">Sessão: </span><span class="valor">00000000</span></div><div class="campo"><span class="rotulo">Versão: </span><span class="valor">atribuída no ato de congelamento — não existe nesta pré-visualização</span></div><div class="folha-secao-texto" style="margin-top:2mm;">Os hashes SHA-256 desta folha — o do arquivo HTML e o do PDF — ficam no registro de congelamento da Casa, sob a versão acima. Um arquivo cujo hash não bater com esse registro não é esta folha<sup class="chamada-nota">7</sup>.</div></div><div class="folha-secao-titulo">NOTAS DESTA FOLHA</div><div class="folha-notas"><div class="nota"><span class="num-nota">1</span> Ordem. Os nomes aparecem na ordem cadastrada na Casa. Esta não é, necessariamente, a ordem oficial de chamada — a ordem varia por regimento. A posição de um nome nesta folha não produz efeito regimental.</div><div class="nota"><span class="num-nota">2</span> Licença. O vereador licenciado consta desta folha, mas fica fora do total de membros usado na apuração — durante a licença, quem compõe a Casa é o suplente, com mandato próprio. Enquanto o suplente não entrar no cadastro da legislatura, a Casa é apurada com um membro a menos.</div><div class="nota"><span class="num-nota">3</span> Situação apurada. A situação de cada nome é a do último registro dentro da janela de apuração desta sessão, não o resumo da sessão inteira. Quem entrou, saiu e voltou consta como presente, e tem a série completa na seção de movimentações.</div><div class="nota"><span class="num-nota">4</span> Os dois instantes. Cada marcação traz a hora do fato (quando aconteceu) e a hora do registro (quando entrou no sistema). Quando as duas diferem, houve registro posterior ao fato. Nenhuma das duas se edita depois de gravada.</div><div class="nota"><span class="num-nota">5</span> Quórum regimental. Esta folha não informa quórum de instalação nem quórum de deliberação. A regra que separa os dois está em homologação e não deve sair da Casa antes de confirmada no regimento. Aqui está a presença apurada; o julgamento sobre ela é da Mesa.</div><div class="nota"><span class="num-nota">6</span> Presença sem assento. Há registro de presença para quem não consta como vereador com mandato vigente na data. Esse registro soma no total de presentes e não soma no total de membros — por isso os dois totais não fecham entre si. A folha mostra o caso em vez de escondê-lo.</div><div class="nota nota-stub"><span class="num-nota">7</span> Integridade e assinatura. Esta folha é congelada: a versão indicada no cabeçalho é imutável e tem hash SHA-256 registrado no ato de congelamento. Esta folha NÃO está assinada digitalmente. A marca STUB-ICP-v0 que o sistema aplica não é assinatura com fé pública: não é certificado ICP-Brasil, não identifica signatário perante terceiros e não substitui a assinatura de quem responde pelo documento. O que esta folha entrega é rastreabilidade e imutabilidade por hash — nada além disso.</div><div class="nota"><span class="num-nota">8</span> O que aqui é escolha nossa. Não existe modelo de folha de presença padronizado e aceito de forma uniforme pelas câmaras municipais. São escolhas deste sistema, não exigência legal: o formato desta folha, a divisão em seções, a numeração de ordem, a coluna de conferência manual, o campo de assinatura ao pé, e a decisão de mostrar os dois instantes de cada marcação. Se o jurídico da Casa exigir outro formato, ele prevalece.</div><div class="nota"><span class="num-nota">9</span> Dado pessoal. Esta folha é nominal e reproduz o motivo declarado nas justificativas de ausência, que pode conter dado de saúde. Trate-a como documento de uso restrito.</div></div><div class="folha-emissao">Emitida por O Plenário — sistema de gestão legislativa da Casa.</div></body></html>
