@@ -34,7 +34,7 @@ arquétipo e herda dele a estrutura, em vez de reinventar layout.
 | Arquétipo | O que é | Telas-âncora (provas) | Estado |
 |---|---|---|---|
 | **Cockpit de governança** | Vitrine read-model: ilha-herói + grade de painéis + barra de comando | Painéis da Mesa (16.11) | ✅ provado |
-| **Cabine ao vivo** | Operação em tempo real: placar-ilha + hemiciclo + faixa de azulejo + comando | Sessão ao vivo (4.17) | ✅ provado |
+| **Cabine ao vivo** | Operação em tempo real: palco + rail sticky + comando fixo | Sessão ao vivo (4.17) · **A chamada (4.5)** | ✅ provado 2× |
 | **Balcão de trabalho** | Servidor produz um artefato: painel de entrada + **ilha-papel** ao vivo + comando | Expediente (3.22) | ✅ provado |
 | **Leitura pública** | Porta da rua white-label: hero + busca + cartões; mais ar, mobile-first | Portal do Cidadão (5.x/6.1) | ✅ provado |
 | **Lista/tabela filtrável** | Coleção com filtros, ordenação, ações em massa, paginação, vazio | Proposições (3.x/11.5/11.7) | ✅ provado |
@@ -70,8 +70,11 @@ Padrões já provados que vivem inline numa ou mais telas. Marcados como `receit
 | **Ilha-papel** (documento) | expediente, **editor**, **ata**, **convocação** | 4 | ✅ **chassi.css** — `.ilha-papel` (+ tokens `--papel-*`); ⚠ `.merge` no escuro = 3.72 (sublinhado 2px = sinal gráfico; `GUIDELINES §5.1`, passe futuro de token) |
 | **Anel de prazo** (donut honesto) | portal, painéis, **pendências** | 3 | **promover** — parametrizar por fração + rótulo + token de cor por urgência |
 | **Chips de status / prazo / semáforo** | painéis, portal, **board**, **pendências**, **app** | 5 | ✅ **chassi.css** — `.chip` + `ok/alerta/risco/info/neutro` + `.chip-cheio` (crítica preenchida); ícone+texto; branco só sobre `--telha-fundo` |
-| **Pino/marca ancorada ↔ painel** (IA lê ESTE conteúdo) | **editor** (artigo↔check), **ata** (trecho↔áudio) | 2 | **promover** — âncora bidirecional texto↔observação; `aria-describedby` |
-| **Campos de formulário** | expediente, protocolo, **pauta**, **config**, galeria | 5 | **promover** com estados (foco/erro/ajuda/disabled); borda ≥3:1 (`58% mix`) |
+| **Pino/marca ancorada ↔ painel** (IA lê ESTE conteúdo) | **editor** (artigo↔check), **ata** (trecho↔áudio), **chamada** (nome↔assento do hemiciclo) | 3 | **PROMOVER JÁ** — âncora bidirecional entre um item da lista e a sua marca no gráfico. Em `chamada` a 3ª leitura é espacial (a linha acende o assento e vice-versa) e prova que a receita não é só de IA. A11y: o gráfico é `role="img"` + `aria-label`, a **lista é a alternativa textual** e as marcas ficam FORA da ordem de tabulação (N paradas sem informação nova) |
+| **Segmento de 3 estados na linha** (marcar presença) | **chamada** (Plenário/Remoto/Ausente por vereador) | 1 | nova; escolha exclusiva repetida N vezes numa lista densa. Selecionado = **inversão** `--texto`/`--surface` (§5.1); a semântica vai no **trilho de 4px da linha** (sinal gráfico ≥3:1, tokens que clareiam no escuro) + ícone vazado/cheio. Setas ←→ dentro do grupo, Tab entre linhas. Promover ao 2º uso |
+| **Trilho semântico de linha** (4px colorido por estado) | **chamada** | 1 | nova; lido em coluna dá a forma do conjunto sem ler uma palavra. **Nunca** `--linha` nem cor de marca escura como trilho (medido 1.35 e <3 no escuro): usar `--marca`/`--foco`/`--amarelo-traco`/`--texto-2`, que invertem com o tema |
+| **Ação em massa com DESFAZER** (não confirmação) | **chamada** ("Todos presentes" sobre 21 nomes) | 1 | nova; ato reversível de alto volume pede undo, não diálogo de confirmação — confirmar a cada chamada é atrito diário. O desfazer vive na barra `.comando`, com `role="status"` |
+| **Campos de formulário** | expediente, protocolo, **pauta**, **config**, galeria, **chamada** | 6 | **promover** com estados (foco/erro/ajuda/disabled); borda ≥3:1 — ⚠ **o `58% mix` que esta linha prescrevia mediu 2.68 e REPROVA**; sobre `--surface-2` o que passa é **`78% mix`** de `--texto-2`. O número da receita não substitui a medição na sua superfície (`GUIDELINES §5.1`) |
 | **Cartão `.card`/`.bloco`** (cabeça+corpo) | painéis, board, pendências, pauta, app | 5+ | **promover** — cartão padrão de listas/fichas/cockpits |
 | **Bottom tab bar** (mobile/PWA) | **app do vereador** | 1 | nova; ≤5 itens ícone+rótulo, `aria-current`; promover ao 2º mobile |
 | **Player de áudio** (a fonte do ASR) | **ata** | 1 | nova; timeline + playhead + marcadores; promover se outra tela tocar gravação |

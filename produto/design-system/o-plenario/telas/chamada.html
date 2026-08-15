@@ -1,0 +1,1217 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — A chamada · folha de presença da sessão</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Tela "A chamada — folha de presença da sessão"
+     Rota do produto: /sessoes/[id]/chamada   ·   papel: secretario
+     Linguagem: República Luminosa (Cívico Tropical), dois modos.
+
+     ARQUÉTIPO (PADROES §2): **Cabine ao vivo**, com o palco ocupado
+     por uma LISTA DENSA em vez do placar. Herda topo + rail sticky +
+     barra .comando de `sessao-ao-vivo.html`; a lista herda a densidade
+     de `cadastro-vereadores.html`.
+
+     A TESE DA TELA: o telão do quórum já existe (Etapa 4). Aqui o
+     assunto é outro — **a Casa se formando nome a nome**, sob a mão de
+     quem conduz. Por isso o herói NÃO é o número: é a folha, e a
+     assinatura é o HEMICICLO VIVO ANCORADO À LINHA (focar/apontar um
+     nome acende o assento dele; apontar o assento destaca o nome).
+     É o 3º uso da receita "pino/marca ancorada ↔ painel"
+     (PADROES §3: editor · ata) — dispara a promoção ao chassi.
+     A ousadia mora aí e só aí; o resto é disciplina.
+
+     CONTRATO REAL QUE ESTA TELA CONSOME (não inventar):
+       GET   /sessoes/:id/chamada              → ChamadaOut
+       POST  /sessoes/:id/presenca             → uma linha
+       POST  /sessoes/:id/presenca/lote        → a chamada em 1 tx (teto 200)
+       POST  /sessoes/:id/chamada              → o ATO "chamada conduzida" (teto 50)
+       GET   /sessoes/:id/justificativas       → JustificativasOut
+       POST  /sessoes/:id/justificativas       → lançar
+       PATCH /sessoes/:id/justificativas/:jid/decisao → decidir (lockVersion → 409)
+       SSE   /sessoes/:id/plenario             → o vivo
+
+     ARMADILHAS DE CONTRASTE APLICADAS (GUIDELINES §5.1):
+       · segmento SELECIONADO nunca usa --marca de fundo com texto
+         branco (2.35 no escuro): usa a inversão provada
+         fundo var(--texto) / texto var(--surface).
+       · o trilho semântico da linha usa tokens que CLAREIAM no escuro
+         (--marca, --foco, --amarelo-traco, --texto-2) — jade cheio
+         sobre --surface escuro fica < 3:1.
+       · branco nunca sobre --telha; só sobre --telha-fundo.
+     ============================================================ */
+
+  /* tokens + base vêm de ../sistema/tokens.css + ../sistema/chassi.css.
+     Abaixo, só o específico desta superfície. */
+
+  /* ============== 1 · BARRA INSTITUCIONAL (herda .topo do chassi) ============== */
+  .ao-vivo {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    font-family: var(--mono); font-size: var(--t-13); font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--acento-texto);
+    padding: 0.32rem 0.7rem; border: 1px solid var(--acento-texto);
+    /* MEDIDO: com o tint de telha (rgba(217,84,43,.1)) sobre a barra, o
+       --acento-texto cai a 4.10 — é a armadilha §5.1 "--acento-texto sobre
+       o body = 4.6, não empilhe sobre fundo mais escuro sem remedir".
+       A pílula usa --surface (o tom MAIS CLARO) para o texto respirar.
+       ⚠ `sessao-ao-vivo.html` tem a mesma pílula com o tint e herda a falha. */
+    background: var(--surface); border-radius: 999px;
+  }
+  .ao-vivo .pulso { width: 9px; height: 9px; border-radius: 50%; background: var(--telha); flex: 0 0 auto; animation: pulso 1.8s ease-out infinite; }
+  @keyframes pulso { 0% { box-shadow: 0 0 0 0 rgba(217,84,43,.5);} 70% { box-shadow: 0 0 0 7px rgba(217,84,43,0);} 100% { box-shadow: 0 0 0 0 rgba(217,84,43,0);} }
+
+  /* estado degradado do canal — honesto: o número pode estar defasado.
+     (Achado da Etapa 4: o badge não pode continuar verde "Ao vivo" com
+     o Wi-Fi caído há mais tempo que a retenção do canal.) */
+  .ao-vivo.reconectando { color: var(--aviso-texto); border-color: color-mix(in srgb, var(--amarelo) 65%, transparent); background: color-mix(in srgb, var(--amarelo) 18%, var(--surface)); }
+  .ao-vivo.reconectando .pulso { background: var(--amarelo-traco); animation: none; }
+  .ao-vivo .rot-reconectando { display: none; }
+  body.canal-caido .ao-vivo .rot-vivo { display: none; }
+  body.canal-caido .ao-vivo .rot-reconectando { display: inline; }
+
+  .sessao-meta { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+  .sessao-meta .tipo { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); }
+  .sessao-meta .quando { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); }
+
+  .relogio { font-family: var(--mono); font-size: var(--t-21); font-weight: 600; color: var(--marca); letter-spacing: -0.01em; }
+  .relogio .rotulo { display: block; font-size: var(--t-12); font-weight: 500; color: var(--texto-2); letter-spacing: .04em; }
+
+  /* ============== 2 · LAYOUT DA CABINE ============== */
+  .cabine { display: grid; grid-template-columns: minmax(0,1fr) 372px; gap: clamp(1rem, 2.4vw, 1.8rem); padding: clamp(1.2rem, 3vw, 2rem) 0 8.5rem; align-items: start; }
+  .rail { display: grid; gap: 1.1rem; position: sticky; top: 84px; }
+
+  .bloco { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); }
+  .bloco-cabeca { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0.9rem 1.1rem; border-bottom: 1px solid var(--linha); }
+  .bloco-cabeca h2 { font-family: var(--display); font-weight: 600; font-size: var(--t-16); letter-spacing: -0.01em; color: var(--texto); margin: 0; }
+  .bloco-corpo { padding: 1.1rem; }
+
+  /* ============== 3 · A FOLHA (o palco) ============== */
+  .folha { overflow: hidden; }
+
+  .folha-cabeca { padding: 1.2rem 1.3rem 1rem; border-bottom: 1px solid var(--linha); }
+  .folha-cabeca h1 { font-family: var(--display); font-weight: 700; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.35rem 0 0.2rem; line-height: 1.15; }
+  .folha-sub { font-size: var(--t-13); color: var(--texto-2); margin: 0; }
+  .folha-sub b { color: var(--texto); font-weight: 600; }
+
+  /* ferramentas da folha: busca · ordenação · ação em massa */
+  .ferramentas { display: flex; align-items: flex-end; gap: 0.7rem; flex-wrap: wrap; margin: 1rem 0 0; }
+  .campo { display: grid; gap: 0.3rem; flex: 1 1 210px; min-width: 0; }
+  .campo label { font-size: var(--t-12); font-weight: 600; color: var(--texto-2); letter-spacing: .01em; }
+  .campo input, .campo select {
+    font-family: var(--corpo); font-size: var(--t-16); color: var(--texto);
+    background: var(--surface-2);
+    /* borda de campo ≥3:1 nos dois temas (PADROES §3 · receita "campos de formulário") */
+    border: 1px solid color-mix(in srgb, var(--texto-2) 78%, transparent);
+    border-radius: var(--raio-sm); padding: 0.6rem 0.7rem; min-height: 44px; width: 100%;
+  }
+  .campo select { cursor: pointer; }
+  .ferramentas .btn { flex: 0 0 auto; }
+
+  .nota-ordem { display: flex; align-items: flex-start; gap: 0.45rem; margin: 0.7rem 0 0; font-size: var(--t-12); color: var(--texto-2); line-height: 1.45; }
+  .nota-ordem svg { flex: 0 0 auto; color: var(--aviso-texto); margin-top: 2px; }
+  .nota-ordem b { color: var(--texto); font-weight: 600; }
+
+  /* --- grupos e linhas --- */
+  .grupo-tit {
+    display: flex; align-items: center; gap: 0.6rem;
+    position: sticky; top: 64px; z-index: 2;
+    padding: 0.5rem 1.3rem; margin: 0;
+    background: var(--bg); border-top: 1px solid var(--linha); border-bottom: 1px solid var(--linha);
+    font-family: var(--mono); font-size: var(--t-12); letter-spacing: .12em; text-transform: uppercase; color: var(--texto-2);
+  }
+  .grupo-tit .qtd { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+  .linhas { list-style: none; margin: 0; padding: 0; }
+  .linha {
+    display: grid;
+    grid-template-columns: 4px 38px minmax(0,1fr) auto auto;
+    align-items: center; gap: 0 0.8rem;
+    padding: 0.55rem 1.3rem 0.55rem 0;
+    border-bottom: 1px solid var(--linha);
+    transition: background-color .12s ease;
+  }
+  .linha:last-child { border-bottom: 0; }
+  .linha:hover, .linha.destacada { background: color-mix(in srgb, var(--marca) 6%, var(--surface)); }
+  .linha:focus-within { background: color-mix(in srgb, var(--foco) 8%, var(--surface)); }
+
+  /* o trilho semântico: 4px de cor por estado — sinal GRÁFICO (≥3:1),
+     nunca o único sinal (a pílula selecionada e o ícone carregam o texto).
+     Lido em coluna, dá a forma da Casa sem ler uma palavra. */
+  .trilho { align-self: stretch; background: var(--linha); }
+  .linha[data-estado="presente-plenario"] .trilho { background: var(--marca); }
+  .linha[data-estado="presente-remoto"]   .trilho { background: var(--foco); }
+  .linha[data-estado="ausente"]           .trilho { background: var(--texto-2); }
+  .linha[data-estado="ausente-justificado"] .trilho { background: color-mix(in srgb, var(--marca) 50%, var(--texto-2)); }
+  .linha[data-estado="ausente-justificativa-pendente"] .trilho { background: var(--amarelo-traco); }
+  .linha[data-estado="licenciado"]        .trilho { background: repeating-linear-gradient(180deg, var(--texto-2) 0 4px, transparent 4px 8px); }
+
+  .linha .avatar { width: 38px; height: 38px; font-size: var(--t-13); background: var(--jade); }
+  .linha[data-estado="presente-remoto"] .avatar { background: var(--cobalto); }
+  .linha[data-estado="ausente"] .avatar,
+  .linha[data-estado="ausente-justificado"] .avatar,
+  .linha[data-estado="ausente-justificativa-pendente"] .avatar,
+  .linha[data-estado="licenciado"] .avatar {
+    background: var(--texto-2);
+    /* MEDIDO 2.28 no escuro com o branco que o chassi põe no .avatar:
+       --texto-2 CLAREIA no escuro (#4C574F → #9FB0A4), então branco sobre
+       ele falha. --surface inverte junto com o tema: 7.1 claro / 6.9 escuro. */
+    color: var(--surface);
+  }
+
+  .quem { min-width: 0; line-height: 1.25; padding: 0.15rem 0; }
+  .quem b { font-weight: 600; font-size: var(--t-16); color: var(--texto); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .quem .sub { font-size: var(--t-12); color: var(--texto-2); display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
+  .quem .partido { font-family: var(--mono); }
+  .cargo-mesa { font-family: var(--mono); font-size: var(--t-12); color: var(--acento-texto); font-weight: 600; }
+
+  /* o par (hora do fato, hora do registro) — decisão da Etapa 2: a tela
+     mostra SEMPRE os dois, para o jurídico distinguir correção de saída real. */
+  .hora { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; line-height: 1.25; }
+  .hora b { display: block; font-size: var(--t-13); font-weight: 500; color: var(--texto); }
+  .hora span { font-size: var(--t-12); color: var(--texto-2); }
+  .hora .retro { color: var(--aviso-texto); }
+  .hora .vazio { color: var(--texto-2); }
+
+  /* --- o segmento de 3 estados (o instrumento da chamada) --- */
+  .marcar { display: inline-flex; border: 1px solid color-mix(in srgb, var(--texto-2) 78%, transparent); border-radius: 999px; overflow: hidden; background: var(--surface-2); }
+  .marcar button {
+    font-family: var(--corpo); font-size: var(--t-13); font-weight: 600;
+    display: inline-flex; align-items: center; gap: 0.38rem;
+    min-height: 44px; padding: 0.4rem 0.8rem;
+    border: none; background: transparent; color: var(--texto-2); cursor: pointer;
+    transition: background-color .12s ease, color .12s ease;
+    white-space: nowrap;
+  }
+  .marcar button + button { border-left: 1px solid color-mix(in srgb, var(--texto-2) 70%, transparent); }
+  .marcar button:hover { background: color-mix(in srgb, var(--texto) 8%, transparent); color: var(--texto); }
+  /* SELECIONADO: inversão provada (15.51 claro / 12.62 escuro).
+     NÃO usar --marca de fundo com texto branco: 2.35 no escuro (§5.1). */
+  .marcar button[aria-pressed="true"] { background: var(--texto); color: var(--surface); }
+  .marcar button[aria-pressed="true"]:hover { background: var(--texto); }
+  .marcar button .glifo { width: 13px; height: 13px; flex: 0 0 auto; }
+  .marcar button .g-vazio { display: inline; }
+  .marcar button .g-cheio { display: none; }
+  .marcar button[aria-pressed="true"] .g-vazio { display: none; }
+  .marcar button[aria-pressed="true"] .g-cheio { display: inline; }
+
+  /* linha sem marcação possível (licenciado) ou folha em leitura */
+  .estado-fixo { display: inline-flex; align-items: center; gap: 0.45rem; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); border: 1px dashed color-mix(in srgb, var(--texto-2) 78%, transparent); border-radius: 999px; padding: 0.35rem 0.75rem; min-height: 44px; }
+
+  /* a justificativa pendurada na linha */
+  .just {
+    grid-column: 3 / -1; margin: 0.45rem 0 0.15rem;
+    display: flex; align-items: flex-start; gap: 0.55rem; flex-wrap: wrap;
+    padding: 0.6rem 0.75rem; border-radius: var(--raio-sm);
+    background: var(--surface-2); border: 1px solid var(--linha);
+    font-size: var(--t-13); color: var(--texto-2); line-height: 1.45;
+  }
+  .just.pendente { border-color: var(--amarelo-traco); background: color-mix(in srgb, var(--amarelo) 10%, var(--surface-2)); }
+  .just .motivo { flex: 1 1 220px; min-width: 0; }
+  .just .motivo b { color: var(--texto); font-weight: 600; }
+  .just .decidir { display: flex; gap: 0.45rem; flex: 0 0 auto; }
+
+  /* --- fora da composição: o fail-loud do servidor, na cara --- */
+  .fora-nota { display: flex; align-items: flex-start; gap: 0.6rem; margin: 0; padding: 0.85rem 1.3rem; background: color-mix(in srgb, var(--telha) 8%, var(--surface)); border-top: 1px solid var(--linha); border-bottom: 1px solid var(--linha); font-size: var(--t-13); color: var(--texto-2); line-height: 1.45; }
+  .fora-nota svg { flex: 0 0 auto; color: var(--acento-texto); margin-top: 2px; }
+  .fora-nota b { color: var(--texto); font-weight: 600; }
+
+  /* --- vazio: sem composição na data --- */
+  .vazio-folha { display: none; padding: 2.6rem 1.3rem 3rem; text-align: center; }
+  .vazio-folha svg { color: var(--texto-2); opacity: .8; }
+  .vazio-folha h2 { font-family: var(--display); font-weight: 600; font-size: var(--t-21); color: var(--texto); margin: 0.9rem 0 0.35rem; }
+  .vazio-folha p { max-width: 46ch; margin: 0 auto 1.2rem; color: var(--texto-2); font-size: var(--t-13); line-height: 1.55; }
+
+  /* --- folha em SOMENTE LEITURA (sessão encerrada) ---
+     read-only ≠ disabled: é um REGISTRO, não um formulário quebrado. */
+  .aviso-fechada { display: none; align-items: flex-start; gap: 0.6rem; padding: 0.95rem 1.3rem; background: color-mix(in srgb, var(--telha) 9%, var(--surface)); border-bottom: 1px solid var(--linha); font-size: var(--t-13); color: var(--texto); line-height: 1.5; }
+  .aviso-fechada svg { flex: 0 0 auto; color: var(--acento-texto); margin-top: 2px; }
+  .aviso-fechada b { font-weight: 600; }
+  .aviso-fechada a { color: var(--acento-texto); font-weight: 600; }
+
+  /* ============== 4 · RAIL ============== */
+  .quorum-num { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+  .quorum-num b { font-family: var(--display); font-weight: 800; font-size: var(--t-40); letter-spacing: -0.02em; color: var(--marca); line-height: 1; font-variant-numeric: tabular-nums; }
+  .quorum-num span { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); }
+
+  /* o hemiciclo VIVO — a assinatura. Cada assento é um vereador e está
+     ancorado à sua linha na folha (data-v). role="img" + aria-label:
+     a lista nominal É a alternativa acessível, então os assentos não
+     entram na ordem de tabulação (21 paradas extras sem informação nova). */
+  svg.hemi { width: 100%; height: auto; display: block; margin: 0.7rem 0 0.2rem; }
+  .hemi circle { transition: r .12s ease, fill .12s ease; cursor: pointer; }
+  /* VOCABULÁRIO DO ASSENTO (MEDIDO, ≥3:1 nos dois temas):
+     preenchido = presente · vazado = ausente · o traço diz de que tipo.
+     Preenchimentos pálidos foram descartados na medição — `marca 34%`
+     dava 2.32 e `--linha` como fill dava 1.35 (é cor de divisória, não
+     de sinal). Forma + traço carregam o significado; a cor reforça. */
+  .hemi circle { fill: none; stroke: var(--texto-2); stroke-width: 1.8; }
+  .hemi .s-presente-plenario { fill: var(--marca); stroke: none; }
+  .hemi .s-presente-remoto   { fill: var(--foco);  stroke: none; }
+  .hemi .s-ausente           { fill: var(--surface-2); stroke: var(--texto-2); stroke-width: 1.8; }
+  .hemi .s-ausente-justificado { fill: var(--surface-2); stroke: var(--marca); stroke-width: 2.2; }
+  .hemi .s-ausente-justificativa-pendente { fill: var(--surface-2); stroke: var(--amarelo-traco); stroke-width: 2.4; }
+  .hemi .s-licenciado { fill: none; stroke: var(--texto-2); stroke-width: 1.8; stroke-dasharray: 2.5 2.5; }
+  .hemi .destaque { r: 7.4; stroke: var(--acento-texto); stroke-width: 2.4; }
+
+  .quorum-legenda { display: grid; grid-template-columns: 1fr 1fr; gap: 0.3rem 0.8rem; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin-top: 0.5rem; }
+  .quorum-legenda i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 0.35rem; vertical-align: -1px; }
+  .quorum-legenda i.vazado { background: none; border: 1.4px dashed var(--texto-2); }
+
+  .limiar { margin: 0.9rem 0 0; padding: 0.7rem 0.8rem; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); font-size: var(--t-12); color: var(--texto-2); line-height: 1.5; }
+  .limiar b { color: var(--texto); font-weight: 600; font-family: var(--mono); }
+  .limiar .gap { display: inline-flex; align-items: center; gap: 0.3rem; font-family: var(--mono); color: var(--aviso-texto); font-weight: 600; }
+
+  .fora-roster { margin: 0.7rem 0 0; padding: 0.65rem 0.8rem; border-radius: var(--raio-sm); background: color-mix(in srgb, var(--telha) 9%, var(--surface)); border: 1px solid var(--acento-texto); font-size: var(--t-12); color: var(--texto-2); line-height: 1.5; display: flex; gap: 0.5rem; align-items: flex-start; }
+  .fora-roster svg { flex: 0 0 auto; color: var(--acento-texto); margin-top: 2px; }
+  .fora-roster b { color: var(--texto); font-weight: 600; }
+
+  .pend-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+  .pend-lista li { display: grid; gap: 0.4rem; padding: 0.7rem 0.8rem; border: 1px solid var(--linha); border-radius: var(--raio-sm); background: var(--surface-2); }
+  .pend-lista .nome { font-size: var(--t-13); font-weight: 600; color: var(--texto); }
+  .pend-lista .txt { font-size: var(--t-12); color: var(--texto-2); line-height: 1.45; }
+  .pend-lista .acoes { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+
+  .nota-mesa { margin: 0.8rem 0 0; padding: 0.6rem 0.75rem; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); font-size: var(--t-12); color: var(--texto-2); line-height: 1.45; display: flex; gap: 0.45rem; align-items: flex-start; }
+  .nota-mesa svg { flex: 0 0 auto; color: var(--cobalto); margin-top: 2px; }
+  [data-tema="escuro"] .nota-mesa svg { color: var(--foco); }
+  .nota-mesa b { color: var(--texto); font-weight: 600; }
+
+  /* atos de chamada — append-only, reusa a gramática de .ev da trilha */
+  .atos { list-style: none; margin: 0; padding: 0; }
+  .atos li { display: grid; grid-template-columns: auto 1fr; gap: 0.15rem 0.7rem; padding: 0.65rem 0; border-top: 1px dashed var(--linha); }
+  .atos li:first-child { border-top: 0; padding-top: 0; }
+  .atos .qdo { font-family: var(--mono); font-size: var(--t-13); color: var(--texto); font-variant-numeric: tabular-nums; }
+  .atos .qm { font-size: var(--t-13); color: var(--texto); }
+  .atos .det { grid-column: 1 / -1; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+
+  /* ============== 5 · BARRA DE COMANDO ============== */
+  .dica { width: 100%; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); padding-bottom: 0.55rem; display: flex; align-items: flex-start; gap: 0.45rem; line-height: 1.45; }
+  .dica svg { color: var(--acento-texto); flex: 0 0 auto; margin-top: 2px; }
+
+  /* desfazer da ação em massa — undo, não confirmação: 21 nomes de uma vez
+     é reversível, e pedir confirmação a cada chamada é atrito diário. */
+  .desfazer { display: none; align-items: center; gap: 0.6rem; font-size: var(--t-13); color: var(--texto); }
+  body.lote-aplicado .desfazer { display: inline-flex; }
+
+  /* ============== 6 · TIRA DE DEMONSTRAÇÃO (scaffolding de design) ============== */
+  .demo-strip { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin: 1rem 0 0; padding: 0.5rem 0.75rem; border: 1px dashed color-mix(in srgb, var(--texto-2) 78%, transparent); border-radius: var(--raio-sm); background: var(--surface-2); font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .demo-strip .seg { display: inline-flex; border: 1px solid color-mix(in srgb, var(--texto-2) 78%, transparent); border-radius: 999px; overflow: hidden; }
+  .demo-strip .seg button { font: inherit; padding: 0.4rem 0.9rem; min-height: 44px; border: none; background: transparent; color: var(--texto-2); cursor: pointer; }
+  .demo-strip .seg button + button { border-left: 1px solid color-mix(in srgb, var(--texto-2) 70%, transparent); }
+  .demo-strip .seg button[aria-pressed="true"] { background: var(--texto); color: var(--surface); }
+
+  /* ---- modo REGISTRADA (a chamada já foi conduzida; ajuste ao vivo) ----
+     ⚠ CLASSE DOBRADA DE PROPÓSITO. As utilitárias precisam vencer regras
+     de ELEMENTO dentro de classe que já existem no chassi e nesta tela
+     — `.comando-ctx b { display:block }` e `.atos li { display:grid }`
+     são (0,1,1) e derrotavam `.so-registrada` (0,1,0). O sintoma media
+     o dobro do erro: em "chamada em curso" a folha anunciava
+     "1ª chamada registrada às 14h03" e listava um ato inexistente.
+     `.x.x` = (0,2,0) e ganha sem `!important`. */
+  body.modo-registrada .so-em-curso.so-em-curso { display: none; }
+  .so-registrada.so-registrada { display: none; }
+  body.modo-registrada .so-registrada.so-registrada { display: revert; }
+
+  /* ---- modo FECHADA (sessão encerrada; somente leitura) ---- */
+  body.modo-fechada .marcar,
+  body.modo-fechada .just .decidir,
+  body.modo-fechada .ferramentas .btn,
+  body.modo-fechada .comando-acoes .btn-primaria,
+  body.modo-fechada .pend-lista .acoes { display: none; }
+  body.modo-fechada .aviso-fechada { display: flex; }
+  body.modo-fechada .so-em-curso.so-em-curso { display: none; }
+
+  /* ---- modo VAZIO (nenhuma composição vigente na data) ---- */
+  body.modo-vazio .folha-corpo,
+  body.modo-vazio .ferramentas,
+  body.modo-vazio .nota-ordem,
+  body.modo-vazio .comando-acoes .btn-primaria { display: none; }
+  body.modo-vazio .vazio-folha { display: block; }
+  /* sem composição não há folha a registrar nem contagem que faça sentido:
+     a barra não pode seguir dizendo "20 de 21 marcados · 18 presentes". */
+  body.modo-vazio .so-em-curso.so-em-curso,
+  body.modo-vazio .comando-ctx { display: none; }
+
+  .so-mobile { display: none; }
+
+  /* ============== RESPONSIVO ============== */
+  @media (max-width: 1040px) {
+    .cabine { grid-template-columns: 1fr; }
+    .rail { position: static; grid-template-columns: 1fr 1fr; align-items: start; }
+    .rail .bloco.larga { grid-column: 1 / -1; }
+  }
+  @media (max-width: 760px) {
+    .rail { grid-template-columns: 1fr; }
+    .topo-dir { margin-left: 0; width: 100%; justify-content: space-between; flex-wrap: wrap; }
+    /* A linha empilha em 3 faixas: identidade+hora · instrumento · justificativa.
+       O placement é EXPLÍCITO: com auto-flow, a .hora caía numa célula
+       sobrando e flutuava fora da linha (visto em 390). */
+    .linha { grid-template-columns: 4px 38px minmax(0,1fr) auto; padding-right: 1rem; row-gap: 0.5rem; }
+    .linha .trilho  { grid-column: 1; grid-row: 1 / -1; }
+    .linha .avatar  { grid-column: 2; grid-row: 1; }
+    .linha .quem    { grid-column: 3; grid-row: 1; }
+    .linha .hora    { grid-column: 4; grid-row: 1; }
+    .linha .marcar, .linha .estado-fixo { grid-column: 2 / -1; grid-row: 2; }
+    .linha .just    { grid-column: 2 / -1; grid-row: 3; margin-top: 0; }
+    .marcar { width: 100%; }
+    .marcar button { flex: 1 1 0; justify-content: center; padding: 0.4rem 0.4rem; }
+    .grupo-tit { padding-left: 1rem; padding-right: 1rem; }
+    .folha-cabeca, .fora-nota, .aviso-fechada { padding-left: 1rem; padding-right: 1rem; }
+    .quorum-legenda { grid-template-columns: 1fr; }
+    /* os 4 botões de estado não cabem em 390: o pill os CLIPAVA
+       (overflow:hidden) e o último ficava inalcançável. Vira grade. */
+    .demo-strip .seg { flex-wrap: wrap; border-radius: var(--raio-sm); width: 100%; }
+    .demo-strip .seg button { flex: 1 1 45%; justify-content: center; }
+    .demo-strip .seg button + button { border-left: none; box-shadow: inset 1px 0 0 color-mix(in srgb, var(--texto-2) 70%, transparent); }
+    .dica, .comando-ctx { display: none; }
+    .comando-acoes { width: 100%; }
+    .comando-acoes .btn-primaria { flex: 1 0 100%; order: -1; }
+    .so-mobile { display: block; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+    .btn:hover { transform: none; }
+    .ao-vivo .pulso { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+  <a class="pular" href="#folha">Pular para a folha de chamada</a>
+
+  <!-- ============== 1 · BARRA INSTITUCIONAL ============== -->
+  <header class="topo">
+    <div class="envelope topo-grade">
+      <div class="marca">
+        <svg class="marca-simbolo" viewBox="0 0 40 40" role="img" aria-label="O Plenário">
+          <circle cx="20" cy="20" r="19" fill="#FBF8F0" stroke="#E0D7BF"/>
+          <path d="M7 27 A13 13 0 0 1 33 27" fill="none" stroke="#0C5340" stroke-width="2.4" stroke-linecap="round"/>
+          <path d="M10 27 A10 10 0 0 1 30 27" fill="none" stroke="#1E5FA8" stroke-width="2.4" stroke-linecap="round"/>
+          <path d="M13.5 27 A6.5 6.5 0 0 1 26.5 27" fill="none" stroke="#D9542B" stroke-width="2.4" stroke-linecap="round"/>
+          <rect x="18.4" y="9.5" width="3.2" height="6" rx="1.2" fill="#E8B23A"/>
+        </svg>
+        <div>
+          <p class="marca-nome">O&nbsp;Plenário</p>
+          <p class="marca-orgao">Câmara Municipal de Maracanaú</p>
+        </div>
+      </div>
+
+      <div class="topo-sep" aria-hidden="true"></div>
+
+      <span class="ao-vivo">
+        <span class="pulso" aria-hidden="true"></span>
+        <span class="rot-vivo">Ao vivo</span>
+        <span class="rot-reconectando">Reconectando</span>
+      </span>
+      <div class="sessao-meta">
+        <span class="tipo">Sessão Ordinária nº 14</span>
+        <span class="quando">21 mai 2026 · aberta 14h00</span>
+      </div>
+
+      <div class="topo-dir">
+        <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" title="Alternar tema claro / escuro">
+          <svg class="sol" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3.2" fill="currentColor"/><g stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13"/></g></svg>
+          <svg class="lua" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M13 9.5A5.5 5.5 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z" fill="currentColor"/></svg>
+          <span class="tema-rotulo">Claro</span>
+        </button>
+        <div class="relogio" role="timer" aria-label="Hora da Casa">
+          <span class="rotulo">Hora da Casa</span>
+          <span id="relogio-casa">14:03:22</span>
+        </div>
+        <div class="presidente">
+          <span class="avatar" aria-hidden="true">DM</span>
+          <span class="quem"><b>Denise Moreira</b><span>Secretaria · conduz a chamada</span></span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="envelope">
+    <div class="cabine">
+
+      <!-- ============== 2 · A FOLHA ============== -->
+      <section class="bloco folha" id="folha" aria-labelledby="folha-titulo">
+
+        <div class="folha-cabeca">
+          <p class="eyebrow">Presença · sessão ordinária nº 14</p>
+          <h1 id="folha-titulo">A chamada</h1>
+          <p class="folha-sub so-em-curso">Marque cada vereador e registre a chamada num único ato. Enquanto não registrar, nada é gravado.</p>
+          <p class="folha-sub so-registrada"><b>Chamada registrada às 14h03</b> por Denise Moreira. A partir daqui, cada marcação é gravada na hora — entradas e saídas durante a sessão.</p>
+
+          <div class="ferramentas">
+            <div class="campo">
+              <label for="busca">Localizar vereador</label>
+              <input id="busca" type="search" placeholder="Nome ou partido" autocomplete="off" />
+            </div>
+            <div class="campo" style="flex: 0 1 190px;">
+              <label for="ordem">Ordem da chamada</label>
+              <select id="ordem">
+                <option>Como sua Casa chama</option>
+                <option>Alfabética</option>
+                <option>Por partido</option>
+                <option>Por estado de presença</option>
+              </select>
+            </div>
+            <button class="btn btn-contorno btn-mini so-em-curso" type="button" id="todos-presentes">
+              <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 8.4l3.2 3.2L13.5 4" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Todos presentes
+            </button>
+          </div>
+
+          <p class="nota-ordem">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
+            <span>A ordem em que se chama os nomes <b>varia por regimento</b> — a folha abre na ordem cadastrada na sua Casa. <b>[Regimento]</b></span>
+          </p>
+        </div>
+
+        <!-- sessão encerrada: registro, não formulário quebrado -->
+        <p class="aviso-fechada" role="status">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+          <span><b>A sessão foi encerrada às 21h14.</b> A presença desta sessão está fechada e não pode mais ser alterada — a correção de um registro errado se faz pela ata. Esta folha segue disponível para leitura e para a <a href="livro-atas.html">folha da sessão</a>.</span>
+        </p>
+
+        <div class="folha-corpo">
+
+          <!-- ---- Mesa Diretora ---- -->
+          <h2 class="grupo-tit" id="g-mesa">Mesa Diretora <span class="qtd mono">5</span></h2>
+          <ul class="linhas" aria-labelledby="g-mesa">
+
+            <li class="linha" data-v="v01" data-estado="presente-plenario">
+              <span class="trilho" aria-hidden="true"></span>
+              <span class="avatar" aria-hidden="true">SL</span>
+              <span class="quem">
+                <b>Ver. Sérgio Lopes</b>
+                <span class="sub"><span class="partido">PDT</span> · <span class="cargo-mesa">Presidente</span></span>
+              </span>
+              <span class="marcar" role="group" aria-label="Presença de Ver. Sérgio Lopes">
+                <button type="button" aria-pressed="true" data-e="presente-plenario">
+                  <svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/></svg>
+                  <svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="3" fill="currentColor"/></svg>
+                  Presente
+                </button>
+                <button type="button" aria-pressed="false" data-e="presente-remoto">
+                  <svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M11.4 8l3-2.2v4.4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+                  <svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" fill="currentColor"/><path d="M11.4 8l3-2.2v4.4z" fill="currentColor"/></svg>
+                  Remoto
+                </button>
+                <button type="button" aria-pressed="false" data-e="ausente">
+                  <svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.6 2.4"/></svg>
+                  <svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+                  Ausente
+                </button>
+              </span>
+              <span class="hora"><b>14:02</b><span>registrado 14:02</span></span>
+            </li>
+
+            <li class="linha" data-v="v02" data-estado="presente-plenario">
+              <span class="trilho" aria-hidden="true"></span>
+              <span class="avatar" aria-hidden="true">CB</span>
+              <span class="quem">
+                <b>Ver.ª Carla Bezerra</b>
+                <span class="sub"><span class="partido">PT</span> · <span class="cargo-mesa">1ª Secretária</span></span>
+              </span>
+              <span class="marcar" role="group" aria-label="Presença de Ver.ª Carla Bezerra">
+                <button type="button" aria-pressed="true" data-e="presente-plenario"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="3" fill="currentColor"/></svg>Presente</button>
+                <button type="button" aria-pressed="false" data-e="presente-remoto"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M11.4 8l3-2.2v4.4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" fill="currentColor"/><path d="M11.4 8l3-2.2v4.4z" fill="currentColor"/></svg>Remoto</button>
+                <button type="button" aria-pressed="false" data-e="ausente"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.6 2.4"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Ausente</button>
+              </span>
+              <span class="hora"><b>14:01</b><span>registrado 14:01</span></span>
+            </li>
+
+            <li class="linha" data-v="v03" data-estado="presente-remoto">
+              <span class="trilho" aria-hidden="true"></span>
+              <span class="avatar" aria-hidden="true">HM</span>
+              <span class="quem">
+                <b>Ver.ª Helena Matos</b>
+                <span class="sub"><span class="partido">PSB</span> · <span class="cargo-mesa">2ª Secretária</span></span>
+              </span>
+              <span class="marcar" role="group" aria-label="Presença de Ver.ª Helena Matos">
+                <button type="button" aria-pressed="false" data-e="presente-plenario"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="3" fill="currentColor"/></svg>Presente</button>
+                <button type="button" aria-pressed="true" data-e="presente-remoto"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M11.4 8l3-2.2v4.4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" fill="currentColor"/><path d="M11.4 8l3-2.2v4.4z" fill="currentColor"/></svg>Remoto</button>
+                <button type="button" aria-pressed="false" data-e="ausente"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.6 2.4"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Ausente</button>
+              </span>
+              <span class="hora"><b>14:00</b><span>registrado 14:00</span></span>
+            </li>
+
+            <li class="linha" data-v="v04" data-estado="presente-plenario">
+              <span class="trilho" aria-hidden="true"></span>
+              <span class="avatar" aria-hidden="true">RA</span>
+              <span class="quem">
+                <b>Ver. Rodrigo Aguiar</b>
+                <span class="sub"><span class="partido">PDT</span> · <span class="cargo-mesa">1º Vice-Presidente</span></span>
+              </span>
+              <span class="marcar" role="group" aria-label="Presença de Ver. Rodrigo Aguiar">
+                <button type="button" aria-pressed="true" data-e="presente-plenario"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="3" fill="currentColor"/></svg>Presente</button>
+                <button type="button" aria-pressed="false" data-e="presente-remoto"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M11.4 8l3-2.2v4.4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" fill="currentColor"/><path d="M11.4 8l3-2.2v4.4z" fill="currentColor"/></svg>Remoto</button>
+                <button type="button" aria-pressed="false" data-e="ausente"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.6 2.4"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Ausente</button>
+              </span>
+              <span class="hora"><b>14:02</b><span>registrado 14:02</span></span>
+            </li>
+
+            <li class="linha" data-v="v05" data-estado="ausente-justificativa-pendente">
+              <span class="trilho" aria-hidden="true"></span>
+              <span class="avatar" aria-hidden="true">MF</span>
+              <span class="quem">
+                <b>Ver. Marcos Frota</b>
+                <span class="sub"><span class="partido">PL</span> · <span class="cargo-mesa">2º Vice-Presidente</span></span>
+              </span>
+              <span class="marcar" role="group" aria-label="Presença de Ver. Marcos Frota">
+                <button type="button" aria-pressed="false" data-e="presente-plenario"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="3" fill="currentColor"/></svg>Presente</button>
+                <button type="button" aria-pressed="false" data-e="presente-remoto"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M11.4 8l3-2.2v4.4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" fill="currentColor"/><path d="M11.4 8l3-2.2v4.4z" fill="currentColor"/></svg>Remoto</button>
+                <button type="button" aria-pressed="true" data-e="ausente"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.6 2.4"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Ausente</button>
+              </span>
+              <span class="hora"><b>—</b><span class="vazio">sem registro</span></span>
+              <span class="just pendente">
+                <span class="chip chip-alerta">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                  Justificativa pendente de decisão
+                </span>
+                <span class="motivo"><b>Missão oficial</b> — Fórum de Prefeitos e Câmaras, Brasília. Protocolada em 20 mai por Denise Moreira.</span>
+                <span class="decidir">
+                  <button class="btn btn-contorno btn-mini" type="button">Deferir</button>
+                  <button class="btn btn-fantasma btn-mini" type="button">Indeferir</button>
+                </span>
+              </span>
+            </li>
+          </ul>
+
+          <!-- ---- Demais vereadores ---- -->
+          <h2 class="grupo-tit" id="g-casa">Demais vereadores <span class="qtd mono">15</span></h2>
+          <ul class="linhas" aria-labelledby="g-casa">
+
+            <li class="linha" data-v="v06" data-estado="presente-plenario">
+              <span class="trilho" aria-hidden="true"></span><span class="avatar" aria-hidden="true">TN</span>
+              <span class="quem"><b>Ver. Teó Nunes</b><span class="sub"><span class="partido">PSB</span></span></span>
+              <span class="marcar" role="group" aria-label="Presença de Ver. Teó Nunes">
+                <button type="button" aria-pressed="true" data-e="presente-plenario"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="3" fill="currentColor"/></svg>Presente</button>
+                <button type="button" aria-pressed="false" data-e="presente-remoto"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M11.4 8l3-2.2v4.4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" fill="currentColor"/><path d="M11.4 8l3-2.2v4.4z" fill="currentColor"/></svg>Remoto</button>
+                <button type="button" aria-pressed="false" data-e="ausente"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.6 2.4"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Ausente</button>
+              </span>
+              <span class="hora"><b>14:01</b><span>registrado 14:01</span></span>
+            </li>
+
+            <li class="linha" data-v="v07" data-estado="presente-plenario">
+              <span class="trilho" aria-hidden="true"></span><span class="avatar" aria-hidden="true">AL</span>
+              <span class="quem"><b>Ver.ª Aparecida Lima</b><span class="sub"><span class="partido">MDB</span></span></span>
+              <span class="marcar" role="group" aria-label="Presença de Ver.ª Aparecida Lima">
+                <button type="button" aria-pressed="true" data-e="presente-plenario"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="3" fill="currentColor"/></svg>Presente</button>
+                <button type="button" aria-pressed="false" data-e="presente-remoto"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M11.4 8l3-2.2v4.4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" fill="currentColor"/><path d="M11.4 8l3-2.2v4.4z" fill="currentColor"/></svg>Remoto</button>
+                <button type="button" aria-pressed="false" data-e="ausente"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.6 2.4"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Ausente</button>
+              </span>
+              <span class="hora"><b>14:00</b><span>registrado 14:00</span></span>
+            </li>
+
+            <li class="linha" data-v="v08" data-estado="presente-plenario">
+              <span class="trilho" aria-hidden="true"></span><span class="avatar" aria-hidden="true">JB</span>
+              <span class="quem"><b>Ver. Josué Bandeira</b><span class="sub"><span class="partido">PP</span></span></span>
+              <span class="marcar" role="group" aria-label="Presença de Ver. Josué Bandeira">
+                <button type="button" aria-pressed="true" data-e="presente-plenario"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="3" fill="currentColor"/></svg>Presente</button>
+                <button type="button" aria-pressed="false" data-e="presente-remoto"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M11.4 8l3-2.2v4.4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" fill="currentColor"/><path d="M11.4 8l3-2.2v4.4z" fill="currentColor"/></svg>Remoto</button>
+                <button type="button" aria-pressed="false" data-e="ausente"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.6 2.4"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Ausente</button>
+              </span>
+              <span class="hora"><b>14:02</b><span>registrado 14:02</span></span>
+            </li>
+
+            <li class="linha" data-v="v09" data-estado="presente-remoto">
+              <span class="trilho" aria-hidden="true"></span><span class="avatar" aria-hidden="true">VC</span>
+              <span class="quem"><b>Ver.ª Vanda Correia</b><span class="sub"><span class="partido">PSD</span></span></span>
+              <span class="marcar" role="group" aria-label="Presença de Ver.ª Vanda Correia">
+                <button type="button" aria-pressed="false" data-e="presente-plenario"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="3" fill="currentColor"/></svg>Presente</button>
+                <button type="button" aria-pressed="true" data-e="presente-remoto"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M11.4 8l3-2.2v4.4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" fill="currentColor"/><path d="M11.4 8l3-2.2v4.4z" fill="currentColor"/></svg>Remoto</button>
+                <button type="button" aria-pressed="false" data-e="ausente"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.6 2.4"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Ausente</button>
+              </span>
+              <span class="hora"><b>14:03</b><span>registrado 14:03</span></span>
+            </li>
+
+            <li class="linha" data-v="v10" data-estado="presente-plenario">
+              <span class="trilho" aria-hidden="true"></span><span class="avatar" aria-hidden="true">EG</span>
+              <span class="quem"><b>Ver. Edmilson Guedes</b><span class="sub"><span class="partido">REPUBLICANOS</span></span></span>
+              <span class="marcar" role="group" aria-label="Presença de Ver. Edmilson Guedes">
+                <button type="button" aria-pressed="true" data-e="presente-plenario"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="3" fill="currentColor"/></svg>Presente</button>
+                <button type="button" aria-pressed="false" data-e="presente-remoto"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M11.4 8l3-2.2v4.4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" fill="currentColor"/><path d="M11.4 8l3-2.2v4.4z" fill="currentColor"/></svg>Remoto</button>
+                <button type="button" aria-pressed="false" data-e="ausente"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.6 2.4"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Ausente</button>
+              </span>
+              <span class="hora"><b>14:00</b><span>registrado 14:00</span></span>
+            </li>
+
+            <li class="linha" data-v="v11" data-estado="ausente-justificado">
+              <span class="trilho" aria-hidden="true"></span><span class="avatar" aria-hidden="true">NP</span>
+              <span class="quem"><b>Ver. Nilton Praça</b><span class="sub"><span class="partido">PV</span></span></span>
+              <span class="marcar" role="group" aria-label="Presença de Ver. Nilton Praça">
+                <button type="button" aria-pressed="false" data-e="presente-plenario"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="3" fill="currentColor"/></svg>Presente</button>
+                <button type="button" aria-pressed="false" data-e="presente-remoto"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M11.4 8l3-2.2v4.4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" fill="currentColor"/><path d="M11.4 8l3-2.2v4.4z" fill="currentColor"/></svg>Remoto</button>
+                <button type="button" aria-pressed="true" data-e="ausente"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.6 2.4"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Ausente</button>
+              </span>
+              <span class="hora"><b>—</b><span class="vazio">sem registro</span></span>
+              <span class="just">
+                <span class="chip chip-ok">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg>
+                  Falta justificada · deferida
+                </span>
+                <span class="motivo"><b>Doença comprovada</b> — atestado apresentado. Deferida em 21 mai às 09h12 por <b>Ver. Sérgio Lopes</b>, Presidente.</span>
+              </span>
+            </li>
+
+            <li class="linha" data-v="v12" data-estado="presente-plenario">
+              <span class="trilho" aria-hidden="true"></span><span class="avatar" aria-hidden="true">SM</span>
+              <span class="quem"><b>Ver.ª Socorro Maciel</b><span class="sub"><span class="partido">PT</span></span></span>
+              <span class="marcar" role="group" aria-label="Presença de Ver.ª Socorro Maciel">
+                <button type="button" aria-pressed="true" data-e="presente-plenario"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="3" fill="currentColor"/></svg>Presente</button>
+                <button type="button" aria-pressed="false" data-e="presente-remoto"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M11.4 8l3-2.2v4.4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" fill="currentColor"/><path d="M11.4 8l3-2.2v4.4z" fill="currentColor"/></svg>Remoto</button>
+                <button type="button" aria-pressed="false" data-e="ausente"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.6 2.4"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Ausente</button>
+              </span>
+              <!-- registro retroativo: o par de horas ganha significado jurídico aqui -->
+              <span class="hora"><b>13:48</b><span class="retro">registrado 14:07</span></span>
+            </li>
+
+            <li class="linha" data-v="v13" data-estado="presente-plenario">
+              <span class="trilho" aria-hidden="true"></span><span class="avatar" aria-hidden="true">GC</span>
+              <span class="quem"><b>Ver. Gilmar Cavalcante</b><span class="sub"><span class="partido">PSDB</span></span></span>
+              <span class="marcar" role="group" aria-label="Presença de Ver. Gilmar Cavalcante">
+                <button type="button" aria-pressed="true" data-e="presente-plenario"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="3" fill="currentColor"/></svg>Presente</button>
+                <button type="button" aria-pressed="false" data-e="presente-remoto"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M11.4 8l3-2.2v4.4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" fill="currentColor"/><path d="M11.4 8l3-2.2v4.4z" fill="currentColor"/></svg>Remoto</button>
+                <button type="button" aria-pressed="false" data-e="ausente"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.6 2.4"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Ausente</button>
+              </span>
+              <span class="hora"><b>14:01</b><span>registrado 14:01</span></span>
+            </li>
+
+            <li class="linha" data-v="v14" data-estado="presente-plenario">
+              <span class="trilho" aria-hidden="true"></span><span class="avatar" aria-hidden="true">IF</span>
+              <span class="quem"><b>Ver.ª Iracema Fontes</b><span class="sub"><span class="partido">PDT</span></span></span>
+              <span class="marcar" role="group" aria-label="Presença de Ver.ª Iracema Fontes">
+                <button type="button" aria-pressed="true" data-e="presente-plenario"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="3" fill="currentColor"/></svg>Presente</button>
+                <button type="button" aria-pressed="false" data-e="presente-remoto"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M11.4 8l3-2.2v4.4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" fill="currentColor"/><path d="M11.4 8l3-2.2v4.4z" fill="currentColor"/></svg>Remoto</button>
+                <button type="button" aria-pressed="false" data-e="ausente"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.6 2.4"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Ausente</button>
+              </span>
+              <span class="hora"><b>14:02</b><span>registrado 14:02</span></span>
+            </li>
+
+            <li class="linha" data-v="v15" data-estado="ausente">
+              <span class="trilho" aria-hidden="true"></span><span class="avatar" aria-hidden="true">WB</span>
+              <span class="quem"><b>Ver. Wilson Braga</b><span class="sub"><span class="partido">PL</span></span></span>
+              <span class="marcar" role="group" aria-label="Presença de Ver. Wilson Braga">
+                <button type="button" aria-pressed="false" data-e="presente-plenario"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="3" fill="currentColor"/></svg>Presente</button>
+                <button type="button" aria-pressed="false" data-e="presente-remoto"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M11.4 8l3-2.2v4.4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" fill="currentColor"/><path d="M11.4 8l3-2.2v4.4z" fill="currentColor"/></svg>Remoto</button>
+                <button type="button" aria-pressed="true" data-e="ausente"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.6 2.4"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Ausente</button>
+              </span>
+              <span class="hora"><b>—</b><span class="vazio">sem registro</span></span>
+              <span class="just">
+                <span class="chip chip-neutro">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg>
+                  Sem justificativa
+                </span>
+                <span class="motivo">Nenhuma justificativa protocolada para esta sessão.</span>
+                <span class="decidir"><button class="btn btn-contorno btn-mini" type="button">Lançar justificativa</button></span>
+              </span>
+            </li>
+
+            <li class="linha" data-v="v16" data-estado="presente-plenario">
+              <span class="trilho" aria-hidden="true"></span><span class="avatar" aria-hidden="true">LT</span>
+              <span class="quem"><b>Ver. Lauro Tavares</b><span class="sub"><span class="partido">PSD</span></span></span>
+              <span class="marcar" role="group" aria-label="Presença de Ver. Lauro Tavares">
+                <button type="button" aria-pressed="true" data-e="presente-plenario"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="3" fill="currentColor"/></svg>Presente</button>
+                <button type="button" aria-pressed="false" data-e="presente-remoto"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M11.4 8l3-2.2v4.4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" fill="currentColor"/><path d="M11.4 8l3-2.2v4.4z" fill="currentColor"/></svg>Remoto</button>
+                <button type="button" aria-pressed="false" data-e="ausente"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.6 2.4"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Ausente</button>
+              </span>
+              <span class="hora"><b>14:01</b><span>registrado 14:01</span></span>
+            </li>
+
+            <li class="linha" data-v="v17" data-estado="presente-plenario">
+              <span class="trilho" aria-hidden="true"></span><span class="avatar" aria-hidden="true">RQ</span>
+              <span class="quem"><b>Ver.ª Rita Queiroz</b><span class="sub"><span class="partido">PCdoB</span></span></span>
+              <span class="marcar" role="group" aria-label="Presença de Ver.ª Rita Queiroz">
+                <button type="button" aria-pressed="true" data-e="presente-plenario"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="3" fill="currentColor"/></svg>Presente</button>
+                <button type="button" aria-pressed="false" data-e="presente-remoto"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M11.4 8l3-2.2v4.4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" fill="currentColor"/><path d="M11.4 8l3-2.2v4.4z" fill="currentColor"/></svg>Remoto</button>
+                <button type="button" aria-pressed="false" data-e="ausente"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.6 2.4"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Ausente</button>
+              </span>
+              <span class="hora"><b>14:00</b><span>registrado 14:00</span></span>
+            </li>
+
+            <li class="linha" data-v="v18" data-estado="presente-plenario">
+              <span class="trilho" aria-hidden="true"></span><span class="avatar" aria-hidden="true">AV</span>
+              <span class="quem"><b>Ver. Aluísio Vieira</b><span class="sub"><span class="partido">PP</span></span></span>
+              <span class="marcar" role="group" aria-label="Presença de Ver. Aluísio Vieira">
+                <button type="button" aria-pressed="true" data-e="presente-plenario"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="3" fill="currentColor"/></svg>Presente</button>
+                <button type="button" aria-pressed="false" data-e="presente-remoto"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M11.4 8l3-2.2v4.4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" fill="currentColor"/><path d="M11.4 8l3-2.2v4.4z" fill="currentColor"/></svg>Remoto</button>
+                <button type="button" aria-pressed="false" data-e="ausente"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.6 2.4"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Ausente</button>
+              </span>
+              <span class="hora"><b>14:03</b><span>registrado 14:03</span></span>
+            </li>
+
+            <li class="linha" data-v="v19" data-estado="presente-plenario">
+              <span class="trilho" aria-hidden="true"></span><span class="avatar" aria-hidden="true">BS</span>
+              <span class="quem"><b>Ver.ª Bernadete Sales</b><span class="sub"><span class="partido">MDB</span></span></span>
+              <span class="marcar" role="group" aria-label="Presença de Ver.ª Bernadete Sales">
+                <button type="button" aria-pressed="true" data-e="presente-plenario"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="3" fill="currentColor"/></svg>Presente</button>
+                <button type="button" aria-pressed="false" data-e="presente-remoto"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M11.4 8l3-2.2v4.4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" fill="currentColor"/><path d="M11.4 8l3-2.2v4.4z" fill="currentColor"/></svg>Remoto</button>
+                <button type="button" aria-pressed="false" data-e="ausente"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.6 2.4"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Ausente</button>
+              </span>
+              <span class="hora"><b>14:02</b><span>registrado 14:02</span></span>
+            </li>
+
+            <li class="linha" data-v="v20" data-estado="presente-plenario">
+              <span class="trilho" aria-hidden="true"></span><span class="avatar" aria-hidden="true">FD</span>
+              <span class="quem"><b>Ver. Fábio Duarte</b><span class="sub"><span class="partido">PSB</span></span></span>
+              <span class="marcar" role="group" aria-label="Presença de Ver. Fábio Duarte">
+                <button type="button" aria-pressed="true" data-e="presente-plenario"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="3" fill="currentColor"/></svg>Presente</button>
+                <button type="button" aria-pressed="false" data-e="presente-remoto"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M11.4 8l3-2.2v4.4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" fill="currentColor"/><path d="M11.4 8l3-2.2v4.4z" fill="currentColor"/></svg>Remoto</button>
+                <button type="button" aria-pressed="false" data-e="ausente"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.6 2.4"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Ausente</button>
+              </span>
+              <span class="hora"><b>14:01</b><span>registrado 14:01</span></span>
+            </li>
+
+            <!-- inconsistência de cadastro: o servidor sinaliza, a tela não esconde -->
+            <li class="linha" data-v="v21" data-estado="presente-plenario">
+              <span class="trilho" aria-hidden="true"></span><span class="avatar" aria-hidden="true">?</span>
+              <span class="quem">
+                <b>Ver. Osmar Bandeira Filho</b>
+                <span class="sub">
+                  <span class="chip chip-risco">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+                    Cadastro incompleto
+                  </span>
+                  <span>partido não informado</span>
+                </span>
+              </span>
+              <span class="marcar" role="group" aria-label="Presença de Ver. Osmar Bandeira Filho">
+                <button type="button" aria-pressed="true" data-e="presente-plenario"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="3" fill="currentColor"/></svg>Presente</button>
+                <button type="button" aria-pressed="false" data-e="presente-remoto"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M11.4 8l3-2.2v4.4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="1.6" y="3.4" width="9.2" height="9.2" rx="2" fill="currentColor"/><path d="M11.4 8l3-2.2v4.4z" fill="currentColor"/></svg>Remoto</button>
+                <button type="button" aria-pressed="false" data-e="ausente"><svg class="glifo g-vazio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.6 2.4"/></svg><svg class="glifo g-cheio" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Ausente</button>
+              </span>
+              <span class="hora"><b>14:02</b><span>registrado 14:02</span></span>
+            </li>
+          </ul>
+
+          <!-- ---- Licenciados: aparecem, não se marcam ---- -->
+          <h2 class="grupo-tit" id="g-lic">Licenciados <span class="qtd mono">1</span></h2>
+          <ul class="linhas" aria-labelledby="g-lic">
+            <li class="linha" data-v="v22" data-estado="licenciado">
+              <span class="trilho" aria-hidden="true"></span><span class="avatar" aria-hidden="true">PV</span>
+              <span class="quem">
+                <b>Ver. Paulo Verçosa</b>
+                <span class="sub"><span class="partido">PSD</span> · licença para tratamento de saúde até 12 jun</span>
+              </span>
+              <span class="estado-fixo">
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2.5 2.5"/></svg>
+                Licenciado
+              </span>
+              <span class="hora"><b>—</b><span class="vazio">não se marca</span></span>
+              <span class="just">
+                <span class="motivo">O licenciado aparece na composição para que a folha não pareça incompleta. <b>Se ele conta para o quórum depende do regimento e da convocação do suplente</b> — o suplente não é convocado por aqui. <b>[Regimento]</b></span>
+              </span>
+            </li>
+          </ul>
+
+          <!-- ---- Fora da composição: o fail-loud do servidor ---- -->
+          <p class="fora-nota">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+            <span><b>1 presença fora da composição.</b> Há registro de presença para alguém que não consta como vereador com mandato vigente nesta data. Ela conta no total de presentes, <b>mas não no total de membros da Casa</b> — por isso os números abaixo não fecham. Verifique o cadastro da legislatura antes de registrar a chamada.</span>
+          </p>
+          <h2 class="grupo-tit" id="g-fora">Fora da composição <span class="qtd mono">1</span></h2>
+          <ul class="linhas" aria-labelledby="g-fora">
+            <li class="linha" data-v="v23" data-estado="presente-plenario">
+              <span class="trilho" aria-hidden="true"></span><span class="avatar" aria-hidden="true">CS</span>
+              <span class="quem">
+                <b>Cléber Souto</b>
+                <span class="sub">
+                  <span class="chip chip-risco">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+                    Sem assento na data
+                  </span>
+                </span>
+              </span>
+              <span class="estado-fixo">Presente · fora do denominador</span>
+              <span class="hora"><b>14:04</b><span>registrado 14:04</span></span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- ---- vazio: nenhuma composição vigente ---- -->
+        <div class="vazio-folha">
+          <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11h-6"/>
+          </svg>
+          <h2>Nenhum vereador com mandato vigente em 21 mai 2026</h2>
+          <p>A chamada usa a composição da Casa na data da sessão. Sem vereadores cadastrados nessa data não há a quem chamar — e o quórum não teria denominador.</p>
+          <a class="btn btn-primaria" href="cadastro-vereadores.html">Abrir cadastro de vereadores</a>
+        </div>
+
+        <!-- tira de demonstração: os estados da folha (scaffolding de design) -->
+        <div class="envelope">
+          <div class="demo-strip" role="group" aria-label="Demonstração de design: estado da folha">
+            <span>Demonstração · estado:</span>
+            <span class="seg">
+              <button type="button" data-modo="em-curso" aria-pressed="true">Chamada em curso</button>
+              <button type="button" data-modo="registrada" aria-pressed="false">Registrada · ao vivo</button>
+              <button type="button" data-modo="fechada" aria-pressed="false">Sessão encerrada</button>
+              <button type="button" data-modo="vazio" aria-pressed="false">Sem composição</button>
+            </span>
+            <span class="seg">
+              <button type="button" id="btn-canal" aria-pressed="false">Simular queda do canal</button>
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============== 3 · RAIL ============== -->
+      <aside class="rail" aria-label="Quórum, justificativas e atos de chamada">
+
+        <section class="bloco quorum" aria-labelledby="quorum-titulo">
+          <div class="bloco-cabeca">
+            <h2 id="quorum-titulo">Quórum</h2>
+            <span class="chip chip-ok">
+              <svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true"><path d="M2.5 7.5l3 3 6-7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Contagem viva
+            </span>
+          </div>
+          <div class="bloco-corpo">
+            <div class="quorum-num" aria-live="polite">
+              <b id="q-presentes">18</b><span>de <b id="q-membros" style="font-family:var(--mono);font-size:var(--t-13);font-weight:600;color:var(--texto);">21</b> membros presentes</span>
+            </div>
+
+            <svg id="hemiciclo" class="hemi" viewBox="0 0 260 140" role="img"
+                 aria-label="Hemiciclo da Casa: 16 presentes no plenário, 2 presentes em remoto, 1 falta justificada, 1 justificativa pendente, 1 ausente sem justificativa, 1 licenciado. Total de 21 membros."></svg>
+
+            <div class="quorum-legenda">
+              <span><i style="background:var(--marca);"></i>Plenário 16</span>
+              <span><i style="background:var(--foco);"></i>Remoto 2</span>
+              <span><i style="background:var(--texto-2);"></i>Ausentes 2</span>
+              <span><i class="vazado"></i>Licenciado 1</span>
+            </div>
+
+            <p class="limiar">
+              Quórum de instalação: <b>11</b> · quórum de deliberação: <b>11</b><br />
+              <span class="gap">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+                [Regimento] regra em homologação
+              </span>
+              — se a sua Casa separa quórum de instalação de quórum de deliberação, confirme os dois no regimento antes de usar este número fora daqui.
+            </p>
+
+            <p class="fora-roster">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+              <span><b>+1 presença fora da composição</b> — total de presentes 19, membros da Casa 21. Ver o grupo no fim da folha.</span>
+            </p>
+          </div>
+        </section>
+
+        <section class="bloco larga" aria-labelledby="just-titulo">
+          <div class="bloco-cabeca">
+            <h2 id="just-titulo">Justificativas</h2>
+            <span class="chip chip-alerta">1 pendente</span>
+          </div>
+          <div class="bloco-corpo">
+            <ul class="pend-lista">
+              <li>
+                <span class="nome">Ver. Marcos Frota</span>
+                <span class="txt"><b>Missão oficial</b> — Fórum de Prefeitos e Câmaras, Brasília. Protocolada em 20 mai.</span>
+                <span class="acoes">
+                  <button class="btn btn-contorno btn-mini" type="button">Deferir</button>
+                  <button class="btn btn-fantasma btn-mini" type="button">Indeferir</button>
+                </span>
+              </li>
+            </ul>
+            <p class="nota-mesa">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l8 4v5c0 4.4-3.4 8.3-8 9-4.6-.7-8-4.6-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg>
+              <span>Quem <b>lança</b> a justificativa é a secretaria; quem <b>decide</b> é a Mesa. A decisão fica registrada com nome e hora de quem deferiu.</span>
+            </p>
+          </div>
+        </section>
+
+        <section class="bloco larga" aria-labelledby="atos-titulo">
+          <div class="bloco-cabeca">
+            <h2 id="atos-titulo">Chamadas desta sessão</h2>
+            <span class="eyebrow" style="color:var(--texto-2)">2</span>
+          </div>
+          <div class="bloco-corpo">
+            <ul class="atos">
+              <li class="so-registrada">
+                <span class="qdo">14:03</span>
+                <span class="qm">1ª chamada · <b>Denise Moreira</b></span>
+                <span class="det">Casa com 21 membros · 18 presentes</span>
+              </li>
+              <li>
+                <span class="qdo">13:55</span>
+                <span class="qm">Verificação de quórum · <b>Denise Moreira</b></span>
+                <span class="det">Casa com 21 membros · 9 presentes · quórum não verificado</span>
+              </li>
+            </ul>
+            <p class="nota-mesa">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+              <span>Cada chamada vira um <b>ato datado e append-only</b>, com quem conduziu e quantos membros a Casa tinha na hora. Não se apaga: uma chamada errada se corrige com outra chamada.</span>
+            </p>
+          </div>
+        </section>
+
+      </aside>
+    </div>
+  </main>
+
+  <!-- ============== 4 · BARRA DE COMANDO ============== -->
+  <div class="comando" role="region" aria-label="Comandos da chamada">
+    <div class="envelope">
+      <p class="dica so-em-curso">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        Registrar grava a folha inteira num único ato, com a hora e o seu nome. Enquanto você marca, nada sai daqui — se a rede cair no meio, não fica meia chamada gravada.
+      </p>
+      <p class="dica so-registrada">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        A chamada já foi registrada. Cada marcação agora é gravada na hora, como entrada ou saída durante a sessão — e entra no quórum das votações seguintes.
+      </p>
+      <div class="comando-grade">
+        <div class="comando-ctx">
+          <b class="so-em-curso">20 de 21 marcados · 1 licenciado</b>
+          <b class="so-registrada">1ª chamada registrada às 14h03</b>
+          <span>18 presentes · 2 ausentes · 1 fora da composição</span>
+        </div>
+        <div class="comando-acoes">
+          <span class="desfazer" role="status">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7v6h6"/><path d="M3.5 13a9 9 0 1 0 2.1-6.4L3 9"/></svg>
+            Todos marcados como presentes.
+            <button class="btn btn-fantasma btn-mini" type="button" id="desfazer-lote">Desfazer</button>
+          </span>
+          <button class="btn btn-contorno" type="button">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M4 3.5h7l3 3V14a.5.5 0 0 1-.5.5h-9A.5.5 0 0 1 4 14z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M6.5 9.5h5M6.5 12h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            Lançar justificativa
+          </button>
+          <button class="btn btn-primaria so-em-curso" type="button">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 9.5l3.5 3.5L15 5" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Registrar a chamada
+          </button>
+          <button class="btn btn-primaria so-registrada" type="button">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2.5 9a6.5 6.5 0 0 1 11-4.7L15.5 6M15.5 2.5V6H12" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Nova chamada
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="../sistema/tema.js"></script>
+  <script>
+    /* =========================================================
+       Comportamento de PROTÓTIPO. A lógica de verdade (ordenação,
+       precedência de estados, contagem, reconciliação otimista)
+       vive num módulo puro e testado fora do componente React —
+       ver a Etapa 3 do plano da frente. Aqui é só o suficiente
+       para o desenho se mostrar honesto.
+       ========================================================= */
+
+    var ESTADOS = {
+      'presente-plenario': 'Presente no plenário',
+      'presente-remoto': 'Presente em remoto',
+      'ausente': 'Ausente',
+      'ausente-justificado': 'Falta justificada',
+      'ausente-justificativa-pendente': 'Justificativa pendente de decisão',
+      'licenciado': 'Licenciado'
+    };
+
+    /* ---- O HEMICICLO VIVO: um assento por vereador, ancorado à linha ---- */
+    (function () {
+      var svg = document.getElementById('hemiciclo');
+      if (!svg) return;
+      var linhas = Array.prototype.slice.call(
+        document.querySelectorAll('.folha-corpo .linha[data-v]')
+      ).filter(function (l) {
+        /* fora da composição não tem assento — é justamente o ponto */
+        return !l.closest('ul').getAttribute('aria-labelledby').match(/g-fora/);
+      });
+
+      var ns = 'http://www.w3.org/2000/svg';
+      var cx = 130, cy = 126;
+      var fileiras = [ {r: 48, n: 6}, {r: 74, n: 7}, {r: 100, n: 9} ]; // 22 lugares p/ 22 linhas
+      var i = 0;
+
+      fileiras.forEach(function (f) {
+        for (var k = 0; k < f.n && i < linhas.length; k++, i++) {
+          var linha = linhas[i];
+          var t = f.n === 1 ? 0.5 : k / (f.n - 1);
+          var ang = Math.PI * (1 - t);
+          var c = document.createElementNS(ns, 'circle');
+          c.setAttribute('cx', (cx + f.r * Math.cos(ang)).toFixed(1));
+          c.setAttribute('cy', (cy - f.r * Math.sin(ang)).toFixed(1));
+          c.setAttribute('r', '6');
+          c.setAttribute('class', 's-' + linha.dataset.estado);
+          c.setAttribute('data-v', linha.dataset.v);
+          /* título por assento: o leitor de tela usa a LISTA (alternativa
+             textual completa); o <title> serve ao ponteiro. */
+          var t2 = document.createElementNS(ns, 'title');
+          t2.textContent = linha.querySelector('.quem b').textContent + ' — ' + ESTADOS[linha.dataset.estado];
+          c.appendChild(t2);
+          svg.appendChild(c);
+        }
+      });
+
+      function acender(v, on) {
+        var assento = svg.querySelector('circle[data-v="' + v + '"]');
+        var linha = document.querySelector('.linha[data-v="' + v + '"]');
+        if (assento) assento.classList.toggle('destaque', on);
+        if (linha) linha.classList.toggle('destacada', on);
+      }
+
+      /* linha → assento */
+      linhas.forEach(function (l) {
+        l.addEventListener('mouseenter', function () { acender(l.dataset.v, true); });
+        l.addEventListener('mouseleave', function () { acender(l.dataset.v, false); });
+        l.addEventListener('focusin',    function () { acender(l.dataset.v, true); });
+        l.addEventListener('focusout',   function () { acender(l.dataset.v, false); });
+      });
+
+      /* assento → linha (ponteiro: leva o foco ao nome) */
+      svg.addEventListener('mouseover', function (e) {
+        var c = e.target.closest('circle[data-v]'); if (c) acender(c.dataset.v, true);
+      });
+      svg.addEventListener('mouseout', function (e) {
+        var c = e.target.closest('circle[data-v]'); if (c) acender(c.dataset.v, false);
+      });
+      svg.addEventListener('click', function (e) {
+        var c = e.target.closest('circle[data-v]'); if (!c) return;
+        var alvo = document.querySelector('.linha[data-v="' + c.dataset.v + '"] .marcar button[aria-pressed="true"], .linha[data-v="' + c.dataset.v + '"] .marcar button');
+        if (alvo) alvo.focus();
+      });
+
+      window.__pintarAssento = function (v, estado) {
+        var a = svg.querySelector('circle[data-v="' + v + '"]');
+        if (!a) return;
+        a.setAttribute('class', 's-' + estado + (a.classList.contains('destaque') ? ' destaque' : ''));
+        var t = a.querySelector('title');
+        var linha = document.querySelector('.linha[data-v="' + v + '"]');
+        if (t && linha) t.textContent = linha.querySelector('.quem b').textContent + ' — ' + ESTADOS[estado];
+      };
+    })();
+
+    /* ---- O segmento de 3 estados ---- */
+    (function () {
+      document.querySelectorAll('.marcar').forEach(function (grupo) {
+        grupo.addEventListener('click', function (e) {
+          var btn = e.target.closest('button[data-e]'); if (!btn) return;
+          grupo.querySelectorAll('button[data-e]').forEach(function (b) {
+            b.setAttribute('aria-pressed', String(b === btn));
+          });
+          var linha = grupo.closest('.linha');
+          linha.dataset.estado = btn.dataset.e;
+          if (window.__pintarAssento) window.__pintarAssento(linha.dataset.v, btn.dataset.e);
+          recontar();
+        });
+
+        /* setas navegam dentro do grupo — o caminho rápido do teclado */
+        grupo.addEventListener('keydown', function (e) {
+          if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+          var bs = Array.prototype.slice.call(grupo.querySelectorAll('button[data-e]'));
+          var i = bs.indexOf(document.activeElement); if (i < 0) return;
+          e.preventDefault();
+          bs[(i + (e.key === 'ArrowRight' ? 1 : bs.length - 1)) % bs.length].focus();
+        });
+      });
+    })();
+
+    /* ---- Contagem (protótipo: o número de verdade vem do servidor) ---- */
+    function recontar() {
+      var linhas = document.querySelectorAll('.folha-corpo .linha[data-v]');
+      var plen = 0, rem = 0;
+      linhas.forEach(function (l) {
+        if (l.closest('ul').getAttribute('aria-labelledby').match(/g-fora/)) return;
+        if (l.dataset.estado === 'presente-plenario') plen++;
+        if (l.dataset.estado === 'presente-remoto') rem++;
+      });
+      var alvo = document.getElementById('q-presentes');
+      if (alvo) alvo.textContent = String(plen + rem);
+    }
+
+    /* ---- Ação em massa + DESFAZER (undo, não confirmação) ---- */
+    (function () {
+      var anterior = null;
+      var btn = document.getElementById('todos-presentes');
+      var undo = document.getElementById('desfazer-lote');
+      if (!btn) return;
+
+      btn.addEventListener('click', function () {
+        anterior = [];
+        document.querySelectorAll('.folha-corpo .linha[data-v]').forEach(function (l) {
+          if (!l.querySelector('.marcar')) return;             // licenciado não se marca
+          anterior.push([l.dataset.v, l.dataset.estado]);
+          l.dataset.estado = 'presente-plenario';
+          l.querySelectorAll('.marcar button[data-e]').forEach(function (b) {
+            b.setAttribute('aria-pressed', String(b.dataset.e === 'presente-plenario'));
+          });
+          if (window.__pintarAssento) window.__pintarAssento(l.dataset.v, 'presente-plenario');
+        });
+        document.body.classList.add('lote-aplicado');
+        recontar();
+      });
+
+      if (undo) undo.addEventListener('click', function () {
+        if (!anterior) return;
+        anterior.forEach(function (par) {
+          var l = document.querySelector('.linha[data-v="' + par[0] + '"]');
+          if (!l) return;
+          l.dataset.estado = par[1];
+          l.querySelectorAll('.marcar button[data-e]').forEach(function (b) {
+            b.setAttribute('aria-pressed', String(b.dataset.e === par[1]));
+          });
+          if (window.__pintarAssento) window.__pintarAssento(par[0], par[1]);
+        });
+        anterior = null;
+        document.body.classList.remove('lote-aplicado');
+        recontar();
+      });
+    })();
+
+    /* ---- Busca ---- */
+    (function () {
+      var busca = document.getElementById('busca'); if (!busca) return;
+      busca.addEventListener('input', function () {
+        var q = busca.value.trim().toLowerCase();
+        document.querySelectorAll('.folha-corpo .linha[data-v]').forEach(function (l) {
+          l.style.display = !q || l.querySelector('.quem').textContent.toLowerCase().indexOf(q) > -1 ? '' : 'none';
+        });
+      });
+    })();
+
+    /* ---- Tira de demonstração: estados da folha ---- */
+    (function () {
+      var strip = document.querySelector('.demo-strip'); if (!strip) return;
+      strip.addEventListener('click', function (e) {
+        var b = e.target.closest('button[data-modo]');
+        if (b) {
+          document.body.classList.remove('modo-registrada', 'modo-fechada', 'modo-vazio');
+          if (b.dataset.modo !== 'em-curso') document.body.classList.add('modo-' + b.dataset.modo);
+          strip.querySelectorAll('button[data-modo]').forEach(function (x) {
+            x.setAttribute('aria-pressed', String(x === b));
+          });
+          return;
+        }
+        var canal = e.target.closest('#btn-canal');
+        if (canal) {
+          var on = canal.getAttribute('aria-pressed') !== 'true';
+          canal.setAttribute('aria-pressed', String(on));
+          document.body.classList.toggle('canal-caido', on);
+        }
+      });
+    })();
+
+    /* ---- Relógio da Casa ---- */
+    (function () {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      var el = document.getElementById('relogio-casa'); if (!el) return;
+      var d = 14 * 3600 + 3 * 60 + 22;
+      setInterval(function () {
+        d += 1;
+        el.textContent = String(Math.floor(d / 3600) % 24).padStart(2, '0') + ':' +
+                         String(Math.floor((d % 3600) / 60)).padStart(2, '0') + ':' +
+                         String(d % 60).padStart(2, '0');
+      }, 1000);
+    })();
+  </script>
+
+</body>
+</html>
