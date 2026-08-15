@@ -43,13 +43,20 @@ function sessao(over: Partial<SessaoOut> = {}): SessaoOut {
     "gera-ata-regimental": true,
     "permite-voto-secreto": false,
     "permite-modalidade-remota": false,
-    "agendada-para": "2026-08-01T14:00:00Z",
+    "agendada-para": emDias(30),
     "aberta-em": null,
     "encerrada-em": null,
     "motivo-nao-realizada": null,
     ...over,
   };
 }
+
+/** Datas RELATIVAS ao agora. Antes eram absolutas ("2026-08-01" como "sessão futura") e o teste
+ * `próxima sessão escolhe a de menor data FUTURA` passou a REPROVAR sozinho quando o relógio de parede
+ * alcançou a data — sem ninguém mudar uma linha de código. O código estava certo: a sessão tinha virado
+ * passado e `derivarHome` corretamente escolheu a outra. Um teste cuja verdade depende do dia em que roda
+ * não distingue regressão de calendário, e o custo cai sobre quem for ler o gate meses depois. */
+const emDias = (d: number) => new Date(Date.now() + d * 86_400_000).toISOString();
 
 describe("derivarHome", () => {
   it("ordena minhas proposições mais-recente-primeiro", () => {
@@ -110,15 +117,15 @@ describe("derivarHome", () => {
 
   it("próxima sessão escolhe a de menor data FUTURA", () => {
     const sessoes = [
-      sessao({ id: "mais-distante", "agendada-para": "2026-12-01T14:00:00Z" }),
-      sessao({ id: "mais-proxima", "agendada-para": "2026-08-01T14:00:00Z" }),
+      sessao({ id: "mais-distante", "agendada-para": emDias(120) }),
+      sessao({ id: "mais-proxima", "agendada-para": emDias(7) }),
     ];
     const r = derivarHome({ proposicoes: [], pareceres: [], ciencias: [] }, sessoes);
     expect(r.proximaSessao?.id).toBe("mais-proxima");
   });
 
   it("próxima sessão ignora datas passadas", () => {
-    const sessoes = [sessao({ id: "passada", "agendada-para": "2020-01-01T00:00:00Z" })];
+    const sessoes = [sessao({ id: "passada", "agendada-para": emDias(-365) })];
     const r = derivarHome({ proposicoes: [], pareceres: [], ciencias: [] }, sessoes);
     expect(r.proximaSessao).toBeNull();
   });
