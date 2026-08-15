@@ -364,6 +364,68 @@ describe("useChamada — a costura de IO da chamada", () => {
     expect(saida.erro).toMatch(/recarregue/i); // a correção, não só a causa
   });
 
+  // ---------- abrirJustificativa (Etapa 3 fatia 4) ----------
+
+  it("abrirJustificativa: motivo só de espaços NÃO vai à rede e devolve erro acionável", async () => {
+    const f = montarFetch();
+    const { result } = renderHook(() => useChamada("s1", "tok"));
+    await waitFor(() => expect(result.current.estado).toBe("pronto"));
+    const antes = f.mock.calls.length;
+
+    let saida: { ok: boolean; erro?: string } = { ok: true };
+    await act(async () => {
+      saida = await result.current.abrirJustificativa("v1", "   ");
+    });
+
+    expect(saida.ok).toBe(false);
+    expect(saida.erro).toMatch(/motivo da ausência/i);
+    expect(f.mock.calls.length).toBe(antes); // nenhum round-trip pro motivo vazio
+  });
+
+  it("abrirJustificativa: corpo vai em kebab-case com vereador-id e motivo aparado, e dispara recarregar no sucesso", async () => {
+    const f = montarFetch();
+    const { result } = renderHook(() => useChamada("s1", "tok"));
+    await waitFor(() => expect(result.current.estado).toBe("pronto"));
+    const antes = getsDeChamada(f);
+
+    let saida: { ok: boolean; erro?: string } = { ok: false, erro: "" };
+    await act(async () => {
+      saida = await result.current.abrirJustificativa("v2", "  Missão oficial  ");
+    });
+
+    expect(saida.ok).toBe(true);
+    const chamada = (f as unknown as { mock: { calls: unknown[][] } }).mock.calls.find((c) => {
+      const init = c[1] as RequestInit | undefined;
+      return String(c[0]).endsWith("/justificativas") && (init?.method ?? "GET").toUpperCase() === "POST";
+    });
+    expect(chamada).toBeDefined();
+    const init = chamada![1] as RequestInit;
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ "vereador-id": "v2", motivo: "Missão oficial" });
+    expect(getsDeChamada(f)).toBeGreaterThan(antes); // sucesso -> recarregar() -> nova busca de /chamada
+  });
+
+  it("abrirJustificativa: 400 do servidor (motivo ausente ou em branco) vira mensagem acionável, não genérica", async () => {
+    montarFetch({
+      respostas: {
+        "/justificativas": () =>
+          ({ ok: false, status: 400, json: async () => ({ erro: "motivo ausente ou em branco" }) }) as Response,
+      },
+    });
+    const { result } = renderHook(() => useChamada("s1", "tok"));
+    await waitFor(() => expect(result.current.estado).toBe("pronto"));
+
+    let saida: { ok: boolean; erro?: string } = { ok: true };
+    await act(async () => {
+      // bypassa a validação do cliente mandando algo não-vazio, pra provar que É o 400 do servidor que fala
+      saida = await result.current.abrirJustificativa("v1", "x");
+    });
+
+    expect(saida.ok).toBe(false);
+    expect(saida.erro).toMatch(/motivo da ausência/i);
+    expect(saida.erro).not.toMatch(/status 400/);
+  });
+
   // ---------- a tradução de erro, testável direto ----------
 
   it("mensagemDeErro traduz os 2 padrões de 409 e nunca devolve genérico quando o domínio falou", () => {

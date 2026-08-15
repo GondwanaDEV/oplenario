@@ -43,13 +43,18 @@
 .ferramentas { display: flex; align-items: flex-end; gap: 0.7rem; flex-wrap: wrap; margin: 1rem 0 0; }
 .campo { display: grid; gap: 0.3rem; flex: 1 1 210px; min-width: 0; }
 .campo label { font-size: var(--t-12); font-weight: 600; color: var(--texto-2); letter-spacing: .01em; }
-.campo input, .campo select {
+.campo input, .campo select, .campo textarea {
   font-family: var(--corpo); font-size: var(--t-16); color: var(--texto);
   background: var(--surface-2);
   border: 1px solid color-mix(in srgb, var(--texto-2) 78%, transparent);
   border-radius: var(--raio-sm); padding: 0.6rem 0.7rem; min-height: 44px; width: 100%;
 }
 .campo select { cursor: pointer; }
+/* mesma receita do input/select acima — só a altura muda (texto livre de motivo é multi-linha), nunca a cor
+   nem o token. `.campo-justificativa` é o mesmo `.campo` da barra de ferramentas, reusado dentro da linha da
+   chamada (Etapa 3 fatia 4, "Lançar justificativa"). */
+.campo textarea { min-height: 4.5rem; resize: vertical; }
+.campo .campo-erro { color: var(--aviso-texto); font-size: var(--t-12); line-height: 1.4; }
 .ferramentas .btn { flex: 0 0 auto; }
 
 .nota-ordem { display: flex; align-items: flex-start; gap: 0.45rem; margin: 0.7rem 0 0; font-size: var(--t-12); color: var(--texto-2); line-height: 1.45; }

@@ -1,8 +1,9 @@
 "use client";
 
-// Hook de IO da CHAMADA (§22.6 eixo C, Etapa 3B fatia 2) — busca o snapshot de `GET /sessoes/:id/chamada`
-// (+ `GET /sessoes/:id/justificativas`), mantém os dois vivos via o canal SSE `/sessoes/:id/plenario`, e
-// expõe as 3 escritas da tela (`marcarLinha`, `registrarChamada`, `decidirJustificativa`). Toda a lógica de
+// Hook de IO da CHAMADA (§22.6 eixo C, Etapa 3B fatia 2 + Etapa 3 fatia 4 — abertura de justificativa) —
+// busca o snapshot de `GET /sessoes/:id/chamada` (+ `GET /sessoes/:id/justificativas`), mantém os dois vivos
+// via o canal SSE `/sessoes/:id/plenario`, e expõe as 4 escritas da tela (`marcarLinha`, `registrarChamada`,
+// `decidirJustificativa`, `abrirJustificativa`). Toda a lógica de
 // ordenação/agrupamento/diff/otimista é de `chamada-vista.ts` (módulo puro, Etapa 3B fatia 1) — este hook só
 // faz IO e nunca reimplementa nada de lá.
 //
@@ -41,6 +42,7 @@ export type ResultadoRegistrarChamada = { ok: true; ato: ChamadaConduzidaOut } |
 export type ResultadoDecisao =
   | { ok: true; decisao: JustificativaDecididaOut }
   | { ok: false; erro: string; conflito: boolean };
+export type ResultadoAbrirJustificativa = { ok: true } | { ok: false; erro: string };
 
 /** Piso entre duas buscas de `GET /sessoes/:id/chamada`. Espelha `REBUSCA_MIN_MS` de `use-plenario.ts` (mesmo
  * motivo, mesma constante) — a rota resolve roster + presença + justificativas inteiras e o servidor não a
@@ -89,7 +91,12 @@ function horaPtBr(iso: string): string {
  *
  * CARRY: o 409 de sessão encerrada não carrega `encerrada-em` no corpo (só o NOME do estado) — só dá para
  * cravar "às HHhMM" quando o CHAMADOR passa `sessaoEncerradaEm` (a tela tipicamente já tem `SessaoOut`
- * carregado por outro hook da mesma página). Sem isso, a frase sai sem a hora — nunca uma hora inventada. */
+ * carregado por outro hook da mesma página). Sem isso, a frase sai sem a hora — nunca uma hora inventada.
+ *
+ * O 400 de `motivo ausente ou em branco` (adapters/in de `abrir-justificativa->dominio`) também casa aqui —
+ * `abrirJustificativa` já valida `motivo.trim()` no cliente antes de sair à rede, então este ramo só existe
+ * como rede de segurança (ex.: um bypass do cliente, ou um form que nunca chame a validação local); a
+ * mensagem do domínio ("motivo ausente ou em branco") não é acionável sozinha — vira instrução do que fazer. */
 export function mensagemDeErro(
   corpoErro: string | null | undefined,
   status: number,
@@ -102,6 +109,9 @@ export function mensagemDeErro(
   if (/nao aceita mais registro de presenca/.test(erro)) {
     const hora = sessaoEncerradaEm ? ` às ${horaPtBr(sessaoEncerradaEm)}` : "";
     return `A sessão foi encerrada${hora}. A presença desta sessão está fechada e não pode mais ser alterada — a correção de um registro errado se faz pela ata.`;
+  }
+  if (/motivo ausente ou em branco/.test(erro)) {
+    return "Descreva o motivo da ausência — o campo não pode ficar em branco.";
   }
   return erro || `falha ao salvar (status ${status})`;
 }
@@ -384,18 +394,51 @@ export function useChamada(sessaoId: string, token: string | null, opcoes?: UseC
     [sessaoId, token, recarregar],
   );
 
+  /** POST /justificativas — a ABERTURA (porta da Mesa/secretaria, papel `secretario`), separada da DECISÃO
+   * acima por desenho: quem abre não decide (vício de competência, ver `wire/in.clj` `AbrirJustificativa`).
+   * Nasce sempre `pendente` no servidor — este método nunca manda `estado`. Valida `motivo.trim()` no
+   * CLIENTE antes de sair à rede (não para confiar nele — o `adapters/in` valida de novo e devolve 400 — mas
+   * para poupar um round-trip e dar erro na hora, no campo). */
+  const abrirJustificativa = useCallback(
+    async (vereadorId: string, motivo: string): Promise<ResultadoAbrirJustificativa> => {
+      if (semCredencial(token)) return { ok: false, erro: "sem token de autenticacao" };
+      const aparado = motivo.trim();
+      if (!aparado) {
+        return { ok: false, erro: "Descreva o motivo da ausência — o campo não pode ficar em branco." };
+      }
+      const r = await apiFetch(`/api/sessoes/${sessaoId}/justificativas`, {
+        token: token ?? undefined,
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ "vereador-id": vereadorId, motivo: aparado }),
+      });
+      if (!r.ok) {
+        const corpoErro = await r.json().catch(() => null);
+        return { ok: false, erro: mensagemDeErro(corpoErro?.erro, r.status, sessaoEncerradaEm) };
+      }
+      await recarregar(); // a abertura muda o estado DERIVADO da linha (ausente -> ausente-justificativa-pendente)
+      return { ok: true };
+    },
+    [sessaoId, token, sessaoEncerradaEm, recarregar],
+  );
+
   // casos de erro derivados (mantêm o effect livre de setState síncrono)
   if (semCredencial(token)) {
     return {
       dados: null, justificativas: null, estado: "erro" as EstadoDados, canal: "carregando" as EstadoCanal,
-      erro: "Sem credencial de sessão (token).", recarregar, marcarLinha, registrarChamada, decidirJustificativa,
+      erro: "Sem credencial de sessão (token).",
+      recarregar, marcarLinha, registrarChamada, decidirJustificativa, abrirJustificativa,
     };
   }
   if (!idValido) {
     return {
       dados: null, justificativas: null, estado: "erro" as EstadoDados, canal: "carregando" as EstadoCanal,
-      erro: "Identificador de sessão inválido.", recarregar, marcarLinha, registrarChamada, decidirJustificativa,
+      erro: "Identificador de sessão inválido.",
+      recarregar, marcarLinha, registrarChamada, decidirJustificativa, abrirJustificativa,
     };
   }
-  return { dados, justificativas, estado, canal, erro, recarregar, marcarLinha, registrarChamada, decidirJustificativa };
+  return {
+    dados, justificativas, estado, canal, erro,
+    recarregar, marcarLinha, registrarChamada, decidirJustificativa, abrirJustificativa,
+  };
 }

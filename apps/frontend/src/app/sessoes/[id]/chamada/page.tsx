@@ -21,10 +21,15 @@
 //     composição, estado da sessão). "Sessão Ordinária nº 14" do design viraria uma 2ª rota de IO fora do
 //     escopo desta fatia — a mensagem de 409 de sessão encerrada sai sem "às HHhMM" por isso (ver
 //     `use-chamada.ts`, `UseChamadaOpcoes.sessaoEncerradaEm`), nunca uma hora inventada.
-//   - "Lançar justificativa" (POST /sessoes/:id/justificativas) NÃO está entre as 3 escritas que
-//     `use-chamada.ts` expõe — só `marcarLinha`, `registrarChamada`, `decidirJustificativa`. O botão do
-//     desenho para abrir esse fluxo não é portado aqui (write inexistente nesta fatia); Deferir/Indeferir
-//     (a decisão, que É uma das 3 escritas) está completo.
+//   - "Lançar justificativa" (POST /sessoes/:id/justificativas) — Etapa 3 fatia 4: `use-chamada.ts` agora
+//     expõe `abrirJustificativa` (a 4ª escrita). O gatilho aparece só na linha `ausente` SEM justificativa
+//     registrada (`justificativaServidor` nulo) — abre um formulário INLINE na própria linha (não modal: a
+//     tela é operada ao vivo, um modal rouba o contexto da folha). Quem LANÇA não DECIDE (vício de
+//     competência, ver `wire/in.clj`): a UI nunca deixa reabrir uma linha que já tem justificativa no
+//     servidor, pendente ou decidida — o gate é `!justificativaServidor`, não o `estado` da linha sozinho
+//     (uma justificativa `indeferida` derivaria a linha de volta a `ausente`, e o servidor recusaria uma
+//     segunda com `:ja-existe`; a UI não tenta adivinhar isso, só não convida a reabrir enquanto o servidor
+//     já tem um registro para aquele vereador).
 //   - Os números de "quórum de instalação/deliberação" do desenho (`11`) são FABRICADOS pelo protótipo —
 //     `ChamadaQuorumOut` não os publica. Portados como nota textual [Regimento], sem número inventado.
 //   - "Ver."/"Ver.ª" (prefixo de tratamento por gênero) não existe no contrato — usa-se o nome como vem.
@@ -95,8 +100,10 @@ export default function PaginaChamada() {
 
 function ConteudoChamada({ id }: { id: string }) {
   const { token } = useAuth();
-  const { dados, justificativas, estado, canal, erro, marcarLinha, registrarChamada, decidirJustificativa } =
-    useChamada(id, token);
+  const {
+    dados, justificativas, estado, canal, erro,
+    marcarLinha, registrarChamada, decidirJustificativa, abrirJustificativa,
+  } = useChamada(id, token);
 
   if (estado === "erro") {
     return (
@@ -122,6 +129,7 @@ function ConteudoChamada({ id }: { id: string }) {
       marcarLinha={marcarLinha}
       registrarChamada={registrarChamada}
       decidirJustificativa={decidirJustificativa}
+      abrirJustificativa={abrirJustificativa}
     />
   );
 }
@@ -137,9 +145,12 @@ interface ChamadaProps {
     decisao: "aprovada" | "indeferida",
     lockVersion: number,
   ) => Promise<{ ok: true } | { ok: false; erro: string; conflito: boolean }>;
+  abrirJustificativa: (vereadorId: string, motivo: string) => Promise<{ ok: true } | { ok: false; erro: string }>;
 }
 
-function Chamada({ dados, justificativas, canal, marcarLinha, registrarChamada, decidirJustificativa }: ChamadaProps) {
+function Chamada({
+  dados, justificativas, canal, marcarLinha, registrarChamada, decidirJustificativa, abrirJustificativa,
+}: ChamadaProps) {
   const { tema, alternar } = useTema();
   const [busca, setBusca] = useState("");
   const [ordem, setOrdem] = useState<CriterioOrdenacao>("servidor");
@@ -344,6 +355,7 @@ function Chamada({ dados, justificativas, canal, marcarLinha, registrarChamada, 
                   onMarcar={onMarcar}
                   justificativas={justificativas}
                   onDecidir={onDecidir}
+                  abrirJustificativa={abrirJustificativa}
                 />
                 <Grupo
                   titulo="Demais vereadores"
@@ -356,6 +368,7 @@ function Chamada({ dados, justificativas, canal, marcarLinha, registrarChamada, 
                   onMarcar={onMarcar}
                   justificativas={justificativas}
                   onDecidir={onDecidir}
+                  abrirJustificativa={abrirJustificativa}
                 />
                 <Grupo
                   titulo="Licenciados"
@@ -368,6 +381,7 @@ function Chamada({ dados, justificativas, canal, marcarLinha, registrarChamada, 
                   onMarcar={onMarcar}
                   justificativas={justificativas}
                   onDecidir={onDecidir}
+                  abrirJustificativa={abrirJustificativa}
                 />
                 {grupos.foraDaComposicao.length > 0 && (
                   <>
@@ -392,6 +406,7 @@ function Chamada({ dados, justificativas, canal, marcarLinha, registrarChamada, 
                       onMarcar={onMarcar}
                       justificativas={justificativas}
                       onDecidir={onDecidir}
+                      abrirJustificativa={abrirJustificativa}
                     />
                   </>
                 )}
@@ -491,9 +506,13 @@ interface GrupoProps {
   onMarcar: (vereadorId: string, alvo: EstadoAlvo) => void;
   justificativas: LinhaJustificativaOut[] | null;
   onDecidir: (jid: string, decisao: "aprovada" | "indeferida", lockVersion: number) => void;
+  abrirJustificativa: (vereadorId: string, motivo: string) => Promise<{ ok: true } | { ok: false; erro: string }>;
 }
 
-function Grupo({ titulo, id, linhas, editavel, estadoExibido, destaque, setDestaque, onMarcar, justificativas, onDecidir }: GrupoProps) {
+function Grupo({
+  titulo, id, linhas, editavel, estadoExibido, destaque, setDestaque, onMarcar, justificativas, onDecidir,
+  abrirJustificativa,
+}: GrupoProps) {
   if (linhas.length === 0) return null;
   return (
     <>
@@ -512,6 +531,7 @@ function Grupo({ titulo, id, linhas, editavel, estadoExibido, destaque, setDesta
             onMarcar={onMarcar}
             justificativaServidor={justificativas?.find((j) => j.vereadorId === l.vereadorId) ?? null}
             onDecidir={onDecidir}
+            abrirJustificativa={abrirJustificativa}
           />
         ))}
       </ul>
@@ -528,9 +548,12 @@ interface LinhaProps {
   onMarcar: (vereadorId: string, alvo: EstadoAlvo) => void;
   justificativaServidor: LinhaJustificativaOut | null;
   onDecidir: (jid: string, decisao: "aprovada" | "indeferida", lockVersion: number) => void;
+  abrirJustificativa: (vereadorId: string, motivo: string) => Promise<{ ok: true } | { ok: false; erro: string }>;
 }
 
-function Linha({ linha, editavel, estado, destacada, onHover, onMarcar, justificativaServidor, onDecidir }: LinhaProps) {
+function Linha({
+  linha, editavel, estado, destacada, onHover, onMarcar, justificativaServidor, onDecidir, abrirJustificativa,
+}: LinhaProps) {
   const nome = nomeDaLinha(linha);
   const horaFato = horaCurta(linha.desde);
   const horaRegistro = horaCurta(linha.registradoEm);
@@ -632,8 +655,97 @@ function Linha({ linha, editavel, estado, destacada, onHover, onMarcar, justific
             </span>
           )}
         </span>
+      ) : linha.estado === "ausente" && editavel && !justificativaServidor ? (
+        <JustificativaAbrir vereadorId={linha.vereadorId} abrirJustificativa={abrirJustificativa} />
       ) : null}
     </li>
+  );
+}
+
+/** O "Lançar justificativa" da linha `ausente` sem registro no servidor (Etapa 3 fatia 4). Formulário INLINE
+ * — nunca modal (a folha é operada ao vivo; um modal rouba o contexto de "quem eu estava marcando"). Reusa a
+ * receita `.campo` (mesma da barra de ferramentas) e `.just`/`.decidir` (mesmos do bloco de justificativa
+ * decidida acima) — nenhum estilo novo. `motivo.trim()` é validado aqui ANTES de chamar `abrirJustificativa`
+ * (que valida de novo — defesa em profundidade, não confiança no cliente); o erro do servidor (400 de motivo
+ * vazio, 409 de fora-do-roster/duplicata) aparece no mesmo lugar, com `role="alert"`. */
+function JustificativaAbrir({
+  vereadorId,
+  abrirJustificativa,
+}: {
+  vereadorId: string;
+  abrirJustificativa: (vereadorId: string, motivo: string) => Promise<{ ok: true } | { ok: false; erro: string }>;
+}) {
+  const [aberta, setAberta] = useState(false);
+  const [motivo, setMotivo] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const campoId = `motivo-${vereadorId}`;
+
+  if (!aberta) {
+    return (
+      <span className="just">
+        <span className="chip chip-neutro">Sem justificativa</span>
+        <span className="motivo">Nenhuma justificativa protocolada para esta sessão.</span>
+        <span className="decidir">
+          <button className="btn btn-contorno btn-mini" type="button" onClick={() => setAberta(true)}>
+            Lançar justificativa
+          </button>
+        </span>
+      </span>
+    );
+  }
+
+  async function onSalvar() {
+    if (!motivo.trim()) {
+      setErro("Descreva o motivo da ausência — o campo não pode ficar em branco.");
+      return;
+    }
+    setEnviando(true);
+    setErro(null);
+    const r = await abrirJustificativa(vereadorId, motivo);
+    setEnviando(false);
+    if (r.ok) {
+      setAberta(false);
+      setMotivo("");
+    } else {
+      setErro(r.erro);
+    }
+  }
+
+  function onCancelar() {
+    setAberta(false);
+    setMotivo("");
+    setErro(null);
+  }
+
+  return (
+    <span className="just">
+      <span className="campo">
+        <label htmlFor={campoId}>Motivo da ausência</label>
+        <textarea
+          id={campoId}
+          value={motivo}
+          onChange={(e) => setMotivo(e.target.value)}
+          rows={2}
+          maxLength={4096}
+          aria-invalid={erro ? true : undefined}
+          aria-describedby={erro ? `${campoId}-erro` : undefined}
+        />
+        {erro && (
+          <span id={`${campoId}-erro`} role="alert" className="campo-erro">
+            {erro}
+          </span>
+        )}
+      </span>
+      <span className="decidir">
+        <button className="btn btn-primaria btn-mini" type="button" disabled={enviando} onClick={onSalvar}>
+          {enviando ? "Salvando…" : "Salvar"}
+        </button>
+        <button className="btn btn-fantasma btn-mini" type="button" disabled={enviando} onClick={onCancelar}>
+          Cancelar
+        </button>
+      </span>
+    </span>
   );
 }
 

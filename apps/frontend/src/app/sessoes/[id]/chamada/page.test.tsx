@@ -26,6 +26,7 @@ vi.mock("@/lib/tema", () => ({
 const marcarLinha = vi.fn().mockResolvedValue(undefined);
 const registrarChamada = vi.fn().mockResolvedValue({ ok: true, ato: { id: "c-novo" } });
 const decidirJustificativa = vi.fn().mockResolvedValue({ ok: true, decisao: {} });
+const abrirJustificativa = vi.fn().mockResolvedValue({ ok: true });
 const useChamadaMock = vi.fn();
 
 vi.mock("@/lib/use-chamada", () => ({
@@ -61,6 +62,15 @@ const vLicenciado = linha({
   registradoEm: null,
 });
 const vFora = linha({ vereadorId: "v23", nome: "Cléber Souto", nomeParlamentar: "Cléber Souto", semAssento: true });
+const vAusente = linha({
+  vereadorId: "v24",
+  nome: "Wilson Braga",
+  nomeParlamentar: "Wilson Braga",
+  estado: "ausente",
+  desde: null,
+  registradoEm: null,
+  fonte: null,
+});
 
 function dadosBase(over: Partial<ChamadaOut> = {}): ChamadaOut {
   return {
@@ -88,6 +98,7 @@ function mockRetorno(dados: ChamadaOut | null, extras: Partial<ReturnType<typeof
     marcarLinha,
     registrarChamada,
     decidirJustificativa,
+    abrirJustificativa,
     ...extras,
   });
 }
@@ -166,5 +177,75 @@ describe("PaginaChamada", () => {
     render(<PaginaChamada />);
     expect(screen.queryByText("Ao vivo")).toBeNull();
     expect(screen.getByText("Reconectando")).toBeDefined();
+  });
+
+  // ---------- "Lançar justificativa" — Etapa 3 fatia 4 ----------
+
+  it("ausente sem justificativa: o botão abre o formulário inline, que salva chamando abrirJustificativa", async () => {
+    mockRetorno(dadosBase({ linhas: [vMesa, vCasa, vAusente] }));
+    render(<PaginaChamada />);
+
+    expect(screen.queryByLabelText("Motivo da ausência")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Lançar justificativa" }));
+
+    const campo = screen.getByLabelText("Motivo da ausência");
+    fireEvent.change(campo, { target: { value: "Missão oficial fora do município" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+
+    await vi.waitFor(() => expect(abrirJustificativa).toHaveBeenCalledTimes(1));
+    expect(abrirJustificativa).toHaveBeenCalledWith("v24", "Missão oficial fora do município");
+  });
+
+  it("motivo só de espaços: não chama abrirJustificativa e mostra erro junto ao campo", async () => {
+    mockRetorno(dadosBase({ linhas: [vMesa, vCasa, vAusente] }));
+    render(<PaginaChamada />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Lançar justificativa" }));
+    fireEvent.change(screen.getByLabelText("Motivo da ausência"), { target: { value: "   " } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+
+    expect(abrirJustificativa).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toMatch(/motivo da ausência/i);
+  });
+
+  it("Cancelar fecha o formulário sem chamar abrirJustificativa", () => {
+    mockRetorno(dadosBase({ linhas: [vMesa, vCasa, vAusente] }));
+    render(<PaginaChamada />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Lançar justificativa" }));
+    expect(screen.getByLabelText("Motivo da ausência")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(screen.queryByLabelText("Motivo da ausência")).toBeNull();
+    expect(abrirJustificativa).not.toHaveBeenCalled();
+  });
+
+  it("sessão encerrada: o botão 'Lançar justificativa' não aparece (registro, não formulário)", () => {
+    mockRetorno(dadosBase({ sessaoEstado: "encerrada", linhas: [vMesa, vCasa, vAusente] }));
+    render(<PaginaChamada />);
+    expect(screen.queryByRole("button", { name: "Lançar justificativa" })).toBeNull();
+  });
+
+  it("quem lança não decide: uma linha já com justificativa (pendente ou decidida) nunca mostra 'Lançar justificativa'", () => {
+    const vPendente = linha({
+      vereadorId: "v25",
+      nome: "Ana Pendente",
+      nomeParlamentar: "Ana Pendente",
+      estado: "ausente-justificativa-pendente",
+      desde: null,
+      registradoEm: null,
+    });
+    mockRetorno(
+      dadosBase({ linhas: [vMesa, vCasa, vPendente] }),
+      {
+        justificativas: [
+          { id: "j9", vereadorId: "v25", estado: "pendente", motivo: "Atestado médico", decididoPor: null, decididoEm: null, lockVersion: 1 },
+        ],
+      },
+    );
+    render(<PaginaChamada />);
+    // a linha pendente mostra Deferir/Indeferir (a DECISÃO), nunca um segundo "Lançar justificativa"
+    expect(screen.queryByRole("button", { name: "Lançar justificativa" })).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Deferir" }).length).toBeGreaterThan(0);
   });
 });
