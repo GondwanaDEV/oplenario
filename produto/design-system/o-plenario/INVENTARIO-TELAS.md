@@ -427,8 +427,10 @@ Não é "o novo" — é candidato das auditorias, gatilho = cliente validado:
   > folha (em curso · registrada/ao vivo · sessão encerrada somente-leitura · sem composição) e o
   > canal degradado. **Honestidades que a tela carrega de propósito:** a ordem da chamada é
   > `[Regimento]` e não se inventa · o quórum de instalação/deliberação é `[Regimento]` e o
-  > denominador vem do servidor, nunca recalculado no cliente · o licenciado aparece mas contar
-  > para o quórum depende de regimento+suplente · `presencasForaDoRoster` é *fail-loud* e fica
+  > denominador vem do servidor, nunca recalculado no cliente · o licenciado aparece na folha mas
+  > **fica fora do denominador** (regra FECHADA em `logic/contar-quorum`: quem compõe a Casa na
+  > licença é o suplente; o `[GAP]` real e estreito é que o suplente não se convoca por aqui) ·
+  > `presencasForaDoRoster` é *fail-loud* e fica
   > visível · o par (hora do fato, hora do registro) aparece sempre, para o jurídico distinguir
   > correção de saída real. AA medido: **180 textos × 2 temas × 6 estados = 0 falhas; 18 gráficos
   > × 2 temas = 0 reprovados; 0 alvos < 44px**.
