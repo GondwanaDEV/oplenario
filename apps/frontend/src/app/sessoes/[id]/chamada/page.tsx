@@ -39,6 +39,8 @@ import { useParams, useSearchParams } from "next/navigation";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { useTema } from "@/lib/tema";
 import { useChamada, type EstadoCanal } from "@/lib/use-chamada";
+import { assentosHemiciclo } from "@/lib/hemiciclo";
+import { formatarData } from "@/lib/formatar-data";
 import {
   agruparLinhas,
   aplicarOtimista,
@@ -253,7 +255,9 @@ function Chamada({
           <CanalBadge canal={canal} />
           <div className="sessao-meta">
             <span className="tipo">Chamada de presença</span>
-            <span className="quando">composição de {dados.dataDeComposicao}</span>
+            {/* `data-de-composicao` chega ISO (`2026-08-15`) — formato de transporte, não de tela. O util
+                compartilhado `formatarData` é a convenção da casa (pt-BR, instância única de Intl). */}
+            <span className="quando">composição de {formatarData(dados.dataDeComposicao)}</span>
           </div>
           <div className="topo-dir">
             <button className="tema-btn" type="button" aria-pressed={tema === "escuro"} onClick={alternar} title="Alternar tema claro / escuro">
@@ -761,24 +765,11 @@ function Quorum({
   setDestaque: (v: string | null) => void;
 }) {
   const total = Math.max(1, linhasComAssento.length);
-  const cx = 120;
-  const cy = 116;
-  const n1 = Math.max(1, Math.round(total * 0.256));
-  const n2 = Math.max(1, Math.round(total * 0.349));
-  const fileiras = [
-    { r: 46, n: n1 },
-    { r: 68, n: n2 },
-    { r: 90, n: Math.max(1, total - n1 - n2) },
-  ];
-  const seats: { x: number; y: number; l: LinhaChamadaOut }[] = [];
-  let i = 0;
-  for (const f of fileiras) {
-    for (let k = 0; k < f.n && i < linhasComAssento.length; k++, i++) {
-      const t = f.n === 1 ? 0.5 : k / (f.n - 1);
-      const ang = Math.PI * (1 - t);
-      seats.push({ x: cx + f.r * Math.cos(ang), y: cy - f.r * Math.sin(ang), l: linhasComAssento[i] });
-    }
-  }
+  // Geometria em `lib/hemiciclo` (pura, testada) — a mesma do telão. Ver o docstring de lá: três
+  // fileiras fixas degeneravam em Casa pequena (4 membros -> [1,1,2], dois assentos no mesmo eixo).
+  const seats = assentosHemiciclo(total)
+    .slice(0, linhasComAssento.length)
+    .map((p, i) => ({ ...p, l: linhasComAssento[i] }));
 
   const legenda = { plenario: 0, remoto: 0, ausentes: 0, licenciados: 0 };
   for (const l of linhasComAssento) {

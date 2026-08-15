@@ -9,8 +9,8 @@ const autografo: AutografoOut = {
   numero: 22,
   ano: 2026,
   destinatarioTexto: "Prefeitura Municipal",
-  enviadoEm: "2026-06-18T00:00:00Z",
-  prazoRespostaEm: "2026-07-03T00:00:00Z",
+  enviadoEm: "2026-06-18T09:00:00-03:00",
+  prazoRespostaEm: "2026-07-03T09:00:00-03:00",
 };
 
 describe("CardAutografo", () => {

@@ -61,6 +61,14 @@ Em conflito, o código prevalece sobre este doc.
       rotulados, `role="img"`+`aria-label` em gráficos, `aria-live` onde atualiza.
 - [ ] Reordenar/arrastar tem **alternativa por teclado** (setas com `aria-disabled` nas pontas).
 
+- [ ] 🔴 **O mock não é o artefato — meça o CSS que o usuário carrega.** Uma correção de AA registrada
+      nesta tabela e aplicada ao `.html` do design system **não chegou ao produto**: `.ao-vivo` seguiu
+      medindo **4.10 no claro** em `plenario.css` e `chamada.css` por meses, com o conserto já pago e
+      escrito. O mock e o CSS de produção são cópias distintas do mesmo componente, e nada as concilia.
+      **Toda linha desta tabela vale para as duas pontas**; ao consertar, `grep` a classe no `apps/frontend`
+      antes de dar por fechado. Achado só quando a tela foi aberta em browser (15/08/2026) — a suíte de
+      testes não mede contraste, e o desenho estático não prova o React.
+
 ### 5.1 🔴 Armadilhas de contraste já medidas nesta casa (confira sempre)
 
 | Situação | Falha | Conserto |
@@ -77,7 +85,7 @@ Em conflito, o código prevalece sobre este doc.
 | **`.merge` (campo mesclado) sobre `--papel` no escuro** (`--merge` #B9421F + `--merge-fundo`) | **3.72** no escuro (`--papel` mais cremoso + tinta laranja) | **mitigado** pelo sublinhado de 2px (`--merge`) = sinal gráfico ≥3, não-cor. Token compartilhado por 4 telas — **passe futuro de token** (escurecer `--merge` no escuro), não re-tonalizar num commit de promoção. Medido na Fase A §5.2. |
 | **Pílula/segmento SELECIONADO preenchido com `--marca` + texto branco** (toggle, segmented control) | **2.35** no **escuro** (o jade `--marca` clareia no escuro → branco-sobre-claro falha) | preenchimento **invertido**: fundo `var(--texto)` + texto `var(--surface)` — contrasta nos 2 temas (15.51 claro / 12.62 escuro). Não usar cor de marca como fundo de texto branco em estado selecionado. Medido na Fase B §5.2 (toggle de demo do editor); **reconfirmado em `chamada` (15.51 / 12.62)**. |
 | **`.avatar` do chassi reusado com FUNDO trocado** (`background: var(--texto-2)` p/ ausentes) | **2.28** no **escuro** — o chassi fixa `color:#fff` (nasceu sobre marca escura) e `--texto-2` **inverte** de claridade (#4C574F → #9FB0A4), virando branco-sobre-claro | `color: var(--surface)`, que inverte junto = **7.11 claro / 6.86 escuro**. Regra geral: ao trocar o FUNDO de um componente herdado, remeça o par nos 2 temas e prefira tokens que invertem em conjunto (`--texto`/`--surface`) a cor literal. Medido em `chamada`. |
-| **`--acento-texto` sobre tint da PRÓPRIA telha dentro da barra `.topo`** (pílula "Ao vivo": texto telha sobre `rgba(217,84,43,.1)`) | **4.10** — é o caso "não empilhe sobre fundo mais escuro sem remedir" acontecendo de fato | fundo `var(--surface)` (o tom mais claro) = **5.12 claro / 5.61 escuro**. ⚠ **`sessao-ao-vivo.html` tem a MESMA pílula com o tint e herda a falha** — corrigir no próximo passe daquela tela. Medido em `chamada`. |
+| **`--acento-texto` sobre tint da PRÓPRIA telha dentro da barra `.topo`** (pílula "Ao vivo": texto telha sobre `rgba(217,84,43,.1)`) | **4.10** — é o caso "não empilhe sobre fundo mais escuro sem remedir" acontecendo de fato | fundo `var(--surface)` (o tom mais claro) = **5.12 claro / 5.61 escuro**. ⚠ **A pílula tinha TRÊS cópias** (os 2 mocks + `plenario.css` + `chamada.css`); o conserto entrou só nos mocks e as de produção seguiram reprovando **até serem medidas no browser** (15/08/2026). Ver "o mock não é o artefato" abaixo. Medido em `chamada`. |
 | **`color` de componente do chassi derrotado por regra de ELEMENTO da tela** (`.tribuna-quem span` sobre `.avatar`) | **1.20** no claro / 3.96 no escuro — as INICIAIS do avatar saíam cinza sobre o jade | a regra da tela é (0,1,1) e o `color:#fff` do componente é (0,1,0): **quem perde é o componente**. Escopar a regra da tela ao que ela realmente quer pintar (`.tribuna-quem div span`). É a mesma armadilha de especificidade do §8 passo 6, aqui com consequência de CONTRASTE. Medido em `sessao-ao-vivo` — passou meses na tela HERO. |
 | **Borda de campo pela receita "58% mix" de `--texto-2`** | **2.68** — a receita documentada em `PADROES §3` enunciava "≥3:1" e prescrevia um mix que não entrega | **78% mix** = 3.0+ nos 2 temas sobre `--surface-2`. Superfície diferente muda o resultado com o mesmo mix: **meça na sua superfície, não confie no número da receita**. Medido em `chamada`. |
 

@@ -11,7 +11,7 @@ const itens = [
     objetoId: "d1",
     sentido: "expedido",
     assunto: "Ofício 142/2026 – SL · Hortas comunitárias",
-    protocoladoEm: "2026-05-21T14:02:00Z",
+    protocoladoEm: "2026-05-21T14:02:00-03:00",
   },
   {
     id: "p2",
@@ -21,7 +21,7 @@ const itens = [
     objetoId: "r1",
     sentido: "recebido",
     assunto: "Cidadão solicita poda de árvore — Bairro Cocó",
-    protocoladoEm: "2026-05-21T11:37:00Z",
+    protocoladoEm: "2026-05-21T11:37:00-03:00",
   },
 ];
 

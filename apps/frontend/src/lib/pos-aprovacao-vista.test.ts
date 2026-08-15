@@ -43,7 +43,7 @@ describe("derivarPipeline", () => {
   it("estado 'sancionado' -> etapas 1-3 feitas, rótulo do desfecho com data de resposta", () => {
     const etapas = derivarPipeline(
       autografo,
-      tramitacao({ estado: "sancionado", respondidoEm: "2026-07-01T00:00:00Z" }),
+      tramitacao({ estado: "sancionado", respondidoEm: "2026-07-01T09:00:00-03:00" }),
     );
     expect(etapas[1].situacao).toBe("feita");
     expect(etapas[2]).toMatchObject({ situacao: "feita" });

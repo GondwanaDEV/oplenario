@@ -11,6 +11,8 @@ import { useTema } from "@/lib/tema";
 import { usePlenario, type EstadoConexao } from "@/lib/use-plenario";
 import { usePauta } from "@/lib/use-pauta";
 import { segundosDecorridos, formatarTempo } from "@/lib/cronometro";
+import { assentosHemiciclo } from "@/lib/hemiciclo";
+import { nomeTipoSessao } from "@/lib/rotulos-sessao";
 import type { EstadoPlenario, PlacarVotacao, VistaQuorum } from "@/lib/plenario-reducer";
 import { vistaDoQuorum } from "@/lib/plenario-reducer";
 import { derivarPlacar, type VistaNominal, type VistaSecreta } from "@/lib/placar-vista";
@@ -120,7 +122,7 @@ function Topo({ sessao, estado, conexao, agora }: { sessao: SessaoOut; estado: E
         <Badge estado={estado.estado} conexao={conexao} aoVivo={aoVivo} />
         <div className="sessao-meta">
           <span className="tipo">
-            Sessão {sessao["tipo-sessao"]} nº {sessao["numero-sequencial"]}
+            Sessão {nomeTipoSessao(sessao["tipo-sessao"])} nº {sessao["numero-sequencial"]}
           </span>
           <span className="quando">{sessao.modalidade}</span>
         </div>
@@ -199,7 +201,7 @@ function Palco({ sessao, estado, pauta }: { sessao: SessaoOut; estado: EstadoPle
     <section className="bloco palco" aria-labelledby="materia-titulo">
       <div className="palco-cabeca">
         <span className="item-od">
-          Sessão {sessao["tipo-sessao"]} · {sessao.delibera ? "deliberativa" : "não deliberativa"}
+          Sessão {nomeTipoSessao(sessao["tipo-sessao"])} · {sessao.delibera ? "deliberativa" : "não deliberativa"}
         </span>
         <span className={`selo-estado ${emCurso ? "" : "calmo"}`}>
           <span className="glifo" aria-hidden="true" />
@@ -208,7 +210,7 @@ function Palco({ sessao, estado, pauta }: { sessao: SessaoOut; estado: EstadoPle
       </div>
       <h1 id="materia-titulo">
         {/* capitalização vem do CSS (.palco h1 { text-transform: capitalize }); evita crash se vier "" */}
-        {sessao["tipo-sessao"]} nº {sessao["numero-sequencial"]}
+        {nomeTipoSessao(sessao["tipo-sessao"])} nº {sessao["numero-sequencial"]}
       </h1>
       <p className="palco-autoria">
         Modalidade <b>{sessao.modalidade}</b>
@@ -449,25 +451,12 @@ function Quorum({ vista }: { vista: VistaQuorum }) {
  * assentos em três fileiras (proporção ~0,26/0,35/0,39 do original), e a geometria decorativa de 43 só
  * aparece enquanto o denominador não é conhecido. */
 function Hemiciclo({ vista }: { vista: VistaQuorum }) {
-  const cx = 120;
-  const cy = 116;
   const total = vista.status === "ok" ? Math.max(1, vista.membrosDaCasa) : 43;
   const presentes = vista.status === "ok" ? vista.presentes : 0;
-  const n1 = Math.max(1, Math.round(total * 0.256));
-  const n2 = Math.max(1, Math.round(total * 0.349));
-  const fileiras = [
-    { r: 46, n: n1 },
-    { r: 68, n: n2 },
-    { r: 90, n: Math.max(1, total - n1 - n2) },
-  ];
-  const seats: { x: number; y: number }[] = [];
-  for (const f of fileiras) {
-    for (let i = 0; i < f.n; i++) {
-      const t = f.n === 1 ? 0.5 : i / (f.n - 1);
-      const ang = Math.PI * (1 - t);
-      seats.push({ x: cx + f.r * Math.cos(ang), y: cy - f.r * Math.sin(ang) });
-    }
-  }
+  // Geometria em `lib/hemiciclo` (pura, testada) — antes era inline aqui E na chamada, com a mesma
+  // constante mágica dos dois lados. Ver o docstring de lá: três fileiras fixas degeneravam em Casa
+  // pequena (4 membros -> [1,1,2], dois assentos no mesmo eixo).
+  const seats = assentosHemiciclo(total);
   const rotulo =
     vista.status === "ok"
       ? `${vista.presentes} de ${vista.membrosDaCasa} vereadores presentes.`
