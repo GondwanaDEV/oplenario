@@ -187,6 +187,22 @@
         ;; fechado no seam mostraria a composicao de HOJE, nao a de entao. Mesma inversao de dependencia
         ;; sobre cadastros (sessoes nunca importa cadastros, §22.10); irmao LITERAL de membros-da-casa.
         roster-da-casa-fn (fn [ente-id data] (repo-cadastros-comp/roster-da-casa repo-cadastros ente-id data))
+        ;; Etapa 5 fatia 1: o cabecalho da FOLHA (nome/legislatura da Casa) — seam irmao LITERAL de
+        ;; `roster-da-casa-fn` acima, mesma inversao de dependencia sobre `cadastros` (sessoes nunca importa
+        ;; cadastros, §22.10). Leva `data` na aridade pelo MESMO motivo de `roster-da-casa-fn` (nunca fechar
+        ;; 'hoje' aqui dentro: reabrir a folha de uma sessao do mes passado com hoje fechado no seam
+        ;; mostraria a composicao de hoje) — CARRY: `cadastros/legislatura-vigente` hoje so' le' o flag
+        ;; `vigente` corrente (nao ha' consulta por DATA em `cadastros`), entao `data` ainda nao MUDA a
+        ;; legislatura resolvida; o parametro existe para o seam nao precisar de uma segunda mudanca de
+        ;; assinatura no dia em que essa consulta existir.
+        dados-da-casa-fn (fn [ente-id _data]
+                           (let [ente (repo-cadastros-comp/buscar-ente repo-cadastros ente-id)
+                                 leg  (repo-cadastros-comp/legislatura-vigente repo-cadastros ente-id)]
+                             {:nome-oficial (:nome-oficial ente)
+                              :nome-curto (:nome-curto ente)
+                              :legislatura-numero (:numero leg)
+                              :legislatura-ano-inicio (:ano-inicio leg)
+                              :legislatura-ano-fim (:ano-fim leg)}))
         ;; Onda B Slice 2: uf/nome-do-municipio do ente, p/ o legislativo computar a URN em protocolar! —
         ;; mesma inversao de dependencia de consultar-sessao/membros-da-casa/info-ente (§22.10).
         resolver-municipio (fn [ente-id] (repo-cadastros-comp/uf-e-municipio repo-cadastros ente-id))
@@ -269,7 +285,12 @@
            :route-name :painel-secretaria]}
         (into (sessoes-http/rotas {:auth auth :repo-sessoes repo-sessoes :objeto-store objeto-store
                                    :resolver-vereador resolver-vereador-fn :relogio relogio-producao
-                                   :roster-da-casa roster-da-casa-fn}))
+                                   :roster-da-casa roster-da-casa-fn
+                                   ;; Etapa 5 fatia 1: `dados-da-casa-fn` chega pronto para a Fatia 5 (as
+                                   ;; rotas HTTP da folha) fiar o cabecalho — sem rota nova nesta fatia,
+                                   ;; `sessoes-http/rotas` ainda nao destrutura a chave (chave extra e'
+                                   ;; inocua p/ um mapa nao-closed).
+                                   :dados-da-casa dados-da-casa-fn}))
         (into (legislativo-http/rotas {:auth auth :repo-legislativo repo-legislativo
                                        :consultar-sessao consultar-sessao
                                        :resolver-municipio resolver-municipio

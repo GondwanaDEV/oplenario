@@ -54,6 +54,11 @@
   (presenca-corrente [this ente-id sessao-id instante]
     "Ultimo evento de CADA vereador da sessao ate' `instante` (uma linha por vereador) — insumo cru da CHAMADA.")
   (listar-justificativas [this ente-id sessao-id] "Justificativas de ausencia da sessao (3o insumo da chamada).")
+  (serie-de-eventos-da-sessao [this ente-id sessao-id piso teto]
+    "A SERIE cronologica de eventos de presenca de CADA vereador, na janela [piso, teto] (a MESMA da
+     chamada — piso/teto ja' resolvidos pelo caller via `logic/piso-da-janela-de-presenca` +
+     `logic/instante-de-avaliacao`). Insumo da FOLHA (Etapa 5 fatia 1); nao confundir com `listar-presenca`
+     (a sessao inteira, sem janela) nem `presenca-corrente` (so' o ultimo evento por vereador).")
   (chamada-da-sessao [this ente-id sessao-id agora]
     "As QUATRO leituras da chamada (sessao + presenca corrente + justificativas + atos de chamada conduzida)
      numa UNICA tx do tenant, com o INSTANTE de avaliacao resolvido DENTRO dela a partir da sessao fresca
@@ -237,6 +242,8 @@
     (transacao this ente-id #(presenca/presenca-corrente % ente-id sessao-id instante)))
   (listar-justificativas [this ente-id sessao-id]
     (transacao this ente-id #(presenca/listar-justificativas-da-sessao % ente-id sessao-id)))
+  (serie-de-eventos-da-sessao [this ente-id sessao-id piso teto]
+    (transacao this ente-id #(presenca/serie-de-eventos-da-sessao % ente-id sessao-id piso teto)))
   ;; UMA tx por request (molde de `adicionar-item-na-sessao!`, e o oposto do que `controllers/pauta-da-sessao`
   ;; faz com tres tx separadas). Aqui a atomicidade nao e' luxo: em tres tx, um vereador pode entrar no
   ;; plenario entre a leitura dos eventos e a das justificativas e sair na tela PRESENTE *e* com ausencia

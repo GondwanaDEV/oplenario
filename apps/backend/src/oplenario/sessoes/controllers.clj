@@ -8,6 +8,7 @@
             [oplenario.kernel.components.objeto-store :as store]
             [oplenario.kernel.tempo :as tempo]
             [oplenario.sessoes.components.repositorio :as repo]
+            [oplenario.sessoes.gerador-folha :as gerador-folha]
             [oplenario.sessoes.logic :as logic])
   (:import (java.security DigestInputStream MessageDigest)))
 
@@ -691,3 +692,67 @@
                {:id (random-uuid) :sessao-id sessao-id :conduzida-por (:identidade-id ator)
                 :roster roster :ocorrido-em agora :agora agora
                 :created-by (:identidade-id ator)})))))
+
+;; ---------- §22.6 eixo C — a FOLHA DA SESSAO (Etapa 5 fatia 1) ----------
+
+(defn folha-da-sessao
+  "O DOCUMENTO da folha de presenca da sessao `sessao-id` (Etapa 5 fatia 1, D1/D2/D6): a chamada da sessao
+  FECHADA MAIS a SERIE completa de eventos por vereador. NAO ha' congelamento nesta fatia (a linha do banco,
+  os dois hashes/refs, e' Fatia 4) — esta funcao devolve o DOCUMENTO puro, formato-agnostico.
+
+  D1 (nao recalcula): reusa `chamada-da-sessao*` (a mesma que serve `chamada-da-sessao` nominal) para
+  `:linhas`/`:quorum`/`:chamadas-conduzidas` — nao ha' aqui uma segunda passada por
+  `logic/derivar-linhas-da-chamada`/`logic/contar-quorum`. O gate de authz e' o MESMO da chamada NOMINAL
+  (`logic/pode-ver-sessao?`, acao propria `:sessao/ver-folha` so' para o audit distinguir): a folha carrega
+  MAIS dado sensivel que a chamada (o `motivo` de justificativa, abaixo), nunca o gate magro do quorum.
+
+  D6 (fail-closed, allowlist): so' sessao em `logic/estados-sessao-fechada` tem folha — checado
+  IMEDIATAMENTE apos a leitura (antes de qualquer segunda consulta), e por ALLOWLIST (o mesmo set que
+  `instante-de-avaliacao` usa para congelar o instante), nunca pelo complemento dos estados 'abertos'
+  (complemento aceitaria um estado NOVO e desconhecido — o caso em que ninguem pensou).
+
+  A SERIE usa a MESMA janela que a chamada: `piso-da-janela-de-presenca` (o dia civil da sessao) como piso,
+  o `:instante` ja' resolvido por `chamada-da-sessao*` (== `instante-de-avaliacao`) como teto. `piso` nil
+  (sessao sem `aberta-em`/`agendada-para` — improvavel numa sessao fechada, mas nao impossivel por CHECK)
+  LANCA: sem piso nao ha' janela, e servir a serie sem filtro de piso vazaria eventos de fora da sessao
+  para dentro do documento — o mesmo tipo de defeito que `instante-de-avaliacao` recusa a todo custo.
+
+  O SEGUNDO `buscar-sessao` (depois do lido dentro de `chamada-da-sessao*`) e' seguro: `aberta-em`/
+  `agendada-para` sao carimbos que nao mudam depois de setados, e a maquina de estados so' anda PRA FRENTE
+  a partir de fechada (`encerrada|nao_realizada -> arquivada`) — nao ha' corrida que desfaca o D6 ja'
+  verificado. Mesmo padrao de `registrar-chamada-conduzida`, que tambem re-le a sessao.
+
+  `justificativas` vem de `repo/listar-justificativas` (RAW, com `motivo` — LGPD) — as linhas de `chamada`
+  ja' derivaram o ESTADO a partir dela mas NAO carregam o texto do motivo (`LinhaChamada` nao o expoe).
+
+  `dados-da-casa` (seam injetado do host sobre `cadastros`, irmao LITERAL de `roster-da-casa`) resolve o
+  cabecalho (nome/legislatura) NA DATA de composicao da chamada — nunca 'hoje' fechado dentro do seam.
+
+  Devolve o DOCUMENTO (`gerador-folha/renderizar`), ou nil (sessao inexistente neste ente -> 404, mesmo
+  contrato de `chamada-da-sessao`). Sessao ainda aberta/suspensa/agendada lanca `:conflito/folha-sessao-aberta`."
+  [repo-sessoes roster-da-casa dados-da-casa ator sessao-id relogio]
+  (when-let [chamada (chamada-da-sessao* repo-sessoes roster-da-casa ator sessao-id relogio
+                                         :sessao/ver-folha logic/pode-ver-sessao?)]
+    (when-not (contains? logic/estados-sessao-fechada (:sessao-estado chamada))
+      (throw (ex-info "folha-da-sessao: so' sessao FECHADA tem folha"
+                      {:tipo :conflito/folha-sessao-aberta :sessao-id sessao-id
+                       :estado (:sessao-estado chamada)})))
+    (let [ente-id (:ente-id ator)
+          sessao  (repo/buscar-sessao repo-sessoes ente-id sessao-id)
+          piso    (or (logic/piso-da-janela-de-presenca sessao)
+                      (throw (ex-info "folha-da-sessao: sessao fechada sem piso de janela de presenca"
+                                      {:tipo :servidor/erro :sessao-id sessao-id})))
+          teto    (:instante chamada)
+          serie   (logic/agrupar-serie-por-vereador
+                   (repo/serie-de-eventos-da-sessao repo-sessoes ente-id sessao-id piso teto))
+          justificativas (repo/listar-justificativas repo-sessoes ente-id sessao-id)]
+      (gerador-folha/renderizar
+       {:sessao {:id sessao-id :estado (:sessao-estado chamada)
+                 :motivo-nao-realizada (:motivo-nao-realizada sessao)}
+        :instante teto
+        :cabecalho-da-casa (dados-da-casa ente-id (:data-de-composicao chamada))
+        :linhas (:linhas chamada)
+        :quorum (:quorum chamada)
+        :serie serie
+        :justificativas justificativas
+        :atos-de-chamada-conduzida (:chamadas-conduzidas chamada)}))))
