@@ -246,6 +246,50 @@
          ;; lista impressa contra a tela marca o vereador errado, e a ata sai com a presenca do homonimo.
          :order-by [[:v.nome :asc] [:v.id :asc]]}))))
 
+(defn- mandato-vigente-lateral
+  "O fragmento HoneySQL do LATERAL de mandato — 'o mandato ('vigente' ou 'licenciado') deste vereador que
+   COBRE `data-expr`, com 'vigente' vencendo 'licenciado' em empate' — extraido de dentro de `roster-da-casa`
+   (Etapa 6 fatia 1) para ser COMPARTILHADO com `roster-da-casa-em-datas`. E' a garantia de I3 (brief da
+   Etapa 6): o roster de UMA data e o roster em LOTE de VARIAS datas nao podem decidir 'quem tem mandato'
+   por dois caminhos de codigo — se um dos dois ganhar um filtro que o outro nao ganhou, a Mesa le' um
+   quorum na chamada e a apuracao de assiduidade conta sobre outra Casa para a MESMA sessao.
+
+   `data-expr` e' uma EXPRESSAO honeysql, nao um valor: o singular passa o parametro `data` (a mesma data
+   em toda linha, virando 1 bind param repetido); o lote passa a COLUNA `:d.data` da tabela de datas
+   (correlacionada linha a linha pelo LATERAL). O corpo do fragmento e' identico nos dois casos — so' muda
+   o que `data-expr` resolve a cada linha. Pressupoe o alias `:v` para `cadastros.vereador` na query externa
+   (`:mm.vereador_id = :v.id`), que e' o mesmo em ambos os chamadores."
+  [data-expr]
+  {:select [:mm.partido :mm.estado]
+   :from [[:cadastros.mandato :mm]]
+   :where [:and [:= :mm.vereador_id :v.id] [:= :mm.ente_id :v.ente_id]
+           [:in :mm.estado ["vigente" "licenciado"]]
+           [:<= :mm.vigencia_inicio data-expr]
+           [:or [:is :mm.vigencia_fim nil] [:>= :mm.vigencia_fim data-expr]]]
+   ;; 'vigente' vence 'licenciado' quando os dois cobrem a data (o EXCLUDE da mig 0059 so' barra dois
+   ;; VIGENTES sobrepostos): quem tem mandato vigente nao e' licenciado.
+   :order-by [[[:case [:= :mm.estado "vigente"] 0 :else 1]]
+              [:mm.vigencia_inicio :desc] [:mm.id]]
+   :limit 1})
+
+(defn- cargo-mesa-lateral
+  "O fragmento HoneySQL do LATERAL de cargo-na-Mesa — irmao LITERAL de `mandato-vigente-lateral`, extraido
+   pelo MESMO motivo (Etapa 6 fatia 1): o lote precisa das MESMAS colunas que o singular, cargo-mesa
+   incluso, e um segundo predicado transcrito a mao seria o mesmo risco de divergencia silenciosa. Pressupoe
+   os alias `:v` (vereador, query externa) e `:cc2`/`:mesa2` (internos deste fragmento)."
+  [data-expr]
+  {:select [:cc2.cargo]
+   :from [[:cadastros.comissao_cargo :cc2]]
+   :join [[:cadastros.comissao :mesa2]
+          [:and [:= :mesa2.id :cc2.comissao_id] [:= :mesa2.tipo "mesa"] [:= :mesa2.ente_id :v.ente_id]
+           [:<= :mesa2.vigencia_inicio data-expr]
+           [:or [:is :mesa2.vigencia_fim nil] [:>= :mesa2.vigencia_fim data-expr]]]]
+   :where [:and [:= :cc2.vereador_id :v.id] [:= :cc2.ente_id :v.ente_id]
+           [:<= :cc2.vigencia_inicio data-expr]
+           [:or [:is :cc2.vigencia_fim nil] [:>= :cc2.vigencia_fim data-expr]]]
+   :order-by [[:cc2.vigencia_inicio :desc] [:cc2.id]]
+   :limit 1})
+
 (defn roster-da-casa
   "Os vereadores que COMPOEM a Casa em `data` — um por linha, com a identidade que a CHAMADA mostra (nome,
    nome parlamentar, partido) e o estado do mandato. Ordena por nome (a chamada e' lida em voz alta e
@@ -298,38 +342,73 @@
         {:select [[:v.id :vereador_id] :v.nome :v.nome_parlamentar :m.partido [:m.estado :estado_mandato]
                   [:cc.cargo :cargo_mesa]]
          :from [[:cadastros.vereador :v]]
-         :join [[[:lateral
-                  {:select [:mm.partido :mm.estado]
-                   :from [[:cadastros.mandato :mm]]
-                   :where [:and [:= :mm.vereador_id :v.id] [:= :mm.ente_id :v.ente_id]
-                           [:in :mm.estado ["vigente" "licenciado"]]
-                           [:<= :mm.vigencia_inicio data]
-                           [:or [:is :mm.vigencia_fim nil] [:>= :mm.vigencia_fim data]]]
-                   ;; 'vigente' vence 'licenciado' quando os dois cobrem a data (o EXCLUDE da mig 0059 so'
-                   ;; barra dois VIGENTES sobrepostos): quem tem mandato vigente nao e' licenciado.
-                   :order-by [[[:case [:= :mm.estado "vigente"] 0 :else 1]]
-                              [:mm.vigencia_inicio :desc] [:mm.id]]
-                   :limit 1}]
-                 :m] true]
-         :left-join [[[:lateral
-                       {:select [:cc2.cargo]
-                        :from [[:cadastros.comissao_cargo :cc2]]
-                        :join [[:cadastros.comissao :mesa2]
-                               [:and [:= :mesa2.id :cc2.comissao_id] [:= :mesa2.tipo "mesa"] [:= :mesa2.ente_id :v.ente_id]
-                                [:<= :mesa2.vigencia_inicio data]
-                                [:or [:is :mesa2.vigencia_fim nil] [:>= :mesa2.vigencia_fim data]]]]
-                        :where [:and [:= :cc2.vereador_id :v.id] [:= :cc2.ente_id :v.ente_id]
-                                [:<= :cc2.vigencia_inicio data]
-                                [:or [:is :cc2.vigencia_fim nil] [:>= :cc2.vigencia_fim data]]]
-                        :order-by [[:cc2.vigencia_inicio :desc] [:cc2.id]]
-                        :limit 1}]
-                      :cc] true]
+         :join [[[:lateral (mandato-vigente-lateral data)] :m] true]
+         :left-join [[[:lateral (cargo-mesa-lateral data)] :cc] true]
          :where [:= :v.ente_id ente-id]
          ;; desempate por id: `nome` NAO e' unico (homonimia e' comum em camara municipal — o que distingue
          ;; e' o nome parlamentar). Sem ele o Postgres nao garante ordem relativa entre linhas de mesma
          ;; chave de sort e o plano pode mudar entre duas execucoes identicas: o secretario que confere a
          ;; lista impressa contra a tela marca o vereador errado, e a ata sai com a presenca do homonimo.
          :order-by [[:v.nome :asc] [:v.id :asc]]}))))
+
+(def ^:private teto-de-datas-lote
+  "Teto de datas DISTINTAS aceitas por `roster-da-casa-em-datas` (Etapa 6 fatia 1) — cada data vira uma
+   linha da tabela VALUES cruzada com toda a Casa mais 2 LATERAL correlacionados por linha; sem teto, um
+   periodo de apuracao absurdo (ex.: decadas) multiplicaria o custo da query sem limite. Convencao da casa
+   (ver `rotas/teto-de-janelas`): todo predicado de cardinalidade aberta tem teto explicito e declarado. 400
+   e' o teto que o brief da Etapa 6 fixa para o recorte da apuracao (periodo maximo de 366 dias + folga)."
+  400)
+
+(defn roster-da-casa-em-datas
+  "O LOTE de `roster-da-casa` para VARIAS datas de uma vez — `{data -> [roster-linha ...]}`, MESMAS colunas
+   do singular (inclusive `:estado-mandato`/`:cargo-mesa`). Existe para a apuracao de assiduidade (Etapa 6):
+   apurar um periodo com centenas de sessoes NAO PODE reabrir o roster sessao a sessao (o carry N+1 do
+   leitor AGREGADO, `i5-decisao.md:277` — 'passa a ser uma leitura em lote, nao um loop de seam singular').
+
+   UMA UNICA query: `cadastros.vereador` CRUZADO (CROSS JOIN) com `datas` materializada como tabela VALUES
+   `(VALUES (d1), (d2), ...) AS d(data)`, mais os DOIS LATERAL de `roster-da-casa` — `mandato-vigente-
+   lateral`/`cargo-mesa-lateral`, os MESMOS fragmentos, aqui correlacionados por `:d.data` (a coluna, uma
+   por linha) em vez do parametro fixo `data` do singular. E' esse compartilhamento que garante I3 do brief:
+   as duas leituras nunca podem decidir 'quem tem mandato' por dois caminhos de codigo — o teste
+   `t1-lote-e-identico-ao-singular-data-a-data` e' o cruzado que pina isso.
+
+   Toda `data` do parametro aparece como CHAVE do mapa devolvido, MESMO quando nenhum vereador tem mandato
+   vigente naquele dia (vetor vazio): o INNER JOIN LATERAL simplesmente nao produz linha nenhuma para essa
+   data, e o mapa e' PRE-SEMEADO com todas as datas ANTES de agrupar as linhas — uma chave ausente seria
+   lida a jusante como 'nao perguntei por essa data', nunca como 'perguntei e a resposta e' vazia' (e a
+   apuracao soma sobre as chaves, entao a diferenca decide o denominador).
+
+   `datas` VAZIO devolve `{}` SEM tocar o banco (mesmo racional de `licencas-de-mandatos` para id vazio).
+   Datas DUPLICADAS no parametro sao dedupe'd antes do teto e da query — pedir a mesma data duas vezes nao
+   e' um segundo dia de exercicio, e contá-la duas vezes contra o teto seria hostil ao chamador. Acima de
+   `teto-de-datas-lote` datas DISTINTAS, lanca `ex-info` FAIL-CLOSED — `{:tipo :limite/datas-excedido :medido
+   :teto}` — NUNCA trunca em silencio (I7 do brief: nenhuma pagina parcial parecendo total)."
+  [tx ente-id datas]
+  (let [distintas (vec (distinct datas))]
+    (cond
+      (empty? distintas)
+      {}
+
+      (> (count distintas) teto-de-datas-lote)
+      (throw (ex-info "numero de datas distintas acima do teto do lote de roster"
+                      {:tipo :limite/datas-excedido :medido (count distintas) :teto teto-de-datas-lote}))
+
+      :else
+      (let [linhas (comum/linhas->kebab
+                    (jdbc/execute! tx
+                      (sql/format
+                        {:select [[:d.data :data] [:v.id :vereador_id] :v.nome :v.nome_parlamentar :m.partido
+                                  [:m.estado :estado_mandato] [:cc.cargo :cargo_mesa]]
+                         :from [[:cadastros.vereador :v]
+                                [{:values (mapv vector distintas)} [[:d :data]]]]
+                         :join [[[:lateral (mandato-vigente-lateral :d.data)] :m] true]
+                         :left-join [[[:lateral (cargo-mesa-lateral :d.data)] :cc] true]
+                         :where [:= :v.ente_id ente-id]
+                         :order-by [[:d.data :asc] [:v.nome :asc] [:v.id :asc]]})))]
+        (reduce (fn [acc {:keys [data] :as linha}]
+                  (update acc data conj (dissoc linha :data)))
+                (zipmap distintas (repeat []))
+                linhas)))))
 
 ;; ---- licenca + suplencia ----
 (defn licencas-de-mandatos

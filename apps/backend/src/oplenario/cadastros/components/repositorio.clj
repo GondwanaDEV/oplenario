@@ -34,6 +34,12 @@
      a Casa em `data` — o mesmo predicado de mandato vigente que `membros-da-casa` CONTA, exposto como
      conjunto. E' o insumo do roster da CHAMADA; `listar-vereadores` nao serve (devolve todo vereador
      cadastrado, inclusive sem mandato). Ver `vereador/roster-da-casa` p/ o porque completo.")
+  (roster-da-casa-em-datas [this ente-id datas]
+    "ADITIVO (Etapa 6 fatia 1 — `roster-da-casa` fica INTACTO): o LOTE de `roster-da-casa` para VARIAS
+     datas numa UNICA query, `{data -> [roster-linha ...]}`. E' o insumo da apuracao de assiduidade — evita
+     reabrir o roster sessao a sessao para um periodo inteiro. Compartilha o predicado de mandato com o
+     singular (I3 do brief); `datas` vazio -> {} sem tocar o banco; teto de 400 datas distintas, fail-closed.
+     Ver `vereador/roster-da-casa-em-datas` p/ o porque completo.")
   (ficha-vereador [this ente-id id data]
     "Leitura composta NUMA UNICA tx (mesma disciplina de ficha-completa-da-proposicao):
      {:vereador :mandato :legislatura :comissoes}, ou nil se o vereador nao existe.")
@@ -99,6 +105,8 @@
   (buscar-vereador [this ente-id id] (transacao this ente-id #(vereador/buscar % ente-id id)))
   (listar-vereadores [this ente-id data] (transacao this ente-id #(vereador/listar % ente-id data)))
   (roster-da-casa [this ente-id data] (transacao this ente-id #(vereador/roster-da-casa % ente-id data)))
+  (roster-da-casa-em-datas [this ente-id datas]
+    (transacao this ente-id #(vereador/roster-da-casa-em-datas % ente-id datas)))
   (ficha-vereador [this ente-id id data]
     (transacao this ente-id
       (fn [tx]
