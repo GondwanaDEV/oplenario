@@ -1,0 +1,71 @@
+-- Etapa 6 fatia 1 (revisao adversarial): os dois indices que o LOTE do roster precisa, e a limpeza dos
+-- dois que eles tornam redundantes.
+--
+-- O DEFEITO MEDIDO. `cadastros/db/vereador/roster-da-casa-em-datas` cruza `cadastros.vereador` com a tabela
+-- VALUES das datas e correlaciona DOIS `LATERAL` por (vereador, data): um em `cadastros.mandato`, outro em
+-- `cadastros.comissao_cargo`. Os dois filtram por `vereador_id = v.id AND ente_id = v.ente_id` mais a
+-- janela de vigencia, e ordenam por `vigencia_inicio DESC`. Com os indices existentes o planner NAO usa
+-- `vereador_id` como Index Cond: ele escolhe `idx_mandato_legislatura (ente_id, legislatura_id)` com o
+-- `ente_id` SOZINHO e joga `vereador_id = v.id` no Filter — ou seja, cada uma das (vereadores x datas)
+-- execucoes do LATERAL le' TODOS os mandatos do ente e descarta todos menos o seu. Os dois planos empatam
+-- em custo estimado, entao qual deles sai depende de `n_distinct(mandato.ente_id)`: e' loteria de
+-- estatistica, nao tuning.
+--
+-- MEDIDO (nao herdado do relatorio de ninguem) em `oplenario-postgres-1`, PG 16.14, papel `oplenario_app`
+-- com RLS ativa, 150 vereadores x 400 datas = 60.000 linhas (o PIOR CASO PERMITIDO pelos tetos do brief da
+-- Etapa 6: 366 dias x 150 vereadores), dado sintetico numa transacao com ROLLBACK, apos ANALYZE. As duas
+-- medicoes saem da MESMA transacao, para que o estado de bloat seja identico nos dois lados:
+--
+--   perfil                      | Execution Time | buffers (nó de topo) | Rows Removed by Filter (mandato)
+--   ----------------------------+----------------+----------------------+---------------------------------
+--   SEM estes indices           |  2.178,161 ms  |      1.204.901       |   299 por execucao x 60.000
+--   COM estes indices           |    250,005 ms  |        366.489       |     1 por execucao x 60.000
+--
+-- 8,7x em tempo e 3,3x em buffers. Sem eles o plano e':
+--   Index Scan using idx_mandato_legislatura on mandato mm  (loops=60000)
+--     Index Cond: (ente_id = v.ente_id)
+--     Filter: (... AND (vereador_id = v.id) ...)
+--     Rows Removed by Filter: 299
+-- Com eles:
+--   Index Scan using idx_mandato_vereador_vigencia on mandato mm  (loops=60000)
+--     Index Cond: ((ente_id = v.ente_id) AND (vereador_id = v.id) AND (vigencia_inicio <= "*VALUES*".column1))
+--     Rows Removed by Filter: 1
+-- O mesmo vale para `comissao_cargo`, que saia por `idx_comissao_cargo_comissao (ente_id, comissao_id)`
+-- com o `ente_id` sozinho (300.000 buffers so' nesse ramo) e passa a entrar pelo indice novo (121.598).
+--
+-- A COLUNA `vigencia_inicio DESC` NA CHAVE NAO E' ENFEITE: e' ela que vira Index Cond para o
+-- `vigencia_inicio <= <data>` do predicado de janela E que da' a ordem pedida pelo `ORDER BY
+-- vigencia_inicio DESC` do LATERAL. No lado de `comissao_cargo` o plano de fato troca o `Sort` por um
+-- `Incremental Sort` (Presorted Key: cc2.vigencia_inicio).
+--
+-- O QUE ISTO **NAO** RESOLVE, escrito para nao ser redescoberto: o `Sort ... external merge Disk: 3640kB`
+-- do topo continua identico nos dois planos. Ele e' o `ORDER BY d.data, v.nome, v.id` sobre as 60.000
+-- linhas com `work_mem` = 4 MB, e nenhum indice o remove (a chave de ordenacao mistura a tabela VALUES com
+-- a tabela vereador). E' um teto de MEMORIA de sessao, nao de indice, e no volume da Casa real
+-- (~21 x 200 = 4.200 linhas) nao acontece.
+--
+-- POR QUE DROPAR `idx_mandato_vereador` E `idx_comissao_cargo_vereador` (decisao explicita, nao omissao):
+-- os dois sao `(ente_id, vereador_id)`, PREFIXO ESTRITO dos indices criados aqui. Todo acesso que eles
+-- serviam — o lookup por (ente_id, vereador_id) de `mandatos-do-vereador`/`mandato-vigente`/
+-- `mandato-sobreposto?`, o Index Only Scan e o check da FK filho->pai (ente_id, vereador_id) -> vereador —
+-- e' servido pelo indice mais largo com o MESMO custo de descida na arvore. Manter os dois so' custaria
+-- escrita em toda posse/licenca/nomeacao e espaco em disco. Mesma limpeza, mesmo racional, da mig 0069
+-- (`idx_presenca_parlamentar_ente`).
+--
+-- JANELA DE MANUTENCAO (mesmo tom das migs 0067/0068/0069): `CREATE INDEX` sem CONCURRENTLY toma
+-- ShareLock (bloqueia ESCRITA) e `DROP INDEX` toma AccessExclusiveLock; migratus roda o arquivo inteiro
+-- numa transacao. `cadastros.mandato` e `cadastros.comissao_cargo` sao pequenas (dezenas de linhas por
+-- Casa) e o efeito e' de milissegundos, mas nao deployar no meio de sessao.
+--
+-- RUNBOOK: rodar `ANALYZE cadastros.mandato, cadastros.comissao_cargo` depois do deploy. Sem estatisticas
+-- frescas o planner pode continuar no plano antigo — foi exatamente a ambiguidade de custo descrita acima
+-- que criou o defeito.
+CREATE INDEX IF NOT EXISTS idx_mandato_vereador_vigencia
+  ON cadastros.mandato (ente_id, vereador_id, vigencia_inicio DESC);
+--;;
+CREATE INDEX IF NOT EXISTS idx_comissao_cargo_vereador_vigencia
+  ON cadastros.comissao_cargo (ente_id, vereador_id, vigencia_inicio DESC);
+--;;
+DROP INDEX IF EXISTS cadastros.idx_mandato_vereador;
+--;;
+DROP INDEX IF EXISTS cadastros.idx_comissao_cargo_vereador;
