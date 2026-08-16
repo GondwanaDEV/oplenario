@@ -36,10 +36,22 @@
      cadastrado, inclusive sem mandato). Ver `vereador/roster-da-casa` p/ o porque completo.")
   (roster-da-casa-em-datas [this ente-id datas]
     "ADITIVO (Etapa 6 fatia 1 — `roster-da-casa` fica INTACTO): o LOTE de `roster-da-casa` para VARIAS
-     datas numa UNICA query, `{data -> [roster-linha ...]}`. E' o insumo da apuracao de assiduidade — evita
-     reabrir o roster sessao a sessao para um periodo inteiro. Compartilha o predicado de mandato com o
-     singular (I3 do brief); `datas` vazio -> {} sem tocar o banco; teto de 400 datas distintas, fail-closed.
-     Ver `vereador/roster-da-casa-em-datas` p/ o porque completo.")
+     datas, `{data -> [roster-linha ...]}`. E' o insumo da apuracao de assiduidade — evita reabrir o roster
+     sessao a sessao para um periodo inteiro. Compartilha o predicado de mandato com o singular (I3).
+
+     CUSTO EXATO, medido e nao alegado (a alegacao anterior era 'sem tocar o banco' / 'uma query so'', e
+     nenhum teste podia reprova-la porque observava `jdbc/execute!` enquanto `com-tenant*` usa
+     `jdbc/execute-one!`):
+     - `datas` vazio/nil -> `{}` com ZERO statements e ZERO conexoes do pool: o curto-circuito e' AQUI,
+       antes de `transacao`, entao a tx de tenant nem abre.
+     - entrada invalida (elemento nao-`LocalDate`) ou acima do teto de datas -> lanca AQUI, tambem antes de
+       `transacao`: rejeicao nao empresta conexao.
+     - caso normal -> UMA query de LEITURA (`jdbc/execute!`) mais os DOIS `jdbc/execute-one!` que
+       `com-tenant*` emite para abrir a tx do tenant (`SET LOCAL ROLE` + `set_config`). Tres statements no
+       total, nao um.
+
+     Tetos fail-closed: `vereador/teto-de-datas-lote` (366 datas distintas — o periodo maximo do brief) e
+     `vereador/teto-de-linhas-lote` (366 x 150 linhas). Ver `vereador/roster-da-casa-em-datas`.")
   (ficha-vereador [this ente-id id data]
     "Leitura composta NUMA UNICA tx (mesma disciplina de ficha-completa-da-proposicao):
      {:vereador :mandato :legislatura :comissoes}, ou nil se o vereador nao existe.")
@@ -106,7 +118,15 @@
   (listar-vereadores [this ente-id data] (transacao this ente-id #(vereador/listar % ente-id data)))
   (roster-da-casa [this ente-id data] (transacao this ente-id #(vereador/roster-da-casa % ente-id data)))
   (roster-da-casa-em-datas [this ente-id datas]
-    (transacao this ente-id #(vereador/roster-da-casa-em-datas % ente-id datas)))
+    ;; A VALIDACAO/DEDUP/TETO roda ANTES de `transacao` de proposito. `transacao` -> `com-tenant*` ja'
+    ;; EMPRESTOU uma conexao do pool (10 slots) e ja' emitiu 2 statements (`SET LOCAL ROLE` + `set_config`)
+    ;; antes de a checagem de dentro da fn de `db/` poder rejeitar — um pedido invalido, que deveria custar
+    ;; ZERO, consumia slot de pool e round-trips. A checagem continua tambem dentro de
+    ;; `vereador/roster-da-casa-em-datas` como REDE (a fn e' publica e outro caller pode chega la' direto).
+    (let [distintas (vereador/normalizar-datas! datas)]
+      (if (empty? distintas)
+        {}
+        (transacao this ente-id #(vereador/roster-da-casa-em-datas % ente-id distintas)))))
   (ficha-vereador [this ente-id id data]
     (transacao this ente-id
       (fn [tx]

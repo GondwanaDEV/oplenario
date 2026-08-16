@@ -3,7 +3,8 @@
   Funcoes sobre a `tx` do tenant (RLS isola). HoneySQL."
   (:require [honey.sql :as sql]
             [next.jdbc :as jdbc]
-            [oplenario.kernel.db-util :as comum]))
+            [oplenario.kernel.db-util :as comum])
+  (:import (java.time LocalDate)))
 
 (set! *warn-on-reflection* true)
 
@@ -351,13 +352,74 @@
          ;; lista impressa contra a tela marca o vereador errado, e a ata sai com a presenca do homonimo.
          :order-by [[:v.nome :asc] [:v.id :asc]]}))))
 
-(def ^:private teto-de-datas-lote
+(def teto-de-datas-lote
   "Teto de datas DISTINTAS aceitas por `roster-da-casa-em-datas` (Etapa 6 fatia 1) — cada data vira uma
    linha da tabela VALUES cruzada com toda a Casa mais 2 LATERAL correlacionados por linha; sem teto, um
    periodo de apuracao absurdo (ex.: decadas) multiplicaria o custo da query sem limite. Convencao da casa
-   (ver `rotas/teto-de-janelas`): todo predicado de cardinalidade aberta tem teto explicito e declarado. 400
-   e' o teto que o brief da Etapa 6 fixa para o recorte da apuracao (periodo maximo de 366 dias + folga)."
-  400)
+   (ver `rotas/teto-de-janelas`): todo predicado de cardinalidade aberta tem teto explicito e declarado.
+
+   366 (nao 400): o PERIODO MAXIMO do brief da Etapa 6 e' de 366 dias, entao a borda nao consegue produzir
+   mais de 366 datas civis DISTINTAS — um teto de 400 seria um guard-rail que NUNCA dispara, e guard-rail
+   que nao pode disparar nao e' guard-rail (nao ha teste possivel do caminho de rejeicao a partir da rota,
+   e o numero de 400 mentiria sobre qual e' o limite real do produto). O teto de 400 do brief e' de SESSOES
+   no recorte, nao de datas — duas sessoes no mesmo dia sao UMA data (o dedup por `distinct` abaixo)."
+  366)
+
+(def teto-de-linhas-lote
+  "Teto de LINHAS que `roster-da-casa-em-datas` aceita materializar na JVM. O teto de datas sozinho nao
+   limita o resultado: o produto e' `datas x vereadores-com-mandato`, e o brief fixa 150 vereadores no
+   roster do periodo — 366 x 150 = 54.900 linhas, cada uma repetindo nome/nome-parlamentar/partido/cargo do
+   MESMO vereador. Sem este teto, uma Casa com cadastro legado inflado (centenas de mandatos vigentes
+   simultaneos, que nenhuma constraint impede entre vereadores DIFERENTES) devolveria um resultado sem
+   limite superior para um unico request.
+
+   COMO E' APLICADO, e por que nao e' so' um `count` depois: a query vai ao driver com `:max-rows` =
+   `teto + 1`, entao o JDBC PARA de materializar em `teto + 1` linhas — a memoria nunca e' gasta com o
+   excesso. Ler `teto + 1` linhas e' a PROVA de que o teto foi ultrapassado, e a funcao lanca fail-closed
+   (`:limite/linhas-excedido`) em vez de devolver a pagina truncada (I7 do brief: nada e' truncado em
+   silencio). O preco honesto disso: quando estoura, sabemos que passou do teto mas NAO por quanto — por
+   isso a ex-data traz `:medido-ao-menos`, nunca um `:medido` que fingiria ser a contagem real.
+
+   MEDIDO no pior caso PERMITIDO antes de fixar o numero (150 vereadores x 400 datas = 60.000 linhas,
+   `oplenario-postgres-1`, PG16, `oplenario_app` com RLS ativa, apos ANALYZE): 250,005 ms / 366.489 buffers
+   COM os indices da migration 0074; 2.178,161 ms / 1.204.901 buffers sem eles. O pior caso permitido cabe;
+   o teto existe para o que esta ALEM dele."
+  (* 366 150))
+
+(defn normalizar-datas!
+  "Valida + dedup + teto da lista de datas de `roster-da-casa-em-datas`. Devolve o VETOR de datas distintas
+   (vazio se `datas` e' nil/vazio). Chamada em DOIS lugares de proposito: no metodo do protocolo, ANTES de
+   abrir a transacao (rejeicao nao pode custar conexao do pool), e aqui dentro da fn de `db/` como REDE
+   (a fn e' publica e um caller futuro pode chama-la direto sobre uma `tx`). E' idempotente — normalizar o
+   ja'-normalizado nao muda nada.
+
+   TIPO EXIGIDO: `java.time.LocalDate` em TODO elemento, fail-closed. Nao e' preciosismo de tipo, sao tres
+   defeitos medidos:
+   - `nil` na lista SOBREVIVE ao `distinct`, vira `VALUES (NULL)`, nenhum LATERAL casa, e a funcao devolvia
+     `{nil []}` — SUCESSO com roster vazio. Pior: `[nil]` sozinho estoura no banco (`date <= text`), mas
+     `[nil d1]` passa. O comportamento mudava com a COMPANHIA do elemento invalido.
+   - `java.sql.Date` na entrada: a query roda, mas `kernel/db_tipos` converte a coluna de volta para
+     `LocalDate`, entao as chaves PRE-SEMEADAS (java.sql.Date) nunca casam com as das linhas (LocalDate).
+     O mapa saia com 2N chaves e o chamador recebia `[]` para TODAS as datas — apuracao em branco, zero
+     erro no log.
+   - keyword ou forma HoneySQL (`[:raw \"...\"]`) viram EXPRESSAO SQL injetada na tabela VALUES, nao bind
+     param. Nao e' explotavel pela borda de hoje (a rota so' produz LocalDate), mas o contrato frouxo e' o
+     que torna a proxima borda explotavel sem ninguem notar.
+
+   `datas` VAZIO (ou nil) devolve `[]` e e' LEGITIMO — significa 'nao ha sessao no recorte', e o chamador
+   recebe `{}`. Um ELEMENTO nil e' o oposto: e' erro do CHAMADOR (montou a lista de datas com um buraco), e
+   por isso lanca. A diferenca importa porque as duas coisas produziam o mesmo `{}`-ish silencioso antes."
+  [datas]
+  (doseq [d datas]
+    (when-not (instance? LocalDate d)
+      (throw (ex-info "roster em lote: cada data tem de ser java.time.LocalDate"
+                      {:tipo :validacao/invalido :campo :datas
+                       :classe (if (nil? d) "nil" (.getName (class d)))}))))
+  (let [distintas (vec (distinct datas))]
+    (when (> (count distintas) teto-de-datas-lote)
+      (throw (ex-info "numero de datas distintas acima do teto do lote de roster"
+                      {:tipo :limite/datas-excedido :medido (count distintas) :teto teto-de-datas-lote})))
+    distintas))
 
 (defn roster-da-casa-em-datas
   "O LOTE de `roster-da-casa` para VARIAS datas de uma vez — `{data -> [roster-linha ...]}`, MESMAS colunas
@@ -378,22 +440,25 @@
    lida a jusante como 'nao perguntei por essa data', nunca como 'perguntei e a resposta e' vazia' (e a
    apuracao soma sobre as chaves, entao a diferenca decide o denominador).
 
-   `datas` VAZIO devolve `{}` SEM tocar o banco (mesmo racional de `licencas-de-mandatos` para id vazio).
-   Datas DUPLICADAS no parametro sao dedupe'd antes do teto e da query — pedir a mesma data duas vezes nao
-   e' um segundo dia de exercicio, e contá-la duas vezes contra o teto seria hostil ao chamador. Acima de
-   `teto-de-datas-lote` datas DISTINTAS, lanca `ex-info` FAIL-CLOSED — `{:tipo :limite/datas-excedido :medido
-   :teto}` — NUNCA trunca em silencio (I7 do brief: nenhuma pagina parcial parecendo total)."
+   `datas` VAZIO (ou nil) devolve `{}` SEM tocar o banco (mesmo racional de `licencas-de-mandatos` para id
+   vazio). Datas DUPLICADAS no parametro sao dedupe'd antes do teto e da query — pedir a mesma data duas
+   vezes nao e' um segundo dia de exercicio (a Casa com ordinaria de manha e extraordinaria a tarde manda a
+   MESMA data duas vezes, e e' rotina), e conta-la duas vezes contra o teto seria hostil ao chamador.
+
+   TRES rejeicoes FAIL-CLOSED, nenhuma silenciosa (I7 do brief — nada e' truncado nem vazio-por-acidente):
+   elemento que nao e' `java.time.LocalDate` (`:validacao/invalido`), datas distintas acima de
+   `teto-de-datas-lote` (`:limite/datas-excedido`) — as duas em `normalizar-datas!`, ver la' o porque de
+   cada uma — e resultado acima de `teto-de-linhas-lote` (`:limite/linhas-excedido`).
+
+   O AGRUPAMENTO LANCA em data desconhecida, e nao a CRIA: o `reduce` usava `update`, que cria a chave
+   ausente. Uma linha cuja `data` nao esta entre as pre-semeadas so' pode significar que o tipo devolvido
+   pelo driver nao casa com o tipo pedido (foi assim que `java.sql.Date` na entrada produzia um mapa de 2N
+   chaves, metade delas nunca consultada pelo chamador, que entao lia `[]` para TUDO). Fabricar a chave
+   transforma um erro de contrato em apuracao em branco; `:invariante/data-desconhecida` o torna visivel."
   [tx ente-id datas]
-  (let [distintas (vec (distinct datas))]
-    (cond
-      (empty? distintas)
+  (let [distintas (normalizar-datas! datas)]
+    (if (empty? distintas)
       {}
-
-      (> (count distintas) teto-de-datas-lote)
-      (throw (ex-info "numero de datas distintas acima do teto do lote de roster"
-                      {:tipo :limite/datas-excedido :medido (count distintas) :teto teto-de-datas-lote}))
-
-      :else
       (let [linhas (comum/linhas->kebab
                     (jdbc/execute! tx
                       (sql/format
@@ -404,8 +469,21 @@
                          :join [[[:lateral (mandato-vigente-lateral :d.data)] :m] true]
                          :left-join [[[:lateral (cargo-mesa-lateral :d.data)] :cc] true]
                          :where [:= :v.ente_id ente-id]
-                         :order-by [[:d.data :asc] [:v.nome :asc] [:v.id :asc]]})))]
+                         :order-by [[:d.data :asc] [:v.nome :asc] [:v.id :asc]]})
+                      ;; `:max-rows` = teto+1: o driver PARA de materializar no primeiro excedente. Ler
+                      ;; teto+1 e' a prova do estouro; a pagina truncada NUNCA e' devolvida (ver
+                      ;; `teto-de-linhas-lote`).
+                      {:max-rows (inc teto-de-linhas-lote)}))]
+        (when (> (count linhas) teto-de-linhas-lote)
+          (throw (ex-info "roster em lote acima do teto de linhas"
+                          {:tipo :limite/linhas-excedido
+                           :medido-ao-menos (count linhas) :teto teto-de-linhas-lote
+                           :datas (count distintas)})))
         (reduce (fn [acc {:keys [data] :as linha}]
+                  (when-not (contains? acc data)
+                    (throw (ex-info "linha do lote de roster com data fora das datas pedidas"
+                                    {:tipo :invariante/data-desconhecida
+                                     :classe (if (nil? data) "nil" (.getName (class data)))})))
                   (update acc data conj (dissoc linha :data)))
                 (zipmap distintas (repeat []))
                 linhas)))))
