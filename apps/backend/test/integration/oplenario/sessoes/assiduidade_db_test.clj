@@ -18,7 +18,7 @@
             [oplenario.sessoes.db.presenca :as presenca]
             [oplenario.sessoes.db.sessao :as sessao]
             [oplenario.sessoes.logic :as logic])
-  (:import (java.time Instant LocalDate)))
+  (:import (java.time Duration Instant LocalDate)))
 
 (def ^:dynamic *repo-s* nil)
 (def ^:dynamic *repo-c* nil)
@@ -191,14 +191,79 @@
         s2 (sessao-encerrada-hoje! ente leg "extraordinaria")
         t2 (:encerrada-em (repo-sessoes/buscar-sessao *repo-s* ente s2))]
     (is (.isBefore ^Instant t1 ^Instant t2) "sanidade: s1 fechou antes de s2")
-    ;; evento NA SESSAO s1, com ocorrido_em DEPOIS de t1 (o fechamento de s1) mas ANTES de t2 — um instante
-    ;; GLOBAL do lote (ex.: o maximo, t2) incluiria este evento na leitura de s1; o instante POR SESSAO (t1,
-    ;; I5) tem de exclui-lo.
-    (repo-sessoes/transacao *repo-s* ente (fn [tx] (ev! tx ente s1 v "entrada" "plenario" (.plusMillis t1 200))))
+    ;; evento NA SESSAO s1, no PONTO MEDIO exato entre t1 e t2 — DEPOIS do fechamento de s1, ANTES do de s2.
+    ;; NAO um offset fixo: a versao anterior usava `+200ms`, e a folga real entre duas transacoes sequenciais
+    ;; no Postgres aquecido e' MENOR que isso — o evento caia depois dos DOIS instantes, e o comentario logo
+    ;; acima afirmava detectar uma mutacao (instante global = t2) que este teste, com o offset fixo, NAO
+    ;; detectava. O ponto medio esta' matematicamente garantido entre t1 e t2 quando t1 < t2 (ja' checado
+    ;; acima), que e' a MESMA correcao que o teste do cruzado recebeu e que nao tinha sido propagada aqui.
+    (let [meio (.plus ^Instant t1 (.dividedBy (Duration/between t1 t2) 2))]
+      (repo-sessoes/transacao *repo-s* ente (fn [tx] (ev! tx ente s1 v "entrada" "plenario" meio))))
     (let [lote (repo-sessoes/transacao *repo-s* ente
                  (fn [tx] (presenca/presencas-correntes-das-sessoes tx ente [[s1 t1] [s2 t2]])))]
       (is (empty? (get lote s1)) "evento pos-fechamento de s1 NAO aparece na leitura de s1")
       (is (empty? (get lote s2)) "s2 nunca teve evento nenhum"))))
+
+;; ---------- os TETOS das duas leituras em lote (I7) ----------
+
+(deftest lote-de-presenca-acima-do-teto-de-linhas-lanca-fail-closed
+  ;; `presenca_evento.vereador_id` NAO tem FK e a escrita nao valida mandato: o `DISTINCT ON` e' limitado
+  ;; pelos ids que aparecem nos EVENTOS, nao pelos do roster. Um acervo migrado sujo materializa 400 x N.
+  (let [ente (random-uuid) leg (casa! ente)
+        sid (sessao-encerrada-hoje! ente leg "ordinaria")
+        encerrada-em (:encerrada-em (repo-sessoes/buscar-sessao *repo-s* ente sid))]
+    (repo-sessoes/transacao *repo-s* ente
+      (fn [tx]
+        (dotimes [n 3]
+          (ev! tx ente sid (random-uuid) "entrada" "plenario" (.minusSeconds encerrada-em (+ 10 n))))))
+    (is (= 3 (count (get (repo-sessoes/transacao *repo-s* ente
+                           (fn [tx] (presenca/presencas-correntes-das-sessoes tx ente [[sid encerrada-em]])))
+                         sid)))
+        "sanidade: os 3 ids sem mandato aparecem, sem teto rebaixado")
+    (with-redefs [logic/teto-de-linhas-de-lote-de-presenca 2]
+      (let [erro (try (repo-sessoes/transacao *repo-s* ente
+                        (fn [tx] (presenca/presencas-correntes-das-sessoes tx ente [[sid encerrada-em]])))
+                      nil (catch clojure.lang.ExceptionInfo e e))]
+        (is (some? erro) "acima do teto LANCA — nunca devolve pagina truncada parecendo total")
+        (is (= :limite/linhas-excedido (:tipo (ex-data erro))))
+        (is (= 3 (:medido-ao-menos (ex-data erro))) "3 = o driver PAROU ali (:max-rows = teto+1)")
+        (is (= 2 (:teto (ex-data erro))))))))
+
+(deftest lote-de-justificativas-acima-do-teto-de-linhas-lanca-fail-closed
+  (let [ente (random-uuid) leg (casa! ente)
+        s1 (sessao-encerrada-hoje! ente leg "ordinaria")
+        s2 (sessao-encerrada-hoje! ente leg "ordinaria")
+        s3 (sessao-encerrada-hoje! ente leg "ordinaria")]
+    (repo-sessoes/transacao *repo-s* ente
+      (fn [tx]
+        (doseq [sid [s1 s2 s3]]
+          (presenca/criar-justificativa! tx {:id (random-uuid) :ente-id ente :sessao-id sid
+                                             :vereador-id (random-uuid) :motivo "doenca"}))))
+    (with-redefs [logic/teto-de-linhas-de-lote-de-presenca 2]
+      (let [erro (try (repo-sessoes/transacao *repo-s* ente
+                        (fn [tx] (presenca/justificativas-das-sessoes tx ente [s1 s2 s3])))
+                      nil (catch clojure.lang.ExceptionInfo e e))]
+        (is (some? erro))
+        (is (= :limite/linhas-excedido (:tipo (ex-data erro))))
+        (is (= 3 (:medido-ao-menos (ex-data erro))))))))
+
+(deftest lote-de-justificativas-nao-atravessa-o-MOTIVO-para-fora-do-modulo
+  ;; `motivo` e' onde o vereador escreve POR QUE faltou — na pratica dado de saude (LGPD art. 11). O unico
+  ;; consumidor da leitura em lote e' `logic/estado-de-presenca`, que le' `:estado`. Copiar a projecao da
+  ;; leitura irma fazia `motivo`/`decidido-por`/`decidido-em`/`lock-version` atravessarem a fronteira sem
+  ;; sair em lugar nenhum do payload.
+  (let [ente (random-uuid) leg (casa! ente)
+        v (vereador! ente "Carla")
+        sid (sessao-encerrada-hoje! ente leg "ordinaria")]
+    (repo-sessoes/transacao *repo-s* ente
+      (fn [tx] (presenca/criar-justificativa! tx {:id (random-uuid) :ente-id ente :sessao-id sid
+                                                  :vereador-id v :motivo "cirurgia cardiaca"})))
+    (let [linha (first (get (repo-sessoes/transacao *repo-s* ente
+                              (fn [tx] (presenca/justificativas-das-sessoes tx ente [sid])))
+                            sid))]
+      (is (= #{:sessao-id :vereador-id :estado} (set (keys linha)))
+          "projecao MINIMA — `motivo` nao sai do banco nesta leitura")
+      (is (not (contains? linha :motivo))))))
 
 ;; ---------- justificativas-das-sessoes ----------
 
@@ -220,3 +285,89 @@
               (fn [tx] (presenca/presencas-correntes-das-sessoes tx (random-uuid) [])))))
   (is (= {} (repo-sessoes/transacao *repo-s* (random-uuid)
               (fn [tx] (presenca/justificativas-das-sessoes tx (random-uuid) []))))))
+
+;; ---------- a DATA DE REFERENCIA: filtro e rotulo saem da MESMA regra ----------
+
+(deftest filtro-e-rotulo-seguem-aberta-em-quando-os-dois-marcos-caem-em-DIAS-CIVIS-DIFERENTES
+  ;; O cenario real: sessao agendada para o dia 10, adiada, aberta no dia 17. Ate' a revisao desta fatia a
+  ;; regra estava REDIGITADA em tres lugares (controller, COALESCE do filtro, rotulo em Clojure) — inverter
+  ;; UMA das copias fazia a sessao ser FILTRADA por uma data e ROTULADA com a outra, e a suite inteira ficava
+  ;; VERDE porque nenhuma fixture tinha `aberta_em` e `agendada_para` em dias civis diferentes.
+  (let [ente (random-uuid) leg (casa! ente)
+        hoje (tempo/hoje-de (Instant/now) tempo/zona-civil-padrao)
+        agendada-para (.minusDays hoje 7)
+        sid (repo-sessoes/transacao *repo-s* ente
+              (fn [tx]
+                (let [{:keys [id]} (sessao/agendar! tx {:id (random-uuid) :ente-id ente
+                                                        :sessao-legislativa-id leg :tipo-sessao "ordinaria"
+                                                        :agendada-para (em agendada-para)})]
+                  ;; abre HOJE (aberta_em = now() do banco) e encerra
+                  (sessao/transicionar! tx {:id id :ente-id ente :para "aberta" :lock-version 0})
+                  (sessao/transicionar! tx {:id id :ente-id ente :para "encerrada" :lock-version 1})
+                  id)))
+        no-dia-de-abertura (repo-sessoes/transacao *repo-s* ente
+                             (fn [tx] (sessao/listar-fechadas-no-periodo tx ente {:de hoje :ate hoje})))
+        no-dia-agendado (repo-sessoes/transacao *repo-s* ente
+                          (fn [tx] (sessao/listar-fechadas-no-periodo
+                                    tx ente {:de agendada-para :ate agendada-para})))]
+    (is (contains? (set (map :id no-dia-de-abertura)) sid)
+        "o RECORTE segue `aberta_em` — a Casa que efetivamente se reuniu")
+    (is (not (contains? (set (map :id no-dia-agendado)) sid))
+        "e NAO a data em que a sessao fora agendada e adiada")
+    (is (= hoje (:data-de-referencia (first (filter #(= sid (:id %)) no-dia-de-abertura))))
+        "o ROTULO e' a MESMA data do filtro — uma regra so'")))
+
+;; ---------- o que o filtro EXCLUI e' contado, nao esquecido ----------
+
+(deftest sessao-fechada-sem-nenhum-marco-de-data-e-CONTADA-em-vez-de-sumir
+  (let [ente (random-uuid) leg (casa! ente)
+        hoje (tempo/hoje-de (Instant/now) tempo/zona-civil-padrao)
+        com-data (sessao-nao-realizada! ente leg "ordinaria" hoje)
+        ;; `agendada_para` e' OPCIONAL no wire e nullable na coluna, e `agendada -> nao_realizada` nao exige
+        ;; data: esta linha e' alcancavel pela API NORMAL, nao e' dado corrompido.
+        _sem-data (repo-sessoes/transacao *repo-s* ente
+                    (fn [tx]
+                      (let [{:keys [id]} (sessao/agendar! tx {:id (random-uuid) :ente-id ente
+                                                              :sessao-legislativa-id leg
+                                                              :tipo-sessao "ordinaria" :agendada-para nil})]
+                        (sessao/transicionar! tx {:id id :ente-id ente :para "nao_realizada" :lock-version 0
+                                                  :motivo "sem quorum"})
+                        id)))
+        linhas (repo-sessoes/transacao *repo-s* ente
+                 (fn [tx] (sessao/listar-fechadas-no-periodo tx ente {:de hoje :ate hoje})))
+        n (repo-sessoes/transacao *repo-s* ente
+            (fn [tx] (sessao/contar-fechadas-sem-data-de-referencia tx ente {:de hoje :ate hoje})))]
+    (is (= [com-data] (mapv :id linhas)) "a sessao sem data fica FORA do periodo (nao ha' onde posiciona-la)")
+    (is (= 1 n) "mas e' CONTADA — o denominador de todos os vereadores nao encolhe em silencio")
+    (is (= 0 (repo-sessoes/transacao *repo-s* ente
+               (fn [tx] (sessao/contar-fechadas-sem-data-de-referencia
+                         tx ente {:de hoje :ate hoje :tipos ["extraordinaria"]}))))
+        "o contador respeita o MESMO filtro de tipo da listagem — senao contaria o que a listagem nem consideraria")))
+
+;; ---------- `tipos` fail-closed nas DUAS camadas ----------
+
+(deftest tipo-desconhecido-e-rejeitado-fail-closed-em-vez-de-devolver-apuracao-em-branco
+  (let [ente (random-uuid)
+        hoje (tempo/hoje-de (Instant/now) tempo/zona-civil-padrao)
+        erro-de (fn [tipos]
+                  (try (repo-sessoes/transacao *repo-s* ente
+                         (fn [tx] (sessao/listar-fechadas-no-periodo tx ente {:de hoje :ate hoje :tipos tipos})))
+                       nil (catch clojure.lang.ExceptionInfo e (ex-data e))))]
+    (is (nil? (erro-de nil)) "nil = todos os tipos, continua legitimo")
+    (is (nil? (erro-de [])) "vazio idem")
+    (is (nil? (erro-de ["ordinaria" "secreta"])) "tipos validos passam")
+    (doseq [mau [["ordinária"] ["ordinaira"] ["Ordinaria"] [:ordinaria] [["1) OR (1=1"]] [nil]]]
+      (is (= :validacao/invalido (:tipo (erro-de mau)))
+          (str "tipo invalido rejeitado FAIL-CLOSED, nunca casando zero sessoes em silencio: " (pr-str mau))))))
+
+(deftest data-que-nao-e-localdate-e-rejeitada-com-400-e-nao-com-500-opaco
+  (let [ente (random-uuid)
+        hoje (LocalDate/of 2026 6 20)
+        erro-de (fn [de ate]
+                  (try (repo-sessoes/transacao *repo-s* ente
+                         (fn [tx] (sessao/listar-fechadas-no-periodo tx ente {:de de :ate ate})))
+                       nil (catch Exception e (if (instance? clojure.lang.ExceptionInfo e) (ex-data e) {:tipo :cru}))))]
+    (is (= :validacao/invalido (:tipo (erro-de nil hoje))))
+    (is (= :validacao/invalido (:tipo (erro-de hoje nil))))
+    (is (= :validacao/invalido (:tipo (erro-de (java.sql.Date/valueOf hoje) hoje))))
+    (is (= :de (:campo (erro-de "2026-06-20" hoje))))))

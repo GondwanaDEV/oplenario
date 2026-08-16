@@ -170,7 +170,10 @@
      (I5) e' resolvido daqui com `logic/instante-de-avaliacao` — nunca um instante global do periodo.
      O ROSTER (cadastros, cross-modulo, §22.10) NAO entra aqui: chega por SEAM, no controller, IGUAL a'
      `chamada-da-sessao`/`folha-da-sessao` — precisa saber quais DATAS pedir, que so' se sabe depois desta
-     leitura. Devolve {:sessoes [...] :presencas-por-sessao {...} :justificativas-por-sessao {...}}."))
+     leitura. Devolve {:sessoes [...] :sessoes-sem-data-de-referencia N :presencas-por-sessao {...}
+     :justificativas-por-sessao {...}} — o contador vem de `sessao/contar-fechadas-sem-data-de-referencia`,
+     na MESMA tx e sobre a MESMA janela: e' o que o filtro de data EXCLUIU, e sem ele o denominador de todos
+     os vereadores encolheria sem explicacao (ver la' por que a decisao e' CONTAR e nao consertar o COALESCE)."))
 
 (defrecord RepoSessoesPg [datasource bus]
   RepoSessoes
@@ -532,7 +535,7 @@
   ;; Etapa 6 fatia 2 — UMA tx do lado de `sessoes` (mesmo molde de `chamada-da-sessao`/`folha-da-sessao`): as
   ;; TRES leituras (sessoes, presencas, justificativas) veem o MESMO snapshot MVCC. O roster fica de fora
   ;; (outro modulo, outra tx — o controller resolve depois desta chamada devolver).
-  (leituras-assiduidade [this ente-id {:keys [de ate tipos] :as periodo}]
+  (leituras-assiduidade [this ente-id periodo]
     (transacao this ente-id
       (fn [tx]
         (let [sessoes (sessao/listar-fechadas-no-periodo tx ente-id periodo)
@@ -550,9 +553,11 @@
               sessoes-com-instante (mapv (fn [s] [(:id s) (instante-de-sessao-fechada s)]) sessoes)
               sessao-ids (mapv :id sessoes)]
           {:sessoes sessoes
+           ;; a MESMA janela, contando o que o filtro de data EXCLUIU por nao ter data de referencia
+           ;; nenhuma — na MESMA tx, para o numero publicado nao ser de outro snapshot que o das sessoes.
+           :sessoes-sem-data-de-referencia (sessao/contar-fechadas-sem-data-de-referencia tx ente-id periodo)
            :presencas-por-sessao (presenca/presencas-correntes-das-sessoes tx ente-id sessoes-com-instante)
-           :justificativas-por-sessao (presenca/justificativas-das-sessoes tx ente-id sessao-ids)}))))
-  )
+           :justificativas-por-sessao (presenca/justificativas-das-sessoes tx ente-id sessao-ids)})))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

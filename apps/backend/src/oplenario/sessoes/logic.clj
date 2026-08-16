@@ -382,10 +382,12 @@
   #{:presente-plenario :presente-remoto :ausente :ausente-justificado
     :ausente-justificativa-pendente :licenciado})
 
-(def estados-chamada-presentes
-  "Os estados que contam como PRESENTE (numerador do quorum). O restante nao conta — inclusive `:licenciado`,
-  que tambem sai do denominador."
-  #{:presente-plenario :presente-remoto})
+;; NAO existe aqui um segundo `estados-*-presentes`. Existiu: `estados-chamada-presentes`, gemeo de
+;; `estados-presentes` (abaixo, junto de `contar-quorum`) — mesmo conteudo, duas docstrings reivindicando ser
+;; a fonte unica do NUMERADOR. A apuracao de assiduidade nasceu consumindo a copia, e no dia em que uma
+;; terceira categoria positiva (presenca por videoconferencia) entrasse em `estados-presentes`, a chamada
+;; mostraria o vereador presente nas 40 sessoes e o CSV publicaria `:comparecimentos 0` — sem NENHUM teste
+;; vermelho. O numerador agora tem uma fonte so': `conta-no-numerador-do-quorum?`.
 
 (def estados-mandato-cadastro
   "Vocabulario de `cadastros.mandato.estado` — ESPELHO do CHECK da migration 20260620000010-cadastros.
@@ -487,10 +489,24 @@
       (assoc :sem-assento true :inconsistencia-cadastro true)))
 
 (def estados-presentes
-  "Os estados de linha derivada que contam como PRESENTE no NUMERADOR do quorum. FONTE UNICA de proposito:
-  `contar-quorum` deriva `:presentes-total` daqui, para que uma terceira categoria positiva (o dominio ja'
-  distingue varios estados em `derivar-linha-chamada`) nao precise ser lembrada em dois lugares."
+  "Os estados de linha derivada que contam como PRESENTE no NUMERADOR do quorum. FONTE UNICA — nao ha' um
+  segundo conjunto com este conteudo em lugar nenhum do ns (ver o comentario onde o gemeo
+  `estados-chamada-presentes` foi morto). Quem consulta usa `conta-no-numerador-do-quorum?`, nunca o
+  `contains?` cru: e' o predicado que os DOIS consumidores (quorum e assiduidade) compartilham."
   #{:presente-plenario :presente-remoto})
+
+(defn conta-no-numerador-do-quorum?
+  "PURO. Uma linha JA DERIVADA conta no NUMERADOR do quorum (`:presentes-total` de `contar-quorum`)?
+  Simetrico de `conta-no-denominador-do-quorum?` e pela MESMA razao: a apuracao de assiduidade
+  (`somar-linha-na-assiduidade`) precisa da decisao LINHA A LINHA ao longo de um periodo inteiro, e antes
+  desta extracao ela tomava a decisao por um SEGUNDO conjunto de estados (`estados-chamada-presentes`), copia
+  de `estados-presentes`. Duas copias do numerador nao produzem erro de tipo nem teste vermelho quando
+  divergem — produzem um CSV oficial dizendo `:comparecimentos 0` para quem a tela mostra presente.
+
+  A linha SEM ASSENTO conta aqui de proposito (e nao conta no denominador): e' o mesmo tratamento que
+  `contar-quorum` documenta — o motor de votacao conta o evento observado, entao a tela tambem conta."
+  [linha]
+  (contains? estados-presentes (:estado linha)))
 
 (defn conta-no-denominador-do-quorum?
   "PURO. Uma linha JA DERIVADA (`derivar-linha-chamada`/`derivar-linha-sem-assento`) conta no DENOMINADOR do
@@ -532,7 +548,7 @@
   [linhas]
   {:presentes-plenario (count (filter #(= :presente-plenario (:estado %)) linhas))
    :presentes-remoto   (count (filter #(= :presente-remoto (:estado %)) linhas))
-   :presentes-total    (count (filter #(estados-presentes (:estado %)) linhas))
+   :presentes-total    (count (filter conta-no-numerador-do-quorum? linhas))
    :membros-da-casa    (count (filter conta-no-denominador-do-quorum? linhas))
    :presencas-fora-do-roster (count (filter :sem-assento linhas))})
 
@@ -608,6 +624,45 @@
         (throw (ex-info "sessao fechada sem encerrada-em: sem instante de avaliacao p/ a chamada"
                         {:tipo :servidor/erro :sessao-id (:id sessao) :estado (:estado sessao)})))
     agora))
+
+;; ---------- §22.6 eixo C — a DATA DE REFERENCIA (uma REGRA, tres consumidores) ----------
+;; A data civil que resolve QUEM compoe a Casa numa sessao estava REDIGITADA em tres lugares: a regra no
+;; controller (privada, e por isso inalcancavel para quem quisesse reusa-la), o `COALESCE` do filtro SQL da
+;; apuracao e o rotulo em Clojure da mesma leitura. Redigitar e' o defeito de primeira classe deste repo
+;; (I2/I3), e o cenario nao e' teorico: sessao agendada para 10/03, adiada, aberta em 17/03 — inverter o
+;; COALESCE faz a sessao ser FILTRADA por 10/03 e ROTULADA 17/03, com a suite inteira VERDE (nenhuma fixture
+;; tinha `aberta_em` e `agendada_para` em dias civis diferentes). Agora a ordem mora numa constante so', e o
+;; fragmento SQL e' DERIVADO dela — inverter a regra inverte os dois lados juntos, por construcao.
+
+(def marcos-de-data-de-referencia
+  "A ORDEM CANONICA dos marcos que resolvem a data de referencia de uma sessao: `aberta-em` primeiro (a Casa
+  que efetivamente se reuniu), `agendada-para` como fallback (a Casa PREVISTA, sessao que nunca abriu).
+  NUNCA `encerrada-em`: acrescentar um terceiro nivel consertaria o denominador da apuracao para a sessao
+  agendada-sem-data que virou nao_realizada, mas criaria uma QUARTA variante da regra, divergente da que a
+  rota `/sessoes/:id/chamada` aplica — que e' exatamente o drift que esta constante existe para fechar."
+  [:aberta-em :agendada-para])
+
+(def marcos-de-data-de-referencia-sql
+  "As MESMAS colunas de `marcos-de-data-de-referencia`, na MESMA ordem, em snake_case — DERIVADAS, nunca
+  redigitadas (`db/sessao` monta `(into [:coalesce] ...)` com isto)."
+  (mapv #(keyword (str/replace (name %) "-" "_")) marcos-de-data-de-referencia))
+
+(defn data-de-referencia-da-sessao
+  "PURO. A DATA CIVIL (LocalDate, fuso `tempo/zona-civil-padrao`) que resolve QUEM compoe a Casa nesta
+  sessao — o primeiro marco NAO-NIL de `marcos-de-data-de-referencia`. NUNCA `LocalDate/now`: reabrir a
+  chamada de uma sessao do mes passado mostraria a composicao de HOJE, nao a de entao.
+
+  Sessao sem NENHUM dos marcos e' um caminho NORMAL da API, nao dado corrompido: `wire/in/AgendarSessao`
+  declara `agendada-para` OPCIONAL e a coluna e' nullable (mig 0026), e `agendada -> nao_realizada` nao
+  exige data. Por isso o erro e' de CONFLITO DE ESTADO com mensagem acionavel (`:conflito/sessao-sem-data`
+  -> 409 no diplomat), e nao um `:servidor/erro` que a borda traduziria em 500 'erro interno': a secretaria
+  que agendou sem marcar a data precisa saber que e' isso que falta. O que continua proibido e' INVENTAR uma
+  data — uma composicao adivinhada vai parar em ata."
+  ^LocalDate [sessao]
+  (if-let [instante (some #(get sessao %) marcos-de-data-de-referencia)]
+    (tempo/hoje-de instante tempo/zona-civil-padrao)
+    (throw (ex-info "sessao sem data marcada: sem data de referencia p/ a chamada"
+                    {:tipo :conflito/sessao-sem-data :sessao-id (:id sessao)}))))
 
 ;; ---------- §22.6 eixo C — a SERIE da FOLHA (Etapa 5 fatia 1) ----------
 ;; A CHAMADA mostra o ULTIMO evento por vereador; a FOLHA mostra a SERIE inteira dentro da janela
@@ -1072,16 +1127,51 @@
 
   Periodo acima de `teto-de-dias-do-periodo-de-assiduidade` dias -> `:limite/periodo-excedido` (namespace
   `limite` -> 422 no interceptor global, JA' mapeado — nenhum handler novo precisa reconhecer este `:tipo`),
-  com `:medido`/`:teto` em DIAS no corpo."
-  [^LocalDate de ^LocalDate ate]
-  (when (.isAfter de ate)
-    (throw (ex-info "apuracao de assiduidade: periodo invalido (de posterior a ate)"
-                    {:tipo :validacao/invalido :de de :ate ate})))
-  (let [dias (inc (.until de ate ChronoUnit/DAYS))]
-    (when (> dias teto-de-dias-do-periodo-de-assiduidade)
-      (throw (ex-info "periodo de apuracao de assiduidade acima do teto"
-                      {:tipo :limite/periodo-excedido :medido dias
-                       :teto teto-de-dias-do-periodo-de-assiduidade})))))
+  com `:medido`/`:teto` em DIAS no corpo.
+
+  `de`/`ate` que NAO sao `java.time.LocalDate` -> `:validacao/invalido` ANTES de qualquer `.isAfter`. Sem
+  este guarda, um `java.sql.Date` (o que o driver devolve quando alguem passa uma data lida do banco) ou um
+  `nil` viravam ClassCastException/NPE sob o type-hint — 500 opaco com stack no `log/error`, no lugar de um
+  400 que diz qual campo esta errado. E' a MESMA disciplina que `vereador/normalizar-datas!` (fatia 1) ja'
+  aplica; ela nao tinha sido aplicada aqui."
+  [de ate]
+  (doseq [[campo v] [[:de de] [:ate ate]]]
+    (when-not (instance? LocalDate v)
+      (throw (ex-info "apuracao de assiduidade: data que nao e' java.time.LocalDate"
+                      {:tipo :validacao/invalido :campo campo
+                       :classe (some-> v class .getName)}))))
+  (let [^LocalDate de de
+        ^LocalDate ate ate]
+    (when (.isAfter de ate)
+      (throw (ex-info "apuracao de assiduidade: periodo invalido (de posterior a ate)"
+                      {:tipo :validacao/invalido :de de :ate ate})))
+    (let [dias (inc (.until de ate ChronoUnit/DAYS))]
+      (when (> dias teto-de-dias-do-periodo-de-assiduidade)
+        (throw (ex-info "periodo de apuracao de assiduidade acima do teto"
+                        {:tipo :limite/periodo-excedido :medido dias
+                         :teto teto-de-dias-do-periodo-de-assiduidade}))))))
+
+(defn validar-tipos-de-assiduidade!
+  "Fail-closed sobre o filtro `tipos` da apuracao, chamado nos MESMOS DOIS lugares que
+  `validar-periodo-assiduidade!` (controller antes da tx + `db/sessao/listar-fechadas-no-periodo` como rede
+  contra o chamador direto). Ate' a revisao desta fatia, `tipos` chegava ao SQL sem validacao em camada
+  NENHUMA, e isso produzia dois defeitos distintos:
+
+  - FAIL-OPEN: `?tipos=ordinaria` com acento, ou um typo (`ordinaira`), casa ZERO sessoes e devolve 200 com
+    a apuracao em branco — indistinguivel de 'nao houve sessao no periodo'. E' o silencio que I7 proibe, e e'
+    TEXTUALMENTE a licao que a fatia 1 pagou e escreveu em `vereador/normalizar-datas!`.
+  - CONTRATO FROUXO: um elemento que nao e' string atravessa o HoneySQL como identificador — uma keyword
+    vira `IN ORDINARIA()` (erro de SQL -> 500) e um vetor `[:raw ...]` vira texto CRU dentro da clausula.
+    Nao ha' rota que alcance isto hoje (a Fatia 3 e' que abre a borda), e por isso nao e' explotavel; o ponto
+    e' que a unica coisa que separava o SQL de uma entrada arbitraria era NAO EXISTIR chamador.
+
+  `nil`/vazio = todos os tipos (o default do brief), e continua legitimo."
+  [tipos]
+  (doseq [t tipos]
+    (when-not (and (string? t) (contains? tipos-sessao t))
+      (throw (ex-info "apuracao de assiduidade: tipo de sessao desconhecido"
+                      {:tipo :validacao/invalido :campo :tipos :valor (str t)
+                       :classe (some-> t class .getName) :validos tipos-sessao})))))
 
 (def ^:private criterio-de-inclusao-assiduidade
   "So' sessoes FECHADAS entram no periodo apurado: encerrada, nao_realizada ou arquivada
@@ -1108,13 +1198,16 @@
   bucket PRÓPRIO e nunca cai no `else` de `:ausente` (I4): a Mesa ainda não decidiu, e contar como
   'injustificada' seria publicar uma acusação que ninguém fez. `:sessoes-computadas` (o denominador) usa a
   MESMA regra de `conta-no-denominador-do-quorum?` — nunca uma soma paralela que poderia divergir da
-  contagem de quorum da própria sessão (I1)."
+  contagem de quorum da própria sessão (I1). `:comparecimentos` (o NUMERADOR) usa
+  `conta-no-numerador-do-quorum?` pela MESMA razão: até a revisão desta fatia ele consultava um conjunto
+  GÊMEO de `estados-presentes`, e uma terceira categoria positiva no domínio teria feito a chamada e o CSV
+  contarem conjuntos diferentes, em silêncio."
   [agregado linha]
   (cond-> agregado
     (conta-no-denominador-do-quorum? linha)
     (update :sessoes-computadas inc)
 
-    (contains? estados-chamada-presentes (:estado linha))
+    (conta-no-numerador-do-quorum? linha)
     (update :comparecimentos inc)
 
     (= :ausente-justificado (:estado linha))
@@ -1162,14 +1255,48 @@
   cadastro furado que `contar-quorum` deliberadamente deixa aparecer em vez de normalizar em silencio — a
   leitura e' do secretario/Mesa, nao da vitrine publica.
 
-  Devolve `{:sessoes [...] :vereadores [...] :por-vereador [...] :detalhe [...] :totais {...}}`."
-  [sessoes rosters-por-data presencas-por-sessao justificativas-por-sessao]
-  (let [por-sessao
+  E' TRUNCADO PARA BAIXO (floor), nunca arredondado. Com `Math/round`, um periodo de 200 sessoes em que o
+  vereador faltou a UMA dava 199/200 = 99,5 -> **100%**: afirmar 'compareceu a 100% das sessoes' de quem
+  faltou a uma e' falso, e este numero vai para um CSV que responde oficio e requerimento — e' o tipo de
+  afirmacao que o adversario politico contesta com a lista de presenca na mao. Com floor, **100% so' aparece
+  quando `comparecimentos >= sessoes-computadas`**. A fracao crua ja' esta publicada nos contadores; o
+  percentual e' conveniencia, e conveniencia nao pode contradizer a fracao.
+
+  `:partido` e' HONESTO, nao constante presumida: mandatos sequenciais com partidos diferentes sao
+  permitidos e `mandato-vigente-lateral` devolve o partido DAQUELA data, entao um vereador que trocou de
+  partido dentro da janela tem mais de um. Publicado quando e' o MESMO em todas as linhas do periodo; quando
+  variou, sai `:partido nil` + `:partido-variou true` (a Casa lista por partido no oficio, entao o campo
+  fica, mas nao pode fixar um rotulo escolhido pela ordem das sessoes).
+
+  `:detalhe` marca `:sigilosa` LINHA A LINHA, e nao so' no total: `:sessoes-sigilosas N` nos totais diz
+  QUANTAS, nao QUAIS — e a fatia 3 serializa `:detalhe` para um CSV que circula por e-mail. A politica de
+  sigilo existe no nivel da sessao desde a Etapa 4; e' a projecao nova que passava por baixo dela.
+
+  Devolve `{:sessoes [...] :vereadores [...] :por-vereador [...] :detalhe [...] :totais {...}}`.
+  `contexto` = `{:sessoes-sem-data-de-referencia N}` (obrigatorio, ver `:totais`)."
+  [sessoes rosters-por-data presencas-por-sessao justificativas-por-sessao
+   {:keys [sessoes-sem-data-de-referencia] :as contexto}]
+  (when-not (nat-int? sessoes-sem-data-de-referencia)
+    (throw (ex-info "apurar-assiduidade: contexto sem :sessoes-sem-data-de-referencia"
+                    {:tipo :servidor/erro :contexto (keys contexto)})))
+  (let [;; "chave ausente" e "perguntei e veio vazio" voltam a ser COISAS DIFERENTES. As duas camadas de
+        ;; baixo ja' garantiam isso — `roster-da-casa-em-datas` chega a LANCAR `:invariante/data-desconhecida`
+        ;; para nao fabricar chave, e as leituras em lote pre-semeiam toda chave pedida — e um `(get m k [])`
+        ;; aqui desfazia as duas: uma data de referencia que nao casasse com nenhuma chave (seam trocado, tipo
+        ;; divergente, uma futura conversao de fuso por ente) derivaria a sessao com roster VAZIO, e quem
+        ;; faltou SUMIRIA da sessao em vez de virar linha ausente — o percentual INFLA, no limite ate' 100%
+        ;; para quem faltou, com HTTP 200 e zero log.
+        exigir (fn [m k rotulo sessao]
+                 (or (get m k)
+                     (throw (ex-info (str "apurar-assiduidade: " rotulo " ausente para a sessao")
+                                     {:tipo :servidor/erro :chave-ausente rotulo :chave k
+                                      :sessao-id (:id sessao)}))))
+        por-sessao
         (mapv (fn [sessao]
                 (let [data      (:data-de-referencia sessao)
-                      roster    (get rosters-por-data data [])
-                      presencas (get presencas-por-sessao (:id sessao) [])
-                      justs     (get justificativas-por-sessao (:id sessao) [])
+                      roster    (exigir rosters-por-data data :roster-da-data sessao)
+                      presencas (exigir presencas-por-sessao (:id sessao) :presencas-da-sessao sessao)
+                      justs     (exigir justificativas-por-sessao (:id sessao) :justificativas-da-sessao sessao)
                       linhas    (mapv :linha (derivar-linhas-da-chamada roster presencas justs))]
                   {:sessao sessao :linhas linhas :quorum (contar-quorum linhas)}))
               sessoes)
@@ -1182,35 +1309,57 @@
                  :quorum quorum})
               por-sessao)
 
-        ;; [sessao-id linha] para cada linha derivada de cada sessao — a fonte comum do resto (identidade,
-        ;; detalhe, agregados por vereador). Uma UNICA passada sobre a projecao inteira.
+        ;; [sessao-id sigilosa? linha] para cada linha derivada de cada sessao — a fonte comum do resto
+        ;; (identidade, detalhe, agregados por vereador). Uma UNICA passada sobre a projecao inteira.
         todas-linhas
-        (into [] (mapcat (fn [{:keys [sessao linhas]}] (map (fn [l] [(:id sessao) l]) linhas)))
+        (into [] (mapcat (fn [{:keys [sessao linhas]}]
+                           (let [sid (:id sessao)
+                                 sigilosa (not (true? (:transmite-publica sessao)))]
+                             (map (fn [l] [sid sigilosa l]) linhas))))
               por-sessao)
 
         identidades
-        (reduce (fn [acc [_sid {:keys [vereador-id nome] :as linha}]]
-                  (cond
-                    (nil? vereador-id) acc
-                    ;; ja' tem identidade CONHECIDA (nome nao-nil) -> nao sobrescreve com uma linha sem-
-                    ;; assento (identidade nil) de outra sessao do mesmo vereador.
-                    (some? (:nome (get acc vereador-id))) acc
-                    :else (assoc acc vereador-id
-                                 {:id vereador-id :nome nome :nome-parlamentar (:nome-parlamentar linha)
-                                  :partido (:partido linha)})))
+        (reduce (fn [acc [_sid _sig {:keys [vereador-id nome partido] :as linha}]]
+                  (if (nil? vereador-id)
+                    acc
+                    (let [atual (get acc vereador-id)
+                          ;; identidade CONHECIDA (nome nao-nil) nunca e' sobrescrita por uma linha
+                          ;; sem-assento (identidade nil) de outra sessao do mesmo vereador — o vereador
+                          ;; cassado que registra presenca depois do fim do mandato sairia com o nome EM
+                          ;; BRANCO num CSV oficial, para alguem que a Casa conhece. `assoc` sobre `atual`
+                          ;; (e nao um mapa novo) preserva os `:partidos` ja' acumulados.
+                          base (if (some? (:nome atual))
+                                 atual
+                                 (assoc atual :id vereador-id :nome nome
+                                        :nome-parlamentar (:nome-parlamentar linha)))]
+                      (assoc acc vereador-id
+                             (cond-> base
+                               (some? partido)
+                               (update :partidos (fnil conj #{}) partido))))))
                 {} todas-linhas)
+
+        identidade-out
+        (fn [{:keys [partidos] :as ident}]
+          (let [variou (> (count partidos) 1)]
+            (-> ident
+                (dissoc :partidos)
+                (assoc :partido (when-not variou (first partidos))
+                       :partido-variou variou))))
 
         vereadores-out
         (->> (vals identidades)
+             (map identidade-out)
              (sort-by (juxt (comp #(or % "") :nome) (comp str :id)))
              vec)
 
         detalhe-out
-        (mapv (fn [[sid linha]] {:sessao-id sid :vereador-id (:vereador-id linha) :estado (:estado linha)})
+        (mapv (fn [[sid sigilosa linha]]
+                {:sessao-id sid :vereador-id (:vereador-id linha) :estado (:estado linha)
+                 :sigilosa sigilosa})
               todas-linhas)
 
         agregados
-        (reduce (fn [acc [_sid {:keys [vereador-id] :as linha}]]
+        (reduce (fn [acc [_sid _sig {:keys [vereador-id] :as linha}]]
                   (if (nil? vereador-id)
                     acc
                     (update acc vereador-id (fnil somar-linha-na-assiduidade (agregado-vazio-de-assiduidade))
@@ -1223,7 +1372,7 @@
                     (assoc agregado
                            :vereador-id vereador-id
                            :percentual (when (pos? (:sessoes-computadas agregado))
-                                         (int (Math/round (* 100.0 (/ (:comparecimentos agregado)
+                                         (int (Math/floor (* 100.0 (/ (:comparecimentos agregado)
                                                                       (:sessoes-computadas agregado)))))))))
              (sort-by (fn [{:keys [vereador-id]}]
                        [(or (:nome (get identidades vereador-id)) "") (str vereador-id)]))
@@ -1235,5 +1384,16 @@
      :totais {:sessoes-consideradas (count sessoes-out)
               :vereadores-considerados (count vereadores-out)
               :sessoes-sigilosas (count (filter :sigilosa sessoes-out))
+              ;; DECLARADO, nao silencioso. Sessao fechada sem NENHUM marco de data (`agendada_para` e'
+              ;; opcional no wire e nullable na coluna, e `agendada -> nao_realizada` nao exige data: a linha
+              ;; e' alcancavel pela API NORMAL) fica FORA do periodo — nao ha' data de referencia que a
+              ;; posicione em periodo nenhum, e acrescentar `encerrada_em` como terceiro nivel do COALESCE
+              ;; criaria uma QUARTA variante da regra, divergente da `/chamada` (ver
+              ;; `marcos-de-data-de-referencia`). O que NAO pode e' o denominador de todos os vereadores
+              ;; encolher sem explicacao: a mesma linha faz `/sessoes/:id/chamada` devolver um 409 ACIONAVEL,
+              ;; e era o comportamento SILENCIOSO que virava documento. Assiduidade sustenta perda de mandato
+              ;; por falta (DL 201) — publicar 92% onde o correto e' 91,7% sem sinal e' o silencio que I7
+              ;; proibe.
+              :sessoes-sem-data-de-referencia sessoes-sem-data-de-referencia
               :criterio-de-inclusao criterio-de-inclusao-assiduidade
               :nota-de-metodologia nota-de-metodologia-assiduidade}}))

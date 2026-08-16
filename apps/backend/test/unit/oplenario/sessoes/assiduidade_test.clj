@@ -44,6 +44,28 @@
              (lateral-de (logic/ultimos-eventos-por-sessao-e-vereador-q
                           {:sessoes-e-instantes [[s1 i1]] :projecao [:vereador_id :fonte]})))))))
 
+;; ---------- o NUMERADOR do quorum tem uma fonte so' (o achado CRITICO desta revisao) ----------
+
+(deftest numerador-do-quorum-e-comparecimentos-mudam-JUNTOS
+  ;; Antes desta correcao, `contar-quorum` consultava `estados-presentes` e `somar-linha-na-assiduidade`
+  ;; consultava `estados-chamada-presentes` — dois vars distintos, MESMO conteudo, ambas as docstrings
+  ;; reivindicando ser a fonte unica do numerador. Uma terceira categoria positiva (presenca por
+  ;; videoconferencia, ja' prevista no dominio) acrescentada a UM dos dois faria a chamada mostrar o vereador
+  ;; PRESENTE e o CSV publicar `:comparecimentos 0`, sem nenhum teste vermelho. Este teste acrescenta um
+  ;; estado positivo SINTETICO a UNICA fonte que restou e prova que os DOIS numeros se movem juntos.
+  (let [v (random-uuid)
+        linha {:vereador-id v :estado :presente-videoconferencia :sem-assento false}
+        somar #(#'logic/somar-linha-na-assiduidade (#'logic/agregado-vazio-de-assiduidade) %)]
+    (is (= 0 (:presentes-total (logic/contar-quorum [linha])))
+        "sanidade: sem o estado sintetico na fonte, o quorum nao o conta")
+    (is (= 0 (:comparecimentos (somar linha)))
+        "sanidade: e a apuracao tambem nao")
+    (with-redefs [logic/estados-presentes (conj logic/estados-presentes :presente-videoconferencia)]
+      (is (= 1 (:presentes-total (logic/contar-quorum [linha])))
+          "o numerador do QUORUM passa a contar o estado novo")
+      (is (= 1 (:comparecimentos (somar linha)))
+          "e `:comparecimentos` muda JUNTO — uma fonte so', nunca duas"))))
+
 ;; ---------- o teto do periodo ----------
 
 (deftest validar-periodo-assiduidade-rejeita-de-posterior-a-ate
@@ -85,7 +107,20 @@
 (defn- detalhe-por-vereador [resultado sid]
   (into {} (comp (filter #(= sid (:sessao-id %))) (map (juxt :vereador-id :estado))) (:detalhe resultado)))
 
+(defn- apurar
+  "Chama `apurar-assiduidade` com o `contexto` obrigatorio; `:sessoes-sem-data-de-referencia` default 0 (as
+  fixtures montam a lista de sessoes a mao, entao nao ha' sessao excluida por falta de data). O teste que
+  exercita o contador nao-zero passa o valor explicitamente."
+  ([sessoes rosters presencas justs] (apurar sessoes rosters presencas justs 0))
+  ([sessoes rosters presencas justs sem-data]
+   (logic/apurar-assiduidade sessoes rosters presencas justs
+                             {:sessoes-sem-data-de-referencia sem-data})))
+
 ;; ---------- PUROS obrigatorios do brief ----------
+;; NOTA sobre as fixtures: todo mapa de entrada e' passado COMPLETO (chave para cada data e para cada sessao,
+;; com vetor vazio quando nao ha' conteudo). Nao e' zelo — `apurar-assiduidade` agora LANCA em chave ausente,
+;; e as fixtures anteriores passavam `{}` justamente onde o fail-open morava: um `{}` como `rosters-por-data`
+;; derivava a sessao com roster vazio, quem faltou SUMIA e o percentual inflava ate' 100%, com HTTP 200.
 
 (deftest as-quatro-classificacoes-saem-separadas-e-pendente-nunca-vira-ausente
   (let [s1 (random-uuid) ana (random-uuid) bruno (random-uuid) carla (random-uuid) dede (random-uuid)
@@ -95,7 +130,7 @@
                    (roster-linha dede "Dede")]}
         presencas {s1 [(presenca ana "entrada" "plenario")]}
         justs {s1 [(justificativa bruno "aprovada") (justificativa carla "pendente")]}
-        r (logic/apurar-assiduidade sessoes roster presencas justs)
+        r (apurar sessoes roster presencas justs)
         por-ver (por-vereador-map r)
         detalhe (detalhe-por-vereador r s1)]
     (is (= :presente-plenario (detalhe ana)))
@@ -113,7 +148,7 @@
   (let [s1 (random-uuid) v (random-uuid) d (LocalDate/of 2026 6 1)
         sessoes [(sessao-fechada {:id s1 :data-de-referencia d})]
         roster {d [(roster-linha v "Vera" {:estado-mandato "licenciado"})]}
-        r (logic/apurar-assiduidade sessoes roster {} {})
+        r (apurar sessoes roster {s1 []} {s1 []})
         agg (first (:por-vereador r))]
     (is (= 0 (:sessoes-computadas agg)))
     (is (= 1 (:sessoes-licenciado agg)))
@@ -123,7 +158,7 @@
   (let [s1 (random-uuid) orfao (random-uuid) d (LocalDate/of 2026 6 1)
         sessoes [(sessao-fechada {:id s1 :data-de-referencia d})]
         presencas {s1 [(presenca orfao "entrada" "plenario")]}
-        r (logic/apurar-assiduidade sessoes {} presencas {})
+        r (apurar sessoes {d []} presencas {s1 []})
         agg (first (:por-vereador r))
         detalhe (first (:detalhe r))]
     (is (= 0 (:sessoes-computadas agg)) "sem roster nenhum, a linha e' SEM ASSENTO — nao cria cadeira")
@@ -138,7 +173,7 @@
                  (sessao-fechada {:id s2 :numero 2 :data-de-referencia d2})]
         roster {d1 [(roster-linha ana "Ana")]
                 d2 [(roster-linha ana "Ana") (roster-linha fabio "Fabio")]}
-        r (logic/apurar-assiduidade sessoes roster {} {})
+        r (apurar sessoes roster {s1 [] s2 []} {s1 [] s2 []})
         por-ver (por-vereador-map r)]
     (is (= 2 (:sessoes-computadas (por-ver ana))) "Ana compunha a Casa nas duas sessoes")
     (is (= 1 (:sessoes-computadas (por-ver fabio)))
@@ -150,7 +185,7 @@
         sessoes [(sessao-fechada {:id s1 :data-de-referencia d :estado "nao_realizada"})]
         roster {d [(roster-linha presente "Presente") (roster-linha ausente "Ausente")]}
         presencas {s1 [(presenca presente "entrada" "plenario")]}
-        r (logic/apurar-assiduidade sessoes roster presencas {})
+        r (apurar sessoes roster presencas {s1 []})
         por-ver (por-vereador-map r)]
     (is (= 1 (:sessoes-computadas (por-ver presente))))
     (is (= 1 (:comparecimentos (por-ver presente))))
@@ -158,13 +193,29 @@
     (is (= 1 (:ausencias-injustificadas (por-ver ausente))))
     (is (= 1 (:sessoes-consideradas (:totais r))))))
 
-(deftest sessao-secreta-entra-nos-totais-e-sai-marcada-sigilosa
-  (let [s1 (random-uuid) d (LocalDate/of 2026 6 1)
-        sessoes [(sessao-fechada {:id s1 :data-de-referencia d :tipo "secreta" :transmite-publica false})]
-        r (logic/apurar-assiduidade sessoes {} {} {})]
-    (is (true? (:sigilosa (first (:sessoes r)))))
+;; ---------- sessao SECRETA: nos totais E marcada LINHA A LINHA ----------
+
+(deftest sessao-secreta-entra-nos-totais-e-CADA-LINHA-do-detalhe-sai-marcada-sigilosa
+  ;; A versao anterior deste teste rodava com roster e presencas VAZIOS: `:detalhe` tinha ZERO linhas, entao
+  ;; o teste cujo NOME anuncia a marcacao nao podia observar a marcacao que faltava. Agora ha' vereador de
+  ;; verdade nas duas sessoes, e a asserção EXIGE a chave.
+  (let [secreta (random-uuid) publica (random-uuid) v (random-uuid)
+        d1 (LocalDate/of 2026 6 1) d2 (LocalDate/of 2026 6 2)
+        sessoes [(sessao-fechada {:id secreta :data-de-referencia d1 :tipo "secreta" :transmite-publica false})
+                 (sessao-fechada {:id publica :numero 2 :data-de-referencia d2})]
+        roster {d1 [(roster-linha v "Vera")] d2 [(roster-linha v "Vera")]}
+        r (apurar sessoes roster {secreta [] publica []} {secreta [] publica []})
+        linha-de (fn [sid] (first (filter #(= sid (:sessao-id %)) (:detalhe r))))]
+    (is (true? (:sigilosa (first (filter #(= secreta (:id %)) (:sessoes r))))))
     (is (= 1 (:sessoes-sigilosas (:totais r))))
-    (is (= 1 (:sessoes-consideradas (:totais r))) "a sessao secreta ENTRA nos totais, nao some em silencio")))
+    (is (= 2 (:sessoes-consideradas (:totais r))) "a sessao secreta ENTRA nos totais, nao some em silencio")
+    (is (true? (:sigilosa (linha-de secreta)))
+        "a LINHA de detalhe da sessao secreta sai marcada — `:sessoes-sigilosas N` diz QUANTAS, nao QUAIS, e a fatia 3 serializa o detalhe para um CSV que circula por e-mail")
+    (is (false? (:sigilosa (linha-de publica))) "e a linha da sessao publica NAO")
+    (is (= #{:sessao-id :vereador-id :estado :sigilosa} (set (keys (linha-de secreta))))
+        "detalhe = ids + estado + sigilo; nome/partido NAO se repetem por linha (LGPD)")))
+
+;; ---------- identidade: uma vez, e nunca sobrescrita por linha sem-assento ----------
 
 (deftest identidade-aparece-uma-vez-e-detalhe-nao-repete-nome-nem-partido
   (let [s1 (random-uuid) s2 (random-uuid) ana (random-uuid)
@@ -173,9 +224,146 @@
                  (sessao-fechada {:id s2 :numero 2 :data-de-referencia d2})]
         roster {d1 [(roster-linha ana "Ana" {:nome-parlamentar "Aninha" :partido "PDT"})]
                 d2 [(roster-linha ana "Ana" {:nome-parlamentar "Aninha" :partido "PDT"})]}
-        r (logic/apurar-assiduidade sessoes roster {} {})]
+        r (apurar sessoes roster {s1 [] s2 []} {s1 [] s2 []})]
     (is (= 1 (count (:vereadores r))) "identidade UMA VEZ, apesar de aparecer em DUAS sessoes")
-    (is (= {:id ana :nome "Ana" :nome-parlamentar "Aninha" :partido "PDT"} (first (:vereadores r))))
-    (is (= #{:sessao-id :vereador-id :estado} (set (keys (first (:detalhe r)))))
-        "detalhe carrega SO' ids+estado — nome/partido NAO se repetem por linha (LGPD)")
+    (is (= {:id ana :nome "Ana" :nome-parlamentar "Aninha" :partido "PDT" :partido-variou false}
+           (first (:vereadores r))))
     (is (= 2 (count (:detalhe r))))))
+
+(deftest identidade-conhecida-NAO-e-sobrescrita-por-linha-sem-assento-posterior
+  ;; O vereador cassado em 10/06 que registra presenca em 15/06 (a escrita de presenca nao valida mandato, e
+  ;; `vereador_id` nao tem FK): esta no roster de 01/06 (linha COMPLETA) e sem-assento em 15/06 (identidade
+  ;; nil). Com um `assoc` cru, a linha POSTERIOR vencia e o CSV saia com NOME EM BRANCO para alguem que a
+  ;; Casa conhece. O unico teste anterior punha o mesmo vereador com a MESMA identidade nas duas sessoes —
+  ;; trocar o `cond` por `assoc` cru ficava verde.
+  (let [s1 (random-uuid) s2 (random-uuid) v (random-uuid)
+        d1 (LocalDate/of 2026 6 1) d2 (LocalDate/of 2026 6 15)
+        sessoes [(sessao-fechada {:id s1 :data-de-referencia d1})
+                 (sessao-fechada {:id s2 :numero 2 :data-de-referencia d2})]
+        roster {d1 [(roster-linha v "Joana Prado" {:nome-parlamentar "Joana" :partido "PSB"})]
+                d2 []}
+        presencas {s1 [] s2 [(presenca v "entrada" "plenario")]}
+        r (apurar sessoes roster presencas {s1 [] s2 []})
+        ident (first (:vereadores r))]
+    (is (= 1 (count (:vereadores r))))
+    (is (= "Joana Prado" (:nome ident)) "a identidade CONHECIDA sobrevive a linha sem-assento posterior")
+    (is (= "Joana" (:nome-parlamentar ident)))
+    (is (= "PSB" (:partido ident)))))
+
+(deftest partido-que-VARIOU-no-periodo-nao-e-publicado-como-se-fosse-constante
+  ;; Mandatos sequenciais com partidos diferentes sao permitidos, e `mandato-vigente-lateral` devolve o
+  ;; partido DAQUELA data. Fixar o primeiro nao-nil publicaria um rotulo escolhido pela ordem das sessoes.
+  (let [s1 (random-uuid) s2 (random-uuid) trocou (random-uuid) fiel (random-uuid)
+        d1 (LocalDate/of 2026 6 1) d2 (LocalDate/of 2026 6 15)
+        sessoes [(sessao-fechada {:id s1 :data-de-referencia d1})
+                 (sessao-fechada {:id s2 :numero 2 :data-de-referencia d2})]
+        roster {d1 [(roster-linha trocou "Trocou" {:partido "PDT"}) (roster-linha fiel "Fiel" {:partido "PV"})]
+                d2 [(roster-linha trocou "Trocou" {:partido "REDE"}) (roster-linha fiel "Fiel" {:partido "PV"})]}
+        r (apurar sessoes roster {s1 [] s2 []} {s1 [] s2 []})
+        por-id (into {} (map (juxt :id identity)) (:vereadores r))]
+    (is (nil? (:partido (por-id trocou))) "quem trocou de partido na janela NAO ganha um rotulo unico")
+    (is (true? (:partido-variou (por-id trocou))))
+    (is (= "PV" (:partido (por-id fiel))) "quem nao trocou continua publicado")
+    (is (false? (:partido-variou (por-id fiel))))))
+
+;; ---------- o PERCENTUAL: o unico numero que a Mesa le' ----------
+
+(deftest licenciado-no-MEIO-do-periodo-e-o-arquetipo-que-a-etapa-existe-para-medir
+  ;; 3 sessoes: licenciado em 1, presente em 1, ausente em 1. E' o caso real que motiva a apuracao e nao
+  ;; existia em NENHUMA das 26 fixtures — por isso tres mutacoes sobreviviam a suite inteira, e a pior punha
+  ;; o licenciado de VOLTA no denominador (50% viraria 33%).
+  (let [s1 (random-uuid) s2 (random-uuid) s3 (random-uuid) v (random-uuid)
+        d1 (LocalDate/of 2026 6 1) d2 (LocalDate/of 2026 6 8) d3 (LocalDate/of 2026 6 15)
+        sessoes [(sessao-fechada {:id s1 :data-de-referencia d1})
+                 (sessao-fechada {:id s2 :numero 2 :data-de-referencia d2})
+                 (sessao-fechada {:id s3 :numero 3 :data-de-referencia d3})]
+        roster {d1 [(roster-linha v "Vera" {:estado-mandato "licenciado"})]
+                d2 [(roster-linha v "Vera")]
+                d3 [(roster-linha v "Vera")]}
+        presencas {s1 [] s2 [(presenca v "entrada" "plenario")] s3 []}
+        r (apurar sessoes roster presencas {s1 [] s2 [] s3 []})
+        agg (first (:por-vereador r))]
+    (is (= 2 (:sessoes-computadas agg)) "a sessao em que estava LICENCIADO fica fora do denominador")
+    (is (= 1 (:sessoes-licenciado agg)) "e aparece a' parte, nunca some")
+    (is (= 1 (:comparecimentos agg)))
+    (is (= 1 (:ausencias-injustificadas agg)))
+    (is (= 50 (:percentual agg)) "1 de 2 = 50% — o denominador NAO inclui a sessao de licenca")))
+
+(deftest percentual-e-truncado-para-baixo-100-porcento-so-quando-nao-faltou-a-nenhuma
+  ;; `Math/round` fazia 199/200 = 99,5 imprimir **100%**. Afirmar 'compareceu a 100% das sessoes' de quem
+  ;; faltou a uma e' falso num documento que responde oficio e requerimento.
+  (let [v (random-uuid)
+        monta (fn [n-sessoes n-presencas]
+                (let [ids (vec (repeatedly n-sessoes random-uuid))
+                      datas (mapv #(.plusDays (LocalDate/of 2026 1 1) %) (range n-sessoes))
+                      sessoes (mapv (fn [i] (sessao-fechada {:id (ids i) :numero (inc i)
+                                                             :data-de-referencia (datas i)})) (range n-sessoes))
+                      roster (into {} (map (fn [d] [d [(roster-linha v "Vera")]])) datas)
+                      presencas (into {} (map-indexed
+                                          (fn [i sid] [sid (if (< i n-presencas)
+                                                             [(presenca v "entrada" "plenario")] [])])) ids)
+                      justs (into {} (map (fn [sid] [sid []])) ids)]
+                  (:percentual (first (:por-vereador (apurar sessoes roster presencas justs))))))]
+    (is (= 99 (monta 200 199)) "199/200 = 99,5 -> 99, NUNCA 100: ele faltou a uma")
+    (is (= 100 (monta 200 200)) "100% so' quando nao faltou a nenhuma")
+    (is (= 66 (monta 3 2)) "2/3 = 66,66 -> 66")
+    (is (= 0 (monta 3 0)) "faltou a todas = 0% (e o denominador nao e' zero)")))
+
+(deftest percentual-acima-de-100-e-DELIBERADO-e-fica-visivel
+  ;; Presenca SEM ASSENTO conta no numerador e nao no denominador (mesmo tratamento de `contar-quorum`).
+  ;; A desigualdade e' sintoma de cadastro furado e NAO e' clampada — decisao documentada, agora pinada.
+  (let [s1 (random-uuid) s2 (random-uuid) v (random-uuid)
+        d1 (LocalDate/of 2026 6 1) d2 (LocalDate/of 2026 6 2)
+        sessoes [(sessao-fechada {:id s1 :data-de-referencia d1})
+                 (sessao-fechada {:id s2 :numero 2 :data-de-referencia d2})]
+        roster {d1 [(roster-linha v "Vera")] d2 []}
+        presencas {s1 [(presenca v "entrada" "plenario")] s2 [(presenca v "entrada" "plenario")]}
+        r (apurar sessoes roster presencas {s1 [] s2 []})
+        agg (first (:por-vereador r))]
+    (is (= 1 (:sessoes-computadas agg)) "so' a sessao com assento conta no denominador")
+    (is (= 2 (:comparecimentos agg)) "as duas presencas contam no numerador")
+    (is (= 200 (:percentual agg)) "NAO e' clampado a 100 — a desigualdade e' o sintoma, e fica visivel")))
+
+;; ---------- ordem estavel do payload ----------
+
+(deftest vereadores-e-por-vereador-saem-ordenados-por-nome
+  ;; Sem asserção de sequencia, remover os dois `sort-by` fica verde e a ordem do CSV vira ordem de hash-map.
+  (let [s1 (random-uuid) d (LocalDate/of 2026 6 1)
+        zeca (random-uuid) ana (random-uuid) bruno (random-uuid)
+        sessoes [(sessao-fechada {:id s1 :data-de-referencia d})]
+        roster {d [(roster-linha zeca "Zeca") (roster-linha ana "Ana") (roster-linha bruno "Bruno")]}
+        r (apurar sessoes roster {s1 []} {s1 []})]
+    (is (= ["Ana" "Bruno" "Zeca"] (mapv :nome (:vereadores r))))
+    (is (= [ana bruno zeca] (mapv :id (:vereadores r))))
+    (is (= [ana bruno zeca] (mapv :vereador-id (:por-vereador r)))
+        "`:por-vereador` na MESMA ordem de `:vereadores` — o CSV le' as duas lado a lado")))
+
+;; ---------- chave ausente NUNCA e' 'perguntei e veio vazio' ----------
+
+(deftest chave-ausente-em-qualquer-dos-tres-mapas-LANCA-em-vez-de-derivar-em-branco
+  (let [s1 (random-uuid) v (random-uuid) d (LocalDate/of 2026 6 1)
+        sessoes [(sessao-fechada {:id s1 :data-de-referencia d})]
+        roster {d [(roster-linha v "Vera")]}
+        completo #(apurar sessoes roster {s1 []} {s1 []})
+        erro-de (fn [f] (try (f) nil (catch clojure.lang.ExceptionInfo e (ex-data e))))]
+    (is (some? (completo)) "sanidade: com os tres mapas completos, apura normalmente")
+    (is (= :roster-da-data (:chave-ausente (erro-de #(apurar sessoes {} {s1 []} {s1 []}))))
+        "roster ausente NAO vira roster vazio — quem faltou sumiria e o percentual inflaria")
+    (is (= :presencas-da-sessao (:chave-ausente (erro-de #(apurar sessoes roster {} {s1 []})))))
+    (is (= :justificativas-da-sessao (:chave-ausente (erro-de #(apurar sessoes roster {s1 []} {})))))
+    (is (= s1 (:sessao-id (erro-de #(apurar sessoes {} {s1 []} {s1 []}))))
+        "a ex-data nomeia a sessao — o erro e' acionavel, nao um NPE")))
+
+;; ---------- o que foi EXCLUIDO tambem e' publicado ----------
+
+(deftest sessoes-sem-data-de-referencia-sao-DECLARADAS-nos-totais
+  (let [s1 (random-uuid) v (random-uuid) d (LocalDate/of 2026 6 1)
+        sessoes [(sessao-fechada {:id s1 :data-de-referencia d})]
+        roster {d [(roster-linha v "Vera")]}
+        r (apurar sessoes roster {s1 []} {s1 []} 3)]
+    (is (= 3 (:sessoes-sem-data-de-referencia (:totais r)))
+        "sessao fechada SEM nenhum marco de data fica fora do periodo — mas o denominador nao encolhe em silencio")
+    (is (= 1 (:sessoes-consideradas (:totais r))))
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (logic/apurar-assiduidade sessoes roster {s1 []} {s1 []} {}))
+        "contexto sem o contador e' erro do chamador — publicar 0 por default seria uma mentira silenciosa")))

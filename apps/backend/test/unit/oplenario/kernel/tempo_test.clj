@@ -255,8 +255,10 @@
     (is (= #{"src/oplenario/rotas.clj"                                  ; o host (uso real)
              "src/oplenario/transparencia/components/repositorio.clj"   ; o consumer de presenca (uso real)
              "src/oplenario/transparencia/db/parlamentar.clj"           ; so' cita, na docstring do UPSERT
-             "src/oplenario/sessoes/controllers.clj"                     ; a CHAMADA, fatia 1b-WIRE (uso real)
-             "src/oplenario/sessoes/logic.clj"                           ; o PISO da janela de presenca (uso real)
+             ;; `sessoes/controllers.clj` SAIU desta lista na revisao da Etapa 6 fatia 2: a DATA DE
+             ;; REFERENCIA da chamada era uma `defn-` privada dele (e por isso estava redigitada em mais dois
+             ;; lugares) e virou `logic/data-de-referencia-da-sessao`. O controller consome a REGRA, nao o fuso.
+             "src/oplenario/sessoes/logic.clj"                           ; o PISO da janela + a DATA DE REFERENCIA (uso real)
              "src/oplenario/sessoes/components/serializador_folha.clj"    ; a FOLHA, Etapa 5 fatia 2
              "src/oplenario/sessoes/components/renderizador_pdf.clj"     ; o PDF da FOLHA, Etapa 5 fatia 3 (uso real)
              "src/oplenario/sessoes/db/sessao.clj"}                      ; a APURACAO, Etapa 6 fatia 2 (uso real)

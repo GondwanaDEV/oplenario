@@ -85,7 +85,7 @@
                 (logic/derivar-linha-chamada (roster) nil (justificativa "pendente"))
                 (logic/derivar-linha-chamada (roster :estado-mandato "licenciado") nil nil)]
         {:keys [presentes-plenario presentes-remoto membros-da-casa]} (logic/contar-quorum linhas)
-        presentes (count (filter #(contains? logic/estados-chamada-presentes (:estado %)) linhas))]
+        presentes (count (filter logic/conta-no-numerador-do-quorum? linhas))]
     (is (= presentes (+ presentes-plenario presentes-remoto))
         "a soma dos dois numeradores e' exatamente o conjunto de presentes")
     (is (= 2 presentes-plenario))

@@ -46,9 +46,12 @@
   `tempo-test/consumidores-de-zona-civil-padrao-estao-DECLARADOS-na-docstring-da-constante`):
   (a) o HOST, `rotas.clj` — data civil de hoje para decidir mandato/comissao VIGENTE (valor efemero, de
       request); (b) o CONSUMER de `presenca.registrada` em `transparencia/components/repositorio.clj` — a
-  data civil que vira a coluna `transparencia.sessao_com_chamada.data`; (c) `sessoes/controllers.clj` — a
-  CHAMADA (§22.6 eixo C, fatia 1b-WIRE): a DATA DE REFERENCIA do roster (`aberta-em`/`agendada-para` da
-  propria sessao -> data civil), tambem valor efemero de request, nunca persistido; (d)
+  data civil que vira a coluna `transparencia.sessao_com_chamada.data`; (c) `sessoes/logic.clj` — a DATA DE
+  REFERENCIA do roster (§22.6 eixo C): `data-de-referencia-da-sessao` converte o primeiro marco nao-nil de
+  `marcos-de-data-de-referencia` (`aberta-em`/`agendada-para`) em data civil. Valor efemero de request,
+  nunca persistido. Ate' a revisao da Etapa 6 fatia 2 esta regra morava PRIVADA em
+  `sessoes/controllers.clj` e por isso estava REDIGITADA em mais dois lugares; promove-la ao `logic` tirou
+  o controller desta lista (ele consome a regra, nao o fuso). (d)
   `sessoes/logic.clj` — o PISO da janela de ESCRITA de presenca (§22.6 eixo C, revisao da Etapa 2):
   `piso-da-janela-de-presenca` recusa um `ocorrido-em` que nao caia no DIA CIVIL da sessao. Este quarto
   consumidor e' o de MAIOR raio de dano se o fuso estiver errado — nao deforma um relatorio, RECUSA uma
@@ -65,9 +68,10 @@
   Nao efemero, nao persistido por este consumidor — mas grava dentro de um artefato binario IMUTAVEL, e o
   mesmo raio de dano do item (e) se aplica: sem correcao depois de congelado. (g) `sessoes/db/sessao.clj`
   (Etapa 6 fatia 2) — `listar-fechadas-no-periodo` converte `de`/`ate` (datas civis do PEDIDO de apuracao de
-  assiduidade) no intervalo de INSTANTES `[lo, hi)` que filtra `COALESCE(aberta_em, agendada_para)`, e volta
-  a converter cada `COALESCE` lido em `:data-de-referencia` (LocalDate) — a MESMA regra de (c), aplicada em
-  LOTE a um periodo em vez de uma sessao so'. Valor efemero de request, nunca persistido por este consumidor.
+  assiduidade) no intervalo de INSTANTES `[lo, hi)` que filtra o `COALESCE` de
+  `logic/marcos-de-data-de-referencia-sql`. O ROTULO de cada linha ja' NAO e' calculado aqui: sai de
+  `logic/data-de-referencia-da-sessao` (item c), que e' a mesma regra que a `/chamada` aplica. Valor efemero
+  de request, nunca persistido por este consumidor.
 
   O QUE ESTA CONSTANTE RESOLVE: ate aqui o fuso era literal espalhado pelas bordas; o host
   (`rotas.clj`) tinha DOIS. Ter um lugar so' e' o pre-requisito de transformar o fuso em

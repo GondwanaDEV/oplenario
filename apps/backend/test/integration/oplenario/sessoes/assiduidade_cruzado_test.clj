@@ -93,18 +93,23 @@
                                                  (tempo/relogio-fixo encerrada-em))
           apuracao (controllers/apurar-assiduidade *repo-s* (roster-seam-lote) (ator-secretario ente)
                      {:de hoje :ate hoje})
-          por-ver-chamada (into {} (map (juxt :vereador-id :estado)) (:linhas chamada))
-          detalhe-sid (into {} (comp (filter #(= sid (:sessao-id %))) (map (juxt :vereador-id :estado)))
+          ;; SEQUENCIA, nao mapa: `(into {} ...)` apaga ordem E duplicata — e' o mesmo apagamento que o
+          ;; `set` da fatia 1 fazia, e que a revisao daquela fatia ja' tinha corrigido uma vez. As duas
+          ;; leituras derivam da MESMA `derivar-linhas-da-chamada` sobre o MESMO roster (I3), entao a ordem
+          ;; tambem tem de bater; comparar mapas deixaria uma linha duplicada passar despercebida.
+          por-ver-chamada (mapv (juxt :vereador-id :estado) (:linhas chamada))
+          detalhe-sid (into [] (comp (filter #(= sid (:sessao-id %))) (map (juxt :vereador-id :estado)))
                             (:detalhe apuracao))
           sessao-out (first (filter #(= sid (:id %)) (:sessoes apuracao)))]
       (is (= 3 (count por-ver-chamada)) "sanidade: 3 vereadores na chamada")
       (is (= por-ver-chamada detalhe-sid)
-          "MESMO estado por vereador nas duas leituras — I1: uma so' aritmetica de presenca")
+          "MESMA SEQUENCIA de (vereador, estado) nas duas leituras — I1: uma so' aritmetica de presenca")
+      (is (apply distinct? (map first detalhe-sid)) "nenhum vereador duplicado no detalhe da sessao")
       (is (= (:quorum chamada) (:quorum sessao-out))
           "MESMO quorum (incl. :membros-da-casa, o denominador) nas duas leituras")
       (is (true? (:inconsistencia-cadastro
                   (first (filter #(= lic (:vereador-id %)) (:linhas chamada))))))
-      (is (= :presente-plenario (por-ver-chamada lic))
+      (is (= :presente-plenario (second (first (filter #(= lic (first %)) por-ver-chamada))))
           "sanidade: a licenciada COM evento positivo aparece PRESENTE nos dois lados"))))
 
 ;; ---------- I5 atraves do CONTROLLER: o instante e' por-sessao, nao um global do periodo ----------
@@ -143,8 +148,12 @@
   (let [ente-a (random-uuid) ente-b (random-uuid)
         leg-b (casa! ente-b)
         _ (casa! ente-a)
-        _sid-b (sessao-encerrada-hoje! ente-b leg-b "ordinaria")
-        hoje (tempo/hoje (tempo/relogio-sistema) tempo/zona-civil-padrao)
+        sid-b (sessao-encerrada-hoje! ente-b leg-b "ordinaria")
+        ;; `hoje` derivado do `encerrada_em` DA SESSAO (o relogio do BANCO), nunca do relogio de sistema da
+        ;; JVM: a sessao e' semeada por `now()` do Postgres, e na virada do dia civil os dois discordam — o
+        ;; teste ficava flaky por um recorte que nao contem a sessao que ele quer excluir.
+        hoje (tempo/hoje-de (:encerrada-em (repo-sessoes/buscar-sessao *repo-s* ente-b sid-b))
+                            tempo/zona-civil-padrao)
         apuracao-a (controllers/apurar-assiduidade *repo-s* (roster-seam-lote) (ator-secretario ente-a)
                      {:de hoje :ate hoje})]
     (is (empty? (:sessoes apuracao-a)) "a Casa A nao ve NENHUMA sessao — todas as fechadas de hoje sao da Casa B")))
@@ -167,16 +176,35 @@
 
 (deftest sem-papel-secretario-e-negado
   (let [ente (random-uuid) _leg (casa! ente)
-        hoje (tempo/hoje (tempo/relogio-sistema) tempo/zona-civil-padrao)]
+        ;; data FIXA de proposito: este teste nao le' o banco (a authz nega antes), entao nao ha' motivo para
+        ;; depender de relogio nenhum.
+        hoje (LocalDate/of 2026 6 20)]
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"autorizacao negada"
           (controllers/apurar-assiduidade *repo-s* (roster-seam-lote) (ator ente) {:de hoje :ate hoje}))
         "ator sem papel 'secretario' e' negado ANTES de qualquer leitura")))
 
 ;; ---------- PROVA DE MUTACAO (manual — nao roda no CI) ----------
-;; (a) `:ausente-justificativa-pendente` colapsado em `:ausente`: em `logic/apurar-assiduidade`, trocar a
-;;     construcao de `detalhe-out` para `(if (= :ausente-justificativa-pendente (:estado linha)) :ausente
-;;     (:estado linha))` — roda `assiduidade-test` inteiro; `as-quatro-classificacoes-...` fica VERMELHO
-;;     ("Expected :ausente-justificativa-pendente Actual :ausente"). Reverter.
-;; (b) instante GLOBAL em vez de por-sessao: em `components/repositorio.clj`/`leituras-assiduidade`, trocar
-;;     `sessoes-com-instante` para usar um UNICO instante (ex.: o da ULTIMA sessao) para TODAS — roda
-;;     `assiduidade-db-test`; `instante-e-por-sessao-nao-um-global-do-lote` fica VERMELHO. Reverter.
+;; Cada receita abaixo nomeia o teste que DE FATO reprova. A versao anterior mandava mutar
+;; `repositorio.clj/leituras-assiduidade` e afirmava que `assiduidade-db-test` ficaria vermelho — mas aquele
+;; ns nunca chama `leituras-assiduidade`: ele chama `presencas-correntes-das-sessoes` direto, com os pares
+;; [sessao-id instante] montados a mao. A mutacao NAO PODIA reprova-lo, e uma receita que nao pode ser
+;; executada e' pior que nenhuma: a proxima revisao a executa, ve verde, e conclui que o codigo esta coberto.
+;;
+;; (a) NUMERADOR pelo var gemeo: em `logic/somar-linha-na-assiduidade`, trocar
+;;     `(conta-no-numerador-do-quorum? linha)` por um `contains?` sobre um conjunto local
+;;     `#{:presente-plenario :presente-remoto}` — roda `assiduidade-test`;
+;;     `numerador-do-quorum-e-comparecimentos-mudam-JUNTOS` fica VERMELHO. Reverter.
+;; (b) `:sigilosa` fora da linha de detalhe: em `logic/apurar-assiduidade`, remover `:sigilosa` de
+;;     `detalhe-out` — roda `assiduidade-test`;
+;;     `sessao-secreta-entra-nos-totais-e-CADA-LINHA-do-detalhe-sai-marcada-sigilosa` fica VERMELHO. Reverter.
+;; (c) fail-open na chave ausente: em `logic/apurar-assiduidade`, trocar o `exigir` por `(get m k [])` —
+;;     roda `assiduidade-test`; `chave-ausente-em-qualquer-dos-tres-mapas-LANCA-em-vez-de-derivar-em-branco`
+;;     fica VERMELHO. Reverter.
+;; (d) percentual arredondado: em `logic/apurar-assiduidade`, trocar `Math/floor` por `Math/round` — roda
+;;     `assiduidade-test`; `percentual-e-truncado-para-baixo-...` fica VERMELHO (199/200 -> 100). Reverter.
+;; (e) `:ausente-justificativa-pendente` colapsado em `:ausente`: em `logic/apurar-assiduidade`, reescrever o
+;;     estado em `detalhe-out` — roda `assiduidade-test`; `as-quatro-classificacoes-...` fica VERMELHO.
+;; (f) instante GLOBAL em vez de por-sessao: em `components/repositorio.clj`/`leituras-assiduidade`, usar um
+;;     UNICO instante (o da ULTIMA sessao) para TODAS — roda ESTE ns (`assiduidade-cruzado-test`), que e' o
+;;     unico caminho que atravessa `leituras-assiduidade`:
+;;     `apuracao-usa-o-instante-de-cada-sessao-nao-um-global-do-periodo` fica VERMELHO. Reverter.
