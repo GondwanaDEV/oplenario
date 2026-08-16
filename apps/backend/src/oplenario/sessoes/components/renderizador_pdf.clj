@@ -53,14 +53,56 @@
       funcao PURA de (bytes do HTML, instante de congelamento) — nao precisei montar o array eu mesmo.
       NENHUM outro lugar escreve XMP com data: os metodos que geram pacote XMP
       (`PdfBoxRenderer/createPdfaSchema`) so' rodam sob `usePdfAConformance`, que este ns nunca liga
-      (PDF/A e' fora de escopo desta fatia — ver CARRY em `folha.css`)."
-  (:require [oplenario.kernel.tempo :as tempo])
-  (:import (com.openhtmltopdf.pdfboxout PdfRendererBuilder)
+      (PDF/A e' fora de escopo desta fatia — ver CARRY em `folha.css`).
+
+  (d) A QUARTA porta, que so' apareceu na revisao adversarial e nao estava no brief:
+      `PdfBoxFastLinkManager/createFileEmbedLinkAnnotation` carimba `PDEmbeddedFile.setModDate` com
+      `Calendar/getInstance()` CRU — relogio da maquina, sem TimeZone nem Locale — e o resultado entra no
+      arquivo. E' o unico `Calendar/getInstance` das duas jars que este ns nao neutraliza por sobrescrita,
+      porque o objeto e' criado dentro da biblioteca. Alcanca-se por um `<a href=\"...\" download>` no HTML
+      (medido no bytecode: `hasAttribute(\"download\")` -> `createFileEmbedLinkAnnotation` ->
+      `ExternalResourceType/FILE_EMBED`). A barreira de recurso externo abaixo fecha essa porta ANTES de
+      resolver a URI, o que a torna inalcancavel por decisao nossa e nao por acidente de conteudo (o HTML
+      canonico nao emite `<a>` HOJE) nem por default de terceiro (`NaiveUserAgent$DefaultAccessController`
+      recusa FILE_EMBED, mas e' default de biblioteca, sujeito a upgrade).
+
+  RECURSO EXTERNO — FAIL-CLOSED, medido, nao presumido. O brief diz que o HTML canonico e' autocontido; o
+  que a revisao adversarial mostrou e' que ele era autocontido por CONTEUDO, e o motor ficava fail-open por
+  CONFIGURACAO. `NaiveUserAgent.checkAccessAllowed` devolve `true` quando nenhum `BiPredicate` esta'
+  registrado para a prioridade consultada, e `openStream` faz `new URI(uri).toURL().openStream()` sem
+  filtro de esquema. Medido contra a biblioteca real: um `<img src=\"http://127.0.0.1:PORTA/x.png\">`
+  produziu DUAS requisicoes GET saindo do processo, e `@import url(...)`/`background-image:url(...)` mais
+  uma cada; um `<img src=\"file:///...\">` LEU o disco do servidor e embutiu o arquivo no PDF como XObject
+  (`COSName{Im1}`). Num renderizador de servidor isso e' SSRF (metadado de nuvem em `169.254.169.254`,
+  servico interno em loopback) e exfiltracao de arquivo local para dentro de um artefato que sera'
+  congelado, hasheado e servido. A unica coisa que separava um campo de texto disso era a disciplina de
+  `esc` em OUTRO arquivo (`serializador-folha`). Agora a recusa e' desta camada, para TODOS os 9
+  `ExternalResourceType`, em `RUN_BEFORE_RESOLVING_URI` — a folha nao tem recurso externo legitimo algum
+  (CSS inline, fonte base-14 resolvida dentro do PDFBox, zero imagem), entao negar tudo nao custa nada.
+  REFUTADO na mesma medicao, e registrado para nao voltar como alarme: `<!DOCTYPE html SYSTEM \"http://...\">`
+  NAO busca a DTD — openhtmltopdf instala um resolvedor de entidade que devolve entidade vazia
+  (`Entity public: null, no local mapping. Returning empty entity to avoid pulling from network`).
+
+  LOG — o canal PROPRIO do openhtmltopdf: `com.openhtmltopdf.util.XRLog` e' o log historico do Flying
+  Saucer, em `java.util.logging`, INDEPENDENTE do SLF4J que o PDFBox 3.x ja' fala. Sem redirecionamento ele
+  escreve linhas cruas (`com.openhtmltopdf.general INFO:: Using fast-mode renderer. Prepare to fly.`) fora
+  do pattern do logback e ignorando o nivel WARN do root — Inv.7 furado em TODO render. Este ns instala um
+  `XRLogger` que encaminha para `clojure.tools.logging`. Encaminhar, e nao `setLoggingEnabled false`: e' por
+  esse mesmo canal que sai o WARNING de recurso externo recusado, que agora e' sinal de SEGURANCA (alguem
+  pos um recurso externo no HTML canonico) e nao ruido a calar."
+  (:require [clojure.tools.logging :as log]
+            [clojure.tools.logging.impl :as log-impl]
+            [oplenario.kernel.tempo :as tempo])
+  (:import (com.openhtmltopdf.outputdevice.helper ExternalResourceControlPriority)
+           (com.openhtmltopdf.pdfboxout PdfRendererBuilder)
+           (com.openhtmltopdf.util XRLog XRLogger)
            (java.io ByteArrayOutputStream)
            (java.nio ByteBuffer)
            (java.security MessageDigest)
            (java.time Instant ZoneId)
-           (java.util Calendar Locale TimeZone)))
+           (java.util Calendar Locale TimeZone)
+           (java.util.function BiPredicate)
+           (java.util.logging Level)))
 
 (set! *warn-on-reflection* true)
 
@@ -101,6 +143,50 @@
   (doto (Calendar/getInstance (TimeZone/getTimeZone ^ZoneId tempo/zona-civil-padrao) Locale/ROOT)
     (.setTime (java.util.Date/from instante))))
 
+;; ---------- recurso externo: recusa TOTAL, antes de resolver a URI ----------
+
+(def ^:private recusa-todo-recurso-externo
+  "Nega os 9 `ExternalResourceType` sem olhar a URI. Nao e' uma allowlist com um furo: a folha e' autocontida
+  por contrato (CSS inline, fonte base-14 interna do PDFBox, zero imagem), entao o conjunto de recursos
+  externos LEGITIMOS e' vazio — e uma lista vazia se escreve como `false`, nao como filtro de esquema que a
+  proxima fatia teria de manter correto. Registrado em `RUN_BEFORE_RESOLVING_URI`: recusa antes de o
+  `FSUriResolver` sequer transformar a string, entao nenhum truque de resolucao alcanca a rede ou o disco."
+  (reify BiPredicate
+    (test [_ _uri _tipo] false)))
+
+;; ---------- log do openhtmltopdf -> logging da aplicacao (Inv.7) ----------
+
+(defn- nivel-de
+  "`java.util.logging.Level` -> palavra-chave de `clojure.tools.logging`. Comparacao por `intValue` (e nao por
+  identidade de constante) porque a biblioteca tambem emite niveis intermediarios (FINE/FINER/CONFIG)."
+  [^Level nivel]
+  (let [v (.intValue nivel)]
+    (cond
+      (>= v (.intValue Level/SEVERE))  :error
+      (>= v (.intValue Level/WARNING)) :warn
+      (>= v (.intValue Level/INFO))    :info
+      (>= v (.intValue Level/FINE))    :debug
+      :else                            :trace)))
+
+(def ^:private logger-openhtmltopdf
+  (reify XRLogger
+    (log [_ nome nivel mensagem]
+      (log/log nome (nivel-de nivel) nil mensagem))
+    (log [_ nome nivel mensagem erro]
+      (log/log nome (nivel-de nivel) erro mensagem))
+    (setLevel [_ _nome _nivel]
+      ;; quem decide nivel e' o logback, nunca a biblioteca — este metodo existe na interface e e' inerte
+      nil)
+    (isLogLevelEnabled [_ diagnostico]
+      (log-impl/enabled? (log-impl/get-logger log/*logger-factory* "com.openhtmltopdf")
+                         (nivel-de (.getLevel diagnostico))))))
+
+(def ^:private roteamento-de-log
+  "Forcado pelo construtor do adapter, nunca no load do ns: `XRLog/setLoggerImpl` e' estado GLOBAL da JVM, e
+  efeito colateral em load de ns e' o tipo de coisa que muda o comportamento de quem so' quis requerer o
+  namespace. `delay` garante uma unica execucao mesmo com N adapters construidos."
+  (delay (XRLog/setLoggerImpl logger-openhtmltopdf) :roteado))
+
 ;; ---------- o port ----------
 
 (defprotocol RenderizadorPdf
@@ -120,6 +206,9 @@
                     (.useFastMode)
                     (.withHtmlContent html-str base-uri-neutro)
                     (.withProducer producer)
+                    (.useExternalResourceAccessControl
+                     recusa-todo-recurso-externo
+                     ExternalResourceControlPriority/RUN_BEFORE_RESOLVING_URI)
                     (.toStream saida))]
       (with-open [renderer (.buildPdfRenderer builder)]
         (.createPDFWithoutClosing renderer)
@@ -140,6 +229,8 @@
 
 (defn renderizador-pdf
   "Cria o adapter RenderizadorPdf via openhtmltopdf-pdfbox (sem estado — o host o constroi e injeta, como
-   `serializador-folha-html`)."
+   `serializador-folha-html`). Efeito colateral unico e idempotente: instala o roteamento do log proprio do
+   openhtmltopdf para o logging da aplicacao (ver docstring do ns, secao LOG)."
   []
+  @roteamento-de-log
   (->RenderizadorPdfOpenHtmlToPdf))

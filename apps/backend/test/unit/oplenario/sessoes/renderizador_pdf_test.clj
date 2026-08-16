@@ -8,7 +8,9 @@
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is]]
             [oplenario.sessoes.components.renderizador-pdf :as pdf])
-  (:import (java.util Locale)
+  (:import (com.openhtmltopdf.util XRLog)
+           (java.net ServerSocket)
+           (java.util Locale)
            (org.apache.pdfbox Loader)
            (org.apache.pdfbox.pdmodel PDDocument)
            (org.apache.pdfbox.text PDFTextStripper)))
@@ -115,3 +117,124 @@
         em-ingles (sob-locale "en-US" #(vec (render html instante)))]
     (is (= em-tailandes em-ingles)
         "o mesmo html-bytes + o mesmo instante, sob dois Locales default da JVM, tem de produzir bytes identicos")))
+
+;; ---------- RECURSO EXTERNO: fail-closed medido, nao "acontece de nao haver" ----------
+;; Achado de revisao adversarial de seguranca, MEDIDO contra a biblioteca real: sem
+;; `useExternalResourceAccessControl` o `NaiveUserAgent` de openhtmltopdf 1.1.73 e' FAIL-OPEN — ele abre
+;; `new URI(uri).toURL().openStream()` sem filtro de esquema para IMAGE_RASTER/CSS/BINARY/FONT. Antes da
+;; correcao, um espiao em `127.0.0.1` recebeu de fato 4 requisicoes GET do processo de renderizacao
+;; (`<img src=http://...>` duas vezes, `@import url(http://...)`, `background-image:url(http://...)`).
+;; Num renderizador de servidor isso e' SSRF: o alvo `http://169.254.169.254/...` (metadado de nuvem) ou
+;; `file:///etc/passwd` fica a UM campo de texto de distancia. Hoje o HTML CANONICO nao emite nenhum
+;; `<a>`/`url()` e `serializador-folha` escapa todo campo humano — mas isso e' disciplina em OUTRO arquivo,
+;; nao barreira na camada que faz a requisicao. Estes testes exigem a barreira aqui.
+
+(defn- espiao-http!
+  "Sobe um servidor de UMA porta efemera que so' REGISTRA a linha de requisicao e responde 404. Porta 0
+  (efemera) e' proposital: dois runs concorrentes da suite nao podem disputar um numero fixo."
+  []
+  (let [ss (ServerSocket. 0)
+        acessos (atom [])]
+    (doto (Thread. (fn []
+                     (try
+                       (loop []
+                         (with-open [s (.accept ss)]
+                           (let [buf (byte-array 512)
+                                 n (.read (.getInputStream s) buf)]
+                             (swap! acessos conj (str/trim (String. buf 0 (max n 0) "UTF-8")))
+                             (doto (.getOutputStream s)
+                               (.write (.getBytes "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n" "UTF-8"))
+                               (.flush))))
+                         (recur))
+                       (catch Exception _ nil))))
+      (.setDaemon true)
+      (.start))
+    {:porta (.getLocalPort ss) :acessos acessos :fechar! #(.close ss)}))
+
+(deftest nenhum-recurso-externo-e-buscado-pela-rede
+  (let [{:keys [porta acessos fechar!]} (espiao-http!)
+        base (str "http://127.0.0.1:" porta)]
+    (try
+      (doseq [html [;; imagem remota
+                    (str "<!DOCTYPE html><html><head><meta charset=\"utf-8\"/></head><body><p>x</p>"
+                         "<img src=\"" base "/pixel.png\" width=\"10\" height=\"10\"/></body></html>")
+                    ;; folha de estilo remota
+                    (str "<!DOCTYPE html><html><head><meta charset=\"utf-8\"/><style>@import url(\""
+                         base "/externo.css\"); body{color:#000;}</style></head><body><p>x</p></body></html>")
+                    ;; imagem de fundo remota
+                    (str "<!DOCTYPE html><html><head><meta charset=\"utf-8\"/><style>body{background-image:url(\""
+                         base "/bg.png\");}</style></head><body><p>x</p></body></html>")
+                    ;; anexo por link de download (ExternalResourceType/FILE_EMBED)
+                    (str "<!DOCTYPE html><html><head><meta charset=\"utf-8\"/></head><body>"
+                         "<a href=\"" base "/anexo.bin\" download=\"anexo.bin\">baixar</a></body></html>")]]
+        (render (.getBytes ^String html "UTF-8") instante))
+      (Thread/sleep 300)
+      (is (= [] @acessos)
+          "o renderizador NAO pode abrir conexao alguma a partir do HTML — recurso externo tem de ser recusado ANTES de resolver a URI (SSRF: metadado de nuvem, servico interno, porta de loopback)")
+      (finally (fechar!)))))
+
+(deftest arquivo-local-nao-e-lido-nem-entra-no-pdf
+  ;; A gemea local do teste acima: `file://` num `<img>` e' IMAGE_RASTER, que o controlador DEFAULT da
+  ;; biblioteca PERMITE — sem a barreira deste ns o processo le' o disco do servidor e embute o resultado
+  ;; no PDF congelado. O PNG de 1x1 abaixo e' escrito em disco de proposito: se o arquivo NAO existisse, o
+  ;; teste passaria por ausencia de alvo, e nao por recusa (asserção que nao pode reprovar nao e' cobertura).
+  (let [png (java.io.File/createTempFile "alvo-local" ".png")
+        ;; PNG 1x1 valido (assinatura + IHDR + IDAT + IEND), em bytes literais — sem recurso externo
+        conteudo (byte-array (map unchecked-byte
+                                  [0x89 0x50 0x4E 0x47 0x0D 0x0A 0x1A 0x0A
+                                   0x00 0x00 0x00 0x0D 0x49 0x48 0x44 0x52
+                                   0x00 0x00 0x00 0x01 0x00 0x00 0x00 0x01
+                                   0x08 0x06 0x00 0x00 0x00 0x1F 0x15 0xC4
+                                   0x89 0x00 0x00 0x00 0x0A 0x49 0x44 0x41
+                                   0x54 0x78 0x9C 0x63 0x00 0x01 0x00 0x00
+                                   0x05 0x00 0x01 0x0D 0x0A 0x2D 0xB4 0x00
+                                   0x00 0x00 0x00 0x49 0x45 0x4E 0x44 0xAE
+                                   0x42 0x60 0x82]))]
+    (try
+      (with-open [os (java.io.FileOutputStream. png)] (.write os conteudo))
+      (let [html (str "<!DOCTYPE html><html><head><meta charset=\"utf-8\"/></head><body><p>x</p>"
+                      "<img src=\"file://" (.getAbsolutePath png) "\" width=\"20\" height=\"20\"/></body></html>")
+            bytes (render (.getBytes ^String html "UTF-8") instante)]
+        (with-open [doc (Loader/loadPDF ^bytes bytes)]
+          (let [nomes (->> (.getPages ^PDDocument doc)
+                           (mapcat (fn [pagina] (seq (.getXObjectNames (.getResources pagina)))))
+                           (into []))]
+            (is (empty? nomes)
+                "nenhum XObject pode entrar no PDF a partir de `file://` — se o arquivo local foi lido e embutido, o renderizador exfiltra disco do servidor para dentro de um artefato que sera' congelado e servido"))))
+      (finally (.delete png)))))
+
+;; ---------- TRAVA (nao reprova hoje): a QUARTA porta do determinismo ----------
+;; `PdfBoxFastLinkManager/createFileEmbedLinkAnnotation` carimba `PDEmbeddedFile.setModDate` com
+;; `Calendar/getInstance()` — o RELOGIO DA MAQUINA, sem TimeZone nem Locale fixos — e o resultado entra no
+;; arquivo. E' a unica porta de relogio das duas jars que o ns nao neutraliza por sobrescrita. Medido: com o
+;; controlador default da propria biblioteca ela JA' era inalcancavel (FILE_EMBED e' o unico dos 9 tipos que
+;; `NaiveUserAgent$DefaultAccessController` recusa), e com a barreira fail-closed deste ns ela passa a ser
+;; inalcancavel por DECISAO NOSSA. Este teste NAO reprova a versao anterior do codigo — ele trava o default
+;; da biblioteca contra drift (upgrade que afrouxe o default, ou controlador permissivo registrado por
+;; engano). Declarado como trava, nao vendido como vermelho.
+(deftest link-de-download-nao-embute-arquivo-nem-carimba-o-relogio
+  (let [html (.getBytes (str "<!DOCTYPE html><html><head><meta charset=\"utf-8\"/></head><body>"
+                             "<a href=\"file:///etc/hostname\" download=\"h.txt\">baixar</a></body></html>")
+                        "UTF-8")
+        p1 (render html instante)
+        p2 (render html instante)]
+    (is (= (vec p1) (vec p2))
+        "HTML com link de download tem de continuar deterministico — se o anexo fosse embutido, `PDEmbeddedFile.setModDate(Calendar/getInstance())` poria o relogio da maquina nos bytes")
+    (with-open [doc (Loader/loadPDF ^bytes p1)]
+      ;; sem anexo algum o catalogo nao tem nem o dicionario /Names — as duas formas do "nada" contam
+      (let [nomes (.getNames (.getDocumentCatalog ^PDDocument doc))]
+        (is (or (nil? nomes) (nil? (.getEmbeddedFiles nomes)))
+            "nenhum arquivo embutido pode existir no PDF da folha — o anexo e' o caminho que carrega o relogio da maquina para dentro do artefato congelado")))))
+
+;; ---------- observabilidade: o log PROPRIO do openhtmltopdf nao pode escapar do logback ----------
+;; `com.openhtmltopdf.util.XRLog` e' o canal de log historico do Flying Saucer, em `java.util.logging` —
+;; INDEPENDENTE do SLF4J que o PDFBox 3.x ja' fala. Sem redirecionamento ele escreve linhas cruas
+;; (`com.openhtmltopdf.general INFO:: Using fast-mode renderer. Prepare to fly.`) fora do pattern do logback
+;; e ignorando o nivel WARN do root — Inv.7 furado em TODO render. Pior: e' por esse canal que sai o
+;; WARNING de recurso externo recusado, o sinal de seguranca dos testes acima.
+(deftest log-do-openhtmltopdf-e-roteado-para-o-logging-da-aplicacao
+  (pdf/renderizador-pdf)
+  (let [impl (class (XRLog/getLoggerImpl))]
+    (is (not (str/starts-with? (.getName impl) "com.openhtmltopdf"))
+        (str "o XRLogger instalado ainda e' o default da biblioteca (" (.getName impl)
+             ") — o log do openhtmltopdf esta' saindo pelo java.util.logging cru, fora do logback"))))
