@@ -191,10 +191,8 @@
         roster-da-casa-fn (fn [ente-id data] (repo-cadastros-comp/roster-da-casa repo-cadastros ente-id data))
         ;; Etapa 6 fatia 1: o LOTE de `roster-da-casa-fn` para VARIAS datas — irmao LITERAL, mesma inversao
         ;; de dependencia sobre `cadastros` (sessoes nunca importa cadastros, §22.10), aridade levando
-        ;; `datas` pelo MESMO motivo (nunca fechar 'hoje' aqui dentro). Sem consumidor nesta fatia — a
-        ;; apuracao de assiduidade (Etapa 6 fatia 2) e' quem chama; a chave chega pronta desde ja' porque
-        ;; `sessoes-http/rotas` ja tolera chave extra num mapa nao-closed (mesmo padrao de `dados-da-casa`
-        ;; na Etapa 5 fatia 1).
+        ;; `datas` pelo MESMO motivo (nunca fechar 'hoje' aqui dentro). Consumido por
+        ;; `controllers/apurar-assiduidade` (Etapa 6 fatia 2) via a rota `GET /assiduidade` (Etapa 6 fatia 3).
         roster-da-casa-em-datas-fn (fn [ente-id datas]
                                      (repo-cadastros-comp/roster-da-casa-em-datas repo-cadastros ente-id datas))
         ;; Etapa 5 fatia 1: o cabecalho da FOLHA (nome/legislatura da Casa) — seam irmao LITERAL de
@@ -306,9 +304,9 @@
         (into (sessoes-http/rotas {:auth auth :repo-sessoes repo-sessoes :objeto-store objeto-store
                                    :resolver-vereador resolver-vereador-fn :relogio relogio-producao
                                    :roster-da-casa roster-da-casa-fn
-                                   ;; Etapa 6 fatia 1: `roster-da-casa-em-datas-fn` chega pronto para a
-                                   ;; Fatia 2 (a apuracao de assiduidade) fiar o roster do periodo — sem
-                                   ;; rota nova nesta fatia, chave extra e' inocua (ver comentario acima).
+                                   ;; Etapa 6 fatia 1: `roster-da-casa-em-datas-fn` fia o roster do periodo
+                                   ;; para `controllers/apurar-assiduidade`, exposta pela rota `GET
+                                   ;; /assiduidade` (Etapa 6 fatia 3).
                                    :roster-da-casa-em-datas roster-da-casa-em-datas-fn
                                    ;; Etapa 5 fatia 1: `dados-da-casa-fn` chega pronto para a Fatia 5 (as
                                    ;; rotas HTTP da folha) fiar o cabecalho — sem rota nova nesta fatia,

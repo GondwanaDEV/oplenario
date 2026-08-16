@@ -62,7 +62,15 @@
    ;; Etapa 5 fatia 5 — a FOLHA DA SESSAO. FolhaMetadadosOut ANTES de FolhasDaSessaoOut (campo :folhas
    ;; aninhado), mesmo racional de PautaItemOut/PautaOut e SegmentoOut/SegmentosOut acima.
    ["FolhaMetadadosOut" out/FolhaMetadadosOut]
-   ["FolhasDaSessaoOut" out/FolhasDaSessaoOut]])
+   ["FolhasDaSessaoOut" out/FolhasDaSessaoOut]
+   ;; Etapa 6 fatia 3 — a APURACAO DE ASSIDUIDADE. As quatro folhas ANTES de AssiduidadeOut (campos
+   ;; :sessoes/:vereadores/:por-vereador/:detalhe/:totais aninhados), mesmo racional de PautaItemOut/PautaOut.
+   ["AssiduidadeSessaoOut" out/AssiduidadeSessaoOut]
+   ["AssiduidadeVereadorOut" out/AssiduidadeVereadorOut]
+   ["AssiduidadePorVereadorOut" out/AssiduidadePorVereadorOut]
+   ["AssiduidadeDetalheLinhaOut" out/AssiduidadeDetalheLinhaOut]
+   ["AssiduidadeTotaisOut" out/AssiduidadeTotaisOut]
+   ["AssiduidadeOut" out/AssiduidadeOut]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))
 
