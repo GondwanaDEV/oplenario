@@ -236,14 +236,6 @@
                 [[:= :sessao_id sessao-id] [:<= :ocorrido_em instante]])
    :order-by (into [[:vereador_id :asc]] ordem-ultimo-evento)})
 
-(def projecao-ultimo-evento-lote-padrao
-  "Projecao default do LOTE multi-sessao (irma de `projecao-ultimo-evento-padrao`): inclui
-  `:presenca_evento.sessao_id` QUALIFICADO — a tabela VALUES do lote (`ultimos-eventos-por-sessao-e-
-  vereador-q`) tambem tem uma coluna `sessao_id`, e sem qualificar o SELECT fica ambiguo para o Postgres.
-  O agrupador a jusante (`db/presenca/presencas-correntes-das-sessoes`) precisa desta coluna para saber de
-  qual sessao cada linha e' — o singular nao precisa, porque so' ha uma sessao por consulta."
-  [:presenca_evento.sessao_id :vereador_id :tipo :modalidade])
-
 (defn ultimos-eventos-por-sessao-e-vereador-q
   "Subquery (mapa HoneySQL puro): a IRMA MULTI-SESSAO de `ultimos-eventos-por-vereador-q` — o ULTIMO evento
   por (sessao, vereador), para um LOTE de sessoes de UMA VEZ, cada sessao com o SEU PROPRIO instante de
@@ -251,28 +243,56 @@
   do periodo fabricaria presenca — um evento gravado depois do fechamento de uma sessao mudaria a apuracao
   de OUTRA sessao que fechou depois).
 
-  `:sessoes-e-instantes` = colecao de pares `[sessao-id instante]`, materializada como tabela VALUES
-  `(VALUES (s1,i1), (s2,i2), ...) AS si(sessao_id, instante)` e JOINADA (nao LATERAL — a correlacao e' uma
-  igualdade simples de `sessao_id`, sem subquery por linha) contra `presenca_evento` pelas DUAS condicoes
-  `sessao_id = si.sessao_id AND ocorrido_em <= si.instante`.
+  A FORMA: `CROSS JOIN LATERAL` **chamando `ultimos-eventos-por-vereador-q`** — a query singular, tal e
+  qual, uma vez por linha da tabela VALUES `si(sessao_id, instante)`. Ou seja: o lote nao TRANSCREVE a
+  consulta singular com um particionador a mais; ele a INVOCA. E' o I2 na sua forma mais forte — nao existe
+  uma segunda redacao do `DISTINCT ON` nem da `ordem-ultimo-evento` para divergir da primeira.
 
-  REUSA LITERALMENTE `ordem-ultimo-evento` — OBRIGATORIO (I2 do brief): nunca redigitar a ordem de
-  desempate, foi o defeito que a fatia 1a da Etapa 1 matou (a TELA anunciava um quorum e a POLICY usava
-  outro na MESMA sessao). `DISTINCT ON (sessao_id, vereador_id)` particiona por sessao E vereador; o
-  `:order-by` antepoe os DOIS particionadores a `ordem-ultimo-evento`, exatamente como o singular antepoe
-  so' `vereador_id`. Para UMA sessao so' (lote de tamanho 1), a sequencia produzida e' IDENTICA a' de
-  `ultimos-eventos-por-vereador-q` para aquela sessao — e' o teste-ancora desta funcao.
+  POR QUE NAO O JOIN PLANO (a forma commitada em f1ef7c4, trocada na revisao). O `DISTINCT ON (sessao_id,
+  vereador_id)` exigia um `ORDER BY` global comecando por `sessao_id`; nenhum indice pode servi-lo, porque a
+  ordem tem de sair do JOIN com uma tabela VALUES, e o `Values Scan` nao tem pathkey — o planner nao propaga
+  a ordem do indice atraves do nested loop. Resultado MEDIDO nesta maquina (`oplenario-postgres-1`, PG 16,
+  1.897.248 eventos / 400 sessoes / 21 vereadores / `work_mem` 4MB, papel `oplenario_app` com RLS, dado
+  sintetico em tx com ROLLBACK):
 
-  `:ente-id` opcional, MESMO contrato do singular (defense-in-depth; a RLS ja isola por tenant).
-  `:projecao` default = `projecao-ultimo-evento-lote-padrao`."
+    | forma            | plano                          | Sort                       | Execution |
+    |------------------|--------------------------------|----------------------------|-----------|
+    | JOIN plano (1a)  | Parallel Seq Scan + Hash Join  | external merge Disk 15.544 kB | 470,1 ms |
+    | JOIN plano (2a)  | Nested Loop + Index Scan       | external merge Disk 43.728 kB | 1.525,2 ms |
+    | LATERAL (1a)     | Nested Loop + Index Scan       | NENHUM (zero temp)         | 490,8 ms  |
+    | LATERAL (2a)     | Nested Loop + Index Scan       | NENHUM (zero temp)         | 559,0 ms  |
+
+  O ganho medido NAO e' de tempo — e' de ESTABILIDADE e de memoria: a forma antiga derrama dezenas de MB em
+  disco por request e escolhe planos radicalmente diferentes para a MESMA query (470 ms num run, 1.525 ms no
+  seguinte, sem nada mudar alem dos uuids sinteticos); a forma LATERAL nunca ordena e nunca derrama. Num
+  processo com pool de 10 conexoes e SEM `statement_timeout` (carry de infra conhecido), plano instavel e'
+  o que transforma uma leitura de relatorio em conexao presa durante a sessao ao vivo.
+
+  Os CASTs explicitos da tabela VALUES (`[:cast sid :uuid]`, `[:cast inst :timestamptz]`) sao obrigatorios,
+  nao cosmeticos: sem OID declarado o Postgres resolve as colunas da VALUES como `text` e a query nem
+  PLANEJA (`operator does not exist: uuid = text`). Hoje isso funcionava por carona do type-mapping do
+  driver; declarar o tipo aqui e' o que torna a subquery correta por si.
+
+  `:sessoes-e-instantes` = colecao de pares `[sessao-id instante]`.
+  `:ente-id` opcional, MESMO contrato do singular (defense-in-depth; a RLS ja isola por tenant) — repassado
+  INTACTO a' subquery singular.
+  `:projecao` = as colunas da subquery SINGULAR (sem `sessao_id`: ele vem do lado de fora, de `si`); default
+  = `projecao-ultimo-evento-padrao`.
+
+  SEM `ORDER BY` externo, de proposito: era ele o Sort. As linhas saem agrupadas por sessao (a ordem do
+  `Values Scan`) e, dentro de cada sessao, por `vereador_id` (o `DISTINCT ON` da subquery) — que e'
+  exatamente a mesma sequencia que o singular devolve para uma sessao. O consumidor
+  (`db/presenca/presencas-correntes-das-sessoes`) faz `group-by :sessao-id` e nao depende de ordem global."
   [{:keys [sessoes-e-instantes ente-id projecao]}]
-  {:select-distinct-on (into [[:presenca_evento.sessao_id :vereador_id]]
-                             (or projecao projecao-ultimo-evento-lote-padrao))
-   :from [:sessoes.presenca_evento]
-   :join [[{:values (mapv (fn [[sid inst]] [sid inst]) sessoes-e-instantes)} [[:si :sessao_id :instante]]]
-          [:and [:= :presenca_evento.sessao_id :si.sessao_id] [:<= :presenca_evento.ocorrido_em :si.instante]]]
-   :where (if (some? ente-id) [:and [:= :presenca_evento.ente_id ente-id]] [:and])
-   :order-by (into [[:presenca_evento.sessao_id :asc] [:vereador_id :asc]] ordem-ultimo-evento)})
+  {:select (into [:si.sessao_id] (map #(keyword (str "u." (name %)))) (or projecao projecao-ultimo-evento-padrao))
+   :from [[{:values (mapv (fn [[sid inst]] [[:cast sid :uuid] [:cast inst :timestamptz]])
+                          sessoes-e-instantes)}
+           [[:si :sessao_id :instante]]]]
+   :join [[[:lateral (ultimos-eventos-por-vereador-q
+                      {:sessao-id :si.sessao_id :instante :si.instante
+                       :ente-id ente-id :projecao projecao})]
+           :u]
+          true]})
 
 (defn presente-por-tipo?
   "O vereador esta presente se o tipo do seu ultimo evento e' positivo (entrada/retorno/mudanca_modalidade)?"
@@ -1018,6 +1038,28 @@
   sessoes'). Pior caso teorico do produto: 400 sessoes x 150 vereadores no roster do periodo (54.900 linhas
   de detalhe); na Casa real e' ~200 sessoes x ~21 vereadores. O teto e' o guard-rail, nao a expectativa."
   400)
+
+(def teto-de-vereadores-do-periodo-de-assiduidade
+  "Vereadores no roster do periodo (brief da Etapa 6, §Tetos) — o MESMO 150 que `cadastros.db.vereador/
+  teto-de-linhas-lote` usa como multiplicador. Fica aqui nomeado (e nao como literal solto) porque e' o
+  fator dos tetos de LINHA das leituras em lote de presenca, abaixo."
+  150)
+
+(def teto-de-linhas-de-lote-de-presenca
+  "Teto de LINHAS que as leituras em lote de `db/presenca` (`presencas-correntes-das-sessoes`,
+  `justificativas-das-sessoes`) aceitam materializar na JVM: 400 sessoes x 150 vereadores = 60.000.
+
+  NAO e' redundante com o teto de SESSOES, e a razao e' concreta: `presenca_evento.vereador_id` **nao tem
+  FK** e a escrita nao valida mandato (ver `derivar-linha-sem-assento`), entao o `DISTINCT ON` e' limitado
+  pelos `vereador_id` DISTINTOS que aparecem nos EVENTOS — nao pelos 150 do roster. Um acervo migrado sujo
+  com 3.000 ids distintos produz 400 x 3.000 = 1,2 MILHAO de linhas materializadas por request. Sem
+  `statement_timeout` (carry de infra) e com pool de 10, dois ou tres requests desses derrubam o processo
+  para TODOS os tenants — inclusive a sessao ao vivo, que e' o SLA que o produto vende.
+
+  Aplicado como na fatia 1: `:max-rows` = teto+1 (o driver PARA de materializar no primeiro excedente) +
+  rejeicao fail-closed `:limite/linhas-excedido` com `:medido-ao-menos` (a medicao e' um PISO), nunca pagina
+  truncada (I7)."
+  (* teto-de-sessoes-do-periodo-de-assiduidade teto-de-vereadores-do-periodo-de-assiduidade))
 
 (defn validar-periodo-assiduidade!
   "Fail-closed, chamado em DOIS lugares de proposito (mesma REDE de `vereador/normalizar-datas!`): no

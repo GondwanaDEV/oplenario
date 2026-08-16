@@ -11,27 +11,38 @@
 
 ;; ---------- a subquery em LOTE — estrutura (o dado real e' pinado na integracao) ----------
 
-(deftest ultimos-eventos-por-sessao-e-vereador-q-reusa-a-ordem-canonica
+(deftest ultimos-eventos-por-sessao-e-vereador-q-INVOCA-a-query-singular
   (let [s1 (random-uuid) s2 (random-uuid)
         i1 (Instant/parse "2026-06-20T10:00:00Z") i2 (Instant/parse "2026-06-21T10:00:00Z")
         ente (random-uuid)
         sem (logic/ultimos-eventos-por-sessao-e-vereador-q {:sessoes-e-instantes [[s1 i1] [s2 i2]]})
-        com (logic/ultimos-eventos-por-sessao-e-vereador-q {:sessoes-e-instantes [[s1 i1] [s2 i2]] :ente-id ente})]
-    (testing "DISTINCT ON particiona por (sessao, vereador) — os DOIS antepostos a ordem-ultimo-evento LITERAL"
-      (is (= [[:presenca_evento.sessao_id :vereador_id] :presenca_evento.sessao_id :vereador_id :tipo :modalidade]
-             (:select-distinct-on sem))))
-    (testing "order-by = os DOIS particionadores + ordem-ultimo-evento, NAO redigitada"
-      (is (= (into [[:presenca_evento.sessao_id :asc] [:vereador_id :asc]] logic/ordem-ultimo-evento)
-             (:order-by sem)))
-      (is (= (:order-by sem) (:order-by com)) "ente-id NUNCA muda a ordem — so' aperta o WHERE"))
-    (testing "ente-id opcional so' aperta o WHERE (defense-in-depth sob a mesma RLS)"
-      (is (= [:and] (:where sem)))
-      (is (= [:and [:= :presenca_evento.ente_id ente]] (:where com))))
-    (testing "projecao explicita substitui o default (mesmo contrato do singular)"
-      (is (= [[:presenca_evento.sessao_id :vereador_id] :presenca_evento.sessao_id :vereador_id :fonte]
-             (:select-distinct-on
-              (logic/ultimos-eventos-por-sessao-e-vereador-q
-               {:sessoes-e-instantes [[s1 i1]] :projecao [:presenca_evento.sessao_id :vereador_id :fonte]})))))))
+        com (logic/ultimos-eventos-por-sessao-e-vereador-q {:sessoes-e-instantes [[s1 i1] [s2 i2]] :ente-id ente})
+        lateral-de (fn [q] (second (first (first (:join q)))))]
+    (testing "o LATERAL e' LITERALMENTE `ultimos-eventos-por-vereador-q` — nao uma transcricao dela (I2)"
+      (is (= [:lateral (logic/ultimos-eventos-por-vereador-q
+                        {:sessao-id :si.sessao_id :instante :si.instante})]
+             (first (first (:join sem)))))
+      (is (= [:lateral (logic/ultimos-eventos-por-vereador-q
+                        {:sessao-id :si.sessao_id :instante :si.instante :ente-id ente})]
+             (first (first (:join com))))
+          "ente-id atravessa INTACTO para a subquery singular"))
+    (testing "NENHUM order-by externo — era ele o Sort que derramava dezenas de MB em disco"
+      (is (nil? (:order-by sem)))
+      (is (nil? (:select-distinct-on sem)) "o DISTINCT ON mora na subquery singular, nao aqui"))
+    (testing "a tabela VALUES declara os OIDs — sem cast o Postgres resolve as colunas como text"
+      (is (= [[[:cast s1 :uuid] [:cast i1 :timestamptz]]
+              [[:cast s2 :uuid] [:cast i2 :timestamptz]]]
+             (:values (first (first (:from sem)))))))
+    (testing "o SELECT externo traz sessao_id de `si` + a projecao da subquery, qualificada por `u`"
+      (is (= [:si.sessao_id :u.vereador_id :u.tipo :u.modalidade] (:select sem)))
+      (is (= [:si.sessao_id :u.vereador_id :u.fonte]
+             (:select (logic/ultimos-eventos-por-sessao-e-vereador-q
+                       {:sessoes-e-instantes [[s1 i1]] :projecao [:vereador_id :fonte]})))))
+    (testing "a projecao pedida atravessa para a subquery singular"
+      (is (= (logic/ultimos-eventos-por-vereador-q
+              {:sessao-id :si.sessao_id :instante :si.instante :projecao [:vereador_id :fonte]})
+             (lateral-de (logic/ultimos-eventos-por-sessao-e-vereador-q
+                          {:sessoes-e-instantes [[s1 i1]] :projecao [:vereador_id :fonte]})))))))
 
 ;; ---------- o teto do periodo ----------
 

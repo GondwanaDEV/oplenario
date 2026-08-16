@@ -146,13 +146,19 @@
   [tx ente-id sessoes-com-instante]
   (if (empty? sessoes-com-instante)
     {}
-    (let [linhas (comum/linhas->kebab
+    (let [teto logic/teto-de-linhas-de-lote-de-presenca
+          linhas (comum/linhas->kebab
                   (jdbc/execute! tx
                     (sql/format (logic/ultimos-eventos-por-sessao-e-vereador-q
                                  {:sessoes-e-instantes sessoes-com-instante :ente-id ente-id
-                                  :projecao [:presenca_evento.sessao_id :vereador_id :tipo :modalidade :fonte
-                                             :ocorrido_em :registrado_em]}))))
+                                  :projecao [:vereador_id :tipo :modalidade :fonte
+                                             :ocorrido_em :registrado_em]}))
+                    {:max-rows (inc teto)}))
           por-sessao (group-by :sessao-id linhas)]
+      (when (> (count linhas) teto)
+        (throw (ex-info "lote de presenca do periodo acima do teto de linhas"
+                        {:tipo :limite/linhas-excedido :medido-ao-menos (count linhas) :teto teto
+                         :sessoes (count sessoes-com-instante)})))
       (into {} (map (fn [[sid _]] [sid (get por-sessao sid [])])) sessoes-com-instante))))
 
 (defn justificativas-das-sessoes
