@@ -193,6 +193,34 @@
     (is (= 400 (:status (pt/response-for svc :get (url :tipos "ordinaria,tipo-que-nao-existe") :headers auth)))
         "o achado que 3 revisores da fatia 2 pegaram: NUNCA 200 com a apuracao em branco")))
 
+(deftest param-REPETIDO-e-400-nos-CINCO-nunca-500-opaco
+  ;; MEDIDO na revisao adversarial: `route/parse-query-string` devolve VETOR quando o param se repete, e
+  ;; `str/blank?` sobre vetor estourava ClassCastException -> 500 `{"erro":"erro interno"}` + stack no log.
+  ;; `?tipos=ordinaria&tipos=secreta` e' a convencao PADRAO de multivalor (`URLSearchParams.append`) — a Onda
+  ;; E vai montar exatamente esse link.
+  (let [ente (random-uuid)
+        svc (service-fn* #{"secretario"} (fake-repo-sessoes {}) (fake-repo-cadastros {}))
+        auth (com-auth (token ente (random-uuid)))]
+    (doseq [[campo u] [[:de      "/assiduidade?de=2026-01-01&de=2026-02-01&ate=2026-01-31"]
+                       [:ate     "/assiduidade?de=2026-01-01&ate=2026-01-31&ate=2026-02-28"]
+                       [:tipos   "/assiduidade?de=2026-01-01&ate=2026-01-31&tipos=ordinaria&tipos=secreta"]
+                       [:formato "/assiduidade?de=2026-01-01&ate=2026-01-31&formato=json&formato=csv"]
+                       [:recorte "/assiduidade?de=2026-01-01&ate=2026-01-31&recorte=resumo&recorte=detalhe"]]]
+      (let [r (pt/response-for svc :get u :headers auth)]
+        (is (= 400 (:status r)) (str campo " repetido -> 400, nunca 500 opaco"))))))
+
+(deftest tipos-degenerado-400-nunca-200-com-o-recorte-ALARGADO
+  ;; `?tipos=,` caia em lista vazia -> nil -> TODOS os tipos, sessao `secreta` inclusive, com HTTP 200: o
+  ;; defeito da Fatia 2 com o sinal invertido (filtro malformado -> resultado MAIS AMPLO que o pedido).
+  (let [ente (random-uuid)
+        repo-s (fake-repo-sessoes {:assiduidade-fn (assiduidade-fixture ente)})
+        repo-c (fake-repo-cadastros {:roster-lote-fn (roster-lote-fixture ente)})
+        svc (service-fn* #{"secretario"} repo-s repo-c)
+        auth (com-auth (token ente (random-uuid)))]
+    (doseq [t ["," ",,," "%20,%20"]]
+      (is (= 400 (:status (pt/response-for svc :get (url :tipos t) :headers auth)))
+          (str "tipos=" t " -> 400")))))
+
 (deftest formato-desconhecido-400
   (let [ente (random-uuid)
         svc (service-fn* #{"secretario"} (fake-repo-sessoes {}) (fake-repo-cadastros {}))
@@ -229,6 +257,10 @@
     (is (= "text/csv; charset=utf-8" (get-in r [:headers "Content-Type"])))
     (is (re-find #"attachment; filename=\"assiduidade-2026-01-01-a-2026-01-31-detalhe\.csv\""
                  (get-in r [:headers "Content-Disposition"])))
+    (is (= "sandbox allow-downloads; default-src 'none'"
+           (get-in r [:headers "Content-Security-Policy"]))
+        "CSP RESTRITIVO sobrepondo o default do Pedestal (que libera script-src 'unsafe-inline'/'unsafe-eval')
+         — a mesma correcao que a revisao adversarial da Etapa 5 obrigou na folha")
     (is (str/includes? (str (:body r)) "sessao-sigilosa")
         "a coluna de sigilo esta' no corpo do CSV servido pela rota real")
     (is (str/includes? (str (:body r)) "Ana Pereira"))))
