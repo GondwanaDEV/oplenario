@@ -274,7 +274,7 @@
 
 ;; ---------- 2 · identificacao do documento ----------
 
-(defn- identificacao-html [{:keys [spec-versao sessao instante]}]
+(defn- identificacao-html [{:keys [spec-versao sessao instante]} versao]
   (let [id-curto (subs (str (:id sessao)) 0 8)]
     (str "<h1 class=\"folha-titulo\">Folha de presença</h1>"
          "<table class=\"folha-carimbo-tabela\"><tr>"
@@ -286,7 +286,9 @@
          ;; o MESMO dado, e um valor tratado como seguro-por-tipo num lugar e escapado no outro e' o tipo de
          ;; heterogeneidade que sobrevive a um refactor que troque `:id` por algo menos garantido que `:uuid`.
          "Sessão " (esc id-curto) " · spec " (esc spec-versao) " · presença apurada em " (esc (fmt-data-hora instante))
-         " · versão numerada atribuída no ato de congelamento desta folha"
+         (if versao
+           (str " · versão " (esc versao) " deste congelamento")
+           " · versão numerada atribuída no ato de congelamento desta folha")
          "</div>")))
 
 ;; ---------- 3 · a sessao ----------
@@ -438,12 +440,14 @@
 
 ;; ---------- 12 · registro de congelamento ----------
 
-(defn- congelamento-html [{:keys [spec-versao sessao]}]
+(defn- congelamento-html [{:keys [spec-versao sessao]} versao]
   (str "<div class=\"folha-congelamento\">"
        "<h2 class=\"folha-secao-titulo\" style=\"margin-top:0;\">10 · REGISTRO DE CONGELAMENTO</h2>"
        "<div class=\"campo\"><span class=\"rotulo\">Especificação: </span><span class=\"valor\">" (esc spec-versao) "</span></div>"
        "<div class=\"campo\"><span class=\"rotulo\">Sessão: </span><span class=\"valor\">" (esc (subs (str (:id sessao)) 0 8)) "</span></div>"
-       "<div class=\"campo\"><span class=\"rotulo\">Versão: </span><span class=\"valor\">atribuída no ato de congelamento — não existe nesta pré-visualização</span></div>"
+       "<div class=\"campo\"><span class=\"rotulo\">Versão: </span><span class=\"valor\">"
+       (if versao (esc versao) "atribuída no ato de congelamento — não existe nesta pré-visualização")
+       "</span></div>"
        "<div class=\"folha-secao-texto\" style=\"margin-top:2mm;\">Os hashes SHA-256 desta folha — o do arquivo HTML e o do PDF — ficam no registro de congelamento da Casa, sob a versão acima. Um arquivo cujo hash não bater com esse registro não é esta folha<sup class=\"chamada-nota\">7</sup>.</div>"
        "</div>"))
 
@@ -474,10 +478,11 @@
 (defn- css-inline []
   (slurp (io/resource "folha/folha.css")))
 
-(defn- corpo-html [{:keys [cabecalho-da-casa linhas quorum serie justificativas atos-de-chamada-conduzida] :as documento}]
+(defn- corpo-html
+  [{:keys [cabecalho-da-casa linhas quorum serie justificativas atos-de-chamada-conduzida] :as documento} versao]
   (let [{:keys [nominal licenciados sem-assento]} (particionar-linhas linhas)]
     (str (cabecalho-casa-html cabecalho-da-casa)
-         (identificacao-html documento)
+         (identificacao-html documento versao)
          (sessao-html documento)
          (quorum-html quorum)
          (atos-html atos-de-chamada-conduzida)
@@ -487,11 +492,11 @@
          (movimentacoes-html linhas serie)
          (justificativas-html linhas justificativas)
          conferencia-html
-         (congelamento-html documento)
+         (congelamento-html documento versao)
          notas-html
          emissao-html)))
 
-(defn- documento-html [documento]
+(defn- documento-html [documento versao]
   ;; DOCTYPE em MAIUSCULAS — medido contra a fonte na Fatia 3 (PDF): openhtmltopdf-core usa parser XML
   ;; estrito p/ `withHtmlContent`, e "<!doctype html>" em minusculas produz SAXParseException ("markup ...
   ;; preceding the root element must be well-formed"); "<!DOCTYPE html>" e' aceito pelos DOIS caminhos —
@@ -503,23 +508,36 @@
        "<title>Folha de presença</title>"
        "<style>" (css-inline) "</style>"
        "</head>"
-       "<body>" (corpo-html documento) "</body>"
+       "<body>" (corpo-html documento versao) "</body>"
        "</html>"))
 
 ;; ---------- o port ----------
 
 (defprotocol SerializadorFolha
-  (serializar [this documento]
+  (serializar [this documento] [this documento versao]
     "Renderiza o `FolhaDocumento` (Malli, Fatia 1) no HTML canonico da folha de presenca. Devolve
      {:bytes <byte-array> :content-type \"text/html; charset=utf-8\"}. DETERMINISTICO: mesma entrada
-     produz bytes identicos — pre-requisito do hash de integridade que a Fatia 4 vai congelar."))
+     produz bytes identicos — pre-requisito do hash de integridade que a Fatia 4 congela.
+
+     ARIDADE 2 vs 3 (Fatia 4, D7 — carry desta docstring escrito na Fatia 2): `documento` (Fatia 1) nunca
+     carrega `:versao` — o numero so' existe depois que `sessoes.controllers/gerar-folha!` o PROPOE (D7: a
+     versao e' decidida ANTES de renderizar, porque a folha IMPRIME a propria versao no papel). A aridade-2
+     (sem `versao`) e' a PRE-VISUALIZACAO (`dev/folha_preview.clj`, o design-system) — imprime o texto
+     generico 'atribuída no ato de congelamento'. A aridade-3 e' o congelamento DE VERDADE: os DOIS pontos
+     que hoje imprimem esse texto generico (identificacao, bloco 2; registro de congelamento, bloco 10)
+     passam a imprimir `versao` — e' a UNICA diferenca de bytes entre a versao N e a versao N+1 da MESMA
+     sessao fechada (cujo :instante nao muda: `instante-de-avaliacao` de uma sessao fechada e' fixo). Sem
+     isto, dois congelamentos do mesmo dado seriam BYTE-IDENTICOS e a versao no papel mentiria."))
+
+(defn- serializar* [documento versao]
+  (let [html (documento-html documento versao)]
+    {:bytes (.getBytes ^String html "UTF-8")
+     :content-type "text/html; charset=utf-8"}))
 
 (defrecord SerializadorFolhaHtml []
   SerializadorFolha
-  (serializar [_ documento]
-    (let [html (documento-html documento)]
-      {:bytes (.getBytes ^String html "UTF-8")
-       :content-type "text/html; charset=utf-8"})))
+  (serializar [_ documento] (serializar* documento nil))
+  (serializar [_ documento versao] (serializar* documento versao)))
 
 (defn serializador-folha-html
   "Cria o adapter SerializadorFolha HTML (sem estado — o host o constroi e injeta, como
