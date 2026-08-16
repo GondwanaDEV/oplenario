@@ -20,6 +20,23 @@
 
 (defn- invalido! [msg info] (throw (ex-info msg (assoc info :tipo :validacao/invalido))))
 
+(defn- ->single
+  "Um query-param do Pedestal e' String (uma ocorrencia) ou VETOR (repetido na URL) — repetido e' AMBIGUO
+  p/ um filtro escalar -> 400 (nunca escolhe 'primeiro/ultimo' em silencio). Ausente -> nil.
+
+  FORMA COPIADA (deliberadamente, com atribuicao) de `legislativo/adapters/in/proposicao/->single`, que ja'
+  carregava esta licao com a mesma docstring. Copiada e nao importada porque `sessoes` NAO pode importar
+  `legislativo` (import-lint §22.10: comunicacao entre modulos so' por HTTP/eventos) — mesma razao pela qual
+  `data-iso-civil` abaixo e' uma segunda redacao da guarda de `cadastros`.
+
+  Sem ela, `str/blank?` recebia o VETOR e estourava `ClassCastException` -> 500 `{\"erro\":\"erro interno\"}`
+  com stack no log — MEDIDO nos 5 params desta rota. E `?tipos=ordinaria&tipos=secreta` nao e' entrada
+  exotica: e' a convencao PADRAO de multivalor (`URLSearchParams.append`), que a Onda E vai montar."
+  [v campo]
+  (cond (nil? v) nil
+        (string? v) v
+        :else (invalido! "parametro repetido" {:campo campo :ocorrencias (count v)})))
+
 (def ^:private data-iso-civil
   "AAAA-MM-DD com QUATRO digitos de ano e sem sinal. Mesma guarda de `cadastros/adapters/in/vereador` (o
   ano ESTENDIDO do ISO, `+10000000-01-01`, parseia sem excecao e so' estoura la' embaixo como PSQLException
@@ -35,13 +52,40 @@
   (try (LocalDate/parse s)
     (catch DateTimeParseException _ (invalido! "data invalida (esperado AAAA-MM-DD)" {:campo campo}))))
 
+(def ^:private teto-de-tipos
+  "Teto de CARDINALIDADE do filtro `tipos` (convencao da casa: teto explicito em todo predicado de
+  cardinalidade aberta). O vocabulario real (`logic/tipos-sessao`) tem 5 entradas; 20 e' folgado o bastante
+  para que um pedido legitimo nunca esbarre nele e apertado o bastante para que
+  `?tipos=ordinaria,ordinaria,...` x800 (cabe numa URL) NAO atravesse ate' a clausula `IN` e ate' o cabecalho
+  do CSV. Aplicado sobre o que o cliente MANDOU (antes do `distinct`), que e' o numero que ele controla — um
+  teto medido depois do `distinct` nunca dispararia para a forma repetida, e guard-rail que nao pode disparar
+  nao e' guard-rail (licao da Fatia 1, teto de datas)."
+  20)
+
 (defn- ->tipos
-  "String separada por virgula -> vetor de strings TRIMADAS, sem elemento em branco; ausente/branco -> nil
-  (= todos os tipos, o default do brief). NAO valida contra o vocabulario (ver docstring do ns)."
-  [s]
+  "String separada por virgula -> vetor de strings TRIMADAS, DISTINTAS e sem elemento em branco;
+  ausente/branco -> nil (= todos os tipos, o default do brief). NAO valida contra o vocabulario (ver
+  docstring do ns).
+
+  STRING PRESENTE QUE PRODUZ LISTA VAZIA E' ERRO, nunca `nil` (achado dos DOIS revisores da Fatia 3):
+  `?tipos=,` / `,,,` / `?tipos=%20,%20` caiam em lista vazia -> `nil` -> TODOS os tipos, sessao `secreta`
+  inclusive, com HTTP 200. E' o defeito da Fatia 2 com o SINAL INVERTIDO — la' o filtro malformado devolvia
+  resultado EM BRANCO; aqui devolve resultado MAIS AMPLO do que foi pedido, num arquivo que sai da Casa. A
+  diferenca entre 'nao mandei filtro' e 'mandei um filtro que nao sobrou nada' tem de ser observavel.
+
+  `distinct` porque o filtro e' um CONJUNTO (o mesmo tipo repetido nao muda o recorte, mas polui a clausula
+  `IN` e a linha `# Tipos de sessao:` do CSV), e teto de cardinalidade (`teto-de-tipos`) antes dele."
+  [s campo]
   (when-not (str/blank? s)
-    (let [ts (into [] (comp (map str/trim) (remove str/blank?)) (str/split s #","))]
-      (when (seq ts) ts))))
+    (let [brutos (str/split s #"," -1)]
+      (when (> (count brutos) teto-de-tipos)
+        (throw (ex-info "filtro `tipos` com cardinalidade acima do teto"
+                        {:tipo :limite/tipos-excedido :campo campo
+                         :medido (count brutos) :teto teto-de-tipos})))
+      (let [ts (into [] (comp (map str/trim) (remove str/blank?) (distinct)) brutos)]
+        (when (empty? ts)
+          (invalido! "filtro `tipos` presente mas sem nenhum tipo" {:campo campo :valor s}))
+        ts))))
 
 (def ^:private formatos-validos #{"json" "csv"})
 (def ^:private recortes-validos #{"resumo" "detalhe"})
@@ -61,11 +105,13 @@
   (`logic/validar-periodo-assiduidade!`, chamado no controller, exige o TIPO antes de qualquer `.isAfter`),
   `:tipos` como vetor de string ou nil."
   [{:keys [de ate tipos]}]
-  {:de (->data! de :de) :ate (->data! ate :ate) :tipos (->tipos tipos)})
+  {:de (->data! (->single de :de) :de)
+   :ate (->data! (->single ate :ate) :ate)
+   :tipos (->tipos (->single tipos :tipos) :tipos)})
 
 (defn query->apresentacao
   "query-params (:formato? :recorte?) -> {:formato :recorte}, keywords (`:json`/`:csv`,
   `:resumo`/`:detalhe`). Puramente uma decisao de SERIALIZACAO do handler — nunca atravessa o controller."
   [{:keys [formato recorte]}]
-  {:formato (keyword (->allowlist! formato formatos-validos "json" "formato"))
-   :recorte (keyword (->allowlist! recorte recortes-validos "resumo" "recorte"))})
+  {:formato (keyword (->allowlist! (->single formato :formato) formatos-validos "json" "formato"))
+   :recorte (keyword (->allowlist! (->single recorte :recorte) recortes-validos "resumo" "recorte"))})
