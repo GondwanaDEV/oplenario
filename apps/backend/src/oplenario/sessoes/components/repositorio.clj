@@ -6,6 +6,7 @@
   (:require [oplenario.kernel.tenancy :as tenancy]
             [oplenario.sessoes.diplomat.producers :as producers]
             [oplenario.sessoes.db.chamada :as chamada]
+            [oplenario.sessoes.db.folha :as db-folha]
             [oplenario.sessoes.db.gravacao :as gravacao]
             [oplenario.sessoes.db.incidente :as incidente]
             [oplenario.sessoes.db.pauta :as pauta]
@@ -61,6 +62,57 @@
      :instante :presencas :justificativas :chamadas-conduzidas}, ou nil se a sessao nao existe neste ente (a
      borda traduz em 404). O roster de `cadastros` NAO entra aqui: e' outro modulo, resolvido por seam no
      host (§22.10).")
+  (folha-da-sessao [this ente-id sessao-id agora]
+    "As leituras da FOLHA (Etapa 5 fatia 1) numa UNICA tx do tenant: tudo o que `chamada-da-sessao` le'
+     MAIS a SERIE de eventos da janela. Devolve {:sessao :instante :presencas :justificativas
+     :chamadas-conduzidas :piso :serie}, ou nil se a sessao nao existe neste ente (404 na borda).
+
+     E' UM METODO SO' — e nao o controller encadeando `chamada-da-sessao` + `buscar-sessao` +
+     `serie-de-eventos-da-sessao` + `listar-justificativas` — porque cada chamada ao Repo abre uma tx NOVA
+     (`transacao` = `tenancy/com-tenant*` = `jdbc/with-transaction`), e leituras em tx diferentes veem
+     snapshots MVCC diferentes. A justificativa de ausencia e' escrita por um ATO APARTADO, deliberadamente
+     SEM gate de estado de sessao (`controllers`, §JUSTIFICATIVA): a Mesa pode decidi-la no meio do request
+     da folha. Em 4 tx, a MESMA justificativa saia 'pendente' na linha derivada (`:linhas`, lida na 1a) e
+     'aprovada' no bloco cru (`:justificativas`, lida na 4a) — o documento formal, que a Fatia 4 congela em
+     PDF, mentindo contra si mesmo. E' o TOCTOU que `chamada-da-sessao` ja' fechou uma vez (o comentario
+     dela descreve o mesmo defeito com presenca) e que a folha reabria pela porta da composicao.
+
+     `:piso` = `logic/piso-da-janela-de-presenca` da sessao lida AQUI (nil quando ela nao tem marco nenhum);
+     `:serie` so' e' lida quando ha' piso — sem janela nao ha' serie, e o controller e' quem decide se isso
+     e' erro (na folha, e'). O teto e' o mesmo `:instante` da chamada.")
+  ;; Etapa 5 fatia 4 (D2/D3/D7/D9) — os CINCO primitivos de persistencia de `sessoes.folha_sessao` (mig 0073).
+  ;; A ORQUESTRACAO (compoe o documento via `folha-da-sessao` acima + os ports de serializacao + o LACO de
+  ;; retry de D7) mora em `sessoes.controllers/gerar-folha!`, NAO aqui: ela precisa da COMPOSICAO com o
+  ;; roster (seam cross-modulo, §22.10) que so' o controller resolve, e RENDERIZAR entre uma leitura e uma
+  ;; escrita nao pode acontecer dentro de uma UNICA tx deste Repo (prenderia o pool durante a renderizacao do
+  ;; PDF — exatamente o que D7 rejeita como alternativa a `SELECT ... FOR UPDATE`). Este metodo continua
+  ;; sendo o dono do formato dos DADOS (a tabela, o schema das linhas); a ORDEM das chamadas e' do chamador.
+  (max-versao-da-folha [this ente-id sessao-id]
+    "A maior versao ja' congelada de (ente, sessao), ou 0 (nunca congelada) — D7: o CHAMADOR le' isto ANTES
+     de renderizar, propoe `(inc max)` como a versao a imprimir no papel.")
+  (inserir-folha! [this ente-id row]
+    "Insere a linha do congelamento com a versao EXPLICITA que `row` traz (D7 — nao MAX+1 no proprio INSERT).
+     `UNIQUE (ente_id, sessao_id, versao)` detecta a corrida: 23505 sob duas propostas concorrentes para o
+     MESMO numero. O chamador re-tenta (rele o max, re-renderiza, re-propoe). Devolve a linha inserida.
+     ESCRITA CRUA, sem dedup — o caminho de producao e' `inserir-folha-dedup!`; este fica para semear e para
+     escritor que NAO representa um pedido de ator (o competidor dos testes de corrida).")
+  (inserir-folha-dedup! [this ente-id row desde]
+    "O INSERT de D7 com a checagem de D9 DENTRO DA MESMA tx (revisao adversarial da fatia 4): le'
+     `recente-do-ator` e, se ja' existe folha desta (sessao, ator) a partir de `desde`, devolve-a com
+     `:ja-congelada true` em vez de inserir; senao insere a versao explicita de `row`.
+
+     Por que a checagem TEM de morar aqui, e nao no controller: o pre-check do controller acontece ANTES da
+     renderizacao (HTML+PDF, I/O lento), entao dois pedidos CONCORRENTES do MESMO ator — o duplo-clique que
+     D9 nomeia como motivacao — liam ambos `nil` e ambos congelavam; o `UNIQUE` resolvia so' o NUMERO (v1 e
+     v2), e o acervo ficava com DUAS linhas imutaveis do mesmo clique. Com a checagem aqui, o perdedor da
+     corrida ou ja' enxerga a linha commitada (dedup), ou colide em 23505 e, no retry (tx nova), enxerga —
+     nos DOIS caminhos converge para uma linha so'. E' o MESMO desenho de `registrar-chamada-conduzida!`:
+     check-then-act de append-only vive dentro da tx que escreve, nunca fora dela.")
+  (buscar-folha [this ente-id sessao-id versao] "Uma versao especifica da folha (metadados), ou nil.")
+  (folhas-da-sessao [this ente-id sessao-id] "Todas as versoes congeladas da sessao, mais recente primeiro.")
+  (folha-recente-do-ator [this ente-id sessao-id gerada-por desde]
+    "A folha mais recente gerada por `gerada-por` para esta sessao a partir de `desde`, ou nil — D9: o
+     insumo da deduplicacao de 30s (mesmo desenho de `chamada/ato-recente-do-ator`).")
   (registrar-chamada-conduzida! [this ente-id m]
     "Registra o ATO de chamada conduzida (Etapa 2d): o MESMO gate de estado+janela de `registrar-presenca!`
      roda DENTRO desta tx, sobre a sessao lida AQUI com `FOR SHARE` — nao sobre a leitura de authz do
@@ -259,6 +311,47 @@
              ;; nao muda de significado; e' `:chamadas-conduzidas` que desambigua "ninguem chamou" de "a
              ;; chamada aconteceu e todos faltaram".
              :chamadas-conduzidas (chamada/listar-da-sessao tx ente-id sessao-id)})))))
+  ;; A FOLHA (Etapa 5 fatia 1) — a MESMA tx unica de `chamada-da-sessao`, mais a SERIE. Nao delega a
+  ;; `chamada-da-sessao` porque delegar abriria uma SEGUNDA tx: o que este metodo existe para impedir e' o
+  ;; documento composto de snapshots diferentes (ver a docstring no protocolo). Toda leitura da folha esta
+  ;; DENTRO deste `fn [tx]`, e nenhuma linha do controller volta ao banco depois.
+  (folha-da-sessao [this ente-id sessao-id agora]
+    (transacao this ente-id
+      (fn [tx]
+        (when-let [s (sessao/buscar tx ente-id sessao-id)]
+          (let [instante (logic/instante-de-avaliacao s agora)
+                piso     (logic/piso-da-janela-de-presenca s)]
+            {:sessao s
+             :instante instante
+             :presencas (presenca/presenca-corrente tx ente-id sessao-id instante)
+             :justificativas (presenca/listar-justificativas-da-sessao tx ente-id sessao-id)
+             :chamadas-conduzidas (chamada/listar-da-sessao tx ente-id sessao-id)
+             :piso piso
+             ;; a janela e' [piso, instante] — o MESMO teto que a presenca corrente acima usou, para a serie
+             ;; nunca mostrar um evento que a linha derivada nao viu.
+             :serie (when piso (presenca/serie-de-eventos-da-sessao tx ente-id sessao-id piso instante))})))))
+  ;; Etapa 5 fatia 4 (D2/D3/D7/D9) — os primitivos de `sessoes.folha_sessao`. Cada um e' UMA tx propria (nao
+  ;; ha' uma UNICA tx envolvendo leitura+renderizacao+escrita — D7 rejeita explicitamente segurar um lock
+  ;; durante a renderizacao do PDF): `max-versao-da-folha` le', o chamador renderiza FORA de qualquer tx, e
+  ;; `inserir-folha!` escreve numa tx nova; se colidir (23505), o chamador re-tenta as tres etapas.
+  (max-versao-da-folha [this ente-id sessao-id]
+    (transacao this ente-id #(db-folha/max-versao % ente-id sessao-id)))
+  (inserir-folha! [this ente-id row]
+    (transacao this ente-id #(db-folha/inserir! % (assoc row :ente-id ente-id))))
+  (inserir-folha-dedup! [this ente-id {:keys [sessao-id gerada-por] :as row} desde]
+    (transacao this ente-id
+      (fn [tx]
+        ;; D9 DENTRO da tx da escrita — a leitura e o INSERT sao o MESMO ato, e nao dois separados por uma
+        ;; renderizacao (que e' o que abria a janela do duplo-clique concorrente).
+        (if-let [existente (db-folha/recente-do-ator tx ente-id sessao-id gerada-por desde)]
+          (assoc existente :ja-congelada true)
+          (db-folha/inserir! tx (assoc row :ente-id ente-id))))))
+  (buscar-folha [this ente-id sessao-id versao]
+    (transacao this ente-id #(db-folha/buscar % ente-id sessao-id versao)))
+  (folhas-da-sessao [this ente-id sessao-id]
+    (transacao this ente-id #(db-folha/folhas-da-sessao % ente-id sessao-id)))
+  (folha-recente-do-ator [this ente-id sessao-id gerada-por desde]
+    (transacao this ente-id #(db-folha/recente-do-ator % ente-id sessao-id gerada-por desde)))
   ;; MESMO desenho de `registrar-presenca!` (gate + janela DENTRO da tx, sobre a sessao lida AQUI com `FOR
   ;; SHARE`): conduzir a chamada e' o MESMO tipo de escrita — um fato contra o quorum de uma sessao, que nao
   ;; pode entrar depois que ela fechou. `:conflito/chamada` e' tag PROPRIA (nao reusa

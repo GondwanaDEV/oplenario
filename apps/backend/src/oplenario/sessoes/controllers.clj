@@ -4,12 +4,21 @@
   a traducao da borda fica no diplomat (que chama adapters/in|out). Depende do Repo-Component (e do ObjetoStore
   do kernel, p/ a ingestao de gravacao — kernel e' camada compartilhada, nao outro modulo), nunca do db/
   (§3-bis). O `ator` (resolvido na borda) e' o sujeito de toda operacao (§22.5: sem ator = proibido)."
-  (:require [oplenario.kernel.autorizacao :as authz]
+  (:require [clojure.tools.logging :as log]
+            [malli.core :as m]
+            [oplenario.kernel.autorizacao :as authz]
             [oplenario.kernel.components.objeto-store :as store]
+            [oplenario.kernel.ids :as ids]
             [oplenario.kernel.tempo :as tempo]
+            [oplenario.sessoes.components.renderizador-pdf :as renderizador-pdf]
             [oplenario.sessoes.components.repositorio :as repo]
-            [oplenario.sessoes.logic :as logic])
-  (:import (java.security DigestInputStream MessageDigest)))
+            [oplenario.sessoes.components.serializador-folha :as serializador-folha]
+            [oplenario.sessoes.gerador-folha :as gerador-folha]
+            [oplenario.sessoes.logic :as logic]
+            [oplenario.sessoes.models.folha :as mod-folha])
+  (:import (java.security DigestInputStream MessageDigest)
+           (java.time Instant)
+           (org.postgresql.util PSQLException)))
 
 (set! *warn-on-reflection* true)
 
@@ -565,6 +574,34 @@
                     :decidido-por (:identidade-id ator)})
                  :justificativa-id justificativa-id))))))
 
+(defn- projetar-chamada
+  "PURO. A PROJECAO da chamada a partir dos insumos JA LIDOS (`:sessao :instante :presencas :justificativas
+  :chamadas-conduzidas` — um unico snapshot do Repo) mais o `roster` da data. Nao toca no banco.
+
+  Existe extraida (Etapa 5 fatia 1, revisao) porque DOIS chamadores precisam da MESMA projecao a partir de
+  leituras diferentes: `chamada-da-sessao*` (que le' `repo/chamada-da-sessao`) e `folha-da-sessao` (que le'
+  `repo/folha-da-sessao`, o mesmo mais a serie). A alternativa — a folha CHAMAR `chamada-da-sessao*` e
+  depois voltar ao banco pelo resto — e' justamente o defeito que a revisao achou: cada chamada ao Repo e'
+  uma tx nova, e o documento saia montado de snapshots diferentes. Aqui a projecao viaja; a leitura, nao."
+  [{:keys [sessao instante presencas justificativas chamadas-conduzidas]} roster data agora]
+  ;; A UNIAO (roster + presencas orfas) e a derivacao vem de `logic`, e nao montadas aqui: e' a MESMA funcao
+  ;; que o Repo usa para congelar o denominador no ato de chamada conduzida. Duas montagens da uniao davam
+  ;; dois denominadores para a mesma sessao (revisao MAJOR).
+  (let [linhas (mapv linha-para-o-adapter
+                     (logic/derivar-linhas-da-chamada roster presencas justificativas))]
+    {:sessao-id (:id sessao)
+     :sessao-estado (:estado sessao)
+     :instante instante
+     :data-de-composicao data
+     :composicao-resolvida-em agora
+     :sem-registro-de-presenca (empty? presencas)
+     :linhas linhas
+     :quorum (logic/contar-quorum linhas)
+     ;; Etapa 2d: distingue "ninguem conduziu a chamada ainda" (vazio) de "a chamada aconteceu e a Casa toda
+     ;; faltou" (nao-vazio + `:sem-registro-de-presenca` true) — o read-model de presenca_evento sozinho e'
+     ;; cego a essa diferenca (os dois casos produzem zero linhas nele).
+     :chamadas-conduzidas (vec chamadas-conduzidas)}))
+
 (defn- chamada-da-sessao*
   "O CORPO da chamada, parametrizado pela POLITICA da camada fina — `chamada-da-sessao` (nominal) e
   `quorum-da-sessao` (magra) sao os dois chamadores. Parametrizar a politica existe por corretude: as duas
@@ -600,28 +637,10 @@
   [repo-sessoes roster-da-casa ator sessao-id relogio acao politica]
   (let [ente-id (:ente-id ator)
         agora   (tempo/agora relogio)]
-    (when-let [{:keys [sessao instante presencas justificativas chamadas-conduzidas]}
-               (repo/chamada-da-sessao repo-sessoes ente-id sessao-id agora)]
+    (when-let [{:keys [sessao] :as lido} (repo/chamada-da-sessao repo-sessoes ente-id sessao-id agora)]
       (authz/check! ator acao sessao politica)
-      (let [data   (data-de-referencia sessao)
-            roster (roster-da-casa ente-id data)
-            ;; A UNIAO (roster + presencas orfas) e a derivacao vem de `logic`, e nao mais montadas aqui:
-            ;; e' a MESMA funcao que o Repo usa para congelar o denominador no ato de chamada conduzida.
-            ;; Duas montagens da uniao davam dois denominadores para a mesma sessao (revisao MAJOR).
-            linhas (mapv linha-para-o-adapter
-                         (logic/derivar-linhas-da-chamada roster presencas justificativas))]
-        {:sessao-id sessao-id
-         :sessao-estado (:estado sessao)
-         :instante instante
-         :data-de-composicao data
-         :composicao-resolvida-em agora
-         :sem-registro-de-presenca (empty? presencas)
-         :linhas linhas
-         :quorum (logic/contar-quorum linhas)
-         ;; Etapa 2d: distingue "ninguem conduziu a chamada ainda" (vazio) de "a chamada aconteceu e a Casa
-         ;; toda faltou" (nao-vazio + `:sem-registro-de-presenca` true) — o read-model de presenca_evento
-         ;; sozinho e' cego a essa diferenca (os dois casos produzem zero linhas nele).
-         :chamadas-conduzidas (vec chamadas-conduzidas)}))))
+      (let [data (data-de-referencia sessao)]
+        (projetar-chamada lido (roster-da-casa ente-id data) data agora)))))
 
 (defn chamada-da-sessao
   "A CHAMADA NOMINAL (`GET /sessoes/:id/chamada`, papel 'secretario' na borda) — o corpo inteiro vive em
@@ -691,3 +710,261 @@
                {:id (random-uuid) :sessao-id sessao-id :conduzida-por (:identidade-id ator)
                 :roster roster :ocorrido-em agora :agora agora
                 :created-by (:identidade-id ator)})))))
+
+;; ---------- §22.6 eixo C — a FOLHA DA SESSAO (Etapa 5 fatia 1) ----------
+
+(defn folha-da-sessao
+  "O DOCUMENTO da folha de presenca da sessao `sessao-id` (Etapa 5 fatia 1, D1/D2/D6): a chamada da sessao
+  FECHADA MAIS a SERIE completa de eventos por vereador. NAO ha' congelamento nesta fatia (a linha do banco,
+  os dois hashes/refs, e' Fatia 4) — esta funcao devolve o DOCUMENTO puro, formato-agnostico.
+
+  D1 (nao recalcula): reusa `projetar-chamada` (a MESMA projecao que serve `chamada-da-sessao` nominal) para
+  `:linhas`/`:quorum`/`:chamadas-conduzidas` — nao ha' aqui uma segunda passada por
+  `logic/derivar-linhas-da-chamada`/`logic/contar-quorum`. O gate de authz e' o MESMO da chamada NOMINAL
+  (`logic/pode-ver-sessao?`, acao propria `:sessao/ver-folha` so' para o audit distinguir): a folha carrega
+  MAIS dado sensivel que a chamada (o `motivo` de justificativa, abaixo), nunca o gate magro do quorum.
+
+  D6 (fail-closed, allowlist): so' sessao em `logic/estados-sessao-fechada` tem folha — checado
+  IMEDIATAMENTE apos a leitura (antes de qualquer segunda consulta), e por ALLOWLIST (o mesmo set que
+  `instante-de-avaliacao` usa para congelar o instante), nunca pelo complemento dos estados 'abertos'
+  (complemento aceitaria um estado NOVO e desconhecido — o caso em que ninguem pensou).
+
+  UM SO' SNAPSHOT (correcao de revisao MAJOR): TODAS as leituras vem de `repo/folha-da-sessao`, UMA tx. A
+  forma anterior encadeava quatro chamadas ao Repo (`chamada-da-sessao` + `buscar-sessao` +
+  `serie-de-eventos-da-sessao` + `listar-justificativas`), e cada chamada ao Repo abre uma tx NOVA — quatro
+  snapshots MVCC. A justificativa de ausencia e' um ato APARTADO, sem gate de estado de sessao (e' assim de
+  proposito: a Mesa a decide dias depois), entao ela PODE ser decidida entre a 1a e a 4a leitura: a mesma
+  justificativa saia `pendente` na linha derivada e `aprovada` no bloco cru, no MESMO documento. Um artefato
+  que a Fatia 4 congela em PDF e assina nao pode divergir de si mesmo. Depois do retorno do Repo, este ns
+  NAO volta ao banco: so' os dois seams de `cadastros` (roster e cabecalho), que sao outro modulo e outra
+  tx por definicao de fronteira (§22.10) — e nenhum deles alimenta a aritmetica do quorum.
+
+  A SERIE usa a MESMA janela que a chamada: `piso-da-janela-de-presenca` (o dia civil da sessao) como piso,
+  o `:instante` (== `instante-de-avaliacao`) como teto — os dois resolvidos DENTRO da tx do Repo. `piso` nil
+  (sessao sem `aberta-em`/`agendada-para` — improvavel numa sessao fechada, mas nao impossivel por CHECK)
+  LANCA: sem piso nao ha' janela, e servir a serie sem filtro de piso vazaria eventos de fora da sessao
+  para dentro do documento — o mesmo tipo de defeito que `instante-de-avaliacao` recusa a todo custo.
+
+  `:justificativas` sai CRUA (com `motivo` — LGPD) da mesma leitura que derivou as linhas: as linhas de
+  `chamada` derivaram o ESTADO a partir dela mas NAO carregam o texto do motivo (`LinhaChamada` nao o expoe).
+
+  `dados-da-casa` (seam injetado do host sobre `cadastros`, irmao LITERAL de `roster-da-casa`) resolve o
+  cabecalho (nome/legislatura) NA DATA de composicao da chamada — nunca 'hoje' fechado dentro do seam.
+
+  Devolve o DOCUMENTO (`gerador-folha/renderizar`), ou nil (sessao inexistente neste ente -> 404, mesmo
+  contrato de `chamada-da-sessao`). Sessao ainda aberta/suspensa/agendada lanca `:conflito/folha-sessao-aberta`."
+  [repo-sessoes roster-da-casa dados-da-casa ator sessao-id relogio]
+  (let [ente-id (:ente-id ator)
+        agora   (tempo/agora relogio)]
+    (when-let [{:keys [sessao] :as lido} (repo/folha-da-sessao repo-sessoes ente-id sessao-id agora)]
+      (authz/check! ator :sessao/ver-folha sessao logic/pode-ver-sessao?)
+      (when-not (contains? logic/estados-sessao-fechada (:estado sessao))
+        (throw (ex-info "folha-da-sessao: so' sessao FECHADA tem folha"
+                        {:tipo :conflito/folha-sessao-aberta :sessao-id sessao-id
+                         :estado (:estado sessao)})))
+      (when (nil? (:piso lido))
+        (throw (ex-info "folha-da-sessao: sessao fechada sem piso de janela de presenca"
+                        {:tipo :servidor/erro :sessao-id sessao-id})))
+      (let [data    (data-de-referencia sessao)
+            chamada (projetar-chamada lido (roster-da-casa ente-id data) data agora)]
+        (gerador-folha/renderizar
+         ;; `:id` sai da LINHA LIDA (uuid round-tripado pelo PG), nao do parametro cru — e' este valor que
+         ;; `gerar-folha!` usa para montar a chave do objeto_store (disciplina do molde de `legislativo`).
+         {:sessao {:id (:id sessao) :estado (:estado sessao)
+                   :motivo-nao-realizada (:motivo-nao-realizada sessao)}
+          :instante (:instante chamada)
+          :cabecalho-da-casa (dados-da-casa ente-id (:data-de-composicao chamada))
+          :linhas (:linhas chamada)
+          :quorum (:quorum chamada)
+          :serie (logic/agrupar-serie-por-vereador (:serie lido))
+          :justificativas (:justificativas lido)
+          :atos-de-chamada-conduzida (:chamadas-conduzidas chamada)})))))
+
+;; ---------- §22.6 eixo C — O CONGELAMENTO DA FOLHA (Etapa 5 fatia 4, D2/D3/D4/D6/D7/D8/D9) ----------
+
+(defn- sha256-hex
+  "Hash hex SHA-256 do binario, prefixado 'sha256:' — integridade do congelamento (duplica conscientemente o
+  helper de `legislativo/components/repositorio.clj`/`compliance/components/repositorio.clj`: 3 linhas,
+  `sessoes` nao importa nenhum dos dois modulos, ADR-0001; consolidar num `kernel/hash` e' cleanup futuro,
+  nao vale acoplar os modulos agora). Reusa `hex` (ja' definido no topo deste ns para os digests da gravacao)."
+  [^bytes b]
+  (str "sha256:" (hex (.digest (MessageDigest/getInstance "SHA-256") b))))
+
+(defn- store-ref-folha [ente-id sessao-id hash-conteudo extensao]
+  (str "folhas/" ente-id "/" sessao-id "/" hash-conteudo "." extensao))
+
+(defn- congelar-tentativa
+  "UMA tentativa do laco de D7: le' o MAX (`repo/max-versao-da-folha`), renderiza HTML e PDF com a versao
+  PREVISTA (`max+1`), hasheia os dois, e tenta o INSERT com essa versao EXPLICITA (`repo/inserir-folha!`).
+  Devolve `{:row :html :pdf}` em sucesso; PROPAGA `PSQLException` em 23505 — o chamador (`congelar!`) decide
+  re-tentar. `html`/`pdf` sao os mapas `{:bytes :content-type}` que os ports devolveram (o CALLER guarda os
+  binarios DEPOIS do INSERT ter commitado, nunca aqui — mesma ordem ANCORA-PRIMEIRO do molde)."
+  [repo-sessoes ente-id sessao-id doc serializador renderizador-pdf gerada-por agora desde]
+  (let [versao        (inc (repo/max-versao-da-folha repo-sessoes ente-id sessao-id))
+        html          (serializador-folha/serializar serializador doc versao)
+        html-hash     (sha256-hex (:bytes html))
+        pdf           (renderizador-pdf/renderizar renderizador-pdf (:bytes html) agora)
+        pdf-hash      (sha256-hex (:bytes pdf))
+        row (repo/inserir-folha-dedup! repo-sessoes ente-id
+              {:id (ids/novo-id) :sessao-id sessao-id :versao versao :spec-versao (:spec-versao doc)
+               :html-hash html-hash :html-content-type (:content-type html)
+               :html-objeto-store-ref (store-ref-folha ente-id sessao-id html-hash "html")
+               :pdf-hash pdf-hash :pdf-content-type (:content-type pdf)
+               :pdf-objeto-store-ref (store-ref-folha ente-id sessao-id pdf-hash "pdf")
+               :gerada-por gerada-por :gerada-em agora}
+              desde)]
+    ;; `:ja-congelada` = o gemeo do MESMO ator commitou enquanto renderizavamos (D9 fechado dentro da tx).
+    ;; Devolver os bytes junto seria um erro: eles imprimem OUTRO numero de versao e o CALLER os guardaria
+    ;; sob o `*_objeto_store_ref` da linha EXISTENTE, corrompendo o binario cujo hash ja' esta' gravado.
+    (if (:ja-congelada row) {:row row} {:row row :html html :pdf pdf})))
+
+(defn- congelar!
+  "D7 — DESVIO CONSCIENTE DO MOLDE, escrito aqui para a proxima revisao NAO 'consertar' de volta para
+  `INSERT ... SELECT MAX+1` (o padrao de `legislativo/gerar-artefato-publicacao!`/`compliance/gerar-
+  remessa!`): a folha IMPRIME a propria versao no papel (`serializador-folha/serializar` na aridade-3), e
+  por isso o NUMERO tem de ser conhecido ANTES da renderizacao — um INSERT atomico que decide a versao SO'
+  depois de os bytes existirem seria circular aqui. Em vez disso: le' o MAX, renderiza com o numero
+  PREVISTO, tenta o INSERT explicito; se colidir (23505 — duas Secretarias congelando a MESMA sessao no
+  MESMO instante), RELE o max (ja' enxerga o commit concorrente) e REFAZ A RENDERIZACAO INTEIRA com o
+  numero novo. O `UNIQUE (ente_id, sessao_id, versao)` (mig 0073) continua sendo o que garante a corretude
+  sob corrida — so' muda QUEM PROPOE o numero. Retry UNICO (mesma disciplina de `inserir-com-retry!`/
+  `inserir-artefato-com-retry!`): uma SEGUNDA colisao no mesmo pedido e' bug, nao corrida legitima. CARRY
+  para a Fatia 5: nessa segunda colisao a `PSQLException` sobe CRUA (sem `ex-info`) — falhar alto e' o
+  comportamento correto (nada errado e' gravado), mas a borda HTTP tera' de traduzi-la em vez de deixar
+  cair no 500 generico.
+
+  D9 VIVE DENTRO DA TX DA ESCRITA (`repo/inserir-folha-dedup!`), nao antes dela. O pre-check em
+  `gerar-folha!` e' so' o atalho barato do duplo-clique SEQUENCIAL (evita renderizar a' toa); ele nao pode
+  ser a garantia, porque entre ele e o INSERT ha' a renderizacao inteira do HTML+PDF — janela na qual dois
+  pedidos concorrentes do MESMO ator liam ambos `nil` e congelavam DUAS linhas imutaveis do mesmo clique.
+  A checagem na tx converge nos dois caminhos possiveis: ou o perdedor ja' enxerga a linha commitada
+  (dedup), ou colide em 23505 e a enxerga no retry.
+
+  ANCORA-ANTES-DO-BLOB, e por que e' MAIS seguro aqui que nos moldes: a linha insere primeiro; os DOIS
+  binarios vao ao `objeto-store` DEPOIS, so' se o INSERT commitou. Se o `objeto-store` falhar entre os dois
+  `guardar!`, a linha aponta para um blob que nao existe — mas, ao contrario de `artefato_publicacao`/
+  `remessa_gerada`, aqui o binario e' RE-DERIVAVEL byte a byte a partir da PROPRIA linha: a renderizacao e'
+  deterministica (Fatias 2/3) e todo insumo (versao, `gerada_em`, o dado da sessao — imutavel depois de
+  fechada) ja' esta' gravado. A linha nao e' so' uma ancora para triagem manual; e' a receita completa."
+  [repo-sessoes ente-id sessao-id doc serializador renderizador-pdf objeto-store gerada-por agora desde]
+  (let [tentar #(congelar-tentativa repo-sessoes ente-id sessao-id doc serializador renderizador-pdf
+                                    gerada-por agora desde)
+        {:keys [row html pdf]}
+        (try (tentar)
+             (catch PSQLException e
+               (if (= "23505" (.getSQLState e)) (tentar) (throw e))))]
+    ;; DEDUP (D9) resolvido dentro da tx: a linha ja' existia, os binarios dela tambem — nao ha' o que
+    ;; guardar, e guardar os bytes re-renderizados sob os refs dela seria destrutivo (ver `congelar-tentativa`).
+    (when-not (:ja-congelada row)
+      (store/guardar! objeto-store (:html-objeto-store-ref row) (:bytes html) (:content-type html))
+      (store/guardar! objeto-store (:pdf-objeto-store-ref row) (:bytes pdf) (:content-type pdf)))
+    row))
+
+(defn gerar-folha!
+  "Congela a folha de presenca da sessao FECHADA `sessao-id` (Etapa 5 fatia 4): renderiza o DOCUMENTO em HTML
+  canonico + PDF, hasheia os dois, e insere UMA linha versionada em `sessoes.folha_sessao` (D3 — um trio
+  html_*/pdf_* cada, NUNCA duas linhas). D4: NENHUM evento de dominio emitido (o molde da remessa, `compliance/
+  events/remessa.clj`, e' so' comentario sem consumidor — abrir uma segunda ferida evento-sem-consumidor e'
+  proibido); a linha do banco e' a ANCORA. `m` = `{:serializador :renderizador-pdf :objeto-store}`, os TRES
+  ports injetados POR CHAMADA (nunca campos do record) — a mesma forma de `gerar-artefato-publicacao!`.
+
+  1. CARREGA O DOCUMENTO reusando `folha-da-sessao` (acima, MESMA funcao, UMA SO' tx no Repo) — isto e' o
+     que cumpre D6 (fail-closed: so' sessao em `logic/estados-sessao-fechada` chega aqui — `folha-da-sessao`
+     JA' lanca `:conflito/folha-sessao-aberta` senao) e a AUTHZ (`logic/pode-ver-sessao?`, a MESMA politica
+     da chamada nominal — nunca a magra do quorum, a folha carrega MAIS dado sensivel) SEM duplicar nenhuma
+     das duas aqui. `nil` (sessao inexistente neste ente) propaga como `nil` (404 na borda).
+  2. D8 — `m/validate FolhaDocumento` ANTES de renderizar: um artefato IMUTAVEL nao aceita schema como
+     promessa (`gerador-folha/renderizar` nao valida no caminho de producao, so' em teste). Invalido lanca
+     `:servidor/erro` com o `m/explain` na ex-data, fail-closed antes de qualquer byte ser produzido.
+  3. D9 — DEDUP: uma folha da MESMA sessao gerada pelo MESMO ator ha' menos de
+     `logic/janela-de-deduplicacao-de-chamada` (30s) devolve a folha EXISTENTE (`:ja-congelada true`) em vez
+     de congelar outra — mesmo precedente de `registrar-chamada-conduzida!`/`:ja-registrado` (Etapa 2d): um
+     duplo-clique nao pode poluir o acervo com versoes identicas numeradas.
+  4. D7 — o CONGELAMENTO em si (`congelar!`, docstring la' tem o desvio de molde por extenso).
+
+  Devolve a linha de `sessoes.folha_sessao` (com `:ja-congelada true` no caminho do dedup), ou `nil` (sessao
+  inexistente neste ente -> 404 na borda, mesmo contrato de `folha-da-sessao`)."
+  [repo-sessoes roster-da-casa dados-da-casa ator sessao-id relogio
+   {:keys [serializador renderizador-pdf objeto-store]}]
+  (when-not objeto-store
+    (throw (ex-info "gerar-folha!: objeto-store ausente" {:sessao-id sessao-id})))
+  (when-not serializador
+    (throw (ex-info "gerar-folha!: serializador ausente" {:sessao-id sessao-id})))
+  (when-not renderizador-pdf
+    (throw (ex-info "gerar-folha!: renderizador-pdf ausente" {:sessao-id sessao-id})))
+  (let [ente-id (:ente-id ator)
+        agora   (tempo/agora relogio)
+        doc     (folha-da-sessao repo-sessoes roster-da-casa dados-da-casa ator sessao-id relogio)]
+    (when doc
+      (when-not (m/validate mod-folha/FolhaDocumento doc)
+        (throw (ex-info "gerar-folha!: documento nao bate FolhaDocumento — recusado ANTES de renderizar"
+                        {:tipo :servidor/erro :sessao-id sessao-id
+                         ;; SO' OS CAMINHOS que reprovaram — nunca o `:value` do `m/explain`, que e' o
+                         ;; DOCUMENTO INTEIRO (e cada erro carrega o sub-valor). O documento traz `motivo`
+                         ;; de justificativa, dado potencialmente de saude (LGPD), e nome de vereador: uma
+                         ;; `ex-data` viaja com a excecao e reaparece em qualquer observabilidade futura
+                         ;; (log estruturado, APM, um `pr-str` de debug) sem ninguem tocar neste arquivo.
+                         ;; O diagnostico util e' ONDE falhou, nao O QUE havia la' dentro.
+                         :caminhos (mapv #(select-keys % [:in :path])
+                                         (:errors (m/explain mod-folha/FolhaDocumento doc)))})))
+      (let [gerada-por (:identidade-id ator)
+            desde      (.minus ^Instant agora logic/janela-de-deduplicacao-de-chamada)
+            ;; o UUID ECHOADO pelo banco (`folha-da-sessao` o tira da linha lida), nunca o parametro cru —
+            ;; mesma disciplina do molde `legislativo/gerar-artefato-publicacao!`: a chave do objeto_store
+            ;; so' usa valor round-tripado+tipado pelo PG, independentemente do que a borda coagir.
+            sid-echoado (get-in doc [:sessao :id])]
+        ;; ATALHO barato do duplo-clique SEQUENCIAL (poupa a renderizacao). A GARANTIA de D9 nao esta' aqui
+        ;; — esta' dentro da tx de `repo/inserir-folha-dedup!`; ver a docstring de `congelar!`.
+        (if-let [existente (repo/folha-recente-do-ator repo-sessoes ente-id sid-echoado gerada-por desde)]
+          (assoc existente :ja-congelada true)
+          (congelar! repo-sessoes ente-id sid-echoado doc serializador renderizador-pdf objeto-store
+                     gerada-por agora desde))))))
+
+;; ---------- Etapa 5 fatia 5 — LEITURA das versoes congeladas (rotas) ----------
+;; As DUAS fns abaixo sao o ponto de entrada das rotas de LEITURA (`GET /sessoes/:id/folhas[/…]`). O MESMO
+;; gate de `folha-da-sessao`/`gerar-folha!` — `logic/pode-ver-sessao?`, NUNCA o gate magro do quorum — vale
+;; aqui tambem: a lista de versoes e o conteudo carregam menos dado por linha que a folha nominal completa,
+;; mas nao ha' razao para a LEITURA abrir mais do que o proprio CONGELAMENTO abre. `it/exige-papel
+;; "secretario"` cobre a borda das quatro rotas; aqui e' so' a policy fina.
+
+(defn folhas-da-sessao-metadados
+  "As versoes congeladas da sessao `sessao-id` (Etapa 5 fatia 5), so' METADADOS — nenhum binario, nenhum
+  `*_objeto_store_ref`. `nil` (sessao inexistente neste ente, cross-tenant inclusive) -> 404 na borda; lista
+  vazia (sessao existe, nunca foi congelada) e' um 200 legitimo, distinto do 404."
+  [repo-sessoes ator sessao-id]
+  (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/ver-folha sessao logic/pode-ver-sessao?)
+    (repo/folhas-da-sessao repo-sessoes (:ente-id ator) sessao-id)))
+
+(defn folha-conteudo
+  "Le' o BINARIO CONGELADO (`qual` = :html ou :pdf) da versao `versao` da folha da sessao `sessao-id` do
+  objeto_store — NUNCA re-renderiza (o proposito do congelamento e' que a leitura mostre exatamente os
+  bytes cujo hash foi gravado; re-renderizar aqui destruiria essa garantia). O I/O de blob mora AQUI
+  (controller impuro), nao no Repo — mesmo racional de `transparencia/baixar-artefato-da-norma` (o Repo so'
+  resolve o ponteiro).
+
+  `nil` (sessao inexistente neste ente, cross-tenant inclusive) -> 404 na borda, ANTES de qualquer consulta
+  de versao (nao revela nem a existencia da sessao a quem nao pode ve-la).
+
+  Com a sessao resolvida e autorizada, TRES desfechos (mesmo padrao de
+  `transparencia/baixar-artefato-da-norma`):
+   - `:versao-nao-encontrada` — a sessao existe, a versao pedida nao -> 404.
+   - `:blob-ausente` — a linha existe (ponteiro gravado), o objeto_store nao devolve bytes: a ANCORA-antes-
+     do-blob (docstring de `congelar!`) falhou entre o INSERT e o `guardar!`. E' ALERTA (log/error + 500),
+     NUNCA 404 sobre um congelamento que existe, NUNCA um render novo.
+   - `:ok` — bytes + content-type + versao, prontos para a resposta binaria."
+  [repo-sessoes objeto-store ator sessao-id versao qual]
+  (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/ver-folha sessao logic/pode-ver-sessao?)
+    (if-let [row (repo/buscar-folha repo-sessoes (:ente-id ator) sessao-id versao)]
+      ;; `store-ref`, nao `ref`: `ref` sombrearia `clojure.core/ref` (o construtor de Ref/STM) — sem
+      ;; consequencia funcional aqui, mas e' o nome que confunde a leitura futura deste ns.
+      (let [store-ref    (case qual :html (:html-objeto-store-ref row) :pdf (:pdf-objeto-store-ref row))
+            content-type (case qual :html (:html-content-type row) :pdf (:pdf-content-type row))]
+        (if-let [b (store/obter objeto-store store-ref)]
+          {:resultado :ok :bytes b :content-type content-type :versao versao}
+          (do (log/error "sessoes: folha com ponteiro mas SEM blob no objeto_store"
+                         {:evento :folha-sem-blob :ente-id (:ente-id ator) :sessao-id sessao-id
+                          :versao versao :qual qual :objeto-store-ref store-ref})
+              {:resultado :blob-ausente})))
+      {:resultado :versao-nao-encontrada})))

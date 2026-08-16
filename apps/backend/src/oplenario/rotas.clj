@@ -16,7 +16,9 @@
             [oplenario.legislativo.diplomat.http.in :as legislativo-http]
             [oplenario.paineis.diplomat.http.in :as paineis-http]
             [oplenario.participacao.diplomat.http.in :as participacao-http]
+            [oplenario.sessoes.components.renderizador-pdf :as renderizador-pdf]
             [oplenario.sessoes.components.repositorio :as repo-sessoes-comp]
+            [oplenario.sessoes.components.serializador-folha :as serializador-folha]
             [oplenario.sessoes.diplomat.http.in :as sessoes-http]
             [oplenario.tempo-real.diplomat.sse :as tempo-real-sse]
             [oplenario.transparencia.diplomat.http.in :as transparencia-http]))
@@ -187,6 +189,32 @@
         ;; fechado no seam mostraria a composicao de HOJE, nao a de entao. Mesma inversao de dependencia
         ;; sobre cadastros (sessoes nunca importa cadastros, §22.10); irmao LITERAL de membros-da-casa.
         roster-da-casa-fn (fn [ente-id data] (repo-cadastros-comp/roster-da-casa repo-cadastros ente-id data))
+        ;; Etapa 5 fatia 1: o cabecalho da FOLHA (nome/legislatura da Casa) — seam irmao LITERAL de
+        ;; `roster-da-casa-fn` acima, mesma inversao de dependencia sobre `cadastros` (sessoes nunca importa
+        ;; cadastros, §22.10). Leva `data` na aridade pelo MESMO motivo de `roster-da-casa-fn` (nunca fechar
+        ;; 'hoje' aqui dentro: reabrir a folha de uma sessao do mes passado com hoje fechado no seam
+        ;; mostraria a composicao de hoje) — CARRY: `cadastros/legislatura-vigente` hoje so' le' o flag
+        ;; `vigente` corrente (nao ha' consulta por DATA em `cadastros`), entao `data` ainda nao MUDA a
+        ;; legislatura resolvida; o parametro existe para o seam nao precisar de uma segunda mudanca de
+        ;; assinatura no dia em que essa consulta existir.
+        dados-da-casa-fn (fn [ente-id _data]
+                           (let [ente (repo-cadastros-comp/buscar-ente repo-cadastros ente-id)
+                                 leg  (repo-cadastros-comp/legislatura-vigente repo-cadastros ente-id)]
+                             {:nome-oficial (:nome-oficial ente)
+                              :nome-curto (:nome-curto ente)
+                              :legislatura-numero (:numero leg)
+                              :legislatura-ano-inicio (:ano-inicio leg)
+                              :legislatura-ano-fim (:ano-fim leg)}))
+        ;; Etapa 5 fatia 5: os DOIS ports da folha, construidos UMA vez aqui (nunca dentro do handler HTTP,
+        ;; que os recriaria a cada request sem ganho) — mesma disciplina de `serializador-fixture`/
+        ;; `serializador-remessa` ("o host constroi e injeta"). JA' DECORADOS com as guardas: o serializador
+        ;; com o TETO de tamanho de ENTRADA; o renderizador com TIMEOUT + TETO de SAIDA + POOL DEDICADO. As
+        ;; duas primeiras sao obrigacoes que a revisao de seguranca da fatia 3 do brief deixou pendentes ate'
+        ;; existir superficie HTTP (`POST /sessoes/:id/folha`, fiada abaixo, e' essa superficie); as outras
+        ;; duas vieram da revisao adversarial da fatia 5 (o teto era assimetrico; o timeout limitava latencia,
+        ;; nao consumo).
+        serializador-folha-fn (serializador-folha/serializador-folha-html-com-teto)
+        renderizador-pdf-fn (renderizador-pdf/renderizador-pdf-guardado)
         ;; Onda B Slice 2: uf/nome-do-municipio do ente, p/ o legislativo computar a URN em protocolar! —
         ;; mesma inversao de dependencia de consultar-sessao/membros-da-casa/info-ente (§22.10).
         resolver-municipio (fn [ente-id] (repo-cadastros-comp/uf-e-municipio repo-cadastros ente-id))
@@ -269,7 +297,15 @@
            :route-name :painel-secretaria]}
         (into (sessoes-http/rotas {:auth auth :repo-sessoes repo-sessoes :objeto-store objeto-store
                                    :resolver-vereador resolver-vereador-fn :relogio relogio-producao
-                                   :roster-da-casa roster-da-casa-fn}))
+                                   :roster-da-casa roster-da-casa-fn
+                                   ;; Etapa 5 fatia 1: `dados-da-casa-fn` chega pronto para a Fatia 5 (as
+                                   ;; rotas HTTP da folha) fiar o cabecalho — sem rota nova nesta fatia,
+                                   ;; `sessoes-http/rotas` ainda nao destrutura a chave (chave extra e'
+                                   ;; inocua p/ um mapa nao-closed).
+                                   :dados-da-casa dados-da-casa-fn
+                                   ;; Etapa 5 fatia 5: os dois ports da folha, ja' construidos+decorados acima.
+                                   :serializador-folha serializador-folha-fn
+                                   :renderizador-pdf renderizador-pdf-fn}))
         (into (legislativo-http/rotas {:auth auth :repo-legislativo repo-legislativo
                                        :consultar-sessao consultar-sessao
                                        :resolver-municipio resolver-municipio

@@ -539,6 +539,22 @@
                         {:tipo :servidor/erro :sessao-id (:id sessao) :estado (:estado sessao)})))
     agora))
 
+;; ---------- §22.6 eixo C — a SERIE da FOLHA (Etapa 5 fatia 1) ----------
+;; A CHAMADA mostra o ULTIMO evento por vereador; a FOLHA mostra a SERIE inteira dentro da janela
+;; ([piso-da-janela-de-presenca, instante-de-avaliacao] acima) — "entrou 14h03, saiu 15h10, retornou 15h40".
+;; A fonte crua vem de `db/presenca/serie-de-eventos-da-sessao`; agrupar por vereador e' a UNICA
+;; transformacao PURA que falta para o gerador da folha consumir.
+
+(defn agrupar-serie-por-vereador
+  "PURO. Agrupa a serie CRUA de eventos (ja' ordenada por vereador_id,ocorrido_em asc —
+  `db/presenca/serie-de-eventos-da-sessao`) por vereador, preservando a ordem cronologica DENTRO de cada
+  grupo (`group-by` preserva a ordem de insercao). Devolve {vereador-id -> [eventos ordenados]}; um
+  vereador sem nenhum evento na janela simplesmente NAO aparece como chave — quem itera por cima do roster
+  trata a ausencia como lista vazia, o mesmo tratamento que `presenca-por-ver` da' em
+  `derivar-linhas-da-chamada`."
+  [eventos]
+  (update-vals (group-by :vereador-id eventos) vec))
+
 ;; ---------- §22.6 eixo C — o GATE de ESCRITA de presenca (Etapa 2 da chamada) ----------
 ;; A leitura acima congela o instante de uma sessao que fechou. Isso protege a CHAMADA, nao o BANCO: sem o
 ;; gate abaixo, o sistema aceitava gravar `presenca_evento` numa sessao ja encerrada, e como o quorum e'

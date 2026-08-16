@@ -72,6 +72,28 @@
                   :where [:and [:= :ente_id ente-id] [:= :sessao_id sessao-id]]
                   :order-by [[:ocorrido_em :asc] [:id :asc]]}))))
 
+(defn serie-de-eventos-da-sessao
+  "Todos os eventos de presenca da sessao NA JANELA [piso, teto] — a MESMA janela que a chamada usa
+  (`logic/piso-da-janela-de-presenca` como piso, `logic/instante-de-avaliacao` como teto), ordenados por
+  (vereador_id asc, ocorrido_em asc, fonte_precedencia desc, id asc). E' a SERIE cronologica de CADA
+  vereador ('entrou 14h03, saiu 15h10, retornou 15h40') — insumo cru da FOLHA (Etapa 5 fatia 1). Nao
+  confundir com `presenca-corrente` (o ULTIMO evento) nem com `listar-eventos` (a sessao inteira, sem
+  janela — a auditoria).
+
+  Ambos os limites INCLUSIVOS: um evento gravado exatamente no instante em que a sessao fechou e' o que a
+  chamada final capturou (`instante-de-avaliacao` usa `ocorrido_em <= instante` do mesmo jeito), e nao pode
+  desaparecer da folha por uma fronteira estrita. `fonte_precedencia` e' a coluna GENERATED da migration
+  0056 — a MESMA usada em `logic/ordem-ultimo-evento`, aqui so' como desempate de MESMO instante (nao
+  particiona por vereador: a serie mostra todo evento, nao so' o vencedor)."
+  [tx ente-id sessao-id piso teto]
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select [:id :ente_id :sessao_id :vereador_id :tipo :modalidade :fonte :ocorrido_em :efetivado_em]
+                  :from [:sessoes.presenca_evento]
+                  :where [:and [:= :ente_id ente-id] [:= :sessao_id sessao-id]
+                          [:>= :ocorrido_em piso] [:<= :ocorrido_em teto]]
+                  :order-by [[:vereador_id :asc] [:ocorrido_em :asc] [:fonte_precedencia :desc] [:id :asc]]}))))
+
 (defn presenca-corrente
   "O ULTIMO evento de presenca de CADA vereador da sessao ate' `instante` — uma linha por vereador
   (DISTINCT ON), o insumo cru da CHAMADA. Nao confundir com `listar-eventos`: aquele e' a AUDITORIA (todos os

@@ -16,7 +16,15 @@
         io.minio/minio                          {:mvn/version "8.5.12"}  ; client S3 (object storage S3-compativel, §22.9)
         com.taoensso/carmine                    {:mvn/version "3.4.1"}   ; client Redis-protocol (Valkey)
         com.auth0/java-jwt                      {:mvn/version "4.4.0"}   ; verificacao JWT RS256 (Onda D Slice 1)
-        com.auth0/jwks-rsa                       {:mvn/version "0.22.1"}} ; JWKS cache+rate-limit por-issuer
+        com.auth0/jwks-rsa                       {:mvn/version "0.22.1"}  ; JWKS cache+rate-limit por-issuer
+        ;; PRIMEIRA dependencia JVM de renderizacao do repo (Etapa 5 fatia 3 — o PDF da folha de presenca).
+        ;; Versao resolvida de fato contra o Maven Central em 15/08/2026 (`clojure -Stree` com
+        ;; `{:mvn/version "RELEASE"}`), nao chutada — traz transitivamente org.apache.pdfbox/pdfbox 3.0.7.
+        ;; LICENCA: openhtmltopdf e' LGPL 2.1+ (github.com/danfickle/openhtmltopdf). O Plenario e' SaaS —
+        ;; nao distribui o jar a terceiros — logo e' CONFORME sem obrigacao de relink dinamico. CARRY: se a
+        ;; Casa vier a rodar a plataforma on-prem (fora do SaaS), isso VIRA distribuicao e a LGPL passa a
+        ;; exigir relink (jar dinamico, nao shade/AOT estatico) — decisao a revisitar se/quando existir.
+        io.github.openhtmltopdf/openhtmltopdf-pdfbox {:mvn/version "1.1.73"}}
  :aliases
  {:dev  {:extra-paths ["dev" "test"]}
   ;; os dirs de suite SAO raizes de classpath (ns oplenario.* sob test/unit, nao test/unit.oplenario.*);

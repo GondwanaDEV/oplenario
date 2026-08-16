@@ -58,7 +58,11 @@
    ["ChamadaOut" out/ChamadaOut]
    ;; Etapa 4a — a leitura MAGRA de quorum; reusa ChamadaQuorumOut por referencia nomeada (um so' shape de
    ;; contagem no TS, espelhando a unica aritmetica no servidor).
-   ["QuorumSessaoOut" out/QuorumSessaoOut]])
+   ["QuorumSessaoOut" out/QuorumSessaoOut]
+   ;; Etapa 5 fatia 5 — a FOLHA DA SESSAO. FolhaMetadadosOut ANTES de FolhasDaSessaoOut (campo :folhas
+   ;; aninhado), mesmo racional de PautaItemOut/PautaOut e SegmentoOut/SegmentosOut acima.
+   ["FolhaMetadadosOut" out/FolhaMetadadosOut]
+   ["FolhasDaSessaoOut" out/FolhasDaSessaoOut]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))
 

@@ -13,13 +13,15 @@
             [oplenario.sessoes.adapters.in.presenca :as adapters-in-presenca]
             [oplenario.sessoes.adapters.in.sessao :as adapters-in]
             [oplenario.sessoes.adapters.in.tribuna :as adapters-in-tribuna]
+            [oplenario.sessoes.adapters.out.folha :as adapters-out-folha]
             [oplenario.sessoes.adapters.out.gravacao :as adapters-out-grav]
             [oplenario.sessoes.adapters.out.incidente :as adapters-out-incidente]
             [oplenario.sessoes.adapters.out.pauta :as adapters-out-pauta]
             [oplenario.sessoes.adapters.out.presenca :as adapters-out-presenca]
             [oplenario.sessoes.adapters.out.sessao :as adapters-out]
             [oplenario.sessoes.adapters.out.tribuna :as adapters-out-tribuna]
-            [oplenario.sessoes.controllers :as controllers]))
+            [oplenario.sessoes.controllers :as controllers])
+  (:import (org.postgresql.util PSQLException)))
 
 (set! *warn-on-reflection* true)
 
@@ -581,18 +583,127 @@
         (http/json-resposta 200 (adapters-out-grav/segmentos->wire (:sessao-id r) (:segmentos r)))
         (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
 
+;; ---------- Etapa 5 fatia 5 — a FOLHA DA SESSAO (rotas) ----------
+;; As QUATRO rotas exigem 'secretario' na BORDA e `logic/pode-ver-sessao?` na camada FINA (dentro dos
+;; controllers acima) — NUNCA o gate magro do quorum: a folha carrega o `motivo` de justificativa (LGPD,
+;; potencial dado de saude), entao herda o gate da chamada NOMINAL, nao o do telao. Vale para as DUAS
+;; rotas de leitura tambem — nao ha' um nivel de authz "so' metadados"/"so' conteudo" mais fraco que o do
+;; congelamento em si.
+
+(defn- resposta-conflito-folha
+  "Traduz os `:tipo` de `ExceptionInfo` que `gerar-folha!` pode lancar. Qualquer outro `:tipo` re-lanca (500
+  opaco, fail-closed) — mesmo contrato dos demais `resposta-conflito-*` deste ns."
+  [e]
+  (case (:tipo (ex-data e))
+    :conflito/folha-sessao-aberta
+    (http/json-resposta 409 {:erro "so' sessao FECHADA tem folha de presenca (D6)"})
+    :validacao/documento-grande
+    (http/json-resposta 413 {:erro "documento da folha excede o teto de tamanho"})
+    ;; pool DEDICADO de renderizacao saturado (`renderizador-pdf/paralelismo-de-renderizacao`): nao e' erro
+    ;; do pedido nem do documento — e' pressao momentanea. 503 + Retry-After diz ao cliente para repetir, e
+    ;; a repeticao dentro de 30s cai no dedup de D9 sem criar versao nova.
+    :servidor/renderizador-saturado
+    (update (http/json-resposta 503 {:erro "renderizador de PDF ocupado — tente novamente em instantes"})
+            :headers assoc "Retry-After" "5")
+    (throw e)))
+
+(defn- gerar-folha-handler
+  "POST /sessoes/:id/folha (Etapa 5 fatia 5, papel 'secretario'). Sem corpo. O controller (`gerar-folha!`)
+  carrega+autoriza a sessao (MESMO gate de `folha-da-sessao`), valida o documento contra o Malli ANTES de
+  renderizar (D8), decide a versao ANTES de renderizar (D7, para imprimi-la no proprio papel) e congela com
+  dedup de 30s (D9). Os TRES ports do mapa `m` (`serializador-folha`/`renderizador-pdf`/`objeto-store`)
+  chegam PRONTOS do HOST — construidos UMA vez fora deste handler: `serializador-folha` ja' decorado com o
+  TETO de tamanho de ENTRADA, `renderizador-pdf` ja' decorado com TIMEOUT + TETO de SAIDA + POOL DEDICADO
+  (as obrigacoes que a revisao de seguranca da Fatia 3 deixou pendentes ate' existir superficie HTTP — esta
+  rota E' essa superficie — mais as duas que a revisao adversarial da Fatia 5 acrescentou). Construi-los
+  aqui dentro recriaria as duas instancias A CADA REQUEST, sem ganho nenhum.
+
+  nil (sessao inexistente neste ente, cross-tenant inclusive — nao distingue, nao confirma existencia) ->
+  404. `:conflito/folha-sessao-aberta` (D6) -> 409. `:validacao/documento-grande` (o TETO reprovando) -> 413.
+  `PSQLException` sqlstate 23505 numa SEGUNDA colisao (o RETRY UNICO ja' esta' DENTRO do controller —
+  `congelar!`; so' a segunda colisao chega aqui crua, carry escrito na docstring dela) -> 409 traduzido,
+  NUNCA o 500 generico. Sucesso -> 201 com os metadados (NUNCA o binario)."
+  [repo-sessoes roster-da-casa dados-da-casa relogio serializador-folha renderizador-pdf objeto-store]
+  (fn [req]
+    (let [ator (:ator req)
+          id   (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (try
+        (if-let [row (controllers/gerar-folha! repo-sessoes roster-da-casa dados-da-casa ator id relogio
+                                               {:serializador serializador-folha
+                                                :renderizador-pdf renderizador-pdf
+                                                :objeto-store objeto-store})]
+          (http/json-resposta 201 (adapters-out-folha/folha->wire row))
+          (http/json-resposta 404 {:erro "sessao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (resposta-conflito-folha e))
+        (catch PSQLException e
+          (if (= "23505" (.getSQLState e))
+            (http/json-resposta 409 {:erro "conflito de versao ao congelar a folha — tente novamente"})
+            (throw e)))))))
+
+(defn- listar-folhas-handler
+  "GET /sessoes/:id/folhas (Etapa 5 fatia 5). MESMO gate do congelamento. Metadados apenas, SEM binario —
+  lista vazia (sessao existe, nunca foi congelada) e' 200, distinto de sessao inexistente (404)."
+  [repo-sessoes]
+  (fn [req]
+    (let [ator (:ator req)
+          id   (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [folhas (controllers/folhas-da-sessao-metadados repo-sessoes ator id)]
+        (http/json-resposta 200 (adapters-out-folha/folhas-da-sessao->wire id folhas))
+        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+
+(defn- resposta-folha-conteudo
+  "Compartilhada por `folha-html-handler`/`folha-pdf-handler`: `nil` (sessao inexistente neste ente) -> 404;
+  `:versao-nao-encontrada` -> 404; `:blob-ausente` (ancora-antes-do-blob) -> 500 explicito (NUNCA um render
+  novo, NUNCA 404 sobre um congelamento que existe — mesmo contrato de
+  `transparencia/baixar-artefato-handler`); `:ok` -> `->resposta` aplicado ao resultado."
+  [r ->resposta]
+  (cond
+    (nil? r) (http/json-resposta 404 {:erro "sessao nao encontrada"})
+    (= :ok (:resultado r)) (->resposta r)
+    (= :versao-nao-encontrada (:resultado r)) (http/json-resposta 404 {:erro "versao da folha nao encontrada"})
+    (= :blob-ausente (:resultado r)) (http/json-resposta 500 {:erro "folha temporariamente indisponivel"})))
+
+(defn- folha-html-handler
+  "GET /sessoes/:id/folhas/:versao (Etapa 5 fatia 5). Serve os BYTES CONGELADOS do HTML canonico
+  (`text/html; charset=utf-8`) lidos do objeto_store — NUNCA re-renderiza: o que a tela mostra (Fatia 6, num
+  `<iframe>`) tem de ser exatamente os bytes cujo hash foi gravado no congelamento. MESMO gate."
+  [repo-sessoes objeto-store]
+  (fn [req]
+    (let [ator   (:ator req)
+          id     (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          versao (adapters-in/versao-param->int (get-in req [:path-params :versao]))]
+      (resposta-folha-conteudo
+       (controllers/folha-conteudo repo-sessoes objeto-store ator id versao :html)
+       adapters-out-folha/->html-resposta))))
+
+(defn- folha-pdf-handler
+  "GET /sessoes/:id/folhas/:versao/pdf (Etapa 5 fatia 5). Download BINARIO do PDF congelado — MESMO contrato
+  de `folha-html-handler`, servindo `application/pdf` + Content-Disposition attachment (o adapter copia a
+  forma de `transparencia.adapters.out.artefato/->download`)."
+  [repo-sessoes objeto-store]
+  (fn [req]
+    (let [ator   (:ator req)
+          id     (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          versao (adapters-in/versao-param->int (get-in req [:path-params :versao]))]
+      (resposta-folha-conteudo
+       (controllers/folha-conteudo repo-sessoes objeto-store ator id versao :pdf)
+       #(adapters-out-folha/->pdf-download % id)))))
+
 (defn rotas
   "Fragmento de rotas do modulo (table syntax Pedestal). Recebe o interceptor `auth` (compartilhado), o
-  `repo-sessoes` (Repo-Component) + o `objeto-store` (p/ a ingestao de gravacao) + `resolver-vereador`/
-  `relogio` (Onda C3, borda self-service `/presenca/confirmar` — identidade->vereador-id + relogio do
-  servidor, injetados pelo host por inversao de dependencia) + `roster-da-casa` (§22.6 eixo C, borda da
-  CHAMADA — `[ente-id data]` -> as linhas da Casa em `data`, seam injetado do host sobre `cadastros`; este
-  ns nunca importa cadastros, §22.10) e devolve as rotas-dado. `oplenario.rotas` funde este fragmento ao
-  conjunto. POST exige a authz GROSSA (papel 'secretario', exceto `/presenca/confirmar` que exige
-  'vereador'); a ingestao NAO usa corpo-json (o corpo e' binario); GET so autentica (a camada fina decide no
-  controller) — EXCETO `/chamada`, que exige 'secretario' na borda (leitura operacional da Mesa de conducao,
-  nao um read-model publico)."
-  [{:keys [auth repo-sessoes objeto-store resolver-vereador relogio roster-da-casa]}]
+  `repo-sessoes` (Repo-Component) + o `objeto-store` (p/ a ingestao de gravacao e p/ a folha) +
+  `resolver-vereador`/`relogio` (Onda C3, borda self-service `/presenca/confirmar` — identidade->vereador-id
+  + relogio do servidor, injetados pelo host por inversao de dependencia) + `roster-da-casa`/`dados-da-casa`
+  (§22.6 eixo C, borda da CHAMADA/FOLHA — seams injetados do host sobre `cadastros`; este ns nunca importa
+  cadastros, §22.10) + `serializador-folha`/`renderizador-pdf` (Etapa 5 fatia 5 — os DOIS ports da folha, JA'
+  DECORADOS com os tetos de tamanho, o timeout e o pool dedicado, construidos UMA vez pelo host) e devolve as
+  rotas-dado. `oplenario.rotas` funde este fragmento ao conjunto. POST exige a authz GROSSA (papel
+  'secretario', exceto `/presenca/confirmar` que exige 'vereador'); a ingestao NAO usa corpo-json (o corpo e'
+  binario); GET so autentica (a camada fina decide no controller) — EXCETO `/chamada` e as quatro rotas da
+  FOLHA, que exigem 'secretario' na borda (leitura operacional da Mesa, nao um read-model publico)."
+  [{:keys [auth repo-sessoes objeto-store resolver-vereador relogio roster-da-casa dados-da-casa
+           serializador-folha renderizador-pdf]}]
   (let [papel-vereador (it/exige-papel "vereador")]
    #{["/sessoes"     :post [auth (it/exige-papel "secretario") it/corpo-json (agendar-handler repo-sessoes)]
      :route-name :sessoes/agendar]
@@ -692,7 +803,25 @@
     ["/sessoes/:id/gravacao" :get [auth (listar-gravacoes-handler repo-sessoes)] :route-name :sessoes/listar-gravacoes]
     ["/sessoes/:id/gravacao/:seg-id/vincular" :post
      [auth (it/exige-papel "secretario") it/corpo-json (vincular-gravacao-handler repo-sessoes)]
-     :route-name :sessoes/vincular-gravacao]}))
+     :route-name :sessoes/vincular-gravacao]
+    ;; Etapa 5 fatia 5 — a FOLHA DA SESSAO. `/folha` (singular, POST) e `/folhas` (plural, GET) sao literais
+    ;; IRMAOS sob `/sessoes/:id` (sem risco de sombreamento literal-vs-param, mesma analise ja' documentada
+    ;; em `/gravacoes`/`/minha-justificativa`); `/folhas/:versao` e `/folhas/:versao/pdf` sao os unicos
+    ;; filhos de `/folhas`, entao tambem sem ambiguidade. As QUATRO exigem 'secretario' na borda.
+    ["/sessoes/:id/folha" :post
+     [auth (it/exige-papel "secretario")
+      (gerar-folha-handler repo-sessoes roster-da-casa dados-da-casa relogio
+                           serializador-folha renderizador-pdf objeto-store)]
+     :route-name :sessoes/gerar-folha]
+    ["/sessoes/:id/folhas" :get
+     [auth (it/exige-papel "secretario") (listar-folhas-handler repo-sessoes)]
+     :route-name :sessoes/listar-folhas]
+    ["/sessoes/:id/folhas/:versao" :get
+     [auth (it/exige-papel "secretario") (folha-html-handler repo-sessoes objeto-store)]
+     :route-name :sessoes/folha-html]
+    ["/sessoes/:id/folhas/:versao/pdf" :get
+     [auth (it/exige-papel "secretario") (folha-pdf-handler repo-sessoes objeto-store)]
+     :route-name :sessoes/folha-pdf]}))
 
 (defn presenca-resumo-wire
   "Ponto de entrada IN-PROCESS da presenca agregada (FE Onda A1) — o gemeo nao-HTTP p/ a RAIZ DE COMPOSICAO

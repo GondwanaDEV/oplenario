@@ -369,3 +369,29 @@
    [:composicao-resolvida-em :string]
    [:sem-registro-de-presenca :boolean]
    [:quorum ChamadaQuorumOut]])
+
+;; ---------- Etapa 5 fatia 5 — a FOLHA DA SESSAO (metadados de congelamento) ----------
+
+(def FolhaMetadadosOut
+  "Metadados de UMA versao congelada da folha de presenca — resposta de `POST /sessoes/:id/folha` (201) e de
+  cada item de `GET /sessoes/:id/folhas` (200). NUNCA o binario nem os `*_objeto_store_ref` (detalhe de
+  armazenamento interno) — so' os DOIS hashes de integridade (o cliente confere sem baixar o conteudo), a
+  versao IMPRESSA no papel (D7) e os carimbos de proveniencia. `:ja-congelada` so' aparece no caminho do
+  dedup de D9 (reenvio do MESMO ator dentro da janela de 30s devolve a versao EXISTENTE) — `:closed true`
+  com o campo `:optional` deixa a chave simplesmente AUSENTE no caminho normal, nunca `false` explicito."
+  [:map {:closed true}
+   [:id :string]
+   [:versao :int]
+   [:spec-versao :string]
+   [:html-hash :string]
+   [:pdf-hash :string]
+   [:gerada-por :string]
+   [:gerada-em :string]
+   [:ja-congelada {:optional true} :boolean]])
+
+(def FolhasDaSessaoOut
+  "Resposta de `GET /sessoes/:id/folhas` — todas as versoes congeladas da sessao, mais recente primeiro
+  (metadados apenas, mesma disciplina de `FolhaMetadadosOut`)."
+  [:map {:closed true}
+   [:sessao-id :string]
+   [:folhas [:sequential FolhaMetadadosOut]]])

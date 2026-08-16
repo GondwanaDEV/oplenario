@@ -40,6 +40,17 @@ describe("middleware — gate de presença do cookie sessao em rotas protegidas"
     expect(resp.headers.get("location")).toBeNull();
   });
 
+  // Etapa 5 fatia 6 (a FOLHA) — a folha é nominal e carrega o motivo da justificativa (LGPD, potencial
+  // dado de saúde), MESMO gate 'secretario' da chamada. Este é um teste de UX (evita round-trip a uma
+  // página que o backend recusaria de qualquer forma) — a autoridade real é o 401/403 do servidor.
+  it("rota protegida standalone /sessoes/:id/folha sem cookie → redireciona", async () => {
+    const resp = middleware(req("/sessoes/abc123/folha"));
+    expect(resp.status).toBe(307);
+    const location = new URL(resp.headers.get("location")!);
+    expect(location.pathname).toBe("/entrar");
+    expect(location.searchParams.get("redirect")).toBe("/sessoes/abc123/folha");
+  });
+
   it("rota vereador protegida sem cookie → redireciona", async () => {
     const resp = middleware(req("/vereador"));
     expect(resp.status).toBe(307);
