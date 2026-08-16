@@ -209,3 +209,19 @@ export interface QuorumSessaoOut {
   semRegistroDePresenca: boolean;
   quorum: ChamadaQuorumOut;
 }
+
+export interface FolhaMetadadosOut {
+  id: string;
+  versao: number;
+  specVersao: string;
+  htmlHash: string;
+  pdfHash: string;
+  geradaPor: string;
+  geradaEm: string;
+  jaCongelada?: boolean;
+}
+
+export interface FolhasDaSessaoOut {
+  sessaoId: string;
+  folhas: FolhaMetadadosOut[];
+}

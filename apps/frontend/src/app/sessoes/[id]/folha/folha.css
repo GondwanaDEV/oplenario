@@ -1,0 +1,103 @@
+/* Chrome específico da tela "A folha da sessão" (Etapa 5, fatia 6) — §22.6 eixo C. Tokens + chassi vêm de
+   globals.css (`.topo`/`.envelope`/`.marca`/`.btn`/`.chip`/`.bloco`/`.bloco-cabeca`/`.bloco-corpo`/
+   `.ilha-papel`/`.nota-imut`/`.tela-estado` já existem lá ou como receita repetida por convenção — ver
+   `.tela-estado` duplicado idêntico em ~15 rotas do repo). Aqui só o que é desta superfície.
+
+   ARQUÉTIPO (GUIDELINES §7): **Balcão de trabalho** — painel de entrada (lista de versões + ação de
+   congelar) + ilha-papel ao vivo (o documento), mesmo par que `expediente` prova. D11 do brief: esta tela
+   NÃO abriu rodada de design própria — o peso visual (o documento) já passou pelos dois consultores na
+   Fatia 2; aqui é casca. Por isso NENHUMA cor nova é introduzida — todo par texto/fundo abaixo reusa um
+   token já medido AA em outra tela do chassi (`--texto`/`--texto-2`/`--aviso-texto`/`--marca`/`--linha`/
+   `--surface`), nunca uma combinação literal nova.
+
+   Nome do grid (`.folha-grade`) é deliberadamente DISTINTO de `.bancada` (expediente): mesmos valores de
+   coluna (384px + 1fr), mas CSS global do Next não é escopado por rota — duas classes de mesmo nome em
+   páginas diferentes correm o risco de uma sobrescrever a outra se as duas rotas carregarem no mesmo
+   cliente (navegação SPA). Reuso é da RECEITA (os valores), não do seletor, seguindo a mesma regra que a
+   Fatia 2 já aplicou ao vocabulário de `livro-atas.html`. */
+
+/* Mesma receita repetida em chamada.css/plenario.css (não está no chassi) — o cabeçalho da tela de
+   sessão sempre tem um rótulo curto (tipo) + opcionalmente um dado de contexto (quando). Aqui só o tipo:
+   a folha não busca `SessaoOut`, então não há data/hora de sessão para mostrar sem inventar. */
+.sessao-meta { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+.sessao-meta .tipo { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); }
+
+.folha-grade {
+  display: grid;
+  grid-template-columns: 384px minmax(0, 1fr);
+  gap: clamp(1rem, 2.4vw, 1.8rem);
+  padding: clamp(1.2rem, 3vw, 2rem) 0 3rem;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .folha-grade { grid-template-columns: 1fr; }
+}
+
+/* ============== painel esquerdo: versões congeladas ============== */
+
+.versoes-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.7rem; }
+
+.versao-item {
+  border: 1px solid var(--linha);
+  border-radius: var(--raio);
+  padding: 0.8rem 0.9rem;
+  display: grid;
+  gap: 0.55rem;
+  background: var(--surface);
+}
+/* Selecionada: borda + sombra interna (sinal GRÁFICO) + o chip "Selecionada" abaixo garante que a
+   seleção nunca depende só da cor da borda (GUIDELINES §5, "cor nunca é único sinal"). */
+.versao-item.selecionada { border-color: var(--marca); box-shadow: 0 0 0 1px var(--marca) inset; }
+
+.versao-cabeca { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; }
+.versao-num { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); }
+.versao-quando { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+.versao-por { font-size: var(--t-12); color: var(--texto-2); }
+
+.versao-hashes { display: grid; gap: 0.3rem; }
+.hash-linha { display: flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); min-width: 0; }
+.hash-linha b { color: var(--texto); font-weight: 600; flex: 0 0 auto; }
+.hash-valor {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  user-select: all; /* o hash existe para ser conferido bit a bit — seleção de um clique, nunca escondido */
+  min-width: 0;
+}
+.hash-copiar {
+  flex: 0 0 auto; background: none; border: none; color: var(--marca); cursor: pointer;
+  font-family: var(--corpo); font-size: var(--t-12); padding: 0.2rem 0; min-height: 24px;
+}
+.hash-copiar:hover, .hash-copiar:focus-visible { text-decoration: underline; }
+
+.versao-acoes { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+.gerar-bloco { display: grid; gap: 0.6rem; padding-top: 0.9rem; margin-top: 0.2rem; border-top: 1px solid var(--linha); }
+.gerar-erro { color: var(--aviso-texto); font-size: var(--t-13); line-height: 1.5; margin: 0; }
+.gerar-nota { color: var(--texto-2); font-size: var(--t-12); line-height: 1.5; margin: 0; }
+
+.versoes-vazio { padding: 1.6rem 0.5rem; text-align: center; }
+.versoes-vazio p { color: var(--texto-2); font-size: var(--t-13); line-height: 1.55; margin: 0; }
+
+/* ============== painel direito: o visualizador ============== */
+
+.visualizador { display: grid; gap: 0.9rem; }
+.visualizador-topo { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; flex-wrap: wrap; }
+.visualizador-titulo { display: grid; gap: 0.15rem; }
+.visualizador-titulo h2 { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); margin: 0; }
+.visualizador-titulo span { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+
+.folha-frame {
+  width: 100%;
+  min-height: 72vh;
+  border: none;
+  border-radius: calc(var(--raio) - 4px);
+  background: #fff; /* o documento é papel — sempre branco, não tematiza (mesma regra de .ilha-papel/.merge) */
+}
+
+.visualizador-vazio, .visualizador-carregando, .visualizador-erro {
+  padding: 3rem 1.2rem;
+  text-align: center;
+  color: var(--texto-2);
+  font-size: var(--t-13);
+  line-height: 1.55;
+}
+.visualizador-erro { color: var(--aviso-texto); }

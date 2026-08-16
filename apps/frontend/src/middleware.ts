@@ -35,6 +35,10 @@ const PREFIXOS_PROTEGIDOS = [
 
 function ehRotaProtegida(pathname: string): boolean {
   if (/^\/sessoes\/[^/]+\/plenario$/.test(pathname)) return true;
+  // Etapa 5 fatia 6 (a FOLHA) — mesmo gate que /plenario: a folha é nominal e carrega o `motivo` da
+  // justificativa (LGPD, potencial dado de saúde), papel 'secretario' na borda real do backend. Esta
+  // checagem é só UX (evita round-trip a uma página que o servidor recusaria de qualquer forma).
+  if (/^\/sessoes\/[^/]+\/folha$/.test(pathname)) return true;
   return PREFIXOS_PROTEGIDOS.some(
     (prefixo) => pathname === prefixo || pathname.startsWith(`${prefixo}/`),
   );
@@ -79,5 +83,6 @@ export const config = {
     "/vereador/:path*",
     "/votar/:path*",
     "/sessoes/:id/plenario",
+    "/sessoes/:id/folha",
   ],
 };
