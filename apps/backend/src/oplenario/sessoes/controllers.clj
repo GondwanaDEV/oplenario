@@ -987,8 +987,15 @@
   `db/sessao/listar-fechadas-no-periodo`, como rede contra o chamador direto do Repo.
 
   Devolve o mapa de `logic/apurar-assiduidade` (`{:sessoes :vereadores :por-vereador :detalhe :totais}`),
-  com `:totais/:sessoes-sem-data-de-referencia` medido na MESMA tx das sessoes."
-  [repo-sessoes roster-da-casa-em-datas ator {:keys [de ate tipos] :as periodo}]
+  com `:totais/:sessoes-sem-data-de-referencia` medido na MESMA tx das sessoes.
+
+  `opts` (aridade 5) leva `:com-detalhe?` ate' o `logic` — a BORDA e' quem sabe se a apresentacao consome
+  `:detalhe` (so' o CSV `recorte=resumo` nao consome). Default TRUE: quem chama a aridade 4 (o payload JSON e
+  os testes da Fatia 2) continua recebendo o mapa completo."
+  ([repo-sessoes roster-da-casa-em-datas ator periodo]
+   (apurar-assiduidade repo-sessoes roster-da-casa-em-datas ator periodo {}))
+  ([repo-sessoes roster-da-casa-em-datas ator {:keys [de ate tipos] :as periodo}
+    {:keys [com-detalhe?] :or {com-detalhe? true}}]
   (when (nil? roster-da-casa-em-datas)
     (throw (ex-info "apurar-assiduidade: seam roster-da-casa-em-datas ausente (carry da Fatia 1)"
                     {:tipo :servidor/erro})))
@@ -1011,4 +1018,5 @@
                            (roster-da-casa-em-datas (:ente-id ator) (vec datas))
                            {})]
     (logic/apurar-assiduidade sessoes rosters-por-data presencas-por-sessao justificativas-por-sessao
-                              {:sessoes-sem-data-de-referencia sessoes-sem-data-de-referencia})))
+                              {:sessoes-sem-data-de-referencia sessoes-sem-data-de-referencia
+                               :com-detalhe? com-detalhe?}))))

@@ -715,8 +715,13 @@
           qp   (:query-params req)
           periodo (adapters-in-assiduidade/query->periodo qp)
           {:keys [formato recorte]} (adapters-in-assiduidade/query->apresentacao qp)
-          apuracao (controllers/apurar-assiduidade repo-sessoes roster-da-casa-em-datas ator periodo)
-          wire (adapters-out-assiduidade/apuracao->wire apuracao)]
+          ;; A BORDA decide se `:detalhe` chega a existir: o JSON sempre o publica, o CSV so' no
+          ;; `recorte=detalhe`. `formato=csv&recorte=resumo` era o unico caminho que CONSTRUIA e VALIDAVA por
+          ;; Malli ate' 60.000 linhas para nao renderizar nenhuma (achado da revisao adversarial da Fatia 3).
+          com-detalhe? (or (= :json formato) (= :detalhe recorte))
+          apuracao (controllers/apurar-assiduidade repo-sessoes roster-da-casa-em-datas ator periodo
+                                                   {:com-detalhe? com-detalhe?})
+          wire (adapters-out-assiduidade/apuracao->wire apuracao com-detalhe?)]
       (case formato
         :json (http/json-resposta 200 wire)
         :csv  (adapters-out-assiduidade/->csv-download
@@ -740,6 +745,17 @@
   borda (leitura operacional da Mesa, nao um read-model publico)."
   [{:keys [auth repo-sessoes objeto-store resolver-vereador relogio roster-da-casa dados-da-casa
            serializador-folha renderizador-pdf roster-da-casa-em-datas]}]
+  ;; ASSERCAO DE BOOT do seam — o carry que as revisoes das Fatias 1 e 2 registraram DUAS vezes e que a
+  ;; Fatia 3, que e' quem finalmente destrutura a chave, nao tinha. O mapa que `rotas.clj` passa aqui NAO e'
+  ;; `:closed`: uma chave com o nome errado (`:roster-da-casa-em-data`, um typo num refactor) destruturaria
+  ;; `nil` em SILENCIO no boot, o processo subiria saudavel, e o defeito so' apareceria na primeira
+  ;; requisicao do secretario a `/assiduidade`. Falhar AQUI transforma isso em processo que nao sobe — o
+  ;; check equivalente dentro de `controllers/apurar-assiduidade` continua valendo como segunda camada, mas
+  ;; ele roda tarde demais para ser um guard-rail de deploy.
+  (when-not (ifn? roster-da-casa-em-datas)
+    (throw (ex-info "sessoes/rotas: seam :roster-da-casa-em-datas ausente ou nao-funcao"
+                    {:tipo :servidor/erro
+                     :classe (some-> roster-da-casa-em-datas class .getName)})))
   (let [papel-vereador (it/exige-papel "vereador")]
    #{["/sessoes"     :post [auth (it/exige-papel "secretario") it/corpo-json (agendar-handler repo-sessoes)]
      :route-name :sessoes/agendar]

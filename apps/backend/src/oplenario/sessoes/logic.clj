@@ -1116,6 +1116,17 @@
   truncada (I7)."
   (* teto-de-sessoes-do-periodo-de-assiduidade teto-de-vereadores-do-periodo-de-assiduidade))
 
+(def teto-de-linhas-de-detalhe-de-assiduidade
+  "Teto da SAIDA `:detalhe` (400 x 150 = 60.000 linhas). NAO e' o mesmo guard-rail que
+  `teto-de-linhas-de-lote-de-presenca`, que limita o que ENTRA da leitura de eventos: este limita o produto
+  `sessoes x roster-da-data` que a apuracao PRODUZ, e ate' a revisao da Fatia 3 esse produto era ILIMITADO —
+  o teto de 150 vereadores existia como `def` e nao era verificado em lugar nenhum (`grep`: aparecia so' na
+  propria `def` e como multiplicador). 400 sessoes na MESMA data com um roster inflado (o acervo migrado
+  sujo que a docstring do lote de presenca ja' descreve) produziam milhoes de linhas serializadas e
+  validadas por Malli, tres a quatro copias do arquivo no heap, com pool de 10 e sem `statement_timeout`.
+  Fail-closed com o numero MEDIDO (`:limite/*` -> 422 pelo interceptor global), nunca pagina truncada (I7)."
+  (* teto-de-sessoes-do-periodo-de-assiduidade teto-de-vereadores-do-periodo-de-assiduidade))
+
 (defn validar-periodo-assiduidade!
   "Fail-closed, chamado em DOIS lugares de proposito (mesma REDE de `vereador/normalizar-datas!`): no
   controller, ANTES de abrir a tx (rejeicao nao empresta conexao do pool) — e de novo dentro de
@@ -1272,14 +1283,25 @@
   QUANTAS, nao QUAIS — e a fatia 3 serializa `:detalhe` para um CSV que circula por e-mail. A politica de
   sigilo existe no nivel da sessao desde a Etapa 4; e' a projecao nova que passava por baixo dela.
 
+  DOIS TETOS DE SAIDA, fail-closed com o numero MEDIDO (`:limite/*` -> 422 pelo interceptor global), ambos
+  ANTES de qualquer serializacao: `teto-de-linhas-de-detalhe-de-assiduidade` (60.000 linhas de detalhe) e
+  `teto-de-vereadores-do-periodo-de-assiduidade` (150). Ate' a revisao da Fatia 3 os dois eram `def` que
+  ninguem verificava, e o produto `sessoes x roster-da-data` era ilimitado.
+
   Devolve `{:sessoes [...] :vereadores [...] :por-vereador [...] :detalhe [...] :totais {...}}`.
-  `contexto` = `{:sessoes-sem-data-de-referencia N}` (obrigatorio, ver `:totais`)."
+  `contexto` = `{:sessoes-sem-data-de-referencia N}` (obrigatorio, ver `:totais`) +
+  `:com-detalhe?` (opcional, default TRUE): `false` OMITE a chave `:detalhe` — nunca a devolve vazia — para
+  a unica apresentacao que nao a consome (CSV `recorte=resumo`)."
   [sessoes rosters-por-data presencas-por-sessao justificativas-por-sessao
    {:keys [sessoes-sem-data-de-referencia] :as contexto}]
   (when-not (nat-int? sessoes-sem-data-de-referencia)
     (throw (ex-info "apurar-assiduidade: contexto sem :sessoes-sem-data-de-referencia"
                     {:tipo :servidor/erro :contexto (keys contexto)})))
-  (let [;; "chave ausente" e "perguntei e veio vazio" voltam a ser COISAS DIFERENTES. As duas camadas de
+  (let [;; `:com-detalhe?` AUSENTE = true (o payload JSON sempre publica `:detalhe`). O unico chamador que
+        ;; o passa false e' o CSV `recorte=resumo`, que nao consome a projecao: construi-la ali era gastar
+        ;; heap e uma passagem inteira de Malli para jogar fora (achado da revisao adversarial da Fatia 3).
+        com-detalhe? (get contexto :com-detalhe? true)
+        ;; "chave ausente" e "perguntei e veio vazio" voltam a ser COISAS DIFERENTES. As duas camadas de
         ;; baixo ja' garantiam isso — `roster-da-casa-em-datas` chega a LANCAR `:invariante/data-desconhecida`
         ;; para nao fabricar chave, e as leituras em lote pre-semeiam toda chave pedida — e um `(get m k [])`
         ;; aqui desfazia as duas: uma data de referencia que nao casasse com nenhuma chave (seam trocado, tipo
@@ -1318,6 +1340,15 @@
                              (map (fn [l] [sid sigilosa l]) linhas))))
               por-sessao)
 
+        ;; O TETO DA SAIDA, fail-closed, ANTES de construir/serializar qualquer projecao (ver
+        ;; `teto-de-linhas-de-detalhe-de-assiduidade`). `(count todas-linhas)` E' a contagem de `:detalhe`
+        ;; (um para um), medida aqui porque e' o primeiro ponto em que o produto `sessoes x roster` existe.
+        _ (let [n (count todas-linhas)]
+            (when (> n teto-de-linhas-de-detalhe-de-assiduidade)
+              (throw (ex-info "apuracao de assiduidade: linhas de detalhe acima do teto"
+                              {:tipo :limite/detalhe-excedido :medido n
+                               :teto teto-de-linhas-de-detalhe-de-assiduidade}))))
+
         identidades
         (reduce (fn [acc [_sid _sig {:keys [vereador-id nome partido] :as linha}]]
                   (if (nil? vereador-id)
@@ -1352,11 +1383,24 @@
              (sort-by (juxt (comp #(or % "") :nome) (comp str :id)))
              vec)
 
+        ;; O teto de VEREADORES do brief (§Tetos) — ate' a revisao da Fatia 3 ele existia so' como `def`.
+        ;; Vale sobre `vereadores-out` (e nao sobre o roster) porque e' esta a contagem que sai no arquivo:
+        ;; ela inclui as presencas SEM ASSENTO, que nao tem FK e que um acervo migrado sujo multiplica.
+        _ (when (> (count vereadores-out) teto-de-vereadores-do-periodo-de-assiduidade)
+            (throw (ex-info "apuracao de assiduidade: vereadores no periodo acima do teto"
+                            {:tipo :limite/vereadores-excedido :medido (count vereadores-out)
+                             :teto teto-de-vereadores-do-periodo-de-assiduidade})))
+
         detalhe-out
-        (mapv (fn [[sid sigilosa linha]]
-                {:sessao-id sid :vereador-id (:vereador-id linha) :estado (:estado linha)
-                 :sigilosa sigilosa})
-              todas-linhas)
+        (when com-detalhe?
+          ;; `vereador-id` nil e' DESCARTADO aqui pela MESMA razao que `identidades` e `agregados` acima o
+          ;; descartam — a assimetria era um defeito: `(str nil)` = "" passa o `:string` do schema e a linha
+          ;; saia ORFA no CSV, sem nome e sem entrada correspondente em `:vereadores`.
+          (into [] (comp (remove (fn [[_sid _sig linha]] (nil? (:vereador-id linha))))
+                         (map (fn [[sid sigilosa linha]]
+                                {:sessao-id sid :vereador-id (:vereador-id linha)
+                                 :estado (:estado linha) :sigilosa sigilosa})))
+                todas-linhas))
 
         agregados
         (reduce (fn [acc [_sid _sig {:keys [vereador-id] :as linha}]]
@@ -1377,11 +1421,11 @@
              (sort-by (fn [{:keys [vereador-id]}]
                        [(or (:nome (get identidades vereador-id)) "") (str vereador-id)]))
              vec)]
-    {:sessoes sessoes-out
-     :vereadores vereadores-out
-     :por-vereador por-vereador-out
-     :detalhe detalhe-out
-     :totais {:sessoes-consideradas (count sessoes-out)
+    (cond-> {:sessoes sessoes-out
+             :vereadores vereadores-out
+             :por-vereador por-vereador-out
+             :totais
+             {:sessoes-consideradas (count sessoes-out)
               :vereadores-considerados (count vereadores-out)
               :sessoes-sigilosas (count (filter :sigilosa sessoes-out))
               ;; DECLARADO, nao silencioso. Sessao fechada sem NENHUM marco de data (`agendada_para` e'
@@ -1396,4 +1440,7 @@
               ;; proibe.
               :sessoes-sem-data-de-referencia sessoes-sem-data-de-referencia
               :criterio-de-inclusao criterio-de-inclusao-assiduidade
-              :nota-de-metodologia nota-de-metodologia-assiduidade}}))
+              :nota-de-metodologia nota-de-metodologia-assiduidade}}
+      ;; A chave `:detalhe` ou vem COMPLETA ou NAO VEM — nunca um vetor vazio, que leria como "nenhuma
+      ;; linha no periodo" e nao como "esta apresentacao nao pede detalhe".
+      com-detalhe? (assoc :detalhe detalhe-out))))
