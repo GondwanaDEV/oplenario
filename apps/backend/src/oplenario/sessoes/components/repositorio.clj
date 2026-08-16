@@ -93,7 +93,21 @@
   (inserir-folha! [this ente-id row]
     "Insere a linha do congelamento com a versao EXPLICITA que `row` traz (D7 — nao MAX+1 no proprio INSERT).
      `UNIQUE (ente_id, sessao_id, versao)` detecta a corrida: 23505 sob duas propostas concorrentes para o
-     MESMO numero. O chamador re-tenta (rele o max, re-renderiza, re-propoe). Devolve a linha inserida.")
+     MESMO numero. O chamador re-tenta (rele o max, re-renderiza, re-propoe). Devolve a linha inserida.
+     ESCRITA CRUA, sem dedup — o caminho de producao e' `inserir-folha-dedup!`; este fica para semear e para
+     escritor que NAO representa um pedido de ator (o competidor dos testes de corrida).")
+  (inserir-folha-dedup! [this ente-id row desde]
+    "O INSERT de D7 com a checagem de D9 DENTRO DA MESMA tx (revisao adversarial da fatia 4): le'
+     `recente-do-ator` e, se ja' existe folha desta (sessao, ator) a partir de `desde`, devolve-a com
+     `:ja-congelada true` em vez de inserir; senao insere a versao explicita de `row`.
+
+     Por que a checagem TEM de morar aqui, e nao no controller: o pre-check do controller acontece ANTES da
+     renderizacao (HTML+PDF, I/O lento), entao dois pedidos CONCORRENTES do MESMO ator — o duplo-clique que
+     D9 nomeia como motivacao — liam ambos `nil` e ambos congelavam; o `UNIQUE` resolvia so' o NUMERO (v1 e
+     v2), e o acervo ficava com DUAS linhas imutaveis do mesmo clique. Com a checagem aqui, o perdedor da
+     corrida ou ja' enxerga a linha commitada (dedup), ou colide em 23505 e, no retry (tx nova), enxerga —
+     nos DOIS caminhos converge para uma linha so'. E' o MESMO desenho de `registrar-chamada-conduzida!`:
+     check-then-act de append-only vive dentro da tx que escreve, nunca fora dela.")
   (buscar-folha [this ente-id sessao-id versao] "Uma versao especifica da folha (metadados), ou nil.")
   (folhas-da-sessao [this ente-id sessao-id] "Todas as versoes congeladas da sessao, mais recente primeiro.")
   (folha-recente-do-ator [this ente-id sessao-id gerada-por desde]
@@ -324,6 +338,14 @@
     (transacao this ente-id #(db-folha/max-versao % ente-id sessao-id)))
   (inserir-folha! [this ente-id row]
     (transacao this ente-id #(db-folha/inserir! % (assoc row :ente-id ente-id))))
+  (inserir-folha-dedup! [this ente-id {:keys [sessao-id gerada-por] :as row} desde]
+    (transacao this ente-id
+      (fn [tx]
+        ;; D9 DENTRO da tx da escrita — a leitura e o INSERT sao o MESMO ato, e nao dois separados por uma
+        ;; renderizacao (que e' o que abria a janela do duplo-clique concorrente).
+        (if-let [existente (db-folha/recente-do-ator tx ente-id sessao-id gerada-por desde)]
+          (assoc existente :ja-congelada true)
+          (db-folha/inserir! tx (assoc row :ente-id ente-id))))))
   (buscar-folha [this ente-id sessao-id versao]
     (transacao this ente-id #(db-folha/buscar % ente-id sessao-id versao)))
   (folhas-da-sessao [this ente-id sessao-id]

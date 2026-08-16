@@ -215,6 +215,35 @@
     (is (false? @chamado?) "D8 recusa ANTES de tocar o serializador — nenhum byte chega a ser produzido")
     (is (empty? (repo-sessoes/folhas-da-sessao *repo-s* ente sid)) "nada foi materializado")))
 
+(deftest a-recusa-de-d8-nao-carrega-o-motivo-da-justificativa-na-ex-data
+  ;; REGRESSAO (revisao adversarial da fatia 4, achado MENOR): `m/explain` devolve o DOCUMENTO INTEIRO em
+  ;; `:value` (e o sub-valor de cada erro). O documento carrega `motivo` de justificativa — dado
+  ;; potencialmente de saude (LGPD). Poe-lo na `ex-data` faz a excecao viajar com o dado sensivel dentro,
+  ;; onde qualquer mudanca futura de observabilidade (log estruturado, APM, um `pr-str` de debug) o reabre
+  ;; sem ninguem tocar neste arquivo. A ex-data deve dizer ONDE falhou, nunca O QUE havia la' dentro.
+  (let [ente (random-uuid) leg (casa! ente)
+        _v1 (vereador-com-mandato! ente leg "Ana")
+        v2 (vereador-com-mandato! ente leg "Bruno")
+        sid (abrir-e-encerrar! ente)
+        a (ator ente)
+        motivo-sensivel "hipertensao arterial CID I10"
+        _ (repo-sessoes/criar-justificativa! *repo-s* ente
+            {:id (random-uuid) :ente-id ente :sessao-id sid :vereador-id v2
+             :motivo motivo-sensivel :created-by (:identidade-id a)})
+        ;; `dados-da-casa` vazio reprova `CabecalhoDaCasa` — o MESMO gatilho de D8 do teste acima.
+        ex (try (controllers/gerar-folha! *repo-s* (roster-seam) (fn [_ _] {}) a sid
+                  (tempo/relogio-fixo (Instant/now)) (m-ports))
+                nil
+                (catch clojure.lang.ExceptionInfo e e))
+        impresso (pr-str (ex-data ex))]
+    (is (some? ex) "D8 tem de reprovar este documento — sem a recusa o teste nao e' cobertura")
+    (is (not (str/includes? impresso motivo-sensivel))
+        "o motivo da justificativa NAO pode viajar dentro da ex-data da recusa")
+    (is (not (str/includes? impresso "Bruno"))
+        "nem o nome do vereador que se justificou — a ex-data nao e' um dump do documento")
+    (is (str/includes? impresso ":cabecalho-da-casa")
+        "mas o diagnostico continua acionavel: o CAMINHO que falhou aparece")))
+
 ;; ---------- D9: dedup de 30s — o MESMO ator em <30s devolve a MESMA versao ----------
 
 (deftest dedup-mesmo-ator-em-menos-de-30s-devolve-a-mesma-versao
@@ -234,6 +263,48 @@
     (is (true? (:ja-congelada row2)) "o reenvio e' marcado como dedup, distinguivel de uma geracao nova")
     (is (= 1 (count (repo-sessoes/folhas-da-sessao *repo-s* ente sid))) "so' UMA linha no acervo")))
 
+(deftest dedup-vale-tambem-sob-concorrencia-do-mesmo-ator
+  ;; REGRESSAO (revisao adversarial da fatia 4, achado MAJOR): o dedup de D9 era um check-then-act FORA de
+  ;; qualquer tx compartilhada — `folha-recente-do-ator` numa tx propria, a RENDERIZACAO (HTML+PDF, I/O lento)
+  ;; no meio, e o INSERT numa tx nova. O duplo-clique CONCORRENTE do MESMO ator (o cenario que D9 nomeia como
+  ;; motivacao) atravessava a janela: os dois pedidos liam nil, os dois renderizavam, o `UNIQUE` resolvia o
+  ;; NUMERO (v1 e v2) — e o acervo ficava com DUAS linhas imutaveis do MESMO clique, que e' exatamente o que
+  ;; D9 existe para impedir. Interleaving DETERMINISTICO pelo mesmo espiao da corrida acima, so' que o
+  ;; competidor commita com a identidade do PROPRIO ator: ele representa o pedido gemeo que ganhou a corrida
+  ;; enquanto este ainda renderizava.
+  (let [ente (random-uuid) leg (casa! ente)
+        _v1 (vereador-com-mandato! ente leg "Ana")
+        sid (abrir-e-encerrar! ente)
+        a (ator ente)
+        agora (Instant/now)
+        ja-colidiu? (atom false)
+        gemeo! (fn []
+                 (repo-sessoes/inserir-folha! *repo-s* ente
+                   {:id (random-uuid) :sessao-id sid :versao 1 :spec-versao "folha-sessao-v1"
+                    :html-hash "sha256:aa" :html-content-type "text/html; charset=utf-8"
+                    :html-objeto-store-ref "folhas/gemeo.html"
+                    :pdf-hash "sha256:bb" :pdf-content-type "application/pdf"
+                    :pdf-objeto-store-ref "folhas/gemeo.pdf"
+                    ;; a MESMA identidade: e' o duplo-clique, nao uma segunda Secretaria.
+                    :gerada-por (:identidade-id a) :gerada-em agora}))
+        real (ser-folha/serializador-folha-html)
+        espiao (reify ser-folha/SerializadorFolha
+                 (serializar [_ documento] (ser-folha/serializar real documento))
+                 (serializar [_ documento versao]
+                   (when (compare-and-set! ja-colidiu? false true) (gemeo!))
+                   (ser-folha/serializar real documento versao)))
+        row (controllers/gerar-folha! *repo-s* (roster-seam) (dados-da-casa-seam) a sid
+              (tempo/relogio-fixo agora) (assoc (m-ports) :serializador espiao))
+        todas (repo-sessoes/folhas-da-sessao *repo-s* ente sid)]
+    (is (true? @ja-colidiu?) "o pedido gemeo TEM de ter rodado — sem isso este teste nao e' cobertura")
+    (is (= 1 (count todas))
+        "D9 sob concorrencia: UMA linha no acervo, nao duas — o gemeo do mesmo ator nao cria versao nova")
+    (is (= 1 (:versao row)) "devolve a versao que o gemeo congelou, nao uma v2")
+    (is (true? (:ja-congelada row)) "e a marca dedup, para a borda responder 200 e nao 201")
+    (is (nil? (os/obter (:objeto-store *sys*) "folhas/gemeo.html"))
+        "o caminho de dedup NAO guarda binario: gravar os bytes re-renderizados (que imprimem outro numero)
+         sob o ref da linha existente CORROMPERIA o hash ja' gravado")))
+
 (deftest dedup-e-por-ator-dois-atores-diferentes-produzem-duas-versoes
   (let [ente (random-uuid) leg (casa! ente)
         _v1 (vereador-com-mandato! ente leg "Ana")
@@ -242,6 +313,24 @@
         row2 (gerar! sid (ator ente))]
     (is (= 1 (:versao row1)))
     (is (= 2 (:versao row2)) "ator DIFERENTE -> dedup nao se aplica, congela versao nova")))
+
+;; ---------- a chave do objeto_store so' usa uuid ECHOADO pelo banco (disciplina do molde) ----------
+
+(deftest store-ref-usa-o-uuid-echoado-pelo-banco-nao-o-parametro-cru
+  ;; GUARDA (revisao adversarial da fatia 4, achado MENOR): o molde
+  ;; (`legislativo/gerar-artefato-publicacao!`) monta a chave do objeto_store a partir do `(:id norma)`
+  ;; ECHOADO pela leitura, nunca do parametro cru do caller — defesa em profundidade para que a chave so'
+  ;; contenha valores round-tripados e tipados pelo PG (uuid canonico), independentemente do que a borda
+  ;; (Fatia 5, ainda nao escrita) coagir. Nao ha' exploracao hoje; este teste amarra a disciplina.
+  (let [ente (random-uuid) leg (casa! ente)
+        _v1 (vereador-com-mandato! ente leg "Ana")
+        sid (abrir-e-encerrar! ente)
+        row (gerar! sid (ator ente))
+        sessao-real (repo-sessoes/buscar-sessao *repo-s* ente sid)]
+    (is (= (str "folhas/" ente "/" (:id sessao-real) "/" (:html-hash row) ".html")
+           (:html-objeto-store-ref row)))
+    (is (= (str "folhas/" ente "/" (:id sessao-real) "/" (:pdf-hash row) ".pdf")
+           (:pdf-objeto-store-ref row)))))
 
 ;; ---------- multi-tenant: ator de outra Casa nao alcanca a folha (RLS via folha-da-sessao) ----------
 

@@ -767,7 +767,9 @@
       (let [data    (data-de-referencia sessao)
             chamada (projetar-chamada lido (roster-da-casa ente-id data) data agora)]
         (gerador-folha/renderizar
-         {:sessao {:id sessao-id :estado (:estado sessao)
+         ;; `:id` sai da LINHA LIDA (uuid round-tripado pelo PG), nao do parametro cru — e' este valor que
+         ;; `gerar-folha!` usa para montar a chave do objeto_store (disciplina do molde de `legislativo`).
+         {:sessao {:id (:id sessao) :estado (:estado sessao)
                    :motivo-nao-realizada (:motivo-nao-realizada sessao)}
           :instante (:instante chamada)
           :cabecalho-da-casa (dados-da-casa ente-id (:data-de-composicao chamada))
@@ -796,20 +798,24 @@
   Devolve `{:row :html :pdf}` em sucesso; PROPAGA `PSQLException` em 23505 — o chamador (`congelar!`) decide
   re-tentar. `html`/`pdf` sao os mapas `{:bytes :content-type}` que os ports devolveram (o CALLER guarda os
   binarios DEPOIS do INSERT ter commitado, nunca aqui — mesma ordem ANCORA-PRIMEIRO do molde)."
-  [repo-sessoes ente-id sessao-id doc serializador renderizador-pdf gerada-por agora]
+  [repo-sessoes ente-id sessao-id doc serializador renderizador-pdf gerada-por agora desde]
   (let [versao        (inc (repo/max-versao-da-folha repo-sessoes ente-id sessao-id))
         html          (serializador-folha/serializar serializador doc versao)
         html-hash     (sha256-hex (:bytes html))
         pdf           (renderizador-pdf/renderizar renderizador-pdf (:bytes html) agora)
         pdf-hash      (sha256-hex (:bytes pdf))
-        row (repo/inserir-folha! repo-sessoes ente-id
+        row (repo/inserir-folha-dedup! repo-sessoes ente-id
               {:id (ids/novo-id) :sessao-id sessao-id :versao versao :spec-versao (:spec-versao doc)
                :html-hash html-hash :html-content-type (:content-type html)
                :html-objeto-store-ref (store-ref-folha ente-id sessao-id html-hash "html")
                :pdf-hash pdf-hash :pdf-content-type (:content-type pdf)
                :pdf-objeto-store-ref (store-ref-folha ente-id sessao-id pdf-hash "pdf")
-               :gerada-por gerada-por :gerada-em agora})]
-    {:row row :html html :pdf pdf}))
+               :gerada-por gerada-por :gerada-em agora}
+              desde)]
+    ;; `:ja-congelada` = o gemeo do MESMO ator commitou enquanto renderizavamos (D9 fechado dentro da tx).
+    ;; Devolver os bytes junto seria um erro: eles imprimem OUTRO numero de versao e o CALLER os guardaria
+    ;; sob o `*_objeto_store_ref` da linha EXISTENTE, corrompendo o binario cujo hash ja' esta' gravado.
+    (if (:ja-congelada row) {:row row} {:row row :html html :pdf pdf})))
 
 (defn- congelar!
   "D7 — DESVIO CONSCIENTE DO MOLDE, escrito aqui para a proxima revisao NAO 'consertar' de volta para
@@ -821,7 +827,17 @@
   MESMO instante), RELE o max (ja' enxerga o commit concorrente) e REFAZ A RENDERIZACAO INTEIRA com o
   numero novo. O `UNIQUE (ente_id, sessao_id, versao)` (mig 0073) continua sendo o que garante a corretude
   sob corrida — so' muda QUEM PROPOE o numero. Retry UNICO (mesma disciplina de `inserir-com-retry!`/
-  `inserir-artefato-com-retry!`): uma SEGUNDA colisao no mesmo pedido e' bug, nao corrida legitima.
+  `inserir-artefato-com-retry!`): uma SEGUNDA colisao no mesmo pedido e' bug, nao corrida legitima. CARRY
+  para a Fatia 5: nessa segunda colisao a `PSQLException` sobe CRUA (sem `ex-info`) — falhar alto e' o
+  comportamento correto (nada errado e' gravado), mas a borda HTTP tera' de traduzi-la em vez de deixar
+  cair no 500 generico.
+
+  D9 VIVE DENTRO DA TX DA ESCRITA (`repo/inserir-folha-dedup!`), nao antes dela. O pre-check em
+  `gerar-folha!` e' so' o atalho barato do duplo-clique SEQUENCIAL (evita renderizar a' toa); ele nao pode
+  ser a garantia, porque entre ele e o INSERT ha' a renderizacao inteira do HTML+PDF — janela na qual dois
+  pedidos concorrentes do MESMO ator liam ambos `nil` e congelavam DUAS linhas imutaveis do mesmo clique.
+  A checagem na tx converge nos dois caminhos possiveis: ou o perdedor ja' enxerga a linha commitada
+  (dedup), ou colide em 23505 e a enxerga no retry.
 
   ANCORA-ANTES-DO-BLOB, e por que e' MAIS seguro aqui que nos moldes: a linha insere primeiro; os DOIS
   binarios vao ao `objeto-store` DEPOIS, so' se o INSERT commitou. Se o `objeto-store` falhar entre os dois
@@ -829,15 +845,18 @@
   `remessa_gerada`, aqui o binario e' RE-DERIVAVEL byte a byte a partir da PROPRIA linha: a renderizacao e'
   deterministica (Fatias 2/3) e todo insumo (versao, `gerada_em`, o dado da sessao — imutavel depois de
   fechada) ja' esta' gravado. A linha nao e' so' uma ancora para triagem manual; e' a receita completa."
-  [repo-sessoes ente-id sessao-id doc serializador renderizador-pdf objeto-store gerada-por agora]
+  [repo-sessoes ente-id sessao-id doc serializador renderizador-pdf objeto-store gerada-por agora desde]
   (let [tentar #(congelar-tentativa repo-sessoes ente-id sessao-id doc serializador renderizador-pdf
-                                    gerada-por agora)
+                                    gerada-por agora desde)
         {:keys [row html pdf]}
         (try (tentar)
              (catch PSQLException e
                (if (= "23505" (.getSQLState e)) (tentar) (throw e))))]
-    (store/guardar! objeto-store (:html-objeto-store-ref row) (:bytes html) (:content-type html))
-    (store/guardar! objeto-store (:pdf-objeto-store-ref row) (:bytes pdf) (:content-type pdf))
+    ;; DEDUP (D9) resolvido dentro da tx: a linha ja' existia, os binarios dela tambem — nao ha' o que
+    ;; guardar, e guardar os bytes re-renderizados sob os refs dela seria destrutivo (ver `congelar-tentativa`).
+    (when-not (:ja-congelada row)
+      (store/guardar! objeto-store (:html-objeto-store-ref row) (:bytes html) (:content-type html))
+      (store/guardar! objeto-store (:pdf-objeto-store-ref row) (:bytes pdf) (:content-type pdf)))
     row))
 
 (defn gerar-folha!
@@ -879,10 +898,23 @@
       (when-not (m/validate mod-folha/FolhaDocumento doc)
         (throw (ex-info "gerar-folha!: documento nao bate FolhaDocumento — recusado ANTES de renderizar"
                         {:tipo :servidor/erro :sessao-id sessao-id
-                         :explicacao (m/explain mod-folha/FolhaDocumento doc)})))
+                         ;; SO' OS CAMINHOS que reprovaram — nunca o `:value` do `m/explain`, que e' o
+                         ;; DOCUMENTO INTEIRO (e cada erro carrega o sub-valor). O documento traz `motivo`
+                         ;; de justificativa, dado potencialmente de saude (LGPD), e nome de vereador: uma
+                         ;; `ex-data` viaja com a excecao e reaparece em qualquer observabilidade futura
+                         ;; (log estruturado, APM, um `pr-str` de debug) sem ninguem tocar neste arquivo.
+                         ;; O diagnostico util e' ONDE falhou, nao O QUE havia la' dentro.
+                         :caminhos (mapv #(select-keys % [:in :path])
+                                         (:errors (m/explain mod-folha/FolhaDocumento doc)))})))
       (let [gerada-por (:identidade-id ator)
-            desde      (.minus ^Instant agora logic/janela-de-deduplicacao-de-chamada)]
-        (if-let [existente (repo/folha-recente-do-ator repo-sessoes ente-id sessao-id gerada-por desde)]
+            desde      (.minus ^Instant agora logic/janela-de-deduplicacao-de-chamada)
+            ;; o UUID ECHOADO pelo banco (`folha-da-sessao` o tira da linha lida), nunca o parametro cru —
+            ;; mesma disciplina do molde `legislativo/gerar-artefato-publicacao!`: a chave do objeto_store
+            ;; so' usa valor round-tripado+tipado pelo PG, independentemente do que a borda coagir.
+            sid-echoado (get-in doc [:sessao :id])]
+        ;; ATALHO barato do duplo-clique SEQUENCIAL (poupa a renderizacao). A GARANTIA de D9 nao esta' aqui
+        ;; — esta' dentro da tx de `repo/inserir-folha-dedup!`; ver a docstring de `congelar!`.
+        (if-let [existente (repo/folha-recente-do-ator repo-sessoes ente-id sid-echoado gerada-por desde)]
           (assoc existente :ja-congelada true)
-          (congelar! repo-sessoes ente-id sessao-id doc serializador renderizador-pdf objeto-store
-                     gerada-por agora))))))
+          (congelar! repo-sessoes ente-id sid-echoado doc serializador renderizador-pdf objeto-store
+                     gerada-por agora desde))))))
