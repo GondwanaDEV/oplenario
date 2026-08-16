@@ -4,7 +4,8 @@
   a traducao da borda fica no diplomat (que chama adapters/in|out). Depende do Repo-Component (e do ObjetoStore
   do kernel, p/ a ingestao de gravacao — kernel e' camada compartilhada, nao outro modulo), nunca do db/
   (§3-bis). O `ator` (resolvido na borda) e' o sujeito de toda operacao (§22.5: sem ator = proibido)."
-  (:require [malli.core :as m]
+  (:require [clojure.tools.logging :as log]
+            [malli.core :as m]
             [oplenario.kernel.autorizacao :as authz]
             [oplenario.kernel.components.objeto-store :as store]
             [oplenario.kernel.ids :as ids]
@@ -918,3 +919,50 @@
           (assoc existente :ja-congelada true)
           (congelar! repo-sessoes ente-id sid-echoado doc serializador renderizador-pdf objeto-store
                      gerada-por agora desde))))))
+
+;; ---------- Etapa 5 fatia 5 — LEITURA das versoes congeladas (rotas) ----------
+;; As DUAS fns abaixo sao o ponto de entrada das rotas de LEITURA (`GET /sessoes/:id/folhas[/…]`). O MESMO
+;; gate de `folha-da-sessao`/`gerar-folha!` — `logic/pode-ver-sessao?`, NUNCA o gate magro do quorum — vale
+;; aqui tambem: a lista de versoes e o conteudo carregam menos dado por linha que a folha nominal completa,
+;; mas nao ha' razao para a LEITURA abrir mais do que o proprio CONGELAMENTO abre. `it/exige-papel
+;; "secretario"` cobre a borda das quatro rotas; aqui e' so' a policy fina.
+
+(defn folhas-da-sessao-metadados
+  "As versoes congeladas da sessao `sessao-id` (Etapa 5 fatia 5), so' METADADOS — nenhum binario, nenhum
+  `*_objeto_store_ref`. `nil` (sessao inexistente neste ente, cross-tenant inclusive) -> 404 na borda; lista
+  vazia (sessao existe, nunca foi congelada) e' um 200 legitimo, distinto do 404."
+  [repo-sessoes ator sessao-id]
+  (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/ver-folha sessao logic/pode-ver-sessao?)
+    (repo/folhas-da-sessao repo-sessoes (:ente-id ator) sessao-id)))
+
+(defn folha-conteudo
+  "Le' o BINARIO CONGELADO (`qual` = :html ou :pdf) da versao `versao` da folha da sessao `sessao-id` do
+  objeto_store — NUNCA re-renderiza (o proposito do congelamento e' que a leitura mostre exatamente os
+  bytes cujo hash foi gravado; re-renderizar aqui destruiria essa garantia). O I/O de blob mora AQUI
+  (controller impuro), nao no Repo — mesmo racional de `transparencia/baixar-artefato-da-norma` (o Repo so'
+  resolve o ponteiro).
+
+  `nil` (sessao inexistente neste ente, cross-tenant inclusive) -> 404 na borda, ANTES de qualquer consulta
+  de versao (nao revela nem a existencia da sessao a quem nao pode ve-la).
+
+  Com a sessao resolvida e autorizada, TRES desfechos (mesmo padrao de
+  `transparencia/baixar-artefato-da-norma`):
+   - `:versao-nao-encontrada` — a sessao existe, a versao pedida nao -> 404.
+   - `:blob-ausente` — a linha existe (ponteiro gravado), o objeto_store nao devolve bytes: a ANCORA-antes-
+     do-blob (docstring de `congelar!`) falhou entre o INSERT e o `guardar!`. E' ALERTA (log/error + 500),
+     NUNCA 404 sobre um congelamento que existe, NUNCA um render novo.
+   - `:ok` — bytes + content-type + versao, prontos para a resposta binaria."
+  [repo-sessoes objeto-store ator sessao-id versao qual]
+  (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/ver-folha sessao logic/pode-ver-sessao?)
+    (if-let [row (repo/buscar-folha repo-sessoes (:ente-id ator) sessao-id versao)]
+      (let [ref          (case qual :html (:html-objeto-store-ref row) :pdf (:pdf-objeto-store-ref row))
+            content-type (case qual :html (:html-content-type row) :pdf (:pdf-content-type row))]
+        (if-let [b (store/obter objeto-store ref)]
+          {:resultado :ok :bytes b :content-type content-type :versao versao}
+          (do (log/error "sessoes: folha com ponteiro mas SEM blob no objeto_store"
+                         {:evento :folha-sem-blob :ente-id (:ente-id ator) :sessao-id sessao-id
+                          :versao versao :qual qual :objeto-store-ref ref})
+              {:resultado :blob-ausente})))
+      {:resultado :versao-nao-encontrada})))

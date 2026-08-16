@@ -234,3 +234,48 @@
   []
   @roteamento-de-log
   (->RenderizadorPdfOpenHtmlToPdf))
+
+;; ---------- Etapa 5 fatia 5 — o TIMEOUT DE RENDERIZACAO (obrigacao herdada da fatia 3) ----------
+;; A revisao de seguranca da Fatia 3 aceitou a ausencia de timeout SO' PORQUE nao existia superficie HTTP
+;; disparando a renderizacao. `POST /sessoes/:id/folha` (Fatia 5) e' essa superficie: sem prazo, um documento
+;; patologico (que passou pelo TETO de tamanho do serializador mas ainda assim degenera no layout — CSS 2.1
+;; com muitas linhas de tabela e' O(n) a O(n^2) conforme o motor de layout) pendura a conexao HTTP e o worker
+;; que a atende indefinidamente. O teto de tamanho (`serializador-folha.clj`) e este timeout sao as DUAS
+;; camadas da mesma obrigacao — uma barra o payload, a outra barra o TEMPO.
+
+(def ^:const timeout-renderizacao-ms
+  "15s — generoso sobre o tempo real de render de uma folha (documento pequeno, CSS 2.1 sem JS/flex/grid,
+  layout so' `block`/`table`, fonte base-14 sem embutimento — nada aqui e' caro por design). Protege o
+  worker HTTP e o pool de conexoes de um documento patologico sem penalizar o caso comum sob carga normal
+  do container (CPU compartilhada, GC)."
+  15000)
+
+(defrecord RenderizadorPdfComTimeout [delegate timeout-ms]
+  RenderizadorPdf
+  (renderizar [_ html-bytes instante-de-congelamento]
+    (let [fut (future (renderizar delegate html-bytes instante-de-congelamento))
+          v   (try
+                (.get ^java.util.concurrent.Future fut timeout-ms java.util.concurrent.TimeUnit/MILLISECONDS)
+                (catch java.util.concurrent.TimeoutException _ ::timeout)
+                ;; A FONTE ME CORRIGIU (medido contra este JDK/Clojure): `.get` com timeout NAO desembrulha
+                ;; `ExecutionException` sozinho (a suposicao original era que `deref` fizesse isso sempre —
+                ;; um teste com um delegate que lanca de proposito provou o contrario: a excecao CRUA que
+                ;; chegava era `ExecutionException`, nao a causa). Desembrulhamos aqui, manualmente, para o
+                ;; comportamento de erro do delegate nao mudar (so' ganha um prazo).
+                (catch java.util.concurrent.ExecutionException e
+                  (throw (or (.getCause e) e))))]
+      (if (= v ::timeout)
+        (do (future-cancel fut)
+            (throw (ex-info "folha: renderizacao de PDF excedeu o prazo — recusada (nunca serve PDF parcial)"
+                            {:tipo :servidor/timeout-renderizacao :timeout-ms timeout-ms})))
+        v))))
+
+(defn renderizador-pdf-com-timeout
+  "Decora `renderizador-pdf` (ou `delegate`, para teste) com o TIMEOUT DE RENDERIZACAO. O HOST constroi UMA
+   instancia (nunca dentro do handler HTTP) e injeta — mesma disciplina de `serializador-folha-html-com-teto`.
+   Erro real do delegate (nao timeout): a CAUSA original atravessa desembrulhada (ver o comentario A FONTE
+   ME CORRIGIU no `renderizar` acima) — o comportamento de erro do renderizador de baixo nao muda, so' ganha
+   um prazo. `future-cancel` no estouro e' melhor-esforco (o openhtmltopdf pode nao responder a interrupcao
+   no meio do parse/layout); o que importa e' o worker HTTP nao ficar preso."
+  ([] (renderizador-pdf-com-timeout (renderizador-pdf) timeout-renderizacao-ms))
+  ([delegate timeout-ms] (->RenderizadorPdfComTimeout delegate timeout-ms)))

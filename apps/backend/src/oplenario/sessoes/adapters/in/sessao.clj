@@ -33,6 +33,14 @@
     (UUID/fromString s)
     (catch IllegalArgumentException _ (invalido! "id de sessao invalido" {:campo :id}))))
 
+(defn versao-param->int
+  "Path-param :versao (string) -> int positivo (Etapa 5 fatia 5, rotas de leitura da folha). Malformado OU
+  nao-positivo (versao da folha comeca em 1, D7) = requisicao invalida (`:validacao/invalido` -> 400 na
+  borda), nunca erro interno (500) nem uma query que casaria contra `versao <= 0` em silencio."
+  [s]
+  (let [n (try (Integer/parseInt s) (catch NumberFormatException _ (invalido! "versao invalida" {:campo :versao})))]
+    (if (pos-int? n) n (invalido! "versao invalida" {:campo :versao}))))
+
 (defn- ->uuid [s campo]
   (try (UUID/fromString s) (catch IllegalArgumentException _ (invalido! "uuid invalido" {:campo campo}))))
 

@@ -544,3 +544,39 @@
    `serializador-fixture`/`serializador-remessa`)."
   []
   (->SerializadorFolhaHtml))
+
+;; ---------- Etapa 5 fatia 5 — o TETO DE TAMANHO (obrigacao herdada da fatia 3) ----------
+;; A revisao de seguranca da Fatia 3 aceitou a ausencia de teto de tamanho de entrada e de timeout de
+;; renderizacao (ver `renderizador-pdf.clj`) SO' PORQUE nao existia superficie HTTP nenhuma disparando a
+;; renderizacao. `POST /sessoes/:id/folha` (Fatia 5) e' exatamente essa superficie: sem teto, uma sessao com
+;; dado inflado (a SERIE de presenca nao tem limite superior — e' o acumulo de meses de registros
+;; individuais, cada um sob o teto de linha de `wire/in`, mas sem teto agregado) vira DoS por payload contra
+;; o renderizador de PDF a jusante, que e' o consumidor CARO (parser XML + layout). O teto barra AQUI, sobre
+;; o HTML CANONICO ja serializado — antes do PDF, nunca depois.
+
+(def ^:const teto-bytes-html
+  "5 MiB — generoso sobre qualquer folha real. O CSS inline sozinho pesa ~22 KiB (`resources/folha/folha.css`,
+  medido); a maior camara municipal do pais (55 cadeiras, Sao Paulo) com uma serie de dezenas de eventos por
+  vereador e dezenas de justificativas nao passa de baixa centena de KiB. 5 MiB e' mais de UMA ORDEM DE
+  GRANDEZA acima disso — generoso o bastante para nunca reprovar um documento legitimo, apertado o bastante
+  para recusar um documento patologico antes de ele alcancar o renderizador de PDF."
+  (* 5 1024 1024))
+
+(defrecord SerializadorFolhaHtmlComTeto [delegate teto-bytes]
+  SerializadorFolha
+  (serializar [_ documento]
+    (serializar delegate documento))
+  (serializar [_ documento versao]
+    (let [{b :bytes :as saida} (serializar delegate documento versao)]
+      (when (> (alength ^bytes b) ^long teto-bytes)
+        (throw (ex-info "folha: HTML canonico excede o teto de tamanho — documento recusado antes do PDF"
+                        {:tipo :validacao/documento-grande
+                         :tamanho-bytes (alength ^bytes b) :teto-bytes teto-bytes})))
+      saida)))
+
+(defn serializador-folha-html-com-teto
+  "Decora `serializador-folha-html` (ou `delegate`, para teste) com o TETO DE TAMANHO. O HOST constroi UMA
+   instancia (nunca dentro do handler HTTP) e injeta — mesma disciplina de `serializador-folha-html`. A
+   aridade-2 permite ao teste injetar um `teto-bytes` pequeno sem depender de gerar megabytes de dado real."
+  ([] (serializador-folha-html-com-teto (serializador-folha-html) teto-bytes-html))
+  ([delegate teto-bytes] (->SerializadorFolhaHtmlComTeto delegate teto-bytes)))
