@@ -9,7 +9,9 @@
             [next.jdbc :as jdbc]
             [oplenario.kernel.db-util :as comum]
             [oplenario.kernel.sequencial :as sequencial]
-            [oplenario.sessoes.logic :as logic]))
+            [oplenario.kernel.tempo :as tempo]
+            [oplenario.sessoes.logic :as logic])
+  (:import (java.time LocalDate ZoneId)))
 
 (set! *warn-on-reflection* true)
 
@@ -127,3 +129,111 @@
         (throw (ex-info "transicionar!: conflito de lock_version ou sessao inexistente"
                         {:tipo :conflito/transicao :id id :lock-version lock-version})))
       {:de estado :para para :ocorrido-em (:atualizado-em r)})))
+
+;; ---------- Etapa 6 fatia 2 — sessoes FECHADAS de um periodo (insumo da apuracao de assiduidade) ----------
+
+(def ^:private data-de-referencia-sql
+  "O fragmento SQL da DATA DE REFERENCIA — `COALESCE` sobre `logic/marcos-de-data-de-referencia-sql`,
+  DERIVADO da mesma constante que `logic/data-de-referencia-da-sessao` consome. Antes desta extracao, a
+  ordem `(aberta_em, agendada_para)` estava redigitada aqui (no filtro), de novo logo abaixo (no rotulo em
+  Clojure) e uma terceira vez no controller: inverter uma das copias fazia a sessao ser FILTRADA por uma data
+  e ROTULADA com outra, com a suite inteira verde (nenhuma fixture tinha os dois marcos em dias civis
+  diferentes)."
+  (into [:coalesce] logic/marcos-de-data-de-referencia-sql))
+
+(defn- where-fechadas-no-periodo
+  "O predicado COMPARTILHADO das duas leituras do periodo (`listar-fechadas-no-periodo` e
+  `contar-fechadas-sem-data-de-referencia`): mesmo tenant, mesmos estados fechados, mesmo filtro de tipo. O
+  que difere entre elas e' SO' a clausula de data, passada em `extra`."
+  [ente-id tipos extra]
+  (cond-> (into [:and [:= :ente_id ente-id]
+                 [:in :estado (vec logic/estados-sessao-fechada)]]
+                extra)
+    (seq tipos) (conj [:in :tipo_sessao (vec tipos)])))
+
+(defn contar-fechadas-sem-data-de-referencia
+  "QUANTAS sessoes FECHADAS do recorte (mesmo tenant, mesmos estados, mesmo filtro de tipo) NAO tem data de
+  referencia nenhuma — `COALESCE(aberta_em, agendada_para) IS NULL`.
+
+  POR QUE ESTE CONTADOR EXISTE. A linha e' alcancavel pela API NORMAL: `agendada_para` e' OPCIONAL no wire
+  e nullable na coluna, e a transicao `agendada -> nao_realizada` nao exige data — nenhuma CHECK a barra.
+  Sem data de referencia ela nao cabe em periodo nenhum, entao `listar-fechadas-no-periodo` a exclui; ate' a
+  revisao desta fatia, exclu-ia em SILENCIO, e o denominador de TODOS os vereadores encolhia sem explicacao.
+  A mesma linha faz `/sessoes/:id/chamada` devolver um 409 ACIONAVEL (`:conflito/sessao-sem-data`) — dois
+  comportamentos para o mesmo buraco, e o que virava documento era o silencioso. Assiduidade sustenta perda
+  de mandato por falta (DL 201): publicar 92% onde o correto e' 91,7% sem nenhum sinal e' o silencio que I7
+  proibe.
+
+  A DECISAO E' CONTAR E PUBLICAR, nao consertar o COALESCE. Acrescentar `encerrada_em` como terceiro nivel
+  arrumaria o denominador e criaria uma QUARTA variante da regra de data de referencia, divergente da que a
+  `/chamada` aplica — que e' exatamente o drift que a Etapa 6 existe para policiar (ver
+  `logic/marcos-de-data-de-referencia`). A apuracao continua excluindo, e DECLARA: `:sessoes-sem-data-de-
+  referencia N` em `:totais`, ao lado de `:sessoes-sigilosas`."
+  [tx ente-id {:keys [de ate tipos]}]
+  (logic/validar-periodo-assiduidade! de ate)
+  (logic/validar-tipos-de-assiduidade! tipos)
+  (-> (jdbc/execute-one! tx
+        (sql/format {:select [[[:count :*] :n]]
+                     :from [:sessoes.sessao]
+                     :where (where-fechadas-no-periodo ente-id tipos [[:= data-de-referencia-sql nil]])}))
+      comum/linha->kebab
+      :n
+      long))
+
+(defn listar-fechadas-no-periodo
+  "As sessoes FECHADAS (`logic/estados-sessao-fechada`: encerrada/nao_realizada/arquivada) cuja DATA DE
+  REFERENCIA cai em `[de, ate]` (LocalDate, inclusivo dos dois lados) — a mesma data que a CHAMADA usa:
+  `logic/data-de-referencia-da-sessao`, cuja ordem de marcos (`logic/marcos-de-data-de-referencia`) e' a
+  MESMA fonte do `COALESCE` do filtro e do rotulo devolvido em cada linha.
+
+  O FILTRO DE DATA E' EXATO, nao uma janela aproximada: `de`/`ate` (datas CIVIS no fuso
+  `tempo/zona-civil-padrao`) viram um intervalo de INSTANTES `[lo, hi)` — `lo` = inicio do dia civil de `de`,
+  `hi` = inicio do dia civil do dia SEGUINTE a `ate` — e o range de instantes cujo dia civil (na MESMA zona)
+  cai em `[de, ate]` E' EXATAMENTE esse intervalo. Por isso o WHERE compara `data-de-referencia-sql` contra
+  `lo`/`hi` (calculados AQUI, em Clojure, com o fuso — o SQL nunca ve o fuso, mesmo racional documentado em
+  `transparencia/db/parlamentar.clj`: 'a data e derivada em Clojure e chega pronta').
+  Sessao SEM NENHUM dos dois marcos (agendada sem data, jamais aberta, dada como nao_realizada) tem
+  `COALESCE` NULL — a comparacao falha e ela fica FORA do periodo. Isso NAO e' silencioso: quantas ficaram de
+  fora e' contado por `contar-fechadas-sem-data-de-referencia` (acima) e publicado em `:totais`.
+
+  Cada linha devolvida carrega `:data-de-referencia` (LocalDate) JA CALCULADA — uma unica vez, aqui, por
+  `logic/data-de-referencia-da-sessao` (a MESMA funcao do controller da chamada) — para
+  `logic/apurar-assiduidade` NUNCA recalcula-la (I3-like: uma so' fonte para 'qual e' a data desta sessao').
+  O `throw` daquela funcao para sessao sem marco nenhum e' aqui uma REDE: o WHERE ja' excluiu essas linhas,
+  entao dispara-lo significaria que filtro e rotulo divergiram — que e' precisamente o que a constante
+  compartilhada existe para impedir.
+
+  TRES rejeicoes, nenhuma silenciosa (I7 do brief):
+  - `logic/validar-periodo-assiduidade!` (tipo das datas + ordem + dias do periodo) — pura, sem tocar o banco;
+  - `logic/validar-tipos-de-assiduidade!` (cada elemento de `tipos` string E ∈ `logic/tipos-sessao`) — a REDE
+    contra o chamador direto, espelhando o que o controller ja' faz. Sem ela, `tipos` era a UNICA entrada da
+    apuracao que chegava ao SQL sem validacao em camada nenhuma;
+  - `logic/teto-de-sessoes-do-periodo-de-assiduidade` (400) via `:max-rows` = teto+1: o driver PARA de
+    materializar no primeiro excedente (mesmo mecanismo de `vereador/roster-da-casa-em-datas`), entao a
+    memoria nunca e' gasta com o excesso. O SERVIDOR, porem, ainda ORDENA o resultado inteiro antes do corte
+    — `Sort` e' no bloqueante, e `:max-rows` age no cliente/protocolo, nao no plano. O custo medido disso e'
+    irrelevante nesta leitura (~0,6 ms), mas a frase honesta e' 'o driver para de materializar', nao 'o banco
+    para de trabalhar'. Ler teto+1 e' a PROVA do estouro, e a funcao lanca `:limite/sessoes-excedido`
+    (`:medido-ao-menos`, nao `:medido` — a medicao e' um PISO) em vez de devolver a pagina truncada.
+
+  `tipos` filtra `tipo_sessao` (vocabulario `logic/tipos-sessao`); nil/vazio = todos os tipos."
+  [tx ente-id {:keys [de ate tipos]}]
+  (logic/validar-periodo-assiduidade! de ate)
+  (logic/validar-tipos-de-assiduidade! tipos)
+  (let [lo (-> ^LocalDate de (.atStartOfDay ^ZoneId tempo/zona-civil-padrao) .toInstant)
+        hi (-> ^LocalDate (.plusDays ^LocalDate ate 1) (.atStartOfDay ^ZoneId tempo/zona-civil-padrao) .toInstant)
+        teto logic/teto-de-sessoes-do-periodo-de-assiduidade
+        linhas (comum/linhas->kebab
+                (jdbc/execute! tx
+                  (sql/format {:select [:id [:numero_sequencial :numero] [:tipo_sessao :tipo] :estado
+                                        :agendada_para :aberta_em :encerrada_em :transmite_publica]
+                               :from [:sessoes.sessao]
+                               :where (where-fechadas-no-periodo
+                                       ente-id tipos [[:>= data-de-referencia-sql lo]
+                                                      [:< data-de-referencia-sql hi]])
+                               :order-by [[data-de-referencia-sql :asc] [:id :asc]]})
+                  {:max-rows (inc teto)}))]
+    (when (> (count linhas) teto)
+      (throw (ex-info "sessoes no periodo de apuracao de assiduidade acima do teto"
+                      {:tipo :limite/sessoes-excedido :medido-ao-menos (count linhas) :teto teto})))
+    (mapv (fn [linha] (assoc linha :data-de-referencia (logic/data-de-referencia-da-sessao linha))) linhas)))

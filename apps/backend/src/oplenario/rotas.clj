@@ -189,6 +189,12 @@
         ;; fechado no seam mostraria a composicao de HOJE, nao a de entao. Mesma inversao de dependencia
         ;; sobre cadastros (sessoes nunca importa cadastros, §22.10); irmao LITERAL de membros-da-casa.
         roster-da-casa-fn (fn [ente-id data] (repo-cadastros-comp/roster-da-casa repo-cadastros ente-id data))
+        ;; Etapa 6 fatia 1: o LOTE de `roster-da-casa-fn` para VARIAS datas — irmao LITERAL, mesma inversao
+        ;; de dependencia sobre `cadastros` (sessoes nunca importa cadastros, §22.10), aridade levando
+        ;; `datas` pelo MESMO motivo (nunca fechar 'hoje' aqui dentro). Consumido por
+        ;; `controllers/apurar-assiduidade` (Etapa 6 fatia 2) via a rota `GET /assiduidade` (Etapa 6 fatia 3).
+        roster-da-casa-em-datas-fn (fn [ente-id datas]
+                                     (repo-cadastros-comp/roster-da-casa-em-datas repo-cadastros ente-id datas))
         ;; Etapa 5 fatia 1: o cabecalho da FOLHA (nome/legislatura da Casa) — seam irmao LITERAL de
         ;; `roster-da-casa-fn` acima, mesma inversao de dependencia sobre `cadastros` (sessoes nunca importa
         ;; cadastros, §22.10). Leva `data` na aridade pelo MESMO motivo de `roster-da-casa-fn` (nunca fechar
@@ -298,6 +304,10 @@
         (into (sessoes-http/rotas {:auth auth :repo-sessoes repo-sessoes :objeto-store objeto-store
                                    :resolver-vereador resolver-vereador-fn :relogio relogio-producao
                                    :roster-da-casa roster-da-casa-fn
+                                   ;; Etapa 6 fatia 1: `roster-da-casa-em-datas-fn` fia o roster do periodo
+                                   ;; para `controllers/apurar-assiduidade`, exposta pela rota `GET
+                                   ;; /assiduidade` (Etapa 6 fatia 3).
+                                   :roster-da-casa-em-datas roster-da-casa-em-datas-fn
                                    ;; Etapa 5 fatia 1: `dados-da-casa-fn` chega pronto para a Fatia 5 (as
                                    ;; rotas HTTP da folha) fiar o cabecalho — sem rota nova nesta fatia,
                                    ;; `sessoes-http/rotas` ainda nao destrutura a chave (chave extra e'

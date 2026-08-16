@@ -91,3 +91,49 @@
         ctx (enter! idp repo {:headers {"authorization" "Bearer tok-bom"}})]
     (is (= 401 (get-in ctx [:response :status])))
     (is (= "sem vinculo ativo" (erro-de ctx)))))
+
+;; ---------- o interceptor de ERRO: teto de capacidade -> 422 com o numero MEDIDO ----------
+;; Etapa 6 fatia 1 (revisao adversarial). `:limite/datas-excedido` era lancado fail-closed pelo repo e
+;; caia no ramo `:else` do interceptor: 500 opaco, corpo `{"erro":"erro interno"}`. O I7 do brief da
+;; Etapa 6 exige o oposto — "estourou teto -> 422 com o numero medido, nunca uma pagina parcial parecendo
+;; total" — e o operador que pediu um periodo grande demais nao tem como corrigir o pedido sem saber
+;; quanto pediu e qual e' o limite.
+
+(defn- corpo-de [ctx]
+  (json/read-value (get-in ctx [:response :body]) json/keyword-keys-object-mapper))
+
+(defn- erro! [ex] ((:error it/erro) {} ex))
+
+(deftest limite-excedido-vira-422-com-medido-e-teto
+  (let [ctx (erro! (ex-info "datas demais" {:tipo :limite/datas-excedido :medido 367 :teto 366}))]
+    (is (= 422 (get-in ctx [:response :status]))
+        "teto de capacidade nao e' 400 (o pedido esta' bem formado) nem 500 (nao e' bug): e' 422")
+    (is (= {:erro "limite excedido" :medido 367 :teto 366} (corpo-de ctx))
+        "o numero MEDIDO e o TETO saem no corpo — sem eles o operador so' tem tentativa e erro")))
+
+(deftest limite-com-medicao-de-piso-marca-que-e-piso
+  ;; `:limite/linhas-excedido` mede via `:max-rows` = teto+1: sabemos que passou, nao por quanto. O corpo
+  ;; nao pode apresentar teto+1 como se fosse a contagem exata.
+  (let [ctx (erro! (ex-info "linhas demais" {:tipo :limite/linhas-excedido
+                                             :medido-ao-menos 54901 :teto 54900 :datas 366}))]
+    (is (= 422 (get-in ctx [:response :status])))
+    (is (= {:erro "limite excedido" :medido 54901 :teto 54900 :medido-e-piso true} (corpo-de ctx)))
+    (is (nil? (:datas (corpo-de ctx)))
+        "so' :medido/:teto atravessam — o resto da ex-data fica no log, como nos demais ramos")))
+
+(deftest limite-embrulhado-pelo-pedestal-tambem-vira-422
+  ;; O Pedestal entrega ao :error um WRAPPER cuja causa e' a excecao original (mesma razao de existir do
+  ;; `raiz`). Sem olhar a raiz, o mapeamento so' funcionaria em teste e nunca em producao.
+  (let [dentro (ex-info "datas demais" {:tipo :limite/datas-excedido :medido 500 :teto 366})
+        ctx (erro! (ex-info "wrapper do pedestal" {:exception dentro} dentro))]
+    (is (= 422 (get-in ctx [:response :status])))
+    (is (= 500 (:medido (corpo-de ctx))))))
+
+(deftest tipo-fora-do-namespace-limite-continua-500
+  ;; O reconhecimento e' por NAMESPACE `limite`; nada mais pode escorregar para o 422 (que carrega numeros
+  ;; no corpo) so' por ter `:medido`/`:teto` na ex-data.
+  (let [ctx (erro! (ex-info "bug" {:tipo :conflito/qualquer :medido 9 :teto 1}))]
+    (is (= 500 (get-in ctx [:response :status])))
+    (is (= {:erro "erro interno"} (corpo-de ctx)) "nenhum numero vaza pelo ramo de 500"))
+  (let [ctx (erro! (ex-info "sem tipo" {}))]
+    (is (= 500 (get-in ctx [:response :status])) "ex-data sem :tipo nao estoura no `namespace`")))

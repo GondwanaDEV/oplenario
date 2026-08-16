@@ -225,3 +225,56 @@ export interface FolhasDaSessaoOut {
   sessaoId: string;
   folhas: FolhaMetadadosOut[];
 }
+
+export interface AssiduidadeSessaoOut {
+  id: string;
+  numero: number;
+  tipo: "especial" | "extraordinaria" | "ordinaria" | "secreta" | "solene";
+  estado: "aberta" | "agendada" | "arquivada" | "encerrada" | "nao_realizada" | "suspensa";
+  dataDeReferencia: string;
+  sigilosa: boolean;
+  quorum: ChamadaQuorumOut;
+}
+
+export interface AssiduidadeVereadorOut {
+  id: string;
+  nome: string | null;
+  nomeParlamentar: string | null;
+  partido: string | null;
+  partidoVariou: boolean;
+}
+
+export interface AssiduidadePorVereadorOut {
+  vereadorId: string;
+  sessoesComputadas: number;
+  comparecimentos: number;
+  ausenciasJustificadas: number;
+  ausenciasComJustificativaPendente: number;
+  ausenciasInjustificadas: number;
+  sessoesLicenciado: number;
+  percentual: number | null;
+}
+
+export interface AssiduidadeDetalheLinhaOut {
+  sessaoId: string;
+  vereadorId: string;
+  estado: "ausente" | "ausente-justificado" | "ausente-justificativa-pendente" | "licenciado" | "presente-plenario" | "presente-remoto";
+  sigilosa: boolean;
+}
+
+export interface AssiduidadeTotaisOut {
+  sessoesConsideradas: number;
+  vereadoresConsiderados: number;
+  sessoesSigilosas: number;
+  sessoesSemDataDeReferencia: number;
+  criterioDeInclusao: string;
+  notaDeMetodologia: string;
+}
+
+export interface AssiduidadeOut {
+  sessoes: AssiduidadeSessaoOut[];
+  vereadores: AssiduidadeVereadorOut[];
+  porVereador: AssiduidadePorVereadorOut[];
+  detalhe: AssiduidadeDetalheLinhaOut[];
+  totais: AssiduidadeTotaisOut;
+}

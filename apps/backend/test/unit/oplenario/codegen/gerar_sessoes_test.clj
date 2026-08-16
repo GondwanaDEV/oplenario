@@ -51,7 +51,19 @@
   ;; manifesto (que passaria no teste acima e envelheceria em silencio, que e' o defeito que ele existe para
   ;; pegar). Aferido no contrato novo desta fatia.
   (is (= wire-out/QuorumSessaoOut (get (into {} gerar-sessoes/manifesto) "QuorumSessaoOut"))
-      "a entrada do manifesto E' o schema do wire/out, nao uma copia"))
+      "a entrada do manifesto E' o schema do wire/out, nao uma copia")
+  ;; Achado da revisao adversarial da Etapa 6 fatia 3: o spot-check acima afere o contrato da Etapa 4a, e o
+  ;; comentario dizia estar aferindo "o contrato desta fatia". Os SEIS contratos novos da fatia 3 nao eram
+  ;; aferidos por identidade — so' pelo NOME, que e' exatamente o que o segundo `is` existe para nao bastar.
+  (let [por-nome (into {} gerar-sessoes/manifesto)]
+    (doseq [[nome schema] {"AssiduidadeSessaoOut" wire-out/AssiduidadeSessaoOut
+                           "AssiduidadeVereadorOut" wire-out/AssiduidadeVereadorOut
+                           "AssiduidadePorVereadorOut" wire-out/AssiduidadePorVereadorOut
+                           "AssiduidadeDetalheLinhaOut" wire-out/AssiduidadeDetalheLinhaOut
+                           "AssiduidadeTotaisOut" wire-out/AssiduidadeTotaisOut
+                           "AssiduidadeOut" wire-out/AssiduidadeOut}]
+      (is (= schema (get por-nome nome))
+          (str "a entrada `" nome "` do manifesto E' o var do wire/out, nao uma copia colada")))))
 
 (deftest b4-geracao-e-reproduzivel
   ;; `gerar-tudo` e' pura por construcao, e este teste e' o que impede que deixe de ser (uma ordenacao por

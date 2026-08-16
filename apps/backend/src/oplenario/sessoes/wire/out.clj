@@ -395,3 +395,97 @@
   [:map {:closed true}
    [:sessao-id :string]
    [:folhas [:sequential FolhaMetadadosOut]]])
+
+;; ---------- Etapa 6 fatia 3 — a APURACAO DE ASSIDUIDADE (resposta de GET /assiduidade) ----------
+;; O payload de `logic/apurar-assiduidade` (ver a docstring la' para a semantica de cada campo) projetado p/
+;; JSON: uuid vira string, `LocalDate` vira string ISO, o `:estado` KEYWORD de `logic/estados-chamada` vira
+;; string (mesmo `(name ...)` de `LinhaChamadaOut.estado`, acima). `IDENTIDADE UMA SO VEZ` (LGPD, carry da
+;; revisao da Fatia 1): o nome/partido do vereador vive SO em `AssiduidadeVereadorOut`; `AssiduidadeDetalheLinhaOut`
+;; referencia por `:vereador-id` e NUNCA repete o nome civil por linha — no teto (54.900 linhas de detalhe)
+;; seriam dezenas de milhares de repeticoes do mesmo nome num payload so'.
+
+(def AssiduidadeSessaoOut
+  "Uma sessao do periodo apurado — `GET /assiduidade`. `:quorum` reusa `ChamadaQuorumOut` POR REFERENCIA
+  (a MESMA aritmetica de `contar-quorum`, nunca uma segunda forma de contagem so' para este contrato).
+  `:sigilosa` = a sessao NAO transmite publicamente (Etapa 4); ela ainda entra nos totais (o dever de
+  comparecer e' real), mas o CSV de detalhe (Fatia 3) marca CADA linha dela, nunca so' o agregado."
+  [:map {:closed true}
+   [:id :string]
+   [:numero :int]
+   [:tipo (km/enum-de logic/tipos-sessao)]
+   [:estado (km/enum-de logic/estados-sessao)]
+   [:data-de-referencia :string]
+   [:sigilosa :boolean]
+   [:quorum ChamadaQuorumOut]])
+
+(def AssiduidadeVereadorOut
+  "A identidade de UM vereador que aparece em pelo menos uma linha do periodo — publicada UMA SO VEZ (ver
+  o comentario do topo desta secao). `:partido` e' HONESTO, nao constante presumida: mandatos sequenciais
+  com partidos diferentes dentro do periodo publicam `:partido nil` + `:partido-variou true` (a Casa lista
+  por partido no oficio, mas o campo nao pode fixar um rotulo escolhido pela ordem das sessoes). `:nome`
+  nulo = presenca SEM ASSENTO em toda a janela pedida (evento de quem `cadastros` nao situa na Casa em
+  nenhuma das datas do periodo) — `sessoes` nao inventa identidade que `cadastros` nao devolveu."
+  [:map {:closed true}
+   [:id :string]
+   [:nome [:maybe :string]]
+   [:nome-parlamentar [:maybe :string]]
+   [:partido [:maybe :string]]
+   [:partido-variou :boolean]])
+
+(def AssiduidadePorVereadorOut
+  "O agregado de UM vereador ao longo do periodo — a linha-resumo do CSV `recorte=resumo` e a fonte do
+  JSON. Nomes DISTINTOS do card publico de `transparencia` de proposito (`:sessoes-computadas`/
+  `:comparecimentos`, nunca `:presenca`/`:sessoes-presente`): a Casa nao pode ver dois numeros de
+  assiduidade do MESMO vereador com o MESMO rotulo, um vindo da vitrine publica e outro desta apuracao
+  interna. `:ausencias-com-justificativa-pendente` e' bucket PROPRIO — nunca colapsado em
+  `:ausencias-injustificadas` (I4: a Mesa ainda nao decidiu, e contar como injustificada e' acusacao falsa).
+  `:percentual` nil quando `:sessoes-computadas` e' zero (NUNCA 0 — leria como 'faltou a tudo'; a diferenca
+  entre 'nao podia comparecer a nada' e 'faltou a tudo' e' a diferenca entre um suplente e um faltoso). NAO
+  clampado a [0,100] de proposito — ver `logic/apurar-assiduidade`."
+  [:map {:closed true}
+   [:vereador-id :string]
+   [:sessoes-computadas :int]
+   [:comparecimentos :int]
+   [:ausencias-justificadas :int]
+   [:ausencias-com-justificativa-pendente :int]
+   [:ausencias-injustificadas :int]
+   [:sessoes-licenciado :int]
+   [:percentual [:maybe :int]]])
+
+(def AssiduidadeDetalheLinhaOut
+  "Uma linha (sessao, vereador) — a fonte do CSV `recorte=detalhe`. `:estado` e' o vocabulario PROPRIO da
+  chamada (`logic/estados-chamada`, keyword no dominio, string aqui via `name` — mesmo contrato de
+  `LinhaChamadaOut.estado`). `:sigilosa` marca CADA LINHA, nao so' o total (`AssiduidadeTotaisOut.
+  sessoes-sigilosas` diz QUANTAS, nao QUAIS) — a Fatia 3 serializa isto para um CSV que circula por e-mail,
+  e a linha de uma sessao secreta identica a uma ordinaria e' o achado que a revisao da Fatia 2 pegou. NAO
+  carrega `motivo` da justificativa (dado de saude, LGPD) — este contrato nao serve decisao, so' contagem."
+  [:map {:closed true}
+   [:sessao-id :string]
+   [:vereador-id :string]
+   [:estado (km/enum-de (map name logic/estados-chamada))]
+   [:sigilosa :boolean]])
+
+(def AssiduidadeTotaisOut
+  "Os agregados do PERIODO inteiro + o texto que faz o payload (e o CSV que dele deriva) se EXPLICAR
+  SOZINHO: `:criterio-de-inclusao` e `:nota-de-metodologia` sao PROSA fixa (nunca dado de usuario), porque o
+  CSV circula solto, sem o JSON ao lado. `:sessoes-sem-data-de-referencia` (I7) e' o que a data de referencia
+  EXCLUIU do periodo — sem ele o denominador de todo vereador encolheria sem explicacao."
+  [:map {:closed true}
+   [:sessoes-consideradas :int]
+   [:vereadores-considerados :int]
+   [:sessoes-sigilosas :int]
+   [:sessoes-sem-data-de-referencia :int]
+   [:criterio-de-inclusao :string]
+   [:nota-de-metodologia :string]])
+
+(def AssiduidadeOut
+  "A resposta de `GET /assiduidade` (Etapa 6 fatia 3, papel 'secretario') — o mapa completo de
+  `logic/apurar-assiduidade` projetado a JSON. `:closed true`: um campo novo em `logic/apurar-assiduidade`
+  que este contrato nao souber vira 500 de servidor (drift, nunca resposta silenciosamente incompleta) — o
+  gate do codegen (`gerar-sessoes-test/b4-manifesto-cobre-TODO-o-wire-out`) faz o mesmo do lado do TS."
+  [:map {:closed true}
+   [:sessoes [:sequential AssiduidadeSessaoOut]]
+   [:vereadores [:sequential AssiduidadeVereadorOut]]
+   [:por-vereador [:sequential AssiduidadePorVereadorOut]]
+   [:detalhe [:sequential AssiduidadeDetalheLinhaOut]]
+   [:totais AssiduidadeTotaisOut]])

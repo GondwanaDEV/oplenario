@@ -10,9 +10,11 @@
             [oplenario.sessoes.adapters.in.gravacao :as adapters-in-grav]
             [oplenario.sessoes.adapters.in.incidente :as adapters-in-incidente]
             [oplenario.sessoes.adapters.in.pauta :as adapters-in-pauta]
+            [oplenario.sessoes.adapters.in.assiduidade :as adapters-in-assiduidade]
             [oplenario.sessoes.adapters.in.presenca :as adapters-in-presenca]
             [oplenario.sessoes.adapters.in.sessao :as adapters-in]
             [oplenario.sessoes.adapters.in.tribuna :as adapters-in-tribuna]
+            [oplenario.sessoes.adapters.out.assiduidade :as adapters-out-assiduidade]
             [oplenario.sessoes.adapters.out.folha :as adapters-out-folha]
             [oplenario.sessoes.adapters.out.gravacao :as adapters-out-grav]
             [oplenario.sessoes.adapters.out.incidente :as adapters-out-incidente]
@@ -690,6 +692,43 @@
        (controllers/folha-conteudo repo-sessoes objeto-store ator id versao :pdf)
        #(adapters-out-folha/->pdf-download % id)))))
 
+;; ---------- Etapa 6 fatia 3 — a APURACAO DE ASSIDUIDADE (rota) ----------
+
+(defn- assiduidade-handler
+  "GET /assiduidade?de=&ate=&tipos=&formato=json|csv&recorte=resumo|detalhe (Etapa 6 fatia 3, papel
+  'secretario'). adapters/in coage os query params EM DUAS PARTES: `query->periodo` (`de`/`ate`/`tipos`,
+  fail-closed — data malformada NUNCA vira nil silencioso, `:validacao/invalido` -> 400 automatico pelo
+  interceptor global `it/erro`) e `query->apresentacao` (`formato`/`recorte`, allowlist estrita — mesma
+  regra). O controller (`controllers/apurar-assiduidade`) roda a authz GROSSA de NOVO por dentro (segunda
+  camada, docstring dela) e valida `tipos` contra `logic/tipos-sessao` — desconhecido tambem vira 400
+  automatico, NUNCA 200 com a apuracao em branco (o achado que 3 revisores da Fatia 2 pegaram
+  independentemente). O TETO de periodo/linhas (`:limite/*`) vira 422 com `:medido`/`:teto` pelo MESMO
+  interceptor global — este handler NAO repete nenhum desses mapeamentos, so' NAO ENGOLE a excecao antes
+  dela chegar la' (SEM try/catch aqui: e' a rota mais simples do modulo por isso).
+
+  `apuracao->wire` roda UMA VEZ (valida contra `AssiduidadeOut`) e serve os DOIS formatos — o CSV reusa o
+  MESMO mapa ja' convertido (uuid/LocalDate/keyword -> string), nunca reconverte o modelo cru (a conversao
+  mora so' em `adapters.out/apuracao->wire`)."
+  [repo-sessoes roster-da-casa-em-datas]
+  (fn [req]
+    (let [ator (:ator req)
+          qp   (:query-params req)
+          periodo (adapters-in-assiduidade/query->periodo qp)
+          {:keys [formato recorte]} (adapters-in-assiduidade/query->apresentacao qp)
+          ;; A BORDA decide se `:detalhe` chega a existir: o JSON sempre o publica, o CSV so' no
+          ;; `recorte=detalhe`. `formato=csv&recorte=resumo` era o unico caminho que CONSTRUIA e VALIDAVA por
+          ;; Malli ate' 60.000 linhas para nao renderizar nenhuma (achado da revisao adversarial da Fatia 3).
+          com-detalhe? (or (= :json formato) (= :detalhe recorte))
+          apuracao (controllers/apurar-assiduidade repo-sessoes roster-da-casa-em-datas ator periodo
+                                                   {:com-detalhe? com-detalhe?})
+          wire (adapters-out-assiduidade/apuracao->wire apuracao com-detalhe?)]
+      (case formato
+        :json (http/json-resposta 200 wire)
+        :csv  (adapters-out-assiduidade/->csv-download
+               (adapters-out-assiduidade/apuracao-wire->csv
+                wire {:de (:de periodo) :ate (:ate periodo) :tipos (:tipos periodo) :recorte recorte})
+               {:de (:de periodo) :ate (:ate periodo) :recorte recorte})))))
+
 (defn rotas
   "Fragmento de rotas do modulo (table syntax Pedestal). Recebe o interceptor `auth` (compartilhado), o
   `repo-sessoes` (Repo-Component) + o `objeto-store` (p/ a ingestao de gravacao e p/ a folha) +
@@ -697,13 +736,26 @@
   + relogio do servidor, injetados pelo host por inversao de dependencia) + `roster-da-casa`/`dados-da-casa`
   (§22.6 eixo C, borda da CHAMADA/FOLHA — seams injetados do host sobre `cadastros`; este ns nunca importa
   cadastros, §22.10) + `serializador-folha`/`renderizador-pdf` (Etapa 5 fatia 5 — os DOIS ports da folha, JA'
-  DECORADOS com os tetos de tamanho, o timeout e o pool dedicado, construidos UMA vez pelo host) e devolve as
-  rotas-dado. `oplenario.rotas` funde este fragmento ao conjunto. POST exige a authz GROSSA (papel
-  'secretario', exceto `/presenca/confirmar` que exige 'vereador'); a ingestao NAO usa corpo-json (o corpo e'
-  binario); GET so autentica (a camada fina decide no controller) — EXCETO `/chamada` e as quatro rotas da
-  FOLHA, que exigem 'secretario' na borda (leitura operacional da Mesa, nao um read-model publico)."
+  DECORADOS com os tetos de tamanho, o timeout e o pool dedicado, construidos UMA vez pelo host) +
+  `roster-da-casa-em-datas` (Etapa 6 fatia 1 — o LOTE por datas, seam injetado pelo host sobre `cadastros`,
+  consumido pela rota de assiduidade abaixo) e devolve as rotas-dado. `oplenario.rotas` funde este fragmento
+  ao conjunto. POST exige a authz GROSSA (papel 'secretario', exceto `/presenca/confirmar` que exige
+  'vereador'); a ingestao NAO usa corpo-json (o corpo e' binario); GET so autentica (a camada fina decide no
+  controller) — EXCETO `/chamada`, `/assiduidade` e as quatro rotas da FOLHA, que exigem 'secretario' na
+  borda (leitura operacional da Mesa, nao um read-model publico)."
   [{:keys [auth repo-sessoes objeto-store resolver-vereador relogio roster-da-casa dados-da-casa
-           serializador-folha renderizador-pdf]}]
+           serializador-folha renderizador-pdf roster-da-casa-em-datas]}]
+  ;; ASSERCAO DE BOOT do seam — o carry que as revisoes das Fatias 1 e 2 registraram DUAS vezes e que a
+  ;; Fatia 3, que e' quem finalmente destrutura a chave, nao tinha. O mapa que `rotas.clj` passa aqui NAO e'
+  ;; `:closed`: uma chave com o nome errado (`:roster-da-casa-em-data`, um typo num refactor) destruturaria
+  ;; `nil` em SILENCIO no boot, o processo subiria saudavel, e o defeito so' apareceria na primeira
+  ;; requisicao do secretario a `/assiduidade`. Falhar AQUI transforma isso em processo que nao sobe — o
+  ;; check equivalente dentro de `controllers/apurar-assiduidade` continua valendo como segunda camada, mas
+  ;; ele roda tarde demais para ser um guard-rail de deploy.
+  (when-not (ifn? roster-da-casa-em-datas)
+    (throw (ex-info "sessoes/rotas: seam :roster-da-casa-em-datas ausente ou nao-funcao"
+                    {:tipo :servidor/erro
+                     :classe (some-> roster-da-casa-em-datas class .getName)})))
   (let [papel-vereador (it/exige-papel "vereador")]
    #{["/sessoes"     :post [auth (it/exige-papel "secretario") it/corpo-json (agendar-handler repo-sessoes)]
      :route-name :sessoes/agendar]
@@ -711,6 +763,17 @@
     ;; de roteamento literal-vs-param com /sessoes/:id (o param sombrearia o POST -> 404).
     ["/gravacoes" :post [auth (it/exige-papel "secretario") (ingestao-handler repo-sessoes objeto-store)]
      :route-name :sessoes/ingerir-gravacao]
+    ;; Etapa 6 fatia 3 — a APURACAO DE ASSIDUIDADE. TAMBEM no TOPO, pela MESMA razao de `/gravacoes` acima —
+    ;; e NAO por precaucao: `/sessoes/assiduidade` foi MEDIDO (repro isolada com `io.pedestal.test/response-
+    ;; for` contra um service minimo com so' as duas rotas) e o `:id` de `/sessoes/:id` SOMBREIA o literal
+    ;; irmao — `GET /sessoes/assiduidade` roteava para `buscar-handler` (id="assiduidade") e devolvia o corpo
+    ;; do `:buscar`, nunca chegando neste handler. E' a mesma limitacao do router prefix-tree do Pedestal 0.7
+    ;; documentada em `oplenario.participacao.diplomat.http.in` ("nao admite um literal e um wildcard no
+    ;; MESMO nivel de path") — aqui confirmada por execucao, nao so' citada. `/sessoes/:id/chamada` e as
+    ;; demais rotas de 3+ segmentos NAO sao afetadas (outro nivel da arvore); o teste de regressao de
+    ;; roteamento desta fatia (`assiduidade-rotas-http-in-test`) prova as duas coisas.
+    ["/assiduidade" :get [auth (it/exige-papel "secretario") (assiduidade-handler repo-sessoes roster-da-casa-em-datas)]
+     :route-name :sessoes/assiduidade]
     ["/sessoes/:id" :get  [auth (buscar-handler repo-sessoes)] :route-name :sessoes/buscar]
     ["/sessoes/:id/transicao" :post
      [auth (it/exige-papel "secretario") it/corpo-json (transicionar-handler repo-sessoes)]

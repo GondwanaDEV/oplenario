@@ -33,23 +33,13 @@
 ;; definicao antes do uso. A ordem de leitura ainda e' a do eixo: quem procura a chamada acha o bloco §22.6
 ;; eixo C mais abaixo, que so' os CONSOME.
 
-(defn- data-de-referencia
-  "A DATA CIVIL que resolve QUEM compoe a Casa nesta sessao: `aberta-em` se a sessao ja abriu (a Casa que
-  efetivamente se reuniu), senao `agendada-para` (a Casa PREVISTA, sessao ainda 'agendada'). Convertida no
-  fuso `tempo/zona-civil-padrao` (NUNCA `LocalDate/now` — reabrir a chamada de uma sessao do mes passado
-  mostraria a composicao de HOJE, nao a de entao).
-
-  Sessao sem NENHUM dos dois marcos e' um caminho NORMAL da API, nao dado corrompido: `wire/in/AgendarSessao`
-  declara `agendada-para` OPCIONAL e a coluna e' nullable (mig 0026) — POST /sessoes sem data cria a linha
-  assim. Por isso o erro e' de CONFLITO DE ESTADO, com mensagem acionavel (`:conflito/sessao-sem-data` ->
-  409 no diplomat), e nao um `:servidor/erro` que a borda traduziria em 500 'erro interno': a secretaria que
-  agendou sem marcar a data precisa saber que e' isso que falta. O que continua proibido e' inventar uma
-  data — uma composicao adivinhada vai parar em ata."
-  [sessao]
-  (if-let [instante (or (:aberta-em sessao) (:agendada-para sessao))]
-    (tempo/hoje-de instante tempo/zona-civil-padrao)
-    (throw (ex-info "sessao sem data marcada: sem data de referencia p/ a chamada"
-                    {:tipo :conflito/sessao-sem-data :sessao-id (:id sessao)}))))
+(def ^:private data-de-referencia
+  "A DATA CIVIL que resolve QUEM compoe a Casa nesta sessao. A REGRA mora em `logic/data-de-referencia-da-
+  sessao` (pura, PUBLICA) desde a revisao da Etapa 6 fatia 2 — aqui so' resta o alias local, porque a mesma
+  regra tem outros dois consumidores (`db/sessao/listar-fechadas-no-periodo`: o filtro SQL e o rotulo da
+  apuracao de assiduidade) e uma `defn-` privada e' inalcancavel para eles. Enquanto a regra era privada, o
+  jeito de 'compartilha-la' era CITA-LA numa docstring, e citacao nao e' compartilhamento."
+  logic/data-de-referencia-da-sessao)
 
 (defn- sem-assento-entre
   "Os `vereador-ids` que NAO compoem a Casa na `data` (seam `roster-da-casa`), com o INDICE de cada um na
@@ -968,3 +958,65 @@
                           :versao versao :qual qual :objeto-store-ref store-ref})
               {:resultado :blob-ausente})))
       {:resultado :versao-nao-encontrada})))
+
+;; ---------- §22.6 eixo C — a APURACAO DE ASSIDUIDADE (Etapa 6 fatia 2) ----------
+
+(defn apurar-assiduidade
+  "A APURACAO DE ASSIDUIDADE de um periodo (Etapa 6 fatia 2): sessao a sessao, vereador a vereador, quem
+  compareceu, quem faltou, e em que estado esta a justificativa de cada falta — com o MESMO calculo
+  (`logic/derivar-linhas-da-chamada` + `logic/contar-quorum`) que a chamada nominal usa (I1: nenhuma segunda
+  aritmetica de presenca).
+
+  TENANT-WIDE, sem recurso unico p/ camada fina (mesmo contrato de `resumo-presenca`/`compliance.controllers/
+  painel`): quem autoriza e' a authz GROSSA (papel 'secretario'), exigida AQUI porque esta fatia nao tem rota
+  ainda (a Fatia 3 acrescenta `it/exige-papel` na borda; este check continua valendo depois, como a SEGUNDA
+  camada — mesma disciplina de defesa em profundidade do resto do modulo).
+
+  UMA UNICA tx do lado de `sessoes` (`repo/leituras-assiduidade` — sessoes+presencas+justificativas do
+  periodo numa tx so', mesmo molde de `chamada-da-sessao`/`folha-da-sessao`). O ROSTER e' outro modulo
+  (`cadastros`, seam `roster-da-casa-em-datas` injetado pelo host, §22.10): chega por uma tx PROPRIA, DEPOIS
+  da leitura de sessoes — so' agora se sabe quais DATAS pedir (a `:data-de-referencia` de cada sessao, ja'
+  calculada por `db/sessao/listar-fechadas-no-periodo`).
+
+  `roster-da-casa-em-datas` e' checado ANTES de qualquer leitura: o mapa que `rotas.clj` passa a
+  `sessoes-http/rotas` NAO e' `:closed`, entao uma chave com o nome errado passaria SILENCIOSA no boot e so'
+  apareceria como NPE em runtime, na rota do secretario — carry deixado pela revisao da Fatia 1.
+
+  ENTRADA VALIDADA EM DUAS CAMADAS: `de`/`ate` (tipo, ordem, teto de dias) e `tipos` (cada elemento string
+  E pertencente a `logic/tipos-sessao`) sao rejeitados AQUI, antes de abrir a tx — e de novo dentro de
+  `db/sessao/listar-fechadas-no-periodo`, como rede contra o chamador direto do Repo.
+
+  Devolve o mapa de `logic/apurar-assiduidade` (`{:sessoes :vereadores :por-vereador :detalhe :totais}`),
+  com `:totais/:sessoes-sem-data-de-referencia` medido na MESMA tx das sessoes.
+
+  `opts` (aridade 5) leva `:com-detalhe?` ate' o `logic` — a BORDA e' quem sabe se a apresentacao consome
+  `:detalhe` (so' o CSV `recorte=resumo` nao consome). Default TRUE: quem chama a aridade 4 (o payload JSON e
+  os testes da Fatia 2) continua recebendo o mapa completo."
+  ([repo-sessoes roster-da-casa-em-datas ator periodo]
+   (apurar-assiduidade repo-sessoes roster-da-casa-em-datas ator periodo {}))
+  ([repo-sessoes roster-da-casa-em-datas ator {:keys [de ate tipos] :as periodo}
+    {:keys [com-detalhe?] :or {com-detalhe? true}}]
+  (when (nil? roster-da-casa-em-datas)
+    (throw (ex-info "apurar-assiduidade: seam roster-da-casa-em-datas ausente (carry da Fatia 1)"
+                    {:tipo :servidor/erro})))
+  ;; papel GROSSA, nao a policy FINA (`authz/check!`): esta leitura e' tenant-wide, sem um recurso unico
+  ;; carregado para uma politica avaliar contra — o mesmo desenho de `resumo-presenca`, so' que aqui o check
+  ;; roda no controller (nao ha' rota ainda que o faca por fora).
+  (authz/exige-papel! ator "secretario")
+  ;; A REJEICAO DO PERIODO roda ANTES de abrir a tx de `sessoes` (mesma disciplina de `roster-da-casa-em-
+  ;; datas`: rejeicao nao empresta conexao do pool) — `db/sessao/listar-fechadas-no-periodo` repete a mesma
+  ;; checagem como REDE, para o chamador direto do Repo.
+  (logic/validar-periodo-assiduidade! de ate)
+  ;; `tipos` e' a UNICA entrada desta apuracao que chegava ao SQL sem validacao em camada NENHUMA. Um tipo
+  ;; com acento ou com typo casava ZERO sessoes e devolvia 200 com a apuracao em branco — indistinguivel de
+  ;; 'nao houve sessao no periodo'. Mesma rede em DOIS lugares que o periodo: aqui e no `db/`.
+  (logic/validar-tipos-de-assiduidade! tipos)
+  (let [{:keys [sessoes sessoes-sem-data-de-referencia presencas-por-sessao justificativas-por-sessao]}
+        (repo/leituras-assiduidade repo-sessoes (:ente-id ator) periodo)
+        datas (into #{} (map :data-de-referencia) sessoes)
+        rosters-por-data (if (seq datas)
+                           (roster-da-casa-em-datas (:ente-id ator) (vec datas))
+                           {})]
+    (logic/apurar-assiduidade sessoes rosters-por-data presencas-por-sessao justificativas-por-sessao
+                              {:sessoes-sem-data-de-referencia sessoes-sem-data-de-referencia
+                               :com-detalhe? com-detalhe?}))))

@@ -121,6 +121,107 @@
                   {:sessao-id sessao-id :instante instante :ente-id ente-id
                    :projecao [:vereador_id :tipo :modalidade :fonte :ocorrido_em :registrado_em]})))))
 
+;; ---------- Etapa 6 fatia 2 — leituras EM LOTE (insumo da apuracao de assiduidade) ----------
+;; A apuracao le' um PERIODO inteiro (ate' 400 sessoes) de uma vez — reabrir `presenca-corrente`/
+;; `listar-justificativas-da-sessao` sessao a sessao seria o mesmo carry N+1 que a fatia 1 fechou para o
+;; roster (`i5-decisao.md:277`). As duas funcoes abaixo sao as irmas em LOTE.
+
+(defn- agrupar-por-sessao-pedida
+  "Agrupa `linhas` por `:sessao-id` PRE-SEMEANDO toda `sessao-id` pedida (vetor vazio quando nao ha' linha) —
+  chave AUSENTE seria lida a jusante como 'nao perguntei por essa sessao', nunca como 'perguntei e a resposta
+  e' vazia'.
+
+  E LANCA se o banco devolveu um grupo cuja chave NAO estava entre as pedidas. Antes desta checagem o grupo
+  simplesmente sumia: um `(get por-sessao sid [])` sobre as chaves pedidas descarta em SILENCIO tudo o que o
+  banco trouxe com outra chave — e o unico jeito de isso acontecer e' o tipo devolvido pelo driver nao casar
+  com o tipo pedido, que e' precisamente o defeito que a fatia 1 pagou com `java.sql.Date`. Descartar o grupo
+  transforma um erro de contrato numa apuracao em branco; lancar o torna visivel."
+  [linhas ids rotulo]
+  (let [pedidas (set ids)
+        por-sessao (group-by :sessao-id linhas)]
+    (when-let [intrusas (seq (remove pedidas (keys por-sessao)))]
+      (throw (ex-info "lote de presenca devolveu sessao que nao foi pedida (tipo de chave divergente?)"
+                      {:tipo :invariante/sessao-desconhecida :leitura rotulo
+                       :classes (into #{} (map #(some-> % class .getName)) intrusas)
+                       :quantas (count intrusas)})))
+    (into {} (map (fn [sid] [sid (get por-sessao sid [])])) pedidas)))
+
+(defn presencas-correntes-das-sessoes
+  "O ULTIMO evento de presenca de CADA vereador, para um LOTE de sessoes de uma vez — cada sessao com o SEU
+  PROPRIO instante de corte (I5: um instante GLOBAL do periodo fabricaria presenca). UMA UNICA query, via
+  `logic/ultimos-eventos-por-sessao-e-vereador-q` (a fonte CANONICA compartilhada com `presenca-corrente`
+  singular e com os agregadores do motor de votacao — I2: nunca redigitar a ordem de desempate).
+
+  `sessoes-com-instante` = colecao de pares `[sessao-id instante]` (o instante ja' resolvido por
+  `logic/instante-de-avaliacao`, um por sessao — o CHAMADOR decide, esta funcao so' le').
+
+  Devolve `{sessao-id -> [presenca-linha ...]}`, PRE-SEMEADO com toda `sessao-id` de `sessoes-com-instante`
+  (vetor vazio quando a sessao nao teve nenhum evento) — mesma disciplina de
+  `vereador/roster-da-casa-em-datas`: chave AUSENTE seria lida a jusante como 'nao perguntei por essa
+  sessao', nunca como 'perguntei e a resposta e' vazia' (e a apuracao itera sobre as sessoes pedidas, nao
+  sobre as chaves que a query devolveu).
+
+  `sessoes-com-instante` VAZIO devolve `{}` SEM tocar o banco (mesmo racional de `licencas-de-mandatos` para
+  id vazio — o periodo sem nenhuma sessao fechada e' o caso normal do primeiro mes de uma Casa nova).
+
+  TETO fail-closed (`logic/teto-de-linhas-de-lote-de-presenca`, 400x150) via `:max-rows` = teto+1, no molde
+  de `vereador/teto-de-linhas-lote` da fatia 1 — ver la' por que o teto de SESSOES nao basta (`vereador_id`
+  sem FK; o `DISTINCT ON` e' limitado pelos ids que aparecem nos EVENTOS, nao pelos do roster)."
+  [tx ente-id sessoes-com-instante]
+  (if (empty? sessoes-com-instante)
+    {}
+    (let [teto logic/teto-de-linhas-de-lote-de-presenca
+          linhas (comum/linhas->kebab
+                  (jdbc/execute! tx
+                    (sql/format (logic/ultimos-eventos-por-sessao-e-vereador-q
+                                 {:sessoes-e-instantes sessoes-com-instante :ente-id ente-id
+                                  :projecao [:vereador_id :tipo :modalidade :fonte
+                                             :ocorrido_em :registrado_em]}))
+                    {:max-rows (inc teto)}))]
+      (when (> (count linhas) teto)
+        (throw (ex-info "lote de presenca do periodo acima do teto de linhas"
+                        {:tipo :limite/linhas-excedido :medido-ao-menos (count linhas) :teto teto
+                         :sessoes (count sessoes-com-instante)})))
+      (agrupar-por-sessao-pedida linhas (map first sessoes-com-instante) :presencas))))
+
+(defn justificativas-das-sessoes
+  "As justificativas de ausencia de um LOTE de sessoes de uma vez — irma em lote de
+  `listar-justificativas-da-sessao`. UMA UNICA query, filtrando `sessao_id IN (...)` — o volume ja' esta'
+  bounded pelo teto de sessoes do periodo (400), entao um `IN` simples e' barato aqui (ao contrario do lote
+  de presenca, que precisa de um instante DIFERENTE por sessao e por isso nao pode ser um `IN` simples).
+
+  PROJECAO MINIMA — `[:sessao_id :vereador_id :estado]`, e NAO a da irma singular. O unico consumidor e'
+  `logic/estado-de-presenca`, que le' `:estado`; `motivo`, `decidido-por`, `decidido-em` e `lock-version`
+  atravessavam a fronteira do modulo sem sair em lugar nenhum do payload. `motivo` e' onde o vereador
+  escreve POR QUE faltou — na pratica dado de saude (LGPD art. 11), e este repo ja' teve um incidente com
+  ele indo parar em log via ex-data (Etapa 5, ver `mensagem-de-recusa-de-justificativa`). Copiar a projecao
+  da leitura irma e' exatamente como esse dado viaja para onde ninguem pediu.
+
+  TETO fail-closed (`logic/teto-de-linhas-de-lote-de-presenca`) via `:max-rows` = teto+1, mesma disciplina
+  de `presencas-correntes-das-sessoes`: a UNIQUE (ente, sessao, vereador) limita a uma justificativa por
+  vereador por sessao, mas `vereador_id` aqui tambem nao tem FK.
+
+  Devolve `{sessao-id -> [justificativa-linha ...]}`, PRE-SEMEADO com toda `sessao-id` pedida (vetor vazio
+  quando a sessao nao tem justificativa nenhuma) — mesma disciplina de `presencas-correntes-das-sessoes`.
+  `sessao-ids` VAZIO devolve `{}` sem tocar o banco."
+  [tx ente-id sessao-ids]
+  (if (empty? sessao-ids)
+    {}
+    (let [ids (vec (distinct sessao-ids))
+          teto logic/teto-de-linhas-de-lote-de-presenca
+          linhas (comum/linhas->kebab
+                  (jdbc/execute! tx
+                    (sql/format {:select [:sessao_id :vereador_id :estado]
+                                 :from [:sessoes.justificativa_ausencia]
+                                 :where [:and [:= :ente_id ente-id] [:in :sessao_id ids]]
+                                 :order-by [[:sessao_id :asc] [:vereador_id :asc]]})
+                    {:max-rows (inc teto)}))]
+      (when (> (count linhas) teto)
+        (throw (ex-info "lote de justificativas do periodo acima do teto de linhas"
+                        {:tipo :limite/linhas-excedido :medido-ao-menos (count linhas) :teto teto
+                         :sessoes (count ids)})))
+      (agrupar-por-sessao-pedida linhas ids :justificativas))))
+
 ;; ---------- justificativa_ausencia (ato apartado, state machine) ----------
 
 (defn buscar-justificativa-do-vereador

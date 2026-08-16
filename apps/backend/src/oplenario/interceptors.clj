@@ -128,22 +128,48 @@
   [ex]
   (= :validacao/invalido (or (:tipo (ex-data ex)) (:tipo (ex-data (raiz ex))))))
 
+(defn- limite-excedido
+  "A `ex-data` de uma excecao de TETO — `:tipo` no namespace `limite` (ex.: `:limite/datas-excedido`,
+  `:limite/linhas-excedido`) — na propria excecao ou na sua raiz; nil se nao e' uma. Reconhece o NAMESPACE
+  e nao cada `:tipo` de proposito: todo teto novo (e a casa cria um por predicado de cardinalidade aberta —
+  ver `vereador/teto-de-datas-lote`, `rotas/teto-de-janelas`) nasce mapeado, em vez de nascer como 500
+  opaco ate' alguem lembrar de registra-lo aqui."
+  [ex]
+  (some (fn [d] (when (= "limite" (some-> (:tipo d) namespace)) d))
+        [(ex-data ex) (ex-data (raiz ex))]))
+
 (def erro
   "Interceptor de ERRO (GLOBAL/outermost via http/servico): validacao de borda -> 400; negacao de autorizacao
-  -> 403; resto -> 500. Nao vaza detalhe de erro interno no corpo."
+  -> 403; teto de capacidade estourado -> 422 com o numero MEDIDO; resto -> 500. Nao vaza detalhe de erro
+  interno no corpo.
+
+  POR QUE O 422 CARREGA NUMERO (unica excecao a regra de corpo opaco): um teto e' uma decisao de PRODUTO,
+  nao um detalhe de implementacao — o operador que pediu um periodo grande demais precisa saber quanto
+  pediu e qual e' o limite para reduzir o pedido, senao a unica saida e' tentativa e erro. So' as chaves
+  `:medido`/`:teto` da ex-data saem; o resto (mensagem, causa, contexto interno) fica no log, como nos
+  demais ramos. `:medido-e-piso` marca a medicao que e' um PISO e nao a contagem exata (o caso do teto
+  aplicado via `:max-rows`, em que o driver para de contar no primeiro excedente)."
   {:name  ::erro
    :error (fn [ctx ex]
-            (cond
+            (let [teto (limite-excedido ex)]
+             (cond
               (validacao? ex)
               (assoc ctx :response (http/json-resposta 400 {:erro "requisicao invalida"}))
               (or (authz/negado? ex) (authz/negado? (raiz ex)))
               (assoc ctx :response (http/json-resposta 403 {:erro "autorizacao negada"}))
+              (some? teto)
+              (assoc ctx :response
+                     (http/json-resposta 422
+                       (cond-> {:erro "limite excedido"
+                                :medido (or (:medido teto) (:medido-ao-menos teto))
+                                :teto (:teto teto)}
+                         (some? (:medido-ao-menos teto)) (assoc :medido-e-piso true))))
               :else
               ;; 500 nao tratado (ex.: drift de projecao adapters/out vs contrato wire — review sec MÉDIO-2):
               ;; LOGA a excecao no servidor (com a causa/`:campos` na ex-data) antes de devolver o corpo
               ;; opaco — senao o bug fica invisivel. O corpo NUNCA carrega detalhe interno.
               (do (log/error ex "erro interno nao tratado na cadeia de borda")
-                  (assoc ctx :response (http/json-resposta 500 {:erro "erro interno"})))))})
+                  (assoc ctx :response (http/json-resposta 500 {:erro "erro interno"}))))))})
 
 (def cabecalhos-seguranca
   "Interceptor de cabecalhos de seguranca (review W2): no-store (respostas de auth nao cacheiam em proxy/browser)
