@@ -559,7 +559,16 @@
   medido); a maior camara municipal do pais (55 cadeiras, Sao Paulo) com uma serie de dezenas de eventos por
   vereador e dezenas de justificativas nao passa de baixa centena de KiB. 5 MiB e' mais de UMA ORDEM DE
   GRANDEZA acima disso — generoso o bastante para nunca reprovar um documento legitimo, apertado o bastante
-  para recusar um documento patologico antes de ele alcancar o renderizador de PDF."
+  para recusar um documento patologico antes de ele alcancar o renderizador de PDF.
+
+  [CARRY (revisao adversarial da fatia 5, MENOR) — o teto mede DEPOIS de o HTML inteiro ja' estar construido
+   em memoria: `serializar` roda ate' o fim e so' entao o decorator faz `alength`. Ele protege o passo CARO a
+   jusante (render de PDF) e a persistencia, mas nao limita quanto o proprio serializador aloca para montar a
+   string. Aceito hoje porque a fonte da serie e' naturalmente limitada: escrever presenca exige papel
+   'secretario' (nao e' superficie anonima) e o volume de eventos de uma sessao real e' operacionalmente
+   limitado. GATILHO para mover o teto para DENTRO da serializacao (um Writer que conta bytes e aborta cedo):
+   a serie deixar de ser naturalmente limitada — import em lote de acervo legado, ou integracao externa
+   escrevendo presenca.]"
   (* 5 1024 1024))
 
 (defrecord SerializadorFolhaHtmlComTeto [delegate teto-bytes]

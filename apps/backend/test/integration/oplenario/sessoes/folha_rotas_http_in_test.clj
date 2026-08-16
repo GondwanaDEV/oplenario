@@ -86,6 +86,9 @@
     (reify repo-sessoes/RepoSessoes
       (buscar-sessao [_ ente-id id] (sessao-fn ente-id id))
       (folha-da-sessao [_ ente-id id _agora] (folha-fn ente-id id))
+      ;; so' p/ o teste do gate MAGRO (`GET /sessoes/:id/quorum`) rodar contra o MESMO dado da folha — e' o
+      ;; contraste que prova que a folha nao herda aquele gate. Mesma forma de `quorum-http-in-test`.
+      (chamada-da-sessao [_ ente-id id _agora] (folha-fn ente-id id))
       (max-versao-da-folha [_ ente-id sessao-id]
         (reduce max 0 (keep #(when (and (= ente-id (:ente-id %)) (= sessao-id (:sessao-id %))) (:versao %))
                              (vals @folhas))))
@@ -124,15 +127,27 @@
       (guardar! [_ chave b content-type] (swap! dados assoc chave {:bytes b :content-type content-type}) chave)
       (obter [_ chave] (:bytes (get @dados chave))))))
 
-(defn- service-fn* [papeis repo-s]
-  (-> (http/servico (config/carregar)
-                    (rotas/montar {:idp (idp-dev/idp-dev)
-                                   :repo-identidade (fake-repo-identidade papeis)
-                                   :repo-sessoes repo-s
-                                   :repo-cadastros (fake-repo-cadastros)
-                                   :objeto-store (fake-objeto-store)})
-                    it/globais)
-      ph/create-server ::ph/service-fn))
+(defn- objeto-store-que-perde-o-blob
+  "Aceita o `guardar!` (devolve a chave, como o real) e DESCARTA os bytes: `obter` sempre devolve nil. E' o
+  unico jeito de exercitar `:blob-ausente` — a linha existe com o ponteiro gravado, o objeto nao. Simula a
+  falha REAL que a ordem ANCORA-ANTES-DO-BLOB admite (crash entre o INSERT commitado e o `guardar!`)."
+  []
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify os/ObjetoStore
+    (guardar! [_ chave _b _content-type] chave)
+    (obter [_ _chave] nil)))
+
+(defn- service-fn*
+  ([papeis repo-s] (service-fn* papeis repo-s (fake-objeto-store)))
+  ([papeis repo-s store]
+   (-> (http/servico (config/carregar)
+                     (rotas/montar {:idp (idp-dev/idp-dev)
+                                    :repo-identidade (fake-repo-identidade papeis)
+                                    :repo-sessoes repo-s
+                                    :repo-cadastros (fake-repo-cadastros)
+                                    :objeto-store store})
+                     it/globais)
+       ph/create-server ::ph/service-fn)))
 
 (defn- token [ente-id ident-id] (json/write-value-as-string {:sub "u" :ente-id (str ente-id) :identidade-id (str ident-id)}))
 (defn- com-auth [tok] {"authorization" (str "Bearer " tok)})
@@ -201,16 +216,81 @@
     (is (= 403 (:status (pt/response-for svc :get (url-html sid 1) :headers auth))))
     (is (= 403 (:status (pt/response-for svc :get (url-pdf sid 1) :headers auth))))))
 
-(deftest sessao-secreta-nao-vaza-pela-rota-de-leitura
-  ;; o mesmo ator (SEM 'secretario') que o telao deixaria ver o QUORUM (rota magra) NAO pode ler a folha —
-  ;; a folha nunca herda o gate magro, nem nas rotas de leitura.
+(deftest folha-nunca-herda-o-gate-magro-do-quorum
+  ;; GUARDA (nao reprovava o codigo anterior — o gate ja' era 'secretario' nas 4 rotas). O teste que existia
+  ;; aqui usava um ator com CONJUNTO DE PAPEIS VAZIO, que reprova na authz GROSSA antes de qualquer politica
+  ;; fina: provava de novo `papel-errado-403-nas-4-rotas`, nao o contraste com o telao. Agora o ator tem um
+  ;; papel REAL de vinculo ativo ('vereador') — exatamente o ator que a rota MAGRA do quorum aceita (ela nao
+  ;; exige papel nenhum na borda) — e o contraste e' medido no MESMO teste, nas duas naturezas de sessao.
   (let [ente (random-uuid) sid (random-uuid)
-        repo-s (fake-repo-sessoes {:sessao-fn (fn [_ id] (sessao-secreta ente id))
-                                   :folha-fn (fn [_ id] (lido-secreta ente id))})
-        svc (service-fn* #{} repo-s)
+        auth (com-auth (token ente (random-uuid)))
+        publica (fake-repo-sessoes {:sessao-fn (fn [_ id] (sessao-encerrada ente id))
+                                    :folha-fn (fn [_ id] (lido-fechada ente id))})
+        secreta (fake-repo-sessoes {:sessao-fn (fn [_ id] (sessao-secreta ente id))
+                                    :folha-fn (fn [_ id] (lido-secreta ente id))})
+        svc-publica (service-fn* #{"vereador"} publica)
+        svc-secreta (service-fn* #{"vereador"} secreta)
+        url-quorum (str "/sessoes/" sid "/quorum")]
+    ;; 1. o gate MAGRO aceita este ator numa sessao de transmissao publica...
+    (is (= 200 (:status (pt/response-for svc-publica :get url-quorum :headers auth)))
+        "premissa do contraste: a rota magra do quorum LE com este mesmo ator/token")
+    ;; 2. ...e as QUATRO rotas da folha recusam o MESMO ator na MESMA sessao.
+    (is (= 403 (:status (pt/response-for svc-publica :post (url-gerar sid) :headers auth))))
+    (is (= 403 (:status (pt/response-for svc-publica :get (url-listar sid) :headers auth))))
+    (is (= 403 (:status (pt/response-for svc-publica :get (url-html sid 1) :headers auth))))
+    (is (= 403 (:status (pt/response-for svc-publica :get (url-pdf sid 1) :headers auth))))
+    ;; 3. sessao SECRETA: ate' o gate magro fecha (`pode-ver-quorum-da-sessao?`), e a folha segue fechada.
+    (is (= 403 (:status (pt/response-for svc-secreta :get url-quorum :headers auth))))
+    (is (= 403 (:status (pt/response-for svc-secreta :post (url-gerar sid) :headers auth))))
+    (is (= 403 (:status (pt/response-for svc-secreta :get (url-listar sid) :headers auth))))
+    (is (= 403 (:status (pt/response-for svc-secreta :get (url-html sid 1) :headers auth))))
+    (is (= 403 (:status (pt/response-for svc-secreta :get (url-pdf sid 1) :headers auth))))))
+
+;; ---------- os cabecalhos de ISOLAMENTO do conteudo congelado ----------
+
+(deftest conteudo-congelado-e-servido-isolado-por-csp
+  ;; O HTML congelado embute TEXTO LIVRE digitado por humano (o `motivo` da justificativa). O escaping da
+  ;; Fatia 2 e' a primeira linha de defesa; o `<iframe sandbox="">` da Fatia 6 (D10) e' a segunda — mas a
+  ;; Fatia 6 ainda NAO EXISTE e esta rota ja' esta' viva. Um secretario que abra `/sessoes/:id/folhas/1`
+  ;; direto numa aba do navegador logado renderiza o documento como pagina de TOPO, same-origin: sem CSP,
+  ;; uma falha futura de escape vira XSS com a sessao dele. O servidor fecha a porta sozinho, sem depender
+  ;; de o frontend lembrar do sandbox. `X-Frame-Options: DENY` (interceptor global) NAO cobre isto — ele
+  ;; impede que a pagina seja ENQUADRADA, nao que ela EXECUTE.
+  (let [ente (random-uuid) sid (random-uuid)
+        repo-s (fake-repo-sessoes {:sessao-fn (fn [_ id] (sessao-encerrada ente id))
+                                   :folha-fn (fn [_ id] (lido-fechada ente id))})
+        svc (service-fn* #{"secretario"} repo-s)
         auth (com-auth (token ente (random-uuid)))]
-    (is (= 403 (:status (pt/response-for svc :get (url-listar sid) :headers auth))))
-    (is (= 403 (:status (pt/response-for svc :get (url-html sid 1) :headers auth))))))
+    (pt/response-for svc :post (url-gerar sid) :headers auth)
+    (let [r-html (pt/response-for svc :get (url-html sid 1) :headers auth)
+          csp (get-in r-html [:headers "Content-Security-Policy"])]
+      (is (some? csp) "o HTML congelado NUNCA sai sem CSP")
+      (is (str/starts-with? csp "sandbox;")
+          "sandbox SEM allow-scripts/allow-same-origin: origem opaca, script nenhum")
+      (is (str/includes? csp "default-src 'none'"))
+      (is (str/includes? csp "style-src 'unsafe-inline'")
+          "o <style> INLINE do documento autocontido tem de continuar valendo — CSP que o quebra e' CSP errado"))
+    (let [r-pdf (pt/response-for svc :get (url-pdf sid 1) :headers auth)
+          csp (get-in r-pdf [:headers "Content-Security-Policy"])]
+      (is (some? csp) "o PDF congelado tambem sai isolado")
+      (is (str/includes? csp "allow-downloads")
+          "sandbox SEM allow-downloads bloquearia o proprio download no Chrome"))))
+
+;; ---------- 500 explicito: a linha existe, o blob nao ----------
+
+(deftest blob-ausente-vira-500-explicito-nunca-404
+  ;; A ordem ANCORA-ANTES-DO-BLOB do molde admite este estado: INSERT commitado, `guardar!` perdido. E' um
+  ;; ALERTA de operacao (log/error + 500), nunca um 404 que mentiria dizendo que o congelamento nao existe,
+  ;; e nunca um render novo (que serviria bytes de hash diferente do gravado).
+  (let [ente (random-uuid) sid (random-uuid)
+        repo-s (fake-repo-sessoes {:sessao-fn (fn [_ id] (sessao-encerrada ente id))
+                                   :folha-fn (fn [_ id] (lido-fechada ente id))})
+        svc (service-fn* #{"secretario"} repo-s (objeto-store-que-perde-o-blob))
+        auth (com-auth (token ente (random-uuid)))]
+    (is (= 201 (:status (pt/response-for svc :post (url-gerar sid) :headers auth)))
+        "o congelamento em si NAO falha — a linha (a ancora) esta' gravada")
+    (is (= 500 (:status (pt/response-for svc :get (url-html sid 1) :headers auth))))
+    (is (= 500 (:status (pt/response-for svc :get (url-pdf sid 1) :headers auth))))))
 
 ;; ---------- 404 ----------
 
@@ -232,7 +312,10 @@
         auth (com-auth (token intruso (random-uuid)))]
     (is (= 404 (:status (pt/response-for svc :post (url-gerar sid) :headers auth)))
         "cross-tenant nunca confirma existencia com 403 — sempre 404")
-    (is (= 404 (:status (pt/response-for svc :get (url-listar sid) :headers auth))))))
+    (is (= 404 (:status (pt/response-for svc :get (url-listar sid) :headers auth))))
+    ;; GUARDA (o codigo ja' era simetrico): as DUAS rotas que servem binario tambem 404, nunca 403.
+    (is (= 404 (:status (pt/response-for svc :get (url-html sid 1) :headers auth))))
+    (is (= 404 (:status (pt/response-for svc :get (url-pdf sid 1) :headers auth))))))
 
 (deftest versao-inexistente-404
   (let [ente (random-uuid) sid (random-uuid)

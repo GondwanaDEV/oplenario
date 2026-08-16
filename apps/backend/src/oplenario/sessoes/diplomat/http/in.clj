@@ -599,6 +599,12 @@
     (http/json-resposta 409 {:erro "so' sessao FECHADA tem folha de presenca (D6)"})
     :validacao/documento-grande
     (http/json-resposta 413 {:erro "documento da folha excede o teto de tamanho"})
+    ;; pool DEDICADO de renderizacao saturado (`renderizador-pdf/paralelismo-de-renderizacao`): nao e' erro
+    ;; do pedido nem do documento — e' pressao momentanea. 503 + Retry-After diz ao cliente para repetir, e
+    ;; a repeticao dentro de 30s cai no dedup de D9 sem criar versao nova.
+    :servidor/renderizador-saturado
+    (update (http/json-resposta 503 {:erro "renderizador de PDF ocupado — tente novamente em instantes"})
+            :headers assoc "Retry-After" "5")
     (throw e)))
 
 (defn- gerar-folha-handler
@@ -607,9 +613,10 @@
   renderizar (D8), decide a versao ANTES de renderizar (D7, para imprimi-la no proprio papel) e congela com
   dedup de 30s (D9). Os TRES ports do mapa `m` (`serializador-folha`/`renderizador-pdf`/`objeto-store`)
   chegam PRONTOS do HOST — construidos UMA vez fora deste handler: `serializador-folha` ja' decorado com o
-  TETO de tamanho, `renderizador-pdf` ja' decorado com o TIMEOUT de renderizacao (as duas obrigacoes que a
-  revisao de seguranca da Fatia 3 deixou pendentes ate' existir superficie HTTP — esta rota E' essa
-  superficie). Construi-los aqui dentro recriaria as duas instancias A CADA REQUEST, sem ganho nenhum.
+  TETO de tamanho de ENTRADA, `renderizador-pdf` ja' decorado com TIMEOUT + TETO de SAIDA + POOL DEDICADO
+  (as obrigacoes que a revisao de seguranca da Fatia 3 deixou pendentes ate' existir superficie HTTP — esta
+  rota E' essa superficie — mais as duas que a revisao adversarial da Fatia 5 acrescentou). Construi-los
+  aqui dentro recriaria as duas instancias A CADA REQUEST, sem ganho nenhum.
 
   nil (sessao inexistente neste ente, cross-tenant inclusive — nao distingue, nao confirma existencia) ->
   404. `:conflito/folha-sessao-aberta` (D6) -> 409. `:validacao/documento-grande` (o TETO reprovando) -> 413.
@@ -690,7 +697,7 @@
   + relogio do servidor, injetados pelo host por inversao de dependencia) + `roster-da-casa`/`dados-da-casa`
   (§22.6 eixo C, borda da CHAMADA/FOLHA — seams injetados do host sobre `cadastros`; este ns nunca importa
   cadastros, §22.10) + `serializador-folha`/`renderizador-pdf` (Etapa 5 fatia 5 — os DOIS ports da folha, JA'
-  DECORADOS com o teto de tamanho e o timeout de renderizacao, construidos UMA vez pelo host) e devolve as
+  DECORADOS com os tetos de tamanho, o timeout e o pool dedicado, construidos UMA vez pelo host) e devolve as
   rotas-dado. `oplenario.rotas` funde este fragmento ao conjunto. POST exige a authz GROSSA (papel
   'secretario', exceto `/presenca/confirmar` que exige 'vereador'); a ingestao NAO usa corpo-json (o corpo e'
   binario); GET so autentica (a camada fina decide no controller) — EXCETO `/chamada` e as quatro rotas da

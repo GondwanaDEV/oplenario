@@ -957,12 +957,14 @@
   (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
     (authz/check! ator :sessao/ver-folha sessao logic/pode-ver-sessao?)
     (if-let [row (repo/buscar-folha repo-sessoes (:ente-id ator) sessao-id versao)]
-      (let [ref          (case qual :html (:html-objeto-store-ref row) :pdf (:pdf-objeto-store-ref row))
+      ;; `store-ref`, nao `ref`: `ref` sombrearia `clojure.core/ref` (o construtor de Ref/STM) — sem
+      ;; consequencia funcional aqui, mas e' o nome que confunde a leitura futura deste ns.
+      (let [store-ref    (case qual :html (:html-objeto-store-ref row) :pdf (:pdf-objeto-store-ref row))
             content-type (case qual :html (:html-content-type row) :pdf (:pdf-content-type row))]
-        (if-let [b (store/obter objeto-store ref)]
+        (if-let [b (store/obter objeto-store store-ref)]
           {:resultado :ok :bytes b :content-type content-type :versao versao}
           (do (log/error "sessoes: folha com ponteiro mas SEM blob no objeto_store"
                          {:evento :folha-sem-blob :ente-id (:ente-id ator) :sessao-id sessao-id
-                          :versao versao :qual qual :objeto-store-ref ref})
+                          :versao versao :qual qual :objeto-store-ref store-ref})
               {:resultado :blob-ausente})))
       {:resultado :versao-nao-encontrada})))

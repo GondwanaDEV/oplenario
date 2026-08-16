@@ -207,12 +207,14 @@
                               :legislatura-ano-fim (:ano-fim leg)}))
         ;; Etapa 5 fatia 5: os DOIS ports da folha, construidos UMA vez aqui (nunca dentro do handler HTTP,
         ;; que os recriaria a cada request sem ganho) — mesma disciplina de `serializador-fixture`/
-        ;; `serializador-remessa` ("o host constroi e injeta"). JA' DECORADOS com o teto de tamanho e o
-        ;; timeout de renderizacao (as duas obrigacoes que a revisao de seguranca da fatia 3 do brief deixou
-        ;; pendentes ate' existir superficie HTTP — `POST /sessoes/:id/folha`, fiada abaixo, e' essa
-        ;; superficie).
+        ;; `serializador-remessa` ("o host constroi e injeta"). JA' DECORADOS com as guardas: o serializador
+        ;; com o TETO de tamanho de ENTRADA; o renderizador com TIMEOUT + TETO de SAIDA + POOL DEDICADO. As
+        ;; duas primeiras sao obrigacoes que a revisao de seguranca da fatia 3 do brief deixou pendentes ate'
+        ;; existir superficie HTTP (`POST /sessoes/:id/folha`, fiada abaixo, e' essa superficie); as outras
+        ;; duas vieram da revisao adversarial da fatia 5 (o teto era assimetrico; o timeout limitava latencia,
+        ;; nao consumo).
         serializador-folha-fn (serializador-folha/serializador-folha-html-com-teto)
-        renderizador-pdf-fn (renderizador-pdf/renderizador-pdf-com-timeout)
+        renderizador-pdf-fn (renderizador-pdf/renderizador-pdf-guardado)
         ;; Onda B Slice 2: uf/nome-do-municipio do ente, p/ o legislativo computar a URN em protocolar! —
         ;; mesma inversao de dependencia de consultar-sessao/membros-da-casa/info-ente (§22.10).
         resolver-municipio (fn [ente-id] (repo-cadastros-comp/uf-e-municipio repo-cadastros ente-id))

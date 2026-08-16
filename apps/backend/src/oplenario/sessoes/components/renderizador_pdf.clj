@@ -101,6 +101,8 @@
            (java.security MessageDigest)
            (java.time Instant ZoneId)
            (java.util Calendar Locale TimeZone)
+           (java.util.concurrent ArrayBlockingQueue Callable ExecutorService RejectedExecutionException
+                                 ThreadFactory ThreadPoolExecutor ThreadPoolExecutor$AbortPolicy TimeUnit)
            (java.util.function BiPredicate)
            (java.util.logging Level)))
 
@@ -235,7 +237,7 @@
   @roteamento-de-log
   (->RenderizadorPdfOpenHtmlToPdf))
 
-;; ---------- Etapa 5 fatia 5 — o TIMEOUT DE RENDERIZACAO (obrigacao herdada da fatia 3) ----------
+;; ---------- Etapa 5 fatia 5 — as TRES GUARDAS da renderizacao (obrigacao herdada da fatia 3) ----------
 ;; A revisao de seguranca da Fatia 3 aceitou a ausencia de timeout SO' PORQUE nao existia superficie HTTP
 ;; disparando a renderizacao. `POST /sessoes/:id/folha` (Fatia 5) e' essa superficie: sem prazo, um documento
 ;; patologico (que passou pelo TETO de tamanho do serializador mas ainda assim degenera no layout — CSS 2.1
@@ -250,12 +252,70 @@
   do container (CPU compartilhada, GC)."
   15000)
 
-(defrecord RenderizadorPdfComTimeout [delegate timeout-ms]
+(def ^:const teto-bytes-pdf
+  "5 MiB de SAIDA. O teto do serializador (`serializador-folha/teto-bytes-html`) barra o HTML de ENTRADA; este
+  barra o PDF de SAIDA, e os dois juntos fecham o ciclo.
+
+  ACHADO DA REVISAO ADVERSARIAL DA FATIA 5 — o teto era ASSIMETRICO: nada garantia que um PDF nascido de um
+  HTML sob 5 MiB ficasse ele proprio sob teto nenhum (o tamanho de saida do openhtmltopdf NAO e' linear no
+  tamanho da entrada — uma tabela longa multiplica caixas de layout, nao caracteres). E o PDF gravado ia
+  depois para o objeto_store SEM medida, para ser servido pela rota de leitura, que carrega o blob inteiro
+  em heap. Medir na SAIDA e' o unico ponto onde a garantia e' direta em vez de inferida.
+
+  Mesmo `:tipo` do teto de HTML (`:validacao/documento-grande`) de proposito: a borda ja' o traduz para 413
+  (`resposta-conflito-folha`), e um documento recusado por tamanho e' o MESMO desfecho para quem chamou,
+  independentemente de qual das duas etapas o pegou."
+  (* 5 1024 1024))
+
+(def ^:const paralelismo-de-renderizacao
+  "Quantas renderizacoes de PDF podem estar em voo AO MESMO TEMPO no processo. 2 e' deliberadamente pequeno:
+  congelar folha e' ato raro e manual (um secretario, uma sessao ja' encerrada), e a renderizacao e' o unico
+  trabalho CPU-pesado do backend — deixa-la disputar o processador com o resto sob carga e' o defeito, nao
+  a fila."
+  2)
+
+(defonce ^:private executor-de-renderizacao
+  ;; ACHADO DA REVISAO ADVERSARIAL DA FATIA 5 — o timeout limita a LATENCIA da resposta, nao o CONSUMO.
+  ;; No estouro, `.get` lanca e o worker HTTP e' liberado, mas a renderizacao continua rodando ate' terminar
+  ;; sozinha (`future-cancel` e' melhor-esforco; o openhtmltopdf pode nao responder a interrupcao no meio do
+  ;; parse/layout). Com `future`, esse trabalho zumbi rodava no `clojure.lang.Agent/soloExecutor`: pool
+  ;; ILIMITADO e COMPARTILHADO por todo `future`/`send-off` da JVM. Documentos patologicos repetidos (mesmo
+  ;; autenticados como 'secretario') acumulavam threads sem teto e competiam com qualquer outro trabalho
+  ;; assincrono do processo. Pool PROPRIO, com N fixo e FILA LIMITADA, poe teto nos dois eixos: quantas
+  ;; renderizacoes rodam e quantas esperam. Saturado, RECUSA (`AbortPolicy` -> 503) em vez de crescer.
+  ;; `defonce` + threads DAEMON: uma instancia por processo (o host constroi o componente uma vez, mas testes
+  ;; constroem varios), e nenhuma thread segura o shutdown da JVM.
+  (delay
+    (let [n (atom 0)
+          fabrica (reify ThreadFactory
+                    (newThread [_ r]
+                      (doto (Thread. ^Runnable r (str "folha-pdf-" (swap! n inc)))
+                        (.setDaemon true))))]
+      (ThreadPoolExecutor.
+       (int paralelismo-de-renderizacao) (int paralelismo-de-renderizacao)
+       0 TimeUnit/MILLISECONDS
+       (ArrayBlockingQueue. (int paralelismo-de-renderizacao))
+       fabrica
+       (ThreadPoolExecutor$AbortPolicy.)))))
+
+(defn- submeter!
+  "Submete a renderizacao ao pool DEDICADO. Pool saturado (N em voo + N na fila) -> recusa explicita, nunca
+  crescimento sem teto."
+  ^java.util.concurrent.Future [^ExecutorService ex ^Callable f]
+  (try
+    (.submit ex f)
+    (catch RejectedExecutionException _
+      (throw (ex-info "folha: renderizador de PDF saturado — recusada (nunca enfileira sem teto)"
+                      {:tipo :servidor/renderizador-saturado
+                       :paralelismo paralelismo-de-renderizacao})))))
+
+(defrecord RenderizadorPdfGuardado [delegate timeout-ms teto-bytes executor]
   RenderizadorPdf
   (renderizar [_ html-bytes instante-de-congelamento]
-    (let [fut (future (renderizar delegate html-bytes instante-de-congelamento))
+    (let [ex  (or executor @executor-de-renderizacao)
+          fut (submeter! ex #(renderizar delegate html-bytes instante-de-congelamento))
           v   (try
-                (.get ^java.util.concurrent.Future fut timeout-ms java.util.concurrent.TimeUnit/MILLISECONDS)
+                (.get ^java.util.concurrent.Future fut timeout-ms TimeUnit/MILLISECONDS)
                 (catch java.util.concurrent.TimeoutException _ ::timeout)
                 ;; A FONTE ME CORRIGIU (medido contra este JDK/Clojure): `.get` com timeout NAO desembrulha
                 ;; `ExecutionException` sozinho (a suposicao original era que `deref` fizesse isso sempre —
@@ -268,14 +328,32 @@
         (do (future-cancel fut)
             (throw (ex-info "folha: renderizacao de PDF excedeu o prazo — recusada (nunca serve PDF parcial)"
                             {:tipo :servidor/timeout-renderizacao :timeout-ms timeout-ms})))
-        v))))
+        (let [b (:bytes v)]
+          (when (> (alength ^bytes b) ^long teto-bytes)
+            (throw (ex-info "folha: PDF excede o teto de tamanho de saida — documento recusado antes do INSERT"
+                            {:tipo :validacao/documento-grande
+                             :tamanho-bytes (alength ^bytes b) :teto-bytes teto-bytes})))
+          v)))))
 
-(defn renderizador-pdf-com-timeout
-  "Decora `renderizador-pdf` (ou `delegate`, para teste) com o TIMEOUT DE RENDERIZACAO. O HOST constroi UMA
-   instancia (nunca dentro do handler HTTP) e injeta — mesma disciplina de `serializador-folha-html-com-teto`.
-   Erro real do delegate (nao timeout): a CAUSA original atravessa desembrulhada (ver o comentario A FONTE
-   ME CORRIGIU no `renderizar` acima) — o comportamento de erro do renderizador de baixo nao muda, so' ganha
-   um prazo. `future-cancel` no estouro e' melhor-esforco (o openhtmltopdf pode nao responder a interrupcao
-   no meio do parse/layout); o que importa e' o worker HTTP nao ficar preso."
-  ([] (renderizador-pdf-com-timeout (renderizador-pdf) timeout-renderizacao-ms))
-  ([delegate timeout-ms] (->RenderizadorPdfComTimeout delegate timeout-ms)))
+(defn renderizador-pdf-guardado
+  "Decora `renderizador-pdf` (ou `delegate`, para teste) com as TRES GUARDAS da renderizacao — as duas
+   herdadas da revisao de seguranca da fatia 3 e a terceira levantada pela revisao adversarial da fatia 5:
+
+   1. TIMEOUT — o worker HTTP nunca fica preso num documento patologico. `future-cancel` no estouro e'
+      melhor-esforco (o openhtmltopdf pode nao responder a interrupcao no meio do parse/layout).
+   2. TETO DE SAIDA (`teto-bytes-pdf`) — nada entra no objeto_store sem ter passado por uma medida; fecha a
+      assimetria com o teto de ENTRADA de `serializador-folha`.
+   3. POOL DEDICADO E LIMITADO — a renderizacao (o unico trabalho CPU-pesado do processo) nao roda no
+      `Agent/soloExecutor` compartilhado da JVM; saturado, RECUSA em vez de crescer.
+
+   O HOST constroi UMA instancia (nunca dentro do handler HTTP) e injeta — mesma disciplina de
+   `serializador-folha-html-com-teto`. `executor` so' existe para o teste injetar um pool minusculo e provar
+   a saturacao de forma deterministica; `nil` = o pool dedicado do processo.
+
+   Erro real do delegate (nao timeout, nao teto): a CAUSA original atravessa desembrulhada (ver o comentario
+   A FONTE ME CORRIGIU no `renderizar` acima) — o comportamento de erro do renderizador de baixo nao muda."
+  ([] (renderizador-pdf-guardado (renderizador-pdf) timeout-renderizacao-ms teto-bytes-pdf nil))
+  ([delegate timeout-ms] (renderizador-pdf-guardado delegate timeout-ms teto-bytes-pdf nil))
+  ([delegate timeout-ms teto-bytes] (renderizador-pdf-guardado delegate timeout-ms teto-bytes nil))
+  ([delegate timeout-ms teto-bytes executor]
+   (->RenderizadorPdfGuardado delegate timeout-ms teto-bytes executor)))
