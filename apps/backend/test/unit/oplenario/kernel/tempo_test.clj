@@ -258,7 +258,8 @@
              "src/oplenario/sessoes/controllers.clj"                     ; a CHAMADA, fatia 1b-WIRE (uso real)
              "src/oplenario/sessoes/logic.clj"                           ; o PISO da janela de presenca (uso real)
              "src/oplenario/sessoes/components/serializador_folha.clj"    ; a FOLHA, Etapa 5 fatia 2
-             "src/oplenario/sessoes/components/renderizador_pdf.clj"}    ; o PDF da FOLHA, Etapa 5 fatia 3 (uso real)
+             "src/oplenario/sessoes/components/renderizador_pdf.clj"     ; o PDF da FOLHA, Etapa 5 fatia 3 (uso real)
+             "src/oplenario/sessoes/db/sessao.clj"}                      ; a APURACAO, Etapa 6 fatia 2 (uso real)
            consumidores)
         "a lista de arquivos de src/ que MENCIONAM o fuso global mudou — atualize a docstring da constante
          (e este conjunto) ANTES de mergear"))

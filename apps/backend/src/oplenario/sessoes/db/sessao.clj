@@ -9,7 +9,9 @@
             [next.jdbc :as jdbc]
             [oplenario.kernel.db-util :as comum]
             [oplenario.kernel.sequencial :as sequencial]
-            [oplenario.sessoes.logic :as logic]))
+            [oplenario.kernel.tempo :as tempo]
+            [oplenario.sessoes.logic :as logic])
+  (:import (java.time LocalDate ZoneId)))
 
 (set! *warn-on-reflection* true)
 
@@ -127,3 +129,58 @@
         (throw (ex-info "transicionar!: conflito de lock_version ou sessao inexistente"
                         {:tipo :conflito/transicao :id id :lock-version lock-version})))
       {:de estado :para para :ocorrido-em (:atualizado-em r)})))
+
+;; ---------- Etapa 6 fatia 2 — sessoes FECHADAS de um periodo (insumo da apuracao de assiduidade) ----------
+
+(defn listar-fechadas-no-periodo
+  "As sessoes FECHADAS (`logic/estados-sessao-fechada`: encerrada/nao_realizada/arquivada) cuja DATA DE
+  REFERENCIA cai em `[de, ate]` (LocalDate, inclusivo dos dois lados) — a mesma data que a CHAMADA usa:
+  `aberta_em` se a sessao ja abriu, senao `agendada_para` (`controllers/data-de-referencia`).
+
+  O FILTRO DE DATA E' EXATO, nao uma janela aproximada: `de`/`ate` (datas CIVIS no fuso
+  `tempo/zona-civil-padrao`) viram um intervalo de INSTANTES `[lo, hi)` — `lo` = inicio do dia civil de `de`,
+  `hi` = inicio do dia civil do dia SEGUINTE a `ate` — e o range de instantes cujo dia civil (na MESMA zona)
+  cai em `[de, ate]` E' EXATAMENTE esse intervalo. Por isso o WHERE compara `COALESCE(aberta_em,
+  agendada_para)` contra `lo`/`hi` (calculados AQUI, em Clojure, com o fuso — o SQL nunca ve o fuso, mesmo
+  racional documentado em `transparencia/db/parlamentar.clj`: 'a data e derivada em Clojure e chega pronta').
+  Sessao SEM NENHUM dos dois marcos (agendada sem data, jamais aberta, dada como nao_realizada) tem
+  `COALESCE` NULL — a comparacao falha e ela fica FORA do periodo (nao ha' data de referencia p/ posiciona-la
+  em periodo nenhum; nao e' truncamento, e' ausencia real de dado).
+
+  Cada linha devolvida carrega `:data-de-referencia` (LocalDate) JA CALCULADA — uma unica vez, aqui — para
+  `logic/apurar-assiduidade` NUNCA recalcula-la (I3-like: uma so' fonte para 'qual e' a data desta sessao').
+
+  DOIS TETOS, nenhum silencioso (I7 do brief):
+  - `logic/validar-periodo-assiduidade!` roda PRIMEIRO (dias do periodo) — pura, sem tocar o banco;
+  - `logic/teto-de-sessoes-do-periodo-de-assiduidade` (400) via `:max-rows` = teto+1 (o driver PARA de
+    materializar no primeiro excedente, mesmo mecanismo de `vereador/roster-da-casa-em-datas`): ler teto+1 e'
+    a PROVA do estouro, e a funcao lanca `:limite/sessoes-excedido` (`:medido-ao-menos`, nao `:medido` — a
+    medicao e' um PISO) em vez de devolver a pagina truncada.
+
+  `tipos` filtra `tipo_sessao` (vocabulario `logic/tipos-sessao`); nil/vazio = todos os tipos."
+  [tx ente-id {:keys [de ate tipos]}]
+  (logic/validar-periodo-assiduidade! de ate)
+  (let [lo (-> ^LocalDate de (.atStartOfDay ^ZoneId tempo/zona-civil-padrao) .toInstant)
+        hi (-> ^LocalDate (.plusDays ^LocalDate ate 1) (.atStartOfDay ^ZoneId tempo/zona-civil-padrao) .toInstant)
+        teto logic/teto-de-sessoes-do-periodo-de-assiduidade
+        linhas (comum/linhas->kebab
+                (jdbc/execute! tx
+                  (sql/format {:select [:id [:numero_sequencial :numero] [:tipo_sessao :tipo] :estado
+                                        :agendada_para :aberta_em :encerrada_em :transmite_publica]
+                               :from [:sessoes.sessao]
+                               :where (cond-> [:and [:= :ente_id ente-id]
+                                              [:in :estado (vec logic/estados-sessao-fechada)]
+                                              [:>= [:coalesce :aberta_em :agendada_para] lo]
+                                              [:< [:coalesce :aberta_em :agendada_para] hi]]
+                                        (seq tipos) (conj [:in :tipo_sessao (vec tipos)]))
+                               :order-by [[[:coalesce :aberta_em :agendada_para] :asc] [:id :asc]]})
+                  ;; `:max-rows` = teto+1: o driver PARA de materializar no primeiro excedente (mesmo
+                  ;; mecanismo de `vereador/roster-da-casa-em-datas`).
+                  {:max-rows (inc teto)}))]
+    (when (> (count linhas) teto)
+      (throw (ex-info "sessoes no periodo de apuracao de assiduidade acima do teto"
+                      {:tipo :limite/sessoes-excedido :medido-ao-menos (count linhas) :teto teto})))
+    (mapv (fn [linha]
+            (assoc linha :data-de-referencia
+                   (tempo/hoje-de (or (:aberta-em linha) (:agendada-para linha)) tempo/zona-civil-padrao)))
+          linhas)))

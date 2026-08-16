@@ -63,7 +63,11 @@
   o `Calendar` de `CreationDate`/`ModificationDate` do PDF congelado vem do MESMO fuso que a hora impressa
   no papel (item e acima), para o metadado do arquivo e o texto visivel nunca contarem horas diferentes.
   Nao efemero, nao persistido por este consumidor — mas grava dentro de um artefato binario IMUTAVEL, e o
-  mesmo raio de dano do item (e) se aplica: sem correcao depois de congelado.
+  mesmo raio de dano do item (e) se aplica: sem correcao depois de congelado. (g) `sessoes/db/sessao.clj`
+  (Etapa 6 fatia 2) — `listar-fechadas-no-periodo` converte `de`/`ate` (datas civis do PEDIDO de apuracao de
+  assiduidade) no intervalo de INSTANTES `[lo, hi)` que filtra `COALESCE(aberta_em, agendada_para)`, e volta
+  a converter cada `COALESCE` lido em `:data-de-referencia` (LocalDate) — a MESMA regra de (c), aplicada em
+  LOTE a um periodo em vez de uma sessao so'. Valor efemero de request, nunca persistido por este consumidor.
 
   O QUE ESTA CONSTANTE RESOLVE: ate aqui o fuso era literal espalhado pelas bordas; o host
   (`rotas.clj`) tinha DOIS. Ter um lugar so' e' o pre-requisito de transformar o fuso em

@@ -121,6 +121,64 @@
                   {:sessao-id sessao-id :instante instante :ente-id ente-id
                    :projecao [:vereador_id :tipo :modalidade :fonte :ocorrido_em :registrado_em]})))))
 
+;; ---------- Etapa 6 fatia 2 — leituras EM LOTE (insumo da apuracao de assiduidade) ----------
+;; A apuracao le' um PERIODO inteiro (ate' 400 sessoes) de uma vez — reabrir `presenca-corrente`/
+;; `listar-justificativas-da-sessao` sessao a sessao seria o mesmo carry N+1 que a fatia 1 fechou para o
+;; roster (`i5-decisao.md:277`). As duas funcoes abaixo sao as irmas em LOTE.
+
+(defn presencas-correntes-das-sessoes
+  "O ULTIMO evento de presenca de CADA vereador, para um LOTE de sessoes de uma vez — cada sessao com o SEU
+  PROPRIO instante de corte (I5: um instante GLOBAL do periodo fabricaria presenca). UMA UNICA query, via
+  `logic/ultimos-eventos-por-sessao-e-vereador-q` (a fonte CANONICA compartilhada com `presenca-corrente`
+  singular e com os agregadores do motor de votacao — I2: nunca redigitar a ordem de desempate).
+
+  `sessoes-com-instante` = colecao de pares `[sessao-id instante]` (o instante ja' resolvido por
+  `logic/instante-de-avaliacao`, um por sessao — o CHAMADOR decide, esta funcao so' le').
+
+  Devolve `{sessao-id -> [presenca-linha ...]}`, PRE-SEMEADO com toda `sessao-id` de `sessoes-com-instante`
+  (vetor vazio quando a sessao nao teve nenhum evento) — mesma disciplina de
+  `vereador/roster-da-casa-em-datas`: chave AUSENTE seria lida a jusante como 'nao perguntei por essa
+  sessao', nunca como 'perguntei e a resposta e' vazia' (e a apuracao itera sobre as sessoes pedidas, nao
+  sobre as chaves que a query devolveu).
+
+  `sessoes-com-instante` VAZIO devolve `{}` SEM tocar o banco (mesmo racional de `licencas-de-mandatos` para
+  id vazio — o periodo sem nenhuma sessao fechada e' o caso normal do primeiro mes de uma Casa nova)."
+  [tx ente-id sessoes-com-instante]
+  (if (empty? sessoes-com-instante)
+    {}
+    (let [linhas (comum/linhas->kebab
+                  (jdbc/execute! tx
+                    (sql/format (logic/ultimos-eventos-por-sessao-e-vereador-q
+                                 {:sessoes-e-instantes sessoes-com-instante :ente-id ente-id
+                                  :projecao [:presenca_evento.sessao_id :vereador_id :tipo :modalidade :fonte
+                                             :ocorrido_em :registrado_em]}))))
+          por-sessao (group-by :sessao-id linhas)]
+      (into {} (map (fn [[sid _]] [sid (get por-sessao sid [])])) sessoes-com-instante))))
+
+(defn justificativas-das-sessoes
+  "As justificativas de ausencia de um LOTE de sessoes de uma vez — irma em lote de
+  `listar-justificativas-da-sessao`, MESMA projecao (`motivo` incluso: o consumidor e' a Mesa/secretario, nao
+  um read-model publico). UMA UNICA query, filtrando `sessao_id IN (...)` — o volume ja' esta' bounded pelo
+  teto de sessoes do periodo (400), entao um `IN` simples e' barato aqui (ao contrario do lote de presenca,
+  que precisa de um instante DIFERENTE por sessao e por isso nao pode ser um `IN` simples).
+
+  Devolve `{sessao-id -> [justificativa-linha ...]}`, PRE-SEMEADO com toda `sessao-id` pedida (vetor vazio
+  quando a sessao nao tem justificativa nenhuma) — mesma disciplina de `presencas-correntes-das-sessoes`.
+  `sessao-ids` VAZIO devolve `{}` sem tocar o banco."
+  [tx ente-id sessao-ids]
+  (if (empty? sessao-ids)
+    {}
+    (let [ids (vec (distinct sessao-ids))
+          linhas (comum/linhas->kebab
+                  (jdbc/execute! tx
+                    (sql/format {:select [:sessao_id :id :vereador_id :estado :motivo :decidido_por
+                                          :decidido_em :lock_version]
+                                 :from [:sessoes.justificativa_ausencia]
+                                 :where [:and [:= :ente_id ente-id] [:in :sessao_id ids]]
+                                 :order-by [[:sessao_id :asc] [:vereador_id :asc]]})))
+          por-sessao (group-by :sessao-id linhas)]
+      (into {} (map (fn [sid] [sid (get por-sessao sid [])])) ids))))
+
 ;; ---------- justificativa_ausencia (ato apartado, state machine) ----------
 
 (defn buscar-justificativa-do-vereador

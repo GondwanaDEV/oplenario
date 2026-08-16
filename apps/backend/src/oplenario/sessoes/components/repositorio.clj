@@ -161,7 +161,16 @@
   ;; §16.13 — incidentes processuais (mesa de conducao ao vivo)
   (registrar-incidente! [this ente-id m] "Registra incidente processual (append-only) + emite incidente.registrado (SSE) na MESMA tx.")
   (buscar-incidente [this ente-id id])
-  (listar-incidentes [this ente-id sessao-id] "Incidentes da sessao em ordem cronologica (ata + painel da mesa)."))
+  (listar-incidentes [this ente-id sessao-id] "Incidentes da sessao em ordem cronologica (ata + painel da mesa).")
+  ;; Etapa 6 fatia 2 — a apuracao de assiduidade
+  (leituras-assiduidade [this ente-id periodo]
+    "As leituras de SESSOES + PRESENCAS + JUSTIFICATIVAS de um PERIODO (Etapa 6 fatia 2), NUMA UNICA tx —
+     `periodo` = {:de :ate :tipos}. `sessao/listar-fechadas-no-periodo` aplica os DOIS tetos (dias do
+     periodo, sessoes do recorte) fail-closed ANTES de qualquer leitura cara; o instante de CADA sessao
+     (I5) e' resolvido daqui com `logic/instante-de-avaliacao` — nunca um instante global do periodo.
+     O ROSTER (cadastros, cross-modulo, §22.10) NAO entra aqui: chega por SEAM, no controller, IGUAL a'
+     `chamada-da-sessao`/`folha-da-sessao` — precisa saber quais DATAS pedir, que so' se sabe depois desta
+     leitura. Devolve {:sessoes [...] :presencas-por-sessao {...} :justificativas-por-sessao {...}}."))
 
 (defrecord RepoSessoesPg [datasource bus]
   RepoSessoes
@@ -519,7 +528,31 @@
               (:requerente-id m) (assoc :requerente-id (:requerente-id m))))
           r))))
   (buscar-incidente [this ente-id id] (transacao this ente-id #(incidente/buscar % ente-id id)))
-  (listar-incidentes [this ente-id sessao-id] (transacao this ente-id #(incidente/listar-da-sessao % ente-id sessao-id))))
+  (listar-incidentes [this ente-id sessao-id] (transacao this ente-id #(incidente/listar-da-sessao % ente-id sessao-id)))
+  ;; Etapa 6 fatia 2 — UMA tx do lado de `sessoes` (mesmo molde de `chamada-da-sessao`/`folha-da-sessao`): as
+  ;; TRES leituras (sessoes, presencas, justificativas) veem o MESMO snapshot MVCC. O roster fica de fora
+  ;; (outro modulo, outra tx — o controller resolve depois desta chamada devolver).
+  (leituras-assiduidade [this ente-id {:keys [de ate tipos] :as periodo}]
+    (transacao this ente-id
+      (fn [tx]
+        (let [sessoes (sessao/listar-fechadas-no-periodo tx ente-id periodo)
+              ;; `instante-de-sessao-fechada`: reusa `logic/instante-de-avaliacao` (I5) com uma guarda —
+              ;; `listar-fechadas-no-periodo` so' devolve `logic/estados-sessao-fechada`, entao o ramo 'agora'
+              ;; daquela funcao (que exigiria um relogio que este metodo nao tem) nunca deveria disparar; a
+              ;; guarda falha ALTO se essa invariante um dia quebrar, em vez de silenciosamente avaliar
+              ;; presenca em `agora=nil` (zerando a apuracao daquela sessao sem erro nenhum).
+              instante-de-sessao-fechada
+              (fn [s]
+                (when-not (contains? logic/estados-sessao-fechada (:estado s))
+                  (throw (ex-info "leituras-assiduidade: sessao nao fechada no lote (invariante quebrada)"
+                                  {:tipo :servidor/erro :sessao-id (:id s) :estado (:estado s)})))
+                (logic/instante-de-avaliacao s nil))
+              sessoes-com-instante (mapv (fn [s] [(:id s) (instante-de-sessao-fechada s)]) sessoes)
+              sessao-ids (mapv :id sessoes)]
+          {:sessoes sessoes
+           :presencas-por-sessao (presenca/presencas-correntes-das-sessoes tx ente-id sessoes-com-instante)
+           :justificativas-por-sessao (presenca/justificativas-das-sessoes tx ente-id sessao-ids)}))))
+  )
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

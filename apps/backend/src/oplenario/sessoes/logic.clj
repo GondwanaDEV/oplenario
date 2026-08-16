@@ -8,7 +8,8 @@
   relogio; nenhum instante e' LIDO aqui."
   (:require [clojure.string :as str]
             [oplenario.kernel.tempo :as tempo])
-  (:import (java.time Duration Instant ZoneId)))
+  (:import (java.time Duration Instant LocalDate ZoneId)
+           (java.time.temporal ChronoUnit)))
 
 (set! *warn-on-reflection* true)
 
@@ -235,6 +236,44 @@
                 [[:= :sessao_id sessao-id] [:<= :ocorrido_em instante]])
    :order-by (into [[:vereador_id :asc]] ordem-ultimo-evento)})
 
+(def projecao-ultimo-evento-lote-padrao
+  "Projecao default do LOTE multi-sessao (irma de `projecao-ultimo-evento-padrao`): inclui
+  `:presenca_evento.sessao_id` QUALIFICADO — a tabela VALUES do lote (`ultimos-eventos-por-sessao-e-
+  vereador-q`) tambem tem uma coluna `sessao_id`, e sem qualificar o SELECT fica ambiguo para o Postgres.
+  O agrupador a jusante (`db/presenca/presencas-correntes-das-sessoes`) precisa desta coluna para saber de
+  qual sessao cada linha e' — o singular nao precisa, porque so' ha uma sessao por consulta."
+  [:presenca_evento.sessao_id :vereador_id :tipo :modalidade])
+
+(defn ultimos-eventos-por-sessao-e-vereador-q
+  "Subquery (mapa HoneySQL puro): a IRMA MULTI-SESSAO de `ultimos-eventos-por-vereador-q` — o ULTIMO evento
+  por (sessao, vereador), para um LOTE de sessoes de UMA VEZ, cada sessao com o SEU PROPRIO instante de
+  corte (I5 do brief da Etapa 6: cada sessao e' avaliada no seu `instante-de-avaliacao`; um instante GLOBAL
+  do periodo fabricaria presenca — um evento gravado depois do fechamento de uma sessao mudaria a apuracao
+  de OUTRA sessao que fechou depois).
+
+  `:sessoes-e-instantes` = colecao de pares `[sessao-id instante]`, materializada como tabela VALUES
+  `(VALUES (s1,i1), (s2,i2), ...) AS si(sessao_id, instante)` e JOINADA (nao LATERAL — a correlacao e' uma
+  igualdade simples de `sessao_id`, sem subquery por linha) contra `presenca_evento` pelas DUAS condicoes
+  `sessao_id = si.sessao_id AND ocorrido_em <= si.instante`.
+
+  REUSA LITERALMENTE `ordem-ultimo-evento` — OBRIGATORIO (I2 do brief): nunca redigitar a ordem de
+  desempate, foi o defeito que a fatia 1a da Etapa 1 matou (a TELA anunciava um quorum e a POLICY usava
+  outro na MESMA sessao). `DISTINCT ON (sessao_id, vereador_id)` particiona por sessao E vereador; o
+  `:order-by` antepoe os DOIS particionadores a `ordem-ultimo-evento`, exatamente como o singular antepoe
+  so' `vereador_id`. Para UMA sessao so' (lote de tamanho 1), a sequencia produzida e' IDENTICA a' de
+  `ultimos-eventos-por-vereador-q` para aquela sessao — e' o teste-ancora desta funcao.
+
+  `:ente-id` opcional, MESMO contrato do singular (defense-in-depth; a RLS ja isola por tenant).
+  `:projecao` default = `projecao-ultimo-evento-lote-padrao`."
+  [{:keys [sessoes-e-instantes ente-id projecao]}]
+  {:select-distinct-on (into [[:presenca_evento.sessao_id :vereador_id]]
+                             (or projecao projecao-ultimo-evento-lote-padrao))
+   :from [:sessoes.presenca_evento]
+   :join [[{:values (mapv (fn [[sid inst]] [sid inst]) sessoes-e-instantes)} [[:si :sessao_id :instante]]]
+          [:and [:= :presenca_evento.sessao_id :si.sessao_id] [:<= :presenca_evento.ocorrido_em :si.instante]]]
+   :where (if (some? ente-id) [:and [:= :presenca_evento.ente_id ente-id]] [:and])
+   :order-by (into [[:presenca_evento.sessao_id :asc] [:vereador_id :asc]] ordem-ultimo-evento)})
+
 (defn presente-por-tipo?
   "O vereador esta presente se o tipo do seu ultimo evento e' positivo (entrada/retorno/mudanca_modalidade)?"
   [tipo]
@@ -433,6 +472,17 @@
   distingue varios estados em `derivar-linha-chamada`) nao precise ser lembrada em dois lugares."
   #{:presente-plenario :presente-remoto})
 
+(defn conta-no-denominador-do-quorum?
+  "PURO. Uma linha JA DERIVADA (`derivar-linha-chamada`/`derivar-linha-sem-assento`) conta no DENOMINADOR do
+  quorum (`:membros-da-casa` de `contar-quorum`, abaixo) quando NAO e' `:licenciado` E TEM assento — a MESMA
+  regra que `contar-quorum` aplicava inline, extraida (Etapa 6 fatia 2) para ser reusada LINHA A LINHA pela
+  apuracao de assiduidade por vereador: ali a decisao precisa ser tomada uma linha de cada vez, ao longo de
+  um periodo inteiro de sessoes, nao so' resumida no agregado de uma sessao. Extrair em vez de redigitar e'a
+  mesma disciplina de `ordem-ultimo-evento`/`mandato-vigente-lateral` (I1/I3 do brief): uma so' fonte para
+  'o que conta na Casa', nunca duas contagens que podem divergir."
+  [linha]
+  (not (or (= :licenciado (:estado linha)) (:sem-assento linha))))
+
 (defn contar-quorum
   "PURO. Contagem de quorum sobre as linhas JA derivadas (`derivar-linha-chamada` /
   `derivar-linha-sem-assento`) — nunca sobre eventos crus, para que a tela e a policy contem o mesmo
@@ -463,7 +513,7 @@
   {:presentes-plenario (count (filter #(= :presente-plenario (:estado %)) linhas))
    :presentes-remoto   (count (filter #(= :presente-remoto (:estado %)) linhas))
    :presentes-total    (count (filter #(estados-presentes (:estado %)) linhas))
-   :membros-da-casa    (count (remove #(or (= :licenciado (:estado %)) (:sem-assento %)) linhas))
+   :membros-da-casa    (count (filter conta-no-denominador-do-quorum? linhas))
    :presencas-fora-do-roster (count (filter :sem-assento linhas))})
 
 (defn derivar-linhas-da-chamada
@@ -945,3 +995,203 @@
          "se o limite foi atingido de verdade, o caso e' de suporte, nao de mais um POST.")
 
     (str "conducao de chamada recusada para esta sessao (" (name motivo) ").")))
+
+;; ---------- §22.6 eixo C — a APURACAO DE ASSIDUIDADE (Etapa 6 fatia 2) ----------
+;; A apuracao NAO e' uma segunda aritmetica de presenca (I1): para CADA sessao do periodo, ela roda a MESMA
+;; `derivar-linhas-da-chamada` + `contar-quorum` que a chamada nominal usa. O que muda e' a ESCALA — em vez
+;; de uma sessao, um PERIODO inteiro — e o AGRUPAMENTO — por vereador, ao longo das sessoes em que ele
+;; comparecia a Casa. `janelas-de-exercicio` (I-5, cadastros) NAO entra aqui: o denominador de CADA sessao
+;; ja' e' o roster daquela data (Etapa 6 fatia 1), o MESMO numero que a chamada congelou — recalcular por
+;; janelas de exercicio produziria um TERCEIRO numero para a mesma pergunta (ver o brief da Etapa 6).
+
+(def teto-de-dias-do-periodo-de-assiduidade
+  "Periodo maximo (dias, inclusivo dos dois lados) que `apurar-assiduidade` aceita apurar de uma vez — o
+  MESMO numero de `cadastros.db.vereador/teto-de-datas-lote` (366): sao a MESMA regra de produto vista de
+  dois modulos (sessoes PEDE o periodo; cadastros o RECEBE como lista de datas civis distintas), e os dois
+  tem de concordar. Um teto de dias maior que o de datas civis produziria uma rejeicao IMPOSSIVEL de
+  disparar a partir da borda real — nao ha' mais de 366 datas civis distintas num periodo de 366 dias."
+  366)
+
+(def teto-de-sessoes-do-periodo-de-assiduidade
+  "Teto de SESSOES no recorte — NAO de datas civis (duas sessoes no mesmo dia sao UMA data para o roster em
+  lote, mas DUAS sessoes para este teto; ver §Tetos do brief da Etapa 6, revisao da Fatia 1: 'datas !=
+  sessoes'). Pior caso teorico do produto: 400 sessoes x 150 vereadores no roster do periodo (54.900 linhas
+  de detalhe); na Casa real e' ~200 sessoes x ~21 vereadores. O teto e' o guard-rail, nao a expectativa."
+  400)
+
+(defn validar-periodo-assiduidade!
+  "Fail-closed, chamado em DOIS lugares de proposito (mesma REDE de `vereador/normalizar-datas!`): no
+  controller, ANTES de abrir a tx (rejeicao nao empresta conexao do pool) — e de novo dentro de
+  `db/sessao/listar-fechadas-no-periodo`, como rede contra um chamador direto.
+
+  `de` posterior a `ate` -> `:validacao/invalido` (400 na borda futura da Fatia 3): nao e' um teto, e' uma
+  entrada sem sentido — devolver silenciosamente ZERO sessoes para um periodo invertido seria indistinguivel
+  de 'realmente nao houve sessao', que e' exatamente o tipo de silencio que I7 proibe.
+
+  Periodo acima de `teto-de-dias-do-periodo-de-assiduidade` dias -> `:limite/periodo-excedido` (namespace
+  `limite` -> 422 no interceptor global, JA' mapeado — nenhum handler novo precisa reconhecer este `:tipo`),
+  com `:medido`/`:teto` em DIAS no corpo."
+  [^LocalDate de ^LocalDate ate]
+  (when (.isAfter de ate)
+    (throw (ex-info "apuracao de assiduidade: periodo invalido (de posterior a ate)"
+                    {:tipo :validacao/invalido :de de :ate ate})))
+  (let [dias (inc (.until de ate ChronoUnit/DAYS))]
+    (when (> dias teto-de-dias-do-periodo-de-assiduidade)
+      (throw (ex-info "periodo de apuracao de assiduidade acima do teto"
+                      {:tipo :limite/periodo-excedido :medido dias
+                       :teto teto-de-dias-do-periodo-de-assiduidade})))))
+
+(def ^:private criterio-de-inclusao-assiduidade
+  "So' sessoes FECHADAS entram no periodo apurado: encerrada, nao_realizada ou arquivada
+  (logic/estados-sessao-fechada). 'Convocada', nesta apuracao, significa 'convocada e ja ocorrida ou
+  frustrada' — sessao agendada (ainda nao ocorreu) ou aberta/suspensa (ao vivo) fica de fora, porque o
+  denominador de uma sessao viva ainda esta em movimento. Sessao nao_realizada CONTA como convocada: quem
+  compareceu antes de a sessao ser dada como frustrada e' presente; quem nao compareceu e' falta,
+  classificada pela justificativa como qualquer outra.")
+
+(def ^:private nota-de-metodologia-assiduidade
+  "Esta apuracao e' RECALCULADA a partir do CADASTRO DE HOJE (roster, mandatos, licencas). A folha de
+  presenca da sessao (Etapa 5) e' o registro do que valia NO DIA da sessao e fica congelada para sempre; um
+  cadastro corrigido DEPOIS daquele dia (um mandato lancado com a data errada, uma licenca registrada com
+  atraso) faz os dois numeros legitimamente diferirem — a divergencia nao e' inconsistencia do sistema, e' o
+  efeito esperado de corrigir um erro de cadastro apos o fato.")
+
+(defn- agregado-vazio-de-assiduidade []
+  {:sessoes-computadas 0 :comparecimentos 0 :ausencias-justificadas 0
+   :ausencias-com-justificativa-pendente 0 :ausencias-injustificadas 0 :sessoes-licenciado 0})
+
+(defn- somar-linha-na-assiduidade
+  "PURO. Soma UMA linha JA DERIVADA (`derivar-linhas-da-chamada`) no agregado de UM vereador. As 4
+  classificações de falta/presença são as de `estados-chamada` — `:ausente-justificativa-pendente` tem
+  bucket PRÓPRIO e nunca cai no `else` de `:ausente` (I4): a Mesa ainda não decidiu, e contar como
+  'injustificada' seria publicar uma acusação que ninguém fez. `:sessoes-computadas` (o denominador) usa a
+  MESMA regra de `conta-no-denominador-do-quorum?` — nunca uma soma paralela que poderia divergir da
+  contagem de quorum da própria sessão (I1)."
+  [agregado linha]
+  (cond-> agregado
+    (conta-no-denominador-do-quorum? linha)
+    (update :sessoes-computadas inc)
+
+    (contains? estados-chamada-presentes (:estado linha))
+    (update :comparecimentos inc)
+
+    (= :ausente-justificado (:estado linha))
+    (update :ausencias-justificadas inc)
+
+    (= :ausente-justificativa-pendente (:estado linha))
+    (update :ausencias-com-justificativa-pendente inc)
+
+    (= :ausente (:estado linha))
+    (update :ausencias-injustificadas inc)
+
+    (= :licenciado (:estado linha))
+    (update :sessoes-licenciado inc)))
+
+(defn apurar-assiduidade
+  "PURA — o coracao da Etapa 6. Para CADA sessao de `sessoes`, deriva as linhas da chamada
+  (`derivar-linhas-da-chamada`) e conta o quorum (`contar-quorum`) — a MESMA aritmetica que a chamada
+  nominal usa (I1 do brief): nenhum COUNT/FILTER em SQL reproduzindo esta regra em outro lugar. Se um teste
+  passa sem que estas duas funcoes sejam chamadas, o teste e' falso.
+
+  `sessoes` = as linhas de `db/sessao/listar-fechadas-no-periodo`, cada uma JA carregando
+  `:data-de-referencia` (LocalDate, calculada UMA vez em `db/sessao` — `(or aberta-em agendada-para)`
+  convertida a data civil — nunca recomputada aqui: um segundo calculo da MESMA data seria a mesma classe de
+  risco de divergencia que I1/I3 fecham para o roster e a ordem de evento).
+  `rosters-por-data` = `{LocalDate -> [roster-linha ...]}` (`cadastros/roster-da-casa-em-datas`, Fatia 1).
+  `presencas-por-sessao`/`justificativas-por-sessao` = `{sessao-id -> [...]}`, MESMA forma de
+  `presenca-corrente`/`listar-justificativas-da-sessao`, agora em lote por sessao (`db/presenca`, Fatia 2).
+
+  IDENTIDADE UMA SO' VEZ (carry de LGPD da revisao da Fatia 1): `nome`/`nome-parlamentar`/`partido` sao
+  CONSTANTES por vereador dentro do periodo e vivem SO' em `:vereadores`; `:detalhe` referencia por
+  `:vereador-id`, nunca repete o nome civil por linha — no pior caso do teto seriam dezenas de milhares de
+  repeticoes do mesmo nome e filiacao partidaria num payload so'. Uma linha SEM ASSENTO (vereador-id sem
+  registro no roster de nenhuma data do periodo) entra em `:vereadores` com identidade `nil` — `sessoes` nao
+  inventa nome que `cadastros` nao devolveu para aquele vereador em nenhuma das datas pedidas.
+
+  NOMES DO WIRE distintos do card publico de `transparencia` (I-5): `:sessoes-computadas`/`:comparecimentos`,
+  NUNCA `:presenca`/`:sessoes-presente` — a Casa nao pode ver dois numeros de assiduidade do MESMO vereador
+  com o MESMO rotulo, um vindo do card publico e outro desta apuracao interna.
+
+  `:percentual` de cada vereador e' `nil` quando `:sessoes-computadas` e' ZERO (nunca `0` — que leria como
+  'faltou a tudo'; a diferenca entre 'nao podia comparecer a nada' e 'faltou a tudo' e' a diferenca entre um
+  suplente e um faltoso). NAO E' CLAMPADO a [0,100] — ao contrario de `db/presenca/resumo-presenca` (que
+  clampa para a vitrine PUBLICA de comprador): aqui, um `:comparecimentos` que excede `:sessoes-computadas`
+  (um vereador com presenca SEM ASSENTO fora do proprio periodo de mandato) e' o MESMO tipo de sintoma de
+  cadastro furado que `contar-quorum` deliberadamente deixa aparecer em vez de normalizar em silencio — a
+  leitura e' do secretario/Mesa, nao da vitrine publica.
+
+  Devolve `{:sessoes [...] :vereadores [...] :por-vereador [...] :detalhe [...] :totais {...}}`."
+  [sessoes rosters-por-data presencas-por-sessao justificativas-por-sessao]
+  (let [por-sessao
+        (mapv (fn [sessao]
+                (let [data      (:data-de-referencia sessao)
+                      roster    (get rosters-por-data data [])
+                      presencas (get presencas-por-sessao (:id sessao) [])
+                      justs     (get justificativas-por-sessao (:id sessao) [])
+                      linhas    (mapv :linha (derivar-linhas-da-chamada roster presencas justs))]
+                  {:sessao sessao :linhas linhas :quorum (contar-quorum linhas)}))
+              sessoes)
+
+        sessoes-out
+        (mapv (fn [{:keys [sessao quorum]}]
+                {:id (:id sessao) :numero (:numero sessao) :tipo (:tipo sessao) :estado (:estado sessao)
+                 :data-de-referencia (:data-de-referencia sessao)
+                 :sigilosa (not (true? (:transmite-publica sessao)))
+                 :quorum quorum})
+              por-sessao)
+
+        ;; [sessao-id linha] para cada linha derivada de cada sessao — a fonte comum do resto (identidade,
+        ;; detalhe, agregados por vereador). Uma UNICA passada sobre a projecao inteira.
+        todas-linhas
+        (into [] (mapcat (fn [{:keys [sessao linhas]}] (map (fn [l] [(:id sessao) l]) linhas)))
+              por-sessao)
+
+        identidades
+        (reduce (fn [acc [_sid {:keys [vereador-id nome] :as linha}]]
+                  (cond
+                    (nil? vereador-id) acc
+                    ;; ja' tem identidade CONHECIDA (nome nao-nil) -> nao sobrescreve com uma linha sem-
+                    ;; assento (identidade nil) de outra sessao do mesmo vereador.
+                    (some? (:nome (get acc vereador-id))) acc
+                    :else (assoc acc vereador-id
+                                 {:id vereador-id :nome nome :nome-parlamentar (:nome-parlamentar linha)
+                                  :partido (:partido linha)})))
+                {} todas-linhas)
+
+        vereadores-out
+        (->> (vals identidades)
+             (sort-by (juxt (comp #(or % "") :nome) (comp str :id)))
+             vec)
+
+        detalhe-out
+        (mapv (fn [[sid linha]] {:sessao-id sid :vereador-id (:vereador-id linha) :estado (:estado linha)})
+              todas-linhas)
+
+        agregados
+        (reduce (fn [acc [_sid {:keys [vereador-id] :as linha}]]
+                  (if (nil? vereador-id)
+                    acc
+                    (update acc vereador-id (fnil somar-linha-na-assiduidade (agregado-vazio-de-assiduidade))
+                            linha)))
+                {} todas-linhas)
+
+        por-vereador-out
+        (->> agregados
+             (map (fn [[vereador-id agregado]]
+                    (assoc agregado
+                           :vereador-id vereador-id
+                           :percentual (when (pos? (:sessoes-computadas agregado))
+                                         (int (Math/round (* 100.0 (/ (:comparecimentos agregado)
+                                                                      (:sessoes-computadas agregado)))))))))
+             (sort-by (fn [{:keys [vereador-id]}]
+                       [(or (:nome (get identidades vereador-id)) "") (str vereador-id)]))
+             vec)]
+    {:sessoes sessoes-out
+     :vereadores vereadores-out
+     :por-vereador por-vereador-out
+     :detalhe detalhe-out
+     :totais {:sessoes-consideradas (count sessoes-out)
+              :vereadores-considerados (count vereadores-out)
+              :sessoes-sigilosas (count (filter :sigilosa sessoes-out))
+              :criterio-de-inclusao criterio-de-inclusao-assiduidade
+              :nota-de-metodologia nota-de-metodologia-assiduidade}}))

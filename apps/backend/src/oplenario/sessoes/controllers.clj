@@ -968,3 +968,47 @@
                           :versao versao :qual qual :objeto-store-ref store-ref})
               {:resultado :blob-ausente})))
       {:resultado :versao-nao-encontrada})))
+
+;; ---------- §22.6 eixo C — a APURACAO DE ASSIDUIDADE (Etapa 6 fatia 2) ----------
+
+(defn apurar-assiduidade
+  "A APURACAO DE ASSIDUIDADE de um periodo (Etapa 6 fatia 2): sessao a sessao, vereador a vereador, quem
+  compareceu, quem faltou, e em que estado esta a justificativa de cada falta — com o MESMO calculo
+  (`logic/derivar-linhas-da-chamada` + `logic/contar-quorum`) que a chamada nominal usa (I1: nenhuma segunda
+  aritmetica de presenca).
+
+  TENANT-WIDE, sem recurso unico p/ camada fina (mesmo contrato de `resumo-presenca`/`compliance.controllers/
+  painel`): quem autoriza e' a authz GROSSA (papel 'secretario'), exigida AQUI porque esta fatia nao tem rota
+  ainda (a Fatia 3 acrescenta `it/exige-papel` na borda; este check continua valendo depois, como a SEGUNDA
+  camada — mesma disciplina de defesa em profundidade do resto do modulo).
+
+  UMA UNICA tx do lado de `sessoes` (`repo/leituras-assiduidade` — sessoes+presencas+justificativas do
+  periodo numa tx so', mesmo molde de `chamada-da-sessao`/`folha-da-sessao`). O ROSTER e' outro modulo
+  (`cadastros`, seam `roster-da-casa-em-datas` injetado pelo host, §22.10): chega por uma tx PROPRIA, DEPOIS
+  da leitura de sessoes — so' agora se sabe quais DATAS pedir (a `:data-de-referencia` de cada sessao, ja'
+  calculada por `db/sessao/listar-fechadas-no-periodo`).
+
+  `roster-da-casa-em-datas` e' checado ANTES de qualquer leitura: o mapa que `rotas.clj` passa a
+  `sessoes-http/rotas` NAO e' `:closed`, entao uma chave com o nome errado passaria SILENCIOSA no boot e so'
+  apareceria como NPE em runtime, na rota do secretario — carry deixado pela revisao da Fatia 1.
+
+  Devolve o mapa de `logic/apurar-assiduidade` (`{:sessoes :vereadores :por-vereador :detalhe :totais}`)."
+  [repo-sessoes roster-da-casa-em-datas ator {:keys [de ate tipos] :as periodo}]
+  (when (nil? roster-da-casa-em-datas)
+    (throw (ex-info "apurar-assiduidade: seam roster-da-casa-em-datas ausente (carry da Fatia 1)"
+                    {:tipo :servidor/erro})))
+  ;; papel GROSSA, nao a policy FINA (`authz/check!`): esta leitura e' tenant-wide, sem um recurso unico
+  ;; carregado para uma politica avaliar contra — o mesmo desenho de `resumo-presenca`, so' que aqui o check
+  ;; roda no controller (nao ha' rota ainda que o faca por fora).
+  (authz/exige-papel! ator "secretario")
+  ;; A REJEICAO DO PERIODO roda ANTES de abrir a tx de `sessoes` (mesma disciplina de `roster-da-casa-em-
+  ;; datas`: rejeicao nao empresta conexao do pool) — `db/sessao/listar-fechadas-no-periodo` repete a mesma
+  ;; checagem como REDE, para o chamador direto do Repo.
+  (logic/validar-periodo-assiduidade! de ate)
+  (let [{:keys [sessoes presencas-por-sessao justificativas-por-sessao]}
+        (repo/leituras-assiduidade repo-sessoes (:ente-id ator) periodo)
+        datas (into #{} (map :data-de-referencia) sessoes)
+        rosters-por-data (if (seq datas)
+                           (roster-da-casa-em-datas (:ente-id ator) (vec datas))
+                           {})]
+    (logic/apurar-assiduidade sessoes rosters-por-data presencas-por-sessao justificativas-por-sessao)))
