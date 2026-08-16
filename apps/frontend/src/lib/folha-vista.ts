@@ -48,14 +48,26 @@ export function retryAfterSegundos(header: string | null | undefined): number | 
 /** Traduz o `{erro}` cru das 4 rotas da folha (`diplomat/http/in.clj`, `resposta-conflito-folha` +
  * `resposta-folha-conteudo`) na frase que a tela mostra — nunca o corpo cru, nunca "erro ao salvar", nunca
  * o nome interno de uma decisão (D6/D9/D7) vazando pro operador. Casa por `status` primeiro (a fonte mais
- * estável) e usa o texto do corpo só para desambiguar os DOIS 409 e os DOIS 404 possíveis. Corpo/status que
- * não casa com nada conhecido cai num texto genérico com o status — nunca lança. */
+ * estável) e usa o texto do corpo só para desambiguar os DOIS 409 e os DOIS 404 possíveis.
+ *
+ * O CORPO NUNCA É REPASSADO. Status desconhecido cai num genérico COM o status — e é genérico de verdade,
+ * não `erro || genérico`. A versão anterior repassava `erro` verbatim quando nada casava, e o caso real que
+ * isso produzia era o 401: `interceptors/autenticacao` responde `{:erro "sem vinculo ativo"}` /
+ * `"sessao invalida"` / `"token invalido"` / `"sem credencial"`, e qualquer um deles ia inteiro pro
+ * `role=alert` da tela. Mesma classe de defeito já paga neste projeto (enum interno cru no telão, 4b789d6).
+ * O corpo cru continua disponível a quem chama, para log/telemetria — só não vai pra tela. */
 export function mensagemDeErroFolha(
   corpoErro: string | null | undefined,
   status: number,
   retryAfter?: number | null,
 ): string {
   const erro = corpoErro ?? "";
+
+  // 401 é o status do gate de autenticação, e os QUATRO corpos possíveis se resolvem pela MESMA ação do
+  // operador (entrar de novo) — por isso uma frase só, e nenhuma delas na tela.
+  if (status === 401) {
+    return "Sua sessão expirou — entre novamente para continuar.";
+  }
 
   if (status === 409) {
     if (/sessao FECHADA/i.test(erro)) {
@@ -80,5 +92,5 @@ export function mensagemDeErroFolha(
   if (status === 500 && /temporariamente indisponivel/i.test(erro)) {
     return "A folha foi congelada, mas o conteúdo está temporariamente indisponível. Tente novamente em instantes.";
   }
-  return erro || `Falha ao processar a folha (status ${status}).`;
+  return `Falha ao processar a folha (status ${status}). Tente novamente; se persistir, fale com o suporte.`;
 }

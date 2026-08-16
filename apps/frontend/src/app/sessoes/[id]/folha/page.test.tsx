@@ -165,3 +165,58 @@ describe("PaginaFolha — visualizador (D10)", () => {
     expect(screen.getByText("Versão 1")).toBeTruthy();
   });
 });
+
+// ---- correção da revisão adversarial da fatia 6 (achado 1, lado da PÁGINA) ----
+// O hook passou a honrar o próprio contrato (nunca rejeita), mas a página não pode DEPENDER disso: um
+// `await` que rejeita deixa o `setCarregando(false)`/`setGerando(false)`/`setBaixando(null)` da linha
+// seguinte pendurado, e o estado transitório vira permanente — spinner eterno, botão travado em "Gerando…",
+// zero mensagem pro operador. Estes três testes injetam a rejeição pelo mock do hook (a única forma de
+// simular a violação de contrato) e provam que nenhum estado transitório fica preso.
+describe("PaginaFolha — nenhum estado transitório fica preso quando a promise REJEITA", () => {
+  it("visualizador: rejeição não deixa 'Carregando o documento congelado…' para sempre", async () => {
+    buscarHtml.mockRejectedValue(new TypeError("Failed to fetch"));
+    mockRetorno([versao({ id: "f1", versao: 1 })]);
+    render(<PaginaFolha />);
+    await waitFor(() => expect(screen.queryByText(/carregando o documento congelado/i)).toBeNull());
+    expect(screen.getByRole("alert").textContent).toBeTruthy();
+  });
+
+  it("gerar: rejeição devolve o botão ao rótulo normal e mostra erro — nunca trava em 'Gerando…'", async () => {
+    gerar.mockRejectedValue(new TypeError("Failed to fetch"));
+    mockRetorno([versao({ id: "f1", versao: 1 })]);
+    render(<PaginaFolha />);
+    fireEvent.click(screen.getByRole("button", { name: /gerar nova versão/i }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: /gerando…/i })).toBeNull());
+    expect(screen.getByRole("button", { name: /gerar nova versão/i })).toBeTruthy();
+    await waitFor(() => expect(screen.getAllByRole("alert").length).toBeGreaterThan(0));
+  });
+
+  it("baixar: rejeição devolve o botão ao rótulo normal e mostra erro — nunca trava em 'Baixando…'", async () => {
+    baixarPdf.mockRejectedValue(new TypeError("Failed to fetch"));
+    mockRetorno([versao({ id: "f1", versao: 1 })]);
+    render(<PaginaFolha />);
+    const itens = screen.getAllByRole("listitem");
+    fireEvent.click(within(itens[0]).getByRole("button", { name: /baixar pdf/i }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: /baixando…/i })).toBeNull());
+    await waitFor(() => expect(screen.getAllByRole("alert").length).toBeGreaterThan(0));
+  });
+});
+
+// ---- correção da revisão adversarial da fatia 6 (achado 3) ----
+// As duas telas-irmãs de sessão têm `<h1>` no corpo útil (`chamada/page.tsx` "A chamada",
+// `plenario/page.tsx` `#materia-titulo`). Aqui o `<h1>` só existia nos estados transitórios de
+// carregando/erro: assim que a lista carregava, a árvore de headings começava em `<h2>`, sem título de
+// página — leitor de tela navegando por headings entra sem âncora.
+describe("PaginaFolha — hierarquia de headings", () => {
+  it("estado normal (com versões) tem <h1> — não começa em h2 como a versão anterior", () => {
+    mockRetorno([versao({ id: "f1", versao: 1 })]);
+    render(<PaginaFolha />);
+    expect(screen.getByRole("heading", { level: 1 })).toBeTruthy();
+  });
+
+  it("estado normal VAZIO (sem versão nenhuma) também tem <h1>", () => {
+    mockRetorno([]);
+    render(<PaginaFolha />);
+    expect(screen.getByRole("heading", { level: 1 })).toBeTruthy();
+  });
+});

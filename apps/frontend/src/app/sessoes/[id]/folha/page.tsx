@@ -98,12 +98,24 @@ function Folha({ sessaoId, versoes, gerar, buscarHtml, baixarPdf }: FolhaProps) 
   const [baixando, setBaixando] = useState<number | null>(null);
   const [erroBaixar, setErroBaixar] = useState<string | null>(null);
 
+  // Os três handlers de ação abaixo põem a tela num estado TRANSITÓRIO ("Gerando…", "Baixando…",
+  // "Carregando o documento…") antes de esperar o hook. `finally` — nunca a linha seguinte ao `await` — é o
+  // que garante que esse estado sai. O hook já promete não rejeitar (`use-folha.ts`), mas a página não pode
+  // DEPENDER disso: uma promise rejeitada aqui congelaria a tela para sempre, sem uma palavra pro operador,
+  // e é justamente o defeito que a revisão adversarial desta fatia encontrou.
   async function onGerar() {
     setGerando(true);
     setErroGerar(null);
     setNotaGerar(null);
-    const r = await gerar();
-    setGerando(false);
+    let r: Awaited<ReturnType<typeof gerar>>;
+    try {
+      r = await gerar();
+    } catch {
+      setErroGerar("Não foi possível falar com o servidor — verifique a conexão e tente novamente.");
+      return;
+    } finally {
+      setGerando(false);
+    }
     if (!r.ok) {
       setErroGerar(r.erro);
       return;
@@ -121,9 +133,14 @@ function Folha({ sessaoId, versoes, gerar, buscarHtml, baixarPdf }: FolhaProps) 
   async function onBaixar(versao: number) {
     setBaixando(versao);
     setErroBaixar(null);
-    const r = await baixarPdf(versao);
-    setBaixando(null);
-    if (!r.ok) setErroBaixar(r.erro);
+    try {
+      const r = await baixarPdf(versao);
+      if (!r.ok) setErroBaixar(r.erro);
+    } catch {
+      setErroBaixar("Não foi possível falar com o servidor — verifique a conexão e tente novamente.");
+    } finally {
+      setBaixando(null);
+    }
   }
 
   return (
@@ -153,6 +170,22 @@ function Folha({ sessaoId, versoes, gerar, buscarHtml, baixarPdf }: FolhaProps) 
       <a className="pular" href="#versoes">Pular para as versões congeladas</a>
 
       <main className="envelope">
+        {/* O `<h1>` da tela útil. As duas irmãs de sessão o têm no corpo (`chamada/page.tsx` "A chamada",
+            `plenario/page.tsx` `#materia-titulo`); aqui ele só existia nos estados de carregando/erro, e a
+            tela carregada abria a árvore de headings em `<h2>` — leitor de tela navegando por headings
+            entrava sem título de página. Os dois `<h2>` abaixo (`Versões congeladas`, `Documento`) passam a
+            ser filhos dele, que é a hierarquia que as irmãs já mantêm. */}
+        <div className="cabeca-tela">
+          {/* Eyebrow deliberadamente NEUTRO: a folha só se congela com a sessão encerrada (D6), mas a rota
+              abre também para sessão em curso (é onde o operador lê o estado vazio explicando a regra) —
+              anunciar "Sessão encerrada" aqui seria afirmar um estado que a tela não verificou. */}
+          <p className="eyebrow">Acervo da sessão</p>
+          <h1>A folha de presença</h1>
+          <p className="cabeca-sub">
+            O documento congelado desta sessão — cada versão é imutável e carrega os dois hashes que provam a
+            integridade do HTML e do PDF.
+          </p>
+        </div>
         <div className="folha-grade">
           <section className="bloco" id="versoes" aria-labelledby="versoes-titulo">
             <div className="bloco-cabeca">
@@ -320,11 +353,18 @@ function Visualizador({
       setCarregando(true);
       setErro(null);
       setHtml(null);
-      const r = await buscarHtml(selecionada);
-      if (!vivo) return;
-      setCarregando(false);
-      if (r.ok) setHtml(r.html);
-      else setErro(r.erro);
+      try {
+        const r = await buscarHtml(selecionada);
+        if (!vivo) return;
+        if (r.ok) setHtml(r.html);
+        else setErro(r.erro);
+      } catch {
+        // Ver o comentário dos handlers de ação: `carregando` é estado transitório, e uma rejeição não
+        // tratada aqui o tornaria permanente ("Carregando o documento congelado…" para sempre).
+        if (vivo) setErro("Não foi possível falar com o servidor — verifique a conexão e tente novamente.");
+      } finally {
+        if (vivo) setCarregando(false);
+      }
     })();
     return () => {
       vivo = false;

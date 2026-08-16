@@ -120,4 +120,33 @@ describe("mensagemDeErroFolha", () => {
     const msg = mensagemDeErroFolha(undefined, 418);
     expect(msg).toMatch(/418/);
   });
+
+  // ---- correção da revisão adversarial da fatia 6 (achado 2) ----
+  // O 401 é o status que `interceptors/autenticacao` emite (`nega! ctx 401 …`) com QUATRO corpos internos
+  // distintos — "sem vinculo ativo" / "sessao invalida" / "token invalido" / "sem credencial". Nenhum deles
+  // é frase de operador, e todos são acionáveis pela MESMA ação (entrar de novo). O caso real: secretário
+  // com a tela aberta, cookie expira, clica em "Gerar nova versão".
+  it("401 de sessão expirada vira frase acionável — nunca o corpo interno do interceptor", () => {
+    for (const corpo of ["sem vinculo ativo", "sessao invalida", "token invalido", "sem credencial"]) {
+      const msg = mensagemDeErroFolha(corpo, 401);
+      expect(msg).not.toBe(corpo);
+      expect(msg).not.toMatch(/vinculo|token|credencial/i);
+      expect(msg).toMatch(/sess[ãa]o expirou|entre novamente/i);
+    }
+  });
+
+  // Este é o teste que a versão anterior de `mensagemDeErroFolha` não tinha: o único caso de fallback
+  // exercitado passava `undefined` como corpo, então o ramo `return erro || …` NUNCA foi medido com corpo
+  // presente — e era exatamente por ali que a string interna do backend chegava ao `role=alert`.
+  it("status não mapeado COM corpo cru devolve o genérico — o corpo do backend nunca vai pra tela", () => {
+    const msg = mensagemDeErroFolha("json invalido", 400);
+    expect(msg).not.toMatch(/json invalido/);
+    expect(msg).toMatch(/400/);
+  });
+
+  it("500 fora do padrão conhecido também não repassa o corpo cru", () => {
+    const msg = mensagemDeErroFolha("NullPointerException em gerador-folha/renderizar", 500);
+    expect(msg).not.toMatch(/NullPointer|gerador-folha/);
+    expect(msg).toMatch(/500/);
+  });
 });

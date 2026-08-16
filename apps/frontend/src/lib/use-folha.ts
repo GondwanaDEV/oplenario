@@ -41,6 +41,13 @@ async function erroTraduzido(r: Response): Promise<string> {
   return mensagemDeErroFolha(corpo, r.status, retryAfter);
 }
 
+/** `fetch` REJEITA (não responde) em falha de rede real: offline, DNS, TLS, proxy que corta a conexão. Isso
+ * não é um status HTTP — não passa por `mensagemDeErroFolha`, e antes desta correção atravessava o hook
+ * inteiro como rejeição, quebrando o contrato dos três `Resultado*` (que prometem `{ok:false}` e nunca
+ * rejeitar) e deixando o chamador com o `setEstado(false)` da linha seguinte pendurado — spinner eterno.
+ * `AbortError` é caso à parte: só o efeito de carga inicial passa `signal`, e ele já trata o abort. */
+const ERRO_DE_REDE = "Não foi possível falar com o servidor — verifique a conexão e tente novamente.";
+
 /** Nome determinístico do download — espelha `adapters/out/folha.clj:->pdf-download`
  * (`folha-<sessao-id>-v<versao>.pdf`), para o arquivo salvo pelo navegador ter o MESMO nome que o servidor
  * já decidiu, nunca um nome inventado no cliente. */
@@ -111,11 +118,15 @@ export function useFolha(sessaoId: string, token: string | null) {
    * recém-congelada precisa aparecer imediatamente. */
   const gerar = useCallback(async (): Promise<ResultadoGerar> => {
     if (semCredencial(token)) return { ok: false, erro: "Sem credencial de sessão." };
-    const r = await apiFetch(`/api/sessoes/${sessaoId}/folha`, { token: token ?? undefined, method: "POST" });
-    if (!r.ok) return { ok: false, erro: await erroTraduzido(r) };
-    const folha = camelizarChaves(await r.json()) as FolhaMetadadosOut;
-    await recarregar();
-    return { ok: true, folha };
+    try {
+      const r = await apiFetch(`/api/sessoes/${sessaoId}/folha`, { token: token ?? undefined, method: "POST" });
+      if (!r.ok) return { ok: false, erro: await erroTraduzido(r) };
+      const folha = camelizarChaves(await r.json()) as FolhaMetadadosOut;
+      await recarregar();
+      return { ok: true, folha };
+    } catch {
+      return { ok: false, erro: ERRO_DE_REDE };
+    }
   }, [sessaoId, token, recarregar]);
 
   /** GET /sessoes/:id/folhas/:versao — os BYTES do HTML canônico congelado, como TEXTO (nunca `.json()`: a
@@ -123,9 +134,13 @@ export function useFolha(sessaoId: string, token: string | null) {
   const buscarHtml = useCallback(
     async (versao: number): Promise<ResultadoHtml> => {
       if (semCredencial(token)) return { ok: false, erro: "Sem credencial de sessão." };
-      const r = await apiFetch(`/api/sessoes/${sessaoId}/folhas/${versao}`, { token: token ?? undefined, cache: "no-store" });
-      if (!r.ok) return { ok: false, erro: await erroTraduzido(r) };
-      return { ok: true, html: await r.text() };
+      try {
+        const r = await apiFetch(`/api/sessoes/${sessaoId}/folhas/${versao}`, { token: token ?? undefined, cache: "no-store" });
+        if (!r.ok) return { ok: false, erro: await erroTraduzido(r) };
+        return { ok: true, html: await r.text() };
+      } catch {
+        return { ok: false, erro: ERRO_DE_REDE };
+      }
     },
     [sessaoId, token],
   );
@@ -139,9 +154,18 @@ export function useFolha(sessaoId: string, token: string | null) {
   const baixarPdf = useCallback(
     async (versao: number): Promise<ResultadoDownload> => {
       if (semCredencial(token)) return { ok: false, erro: "Sem credencial de sessão." };
-      const r = await apiFetch(`/api/sessoes/${sessaoId}/folhas/${versao}/pdf`, { token: token ?? undefined });
-      if (!r.ok) return { ok: false, erro: await erroTraduzido(r) };
-      const blob = await r.blob();
+      let r: Response;
+      let blob: Blob;
+      try {
+        r = await apiFetch(`/api/sessoes/${sessaoId}/folhas/${versao}/pdf`, { token: token ?? undefined });
+        if (!r.ok) return { ok: false, erro: await erroTraduzido(r) };
+        blob = await r.blob();
+      } catch {
+        return { ok: false, erro: ERRO_DE_REDE };
+      }
+      // O disparo do download fica FORA do catch de rede de propósito: um erro aqui não é falha de rede
+      // (os bytes já chegaram) e não deve ser rotulado como tal. O `finally` revoga o objectURL mesmo se
+      // `a.click()` lançar — a única garantia que este trecho precisa dar.
       const url = URL.createObjectURL(blob);
       try {
         const a = document.createElement("a");

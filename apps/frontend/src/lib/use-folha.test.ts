@@ -220,3 +220,77 @@ describe("useFolha — baixarPdf", () => {
     if (!r.ok) expect(r.erro).toMatch(/5s/);
   });
 });
+
+// ---- correção da revisão adversarial da fatia 6 (achado 1) ----
+// O tipo de retorno das três funções (`Promise<ResultadoGerar|ResultadoHtml|ResultadoDownload>`) é um
+// CONTRATO: elas resolvem `{ok:false, erro}`, nunca rejeitam. A versão anterior só tratava `!r.ok` (erro
+// HTTP com corpo) — `fetch` lança `TypeError` em falha de REDE (offline, DNS, proxy sem prazo), e essa
+// rejeição atravessava o hook inteiro. Quem chamava (`page.tsx`) ficava com o `setCarregando(false)`
+// pendurado depois do `await` que rejeitou, e a tela travava em "Carregando…"/"Gerando…" para sempre.
+// Nenhum teste do commit exercitava `fetch` REJEITANDO — só respostas `ok:false` — por isso o gate verde
+// não via este caminho.
+describe("useFolha — falha de REDE (fetch REJEITA, não responde !ok)", () => {
+  it("gerar: rejeição de rede vira {ok:false} com mensagem de rede — nunca propaga a rejeição", async () => {
+    montarFetch({
+      respostas: {
+        "/folha": async (init) => {
+          if ((init?.method ?? "GET").toUpperCase() === "POST") throw new TypeError("Failed to fetch");
+          return { ok: true, status: 200, json: async () => ({ "sessao-id": "s1", folhas: [] }) } as Response;
+        },
+      },
+    });
+    const { result } = renderHook(() => useFolha("s1", "tok"));
+    await waitFor(() => expect(result.current.estado).toBe("pronto"));
+
+    const r = await result.current.gerar();
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.erro).toMatch(/conex|rede/i);
+  });
+
+  it("buscarHtml: rejeição de rede vira {ok:false} — nunca propaga a rejeição", async () => {
+    montarFetch({
+      respostas: {
+        "/folhas/2": async () => {
+          throw new TypeError("Failed to fetch");
+        },
+      },
+    });
+    const { result } = renderHook(() => useFolha("s1", "tok"));
+    await waitFor(() => expect(result.current.estado).toBe("pronto"));
+
+    const r = await result.current.buscarHtml(2);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.erro).toMatch(/conex|rede/i);
+  });
+
+  it("baixarPdf: rejeição de rede vira {ok:false} — nunca propaga a rejeição", async () => {
+    montarFetch({
+      respostas: {
+        "/folhas/1/pdf": async () => {
+          throw new TypeError("Failed to fetch");
+        },
+      },
+    });
+    const { result } = renderHook(() => useFolha("s1", "tok"));
+    await waitFor(() => expect(result.current.estado).toBe("pronto"));
+
+    const r = await result.current.baixarPdf(1);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.erro).toMatch(/conex|rede/i);
+  });
+
+  // GUARDA (não reprovava antes): o efeito de carga inicial JÁ tinha try/catch — este teste existe para
+  // impedir que a disciplina se perca, não para provar a correção.
+  it("GUARDA — carga inicial que rejeita já virava estado erro (comportamento preexistente)", async () => {
+    montarFetch({
+      respostas: {
+        "/folhas": async () => {
+          throw new TypeError("Failed to fetch");
+        },
+      },
+    });
+    const { result } = renderHook(() => useFolha("s1", "tok"));
+    await waitFor(() => expect(result.current.estado).toBe("erro"));
+    expect(result.current.erro).toBeTruthy();
+  });
+});

@@ -22,11 +22,21 @@
 .sessao-meta { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
 .sessao-meta .tipo { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); }
 
+/* Cabeçalho da TELA (o `<h1>`) — mesma receita de `.folha-cabeca` em chamada.css, com nome próprio pela
+   regra do topo deste arquivo (CSS global do Next não é escopado por rota: reusa-se a RECEITA, nunca o
+   seletor). Nenhuma cor nova: `--texto`/`--texto-2` já medidos AA no chassi. */
+.cabeca-tela { padding: clamp(1.2rem, 3vw, 2rem) 0 0; }
+.cabeca-tela h1 {
+  font-family: var(--display); font-weight: 700; font-size: var(--t-28); letter-spacing: -0.02em;
+  color: var(--texto); margin: 0.35rem 0 0.2rem; line-height: 1.15;
+}
+.cabeca-sub { font-size: var(--t-13); color: var(--texto-2); line-height: 1.55; margin: 0; max-width: 62ch; }
+
 .folha-grade {
   display: grid;
   grid-template-columns: 384px minmax(0, 1fr);
   gap: clamp(1rem, 2.4vw, 1.8rem);
-  padding: clamp(1.2rem, 3vw, 2rem) 0 3rem;
+  padding: clamp(1rem, 2.2vw, 1.4rem) 0 3rem;
   align-items: start;
 }
 @media (max-width: 900px) {
