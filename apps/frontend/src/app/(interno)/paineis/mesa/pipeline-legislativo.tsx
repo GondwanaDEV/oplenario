@@ -6,7 +6,15 @@
 
 import { BarraSegmentada } from "@/lib/charts/barra-segmentada";
 import { TabuleiroEstagios } from "@/lib/charts/tabuleiro-estagios";
+import { derivarRef } from "@/lib/materia-vista";
 import type { MesaVista } from "@/lib/mesa-vista";
+import { derivarTramitacao } from "@/lib/tramitacao-vista";
+
+// O painel mostrava a CHAVE do estado ("em_comissoes", que o CSS ainda punha em maiuscula ->
+// "EM_COMISSOES") e o tipo cru ("PROJETO_LEI"). Os tradutores ja existiam e ja sao o que o Portal
+// do Cidadao mostra ao publico — `derivarTramitacao().rotuloSituacao` e `derivarRef()`. Reusa-los
+// aqui mantem UMA fonte de rotulo por conceito, em vez de um segundo mapa a divergir com o tempo.
+const rotularEstagio = (estado: string) => derivarTramitacao(estado).rotuloSituacao;
 
 const CORES_ESTAGIO: Record<string, string> = {
   protocolada: "#0C5340",
@@ -25,7 +33,7 @@ export function PipelineLegislativo({ vista }: { vista: MesaVista["pipeline"] })
       </section>
     );
   }
-  const segmentos = vista.porEstado.map((e) => ({ rotulo: e.estado, n: e.n, cor: CORES_ESTAGIO[e.estado] ?? "#888" }));
+  const segmentos = vista.porEstado.map((e) => ({ rotulo: rotularEstagio(e.estado), n: e.n, cor: CORES_ESTAGIO[e.estado] ?? "#888" }));
   return (
     <section className="bloco" aria-labelledby="pipeline-titulo">
       <div className="bloco-cabeca">
@@ -35,10 +43,10 @@ export function PipelineLegislativo({ vista }: { vista: MesaVista["pipeline"] })
         {vista.comItens ? (
           <div className="pipeline-board">
             {vista.porEstado.map((e) => (
-              <section className="estagio" key={e.estado} aria-label={`${e.estado}: ${e.n}`}>
+              <section className="estagio" key={e.estado} aria-label={`${rotularEstagio(e.estado)}: ${e.n}`}>
                 <div className="estagio-cab">
                   <div className="meta">
-                    <span className="nome">{e.estado}</span>
+                    <span className="nome">{rotularEstagio(e.estado)}</span>
                     <span className="n">{e.n}</span>
                   </div>
                 </div>
@@ -48,7 +56,7 @@ export function PipelineLegislativo({ vista }: { vista: MesaVista["pipeline"] })
                     .slice(0, 3)
                     .map((it) => (
                       <li key={it.proposicaoId}>
-                        <span className="ref">{it.tipo.toUpperCase()} {it.sequencial}/{it.ano}</span>
+                        <span className="ref">{derivarRef(it)}</span>
                         <span className="tit">{it.ementa}</span>
                       </li>
                     ))}
@@ -57,7 +65,7 @@ export function PipelineLegislativo({ vista }: { vista: MesaVista["pipeline"] })
             ))}
           </div>
         ) : (
-          <TabuleiroEstagios estagios={vista.porEstado.map((e) => ({ rotulo: e.estado, n: e.n }))} />
+          <TabuleiroEstagios estagios={vista.porEstado.map((e) => ({ rotulo: rotularEstagio(e.estado), n: e.n }))} />
         )}
         <BarraSegmentada segmentos={segmentos} rotuloGeral={`Carga por estágio · ${vista.porEstado.reduce((a, e) => a + e.n, 0)} proposições ativas`} />
       </div>

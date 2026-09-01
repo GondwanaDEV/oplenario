@@ -71,10 +71,20 @@ services:
   app:
     image: oplenario-backend:local
     build: .
+    # A JVM morreu com SIGBUS (BUS_ADRERR) escrevendo no proprio /tmp/hsperfdata_root/1 — o arquivo de
+    # perf-data que ela mapeia em memoria — sob OrbStack/aarch64. Nao e' falha da aplicacao: o endereco
+    # do siginfo cai DENTRO do mapeamento desse arquivo. `restart` traz o servico de volta se acontecer
+    # de novo (sem isto o container fica morto e a stack inteira 500a em silencio, o modo de falha que
+    # inutilizaria uma apresentacao).
+    restart: unless-stopped
     depends_on:
       postgres: { condition: service_healthy }
       migrate:  { condition: service_completed_successfully }
     environment:
+      # -XX:-UsePerfData desliga a criacao/mapeamento de /tmp/hsperfdata_root/<pid>, a origem exata do
+      # SIGBUS acima. Custo: `jstat`/`jcmd` locais deixam de enxergar este processo. Nenhum efeito
+      # funcional — nada no projeto depende de perf-data.
+      JAVA_TOOL_OPTIONS: "-XX:-UsePerfData"
       DATABASE_URL: "jdbc:postgresql://postgres:5432/oplenario"
       # o app de runtime conecta como o role LOGIN NOBYPASSRLS (defesa em profundidade, F1.0);
       # o servico `migrate` segue como o dono (superuser do POSTGRES_USER) p/ rodar DDL. Senha = DEV.

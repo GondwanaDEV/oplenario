@@ -4,6 +4,7 @@
 // (fila.relator); os demais (distribuição/autógrafo/ata) ficam em-breve por construção (spec §7 — nenhum
 // tem rota hoje) e NÃO viram bullet points inventados: aparecem como uma nota honesta, não itens fake.
 
+import { derivarRef } from "@/lib/materia-vista";
 import type { MesaVista } from "@/lib/mesa-vista";
 
 export function DespachosDaMesa({ vista }: { vista: MesaVista["despachos"] }) {
@@ -21,7 +22,7 @@ export function DespachosDaMesa({ vista }: { vista: MesaVista["despachos"] }) {
             <li key={it.id} className="fila-item">
               <div className="fila-txt">
                 <span className="tag-p">Designar relator</span>
-                <b>{it.tipo.toUpperCase()} {it.sequencial}/{it.ano}</b>
+                <b>{derivarRef(it)}</b>
                 <span className="de">{it.ementa}</span>
               </div>
             </li>

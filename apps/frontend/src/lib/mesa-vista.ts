@@ -137,4 +137,25 @@ export function derivarMesaVista(input: MesaVistaInput) {
   };
 }
 
+// Rotulo de tela do `objeto_tipo` de um prazo. O vocabulario vem da FONTE — o CHECK de
+// `paineis.pendencia` (e o identico de `participacao.prazo_ativo`/`prorrogacao`):
+//   CHECK (objeto_tipo IN ('pedido_esic','recurso_esic','solicitacao_titular','manifestacao_ouvidoria'))
+// NAO reusa `rotularObjetoTipo` de expediente-vista: aquele mapa e' o vocabulario de
+// `legislativo.protocolo_geral` ('proposicao','documento','oficio_recebido',...), um dominio
+// diferente com um campo de mesmo nome. Fundir os dois faria uma chave de um dominio resolver
+// silenciosamente para o rotulo do outro.
+//
+// Fail-closed: chave fora do vocabulario devolve a propria chave — um tipo novo aparece feio e
+// verdadeiro na tela, nunca some nem vira um rotulo plausivel inventado.
+const OBJETO_PRAZO_ROTULO: Record<string, string> = {
+  pedido_esic: "Pedido e-SIC",
+  recurso_esic: "Recurso e-SIC",
+  solicitacao_titular: "Solicitacao do titular (LGPD)",
+  manifestacao_ouvidoria: "Manifestacao de ouvidoria",
+};
+
+export function rotularObjetoPrazo(objetoTipo: string): string {
+  return OBJETO_PRAZO_ROTULO[objetoTipo] ?? objetoTipo;
+}
+
 export type MesaVista = ReturnType<typeof derivarMesaVista>;

@@ -12,7 +12,7 @@ import { usePlenario, type EstadoConexao } from "@/lib/use-plenario";
 import { usePauta } from "@/lib/use-pauta";
 import { segundosDecorridos, formatarTempo } from "@/lib/cronometro";
 import { assentosHemiciclo } from "@/lib/hemiciclo";
-import { nomeTipoSessao } from "@/lib/rotulos-sessao";
+import { nomeFase, nomeTipoSessao } from "@/lib/rotulos-sessao";
 import type { EstadoPlenario, PlacarVotacao, VistaQuorum } from "@/lib/plenario-reducer";
 import { vistaDoQuorum } from "@/lib/plenario-reducer";
 import { derivarPlacar, type VistaNominal, type VistaSecreta } from "@/lib/placar-vista";
@@ -180,13 +180,6 @@ function Fases({ estado }: { estado: string }) {
   );
 }
 
-const NOME_FASE: Record<string, string> = {
-  expediente: "Expediente",
-  grande_expediente: "Grande Expediente",
-  ordem_do_dia: "Ordem do Dia",
-  explicacoes_pessoais: "Explicações Pessoais",
-  tribuna_livre_cidadao: "Tribuna Livre",
-};
 const NOME_TIPO_ITEM: Record<string, string> = {
   proposicao: "Proposição",
   leitura: "Leitura",
@@ -228,7 +221,7 @@ function Palco({ sessao, estado, pauta }: { sessao: SessaoOut; estado: EstadoPle
               <li key={it.id} className="pauta-item">
                 <span className="pauta-ordem" aria-hidden="true">{it.ordem}</span>
                 <span className="pauta-corpo">
-                  <span className="pauta-fase">{NOME_FASE[it.fase] ?? it.fase}</span>
+                  <span className="pauta-fase">{nomeFase(it.fase)}</span>
                   <span className="pauta-desc">
                     {it["tipo-item"] === "proposicao"
                       ? `${NOME_TIPO_ITEM.proposicao} · matéria vinculada`
@@ -480,7 +473,7 @@ function Tribuna({ estado, agora }: { estado: EstadoPlenario; agora: number }) {
       <div className="bloco-cabeca">
         <h2 id="tribuna-titulo">Tribuna</h2>
         <span className="eyebrow" style={{ color: "var(--texto-2)" }}>
-          {o ? o.fase : "livre"}
+          {o ? nomeFase(o.fase) : "livre"}
         </span>
       </div>
       <div className="bloco-corpo">

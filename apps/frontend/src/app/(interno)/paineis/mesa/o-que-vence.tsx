@@ -13,6 +13,7 @@
 // direto, com checagem estática de verdade em vez de um cast que mascarava a falta do campo.
 
 import { AnelPrazo } from "@/lib/charts/anel-prazo";
+import { rotularObjetoPrazo } from "@/lib/mesa-vista";
 import type { MesaVista } from "@/lib/mesa-vista";
 
 function diasAte(dataIso: string): number {
@@ -43,7 +44,7 @@ export function OQueVence({ vista }: { vista: MesaVista["oQueVence"] }) {
             const rotulo =
               item.origem === "compliance"
                 ? `Obrigação TCE · ${item.templateChave}`
-                : `${item.objetoTipo} · ${item.protocolo}`;
+                : `${rotularObjetoPrazo(item.objetoTipo)} · ${item.protocolo}`;
             return (
               <li key={i} className="prazo-item">
                 <AnelPrazo diasRestantes={dias} diasTotal={30} rotulo={rotulo} />
