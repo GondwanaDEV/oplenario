@@ -5,7 +5,7 @@
 // a partir de `iniciouEm` + marcos (decisão de §22.6 eixo G — ticks por segundo são descartados no fio).
 
 import type { EventoPlenario, SessaoOut } from "./contrato";
-import type { QuorumSessaoOut } from "./contrato-sessoes.gen";
+import type { ComposicaoSessaoOut, QuorumSessaoOut } from "./contrato-sessoes.gen";
 
 /** Tipos de evento de presença que marcam PRESENTE (logic/tipos-presenca-positiva); "saida" remove. */
 const PRESENCA_POSITIVA = new Set(["entrada", "retorno", "mudanca_modalidade"]);
@@ -93,8 +93,20 @@ export interface EstadoPlenario {
   ultimaFalaEncerrada: { falaId: string; tempoSegundos: number } | null;
   inscritos: Inscrito[]; // fila ordenada por `ordem`
   placar: PlacarVotacao | null; // votação corrente/última (null = nenhuma votação vista)
+  /** vereadorId -> identidade PÚBLICA (nome parlamentar, cargo na Mesa), de GET /sessoes/:id/composicao.
+   * Existe porque o SSE carrega só o `orador-id`/`vereador-id` no evento: sem este mapa a tribuna não
+   * tem como dizer QUEM está com a palavra, e o telão exibia o prefixo do UUID no lugar do nome.
+   * `null` = ainda não chegou. Ausência de uma CHAVE não é erro: o orador pode legitimamente não ser
+   * membro da Casa (fase `tribuna_livre_cidadao`; e `orador-id` não tem FK para vereador). */
+  composicao: Map<string, IdentidadeParlamentar> | null;
+  composicaoStatus: QuorumStatus;
   ultimoSeq: number; // maior seq visto — vira o Last-Event-ID no resume
 }
+
+/** A identidade PÚBLICA de um parlamentar — o subconjunto que `GET /sessoes/:id/composicao` serve, que é
+ * por sua vez o subconjunto que a rota pública de perfil de vereador já serve sem autenticação nenhuma.
+ * Nunca nome civil, nunca estado de presença: esses são da chamada nominal, atrás do papel 'secretario'. */
+export type IdentidadeParlamentar = { nomeParlamentar: string | null; cargoMesa: string | null };
 
 export function estadoInicial(sessao: SessaoOut): EstadoPlenario {
   return {
@@ -109,8 +121,46 @@ export function estadoInicial(sessao: SessaoOut): EstadoPlenario {
     ultimaFalaEncerrada: null,
     inscritos: [],
     placar: null,
+    composicao: null,
+    composicaoStatus: "carregando",
     ultimoSeq: 0,
   };
+}
+
+/** Chegou a composição. Constrói o índice por `vereadorId` de uma vez — a tribuna resolve nome por
+ * evento, e varrer uma lista a cada frame seria trabalho por tick para um dado que não muda na sessão. */
+export function hidratarComposicao(estado: EstadoPlenario, cru: ComposicaoSessaoOut): EstadoPlenario {
+  const membros = Array.isArray(cru?.membros) ? cru.membros : null;
+  if (membros === null) {
+    // corpo de forma inesperada: mesma postura TOTAL de `hidratarQuorum` — degrada, nunca lança (este
+    // updater pode ser avaliado na fase de RENDER do React).
+    return { ...estado, composicaoStatus: estado.composicao ? "ok" : "indisponivel" };
+  }
+  const indice = new Map<string, IdentidadeParlamentar>();
+  for (const m of membros) {
+    if (m && typeof m.vereadorId === "string") {
+      indice.set(m.vereadorId, { nomeParlamentar: m.nomeParlamentar ?? null, cargoMesa: m.cargoMesa ?? null });
+    }
+  }
+  return { ...estado, composicao: indice, composicaoStatus: "ok" };
+}
+
+/** A borda da composição falhou (rede/403/500/parse). DEGRADA, não zera: um índice já obtido continua
+ * valendo (a composição de uma sessão não muda no meio dela). Sem índice, a tribuna cai no rótulo
+ * neutro — nunca no UUID, que era justamente o defeito. */
+export function falharComposicao(estado: EstadoPlenario): EstadoPlenario {
+  return { ...estado, composicaoStatus: estado.composicao ? "ok" : "indisponivel" };
+}
+
+/** A identidade de quem o evento só identificou por id, ou `null` quando não há nome a exibir — seja
+ * porque a composição ainda não chegou, seja porque o id não é de um membro da Casa (tribuna livre do
+ * cidadão, presença sem assento). Os dois casos colapsam de propósito: a tela não deve AFIRMAR
+ * "não identificado" para quem é legitimamente um cidadão na tribuna. Quem chama decide o rótulo neutro. */
+export function identidadeDe(estado: EstadoPlenario, vereadorId: string | null | undefined): IdentidadeParlamentar | null {
+  if (!vereadorId || !estado.composicao) return null;
+  const id = estado.composicao.get(vereadorId);
+  if (!id || !id.nomeParlamentar) return null;
+  return id;
 }
 
 /** Instante ISO-8601 -> epoch ms, ou NaN se não for um instante.

@@ -42,3 +42,24 @@ export function nomeFase(fase: string | null | undefined): string {
   if (!fase) return "";
   return NOME_FASE[fase] ?? fase;
 }
+
+// O TIPO DA FALA. Terceiro enum do mesmo domínio que chegava cru ao telão (junto com tipo de sessão e
+// fase): a tribuna renderizava `{o.tipoFala}` direto do evento. "principal" passa despercebido porque
+// coincide com português correto; "pela_ordem" e "questao_de_ordem" não — sairiam com underscore,
+// à vista do público, na tela HERO.
+//
+// Valores da FONTE — `sessoes/logic.clj`, `(def tipos-fala ...)`:
+//   #{"principal" "aparte" "pela_ordem" "questao_de_ordem" "explicacao_pessoal" "comunicado"}
+const NOME_TIPO_FALA: Record<string, string> = {
+  principal: "Fala principal",
+  aparte: "Aparte",
+  pela_ordem: "Pela ordem",
+  questao_de_ordem: "Questão de ordem",
+  explicacao_pessoal: "Explicação pessoal",
+  comunicado: "Comunicado",
+};
+
+export function nomeTipoFala(tipo: string | null | undefined): string {
+  if (!tipo) return "";
+  return NOME_TIPO_FALA[tipo] ?? tipo;
+}

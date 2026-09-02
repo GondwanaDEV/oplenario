@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nomeFase, nomeTipoSessao } from "./rotulos-sessao";
+import { nomeFase, nomeTipoFala, nomeTipoSessao } from "./rotulos-sessao";
 
 describe("nomeTipoSessao — o tipo da sessao no cabecalho do telao", () => {
   // Valores da FONTE — CHECK de `sessoes.sessao.tipo_sessao`:
@@ -50,5 +50,32 @@ describe("nomeFase — a fase do rito no telao", () => {
   it("nulo/vazio -> string vazia (mesma convencao de nomeTipoSessao)", () => {
     expect(nomeFase(null)).toBe("");
     expect(nomeFase(undefined)).toBe("");
+  });
+});
+
+describe("nomeTipoFala — o tipo da fala na tribuna", () => {
+  // Terceiro enum do mesmo domínio que vazava para o telão. "principal" enganava por coincidir com
+  // português correto; "pela_ordem"/"questao_de_ordem" saíam com underscore à vista do público.
+  //
+  // Valores da FONTE — `sessoes/logic.clj`, `(def tipos-fala ...)`:
+  //   #{"principal" "aparte" "pela_ordem" "questao_de_ordem" "explicacao_pessoal" "comunicado"}
+  it.each([
+    ["principal", "Fala principal"],
+    ["aparte", "Aparte"],
+    ["pela_ordem", "Pela ordem"],
+    ["questao_de_ordem", "Questão de ordem"],
+    ["explicacao_pessoal", "Explicação pessoal"],
+    ["comunicado", "Comunicado"],
+  ])("%s -> %s", (chave, rotulo) => {
+    expect(nomeTipoFala(chave)).toBe(rotulo);
+  });
+
+  it("fail-closed: tipo desconhecido devolve a propria chave, nunca lanca", () => {
+    expect(nomeTipoFala("tipo_de_fala_novo")).toBe("tipo_de_fala_novo");
+  });
+
+  it("nulo/vazio -> string vazia", () => {
+    expect(nomeTipoFala(null)).toBe("");
+    expect(nomeTipoFala(undefined)).toBe("");
   });
 });
