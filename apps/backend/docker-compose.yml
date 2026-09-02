@@ -71,10 +71,20 @@ services:
   app:
     image: oplenario-backend:local
     build: .
+    # A JVM morreu com SIGBUS (BUS_ADRERR) escrevendo no proprio /tmp/hsperfdata_root/1 — o arquivo de
+    # perf-data que ela mapeia em memoria — sob OrbStack/aarch64. Nao e' falha da aplicacao: o endereco
+    # do siginfo cai DENTRO do mapeamento desse arquivo. `restart` traz o servico de volta se acontecer
+    # de novo (sem isto o container fica morto e a stack inteira 500a em silencio, o modo de falha que
+    # inutilizaria uma apresentacao).
+    restart: unless-stopped
     depends_on:
       postgres: { condition: service_healthy }
       migrate:  { condition: service_completed_successfully }
     environment:
+      # -XX:-UsePerfData desliga a criacao/mapeamento de /tmp/hsperfdata_root/<pid>, a origem exata do
+      # SIGBUS acima. Custo: `jstat`/`jcmd` locais deixam de enxergar este processo. Nenhum efeito
+      # funcional — nada no projeto depende de perf-data.
+      JAVA_TOOL_OPTIONS: "-XX:-UsePerfData"
       DATABASE_URL: "jdbc:postgresql://postgres:5432/oplenario"
       # o app de runtime conecta como o role LOGIN NOBYPASSRLS (defesa em profundidade, F1.0);
       # o servico `migrate` segue como o dono (superuser do POSTGRES_USER) p/ rodar DDL. Senha = DEV.
@@ -99,6 +109,15 @@ services:
       # resolve pro KC tanto no browser (host) quanto nos containers.
       KEYCLOAK_BASE_URL_PUBLICO: "http://keycloak:8080"
     ports: ["${OPLENARIO_APP_PORT:-8888}:8888"]
+    # Sem healthcheck, `restart: unless-stopped` esconde crash-loop: o container aparece "Up" enquanto
+    # reinicia em laco, e so' a contagem de restarts denuncia. Com ele, `docker compose ps` diz
+    # "unhealthy" de cara — a visibilidade que o restart automatico tira, devolvida.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8888/saude || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
     # ── Login PKCE REAL (perfil `auth`) ──────────────────────────────────────────────────────────
     # Requer: (1) /etc/hosts com `127.0.0.1 keycloak` — browser E containers precisam resolver o MESMO
     #   host `keycloak` p/ o issuer do token bater com o JWKS alcançável do container;

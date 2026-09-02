@@ -95,7 +95,9 @@
 .pipeline-board { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.7rem; }
 .estagio { background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.85rem 0.8rem; display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; }
 .estagio-cab { display: flex; align-items: center; gap: 0.6rem; }
-.estagio-cab .meta { line-height: 1.1; }
+/* `.nome` e `.n` sao dois <span> irmaos: em fluxo inline eles encostavam e a tela mostrava
+   "PROTOCOLADA3" (rotulo colado no numero). Empilhar em coluna e' o que o cartao sempre quis. */
+.estagio-cab .meta { line-height: 1.1; display: flex; flex-direction: column; gap: 0.15rem; }
 .estagio-cab .nome { font-family: var(--mono); font-size: var(--t-12); text-transform: uppercase; letter-spacing: .05em; color: var(--texto-2); }
 .estagio-cab .n { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: var(--texto); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .estagio-lista { list-style: none; margin: 0.1rem 0 0; padding: 0.6rem 0 0; border-top: 1px solid var(--linha); display: grid; gap: 0.5rem; }

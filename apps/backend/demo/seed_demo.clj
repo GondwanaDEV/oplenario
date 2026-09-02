@@ -70,13 +70,21 @@
        (tenancy/com-tenant* ds ente
          (fn [tx]
            (estrutura/inserir-ente! tx {:ente-id ente :municipio-ibge "2304400" :nome-oficial "Câmara Municipal de Fortaleza"})
-           (vinc/criar! tx {:id (random-uuid) :ente-id ente :identidade-id ident :tipo "servidor"})))
+           (vinc/criar! tx {:id (random-uuid) :ente-id ente :identidade-id ident :tipo "servidor"})
+           ;; O vinculo sozinho NAO abre as telas internas — a autorizacao e' por PAPEL, e o dev-token
+           ;; so' carrega o que esta escrito nele. Sem isto, a URL que este proprio seed imprime abaixo
+           ;; cai em "Acesso restrito" em /pauta-convocacao, /paineis/mesa e afins: a semente existe
+           ;; para demonstrar as telas e imprimia um endereco que nao as abre.
+           (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente :identidade-id ident :papel "secretario"})))
        ;; sessão ordinária (transmite-publica=true) -> abrir
        (let [sid (:id (repo/agendar-sessao! r ente {:id (random-uuid) :sessao-legislativa-id (random-uuid)
                                                     :tipo-sessao "ordinaria" :modalidade "presencial"}))]
          (repo/transicionar-sessao! r ente {:id sid :para "aberta" :updated-by ident :lock-version 0})
          (spit ids-file (pr-str {:ente ente :ident ident :sessao sid}))
-         (let [token (format "{\"identidade-id\":\"%s\",\"ente-id\":\"%s\"}" ident ente)]
+         ;; `papeis` VAI no token: o IdP de dev confia nos claims do proprio token (nao consulta o banco),
+         ;; entao um token sem papeis navega como se a identidade nao tivesse nenhum — mesmo com o papel
+         ;; gravado acima. E' o mesmo formato que `seed-demo/vereador` ja imprime.
+         (let [token (format "{\"identidade-id\":\"%s\",\"ente-id\":\"%s\",\"papeis\":[\"secretario\"]}" ident ente)]
            (println "\n=== DEMO PRONTA ===")
            (println "sessao-id:" sid)
            (println "token    :" token)
@@ -326,7 +334,11 @@
                                                   :vereador-id vid :vigencia-inicio hoje}))
                (comissao-db/inserir-cargo! tx {:id (random-uuid) :ente-id ente :comissao-id ccj-id
                                                :vereador-id id-bruno :cargo "presidente" :vigencia-inicio hoje})))))
-       (let [token (format "{\"identidade-id\":\"%s\",\"ente-id\":\"%s\"}" ident ente)]
+       ;; `papeis` no token pelo MESMO motivo de `base`: esta funcao GRAVA o papel 'secretario' acima
+       ;; (sem ele GET /cadastros/vereadores e' 403), mas o dev-token nao consulta o banco — le' os claims
+       ;; do proprio token. Sem `papeis` aqui, a URL impressa logo abaixo caia em "Acesso restrito"
+       ;; justamente na tela que esta semente existe para abrir.
+       (let [token (format "{\"identidade-id\":\"%s\",\"ente-id\":\"%s\",\"papeis\":[\"secretario\"]}" ident ente)]
          (println "\n=== VEREADORES DA DEMO PRONTOS (fe-19-cadastro-vereadores) ===")
          (println "ente-id  :" (str ente))
          (println "token    :" token)

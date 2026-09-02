@@ -22,3 +22,23 @@ export function nomeTipoSessao(tipo: string | null | undefined): string {
   if (!tipo) return "";
   return NOME_TIPO_SESSAO[tipo] ?? tipo;
 }
+
+// A FASE do rito. Mesma mecânica e mesmo motivo do tipo de sessão acima: o backend transporta a chave
+// (`ordem_do_dia`), e a tribuna do plenário renderizava essa chave crua — com o CSS pondo em
+// maiúscula, o painel exibia "ORDEM_DO_DIA" ao público. O mapa vivia local em plenario/page.tsx
+// (NOME_FASE) e só era aplicado aos itens de pauta; a tribuna não o chamava. Uma fonte só, aqui.
+//
+// Valores da FONTE — o contrato gerado (lib/contrato-sessoes.gen.ts, campo `fase`):
+//   "expediente" | "explicacoes_pessoais" | "grande_expediente" | "ordem_do_dia" | "tribuna_livre_cidadao"
+const NOME_FASE: Record<string, string> = {
+  expediente: "Expediente",
+  grande_expediente: "Grande Expediente",
+  ordem_do_dia: "Ordem do Dia",
+  explicacoes_pessoais: "Explicações Pessoais",
+  tribuna_livre_cidadao: "Tribuna Livre",
+};
+
+export function nomeFase(fase: string | null | undefined): string {
+  if (!fase) return "";
+  return NOME_FASE[fase] ?? fase;
+}
