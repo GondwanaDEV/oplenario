@@ -39,14 +39,17 @@ export function OQueVence({ vista }: { vista: MesaVista["oQueVence"] }) {
       </div>
       <div className="bloco-corpo">
         <ul className="prazos">
-          {vista.itens.map((item, i) => {
+          {vista.itens.map((item) => {
             const dias = diasAte(item.venceEm);
             const rotulo =
               item.origem === "compliance"
                 ? `Obrigação TCE · ${item.templateChave}`
                 : `${rotularObjetoPrazo(item.objetoTipo)} · ${item.protocolo}`;
             return (
-              <li key={i} className="prazo-item">
+              // Chave ESTAVEL, nao o indice: `vista.itens` e' recomposta de duas fontes e reordenada
+              // por `venceEm`, entao um prazo novo mais urgente entra no meio e desloca todos os
+              // indices seguintes — o React reaproveitaria o <li> errado.
+              <li key={item.origem === "compliance" ? item.id : item.objetoId} className="prazo-item">
                 <AnelPrazo diasRestantes={dias} diasTotal={30} rotulo={rotulo} />
                 <div className="prazo-obj">
                   <b>{rotulo}</b>

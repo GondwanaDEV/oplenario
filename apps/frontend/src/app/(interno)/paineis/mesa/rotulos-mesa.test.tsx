@@ -41,6 +41,18 @@ describe("painel da Mesa — nenhuma chave de enum chega a tela", () => {
     expect(getAllByText(/Em comiss/i).length).toBeGreaterThan(0);
   });
 
+  // O pipeline tem DOIS ramos e a fixture acima so' exercita um. Quando a chamada de detalhe falha
+  // (`tramitacaoItens === null` -> `comItens: false`), a tela degrada para `TabuleiroEstagios` — que
+  // recebe os MESMOS rotulos por outro caminho. Sem este teste, reverter so' aquela linha para a chave
+  // crua deixa a suite inteira verde (medido: a revisao adversarial fez exatamente essa mutacao e
+  // nada reprovou).
+  it("pipeline degradado (sem itens): o tabuleiro tambem recebe rotulo humanizado", () => {
+    const { container } = render(<PipelineLegislativo vista={{ ...pipeline, comItens: false, itens: [] }} />);
+    const texto = container.textContent ?? "";
+    expect(texto).not.toMatch(/em_comissoes|segundo_turno/);
+    expect(texto).toMatch(/Em comiss/i);
+  });
+
   it("despachos: a referencia da proposicao sai como sigla, nao como o tipo cru", () => {
     const vista = {
       relator: {

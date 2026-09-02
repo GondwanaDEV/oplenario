@@ -334,7 +334,11 @@
                                                   :vereador-id vid :vigencia-inicio hoje}))
                (comissao-db/inserir-cargo! tx {:id (random-uuid) :ente-id ente :comissao-id ccj-id
                                                :vereador-id id-bruno :cargo "presidente" :vigencia-inicio hoje})))))
-       (let [token (format "{\"identidade-id\":\"%s\",\"ente-id\":\"%s\"}" ident ente)]
+       ;; `papeis` no token pelo MESMO motivo de `base`: esta funcao GRAVA o papel 'secretario' acima
+       ;; (sem ele GET /cadastros/vereadores e' 403), mas o dev-token nao consulta o banco — le' os claims
+       ;; do proprio token. Sem `papeis` aqui, a URL impressa logo abaixo caia em "Acesso restrito"
+       ;; justamente na tela que esta semente existe para abrir.
+       (let [token (format "{\"identidade-id\":\"%s\",\"ente-id\":\"%s\",\"papeis\":[\"secretario\"]}" ident ente)]
          (println "\n=== VEREADORES DA DEMO PRONTOS (fe-19-cadastro-vereadores) ===")
          (println "ente-id  :" (str ente))
          (println "token    :" token)

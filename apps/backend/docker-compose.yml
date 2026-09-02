@@ -109,6 +109,15 @@ services:
       # resolve pro KC tanto no browser (host) quanto nos containers.
       KEYCLOAK_BASE_URL_PUBLICO: "http://keycloak:8080"
     ports: ["${OPLENARIO_APP_PORT:-8888}:8888"]
+    # Sem healthcheck, `restart: unless-stopped` esconde crash-loop: o container aparece "Up" enquanto
+    # reinicia em laco, e so' a contagem de restarts denuncia. Com ele, `docker compose ps` diz
+    # "unhealthy" de cara — a visibilidade que o restart automatico tira, devolvida.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8888/saude || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
     # ── Login PKCE REAL (perfil `auth`) ──────────────────────────────────────────────────────────
     # Requer: (1) /etc/hosts com `127.0.0.1 keycloak` — browser E containers precisam resolver o MESMO
     #   host `keycloak` p/ o issuer do token bater com o JWKS alcançável do container;
