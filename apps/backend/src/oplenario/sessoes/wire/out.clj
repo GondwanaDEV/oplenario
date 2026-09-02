@@ -370,6 +370,41 @@
    [:sem-registro-de-presenca :boolean]
    [:quorum ChamadaQuorumOut]])
 
+;; ---------- Tribuna nominal — a COMPOSICAO da sessao (resposta de GET /sessoes/:id/composicao) ----------
+
+(def ComposicaoMembroOut
+  "Um membro da COMPOSICAO. So' os campos que a rota PUBLICA de vereador (`GET
+  /portal/casa/:ente/vereadores/:id`, sem autenticacao nenhuma) ja' devolve — `nome-parlamentar` e
+  `cargo-mesa` estao no payload dela; `partido` NAO esta, e por isso nao entra aqui (verificado campo a
+  campo contra a rota real — a primeira versao deste contrato o incluia por uma premissa que nao se
+  sustentou). Nulaveis pelo MESMO motivo de `LinhaChamadaOut` (roster incompleto, ou vereador sem cargo).
+  NUNCA `:nome` civil nem qualquer campo de ESTADO de presenca — esses so' saem pela chamada NOMINAL
+  (papel 'secretario', `GET /sessoes/:id/chamada`)."
+  [:map {:closed true}
+   [:vereador-id :string]
+   [:nome-parlamentar [:maybe :string]]
+   [:cargo-mesa [:maybe :string]]])
+
+(def ComposicaoSessaoOut
+  "A COMPOSICAO da sessao (resposta de `GET /sessoes/:id/composicao`) — resolve o NOME de quem o painel ao
+  vivo do plenario so' conhece por `vereador-id` (o SSE de `tempo-real` carrega so' o id no evento).
+  `data-de-composicao`/`composicao-resolvida-em` tem o MESMO significado de `ChamadaOut`/`QuorumSessaoOut`
+  (a data civil que resolveu a Casa, e o instante de audit em que este calculo rodou) — os dois contratos
+  compartilham a MESMA leitura por dentro (`chamada-da-sessao*`), entao os carimbos batem campo a campo
+  entre as tres rotas irmas.
+
+  Deliberadamente SEM `instante`, `sem-registro-de-presenca` e `quorum`: esses sao do DOMINIO da presenca
+  (o que `/chamada` e `/quorum` respondem), e esta rota responde uma pergunta diferente — 'quem sao', nao
+  'quantos/quem esta'. Juntar os dois dava um contrato que repete `ChamadaOut` com metade dos campos por
+  um motivo errado (a Etapa 4a ja fez essa distincao para o QuorumSessaoOut; aqui a distincao e' a mesma,
+  so' que por IDENTIDADE em vez de por NUMERO)."
+  [:map {:closed true}
+   [:sessao-id :string]
+   [:sessao-estado (km/enum-de logic/estados-sessao)]
+   [:data-de-composicao :string]
+   [:composicao-resolvida-em :string]
+   [:membros [:sequential ComposicaoMembroOut]]])
+
 ;; ---------- Etapa 5 fatia 5 — a FOLHA DA SESSAO (metadados de congelamento) ----------
 
 (def FolhaMetadadosOut
