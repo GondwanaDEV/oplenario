@@ -9,9 +9,9 @@ import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { EventoPlenario, SessaoOut } from "./contrato";
 import { TIPOS_PLENARIO } from "./contrato";
-import type { ComposicaoSessaoOut, QuorumSessaoOut } from "./contrato-sessoes.gen";
+import type { ComposicaoSessaoOut, QuorumSessaoOut, TribunaOut } from "./contrato-sessoes.gen";
 import { semCredencial } from "./modo";
-import { aplicarEvento, estadoInicial, falharComposicao, falharQuorum, hidratarComposicao, hidratarQuorum, type EstadoPlenario } from "./plenario-reducer";
+import { aplicarEvento, estadoInicial, falharComposicao, falharQuorum, falharTribuna, hidratarComposicao, hidratarQuorum, hidratarTribuna, type EstadoPlenario } from "./plenario-reducer";
 import { consumirSse } from "./sse";
 
 export type EstadoConexao = "carregando" | "ao-vivo" | "reconectando" | "erro";
@@ -42,11 +42,15 @@ const espera = (ms: number, signal: AbortSignal) =>
     signal.addEventListener("abort", () => { clearTimeout(id); reject(signal.reason); }, { once: true });
   });
 
-/** `comQuorum` liga a hidratação de `GET /sessoes/:id/quorum` — DESLIGADA por default, e isso é estrutural,
- * não economia. Este hook alimenta DUAS telas: o TELÃO (que precisa de "N de M") e o COCKPIT do vereador
- * (que só lê `estado.presentes` de forma nominal e nunca mostrou quórum). Manter o cockpit fora do caminho
- * de quórum (a) impede que qualquer evolução da hidratação volte a regredir a tela de votar, e (b) tira ~21
- * clientes por Casa do polling da leitura mais cara do módulo, deixando lá só os 1-2 telões. */
+/** `comQuorum` seleciona o TELÃO — liga a hidratação de `GET /sessoes/:id/quorum` E de
+ * `GET /sessoes/:id/tribuna` — e vem DESLIGADA por default, o que é estrutural, não economia. Este hook
+ * alimenta DUAS telas: o TELÃO (que precisa de "N de M" e de quem está com a palavra) e o COCKPIT do
+ * vereador (que só lê `estado.presentes` de forma nominal e nunca mostrou quórum nem tribuna). Manter o
+ * cockpit fora deste caminho (a) impede que qualquer evolução da hidratação volte a regredir a tela de
+ * votar, e (b) tira ~21 clientes por Casa do polling das leituras mais caras do módulo, deixando-o só
+ * para os 1-2 telões. O nome ficou de quando só existia quórum; não foi renomeado nesta fatia — o único
+ * outro chamador é o cockpit do vereador, que passa sem opções nenhumas, e tocar essa assinatura
+ * compartilhada é exatamente o tipo de mudança que já derrubou o botão de votar nesta base. */
 export function usePlenario(sessaoId: string, token: string | null, opcoes?: { comQuorum?: boolean }) {
   const comQuorum = opcoes?.comQuorum === true;
   const [sessao, setSessao] = useState<SessaoOut | null>(null);
@@ -55,6 +59,11 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
   const [erro, setErro] = useState<string | null>(null);
   const lastIdRef = useRef<string | undefined>(undefined);
   const idValido = ID_VALIDO.test(sessaoId);
+  // Espelha `estado.tribunaEventoSeq` de forma SÍNCRONA — `aoFrame` só consegue escrever estado por
+  // updater funcional (`setEstado(prev => ...)`), e a busca da tribuna precisa LER o contador no
+  // instante do disparo (T0 do ruling de precedência), antes de qualquer `await`. Zerado a cada nova
+  // sessão junto com `estadoInicial` (ver o passo 1 abaixo).
+  const tribunaEventoSeqRef = useRef(0);
 
   useEffect(() => {
     if (semCredencial(token) || !idValido) return; // casos de erro são derivados no retorno (sem setState síncrono no effect)
@@ -63,31 +72,72 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
     let rebuscando = false;
     let ultimaRebusca = 0;
 
-    /** Uma busca do snapshot de quórum. Best-effort e TOTAL: rede/403/500/parse deixam a tela no tri-estado
-     * honesto (`falharQuorum`), nunca travam e nunca zeram um número já obtido. */
+    /** Uma busca do snapshot de quórum E de tribuna — o par que o TELÃO precisa para se reconstruir
+     * sozinho (ver a docstring de `comQuorum`). As duas correm em PARALELO e são independentes: cada
+     * uma tem seu try/catch, então uma falhando não atrasa nem contamina a outra. Best-effort e TOTAL:
+     * rede/403/500/parse deixam o quórum no tri-estado honesto (`falharQuorum`) e simplesmente NÃO
+     * mexem na tribuna (`falharTribuna` — ela não tem status próprio, ver a docstring lá); nenhuma das
+     * duas trava a tela nem derruba o SSE.
+     *
+     * `tribunaEventoSeqNoDisparo` é capturado ANTES do fetch — o T0 da regra de PRECEDÊNCIA de
+     * `hidratarTribuna` (ver a docstring lá): se um dos 5 eventos de tribuna chegar pelo canal AO VIVO
+     * enquanto esta resposta está em voo, a hidratação DESCARTA o snapshot em vez de ressuscitar quem
+     * já desceu da tribuna. Um snapshot descartado não fica perdido: esta função roda periodicamente
+     * (e a cada reconexão — ver o passo 2 abaixo), e tenta de novo no próximo tick. */
     const rehidratar = async () => {
       if (!comQuorum || !vivo || rebuscando) return;
       rebuscando = true;
       ultimaRebusca = Date.now();
-      try {
-        const resp = await apiFetch(`/api/sessoes/${sessaoId}/quorum`, {
-          token: token ?? undefined,
-          signal: controller.signal,
-          cache: "no-store",
-        });
-        if (!vivo) return;
-        if (!resp.ok) {
+      const tribunaEventoSeqNoDisparo = tribunaEventoSeqRef.current;
+
+      const buscarQuorum = async () => {
+        try {
+          const resp = await apiFetch(`/api/sessoes/${sessaoId}/quorum`, {
+            token: token ?? undefined,
+            signal: controller.signal,
+            cache: "no-store",
+          });
+          if (!vivo) return;
+          if (!resp.ok) {
+            setEstado((prev) => (prev ? falharQuorum(prev) : prev));
+            return;
+          }
+          const q = camelizarChaves(await resp.json()) as QuorumSessaoOut;
+          if (!vivo) return;
+          // `hidratarQuorum` é TOTAL: um corpo de forma inesperada devolve o estado praticamente inalterado,
+          // então este updater nunca lança — o que importa porque o React pode avaliá-lo na fase de RENDER.
+          setEstado((prev) => (prev ? hidratarQuorum(prev, q) : prev));
+        } catch {
+          if (!vivo) return;
           setEstado((prev) => (prev ? falharQuorum(prev) : prev));
-          return;
         }
-        const q = camelizarChaves(await resp.json()) as QuorumSessaoOut;
-        if (!vivo) return;
-        // `hidratarQuorum` é TOTAL: um corpo de forma inesperada devolve o estado praticamente inalterado,
-        // então este updater nunca lança — o que importa porque o React pode avaliá-lo na fase de RENDER.
-        setEstado((prev) => (prev ? hidratarQuorum(prev, q) : prev));
-      } catch {
-        if (!vivo) return;
-        setEstado((prev) => (prev ? falharQuorum(prev) : prev));
+      };
+
+      const buscarTribuna = async () => {
+        try {
+          const resp = await apiFetch(`/api/sessoes/${sessaoId}/tribuna`, {
+            token: token ?? undefined,
+            signal: controller.signal,
+            cache: "no-store",
+          });
+          if (!vivo) return;
+          if (!resp.ok) {
+            setEstado((prev) => (prev ? falharTribuna(prev) : prev));
+            return;
+          }
+          const t = camelizarChaves(await resp.json()) as TribunaOut;
+          if (!vivo) return;
+          // `hidratarTribuna` é TOTAL e checa a precedência contra `tribunaEventoSeqNoDisparo`: nunca
+          // lança e nunca ressuscita quem o SSE já desceu da tribuna nesse meio-tempo.
+          setEstado((prev) => (prev ? hidratarTribuna(prev, t, tribunaEventoSeqNoDisparo) : prev));
+        } catch {
+          if (!vivo) return;
+          setEstado((prev) => (prev ? falharTribuna(prev) : prev));
+        }
+      };
+
+      try {
+        await Promise.all([buscarQuorum(), buscarTribuna()]);
       } finally {
         rebuscando = false;
       }
@@ -109,6 +159,9 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
           if (!prev) return prev;
           const proximo = aplicarEvento(prev, evento);
           if (proximo.precisaRehidratar) pedidoDeRebusca = true;
+          // espelha o contador para o ref síncrono (ver a docstring de `tribunaEventoSeqRef`) — todo
+          // evento passa por `aplicarEvento`, então este é o ÚNICO ponto que precisa espelhar.
+          tribunaEventoSeqRef.current = proximo.tribunaEventoSeq;
           return proximo;
         });
       } catch {
@@ -143,6 +196,7 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
         if (!vivo) return;
         setSessao(s);
         setEstado(estadoInicial(s));
+        tribunaEventoSeqRef.current = 0; // nova sessão -> mesmo zero de `estadoInicial().tribunaEventoSeq`
       } catch (e) {
         if (!vivo || controller.signal.aborted) return;
         setConexao("erro");
@@ -151,13 +205,20 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
         return;
       }
 
-      // 1b) hidratação do quórum — BEST-EFFORT e em paralelo ao SSE (não bloqueia a conexão ao vivo). O
-      // numerador do telão vem SÓ daqui: nada de fundir o número do servidor com o delta do SSE (ver a
-      // docstring de `hidratarQuorum`). Por isso ela não é um disparo único — é re-buscada sempre que a
-      // presença se mexe (debounced), depois de toda reconexão e periodicamente.
+      // 1b) hidratação do quórum E DA TRIBUNA — BEST-EFFORT e em paralelo ao SSE (não bloqueia a conexão
+      // ao vivo). `rehidratar()` busca as duas (ver a docstring dela): o numerador do telão vem SÓ do
+      // quórum (nunca funde com delta do SSE — docstring de `hidratarQuorum`), e a tribuna é o read-model
+      // desta fatia — quem está com a palavra AGORA, mesmo que a tela abra com a fala já em curso e
+      // nenhum evento SSE tenha sido visto ainda. Por isso nenhuma das duas é um disparo único: são
+      // re-buscadas sempre que a presença se mexe (debounced), depois de toda reconexão e periodicamente.
+      //
+      // (não há uma chamada de tribuna separada ao lado do bloco `1c) COMPOSIÇÃO` abaixo: esta MESMA
+      // chamada já cobre a carga inicial da tribuna — uma segunda chamada duplicaria o fetch. A tribuna
+      // segue a MESMA condição `comQuorum` que o quórum — ver o Ruling do controlador no brief desta
+      // fatia — e por isso anda dentro da MESMA função, não de uma cópia da rotina de composição.)
       void rehidratar();
 
-      // 1c) COMPOSIÇÃO — disparo ÚNICO, ao contrário do quórum. O quórum é re-buscado porque o NÚMERO
+      // 1c) COMPOSIÇÃO — disparo ÚNICO, ao contrário do quórum e da tribuna. O quórum é re-buscado porque o NÚMERO
       // muda a cada evento de presença; a composição é "quem são os membros da Casa NA DATA desta
       // sessão", que não muda no meio dela (a data de composição é congelada, ver a docstring de
       // `composicao-da-sessao` no backend). Re-buscar a cada frame seria trabalho por tick para um dado

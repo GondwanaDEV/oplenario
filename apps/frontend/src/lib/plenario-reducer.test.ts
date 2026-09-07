@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { aplicarEvento, estadoInicial, falharComposicao, falharQuorum, hidratarComposicao, hidratarQuorum, identidadeDe, numeroDoTelao, type EstadoPlenario, vistaDoQuorum } from "./plenario-reducer";
+import { aplicarEvento, estadoInicial, falharComposicao, falharQuorum, falharTribuna, hidratarComposicao, hidratarQuorum, hidratarTribuna, identidadeDe, numeroDoTelao, type EstadoPlenario, vistaDoQuorum } from "./plenario-reducer";
 import { derivarMeuVoto } from "./meu-voto-vista";
 import type { EventoPlenario, SessaoOut } from "./contrato";
-import type { QuorumSessaoOut } from "./contrato-sessoes.gen";
+import type { QuorumSessaoOut, TribunaOut } from "./contrato-sessoes.gen";
 
 // ---- fixtures mínimas (forma fiel ao wire) ----
 
@@ -470,5 +470,113 @@ describe("composição — o índice de nomes sobrevive ao fluxo de eventos", ()
     } as never);
     expect(identidadeDe(depois, "v1")).toEqual({ nomeParlamentar: "Ana Ribeiro", cargoMesa: "presidente" });
     expect(depois.composicaoStatus).toBe("ok");
+  });
+});
+
+// #7 do ledger de prontidão: o telão perde a tribuna em três momentos — F5, abrir a tela com a fala já
+// em curso, e queda de rede > 5 min. `hidratarTribuna` é o read-model que reconstrói `oradorAtual` /
+// `marcosCronometro` / `inscritos` a partir de `GET /sessoes/:id/tribuna`, sem depender de nenhum
+// evento SSE ter sido visto.
+describe("tribuna — o read-model reconstrói quem está com a palavra", () => {
+  const aberta = () => estadoInicial(sessao({ estado: "aberta" }));
+
+  const falaIniciada = (seq: number, oradorId: string, falaId = "f1"): EventoPlenario => ({
+    tipo: "fala.iniciada",
+    seq,
+    dados: { "fala-id": falaId, "sessao-id": "s1", "orador-id": oradorId, "tipo-fala": "principal", fase: "ordem_do_dia", "iniciou-em": "2026-09-07T22:00:00Z" },
+  });
+
+  const falaEncerrada = (seq: number, falaId = "f1"): EventoPlenario => ({
+    tipo: "fala.encerrada",
+    seq,
+    dados: { "fala-id": falaId, "sessao-id": "s1", "tempo-segundos": 120, "encerrou-em": "2026-09-07T22:02:00Z" },
+  });
+
+  const snap = (over: Partial<TribunaOut> = {}): TribunaOut => ({
+    sessaoId: "s1",
+    oradorAtual: { falaId: "f2", oradorId: "vSnapshot", tipoFala: "principal", fase: "ordem_do_dia", iniciouEm: "2026-09-07T21:55:00Z", inscricaoId: null },
+    marcosCronometro: [{ tipo: "pausada", ocorridoEm: "2026-09-07T21:56:00Z", segundosAdicionais: null }],
+    inscritos: [
+      { inscricaoId: "i2", vereadorId: "v2", origemInscricao: "pre_sessao_app", fase: "ordem_do_dia", ordem: 2 },
+      { inscricaoId: "i1", vereadorId: "v1", origemInscricao: "pre_sessao_app", fase: "ordem_do_dia", ordem: 1 },
+    ],
+    ...over,
+  });
+
+  it("T1 — o CASO DA FATIA: abrir a tela com a fala já em curso resolve o orador SEM nenhum evento SSE", () => {
+    const e = hidratarTribuna(aberta(), snap(), 0);
+    expect(e.oradorAtual).toEqual({ falaId: "f2", oradorId: "vSnapshot", tipoFala: "principal", fase: "ordem_do_dia", iniciouEm: "2026-09-07T21:55:00Z" });
+    expect(e.marcosCronometro).toEqual([{ tipo: "pausada", ocorridoEm: "2026-09-07T21:56:00Z", segundosAdicionais: null }]);
+    // e a fila chega ORDENADA por `ordem`, mesmo fora de ordem no wire
+    expect(e.inscritos.map((i) => i.inscricaoId)).toEqual(["i1", "i2"]);
+  });
+
+  it("T2 — `oradorAtual: null` no snapshot é um estado VÁLIDO (tribuna livre), não uma forma inesperada", () => {
+    const comFala = aplicarEvento(aberta(), falaIniciada(1, "vAoVivo"));
+    const e = hidratarTribuna(comFala, snap({ oradorAtual: null, marcosCronometro: [] }), comFala.tribunaEventoSeq);
+    expect(e.oradorAtual).toBeNull();
+  });
+
+  it("T3 (MAJOR) — corpo de forma inesperada não lança e não inventa orador: TOTAL, como hidratarComposicao/hidratarQuorum", () => {
+    const base = aberta();
+    expect(() => hidratarTribuna(base, {} as never, 0)).not.toThrow();
+    const semForma = hidratarTribuna(base, {} as never, 0);
+    expect(semForma.oradorAtual).toBeNull(); // não muda o que já havia (estado inicial: ninguém)
+    expect(semForma.inscritos).toEqual([]);
+
+    // um orador já visto pelo SSE sobrevive a uma resposta de forma torta
+    const comFala = aplicarEvento(base, falaIniciada(1, "vAoVivo"));
+    const naoLanca = hidratarTribuna(comFala, { oradorAtual: "nao-e-um-objeto" } as unknown as TribunaOut, comFala.tribunaEventoSeq);
+    expect(naoLanca.oradorAtual?.oradorId).toBe("vAoVivo");
+
+    // um item torto na lista de inscritos não descarta os vizinhos válidos
+    const comItemTorto = hidratarTribuna(
+      base,
+      snap({ inscritos: [{ inscricaoId: "iOk", vereadorId: "vOk", origemInscricao: "pre_sessao_app", fase: "ordem_do_dia", ordem: 1 }, { inscricaoId: 42 } as never] }),
+      0,
+    );
+    expect(comItemTorto.inscritos).toEqual([{ inscricaoId: "iOk", vereadorId: "vOk", ordem: 1 }]);
+  });
+
+  it("T4 (CRÍTICO) — PRECEDÊNCIA: um `fala.encerrada` chegado DEPOIS do disparo descarta o snapshot em voo", () => {
+    // Anatomia do ruling: T0 dispara o GET com alguém na tribuna; entre T0 e a resposta (T1) o SSE
+    // entrega `fala.encerrada` — a Mesa encerrou a fala. Se a hidratação aplicasse o snapshot de T0
+    // (o molde "servidor sempre vence" de `hidratarQuorum`), o telão RESSUSCITARIA na transmissão
+    // pública um orador que já desceu da tribuna. A regra correta é descartar: o SSE é mais novo.
+    const comFala = aplicarEvento(aberta(), falaIniciada(1, "vAoVivo"));
+    const seqNoDisparo = comFala.tribunaEventoSeq; // capturado pelo hook ANTES do fetch (T0)
+
+    const encerrada = aplicarEvento(comFala, falaEncerrada(2)); // chega em T1, antes da resposta HTTP
+
+    const resultado = hidratarTribuna(encerrada, snap(), seqNoDisparo); // resposta de T0 chega em T2
+    expect(resultado.oradorAtual).toBeNull(); // continua encerrado — não ressuscitado pelo snapshot velho
+    expect(resultado.marcosCronometro).toEqual([]); // idem: `fala.encerrada` já zerou os marcos
+
+    // contraprova: SEM o evento de por meio, o mesmo snapshot é aceito normalmente (a mutação que troca
+    // a regra por "servidor sempre vence" faz este describe passar mas o T4 acima reprovar)
+    const semEventoNoMeio = hidratarTribuna(comFala, snap(), seqNoDisparo);
+    expect(semEventoNoMeio.oradorAtual?.oradorId).toBe("vSnapshot");
+  });
+
+  it("T5 — a borda falhando (rede/403/500/parse) não muda nada: não há status próprio para degradar", () => {
+    const comFala = aplicarEvento(aberta(), falaIniciada(1, "vAoVivo"));
+    expect(falharTribuna(comFala)).toEqual(comFala);
+    expect(falharTribuna(aberta())).toEqual(aberta());
+  });
+
+  it("T6 — o contador de tribuna avança SÓ nos 5 eventos que tocam a tribuna, nunca em presença/votação", () => {
+    const depoisDePresenca = aplicarEvento(aberta(), {
+      tipo: "presenca.registrada",
+      seq: 1,
+      dados: { "sessao-id": "s1", "vereador-id": "v1", tipo: "entrada", modalidade: "plenario", fonte: "manual_secretaria", "ocorrido-em": "2026-09-07T22:00:00Z" },
+    } as never);
+    expect(depoisDePresenca.tribunaEventoSeq).toBe(0);
+
+    const depoisDeInscricao = aplicarEvento(aberta(), {
+      tipo: "inscricao.registrada",
+      seq: 1,
+      dados: { "inscricao-id": "i1", "sessao-id": "s1", "vereador-id": "v1", "origem-inscricao": "pre_sessao_app", fase: "ordem_do_dia", ordem: 1 },
+    } as never);
+    expect(depoisDeInscricao.tribunaEventoSeq).toBe(1);
   });
 });

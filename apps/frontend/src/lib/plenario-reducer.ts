@@ -5,10 +5,21 @@
 // a partir de `iniciouEm` + marcos (decisão de §22.6 eixo G — ticks por segundo são descartados no fio).
 
 import type { EventoPlenario, SessaoOut } from "./contrato";
-import type { ComposicaoSessaoOut, QuorumSessaoOut } from "./contrato-sessoes.gen";
+import type { ComposicaoSessaoOut, QuorumSessaoOut, TribunaOut } from "./contrato-sessoes.gen";
 
 /** Tipos de evento de presença que marcam PRESENTE (logic/tipos-presenca-positiva); "saida" remove. */
 const PRESENCA_POSITIVA = new Set(["entrada", "retorno", "mudanca_modalidade"]);
+
+/** Os 5 tipos de `EventoPlenario` que tocam a tribuna (oradorAtual/marcosCronometro/inscritos) — a
+ * FONTE ÚNICA da precedência de `hidratarTribuna`. Conferido contra `TIPOS_PLENARIO` em `contrato.ts` e
+ * contra os `case`s de `aplicarEvento` abaixo — não redigitar esta lista em outro lugar. */
+const TIPOS_EVENTO_TRIBUNA = new Set([
+  "fala.iniciada",
+  "fala.cronometro",
+  "fala.encerrada",
+  "inscricao.registrada",
+  "inscricao.desistida",
+]);
 
 export interface MarcoCronometro {
   tipo: string; // pausada | retomada | aparte_concedido | tempo_adicional_concedido
@@ -101,6 +112,11 @@ export interface EstadoPlenario {
   composicao: Map<string, IdentidadeParlamentar> | null;
   composicaoStatus: QuorumStatus;
   ultimoSeq: number; // maior seq visto — vira o Last-Event-ID no resume
+  /** Contador monotônico dos 5 eventos de `TIPOS_EVENTO_TRIBUNA` já aplicados. Existe só para a
+   * PRECEDÊNCIA de `hidratarTribuna`: o hook captura este valor antes de disparar `GET .../tribuna` e
+   * o repassa; se o contador tiver avançado quando a resposta chega, um evento ao vivo já é mais novo
+   * que o snapshot em voo, e a hidratação descarta em vez de ressuscitar quem já desceu da tribuna. */
+  tribunaEventoSeq: number;
 }
 
 /** A identidade PÚBLICA de um parlamentar — o subconjunto que `GET /sessoes/:id/composicao` serve, que é
@@ -124,6 +140,7 @@ export function estadoInicial(sessao: SessaoOut): EstadoPlenario {
     composicao: null,
     composicaoStatus: "carregando",
     ultimoSeq: 0,
+    tribunaEventoSeq: 0,
   };
 }
 
@@ -255,8 +272,109 @@ export function falharQuorum(estado: EstadoPlenario): EstadoPlenario {
   return { ...estado, quorumStatus: estado.quorum ? "ok" : "indisponivel" };
 }
 
+/** Lê `oradorAtual` do snapshot cru de `GET /sessoes/:id/tribuna`. `null` explícito é um estado válido
+ * ("ninguém com a palavra"); `undefined` sinaliza forma inesperada — quem chama mantém o que já havia
+ * (mesma postura TOTAL do resto deste arquivo: nunca lança, nunca inventa). */
+function lerOradorAtualTribuna(o: unknown): OradorAtual | null | undefined {
+  if (o === null) return null;
+  if (!o || typeof o !== "object") return undefined;
+  const x = o as Record<string, unknown>;
+  if (
+    typeof x.falaId !== "string" ||
+    typeof x.oradorId !== "string" ||
+    typeof x.tipoFala !== "string" ||
+    typeof x.fase !== "string" ||
+    typeof x.iniciouEm !== "string"
+  ) {
+    return undefined;
+  }
+  return { falaId: x.falaId, oradorId: x.oradorId, tipoFala: x.tipoFala, fase: x.fase, iniciouEm: x.iniciouEm };
+}
+
+/** Lê `marcosCronometro`. `undefined` (forma inesperada) preserva os marcos já vividos pelo SSE; uma
+ * lista presente mas com itens tortos apenas PULA o item torto (não descarta a lista inteira por causa
+ * de um vizinho malformado). */
+function lerMarcosTribuna(m: unknown): MarcoCronometro[] | undefined {
+  if (!Array.isArray(m)) return undefined;
+  const marcos: MarcoCronometro[] = [];
+  for (const item of m) {
+    if (!item || typeof item !== "object") continue;
+    const x = item as Record<string, unknown>;
+    if (typeof x.tipo !== "string" || typeof x.ocorridoEm !== "string") continue;
+    marcos.push({
+      tipo: x.tipo,
+      ocorridoEm: x.ocorridoEm,
+      segundosAdicionais: finito(x.segundosAdicionais) ? x.segundosAdicionais : null,
+    });
+  }
+  return marcos;
+}
+
+/** Lê `inscritos`, já ordenados por `ordem` (mesmo invariante que `inscricao.registrada` mantém em
+ * `aplicarEvento`). Mesma tolerância a item torto que `lerMarcosTribuna`. */
+function lerInscritosTribuna(lst: unknown): Inscrito[] | undefined {
+  if (!Array.isArray(lst)) return undefined;
+  const inscritos: Inscrito[] = [];
+  for (const item of lst) {
+    if (!item || typeof item !== "object") continue;
+    const x = item as Record<string, unknown>;
+    if (typeof x.inscricaoId !== "string" || typeof x.vereadorId !== "string" || !finito(x.ordem)) continue;
+    inscritos.push({ inscricaoId: x.inscricaoId, vereadorId: x.vereadorId, ordem: x.ordem });
+  }
+  return inscritos.sort((a, b) => a.ordem - b.ordem);
+}
+
+/** Hidrata a tribuna a partir do snapshot de `GET /sessoes/:id/tribuna`. PURA e TOTAL: nunca lança, e
+ * um corpo de forma inesperada devolve o estado praticamente inalterado (este updater pode ser avaliado
+ * na fase de RENDER do React, como `hidratarQuorum`/`hidratarComposicao`).
+ *
+ * `tribunaEventoSeqNoDisparo` é o valor de `estado.tribunaEventoSeq` que o HOOK capturou no instante em
+ * que disparou o request — antes de saber se o SSE traria algo novo enquanto a resposta estava em voo.
+ * Se o contador tiver avançado entre o disparo e agora, um dos 5 eventos de tribuna já chegou pelo canal
+ * AO VIVO, e esse estado é por construção mais novo que este snapshot: a hidratação DESCARTA em vez de
+ * aplicar. É o RULING desta fatia — a alternativa óbvia ("servidor sempre vence", o molde de
+ * `hidratarQuorum`) ressuscitaria em produção um orador que a Mesa já havia encerrado, na transmissão
+ * pública, só porque a resposta HTTP chegou atrasada. Como `rehidratar()` roda periodicamente (e a cada
+ * reconexão), um snapshot descartado aqui não trava a tela: é retentado no próximo tick. */
+export function hidratarTribuna(
+  estado: EstadoPlenario,
+  cru: TribunaOut,
+  tribunaEventoSeqNoDisparo: number,
+): EstadoPlenario {
+  if (estado.tribunaEventoSeq !== tribunaEventoSeqNoDisparo) return estado;
+  if (!cru || typeof cru !== "object") return estado;
+
+  const c = cru as Partial<TribunaOut>;
+  const oradorAtual = lerOradorAtualTribuna(c.oradorAtual);
+  const marcosCronometro = lerMarcosTribuna(c.marcosCronometro);
+  const inscritos = lerInscritosTribuna(c.inscritos);
+
+  return {
+    ...estado,
+    oradorAtual: oradorAtual === undefined ? estado.oradorAtual : oradorAtual,
+    marcosCronometro: marcosCronometro === undefined ? estado.marcosCronometro : marcosCronometro,
+    inscritos: inscritos === undefined ? estado.inscritos : inscritos,
+  };
+}
+
+/** A borda da tribuna falhou (rede/403/500/parse). Ao contrário de quórum/composição, a tribuna não tem
+ * um status próprio para degradar: `oradorAtual`/`marcosCronometro`/`inscritos` JÁ são os campos ao vivo
+ * do SSE, com defaults sãos (`null`/`[]`/`[]`) desde `estadoInicial`. Uma falha da borda simplesmente NÃO
+ * muda nada — o SSE segue sendo a única fonte até o próximo `rehidratar()` bem-sucedido. */
+export function falharTribuna(estado: EstadoPlenario): EstadoPlenario {
+  return estado;
+}
+
 export function aplicarEvento(estado: EstadoPlenario, evento: EventoPlenario): EstadoPlenario {
-  const base = { ...estado, ultimoSeq: Math.max(estado.ultimoSeq, evento.seq) };
+  // O contador de tribuna avança aqui, na construção de `base`, e não em cada `case`: um `case` que
+  // devolve `base` cedo (ex.: `fala.cronometro` para uma fala que não é a corrente) precisa do avanço
+  // do MESMO jeito — o evento chegou e o snapshot em voo já é mais velho, ainda que o reducer não
+  // tenha mudado nada visível a partir dele.
+  const base = {
+    ...estado,
+    ultimoSeq: Math.max(estado.ultimoSeq, evento.seq),
+    tribunaEventoSeq: estado.tribunaEventoSeq + (TIPOS_EVENTO_TRIBUNA.has(evento.tipo) ? 1 : 0),
+  };
 
   switch (evento.tipo) {
     case "sessao.transicionou":
