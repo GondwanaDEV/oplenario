@@ -458,9 +458,11 @@
 
   `orador-atual` nil = ninguem com a palavra agora; `marcos-cronometro` vazio quando nao ha' fala em
   curso (nao ha' cronometro de ninguem para mostrar). Payload = a UNIAO EXATA do que
-  `sessoes.events.tribuna` ja' transmite ao MESMO publico pelo canal do plenario (Constraint 7) — SEM
-  roster e SEM nome de vereador: este ns nunca importa `cadastros` (§22.10), e o nome de quem esta na
-  tribuna vem de `/composicao` (o irmao que resolve identidade), nao daqui."
+  `sessoes.events.tribuna` ja' transmite pelo canal do plenario (Constraint 7) — SEM roster e SEM nome de
+  vereador: este ns nunca importa `cadastros` (§22.10), e o nome de quem esta na tribuna vem de
+  `/composicao` (o irmao que resolve identidade), nao daqui. O PUBLICO e' o do SSE MAIS o secretario nas
+  sessoes SECRETAS (o SSE recusa a subscricao inteira nessas; esta rota nao) — nao 'o mesmo publico',
+  ver a docstring de `tribuna-handler`."
   [:map {:closed true}
    [:sessao-id :string]
    [:orador-atual [:maybe OradorAtualOut]]

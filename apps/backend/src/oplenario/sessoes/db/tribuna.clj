@@ -160,11 +160,15 @@
 
 (defn fala-em-curso
   "A fala ATUALMENTE em curso da sessao — `encerrou_em IS NULL`, o mesmo filtro que `encerrar-fala!` exige
-  (`fala-para-encerrar` acima) para aceitar encerrar. No maximo uma por design (uma fala so' comeca depois
-  que a anterior encerra), mas a query nao PRESUME isso: `ORDER BY iniciou_em DESC LIMIT 1` e' defesa em
-  profundidade contra um dado historico incoerente (fixture, migracao futura) virar DOIS oradores na
-  tela ao mesmo tempo — pega a mais recente, nunca uma aritmetica de contagem. Devolve o mapa kebab-case
-  ou nil (ninguem com a palavra agora — o read-model da tribuna projeta `orador-atual` nil neste caso)."
+  (`fala-para-encerrar` acima) para aceitar encerrar. DUAS falas abertas ao MESMO TEMPO e' o caso NORMAL
+  do aparte, nao um dado incoerente: `iniciar-fala!` NAO tem guarda contra abrir um aparte com a fala-mae
+  ainda sem `encerrar-fala!` (`apartes-via-fala-pai` em `tribuna_db_test.clj` grava exatamente isso), e a
+  Mesa ao vivo tipicamente so' encerra a fala principal, nao o aparte. Por isso a query nao pega
+  'a unica aberta' — pega a MAIS RECENTE por `iniciou_em` (desempate estavel por `id`), a mesma regra que
+  o reducer do SSE aplica no canal (`fala.iniciada` de um aparte SUBSTITUI o orador atual): durante o
+  aparte, o aparteante e' quem esta com a palavra na tela, e quando ele nao encerra, e' quem continua
+  aparecendo — decisao explicita, nao lacuna. Devolve o mapa kebab-case ou nil (ninguem com a palavra
+  agora — o read-model da tribuna projeta `orador-atual` nil neste caso)."
   [tx ente-id sessao-id]
   (comum/linha->kebab
    (jdbc/execute-one! tx

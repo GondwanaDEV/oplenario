@@ -197,6 +197,47 @@
                                                              :lock-version 1 :updated-by (random-uuid)}))
               "encerrar uma fala ja encerrada e' barrado (uma vez)"))))))
 
+;; ---------- fala-em-curso: `encerrou_em IS NULL`, nao "a mais recente" (achado C1 da revisao) ----------
+
+(deftest fala-em-curso-e-a-aberta-nao-a-ultima-por-ordem
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [sid (:id (sessao/agendar! tx {:id (random-uuid) :ente-id ente :sessao-legislativa-id (random-uuid)
+                                            :tipo-sessao "ordinaria" :modalidade "presencial"}))
+              {f1 :id} (iniciar! tx ente sid {})]
+          (is (= f1 (:id (tribuna/fala-em-curso tx ente sid)))
+              "a unica fala aberta e' a em curso")
+          (tribuna/encerrar-fala! tx {:ente-id ente :id f1 :encerrou-em (mais f0 60)
+                                      :lock-version 0 :updated-by (random-uuid)})
+          (let [{f2 :id} (iniciar! tx ente sid {:iniciou-em (mais f0 90)})]
+            (is (= f2 (:id (tribuna/fala-em-curso tx ente sid)))
+                "com f1 encerrada, a fala em curso e' a nova (f2), ainda aberta")
+            (tribuna/encerrar-fala! tx {:ente-id ente :id f2 :encerrou-em (mais f0 150)
+                                        :lock-version 0 :updated-by (random-uuid)})
+            (is (nil? (tribuna/fala-em-curso tx ente sid))
+                (str "com AS DUAS encerradas -- e f2 e' a MAIS RECENTE por iniciou_em -- fala-em-curso "
+                     "tem de ser nil. Se este `is` passar com `[:= :encerrou_em nil]` removido de "
+                     "db/tribuna.clj, o filtro voltou a ser 'a ultima fala', nao 'a fala em curso'."))))))))
+
+;; ---------- fala-em-curso com PAI + APARTE ambos abertos (achado I2 da revisao) ----------
+
+(deftest fala-em-curso-durante-aparte-e-o-aparteante-mais-recente-vence
+  ;; Duas falas abertas ao MESMO TEMPO e' o caso NORMAL do aparte (ver docstring de `fala-em-curso`):
+  ;; `iniciar-fala!` nao tem guarda contra abrir o aparte com a fala-mae ainda sem encerrar, e a Mesa ao
+  ;; vivo tipicamente so' encerra a fala principal. `fala-em-curso` resolve isso de forma DETERMINISTICA
+  ;; -- a MAIS RECENTE por `iniciou_em` -- espelhando o reducer do SSE (`fala.iniciada` do aparte
+  ;; SUBSTITUI o orador atual no canal).
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [sid (:id (sessao/agendar! tx {:id (random-uuid) :ente-id ente :sessao-legislativa-id (random-uuid)
+                                            :tipo-sessao "ordinaria" :modalidade "presencial"}))
+              {pai :id} (iniciar! tx ente sid {})
+              {ap :id} (iniciar! tx ente sid {:tipo-fala "aparte" :fala-pai-id pai :iniciou-em (mais f0 30)})]
+          (is (= ap (:id (tribuna/fala-em-curso tx ente sid)))
+              "pai e aparte ambos abertos -- o aparteante (iniciou_em mais recente) e' quem esta com a palavra"))))))
+
 ;; ---------- apartes via fala_pai_id ----------
 
 (deftest apartes-via-fala-pai

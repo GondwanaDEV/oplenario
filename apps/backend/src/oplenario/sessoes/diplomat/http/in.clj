@@ -592,9 +592,14 @@
   nenhum — so' UUIDs (o mesmo `orador-id` que o SSE ja' publica) — entao o argumento que abre `/quorum`
   vale aqui SEM a ressalva de identidade que `/composicao` precisou discutir.
 
-  O payload e' a UNIAO EXATA do que `sessoes.events.tribuna` ja' transmite ao MESMO publico pelo canal do
-  plenario (`FalaIniciadaPayload`/`FalaCronometroPayload`/`InscricaoRegistradaPayload`, cada um menos os
-  ids redundantes no path/aninhamento) — ver `wire/TribunaOut`.
+  O payload e' a UNIAO EXATA do que `sessoes.events.tribuna` ja' transmite (`FalaIniciadaPayload`/
+  `FalaCronometroPayload`/`InscricaoRegistradaPayload`, cada um menos os ids redundantes no
+  path/aninhamento) — ver `wire/TribunaOut`. O PUBLICO, porem, e' o do SSE MAIS o secretario nas sessoes
+  SECRETAS, nao 'o mesmo publico': o canal `/sessoes/:id/plenario` recusa a subscricao inteira (403) de
+  QUALQUER UM, secretario inclusive, quando `transmite_publica=false` (`tempo_real/canais.clj`); esta
+  rota usa `pode-ver-quorum-da-sessao?`, que abre excecao para o papel 'secretario' (o mesmo precedente
+  de `/quorum`/`/composicao` — e' quem escreve esses mesmos dados). Para `transmite_publica=true` os dois
+  publicos SAO identicos; a diferenca so aparece na secreta.
 
   nil -> 404 (sessao inexistente). SEM o 409 de 'sessao sem data marcada' que `/quorum`/`/composicao`
   tem: aqueles resolvem `instante`/`data-de-composicao` a partir do roster (que precisa de uma data), e

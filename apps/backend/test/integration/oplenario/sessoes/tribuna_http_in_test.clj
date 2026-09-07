@@ -29,7 +29,6 @@
   (:import (java.time Instant)))
 
 (def ^:private iniciou-em (Instant/parse "2026-06-30T13:05:00Z"))
-(def ^:private iniciou-em-anterior (Instant/parse "2026-06-30T12:50:00Z"))
 
 ;; `transmite-publica` NAO e' decoracao — e' a coluna que `logic/pode-ver-quorum-da-sessao?` le' (mesmo
 ;; racional de `quorum_http_in_test`/`composicao_http_in_test`: uma fixture que a omitisse deixaria o
@@ -142,10 +141,16 @@
 
 ;; ---------- 4: marcos do cronometro DA FALA EM CURSO, nunca de uma fala anterior ----------
 
-(deftest marcos-da-fala-em-curso-aparecem-de-fala-anterior-nao
+(deftest marcos-da-fala-em-curso-controller-passa-adiante-so-o-que-o-repo-escopou
+  ;; ESTE teste e' sobre o CONTROLLER: dado que o repo (real ou fake) ja' devolveu `:marcos` escopado a
+  ;; UMA fala, o controller nao reintroduz nada de fora dessa lista. O fake aqui SO' fornece `marco-atual`
+  ;; -- ele nao pode provar o escopo por fala-id em `repositorio.clj` (`(tribuna/listar-eventos-cronometro
+  ;; tx ente-id (:id fala))`), porque o fake nunca EXECUTA aquela linha; um `marco-anterior` bindado e
+  ;; nunca inserido no fake so' provaria a si mesmo (tautologia -- achado I1 da revisao). A prova real do
+  ;; escopo por fala-id mora no nivel do Repo/DB, contra Postgres real, com DUAS falas de verdade: ver
+  ;; `tribuna-repo-test/tribuna-da-sessao-marcos-nao-vazam-de-fala-anterior`.
   (let [ente (random-uuid) sid (random-uuid)
         marco-atual {:tipo "pausada" :ocorrido-em iniciou-em :segundos-adicionais nil}
-        marco-anterior {:tipo "aparte_concedido" :ocorrido-em iniciou-em-anterior :segundos-adicionais nil}
         repo-s (fake-repo-sessoes
                 (fn [_ id] (sessao-aberta ente id))
                 (fn [_ _] {:fala-em-curso (fala-em-curso-doc) :marcos [marco-atual] :inscricoes []}))
@@ -154,11 +159,8 @@
         marcos (:marcos-cronometro (ler-json r))]
     (is (= 1 (count marcos)))
     (is (= "pausada" (:tipo (first marcos))))
-    (is (not (re-find #"aparte_concedido" (:body r))) "o marco da fala ANTERIOR nao entra no payload")
-    ;; A fixture acima simula o db/tribuna/listar-eventos-cronometro ja' escopado por fala-id (o repo
-    ;; real so' le' os eventos DAQUELA fala-em-curso) -- marco-anterior existe so' para provar que,
-    ;; mesmo que aparecesse na lista crua, o teste teria acusado.
-    (is (some? marco-anterior))))
+    (is (not (re-find #"aparte_concedido" (:body r)))
+        "o controller nao inventa um marco que o repo nao devolveu")))
 
 (deftest marcos-filtram-iniciada-e-encerrada-o-sse-nunca-emite-esses-tipos-em-fala-cronometro
   ;; Constraint 7: o evento `fala.cronometro` do SSE (events/tribuna.clj) SO' e' emitido por
@@ -270,4 +272,6 @@
                            :get (url sid) :headers (com-auth (token ente (random-uuid))))
         body (ler-json r)]
     (is (= #{:sessao-id :orador-atual :marcos-cronometro :inscritos} (set (keys body)))
-        "o contrato de topo e' fechado -- nem instante, nem data-de-composicao, nem quorum (isso e' /quorum)")))
+        "o contrato de topo e' fechado -- nem instante, nem data-de-composicao, nem quorum (isso e' /quorum)")
+    (is (= (str sid) (:sessao-id body))
+        "sessao-id no topo e' o :id da sessao LIDA -- o cliente confirma contra qual sessao a resposta veio")))
