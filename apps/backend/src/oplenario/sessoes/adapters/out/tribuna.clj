@@ -50,3 +50,29 @@
   [{:keys [id]}]
   (validado wire/DecisaoMesaReciboOut {:id (->str id)}
             "recibo de decisao da mesa viola o contrato DecisaoMesaReciboOut (bug de servidor)"))
+
+;; ---------- Tribuna nominal — o ORADOR e a FILA (GET /sessoes/:id/tribuna) ----------
+
+(defn- orador-atual->wire [{:keys [fala-id orador-id tipo-fala fase iniciou-em inscricao-id]}]
+  {:fala-id (->str fala-id) :orador-id (->str orador-id) :tipo-fala tipo-fala :fase fase
+   :iniciou-em (->str iniciou-em) :inscricao-id (->str inscricao-id)})
+
+(defn- marco->wire [{:keys [tipo ocorrido-em segundos-adicionais]}]
+  {:tipo tipo :ocorrido-em (->str ocorrido-em) :segundos-adicionais segundos-adicionais})
+
+(defn- inscrito->wire [{:keys [inscricao-id vereador-id origem-inscricao fase ordem]}]
+  {:inscricao-id (->str inscricao-id) :vereador-id (->str vereador-id) :origem-inscricao origem-inscricao
+   :fase fase :ordem ordem})
+
+(defn tribuna-sessao->wire
+  "O estado de dominio (`sessoes.controllers/tribuna-da-sessao`) -> TribunaOut (validado). CAMPO A CAMPO
+  (nunca `select-keys`/`dissoc` sobre um mapa maior) — mesma disciplina de `composicao-sessao->wire`: o
+  default e' NAO expor, e o `:closed true` do contrato vira erro de servidor, nao vazamento silencioso,
+  quando `logic`/`controllers` ganhar campo novo."
+  [{:keys [sessao-id orador-atual marcos-cronometro inscritos]}]
+  (validado wire/TribunaOut
+            {:sessao-id (->str sessao-id)
+             :orador-atual (some-> orador-atual orador-atual->wire)
+             :marcos-cronometro (mapv marco->wire marcos-cronometro)
+             :inscritos (mapv inscrito->wire inscritos)}
+            "tribuna viola o contrato TribunaOut (bug de servidor)"))

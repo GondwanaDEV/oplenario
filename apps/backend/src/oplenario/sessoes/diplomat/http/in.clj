@@ -576,6 +576,37 @@
             (http/json-resposta 409 {:erro "sessao sem data marcada: informe a data da sessao antes de ler a composicao"})
             (throw e)))))))
 
+(defn- tribuna-handler
+  "GET /sessoes/:id/tribuna (leitura agregada da tribuna — o read-model que faltava ao telao, ledger de
+  prontidao #7). SEM papel exigido na borda — MESMO nivel de authz de `/quorum`/`/composicao` (irmaos
+  literais, mesmo racional de nao-sombreamento).
+
+  As 5 rotas de ESCRITA da tribuna (inscrever/desistir/falas/cronometro/encerrar) nunca tiveram uma de
+  LEITURA: o painel do plenario so' sabia o orador/a fila por SSE (`GET /sessoes/:id/plenario`), e um
+  reload, uma reconexao > 5 min (a janela de replay do canal) ou abrir a tela DEPOIS da fala comecar
+  deixavam 'Ninguem com a palavra' com alguem efetivamente falando. Esta rota fecha essa lacuna sem
+  reabrir a assimetria da Etapa 4a: a camada FINA roda `logic/pode-ver-quorum-da-sessao?` (mesma Casa E
+  (transmissao publica OU papel 'secretario')) — NUNCA `pode-ver-sessao?` cru, que reabriria a porta dos
+  fundos da sessao SECRETA que aquela etapa fechou (ver a docstring de `quorum-handler` e de
+  `pode-ver-quorum-da-sessao?`). Ao contrario de `/composicao`, esta rota nao carrega nome de vereador
+  nenhum — so' UUIDs (o mesmo `orador-id` que o SSE ja' publica) — entao o argumento que abre `/quorum`
+  vale aqui SEM a ressalva de identidade que `/composicao` precisou discutir.
+
+  O payload e' a UNIAO EXATA do que `sessoes.events.tribuna` ja' transmite ao MESMO publico pelo canal do
+  plenario (`FalaIniciadaPayload`/`FalaCronometroPayload`/`InscricaoRegistradaPayload`, cada um menos os
+  ids redundantes no path/aninhamento) — ver `wire/TribunaOut`.
+
+  nil -> 404 (sessao inexistente). SEM o 409 de 'sessao sem data marcada' que `/quorum`/`/composicao`
+  tem: aqueles resolvem `instante`/`data-de-composicao` a partir do roster (que precisa de uma data), e
+  esta leitura nao cruza roster nenhum — nao ha' o caminho de sessao agendada sem data a mapear."
+  [repo-sessoes]
+  (fn [req]
+    (let [ator (:ator req)
+          id   (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [t (controllers/tribuna-da-sessao repo-sessoes ator id)]
+        (http/json-resposta 200 (adapters-out-tribuna/tribuna-sessao->wire t))
+        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+
 (defn- conduzir-chamada-handler
   "POST /sessoes/:id/chamada (§22.6 eixo C, Etapa 2d, papel 'secretario'). Sem corpo — `conduzida-por` = o
   ator (anti-forja, mesmo contrato de `confirmar-presenca-handler`), `membros-da-casa` congelado DENTRO da
@@ -846,6 +877,13 @@
     ["/sessoes/:id/composicao" :get
      [auth (composicao-handler repo-sessoes roster-da-casa relogio)]
      :route-name :sessoes/composicao]
+    ;; A leitura agregada da tribuna — o read-model que faltava ao telao (ledger de prontidao #7). Path
+    ;; IRMAO de `/quorum`/`/composicao`, mesmo racional de nao-sombreamento (literal sob `/sessoes/:id`,
+    ;; sem filho `:param`). SEM `exige-papel` de proposito — mesmo nivel de authz das duas, e esta nem
+    ;; carrega nome (so' UUIDs, o mesmo dado que o SSE ja' publica). Ver a docstring de `tribuna-handler`.
+    ["/sessoes/:id/tribuna" :get
+     [auth (tribuna-handler repo-sessoes)]
+     :route-name :sessoes/tribuna]
     ;; A justificativa tem DUAS portas de abertura, e nao uma que aceite os dois papeis: e' o mesmo desenho
     ;; ja' provado em presenca (`/presenca` da Mesa vs `/presenca/confirmar` do vereador). Numa rota unica o
     ;; significado de `vereador-id` no corpo passaria a depender do PAPEL do ator, e quem tivesse os dois

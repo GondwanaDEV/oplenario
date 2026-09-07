@@ -158,6 +158,11 @@
   (registrar-decisao-mesa! [this ente-id m] "Registra a decisao do presidente sobre questao de ordem (ato p/ ata, append-only).")
   (buscar-decisao-mesa [this ente-id id])
   (listar-decisoes-mesa [this ente-id sessao-id] "Decisoes da mesa da sessao em ordem cronologica (ata).")
+  ;; §22.6 eixo F — tribuna: a LEITURA AGREGADA (read-model do telao, GET /sessoes/:id/tribuna)
+  (tribuna-da-sessao [this ente-id sessao-id]
+    "A leitura inteira da tribuna (sessao + fala em curso + marcos do cronometro DAQUELA fala + fila de
+     inscritos) numa UNICA tx — molde de `chamada-da-sessao`. Devolve {:sessao :fala-em-curso :marcos
+     :inscricoes} ou nil (sessao inexistente neste tenant -> 404 no diplomat).")
   ;; §16.13 — incidentes processuais (mesa de conducao ao vivo)
   (registrar-incidente! [this ente-id m] "Registra incidente processual (append-only) + emite incidente.registrado (SSE) na MESMA tx.")
   (buscar-incidente [this ente-id id])
@@ -517,6 +522,22 @@
   (registrar-decisao-mesa! [this ente-id m] (transacao this ente-id #(tribuna/registrar-decisao-mesa! % (assoc m :ente-id ente-id))))
   (buscar-decisao-mesa [this ente-id id] (transacao this ente-id #(tribuna/buscar-decisao-mesa % ente-id id)))
   (listar-decisoes-mesa [this ente-id sessao-id] (transacao this ente-id #(tribuna/listar-decisoes-mesa % ente-id sessao-id)))
+  ;; UMA tx (molde LITERAL de `chamada-da-sessao` acima): sessao + fala em curso + marcos DAQUELA fala +
+  ;; fila, tudo na MESMA leitura — em tx separadas, a Mesa podia encerrar a fala no meio do request e o
+  ;; telao publicava um orador que ja' desceu da tribuna. Curto-circuito: sessao inexistente devolve nil
+  ;; sem tocar fala/cronometro/inscricoes. SEM roster: ao contrario de `chamada-da-sessao`, esta leitura
+  ;; nao cruza a Casa com presenca (nao ha' denominador a resolver aqui).
+  (tribuna-da-sessao [this ente-id sessao-id]
+    (transacao this ente-id
+      (fn [tx]
+        (when-let [s (sessao/buscar tx ente-id sessao-id)]
+          (let [fala (tribuna/fala-em-curso tx ente-id sessao-id)]
+            {:sessao s
+             :fala-em-curso fala
+             ;; marcos so' fazem sentido presos a UMA fala — sem fala em curso, nao ha' cronometro de
+             ;; ninguem para ler (e ler `fala-id nil` seria uma query sem sentido, nao "zero marcos").
+             :marcos (if fala (tribuna/listar-eventos-cronometro tx ente-id (:id fala)) [])
+             :inscricoes (tribuna/listar-inscricoes tx ente-id sessao-id)})))))
   ;; §16.13 — compoe o ato append-only + a emissao do evento de tempo real na MESMA tx (atomicidade §22.9 E2):
   ;; o painel da mesa de conducao reage ao incidente ao vivo (SSE canal plenario).
   (registrar-incidente! [this ente-id m]

@@ -63,6 +63,12 @@
    ;; :membros aninhado), mesmo racional de PautaItemOut/PautaOut.
    ["ComposicaoMembroOut" out/ComposicaoMembroOut]
    ["ComposicaoSessaoOut" out/ComposicaoSessaoOut]
+   ;; Tribuna nominal — o ORADOR e a FILA (GET /sessoes/:id/tribuna, ledger de prontidao #7).
+   ;; OradorAtualOut/MarcoCronometroOut/InscritoTribunaOut ANTES de TribunaOut (campos aninhados).
+   ["OradorAtualOut" out/OradorAtualOut]
+   ["MarcoCronometroOut" out/MarcoCronometroOut]
+   ["InscritoTribunaOut" out/InscritoTribunaOut]
+   ["TribunaOut" out/TribunaOut]
    ;; Etapa 5 fatia 5 — a FOLHA DA SESSAO. FolhaMetadadosOut ANTES de FolhasDaSessaoOut (campo :folhas
    ;; aninhado), mesmo racional de PautaItemOut/PautaOut e SegmentoOut/SegmentosOut acima.
    ["FolhaMetadadosOut" out/FolhaMetadadosOut]

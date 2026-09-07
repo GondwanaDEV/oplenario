@@ -158,6 +158,21 @@
                   :where [:and [:= :ente_id ente-id] [:= :sessao_id sessao-id]]
                   :order-by [[:iniciou_em :asc] [:id :asc]]}))))
 
+(defn fala-em-curso
+  "A fala ATUALMENTE em curso da sessao — `encerrou_em IS NULL`, o mesmo filtro que `encerrar-fala!` exige
+  (`fala-para-encerrar` acima) para aceitar encerrar. No maximo uma por design (uma fala so' comeca depois
+  que a anterior encerra), mas a query nao PRESUME isso: `ORDER BY iniciou_em DESC LIMIT 1` e' defesa em
+  profundidade contra um dado historico incoerente (fixture, migracao futura) virar DOIS oradores na
+  tela ao mesmo tempo — pega a mais recente, nunca uma aritmetica de contagem. Devolve o mapa kebab-case
+  ou nil (ninguem com a palavra agora — o read-model da tribuna projeta `orador-atual` nil neste caso)."
+  [tx ente-id sessao-id]
+  (comum/linha->kebab
+   (jdbc/execute-one! tx
+     (sql/format {:select cols-fala :from [:sessoes.fala_executada]
+                  :where [:and [:= :ente_id ente-id] [:= :sessao_id sessao-id] [:= :encerrou_em nil]]
+                  :order-by [[:iniciou_em :desc] [:id :desc]]
+                  :limit 1}))))
+
 (defn listar-apartes
   "Apartes de uma fala-mae (reconstroi 'fala principal com apartes'), em ordem cronologica."
   [tx ente-id fala-pai-id]

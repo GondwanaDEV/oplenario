@@ -224,6 +224,36 @@ export interface ComposicaoSessaoOut {
   membros: ComposicaoMembroOut[];
 }
 
+export interface OradorAtualOut {
+  falaId: string;
+  oradorId: string;
+  tipoFala: "aparte" | "comunicado" | "explicacao_pessoal" | "pela_ordem" | "principal" | "questao_de_ordem";
+  fase: "expediente" | "explicacoes_pessoais" | "grande_expediente" | "ordem_do_dia" | "tribuna_livre_cidadao";
+  iniciouEm: string;
+  inscricaoId: string | null;
+}
+
+export interface MarcoCronometroOut {
+  tipo: "aparte_concedido" | "pausada" | "retomada" | "tempo_adicional_concedido";
+  ocorridoEm: string;
+  segundosAdicionais: number | null;
+}
+
+export interface InscritoTribunaOut {
+  inscricaoId: string;
+  vereadorId: string;
+  origemInscricao: "automatica_por_autoria" | "intra_sessao_pedido" | "pre_sessao_app" | "pre_sessao_secretaria";
+  fase: "expediente" | "explicacoes_pessoais" | "grande_expediente" | "ordem_do_dia" | "tribuna_livre_cidadao";
+  ordem: number;
+}
+
+export interface TribunaOut {
+  sessaoId: string;
+  oradorAtual: OradorAtualOut | null;
+  marcosCronometro: MarcoCronometroOut[];
+  inscritos: InscritoTribunaOut[];
+}
+
 export interface FolhaMetadadosOut {
   id: string;
   versao: number;

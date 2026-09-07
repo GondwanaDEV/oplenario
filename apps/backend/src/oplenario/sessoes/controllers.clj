@@ -719,6 +719,74 @@
                               (remove :sem-assento)
                               (mapv membro-da-composicao))))))
 
+;; ---------- Tribuna nominal — o ORADOR e a FILA (GET /sessoes/:id/tribuna) ----------
+
+(defn- orador-atual-da-tribuna
+  "A fala em curso de dominio (`repo/tribuna-da-sessao`, ja kebab) -> o mapa OradorAtual do payload. So'
+  os campos de `events.tribuna/FalaIniciadaPayload` MENOS `sessao-id` (Constraint 7) — `id` (o uuid da
+  fala) vira `fala-id`; o resto passa direto."
+  [{:keys [id orador-id tipo-fala fase iniciou-em inscricao-id]}]
+  {:fala-id id :orador-id orador-id :tipo-fala tipo-fala :fase fase :iniciou-em iniciou-em
+   :inscricao-id inscricao-id})
+
+(defn- marco-da-tribuna
+  "Um evento de cronometro de dominio -> um marco do payload. So' os campos de `events.tribuna/
+  FalaCronometroPayload` MENOS os ids (o marco ja vem aninhado sob a fala)."
+  [{:keys [tipo ocorrido-em segundos-adicionais]}]
+  {:tipo tipo :ocorrido-em ocorrido-em :segundos-adicionais segundos-adicionais})
+
+(defn- inscrito-da-tribuna
+  "Uma inscricao de dominio -> um inscrito do payload. So' os campos de `events.tribuna/
+  InscricaoRegistradaPayload` MENOS `sessao-id`; `id` vira `inscricao-id`."
+  [{:keys [id vereador-id origem-inscricao fase ordem]}]
+  {:inscricao-id id :vereador-id vereador-id :origem-inscricao origem-inscricao :fase fase :ordem ordem})
+
+(defn tribuna-da-sessao
+  "O ESTADO CORRENTE da TRIBUNA (`GET /sessoes/:id/tribuna`) — fecha a lacuna de leitura que as 5 rotas de
+  ESCRITA da tribuna (inscrever/desistir/iniciar-fala/cronometro/encerrar-fala) deixaram: ate' esta fatia
+  o painel ao vivo do plenario so' sabia reconstruir orador/fila por SSE, e um reload, uma reconexao
+  longa (a janela de replay do canal) ou abrir a tela DEPOIS da fala comecar deixavam 'Ninguem com a
+  palavra' com alguem efetivamente falando (ledger de prontidao #7).
+
+  UMA leitura no Repo (`repo/tribuna-da-sessao`, molde LITERAL de `repo/chamada-da-sessao`): sessao + fala
+  em curso (`encerrou_em IS NULL`) + marcos do cronometro DAQUELA fala + a fila de inscritos, tudo na
+  MESMA tx — ler em tx separadas deixaria a Mesa encerrar a fala no meio do request e a tela publicar um
+  orador que ja' desceu da tribuna.
+
+  AUTHZ = a MESMA de `quorum-da-sessao`/`composicao-da-sessao` (`logic/pode-ver-quorum-da-sessao?`: mesma
+  Casa E (transmissao publica OU papel 'secretario')) — roda sobre a sessao lida NESTA MESMA tx, ANTES de
+  qualquer uso do dado (o mesmo padrao de `chamada-da-sessao*`). NUNCA `pode-ver-sessao?` cru: essa e' a
+  porta dos fundos da sessao SECRETA que a Etapa 4a fechou para o quorum (ver a docstring de
+  `pode-ver-quorum-da-sessao?`) — esta rota nao carrega nome de vereador nenhum (§22.10, este ns nunca
+  importa `cadastros`), entao o argumento que abre `/quorum` vale aqui SEM a ressalva de identidade que
+  `/composicao` precisou discutir.
+
+  SEM roster: ao contrario de `chamada-da-sessao*` (que existe para o TRIO chamada/quorum/composicao,
+  todos sobre a MESMA aritmetica de roster+presenca), esta leitura nao cruza a Casa com presenca — nao ha'
+  denominador a resolver, so' o que ja' esta gravado em `fala_executada`/`fala_cronometro_evento`/
+  `inscricao_oradores`. Por isso NAO reusa `chamada-da-sessao*`: reusa-lo aqui inventaria um roster que a
+  tribuna nunca precisou, e uma segunda aritmetica de composicao da Casa e' exatamente o defeito que
+  aquela funcao existe para evitar nos OUTROS tres chamadores.
+
+  Devolve {:sessao-id :orador-atual :marcos-cronometro :inscritos} ou nil (sessao inexistente -> 404 no
+  diplomat)."
+  [repo-sessoes ator sessao-id]
+  (when-let [{:keys [sessao fala-em-curso marcos inscricoes]}
+             (repo/tribuna-da-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/ver-tribuna sessao logic/pode-ver-quorum-da-sessao?)
+    {:sessao-id (:id sessao)
+     :orador-atual (some-> fala-em-curso orador-atual-da-tribuna)
+     ;; SO' os tipos MANUAIS: 'iniciada'/'encerrada' sao gravados por iniciar-fala!/encerrar-fala! (a
+     ;; tabela guarda os 6 tipos, de proposito, para a serie completa existir), mas o SSE NUNCA os emite
+     ;; pelo evento `fala.cronometro` (eles tem os proprios eventos) — sem este filtro, 'iniciada' vazaria
+     ;; um tipo que o canal nunca serviu por este evento (Constraint 7; ver `wire/MarcoCronometroOut`).
+     :marcos-cronometro (->> marcos
+                             (filter #(contains? logic/tipos-evento-cronometro-manual (:tipo %)))
+                             (mapv marco-da-tribuna))
+     :inscritos (->> inscricoes
+                     (remove #(contains? logic/estados-inscricao-terminais (:estado %)))
+                     (mapv inscrito-da-tribuna))}))
+
 ;; ---------- §22.6 eixo C — o ATO da CHAMADA CONDUZIDA (Etapa 2d) ----------
 
 (defn registrar-chamada-conduzida

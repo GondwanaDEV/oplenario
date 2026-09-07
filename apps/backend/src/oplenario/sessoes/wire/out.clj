@@ -405,6 +405,68 @@
    [:composicao-resolvida-em :string]
    [:membros [:sequential ComposicaoMembroOut]]])
 
+;; ---------- Tribuna nominal — o ORADOR e a FILA (resposta de GET /sessoes/:id/tribuna) ----------
+
+(def OradorAtualOut
+  "O orador COM A PALAVRA agora, ou nil quando ninguem esta na tribuna. Espelha `events.tribuna/
+  FalaIniciadaPayload` MENOS `sessao-id` (redundante no path, ja fixado na URL) — o MESMO publico do SSE
+  do plenario ja recebe estes campos pelo evento `fala.iniciada`; esta rota so' devolve o SNAPSHOT
+  corrente do mesmo dado, para quem abriu a tela DEPOIS do evento ter passado (reload, reconexao longa,
+  ou abrir a tela com a fala ja em curso — os tres momentos que apagam o telao hoje). `inscricao-id` e'
+  `[:maybe :string]` (nunca `:optional`) porque a projecao sempre inclui a chave — uma fala que nao veio
+  de inscricao (ex.: aparte, questao de ordem) tem valor nil, nao chave ausente."
+  [:map {:closed true}
+   [:fala-id :string]
+   [:orador-id :string]
+   [:tipo-fala (km/enum-de logic/tipos-fala)]
+   [:fase (km/enum-de logic/fases-pauta)]
+   [:iniciou-em :string]
+   [:inscricao-id [:maybe :string]]])
+
+(def MarcoCronometroOut
+  "Um marco ESTRUTURAL do cronometro da fala em curso — espelha `events.tribuna/FalaCronometroPayload`
+  MENOS os ids (o marco ja vem aninhado sob a fala em `TribunaOut`; `fala-id` seria redundante). SO' os
+  4 tipos MANUAIS (`logic/tipos-evento-cronometro-manual`: pausada/retomada/aparte_concedido/
+  tempo_adicional_concedido) — 'iniciada'/'encerrada' NAO aparecem aqui: o SSE nunca os emite pelo evento
+  `fala.cronometro` (eles tem os PROPRIOS eventos, `fala.iniciada`/`fala.encerrada`), e `iniciou-em` de
+  'iniciada' ja' viaja em `OradorAtualOut`. A tabela `fala_cronometro_evento` grava os 6 tipos (
+  `iniciar-fala!`/`encerrar-fala!` logam 'iniciada'/'encerrada' tambem, de proposito, para a serie
+  completa existir) — incluir 'iniciada'/'encerrada' aqui seria um campo que o canal nunca serviu por
+  este evento, vazamento por omissao do filtro, nao conveniencia (Constraint 7)."
+  [:map {:closed true}
+   [:tipo (km/enum-de logic/tipos-evento-cronometro-manual)]
+   [:ocorrido-em :string]
+   [:segundos-adicionais [:maybe :int]]])
+
+(def InscritoTribunaOut
+  "Um inscrito da FILA ATIVA (desistencias fora — `logic/estados-inscricao-terminais`) — espelha
+  `events.tribuna/InscricaoRegistradaPayload` MENOS `sessao-id` (redundante no path). Ordenado por
+  (fase, ordem), a MESMA ordem de `db/tribuna/listar-inscricoes`."
+  [:map {:closed true}
+   [:inscricao-id :string]
+   [:vereador-id :string]
+   [:origem-inscricao (km/enum-de logic/origens-inscricao)]
+   [:fase (km/enum-de logic/fases-pauta)]
+   [:ordem :int]])
+
+(def TribunaOut
+  "O estado corrente da TRIBUNA (resposta de `GET /sessoes/:id/tribuna`) — o read-model que faltava ao
+  painel ao vivo do plenario: as 5 rotas de ESCRITA da tribuna (inscrever/desistir/iniciar-fala/
+  cronometro/encerrar-fala) nunca tiveram uma de LEITURA, e o telao so' sabia reconstruir o estado por
+  SSE — um reload, uma reconexao > 5 min (a janela de replay do canal) ou abrir a tela DEPOIS da fala
+  comecar deixavam 'Ninguem com a palavra' com alguem efetivamente falando (ledger de prontidao #7).
+
+  `orador-atual` nil = ninguem com a palavra agora; `marcos-cronometro` vazio quando nao ha' fala em
+  curso (nao ha' cronometro de ninguem para mostrar). Payload = a UNIAO EXATA do que
+  `sessoes.events.tribuna` ja' transmite ao MESMO publico pelo canal do plenario (Constraint 7) — SEM
+  roster e SEM nome de vereador: este ns nunca importa `cadastros` (§22.10), e o nome de quem esta na
+  tribuna vem de `/composicao` (o irmao que resolve identidade), nao daqui."
+  [:map {:closed true}
+   [:sessao-id :string]
+   [:orador-atual [:maybe OradorAtualOut]]
+   [:marcos-cronometro [:sequential MarcoCronometroOut]]
+   [:inscritos [:sequential InscritoTribunaOut]]])
+
 ;; ---------- Etapa 5 fatia 5 — a FOLHA DA SESSAO (metadados de congelamento) ----------
 
 (def FolhaMetadadosOut
