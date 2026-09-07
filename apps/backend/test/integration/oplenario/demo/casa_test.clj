@@ -15,6 +15,8 @@
   (`component/start` do `oplenario.sistema/novo-sistema` + `migracao/migrar!`), que e' o unico padrao
   de boot de sistema completo ja usado no repo."
   (:require [casa]
+            [clojure.edn :as edn]
+            [clojure.java.io :as io]
             [clojure.test :refer [deftest is testing]]
             [com.stuartsierra.component :as component]
             [oplenario.config :as config]
@@ -43,4 +45,15 @@
         (is (= 17 (count (:vereadores r1))))
         (is (every? :mandato-id (:vereadores r1))))
       (testing "nenhum nome duplicado no roster"
-        (is (= 17 (count (distinct (map :nome (:vereadores r1))))))))))
+        (is (= 17 (count (distinct (map :nome (:vereadores r1)))))))
+      (testing "o artefato de ids foi REALMENTE gravado, e nao só tentado"
+        ;; A 1a redacao engolia a falha de escrita num `catch`+`log/warn`: sob o mount `:ro` do
+        ;; container de teste a gravacao falhava e a funcao devolvia sucesso. O efeito so' apareceria
+        ;; na sonda (Task 1.1), como "demo-ids.edn nao existe", longe da causa. Agora `gravar-artefato!`
+        ;; falha alto, e quem legitimamente nao pode escrever no CWD — este teste — aponta
+        ;; DEMO_ARTIFACTS_DIR para um diretorio gravavel. Sem esta assercao a regressao volta calada.
+        (let [alvo (io/file (System/getenv "DEMO_ARTIFACTS_DIR") "demo-ids.edn")]
+          (is (.exists alvo) (str "esperado o arquivo de ids em " (.getAbsolutePath alvo)))
+          (let [lido (edn/read-string (slurp alvo))]
+            (is (= (:ente r1) (:ente lido)) "o ente gravado tem de ser o ente semeado")
+            (is (= 17 (count (:vereadores lido))))))))))

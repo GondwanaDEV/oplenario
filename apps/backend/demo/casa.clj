@@ -199,18 +199,22 @@
 ;; ---------- artefato p/ downstream (sonda, varredura de API — Fases 1/2b do plano) ----------
 
 (defn- gravar-artefato!
-  "Grava o resultado em `.artifacts/demo-ids.edn` (relativo ao CWD do processo) p/ ferramental
-  downstream ler os ids sem cravar a mao (§4/Task 1.1 do plano). NAO falha `semear!` se a escrita nao
-  for possivel — o mount `:ro` do container de TESTE (comando da Task 0.2) torna o CWD read-only de
-  proposito; o dado ja' esta no banco e no retorno da funcao, o arquivo e' so' um atalho para quem roda
-  fora do teste (semeadura real, `docker compose up` sem `:ro`)."
+  "Grava o resultado em `<DEMO_ARTIFACTS_DIR>/demo-ids.edn` (default `.artifacts`, relativo ao CWD).
+  Toda semente posterior e a sonda (Task 1.1) leem esse arquivo para nao cravar id a mao.
+
+  FALHA ALTO se nao conseguir gravar. A primeira redacao engolia a excecao num `catch` com `log/warn`,
+  porque o mount `:ro` do container de TESTE torna o CWD read-only; o efeito colateral era que uma
+  semeadura REAL sem permissao de escrita passaria como sucesso e o erro so' apareceria tres tasks
+  adiante, na sonda, como 'arquivo nao existe' — longe da causa. O teste, que e' quem legitimamente
+  nao pode escrever no CWD, aponta `DEMO_ARTIFACTS_DIR` para um diretorio gravavel (`/tmp/...`).
+  Quem escolhe tolerar e' quem chama, por configuracao explicita — nunca a funcao, em silencio."
   [resultado]
-  (try
-    (let [dir (io/file ".artifacts")]
-      (.mkdirs dir)
-      (spit (io/file dir "demo-ids.edn") (pr-str resultado)))
-    (catch Exception e
-      (log/warn e "casa/semear!: nao foi possivel gravar .artifacts/demo-ids.edn (esperado sob mount :ro) — resultado devolvido normalmente pela funcao"))))
+  (let [dir (io/file (or (System/getenv "DEMO_ARTIFACTS_DIR") ".artifacts"))]
+    (.mkdirs dir)
+    (let [alvo (io/file dir "demo-ids.edn")]
+      (spit alvo (pr-str resultado))
+      (log/info "casa/semear!: ids gravados em" (.getAbsolutePath alvo))
+      alvo)))
 
 ;; ---------- a funcao publica ----------
 
