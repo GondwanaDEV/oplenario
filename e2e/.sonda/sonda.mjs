@@ -102,9 +102,11 @@ if (pareceres.length === 0) {
 const PARECER = pareceres[0].id;
 const PARECER_ASSINATURA = (pareceres.find(p => p.estado === 'aguardando_assinatura') ?? pareceres[0]).id;
 
+// ---------- Task 1.2 — a 27ª rota (/entrar/:ente) ----------
 const rotas = [
   ['/', null, 'publico'],
   ['/entrar', null, 'publico'],
+  [`/entrar/${ENTE}`, null, 'publico'],
   [`/portal/casa/${ENTE}`, null, 'cidadao'],
   [`/portal/casa/${ENTE}/materias/${PROP}`, null, 'cidadao'],
   [`/portal/casa/${ENTE}/vereadores/${VEREADOR_PORTAL}`, null, 'cidadao'],
@@ -166,5 +168,42 @@ for (const [rota, tok, publico] of rotas) {
   await page.close();
 }
 await browser.close();
+
+// ---------- Task 1.2 — o veredicto ----------
+// Reprova se, em QUALQUER rota: status >= 400 · fragmento de UUID no texto visível · chave de
+// enum crua · erro de console · texto de erro genérico. `EmBreve` é AVISO (lacuna conhecida,
+// classe B do plano), nunca reprova.
+const falha = r =>
+  (r.status ?? 0) >= 400 ||
+  (r.uuidFrag?.length ?? 0) > 0 ||
+  (r.enums?.length ?? 0) > 0 ||
+  (r.consoleErr?.length ?? 0) > 0 ||
+  (r.erros?.length ?? 0) > 0;
+
+const reprovadas = out.filter(falha);
+const comAviso = out.filter(r => !falha(r) && (r.emBreve ?? 0) > 0);
+
 console.log('###JSON###');
 console.log(JSON.stringify(out, null, 1));
+
+console.log('\n###RELATORIO###');
+console.log(`${out.length} rotas visitadas — ${reprovadas.length} reprovada(s), ${comAviso.length} com aviso (EmBreve)\n`);
+for (const r of out) {
+  const marca = falha(r) ? 'FALHA' : (comAviso.includes(r) ? 'AVISO' : 'ok');
+  console.log(`[${marca}] ${r.status ?? '—'} ${r.rota} (${r.publico})`);
+  if (falha(r)) {
+    if ((r.status ?? 0) >= 400) console.log(`         status ${r.status} >= 400`);
+    if (r.uuidFrag?.length) console.log(`         fragmento de UUID no texto: ${r.uuidFrag.join(', ')}`);
+    if (r.enums?.length) console.log(`         enum cru no texto: ${r.enums.join(', ')}`);
+    if (r.consoleErr?.length) console.log(`         erro de console: ${r.consoleErr.join(' | ')}`);
+    if (r.erros?.length) console.log(`         texto de erro genérico: ${r.erros.join(' | ')}`);
+  } else if (comAviso.includes(r)) {
+    console.log(`         "Em breve" ${r.emBreve}x — lacuna conhecida, não é falha`);
+  }
+}
+
+if (reprovadas.length > 0) {
+  console.error(`\n###VEREDICTO### REPROVADO — ${reprovadas.length}/${out.length} rota(s) com defeito: ${reprovadas.map(r=>r.rota).join(', ')}`);
+  process.exit(1);
+}
+console.log(`\n###VEREDICTO### OK — ${out.length}/${out.length} rotas limpas (${comAviso.length} aviso de EmBreve)`);
