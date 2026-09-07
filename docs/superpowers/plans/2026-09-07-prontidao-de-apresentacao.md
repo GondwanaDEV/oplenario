@@ -47,7 +47,7 @@ levantado ao vivo em 07/09/2026 contra a stack de pé, não deduzido do reposit�
 |---|---|
 | 7 containers (app, frontend, keycloak, mailpit, postgres, valkey, minio) | de pé, saudáveis |
 | Backend `:8888` · Frontend `:3000` | respondem; portal público devolve matérias reais |
-| Migrations | 61 aplicadas; `migrate` roda como serviço do compose |
+| Migrations | **74** aplicadas (o CLAUDE.md diz 61 — está desatualizado); `migrate` roda como serviço do compose |
 | Reset | **limpo** — não há volume nomeado; `docker compose down -v` + `up -d --build` re-migra do zero |
 
 ### 1.2 O dado — o gargalo real
@@ -180,7 +180,7 @@ cd apps/backend && docker compose --profile auth down -v
 cd apps/backend && docker compose --profile auth up -d --build
 docker compose logs migrate | tail -20
 ```
-Esperado: as 61 migrations aplicadas, `migrate` sai com código 0.
+Esperado: as **74** migrations aplicadas, `migrate` sai com código 0. **Medido em 07/09: passou.**
 **Armadilha conhecida:** migratus deixa lock `-1` preso se uma migration quebrar — se o log parar
 num `applying`, limpar `schema_migrations` manualmente antes de repetir.
 
@@ -251,7 +251,16 @@ git add apps/backend/demo/casa.clj apps/backend/test/oplenario/demo/casa_test.cl
 git commit -m "feat(demo): uma Casa unica e estavel — 17 vereadores, Mesa e 3 comissoes"
 ```
 
-### Task 0.3: As presenças que existem de verdade
+### Task 0.3: ~~As presenças que existem de verdade~~ → FUNDIDA NA TASK 0.5 (07/09)
+
+**Esta task não existe mais como unidade separada.** A redação original mandava criar presenças em
+`casa.clj`, mas presença exige uma sessão para pendurar, e as sessões só nascem na Task 0.5 — a 0.3
+teria de inventar uma quarta sessão só para segurar as presenças. A garantia que ela protegia (a mais
+cara já medida: **14 presenças de 14 pessoas que não existem no cadastro, enquanto os 17 vereadores
+nominados têm zero**) virou asserção obrigatória dentro da Task 0.5, onde a presença de fato nasce.
+Uma semente, um dono. O texto abaixo fica como registro do defeito que a asserção precisa pegar.
+
+#### Registro do defeito original
 
 **Arquivos:** Modificar `apps/backend/demo/casa.clj` · Test: `apps/backend/test/oplenario/demo/casa_test.clj`
 
