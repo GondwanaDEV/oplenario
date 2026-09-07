@@ -39,7 +39,9 @@ describe("derivarProposicoesVista", () => {
 
   it("estado desconhecido degrada honesto (fail-closed), nunca lança", () => {
     const [linha] = derivarProposicoesVista([{ ...base, estado: "estado_customizado_do_tenant" }]);
-    expect(linha.situacao.rotulo).toBe("estado_customizado_do_tenant");
+    // Era a CHAVE crua — e era exatamente este vocabulário de tenant que aparecia na tela em
+    // `/proposicoes` (defeito #9 do ledger, `CONSTRANGE`). Degradar não obriga a expor a chave.
+    expect(linha.situacao.rotulo).toBe("Estado customizado do tenant");
   });
 
   it("lista vazia vira lista vazia", () => {

@@ -13,6 +13,7 @@
 // Decisão da fatia (spec §"Decisões técnicas"): pareceres/emendas mostram TODOS os estados (chip de status
 // por linha), não só os ativos — estas funções não filtram nada, só rotulam.
 
+import { rotularComissao } from "./comissao-vista";
 import { derivarTramitacao } from "./tramitacao-vista";
 import { categorizarSituacao, type CategoriaSituacao } from "./proposicoes-vista";
 import type {
@@ -97,6 +98,9 @@ function categorizarParecer(estado: string): CategoriaSituacao {
 export type ParecerVista = ParecerResumoOut & {
   rotuloEstado: string;
   categoria: CategoriaSituacao;
+  // A aba imprimia `comissaoId` — um UUID por linha (defeito #11 do ledger, `MATA`). O rótulo vem
+  // pronto daqui; o id continua no objeto porque `key`/navegação precisam dele, mas nada o exibe.
+  comissaoRotulo: string;
 };
 
 export function derivarPareceres(pareceres: ParecerResumoOut[]): ParecerVista[] {
@@ -104,6 +108,9 @@ export function derivarPareceres(pareceres: ParecerResumoOut[]): ParecerVista[] 
     ...p,
     rotuloEstado: PARECER_ROTULO_POR_ESTADO[p.estado] ?? p.estado,
     categoria: categorizarParecer(p.estado),
+    // O wire não traz nome de comissão em lugar nenhum (ver comissao-vista.ts) — passar o id aqui só
+    // devolveria o UUID pra tela, então o que entra é a ausência, explicitamente.
+    comissaoRotulo: rotularComissao(undefined),
   }));
 }
 

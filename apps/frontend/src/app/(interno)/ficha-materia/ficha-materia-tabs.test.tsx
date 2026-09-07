@@ -24,7 +24,7 @@ const ficha: FichaMateriaOut = {
     { id: "e1", numeroLocal: 1, tipoEmenda: "modificativa", momentoApresentacao: "no_prazo", autorTexto: "Ver.ª Carla Souza", estado: "aprovada" },
   ],
   pareceres: [
-    { id: "p1", comissaoId: "CCJ", relatorId: "r1", votoRelator: "favorável", estado: "aprovado" },
+    { id: "p1", comissaoId: "9119889e-1111-4222-8333-444444444444", relatorId: "r1", votoRelator: "favoravel", estado: "aprovado" },
   ],
 };
 
@@ -45,7 +45,15 @@ describe("FichaMateriaTabs", () => {
     fireEvent.click(screen.getByRole("tab", { name: /pareceres/i }));
     expect(screen.getByRole("tab", { name: /pareceres/i }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("tab", { name: /texto vigente/i }).getAttribute("aria-selected")).toBe("false");
-    expect(screen.getByText("CCJ")).toBeTruthy();
+    // Era `getByText("CCJ")` — uma fixture com um código legível onde o dado REAL é `uuid NOT NULL`,
+    // e por isso o teste ficou verde enquanto a aba imprimia UUIDs (defeito #11 do ledger, `MATA`).
+    // A fixture agora traz o formato de verdade, e a asserção é sobre a tela, não sobre o id.
+    expect(screen.getByText("Comissão designada")).toBeTruthy();
+    expect(document.body.textContent).not.toContain("9119889e");
+    // O voto saía cru na tela ("Voto do relator: favoravel") — sem acento e sem maiúscula, invisível
+    // pro detector de underscore da sonda. `rotularVoto` já existia em parecer-vista.ts e não estava
+    // sendo usado aqui; achado olhando a tela viva, não a suíte.
+    expect(screen.getByText(/Voto do relator: Favorável$/)).toBeTruthy();
   });
 
   it("aba Pareceres: cada item linka pro editor de parecer (Onda B Slice 5), preservando ?token=", () => {

@@ -1,9 +1,9 @@
 // RailParecer — os 3 cards do rail do editor de parecer (Onda B Slice 5): Matéria, Relatoria, Antes de
 // emitir. Porte de produto/design-system/o-plenario/telas/parecer.html:146-170. Sem prazo (chip/linha
 // "Prazo" do mockup omitidos — §22.7.7 não ligado a pareceres ainda, Global Constraint "sem dado falso").
-// Comissão/relator NÃO têm resolução id->nome no backend ainda (carry F2/FE) — comissão sai como o id cru
-// (mesma disciplina de ficha-materia-tabs.tsx pra `p.comissaoId`), relator vira rótulo honesto sem nome ou
-// some da lista quando ausente (derivarRelatoria, parecer-vista.ts).
+// Comissão/relator NÃO têm resolução id->nome no backend (carry F2/FE) — ambos viram rótulo honesto sem
+// nome (derivarRelatoria, parecer-vista.ts), e o relator some da lista quando ausente. A comissão saía
+// como o id CRU, o que punha um UUID no rail do editor: defeito #11 do ledger de prontidão, `MATA`.
 
 import Link from "next/link";
 import { derivarMateria, derivarRelatoria } from "@/lib/parecer-vista";
@@ -35,8 +35,12 @@ export function RailParecer({ parecer, token }: { parecer: ParecerEditorOut; tok
       <div className="rcard">
         <h3>Relatoria</h3>
         <dl className="dl">
-          <dt>Comissão</dt>
-          <dd>{relatoria.comissaoId}</dd>
+          {relatoria.comissaoNome && (
+            <>
+              <dt>Comissão</dt>
+              <dd>{relatoria.comissaoNome}</dd>
+            </>
+          )}
           {relatoria.relatorRotulo && (
             <>
               <dt>Relator</dt>

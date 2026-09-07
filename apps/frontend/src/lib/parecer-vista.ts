@@ -9,15 +9,18 @@
 // "ve" primeiro, "vf" segundo, "vc" terceiro). Qualquer voto fora desse conjunto (import de outro
 // cliente, dado legado) degrada fail-closed pro rótulo cru — nunca inventa, nunca lança.
 //
-// `comissaoId`/`relatorId` NÃO têm resolução id→nome no backend ainda (mesmo carry documentado do
-// vereador-id→nome no F2/FE) — `derivarRelatoria` nunca inventa um nome; comissão fica exposta como o id
-// cru (mesma disciplina já usada em ficha-materia-tabs.tsx pra `p.comissaoId`), relator vira um rótulo
-// honesto sem nome ("Relator designado") ou nulo (omite a linha) quando não há relator-id.
+// `comissaoId`/`relatorId` NÃO têm resolução id→nome no backend (mesmo carry documentado do
+// vereador-id→nome no F2/FE) — `derivarRelatoria` nunca inventa um nome. O relator sempre foi um rótulo
+// honesto sem nome ("Relator designado") ou nulo (omite a linha) quando não há relator-id; a comissão
+// ERA exposta como o id cru, o que punha um UUID na tela do parecer (defeito #11 do ledger de prontidão,
+// `MATA`) — agora passa pelo mesmo tratamento, via `rotularComissao` (ver comissao-vista.ts para por que
+// o nome não existe do lado de cá). O view-model NÃO devolve mais o id: o que não sai daqui não vaza.
 //
 // Não há prazo/vencimento plumbado pra parecer nesta fatia (o motor de compliance de prazo, §22.7.7, não
 // está ligado a pareceres ainda) — este view-model DELIBERADAMENTE não deriva nada de "vence em X dias";
 // o componente que consome omite o chip de prazo do mockup por inteiro.
 
+import { nomeDeComissao } from "./comissao-vista";
 import { PARECER_APROVADOS, PARECER_ARQUIVADOS } from "./ficha-materia-vista";
 import { formatarNumeroProposicao } from "./proposicoes-vista";
 import type { ParecerEditorOut } from "./contrato-legislativo.gen";
@@ -59,13 +62,15 @@ export function parecerEhTerminal(estado: string): boolean {
 }
 
 export type RelatoriaVista = {
-  comissaoId: string;
+  comissaoNome: string | null; // null = omitir a linha; NUNCA o id (defeito #11) — ver comissao-vista.ts
   relatorRotulo: string | null; // null = omitir a linha (sem resolução id->nome ainda, carry F2/FE)
 };
 
 export function derivarRelatoria(parecer: ParecerEditorOut): RelatoriaVista {
   return {
-    comissaoId: parecer.comissaoId,
+    // O argumento é o NOME da comissão, que o wire ainda não traz. Fica explícito assim (e não como um
+    // `null` solto) porque é este o ponto exato que muda no dia em que o backend servir o nome.
+    comissaoNome: nomeDeComissao(undefined),
     relatorRotulo: parecer.relatorId ? "Relator designado" : null,
   };
 }

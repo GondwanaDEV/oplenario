@@ -7,6 +7,7 @@
 // rotulam, nunca filtram. Anexos não tem backend nesta fatia -> <EmBreve> honesto (mesma disciplina de
 // AcoesCard/BalcaoLgpd).
 
+import { rotularVoto } from "@/lib/parecer-vista";
 import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { EmBreve } from "@/lib/em-breve";
@@ -152,9 +153,11 @@ export function FichaMateriaTabs({
             {pareceres.map((p) => (
               <li key={p.id}>
                 <span className={`chip chip-${p.categoria}`}>{p.rotuloEstado}</span>
-                <p className="evt">{p.comissaoId}</p>
+                <p className="evt">{p.comissaoRotulo}</p>
                 <span className="quem">
-                  {p.votoRelator ? `Voto do relator: ${p.votoRelator}` : "Sem voto de relator registrado"}
+                  {p.votoRelator
+                    ? `Voto do relator: ${rotularVoto(p.votoRelator)}`
+                    : "Sem voto de relator registrado"}
                 </span>
                 <Link className="ir" href={comToken(`/parecer/${p.id}`, token)}>
                   Abrir parecer

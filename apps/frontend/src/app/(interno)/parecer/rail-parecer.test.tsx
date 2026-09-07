@@ -7,7 +7,7 @@ const base: ParecerEditorOut = {
   id: "p1",
   objetoTipo: "proposicao",
   objetoId: "obj1",
-  comissaoId: "c-ccj",
+  comissaoId: "9119889e-1111-4222-8333-444444444444",
   relatorId: null,
   votoRelator: null,
   estado: "em_elaboracao",
@@ -51,9 +51,13 @@ describe("RailParecer", () => {
     expect(screen.getByText(/matéria não disponível/i)).toBeTruthy();
   });
 
-  it("card 'Relatoria': comissão crua (sem resolução id->nome), relator ausente omite a linha", () => {
-    render(<RailParecer parecer={base} token={null} />);
-    expect(screen.getByText("c-ccj")).toBeTruthy();
+  // Este teste EXIGIA o vazamento: afirmava que o id da comissão aparecia na tela ("comissão crua"),
+  // e por isso ficou verde enquanto o rail imprimia um UUID no ar (defeito #11 do ledger, `MATA`).
+  // Sem resolução id->nome no backend, a linha inteira some — mesma disciplina já usada pro relator.
+  it("card 'Relatoria': sem nome de comissão a linha SOME, e o id nunca vai pra tela", () => {
+    const { container } = render(<RailParecer parecer={base} token={null} />);
+    expect(screen.queryByText(/^comissão$/i)).toBeNull();
+    expect(container.textContent).not.toContain(base.comissaoId);
     expect(screen.queryByText(/^relator$/i)).toBeNull();
   });
 

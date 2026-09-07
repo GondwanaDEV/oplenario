@@ -10,7 +10,13 @@ import { useAuth } from "@/lib/auth";
 import { useParecerEditor } from "@/lib/use-parecer-editor";
 import { useSalvarRascunhoParecer } from "@/lib/use-salvar-rascunho-parecer";
 import { useEmitirParecer } from "@/lib/use-emitir-parecer";
-import { derivarMateria, rotularEstadoParecer, parecerEhTerminal } from "@/lib/parecer-vista";
+import {
+  derivarMateria,
+  derivarRelatoria,
+  rotularEstadoParecer,
+  parecerEhTerminal,
+} from "@/lib/parecer-vista";
+import { rotularComissao } from "@/lib/comissao-vista";
 import { TopoInterno } from "../../topo";
 import { FormularioParecer, type ValoresParecer } from "../formulario-parecer";
 import { RailParecer } from "../rail-parecer";
@@ -79,6 +85,9 @@ export default function PaginaParecer({ params }: { params: Promise<{ id: string
   }
 
   const materia = derivarMateria(dados);
+  // O subtítulo dizia "Comissão <comissaoId>" e imprimia o UUID (defeito #11 do ledger, `MATA`). Passa a
+  // usar o MESMO rótulo do rail — uma fonte só de verdade pra comissão nesta tela.
+  const relatoria = derivarRelatoria(dados);
   const bloqueado = parecerEhTerminal(dados.estado);
 
   return (
@@ -90,7 +99,7 @@ export default function PaginaParecer({ params }: { params: Promise<{ id: string
             <span className="eyebrow">Parecer de comissão</span>
             <h1>{materia ? `Parecer a ${materia.numero}` : "Parecer de comissão"}</h1>
             <p className="sub">
-              Comissão <b>{dados.comissaoId}</b> · {rotularEstadoParecer(dados.estado)}
+              <b>{rotularComissao(relatoria.comissaoNome)}</b> · {rotularEstadoParecer(dados.estado)}
             </p>
           </div>
         </div>

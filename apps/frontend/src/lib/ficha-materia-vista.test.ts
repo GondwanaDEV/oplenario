@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { COMISSAO_SEM_NOME } from "./comissao-vista";
 import {
   derivarDadosMateria,
   derivarTimelineTramitacao,
@@ -59,10 +60,14 @@ describe("derivarDadosMateria", () => {
     expect(r.apensadosTotal).toBe(0);
   });
 
-  it("estado desconhecido -> fail-closed (situação = estado cru, não lança)", () => {
-    const fichaXpto = { ...fichaBase, proposicao: { ...fichaBase.proposicao, estado: "xpto" } };
+  // Estes dois testes AFIRMAVAM a chave crua e por isso não viram os defeitos #9/#10 do ledger. O
+  // contrato mudou junto com `derivarTramitacao` (tramitacao-vista.ts): fail-closed continua sendo não
+  // lançar e não fingir progresso, mas degradar não obriga a mostrar vocabulário de banco — o rótulo é
+  // HUMANIZADO. Detector estrutural do underscore vive em tramitacao-vista.test.ts.
+  it("estado desconhecido -> fail-closed (não lança) e situação HUMANIZADA, nunca a chave crua", () => {
+    const fichaXpto = { ...fichaBase, proposicao: { ...fichaBase.proposicao, estado: "xpto_qualquer" } };
     expect(() => derivarDadosMateria(fichaXpto)).not.toThrow();
-    expect(derivarDadosMateria(fichaXpto).situacao).toBe("xpto");
+    expect(derivarDadosMateria(fichaXpto).situacao).toBe("Xpto qualquer");
   });
 });
 
@@ -83,12 +88,12 @@ describe("derivarTimelineTramitacao", () => {
     expect(derivarTimelineTramitacao([])).toEqual([]);
   });
 
-  it("de-estado/para-estado fora do vocabulário ilustrativo -> rótulo cru, sem lançar", () => {
+  it("de-estado/para-estado fora do vocabulário ilustrativo -> rótulo HUMANIZADO, sem lançar", () => {
     const r = derivarTimelineTramitacao([
-      { deEstado: "xpto-de", paraEstado: "xpto-para", gatilho: "g", ocorridoEm: "2026-01-01T00:00:00Z" },
+      { deEstado: "xpto_de", paraEstado: "xpto_para", gatilho: "g", ocorridoEm: "2026-01-01T00:00:00Z" },
     ]);
-    expect(r[0].rotuloDe).toBe("xpto-de");
-    expect(r[0].rotuloPara).toBe("xpto-para");
+    expect(r[0].rotuloDe).toBe("Xpto de");
+    expect(r[0].rotuloPara).toBe("Xpto para");
   });
 });
 
@@ -110,6 +115,17 @@ describe("derivarPareceres", () => {
     const r = derivarPareceres([{ id: "p1", comissaoId: "c1", estado: "xpto" }]);
     expect(r[0].rotuloEstado).toBe("xpto");
     expect(r[0].categoria).toBe("tram");
+  });
+
+  // Defeito #11 do ledger (`MATA`): a aba "Pareceres" da ficha imprimia `p.comissaoId` — um UUID por
+  // linha. O view-model passa a entregar um rótulo pronto, e a asserção é ESTRUTURAL: nenhum campo
+  // derivado pode carregar o id de volta pra tela.
+  it("cada parecer ganha rótulo de comissão — e o id não vira texto exibível", () => {
+    const r = derivarPareceres([
+      { id: "p1", comissaoId: "9119889e-1111-4222-8333-444444444444", estado: "aprovado" },
+    ]);
+    expect(r[0].comissaoRotulo).toBe(COMISSAO_SEM_NOME);
+    expect(r[0].comissaoRotulo).not.toContain("9119889e");
   });
 
   it("lista vazia -> array vazio", () => {

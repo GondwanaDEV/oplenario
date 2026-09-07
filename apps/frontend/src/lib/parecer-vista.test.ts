@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { COMISSAO_SEM_NOME, rotularComissao } from "./comissao-vista";
 import {
   VOTO_OPCOES,
   rotularVoto,
@@ -95,7 +96,16 @@ describe("derivarRelatoria", () => {
   it("relatorId ausente -> relatorRotulo nulo (omite a linha, nunca inventa nome)", () => {
     const v = derivarRelatoria(base);
     expect(v.relatorRotulo).toBeNull();
-    expect(v.comissaoId).toBe(base.comissaoId);
+  });
+
+  // Defeito #11 do ledger (`MATA`): esta asserção era `expect(v.comissaoId).toBe(base.comissaoId)` —
+  // um teste que EXIGIA o vazamento. O id não sai mais do view-model, então não há por onde a tela
+  // imprimi-lo (ver comissao-vista.ts para por que o nome não existe do lado de cá).
+  it("a comissão sai como RÓTULO, nunca como id — o UUID não atravessa o view-model", () => {
+    const v = derivarRelatoria(base);
+    expect(v.comissaoNome).toBeNull();
+    expect(rotularComissao(v.comissaoNome)).toBe(COMISSAO_SEM_NOME);
+    expect(JSON.stringify(v)).not.toContain(base.comissaoId);
   });
 
   it("relatorId presente -> rótulo honesto sem nome resolvido (carry F2/FE)", () => {
