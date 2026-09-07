@@ -170,3 +170,32 @@
       (throw (ex-info "quorum viola o contrato QuorumSessaoOut (bug de servidor)"
                       {:erros (me/humanize (m/explain wire/QuorumSessaoOut out))})))
     out))
+
+;; ---------- Tribuna nominal — a COMPOSICAO da sessao (GET /sessoes/:id/composicao) ----------
+
+(defn- membro-composicao->wire
+  "Um membro de dominio (`sessoes.controllers/membro-da-composicao`) -> ComposicaoMembroOut. CAMPO A CAMPO,
+  nao `select-keys` sobre uma linha maior: o mapa de dominio ja' chega enxuto (`controllers` fez o corte),
+  mas construir aqui de novo, nomeando cada chave, e' o que faz um campo nominal novo em `logic` precisar de
+  uma decisao EXPLICITA nesta funcao antes de poder viajar — o mesmo racional documentado em
+  `quorum-sessao->wire`."
+  [{:keys [vereador-id nome-parlamentar cargo-mesa]}]
+  {:vereador-id (str vereador-id)
+   :nome-parlamentar nome-parlamentar
+   :cargo-mesa cargo-mesa})
+
+(defn composicao-sessao->wire
+  "A COMPOSICAO de dominio (`sessoes.controllers/composicao-da-sessao`) -> ComposicaoSessaoOut (validado).
+  MESMA disciplina de `quorum-sessao->wire`: projecao CAMPO A CAMPO (nunca `dissoc` sobre um mapa maior),
+  para que o default seja NAO expor e o `:closed true` do contrato vire erro de servidor, nao vazamento
+  silencioso, quando algo novo aparecer em `logic`."
+  [{:keys [sessao-id sessao-estado data-de-composicao composicao-resolvida-em membros]}]
+  (let [out {:sessao-id (str sessao-id)
+             :sessao-estado sessao-estado
+             :data-de-composicao (str data-de-composicao)
+             :composicao-resolvida-em (str composicao-resolvida-em)
+             :membros (mapv membro-composicao->wire membros)}]
+    (when-not (m/validate wire/ComposicaoSessaoOut out)
+      (throw (ex-info "composicao viola o contrato ComposicaoSessaoOut (bug de servidor)"
+                      {:erros (me/humanize (m/explain wire/ComposicaoSessaoOut out))})))
+    out))

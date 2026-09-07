@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { estadoInicial, aplicarEvento, hidratarQuorum, falharQuorum, numeroDoTelao, vistaDoQuorum, type EstadoPlenario } from "./plenario-reducer";
+import { aplicarEvento, estadoInicial, falharComposicao, falharQuorum, hidratarComposicao, hidratarQuorum, identidadeDe, numeroDoTelao, type EstadoPlenario, vistaDoQuorum } from "./plenario-reducer";
 import { derivarMeuVoto } from "./meu-voto-vista";
 import type { EventoPlenario, SessaoOut } from "./contrato";
 import type { QuorumSessaoOut } from "./contrato-sessoes.gen";
@@ -413,5 +413,62 @@ describe("quórum do telão — hidratação de GET /sessoes/:id/quorum", () => 
     }));
     const v = vistaDoQuorum(e);
     expect(v).toEqual({ status: "ok", presentes: 22, membrosDaCasa: 21, foraDoRoster: 1, semRegistro: true });
+  });
+});
+
+
+describe("composição — o índice de nomes sobrevive ao fluxo de eventos", () => {
+  // `sessao` é o helper de topo deste arquivo; `aberta` existe só dentro de outro describe, então
+  // este bloco define o seu.
+  const aberta = () => estadoInicial(sessao({ estado: "aberta" }));
+
+  const composicao = {
+    sessaoId: "s1",
+    sessaoEstado: "aberta",
+    dataDeComposicao: "2026-09-01",
+    composicaoResolvidaEm: "2026-09-01T23:00:00Z",
+    membros: [
+      { vereadorId: "v1", nomeParlamentar: "Ana Ribeiro", cargoMesa: "presidente" },
+      { vereadorId: "v2", nomeParlamentar: null, cargoMesa: null },
+    ],
+  } as never;
+
+  it("indexa por vereadorId e resolve nome + cargo", () => {
+    const e = hidratarComposicao(aberta(), composicao);
+    expect(e.composicaoStatus).toBe("ok");
+    expect(identidadeDe(e, "v1")).toEqual({ nomeParlamentar: "Ana Ribeiro", cargoMesa: "presidente" });
+  });
+
+  it("membro SEM nome parlamentar resolve para null — a tela cai no rótulo neutro, não num nome vazio", () => {
+    const e = hidratarComposicao(aberta(), composicao);
+    expect(identidadeDe(e, "v2")).toBeNull();
+    expect(identidadeDe(e, "id-que-nao-existe")).toBeNull();
+  });
+
+  it("sem composição carregada, resolver não lança — devolve null", () => {
+    expect(identidadeDe(aberta(), "v1")).toBeNull();
+  });
+
+  it("corpo de forma inesperada degrada, nunca lança (este updater roda na fase de RENDER)", () => {
+    expect(() => hidratarComposicao(aberta(), {} as never)).not.toThrow();
+    expect(hidratarComposicao(aberta(), {} as never).composicaoStatus).toBe("indisponivel");
+    // e uma falha DEPOIS de um índice bom degrada, não zera
+    const ja = hidratarComposicao(aberta(), composicao);
+    expect(falharComposicao(ja).composicaoStatus).toBe("ok");
+    expect(identidadeDe(falharComposicao(ja), "v1")).not.toBeNull();
+  });
+
+  // A GARANTIA ESTRUTURAL: `aplicarEvento` compõe estado por spread de `base`. Um `case` futuro que
+  // devolvesse um literal sem esse spread apagaria o índice de nomes em silêncio, e o telão voltaria ao
+  // rótulo neutro no meio da sessão — sem erro, sem log, sem teste reprovando. É isto que trava aqui.
+  it("o índice sobrevive a um evento aplicado depois dele", () => {
+    const comNomes = hidratarComposicao(aberta(), composicao);
+    const depois = aplicarEvento(comNomes, {
+      tipo: "presenca.registrada",
+      seq: 1,
+      dados: { "sessao-id": "s1", "vereador-id": "v1", tipo: "entrada", "ocorrido-em": "2026-09-01T23:05:00Z" },
+    } as never);
+    expect(identidadeDe(depois, "v1")).toEqual({ nomeParlamentar: "Ana Ribeiro", cargoMesa: "presidente" });
+    expect(depois.composicaoStatus).toBe("ok");
   });
 });

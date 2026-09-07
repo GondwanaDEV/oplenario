@@ -10,9 +10,10 @@ import { useParams, useSearchParams } from "next/navigation";
 import { useTema } from "@/lib/tema";
 import { usePlenario, type EstadoConexao } from "@/lib/use-plenario";
 import { usePauta } from "@/lib/use-pauta";
-import { segundosDecorridos, formatarTempo } from "@/lib/cronometro";
+import { formatarTempo } from "@/lib/cronometro";
 import { assentosHemiciclo } from "@/lib/hemiciclo";
 import { nomeFase, nomeTipoSessao } from "@/lib/rotulos-sessao";
+import { Tribuna } from "./tribuna";
 import type { EstadoPlenario, PlacarVotacao, VistaQuorum } from "@/lib/plenario-reducer";
 import { vistaDoQuorum } from "@/lib/plenario-reducer";
 import { derivarPlacar, type VistaNominal, type VistaSecreta } from "@/lib/placar-vista";
@@ -460,56 +461,6 @@ function Hemiciclo({ vista }: { vista: VistaQuorum }) {
         <circle key={i} cx={s.x.toFixed(1)} cy={s.y.toFixed(1)} r="4.6" className={i < presentes ? "presente" : "ausente"} />
       ))}
     </svg>
-  );
-}
-
-function Tribuna({ estado, agora }: { estado: EstadoPlenario; agora: number }) {
-  const o = estado.oradorAtual;
-  const pausado = estado.marcosCronometro.length > 0 && estado.marcosCronometro[estado.marcosCronometro.length - 1].tipo === "pausada";
-  // aritmética pura por tick — sem useMemo (a dep `agora` muda a cada segundo, a memo nunca acertaria; review react MINOR)
-  const decorrido = o ? segundosDecorridos(o.iniciouEm, estado.marcosCronometro, agora) : 0;
-  return (
-    <section className="bloco larga" aria-labelledby="tribuna-titulo">
-      <div className="bloco-cabeca">
-        <h2 id="tribuna-titulo">Tribuna</h2>
-        <span className="eyebrow" style={{ color: "var(--texto-2)" }}>
-          {o ? nomeFase(o.fase) : "livre"}
-        </span>
-      </div>
-      <div className="bloco-corpo">
-        {o ? (
-          <>
-            <div className="tribuna-quem">
-              <span className="avatar av" aria-hidden="true">
-                {o.oradorId.slice(0, 2).toUpperCase()}
-              </span>
-              <div>
-                <b>Orador com a palavra</b>
-                <span>{o.tipoFala}</span>
-              </div>
-            </div>
-            <div className="tribuna-tempo">
-              <span className="rotulo">{pausado ? "Pausado" : "No uso da palavra"}</span>
-              <span className={`timer ${pausado ? "pausado" : ""}`} role="timer" aria-label="Tempo de tribuna">
-                {formatarTempo(decorrido)}
-              </span>
-            </div>
-          </>
-        ) : (
-          <p className="tribuna-vazia">Ninguém com a palavra no momento.</p>
-        )}
-        {estado.inscritos.length > 0 && (
-          <ol className="inscritos" aria-label="Inscritos">
-            {estado.inscritos.map((i) => (
-              <li key={i.inscricaoId}>
-                <span className="ord">{i.ordem}</span>
-                <b>{i.vereadorId.slice(0, 8)}</b>
-              </li>
-            ))}
-          </ol>
-        )}
-      </div>
-    </section>
   );
 }
 

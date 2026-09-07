@@ -9,9 +9,9 @@ import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { EventoPlenario, SessaoOut } from "./contrato";
 import { TIPOS_PLENARIO } from "./contrato";
-import type { QuorumSessaoOut } from "./contrato-sessoes.gen";
+import type { ComposicaoSessaoOut, QuorumSessaoOut } from "./contrato-sessoes.gen";
 import { semCredencial } from "./modo";
-import { aplicarEvento, estadoInicial, falharQuorum, hidratarQuorum, type EstadoPlenario } from "./plenario-reducer";
+import { aplicarEvento, estadoInicial, falharComposicao, falharQuorum, hidratarComposicao, hidratarQuorum, type EstadoPlenario } from "./plenario-reducer";
 import { consumirSse } from "./sse";
 
 export type EstadoConexao = "carregando" | "ao-vivo" | "reconectando" | "erro";
@@ -156,6 +156,36 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
       // docstring de `hidratarQuorum`). Por isso ela não é um disparo único — é re-buscada sempre que a
       // presença se mexe (debounced), depois de toda reconexão e periodicamente.
       void rehidratar();
+
+      // 1c) COMPOSIÇÃO — disparo ÚNICO, ao contrário do quórum. O quórum é re-buscado porque o NÚMERO
+      // muda a cada evento de presença; a composição é "quem são os membros da Casa NA DATA desta
+      // sessão", que não muda no meio dela (a data de composição é congelada, ver a docstring de
+      // `composicao-da-sessao` no backend). Re-buscar a cada frame seria trabalho por tick para um dado
+      // estável — e esta é hoje a leitura mais cara do módulo (resolve o roster inteiro).
+      //
+      // BEST-EFFORT e TOTAL, mesma postura do quórum: rede/403/500/parse não travam o painel nem
+      // derrubam o SSE. Sem composição a tribuna cai no rótulo neutro; o que não pode voltar a
+      // acontecer é o telão exibir o prefixo do UUID no lugar do nome.
+      void (async () => {
+        try {
+          const resp = await apiFetch(`/api/sessoes/${sessaoId}/composicao`, {
+            token: token ?? undefined,
+            signal: controller.signal,
+            cache: "no-store",
+          });
+          if (!vivo) return;
+          if (!resp.ok) {
+            setEstado((prev) => (prev ? falharComposicao(prev) : prev));
+            return;
+          }
+          const c = camelizarChaves(await resp.json()) as ComposicaoSessaoOut;
+          if (!vivo) return;
+          setEstado((prev) => (prev ? hidratarComposicao(prev, c) : prev));
+        } catch {
+          if (!vivo) return;
+          setEstado((prev) => (prev ? falharComposicao(prev) : prev));
+        }
+      })();
 
       // 2) stream com reconexão por backoff (resume via Last-Event-ID)
       let tentativa = 0;

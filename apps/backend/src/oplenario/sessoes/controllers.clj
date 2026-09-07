@@ -673,6 +673,52 @@
           (select-keys [:sessao-id :sessao-estado :instante :data-de-composicao :composicao-resolvida-em
                         :sem-registro-de-presenca :quorum])))
 
+;; ---------- Tribuna nominal — a COMPOSICAO da sessao (GET /sessoes/:id/composicao) ----------
+
+(defn- membro-da-composicao
+  "Uma LINHA da chamada -> um membro da COMPOSICAO. So' os tres campos que a rota PUBLICA de vereador
+  (`GET /portal/casa/:ente/vereadores/:id`, sem autenticacao nenhuma) ja' serve: `nome-parlamentar` e
+  `cargo-mesa` estao naquela lista de chaves; `partido` NAO esta (conferido campo a campo contra a rota —
+  premissa do briefing que caiu na verificacao: a justificativa original incluia `partido` por engano).
+  `nome` civil, `estado` de presenca e `justificativa` ficam para tras de proposito — nao sao identidade
+  PUBLICA, e essa e' a linha que separa esta rota de `/chamada`."
+  [{:keys [vereador-id nome-parlamentar cargo-mesa]}]
+  {:vereador-id vereador-id :nome-parlamentar nome-parlamentar :cargo-mesa cargo-mesa})
+
+(defn composicao-da-sessao
+  "A COMPOSICAO da sessao (`GET /sessoes/:id/composicao`) — 'quem sao os parlamentares desta sessao, por
+  nome'. Existe para o painel ao vivo do plenario (`/sessoes/:id/plenario`): o SSE carrega so' `orador-id`
+  no evento, e ate' esta fatia nao havia rota que o telao pudesse consultar para resolver o nome — o avatar
+  mostrava 2 caracteres do UUID e a fila de inscritos, o prefixo dele.
+
+  TERCEIRO chamador de `chamada-da-sessao*` (os outros dois sao `chamada-da-sessao` nominal e
+  `quorum-da-sessao` magra). NAO ha' aqui uma segunda consulta de roster: escrever uma aritmetica propria
+  so' para variar a authz e' exatamente o defeito que a docstring de `chamada-da-sessao*` recusa — duas
+  contagens da mesma Casa. `membros` e' `:linhas` reprojetada e filtrada, nunca uma segunda leitura.
+
+  AUTHZ = a MESMA de `quorum-da-sessao` (`logic/pode-ver-quorum-da-sessao?`: mesma Casa E (transmissao
+  publica OU papel 'secretario')), e por proposito: esta rota carrega NOME, que `/quorum` nao carrega, mas
+  `nome-parlamentar`/`cargo-mesa` JA sao publicos (ver `membro-da-composicao`) — o que NAO e' publico
+  (`motivo` de justificativa, LGPD, e o estado de presenca) nao viaja aqui. A politica continua sendo,
+  estritamente, a do telao, nunca mais frouxa que a rota numerica — usar `logic/pode-ver-sessao?` cru abriria
+  a mesma porta dos fundos da sessao SECRETA que a Etapa 4a corrigiu para o quorum (ver a docstring de
+  `pode-ver-quorum-da-sessao?`).
+
+  EXCLUI linhas `sem-assento`: uma presenca cujo vereador o roster da data nao situa na Casa CONTA no
+  quorum (e' o que o motor de votacao conta), mas nao e' 'quem compoe a Casa' — e o `nome-parlamentar` dela
+  e' sempre nil (sem roster, sem identidade a exibir). Incluir essas linhas em `membros` seria expor uma
+  entrada vazia sem propósito, alem de confundir 'presente' com 'membro'.
+
+  Devolve {:sessao-id :sessao-estado :data-de-composicao :composicao-resolvida-em :membros} ou nil (sessao
+  inexistente -> 404 no diplomat)."
+  [repo-sessoes roster-da-casa ator sessao-id relogio]
+  (when-let [chamada (chamada-da-sessao* repo-sessoes roster-da-casa ator sessao-id relogio
+                                         :sessao/ver-composicao logic/pode-ver-quorum-da-sessao?)]
+    (-> (select-keys chamada [:sessao-id :sessao-estado :data-de-composicao :composicao-resolvida-em])
+        (assoc :membros (->> (:linhas chamada)
+                              (remove :sem-assento)
+                              (mapv membro-da-composicao))))))
+
 ;; ---------- §22.6 eixo C — o ATO da CHAMADA CONDUZIDA (Etapa 2d) ----------
 
 (defn registrar-chamada-conduzida

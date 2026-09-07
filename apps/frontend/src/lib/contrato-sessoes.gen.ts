@@ -210,6 +210,20 @@ export interface QuorumSessaoOut {
   quorum: ChamadaQuorumOut;
 }
 
+export interface ComposicaoMembroOut {
+  vereadorId: string;
+  nomeParlamentar: string | null;
+  cargoMesa: string | null;
+}
+
+export interface ComposicaoSessaoOut {
+  sessaoId: string;
+  sessaoEstado: "aberta" | "agendada" | "arquivada" | "encerrada" | "nao_realizada" | "suspensa";
+  dataDeComposicao: string;
+  composicaoResolvidaEm: string;
+  membros: ComposicaoMembroOut[];
+}
+
 export interface FolhaMetadadosOut {
   id: string;
   versao: number;

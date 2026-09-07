@@ -543,6 +543,39 @@
             (http/json-resposta 409 {:erro "sessao sem data marcada: informe a data da sessao antes de ler o quorum"})
             (throw e)))))))
 
+(defn- composicao-handler
+  "GET /sessoes/:id/composicao (tribuna nominal). SEM papel exigido na borda — o MESMO nivel de authz de
+  `/quorum` (irmao literal, mesmo racional de nao-sombreamento).
+
+  O painel do plenario (o telao) resolve `orador-id`/inscritos por UUID porque nunca teve onde perguntar o
+  nome: o SSE `GET /sessoes/:id/plenario` carrega so' o id no evento, e a unica rota que sabia o nome
+  (`GET /sessoes/:id/chamada`) exige 'secretario' e carrega o `motivo` de justificativa junto (LGPD). Esta
+  rota fecha essa lacuna sem repetir a assimetria da Etapa 4a: a camada FINA roda
+  `logic/pode-ver-quorum-da-sessao?` (mesma Casa E (transmissao publica OU papel 'secretario')) — NUNCA
+  `pode-ver-sessao?` cru, que reabriria a porta dos fundos da sessao SECRETA que aquela etapa fechou (ver a
+  docstring de `quorum-handler` e de `pode-ver-quorum-da-sessao?`).
+
+  O payload aceita esse nivel de authz aberto porque `nome-parlamentar`/`cargo-mesa` JA sao servidos SEM
+  autenticacao nenhuma por `GET /portal/casa/:ente/vereadores/:id` (verificavel campo a campo contra aquela
+  rota); o que essa rota publica NAO serve — `partido` — tambem nao entra aqui (ver `ComposicaoMembroOut`).
+  O que de fato e' sensivel (`motivo`, estado de presenca) fica de fora por construcao: `controllers/
+  composicao-da-sessao` nunca os inclui na projecao.
+
+  Mesmos codigos do GET de quorum, porque e' o MESMO controller por dentro: nil -> 404; sessao agendada sem
+  data marcada -> 409 acionavel."
+  [repo-sessoes roster-da-casa relogio]
+  (fn [req]
+    (let [ator (:ator req)
+          id   (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (try
+        (if-let [c (controllers/composicao-da-sessao repo-sessoes roster-da-casa ator id relogio)]
+          (http/json-resposta 200 (adapters-out-presenca/composicao-sessao->wire c))
+          (http/json-resposta 404 {:erro "sessao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/sessao-sem-data (:tipo (ex-data e)))
+            (http/json-resposta 409 {:erro "sessao sem data marcada: informe a data da sessao antes de ler a composicao"})
+            (throw e)))))))
+
 (defn- conduzir-chamada-handler
   "POST /sessoes/:id/chamada (§22.6 eixo C, Etapa 2d, papel 'secretario'). Sem corpo — `conduzida-por` = o
   ator (anti-forja, mesmo contrato de `confirmar-presenca-handler`), `membros-da-casa` congelado DENTRO da
@@ -806,6 +839,13 @@
     ["/sessoes/:id/quorum" :get
      [auth (quorum-handler repo-sessoes roster-da-casa relogio)]
      :route-name :sessoes/quorum]
+    ;; Tribuna nominal — a COMPOSICAO da sessao. Path IRMAO de `/chamada`/`/quorum`, mesmo racional de
+    ;; nao-sombreamento (literal sob `/sessoes/:id`, sem filho `:param`). SEM `exige-papel` de proposito —
+    ;; mesmo nivel de authz de `/quorum` (ver a docstring de `composicao-handler`): esta rota carrega NOME,
+    ;; mas so' o que a rota publica de vereador ja' serve sem autenticacao.
+    ["/sessoes/:id/composicao" :get
+     [auth (composicao-handler repo-sessoes roster-da-casa relogio)]
+     :route-name :sessoes/composicao]
     ;; A justificativa tem DUAS portas de abertura, e nao uma que aceite os dois papeis: e' o mesmo desenho
     ;; ja' provado em presenca (`/presenca` da Mesa vs `/presenca/confirmar` do vereador). Numa rota unica o
     ;; significado de `vereador-id` no corpo passaria a depender do PAPEL do ator, e quem tivesse os dois
