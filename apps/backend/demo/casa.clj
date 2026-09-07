@@ -217,13 +217,19 @@
             linhas (vereador/listar tx ente-id hoje)
             comissoes (mapv #(assoc % :tipo "permanente") (comissoes-permanentes-existentes tx))]
         {:legislatura-id (:id leg)
-         :comissoes comissoes
+         ;; ORDEM IMPORTA (nao so' semantica): `:vereadores` tem de imprimir ANTES de `:comissoes` no
+         ;; EDN devolvido — `demo/semear-tudo.sh:72-78` extrai "o :id do 1º vereador" com um `sed` NAO
+         ;; estrutural (o 1º `:id #uuid ...` LITERAL do arquivo inteiro). Com `:comissoes` primeiro, o
+         ;; script pegaria o id de uma COMISSAO e o poll do perfil publico do vereador quebraria — bug
+         ;; real, achado rodando `./demo/semear-tudo.sh` de verdade (nao pego por nenhum teste unitario,
+         ;; que nao olha ordem de chave em mapa). Mesma ordem que `criar-cadastro!` ja usa.
          :vereadores (mapv (fn [linha]
                               (let [mandato (first (vereador/mandatos-do-vereador tx ente-id (:id linha)))]
                                 {:id (:id linha) :nome (:nome linha)
                                  :nome-parlamentar (:nome-parlamentar linha)
                                  :partido (:partido linha) :mandato-id (:id mandato)}))
-                            linhas)}))))
+                            linhas)
+         :comissoes comissoes}))))
 
 ;; ---------- artefato p/ downstream (sonda, varredura de API — Fases 1/2b do plano) ----------
 
