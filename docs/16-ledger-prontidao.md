@@ -167,3 +167,66 @@ Nenhuma aparecia em teste unitário; apareceram rodando `semear-tudo.sh` de verd
    **último** `:id` do arquivo. Só "funcionava" porque `:vereadores` era, por acaso, a última
    estrutura com `:id` no EDN — ao acrescentar `:comissoes`, quebrou. O comentário do próprio script
    afirmava que pegava o primeiro.
+
+---
+
+# #11 — MORTO (07/09/2026, commit `1546e45`)
+
+**A causa era a que a caminhada apontou, e ela não tem conserto de dado:** não existe, em nenhuma
+rota do backend, resolução `comissao-id` → nome. `cadastros/diplomat/http/in.clj` expõe apenas
+`/cadastros/vereadores*` e `/cadastros/legislatura-vigente`; a ficha do vereador devolve as
+comissões dele por `nome`/`tipo`/`cargo` e **deliberadamente sem o `id`**
+(`cadastros/wire/out/vereador.clj`, `ComissaoDoVereadorOut`). O frontend não tinha de onde tirar o
+nome — não era preguiça de view-model, era ausência de fonte. E `legislativo.pareceres.comissao_id`
+é `uuid NOT NULL` (migration 20260620000019), então imprimir o campo era imprimir um UUID.
+
+**O conserto é a mesma degradação honesta que o relator já usava** ("Relator designado"): afirmar
+que *há* uma comissão designada, sem inventar qual. `lib/comissao-vista.ts` passa a ser o único
+lugar que decide isso — `nomeDeComissao` devolve `null` para quem prefere **omitir** a linha (o rail
+do editor, cujo rótulo do campo já diz "Comissão"), `rotularComissao` devolve o rótulo para quem
+exibe a comissão **sozinha** (subtítulo da tela, linha da lista). `derivarRelatoria` deixou de
+devolver o `comissaoId`: o que não sai do view-model não tem por onde chegar na tela.
+
+| Superfície | Antes | Agora |
+|---|---|---|
+| `/parecer/:id` subtítulo | `Comissão 9119889e-…` | `Comissão designada · Aprovado` |
+| `/parecer/:id` rail "Relatoria" | `Comissão / 9119889e-…` | a linha some (só Relator + Distribuído) |
+| `/ficha-materia/:id` aba Pareceres | um UUID por linha | `Comissão designada` |
+
+## O que este conserto ensinou, e não era sobre comissão
+
+**Três testes AFIRMAVAM o vazamento** — e por isso ficaram verdes durante meses com um UUID no ar:
+
+| Teste | O que exigia |
+|---|---|
+| `parecer-vista.test.ts` | `expect(v.comissaoId).toBe(base.comissaoId)` |
+| `rail-parecer.test.tsx` | `getByText("c-ccj")`, sob o nome *"comissão crua"* |
+| `ficha-materia-tabs.test.tsx` | `getByText("CCJ")`, com fixture de **código legível** onde o dado real é `uuid NOT NULL` |
+
+É o mesmo padrão que o handoff já registrava como dominante em três frentes seguidas: **teste com o
+nome da garantia que não a exercita**. Aqui a variante é pior — o teste não só deixava de exercitar,
+ele *travava* o defeito: consertar a tela reprovava a suíte. **Fixture com formato irreal é o
+mecanismo** (`"CCJ"`/`"c-ccj"` onde o banco só produz UUID); as fixtures agora trazem o formato de
+verdade e as asserções olham a tela, não o id.
+
+**Quatro asserções de outro conserto meu ainda exigiam a chave crua.** Os defeitos #9/#10
+(humanização de enum) foram provados no arquivo de teste do próprio módulo, mas a suíte **inteira**
+não foi rodada: `ficha-materia-vista`, `ficha-vista` e `proposicoes-vista` seguiram vermelhos até
+agora. Conserto que muda contrato de view-model exige a suíte toda, não o arquivo vizinho.
+
+**Um quarto vazamento, que só a tela viva mostrou.** A aba de pareceres imprimia
+`Voto do relator: favoravel` — sem acento e sem maiúscula, portanto **invisível ao detector de
+underscore da sonda**. `rotularVoto` já existia em `parecer-vista.ts` e não estava sendo usado ali.
+Detector estrutural pega a forma que ele conhece; o resto continua sendo olho.
+
+## Placar da sonda
+
+**3/27 → 2/27.** As duas restantes são o **#13** (`/portal/casa/:ente` e `…/materias/:id`, "resumo em
+linguagem simples indisponível") — Track IA sem código, decisão da Fase 3, não defeito novo.
+
+## O que ficaria melhor, e é decisão de backend
+
+O nome de verdade exige que o backend passe a servi-lo: um `resolver-comissao` injetado pelo host
+(mesma exceção nomeada de §22.5.3 que `resolver-vereador` já usa) e um `comissao-nome` em
+`ParecerEditorOut`/`ParecerResumoOut`. `rotularComissao` foi desenhada para sumir nesse dia — o
+parâmetro passa a ter valor e o rótulo genérico deixa de aparecer, **sem tocar em componente nenhum**.
