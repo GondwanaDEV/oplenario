@@ -37,11 +37,33 @@ describe("derivarTramitacao", () => {
     expect(r.rotuloSituacao).toBe("Aprovado");
   });
 
-  it("fail-closed: estado desconhecido -> faixa mínima (só Protocolo) + rotuloSituacao = estado cru, sem throw", () => {
-    expect(() => derivarTramitacao("xpto-desconhecido")).not.toThrow();
-    const r = derivarTramitacao("xpto-desconhecido");
+  // DECISÃO REVISTA (07/09/2026, caminhada de prontidão de apresentação). A redação anterior deste
+  // teste afirmava `rotuloSituacao = estado CRU` para estado fora do vocabulário ilustrativo, e o
+  // comentário do topo do arquivo já previa que "tenant real terá vocabulário próprio via template".
+  // A previsão estava certa e a consequência não tinha sido olhada: com o rito real da Casa de
+  // demonstração ("Rito Ordinário de Tramitação"), o estado `aguardando_pauta` cai neste ramo e
+  // aparece CRU na tela em `/proposicoes` e, com o CSS do painel da Mesa em caixa alta, como
+  // `AGUARDANDO_PAUTA`. Fail-closed continua sendo o contrato — nada lança, nada finge progresso —
+  // mas degradar não obriga a mostrar a chave: humanizar é estritamente melhor e vale para QUALQUER
+  // vocabulário de tenant, que é justamente o caso que o mapa fixo nunca vai cobrir.
+  it("fail-closed: estado fora do vocabulário -> faixa mínima, sem throw, e rótulo HUMANIZADO (nunca a chave crua)", () => {
+    expect(() => derivarTramitacao("xpto_desconhecido")).not.toThrow();
+    const r = derivarTramitacao("xpto_desconhecido");
     expect(r.estagios).toEqual([{ rotulo: "Protocolo", situacao: "ativo" }]);
-    expect(r.rotuloSituacao).toBe("xpto-desconhecido");
+    expect(r.rotuloSituacao).toBe("Xpto desconhecido");
+  });
+
+  it("o estado real do rito da Casa não vaza cru — foi o defeito #9/#10 do ledger", () => {
+    expect(derivarTramitacao("aguardando_pauta").rotuloSituacao).toBe("Aguardando pauta");
+  });
+
+  it("nenhum rótulo de situação contém underscore, em nenhum estado", () => {
+    // Detector: é o underscore que denuncia chave de enum na tela. Se um estado novo entrar e vazar,
+    // este teste reprova sem precisar que alguém lembre de olhar a tela.
+    for (const estado of ["protocolada", "em_comissoes", "aguardando_pauta", "em_pauta", "aprovada",
+                          "arquivada", "primeiro_turno", "segundo_turno", "em_sancao", "estado_novo_qualquer"]) {
+      expect(derivarTramitacao(estado).rotuloSituacao).not.toMatch(/_/);
+    }
   });
 });
 

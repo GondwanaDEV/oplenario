@@ -41,6 +41,18 @@ const ROTULO_SITUACAO_POR_ESTADO: Record<string, string> = {
 
 const FAIXA_MINIMA: EstagioTramitacao[] = [{ rotulo: "Protocolo", situacao: "ativo" }];
 
+// Último recurso de rótulo. `estado` de proposição é string LIVRE, definida por template POR CÂMARA
+// (§22.4 / Invariante 4: regra é dado, não código) — então NENHUM mapa fixo em código vai cobrir o
+// vocabulário de um tenant real, e o ramo de fallback é o caso COMUM em produção, não a exceção.
+// Devolver a chave crua fazia `aguardando_pauta` (e, em caixa alta pelo CSS do painel da Mesa,
+// `AGUARDANDO_PAUTA`) aparecer na tela para o usuário final. Humanizar não inventa semântica nenhuma:
+// só troca o separador e sobe a inicial, o que é sempre melhor que a chave e nunca é errado.
+function humanizarEstado(estado: string): string {
+  const limpo = estado.replace(/[_-]+/g, " ").trim();
+  if (limpo.length === 0) return estado;
+  return limpo.charAt(0).toUpperCase() + limpo.slice(1);
+}
+
 export function derivarTramitacao(estado: string): {
   estagios: EstagioTramitacao[];
   rotuloSituacao: string;
@@ -65,8 +77,9 @@ export function derivarTramitacao(estado: string): {
   const indiceAtivo = INDICE_ATIVO_POR_ESTADO[estado];
   if (indiceAtivo === undefined) {
     // fail-closed: estado fora do vocabulário ilustrativo (ex. vocabulário real de um tenant via
-    // template) — nunca lança; degrada para a faixa mínima honesta com o estado cru como rótulo.
-    return { estagios: FAIXA_MINIMA, rotuloSituacao: estado };
+    // template) — nunca lança; degrada para a faixa mínima honesta. O rótulo é HUMANIZADO, nunca a
+    // chave crua: degradar não obriga a expor vocabulário de banco ao usuário.
+    return { estagios: FAIXA_MINIMA, rotuloSituacao: humanizarEstado(estado) };
   }
 
   return {
@@ -74,7 +87,7 @@ export function derivarTramitacao(estado: string): {
       rotulo,
       situacao: i < indiceAtivo ? "concluido" : i === indiceAtivo ? "ativo" : "pendente",
     })),
-    rotuloSituacao: ROTULO_SITUACAO_POR_ESTADO[estado] ?? estado,
+    rotuloSituacao: ROTULO_SITUACAO_POR_ESTADO[estado] ?? humanizarEstado(estado),
   };
 }
 
