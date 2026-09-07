@@ -128,6 +128,19 @@ describe("derivarPareceres", () => {
     expect(r[0].comissaoRotulo).not.toContain("9119889e");
   });
 
+  it("com o nome servido pelo backend, a linha diz a comissão de verdade", () => {
+    const r = derivarPareceres([
+      { id: "p1", comissaoId: "9119889e-1111-4222-8333-444444444444",
+        comissaoNome: "Comissão de Finanças e Orçamento", estado: "aprovado" },
+      { id: "p2", comissaoId: "10000000-0000-0000-0000-000000000001", comissaoNome: null,
+        estado: "em_elaboracao" },
+    ]);
+    expect(r.map((p) => p.comissaoRotulo)).toEqual([
+      "Comissão de Finanças e Orçamento",
+      COMISSAO_SEM_NOME,
+    ]);
+  });
+
   it("lista vazia -> array vazio", () => {
     expect(derivarPareceres([])).toEqual([]);
   });

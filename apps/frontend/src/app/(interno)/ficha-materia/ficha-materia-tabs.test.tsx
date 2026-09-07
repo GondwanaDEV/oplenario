@@ -56,6 +56,14 @@ describe("FichaMateriaTabs", () => {
     expect(screen.getByText(/Voto do relator: Favorável$/)).toBeTruthy();
   });
 
+  it("aba Pareceres: com nome servido pelo backend, a linha diz a comissão de verdade", () => {
+    const p1 = { ...ficha.pareceres[0], comissaoNome: "Comissão de Finanças e Orçamento" };
+    render(<FichaMateriaTabs ficha={{ ...ficha, pareceres: [p1] }} />);
+    fireEvent.click(screen.getByRole("tab", { name: /pareceres/i }));
+    expect(screen.getByText("Comissão de Finanças e Orçamento")).toBeTruthy();
+    expect(document.body.textContent).not.toContain("9119889e");
+  });
+
   it("aba Pareceres: cada item linka pro editor de parecer (Onda B Slice 5), preservando ?token=", () => {
     render(<FichaMateriaTabs ficha={ficha} token="tok" />);
     fireEvent.click(screen.getByRole("tab", { name: /pareceres/i }));

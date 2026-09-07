@@ -95,6 +95,9 @@
   ;; comissao / cargo / membro
   (criar-comissao! [this ente-id comissao])
   (buscar-comissao [this ente-id id])
+  ;; `resolver-comissoes` do host (§22.5.3) — id -> nome em LOTE, p/ o legislativo nomear a comissao do
+  ;; parecer sem importar `cadastros` (defeito #11 do ledger de prontidao).
+  (nomes-de-comissoes [this ente-id ids])
   (mesa-vigente [this ente-id data])
   (criar-cargo! [this ente-id cargo])
   (criar-membro! [this ente-id membro])
@@ -238,6 +241,7 @@
           (throw e)))))
   (criar-comissao! [this ente-id c] (transacao this ente-id #(comissao/inserir! % c)))
   (buscar-comissao [this ente-id id] (transacao this ente-id #(comissao/buscar % id)))
+  (nomes-de-comissoes [this ente-id ids] (transacao this ente-id #(comissao/nomes-por-id % ids)))
   (mesa-vigente [this ente-id data] (transacao this ente-id #(comissao/mesa-vigente % data)))
   (criar-cargo! [this ente-id c] (transacao this ente-id #(comissao/inserir-cargo! % c)))
   (criar-membro! [this ente-id m] (transacao this ente-id #(comissao/inserir-membro! % m)))

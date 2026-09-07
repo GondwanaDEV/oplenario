@@ -67,6 +67,7 @@ export interface EmendaResumoOut {
 export interface ParecerResumoOut {
   id: string;
   comissaoId: string;
+  comissaoNome?: string | null;
   relatorId?: string | null;
   votoRelator?: string | null;
   estado: string;
@@ -94,6 +95,7 @@ export interface ParecerEditorOut {
   objetoTipo: string;
   objetoId: string;
   comissaoId: string;
+  comissaoNome?: string | null;
   relatorId?: string | null;
   votoRelator?: string | null;
   estado: string;

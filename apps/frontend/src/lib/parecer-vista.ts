@@ -9,12 +9,12 @@
 // "ve" primeiro, "vf" segundo, "vc" terceiro). Qualquer voto fora desse conjunto (import de outro
 // cliente, dado legado) degrada fail-closed pro rótulo cru — nunca inventa, nunca lança.
 //
-// `comissaoId`/`relatorId` NÃO têm resolução id→nome no backend (mesmo carry documentado do
-// vereador-id→nome no F2/FE) — `derivarRelatoria` nunca inventa um nome. O relator sempre foi um rótulo
-// honesto sem nome ("Relator designado") ou nulo (omite a linha) quando não há relator-id; a comissão
-// ERA exposta como o id cru, o que punha um UUID na tela do parecer (defeito #11 do ledger de prontidão,
-// `MATA`) — agora passa pelo mesmo tratamento, via `rotularComissao` (ver comissao-vista.ts para por que
-// o nome não existe do lado de cá). O view-model NÃO devolve mais o id: o que não sai daqui não vaza.
+// `relatorId` NÃO tem resolução id→nome no backend (carry F2/FE) — vira um rótulo honesto sem nome
+// ("Relator designado") ou nulo (omite a linha) quando não há relator-id; `derivarRelatoria` nunca
+// inventa. A comissão ERA o mesmo caso e pior: saía como o id CRU, pondo um UUID na tela (defeito #11 do
+// ledger de prontidão, `MATA`). O backend passou a servir `comissaoNome` (host `resolver-comissoes`,
+// §22.5.3), então aqui o nome real atravessa quando existe e degrada quando não — ver comissao-vista.ts.
+// O view-model NÃO devolve o id em nenhum caso: o que não sai daqui não vaza para a tela.
 //
 // Não há prazo/vencimento plumbado pra parecer nesta fatia (o motor de compliance de prazo, §22.7.7, não
 // está ligado a pareceres ainda) — este view-model DELIBERADAMENTE não deriva nada de "vence em X dias";
@@ -68,9 +68,9 @@ export type RelatoriaVista = {
 
 export function derivarRelatoria(parecer: ParecerEditorOut): RelatoriaVista {
   return {
-    // O argumento é o NOME da comissão, que o wire ainda não traz. Fica explícito assim (e não como um
-    // `null` solto) porque é este o ponto exato que muda no dia em que o backend servir o nome.
-    comissaoNome: nomeDeComissao(undefined),
+    // `comissaoNome` chega resolvido pelo host (`resolver-comissoes`, §22.5.3) e vem `null` quando o
+    // guard ref não tem dono nesta Casa — `nomeDeComissao` guarda a porta em qualquer um dos casos.
+    comissaoNome: nomeDeComissao(parecer.comissaoNome),
     relatorRotulo: parecer.relatorId ? "Relator designado" : null,
   };
 }

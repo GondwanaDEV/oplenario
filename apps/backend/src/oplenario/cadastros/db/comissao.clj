@@ -22,6 +22,29 @@
       (sql/format {:select [:id :ente_id :nome :tipo :legislatura_id :vigencia_inicio :vigencia_fim]
                    :from [:cadastros.comissao] :where [:= :id id]}))))
 
+(defn nomes-por-id
+  "ids -> {id nome}, numa consulta so'. Base da metade de `cadastros` do `resolver-comissoes` que o HOST
+  injeta no `legislativo` (§22.5.3, exceção nomeada): o legislativo guarda `comissao_id` como guard ref
+  `uuid NOT NULL` SEM FK cross-schema (mig 20260620000019) e por isso nunca soube o nome — a tela do
+  parecer mostrava o UUID (defeito #11 do ledger de prontidao).
+
+  PLURAL de proposito: a ficha da materia lista N pareceres, e resolver um a um seria N transacoes por
+  request. Cardinalidade nao e' aberta (nao leva teto proprio como a pauta/o fan-out): os ids chegam de
+  uma lista que o Repo do legislativo ja' limita em 50.
+
+  Coll vazia (ou so' de nils) NAO vai ao banco — `IN ()` nao e' SQL valido — e devolve {}. Id sem
+  comissao correspondente simplesmente nao aparece no mapa: o chamador degrada pra nil, nunca lanca.
+  RLS isola o tenant, mesma forma de `buscar` (que tambem nao repete `ente_id` no WHERE)."
+  [tx ids]
+  (let [ids (vec (distinct (remove nil? ids)))]
+    (if (empty? ids)
+      {}
+      (into {}
+            (map (juxt :id :nome))
+            (comum/linhas->kebab
+              (jdbc/execute! tx
+                (sql/format {:select [:id :nome] :from [:cadastros.comissao] :where [:in :id ids]})))))))
+
 (defn mesa-vigente
   "A Mesa Diretora vigente em `data` (tipo='mesa', dentro da vigencia). Base de quem_exerce_presidencia (F2)."
   [tx data]

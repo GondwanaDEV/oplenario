@@ -101,6 +101,17 @@ describe("derivarRelatoria", () => {
   // Defeito #11 do ledger (`MATA`): esta asserção era `expect(v.comissaoId).toBe(base.comissaoId)` —
   // um teste que EXIGIA o vazamento. O id não sai mais do view-model, então não há por onde a tela
   // imprimi-lo (ver comissao-vista.ts para por que o nome não existe do lado de cá).
+  it("com o nome servido pelo backend (resolver-comissoes), o rótulo genérico some", () => {
+    const v = derivarRelatoria({ ...base, comissaoNome: "Comissão de Constituição e Justiça" });
+    expect(v.comissaoNome).toBe("Comissão de Constituição e Justiça");
+  });
+
+  it("nome ausente no wire (guard ref órfão / comissão de outra Casa) -> null, nunca o id", () => {
+    for (const servido of [null, undefined, "", base.comissaoId]) {
+      expect(derivarRelatoria({ ...base, comissaoNome: servido }).comissaoNome).toBeNull();
+    }
+  });
+
   it("a comissão sai como RÓTULO, nunca como id — o UUID não atravessa o view-model", () => {
     const v = derivarRelatoria(base);
     expect(v.comissaoNome).toBeNull();

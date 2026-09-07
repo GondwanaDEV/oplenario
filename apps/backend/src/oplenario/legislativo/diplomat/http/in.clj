@@ -143,11 +143,11 @@
   DOIS adapters/out (proposicao p/ o cabecalho + ficha-materia p/ o envelope) — adapters/ nunca chama outro
   adapters/ (ADR-0001 §3). `:texto` ja' chega EXTRAIDO do controller (string/nil — review MENOR
   fe-9-ficha-materia: o diplomat nunca decide nome de campo do model, so' compoe)."
-  [repo-leg]
+  [repo-leg resolver-comissoes]
   (fn [req]
     (let [ente-id (:ente-id (:ator req))
           id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
-      (if-let [{:keys [proposicao texto] :as ficha} (controllers/buscar-ficha-materia repo-leg ente-id id)]
+      (if-let [{:keys [proposicao texto] :as ficha} (controllers/buscar-ficha-materia repo-leg resolver-comissoes ente-id id)]
         (http/json-resposta 200 (adapters-out-ficha/ficha->wire
                                    (adapters-out-proposicao/detalhe->wire proposicao texto)
                                    ficha))
@@ -176,52 +176,52 @@
 
 (defn- parecer-editor-handler
   "GET /legislativo/pareceres/:id (Onda B Slice 5). nil (parecer inexistente ou de outro tenant) -> 404."
-  [repo-leg]
+  [repo-leg resolver-comissoes]
   (fn [req]
     (let [ente-id (:ente-id (:ator req))
           id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
-      (if-let [dados (controllers/buscar-parecer-editor repo-leg ente-id id)]
+      (if-let [dados (controllers/buscar-parecer-editor repo-leg resolver-comissoes ente-id id)]
         (http/json-resposta 200 (adapters-out-parecer/editor->wire dados))
         (http/json-resposta 404 {:erro "parecer nao encontrado"})))))
 
 (defn- salvar-rascunho-parecer-handler
   "PATCH /legislativo/pareceres/:id. PRE-CHECK 404 ANTES de escrever se o parecer nao existir (mesmo
   contrato de editar-proposicao-handler — evita a ex-info sem :tipo do db/ cair no fallback 500)."
-  [repo-leg]
+  [repo-leg resolver-comissoes]
   (fn [req]
     (let [ator (:ator req) ente-id (:ente-id ator)
           id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
-      (if-not (controllers/buscar-parecer-editor repo-leg ente-id id)
+      (if-not (controllers/buscar-parecer-editor repo-leg resolver-comissoes ente-id id)
         (http/json-resposta 404 {:erro "parecer nao encontrado"})
         (let [m (adapters-in-parecer/salvar-rascunho->dominio ator id (:json-params req))]
           (controllers/salvar-rascunho-parecer repo-leg ente-id m)
           (http/json-resposta 200 (adapters-out-parecer/editor->wire
-                                     (controllers/buscar-parecer-editor repo-leg ente-id id))))))))
+                                     (controllers/buscar-parecer-editor repo-leg resolver-comissoes ente-id id))))))))
 
 (defn- emitir-parecer-handler
   "POST /legislativo/pareceres/:id/emissao. Onda C4: constroi o assinador STUB inline (mesmo padrao de
   gerar-artefato-publicacao!) — a assinatura acontece dentro de Repo/emitir-parecer!, nao aqui."
-  [repo-leg registro relogio]
+  [repo-leg resolver-comissoes registro relogio]
   (fn [req]
     (let [ator (:ator req) ente-id (:ente-id ator)
           id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
           agora (tempo/hoje relogio zona-civil)]
-      (if-let [{:keys [parecer]} (controllers/buscar-parecer-editor repo-leg ente-id id)]
+      (if-let [{:keys [parecer]} (controllers/buscar-parecer-editor repo-leg resolver-comissoes ente-id id)]
         (let [m (adapters-in-parecer/emitir->dominio ator id (:template-id parecer) agora (:json-params req))]
           (controllers/emitir-parecer repo-leg registro (assinador-icp/assinador-stub) ente-id m)
           (http/json-resposta 200 (adapters-out-parecer/editor->wire
-                                     (controllers/buscar-parecer-editor repo-leg ente-id id))))
+                                     (controllers/buscar-parecer-editor repo-leg resolver-comissoes ente-id id))))
         (http/json-resposta 404 {:erro "parecer nao encontrado"})))))
 
 (defn- meu-parecer-editor-handler
   "GET /meu/pareceres/:id (Onda C4, feature 7.3). Gate grosso 'vereador' na rota; gate de posse
   (relator-do-parecer?) no controller — 404 sem distinguir 'nao existe' de 'nao e' seu' (mesmo contrato de
   acusar-ciencia-handler)."
-  [repo-leg resolver-vereador]
+  [repo-leg resolver-vereador resolver-comissoes]
   (fn [req]
     (let [ator (:ator req)
           id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
-      (if-let [dados (controllers/meu-parecer-editor repo-leg resolver-vereador ator id)]
+      (if-let [dados (controllers/meu-parecer-editor repo-leg resolver-vereador resolver-comissoes ator id)]
         (http/json-resposta 200 (adapters-out-parecer/editor->wire dados))
         (http/json-resposta 404 {:erro "parecer nao encontrado"})))))
 
@@ -229,17 +229,17 @@
   "POST /meu/pareceres/:id/emissao (Onda C4) — 'assinar em 2 toques'. Mesmo gate de posse de
   meu-parecer-editor-handler ANTES de tentar emitir; o TEMPLATE-ID vem do parecer JA' CARREGADO por
   meu-parecer-editor (mesmo pre-check tambem serve de gate 404 — mesmo padrao de emitir-parecer-handler)."
-  [repo-leg registro relogio resolver-vereador]
+  [repo-leg registro relogio resolver-vereador resolver-comissoes]
   (fn [req]
     (let [ator (:ator req)
           id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
           agora (tempo/hoje relogio zona-civil)]
-      (if-let [{:keys [parecer]} (controllers/meu-parecer-editor repo-leg resolver-vereador ator id)]
+      (if-let [{:keys [parecer]} (controllers/meu-parecer-editor repo-leg resolver-vereador resolver-comissoes ator id)]
         (let [m (adapters-in-parecer/emitir->dominio ator id (:template-id parecer) agora (:json-params req))]
           (if (controllers/meu-emitir-parecer repo-leg registro (assinador-icp/assinador-stub)
                                               resolver-vereador ator id m)
             (http/json-resposta 200 (adapters-out-parecer/editor->wire
-                                       (controllers/meu-parecer-editor repo-leg resolver-vereador ator id)))
+                                       (controllers/meu-parecer-editor repo-leg resolver-vereador resolver-comissoes ator id)))
             (http/json-resposta 404 {:erro "parecer nao encontrado"})))
         (http/json-resposta 404 {:erro "parecer nao encontrado"})))))
 
@@ -410,7 +410,10 @@
   proprio modulo), `consultar-sessao` (injetada pelo host — cross-modulo p/ a authz herdada da sessao),
   `resolver-municipio` (injetada pelo host — cross-modulo p/ o legislativo computar a URN em protocolar!,
   Onda B Slice 2, §22.10), `resolver-vereador` (injetada pelo host — cross-modulo p/ cadastros, Onda C1,
-  §22.5.3 exceção nomeada — resolve identidade->vereador-id NESTA Casa p/ a borda /meu), `vereador-vinculado?`
+  §22.5.3 exceção nomeada — resolve identidade->vereador-id NESTA Casa p/ a borda /meu),
+  `resolver-comissoes` (injetada pelo host — MESMA exceção nomeada, cross-modulo p/ cadastros: resolve
+  `comissao-id -> nome` EM LOTE, porque `legislativo.pareceres.comissao_id` e' guard ref sem FK
+  cross-schema e por isso a tela do parecer mostrava o UUID — defeito #11 do ledger de prontidao), `vereador-vinculado?`
   (injetada pelo host — cross-modulo p/ cadastros, mesma inversao de dependencia; fix da review Onda E
   fatia 2 achados I-1/M-1 — confirma que um `autor-id` cru do corpo e' um cadastro de vereador NESTE ente
   antes de virar autoria PUBLICA), `registro` (RegistroFatos do motor, injetado pelo host — Onda B Slice 5,
@@ -420,8 +423,8 @@
   Todas as acoes das verticais de votacao/proposicoes/parecer EXIGEM a authz GROSSA (papel 'secretario') +
   corpo-json nas de escrita; a fina da votacao decide no controller com a sessao carregada. A borda /meu
   EXIGE papel 'vereador' (papel DISTINTO — nao 'secretario')."
-  [{:keys [auth repo-legislativo consultar-sessao resolver-municipio resolver-vereador vereador-vinculado?
-           registro relogio]}]
+  [{:keys [auth repo-legislativo consultar-sessao resolver-municipio resolver-vereador resolver-comissoes
+           vereador-vinculado? registro relogio]}]
   (let [papel (it/exige-papel "secretario")
         papel-vereador (it/exige-papel "vereador")]
     #{["/sessoes/:id/votacoes" :post
@@ -443,18 +446,18 @@
        :route-name :legislativo/criar-proposicao]
       ["/legislativo/proposicoes/:id" :get [auth papel (detalhe-proposicao-handler repo-legislativo)]
        :route-name :legislativo/detalhe-proposicao]
-      ["/legislativo/proposicoes/:id/ficha" :get [auth papel (ficha-materia-handler repo-legislativo)]
+      ["/legislativo/proposicoes/:id/ficha" :get [auth papel (ficha-materia-handler repo-legislativo resolver-comissoes)]
        :route-name :legislativo/ficha-materia]
       ["/legislativo/proposicoes/:id" :patch
        [auth papel it/corpo-json (editar-proposicao-handler repo-legislativo vereador-vinculado?)]
        :route-name :legislativo/editar-proposicao]
-      ["/legislativo/pareceres/:id" :get [auth papel (parecer-editor-handler repo-legislativo)]
+      ["/legislativo/pareceres/:id" :get [auth papel (parecer-editor-handler repo-legislativo resolver-comissoes)]
        :route-name :legislativo/parecer-editor]
       ["/legislativo/pareceres/:id" :patch
-       [auth papel it/corpo-json (salvar-rascunho-parecer-handler repo-legislativo)]
+       [auth papel it/corpo-json (salvar-rascunho-parecer-handler repo-legislativo resolver-comissoes)]
        :route-name :legislativo/salvar-rascunho-parecer]
       ["/legislativo/pareceres/:id/emissao" :post
-       [auth papel it/corpo-json (emitir-parecer-handler repo-legislativo registro relogio)]
+       [auth papel it/corpo-json (emitir-parecer-handler repo-legislativo resolver-comissoes registro relogio)]
        :route-name :legislativo/emitir-parecer]
       ["/legislativo/documento-modelos" :get [auth papel (listar-modelos-documento-handler repo-legislativo)]
        :route-name :legislativo/listar-modelos-documento]
@@ -487,10 +490,10 @@
       ["/meu/ciencias" :post
        [auth papel-vereador it/corpo-json (acusar-ciencia-handler repo-legislativo resolver-vereador)]
        :route-name :legislativo/acusar-ciencia]
-      ["/meu/pareceres/:id" :get [auth papel-vereador (meu-parecer-editor-handler repo-legislativo resolver-vereador)]
+      ["/meu/pareceres/:id" :get [auth papel-vereador (meu-parecer-editor-handler repo-legislativo resolver-vereador resolver-comissoes)]
        :route-name :legislativo/meu-parecer-editor]
       ["/meu/pareceres/:id/emissao" :post
-       [auth papel-vereador it/corpo-json (meu-emitir-parecer-handler repo-legislativo registro relogio resolver-vereador)]
+       [auth papel-vereador it/corpo-json (meu-emitir-parecer-handler repo-legislativo registro relogio resolver-vereador resolver-comissoes)]
        :route-name :legislativo/meu-emitir-parecer]}))
 
 ;; ========================= FE Onda A1: fila de relatores pendentes (§16.11) =========================

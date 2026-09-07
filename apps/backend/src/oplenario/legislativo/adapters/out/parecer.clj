@@ -58,6 +58,7 @@
     (validado wire/ParecerEditorOut
               {:id (->str (:id parecer)) :objeto-tipo (:objeto-tipo parecer)
                :objeto-id (->str (:objeto-id parecer)) :comissao-id (->str (:comissao-id parecer))
+               :comissao-nome (:comissao-nome parecer)
                :relator-id (->str (:relator-id parecer)) :voto-relator (:voto-relator parecer)
                :estado (:estado parecer) :template-id (->str (:template-id parecer))
                :lock-version (:lock-version parecer) :criado-em (->str (:criado-em parecer))

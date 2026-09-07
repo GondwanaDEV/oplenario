@@ -5,6 +5,7 @@
   tenant — o fake simula o que a RLS faria: sem linha p/ um ente diferente do dono da fixture)."
   (:require [clojure.test :refer [deftest is]]
             [io.pedestal.http :as ph]
+            [oplenario.cadastros.components.repositorio :as repo-cadastros-comp]
             [io.pedestal.test :as pt]
             [jsonista.core :as json]
             [oplenario.config :as config]
@@ -22,6 +23,8 @@
    :autor-tipo "vereador" :autor-texto "Helena Matos" :estado "em_comissoes" :lock-version 0
    :atualizado-em (java.time.Instant/parse "2026-05-21T10:00:00Z")})
 
+(def ^:private ccj-id (random-uuid))
+
 (defn- ficha-canonica [ente id]
   {:proposicao (proposicao-canonica ente id)
    :texto {:texto-inline "## Art. 1o"}
@@ -32,8 +35,12 @@
                 :motivo-apensacao "materia conexa"}]
    :emendas [{:id (random-uuid) :numero-local 1 :tipo-emenda "aditiva" :momento-apresentacao "no_prazo"
               :autor-tipo "vereador" :autor-texto "Helena Matos" :estado "apresentada"}]
-   :pareceres [{:id (random-uuid) :comissao-id (random-uuid) :relator-id (random-uuid)
-                :voto-relator "favoravel" :estado "com_relator"}]})
+   :pareceres [{:id (random-uuid) :comissao-id ccj-id :relator-id (random-uuid)
+                :voto-relator "favoravel" :estado "com_relator"}
+               ;; 2a linha: comissao que o resolver NAO conhece (guard ref orfao, ou de outra Casa) —
+               ;; prova que a ausencia de nome sai nil e nao derruba o 200 nem cai no id.
+               {:id (random-uuid) :comissao-id (random-uuid) :relator-id nil
+                :voto-relator nil :estado "em_elaboracao"}]})
 
 (defn- fake-repo-legislativo
   "So' o metodo exercido (`ficha-completa-da-proposicao`). Simula a RLS: `dono` (ente-id da fixture) e' o
@@ -52,11 +59,23 @@
   (reify repo-id/RepoIdentidade
     (snapshot-ator [_ _ente-id _identidade-id] {:vinculo-ativo {:id (random-uuid) :tipo "servidor"} :papeis papeis})))
 
+(defn- fake-repo-cadastros
+  "So' `nomes-de-comissoes`, a metade de `cadastros` do `resolver-comissoes` que o host injeta no
+  legislativo (§22.5.3) — e' o que da' nome a comissao de cada parecer da ficha (defeito #11 do ledger de
+  prontidao, em que a aba mostrava um UUID por linha). Conhece SO' a CCJ: o 2o parecer da fixture aponta
+  uma comissao desconhecida de proposito."
+  []
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify repo-cadastros-comp/RepoCadastros
+    (nomes-de-comissoes [_ _ente-id ids]
+      (into {} (keep (fn [i] (when (= i ccj-id) [i "Comissão de Constituição e Justiça"]))) ids))))
+
 (defn- service-fn [papeis repo-l]
   (-> (http/servico (config/carregar)
                     (rotas/montar {:idp (idp-dev/idp-dev)
                                    :repo-identidade (fake-repo-identidade papeis)
-                                   :repo-legislativo repo-l})
+                                   :repo-legislativo repo-l
+                                   :repo-cadastros (fake-repo-cadastros)})
                     it/globais)
       ph/create-server ::ph/service-fn))
 
@@ -80,8 +99,12 @@
     (is (= 1 (count (:apensadas body))))
     (is (= 1 (count (:emendas body))))
     (is (= "aditiva" (:tipo-emenda (first (:emendas body)))))
-    (is (= 1 (count (:pareceres body))))
-    (is (= "favoravel" (:voto-relator (first (:pareceres body)))))))
+    (is (= 2 (count (:pareceres body))))
+    (is (= "favoravel" (:voto-relator (first (:pareceres body)))))
+    ;; #11: a ficha nomeia a comissao de cada parecer, atravessando a fronteira de modulo pelo resolver
+    ;; do host — e a linha cuja comissao o resolver nao conhece sai com nome nil, NUNCA com o id.
+    (is (= ["Comissão de Constituição e Justiça" nil] (mapv :comissao-nome (:pareceres body))))
+    (is (not-any? #(= (:comissao-nome %) (:comissao-id %)) (:pareceres body)))))
 
 (deftest ficha-materia-inexistente-404
   (let [r (pt/response-for (service-fn #{"secretario"} (fake-repo-legislativo (random-uuid) (random-uuid)))

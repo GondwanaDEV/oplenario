@@ -36,6 +36,24 @@
   [repo-cadastros ente-id identidade-id]
   (:id (repo-cadastros-comp/vereador-por-identidade repo-cadastros ente-id identidade-id)))
 
+(defn resolver-comissoes
+  "comissao-ids -> {comissao-id nome} NESTA Casa — host wiring (§22.5.3, exceção nomeada, mesma forma de
+  `resolver-vereador`/`membros-da-casa`). Resolve via o Repo-Component de `cadastros`
+  (`nomes-de-comissoes`); o `legislativo` recebe esta fn JA' RESOLVIDA e nunca importa `cadastros`.
+
+  Existe porque `legislativo.pareceres.comissao_id` e' guard ref `uuid NOT NULL` SEM FK cross-schema
+  (mig 20260620000019): o legislativo guarda o id e nunca soube o nome, entao a tela do parecer exibia
+  `9119889e-...` — defeito #11 do ledger de prontidao (`docs/16-ledger-prontidao.md`), classificado
+  `MATA`. Nao havia, ate' aqui, NENHUMA rota que fizesse id->nome de comissao.
+
+  PLURAL de proposito: a ficha da materia lista N pareceres e resolver um a um seria N transacoes por
+  request. Id sem comissao correspondente (guard ref orfao, ou comissao de outra Casa — a RLS ja' corta)
+  simplesmente nao aparece no mapa; o chamador degrada pra nil e o FE mostra rotulo honesto. Nunca lanca,
+  nunca inventa nome. Extraida como defn de topo, testavel direto contra Postgres real (mesmo racional de
+  `resolver-vereador`)."
+  [repo-cadastros ente-id ids]
+  (repo-cadastros-comp/nomes-de-comissoes repo-cadastros ente-id ids))
+
 (def ^:private teto-de-janelas
   "Teto de intervalos devolvidos por `janelas-de-exercicio`. Cada janela vira um ramo de OR sobre `data` no
   WHERE da fatia 6, numa rota PUBLICA, anonima e sem cache; `criar-mandato!` (INSERT direto — o caminho do
@@ -229,6 +247,8 @@
         ;; `resolver-vereador` p/ nao sombrear — a chave passada a legislativo-http/rotas continua
         ;; :resolver-vereador).
         resolver-vereador-fn (fn [ente-id identidade-id] (resolver-vereador repo-cadastros ente-id identidade-id))
+        ;; #11: a metade de `cadastros` do nome da comissao, para o `legislativo` (ver `resolver-comissoes`).
+        resolver-comissoes-fn (fn [ente-id ids] (resolver-comissoes repo-cadastros ente-id ids))
         ;; Fix da review Onda E fatia 2 (achados I-1+M-1): autor-id cru do corpo de POST/PATCH proposicao
         ;; vira o elo de autoria PUBLICA (transparencia.materia) — precisa apontar pra um vereador de
         ;; verdade NESTE ente antes de virar afirmacao publica. Mesma inversao de dependencia de
@@ -320,6 +340,7 @@
                                        :consultar-sessao consultar-sessao
                                        :resolver-municipio resolver-municipio
                                        :resolver-vereador resolver-vereador-fn
+                                       :resolver-comissoes resolver-comissoes-fn
                                        :vereador-vinculado? vereador-vinculado?
                                        :registro registro-fatos
                                        :relogio relogio-producao}))

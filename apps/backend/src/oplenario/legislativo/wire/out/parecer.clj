@@ -28,6 +28,11 @@
    [:objeto-tipo :string]
    [:objeto-id :string]
    [:comissao-id :string]
+   ;; Defeito #11 do ledger de prontidao: `comissao-id` e' guard ref `uuid NOT NULL` sem FK cross-schema,
+   ;; e a tela mostrava o UUID por falta de nome. O HOST resolve (`resolver-comissoes`, §22.5.3) e o
+   ;; controller decora. OPCIONAL/maybe de proposito: guard ref orfao (ou comissao de outra Casa) sai nil
+   ;; — o contrato nao pode quebrar porque o resolver nao achou dono.
+   [:comissao-nome {:optional true} [:maybe :string]]
    [:relator-id {:optional true} [:maybe :string]]
    [:voto-relator {:optional true} [:maybe :string]]
    [:estado :string]

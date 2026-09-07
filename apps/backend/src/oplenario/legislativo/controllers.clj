@@ -207,25 +207,55 @@
   (validar-autor! vereador-vinculado? ente-id m)
   (repo/editar-proposicao! repo-legislativo ente-id m))
 
+(defn- nomear-comissoes
+  "Decora cada mapa de `ms` (que tem `:comissao-id`) com `:comissao-nome`, resolvendo os N ids numa
+  chamada so'. A CHAVE existe sempre, mesmo quando o resolver nao acha nada: o wire/out nao pode depender
+  de o guard ref ter dono — id orfao (ou de outra Casa) vira nil, e o FE mostra rotulo honesto.
+
+  `resolver-comissoes` e' a fn injetada pelo HOST (§22.5.3, exceção nomeada — o legislativo NUNCA importa
+  `cadastros`), mesma forma de `resolver-vereador`. Lista vazia nao chama o resolver: materia sem parecer
+  nao paga uma transacao a mais."
+  [resolver-comissoes ente-id ms]
+  (if (empty? ms)
+    ms
+    (let [nomes (resolver-comissoes ente-id (mapv :comissao-id ms))]
+      (mapv #(assoc % :comissao-nome (get nomes (:comissao-id %))) ms))))
+
 (defn buscar-ficha-materia
   "Onda B Slice 3 — ficha completa da materia (proposicao + texto + tramitacao + apensadas + emendas +
   pareceres), mesmo gate grosso das rotas irmas (papel 'secretario', sem policy fina adicional). nil se a
   proposicao nao existe no tenant (-> 404 na borda), mesmo contrato de `buscar-proposicao-ficha`. `:texto`
   sai daqui JA extraido (:texto-inline da linha de dominio, ou nil) — mesma disciplina de
   `buscar-proposicao-ficha` (review MENOR fe-9-ficha-materia): o CONTROLLER e' quem decide o nome de campo
-  do model, nunca o diplomat/http/in (que so' compoe adapters/out ja' prontos)."
-  [repo-legislativo ente-id id]
+  do model, nunca o diplomat/http/in (que so' compoe adapters/out ja' prontos).
+
+  Cada parecer sai com `:comissao-nome` (defeito #11 do ledger de prontidao — a aba mostrava o UUID)."
+  [repo-legislativo resolver-comissoes ente-id id]
   (let [{:keys [proposicao texto] :as ficha} (repo/ficha-completa-da-proposicao repo-legislativo ente-id id)]
-    (when proposicao (assoc ficha :texto (:texto-inline texto)))))
+    (when proposicao
+      (-> ficha
+          (assoc :texto (:texto-inline texto))
+          (update :pareceres #(nomear-comissoes resolver-comissoes ente-id %))))))
 
 ;; ========================= Onda B Slice 5: editor/emissao do parecer =========================
+
+(defn- nomear-comissao-do-parecer
+  "Mesma decoracao de `nomear-comissoes`, para o agregado de UM parecer (`{:parecer :objeto ...}`).
+  `nil` passa reto — o gate 404 da borda vem antes e nao paga transacao de cadastros."
+  [resolver-comissoes ente-id dados]
+  (when dados
+    (update dados :parecer #(first (nomear-comissoes resolver-comissoes ente-id [%])))))
 
 (defn buscar-parecer-editor
   "Onda B Slice 5 — leitura agregada p/ o editor de parecer (parecer + objeto + texto rascunho/vigente),
   mesmo gate grosso das rotas irmas (papel 'secretario', sem policy fina adicional). nil se o parecer nao
-  existe no tenant (-> 404 na borda), mesmo contrato de buscar-ficha-materia/buscar-proposicao-ficha."
-  [repo-legislativo ente-id id]
-  (repo/buscar-parecer-para-editor repo-legislativo ente-id id))
+  existe no tenant (-> 404 na borda), mesmo contrato de buscar-ficha-materia/buscar-proposicao-ficha.
+
+  O parecer sai com `:comissao-nome` resolvido pelo host (defeito #11 do ledger de prontidao — o
+  subtitulo e o rail de /parecer/:id mostravam o UUID da comissao)."
+  [repo-legislativo resolver-comissoes ente-id id]
+  (nomear-comissao-do-parecer resolver-comissoes ente-id
+                              (repo/buscar-parecer-para-editor repo-legislativo ente-id id)))
 
 (defn salvar-rascunho-parecer
   "Onda B Slice 5 — cria uma nova versao 'rascunho' do texto do parecer. `m` ja' vem coagido pelo
@@ -248,10 +278,11 @@
   SEMPRE resolvido do proprio ator (mesmo contrato de meu-painel/acusar-ciencia), nunca de path/corpo. nil
   (ator sem cadastro vinculado OU nao e' o relator OU parecer inexistente) -> nil — a borda traduz -> 404,
   sem distinguir motivo (mesmo contrato de parecer-elegivel-para-ciencia?)."
-  [repo-legislativo resolver-vereador ator id]
+  [repo-legislativo resolver-vereador resolver-comissoes ator id]
   (when-let [vereador-id (resolver-vereador (:ente-id ator) (:identidade-id ator))]
     (when (repo/relator-do-parecer? repo-legislativo (:ente-id ator) vereador-id id)
-      (repo/buscar-parecer-para-editor repo-legislativo (:ente-id ator) id))))
+      (nomear-comissao-do-parecer resolver-comissoes (:ente-id ator)
+                                  (repo/buscar-parecer-para-editor repo-legislativo (:ente-id ator) id)))))
 
 (defn meu-emitir-parecer
   "Onda C4 — 'assinar em 2 toques': o vereador-relator emite (=assina) o PROPRIO parecer. MESMO gate de

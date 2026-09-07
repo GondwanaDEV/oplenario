@@ -118,10 +118,50 @@
            (controllers/editar-proposicao repo sempre-vinculado? (random-uuid)
              {:id id :autor-tipo "vereador" :autor-id vid :autor-texto "Fulano de Tal"})))))
 
+(def ^:private sem-nomes
+  "resolver-comissoes que nunca resolve nada — o caso de guard ref orfao/comissao de outra Casa."
+  (constantly {}))
+
 (deftest buscar-ficha-materia-nil-quando-nao-existe
   (let [repo (fake-repo :ficha (fn [_id] {:proposicao nil :texto nil :tramitacao [] :apensadas []
                                            :emendas [] :pareceres []}))]
-    (is (nil? (controllers/buscar-ficha-materia repo (random-uuid) (random-uuid))))))
+    (is (nil? (controllers/buscar-ficha-materia repo sem-nomes (random-uuid) (random-uuid))))))
+
+;; Defeito #11 do ledger de prontidao: a aba "Pareceres" da ficha mostrava o `comissao-id` cru porque
+;; NINGUEM sabia o nome — `legislativo.pareceres.comissao_id` e' guard ref sem FK cross-schema. O host
+;; injeta `resolver-comissoes` (§22.5.3, mesma exceção nomeada de `resolver-vereador`) e o controller
+;; decora cada parecer com `:comissao-nome`.
+(deftest buscar-ficha-materia-nomeia-a-comissao-de-cada-parecer
+  (let [ccj (random-uuid) fin (random-uuid)
+        pedidos (atom nil)
+        resolver (fn [_ente-id ids] (reset! pedidos ids)
+                   {ccj "Comissão de Constituição e Justiça" fin "Comissão de Finanças"})
+        repo (fake-repo :ficha (fn [_id] {:proposicao {:id "p"} :texto nil :tramitacao [] :apensadas []
+                                           :emendas []
+                                           :pareceres [{:id "p1" :comissao-id ccj}
+                                                       {:id "p2" :comissao-id fin}]}))
+        r (controllers/buscar-ficha-materia repo resolver (random-uuid) (random-uuid))]
+    (is (= ["Comissão de Constituição e Justiça" "Comissão de Finanças"]
+           (mapv :comissao-nome (:pareceres r))))
+    (is (= [ccj fin] (vec @pedidos))
+        "UMA chamada com os N ids — resolver um a um seria N transacoes por request")))
+
+(deftest buscar-ficha-materia-comissao-nao-resolvida-vira-nil-e-nao-lanca
+  (let [repo (fake-repo :ficha (fn [_id] {:proposicao {:id "p"} :texto nil :tramitacao [] :apensadas []
+                                           :emendas [] :pareceres [{:id "p1" :comissao-id (random-uuid)}]}))
+        r (controllers/buscar-ficha-materia repo sem-nomes (random-uuid) (random-uuid))]
+    (is (= [nil] (mapv :comissao-nome (:pareceres r)))
+        "guard ref orfao degrada — o FE ja' mostra 'Comissão designada', nunca o UUID")
+    (is (contains? (first (:pareceres r)) :comissao-nome)
+        "a CHAVE existe sempre: o wire/out nao pode depender de o resolver ter achado algo")))
+
+(deftest buscar-ficha-materia-sem-pareceres-nao-chama-o-resolver
+  (let [chamou (atom false)
+        resolver (fn [_ _] (reset! chamou true) {})
+        repo (fake-repo :ficha (fn [_id] {:proposicao {:id "p"} :texto nil :tramitacao [] :apensadas []
+                                           :emendas [] :pareceres []}))]
+    (controllers/buscar-ficha-materia repo resolver (random-uuid) (random-uuid))
+    (is (false? @chamou) "materia sem parecer nao paga uma transacao a mais")))
 
 (deftest buscar-ficha-materia-devolve-a-composicao-quando-existe
   ;; review MENOR fe-9-ficha-materia: a extracao de :texto-inline e' responsabilidade do CONTROLLER (mesma
@@ -130,7 +170,7 @@
   (let [repo (fake-repo :ficha (fn [_id] {:proposicao {:id "p"} :texto {:texto-inline "## Art. 1o"}
                                            :tramitacao [{:gatilho "despachar"}] :apensadas []
                                            :emendas [] :pareceres []}))
-        r (controllers/buscar-ficha-materia repo (random-uuid) (random-uuid))]
+        r (controllers/buscar-ficha-materia repo sem-nomes (random-uuid) (random-uuid))]
     (is (= {:id "p"} (:proposicao r)))
     (is (= "## Art. 1o" (:texto r)))
     (is (= [{:gatilho "despachar"}] (:tramitacao r)))))

@@ -45,6 +45,9 @@
   [:map {:closed true}
    [:id :string]
    [:comissao-id :string]
+   ;; Resolvido pelo HOST (`resolver-comissoes`, §22.5.3) — defeito #11 do ledger de prontidao, a aba
+   ;; "Pareceres" mostrava um UUID por linha. nil quando o guard ref nao tem dono nesta Casa.
+   [:comissao-nome {:optional true} [:maybe :string]]
    [:relator-id {:optional true} [:maybe :string]]
    [:voto-relator {:optional true} [:maybe :string]]
    [:estado :string]])

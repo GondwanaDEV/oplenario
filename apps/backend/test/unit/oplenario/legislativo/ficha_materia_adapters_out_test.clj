@@ -97,3 +97,15 @@
     (is (= "favoravel" (:voto-relator item)))
     (is (not (contains? item :template-id)) "template-id nao vaza no resumo")
     (is (not (contains? item :objeto-tipo)) "objeto-tipo nao vaza no resumo")))
+
+;; ---------- #11: o nome da comissao em cada linha de parecer ----------
+
+(deftest ficha->wire-projeta-o-nome-da-comissao-de-cada-parecer
+  (let [ente (random-uuid)
+        out (adapters/ficha->wire (header ente nil)
+              {:tramitacao [] :apensadas [] :emendas []
+               :pareceres [(assoc (parecer-canonico) :comissao-nome "Comissão de Finanças")
+                           (parecer-canonico)]})]
+    (is (m/validate wire/FichaMateriaOut out))
+    (is (= ["Comissão de Finanças" nil] (mapv :comissao-nome (:pareceres out)))
+        "linha sem nome resolvido sai nil — nunca o comissao-id como substituto")))

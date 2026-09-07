@@ -99,7 +99,8 @@ export type ParecerVista = ParecerResumoOut & {
   rotuloEstado: string;
   categoria: CategoriaSituacao;
   // A aba imprimia `comissaoId` — um UUID por linha (defeito #11 do ledger, `MATA`). O rótulo vem
-  // pronto daqui; o id continua no objeto porque `key`/navegação precisam dele, mas nada o exibe.
+  // pronto daqui: o nome de verdade quando o backend resolve, o rótulo honesto quando não. O id
+  // continua no objeto porque `key`/navegação precisam dele, mas nada o exibe.
   comissaoRotulo: string;
 };
 
@@ -108,9 +109,9 @@ export function derivarPareceres(pareceres: ParecerResumoOut[]): ParecerVista[] 
     ...p,
     rotuloEstado: PARECER_ROTULO_POR_ESTADO[p.estado] ?? p.estado,
     categoria: categorizarParecer(p.estado),
-    // O wire não traz nome de comissão em lugar nenhum (ver comissao-vista.ts) — passar o id aqui só
-    // devolveria o UUID pra tela, então o que entra é a ausência, explicitamente.
-    comissaoRotulo: rotularComissao(undefined),
+    // `comissaoNome` vem resolvido pelo host (`resolver-comissoes`, §22.5.3) e é `null` quando o guard
+    // ref não tem dono nesta Casa — o rótulo honesto cobre esse caso; o id nunca entra aqui.
+    comissaoRotulo: rotularComissao(p.comissaoNome),
   }));
 }
 

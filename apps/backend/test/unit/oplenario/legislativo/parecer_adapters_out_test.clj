@@ -95,3 +95,21 @@
                  :texto-rascunho {:texto-inline "## Relatório\n\nX" :numero-versao 2}
                  :texto-vigente nil})]
     (is (nil? (:assinatura-algoritmo saida)) "rascunho em edicao nunca esta assinado")))
+
+;; ---------- #11: o nome da comissao (host `resolver-comissoes`, §22.5.3) ----------
+
+(deftest editor->wire-projeta-o-nome-da-comissao-resolvido-pelo-host
+  (let [out (adapters/editor->wire
+              {:parecer (assoc (parecer-canonico) :comissao-nome "Comissão de Constituição e Justiça")
+               :objeto (objeto-canonico) :texto-rascunho nil :texto-vigente nil})]
+    (is (m/validate wire/ParecerEditorOut out))
+    (is (= "Comissão de Constituição e Justiça" (:comissao-nome out)))))
+
+(deftest editor->wire-sem-nome-de-comissao-continua-valido
+  ;; guard ref orfao: o adapter NAO pode reprovar o contrato so' porque o resolver nao achou dono — e
+  ;; muito menos cair no `comissao-id` como substituto (era exatamente isso que punha o UUID na tela).
+  (let [out (adapters/editor->wire
+              {:parecer (parecer-canonico) :objeto (objeto-canonico)
+               :texto-rascunho nil :texto-vigente nil})]
+    (is (m/validate wire/ParecerEditorOut out))
+    (is (nil? (:comissao-nome out)))))

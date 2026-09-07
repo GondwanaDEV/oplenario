@@ -61,6 +61,12 @@ describe("RailParecer", () => {
     expect(screen.queryByText(/^relator$/i)).toBeNull();
   });
 
+  it("com nome servido pelo backend, a linha 'Comissão' aparece com o nome de verdade", () => {
+    render(<RailParecer parecer={{ ...base, comissaoNome: "Comissão de Constituição e Justiça" }} token={null} />);
+    expect(screen.getByText("Comissão")).toBeTruthy();
+    expect(screen.getByText("Comissão de Constituição e Justiça")).toBeTruthy();
+  });
+
   it("relatorId presente -> mostra a linha 'Relator' com rótulo honesto (sem nome inventado)", () => {
     render(<RailParecer parecer={{ ...base, relatorId: "r1" }} token={null} />);
     expect(screen.getByText("Relator")).toBeTruthy();

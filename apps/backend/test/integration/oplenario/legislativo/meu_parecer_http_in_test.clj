@@ -30,11 +30,19 @@
   (reify repo-id/RepoIdentidade
     (snapshot-ator [_ _ente-id _identidade-id] {:vinculo-ativo {:id (random-uuid) :tipo "vereador"} :papeis #{"vereador"}})))
 
-(defn- fake-repo-cadastros [resolver]
+(def ^:private ccj-id (random-uuid))
+
+(defn- fake-repo-cadastros
+  "Os DOIS resolvers que o host injeta no legislativo (§22.5.3): `vereador-por-identidade` (borda /meu) e
+  `nomes-de-comissoes` (o nome da comissao do parecer — defeito #11 do ledger de prontidao, em que o
+  editor do vereador mostrava o UUID)."
+  [resolver]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify repo-cadastros-comp/RepoCadastros
     (vereador-por-identidade [_ ente-id identidade-id]
-      (when-let [v (resolver ente-id identidade-id)] {:id v}))))
+      (when-let [v (resolver ente-id identidade-id)] {:id v}))
+    (nomes-de-comissoes [_ _ente-id ids]
+      (into {} (keep (fn [i] (when (= i ccj-id) [i "Comissão de Educação e Cultura"]))) ids))))
 
 (defn- service-fn [repo-l resolver-vereador]
   (-> (http/servico (config/carregar)
@@ -59,14 +67,17 @@
 
 (deftest get-meu-parecer-200-quando-e-o-relator
   (let [ente (random-uuid) identidade (random-uuid) vereador (random-uuid) pid (random-uuid)
-        parecer {:parecer {:id pid :objeto-tipo "proposicao" :objeto-id (random-uuid) :comissao-id (random-uuid)
+        parecer {:parecer {:id pid :objeto-tipo "proposicao" :objeto-id (random-uuid) :comissao-id ccj-id
                            :estado "com_relator" :template-id (random-uuid) :lock-version 0
                            :criado-em (Instant/now)}
                  :objeto nil :texto-rascunho {:texto-inline "## Relatório\n\nX" :numero-versao 1} :texto-vigente nil}
         svc (service-fn (fake-repo-legislativo {:relator? true :parecer parecer}) (fn [_ _] vereador))
-        r (pt/response-for svc :get (str "/meu/pareceres/" pid) :headers (com-bearer (token ente identidade)))]
+        r (pt/response-for svc :get (str "/meu/pareceres/" pid) :headers (com-bearer (token ente identidade)))
+        body (ler-json r)]
     (is (= 200 (:status r)))
-    (is (= (str pid) (:id (ler-json r))))))
+    (is (= (str pid) (:id body)))
+    ;; #11: a borda /meu tambem nomeia a comissao — o vereador-relator via o UUID igual ao servidor.
+    (is (= "Comissão de Educação e Cultura" (:comissao-nome body)))))
 
 (deftest post-meu-emissao-404-quando-nao-e-o-relator
   (let [ente (random-uuid) identidade (random-uuid) vereador (random-uuid) pid (random-uuid)
