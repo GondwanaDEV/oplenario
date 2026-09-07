@@ -69,13 +69,21 @@ if [ -z "$ENTE_ID" ]; then
   echo "ERRO: não foi possível extrair \":ente #uuid ...\" de $ARTEFATOS/demo-ids.edn" >&2
   exit 1
 fi
-# O 1º `:id #uuid ...` do arquivo e' sempre o do 1º vereador do vetor `:vereadores` (idx 0, o presidente
-# da Mesa — `casa.clj:88`) porque nenhuma outra chave do topo do EDN se chama `:id` (as demais sao
-# `:ente`/`:legislatura`/`:identidades`; `:mandato-id` dentro de cada vereador tem outro nome). A
-# autoria das materias em `acervo.clj` e' round-robin sobre os 17 vereadores (`acervo.clj:218`), entao o
-# vereador idx 0 SEMPRE autora pelo menos 1 materia (idx 0 e 17 de 24) — `materias-total` dele nunca fica
-# em 0 depois que a projecao materializa.
-VEREADOR_ID="$(sed -n 's/.*:id[[:space:]]*#uuid[[:space:]]*"\([0-9a-fA-F-]\{36\}\)".*/\1/p' "$ARTEFATOS/demo-ids.edn" | head -1)"
+# CORRIGIDO (achado rodando este script de verdade, apos `casa/semear!` ganhar `:comissoes` no
+# retorno — conserto D do ledger #11, docs/16-ledger-prontidao.md): a redacao original pegava "o 1º
+# `:id #uuid ...` do arquivo inteiro" com um `s/.*:id.../\1/p` — mas `.*` E' GANANCIOSO, entao um
+# `sed` de UMA SUBSTITUICAO como essa acha o ULTIMO `:id` que ainda deixa o resto do padrao casar, nao
+# o primeiro (o comentario antigo estava errado sobre o proprio mecanismo, e so' "funcionava" por
+# coincidencia: antes de `:comissoes` existir, `:vereadores` era a ULTIMA estrutura do EDN com chave
+# `:id`, entao o "ultimo :id do arquivo" batia por acidente com ALGUM vereador — nao necessariamente
+# o idx 0, mas o round-robin de `acervo.clj:218` garante materia pra qualquer idx do roster). Com
+# `:comissoes` IMPRESSO DEPOIS de `:vereadores` no retorno de `casa/semear!`, o "ultimo :id do
+# arquivo" passou a ser o de uma COMISSAO, e o poll do perfil publico do vereador nunca resolvia
+# (id inexistente na rota de vereador). Corrigido isolando a FATIA do EDN entre `:vereadores [` e a
+# proxima chave do topo (`:comissoes`) antes de extrair — `grep -o` (nao `sed` de substituicao unica)
+# acha ocorrencias em ORDEM, entao `head -1` agora e' de fato o 1º `:id` da fatia.
+FATIA_VEREADORES="$(sed -n 's/.*:vereadores \[\(.*\)\], :comissoes.*/\1/p' "$ARTEFATOS/demo-ids.edn")"
+VEREADOR_ID="$(printf '%s' "$FATIA_VEREADORES" | grep -oE ':id #uuid "[0-9a-fA-F-]{36}"' | head -1 | grep -oE '[0-9a-fA-F-]{36}')"
 if [ -z "$VEREADOR_ID" ]; then
   echo "ERRO: não foi possível extrair o \":id\" do 1º vereador de $ARTEFATOS/demo-ids.edn" >&2
   exit 1
