@@ -29,7 +29,11 @@
  {:dev  {:extra-paths ["dev" "test"]}
   ;; os dirs de suite SAO raizes de classpath (ns oplenario.* sob test/unit, nao test/unit.oplenario.*);
   ;; alinhado ao tests.edn p/ o REPL carregar tambem, nao so o kaocha (que adiciona test-paths dinamicamente).
-  :test {:extra-paths ["test/unit" "test/integration" "test/e2e" "test/keycloak"]
+  ;; "demo" entrou aqui na Task 0.2 (plano de prontidao de apresentacao): `demo/casa.clj` etc so' fazem
+  ;; ns `casa` etc — sem esta raiz de classpath, `test/integration/oplenario/demo/casa_test.clj` nao
+  ;; conseguiria `(:require [casa ...])` (o alias ad-hoc `-Sdeps '{:extra-paths ["demo"]}'` documentado
+  ;; no topo de `seed_demo.clj` so cobre a execucao MANUAL da semente, nao a suite `-M:test`).
+  :test {:extra-paths ["test/unit" "test/integration" "test/e2e" "test/keycloak" "demo"]
          :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}
                        clj-kondo/clj-kondo {:mvn/version "2026.05.25"}} ; analise p/ o import-lint (§22.10)
          :main-opts   ["-m" "kaocha.runner"]}
