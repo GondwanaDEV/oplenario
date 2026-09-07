@@ -29,6 +29,7 @@
     a tela de pos-aprovacao mostra pendente."
   (:require [honey.sql :as sql]
             [next.jdbc :as jdbc]
+            [oplenario.cadastros.components.repositorio :as repo-cadastros]
             [oplenario.cadastros.db.vereador :as vereador]
             [oplenario.kernel.db-util :as comum]
             [oplenario.kernel.tenancy :as tenancy]
@@ -258,9 +259,18 @@
 (defn- semear-pareceres!
   "3 pareceres — A: rascunho (relator designado, texto em elaboração, SEM transicionar). B: aguardando
   assinatura do relator (relatoria concluída, ainda não emitido). C: emitido — engine leva a 'aprovado'
-  (o vocabulario real; 'emitido' e' rotulo de UI), com assinatura (Onda C Slice C4, `assinador-icp`)."
-  [repo registro ente template-id vereadores por-ref]
-  (let [relator1 (:id (nth vereadores 0)) relator2 (:id (nth vereadores 1)) relator3 (:id (nth vereadores 2))]
+  (o vocabulario real; 'emitido' e' rotulo de UI), com assinatura (Onda C Slice C4, `assinador-icp`).
+
+  CORRIGIDO (ledger #12, docs/16-ledger-prontidao.md): a 1a redacao designava relator1/2/3 pelos 3
+  PRIMEIROS do roster (`vereadores`, ordem de `vereador/listar`), sem vinculo com identidade nenhuma
+  — a identidade `:vereador` da demo NUNCA era relatora, e GET /parecer/:id/assinar respondia 404 pro
+  login vereador (a jornada J3 morria). `relator-vereador-id` (o vereador ligado a' identidade
+  `:vereador`, resolvido em `semear!`) agora e' o relator do parecer B — o UNICO dos 3 num estado
+  NAO-terminal ('aguardando_assinatura'): A e' rascunho (ainda sem relatoria concluida) e C ja'
+  termina em 'aprovado' (§22.4 eixo F, `legislativo.logic/estados-parecer-terminais` — um parecer
+  terminal nao pode mais ser assinado, migration 20260620000019-legislativo-pareceres.up.sql:87)."
+  [repo registro ente template-id vereadores relator-vereador-id por-ref]
+  (let [relator1 (:id (nth vereadores 0)) relator2 relator-vereador-id relator3 (:id (nth vereadores 2))]
     ;; A — rascunho
     (let [{pcid :id} (repo-leg/iniciar-parecer! repo ente
                        {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id (get por-ref :em-comissoes-1)
@@ -270,7 +280,7 @@
         {:id (random-uuid) :parecer-id pcid
          :texto-inline (texto-parecer "Trata-se de projeto de lei que dispõe sobre a criação do Conselho Municipal de Mobilidade Urbana.")
          :origem-versao "redacao" :formato "markdown"}))
-    ;; B — aguardando assinatura do relator
+    ;; B — aguardando assinatura do relator (relator = o vereador da identidade ':vereador' — ledger #12)
     (let [{pcid :id} (repo-leg/iniciar-parecer! repo ente
                        {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id (get por-ref :aguardando-pauta-1)
                         :comissao-id (random-uuid) :template-id template-id})]
@@ -347,20 +357,28 @@
   `(:registro-fatos sistema)` (ja' `using`-ados com :datasource/:bus, nada a fiar aqui) + o `:datasource`
   cru so' pra' as 2 leituras que nao tem fn exposta no modulo (`template-do-rito`/`estados-do-template`).
 
+  `identidade-vereador` e' o `:vereador` de `(:identidades (casa/semear! sistema))` — o UUID de
+  IDENTIDADE (nao de vereador) do login usado na jornada J3. Resolvido aqui pro vereador-id real via
+  `RepoCadastros/vereador-por-identidade` (mesmo seam de `rotas.clj:37`) — ledger #12
+  (docs/16-ledger-prontidao.md): sem isso nenhum parecer tinha esse vereador como relator, e
+  GET /parecer/:id/assinar respondia 404 pro login vereador.
+
   IDEMPOTENCIA (mesmo padrao de `casa/ja-semeada?`, carry #6 do briefing — os `db/` de proposicao/
   template/parecer/autografo/norma NAO tem ON CONFLICT): o gate e' a existencia do template
   `rito-chave` v1 neste ente. Se ja' existe, RELE (devolve so' `:template-id`, sem duplicar as 24
   proposicoes) em vez de tentar recriar — chamar de novo NAO cria um segundo acervo.
 
   Devolve `{:template-id}`."
-  [sistema ente]
+  [sistema ente identidade-vereador]
   (let [repo (:repo-legislativo sistema)
         registro (:registro-fatos sistema)
+        repo-cad (:repo-cadastros sistema)
         ds (get-in sistema [:datasource :ds])
         existente (tenancy/com-tenant* ds ente (fn [tx] (template-do-rito tx ente)))]
     (if existente
       {:template-id existente}
       (let [vereadores (tenancy/com-tenant* ds ente (fn [tx] (vereador/listar tx ente hoje)))
+            relator-vereador-id (:id (repo-cadastros/vereador-por-identidade repo-cad ente identidade-vereador))
             template-id (criar-rito! repo ente)
             por-ref (into {}
                       (map-indexed
@@ -368,7 +386,7 @@
                         materias))
             materias-por-ref (into {} (map (juxt :ref identity) materias))
             template-parecer-id (criar-template-parecer! repo ente)]
-        (semear-pareceres! repo registro ente template-parecer-id vereadores por-ref)
+        (semear-pareceres! repo registro ente template-parecer-id vereadores relator-vereador-id por-ref)
         (semear-pos-aprovacao! repo ente por-ref)
         (semear-normas! repo ente por-ref materias-por-ref)
         {:template-id template-id}))))

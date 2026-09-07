@@ -11,13 +11,15 @@
             [casa]
             [clojure.set]
             [clojure.test :refer [deftest is testing]]
+            [oplenario.cadastros.components.repositorio :as repo-cadastros]
             [oplenario.demo.casa-test :refer [with-sistema]]
+            [oplenario.legislativo.components.repositorio :as repo-legislativo]
             [oplenario.legislativo.logic :as legislativo.logic]))
 
 (deftest acervo-usa-vocabulario-real-e-cobre-o-rito-que-instala
   (with-sistema [s]
-    (let [{:keys [ente]} (casa/semear! s)
-          {:keys [template-id]} (acervo/semear! s ente)
+    (let [{:keys [ente identidades]} (casa/semear! s)
+          {:keys [template-id]} (acervo/semear! s ente (:vereador identidades))
           por-estado (acervo/contar-por-estado s ente)
           estados-do-template (acervo/estados-do-template s ente template-id)]
       (testing "todo tipo usado existe em legislativo.logic/tipos — a autoridade real"
@@ -31,3 +33,24 @@
       (testing "nenhuma matéria em estado que o template não declara"
         (is (empty? (clojure.set/difference (set (keys por-estado))
                                              (set estados-do-template))))))))
+
+(deftest o-vereador-da-identidade-e-relator-de-parecer-assinavel
+  ;; Ledger #12 (docs/16-ledger-prontidao.md): a identidade `:vereador` da demo NUNCA era relatora de
+  ;; parecer nenhum (`semear-pareceres!` designava relator entre os 3 primeiros do roster, sem vinculo
+  ;; com nenhuma identidade — `vereador/listar` nem é chamado por identidade) — GET
+  ;; /parecer/:id/assinar respondia 404 "parecer não encontrado" pro login vereador, e a jornada J3
+  ;; (o parecer) não podia ser demonstrada de ponta a ponta.
+  (with-sistema [s]
+    (let [{:keys [ente identidades]} (casa/semear! s)
+          vereador-identidade (:vereador identidades)
+          _ (acervo/semear! s ente vereador-identidade)
+          repo-cad (:repo-cadastros s)
+          repo-leg (:repo-legislativo s)
+          vereador-id (:id (repo-cadastros/vereador-por-identidade repo-cad ente vereador-identidade))
+          pareceres (:pareceres (repo-legislativo/meu-painel repo-leg ente vereador-id))]
+      (testing "o vereador da identidade :vereador e' relator de pelo menos 1 parecer"
+        (is (seq pareceres)
+            "identidade :vereador nunca e' relatora — GET /parecer/:id/assinar responde 404"))
+      (testing "existe parecer NAO terminal (assinavel) entre eles"
+        (is (some #(not (contains? legislativo.logic/estados-parecer-terminais (:estado %))) pareceres)
+            "todo parecer do relator ja' esta' num dos 4 estados terminais — nao ha' o que assinar")))))
