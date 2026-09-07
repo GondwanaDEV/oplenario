@@ -19,9 +19,11 @@
             [clojure.java.io :as io]
             [clojure.test :refer [deftest is testing]]
             [com.stuartsierra.component :as component]
+            [oplenario.cadastros.components.repositorio :as repo-cadastros]
             [oplenario.config :as config]
             [oplenario.migracao :as migracao]
-            [oplenario.sistema :as sistema]))
+            [oplenario.sistema :as sistema])
+  (:import (java.time LocalDate)))
 
 (defmacro with-sistema
   "Boota o sistema Component (datasource + os sub-systems dos modulos) p/ a duracao de `body`, migra o
@@ -57,3 +59,30 @@
           (let [lido (edn/read-string (slurp alvo))]
             (is (= (:ente r1) (:ente lido)) "o ente gravado tem de ser o ente semeado")
             (is (= 17 (count (:vereadores lido))))))))))
+
+(deftest a-ficha-do-presidente-mostra-cargo-e-comissao-da-mesa
+  ;; Ledger #3/#4 (docs/16-ledger-prontidao.md): `comissao_membro` da Mesa tinha 0 linhas enquanto os 4
+  ;; cargos existiam em `comissao_cargo` com vereador ligado. `ficha-vereador` (repositorio.clj:136)
+  ;; resolve `:comissoes` via `comissao/comissoes-do-vereador` (db/comissao.clj:54-71), que faz INNER
+  ;; JOIN em `comissao_membro` — sem membro, a Mesa some da ficha, e a ficha do presidente mostrava
+  ;; "Sem cargo na Mesa"/"Sem comissões atribuídas" enquanto a LISTA (`/cadastros/vereadores`, que le'
+  ;; `comissao_cargo` direto via `cargo-mesa-lateral`, db/vereador.clj:276) e `/sessoes/:id/composicao`
+  ;; (mesma leitura, via `roster-da-casa`) mostravam "PT · presidente" ao lado — contradicao visivel na
+  ;; MESMA tela.
+  ;;
+  ;; Resolve o presidente pela IDENTIDADE (`vereador-por-identidade`), nao por indice do vetor
+  ;; `:vereadores` — em re-execucao (`ja-semeada?` = true), `ler-cadastro` devolve os vereadores na
+  ;; ordem de `vereador/listar` (por NOME, alfabetica), nao na ordem de `vereadores-base` — `(first
+  ;; vereadores)` so' seria o presidente por coincidencia.
+  (with-sistema [s]
+    (let [{:keys [ente identidades]} (casa/semear! s)
+          repo-cad (:repo-cadastros s)
+          presidente-id (:id (repo-cadastros/vereador-por-identidade repo-cad ente (:presidente identidades)))
+          ficha (repo-cadastros/ficha-vereador repo-cad ente presidente-id (LocalDate/now))
+          mesa-do-presidente (some #(when (= "mesa" (:tipo %)) %) (:comissoes ficha))]
+      (testing "a Mesa aparece em :comissoes da ficha — nao so' em comissao_cargo"
+        (is (some? mesa-do-presidente)
+            "presidente da Mesa sem entrada tipo='mesa' em :comissoes — a ficha mostraria 'Sem comissões atribuídas'"))
+      (testing "o cargo do presidente na Mesa e' 'presidente' — o mesmo que a lista mostra ao lado"
+        (is (= "presidente" (:cargo mesa-do-presidente))
+            "cargo-mesa ficaria null na ficha, contradizendo a lista (que mostra 'PT · presidente')")))))

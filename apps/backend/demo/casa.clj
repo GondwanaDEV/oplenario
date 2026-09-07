@@ -156,12 +156,21 @@
             {:id mandato-id :ente-id ente-id :vereador-id id :legislatura-id leg-id
              :partido partido :estado (if (= idx idx-licenciado) "licenciado" "vigente")
              :natureza "titular" :vigencia-inicio hoje}))
-        ;; Mesa Diretora — presidente/vice/1º e 2º secretarios (so' cargo, sem `comissao_membro`: a Mesa
-        ;; nao e' corpo de "membresia", e' de cargo nomeado — mesmo desenho de `seed_demo.clj/vereadores`)
+        ;; Mesa Diretora — presidente/vice/1º e 2º secretarios. CORRIGIDO (ledger #3/#4,
+        ;; docs/16-ledger-prontidao.md): a 1a redacao criava SO' `comissao_cargo` ("a Mesa nao e' corpo
+        ;; de membresia") — mas `ficha-vereador` (repositorio.clj:136) resolve `:comissoes` via
+        ;; `comissao/comissoes-do-vereador` (db/comissao.clj:54-71), que faz INNER JOIN em
+        ;; `comissao_membro`. Sem membro, a ficha do presidente mostrava "Sem cargo na Mesa"/"Sem
+        ;; comissões atribuídas" enquanto a LISTA e `/sessoes/:id/composicao` (que leem `comissao_cargo`
+        ;; direto via `cargo-mesa-lateral`, db/vereador.clj:276-291 — sem exigir membro) mostravam "PT ·
+        ;; presidente" ao lado — contradicao visivel na MESMA tela. Os 4 ocupantes de cargo da Mesa
+        ;; agora TAMBEM entram como membro — mesmo desenho ja' usado abaixo p/ as 3 comissoes permanentes.
         (let [mesa-id (random-uuid)]
           (comissao/inserir! tx {:id mesa-id :ente-id ente-id :nome "Mesa Diretora" :tipo "mesa"
                                   :legislatura-id leg-id :vigencia-inicio hoje})
           (doseq [[idx cargo] cargos-mesa]
+            (comissao/inserir-membro! tx {:id (random-uuid) :ente-id ente-id :comissao-id mesa-id
+                                           :vereador-id (:id (nth linhas idx)) :vigencia-inicio hoje})
             (comissao/inserir-cargo! tx {:id (random-uuid) :ente-id ente-id :comissao-id mesa-id
                                           :vereador-id (:id (nth linhas idx)) :cargo cargo
                                           :vigencia-inicio hoje})))
