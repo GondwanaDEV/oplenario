@@ -27,12 +27,15 @@
   seguidas no mesmo teste, o que exige um datasource que sobreviva entre as duas chamadas."
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log]
+            [honey.sql :as sql]
+            [next.jdbc :as jdbc]
             [oplenario.cadastros.db.comissao :as comissao]
             [oplenario.cadastros.db.estrutura :as estrutura]
             [oplenario.cadastros.db.referencia :as referencia]
             [oplenario.cadastros.db.vereador :as vereador]
             [oplenario.identidade.db.identidade :as id]
             [oplenario.identidade.db.vinculo :as vinc]
+            [oplenario.kernel.db-util :as comum]
             [oplenario.kernel.tenancy :as tenancy])
   (:import (java.time LocalDate)))
 
@@ -176,19 +179,34 @@
                                           :vigencia-inicio hoje})))
         ;; 3 comissoes permanentes — presidente TAMBEM entra como membro (mesmo desenho de
         ;; `seed_demo.clj/vereadores`: `comissao_membro` cobre todo participante, `comissao_cargo` so' o
-        ;; cargo nomeado por cima)
-        (doseq [[nome presidente-idx membros-idx] comissoes-permanentes]
-          (let [com-id (random-uuid)]
-            (comissao/inserir! tx {:id com-id :ente-id ente-id :nome nome :tipo "permanente"
-                                    :legislatura-id leg-id :vigencia-inicio hoje})
-            (doseq [m-idx (cons presidente-idx membros-idx)]
-              (comissao/inserir-membro! tx {:id (random-uuid) :ente-id ente-id :comissao-id com-id
-                                             :vereador-id (:id (nth linhas m-idx)) :vigencia-inicio hoje}))
-            (comissao/inserir-cargo! tx {:id (random-uuid) :ente-id ente-id :comissao-id com-id
-                                          :vereador-id (:id (nth linhas presidente-idx))
-                                          :cargo "presidente" :vigencia-inicio hoje})))
+        ;; cargo nomeado por cima). `:comissoes` (mapv em vez de doseq) devolvido no retorno de
+        ;; `semear!` p/ downstream (ledger #11, docs/16-ledger-prontidao.md: `acervo.clj` precisa das
+        ;; comissoes REAIS da Casa em vez de `random-uuid` guard ref orfao).
         {:legislatura-id leg-id
-         :vereadores (mapv #(select-keys % [:id :nome :nome-parlamentar :partido :mandato-id]) linhas)}))))
+         :vereadores (mapv #(select-keys % [:id :nome :nome-parlamentar :partido :mandato-id]) linhas)
+         :comissoes (mapv (fn [[nome presidente-idx membros-idx]]
+                             (let [com-id (random-uuid)]
+                               (comissao/inserir! tx {:id com-id :ente-id ente-id :nome nome :tipo "permanente"
+                                                       :legislatura-id leg-id :vigencia-inicio hoje})
+                               (doseq [m-idx (cons presidente-idx membros-idx)]
+                                 (comissao/inserir-membro! tx {:id (random-uuid) :ente-id ente-id :comissao-id com-id
+                                                                :vereador-id (:id (nth linhas m-idx)) :vigencia-inicio hoje}))
+                               (comissao/inserir-cargo! tx {:id (random-uuid) :ente-id ente-id :comissao-id com-id
+                                                             :vereador-id (:id (nth linhas presidente-idx))
+                                                             :cargo "presidente" :vigencia-inicio hoje})
+                               {:id com-id :nome nome :tipo "permanente"}))
+                           comissoes-permanentes)}))))
+
+(defn- comissoes-permanentes-existentes
+  "Leitura crua (nenhuma fn exposta no Repo/db do modulo p/ 'listar comissoes do ente' — mesmo racional
+  de `acervo.clj`/`template-do-rito`): as 3 comissoes permanentes ja' criadas, p/ `ler-cadastro` RELER
+  em vez de duplicar."
+  [tx]
+  (comum/linhas->kebab
+    (jdbc/execute! tx
+      (sql/format {:select [:id :nome] :from [:cadastros.comissao]
+                   :where [:and [:= :ente_id ente-id] [:= :tipo "permanente"]]
+                   :order-by [[:nome :asc]]}))))
 
 (defn- ler-cadastro
   "RELE o agregado cadastral do banco (rota de re-execucao, `ja-semeada?` = true) em vez de duplicar."
@@ -196,8 +214,10 @@
   (tenancy/com-tenant* ds ente-id
     (fn [tx]
       (let [leg (estrutura/legislatura-vigente tx ente-id)
-            linhas (vereador/listar tx ente-id hoje)]
+            linhas (vereador/listar tx ente-id hoje)
+            comissoes (mapv #(assoc % :tipo "permanente") (comissoes-permanentes-existentes tx))]
         {:legislatura-id (:id leg)
+         :comissoes comissoes
          :vereadores (mapv (fn [linha]
                               (let [mandato (first (vereador/mandatos-do-vereador tx ente-id (:id linha)))]
                                 {:id (:id linha) :nome (:nome linha)
@@ -232,7 +252,7 @@
   (`(component/start (oplenario.sistema/novo-sistema (config/carregar)))`, mesmo formato de
   `sistema_test.clj`/`repo_test.clj`) — so' o `:datasource` e' usado aqui.
 
-  Devolve `{:ente :legislatura :vereadores :identidades}`; grava o mesmo mapa em
+  Devolve `{:ente :legislatura :vereadores :comissoes :identidades}`; grava o mesmo mapa em
   `.artifacts/demo-ids.edn`. Chamar de novo NAO cria uma segunda Casa — reusa o ente fixo e o
   cadastro ja existente."
   [sistema]
@@ -249,6 +269,7 @@
     (let [identidades (criar-identidades! ds)
           cadastro (if (ja-semeada? ds) (ler-cadastro ds) (criar-cadastro! ds identidades))
           resultado {:ente ente-id :legislatura (:legislatura-id cadastro)
-                     :vereadores (:vereadores cadastro) :identidades identidades}]
+                     :vereadores (:vereadores cadastro) :comissoes (:comissoes cadastro)
+                     :identidades identidades}]
       (gravar-artefato! resultado)
       resultado)))

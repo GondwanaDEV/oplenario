@@ -194,6 +194,39 @@
   (->> (repo-leg/listar-e-contar-proposicoes (:repo-legislativo sistema) ente {:pagina 1 :tamanho 200})
        :itens (map :estado) frequencies))
 
+(defn- comissoes-permanentes-do-ente
+  "As comissoes permanentes REAIS da Casa (CCJ, Financas, Obras — criadas por `casa.clj`), tipo!='mesa'.
+  Leitura crua cross-schema (mesmo racional das leituras acima; `sessoes.clj` ja cruza pra
+  `cadastros.sessao_legislativa` do mesmo jeito) — ledger #11 (docs/16-ledger-prontidao.md):
+  `semear-pareceres!` gravava `comissao-id` como `(random-uuid)`, guard ref ORFAO (sem FK, §22.10),
+  e a tela `/parecer/:id` mostrava esse UUID cru onde deveria ir o nome da comissao."
+  [tx ente]
+  (comum/linhas->kebab
+    (jdbc/execute! tx
+      (sql/format {:select [:id :nome] :from [:cadastros.comissao]
+                   :where [:and [:= :ente_id ente] [:= :tipo "permanente"]]
+                   :order-by [[:nome :asc]]}))))
+
+(defn comissoes
+  "As comissoes permanentes reais da Casa — usado pelo teste da Task 0.4 (ledger #11) p/ provar que
+  todo `comissao-id` de parecer aponta pra uma comissao que EXISTE."
+  [sistema ente]
+  (let [ds (get-in sistema [:datasource :ds])]
+    (tenancy/com-tenant* ds ente (fn [tx] (comissoes-permanentes-do-ente tx ente)))))
+
+(defn pareceres
+  "Leitura crua de auditoria dos pareceres deste ente (id/comissao-id/estado/relator-id) — usado pelo
+  teste da Task 0.4 (ledger #11/#12); nenhuma fn exposta no Repo/db do modulo p/ 'listar pareceres do
+  ente' sem filtrar por objeto/relator (ver nota da ns acima)."
+  [sistema ente]
+  (let [ds (get-in sistema [:datasource :ds])]
+    (tenancy/com-tenant* ds ente
+      (fn [tx]
+        (comum/linhas->kebab
+          (jdbc/execute! tx
+            (sql/format {:select [:id :comissao_id :estado :relator_id] :from [:legislativo.pareceres]
+                         :where [:= :ente_id ente]})))))))
+
 ;; ---------- o rito + as 24 proposicoes ----------
 
 (defn- criar-rito!
@@ -268,13 +301,20 @@
   `:vereador`, resolvido em `semear!`) agora e' o relator do parecer B — o UNICO dos 3 num estado
   NAO-terminal ('aguardando_assinatura'): A e' rascunho (ainda sem relatoria concluida) e C ja'
   termina em 'aprovado' (§22.4 eixo F, `legislativo.logic/estados-parecer-terminais` — um parecer
-  terminal nao pode mais ser assinado, migration 20260620000019-legislativo-pareceres.up.sql:87)."
-  [repo registro ente template-id vereadores relator-vereador-id por-ref]
-  (let [relator1 (:id (nth vereadores 0)) relator2 relator-vereador-id relator3 (:id (nth vereadores 2))]
+  terminal nao pode mais ser assinado, migration 20260620000019-legislativo-pareceres.up.sql:87).
+
+  CORRIGIDO TAMBEM (ledger #11): `comissao-id` era `(random-uuid)` — guard ref ORFAO, sem FK
+  (§22.10) — e a tela `/parecer/:id` mostrava esse UUID cru onde deveria ir o nome da comissao.
+  `comissoes` (as 3 comissoes permanentes REAIS da Casa, de `comissoes-permanentes-do-ente`) agora
+  fornece o `comissao-id` de cada parecer, um por comissao (A: CCJ, B: Financas, C: Obras — a ORDEM
+  de `comissoes` e' por nome, ver `comissoes-permanentes-do-ente`)."
+  [repo registro ente template-id vereadores relator-vereador-id comissoes por-ref]
+  (let [relator1 (:id (nth vereadores 0)) relator2 relator-vereador-id relator3 (:id (nth vereadores 2))
+        comissao1 (:id (nth comissoes 0)) comissao2 (:id (nth comissoes 1)) comissao3 (:id (nth comissoes 2))]
     ;; A — rascunho
     (let [{pcid :id} (repo-leg/iniciar-parecer! repo ente
                        {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id (get por-ref :em-comissoes-1)
-                        :comissao-id (random-uuid) :template-id template-id})]
+                        :comissao-id comissao1 :template-id template-id})]
       (repo-leg/designar-relator! repo ente {:id pcid :relator-id relator1 :updated-by nil :lock-version 0})
       (repo-leg/nova-versao-parecer! repo ente
         {:id (random-uuid) :parecer-id pcid
@@ -283,7 +323,7 @@
     ;; B — aguardando assinatura do relator (relator = o vereador da identidade ':vereador' — ledger #12)
     (let [{pcid :id} (repo-leg/iniciar-parecer! repo ente
                        {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id (get por-ref :aguardando-pauta-1)
-                        :comissao-id (random-uuid) :template-id template-id})]
+                        :comissao-id comissao2 :template-id template-id})]
       (repo-leg/designar-relator! repo ente {:id pcid :relator-id relator2 :updated-by nil :lock-version 0})
       (repo-leg/nova-versao-parecer! repo ente
         {:id (random-uuid) :parecer-id pcid
@@ -294,7 +334,7 @@
     ;; C — emitido (aprovado), assinado
     (let [{pcid :id} (repo-leg/iniciar-parecer! repo ente
                        {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id (get por-ref :em-pauta-1)
-                        :comissao-id (random-uuid) :template-id template-id})]
+                        :comissao-id comissao3 :template-id template-id})]
       (repo-leg/designar-relator! repo ente {:id pcid :relator-id relator3 :updated-by nil :lock-version 0})
       (repo-leg/nova-versao-parecer! repo ente
         {:id (random-uuid) :parecer-id pcid
@@ -379,6 +419,11 @@
       {:template-id existente}
       (let [vereadores (tenancy/com-tenant* ds ente (fn [tx] (vereador/listar tx ente hoje)))
             relator-vereador-id (:id (repo-cadastros/vereador-por-identidade repo-cad ente identidade-vereador))
+            comissoes-reais (tenancy/com-tenant* ds ente (fn [tx] (comissoes-permanentes-do-ente tx ente)))
+            _ (when (< (count comissoes-reais) 3)
+                (throw (ex-info (str "acervo/semear!: precisa de >=3 comissoes permanentes da Casa — "
+                                     "rode casa/semear! primeiro")
+                                {:encontradas (count comissoes-reais)})))
             template-id (criar-rito! repo ente)
             por-ref (into {}
                       (map-indexed
@@ -386,7 +431,7 @@
                         materias))
             materias-por-ref (into {} (map (juxt :ref identity) materias))
             template-parecer-id (criar-template-parecer! repo ente)]
-        (semear-pareceres! repo registro ente template-parecer-id vereadores relator-vereador-id por-ref)
+        (semear-pareceres! repo registro ente template-parecer-id vereadores relator-vereador-id comissoes-reais por-ref)
         (semear-pos-aprovacao! repo ente por-ref)
         (semear-normas! repo ente por-ref materias-por-ref)
         {:template-id template-id}))))

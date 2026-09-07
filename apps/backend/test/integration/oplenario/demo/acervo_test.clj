@@ -54,3 +54,17 @@
       (testing "existe parecer NAO terminal (assinavel) entre eles"
         (is (some #(not (contains? legislativo.logic/estados-parecer-terminais (:estado %))) pareceres)
             "todo parecer do relator ja' esta' num dos 4 estados terminais — nao ha' o que assinar")))))
+
+(deftest comissao-id-do-parecer-aponta-para-comissao-real-da-casa
+  ;; Ledger #11 (docs/16-ledger-prontidao.md): `semear-pareceres!` gravava `comissao-id` como
+  ;; `(random-uuid)` — guard ref ORFAO (sem FK, §22.10) — e a tela /parecer/:id mostrava esse UUID
+  ;; cru onde deveria ir o nome da comissao.
+  (with-sistema [s]
+    (let [{:keys [ente identidades]} (casa/semear! s)
+          _ (acervo/semear! s ente (:vereador identidades))
+          ids-comissoes-reais (set (map :id (acervo/comissoes s ente)))
+          ids-comissoes-dos-pareceres (set (map :comissao-id (acervo/pareceres s ente)))]
+      (testing "nenhum parecer aponta pra comissao inexistente"
+        (is (seq ids-comissoes-dos-pareceres) "nenhum parecer achado — a semente rodou?")
+        (is (empty? (clojure.set/difference ids-comissoes-dos-pareceres ids-comissoes-reais))
+            "comissao-id do parecer nao bate com nenhuma comissao real da Casa — guard ref orfao")))))
