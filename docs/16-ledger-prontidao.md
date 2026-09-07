@@ -114,3 +114,56 @@ J8 (entrar de verdade) · J9 (o expediente).
 **Suspeitos já registrados no plano, a confirmar nessas jornadas:** parecer apontando para comissão
 inexistente (`acervo.clj` grava `comissao-id` como `random-uuid`) e atos sem autoria
 (`created-by`/`updated-by` nulos em todo o acervo).
+
+
+---
+
+# FASE 4 — o que foi consertado (07/09/2026)
+
+**Prova executada contra reconstrução limpa**, não contra dado remendado: `docker compose down -v` →
+`up` (74 migrations, `entes=0`) → `./demo/semear-tudo.sh` → `./e2e/.sonda/rodar.sh`.
+
+## Placar da sonda: **6/27 → 3/27**
+
+| # | Defeito | Estado | Prova |
+|---|---|---|---|
+| **3, 4** | Ficha do presidente contradizia a lista | ✅ **morto** | `GET /cadastros/vereadores/:id` devolve `cargo-mesa: "presidente"` e `comissoes: ["Mesa Diretora"]` — era `null` e `[]` |
+| **6** | Telão ao vivo sem pauta | ✅ **morto** | `GET /sessoes/:id/pauta` da sessão `aberta` devolve **3 itens** — era 0 |
+| **9, 10** | `aguardando_pauta` / `AGUARDANDO_PAUTA` crus | ✅ **mortos** | `/proposicoes` rende "Aguardando pauta" ×8, "Em comissões" ×8, zero underscore; `/paineis/mesa` limpo na sonda |
+| **12** | J3 morta (404 no assinar) | ✅ **morto** | `/parecer/:id/assinar` responde **200** na sonda |
+| **11** | UUID cru em `/parecer/:id` | ❌ **VIVO** | ver abaixo |
+| **13** | "resumo em linguagem simples indisponível" | ❌ vivo, **esperado** | Track IA não tem código |
+| **7** | Tribuna sem read-model | ❌ **VIVO** | decisão estrutural pendente |
+| **1, 2, 8** | `1_secretario` na lista · ator hardcoded · trilha de fase | ❌ vivos | `CONSTRANGE`/`PASSA`, não bloqueiam |
+
+## #11 — a premissa do conserto estava errada
+
+O plano previa que semear comissões reais tiraria o UUID da tela. **Não tirou, e não podia tirar:**
+o frontend **nunca resolve `comissaoId` → nome, em lugar nenhum** — `lib/parecer-vista.ts:12-14`
+(o comentário do próprio arquivo registra como carry), `app/(interno)/parecer/[id]/page.tsx:93`
+(`{dados.comissaoId}` cru), `rail-parecer.tsx:39`. Uma comissão *real* continua sendo um UUID para o
+olho de quem assiste. **O conserto de semente tinha valor próprio** (o guard ref deixou de ser órfão)
+mas o sintoma é **defeito de frontend**, e continua aberto.
+
+## Divergência estrutural documentada, NÃO consertada (decisão do Daouda)
+
+Três caminhos leem "cargo na Mesa" de duas formas:
+
+| Caminho | Como lê |
+|---|---|
+| Ficha `GET /cadastros/vereadores/:id` | `cadastros/db/comissao.clj:54-71` — **INNER JOIN em `comissao_membro`** |
+| Lista `GET /cadastros/vereadores` e `GET /sessoes/:id/composicao` | `cadastros/db/vereador.clj:276-291` — lê **`comissao_cargo` direto**, sem exigir membro |
+
+A semente foi corrigida (Mesa também vira membro), mas **a divergência sobrevive**: um cliente real
+com cargo de Mesa sem membro correspondente — que o modelo permite, e a Mesa historicamente era "só
+cargo" — faz a ficha voltar a mostrar `null` enquanto lista e composição mostram o cargo.
+
+## Duas regressões que só a execução real pegou
+
+Nenhuma aparecia em teste unitário; apareceram rodando `semear-tudo.sh` de verdade:
+
+1. `ler-cadastro` mudou a ordem de chave no EDN e quebrou quem lia por posição.
+2. `demo/semear-tudo.sh` extraía o id do 1º vereador com um `sed` **ganancioso**, que pegava o
+   **último** `:id` do arquivo. Só "funcionava" porque `:vereadores` era, por acaso, a última
+   estrutura com `:id` no EDN — ao acrescentar `:comissoes`, quebrou. O comentário do próprio script
+   afirmava que pegava o primeiro.
