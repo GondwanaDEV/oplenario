@@ -224,9 +224,36 @@ Detector estrutural pega a forma que ele conhece; o resto continua sendo olho.
 **3/27 → 2/27.** As duas restantes são o **#13** (`/portal/casa/:ente` e `…/materias/:id`, "resumo em
 linguagem simples indisponível") — Track IA sem código, decisão da Fase 3, não defeito novo.
 
-## O que ficaria melhor, e é decisão de backend
+## O nome de verdade — feito (07/09/2026, commit `139159a`)
 
-O nome de verdade exige que o backend passe a servi-lo: um `resolver-comissao` injetado pelo host
-(mesma exceção nomeada de §22.5.3 que `resolver-vereador` já usa) e um `comissao-nome` em
-`ParecerEditorOut`/`ParecerResumoOut`. `rotularComissao` foi desenhada para sumir nesse dia — o
-parâmetro passa a ter valor e o rótulo genérico deixa de aparecer, **sem tocar em componente nenhum**.
+Não era só decisão de backend: era a metade que faltava. **A tela agora diz "Comissão de Obras e
+Serviços Públicos"**, no subtítulo, no rail e na aba da ficha. Como previsto, `rotularComissao`
+sumiu do caminho feliz sem que nenhum componente mudasse — o parâmetro passou a ter valor.
+
+**A forma é a exceção nomeada da §22.5.3, a mesma de `resolver-vereador`:** o host resolve e injeta
+a fn pronta; o `legislativo` continua sem importar `cadastros`.
+
+| Camada | O que entrou |
+|---|---|
+| `cadastros/db/comissao.clj` | `nomes-por-id` — o lote numa consulta só |
+| `RepoCadastros` | `nomes-de-comissoes` |
+| `rotas.clj` | `resolver-comissoes`, injetada em `legislativo-http/rotas` |
+| `legislativo/controllers.clj` | `nomear-comissoes` decora cada parecer com `:comissao-nome` |
+| wire/out + adapters/out | `comissao-nome` em `ParecerEditorOut` e `ParecerResumoOut` |
+| contrato TS | regenerado pelo codegen — +2 campos, zero drift |
+
+**Plural de propósito.** A ficha lista N pareceres; um resolver singular custaria N transações por
+request. Materia sem parecer não chama o resolver, e 404 não paga transação de cadastros.
+
+**Degrada, nunca inventa.** Id sem comissão correspondente — guard ref órfão, ou comissão de outra
+Casa, que a RLS já corta — não aparece no mapa. `comissao-nome` é `{:optional true} [:maybe :string]`
+nos dois wire/out: o contrato não pode quebrar porque o resolver não achou dono, e o adapter jamais
+cai no `comissao-id` como substituto — era exatamente isso que punha o UUID na tela.
+
+**Provas, não só verde.** Teste de repositório contra Postgres real cobre lote, id desconhecido,
+coll vazia, ids repetidos e **isolamento por RLS** (comissão de outro ente nunca vira nome). Os
+testes de borda ganharam uma **segunda linha de parecer cuja comissão o resolver não conhece** —
+prova que a ausência sai `nil` e não derruba o 200. E a stack de pé mostra o nome real nas três
+telas. Backend 2007 testes, sem falha própria; FE 1093/0.
+
+**A borda `/meu` entrou junto:** o vereador-relator via o mesmo UUID que o servidor.
