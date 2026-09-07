@@ -294,18 +294,34 @@ git commit -m "fix(demo): a presenca era de gente que nao existia, e o telao mos
 
 **Arquivos:** Criar `apps/backend/demo/acervo.clj` · Test: `apps/backend/test/oplenario/demo/acervo_test.clj`
 
-- [ ] **Passo 1: o teste que falha — todo estado do rito tem exemplar**
+**⚠️ Vocabulário — lido da fonte em 07/09, corrige a primeira redação desta task:**
+`legislativo.proposicoes.estado` **não tem `CHECK`** — é texto livre, default `'protocolada'`, e o
+comentário da migration 0013 diz *"coarse; a maquina fina e' a tramitacao (F3.3)"*. Os estados do
+rito são **dado**, na tabela `legislativo.template_estado` (Invariante 4: regra é dado, não código).
+Portanto **não existe uma lista canônica de estados para o teste afirmar** — afirmar uma seria o
+teste validando o vocabulário que a própria semente inventou, circular por construção. O `tipo`, em
+compensação, **tem** autoridade real: `legislativo.logic/tipos` (`src/oplenario/legislativo/logic.clj:13`).
+
+- [ ] **Passo 1: o teste que falha — ancorado na única autoridade que existe**
 
 ```clojure
-(deftest acervo-cobre-todos-os-estados-do-rito
+(deftest acervo-usa-vocabulario-real-e-cobre-o-rito-que-instala
   (with-sistema [s]
     (let [{:keys [ente]} (casa/semear! s)
-          _ (acervo/semear! s ente)
-          por-estado (acervo/contar-por-estado s ente)]
-      (doseq [estado ["protocolada" "em_comissoes" "pronta_para_pauta"
-                      "em_pauta" "aprovada" "arquivada"]]
-        (testing (str "existe matéria em " estado)
-          (is (pos? (get por-estado estado 0))))))))
+          {:keys [template-id]} (acervo/semear! s ente)
+          por-estado (acervo/contar-por-estado s ente)
+          estados-do-template (acervo/estados-do-template s ente template-id)]
+      (testing "todo tipo usado existe em legislativo.logic/tipos — a autoridade real"
+        (is (empty? (clojure.set/difference (acervo/tipos-usados s ente)
+                                           legislativo.logic/tipos))))
+      (testing "todo estado que o template DECLARA tem pelo menos uma matéria nele"
+        (is (seq estados-do-template) "template sem estado não prova nada")
+        (doseq [estado estados-do-template]
+          (is (pos? (get por-estado estado 0))
+              (str "o rito declara '" estado "' e nenhuma matéria está nele"))))
+      (testing "nenhuma matéria em estado que o template não declara"
+        (is (empty? (clojure.set/difference (set (keys por-estado))
+                                           (set estados-do-template))))))))
 ```
 
 - [ ] **Passo 2: rodar e ver falhar.**
@@ -331,18 +347,28 @@ git commit -m "feat(demo): o acervo legislativo — 24 materias cobrindo os 6 es
 A jornada J4 precisa de três sessões simultâneas em estados diferentes — sem isso não há como
 mostrar a folha (exige encerrada) e o telão ao vivo (exige em curso) na mesma apresentação.
 
+**⚠️ Vocabulário — lido da fonte em 07/09, corrige a primeira redação desta task:** o estado da
+sessão **não é `em_curso`**. `sessoes.sessao.estado` tem `CHECK` estrito com exatamente seis valores
+(migration `20260620000026-sessoes-sessao.up.sql`), default `'agendada'`:
+`agendada · aberta · suspensa · encerrada · nao_realizada · arquivada`. **A sessão ao vivo é `aberta`.**
+
 - [ ] **Passo 1: o teste que falha**
 
 ```clojure
 (deftest tres-sessoes-em-estados-distintos
   (with-sistema [s]
     (let [{:keys [ente]} (casa/semear! s)
-          {:keys [encerrada em-curso agendada]} (sessoes-demo/semear! s ente)]
-      (testing "a encerrada tem chamada registrada e votação apurada"
+          {:keys [encerrada aberta agendada]} (sessoes-demo/semear! s ente)]
+      (testing "os três estados são do CHECK da migration, não inventados"
         (is (= "encerrada" (:estado (sessoes-demo/buscar s ente encerrada))))
+        (is (= "aberta"    (:estado (sessoes-demo/buscar s ente aberta))))
+        (is (= "agendada"  (:estado (sessoes-demo/buscar s ente agendada)))))
+      (testing "a encerrada tem chamada registrada e votação apurada"
         (is (pos? (sessoes-demo/votos-apurados s ente encerrada))))
-      (testing "a em curso tem quórum e pauta publicada"
-        (is (>= (sessoes-demo/quorum s ente em-curso) 9)))
+      (testing "a aberta tem quórum de gente do roster e votação em aberto"
+        (is (>= (sessoes-demo/quorum s ente aberta) 9))
+        (is (some? (sessoes-demo/votacao-aberta s ente aberta))
+            "sem votação aberta o vereador não tem o que votar ao vivo"))
       (testing "a agendada tem pauta montada e nenhuma presença"
         (is (pos? (sessoes-demo/itens-de-pauta s ente agendada)))
         (is (zero? (sessoes-demo/quorum s ente agendada)))))))
