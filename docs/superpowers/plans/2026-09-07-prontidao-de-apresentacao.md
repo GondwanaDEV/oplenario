@@ -547,6 +547,19 @@ divergir do esperado. Um arquivo de ledger, uma linha por achado.
 **A coluna do endpoint é obrigatória** e é o que separa classe A de classe C: antes de acusar a tela,
 chamar o endpoint com `curl` e colar a resposta.
 
+### Suspeitos já conhecidos — verificar na caminhada, não corrigir antes
+
+Levantados durante a Fase 0. **Não foram corrigidos de propósito:** o plano manda medir antes de
+corrigir, e só a caminhada em browser diz se são visíveis. Entram no ledger com veredicto próprio.
+
+| Suspeito | Origem | Jornada onde apareceria | O que conferir |
+|---|---|---|---|
+| **Parecer aponta para comissão que não existe** | `acervo.clj` grava `comissao-id` como `random-uuid` (guard ref sem FK, mesma convenção dos testes do módulo) — a Casa **tem** CCJ, Finanças e Obras reais | **J3** (o parecer) e **J2** (ficha da matéria) | A tela mostra o NOME da comissão? Se mostrar, é a mesma classe das presenças fantasma e vira defeito `MATA` |
+| **Atos sem autoria** | `created-by`/`updated-by`/`ator-id` = `nil` em todo o acervo | **J2**, **J3**, **J5** | Alguma coluna "quem fez" / "responsável" fica vazia na ficha ou no histórico de tramitação? |
+
+**Se qualquer um dos dois for invisível na tela, é classe (C) tolerada** — dado imperfeito que
+ninguém vê não atrapalha apresentação. Se for visível, é classe (A) e sobe para o topo da fila.
+
 ### Task 2.1 a 2.9 — uma por jornada
 
 Para cada jornada da tabela da §2, nesta ordem (J1, J9, J2, J3, J4, J5, J7, J6, J8 — as de escrita
