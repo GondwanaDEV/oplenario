@@ -257,3 +257,76 @@ prova que a ausência sai `nil` e não derruba o 200. E a stack de pé mostra o 
 telas. Backend 2007 testes, sem falha própria; FE 1093/0.
 
 **A borda `/meu` entrou junto:** o vereador-relator via o mesmo UUID que o servidor.
+
+---
+
+# #7 — a tribuna sem read-model: anatomia verificada (07/09/2026)
+
+Levantado na fonte para a decisão da Fase 3. **Não é opinião de leitura antiga — cada linha foi
+conferida no código nesta data.**
+
+## O que é
+
+A tela do plenário tem 5 painéis. **Quatro sabem se reconstruir sozinhos; a tribuna não.**
+
+| Painel | Como obtém o dado |
+|---|---|
+| Sessão | `GET /sessoes/:id` (`use-plenario.ts:136`) |
+| Quórum | `GET /sessoes/:id/quorum` (`use-plenario.ts:73`) |
+| Composição | `GET /sessoes/:id/composicao` (`use-plenario.ts:171`) |
+| Pauta | `GET /sessoes/:id/pauta` (`use-pauta.ts:27`) |
+| **Tribuna** | **nenhum GET existe** |
+
+A tribuna tem **5 rotas de escrita e zero de leitura** (`sessoes/diplomat/http/in.clj:875-889`):
+`POST /sessoes/:id/inscricoes` · `.../inscricoes/:insc-id/desistir` · `.../falas` ·
+`.../falas/:fala-id/cronometro` · `.../falas/:fala-id/encerrar`. **É a única entidade da sessão nessa
+situação** — justificativas, gravação, folhas, pauta, chamada e quórum todas têm GET.
+
+## O dado existe; a tela é que não tem como perguntar
+
+`sessoes.fala_executada` (mig `20260620000033`) guarda a fala com `iniciou_em` preenchido e
+`encerrou_em NULL` enquanto em curso. A fila está em `inscricao_oradores` (mig `…032`) e os marcos do
+cronômetro em `fala_cronometro_evento` (append-only). O achado original desta caminhada foi exatamente
+esse: **o banco tinha 1 fala aberta e a tela dizia "Ninguém com a palavra no momento".**
+
+No frontend, `oradorAtual`, a fila e `marcosCronometro` nascem vazios em `plenario-reducer.ts` e só
+são preenchidos por evento SSE.
+
+## Os três momentos em que o telão apaga
+
+1. **F5 / navegador se recuperando.** O cursor do stream é `lastIdRef`, um `useRef` inicializado
+   `undefined` (`use-plenario.ts:56`) — some no reload; o stream recomeça "de agora" e o orador atual
+   fica invisível **pelo resto da fala dele**.
+2. **Abrir o telão depois que a fala começou** — o caso mais provável ao conectar um projetor.
+3. **Queda de rede > 5 min** (janela de replay do canal, `tempo_real/components.clj:39-40`). O
+   `rehidratar()` da reconexão busca quórum, sessão e composição — **a tribuna não, porque não há rota**.
+
+## ⚠️ Correção: "semear por evento" NÃO é uma terceira opção
+
+Estava listada como opção (c) na Fase 3 e **está errada**. Sem replay por `Last-Event-ID` — e não há,
+depois de um F5 — publicar o evento só funciona se a tela já estiver aberta no instante em que ele
+sai. **As opções reais são duas: construir ou contornar.**
+
+## Por que a recomendação é CONSTRUIR
+
+**Não é risco de demonstração — é read-model de produto incompleto.** O telão de uma câmara fica
+ligado por horas, muitas vezes numa TV sem supervisão: qualquer reinício, oscilação de rede ou aba
+recuperada deixa a tribuna em branco **enquanto um vereador fala, na transmissão pública**. Quem entra
+na transmissão no meio da sessão nunca vê quem está com a palavra. É justamente o painel que a Aposta 3
+(confiança operacional) e o público decisor "presidente da Mesa" olham.
+
+## O custo
+
+Uma fatia **sem migration**, do tamanho da rota `composicao` (`22b8951`: 16 arquivos, +862/−56):
+
+- `GET /sessoes/:id/tribuna` → orador atual (id, `tipo-fala`, fase, `iniciou-em`, marcos do cronômetro)
+  + fila de inscritos ativos;
+- **mesma authz das irmãs** — mesma Casa **E** (transmissão pública **OU** papel `secretario`);
+- leitura direta de `fala_executada` (`encerrou_em IS NULL`), `fala_cronometro_evento` e
+  `inscricao_oradores`, **sem aritmética nova** (mesma disciplina de `chamada-da-sessao*`);
+- FE: buscar no carregamento inicial **e dentro do `rehidratar()` que já existe**.
+
+## Se a decisão for contornar
+
+Abrir o telão **antes** de qualquer fala começar e não recarregar. Serve à apresentação; o defeito
+segue vivo para o primeiro cliente.
