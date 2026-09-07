@@ -42,6 +42,12 @@
         (is (>= (sessoes-demo/quorum s ente aberta) 9))
         (is (some? (sessoes-demo/votacao-aberta s ente aberta))
             "sem votação aberta o vereador não tem o que votar ao vivo"))
+      (testing "a aberta TAMBEM tem pauta montada — ledger #6"
+        ;; Ledger #6 (docs/16-ledger-prontidao.md): os 5 itens de pauta iam SO' pra sessao 'agendada';
+        ;; a 'aberta' (o telao AO VIVO, /sessoes/:id/plenario) tinha 0 itens, e a regiao central do
+        ;; telao mostrava "Nenhum item ativo na pauta ainda" durante a sessao em curso.
+        (is (pos? (sessoes-demo/itens-de-pauta s ente aberta))
+            "telao da sessao AO VIVO sem pauta — 'Nenhum item ativo na pauta ainda' no meio da sessao"))
       (testing "a agendada tem pauta montada e nenhuma presença"
         (is (pos? (sessoes-demo/itens-de-pauta s ente agendada)))
         (is (zero? (sessoes-demo/quorum s ente agendada))))

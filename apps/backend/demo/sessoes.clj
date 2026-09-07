@@ -203,11 +203,21 @@
 ;; ---------- a ABERTA (hoje, o telao ao vivo) ----------
 
 (defn- semear-aberta!
-  [repo-s repo-l repo-cad ente-id materia-votando]
+  "CORRIGIDO (ledger #6, docs/16-ledger-prontidao.md): a 1a redacao so' abria a votacao — a ABERTA
+  ficava com ZERO item de pauta, e o telao (`/sessoes/:id/plenario`, a regiao central 'Pauta da
+  sessao') mostrava 'Nenhum item ativo na pauta ainda' durante a sessao AO VIVO. Agora a ABERTA
+  TAMBEM recebe pauta (fase 'ordem_do_dia', compativel com sessao em curso) com as MESMAS 3 materias
+  'em_pauta' do acervo — a mesma lista de que `materia-votando` (o 3o item, ja' com votacao aberta)
+  faz parte, entao o item que o telao mostra 'em votacao' e' o mesmo que a pauta lista."
+  [repo-s repo-l repo-cad ente-id materias-em-pauta materia-votando]
   (repo-sessoes/agendar-sessao! repo-s ente-id
     {:id id-aberta :sessao-legislativa-id sessao-legislativa-id :tipo-sessao "ordinaria"
      :modalidade "presencial" :agendada-para (Instant/now) :created-by nil})
   (repo-sessoes/transicionar-sessao! repo-s ente-id {:id id-aberta :para "aberta" :updated-by nil :lock-version 0})
+  (doseq [materia-id materias-em-pauta]
+    (repo-sessoes/adicionar-item-na-sessao! repo-s ente-id
+      {:id (random-uuid) :sessao-id id-aberta :fase "ordem_do_dia" :tipo-item "proposicao"
+       :proposicao-id materia-id :created-by nil}))
   (let [sessao (repo-sessoes/buscar-sessao repo-s ente-id id-aberta)
         roster (roster-da-data repo-cad ente-id sessao)
         vigentes (filterv #(= "vigente" (:estado-mandato %)) roster)
@@ -261,7 +271,7 @@
         (garantir-sessao-legislativa! ds ente)
         (let [materias (materias-em-pauta repo-l ente)]
           (semear-encerrada! repo-s repo-l repo-cad ente (take 2 materias))
-          (semear-aberta! repo-s repo-l repo-cad ente (nth materias 2))
+          (semear-aberta! repo-s repo-l repo-cad ente materias (nth materias 2))
           (semear-agendada! repo-s repo-l ente))
         {:encerrada id-encerrada :aberta id-aberta :agendada id-agendada}))))
 
