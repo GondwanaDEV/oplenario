@@ -722,3 +722,47 @@ depois.
 `docker ps` 5/5 `Up (healthy)` do início ao fim; único par de `ERROR` no log do `app` é exatamente o
 achado #1 (repetido de propósito); zero `Apparent connection leak`; memória da VM com folga larga
 (`app` 523 MiB, `frontend` 931 MiB, de um teto de 3,9 GiB).
+
+# Fase 9 — os 5 `QUEBRA` da Fase 8, consertados
+
+Dois commits: `922cdf4` (A1/A2/A3) e `9051787` (o estrutural). **Cada conserto verificado por mim, no
+controlador, contra a stack viva — não pela alegação do implementador.**
+
+| # | Defeito | Conserto | Verificação independente |
+|---|---|---|---|
+| **4/5** | Sessão **encerrada** aceitava escrita (201) | `exigir-sessao-aberta!` em `sessoes/controllers.clj`, **11 call-sites**, reusando `estados-sessao-fechada` (não um conjunto novo). O `legislativo` não pode importar `sessoes.logic` (ADR-0001), então recebe `sessao-fechada?` injetado por `rotas.clj` — mesma mecânica de `consultar-sessao` | `POST /sessoes/<encerrada>/votacoes` → **409** `{"erro":"sessao ja fechada; escrita de votacao bloqueada"}` |
+| **1** | Voto duplicado da Mesa → **500** com `PSQLException` crua | Espelhado o `try/catch` de `23505` que o irmão self-service `registrar-meu-voto!` já tinha | 500 → **409**, sem ERROR no log |
+| **3** | Encerrar votação terminal → **400** | `:validacao/invalido` → `:conflito/votacao-terminal` → **409**, consistente com os outros 5 conflitos "já terminal" do grupo | 400 → **409** |
+| **2** | CAS exigido em 7 rotas e `lock-version` **nunca devolvido** | Exposto nas 5 saídas, com fonte identificada para **cada uma** das 7 rotas; contrato TS regenerado (+5 interfaces) | `GET /sessoes/:id`, `/pauta` e `/tribuna` passam a trazer `lock-version`; contrato com 7 campos |
+
+## Dois achados de método que valem mais que os consertos
+
+**O `lock-version` não era decisão deliberada a reverter — era a própria regra do time aplicada pela
+metade.** O ns `sessoes.wire.out` esconde tokens de mecânica interna por default, **e já documentava a
+exceção certa para este exato caso** (`JustificativaAbertaOut`: "aqui o token de CAS não é interno, é
+PARTE DO PROTOCOLO"). A exceção nunca foi estendida às outras 7. Investigar a intenção antes de expor
+transformou "reverter uma decisão" em "terminar de aplicar uma regra" — decisões opostas sobre o mesmo
+diff.
+
+**Uma otimização recusada por evidência.** O implementador considerou mapear `:conflito/*` → 409
+genericamente no interceptor global (menos código) e recuou: um teste existente
+(`tipo-fora-do-namespace-limite-continua-500`) **prova** que esta base recusa isso de propósito. Ler a
+intenção antes de generalizar.
+
+## Custo colateral desta fase (registrado, não escondido)
+
+A verificação ao vivo sujou dado de demonstração: uma **votação órfã** na sessão encerrada `…0210`
+(criada por mim ao provar o defeito), a sessão `…0212` percorrida até `encerrada` (era a cobaia), e a
+**votação que ficava aberta na `…0211`** para o telão — esta última por omissão minha: a restrição
+"não escreva na `0211`" estava no primeiro despacho e não foi carregada para o segundo. Tudo
+reconstruível com `./demo/semear-tudo.sh`. A `…0211` segue `aberta`.
+
+## Aberto
+
+- **Pergunta de regimento (Daouda):** o portão cobre `encerrada`/`nao_realizada`/`arquivada`. Falta
+  decidir se **votação e tribuna** também devem ser bloqueadas em `agendada` e `suspensa` — montar
+  pauta com a sessão agendada é legítimo, abrir votação talvez não. Não foi decidido por engenharia.
+- **Gap pré-existente:** `AberturaOut` não está no manifesto do codegen do `legislativo`, então o
+  `lock-version` da abertura de votação não chega ao contrato TS. Fora do escopo desta fase.
+- `demo.sessoes-test` falha porque a sonda da Fase 8 mutou a sessão `…0212`. É poluição de dado da
+  própria varredura, não regressão — some com `semear-tudo.sh`.
