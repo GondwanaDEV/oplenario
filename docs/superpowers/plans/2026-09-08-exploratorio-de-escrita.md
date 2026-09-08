@@ -1,125 +1,175 @@
-# Frente — teste exploratório das ESCRITAS
+# Frente — a plataforma local roda sem falha
 
-> A prontidão verificou que **as telas não mentem sobre o que exibem**. Esta frente verifica se a
-> plataforma **funciona quando alguém age nela**. São coisas diferentes, e a segunda nunca foi feita.
+> **Objetivo (Daouda, 08/09/2026):** uma versão local de O Plenário rodando **sem falha**, e a
+> garantia de que **tudo que foi feito até agora está funcionando**.
+>
+> Isso é maior que "testar a interface". A prontidão provou que **as telas não mentem sobre o que
+> exibem**; falta provar que a plataforma **opera** e que **funciona quando alguém age nela** —
+> inclusive nas 42 capacidades que existem no backend e não têm botão.
 
-## 1. O que já foi verificado, e o que não foi
+## Eixo de classificação (mudou — e a mudança importa)
 
-| | Total | Exercido até 08/09/2026 |
-|---|---|---|
-| Rotas de **leitura** (GET) | 47 | ~27 pela sonda + as 9 jornadas caminhadas |
-| Rotas de **escrita** (POST/PATCH/PUT/DELETE) | **66** | **1** (iniciar fala de tribuna, por `curl`) |
+O ledger de prontidão usava `MATA`/`CONSTRANGE`/`PASSA`, que é eixo de **demonstração**. Para este
+objetivo o eixo é outro:
 
-Os 9 defeitos `MATA` mortos eram **todos** da família "a tela afirma o que o dado não sustenta".
-Nenhum deles exigia clicar. **Nada nesta plataforma foi verificado sob ação.**
-
-## 2. Inventário — a descoberta que muda a frente
-
-Método: extrair todas as URLs que o frontend de fato chama (`apiFetch`/`fetch`, fora de testes),
-normalizar template literals para `:p`, e casar contra as 66 rotas de escrita.
-
-**Instrumento validado** contra um caso conhecido: o cockpit de votação vota por
-`/sessoes/:id/votacoes/:votacao-id/meu-voto` (aparece), e **não** por `/votos` (não aparece) — que é a
-rota do lado da secretaria. A primeira versão do casamento, por substring solta, dava 58 falsos
-positivos; foi descartada.
-
-| | Rotas |
+| Classe | O que é |
 |---|---|
-| Escritas **alcançáveis por clique** | **24** |
-| Escritas **sem nenhum chamador no frontend** | **42** |
+| **QUEBRA** | Não funciona, ou funciona errado: escrita que não persiste, estado corrompido, erro 500, dado de outra Casa vazando, worker parado. |
+| **FRÁGIL** | Funciona, mas não sobrevive a condição normal: restart, reload, duplo clique, rede lenta, segunda execução. |
+| **COSMÉTICO** | Funciona e persiste; o que está errado é rótulo, acento, espaçamento. **Registra, não bloqueia.** |
+| **GAP** | Não foi construído, e a tela **diz isso honestamente** ("EM BREVE"). Não é falha. |
 
-**42 de 66 escritas não têm por onde clicar.** O ledger registrava "13 rotas de condução de sessão sem
-tela"; o número real, no conjunto, é três vezes maior.
+A troca é deliberada: no eixo antigo, um enum cru era `CONSTRANGE` e disputava atenção com uma escrita
+que não grava. Aqui, cosmético nunca bloqueia e `QUEBRA` sempre bloqueia.
 
-### As 42 órfãs, classificadas
+---
 
-| Classe | Rotas | O que significa |
+# TRILHA 1 — Operação (primeiro, e bloqueia as outras)
+
+**Por que primeiro:** testar escrita numa stack que não fica de pé mede a stack, não a escrita.
+
+**Estado medido em 08/09/2026, 13:5x:** todos os containers `Exited` há ~4h (código 143 = SIGTERM; o
+host parou o Docker, não houve crash). A plataforma **não volta sozinha**. E o app deixou
+**`Apparent connection leak detected` ×2** nos últimos 200 log lines.
+
+## T1.1 — Sobe do zero e volta sozinha
+- `docker compose down -v` → `up -d --build` → `./demo/semear-tudo.sh`, cronometrado.
+- **Depois de parar o Docker e religar**, a stack sobe sozinha? `restart: unless-stopped` cobre o `app`;
+  **cobre os outros seis?** Verificar serviço a serviço, não presumir.
+- Critério: da máquina fria à Casa semeada, **um comando e nenhuma intervenção manual**.
+
+## T1.2 — Zero erro em log durante operação normal
+- **`Apparent connection leak detected` é o primeiro alvo.** É aviso do HikariCP: uma conexão saiu do
+  pool e não voltou no prazo. Achar o caminho que vaza (a `transacao` que não fecha, ou o SSE segurando
+  conexão), e provar o conserto pela ausência do aviso sob carga.
+- Varrer log de `app`, `frontend`, `postgres`, `valkey`, `minio` depois de: subir · semear · abrir as
+  27 rotas da sonda · rodar T2 e T3. **Critério: nenhum ERROR, nenhuma exception, nenhum leak.**
+
+## T1.3 — Suíte 100% verde (hoje não está)
+Sob "sem falha", estes deixam de ser carries e viram escopo:
+- **`demo.casa-test/semear-produz-uma-unica-casa`** — falha na asserção `.exists` e depois lança no
+  `slurp`, porque `DEMO_ARTIFACTS_DIR` não existe no comando de suíte. Pré-existência já provada em
+  worktree do commit anterior. **Consertar o teste ou o comando, não conviver.**
+- **`notificacao-autor-test`** — flake: `outbox/drenar!` **não é escopado por `ente-id`** e drena tudo
+  do banco compartilhado. Falha em run cheio, passa isolado. É defeito estrutural da suíte.
+- Critério: **dois runs cheios consecutivos, ambos 100%.** Um run verde não prova ausência de flake.
+
+## T1.4 — As armadilhas conhecidas não reproduzem
+Quatro registradas, que **nenhum teste pega**:
+1. **JVM morrendo com SIGBUS** (perf-data mmapeado sob OrbStack/aarch64). Sintoma: todas as telas em
+   500 ao mesmo tempo, `docker ps` sem `oplenario-app-1`. Verificar: `docker logs oplenario-app-1 | grep SIGBUS`.
+2. **`.next` obsoleto servindo 404 em rota que existe em disco** — `up -d --build` reusa o volume
+   anônimo. `docker restart oplenario-frontend-1` resolve. **Confirmar se ainda reproduz**; se sim, é
+   `FRÁGIL` e merece conserto, não procedimento decorado.
+3. **Token sem `papeis` navegando como sem papel nenhum** — o FE lê papéis do claim, o backend lê do
+   banco. Corrigido na semente; **verificar que continua corrigido**.
+4. **Restart do `app` apagando a tribuna ao vivo** — *consertado em 07/09 pelo read-model da tribuna.*
+   **Provar que não reproduz mais**: fala aberta → `docker restart oplenario-app-1` → o telão volta a
+   dizer quem está com a palavra.
+
+## T1.5 — Os workers estão vivos
+Relay de outbox e agendador. Critério: um evento emitido **aparece projetado** sem intervenção, e o
+`down -v` → `up` não deixa o migratus com lock `-1` preso (armadilha registrada).
+
+---
+
+# TRILHA 2 — As 42 escritas sem botão, por HTTP
+
+**Por que antes da interface:** cobre 42 rotas contra 24, é mais barata por rota, e ataca o que impede
+a plataforma de **funcionar** em vez do que impede de **parecer bem**.
+
+**Método:** estender `e2e/.sonda/`, que já roda contra a stack viva, lê ids reais de
+`e2e/.artifacts/demo-ids.edn` e **sai `!= 0` com veredicto**. A sonda cobre leitura; ganha escrita.
+
+**Regra que não pode cair:** a sonda **suja o dado**. Ela roda depois de `semear-tudo.sh` e antes de
+qualquer verificação de tela, ou numa Casa própria. Nunca contra a Casa que será demonstrada.
+
+| Grupo | Rotas | O que provar |
 |---|---|---|
-| **A — a sessão inteira é conduzida sem tela** | **17** | `transicao` (abrir/suspender/encerrar), `votacoes` + `encerramento` + `votos`, `falas` + `cronometro` + `encerrar`, `inscricoes` + `desistir`, `decisoes-mesa`, `incidentes`, `pauta/itens` (POST/PATCH/DELETE), `minha-justificativa`, `gravacoes` + `vincular` |
-| **B — participação, lado servidor** | **8** | responder e-SIC, decidir recurso, responder LGPD, responder/prorrogar/arquivar ouvidoria, moderar comentário, definir encarregado |
-| **C — cidadão, bloqueado por gov.br** | **8** | abrir pedido e-SIC, recurso, solicitação LGPD, manifestação de ouvidoria, comentar, denunciar, acompanhar matéria (POST/DELETE) |
-| **D — compliance / remessa ao TCE** | **3** | validar, submeter, registrar resposta |
-| **E — identidade / console do operador** | **3** | criar identidade, conceder acesso, convite |
-| **F — cadastros** | **2** | vincular identidade a vereador, reassunção de mandato |
-| **G — legislativo** | **1** | apreciação de tramitação executiva |
+| **A — condução de sessão** | **17** | Abrir sessão → montar pauta → chamada → abrir votação → votar → encerrar votação → tribuna (inscrever, iniciar fala, cronômetro, encerrar) → questão de ordem → incidente → encerrar sessão. **É a jornada que faz a plataforma existir, e nunca foi percorrida ponta a ponta.** |
+| **B — participação, servidor** | 8 | Responder e-SIC · decidir recurso · responder LGPD · responder/prorrogar/arquivar ouvidoria · moderar comentário · definir encarregado. **O painel da Mesa já exibe o prazo legal vencendo destes** — provar que o backend cumpre o que a tela cobra. |
+| **C — cidadão** | 8 | Abrir pedido e-SIC, recurso, LGPD, ouvidoria, comentar, denunciar, acompanhar. **Atenção:** a tela diz "EM BREVE — exige gov.br". Se o backend aceitar sem gov.br, o `GAP` é só de interface e isso muda o diagnóstico. Se recusar, é `GAP` de verdade. |
+| **D — compliance/TCE** | 3 | Validar → submeter → registrar resposta. É o **M6**, marco dado como fechado e nunca exercido pela borda. |
+| **E — identidade** | 3 | Criar identidade · conceder acesso · convite. |
+| **F — cadastros** | 2 | Vincular identidade a vereador · reassunção de mandato. |
+| **G — legislativo** | 1 | Apreciação de tramitação executiva. |
 
-**A classe A é a mais grave, e é dupla:** o backend conduz a sessão inteira e a Mesa não tem por onde
-clicar — mas o **telão exibe** tribuna, pauta e placar. Ou seja: a plataforma **mostra** a sessão
-acontecendo e **não deixa** conduzi-la pela interface.
+**Cada rota se prova em três lugares:** a resposta HTTP diz que gravou · o banco tem a linha · **uma
+leitura subsequente devolve** o que foi gravado. O terceiro é o que pegou os 9 `MATA` da prontidão.
 
-**A classe B tem a mesma forma, e é pior por ser visível:** `/paineis/mesa` exibe "Recurso e-SIC ·
-vence em 9 dia(s)" — a tela **avisa do prazo legal** e não existe tela para responder.
+**Caminho de erro é obrigatório**, e para escrita ele é onde mora o risco: corpo inválido · id
+inexistente · conflito de estado (encerrar votação já encerrada) · **papel errado** · **Casa errada**
+(isolamento multi-tenant) · **repetição** (idempotência: a segunda chamada duplica ou é recusada?).
 
-## 3. Escopo desta frente
+---
 
-**Dentro:** as **24 escritas alcançáveis por clique**, cada uma pelo caminho feliz e pelos caminhos de
-erro. É o único conjunto que um teste *exploratório de interface* pode exercer.
+# TRILHA 3 — As 24 escritas alcançáveis, pela interface
 
-**Fora, e registrado como achado, não como omissão:** as 42 órfãs. Uma capacidade sem interface não é
-um defeito que o exploratório acha — é um **`[GAP]` de produto** que este inventário já provou. A
-decisão de construir tela para elas é do Daouda e não pertence a esta frente.
+O que a T2 não alcança: **o caminho que o usuário percorre**. Uma rota pode responder 201 e o botão
+não submeter, a mensagem de erro ser genérica, a tela não recarregar.
 
-## 4. As jornadas de ESCRITA (o roteiro)
+### E1 — Cadastros (servidor) · 4
+Criar vereador · editar · mandato · licença.
+Erros: campo obrigatório vazio · CPF inválido · CPF duplicado · mandato com fim antes do início ·
+licença sem mandato · **duplo clique**.
 
-Por persona, cada uma com **caminho feliz** e **caminhos de erro**.
+### E2 — Expediente e protocolo (servidor) · 3
+Gerar documento de modelo · editar rascunho · **protocolar e numerar**.
+Erros: protocolar duas vezes (**numeração gapless: não pode abrir buraco nem duplicar**) · protocolar
+o que não está em rascunho · campo `{{ }}` não preenchido.
 
-### E1 — Cadastros (servidor) · 4 escritas
-Criar vereador · editar · registrar mandato · registrar licença.
-Erros a forçar: campo obrigatório vazio · CPF inválido · CPF duplicado · mandato com data final antes
-da inicial · licença sobrepondo mandato inexistente · **duplo clique** no salvar.
+### E3 — A matéria nasce (servidor) · 2
+Criar proposição · editar. Erros: ementa vazia · espécie inválida · autor inexistente · duplo clique.
 
-### E2 — Expediente e protocolo (servidor) · 3 escritas
-Gerar documento a partir de modelo · editar rascunho · **protocolar e numerar**.
-Erros: protocolar duas vezes o mesmo documento (a numeração é gapless — **não pode abrir buraco nem
-duplicar**) · protocolar documento que não está em rascunho · campo `{{ }}` do template não preenchido.
+### E4 — O parecer (servidor + vereador) · 4
+Editar · emitir (secretaria) · emitir "meu parecer" (vereador) · dar ciência.
+Erros: emitir sem texto · **emitir sem ser relator (posse)** · emitir duas vezes · papéis trocados.
 
-### E3 — A matéria nasce (servidor) · 2 escritas
-Criar proposição · editar.
-Erros: ementa vazia · espécie inválida · autor inexistente · duplo clique.
+### E5 — Chamada e presença (servidor + vereador) · 6
+Presença · confirmar a própria · lote · conduzir chamada · justificar · decidir justificativa · folha.
+Erros: presença fora do roster da data · **lote com um id inválido (a transação inteira tem de
+falhar)** · chamada em sessão encerrada · justificativa de terceiro · **decidir a própria
+justificativa** · folha duas vezes.
 
-### E4 — O parecer (servidor + vereador) · 4 escritas
-Editar parecer · emitir (secretaria) · emitir "meu parecer" (vereador) · dar ciência.
-Erros: emitir parecer sem texto · emitir parecer de que não se é relator (**posse**) · emitir duas
-vezes · vereador emitindo pela secretaria e vice-versa.
+### E6 — Votar (vereador) · 1
+Erros: sem votação aberta · duas vezes · sessão de que não participa · **sessão secreta sem direito**.
 
-### E5 — Chamada e presença (servidor + vereador) · 6 escritas
-Registrar presença · confirmar a própria presença · lote · conduzir chamada · justificar ausência ·
-decidir sobre justificativa · gerar folha.
-Erros: presença de vereador fora do roster da data · lote com um id inválido (**a transação inteira
-tem de falhar**) · chamada em sessão encerrada · justificativa de terceiro · **decidir a própria
-justificativa** (juiz em causa própria) · folha duas vezes.
+### E7 — Pós-aprovação (servidor) · 2
+Autógrafo · resposta do Executivo. Erros: autógrafo de matéria não aprovada · dois autógrafos ·
+resposta sem autógrafo.
 
-### E6 — Votar (vereador) · 1 escrita
-Registrar meu voto.
-Erros: votar sem votação aberta · votar duas vezes · votar em sessão de que não se participa ·
-**votar em sessão secreta sem direito**.
+### E8 — Notificações (vereador) · 1
+Marcar lida. Erros: marcar a de outro · duas vezes.
 
-### E7 — Pós-aprovação (servidor) · 2 escritas
-Gerar autógrafo · registrar resposta do Executivo.
-Erros: autógrafo de matéria não aprovada · dois autógrafos · resposta sem autógrafo.
+**Verificação de cada escrita, em três lugares:** a tela diz que gravou · o banco tem a linha · **a
+tela recarregada (F5) ainda mostra**.
 
-### E8 — Notificações (vereador) · 1 escrita
-Marcar como lida. Erros: marcar a de outro · marcar duas vezes.
+---
 
-### E9 — Justificativa e decisão (transversal) — coberto em E5.
+# Método comum
 
-## 5. Método
+- **Reconstrução limpa antes de cada trilha** (`down -v` → `up --build` → `semear-tudo.sh`). Escrita
+  suja dado; exploratório sobre dado remendado mede a remenda.
+- **Causa raiz verificada na fonte**, nunca "parece que". Foi o que transformou "a tela do vereador
+  está errada" em "não existe `GET /sessoes`".
+- **Caminhar depois de consertar.** Provado três vezes em 07/09: consertar abre porta. O card de
+  próxima sessão trouxe um enum cru junto; o filtro por data ressuscitava sessão cancelada.
+- **Cobertura que impede a volta calada.** Todo defeito `QUEBRA` fechado ganha teste que **reprova** se
+  ele voltar — o #15 viveu meses com a suíte verde por falta exatamente disso.
+- **Registro:** append em `docs/16-ledger-prontidao.md`, uma fase por trilha.
 
-- **Interface, não `curl`.** O objeto do teste é o caminho que o usuário percorre. `curl` só para
-  confirmar no banco o que a tela alega ter gravado.
-- **Toda escrita se verifica em três lugares:** a tela diz que gravou · o banco tem a linha · a tela
-  **recarregada** (F5) ainda mostra. O terceiro é o que pegou os 9 `MATA` da prontidão.
-- **Caminho de erro é obrigatório**, não bônus: campo vazio, valor inválido, duplo clique, conflito de
-  estado, permissão de outro papel. A pergunta em cada um: *a mensagem diz o que fazer, ou é genérica?*
-- **Classificação:** `MATA` (não dá para apresentar) · `CONSTRANGE` (dá, com desculpa) · `PASSA`.
-- **Registro:** append em `docs/16-ledger-prontidao.md`, uma fase por jornada, com causa raiz
-  verificada na fonte — nunca "parece que".
-- **Reconstrução limpa antes de começar** (`down -v` → `up --build` → `semear-tudo.sh`): escrita suja o
-  dado, e um exploratório sobre dado remendado mede a remenda.
-- **Um `[GAP]` não é defeito.** Se a tela diz "EM BREVE" honestamente, é `PASSA`.
+# O que esta frente NÃO faz
 
-## 6. O que esperar
+As 42 rotas sem botão serão **exercidas** (T2), não **ganham tela**. Construir interface para elas é
+decisão de produto do Daouda, com dois `[GAP]` já nomeados que pesam mais que os outros:
 
-A caminhada de **leitura** rendeu 6 defeitos em 7 jornadas (3 `MATA`). Escrita tem mais superfície de
-falha que leitura — validação, estado, concorrência, permissão, idempotência. **A expectativa razoável
-é colheita igual ou maior**, concentrada nos caminhos de erro, que é onde ninguém olhou nunca.
+1. **A Mesa não conduz a sessão pela interface** — 17 rotas. A plataforma *mostra* a sessão
+   acontecendo e não deixa conduzi-la.
+2. **O servidor não responde um e-SIC pela interface** — e `/paineis/mesa` exibe o prazo legal vencendo.
+
+# Ordem e critério de pronto
+
+**T1 → T2 → T3.** A frente está pronta quando: a stack sobe de máquina fria com um comando e volta
+sozinha após restart · zero ERROR/exception/leak em log sob uso · **dois runs cheios de suíte 100%
+verdes** · as 4 armadilhas conhecidas não reproduzem · as 66 escritas exercidas com caminho feliz e de
+erro · e todo `QUEBRA` fechado com teste que o impede de voltar.
