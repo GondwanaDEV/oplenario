@@ -541,7 +541,7 @@ describe("tribuna — o read-model reconstrói quem está com a palavra", () => 
       snap({ inscritos: [{ inscricaoId: "iOk", vereadorId: "vOk", origemInscricao: "pre_sessao_app", fase: "ordem_do_dia", ordem: 1 }, { inscricaoId: 42 } as never] }),
       seq0,
     );
-    expect(comItemTorto.inscritos).toEqual([{ inscricaoId: "iOk", vereadorId: "vOk", ordem: 1 }]);
+    expect(comItemTorto.inscritos).toEqual([{ inscricaoId: "iOk", vereadorId: "vOk", fase: "ordem_do_dia", ordem: 1 }]);
   });
 
   it("T4 (CRÍTICO) — PRECEDÊNCIA: um `fala.encerrada` chegado DEPOIS do disparo descarta só o CAMPO de fala do snapshot em voo", () => {
@@ -609,6 +609,40 @@ describe("tribuna — o read-model reconstrói quem está com a palavra", () => 
     });
     const e = hidratarTribuna(aberta(), doisFluxos, seq0);
     expect(e.inscritos.map((i) => i.inscricaoId)).toEqual(["ana", "carla", "bruno", "davi"]);
+  });
+
+  it("T8 (A1/N1) — a fila hidratada NÃO se reembaralha quando o PRIMEIRO evento ao vivo chega pelo SSE", () => {
+    // O defeito que sobreviveu ao Fix round 1: `lerInscritosTribuna` (HTTP) parou de reordenar, mas o
+    // `case "inscricao.registrada"` (SSE) continuava ordenando só por `ordem` — os dois caminhos de
+    // escrita do MESMO campo discordavam. Fila real de duas fases, hidratada corretamente pelo HTTP:
+    // expediente = [Ana(1), Carla(2)], ordem_do_dia = [Bruno(1), Davi(2)].
+    const hidratada = hidratarTribuna(
+      aberta(),
+      snap({
+        inscritos: [
+          { inscricaoId: "ana", vereadorId: "vAna", origemInscricao: "pre_sessao_app", fase: "expediente", ordem: 1 },
+          { inscricaoId: "carla", vereadorId: "vCarla", origemInscricao: "pre_sessao_app", fase: "expediente", ordem: 2 },
+          { inscricaoId: "bruno", vereadorId: "vBruno", origemInscricao: "pre_sessao_app", fase: "ordem_do_dia", ordem: 1 },
+          { inscricaoId: "davi", vereadorId: "vDavi", origemInscricao: "pre_sessao_app", fase: "ordem_do_dia", ordem: 2 },
+        ],
+      }),
+      seq0,
+    );
+    expect(hidratada.inscritos.map((i) => i.inscricaoId)).toEqual(["ana", "carla", "bruno", "davi"]);
+
+    // chega UMA inscrição nova pelo SSE, no EXPEDIENTE (fase que já tem gente na fila) — com o `case`
+    // ordenando só por `ordem` (o defeito de N1), o resultado intercalaria por `ordem` sozinho:
+    // [ana(1), bruno(1), carla(2), davi(2), elena(3)] — a mesma intercalação que I1 já descrevia,
+    // agora publicada na PRIMEIRA inscrição ao vivo depois de uma hidratação correta.
+    const comElena = aplicarEvento(hidratada, {
+      tipo: "inscricao.registrada",
+      seq: 1,
+      dados: { "inscricao-id": "elena", "sessao-id": "s1", "vereador-id": "vElena", "origem-inscricao": "pre_sessao_app", fase: "expediente", ordem: 3 },
+    });
+    // (fase, ordem) preservado: elena entra DEPOIS de carla (mesma fase, ordem maior) e ANTES de bruno/davi
+    // (fase textualmente maior — "ordem_do_dia" > "expediente" — que é o que o servidor também usa, já que
+    // `fase` é coluna `text`/CHECK, não enum: ver `compararInscritos`).
+    expect(comElena.inscritos.map((i) => i.inscricaoId)).toEqual(["ana", "carla", "elena", "bruno", "davi"]);
   });
 
   describe("os dois contadores de precedência (I4) — cada um dos 5 tipos tem prova própria", () => {

@@ -85,8 +85,8 @@ describe("Tribuna — o telão nunca mostra UUID no lugar de identidade", () => 
   it("a fila de inscritos mostra nomes, nunca o prefixo do id", () => {
     const estado = estadoBase({
       inscritos: [
-        { inscricaoId: "i1", vereadorId: ID_BRUNO, ordem: 1 },
-        { inscricaoId: "i2", vereadorId: ID_CIDADAO, ordem: 2 },
+        { inscricaoId: "i1", vereadorId: ID_BRUNO, fase: "ordem_do_dia", ordem: 1 },
+        { inscricaoId: "i2", vereadorId: ID_CIDADAO, fase: "ordem_do_dia", ordem: 2 },
       ],
       composicao: composicaoCom([ID_BRUNO, { nomeParlamentar: "Bruno Sales", cargoMesa: null }]),
       composicaoStatus: "ok",

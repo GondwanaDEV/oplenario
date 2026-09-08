@@ -40,7 +40,27 @@ export interface OradorAtual {
 export interface Inscrito {
   inscricaoId: string;
   vereadorId: string;
+  /** Fix round 2 (A1/N1): antes ausente aqui, o que forçava a hidratação a CONFIAR cegamente na ordem
+   * do servidor e o `case "inscricao.registrada"` a reordenar só por `ordem` — que intercala fases (ver
+   * `compararInscritos`). Com `fase` presente, a ordenação vira UMA função usada nos dois caminhos. */
+  fase: string;
   ordem: number;
+}
+
+/** A ÚNICA ordenação da fila de inscritos — usada tanto por `lerInscritosTribuna` (hidratação HTTP) quanto
+ * pelo `case "inscricao.registrada"` de `aplicarEvento` (SSE). Fix round 2 (A1/N1): o Fix round 1 corrigiu
+ * só o caminho HTTP (parou de reordenar, confiando na ordem do servidor) e deixou o `case` do SSE ainda
+ * ordenando por `ordem` sozinho — os dois caminhos discordavam, e a PRIMEIRA inscrição ao vivo depois da
+ * hidratação reembaralhava a fila que acabara de chegar correta (a intercalação exata do defeito original,
+ * publicada na transmissão). Replica `ORDER BY fase ASC, ordem ASC` de `listar-inscricoes`
+ * (`db/tribuna.clj`): `fase` é coluna `text` (CHECK, não enum — migration 0032), então o `ASC` do Postgres
+ * é ordem TEXTUAL simples, não a ordem semântica do fluxo da sessão — comparação de string aqui replica
+ * fielmente esse comportamento (os 5 valores são ASCII minúsculo com `_`, sem acento; a mesma premissa que
+ * já valia implicitamente quando o Fix round 1 confiou na ordem do servidor sem tocar nela). Definida UMA
+ * vez, usada nos dois lugares — não redigitar este comparador em outro `case`/parser. */
+function compararInscritos(a: Inscrito, b: Inscrito): number {
+  if (a.fase !== b.fase) return a.fase < b.fase ? -1 : 1;
+  return a.ordem - b.ordem;
 }
 
 export type VotoNominal = "sim" | "nao" | "abstencao";
@@ -319,23 +339,23 @@ function lerMarcosTribuna(m: unknown): MarcoCronometro[] | undefined {
   return marcos;
 }
 
-/** Lê `inscritos`. Fix round 1 (I1): NÃO reordena — a fila chega do servidor já ordenada por
- * `(fase, ordem)` (`wire/out.clj`/`db/tribuna.clj`, `listar-inscricoes`), e `ordem` sozinho NÃO é
- * única na sessão: é `max+1` por `(sessao, fase)` (migration `…032`), então duas fases distintas têm,
- * cada uma, seu próprio `ordem = 1, 2, 3…`. Reordenar aqui só por `ordem` INTERCALA as fases e produz
- * ordinais repetidos no telão (`1 Ana / 1 Bruno / 2 Carla / 2 Davi`) — a fila publicada mente sobre
- * quem fala em seguida. Mesma tolerância a item torto que `lerMarcosTribuna`, mas um item pulado não
- * reordena os vizinhos: a POSIÇÃO de quem sobra é a do servidor. */
+/** Lê `inscritos`. Fix round 1 (I1) parou de reordenar aqui (confiava que o servidor já manda em
+ * `(fase, ordem)`); Fix round 2 (A1/N1) volta a ordenar explicitamente, agora que `Inscrito` carrega
+ * `fase` — com `compararInscritos`, a MESMA função que o `case "inscricao.registrada"` usa do lado do
+ * SSE. Ordenar aqui explicitamente (em vez de só confiar na ordem HTTP) é defesa em profundidade: os
+ * dois caminhos de escrita deste campo agora produzem o resultado do MESMO critério, nunca dois
+ * critérios que podem discordar. Mesma tolerância a item torto que `lerMarcosTribuna`: um item pulado
+ * não descarta os vizinhos válidos, só sai da ordenação final. */
 function lerInscritosTribuna(lst: unknown): Inscrito[] | undefined {
   if (!Array.isArray(lst)) return undefined;
   const inscritos: Inscrito[] = [];
   for (const item of lst) {
     if (!item || typeof item !== "object") continue;
     const x = item as Record<string, unknown>;
-    if (typeof x.inscricaoId !== "string" || typeof x.vereadorId !== "string" || !finito(x.ordem)) continue;
-    inscritos.push({ inscricaoId: x.inscricaoId, vereadorId: x.vereadorId, ordem: x.ordem });
+    if (typeof x.inscricaoId !== "string" || typeof x.vereadorId !== "string" || typeof x.fase !== "string" || !finito(x.ordem)) continue;
+    inscritos.push({ inscricaoId: x.inscricaoId, vereadorId: x.vereadorId, fase: x.fase, ordem: x.ordem });
   }
-  return inscritos;
+  return inscritos.sort(compararInscritos);
 }
 
 /** O contador de precedência que `hidratarTribuna` compara contra cada CAMPO do snapshot — ver a
@@ -360,8 +380,9 @@ export interface TribunaEventoSeqNoDisparo {
  * alternativa óbvia ("servidor sempre vence", o molde de `hidratarQuorum`) ressuscitaria em produção um
  * orador que a Mesa já havia encerrado, na transmissão pública, só porque a resposta HTTP chegou
  * atrasada. Como `rehidratar()` roda periodicamente (e a cada reconexão) e o hook pede retentativa
- * IMEDIATA (próximo tick de 500ms) quando detecta um descarte, um campo descartado aqui não trava a
- * tela por 30s: converge em poucos segundos. */
+ * quando detecta um descarte, um campo descartado aqui não trava a tela por 30s: o relógio de 500ms do
+ * hook observa o pedido e dispara assim que o piso `REBUSCA_MIN_MS` permitir — até ~3s, não 500ms (a
+ * docstring já teve essa imprecisão registrada como achado; não redigitar "500ms" sem o piso ao lado). */
 export function hidratarTribuna(
   estado: EstadoPlenario,
   cru: TribunaOut,
@@ -470,10 +491,14 @@ export function aplicarEvento(estado: EstadoPlenario, evento: EventoPlenario): E
     case "inscricao.registrada": {
       const id = evento.dados["inscricao-id"];
       if (base.inscritos.some((i) => i.inscricaoId === id)) return base; // idempotente (at-least-once)
+      // Fix round 2 (A1/N1): `compararInscritos` — a MESMA função que `lerInscritosTribuna` usa do
+      // lado HTTP. Antes este `case` ordenava só por `ordem` (a mesma regressão que o Fix round 1
+      // havia corrigido do outro lado): com fila multi-fase já hidratada corretamente, a chegada de
+      // UM evento aqui reembaralhava tudo por `ordem` sozinha, intercalando as fases na tela pública.
       const inscritos = [
         ...base.inscritos,
-        { inscricaoId: id, vereadorId: evento.dados["vereador-id"], ordem: evento.dados.ordem },
-      ].sort((a, b) => a.ordem - b.ordem);
+        { inscricaoId: id, vereadorId: evento.dados["vereador-id"], fase: evento.dados.fase, ordem: evento.dados.ordem },
+      ].sort(compararInscritos);
       return { ...base, inscritos };
     }
 

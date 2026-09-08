@@ -37,8 +37,47 @@ const REBUSCA_PERIODICA_MS = 30000;
  * rede (a leitura mais cara do módulo ainda responde em baixas centenas de ms), bem abaixo da
  * periódica de 30s (então um travamento não consome o ciclo inteiro sem tentar de novo) e abaixo do
  * teto de backoff de 15s (uma reconexão do momento 3 não fica presa atrás de um timeout mais longo que
- * ela mesma). */
-const TIMEOUT_REBUSCA_MS = 8000;
+ * ela mesma).
+ *
+ * Fix round 2 (A3): decisão explícita sobre rede lenta PERSISTENTE (RTT > 8s de forma sustentada, não
+ * uma queda pontual): a cadência vira 1 tentativa a cada `REBUSCA_PERIODICA_MS`, cada uma abortada aos
+ * 8s — nunca completa enquanto a rede seguir lenta, e o número exibido fica congelado (degrada, não
+ * zera — `falharQuorum`/`falharTribuna`). Decisão: MANTER sem backoff nem sinalização extra. Um telão
+ * de plenário numa LAN interna com RTT sustentado > 8s já está num regime patológico por si só (a
+ * leitura mais cara do módulo responde em baixas centenas de ms em operação normal); a alternativa
+ * (backoff progressivo, ou alargar o timeout) trocaria "número velho, badge ao vivo" por "número velho
+ * por mais tempo ainda" sem resolver a causa. Testado em `use-plenario.test.ts` ("A3"). Exportada para o
+ * teste não redigitar o valor (a mesma razão de não redigitar `TIPOS_EVENTO_FALA`/`TIPOS_EVENTO_INSCRICAO`
+ * em outro lugar). */
+export const TIMEOUT_REBUSCA_MS = 8000;
+
+/** Compõe um `AbortSignal` com timeout SEM `AbortSignal.any`/`AbortSignal.timeout`. Fix round 2 (A2):
+ * as duas APIs são baseline recente (Chrome 116 / Safari 17.4) e este projeto não tem `browserslist`. O
+ * telão de uma câmara municipal É a máquina que roda navegador velho — TV/quiosque fixo, ligado por
+ * horas, que ninguém atualiza. Num navegador sem a API, a chamada lançaria DENTRO do `try` de
+ * `buscarQuorum`/`buscarTribuna`, caindo no `catch` igual a qualquer outra falha de rede — MAS antes de
+ * qualquer fetch sair, então a tribuna NUNCA hidrataria, em SILÊNCIO: sem erro visível, sem log, sem
+ * sinal — exatamente o defeito que esta frente existe para matar, reintroduzido pela própria correção.
+ * `AbortController` + `setTimeout` + listener no sinal-pai é suportado universalmente.
+ *
+ * `limpar()` DEVE ser chamado no caminho feliz (dentro do `finally` de quem chama) — sem isso o timer
+ * só é liberado quando dispara ou quando o sinal-pai aborta, vazando um `setTimeout` (e o listener no
+ * sinal-pai) por chamada até lá. */
+function sinalComTimeout(sinalPai: AbortSignal, ms: number): { signal: AbortSignal; limpar: () => void } {
+  const composto = new AbortController();
+  const propagarAbort = () => composto.abort(sinalPai.reason);
+  if (sinalPai.aborted) {
+    propagarAbort();
+  } else {
+    sinalPai.addEventListener("abort", propagarAbort, { once: true });
+  }
+  const timer = setTimeout(() => composto.abort(new DOMException("Tempo de resposta esgotado", "TimeoutError")), ms);
+  const limpar = () => {
+    clearTimeout(timer);
+    sinalPai.removeEventListener("abort", propagarAbort);
+  };
+  return { signal: composto.signal, limpar };
+}
 
 const ehTipoPlenario = (t?: string): t is EventoPlenario["tipo"] =>
   !!t && (TIPOS_PLENARIO as readonly string[]).includes(t);
@@ -85,12 +124,6 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
     let vivo = true;
     let ultimaRebusca = 0;
 
-    /** Fix round 1 (I3): antes um único `AbortSignal` (o de unmount) cobria as duas buscas, e
-     * `apiFetch` não tem timeout — uma `/quorum`/`/tribuna` pendurada nunca resolvia. Um novo
-     * `AbortSignal.timeout` por chamada, combinado com o de unmount, garante que toda busca desiste
-     * em `TIMEOUT_REBUSCA_MS` (ver a docstring da constante). */
-    const sinalComTimeout = () => AbortSignal.any([controller.signal, AbortSignal.timeout(TIMEOUT_REBUSCA_MS)]);
-
     // Fix round 1 (I3): guardas de in-flight INDEPENDENTES por rota (antes era um único `rebuscando`
     // compartilhado, preso até as DUAS buscas resolverem). Com um guarda só, uma `/tribuna` pendurada
     // travava também a re-busca do `/quorum` PARA SEMPRE — o numerador do telão congelava com o badge
@@ -102,10 +135,13 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
     const buscarQuorum = async () => {
       if (quorumEmVoo) return;
       quorumEmVoo = true;
+      // Fix round 2 (A2): timeout composto à mão (sem `AbortSignal.any`/`.timeout`) — ver a docstring
+      // da função. `limpar()` no `finally` evita vazar o `setTimeout`/listener a cada chamada.
+      const { signal, limpar } = sinalComTimeout(controller.signal, TIMEOUT_REBUSCA_MS);
       try {
         const resp = await apiFetch(`/api/sessoes/${sessaoId}/quorum`, {
           token: token ?? undefined,
-          signal: sinalComTimeout(),
+          signal,
           cache: "no-store",
         });
         if (!vivo) return;
@@ -122,6 +158,7 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
         if (!vivo) return;
         setEstado((prev) => (prev ? falharQuorum(prev) : prev));
       } finally {
+        limpar();
         quorumEmVoo = false;
       }
     };
@@ -131,8 +168,20 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
      * INSCRIÇÃO chegar pelo canal AO VIVO enquanto esta resposta está em voo, a hidratação DESCARTA o
      * campo correspondente do snapshot em vez de ressuscitar quem já desceu da tribuna (ou uma fila já
      * desatualizada). Fix round 1 (I2b): um snapshot com QUALQUER campo descartado não fica esperando a
-     * periódica de 30s — pede retentativa no PRÓXIMO tick de 500ms (piso de `REBUSCA_MIN_MS`) pela MESMA
-     * `pedidoDeRebusca` que o movimento de presença usa. */
+     * periódica de 30s — pede retentativa assim que o piso `REBUSCA_MIN_MS` (~3s) permitir, pela MESMA
+     * `pedidoDeRebusca` que o movimento de presença usa.
+     *
+     * Fix round 2 (A4a): o PEDIDO de retentativa é decidido DENTRO do updater de `setEstado`, contra
+     * `prev` — a MESMA leitura que `hidratarTribuna` usa para decidir o descarte, não os refs lidos por
+     * fora. Antes, a comparação contra `falaEventoSeqRef`/`inscricaoEventoSeqRef` corria ANTES do
+     * `setEstado`, e os refs só são escritos DENTRO do updater de `aoFrame` (que o React processa no
+     * render, não na chegada do frame SSE) — havia uma janela entre um frame chegar e o React aplicá-lo
+     * em que os refs ainda liam o valor VELHO. Se a resposta da tribuna resolvesse nesse instante, a
+     * checagem de fora não via a divergência (refs velhos) e não pedia retry — mas o updater de
+     * `hidratarTribuna`, enfileirado DEPOIS do de `aoFrame`, já rodava contra o `prev` NOVO e descartava
+     * o campo mesmo assim. Resultado: descarte sem pedido de retentativa, esperando a periódica de 30s
+     * (nunca dado errado — só o atraso que esta fatia existe para eliminar). Ler `prev` no mesmo updater
+     * elimina a janela: as duas decisões agora leem o MESMO valor, no MESMO instante. */
     const buscarTribuna = async () => {
       if (tribunaEmVoo) return;
       tribunaEmVoo = true;
@@ -140,10 +189,12 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
         fala: falaEventoSeqRef.current,
         inscricao: inscricaoEventoSeqRef.current,
       };
+      // Fix round 2 (A2): timeout composto à mão — ver a docstring de `sinalComTimeout`.
+      const { signal, limpar } = sinalComTimeout(controller.signal, TIMEOUT_REBUSCA_MS);
       try {
         const resp = await apiFetch(`/api/sessoes/${sessaoId}/tribuna`, {
           token: token ?? undefined,
-          signal: sinalComTimeout(),
+          signal,
           cache: "no-store",
         });
         if (!vivo) return;
@@ -153,16 +204,22 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
         }
         const t = camelizarChaves(await resp.json()) as TribunaOut;
         if (!vivo) return;
-        if (falaEventoSeqRef.current !== seqNoDisparo.fala || inscricaoEventoSeqRef.current !== seqNoDisparo.inscricao) {
-          pedidoDeRebusca = true;
-        }
         // `hidratarTribuna` é TOTAL e checa a precedência POR CAMPO contra `seqNoDisparo`: nunca lança
         // e nunca ressuscita quem o SSE já desceu da tribuna nesse meio-tempo.
-        setEstado((prev) => (prev ? hidratarTribuna(prev, t, seqNoDisparo) : prev));
+        setEstado((prev) => {
+          if (!prev) return prev;
+          // MESMA leitura (`prev`) que `hidratarTribuna` usa para decidir o descarte — ver o Fix round 2
+          // (A4a) na docstring acima.
+          if (prev.falaEventoSeq !== seqNoDisparo.fala || prev.inscricaoEventoSeq !== seqNoDisparo.inscricao) {
+            pedidoDeRebusca = true;
+          }
+          return hidratarTribuna(prev, t, seqNoDisparo);
+        });
       } catch {
         if (!vivo) return;
         setEstado((prev) => (prev ? falharTribuna(prev) : prev));
       } finally {
+        limpar();
         tribunaEmVoo = false;
       }
     };

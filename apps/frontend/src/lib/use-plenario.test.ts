@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
-import { usePlenario } from "./use-plenario";
+import { usePlenario, TIMEOUT_REBUSCA_MS } from "./use-plenario";
 import { numeroDoTelao } from "./plenario-reducer";
 
 // O ÚNICO hook de `lib/` que não tinha teste — e é o que carrega a costura de BORDA do quórum: o fetch em
@@ -103,15 +103,29 @@ async function ateQue(cond: () => boolean, passo = 20, tentativas = 200) {
 const contarChamadas = (f: typeof fetch, frag: string) =>
   (f as unknown as { mock: { calls: unknown[][] } }).mock.calls.filter((c) => String(c[0]).includes(frag)).length;
 
-/** fetch fake: responde as rotas de dados e deixa o SSE pendurado (o stream nunca resolve sozinho). */
-function fetchFake(overrides: Record<string, () => Response | Promise<Response>> = {}) {
-  return vi.fn(async (url: string) => {
-    for (const [frag, fn] of Object.entries(overrides)) if (url.includes(frag)) return fn();
+/** fetch fake: responde as rotas de dados e deixa o SSE pendurado (o stream nunca resolve sozinho).
+ * Fix round 2 (A3): repassa `options?.signal` ao override — sem isto, testar o timeout de
+ * `sinalComTimeout` era impossível (o fake nunca reagia a um abort). */
+function fetchFake(overrides: Record<string, (signal?: AbortSignal) => Response | Promise<Response>> = {}) {
+  return vi.fn(async (url: string, options?: RequestInit) => {
+    for (const [frag, fn] of Object.entries(overrides)) if (url.includes(frag)) return fn(options?.signal ?? undefined);
     if (url.includes("/quorum")) return { ok: true, status: 200, json: async () => quorumCru } as Response;
     if (url.includes("/tribuna")) return { ok: true, status: 200, json: async () => tribunaCru } as Response;
     if (url.includes("/plenario")) return new Promise<Response>(() => {}); // SSE: pendurado de propósito
     return { ok: true, status: 200, json: async () => sessaoCrua } as Response;
   }) as unknown as typeof fetch;
+}
+
+/** Promessa que HONRA o `AbortSignal`: nunca resolve sozinha, mas REJEITA assim que `signal` abortar —
+ * o comportamento real de um `fetch` pendurado quando o timeout (`sinalComTimeout`) dispara. Fix round 2
+ * (A3): sem isto o `fetchFake` anterior (que ignorava o signal) tornava o timeout INTESTÁVEL — a suíte
+ * ficava verde mesmo removendo `sinalComTimeout()` inteiramente. */
+function penduradoAteAbortar(signal?: AbortSignal): Promise<Response> {
+  return new Promise((_, reject) => {
+    if (!signal) return; // sem signal: hang genuíno (usado onde o abort não é o que se testa)
+    if (signal.aborted) { reject(signal.reason ?? new DOMException("Aborted", "AbortError")); return; }
+    signal.addEventListener("abort", () => reject(signal.reason ?? new DOMException("Aborted", "AbortError")), { once: true });
+  });
 }
 
 describe("usePlenario — a costura de borda do quórum", () => {
@@ -184,7 +198,7 @@ describe("usePlenario — a costura de borda da TRIBUNA (#7 do ledger de prontid
     await waitFor(() => expect(result.current.estado?.oradorAtual?.falaId).toBe("f1"));
     expect(result.current.estado!.oradorAtual).toMatchObject({ falaId: "f1", oradorId: "vFalando", tipoFala: "principal" });
     expect(result.current.estado!.marcosCronometro).toEqual([{ tipo: "pausada", ocorridoEm: "2026-09-07T22:01:00.123456Z", segundosAdicionais: null }]);
-    expect(result.current.estado!.inscritos).toEqual([{ inscricaoId: "i1", vereadorId: "v1", ordem: 1 }]);
+    expect(result.current.estado!.inscritos).toEqual([{ inscricaoId: "i1", vereadorId: "v1", fase: "ordem_do_dia", ordem: 1 }]);
   });
 
   it("SEM `comQuorum` (o cockpit do vereador) a rota de tribuna também não é chamada — mesmo gate do quórum", async () => {
@@ -251,7 +265,7 @@ describe("usePlenario — a costura de borda da TRIBUNA (#7 do ledger de prontid
       });
       await vi.advanceTimersByTimeAsync(10);
     });
-    expect(result.current.estado!.inscritos).toEqual([{ inscricaoId: "iNova", vereadorId: "v9", ordem: 3 }]);
+    expect(result.current.estado!.inscritos).toEqual([{ inscricaoId: "iNova", vereadorId: "v9", fase: "ordem_do_dia", ordem: 3 }]);
 
     // AGORA a resposta de T0 chega — um snapshot com `vFalando` na tribuna, mas SEM a inscrição nova
     await act(async () => {
@@ -262,7 +276,7 @@ describe("usePlenario — a costura de borda da TRIBUNA (#7 do ledger de prontid
     // o orador SOBREVIVE: nenhum evento de FALA chegou no meio, só um de INSCRIÇÃO
     await ateQue(() => result.current.estado?.oradorAtual?.oradorId === "vFalando");
     // e a fila de inscritos não regride para a do snapshot velho (o SSE já sabe mais)
-    expect(result.current.estado!.inscritos).toEqual([{ inscricaoId: "iNova", vereadorId: "v9", ordem: 3 }]);
+    expect(result.current.estado!.inscritos).toEqual([{ inscricaoId: "iNova", vereadorId: "v9", fase: "ordem_do_dia", ordem: 3 }]);
   });
 
   it("Fix round 1 (I3) — uma `/tribuna` pendurada PARA SEMPRE não trava a re-busca do quórum nos ciclos seguintes", async () => {
@@ -282,5 +296,59 @@ describe("usePlenario — a costura de borda da TRIBUNA (#7 do ledger de prontid
     });
     // o quórum foi re-buscado de novo, mesmo com a tribuna pendurada desde o primeiro disparo
     expect(contarChamadas(f, "/quorum")).toBeGreaterThan(antes);
+  });
+
+  it("A3 — uma `/quorum` pendurada indefinidamente é ABORTADA em 8s (TIMEOUT_REBUSCA_MS): sem o timeout, o guard nunca libera e o status fica preso em 'carregando' para sempre", async () => {
+    // Furo de cobertura do round anterior: o `fetchFake` ignorava o `AbortSignal`, então trocar
+    // `sinalComTimeout()` de volta por `controller.signal` puro deixava a suíte inteira verde — o
+    // timeout era decorativo do ponto de vista dos testes. `penduradoAteAbortar` fecha o furo: reage
+    // ao abort de verdade, como um `fetch` pendurado reagiria.
+    vi.useFakeTimers();
+    const f = fetchFake({ "/quorum": (signal) => penduradoAteAbortar(signal) });
+    global.fetch = f;
+
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comQuorum: true }));
+    await ateQue(() => result.current.estado !== null); // sessão carregou; `/quorum` já disparou e está em voo
+    expect(result.current.estado!.quorumStatus).toBe("carregando"); // ainda em voo — nenhum tempo decorrido
+
+    // SEM o timeout, esta promessa nunca resolve nem rejeita (só reage a abort, e nada aborta): o
+    // `ateQue` abaixo estouraria o orçamento e reprovaria com "condição não atingida" — é a prova RED.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TIMEOUT_REBUSCA_MS);
+    });
+    await ateQue(() => result.current.estado?.quorumStatus === "indisponivel");
+  });
+
+  it("A3 — rede lenta PERSISTENTE (RTT > 8s sustentado): 1 tentativa a cada 30s, cada uma abortada aos 8s, número velho congelado — decisão: manter sem backoff", async () => {
+    // Decisão do round 2 (ver a docstring de `TIMEOUT_REBUSCA_MS` em use-plenario.ts): sem backoff nem
+    // sinalização extra. Este teste PROVA a cadência declarada, não só afirma a decisão em comentário.
+    vi.useFakeTimers();
+    let travar = false;
+    const f = fetchFake({
+      "/quorum": (signal) => (travar ? penduradoAteAbortar(signal) : ({ ok: true, status: 200, json: async () => quorumCru }) as Response),
+    });
+    global.fetch = f;
+
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comQuorum: true }));
+    await ateQue(() => result.current.estado?.quorumStatus === "ok");
+    expect(numeroDoTelao(result.current.estado!)).toBe(9);
+
+    travar = true; // a partir de agora toda /quorum trava até o timeout abortar
+    const antes = contarChamadas(f, "/quorum");
+
+    // a periódica de 30s dispara uma tentativa; ela é abortada 8s depois (TIMEOUT_REBUSCA_MS)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000 + TIMEOUT_REBUSCA_MS + 500);
+    });
+    expect(contarChamadas(f, "/quorum")).toBe(antes + 1); // exatamente 1 tentativa nova, abortada — sem retry mais cedo
+    expect(result.current.estado!.quorumStatus).toBe("ok"); // degrada, não zera (falharQuorum preserva o snapshot bom)
+    expect(numeroDoTelao(result.current.estado!)).toBe(9); // número velho FICA — não há backoff nem folga
+
+    // uma segunda janela de 30s repete a MESMA cadência — não converge sozinho enquanto a rede seguir lenta
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000 + TIMEOUT_REBUSCA_MS + 500);
+    });
+    expect(contarChamadas(f, "/quorum")).toBe(antes + 2);
+    expect(numeroDoTelao(result.current.estado!)).toBe(9);
   });
 });
