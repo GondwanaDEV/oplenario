@@ -95,6 +95,30 @@
         "so' a publica aparece -- a secreta e' invisivel: nem id, nem tipo, nem estado, nada")
     (is (not (re-find #"(?i)secreta" (:body r))) "nenhum vestigio da secreta atravessa o payload")))
 
+;; A4 (revisao adversarial de conserta-3-mata): nos testes acima o fake SEMPRE devolve linhas com o
+;; `ente-id` do PROPRIO ator (`(sessao eid ...)`, onde `eid` e' o `ente-id` que o controller passou pro
+;; repo) -- dropar o check de tenant em `logic/pode-ver-sessao?` passaria em 100% deles. `pode-ver-sessao?`
+;; e' documentada como DEFESA-EM-PROFUNDIDADE (`logic.clj:82-87`: "a RLS ja escopa a query; isto barra um
+;; recurso de outro ente que escape por bug de query/repo"). Este teste simula EXATAMENTE esse bug: um
+;; repo (por hipotese, com WHERE ente_id quebrado) devolvendo uma sessao de OUTRO ente -- e prova que o
+;; `filter` no controller ainda a barra, mesmo sem depender da RLS. REPROVA se
+;; `logic/pode-ver-quorum-da-sessao?`/`pode-ver-sessao?` perder o check de tenant (ex.: virar so'
+;; `(or transmite-publica (contains? papeis "secretario"))`).
+(deftest sessao-de-outro-ente-nunca-aparece-mesmo-se-o-repo-devolver-por-bug
+  (let [ente (random-uuid) outro-ente (random-uuid)
+        minha (random-uuid) alheia (random-uuid)
+        repo-s (fake-repo-sessoes
+                (fn [_eid-pedido]
+                  ;; ignora deliberadamente o ente-id pedido -- simula RLS/WHERE quebrado no repo real
+                  [(sessao ente minha "aberta" "ordinaria" true)
+                   (sessao outro-ente alheia "aberta" "ordinaria" true)]))
+        r (pt/response-for (service-fn* #{} repo-s)
+                           :get "/sessoes" :headers (com-auth (token ente (random-uuid))))
+        body (ler-json r)]
+    (is (= 200 (:status r)))
+    (is (= [(str minha)] (mapv :id (:sessoes body)))
+        "so' a sessao do PROPRIO ente aparece -- a de outro ente e' barrada pelo filtro de tenant, nao so' pela RLS")))
+
 (deftest sessao-secreta-continua-visivel-ao-secretario
   (let [ente (random-uuid) secreta (random-uuid)
         repo-s (fake-repo-sessoes (fn [eid] [(sessao eid secreta "aberta" "secreta" false)]))

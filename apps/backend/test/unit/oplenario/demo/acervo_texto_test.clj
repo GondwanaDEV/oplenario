@@ -33,3 +33,17 @@
   (testing "texto-parecer — escrevia '## Relatório' + '## Análise'"
     (let [t (@#'acervo/texto-parecer "assunto X")]
       (is (sem-linha-markdown? t) (str "linha markdown crua em texto-parecer: " (pr-str t))))))
+
+;; A2 (revisao adversarial de conserta-3-mata): o teste acima cobre os HELPERS de texto, nao os DADOS —
+;; nada afirmava que as 24 materias da semente TEM `:texto`. E' o invariante do proprio #15: uma 25a
+;; materia entrando sem `:texto` deixa `proposicao_texto_versao` vazia p/ ela (protocolar-e-tramitar! so'
+;; grava versao QUANDO o payload traz `:texto`, ver acervo.clj) e a ficha em branco na tela, com a suite
+;; inteira verde — que e' literalmente como o #15 existiu ate' a caminhada que o achou. REPROVA se alguem
+;; acrescentar uma materia sem `:texto` (nil) ou com `:texto` vazio/so'-espaco.
+(deftest todas-as-materias-da-semente-tem-texto
+  (testing "invariante do #15: nenhuma materia de `acervo/materias` pode ficar sem :texto"
+    (let [materias @#'acervo/materias]
+      (is (= 24 (count materias)) "a semente e' documentada como 24 materias — contagem mudou")
+      (doseq [{:keys [ref texto]} materias]
+        (is (string? texto) (str "materia " ref " sem :texto (nil ou nao-string)"))
+        (is (not (string/blank? texto)) (str "materia " ref " com :texto vazio/so-espaco"))))))

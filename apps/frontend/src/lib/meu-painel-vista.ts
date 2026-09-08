@@ -84,10 +84,17 @@ export function derivarHome(
   };
 }
 
-/** A sessão agendada de menor data FUTURA (>= `agoraIso`); `null` se nenhuma sessão futura agendada. */
+/** A sessão de `estado` "agendada" com menor data FUTURA (> `agoraIso`, estrito); `null` se nenhuma. Filtra
+ * por ESTADO, não só por data: `agendada -> nao_realizada` é transição legal da máquina
+ * (`sessoes/logic.clj`, `transicoes-sessao`) e NÃO apaga `agendada-para` — uma sessão cancelada por luto ou
+ * falta de quórum continua com a data futura na projeção. Sem o filtro de estado, esta função reabre o
+ * defeito #16 por outro campo: a home anunciaria como "próxima sessão" uma sessão que a Mesa já cancelou.
+ * O mesmo raciocínio vale para `arquivada` chegando via `nao_realizada` — nenhum estado fora de "agendada"
+ * é candidato a "próxima". */
 function proximaSessaoFutura(sessoes: SessaoOut[], agoraIso: string): SessaoOut | null {
   const futuras = sessoes.filter(
-    (s): s is SessaoOut & { agendadaPara: string } => s.agendadaPara != null && s.agendadaPara > agoraIso
+    (s): s is SessaoOut & { agendadaPara: string } =>
+      s.estado === "agendada" && s.agendadaPara != null && s.agendadaPara > agoraIso
   );
   if (futuras.length === 0) return null;
   return futuras.reduce((maisProxima, atual) =>

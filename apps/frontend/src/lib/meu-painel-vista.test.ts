@@ -141,6 +141,33 @@ describe("derivarHome", () => {
     expect(r.proximaSessao).toBeNull();
   });
 
+  // A1 (revisão adversarial de conserta-3-mata): agendada -> nao_realizada é transição LEGAL
+  // (sessoes/logic.clj) e NÃO apaga `agendada-para`. Uma sessão cancelada continua com data futura na
+  // projeção — sem o filtro por `estado`, a home reabre o #16 anunciando como "próxima sessão" uma sessão
+  // que a Mesa já cancelou.
+  it("próxima sessão ignora sessão CANCELADA (nao_realizada) mesmo com data futura", () => {
+    const sessoes = [
+      sessao({ id: "cancelada", estado: "nao_realizada", agendadaPara: emDias(7) }),
+    ];
+    const r = derivarHome({ proposicoes: [], pareceres: [], ciencias: [] }, sessoes);
+    expect(r.proximaSessao).toBeNull();
+  });
+
+  it("próxima sessão ignora sessão ARQUIVADA mesmo com data futura", () => {
+    const sessoes = [sessao({ id: "arquivada", estado: "arquivada", agendadaPara: emDias(7) })];
+    const r = derivarHome({ proposicoes: [], pareceres: [], ciencias: [] }, sessoes);
+    expect(r.proximaSessao).toBeNull();
+  });
+
+  it("próxima sessão escolhe a AGENDADA e ignora uma CANCELADA mais próxima no tempo", () => {
+    const sessoes = [
+      sessao({ id: "cancelada-mais-proxima", estado: "nao_realizada", agendadaPara: emDias(3) }),
+      sessao({ id: "agendada-mais-distante", estado: "agendada", agendadaPara: emDias(30) }),
+    ];
+    const r = derivarHome({ proposicoes: [], pareceres: [], ciencias: [] }, sessoes);
+    expect(r.proximaSessao?.id).toBe("agendada-mais-distante");
+  });
+
   it("painel/sessoes ausentes (undefined) -> estrutura vazia coerente, sem lançar", () => {
     const r = derivarHome(undefined, undefined);
     expect(r).toEqual({

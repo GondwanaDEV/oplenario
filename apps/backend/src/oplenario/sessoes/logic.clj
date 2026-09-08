@@ -635,9 +635,10 @@
   'aberta'/'suspensa' precisavam de um grupo proprio, que nenhuma constante existente ja nomeava."
   (merge {"aberta" 0 "suspensa" 0 "agendada" 1} (zipmap estados-sessao-fechada (repeat 2))))
 
-(defn- epoch-ms-ou-fim [instante]
+(defn- epoch-ms-ou-fim
   "PURO. `Instant` -> epoch-millis (long); nil -> `Long/MAX_VALUE` (sentinela 'fim do grupo' — nao ha' como
   saber se um marco ausente e' 'recente' ou 'antigo', entao ele sempre perde para qualquer data real)."
+  [instante]
   (if instante (.toEpochMilli ^Instant instante) Long/MAX_VALUE))
 
 (defn chave-ordenacao-listagem-geral

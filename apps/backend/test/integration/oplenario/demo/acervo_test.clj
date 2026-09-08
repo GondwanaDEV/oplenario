@@ -55,6 +55,34 @@
         (is (some #(not (contains? legislativo.logic/estados-parecer-terminais (:estado %))) pareceres)
             "todo parecer do relator ja' esta' num dos 4 estados terminais — nao ha' o que assinar")))))
 
+;; A3 (revisao adversarial de conserta-3-mata, #14): a inscricao das 24 proposicoes no Livro do Protocolo
+;; Geral (acervo.clj/protocolar-e-tramitar!, repo-leg/protocolar-geral!) so' tinha sido verificada AO VIVO
+;; pelo revisor — nenhum teste provava. REPROVA se `protocolar-e-tramitar!` parar de chamar
+;; `protocolar-geral!` (Livro vazio), se o `objeto-tipo`/`sentido` regredirem, ou se a numeracao deixar de
+;; ser gapless 1..24 (ex.: um crash no meio do loop, ou dois entes compartilhando o mesmo escopo por
+;; engano).
+(deftest acervo-inscreve-as-24-proposicoes-no-livro-do-protocolo-geral
+  (with-sistema [s]
+    (let [{:keys [ente identidades]} (casa/semear! s)
+          _ (acervo/semear! s ente (:vereador identidades))
+          repo-leg (:repo-legislativo s)
+          livro-2026 (repo-legislativo/protocolos-do-ano repo-leg ente 2026)
+          proposicoes (acervo/tipos-usados s ente)
+          entradas-de-proposicao (filterv #(= "proposicao" (:objeto-tipo %)) livro-2026)]
+      (testing "as 24 proposicoes da semente estao TODAS inscritas no Livro"
+        (is (= 24 (count entradas-de-proposicao))
+            "o Livro nao tem as 24 entradas 'proposicao' esperadas — protocolar-geral! parou de ser chamado?"))
+      (testing "sentido 'interno' — vereador da PROPRIA Casa, nunca 'recebido' (externo)"
+        (is (every? #(= "interno" (:sentido %)) entradas-de-proposicao)
+            "alguma entrada regrediu p/ sentido diferente de 'interno'"))
+      (testing "numeracao gapless 1..24, sem furo (append-only, escopo protocolo_geral:2026 do ente)"
+        (is (= (range 1 25) (sort (mapv :numero entradas-de-proposicao)))
+            "numeracao nao e' 1..24 gapless — sinal de crash-no-meio-do-loop ou escopo de sequencial compartilhado"))
+      (testing "cada entrada aponta pra uma proposicao real (objeto-id existe entre as protocoladas)"
+        (is (seq proposicoes) "acervo/tipos-usados vazio — a semente rodou?")
+        (is (every? some? (map :objeto-id entradas-de-proposicao))
+            "entrada 'proposicao' sem objeto-id — guard ref orfao no Livro")))))
+
 (deftest comissao-id-do-parecer-aponta-para-comissao-real-da-casa
   ;; Ledger #11 (docs/16-ledger-prontidao.md): `semear-pareceres!` gravava `comissao-id` como
   ;; `(random-uuid)` — guard ref ORFAO (sem FK, §22.10) — e a tela /parecer/:id mostrava esse UUID
