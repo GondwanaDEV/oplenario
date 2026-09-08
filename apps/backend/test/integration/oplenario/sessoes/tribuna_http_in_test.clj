@@ -45,7 +45,7 @@
 
 (defn- fala-em-curso-doc []
   {:id fala-em-curso-id :sessao-id nil :orador-id orador-1 :tipo-fala "principal" :fase "ordem_do_dia"
-   :iniciou-em iniciou-em :encerrou-em nil :inscricao-id inscricao-orador-1})
+   :iniciou-em iniciou-em :encerrou-em nil :inscricao-id inscricao-orador-1 :lock-version 4})
 
 ;; `tribuna-fn` devolve {:fala-em-curso :marcos :inscricoes} (o resto que `tribuna-da-sessao` do repo
 ;; agrega na MESMA tx) — o fake NAO reimplementa a projecao do controller, so' os TRES insumos crus.
@@ -101,7 +101,9 @@
     (is (= "principal" (:tipo-fala (:orador-atual body))))
     (is (= "ordem_do_dia" (:fase (:orador-atual body))))
     (is (= (str iniciou-em) (:iniciou-em (:orador-atual body))))
-    (is (= (str inscricao-orador-1) (:inscricao-id (:orador-atual body))))))
+    (is (= (str inscricao-orador-1) (:inscricao-id (:orador-atual body))))
+    (is (= 4 (:lock-version (:orador-atual body)))
+        "ledger de prontidao Fase 8 achado #2: GET .../tribuna e' a UNICA fonte do lock-version que POST .../falas/:fala-id/encerrar exige no corpo")))
 
 ;; ---------- 2: nenhuma fala em curso -> orador-atual nil, marcos vazio ----------
 
@@ -188,11 +190,11 @@
   (let [ente (random-uuid) sid (random-uuid)
         v1 (random-uuid) v2 (random-uuid) v-desistiu (random-uuid)
         i1 {:id (random-uuid) :vereador-id v1 :origem-inscricao "pre_sessao_app"
-            :fase "ordem_do_dia" :estado "inscrita" :ordem 1}
+            :fase "ordem_do_dia" :estado "inscrita" :ordem 1 :lock-version 2}
         i2 {:id (random-uuid) :vereador-id v2 :origem-inscricao "pre_sessao_secretaria"
-            :fase "ordem_do_dia" :estado "inscrita" :ordem 2}
+            :fase "ordem_do_dia" :estado "inscrita" :ordem 2 :lock-version 5}
         i-desistiu {:id (random-uuid) :vereador-id v-desistiu :origem-inscricao "pre_sessao_app"
-                    :fase "ordem_do_dia" :estado "desistencia" :ordem 3}
+                    :fase "ordem_do_dia" :estado "desistencia" :ordem 3 :lock-version 1}
         repo-s (fake-repo-sessoes
                 (fn [_ id] (sessao-aberta ente id))
                 (fn [_ _] {:fala-em-curso nil :marcos [] :inscricoes [i1 i2 i-desistiu]}))
@@ -201,6 +203,8 @@
         inscritos (:inscritos (ler-json r))]
     (is (= 2 (count inscritos)) "o desistente fica de fora")
     (is (= [(str v1) (str v2)] (mapv :vereador-id inscritos)) "ordem preservada")
+    (is (= [2 5] (mapv :lock-version inscritos))
+        "ledger de prontidao Fase 8 achado #2: GET .../tribuna e' a UNICA fonte do lock-version que POST .../inscricoes/:insc-id/desistir exige no corpo")
     (is (not (re-find #"(?i)desistencia" (:body r))) "nenhum vestigio do desistente atravessa o payload")))
 
 ;; ---------- 6: a FRONTEIRA DA SESSAO SECRETA -- mesmo gate de /quorum e /composicao ----------

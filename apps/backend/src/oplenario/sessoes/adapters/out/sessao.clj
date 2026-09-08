@@ -1,8 +1,13 @@
 (ns oplenario.sessoes.adapters.out.sessao
   "Gate de SAIDA `models -> wire/out` da sessao (§22.10 adapters/out, ADR-0001 §3) — dividido por DIRECAO (sob
   adapters/out/). Chamado SO pelo diplomat/. Projeta a sessao do dominio (kebab, uuid/Instant) p/ a
-  representacao externa (strings, JSON-serializavel) e FILTRA o que nao deve vazar: `lock-version` (token
-  interno de concorrencia) e `ente-id` (o tenant ja e' o do ator). A defesa anti-vazamento de saida mora aqui.
+  representacao externa (strings, JSON-serializavel) e FILTRA o que nao deve vazar: `ente-id` (o tenant ja e'
+  o do ator). A defesa anti-vazamento de saida mora aqui.
+
+  `lock-version` (token de CAS) EXPOE, deliberadamente (ledger de prontidao Fase 8 achado #2):
+  `POST /sessoes/:id/transicao` o exige no corpo, e `GET /sessoes/:id` (esta projecao) e' a UNICA leitura
+  de onde um cliente aprende o valor corrente — sem ele a 2a chamada de qualquer fluxo de transicao e'
+  impossivel de montar so' pela API.
 
   O contrato de forma e' `wire/out.SessaoOut` (a fonte do TS, Eixo 8); a projecao abaixo o satisfaz — e e'
   VALIDADA contra ele (drift de campo, ex.: modalidade NULL de linha legada, = bug de servidor -> 500, nunca
@@ -33,7 +38,8 @@
      :agendada-para             (->str (:agendada-para s))
      :aberta-em                 (->str (:aberta-em s))
      :encerrada-em              (->str (:encerrada-em s))
-     :motivo-nao-realizada      (:motivo-nao-realizada s)}]
+     :motivo-nao-realizada      (:motivo-nao-realizada s)
+     :lock-version              (:lock-version s)}]
       (when-not (m/validate wire/SessaoOut out)
         (throw (ex-info "projecao de sessao viola o contrato SessaoOut (bug de servidor)"
                         {:campos (keys (me/humanize (m/explain wire/SessaoOut out)))})))

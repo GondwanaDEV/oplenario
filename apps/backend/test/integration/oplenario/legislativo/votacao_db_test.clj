@@ -51,6 +51,22 @@
   (is (= "aprovada" (logic/resultado-votacao "maioria_simples" {:sim 2 :nao 1} 9)) "2>1 votos validos")
   (is (= "rejeitada" (logic/resultado-votacao "maioria_simples" {:sim 1 :nao 1} 9)) "empate nao aprova"))
 
+;; ---------- ledger de prontidao Fase 8 achado #2: abrir! devolve o lock-version ----------
+
+(deftest abrir-devolve-lock-version-para-o-recibo-de-abertura
+  ;; nao ha' rota GET de detalhe da votacao: o recibo de `abrir!` e' a UNICA fonte do token de CAS que
+  ;; `encerrar!` exige no corpo — sem RETURNING lock_version aqui, encerrar fica impossivel de montar
+  ;; so' pela API (a versao anterior devolvia so' {:id}).
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [pid (protocolar! tx ente)
+              recibo (abrir! tx ente pid {})]
+          (is (= 0 (:lock-version recibo)) "votacao recem-aberta nasce com lock_version 0")
+          (is (= (:lock-version recibo)
+                 (:lock-version (votacao/buscar tx ente (:id recibo))))
+              "o lock-version do recibo bate com o que esta gravado"))))))
+
 ;; ---------- fluxo nominal ----------
 
 (deftest abrir-votar-encerrar-nominal

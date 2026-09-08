@@ -34,7 +34,7 @@
     (buscar-sessao [_ ente-id id] (busca-fn ente-id id))
     (registrar-segmento! [_ ente-id m]
       (reset! capturado (assoc m :ente-id ente-id))
-      {:id (:id m)})))
+      {:id (:id m) :lock-version 0})))
 
 (defn- fake-store
   "ObjetoStore fake: `guardar-stream!` CONSOME o InputStream (popula o DigestInputStream) e grava os bytes +
@@ -94,6 +94,8 @@
     (is (string? (:id body)) "recibo carrega o id do segmento (string)")
     (is (= (sha256-hex corpo) (:audio-hash body)) "recibo carrega o sha256 do conteudo (integridade/dedup §22.3.4)")
     (is (= 64 (count (:audio-hash body))) "sha256 hex = 64 chars (trava o bug de sign-extension do byte)")
+    (is (= 0 (:lock-version body))
+        "ledger de prontidao Fase 8 achado #2: um segmento nao-vinculado nunca aparece em GET .../gravacao -- este recibo e' a UNICA fonte do lock-version que POST .../vincular exige no corpo")
     (is (= corpo (String. ^bytes (:bytes @cap-store) "UTF-8")) "o store recebeu os bytes do container, integros")
     (is (= "gravacao_local_pos_sessao" (:fonte-ingestao @cap-repo)) "o Repo registrou a fonte de ingestao")
     (is (= (:chave @cap-store) (:container-bruto-uri @cap-repo)) "o container-bruto-uri registrado = a chave do store")

@@ -36,7 +36,8 @@
   {:id id :ente-id ente-id :estado estado :tipo-sessao tipo :transmite-publica transmite
    :sessao-legislativa-id (random-uuid) :numero-sequencial 1 :modalidade "presencial"
    :delibera true :gera-ata-regimental true :permite-voto-secreto false :permite-modalidade-remota true
-   :agendada-para agendada-para :aberta-em aberta-em :encerrada-em encerrada-em :motivo-nao-realizada nil})
+   :agendada-para agendada-para :aberta-em aberta-em :encerrada-em encerrada-em :motivo-nao-realizada nil
+   :lock-version 0})
 
 (defn- fake-repo-sessoes [listar-fn]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
@@ -173,9 +174,9 @@
     (is (= #{:sessoes} (set (keys body))) "o contrato de topo e' fechado -- so' :sessoes")
     (is (= #{:id :sessao-legislativa-id :tipo-sessao :numero-sequencial :estado :modalidade :delibera
              :transmite-publica :gera-ata-regimental :permite-voto-secreto :permite-modalidade-remota
-             :agendada-para :aberta-em :encerrada-em :motivo-nao-realizada}
+             :agendada-para :aberta-em :encerrada-em :motivo-nao-realizada :lock-version}
            (set (keys (first (:sessoes body)))))
-        "cada item e' o MESMO shape de SessaoOut (GET /sessoes/:id) -- vocabulario unico")))
+        "cada item e' o MESMO shape de SessaoOut (GET /sessoes/:id) -- vocabulario unico, agora incluindo lock-version (ledger de prontidao Fase 8 achado #2)")))
 
 ;; ---------- borda: sem token ----------
 

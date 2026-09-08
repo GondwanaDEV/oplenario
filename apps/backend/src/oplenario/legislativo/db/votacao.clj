@@ -20,16 +20,21 @@
 (defn abrir!
   "Abre uma votacao (estado 'aberta') sobre o objeto polimorfico (objeto-tipo,objeto-id). `sessao-id` +
   `pauta-item-id` (ambos forward-ref a sessoes, §22.10) sao CONTEXTO TEMPORAL — a votacao e' sobre a
-  MATERIA (objeto), nao sobre o item (§22.6 eixo B). Devolve {:id}."
+  MATERIA (objeto), nao sobre o item (§22.6 eixo B). RETURNING `lock_version` (ledger de prontidao Fase
+  8 achado #2): esta e' a UNICA leitura que existe da votacao recem-aberta — nao ha' rota GET de
+  detalhe — entao o recibo de abertura tem de carregar o token de CAS que `POST .../encerramento`
+  exige, ou o encerramento fica impossivel de montar so' pela API. Devolve {:id :lock-version}."
   [tx {:keys [id ente-id objeto-tipo objeto-id modalidade quorum-tipo votacao-corrige-id
               sessao-id pauta-item-id created-by]}]
-  (jdbc/execute-one! tx
-    (sql/format {:insert-into :legislativo.votacoes
-                 :values [{:id id :ente_id ente-id :objeto_tipo objeto-tipo :objeto_id objeto-id
-                           :modalidade modalidade :quorum_tipo quorum-tipo :estado "aberta"
-                           :votacao_corrige_id votacao-corrige-id :sessao_id sessao-id
-                           :pauta_item_id pauta-item-id :created_by created-by :efetivado_em [:now]}]}))
-  {:id id})
+  (let [r (comum/linha->kebab
+           (jdbc/execute-one! tx
+             (sql/format {:insert-into :legislativo.votacoes
+                          :values [{:id id :ente_id ente-id :objeto_tipo objeto-tipo :objeto_id objeto-id
+                                    :modalidade modalidade :quorum_tipo quorum-tipo :estado "aberta"
+                                    :votacao_corrige_id votacao-corrige-id :sessao_id sessao-id
+                                    :pauta_item_id pauta-item-id :created_by created-by :efetivado_em [:now]}]
+                          :returning [:lock_version]})))]
+    {:id id :lock-version (:lock-version r)}))
 
 (defn registrar-voto!
   "Registra um voto NOMINAL (atribuido). Append-only; a UNIQUE (ente_id,votacao_id,vereador_id) barra voto

@@ -1,8 +1,11 @@
 (ns oplenario.legislativo.adapters.out.votacao
   "Gate de SAIDA `models -> wire/out` da votacao ao vivo (§22.10 adapters/out, ADR-0001 §3). Chamado SO pelo
-  diplomat/. Projeta os recibos do dominio (kebab, uuid) p/ a representacao externa (strings, JSON) e FILTRA o
-  que nao deve vazar (lock-version interno). As projecoes sao VALIDADAS contra os contratos wire/out (drift de
-  campo = bug de servidor -> 500, nunca resposta malformada que envenena o codegen do front, Eixo 8)."
+  diplomat/. Projeta os recibos do dominio (kebab, uuid) p/ a representacao externa (strings, JSON) e FILTRA
+  internos. EXCECAO deliberada: `abertura->wire` EXPOE `lock-version` (ledger de prontidao Fase 8 achado #2) —
+  nao ha' rota GET de detalhe da votacao, entao o recibo de abertura e' a UNICA fonte do token de CAS que
+  `POST .../encerramento` exige; esconde-lo tornaria essa segunda chamada impossivel de montar so' pela API.
+  As projecoes sao VALIDADAS contra os contratos wire/out (drift de campo = bug de servidor -> 500, nunca
+  resposta malformada que envenena o codegen do front, Eixo 8)."
   (:require [malli.core :as m]
             [malli.error :as me]
             [oplenario.legislativo.wire.out.votacao :as wire]))
@@ -18,9 +21,11 @@
   out)
 
 (defn abertura->wire
-  "Recibo de abrir-votacao! {:id} -> AberturaOut. Estado e' sempre 'aberta' (a votacao nasce aberta)."
-  [{:keys [id]}]
-  (validado wire/AberturaOut {:id (->str id) :estado "aberta"} "abertura de votacao"))
+  "Recibo de abrir-votacao! {:id :lock-version} -> AberturaOut. Estado e' sempre 'aberta' (a votacao nasce
+  aberta). `lock-version` viaja (excecao consciente, ver docstring do ns) — sem ele o cliente nao tem como
+  montar `POST .../encerramento` (que o exige no corpo)."
+  [{:keys [id lock-version]}]
+  (validado wire/AberturaOut {:id (->str id) :estado "aberta" :lock-version lock-version} "abertura de votacao"))
 
 (defn voto->wire
   "Recibo de registrar-voto!/registrar-voto-secreto! {:id} -> VotoOut (so o id; sem identidade — sigilo §22.6)."

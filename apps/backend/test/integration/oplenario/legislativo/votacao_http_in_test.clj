@@ -54,7 +54,7 @@
   (reify repo-leg/RepoLegislativo
     (buscar-votacao [_ ente-id id] (busca-votacao-fn ente-id id))
     (abrir-votacao! [_ _ente-id m]
-      (swap! chamadas conj :abrir) {:id (:id m)})
+      (swap! chamadas conj :abrir) {:id (:id m) :lock-version 0})
     (registrar-voto! [_ _ente-id m]
       (swap! chamadas conj :nominal) {:id (:id m)})
     (registrar-voto-secreto! [_ _ente-id m]
@@ -105,6 +105,8 @@
     (is (= 201 (:status r)) "abrir votacao com papel + corpo valido + mesma Casa -> 201")
     (is (string? (:id body)) "o recibo carrega o id da votacao (string)")
     (is (= "aberta" (:estado body)) "votacao recem-aberta")
+    (is (= 0 (:lock-version body))
+        "ledger de prontidao Fase 8 achado #2: nao ha' GET de detalhe da votacao -- este recibo e' a UNICA fonte do lock-version que POST .../encerramento exige no corpo")
     (is (= [:abrir] @chamadas) "o controller chamou abrir-votacao! do Repo do legislativo")))
 
 (deftest abrir-votacao-sem-papel-403

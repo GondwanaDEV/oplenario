@@ -429,7 +429,9 @@
   emite `gravacao.segmento-captado` (atomico, no Repo). `meta` = a metadata validada pelo adapters/in. Se
   `meta` carrega `sessao-id` (link-at-ingest), a sessao tem de existir no tenant (nil -> 404 via nil de
   retorno) e ser da mesma Casa (pode-ver-sessao? -> 403 fail-closed). Sem sessao-id = Opcao A (vincula depois).
-  Devolve o recibo {:id :audio-hash} ou nil (sessao-id informado mas inexistente -> 404). ente/autor vem do
+  Devolve o recibo {:id :audio-hash :lock-version} ou nil (sessao-id informado mas inexistente -> 404). `lock-
+  version` viaja (ledger de prontidao Fase 8 achado #2: e' a UNICA fonte do token de CAS que `vincular-
+  gravacao` exige, ja' que um segmento nao-vinculado nunca aparece em `listar-gravacoes`). ente/autor vem do
   `ator`, nunca do cliente (§22.5). A chave do store = `gravacao/<ente>/<segmento>` (server-side)."
   [repo-sessoes objeto-store ator metadata body-stream]
   (let [ente-id   (:ente-id ator)
@@ -451,11 +453,11 @@
               md        (MessageDigest/getInstance "SHA-256")
               din       (DigestInputStream. ^java.io.InputStream body-stream md)]
           (store/guardar-stream! objeto-store chave din "application/octet-stream")
-          (let [hash-hex (hex (.digest md))]
-            (repo/registrar-segmento! repo-sessoes ente-id
-              (assoc metadata :id seg-id :container-bruto-uri chave :audio-hash hash-hex
-                     :acesso-restrito restrito? :created-by (:identidade-id ator)))
-            {:id seg-id :audio-hash hash-hex}))))))
+          (let [hash-hex (hex (.digest md))
+                r (repo/registrar-segmento! repo-sessoes ente-id
+                    (assoc metadata :id seg-id :container-bruto-uri chave :audio-hash hash-hex
+                           :acesso-restrito restrito? :created-by (:identidade-id ator)))]
+            {:id seg-id :audio-hash hash-hex :lock-version (:lock-version r)}))))))
 
 (defn vincular-gravacao
   "Vincula (Opcao A pos-upload) um segmento ja ingerido a uma sessao. Carrega a SESSAO do tenant do `ator`
@@ -791,10 +793,12 @@
 (defn- orador-atual-da-tribuna
   "A fala em curso de dominio (`repo/tribuna-da-sessao`, ja kebab) -> o mapa OradorAtual do payload. So'
   os campos de `events.tribuna/FalaIniciadaPayload` MENOS `sessao-id` (Constraint 7) — `id` (o uuid da
-  fala) vira `fala-id`; o resto passa direto."
-  [{:keys [id orador-id tipo-fala fase iniciou-em inscricao-id]}]
+  fala) vira `fala-id`; o resto passa direto. `lock-version` QUEBRA deliberadamente essa uniao-exata-com-o-
+  SSE (ledger de prontidao Fase 8 achado #2): `POST .../falas/:fala-id/encerrar` o exige no corpo, e esta
+  leitura e' a UNICA fonte do token de CAS de uma fala alheia."
+  [{:keys [id orador-id tipo-fala fase iniciou-em inscricao-id lock-version]}]
   {:fala-id id :orador-id orador-id :tipo-fala tipo-fala :fase fase :iniciou-em iniciou-em
-   :inscricao-id inscricao-id})
+   :inscricao-id inscricao-id :lock-version lock-version})
 
 (defn- marco-da-tribuna
   "Um evento de cronometro de dominio -> um marco do payload. So' os campos de `events.tribuna/
@@ -804,9 +808,12 @@
 
 (defn- inscrito-da-tribuna
   "Uma inscricao de dominio -> um inscrito do payload. So' os campos de `events.tribuna/
-  InscricaoRegistradaPayload` MENOS `sessao-id`; `id` vira `inscricao-id`."
-  [{:keys [id vereador-id origem-inscricao fase ordem]}]
-  {:inscricao-id id :vereador-id vereador-id :origem-inscricao origem-inscricao :fase fase :ordem ordem})
+  InscricaoRegistradaPayload` MENOS `sessao-id`; `id` vira `inscricao-id`. `lock-version` QUEBRA
+  deliberadamente essa uniao-exata-com-o-SSE (ledger de prontidao Fase 8 achado #2): `POST .../inscricoes/
+  :insc-id/desistir` o exige no corpo, e esta leitura e' a UNICA fonte do token de CAS de uma inscricao alheia."
+  [{:keys [id vereador-id origem-inscricao fase ordem lock-version]}]
+  {:inscricao-id id :vereador-id vereador-id :origem-inscricao origem-inscricao :fase fase :ordem ordem
+   :lock-version lock-version})
 
 (defn tribuna-da-sessao
   "O ESTADO CORRENTE da TRIBUNA (`GET /sessoes/:id/tribuna`) — fecha a lacuna de leitura que as 5 rotas de

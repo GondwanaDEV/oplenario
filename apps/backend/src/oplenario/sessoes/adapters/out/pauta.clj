@@ -1,9 +1,14 @@
 (ns oplenario.sessoes.adapters.out.pauta
   "Gate de SAIDA `models -> wire/out` da PAUTA (§22.10 adapters/out, ADR-0001 §3) — chamado SO pelo diplomat/.
   Projeta a pauta viva do dominio (kebab, uuid) p/ a representacao externa (strings, JSON-serializavel) e
-  FILTRA o que nao deve vazar: `ente-id`, `pauta-sessao-id`, `lock-version` e `ativo` (internos). A defesa
-  anti-vazamento de saida mora aqui. A projecao e' VALIDADA contra `wire/out.PautaOut` (drift de campo =
-  bug de servidor -> 500, nunca resposta malformada que envenena o codegen do front)."
+  FILTRA o que nao deve vazar: `ente-id`, `pauta-sessao-id` e `ativo` (internos). A defesa anti-vazamento de
+  saida mora aqui. A projecao e' VALIDADA contra `wire/out.PautaOut` (drift de campo = bug de servidor -> 500,
+  nunca resposta malformada que envenena o codegen do front).
+
+  `lock-version` (token de CAS) EXPOE, deliberadamente (ledger de prontidao Fase 8 achado #2): `PATCH`/
+  `DELETE /sessoes/:id/pauta/itens/:item-id` o exigem no corpo, e `GET .../pauta` (esta projecao) e' a UNICA
+  leitura de onde um cliente aprende o valor corrente de um item — sem ele reordenar/remover e' impossivel
+  de montar so' pela API."
   (:require [malli.core :as m]
             [malli.error :as me]
             [oplenario.sessoes.wire.out :as wire]))
@@ -17,10 +22,11 @@
   schema: a chave FK-por-tipo so aparece quando presente (proposicao-id XOR texto-descricao, garantido a
   montante) — em vez de emitir `null` explicito, que o codegen Malli->TS leria como nullable em vez de ausente."
   [it]
-  (cond-> {:id        (->str (:id it))
-           :fase      (:fase it)
-           :tipo-item (:tipo-item it)
-           :ordem     (:ordem it)}
+  (cond-> {:id           (->str (:id it))
+           :fase         (:fase it)
+           :tipo-item    (:tipo-item it)
+           :ordem        (:ordem it)
+           :lock-version (:lock-version it)}
     (:proposicao-id it)   (assoc :proposicao-id   (->str (:proposicao-id it)))
     (:texto-descricao it) (assoc :texto-descricao (:texto-descricao it))))
 
