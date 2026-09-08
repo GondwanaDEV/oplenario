@@ -233,6 +233,15 @@
 
 ;; ---------- artefato p/ downstream (sonda, varredura de API — Fases 1/2b do plano) ----------
 
+(defn diretorio-de-artefatos
+  "Onde `demo-ids.edn` e' gravado: `DEMO_ARTIFACTS_DIR`, ou `.artifacts` relativo ao CWD.
+
+  PUBLICA de proposito: o teste que verifica a gravacao tem de perguntar a REGRA, nunca redigita-la.
+  Redigitada, o teste passou a exigir a variavel de ambiente que o comando de suite nao seta — e
+  quebrava com NPE no `io/file` de nil, um defeito do teste que se lia como defeito do codigo."
+  ^java.io.File []
+  (io/file (or (System/getenv "DEMO_ARTIFACTS_DIR") ".artifacts")))
+
 (defn- gravar-artefato!
   "Grava o resultado em `<DEMO_ARTIFACTS_DIR>/demo-ids.edn` (default `.artifacts`, relativo ao CWD).
   Toda semente posterior e a sonda (Task 1.1) leem esse arquivo para nao cravar id a mao.
@@ -244,7 +253,7 @@
   nao pode escrever no CWD, aponta `DEMO_ARTIFACTS_DIR` para um diretorio gravavel (`/tmp/...`).
   Quem escolhe tolerar e' quem chama, por configuracao explicita — nunca a funcao, em silencio."
   [resultado]
-  (let [dir (io/file (or (System/getenv "DEMO_ARTIFACTS_DIR") ".artifacts"))]
+  (let [dir (diretorio-de-artefatos)]
     (.mkdirs dir)
     (let [alvo (io/file dir "demo-ids.edn")]
       (spit alvo (pr-str resultado))

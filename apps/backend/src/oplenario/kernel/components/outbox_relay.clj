@@ -2,9 +2,10 @@
   "Relay do bus (§22.9 E3): Component que, como LIDER unico (advisory lock via scheduler), varre o
   shared.outbox periodicamente e despacha aos consumidores (outbox/drenar!), e poda o ledger de inbox.
   Thread daemon; AUTO-CURA (reabre a conexao de lideranca se ela cair) e para limpo no stop.
-  CUSTO: mantem UMA conexao do pool presa p/ o advisory lock enquanto vive (lock e' session-level) —
-  dimensionar :db :pool-max-size >= nº de replicas + concorrencia normal. Pool de lock DEDICADO fica
-  p/ a escala multi-replica (Rota D)."
+  CUSTO: mantem UMA conexao presa p/ o advisory lock enquanto vive (lock e' session-level). Ela sai do
+  pool DEDICADO `:ds-lock` (datasource.clj), nunca do pool de trabalho — no pool de trabalho o
+  `leakDetectionThreshold` a denunciava como vazada em todo boot, ruido garantido que esconderia um
+  vazamento de verdade. Dimensionar :db :pool-max-size contra a concorrencia normal apenas."
   (:require [com.stuartsierra.component :as component]
             [next.jdbc :as jdbc]
             [clojure.tools.logging :as log]
@@ -25,9 +26,13 @@
 
 (defn- ciclo-lider
   "Um ciclo com conexao de lock propria. Vira lider UMA vez (sem re-adquirir -> sem contador
-  re-entrante); enquanto lider, drena e poda (time-gated). Sai (lanca) ao cair a conexao."
-  [ds registro rodando? intervalo-ms]
-  (with-open [lock-conn (jdbc/get-connection ds)]
+  re-entrante); enquanto lider, drena e poda (time-gated). Sai (lanca) ao cair a conexao.
+
+  `ds-lock` e `ds` sao pools DISTINTOS de proposito: a conexao de lideranca fica presa enquanto o
+  relay vive (advisory lock session-level), e no pool de trabalho isso disparava o detector de
+  vazamento do Hikari em todo boot — ver `datasource.clj`."
+  [ds ds-lock registro rodando? intervalo-ms]
+  (with-open [lock-conn (jdbc/get-connection ds-lock)]
     (loop [lider? false, ultima-limpeza 0]
       (when @rodando?
         (let [lider?  (or lider? (scheduler/tentar-lider? lock-conn chave-lock-relay))
@@ -48,9 +53,9 @@
 
 (defn- loop-relay
   "Loop externo de auto-cura: se a conexao de lideranca cair (PG restart/blip), loga e reabre."
-  [ds registro rodando? intervalo-ms]
+  [ds ds-lock registro rodando? intervalo-ms]
   (while @rodando?
-    (try (ciclo-lider ds registro rodando? intervalo-ms)
+    (try (ciclo-lider ds ds-lock registro rodando? intervalo-ms)
          (catch Throwable e
            (when @rodando?
              (log/error e "relay: conexao de lideranca caiu — reconectando")
@@ -63,7 +68,7 @@
       this
       (let [run?      (atom true)
             intervalo (if (nil? intervalo-ms) 1000 intervalo-ms)
-            w         (doto (Thread. ^Runnable #(loop-relay (:ds datasource) registro run? intervalo)
+            w         (doto (Thread. ^Runnable #(loop-relay (:ds datasource) (:ds-lock datasource) registro run? intervalo)
                                      "oplenario-outbox-relay")
                         (.setDaemon true)
                         (.start))]

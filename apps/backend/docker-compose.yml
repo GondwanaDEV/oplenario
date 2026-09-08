@@ -8,6 +8,9 @@ name: oplenario
 services:
   postgres:
     image: postgres:16
+    # T1.1: sem politica de restart a plataforma NAO voltava sozinha — parar o Docker e religar deixava
+    # os seis servicos de infra `Exited` e so' o `app` de pe', em crash-loop contra um banco ausente.
+    restart: unless-stopped
     environment: { POSTGRES_USER: oplenario, POSTGRES_PASSWORD: dev, POSTGRES_DB: oplenario }
     ports: ["${OPLENARIO_PG_PORT:-5432}:5432"]
     healthcheck:
@@ -18,6 +21,7 @@ services:
 
   valkey:
     image: valkey/valkey:8
+    restart: unless-stopped
     ports: ["${OPLENARIO_VALKEY_PORT:-6379}:6379"]
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
@@ -27,6 +31,7 @@ services:
 
   minio:
     image: minio/minio
+    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment: { MINIO_ROOT_USER: oplenario, MINIO_ROOT_PASSWORD: dev12345 }
     ports:
@@ -39,6 +44,7 @@ services:
   # -- use OPLENARIO_KEYCLOAK_PORT (+ KEYCLOAK_BASE_URL do app apontando pra' mesma porta) se precisar.
   keycloak:
     image: quay.io/keycloak/keycloak:26.0.0
+    restart: unless-stopped
     command: start-dev
     environment: { KEYCLOAK_ADMIN: admin, KEYCLOAK_ADMIN_PASSWORD: admin }
     ports: ["${OPLENARIO_KEYCLOAK_PORT:-8080}:8080"]
@@ -48,6 +54,7 @@ services:
   # Caixa em http://localhost:${OPLENARIO_MAILPIT_PORT:-8025}. API: /api/v1/messages.
   mailpit:
     image: axllent/mailpit:v1.20
+    restart: unless-stopped
     ports:
       - "${OPLENARIO_MAILPIT_PORT:-8025}:8025"   # UI/API
       - "${OPLENARIO_SMTP_PORT:-1025}:1025"      # SMTP
@@ -127,6 +134,7 @@ services:
 
   frontend:
     image: oplenario-frontend:local
+    restart: unless-stopped
     build:
       context: ../frontend
       target: dev

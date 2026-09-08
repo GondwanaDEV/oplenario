@@ -43,6 +43,16 @@
                            (legislativo-consumers/registrar resolver)
                            (paineis-consumers/registrar))))
 
+(defn- outbox-do-ente
+  "Quantos eventos DESTE ente estao no outbox, por estado. `drenar!` devolve uma contagem GLOBAL — ela
+  nao serve de assercao numa suite que compartilha o banco."
+  [ente]
+  (let [linha (jdbc/execute-one! *ds*
+                                 ["SELECT count(*) FILTER (WHERE processed_at IS NOT NULL) AS processados,
+                                          count(*) FILTER (WHERE processed_at IS NULL)     AS pendentes
+                                     FROM shared.outbox WHERE ente_id = ?" ente])]
+    {:processados (:processados linha) :pendentes (:pendentes linha)}))
+
 (defn- caixa [ente]
   (tenancy/com-tenant* *ds* ente
     (fn [tx] (jdbc/execute! tx ["SELECT destinatario_identidade_id, categoria, assunto, objeto_id
@@ -108,7 +118,14 @@
     ;; (`proposicao.protocolada` em `protocolar!` + `norma.publicada` em `publicar-norma!` — nenhum outro
     ;; passo do fixture emite) e, sem identidade resolvivel, NENHUM `notificacao.requisitada` e' gerado —
     ;; a contagem real drenada prova que os dois eventos do fluxo de fato passaram pelo relay.
-    (is (= 2 (drenar! (resolver-fixo {}))) "criterio 2: o relay drena os 2 eventos do fluxo, nenhuma excecao")
+    ;; FLAKE ESTRUTURAL (T1.3): `outbox/drenar!` nao e' escopado por ente — ele drena o outbox INTEIRO
+    ;; do banco e devolve essa contagem global. Com outros testes na mesma suite (ou a stack de pe',
+    ;; com o relay da aplicacao emitindo), `(= 2 ...)` reprovava em run cheio e passava isolado. A
+    ;; pergunta que o criterio 2 realmente faz e' escopada: os 2 eventos DESTE fluxo passaram pelo relay?
+    (drenar! (resolver-fixo {}))
+    (let [{:keys [processados pendentes]} (outbox-do-ente ente)]
+      (is (= 2 processados) "criterio 2: os 2 eventos deste fluxo foram processados pelo relay")
+      (is (zero? pendentes) "nenhum evento deste fluxo ficou pendente — o relay nao lancou no meio"))
     (is (empty? (caixa ente)) "sem identidade resolvivel -> silencio honesto, nenhuma notificacao")))
 
 (deftest autor-nao-vereador-nao-notifica

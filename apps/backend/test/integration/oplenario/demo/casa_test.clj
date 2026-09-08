@@ -54,7 +54,10 @@
         ;; na sonda (Task 1.1), como "demo-ids.edn nao existe", longe da causa. Agora `gravar-artefato!`
         ;; falha alto, e quem legitimamente nao pode escrever no CWD — este teste — aponta
         ;; DEMO_ARTIFACTS_DIR para um diretorio gravavel. Sem esta assercao a regressao volta calada.
-        (let [alvo (io/file (System/getenv "DEMO_ARTIFACTS_DIR") "demo-ids.edn")]
+        ;; O caminho vem de `casa/diretorio-de-artefatos` — a MESMA regra que a producao usa. Redigitar
+        ;; `(System/getenv "DEMO_ARTIFACTS_DIR")` aqui amarrava o teste a uma variavel que nenhum comando
+        ;; de suite (nem o CI) seta: `(io/file nil "...")` estourava NPE e o teste reprovava por si.
+        (let [alvo (io/file (casa/diretorio-de-artefatos) "demo-ids.edn")]
           (is (.exists alvo) (str "esperado o arquivo de ids em " (.getAbsolutePath alvo)))
           (let [lido (edn/read-string (slurp alvo))]
             (is (= (:ente r1) (:ente lido)) "o ente gravado tem de ser o ente semeado")

@@ -413,3 +413,134 @@ tenant casado, então dropar o check de isolamento passava em tudo.
 - **`[GAP]` de produto:** o Livro se anuncia "numerador único · **proposições** e documentos
   administrativos", mas no fluxo real protocolar uma proposição não a inscreve. Hoje só a semente
   inscreve. **Se o Livro é mesmo o numerador único da Casa, falta uma composição no `protocolar!`.**
+
+---
+
+# Fase 7 — TRILHA 1 (operação): a plataforma local roda sem falha
+
+> Plano: `docs/superpowers/plans/2026-09-08-exploratorio-de-escrita.md`, Trilha 1.
+> Eixo desta fase é **QUEBRA / FRÁGIL / COSMÉTICO / GAP**, não `MATA/CONSTRANGE/PASSA`.
+> Branch `trilha-1-operacao`. Máquina: Mac de 8 GB, VM do OrbStack com **3.9 GiB**.
+
+## O achado que domina a trilha: o Postgres cai por falta de memória da VM, não por defeito de código
+
+Com a stack completa de pé (**incluindo o perfil `auth`**) e a sonda das 27 rotas rodando, o
+`oplenario-postgres-1` **crashou duas vezes em três minutos**:
+
+```
+LOG:  server process (PID 822) exited with exit code 2
+LOG:  terminating any other active server processes
+LOG:  database system was not properly shut down; automatic recovery in progress
+FATAL: the database system is not yet accepting connections
+```
+
+O `dmesg` da VM dá a causa, e ela não é do produto:
+
+```
+Huh VM_FAULT_OOM leaked out to the #PF handler. Retrying PF
+```
+
+Nenhum container foi OOM-killed (`OOMKilled=false`, sem limite de memória por serviço): quem esgotou
+foi a **VM inteira**. Consumo no pico: frontend em modo dev **1.2–1.4 GiB**, keycloak 478 MiB,
+app 481 MiB, mais o Chromium da sonda — sobre 3.9 GiB totais.
+
+**Verificação do diagnóstico, não só da hipótese:** parar keycloak+mailpit devolveu ~500 MiB, e a
+sonda inteira voltou a rodar com o mínimo disponível em **1.23 GiB** e **zero crash**. O dado
+sobreviveu ao crash (redo do WAL, sem perda) — mas isso é o Postgres se defendendo, não a plataforma
+funcionando.
+
+| Classe | Item |
+|---|---|
+| **QUEBRA** | A plataforma local + o próprio harness de verificação não cabem juntos na VM de 3.9 GiB. É `QUEBRA` porque o modo de falha é o banco morrer no meio da operação, não uma tela feia. |
+| — | **Decisão do Daouda, não conserto unilateral:** subir a memória da VM do OrbStack, e/ou servir o frontend em **modo produção** na verificação (o `next dev` é o maior consumidor isolado e ainda compila cada rota sob demanda — 27 rotas levaram ~12 min). |
+
+## T1.1 — Sobe do zero e volta sozinha
+
+- **Tempo medido** (com volumes preservados, build em cache): `up -d --build` **65s** + `semear-tudo.sh`
+  **96s** = **2min41s**, sem intervenção manual, com as duas barreiras de projeção passando.
+- **`down -v` não foi executado** — a ação é destrutiva e ficou pendente de autorização. Logo o
+  critério "de máquina fria à Casa semeada" está **provado por reconstrução parcial**, não total, e a
+  armadilha do lock `-1` do migratus (T1.5) segue **não exercida**.
+- **FRÁGIL, consertado:** só o `app` tinha `restart: unless-stopped`. Os outros **seis** serviços não
+  tinham política nenhuma — parar o Docker e religar deixava toda a infra `Exited` com o `app` sozinho
+  em crash-loop contra um banco ausente. Todos ganharam `unless-stopped`; o `migrate` fica `"no"` de
+  propósito (é one-shot). **A verificação empírica — parar e religar o Docker — não foi feita**, pela
+  mesma razão de a ação ser disruptiva.
+
+## T1.2 — Zero erro em log durante operação normal
+
+**`Apparent connection leak detected` não era vazamento — era falso-positivo estrutural.** Causa raiz
+lida na fonte, não inferida:
+
+- `outbox_relay.clj:30` abre `lock-conn` e a segura pela vida inteira do relay — o advisory lock é
+  **session-level**, é assim que a liderança se sustenta. O docstring do próprio worker já dizia isso.
+- `datasource.clj:27` liga `setLeakDetectionThreshold 30000` **no mesmo pool**.
+- Resultado: aviso com stack trace **garantido em todo boot**, 30s depois de subir, apontando para uma
+  conexão que está exatamente onde deveria estar.
+
+Conserto: pool **dedicado** `:ds-lock` (1 conexão, detector desligado) para a liderança; o pool de
+trabalho mantém o detector ligado — **o conserto não pode ser desligar o detector**. É o pool que o
+próprio docstring do relay já previa.
+
+**Prova:** app rebuildado, 90s de carga (`/saude`, `/portal/.../materias`, portal da casa) →
+**0 ocorrências de `Apparent connection leak detected`, 0 `ERROR`, 0 `Exception`** no log do app.
+Varredura dos outros serviços na janela de operação: `frontend` 0, `valkey` 0, `minio` 0, `postgres`
+0 erro de query (os `ERROR: relation ... does not exist` do log são do bootstrap de 02:34, antes das
+migrations).
+
+**Teste que impede a volta calada:** `outbox_relay_test/a-lideranca-nao-prende-conexao-do-pool-principal`
+— afirma que o pool de lock existe, é distinto, tem o detector **desligado**, que o pool de trabalho
+tem o detector **ligado**, e que a conexão de liderança sai do pool de lock. **Provado com defeito
+plantado:** revertendo `ds-lock` → `ds`, o teste reprova nomeando o defeito (`esperado 1, obtido 0`).
+
+## T1.3 — Suíte 100% verde
+
+Os dois carries viraram escopo e foram consertados na causa:
+
+| # | Defeito | Causa raiz | Conserto |
+|---|---|---|---|
+| 1 | `demo.casa-test/semear-produz-uma-unica-casa` reprova sempre | O teste **redigitou metade da regra** da produção: leu só `System/getenv "DEMO_ARTIFACTS_DIR"`, enquanto a produção é `getenv OU ".artifacts"`. Nenhum comando de suíte seta a variável — **nem o do CI** — então `(io/file nil "…")` estourava NPE | `casa/diretorio-de-artefatos` vira **pública** e é a única fonte da regra; o teste pergunta em vez de reescrever |
+| 2 | `notificacao-autor-test` floca em run cheio, passa isolado | `(is (= 2 (drenar! …)))` mede efeito **global**: `outbox/drenar!` não é escopado por `ente-id` e drena o outbox inteiro do banco compartilhado | A asserção passa a ser **escopada ao ente** (2 processados, 0 pendentes) — a pergunta que o critério realmente faz |
+
+**Resultado: 2051 testes, 5528 asserções, 0 falhas** (dois runs cheios consecutivos).
+
+## T1.4 — As armadilhas conhecidas
+
+| # | Armadilha | Veredicto |
+|---|---|---|
+| 1 | JVM morrendo com SIGBUS (perf-data mmapeado) | **Não reproduz** — 0 ocorrências; a mitigação `-XX:-UsePerfData` está viva no `JAVA_TOOL_OPTIONS` do container |
+| 2 | `.next` obsoleto servindo 404 em rota que existe | **Não reproduz** — logo após `up -d --build frontend`, 7/7 rotas em 200 |
+| 3 | Token sem `papeis` navegando como sem papel nenhum | **Não reproduz, e o backend é mais forte que "corrigido":** a mesma identidade de secretaria autoriza com `papeis`, **sem** `papeis` e com `papeis: []` — todos 200, os papéis vêm do banco. Identidade de cidadão com claim **mentindo** `papeis:["secretario"]` → **401**, fail-closed. No FE, a tela renderiza igual com e sem o claim |
+| 4 | Restart do `app` apagando a tribuna ao vivo | **Não reproduz** — `docker restart oplenario-app-1` com fala aberta, e `GET /sessoes/:id/tribuna` volta com o mesmo `fala-id`, o mesmo orador e a fase `grande_expediente`. O read-model da tribuna (07/09) sustenta |
+
+## T1.5 — Os workers estão vivos
+
+- **Relay: provado.** `semear-tudo.sh` tem duas barreiras de projeção que **falham alto** e ambas
+  passaram: as matérias e o read-model do perfil do vereador apareceram no portal público sem
+  intervenção — ou seja, evento emitido → projetado.
+- **Auto-cura provada por acidente:** durante o crash do Postgres o relay perdeu a conexão de
+  liderança, logou `relay: falha ao drenar o outbox — retenta no proximo tick` e **voltou a drenar
+  sozinho** quando o banco reabriu. O caminho de reconexão do `loop-relay` existe e funciona.
+- **Lock `-1` do migratus: NÃO exercido** — depende do `down -v`.
+
+## Sobre a própria sonda (FRÁGIL da ferramenta, não do produto)
+
+- Roda em **série**, 30s de timeout por rota, e **só imprime no fim**: com a stack degradada, gastou
+  **921 segundos imprimindo zero bytes**. "Trabalhando", "travada" e "vai reprovar tudo" são
+  indistinguíveis pelo lado de fora — o progresso real só ficou visível no log do frontend.
+- **Não faz pre-flight de saúde**: com o alvo fora do ar, paga 27×30s para chegar à conclusão que uma
+  requisição a `/saude` daria em 1 segundo.
+- Rodada válida (stack sadia): **26/27**. A única reprovada é `/sessoes/:id/plenario`, com
+  `net::ERR_NETWORK_CHANGED` no console — é a rota que abre **SSE**, e o erro tem cara de interrupção
+  de transporte, não de defeito de tela. **Fica aberto**: precisa de segunda medição para separar
+  flake de defeito.
+
+## Carries desta fase
+
+- **`down -v` + reinício do Docker pendentes de autorização** — sem eles, T1.1 e o lock do migratus
+  (T1.5) ficam provados pela metade.
+- **Memória da VM é decisão de produto/infra do Daouda** (subir a VM, e/ou frontend em modo produção
+  na verificação).
+- **`/sessoes/:id/plenario` com `ERR_NETWORK_CHANGED`** — uma medição, não duas.
+- **`outbox/drenar!` continua sem escopo de `ente-id`.** Consertei a *asserção* que dependia disso; a
+  função segue global. Para a suíte isso basta; para uma segunda réplica, não.
