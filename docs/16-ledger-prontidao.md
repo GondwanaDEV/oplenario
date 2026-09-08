@@ -658,3 +658,67 @@ A medição original errou ao concluir "não reproduz" a partir de 7 rotas **da 
 servidor). A bateria acima é **estratificada pelo mecanismo** — raiz, estática, dinâmica e dinâmica
 aninhada — porque é a distinção que o defeito faz. Amostra escolhida por conveniência mede a
 conveniência.
+
+# Fase 8 — TRILHA 2 grupo A: as 17 rotas de condução de sessão, por HTTP
+
+> Plano: `docs/superpowers/plans/2026-09-08-exploratorio-de-escrita.md`, Trilha 2, grupo A.
+> Eixo desta fase é **QUEBRA / FRÁGIL / COSMÉTICO / GAP**, não `MATA/CONSTRANGE/PASSA`.
+> Branch `trilha-2-escritas`. Script: `e2e/.sonda/t2-grupo-a.sh`. Relatório completo em
+> `/tmp/t2-grupo-a.md` (tabela rota×caminho feliz×caminhos de erro×veredicto).
+
+**Método:** bash+curl+psql no host (o alvo é o backend por HTTP puro — nenhum app-code do projeto roda
+fora de container, então o mandato Docker não se aplica a `curl`/`docker exec`, mesma leitura que
+`e2e/semear.sh` já faz). Sessão `…0212` (agendada→aberta→encerrada, via de mão única — não é
+re-rodável sem `./demo/semear-tudo.sh`). Sessão `…0211` (demonstrativa): só lida, nunca escrita.
+
+**Placar:** 17/17 rotas exercidas, caminho feliz + caminho de erro em cada uma · 96 checagens OK · **5
+QUEBRA** · 0 FRÁGIL · 0 COSMÉTICO · 1 GAP (reentrância tolerada, não é defeito — ver abaixo). Isolamento
+multi-tenant testado com identidade REAL de outro ente em 6 rotas: **0 vazamentos**.
+
+## Os 5 achados QUEBRA
+
+1. **`POST /votacoes/:id/votos`, voto duplicado do mesmo vereador → 500, não 409.**
+   `legislativo/diplomat/http/in.clj` `voto-handler` (rota da Mesa) não tem `try/catch`; o UNIQUE
+   `votos_ente_id_votacao_id_vereador_id_key` sobe cru até o interceptor global. O irmão self-service
+   `meu-voto-handler` TEM esse tratamento (`:conflito/voto-duplicado` → 409) — só a rota da Mesa não.
+   Confirmado por `docker logs`: `PSQLException ... duplicate key value violates unique constraint`.
+2. **CAS obrigatório em 7 rotas (`transicao` · pauta `PATCH`/`DELETE` · `votacoes/:id/encerramento` ·
+   `inscricoes/:id/desistir` · `falas/:id/encerrar` · `gravacao/:id/vincular`), e nenhum GET nem
+   recibo de criação jamais devolve `lock-version`.** As 5 saídas envolvidas (`sessoes.adapters.out.
+   {sessao,pauta,tribuna,gravacao}` + `legislativo.adapters.out.votacao`) repetem a mesma frase de
+   docstring ("filtra lock-version, interno"). Um cliente real (FE incluído) não tem como montar a 2ª
+   chamada de qualquer fluxo de mais de um passo sem ler o Postgres direto — a sonda teve de fazer
+   isso em 7 pontos só para conseguir avançar. Achado estrutural, não de uma rota isolada.
+3. **`POST /votacoes/:id/encerramento`, repetição (já encerrada) → 400, não 409.**
+   `legislativo/controllers.clj` `encerrar-votacao` tem guard explícito que mapeia "estado terminal"
+   para `:validacao/invalido` → 400 — deliberado (evita o 500 do db), mas semanticamente errado (400 =
+   "conserte seu pedido"; 409 = "seu pedido era válido, o recurso mudou") e inconsistente com os
+   outros 5 conflitos de "já terminal" deste MESMO grupo de 17 rotas, todos 409.
+4. **`POST /sessoes/:id/pauta/itens` aceita escrita numa sessão JÁ ENCERRADA** (201 confirmado ao
+   vivo). Nenhum controller de pauta/tribuna/incidente/decisão-mesa checa `estado` da sessão — só
+   `pode-ver-sessao?` (mesma Casa).
+5. **`POST /sessoes/:id/votacoes` aceita abrir votação numa sessão JÁ ENCERRADA** (201 confirmado ao
+   vivo). `legislativo.logic/pode-dirigir-votacao?` também só checa mesma Casa. Por leitura de fonte,
+   o MESMO gate vale para inscrições/falas/decisões-mesa/incidentes (não testadas ao vivo pós-fecho,
+   mas o código é idêntico).
+
+## O que funcionou (não são achados — é o que prova que o resto está são)
+
+Anti confused-deputy (item de pauta, fala, decisão-mesa de outra sessão → 404, 3/3) · isolamento
+multi-tenant (0/6 vazamentos, com identidade REAL de outro ente, não forjada) · CAS correto em 5 das 6
+rotas que o usam (só a votação erra o código, achado #3) · injeção de autor no servidor (nunca do
+corpo) · validação de borda (enum, coerência de campo, FK-por-tipo) sempre 400, nunca 500 do banco.
+
+## Gotcha de método desta fase
+
+Primeira corrida truncada por `bash script.sh | tee log | head -100` — `head` fecha o pipe, `SIGPIPE`
+mata o script NO MEIO de uma escrita (sessão ficou em `aberta`, roteiro incompleto). A sonda sobreviveu:
+rodada de novo, detectou pelo `GET` inicial que a sessão não estava mais `agendada` e seguiu (GAP, não
+crash). Nunca pipe um script que muta estado através de `head`/`tail`; redirecionar para arquivo e ler
+depois.
+
+## Terreno confirmado são (checado antes de acusar, per protocolo)
+
+`docker ps` 5/5 `Up (healthy)` do início ao fim; único par de `ERROR` no log do `app` é exatamente o
+achado #1 (repetido de propósito); zero `Apparent connection leak`; memória da VM com folga larga
+(`app` 523 MiB, `frontend` 931 MiB, de um teto de 3,9 GiB).
