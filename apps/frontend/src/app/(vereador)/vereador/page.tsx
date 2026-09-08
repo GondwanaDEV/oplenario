@@ -1,17 +1,22 @@
 "use client";
 
-// A home do vereador — estado FORA DE SESSÃO (Onda C1, Task 7). Porte 1:1 de
+// A home do vereador — estado FORA DE SESSÃO (Onda C1, Task 7) + defeito #16 (MATA) fechado. Porte 1:1 de
 // produto/design-system/o-plenario/telas/vereador-app.html (bloco `.so-fora` + o comum `.card`/`.secao-tit`),
-// só o estado calmo: SEM votação ao vivo, SEM placar (isso é a C3, estado `.so-em-sessao`). Composição:
-// useAuth (token, já resolvido pelo GuardVereador do layout) + useMeuPainel (Task 7.2) + useAcusarCiencia
-// (Task 7.2) + derivarHome (Task 6, view-model puro). `sessoes` fica `[]` nesta fatia — não há endpoint de
-// listagem de sessões ainda (carry documentado em meu-painel-vista.ts); `proximaSessao` é sempre `null` até
-// esse carry fechar, então o card "próxima sessão" mostra o estado honesto "sem sessão agendada" em vez de
-// fingir dado que não existe.
-
+// só o estado calmo: SEM placar nominal (isso continua sendo a C3 — `/votar` — pra onde este componente
+// LINCA quando há sessão ao vivo, em vez de duplicar o cockpit aqui). Composição: useAuth (token, já
+// resolvido pelo GuardVereador do layout) + useMeuPainel + useSessoes (GET /api/sessoes, defeito #16) +
+// useAcusarCiencia + derivarHome (view-model puro).
+//
+// O defeito: a home dizia "SEM SESSÃO AGORA" / "Nenhuma sessão agendada" no MESMO segundo em que existia
+// uma sessão ABERTA (com orador na tribuna) e uma AGENDADA — porque não havia rota de listagem, então
+// `sessoes` era SEMPRE `[]` e "não sei" virava "não há". A rota existe agora (GET /sessoes); a parte que
+// PERMANECE deste componente (e é o que fecha o defeito de verdade) é NUNCA deixar `estadoSessoes`
+// "carregando"/"erro" cair nos mesmos textos que "de fato nenhuma sessão" — `HeroSessao`/`ProximaSessaoResumo`
+// abaixo tomam `estadoSessoes` explicitamente e escolhem o texto por ESSE estado, não só pelo dado.
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { useMeuPainel } from "@/lib/use-meu-painel";
+import { useSessoes, type EstadoSessoes } from "@/lib/use-sessoes";
 import { useAcusarCiencia } from "@/lib/use-acusar-ciencia";
 import { derivarHome, type HomeVereadorVista } from "@/lib/meu-painel-vista";
 import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
@@ -26,8 +31,9 @@ import "./vereador-home.css";
 export default function PaginaHomeVereador() {
   const { token } = useAuth();
   const { dados, estado, recarregar } = useMeuPainel(token);
+  const { sessoes, estado: estadoSessoes } = useSessoes(token);
   const { acusar, estado: estadoCiencia, erro: erroCiencia } = useAcusarCiencia(token);
-  const vista = derivarHome(dados, []);
+  const vista = derivarHome(dados, sessoes);
 
   if (estado === "erro") {
     return (
@@ -62,29 +68,15 @@ export default function PaginaHomeVereador() {
       <h1 className="sr-only">Sua home</h1>
 
       <section className="fora-hero" aria-label="Fora de sessão">
-        <span className="estado">
-          <span className="dot" aria-hidden="true" />
-          Sem sessão agora
-        </span>
-        <h2>Tudo em dia.</h2>
-        <p className="resumo">
-          Nenhuma votação aberta.{" "}
-          {vista.ciencias.length > 0 && (
-            <>
-              Você tem <b>{vista.ciencias.length}</b> {vista.ciencias.length === 1 ? "ciência" : "ciências"} a
-              registrar
-              {vista.minhasProposicoes.length > 0 ? " e " : ". "}
-            </>
-          )}
-          {vista.minhasProposicoes.length > 0 && (
-            <>
-              <b>{vista.minhasProposicoes.length}</b>{" "}
-              {vista.minhasProposicoes.length === 1 ? "proposição" : "proposições"} em andamento.
-            </>
-          )}
-        </p>
+        <HeroSessao
+          estadoSessoes={estadoSessoes}
+          sessaoAoVivo={vista.sessaoAoVivo}
+          ciencias={vista.ciencias.length}
+          proposicoes={vista.minhasProposicoes.length}
+          token={token}
+        />
         <div className="fora-prox">
-          <ProximaSessaoResumo sessao={vista.proximaSessao} />
+          <ProximaSessaoResumo estadoSessoes={estadoSessoes} sessao={vista.proximaSessao} />
         </div>
       </section>
 
@@ -121,12 +113,146 @@ export default function PaginaHomeVereador() {
   );
 }
 
-function ProximaSessaoResumo({ sessao }: { sessao: HomeVereadorVista["proximaSessao"] }) {
-  // Carry documentado (meu-painel-vista.ts): sem endpoint de listagem de sessões ainda, `derivarHome` é
-  // sempre chamado com `sessoes=[]` nesta fatia — então `sessao` é sempre `null` na prática, e o ramo real
-  // abaixo fica sem cobertura de dado real até esse carry fechar. O componente já toma a prop (em vez de
-  // hard-codar o vazio) para que, no dia em que o carry fechar, baste passar a lista real — sem precisar
-  // tocar este componente de novo.
+/** Resumo textual dos números de ciências/proposições — extraído para ser reaproveitado pelos 4 estados
+ * de `HeroSessao` sem repetir a mesma expressão condicional 4 vezes. */
+function ResumoContagens({ ciencias, proposicoes }: { ciencias: number; proposicoes: number }) {
+  if (ciencias === 0 && proposicoes === 0) return null;
+  return (
+    <>
+      {ciencias > 0 && (
+        <>
+          Você tem <b>{ciencias}</b> {ciencias === 1 ? "ciência" : "ciências"} a registrar
+          {proposicoes > 0 ? " e " : ". "}
+        </>
+      )}
+      {proposicoes > 0 && (
+        <>
+          <b>{proposicoes}</b> {proposicoes === 1 ? "proposição" : "proposições"} em andamento.
+        </>
+      )}
+    </>
+  );
+}
+
+/** O badge + título + resumo do herói fora-de-sessão. É AQUI que o defeito #16 morava de verdade: o badge
+ * dizia "Sem sessão agora" e o resumo "Nenhuma votação aberta." incondicionalmente — nunca checavam se
+ * havia dado nenhum, então mentiam sempre que `estadoSessoes` não tivesse chegado a "pronto" (ou tivesse
+ * chegado a "pronto" com uma sessão ABERTA/SUSPENSA na lista). `estadoSessoes === "carregando" | "erro"`
+ * são os dois ramos que NÃO PODEM cair no texto "Sem sessão agora" nem em "Tudo em dia."/"Nenhuma votação
+ * aberta." — essas são afirmações factuais que só valem depois que a listagem confirma. */
+function HeroSessao({
+  estadoSessoes,
+  sessaoAoVivo,
+  ciencias,
+  proposicoes,
+  token,
+}: {
+  estadoSessoes: EstadoSessoes;
+  sessaoAoVivo: HomeVereadorVista["sessaoAoVivo"];
+  ciencias: number;
+  proposicoes: number;
+  token: string | null;
+}) {
+  if (estadoSessoes === "erro") {
+    return (
+      <>
+        <span className="estado">
+          <span className="dot" aria-hidden="true" />
+          Sessão: não verificada
+        </span>
+        <h2>Não foi possível confirmar</h2>
+        <p className="resumo">
+          Não foi possível verificar se há sessão em andamento agora.{" "}
+          <ResumoContagens ciencias={ciencias} proposicoes={proposicoes} />
+        </p>
+      </>
+    );
+  }
+  if (estadoSessoes === "carregando") {
+    return (
+      <>
+        <span className="estado">
+          <span className="dot" aria-hidden="true" />
+          Verificando sessão…
+        </span>
+        <h2>Um instante…</h2>
+        <p className="resumo">
+          <ResumoContagens ciencias={ciencias} proposicoes={proposicoes} />
+        </p>
+      </>
+    );
+  }
+  if (sessaoAoVivo) {
+    return (
+      <>
+        <span className="estado">
+          <span className="dot" aria-hidden="true" />
+          Sessão em andamento
+        </span>
+        <h2>A sessão está acontecendo agora.</h2>
+        <p className="resumo">
+          <Link href={comToken("/votar", token)}>Acompanhar a sessão</Link>.{" "}
+          <ResumoContagens ciencias={ciencias} proposicoes={proposicoes} />
+        </p>
+      </>
+    );
+  }
+  return (
+    <>
+      <span className="estado">
+        <span className="dot" aria-hidden="true" />
+        Sem sessão agora
+      </span>
+      <h2>Tudo em dia.</h2>
+      <p className="resumo">
+        Nenhuma votação aberta. <ResumoContagens ciencias={ciencias} proposicoes={proposicoes} />
+      </p>
+    </>
+  );
+}
+
+/** O card "próxima sessão". A REPROVA que dá nome ao defeito #16: `estadoSessoes` "carregando"/"erro" tem
+ * de renderizar um texto DIFERENTE de "Nenhuma sessão agendada" — mesmo com `sessao === null` nos três
+ * casos (carregando/erro/de fato nenhuma dão `null` igualmente, porque `derivarHome` é pura e não sabe
+ * distinguir "lista vazia porque ainda não chegou" de "lista vazia porque não há sessão"; ver o comentário
+ * em `derivarHome`). Um componente que decidisse o texto só por `if (!sessao)` — como a versão antiga deste
+ * arquivo — voltaria a dizer "Nenhuma sessão agendada" enquanto o fetch está em voo ou falhou; é
+ * exatamente isso que `page.test.tsx` ("estado honesto…") reprova. */
+function ProximaSessaoResumo({
+  estadoSessoes,
+  sessao,
+}: {
+  estadoSessoes: EstadoSessoes;
+  sessao: HomeVereadorVista["proximaSessao"];
+}) {
+  if (estadoSessoes === "carregando") {
+    return (
+      <>
+        <div className="cal" aria-hidden="true">
+          <b>—</b>
+          <span>—</span>
+        </div>
+        <div className="info">
+          <b>Carregando agenda…</b>
+          <span>Buscando a próxima sessão.</span>
+        </div>
+      </>
+    );
+  }
+  if (estadoSessoes === "erro") {
+    return (
+      <>
+        <div className="cal" aria-hidden="true">
+          <b>—</b>
+          <span>—</span>
+        </div>
+        <div className="info">
+          <b>Agenda indisponível</b>
+          <span>Não foi possível carregar a próxima sessão. Tente novamente em instantes.</span>
+        </div>
+      </>
+    );
+  }
   if (!sessao) {
     return (
       <>
@@ -141,7 +267,7 @@ function ProximaSessaoResumo({ sessao }: { sessao: HomeVereadorVista["proximaSes
       </>
     );
   }
-  const data = sessao["agendada-para"] ? new Date(sessao["agendada-para"]) : null;
+  const data = sessao.agendadaPara ? new Date(sessao.agendadaPara) : null;
   return (
     <>
       <div className="cal" aria-hidden="true">
@@ -149,7 +275,7 @@ function ProximaSessaoResumo({ sessao }: { sessao: HomeVereadorVista["proximaSes
         <span>{data ? data.toLocaleDateString("pt-BR", { month: "short" }) : "—"}</span>
       </div>
       <div className="info">
-        <b>{sessao["tipo-sessao"] ?? "Próxima sessão"}</b>
+        <b>{sessao.tipoSessao ?? "Próxima sessão"}</b>
         <span>{data ? data.toLocaleDateString("pt-BR", { weekday: "long", hour: "2-digit", minute: "2-digit" }) : ""}</span>
       </div>
     </>
