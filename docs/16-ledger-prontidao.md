@@ -364,3 +364,52 @@ dos achados abaixo aparece na suíte** — backend 2028 e frontend 1116 estavam 
 **J8 (entrar de verdade):** `/entrar/:ente` renderiza ("Entrar em CM Fortaleza" → redireciona ao login
 oficial). O fluxo completo **não foi percorrido** porque exige digitar credenciais — fora do que este
 agente faz. Fica como a única jornada com verificação parcial.
+
+---
+
+# FASE 6 — os 3 `MATA` da Fase 5, mortos (07-08/09/2026, branch `conserta-3-mata`)
+
+6 commits. **Provado na tela após reconstrução limpa** (`down -v` → `up --build` → `semear-tudo.sh`),
+nunca contra dado remendado.
+
+| # | Causa raiz (verificada) | Conserto | Prova na tela |
+|---|---|---|---|
+| **16** | **Não existia `GET /sessoes`.** Havia `POST /sessoes` e `GET /sessoes/:id`; a home era chamada com `sessoes=[]` e convertia "não sei" em "não há" | `c3df2e5` cria a rota (authz **por linha**, sessão secreta invisível); `d047d01` liga a tela e separa carregando / erro / de fato nenhuma | "SESSÃO EM ANDAMENTO · A sessão está acontecendo agora" + próxima em 14/SET |
+| **14** | `protocolar!` de proposição **não** compõe `protocolo-geral/protocolar!` — só o fluxo de documento administrativo o faz | `19644ad` faz a semente inscrever as 24; `07444cd` corrige `sentido` p/ `interno` | Livro com 24 entradas `2026/00001`–`2026/00024`, gapless, "Interno" |
+| **15** | `protocolar!` cria e promove versão de texto, mas só `(when-let [corpo (:texto p)])` — a semente nunca passava `:texto`. **Produto correto; semente incompleta** | `19644ad` passa o texto; `07444cd` tira a sintaxe markdown visível | Corpo da lei, Art. 1º–4º, específico da ementa, sem `##` |
+
+## O que a caminhada PÓS-conserto achou — e é o padrão da noite
+
+**Consertar abre porta.** Três vezes:
+
+- **F2** — ligar o card de próxima sessão fez aparecer **"ordinaria"** cru. O card antes nunca aparecia
+  (era sempre `null`), então o enum nunca chegava à tela. Família já morta duas vezes (#9, #10),
+  ressurgida por porta nova. Corrigido em `2a3092c` reusando `formatarTipoSessao`.
+- **#17 pego junto** — "Estado: em comissoes" → **"Em comissões"**, reusando `derivarTramitacao`. Sem
+  segundo vocabulário de rótulos.
+- **A1 (bloqueador da revisão)** — `proximaSessaoFutura` filtrava só por **data**, não por estado.
+  `agendada → nao_realizada` é transição legal e **não apaga `agendada_para`**: a Mesa cancela por luto
+  e a home anuncia a sessão cancelada. **O gênero exato do #16, nascido dentro do conserto do #16.**
+  Corrigido em `130d4ef`.
+
+## Cobertura que faltava e agora existe (`130d4ef`)
+
+O #15 existiu por meses **com a suíte verde**. As três lacunas que permitiam a volta calada:
+teste afirmando que **as 24 matérias têm texto** (uma 25ª sem texto reprova); teste da **inscrição no
+Livro** (gapless + `sentido`); e o caso de **ente diferente** na listagem — o fake sempre devolvia
+tenant casado, então dropar o check de isolamento passava em tudo.
+
+## Carries registrados, NÃO consertados (decisão de desenho, não defeito)
+
+- Teto de 500 da listagem é medido **antes** do filtro de authz: 480 públicas + 30 secretas = 422 para
+  quem teria direito a 480 — negação por dado invisível.
+- O mesmo teto quebra Casa com ~10 anos de acervo (~50-60 sessões/ano). O desenho certo é `?de`/`?ate`
+  (a assiduidade já tem), com o teto como guard-rail.
+- O vereador **não vê a própria sessão secreta**: a política só excetua `secretario`, então durante uma
+  secreta a home diz "Sem sessão agora" a quem vota nela.
+- `formato "markdown"` é gravado enquanto a ficha é **texto puro**. O #15 foi consertado no dado, não no
+  descasamento.
+- `outbox/drenar!` não é escopado por `ente-id` — fonte estrutural de flakiness da suíte cheia.
+- **`[GAP]` de produto:** o Livro se anuncia "numerador único · **proposições** e documentos
+  administrativos", mas no fluxo real protocolar uma proposição não a inscreve. Hoje só a semente
+  inscreve. **Se o Livro é mesmo o numerador único da Casa, falta uma composição no `protocolar!`.**
