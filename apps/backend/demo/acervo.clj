@@ -80,29 +80,34 @@
 (defn- artigos->texto
   "Corpo de um projeto normativo (lei/lei complementar/resolucao/decreto legislativo/emenda a LOM):
   cada string de `artigos` vira UM artigo numerado em sequencia a partir do Art. 1o — o CALLER decide o
-  conteudo (nucleo especifico da ementa, complemento, despesas quando cabe, vigencia), nunca este helper."
+  conteudo (nucleo especifico da ementa, complemento, despesas quando cabe, vigencia), nunca este helper.
+
+  Sem sintaxe markdown (`## `) no cabecalho — defeito F3/MATA da caminhada pos-fatia: o dominio grava
+  `formato \"markdown\"` mas a ficha da materia e' texto puro e nao renderiza; a versao anterior deste
+  helper escrevia `## Lei` e a tela mostrava o `##` cru ao usuario. O rotulo continua presente, so' sem
+  o marcador."
   [rotulo artigos]
-  (str "## " rotulo "\n\n"
+  (str rotulo "\n\n"
        (string/join "\n\n" (map-indexed (fn [i corpo] (str "Art. " (inc i) "º " corpo)) artigos))))
 
 (defn- texto-indicacao [pedido justificativa]
-  (str "## Indicação\n\nSenhor Presidente,\n\n"
+  (str "Indicação\n\nSenhor Presidente,\n\n"
        "Nos termos regimentais, venho indicar à Mesa Diretora, para que encaminhe ao Poder Executivo "
-       "Municipal, a seguinte providência:\n\n" pedido "\n\n### Justificativa\n\n" justificativa))
+       "Municipal, a seguinte providência:\n\n" pedido "\n\nJustificativa\n\n" justificativa))
 
 (defn- texto-requerimento [pedido justificativa]
-  (str "## Requerimento\n\nSenhor Presidente,\n\n"
+  (str "Requerimento\n\nSenhor Presidente,\n\n"
        "Requeiro a Vossa Excelência, ouvido o Plenário, nos termos regimentais, que seja oficiado ao "
-       "Poder Executivo Municipal solicitando:\n\n" pedido "\n\n### Justificativa\n\n" justificativa))
+       "Poder Executivo Municipal solicitando:\n\n" pedido "\n\nJustificativa\n\n" justificativa))
 
 (defn- texto-requerimento-pesar [homenageado justificativa]
-  (str "## Requerimento\n\nSenhor Presidente,\n\n"
+  (str "Requerimento\n\nSenhor Presidente,\n\n"
        "Requeiro a Vossa Excelência que se consigne, em ata dos trabalhos desta Casa, voto de profundo "
        "pesar pelo falecimento de " homenageado ", dando-se ciência à família enlutada.\n\n"
-       "### Justificativa\n\n" justificativa))
+       "Justificativa\n\n" justificativa))
 
 (defn- texto-mocao [titulo corpo considerandos]
-  (str "## Moção de " titulo "\n\n" corpo "\n\n### Considerando\n\n"
+  (str "Moção de " titulo "\n\n" corpo "\n\nConsiderando\n\n"
        (string/join "\n" (map #(str "- " %) considerandos))
        "\n\nA Câmara Municipal de Fortaleza RESOLVE encaminhar a presente Moção aos destinatários "
        "mencionados, dando-lhes ciência de seu inteiro teor."))
@@ -394,11 +399,15 @@
 
   Depois de protocolada, INSCREVE a materia no Livro do Protocolo Geral via `repo-leg/protocolar-geral!`
   (Task C, #14) — `objeto-tipo` 'proposicao' (vocabulario do CHECK, migration 20260620000024:24-25),
-  `sentido` 'recebido' (a materia da' entrada institucional na Casa pelo protocolo, mesmo sendo de
-  autoria de vereador — nao e' 'interno' no sentido do CHECK, que a migration nao define pelo AUTOR e
-  sim pela DIRECAO do fluxo). Numero e' gapless por (ente,ano) via `kernel/sequencial`, escopo
-  'protocolo_geral:ano' — nunca escrito a mao. DECISAO DO CONTROLADOR (nao ampliar): so' as 24
-  proposicoes entram no Livro por esta fatia; oficios/documentos administrativos ficam fora de escopo.
+  `sentido` 'interno' (corrigido — caminhada pos-fatia, defeito F1/MATA: a versao anterior gravava
+  'recebido' com um racional que nao sobrevive a fonte. O proprio modulo, no seu teste de integracao —
+  `protocolo_geral_db_test.clj:52` — usa `proposicao|interno` para exatamente este caso: uma proposicao
+  protocolada em nome de um vereador da PROPRIA Casa. 'recebido' e' para o que entra de FORA da Casa —
+  um oficio da Prefeitura (`oficio_recebido|recebido`, mesmo teste, linha 55) ou um requerimento de
+  cidadao; um vereador nao e' externo a sua propria Casa, entao a materia nao 'entra' — ela nasce aqui.
+  Numero e' gapless por (ente,ano) via `kernel/sequencial`, escopo 'protocolo_geral:ano' — nunca escrito
+  a mao. DECISAO DO CONTROLADOR (nao ampliar): so' as 24 proposicoes entram no Livro por esta fatia;
+  oficios/documentos administrativos ficam fora de escopo.
 
   Devolve o `id` da proposicao. Falha alto se algum gatilho do caminho NAO transicionar (guard bloqueado
   ou rito mal-formado — bug deste ns, nao dado esperado)."
@@ -417,7 +426,7 @@
           (throw (ex-info "acervo/semear!: gatilho do caminho nao transicionou (guard bloqueado ou rito mal-formado)"
                           {:proposicao-id pid :gatilho gatilho :de (:de r)})))))
     (repo-leg/protocolar-geral! repo ente
-      {:id (random-uuid) :ano 2026 :objeto-tipo "proposicao" :objeto-id pid :sentido "recebido"
+      {:id (random-uuid) :ano 2026 :objeto-tipo "proposicao" :objeto-id pid :sentido "interno"
        :assunto ementa :interessado-texto (:nome-parlamentar autor)})
     pid))
 
@@ -444,7 +453,8 @@
     tid))
 
 (defn- texto-parecer [assunto]
-  (str "## Relatório\n\n" assunto "\n\n## Análise\n\nA proposição atende aos requisitos formais e "
+  ;; sem sintaxe markdown no cabecalho — mesmo defeito F3/MATA de `artigos->texto` acima.
+  (str "Relatório\n\n" assunto "\n\nAnálise\n\nA proposição atende aos requisitos formais e "
        "materiais de admissibilidade regimental, nos termos do Regimento Interno desta Casa."))
 
 (defn- semear-pareceres!
