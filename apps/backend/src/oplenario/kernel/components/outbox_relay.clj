@@ -5,7 +5,13 @@
   CUSTO: mantem UMA conexao presa p/ o advisory lock enquanto vive (lock e' session-level). Ela sai do
   pool DEDICADO `:ds-lock` (datasource.clj), nunca do pool de trabalho — no pool de trabalho o
   `leakDetectionThreshold` a denunciava como vazada em todo boot, ruido garantido que esconderia um
-  vazamento de verdade. Dimensionar :db :pool-max-size contra a concorrencia normal apenas."
+  vazamento de verdade.
+
+  ORCAMENTO DE CONEXOES: o pool de lock e' ADICIONAL, nao sai do `:db :pool-max-size`. Cada processo
+  abre `pool-max-size + 1` conexoes fisicas (o pool de lock tem minimumIdle = 1, entao a conexao fica
+  aberta seja o processo lider ou nao). Dimensionar `max_connections` do PG contra
+  `(pool-max-size + 1) x replicas`. Em compensacao a concorrencia efetiva de TRABALHO subiu: o relay
+  nao consome mais um slot do pool principal."
   (:require [com.stuartsierra.component :as component]
             [next.jdbc :as jdbc]
             [clojure.tools.logging :as log]
@@ -33,9 +39,18 @@
   vazamento do Hikari em todo boot — ver `datasource.clj`."
   [ds ds-lock registro rodando? intervalo-ms]
   (with-open [lock-conn (jdbc/get-connection ds-lock)]
-    (loop [lider? false, ultima-limpeza 0]
+    ;; `lider?` fora do loop p/ o finally saber se ha' lock a liberar. Sem liberar, a conexao voltava ao
+    ;; pool AINDA segurando `pg_try_advisory_lock` — o Hikari reseta autocommit/isolation no retorno,
+    ;; nunca lock de sessao. Efeitos: o contador re-entrante crescia a cada reabertura do ciclo (o oposto
+    ;; do que esta docstring promete), e parar o relay SEM parar o datasource deixava o lock preso numa
+    ;; conexao ociosa — nenhuma outra replica viraria lider. Hoje so' nao mordia porque o stop do sistema
+    ;; fecha o pool logo depois e a sessao morre junto.
+    (let [sou-lider? (atom false)]
+     (try
+      (loop [lider? false, ultima-limpeza 0]
       (when @rodando?
-        (let [lider?  (or lider? (scheduler/tentar-lider? lock-conn chave-lock-relay))
+        (let [lider?  (or lider? (boolean (scheduler/tentar-lider? lock-conn chave-lock-relay)))
+              _       (when lider? (reset! sou-lider? true))
               agora   (System/currentTimeMillis)
               limpar? (and lider? (> (- agora ultima-limpeza) intervalo-limpeza-ms))]
           (when lider?
@@ -49,7 +64,12 @@
                    (catch Exception e
                      (log/warn e "relay: falha ao podar o ledger de inbox")))))
           (dormir intervalo-ms rodando?)
-          (recur lider? (if limpar? agora ultima-limpeza)))))))
+          (recur lider? (if limpar? agora ultima-limpeza)))))
+      (finally
+        (when @sou-lider?
+          (try (scheduler/liberar-lider! lock-conn chave-lock-relay)
+               (catch Exception e
+                 (log/warn e "relay: falha ao liberar o lock de lideranca (a conexao sera' descartada)")))))))))
 
 (defn- loop-relay
   "Loop externo de auto-cura: se a conexao de lideranca cair (PG restart/blip), loga e reabre."
@@ -66,7 +86,13 @@
   (start [this]
     (if worker
       this
-      (let [run?      (atom true)
+      (let [_         (when-not (:ds-lock datasource)
+                        ;; sem isto, `(jdbc/get-connection nil)` estoura la' dentro, `loop-relay` engole
+                        ;; como Throwable e loga "conexao de lideranca caiu — reconectando" para sempre:
+                        ;; uma causa FALSA, em laco, sem drenar nada. Falha aqui, nomeando o defeito.
+                        (throw (ex-info "relay: :datasource sem :ds-lock — pool de lock nao iniciado"
+                                        {:tipo :relay/sem-pool-de-lock})))
+            run?      (atom true)
             intervalo (if (nil? intervalo-ms) 1000 intervalo-ms)
             w         (doto (Thread. ^Runnable #(loop-relay (:ds datasource) (:ds-lock datasource) registro run? intervalo)
                                      "oplenario-outbox-relay")

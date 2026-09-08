@@ -9,9 +9,9 @@
 
 (set! *warn-on-reflection* true)
 
-(defn- ^HikariConfig config-base
+(defn- config-base
   "HikariConfig comum aos dois pools. `leak-ms` = 0 desliga a deteccao de vazamento."
-  [{:keys [jdbc-url user password]} nome tamanho leak-ms]
+  ^HikariConfig [{:keys [jdbc-url user password]} nome tamanho leak-ms]
   (doto (HikariConfig.)
     (.setJdbcUrl jdbc-url)
     (.setUsername user)
@@ -25,20 +25,31 @@
 (defrecord Datasource [config ds ds-lock]
   component/Lifecycle
   (start [this]
-    (if ds
+    ;; guard pelos DOIS campos: `ds` preenchido com `ds-lock` nil e' meio-iniciado, e o relay que
+    ;; recebe `ds-lock` nil entra em laco de erro logando "conexao de lideranca caiu" — uma causa que
+    ;; e' mentira. O invariante e' os dois juntos, entao o guard tem de ser sobre os dois.
+    (if (and ds ds-lock)
       this
-      (let [{:keys [pool-max-size] :as db} (:db config)]
-        (assoc this
-               ;; pool de TRABALHO: o operador dimensiona max_connections do PG contra (pool x replicas).
-               ;; Deteccao de vazamento LIGADA — e' aqui que uma tx que nao fecha tem de aparecer.
-               :ds (HikariDataSource. (config-base db "oplenario" (or pool-max-size 10) 30000))
-               ;; pool de LOCK (dedicado, 1 conexao): o advisory lock de lideranca do relay e'
-               ;; session-level, entao a conexao fica presa DE PROPOSITO enquanto o relay vive
-               ;; (outbox_relay.clj:5 ja' previa este pool). Saindo do pool principal, o detector de
-               ;; vazamento a denunciava em todo boot — falso-positivo garantido, que treina o operador
-               ;; a ignorar a categoria e entao esconde um vazamento real. Aqui o detector fica
-               ;; DESLIGADO porque segurar a conexao e' o desenho, nao o defeito.
-               :ds-lock (HikariDataSource. (config-base db "oplenario-lock" 1 0))))))
+      (let [{:keys [pool-max-size] :as db} (:db config)
+            ;; pool de TRABALHO: deteccao de vazamento LIGADA — e' aqui que uma tx que nao fecha tem
+            ;; de aparecer. Orcamento de conexoes por processo = pool-max-size + 1 (o pool de lock).
+            trabalho (HikariDataSource. (config-base db "oplenario" (or pool-max-size 10) 30000))]
+        ;; o construtor do Hikari e' ANSIOSO (checkFailFast abre e valida uma conexao). Se o segundo
+        ;; pool estourar — PG batendo max_connections, banco caindo entre as duas chamadas — o primeiro
+        ;; ficaria orfao: threads e conexoes vivas sem ninguem que possa fecha-las, porque o `this` que
+        ;; sobrevive tem `:ds` nil. Na JVM de producao o processo morre junto; na suite e no REPL, nao.
+        (let [lock (try
+                     ;; pool de LOCK (dedicado, 1 conexao): o advisory lock de lideranca do relay e'
+                     ;; session-level, entao a conexao fica presa DE PROPOSITO enquanto o relay vive
+                     ;; (outbox_relay.clj ja' previa este pool). Saindo do pool principal, o detector de
+                     ;; vazamento a denunciava em todo boot — falso-positivo garantido, que treina o
+                     ;; operador a ignorar a categoria e entao esconde um vazamento real. Aqui o detector
+                     ;; fica DESLIGADO porque segurar a conexao e' o desenho, nao o defeito.
+                     (HikariDataSource. (config-base db "oplenario-lock" 1 0))
+                     (catch Throwable e
+                       (.close trabalho)
+                       (throw e)))]
+          (assoc this :ds trabalho :ds-lock lock)))))
   (stop [this]
     (when ds (.close ^HikariDataSource ds))
     (when ds-lock (.close ^HikariDataSource ds-lock))

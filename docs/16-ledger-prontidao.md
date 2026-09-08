@@ -509,7 +509,7 @@ Os dois carries viraram escopo e foram consertados na causa:
 | # | Armadilha | Veredicto |
 |---|---|---|
 | 1 | JVM morrendo com SIGBUS (perf-data mmapeado) | **Não reproduz** — 0 ocorrências; a mitigação `-XX:-UsePerfData` está viva no `JAVA_TOOL_OPTIONS` do container |
-| 2 | `.next` obsoleto servindo 404 em rota que existe | **Não reproduz** — logo após `up -d --build frontend`, 7/7 rotas em 200 |
+| 2 | `.next` obsoleto servindo 404 em rota que existe | **REPRODUZ.** Ver a seção própria abaixo — a primeira medição desta sessão disse "não reproduz" e **estava errada** |
 | 3 | Token sem `papeis` navegando como sem papel nenhum | **Não reproduz, e o backend é mais forte que "corrigido":** a mesma identidade de secretaria autoriza com `papeis`, **sem** `papeis` e com `papeis: []` — todos 200, os papéis vêm do banco. Identidade de cidadão com claim **mentindo** `papeis:["secretario"]` → **401**, fail-closed. No FE, a tela renderiza igual com e sem o claim |
 | 4 | Restart do `app` apagando a tribuna ao vivo | **Não reproduz** — `docker restart oplenario-app-1` com fala aberta, e `GET /sessoes/:id/tribuna` volta com o mesmo `fala-id`, o mesmo orador e a fase `grande_expediente`. O read-model da tribuna (07/09) sustenta |
 
@@ -523,6 +523,50 @@ Os dois carries viraram escopo e foram consertados na causa:
   sozinho** quando o banco reabriu. O caminho de reconexão do `loop-relay` existe e funciona.
 - **Lock `-1` do migratus: NÃO exercido** — depende do `down -v`.
 
+## Armadilha #2: reproduz, e a primeira medição desta sessão errou
+
+**Como errei.** Logo após `up -d --build frontend` medi 7 rotas, todas 200, e escrevi "não reproduz".
+As 7 eram rotas de servidor; a família que quebra é outra. A segunda rodada da sonda pegou:
+
+- `/portal/casa/<ente>/materias/<id>` → **404 no frontend**, com o **backend servindo a mesma matéria
+  em 200** e o `page.tsx` presente em disco e visível dentro do container.
+- `docker restart oplenario-frontend-1` → **200**. É o remédio registrado, e ele funciona.
+
+**Mecanismo, agora estrutural:** `.next` é um **volume anônimo** (`docker inspect` mostra
+`volume:843ecc…→/app/.next`). O `next dev` persiste cache de build ali ("Finished writing to
+filesystem cache"); o container morto no meio dessa escrita deixa estado parcial, e o container
+seguinte confia nele. `up -d --build` recria o container e **reata o mesmo volume**.
+
+**Tentei consertar e piorei — e revertí.** Fiz o stage `dev` do Dockerfile limpar `.next` no start do
+container. Resultado medido: **a subárvore dinâmica inteira de `/portal/casa/[ente]/*` passou a 404**,
+inclusive `vereadores/<id>`, que estava passando. Revertido o Dockerfile, as duas rotas voltaram a 200
+na mesma medição. **Registro isso como erro meu, não como propriedade do sistema:** limpar o cache no
+start não é o conserto, e a causa de por que ele quebra o roteamento não foi investigada.
+
+**Carry:** a armadilha #2 continua **viva e sem conserto**. O que existe é o procedimento decorado
+(`docker restart oplenario-frontend-1`), que é exatamente o que o plano dizia não aceitar.
+
+## O que a revisão adversarial (`ecc:clojure-reviewer`) reprovou — e o que virou conserto
+
+A revisão **bloqueou** o commit inicial. Nove achados; o núcleo do conserto (pool de lock dedicado)
+foi confirmado correto, e os problemas estavam todos nas bordas:
+
+| # | Achado | Classe | Desfecho |
+|---|---|---|---|
+| A1 | O teste novo subia um relay **real** com registro vazio contra o banco compartilhado. Ganhando o lock 911, `drenar!` marcaria `processed_at` **sem consumidor** — descartando em silêncio todo evento pendente. E o procedimento canônico de suíte manda parar o `app` antes do run, o que faz do teste **o líder mais provável** | MAIOR | **Consertado:** o teste toma o lock 911 numa conexão crua (fora dos dois pools) **antes** de subir o relay. A asserção não muda; o efeito colateral desaparece |
+| A2 | `restart: unless-stopped` faz a stack voltar **pulando o `migrate`** — política de restart é do dockerd, e o `depends_on` não é honrado no religar do daemon | MAIOR | **Conserto tentado e reprovado pela realidade:** o `serve` checando pendências morre com `permission denied for schema public` — o papel do app **não tem `USAGE` em `public`**. Fechá-lo exige conceder leitura do ledger de migrations ao papel do app: decisão de segurança do Daouda. **Documentado no compose como carry** |
+| A3 | Falha parcial no `start` órfã o pool de trabalho (Hikari é ansioso; o segundo pool pode estourar depois do primeiro ter sucedido) | MENOR | **Consertado:** `try/catch` fecha o primeiro antes de relançar |
+| A4 | Guard `(if ds …)` deixou de cobrir o invariante; `:ds-lock` nil vira laço infinito logando **"a conexão de liderança caiu"** — causa falsa | MENOR | **Consertado:** guard sobre os dois campos + o relay falha no `start` nomeando o defeito. Teste novo cobre |
+| A5 | A docstring **nova** dizia "dimensionar contra a concorrência normal apenas" — **invertendo a verdade**: o orçamento virou `pool-max-size + 1` por processo | MENOR | **Consertado:** a docstring passa a dizer `(pool-max-size + 1) × réplicas` |
+| A6 | `liberar-lider!` **não tem chamador em `src/`**: a conexão voltava ao pool ainda segurando o advisory lock; o contador re-entrante só crescia | MENOR (pré-existente, agravado pelo pool de 1) | **Consertado:** `finally` libera a liderança |
+| A7 | `Thread/sleep 1500` fixo (o teste vizinho documenta explicitamente que sleep fixo é flaky) e **faltava a asserção que o nome do teste promete** | MENOR | **Consertado:** poll com prazo de 15s + `(is (zero? (ativas (:ds d))))` |
+| A8 | Type hint de retorno no nome do var (clj-kondo reprova; o mesmo commit acertou a forma em `casa.clj`) | MENOR | **Consertado:** hint no vetor de argumentos |
+| A9 | `unless-stopped` aplicado a 3 serviços **sem healthcheck** — contradizendo o comentário do próprio arquivo ("sem healthcheck, `unless-stopped` esconde crash-loop") | MENOR | **Consertado:** healthcheck em `minio` e `frontend` (ambos verificados subindo a `healthy`), e `keycloak`/`mailpit` **perderam** a política — política de restart ignora `profiles`, e ~500 MiB voltando sozinhos numa VM de 3.9 GiB empurra o OOM que domina esta trilha |
+
+Detalhe que só apareceu ao verificar: o healthcheck do frontend com `localhost` fica em
+`Connection refused` para sempre — o `next dev` faz bind em `0.0.0.0` (IPv4) e o `wget` do busybox
+tenta `::1` primeiro. Com `127.0.0.1`, saudável em 20s.
+
 ## Sobre a própria sonda (FRÁGIL da ferramenta, não do produto)
 
 - Roda em **série**, 30s de timeout por rota, e **só imprime no fim**: com a stack degradada, gastou
@@ -535,12 +579,31 @@ Os dois carries viraram escopo e foram consertados na causa:
   de transporte, não de defeito de tela. **Fica aberto**: precisa de segunda medição para separar
   flake de defeito.
 
+## Dois achados de infra que a T1.1 destapou depois do conserto
+
+- **FRÁGIL — o estado local mora em volumes ANÔNIMOS.** O `docker-compose.yml` não tem seção
+  `volumes:` de topo: `postgres` (`/var/lib/postgresql/data`) e `minio` (`/data`) persistem em volumes
+  sem nome. Eles sobrevivem a um `up` que recria o container (o compose reusa o volume anônimo), mas
+  morrem em `down -v` ou `--renew-anon-volumes`, não são descobríveis por nome e não são backupáveis.
+  Para "a plataforma local roda sem falha", o estado inteiro pendurado num identificador que só existe
+  no histórico do container é frágil. **Conserto = volumes nomeados, e ele implica reconstruir a Casa —
+  decisão do Daouda, não ação unilateral.**
+- **Política escrita ≠ política aplicada.** Depois de editar o compose, `valkey` e `minio` continuavam
+  com `RestartPolicy=no` em runtime — o arquivo estava certo e a máquina não. Só um `up -d` que
+  **recria** o container aplica a mudança. Verificado serviço a serviço com
+  `docker inspect --format '{{.HostConfig.RestartPolicy.Name}}'`; os cinco serviços em execução hoje
+  estão em `unless-stopped`. **Editar o compose não é a prova; o `inspect` é.**
+
 ## Carries desta fase
 
 - **`down -v` + reinício do Docker pendentes de autorização** — sem eles, T1.1 e o lock do migratus
   (T1.5) ficam provados pela metade.
 - **Memória da VM é decisão de produto/infra do Daouda** (subir a VM, e/ou frontend em modo produção
   na verificação).
-- **`/sessoes/:id/plenario` com `ERR_NETWORK_CHANGED`** — uma medição, não duas.
+- **`/sessoes/:id/plenario` com `ERR_NETWORK_CHANGED`: era flake.** Segunda medição passou limpo.
+- **Armadilha #2 sem conserto** — só o procedimento decorado (`docker restart oplenario-frontend-1`).
+  A tentativa de limpar `.next` no start do container quebrou o roteamento dinâmico e foi revertida.
+- **A2: o `serve` não consegue checar migrations pendentes** — o papel do app não tem `USAGE` em
+  `public`. Fechar isso exige conceder leitura do ledger de migrations: decisão de segurança.
 - **`outbox/drenar!` continua sem escopo de `ente-id`.** Consertei a *asserção* que dependia disso; a
   função segue global. Para a suíte isso basta; para uma segunda réplica, não.

@@ -34,6 +34,14 @@ services:
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment: { MINIO_ROOT_USER: oplenario, MINIO_ROOT_PASSWORD: dev12345 }
+    # healthcheck OBRIGATORIO junto com `unless-stopped`: sem ele o container em crash-loop aparece
+    # "Up" no `ps` (a mesma razao ja' escrita no service `app`). Regra do proprio arquivo, agora
+    # aplicada onde ela vale.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
     ports:
       - "${OPLENARIO_MINIO_PORT:-9000}:9000"
       - "${OPLENARIO_MINIO_CONSOLE_PORT:-9001}:9001"
@@ -42,9 +50,11 @@ services:
   # 1o boot demora ~3-5min (Quarkus augmentation + schema do banco embutido) -- espere o healthcheck,
   # nao assuma pronto so' porque o container "started". Porta 8080 pode colidir com outro projeto local
   # -- use OPLENARIO_KEYCLOAK_PORT (+ KEYCLOAK_BASE_URL do app apontando pra' mesma porta) se precisar.
+  # SEM `restart:` de proposito. Politica de restart e' do dockerd e IGNORA `profiles` — com
+  # `unless-stopped` o keycloak voltaria no religar do daemon mesmo sem `--profile auth`, e ~500 MiB
+  # a mais numa VM de 3.9 GiB e' exatamente o que derrubou o Postgres por OOM (ledger, Fase 7).
   keycloak:
     image: quay.io/keycloak/keycloak:26.0.0
-    restart: unless-stopped
     command: start-dev
     environment: { KEYCLOAK_ADMIN: admin, KEYCLOAK_ADMIN_PASSWORD: admin }
     ports: ["${OPLENARIO_KEYCLOAK_PORT:-8080}:8080"]
@@ -54,7 +64,6 @@ services:
   # Caixa em http://localhost:${OPLENARIO_MAILPIT_PORT:-8025}. API: /api/v1/messages.
   mailpit:
     image: axllent/mailpit:v1.20
-    restart: unless-stopped
     ports:
       - "${OPLENARIO_MAILPIT_PORT:-8025}:8025"   # UI/API
       - "${OPLENARIO_SMTP_PORT:-1025}:1025"      # SMTP
@@ -65,6 +74,15 @@ services:
       timeout: 3s
       retries: 20
 
+  # CARRY CONHECIDO (T1.1/A2, 08/09/2026): politica de restart e' do dockerd, e no religar do daemon o
+  # `depends_on` NAO e' honrado — o `app` volta sozinho enquanto este `migrate` (one-shot, `restart: no`,
+  # correto) nao re-executa. Com imagem nova + migration pendente, o app sobe contra schema velho e o
+  # sintoma vira `relation ... does not exist` longe da causa. O conserto natural — o `serve` checar
+  # migrations pendentes e falhar fechado — foi TENTADO e nao passa: o papel do app nao tem sequer
+  # `USAGE` em `public` (least privilege), entao `migratus/pending-list` morre com
+  # `permission denied for schema public`. Fecha-lo exige conceder leitura do ledger de migrations ao
+  # papel do app — decisao de seguranca, nao de conveniencia. Ate la': depois de um `--build` com
+  # migration nova, subir com `docker compose up -d` (que honra o depends_on), nunca so' religar o Docker.
   migrate:
     image: oplenario-backend:local
     build: .
@@ -135,6 +153,15 @@ services:
   frontend:
     image: oplenario-frontend:local
     restart: unless-stopped
+    # healthcheck OBRIGATORIO junto com `unless-stopped` (mesma regra do `app`). `start_period` largo
+    # porque o `next dev` compila a rota `/` sob demanda no 1o acesso — medido em ~46s com o cache
+    # vazio, e mais sob contencao de CPU. `wget` vem do busybox da imagem node:alpine.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/ || exit 1"]
+      interval: 15s
+      timeout: 20s
+      retries: 6
+      start_period: 180s
     build:
       context: ../frontend
       target: dev
