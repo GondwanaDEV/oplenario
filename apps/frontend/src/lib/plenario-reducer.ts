@@ -10,16 +10,18 @@ import type { ComposicaoSessaoOut, QuorumSessaoOut, TribunaOut } from "./contrat
 /** Tipos de evento de presença que marcam PRESENTE (logic/tipos-presenca-positiva); "saida" remove. */
 const PRESENCA_POSITIVA = new Set(["entrada", "retorno", "mudanca_modalidade"]);
 
-/** Os 5 tipos de `EventoPlenario` que tocam a tribuna (oradorAtual/marcosCronometro/inscritos) — a
- * FONTE ÚNICA da precedência de `hidratarTribuna`. Conferido contra `TIPOS_PLENARIO` em `contrato.ts` e
- * contra os `case`s de `aplicarEvento` abaixo — não redigitar esta lista em outro lugar. */
-const TIPOS_EVENTO_TRIBUNA = new Set([
-  "fala.iniciada",
-  "fala.cronometro",
-  "fala.encerrada",
-  "inscricao.registrada",
-  "inscricao.desistida",
-]);
+/** Os 3 tipos de `EventoPlenario` que tocam `oradorAtual`/`marcosCronometro` — FONTE ÚNICA da
+ * precedência de `oradorAtual`/`marcosCronometro` em `hidratarTribuna`. Fix round 1 (I2): antes havia
+ * um Set único para os 5 tipos, e o descarte por precedência era do SNAPSHOT INTEIRO — um
+ * `inscricao.registrada` alheio em voo jogava fora o orador junto, apagando quem está com a palavra
+ * por até 30s. Agora cada CAMPO do snapshot tem seu próprio contador e é aplicado/descartado
+ * independente do outro. Conferido contra `TIPOS_PLENARIO` em `contrato.ts` e contra os `case`s de
+ * `aplicarEvento` abaixo — não redigitar esta lista em outro lugar. */
+const TIPOS_EVENTO_FALA = new Set(["fala.iniciada", "fala.cronometro", "fala.encerrada"]);
+
+/** Os 2 tipos de `EventoPlenario` que tocam `inscritos` — FONTE ÚNICA da precedência de `inscritos`
+ * em `hidratarTribuna`. Ver a docstring de `TIPOS_EVENTO_FALA` sobre por que são dois Sets, não um. */
+const TIPOS_EVENTO_INSCRICAO = new Set(["inscricao.registrada", "inscricao.desistida"]);
 
 export interface MarcoCronometro {
   tipo: string; // pausada | retomada | aparte_concedido | tempo_adicional_concedido
@@ -112,11 +114,17 @@ export interface EstadoPlenario {
   composicao: Map<string, IdentidadeParlamentar> | null;
   composicaoStatus: QuorumStatus;
   ultimoSeq: number; // maior seq visto — vira o Last-Event-ID no resume
-  /** Contador monotônico dos 5 eventos de `TIPOS_EVENTO_TRIBUNA` já aplicados. Existe só para a
-   * PRECEDÊNCIA de `hidratarTribuna`: o hook captura este valor antes de disparar `GET .../tribuna` e
-   * o repassa; se o contador tiver avançado quando a resposta chega, um evento ao vivo já é mais novo
-   * que o snapshot em voo, e a hidratação descarta em vez de ressuscitar quem já desceu da tribuna. */
-  tribunaEventoSeq: number;
+  /** Contador monotônico dos 3 eventos de `TIPOS_EVENTO_FALA` já aplicados. Existe só para a
+   * PRECEDÊNCIA de `oradorAtual`/`marcosCronometro` em `hidratarTribuna`: o hook captura este valor
+   * antes de disparar `GET .../tribuna` e o repassa; se o contador tiver avançado quando a resposta
+   * chega, um evento de FALA ao vivo já é mais novo que o snapshot em voo, e a hidratação descarta em
+   * vez de ressuscitar quem já desceu da tribuna. Fix round 1 (I2): separado de `inscricaoEventoSeq`
+   * para que um `inscricao.registrada` alheio não jogue fora o orador junto — cada campo do snapshot
+   * tem seu próprio relógio. */
+  falaEventoSeq: number;
+  /** Contador monotônico dos 2 eventos de `TIPOS_EVENTO_INSCRICAO` já aplicados — a mesma PRECEDÊNCIA
+   * de `falaEventoSeq`, mas só para o campo `inscritos`. Ver a docstring de `falaEventoSeq`. */
+  inscricaoEventoSeq: number;
 }
 
 /** A identidade PÚBLICA de um parlamentar — o subconjunto que `GET /sessoes/:id/composicao` serve, que é
@@ -140,7 +148,8 @@ export function estadoInicial(sessao: SessaoOut): EstadoPlenario {
     composicao: null,
     composicaoStatus: "carregando",
     ultimoSeq: 0,
-    tribunaEventoSeq: 0,
+    falaEventoSeq: 0,
+    inscricaoEventoSeq: 0,
   };
 }
 
@@ -310,8 +319,13 @@ function lerMarcosTribuna(m: unknown): MarcoCronometro[] | undefined {
   return marcos;
 }
 
-/** Lê `inscritos`, já ordenados por `ordem` (mesmo invariante que `inscricao.registrada` mantém em
- * `aplicarEvento`). Mesma tolerância a item torto que `lerMarcosTribuna`. */
+/** Lê `inscritos`. Fix round 1 (I1): NÃO reordena — a fila chega do servidor já ordenada por
+ * `(fase, ordem)` (`wire/out.clj`/`db/tribuna.clj`, `listar-inscricoes`), e `ordem` sozinho NÃO é
+ * única na sessão: é `max+1` por `(sessao, fase)` (migration `…032`), então duas fases distintas têm,
+ * cada uma, seu próprio `ordem = 1, 2, 3…`. Reordenar aqui só por `ordem` INTERCALA as fases e produz
+ * ordinais repetidos no telão (`1 Ana / 1 Bruno / 2 Carla / 2 Davi`) — a fila publicada mente sobre
+ * quem fala em seguida. Mesma tolerância a item torto que `lerMarcosTribuna`, mas um item pulado não
+ * reordena os vizinhos: a POSIÇÃO de quem sobra é a do servidor. */
 function lerInscritosTribuna(lst: unknown): Inscrito[] | undefined {
   if (!Array.isArray(lst)) return undefined;
   const inscritos: Inscrito[] = [];
@@ -321,33 +335,47 @@ function lerInscritosTribuna(lst: unknown): Inscrito[] | undefined {
     if (typeof x.inscricaoId !== "string" || typeof x.vereadorId !== "string" || !finito(x.ordem)) continue;
     inscritos.push({ inscricaoId: x.inscricaoId, vereadorId: x.vereadorId, ordem: x.ordem });
   }
-  return inscritos.sort((a, b) => a.ordem - b.ordem);
+  return inscritos;
+}
+
+/** O contador de precedência que `hidratarTribuna` compara contra cada CAMPO do snapshot — ver a
+ * docstring de `falaEventoSeq`/`inscricaoEventoSeq` em `EstadoPlenario`. */
+export interface TribunaEventoSeqNoDisparo {
+  fala: number;
+  inscricao: number;
 }
 
 /** Hidrata a tribuna a partir do snapshot de `GET /sessoes/:id/tribuna`. PURA e TOTAL: nunca lança, e
  * um corpo de forma inesperada devolve o estado praticamente inalterado (este updater pode ser avaliado
  * na fase de RENDER do React, como `hidratarQuorum`/`hidratarComposicao`).
  *
- * `tribunaEventoSeqNoDisparo` é o valor de `estado.tribunaEventoSeq` que o HOOK capturou no instante em
- * que disparou o request — antes de saber se o SSE traria algo novo enquanto a resposta estava em voo.
- * Se o contador tiver avançado entre o disparo e agora, um dos 5 eventos de tribuna já chegou pelo canal
- * AO VIVO, e esse estado é por construção mais novo que este snapshot: a hidratação DESCARTA em vez de
- * aplicar. É o RULING desta fatia — a alternativa óbvia ("servidor sempre vence", o molde de
- * `hidratarQuorum`) ressuscitaria em produção um orador que a Mesa já havia encerrado, na transmissão
- * pública, só porque a resposta HTTP chegou atrasada. Como `rehidratar()` roda periodicamente (e a cada
- * reconexão), um snapshot descartado aqui não trava a tela: é retentado no próximo tick. */
+ * `seqNoDisparo` são os valores de `estado.falaEventoSeq`/`estado.inscricaoEventoSeq` que o HOOK
+ * capturou no instante em que disparou o request — antes de saber se o SSE traria algo novo enquanto a
+ * resposta estava em voo. Fix round 1 (I2): a PRECEDÊNCIA é avaliada **por campo**, não mais em bloco.
+ * Antes, um único contador cobria os 5 tipos e um `inscricao.registrada` alheio chegado em voo jogava
+ * fora o snapshot INTEIRO — inclusive `oradorAtual`, apagando quem está com a palavra por até 30s (o
+ * defeito exato que esta frente existe para matar). Agora `oradorAtual`/`marcosCronometro` só são
+ * descartados se um evento de FALA chegou no meio, e `inscritos` só se um evento de INSCRIÇÃO chegou —
+ * cada metade do snapshot é aplicada ou descartada independente da outra. O RULING em si não mudou: a
+ * alternativa óbvia ("servidor sempre vence", o molde de `hidratarQuorum`) ressuscitaria em produção um
+ * orador que a Mesa já havia encerrado, na transmissão pública, só porque a resposta HTTP chegou
+ * atrasada. Como `rehidratar()` roda periodicamente (e a cada reconexão) e o hook pede retentativa
+ * IMEDIATA (próximo tick de 500ms) quando detecta um descarte, um campo descartado aqui não trava a
+ * tela por 30s: converge em poucos segundos. */
 export function hidratarTribuna(
   estado: EstadoPlenario,
   cru: TribunaOut,
-  tribunaEventoSeqNoDisparo: number,
+  seqNoDisparo: TribunaEventoSeqNoDisparo,
 ): EstadoPlenario {
-  if (estado.tribunaEventoSeq !== tribunaEventoSeqNoDisparo) return estado;
   if (!cru || typeof cru !== "object") return estado;
 
   const c = cru as Partial<TribunaOut>;
-  const oradorAtual = lerOradorAtualTribuna(c.oradorAtual);
-  const marcosCronometro = lerMarcosTribuna(c.marcosCronometro);
-  const inscritos = lerInscritosTribuna(c.inscritos);
+  const falaEmDia = estado.falaEventoSeq === seqNoDisparo.fala;
+  const inscricaoEmDia = estado.inscricaoEventoSeq === seqNoDisparo.inscricao;
+
+  const oradorAtual = falaEmDia ? lerOradorAtualTribuna(c.oradorAtual) : undefined;
+  const marcosCronometro = falaEmDia ? lerMarcosTribuna(c.marcosCronometro) : undefined;
+  const inscritos = inscricaoEmDia ? lerInscritosTribuna(c.inscritos) : undefined;
 
   return {
     ...estado,
@@ -366,14 +394,15 @@ export function falharTribuna(estado: EstadoPlenario): EstadoPlenario {
 }
 
 export function aplicarEvento(estado: EstadoPlenario, evento: EventoPlenario): EstadoPlenario {
-  // O contador de tribuna avança aqui, na construção de `base`, e não em cada `case`: um `case` que
-  // devolve `base` cedo (ex.: `fala.cronometro` para uma fala que não é a corrente) precisa do avanço
-  // do MESMO jeito — o evento chegou e o snapshot em voo já é mais velho, ainda que o reducer não
-  // tenha mudado nada visível a partir dele.
+  // Os dois contadores de tribuna avançam aqui, na construção de `base`, e não em cada `case`: um
+  // `case` que devolve `base` cedo (ex.: `fala.cronometro` para uma fala que não é a corrente) precisa
+  // do avanço do MESMO jeito — o evento chegou e o snapshot em voo já é mais velho, ainda que o reducer
+  // não tenha mudado nada visível a partir dele.
   const base = {
     ...estado,
     ultimoSeq: Math.max(estado.ultimoSeq, evento.seq),
-    tribunaEventoSeq: estado.tribunaEventoSeq + (TIPOS_EVENTO_TRIBUNA.has(evento.tipo) ? 1 : 0),
+    falaEventoSeq: estado.falaEventoSeq + (TIPOS_EVENTO_FALA.has(evento.tipo) ? 1 : 0),
+    inscricaoEventoSeq: estado.inscricaoEventoSeq + (TIPOS_EVENTO_INSCRICAO.has(evento.tipo) ? 1 : 0),
   };
 
   switch (evento.tipo) {

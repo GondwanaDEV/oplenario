@@ -480,6 +480,10 @@ describe("composição — o índice de nomes sobrevive ao fluxo de eventos", ()
 describe("tribuna — o read-model reconstrói quem está com a palavra", () => {
   const aberta = () => estadoInicial(sessao({ estado: "aberta" }));
 
+  // captura os dois contadores de precedência, na forma que `hidratarTribuna`/o hook esperam (fix round 1, I2)
+  const capturar = (e: EstadoPlenario) => ({ fala: e.falaEventoSeq, inscricao: e.inscricaoEventoSeq });
+  const seq0 = { fala: 0, inscricao: 0 };
+
   const falaIniciada = (seq: number, oradorId: string, falaId = "f1"): EventoPlenario => ({
     tipo: "fala.iniciada",
     seq,
@@ -496,55 +500,57 @@ describe("tribuna — o read-model reconstrói quem está com a palavra", () => 
     sessaoId: "s1",
     oradorAtual: { falaId: "f2", oradorId: "vSnapshot", tipoFala: "principal", fase: "ordem_do_dia", iniciouEm: "2026-09-07T21:55:00Z", inscricaoId: null },
     marcosCronometro: [{ tipo: "pausada", ocorridoEm: "2026-09-07T21:56:00Z", segundosAdicionais: null }],
+    // já na ordem que o SERVIDOR manda (fase ASC, ordem ASC) — o cliente NÃO reordena (fix round 1, I1;
+    // ver T7 abaixo para o caso que reprova se o sort voltar)
     inscritos: [
-      { inscricaoId: "i2", vereadorId: "v2", origemInscricao: "pre_sessao_app", fase: "ordem_do_dia", ordem: 2 },
       { inscricaoId: "i1", vereadorId: "v1", origemInscricao: "pre_sessao_app", fase: "ordem_do_dia", ordem: 1 },
+      { inscricaoId: "i2", vereadorId: "v2", origemInscricao: "pre_sessao_app", fase: "ordem_do_dia", ordem: 2 },
     ],
     ...over,
   });
 
   it("T1 — o CASO DA FATIA: abrir a tela com a fala já em curso resolve o orador SEM nenhum evento SSE", () => {
-    const e = hidratarTribuna(aberta(), snap(), 0);
+    const e = hidratarTribuna(aberta(), snap(), seq0);
     expect(e.oradorAtual).toEqual({ falaId: "f2", oradorId: "vSnapshot", tipoFala: "principal", fase: "ordem_do_dia", iniciouEm: "2026-09-07T21:55:00Z" });
     expect(e.marcosCronometro).toEqual([{ tipo: "pausada", ocorridoEm: "2026-09-07T21:56:00Z", segundosAdicionais: null }]);
-    // e a fila chega ORDENADA por `ordem`, mesmo fora de ordem no wire
+    // e a fila chega na MESMA ordem em que o servidor mandou
     expect(e.inscritos.map((i) => i.inscricaoId)).toEqual(["i1", "i2"]);
   });
 
   it("T2 — `oradorAtual: null` no snapshot é um estado VÁLIDO (tribuna livre), não uma forma inesperada", () => {
     const comFala = aplicarEvento(aberta(), falaIniciada(1, "vAoVivo"));
-    const e = hidratarTribuna(comFala, snap({ oradorAtual: null, marcosCronometro: [] }), comFala.tribunaEventoSeq);
+    const e = hidratarTribuna(comFala, snap({ oradorAtual: null, marcosCronometro: [] }), capturar(comFala));
     expect(e.oradorAtual).toBeNull();
   });
 
   it("T3 (MAJOR) — corpo de forma inesperada não lança e não inventa orador: TOTAL, como hidratarComposicao/hidratarQuorum", () => {
     const base = aberta();
-    expect(() => hidratarTribuna(base, {} as never, 0)).not.toThrow();
-    const semForma = hidratarTribuna(base, {} as never, 0);
+    expect(() => hidratarTribuna(base, {} as never, seq0)).not.toThrow();
+    const semForma = hidratarTribuna(base, {} as never, seq0);
     expect(semForma.oradorAtual).toBeNull(); // não muda o que já havia (estado inicial: ninguém)
     expect(semForma.inscritos).toEqual([]);
 
     // um orador já visto pelo SSE sobrevive a uma resposta de forma torta
     const comFala = aplicarEvento(base, falaIniciada(1, "vAoVivo"));
-    const naoLanca = hidratarTribuna(comFala, { oradorAtual: "nao-e-um-objeto" } as unknown as TribunaOut, comFala.tribunaEventoSeq);
+    const naoLanca = hidratarTribuna(comFala, { oradorAtual: "nao-e-um-objeto" } as unknown as TribunaOut, capturar(comFala));
     expect(naoLanca.oradorAtual?.oradorId).toBe("vAoVivo");
 
     // um item torto na lista de inscritos não descarta os vizinhos válidos
     const comItemTorto = hidratarTribuna(
       base,
       snap({ inscritos: [{ inscricaoId: "iOk", vereadorId: "vOk", origemInscricao: "pre_sessao_app", fase: "ordem_do_dia", ordem: 1 }, { inscricaoId: 42 } as never] }),
-      0,
+      seq0,
     );
     expect(comItemTorto.inscritos).toEqual([{ inscricaoId: "iOk", vereadorId: "vOk", ordem: 1 }]);
   });
 
-  it("T4 (CRÍTICO) — PRECEDÊNCIA: um `fala.encerrada` chegado DEPOIS do disparo descarta o snapshot em voo", () => {
+  it("T4 (CRÍTICO) — PRECEDÊNCIA: um `fala.encerrada` chegado DEPOIS do disparo descarta só o CAMPO de fala do snapshot em voo", () => {
     // Anatomia do ruling: T0 dispara o GET com alguém na tribuna; entre T0 e a resposta (T1) o SSE
     // entrega `fala.encerrada` — a Mesa encerrou a fala. Se a hidratação aplicasse o snapshot de T0
     // (o molde "servidor sempre vence" de `hidratarQuorum`), o telão RESSUSCITARIA na transmissão
     // pública um orador que já desceu da tribuna. A regra correta é descartar: o SSE é mais novo.
     const comFala = aplicarEvento(aberta(), falaIniciada(1, "vAoVivo"));
-    const seqNoDisparo = comFala.tribunaEventoSeq; // capturado pelo hook ANTES do fetch (T0)
+    const seqNoDisparo = capturar(comFala); // capturado pelo hook ANTES do fetch (T0)
 
     const encerrada = aplicarEvento(comFala, falaEncerrada(2)); // chega em T1, antes da resposta HTTP
 
@@ -558,25 +564,107 @@ describe("tribuna — o read-model reconstrói quem está com a palavra", () => 
     expect(semEventoNoMeio.oradorAtual?.oradorId).toBe("vSnapshot");
   });
 
+  it("T4b (I2) — um `inscricao.registrada` alheio em voo NÃO derruba o orador: o descarte agora é POR CAMPO", () => {
+    // O defeito que o Fix round 1 mata: antes, um único contador cobria os 5 tipos e QUALQUER um deles
+    // em voo descartava o snapshot INTEIRO — inclusive `oradorAtual`, apagando quem está com a palavra
+    // por até 30s. Cenário: telão em F5 no meio de uma fala; entre o disparo e a resposta, um vereador
+    // se inscreve (evento de INSCRIÇÃO, não de fala).
+    const comFala = aplicarEvento(aberta(), falaIniciada(1, "vAoVivo"));
+    const seqNoDisparo = capturar(comFala); // T0
+
+    const comInscricaoAlheia = aplicarEvento(comFala, {
+      tipo: "inscricao.registrada",
+      seq: 2,
+      dados: { "inscricao-id": "iNova", "sessao-id": "s1", "vereador-id": "v9", "origem-inscricao": "pre_sessao_app", fase: "ordem_do_dia", ordem: 3 },
+    }); // chega em T1, antes da resposta HTTP — só mexe em `inscricaoEventoSeq`
+
+    const resultado = hidratarTribuna(comInscricaoAlheia, snap(), seqNoDisparo); // resposta de T0 em T2
+    // o snapshot de FALA é APLICADO normalmente: nenhum evento de FALA chegou no meio, só um de
+    // INSCRIÇÃO — o campo de orador não tem por que ser descartado. Com o contador ÚNICO de antes do
+    // fix, o `inscricao.registrada` alheio descartava o snapshot INTEIRO e `oradorAtual` ficava preso
+    // em "vAoVivo" (o valor de ANTES do fetch) em vez de avançar para o que o snapshot de fato diz.
+    expect(resultado.oradorAtual?.oradorId).toBe("vSnapshot");
+    // mas a fila de inscritos É descartada (o snapshot de T0 não sabe da inscrição nova de T1)
+    expect(resultado.inscritos).toEqual(comInscricaoAlheia.inscritos);
+  });
+
   it("T5 — a borda falhando (rede/403/500/parse) não muda nada: não há status próprio para degradar", () => {
     const comFala = aplicarEvento(aberta(), falaIniciada(1, "vAoVivo"));
     expect(falharTribuna(comFala)).toEqual(comFala);
     expect(falharTribuna(aberta())).toEqual(aberta());
   });
 
-  it("T6 — o contador de tribuna avança SÓ nos 5 eventos que tocam a tribuna, nunca em presença/votação", () => {
-    const depoisDePresenca = aplicarEvento(aberta(), {
-      tipo: "presenca.registrada",
-      seq: 1,
-      dados: { "sessao-id": "s1", "vereador-id": "v1", tipo: "entrada", modalidade: "plenario", fonte: "manual_secretaria", "ocorrido-em": "2026-09-07T22:00:00Z" },
-    } as never);
-    expect(depoisDePresenca.tribunaEventoSeq).toBe(0);
+  it("T7 (I1) — a fila de inscritos NÃO é reordenada: preserva (fase, ordem) do servidor mesmo com `ordem` repetido entre fases", () => {
+    // Fila real: expediente = [Ana(1), Carla(2)], ordem_do_dia = [Bruno(1), Davi(2)] — `ordem` é
+    // max+1 POR (sessão, fase) (migration …032), então duas fases têm, cada uma, seu próprio 1, 2…
+    // O servidor já entrega ordenado por (fase, ordem); um sort por `ordem` sozinho é ESTÁVEL e
+    // intercalaria as fases: [Ana(1), Bruno(1), Carla(2), Davi(2)] — ordinais repetidos no telão.
+    const doisFluxos = snap({
+      inscritos: [
+        { inscricaoId: "ana", vereadorId: "vAna", origemInscricao: "pre_sessao_app", fase: "expediente", ordem: 1 },
+        { inscricaoId: "carla", vereadorId: "vCarla", origemInscricao: "pre_sessao_app", fase: "expediente", ordem: 2 },
+        { inscricaoId: "bruno", vereadorId: "vBruno", origemInscricao: "pre_sessao_app", fase: "ordem_do_dia", ordem: 1 },
+        { inscricaoId: "davi", vereadorId: "vDavi", origemInscricao: "pre_sessao_app", fase: "ordem_do_dia", ordem: 2 },
+      ],
+    });
+    const e = hidratarTribuna(aberta(), doisFluxos, seq0);
+    expect(e.inscritos.map((i) => i.inscricaoId)).toEqual(["ana", "carla", "bruno", "davi"]);
+  });
 
-    const depoisDeInscricao = aplicarEvento(aberta(), {
-      tipo: "inscricao.registrada",
-      seq: 1,
-      dados: { "inscricao-id": "i1", "sessao-id": "s1", "vereador-id": "v1", "origem-inscricao": "pre_sessao_app", fase: "ordem_do_dia", ordem: 1 },
-    } as never);
-    expect(depoisDeInscricao.tribunaEventoSeq).toBe(1);
+  describe("os dois contadores de precedência (I4) — cada um dos 5 tipos tem prova própria", () => {
+    it("fala.iniciada avança SÓ falaEventoSeq", () => {
+      const antes = aberta();
+      const depois = aplicarEvento(antes, falaIniciada(1, "v1"));
+      expect(depois.falaEventoSeq).toBe(antes.falaEventoSeq + 1);
+      expect(depois.inscricaoEventoSeq).toBe(antes.inscricaoEventoSeq);
+    });
+
+    it("fala.cronometro avança SÓ falaEventoSeq — inclusive quando é NO-OP visível (guard de fala não-corrente)", () => {
+      const antes = aplicarEvento(aberta(), falaIniciada(1, "vAoVivo")); // fala corrente = f1
+      const evento: EventoPlenario = {
+        tipo: "fala.cronometro",
+        seq: 2,
+        dados: { "fala-id": "OUTRA-FALA", "sessao-id": "s1", tipo: "pausada", "ocorrido-em": "2026-09-07T22:01:00Z", "segundos-adicionais": null },
+      };
+      const depois = aplicarEvento(antes, evento);
+      expect(depois.marcosCronometro).toEqual(antes.marcosCronometro); // NO-OP visível: marco de fala alheia é ignorado
+      expect(depois.falaEventoSeq).toBe(antes.falaEventoSeq + 1); // mas o contador avança do mesmo jeito
+      expect(depois.inscricaoEventoSeq).toBe(antes.inscricaoEventoSeq);
+    });
+
+    it("fala.encerrada avança SÓ falaEventoSeq", () => {
+      const antes = aplicarEvento(aberta(), falaIniciada(1, "vAoVivo"));
+      const depois = aplicarEvento(antes, falaEncerrada(2));
+      expect(depois.falaEventoSeq).toBe(antes.falaEventoSeq + 1);
+      expect(depois.inscricaoEventoSeq).toBe(antes.inscricaoEventoSeq);
+    });
+
+    it("inscricao.registrada avança SÓ inscricaoEventoSeq", () => {
+      const antes = aberta();
+      const depois = aplicarEvento(antes, {
+        tipo: "inscricao.registrada",
+        seq: 1,
+        dados: { "inscricao-id": "i1", "sessao-id": "s1", "vereador-id": "v1", "origem-inscricao": "pre_sessao_app", fase: "ordem_do_dia", ordem: 1 },
+      });
+      expect(depois.inscricaoEventoSeq).toBe(antes.inscricaoEventoSeq + 1);
+      expect(depois.falaEventoSeq).toBe(antes.falaEventoSeq);
+    });
+
+    it("inscricao.desistida avança SÓ inscricaoEventoSeq", () => {
+      const antes = aberta();
+      const depois = aplicarEvento(antes, { tipo: "inscricao.desistida", seq: 1, dados: { "inscricao-id": "i1", "sessao-id": "s1" } });
+      expect(depois.inscricaoEventoSeq).toBe(antes.inscricaoEventoSeq + 1);
+      expect(depois.falaEventoSeq).toBe(antes.falaEventoSeq);
+    });
+
+    it("presenca.registrada não avança NENHUM dos dois contadores", () => {
+      const depois = aplicarEvento(aberta(), {
+        tipo: "presenca.registrada",
+        seq: 1,
+        dados: { "sessao-id": "s1", "vereador-id": "v1", tipo: "entrada", modalidade: "plenario", fonte: "manual_secretaria", "ocorrido-em": "2026-09-07T22:00:00Z" },
+      } as never);
+      expect(depois.falaEventoSeq).toBe(0);
+      expect(depois.inscricaoEventoSeq).toBe(0);
+    });
   });
 });

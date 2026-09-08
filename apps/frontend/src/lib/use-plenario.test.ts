@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { renderHook, act, waitFor } from "@testing-library/react";
 import { usePlenario } from "./use-plenario";
 import { numeroDoTelao } from "./plenario-reducer";
 
@@ -63,6 +63,45 @@ const tribunaCru = {
   "marcos-cronometro": [{ tipo: "pausada", "ocorrido-em": "2026-09-07T22:01:00.123456Z", "segundos-adicionais": null }],
   inscritos: [{ "inscricao-id": "i1", "vereador-id": "v1", "origem-inscricao": "pre_sessao_app", fase: "ordem_do_dia", ordem: 1 }],
 };
+
+/** Promessa controlável de fora — usada pelos testes do Fix round 1 (I2/I3) para abrir uma JANELA exata
+ * em que uma resposta HTTP fica em voo enquanto um evento SSE é injetado (ou fica pendurada pra sempre). */
+function deferido<T>() {
+  let resolve!: (v: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+/** Stream de SSE controlável de fora — mesmo molde de `use-chamada.test.ts` (`ReadableStream` real,
+ * porque `consumirSse` usa `body.getReader()`). */
+function sseControlado() {
+  let ctrl!: ReadableStreamDefaultController<Uint8Array>;
+  const body = new ReadableStream<Uint8Array>({ start: (c) => (ctrl = c) });
+  const enc = new TextEncoder();
+  return {
+    body,
+    enviar(evento: string, seq: number, dados: unknown) {
+      ctrl.enqueue(enc.encode(`event: ${evento}\nid: ${seq}\ndata: ${JSON.stringify(dados)}\n\n`));
+    },
+  };
+}
+
+/** Espera uma condição SOB FAKE TIMERS, avançando o relógio E drenando microtasks dentro de `act` — ver
+ * a mesma necessidade documentada em `use-chamada.test.ts` (`waitFor` sozinho pendura sob fake timers). */
+async function ateQue(cond: () => boolean, passo = 20, tentativas = 200) {
+  for (let i = 0; i < tentativas; i++) {
+    if (cond()) return;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(passo);
+    });
+  }
+  throw new Error("condição não atingida dentro do orçamento de tempo falso");
+}
+
+const contarChamadas = (f: typeof fetch, frag: string) =>
+  (f as unknown as { mock: { calls: unknown[][] } }).mock.calls.filter((c) => String(c[0]).includes(frag)).length;
 
 /** fetch fake: responde as rotas de dados e deixa o SSE pendurado (o stream nunca resolve sozinho). */
 function fetchFake(overrides: Record<string, () => Response | Promise<Response>> = {}) {
@@ -132,7 +171,10 @@ describe("usePlenario — a costura de borda do quórum", () => {
 });
 
 describe("usePlenario — a costura de borda da TRIBUNA (#7 do ledger de prontidão)", () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
 
   it("O CASO DA FATIA: abrir a tela com a fala JÁ EM CURSO resolve o orador sem nenhum evento SSE", async () => {
     global.fetch = fetchFake();
@@ -179,5 +221,66 @@ describe("usePlenario — a costura de borda da TRIBUNA (#7 do ledger de prontid
     await waitFor(() => expect(result.current.estado?.quorumStatus).toBe("ok"));
     expect(result.current.estado!.oradorAtual).toBeNull();
     expect(result.current.conexao).not.toBe("erro");
+  });
+
+  it("Fix round 1 (I2) — um `inscricao.registrada` alheio chegado ENQUANTO o GET /tribuna está em voo não apaga o orador", async () => {
+    // Reproduz o cenário do achado: F5 no meio de uma fala; a resposta de `/tribuna` ainda não voltou
+    // quando um vereador se inscreve pelo SSE. Antes do fix, o contador ÚNICO descartava o snapshot
+    // INTEIRO (orador incluso) — "Ninguém com a palavra" por até 30s com alguém de fato falando.
+    vi.useFakeTimers();
+    const sse = sseControlado();
+    const tribunaEmVoo = deferido<Response>();
+    const f = fetchFake({
+      "/plenario": () => ({ ok: true, status: 200, body: sse.body }) as unknown as Response,
+      "/tribuna": () => tribunaEmVoo.promise,
+    });
+    global.fetch = f;
+
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comQuorum: true }));
+    await ateQue(() => result.current.conexao === "ao-vivo"); // SSE conectado; GET /tribuna já disparou e está em voo
+
+    // chega, pelo SSE, uma inscrição de OUTRO vereador — não mexe em `oradorAtual`
+    await act(async () => {
+      sse.enviar("inscricao.registrada", 1, {
+        "inscricao-id": "iNova",
+        "sessao-id": "s1",
+        "vereador-id": "v9",
+        "origem-inscricao": "pre_sessao_app",
+        fase: "ordem_do_dia",
+        ordem: 3,
+      });
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    expect(result.current.estado!.inscritos).toEqual([{ inscricaoId: "iNova", vereadorId: "v9", ordem: 3 }]);
+
+    // AGORA a resposta de T0 chega — um snapshot com `vFalando` na tribuna, mas SEM a inscrição nova
+    await act(async () => {
+      tribunaEmVoo.resolve({ ok: true, status: 200, json: async () => tribunaCru } as Response);
+      await vi.advanceTimersByTimeAsync(10);
+    });
+
+    // o orador SOBREVIVE: nenhum evento de FALA chegou no meio, só um de INSCRIÇÃO
+    await ateQue(() => result.current.estado?.oradorAtual?.oradorId === "vFalando");
+    // e a fila de inscritos não regride para a do snapshot velho (o SSE já sabe mais)
+    expect(result.current.estado!.inscritos).toEqual([{ inscricaoId: "iNova", vereadorId: "v9", ordem: 3 }]);
+  });
+
+  it("Fix round 1 (I3) — uma `/tribuna` pendurada PARA SEMPRE não trava a re-busca do quórum nos ciclos seguintes", async () => {
+    // Antes do fix, um `rebuscando` ÚNICO só liberava depois que as DUAS rotas resolvessem — uma
+    // `/tribuna` que nunca responde travava também o quórum, e o numerador do telão congelava com o
+    // badge dizendo "Ao vivo" pelo resto da sessão.
+    vi.useFakeTimers();
+    const f = fetchFake({ "/tribuna": () => new Promise<Response>(() => {}) }); // pendura pra sempre
+    global.fetch = f;
+
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comQuorum: true }));
+    await ateQue(() => result.current.estado?.quorumStatus === "ok");
+    const antes = contarChamadas(f, "/quorum");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(31000); // passa a periódica de 30s
+    });
+    // o quórum foi re-buscado de novo, mesmo com a tribuna pendurada desde o primeiro disparo
+    expect(contarChamadas(f, "/quorum")).toBeGreaterThan(antes);
   });
 });
