@@ -27,7 +27,8 @@
     virar lei ainda (1 aguardando, 1 sancionado); as 4 normas nascem de 4 OUTROS autografos, cada um
     sancionado so' para satisfazer essa FK — nao contam contra os '2' do briefing, que descrevem o que
     a tela de pos-aprovacao mostra pendente."
-  (:require [honey.sql :as sql]
+  (:require [clojure.string :as string]
+            [honey.sql :as sql]
             [next.jdbc :as jdbc]
             [oplenario.cadastros.components.repositorio :as repo-cadastros]
             [oplenario.cadastros.db.vereador :as vereador]
@@ -70,91 +71,230 @@
 ;; ---------- as 24 proposicoes — ementas plausiveis de camara municipal (nada de "teste 1"/"foo") ----------
 ;; :ref identifica o item p/ pareceres/autografos/normas irem buscar um :id especifico depois de protocolar.
 ;; :caminho = os gatilhos disparados em sequencia por `transicionar!`, a partir de 'protocolada'.
+;; :texto (Task C, #15 do briefing de prontidao) — cada materia carrega o SEU corpo, nunca lorem ipsum nem
+;; texto repetido entre as 24; helpers abaixo compoem por genero normativo, mas cada chamada passa artigos/
+;; pedido/justificativa PROPRIOS aquela ementa. `repositorio.clj:262-277` (protocolar!) so' cria + promove a
+;; versao de texto quando o payload traz `:texto` — sem isto, `proposicao_texto_versao` fica vazia p/ o
+;; ente da demo (a causa raiz do defeito, ja confirmada na fonte).
+
+(defn- artigos->texto
+  "Corpo de um projeto normativo (lei/lei complementar/resolucao/decreto legislativo/emenda a LOM):
+  cada string de `artigos` vira UM artigo numerado em sequencia a partir do Art. 1o — o CALLER decide o
+  conteudo (nucleo especifico da ementa, complemento, despesas quando cabe, vigencia), nunca este helper."
+  [rotulo artigos]
+  (str "## " rotulo "\n\n"
+       (string/join "\n\n" (map-indexed (fn [i corpo] (str "Art. " (inc i) "º " corpo)) artigos))))
+
+(defn- texto-indicacao [pedido justificativa]
+  (str "## Indicação\n\nSenhor Presidente,\n\n"
+       "Nos termos regimentais, venho indicar à Mesa Diretora, para que encaminhe ao Poder Executivo "
+       "Municipal, a seguinte providência:\n\n" pedido "\n\n### Justificativa\n\n" justificativa))
+
+(defn- texto-requerimento [pedido justificativa]
+  (str "## Requerimento\n\nSenhor Presidente,\n\n"
+       "Requeiro a Vossa Excelência, ouvido o Plenário, nos termos regimentais, que seja oficiado ao "
+       "Poder Executivo Municipal solicitando:\n\n" pedido "\n\n### Justificativa\n\n" justificativa))
+
+(defn- texto-requerimento-pesar [homenageado justificativa]
+  (str "## Requerimento\n\nSenhor Presidente,\n\n"
+       "Requeiro a Vossa Excelência que se consigne, em ata dos trabalhos desta Casa, voto de profundo "
+       "pesar pelo falecimento de " homenageado ", dando-se ciência à família enlutada.\n\n"
+       "### Justificativa\n\n" justificativa))
+
+(defn- texto-mocao [titulo corpo considerandos]
+  (str "## Moção de " titulo "\n\n" corpo "\n\n### Considerando\n\n"
+       (string/join "\n" (map #(str "- " %) considerandos))
+       "\n\nA Câmara Municipal de Fortaleza RESOLVE encaminhar a presente Moção aos destinatários "
+       "mencionados, dando-lhes ciência de seu inteiro teor."))
 
 (def ^:private materias
   [;; ---- protocolada (4) ----
    {:ref :protocolada-1 :tipo "projeto_lei"
     :ementa "Institui o Programa Municipal de Hortas Comunitárias e dá outras providências."
-    :caminho []}
+    :caminho []
+    :texto (artigos->texto "Lei"
+             ["Fica instituído, no âmbito do Município de Fortaleza, o Programa Municipal de Hortas Comunitárias, destinado a promover a produção de alimentos e a agricultura urbana em áreas públicas e comunitárias."
+              "O Poder Executivo disponibilizará espaços públicos ociosos para implantação das hortas comunitárias, mediante termo de cessão de uso às associações e grupos comunitários interessados."
+              "As despesas decorrentes da execução desta Lei correrão por conta de dotações orçamentárias próprias, suplementadas se necessário."
+              "Esta Lei entra em vigor na data de sua publicação."])}
    {:ref :protocolada-2 :tipo "projeto_lei"
     :ementa "Dispõe sobre a obrigatoriedade de instalação de bebedouros em praças públicas municipais."
-    :caminho []}
+    :caminho []
+    :texto (artigos->texto "Lei"
+             ["Ficam as praças públicas municipais obrigadas a dispor de, no mínimo, 1 (um) bebedouro de água potável em local de fácil acesso ao público."
+              "O Poder Executivo instalará os bebedouros previstos no art. 1º no prazo de 180 (cento e oitenta) dias, contado da publicação desta Lei, priorizando as praças de maior fluxo de pessoas, e observará padrões de acessibilidade para pessoas com deficiência e mobilidade reduzida."
+              "As despesas decorrentes da execução desta Lei correrão por conta de dotações orçamentárias próprias, suplementadas se necessário."
+              "Esta Lei entra em vigor na data de sua publicação."])}
    {:ref :protocolada-3 :tipo "indicacao"
     :ementa "Indica ao Executivo a instalação de iluminação pública na Praça da Gentilândia."
-    :objeto-indicacao "Instalação de iluminação pública na Praça da Gentilândia" :caminho []}
+    :objeto-indicacao "Instalação de iluminação pública na Praça da Gentilândia" :caminho []
+    :texto (texto-indicacao
+             "a instalação de iluminação pública na Praça da Gentilândia, com prioridade para os pontos de acesso de pedestres e as áreas de maior circulação noturna."
+             "moradores da região relatam sensação de insegurança no período noturno em razão da precariedade da iluminação existente, o que prejudica a circulação de pedestres e favorece a ocorrência de furtos.")}
    {:ref :protocolada-4 :tipo "requerimento"
     :ementa "Requer informações ao Executivo sobre o andamento das obras do Parque Linear do Rio Cocó."
-    :tipo-requerimento "informacao" :caminho []}
+    :tipo-requerimento "informacao" :caminho []
+    :texto (texto-requerimento
+             "o andamento das obras do Parque Linear do Rio Cocó, especificando: (i) o percentual de execução física da obra; (ii) o cronograma atualizado de conclusão; e (iii) eventuais pendências que impactem o prazo de entrega."
+             "moradores do entorno têm procurado este gabinete parlamentar questionando a aparente paralisação das obras, sem informação oficial disponível ao público.")}
 
    ;; ---- em_comissoes (4) ----
    {:ref :em-comissoes-1 :tipo "projeto_lei"
     :ementa "Dispõe sobre a criação do Conselho Municipal de Mobilidade Urbana."
-    :caminho ["despachar"]}
+    :caminho ["despachar"]
+    :texto (artigos->texto "Lei"
+             ["Fica criado o Conselho Municipal de Mobilidade Urbana, órgão colegiado de caráter consultivo, vinculado à Secretaria Municipal responsável pela mobilidade urbana."
+              "Compete ao Conselho acompanhar a execução da política municipal de mobilidade urbana, opinar sobre projetos de infraestrutura viária e propor diretrizes de acessibilidade e transporte coletivo, sendo composto por representantes do Poder Executivo, da sociedade civil e de entidades de classe ligadas ao transporte, na forma do regulamento."
+              "As despesas decorrentes da execução desta Lei correrão por conta de dotações orçamentárias próprias, suplementadas se necessário."
+              "Esta Lei entra em vigor na data de sua publicação."])}
    {:ref :em-comissoes-2 :tipo "projeto_lei"
     :ementa "Autoriza o Executivo a firmar convênio com entidades de assistência social do Município."
-    :caminho ["despachar"]}
+    :caminho ["despachar"]
+    :texto (artigos->texto "Lei"
+             ["Fica o Poder Executivo autorizado a firmar convênios com entidades de assistência social sem fins lucrativos sediadas no Município, para execução de ações de proteção social básica e especial."
+              "Os convênios de que trata esta Lei observarão critérios objetivos de habilitação das entidades, definidos em regulamento, serão precedidos de chamamento público, nos termos da legislação aplicável, e exigirão prestação de contas anual ao órgão municipal repassador."
+              "As despesas decorrentes da execução desta Lei correrão por conta de dotações orçamentárias próprias, suplementadas se necessário."
+              "Esta Lei entra em vigor na data de sua publicação."])}
    {:ref :em-comissoes-3 :tipo "projeto_lei_complementar"
     :ementa "Altera o Código de Posturas do Município quanto ao horário de funcionamento do comércio."
-    :caminho ["despachar"]}
+    :caminho ["despachar"]
+    :texto (artigos->texto "Lei Complementar"
+             ["O dispositivo do Código de Posturas do Município que trata do horário de funcionamento do comércio passa a vigorar de modo a permitir o funcionamento dos estabelecimentos comerciais de segunda-feira a sábado, das 6h às 22h, e aos domingos e feriados, das 8h às 18h."
+              "Os estabelecimentos que exerçam atividade de interesse turístico ou de lazer poderão requerer horário especial de funcionamento, mediante autorização do órgão municipal competente."
+              "Esta Lei Complementar entra em vigor na data de sua publicação."])}
    {:ref :em-comissoes-4 :tipo "mocao"
     :ementa "Manifesta congratulações à comunidade escolar pela conquista na Olimpíada Municipal de Matemática."
-    :categoria-mocao "congratulacoes" :caminho ["despachar"]}
+    :categoria-mocao "congratulacoes" :caminho ["despachar"]
+    :texto (texto-mocao "Congratulações"
+             "A Câmara Municipal de Fortaleza manifesta congratulações à comunidade escolar do Município pela expressiva conquista de estudantes e professores na Olimpíada Municipal de Matemática."
+             ["a Olimpíada revela e estimula talentos da rede pública e privada de ensino do Município;"
+              "o resultado é fruto do empenho de estudantes, do trabalho de professores e do apoio das famílias;"
+              "cabe ao Poder Legislativo reconhecer publicamente iniciativas que valorizam a educação municipal."])}
 
    ;; ---- aguardando_pauta (4) ----
    {:ref :aguardando-pauta-1 :tipo "projeto_lei"
     :ementa "Institui a Semana Municipal de Combate ao Trabalho Infantil."
-    :caminho ["despachar" "concluir_comissoes"]}
+    :caminho ["despachar" "concluir_comissoes"]
+    :texto (artigos->texto "Lei"
+             ["Fica instituída, no calendário oficial do Município, a Semana Municipal de Combate ao Trabalho Infantil, a ser realizada anualmente na semana que contempla o dia 12 de junho, Dia Mundial contra o Trabalho Infantil."
+              "Durante a Semana Municipal, o Poder Executivo promoverá, em articulação com o Conselho Tutelar e a rede de proteção à criança e ao adolescente, atividades de conscientização nas escolas da rede municipal de ensino."
+              "Esta Lei entra em vigor na data de sua publicação."])}
    {:ref :aguardando-pauta-2 :tipo "projeto_lei"
     :ementa "Dispõe sobre a coleta seletiva de resíduos sólidos na Zona Leste do Município."
-    :caminho ["despachar" "concluir_comissoes"]}
+    :caminho ["despachar" "concluir_comissoes"]
+    :texto (artigos->texto "Lei"
+             ["Fica instituído o serviço de coleta seletiva de resíduos sólidos domiciliares na Zona Leste do Município, com separação entre resíduos recicláveis e rejeitos."
+              "O Poder Executivo definirá, por ato próprio, o cronograma e os itinerários de coleta, priorizando a integração com cooperativas de catadores de materiais recicláveis sediadas no Município."
+              "Esta Lei entra em vigor na data de sua publicação."])}
    {:ref :aguardando-pauta-3 :tipo "projeto_resolucao"
     :ementa "Concede título de utilidade pública à Associação Comunitária do Bairro Parangaba."
-    :caminho ["despachar" "concluir_comissoes"]}
+    :caminho ["despachar" "concluir_comissoes"]
+    :texto (artigos->texto "Resolução"
+             ["Fica declarada de utilidade pública municipal a Associação Comunitária do Bairro Parangaba, entidade civil sem fins lucrativos, com sede neste Município."
+              "A declaração de utilidade pública de que trata esta Resolução não implica repasse automático de recursos públicos, dependendo cada auxílio de lei específica."
+              "Esta Resolução entra em vigor na data de sua publicação."])}
    {:ref :aguardando-pauta-4 :tipo "projeto_decreto_legislativo"
     :ementa "Concede Diploma de Honra ao Mérito a profissionais da Educação Municipal."
-    :caminho ["despachar" "concluir_comissoes"]}
+    :caminho ["despachar" "concluir_comissoes"]
+    :texto (artigos->texto "Decreto Legislativo"
+             ["Fica concedido o Diploma de Honra ao Mérito a profissionais da Educação Municipal que se destacaram, no exercício de suas funções, por relevantes serviços prestados à comunidade escolar de Fortaleza."
+              "A relação dos homenageados constará de anexo a ser publicado por ocasião da entrega do Diploma, em sessão solene especialmente convocada para esse fim."
+              "Este Decreto Legislativo entra em vigor na data de sua publicação."])}
 
    ;; ---- em_pauta (3) ----
    {:ref :em-pauta-1 :tipo "projeto_lei"
     :ementa "Institui o Programa Municipal de Arborização Urbana."
-    :caminho ["despachar" "concluir_comissoes" "incluir_pauta"]}
+    :caminho ["despachar" "concluir_comissoes" "incluir_pauta"]
+    :texto (artigos->texto "Lei"
+             ["Fica instituído o Programa Municipal de Arborização Urbana, com o objetivo de ampliar e qualificar a cobertura vegetal nas vias e logradouros públicos do Município."
+              "O plantio de mudas previsto nesta Lei observará espécies nativas ou adaptadas ao clima local, priorizando vias com baixo índice de arborização, conforme levantamento do órgão ambiental municipal."
+              "As despesas decorrentes da execução desta Lei correrão por conta de dotações orçamentárias próprias, suplementadas se necessário."
+              "Esta Lei entra em vigor na data de sua publicação."])}
    {:ref :em-pauta-2 :tipo "projeto_lei"
     :ementa "Dispõe sobre a criação de vagas de estacionamento para idosos em logradouros públicos."
-    :caminho ["despachar" "concluir_comissoes" "incluir_pauta"]}
+    :caminho ["despachar" "concluir_comissoes" "incluir_pauta"]
+    :texto (artigos->texto "Lei"
+             ["Ficam os estacionamentos situados em logradouros públicos municipais obrigados a reservar vagas específicas para idosos, na proporção mínima de 5% (cinco por cento) do total de vagas."
+              "As vagas reservadas deverão ser sinalizadas de forma visível, com identificação própria e localização preferencial próxima aos acessos."
+              "Esta Lei entra em vigor na data de sua publicação."])}
    {:ref :em-pauta-3 :tipo "proposta_emenda_lom"
     :ementa "Altera a Lei Orgânica do Município quanto à composição da Mesa Diretora."
-    :caminho ["despachar" "concluir_comissoes" "incluir_pauta"]}
+    :caminho ["despachar" "concluir_comissoes" "incluir_pauta"]
+    :texto (artigos->texto "Emenda à Lei Orgânica"
+             ["O dispositivo da Lei Orgânica do Município de Fortaleza que trata da composição da Mesa Diretora passa a vigorar com nova redação, ampliando o número de membros da Mesa Diretora de 5 (cinco) para 7 (sete) vereadores."
+              "Aplicam-se aos novos cargos criados por esta Emenda as mesmas prerrogativas e vedações previstas na Lei Orgânica para os demais membros da Mesa Diretora."
+              "Esta Emenda à Lei Orgânica entra em vigor na data de sua publicação, produzindo efeitos a partir da próxima legislatura."])}
 
    ;; ---- aprovada (6, todas projeto_lei — alimentam os autografos/normas abaixo) ----
    {:ref :aprovada-1 :tipo "projeto_lei"
     :ementa "Institui o Código Municipal de Defesa do Consumidor."
-    :caminho ["despachar" "concluir_comissoes" "incluir_pauta" "aprovar"]}
+    :caminho ["despachar" "concluir_comissoes" "incluir_pauta" "aprovar"]
+    :texto (artigos->texto "Lei"
+             ["Fica instituído o Código Municipal de Defesa do Consumidor, consolidando as normas municipais de proteção e defesa do consumidor no âmbito do Município de Fortaleza."
+              "Compete ao órgão municipal de proteção e defesa do consumidor fiscalizar o cumprimento desta Lei e aplicar as sanções administrativas cabíveis, sem prejuízo das competências estadual e federal."
+              "As despesas decorrentes da execução desta Lei correrão por conta de dotações orçamentárias próprias, suplementadas se necessário."
+              "Esta Lei entra em vigor na data de sua publicação."])}
    {:ref :aprovada-2 :tipo "projeto_lei"
     :ementa "Cria o Programa Municipal de Incentivo à Leitura nas Escolas Públicas."
-    :caminho ["despachar" "concluir_comissoes" "incluir_pauta" "aprovar"]}
+    :caminho ["despachar" "concluir_comissoes" "incluir_pauta" "aprovar"]
+    :texto (artigos->texto "Lei"
+             ["Fica criado o Programa Municipal de Incentivo à Leitura nas Escolas Públicas, destinado a fomentar o hábito da leitura entre estudantes da rede municipal de ensino."
+              "O Programa contemplará, entre outras ações, a ampliação do acervo das bibliotecas escolares e a realização de feiras literárias anuais em cada unidade de ensino."
+              "As despesas decorrentes da execução desta Lei correrão por conta de dotações orçamentárias próprias, suplementadas se necessário."
+              "Esta Lei entra em vigor na data de sua publicação."])}
    {:ref :aprovada-3 :tipo "projeto_lei"
     :ementa "Institui multa para o descarte irregular de resíduos da construção civil."
-    :caminho ["despachar" "concluir_comissoes" "incluir_pauta" "aprovar"]}
+    :caminho ["despachar" "concluir_comissoes" "incluir_pauta" "aprovar"]
+    :texto (artigos->texto "Lei"
+             ["Fica instituída multa administrativa para o descarte irregular de resíduos da construção civil em logradouros públicos, terrenos baldios ou áreas de preservação ambiental do Município."
+              "A multa de que trata esta Lei será aplicada em valor correspondente a 100 (cem) a 1.000 (mil) Unidades Fiscais de Referência do Município, conforme a gravidade e a reincidência da infração, sem prejuízo da obrigação de remoção dos resíduos pelo infrator."
+              "Esta Lei entra em vigor na data de sua publicação."])}
    {:ref :aprovada-4 :tipo "projeto_lei"
     :ementa "Autoriza a cessão de uso de imóvel público a entidade privada sem fins lucrativos."
-    :caminho ["despachar" "concluir_comissoes" "incluir_pauta" "aprovar"]}
+    :caminho ["despachar" "concluir_comissoes" "incluir_pauta" "aprovar"]
+    :texto (artigos->texto "Lei"
+             ["Fica o Poder Executivo autorizado a ceder o uso de imóvel público municipal a entidade privada sem fins lucrativos, para fins de execução de atividades de relevante interesse social."
+              "A cessão de que trata esta Lei será formalizada por termo próprio, pelo prazo máximo de 10 (dez) anos, renovável, vedada a cessão a título gratuito para fins diversos dos previstos no termo."
+              "Esta Lei entra em vigor na data de sua publicação."])}
    {:ref :aprovada-5 :tipo "projeto_lei"
     :ementa "Institui o Programa Municipal de Combate ao Desperdício de Alimentos."
-    :caminho ["despachar" "concluir_comissoes" "incluir_pauta" "aprovar"]}
+    :caminho ["despachar" "concluir_comissoes" "incluir_pauta" "aprovar"]
+    :texto (artigos->texto "Lei"
+             ["Fica instituído o Programa Municipal de Combate ao Desperdício de Alimentos, com o objetivo de reduzir o descarte de alimentos próprios para consumo e fomentar sua doação a entidades assistenciais."
+              "Estabelecimentos comerciais do ramo alimentício poderão firmar termo de adesão ao Programa, comprometendo-se a doar excedentes alimentares a bancos de alimentos e entidades cadastradas, mediante incentivos a serem definidos em regulamento."
+              "As despesas decorrentes da execução desta Lei correrão por conta de dotações orçamentárias próprias, suplementadas se necessário."
+              "Esta Lei entra em vigor na data de sua publicação."])}
    {:ref :aprovada-6 :tipo "projeto_lei"
     :ementa "Dispõe sobre a acessibilidade em prédios públicos municipais."
-    :caminho ["despachar" "concluir_comissoes" "incluir_pauta" "aprovar"]}
+    :caminho ["despachar" "concluir_comissoes" "incluir_pauta" "aprovar"]
+    :texto (artigos->texto "Lei"
+             ["Ficam os prédios públicos municipais obrigados a adequar suas instalações aos padrões de acessibilidade previstos na legislação federal, no prazo de 2 (dois) anos, contado da publicação desta Lei."
+              "O Poder Executivo priorizará, no cronograma de adequação, os prédios de maior fluxo de atendimento ao público, especialmente unidades de saúde e escolas."
+              "As despesas decorrentes da execução desta Lei correrão por conta de dotações orçamentárias próprias, suplementadas se necessário."
+              "Esta Lei entra em vigor na data de sua publicação."])}
 
    ;; ---- arquivada (3) ----
    {:ref :arquivada-1 :tipo "mocao"
     :ementa "Manifesta repúdio a atos de violência contra profissionais da imprensa local."
-    :categoria-mocao "repudio" :caminho ["arquivar"]}
+    :categoria-mocao "repudio" :caminho ["arquivar"]
+    :texto (texto-mocao "Repúdio"
+             "A Câmara Municipal de Fortaleza manifesta repúdio aos recentes atos de violência praticados contra profissionais da imprensa local no exercício de suas funções."
+             ["a liberdade de imprensa e a integridade dos profissionais que a exercem são pilares do regime democrático;"
+              "episódios de agressão a jornalistas em cobertura de fatos de interesse público têm se repetido no Município;"
+              "cabe ao Poder Legislativo municipal manifestar-se em defesa da imprensa livre e da segurança de seus profissionais."])}
    {:ref :arquivada-2 :tipo "requerimento"
     :ementa "Requer voto de pesar pelo falecimento do ex-vereador Antônio Bezerra."
-    :tipo-requerimento "voto_pesar" :caminho ["arquivar"]}
+    :tipo-requerimento "voto_pesar" :caminho ["arquivar"]
+    :texto (texto-requerimento-pesar "Antônio Bezerra"
+             "o homenageado exerceu mandato de vereador nesta Casa, prestando relevantes serviços ao Município de Fortaleza, sendo justa a manifestação de pesar por seu falecimento.")}
    {:ref :arquivada-3 :tipo "projeto_lei"
     :ementa "Dispõe sobre a redução da jornada de trabalho dos servidores da Guarda Municipal Metropolitana."
-    :caminho ["despachar" "concluir_comissoes" "incluir_pauta" "rejeitar"]}])
+    :caminho ["despachar" "concluir_comissoes" "incluir_pauta" "rejeitar"]
+    :texto (artigos->texto "Lei"
+             ["Fica reduzida para 30 (trinta) horas semanais a jornada de trabalho dos servidores integrantes da Guarda Municipal Metropolitana, sem redução da remuneração."
+              "As escalas de serviço serão reorganizadas pelo órgão competente de modo a preservar a cobertura operacional da Guarda Municipal Metropolitana em regime de 24 (vinte e quatro) horas."
+              "As despesas decorrentes da execução desta Lei correrão por conta de dotações orçamentárias próprias, suplementadas se necessário."
+              "Esta Lei entra em vigor na data de sua publicação."])}])
 
 ;; ---------- leituras cruas (nenhuma fn exposta no Repo/db do modulo p/ isto; adicionar uma so' pra este
 ;;            script ficaria fora do escopo da Task 0.4, que e' CRIAR SO acervo.clj) ----------
@@ -245,22 +385,40 @@
 (defn- protocolar-e-tramitar!
   "Protocola 1 materia (autor = vereador `idx` do roster, round-robin) e percorre `:caminho` via o
   ENGINE real (`transicionar!`, Disciplina 5) — nunca `mudar-estado-proposicao!` (bypassaria o motor).
+
+  `:texto` (Task C, #15) vai no payload de `protocolar!` — SO' com essa chave presente e' que
+  `repositorio.clj:262-277` cria E promove a versao de texto (`texto/nova-versao!` + `texto/promover!`);
+  sem ela `proposicao_texto_versao` fica vazia p/ o ente da demo. `:created-by` fica ausente de proposito
+  (vira nil no `p` do Repo, coluna nullable — mesmo padrao ja usado neste ns p/ `updated-by nil` nos
+  pareceres; `vereador/listar` NAO devolve `identidade-id`, entao nao ha' ator real disponivel aqui).
+
+  Depois de protocolada, INSCREVE a materia no Livro do Protocolo Geral via `repo-leg/protocolar-geral!`
+  (Task C, #14) — `objeto-tipo` 'proposicao' (vocabulario do CHECK, migration 20260620000024:24-25),
+  `sentido` 'recebido' (a materia da' entrada institucional na Casa pelo protocolo, mesmo sendo de
+  autoria de vereador — nao e' 'interno' no sentido do CHECK, que a migration nao define pelo AUTOR e
+  sim pela DIRECAO do fluxo). Numero e' gapless por (ente,ano) via `kernel/sequencial`, escopo
+  'protocolo_geral:ano' — nunca escrito a mao. DECISAO DO CONTROLADOR (nao ampliar): so' as 24
+  proposicoes entram no Livro por esta fatia; oficios/documentos administrativos ficam fora de escopo.
+
   Devolve o `id` da proposicao. Falha alto se algum gatilho do caminho NAO transicionar (guard bloqueado
   ou rito mal-formado — bug deste ns, nao dado esperado)."
   [repo registro ente template-id vereadores idx
-   {:keys [tipo ementa caminho objeto-indicacao tipo-requerimento categoria-mocao]}]
+   {:keys [tipo ementa caminho objeto-indicacao tipo-requerimento categoria-mocao texto]}]
   (let [autor (nth vereadores (mod idx (count vereadores)))
         {pid :id} (repo-leg/protocolar! repo ente
                     {:id (random-uuid) :ente-id ente :tipo tipo :ano 2026 :uf "CE" :municipio-nome "Fortaleza"
                      :ementa ementa :autor-tipo "vereador" :autor-id (:id autor) :autor-texto (:nome-parlamentar autor)
                      :objeto-indicacao objeto-indicacao :tipo-requerimento tipo-requerimento
-                     :categoria-mocao categoria-mocao})]
+                     :categoria-mocao categoria-mocao :texto texto})]
     (doseq [gatilho caminho]
       (let [r (repo-leg/transicionar! repo ente registro
                 {:proposicao-id pid :template-id template-id :gatilho gatilho})]
         (when-not (:transicionou? r)
           (throw (ex-info "acervo/semear!: gatilho do caminho nao transicionou (guard bloqueado ou rito mal-formado)"
                           {:proposicao-id pid :gatilho gatilho :de (:de r)})))))
+    (repo-leg/protocolar-geral! repo ente
+      {:id (random-uuid) :ano 2026 :objeto-tipo "proposicao" :objeto-id pid :sentido "recebido"
+       :assunto ementa :interessado-texto (:nome-parlamentar autor)})
     pid))
 
 ;; ---------- o template de PARECER (sujeito 'parecer') + os 3 pareceres ----------
