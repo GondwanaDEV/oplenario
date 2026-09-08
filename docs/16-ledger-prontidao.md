@@ -330,3 +330,37 @@ Uma fatia **sem migration**, do tamanho da rota `composicao` (`22b8951`: 16 arqu
 
 Abrir o telão **antes** de qualquer fala começar e não recarregar. Serve à apresentação; o defeito
 segue vivo para o primeiro cliente.
+
+---
+
+# FASE 5 — as 7 jornadas restantes, caminhadas (07/09/2026, 22h)
+
+J9 · J2 · J3 · J5 · J6 · J7 · J8. Todas no navegador, contra a stack viva e a semente real. **Nenhum
+dos achados abaixo aparece na suíte** — backend 2028 e frontend 1116 estavam verdes no mesmo instante.
+
+## Placar novo: 3 `MATA` · 3 `CONSTRANGE`
+
+| # | Jornada | Tela | O que se vê | Causa (verificada) | Classe | Gravidade |
+|---|---|---|---|---|---|---|
+| **14** | J9 | `/expediente` | **"Nenhum registro no Protocolo Geral deste ano ainda."** no Livro do ano corrente | `legislativo.protocolo_geral` tem **102 linhas**, e **zero do ente da demo** — pertencem a **72 entes aleatórios**, resíduo de rodadas de teste. `GET /legislativo/protocolo-geral` devolve `{"itens":[]}`: a tela é honesta, o dado é que não existe. A semente nunca passa por `protocolar!` | **C — dado** | **MATA** |
+| **15** | J2 | `/ficha-materia/:id` | **"Nenhum texto vigente registrado ainda para esta matéria."** | `legislativo.proposicao_texto_versao` = **0 linhas** para o ente, nas **8 partições**. **Nenhuma das 24 matérias tem corpo** — vale para toda ficha, não para uma | **C — dado** | **MATA** |
+| **16** | J3 | `/vereador` | **"SEM SESSÃO AGORA · Nenhuma votação aberta"** e **"Nenhuma sessão agendada · Ainda não há próxima sessão publicada"** | **Falso nos dois.** No mesmo instante existe sessão **ABERTA** (`…0211`, com orador na tribuna há ~4h) e **agendada** para 14/09 — e `/paineis/mesa` mostra "Próxima sessão: agendada para 14/09/2026" corretamente. Duas telas do mesmo sistema se contradizendo | **A — defeito** | **MATA** |
+| **17** | J3 | `/vereador` | **"Estado: em comissoes"**, **"Estado: arquivada"** — enum cru, sem acento | A ficha da matéria rende **"Em comissões"** certo. Mesma família de #9/#10 (já mortos), ressurgida noutra tela | **A — defeito** | **CONSTRANGE** |
+| **18** | J3 | `/vereador` | **"Parecer em aguardando assinatura"** | Frase quebrada com o enum embutido cru no meio | **A — defeito** | **CONSTRANGE** |
+| **19** | J7 | `/paineis/mesa` | **"A Casa está em dia com o TCE-CE."** sobre **0 conformes · 0 pendentes · 0 vencidas** | Afirma conformidade a partir de **zero dado**. Mesma classe do juiz fail-open. É a tela do público decisor **jurídico/administrativo** | **A — defeito** | **CONSTRANGE** |
+
+## O que passou
+
+- **J5 (a lei nasce) — íntegra.** `/pos-aprovacao` mostra a cadeia inteira (autógrafo nº 006/2026 →
+  Executivo → sancionado), com rótulo **`GAP` honesto** sobre o prazo da LOM não informado. Sem defeito.
+- **J7 (a Mesa) — rica e correta**, ao contrário do que o plano previa ("beco"): prazos que vencem,
+  carga por estágio, 24 proposições nomeadas por estado, próxima sessão. O único senão é o #19.
+- **J9/J2/J6 — os placeholders são HONESTOS.** "EM BREVE" dizendo o que falta e por quê, em vez de
+  botão morto. `PASSA`.
+- **J2 — autoria resolve por NOME** ("Fernanda Pinto"), não UUID.
+
+## Não caminhado
+
+**J8 (entrar de verdade):** `/entrar/:ente` renderiza ("Entrar em CM Fortaleza" → redireciona ao login
+oficial). O fluxo completo **não foi percorrido** porque exige digitar credenciais — fora do que este
+agente faz. Fica como a única jornada com verificação parcial.
