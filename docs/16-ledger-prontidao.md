@@ -607,3 +607,54 @@ tenta `::1` primeiro. Com `127.0.0.1`, saudável em 20s.
   `public`. Fechar isso exige conceder leitura do ledger de migrations: decisão de segurança.
 - **`outbox/drenar!` continua sem escopo de `ente-id`.** Consertei a *asserção* que dependia disso; a
   função segue global. Para a suíte isso basta; para uma segunda réplica, não.
+
+## Armadilha #2 — investigação da causa raiz (08/09, sessão seguinte)
+
+**O mecanismo registrado acima ("`.next` é volume anônimo, o container morto no meio da escrita deixa
+estado parcial, e o container seguinte confia nele") NÃO se sustenta. Refutado por experimento.**
+
+### O que foi medido, e o que cada medição elimina
+
+| # | Experimento | Resultado | O que elimina |
+|---|---|---|---|
+| 1 | Requisitar rota **existente e fora do manifesto** (`/entrar/[ente]`) | **200 em 4s**, e a rota **entra** no `app-paths-manifest.json` | Elimina "compilação sob demanda devolve 404". Ela devolve 200 |
+| 2 | `up -d --build frontend` e comparar o volume de `/app/.next` | **Mesmo volume anônimo** (`843ecc…`) reatado | Confirma a premissa do volume — mas veja o #3 |
+| 3 | Ler o manifesto **logo após** recriar, antes de qualquer request | Manifesto **zerado**: só `{"/page": …}` (tinha 6 rotas antes) | **Elimina a hipótese do cache obsoleto.** O dev server **reescreve** o manifesto no start; ele não "confia" no anterior |
+| 4 | Bateria estratificada logo após recriar (raiz · estática · dinâmica · dinâmica **aninhada**) | **6/6 em 200**, ≤1s cada | A armadilha **não reproduz** por recriação de container com volume quente |
+| 5 | Varredura de 13 rotas internas sob carga, com corte automático a <400 MiB livres | **Zero 404, zero erro**; frontend 613→870 MiB; livre estável ~2 GiB | Não reproduz sob carga de compilação, **sem keycloak** |
+
+**Estado da árvore durante toda a investigação:** keycloak e mailpit **fora** — ou seja, ~478 MiB a
+menos do que na medição em que a armadilha apareceu.
+
+### A hipótese que sobrevive, e por que ela muda a decisão
+
+A #2 tem cara de **sintoma da pressão de memória da VM**, não de defeito independente:
+
+- A falha original ocorreu com **`--profile auth` de pé** (+478 MiB) **e a sonda rodando** (Chromium),
+  que é exatamente a condição que **crashou o Postgres duas vezes** por `VM_FAULT_OOM` da VM.
+- Explica o que o cache não explica: **por que limpar `.next` piorou.** Cache frio força recompilar
+  tudo — mais memória e mais CPU, exatamente na direção do teto.
+- Explica por que `docker restart oplenario-frontend-1` "conserta": devolve a memória acumulada do
+  processo `next dev` (613 MiB fresco × 1,2–1,4 GiB no pico).
+
+**Consequência prática:** se confirmada, a #2 deixa de ser um item aberto próprio e passa a depender
+da **decisão 1 do Daouda** (memória da VM / frontend em modo produção na verificação). Duas pendências
+viram uma.
+
+**Não confirmada porque a confirmação exige induzir o OOM** — subir keycloak + rodar a sonda, que é a
+condição que já derrubou o banco. É ação disruptiva e fica **pendente de autorização**, junto com o
+`down -v`.
+
+### O buraco de instrumentação que a investigação original deixou
+
+No momento do 404, ninguém capturou **o log do `next dev`**. É o artefato mais informativo e o mais
+barato: um `docker logs oplenario-frontend-1` na hora diria se houve falha de compilação (sustenta a
+hipótese de memória) ou um 404 limpo do roteador (derruba). **Na próxima reprodução, capturar o log do
+frontend ANTES de aplicar o `docker restart` que apaga a evidência.**
+
+### Nota de método
+
+A medição original errou ao concluir "não reproduz" a partir de 7 rotas **da mesma família** (todas de
+servidor). A bateria acima é **estratificada pelo mecanismo** — raiz, estática, dinâmica e dinâmica
+aninhada — porque é a distinção que o defeito faz. Amostra escolhida por conveniência mede a
+conveniência.
