@@ -93,6 +93,16 @@
     (is (true? (:forcar-acesso-restrito @cap))
         "sessao secreta -> servidor FORCA acesso-restrito=true no vinculo (sigilo)")))
 
+(deftest vincular-sessao-encerrada-409
+  ;; T2 grupo A achado #4 (ledger de prontidao Fase 8): mesmo gate `exigir-sessao-aberta!` — a rota
+  ;; #17 (gravacao/vincular) do grupo A.
+  (let [ente (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ id] (assoc (sessao-canonica ente id) :estado "encerrada")) (atom nil))
+        r (pt/response-for (service-fn* #{"secretario"} repo-s)
+                           :post (url (random-uuid) (random-uuid))
+                           :headers (com-json (token ente (random-uuid))) :body (corpo-lv 0))]
+    (is (= 409 (:status r)) "sessao ja encerrada -> 409")))
+
 (deftest vincular-sessao-inexistente-404
   (let [ente (random-uuid)
         repo-s (fake-repo-sessoes (fn [_ _] nil) (atom nil))

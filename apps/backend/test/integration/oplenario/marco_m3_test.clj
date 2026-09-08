@@ -27,6 +27,7 @@
             [oplenario.legislativo.controllers :as controllers]
             [oplenario.migracao :as migracao]
             [oplenario.sessoes.components.repositorio :as repo-sess]
+            [oplenario.sessoes.logic :as sessoes-logic]
             [oplenario.sistema :as sistema])
   (:import (java.time Instant LocalDate)))
 
@@ -80,6 +81,12 @@
 (defn- consultar-sessao-fn [repo-sessoes]
   (fn [ente-id sessao-id] (repo-sess/buscar-sessao repo-sessoes ente-id sessao-id)))
 
+;; T2 grupo A achado #4/#5 (ledger Fase 8): `sessao-autorizada` agora recebe `sessao-fechada?` (mesma inversao
+;; de dependencia de `oplenario.rotas` em producao — legislativo NAO importa `sessoes.logic`, §22.10). Todas
+;; as sessoes semeadas neste teste ficam 'aberta'; o gate dedicado desta fase vive no unitario irmao
+;; (meu_voto_controller_test).
+(defn- sessao-fechada?-fn [sessao] (contains? sessoes-logic/estados-sessao-fechada (:estado sessao)))
+
 (defn- resolver-vereador-fn [repo-cadastros]
   (fn [ente-id identidade-id] (:id (repo-cad/vereador-por-identidade repo-cadastros ente-id identidade-id))))
 
@@ -120,7 +127,7 @@
     (registrar-presenca! repo-sessoes ente sid vereador-id ANTES-DO-INSTANTE)
     (let [ator {:ente-id ente :identidade-id identidade}
           m {:id (random-uuid) :votacao-id vid :voto "sim" :created-by nil}
-          recibo (controllers/meu-voto repo-legislativo (consultar-sessao-fn repo-sessoes)
+          recibo (controllers/meu-voto repo-legislativo (consultar-sessao-fn repo-sessoes) sessao-fechada?-fn
                                         (resolver-vereador-fn repo-cadastros) registro-fatos
                                         ator sid vid HOJE INSTANTE m)]
       (is (= (:id m) (:id recibo)) "recibo carrega o id do voto")
@@ -145,7 +152,7 @@
         vid (abrir-votacao! repo-legislativo ente sid pid "nominal")]
     (registrar-presenca! repo-sessoes ente sid vereador-id ANTES-DO-INSTANTE)
     (let [ator {:ente-id ente :identidade-id identidade}
-          votar! (fn [] (controllers/meu-voto repo-legislativo (consultar-sessao-fn repo-sessoes)
+          votar! (fn [] (controllers/meu-voto repo-legislativo (consultar-sessao-fn repo-sessoes) sessao-fechada?-fn
                                               (resolver-vereador-fn repo-cadastros) registro-fatos
                                               ator sid vid HOJE INSTANTE
                                               {:id (random-uuid) :votacao-id vid :voto "sim" :created-by nil}))]
@@ -168,7 +175,7 @@
     ;; SEM registrar-presenca! — o vereador tem mandato vigente mas nunca "chegou" nesta sessao.
     (let [ator {:ente-id ente :identidade-id identidade}
           m {:id (random-uuid) :votacao-id vid :voto "sim" :created-by nil}]
-      (is (nega? #(controllers/meu-voto repo-legislativo (consultar-sessao-fn repo-sessoes)
+      (is (nega? #(controllers/meu-voto repo-legislativo (consultar-sessao-fn repo-sessoes) sessao-fechada?-fn
                                          (resolver-vereador-fn repo-cadastros) registro-fatos
                                          ator sid vid HOJE INSTANTE m))
           "sem presenca registrada nesta sessao -> esta_presente_em=false -> NEGA")
@@ -187,7 +194,7 @@
     (cassar-mandato! repo-cadastros ente identidade HOJE)
     (let [ator {:ente-id ente :identidade-id identidade}
           m {:id (random-uuid) :votacao-id vid :voto "sim" :created-by nil}]
-      (is (nega? #(controllers/meu-voto repo-legislativo (consultar-sessao-fn repo-sessoes)
+      (is (nega? #(controllers/meu-voto repo-legislativo (consultar-sessao-fn repo-sessoes) sessao-fechada?-fn
                                          (resolver-vereador-fn repo-cadastros) registro-fatos
                                          ator sid vid HOJE INSTANTE m))
           "mandato cassado (mesmo com presenca OK) -> tem_mandato_vigente=false -> NEGA")
@@ -205,7 +212,7 @@
     (registrar-presenca! repo-sessoes ente sid vereador-id ANTES-DO-INSTANTE)
     (let [ator {:ente-id ente :identidade-id identidade}
           m {:id (random-uuid) :votacao-id vid :voto "sim" :created-by nil}]
-      (is (invalido? #(controllers/meu-voto repo-legislativo (consultar-sessao-fn repo-sessoes)
+      (is (invalido? #(controllers/meu-voto repo-legislativo (consultar-sessao-fn repo-sessoes) sessao-fechada?-fn
                                              (resolver-vereador-fn repo-cadastros) registro-fatos
                                              ator sid vid HOJE INSTANTE m))
           "voto secreto pelo proprio celular -> :validacao/invalido (pre-check de borda)")
@@ -240,7 +247,7 @@
     (registrar-presenca! repo-sessoes ente sid vereador-id presenca-sanidade)
     (let [ator {:ente-id ente :identidade-id identidade}
           m {:id (random-uuid) :votacao-id vid :voto "sim" :created-by nil}
-          recibo (controllers/meu-voto repo-legislativo (consultar-sessao-fn repo-sessoes)
+          recibo (controllers/meu-voto repo-legislativo (consultar-sessao-fn repo-sessoes) sessao-fechada?-fn
                                         (resolver-vereador-fn repo-cadastros) registro-fatos
                                         ator sid vid hoje-sanidade instante-sanidade m)]
       (is (= (:id m) (:id recibo))

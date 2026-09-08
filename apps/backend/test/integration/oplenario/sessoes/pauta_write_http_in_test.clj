@@ -127,6 +127,19 @@
                            :body (corpo item-leitura))]
     (is (= 403 (:status r)) "sessao de ente alheio -> 403")))
 
+(deftest adicionar-sessao-encerrada-409
+  ;; T2 grupo A achado #4 (ledger de prontidao Fase 8): verificado AO VIVO pelo Daouda — adicionar item de
+  ;; pauta numa sessao ja ENCERRADA devolvia 201 (`{"id":"9f6278ce…","ordem":10}`). RED confirmado: antes de
+  ;; `exigir-sessao-aberta!` existir em `adicionar-item-pauta`, este teste falhava com
+  ;; `Expected: 409 Actual: 201`.
+  (let [ente (random-uuid)
+        repo-s (fake-repo-sessoes :sessao-fn (fn [e id] (assoc (sessao-canonica e id) :estado "encerrada")))
+        r (pt/response-for (service-fn* #{"secretario"} repo-s)
+                           :post (url-itens (random-uuid))
+                           :headers (com-json (token ente (random-uuid)))
+                           :body (corpo item-leitura))]
+    (is (= 409 (:status r)) "sessao ja encerrada -> 409 (ata fechada nao admite item novo)")))
+
 (deftest adicionar-sem-papel-403
   (let [ente (random-uuid)
         repo-s (fake-repo-sessoes)
@@ -238,6 +251,17 @@
     (is (= 3 (:nova-ordem @cap)) "Repo recebeu a nova-ordem")
     (is (= 0 (:lock-version @cap)) "Repo recebeu o lock-version")
     (is (= op (:updated-by @cap)) "updated-by INJETADO do ator")))
+
+(deftest reordenar-sessao-encerrada-409
+  ;; T2 grupo A achado #4 (ledger Fase 8) — mesma familia, mesmo gate `exigir-sessao-aberta!`.
+  (let [ente (random-uuid) pid (random-uuid) iid (random-uuid)
+        repo-s (fake-repo-sessoes :sessao-fn (fn [e id] (assoc (sessao-canonica e id) :estado "encerrada"))
+                                  :pauta {:id pid} :item {:pauta-sessao-id pid})
+        r (pt/response-for (service-fn* #{"secretario"} repo-s)
+                           :patch (url-item (random-uuid) iid)
+                           :headers (com-json (token ente (random-uuid)))
+                           :body (corpo reordenar-valido))]
+    (is (= 409 (:status r)) "sessao ja encerrada -> 409, antes de checar o item")))
 
 (deftest reordenar-item-de-outra-sessao-404
   (let [ente (random-uuid) pid (random-uuid)
@@ -363,6 +387,17 @@
     (is (= 0 (:lock-version @cap)) "Repo recebeu o lock-version")
     (is (= op (:updated-by @cap)) "updated-by INJETADO do ator")
     (is (nil? (:justificativa @cap)) "sem justificativa no corpo -> nil")))
+
+(deftest remover-sessao-encerrada-409
+  ;; T2 grupo A achado #4 (ledger Fase 8) — mesma familia, mesmo gate `exigir-sessao-aberta!`.
+  (let [ente (random-uuid) pid (random-uuid) iid (random-uuid)
+        repo-s (fake-repo-sessoes :sessao-fn (fn [e id] (assoc (sessao-canonica e id) :estado "encerrada"))
+                                  :pauta {:id pid} :item {:pauta-sessao-id pid})
+        r (pt/response-for (service-fn* #{"secretario"} repo-s)
+                           :delete (url-item (random-uuid) iid)
+                           :headers (com-json (token ente (random-uuid)))
+                           :body (corpo remover-valido))]
+    (is (= 409 (:status r)) "sessao ja encerrada -> 409, antes de checar o item")))
 
 (deftest remover-com-justificativa-200
   (let [ente (random-uuid) pid (random-uuid)

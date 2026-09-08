@@ -497,29 +497,41 @@
   ;; `votacoes.modalidade` — chamar registrar-voto! (nominal) sobre uma votacao SECRETA vazaria a identidade
   ;; no outbox. Busca a votacao ANTES de escrever, recusa fail-loud o cruzamento de modalidade (a tx rola
   ;; atras) e REUSA o `v` p/ o sessao-id do roteamento (uma unica leitura).
+  ;; T2 grupo A achado #1 (ledger de prontidao Fase 8): esta e' a rota da MESA registrando votos nominais em
+  ;; nome dos vereadores — o cenario mais comum de erro humano numa sessao ao vivo, sob pressao (duplo-clique
+  ;; digitando votos). O 2o voto do MESMO (ente_id,votacao_id,vereador_id) batia no UNIQUE
+  ;; `votos_ente_id_votacao_id_vereador_id_key` e a PSQLException subia CRUA ate' o interceptor global -> 500
+  ;; ('erro interno'). `registrar-meu-voto!` (self-service do vereador, abaixo) JA' tinha este catch — so' esta
+  ;; rota nao tinha. ESPELHA o irmao: mesmo 23505 -> `:conflito/voto-duplicado` (o diplomat mapeia 409).
   (registrar-voto! [this ente-id m]
-    (transacao this ente-id
-      (fn [tx]
-        (let [v (votacao/buscar tx ente-id (:votacao-id m))]
-          (when (not= "nominal" (:modalidade v))
-            (throw (ex-info "registrar-voto!: votacao nao e' nominal — use registrar-voto-secreto!"
-                            {:erro :modalidade-mismatch :votacao-id (:votacao-id m) :modalidade (:modalidade v)})))
-          (let [r (votacao/registrar-voto! tx (assoc m :ente-id ente-id))]
-            (when (:sessao-id v)
-              ;; :ocorrido-em (Onda E fatia 2 carry): RETURNING de votacao/registrar-voto! — mesma disciplina
-              ;; de tempo de dominio de proposicao.transicionou. some-> (revisao Task 2, achado I-1): (str nil)
-              ;; daria "" e o Malli `:string` cru ACEITARIA — fail-open latente que so' estoura la' na frente,
-              ;; no `Instant/parse` do consumer (mesmo envenenamento do C-1, agora por evento NOVO e valido pelo
-              ;; contrato). Com some->, nil aqui vira nil e `evento-validado` recusa a emissao — falha ALTO no
-              ;; producer, nao mascara. :proposicao-id (achado I-2): `v` ja' esta' em maos NESTA tx (mesma
-              ;; leitura usada no guard de modalidade acima) — custo zero; so' preenche quando o objeto votado
-              ;; E' uma proposicao (votacoes tambem admite emenda/parecer/requerimento/redacao_final).
-              (producers/emitir-voto-registrado! bus tx ente-id
-                {:votacao-id (:votacao-id m) :sessao-id (:sessao-id v) :modalidade "nominal"
-                 :vereador-id (:vereador-id m) :voto (:voto m)
-                 :proposicao-id (when (= "proposicao" (:objeto-tipo v)) (:objeto-id v))
-                 :ocorrido-em (some-> (:ocorrido-em r) str)}))
-            r)))))
+    (try
+      (transacao this ente-id
+        (fn [tx]
+          (let [v (votacao/buscar tx ente-id (:votacao-id m))]
+            (when (not= "nominal" (:modalidade v))
+              (throw (ex-info "registrar-voto!: votacao nao e' nominal — use registrar-voto-secreto!"
+                              {:erro :modalidade-mismatch :votacao-id (:votacao-id m) :modalidade (:modalidade v)})))
+            (let [r (votacao/registrar-voto! tx (assoc m :ente-id ente-id))]
+              (when (:sessao-id v)
+                ;; :ocorrido-em (Onda E fatia 2 carry): RETURNING de votacao/registrar-voto! — mesma disciplina
+                ;; de tempo de dominio de proposicao.transicionou. some-> (revisao Task 2, achado I-1): (str nil)
+                ;; daria "" e o Malli `:string` cru ACEITARIA — fail-open latente que so' estoura la' na frente,
+                ;; no `Instant/parse` do consumer (mesmo envenenamento do C-1, agora por evento NOVO e valido pelo
+                ;; contrato). Com some->, nil aqui vira nil e `evento-validado` recusa a emissao — falha ALTO no
+                ;; producer, nao mascara. :proposicao-id (achado I-2): `v` ja' esta' em maos NESTA tx (mesma
+                ;; leitura usada no guard de modalidade acima) — custo zero; so' preenche quando o objeto votado
+                ;; E' uma proposicao (votacoes tambem admite emenda/parecer/requerimento/redacao_final).
+                (producers/emitir-voto-registrado! bus tx ente-id
+                  {:votacao-id (:votacao-id m) :sessao-id (:sessao-id v) :modalidade "nominal"
+                   :vereador-id (:vereador-id m) :voto (:voto m)
+                   :proposicao-id (when (= "proposicao" (:objeto-tipo v)) (:objeto-id v))
+                   :ocorrido-em (some-> (:ocorrido-em r) str)}))
+              r))))
+      (catch PSQLException e
+        (if (= "23505" (.getSQLState e))
+          (throw (ex-info "voto ja registrado para este vereador nesta votacao"
+                          {:tipo :conflito/voto-duplicado :votacao-id (:votacao-id m)}))
+          (throw e)))))
   (registrar-voto-secreto! [this ente-id m]
     (transacao this ente-id
       (fn [tx]

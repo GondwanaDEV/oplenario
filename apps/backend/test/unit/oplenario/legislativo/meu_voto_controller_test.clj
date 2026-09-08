@@ -12,12 +12,19 @@
             [oplenario.kernel.autorizacao :as autz]
             [oplenario.legislativo.components.repositorio :as repo-leg]
             [oplenario.legislativo.controllers :as controllers]
-            [oplenario.motor.components.registro-fatos :as registro-fatos])
+            [oplenario.motor.components.registro-fatos :as registro-fatos]
+            [oplenario.sessoes.logic :as sessoes-logic])
   (:import (java.time Instant LocalDate)))
 
 ;; valores arbitrarios — as fns stub de fato ignoram os argumentos de dominio (ver docstring do ns).
 (def ^:private HOJE (LocalDate/of 2026 6 19))
 (def ^:private INSTANTE (Instant/parse "2026-06-19T10:00:00Z"))
+
+;; T2 grupo A achado #4/#5 (ledger Fase 8): `sessao-autorizada` agora recebe `sessao-fechada?` (injetada pelo
+;; host em producao, via `oplenario.rotas`). Aqui a REUSAMOS de verdade (`sessoes.logic/estados-sessao-
+;; fechada`, a MESMA particao que `sessoes.controllers/exigir-sessao-aberta!` usa) — nao um stub `(constantly
+;; false)`, para o teste dedicado abaixo poder EXERCITAR o gate contra a sessao "encerrada".
+(defn- sessao-fechada? [s] (contains? sessoes-logic/estados-sessao-fechada (:estado s)))
 
 (defn- nega?
   "Mesmo padrao de marco_m2_test/marco_m3_test: true se `f` lanca uma negacao de autorizacao."
@@ -79,7 +86,7 @@
         registro (registro-stub true true)
         repo (fake-repo-legislativo (fn [_] (votacao-canonica ente vid sid "nominal" "aberta")) chamadas)
         ator {:ente-id ente :identidade-id (random-uuid)}]
-    (is (nil? (controllers/meu-voto repo consultar-sessao resolver-vereador registro ator sid vid
+    (is (nil? (controllers/meu-voto repo consultar-sessao sessao-fechada? resolver-vereador registro ator sid vid
                                      HOJE INSTANTE (m-voto vid)))
         "ator sem cadastro de vereador (resolver-vereador nil) -> nil, mesmo contrato de meu-painel")
     (is (empty? @chamadas) "nunca chamou o Repo (nem chegou perto da sessao/votacao)")))
@@ -94,7 +101,7 @@
         registro (registro-stub true true)
         repo (fake-repo-legislativo (fn [_] (votacao-canonica ente vid sid "nominal" "aberta")) chamadas)
         ator {:ente-id ente :identidade-id (random-uuid)}]
-    (is (nega? #(controllers/meu-voto repo consultar-sessao resolver-vereador registro ator sid vid
+    (is (nega? #(controllers/meu-voto repo consultar-sessao sessao-fechada? resolver-vereador registro ator sid vid
                                        HOJE INSTANTE (m-voto vid)))
         "sessao de ente alheio -> pode-dirigir-votacao? nega -> 403 na borda")
     (is (empty? @chamadas))))
@@ -109,7 +116,7 @@
         registro (registro-stub true true)
         repo (fake-repo-legislativo (fn [_] (votacao-canonica ente vid outra-sid "nominal" "aberta")) chamadas)
         ator {:ente-id ente :identidade-id (random-uuid)}]
-    (is (nil? (controllers/meu-voto repo consultar-sessao resolver-vereador registro ator sid vid
+    (is (nil? (controllers/meu-voto repo consultar-sessao sessao-fechada? resolver-vereador registro ator sid vid
                                      HOJE INSTANTE (m-voto vid)))
         "votacao pertence a OUTRA sessao -> amarra barra -> nil (404 na borda)")
     (is (empty? @chamadas))))
@@ -125,7 +132,7 @@
         registro (registro-stub true true)
         repo (fake-repo-legislativo (fn [_] (votacao-canonica ente vid sid "secreta" "aberta")) chamadas)
         ator {:ente-id ente :identidade-id (random-uuid)}]
-    (is (invalido? #(controllers/meu-voto repo consultar-sessao resolver-vereador registro ator sid vid
+    (is (invalido? #(controllers/meu-voto repo consultar-sessao sessao-fechada? resolver-vereador registro ator sid vid
                                            HOJE INSTANTE (m-voto vid)))
         "voto secreto pelo proprio celular -> :validacao/invalido")
     (is (empty? @chamadas) "nunca abriu tx/chamou o Repo — a checagem de secreta e' de borda, antes da policy")))
@@ -140,7 +147,7 @@
         registro (registro-stub true true)  ; mandato+presenca OK, estado aberta -> a POLICY passaria
         repo (fake-repo-legislativo (fn [_] (votacao-canonica ente vid sid "simbolica" "aberta")) chamadas)
         ator {:ente-id ente :identidade-id (random-uuid)}]
-    (is (invalido? #(controllers/meu-voto repo consultar-sessao resolver-vereador registro ator sid vid
+    (is (invalido? #(controllers/meu-voto repo consultar-sessao sessao-fechada? resolver-vereador registro ator sid vid
                                            HOJE INSTANTE (m-voto vid)))
         "simbolica nao registra voto individual — o DISPATCH de modalidade (pos-policy) e' quem barra")
     (is (empty? @chamadas) "a policy passou (nao negou), mas o case fail-closed nunca chamou registrar-voto!")))
@@ -157,7 +164,7 @@
         repo (fake-repo-legislativo (fn [_] (votacao-canonica ente vid sid "nominal" "aberta")) chamadas)
         ator {:ente-id ente :identidade-id (random-uuid)}
         m (m-voto vid)  ; SEM :vereador-id — o wire/in de meu-voto nao carrega esse campo
-        recibo (controllers/meu-voto repo consultar-sessao resolver-vereador registro ator sid vid
+        recibo (controllers/meu-voto repo consultar-sessao sessao-fechada? resolver-vereador registro ator sid vid
                                       HOJE INSTANTE m)]
     (is (= {:id (:id m) :recibo :ok} recibo) "devolve o recibo ecoado pelo Repo")
     (is (= 1 (count @chamadas)) "registrar-voto! chamado exatamente uma vez")
@@ -174,7 +181,7 @@
         registro (registro-stub false true)  ; mandato NAO vigente, presenca OK
         repo (fake-repo-legislativo (fn [_] (votacao-canonica ente vid sid "nominal" "aberta")) chamadas)
         ator {:ente-id ente :identidade-id (random-uuid)}]
-    (is (nega? #(controllers/meu-voto repo consultar-sessao resolver-vereador registro ator sid vid
+    (is (nega? #(controllers/meu-voto repo consultar-sessao sessao-fechada? resolver-vereador registro ator sid vid
                                        HOJE INSTANTE (m-voto vid)))
         "sem mandato vigente -> NEGA, mesmo com presenca OK")
     (is (empty? @chamadas))))
@@ -187,7 +194,7 @@
         registro (registro-stub true false)  ; mandato OK, presenca NAO
         repo (fake-repo-legislativo (fn [_] (votacao-canonica ente vid sid "nominal" "aberta")) chamadas)
         ator {:ente-id ente :identidade-id (random-uuid)}]
-    (is (nega? #(controllers/meu-voto repo consultar-sessao resolver-vereador registro ator sid vid
+    (is (nega? #(controllers/meu-voto repo consultar-sessao sessao-fechada? resolver-vereador registro ator sid vid
                                        HOJE INSTANTE (m-voto vid)))
         "sem presenca registrada nesta sessao -> NEGA, mesmo com mandato OK")
     (is (empty? @chamadas))))
@@ -202,7 +209,29 @@
         registro (registro-stub true true)
         repo (fake-repo-legislativo (fn [_] (votacao-canonica ente vid sid "nominal" "encerrada")) chamadas)
         ator {:ente-id ente :identidade-id (random-uuid)}]
-    (is (nega? #(controllers/meu-voto repo consultar-sessao resolver-vereador registro ator sid vid
+    (is (nega? #(controllers/meu-voto repo consultar-sessao sessao-fechada? resolver-vereador registro ator sid vid
                                        HOJE INSTANTE (m-voto vid)))
         "votacao 'encerrada' -> NEGA (o check em Clojure puro de estado tambem mora na policy, `and`)")
     (is (empty? @chamadas))))
+
+;; ---------- 10: T2 grupo A achado #4/#5 (ledger Fase 8) — sessao ENCERRADA bloqueia meu-voto ----------
+;; A votacao em si continua 'aberta' (o achado ao vivo foi provado em abrir-votacao/pauta, nao aqui — mas
+;; `sessao-autorizada` e' o MESMO ponto de checagem para as 4 escritas da familia votacao, entao o proprio
+;; celular do vereador tem de recusar tambem: a Mesa ja fechou a sessao, o registro esta congelado).
+
+(defn- conflito-sessao-fechada? [f]
+  (try (f) false (catch clojure.lang.ExceptionInfo e (= :conflito/sessao-fechada (:tipo (ex-data e))))))
+
+(deftest meu-voto-nega-quando-sessao-esta-encerrada
+  (let [ente (random-uuid) sid (random-uuid) vid (random-uuid)
+        chamadas (atom [])
+        consultar-sessao (fn [_ id] (assoc (sessao-canonica ente id) :estado "encerrada"))
+        resolver-vereador (fn [_ _] (random-uuid))
+        registro (registro-stub true true)
+        repo (fake-repo-legislativo (fn [_] (votacao-canonica ente vid sid "nominal" "aberta")) chamadas)
+        ator {:ente-id ente :identidade-id (random-uuid)}]
+    (is (conflito-sessao-fechada?
+         #(controllers/meu-voto repo consultar-sessao sessao-fechada? resolver-vereador registro ator sid vid
+                                 HOJE INSTANTE (m-voto vid)))
+        "sessao 'encerrada' -> :conflito/sessao-fechada (o diplomat mapeia 409), MESMO com a votacao 'aberta'")
+    (is (empty? @chamadas) "nunca chegou perto do Repo — o gate roda em sessao-autorizada, antes da amarra")))

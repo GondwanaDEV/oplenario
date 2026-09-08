@@ -78,6 +78,26 @@
                        :sessao-id (:id sessao) :data-de-composicao data
                        :vereador-id vereador-id :indice indice})))))
 
+;; ---------- T2 grupo A achado #4/#5 (ledger Fase 8) — o gate de ESTADO da conducao ----------
+;; Achado ao vivo: sessao ENCERRADA continuava aceitando POST de item de pauta e abertura de votacao — nenhum
+;; controller de pauta/tribuna/incidente/decisao-mesa/gravacao checava `estado`, so' `pode-ver-sessao?` (mesma
+;; Casa). `logic/estados-sessao-fechada` (a MESMA particao que a folha/apuracao ja usam, disc. §22 motor
+;; declarativo compartilhado) e' o vocabulario certo — nao um segundo conjunto para a mesma ideia.
+
+(defn- exigir-sessao-aberta!
+  "Fail-closed nas ESCRITAS DE CONDUCAO (pauta/tribuna/decisao-mesa/incidente/vinculo-de-gravacao): recusa
+  quando a sessao ja fechou (`logic/estados-sessao-fechada` — encerrada/nao_realizada/arquivada). Uma sessao
+  fechada e' um capitulo congelado da ata; nenhuma dessas verticais tem escrita legitima nela. UMA fn so',
+  chamada apos `authz/check!` em cada controller de escrita das 5 familias — repetir o `if` em cada uma seria
+  reabrir o mesmo defeito por 11 portas em vez de uma (mesma disciplina de `exigir-assento-para-presenca!`
+  acima). NAO decide sobre 'agendada'/'suspensa' (fora do escopo provado; `[GAP]` de regimento p/ o Daouda) —
+  so' o conjunto que JA' e' lei em `estados-sessao-fechada`. Lanca `:conflito/sessao-fechada` (o diplomat mapeia
+  409, mesmo padrao de `:conflito/pauta|fala|inscricao|vinculo` neste modulo)."
+  [sessao]
+  (when (contains? logic/estados-sessao-fechada (:estado sessao))
+    (throw (ex-info "sessao ja fechada (encerrada/nao_realizada/arquivada); escrita bloqueada"
+                    {:tipo :conflito/sessao-fechada :sessao-id (:id sessao) :estado (:estado sessao)}))))
+
 (defn buscar-sessao
   "Le a sessao `id` (UUID) do tenant do `ator`. Camada FINA: carrega o recurso e roda policy.check
   (pode-ver-sessao?) ANTES de devolver — quem nao consegue decidir NEGA (check! mapeia -> 403). Devolve a sessao
@@ -227,6 +247,7 @@
   [repo-sessoes ator m]
   (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) (:sessao-id m))]
     (authz/check! ator :sessao/inscrever-orador sessao logic/pode-ver-sessao?)
+    (exigir-sessao-aberta! sessao)
     (repo/inscrever! repo-sessoes (:ente-id ator)
       (assoc m :id (random-uuid) :created-by (:identidade-id ator)))))
 
@@ -239,6 +260,7 @@
   [repo-sessoes ator {:keys [sessao-id inscricao-id lock-version]}]
   (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
     (authz/check! ator :sessao/desistir-inscricao sessao logic/pode-ver-sessao?)
+    (exigir-sessao-aberta! sessao)
     (assoc (repo/desistir! repo-sessoes (:ente-id ator)
              {:id inscricao-id :lock-version lock-version :updated-by (:identidade-id ator)})
            :inscricao-id inscricao-id)))
@@ -251,6 +273,7 @@
   [repo-sessoes ator m]
   (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) (:sessao-id m))]
     (authz/check! ator :sessao/iniciar-fala sessao logic/pode-ver-sessao?)
+    (exigir-sessao-aberta! sessao)
     (repo/iniciar-fala! repo-sessoes (:ente-id ator)
       (assoc m :id (random-uuid) :created-by (:identidade-id ator)))))
 
@@ -262,6 +285,7 @@
   [repo-sessoes ator {:keys [sessao-id fala-id tipo ocorrido-em segundos-adicionais]}]
   (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
     (authz/check! ator :sessao/registrar-evento-cronometro sessao logic/pode-ver-sessao?)
+    (exigir-sessao-aberta! sessao)
     ;; a authz roda no recurso SESSAO (path :id); a `fala-id` (outro path-param) tem de pertencer A ESTA sessao —
     ;; senao um secretario da Casa poderia cronometrar uma fala de OUTRA sessao da mesma Casa (confused-deputy,
     ;; review sec MAJOR). fala.sessao-id e' imutavel pos-criacao (nao ha TOCTOU). Mismatch/inexistente -> 404.
@@ -280,6 +304,7 @@
   [repo-sessoes ator {:keys [sessao-id fala-id encerrou-em lock-version]}]
   (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
     (authz/check! ator :sessao/encerrar-fala sessao logic/pode-ver-sessao?)
+    (exigir-sessao-aberta! sessao)
     ;; mesma guarda anti-confused-deputy do cronometro: a `fala-id` tem de pertencer A ESTA sessao (review sec
     ;; MAJOR). fala.sessao-id imutavel pos-criacao. Mismatch/inexistente -> nil de retorno -> 404 (nunca encerra
     ;; uma fala de outra sessao da mesma Casa).
@@ -300,6 +325,7 @@
   [repo-sessoes ator {:keys [sessao-id fala-id] :as m}]
   (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
     (authz/check! ator :sessao/registrar-decisao-mesa sessao logic/pode-ver-sessao?)
+    (exigir-sessao-aberta! sessao)
     ;; fala.sessao-id e' imutavel pos-criacao (nao ha TOCTOU entre o buscar-fala e o insert) — mesma guarda do
     ;; cronometro/encerrar. fala-id ausente = decisao sem fala associada (regimentalmente valido).
     (when (or (nil? fala-id)
@@ -319,6 +345,7 @@
   [repo-sessoes ator {:keys [sessao-id] :as m}]
   (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
     (authz/check! ator :sessao/registrar-incidente sessao logic/pode-ver-sessao?)
+    (exigir-sessao-aberta! sessao)
     (repo/registrar-incidente! repo-sessoes (:ente-id ator)
       (assoc m :id (random-uuid) :created-by (:identidade-id ator)))))
 
@@ -346,6 +373,7 @@
   [repo-sessoes ator m]
   (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) (:sessao-id m))]
     (authz/check! ator :sessao/editar-pauta sessao logic/pode-ver-sessao?)
+    (exigir-sessao-aberta! sessao)
     (repo/adicionar-item-na-sessao! repo-sessoes (:ente-id ator)
       (assoc m :id (random-uuid) :created-by (:identidade-id ator)))))
 
@@ -367,6 +395,7 @@
   [repo-sessoes ator {:keys [sessao-id item-id nova-ordem lock-version]}]
   (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
     (authz/check! ator :sessao/editar-pauta sessao logic/pode-ver-sessao?)
+    (exigir-sessao-aberta! sessao)
     (when (item-desta-sessao repo-sessoes (:ente-id ator) sessao-id item-id)
       (repo/reordenar-item! repo-sessoes (:ente-id ator)
         {:id item-id :nova-ordem nova-ordem :lock-version lock-version :updated-by (:identidade-id ator)}))))
@@ -380,6 +409,7 @@
   [repo-sessoes ator {:keys [sessao-id item-id tipo justificativa lock-version]}]
   (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
     (authz/check! ator :sessao/editar-pauta sessao logic/pode-ver-sessao?)
+    (exigir-sessao-aberta! sessao)
     (when (item-desta-sessao repo-sessoes (:ente-id ator) sessao-id item-id)
       (repo/remover-item! repo-sessoes (:ente-id ator)
         (cond-> {:id item-id :tipo tipo :lock-version lock-version :updated-by (:identidade-id ator)}
@@ -437,6 +467,7 @@
   [repo-sessoes ator {:keys [sessao-id segmento-id lock-version]}]
   (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
     (authz/check! ator :sessao/ver sessao logic/pode-ver-sessao?)
+    (exigir-sessao-aberta! sessao)
     (repo/vincular-segmento! repo-sessoes (:ente-id ator)
       {:id segmento-id :sessao-id sessao-id :lock-version lock-version
        :updated-by (:identidade-id ator)

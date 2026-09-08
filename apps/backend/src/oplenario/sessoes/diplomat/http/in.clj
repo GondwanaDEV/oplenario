@@ -114,6 +114,15 @@
                               (:vereador-id d) (assoc :vereador-id (str (:vereador-id d)))
                               (:indice d)      (assoc :indice (:indice d))))))
 
+(defn- resposta-conflito-sessao-fechada
+  "Traduz `controllers/exigir-sessao-aberta!` (`:conflito/sessao-fechada`) -> 409 com a mensagem DO DOMINIO
+  (T2 grupo A achado #4/#5, ledger de prontidao Fase 8: sessao ENCERRADA aceitava POST de item de pauta e
+  abertura de votacao — nenhum controller de conducao checava `estado`). UMA fn so', reusada pelas 11 rotas
+  de escrita de conducao (pauta/tribuna/decisao-mesa/incidente/vinculo-gravacao) — mesma disciplina de
+  `resposta-conflito-presenca`/`resposta-conflito-justificativa` acima."
+  [e]
+  (http/json-resposta 409 {:erro (ex-message e)}))
+
 (defn- registrar-presenca-handler
   "POST /sessoes/:id/presenca (§22.6 eixo C). adapters/in coage o :id + valida o corpo {vereador-id, tipo,
   modalidade, ocorrido-em}; o controller carrega+autoriza a sessao e grava o evento append-only (a fonte e'
@@ -288,14 +297,20 @@
 (defn- inscrever-handler
   "POST /sessoes/:id/inscricoes (§22.6 eixo F, tribuna). adapters/in coage o :id + valida o corpo {vereador-id,
   origem-inscricao, fase, proposicao-ref-id?}; o controller carrega+autoriza a sessao e inscreve (o Repo emite
-  inscricao.registrada na mesma tx); adapters/out projeta o recibo {:id :ordem}. nil -> 404; sucesso -> 201."
+  inscricao.registrada na mesma tx); adapters/out projeta o recibo {:id :ordem}. nil -> 404; sessao ja fechada
+  (`:conflito/sessao-fechada`) -> 409 (ledger Fase 8 achado #4/#5); sucesso -> 201."
   [repo-sessoes]
   (fn [req]
     (let [ator (:ator req)
           m    (adapters-in-tribuna/inscrever->dominio (get-in req [:path-params :id]) (:json-params req))]
-      (if-let [recibo (controllers/inscrever-orador repo-sessoes ator m)]
-        (http/json-resposta 201 (adapters-out-tribuna/recibo-inscricao->wire recibo))
-        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+      (try
+        (if-let [recibo (controllers/inscrever-orador repo-sessoes ator m)]
+          (http/json-resposta 201 (adapters-out-tribuna/recibo-inscricao->wire recibo))
+          (http/json-resposta 404 {:erro "sessao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/sessao-fechada (:tipo (ex-data e)))
+            (resposta-conflito-sessao-fechada e)
+            (throw e)))))))
 
 (defn- desistir-handler
   "POST /sessoes/:id/inscricoes/:insc-id/desistir (§22.6 eixo F, tribuna). adapters/in coage os path-params + o
@@ -313,37 +328,50 @@
           (http/json-resposta 200 (adapters-out-tribuna/recibo-desistencia->wire recibo))
           (http/json-resposta 404 {:erro "sessao nao encontrada"}))
         (catch clojure.lang.ExceptionInfo e
-          (if (= :conflito/inscricao (:tipo (ex-data e)))
+          (case (:tipo (ex-data e))
+            :conflito/inscricao
             (http/json-resposta 409 {:erro "inscricao ja desistida, inexistente ou lock-version desatualizado"})
+            :conflito/sessao-fechada (resposta-conflito-sessao-fechada e)
             (throw e)))))))
 
 (defn- iniciar-fala-handler
   "POST /sessoes/:id/falas (§22.6 eixo F, tribuna execucao). adapters/in coage o :id + valida o corpo {orador-id,
   tipo-fala, fase, iniciou-em, ...?}; o controller carrega+autoriza a sessao e inicia a fala (o Repo loga
-  'iniciada' + emite fala.iniciada na mesma tx); adapters/out projeta o recibo {:fala-id}. nil -> 404;
-  sucesso -> 201 (cria)."
+  'iniciada' + emite fala.iniciada na mesma tx); adapters/out projeta o recibo {:fala-id}. nil -> 404; sessao ja
+  fechada (`:conflito/sessao-fechada`) -> 409 (ledger Fase 8 achado #4/#5); sucesso -> 201 (cria)."
   [repo-sessoes]
   (fn [req]
     (let [ator (:ator req)
           m    (adapters-in-tribuna/iniciar-fala->dominio (get-in req [:path-params :id]) (:json-params req))]
-      (if-let [recibo (controllers/iniciar-fala repo-sessoes ator m)]
-        (http/json-resposta 201 (adapters-out-tribuna/recibo-fala-iniciada->wire recibo))
-        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+      (try
+        (if-let [recibo (controllers/iniciar-fala repo-sessoes ator m)]
+          (http/json-resposta 201 (adapters-out-tribuna/recibo-fala-iniciada->wire recibo))
+          (http/json-resposta 404 {:erro "sessao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/sessao-fechada (:tipo (ex-data e)))
+            (resposta-conflito-sessao-fechada e)
+            (throw e)))))))
 
 (defn- cronometro-handler
   "POST /sessoes/:id/falas/:fala-id/cronometro (§22.6 eixo F). adapters/in coage os path-params + valida o corpo
   {tipo, ocorrido-em, segundos-adicionais?} INCL. a coerencia tipo<->segundos (-> 400 na borda); o controller
   carrega+autoriza a sessao e registra o evento append-only (o Repo emite fala.cronometro na mesma tx);
-  adapters/out projeta o recibo {:id}. nil (sessao inexistente) -> 404; sucesso -> 201 (cria evento)."
+  adapters/out projeta o recibo {:id}. nil (sessao inexistente) -> 404; sessao ja fechada
+  (`:conflito/sessao-fechada`) -> 409 (ledger Fase 8 achado #4/#5); sucesso -> 201 (cria evento)."
   [repo-sessoes]
   (fn [req]
     (let [ator (:ator req)
           m    (adapters-in-tribuna/cronometro->dominio (get-in req [:path-params :id])
                                                         (get-in req [:path-params :fala-id])
                                                         (:json-params req))]
-      (if-let [recibo (controllers/registrar-evento-cronometro repo-sessoes ator m)]
-        (http/json-resposta 201 (adapters-out-tribuna/recibo-cronometro->wire recibo))
-        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+      (try
+        (if-let [recibo (controllers/registrar-evento-cronometro repo-sessoes ator m)]
+          (http/json-resposta 201 (adapters-out-tribuna/recibo-cronometro->wire recibo))
+          (http/json-resposta 404 {:erro "sessao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/sessao-fechada (:tipo (ex-data e)))
+            (resposta-conflito-sessao-fechada e)
+            (throw e)))))))
 
 (defn- encerrar-fala-handler
   "POST /sessoes/:id/falas/:fala-id/encerrar (§22.6 eixo F). adapters/in coage os path-params + valida o corpo
@@ -361,8 +389,10 @@
           (http/json-resposta 200 (adapters-out-tribuna/recibo-fala-encerrada->wire recibo))
           (http/json-resposta 404 {:erro "sessao nao encontrada"}))
         (catch clojure.lang.ExceptionInfo e
-          (if (= :conflito/fala (:tipo (ex-data e)))
+          (case (:tipo (ex-data e))
+            :conflito/fala
             (http/json-resposta 409 {:erro "fala ja encerrada, inexistente ou lock-version desatualizado"})
+            :conflito/sessao-fechada (resposta-conflito-sessao-fechada e)
             (throw e)))))))
 
 (defn- decisao-mesa-handler
@@ -370,41 +400,59 @@
   decisao, decidido-em, fundamentacao?, fala-id?} INCL. o nao-vazio de questao/decisao (-> 400 na borda); o
   controller carrega+autoriza a sessao, injeta presidente-id/created-by do ator e registra a decisao append-only
   (sem CAS, sem evento; se fala-id veio, tem de ser desta sessao -> senao 404); adapters/out projeta o recibo
-  {:id}. nil (sessao inexistente / fala alheia) -> 404; sucesso -> 201 (cria o ato — append-only, sem 409)."
+  {:id}. nil (sessao inexistente / fala alheia) -> 404; sessao ja fechada (`:conflito/sessao-fechada`) -> 409
+  (ledger Fase 8); sucesso -> 201 (cria o ato — append-only, sem outro 409)."
   [repo-sessoes]
   (fn [req]
     (let [ator (:ator req)
           m    (adapters-in-tribuna/decisao-mesa->dominio (get-in req [:path-params :id]) (:json-params req))]
-      (if-let [recibo (controllers/registrar-decisao-mesa repo-sessoes ator m)]
-        (http/json-resposta 201 (adapters-out-tribuna/recibo-decisao-mesa->wire recibo))
-        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+      (try
+        (if-let [recibo (controllers/registrar-decisao-mesa repo-sessoes ator m)]
+          (http/json-resposta 201 (adapters-out-tribuna/recibo-decisao-mesa->wire recibo))
+          (http/json-resposta 404 {:erro "sessao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/sessao-fechada (:tipo (ex-data e)))
+            (resposta-conflito-sessao-fechada e)
+            (throw e)))))))
 
 (defn- incidente-handler
   "POST /sessoes/:id/incidentes (§16.13). adapters/in coage o :id + valida o corpo {tipo, resultado, descricao,
   ocorrido-em, objeto-tipo?, objeto-id?, requerente-id?, deliberacao?} INCL. o enum/nao-vazio/coerencia (-> 400 na
   borda); o controller carrega+autoriza a sessao, injeta created-by do ator e registra o incidente append-only +
   emite incidente.registrado (SSE) na mesma tx; adapters/out projeta o recibo {:id}. nil (sessao inexistente) ->
-  404; sucesso -> 201 (cria o ato — append-only, sem 409)."
+  404; sessao ja fechada (`:conflito/sessao-fechada`) -> 409 (ledger Fase 8); sucesso -> 201 (cria o ato —
+  append-only, sem outro 409)."
   [repo-sessoes]
   (fn [req]
     (let [ator (:ator req)
           m    (adapters-in-incidente/registrar->dominio (get-in req [:path-params :id]) (:json-params req))]
-      (if-let [recibo (controllers/registrar-incidente repo-sessoes ator m)]
-        (http/json-resposta 201 (adapters-out-incidente/recibo-incidente->wire recibo))
-        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+      (try
+        (if-let [recibo (controllers/registrar-incidente repo-sessoes ator m)]
+          (http/json-resposta 201 (adapters-out-incidente/recibo-incidente->wire recibo))
+          (http/json-resposta 404 {:erro "sessao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/sessao-fechada (:tipo (ex-data e)))
+            (resposta-conflito-sessao-fechada e)
+            (throw e)))))))
 
 (defn- adicionar-item-handler
   "POST /sessoes/:id/pauta/itens (§22.6 eixo B). adapters/in coage o :id + valida o corpo {fase, tipo-item,
   proposicao-id? | texto-descricao?} INCL. a FK-por-tipo (-> 400 na borda); o controller carrega+autoriza a
   sessao e adiciona o item (get-or-create do container 1:1 + insere, atomico); adapters/out projeta o recibo
-  {:id :ordem}. nil (sessao inexistente) -> 404; sucesso -> 201 (cria)."
+  {:id :ordem}. nil (sessao inexistente) -> 404; sessao ja fechada (`:conflito/sessao-fechada`) -> 409 (ledger
+  Fase 8 achado #4: sessao ENCERRADA aceitava item de pauta novo); sucesso -> 201 (cria)."
   [repo-sessoes]
   (fn [req]
     (let [ator (:ator req)
           m    (adapters-in-pauta/adicionar-item->dominio (get-in req [:path-params :id]) (:json-params req))]
-      (if-let [recibo (controllers/adicionar-item-pauta repo-sessoes ator m)]
-        (http/json-resposta 201 (adapters-out-pauta/recibo-item-adicionado->wire recibo))
-        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+      (try
+        (if-let [recibo (controllers/adicionar-item-pauta repo-sessoes ator m)]
+          (http/json-resposta 201 (adapters-out-pauta/recibo-item-adicionado->wire recibo))
+          (http/json-resposta 404 {:erro "sessao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/sessao-fechada (:tipo (ex-data e)))
+            (resposta-conflito-sessao-fechada e)
+            (throw e)))))))
 
 (defn- reordenar-item-handler
   "PATCH /sessoes/:id/pauta/itens/:item-id (§22.6 eixo B). adapters/in coage os path-params + valida o corpo
@@ -422,8 +470,10 @@
           (http/json-resposta 200 (adapters-out-pauta/recibo-reordenacao->wire recibo))
           (http/json-resposta 404 {:erro "sessao ou item de pauta nao encontrado"}))
         (catch clojure.lang.ExceptionInfo e
-          (if (= :conflito/pauta (:tipo (ex-data e)))
+          (case (:tipo (ex-data e))
+            :conflito/pauta
             (http/json-resposta 409 {:erro "item removido ou lock-version desatualizado"})
+            :conflito/sessao-fechada (resposta-conflito-sessao-fechada e)
             (throw e)))))))
 
 (defn- remover-item-handler
@@ -443,8 +493,10 @@
           (http/json-resposta 200 (adapters-out-pauta/recibo-remocao->wire recibo))
           (http/json-resposta 404 {:erro "sessao ou item de pauta nao encontrado"}))
         (catch clojure.lang.ExceptionInfo e
-          (if (= :conflito/pauta (:tipo (ex-data e)))
+          (case (:tipo (ex-data e))
+            :conflito/pauta
             (http/json-resposta 409 {:erro "item ja removido ou lock-version desatualizado"})
+            :conflito/sessao-fechada (resposta-conflito-sessao-fechada e)
             (throw e)))))))
 
 (defn- pauta-handler
@@ -510,8 +562,10 @@
           (http/json-resposta 200 (adapters-out-grav/recibo-vinculo->wire recibo))
           (http/json-resposta 404 {:erro "sessao nao encontrada"}))
         (catch clojure.lang.ExceptionInfo e
-          (if (= :conflito/vinculo (:tipo (ex-data e)))
+          (case (:tipo (ex-data e))
+            :conflito/vinculo
             (http/json-resposta 409 {:erro "segmento ja vinculado ou lock-version desatualizado"})
+            :conflito/sessao-fechada (resposta-conflito-sessao-fechada e)
             (throw e)))))))
 
 (defn- chamada-handler
