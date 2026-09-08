@@ -20,6 +20,8 @@ import { useSessoes, type EstadoSessoes } from "@/lib/use-sessoes";
 import { useAcusarCiencia } from "@/lib/use-acusar-ciencia";
 import { derivarHome, type HomeVereadorVista } from "@/lib/meu-painel-vista";
 import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
+import { formatarTipoSessao } from "@/lib/pauta-convocacao-vista";
+import { derivarTramitacao } from "@/lib/tramitacao-vista";
 import { comToken } from "@/lib/nav";
 import type {
   CienciaPendenteOut,
@@ -275,7 +277,11 @@ function ProximaSessaoResumo({
         <span>{data ? data.toLocaleDateString("pt-BR", { month: "short" }) : "—"}</span>
       </div>
       <div className="info">
-        <b>{sessao.tipoSessao ?? "Próxima sessão"}</b>
+        {/* defeito F2/regressao (caminhada pos-fatia): o card mostrava a chave crua do enum ("ordinaria").
+            `formatarTipoSessao` (pauta-convocacao-vista.ts) e' o mapa ja existente pra esse vocabulario —
+            mesmo usado no titulo da convocacao ("16ª Sessão Ordinária"); reaproveitado aqui, sem 2º
+            vocabulario pro mesmo enum. */}
+        <b>{sessao.tipoSessao ? formatarTipoSessao(sessao.tipoSessao) : "Próxima sessão"}</b>
         <span>{data ? data.toLocaleDateString("pt-BR", { weekday: "long", hour: "2-digit", minute: "2-digit" }) : ""}</span>
       </div>
     </>
@@ -334,7 +340,11 @@ function CartaoProposicao({ proposicao }: { proposicao: ProposicaoResumoMeuPaine
         <span className="num">{formatarNumeroProposicao(proposicao.tipo, proposicao.sequencial, proposicao.ano)}</span>
       </div>
       <h3>{proposicao.ementa}</h3>
-      <p className="meta">Estado: {proposicao.estado.replaceAll("_", " ")}</p>
+      {/* #17 do ledger (CONSTRANGE), pego junto por reusar o mesmo mapa: `derivarTramitacao` (o
+          view-model que /ficha-materia ja usa) rotula "em_comissoes" -> "Em comissões", "arquivada" ->
+          "Arquivada" etc., com fallback humanizado fail-closed pra estado fora do vocabulario — nunca a
+          chave crua com underscore. */}
+      <p className="meta">Estado: {derivarTramitacao(proposicao.estado).rotuloSituacao}</p>
     </article>
   );
 }

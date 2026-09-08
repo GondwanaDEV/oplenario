@@ -84,6 +84,10 @@ describe("PaginaHomeVereador", () => {
     // "PL 42/2026" aparece 2x (o num-inline do card de ciência + o num do card de proposição) — a mesma
     // matéria referenciada nos dois lugares, não duplicação de bug.
     expect(screen.getAllByText("PL 42/2026")).toHaveLength(2);
+    // #17 do ledger (CONSTRANGE), pego junto: o card de proposição rotulava "em_comissoes" cru (com
+    // underscore) em vez de "Em comissões" — `painelFake` já traz `estado: "em_comissoes"` (linha 21).
+    expect(screen.getByText("Estado: Em comissões")).toBeTruthy();
+    expect(screen.queryByText(/em_comissoes/)).toBeNull();
   });
 
   // A REPROVA do defeito #16: uma implementação que decida o texto só por `sessao === null` (ignorando
@@ -146,7 +150,12 @@ describe("PaginaHomeVereador", () => {
       "/votar?token=tok-de-teste"
     );
     // a próxima sessão agendada continua visível no card — as duas afirmações coexistem.
-    expect(screen.getByText("ordinaria")).toBeTruthy();
+    // REPROVA do defeito F2 (regressão desta frente, ledger #9/#10 revividos por porta nova): o card
+    // chegou a renderizar a chave crua do enum ("ordinaria", sem acento) porque nada rotulava
+    // `sessao.tipoSessao` antes de cair no `<b>`. Só "Ordinária" (rotulada) pode aparecer; a chave crua
+    // nunca.
+    expect(screen.getByText("Ordinária")).toBeTruthy();
+    expect(screen.queryByText("ordinaria")).toBeNull();
   });
 
   it("'Dar ciência' POSTa e revalida o painel (a ciência some da lista)", async () => {
