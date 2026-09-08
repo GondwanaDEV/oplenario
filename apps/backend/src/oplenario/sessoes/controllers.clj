@@ -87,6 +87,42 @@
     (authz/check! ator :sessao/ver s logic/pode-ver-sessao?)
     s))
 
+(defn listar-sessoes
+  "GET /sessoes — a LISTAGEM GERAL das sessoes do ente (ledger de prontidao #16, MATA): a home do
+  vereador so' tinha POST /sessoes (agendar) e GET /sessoes/:id (uma so'), e por isso mostrava 'SEM
+  SESSAO AGORA' / 'nenhuma sessao agendada' mesmo com uma sessao ABERTA (orador na tribuna) e uma
+  AGENDADA existindo ao MESMO tempo — `/paineis/mesa` mostrava a agendada corretamente; a mesma verdade,
+  duas telas discordando.
+
+  UMA LISTAGEM AUTORIZA POR LINHA, NUNCA POR REQUISICAO. Um `check!` unico na entrada barraria a
+  requisicao INTEIRA quando a Casa tivesse QUALQUER sessao secreta no meio — o efeito oposto do
+  desejado (o vereador comum ficaria sem ver ATE as PUBLICAS, so' porque uma secreta coexiste no
+  resultado). O correto — e o que esta funcao faz — e' FILTRAR: `logic/pode-ver-quorum-da-sessao?` roda
+  sobre CADA sessao do resultado (a MESMA politica de `/quorum`/`/composicao`/`/tribuna` — mesma Casa E
+  (transmissao publica OU papel 'secretario')), e a sessao que reprova simplesmente NAO aparece na
+  resposta. Para um vereador SEM o papel 'secretario', uma sessao secreta e' TOTALMENTE invisivel aqui:
+  nenhum id, nenhuma data, nenhum tipo, nenhum estado — nada que revele que ela existe.
+
+  Deliberadamente NAO `pode-ver-sessao?` cru: essa e' a MESMA porta dos fundos da sessao secreta que a
+  Etapa 4a fechou para `/quorum` (ver a docstring de `pode-ver-quorum-da-sessao?` em `logic.clj`). NUMA
+  LISTAGEM O RISCO E' MAIOR que numa rota de item: o vazamento e' SILENCIOSO e EM LOTE — uma sessao
+  secreta a mais dentro de um array json e' um vazamento que ninguem nota olhando UMA resposta, ao
+  contrario de um 403 isolado numa rota de item.
+
+  A ORDEM (aberta/suspensa primeiro, agendadas por data crescente, fechadas por data decrescente) roda
+  AQUI, DEPOIS do filtro — `logic/chave-ordenacao-listagem-geral` (pura). Filtrar antes de ordenar e' so'
+  a ordem mais barata (ordena so' o que sobrevive ao filtro); o RESULTADO seria o mesmo na ordem inversa,
+  ja' que a chave de ordenacao nao depende de NENHUMA sessao removida.
+
+  Devolve a sequencia de sessoes de dominio (models) que o `ator` PODE ver, ja' na ordem final — o
+  diplomat projeta cada uma com o MESMO `adapters.out.sessao/sessao->wire` de `GET /sessoes/:id`
+  (vocabulario unico, nunca dois formatos para a mesma sessao)."
+  [repo-sessoes ator]
+  (->> (repo/listar-sessoes repo-sessoes (:ente-id ator))
+       (filter #(logic/pode-ver-quorum-da-sessao? ator %))
+       (sort-by logic/chave-ordenacao-listagem-geral)
+       vec))
+
 (defn transicionar-sessao
   "Mesa de conducao (§22.6 eixo A/G): move o estado da sessao `sessao-id` pela maquina. Carrega a sessao do
   tenant do `ator` (nil -> 404 via nil de retorno), roda pode-ver-sessao? (mesma Casa -> 403 fail-closed), e

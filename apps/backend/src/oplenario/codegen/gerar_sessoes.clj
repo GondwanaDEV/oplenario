@@ -22,6 +22,9 @@
 
 (def manifesto
   [["SessaoOut" out/SessaoOut]
+   ;; GET /sessoes (ledger de prontidao #16) — SessoesOut DEPOIS de SessaoOut (campo :sessoes aninhado),
+   ;; mesmo racional de PautaItemOut/PautaOut.
+   ["SessoesOut" out/SessoesOut]
    ["TransicaoSessaoOut" out/TransicaoSessaoOut]
    ;; PresencaReciboOut ANTES de PresencaLoteReciboOut (campo :recibos aninhado).
    ["PresencaReciboOut" out/PresencaReciboOut]

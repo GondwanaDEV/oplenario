@@ -610,6 +610,67 @@
   carimbo de encerramento, e a derivacao abaixo e' o cinto de seguranca que sobrou dela."
   #{"encerrada" "nao_realizada" "arquivada"})
 
+;; ---------- GET /sessoes — a LISTAGEM GERAL (ledger de prontidao #16, MATA) ----------
+;; A home do vereador so tinha POST /sessoes (agendar) e GET /sessoes/:id (uma so') — sem listagem, o
+;; frontend chamava sempre com `sessoes=[]` e "nao sei" virava "nao ha": a mesma sessao ABERTA (orador na
+;; tribuna) e AGENDADA que `/paineis/mesa` mostrava corretamente sumia na home. Esta secao e' a ORDENACAO
+;; PURA que a leitura em lote usa — ao contrario da assiduidade, aqui NAO ha' `WHERE` de periodo (a
+;; listagem e' "todas as sessoes do ente", nao um recorte), entao o teto de linhas e' o UNICO guard-rail.
+
+(def teto-de-sessoes-da-listagem-geral
+  "Teto de linhas de GET /sessoes — SEM filtro de periodo (a listagem geral, ao contrario da apuracao de
+  assiduidade, nao recebe `de`/`ate`), entao o crescimento e' o de TODA a vida da Casa, nao de um recorte.
+  500 cobre com folga o pior caso realista de MUITAS legislaturas (a Casa da demo tem 3; uma Casa real
+  ativa por decadas fica na casa das centenas — ver o brief da fatia). Fail-closed (lanca, nunca pagina
+  truncada em silencio — mesma disciplina de `teto-de-sessoes-do-periodo-de-assiduidade`): silenciar aqui
+  reabriria, por outro mecanismo, o MESMO defeito que esta rota existe para fechar — a sessao aberta
+  'desaparecendo' de uma pagina cortada sem aviso nenhum."
+  500)
+
+(def ^:private grupo-listagem-por-estado
+  "O GRUPO de prioridade de cada estado na listagem — 0 = a Casa esta reunida AGORA ('aberta' e
+  'suspensa': um recesso de plenario NAO fecha a sessao, entao quem abre a home durante um recesso ainda
+  tem 'uma sessao agora'), 1 = agendada (o futuro), 2 = os tres estados de `estados-sessao-fechada` (o
+  passado). Reusa a particao ja fechada de `estados-sessao-fechada` em vez de inventar uma nova — so'
+  'aberta'/'suspensa' precisavam de um grupo proprio, que nenhuma constante existente ja nomeava."
+  (merge {"aberta" 0 "suspensa" 0 "agendada" 1} (zipmap estados-sessao-fechada (repeat 2))))
+
+(defn- epoch-ms-ou-fim [instante]
+  "PURO. `Instant` -> epoch-millis (long); nil -> `Long/MAX_VALUE` (sentinela 'fim do grupo' — nao ha' como
+  saber se um marco ausente e' 'recente' ou 'antigo', entao ele sempre perde para qualquer data real)."
+  (if instante (.toEpochMilli ^Instant instante) Long/MAX_VALUE))
+
+(defn chave-ordenacao-listagem-geral
+  "PURA, FAIL-SAFE (nunca lanca — quem barra estado invalido e' a ESCRITA, nao esta leitura). A chave de
+  ordenacao de GET /sessoes: `[grupo valor-no-grupo id]` — `sort-by` com esta chave (via `compare`, que
+  compara vetores Clojure elemento a elemento) da' a ordem certa numa PASSADA so, sem comparator
+  customizado.
+
+  - Grupo 0 (aberta/suspensa, 'agora'): `aberta-em` CRESCENTE (a mais antiga ainda aberta primeiro —
+    normalmente ha' so' uma sessao viva por vez).
+  - Grupo 1 (agendada, 'futuro'): `agendada-para` CRESCENTE (a mais proxima primeiro).
+  - Grupo 2 (fechada, 'passado'): `COALESCE(encerrada-em, agendada-para, aberta-em)` DECRESCENTE — a mais
+    recente primeiro. Decrescente dentro de uma chave que so' sabe crescer vira o valor NEGADO (ASC de -x
+    == DESC de x); a mesma ordem de fallback de `marcos-de-data-de-referencia`, com `encerrada-em` na
+    FRENTE (o marco mais especifico do estado fechado, que aquela constante deliberadamente evita para nao
+    criar uma quarta variante da regra — aqui nao ha' esse risco: esta ordenacao nao alimenta apuracao
+    nenhuma, so' a exibicao).
+  - Marco ausente (agendada sem data, fechada sem NENHUM marco — ambos [GAP] conhecidos, nao dado
+    corrompido): vai para o FIM do proprio grupo via `epoch-ms-ou-fim`, nunca lanca.
+  - Estado fora do vocabulario (defensivo — `estados-sessao` e' fechado por CHECK, isto nunca deveria ser
+    alcancavel pela API real): grupo 3, sempre por ultimo.
+
+  `id` (string, ordem lexica de UUID) e' o ULTIMO desempate — sem ele, duas sessoes com o MESMO carimbo no
+  mesmo grupo dancariam de posicao a cada request."
+  [{:keys [estado aberta-em agendada-para encerrada-em id]}]
+  (let [grupo (get grupo-listagem-por-estado estado 3)]
+    (case (int grupo)
+      0 [0 (epoch-ms-ou-fim aberta-em) (str id)]
+      1 [1 (epoch-ms-ou-fim agendada-para) (str id)]
+      2 (let [marco (or encerrada-em agendada-para aberta-em)]
+          [2 (if marco (- (.toEpochMilli ^Instant marco)) Long/MAX_VALUE) (str id)])
+      [3 0 (str id)])))
+
 (defn instante-de-avaliacao
   "PURO. O INSTANTE em que a presenca corrente e' avaliada: `agora` (o relogio ja lido, injetado) enquanto a
   sessao esta viva (agendada/aberta/suspensa — a chamada de uma sessao ao vivo e' sempre 'agora');

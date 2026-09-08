@@ -25,6 +25,16 @@
    [:encerrada-em {:optional true} [:maybe :string]]
    [:motivo-nao-realizada {:optional true} [:maybe :string]]])
 
+(def SessoesOut
+  "Resposta de `GET /sessoes` (listagem geral, ledger de prontidao #16) — as sessoes do ente ja' FILTRADAS
+  linha a linha por `logic/pode-ver-quorum-da-sessao?` (nunca `authz/check!` unico na entrada: uma sessao
+  secreta que reprova simplesmente NAO entra em `:sessoes`, invisivel por omissao) e ORDENADAS para a home
+  (aberta/suspensa primeiro; agendadas por data-agendada crescente; fechadas por data-de-referencia
+  decrescente — `logic/chave-ordenacao-listagem-geral`). Cada item e' o MESMO `SessaoOut` de
+  `GET /sessoes/:id` — vocabulario unico, nunca dois formatos para a mesma sessao."
+  [:map {:closed true}
+   [:sessoes [:sequential SessaoOut]]])
+
 (def TransicaoSessaoOut
   "Recibo da transicao de estado da sessao (resposta 200 de POST /sessoes/:id/transicao, Mesa de conducao).
   Carrega a `sessao-id` + o par `de`/`para` (espelha o payload do evento sessao.transicionou). NAO expoe o

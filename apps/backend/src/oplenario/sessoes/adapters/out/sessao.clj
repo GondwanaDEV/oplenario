@@ -39,6 +39,16 @@
                         {:campos (keys (me/humanize (m/explain wire/SessaoOut out)))})))
       out)))
 
+(defn sessoes->wire
+  "Sequencia de sessoes de dominio (JA filtrada por authz no controller) -> SessoesOut (validada). Cada
+  item reusa `sessao->wire` — a listagem NUNCA inventa um segundo vocabulario para a mesma sessao."
+  [sessoes]
+  (let [out {:sessoes (mapv sessao->wire sessoes)}]
+    (when-not (m/validate wire/SessoesOut out)
+      (throw (ex-info "listagem de sessoes viola o contrato SessoesOut (bug de servidor)"
+                      {:campos (keys (me/humanize (m/explain wire/SessoesOut out)))})))
+    out))
+
 (defn recibo-agendamento->wire
   "Recibo de dominio {:id uuid :numero int} -> {:id string :numero-sequencial int} (resposta 201 do POST)."
   [{:keys [id numero]}]

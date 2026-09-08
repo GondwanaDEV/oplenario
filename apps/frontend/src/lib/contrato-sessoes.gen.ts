@@ -18,6 +18,10 @@ export interface SessaoOut {
   motivoNaoRealizada?: string | null;
 }
 
+export interface SessoesOut {
+  sessoes: SessaoOut[];
+}
+
 export interface TransicaoSessaoOut {
   sessaoId: string;
   de: "aberta" | "agendada" | "arquivada" | "encerrada" | "nao_realizada" | "suspensa";

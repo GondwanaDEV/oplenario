@@ -25,6 +25,13 @@
   (transicionar-sessao! [this ente-id m] "Move o estado pela maquina (fail-closed) com CAS.")
   (buscar-sessao [this ente-id id])
   (sessoes-da-legislativa [this ente-id sessao-legislativa-id])
+  ;; GET /sessoes — a LISTAGEM GERAL (ledger de prontidao #16, MATA)
+  (listar-sessoes [this ente-id]
+    "Todas as sessoes do ente, SEM ordenacao nem filtro de visibilidade — as duas coisas sao do
+     CONTROLLER (`controllers/listar-sessoes`: ORDENA via `logic/chave-ordenacao-listagem-geral` e
+     FILTRA por linha via `logic/pode-ver-quorum-da-sessao?`). Teto de guard-rail
+     (`logic/teto-de-sessoes-da-listagem-geral`); lanca `:limite/sessoes-excedido` se estourar (o
+     interceptor global `erro` mapeia -> 422).")
   ;; §22.6 eixo B — pauta (camada viva)
   (criar-pauta! [this ente-id m] "Cria a pauta 1:1 da sessao.")
   (buscar-pauta-por-sessao [this ente-id sessao-id])
@@ -210,6 +217,7 @@
           r))))
   (buscar-sessao [this ente-id id] (transacao this ente-id #(sessao/buscar % ente-id id)))
   (sessoes-da-legislativa [this ente-id slid] (transacao this ente-id #(sessao/listar-por-sessao-legislativa % ente-id slid)))
+  (listar-sessoes [this ente-id] (transacao this ente-id #(sessao/listar-todas % ente-id)))
   (criar-pauta! [this ente-id m] (transacao this ente-id #(pauta/criar-pauta! % (assoc m :ente-id ente-id))))
   (buscar-pauta-por-sessao [this ente-id sessao-id] (transacao this ente-id #(pauta/buscar-pauta-por-sessao % ente-id sessao-id)))
   ;; get-or-create do container 1:1 + insere o item na MESMA tx (a pauta e' transparente: a borda adiciona item

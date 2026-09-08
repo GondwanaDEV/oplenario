@@ -50,6 +50,28 @@
       (available [] (.available in))
       (close [] (.close in)))))
 
+(defn- listar-handler
+  "GET /sessoes — a LISTAGEM GERAL das sessoes do ente (ledger de prontidao #16, MATA): a home do vereador
+  so' tinha POST /sessoes (agendar) e GET /sessoes/:id (uma so'), entao o frontend sempre recebia
+  `sessoes=[]` e tratava 'nao sei' como 'nao ha' (carry documentado em
+  `apps/frontend/src/lib/meu-painel-vista.ts:34-35` e no comentario de topo de
+  `apps/frontend/src/app/(vereador)/vereador/page.tsx`) — mesmo com uma sessao ABERTA e uma AGENDADA
+  existindo ao MESMO tempo, que `/paineis/mesa` mostrava corretamente.
+
+  SEM papel exigido na borda — MESMO nivel de authz de `/quorum`/`/composicao`/`/tribuna`: a authz FINA
+  (`logic/pode-ver-quorum-da-sessao?`) roda no controller, POR LINHA (nunca um `check!` unico na entrada —
+  ver a docstring de `controllers/listar-sessoes`: uma listagem que barrasse a requisicao inteira por
+  causa de UMA sessao secreta erraria na direcao oposta, escondendo as PUBLICAS de quem so' nao pode ver
+  a secreta).
+
+  SEM 404/409: a listagem geral nunca falha por 'sessao nao encontrada' (nao ha' `:id` no path) nem por
+  'sessao sem data' (isso e' invariante de UMA sessao — `/quorum`/`/composicao` — nao da listagem). O
+  UNICO jeito de esta rota falhar e' o teto de linhas (`logic/teto-de-sessoes-da-listagem-geral`), mapeado
+  a 422 pelo interceptor global `erro` — SEM try/catch aqui, mesmo racional simples do `assiduidade-handler`."
+  [repo-sessoes]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out/sessoes->wire (controllers/listar-sessoes repo-sessoes (:ator req))))))
+
 (defn- buscar-handler
   "GET /sessoes/:id. adapters/in coage o :id; controller carrega+autoriza; adapters/out projeta. nil -> 404."
   [repo-sessoes]
@@ -828,6 +850,10 @@
   (let [papel-vereador (it/exige-papel "vereador")]
    #{["/sessoes"     :post [auth (it/exige-papel "secretario") it/corpo-json (agendar-handler repo-sessoes)]
      :route-name :sessoes/agendar]
+    ;; MESMO path do POST acima, metodo diferente — Pedestal despacha por (path, metodo); precedente
+    ;; identico em `/sessoes/:id/chamada` (GET+POST) e `/pauta/itens/:item-id` (PATCH+DELETE). SEM papel
+    ;; exigido: ver a docstring de `listar-handler` — a authz fina roda por LINHA no controller.
+    ["/sessoes"     :get  [auth (listar-handler repo-sessoes)] :route-name :sessoes/listar]
     ;; ingestao no TOPO (nao /sessoes/...): o segmento e' agnostico de sessao (Opcao A) e isto evita a colisao
     ;; de roteamento literal-vs-param com /sessoes/:id (o param sombrearia o POST -> 404).
     ["/gravacoes" :post [auth (it/exige-papel "secretario") (ingestao-handler repo-sessoes objeto-store)]

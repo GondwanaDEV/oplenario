@@ -74,6 +74,35 @@
                   :where [:and [:= :ente_id ente-id] [:= :id id]]
                   :for :share}))))
 
+(defn listar-todas
+  "TODAS as sessoes do ente (GET /sessoes, listagem geral — ledger de prontidao #16). SEM filtro de
+  periodo (ao contrario de `listar-fechadas-no-periodo`, abaixo): esta e' 'toda a vida da Casa', por isso
+  o UNICO guard-rail e' o teto de linhas (`logic/teto-de-sessoes-da-listagem-geral`), aplicado do MESMO
+  jeito que a apuracao de assiduidade faz mais abaixo neste ns — `:max-rows` (teto+1): o driver PARA de
+  materializar no primeiro excedente (a medicao e' um PISO, `:medido-ao-menos`), e a funcao lanca
+  `:limite/sessoes-excedido` em vez de devolver uma pagina truncada. Silenciar aqui reabriria, por outro
+  caminho, o MESMO defeito que esta rota existe para fechar (a sessao aberta sumindo de um corte sem
+  aviso nenhum).
+
+  SEM ORDENACAO nenhuma aqui (a ordem de retorno e' a do plano do Postgres, arbitraria) e SEM filtro de
+  visibilidade — as DUAS coisas sao do CONTROLLER (`controllers/listar-sessoes`): a ORDENACAO (aberta
+  primeiro, agendadas por data crescente, fechadas por data decrescente, via
+  `logic/chave-ordenacao-listagem-geral`) e a AUTHZ (`logic/pode-ver-quorum-da-sessao?`, por linha).
+  Devolver aqui ja' ordenado exigiria ou negar timestamp em SQL via EXTRACT(EPOCH ...) — sem precedente
+  neste ns, so' para uma ordem que o CONTROLLER teria de reordenar de qualquer jeito apos filtrar — ou
+  ordenar aqui E de novo la'; nenhuma das duas e' mais simples que 'este ns devolve o CONJUNTO
+  (com o teto), o controller decide o que sobrevive e em que ordem'."
+  [tx ente-id]
+  (let [teto   logic/teto-de-sessoes-da-listagem-geral
+        linhas (comum/linhas->kebab
+                (jdbc/execute! tx
+                  (sql/format {:select colunas :from [:sessoes.sessao] :where [:= :ente_id ente-id]})
+                  {:max-rows (inc teto)}))]
+    (when (> (count linhas) teto)
+      (throw (ex-info "sessoes do ente acima do teto da listagem geral"
+                      {:tipo :limite/sessoes-excedido :medido-ao-menos (count linhas) :teto teto})))
+    linhas))
+
 (defn listar-por-sessao-legislativa [tx ente-id sessao-legislativa-id]
   (comum/linhas->kebab
    (jdbc/execute! tx
