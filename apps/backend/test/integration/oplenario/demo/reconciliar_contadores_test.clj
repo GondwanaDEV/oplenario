@@ -13,13 +13,15 @@
   `with-sistema` reusada de `oplenario.demo.casa-test`, como os outros testes de `demo/`."
   (:require [acervo]
             [casa]
+            [clojure.set :as set]
             [clojure.test :refer [deftest is testing]]
             [next.jdbc :as jdbc]
             [oplenario.demo.casa-test :refer [with-sistema]]
             [oplenario.kernel.sequencial :as sequencial]
             [oplenario.kernel.tenancy :as tenancy]
             [participacao :as participacao-demo]
-            [reconciliar-contadores :as recon]))
+            [reconciliar-contadores :as recon]
+            [sessoes :as sessoes-demo]))
 
 (defn- escopos-gravados-pelo-proximo
   "Os escopos que o proprio `proximo!` criou em `shared.sequencial` para este ente — a FONTE contra a
@@ -33,16 +35,21 @@
     (let [ds (:ds (:datasource s))
           {:keys [ente identidades]} (casa/semear! s)
           _ (acervo/semear! s ente (:vereador identidades))
+          ;; `sessoes/semear!` ENTRA aqui por causa da revisao adversarial da Fase 10: sem ele a familia
+          ;; de escopo `sessao:<sessao-legislativa-id>:<tipo>` nunca aparecia em `reais`, e a assercao
+          ;; central deste teste — "todo escopo que o proximo! usou e coberto" — NAO PODIA REPROVAR para
+          ;; esse ramo. A consulta de sessoes estava correta, mas por sorte, nao por prova.
+          _ (sessoes-demo/semear! s ente)
           _ (participacao-demo/semear! s ente)
           reais (escopos-gravados-pelo-proximo ds ente)
           meus  (into #{} (map :escopo) (recon/pisos ds ente))]
       (testing "a semente exercitou numeracao de verdade (senao o teste nao provaria nada)"
         (is (seq reais) "nenhum contador foi criado — a semente nao numerou nada e este teste seria vazio"))
       (testing "todo escopo que o `proximo!` de fato usou e' coberto por uma consulta deste ns"
-        (is (empty? (clojure.set/difference reais meus))
+        (is (empty? (set/difference reais meus))
             (str "escopo(s) numerado(s) pela borda real que a reconciliacao NAO enxerga — se o contador "
                  "deles se perder, ninguem repara e a escrita fica em 500 permanente. Faltando: "
-                 (pr-str (clojure.set/difference reais meus))))))))
+                 (pr-str (set/difference reais meus))))))))
 
 (deftest reconciliacao-repara-contador-perdido-e-a-escrita-volta-a-funcionar
   (with-sistema [s]
@@ -96,3 +103,24 @@
           "rodar a reconciliacao 2x nao move contador nenhum — GREATEST, nao incremento")
       (is (every? #(>= (:valor-final %) (:piso %)) primeira)
           "nenhum contador ficou ABAIXO do maior numero ja' gravado"))))
+
+(deftest pisos-nao-enxergam-o-ente-vizinho
+  ;; Revisao adversarial da Fase 10: em dev/demo a conexao usa o role DONO do banco, que e' superusuario
+  ;; e ignora RLS. O isolamento das consultas de `pisos` dependia inteiramente do `WHERE ente_id = ?`
+  ;; escrito a mao, e NENHUM teste semeava dois entes para provar isso — uma consulta futura sem o WHERE
+  ;; vazaria cross-tenant em silencio. Este teste e a rede que faltava: se qualquer consulta perder o
+  ;; escopo de tenant, o piso do vizinho aparece aqui.
+  (with-sistema [s]
+    (let [ds (:ds (:datasource s))
+          {:keys [ente identidades]} (casa/semear! s)
+          _ (acervo/semear! s ente (:vereador identidades))
+          _ (participacao-demo/semear! s ente)
+          pisos-do-ente (into {} (map (juxt :escopo :piso)) (recon/pisos ds ente))
+          vizinho (random-uuid)
+          ;; o vizinho NAO tem nenhuma linha numerada — entao qualquer piso devolvido para ele so'
+          ;; pode ter vindo das linhas do ente semeado, i.e. de uma consulta que perdeu o WHERE.
+          pisos-do-vizinho (recon/pisos ds vizinho)]
+      (is (seq pisos-do-ente) "premissa: o ente semeado tem pisos (senao o teste nao prova nada)")
+      (is (empty? pisos-do-vizinho)
+          (str "VAZAMENTO CROSS-TENANT: um ente sem nenhuma linha numerada recebeu pisos — alguma "
+               "consulta de `consultas` perdeu o `WHERE ente_id = ?`. Vazou: " (pr-str pisos-do-vizinho))))))

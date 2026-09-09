@@ -59,13 +59,23 @@
      from sessoes.sessao where ente_id = ? group by sessao_legislativa_id, tipo_sessao"]])
 
 (defn pisos
-  "Todos os `{:escopo :piso}` observados nas tabelas de modulo para `ente`. Leitura pura, sem escrita."
+  "Todos os `{:escopo :piso}` observados nas tabelas de modulo para `ente`. Leitura pura, sem escrita.
+
+  RODA DENTRO DE `com-tenant*` (revisao adversarial da Fase 10). Cada consulta ja' tem `WHERE ente_id = ?`
+  explicito e vinculado ao `ente` do chamador — mas em dev/demo a conexao usa o role dono do banco, que e'
+  SUPERUSUARIO e portanto ignora RLS por completo. Com so' o `WHERE` como guarda, uma 9a consulta futura
+  que o esquecesse vazaria dado de outro tenant EM SILENCIO: nem a RLS (bypassada) nem o teste pegariam.
+  Rodar sob `com-tenant*` poe a RLS de volta no caminho sempre que o role NAO for superusuario (que e' a
+  postura de producao, `oplenario_pool`/`oplenario_app` sao NOBYPASSRLS) — cinto alem do suspensorio,
+  que e' o padrao do resto da base. O `WHERE` continua: e' ele que vale quando o role bypassa."
   [ds ente]
-  (into []
-        (comp (mapcat (fn [[sql]] (jdbc/execute! ds [sql ente])))
-              (map (fn [r] {:escopo (:escopo r) :piso (int (:piso r))}))
-              (filter #(pos? (:piso %))))
-        consultas))
+  (tenancy/com-tenant* ds ente
+    (fn [tx]
+      (into []
+            (comp (mapcat (fn [[sql]] (jdbc/execute! tx [sql ente])))
+                  (map (fn [r] {:escopo (:escopo r) :piso (int (:piso r))}))
+                  (filter #(pos? (:piso %))))
+            consultas))))
 
 (defn reconciliar!
   "Levanta cada contador do `ente` ate' o maior numero ja' gravado no escopo. Idempotente; nunca abaixa.
