@@ -25,6 +25,7 @@
             [oplenario.migracao :as migracao]
             [oplenario.sistema :as sistema]
             [participacao]
+            [reconciliar-contadores]
             [sessoes]))
 
 (defn semear-tudo!
@@ -52,6 +53,20 @@
                 (pr-str (-> participacao-r
                             (dissoc :comentarios)
                             (assoc :n-comentarios (count (:comentarios participacao-r))))))
+              ;; 5a etapa: reconciliar `shared.sequencial` com a numeracao que as 4 sementes gravaram.
+              ;; NAO e' zelo preventivo — e' reparo. As 4 sementes sao idempotentes POR PULAR (releem em
+              ;; vez de reescrever), entao um banco que perdeu os contadores e manteve as linhas numeradas
+              ;; NUNCA se conserta rodando a semente de novo: `proximo!` volta a 1, colide na UNIQUE, e a
+              ;; colisao aborta a tx revertendo o proprio incremento — 500 permanente em toda escrita
+              ;; numerada. Ver `reconciliar-contadores` p/ o mecanismo completo e o achado que o motivou.
+              ;; Idempotente e nunca abaixa contador (GREATEST), entao rodar sempre e' seguro.
+              (let [recon (reconciliar-contadores/reconciliar! (:ds (:datasource sys)) ente)
+                    levantados (filterv #(> (:valor-final %) (:piso %)) recon)]
+                (println "==> contadores:" (count recon) "escopo(s) reconciliado(s)")
+                (doseq [{:keys [escopo piso valor-final]} recon]
+                  (println "    " escopo "piso=" piso "-> valor=" valor-final))
+                (when (seq levantados)
+                  (println "    (nenhum contador foi abaixado — GREATEST)")))
               (println "==> semear-tudo! OK — ente" ente)
               {:ente ente :casa casa-r :acervo acervo-r :sessoes sessoes-r :participacao participacao-r}))))
       (finally (component/stop sys)))))
