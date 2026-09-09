@@ -560,9 +560,12 @@ echo "--- Rotas D1/D2/D3: POST /compliance/remessas/:id/{validar,submeter,respos
 # rota HTTP que CRIE uma. `gerar-remessa!` mora no Repo e nao esta ligado a nenhuma rota. As 3 rotas
 # de escrita do modulo so' TRANSICIONAM uma remessa que ja existe — pela borda, a cadeia do M6 e'
 # inalcancavel de ponta a ponta. Por isso a sonda planta o fixture por psql (e diz que plantou).
-N_REM_ENTE=$(dbval "select count(*) from compliance.remessa_gerada where ente_id='$ENTE';")
+# EXCLUI os ids de fixture da propria sonda: sem isso, a partir da 2a corrida o check via as remessas
+# que ELA MESMA plantou e concluia que a Casa tinha remessas — escondendo o achado estrutural. E' o
+# mesmo erro do check de cadastros, e ele reaparece toda vez que uma medicao roda depois do fixture.
+N_REM_ENTE=$(dbval "select count(*) from compliance.remessa_gerada where ente_id='$ENTE' and id not in ('dddddddd-0000-0000-0000-0000000000f1','dddddddd-0000-0000-0000-0000000000f2');")
 if [ "$N_REM_ENTE" = "0" ]; then
-  registrar QUEBRA "compliance (cadeia M6)" "o ente da demo nao tem NENHUMA remessa e nao existe rota HTTP que crie uma — validar/submeter/resposta so' transicionam o que ja' existe, entao a cadeia do M6 e' INALCANCAVEL pela borda (gerar-remessa! nao esta wired em rota)" "select count(*) from compliance.remessa_gerada where ente_id='$ENTE' -> 0"
+  registrar GAP "compliance (cadeia M6)" "o ente da demo nao tem NENHUMA remessa (fora as plantadas por esta sonda) e nao existe rota HTTP que crie uma — validar/submeter/resposta so' transicionam o que ja' existe, entao a cadeia do M6 e' INALCANCAVEL pela borda (gerar-remessa! nao esta wired em rota)" "select count(*) from compliance.remessa_gerada where ente_id='$ENTE' -> 0"
 else
   registrar OK "compliance (cadeia M6)" "o ente da demo ja tem $N_REM_ENTE remessa(s)"
 fi
