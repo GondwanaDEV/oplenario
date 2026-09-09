@@ -3,3 +3,6 @@
 /playwright-report
 /playwright/.cache
 /.artifacts
+
+# saida da ultima corrida da sonda T2 (artefato de execucao, nao fonte)
+.sonda/*-ultima-corrida.jsonl
