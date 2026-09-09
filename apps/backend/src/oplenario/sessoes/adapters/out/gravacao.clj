@@ -1,8 +1,14 @@
 (ns oplenario.sessoes.adapters.out.gravacao
   "Gate de SAIDA `models -> wire/out` da gravacao (§22.10 adapters/out, ADR-0001 §3). Projeta o recibo de
   ingestao e o read-model de segmentos p/ a borda, FILTRANDO o que nao deve vazar: a chave interna do store
-  (`container-bruto-uri`), `audio-hash`, `ente-id`, `lock-version`. Validado contra o contrato wire/out
-  (drift de campo = bug de servidor -> 500, nunca resposta malformada que envenena o codegen do front)."
+  (`container-bruto-uri`), `ente-id`, e (no read-model de segmentos JA' vinculados) `audio-hash`/
+  `lock-version`. Validado contra o contrato wire/out (drift de campo = bug de servidor -> 500, nunca
+  resposta malformada que envenena o codegen do front).
+
+  `recibo-ingestao->wire` EXPOE `lock-version` deliberadamente (ledger de prontidao Fase 8 achado #2):
+  `POST .../gravacao/:seg-id/vincular` o exige no corpo, e um segmento AINDA NAO vinculado nunca aparece em
+  `GET .../gravacao` (que so' lista os JA' vinculados) — este recibo e' a UNICA fonte do token de CAS, sem
+  a qual vincular e' impossivel de montar so' pela API."
   (:require [malli.core :as m]
             [malli.error :as me]
             [oplenario.sessoes.wire.out :as wire]))
@@ -17,9 +23,11 @@
   out)
 
 (defn recibo-ingestao->wire
-  "Recibo de dominio {:id uuid :audio-hash string} -> GravacaoReciboOut (resposta 201). NAO inclui a chave do store."
-  [{:keys [id audio-hash]}]
-  (validado wire/GravacaoReciboOut {:id (->str id) :audio-hash audio-hash}
+  "Recibo de dominio {:id uuid :audio-hash string :lock-version int} -> GravacaoReciboOut (resposta 201). NAO
+  inclui a chave do store. `lock-version` viaja (excecao consciente, ver docstring do ns) — sem ele o cliente
+  nao tem como montar `POST .../gravacao/:seg-id/vincular`."
+  [{:keys [id audio-hash lock-version]}]
+  (validado wire/GravacaoReciboOut {:id (->str id) :audio-hash audio-hash :lock-version lock-version}
             "recibo de ingestao viola o contrato GravacaoReciboOut (bug de servidor)"))
 
 (defn recibo-vinculo->wire

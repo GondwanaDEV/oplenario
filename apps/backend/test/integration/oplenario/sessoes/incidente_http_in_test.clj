@@ -101,6 +101,16 @@
 
 ;; ---------- authz / not-found ----------
 
+(deftest incidente-sessao-encerrada-409
+  ;; T2 grupo A achado #4 (ledger de prontidao Fase 8): mesmo gate `exigir-sessao-aberta!`.
+  (let [ente (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ id] (assoc (sessao-canonica ente id) :estado "encerrada")) (atom nil))
+        r (pt/response-for (service-fn* #{"secretario"} repo-s)
+                           :post (url-incidentes (random-uuid))
+                           :headers (com-json (token ente (random-uuid)))
+                           :body (corpo incidente-valido))]
+    (is (= 409 (:status r)) "sessao ja encerrada -> 409")))
+
 (deftest incidente-sessao-inexistente-404
   (let [ente (random-uuid)
         repo-s (fake-repo-sessoes (fn [_ _] nil) (atom nil))

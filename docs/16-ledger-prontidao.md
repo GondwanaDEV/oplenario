@@ -413,3 +413,553 @@ tenant casado, então dropar o check de isolamento passava em tudo.
 - **`[GAP]` de produto:** o Livro se anuncia "numerador único · **proposições** e documentos
   administrativos", mas no fluxo real protocolar uma proposição não a inscreve. Hoje só a semente
   inscreve. **Se o Livro é mesmo o numerador único da Casa, falta uma composição no `protocolar!`.**
+
+---
+
+# Fase 7 — TRILHA 1 (operação): a plataforma local roda sem falha
+
+> Plano: `docs/superpowers/plans/2026-09-08-exploratorio-de-escrita.md`, Trilha 1.
+> Eixo desta fase é **QUEBRA / FRÁGIL / COSMÉTICO / GAP**, não `MATA/CONSTRANGE/PASSA`.
+> Branch `trilha-1-operacao`. Máquina: Mac de 8 GB, VM do OrbStack com **3.9 GiB**.
+
+## O achado que domina a trilha: o Postgres cai por falta de memória da VM, não por defeito de código
+
+Com a stack completa de pé (**incluindo o perfil `auth`**) e a sonda das 27 rotas rodando, o
+`oplenario-postgres-1` **crashou duas vezes em três minutos**:
+
+```
+LOG:  server process (PID 822) exited with exit code 2
+LOG:  terminating any other active server processes
+LOG:  database system was not properly shut down; automatic recovery in progress
+FATAL: the database system is not yet accepting connections
+```
+
+O `dmesg` da VM dá a causa, e ela não é do produto:
+
+```
+Huh VM_FAULT_OOM leaked out to the #PF handler. Retrying PF
+```
+
+Nenhum container foi OOM-killed (`OOMKilled=false`, sem limite de memória por serviço): quem esgotou
+foi a **VM inteira**. Consumo no pico: frontend em modo dev **1.2–1.4 GiB**, keycloak 478 MiB,
+app 481 MiB, mais o Chromium da sonda — sobre 3.9 GiB totais.
+
+**Verificação do diagnóstico, não só da hipótese:** parar keycloak+mailpit devolveu ~500 MiB, e a
+sonda inteira voltou a rodar com o mínimo disponível em **1.23 GiB** e **zero crash**. O dado
+sobreviveu ao crash (redo do WAL, sem perda) — mas isso é o Postgres se defendendo, não a plataforma
+funcionando.
+
+| Classe | Item |
+|---|---|
+| **QUEBRA** | A plataforma local + o próprio harness de verificação não cabem juntos na VM de 3.9 GiB. É `QUEBRA` porque o modo de falha é o banco morrer no meio da operação, não uma tela feia. |
+| — | **Decisão do Daouda, não conserto unilateral:** subir a memória da VM do OrbStack, e/ou servir o frontend em **modo produção** na verificação (o `next dev` é o maior consumidor isolado e ainda compila cada rota sob demanda — 27 rotas levaram ~12 min). |
+
+## T1.1 — Sobe do zero e volta sozinha
+
+- **Tempo medido** (com volumes preservados, build em cache): `up -d --build` **65s** + `semear-tudo.sh`
+  **96s** = **2min41s**, sem intervenção manual, com as duas barreiras de projeção passando.
+- **`down -v` não foi executado** — a ação é destrutiva e ficou pendente de autorização. Logo o
+  critério "de máquina fria à Casa semeada" está **provado por reconstrução parcial**, não total, e a
+  armadilha do lock `-1` do migratus (T1.5) segue **não exercida**.
+- **FRÁGIL, consertado:** só o `app` tinha `restart: unless-stopped`. Os outros **seis** serviços não
+  tinham política nenhuma — parar o Docker e religar deixava toda a infra `Exited` com o `app` sozinho
+  em crash-loop contra um banco ausente. Todos ganharam `unless-stopped`; o `migrate` fica `"no"` de
+  propósito (é one-shot). **A verificação empírica — parar e religar o Docker — não foi feita**, pela
+  mesma razão de a ação ser disruptiva.
+
+## T1.2 — Zero erro em log durante operação normal
+
+**`Apparent connection leak detected` não era vazamento — era falso-positivo estrutural.** Causa raiz
+lida na fonte, não inferida:
+
+- `outbox_relay.clj:30` abre `lock-conn` e a segura pela vida inteira do relay — o advisory lock é
+  **session-level**, é assim que a liderança se sustenta. O docstring do próprio worker já dizia isso.
+- `datasource.clj:27` liga `setLeakDetectionThreshold 30000` **no mesmo pool**.
+- Resultado: aviso com stack trace **garantido em todo boot**, 30s depois de subir, apontando para uma
+  conexão que está exatamente onde deveria estar.
+
+Conserto: pool **dedicado** `:ds-lock` (1 conexão, detector desligado) para a liderança; o pool de
+trabalho mantém o detector ligado — **o conserto não pode ser desligar o detector**. É o pool que o
+próprio docstring do relay já previa.
+
+**Prova:** app rebuildado, 90s de carga (`/saude`, `/portal/.../materias`, portal da casa) →
+**0 ocorrências de `Apparent connection leak detected`, 0 `ERROR`, 0 `Exception`** no log do app.
+Varredura dos outros serviços na janela de operação: `frontend` 0, `valkey` 0, `minio` 0, `postgres`
+0 erro de query (os `ERROR: relation ... does not exist` do log são do bootstrap de 02:34, antes das
+migrations).
+
+**Teste que impede a volta calada:** `outbox_relay_test/a-lideranca-nao-prende-conexao-do-pool-principal`
+— afirma que o pool de lock existe, é distinto, tem o detector **desligado**, que o pool de trabalho
+tem o detector **ligado**, e que a conexão de liderança sai do pool de lock. **Provado com defeito
+plantado:** revertendo `ds-lock` → `ds`, o teste reprova nomeando o defeito (`esperado 1, obtido 0`).
+
+## T1.3 — Suíte 100% verde
+
+Os dois carries viraram escopo e foram consertados na causa:
+
+| # | Defeito | Causa raiz | Conserto |
+|---|---|---|---|
+| 1 | `demo.casa-test/semear-produz-uma-unica-casa` reprova sempre | O teste **redigitou metade da regra** da produção: leu só `System/getenv "DEMO_ARTIFACTS_DIR"`, enquanto a produção é `getenv OU ".artifacts"`. Nenhum comando de suíte seta a variável — **nem o do CI** — então `(io/file nil "…")` estourava NPE | `casa/diretorio-de-artefatos` vira **pública** e é a única fonte da regra; o teste pergunta em vez de reescrever |
+| 2 | `notificacao-autor-test` floca em run cheio, passa isolado | `(is (= 2 (drenar! …)))` mede efeito **global**: `outbox/drenar!` não é escopado por `ente-id` e drena o outbox inteiro do banco compartilhado | A asserção passa a ser **escopada ao ente** (2 processados, 0 pendentes) — a pergunta que o critério realmente faz |
+
+**Resultado: 2051 testes, 5528 asserções, 0 falhas** (dois runs cheios consecutivos).
+
+## T1.4 — As armadilhas conhecidas
+
+| # | Armadilha | Veredicto |
+|---|---|---|
+| 1 | JVM morrendo com SIGBUS (perf-data mmapeado) | **Não reproduz** — 0 ocorrências; a mitigação `-XX:-UsePerfData` está viva no `JAVA_TOOL_OPTIONS` do container |
+| 2 | `.next` obsoleto servindo 404 em rota que existe | **REPRODUZ.** Ver a seção própria abaixo — a primeira medição desta sessão disse "não reproduz" e **estava errada** |
+| 3 | Token sem `papeis` navegando como sem papel nenhum | **Não reproduz, e o backend é mais forte que "corrigido":** a mesma identidade de secretaria autoriza com `papeis`, **sem** `papeis` e com `papeis: []` — todos 200, os papéis vêm do banco. Identidade de cidadão com claim **mentindo** `papeis:["secretario"]` → **401**, fail-closed. No FE, a tela renderiza igual com e sem o claim |
+| 4 | Restart do `app` apagando a tribuna ao vivo | **Não reproduz** — `docker restart oplenario-app-1` com fala aberta, e `GET /sessoes/:id/tribuna` volta com o mesmo `fala-id`, o mesmo orador e a fase `grande_expediente`. O read-model da tribuna (07/09) sustenta |
+
+## T1.5 — Os workers estão vivos
+
+- **Relay: provado.** `semear-tudo.sh` tem duas barreiras de projeção que **falham alto** e ambas
+  passaram: as matérias e o read-model do perfil do vereador apareceram no portal público sem
+  intervenção — ou seja, evento emitido → projetado.
+- **Auto-cura provada por acidente:** durante o crash do Postgres o relay perdeu a conexão de
+  liderança, logou `relay: falha ao drenar o outbox — retenta no proximo tick` e **voltou a drenar
+  sozinho** quando o banco reabriu. O caminho de reconexão do `loop-relay` existe e funciona.
+- **Lock `-1` do migratus: NÃO exercido** — depende do `down -v`.
+
+## Armadilha #2: reproduz, e a primeira medição desta sessão errou
+
+**Como errei.** Logo após `up -d --build frontend` medi 7 rotas, todas 200, e escrevi "não reproduz".
+As 7 eram rotas de servidor; a família que quebra é outra. A segunda rodada da sonda pegou:
+
+- `/portal/casa/<ente>/materias/<id>` → **404 no frontend**, com o **backend servindo a mesma matéria
+  em 200** e o `page.tsx` presente em disco e visível dentro do container.
+- `docker restart oplenario-frontend-1` → **200**. É o remédio registrado, e ele funciona.
+
+**Mecanismo, agora estrutural:** `.next` é um **volume anônimo** (`docker inspect` mostra
+`volume:843ecc…→/app/.next`). O `next dev` persiste cache de build ali ("Finished writing to
+filesystem cache"); o container morto no meio dessa escrita deixa estado parcial, e o container
+seguinte confia nele. `up -d --build` recria o container e **reata o mesmo volume**.
+
+**Tentei consertar e piorei — e revertí.** Fiz o stage `dev` do Dockerfile limpar `.next` no start do
+container. Resultado medido: **a subárvore dinâmica inteira de `/portal/casa/[ente]/*` passou a 404**,
+inclusive `vereadores/<id>`, que estava passando. Revertido o Dockerfile, as duas rotas voltaram a 200
+na mesma medição. **Registro isso como erro meu, não como propriedade do sistema:** limpar o cache no
+start não é o conserto, e a causa de por que ele quebra o roteamento não foi investigada.
+
+**Carry:** a armadilha #2 continua **viva e sem conserto**. O que existe é o procedimento decorado
+(`docker restart oplenario-frontend-1`), que é exatamente o que o plano dizia não aceitar.
+
+## O que a revisão adversarial (`ecc:clojure-reviewer`) reprovou — e o que virou conserto
+
+A revisão **bloqueou** o commit inicial. Nove achados; o núcleo do conserto (pool de lock dedicado)
+foi confirmado correto, e os problemas estavam todos nas bordas:
+
+| # | Achado | Classe | Desfecho |
+|---|---|---|---|
+| A1 | O teste novo subia um relay **real** com registro vazio contra o banco compartilhado. Ganhando o lock 911, `drenar!` marcaria `processed_at` **sem consumidor** — descartando em silêncio todo evento pendente. E o procedimento canônico de suíte manda parar o `app` antes do run, o que faz do teste **o líder mais provável** | MAIOR | **Consertado:** o teste toma o lock 911 numa conexão crua (fora dos dois pools) **antes** de subir o relay. A asserção não muda; o efeito colateral desaparece |
+| A2 | `restart: unless-stopped` faz a stack voltar **pulando o `migrate`** — política de restart é do dockerd, e o `depends_on` não é honrado no religar do daemon | MAIOR | **Conserto tentado e reprovado pela realidade:** o `serve` checando pendências morre com `permission denied for schema public` — o papel do app **não tem `USAGE` em `public`**. Fechá-lo exige conceder leitura do ledger de migrations ao papel do app: decisão de segurança do Daouda. **Documentado no compose como carry** |
+| A3 | Falha parcial no `start` órfã o pool de trabalho (Hikari é ansioso; o segundo pool pode estourar depois do primeiro ter sucedido) | MENOR | **Consertado:** `try/catch` fecha o primeiro antes de relançar |
+| A4 | Guard `(if ds …)` deixou de cobrir o invariante; `:ds-lock` nil vira laço infinito logando **"a conexão de liderança caiu"** — causa falsa | MENOR | **Consertado:** guard sobre os dois campos + o relay falha no `start` nomeando o defeito. Teste novo cobre |
+| A5 | A docstring **nova** dizia "dimensionar contra a concorrência normal apenas" — **invertendo a verdade**: o orçamento virou `pool-max-size + 1` por processo | MENOR | **Consertado:** a docstring passa a dizer `(pool-max-size + 1) × réplicas` |
+| A6 | `liberar-lider!` **não tem chamador em `src/`**: a conexão voltava ao pool ainda segurando o advisory lock; o contador re-entrante só crescia | MENOR (pré-existente, agravado pelo pool de 1) | **Consertado:** `finally` libera a liderança |
+| A7 | `Thread/sleep 1500` fixo (o teste vizinho documenta explicitamente que sleep fixo é flaky) e **faltava a asserção que o nome do teste promete** | MENOR | **Consertado:** poll com prazo de 15s + `(is (zero? (ativas (:ds d))))` |
+| A8 | Type hint de retorno no nome do var (clj-kondo reprova; o mesmo commit acertou a forma em `casa.clj`) | MENOR | **Consertado:** hint no vetor de argumentos |
+| A9 | `unless-stopped` aplicado a 3 serviços **sem healthcheck** — contradizendo o comentário do próprio arquivo ("sem healthcheck, `unless-stopped` esconde crash-loop") | MENOR | **Consertado:** healthcheck em `minio` e `frontend` (ambos verificados subindo a `healthy`), e `keycloak`/`mailpit` **perderam** a política — política de restart ignora `profiles`, e ~500 MiB voltando sozinhos numa VM de 3.9 GiB empurra o OOM que domina esta trilha |
+
+Detalhe que só apareceu ao verificar: o healthcheck do frontend com `localhost` fica em
+`Connection refused` para sempre — o `next dev` faz bind em `0.0.0.0` (IPv4) e o `wget` do busybox
+tenta `::1` primeiro. Com `127.0.0.1`, saudável em 20s.
+
+## Sobre a própria sonda (FRÁGIL da ferramenta, não do produto)
+
+- Roda em **série**, 30s de timeout por rota, e **só imprime no fim**: com a stack degradada, gastou
+  **921 segundos imprimindo zero bytes**. "Trabalhando", "travada" e "vai reprovar tudo" são
+  indistinguíveis pelo lado de fora — o progresso real só ficou visível no log do frontend.
+- **Não faz pre-flight de saúde**: com o alvo fora do ar, paga 27×30s para chegar à conclusão que uma
+  requisição a `/saude` daria em 1 segundo.
+- Rodada válida (stack sadia): **26/27**. A única reprovada é `/sessoes/:id/plenario`, com
+  `net::ERR_NETWORK_CHANGED` no console — é a rota que abre **SSE**, e o erro tem cara de interrupção
+  de transporte, não de defeito de tela. **Fica aberto**: precisa de segunda medição para separar
+  flake de defeito.
+
+## Dois achados de infra que a T1.1 destapou depois do conserto
+
+- **FRÁGIL — o estado local mora em volumes ANÔNIMOS.** O `docker-compose.yml` não tem seção
+  `volumes:` de topo: `postgres` (`/var/lib/postgresql/data`) e `minio` (`/data`) persistem em volumes
+  sem nome. Eles sobrevivem a um `up` que recria o container (o compose reusa o volume anônimo), mas
+  morrem em `down -v` ou `--renew-anon-volumes`, não são descobríveis por nome e não são backupáveis.
+  Para "a plataforma local roda sem falha", o estado inteiro pendurado num identificador que só existe
+  no histórico do container é frágil. **Conserto = volumes nomeados, e ele implica reconstruir a Casa —
+  decisão do Daouda, não ação unilateral.**
+- **Política escrita ≠ política aplicada.** Depois de editar o compose, `valkey` e `minio` continuavam
+  com `RestartPolicy=no` em runtime — o arquivo estava certo e a máquina não. Só um `up -d` que
+  **recria** o container aplica a mudança. Verificado serviço a serviço com
+  `docker inspect --format '{{.HostConfig.RestartPolicy.Name}}'`; os cinco serviços em execução hoje
+  estão em `unless-stopped`. **Editar o compose não é a prova; o `inspect` é.**
+
+## Carries desta fase
+
+- **`down -v` + reinício do Docker pendentes de autorização** — sem eles, T1.1 e o lock do migratus
+  (T1.5) ficam provados pela metade.
+- **Memória da VM é decisão de produto/infra do Daouda** (subir a VM, e/ou frontend em modo produção
+  na verificação).
+- **`/sessoes/:id/plenario` com `ERR_NETWORK_CHANGED`: era flake.** Segunda medição passou limpo.
+- **Armadilha #2 sem conserto** — só o procedimento decorado (`docker restart oplenario-frontend-1`).
+  A tentativa de limpar `.next` no start do container quebrou o roteamento dinâmico e foi revertida.
+- **A2: o `serve` não consegue checar migrations pendentes** — o papel do app não tem `USAGE` em
+  `public`. Fechar isso exige conceder leitura do ledger de migrations: decisão de segurança.
+- **`outbox/drenar!` continua sem escopo de `ente-id`.** Consertei a *asserção* que dependia disso; a
+  função segue global. Para a suíte isso basta; para uma segunda réplica, não.
+
+## Armadilha #2 — investigação da causa raiz (08/09, sessão seguinte)
+
+**O mecanismo registrado acima ("`.next` é volume anônimo, o container morto no meio da escrita deixa
+estado parcial, e o container seguinte confia nele") NÃO se sustenta. Refutado por experimento.**
+
+### O que foi medido, e o que cada medição elimina
+
+| # | Experimento | Resultado | O que elimina |
+|---|---|---|---|
+| 1 | Requisitar rota **existente e fora do manifesto** (`/entrar/[ente]`) | **200 em 4s**, e a rota **entra** no `app-paths-manifest.json` | Elimina "compilação sob demanda devolve 404". Ela devolve 200 |
+| 2 | `up -d --build frontend` e comparar o volume de `/app/.next` | **Mesmo volume anônimo** (`843ecc…`) reatado | Confirma a premissa do volume — mas veja o #3 |
+| 3 | Ler o manifesto **logo após** recriar, antes de qualquer request | Manifesto **zerado**: só `{"/page": …}` (tinha 6 rotas antes) | **Elimina a hipótese do cache obsoleto.** O dev server **reescreve** o manifesto no start; ele não "confia" no anterior |
+| 4 | Bateria estratificada logo após recriar (raiz · estática · dinâmica · dinâmica **aninhada**) | **6/6 em 200**, ≤1s cada | A armadilha **não reproduz** por recriação de container com volume quente |
+| 5 | Varredura de 13 rotas internas sob carga, com corte automático a <400 MiB livres | **Zero 404, zero erro**; frontend 613→870 MiB; livre estável ~2 GiB | Não reproduz sob carga de compilação, **sem keycloak** |
+
+**Estado da árvore durante toda a investigação:** keycloak e mailpit **fora** — ou seja, ~478 MiB a
+menos do que na medição em que a armadilha apareceu.
+
+### A hipótese que sobrevive, e por que ela muda a decisão
+
+A #2 tem cara de **sintoma da pressão de memória da VM**, não de defeito independente:
+
+- A falha original ocorreu com **`--profile auth` de pé** (+478 MiB) **e a sonda rodando** (Chromium),
+  que é exatamente a condição que **crashou o Postgres duas vezes** por `VM_FAULT_OOM` da VM.
+- Explica o que o cache não explica: **por que limpar `.next` piorou.** Cache frio força recompilar
+  tudo — mais memória e mais CPU, exatamente na direção do teto.
+- Explica por que `docker restart oplenario-frontend-1` "conserta": devolve a memória acumulada do
+  processo `next dev` (613 MiB fresco × 1,2–1,4 GiB no pico).
+
+**Consequência prática:** se confirmada, a #2 deixa de ser um item aberto próprio e passa a depender
+da **decisão 1 do Daouda** (memória da VM / frontend em modo produção na verificação). Duas pendências
+viram uma.
+
+**Não confirmada porque a confirmação exige induzir o OOM** — subir keycloak + rodar a sonda, que é a
+condição que já derrubou o banco. É ação disruptiva e fica **pendente de autorização**, junto com o
+`down -v`.
+
+### O buraco de instrumentação que a investigação original deixou
+
+No momento do 404, ninguém capturou **o log do `next dev`**. É o artefato mais informativo e o mais
+barato: um `docker logs oplenario-frontend-1` na hora diria se houve falha de compilação (sustenta a
+hipótese de memória) ou um 404 limpo do roteador (derruba). **Na próxima reprodução, capturar o log do
+frontend ANTES de aplicar o `docker restart` que apaga a evidência.**
+
+### Nota de método
+
+A medição original errou ao concluir "não reproduz" a partir de 7 rotas **da mesma família** (todas de
+servidor). A bateria acima é **estratificada pelo mecanismo** — raiz, estática, dinâmica e dinâmica
+aninhada — porque é a distinção que o defeito faz. Amostra escolhida por conveniência mede a
+conveniência.
+
+# Fase 8 — TRILHA 2 grupo A: as 17 rotas de condução de sessão, por HTTP
+
+> Plano: `docs/superpowers/plans/2026-09-08-exploratorio-de-escrita.md`, Trilha 2, grupo A.
+> Eixo desta fase é **QUEBRA / FRÁGIL / COSMÉTICO / GAP**, não `MATA/CONSTRANGE/PASSA`.
+> Branch `trilha-2-escritas`. Script: `e2e/.sonda/t2-grupo-a.sh`. Relatório completo em
+> `/tmp/t2-grupo-a.md` (tabela rota×caminho feliz×caminhos de erro×veredicto).
+
+**Método:** bash+curl+psql no host (o alvo é o backend por HTTP puro — nenhum app-code do projeto roda
+fora de container, então o mandato Docker não se aplica a `curl`/`docker exec`, mesma leitura que
+`e2e/semear.sh` já faz). Sessão `…0212` (agendada→aberta→encerrada, via de mão única — não é
+re-rodável sem `./demo/semear-tudo.sh`). Sessão `…0211` (demonstrativa): só lida, nunca escrita.
+
+**Placar:** 17/17 rotas exercidas, caminho feliz + caminho de erro em cada uma · 96 checagens OK · **5
+QUEBRA** · 0 FRÁGIL · 0 COSMÉTICO · 1 GAP (reentrância tolerada, não é defeito — ver abaixo). Isolamento
+multi-tenant testado com identidade REAL de outro ente em 6 rotas: **0 vazamentos**.
+
+## Os 5 achados QUEBRA
+
+1. **`POST /votacoes/:id/votos`, voto duplicado do mesmo vereador → 500, não 409.**
+   `legislativo/diplomat/http/in.clj` `voto-handler` (rota da Mesa) não tem `try/catch`; o UNIQUE
+   `votos_ente_id_votacao_id_vereador_id_key` sobe cru até o interceptor global. O irmão self-service
+   `meu-voto-handler` TEM esse tratamento (`:conflito/voto-duplicado` → 409) — só a rota da Mesa não.
+   Confirmado por `docker logs`: `PSQLException ... duplicate key value violates unique constraint`.
+2. **CAS obrigatório em 7 rotas (`transicao` · pauta `PATCH`/`DELETE` · `votacoes/:id/encerramento` ·
+   `inscricoes/:id/desistir` · `falas/:id/encerrar` · `gravacao/:id/vincular`), e nenhum GET nem
+   recibo de criação jamais devolve `lock-version`.** As 5 saídas envolvidas (`sessoes.adapters.out.
+   {sessao,pauta,tribuna,gravacao}` + `legislativo.adapters.out.votacao`) repetem a mesma frase de
+   docstring ("filtra lock-version, interno"). Um cliente real (FE incluído) não tem como montar a 2ª
+   chamada de qualquer fluxo de mais de um passo sem ler o Postgres direto — a sonda teve de fazer
+   isso em 7 pontos só para conseguir avançar. Achado estrutural, não de uma rota isolada.
+3. **`POST /votacoes/:id/encerramento`, repetição (já encerrada) → 400, não 409.**
+   `legislativo/controllers.clj` `encerrar-votacao` tem guard explícito que mapeia "estado terminal"
+   para `:validacao/invalido` → 400 — deliberado (evita o 500 do db), mas semanticamente errado (400 =
+   "conserte seu pedido"; 409 = "seu pedido era válido, o recurso mudou") e inconsistente com os
+   outros 5 conflitos de "já terminal" deste MESMO grupo de 17 rotas, todos 409.
+4. **`POST /sessoes/:id/pauta/itens` aceita escrita numa sessão JÁ ENCERRADA** (201 confirmado ao
+   vivo). Nenhum controller de pauta/tribuna/incidente/decisão-mesa checa `estado` da sessão — só
+   `pode-ver-sessao?` (mesma Casa).
+5. **`POST /sessoes/:id/votacoes` aceita abrir votação numa sessão JÁ ENCERRADA** (201 confirmado ao
+   vivo). `legislativo.logic/pode-dirigir-votacao?` também só checa mesma Casa. Por leitura de fonte,
+   o MESMO gate vale para inscrições/falas/decisões-mesa/incidentes (não testadas ao vivo pós-fecho,
+   mas o código é idêntico).
+
+## O que funcionou (não são achados — é o que prova que o resto está são)
+
+Anti confused-deputy (item de pauta, fala, decisão-mesa de outra sessão → 404, 3/3) · isolamento
+multi-tenant (0/6 vazamentos, com identidade REAL de outro ente, não forjada) · CAS correto em 5 das 6
+rotas que o usam (só a votação erra o código, achado #3) · injeção de autor no servidor (nunca do
+corpo) · validação de borda (enum, coerência de campo, FK-por-tipo) sempre 400, nunca 500 do banco.
+
+## Gotcha de método desta fase
+
+Primeira corrida truncada por `bash script.sh | tee log | head -100` — `head` fecha o pipe, `SIGPIPE`
+mata o script NO MEIO de uma escrita (sessão ficou em `aberta`, roteiro incompleto). A sonda sobreviveu:
+rodada de novo, detectou pelo `GET` inicial que a sessão não estava mais `agendada` e seguiu (GAP, não
+crash). Nunca pipe um script que muta estado através de `head`/`tail`; redirecionar para arquivo e ler
+depois.
+
+## Terreno confirmado são (checado antes de acusar, per protocolo)
+
+`docker ps` 5/5 `Up (healthy)` do início ao fim; único par de `ERROR` no log do `app` é exatamente o
+achado #1 (repetido de propósito); zero `Apparent connection leak`; memória da VM com folga larga
+(`app` 523 MiB, `frontend` 931 MiB, de um teto de 3,9 GiB).
+
+# Fase 9 — os 5 `QUEBRA` da Fase 8, consertados
+
+Dois commits: `922cdf4` (A1/A2/A3) e `9051787` (o estrutural). **Cada conserto verificado por mim, no
+controlador, contra a stack viva — não pela alegação do implementador.**
+
+| # | Defeito | Conserto | Verificação independente |
+|---|---|---|---|
+| **4/5** | Sessão **encerrada** aceitava escrita (201) | `exigir-sessao-aberta!` em `sessoes/controllers.clj`, **11 call-sites**, reusando `estados-sessao-fechada` (não um conjunto novo). O `legislativo` não pode importar `sessoes.logic` (ADR-0001), então recebe `sessao-fechada?` injetado por `rotas.clj` — mesma mecânica de `consultar-sessao` | `POST /sessoes/<encerrada>/votacoes` → **409** `{"erro":"sessao ja fechada; escrita de votacao bloqueada"}` |
+| **1** | Voto duplicado da Mesa → **500** com `PSQLException` crua | Espelhado o `try/catch` de `23505` que o irmão self-service `registrar-meu-voto!` já tinha | 500 → **409**, sem ERROR no log |
+| **3** | Encerrar votação terminal → **400** | `:validacao/invalido` → `:conflito/votacao-terminal` → **409**, consistente com os outros 5 conflitos "já terminal" do grupo | 400 → **409** |
+| **2** | CAS exigido em 7 rotas e `lock-version` **nunca devolvido** | Exposto nas 5 saídas, com fonte identificada para **cada uma** das 7 rotas; contrato TS regenerado (+5 interfaces) | `GET /sessoes/:id`, `/pauta` e `/tribuna` passam a trazer `lock-version`; contrato com 7 campos |
+
+## Dois achados de método que valem mais que os consertos
+
+**O `lock-version` não era decisão deliberada a reverter — era a própria regra do time aplicada pela
+metade.** O ns `sessoes.wire.out` esconde tokens de mecânica interna por default, **e já documentava a
+exceção certa para este exato caso** (`JustificativaAbertaOut`: "aqui o token de CAS não é interno, é
+PARTE DO PROTOCOLO"). A exceção nunca foi estendida às outras 7. Investigar a intenção antes de expor
+transformou "reverter uma decisão" em "terminar de aplicar uma regra" — decisões opostas sobre o mesmo
+diff.
+
+**Uma otimização recusada por evidência.** O implementador considerou mapear `:conflito/*` → 409
+genericamente no interceptor global (menos código) e recuou: um teste existente
+(`tipo-fora-do-namespace-limite-continua-500`) **prova** que esta base recusa isso de propósito. Ler a
+intenção antes de generalizar.
+
+## Custo colateral desta fase (registrado, não escondido)
+
+A verificação ao vivo sujou dado de demonstração: uma **votação órfã** na sessão encerrada `…0210`
+(criada por mim ao provar o defeito), a sessão `…0212` percorrida até `encerrada` (era a cobaia), e a
+**votação que ficava aberta na `…0211`** para o telão — esta última por omissão minha: a restrição
+"não escreva na `0211`" estava no primeiro despacho e não foi carregada para o segundo. Tudo
+reconstruível com `./demo/semear-tudo.sh`. A `…0211` segue `aberta`.
+
+## Aberto
+
+- **Pergunta de regimento (Daouda):** o portão cobre `encerrada`/`nao_realizada`/`arquivada`. Falta
+  decidir se **votação e tribuna** também devem ser bloqueadas em `agendada` e `suspensa` — montar
+  pauta com a sessão agendada é legítimo, abrir votação talvez não. Não foi decidido por engenharia.
+- **Gap pré-existente:** `AberturaOut` não está no manifesto do codegen do `legislativo`, então o
+  `lock-version` da abertura de votação não chega ao contrato TS. Fora do escopo desta fase.
+- `demo.sessoes-test` falha porque a sonda da Fase 8 mutou a sessão `…0212`. É poluição de dado da
+  própria varredura, não regressão — some com `semear-tudo.sh`.
+
+---
+
+# Fase 10 — TRILHA 2 grupo B: as 25 escritas restantes, por HTTP
+
+> Plano: `docs/superpowers/plans/2026-09-08-exploratorio-de-escrita.md`, Trilha 2, grupos B–G.
+> Branch `trilha-2-escritas`. Script: `e2e/.sonda/t2-grupo-b.sh`.
+> Commits: `6eaa28c` (contador) · `a8b9bbc` (apreciação de veto) · `3ad57b0` (a sonda).
+
+**Placar final:** 25/25 rotas exercidas, caminho feliz + caminhos de erro em cada uma · **157
+checagens OK · 0 QUEBRA · 0 FRÁGIL · 7 GAP declarados**. Duas corridas consecutivas com placar
+idêntico. Isolamento multi-tenant testado com identidade REAL de outro ente em 8 rotas: **0
+vazamentos**. Suíte do backend: 2085 testes, 5588 asserções, 3 falhas — todas em `demo.*` por
+poluição de dado, nenhuma regressão (prova abaixo).
+
+**Como o placar chegou aqui:** 58 QUEBRA na 1ª corrida → 16 → 2 → 0. Cada queda foi destravada por um
+conserto real ou por uma acusação retirada com evidência. As 4 corridas vermelhas são a prova de que
+este gate reprova; nenhuma delas foi ajustada para ficar verde.
+
+## O achado que domina a fase: a Casa da demo estava em 500 permanente
+
+`POST /portal/esic/pedidos`, `/portal/lgpd/solicitacoes` e `/portal/ouvidoria/manifestacoes`
+devolviam **500 para qualquer submissão de cidadão**. Não era flake: era determinístico e
+irreversível.
+
+**Mecanismo, verificado na fonte e no banco.** O contador gapless (`shared.sequencial`) e as linhas
+numeradas nas tabelas de módulo são um **par de invariante**.
+`test/integration/oplenario/kernel/sequencial_test.clj:22` truncava `shared.sequencial`
+**globalmente** — sem escopo de tenant, e sem truncar as tabelas numeradas junto. Rodar a suíte
+contra um banco com dado semeado apagava o contador de **todos** os entes e deixava as linhas para
+trás. `proximo!` então volta a 1, colide na UNIQUE `(ente, ano, sequencial)`, e **a colisão aborta a
+transação inteira — revertendo o próprio incremento do contador**. O contador nunca ultrapassa a
+colisão.
+
+**Extensão real, medida:** a Casa da demo tinha **17 escopos com linhas numeradas** (até
+`projeto_lei:2026`=15 e `protocolo_geral:2026`=24) e **um único contador vivo**. Criar proposição,
+protocolar documento, gerar autógrafo ou abrir qualquer pedido de cidadão: 500. **Numa demonstração,
+isso mataria M5 e M6 ao vivo.**
+
+**Por que o grupo A não pegou:** conduzir sessão não numera nada. Votação, pauta, fala e incidente
+não passam por `shared.sequencial`. A varredura de 17 rotas passou ao lado do defeito.
+
+**E `./demo/semear-tudo.sh` não reparava.** A semente é idempotente **por pular** (`ja-semeada?` →
+relê), então nunca reprotocola e nunca reconstrói o contador. O script terminava com **exit 0** e a
+Casa continuava quebrada. A memória do projeto afirmava que ele "resolve tudo" — não resolvia, e essa
+afirmação foi corrigida.
+
+**Conserto (`6eaa28c`), em três peças:**
+
+| Peça | O quê |
+|---|---|
+| Raiz | O TRUNCATE sai do fixture (os testes já isolam por `random-uuid`) e vira **gate de CI**: `kernel/sequencial-lint-test` reprova se qualquer teste truncar de novo. |
+| Reparo | `kernel/sequencial/reconciliar!` levanta o contador até um piso explícito (`GREATEST` — nunca abaixa). O kernel não conhece módulo: quem lê o piso é o chamador. |
+| Operação | `demo/reconciliar_contadores.clj` + 5ª etapa em `semear-tudo!`, que reconcilia e **imprime** o que levantou. Aplicado ao banco vivo: 17 escopos, e as 16 rotas de participação foram de 500 a verde. |
+
+## O 2º achado: a apreciação de veto devolvia 500 em todos os caminhos de erro
+
+`POST /legislativo/tramitacoes-executivas/:id/apreciacao` (a única rota do grupo G):
+
+| Caminho | Era | Ficou |
+|---|---|---|
+| Tramitação não está `vetado` | **500** | **409** |
+| `lock-version` divergente | **500** | **409** |
+| `veto-votacao-id` inexistente | **500** cru de FK | **400** com o campo nomeado |
+
+Causa: `db/tramitacao_executiva` lançava `ex-info` **sem `:tipo`** (o interceptor global cai no
+`:else`), e a violação de FK subia crua. Conserto (`a8b9bbc`) estende o que a base já faz: tag no
+`db/`, tradução de 23503 no Repo-Component (mesmo predicado de `cadastros/ligar-identidade!`), e
+tradução das tags no diplomat (como `resposta-conflito-sessao-fechada` do grupo A). A rota irmã
+`/legislativo/autografos/:id/resposta` foi corrigida junto — não está nas 25, mas compartilha a mesma
+dupla de funções e o mesmo guard; declarado, não silencioso.
+
+**E a docstring do schema mentia.** `wire/in/pos_aprovacao` afirmava que `veto-votacao-id` era
+"forward-ref (sem FK declarativa no domínio)". O banco desmente: a FK
+`(ente_id, veto_votacao_id) → legislativo.votacoes` existe desde a migration 0022. Corrigida, e
+ancorada por teste que reprova se a FK sair.
+
+## Dois testes que estavam mentindo (o mesmo mecanismo, duas formas)
+
+1. **`registrar-resposta-conflito-lock-version-400` fabricava a exceção.** O fake lançava
+   `{:tipo :validacao/invalido}` — formato que a produção **nunca produziu** (lançava sem tipo
+   nenhum). O teste ficava verde afirmando 400 enquanto a borda real devolvia 500. É o mesmo
+   mecanismo já registrado duas vezes neste projeto: **fixture que inventa a forma mantém verde um
+   caminho morto.** Agora o fake usa a tag real, e a tag está ancorada na fonte.
+2. **Os guards de `db` usavam `(is (thrown? Exception ...))`.** Isso passa igual para uma `ex-info`
+   sem `:tipo` — exatamente a que vira 500. Uma asserção que não distingue "lança certo" de "lança
+   virando erro interno" não é cobertura. Trocadas por asserções sobre o `:tipo` da `ex-data`.
+
+## Quatro defeitos do próprio instrumento (a sonda mediu a si mesma antes de acusar)
+
+1. **Cascata.** Um fixture que não nasceu gerou **40 achados derivados** — todos "esperava 200, veio
+   400 Ambiguous URI empty segment", porque o id vazio montava `/esic/pedidos//resposta`. Quarenta
+   linhas escondendo o único defeito real. `exigir` agora registra **um** achado e pula o bloco.
+2. **Não-re-rodabilidade.** CPF fixo reusava a mesma identidade (já ligada) e o `PATCH` dava 409
+   legítimo, lido como defeito do produto. CPF passou a ser gerado com dígito verificador calculado.
+3. **A sonda acusando o próprio fixture.** O check de fidelidade da semente rodava **depois** de a
+   sonda licenciar um mandato por psql, e culpava a semente por isso. Movido para antes.
+4. **`veto-votacao-id` aleatório.** Há FK real — mandar UUID inventado media a sonda, não o produto.
+
+## Duas acusações RETIRADAS depois de ler a fonte
+
+O método do grupo A ("investigar a intenção antes de reverter") valeu de novo, e nos dois casos a
+fonte venceu:
+
+- **`/identidade/acessos` → 500 com IdP fora não é descuido.** O handler documenta "Erro de infra do
+  KC PROPAGA -> 500 (nunca 401)" e existe teste `conceder-acesso-keycloak-fora-do-ar-500` que o
+  exige. O "banco antes do Keycloak" também é deliberado e explicado (fail-closed: vínculo sem
+  credencial não deixa ninguém entrar, e repetir conserta). Reclassificado para GAP — carry F1.4.
+- **O "cidadão da semente sem vínculo" tem decisão explícita** em `demo/casa.clj:106`, para *leitura*
+  pública. O que a decisão não cobre é a semente ter estendido a mesma identidade a uma *escrita*
+  autenticada (3 pedidos e-SIC). Vira decisão de narrativa da demo, não defeito de rota.
+
+## Afirmação de cobertura (uma corrida ficou verde cobrindo 24 de 25)
+
+"Zero achados" e "não rodou" tinham a mesma saída. A cobertura virou **asserção**: se uma rota não
+teve nenhuma checagem OK, o gate cai. Provado subindo o esperado para 26 e vendo reprovar.
+
+## As 3 falhas de suíte, provadas como dado e não como regressão
+
+| Teste | Por quê | Evidência |
+|---|---|---|
+| `demo.sessoes-test` (×2) | Sessão `…0212` = `encerrada` e zero votações abertas na `…0211` | Poluição da **Fase 8**, anterior a esta sessão |
+| `demo.participacao-test` | Fila de moderação com 10 pendentes em vez de 2 | Comentários rotulados `Sonda T2B —` no banco |
+
+**E não dá para limpar.** O banco de participação é **append-only por desenho**
+(`shared.imut_append_only` barra DELETE em `moderacao_comentario`/`denuncia_comentario`), e a FK
+impede apagar o comentário. Tentei e o banco recusou — corretamente.
+
+## O conflito estrutural que isso destapa (decisão do Daouda)
+
+Os testes `demo.*` afirmam o **conteúdo exato** de uma Casa **compartilhada e append-only**. Qualquer
+escrita exploratória — que é o objetivo inteiro da T2 e da T3 — a suja de forma **permanente**, e
+`semear-tudo.sh` não restaura (idempotência por pular + append-only). O único reset é `down -v`.
+
+Ou seja: **"suíte 100% verde" (T1.3) e "exercitar as 66 escritas" (T2/T3) são hoje mutuamente
+exclusivos nesta máquina.** O plano já dizia que a sonda deveria rodar "numa Casa própria"; isso
+deixou de ser preferência e virou pré-requisito.
+
+Três saídas, e a escolha não é de engenharia:
+1. **Casa própria para sonda** (um `ente` de varredura, separado do da demo) — mais trabalho, resolve de vez.
+2. **Testes `demo.*` param de afirmar contagem exata** e passam a afirmar invariantes ("existe ao menos um pendente") — mais barato, perde poder de detecção.
+3. **`down -v` antes de cada suíte cheia** — zero código, mas depende de autorizar o `down -v` (ainda pendente da T1) e custa o tempo de reconstrução.
+
+## Aberto
+
+- **A escolha das 3 saídas acima.** É o que trava o critério "dois runs cheios 100% verdes" do plano.
+- **`veto-votacao-id` é carimbado sem checar se a votação é DA apreciação daquele veto.** A FK garante
+  que a votação existe e é da Casa; nada garante que é a votação certa. Não é defeito desta frente —
+  é `[GAP]` de regra de negócio, e a rota nem sabe qual seria a votação correta.
+- **Carry `CPF-cifra` segue aberto** (medido de novo: CPF em texto puro em `identidade.identidade`).
+  Dado pessoal sensível da LGPD sob custódia da plataforma que vende conformidade. Cifrar exige
+  decisão de cripto + migração.
+- **A cadeia do M6 é inalcançável pela borda.** Não existe rota HTTP que **crie** uma remessa —
+  `validar`/`submeter`/`resposta` só transicionam o que já existe, e `gerar-remessa!` não está ligado
+  a rota nenhuma. A sonda teve de plantar a remessa por psql para exercer as 3 rotas.
+- **A semente marca mandato `licenciado` sem gravar o ato da licença** (zero linhas em
+  `cadastros.mandato_licenca`). A reassunção funciona, mas devolve `fim: null` — não há licença
+  aberta para fechar. Dado de demo incompleto.
+- **Fixtures de um uso.** Reassunção e apreciação de veto consomem o único candidato da Casa. A sonda
+  os replanta por psql e diz que replantou, mas a solução real é a Casa própria (saída 1 acima).
+
+## Revisão adversarial (`ecc:clojure-reviewer`) — o que ela reprovou
+
+**Zero CRÍTICO.** `a8b9bbc` (apreciação de veto) passou limpo: o revisor verificou explicitamente
+TOCTOU entre o `buscar` do controller e a escrita, engolimento de exceção alheia pelo `try` novo, e
+atribuição errada de FK (a tabela tem duas) — os três estão corretos por construção, com o raciocínio
+escrito. **Dois IMPORTANTE em `6eaa28c`**, ambos reais, ambos consertados em `862f271`:
+
+1. **A família `sessao:` nunca era exercitada pelo round-trip.** O teste prometia conferir *todo*
+   escopo contra o que o `proximo!` gravou, mas nunca chamava `sessoes/semear!` — então a asserção
+   central **não podia reprovar** para esse ramo. A consulta estava certa por sorte. É o mesmo padrão
+   que esta fase inteira passou caçando, desta vez **no meu próprio teste**, escrito no mesmo dia em
+   que registrei o padrão duas vezes. Corrigido e provado com escopo plantado.
+2. **`pisos` lia no datasource cru.** Em dev o role é superusuário e ignora RLS: o isolamento
+   dependia só do `WHERE ente_id = ?` manual, sem rede. Agora roda sob `com-tenant*` (vira
+   `oplenario_app`, NOBYPASSRLS) **e** ganhou teste de dois entes.
+
+**O experimento que fecha a questão, medido nos dois sentidos:**
+
+| Estado do código | `WHERE` removido | Resultado |
+|---|---|---|
+| Pré-conserto (leitura crua, superusuário) | sim | **Vazou** — o teste reprova e nomeia (`pedido_esic:2026, piso 30` de outro ente) |
+| Pós-conserto (`com-tenant*`) | sim | **Não vazou** — a RLS barra |
+
+Provado o que cada camada faz: o teste não é cego, e a defesa em profundidade segura mesmo uma
+consulta futura que esqueça o `WHERE`. Sem os dois sentidos, o verde do teste pós-conserto teria sido
+lido como "o teste não pega nada".
+
+## Um custo de método desta fase: plantar defeito em banco compartilhado deixa rastro
+
+Provar que um gate reprova exige plantar o defeito. Duas vezes nesta fase o defeito plantado **gravou
+estado** no banco compartilhado (`pedido_esic_DEFEITO:2026` e `sessao_ERRADO:*` em
+`shared.sequencial`, escritos pela própria reconciliação sob teste), e o resíduo **contaminou o
+experimento seguinte** — cheguei a ler uma falha do experimento anterior como se fosse o resultado do
+atual. Ambos limpos. A regra que faltava: **defeito plantado em código que ESCREVE precisa de limpeza
+explícita antes do próximo experimento**, e o próprio experimento deve ser conferido pelo nome do
+teste que falhou, nunca só pela contagem de falhas.

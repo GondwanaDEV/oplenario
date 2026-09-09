@@ -83,8 +83,8 @@
     (is (= 1 (:numero-sequencial body)))
     (is (= "agendada" (:estado body)))
     (is (false? (:permite-voto-secreto body)))
-    (is (not (contains? body :lock-version))
-        "adapters/out FILTRA o token interno de concorrencia (lock-version nao vaza)")))
+    (is (= 0 (:lock-version body))
+        "ledger de prontidao Fase 8 achado #2: GET /sessoes/:id e' a UNICA fonte do lock-version que POST /sessoes/:id/transicao exige no corpo -- sem ele a 2a chamada do fluxo e' impossivel")))
 
 (deftest buscar-sessao-inexistente-404
   (let [ente (random-uuid)
@@ -136,7 +136,8 @@
     (is (= "proposicao" (:tipo-item (first (:itens body)))))
     (is (= (str prop) (:proposicao-id (first (:itens body)))) "proposicao-id projetado como string")
     (is (= "Comunicado da Mesa" (:texto-descricao (second (:itens body)))))
-    (is (not (contains? (first (:itens body)) :lock-version)) "lock-version interno nao vaza")
+    (is (= 0 (:lock-version (first (:itens body))))
+        "ledger de prontidao Fase 8 achado #2: GET .../pauta e' a UNICA fonte do lock-version que PATCH/DELETE .../pauta/itens/:item-id exigem no corpo")
     (is (not (contains? (first (:itens body)) :ente-id)) "ente-id nao vaza")
     (is (not (contains? (first (:itens body)) :pauta-sessao-id)) "pauta-sessao-id interno nao vaza")))
 

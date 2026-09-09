@@ -16,6 +16,7 @@ export interface SessaoOut {
   abertaEm?: string | null;
   encerradaEm?: string | null;
   motivoNaoRealizada?: string | null;
+  lockVersion: number;
 }
 
 export interface SessoesOut {
@@ -106,6 +107,7 @@ export interface PautaItemOut {
   proposicaoId?: string | null;
   textoDescricao?: string | null;
   ordem: number;
+  lockVersion: number;
 }
 
 export interface PautaOut {
@@ -116,6 +118,7 @@ export interface PautaOut {
 export interface GravacaoReciboOut {
   id: string;
   audioHash: string;
+  lockVersion: number;
 }
 
 export interface SegmentoOut {
@@ -235,6 +238,7 @@ export interface OradorAtualOut {
   fase: "expediente" | "explicacoes_pessoais" | "grande_expediente" | "ordem_do_dia" | "tribuna_livre_cidadao";
   iniciouEm: string;
   inscricaoId: string | null;
+  lockVersion: number;
 }
 
 export interface MarcoCronometroOut {
@@ -249,6 +253,7 @@ export interface InscritoTribunaOut {
   origemInscricao: "automatica_por_autoria" | "intra_sessao_pedido" | "pre_sessao_app" | "pre_sessao_secretaria";
   fase: "expediente" | "explicacoes_pessoais" | "grande_expediente" | "ordem_do_dia" | "tribuna_livre_cidadao";
   ordem: number;
+  lockVersion: number;
 }
 
 export interface TribunaOut {

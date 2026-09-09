@@ -47,6 +47,22 @@
   (is (nil? (logic/validar-motivo-fim nil)) "motivo_fim nil e' valido (gravacao ainda aberta)")
   (is (nil? (logic/validar-motivo-inicio "reinicio_pos_falha")) "reinicio pos falha e' motivo valido"))
 
+;; ---------- ledger de prontidao Fase 8 achado #2: registrar-segmento! devolve o lock-version ----------
+
+(deftest registrar-devolve-lock-version-para-o-recibo-de-ingestao
+  ;; um segmento AINDA NAO vinculado nunca aparece em `listar-segmentos-da-sessao` (so' lista os JA'
+  ;; vinculados): o recibo de `registrar-segmento!` e' a UNICA fonte do token de CAS que `vincular-
+  ;; segmento!` exige no corpo — sem RETURNING lock_version aqui, vincular fica impossivel de montar
+  ;; so' pela API (a versao anterior devolvia so' {:id}).
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [recibo (registrar! tx ente {})]
+          (is (= 0 (:lock-version recibo)) "segmento recem-registrado nasce com lock_version 0")
+          (is (= (:lock-version recibo)
+                 (:lock-version (gravacao/buscar tx ente (:id recibo))))
+              "o lock-version do recibo bate com o que esta gravado"))))))
+
 ;; ---------- registrar + buscar + model ----------
 
 (deftest registrar-e-buscar

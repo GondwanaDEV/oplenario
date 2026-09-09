@@ -18,6 +18,7 @@
             [oplenario.participacao.diplomat.http.in :as participacao-http]
             [oplenario.sessoes.components.renderizador-pdf :as renderizador-pdf]
             [oplenario.sessoes.components.repositorio :as repo-sessoes-comp]
+            [oplenario.sessoes.logic :as sessoes-logic]
             [oplenario.sessoes.components.serializador-folha :as serializador-folha]
             [oplenario.sessoes.diplomat.http.in :as sessoes-http]
             [oplenario.tempo-real.diplomat.sse :as tempo-real-sse]
@@ -192,6 +193,13 @@
         ;; que o endpoint SSE (G3) E a vertical de votacao ao vivo (F4 Slice 3, no legislativo) precisam p/
         ;; autorizar (a RLS escopa por tenant). Os modulos chamam por esta fn, nunca importam sessoes (§22.10).
         consultar-sessao (fn [ente-id sessao-id] (repo-sessoes-comp/buscar-sessao repo-sessoes ente-id sessao-id))
+        ;; T2 grupo A achado #4/#5 (ledger de prontidao Fase 8): a votacao ao vivo (legislativo) precisa saber
+        ;; se a sessao ja FECHOU p/ recusar abrir/registrar-voto/encerrar — mas legislativo NAO importa
+        ;; `sessoes.logic` (§22.10, cross-modulo so por HTTP/eventos/injecao). MESMA inversao de dependencia de
+        ;; `consultar-sessao` acima: o host fecha sobre o vocabulario REAL (`estados-sessao-fechada`, a MESMA
+        ;; particao que `sessoes.controllers/exigir-sessao-aberta!` usa) em vez de deixar o legislativo duplicar
+        ;; o conjunto.
+        sessao-fechada? (fn [sessao] (contains? sessoes-logic/estados-sessao-fechada (:estado sessao)))
         ;; FE Onda A1: membros-da-casa injetado em sessoes (presenca agregada) — mesma inversao de
         ;; dependencia de consultar-sessao/painel-compliance; fuso civil vindo do kernel
         ;; (`tempo/zona-civil-padrao`, I-5 fatia 2 — antes era literal aqui), mesmo racional de
@@ -338,6 +346,7 @@
                                    :renderizador-pdf renderizador-pdf-fn}))
         (into (legislativo-http/rotas {:auth auth :repo-legislativo repo-legislativo
                                        :consultar-sessao consultar-sessao
+                                       :sessao-fechada? sessao-fechada?
                                        :resolver-municipio resolver-municipio
                                        :resolver-vereador resolver-vereador-fn
                                        :resolver-comissoes resolver-comissoes-fn

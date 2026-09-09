@@ -42,7 +42,8 @@
   {:id id :ente-id ente-id :estado "aberta" :tipo-sessao "ordinaria" :transmite-publica true
    :agendada-para agendada-para :aberta-em aberta-em :encerrada-em nil
    :sessao-legislativa-id (random-uuid) :numero-sequencial 1 :modalidade "presencial"
-   :delibera true :gera-ata-regimental true :permite-voto-secreto false :permite-modalidade-remota false})
+   :delibera true :gera-ata-regimental true :permite-voto-secreto false :permite-modalidade-remota false
+   :lock-version 0})
 
 (defn- lido-aberta [ente-id id]
   {:sessao (sessao-aberta ente-id id) :instante aberta-em

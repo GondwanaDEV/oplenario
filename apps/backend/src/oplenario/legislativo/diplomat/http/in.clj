@@ -43,38 +43,66 @@
 ;; data civil, nao UTC (review MEDIUM fe-11-parecer); mesma constante de participacao.controllers/zona-civil.
 (def ^:private zona-civil (ZoneId/of "America/Fortaleza"))
 
+(defn- resposta-conflito-sessao-fechada
+  "Traduz `:conflito/sessao-fechada` -> 409 (T2 grupo A achado #4/#5, ledger de prontidao Fase 8): a sessao ja
+  fechou e a votacao (abrir/votar/meu-voto/encerrar) esta bloqueada. Mensagem do dominio via ex-message —
+  mesma disciplina de `sessoes.diplomat.http.in/resposta-conflito-sessao-fechada` (tag identica cross-modulo,
+  cada diplomat traduz a SUA borda)."
+  [e]
+  (http/json-resposta 409 {:erro (ex-message e)}))
+
 (defn- abrir-handler
   "POST /sessoes/:id/votacoes. corpo-json -> :json-params; adapters/in valida+coage+injeta id/autor; controller
-  autoriza na sessao (:id) e abre; adapters/out projeta o recibo. nil (sessao inexistente) -> 404."
-  [repo-leg consultar-sessao]
+  autoriza na sessao (:id) e abre; adapters/out projeta o recibo. nil (sessao inexistente) -> 404; sessao ja
+  fechada (`:conflito/sessao-fechada`) -> 409 (ledger Fase 8 achado #5)."
+  [repo-leg consultar-sessao sessao-fechada?]
   (fn [req]
     (let [ator (:ator req)
           sid  (adapters-in/id-param->uuid (get-in req [:path-params :id]))
           m    (adapters-in/abrir-votacao->dominio ator (:json-params req))]
-      (if-let [recibo (controllers/abrir-votacao repo-leg consultar-sessao ator sid m)]
-        (http/json-resposta 201 (adapters-out/abertura->wire recibo))
-        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+      (try
+        (if-let [recibo (controllers/abrir-votacao repo-leg consultar-sessao sessao-fechada? ator sid m)]
+          (http/json-resposta 201 (adapters-out/abertura->wire recibo))
+          (http/json-resposta 404 {:erro "sessao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/sessao-fechada (:tipo (ex-data e)))
+            (resposta-conflito-sessao-fechada e)
+            (throw e)))))))
 
 (defn- voto-handler
   "POST /sessoes/:id/votacoes/:votacao-id/votos. Authz na sessao + amarra votacao<->sessao; dispatch por
-  modalidade no controller. nil (votacao inexistente ou de outra sessao) -> 404."
-  [repo-leg consultar-sessao]
+  modalidade no controller. nil (votacao inexistente ou de outra sessao) -> 404. T2 grupo A achado #1 (ledger
+  Fase 8): o 2o voto NOMINAL do MESMO vereador batia no UNIQUE
+  `votos_ente_id_votacao_id_vereador_id_key` e a PSQLException subia CRUA ate' o interceptor global -> 500
+  ('erro interno'). O irmao self-service `meu-voto-handler` (abaixo) JA tratava isto — so' esta rota (a Mesa
+  registrando votos nominais) nao tinha o catch. ESPELHA o irmao: mesma tag `:conflito/voto-duplicado`
+  (lancada agora tambem por `repo/registrar-voto!`, nao so' `registrar-meu-voto!`) -> 409. Sessao ja fechada
+  (`:conflito/sessao-fechada`) -> 409 (ledger Fase 8 achado #4/#5)."
+  [repo-leg consultar-sessao sessao-fechada?]
   (fn [req]
     (let [ator (:ator req)
           sid  (adapters-in/id-param->uuid (get-in req [:path-params :id]))
           vid  (adapters-in/id-param->uuid (get-in req [:path-params :votacao-id]))
           m    (adapters-in/registrar-voto->dominio ator vid (:json-params req))]
-      (if-let [recibo (controllers/registrar-voto repo-leg consultar-sessao ator sid vid m)]
-        (http/json-resposta 201 (adapters-out/voto->wire recibo))
-        (http/json-resposta 404 {:erro "votacao nao encontrada nesta sessao"})))))
+      (try
+        (if-let [recibo (controllers/registrar-voto repo-leg consultar-sessao sessao-fechada? ator sid vid m)]
+          (http/json-resposta 201 (adapters-out/voto->wire recibo))
+          (http/json-resposta 404 {:erro "votacao nao encontrada nesta sessao"}))
+        (catch clojure.lang.ExceptionInfo e
+          (case (:tipo (ex-data e))
+            :conflito/voto-duplicado
+            (http/json-resposta 409 {:erro "voto ja registrado para este vereador nesta votacao"})
+            :conflito/sessao-fechada (resposta-conflito-sessao-fechada e)
+            (throw e)))))))
 
 (defn- meu-voto-handler
   "POST /sessoes/:id/votacoes/:votacao-id/meu-voto (Onda C3, papel 'vereador'). `hoje`/`instante` resolvidos
   AQUI, na borda (mesmo padrao de emitir-parecer-handler/`agora`) — o controller nao le o relogio. Um
   double-tap/retry do celular (2 requests concorrentes do MESMO vereador) serializa pelo lock `FOR UPDATE`
   em `registrar-meu-voto!` e o 2o bate no UNIQUE -> `:conflito/voto-duplicado` -> 409 (nunca 500 opaco;
-  mesmo padrao de :conflito/transicao|inscricao|fala neste modulo/sessoes)."
-  [repo-leg consultar-sessao resolver-vereador registro relogio]
+  mesmo padrao de :conflito/transicao|inscricao|fala neste modulo/sessoes). Sessao ja fechada
+  (`:conflito/sessao-fechada`) -> 409 (ledger Fase 8 achado #4/#5)."
+  [repo-leg consultar-sessao sessao-fechada? resolver-vereador registro relogio]
   (fn [req]
     (let [ator (:ator req)
           sid  (adapters-in/id-param->uuid (get-in req [:path-params :id]))
@@ -83,26 +111,38 @@
           hoje (tempo/hoje-de instante zona-civil)
           m    (adapters-in/meu-voto->dominio ator vid (:json-params req))]
       (try
-        (if-let [recibo (controllers/meu-voto repo-leg consultar-sessao resolver-vereador registro ator sid vid hoje instante m)]
+        (if-let [recibo (controllers/meu-voto repo-leg consultar-sessao sessao-fechada? resolver-vereador registro ator sid vid hoje instante m)]
           (http/json-resposta 201 (adapters-out/voto->wire recibo))
           (http/json-resposta 404 {:erro "vereador sem cadastro vinculado, ou sessao/votacao nao encontrada"}))
         (catch clojure.lang.ExceptionInfo e
-          (if (= :conflito/voto-duplicado (:tipo (ex-data e)))
+          (case (:tipo (ex-data e))
+            :conflito/voto-duplicado
             (http/json-resposta 409 {:erro "voto ja registrado para este vereador nesta votacao"})
+            :conflito/sessao-fechada (resposta-conflito-sessao-fechada e)
             (throw e)))))))
 
 (defn- encerrar-handler
   "POST /sessoes/:id/votacoes/:votacao-id/encerramento. Apura + grava o snapshot (CAS); adapters/out projeta os
-  totais. nil (votacao inexistente ou de outra sessao) -> 404."
-  [repo-leg consultar-sessao]
+  totais. nil (votacao inexistente ou de outra sessao) -> 404. Votacao ja terminal -> `:conflito/votacao-
+  terminal` -> 409 (T2 grupo A achado #3, ledger Fase 8 — ERA 400, corrigido: 409 e' o codigo certo p/
+  'seu pedido era valido, o recurso mudou'). Sessao ja fechada (`:conflito/sessao-fechada`) -> 409 (achado
+  #4/#5)."
+  [repo-leg consultar-sessao sessao-fechada?]
   (fn [req]
     (let [ator (:ator req)
           sid  (adapters-in/id-param->uuid (get-in req [:path-params :id]))
           vid  (adapters-in/id-param->uuid (get-in req [:path-params :votacao-id]))
           m    (adapters-in/encerrar-votacao->dominio ator vid (:json-params req))]
-      (if-let [snap (controllers/encerrar-votacao repo-leg consultar-sessao ator sid vid m)]
-        (http/json-resposta 200 (adapters-out/encerramento->wire snap))
-        (http/json-resposta 404 {:erro "votacao nao encontrada nesta sessao"})))))
+      (try
+        (if-let [snap (controllers/encerrar-votacao repo-leg consultar-sessao sessao-fechada? ator sid vid m)]
+          (http/json-resposta 200 (adapters-out/encerramento->wire snap))
+          (http/json-resposta 404 {:erro "votacao nao encontrada nesta sessao"}))
+        (catch clojure.lang.ExceptionInfo e
+          (case (:tipo (ex-data e))
+            :conflito/votacao-terminal
+            (http/json-resposta 409 {:erro "votacao ja em estado terminal (encerrada/anulada)"})
+            :conflito/sessao-fechada (resposta-conflito-sessao-fechada e)
+            (throw e)))))))
 
 (defn- listar-proposicoes-handler
   "GET /legislativo/proposicoes(?busca=&tipo=&estado=&autor-id=&ano=&pagina=&tamanho=&ordenar-por=&ordenar-dir=).
@@ -355,32 +395,57 @@
         (http/json-resposta 200 (pos-aprovacao->wire dados))
         (http/json-resposta 404 {:erro "proposicao nao encontrada"})))))
 
+(defn- resposta-conflito-tramitacao-executiva
+  "Traduz `:conflito/tramitacao-executiva` -> 409 e `:validacao/votacao-inexistente` -> 400 (T2 grupo B,
+  ledger de prontidao Fase 10). Sem esta traducao as duas caiam no `:else` do interceptor global e a
+  borda devolvia **500 'erro interno'** para (a) conflito de estado, (b) CAS divergente — o caso mais
+  banal de escrita concorrente — e (c) um `veto-votacao-id` que nao existe, que e' erro de CORPO.
+  Mesma disciplina de `resposta-conflito-sessao-fechada` acima: cada diplomat traduz a SUA borda,
+  mensagem do dominio via `ex-message`, nada de mapear `:conflito/*` no interceptor global."
+  [e]
+  (case (:tipo (ex-data e))
+    :conflito/tramitacao-executiva (http/json-resposta 409 {:erro (ex-message e)})
+    :validacao/votacao-inexistente (http/json-resposta 400 {:erro (ex-message e)})
+    (throw e)))
+
 (defn- registrar-resposta-executivo-handler
   "POST /legislativo/autografos/:id/resposta — 'Registrar retorno' (path :id = autografo-id). nil (sem
-  tramitacao executiva para este autografo no tenant) -> 404."
+  tramitacao executiva para este autografo no tenant) -> 404; conflito de estado ou de lock-version -> 409.
+
+  A rota IRMA da apreciacao, e com o MESMO guard: `db/tramitacao-executiva` lanca os dois conflitos com a
+  mesma tag. Traduzida junto de proposito — a sonda T2 grupo B so' exercia a apreciacao, mas deixar o
+  irmao adjacente com o mesmo defeito enquanto se edita a mesma dupla de funcoes seria pior engenharia
+  que corrigir os dois (ledger Fase 10)."
   [repo-leg]
   (fn [req]
     (let [ator (:ator req) ente-id (:ente-id ator)
           autografo-id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
           m (adapters-in-pos-aprovacao/registrar-resposta->dominio ator (:json-params req))]
-      (if (controllers/registrar-resposta-executivo repo-leg ente-id autografo-id m)
-        (http/json-resposta 200 (adapters-out-tramitacao-executiva/tramitacao-executiva->wire
-                                   (controllers/buscar-tramitacao-por-autografo repo-leg ente-id autografo-id)))
-        (http/json-resposta 404 {:erro "tramitacao executiva nao encontrada para este autografo"})))))
+      (try
+        (if (controllers/registrar-resposta-executivo repo-leg ente-id autografo-id m)
+          (http/json-resposta 200 (adapters-out-tramitacao-executiva/tramitacao-executiva->wire
+                                     (controllers/buscar-tramitacao-por-autografo repo-leg ente-id autografo-id)))
+          (http/json-resposta 404 {:erro "tramitacao executiva nao encontrada para este autografo"}))
+        (catch clojure.lang.ExceptionInfo e
+          (resposta-conflito-tramitacao-executiva e))))))
 
 (defn- apreciar-veto-handler
   "POST /legislativo/tramitacoes-executivas/:id/apreciacao (path :id = tramitacao-executiva-id, DIRETO).
   A votacao real e' aberta/encerrada via /sessoes/:id/votacoes* ja' existente (§5 doc-mestre) — esta rota
-  so' carimba o desfecho. nil (tramitacao executiva inexistente no tenant) -> 404."
+  so' carimba o desfecho. nil (tramitacao executiva inexistente no tenant) -> 404; conflito de estado ou
+  de lock-version -> 409; `veto-votacao-id` inexistente -> 400 (ledger Fase 10)."
   [repo-leg]
   (fn [req]
     (let [ator (:ator req) ente-id (:ente-id ator)
           id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
           m (adapters-in-pos-aprovacao/apreciar-veto->dominio ator (:json-params req))]
-      (if (controllers/apreciar-veto repo-leg ente-id id m)
-        (http/json-resposta 200 (adapters-out-tramitacao-executiva/tramitacao-executiva->wire
-                                   (controllers/buscar-tramitacao-executiva repo-leg ente-id id)))
-        (http/json-resposta 404 {:erro "tramitacao executiva nao encontrada"})))))
+      (try
+        (if (controllers/apreciar-veto repo-leg ente-id id m)
+          (http/json-resposta 200 (adapters-out-tramitacao-executiva/tramitacao-executiva->wire
+                                     (controllers/buscar-tramitacao-executiva repo-leg ente-id id)))
+          (http/json-resposta 404 {:erro "tramitacao executiva nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (resposta-conflito-tramitacao-executiva e))))))
 
 ;; ========================= Onda C1: borda /meu do vereador (home fora-de-sessao) =========================
 
@@ -419,25 +484,29 @@
   antes de virar autoria PUBLICA), `registro` (RegistroFatos do motor, injetado pelo host — Onda B Slice 5,
   o editor de parecer dirige o motor via emitir-parecer!) e `relogio` (kernel/tempo, injetado pelo host —
   review MEDIUM fe-11-parecer, mesmo contrato de `participacao-http/rotas`: producao le o relogio do
-  sistema, teste crava o instante).
+  sistema, teste crava o instante). `sessao-fechada?` (injetada pelo host — cross-modulo p/ `sessoes.logic/
+  estados-sessao-fechada`, T2 grupo A achado #4/#5 do ledger de prontidao Fase 8: legislativo NAO importa o
+  vocabulario de estado fechado, §22.10 — o predicado atravessa a fronteira do jeito que `consultar-sessao`
+  ja' atravessa).
   Todas as acoes das verticais de votacao/proposicoes/parecer EXIGEM a authz GROSSA (papel 'secretario') +
   corpo-json nas de escrita; a fina da votacao decide no controller com a sessao carregada. A borda /meu
   EXIGE papel 'vereador' (papel DISTINTO — nao 'secretario')."
-  [{:keys [auth repo-legislativo consultar-sessao resolver-municipio resolver-vereador resolver-comissoes
-           vereador-vinculado? registro relogio]}]
+  [{:keys [auth repo-legislativo consultar-sessao sessao-fechada? resolver-municipio resolver-vereador
+           resolver-comissoes vereador-vinculado? registro relogio]}]
   (let [papel (it/exige-papel "secretario")
         papel-vereador (it/exige-papel "vereador")]
     #{["/sessoes/:id/votacoes" :post
-       [auth papel it/corpo-json (abrir-handler repo-legislativo consultar-sessao)]
+       [auth papel it/corpo-json (abrir-handler repo-legislativo consultar-sessao sessao-fechada?)]
        :route-name :legislativo/abrir-votacao]
       ["/sessoes/:id/votacoes/:votacao-id/votos" :post
-       [auth papel it/corpo-json (voto-handler repo-legislativo consultar-sessao)]
+       [auth papel it/corpo-json (voto-handler repo-legislativo consultar-sessao sessao-fechada?)]
        :route-name :legislativo/registrar-voto]
       ["/sessoes/:id/votacoes/:votacao-id/meu-voto" :post
-       [auth papel-vereador it/corpo-json (meu-voto-handler repo-legislativo consultar-sessao resolver-vereador registro relogio)]
+       [auth papel-vereador it/corpo-json (meu-voto-handler repo-legislativo consultar-sessao sessao-fechada?
+                                                             resolver-vereador registro relogio)]
        :route-name :legislativo/meu-voto]
       ["/sessoes/:id/votacoes/:votacao-id/encerramento" :post
-       [auth papel it/corpo-json (encerrar-handler repo-legislativo consultar-sessao)]
+       [auth papel it/corpo-json (encerrar-handler repo-legislativo consultar-sessao sessao-fechada?)]
        :route-name :legislativo/encerrar-votacao]
       ["/legislativo/proposicoes" :get [auth papel (listar-proposicoes-handler repo-legislativo)]
        :route-name :legislativo/listar-proposicoes]

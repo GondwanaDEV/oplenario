@@ -15,11 +15,22 @@
   "Carrega a sessao `sessao-id` no tenant do `ator` via `consultar-sessao` (delega ao Repo de sessoes; a RLS
   escopa por tenant) e roda a camada FINA (policy.check/pode-dirigir-votacao? = mesma Casa). Devolve a sessao se
   autorizada; nil se inexistente (a borda traduz -> 404); LANCA negacao (-> 403) se de outra Casa. Fail-closed:
-  ator nil NEGA aqui, nunca delega a consultar-sessao com ente-id nil."
-  [consultar-sessao ator sessao-id]
+  ator nil NEGA aqui, nunca delega a consultar-sessao com ente-id nil.
+
+  T2 grupo A achado #4/#5 (ledger de prontidao Fase 8): sessao ENCERRADA continuava aceitando abrir-votacao/
+  registrar-voto/encerrar-votacao/meu-voto — so' `pode-dirigir-votacao?` (mesma Casa) rodava. `sessao-fechada?`
+  e' INJETADA pelo host (§22.10: legislativo NAO importa `sessoes.logic/estados-sessao-fechada` — o vocabulario
+  do estado fechado mora la', o predicado atravessa a fronteira do jeito que `consultar-sessao` ja' atravessa,
+  nao um segundo conjunto duplicado aqui). UM SO' ponto de checagem para as 4 escritas da familia votacao
+  (abrir/registrar-voto/encerrar/meu-voto) — todas passam por esta fn. Lanca `:conflito/sessao-fechada` (o
+  diplomat mapeia 409, mesmo tag do modulo `sessoes`)."
+  [consultar-sessao sessao-fechada? ator sessao-id]
   (when (nil? ator) (authz/negar! :ator-ausente {:acao :votacao/dirigir}))
   (when-let [s (consultar-sessao (:ente-id ator) sessao-id)]
     (authz/check! ator :votacao/dirigir s logic/pode-dirigir-votacao?)
+    (when (sessao-fechada? s)
+      (throw (ex-info "sessao ja fechada; escrita de votacao bloqueada"
+                      {:tipo :conflito/sessao-fechada :sessao-id sessao-id :estado (:estado s)})))
     s))
 
 (defn- votacao-na-sessao
@@ -32,9 +43,10 @@
 
 (defn abrir-votacao
   "Abre uma votacao na sessao `sessao-id` (authz herdada da sessao). `m` ja vem decodificado/coagido pelo
-  adapters/in (sem sessao-id). Devolve o recibo {:id} ou nil se a sessao nao existe no tenant (-> 404)."
-  [repo-leg consultar-sessao ator sessao-id m]
-  (when (sessao-autorizada consultar-sessao ator sessao-id)
+  adapters/in (sem sessao-id). Devolve o recibo {:id} ou nil se a sessao nao existe no tenant (-> 404). Sessao
+  ja fechada -> `sessao-autorizada` lanca `:conflito/sessao-fechada` (-> 409, ledger Fase 8 achado #5)."
+  [repo-leg consultar-sessao sessao-fechada? ator sessao-id m]
+  (when (sessao-autorizada consultar-sessao sessao-fechada? ator sessao-id)
     (repo/abrir-votacao! repo-leg (:ente-id ator) (assoc m :sessao-id sessao-id))))
 
 (defn registrar-voto
@@ -43,9 +55,10 @@
   (DESCARTA a identidade, sigilo §22.6); 'nominal' -> registrar-voto! (exige vereador-id); 'simbolica'
   (aclamacao) -> NAO registra votos individuais (o resultado e' cravado no encerramento via :resultado) ->
   :validacao/invalido (-> 400). Qualquer modalidade futura desconhecida cai no ramo fail-closed (nao no nominal).
-  Devolve {:id} ou nil (sessao/votacao inexistente ou de outra sessao -> 404). Nominal sem vereador-id -> 400."
-  [repo-leg consultar-sessao ator sessao-id votacao-id m]
-  (when (sessao-autorizada consultar-sessao ator sessao-id)
+  Devolve {:id} ou nil (sessao/votacao inexistente ou de outra sessao -> 404). Nominal sem vereador-id -> 400.
+  Sessao ja fechada -> `sessao-autorizada` lanca `:conflito/sessao-fechada` (-> 409)."
+  [repo-leg consultar-sessao sessao-fechada? ator sessao-id votacao-id m]
+  (when (sessao-autorizada consultar-sessao sessao-fechada? ator sessao-id)
     (let [ente-id (:ente-id ator)]
       (when-let [v (votacao-na-sessao repo-leg ente-id sessao-id votacao-id)]
         (case (:modalidade v)
@@ -84,10 +97,12 @@
   slice3-cockpit-votacao-design.md §3.2 — + o check trivial de estado 'aberta', tudo contra o snapshot
   LOCKED, nunca o `v` pre-tx) e so' entao reconfere+insere. Qualquer falha -> authz/check! lanca -> 403
   generico (nunca detalha qual precondicao falhou). nil (sessao/votacao inexistente ou de outra sessao, OU
-  ator sem cadastro de vereador) -> borda traduz 404."
-  [repo-leg consultar-sessao resolver-vereador registro ator sessao-id votacao-id hoje instante m]
+  ator sem cadastro de vereador) -> borda traduz 404. Sessao ja fechada -> `sessao-autorizada` lanca
+  `:conflito/sessao-fechada` (-> 409): o proprio celular do vereador nao pode votar numa sessao que a Mesa ja
+  encerrou, MESMO gate da rota da Mesa (ledger Fase 8 achado #4/#5)."
+  [repo-leg consultar-sessao sessao-fechada? resolver-vereador registro ator sessao-id votacao-id hoje instante m]
   (when-let [vereador-id (resolver-vereador (:ente-id ator) (:identidade-id ator))]
-    (when (sessao-autorizada consultar-sessao ator sessao-id)
+    (when (sessao-autorizada consultar-sessao sessao-fechada? ator sessao-id)
       (let [ente-id (:ente-id ator)]
         (when-let [v (votacao-na-sessao repo-leg ente-id sessao-id votacao-id)]
           (when (= "secreta" (:modalidade v))
@@ -296,9 +311,15 @@
 (defn encerrar-votacao
   "Encerra a votacao `votacao-id` da sessao `sessao-id` (authz na sessao + amarra). `m` carrega o id
   (=votacao-id), lock-version, base-membros e resultado. Devolve o snapshot apurado ou nil se a votacao nao
-  existe nesta sessao (-> 404). Pre-condicoes de borda viram :validacao/invalido (-> 400) usando a votacao JA
-  carregada — em vez de propagarem como 500 do db: (a) votacao terminal nao reencerra; (b) modalidade
-  'simbolica' (aclamacao) exige `resultado` explicito (nao apura individual).
+  existe nesta sessao (-> 404). Pre-condicoes de borda usam a votacao JA carregada — em vez de propagarem como
+  500 do db: (a) votacao terminal nao reencerra -> `:conflito/votacao-terminal` (-> 409, T2 grupo A achado #3
+  do ledger Fase 8 — ERA `:validacao/invalido` (400), mas 400 diz 'conserte seu pedido' e o MESMO corpo teria
+  funcionado segundos antes; 409 diz 'seu pedido era valido, o recurso mudou', consistente com os outros 5
+  conflitos de 'ja terminal' deste grupo de 17 rotas — transicao/pauta/inscricao/fala/vinculo, todos 409); (b)
+  modalidade 'simbolica' (aclamacao) exige `resultado` explicito -> `:validacao/invalido` (-> 400, este SIM e'
+  erro de pedido, nao de estado).
+
+  Sessao ja fechada -> `sessao-autorizada` lanca `:conflito/sessao-fechada` (-> 409, ledger Fase 8 achado #4/#5).
 
   CARRY DE SEGURANCA (sec MEDIUM-1, F4 Slice 3): `base-membros` (denominador do quorum p/ maioria
   absoluta/qualificada) vem do CORPO do request — um secretario comprometido poderia falsear o resultado legal
@@ -307,13 +328,13 @@
   da Casa SERVER-SIDE via a relacao `cadastros/membros_da_casa` (ja existe), injetada pelo host como o
   `consultar-sessao` faz — e remover `base-membros` do wire/in. Cross-modulo + data de vigencia do mandato =
   trabalho do resolvedor de fatos (§22.5.3 disc.5), nao desta fatia de borda."
-  [repo-leg consultar-sessao ator sessao-id votacao-id m]
-  (when (sessao-autorizada consultar-sessao ator sessao-id)
+  [repo-leg consultar-sessao sessao-fechada? ator sessao-id votacao-id m]
+  (when (sessao-autorizada consultar-sessao sessao-fechada? ator sessao-id)
     (let [ente-id (:ente-id ator)]
       (when-let [v (votacao-na-sessao repo-leg ente-id sessao-id votacao-id)]
         (when (contains? logic/estados-votacao-terminais (:estado v))
           (throw (ex-info "votacao ja em estado terminal (encerrada/anulada)"
-                          {:tipo :validacao/invalido :estado (:estado v)})))
+                          {:tipo :conflito/votacao-terminal :estado (:estado v)})))
         (when (and (= "simbolica" (:modalidade v)) (nil? (:resultado m)))
           (throw (ex-info "votacao simbolica exige resultado explicito"
                           {:tipo :validacao/invalido :campos [:resultado]})))

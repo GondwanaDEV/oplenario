@@ -1,7 +1,13 @@
 (ns oplenario.sessoes.adapters.out.tribuna
   "Gate de SAIDA `models -> wire/out` da TRIBUNA (§22.10 adapters/out, ADR-0001 §3) — eixo F. Projeta os recibos
   de inscricao/desistencia p/ a borda. Validado contra o contrato wire/out (drift de campo = bug de servidor ->
-  500, nunca resposta malformada que envenena o codegen do front, Eixo 8)."
+  500, nunca resposta malformada que envenena o codegen do front, Eixo 8).
+
+  `orador-atual->wire`/`inscrito->wire` EXPOEM `lock-version` deliberadamente (ledger de prontidao Fase 8
+  achado #2): `POST .../falas/:fala-id/encerrar` e `POST .../inscricoes/:insc-id/desistir` o exigem no corpo,
+  e `GET .../tribuna` (a leitura que estas duas fns projetam) e' a UNICA leitura de onde um cliente aprende
+  o valor corrente de uma fala/inscricao alheia — sem ele essas duas rotas sao impossiveis de montar so'
+  pela API."
   (:require [malli.core :as m]
             [malli.error :as me]
             [oplenario.sessoes.wire.out :as wire]))
@@ -53,16 +59,16 @@
 
 ;; ---------- Tribuna nominal — o ORADOR e a FILA (GET /sessoes/:id/tribuna) ----------
 
-(defn- orador-atual->wire [{:keys [fala-id orador-id tipo-fala fase iniciou-em inscricao-id]}]
+(defn- orador-atual->wire [{:keys [fala-id orador-id tipo-fala fase iniciou-em inscricao-id lock-version]}]
   {:fala-id (->str fala-id) :orador-id (->str orador-id) :tipo-fala tipo-fala :fase fase
-   :iniciou-em (->str iniciou-em) :inscricao-id (->str inscricao-id)})
+   :iniciou-em (->str iniciou-em) :inscricao-id (->str inscricao-id) :lock-version lock-version})
 
 (defn- marco->wire [{:keys [tipo ocorrido-em segundos-adicionais]}]
   {:tipo tipo :ocorrido-em (->str ocorrido-em) :segundos-adicionais segundos-adicionais})
 
-(defn- inscrito->wire [{:keys [inscricao-id vereador-id origem-inscricao fase ordem]}]
+(defn- inscrito->wire [{:keys [inscricao-id vereador-id origem-inscricao fase ordem lock-version]}]
   {:inscricao-id (->str inscricao-id) :vereador-id (->str vereador-id) :origem-inscricao origem-inscricao
-   :fase fase :ordem ordem})
+   :fase fase :ordem ordem :lock-version lock-version})
 
 (defn tribuna-sessao->wire
   "O estado de dominio (`sessoes.controllers/tribuna-da-sessao`) -> TribunaOut (validado). CAMPO A CAMPO

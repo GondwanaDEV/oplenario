@@ -19,22 +19,27 @@
   "Grava um segmento de gravacao (captura/ingestao). `sessao-id` e' OPCIONAL (Opcao A: o arquivo pode chegar
   do CLI/watch folder antes de o servidor vincular). `acesso-restrito` (default false) DEVE vir true p/ sessao
   secreta — o controlador (eixo G/wire/in) e' responsavel por passa-lo. Valida motivos + fonte (fail-closed).
-  Devolve {:id}."
+  RETURNING `lock_version` (ledger de prontidao Fase 8 achado #2): um segmento AINDA NAO vinculado nunca
+  aparece em `listar-segmentos-da-sessao` (so' lista os JA' vinculados), entao este recibo e' a UNICA fonte
+  do token de CAS que `vincular-segmento!` exige — sem ele, vincular fica impossivel de montar so' pela API.
+  Devolve {:id :lock-version}."
   [tx {:keys [id ente-id sessao-id iniciou-em encerrou-em motivo-inicio motivo-fim
               container-bruto-uri audio-uri video-uri audio-hash fonte-ingestao acesso-restrito created-by]}]
   (logic/validar-motivo-inicio motivo-inicio)
   (logic/validar-motivo-fim motivo-fim)
   (logic/validar-fonte-ingestao fonte-ingestao)
-  (jdbc/execute-one! tx
-    (sql/format {:insert-into :sessoes.gravacao_segmento
-                 :values [{:id id :ente_id ente-id :sessao_id sessao-id
-                           :iniciou_em iniciou-em :encerrou_em encerrou-em
-                           :motivo_inicio motivo-inicio :motivo_fim motivo-fim
-                           :container_bruto_uri container-bruto-uri :audio_uri audio-uri :video_uri video-uri
-                           :audio_hash audio-hash :fonte_ingestao fonte-ingestao
-                           :acesso_restrito (boolean acesso-restrito)
-                           :created_by created-by :efetivado_em [:now]}]}))
-  {:id id})
+  (let [r (comum/linha->kebab
+           (jdbc/execute-one! tx
+             (sql/format {:insert-into :sessoes.gravacao_segmento
+                          :values [{:id id :ente_id ente-id :sessao_id sessao-id
+                                    :iniciou_em iniciou-em :encerrou_em encerrou-em
+                                    :motivo_inicio motivo-inicio :motivo_fim motivo-fim
+                                    :container_bruto_uri container-bruto-uri :audio_uri audio-uri
+                                    :video_uri video-uri :audio_hash audio-hash :fonte_ingestao fonte-ingestao
+                                    :acesso_restrito (boolean acesso-restrito)
+                                    :created_by created-by :efetivado_em [:now]}]
+                          :returning [:lock_version]})))]
+    {:id id :lock-version (:lock-version r)}))
 
 (defn buscar
   "Busca um segmento por id no tenant (RLS via ente-id no WHERE). Devolve o mapa kebab-case ou nil (not-found)."

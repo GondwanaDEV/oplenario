@@ -111,6 +111,16 @@
     (is (= pai (:fala-pai-id @cap)) "Repo recebeu o fala-pai-id coagido")
     (is (= pid (:proposicao-ref-id @cap)) "Repo recebeu o proposicao-ref-id coagido")))
 
+(deftest iniciar-sessao-encerrada-409
+  ;; T2 grupo A achado #4 (ledger de prontidao Fase 8): mesmo gate `exigir-sessao-aberta!` da familia tribuna.
+  (let [ente (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ id] (assoc (sessao-canonica ente id) :estado "encerrada")) (atom nil))
+        r (pt/response-for (service-fn* #{"secretario"} repo-s)
+                           :post (url-falas (random-uuid))
+                           :headers (com-json (token ente (random-uuid)))
+                           :body (corpo (assoc fala-valida "orador-id" (str (random-uuid)))))]
+    (is (= 409 (:status r)) "sessao ja encerrada -> 409")))
+
 (deftest iniciar-sessao-inexistente-404
   (let [ente (random-uuid)
         repo-s (fake-repo-sessoes (fn [_ _] nil) (atom nil))
@@ -236,6 +246,16 @@
     (is (= 201 (:status r)) "tempo_adicional_concedido com segundos > 0 -> 201")
     (is (= 120 (:segundos-adicionais @cap)) "Repo recebeu os segundos-adicionais")))
 
+(deftest cronometro-sessao-encerrada-409
+  ;; T2 grupo A achado #4 (ledger Fase 8) — mesmo gate, mesma familia.
+  (let [ente (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ id] (assoc (sessao-canonica ente id) :estado "encerrada")) (atom nil))
+        r (pt/response-for (service-fn* #{"secretario"} repo-s)
+                           :post (url-cronometro (random-uuid) (random-uuid))
+                           :headers (com-json (token ente (random-uuid)))
+                           :body (corpo {"tipo" "pausada" "ocorrido-em" "2026-06-30T12:05:00Z"}))]
+    (is (= 409 (:status r)) "sessao ja encerrada -> 409")))
+
 (deftest cronometro-sessao-inexistente-404
   (let [ente (random-uuid)
         repo-s (fake-repo-sessoes (fn [_ _] nil) (atom nil))
@@ -357,6 +377,18 @@
     (is (= (Instant/parse "2026-06-30T12:30:00Z") (:encerrou-em @cap)) "Repo recebeu o encerrou-em coagido")
     (is (= 0 (:lock-version @cap)) "Repo recebeu o lock-version (CAS)")
     (is (some? (:updated-by @cap)) "Repo recebeu updated-by (do ator)")))
+
+(deftest encerrar-fala-sessao-encerrada-409
+  ;; T2 grupo A achado #4 (ledger Fase 8) — mesmo gate, mesma familia. Ordem confirmada: o gate roda ANTES do
+  ;; guard de conflito de lock/estado-terminal da fala (`encerrar-conflito-409` abaixo).
+  (let [ente (random-uuid) sid (random-uuid) fid (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ id] (assoc (sessao-canonica ente id) :estado "encerrada")) (atom nil)
+                                  :fala-sessao-id sid)
+        r (pt/response-for (service-fn* #{"secretario"} repo-s)
+                           :post (url-encerrar sid fid)
+                           :headers (com-json (token ente (random-uuid)))
+                           :body (corpo {"encerrou-em" "2026-06-30T12:30:00Z" "lock-version" 0}))]
+    (is (= 409 (:status r)) "sessao ja encerrada -> 409")))
 
 (deftest encerrar-conflito-409
   (let [ente (random-uuid) sid (random-uuid)

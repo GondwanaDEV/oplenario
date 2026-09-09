@@ -1,13 +1,26 @@
 (ns oplenario.sessoes.wire.out
   "Representacao EXTERNA de SAIDA da sessao (§22.10 wire/out, ADR-0001) — o contrato de borda que o
   `adapters/out` produz e do qual o Eixo 8 gera os tipos TS do front. Tudo como tipo serializavel a JSON:
-  uuid/Instant viram string. NAO expoe o token interno de concorrencia (`lock-version`) nem campos
-  sensiveis — a defesa anti-vazamento mora no adapters/out."
+  uuid/Instant viram string. NAO expoe campos sensiveis — a defesa anti-vazamento mora no adapters/out.
+
+  O token interno de concorrencia (`lock-version`) e' filtrado por DEFAULT (ex.: `TransicaoSessaoOut`,
+  `DesistenciaInscricaoOut`, `FalaEncerradaOut`, `PautaItemRemovidoOut`, `VinculoGravacaoOut` — recibos de
+  uma maquina de estados que JA' consumiu o CAS, nada mais precisa dele). As EXCECOES deliberadas —
+  `SessaoOut`, `PautaItemOut`, `OradorAtualOut`, `InscritoTribunaOut`, `GravacaoReciboOut`, e (no ns irmao
+  `legislativo.wire.out.votacao`) `AberturaOut` — expoem `lock-version` pelo MESMO racional que ja' valia
+  para `JustificativaAbertaOut`/`LinhaJustificativaOut` abaixo e para `legislativo.wire.out.documento`/
+  `.../parecer`: aqui o token NAO e' detalhe interno, e' PARTE DO PROTOCOLO que uma rota de escrita CAS
+  exige no corpo (`transicao`, pauta `PATCH`/`DELETE`, `inscricoes/:id/desistir`, `falas/:id/encerrar`,
+  `gravacao/:id/vincular`) — e ate' a correcao do ledger de prontidao Fase 8 achado #2 NENHUMA leitura nem
+  recibo de criacao o devolvia, tornando a 2a chamada de qualquer um desses fluxos impossivel de montar
+  so' pela API (a sonda daquela fase teve de ler o Postgres direto em 7 pontos)."
   (:require [oplenario.kernel.malli :as km]
             [oplenario.sessoes.logic :as logic]))
 
 (def SessaoOut
-  "Projecao publica de uma sessao (resposta REST). Strings p/ uuid; ISO-8601 p/ Instant; marcos opcionais."
+  "Projecao publica de uma sessao (resposta REST). Strings p/ uuid; ISO-8601 p/ Instant; marcos opcionais.
+  `lock-version` viaja (excecao consciente, ver cabecalho do ns) — `POST /sessoes/:id/transicao` o exige no
+  corpo, e este e' o unico lugar onde um cliente aprende o valor corrente."
   [:map {:closed true}
    [:id :string]
    [:sessao-legislativa-id :string]
@@ -23,7 +36,8 @@
    [:agendada-para {:optional true} [:maybe :string]]
    [:aberta-em {:optional true} [:maybe :string]]
    [:encerrada-em {:optional true} [:maybe :string]]
-   [:motivo-nao-realizada {:optional true} [:maybe :string]]])
+   [:motivo-nao-realizada {:optional true} [:maybe :string]]
+   [:lock-version :int]])
 
 (def SessoesOut
   "Resposta de `GET /sessoes` (listagem geral, ledger de prontidao #16) — as sessoes do ente ja' FILTRADAS
@@ -167,14 +181,17 @@
 
 (def PautaItemOut
   "Projecao publica de um item ATIVO da pauta (§22.6 eixo B). NAO expoe internos (ente-id, pauta-sessao-id,
-  lock-version, ativo). FK-por-tipo: 'proposicao' carrega proposicao-id (string); os demais, texto-descricao."
+  ativo). FK-por-tipo: 'proposicao' carrega proposicao-id (string); os demais, texto-descricao. `lock-version`
+  viaja (excecao consciente, ver cabecalho do ns): `PATCH`/`DELETE .../pauta/itens/:item-id` o exigem no
+  corpo, e `GET .../pauta` e' a UNICA leitura de onde um cliente aprende o valor corrente do item."
   [:map {:closed true}
    [:id :string]
    [:fase (km/enum-de logic/fases-pauta)]
    [:tipo-item (km/enum-de logic/tipos-item-pauta)]
    [:proposicao-id {:optional true} [:maybe :string]]
    [:texto-descricao {:optional true} [:maybe :string]]
-   [:ordem :int]])
+   [:ordem :int]
+   [:lock-version :int]])
 
 (def PautaOut
   "Pauta viva da sessao (resposta de GET /sessoes/:id/pauta) — o sessao-id + os itens ativos em ordem.
@@ -186,10 +203,13 @@
 (def GravacaoReciboOut
   "Recibo da ingestao de gravacao (resposta 201 de POST /gravacoes). Carrega o `id` do segmento + o
   `audio-hash` (sha256) p/ o utilitario CLI confirmar integridade/dedup (§22.3.4). NAO expoe a chave interna
-  do store (container-bruto-uri)."
+  do store (container-bruto-uri). `lock-version` viaja (excecao consciente, ver cabecalho do ns):
+  `POST .../gravacao/:seg-id/vincular` o exige no corpo, e um segmento AINDA NAO vinculado nao aparece em
+  `GET .../gravacao` (so' lista os JA' vinculados) — este recibo e' a UNICA fonte do token de CAS."
   [:map {:closed true}
    [:id :string]
-   [:audio-hash :string]])
+   [:audio-hash :string]
+   [:lock-version :int]])
 
 (def SegmentoOut
   "Projecao publica de um segmento de gravacao no read-model do painel (GET /sessoes/:id/gravacao). NAO expoe
@@ -424,14 +444,19 @@
   corrente do mesmo dado, para quem abriu a tela DEPOIS do evento ter passado (reload, reconexao longa,
   ou abrir a tela com a fala ja em curso — os tres momentos que apagam o telao hoje). `inscricao-id` e'
   `[:maybe :string]` (nunca `:optional`) porque a projecao sempre inclui a chave — uma fala que nao veio
-  de inscricao (ex.: aparte, questao de ordem) tem valor nil, nao chave ausente."
+  de inscricao (ex.: aparte, questao de ordem) tem valor nil, nao chave ausente.
+
+  `lock-version` QUEBRA deliberadamente a 'uniao exata com o SSE' (excecao consciente, ver cabecalho do
+  ns): `POST .../falas/:fala-id/encerrar` o exige no corpo, e esta rota e' a UNICA leitura de onde um
+  cliente aprende o valor corrente da fala em curso (ledger de prontidao Fase 8 achado #2)."
   [:map {:closed true}
    [:fala-id :string]
    [:orador-id :string]
    [:tipo-fala (km/enum-de logic/tipos-fala)]
    [:fase (km/enum-de logic/fases-pauta)]
    [:iniciou-em :string]
-   [:inscricao-id [:maybe :string]]])
+   [:inscricao-id [:maybe :string]]
+   [:lock-version :int]])
 
 (def MarcoCronometroOut
   "Um marco ESTRUTURAL do cronometro da fala em curso — espelha `events.tribuna/FalaCronometroPayload`
@@ -451,13 +476,18 @@
 (def InscritoTribunaOut
   "Um inscrito da FILA ATIVA (desistencias fora — `logic/estados-inscricao-terminais`) — espelha
   `events.tribuna/InscricaoRegistradaPayload` MENOS `sessao-id` (redundante no path). Ordenado por
-  (fase, ordem), a MESMA ordem de `db/tribuna/listar-inscricoes`."
+  (fase, ordem), a MESMA ordem de `db/tribuna/listar-inscricoes`.
+
+  `lock-version` QUEBRA deliberadamente a 'uniao exata com o SSE' (excecao consciente, ver cabecalho do
+  ns): `POST .../inscricoes/:insc-id/desistir` o exige no corpo, e esta rota e' a UNICA leitura de onde
+  um cliente aprende o valor corrente de uma inscricao alheia (ledger de prontidao Fase 8 achado #2)."
   [:map {:closed true}
    [:inscricao-id :string]
    [:vereador-id :string]
    [:origem-inscricao (km/enum-de logic/origens-inscricao)]
    [:fase (km/enum-de logic/fases-pauta)]
-   [:ordem :int]])
+   [:ordem :int]
+   [:lock-version :int]])
 
 (def TribunaOut
   "O estado corrente da TRIBUNA (resposta de `GET /sessoes/:id/tribuna`) — o read-model que faltava ao

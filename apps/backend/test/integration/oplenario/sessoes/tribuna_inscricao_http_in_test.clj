@@ -95,6 +95,16 @@
     (is (= 201 (:status r)) "proposicao-ref-id opcional aceito -> 201")
     (is (= pid (:proposicao-ref-id @cap)) "Repo recebeu o proposicao-ref-id coagido")))
 
+(deftest inscrever-sessao-encerrada-409
+  ;; T2 grupo A achado #4 (ledger de prontidao Fase 8): mesmo gate `exigir-sessao-aberta!` da familia tribuna.
+  (let [ente (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ id] (assoc (sessao-canonica ente id) :estado "encerrada")) (atom nil))
+        r (pt/response-for (service-fn* #{"secretario"} repo-s)
+                           :post (url-inscrever (random-uuid))
+                           :headers (com-json (token ente (random-uuid)))
+                           :body (corpo (assoc inscricao-valida "vereador-id" (str (random-uuid)))))]
+    (is (= 409 (:status r)) "sessao ja encerrada -> 409")))
+
 (deftest inscrever-sessao-inexistente-404
   (let [ente (random-uuid)
         repo-s (fake-repo-sessoes (fn [_ _] nil) (atom nil))
@@ -195,6 +205,16 @@
                            :headers (com-json (token ente (random-uuid)))
                            :body (corpo {"lock-version" 0}))]
     (is (= 409 (:status r)) "ja desistiu / lock-stale -> 409 (nao 500)")))
+
+(deftest desistir-sessao-encerrada-409
+  ;; T2 grupo A achado #4 (ledger Fase 8) — mesmo gate, mesma familia.
+  (let [ente (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ id] (assoc (sessao-canonica ente id) :estado "encerrada")) (atom nil))
+        r (pt/response-for (service-fn* #{"secretario"} repo-s)
+                           :post (url-desistir (random-uuid) (random-uuid))
+                           :headers (com-json (token ente (random-uuid)))
+                           :body (corpo {"lock-version" 0}))]
+    (is (= 409 (:status r)) "sessao ja encerrada -> 409")))
 
 (deftest desistir-sessao-inexistente-404
   (let [ente (random-uuid)
