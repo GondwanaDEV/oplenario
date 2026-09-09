@@ -766,3 +766,163 @@ reconstruível com `./demo/semear-tudo.sh`. A `…0211` segue `aberta`.
   `lock-version` da abertura de votação não chega ao contrato TS. Fora do escopo desta fase.
 - `demo.sessoes-test` falha porque a sonda da Fase 8 mutou a sessão `…0212`. É poluição de dado da
   própria varredura, não regressão — some com `semear-tudo.sh`.
+
+---
+
+# Fase 10 — TRILHA 2 grupo B: as 25 escritas restantes, por HTTP
+
+> Plano: `docs/superpowers/plans/2026-09-08-exploratorio-de-escrita.md`, Trilha 2, grupos B–G.
+> Branch `trilha-2-escritas`. Script: `e2e/.sonda/t2-grupo-b.sh`.
+> Commits: `6eaa28c` (contador) · `a8b9bbc` (apreciação de veto) · `3ad57b0` (a sonda).
+
+**Placar final:** 25/25 rotas exercidas, caminho feliz + caminhos de erro em cada uma · **157
+checagens OK · 0 QUEBRA · 0 FRÁGIL · 7 GAP declarados**. Duas corridas consecutivas com placar
+idêntico. Isolamento multi-tenant testado com identidade REAL de outro ente em 8 rotas: **0
+vazamentos**. Suíte do backend: 2085 testes, 5588 asserções, 3 falhas — todas em `demo.*` por
+poluição de dado, nenhuma regressão (prova abaixo).
+
+**Como o placar chegou aqui:** 58 QUEBRA na 1ª corrida → 16 → 2 → 0. Cada queda foi destravada por um
+conserto real ou por uma acusação retirada com evidência. As 4 corridas vermelhas são a prova de que
+este gate reprova; nenhuma delas foi ajustada para ficar verde.
+
+## O achado que domina a fase: a Casa da demo estava em 500 permanente
+
+`POST /portal/esic/pedidos`, `/portal/lgpd/solicitacoes` e `/portal/ouvidoria/manifestacoes`
+devolviam **500 para qualquer submissão de cidadão**. Não era flake: era determinístico e
+irreversível.
+
+**Mecanismo, verificado na fonte e no banco.** O contador gapless (`shared.sequencial`) e as linhas
+numeradas nas tabelas de módulo são um **par de invariante**.
+`test/integration/oplenario/kernel/sequencial_test.clj:22` truncava `shared.sequencial`
+**globalmente** — sem escopo de tenant, e sem truncar as tabelas numeradas junto. Rodar a suíte
+contra um banco com dado semeado apagava o contador de **todos** os entes e deixava as linhas para
+trás. `proximo!` então volta a 1, colide na UNIQUE `(ente, ano, sequencial)`, e **a colisão aborta a
+transação inteira — revertendo o próprio incremento do contador**. O contador nunca ultrapassa a
+colisão.
+
+**Extensão real, medida:** a Casa da demo tinha **17 escopos com linhas numeradas** (até
+`projeto_lei:2026`=15 e `protocolo_geral:2026`=24) e **um único contador vivo**. Criar proposição,
+protocolar documento, gerar autógrafo ou abrir qualquer pedido de cidadão: 500. **Numa demonstração,
+isso mataria M5 e M6 ao vivo.**
+
+**Por que o grupo A não pegou:** conduzir sessão não numera nada. Votação, pauta, fala e incidente
+não passam por `shared.sequencial`. A varredura de 17 rotas passou ao lado do defeito.
+
+**E `./demo/semear-tudo.sh` não reparava.** A semente é idempotente **por pular** (`ja-semeada?` →
+relê), então nunca reprotocola e nunca reconstrói o contador. O script terminava com **exit 0** e a
+Casa continuava quebrada. A memória do projeto afirmava que ele "resolve tudo" — não resolvia, e essa
+afirmação foi corrigida.
+
+**Conserto (`6eaa28c`), em três peças:**
+
+| Peça | O quê |
+|---|---|
+| Raiz | O TRUNCATE sai do fixture (os testes já isolam por `random-uuid`) e vira **gate de CI**: `kernel/sequencial-lint-test` reprova se qualquer teste truncar de novo. |
+| Reparo | `kernel/sequencial/reconciliar!` levanta o contador até um piso explícito (`GREATEST` — nunca abaixa). O kernel não conhece módulo: quem lê o piso é o chamador. |
+| Operação | `demo/reconciliar_contadores.clj` + 5ª etapa em `semear-tudo!`, que reconcilia e **imprime** o que levantou. Aplicado ao banco vivo: 17 escopos, e as 16 rotas de participação foram de 500 a verde. |
+
+## O 2º achado: a apreciação de veto devolvia 500 em todos os caminhos de erro
+
+`POST /legislativo/tramitacoes-executivas/:id/apreciacao` (a única rota do grupo G):
+
+| Caminho | Era | Ficou |
+|---|---|---|
+| Tramitação não está `vetado` | **500** | **409** |
+| `lock-version` divergente | **500** | **409** |
+| `veto-votacao-id` inexistente | **500** cru de FK | **400** com o campo nomeado |
+
+Causa: `db/tramitacao_executiva` lançava `ex-info` **sem `:tipo`** (o interceptor global cai no
+`:else`), e a violação de FK subia crua. Conserto (`a8b9bbc`) estende o que a base já faz: tag no
+`db/`, tradução de 23503 no Repo-Component (mesmo predicado de `cadastros/ligar-identidade!`), e
+tradução das tags no diplomat (como `resposta-conflito-sessao-fechada` do grupo A). A rota irmã
+`/legislativo/autografos/:id/resposta` foi corrigida junto — não está nas 25, mas compartilha a mesma
+dupla de funções e o mesmo guard; declarado, não silencioso.
+
+**E a docstring do schema mentia.** `wire/in/pos_aprovacao` afirmava que `veto-votacao-id` era
+"forward-ref (sem FK declarativa no domínio)". O banco desmente: a FK
+`(ente_id, veto_votacao_id) → legislativo.votacoes` existe desde a migration 0022. Corrigida, e
+ancorada por teste que reprova se a FK sair.
+
+## Dois testes que estavam mentindo (o mesmo mecanismo, duas formas)
+
+1. **`registrar-resposta-conflito-lock-version-400` fabricava a exceção.** O fake lançava
+   `{:tipo :validacao/invalido}` — formato que a produção **nunca produziu** (lançava sem tipo
+   nenhum). O teste ficava verde afirmando 400 enquanto a borda real devolvia 500. É o mesmo
+   mecanismo já registrado duas vezes neste projeto: **fixture que inventa a forma mantém verde um
+   caminho morto.** Agora o fake usa a tag real, e a tag está ancorada na fonte.
+2. **Os guards de `db` usavam `(is (thrown? Exception ...))`.** Isso passa igual para uma `ex-info`
+   sem `:tipo` — exatamente a que vira 500. Uma asserção que não distingue "lança certo" de "lança
+   virando erro interno" não é cobertura. Trocadas por asserções sobre o `:tipo` da `ex-data`.
+
+## Quatro defeitos do próprio instrumento (a sonda mediu a si mesma antes de acusar)
+
+1. **Cascata.** Um fixture que não nasceu gerou **40 achados derivados** — todos "esperava 200, veio
+   400 Ambiguous URI empty segment", porque o id vazio montava `/esic/pedidos//resposta`. Quarenta
+   linhas escondendo o único defeito real. `exigir` agora registra **um** achado e pula o bloco.
+2. **Não-re-rodabilidade.** CPF fixo reusava a mesma identidade (já ligada) e o `PATCH` dava 409
+   legítimo, lido como defeito do produto. CPF passou a ser gerado com dígito verificador calculado.
+3. **A sonda acusando o próprio fixture.** O check de fidelidade da semente rodava **depois** de a
+   sonda licenciar um mandato por psql, e culpava a semente por isso. Movido para antes.
+4. **`veto-votacao-id` aleatório.** Há FK real — mandar UUID inventado media a sonda, não o produto.
+
+## Duas acusações RETIRADAS depois de ler a fonte
+
+O método do grupo A ("investigar a intenção antes de reverter") valeu de novo, e nos dois casos a
+fonte venceu:
+
+- **`/identidade/acessos` → 500 com IdP fora não é descuido.** O handler documenta "Erro de infra do
+  KC PROPAGA -> 500 (nunca 401)" e existe teste `conceder-acesso-keycloak-fora-do-ar-500` que o
+  exige. O "banco antes do Keycloak" também é deliberado e explicado (fail-closed: vínculo sem
+  credencial não deixa ninguém entrar, e repetir conserta). Reclassificado para GAP — carry F1.4.
+- **O "cidadão da semente sem vínculo" tem decisão explícita** em `demo/casa.clj:106`, para *leitura*
+  pública. O que a decisão não cobre é a semente ter estendido a mesma identidade a uma *escrita*
+  autenticada (3 pedidos e-SIC). Vira decisão de narrativa da demo, não defeito de rota.
+
+## Afirmação de cobertura (uma corrida ficou verde cobrindo 24 de 25)
+
+"Zero achados" e "não rodou" tinham a mesma saída. A cobertura virou **asserção**: se uma rota não
+teve nenhuma checagem OK, o gate cai. Provado subindo o esperado para 26 e vendo reprovar.
+
+## As 3 falhas de suíte, provadas como dado e não como regressão
+
+| Teste | Por quê | Evidência |
+|---|---|---|
+| `demo.sessoes-test` (×2) | Sessão `…0212` = `encerrada` e zero votações abertas na `…0211` | Poluição da **Fase 8**, anterior a esta sessão |
+| `demo.participacao-test` | Fila de moderação com 10 pendentes em vez de 2 | Comentários rotulados `Sonda T2B —` no banco |
+
+**E não dá para limpar.** O banco de participação é **append-only por desenho**
+(`shared.imut_append_only` barra DELETE em `moderacao_comentario`/`denuncia_comentario`), e a FK
+impede apagar o comentário. Tentei e o banco recusou — corretamente.
+
+## O conflito estrutural que isso destapa (decisão do Daouda)
+
+Os testes `demo.*` afirmam o **conteúdo exato** de uma Casa **compartilhada e append-only**. Qualquer
+escrita exploratória — que é o objetivo inteiro da T2 e da T3 — a suja de forma **permanente**, e
+`semear-tudo.sh` não restaura (idempotência por pular + append-only). O único reset é `down -v`.
+
+Ou seja: **"suíte 100% verde" (T1.3) e "exercitar as 66 escritas" (T2/T3) são hoje mutuamente
+exclusivos nesta máquina.** O plano já dizia que a sonda deveria rodar "numa Casa própria"; isso
+deixou de ser preferência e virou pré-requisito.
+
+Três saídas, e a escolha não é de engenharia:
+1. **Casa própria para sonda** (um `ente` de varredura, separado do da demo) — mais trabalho, resolve de vez.
+2. **Testes `demo.*` param de afirmar contagem exata** e passam a afirmar invariantes ("existe ao menos um pendente") — mais barato, perde poder de detecção.
+3. **`down -v` antes de cada suíte cheia** — zero código, mas depende de autorizar o `down -v` (ainda pendente da T1) e custa o tempo de reconstrução.
+
+## Aberto
+
+- **A escolha das 3 saídas acima.** É o que trava o critério "dois runs cheios 100% verdes" do plano.
+- **`veto-votacao-id` é carimbado sem checar se a votação é DA apreciação daquele veto.** A FK garante
+  que a votação existe e é da Casa; nada garante que é a votação certa. Não é defeito desta frente —
+  é `[GAP]` de regra de negócio, e a rota nem sabe qual seria a votação correta.
+- **Carry `CPF-cifra` segue aberto** (medido de novo: CPF em texto puro em `identidade.identidade`).
+  Dado pessoal sensível da LGPD sob custódia da plataforma que vende conformidade. Cifrar exige
+  decisão de cripto + migração.
+- **A cadeia do M6 é inalcançável pela borda.** Não existe rota HTTP que **crie** uma remessa —
+  `validar`/`submeter`/`resposta` só transicionam o que já existe, e `gerar-remessa!` não está ligado
+  a rota nenhuma. A sonda teve de plantar a remessa por psql para exercer as 3 rotas.
+- **A semente marca mandato `licenciado` sem gravar o ato da licença** (zero linhas em
+  `cadastros.mandato_licenca`). A reassunção funciona, mas devolve `fim: null` — não há licença
+  aberta para fechar. Dado de demo incompleto.
+- **Fixtures de um uso.** Reassunção e apreciação de veto consomem o único candidato da Casa. A sonda
+  os replanta por psql e diz que replantou, mas a solução real é a Casa própria (saída 1 acima).
