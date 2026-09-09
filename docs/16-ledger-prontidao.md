@@ -926,3 +926,40 @@ Três saídas, e a escolha não é de engenharia:
   aberta para fechar. Dado de demo incompleto.
 - **Fixtures de um uso.** Reassunção e apreciação de veto consomem o único candidato da Casa. A sonda
   os replanta por psql e diz que replantou, mas a solução real é a Casa própria (saída 1 acima).
+
+## Revisão adversarial (`ecc:clojure-reviewer`) — o que ela reprovou
+
+**Zero CRÍTICO.** `a8b9bbc` (apreciação de veto) passou limpo: o revisor verificou explicitamente
+TOCTOU entre o `buscar` do controller e a escrita, engolimento de exceção alheia pelo `try` novo, e
+atribuição errada de FK (a tabela tem duas) — os três estão corretos por construção, com o raciocínio
+escrito. **Dois IMPORTANTE em `6eaa28c`**, ambos reais, ambos consertados em `862f271`:
+
+1. **A família `sessao:` nunca era exercitada pelo round-trip.** O teste prometia conferir *todo*
+   escopo contra o que o `proximo!` gravou, mas nunca chamava `sessoes/semear!` — então a asserção
+   central **não podia reprovar** para esse ramo. A consulta estava certa por sorte. É o mesmo padrão
+   que esta fase inteira passou caçando, desta vez **no meu próprio teste**, escrito no mesmo dia em
+   que registrei o padrão duas vezes. Corrigido e provado com escopo plantado.
+2. **`pisos` lia no datasource cru.** Em dev o role é superusuário e ignora RLS: o isolamento
+   dependia só do `WHERE ente_id = ?` manual, sem rede. Agora roda sob `com-tenant*` (vira
+   `oplenario_app`, NOBYPASSRLS) **e** ganhou teste de dois entes.
+
+**O experimento que fecha a questão, medido nos dois sentidos:**
+
+| Estado do código | `WHERE` removido | Resultado |
+|---|---|---|
+| Pré-conserto (leitura crua, superusuário) | sim | **Vazou** — o teste reprova e nomeia (`pedido_esic:2026, piso 30` de outro ente) |
+| Pós-conserto (`com-tenant*`) | sim | **Não vazou** — a RLS barra |
+
+Provado o que cada camada faz: o teste não é cego, e a defesa em profundidade segura mesmo uma
+consulta futura que esqueça o `WHERE`. Sem os dois sentidos, o verde do teste pós-conserto teria sido
+lido como "o teste não pega nada".
+
+## Um custo de método desta fase: plantar defeito em banco compartilhado deixa rastro
+
+Provar que um gate reprova exige plantar o defeito. Duas vezes nesta fase o defeito plantado **gravou
+estado** no banco compartilhado (`pedido_esic_DEFEITO:2026` e `sessao_ERRADO:*` em
+`shared.sequencial`, escritos pela própria reconciliação sob teste), e o resíduo **contaminou o
+experimento seguinte** — cheguei a ler uma falha do experimento anterior como se fosse o resultado do
+atual. Ambos limpos. A regra que faltava: **defeito plantado em código que ESCREVE precisa de limpeza
+explícita antes do próximo experimento**, e o próprio experimento deve ser conferido pelo nome do
+teste que falhou, nunca só pela contagem de falhas.
