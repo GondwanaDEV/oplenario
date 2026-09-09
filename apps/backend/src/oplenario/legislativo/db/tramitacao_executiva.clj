@@ -32,6 +32,15 @@
                      :where [:and [:= :ente_id ente-id] [:= :id id]] :for :update}))
       comum/linha->kebab))
 
+;; NOTA DE CONTRATO (T2 grupo B, ledger Fase 10) — as excecoes de CONFLITO deste ns carregam
+;; `:tipo :conflito/tramitacao-executiva`. Sem a tag, o interceptor global de erro cai no `:else` e a
+;; borda devolve **500 'erro interno'** para o caso mais banal de escrita concorrente (CAS divergente)
+;; e para o conflito de estado — foi o que a sonda `e2e/.sonda/t2-grupo-b.sh` mediu ao vivo. Quem
+;; traduz a tag em 409 e' o `diplomat/http/in`, nao o interceptor global (a base recusa mapear
+;; `:conflito/*` no interceptor de proposito — ver `tipo-fora-do-namespace-limite-continua-500`).
+;; As excecoes de INEXISTENCIA seguem SEM tipo: o controller ja' as evita com um `buscar` antes,
+;; e a borda responde 404 por aquele caminho.
+
 (defn registrar-resposta!
   "Registra a resposta do Executivo: 'aguardando' -> resultado in {sancionado|sancao_tacita|vetado}. Para
   'vetado' exige `:veto-tipo` (total|parcial) — o CHECK do banco tambem barra, mas o guard aqui da' erro
@@ -41,8 +50,8 @@
     (when (nil? estado)
       (throw (ex-info "registrar-resposta!: tramitacao executiva inexistente" {:id id :ente-id ente-id})))
     (when (not= "aguardando" estado)
-      (throw (ex-info "registrar-resposta!: so se responde uma tramitacao 'aguardando'"
-                      {:id id :estado estado})))
+      (throw (ex-info "so se responde uma tramitacao 'aguardando'"
+                      {:tipo :conflito/tramitacao-executiva :id id :estado estado})))
     (when (not (contains? logic/estados-resposta-executivo resultado))
       (throw (ex-info "registrar-resposta!: resultado invalido (sancionado|sancao_tacita|vetado)"
                       {:resultado resultado})))
@@ -56,8 +65,8 @@
                                  :lock_version [:+ :lock_version 1]}
                            :where [:and [:= :ente_id ente-id] [:= :id id] [:= :lock_version lock-version]]}))]
       (when (zero? (:next.jdbc/update-count r 0))
-        (throw (ex-info "registrar-resposta!: conflito de lock_version ou inexistente"
-                        {:id id :lock-version lock-version})))
+        (throw (ex-info "conflito de lock-version: a tramitacao mudou desde a leitura"
+                        {:tipo :conflito/tramitacao-executiva :id id :lock-version lock-version})))
       {:id id :estado resultado})))
 
 (defn apreciar-veto!
@@ -69,8 +78,8 @@
     (when (nil? estado)
       (throw (ex-info "apreciar-veto!: tramitacao executiva inexistente" {:id id :ente-id ente-id})))
     (when (not= "vetado" estado)
-      (throw (ex-info "apreciar-veto!: so se aprecia o veto de uma tramitacao 'vetado'"
-                      {:id id :estado estado})))
+      (throw (ex-info "so se aprecia o veto de uma tramitacao 'vetado'"
+                      {:tipo :conflito/tramitacao-executiva :id id :estado estado})))
     (when (not (contains? logic/estados-apreciacao-veto resultado))
       (throw (ex-info "apreciar-veto!: resultado invalido (veto_mantido|veto_derrubado)"
                       {:resultado resultado})))
@@ -81,8 +90,8 @@
                                  :lock_version [:+ :lock_version 1]}
                            :where [:and [:= :ente_id ente-id] [:= :id id] [:= :lock_version lock-version]]}))]
       (when (zero? (:next.jdbc/update-count r 0))
-        (throw (ex-info "apreciar-veto!: conflito de lock_version ou inexistente"
-                        {:id id :lock-version lock-version})))
+        (throw (ex-info "conflito de lock-version: a tramitacao mudou desde a leitura"
+                        {:tipo :conflito/tramitacao-executiva :id id :lock-version lock-version})))
       {:id id :estado resultado})))
 
 (defn buscar [tx ente-id id]

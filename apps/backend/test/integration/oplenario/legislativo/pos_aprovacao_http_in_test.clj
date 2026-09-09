@@ -259,18 +259,28 @@
                            :body (json/write-value-as-string {:lock-version 0 :resultado "sancionado"}))]
     (is (= 404 (:status r)))))
 
-(deftest registrar-resposta-conflito-lock-version-400
+;; CORRIGIDO (T2 grupo B, ledger Fase 10). Este teste chamava-se `-400` e FABRICAVA a ex-info com
+;; `:tipo :validacao/invalido` — um formato que a producao NUNCA produziu: `db/tramitacao-executiva`
+;; lancava sem `:tipo` nenhum, entao a borda real devolvia 500, e este teste ficava verde afirmando 400.
+;; E' o mesmo mecanismo ja' registrado duas vezes neste projeto (fixture que redigita um vocabulario
+;; que o dono nao usa mantem um caminho MORTO verde). Agora o fake usa a tag REAL, ancorada na fonte
+;; por `pos-aprovacao-db-test/registrar-resposta-fora-do-estado-carrega-tipo-de-conflito`, e a resposta
+;; e' 409 — conflito de CAS e' "seu pedido era valido, o recurso mudou", nao "conserte seu pedido"
+;; (mesma correcao semantica do achado #3 do grupo A, ledger Fase 8).
+(deftest registrar-resposta-conflito-lock-version-409
   (let [ente (random-uuid) aid (random-uuid) tid (random-uuid)
         repo (fake-repo-legislativo
               {:tramitacao-executiva-do-autografo (fn [_aid] (tramitacao-canonica ente tid aid))
                :registrar-resposta-executivo!
-               (fn [_m] (throw (ex-info "registrar-resposta!: conflito de lock_version ou inexistente"
-                                       {:tipo :validacao/invalido :id tid :lock-version 0})))})
+               (fn [_m] (throw (ex-info "conflito de lock-version: a tramitacao mudou desde a leitura"
+                                       {:tipo :conflito/tramitacao-executiva :id tid :lock-version 0})))})
         r (pt/response-for (service-fn #{"secretario"} repo)
                            :post (str "/legislativo/autografos/" aid "/resposta")
                            :headers (com-bearer (token ente (random-uuid)))
                            :body (json/write-value-as-string {:lock-version 0 :resultado "sancionado"}))]
-    (is (= 400 (:status r)))))
+    (is (= 409 (:status r)))
+    (is (= "conflito de lock-version: a tramitacao mudou desde a leitura" (:erro (ler-json r)))
+        "a mensagem do dominio chega ao cliente — 'erro interno' nao diz o que fazer")))
 
 (deftest registrar-resposta-sem-papel-403
   (let [repo (fake-repo-legislativo {})
@@ -327,3 +337,52 @@
                            :body (json/write-value-as-string
                                    {:lock-version 1 :resultado "veto_mantido" :veto-votacao-id (str (random-uuid))}))]
     (is (= 403 (:status r)))))
+
+;; ---------- os 3 caminhos que devolviam 500 ao vivo (sonda T2 grupo B, ledger Fase 10) ----------
+
+(deftest apreciar-veto-conflito-de-estado-409
+  (let [ente (random-uuid) tid (random-uuid) aid (random-uuid)
+        repo (fake-repo-legislativo
+              {:buscar-tramitacao-executiva (fn [_id] (tramitacao-canonica ente tid aid))
+               :apreciar-veto!
+               (fn [_m] (throw (ex-info "so se aprecia o veto de uma tramitacao 'vetado'"
+                                       {:tipo :conflito/tramitacao-executiva :id tid :estado "aguardando"})))})
+        r (pt/response-for (service-fn #{"secretario"} repo)
+                           :post (str "/legislativo/tramitacoes-executivas/" tid "/apreciacao")
+                           :headers (com-bearer (token ente (random-uuid)))
+                           :body (json/write-value-as-string
+                                   {:lock-version 0 :resultado "veto_mantido" :veto-votacao-id (str (random-uuid))}))]
+    (is (= 409 (:status r)) "apreciar sem haver veto -> 409, nao 500")
+    (is (= "so se aprecia o veto de uma tramitacao 'vetado'" (:erro (ler-json r))))))
+
+(deftest apreciar-veto-conflito-lock-version-409
+  (let [ente (random-uuid) tid (random-uuid) aid (random-uuid)
+        repo (fake-repo-legislativo
+              {:buscar-tramitacao-executiva (fn [_id] (tramitacao-canonica ente tid aid :estado "vetado"))
+               :apreciar-veto!
+               (fn [_m] (throw (ex-info "conflito de lock-version: a tramitacao mudou desde a leitura"
+                                       {:tipo :conflito/tramitacao-executiva :id tid :lock-version 999})))})
+        r (pt/response-for (service-fn #{"secretario"} repo)
+                           :post (str "/legislativo/tramitacoes-executivas/" tid "/apreciacao")
+                           :headers (com-bearer (token ente (random-uuid)))
+                           :body (json/write-value-as-string
+                                   {:lock-version 999 :resultado "veto_derrubado" :veto-votacao-id (str (random-uuid))}))]
+    (is (= 409 (:status r)) "CAS divergente -> 409; devolver 500 faz o cliente tratar corrida como bug do servidor")))
+
+(deftest apreciar-veto-votacao-inexistente-400
+  (let [ente (random-uuid) tid (random-uuid) aid (random-uuid)
+        repo (fake-repo-legislativo
+              {:buscar-tramitacao-executiva (fn [_id] (tramitacao-canonica ente tid aid :estado "vetado"))
+               :apreciar-veto!
+               ;; a forma que o Repo-Component produz ao capturar a violacao de FK 23503 do par
+               ;; (ente_id, veto_votacao_id) -> legislativo.votacoes.
+               (fn [_m] (throw (ex-info "veto-votacao-id nao corresponde a uma votacao desta Casa"
+                                       {:tipo :validacao/votacao-inexistente :id tid})))})
+        r (pt/response-for (service-fn #{"secretario"} repo)
+                           :post (str "/legislativo/tramitacoes-executivas/" tid "/apreciacao")
+                           :headers (com-bearer (token ente (random-uuid)))
+                           :body (json/write-value-as-string
+                                   {:lock-version 1 :resultado "veto_derrubado" :veto-votacao-id (str (random-uuid))}))]
+    (is (= 400 (:status r)) "referencia a votacao inexistente e' erro de CORPO -> 400, nao 500 cru de FK")
+    (is (= "veto-votacao-id nao corresponde a uma votacao desta Casa" (:erro (ler-json r)))
+        "a mensagem diz QUAL campo esta errado")))

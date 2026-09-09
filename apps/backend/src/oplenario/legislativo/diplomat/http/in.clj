@@ -395,32 +395,57 @@
         (http/json-resposta 200 (pos-aprovacao->wire dados))
         (http/json-resposta 404 {:erro "proposicao nao encontrada"})))))
 
+(defn- resposta-conflito-tramitacao-executiva
+  "Traduz `:conflito/tramitacao-executiva` -> 409 e `:validacao/votacao-inexistente` -> 400 (T2 grupo B,
+  ledger de prontidao Fase 10). Sem esta traducao as duas caiam no `:else` do interceptor global e a
+  borda devolvia **500 'erro interno'** para (a) conflito de estado, (b) CAS divergente — o caso mais
+  banal de escrita concorrente — e (c) um `veto-votacao-id` que nao existe, que e' erro de CORPO.
+  Mesma disciplina de `resposta-conflito-sessao-fechada` acima: cada diplomat traduz a SUA borda,
+  mensagem do dominio via `ex-message`, nada de mapear `:conflito/*` no interceptor global."
+  [e]
+  (case (:tipo (ex-data e))
+    :conflito/tramitacao-executiva (http/json-resposta 409 {:erro (ex-message e)})
+    :validacao/votacao-inexistente (http/json-resposta 400 {:erro (ex-message e)})
+    (throw e)))
+
 (defn- registrar-resposta-executivo-handler
   "POST /legislativo/autografos/:id/resposta — 'Registrar retorno' (path :id = autografo-id). nil (sem
-  tramitacao executiva para este autografo no tenant) -> 404."
+  tramitacao executiva para este autografo no tenant) -> 404; conflito de estado ou de lock-version -> 409.
+
+  A rota IRMA da apreciacao, e com o MESMO guard: `db/tramitacao-executiva` lanca os dois conflitos com a
+  mesma tag. Traduzida junto de proposito — a sonda T2 grupo B so' exercia a apreciacao, mas deixar o
+  irmao adjacente com o mesmo defeito enquanto se edita a mesma dupla de funcoes seria pior engenharia
+  que corrigir os dois (ledger Fase 10)."
   [repo-leg]
   (fn [req]
     (let [ator (:ator req) ente-id (:ente-id ator)
           autografo-id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
           m (adapters-in-pos-aprovacao/registrar-resposta->dominio ator (:json-params req))]
-      (if (controllers/registrar-resposta-executivo repo-leg ente-id autografo-id m)
-        (http/json-resposta 200 (adapters-out-tramitacao-executiva/tramitacao-executiva->wire
-                                   (controllers/buscar-tramitacao-por-autografo repo-leg ente-id autografo-id)))
-        (http/json-resposta 404 {:erro "tramitacao executiva nao encontrada para este autografo"})))))
+      (try
+        (if (controllers/registrar-resposta-executivo repo-leg ente-id autografo-id m)
+          (http/json-resposta 200 (adapters-out-tramitacao-executiva/tramitacao-executiva->wire
+                                     (controllers/buscar-tramitacao-por-autografo repo-leg ente-id autografo-id)))
+          (http/json-resposta 404 {:erro "tramitacao executiva nao encontrada para este autografo"}))
+        (catch clojure.lang.ExceptionInfo e
+          (resposta-conflito-tramitacao-executiva e))))))
 
 (defn- apreciar-veto-handler
   "POST /legislativo/tramitacoes-executivas/:id/apreciacao (path :id = tramitacao-executiva-id, DIRETO).
   A votacao real e' aberta/encerrada via /sessoes/:id/votacoes* ja' existente (§5 doc-mestre) — esta rota
-  so' carimba o desfecho. nil (tramitacao executiva inexistente no tenant) -> 404."
+  so' carimba o desfecho. nil (tramitacao executiva inexistente no tenant) -> 404; conflito de estado ou
+  de lock-version -> 409; `veto-votacao-id` inexistente -> 400 (ledger Fase 10)."
   [repo-leg]
   (fn [req]
     (let [ator (:ator req) ente-id (:ente-id ator)
           id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
           m (adapters-in-pos-aprovacao/apreciar-veto->dominio ator (:json-params req))]
-      (if (controllers/apreciar-veto repo-leg ente-id id m)
-        (http/json-resposta 200 (adapters-out-tramitacao-executiva/tramitacao-executiva->wire
-                                   (controllers/buscar-tramitacao-executiva repo-leg ente-id id)))
-        (http/json-resposta 404 {:erro "tramitacao executiva nao encontrada"})))))
+      (try
+        (if (controllers/apreciar-veto repo-leg ente-id id m)
+          (http/json-resposta 200 (adapters-out-tramitacao-executiva/tramitacao-executiva->wire
+                                     (controllers/buscar-tramitacao-executiva repo-leg ente-id id)))
+          (http/json-resposta 404 {:erro "tramitacao executiva nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (resposta-conflito-tramitacao-executiva e))))))
 
 ;; ========================= Onda C1: borda /meu do vereador (home fora-de-sessao) =========================
 

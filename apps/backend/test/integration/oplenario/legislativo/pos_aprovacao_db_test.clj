@@ -197,3 +197,72 @@
                    (fn [tx] (jdbc/execute-one! tx ["UPDATE legislativo.tramitacao_executiva SET veto_tipo = 'meio' WHERE id = ?"
                                                    (:tid @ctx)]))))
         "veto_tipo invalido barra (CHECK)")))
+
+;; ---------- a TAG das excecoes de conflito (T2 grupo B, ledger Fase 10) ----------
+;; Os guards acima provam que `apreciar-veto!` LANCA fora do estado e no CAS divergente. Nao provavam
+;; COMO lanca — e' o que faltava: `(is (thrown? Exception ...))` passa igual para uma ex-info sem
+;; `:tipo`, e uma ex-info sem `:tipo` cai no `:else` do interceptor global e vira **HTTP 500 'erro
+;; interno'**. Medido ao vivo pela sonda `e2e/.sonda/t2-grupo-b.sh`: conflito de lock_version devolvia
+;; 500. O teste de borda que "cobria" isso (`registrar-resposta-conflito-lock-version`) FABRICAVA a
+;; ex-info com `:tipo :validacao/invalido` no fake — um formato que a producao nunca produziu.
+;; Estas assercoes ancoram a tag na FONTE, para que o fake da borda nao possa inventar de novo.
+
+(defn- tipo-lancado
+  "O `:tipo` da ex-data de `f`, ou `::nao-lancou`. Falha alto se a excecao nao for ex-info."
+  [f]
+  (try (f) ::nao-lancou
+       (catch clojure.lang.ExceptionInfo e (:tipo (ex-data e)))))
+
+(deftest apreciar-veto-fora-do-estado-carrega-tipo-de-conflito
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [pid (protocolar! tx ente) {aid :id} (gerar-autografo! tx ente pid)
+              {tid :id} (exec/iniciar! tx {:id (random-uuid) :ente-id ente :autografo-id aid})]
+          (is (= :conflito/tramitacao-executiva
+                 (tipo-lancado #(exec/apreciar-veto! tx {:id tid :ente-id ente :resultado "veto_derrubado"
+                                                         :veto-votacao-id nil :updated-by nil :lock-version 0})))
+              "apreciar sem haver veto tem de ser CONFLITO tagueado (-> 409), nunca ex-info sem tipo (-> 500)"))))))
+
+(deftest apreciar-veto-lock-version-divergente-carrega-tipo-de-conflito
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [pid (protocolar! tx ente) {aid :id} (gerar-autografo! tx ente pid)
+              {tid :id} (exec/iniciar! tx {:id (random-uuid) :ente-id ente :autografo-id aid})]
+          (exec/registrar-resposta! tx {:id tid :ente-id ente :resultado "vetado" :veto-tipo "total"
+                                        :updated-by nil :lock-version 0})
+          (is (= :conflito/tramitacao-executiva
+                 (tipo-lancado #(exec/apreciar-veto! tx {:id tid :ente-id ente :resultado "veto_derrubado"
+                                                         :veto-votacao-id nil :updated-by nil :lock-version 999})))
+              "CAS divergente e' o caso mais banal de escrita concorrente — 409, nunca 500"))))))
+
+(deftest registrar-resposta-fora-do-estado-carrega-tipo-de-conflito
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [pid (protocolar! tx ente) {aid :id} (gerar-autografo! tx ente pid)
+              {tid :id} (exec/iniciar! tx {:id (random-uuid) :ente-id ente :autografo-id aid})]
+          (exec/registrar-resposta! tx {:id tid :ente-id ente :resultado "sancionado"
+                                        :updated-by nil :lock-version 0})
+          (is (= :conflito/tramitacao-executiva
+                 (tipo-lancado #(exec/registrar-resposta! tx {:id tid :ente-id ente :resultado "vetado"
+                                                              :veto-tipo "total" :updated-by nil :lock-version 1})))
+              "irmao da apreciacao, MESMA forma de guard — a tag anda junto para nao divergirem"))))))
+
+(deftest veto-votacao-id-tem-FK-de-verdade-contra-votacoes
+  ;; A docstring de `wire/in/pos_aprovacao.clj` dizia que `veto-votacao-id` era "forward-ref (sem FK
+  ;; declarativa no dominio)". O banco discorda: ha' FK `(ente_id, veto_votacao_id) -> votacoes`. A sonda
+  ;; T2B mandou um UUID aleatorio e levou 500 cru de violacao de FK. Este teste ancora o FATO — se algum
+  ;; dia a FK sair, ele reprova e a docstring volta a ser verdade de propria vontade.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [pid (protocolar! tx ente) {aid :id} (gerar-autografo! tx ente pid)
+              {tid :id} (exec/iniciar! tx {:id (random-uuid) :ente-id ente :autografo-id aid})]
+          (exec/registrar-resposta! tx {:id tid :ente-id ente :resultado "vetado" :veto-tipo "total"
+                                        :updated-by nil :lock-version 0})
+          (is (thrown? org.postgresql.util.PSQLException
+                       (exec/apreciar-veto! tx {:id tid :ente-id ente :resultado "veto_derrubado"
+                                                :veto-votacao-id (random-uuid) :updated-by nil :lock-version 1}))
+              "votacao inexistente viola a FK — quem traduz isso p/ 400 e' o Repo-Component, nao o db/"))))))

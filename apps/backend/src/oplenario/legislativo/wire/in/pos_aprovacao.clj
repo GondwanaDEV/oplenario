@@ -38,9 +38,14 @@
   "Corpo de POST /legislativo/tramitacoes-executivas/:id/apreciacao — carimba a apreciacao do veto pela
   camara (a votacao REAL e' aberta/encerrada via POST /sessoes/:id/votacoes*, ja' existente, §5 doc-mestre
   'nao construir DSLs/subsistemas distintos' — sem rota nova aqui). `resultado` fechado
-  (logic/estados-apreciacao-veto: veto_mantido|veto_derrubado). `veto-votacao-id` e' forward-ref (sem FK
-  declarativa no dominio, mesmo racional de destinatario-id em autografo) — chega como string, o
-  adapters/in coage p/ UUID. `lock-version` OBRIGATORIO (CAS real)."
+  (logic/estados-apreciacao-veto: veto_mantido|veto_derrubado). `veto-votacao-id` chega como string e o
+  adapters/in coage p/ UUID. `lock-version` OBRIGATORIO (CAS real).
+
+  CORRIGIDO (T2 grupo B, ledger Fase 10): esta docstring afirmava que `veto-votacao-id` era
+  forward-ref, `sem FK declarativa no dominio`. O BANCO DESMENTE — ha' FK real `(ente_id, veto_votacao_id) ->
+  legislativo.votacoes` (migration 0022). A sonda mandou um UUID que nao existia e levou 500 cru de
+  violacao de FK. Hoje o Repo-Component traduz 23503 -> 400; o teste
+  `veto-votacao-id-tem-FK-de-verdade-contra-votacoes` ancora o fato para a docstring nao voltar a mentir."
   [:map {:closed true}
    [:lock-version :int]
    [:resultado (enum-de logic/estados-apreciacao-veto)]

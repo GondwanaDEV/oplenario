@@ -606,7 +606,20 @@
   (autografo-da-proposicao [this ente-id pid] (transacao this ente-id #(autografo/buscar-por-proposicao % ente-id pid)))
   (iniciar-tramitacao-executiva! [this ente-id m] (transacao this ente-id #(exec/iniciar! % (assoc m :ente-id ente-id))))
   (registrar-resposta-executivo! [this ente-id m] (transacao this ente-id #(exec/registrar-resposta! % (assoc m :ente-id ente-id))))
-  (apreciar-veto! [this ente-id m] (transacao this ente-id #(exec/apreciar-veto! % (assoc m :ente-id ente-id))))
+  (apreciar-veto! [this ente-id m]
+    ;; 23503 (FK) do par `(ente_id, veto_votacao_id) -> legislativo.votacoes` -> erro de CORPO (400),
+    ;; nunca 500. Mesmo predicado/forma de `cadastros/ligar-identidade!` (23505) e de `registrar-voto!`
+    ;; logo abaixo. Achado da sonda T2 grupo B (ledger Fase 10): a sonda mandou um `veto-votacao-id`
+    ;; que nao existia e recebeu 500 'erro interno' — e a docstring de `wire/in/pos_aprovacao` ainda
+    ;; afirmava que este campo era "forward-ref (sem FK declarativa)", o que o banco desmente.
+    (try
+      (transacao this ente-id #(exec/apreciar-veto! % (assoc m :ente-id ente-id)))
+      (catch PSQLException e
+        (if (= "23503" (.getSQLState e))
+          (throw (ex-info "veto-votacao-id nao corresponde a uma votacao desta Casa"
+                          {:tipo :validacao/votacao-inexistente
+                           :id (:id m) :veto-votacao-id (:veto-votacao-id m)}))
+          (throw e)))))
   (buscar-tramitacao-executiva [this ente-id id] (transacao this ente-id #(exec/buscar % ente-id id)))
   (tramitacao-executiva-do-autografo [this ente-id aid] (transacao this ente-id #(exec/buscar-por-autografo % ente-id aid)))
   ;; Onda B Slice 7 — leitura composta (mesma disciplina de ficha-completa-da-proposicao/
