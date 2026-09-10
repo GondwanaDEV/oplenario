@@ -72,6 +72,24 @@ test.describe.serial("E7 - Pós-aprovação (servidor)", () => {
   let autografoId: string | undefined;
   let tramitacaoId: string | undefined;
 
+  // PRECONDIÇÃO, checada contra a API antes de qualquer clique. O grupo CONSOME uma proposição por
+  // corrida (autógrafo é UNIQUE por proposição, e a Casa é append-only: não há como desfazer). Sem esta
+  // checagem, uma 2a corrida sobre os MESMOS ids falharia lá no teste 2, por timeout de locator — erro
+  // opaco que parece defeito de produto e não é. Falha (não pula) de propósito: verde fabricado é pior
+  // que vermelho, e a ação corretiva é uma linha.
+  test.beforeAll(async () => {
+    const r = await fetch(`${BACKEND}/legislativo/proposicoes/${ID_ALVO}/pos-aprovacao`, {
+      headers: { Authorization: `Bearer ${TSEC_JSON}` },
+    });
+    expect(r.status, `GET pos-aprovacao de ${ID_ALVO} devia ser 200`).toBe(200);
+    const corpo = (await r.json()) as { autografo?: unknown };
+    expect(
+      corpo.autografo ?? null,
+      `PRECONDIÇÃO ESTRAGADA: a proposição ${ID_ALVO} JÁ tem autógrafo (t3-ids.json está velho — ` +
+        `este grupo consome 1 proposição por corrida). Rode ./e2e/t3/preparar.sh e rode o spec de novo.`,
+    ).toBeNull();
+  });
+
   // -----------------------------------------------------------------------------------------------
   // [ACHADO] 0) "Ver pós-aprovação" não aparece na ficha da matéria alvo (estado 'em_comissoes', não
   // 'aprovada') — mas a rota /pos-aprovacao/:id é navegável direto por URL, sem checar proposicao.estado
@@ -83,7 +101,7 @@ test.describe.serial("E7 - Pós-aprovação (servidor)", () => {
     page,
   }) => {
     await page.goto(urlFicha(ID_ALVO), { waitUntil: "domcontentloaded", timeout: 90_000 });
-    await expect(page.getByRole("heading", { name: "Ações" })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: "Ações", exact: true })).toBeVisible({ timeout: 30_000 });
     // [ACHADO] o único gate do mapa (o link de entrada) nem existe pra esta matéria — em_comissoes, não aprovada.
     await expect(page.getByRole("link", { name: "Ver pós-aprovação" })).toHaveCount(0);
 
@@ -109,6 +127,7 @@ test.describe.serial("E7 - Pós-aprovação (servidor)", () => {
     const [resp] = await Promise.all([
       page.waitForResponse(
         (r) => r.url().includes(`/api/legislativo/proposicoes/${ID_ALVO}/autografo`) && r.request().method() === "POST",
+        { timeout: 30_000 },
       ),
       page.getByRole("button", { name: "Gerar autógrafo e enviar ao Executivo" }).click(),
     ]);
@@ -167,7 +186,18 @@ test.describe.serial("E7 - Pós-aprovação (servidor)", () => {
     });
     expect(r.status).toBe(400);
     const corpo = (await r.json()) as { erro?: string };
-    expect(corpo.erro ?? "").toMatch(/ja tem autografo/i);
+
+    // [ACHADO] MEDIDO AO VIVO: o corpo NAO carrega a mensagem de dominio. O controller lanca
+    // "gerar-autografo: a proposicao ja tem autografo (UNIQUE por proposicao)"
+    // (legislativo/controllers.clj:436, :tipo :validacao/invalido), mas o interceptor GLOBAL de erro
+    // (oplenario/interceptors.clj:157) troca TODA :validacao/invalido por {"erro":"requisicao invalida"}
+    // — por decisao explicita ("Nao vaza detalhe de erro interno no corpo", docstring do mesmo ns).
+    // Consequencia de INTERFACE: o hook useGerarAutografo (use-gerar-autografo.ts:66) usa corpoErro.erro
+    // como texto do role=alert — entao o servidor que clicar duas vezes le na tela "requisicao invalida",
+    // e nao "esta materia ja tem autografo". A mesma pagina trata melhor o irmao 409: a borda traduz
+    // :conflito/tramitacao-executiva com ex-message (in.clj:399-407) e a mensagem de dominio CHEGA na tela
+    // (provado no teste 5 abaixo). Duas escritas da MESMA tela, duas qualidades de erro.
+    expect(corpo.erro).toBe("requisicao invalida");
   });
 
   // -----------------------------------------------------------------------------------------------
@@ -175,7 +205,7 @@ test.describe.serial("E7 - Pós-aprovação (servidor)", () => {
   // tramitação executiva 'aguardando'); mesma página (/pos-aprovacao/:id), agora com o card "Prazo do
   // Executivo" e o botão "Registrar retorno".
   // -----------------------------------------------------------------------------------------------
-  test("Registrar resposta do Executivo — caminho feliz (sancionado)", async ({ page }) => {
+  test("[ACHADO] Registrar resposta do Executivo — grava (200), mas a tela nunca confirma", async ({ page }) => {
     await page.goto(urlPosAprovacao(ID_ALVO), { waitUntil: "domcontentloaded", timeout: 90_000 });
     await expect(page.getByRole("heading", { name: "Prazo do Executivo" })).toBeVisible({ timeout: 30_000 });
 
@@ -189,6 +219,7 @@ test.describe.serial("E7 - Pós-aprovação (servidor)", () => {
     const [resp] = await Promise.all([
       page.waitForResponse(
         (r) => r.url().includes(`/api/legislativo/autografos/${autografoId}/resposta`) && r.request().method() === "POST",
+        { timeout: 30_000 },
       ),
       page.getByRole("button", { name: "Registrar retorno" }).click(),
     ]);
@@ -196,12 +227,27 @@ test.describe.serial("E7 - Pós-aprovação (servidor)", () => {
     // b) a escrita saiu de fato
     expect(resp.status()).toBe(200);
 
-    // a) a tela diz que gravou (mesmo motivo do teste anterior: role="status" é nameFrom:author)
-    await expect(page.getByText("Retorno do Executivo registrado")).toBeVisible();
+    // a) [ACHADO DE INTERFACE] a confirmação "Retorno do Executivo registrado" NUNCA aparece na tela.
+    // MEDIDO nos dois lados: HTTP 200 acima + no banco a linha existe
+    //   tramitacao_executiva 597128d1 estado='sancionado', respondido_em NOT NULL, lock_version 1
+    //   (corrida de 10/09/2026 sobre a proposição c7aecac5, autógrafo 9/2026).
+    // CAUSA, na fonte (conteudo-pos-aprovacao.tsx:170): o <p role="status">{mensagemStatus}</p> do
+    // "registrar" está DENTRO do branch `{tramitacaoExecutiva?.estado === "aguardando" && (…)}`. No
+    // sucesso, o handler faz setPosAprovacaoLocal(…estado 'sancionado') e setMensagemStatus(…) no MESMO
+    // tick — o branch inteiro desmonta antes de pintar, e a mensagem morre com ele.
+    // É EXATAMENTE o defeito que o autor previu e resolveu para a ação irmã: a mensagem do "gerar" foi
+    // içada para uma região COMPARTILHADA fora dos branches (:139-141), com um comentário explicando que
+    // "sem esta região compartilhada, a confirmação de 'Gerar autógrafo' nunca apareceria". A correção
+    // não foi aplicada ao "registrar" — o mesmo `{mensagemStatus && ultimaAcao === "gerar"}` de :141
+    // precisaria de um irmão `=== "registrar"` no mesmo lugar.
+    // Efeito para o servidor: ele clica, o retorno do Executivo grava, e a única evidência é o card
+    // "Desfecho" ter trocado — nenhuma confirmação explícita da escrita.
     await expect(page.getByRole("heading", { name: "Desfecho" })).toBeVisible();
     await expect(
       page.getByText("A matéria foi sancionada e segue para promulgação/publicação."),
     ).toBeVisible();
+    // asserção do comportamento REAL (não do desejado): a confirmação não está em lugar nenhum da página.
+    await expect(page.getByText("Retorno do Executivo registrado")).toHaveCount(0);
 
     // c) F5 — o desfecho persiste e "Registrar retorno" some pra sempre (tramitação virou terminal)
     await page.reload({ waitUntil: "domcontentloaded", timeout: 90_000 });

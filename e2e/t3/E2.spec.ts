@@ -41,6 +41,13 @@ function authHeader(tokenJson: string) {
 // ORDEM ESCRITA, mesmo atravessando describes diferentes. Por isso e seguro guardar aqui o id do
 // documento que o fluxo feliz gera e reusa-lo nos testes de erro que vem depois (via API direta, ja
 // que a UI nao tem como reabrir um documento existente por id — ver achado abaixo).
+//
+// ARMADILHA MEDIDA (nao re-descobrir): o Playwright DESCARTA o worker apos QUALQUER teste que falha e
+// abre um novo — o modulo e' reimportado e estas tres variaveis voltam a null. Consequencia pratica:
+// se um teste anterior falha, os dois testes que dependem de `docId` (o PATCH em 'emitido' e o replay
+// de protocolar) aparecem no placar como SKIP ("-"), nao como falha. Ler esse "-" como benigno mascara
+// que a cobertura caiu de 8 para 6. O skip esta certo (e' honesto, nao verde fabricado); o que muda e'
+// como se le o placar: 8 passed e a unica leitura que prova cobertura cheia.
 let docId: string | null = null;
 let docLockVersionAposEditar: number | null = null;
 let docLockVersionAposProtocolar: number | null = null;
@@ -263,7 +270,14 @@ test.describe("E2 - Expediente: casos de erro", () => {
     // #assunto fica vazio de proposito.
     await page.getByRole("button", { name: "Gerar documento" }).click();
 
-    await expect(page.getByRole("alert")).toHaveText("Preencha o assunto antes de gerar o documento.");
+    // NAO usar page.getByRole("alert") aqui: o Next injeta um <div id="__next-route-announcer__"
+    // role="alert" em TODA pagina, entao o role sozinho casa 2 elementos e o expect morre em strict
+    // mode antes de medir qualquer coisa. O alerta do formulario e' `p.form-erro[role=alert]`
+    // (formulario-preenchimento.tsx:129 e :194) — so' um dos dois esta montado por vez (fase de
+    // composicao vs. fase de edicao), entao `p.form-erro` e' unico em tela.
+    await expect(page.locator('p.form-erro[role="alert"]')).toHaveText(
+      "Preencha o assunto antes de gerar o documento.",
+    );
     // janela curta pra dar tempo de QUALQUER request assincrona aparecer antes de afirmar a ausencia.
     await page.waitForTimeout(500);
     expect(houvePost).toBe(false);
@@ -296,7 +310,14 @@ test.describe("E2 - Expediente: casos de erro", () => {
     expect(resp.status()).toBe(400);
     // mensagem GENÉRICA por desenho (interceptors.clj/erro: corpo nunca vaza qual campo faltou) — a
     // tela so' repassa `corpoErro?.erro`, entao o texto exato e o mesmo do backend.
-    await expect(page.getByRole("alert")).toContainText("requisicao invalida");
+    // mesmo cuidado do teste acima: role=alert casa tambem o route-announcer do Next.
+    await expect(page.locator('p.form-erro[role="alert"]')).toContainText("requisicao invalida");
+    // POR QUE o 400 e' atribuivel ao placeholder faltante, e nao a borda Malli recusando por outro
+    // motivo: o payload aqui tem exatamente o MESMO formato que o do fluxo feliz acima (modelo-id +
+    // assunto nao-vazio + 2 pares chave/valor), que devolve 201. A unica diferenca e' que este modelo
+    // tem 3 placeholders. Prova negativa medida no Postgres depois desta corrida:
+    // SELECT count(*) FROM legislativo.documento WHERE assunto LIKE 'Certidão de vinculação%'; -> 0.
+    // O 400 nao gravou linha nenhuma.
     // nenhum documento foi criado: a fase continua "composicao" (documento === null), o formulario de
     // Modelo/Assunto/Dados segue montado (nao vira o form de Corpo).
     await expect(page.locator("#corpo")).toHaveCount(0);

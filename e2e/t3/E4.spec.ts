@@ -10,18 +10,32 @@ import { resolve } from "node:path";
 //   3) Emitir "meu parecer" (vereador, 2 toques) — POST  /meu/pareceres/:id/emissao
 //   4) Dar ciencia (vereador)                    — POST  /meu/ciencias
 //
-// Duas pareceres fixas sustentam o grupo (t3-ids.json / e4):
-//   ID_EDITAVEL  = 50a690c2... (em_elaboracao, relator = :presidente) — nunca transiciona a terminal
-//     pelo gatilho 'emitir' (o template so mapeia aguardando_assinatura->aprovado), entao serve pra
-//     provar a emissao feliz E a dupla-emissao SEM crashar nada.
-//   ID_AGUARDANDO = ce76c191... (aguardando_assinatura, relator = :vereador) — comeca com voto_relator
-//     NULO (situacao 'sem-voto' na tela de assinatura). So DEPOIS que a secretaria emite sobre ele (T5)
-//     e' que ele fica com voto setado E vira 'aprovado' (terminal) NO MESMO clique — e e' exatamente
-//     essa combinacao que reproduz o achado central do mapa (T6): a tela de assinatura nunca olha o
-//     estado terminal do parecer, entao reoferece "Revisar e assinar" e o POST bate no trigger de
-//     imutabilidade (500 opaco). NAO aponto as duas emissoes (T2/T3 x T5) pro MESMO parecer — o
-//     agente de precondicoes ja registrou esse cuidado (ver "achados" do mapa) e reusar o mesmo id
-//     pros dois lados destruiria a chance de mostrar a emissao feliz em separado da colisao.
+// Dois pareceres sustentam o grupo (ids resolvidos em runtime de t3-ids.json / e4 — nao ha UUID
+// escrito a mao aqui):
+//   ID_EDITAVEL  = e4.parecerEditavelId (em_elaboracao, relator = :presidente) — nunca transiciona a
+//     terminal pelo gatilho 'emitir' (o template de demo so mapeia aguardando_assinatura->aprovado),
+//     entao serve pra provar a emissao feliz E a dupla-emissao SEM crashar nada. E' REUSAVEL: nenhum
+//     teste o leva a estado terminal.
+//   ID_AGUARDANDO = e4.parecerAguardandoAssinaturaId (aguardando_assinatura, relator = :vereador) —
+//     comeca com voto_relator NULO (situacao 'sem-voto' na tela de assinatura). So DEPOIS que a
+//     secretaria emite sobre ele e' que ele fica com voto setado E vira 'aprovado' (terminal) NO
+//     MESMO clique — e e' exatamente essa combinacao que reproduz o achado central do grupo: a tela
+//     de assinatura nunca olha o estado terminal do parecer, entao reoferece "Revisar e assinar" e o
+//     POST bate no trigger de imutabilidade (500 opaco). NAO aponto as duas emissoes pro MESMO
+//     parecer: reusar o mesmo id pros dois lados destruiria a chance de mostrar a emissao feliz em
+//     separado da colisao.
+//
+// ESTE PARECER E' CONSUMIDO EM CADA CORRIDA (vira terminal e o trigger trava qualquer UPDATE
+// depois), e NAO EXISTE rota HTTP que crie parecer. Por isso e2e/t3/fixtures.sql ganhou um bloco
+// que CLONA a linha da semente quando nao ha mais alvo em 'aguardando_assinatura' para o relator
+// :vereador — e' o que torna E4 repetivel. Sempre rodar ./e2e/t3/preparar.sh antes de uma corrida
+// cheia; sem isso, a 2a corrida seguida falha nos 2 ultimos testes por falta de alvo.
+//
+// [CORRECAO DO MAPA] mapa-E4.json afirma que a tela (interno)/parecer/[id] "abre normalmente pra um
+// token 'vereador' e so a escrita falha com 403". FALSO, medido nesta sessao: o interceptor
+// `exige-papel "secretario"` esta na rota :get tambem (in.clj:523), entao o GET ja e' 403 e o
+// formulario nunca monta. O achado verdadeiro (ausencia de guard client-side) sobrevive, com outra
+// forma observavel — ver o teste de papeis trocados abaixo.
 const ids = JSON.parse(readFileSync(resolve(__dirname, ".artifacts/t3-ids.json"), "utf8"));
 // mapa-E4.json (o dossiê original de achados) fica só como referência de leitura — cada achado
 // citado nos comentários abaixo tem a linha correspondente lá, pra quem quiser conferir a fonte.
@@ -30,6 +44,8 @@ const BASE = ids.base.frontend as string;
 const ENTE = ids.ente as string;
 const TSEC = ids.tokens.secretaria.url as string; // papel 'secretario'
 const TVER = ids.tokens.vereador.url as string; // papel 'vereador' — e' o relator de ID_AGUARDANDO
+const TVER_JSON = ids.tokens.vereador.json as string; // o MESMO token, cru — vai no Authorization: Bearer
+const BACKEND = ids.base.backend as string; // http://localhost:8888 — usado só onde a tela não alcança a rota
 
 const ID_EDITAVEL: string = ids.e4.parecerEditavelId; // em_elaboracao, relator = :presidente
 const ID_AGUARDANDO: string = ids.e4.parecerAguardandoAssinaturaId; // aguardando_assinatura, relator = :vereador
@@ -72,6 +88,7 @@ test.describe.serial("E4 - O parecer (servidor + vereador)", () => {
     const [resp] = await Promise.all([
       page.waitForResponse(
         (r) => r.url().includes(`/api/legislativo/pareceres/${ID_EDITAVEL}`) && r.request().method() === "PATCH",
+        { timeout: 30_000 },
       ),
       page.getByRole("button", { name: "Salvar rascunho" }).click(),
     ]);
@@ -116,6 +133,7 @@ test.describe.serial("E4 - O parecer (servidor + vereador)", () => {
     const [resp] = await Promise.all([
       page.waitForResponse(
         (r) => r.url().includes(`/api/legislativo/pareceres/${ID_EDITAVEL}/emissao`) && r.request().method() === "POST",
+        { timeout: 30_000 },
       ),
       page.getByRole("button", { name: "Emitir parecer" }).click(),
     ]);
@@ -156,6 +174,7 @@ test.describe.serial("E4 - O parecer (servidor + vereador)", () => {
     const [resp] = await Promise.all([
       page.waitForResponse(
         (r) => r.url().includes(`/api/legislativo/pareceres/${ID_EDITAVEL}/emissao`) && r.request().method() === "POST",
+        { timeout: 30_000 },
       ),
       page.getByRole("button", { name: "Emitir parecer" }).click(),
     ]);
@@ -176,29 +195,67 @@ test.describe.serial("E4 - O parecer (servidor + vereador)", () => {
   });
 
   // ---------------------------------------------------------------------------------------------
-  // [ACHADO] 4) Sem guard de papel client-side em (interno)/parecer/[id] — um token 'vereador' abre
-  // o editor da secretaria normalmente (mapa: "layout.tsx só injeta AuthProvider+TemaProvider, sem
-  // GuardServidor"). O bloqueio de fato so' vem do backend (403). Nao mudo o estado de ID_EDITAVEL
-  // pro resto da suite: o 403 acontece ANTES de qualquer escrita (exige-papel nega antes do UPDATE).
+  // [ACHADO] 4) Papéis trocados em (interno)/parecer/[id]. A versão anterior deste teste vinha do
+  // mapa-E4.json, que afirma "o formulário abre normalmente pra um token 'vereador'; só a escrita
+  // falha com 403". MEDIDO NA FONTE, isso é FALSO — e era a causa da falha de 30,7 s (o teste
+  // esperava 30 s por um <textarea> que nunca ia renderizar):
+  //
+  //   $ curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer <TVER>" \
+  //       http://localhost:8888/legislativo/pareceres/50a690c2-...  ->  403 {"erro":"autorizacao negada"}
+  //
+  // O gate `papel` (exige-papel "secretario") está na rota :get TAMBÉM, não só no :patch —
+  // legislativo/diplomat/http/in.clj:523 e :525 recebem o MESMO interceptor. Logo o formulário
+  // nunca chega a montar.
+  //
+  // O que continua verdadeiro do mapa (e é o achado real): NÃO existe guard de papel client-side em
+  // (interno)/layout.tsx — ele só injeta AuthProvider+TemaProvider, sem nada como o GuardVereador de
+  // (vereador)/layout.tsx. A consequência observável é dupla, e é isso que este teste afirma:
+  //   (a) o vereador recebe o CHASSI INTERNO da secretaria (topo institucional, nav "Painéis da
+  //       Mesa/Tramitação/...", e o ator hardcoded "Rita Campos · Servidora legislativa") em vez de
+  //       um "Acesso restrito";
+  //   (b) o 403 é renderizado pelo MESMO ramo de erro que um 404 — "Não foi possível carregar este
+  //       parecer" — então "você não tem o papel" fica indistinguível de "este parecer não existe"
+  //       (compare com o teste seguinte, que é um 404 de verdade e mostra a MESMA tela).
+  // O gate de escrita do backend fica provado por HTTP direto, porque pela interface ele é
+  // inalcançável: sem formulário, não há clique em "Salvar rascunho".
   // ---------------------------------------------------------------------------------------------
-  test("[ACHADO] Editar parecer — papéis trocados: sem guard client-side, 403 no backend", async ({ page }) => {
+  test("[ACHADO] Papéis trocados em /parecer/:id — sem guard client-side, e o 403 vira a tela de 404", async ({
+    page,
+  }) => {
+    // a promessa ANTES do goto: o GET do editor sai junto com a navegação.
+    const esperaGet = page.waitForResponse(
+      (r) => r.url().includes(`/api/legislativo/pareceres/${ID_EDITAVEL}`) && r.request().method() === "GET",
+      { timeout: 30_000 },
+    );
     await page.goto(urlParecer(ID_EDITAVEL, TVER), { waitUntil: "domcontentloaded", timeout: 90_000 });
-    // [ACHADO] o formulario abre normalmente pra um token 'vereador' — nenhum "Acesso restrito" aqui,
-    // ao contrario do app do vereador (que TEM GuardVereador em (vereador)/layout.tsx).
-    await expect(page.getByLabel("Relatório")).toBeVisible({ timeout: 30_000 });
+    const respGet = await esperaGet;
 
-    await page.getByLabel("Relatório").fill("Tentativa de escrita com papel trocado — não deve gravar");
+    // [ACHADO] o GET do editor da secretaria é 403 para um token 'vereador' — o mapa dizia que a
+    // tela abria; não abre.
+    expect(respGet.status()).toBe(403);
 
-    const [resp] = await Promise.all([
-      page.waitForResponse(
-        (r) => r.url().includes(`/api/legislativo/pareceres/${ID_EDITAVEL}`) && r.request().method() === "PATCH",
-      ),
-      page.getByRole("button", { name: "Salvar rascunho" }).click(),
-    ]);
+    // (a) sem guard client-side: o chassi INTERNO renderiza mesmo assim, com o ator da secretaria.
+    await expect(page.getByRole("navigation", { name: "Navegação interna" })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Servidora legislativa")).toBeVisible();
+    // contraste: o app do vereador teria mostrado isto (GuardVereador, (vereador)/layout.tsx:47).
+    await expect(page.getByRole("heading", { name: "Acesso restrito" })).toHaveCount(0);
 
-    expect(resp.status()).toBe(403);
-    // [REVISAO #2] sem .first() corre risco de strict-mode se o form expuser mais de 1 alert.
-    await expect(page.getByRole("alert").first()).toBeVisible();
+    // (b) o 403 cai no ramo genérico de erro — a mesma tela que o teste seguinte vê num 404 real.
+    await expect(page.getByRole("heading", { name: "Não foi possível carregar este parecer" })).toBeVisible();
+
+    // sem formulário, a escrita é inalcançável pela interface.
+    await expect(page.getByLabel("Relatório")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Salvar rascunho" })).toHaveCount(0);
+
+    // O gate de ESCRITA existe e é o mesmo — provado direto no backend, já que a tela não chega lá.
+    // Medido também no banco fora do teste: `SELECT count(*) FROM legislativo.parecer_texto_versao
+    // WHERE parecer_id='<ID_EDITAVEL>'` fica IGUAL antes e depois (403 nega antes do INSERT).
+    const respPatch = await page.request.patch(`${BACKEND}/legislativo/pareceres/${ID_EDITAVEL}`, {
+      headers: { Authorization: `Bearer ${TVER_JSON}`, "Content-Type": "application/json" },
+      data: { relatorio: "Tentativa de escrita com papel trocado", analise: "não deve gravar" },
+    });
+    expect(respPatch.status()).toBe(403);
+    expect(await respPatch.json()).toMatchObject({ erro: "autorizacao negada" });
   });
 
   // ---------------------------------------------------------------------------------------------
@@ -242,6 +299,7 @@ test.describe.serial("E4 - O parecer (servidor + vereador)", () => {
     const [resp] = await Promise.all([
       page.waitForResponse(
         (r) => r.url().includes(`/api/legislativo/pareceres/${ID_AGUARDANDO}/emissao`) && r.request().method() === "POST",
+        { timeout: 30_000 },
       ),
       page.getByRole("button", { name: "Emitir parecer" }).click(),
     ]);
@@ -292,6 +350,7 @@ test.describe.serial("E4 - O parecer (servidor + vereador)", () => {
     const [resp] = await Promise.all([
       page.waitForResponse(
         (r) => r.url().includes(`/api/meu/pareceres/${ID_AGUARDANDO}/emissao`) && r.request().method() === "POST",
+        { timeout: 30_000 },
       ),
       dialog.getByRole("button", { name: "Confirmar com a biometria" }).click(),
     ]);

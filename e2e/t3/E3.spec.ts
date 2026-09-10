@@ -12,13 +12,19 @@ import { resolve, dirname } from "node:path";
 //   - ementa só-espaços passa em qualquer camada (criar E editar) — o HTML `required` só barra length 0.
 //   - criar não tem idempotency-key: 2 abas concorrentes com o mesmo corpo geram 2 proposições distintas.
 //   - editar TEM proteção real (CAS por lock_version): a 2ª de duas PATCHes concorrentes recebe 400.
+//   - editar só a ementa cunha uma versão de TEXTO nova, byte-a-byte idêntica à anterior (o form reenvia o
+//     texto intacto e o backend decide promover por PRESENÇA da chave, não por mudança) — medido pelo salto
+//     de lock_version (+2 com texto no corpo, +1 sem), com o alvo sem texto servindo de controle.
+//   - o conflito de CAS sai como **400 "requisicao invalida"**, não 409: `:validacao/invalido` e corpo
+//     malformado são indistinguíveis para o cliente, e essa string crua é o que o usuário lê no alerta.
 //   - "espécie inválida" e "autor inexistente" NÃO são alcançáveis pela interface em nenhuma das 2 telas —
 //     os testes correspondentes provam o motivo (select fechado / campo autor-id nunca existe no form),
 //     não fingem cobrir um caso que a UI não deixa acontecer.
 //
-// Não fomos autorizados a RODAR este spec (8 agentes escrevendo contra a mesma Casa ao mesmo tempo) — só
-// a escrevê-lo. Toda escrita bem-sucedida dá append em .artifacts/escritas-E3.json para o SQL de prova
-// rodar depois, com ente_id sempre no WHERE (RLS por tenant).
+// RODADO nesta stack (10/09/2026, agente único, stack viva): 10/10 verde, duas corridas seguidas, `tsc
+// --noEmit` limpo. As asserções novas foram provadas capazes de reprovar (delta de lock plantado errado →
+// vermelho). Toda escrita bem-sucedida dá append em .artifacts/escritas-E3.json para o SQL de prova rodar
+// depois, com ente_id sempre no WHERE (RLS por tenant).
 
 const ids = JSON.parse(readFileSync(resolve(__dirname, ".artifacts/t3-ids.json"), "utf8"));
 
@@ -352,18 +358,60 @@ test.describe("E3 - A matéria nasce (servidor)", () => {
       pageB.getByRole("button", { name: "Salvar alterações" }).click(),
     ]);
     const [rA, rB] = await Promise.all([respA, respB]);
-    const statuses = [rA.status(), rB.status()].sort((x, y) => x - y);
 
-    // (b): exatamente uma vence (2xx) e a outra leva 400 de conflito — não é escrita perdida silenciosa.
-    expect(statuses[0]).toBe(400);
-    expect(statuses[1]).toBeLessThan(300);
+    // As duas abas TÊM de ter partido da mesma versão — senão não há conflito nenhum a provar e o teste
+    // seria vácuo. Isto é medido no tráfego real, não presumido do fluxo da UI.
+    const lockEnviadoA = JSON.parse(rA.request().postData() ?? "{}")["lock-version"];
+    const lockEnviadoB = JSON.parse(rB.request().postData() ?? "{}")["lock-version"];
+    expect(
+      lockEnviadoA,
+      "as 2 abas precisam sair da MESMA lock_version; se divergirem, não houve corrida",
+    ).toBe(lockEnviadoB);
+    expect(typeof lockEnviadoA).toBe("number");
 
-    // (a) a tela: a página perdedora mostra o alerta de erro (foco automático via erroRef).
-    const perdedora = rA.status() === 400 ? pageA : pageB;
-    await expect(perdedora.getByRole("alert")).toBeVisible({ timeout: 30_000 });
+    // Qual das duas abas perde é NÃO-DETERMINÍSTICO (vence quem chegar primeiro ao `SELECT … FOR UPDATE`
+    // de `estado+lock`), então a asserção é sobre o PAR, nunca sobre uma aba fixa.
+    const perdeuA = rA.status() !== 200;
+    const [rPerdedora, rVencedora] = perdeuA ? [rA, rB] : [rB, rA];
+    const [pagePerdedora] = perdeuA ? [pageA] : [pageB];
 
-    const vencedora = rA.status() === 400 ? rB : rA;
+    // (b): exatamente uma vence (2xx) e a outra leva conflito — não é escrita perdida silenciosa.
+    // O status do conflito é **400, não 409** — medido e confirmado na fonte: `editar!` lança
+    // `ex-info "editar!: conflito de lock_version…" {:tipo :validacao/invalido}` (db/proposicao.clj:186-188)
+    // e o interceptor global `erro` mapeia TODO `:validacao/invalido` para 400 com corpo opaco
+    // (interceptors.clj:155-157). Não existe ramo 409 na cadeia de borda: conflito de CAS e corpo malformado
+    // saem indistinguíveis para o cliente. [ACHADO menor de contrato — o correto REST seria 409; não é bug
+    // de gravação, o dado está íntegro. Se um dia virar 409, esta linha reprova e é aqui que se ajusta.]
+    expect(
+      rPerdedora.status(),
+      `a 2ª PATCH concorrente tinha de levar conflito; veio ${rPerdedora.status()}`,
+    ).toBe(400);
+    expect(rVencedora.status()).toBe(200);
+    expect(await rPerdedora.json()).toEqual({ erro: "requisicao invalida" });
+
+    // (a) a tela: a página perdedora mostra o alerta de erro (foco automático via erroRef) e NÃO navega.
+    // Ancorado em `p.form-erro` e não em `getByRole("alert")`: o Next injeta um segundo role=alert vazio
+    // (`#__next-route-announcer__`) em toda página, e o role puro estoura strict mode.
+    const alertaDaPerdedora = pagePerdedora.locator("p.form-erro");
+    await expect(alertaDaPerdedora).toBeVisible({ timeout: 30_000 });
+    // A mensagem que o servidor mandou É a que a tela mostra — sem tradução, sem "tente novamente" genérico.
+    // [ACHADO de microcopy] o usuário lê literalmente "requisicao invalida" (sem acento, sem explicar que
+    // outra pessoa salvou antes) num conflito de edição concorrente — o corpo opaco do interceptor vaza cru
+    // pro alerta (use-editar-proposicao.ts usa `corpoErro?.erro` direto).
+    await expect(alertaDaPerdedora).toHaveText("requisicao invalida");
+    await expect(pagePerdedora).toHaveURL(new RegExp(`/editor-proposicao/${alvo.id}`));
+
+    const vencedora = rVencedora;
     const corpoVencedor = await vencedora.json();
+    // A prova de que NÃO houve escrita perdida: SÓ a vencedora gravou. O incremento esperado é +2, não +1,
+    // porque este corpo carrega `texto` — ver o teste "editar só a ementa…" abaixo, que isola e mede a
+    // causa (`texto_versao/promover!` passo 3 dá um segundo `lock_version + 1` na mesma tx). Se a perdedora
+    // também tivesse gravado, o salto seria +4.
+    const passosDoLock = "texto" in JSON.parse(rVencedora.request().postData() ?? "{}") ? 2 : 1;
+    expect(corpoVencedor["lock-version"]).toBe(lockEnviadoA + passosDoLock);
+    expect(corpoVencedor.ementa).toBe(
+      JSON.parse(rVencedora.request().postData() ?? "{}").ementa,
+    );
 
     registrarEscrita({
       escrita: "editar proposicao (duplo clique concorrente — a que venceu o CAS)",
@@ -374,11 +422,99 @@ test.describe("E3 - A matéria nasce (servidor)", () => {
       tabela: "legislativo.proposicoes",
       sql_de_prova:
         `SELECT id, ementa, lock_version FROM legislativo.proposicoes ` +
-        `WHERE ente_id='${ENTE_ID}' AND id='${alvo.id}'; -- ementa = a da vencedora ('${corpoVencedor.ementa}'), lock_version incrementou só 1x`,
+        `WHERE ente_id='${ENTE_ID}' AND id='${alvo.id}'; ` +
+        `-- ementa = a da vencedora ('${corpoVencedor.ementa}'), lock_version = ${corpoVencedor["lock-version"]} ` +
+        `(= ${lockEnviadoA} + 1: incrementou UMA vez, a perdedora não gravou)`,
     });
 
     await pageA.close();
     await pageB.close();
+  });
+
+  test("editar só a ementa cria uma versão de TEXTO nova e idêntica à anterior [ACHADO]", async ({ page }) => {
+    // MEDIDO nesta stack, não deduzido. O textarea "Texto da proposição" vem pré-preenchido pelo GET e o
+    // hook `useEditarProposicao` só filtra `undefined` — logo o form reenvia o texto INTACTO em toda
+    // gravação, mesmo quando o usuário só corrigiu a ementa. No backend, `editar-proposicao!`
+    // (components/repositorio.clj:301-315) decide promover nova versão por `(when-let [corpo (:texto m)])`
+    // — PRESENÇA da chave, nunca "o texto mudou". Efeito: cada salvamento de metadado cunha uma versão
+    // `origem_versao='edicao'` byte-a-byte igual à anterior e supersede a vigente. Num sistema em que a
+    // versão de texto é ato auditado (§22.4 eixo B), isso polui a trilha com versões que não são edição.
+    //
+    // A prova está no PAR de alvos, e é falseável dos dois lados:
+    //   - alvo COM texto  -> o corpo leva `texto` e lock_version sobe 2 (o +1 extra é o reaponte do
+    //     pointer em texto_versao/promover! passo 3, db/texto_versao.clj:64-68).
+    //   - alvo SEM texto  -> o corpo não leva `texto`, nenhuma versão nasce e lock_version sobe 1.
+    // Não há rota HTTP que liste as versões (nenhuma `/versoes` em diplomat/http/in.clj), por isso a
+    // contagem direta fica no `sql_de_prova`, e o que a interface consegue medir é o salto do lock.
+    // ESCOLHA POR PROPRIEDADE, NUNCA POR INDICE. A redacao anterior cravava `outrasEditaveis[2]` como
+    // o alvo "sem texto", e a ordem de GET /legislativo/proposicoes NAO e' estavel entre corridas
+    // (medido: os mesmos ids trocam de posicao entre duas preparacoes seguidas). Numa corrida em que o
+    // indice 2 calhava de ter texto, este teste reprovava sem que nada do produto tivesse mudado.
+    // O discriminador e' `lockVersion`: proposicao recem-criada pelo formulario nasce com lock 0 e SEM
+    // versao de texto; qualquer uma ja editada tem lock > 0 e texto vigente. Conferido por SQL contra
+    // legislativo.proposicao_texto_versao nos 5 candidatos do artefato.
+    type Cand = { id: string; lockVersion: number };
+    const cands = ids.e3.outrasEditaveis as Cand[];
+    const comTextoCand = cands.find((c) => c.lockVersion > 0);
+    const semTextoCand = cands.find((c) => c.lockVersion === 0);
+    if (!comTextoCand || !semTextoCand) {
+      throw new Error(
+        "E3: o artefato nao trouxe o PAR de alvos (um com texto, um sem). Rode ./e2e/t3/preparar.sh.",
+      );
+    }
+    const comTexto: string = comTextoCand.id;
+    const semTexto: string = semTextoCand.id;
+
+    async function salvarSoAEmenta(alvo: string) {
+      const antes = await page.request.get(`${ids.base.backend}/legislativo/proposicoes/${alvo}`, {
+        headers: { Authorization: `Bearer ${TOKEN_SECRETARIA}` },
+      });
+      expect(antes.ok()).toBeTruthy();
+      const lockAntes = (await antes.json())["lock-version"] as number;
+
+      await page.goto(urlEditar(alvo), { waitUntil: "domcontentloaded", timeout: 90_000 });
+      await expect(page.getByLabel(/^ementa$/i)).not.toHaveValue("", { timeout: 30_000 });
+      // Só a ementa é tocada. O textarea de texto NÃO recebe um caractere sequer.
+      await page.getByLabel(/^ementa$/i).fill(`Ementa E3 só-metadado ${Date.now()}`);
+
+      const respostaPatch = page.waitForResponse(
+        (r) => r.url().includes(`/api/legislativo/proposicoes/${alvo}`) && r.request().method() === "PATCH",
+        { timeout: 30_000 },
+      );
+      await page.getByRole("button", { name: "Salvar alterações" }).click();
+      const resposta = await respostaPatch;
+      expect(resposta.status(), `esperava 200, veio ${resposta.status()}`).toBe(200);
+      const enviado = JSON.parse(resposta.request().postData() ?? "{}");
+      const corpo = await resposta.json();
+      return { lockAntes, enviado, corpo };
+    }
+
+    // (1) alvo COM texto: o form reenviou o texto que ninguém tocou, e o lock saltou 2.
+    const a = await salvarSoAEmenta(comTexto);
+    expect(a.enviado, "o form reenvia o texto intacto mesmo sem o usuário tocá-lo").toHaveProperty("texto");
+    expect(typeof a.enviado.texto).toBe("string");
+    expect(a.corpo.texto, "o texto é o MESMO — não houve edição de texto nenhuma").toBe(a.enviado.texto);
+    expect(a.corpo["lock-version"], "o +1 extra é a versão de texto promovida à toa").toBe(a.lockAntes + 2);
+
+    // (2) alvo SEM texto: o mesmo fluxo de tela, sem `texto` no corpo, sobe só 1 — o controle que prova
+    // que o salto de 2 acima vem da promoção de versão e não de outra coisa qualquer.
+    const b = await salvarSoAEmenta(semTexto);
+    expect(b.enviado).not.toHaveProperty("texto");
+    expect(b.corpo["lock-version"]).toBe(b.lockAntes + 1);
+
+    registrarEscrita({
+      escrita: "editar proposicao (só a ementa; nasce versão de texto idêntica) [ACHADO]",
+      metodo: "PATCH",
+      url: `/legislativo/proposicoes/${comTexto}`,
+      status: 200,
+      id: comTexto,
+      tabela: "legislativo.proposicao_texto_versao",
+      sql_de_prova:
+        `SELECT origem_versao, estado_versao, md5(texto_inline) AS hash, length(texto_inline) AS tam, criado_em ` +
+        `FROM legislativo.proposicao_texto_versao WHERE ente_id='${ENTE_ID}' AND proposicao_id='${comTexto}' ` +
+        `ORDER BY criado_em; -- espera N linhas com o MESMO md5, a última 'vigente'/'edicao': ` +
+        `versões cunhadas por edição de metadado, texto byte-a-byte igual`,
+    });
   });
 
   test("autor inexistente — o formulário nunca coleta autor-id, no criar nem no editar [ACHADO estrutural]", async ({

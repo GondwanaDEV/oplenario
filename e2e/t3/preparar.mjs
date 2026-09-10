@@ -269,7 +269,15 @@ if (naoLidas.length === 0) {
 
 // ---- 5. varredura das proposicoes: pareceres (E4), autografo (E7), editavel (E3) ----------
 passo("\n5) varredura das proposicoes (ficha + pos-aprovacao) — E4/E7/E3");
-const listaProps = exigir(await api(TOK.secretaria, "GET", "/legislativo/proposicoes"), "GET /legislativo/proposicoes");
+// [CONSERTO DO INSTRUMENTO] GET /legislativo/proposicoes e' PAGINADO (tamanho-default=20,
+// adapters/in/proposicao.clj:30). Sem `?tamanho=100` esta varredura via 20 das 48 proposicoes e
+// perdia os pareceres cujas proposicoes cairam da 1a pagina — foi o que deixou
+// e4.parecerEditavelId=null (o parecer 50a690c2, em_elaboracao, existe no banco desde a semente).
+// tamanho-max e' 100 (idem:29); com 48 proposicoes uma pagina basta. AVISO medido: a ordem que a
+// rota devolve NAO e' estavel entre corridas (comparei dois artefatos seguidos e os mesmos ids
+// trocaram de posicao), entao e3.proposicaoEditavelId / e7.proposicaoParaAutografoId ja variavam de
+// preparacao pra preparacao ANTES desta mudanca — os specs leem o artefato em runtime e se adaptam.
+const listaProps = exigir(await api(TOK.secretaria, "GET", "/legislativo/proposicoes?tamanho=100"), "GET /legislativo/proposicoes");
 const TERMINAIS = new Set(["arquivada", "aprovada", "rejeitada", "prejudicada", "retirada", "transformada_em_norma"]);
 const pareceres = [];
 const semAutografo = [];

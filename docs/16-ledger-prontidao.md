@@ -1198,12 +1198,81 @@ metadado, sem edição nenhuma.
 | Produtor de evento de **ciência** | `publicar-norma!` não tem chamador em diplomat nenhum; a seção "Para sua ciência" nunca renderiza |
 | Rota que **crie remessa** | herdado da T2, segue aberto |
 
-## Carry T3-1 — o único aberto, e o que está provado dele
+## ERRATA — o "achado T3-1" era falso, e a causa era o instrumento pela TERCEIRA vez
 
-O grupo A do E5 (presença unitária → justificativa → decisão) não conclui. **As escritas funcionam, e
-isso é medido:** o `GET /chamada` devolve `ausente-justificativa-pendente` com o motivo exato que o
-spec digita, e a linha entra em `sessoes.presenca_evento`. O que não conclui é a **asserção de tela
-depois da escrita**, e não consegui separar com confiança quanto disso é o defeito T3-B (o `vivoRef`)
-e quanto é custo de compilação sob demanda do `next dev`. Não virou verde por conveniência e não virou
-acusação sem prova.
+Esta seção registrava um carry: *"a escrita grava e a linha já renderizada não muda, nem em 2.5
+minutos"*. **Isso estava errado, e o modo como estava errado é o que interessa: foi deduzido do
+timeout, nunca observado.** O teste jamais chegou a olhar a linha.
 
+**A causa real, medida com cronômetro por passo:** `Response.json()` do Playwright **nunca resolve
+quando o código da página fez o `fetch` e não consumiu o corpo**. `marcarLinha`
+(`apps/frontend/src/lib/use-chamada.ts`) só lê o corpo no ramo de erro — no `201` o stream fica
+intacto. O helper `idDaResposta` do spec ficava pendurado ali. **149 dos 150 s eram uma única linha, e
+era minha.** O teste 1 passava porque `registrarChamada` faz `await ra.json()` no cliente, drenando o
+corpo.
+
+Dois agravantes esconderam isso por cinco ciclos: o `await` estava dentro de um `try/catch` silencioso,
+e o erro final apontava sempre o passo *seguinte* (`page.reload`), a 149 s de distância da causa.
+
+**O comportamento real, medido por sonda não-bloqueante** lendo o DOM cru em t+0 ms, t+1,5 s e t+5 s
+depois do 201 — nas três leituras:
+
+    data-estado="ausente" · pressed=[presente-plenario=false, presente-remoto=false, ausente=true]
+
+A atualização otimista chega à tela **na hora**. É verdade que `marcarLinha` é a única das 4 mutações
+do hook sem `recarregar()` no sucesso — mas isso é **desenho, não defeito**: ela aplica `linhasOtimistas`
+com rollback exato, e o SSE reconcilia logo atrás. O teste passou a **afirmar** esse comportamento, com
+teto curto de 5 s de propósito, para que a re-hidratação periódica de 30 s não "salve" a asserção e o
+teste passe a provar a coisa errada.
+
+**E5 fechou 12/12, zero fixme.**
+
+## Achado de método que esta fase pagou caro para aprender
+
+**Um timeout de teste aponta onde o relógio acabou, nunca onde o tempo foi gasto** — e aumentar o
+timeout (90 s → 150 s) **afasta** a medição em vez de aproximá-la. Um cronômetro por passo custou uma
+corrida e derrubou um "defeito de produto" que já estava escrito como conclusão em três lugares do
+spec e em uma seção deste ledger.
+
+É a terceira vez nesta frente que o instrumento mede a si mesmo, e a terceira raiz diferente:
+Fase 10 (a sonda medindo o próprio fixture), Fase 11 (o `goto` esperando `load` com SSE aberto), e
+agora o `json()` esperando um corpo que ninguém iria drenar. As três tinham a mesma assinatura — um
+resultado estável e plausível que eu quase publiquei como fato do produto.
+
+## Defeito de teste achado ao destravar, e que valia um voto errado
+
+`getByRole("button", { name: "Deferir" })` casa **por substring** e resolvia dois elementos: "Deferir" e
+"Ind**eferir**", lado a lado no mesmo bloco (`chamada/page.tsx:650-666`). O strict mode do Playwright
+pegou. **Num teste menos estrito, o clique em "Deferir" poderia ter virado indeferir em silêncio** —
+e a asserção seguinte ainda passaria, porque as duas decisões mudam o mesmo campo. Corrigido com
+`exact: true` nos dois locators.
+
+## Carry aberto — risco latente nos outros 7 specs
+
+`grep` confirma: E1, E3, E6 e outros fazem `await resposta.json()` sobre respostas de
+`page.waitForResponse` **sem teto**. Estão verdes hoje só porque, nesses casos, o código da página
+consome o corpo. **Qualquer hook novo que deixe de ler o corpo de uma resposta de sucesso reproduz o
+travamento** — com o erro apontando o lugar errado, como aconteceu aqui. A correção, se o Daouda
+quiser, é promover o `idDaResposta` com teto a helper compartilhado dos 8 specs.
+
+## A suíte da T3 fecha VERDE
+
+Corrida cheia, os 8 specs na ordem de dependência, `preparar.sh` antes de cada um:
+
+| Grupo | Verdes | fixme |
+|---|---|---|
+| E1 Cadastros | 16 | 2 |
+| E2 Expediente | 8 | 0 |
+| E3 Matéria | 10 | 0 |
+| E4 Parecer | 9 | 1 |
+| E5 Chamada | 12 | 0 |
+| E6 Votar | 3 | 2 |
+| E7 Pós-aprovação | 7 | 0 |
+| E8 Notificações | 2 | 1 |
+| **Total** | **67** | **6** |
+
+**Duas correções de fixture que a corrida cheia destapou** (e que rodar spec a spec escondia): as
+notificações de fixture do E8 ficavam lidas da corrida anterior e o INSERT idempotente não as
+restaurava — `fixtures.sql` passou a **resetá-las**; e o E3 escolhia o alvo "sem texto" por **índice
+fixo**, sendo que a ordem de `GET /proposicoes` não é estável entre corridas — passou a escolher por
+propriedade (`lockVersion === 0` ⟺ sem versão de texto, conferido por SQL).

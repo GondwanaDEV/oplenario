@@ -43,12 +43,54 @@ function registrarProva(linha: LinhaProva): void {
   appendFileSync(PROVA_PATH, JSON.stringify(linha) + "\n", "utf8");
 }
 
+/** Cronometro de diagnostico: imprime o tempo decorrido a cada marco de um teste. Existe para
+ * responder "ONDE o tempo foi gasto" quando um teste estoura o relogio — o erro final aponta so' o
+ * passo em que o cronometro acabou, nunca o que o consumiu. Ligado por E5_CRONO=1. */
+function crono(): (marco: string) => void {
+  const t0 = Date.now();
+  let ultimo = t0;
+  return (marco: string) => {
+    if (!process.env.E5_CRONO) return;
+    const agora = Date.now();
+    console.log(`      [crono] +${String(agora - ultimo).padStart(6)}ms  (total ${agora - t0}ms)  ${marco}`);
+    ultimo = agora;
+  };
+}
+
+/** Liga os ouvintes de diagnostico da pagina (so' com E5_CRONO=1). Sao eles que separam "a pagina
+ * morreu" de "a pagina esta viva e quem pendurou foi o meu instrumento" — a distincao que custou 5
+ * ciclos de depuracao antes de existir. */
+function instrumentarPagina(page: import("@playwright/test").Page, t: (m: string) => void): void {
+  page.on("console", (m) => console.log(`      [browser:${m.type()}] ${m.text().slice(0, 300)}`));
+  page.on("pageerror", (e) => console.log(`      [pageerror] ${String(e).slice(0, 300)}`));
+  page.on("crash", () => t("!!! page CRASH !!!"));
+  page.on("close", () => t("!!! page CLOSE !!!"));
+  page.on("framenavigated", (f) => { if (f === page.mainFrame()) t(`framenavigated -> ${f.url().slice(0, 90)}`); });
+  page.on("requestfailed", (r) => console.log(`      [reqfail] ${r.method()} ${r.url().slice(0, 120)} :: ${r.failure()?.errorText}`));
+}
+
 /** Extrai o id do corpo JSON de uma resposta de escrita. Nunca lanca — se nao achar, devolve null e
  * o teste registra null (nunca inventa um id pra preencher a prova). Tipagem estrutural (so' precisa
  * de `.json()`) pra aceitar tanto o `Response` de `page.waitForResponse` quanto qualquer outro. */
 async function idDaResposta(resp: { json: () => Promise<unknown> }): Promise<string | null> {
   try {
-    const corpo = (await resp.json()) as { id?: unknown } | null;
+    // [ACHADO DE INSTRUMENTO T3-I1 — a causa dos 150s que pareciam defeito de produto]
+    // `Response.json()` do Playwright (que chama `response.body()`) PENDURA PARA SEMPRE quando o código
+    // da página fez o `fetch` e NUNCA CONSUMIU o corpo da resposta. Medido, nao suposto:
+    //   - teste 1 (POST /chamada): `registrarChamada` faz `await ra.json()` no cliente -> corpo drenado
+    //     -> `resp.json()` do Playwright volta em milissegundos. O teste passa em 2.9s.
+    //   - teste 3 (POST /presenca): `marcarLinha` (use-chamada.ts) só lê o corpo no ramo de ERRO
+    //     (`if (!r.ok) { await r.json() }`); no 201 o ReadableStream fica intacto -> `resp.json()` do
+    //     Playwright NUNCA resolve. Prova: o crono imprime "antes de idDaResposta (page.isClosed=false)"
+    //     e NADA depois, ate os 150s do teste estourarem — a pagina segue viva o tempo todo.
+    // Como o `await` estava dentro deste try/catch, o sintoma nao aparecia aqui: o teste era morto pelo
+    // relogio e o erro apontava o passo seguinte (`page.reload`), a 149s de distancia da causa.
+    // O TETO abaixo e a correcao: o id do recibo e um EXTRA da prova (o `sql_de_prova` ancora a linha por
+    // ente+sessao+vereador e nao depende dele) — sem teto, um extra opcional derruba o teste inteiro.
+    const corpo = (await Promise.race([
+      resp.json(),
+      new Promise<null>((r) => setTimeout(() => r(null), 3000)),
+    ])) as { id?: unknown } | null;
     if (corpo && typeof corpo.id === "string") return corpo.id;
     return null;
   } catch {
@@ -204,28 +246,24 @@ test.describe.serial("E5 - Chamada e presença (servidor + vereador)", () => {
   });
 
   test("registrar presença unitária ao vivo — marca o vereador alvo 'Ausente' de novo", async ({ page }) => {
-    // [CARRY T3-1] NAO ESTABILIZADO — 5 ciclos, e paro aqui por timebox, com o estado registrado.
-    // O QUE ESTA PROVADO (nao e' suposicao): o POST /sessoes/:id/presenca devolve 201; a linha entra
-    // em sessoes.presenca_evento (conferido por psql: tipo/modalidade/fonte/ocorrido_em); o
-    // GET /sessoes/:id/chamada ja devolve o estado NOVO; e uma carga limpa da mesma URL mostra o botao
-    // certo com aria-pressed="true" e o gatilho "Lancar justificativa" no lugar (sonda a parte).
-    // O QUE NAO CONSEGUI: fazer este teste concluir. Ele consome os 150s inteiros somando os tetos de
-    // goto + espera de hidratacao + waitForResponse, e morre no `page.reload` seguinte. Ja tentou-se:
-    // 90s -> 150s de folga (reprovou igual, gastando tudo), ler o estado real em vez de assumir
-    // "presente", esperar a hidratacao antes de ler, e teto explicito no waitForResponse.
-    // POR QUE FICA fixme E NAO VERDE: a atualizacao AO VIVO de fato nao acontece (achado T3-1, teste
-    // proprio logo abaixo) — mas eu nao consegui separar, com confianca, quanto deste timeout e' o
-    // achado e quanto e' custo de compilacao a frio do `next dev` nesta maquina. Afirmar qualquer uma
-    // das duas coisas sem essa separacao seria alegacao, nao medicao.
-    // PROXIMO PASSO para quem retomar: rodar com a imagem de PRODUCAO do frontend (sem compilacao sob
-    // demanda) — isso zera a variavel do relogio e o que sobrar e' o defeito puro.
-    test.fixme(true, "[CARRY T3-1] escrita provada por psql e por carga limpa; o teste nao conclui — ver comentario");
-    // 150s: com 90s este teste estourou o relogio, nao o merito — o goto sozinho pode levar ~55s na
-    // compilacao a frio do Turbopack e sobrava pouco para a asserção. Provado depois que o mesmo estado
-    // aparece correto numa carga limpa (sonda .probe): o servidor grava e a tela reflete.
-    test.setTimeout(150_000);
+    // HISTORIA DESTE TESTE (fica registrada porque a conclusao ANTERIOR estava errada e a errata
+    // importa mais que o conserto): ele reprovou por 5 ciclos consumindo os 150s inteiros, e o erro
+    // apontava sempre `page.reload`. Foi diagnosticado como "[ACHADO T3-1] a linha ao vivo nao
+    // atualiza" mais um custo indeterminado de compilacao a frio do `next dev`.
+    // MEDIDO AGORA, com cronometro por passo (E5_CRONO=1) em vez de deducao:
+    //   goto 501ms · botao hidratado +184ms · linha visivel +30ms · POST 201 aos 1.6s.
+    // Ou seja NADA do relogio ia para o `next dev` — a rota ja estava aquecida e a tela respondia em
+    // milissegundos. Os 149s restantes eram UMA linha: `idDaResposta(resp)` -> `resp.json()`, que o
+    // Playwright nao resolve quando a pagina nao consome o corpo da resposta (ver T3-I1 no topo).
+    // O "achado T3-1" era, portanto, do INSTRUMENTO, nao do produto — a errata esta no teste seguinte.
+    // 60s bastam com folga (a corrida verde leva ~13s, dos quais 3s sao o teto de T3-I1).
+    test.setTimeout(60_000);
+    const t = crono();
+    if (process.env.E5_CRONO) instrumentarPagina(page, t);
     await page.goto(URL_CHAMADA, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    t("goto");
     await expect(page.getByRole("button", { name: "Nova chamada" })).toBeVisible({ timeout: 30_000 });
+    t("botao 'Nova chamada' visivel (hidratado)");
 
     // "Todos presentes" da 1ª escrita deixou o alvo como presente-plenario. Em modo "registrada ao
     // vivo" (chamadasConduzidas.length>0), clicar um estado diferente do atual dispara o POST unitário
@@ -234,6 +272,7 @@ test.describe.serial("E5 - Chamada e presença (servidor + vereador)", () => {
     // (chamada/page.tsx:83) e o roster só traz o `nome` civil; o `data-v` já ancora a linha certa.
     const linha = page.locator(`li[data-v="${ALVO_ID}"]`);
     await expect(linha).toBeVisible();
+    t("linha do alvo visivel");
 
     // NAO assumir o estado de partida. A 1a redacao deste teste clicava "Ausente" cego, supondo que
     // "Todos presentes" (teste 1) tivesse deixado o alvo presente. Quando o alvo ja estava ausente, o
@@ -250,9 +289,12 @@ test.describe.serial("E5 - Chamada e presença (servidor + vereador)", () => {
     await expect(botaoAusente).toBeVisible({ timeout: 30_000 });
     await expect(botaoAusente).toHaveAttribute("aria-pressed", /true|false/, { timeout: 30_000 });
 
+    t("aria-pressed do botao 'Ausente' pintado");
+
     const jaAusente = (await botaoAusente.getAttribute("aria-pressed")) === "true";
     const rotuloAlvo = jaAusente ? "Presente" : "Ausente";
     const dataEAlvo = jaAusente ? "presente-plenario" : "ausente";
+    t(`estado lido: jaAusente=${jaAusente} -> vou clicar "${rotuloAlvo}"`);
 
     // Timeout EXPLICITO: um no-op (clique no estado que ja vale) nao emite POST. Sem teto, isso vira
     // "o teste travou"; com teto, vira "a escrita nao saiu", que e a informacao que eu quero.
@@ -263,29 +305,25 @@ test.describe.serial("E5 - Chamada e presença (servidor + vereador)", () => {
       ),
       linha.getByRole("button", { name: rotuloAlvo }).click(),
     ]);
+    t(`POST /presenca respondeu ${resp.status()}`);
     expect(resp.status(), "POST /presenca unitário deve gravar").toBe(201);
+    t(`antes de idDaResposta (page.isClosed=${page.isClosed()})`);
     const id = await idDaResposta(resp);
+    t(`depois de idDaResposta: id=${id} (page.isClosed=${page.isClosed()})`);
 
-    // [ACHADO T3-1 — A ESCRITA GRAVA E A LINHA AO VIVO NAO MUDA]
-    // Medido, nao suposto, em 3 corridas com folga de relogio crescente (90s, 150s, 150s):
-    //   - POST /sessoes/:id/presenca devolve 201;
-    //   - sessoes.presenca_evento GANHA a linha (conferido por psql: tipo/modalidade/fonte/ocorrido_em);
-    //   - GET /sessoes/:id/chamada ja devolve o `estado` NOVO para esse vereador;
-    //   - uma carga limpa da MESMA url mostra o botao certo com aria-pressed="true" e o gatilho
-    //     "Lancar justificativa" no lugar (provado por sonda a parte);
-    //   - e a linha JA RENDERIZADA nao muda — nem em 2.5 minutos.
-    // Nao e relogio: com 150s reprovou igual, gastando os 150s. Nao e premissa de estado: o teste
-    // passou a LER o estado real e clicar no diferente, e reprova do mesmo jeito.
-    // `marcarLinha` (use-chamada.ts:283-318) ATE monta a atualizacao otimista (`linhasOtimistas`) e a
-    // aplica sob `if (vivoRef.current)`, mas ela nao chega na tela; e, ao contrario de
-    // `registrarChamada` (:356,:360), `decidirJustificativa` (:391) e `abrirJustificativa` (:419) —
-    // as outras TRES mutacoes do mesmo hook — `marcarLinha` NAO chama `recarregar()` no sucesso.
-    // E a unica das quatro sem re-busca, e a unica cujo efeito nao aparece.
-    // Efeito para a Mesa: clicar "Ausente" durante a sessao parece nao ter funcionado. O operador
-    // clica de novo — e o segundo clique e no-op (mesmo estado), reforcando a impressao de travamento.
-    // Este teste NAO afirma a atualizacao ao vivo (ela nao acontece): afirma o que e' verdade — a
-    // escrita saiu com 201 e sobrevive ao F5. O defeito tem teste PROPRIO logo abaixo, em fixme, que
-    // vira verde no dia do conserto e reprova se ele regredir. Assim nada aqui e' verde mentiroso.
+    // ERRATA DO "ACHADO T3-1" — A LINHA AO VIVO ATUALIZA, SIM.
+    // A afirmacao anterior ("a escrita grava e a linha ja renderizada nao muda, nem em 2.5 minutos")
+    // era consequencia do travamento em `resp.json()` (T3-I1): o teste nunca chegava a OLHAR a linha,
+    // e o "nao muda" foi deduzido do timeout, nao observado. Com o teto no `idDaResposta`, uma sonda
+    // nao-bloqueante leu o DOM cru em t+0ms, t+1.5s e t+5s depois do 201 e devolveu, nas tres:
+    //   data-estado="ausente" · pressed=[presente-plenario=false, presente-remoto=false, ausente=true]
+    // Ou seja: a atualizacao otimista de `marcarLinha` (use-chamada.ts:283-318) chega a tela na hora.
+    // `marcarLinha` de fato nao chama `recarregar()` no sucesso, ao contrario das outras tres mutacoes
+    // do hook — mas isso e' DESENHO, nao defeito: ela ja aplicou `linhasOtimistas` com rollback exato
+    // em falha, e o canal SSE + o relogio de re-hidratacao (`REBUSCA_MIN_MS`/`REBUSCA_PERIODICA_MS`)
+    // reconciliam com o servidor logo em seguida. A assercao que prende esse comportamento — e que
+    // reprova se alguem tirar o otimismo — e' o teste seguinte, agora VERDE em vez de fixme.
+    t("errata T3-1 verificada no teste seguinte");
 
     registrarProva({
       escrita: "registrar presença unitária ao vivo (vereador alvo -> Ausente)",
@@ -298,50 +336,61 @@ test.describe.serial("E5 - Chamada e presença (servidor + vereador)", () => {
     });
 
     // (c) F5 — o estado unitário persiste (não é otimismo de cliente).
+    t("registrarProva");
     await page.reload({ waitUntil: "domcontentloaded", timeout: 30_000 });
+    t("reload");
     const linhaPosReload = page.locator(`li[data-v="${ALVO_ID}"]`);
     await expect(linhaPosReload.locator(`.marcar button[data-e="${dataEAlvo}"]`)).toHaveAttribute(
       "aria-pressed",
       "true",
       { timeout: 30_000 },
     );
+    t("pos-reload: aria-pressed=true");
   });
 
-  // [ACHADO T3-1] O teste que prende o defeito. Hoje reprova de proposito (fixme). No dia em que
-  // `marcarLinha` ganhar a re-busca que as outras tres mutacoes do hook ja tem, ele fica verde — e
-  // passa a reprovar se alguem tirar a re-busca de novo. E a cobertura que o plano exige de todo
-  // QUEBRA fechado: "teste que reprova se ele voltar".
-  test("[ACHADO T3-1] a linha ao vivo reflete a presenca unitaria SEM F5", async ({ page }) => {
-    test.fixme(true, "marcarLinha (use-chamada.ts:283) e a unica das 4 mutacoes sem recarregar() no sucesso");
-    await page.goto(URL_CHAMADA, { waitUntil: "domcontentloaded", timeout: 90_000 });
+  // [ERRATA T3-1] Este teste nasceu como fixme, para "prender o defeito" de que a linha ao vivo nao
+  // refletia a presenca unitaria. O defeito NAO EXISTE: era o instrumento (T3-I1) que travava antes de
+  // o teste chegar a olhar a tela. Agora ele roda de verdade e AFIRMA o comportamento correto — a
+  // atualizacao otimista de `marcarLinha` chega ao DOM sem F5 — passando a reprovar se alguem tirar o
+  // otimismo (ou se `marcarLinha` deixar de aplicar `linhasOtimistas`).
+  // Este e o 2o clique unitario da corrida no MESMO alvo: o teste 3 o deixou "ausente", entao aqui ele
+  // le o estado real e clica no oposto ("Presente"). Nao e' repeticao — e' a ida e a VOLTA da transicao,
+  // que exercita os dois ramos de `diffParaLote` (entrada e saida).
+  test("[ERRATA T3-1] a linha ao vivo reflete a presenca unitaria SEM F5", async ({ page }) => {
+    test.setTimeout(60_000);
+    await page.goto(URL_CHAMADA, { waitUntil: "domcontentloaded", timeout: 60_000 });
     const linha = page.locator(`li[data-v="${ALVO_ID}"]`);
     await expect(linha).toBeVisible({ timeout: 30_000 });
-    const jaAusente = (await linha.locator('.marcar button[data-e="ausente"]').getAttribute("aria-pressed")) === "true";
+    // Esperar a hidratacao antes de LER: `getAttribute` sobre o HTML do servidor devolveria o
+    // aria-pressed pre-React e a escolha do rotulo sairia errada (no-op legitimo, POST nenhum).
+    const botaoAusente = linha.locator('.marcar button[data-e="ausente"]');
+    await expect(botaoAusente).toHaveAttribute("aria-pressed", /true|false/, { timeout: 30_000 });
+    const jaAusente = (await botaoAusente.getAttribute("aria-pressed")) === "true";
     const rotulo = jaAusente ? "Presente" : "Ausente";
     const dataE = jaAusente ? "presente-plenario" : "ausente";
     const [r] = await Promise.all([
       page.waitForResponse(
         (x) => x.url().endsWith(`/api/sessoes/${SESSAO_CHAMADA}/presenca`) && x.request().method() === "POST",
+        { timeout: 20_000 },
       ),
       linha.getByRole("button", { name: rotulo }).click(),
     ]);
     expect(r.status()).toBe(201);
-    // SEM reload: e exatamente isto que hoje nao acontece.
+    // NAO chamar `idDaResposta(r)` aqui: esta e' exatamente a resposta cujo corpo a pagina nao consome
+    // (T3-I1). O id nao faz falta — o que este teste afirma e' o DOM, nao o recibo.
+    // SEM reload, e com teto CURTO de proposito: 5s. Um teto largo deixaria a re-hidratacao periodica
+    // do hook (REBUSCA_PERIODICA_MS = 30s) "salvar" a asserção e o teste passaria a provar a re-busca
+    // em vez do otimismo. Com 5s, so' o otimismo de `marcarLinha` chega a tempo.
     await expect(linha.locator(`.marcar button[data-e="${dataE}"]`)).toHaveAttribute("aria-pressed", "true", {
-      timeout: 15_000,
+      timeout: 5_000,
     });
+    await expect(linha).toHaveAttribute("data-estado", dataE === "ausente" ? "ausente" : "presente-plenario");
   });
 
   test("justificar ausência — vereador alvo ('Lançar justificativa')", async ({ page, request }) => {
-    // [CARRY T3-1, mesma raiz do teste acima] A ESCRITA FUNCIONA — medido, nao suposto: depois desta
-    // corrida o GET /sessoes/:id/chamada devolve para o alvo
-    //   estado = "ausente-justificativa-pendente"
-    //   justificativa = { estado: "pendente", motivo: "Atestado médico protocolado na secretaria (T3 E5)." }
-    // que e' exatamente o texto que este teste digita. A justificativa nasceu pelo clique, pela
-    // interface, como a Trilha 3 exige. O que nao conclui e a ASSERCAO DE TELA depois da escrita.
-    // E o mesmo padrao do teste de presenca unitaria: nesta tela as escritas gravam e as verificacoes
-    // de interface estouram o relogio. Fica fixme com o dado registrado, e nao verde por conveniencia.
-    test.fixme(true, "[CARRY T3-1] a justificativa E criada pelo clique (provado na API); a assercao de tela nao conclui");
+    // O carry T3-1 que segurava este teste era a mesma raiz de instrumento (T3-I1) do teste 3 — nao
+    // "as verificacoes de interface estouram o relogio nesta tela", como o texto anterior dizia. Com o
+    // teto no `idDaResposta` o teste conclui inteiro, incluindo a assercao de tela e o F5.
     test.setTimeout(90_000);
 
     // SETUP DECLARADO (nao e a escrita sob teste): "Lancar justificativa" so' renderiza para quem esta
@@ -412,11 +461,9 @@ test.describe.serial("E5 - Chamada e presença (servidor + vereador)", () => {
   });
 
   test("decidir justificativa — Deferir a do vereador alvo (Mesa/servidor)", async ({ page }) => {
-    // [CARRY T3-1, dependencia] Nao ha o que deferir: a justificativa e criada pelo teste acima, que
-    // esta em carry, e `preparar.sh` cria uma sessao de chamada NOVA a cada corrida — entao a
-    // justificativa de uma corrida anterior nao existe nesta. Fica preso ao mesmo carry: quando o
-    // teste 5 concluir, este roda logo atras sem mudanca nenhuma.
-    test.fixme(true, "[CARRY T3-1] depende da justificativa criada pelo teste anterior, que esta em carry");
+    // Depende da justificativa que o teste anterior cria pela interface (`preparar.sh` cria uma sessao
+    // de chamada NOVA a cada corrida — a justificativa de uma corrida antiga nao existe nesta). Com o
+    // teste anterior verde, este roda logo atras sem mudanca nenhuma; era so' isso o "carry T3-1" aqui.
     test.setTimeout(90_000);
     await page.goto(URL_CHAMADA, { waitUntil: "domcontentloaded", timeout: 60_000 });
     const linha = page.locator(`li[data-v="${ALVO_ID}"]`);
@@ -429,14 +476,19 @@ test.describe.serial("E5 - Chamada e presença (servidor + vereador)", () => {
           r.url().endsWith("/decisao") &&
           r.request().method() === "PATCH",
       ),
-      linha.getByRole("button", { name: "Deferir" }).click(),
+      // `exact: true` NAO e cosmetico: `getByRole(name:"Deferir")` casa por SUBSTRING do nome
+      // acessivel e resolvia 2 elementos — o "Deferir" e o "Indeferir" que ficam lado a lado no mesmo
+      // bloco `.decidir` (chamada/page.tsx L650-666) — derrubando o teste por strict mode. Sem o
+      // `exact`, um clique em "Deferir" poderia virar INDEFERIR num teste menos estrito.
+      linha.getByRole("button", { name: "Deferir", exact: true }).click(),
     ]);
     expect(resp.status(), "PATCH /justificativas/:jid/decisao deve gravar a decisão").toBe(200);
     const id = await idDaResposta(resp);
 
     // (a) a tela troca o chip para "Falta justificada" e os botões Deferir/Indeferir somem.
     await expect(linha.getByText("Falta justificada")).toBeVisible({ timeout: 15_000 });
-    await expect(linha.getByRole("button", { name: "Deferir" })).toHaveCount(0);
+    await expect(linha.getByRole("button", { name: "Deferir", exact: true })).toHaveCount(0);
+    await expect(linha.getByRole("button", { name: "Indeferir", exact: true })).toHaveCount(0);
 
     registrarProva({
       escrita: "decidir justificativa (Deferir)",
