@@ -1,0 +1,241 @@
+{
+ "achados": [
+  "Contagem do plano bate errado: E5 diz \"6 escritas\" mas lista 7 verbos distintos (presença unitária · confirmar própria · lote · conduzir chamada · justificar · decidir · folha) mapeando 7 endpoints diferentes — reportei os 7, sem forçar um a menos.",
+  "\"Justificar ausência\" própria do VEREADOR (POST /sessoes/:id/minha-justificativa, papel vereador, wire/in.clj L243-261) NAO TEM TELA — nenhum componente React chama esse endpoint. Só existe a versão da secretaria lançando EM NOME do vereador (chamada/page.tsx, JustificativaAbrir).",
+  "Achado de UI mais restritiva que o backend: os botões Deferir/Indeferir só renderizam quando `podeEditar(sessaoEstado)` é true (chamada/page.tsx L657-681 e L913-919, chamada-vista.ts L278-280), mas o controller (controllers.clj L594-608) autoriza deliberadamente decidir uma justificativa mesmo com a sessão FECHADA. Consequência real: a justificativa pendente já semeada na sessão ...0212 (hoje encerrada) não pode ser decidida pela interface.",
+  "\"Decidir a própria justificativa\" (impedimento juiz-em-causa-própria, controllers.clj L595-630) não é reproduzível com os dados de seed atuais: nenhuma identidade logável acumula papel secretario+vereador ao mesmo tempo (secretaria=só secretario; presidente=vereador+admin_ente; vereador-comum=só vereador) — precisa de um GRANT manual em identidade.usuario_papel antes de dirigir o browser.",
+  "\"Confirmar a própria presença\" (/votar) exige uma votação NOMINAL aberta na mesma sessão E o vereador ainda não presente (meu-voto-vista.ts L16-39). As duas ÚNICAS identidades de vereador logáveis no seed (presidente e vereador-comum/Fernanda Pinto) JÁ estão marcadas presentes na sessão aberta ...0211 (presença é append-only) — a secretaria precisa primeiro marcá-la \"Ausente\" de novo na tela da chamada para reabrir o caminho de auto-confirmação.",
+  "\"Lote com id inválido\" e \"presença fora do roster\" NAO SAO TESTAVEIS VIA ESTA INTERFACE por desenho: os botões de marcação só existem para vereadorId's que já vieram do GET /chamada (roster real); não há campo livre de texto para digitar um id. Já cobertos via HTTP direto na Trilha 2.",
+  "\"Folha duas vezes\" NAO E' um caso de erro — é feature deliberada (D9): dentro de 30s da mesma pessoa devolve a MESMA versão (`ja-congelada`), fora da janela cria versão NOVA numerada; nunca 409 por duplicidade. O botão muda de rótulo (\"Gerar a folha desta sessão\" -> \"Gerar nova versão\") mas nunca desaparece.",
+  "Achado operacional (não é bug): o briefing assume sessão ...0212 \"agendada\", mas no banco AGORA ela já está \"encerrada\" (lock_version=2) porque a Trilha 2 grupo A já rodou sua sonda HTTP contra ela até o fim. T3 precisa da \"Reconstrução limpa\" (down -v + demo/semear-tudo.sh) do método comum antes de dirigir o browser, senão a premissa de estado do enunciado está desatualizada.",
+  "A tela de folha (folha/page.tsx) não lê o estado da sessão — o botão \"Gerar\" aparece e fica clicável mesmo numa sessão ainda ABERTA; só o backend recusa (409 \"so' sessao FECHADA tem folha de presenca (D6)\"), mostrado em erroGerar. Não é um dos erros listados no plano, mas é uma lacuna real de proteção client-side equivalente à achada acima."
+ ],
+ "escritas": [
+  {
+   "nome": "registrar presença (unitária, ao vivo, servidor)",
+   "tem_tela": true,
+   "rota_next": "apps/frontend/src/app/sessoes/[id]/chamada/page.tsx",
+   "url_navegavel": "http://localhost:3000/sessoes/10000000-0000-0000-0000-000000000211/chamada?token=%7B%22identidade-id%22%3A%224893207b-8487-42d6-a12d-d8721cd348ec%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%2C%22papeis%22%3A%5B%22secretario%22%5D%7D",
+   "endpoint_api": "POST /sessoes/:id/presenca",
+   "tabela_db": "sessoes.presenca_evento",
+   "papel": "servidor (papel RBAC \"secretario\")",
+   "passos_browser": [
+    "Abrir a URL acima logado como secretaria (token da identidade 4893207b-...). A sessão ...0211 já tem chamada conduzida=0 no momento desta investigação — se ainda estiver 'em curso' quando o T3 rodar (após reconstrução limpa), primeiro executar a escrita 'conduzir chamada' para chegar ao estado 'registradaAoVivo', que é o que habilita marcação individual ao vivo",
+    "No campo 'Localizar vereador' (input#busca), digitar um nome, ex.: 'Otávio'",
+    "Dentro do grupo com aria-label=\"Presença de Otávio Monteiro\", clicar no botão de texto visível \"Ausente\" (ou \"Presente\"/\"Remoto\")",
+    "O clique dispara o POST imediatamente (feedback otimista) — não há um botão de confirmação separado"
+   ],
+   "seletores": [
+    "input#busca (placeholder=\"Nome ou partido\")",
+    "span[role=group][aria-label=\"Presença de <nome>\"]",
+    "button[data-e=\"presente-plenario\"] com texto \"Presente\"",
+    "button[data-e=\"presente-remoto\"] com texto \"Remoto\"",
+    "button[data-e=\"ausente\"] com texto \"Ausente\""
+   ],
+   "assercao_db": "select id, tipo, modalidade, fonte, ocorrido_em from sessoes.presenca_evento where sessao_id='10000000-0000-0000-0000-000000000211' and vereador_id='45c0a7d4-76e6-4b88-b948-1b4ca1c5946a' order by registrado_em desc limit 1; -- espera fonte='manual_secretaria'",
+   "casos_de_erro": [
+    {
+     "caso": "presença fora do roster da data",
+     "onde_surge": "NAO TESTAVEL VIA ESTA TELA — os botões de marcação só existem para vereadorId's que vieram do GET /chamada (roster real), sem campo livre. Quando ocorre (via HTTP direto), o backend ACEITA por desenho (logic.clj, fail-loud) e a tela exibiria o grupo 'Fora da composição' com aviso — não é rejeitado."
+    },
+    {
+     "caso": "chamada em sessão encerrada",
+     "onde_surge": "TELA PREVINE proativamente: em sessão fechada, editavel=false e os botões de marcação nem renderizam (chamada/page.tsx L611-624, mostra span.estado-fixo no lugar); aparece só o aviso role=\"status\" .aviso-fechada. Se forçado via API fora da UI, backend recusa 409 e a mensagem aparece em p.erro-inline role=\"status\"."
+    }
+   ]
+  },
+  {
+   "nome": "confirmar a própria presença (vereador)",
+   "tem_tela": true,
+   "rota_next": "apps/frontend/src/app/(vereador)/votar/page.tsx",
+   "url_navegavel": "http://localhost:3000/votar?token=%7B%22identidade-id%22%3A%2249c23663-c30e-4829-b3be-c7481f107275%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%2C%22papeis%22%3A%5B%22vereador%22%5D%7D",
+   "endpoint_api": "POST /sessoes/:id/presenca/confirmar",
+   "tabela_db": "sessoes.presenca_evento",
+   "papel": "vereador",
+   "passos_browser": [
+    "PRE-CONDICAO (medida no banco agora): a única identidade de vereador logável do seed (Fernanda Pinto, vereador-id 69d7aa68-498a-4aa5-a6e9-10e0ad2d664b) JÁ está presente na sessão ...0211. Antes de tudo, logar como secretaria em /sessoes/.../0211/chamada e clicar 'Ausente' na linha de Fernanda Pinto (mesma escrita 'registrar presença' acima) para reabrir o ciclo 'sem-presenca'",
+    "Abrir a URL acima logado como Fernanda Pinto (vereador)",
+    "A sessão ...0211 já tem uma votação nominal ABERTA semeada — a tela mostra \"Confirme sua presença para poder votar.\" e o botão \"Confirmar presença\"",
+    "Clicar \"Confirmar presença\""
+   ],
+   "seletores": [
+    "p.voto-nota[aria-live=\"polite\"] com texto \"Confirme sua presença para poder votar.\"",
+    "button.btn.btn-primaria com texto \"Confirmar presença\" (disabled quando estadoConfirmar==='enviando')",
+    "p.voto-erro[role=alert] (erro, se houver)"
+   ],
+   "assercao_db": "select fonte, tipo, modalidade from sessoes.presenca_evento where sessao_id='10000000-0000-0000-0000-000000000211' and vereador_id='69d7aa68-498a-4aa5-a6e9-10e0ad2d664b' order by registrado_em desc limit 1; -- espera fonte='autoatendimento', tipo='entrada', modalidade='plenario'",
+   "casos_de_erro": [
+    {
+     "caso": "sessão sem votação atual / não é minha sessão",
+     "onde_surge": "TELA PREVINE — useMinhaSessaoAtual só devolve um sessaoId quando há sessão corrente para o vereador; sem isso a tela mostra \"Nenhuma sessão em curso agora.\" e o botão nem aparece."
+    },
+    {
+     "caso": "confirmar já presente",
+     "onde_surge": "TELA PREVINE — o CTA só renderiza quando ciclo==='sem-presenca' (derivarMeuVoto, meu-voto-vista.ts L36-38); já presente, o bloco de votar aparece no lugar."
+    }
+   ]
+  },
+  {
+   "nome": "lote de presença (servidor)",
+   "tem_tela": true,
+   "rota_next": "apps/frontend/src/app/sessoes/[id]/chamada/page.tsx",
+   "url_navegavel": "http://localhost:3000/sessoes/10000000-0000-0000-0000-000000000211/chamada?token=%7B%22identidade-id%22%3A%224893207b-8487-42d6-a12d-d8721cd348ec%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%2C%22papeis%22%3A%5B%22secretario%22%5D%7D",
+   "endpoint_api": "POST /sessoes/:id/presenca/lote",
+   "tabela_db": "sessoes.presenca_evento",
+   "papel": "servidor (papel \"secretario\")",
+   "passos_browser": [
+    "Abrir a URL acima com a sessão ainda 'em curso' (chamadasConduzidas.length===0 — verdade agora para ...0211 mesmo já tendo 12 presenças diretas no banco)",
+    "Clicar o botão \"Todos presentes\" (marca localmente os que ainda não têm marca — os 5 ausentes: Otávio Monteiro, Patrícia Santos, Rodrigo Cunha, Simone Rezende, Thiago Bezerra)",
+    "Clicar \"Registrar a chamada\" — dispara POST /presenca/lote só com os registros que MUDARAM, seguido do POST /chamada (ato)"
+   ],
+   "seletores": [
+    "button.btn.btn-contorno.btn-mini com texto \"Todos presentes\"",
+    "button.btn.btn-primaria com texto \"Registrar a chamada\" (disabled=registrando)",
+    "span.desfazer button com texto \"Desfazer\" (reverte o pré-preenchimento antes de registrar)"
+   ],
+   "assercao_db": "select count(*) from sessoes.presenca_evento where sessao_id='10000000-0000-0000-0000-000000000211' and registrado_em > now() - interval '2 minutes'; -- espera 5 (um por vereador que estava pendente), todos fonte='manual_secretaria'",
+   "casos_de_erro": [
+    {
+     "caso": "LOTE COM UM ID INVALIDO (a transação inteira tem de falhar)",
+     "onde_surge": "NAO TESTAVEL VIA ESTA TELA no fluxo normal — o lote da UI é sempre montado a partir de dados.linhas (vereadorId's reais devolvidos pelo servidor); não há input livre. O backend garante atomicidade por desenho: TODAS as linhas passam pelo gate de janela ANTES de qualquer INSERT (repositorio.clj L292-305) e um corpo malformado falha Malli 400 antes de tocar o banco. Já provado via HTTP direto na Trilha 2."
+    },
+    {
+     "caso": "presença fora do roster da data",
+     "onde_surge": "mesmo caso da escrita 'registrar presença unitária' — aceito por desenho, sem caminho de UI para forçar."
+    },
+    {
+     "caso": "chamada em sessão encerrada",
+     "onde_surge": "TELA PREVINE — o bloco comando-acoes (que contém 'Registrar a chamada') só renderiza quando podeEditarSessao é true (chamada/page.tsx L481-486)."
+    }
+   ]
+  },
+  {
+   "nome": "conduzir chamada (servidor)",
+   "tem_tela": true,
+   "rota_next": "apps/frontend/src/app/sessoes/[id]/chamada/page.tsx",
+   "url_navegavel": "http://localhost:3000/sessoes/10000000-0000-0000-0000-000000000211/chamada?token=%7B%22identidade-id%22%3A%224893207b-8487-42d6-a12d-d8721cd348ec%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%2C%22papeis%22%3A%5B%22secretario%22%5D%7D",
+   "endpoint_api": "POST /sessoes/:id/chamada",
+   "tabela_db": "sessoes.chamada_conduzida",
+   "papel": "servidor (papel \"secretario\")",
+   "passos_browser": [
+    "Mesmo fluxo da escrita 'lote de presença': clicar 'Registrar a chamada' (1ª vez, chamadasConduzidas ainda vazio) — o hook dispara o POST do ato SEMPRE após o lote (mesmo quando o lote está vazio, o ato ainda roda)",
+    "Para reconduzir depois de já registrada (chamadasConduzidas.length>0), o botão muda de rótulo para 'Nova chamada' e chama o MESMO endpoint sem corpo de lote"
+   ],
+   "seletores": [
+    "button.btn.btn-primaria com texto \"Registrar a chamada\" (emCurso) ou \"Nova chamada\" (registradaAoVivo)"
+   ],
+   "assercao_db": "select id, conduzida_por, membros_da_casa, ocorrido_em from sessoes.chamada_conduzida where sessao_id='10000000-0000-0000-0000-000000000211' order by registrado_em desc limit 1;",
+   "casos_de_erro": [
+    {
+     "caso": "chamada em sessão encerrada",
+     "onde_surge": "TELA PREVINE — o botão não existe quando !podeEditarSessao. Se forçado via API, backend recusa com :conflito/chamada -> 409, texto exibido cru em p.erro-inline (mensagemDeErro não tem tradução específica para esse 409, repassa o texto do domínio)."
+    }
+   ]
+  },
+  {
+   "nome": "justificar ausência (secretaria lança em nome do vereador)",
+   "tem_tela": true,
+   "rota_next": "apps/frontend/src/app/sessoes/[id]/chamada/page.tsx",
+   "url_navegavel": "http://localhost:3000/sessoes/10000000-0000-0000-0000-000000000211/chamada?token=%7B%22identidade-id%22%3A%224893207b-8487-42d6-a12d-d8721cd348ec%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%2C%22papeis%22%3A%5B%22secretario%22%5D%7D",
+   "endpoint_api": "POST /sessoes/:id/justificativas",
+   "tabela_db": "sessoes.justificativa_ausencia",
+   "papel": "servidor (papel \"secretario\")",
+   "passos_browser": [
+    "Na linha de um vereador com estado 'Ausente' e sem justificativa registrada (ex.: Otávio Monteiro, vereador-id 45c0a7d4-76e6-4b88-b948-1b4ca1c5946a, ainda ausente na sessão ...0211), clicar o botão \"Lançar justificativa\"",
+    "Preencher o textarea (label \"Motivo da ausência\") com um texto não vazio",
+    "Clicar \"Salvar\""
+   ],
+   "seletores": [
+    "button.btn.btn-contorno.btn-mini com texto \"Lançar justificativa\"",
+    "textarea#motivo-<vereadorId> (label associado via htmlFor)",
+    "button.btn.btn-primaria.btn-mini com texto \"Salvar\" (ou \"Salvando…\")",
+    "button.btn.btn-fantasma.btn-mini com texto \"Cancelar\"",
+    "span#motivo-<vereadorId>-erro[role=alert] (erro de validação local)"
+   ],
+   "assercao_db": "select estado, motivo, vereador_id from sessoes.justificativa_ausencia where sessao_id='10000000-0000-0000-0000-000000000211' and vereador_id='45c0a7d4-76e6-4b88-b948-1b4ca1c5946a'; -- espera estado='pendente'",
+   "casos_de_erro": [
+    {
+     "caso": "justificativa de terceiro",
+     "onde_surge": "NAO ESTA TRATADO NESTA TELA porque não é alcançável por ela — o formulário é fixo ao vereadorId da própria linha, sem campo de escolha de outro vereador. A variante real (vereador tentando justificar OUTRO via /minha-justificativa) não tem tela nenhuma (achado geral) — só testável via HTTP, já feito na Trilha 2."
+    },
+    {
+     "caso": "motivo vazio",
+     "onde_surge": "TELA TRATA — validação local (motivo.trim()) antes do POST, mensagem \"Descreva o motivo da ausência — o campo não pode ficar em branco.\"; o backend também revalida e devolveria 400 se contornado."
+    },
+    {
+     "caso": "vereador já tem justificativa (409 :ja-existe)",
+     "onde_surge": "TELA PREVINE parcialmente — o gatilho 'Lançar justificativa' só aparece quando !justificativaServidor; se ainda assim ocorrer corrida, o 409 aparece via mensagemDeErro."
+    }
+   ]
+  },
+  {
+   "nome": "decidir justificativa (Mesa/servidor)",
+   "tem_tela": true,
+   "rota_next": "apps/frontend/src/app/sessoes/[id]/chamada/page.tsx",
+   "url_navegavel": "http://localhost:3000/sessoes/10000000-0000-0000-0000-000000000211/chamada?token=%7B%22identidade-id%22%3A%224893207b-8487-42d6-a12d-d8721cd348ec%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%2C%22papeis%22%3A%5B%22secretario%22%5D%7D",
+   "endpoint_api": "PATCH /sessoes/:id/justificativas/:jid/decisao",
+   "tabela_db": "sessoes.justificativa_ausencia",
+   "papel": "servidor (papel \"secretario\", ato da Mesa)",
+   "passos_browser": [
+    "Abrir a chamada de uma sessão ABERTA/SUSPENSA (obrigatório — ver achado sobre gate de UI) que tenha justificativa pendente — ex.: após executar a escrita 'justificar ausência' acima em ...0211",
+    "No painel lateral 'Justificativas' (rail) ou na própria linha (chip 'Justificativa pendente de decisão'), clicar \"Deferir\" ou \"Indeferir\""
+   ],
+   "seletores": [
+    "section[aria-labelledby=\"just-titulo\"] .pend-lista li .acoes button com texto \"Deferir\"/\"Indeferir\"",
+    "span.decidir button.btn.btn-contorno.btn-mini com texto \"Deferir\" (inline na linha)",
+    "span.decidir button.btn.btn-fantasma.btn-mini com texto \"Indeferir\" (inline na linha)"
+   ],
+   "assercao_db": "select estado, decidido_por, decidido_em, lock_version from sessoes.justificativa_ausencia where id='<jid>'; -- espera estado in ('aprovada','indeferida')",
+   "casos_de_erro": [
+    {
+     "caso": "DECIDIR A PROPRIA JUSTIFICATIVA (juiz em causa própria)",
+     "onde_surge": "BACKEND recusa com 403 (controllers.clj L595-630, authz/negar! :juiz-em-causa-propria); a TELA NÃO PREVINE proativamente (não esconde o botão nesse caso específico) mas NÃO É REPRODUZÍVEL com os dados de demo atuais — ver achado dedicado. Se ocorrer, o texto cru 'autorizacao negada' aparece em p.erro-inline (sem tradução específica em mensagemDeErro)."
+    },
+    {
+     "caso": "conflito de concorrência (lock-version stale)",
+     "onde_surge": "TELA TRATA — mensagem específica de conflito pedindo para recarregar a lista."
+    },
+    {
+     "caso": "decidir em sessão fechada",
+     "onde_surge": "TELA PREVINE (bloqueio a mais que o backend exige) — os botões Deferir/Indeferir só renderizam quando podeEditar(sessaoEstado); backend aceitaria a decisão mesmo com a sessão encerrada, mas a UI não oferece o caminho (ver achado dedicado, ex. real: justificativa pendente da sessão ...0212)."
+    }
+   ]
+  },
+  {
+   "nome": "gerar folha (servidor)",
+   "tem_tela": true,
+   "rota_next": "apps/frontend/src/app/sessoes/[id]/folha/page.tsx",
+   "url_navegavel": "http://localhost:3000/sessoes/10000000-0000-0000-0000-000000000210/folha?token=%7B%22identidade-id%22%3A%224893207b-8487-42d6-a12d-d8721cd348ec%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%2C%22papeis%22%3A%5B%22secretario%22%5D%7D",
+   "endpoint_api": "POST /sessoes/:id/folha",
+   "tabela_db": "sessoes.folha_sessao",
+   "papel": "servidor (papel \"secretario\")",
+   "passos_browser": [
+    "Abrir a URL acima (sessão ...0210, encerrada; medido agora: 0 versões de folha)",
+    "Clicar o botão \"Gerar a folha desta sessão\"",
+    "Aguardar o estado \"Gerando…\" terminar — a lista de versões passa a mostrar a versão 1"
+   ],
+   "seletores": [
+    "button.btn.btn-primaria com texto \"Gerar a folha desta sessão\" (vazio) / \"Gerar nova versão\" (já há versão) / \"Gerando…\" (em voo)",
+    "p.gerar-erro[role=alert] (erro)",
+    "p.gerar-nota[role=status] (nota de sucesso)",
+    "ul.versoes-lista[aria-label=\"Versões congeladas da folha\"]"
+   ],
+   "assercao_db": "select versao, html_hash, pdf_hash, gerada_por from sessoes.folha_sessao where sessao_id='10000000-0000-0000-0000-000000000210' order by versao desc limit 1; -- espera versao=1 na 1a chamada",
+   "casos_de_erro": [
+    {
+     "caso": "folha duas vezes",
+     "onde_surge": "NAO E' ERRO — dentro de 30s da MESMA pessoa devolve a MESMA versão (dedup D9, controllers.clj L1058, resposta 201 com ja-congelada implícito); fora da janela cria versão NOVA numerada. Nunca 409 por duplicidade; o rótulo do botão muda para \"Gerar nova versão\"."
+    },
+    {
+     "caso": "sessão ainda aberta (fora da lista do plano, achado extra)",
+     "onde_surge": "TELA NAO PREVINE — o botão fica clicável independente do estado da sessão (a página não busca SessaoOut); só o BACKEND recusa com 409 \"so' sessao FECHADA tem folha de presenca (D6)\", exibido em p.gerar-erro."
+    },
+    {
+     "caso": "documento excede o teto de tamanho",
+     "onde_surge": "BACKEND recusa 413; TELA traduz em folha-vista.ts e mostra em p.gerar-erro."
+    }
+   ]
+  }
+ ],
+ "grupo": "E5 — Chamada e presença (servidor + vereador)"
+}

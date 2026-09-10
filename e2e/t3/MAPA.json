@@ -1,0 +1,1030 @@
+{
+ "auth": {
+  "mecanismo": "Dois modos, escolhidos por UMA env (`NEXT_PUBLIC_APP_ENV` no FE, `APP_ENV` no backend, ambas alimentadas por `${OPLENARIO_APP_ENV:-dev}` no compose). (a) MODO DEV (o que está de pé agora — verifiquei `docker exec oplenario-frontend-1 env` => `NEXT_PUBLIC_APP_ENV=dev`, e `oplenario-app-1` => `APP_ENV=dev`): a credencial é um \"dev-token\" = JSON de claims CRU, sem assinatura, passado na querystring da página (`?token=<json url-encoded>`) ou em `NEXT_PUBLIC_DEV_TOKEN`. O AuthProvider (lib/auth.tsx, montado nos layouts (interno)/(vereador) e nas 3 páginas de /sessoes) lê `useSearchParams().get(\"token\")`, guarda no contexto, e todo hook passa esse token ao boundary único `apiFetch`, que monta `Authorization: Bearer <json>`. As chamadas vão para `/api/*` same-origin e o rewrite de next.config.ts proxeia para `BACKEND_URL=http://app:8888` (o prefixo `/api` é removido). No backend, `sistema/idp-para` injeta `idp-dev` quando `:env` ∈ {\"dev\",\"test\"}: `verificar-token` só faz `json/read-value` do token — confiança total, sem verificar assinatura. (b) MODO REAL (qualquer outro APP_ENV): sessão = cookie opaco httpOnly `sessao`, setado pelo BFF do Next (`src/app/api/auth/{login,callback,logout}`) após Authorization Code + PKCE contra o Keycloak; o backend resolve o cookie via `repo/resolver-sessao-por-segredo` a cada request. O interceptor `autenticacao` dá PRECEDÊNCIA ao cookie e cai no Bearer só se não houver cookie — os dois caminhos convergem em `auten/resolver-sessao`, que exige vínculo ATIVO no ente e devolve os papéis DO BANCO (o campo `papeis` do token é só guarda de UI, não é autoritativo).",
+  "existe_bypass_dev": true,
+  "bypass_como": "`?token=<JSON de claims url-encoded>` na URL da PÁGINA (não em /entrar). Claims mínimas: `{\"identidade-id\":\"<uuid>\",\"ente-id\":\"<uuid>\"}`; opcionalmente `\"papeis\":[\"vereador\"]` — necessário só para a guarda client-side do shell (vereador) (`GuardVereador` exige \"vereador\" em papeis quando em modo dev; em modo real ele consulta GET /eu). Três peças cooperam: (1) `middleware.ts` deixa passar sem cookie quando `searchParams.has(\"token\") && NODE_ENV !== \"production\"`; (2) `AuthProvider` só aceita o token se `modoReal() === false`, i.e. `NEXT_PUBLIC_APP_ENV` ∈ {\"dev\",\"test\"} — caso contrário LANÇA; (3) backend com `APP_ENV` ∈ {\"dev\",\"test\"} usa `idp-dev`, que aceita o JSON cru. VERIFIQUEI AO VIVO agora: `GET /proposicoes` sem token => 307 para `/entrar?redirect=%2Fproposicoes`; com `?token=` => 200. `GET /api/eu` com `Authorization: Bearer {\"identidade-id\":\"4893207b-…\",\"ente-id\":\"10000000-…\"}` => 200 com `papeis:[\"secretario\"]`; presidente => `[\"vereador\",\"admin_ente\"]`; vereador => `[\"vereador\"]`; cidadão => 401 \"sem vinculo ativo\" (por desenho — o cidadão não tem vínculo). `POST /api/sessoes` com corpo `{}` + Bearer => 400 do backend (proxy repassa método, corpo e header); sem credencial => 401.",
+  "precisa_profile_auth": false,
+  "precisa_imagem_producao": false,
+  "receita_playwright": [
+   "0) PRÉ-REQUISITO: a stack já está de pé em modo dev (conferido: oplenario-frontend-1 e oplenario-app-1 healthy, NEXT_PUBLIC_APP_ENV=dev / APP_ENV=dev). Se alguém subir com OPLENARIO_APP_ENV=production, TODA esta receita morre (o AuthProvider lança e o backend troca para o KeycloakIdp).",
+   "1) Ler os ids de /Users/daoudatraore/oplenario/e2e/.artifacts/demo-ids.edn — NUNCA cravar UUID à mão. Reusar o parser por regex que já existe em e2e/.sonda/sonda.mjs (linhas 20-35): ENTE via /:ente #uuid \"(...)\"/, e o bloco :identidades via /:identidades\\s*\\{([\\s\\S]*)\\}\\s*\\}?\\s*$/ seguido de /:secretaria|:presidente|:vereador #uuid \"(...)\"/. Ids atuais: ente=10000000-0000-0000-0000-000000000001, secretaria=4893207b-8487-42d6-a12d-d8721cd348ec, presidente=a3aaef2f-ca3c-441b-92c7-d0320c989ce4, vereador=49c23663-c30e-4829-b3be-c7481f107275.",
+   "2) Montar um token por papel: const q = o => encodeURIComponent(JSON.stringify(o)); TSEC = q({'identidade-id':SECRETARIA,'ente-id':ENTE,papeis:['secretario']}); TPRES = q({'identidade-id':PRESIDENTE,'ente-id':ENTE,papeis:['vereador','admin_ente']}); TVER = q({'identidade-id':VEREADOR,'ente-id':ENTE,papeis:['vereador']}). Os papéis reais vêm do banco (semeados em apps/backend/demo/casa.clj:110-123) — o array `papeis` do token só destrava a guarda de UI do shell (vereador).",
+   "3) Navegar SEMPRE com o token na URL: await page.goto(`http://localhost:3000${rota}?token=${TOK}`). Não existe storageState, não existe cookie, não existe login: a credencial é a querystring e ela é relida por useSearchParams() a CADA página.",
+   "4) Cliques internos: os <Link> de dentro do app usam o helper `comToken` (lib/nav.ts, 38 call sites) e PRESERVAM o ?token=. Ainda assim, para cada escrita da Trilha 3, prefira um page.goto direto na rota-alvo com ?token= em vez de clicar através de 3 telas — é o caminho que a sonda já provou (27 rotas, e2e/.sonda/sonda.mjs:104-131) e não depende de nenhum link ter sido instrumentado.",
+   "5) Papel por rota (o que a sonda já usa e funciona): TSEC para /cadastros/vereadores, /expediente*, /proposicoes, /tramitacao, /pauta-convocacao, /editor-proposicao*, /ficha-materia/:id, /pos-aprovacao/:id, /parecer/:id, /paineis/mesa, /sessoes/:id/plenario, /sessoes/:id/chamada, /sessoes/:id/folha. TVER para /vereador, /votar, /notificacoes, /parecer/:id/assinar. TPRES onde a escrita exigir admin_ente ou for ato de presidência (mesmas rotas de secretaria/vereador — o backend decide pelo policy.check in-domain, não por prefixo de URL).",
+   "6) Escritas: nada de novo a fazer. O botão da UI chama um hook -> apiFetch -> POST/PATCH em /api/<rota do backend> same-origin, com o Bearer montado a partir do mesmo token da URL. Verifiquei o proxy: POST http://localhost:3000/api/sessoes com Bearer => 400 do backend; sem Bearer => 401. Para asserção, capture a chamada com page.waitForResponse(r => r.url().includes('/api/…') && r.request().method() !== 'GET') — é o único jeito de provar que a escrita SAIU, já que o texto da tela pode não mudar.",
+   "7) Onde rodar: o container oficial, como manda o mandato Docker — `docker run --rm --network host -v <e2e>:/e2e -v oplenario_e2e_nm:/e2e/node_modules -w /e2e mcr.microsoft.com/playwright:v1.49.0-noble sh -c 'npm ci --ignore-scripts && npx playwright test <spec>'` (é o corpo do e2e/rodar.sh). ATENÇÃO: o globalSetup atual (e2e/global-setup.ts) exige .artifacts/demo-ids.edn e aquece só / e /portal/casa/:ente. Para um spec autenticado, ou acrescente as rotas internas ao aquecimento, ou dê um timeout maior no primeiro goto de cada rota nova — o `next dev` compila sob demanda e a compilação a frio passa de 20s.",
+   "8) Se precisar de usuário+senha DE VERDADE (não é o caso da Trilha 3): a receita está na memória `oplenario-subir-com-login` e custa caro — /etc/hosts com `127.0.0.1 keycloak`, OPLENARIO_APP_ENV=production docker compose --profile auth up -d (~500 MiB de Keycloak numa VM de 3.9 GiB, que já derrubou o Postgres por OOM), ~1-5 min de boot do KC, re-semear, provisionar o usuário no realm do ente com um script de scratchpad (nenhuma seed faz isso), o token admin do KC 26 vivendo 56s, e trocar o `next dev` pela imagem de produção do frontend (o dev server não arranca a frio). Não faça isso para exercitar escritas."
+  ],
+  "arquivos_chave": [
+   "/Users/daoudatraore/oplenario/apps/frontend/src/middleware.ts",
+   "/Users/daoudatraore/oplenario/apps/frontend/src/lib/auth.tsx",
+   "/Users/daoudatraore/oplenario/apps/frontend/src/lib/modo.ts",
+   "/Users/daoudatraore/oplenario/apps/frontend/src/lib/api-fetch.ts",
+   "/Users/daoudatraore/oplenario/apps/frontend/src/lib/nav.ts",
+   "/Users/daoudatraore/oplenario/apps/frontend/src/app/(interno)/layout.tsx",
+   "/Users/daoudatraore/oplenario/apps/frontend/src/app/(vereador)/layout.tsx",
+   "/Users/daoudatraore/oplenario/apps/frontend/next.config.ts",
+   "/Users/daoudatraore/oplenario/apps/backend/src/oplenario/interceptors.clj",
+   "/Users/daoudatraore/oplenario/apps/backend/src/oplenario/kernel/components/idp_dev.clj",
+   "/Users/daoudatraore/oplenario/apps/backend/src/oplenario/sistema.clj",
+   "/Users/daoudatraore/oplenario/apps/backend/src/oplenario/identidade/autenticacao.clj",
+   "/Users/daoudatraore/oplenario/apps/backend/src/oplenario/identidade/diplomat/http/auth_in.clj",
+   "/Users/daoudatraore/oplenario/apps/backend/demo/casa.clj",
+   "/Users/daoudatraore/oplenario/apps/backend/docker-compose.yml",
+   "/Users/daoudatraore/oplenario/e2e/.sonda/sonda.mjs",
+   "/Users/daoudatraore/oplenario/e2e/global-setup.ts",
+   "/Users/daoudatraore/oplenario/e2e/playwright.config.ts",
+   "/Users/daoudatraore/oplenario/e2e/rodar.sh",
+   "/Users/daoudatraore/oplenario/e2e/.artifacts/demo-ids.edn"
+  ],
+  "riscos": [
+   "O bypass é frágil por env, não por código: basta alguém subir com OPLENARIO_APP_ENV=production para o AuthProvider LANÇAR em toda página interna e o backend trocar para o KeycloakIdp. O spec deve falhar ALTO com essa mensagem em vez de reportar 'tela quebrada' — sugiro um assert de pré-voo no globalSetup (GET /api/eu com um token dev; se vier 401 'token invalido', abortar dizendo que a stack não está em modo dev).",
+   "O papel do token NÃO é o papel real. `auten/resolver-sessao` devolve os papéis do BANCO; o array `papeis` do JSON só destrava a guarda client-side de (vereador)/layout.tsx. Um spec que 'promove' alguém no token e vê a UI abrir está medindo a guarda de UI, não a autorização — o 403 do backend continua vindo. Não confundir isso com uma escrita bem-sucedida.",
+   "Não existe usuário 'presidente' com papel 'presidente'. A identidade `presidente` da semente tem papéis `vereador` + `admin_ente` (casa.clj:119-120). Se alguma escrita da Trilha 3 exigir um conceito de presidência (abrir/encerrar sessão, cassar a palavra), a autorização virá do policy.check in-domain contra o cargo na Mesa (o vereador idx 0), não de um papel de vínculo — verificar caso a caso antes de declarar 'sem permissão'.",
+   "O cidadão da demo NÃO autentica: identidade sem vínculo => 401 'sem vinculo ativo' (confirmado ao vivo). Qualquer escrita de cidadão autenticado (e-SIC, LGPD, ouvidoria com login) é INALCANÇÁVEL hoje pela interface — o broker gov.br não tem uma linha de código. Se a Trilha 3 listar uma dessas 24, o veredicto é tem_tela/alcançável = false por falta de IdP, não por falta de tela.",
+   "O token viaja na URL: aparece em screenshot, em trace do Playwright, no relatório e no histórico do navegador. É JSON de claims, não credencial reutilizável fora do modo dev — mas não publicar traces desta suíte.",
+   "`comToken` (lib/nav.ts) concatena `?token=` cru; um href que já tivesse query string quebraria. Hoje nenhum call site faz isso (o único caso com query, hrefComSelecao em cadastros/vereadores, monta via URLSearchParams), mas um link novo pode reintroduzir o defeito e o sintoma será 'perdeu a sessão ao clicar'.",
+   "O `next dev` compila rota sob demanda: o primeiro goto de cada rota interna pode passar de 20s e estourar o timeout de 30s da config. O global-setup atual só aquece / e /portal/casa/:ente. Sem aquecer as rotas internas, a suíte vai falhar por compilação, não por defeito — falso vermelho.",
+   "Exercitar escritas MUTA a Casa da demo, que é append-only e compartilhada (conflito estrutural já registrado em oplenario-t2-escritas: suíte verde e exercitar escritas são mutuamente exclusivos). Rodar a Trilha 3 gasta o dado de demo, e ele não é restaurável sem `down -v`.",
+   "Rodar a suíte do backend e um Playwright pesado ao mesmo tempo gera falhas fantasmas por contenção de CPU (memória oplenario-chamada-execucao), e a VM do OrbStack (3.9 GiB) não comporta a stack + Keycloak + harness — mais uma razão para NÃO ir pelo caminho do --profile auth."
+  ]
+ },
+ "mapas": [
+  {
+   "achados": [
+    "CPF nao existe em nenhum dos 4 escritas do grupo E1. `cadastros.vereador` (migration 20260620000010) tem colunas: ente_id, id, identidade_id (GUARD ref, sem FK), nome, nome_parlamentar, lote_id, efetivado_em, criado_em — NENHUMA coluna de CPF. CPF so aparece em `identidade` (wire/in/acesso.clj, CriarIdentidade, regex ^\\d{11}$) e na validacao do form `ConcederAcessoForm` (validarConcederAcesso em cadastro-vereadores-forms.ts). 'Conceder acesso' (ligar-identidade) NAO esta na lista das 4 escritas deste grupo (criar/editar vereador, criar mandato, registrar licenca). Os casos de erro 'CPF invalido' e 'CPF duplicado' do plano nao se aplicam a NENHUMA das 4 escritas de E1 — pertencem a uma quinta escrita (conceder acesso) fora do escopo deste grupo. Isso e um ACHADO: ou o plano atribuiu esses 2 casos ao grupo errado, ou eles precisam ser reclassificados para o grupo que cobre 'conceder acesso'.",
+    "'Licenca sem mandato' nao e testavel como uma condicao separada de input no form: o botao 'Registrar licenca' fica DESABILITADO na propria pagina (page.tsx: disabled={ficha.mandato?.estado !== 'vigente'}) sempre que o vereador nao tem mandato vigente (inclui o caso de nenhum mandato). Para exercitar o caso de erro pela INTERFACE e preciso ou (a) forcar o painel via DOM/JS ignorando o disabled, ou (b) provar o 409 so por HTTP direto (que ja foi feito na Trilha 2) — a Trilha 3 (so interface) nao alcanca esse caso de erro do jeito descrito no plano sem contornar a UI.",
+    "O double-click e tratado no cliente por uma ref sincrona (`enviandoRef.current`) em CADA hook de mutacao (use-criar-vereador, use-editar-vereador, use-registrar-mandato, use-registrar-licenca) que lanca 'envio em andamento' na segunda chamada, MAIS o botao fica disabled durante estado 'enviando' — mas a checagem do disabled e assincrona (so aplica apos o primeiro render pos-clique); um duplo-clique fisico rapido o bastante pode ainda passar pelo guard de disabled e cair no guard da ref (que e sincrono e realmente bloqueia). Confirmar na pratica com Playwright (2 cliques no mesmo frame) e nao so ler o codigo."
+   ],
+   "escritas": [
+    {
+     "nome": "criar vereador",
+     "tem_tela": true,
+     "rota_next": "apps/frontend/src/app/(interno)/cadastros/vereadores/page.tsx + novo-vereador-form.tsx",
+     "url_navegavel": "/cadastros/vereadores",
+     "endpoint_api": "POST /cadastros/vereadores (proxy Next: POST /api/cadastros/vereadores)",
+     "tabela_db": "cadastros.vereador",
+     "papel": "servidor (gate backend: papel 'secretario')",
+     "passos_browser": [
+      "Logado como usuario com papel 'secretario' no ente 10000000-0000-0000-0000-000000000001, abrir /cadastros/vereadores",
+      "Clicar no botao 'Novo vereador' (button.btn-primaria, texto literal 'Novo vereador') no topo da pagina — abre painel inline (NAO modal)",
+      "No form aria-label='Novo vereador': preencher input#nv-nome (label 'Nome*') com o nome",
+      "Opcional: preencher input#nv-parlamentar (label 'Nome parlamentar')",
+      "Clicar no botao de submit (button[type=submit], texto 'Criar vereador', vira 'Salvando…' durante o envio)",
+      "Sucesso -> painel fecha, o vereador criado passa a ser o selecionado na lista master (onSucesso seleciona o novo id e refaz o fetch)"
+     ],
+     "seletores": [
+      "button.btn-primaria.btn-mini com texto 'Novo vereador' (abre painel)",
+      "form[aria-label='Novo vereador']",
+      "input#nv-nome (label associado via htmlFor, texto do label 'Nome*')",
+      "input#nv-parlamentar (label 'Nome parlamentar')",
+      "p#nv-nome-erro[role=alert] (erro de campo, so aparece apos 'tocado')",
+      "button[type=submit].btn-primaria com texto 'Criar vereador' / 'Salvando…' quando enviando",
+      "button[type=button].btn-fantasma com texto 'Cancelar'",
+      "p[role=alert].campo-erro generico quando estado==='erro' (mensagem vinda de corpoErro.erro do backend)"
+     ],
+     "assercao_db": "SELECT id, nome, nome_parlamentar, identidade_id FROM cadastros.vereador WHERE ente_id = '10000000-0000-0000-0000-000000000001' AND nome = '<nome digitado>' ORDER BY criado_em DESC LIMIT 1;",
+     "casos_de_erro": [
+      {
+       "caso": "campo obrigatorio vazio (nome em branco)",
+       "onde_surge": "TELA trata: validarNovoVereador (cadastro-vereadores-forms.ts) marca erros.nome='Informe o nome do vereador.' e o botao de submit fica disabled quando tocado && !valido (p#nv-nome-erro exibido). BACKEND tambem recusa (adapters/in/vereador.clj criar-vereador->dominio: (when (str/blank? (:nome mm)) (invalido! ...)) -> 400 :validacao/invalido) — redundante, dupla camada."
+      },
+      {
+       "caso": "CPF invalido",
+       "onde_surge": "NAO SE APLICA — 'criar vereador' nao tem campo CPF em nenhuma camada (form, wire, tabela). Ver achado geral."
+      },
+      {
+       "caso": "CPF duplicado",
+       "onde_surge": "NAO SE APLICA — mesmo motivo acima."
+      },
+      {
+       "caso": "duplo clique",
+       "onde_surge": "TELA trata parcialmente: guard sincrono enviandoRef.current em use-criar-vereador.ts lanca erro em cliques concorrentes + botao disabled durante estado==='enviando'. Nao ha guard no BACKEND contra 2 vereadores identicos criados por 2 POSTs distintos (nao ha UNIQUE em cadastros.vereador(nome) nem idempotency-key) — 2 cliques que escapem do guard client-side (ex. requisicoes disparadas antes do primeiro setEstado) criam DOIS registros. Verificar na pratica."
+      }
+     ]
+    },
+    {
+     "nome": "editar vereador",
+     "tem_tela": true,
+     "rota_next": "apps/frontend/src/app/(interno)/cadastros/vereadores/page.tsx + editar-vereador-form.tsx",
+     "url_navegavel": "/cadastros/vereadores?v=6ad35bb6-c375-462e-bab0-1cbfc0b9a93c",
+     "endpoint_api": "PATCH /cadastros/vereadores/:id (proxy Next: PATCH /api/cadastros/vereadores/:id)",
+     "tabela_db": "cadastros.vereador",
+     "papel": "servidor (gate backend: papel 'secretario')",
+     "passos_browser": [
+      "Logado como 'secretario', abrir /cadastros/vereadores?v=6ad35bb6-c375-462e-bab0-1cbfc0b9a93c (seleciona Antonio Carlos Ferreira direto pela URL, ?v=<id>)",
+      "Na ficha (detail pane), clicar no botao 'Editar cadastro' (dentro de .ficha-acoes) — abre painel inline abaixo",
+      "No form aria-label='Editar cadastro' (pre-preenchido): alterar input#ev-nome e/ou input#ev-parlamentar",
+      "Clicar em button[type=submit] texto 'Salvar alteracoes' (vira 'Salvando…')",
+      "Sucesso -> painel fecha, ficha + lista refazem fetch (versao incrementada)"
+     ],
+     "seletores": [
+      "button.btn-contorno.btn-mini com texto 'Editar cadastro'",
+      "form[aria-label='Editar cadastro']",
+      "input#ev-nome (label 'Nome')",
+      "input#ev-parlamentar (label 'Nome parlamentar')",
+      "p#ev-nome-erro[role=alert]",
+      "p[role=alert].campo-erro para erros.geral ('Preencha ao menos um campo para salvar.')",
+      "button[type=submit].btn-primaria texto 'Salvar alteracoes' / 'Salvando…'",
+      "button[type=button].btn-fantasma texto 'Cancelar'"
+     ],
+     "assercao_db": "SELECT nome, nome_parlamentar FROM cadastros.vereador WHERE ente_id = '10000000-0000-0000-0000-000000000001' AND id = '6ad35bb6-c375-462e-bab0-1cbfc0b9a93c';",
+     "casos_de_erro": [
+      {
+       "caso": "campo obrigatorio vazio (nome esvaziado)",
+       "onde_surge": "TELA trata: validarEditar marca erros.nome='O nome nao pode ficar em branco.' quando mudouNome && branco(nome) — so dispara se o campo nome foi de fato alterado (mudouNome = nome.trim() !== inicial.nome). BACKEND tambem recusa (editar-vereador->dominio: contains :nome && blank -> 'nome nao pode ser vazio' -> 400). nome_parlamentar PODE ser esvaziado (vira NULL), isso e' comportamento valido, nao erro."
+      },
+      {
+       "caso": "CPF invalido",
+       "onde_surge": "NAO SE APLICA — editar vereador nao toca CPF/identidade."
+      },
+      {
+       "caso": "CPF duplicado",
+       "onde_surge": "NAO SE APLICA — mesmo motivo."
+      },
+      {
+       "caso": "duplo clique",
+       "onde_surge": "TELA trata parcialmente: enviandoRef.current em use-editar-vereador.ts + botao disabled durante envio. Sem idempotency-key no backend; 2 PATCHs concorrentes com o MESMO corpo sao inofensivos (ambos escrevem o mesmo valor final), diferente de criar-vereador onde duplicaria a linha — risco menor aqui, mas nao zero se os dois cliques carregarem valores diferentes de digitacao simultanea."
+      }
+     ]
+    },
+    {
+     "nome": "criar mandato",
+     "tem_tela": true,
+     "rota_next": "apps/frontend/src/app/(interno)/cadastros/vereadores/page.tsx + registrar-mandato-form.tsx",
+     "url_navegavel": "/cadastros/vereadores?v=5029fcbc-bf8d-4142-902e-ba45929e41b2",
+     "endpoint_api": "POST /cadastros/vereadores/:id/mandatos (proxy Next: POST /api/cadastros/vereadores/:id/mandatos)",
+     "tabela_db": "cadastros.mandato",
+     "papel": "servidor (gate backend: papel 'secretario')",
+     "passos_browser": [
+      "Logado como 'secretario', abrir /cadastros/vereadores?v=<id-de-um-vereador> (idealmente um SEM mandato vigente hoje, para nao colidir de imediato com o 409 de sobreposicao — ou aceitar o 409 como o teste do caso de erro)",
+      "Na ficha, clicar 'Registrar mandato' (.ficha-acoes) — abre painel",
+      "Form aria-label='Registrar mandato': a legislatura vigente ja vem fixa (exibida como texto, ex. 'Xa (2025-2029)', vem de GET /cadastros/legislatura-vigente via useLegislaturaVigente) — se nao houver legislatura vigente o form mostra so 'Cadastre a legislatura vigente primeiro.' com botao 'Fechar', sem campos",
+      "Preencher input#rm-partido (opcional)",
+      "select#rm-natureza (opcoes: 'Titular'=titular, 'Suplencia'=suplencia)",
+      "input#rm-inicio type=date (obrigatorio, label 'Inicio da vigencia*')",
+      "input#rm-fim type=date (opcional, label 'Fim da vigencia')",
+      "Clicar button[type=submit] texto 'Registrar mandato' / 'Salvando…'"
+     ],
+     "seletores": [
+      "button.btn-contorno.btn-mini com texto 'Registrar mandato'",
+      "form[aria-label='Registrar mandato']",
+      "p#rm-legislatura-rotulo (so display, nao input)",
+      "input#rm-partido (label 'Partido')",
+      "select#rm-natureza (label 'Natureza*')",
+      "input#rm-inicio (label 'Inicio da vigencia*')",
+      "input#rm-fim (label 'Fim da vigencia')",
+      "p#rm-inicio-erro[role=alert], p#rm-fim-erro[role=alert], p#rm-natureza-erro[role=alert]",
+      "button[type=submit].btn-primaria texto 'Registrar mandato' / 'Salvando…'",
+      "button[type=button].btn-fantasma texto 'Cancelar'"
+     ],
+     "assercao_db": "SELECT id, vereador_id, legislatura_id, partido, estado, natureza, vigencia_inicio, vigencia_fim FROM cadastros.mandato WHERE ente_id = '10000000-0000-0000-0000-000000000001' AND vereador_id = '<id-do-vereador>' ORDER BY criado_em DESC LIMIT 1; -- estado esperado = 'vigente' (default do insert)",
+     "casos_de_erro": [
+      {
+       "caso": "campo obrigatorio vazio (data de inicio ou natureza)",
+       "onde_surge": "TELA trata: validarMandato marca erros.vigenciaInicio='Data de inicio invalida (AAAA-MM-DD).' se vazio/mal formatado, e erros.natureza se natureza nao for 'titular'/'suplencia' (select so oferece essas 2 opcoes, entao esse ramo especifico e inatingivel pela UI, so por manipulacao de DOM). BACKEND: wire/RegistrarMandato (malli) tambem recusa corpo sem vigencia-inicio/natureza -> 400."
+      },
+      {
+       "caso": "CPF invalido",
+       "onde_surge": "NAO SE APLICA — registrar mandato nao tem CPF."
+      },
+      {
+       "caso": "CPF duplicado",
+       "onde_surge": "NAO SE APLICA — mesmo motivo."
+      },
+      {
+       "caso": "mandato com fim antes do inicio",
+       "onde_surge": "TRATADO NOS DOIS LADOS: TELA (validarMandato: 'if (ini && fim < ini) erros.vigenciaFim = O fim nao pode ser anterior ao inicio.' bloqueia o submit) E BACKEND (registrar-mandato->dominio: (.isBefore fim inicio) -> invalido! 'vigencia-fim nao pode ser anterior a vigencia-inicio' -> 400). Para exercitar o caminho do BACKEND pela interface e preciso contornar a validacao client-side (ex. digitar datas validas isoladamente e depois trocar via devtools, ou usar um par que a validacao do form nao pega mas o backend pegaria — na pratica as duas validacoes sao identicas em regra, entao nao ha gap; o unico jeito de ver o 400 do backend pela UI e desabilitar JS ou interceptar a requisicao)."
+      },
+      {
+       "caso": "licenca sem mandato",
+       "onde_surge": "NAO SE APLICA a esta escrita (criar mandato) — esse caso e do 'registrar licenca'."
+      },
+      {
+       "caso": "duplo clique / mandato sobreposto",
+       "onde_surge": "TELA/BACKEND: 2 cliques rapidos podem gerar 2 POSTs; o SEGUNDO deve bater no 409 :conflito/mandato-sobreposto (registrar-mandato-handler captura local e devolve {:erro 'ja existe mandato vigente sobreposto para este vereador'}), exibido no form via p[role=alert].campo-erro (estado==='erro' && erro). O guard client-side (enviandoRef) tenta impedir o 2o clique ANTES de chegar la, mas se um vereador ja tinha mandato vigente e o usuario tenta criar outro sobreposto em 1 unico clique, o 409 tambem aparece — mesmo texto de erro."
+      }
+     ]
+    },
+    {
+     "nome": "registrar licenca",
+     "tem_tela": true,
+     "rota_next": "apps/frontend/src/app/(interno)/cadastros/vereadores/page.tsx + registrar-licenca-form.tsx",
+     "url_navegavel": "/cadastros/vereadores?v=6ad35bb6-c375-462e-bab0-1cbfc0b9a93c",
+     "endpoint_api": "POST /cadastros/vereadores/:id/licencas (proxy Next: POST /api/cadastros/vereadores/:id/licencas)",
+     "tabela_db": "cadastros.mandato_licenca (efeito colateral: cadastros.mandato.estado vira 'licenciado')",
+     "papel": "servidor (gate backend: papel 'secretario')",
+     "passos_browser": [
+      "Logado como 'secretario', abrir /cadastros/vereadores?v=<id-de-um-vereador-com-mandato-VIGENTE> (ex. 6ad35bb6-c375-462e-bab0-1cbfc0b9a93c, Antonio Carlos Ferreira — mandato-id f6fc4e75... no seed demo)",
+      "Na ficha, o botao 'Registrar licenca' (.btn-fantasma) so fica CLICAVEL se ficha.mandato.estado === 'vigente'; caso contrario esta disabled com title='Requer um mandato vigente.'",
+      "Clicar 'Registrar licenca' — abre painel",
+      "Form aria-label='Registrar licenca': preencher input#rl-inicio type=date (obrigatorio, label 'Inicio*')",
+      "Opcional: input#rl-fim type=date (label 'Fim')",
+      "Opcional: input#rl-motivo (label 'Motivo')",
+      "Clicar button[type=submit] texto 'Registrar licenca' / 'Salvando…'"
+     ],
+     "seletores": [
+      "button.btn-fantasma.btn-mini com texto 'Registrar licenca' (disabled quando ficha.mandato?.estado !== 'vigente')",
+      "form[aria-label='Registrar licenca']",
+      "input#rl-inicio (label 'Inicio*')",
+      "input#rl-fim (label 'Fim')",
+      "input#rl-motivo (label 'Motivo')",
+      "p#rl-inicio-erro[role=alert], p#rl-fim-erro[role=alert]",
+      "button[type=submit].btn-primaria texto 'Registrar licenca' / 'Salvando…'",
+      "button[type=button].btn-fantasma texto 'Cancelar'"
+     ],
+     "assercao_db": "SELECT ml.id, ml.mandato_id, ml.inicio, ml.fim, ml.motivo FROM cadastros.mandato_licenca ml WHERE ente_id = '10000000-0000-0000-0000-000000000001' ORDER BY criado_em DESC LIMIT 1; -- e conferir: SELECT estado FROM cadastros.mandato WHERE id = '<mandato_id-do-vereador>'; -- esperado = 'licenciado'",
+     "casos_de_erro": [
+      {
+       "caso": "campo obrigatorio vazio (inicio)",
+       "onde_surge": "TELA trata: validarLicenca marca erros.inicio='Data de inicio invalida (AAAA-MM-DD).' quando vazio -> botao submit disabled apos 'tocado'. BACKEND tambem recusa (wire/RegistrarLicenca malli exige :inicio) -> 400."
+      },
+      {
+       "caso": "CPF invalido",
+       "onde_surge": "NAO SE APLICA — registrar licenca nao tem CPF."
+      },
+      {
+       "caso": "CPF duplicado",
+       "onde_surge": "NAO SE APLICA — mesmo motivo."
+      },
+      {
+       "caso": "mandato com fim antes do inicio (aqui: licenca com fim antes do inicio)",
+       "onde_surge": "TRATADO NOS DOIS LADOS: TELA (validarLicenca: fim < ini -> erros.fim='O fim nao pode ser anterior ao inicio.') e BACKEND nao tem checagem explicita de fim<inicio em registrar-licenca->dominio (so valida formato de data e o teto 'inicio <= hoje') — CONFERIR: se o form for contornado (JS off / requisicao direta), o backend pode aceitar fim<inicio sem recusar, pois so o FE valida essa ordem para licenca. Isto e um achado a validar: revisar registrar-licenca->dominio (apps/backend/src/oplenario/cadastros/adapters/in/vereador.clj) mostra SEM check de fim<inicio, ao contrario de registrar-mandato->dominio que TEM. Backend so valida: inicio no formato certo, fim no formato certo (se presente), e inicio <= hoje. NAO valida fim >= inicio."
+      },
+      {
+       "caso": "licenca sem mandato",
+       "onde_surge": "TELA bloqueia proativamente: botao 'Registrar licenca' fica disabled (nao apenas escondido) quando ficha.mandato?.estado !== 'vigente' (cobre tanto 'sem mandato nenhum' quanto 'mandato licenciado/cassado/etc'). BACKEND tambem recusa via 409 :conflito/sem-mandato-vigente (registrar-licenca-handler, mensagem 'vereador sem mandato vigente para licenciar') SE a chamada chegar la (ex. corpo enviado direto por fetch/devtools ignorando o disabled). Para provar o caso de erro PELA TELA de fato (nao so por HTTP, que ja foi feito na Trilha 2) e preciso ou remover o atributo disabled via JS no browser e clicar, ou aceitar que a tela nunca deixa o usuario chegar la organicamente — achado a reportar."
+      },
+      {
+       "caso": "duplo clique",
+       "onde_surge": "TELA trata parcialmente: enviandoRef.current em use-registrar-licenca.ts + disabled durante 'enviando'. 2a chamada que escape do guard bateria no MESMO 409 sem-mandato-vigente (a primeira ja mudou o mandato para 'licenciado'), entao o proprio dominio absorve o double-submit sem duplicar a linha — mais seguro que criar-vereador."
+      }
+     ]
+    }
+   ],
+   "grupo": "E1 — Cadastros (servidor)"
+  },
+  {
+   "grupo": "E2 — Expediente e protocolo (servidor)",
+   "achados": [
+    "ACHADO CRÍTICO (bloqueia as 3 escritas do grupo, não só reporta um erro isolado): `apps/backend/demo/seed_demo.clj` não insere NENHUMA linha em `legislativo.documento_modelo` (grep confirmado: zero ocorrências de 'documento_modelo'/'documento-modelo' no arquivo de seed). Sem modelo ativo, `GET /legislativo/documento-modelos` devolve lista vazia, `SeletorModelo` renderiza 0 botões (só o botão estático 'Mala-direta', sempre `disabled`), e o botão 'Gerar documento' fica permanentemente `disabled` (`disabled={enviandoGeracao || !modeloSelecionadoId}` em formulario-preenchimento.tsx:238). Partindo da Casa da demo, a escrita 1 é INALCANÇÁVEL pela interface.",
+    "Não existe rota HTTP de escrita para criar `documento_modelo`: `apps/backend/src/oplenario/legislativo/diplomat/http/in.clj` só registra `[\"/legislativo/documento-modelos\" :get ...]` (linha 531) — não há `:post`. `Repositorio/criar-modelo!` existe no protocolo (`components/repositorio.clj:666`) e em `db/documento_modelo.clj:criar!`, mas não está wired a nenhum handler/rota — é código morto do lado de fora do processo HTTP. A aba 'Modelos' (`apps/frontend/src/app/(interno)/expediente/modelos/page.tsx`) é `<EmBreve>` e confirma isso no próprio texto: 'Criar um modelo novo... ainda não tem tela própria'. Conclusão: a ÚNICA forma de plantar o pré-requisito das 3 escritas é INSERT direto no Postgres via SQL, bypassando interface E API — isso não é 'exercer pela interface', é uma fixture de banco.",
+    "'Protocolar duas vezes' e 'protocolar o que não está em rascunho' não são alcançáveis via um fluxo normal de UMA aba: assim que `documento.estado` vira 'emitido', `documentoEhTerminal` torna `bloqueado=true` e o bloco `{!bloqueado && (<>...botões...</>)}` em formulario-preenchimento.tsx:253 REMOVE os botões 'Salvar rascunho'/'Protocolar e numerar' do DOM (não apenas desabilita) — a tela tira a affordance, não sobra o que clicar duas vezes. O único caminho realista pela interface é abrir DUAS ABAS na mesma sessão de rascunho (uma protocola primeiro; a outra, com `lockVersion` desatualizado, tenta protocolar depois) — documentado nos passos_browser de cada caso."
+   ],
+   "escritas": [
+    {
+     "nome": "Gerar documento a partir de modelo",
+     "tem_tela": true,
+     "rota_next": "apps/frontend/src/app/(interno)/expediente/page.tsx",
+     "url_navegavel": "http://localhost:3000/expediente?token=%7B%22identidade-id%22%3A%224893207b-8487-42d6-a12d-d8721cd348ec%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%2C%22papeis%22%3A%5B%22secretario%22%5D%7D",
+     "endpoint_api": "POST /legislativo/documentos (Malli GerarDocumento: modelo-id obrigatório, assunto obrigatório min1, dados opcional map string->string)",
+     "tabela_db": "legislativo.documento (INSERT estado='rascunho'); lê legislativo.documento_modelo (modelo-id) e o ator resolvido via auth",
+     "papel": "servidor (papel de authz no backend é literalmente 'secretario' — `it/exige-papel \"secretario\"` em diplomat/http/in.clj:493)",
+     "passos_browser": [
+      "PRÉ-REQUISITO FORA DA UI (achado): inserir 1 linha em legislativo.documento_modelo, ex.: INSERT INTO legislativo.documento_modelo (ente_id, id, chave, nome, tipo_documento, corpo_template, efetivado_em) VALUES ('10000000-0000-0000-0000-000000000001', gen_random_uuid(), 'oficio_teste_t3', 'Ofício de teste T3', 'oficio', 'Prezado(a) {{destinatario}}, convidamos para a audiência pública.', now()); — sem isso o passo 3 não tem o que clicar.",
+      "Abrir url_navegavel no browser (token dev com papel 'secretario').",
+      "Na seção 'Modelo' (h2#modelo-titulo, 'passo 1 de 3'), clicar no botão com role=button e texto igual ao `nome` inserido (ex. 'Ofício de teste T3') — seletor real: `button.modelo[aria-pressed]` dentro de `div.modelos[role=group][aria-label='Tipo de documento']`.",
+      "Preencher o campo Assunto: input#assunto (label 'Assunto') com texto não vazio, ex. 'Convite à audiência pública'.",
+      "Preencher o par de Dados exigido pelo template: input#dados-chave-0 (label 'Campo 1') = 'destinatario'; input#dados-valor-0 (label 'Valor 1') = 'Secretaria de Obras'. (Deixar vazio/errado aqui exerce o caso de erro 'campo {{ }} não preenchido'.)",
+      "Clicar no botão role=button, name='Gerar documento' (barra fixa `.comando`, só habilitado quando `modeloSelecionadoId` != null).",
+      "Esperar o texto de status 'Documento gerado' aparecer em `.comando-ctx span` e o preview (`article.documento[role=document]`) deixar de mostrar o estado vazio."
+     ],
+     "assercao_db": "SELECT id, estado, assunto, corpo, modelo_id FROM legislativo.documento WHERE ente_id='10000000-0000-0000-0000-000000000001' AND modelo_id='<id do modelo inserido>' ORDER BY criado_em DESC LIMIT 1; -- espera 1 linha, estado='rascunho', corpo com o placeholder {{destinatario}} substituído por 'Secretaria de Obras'.",
+     "casos_de_erro": [
+      {
+       "caso": "campo {{ }} não preenchido (placeholder sem valor correspondente em `dados`)",
+       "onde_surge": "TRATADO nos dois lados: backend recusa fail-closed — `logic/renderizar-documento` (logic.clj:165) lança `:tipo :validacao/invalido` quando `(get dados chave)` é nil; o interceptor global (`interceptors.clj:157`) mapeia para 400 `{:erro \"requisicao invalida\"}` — mensagem GENÉRICA, não nomeia o campo faltante. A tela mostra essa mensagem genérica via `erroGeracao` em `<p role=alert class=form-erro>` (formulario-preenchimento.tsx:128-132) e foca nela (`erroRef.current?.focus()`)."
+      },
+      {
+       "caso": "assunto vazio / campo obrigatório vazio",
+       "onde_surge": "TRATADO em 3 camadas: a tela valida client-side antes do POST (`aoClicarGerar`: `if (!assunto.trim()) setErroValidacao(...)`, formulario-preenchimento.tsx:103-110, mensagem 'Preencha o assunto antes de gerar o documento.'); se burlado, o wire/in Malli (`GerarDocumento` schema, `:assunto [:string {:min 1 ...}]`) recusa 400 na borda antes de tocar lógica de domínio."
+      }
+     ]
+    },
+    {
+     "nome": "Editar rascunho",
+     "tem_tela": true,
+     "rota_next": "apps/frontend/src/app/(interno)/expediente/page.tsx",
+     "url_navegavel": "http://localhost:3000/expediente?token=%7B%22identidade-id%22%3A%224893207b-8487-42d6-a12d-d8721cd348ec%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%2C%22papeis%22%3A%5B%22secretario%22%5D%7D",
+     "endpoint_api": "PATCH /legislativo/documentos/:id (Malli EditarDocumento: lock-version obrigatório :int; corpo e assunto opcionais)",
+     "tabela_db": "legislativo.documento (UPDATE corpo/assunto, lock_version+1, atualizado_em)",
+     "papel": "servidor (papel backend 'secretario')",
+     "passos_browser": [
+      "Continuação do fluxo de 'Gerar documento' — mesma página, documento já em estado 'rascunho' (a seção 'Preenchimento' agora mostra Assunto+Corpo em vez do formulário de geração; passo indicado é `rotularEstadoDocumento(documento.estado)`, não mais 'passo 2 de 3').",
+      "Limpar/editar o conteúdo do textarea#corpo (label 'Corpo do documento') — ex. adicionar uma frase ao final.",
+      "Opcionalmente editar input#assunto (mesmo id da fase de geração, agora habilitado pois `bloqueado=false`).",
+      "Clicar no botão role=button, name='Salvar rascunho' (`.btn.btn-contorno`, só existe enquanto `!bloqueado`).",
+      "Esperar 'Rascunho salvo' em `.comando-ctx span` — a página então chama `recarregar()` (GET /legislativo/documentos/:id) e confirma o novo `lockVersion`."
+     ],
+     "assercao_db": "SELECT corpo, assunto, lock_version, atualizado_em FROM legislativo.documento WHERE ente_id='10000000-0000-0000-0000-000000000001' AND id='<id do documento>'; -- espera corpo/assunto refletindo a edição e lock_version incrementado em 1 em relação ao valor pós-geração.",
+     "casos_de_erro": [
+      {
+       "caso": "editar documento que não está mais em 'rascunho' (já emitido)",
+       "onde_surge": "NÃO TRATADO por reprovação explícita na tela em uma única aba — a affordance simplesmente some (`bloqueado=true` remove os inputs de edição e os botões, formulario-preenchimento.tsx:198-221 mostra os campos com `disabled` e a barra de comando some por inteiro os botões de escrita). Só é alcançável via DUAS ABAS: aba A protocola (emite); aba B, que ainda tem o form de edição montado com `lockVersion` velho, clica 'Salvar rascunho' -> backend recusa: `db/documento.clj/editar-rascunho!` guard `(when (not= \"rascunho\" estado) (throw {:tipo :validacao/invalido ...}))` -> 400 `{:erro \"requisicao invalida\"}` exibido via `erroEdicao`."
+      },
+      {
+       "caso": "conflito de lock_version (edição concorrente)",
+       "onde_surge": "TRATADO pelo backend: `editar-rascunho!` faz UPDATE com `WHERE lock_version = <valor enviado>`; 0 linhas afetadas -> lança `:validacao/invalido` -> 400. A tela mostra a mensagem genérica via `erroEdicao`, sem indicar que foi conflito de concorrência especificamente."
+      }
+     ]
+    },
+    {
+     "nome": "Protocolar e numerar",
+     "tem_tela": true,
+     "rota_next": "apps/frontend/src/app/(interno)/expediente/page.tsx",
+     "url_navegavel": "http://localhost:3000/expediente?token=%7B%22identidade-id%22%3A%224893207b-8487-42d6-a12d-d8721cd348ec%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%2C%22papeis%22%3A%5B%22secretario%22%5D%7D",
+     "endpoint_api": "POST /legislativo/documentos/:id/protocolo (Malli ProtocolarDocumento: lock-version obrigatório :int)",
+     "tabela_db": "legislativo.protocolo_geral (INSERT: numero gapless via kernel/sequencial escopo 'protocolo_geral:<ano>', objeto_tipo='documento', objeto_id=<documento.id>, sentido='expedido') + legislativo.documento (UPDATE estado='rascunho'->'emitido', protocolo_geral_id, emitido_em, emitido_por) — 1 única tx (Repositorio/protocolar-documento!)",
+     "papel": "servidor (papel backend 'secretario')",
+     "passos_browser": [
+      "Continuação do fluxo — documento em 'rascunho' (salvo ou recém-gerado), mesma página.",
+      "Clicar no botão role=button, name='Protocolar e numerar' (`.btn.btn-primaria`, ao lado de 'Salvar rascunho', só existe enquanto `!bloqueado`).",
+      "Esperar 'Documento protocolado' em `.comando-ctx span`.",
+      "Conferir o carimbo do preview: `div.carimbo` deixa de ter a classe `reservar` e `span.num` passa a mostrar o número real (`textoCarimbo`, antes exibia 'a reservar').",
+      "Rolar até a seção 'Livro do Protocolo Geral — ano corrente' (h2#livro-titulo) e conferir que uma nova linha em `table.protocolo tbody tr` aparece com o mesmo número/assunto."
+     ],
+     "assercao_db": "SELECT d.estado, d.protocolo_geral_id, p.numero, p.ano, p.objeto_tipo, p.objeto_id FROM legislativo.documento d JOIN legislativo.protocolo_geral p ON p.ente_id=d.ente_id AND p.id=d.protocolo_geral_id WHERE d.ente_id='10000000-0000-0000-0000-000000000001' AND d.id='<id do documento>'; -- espera d.estado='emitido', p.objeto_tipo='documento', p.objeto_id=d.id. Gapless: SELECT numero, numero = row_number() OVER (ORDER BY numero) AS esperado FROM legislativo.protocolo_geral WHERE ente_id='10000000-0000-0000-0000-000000000001' AND ano=<ano corrente> ORDER BY numero; -- toda linha deve ter numero=esperado (sem buraco).",
+     "casos_de_erro": [
+      {
+       "caso": "protocolar duas vezes (o mesmo documento)",
+       "onde_surge": "TRATADO em 2 camadas, mas pela MESMA aba é estruturalmente inalcançável: após sucesso, `estado='emitido'` -> `bloqueado=true` remove o botão do DOM (formulario-preenchimento.tsx:253). Via 2ª aba com estado obsoleto: backend recusa em `db/documento.clj/emitir!` (guard `(when (not= \"rascunho\" estado) (throw {:tipo :validacao/invalido ...}))`, chamado dentro de `Repositorio/protocolar-documento!`) -> tx inteira faz ROLLBACK -> o número reservado pelo `kernel/sequencial` NUNCA é commitado (comentário explícito em repositorio.clj:685-690: 'o numero reservado pelo kernel/sequencial some com o rollback, gapless preservado') -> 400 exibido via `erroProtocolo`. Numeração gapless PROVADA por construção transacional, não por retry/compensação."
+      },
+      {
+       "caso": "protocolar o que não está em rascunho (documento já emitido por outro caminho)",
+       "onde_surge": "Mesmo guard/mesmo caminho do caso acima — `emitir!` é reusado tanto para replay quanto para qualquer documento fora de 'rascunho'; 400 fail-closed, rollback preserva gapless."
+      },
+      {
+       "caso": "campo {{ }} não preenchido no momento de protocolar",
+       "onde_surge": "NÃO SE APLICA a este endpoint — `renderizar-documento` só roda em `gerar!` (na geração), não em `protocolar-documento!`. Uma vez gerado, o `corpo` já está congelado como string final; protocolar não faz merge de novo. Esse caso de erro só existe na escrita 'Gerar documento' (ver acima)."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "grupo": "E3 — A matéria nasce (servidor)",
+   "escritas": [
+    {
+     "nome": "criar proposicao",
+     "tem_tela": true,
+     "rota_next": "apps/frontend/src/app/(interno)/editor-proposicao/page.tsx (form compartilhado em apps/frontend/src/app/(interno)/editor-proposicao/formulario-proposicao.tsx)",
+     "url_navegavel": "http://localhost:3000/editor-proposicao?token={\"identidade-id\":\"4893207b-8487-42d6-a12d-d8721cd348ec\",\"ente-id\":\"10000000-0000-0000-0000-000000000001\",\"papeis\":[\"secretario\"]} — o valor de token deve ir URL-encoded na querystring (papel exigido pela rota: 'secretario', gate em diplomat/http/in.clj:496). Chegar lá também navegando /proposicoes?token=... e clicando 'Nova proposição'.",
+     "endpoint_api": "POST /legislativo/proposicoes (backend, registrado em apps/backend/src/oplenario/legislativo/diplomat/http/in.clj:513-515; frontend chama via proxy same-origin /api/legislativo/proposicoes, rewrite em apps/frontend/next.config.ts:58)",
+     "tabela_db": "legislativo.proposicoes (hash-particionada por ente_id, migration 20260620000013-legislativo-proposicoes.up.sql)",
+     "papel": "servidor",
+     "passos_browser": [
+      "1. Abrir http://localhost:3000/proposicoes?token=<token servidor acima>",
+      "2. Clicar no link com texto visível 'Nova proposição' (role link, classe btn-primaria, no cabeçalho da lista) — navega para /editor-proposicao?token=...",
+      "3. No formulário: selecionar espécie no <select id=\"f-especie\"> rotulado 'Espécie' (opções: Projeto de Lei / Projeto de Lei Complementar / Projeto de Resolução / Decreto Legislativo / Emenda à LOM / Requerimento / Indicação / Moção)",
+      "4. Preencher <input id=\"f-ano\" type=\"number\"> rotulado 'Ano'",
+      "5. Opcional: selecionar <select id=\"f-autor-tipo\"> rotulado 'Autor' (Vereador/Mesa Diretora/Comissão/Poder Executivo/Iniciativa popular); ao selecionar, aparece <input id=\"f-autor-texto\"> rotulado 'Nome do autor' — preencher texto livre",
+      "6. Preencher <textarea id=\"f-ementa\"> rotulado 'Ementa' (obrigatório via HTML `required`)",
+      "7. Opcional: preencher <textarea id=\"f-texto\"> rotulado 'Texto da proposição' (placeholder '## Art. 1º ...'); botões 'Inserir artigo' / 'Inciso' / '§ Parágrafo' inserem snippet no cursor",
+      "8. Clicar no botão com texto exato 'Protocolar' (type=submit, classe btn-primaria)",
+      "9. Sucesso: router.push para /proposicoes?token=... — a nova linha aparece na tabela com número/sequencial recém-gerado"
+     ],
+     "seletores": [
+      "getByRole('link', { name: 'Nova proposição' }) — na lista /proposicoes",
+      "getByLabelText(/espécie/i) -> select#f-especie",
+      "getByLabelText(/^ano$/i) -> input#f-ano (number)",
+      "getByLabelText(/^autor$/i) -> select#f-autor-tipo",
+      "getByLabelText(/nome do autor/i) -> input#f-autor-texto (condicional, só após escolher autor-tipo)",
+      "getByLabelText(/objeto da indicação/i) -> input#f-objeto-indicacao (condicional, só tipo=indicacao)",
+      "getByLabelText(/tipo do requerimento/i) -> input#f-tipo-requerimento (condicional, só tipo=requerimento)",
+      "getByLabelText(/categoria da moção/i) -> input#f-categoria-mocao (condicional, só tipo=mocao)",
+      "getByLabelText(/^ementa$/i) -> textarea#f-ementa",
+      "getByLabelText(/texto da proposição/i) -> textarea#f-texto",
+      "getByRole('button', { name: 'Protocolar' }) -> button[type=submit]",
+      "getByRole('alert') -> p.form-erro (só aparece com erro; foco automático via erroRef)"
+     ],
+     "assercao_db": "SELECT id, tipo, ano, sequencial, urn_lex, ementa, autor_tipo, autor_texto, estado, lock_version, criado_em FROM legislativo.proposicoes WHERE ente_id='10000000-0000-0000-0000-000000000001' AND ementa = '<texto exato digitado>' ORDER BY criado_em DESC LIMIT 1; -- espera 1 linha, estado='protocolada', sequencial e urn_lex preenchidos, lock_version=0",
+     "casos_de_erro": [
+      {
+       "caso": "ementa vazia",
+       "onde_surge": "TRATADO PARCIALMENTE só na tela: textarea#f-ementa tem atributo HTML `required`, que bloqueia string totalmente vazia no submit nativo (nem chega a chamar aoSubmeter/POST). NÃO TRATADO em nenhuma camada para ementa 'espaço em branco' (ex.: '   '): `required` só checa length>0, wire/in.CriarProposicao usa `[:string {:max 2000}]` sem `:min`/trim, e a coluna `ementa text NOT NULL` (migration 20260620000013) não tem CHECK de conteúdo — uma proposição com ementa em branco protocola normalmente e fica pública."
+      },
+      {
+       "caso": "especie invalida",
+       "onde_surge": "NÃO ALCANÇÁVEL PELA INTERFACE: select#f-especie só lista as 8 espécies do array ESPECIES (mesmo vocabulário do CHECK `proposicao_tipo_conhecido` da migration). Forçar um valor fora dessas 8 exige manipular o DOM fora do fluxo normal do usuário. Se alcançado via HTTP direto, backend rejeita 400 por Malli `km/enum-de logic/tipos` (já coberto na Trilha 2)."
+      },
+      {
+       "caso": "autor inexistente",
+       "onde_surge": "NÃO ALCANÇÁVEL PELA INTERFACE: a tela não tem NENHUM campo para `autor-id` (o UUID de um vereador). FormularioProposicao/ValoresFormulario só coleta `autorTipo` (select de categoria) e `autorTexto` (texto livre) — `autorId` existe no tipo `CriarProposicaoIn` do hook `use-criar-proposicao.ts` mas nunca é atribuído em nenhum onChange do form, então o corpo enviado NUNCA carrega `autor-id`. A validação real de backend (`validar-autor!` em controllers.clj:155-194, que chama `vereador-vinculado?` e lança `:validacao/invalido`->400 'autor-id nao corresponde a um vereador vinculado a esta Casa') existe e funciona, mas fica MORTA neste fluxo — é um ACHADO estrutural, não um caso testável pela interface como está."
+      },
+      {
+       "caso": "duplo clique",
+       "onde_surge": "TRATADO NA TELA (parcial): botão fica `disabled` durante `enviando`, e o hook `useCriarProposicao` tem guard de reentrância síncrono via `enviandoRef` (ref, não state) contra Enter repetido. NÃO TRATADO NO BACKEND: `criar-proposicao-handler`/`repo/protocolar!` (db/proposicao.clj:22-38) não tem idempotency-key nem dedupe — cada POST gera `id` novo (`random-uuid` em adapters/in) e um `sequencial` novo via `kernel/sequencial`. Duas requisições genuinamente concorrentes (guard client-side não impede: 2 abas, retry de rede, StrictMode) criam DUAS proposições protocoladas distintas — o servidor confia inteiramente na UI."
+      }
+     ]
+    },
+    {
+     "nome": "editar proposicao",
+     "tem_tela": true,
+     "rota_next": "apps/frontend/src/app/(interno)/editor-proposicao/[id]/page.tsx (mesmo form formulario-proposicao.tsx, com bloquearIdentidade=true)",
+     "url_navegavel": "http://localhost:3000/editor-proposicao/<id>?token={\"identidade-id\":\"4893207b-8487-42d6-a12d-d8721cd348ec\",\"ente-id\":\"10000000-0000-0000-0000-000000000001\",\"papeis\":[\"secretario\"]} — <id> é DINÂMICO: a demo (apps/backend/demo/seed_demo.clj) gera proposições com `random-uuid`, não há id fixo conhecido. Obter o id real navegando /proposicoes?token=... e lendo o href de qualquer link 'Editar' da tabela (ou o resultado da assercao_db de 'criar proposicao').",
+     "endpoint_api": "PATCH /legislativo/proposicoes/:id (backend, diplomat/http/in.clj:520-524; frontend via proxy /api/legislativo/proposicoes/:id)",
+     "tabela_db": "legislativo.proposicoes",
+     "papel": "servidor",
+     "passos_browser": [
+      "1. Abrir http://localhost:3000/proposicoes?token=<token servidor>",
+      "2. Clicar no link 'Editar' (aria-label 'Editar <número>') de qualquer linha da tabela — navega para /editor-proposicao/<id>?token=...",
+      "3. Aguardar sair do estado role=status 'Carregando…' (useProposicaoDetalhe resolvendo GET /legislativo/proposicoes/:id)",
+      "4. Notar: select#f-especie e input#f-ano vêm DESABILITADOS (disabled, bloquearIdentidade=true) — identidade imutável pós-protocolo",
+      "5. Editar textarea#f-ementa e/ou textarea#f-texto e/ou select#f-autor-tipo + input#f-autor-texto",
+      "6. Clicar no botão com texto exato 'Salvar alterações'",
+      "7. Sucesso: router.push para /proposicoes?token=..."
+     ],
+     "seletores": [
+      "getByRole('link', { name: /Editar/ }) na linha da tabela em /proposicoes",
+      "getByRole('status') -> p com texto 'Carregando…' (estado transitório)",
+      "getByLabelText(/espécie/i) -> select#f-especie (disabled)",
+      "getByLabelText(/^ano$/i) -> input#f-ano (disabled)",
+      "getByLabelText(/^autor$/i) -> select#f-autor-tipo",
+      "getByLabelText(/nome do autor/i) -> input#f-autor-texto",
+      "getByLabelText(/^ementa$/i) -> textarea#f-ementa",
+      "getByLabelText(/texto da proposição/i) -> textarea#f-texto",
+      "getByRole('button', { name: 'Salvar alterações' }) -> button[type=submit]",
+      "getByRole('alert') -> p.form-erro"
+     ],
+     "assercao_db": "SELECT id, ementa, autor_tipo, autor_texto, lock_version, atualizado_em FROM legislativo.proposicoes WHERE ente_id='10000000-0000-0000-0000-000000000001' AND id='<id editado>'; -- espera lock_version incrementado em +1 sobre o valor antes da edição, ementa/autor refletindo a mudança, atualizado_em mais recente",
+     "casos_de_erro": [
+      {
+       "caso": "ementa vazia",
+       "onde_surge": "MESMO padrão do criar, com uma diferença de contrato: no PATCH o campo é opcional (`wire/EditarProposicao` tem `:ementa {:optional true} [:maybe [:string {:max 2000}]]`, sem `:min`), mas a UI sempre pré-preenche o textarea com o valor atual e mantém o `required` do HTML — então apagar tudo é bloqueado nativamente; apagar e deixar só espaços NÃO É TRATADO em nenhuma camada (mesmo achado do criar) e sobrescreve a ementa pública com string em branco."
+      },
+      {
+       "caso": "especie invalida",
+       "onde_surge": "NÃO ALCANÇÁVEL — aqui por DESIGN, não só ausência de UI: select#f-especie fica desabilitado (bloquearIdentidade) porque tipo/ano são IMUTÁVEIS pós-protocolo, garantido por trigger de banco `legislativo.proposicao_identidade_imutavel()` (migration 20260620000013) que lança exceção se `tipo` mudar em UPDATE. Mesmo que a UI permitisse, o banco rejeitaria."
+      },
+      {
+       "caso": "autor inexistente",
+       "onde_surge": "NÃO ALCANÇÁVEL PELA INTERFACE — mesmo achado do criar: FormularioProposicao é o MESMO componente, sem campo autor-id. Confirmado também no `valorInicial` montado em editor-proposicao/[id]/page.tsx (linhas ~62-72): copia autorTipo/autorTexto de `dados`, mas NUNCA autorId — então nem o valor pré-existente (se houver) é exposto/reenviado pelo form. A validação de backend (`validar-autor!`, mesma função do criar) segue ativa e correta, mas morta neste fluxo."
+      },
+      {
+       "caso": "duplo clique",
+       "onde_surge": "TRATADO NA TELA igual ao criar (enviandoRef + botão disabled). PARCIALMENTE TRATADO NO BACKEND, diferente do criar: `editar!` (db/proposicao.clj:166-192) faz CAS por `lock_version` no WHERE do UPDATE — duas PATCHes concorrentes com o mesmo `lockVersion` (o que a UI garante, pois só lê o valor uma vez ao carregar a tela): a primeira aplica e incrementa `lock_version`; a segunda casa 0 linhas, `:returning` volta nil, e o handler lança `:validacao/invalido` 'editar!: conflito de lock_version ou proposicao inexistente' -> 400, exibido no alerta da tela. Não é idempotência, mas evita a escrita perdida silenciosa que existe no criar."
+      }
+     ]
+    }
+   ],
+   "achados": [
+    "'autor inexistente' não é exercível pela interface em NENHUMA das 2 escritas do grupo E3: FormularioProposicao (compartilhado por criar/editar) nunca coleta nem envia autor-id — só autor-tipo (select de categoria) e autor-texto (texto livre). A validação real de backend (validar-autor! + vereador-vinculado?) existe e está correta, mas fica morta neste fluxo de UI. A premissa do plano (as 24 escritas são alcançáveis pela interface) já falha aqui para este caso de erro específico.",
+    "'especie invalida' também não é exercível pela interface em nenhuma das 2 telas: no criar, o <select> só lista as 8 espécies válidas (mesmo vocabulário do CHECK de banco); no editar, o campo vem desabilitado por DESIGN (identidade imutável pós-protocolo, reforçado por trigger de banco, não só react state).",
+    "'ementa vazia' tem tratamento incompleto e é preciso distinguir 'vazia' de 'em branco': o atributo HTML required bloqueia string vazia (length 0) mas não bloqueia espaços — e nem Malli (sem :min) nem a constraint do banco (NOT NULL sem CHECK de conteúdo) travam ementa só-espaço, em nenhuma das 2 escritas.",
+    "'duplo clique' tem proteção ASSIMÉTRICA entre as 2 escritas do grupo: no criar não há proteção alguma no servidor (POST sem idempotency-key gera 2 proposições distintas de 2 requisições concorrentes); no editar, o CAS por lock_version dá proteção real de servidor (a segunda de duas PATCHes concorrentes recebe 400 de conflito)."
+   ]
+  },
+  {
+   "grupo": "E4 — O parecer (servidor + vereador)",
+   "achados": [
+    "A premissa do plano ('EMITIR SEM SER RELATOR' se aplica às 2 rotas de emissão) está parcialmente errada: a rota da secretaria (POST /legislativo/pareceres/:id/emissao, controllers.clj `emitir-parecer`) NÃO tem gate de posse nenhum — qualquer ator com papel 'secretario' emite QUALQUER parecer, seja ou não o relator. O gate `relator-do-parecer?` só existe na rota /meu/pareceres/:id/emissao (vereador). Isso é por desenho (a secretaria emite em nome da comissão), não bug, mas o caso de erro 'emitir sem ser relator' só é exercitável pela tela do vereador.",
+    "'Emitir duas vezes' na tela da secretaria (/parecer/[id]) só é bloqueado quando a 1ª emissão TRANSICIONA o parecer para um dos 4 estados terminais (aprovado/rejeitado/prejudicado/prazo_vencido) — só aí `parecerEhTerminal` esconde os botões. O gatilho enviado é sempre fixo 'emitir' (adapters/in/parecer.clj:59) e no template de demo (apps/backend/demo/acervo.clj:449-452) só existe transição 'aguardando_assinatura'→'aprovado' por esse gatilho. Um parecer ainda em 'em_elaboracao' (relatoria não concluída) que seja emitido fica no MESMO estado não-terminal (a transição é best-effort e falha em silêncio) — a tela CONTINUA oferecendo 'Emitir parecer', e o backend aceita de novo sem erro algum. Achado real: dupla emissão não é bloqueada nesse caminho.",
+    "GAP mais sério do grupo: a tela (vereador)/parecer/[id]/assinar NUNCA olha `dados.estado`/`parecerEhTerminal` — `deriveEstadoAssinatura` (assinatura-vista.ts) só checa `textoEstado` e `votoRelator`. Um parecer JÁ 'aprovado' (que só chega nesse estado tendo texto+voto setados) cai em 'pronto-pra-revisar' de novo e reexibe 'Revisar e assinar'/'Confirmar com a biometria'. Ao confirmar, o POST bate em Repo/emitir-parecer!, que faz UPDATE em legislativo.pareceres (registrar-voto-relator!) numa row já terminal — o trigger `trg_pareceres_imut_estado` (shared.imut_trava_estado_terminal, kernel-imutabilidade migration) lança RAISE EXCEPTION check_violation (SQLSTATE 23514). Nenhum catch em repositorio.clj trata 23514 (só 23505/23503 são tratados nesse arquivo); a exceção sobe crua e o interceptor global `erro` (interceptors.clj) não a reconhece como validacao/negado/teto → cai no ramo `:else` → 500 opaco 'erro interno'. Não há 409 limpo nem bloqueio de UI para esse caso.",
+    "'Dar ciência' é a única escrita do grupo com dupla-submissão genuinamente bem tratada dos dois lados: UNIQUE(ente_id, vereador_id, evento_ref) + INSERT...ON CONFLICT DO NOTHING + re-SELECT (db/meu_painel.clj/acusar-ciencia!) devolve sempre 201 idempotente com o `ciente_em` original — nunca duplica, nunca erra. A tela também remove o card após recarregar() porque o item sai de `ciencias-pendentes` (anti-join contra a própria tabela).",
+    "Nenhuma das escritas do grupo tem id fixo em e2e/.artifacts/demo-ids.edn — pareceres não são semeados com UUID estável (acervo.clj usa random-uuid, sem gravar artefato). A sonda já existente (e2e/.sonda/sonda.mjs, linhas 71-99) resolve isso em runtime via GET /portal/casa/:ente/materias → GET /legislativo/proposicoes/:id/ficha (autenticado) → .pareceres[].id, e documenta um gap conhecido da própria semente: a identidade fixa 'vereador' do artefato raramente é o relator sorteado round-robin, então a rota /meu/pareceres/:id costuma 404 por posse mesmo com dado real — a Trilha 3 precisa ou trocar de identidade dinamicamente (resolver o relator_id real e a identidade correspondente) ou aceitar esse 404 como resultado esperado na maioria das corridas.",
+    "A rota interna (interno)/parecer/[id] (editor da secretaria) não tem NENHUM guard de papel client-side (layout.tsx só injeta AuthProvider+TemaProvider, sem GuardServidor) — um token com papel 'vereador' abre a tela e vê o formulário normalmente; só a escrita (PATCH/POST) falha no backend com 403. Contraste: o app do vereador tem GuardVereador bloqueando client-side. Achado de consistência, não bug isolado."
+   ],
+   "escritas": [
+    {
+     "nome": "Editar parecer (rascunho)",
+     "tem_tela": true,
+     "rota_next": "apps/frontend/src/app/(interno)/parecer/[id]/page.tsx (form em apps/frontend/src/app/(interno)/parecer/formulario-parecer.tsx)",
+     "url_navegavel": "http://localhost:3000/parecer/<PARECER_ID>?token=<TOKEN_SECRETARIA_JSON_URLENCODED> — <PARECER_ID> não é fixo (ver achado sobre demo-ids.edn); resolver via GET http://localhost:8888/portal/casa/10000000-0000-0000-0000-000000000001/materias e depois GET /legislativo/proposicoes/:proposicao-id/ficha (Bearer TSEC) para pegar .pareceres[].id, mesma técnica de e2e/.sonda/sonda.mjs:71-99. <TOKEN_SECRETARIA_JSON_URLENCODED> = encodeURIComponent(JSON.stringify({'identidade-id': IDENTIDADE_SECRETARIA (demo-ids.edn :identidades :secretaria = 4893207b-8487-42d6-a12d-d8721cd348ec), 'ente-id': '10000000-0000-0000-0000-000000000001', papeis: ['secretario']}))",
+     "endpoint_api": "PATCH /legislativo/pareceres/:id (front chama /api/legislativo/pareceres/:id, proxy)",
+     "tabela_db": "legislativo.parecer_texto_versao (INSERT de nova linha estado_versao='rascunho'); legislativo.pareceres não é alterada por esta escrita",
+     "papel": "servidor",
+     "passos_browser": [
+      "Resolver <PARECER_ID> via as 2 chamadas GET descritas em url_navegavel",
+      "Abrir http://localhost:3000/parecer/<PARECER_ID>?token=<TSEC>",
+      "Esperar role='status' com texto 'Carregando…' sumir e o formulário aparecer",
+      "No textarea com aria-label='Relatório', digitar um texto (ex.: 'Relatório de teste E2E')",
+      "No textarea com aria-label='Análise', digitar um texto (ex.: 'Análise de teste E2E')",
+      "Clicar no botão de texto literal 'Salvar rascunho' (button type='button' className='btn btn-contorno', dentro de div.comando-acoes)",
+      "Confirmar que aparece 'Rascunho salvo' dentro de span.comando-ctx (mensagemStatus)"
+     ],
+     "assercao_db": "SELECT id, numero_versao, estado_versao, texto_inline, criado_em FROM legislativo.parecer_texto_versao WHERE ente_id='10000000-0000-0000-0000-000000000001' AND parecer_id='<PARECER_ID>' ORDER BY numero_versao DESC, criado_em DESC LIMIT 1; -- espera estado_versao='rascunho' e texto_inline = '## Relatório\\n\\n<texto digitado>\\n\\n## Análise\\n\\n<texto digitado>'",
+     "casos_de_erro": [
+      {
+       "caso": "papéis trocados — vereador abre /parecer/:id (rota da secretaria) e tenta salvar",
+       "onde_surge": "NÃO TRATADO na tela: (interno)/layout.tsx não tem guard de papel client-side, o formulário abre normalmente. TRATADO no backend: interceptor `exige-papel 'secretario'` (interceptors.clj) nega -> `authz/negado?` -> 403 'autorização negada' — o front mostra o erro genérico via erroRascunho."
+      },
+      {
+       "caso": "parecer inexistente ou de outro tenant",
+       "onde_surge": "TRATADO no backend: salvar-rascunho-parecer-handler (diplomat/http/in.clj:227-239) faz pré-check buscar-parecer-editor ANTES de escrever -> 404 'parecer não encontrado' sem tocar a tabela; a tela cai no ramo estadoDetalhe==='erro' já no GET inicial (não chega a mostrar o formulário)."
+      },
+      {
+       "caso": "parecer já em estado terminal (aprovado/rejeitado/prejudicado/prazo_vencido)",
+       "onde_surge": "TRATADO pela tela: `bloqueado=parecerEhTerminal(dados.estado)` desabilita os 2 textareas e remove o botão 'Salvar rascunho' inteiramente. O backend em si não impede a escrita (nova-versao-parecer! é um INSERT append-only sem checar o estado do parecer pai), então esse caso só está coberto porque a tela nunca deixa o clique acontecer."
+      }
+     ]
+    },
+    {
+     "nome": "Emitir parecer (secretaria)",
+     "tem_tela": true,
+     "rota_next": "apps/frontend/src/app/(interno)/parecer/[id]/page.tsx (mesmo form de 'Editar parecer')",
+     "url_navegavel": "http://localhost:3000/parecer/<PARECER_ID>?token=<TOKEN_SECRETARIA_JSON_URLENCODED> — mesma resolução de id/token do item anterior. Preferir um parecer no estado 'aguardando_assinatura' (para ver a transição para 'aprovado' de fato acontecer) — nenhuma rota pública lista isso; ler o campo 'estado' do JSON de /legislativo/proposicoes/:id/ficha .pareceres[] autenticado, ou consultar direto no Postgres (ver assercao_db).",
+     "endpoint_api": "POST /legislativo/pareceres/:id/emissao (front chama /api/legislativo/pareceres/:id/emissao)",
+     "tabela_db": "legislativo.pareceres (UPDATE: estado, voto_relator, lock_version, texto_vigente_versao_id); legislativo.parecer_texto_versao (UPDATE estado_versao='vigente' + assinatura_*, se havia rascunho); legislativo.parecer_transicao_historico (INSERT, só se transicionou)",
+     "papel": "servidor",
+     "passos_browser": [
+      "Abrir http://localhost:3000/parecer/<PARECER_ID>?token=<TSEC> (mesmo parecer do rascunho, ou um novo já com texto salvo/vigente)",
+      "No grupo role='radiogroup' aria-label='Voto do relator', clicar num dos 3 labels: 'Favorável com emendas' (id voto-favoravel_com_emendas), 'Favorável' (id voto-favoravel) ou 'Contrário' (id voto-contrario)",
+      "Clicar no botão de texto literal 'Emitir parecer' (button type='button' className='btn btn-primaria')",
+      "Confirmar mensagem 'Parecer emitido' em span.comando-ctx",
+      "Opcional: recarregar a página e verificar que, se o parecer transicionou a terminal, os botões 'Salvar rascunho'/'Emitir parecer' sumiram (só resta 'Pré-visualizar')"
+     ],
+     "assercao_db": "SELECT estado, voto_relator, lock_version, texto_vigente_versao_id FROM legislativo.pareceres WHERE ente_id='10000000-0000-0000-0000-000000000001' AND id='<PARECER_ID>'; -- espera voto_relator = valor clicado. SELECT de_estado, para_estado, gatilho, ocorrido_em FROM legislativo.parecer_transicao_historico WHERE ente_id='10000000-0000-0000-0000-000000000001' AND parecer_id='<PARECER_ID>' ORDER BY ocorrido_em DESC LIMIT 1; -- só existe linha se o parecer estava em 'aguardando_assinatura' antes do clique.",
+     "casos_de_erro": [
+      {
+       "caso": "emitir sem texto (parecer nunca teve rascunho salvo nem versão vigente)",
+       "onde_surge": "NÃO TRATADO pela tela (só valida se um voto foi selecionado, nunca se há texto). TRATADO pelo backend: repositorio.clj ~linha 452 lança ex-info {:tipo :validacao/invalido} 'nenhum conteúdo de texto para emitir', o interceptor `erro` mapeia para 400 com corpo genérico {'erro':'requisição inválida'} — a tela mostra isso via role='alert' (erroExibido), sem detalhar a causa real."
+      },
+      {
+       "caso": "emitir sem ser relator (posse)",
+       "onde_surge": "NÃO SE APLICA a esta rota por desenho — /legislativo/pareceres/:id/emissao não checa relator_id (ver achados). Qualquer secretário emite qualquer parecer."
+      },
+      {
+       "caso": "emitir duas vezes",
+       "onde_surge": "NÃO TRATADO quando a 1ª emissão não transiciona o parecer a um estado terminal (ex.: parecer ainda em 'em_elaboracao', sem ter passado por 'concluir_relatoria'): `bloqueado` continua false, a tela reoferece 'Emitir parecer', e o backend aceita de novo silenciosamente (reescreve voto_relator, tenta transicionar de novo, sem erro). TRATADO apenas indiretamente quando a 1ª emissão parte de 'aguardando_assinatura' e vira 'aprovado' — aí `parecerEhTerminal` esconde os botões."
+      },
+      {
+       "caso": "papéis trocados",
+       "onde_surge": "Mesmo tratamento do 'Editar parecer': sem guard client-side, 403 no backend via exige-papel 'secretario'."
+      }
+     ]
+    },
+    {
+     "nome": "Emitir 'meu parecer' (vereador, assinatura em 2 toques)",
+     "tem_tela": true,
+     "rota_next": "apps/frontend/src/app/(vereador)/parecer/[id]/assinar/page.tsx",
+     "url_navegavel": "http://localhost:3000/parecer/<PARECER_ID>/assinar?token=<TOKEN_VEREADOR_JSON_URLENCODED> — <TOKEN_VEREADOR...> = encodeURIComponent(JSON.stringify({'identidade-id': IDENTIDADE_VEREADOR (demo-ids.edn :identidades :vereador = 49c23663-c30e-4829-b3be-c7481f107275), 'ente-id': '10000000-0000-0000-0000-000000000001', papeis: ['vereador']})). ATENÇÃO (achado): essa identidade fixa raramente é o relator_id real do parecer sorteado pela semente — checar primeiro no Postgres qual vereador_id é relator_id do <PARECER_ID> escolhido e, se não bater com a identidade fixa, essa tela vai 404 por posse mesmo com um id de parecer real.",
+     "endpoint_api": "POST /meu/pareceres/:id/emissao (front chama /api/meu/pareceres/:id/emissao)",
+     "tabela_db": "legislativo.pareceres (UPDATE: estado, voto_relator, lock_version); legislativo.parecer_texto_versao (UPDATE estado_versao='vigente' + assinatura_algoritmo/assinatura_b64/assinado_por/assinado_em, só se havia rascunho); legislativo.parecer_transicao_historico (INSERT, só se transicionou)",
+     "papel": "vereador",
+     "passos_browser": [
+      "Abrir http://localhost:3000/parecer/<PARECER_ID>/assinar?token=<TVER>",
+      "Confirmar que NÃO caiu em 'Não foi possível carregar este parecer' (isso indicaria 404 de posse — vereador não é o relator)",
+      "Se `situacao==='sem-voto'` a tela mostra apenas o aviso 'Ainda falta registrar a conclusão (voto) do relator no editor' — nesse caso a escrita não é alcançável por aqui; o voto precisa ter sido setado antes via a rota da secretaria (ver achado circular sobre votoRelator)",
+      "Se pronta: clicar no botão de texto literal 'Revisar e assinar' (button className='btn btn-primaria', dentro de div.assinar-bar)",
+      "No dialog role='dialog' aria-labelledby='sh-tit' que abre, clicar no botão de texto literal 'Confirmar com a biometria' (button className='btn btn-primaria', disabled durante envio)",
+      "Confirmar redirecionamento para /vereador?token=<TVER> em caso de sucesso"
+     ],
+     "assercao_db": "SELECT estado, voto_relator, lock_version FROM legislativo.pareceres WHERE ente_id='10000000-0000-0000-0000-000000000001' AND id='<PARECER_ID>'; SELECT estado_versao, assinatura_algoritmo, assinado_por, assinado_em FROM legislativo.parecer_texto_versao WHERE ente_id='10000000-0000-0000-0000-000000000001' AND parecer_id='<PARECER_ID>' AND estado_versao='vigente'; -- assinado_por deve ser a identidade-id do vereador ator (updated_by/created_by do ator, não a secretaria)",
+     "casos_de_erro": [
+      {
+       "caso": "emitir sem ser relator (posse)",
+       "onde_surge": "TRATADO nos dois lados: GET /meu/pareceres/:id (controllers.clj meu-parecer-editor) só devolve dados se repo/relator-do-parecer? for true; senão nil->404, e a tela mostra 'Não foi possível carregar este parecer / Ele pode não existir, ou você não é o relator designado.' O mesmo gate roda de novo em meu-emitir-parecer antes do POST de emissão."
+      },
+      {
+       "caso": "emitir sem texto",
+       "onde_surge": "TRATADO pela tela: deriveEstadoAssinatura retorna 'sem-texto' quando dados.textoEstado==='vazio' -> mostra apenas 'Ainda sem texto pronto para assinar.' e nunca renderiza o CTA de assinatura."
+      },
+      {
+       "caso": "emitir sem voto do relator ainda registrado",
+       "onde_surge": "TRATADO pela tela: situacao 'sem-voto' mostra aviso explícito e não libera o CTA 'Revisar e assinar' (o guard extra em confirmar() também aborta silenciosamente se votoRelator vier nulo, defesa em profundidade)."
+      },
+      {
+       "caso": "emitir duas vezes (assinar parecer já terminal/aprovado)",
+       "onde_surge": "NÃO TRATADO — achado central deste grupo. `deriveEstadoAssinatura` nunca olha dados.estado/parecerEhTerminal; um parecer já 'aprovado' reaparece como 'pronto-pra-revisar' e reoferece o botão. Ao confirmar, o UPDATE em legislativo.pareceres bate no trigger trg_pareceres_imut_estado (check_violation/23514), que não é capturado em nenhum lugar do caminho -> sobe cru -> interceptor global cai no ramo 500 genérico 'erro interno'. A tela mostra 'Não foi possível assinar: falha ao assinar parecer (status 500)' — nem a UI nem o backend dão um 409 limpo."
+      },
+      {
+       "caso": "papéis trocados",
+       "onde_surge": "TRATADO nos dois lados: GuardVereador ((vereador)/layout.tsx) bloqueia client-side qualquer papel != 'vereador' com tela 'Acesso restrito'; a rota /meu/pareceres/:id/emissao também exige papel-vereador no backend -> 403 se o token só tiver 'secretario'."
+      }
+     ]
+    },
+    {
+     "nome": "Dar ciência",
+     "tem_tela": true,
+     "rota_next": "apps/frontend/src/app/(vereador)/vereador/page.tsx (card CartaoCiencia dentro da própria função PaginaHomeVereador)",
+     "url_navegavel": "http://localhost:3000/vereador?token=<TOKEN_VEREADOR_JSON_URLENCODED> — mesmo formato de token do item anterior. O card só aparece se `vista.ciencias.length>0`; se a home mostrar 'Nenhuma proposição sua ainda.' e nenhuma seção 'Para sua ciência', é preciso achar um evento pendente (parecer publicado sobre proposição de autoria desta identidade) antes.",
+     "endpoint_api": "POST /meu/ciencias (front chama /api/meu/ciencias)",
+     "tabela_db": "legislativo.ciencia_vereador (INSERT append-only, idempotente por UNIQUE(ente_id, vereador_id, evento_ref))",
+     "papel": "vereador",
+     "passos_browser": [
+      "Abrir http://localhost:3000/vereador?token=<TVER>",
+      "Confirmar a seção com aria-label='Para sua ciência' (h2 'Para sua ciência') está visível",
+      "Dentro do article.ciencia correspondente, clicar no botão de texto literal 'Dar ciência' (button type='button' className='btn btn-primaria btn-mini')",
+      "Confirmar que o card some da lista após recarregar() (a ciência sai de ciencias-pendentes)"
+     ],
+     "assercao_db": "SELECT id, vereador_id, evento_ref, tipo, ciente_em FROM legislativo.ciencia_vereador WHERE ente_id='10000000-0000-0000-0000-000000000001' AND evento_ref='<PARECER_ID_DA_CIENCIA>' ORDER BY ciente_em DESC LIMIT 1; -- vereador_id é o resolvido pelo `resolver-vereador` para a identidade do token (cross-schema cadastros); usar o :id devolvido no corpo 201 da resposta HTTP como referência confiável em vez de adivinhar o vereador_id de antemão.",
+     "casos_de_erro": [
+      {
+       "caso": "dar ciência duas vezes",
+       "onde_surge": "TRATADO por completo: UNIQUE(ente_id, vereador_id, evento_ref) + INSERT...ON CONFLICT DO NOTHING + re-SELECT (db/meu_painel.clj/acusar-ciencia!) sempre devolve 201 idempotente com o ciente_em original, nunca duplica/erra. Guard extra: useAcusarCiencia.enviandoRef recusa clique duplo em voo com 'envio em andamento' antes mesmo de chegar à rede."
+      },
+      {
+       "caso": "dar ciência sobre evento que não é seu / evento inválido (forja)",
+       "onde_surge": "TRATADO: `parecer-elegivel-para-ciencia?` é checado no controller (fast-path) E reconfirmado dentro da mesma tx do INSERT (defesa em profundidade) — se falhar, `acusar-ciencia` devolve nil e o handler responde 404 'vereador sem cadastro vinculado neste ente' (mensagem reaproveitada/genérica, não distingue 'evento não é seu' de 'sem cadastro', mas o efeito de recusar está correto)."
+      },
+      {
+       "caso": "papéis trocados (secretaria chamando /meu/ciencias)",
+       "onde_surge": "TRATADO: GuardVereador bloqueia client-side; backend exige papel-vereador -> 403."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "achados": [
+    "Contagem do plano bate errado: E5 diz \"6 escritas\" mas lista 7 verbos distintos (presença unitária · confirmar própria · lote · conduzir chamada · justificar · decidir · folha) mapeando 7 endpoints diferentes — reportei os 7, sem forçar um a menos.",
+    "\"Justificar ausência\" própria do VEREADOR (POST /sessoes/:id/minha-justificativa, papel vereador, wire/in.clj L243-261) NAO TEM TELA — nenhum componente React chama esse endpoint. Só existe a versão da secretaria lançando EM NOME do vereador (chamada/page.tsx, JustificativaAbrir).",
+    "Achado de UI mais restritiva que o backend: os botões Deferir/Indeferir só renderizam quando `podeEditar(sessaoEstado)` é true (chamada/page.tsx L657-681 e L913-919, chamada-vista.ts L278-280), mas o controller (controllers.clj L594-608) autoriza deliberadamente decidir uma justificativa mesmo com a sessão FECHADA. Consequência real: a justificativa pendente já semeada na sessão ...0212 (hoje encerrada) não pode ser decidida pela interface.",
+    "\"Decidir a própria justificativa\" (impedimento juiz-em-causa-própria, controllers.clj L595-630) não é reproduzível com os dados de seed atuais: nenhuma identidade logável acumula papel secretario+vereador ao mesmo tempo (secretaria=só secretario; presidente=vereador+admin_ente; vereador-comum=só vereador) — precisa de um GRANT manual em identidade.usuario_papel antes de dirigir o browser.",
+    "\"Confirmar a própria presença\" (/votar) exige uma votação NOMINAL aberta na mesma sessão E o vereador ainda não presente (meu-voto-vista.ts L16-39). As duas ÚNICAS identidades de vereador logáveis no seed (presidente e vereador-comum/Fernanda Pinto) JÁ estão marcadas presentes na sessão aberta ...0211 (presença é append-only) — a secretaria precisa primeiro marcá-la \"Ausente\" de novo na tela da chamada para reabrir o caminho de auto-confirmação.",
+    "\"Lote com id inválido\" e \"presença fora do roster\" NAO SAO TESTAVEIS VIA ESTA INTERFACE por desenho: os botões de marcação só existem para vereadorId's que já vieram do GET /chamada (roster real); não há campo livre de texto para digitar um id. Já cobertos via HTTP direto na Trilha 2.",
+    "\"Folha duas vezes\" NAO E' um caso de erro — é feature deliberada (D9): dentro de 30s da mesma pessoa devolve a MESMA versão (`ja-congelada`), fora da janela cria versão NOVA numerada; nunca 409 por duplicidade. O botão muda de rótulo (\"Gerar a folha desta sessão\" -> \"Gerar nova versão\") mas nunca desaparece.",
+    "Achado operacional (não é bug): o briefing assume sessão ...0212 \"agendada\", mas no banco AGORA ela já está \"encerrada\" (lock_version=2) porque a Trilha 2 grupo A já rodou sua sonda HTTP contra ela até o fim. T3 precisa da \"Reconstrução limpa\" (down -v + demo/semear-tudo.sh) do método comum antes de dirigir o browser, senão a premissa de estado do enunciado está desatualizada.",
+    "A tela de folha (folha/page.tsx) não lê o estado da sessão — o botão \"Gerar\" aparece e fica clicável mesmo numa sessão ainda ABERTA; só o backend recusa (409 \"so' sessao FECHADA tem folha de presenca (D6)\"), mostrado em erroGerar. Não é um dos erros listados no plano, mas é uma lacuna real de proteção client-side equivalente à achada acima."
+   ],
+   "escritas": [
+    {
+     "nome": "registrar presença (unitária, ao vivo, servidor)",
+     "tem_tela": true,
+     "rota_next": "apps/frontend/src/app/sessoes/[id]/chamada/page.tsx",
+     "url_navegavel": "http://localhost:3000/sessoes/10000000-0000-0000-0000-000000000211/chamada?token=%7B%22identidade-id%22%3A%224893207b-8487-42d6-a12d-d8721cd348ec%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%2C%22papeis%22%3A%5B%22secretario%22%5D%7D",
+     "endpoint_api": "POST /sessoes/:id/presenca",
+     "tabela_db": "sessoes.presenca_evento",
+     "papel": "servidor (papel RBAC \"secretario\")",
+     "passos_browser": [
+      "Abrir a URL acima logado como secretaria (token da identidade 4893207b-...). A sessão ...0211 já tem chamada conduzida=0 no momento desta investigação — se ainda estiver 'em curso' quando o T3 rodar (após reconstrução limpa), primeiro executar a escrita 'conduzir chamada' para chegar ao estado 'registradaAoVivo', que é o que habilita marcação individual ao vivo",
+      "No campo 'Localizar vereador' (input#busca), digitar um nome, ex.: 'Otávio'",
+      "Dentro do grupo com aria-label=\"Presença de Otávio Monteiro\", clicar no botão de texto visível \"Ausente\" (ou \"Presente\"/\"Remoto\")",
+      "O clique dispara o POST imediatamente (feedback otimista) — não há um botão de confirmação separado"
+     ],
+     "seletores": [
+      "input#busca (placeholder=\"Nome ou partido\")",
+      "span[role=group][aria-label=\"Presença de <nome>\"]",
+      "button[data-e=\"presente-plenario\"] com texto \"Presente\"",
+      "button[data-e=\"presente-remoto\"] com texto \"Remoto\"",
+      "button[data-e=\"ausente\"] com texto \"Ausente\""
+     ],
+     "assercao_db": "select id, tipo, modalidade, fonte, ocorrido_em from sessoes.presenca_evento where sessao_id='10000000-0000-0000-0000-000000000211' and vereador_id='45c0a7d4-76e6-4b88-b948-1b4ca1c5946a' order by registrado_em desc limit 1; -- espera fonte='manual_secretaria'",
+     "casos_de_erro": [
+      {
+       "caso": "presença fora do roster da data",
+       "onde_surge": "NAO TESTAVEL VIA ESTA TELA — os botões de marcação só existem para vereadorId's que vieram do GET /chamada (roster real), sem campo livre. Quando ocorre (via HTTP direto), o backend ACEITA por desenho (logic.clj, fail-loud) e a tela exibiria o grupo 'Fora da composição' com aviso — não é rejeitado."
+      },
+      {
+       "caso": "chamada em sessão encerrada",
+       "onde_surge": "TELA PREVINE proativamente: em sessão fechada, editavel=false e os botões de marcação nem renderizam (chamada/page.tsx L611-624, mostra span.estado-fixo no lugar); aparece só o aviso role=\"status\" .aviso-fechada. Se forçado via API fora da UI, backend recusa 409 e a mensagem aparece em p.erro-inline role=\"status\"."
+      }
+     ]
+    },
+    {
+     "nome": "confirmar a própria presença (vereador)",
+     "tem_tela": true,
+     "rota_next": "apps/frontend/src/app/(vereador)/votar/page.tsx",
+     "url_navegavel": "http://localhost:3000/votar?token=%7B%22identidade-id%22%3A%2249c23663-c30e-4829-b3be-c7481f107275%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%2C%22papeis%22%3A%5B%22vereador%22%5D%7D",
+     "endpoint_api": "POST /sessoes/:id/presenca/confirmar",
+     "tabela_db": "sessoes.presenca_evento",
+     "papel": "vereador",
+     "passos_browser": [
+      "PRE-CONDICAO (medida no banco agora): a única identidade de vereador logável do seed (Fernanda Pinto, vereador-id 69d7aa68-498a-4aa5-a6e9-10e0ad2d664b) JÁ está presente na sessão ...0211. Antes de tudo, logar como secretaria em /sessoes/.../0211/chamada e clicar 'Ausente' na linha de Fernanda Pinto (mesma escrita 'registrar presença' acima) para reabrir o ciclo 'sem-presenca'",
+      "Abrir a URL acima logado como Fernanda Pinto (vereador)",
+      "A sessão ...0211 já tem uma votação nominal ABERTA semeada — a tela mostra \"Confirme sua presença para poder votar.\" e o botão \"Confirmar presença\"",
+      "Clicar \"Confirmar presença\""
+     ],
+     "seletores": [
+      "p.voto-nota[aria-live=\"polite\"] com texto \"Confirme sua presença para poder votar.\"",
+      "button.btn.btn-primaria com texto \"Confirmar presença\" (disabled quando estadoConfirmar==='enviando')",
+      "p.voto-erro[role=alert] (erro, se houver)"
+     ],
+     "assercao_db": "select fonte, tipo, modalidade from sessoes.presenca_evento where sessao_id='10000000-0000-0000-0000-000000000211' and vereador_id='69d7aa68-498a-4aa5-a6e9-10e0ad2d664b' order by registrado_em desc limit 1; -- espera fonte='autoatendimento', tipo='entrada', modalidade='plenario'",
+     "casos_de_erro": [
+      {
+       "caso": "sessão sem votação atual / não é minha sessão",
+       "onde_surge": "TELA PREVINE — useMinhaSessaoAtual só devolve um sessaoId quando há sessão corrente para o vereador; sem isso a tela mostra \"Nenhuma sessão em curso agora.\" e o botão nem aparece."
+      },
+      {
+       "caso": "confirmar já presente",
+       "onde_surge": "TELA PREVINE — o CTA só renderiza quando ciclo==='sem-presenca' (derivarMeuVoto, meu-voto-vista.ts L36-38); já presente, o bloco de votar aparece no lugar."
+      }
+     ]
+    },
+    {
+     "nome": "lote de presença (servidor)",
+     "tem_tela": true,
+     "rota_next": "apps/frontend/src/app/sessoes/[id]/chamada/page.tsx",
+     "url_navegavel": "http://localhost:3000/sessoes/10000000-0000-0000-0000-000000000211/chamada?token=%7B%22identidade-id%22%3A%224893207b-8487-42d6-a12d-d8721cd348ec%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%2C%22papeis%22%3A%5B%22secretario%22%5D%7D",
+     "endpoint_api": "POST /sessoes/:id/presenca/lote",
+     "tabela_db": "sessoes.presenca_evento",
+     "papel": "servidor (papel \"secretario\")",
+     "passos_browser": [
+      "Abrir a URL acima com a sessão ainda 'em curso' (chamadasConduzidas.length===0 — verdade agora para ...0211 mesmo já tendo 12 presenças diretas no banco)",
+      "Clicar o botão \"Todos presentes\" (marca localmente os que ainda não têm marca — os 5 ausentes: Otávio Monteiro, Patrícia Santos, Rodrigo Cunha, Simone Rezende, Thiago Bezerra)",
+      "Clicar \"Registrar a chamada\" — dispara POST /presenca/lote só com os registros que MUDARAM, seguido do POST /chamada (ato)"
+     ],
+     "seletores": [
+      "button.btn.btn-contorno.btn-mini com texto \"Todos presentes\"",
+      "button.btn.btn-primaria com texto \"Registrar a chamada\" (disabled=registrando)",
+      "span.desfazer button com texto \"Desfazer\" (reverte o pré-preenchimento antes de registrar)"
+     ],
+     "assercao_db": "select count(*) from sessoes.presenca_evento where sessao_id='10000000-0000-0000-0000-000000000211' and registrado_em > now() - interval '2 minutes'; -- espera 5 (um por vereador que estava pendente), todos fonte='manual_secretaria'",
+     "casos_de_erro": [
+      {
+       "caso": "LOTE COM UM ID INVALIDO (a transação inteira tem de falhar)",
+       "onde_surge": "NAO TESTAVEL VIA ESTA TELA no fluxo normal — o lote da UI é sempre montado a partir de dados.linhas (vereadorId's reais devolvidos pelo servidor); não há input livre. O backend garante atomicidade por desenho: TODAS as linhas passam pelo gate de janela ANTES de qualquer INSERT (repositorio.clj L292-305) e um corpo malformado falha Malli 400 antes de tocar o banco. Já provado via HTTP direto na Trilha 2."
+      },
+      {
+       "caso": "presença fora do roster da data",
+       "onde_surge": "mesmo caso da escrita 'registrar presença unitária' — aceito por desenho, sem caminho de UI para forçar."
+      },
+      {
+       "caso": "chamada em sessão encerrada",
+       "onde_surge": "TELA PREVINE — o bloco comando-acoes (que contém 'Registrar a chamada') só renderiza quando podeEditarSessao é true (chamada/page.tsx L481-486)."
+      }
+     ]
+    },
+    {
+     "nome": "conduzir chamada (servidor)",
+     "tem_tela": true,
+     "rota_next": "apps/frontend/src/app/sessoes/[id]/chamada/page.tsx",
+     "url_navegavel": "http://localhost:3000/sessoes/10000000-0000-0000-0000-000000000211/chamada?token=%7B%22identidade-id%22%3A%224893207b-8487-42d6-a12d-d8721cd348ec%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%2C%22papeis%22%3A%5B%22secretario%22%5D%7D",
+     "endpoint_api": "POST /sessoes/:id/chamada",
+     "tabela_db": "sessoes.chamada_conduzida",
+     "papel": "servidor (papel \"secretario\")",
+     "passos_browser": [
+      "Mesmo fluxo da escrita 'lote de presença': clicar 'Registrar a chamada' (1ª vez, chamadasConduzidas ainda vazio) — o hook dispara o POST do ato SEMPRE após o lote (mesmo quando o lote está vazio, o ato ainda roda)",
+      "Para reconduzir depois de já registrada (chamadasConduzidas.length>0), o botão muda de rótulo para 'Nova chamada' e chama o MESMO endpoint sem corpo de lote"
+     ],
+     "seletores": [
+      "button.btn.btn-primaria com texto \"Registrar a chamada\" (emCurso) ou \"Nova chamada\" (registradaAoVivo)"
+     ],
+     "assercao_db": "select id, conduzida_por, membros_da_casa, ocorrido_em from sessoes.chamada_conduzida where sessao_id='10000000-0000-0000-0000-000000000211' order by registrado_em desc limit 1;",
+     "casos_de_erro": [
+      {
+       "caso": "chamada em sessão encerrada",
+       "onde_surge": "TELA PREVINE — o botão não existe quando !podeEditarSessao. Se forçado via API, backend recusa com :conflito/chamada -> 409, texto exibido cru em p.erro-inline (mensagemDeErro não tem tradução específica para esse 409, repassa o texto do domínio)."
+      }
+     ]
+    },
+    {
+     "nome": "justificar ausência (secretaria lança em nome do vereador)",
+     "tem_tela": true,
+     "rota_next": "apps/frontend/src/app/sessoes/[id]/chamada/page.tsx",
+     "url_navegavel": "http://localhost:3000/sessoes/10000000-0000-0000-0000-000000000211/chamada?token=%7B%22identidade-id%22%3A%224893207b-8487-42d6-a12d-d8721cd348ec%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%2C%22papeis%22%3A%5B%22secretario%22%5D%7D",
+     "endpoint_api": "POST /sessoes/:id/justificativas",
+     "tabela_db": "sessoes.justificativa_ausencia",
+     "papel": "servidor (papel \"secretario\")",
+     "passos_browser": [
+      "Na linha de um vereador com estado 'Ausente' e sem justificativa registrada (ex.: Otávio Monteiro, vereador-id 45c0a7d4-76e6-4b88-b948-1b4ca1c5946a, ainda ausente na sessão ...0211), clicar o botão \"Lançar justificativa\"",
+      "Preencher o textarea (label \"Motivo da ausência\") com um texto não vazio",
+      "Clicar \"Salvar\""
+     ],
+     "seletores": [
+      "button.btn.btn-contorno.btn-mini com texto \"Lançar justificativa\"",
+      "textarea#motivo-<vereadorId> (label associado via htmlFor)",
+      "button.btn.btn-primaria.btn-mini com texto \"Salvar\" (ou \"Salvando…\")",
+      "button.btn.btn-fantasma.btn-mini com texto \"Cancelar\"",
+      "span#motivo-<vereadorId>-erro[role=alert] (erro de validação local)"
+     ],
+     "assercao_db": "select estado, motivo, vereador_id from sessoes.justificativa_ausencia where sessao_id='10000000-0000-0000-0000-000000000211' and vereador_id='45c0a7d4-76e6-4b88-b948-1b4ca1c5946a'; -- espera estado='pendente'",
+     "casos_de_erro": [
+      {
+       "caso": "justificativa de terceiro",
+       "onde_surge": "NAO ESTA TRATADO NESTA TELA porque não é alcançável por ela — o formulário é fixo ao vereadorId da própria linha, sem campo de escolha de outro vereador. A variante real (vereador tentando justificar OUTRO via /minha-justificativa) não tem tela nenhuma (achado geral) — só testável via HTTP, já feito na Trilha 2."
+      },
+      {
+       "caso": "motivo vazio",
+       "onde_surge": "TELA TRATA — validação local (motivo.trim()) antes do POST, mensagem \"Descreva o motivo da ausência — o campo não pode ficar em branco.\"; o backend também revalida e devolveria 400 se contornado."
+      },
+      {
+       "caso": "vereador já tem justificativa (409 :ja-existe)",
+       "onde_surge": "TELA PREVINE parcialmente — o gatilho 'Lançar justificativa' só aparece quando !justificativaServidor; se ainda assim ocorrer corrida, o 409 aparece via mensagemDeErro."
+      }
+     ]
+    },
+    {
+     "nome": "decidir justificativa (Mesa/servidor)",
+     "tem_tela": true,
+     "rota_next": "apps/frontend/src/app/sessoes/[id]/chamada/page.tsx",
+     "url_navegavel": "http://localhost:3000/sessoes/10000000-0000-0000-0000-000000000211/chamada?token=%7B%22identidade-id%22%3A%224893207b-8487-42d6-a12d-d8721cd348ec%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%2C%22papeis%22%3A%5B%22secretario%22%5D%7D",
+     "endpoint_api": "PATCH /sessoes/:id/justificativas/:jid/decisao",
+     "tabela_db": "sessoes.justificativa_ausencia",
+     "papel": "servidor (papel \"secretario\", ato da Mesa)",
+     "passos_browser": [
+      "Abrir a chamada de uma sessão ABERTA/SUSPENSA (obrigatório — ver achado sobre gate de UI) que tenha justificativa pendente — ex.: após executar a escrita 'justificar ausência' acima em ...0211",
+      "No painel lateral 'Justificativas' (rail) ou na própria linha (chip 'Justificativa pendente de decisão'), clicar \"Deferir\" ou \"Indeferir\""
+     ],
+     "seletores": [
+      "section[aria-labelledby=\"just-titulo\"] .pend-lista li .acoes button com texto \"Deferir\"/\"Indeferir\"",
+      "span.decidir button.btn.btn-contorno.btn-mini com texto \"Deferir\" (inline na linha)",
+      "span.decidir button.btn.btn-fantasma.btn-mini com texto \"Indeferir\" (inline na linha)"
+     ],
+     "assercao_db": "select estado, decidido_por, decidido_em, lock_version from sessoes.justificativa_ausencia where id='<jid>'; -- espera estado in ('aprovada','indeferida')",
+     "casos_de_erro": [
+      {
+       "caso": "DECIDIR A PROPRIA JUSTIFICATIVA (juiz em causa própria)",
+       "onde_surge": "BACKEND recusa com 403 (controllers.clj L595-630, authz/negar! :juiz-em-causa-propria); a TELA NÃO PREVINE proativamente (não esconde o botão nesse caso específico) mas NÃO É REPRODUZÍVEL com os dados de demo atuais — ver achado dedicado. Se ocorrer, o texto cru 'autorizacao negada' aparece em p.erro-inline (sem tradução específica em mensagemDeErro)."
+      },
+      {
+       "caso": "conflito de concorrência (lock-version stale)",
+       "onde_surge": "TELA TRATA — mensagem específica de conflito pedindo para recarregar a lista."
+      },
+      {
+       "caso": "decidir em sessão fechada",
+       "onde_surge": "TELA PREVINE (bloqueio a mais que o backend exige) — os botões Deferir/Indeferir só renderizam quando podeEditar(sessaoEstado); backend aceitaria a decisão mesmo com a sessão encerrada, mas a UI não oferece o caminho (ver achado dedicado, ex. real: justificativa pendente da sessão ...0212)."
+      }
+     ]
+    },
+    {
+     "nome": "gerar folha (servidor)",
+     "tem_tela": true,
+     "rota_next": "apps/frontend/src/app/sessoes/[id]/folha/page.tsx",
+     "url_navegavel": "http://localhost:3000/sessoes/10000000-0000-0000-0000-000000000210/folha?token=%7B%22identidade-id%22%3A%224893207b-8487-42d6-a12d-d8721cd348ec%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%2C%22papeis%22%3A%5B%22secretario%22%5D%7D",
+     "endpoint_api": "POST /sessoes/:id/folha",
+     "tabela_db": "sessoes.folha_sessao",
+     "papel": "servidor (papel \"secretario\")",
+     "passos_browser": [
+      "Abrir a URL acima (sessão ...0210, encerrada; medido agora: 0 versões de folha)",
+      "Clicar o botão \"Gerar a folha desta sessão\"",
+      "Aguardar o estado \"Gerando…\" terminar — a lista de versões passa a mostrar a versão 1"
+     ],
+     "seletores": [
+      "button.btn.btn-primaria com texto \"Gerar a folha desta sessão\" (vazio) / \"Gerar nova versão\" (já há versão) / \"Gerando…\" (em voo)",
+      "p.gerar-erro[role=alert] (erro)",
+      "p.gerar-nota[role=status] (nota de sucesso)",
+      "ul.versoes-lista[aria-label=\"Versões congeladas da folha\"]"
+     ],
+     "assercao_db": "select versao, html_hash, pdf_hash, gerada_por from sessoes.folha_sessao where sessao_id='10000000-0000-0000-0000-000000000210' order by versao desc limit 1; -- espera versao=1 na 1a chamada",
+     "casos_de_erro": [
+      {
+       "caso": "folha duas vezes",
+       "onde_surge": "NAO E' ERRO — dentro de 30s da MESMA pessoa devolve a MESMA versão (dedup D9, controllers.clj L1058, resposta 201 com ja-congelada implícito); fora da janela cria versão NOVA numerada. Nunca 409 por duplicidade; o rótulo do botão muda para \"Gerar nova versão\"."
+      },
+      {
+       "caso": "sessão ainda aberta (fora da lista do plano, achado extra)",
+       "onde_surge": "TELA NAO PREVINE — o botão fica clicável independente do estado da sessão (a página não busca SessaoOut); só o BACKEND recusa com 409 \"so' sessao FECHADA tem folha de presenca (D6)\", exibido em p.gerar-erro."
+      },
+      {
+       "caso": "documento excede o teto de tamanho",
+       "onde_surge": "BACKEND recusa 413; TELA traduz em folha-vista.ts e mostra em p.gerar-erro."
+      }
+     ]
+    }
+   ],
+   "grupo": "E5 — Chamada e presença (servidor + vereador)"
+  },
+  {
+   "achados": [
+    "Precondição de E6 NÃO tem tela: `abrir-votacao` (POST /api/sessoes/:id/votacoes, papel secretario) só existe em apps/backend/src/oplenario/legislativo/diplomat/http/in.clj:498; busca em apps/frontend/src por 'votacoes' só retorna src/lib/use-meu-voto.ts — nenhum componente chama /votacoes (abrir) ou /votacoes/:id/votos (voto da Mesa). Para exercer a tela de E6 é preciso abrir a votação por HTTP/SQL antes — confirma o que docs/superpowers/plans/2026-09-08-exploratorio-de-escrita.md já registra: 'A Mesa não conduz a sessão pela interface — 17 rotas' (grupo A).",
+    "Estado medido ao vivo em 09/09 (stack em pé, pós-Trilha-2): a sessão 10000000-0000-0000-0000-000000000211 ('aberta') NÃO tem nenhuma votação em estado 'aberta' — a única votação vinculada (1ab2dd69-eda8-406f-b862-25dcf28ddb0e) já está 'encerrada'. É preciso abrir uma votação nominal nova antes de rodar o caminho feliz de E6.",
+    "A sessão 10000000-0000-0000-0000-000000000212, que o briefing descreve como 'agendada', está com estado='encerrada' no banco atual (SELECT direto em sessoes.sessao) — provavelmente mutada pelas escritas da Trilha 2/T1. Os 3 ids de demo-ids/sessoes.clj continuam corretos como IDENTIFICADORES (10...210/211/212), mas os RÓTULOS de estado do briefing estão desatualizados contra o dado vivo.",
+    "Ambiguidade não resolvida no caso de erro 'sessão de que não participa': a tela (`meu-voto-vista.ts`) só distingue 'sem-presenca' (CTA de confirmar presença) de 'pode-votar'; não existe um ciclo de tela dedicado para 'vereador sem mandato vigente nesta Casa' ou 'vereador de outro ente'. Se esse caso ocorrer, ou `resolver-vereador` retorna nil (→ 404, cai no /meu/painel com estado 'erro' genérico 'Não foi possível abrir o cockpit') ou o backend nega no authz/check! (403 genérico 'Não é possível votar agora.') sem uma mensagem de tela específica — não verificado ao vivo nesta passada, ficou só na leitura do código (controllers.clj:76-135)."
+   ],
+   "escritas": [
+    {
+     "nome": "Votar (vereador) — voto nominal no cockpit ao vivo",
+     "tem_tela": true,
+     "rota_next": "apps/frontend/src/app/(vereador)/votar/page.tsx",
+     "url_navegavel": "/votar?token=%7B%22identidade-id%22%3A%2249c23663-c30e-4829-b3be-c7481f107275%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%2C%22papeis%22%3A%5B%22vereador%22%5D%7D",
+     "endpoint_api": "POST /api/sessoes/:id/votacoes/:votacaoId/meu-voto (apps/backend/src/oplenario/legislativo/diplomat/http/in.clj:504-507, handler meu-voto-handler em linha 98)",
+     "tabela_db": "legislativo.votos (UNIQUE ente_id,votacao_id,vereador_id; CHECK voto in sim/nao/abstencao)",
+     "papel": "vereador",
+     "passos_browser": [
+      "SETUP fora da UI (grupo A não tem tela): com um token de secretario ({\"identidade-id\":\"4893207b-8487-42d6-a12d-d8721cd348ec\",\"ente-id\":\"10000000-0000-0000-0000-000000000001\",\"papeis\":[\"secretario\"]}), POST http://localhost:8888/api/sessoes/10000000-0000-0000-0000-000000000211/votacoes com body {\"objeto-tipo\":\"proposicao\",\"objeto-id\":\"<uuid de uma proposição real do ente>\",\"modalidade\":\"nominal\",\"quorum-tipo\":\"maioria_simples\"} — anote o `id` da votação retornada (votacao-id).",
+      "Navegar no browser para /votar?token=%7B%22identidade-id%22%3A%2249c23663-c30e-4829-b3be-c7481f107275%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%2C%22papeis%22%3A%5B%22vereador%22%5D%7D (Fernanda Rocha Pinto, vereador-id 69d7aa68-498a-4aa5-a6e9-10e0ad2d664b — já tem presença 'entrada' registrada na sessão 211 e mandato vigente, confirmado no banco).",
+      "Esperar a section aria-label=\"Votação ao vivo\" renderizar com o badge 'Ao vivo' (não 'Reconectando…'/'Conectando…').",
+      "Confirmar que aparece o grupo role=\"group\" aria-label=\"Seu voto na votação corrente\" com os 3 botões (o ciclo já deve estar 'pode-votar' pois a presença já está confirmada — se aparecer o botão 'Confirmar presença' em vez disso, clicar nele primeiro).",
+      "Clicar no botão de texto literal \"Sim\" (classe vbtn vbtn-sim).",
+      "Observar o parágrafo que aparece: \"Você votou Sim. O voto já entra no placar oficial abaixo.\" e que os 3 botões de voto somem (ciclo virou ja-votou).",
+      "Recarregar a página (F5) mantendo a mesma URL com token e confirmar que a mesma mensagem \"Você votou Sim…\" persiste (prova que não é estado só-de-cliente)."
+     ],
+     "assercao_db": "SELECT id, voto, vereador_id, registrado_em FROM legislativo.votos WHERE votacao_id = '<votacao-id do setup>' AND vereador_id = '69d7aa68-498a-4aa5-a6e9-10e0ad2d664b'; -- espera 1 linha, voto='sim'",
+     "casos_de_erro": [
+      {
+       "caso": "sem votação aberta",
+       "onde_surge": "TELA trata: quando não há votação 'aberta' vinculada à sessão, placar.kind==='nenhuma' e a tela mostra só o texto \"Nenhuma votação aberta no momento.\" (aria-live=polite) — nenhum botão de voto é renderizado, então não há como sequer tentar o POST pela interface. BACKEND também recusa em defesa: se a votação existir mas não estiver 'aberta', o check `(= \"aberta\" (:estado v))` falha dentro de authz/check! → 403 genérico \"Não é possível votar agora.\" (controllers.clj linha ~119; use-meu-voto.ts mapeia 403→essa mesma frase fixa, sem vazar a causa)."
+      },
+      {
+       "caso": "votar duas vezes",
+       "onde_surge": "TELA trata (client-side): o botão fica disabled={estadoVotar===\"enviando\"} durante o envio, e depois do sucesso o ciclo vira 'ja-votou' e os botões de voto somem (não há como clicar de novo pela mesma sessão de browser). BACKEND recusa como garantia real: 2ª escrita bate no UNIQUE (ente_id,votacao_id,vereador_id) → SQLState 23505 → :conflito/voto-duplicado → 409 'voto ja registrado para este vereador nesta votacao' (repositorio.clj linhas ~557-580). Para reproduzir de fato o erro pela UI seria preciso 2 abas/sessões votando como o MESMO vereador quase simultaneamente, ou reenviar o POST fora da tela."
+      },
+      {
+       "caso": "sessão de que não participa",
+       "onde_surge": "PARCIALMENTE TRATADO / AMBÍGUO: se o vereador não tem presença confirmada NESTA sessão, meu-voto-vista.ts deriva ciclo='sem-presenca' e a tela mostra só o CTA \"Confirme sua presença para poder votar.\" (sem botões de voto) — TELA trata esse sub-caso. Mas se 'não participa' significa mandato não vigente/vereador de outro ente, não existe ciclo de tela dedicado: cai ou em 404 (resolver-vereador nil, controllers.clj:100) que a página /votar não trata explicitamente para esse hook específico, ou em 403 genérico do backend via o fato DSL tem_mandato_vigente (controllers.clj linha ~127). NÃO VERIFICADO AO VIVO nesta passada — achado registrado acima."
+      },
+      {
+       "caso": "SESSÃO SECRETA sem direito",
+       "onde_surge": "TELA trata plenamente: derivarMeuVoto retorna ciclo='secreta' sempre que placar.modalidade !== 'nominal' (fail-closed, sem depender de authz do vereador), e a tela mostra só o texto \"Votação secreta: o voto só é registrável pelo terminal da Mesa (§22.6).\" — nenhum botão de voto aparece. BACKEND também recusa explicitamente e primeiro: controllers.clj linha ~103 lança :validacao/invalido ANTES de qualquer authz se `(:modalidade v)` = 'secreta', mesmo que alguém tente o POST direto contornando a tela."
+      }
+     ]
+    }
+   ],
+   "grupo": "E6 — Votar (vereador)"
+  },
+  {
+   "achados": [
+    "ESTADO DA DEMO (medido agora, psql direto): as 6 proposicoes 'aprovada' do ente 10000000-...-001 (numeros 9-14/2026) JA TEM autografo, e as 6 tramitacao_executiva correspondentes estao TODAS em estado TERMINAL (4x veto_derrubado, 2x sancionado, lock_version 1-2) — esgotadas, provavelmente pela sonda HTTP da Trilha 2 (T2 grupo B). Hoje NAO existe nenhuma proposicao 'aprovada' sem autografo nem nenhuma tramitacao 'aguardando' — o caminho feliz das duas escritas de E7 nao e exercitavel pela interface sem antes promover outra proposicao a 'aprovada' (fluxo de votacao, fora deste grupo) ou reconciliar/resemear a demo.",
+    "ACHADO DE CODIGO CONFIRMADO CONTRA O BANCO: o caso de erro 'autografo de materia nao aprovada' NAO E TRATADO nem pelo backend nem pela tela. controllers/gerar-autografo (apps/backend/src/oplenario/legislativo/controllers.clj:411-443) so guarda (1) duplicidade de autografo e (2) existencia de texto vigente — nunca confere proposicao.estado=='aprovada'. Na tela, o link condicional 'Ver pos-aprovacao' (ficha-materia/acoes-card.tsx, so aparece se estado==='aprovada') e o UNICO gate, e e contornavel por URL direta: /pos-aprovacao/:id aceita qualquer proposicao-id e o botao 'Gerar autografo e enviar ao Executivo' aparece sempre que !autografo, sem checar estado. CONFIRMADO EXPLORAVEL AGORA: existem 17 proposicoes do ente com estado_versao='vigente' em texto MAS estado != 'aprovada' (4 protocolada, 4 em_comissoes, 4 aguardando_pauta, 3 em_pauta, 3 arquivada — ex.: c7aecac5-b9c2-454e-b5ca-4fb92112b4e1, em_pauta). Um servidor logado pode gerar um autografo real e valido para uma dessas materias ainda em tramitacao.",
+    "'dois autografos' e' bem tratado nas duas pontas: backend lanca :validacao/invalido -> 400 (interceptor global), e o hook useGerarAutografo (apps/frontend/src/lib/use-gerar-autografo.ts) exibe o erro via role=alert. Mas so e alcancavel por corrida de 2 cliques/2 abas, porque assim que o 1o autografo existe a tela muda de branch e o botao 'Gerar autografo' some.",
+    "'resposta sem autografo' (POST /legislativo/autografos/:id/resposta para um autografo-id sem tramitacao_executiva) e RECUSADO pelo backend com 404 (registrar-resposta-executivo-handler, apps/backend/src/oplenario/legislativo/diplomat/http/in.clj:411-430), mas NAO E ALCANCAVEL PELA TELA em uso normal: autografo e tramitacao_executiva nascem juntos na MESMA tx (repo/gerar-autografo-e-abrir-tramitacao!), entao a UI nunca produz um autografo-id sem tramitacao. So testavel via HTTP direto com id inventado (ja coberto na Trilha 2)."
+   ],
+   "escritas": [
+    {
+     "nome": "gerar autografo",
+     "tem_tela": true,
+     "rota_next": "apps/frontend/src/app/(interno)/pos-aprovacao/[id]/page.tsx",
+     "url_navegavel": "http://localhost:3000/pos-aprovacao/c7aecac5-b9c2-454e-b5ca-4fb92112b4e1?token=%7B%22sub%22%3A%22secretaria-demo%22%2C%22identidade-id%22%3A%224893207b-8487-42d6-a12d-d8721cd348ec%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%7D  (proposicao-id real do path; NENHUMA proposicao 'aprovada' esta sem autografo agora — este id (em_pauta) e a UNICA instancia hoje com texto vigente + sem autografo, e exercita-la e o proprio achado de 'autografo de materia nao aprovada'; para o caminho feliz real, primeiro levar outra materia a estado='aprovada')",
+     "endpoint_api": "POST /legislativo/proposicoes/:id/autografo (navegador chama via proxy Next POST /api/legislativo/proposicoes/:id/autografo, ver apps/frontend/src/lib/use-gerar-autografo.ts)",
+     "tabela_db": "legislativo.autografo (+ legislativo.tramitacao_executiva, aberta 'aguardando' na MESMA tx)",
+     "papel": "servidor (gate de rota: it/exige-papel \"secretario\", apps/backend/src/oplenario/legislativo/diplomat/http/in.clj:496 — identidade demo :secretaria em e2e/.artifacts/demo-ids.edn)",
+     "passos_browser": [
+      "Navegar para http://localhost:3000/proposicoes com ?token=<dev-token JSON da identidade secretaria> (modo dev do FE, apps/frontend/src/lib/modo.ts + auth.tsx — so vale com o stack em APP_ENV=dev/test)",
+      "Abrir a ficha da materia alvo: /ficha-materia/{proposicao_id} (ou ir direto para /pos-aprovacao/{proposicao_id})",
+      "Se veio de ficha-materia e a materia estiver 'aprovada': clicar no link 'Ver pos-aprovacao' (texto literal, apps/frontend/src/app/(interno)/ficha-materia/acoes-card.tsx)",
+      "Na tela /pos-aprovacao/{id}, dentro do card 'Autografo' com o paragrafo 'Nenhum autografo foi gerado ainda para esta materia.', clicar no botao 'Gerar autografo e enviar ao Executivo' (button, class btn btn-primaria, apps/frontend/src/app/(interno)/pos-aprovacao/conteudo-pos-aprovacao.tsx)",
+      "Aguardar a mensagem role=status 'Autografo gerado e enviado ao Executivo' e o card mudar para o CardAutografo preenchido (numero/ano, enviado-em, destinatario) + PipelinePosAprovacao"
+     ],
+     "assercao_db": "SELECT a.numero, a.ano, a.texto_versao_id, a.destinatario_texto, t.id AS tramitacao_id, t.estado FROM legislativo.autografo a JOIN legislativo.tramitacao_executiva t ON t.autografo_id = a.id AND t.ente_id = a.ente_id WHERE a.ente_id = '10000000-0000-0000-0000-000000000001' AND a.proposicao_id = '<proposicao_id>' AND t.estado = 'aguardando'; -- espera exatamente 1 linha (autografo + tramitacao abertos na mesma tx, apps/backend/src/oplenario/legislativo/db/autografo.clj + db/tramitacao_executiva.clj/iniciar!)",
+     "casos_de_erro": [
+      {
+       "caso": "autografo de materia nao aprovada",
+       "onde_surge": "NAO TRATADO em nenhuma das duas pontas. Backend (controllers/gerar-autografo, apps/backend/src/oplenario/legislativo/controllers.clj:411-443) so verifica duplicidade de autografo e existencia de texto vigente, nunca proposicao.estado. Tela: o gate condicional fica so no link de ENTRADA (ficha-materia/acoes-card.tsx, estado==='aprovada'), mas a rota /pos-aprovacao/:id e navegavel direto por URL para qualquer proposicao-id e o botao 'Gerar autografo' aparece sempre que !autografo — CONFIRMADO contra o banco: 17 proposicoes do ente (protocolada/em_comissoes/aguardando_pauta/em_pauta/arquivada) tem texto vigente e por isso aceitariam a escrita hoje."
+      },
+      {
+       "caso": "dois autografos",
+       "onde_surge": "Backend RECUSA: throw :validacao/invalido (mensagem 'gerar-autografo: a proposicao ja tem autografo (UNIQUE por proposicao)') -> 400 pelo interceptor global. Tela TRATA: useGerarAutografo (apps/frontend/src/lib/use-gerar-autografo.ts) captura o corpoErro.erro e ConteudoPosAprovacao exibe via role=alert (erro && ultimaAcao==='gerar' && !autografo). So alcancavel em corrida (dois cliques/duas abas), pois assim que o 1o autografo existe a branch da tela muda e o botao some."
+      }
+     ]
+    },
+    {
+     "nome": "registrar resposta do Executivo",
+     "tem_tela": true,
+     "rota_next": "apps/frontend/src/app/(interno)/pos-aprovacao/[id]/page.tsx (mesma rota da escrita anterior — o formulario vive dentro dela quando ha autografo com tramitacao 'aguardando')",
+     "url_navegavel": "http://localhost:3000/pos-aprovacao/{mesmo proposicao_id da escrita 'gerar autografo'}?token=%7B%22sub%22%3A%22secretaria-demo%22%2C%22identidade-id%22%3A%224893207b-8487-42d6-a12d-d8721cd348ec%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%7D  (SO fica exercitavel depois que a escrita 'gerar autografo' rodar naquela materia — hoje nenhuma tramitacao_executiva do ente esta em 'aguardando', todas as 6 existentes ja sao terminais)",
+     "endpoint_api": "POST /legislativo/autografos/:id/resposta (path :id = autografo-id; navegador via proxy Next, ver apps/frontend/src/lib/use-registrar-resposta.ts)",
+     "tabela_db": "legislativo.tramitacao_executiva (UPDATE: estado, veto_tipo, veto_razoes, respondido_em, lock_version+1)",
+     "papel": "servidor (mesmo gate 'secretario' da rota irma)",
+     "passos_browser": [
+      "A partir da tela /pos-aprovacao/{id} ja com autografo e tramitacaoExecutiva.estado==='aguardando' (aside mostra CardPrazoExecutivo)",
+      "Clicar no botao 'Registrar retorno' (button, class btn btn-contorno btn-mini, apps/frontend/src/app/(interno)/pos-aprovacao/conteudo-pos-aprovacao.tsx) para abrir o FormRegistrarRetorno",
+      "No radiogroup aria-label='Resultado do Executivo' (apps/frontend/src/app/(interno)/pos-aprovacao/form-registrar-retorno.tsx), marcar um radio: name='resultado', rotulo literal 'Sancionado' | 'Sancao tacita' | 'Vetado'",
+      "Se 'Vetado': marcar o radiogroup aria-label='Tipo do veto' (name='veto-tipo', rotulos 'Total'|'Parcial') e opcionalmente preencher o textarea id='veto-razoes' (label 'Razoes do veto')",
+      "Clicar no botao de submit 'Registrar retorno' (button, class btn btn-primaria, dentro do form — nao confundir com o botao-gatilho do passo 2, que ja sumiu quando o form abre)",
+      "Aguardar role=status 'Retorno do Executivo registrado'; o aside troca para o card 'Desfecho' com a mensagem correspondente ao estado"
+     ],
+     "assercao_db": "SELECT estado, veto_tipo, respondido_em, lock_version FROM legislativo.tramitacao_executiva WHERE ente_id = '10000000-0000-0000-0000-000000000001' AND autografo_id = '<autografo_id>'; -- espera estado IN ('sancionado','sancao_tacita','vetado'), respondido_em NOT NULL, lock_version incrementado em +1 frente ao valor lido antes do submit (CAS, apps/backend/src/oplenario/legislativo/db/tramitacao_executiva.clj/registrar-resposta!)",
+     "casos_de_erro": [
+      {
+       "caso": "resposta sem autografo",
+       "onde_surge": "Backend RECUSA com 404 ('tramitacao executiva nao encontrada para este autografo' — registrar-resposta-executivo-handler, apps/backend/src/oplenario/legislativo/diplomat/http/in.clj:411-430, via buscar-tramitacao-por-autografo nil). NAO ESTA ALCANCAVEL PELA TELA em uso normal: autografo e tramitacao_executiva sao criados juntos, na MESMA transacao (repo/gerar-autografo-e-abrir-tramitacao!) — nao existe fluxo de UI que produza um autografo sem tramitacao correspondente. So testavel via chamada HTTP direta com id inventado (ja coberto na Trilha 2, T2 grupo B)."
+      },
+      {
+       "caso": "resposta duplicada / tramitacao ja respondida (correlato de 'dois autografos' nesta escrita, achado por leitura do codigo, nao listado no enunciado mas real)",
+       "onde_surge": "Backend RECUSA 409 (:conflito/tramitacao-executiva, traduzido em resposta-conflito-tramitacao-executiva, mensagem \"so se responde uma tramitacao 'aguardando'\"; o mesmo caminho cobre CAS de lock-version divergente). Tela TRATA parcialmente: o formulario so renderiza quando tramitacaoExecutiva.estado==='aguardando', entao a UI normal nao reenvia — mas numa corrida (estado mudou entre o GET e o clique) o 409 cai no mesmo role=alert generico (erroRegistro) do hook use-registrar-resposta.ts."
+      }
+     ]
+    }
+   ],
+   "grupo": "E7 — Pos-aprovacao (servidor)"
+  },
+  {
+   "grupo": "E8 — Notificacoes (vereador)",
+   "achados": [
+    "A canônica identidade `identidades.vereador` de e2e/.artifacts/demo-ids.edn (49c23663-c30e-4829-b3be-c7481f107275) tem ZERO linhas em paineis.notificacao_caixa no ente da demo (10000000-0000-0000-0000-000000000001) — verificado ao vivo via psql. Navegar /notificacoes com esse token mostra inbox VAZIA: vazia=true, nenhum botão 'Marcar como lida' para clicar.",
+    "A única forma no repo de POPULAR a inbox de um vereador é a semente `seed-demo/notificacoes` (apps/backend/demo/seed_demo.clj:602-648), e ela é EXPLICITAMENTE NÃO-IDEMPOTENTE: a cada chamada cria uma identidade-vereador NOVA (random-uuid), não reutiliza os ids de demo-ids.edn, e imprime um token/URL novos no stdout a cada execução. Não há seed determinística que dê uma notificação ao vereador canônico do resto da demo.",
+    "`semear-tudo.sh`/e2e/rodar.sh NÃO chamam `seed-demo/notificacoes` — confirmado por grep. Ou seja, a rota E8 fica inatingível pela interface na demo padrão sem um passo manual extra fora do fluxo de semeadura documentado.",
+    "Existe HOJE (verificado ao vivo, 09/09) 1 linha não-lida em paineis.notificacao_caixa presa ao ente da demo, mas pertencente à identidade `presidente` (a3aaef2f-ca3c-441b-92c7-d0320c989ce4, que também carrega papel 'vereador' — vinculo.tipo='vereador' + usuario_papel inclui 'vereador' e 'admin_ente'). Essa linha é resíduo do T2 grupo B (sonda HTTP), não de uma semente oficial — funciona AGORA como atalho para exercer a escrita pela interface, mas não é reproduzível: some em qualquer reset/recriação do banco (down -v, ou nova rodada limpa de semear-tudo.sh).",
+    "O caso de erro 'marcar a de outro destinatário' listado no plano NÃO é alcançável pela interface por desenho: a tela só renderiza os itens do próprio ator (destinatario-identidade-id sempre vem de (:ator req), nunca do cliente) — não existe elemento de UI que aponte para o :id de outra pessoa. Só é exercitável via chamada HTTP direta (já coberto na Trilha 2), não via clique de browser.",
+    "'Marcar duas vezes' NÃO é um caso de erro no sistema real: o backend é IDEMPOTENTE por desenho (COALESCE(lida_em, now()) — segunda chamada devolve 200 com o MESMO recibo, nunca falha). A tela reforça isso removendo o botão assim que o item vira 'Lida' e desabilitando o botão (`disabled={estadoMarcacao==='enviando'}`) durante o request em voo — não há caminho de UI normal para gerar um segundo POST genuíno após o primeiro completar; só um replay manual via devtools/network alcançaria o servidor duas vezes, e mesmo aí o resultado é sucesso, não erro."
+   ],
+   "escritas": [
+    {
+     "nome": "marcar notificação como lida",
+     "tem_tela": true,
+     "rota_next": "apps/frontend/src/app/(vereador)/notificacoes/page.tsx",
+     "url_navegavel": "http://localhost:3000/notificacoes?token=%7B%22identidade-id%22%3A%22a3aaef2f-ca3c-441b-92c7-d0320c989ce4%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%2C%22papeis%22%3A%5B%22vereador%22%5D%7D — FUNCIONA HOJE (verificado ao vivo) porque essa identidade tem 1 notificação não-lida residual no banco (id=9a6c4e8b-00e0-4d5a-a9f4-ceed1323c6c0). Não é reproduzível após reset de banco — ver achados. Caminho DETERMINÍSTICO: rodar `clojure -X:seed seed-demo/notificacoes` primeiro (não-idempotente, gera identidade+token novos a cada chamada) e usar a URL impressa no stdout dessa semente em vez desta.",
+     "endpoint_api": "POST /meu/notificacoes/:id/lida (proxy Next.js em /api/meu/notificacoes/:id/lida via rewrites fallback); gate `auth` apenas, sem exigência de papel — só posse (WHERE ente_id+id+destinatario_identidade_id)",
+     "tabela_db": "paineis.notificacao_caixa (coluna lida_em: NULL=não lida; UPDATE seta lida_em=COALESCE(lida_em, now()))",
+     "papel": "vereador (mas a rota aceita qualquer ator autenticado com uma notificação sua — GET/POST /meu/notificacoes não exigem papel 'vereador' no backend, só a tela (vereador)/notificacoes exige via GuardVereador no layout)",
+     "passos_browser": [
+      "1. Confirmar stack viva: `cd apps/backend && docker compose ps` (app/frontend/postgres healthy).",
+      "2. [Recomendado, determinístico] Rodar a semente dedicada contra o mesmo ente da demo: `docker run --rm --network oplenario_default -v \"$(pwd)/apps/backend\":/app -v <mesmo-scratch-da-base>:/demo-scratch -w /app -e DATABASE_URL=jdbc:postgresql://postgres:5432/oplenario -e MINIO_ENDPOINT=http://minio:9000 -e KEYCLOAK_BASE_URL=http://keycloak:8080 clojure:temurin-21-tools-deps clojure -Sdeps '{:aliases {:seed {:extra-paths [\"demo\"]}}}' -X:seed seed-demo/notificacoes` — captura no stdout a linha `http://localhost:3000/notificacoes?token=...` já pronta.",
+      "3. Aguardar ~1s (o relay do outbox precisa drenar `notificacao.requisitada` até a projeção `paineis`).",
+      "4. Abrir no browser a URL capturada no passo 2 (ou, para o atalho de hoje sem rodar a semente, a url_navegavel acima).",
+      "5. Confirmar carregamento: heading role=heading name contendo 'Notificações', e um `span.badge` com contagem >=1 ao lado do h1.",
+      "6. Localizar `article.nt.nao-lida` cujo `h3` tem o texto 'A sua proposicao virou lei' (ou 'A sua proposicao virou lei — Lei 1/2026').",
+      "7. Dentro desse article, localizar o botão: role=button, name visível 'Marcar como lida' (classe `nt-lida`, `type=\"button\"`).",
+      "8. Clicar no botão.",
+      "9. Aguardar: o botão some e é substituído por `span.nt-lida-marca` com texto 'Lida'; o `span.nt-ponto` (bolinha de não-lida) some; o badge do h1 decresce ou desaparece (useMinhasNotificacoes.recarregar() refaz o GET)."
+     ],
+     "assercao_db": "SELECT id, lida_em FROM paineis.notificacao_caixa WHERE id = '<id-clicado>' AND lida_em IS NOT NULL; -- deve devolver 1 linha com lida_em preenchido. Para o atalho de hoje: SELECT id, lida_em FROM paineis.notificacao_caixa WHERE id='9a6c4e8b-00e0-4d5a-a9f4-ceed1323c6c0';",
+     "casos_de_erro": [
+      {
+       "caso": "marcar a de outro destinatário",
+       "onde_surge": "NÃO TRATADO NA TELA por ser inatingível: a UI só lista `n.id` dos itens do próprio ator (GET /meu/notificacoes resolve destinatário do :ator, nunca do cliente) — não existe botão nem link na interface apontando para o :id de outra pessoa. O BACKEND recusa corretamente (marcar-lida-handler em diplomat/http/in.clj:111-120): update-count 0 -> controllers/marcar-lida devolve nil -> handler responde 404 uniforme {:erro \"notificacao nao encontrada\"}, indistinguível de id inexistente ou malformado (anti-oráculo, adapters/in/notificacao.clj). Só reproduzível via chamada HTTP direta com o :id de outro ator (já coberto fora da interface, na Trilha 2), não via clique de browser."
+      },
+      {
+       "caso": "marcar duas vezes",
+       "onde_surge": "TRATADO nos dois lados, e não é um erro por desenho. TELA: botão tem `disabled={estadoMarcacao === \"enviando\"}` enquanto o POST está em voo, e some de vez assim que `n.lida` vira true após `recarregar()` — não há caminho de clique normal para reenviar depois do primeiro sucesso. BACKEND: `marcar-lida!` em db/notificacao_caixa.clj usa `SET lida_em = COALESCE(lida_em, now())`, então a 2ª chamada (via replay manual de rede/devtools, ou clique duplo simultâneo se o disabled falhar) devolve 200 com o MESMO carimbo — nunca 409/erro. Verificação real: reenviar o mesmo POST duas vezes contra o mesmo :id e conferir que `lida_em` não muda entre a 1ª e a 2ª resposta."
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "critico": "## Relatório do crítico de completude\n\n### 1. A soma não é 24 no plano — é 23\n\n| Grupo | Cabeçalho | Verbos listados |\n|---|---|---|\n| E1 | 4 | 4 |\n| E2 | 3 | 3 |\n| E3 | 2 | 2 |\n| E4 | 4 | 4 |\n| **E5** | **6** | **7** (presença · confirmar a própria · lote · conduzir chamada · justificar · decidir · folha) |\n| E6 | 1 | 1 |\n| E7 | 2 | 2 |\n| E8 | 1 | 1 |\n| **Total** | **23** | **24** |\n\nNada falta e nada sobra no mapa: o erro é do plano (`docs/superpowers/plans/2026-09-08-exploratorio-de-escrita.md:128`). Adote 24 (E5=7) e corrija o cabeçalho. O agente do E5 acertou ao devolver 7.\n\n### 2. As 3 críticas — conferidas na fonte, todas corretas\n\n| Escrita | Verificado | Resultado |\n|---|---|---|\n| Protocolar/numerar | `apps/frontend/src/app/(interno)/expediente/formulario-preenchimento.tsx:265-270` · `apps/backend/src/oplenario/legislativo/diplomat/http/in.clj:541` | OK. Botão literal \"Protocolar e numerar\" (`button[type=button].btn.btn-primaria`), some do DOM quando `bloqueado`. `POST /legislativo/documentos/:id/protocolo` existe. `input#assunto`, `textarea#corpo`, `input#dados-chave-N`/`dados-valor-N`, `.comando-ctx`, `article.documento[role=document]`, `div.carimbo > span.num`, `h2#livro-titulo`, `table.protocolo` — **todos reais**. `h2#modelo-titulo` está em `expediente/page.tsx:112`, não no seletor-modelo (o mapa atribuiu ao arquivo errado, seletor válido). |\n| Lote de presença | `apps/frontend/src/app/sessoes/[id]/chamada/page.tsx:479` e `:611-621` · `lib/use-chamada.ts:337` · backend `sessoes/.../in.clj:939` | OK, com uma correção de caminho: a tela **não** está em `(interno)/` — é `app/sessoes/[id]/chamada/page.tsx`, URL `/sessoes/<id>/chamada`. Marcação por vereador: `span.marcar[role=group][aria-label=\"Presença de <nome>\"] > button[data-e=\"<estado>\"]` — `data-e` é atributo real, não inventado. Disparo do lote: `button.btn.btn-primaria` texto \"Registrar a chamada\" (só existe com `emCurso && podeEditarSessao`). |\n| Votar | `app/(vereador)/votar/page.tsx:160-169` · `lib/use-meu-voto.ts:40` | OK. `div.votar[role=group][aria-label=\"Seu voto na votação corrente\"]` com `button.vbtn-sim` / `.vbtn-nao` / `.vbtn-abs` (textos \"Sim\" / \"Não\" / \"Abster\"). Endpoint `POST /sessoes/:id/votacoes/:votacaoId/meu-voto`. |\n\nNenhum seletor inventado nas três. Nenhum `data-testid` foi alegado (o projeto não usa) — correto.\n\n### 3. Erros do mapa que mudam sua ação agora\n\n- **E5 errou os ids de sessão.** O achado diz \"sessão ...0212 (hoje encerrada)\". Em `apps/backend/demo/sessoes.clj:72-74`: `...0210` = **encerrada**, `...0211` = **aberta**, `...0212` = **agendada**. E `podeEditar` (`lib/chamada-vista.ts:278`) inclui `\"agendada\"` — logo a 0212 **é editável**. A conclusão de que \"a justificativa pendente não pode ser decidida pela interface\" está construída sobre id trocado.\n- **Não existe justificativa semeada nenhuma.** `grep -i justificativ apps/backend/demo/` só bate em texto de ementa (`acervo.clj`) e em leituras. Zero `abrir-justificativa!`. Consequência prática: \"decidir justificativa\" **não precisa de SQL nem de fixture** — você abre uma pela própria UI (`JustificativaAbrir`, `page.tsx:670`) num vereador ausente da 0211 e depois clica Deferir/Indeferir. Ganhou-se uma escrita que o mapa dava como bloqueada.\n- **E2 escrita 1 está mesmo bloqueada.** Confirmado: `grep -c documento_modelo apps/backend/demo/seed_demo.clj` = 0, e `in.clj` só tem `:get` em `/legislativo/documento-modelos`. INSERT SQL é a única via. Achado válido.\n\n### 4. O que o mapa não respondeu e vai te travar\n\n1. **Os ids de sessão não estão em `e2e/.artifacts/demo-ids.edn`** — o artefato só tem ente, legislatura, 17 vereadores, 3 comissões e 4 identidades. Os ids de sessão são constantes hardcoded (`0210`/`0211`/`0212`). Nenhum agente disse isso.\n2. **`/votar` não aceita parâmetro de sessão.** Deriva de `GET /meu/sessao-atual`, que devolve **a primeira entrada de `sli-sessoes`** (\"em curso primeiro\"). Se houver mais de uma sessão aberta no banco (rodadas repetidas de `seed_demo/base`, que cria ente novo a cada run, ou uma 0211 já mexida), o cockpit pode abrir a sessão errada e você não tem como forçar por URL.\n3. **A identidade `:vereador` (`49c23663-…`) já está presente na 0211.** `casa.clj` ordena os 17 alfabeticamente e essa identidade é o índice 5 (Fernanda Rocha Pinto); `semear-aberta!` marca `(take 12 vigentes)` como presentes. Efeito: `/votar` abre direto em `pode-votar` e o botão **\"Confirmar presença\" nunca aparece** — a escrita \"confirmar a própria presença\" (E5) só é alcançável se você apagar a presença dela antes. Ninguém sinalizou.\n4. **E5 e E6 disputam a mesma sessão 0211 e a mesma votação aberta.** Votar consome a única votação aberta (`semear-aberta!` abre uma e não fecha); registrar a chamada muda o denominador do quórum que o cockpit exibe. Precisa de ordem explícita: votar → depois chamada/lote, ou aceitar que a segunda metade roda com estado alterado.\n5. **A 0211 não tem chamada registrada** (`semear-aberta!` chama `registrar-presenca-de!` mas nunca `registrar-chamada-conduzida!`, ao contrário da 0210). Bom para você: `emCurso` = true, \"Registrar a chamada\" aparece. Mas isso vale **uma vez só** — depois vira \"Nova chamada\".\n6. **Irreversibilidade.** Nenhum agente tratou disso: a Casa da demo é append-only e T2 já provou que só `down -v` restaura. Toda escrita da T3 na 0211 é definitiva; se você quiser repetir E5 do zero, precisa decidir isso antes de começar, não no meio.\n7. **Pareceres (E4) não têm id estável** — o próprio agente do E4 reportou; some com isso o fato de que a identidade fixa de vereador raramente é o relator sorteado. Trate E4 como o grupo de maior chance de 404 e resolva o `relator_id` por SQL antes de abrir o browser."
+}

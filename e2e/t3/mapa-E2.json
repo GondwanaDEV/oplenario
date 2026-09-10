@@ -1,0 +1,97 @@
+{
+ "grupo": "E2 — Expediente e protocolo (servidor)",
+ "achados": [
+  "ACHADO CRÍTICO (bloqueia as 3 escritas do grupo, não só reporta um erro isolado): `apps/backend/demo/seed_demo.clj` não insere NENHUMA linha em `legislativo.documento_modelo` (grep confirmado: zero ocorrências de 'documento_modelo'/'documento-modelo' no arquivo de seed). Sem modelo ativo, `GET /legislativo/documento-modelos` devolve lista vazia, `SeletorModelo` renderiza 0 botões (só o botão estático 'Mala-direta', sempre `disabled`), e o botão 'Gerar documento' fica permanentemente `disabled` (`disabled={enviandoGeracao || !modeloSelecionadoId}` em formulario-preenchimento.tsx:238). Partindo da Casa da demo, a escrita 1 é INALCANÇÁVEL pela interface.",
+  "Não existe rota HTTP de escrita para criar `documento_modelo`: `apps/backend/src/oplenario/legislativo/diplomat/http/in.clj` só registra `[\"/legislativo/documento-modelos\" :get ...]` (linha 531) — não há `:post`. `Repositorio/criar-modelo!` existe no protocolo (`components/repositorio.clj:666`) e em `db/documento_modelo.clj:criar!`, mas não está wired a nenhum handler/rota — é código morto do lado de fora do processo HTTP. A aba 'Modelos' (`apps/frontend/src/app/(interno)/expediente/modelos/page.tsx`) é `<EmBreve>` e confirma isso no próprio texto: 'Criar um modelo novo... ainda não tem tela própria'. Conclusão: a ÚNICA forma de plantar o pré-requisito das 3 escritas é INSERT direto no Postgres via SQL, bypassando interface E API — isso não é 'exercer pela interface', é uma fixture de banco.",
+  "'Protocolar duas vezes' e 'protocolar o que não está em rascunho' não são alcançáveis via um fluxo normal de UMA aba: assim que `documento.estado` vira 'emitido', `documentoEhTerminal` torna `bloqueado=true` e o bloco `{!bloqueado && (<>...botões...</>)}` em formulario-preenchimento.tsx:253 REMOVE os botões 'Salvar rascunho'/'Protocolar e numerar' do DOM (não apenas desabilita) — a tela tira a affordance, não sobra o que clicar duas vezes. O único caminho realista pela interface é abrir DUAS ABAS na mesma sessão de rascunho (uma protocola primeiro; a outra, com `lockVersion` desatualizado, tenta protocolar depois) — documentado nos passos_browser de cada caso."
+ ],
+ "escritas": [
+  {
+   "nome": "Gerar documento a partir de modelo",
+   "tem_tela": true,
+   "rota_next": "apps/frontend/src/app/(interno)/expediente/page.tsx",
+   "url_navegavel": "http://localhost:3000/expediente?token=%7B%22identidade-id%22%3A%224893207b-8487-42d6-a12d-d8721cd348ec%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%2C%22papeis%22%3A%5B%22secretario%22%5D%7D",
+   "endpoint_api": "POST /legislativo/documentos (Malli GerarDocumento: modelo-id obrigatório, assunto obrigatório min1, dados opcional map string->string)",
+   "tabela_db": "legislativo.documento (INSERT estado='rascunho'); lê legislativo.documento_modelo (modelo-id) e o ator resolvido via auth",
+   "papel": "servidor (papel de authz no backend é literalmente 'secretario' — `it/exige-papel \"secretario\"` em diplomat/http/in.clj:493)",
+   "passos_browser": [
+    "PRÉ-REQUISITO FORA DA UI (achado): inserir 1 linha em legislativo.documento_modelo, ex.: INSERT INTO legislativo.documento_modelo (ente_id, id, chave, nome, tipo_documento, corpo_template, efetivado_em) VALUES ('10000000-0000-0000-0000-000000000001', gen_random_uuid(), 'oficio_teste_t3', 'Ofício de teste T3', 'oficio', 'Prezado(a) {{destinatario}}, convidamos para a audiência pública.', now()); — sem isso o passo 3 não tem o que clicar.",
+    "Abrir url_navegavel no browser (token dev com papel 'secretario').",
+    "Na seção 'Modelo' (h2#modelo-titulo, 'passo 1 de 3'), clicar no botão com role=button e texto igual ao `nome` inserido (ex. 'Ofício de teste T3') — seletor real: `button.modelo[aria-pressed]` dentro de `div.modelos[role=group][aria-label='Tipo de documento']`.",
+    "Preencher o campo Assunto: input#assunto (label 'Assunto') com texto não vazio, ex. 'Convite à audiência pública'.",
+    "Preencher o par de Dados exigido pelo template: input#dados-chave-0 (label 'Campo 1') = 'destinatario'; input#dados-valor-0 (label 'Valor 1') = 'Secretaria de Obras'. (Deixar vazio/errado aqui exerce o caso de erro 'campo {{ }} não preenchido'.)",
+    "Clicar no botão role=button, name='Gerar documento' (barra fixa `.comando`, só habilitado quando `modeloSelecionadoId` != null).",
+    "Esperar o texto de status 'Documento gerado' aparecer em `.comando-ctx span` e o preview (`article.documento[role=document]`) deixar de mostrar o estado vazio."
+   ],
+   "assercao_db": "SELECT id, estado, assunto, corpo, modelo_id FROM legislativo.documento WHERE ente_id='10000000-0000-0000-0000-000000000001' AND modelo_id='<id do modelo inserido>' ORDER BY criado_em DESC LIMIT 1; -- espera 1 linha, estado='rascunho', corpo com o placeholder {{destinatario}} substituído por 'Secretaria de Obras'.",
+   "casos_de_erro": [
+    {
+     "caso": "campo {{ }} não preenchido (placeholder sem valor correspondente em `dados`)",
+     "onde_surge": "TRATADO nos dois lados: backend recusa fail-closed — `logic/renderizar-documento` (logic.clj:165) lança `:tipo :validacao/invalido` quando `(get dados chave)` é nil; o interceptor global (`interceptors.clj:157`) mapeia para 400 `{:erro \"requisicao invalida\"}` — mensagem GENÉRICA, não nomeia o campo faltante. A tela mostra essa mensagem genérica via `erroGeracao` em `<p role=alert class=form-erro>` (formulario-preenchimento.tsx:128-132) e foca nela (`erroRef.current?.focus()`)."
+    },
+    {
+     "caso": "assunto vazio / campo obrigatório vazio",
+     "onde_surge": "TRATADO em 3 camadas: a tela valida client-side antes do POST (`aoClicarGerar`: `if (!assunto.trim()) setErroValidacao(...)`, formulario-preenchimento.tsx:103-110, mensagem 'Preencha o assunto antes de gerar o documento.'); se burlado, o wire/in Malli (`GerarDocumento` schema, `:assunto [:string {:min 1 ...}]`) recusa 400 na borda antes de tocar lógica de domínio."
+    }
+   ]
+  },
+  {
+   "nome": "Editar rascunho",
+   "tem_tela": true,
+   "rota_next": "apps/frontend/src/app/(interno)/expediente/page.tsx",
+   "url_navegavel": "http://localhost:3000/expediente?token=%7B%22identidade-id%22%3A%224893207b-8487-42d6-a12d-d8721cd348ec%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%2C%22papeis%22%3A%5B%22secretario%22%5D%7D",
+   "endpoint_api": "PATCH /legislativo/documentos/:id (Malli EditarDocumento: lock-version obrigatório :int; corpo e assunto opcionais)",
+   "tabela_db": "legislativo.documento (UPDATE corpo/assunto, lock_version+1, atualizado_em)",
+   "papel": "servidor (papel backend 'secretario')",
+   "passos_browser": [
+    "Continuação do fluxo de 'Gerar documento' — mesma página, documento já em estado 'rascunho' (a seção 'Preenchimento' agora mostra Assunto+Corpo em vez do formulário de geração; passo indicado é `rotularEstadoDocumento(documento.estado)`, não mais 'passo 2 de 3').",
+    "Limpar/editar o conteúdo do textarea#corpo (label 'Corpo do documento') — ex. adicionar uma frase ao final.",
+    "Opcionalmente editar input#assunto (mesmo id da fase de geração, agora habilitado pois `bloqueado=false`).",
+    "Clicar no botão role=button, name='Salvar rascunho' (`.btn.btn-contorno`, só existe enquanto `!bloqueado`).",
+    "Esperar 'Rascunho salvo' em `.comando-ctx span` — a página então chama `recarregar()` (GET /legislativo/documentos/:id) e confirma o novo `lockVersion`."
+   ],
+   "assercao_db": "SELECT corpo, assunto, lock_version, atualizado_em FROM legislativo.documento WHERE ente_id='10000000-0000-0000-0000-000000000001' AND id='<id do documento>'; -- espera corpo/assunto refletindo a edição e lock_version incrementado em 1 em relação ao valor pós-geração.",
+   "casos_de_erro": [
+    {
+     "caso": "editar documento que não está mais em 'rascunho' (já emitido)",
+     "onde_surge": "NÃO TRATADO por reprovação explícita na tela em uma única aba — a affordance simplesmente some (`bloqueado=true` remove os inputs de edição e os botões, formulario-preenchimento.tsx:198-221 mostra os campos com `disabled` e a barra de comando some por inteiro os botões de escrita). Só é alcançável via DUAS ABAS: aba A protocola (emite); aba B, que ainda tem o form de edição montado com `lockVersion` velho, clica 'Salvar rascunho' -> backend recusa: `db/documento.clj/editar-rascunho!` guard `(when (not= \"rascunho\" estado) (throw {:tipo :validacao/invalido ...}))` -> 400 `{:erro \"requisicao invalida\"}` exibido via `erroEdicao`."
+    },
+    {
+     "caso": "conflito de lock_version (edição concorrente)",
+     "onde_surge": "TRATADO pelo backend: `editar-rascunho!` faz UPDATE com `WHERE lock_version = <valor enviado>`; 0 linhas afetadas -> lança `:validacao/invalido` -> 400. A tela mostra a mensagem genérica via `erroEdicao`, sem indicar que foi conflito de concorrência especificamente."
+    }
+   ]
+  },
+  {
+   "nome": "Protocolar e numerar",
+   "tem_tela": true,
+   "rota_next": "apps/frontend/src/app/(interno)/expediente/page.tsx",
+   "url_navegavel": "http://localhost:3000/expediente?token=%7B%22identidade-id%22%3A%224893207b-8487-42d6-a12d-d8721cd348ec%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%2C%22papeis%22%3A%5B%22secretario%22%5D%7D",
+   "endpoint_api": "POST /legislativo/documentos/:id/protocolo (Malli ProtocolarDocumento: lock-version obrigatório :int)",
+   "tabela_db": "legislativo.protocolo_geral (INSERT: numero gapless via kernel/sequencial escopo 'protocolo_geral:<ano>', objeto_tipo='documento', objeto_id=<documento.id>, sentido='expedido') + legislativo.documento (UPDATE estado='rascunho'->'emitido', protocolo_geral_id, emitido_em, emitido_por) — 1 única tx (Repositorio/protocolar-documento!)",
+   "papel": "servidor (papel backend 'secretario')",
+   "passos_browser": [
+    "Continuação do fluxo — documento em 'rascunho' (salvo ou recém-gerado), mesma página.",
+    "Clicar no botão role=button, name='Protocolar e numerar' (`.btn.btn-primaria`, ao lado de 'Salvar rascunho', só existe enquanto `!bloqueado`).",
+    "Esperar 'Documento protocolado' em `.comando-ctx span`.",
+    "Conferir o carimbo do preview: `div.carimbo` deixa de ter a classe `reservar` e `span.num` passa a mostrar o número real (`textoCarimbo`, antes exibia 'a reservar').",
+    "Rolar até a seção 'Livro do Protocolo Geral — ano corrente' (h2#livro-titulo) e conferir que uma nova linha em `table.protocolo tbody tr` aparece com o mesmo número/assunto."
+   ],
+   "assercao_db": "SELECT d.estado, d.protocolo_geral_id, p.numero, p.ano, p.objeto_tipo, p.objeto_id FROM legislativo.documento d JOIN legislativo.protocolo_geral p ON p.ente_id=d.ente_id AND p.id=d.protocolo_geral_id WHERE d.ente_id='10000000-0000-0000-0000-000000000001' AND d.id='<id do documento>'; -- espera d.estado='emitido', p.objeto_tipo='documento', p.objeto_id=d.id. Gapless: SELECT numero, numero = row_number() OVER (ORDER BY numero) AS esperado FROM legislativo.protocolo_geral WHERE ente_id='10000000-0000-0000-0000-000000000001' AND ano=<ano corrente> ORDER BY numero; -- toda linha deve ter numero=esperado (sem buraco).",
+   "casos_de_erro": [
+    {
+     "caso": "protocolar duas vezes (o mesmo documento)",
+     "onde_surge": "TRATADO em 2 camadas, mas pela MESMA aba é estruturalmente inalcançável: após sucesso, `estado='emitido'` -> `bloqueado=true` remove o botão do DOM (formulario-preenchimento.tsx:253). Via 2ª aba com estado obsoleto: backend recusa em `db/documento.clj/emitir!` (guard `(when (not= \"rascunho\" estado) (throw {:tipo :validacao/invalido ...}))`, chamado dentro de `Repositorio/protocolar-documento!`) -> tx inteira faz ROLLBACK -> o número reservado pelo `kernel/sequencial` NUNCA é commitado (comentário explícito em repositorio.clj:685-690: 'o numero reservado pelo kernel/sequencial some com o rollback, gapless preservado') -> 400 exibido via `erroProtocolo`. Numeração gapless PROVADA por construção transacional, não por retry/compensação."
+    },
+    {
+     "caso": "protocolar o que não está em rascunho (documento já emitido por outro caminho)",
+     "onde_surge": "Mesmo guard/mesmo caminho do caso acima — `emitir!` é reusado tanto para replay quanto para qualquer documento fora de 'rascunho'; 400 fail-closed, rollback preserva gapless."
+    },
+    {
+     "caso": "campo {{ }} não preenchido no momento de protocolar",
+     "onde_surge": "NÃO SE APLICA a este endpoint — `renderizar-documento` só roda em `gerar!` (na geração), não em `protocolar-documento!`. Uma vez gerado, o `corpo` já está congelado como string final; protocolar não faz merge de novo. Esse caso de erro só existe na escrita 'Gerar documento' (ver acima)."
+    }
+   ]
+  }
+ ]
+}

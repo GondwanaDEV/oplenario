@@ -1,0 +1,151 @@
+{
+ "grupo": "E4 — O parecer (servidor + vereador)",
+ "achados": [
+  "A premissa do plano ('EMITIR SEM SER RELATOR' se aplica às 2 rotas de emissão) está parcialmente errada: a rota da secretaria (POST /legislativo/pareceres/:id/emissao, controllers.clj `emitir-parecer`) NÃO tem gate de posse nenhum — qualquer ator com papel 'secretario' emite QUALQUER parecer, seja ou não o relator. O gate `relator-do-parecer?` só existe na rota /meu/pareceres/:id/emissao (vereador). Isso é por desenho (a secretaria emite em nome da comissão), não bug, mas o caso de erro 'emitir sem ser relator' só é exercitável pela tela do vereador.",
+  "'Emitir duas vezes' na tela da secretaria (/parecer/[id]) só é bloqueado quando a 1ª emissão TRANSICIONA o parecer para um dos 4 estados terminais (aprovado/rejeitado/prejudicado/prazo_vencido) — só aí `parecerEhTerminal` esconde os botões. O gatilho enviado é sempre fixo 'emitir' (adapters/in/parecer.clj:59) e no template de demo (apps/backend/demo/acervo.clj:449-452) só existe transição 'aguardando_assinatura'→'aprovado' por esse gatilho. Um parecer ainda em 'em_elaboracao' (relatoria não concluída) que seja emitido fica no MESMO estado não-terminal (a transição é best-effort e falha em silêncio) — a tela CONTINUA oferecendo 'Emitir parecer', e o backend aceita de novo sem erro algum. Achado real: dupla emissão não é bloqueada nesse caminho.",
+  "GAP mais sério do grupo: a tela (vereador)/parecer/[id]/assinar NUNCA olha `dados.estado`/`parecerEhTerminal` — `deriveEstadoAssinatura` (assinatura-vista.ts) só checa `textoEstado` e `votoRelator`. Um parecer JÁ 'aprovado' (que só chega nesse estado tendo texto+voto setados) cai em 'pronto-pra-revisar' de novo e reexibe 'Revisar e assinar'/'Confirmar com a biometria'. Ao confirmar, o POST bate em Repo/emitir-parecer!, que faz UPDATE em legislativo.pareceres (registrar-voto-relator!) numa row já terminal — o trigger `trg_pareceres_imut_estado` (shared.imut_trava_estado_terminal, kernel-imutabilidade migration) lança RAISE EXCEPTION check_violation (SQLSTATE 23514). Nenhum catch em repositorio.clj trata 23514 (só 23505/23503 são tratados nesse arquivo); a exceção sobe crua e o interceptor global `erro` (interceptors.clj) não a reconhece como validacao/negado/teto → cai no ramo `:else` → 500 opaco 'erro interno'. Não há 409 limpo nem bloqueio de UI para esse caso.",
+  "'Dar ciência' é a única escrita do grupo com dupla-submissão genuinamente bem tratada dos dois lados: UNIQUE(ente_id, vereador_id, evento_ref) + INSERT...ON CONFLICT DO NOTHING + re-SELECT (db/meu_painel.clj/acusar-ciencia!) devolve sempre 201 idempotente com o `ciente_em` original — nunca duplica, nunca erra. A tela também remove o card após recarregar() porque o item sai de `ciencias-pendentes` (anti-join contra a própria tabela).",
+  "Nenhuma das escritas do grupo tem id fixo em e2e/.artifacts/demo-ids.edn — pareceres não são semeados com UUID estável (acervo.clj usa random-uuid, sem gravar artefato). A sonda já existente (e2e/.sonda/sonda.mjs, linhas 71-99) resolve isso em runtime via GET /portal/casa/:ente/materias → GET /legislativo/proposicoes/:id/ficha (autenticado) → .pareceres[].id, e documenta um gap conhecido da própria semente: a identidade fixa 'vereador' do artefato raramente é o relator sorteado round-robin, então a rota /meu/pareceres/:id costuma 404 por posse mesmo com dado real — a Trilha 3 precisa ou trocar de identidade dinamicamente (resolver o relator_id real e a identidade correspondente) ou aceitar esse 404 como resultado esperado na maioria das corridas.",
+  "A rota interna (interno)/parecer/[id] (editor da secretaria) não tem NENHUM guard de papel client-side (layout.tsx só injeta AuthProvider+TemaProvider, sem GuardServidor) — um token com papel 'vereador' abre a tela e vê o formulário normalmente; só a escrita (PATCH/POST) falha no backend com 403. Contraste: o app do vereador tem GuardVereador bloqueando client-side. Achado de consistência, não bug isolado."
+ ],
+ "escritas": [
+  {
+   "nome": "Editar parecer (rascunho)",
+   "tem_tela": true,
+   "rota_next": "apps/frontend/src/app/(interno)/parecer/[id]/page.tsx (form em apps/frontend/src/app/(interno)/parecer/formulario-parecer.tsx)",
+   "url_navegavel": "http://localhost:3000/parecer/<PARECER_ID>?token=<TOKEN_SECRETARIA_JSON_URLENCODED> — <PARECER_ID> não é fixo (ver achado sobre demo-ids.edn); resolver via GET http://localhost:8888/portal/casa/10000000-0000-0000-0000-000000000001/materias e depois GET /legislativo/proposicoes/:proposicao-id/ficha (Bearer TSEC) para pegar .pareceres[].id, mesma técnica de e2e/.sonda/sonda.mjs:71-99. <TOKEN_SECRETARIA_JSON_URLENCODED> = encodeURIComponent(JSON.stringify({'identidade-id': IDENTIDADE_SECRETARIA (demo-ids.edn :identidades :secretaria = 4893207b-8487-42d6-a12d-d8721cd348ec), 'ente-id': '10000000-0000-0000-0000-000000000001', papeis: ['secretario']}))",
+   "endpoint_api": "PATCH /legislativo/pareceres/:id (front chama /api/legislativo/pareceres/:id, proxy)",
+   "tabela_db": "legislativo.parecer_texto_versao (INSERT de nova linha estado_versao='rascunho'); legislativo.pareceres não é alterada por esta escrita",
+   "papel": "servidor",
+   "passos_browser": [
+    "Resolver <PARECER_ID> via as 2 chamadas GET descritas em url_navegavel",
+    "Abrir http://localhost:3000/parecer/<PARECER_ID>?token=<TSEC>",
+    "Esperar role='status' com texto 'Carregando…' sumir e o formulário aparecer",
+    "No textarea com aria-label='Relatório', digitar um texto (ex.: 'Relatório de teste E2E')",
+    "No textarea com aria-label='Análise', digitar um texto (ex.: 'Análise de teste E2E')",
+    "Clicar no botão de texto literal 'Salvar rascunho' (button type='button' className='btn btn-contorno', dentro de div.comando-acoes)",
+    "Confirmar que aparece 'Rascunho salvo' dentro de span.comando-ctx (mensagemStatus)"
+   ],
+   "assercao_db": "SELECT id, numero_versao, estado_versao, texto_inline, criado_em FROM legislativo.parecer_texto_versao WHERE ente_id='10000000-0000-0000-0000-000000000001' AND parecer_id='<PARECER_ID>' ORDER BY numero_versao DESC, criado_em DESC LIMIT 1; -- espera estado_versao='rascunho' e texto_inline = '## Relatório\\n\\n<texto digitado>\\n\\n## Análise\\n\\n<texto digitado>'",
+   "casos_de_erro": [
+    {
+     "caso": "papéis trocados — vereador abre /parecer/:id (rota da secretaria) e tenta salvar",
+     "onde_surge": "NÃO TRATADO na tela: (interno)/layout.tsx não tem guard de papel client-side, o formulário abre normalmente. TRATADO no backend: interceptor `exige-papel 'secretario'` (interceptors.clj) nega -> `authz/negado?` -> 403 'autorização negada' — o front mostra o erro genérico via erroRascunho."
+    },
+    {
+     "caso": "parecer inexistente ou de outro tenant",
+     "onde_surge": "TRATADO no backend: salvar-rascunho-parecer-handler (diplomat/http/in.clj:227-239) faz pré-check buscar-parecer-editor ANTES de escrever -> 404 'parecer não encontrado' sem tocar a tabela; a tela cai no ramo estadoDetalhe==='erro' já no GET inicial (não chega a mostrar o formulário)."
+    },
+    {
+     "caso": "parecer já em estado terminal (aprovado/rejeitado/prejudicado/prazo_vencido)",
+     "onde_surge": "TRATADO pela tela: `bloqueado=parecerEhTerminal(dados.estado)` desabilita os 2 textareas e remove o botão 'Salvar rascunho' inteiramente. O backend em si não impede a escrita (nova-versao-parecer! é um INSERT append-only sem checar o estado do parecer pai), então esse caso só está coberto porque a tela nunca deixa o clique acontecer."
+    }
+   ]
+  },
+  {
+   "nome": "Emitir parecer (secretaria)",
+   "tem_tela": true,
+   "rota_next": "apps/frontend/src/app/(interno)/parecer/[id]/page.tsx (mesmo form de 'Editar parecer')",
+   "url_navegavel": "http://localhost:3000/parecer/<PARECER_ID>?token=<TOKEN_SECRETARIA_JSON_URLENCODED> — mesma resolução de id/token do item anterior. Preferir um parecer no estado 'aguardando_assinatura' (para ver a transição para 'aprovado' de fato acontecer) — nenhuma rota pública lista isso; ler o campo 'estado' do JSON de /legislativo/proposicoes/:id/ficha .pareceres[] autenticado, ou consultar direto no Postgres (ver assercao_db).",
+   "endpoint_api": "POST /legislativo/pareceres/:id/emissao (front chama /api/legislativo/pareceres/:id/emissao)",
+   "tabela_db": "legislativo.pareceres (UPDATE: estado, voto_relator, lock_version, texto_vigente_versao_id); legislativo.parecer_texto_versao (UPDATE estado_versao='vigente' + assinatura_*, se havia rascunho); legislativo.parecer_transicao_historico (INSERT, só se transicionou)",
+   "papel": "servidor",
+   "passos_browser": [
+    "Abrir http://localhost:3000/parecer/<PARECER_ID>?token=<TSEC> (mesmo parecer do rascunho, ou um novo já com texto salvo/vigente)",
+    "No grupo role='radiogroup' aria-label='Voto do relator', clicar num dos 3 labels: 'Favorável com emendas' (id voto-favoravel_com_emendas), 'Favorável' (id voto-favoravel) ou 'Contrário' (id voto-contrario)",
+    "Clicar no botão de texto literal 'Emitir parecer' (button type='button' className='btn btn-primaria')",
+    "Confirmar mensagem 'Parecer emitido' em span.comando-ctx",
+    "Opcional: recarregar a página e verificar que, se o parecer transicionou a terminal, os botões 'Salvar rascunho'/'Emitir parecer' sumiram (só resta 'Pré-visualizar')"
+   ],
+   "assercao_db": "SELECT estado, voto_relator, lock_version, texto_vigente_versao_id FROM legislativo.pareceres WHERE ente_id='10000000-0000-0000-0000-000000000001' AND id='<PARECER_ID>'; -- espera voto_relator = valor clicado. SELECT de_estado, para_estado, gatilho, ocorrido_em FROM legislativo.parecer_transicao_historico WHERE ente_id='10000000-0000-0000-0000-000000000001' AND parecer_id='<PARECER_ID>' ORDER BY ocorrido_em DESC LIMIT 1; -- só existe linha se o parecer estava em 'aguardando_assinatura' antes do clique.",
+   "casos_de_erro": [
+    {
+     "caso": "emitir sem texto (parecer nunca teve rascunho salvo nem versão vigente)",
+     "onde_surge": "NÃO TRATADO pela tela (só valida se um voto foi selecionado, nunca se há texto). TRATADO pelo backend: repositorio.clj ~linha 452 lança ex-info {:tipo :validacao/invalido} 'nenhum conteúdo de texto para emitir', o interceptor `erro` mapeia para 400 com corpo genérico {'erro':'requisição inválida'} — a tela mostra isso via role='alert' (erroExibido), sem detalhar a causa real."
+    },
+    {
+     "caso": "emitir sem ser relator (posse)",
+     "onde_surge": "NÃO SE APLICA a esta rota por desenho — /legislativo/pareceres/:id/emissao não checa relator_id (ver achados). Qualquer secretário emite qualquer parecer."
+    },
+    {
+     "caso": "emitir duas vezes",
+     "onde_surge": "NÃO TRATADO quando a 1ª emissão não transiciona o parecer a um estado terminal (ex.: parecer ainda em 'em_elaboracao', sem ter passado por 'concluir_relatoria'): `bloqueado` continua false, a tela reoferece 'Emitir parecer', e o backend aceita de novo silenciosamente (reescreve voto_relator, tenta transicionar de novo, sem erro). TRATADO apenas indiretamente quando a 1ª emissão parte de 'aguardando_assinatura' e vira 'aprovado' — aí `parecerEhTerminal` esconde os botões."
+    },
+    {
+     "caso": "papéis trocados",
+     "onde_surge": "Mesmo tratamento do 'Editar parecer': sem guard client-side, 403 no backend via exige-papel 'secretario'."
+    }
+   ]
+  },
+  {
+   "nome": "Emitir 'meu parecer' (vereador, assinatura em 2 toques)",
+   "tem_tela": true,
+   "rota_next": "apps/frontend/src/app/(vereador)/parecer/[id]/assinar/page.tsx",
+   "url_navegavel": "http://localhost:3000/parecer/<PARECER_ID>/assinar?token=<TOKEN_VEREADOR_JSON_URLENCODED> — <TOKEN_VEREADOR...> = encodeURIComponent(JSON.stringify({'identidade-id': IDENTIDADE_VEREADOR (demo-ids.edn :identidades :vereador = 49c23663-c30e-4829-b3be-c7481f107275), 'ente-id': '10000000-0000-0000-0000-000000000001', papeis: ['vereador']})). ATENÇÃO (achado): essa identidade fixa raramente é o relator_id real do parecer sorteado pela semente — checar primeiro no Postgres qual vereador_id é relator_id do <PARECER_ID> escolhido e, se não bater com a identidade fixa, essa tela vai 404 por posse mesmo com um id de parecer real.",
+   "endpoint_api": "POST /meu/pareceres/:id/emissao (front chama /api/meu/pareceres/:id/emissao)",
+   "tabela_db": "legislativo.pareceres (UPDATE: estado, voto_relator, lock_version); legislativo.parecer_texto_versao (UPDATE estado_versao='vigente' + assinatura_algoritmo/assinatura_b64/assinado_por/assinado_em, só se havia rascunho); legislativo.parecer_transicao_historico (INSERT, só se transicionou)",
+   "papel": "vereador",
+   "passos_browser": [
+    "Abrir http://localhost:3000/parecer/<PARECER_ID>/assinar?token=<TVER>",
+    "Confirmar que NÃO caiu em 'Não foi possível carregar este parecer' (isso indicaria 404 de posse — vereador não é o relator)",
+    "Se `situacao==='sem-voto'` a tela mostra apenas o aviso 'Ainda falta registrar a conclusão (voto) do relator no editor' — nesse caso a escrita não é alcançável por aqui; o voto precisa ter sido setado antes via a rota da secretaria (ver achado circular sobre votoRelator)",
+    "Se pronta: clicar no botão de texto literal 'Revisar e assinar' (button className='btn btn-primaria', dentro de div.assinar-bar)",
+    "No dialog role='dialog' aria-labelledby='sh-tit' que abre, clicar no botão de texto literal 'Confirmar com a biometria' (button className='btn btn-primaria', disabled durante envio)",
+    "Confirmar redirecionamento para /vereador?token=<TVER> em caso de sucesso"
+   ],
+   "assercao_db": "SELECT estado, voto_relator, lock_version FROM legislativo.pareceres WHERE ente_id='10000000-0000-0000-0000-000000000001' AND id='<PARECER_ID>'; SELECT estado_versao, assinatura_algoritmo, assinado_por, assinado_em FROM legislativo.parecer_texto_versao WHERE ente_id='10000000-0000-0000-0000-000000000001' AND parecer_id='<PARECER_ID>' AND estado_versao='vigente'; -- assinado_por deve ser a identidade-id do vereador ator (updated_by/created_by do ator, não a secretaria)",
+   "casos_de_erro": [
+    {
+     "caso": "emitir sem ser relator (posse)",
+     "onde_surge": "TRATADO nos dois lados: GET /meu/pareceres/:id (controllers.clj meu-parecer-editor) só devolve dados se repo/relator-do-parecer? for true; senão nil->404, e a tela mostra 'Não foi possível carregar este parecer / Ele pode não existir, ou você não é o relator designado.' O mesmo gate roda de novo em meu-emitir-parecer antes do POST de emissão."
+    },
+    {
+     "caso": "emitir sem texto",
+     "onde_surge": "TRATADO pela tela: deriveEstadoAssinatura retorna 'sem-texto' quando dados.textoEstado==='vazio' -> mostra apenas 'Ainda sem texto pronto para assinar.' e nunca renderiza o CTA de assinatura."
+    },
+    {
+     "caso": "emitir sem voto do relator ainda registrado",
+     "onde_surge": "TRATADO pela tela: situacao 'sem-voto' mostra aviso explícito e não libera o CTA 'Revisar e assinar' (o guard extra em confirmar() também aborta silenciosamente se votoRelator vier nulo, defesa em profundidade)."
+    },
+    {
+     "caso": "emitir duas vezes (assinar parecer já terminal/aprovado)",
+     "onde_surge": "NÃO TRATADO — achado central deste grupo. `deriveEstadoAssinatura` nunca olha dados.estado/parecerEhTerminal; um parecer já 'aprovado' reaparece como 'pronto-pra-revisar' e reoferece o botão. Ao confirmar, o UPDATE em legislativo.pareceres bate no trigger trg_pareceres_imut_estado (check_violation/23514), que não é capturado em nenhum lugar do caminho -> sobe cru -> interceptor global cai no ramo 500 genérico 'erro interno'. A tela mostra 'Não foi possível assinar: falha ao assinar parecer (status 500)' — nem a UI nem o backend dão um 409 limpo."
+    },
+    {
+     "caso": "papéis trocados",
+     "onde_surge": "TRATADO nos dois lados: GuardVereador ((vereador)/layout.tsx) bloqueia client-side qualquer papel != 'vereador' com tela 'Acesso restrito'; a rota /meu/pareceres/:id/emissao também exige papel-vereador no backend -> 403 se o token só tiver 'secretario'."
+    }
+   ]
+  },
+  {
+   "nome": "Dar ciência",
+   "tem_tela": true,
+   "rota_next": "apps/frontend/src/app/(vereador)/vereador/page.tsx (card CartaoCiencia dentro da própria função PaginaHomeVereador)",
+   "url_navegavel": "http://localhost:3000/vereador?token=<TOKEN_VEREADOR_JSON_URLENCODED> — mesmo formato de token do item anterior. O card só aparece se `vista.ciencias.length>0`; se a home mostrar 'Nenhuma proposição sua ainda.' e nenhuma seção 'Para sua ciência', é preciso achar um evento pendente (parecer publicado sobre proposição de autoria desta identidade) antes.",
+   "endpoint_api": "POST /meu/ciencias (front chama /api/meu/ciencias)",
+   "tabela_db": "legislativo.ciencia_vereador (INSERT append-only, idempotente por UNIQUE(ente_id, vereador_id, evento_ref))",
+   "papel": "vereador",
+   "passos_browser": [
+    "Abrir http://localhost:3000/vereador?token=<TVER>",
+    "Confirmar a seção com aria-label='Para sua ciência' (h2 'Para sua ciência') está visível",
+    "Dentro do article.ciencia correspondente, clicar no botão de texto literal 'Dar ciência' (button type='button' className='btn btn-primaria btn-mini')",
+    "Confirmar que o card some da lista após recarregar() (a ciência sai de ciencias-pendentes)"
+   ],
+   "assercao_db": "SELECT id, vereador_id, evento_ref, tipo, ciente_em FROM legislativo.ciencia_vereador WHERE ente_id='10000000-0000-0000-0000-000000000001' AND evento_ref='<PARECER_ID_DA_CIENCIA>' ORDER BY ciente_em DESC LIMIT 1; -- vereador_id é o resolvido pelo `resolver-vereador` para a identidade do token (cross-schema cadastros); usar o :id devolvido no corpo 201 da resposta HTTP como referência confiável em vez de adivinhar o vereador_id de antemão.",
+   "casos_de_erro": [
+    {
+     "caso": "dar ciência duas vezes",
+     "onde_surge": "TRATADO por completo: UNIQUE(ente_id, vereador_id, evento_ref) + INSERT...ON CONFLICT DO NOTHING + re-SELECT (db/meu_painel.clj/acusar-ciencia!) sempre devolve 201 idempotente com o ciente_em original, nunca duplica/erra. Guard extra: useAcusarCiencia.enviandoRef recusa clique duplo em voo com 'envio em andamento' antes mesmo de chegar à rede."
+    },
+    {
+     "caso": "dar ciência sobre evento que não é seu / evento inválido (forja)",
+     "onde_surge": "TRATADO: `parecer-elegivel-para-ciencia?` é checado no controller (fast-path) E reconfirmado dentro da mesma tx do INSERT (defesa em profundidade) — se falhar, `acusar-ciencia` devolve nil e o handler responde 404 'vereador sem cadastro vinculado neste ente' (mensagem reaproveitada/genérica, não distingue 'evento não é seu' de 'sem cadastro', mas o efeito de recusar está correto)."
+    },
+    {
+     "caso": "papéis trocados (secretaria chamando /meu/ciencias)",
+     "onde_surge": "TRATADO: GuardVereador bloqueia client-side; backend exige papel-vereador -> 403."
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,113 @@
+{
+ "grupo": "E3 — A matéria nasce (servidor)",
+ "escritas": [
+  {
+   "nome": "criar proposicao",
+   "tem_tela": true,
+   "rota_next": "apps/frontend/src/app/(interno)/editor-proposicao/page.tsx (form compartilhado em apps/frontend/src/app/(interno)/editor-proposicao/formulario-proposicao.tsx)",
+   "url_navegavel": "http://localhost:3000/editor-proposicao?token={\"identidade-id\":\"4893207b-8487-42d6-a12d-d8721cd348ec\",\"ente-id\":\"10000000-0000-0000-0000-000000000001\",\"papeis\":[\"secretario\"]} — o valor de token deve ir URL-encoded na querystring (papel exigido pela rota: 'secretario', gate em diplomat/http/in.clj:496). Chegar lá também navegando /proposicoes?token=... e clicando 'Nova proposição'.",
+   "endpoint_api": "POST /legislativo/proposicoes (backend, registrado em apps/backend/src/oplenario/legislativo/diplomat/http/in.clj:513-515; frontend chama via proxy same-origin /api/legislativo/proposicoes, rewrite em apps/frontend/next.config.ts:58)",
+   "tabela_db": "legislativo.proposicoes (hash-particionada por ente_id, migration 20260620000013-legislativo-proposicoes.up.sql)",
+   "papel": "servidor",
+   "passos_browser": [
+    "1. Abrir http://localhost:3000/proposicoes?token=<token servidor acima>",
+    "2. Clicar no link com texto visível 'Nova proposição' (role link, classe btn-primaria, no cabeçalho da lista) — navega para /editor-proposicao?token=...",
+    "3. No formulário: selecionar espécie no <select id=\"f-especie\"> rotulado 'Espécie' (opções: Projeto de Lei / Projeto de Lei Complementar / Projeto de Resolução / Decreto Legislativo / Emenda à LOM / Requerimento / Indicação / Moção)",
+    "4. Preencher <input id=\"f-ano\" type=\"number\"> rotulado 'Ano'",
+    "5. Opcional: selecionar <select id=\"f-autor-tipo\"> rotulado 'Autor' (Vereador/Mesa Diretora/Comissão/Poder Executivo/Iniciativa popular); ao selecionar, aparece <input id=\"f-autor-texto\"> rotulado 'Nome do autor' — preencher texto livre",
+    "6. Preencher <textarea id=\"f-ementa\"> rotulado 'Ementa' (obrigatório via HTML `required`)",
+    "7. Opcional: preencher <textarea id=\"f-texto\"> rotulado 'Texto da proposição' (placeholder '## Art. 1º ...'); botões 'Inserir artigo' / 'Inciso' / '§ Parágrafo' inserem snippet no cursor",
+    "8. Clicar no botão com texto exato 'Protocolar' (type=submit, classe btn-primaria)",
+    "9. Sucesso: router.push para /proposicoes?token=... — a nova linha aparece na tabela com número/sequencial recém-gerado"
+   ],
+   "seletores": [
+    "getByRole('link', { name: 'Nova proposição' }) — na lista /proposicoes",
+    "getByLabelText(/espécie/i) -> select#f-especie",
+    "getByLabelText(/^ano$/i) -> input#f-ano (number)",
+    "getByLabelText(/^autor$/i) -> select#f-autor-tipo",
+    "getByLabelText(/nome do autor/i) -> input#f-autor-texto (condicional, só após escolher autor-tipo)",
+    "getByLabelText(/objeto da indicação/i) -> input#f-objeto-indicacao (condicional, só tipo=indicacao)",
+    "getByLabelText(/tipo do requerimento/i) -> input#f-tipo-requerimento (condicional, só tipo=requerimento)",
+    "getByLabelText(/categoria da moção/i) -> input#f-categoria-mocao (condicional, só tipo=mocao)",
+    "getByLabelText(/^ementa$/i) -> textarea#f-ementa",
+    "getByLabelText(/texto da proposição/i) -> textarea#f-texto",
+    "getByRole('button', { name: 'Protocolar' }) -> button[type=submit]",
+    "getByRole('alert') -> p.form-erro (só aparece com erro; foco automático via erroRef)"
+   ],
+   "assercao_db": "SELECT id, tipo, ano, sequencial, urn_lex, ementa, autor_tipo, autor_texto, estado, lock_version, criado_em FROM legislativo.proposicoes WHERE ente_id='10000000-0000-0000-0000-000000000001' AND ementa = '<texto exato digitado>' ORDER BY criado_em DESC LIMIT 1; -- espera 1 linha, estado='protocolada', sequencial e urn_lex preenchidos, lock_version=0",
+   "casos_de_erro": [
+    {
+     "caso": "ementa vazia",
+     "onde_surge": "TRATADO PARCIALMENTE só na tela: textarea#f-ementa tem atributo HTML `required`, que bloqueia string totalmente vazia no submit nativo (nem chega a chamar aoSubmeter/POST). NÃO TRATADO em nenhuma camada para ementa 'espaço em branco' (ex.: '   '): `required` só checa length>0, wire/in.CriarProposicao usa `[:string {:max 2000}]` sem `:min`/trim, e a coluna `ementa text NOT NULL` (migration 20260620000013) não tem CHECK de conteúdo — uma proposição com ementa em branco protocola normalmente e fica pública."
+    },
+    {
+     "caso": "especie invalida",
+     "onde_surge": "NÃO ALCANÇÁVEL PELA INTERFACE: select#f-especie só lista as 8 espécies do array ESPECIES (mesmo vocabulário do CHECK `proposicao_tipo_conhecido` da migration). Forçar um valor fora dessas 8 exige manipular o DOM fora do fluxo normal do usuário. Se alcançado via HTTP direto, backend rejeita 400 por Malli `km/enum-de logic/tipos` (já coberto na Trilha 2)."
+    },
+    {
+     "caso": "autor inexistente",
+     "onde_surge": "NÃO ALCANÇÁVEL PELA INTERFACE: a tela não tem NENHUM campo para `autor-id` (o UUID de um vereador). FormularioProposicao/ValoresFormulario só coleta `autorTipo` (select de categoria) e `autorTexto` (texto livre) — `autorId` existe no tipo `CriarProposicaoIn` do hook `use-criar-proposicao.ts` mas nunca é atribuído em nenhum onChange do form, então o corpo enviado NUNCA carrega `autor-id`. A validação real de backend (`validar-autor!` em controllers.clj:155-194, que chama `vereador-vinculado?` e lança `:validacao/invalido`->400 'autor-id nao corresponde a um vereador vinculado a esta Casa') existe e funciona, mas fica MORTA neste fluxo — é um ACHADO estrutural, não um caso testável pela interface como está."
+    },
+    {
+     "caso": "duplo clique",
+     "onde_surge": "TRATADO NA TELA (parcial): botão fica `disabled` durante `enviando`, e o hook `useCriarProposicao` tem guard de reentrância síncrono via `enviandoRef` (ref, não state) contra Enter repetido. NÃO TRATADO NO BACKEND: `criar-proposicao-handler`/`repo/protocolar!` (db/proposicao.clj:22-38) não tem idempotency-key nem dedupe — cada POST gera `id` novo (`random-uuid` em adapters/in) e um `sequencial` novo via `kernel/sequencial`. Duas requisições genuinamente concorrentes (guard client-side não impede: 2 abas, retry de rede, StrictMode) criam DUAS proposições protocoladas distintas — o servidor confia inteiramente na UI."
+    }
+   ]
+  },
+  {
+   "nome": "editar proposicao",
+   "tem_tela": true,
+   "rota_next": "apps/frontend/src/app/(interno)/editor-proposicao/[id]/page.tsx (mesmo form formulario-proposicao.tsx, com bloquearIdentidade=true)",
+   "url_navegavel": "http://localhost:3000/editor-proposicao/<id>?token={\"identidade-id\":\"4893207b-8487-42d6-a12d-d8721cd348ec\",\"ente-id\":\"10000000-0000-0000-0000-000000000001\",\"papeis\":[\"secretario\"]} — <id> é DINÂMICO: a demo (apps/backend/demo/seed_demo.clj) gera proposições com `random-uuid`, não há id fixo conhecido. Obter o id real navegando /proposicoes?token=... e lendo o href de qualquer link 'Editar' da tabela (ou o resultado da assercao_db de 'criar proposicao').",
+   "endpoint_api": "PATCH /legislativo/proposicoes/:id (backend, diplomat/http/in.clj:520-524; frontend via proxy /api/legislativo/proposicoes/:id)",
+   "tabela_db": "legislativo.proposicoes",
+   "papel": "servidor",
+   "passos_browser": [
+    "1. Abrir http://localhost:3000/proposicoes?token=<token servidor>",
+    "2. Clicar no link 'Editar' (aria-label 'Editar <número>') de qualquer linha da tabela — navega para /editor-proposicao/<id>?token=...",
+    "3. Aguardar sair do estado role=status 'Carregando…' (useProposicaoDetalhe resolvendo GET /legislativo/proposicoes/:id)",
+    "4. Notar: select#f-especie e input#f-ano vêm DESABILITADOS (disabled, bloquearIdentidade=true) — identidade imutável pós-protocolo",
+    "5. Editar textarea#f-ementa e/ou textarea#f-texto e/ou select#f-autor-tipo + input#f-autor-texto",
+    "6. Clicar no botão com texto exato 'Salvar alterações'",
+    "7. Sucesso: router.push para /proposicoes?token=..."
+   ],
+   "seletores": [
+    "getByRole('link', { name: /Editar/ }) na linha da tabela em /proposicoes",
+    "getByRole('status') -> p com texto 'Carregando…' (estado transitório)",
+    "getByLabelText(/espécie/i) -> select#f-especie (disabled)",
+    "getByLabelText(/^ano$/i) -> input#f-ano (disabled)",
+    "getByLabelText(/^autor$/i) -> select#f-autor-tipo",
+    "getByLabelText(/nome do autor/i) -> input#f-autor-texto",
+    "getByLabelText(/^ementa$/i) -> textarea#f-ementa",
+    "getByLabelText(/texto da proposição/i) -> textarea#f-texto",
+    "getByRole('button', { name: 'Salvar alterações' }) -> button[type=submit]",
+    "getByRole('alert') -> p.form-erro"
+   ],
+   "assercao_db": "SELECT id, ementa, autor_tipo, autor_texto, lock_version, atualizado_em FROM legislativo.proposicoes WHERE ente_id='10000000-0000-0000-0000-000000000001' AND id='<id editado>'; -- espera lock_version incrementado em +1 sobre o valor antes da edição, ementa/autor refletindo a mudança, atualizado_em mais recente",
+   "casos_de_erro": [
+    {
+     "caso": "ementa vazia",
+     "onde_surge": "MESMO padrão do criar, com uma diferença de contrato: no PATCH o campo é opcional (`wire/EditarProposicao` tem `:ementa {:optional true} [:maybe [:string {:max 2000}]]`, sem `:min`), mas a UI sempre pré-preenche o textarea com o valor atual e mantém o `required` do HTML — então apagar tudo é bloqueado nativamente; apagar e deixar só espaços NÃO É TRATADO em nenhuma camada (mesmo achado do criar) e sobrescreve a ementa pública com string em branco."
+    },
+    {
+     "caso": "especie invalida",
+     "onde_surge": "NÃO ALCANÇÁVEL — aqui por DESIGN, não só ausência de UI: select#f-especie fica desabilitado (bloquearIdentidade) porque tipo/ano são IMUTÁVEIS pós-protocolo, garantido por trigger de banco `legislativo.proposicao_identidade_imutavel()` (migration 20260620000013) que lança exceção se `tipo` mudar em UPDATE. Mesmo que a UI permitisse, o banco rejeitaria."
+    },
+    {
+     "caso": "autor inexistente",
+     "onde_surge": "NÃO ALCANÇÁVEL PELA INTERFACE — mesmo achado do criar: FormularioProposicao é o MESMO componente, sem campo autor-id. Confirmado também no `valorInicial` montado em editor-proposicao/[id]/page.tsx (linhas ~62-72): copia autorTipo/autorTexto de `dados`, mas NUNCA autorId — então nem o valor pré-existente (se houver) é exposto/reenviado pelo form. A validação de backend (`validar-autor!`, mesma função do criar) segue ativa e correta, mas morta neste fluxo."
+    },
+    {
+     "caso": "duplo clique",
+     "onde_surge": "TRATADO NA TELA igual ao criar (enviandoRef + botão disabled). PARCIALMENTE TRATADO NO BACKEND, diferente do criar: `editar!` (db/proposicao.clj:166-192) faz CAS por `lock_version` no WHERE do UPDATE — duas PATCHes concorrentes com o mesmo `lockVersion` (o que a UI garante, pois só lê o valor uma vez ao carregar a tela): a primeira aplica e incrementa `lock_version`; a segunda casa 0 linhas, `:returning` volta nil, e o handler lança `:validacao/invalido` 'editar!: conflito de lock_version ou proposicao inexistente' -> 400, exibido no alerta da tela. Não é idempotência, mas evita a escrita perdida silenciosa que existe no criar."
+    }
+   ]
+  }
+ ],
+ "achados": [
+  "'autor inexistente' não é exercível pela interface em NENHUMA das 2 escritas do grupo E3: FormularioProposicao (compartilhado por criar/editar) nunca coleta nem envia autor-id — só autor-tipo (select de categoria) e autor-texto (texto livre). A validação real de backend (validar-autor! + vereador-vinculado?) existe e está correta, mas fica morta neste fluxo de UI. A premissa do plano (as 24 escritas são alcançáveis pela interface) já falha aqui para este caso de erro específico.",
+  "'especie invalida' também não é exercível pela interface em nenhuma das 2 telas: no criar, o <select> só lista as 8 espécies válidas (mesmo vocabulário do CHECK de banco); no editar, o campo vem desabilitado por DESIGN (identidade imutável pós-protocolo, reforçado por trigger de banco, não só react state).",
+  "'ementa vazia' tem tratamento incompleto e é preciso distinguir 'vazia' de 'em branco': o atributo HTML required bloqueia string vazia (length 0) mas não bloqueia espaços — e nem Malli (sem :min) nem a constraint do banco (NOT NULL sem CHECK de conteúdo) travam ementa só-espaço, em nenhuma das 2 escritas.",
+  "'duplo clique' tem proteção ASSIMÉTRICA entre as 2 escritas do grupo: no criar não há proteção alguma no servidor (POST sem idempotency-key gera 2 proposições distintas de 2 requisições concorrentes); no editar, o CAS por lock_version dá proteção real de servidor (a segunda de duas PATCHes concorrentes recebe 400 de conflito)."
+ ]
+}

@@ -1,0 +1,48 @@
+{
+ "achados": [
+  "Precondição de E6 NÃO tem tela: `abrir-votacao` (POST /api/sessoes/:id/votacoes, papel secretario) só existe em apps/backend/src/oplenario/legislativo/diplomat/http/in.clj:498; busca em apps/frontend/src por 'votacoes' só retorna src/lib/use-meu-voto.ts — nenhum componente chama /votacoes (abrir) ou /votacoes/:id/votos (voto da Mesa). Para exercer a tela de E6 é preciso abrir a votação por HTTP/SQL antes — confirma o que docs/superpowers/plans/2026-09-08-exploratorio-de-escrita.md já registra: 'A Mesa não conduz a sessão pela interface — 17 rotas' (grupo A).",
+  "Estado medido ao vivo em 09/09 (stack em pé, pós-Trilha-2): a sessão 10000000-0000-0000-0000-000000000211 ('aberta') NÃO tem nenhuma votação em estado 'aberta' — a única votação vinculada (1ab2dd69-eda8-406f-b862-25dcf28ddb0e) já está 'encerrada'. É preciso abrir uma votação nominal nova antes de rodar o caminho feliz de E6.",
+  "A sessão 10000000-0000-0000-0000-000000000212, que o briefing descreve como 'agendada', está com estado='encerrada' no banco atual (SELECT direto em sessoes.sessao) — provavelmente mutada pelas escritas da Trilha 2/T1. Os 3 ids de demo-ids/sessoes.clj continuam corretos como IDENTIFICADORES (10...210/211/212), mas os RÓTULOS de estado do briefing estão desatualizados contra o dado vivo.",
+  "Ambiguidade não resolvida no caso de erro 'sessão de que não participa': a tela (`meu-voto-vista.ts`) só distingue 'sem-presenca' (CTA de confirmar presença) de 'pode-votar'; não existe um ciclo de tela dedicado para 'vereador sem mandato vigente nesta Casa' ou 'vereador de outro ente'. Se esse caso ocorrer, ou `resolver-vereador` retorna nil (→ 404, cai no /meu/painel com estado 'erro' genérico 'Não foi possível abrir o cockpit') ou o backend nega no authz/check! (403 genérico 'Não é possível votar agora.') sem uma mensagem de tela específica — não verificado ao vivo nesta passada, ficou só na leitura do código (controllers.clj:76-135)."
+ ],
+ "escritas": [
+  {
+   "nome": "Votar (vereador) — voto nominal no cockpit ao vivo",
+   "tem_tela": true,
+   "rota_next": "apps/frontend/src/app/(vereador)/votar/page.tsx",
+   "url_navegavel": "/votar?token=%7B%22identidade-id%22%3A%2249c23663-c30e-4829-b3be-c7481f107275%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%2C%22papeis%22%3A%5B%22vereador%22%5D%7D",
+   "endpoint_api": "POST /api/sessoes/:id/votacoes/:votacaoId/meu-voto (apps/backend/src/oplenario/legislativo/diplomat/http/in.clj:504-507, handler meu-voto-handler em linha 98)",
+   "tabela_db": "legislativo.votos (UNIQUE ente_id,votacao_id,vereador_id; CHECK voto in sim/nao/abstencao)",
+   "papel": "vereador",
+   "passos_browser": [
+    "SETUP fora da UI (grupo A não tem tela): com um token de secretario ({\"identidade-id\":\"4893207b-8487-42d6-a12d-d8721cd348ec\",\"ente-id\":\"10000000-0000-0000-0000-000000000001\",\"papeis\":[\"secretario\"]}), POST http://localhost:8888/api/sessoes/10000000-0000-0000-0000-000000000211/votacoes com body {\"objeto-tipo\":\"proposicao\",\"objeto-id\":\"<uuid de uma proposição real do ente>\",\"modalidade\":\"nominal\",\"quorum-tipo\":\"maioria_simples\"} — anote o `id` da votação retornada (votacao-id).",
+    "Navegar no browser para /votar?token=%7B%22identidade-id%22%3A%2249c23663-c30e-4829-b3be-c7481f107275%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%2C%22papeis%22%3A%5B%22vereador%22%5D%7D (Fernanda Rocha Pinto, vereador-id 69d7aa68-498a-4aa5-a6e9-10e0ad2d664b — já tem presença 'entrada' registrada na sessão 211 e mandato vigente, confirmado no banco).",
+    "Esperar a section aria-label=\"Votação ao vivo\" renderizar com o badge 'Ao vivo' (não 'Reconectando…'/'Conectando…').",
+    "Confirmar que aparece o grupo role=\"group\" aria-label=\"Seu voto na votação corrente\" com os 3 botões (o ciclo já deve estar 'pode-votar' pois a presença já está confirmada — se aparecer o botão 'Confirmar presença' em vez disso, clicar nele primeiro).",
+    "Clicar no botão de texto literal \"Sim\" (classe vbtn vbtn-sim).",
+    "Observar o parágrafo que aparece: \"Você votou Sim. O voto já entra no placar oficial abaixo.\" e que os 3 botões de voto somem (ciclo virou ja-votou).",
+    "Recarregar a página (F5) mantendo a mesma URL com token e confirmar que a mesma mensagem \"Você votou Sim…\" persiste (prova que não é estado só-de-cliente)."
+   ],
+   "assercao_db": "SELECT id, voto, vereador_id, registrado_em FROM legislativo.votos WHERE votacao_id = '<votacao-id do setup>' AND vereador_id = '69d7aa68-498a-4aa5-a6e9-10e0ad2d664b'; -- espera 1 linha, voto='sim'",
+   "casos_de_erro": [
+    {
+     "caso": "sem votação aberta",
+     "onde_surge": "TELA trata: quando não há votação 'aberta' vinculada à sessão, placar.kind==='nenhuma' e a tela mostra só o texto \"Nenhuma votação aberta no momento.\" (aria-live=polite) — nenhum botão de voto é renderizado, então não há como sequer tentar o POST pela interface. BACKEND também recusa em defesa: se a votação existir mas não estiver 'aberta', o check `(= \"aberta\" (:estado v))` falha dentro de authz/check! → 403 genérico \"Não é possível votar agora.\" (controllers.clj linha ~119; use-meu-voto.ts mapeia 403→essa mesma frase fixa, sem vazar a causa)."
+    },
+    {
+     "caso": "votar duas vezes",
+     "onde_surge": "TELA trata (client-side): o botão fica disabled={estadoVotar===\"enviando\"} durante o envio, e depois do sucesso o ciclo vira 'ja-votou' e os botões de voto somem (não há como clicar de novo pela mesma sessão de browser). BACKEND recusa como garantia real: 2ª escrita bate no UNIQUE (ente_id,votacao_id,vereador_id) → SQLState 23505 → :conflito/voto-duplicado → 409 'voto ja registrado para este vereador nesta votacao' (repositorio.clj linhas ~557-580). Para reproduzir de fato o erro pela UI seria preciso 2 abas/sessões votando como o MESMO vereador quase simultaneamente, ou reenviar o POST fora da tela."
+    },
+    {
+     "caso": "sessão de que não participa",
+     "onde_surge": "PARCIALMENTE TRATADO / AMBÍGUO: se o vereador não tem presença confirmada NESTA sessão, meu-voto-vista.ts deriva ciclo='sem-presenca' e a tela mostra só o CTA \"Confirme sua presença para poder votar.\" (sem botões de voto) — TELA trata esse sub-caso. Mas se 'não participa' significa mandato não vigente/vereador de outro ente, não existe ciclo de tela dedicado: cai ou em 404 (resolver-vereador nil, controllers.clj:100) que a página /votar não trata explicitamente para esse hook específico, ou em 403 genérico do backend via o fato DSL tem_mandato_vigente (controllers.clj linha ~127). NÃO VERIFICADO AO VIVO nesta passada — achado registrado acima."
+    },
+    {
+     "caso": "SESSÃO SECRETA sem direito",
+     "onde_surge": "TELA trata plenamente: derivarMeuVoto retorna ciclo='secreta' sempre que placar.modalidade !== 'nominal' (fail-closed, sem depender de authz do vereador), e a tela mostra só o texto \"Votação secreta: o voto só é registrável pelo terminal da Mesa (§22.6).\" — nenhum botão de voto aparece. BACKEND também recusa explicitamente e primeiro: controllers.clj linha ~103 lança :validacao/invalido ANTES de qualquer authz se `(:modalidade v)` = 'secreta', mesmo que alguém tente o POST direto contornando a tela."
+    }
+   ]
+  }
+ ],
+ "grupo": "E6 — Votar (vereador)"
+}
