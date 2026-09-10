@@ -77,10 +77,30 @@ linguagem simples, busca semântica) e é o que impede M4 de fechar. Atenção: 
 escrita autenticados do cidadão (a consulta pública não exige login, então M5 não está bloqueado).
 O IdP do operador (`admin_sistema`) é um **stub de 3 linhas** — bloqueia o console supratenant.
 
-**3. Onda E da track FE — não iniciada.** ~13 telas com design pronto e zero rota Next: transparência
-fiscal, dados abertos, status, console do operador, livro de atas, calendário, audiência pública,
-julgamento de contas, notificações, observabilidade de IA, perfil público de vereador, trilha de
-auditoria. Trabalho mecânico — o design já foi pago.
+**3. Onda E da track FE — MEDIDA em 10/09/2026, e a cauda NÃO é trabalho mecânico.** A descrição
+anterior deste item ("~13 telas com design pronto e zero rota Next… trabalho mecânico, o design já foi
+pago") estava **errada**, e errada de um jeito caro: mandaria 12 agentes portar telas que não têm API
+para chamar. A medição (14 telas × medir + refutar; ledger `docs/16`, seção Onda E) devolveu:
+
+| Veredito | Telas |
+|---|---|
+| **BLOQUEADO — o domínio não existe no backend** (8) | `transparencia-fiscal` · `console-operador` · `console-operador-tenant` · `livro-atas` · `audiencia-publica` · `julgamento-contas` · `trilha-auditoria` · `observabilidade-ia` |
+| **PARCIAL** (4) | `dados-abertos` · `calendario` ✅ · `vereador-estatisticas` · `notificacoes` ✅ |
+| **PORTÁVEL** (1) | `status` ✅ — e só porque o design é texto fixo, sem binding |
+| **JÁ FEITA** (1) | `perfil-vereador-publico` (a lista anterior a dava como pendente) |
+
+✅ = **entregue** na branch `onda-e-cauda`. As 3 fatias entregáveis foram feitas: `/status` (pública),
+`/calendario` (interno, sessões + prazos de compliance) e o incremento de `/notificacoes`.
+
+**O que sobra não é FE adiado, é domínio ausente** — e três dessas dependem de decisão, não de código:
+- `transparencia-fiscal` — o **documento-mestre §289/§404 veta** produzir o dado fiscal: isso é do sistema
+  contábil, e entra só a camada de publicação, por consumo. É `[GAP]` de conector externo (qual sistema,
+  qual protocolo), da mesma família do layout SIM do TCE-CE. **Não é backlog de engenharia.**
+- `console-operador` (+tenant) — `admin_sistema/diplomat/http/in.clj` tem **3 linhas e zero rotas**, e o
+  IdP do operador é o stub do item 2 acima.
+- `observabilidade-ia` — Track IA, item 1 acima.
+
+E `vereador-estatisticas` esbarra no `proposicoes.estado` morto (4 dos 5 buckets).
 
 **4. A verificação nunca saiu desta máquina.** O repositório **não tem remote** (`git remote -v`
 vazio): o `.github/workflows/ci.yml` existe desde F0 mas **nunca executou**. Todo "CI verde" citado
