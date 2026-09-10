@@ -373,17 +373,26 @@
   tempo, injetavel em teste) resolve o ano civil da geracao AQUI, na borda (mesmo padrao de
   protocolar-documento-handler/`ano`). nil (proposicao inexistente no tenant) -> 404. Autografo duplicado
   (guard do controller, mesmo racional de encerrar-votacao) -> :validacao/invalido -> 400 (interceptor
-  global de erro)."
+  global de erro). Materia NAO APROVADA em votacao (T3-A) -> :conflito/proposicao-nao-aprovada -> 409,
+  traduzido AQUI (o interceptor global so' conhece :validacao/invalido; um :conflito/* solto vira 500)."
   [repo-leg resolver-municipio relogio]
   (fn [req]
     (let [ator (:ator req) ente-id (:ente-id ator)
           proposicao-id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
           ano (.getYear (tempo/hoje relogio zona-civil))
           m (adapters-in-pos-aprovacao/gerar-autografo->dominio ator proposicao-id (:json-params req))]
-      (if (controllers/gerar-autografo repo-leg resolver-municipio ente-id ano m)
-        (http/json-resposta 201 (pos-aprovacao->wire
-                                   (controllers/buscar-pos-aprovacao repo-leg ente-id proposicao-id)))
-        (http/json-resposta 404 {:erro "proposicao nao encontrada"})))))
+      (try
+        (if (controllers/gerar-autografo repo-leg resolver-municipio ente-id ano m)
+          (http/json-resposta 201 (pos-aprovacao->wire
+                                    (controllers/buscar-pos-aprovacao repo-leg ente-id proposicao-id)))
+          (http/json-resposta 404 {:erro "proposicao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          ;; T3-A: materia nao aprovada -> 409 (o pedido era valido; o recurso e' que nao chegou la'). Sem
+          ;; esta traducao o `:conflito/*` cai no `:else` do interceptor global e a recusa vira 500 — mesma
+          ;; disciplina de `resposta-conflito-tramitacao-executiva`: cada diplomat traduz a SUA borda.
+          (if (= :conflito/proposicao-nao-aprovada (:tipo (ex-data e)))
+            (http/json-resposta 409 {:erro (ex-message e)})
+            (throw e)))))))
 
 (defn- pos-aprovacao-handler
   "GET /legislativo/proposicoes/:id/pos-aprovacao. nil (proposicao inexistente no tenant) -> 404."

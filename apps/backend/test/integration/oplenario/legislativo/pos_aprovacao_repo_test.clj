@@ -11,6 +11,7 @@
             [oplenario.kernel.outbox :as outbox]
             [oplenario.legislativo.components.repositorio :as repo]
             [oplenario.legislativo.db.proposicao :as prop]
+            [oplenario.legislativo.db.votacao :as votacao]
             [oplenario.migracao :as migracao]))
 
 (def ^:dynamic *repo* nil)
@@ -27,6 +28,23 @@
          (fn [tx] (prop/protocolar! tx {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026
                                         :uf "CE" :municipio-nome "Fortaleza" :ementa "Dispoe sobre X"})))))
 
+(defn- protocolar-e-aprovar!
+  "T3-A (guarda-autografo-votacao): protocola E FAZ A CAMARA APROVAR. Desde a guarda, gerar autografo exige
+  o ATO — votacao encerrada com resultado 'aprovada' sobre a materia. Todo teste que gera autografo passou
+  a precisar disto, e essa exigencia e' o conserto, nao um custo de fixture: antes da guarda, estes mesmos
+  testes provavam que a numeracao gapless funcionava PARA MATERIA QUE NINGUEM VOTOU."
+  [ente]
+  (let [pid (protocolar! ente)]
+    (repo/transacao *repo* ente
+      (fn [tx]
+        (let [{vid :id} (votacao/abrir! tx {:id (random-uuid) :ente-id ente :objeto-tipo "proposicao"
+                                            :objeto-id pid :modalidade "nominal"
+                                            :quorum-tipo "maioria_simples"})]
+          (votacao/registrar-voto! tx {:id (random-uuid) :ente-id ente :votacao-id vid
+                                       :vereador-id (random-uuid) :voto "sim"})
+          (votacao/encerrar! tx {:id vid :ente-id ente :base-membros 1 :updated-by nil :lock-version 0}))))
+    pid))
+
 ;; ========================= buscar-pos-aprovacao (leitura composta) =========================
 
 (deftest buscar-pos-aprovacao-sem-autografo-ainda
@@ -42,7 +60,7 @@
     (is (= {:autografo nil :tramitacao-executiva nil} r))))
 
 (deftest buscar-pos-aprovacao-com-autografo-e-tramitacao
-  (let [ente (random-uuid) pid (protocolar! ente)
+  (let [ente (random-uuid) pid (protocolar-e-aprovar! ente)
         gerado (repo/gerar-autografo-e-abrir-tramitacao! *repo* ente
                  {:id (random-uuid) :proposicao-id pid :ano 2026 :texto-versao-id (random-uuid)
                   :destinatario-texto "Prefeito Municipal de Fortaleza" :created-by (random-uuid)})
@@ -57,7 +75,7 @@
 ;; ========================= gerar-autografo-e-abrir-tramitacao! (acao composta atomica) =========================
 
 (deftest gerar-autografo-e-abrir-tramitacao-numera-e-abre-atomico
-  (let [ente (random-uuid) pid (protocolar! ente)
+  (let [ente (random-uuid) pid (protocolar-e-aprovar! ente)
         r (repo/gerar-autografo-e-abrir-tramitacao! *repo* ente
             {:id (random-uuid) :proposicao-id pid :ano 2026 :texto-versao-id (random-uuid)
              :destinatario-texto "Prefeito Municipal de Fortaleza" :created-by (random-uuid)})]
@@ -71,7 +89,7 @@
       (is (= "aguardando" (:estado tram))))))
 
 (deftest gerar-autografo-e-abrir-tramitacao-numera-gapless-entre-proposicoes
-  (let [ente (random-uuid) pid-a (protocolar! ente) pid-b (protocolar! ente)
+  (let [ente (random-uuid) pid-a (protocolar-e-aprovar! ente) pid-b (protocolar-e-aprovar! ente)
         ra (repo/gerar-autografo-e-abrir-tramitacao! *repo* ente
              {:id (random-uuid) :proposicao-id pid-a :ano 2026 :texto-versao-id (random-uuid)
               :destinatario-texto "Prefeito Municipal de Fortaleza" :created-by (random-uuid)})
@@ -84,7 +102,7 @@
   ;; a UNIQUE (ente_id, proposicao_id) do autografo barra um segundo autografo p/ a mesma proposicao — a
   ;; tentativa falha NAO deixa buraco no numerador gapless (kernel/sequencial e' transacional; mesmo teste
   ;; de regressao de protocolar-documento-lock-version-desatualizado-lanca-e-rollback-nao-deixa-buraco).
-  (let [ente (random-uuid) pid (protocolar! ente)]
+  (let [ente (random-uuid) pid (protocolar-e-aprovar! ente)]
     (repo/gerar-autografo-e-abrir-tramitacao! *repo* ente
       {:id (random-uuid) :proposicao-id pid :ano 2026 :texto-versao-id (random-uuid)
        :destinatario-texto "Prefeito Municipal de Fortaleza" :created-by (random-uuid)})
@@ -92,9 +110,29 @@
           (repo/gerar-autografo-e-abrir-tramitacao! *repo* ente
             {:id (random-uuid) :proposicao-id pid :ano 2026 :texto-versao-id (random-uuid)
              :destinatario-texto "Prefeito Municipal de Fortaleza" :created-by (random-uuid)})))
-    (let [outro-pid (protocolar! ente)
+    (let [outro-pid (protocolar-e-aprovar! ente)
           r (repo/gerar-autografo-e-abrir-tramitacao! *repo* ente
               {:id (random-uuid) :proposicao-id outro-pid :ano 2026 :texto-versao-id (random-uuid)
                :destinatario-texto "Prefeito Municipal de Fortaleza" :created-by (random-uuid)})]
       (is (= 2 (:numero r))
           "gapless: a tentativa falha (rollback) NAO consumiu numero — o proximo sucesso e' 2, nao 3"))))
+
+;; ========================= T3-A: a re-verificacao DENTRO da tx =========================
+
+(deftest gerar-autografo-em-materia-nao-aprovada-nao-escreve-nem-queima-numero
+  ;; O controller ja' guarda na borda (pos_aprovacao_http_in_test). ESTE teste prova o backstop: mesmo
+  ;; chamando o Repo DIRETO — sem passar pela borda — a materia nao aprovada nao vira autografo. Sem esta
+  ;; camada haveria janela TOCTOU entre o guard e a escrita, e o guard de duplicidade tem o UNIQUE do banco
+  ;; como backstop enquanto a aprovacao (fato noutra tabela) nao tem constraint equivalente.
+  (let [ente (random-uuid) pid (protocolar! ente)]      ; protocolada, JAMAIS votada
+    (is (thrown? Exception
+          (repo/gerar-autografo-e-abrir-tramitacao! *repo* ente
+            {:id (random-uuid) :proposicao-id pid :ano 2026 :texto-versao-id (random-uuid)
+             :destinatario-texto "Prefeito Municipal de Fortaleza" :created-by (random-uuid)})))
+    (is (nil? (repo/autografo-da-proposicao *repo* ente pid)) "nenhum autografo ficou no banco")
+    ;; e o numerador gapless nao foi consumido pela tentativa barrada
+    (let [aprovada (protocolar-e-aprovar! ente)
+          r (repo/gerar-autografo-e-abrir-tramitacao! *repo* ente
+              {:id (random-uuid) :proposicao-id aprovada :ano 2026 :texto-versao-id (random-uuid)
+               :destinatario-texto "Prefeito Municipal de Fortaleza" :created-by (random-uuid)})]
+      (is (= 1 (:numero r)) "a recusa nao queimou numero: o primeiro autografo do ano ainda e' o 1"))))

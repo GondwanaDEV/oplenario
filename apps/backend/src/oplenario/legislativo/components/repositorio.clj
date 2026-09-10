@@ -51,6 +51,10 @@
     "PATCH parcial (CAS) + promove nova versao 'edicao' se :texto presente, 1 tx.")
   (buscar-proposicao-detalhe [this ente-id id]
     "{:proposicao ... :texto (a linha de texto/vigente, ou nil)}, uma leitura.")
+  (proposicao-aprovada-em-votacao? [this ente-id proposicao-id]
+    "T3-A — a Casa APROVOU esta materia? Booleano, lido do ATO (votacao encerrada com resultado
+     'aprovada'), nunca do rotulo `proposicoes.estado`. Pre-condicao do autografo; ver
+     db/votacao.clj/aprovada-em-votacao? p/ as tres exclusoes e o limite declarado.")
   (ficha-completa-da-proposicao [this ente-id id]
     "Onda B Slice 3 (ficha-materia, leitura interna): {:proposicao :texto :tramitacao :apensadas :emendas
      :pareceres} NUMA UNICA tx (mesma disciplina de buscar-proposicao-detalhe/listar-e-contar-proposicoes).
@@ -328,6 +332,11 @@
       (fn [tx]
         {:proposicao (proposicao/buscar tx ente-id id)
          :texto (texto/vigente tx ente-id id)})))
+  ;; T3-A (guarda-autografo-votacao): o fato de aprovacao servido como LEITURA — o controller o consulta
+  ;; antes de gerar o autografo, e o read-model o publica p/ o FE gatear o botao na mesma verdade.
+  (proposicao-aprovada-em-votacao? [this ente-id proposicao-id]
+    (transacao this ente-id
+      (fn [tx] (votacao/aprovada-em-votacao? tx ente-id proposicao-id))))
   ;; Onda B Slice 3 (ficha-materia): composicao NUMA UNICA tx (mesma disciplina de buscar-proposicao-detalhe).
   ;; Tetos EMPURRADOS AO SQL (review MAJOR fe-9-ficha-materia — `take` em memoria truncava preservando os
   ;; MAIS ANTIGOS e descartava os MAIS RECENTES, e ainda pagava o custo de fetch da tabela inteira): cada
@@ -637,6 +646,14 @@
   (gerar-autografo-e-abrir-tramitacao! [this ente-id m]
     (transacao this ente-id
       (fn [tx]
+        ;; T3-A — RE-VERIFICACAO DA APROVACAO DENTRO DA TX (defesa em profundidade). O controller ja' guarda
+        ;; na borda, e e' de la' que sai a mensagem util; esta segunda leitura fecha a janela TOCTOU entre o
+        ;; guard e a escrita. O guard de duplicidade tem o UNIQUE (ente_id, proposicao_id) como backstop no
+        ;; banco — a aprovacao NAO tem constraint equivalente (o fato mora noutra tabela), entao o backstop
+        ;; tem de ser esta linha. Um autografo e' ato juridico NUMERADO: nao se aceita janela.
+        (when-not (votacao/aprovada-em-votacao? tx ente-id (:proposicao-id m))
+          (throw (ex-info "gerar-autografo: a materia nao foi aprovada em votacao (re-verificacao na tx)"
+                          {:tipo :conflito/proposicao-nao-aprovada :proposicao-id (:proposicao-id m)})))
         (let [{aut-id :id numero :numero} (autografo/gerar! tx (assoc m :ente-id ente-id))
               {tram-id :id} (exec/iniciar! tx {:id (random-uuid) :ente-id ente-id :autografo-id aut-id
                                                 :created-by (:created-by m)})]

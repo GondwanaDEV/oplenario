@@ -40,12 +40,13 @@
   proposicao que buscar-pos-aprovacao/gerar-autografo fazem via buscar-proposicao-detalhe). A AUSENCIA de
   uma chave e' PROPOSITAL: se o handler chamar o metodo fora de ordem, a chamada nil estoura — sinaliza a
   regressao em vez de passar silenciosamente."
-  [{:keys [buscar-proposicao-detalhe autografo-da-proposicao gerar-autografo-e-abrir-tramitacao!
-           buscar-pos-aprovacao tramitacao-executiva-do-autografo registrar-resposta-executivo!
-           buscar-tramitacao-executiva apreciar-veto!]}]
+  [{:keys [buscar-proposicao-detalhe proposicao-aprovada-em-votacao? autografo-da-proposicao
+           gerar-autografo-e-abrir-tramitacao! buscar-pos-aprovacao tramitacao-executiva-do-autografo
+           registrar-resposta-executivo! buscar-tramitacao-executiva apreciar-veto!]}]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify repo-leg/RepoLegislativo
     (buscar-proposicao-detalhe [_ _ente-id id] (buscar-proposicao-detalhe id))
+    (proposicao-aprovada-em-votacao? [_ _ente-id pid] (proposicao-aprovada-em-votacao? pid))
     (autografo-da-proposicao [_ _ente-id pid] (autografo-da-proposicao pid))
     (gerar-autografo-e-abrir-tramitacao! [_ _ente-id m] (gerar-autografo-e-abrir-tramitacao! m))
     (buscar-pos-aprovacao [_ _ente-id pid] (buscar-pos-aprovacao pid))
@@ -87,6 +88,7 @@
         repo (fake-repo-legislativo
               {:buscar-proposicao-detalhe (fn [_id] {:proposicao (proposicao-canonica ente pid)
                                                        :texto {:id (random-uuid)}})
+               :proposicao-aprovada-em-votacao? (fn [_pid] true)
                :autografo-da-proposicao (fn [_pid] nil)
                :gerar-autografo-e-abrir-tramitacao! (fn [_m] {:autografo-id aid :numero 1 :tramitacao-executiva-id tid})
                :buscar-pos-aprovacao (fn [_pid] {:autografo (autografo-canonico ente aid pid)
@@ -114,6 +116,7 @@
   (let [ente (random-uuid) pid (random-uuid)
         repo (fake-repo-legislativo
               {:buscar-proposicao-detalhe (fn [_id] {:proposicao (proposicao-canonica ente pid) :texto nil})
+               :proposicao-aprovada-em-votacao? (fn [_pid] true)
                :autografo-da-proposicao (fn [_pid] (autografo-canonico ente (random-uuid) pid))})
         r (pt/response-for (service-fn #{"secretario"} repo)
                            :post (str "/legislativo/proposicoes/" pid "/autografo")
@@ -128,6 +131,7 @@
   (let [ente (random-uuid) pid (random-uuid)
         repo (fake-repo-legislativo
               {:buscar-proposicao-detalhe (fn [_id] {:proposicao (proposicao-canonica ente pid) :texto nil})
+               :proposicao-aprovada-em-votacao? (fn [_pid] true)
                :autografo-da-proposicao (fn [_pid] nil)})
         r (pt/response-for (service-fn #{"secretario"} repo)
                            :post (str "/legislativo/proposicoes/" pid "/autografo")
@@ -386,3 +390,47 @@
     (is (= 400 (:status r)) "referencia a votacao inexistente e' erro de CORPO -> 400, nao 500 cru de FK")
     (is (= "veto-votacao-id nao corresponde a uma votacao desta Casa" (:erro (ler-json r)))
         "a mensagem diz QUAL campo esta errado")))
+
+;; ========================= T3-A: a guarda de aprovacao (guarda-autografo-votacao) =========================
+;; O achado: `POST .../autografo` nascia em materia que a Camara NUNCA aprovou — provado 4x ao vivo pela
+;; T3 (ledger Fase 11), 4 atos juridicos NUMERADOS fabricados, dois deles "sancionados" pelo Executivo.
+;; A pre-condicao correta NAO e' o rotulo `proposicao.estado` (texto livre, config de template por camara,
+;; e sem nenhuma rota HTTP que o mova — so' a semente): e' o ATO, a votacao encerrada com resultado
+;; 'aprovada' sobre esta proposicao. Recusa = 409 (o pedido era valido; o recurso e' que nao chegou la'),
+;; mesma regua dos outros 6 conflitos de estado desta borda (ledger Fase 8 achado #3).
+
+(deftest gerar-autografo-materia-nao-aprovada-409
+  (let [ente (random-uuid) pid (random-uuid)
+        escreveu? (atom false)
+        repo (fake-repo-legislativo
+              {:buscar-proposicao-detalhe (fn [_id] {:proposicao (proposicao-canonica ente pid)
+                                                       :texto {:id (random-uuid)}})
+               :proposicao-aprovada-em-votacao? (fn [_pid] false)
+               :autografo-da-proposicao (fn [_pid] nil)
+               :gerar-autografo-e-abrir-tramitacao! (fn [_m] (reset! escreveu? true) nil)})
+        r (pt/response-for (service-fn #{"secretario"} repo)
+                           :post (str "/legislativo/proposicoes/" pid "/autografo")
+                           :headers (com-bearer (token ente (random-uuid)))
+                           :body (json/write-value-as-string {}))]
+    (is (= 409 (:status r)))
+    ;; o que o achado exige provar: NENHUM numero foi queimado, nenhuma escrita aconteceu.
+    (is (false? @escreveu?) "a guarda tem de barrar ANTES da escrita — o numero do autografo e' gapless")))
+
+(deftest gerar-autografo-materia-aprovada-em-votacao-201
+  ;; o par positivo: o `estado` da proposicao segue 'protocolada' (o que o HTTP de fato produz hoje) e o
+  ;; autografo NASCE — a guarda olha o ato, nunca o rotulo.
+  (let [ente (random-uuid) pid (random-uuid) aid (random-uuid) tid (random-uuid)
+        repo (fake-repo-legislativo
+              {:buscar-proposicao-detalhe (fn [_id] {:proposicao (assoc (proposicao-canonica ente pid)
+                                                                        :estado "protocolada")
+                                                       :texto {:id (random-uuid)}})
+               :proposicao-aprovada-em-votacao? (fn [_pid] true)
+               :autografo-da-proposicao (fn [_pid] nil)
+               :gerar-autografo-e-abrir-tramitacao! (fn [_m] {:autografo-id aid :numero 1 :tramitacao-executiva-id tid})
+               :buscar-pos-aprovacao (fn [_pid] {:autografo (autografo-canonico ente aid pid)
+                                                  :tramitacao-executiva (tramitacao-canonica ente tid aid)})})
+        r (pt/response-for (service-fn #{"secretario"} repo)
+                           :post (str "/legislativo/proposicoes/" pid "/autografo")
+                           :headers (com-bearer (token ente (random-uuid)))
+                           :body (json/write-value-as-string {}))]
+    (is (= 201 (:status r)))))

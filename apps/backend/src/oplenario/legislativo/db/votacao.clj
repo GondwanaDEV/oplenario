@@ -65,6 +65,43 @@
      (sql/format {:select colunas :from [:legislativo.votacoes]
                   :where [:and [:= :ente_id ente-id] [:= :id id]]}))))
 
+(defn aprovada-em-votacao?
+  "T3-A (guarda-autografo-votacao) — a proposicao `proposicao-id` foi APROVADA pela Casa? Devolve booleano.
+
+  A pergunta que o autografo (artefato legal, numeracao gapless) tem de fazer NAO e' sobre o rotulo
+  `proposicoes.estado`: aquilo e' texto livre (sem CHECK, default 'protocolada'), e' chave de estado de
+  TEMPLATE — config do tenant, nao vocabulario de sistema (Inv.4) — e nenhuma rota HTTP o move (o unico
+  chamador de `db/tramitacao.clj/transicionar!` e' a semente da demo). A pergunta e' sobre o ATO: existe
+  votacao ENCERRADA sobre esta proposicao cujo resultado foi 'aprovada'.
+
+  Tres exclusoes, todas deliberadas:
+  - `estado = 'encerrada'` deixa de fora a votacao 'aberta' (ainda apurando) e a 'anulada' (terminal por
+    correcao — migration 0021 L8: correcao de voto nunca e' UPDATE, anula-se e abre-se outra).
+  - `NOT EXISTS (... votacao_corrige_id = v.id)` deixa de fora a votacao que uma OUTRA veio corrigir. A
+    anulacao e a abertura da corretiva sao dois atos distintos; entre um e outro a corrigida ainda esta'
+    'encerrada' e sozinha ela mentiria.
+  - `objeto_tipo = 'proposicao'` amarra ao objeto certo: `objeto_id` e' polimorfico (emenda/parecer/
+    requerimento/redacao_final compartilham a coluna) e sem isso uma emenda aprovada de id colidente
+    responderia pela materia-mae.
+
+  LIMITE CONHECIDO, declarado: isto responde 'houve UMA aprovacao', nao 'o rito se completou'. Rito de dois
+  turnos e redacao final ainda passam com um turno so'. E' [GAP] regimental (mesmo bolso de
+  admissibilidade-de-emenda-de-plenario), e a forma aqui aceita o refino sem refactor — o predicado ganha
+  criterio, os chamadores nao mudam."
+  [tx ente-id proposicao-id]
+  (some? (jdbc/execute-one! tx
+           (sql/format {:select [[[:inline 1] :existe]] :from [[:legislativo.votacoes :v]]
+                        :where [:and [:= :v.ente_id ente-id]
+                                     [:= :v.objeto_tipo "proposicao"]
+                                     [:= :v.objeto_id proposicao-id]
+                                     [:= :v.estado "encerrada"]
+                                     [:= :v.resultado "aprovada"]
+                                     [:not [:exists {:select [[[:inline 1]]]
+                                                     :from [[:legislativo.votacoes :c]]
+                                                     :where [:and [:= :c.ente_id ente-id]
+                                                                  [:= :c.votacao_corrige_id :v.id]]}]]]
+                        :limit 1}))))
+
 (defn buscar-com-lock
   "Como `buscar`, mas sob `SELECT ... FOR UPDATE` — serializa contra `encerrar!` (que tambem toma o lock via
   `votacao+lock`). Onda C3 (`registrar-meu-voto!`): fecha a janela de corrida entre AUTORIZAR um voto
