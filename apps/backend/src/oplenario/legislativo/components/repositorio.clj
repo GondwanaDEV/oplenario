@@ -260,6 +260,23 @@
          (catch PSQLException e
            (if (= "23505" (.getSQLState e)) (inserir) (throw e))))))
 
+(defn- proposicao-com-aprovada
+  "A proposicao de `id` com `:aprovada` ja' resolvido, na `tx` CORRENTE — nil se ela nao existe no tenant.
+
+  Existe para que o fato T3-A nao dependa de cada leitura composta lembrar de o buscar: hoje sao duas
+  (`buscar-proposicao-detalhe` e `ficha-completa-da-proposicao`), e uma terceira que nascesse copiando a
+  vizinha erraria em silencio — `ProposicaoDetalheOut` exige `:aprovada`, entao o esquecimento vira erro de
+  validacao no wire, mas so' na rota nova, e so' quando alguem a exercitar.
+
+  `some->` e' LOAD-BEARING, nao estilo: `(assoc nil :aprovada false)` devolve `{:aprovada false}`, um mapa
+  TRUTHY, e as duas leituras contratam devolver nil p/ 'proposicao inexistente' — que a borda traduz em 404.
+  Sem ele, proposicao inexistente viraria 200 com corpo fantasma.
+
+  MESMA tx da leitura de proposito (mesmo snapshot MVCC): o fato e o registro tem de vir do mesmo mundo."
+  [tx ente-id id]
+  (some-> (proposicao/buscar tx ente-id id)
+          (assoc :aprovada (votacao/aprovada-em-votacao? tx ente-id id))))
+
 (defrecord RepoLegislativoPg [datasource bus]
   RepoLegislativo
   (transacao [_ ente-id f] (tenancy/com-tenant* (:ds datasource) ente-id f))
@@ -335,9 +352,8 @@
   (buscar-proposicao-detalhe [this ente-id id]
     (transacao this ente-id
       (fn [tx]
-        (let [p (proposicao/buscar tx ente-id id)]
-          {:proposicao (some-> p (assoc :aprovada (votacao/aprovada-em-votacao? tx ente-id id)))
-           :texto (texto/vigente tx ente-id id)}))))
+        {:proposicao (proposicao-com-aprovada tx ente-id id)
+         :texto (texto/vigente tx ente-id id)})))
   ;; T3-A (guarda-autografo-votacao): o fato de aprovacao servido como LEITURA — o controller o consulta
   ;; antes de gerar o autografo, e o read-model o publica p/ o FE gatear o botao na mesma verdade.
   (proposicao-aprovada-em-votacao? [this ente-id proposicao-id]
@@ -354,8 +370,7 @@
   (ficha-completa-da-proposicao [this ente-id id]
     (transacao this ente-id
       (fn [tx]
-        {:proposicao (some-> (proposicao/buscar tx ente-id id)
-                              (assoc :aprovada (votacao/aprovada-em-votacao? tx ente-id id)))
+        {:proposicao (proposicao-com-aprovada tx ente-id id)
          :texto (texto/vigente tx ente-id id)
          :tramitacao (tram/historico-da-proposicao tx ente-id id 100)
          :apensadas (apensacao/apensadas-ativas tx ente-id id 50)
