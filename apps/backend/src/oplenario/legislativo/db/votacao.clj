@@ -129,7 +129,12 @@
     em maioria_simples, e com `base-membros` do corpo (carry sec MEDIUM-1).
   - a votacao pode ter sido aberta e encerrada numa sessao 'agendada' que nunca se realizou:
     `estados-sessao-fechada` e' so' #{encerrada nao_realizada arquivada}.
-  - `objeto_tipo='redacao_final'` aprovada NAO conta (conservador de proposito, mas nao e' obvio).
+  - `objeto_tipo='redacao_final'` aprovada NAO conta — e ISTO ESTA ERRADO PARA O BEACHHEAD, nao e'
+    conservadorismo (a versao anterior desta linha afirmava que era; a pesquisa de rito desmentiu). No
+    regimento vigente de Fortaleza (Res. 1.670/2020, Art. 180 §1º) e' JUSTAMENTE a aprovacao da Redacao
+    Final que manda a materia p/ elaboracao do autografo. A regra atual acerta em Mossoro/RN (onde o
+    gatilho e' a aprovacao do projeto) e erra na casa-alvo. Conserto pendente: aceitar `proposicao` OU
+    `redacao_final` — a uniao dos dois modelos. Ver `docs/17-rito-do-autografo-fortaleza-e-ceara.md` §5.1.
   - (RESOLVIDO em T3-A2, mig 0075) qual TEXTO foi aprovado deixou de ser incognita: `abrir!` congela a
     versao posta em deliberacao, e quem precisa do conteudo usa `aprovacao-vigente` logo acima.
   E' [GAP] regimental (mesmo bolso de admissibilidade-de-emenda-de-plenario), e a forma aqui aceita o

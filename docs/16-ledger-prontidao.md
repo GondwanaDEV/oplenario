@@ -1204,8 +1204,28 @@ autógrafos originais — é barreira de **procedimento**, não de **autorizaç�
 com a guarda: o que antes produzia um placar errado agora destrava um ato jurídico numerado. O carry de
 segurança `sec MEDIUM-1` (`base-membros` vindo do corpo, `controllers.clj:324`) herda a mesma promoção.
 
-**Mínimo para fechar:** separação de papéis (quem encerra votação não gera autógrafo) ou aprovação de
-segunda pessoa. **É decisão de processo da câmara, não de engenharia** — precisa do Daouda.
+**A PESQUISA DE RITO RESPONDEU O MÉRITO** (10/09/2026,
+[`docs/17-...`](17-rito-do-autografo-fortaleza-e-ceara.md)): no regimento são **três atos com donos
+distintos** — proclamar o resultado (**Presidente**), elaborar o autógrafo (**órgão administrativo**; em
+Fortaleza, a COGEL) e assinar/encaminhar à sanção (**Presidente ou Mesa**). O sistema funde os três num
+único `POST` com papel `secretario`.
+
+Então a pergunta deixou de ser "que papel emite o autógrafo" e virou **"a operação é uma ou são duas"** —
+e a resposta do regimento é DUAS. O conserto não é política de segurança inventada: é espelhar o rito.
+
+A peça já existe e não precisa ser construída: o catálogo de fatos traz `é_presidente_da_mesa`,
+`é_secretario_da_mesa` e `quem_exerce_presidencia`, com implementação real em
+`cadastros/relacoes/cadastro.clj:58`; e `legislativo/logic.clj:92` já registra que essa política "em F2
+vira expressão da DSL avaliada pelo mesmo motor (disciplina 5)". Política declarativa = **dado**,
+satisfazendo o Invariante 4 — cada câmara configura conforme o seu regimento, que é exatamente a variação
+medida entre as casas.
+
+**Sobre a votação `simbolica`:** o regimento não proíbe a aclamação — garante o **direito de verificação
+nominal**, atendido "de imediato e necessariamente" (Mossoró, Art. 249). A mitigação de produto é expor
+esse direito, não bloquear a modalidade.
+
+**O que resta é decisão de ESCOPO do Daouda:** separar a operação em duas agora, ou seguir o roadmap e
+manter isto registrado.
 
 ## ✅ T3-A2 · O autógrafo pode levar um texto que a Câmara nunca votou — CONSERTADO
 
@@ -1286,6 +1306,37 @@ da tx "fecha a janela TOCTOU" era **falsa** e foi corrigida no código. É READ 
 simples, e o que precisaria ser barrado é um INSERT fantasma. A janela hoje é **inalcançável, não
 fechada** — não existe rota que crie votação corretiva nem que anule votação encerrada. No dia em que a
 correção de votação ganhar borda, aquela linha **não** protegerá.
+
+## 🔴 T3-A3 · O pin do texto votado bloqueia a correção de inexatidão que o regimento prevê
+
+**Achado da pesquisa de rito (10/09/2026), documentada em
+[`docs/17-rito-do-autografo-fortaleza-e-ceara.md`](17-rito-do-autografo-fortaleza-e-ceara.md).** Não é
+defeito de produção — é rigidez: o conserto do T3-A2 fecha a fabricação e, no mesmo movimento, impede um
+ato legítimo.
+
+O T3-A2 amarrou o autógrafo à versão de texto congelada na **abertura** da votação. Mas o regimento
+prevê expressamente que o texto pode mudar depois da aprovação — **AL-CE, Res. 751/2022, Art. 268 §1º**,
+literal:
+
+> *"Quando, após aprovação da redação final e **até a expedição do autógrafo**, se verificar inexatidão
+> do texto, a **Mesa Diretora** procederá à respectiva correção, da qual **dará conhecimento ao
+> Plenário**, não havendo impugnação, considerar-se-á aceita a correção; em caso contrário, proceder-se-á
+> à discussão da impugnação para decisão final do Plenário."*
+
+Mossoró tem cláusula equivalente — **é padrão entre casas**, não particularidade.
+
+Repare no que o regimento cerca: a correção é **restrita a inexatidão** (vernáculo/atecnia, não
+substância), é **ato da Mesa** (não de um servidor), e exige **ciência ao Plenário**, que pode impugnar.
+Ou seja, o `PATCH` livre que produziu o T3-A2 nunca foi o ato previsto — mas a correção da Mesa é.
+
+**O conserto certo NÃO é afrouxar o pin.** É tornar a correção um ato auditável próprio (autoria da Mesa
++ ciência ao Plenário) e o autógrafo passar a levar *texto votado + correções registradas*. O domínio já
+tem onde: `logic/origens-versao` inclui `"redacao_final"`. Falta o ato ser autorizado e registrado.
+
+**Correlato, do mesmo documento §5.1:** `aprovada-em-votacao?` exclui `objeto_tipo = 'redacao_final'`, e a
+docstring declarava a exclusão como "conservadora de propósito". **Não é** — no regimento vigente de
+Fortaleza (Res. 1.670/2020, Art. 180 §1º) a aprovação da Redação Final é o que destrava o autógrafo. A
+regra acerta em Mossoró e **erra na casa-alvo**. Conserto: aceitar `proposicao` OU `redacao_final`.
 
 ## ✅ T3-B · Os 19 hooks de escrita nunca re-armam `vivoRef` — nenhum erro do servidor aparece em dev — CONSERTADO
 
