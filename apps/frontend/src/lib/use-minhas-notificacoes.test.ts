@@ -58,4 +58,43 @@ describe("useMinhasNotificacoes", () => {
     });
     expect(result.current.dados?.naoLidas).toBe(0);
   });
+
+  // A guarda de token (`tokenAtualRef.current !== tokenDaChamada`) é a razão de existir declarada no
+  // cabeçalho do hook e não tinha UMA asserção — os outros testes usam sempre o mesmo "tok". Cenário
+  // real: o vereador manda marcar como lida, o `recarregar()` sai em voo, a sessão troca de ator, e a
+  // resposta atrasada do token ANTIGO pinta a inbox de A na tela de B.
+  it("resposta em voo do token ANTIGO não pinta a inbox do token NOVO", async () => {
+    let liberarA: () => void = () => {};
+    const aEmVoo = new Promise<void>((r) => {
+      liberarA = r;
+    });
+    const deA = { notificacoes: [], "nao-lidas": 99 };
+    const deB = { notificacoes: [], "nao-lidas": 7 };
+    global.fetch = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (new Headers(init?.headers).get("Authorization") === "Bearer tok-A") {
+        await aEmVoo; // a resposta de A só chega DEPOIS da troca de token
+        return { ok: true, json: async () => deA } as Response;
+      }
+      return { ok: true, json: async () => deB } as Response;
+    }) as unknown as typeof fetch;
+
+    const { result, rerender } = renderHook(({ t }) => useMinhasNotificacoes(t), {
+      initialProps: { t: "tok-A" },
+    });
+    let recarga!: Promise<void>;
+    act(() => {
+      recarga = result.current.recarregar(); // fetch de A, preso
+    });
+
+    await act(async () => {
+      rerender({ t: "tok-B" });
+    });
+    await waitFor(() => expect(result.current.dados?.naoLidas).toBe(7));
+
+    await act(async () => {
+      liberarA();
+      await recarga;
+    });
+    expect(result.current.dados?.naoLidas).toBe(7);
+  });
 });

@@ -1644,3 +1644,48 @@ conserto. Trocado: o teste virou de *vermelho-que-documenta* para *verde-que-pre
 Duas corridas cheias consecutivas, 100% verdes — o critério de pronto que o plano pedia para a T1.3 e
 que a Fase 10 não conseguia cumprir por causa do conflito estrutural.
 
+
+## 📏 Onda E · A cauda do FE, medida — e a premissa que ela derrubou
+
+**10/09/2026.** O `CLAUDE.md` §3 descrevia a Onda E como *"~13 telas com design pronto e zero rota Next…
+trabalho mecânico — o design já foi pago"*. A frase foi medida e é **falsa**, de um jeito caro: executada
+ao pé da letra, mandaria 12 agentes portar telas que não têm API para chamar — e um agente sem API ou
+inventa o endpoint, ou preenche a tela com dado falso.
+
+**Método:** 14 telas, duas etapas por tela — medir (ler o design HTML, enumerar cada bloco de dado,
+casar com as rotas de todos os `diplomat/http/in.clj`, dar veredito) e **refutar** (atacar o veredito nas
+duas direções: um falso PORTÁVEL manda inventar API, um falso BLOQUEADO adia trabalho que dava para fazer).
+
+**Resultado: 8 BLOQUEADO · 4 PARCIAL · 1 PORTÁVEL · 1 JÁ FEITA. Zero vereditos mudaram na refutação** —
+mas as refutações trouxeram 33 correções de evidência, e três valem por si:
+
+1. **`transparencia-fiscal` não é backlog de engenharia.** A medição original prescrevia construir um
+   *"módulo de execução orçamentária (despesa empenhada/liquidada/paga)"*. O `documento-mestre` §289 e
+   §404 **vetam exatamente isso**: produzir o dado fiscal é do sistema contábil; entra só a camada de
+   publicação, por **consumo** (idem `produto/13:227` e `docs/11:137`). Uma fase de implementação que
+   seguisse a medição teria construído um módulo que o SSOT proíbe. O bloqueio real é `[GAP]` de
+   informação externa — qual sistema contábil, por qual protocolo — registrado em `produto/14:76` (G12).
+   O próprio design já se declara sem fonte (`telas/transparencia-fiscal.html:117`).
+2. **`livro-atas`: a ata está modelada como capacidade, não como artefato.** A medição afirmou "zero hit
+   real para 'ata'"; são 20 com fronteira de palavra, e um é campo de domínio vivo — `gera_ata_regimental`
+   (migration 0026, `sessoes/logic.clj:38-48`, já no contrato do FE). O que não existe é o **artefato**.
+3. **`dados-abertos` publicaria histórico truncado.** `transparencia/adapters/out/parlamentar.clj:34` fixa
+   `presenca-projetada-desde = "2026-07-20"` e a própria docstring diz que *não há ferramenta de
+   re-projeção no repo*. Um dataset aberto derivado disso promete "todas as matérias" e entrega a partir
+   da migration.
+
+**Entregue** (branch `onda-e-cauda`, 3 commits): `/status` · `/calendario` · incremento de `/notificacoes`.
+Suíte do FE 142 arquivos / **1226 testes** / EXIT=0 (partida 141 / 1193). Revisão adversarial de 9 lentes
+achou 30 defeitos (1 crítico, 16 importantes) — **todos os de teste vieram com o defeito plantado e a
+suíte confirmada verde**, e os consertos vieram com o plante de volta e a linha do erro.
+
+**O crítico:** `GET /compliance/painel` corta `em-aberto` em 100 sem sinalizar (`:or
+{limite-em-aberto 100}`, controller passa `{}`, `PainelOut` é `{:closed true}`). Numa Casa com backlog a
+remessa do TCE some do calendário e o servidor conclui que não há prazo. Detectado pelo `resumo` do mesmo
+payload, que conta sem teto. **A rota segue truncando para todo mundo — o calendário só passou a
+DENUNCIAR.** Quem consumir `em-aberto` sem essa comparação herda o defeito.
+
+**Decisão para o Daouda que saiu de raspão:** o selo *"Acessível · eMAG / WCAG AA"* foi **removido** do
+rodapé institucional (3 páginas do portal público). Conformidade é resultado de auditoria, e não há laudo
+nem gate citável no repositório — as ocorrências de "eMAG" são plano e requisito, nenhuma é resultado.
+Reversível numa linha se houver laudo.

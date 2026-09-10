@@ -1,0 +1,55 @@
+/* Status do sistema (Onda E, fatia 1) — porte de
+   produto/design-system/o-plenario/telas/status.html (blocos .st-topo, .comp/.cl, .hist, .rodape).
+   tokens.css + chassi.css já vêm globais (app/globals.css); .em-breve/.pular/.sr-only/.envelope também
+   já existem (public.css e chassi.css) e NÃO são duplicados aqui.
+
+   FORA deste porte, deliberado (ver o cabeçalho de page.tsx): as classes de saúde do original
+   (.st-ok, .st-deg, .dot) e a moldura verde do banner. Elas pintam uma afirmação de disponibilidade
+   que a plataforma não mede — cor como dado falso. Quando existir medição, voltam junto com ela, e aí
+   com ícone+texto, nunca só cor (GUIDELINES-CHECKLIST §5).
+
+   Nenhuma cor literal: só tokens, que já resolvem claro/escuro em AA. */
+
+.st-pagina { display: flex; flex-direction: column; gap: 1.3rem; min-height: 100vh; padding-top: 1rem; padding-bottom: 1.2rem; }
+
+.st-topo { display: flex; align-items: center; gap: 0.7rem; }
+.st-marca { width: 32px; height: 32px; flex: 0 0 auto; }
+.st-topo h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0; line-height: 1.15; }
+.st-topo h1 span { font-family: var(--display); font-weight: 400; font-size: var(--t-21); color: var(--texto-2); white-space: nowrap; }
+
+.st-secao h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.8rem; }
+
+/* a tabela é estreita (2 colunas de texto), mas em telas muito pequenas a rolagem horizontal é dela,
+   nunca da página. */
+.st-tabela-rolagem { overflow-x: auto; }
+.st-tabela {
+  width: 100%; border-collapse: collapse; text-align: left;
+  background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio);
+  box-shadow: var(--sombra); overflow: hidden;
+}
+.st-tabela thead th {
+  font-family: var(--mono); font-weight: 600; font-size: var(--t-12); letter-spacing: .06em;
+  text-transform: uppercase; color: var(--texto-2);
+  padding: 0.75rem 1.2rem; border-bottom: 1px solid var(--linha); white-space: nowrap;
+}
+.st-tabela tbody th {
+  font-family: var(--corpo); font-weight: 600; font-size: var(--t-13); color: var(--texto);
+  padding: 0.95rem 1.2rem;
+}
+.st-tabela tbody td { padding: 0.95rem 1.2rem; }
+.st-tabela tbody tr + tr th, .st-tabela tbody tr + tr td { border-top: 1px solid var(--linha); }
+
+/* a coluna de disponibilidade, nos dois estados que ela sabe declarar: mono + tinta secundária.
+   Deliberadamente SEM cor de estado (nada de verde de "ok" nem âmbar de "atenção") — não há estado a
+   comunicar, só a falta do dado. As duas classes só diferem na quebra: "Sem medição publicada" é curta
+   e cabe numa linha; a declaração de INEXISTÊNCIA é uma frase e tem de poder quebrar. */
+.st-sem-medicao, .st-inexistente { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+.st-sem-medicao { white-space: nowrap; }
+.st-inexistente { line-height: 1.5; min-width: 15rem; }
+
+.st-rodape { margin-top: auto; padding-top: 1.4rem; border-top: 1px solid var(--linha); font-size: var(--t-12); color: var(--texto-2); line-height: 1.6; }
+
+@media (max-width: 560px) {
+  .st-topo { flex-wrap: wrap; }
+  .st-topo h1 span { white-space: normal; }
+}

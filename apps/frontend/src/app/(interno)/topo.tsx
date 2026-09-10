@@ -28,6 +28,9 @@ const DESTINOS_NAV = [
   { rotulo: "Pauta", href: "/pauta-convocacao" },
   // Cadastro de Vereadores (Task 9) — cadastros estruturais, área de topo nova (arquétipo master-detail).
   { rotulo: "Vereadores", href: "/cadastros/vereadores" },
+  // Onda E fatia 2 — Calendário institucional (a agenda da Casa: sessões agendadas + prazos de
+  // compliance). Sem esta entrada a rota existiria órfã, alcançável só por URL digitada.
+  { rotulo: "Calendário", href: "/calendario" },
 ];
 
 export function TopoInterno({ area, ator }: { area: string; ator: { nome: string; papel: string } }) {

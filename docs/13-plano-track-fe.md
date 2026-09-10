@@ -106,10 +106,27 @@ consomem D1+D2/D3 conforme forem entrando — nenhuma tela é a primeira fatia.
   em `usuario_papel` — o vínculo cidadão torna real o bug latente "papéis sobrevivem ao vínculo".
 - **D4 — IdP do operador (`admin_sistema`): aberto** (stub vazio).
 
-### Onda E — cauda
-`transparencia-fiscal`, `dados-abertos`, `status`, `console-operador`(+tenant), `livro-atas`, `calendario`,
-`audiencia-publica`, `julgamento-contas`, `vereador-estatisticas`, `perfil-vereador-publico`, `trilha-auditoria`,
-`notificacoes`, `observabilidade-ia`, e as **IA-gated** (`ata-revisao`, `legendas-ao-vivo`) quando a Track IA entregar.
+### Onda E — cauda · MEDIDA 10/09/2026
+
+> ⚠️ **A cauda não era trabalho mecânico.** Medida tela a tela contra as rotas HTTP reais (14 telas ×
+> medir + refutar): **8 BLOQUEADAS** porque o domínio não existe no backend, **4 PARCIAIS**, **1 PORTÁVEL**,
+> **1 já feita**. Só 3 fatias eram entregáveis, e foram entregues. Detalhe em `CLAUDE.md` §3 e no ledger
+> `docs/16-ledger-prontidao.md`, seção "Onda E".
+
+| Tela | Veredito | Estado |
+|---|---|---|
+| `status` | PORTÁVEL (design é texto fixo) | ✅ entregue — `(publico)/status` |
+| `calendario` | PARCIAL (sessões + prazos existem; comissão/audiência/recesso não) | ✅ entregue — `(interno)/calendario` |
+| `notificacoes` | PARCIAL (rota já existia; faltava apresentação) | ✅ incremento entregue |
+| `perfil-vereador-publico` | JÁ FEITA na Onda D | — |
+| `dados-abertos` | PARCIAL — nenhum dataset tem export/CSV bulk | aberta |
+| `vereador-estatisticas` | PARCIAL — 4 dos 5 buckets dependem do `proposicoes.estado` morto | aberta |
+| `transparencia-fiscal` | BLOQUEADA — **o SSOT veta produzir o dado**; falta o conector contábil | `[GAP]` externo |
+| `console-operador` (+tenant) | BLOQUEADA — `admin_sistema` tem 3 linhas e zero rotas | gated por IdP do operador |
+| `livro-atas` | BLOQUEADA — a ata existe como *capacidade* (`gera_ata_regimental`), não como artefato | aberta |
+| `audiencia-publica` · `julgamento-contas` · `trilha-auditoria` | BLOQUEADAS — zero entidade no backend | aberta |
+| `observabilidade-ia` | BLOQUEADA — Track IA tem zero código | IA-gated |
+| `ata-revisao` · `legendas-ao-vivo` | IA-gated desde a origem | IA-gated |
 
 ## 5. Fundações transversais (assentar cedo, dentro das primeiras fatias)
 

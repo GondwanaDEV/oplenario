@@ -7,6 +7,14 @@
 // fatia (e o contato do DPO já tem rota própria, `/encarregado`, wired na Fatia A2.2), fabricar esses
 // dados aqui violaria a Global Constraint "sem dado falso". A coluna de privacidade aponta para o
 // balcão LGPD (Task 2.2) em vez de cravar um e-mail.
+//
+// DESCARTADO pela mesma regra (revisão da Onda E): o selo `Acessível · eMAG / WCAG AA` que vinha
+// verbatim de portal-cidadao.html:673. É uma declaração pública de CONFORMIDADE, e conformidade é
+// resultado de auditoria — não há no repositório laudo, auditoria nem gate automatizado de e-MAG/WCAG
+// que a sustente (as ocorrências de "eMAG" são plano e requisito: docs/11, produto/13, produto/15,
+// produto/16 — nenhuma é um resultado). Um cidadão com deficiência, ou um órgão de controle avaliando
+// a Casa sob o Decreto 5.296, leria o selo como "esta superfície foi auditada e está conforme". O selo
+// volta quando existir laudo ou gate citável — e aí dizendo o que de fato se mediu.
 
 export function RodapeInstitucional({ nomeCasa }: { nomeCasa: string }) {
   const ano = new Date().getFullYear();
@@ -16,9 +24,6 @@ export function RodapeInstitucional({ nomeCasa }: { nomeCasa: string }) {
         <div className="rodape-grade">
           <div className="rodape-casa">
             <b>{nomeCasa}</b>
-            <p style={{ marginTop: "0.9rem" }}>
-              <span className="selo-a11y">Acessível · eMAG / WCAG AA</span>
-            </p>
           </div>
           <div>
             <h5>Cidadão</h5>
