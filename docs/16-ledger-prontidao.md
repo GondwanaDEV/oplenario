@@ -1109,7 +1109,7 @@ plantado: `TS2322`, exit 2.
 
 Todos com evidência dos dois lados — o que a tela faz **e** o que o banco tem. Nenhum é alegação.
 
-## 🔴 T3-A · Autógrafo nasce em matéria que a Câmara nunca aprovou
+## ✅ T3-A · Autógrafo nasce em matéria que a Câmara nunca aprovou — CONSERTADO
 
 **Nenhuma das duas pontas confere `proposicao.estado === 'aprovada'`.** O backend
 (`legislativo/controllers.clj:432-441`) guarda só duplicidade e texto vigente. A tela põe o gate
@@ -1126,6 +1126,114 @@ Provado ao vivo, 4 vezes, e o estado ficou no banco:
 Quatro **autógrafos numerados** — artefato legal, numeração gapless — para matérias ainda em
 tramitação. Duas delas com o Executivo "sancionando" o que a Câmara não votou. É o achado mais grave
 da frente: não corrompe dado por acidente, **fabrica um ato jurídico que não aconteceu**.
+
+### O conserto (branch `guarda-autografo-votacao`, commits `254a768`/`86b64fa`/`d93b077`)
+
+**A pré-condição não virou `proposicao.estado === 'aprovada'`.** Esse rótulo é texto livre, sem
+`CHECK`, default `'protocolada'` — chave de estado de **template por câmara** (config do tenant, não
+vocabulário de sistema, Invariante 4), e nenhuma rota HTTP hoje o move (o único chamador de
+`db/tramitacao.clj/transicionar!` é a semente da demo). Guardar nele teria matado o autógrafo por
+completo e ainda cravaria vocabulário de câmara dentro do motor.
+
+A pré-condição é **o ATO**: existe uma votação **encerrada** sobre esta proposição com resultado
+`'aprovada'` (`db/votacao.clj/aprovada-em-votacao?`). É o registro append-only do que a Casa fez de
+fato, já produzível pela interface (cockpit de votação, MFE-3), e é o que se perguntaria num
+questionamento judicial. O predicado carrega três exclusões deliberadas: `estado = 'encerrada'` (fora
+a aberta e a anulada); `NOT EXISTS` de uma votação que a corrigiu (entre anular a corrigida e abrir a
+corretiva há um intervalo em que a corrigida, sozinha, mentiria); `objeto_tipo = 'proposicao'`
+(`objeto_id` é polimórfico — sem isso uma emenda aprovada de id colidente responderia pela
+matéria-mãe).
+
+**Duas camadas de guarda, de propósito:**
+
+- **Borda** (`controllers/gerar-autografo`) — roda **primeiro**, antes dos guards de duplicidade e de
+  texto vigente: "esta matéria nunca foi aprovada" é a verdade que o operador precisa ouvir mesmo
+  quando há também duplicidade ou falta de texto. Lança `:conflito/proposicao-nao-aprovada` → **409**
+  (o pedido estava correto; o recurso é que não chegou lá — mesma régua dos outros 6 conflitos de
+  estado desta borda).
+- **Dentro da tx** (`Repo/gerar-autografo-e-abrir-tramitacao!`) — **reverifica** o mesmo fato antes de
+  escrever. O guard de duplicidade tem o `UNIQUE (ente_id, proposicao_id)` como backstop no banco; a
+  aprovação, cujo fato mora em outra tabela (`legislativo.votacoes`), não tem constraint equivalente
+  — então o backstop tem de ser esta segunda leitura. Autógrafo é ato numerado: não se aceita janela
+  TOCTOU entre o guard da borda e a escrita.
+
+O fato "a Casa aprovou" também foi publicado no **read-model** (`ProposicaoDetalheOut.aprovada`,
+booleano **obrigatório**, nunca `{:optional true}` — ausência do campo é sempre bug de servidor, nunca
+"não sei"): o FE deixou de gatear no rótulo morto e passou a gatear no mesmo fato que o backend
+guarda. Os **dois** pontos da tela foram corrigidos — o link de entrada (`ficha-materia/acoes-card.tsx`)
+**e**, mais importante, o botão dentro de `/pos-aprovacao/:id`, que é o ponto que o achado de fato
+explorou (a rota sempre foi navegável direto por URL; isso não mudou e não era o defeito). O botão
+fica **desabilitado, não escondido** — `disabled` + `aria-disabled="true"` + `aria-describedby` ligando
+a uma explicação visível — porque sumir sem dizer o motivo transformaria um estado explicável em
+silêncio (Global Constraint "sem dado falso").
+
+**Limite declarado, não escondido:** a guarda responde **"houve UMA aprovação"**, não **"o rito se
+completou"**. Dois turnos e redação final ainda passam com um turno só — é `[GAP]` regimental (mesmo
+bolso de admissibilidade-de-emenda-de-plenário), e a forma aceita o refino sem refactor: o predicado
+ganha critério, os chamadores não mudam.
+
+Cada guarda provada por **mutação**, não por verde: guard do controller removido → o teste reprova
+nomeando o defeito (a escrita acontece, que é literalmente o T3-A); `NOT EXISTS` da correção removido
+→ só o teste da correção reprova; `objeto_tipo` afrouxado → só o teste da emenda reprova.
+
+## 🔴 T3-A1 · O mesmo `secretario` fabrica a aprovação e depois o autógrafo, sem um único voto
+
+**Achado da revisão adversarial `ecc` do conserto do T3-A, confirmado contra a fonte.** A guarda do T3-A
+exige o *ato*. Quem produz o ato é **o mesmo papel** que gera o autógrafo, e não há separação de funções
+em nenhum ponto da cadeia:
+
+| Fato | Fonte |
+|---|---|
+| `abrir-votacao`, `registrar-voto`, `encerrar-votacao` e `gerar-autografo` usam **o mesmo** `(it/exige-papel "secretario")` | `legislativo/diplomat/http/in.clj:505-520, 555` |
+| Votação `simbolica` (aclamação) toma o `resultado` **do corpo do request**: `(or resultado (throw ...))` | `legislativo/db/votacao.clj/encerrar!` |
+| `estados-sessao-fechada` = `#{encerrada nao_realizada arquivada}` — sessão **`agendada` que nunca se realizou** aceita abrir e encerrar votação | `sessoes/logic.clj:611` |
+
+Caminho executável, um único token de `secretario`: `POST /sessoes` (fica `agendada`) → `POST
+/sessoes/:sid/votacoes` com `modalidade: "simbolica"` → `POST .../encerramento` com `{"resultado":
+"aprovada"}` (**zero votos registrados**) → `POST /legislativo/proposicoes/:pid/autografo` → **201**.
+
+Variante sem aclamação: `nominal` + um `POST .../votos` com `vereador-id` de UUID qualquer (o
+`registrar-voto` do secretário **não** valida mandato vivo, ao contrário do `meu-voto` do vereador) +
+encerramento com `base-membros: 1`.
+
+**O que o conserto do T3-A de fato entregou contra este vetor:** o custo subiu de 1 requisição para 3,
+todas com o mesmo token. Contra operador comprometido ou apenas errado — que é o modelo de ameaça dos 4
+autógrafos originais — é barreira de **procedimento**, não de **autorização**.
+
+**Não é regressão:** o vetor é pré-existente e nenhuma linha dele foi tocada. Mas a **severidade subiu**
+com a guarda: o que antes produzia um placar errado agora destrava um ato jurídico numerado. O carry de
+segurança `sec MEDIUM-1` (`base-membros` vindo do corpo, `controllers.clj:324`) herda a mesma promoção.
+
+**Mínimo para fechar:** separação de papéis (quem encerra votação não gera autógrafo) ou aprovação de
+segunda pessoa. **É decisão de processo da câmara, não de engenharia** — precisa do Daouda.
+
+## 🔴 T3-A2 · O autógrafo pode levar um texto que a Câmara nunca votou
+
+**Mesma revisão, confirmado contra a fonte.** A votação registra **só `objeto_id`** (qual matéria), nunca
+qual **versão de texto** foi aprovada. O autógrafo pega a versão vigente **no momento da geração**:
+
+- `legislativo/controllers.clj:457` — `:texto-versao-id (:id texto)`, onde `texto` é lido *agora*.
+- `PATCH /legislativo/proposicoes/:id` com `texto` **promove versão nova a vigente**
+  (`components/repositorio.clj`, `editar-proposicao!`), bloqueado apenas em estado terminal
+  (`publicada`/`arquivada`) — e **matéria aprovada e não publicada não é terminal**.
+
+Caminho executável, papel `secretario`: votação legítima em plenário aprova a matéria com o texto V1 →
+`PATCH` promove V2 → `POST .../autografo` → a guarda **passa** (a aprovação existe) e o autógrafo sai
+com **V2**. O Prefeito sanciona um texto que nunca foi lido em plenário.
+
+**Isto não está coberto pelo limite declarado do T3-A**, que fala só de "uma aprovação vs. o rito
+completo". É a mesma classe de dano do achado original — ato cujo conteúdo a Casa não deliberou — por
+outro mecanismo.
+
+**Mínimo para fechar:** gravar `texto_versao_id` no ato da votação (ou no encerramento) e exigir em
+`aprovada-em-votacao?` que a versão vigente na geração seja a mesma que foi aprovada. Migration +
+mudança de contrato — não é conserto de passagem.
+
+**Correlato registrado no mesmo commit (`6dd48af`):** a afirmação de que a re-verificação dentro da tx
+"fecha a janela TOCTOU" era **falsa** e foi corrigida no código. É READ COMMITTED com `SELECT` simples,
+e o que precisaria ser barrado é um INSERT fantasma. A janela hoje é **inalcançável, não fechada** — não
+existe rota que crie votação corretiva nem que anule votação encerrada. No dia em que a correção de
+votação ganhar borda, aquela linha **não** protegerá.
 
 ## 🔴 T3-B · Os 19 hooks de escrita nunca re-armam `vivoRef` — nenhum erro do servidor aparece em dev
 
@@ -1192,7 +1300,7 @@ metadado, sem edição nenhuma.
 
 | Falta | Consequência |
 |---|---|
-| Rota que leve proposição a **`aprovada`** | o caminho feliz de E7 só é alcançável **através do defeito T3-A** |
+| Rota que leve proposição ao **rótulo** `estado='aprovada'` | continua não existindo (só a semente da demo chama `db/tramitacao.clj/transicionar!`) — mas **deixou de bloquear E7**: a pré-condição do autógrafo (guarda-autografo-votacao, T3-A) nunca foi o rótulo, é o ATO (votação encerrada com resultado `'aprovada'`), e o ato já tinha rota (`POST .../votacoes` + `.../votos` + `.../encerramento`) |
 | Rota que **crie parecer** | E4 era spec de uso único: emitir leva a estado terminal e o trigger trava tudo depois |
 | Rota que **crie `documento_modelo`** | a aba "Modelos" é `<EmBreve>`; sem INSERT manual, "Gerar documento" fica `disabled` para sempre |
 | Produtor de evento de **ciência** | `publicar-norma!` não tem chamador em diplomat nenhum; a seção "Para sua ciência" nunca renderiza |
