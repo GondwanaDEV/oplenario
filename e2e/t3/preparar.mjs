@@ -343,6 +343,53 @@ const reservadosNestaCorrida = new Set(
 );
 const candidataAprovar = naoTerminalSemAutografo.find((p) => !reservadosNestaCorrida.has(p.id)) ?? null;
 
+// aprovarDeVerdade — o RITO REAL (abrir votacao + registrar voto + encerrar com resultado='aprovada'),
+// fatorado pra servir os DOIS alvos que passam por ele: proposicaoAprovada (E7 caminho feliz) e
+// textoTrocado (E7-A2, achado T3-A2 — abaixo). Mesmas 3 rotas, mesma prova pos-encerramento (reconsulta
+// GET /legislativo/proposicoes/:id .aprovada, a MESMA leitura que o guard do backend usa — nunca confia
+// so' no corpo do encerramento). Lanca alto se o resultado nao fechar 'aprovada' ou se .aprovada divergir
+// — nada aqui e' presumido.
+async function aprovarDeVerdade(candidata, rotulo) {
+  passo(`\n5b) ${rotulo} — aprovando DE VERDADE ${candidata.id} (estava '${candidata.estado}') pelo rito real`);
+  const abertura = exigir(
+    await api(TOK.secretaria, "POST", `/sessoes/${sessaoChamada}/votacoes`, {
+      "objeto-tipo": "proposicao", "objeto-id": candidata.id,
+      modalidade: "nominal", "quorum-tipo": "maioria_simples",
+    }),
+    `POST /sessoes/:id/votacoes (${rotulo} aprovar de verdade)`);
+  const votanteId = vereadorIdDoVereador ?? vereadorIdDoPresidente;
+  exigir(
+    await api(TOK.secretaria, "POST", `/sessoes/${sessaoChamada}/votacoes/${abertura.id}/votos`, {
+      voto: "sim", "vereador-id": votanteId,
+    }),
+    `POST .../votos (${rotulo} aprovar de verdade)`);
+  const encerramento = exigir(
+    await api(TOK.secretaria, "POST", `/sessoes/${sessaoChamada}/votacoes/${abertura.id}/encerramento`, {
+      "lock-version": abertura["lock-version"] ?? 0, "base-membros": chamadaNova.linhas.length,
+    }),
+    `POST .../encerramento (${rotulo} aprovar de verdade)`);
+  if (encerramento.resultado !== "aprovada") {
+    throw new Error(
+      `${rotulo}: a votacao de aprovacao (maioria_simples, 1 sim x 0 nao) fechou com resultado='${encerramento.resultado}', ` +
+      `nao 'aprovada' — logic/resultado-votacao deveria aprovar com sim>nao. Candidata ${candidata.id}, ` +
+      `votacao ${abertura.id}. Nada foi assumido: pare e investigue antes de rodar o spec.`);
+  }
+  // PROVA REAL, nao suposta: reconsulta a proposicao pela MESMA leitura que o guard do backend usa
+  // (Repo/proposicao-aprovada-em-votacao?, exposta em ProposicaoDetalheOut.aprovada) — nao confia so' no
+  // corpo do encerramento.
+  const detalhe = exigir(
+    await api(TOK.secretaria, "GET", `/legislativo/proposicoes/${candidata.id}`),
+    "GET /legislativo/proposicoes/:id (prova pos-encerramento)");
+  if (detalhe.aprovada !== true) {
+    throw new Error(
+      `${rotulo}: votacao ${abertura.id} encerrou com resultado=aprovada, mas GET /legislativo/proposicoes/` +
+      `${candidata.id} devolveu aprovada=${detalhe.aprovada}. proposicao-aprovada-em-votacao? ` +
+      `diverge do encerramento — bug real, nao presuma que preparou.`);
+  }
+  console.log(`   votacao ${abertura.id} encerrada: resultado=aprovada · GET detalhe confirma aprovada=true`);
+  return { ...candidata, votacaoId: abertura.id, textoNoMomentoDaAbertura: detalhe.texto };
+}
+
 let proposicaoAprovada = null;
 if (!candidataAprovar) {
   bloqueio("e7-sem-candidata-para-aprovar",
@@ -350,44 +397,64 @@ if (!candidataAprovar) {
     "reservadas por outro grupo (E3/E4/E6) ou sao a propria autografoAlvo. E7 fica sem alvo para o " +
     "caminho feliz real; rode de novo (a ordem da varredura nao e estavel entre corridas) ou amplie o pool.");
 } else {
-  passo(`\n5b) E7 — aprovando DE VERDADE ${candidataAprovar.id} (estava '${candidataAprovar.estado}') pelo rito real`);
-  const abertura = exigir(
-    await api(TOK.secretaria, "POST", `/sessoes/${sessaoChamada}/votacoes`, {
-      "objeto-tipo": "proposicao", "objeto-id": candidataAprovar.id,
-      modalidade: "nominal", "quorum-tipo": "maioria_simples",
-    }),
-    "POST /sessoes/:id/votacoes (E7 aprovar de verdade)");
-  const votanteId = vereadorIdDoVereador ?? vereadorIdDoPresidente;
+  proposicaoAprovada = await aprovarDeVerdade(candidataAprovar, "E7");
+}
+
+// ---- 5c. E7-A2 (T3-A2) — matéria aprovada, TEXTO TROCADO DEPOIS: o autografo tem de levar a versao
+// VOTADA, nao a vigente na geracao (achado T3-A2, mig 0075 — apps/backend `abrir!` congela
+// texto_versao_id NA ABERTURA da votacao). candidataTextoTrocado e' outra proposicao nao-terminal, sem
+// autografo, livre de TUDO que ja foi reservado (inclusive candidataAprovar agora, que ja' consumiu seu
+// lugar acima) — nunca a mesma da recusa (autografoAlvo) nem a do caminho feliz simples (candidataAprovar).
+if (candidataAprovar) reservadosNestaCorrida.add(candidataAprovar.id);
+const candidataTextoTrocado = naoTerminalSemAutografo.find((p) => !reservadosNestaCorrida.has(p.id)) ?? null;
+
+let textoTrocado = null;
+if (!candidataTextoTrocado) {
+  bloqueio("e7a2-sem-candidata-para-texto-trocado",
+    "todas as proposicoes nao-terminais com texto vigente e sem autografo desta corrida ja estao " +
+    "reservadas (E3/E4/E6/autografoAlvo/candidataAprovar). O caso T3-A2 (texto trocado apos a aprovacao) " +
+    "fica sem alvo; rode de novo (a ordem da varredura nao e estavel entre corridas) ou amplie o pool.");
+} else {
+  const aprovada = await aprovarDeVerdade(candidataTextoTrocado, "E7-A2");
+  const textoVotado = aprovada.textoNoMomentoDaAbertura;
+  if (typeof textoVotado !== "string" || textoVotado.trim().length === 0) {
+    throw new Error(
+      `E7-A2: GET /legislativo/proposicoes/${candidataTextoTrocado.id} nao devolveu .texto pos-aprovacao ` +
+      `(veio ${JSON.stringify(textoVotado)}) — sem o texto VOTADO nao ha' o que comparar contra o texto ` +
+      `trocado depois. Nada foi assumido.`);
+  }
+  passo(`\n5c) E7-A2 — PATCH promovendo um texto NOVO em ${candidataTextoTrocado.id}, DEPOIS da aprovacao`);
+  const fresco = exigir(
+    await api(TOK.secretaria, "GET", `/legislativo/proposicoes/${candidataTextoTrocado.id}`),
+    "GET /legislativo/proposicoes/:id (lock-version fresco pro PATCH do E7-A2)");
+  const textoNovo =
+    `${textoVotado}\n\n[T3-A2 — texto promovido DEPOIS da aprovacao, ${new Date().toISOString()}: ` +
+    `este paragrafo NAO foi deliberado pelo plenario. O autografo tem de ignorar esta versao.]`;
   exigir(
-    await api(TOK.secretaria, "POST", `/sessoes/${sessaoChamada}/votacoes/${abertura.id}/votos`, {
-      voto: "sim", "vereador-id": votanteId,
+    await api(TOK.secretaria, "PATCH", `/legislativo/proposicoes/${candidataTextoTrocado.id}`, {
+      "lock-version": fresco["lock-version"], texto: textoNovo,
     }),
-    "POST .../votos (E7 aprovar de verdade)");
-  const encerramento = exigir(
-    await api(TOK.secretaria, "POST", `/sessoes/${sessaoChamada}/votacoes/${abertura.id}/encerramento`, {
-      "lock-version": abertura["lock-version"] ?? 0, "base-membros": chamadaNova.linhas.length,
-    }),
-    "POST .../encerramento (E7 aprovar de verdade)");
-  if (encerramento.resultado !== "aprovada") {
+    "PATCH /legislativo/proposicoes/:id (E7-A2 — promover texto novo pos-aprovacao)");
+  // PROVA REAL: reconsulta e confirma que o vigente MUDOU — sem isto o PATCH podia ter sido um no-op
+  // silencioso (ex.: campo dropado no adapters/in) e o teste estaria comparando o mesmo texto consigo.
+  const posPatch = exigir(
+    await api(TOK.secretaria, "GET", `/legislativo/proposicoes/${candidataTextoTrocado.id}`),
+    "GET /legislativo/proposicoes/:id (prova pos-PATCH do E7-A2)");
+  if (posPatch.texto !== textoNovo) {
     throw new Error(
-      `E7: a votacao de aprovacao (maioria_simples, 1 sim x 0 nao) fechou com resultado='${encerramento.resultado}', ` +
-      `nao 'aprovada' — logic/resultado-votacao deveria aprovar com sim>nao. Candidata ${candidataAprovar.id}, ` +
-      `votacao ${abertura.id}. Nada foi assumido: pare e investigue antes de rodar o spec.`);
+      `E7-A2: PATCH em ${candidataTextoTrocado.id} devolveu 200, mas GET .texto pos-PATCH nao bate com o ` +
+      `texto enviado (veio ${JSON.stringify(posPatch.texto)}) — o vigente pode nao ter mudado. Nao presuma.`);
   }
-  // PROVA REAL, nao suposta: reconsulta a proposicao pela MESMA leitura que o guard do backend usa
-  // (Repo/proposicao-aprovada-em-votacao?, exposta em ProposicaoDetalheOut.aprovada) — nao confia so' no
-  // corpo do encerramento.
-  const detalhe = exigir(
-    await api(TOK.secretaria, "GET", `/legislativo/proposicoes/${candidataAprovar.id}`),
-    "GET /legislativo/proposicoes/:id (prova pos-encerramento)");
-  if (detalhe.aprovada !== true) {
-    throw new Error(
-      `E7: votacao ${abertura.id} encerrou com resultado=aprovada, mas GET /legislativo/proposicoes/` +
-      `${candidataAprovar.id} devolveu aprovada=${detalhe.aprovada}. proposicao-aprovada-em-votacao? ` +
-      `diverge do encerramento — bug real, nao presuma que preparou.`);
+  if (posPatch.texto === textoVotado) {
+    throw new Error(`E7-A2: o texto pos-PATCH ficou IGUAL ao texto votado — a fixture nao criou divergencia nenhuma.`);
   }
-  console.log(`   votacao ${abertura.id} encerrada: resultado=aprovada · GET detalhe confirma aprovada=true`);
-  proposicaoAprovada = { ...candidataAprovar, votacaoId: abertura.id };
+  console.log(`   texto vigente TROCOU: ${textoVotado.length} chars (votado) -> ${posPatch.texto.length} chars (atual)`);
+  textoTrocado = {
+    proposicaoId: candidataTextoTrocado.id,
+    votacaoId: aprovada.votacaoId,
+    textoVotado,
+    textoAtualPosPromocao: posPatch.texto,
+  };
 }
 
 // ---- 6. E1: um vereador NOVO, sem mandato (todos os 17 da demo tem mandato vigente) --------
@@ -507,6 +574,24 @@ const artefato = {
       "unico alvo do caminho feliz de gerar autografo. Depois que o spec gerar o autografo sobre " +
       "proposicaoAprovadaId, a tramitacao executiva nasce 'aguardando' na MESMA tx — so entao 'registrar " +
       "resposta do Executivo' fica exercitavel, na MESMA pagina.",
+
+    textoTrocado: textoTrocado && {
+      proposicaoTextoTrocadoId: textoTrocado.proposicaoId,
+      votacaoTextoTrocadoId: textoTrocado.votacaoId,
+      textoVotado: textoTrocado.textoVotado,
+      textoAtualPosPromocao: textoTrocado.textoAtualPosPromocao,
+      url: comToken(`/pos-aprovacao/${textoTrocado.proposicaoId}`, "secretaria"),
+      nota: "T3-A2: proposicaoId foi aprovada DE VERDADE pelo rito real (aprovarDeVerdade, mesma prova de " +
+        "proposicaoAprovada) e, DEPOIS do encerramento, levou um PATCH .../proposicoes/:id com :texto NOVO " +
+        "(promove uma versao 'edicao' — permitido ate' estado terminal, e votar nao termina a proposicao). " +
+        "textoVotado e' o texto que estava vigente QUANDO a votacao abriu (congelado server-side por " +
+        "abrir!, mig 0075); textoAtualPosPromocao e' o vigente AGORA, depois do PATCH — os dois divergem de " +
+        "proposito. Nenhum dos dois e' o texto_versao_id (a API nao expoe esse id em lugar nenhum fora do " +
+        "wire do autografo ja gerado — so' AutografoOut carrega texto-versao-id); os UUIDs para comparar " +
+        "ficam em e2e/t3/.artifacts/t3-versoes.json, escritos por preparar.sh via psql DIRETO (mesmo " +
+        "precedente de fixtures.sql — nao ha' rota HTTP para isto). O autografo gerado sobre proposicaoId " +
+        "tem de carregar textoVersaoVotadaId (t3-versoes.json), nunca textoVersaoAtualId.",
+    },
   },
 
   e8: {

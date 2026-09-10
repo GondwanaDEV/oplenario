@@ -1207,48 +1207,108 @@ segurança `sec MEDIUM-1` (`base-membros` vindo do corpo, `controllers.clj:324`)
 **Mínimo para fechar:** separação de papéis (quem encerra votação não gera autógrafo) ou aprovação de
 segunda pessoa. **É decisão de processo da câmara, não de engenharia** — precisa do Daouda.
 
-## 🔴 T3-A2 · O autógrafo pode levar um texto que a Câmara nunca votou
+## ✅ T3-A2 · O autógrafo pode levar um texto que a Câmara nunca votou — CONSERTADO
 
-**Mesma revisão, confirmado contra a fonte.** A votação registra **só `objeto_id`** (qual matéria), nunca
-qual **versão de texto** foi aprovada. O autógrafo pega a versão vigente **no momento da geração**:
+**Mesma revisão, confirmado contra a fonte.** A votação registrava **só `objeto_id`** (qual matéria),
+nunca qual **versão de texto** foi aprovada. O autógrafo pegava a versão vigente **no momento da
+geração**:
 
-- `legislativo/controllers.clj:457` — `:texto-versao-id (:id texto)`, onde `texto` é lido *agora*.
+- `legislativo/controllers.clj:457` (antes do conserto) — `:texto-versao-id (:id texto)`, onde `texto`
+  era lido *agora*, na geração.
 - `PATCH /legislativo/proposicoes/:id` com `texto` **promove versão nova a vigente**
   (`components/repositorio.clj`, `editar-proposicao!`), bloqueado apenas em estado terminal
   (`publicada`/`arquivada`) — e **matéria aprovada e não publicada não é terminal**.
 
 Caminho executável, papel `secretario`: votação legítima em plenário aprova a matéria com o texto V1 →
-`PATCH` promove V2 → `POST .../autografo` → a guarda **passa** (a aprovação existe) e o autógrafo sai
-com **V2**. O Prefeito sanciona um texto que nunca foi lido em plenário.
+`PATCH` promove V2 → `POST .../autografo` → a guarda **passava** (a aprovação existe) e o autógrafo saía
+com **V2**. O Prefeito sancionava um texto que nunca foi lido em plenário.
 
-**Isto não está coberto pelo limite declarado do T3-A**, que fala só de "uma aprovação vs. o rito
-completo". É a mesma classe de dano do achado original — ato cujo conteúdo a Casa não deliberou — por
+**Isto não estava coberto pelo limite declarado do T3-A**, que fala só de "uma aprovação vs. o rito
+completo". Era a mesma classe de dano do achado original — ato cujo conteúdo a Casa não deliberou — por
 outro mecanismo.
 
-**Mínimo para fechar:** gravar `texto_versao_id` no ato da votação (ou no encerramento) e exigir em
-`aprovada-em-votacao?` que a versão vigente na geração seja a mesma que foi aprovada. Migration +
-mudança de contrato — não é conserto de passagem.
+### O conserto (branch `autografo-texto-votado`, commit `b02941a`)
 
-**Correlato registrado no mesmo commit (`6dd48af`):** a afirmação de que a re-verificação dentro da tx
-"fecha a janela TOCTOU" era **falsa** e foi corrigida no código. É READ COMMITTED com `SELECT` simples,
-e o que precisaria ser barrado é um INSERT fantasma. A janela hoje é **inalcançável, não fechada** — não
-existe rota que crie votação corretiva nem que anule votação encerrada. No dia em que a correção de
-votação ganhar borda, aquela linha **não** protegerá.
+**A solução escolhida NÃO é a que o achado original recomendava.** A recomendação de origem ("mínimo
+para fechar", acima) era gravar a versão votada e **recusar** o autógrafo se o texto vigente tivesse
+mudado — um estado de erro novo, um segundo booleano no contrato de saída, e trabalho de tela para
+explicar a recusa. Em vez disso, o autógrafo passou a **ler a versão da votação que aprovou a
+matéria**, em vez de ler o vigente na geração. Por construção ele carrega o que foi deliberado, e não
+há o que recusar: editar a matéria depois deixa de corromper o autógrafo, porque o autógrafo não olha
+mais para o vigente. **A solução é menor que a alternativa** — zero estado de erro novo, zero campo
+novo no contrato, zero tela: o schema já dizia isto (o comentário da migration `0022` descreve
+`autografo.texto_versao_id` como "o CONTEÚDO do autógrafo... a versão `redacao_final` aprovada") e o
+código nunca cumpria.
 
-## 🔴 T3-B · Os 19 hooks de escrita nunca re-armam `vivoRef` — nenhum erro do servidor aparece em dev
+A cadeia:
 
-Os hooks de escrita de `apps/frontend/src/lib/use-*.ts` fazem
-`useEffect(() => () => { vivoRef.current = false; }, [])` e **nunca re-armam o ref**. Os hooks de
-**leitura** fazem certo (`use-chamada.ts:143`). Sob React StrictMode — que roda em dev — o cleanup
-executa no mount, `vivoRef.current` nasce `false`, e todo `setEstado("erro")` vira no-op.
+- Migration `0075` acrescenta `texto_versao_id` a `legislativo.votacoes` (sem FK — mesmo precedente já
+  registrado em `autografo.texto_versao_id`, migration `0022`: o alvo é hash-particionado e a FK exigiria
+  carregar a PK composta).
+- `db/votacao.clj/abrir!` **congela a versão vigente no instante da ABERTURA**, server-side, na mesma tx
+  do `INSERT` da votação — nunca vem do corpo do request. **O instante certo é a abertura, não o
+  encerramento**: o texto sobre o qual o plenário delibera é o que está na mesa quando a votação abre,
+  não o que sobra depois de apurados os votos. Só faz sentido para `objeto_tipo = 'proposicao'` — o
+  objeto da votação é polimórfico, e emenda/parecer/requerimento não têm versão de texto de proposição;
+  nesses casos o campo fica `nil`.
+- `aprovacao-vigente` devolve `{:votacao-id :texto-versao-id}`; `aprovada-em-votacao?` (o predicado que
+  gateia o botão) passa a sair da MESMA consulta — uma fonte só, porque as duas perguntas do sistema são
+  distintas e não devem colapsar: "a Casa aprovou?" (read-model, gateia botão) vs. "**qual** texto ela
+  aprovou?" (o autógrafo, que precisa do conteúdo).
+- O Repo lê a versão **da votação** dentro da mesma tx da escrita do autógrafo e **sobrescreve** o que o
+  caller mandar — o controller parou de resolver o vigente.
 
-A contagem não deixa dúvida sobre o padrão: **8 hooks armam, e são todos de leitura; 19 só desarmam, e
-são todos de escrita.**
+**Política de falha fechada para `NULL`, incluindo linhas legadas:** `texto_versao_id` nulo na votação
+(objeto não-proposição, ou votação anterior à migration — o schema não foi retro-preenchido) faz o
+guard lançar `:conflito/aprovacao-sem-texto` → **409**. Isto inclui deliberadamente o legado: deixar uma
+votação pré-migration gerar autógrafo sem saber qual texto foi deliberado reabriria o mesmo buraco
+justamente onde ele não pode mais ser auditado — e o sistema não está em produção, então não há custo de
+compatibilidade a proteger. Medido ao vivo nesta sessão (10/09/2026, ledger de verificação): a Casa
+compartilhada da demo tem votações fixas (`sessoes.clj`) abertas **antes** da migration — todas com
+`texto_versao_id NULL` — que continuam corretamente bloqueadas para o caminho do autógrafo até a Casa
+ser resemeada; nenhuma delas nunca gerou autógrafo pelo caminho guardado, então não há regressão visível
+hoje, só o comportamento fail-closed esperado se alguém tentar.
+
+**Provado por MUTAÇÃO** (suite backend): com o Repo voltando a resolver o vigente em vez da votação, só o
+teste `autografo-leva-a-versao-VOTADA-nao-a-vigente-na-geracao` reprova. **Provado end-to-end nesta
+sessão de verificação** (não só lido): `e2e/t3/preparar.mjs` ganhou um segundo alvo (`e7.textoTrocado`)
+que aprova uma matéria pelo rito real e, DEPOIS do encerramento, promove um texto novo via `PATCH`; como
+a API não expõe `texto_versao_id` em nenhuma rota fora do wire do autógrafo já gerado, os dois ids de
+versão (votada vs. atual) são lidos por `psql` direto em `preparar.sh` (mesmo precedente já usado ali
+para `fixtures.sql`) e gravados em `t3-versoes.json`. O novo teste `E7.spec.ts` (teste 8) gera o
+autógrafo pela API real e confirma `autografo.texto-versao-id === textoVersaoVotadaId` **e**
+`!== textoVersaoAtualId` — 9/9 testes verdes na corrida real, e a consulta de prova (registrada em
+`escritas-E7.json`) foi rodada ao vivo contra o Postgres confirmando as três colunas: o autógrafo saiu
+com a versão votada, distinta da versão trocada depois.
+
+**Correlato registrado no mesmo commit original (`6dd48af`):** a afirmação de que a re-verificação dentro
+da tx "fecha a janela TOCTOU" era **falsa** e foi corrigida no código. É READ COMMITTED com `SELECT`
+simples, e o que precisaria ser barrado é um INSERT fantasma. A janela hoje é **inalcançável, não
+fechada** — não existe rota que crie votação corretiva nem que anule votação encerrada. No dia em que a
+correção de votação ganhar borda, aquela linha **não** protegerá.
+
+## ✅ T3-B · Os 19 hooks de escrita nunca re-armam `vivoRef` — nenhum erro do servidor aparece em dev — CONSERTADO
+
+Os hooks de escrita de `apps/frontend/src/lib/use-*.ts` faziam
+`useEffect(() => () => { vivoRef.current = false; }, [])` e **nunca re-armavam o ref**. Os hooks de
+**leitura** faziam certo (`use-chamada.ts:143`). Sob React StrictMode — que roda em dev — o cleanup
+executava no mount, `vivoRef.current` nascia `false`, e todo `setEstado("erro")` virava no-op.
+
+A contagem não deixava dúvida sobre o padrão: **8 hooks armavam, e eram todos de leitura; 19 só
+desarmavam, e eram todos de escrita.**
 
 Efeito medido: 1,5 s depois de um `409 {"erro":"ja existe mandato vigente sobreposto..."}`, o botão
-continua **"Salvando…" desabilitado** e há **zero alerta na página**. O usuário não recebe pista
+continuava **"Salvando…" desabilitado** e havia **zero alerta na página**. O usuário não recebia pista
 nenhuma de que a Casa recusou. Falseável dos dois lados: o mesmo caso em RTL, **sem** StrictMode,
-passa. Conserto: uma linha por hook.
+passava.
+
+**Consertado no commit `d79ccb2`** — uma linha por hook (os 19 hooks de escrita passaram a armar
+`vivoRef` no mount, mesmo padrão que os hooks de leitura já usavam), mais o gate estrutural
+`apps/frontend/src/lib/vivo-ref-lint.test.ts` que impede a volta. Escrita completa do conserto, da prova
+por mutação e da prova de graça (o teste do E1 que nasceu afirmando o defeito e reprovou quando ele
+sumiu) na seção **"T3-B CONSERTADO"**, mais adiante neste documento. Reconfirmado ao vivo nesta sessão de
+verificação (10/09/2026): `vivo-ref-lint.test.ts` roda dentro de `oplenario-frontend-1` e continua
+verde — 1 passou, 0 falhou.
 
 ## 🟠 T3-C · "Registrar retorno" grava e a tela nunca confirma
 

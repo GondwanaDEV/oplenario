@@ -26,4 +26,9 @@
    ;; contexto temporal na sessao (forward-ref §22.10) — votacao e' sobre a materia, nao o item (§22.6 eixo B)
    [:sessao-id {:optional true} [:maybe :uuid]]
    [:pauta-item-id {:optional true} [:maybe :uuid]]
+   ;; T3-A2 (mig 0075) — a versao de texto POSTA EM DELIBERACAO, congelada por `abrir!`. `:maybe` porque
+   ;; o objeto e' polimorfico (emenda/parecer/requerimento nao tem versao de proposicao), porque a materia
+   ;; pode ir a plenario sem texto vigente, e porque votacao anterior a' migration nao tem o dado. Quem
+   ;; emite ato juridico a partir dela falha FECHADA no nil — ver db/votacao.clj/aprovacao-vigente.
+   [:texto-versao-id {:optional true} [:maybe :uuid]]
    [:lock-version :int]])

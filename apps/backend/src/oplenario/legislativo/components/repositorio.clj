@@ -52,6 +52,10 @@
   (buscar-proposicao-detalhe [this ente-id id]
     "{:proposicao ... :texto (a linha de texto/vigente, ou nil)}, uma leitura. `:proposicao` carrega
      `:aprovada` (Fatia 2) na MESMA tx — ver proposicao-aprovada-em-votacao? logo abaixo.")
+  (aprovacao-vigente [this ente-id proposicao-id]
+    "T3-A2 — a votacao que aprovou esta materia: {:votacao-id :texto-versao-id}, ou nil. O
+     `:texto-versao-id` e' o CONTEUDO deliberado (congelado na abertura, mig 0075) e pode ser nil em
+     votacao legada; quem emite ato juridico falha FECHADA nesse caso.")
   (proposicao-aprovada-em-votacao? [this ente-id proposicao-id]
     "T3-A — a Casa APROVOU esta materia? Booleano, lido do ATO (votacao encerrada com resultado
      'aprovada'), nunca do rotulo `proposicoes.estado`. Pre-condicao do autografo; ver
@@ -359,6 +363,9 @@
   (proposicao-aprovada-em-votacao? [this ente-id proposicao-id]
     (transacao this ente-id
       (fn [tx] (votacao/aprovada-em-votacao? tx ente-id proposicao-id))))
+  (aprovacao-vigente [this ente-id proposicao-id]
+    (transacao this ente-id
+      (fn [tx] (votacao/aprovacao-vigente tx ente-id proposicao-id))))
   ;; Onda B Slice 3 (ficha-materia): composicao NUMA UNICA tx (mesma disciplina de buscar-proposicao-detalhe).
   ;; Tetos EMPURRADOS AO SQL (review MAJOR fe-9-ficha-materia — `take` em memoria truncava preservando os
   ;; MAIS ANTIGOS e descartava os MAIS RECENTES, e ainda pagava o custo de fetch da tabela inteira): cada
@@ -684,12 +691,21 @@
         ;; corretiva (`AbrirVotacao` nao expoe `votacao-corrige-id`) nem que anule votacao encerrada
         ;; (`anular-votacao!` nao tem borda). No dia em que a correcao de votacao ganhar rota, esta linha NAO
         ;; protege: sera' preciso SERIALIZABLE ou uma constraint que amarre autografo<->votacao.
-        (when-not (votacao/aprovada-em-votacao? tx ente-id (:proposicao-id m))
-          (throw (ex-info "gerar-autografo: a materia nao foi aprovada em votacao (re-verificacao na tx)"
-                          {:tipo :conflito/proposicao-nao-aprovada :proposicao-id (:proposicao-id m)})))
-        (let [{aut-id :id numero :numero} (autografo/gerar! tx (assoc m :ente-id ente-id))
+        ;; T3-A2 — o CONTEUDO do autografo e' a versao que o plenario DELIBEROU, lida DA VOTACAO. O caller
+        ;; nao fornece `:texto-versao-id`; se fornecer, o `assoc` abaixo sobrescreve. Antes disto o
+        ;; controller resolvia o texto VIGENTE na hora de gerar, e uma promocao de versao entre a aprovacao
+        ;; e a geracao fazia o autografo sair com texto que ninguem votou (achado T3-A2).
+        (let [{:keys [texto-versao-id]}
+              (or (votacao/aprovacao-vigente tx ente-id (:proposicao-id m))
+                  (throw (ex-info "gerar-autografo: a materia nao foi aprovada em votacao (re-verificacao na tx)"
+                                  {:tipo :conflito/proposicao-nao-aprovada :proposicao-id (:proposicao-id m)})))
+              _ (when (nil? texto-versao-id)
+                  (throw (ex-info "gerar-autografo: a votacao que aprovou esta materia nao registrou qual texto foi deliberado"
+                                  {:tipo :conflito/aprovacao-sem-texto :proposicao-id (:proposicao-id m)})))
+              {aut-id :id numero :numero} (autografo/gerar! tx (assoc m :ente-id ente-id
+                                                                       :texto-versao-id texto-versao-id))
               {tram-id :id} (exec/iniciar! tx {:id (random-uuid) :ente-id ente-id :autografo-id aut-id
-                                                :created-by (:created-by m)})]
+                                               :created-by (:created-by m)})]
           {:autografo-id aut-id :numero numero :tramitacao-executiva-id tram-id}))))
   ;; F3.8b — norma. promulgar! compoe (sequencial + URN + insert) na tx; o caller garante o desfecho promulgavel.
   (promulgar-norma! [this ente-id m] (transacao this ente-id #(norma/promulgar! % (assoc m :ente-id ente-id))))

@@ -40,13 +40,14 @@
   proposicao que buscar-pos-aprovacao/gerar-autografo fazem via buscar-proposicao-detalhe). A AUSENCIA de
   uma chave e' PROPOSITAL: se o handler chamar o metodo fora de ordem, a chamada nil estoura — sinaliza a
   regressao em vez de passar silenciosamente."
-  [{:keys [buscar-proposicao-detalhe proposicao-aprovada-em-votacao? autografo-da-proposicao
+  [{:keys [buscar-proposicao-detalhe proposicao-aprovada-em-votacao? aprovacao-vigente autografo-da-proposicao
            gerar-autografo-e-abrir-tramitacao! buscar-pos-aprovacao tramitacao-executiva-do-autografo
            registrar-resposta-executivo! buscar-tramitacao-executiva apreciar-veto!]}]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify repo-leg/RepoLegislativo
     (buscar-proposicao-detalhe [_ _ente-id id] (buscar-proposicao-detalhe id))
     (proposicao-aprovada-em-votacao? [_ _ente-id pid] (proposicao-aprovada-em-votacao? pid))
+    (aprovacao-vigente [_ _ente-id pid] (aprovacao-vigente pid))
     (autografo-da-proposicao [_ _ente-id pid] (autografo-da-proposicao pid))
     (gerar-autografo-e-abrir-tramitacao! [_ _ente-id m] (gerar-autografo-e-abrir-tramitacao! m))
     (buscar-pos-aprovacao [_ _ente-id pid] (buscar-pos-aprovacao pid))
@@ -88,7 +89,8 @@
         repo (fake-repo-legislativo
               {:buscar-proposicao-detalhe (fn [_id] {:proposicao (proposicao-canonica ente pid)
                                                        :texto {:id (random-uuid)}})
-               :proposicao-aprovada-em-votacao? (fn [_pid] true)
+:proposicao-aprovada-em-votacao? (fn [_pid] true)
+               :aprovacao-vigente (fn [_pid] {:votacao-id (random-uuid) :texto-versao-id (random-uuid)})
                :autografo-da-proposicao (fn [_pid] nil)
                :gerar-autografo-e-abrir-tramitacao! (fn [_m] {:autografo-id aid :numero 1 :tramitacao-executiva-id tid})
                :buscar-pos-aprovacao (fn [_pid] {:autografo (autografo-canonico ente aid pid)
@@ -124,20 +126,25 @@
                            :body (json/write-value-as-string {}))]
     (is (= 400 (:status r)))))
 
-(deftest gerar-autografo-sem-texto-vigente-400
-  ;; a proposicao aprovada NUNCA teve texto promovido a vigente (protocolar sem texto e' permitido, Onda B
-  ;; Slice 2) — sem isso o autografo (artefato legal) nasceria vazio; a CHECK do banco
-  ;; (autografo_efetivado_tem_texto) bloquearia como 500 opaco se o controller nao guardasse antes.
+(deftest gerar-autografo-aprovacao-sem-texto-deliberado-409
+  ;; ERA `gerar-autografo-sem-texto-vigente-400`. A pergunta MUDOU em T3-A2: nao e' mais "ha texto vigente
+  ;; AGORA?" e sim "a votacao que aprovou registrou QUAL texto foi deliberado?". A antiga PASSAVA quando o
+  ;; texto tinha sido trocado depois da aprovacao — o buraco do A-2 — e reprovava quando a versao aprovada
+  ;; existia mas fora superada. 409 e nao 400: e' estado do recurso, nao erro de corpo (o mesmo pedido
+  ;; funciona depois de uma votacao com texto na mesa).
   (let [ente (random-uuid) pid (random-uuid)
         repo (fake-repo-legislativo
               {:buscar-proposicao-detalhe (fn [_id] {:proposicao (proposicao-canonica ente pid) :texto nil})
                :proposicao-aprovada-em-votacao? (fn [_pid] true)
+               :aprovacao-vigente (fn [_pid] {:votacao-id (random-uuid) :texto-versao-id nil})
                :autografo-da-proposicao (fn [_pid] nil)})
         r (pt/response-for (service-fn #{"secretario"} repo)
                            :post (str "/legislativo/proposicoes/" pid "/autografo")
                            :headers (com-bearer (token ente (random-uuid)))
                            :body (json/write-value-as-string {}))]
-    (is (= 400 (:status r)))))
+    (is (= 409 (:status r)))
+    (is (= "gerar-autografo: a votacao que aprovou esta materia nao registrou qual texto foi deliberado"
+           (:erro (ler-json r))))))
 
 (deftest gerar-autografo-corpo-invalido-400
   ;; `prazo-resposta-em` que nao parseia como Instant ISO-8601 -> 400 na borda, ANTES de qualquer Repo (fake
@@ -424,7 +431,8 @@
               {:buscar-proposicao-detalhe (fn [_id] {:proposicao (assoc (proposicao-canonica ente pid)
                                                                         :estado "protocolada")
                                                        :texto {:id (random-uuid)}})
-               :proposicao-aprovada-em-votacao? (fn [_pid] true)
+:proposicao-aprovada-em-votacao? (fn [_pid] true)
+               :aprovacao-vigente (fn [_pid] {:votacao-id (random-uuid) :texto-versao-id (random-uuid)})
                :autografo-da-proposicao (fn [_pid] nil)
                :gerar-autografo-e-abrir-tramitacao! (fn [_m] {:autografo-id aid :numero 1 :tramitacao-executiva-id tid})
                :buscar-pos-aprovacao (fn [_pid] {:autografo (autografo-canonico ente aid pid)

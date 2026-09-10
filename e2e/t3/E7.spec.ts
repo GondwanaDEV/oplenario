@@ -389,4 +389,89 @@ test.describe.serial("E7 - Pós-aprovação (servidor)", () => {
     await expect(page.getByRole("button", { name: "Registrar retorno" })).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "Prazo do Executivo" })).toHaveCount(0);
   });
+
+  // -----------------------------------------------------------------------------------------------
+  // 8) T3-A2 — o autógrafo leva a versão VOTADA, não a que foi trocada DEPOIS da aprovação (commit
+  // b02941a: `abrir!` congela `texto_versao_id` NA ABERTURA da votação, mig 0075; o autógrafo lê a
+  // versão DA VOTAÇÃO, nunca o vigente-na-geração). e7.textoTrocado (preparar.mjs) aprovou uma matéria
+  // DE VERDADE pelo rito real e, DEPOIS do encerramento, promoveu um texto NOVO via
+  // PATCH .../proposicoes/:id (a mesma janela que o achado A2 media: uma promoção de versão entre a
+  // aprovação e a geração do autógrafo). Nenhuma rota expõe texto_versao_id fora do wire do autógrafo
+  // (`AutografoOut.texto-versao-id`) — os dois ids para comparar (votado vs. atual) vêm de
+  // e2e/t3/.artifacts/t3-versoes.json, lido por psql DIRETO em preparar.sh (mesmo precedente de
+  // fixtures.sql: não há rota HTTP para isto, e ler não é o mesmo que inventar a escrita).
+  // -----------------------------------------------------------------------------------------------
+  test("Gerar autógrafo — texto trocado DEPOIS da aprovação: o autógrafo leva a versão VOTADA, não a vigente (T3-A2)", async () => {
+    const alvo = ids.e7.textoTrocado as {
+      proposicaoTextoTrocadoId: string;
+      votacaoTextoTrocadoId: string;
+      textoVotado: string;
+      textoAtualPosPromocao: string;
+    } | null;
+    test.skip(
+      !alvo,
+      "preparar.mjs não deixou e7.textoTrocado (ver e7a2-sem-candidata-para-texto-trocado em bloqueios) — rode e2e/t3/preparar.sh de novo.",
+    );
+
+    let versoes: { textoVersaoVotadaId: string; textoVersaoAtualId: string } | null = null;
+    try {
+      versoes = JSON.parse(readFileSync(resolve(__dirname, ".artifacts/t3-versoes.json"), "utf8"));
+    } catch {
+      /* tratado abaixo pelo skip */
+    }
+    test.skip(
+      !versoes?.textoVersaoVotadaId || !versoes?.textoVersaoAtualId,
+      "e2e/t3/.artifacts/t3-versoes.json ausente ou incompleto — preparar.sh (etapa 3/3) não conseguiu ler os dois texto_versao_id por psql. Rode e2e/t3/preparar.sh de novo.",
+    );
+
+    // PRECONDIÇÃO, mesma disciplina do beforeAll: a proposição do T3-A2 ainda não pode ter autógrafo
+    // (append-only — cada corrida consome a sua).
+    const rPre = await fetch(`${BACKEND}/legislativo/proposicoes/${alvo!.proposicaoTextoTrocadoId}/pos-aprovacao`, {
+      headers: { Authorization: `Bearer ${TSEC_JSON}` },
+    });
+    expect(rPre.status, "GET pos-aprovacao do alvo do T3-A2 devia ser 200").toBe(200);
+    const corpoPre = (await rPre.json()) as { autografo?: unknown };
+    expect(
+      corpoPre.autografo ?? null,
+      "PRECONDIÇÃO ESTRAGADA: o alvo do T3-A2 já tem autógrafo (t3-ids.json está velho) — rode ./e2e/t3/preparar.sh e rode o spec de novo.",
+    ).toBeNull();
+
+    // sanidade da FIXTURE (não do produto): os dois textos e os dois texto_versao_id têm mesmo que
+    // divergir — senão o caso não está testando nada.
+    expect(alvo!.textoVotado).not.toBe(alvo!.textoAtualPosPromocao);
+    expect(versoes!.textoVersaoVotadaId).not.toBe(versoes!.textoVersaoAtualId);
+
+    const r = await fetch(`${BACKEND}/legislativo/proposicoes/${alvo!.proposicaoTextoTrocadoId}/autografo`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${TSEC_JSON}` },
+      body: JSON.stringify({}),
+    });
+    expect(r.status, "gerar autógrafo sobre matéria REALMENTE aprovada devia ser 201").toBe(201);
+    const corpo = (await r.json()) as { autografo?: { id?: string; ["texto-versao-id"]?: string } };
+    const autografoTextoVersaoId = corpo.autografo?.["texto-versao-id"];
+    expect(autografoTextoVersaoId, "AutografoOut devia carregar texto-versao-id").toBeTruthy();
+
+    // A PROVA do achado A2: o autógrafo carrega a versão QUE FOI VOTADA — nunca a que foi trocada depois.
+    expect(autografoTextoVersaoId, "o autógrafo tem de levar a versão VOTADA").toBe(versoes!.textoVersaoVotadaId);
+    expect(autografoTextoVersaoId, "o autógrafo NÃO pode levar a versão trocada depois da aprovação").not.toBe(
+      versoes!.textoVersaoAtualId,
+    );
+
+    registrarEscrita({
+      escrita: "Gerar autógrafo — texto trocado depois da aprovação (T3-A2): leva a versão VOTADA",
+      metodo: "POST",
+      url: `/legislativo/proposicoes/${alvo!.proposicaoTextoTrocadoId}/autografo`,
+      status: r.status,
+      id: corpo.autografo?.id,
+      tabela: "legislativo.autografo",
+      sql_de_prova:
+        `SELECT a.texto_versao_id AS texto_versao_do_autografo, v.texto_versao_id AS texto_versao_votada, ` +
+        `p.texto_vigente_versao_id AS texto_versao_atual ` +
+        `FROM legislativo.autografo a ` +
+        `JOIN legislativo.votacoes v ON v.id = '${alvo!.votacaoTextoTrocadoId}' AND v.ente_id = a.ente_id ` +
+        `JOIN legislativo.proposicoes p ON p.id = a.proposicao_id AND p.ente_id = a.ente_id ` +
+        `WHERE a.ente_id = '${ENTE}' AND a.proposicao_id = '${alvo!.proposicaoTextoTrocadoId}'; ` +
+        `-- espera texto_versao_do_autografo = texto_versao_votada, e DIFERENTE de texto_versao_atual`,
+    });
+  });
 });
