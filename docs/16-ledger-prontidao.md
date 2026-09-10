@@ -1064,3 +1064,146 @@ um interruptor de segurança**, e merece estar assim nomeado em qualquer runbook
 justificativa semeada nenhuma** — logo ela se abre pela própria UI (`JustificativaAbrir`) antes de ser
 decidida. O mapa a dava como perdida por ter lido o banco sujo em vez da semente.
 
+
+## A corrida: 62 testes verdes, e a raiz que era MINHA
+
+Os 8 specs foram escritos em paralelo, revisados adversarialmente, corrigidos, e então rodados **em
+série** — escrita concorrente na mesma Casa append-only é exatamente o que não pode acontecer.
+
+**A primeira corrida travou tudo, e a causa não era o produto.** Todos os testes de tela de sessão
+morriam em ~31s uniformes, e os mais longos em 2.5 min. Cheguei a redigir isso como defeito de produto
+("a tela não reflete a escrita ao vivo") antes de ler o log do frontend, que dizia:
+
+    GET /api/sessoes/.../plenario 200 in 30.2s
+
+É o **SSE do plenário** — stream de vida longa. E `page.goto()` do Playwright espera o evento `load`,
+que **não dispara enquanto há conexão aberta**. Toda navegação para uma tela com SSE bloqueava 30s; um
+teste com dois `goto`/`reload` estourava o relógio sem nunca chegar na asserção. Corrigido com
+`waitUntil: "domcontentloaded"` em **87 navegações** dos 8 specs.
+
+**Fica registrado como erro meu, não do produto** — é a terceira vez nesta frente que o instrumento
+mede a si mesmo (as outras duas estão na Fase 10). E a segunda armadilha de instrumento da fase: o
+`npx tsc --noEmit` que o harness manda rodar **não checa nada** — `e2e/` não tem `typescript` nem
+`tsconfig.json`, então `npx` baixa um pacote homônimo que imprime *"This is not the tsc command you are
+looking for"* e sai **0**. Um gate incapaz de reprovar, achado por dois agentes independentes. O
+type-check real (typescript 5.6.3 + tsconfig próprio) foi provado capaz de reprovar com defeito
+plantado: `TS2322`, exit 2.
+
+### Placar final por grupo
+
+| Grupo | Verdes | fixme | O que o fixme guarda |
+|---|---|---|---|
+| E1 Cadastros | 16 | 2 | precondição só-de-ida (licenciar não tem volta pela tela) |
+| E2 Expediente | 8 | 0 | — |
+| E3 Matéria | 10 | 0 | — |
+| E4 Parecer | 9 | 1 | "dar ciência" não tem produtor de evento |
+| E5 Chamada | 7 | 3 | carry T3-1 (ver abaixo) |
+| E6 Votar | 3 | 2 | casos documentados por leitura |
+| E7 Pós-aprovação | 7 | 0 | — |
+| E8 Notificações | 2 | 0 | — |
+| **Total** | **62** | **8** | |
+
+---
+
+# Os achados de PRODUTO da Trilha 3
+
+Todos com evidência dos dois lados — o que a tela faz **e** o que o banco tem. Nenhum é alegação.
+
+## 🔴 T3-A · Autógrafo nasce em matéria que a Câmara nunca aprovou
+
+**Nenhuma das duas pontas confere `proposicao.estado === 'aprovada'`.** O backend
+(`legislativo/controllers.clj:432-441`) guarda só duplicidade e texto vigente. A tela põe o gate
+apenas no *link de entrada* (`ficha-materia/acoes-card.tsx:23`) — mas `/pos-aprovacao/:id` é
+**navegável direto por URL**, e ali o botão aparece sempre que não há autógrafo.
+
+Provado ao vivo, 4 vezes, e o estado ficou no banco:
+
+    8/2026  | 8344f6b3… | em_comissoes     | aguardando
+    9/2026  | c7aecac5… | em_pauta         | sancionado
+    10/2026 | 3b59cdbb… | em_pauta         | sancionado
+    11/2026 | 044ab363… | aguardando_pauta | sancionado
+
+Quatro **autógrafos numerados** — artefato legal, numeração gapless — para matérias ainda em
+tramitação. Duas delas com o Executivo "sancionando" o que a Câmara não votou. É o achado mais grave
+da frente: não corrompe dado por acidente, **fabrica um ato jurídico que não aconteceu**.
+
+## 🔴 T3-B · Os 19 hooks de escrita nunca re-armam `vivoRef` — nenhum erro do servidor aparece em dev
+
+Os hooks de escrita de `apps/frontend/src/lib/use-*.ts` fazem
+`useEffect(() => () => { vivoRef.current = false; }, [])` e **nunca re-armam o ref**. Os hooks de
+**leitura** fazem certo (`use-chamada.ts:143`). Sob React StrictMode — que roda em dev — o cleanup
+executa no mount, `vivoRef.current` nasce `false`, e todo `setEstado("erro")` vira no-op.
+
+A contagem não deixa dúvida sobre o padrão: **8 hooks armam, e são todos de leitura; 19 só desarmam, e
+são todos de escrita.**
+
+Efeito medido: 1,5 s depois de um `409 {"erro":"ja existe mandato vigente sobreposto..."}`, o botão
+continua **"Salvando…" desabilitado** e há **zero alerta na página**. O usuário não recebe pista
+nenhuma de que a Casa recusou. Falseável dos dois lados: o mesmo caso em RTL, **sem** StrictMode,
+passa. Conserto: uma linha por hook.
+
+## 🟠 T3-C · "Registrar retorno" grava e a tela nunca confirma
+
+POST 200, linha no banco (`estado='sancionado'`, `respondido_em` preenchido) — e a mensagem "Retorno do
+Executivo registrado" **não aparece em lugar nenhum**. Em
+`pos-aprovacao/conteudo-pos-aprovacao.tsx:170`, o `<p role="status">` está **dentro** do branch
+`tramitacaoExecutiva?.estado === "aguardando"`; no sucesso o handler troca o estado e a mensagem no
+mesmo tick, o branch desmonta antes de pintar, e a mensagem morre com ele.
+
+O detalhe que torna isso instrutivo: **o autor previu esse defeito e o corrigiu para a ação irmã** —
+a mensagem do "gerar" foi içada para uma região compartilhada fora dos branches (`:139-141`), com
+comentário explicando o porquê. A correção simplesmente não foi replicada.
+
+## 🟠 T3-D · Editar só a ementa cunha uma versão de TEXTO nova, byte-a-byte idêntica
+
+O textarea vem pré-preenchido e o form **reenvia o texto intacto**; o backend
+(`components/repositorio.clj:301-315`) decide promover por `(when-let [corpo (:texto m)])` — **presença
+da chave, nunca "o texto mudou"**. Em `legislativo.proposicao_texto_versao` da proposição `1511bc9e`:
+**6 versões com md5 idêntico** (`bc68d42d…`), 5 delas `origem_versao='edicao'` geradas por corridas que
+só mexeram na ementa. `lock_version` +2 com `texto`, +1 sem.
+
+Versão de texto é **ato auditado** (§22.4 eixo B). A trilha ganha uma "edição" por salvamento de
+metadado, sem edição nenhuma.
+
+## 🟠 T3-E · O parecer é invisível para o vereador, e o 403 é indistinguível de 404
+
+`GET /legislativo/pareceres/:id` exige papel `secretario` **também no `:get`**
+(`legislativo/diplomat/http/in.clj:523`), não só nas escritas. Três consequências medidas:
+
+- O vereador recebe o **chassi interno da secretaria** — não há guard de papel em `(interno)/layout.tsx`
+  (compare com o `GuardVereador` de `(vereador)/layout.tsx:47`) — incluindo o ator **hardcoded**
+  "Rita Campos · Servidora legislativa".
+- O 403 cai no **mesmo ramo de erro do 404**: "Não foi possível carregar este parecer". "Você não tem o
+  papel" fica indistinguível de "isto não existe".
+- A escrita é inalcançável pela interface, então o gate só se prova por HTTP.
+
+## 🟡 Os menores, todos reproduzidos
+
+| # | Achado | Evidência |
+|---|---|---|
+| T3-F | **Emitir parecer duas vezes não é bloqueado** | `50a690c2` foi de `lock_version` 5 → 11, ainda em `em_elaboracao`; a 2ª emissão grava com 200 |
+| T3-G | **Ementa só com espaços passa** em todas as camadas | nem `required` (só barra length 0), nem Malli (sem `:min`), nem CHECK |
+| T3-H | **Criar proposição não tem `idempotency-key`** | duas abas concorrentes = **duas** proposições distintas |
+| T3-I | **Erro do servidor chega como "requisicao invalida"** | o interceptor global (`interceptors.clj:157`) troca toda `:validacao/invalido` pelo literal opaco, e o hook o usa cru como texto do `role=alert`. Conflito de CAS fica indistinguível de JSON malformado. A rota irmã de autógrafo trata melhor (traduz `ex-message` na borda) — **duas escritas da mesma tela, duas qualidades de erro** |
+| T3-J | **"Nova chamada" mente por 30s** | dentro da `janela-de-deduplicacao-de-chamada` o botão fica clicável, o POST volta 200 `:ja-registrado`, **nenhum ato nasce** e a tela não conta isso ao operador |
+| T3-K | **Assinar parecer terminal → 500 opaco** | o trigger `trg_pareceres_imut_estado` reverte tudo (banco confirma: nada gravou), mas o erro sobe sem `:tipo` e vira 500 |
+
+## Os `[GAP]` de produto que a T3 destapou (não são bugs — são rotas que não existem)
+
+| Falta | Consequência |
+|---|---|
+| Rota que leve proposição a **`aprovada`** | o caminho feliz de E7 só é alcançável **através do defeito T3-A** |
+| Rota que **crie parecer** | E4 era spec de uso único: emitir leva a estado terminal e o trigger trava tudo depois |
+| Rota que **crie `documento_modelo`** | a aba "Modelos" é `<EmBreve>`; sem INSERT manual, "Gerar documento" fica `disabled` para sempre |
+| Produtor de evento de **ciência** | `publicar-norma!` não tem chamador em diplomat nenhum; a seção "Para sua ciência" nunca renderiza |
+| Rota que **crie remessa** | herdado da T2, segue aberto |
+
+## Carry T3-1 — o único aberto, e o que está provado dele
+
+O grupo A do E5 (presença unitária → justificativa → decisão) não conclui. **As escritas funcionam, e
+isso é medido:** o `GET /chamada` devolve `ausente-justificativa-pendente` com o motivo exato que o
+spec digita, e a linha entra em `sessoes.presenca_evento`. O que não conclui é a **asserção de tela
+depois da escrita**, e não consegui separar com confiança quanto disso é o defeito T3-B (o `vivoRef`)
+e quanto é custo de compilação sob demanda do `next dev`. Não virou verde por conveniência e não virou
+acusação sem prova.
+
