@@ -1276,3 +1276,44 @@ notificações de fixture do E8 ficavam lidas da corrida anterior e o INSERT ide
 restaurava — `fixtures.sql` passou a **resetá-las**; e o E3 escolhia o alvo "sem texto" por **índice
 fixo**, sendo que a ordem de `GET /proposicoes` não é estável entre corridas — passou a escolher por
 propriedade (`lockVersion === 0` ⟺ sem versão de texto, conferido por SQL).
+
+---
+
+# T3-B CONSERTADO — e o teste que documentava o defeito reprovou, como devia
+
+O achado **T3-B** (os hooks de escrita que nunca re-armam `vivoRef`) não ficou só registrado: foi
+fechado, com o gate que impede a volta.
+
+**O conserto:** 19 hooks de escrita passaram de
+`useEffect(() => () => { vivoRef.current = false; }, [])` para o mesmo padrão que os hooks de leitura
+já usavam — armar no mount, desarmar no cleanup. **Auditoria depois: 27 hooks armam, nenhum desarma
+sem armar.**
+
+**O gate estrutural:** `apps/frontend/src/lib/vivo-ref-lint.test.ts`. É lint e não teste de
+comportamento **de propósito** — o defeito é uma *omissão* que se repete a cada hook novo, e um teste
+por hook seria esquecido exatamente do mesmo jeito que o `vivoRef.current = true` foi. O gate foi
+**provado capaz de reprovar**: com a linha removida de um hook, ele falha **nomeando o arquivo**
+(`use-marcar-lida.ts`) — vermelho que aponta o defeito, não vermelho genérico. Traz também uma guarda
+contra virar vácuo: afirma que inspecionou mais de 20 arquivos, para o caso de uma renomeação de pasta
+esvaziar o glob e deixar o teste passar sem olhar nada.
+
+**A prova de que o conserto é real veio de graça, e é o melhor pedaço desta fase.** O teste
+`criar mandato — mandato sobreposto (409)` do E1 **nasceu afirmando o defeito**: 1,5 s depois do 409, o
+botão preso em "Salvando…" e zero alerta. Na primeira corrida cheia depois de mexer no hook, **ele
+reprovou** — porque o alerta passou a aparecer. É a armadilha que este projeto já tinha registrado
+(`oplenario-teste-que-afirma-o-vazamento`): **teste que exige o defeito trava o conserto**. Quem o
+escreveu previu o momento e deixou, no próprio corpo do teste, a instrução do que trocar no dia do
+conserto. Trocado: o teste virou de *vermelho-que-documenta* para *verde-que-prende*.
+
+## Estado final da Trilha 3
+
+| Gate | Resultado |
+|---|---|
+| **T3, corrida cheia 1** | **67 passou · 0 falhou · 6 fixme** |
+| **T3, corrida cheia 2** | **67 passou · 0 falhou · 6 fixme** |
+| Suíte unitária do frontend | **137 arquivos · 1132 testes · 0 falhas** |
+| Lint estrutural do `vivoRef` | verde, e **provado capaz de reprovar** |
+
+Duas corridas cheias consecutivas, 100% verdes — o critério de pronto que o plano pedia para a T1.3 e
+que a Fase 10 não conseguia cumprir por causa do conflito estrutural.
+

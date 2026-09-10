@@ -33,7 +33,16 @@ export function useRegistrarMandato(token: string | null, vereadorId: string | n
   const [erro, setErro] = useState<string | null>(null);
   const vivoRef = useRef(true);
   const enviandoRef = useRef(false);
-  useEffect(() => () => { vivoRef.current = false; }, []);
+  useEffect(() => {
+    // RE-ARMA no mount. Sem esta linha o ref nasce FALSE sob React StrictMode (dev), porque o
+    // StrictMode roda cleanup+setup no primeiro mount — e entao TODO setEstado pos-resposta vira
+    // no-op e nenhuma mensagem de erro do servidor chega na tela. Medido: 1,5s depois de um 409 o
+    // botao seguia "Salvando..." com zero alerta na pagina. Os hooks de LEITURA ja faziam assim.
+    vivoRef.current = true;
+    return () => {
+      vivoRef.current = false;
+    };
+  }, []);
 
   async function registrar(corpo: RegistrarMandatoIn): Promise<{ id: string }> {
     if (semCredencial(token)) throw new Error("sem token de autenticacao");

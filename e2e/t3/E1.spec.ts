@@ -366,20 +366,24 @@ test.describe("E1 - Cadastros de vereadores", () => {
     expect(resposta.status()).toBe(409);
     expect((await resposta.json()).erro).toBe("ja existe mandato vigente sobreposto para este vereador");
 
-    // [ACHADO — INTERFACE] A TELA NUNCA MOSTRA ESSE ERRO em dev. Este teste afirma o comportamento REAL
-    // medido, nao o desejado: 1,5s depois do 409 o form continua com o botao "Salvando…" desabilitado e
-    // ZERO alerta na pagina. Causa raiz no bloco de achado transversal no topo deste arquivo
-    // (`vivoRef` nunca re-armado em use-registrar-mandato.ts:26-30 + React StrictMode).
-    // Consequencia de produto: o usuario clica, o botao trava em "Salvando…" e ele nao tem NENHUMA pista
-    // de que a Casa recusou o mandato — so' fechar o painel e tentar de novo.
-    // >>> QUANDO O HOOK FOR CONSERTADO, este teste REPROVA de proposito. A correcao entao e' trocar as 3
-    // >>> asserçoes abaixo pela unica que o produto certo satisfaz:
-    // >>>   await expect(form.getByText("ja existe mandato vigente sobreposto para este vereador")).toBeVisible();
-    await page.waitForTimeout(1500); // janela generosa: se o erro fosse renderizar, renderizaria aqui
+    // [ACHADO T3-B — CONSERTADO em 10/09/2026] Este teste NASCEU afirmando o defeito: 1,5s depois do 409
+    // o form continuava com o botao "Salvando…" desabilitado e ZERO alerta na pagina, porque os 19 hooks
+    // de ESCRITA faziam `useEffect(() => () => { vivoRef.current = false; }, [])` e nunca re-armavam o
+    // ref — sob React StrictMode (dev) o cleanup roda no mount, o ref nasce false, e todo setEstado
+    // pos-resposta vira no-op. Os 8 hooks de LEITURA ja armavam certo; a assimetria era o padrao.
+    //
+    // O autor do teste deixou escrito, aqui mesmo, o que fazer no dia do conserto: trocar as 3 asserçoes
+    // do comportamento quebrado pela UNICA que o produto certo satisfaz. E isso que segue abaixo — e o
+    // teste virou de vermelho-que-documenta para verde-que-prende. A prova de que o conserto e' real
+    // esta justamente em ele ter REPROVADO na primeira corrida depois da mudanca do hook.
+    // Gate estrutural que impede a omissao de voltar em qualquer hook novo:
+    // apps/frontend/src/lib/vivo-ref-lint.test.ts (provado capaz de reprovar, nomeando o arquivo).
+    await expect(form.getByText("ja existe mandato vigente sobreposto para este vereador")).toBeVisible({
+      timeout: 15_000,
+    });
+    // E o botao volta a ser clicavel: o usuario pode corrigir a data e tentar de novo sem fechar o painel.
     const submit = form.getByRole("button", { name: /Registrar mandato|Salvando/ });
-    await expect(submit).toHaveText("Salvando…");
-    await expect(submit).toBeDisabled();
-    expect(await page.getByText("ja existe mandato vigente sobreposto para este vereador").count()).toBe(0);
+    await expect(submit).toBeEnabled({ timeout: 15_000 });
   });
 
   test("criar mandato — duplo clique", async ({ page }) => {

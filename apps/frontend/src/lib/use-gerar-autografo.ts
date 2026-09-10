@@ -36,10 +36,15 @@ export function useGerarAutografo(token: string | null, proposicaoId: string | n
   const enviandoRef = useRef(false);
 
   useEffect(() => {
+    // RE-ARMA no mount. Sem esta linha o ref nasce FALSE sob React StrictMode (dev), porque o
+    // StrictMode roda cleanup+setup no primeiro mount — e entao TODO setEstado pos-resposta vira
+    // no-op e nenhuma mensagem de erro do servidor chega na tela. Medido: 1,5s depois de um 409 o
+    // botao seguia "Salvando..." com zero alerta na pagina. Os hooks de LEITURA ja faziam assim.
+    vivoRef.current = true;
     return () => {
       vivoRef.current = false;
     };
-  }, []);
+    }, []);
 
   async function gerar(corpo: GerarAutografoIn = {}): Promise<PosAprovacaoOut> {
     if (semCredencial(token)) {
