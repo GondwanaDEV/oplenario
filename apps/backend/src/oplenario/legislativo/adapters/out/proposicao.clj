@@ -33,7 +33,9 @@
             "lista de proposicoes"))
 
 (defn detalhe->wire
-  "Proposicao (dominio, kebab) + texto vigente inline opcional (string ou nil) -> ProposicaoDetalheOut."
+  "Proposicao (dominio, kebab) + texto vigente inline opcional (string ou nil) -> ProposicaoDetalheOut.
+  `:aprovada` (T3-A/Fatia 2) chega JA COMPUTADO em `linha` (o Repo o traz na MESMA tx da leitura, via
+  votacao/aprovada-em-votacao?) — este adapter so' repassa, nunca decide o fato aqui."
   [linha texto]
   (validado wire/ProposicaoDetalheOut
             {:id (->str (:id linha)) :tipo (:tipo linha) :ano (:ano linha) :sequencial (:sequencial linha)
@@ -41,6 +43,6 @@
              :autor-id (->str (:autor-id linha)) :autor-texto (:autor-texto linha)
              :objeto-indicacao (:objeto-indicacao linha) :destinatario-id (->str (:destinatario-id linha))
              :destinatario-texto (:destinatario-texto linha) :tipo-requerimento (:tipo-requerimento linha)
-             :categoria-mocao (:categoria-mocao linha) :estado (:estado linha)
+             :categoria-mocao (:categoria-mocao linha) :estado (:estado linha) :aprovada (:aprovada linha)
              :lock-version (:lock-version linha) :atualizado-em (->str (:atualizado-em linha)) :texto texto}
             "detalhe de proposicao"))

@@ -50,6 +50,11 @@
    [:tipo-requerimento {:optional true} [:maybe :string]]
    [:categoria-mocao {:optional true} [:maybe :string]]
    [:estado :string]
+   ;; T3-A/Fatia 2 (guarda-autografo-votacao): o fato "a Casa APROVOU" que o FE gateia botao (autografo,
+   ;; pos-aprovacao) — vem do ATO (votacao encerrada 'aprovada'), NUNCA do :estado acima (texto livre,
+   ;; template por camara — ver db/votacao.clj/aprovada-em-votacao?). :boolean, nao {:optional true}: toda
+   ;; leitura de detalhe computa o fato, entao a ausencia do campo e' sempre bug de servidor, nunca "nao sei".
+   [:aprovada :boolean]
    [:lock-version :int]
    [:atualizado-em :string]
    [:texto {:optional true} [:maybe :string]]])

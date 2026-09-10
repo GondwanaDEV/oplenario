@@ -20,7 +20,7 @@
   {:id id :ente-id ente :tipo "projeto_lei" :ano 2026 :sequencial 42
    :urn-lex "urn:lex:br:camara.municipal.fortaleza:projeto.lei:2026;42"
    :ementa "Cria o Programa Municipal de Hortas Comunitarias"
-   :autor-tipo "vereador" :autor-texto "Helena Matos" :estado "em_comissoes" :lock-version 0
+   :autor-tipo "vereador" :autor-texto "Helena Matos" :estado "em_comissoes" :aprovada false :lock-version 0
    :atualizado-em (java.time.Instant/parse "2026-05-21T10:00:00Z")})
 
 (def ^:private ccj-id (random-uuid))

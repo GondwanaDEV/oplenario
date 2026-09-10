@@ -50,7 +50,8 @@
   (editar-proposicao! [this ente-id m]
     "PATCH parcial (CAS) + promove nova versao 'edicao' se :texto presente, 1 tx.")
   (buscar-proposicao-detalhe [this ente-id id]
-    "{:proposicao ... :texto (a linha de texto/vigente, ou nil)}, uma leitura.")
+    "{:proposicao ... :texto (a linha de texto/vigente, ou nil)}, uma leitura. `:proposicao` carrega
+     `:aprovada` (Fatia 2) na MESMA tx — ver proposicao-aprovada-em-votacao? logo abaixo.")
   (proposicao-aprovada-em-votacao? [this ente-id proposicao-id]
     "T3-A — a Casa APROVOU esta materia? Booleano, lido do ATO (votacao encerrada com resultado
      'aprovada'), nunca do rotulo `proposicoes.estado`. Pre-condicao do autografo; ver
@@ -58,6 +59,7 @@
   (ficha-completa-da-proposicao [this ente-id id]
     "Onda B Slice 3 (ficha-materia, leitura interna): {:proposicao :texto :tramitacao :apensadas :emendas
      :pareceres} NUMA UNICA tx (mesma disciplina de buscar-proposicao-detalhe/listar-e-contar-proposicoes).
+     `:proposicao` carrega `:aprovada` (Fatia 2), mesma disciplina de buscar-proposicao-detalhe.
      Sem short-circuit no nil da proposicao (mesmo estilo de buscar-proposicao-detalhe): as demais leituras
      rodam do mesmo jeito e vem naturalmente vazias. Tetos (review MAJOR fe-9-ficha-materia — o `take`
      em memoria anterior truncava preservando os MAIS ANTIGOS): 100 p/ tramitacao, 50 p/
@@ -327,11 +329,15 @@
   ;; Onda B Slice 2: leitura composta (proposicao + texto vigente) NUMA UNICA tx — mesmo snapshot MVCC
   ;; (mesma disciplina de listar-e-contar-proposicoes). Nao lanca quando a proposicao nao existe: devolve
   ;; {:proposicao nil :texto nil} (o caller/HTTP traduz p/ 404).
+  ;; :aprovada (T3-A/Fatia 2, ledger observacao 254a768): entra NA MESMA tx da leitura (nao uma segunda
+  ;; consulta solta) — `some->` porque `(assoc nil ...)` produziria um mapa {:aprovada ...} onde o caller
+  ;; espera nil p/ "proposicao nao existe" (a borda traduz nil -> 404; um mapa truthy quebraria isso).
   (buscar-proposicao-detalhe [this ente-id id]
     (transacao this ente-id
       (fn [tx]
-        {:proposicao (proposicao/buscar tx ente-id id)
-         :texto (texto/vigente tx ente-id id)})))
+        (let [p (proposicao/buscar tx ente-id id)]
+          {:proposicao (some-> p (assoc :aprovada (votacao/aprovada-em-votacao? tx ente-id id)))
+           :texto (texto/vigente tx ente-id id)}))))
   ;; T3-A (guarda-autografo-votacao): o fato de aprovacao servido como LEITURA — o controller o consulta
   ;; antes de gerar o autografo, e o read-model o publica p/ o FE gatear o botao na mesma verdade.
   (proposicao-aprovada-em-votacao? [this ente-id proposicao-id]
@@ -343,10 +349,13 @@
   ;; db/ aceita `limite` e devolve os N MAIS RECENTES (DESC+LIMIT no SQL, revertido a ASC internamente —
   ;; o contrato de ordem cronologica pro caller e' o MESMO com ou sem limite). 100 tramitacao, 50
   ;; apensadas/emendas/pareceres (mesmo teto-fixo-50 de relatores-pendentes).
+  ;; :aprovada mesma disciplina de buscar-proposicao-detalhe acima — MESMA tx, `some->` p/ nao mentir um
+  ;; mapa truthy quando a proposicao nao existe.
   (ficha-completa-da-proposicao [this ente-id id]
     (transacao this ente-id
       (fn [tx]
-        {:proposicao (proposicao/buscar tx ente-id id)
+        {:proposicao (some-> (proposicao/buscar tx ente-id id)
+                              (assoc :aprovada (votacao/aprovada-em-votacao? tx ente-id id)))
          :texto (texto/vigente tx ente-id id)
          :tramitacao (tram/historico-da-proposicao tx ente-id id 100)
          :apensadas (apensacao/apensadas-ativas tx ente-id id 50)

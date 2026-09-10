@@ -44,3 +44,10 @@
         "ProposicaoDetalheOut.texto é opcional e pode ser null")
     (is (str/includes? out "lockVersion: number;")
         "ProposicaoDetalheOut.lockVersion é obrigatório e do tipo number")))
+
+;; ---------- Fatia 2 (guarda-autografo-votacao): :aprovada — o fato do ATO, nao do :estado ----------
+
+(deftest proposicao-detalhe-out-tem-aprovada-booleano-obrigatorio
+  (let [out (gerar-legislativo/gerar-tudo)]
+    (is (str/includes? out "aprovada: boolean;")
+        "ProposicaoDetalheOut.aprovada é obrigatório (nunca opcional) e boolean — o FE gateia botao nele")))

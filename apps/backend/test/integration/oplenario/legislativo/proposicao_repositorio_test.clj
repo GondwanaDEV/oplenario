@@ -94,6 +94,34 @@
     (is (some? erro) "lock-version desatualizado lanca, nao passa silenciosamente")
     (is (= :validacao/invalido (:tipo (ex-data erro))))))
 
+;; ---------- Fatia 2 (guarda-autografo-votacao): :aprovada vem do ATO, servido NA MESMA tx da leitura ----------
+
+(deftest buscar-proposicao-detalhe-sem-votacao-aprovada-false
+  (let [ente (random-uuid)
+        r (repo/protocolar! *repo* ente {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026 :uf "CE"
+                                          :municipio-nome "Fortaleza" :ementa "X"})
+        {:keys [proposicao]} (repo/buscar-proposicao-detalhe *repo* ente (:id r))]
+    (is (false? (:aprovada proposicao))
+        "sem NENHUMA votacao encerrada 'aprovada' sobre a materia, o fato e' false")))
+
+(deftest buscar-proposicao-detalhe-com-votacao-aprovada-true
+  ;; mesma receita de votacao_eventos_repo_test.clj/encerrar-votacao-emite-encerrada-com-totais: 2 sim > 1
+  ;; nao, base-membros 3, maioria_simples -> resultado 'aprovada'.
+  (let [ente (random-uuid)
+        r (repo/protocolar! *repo* ente {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026 :uf "CE"
+                                          :municipio-nome "Fortaleza" :ementa "X"})
+        pid (:id r)
+        vid (random-uuid)]
+    (repo/abrir-votacao! *repo* ente {:id vid :objeto-tipo "proposicao" :objeto-id pid
+                                      :modalidade "nominal" :quorum-tipo "maioria_simples"})
+    (repo/registrar-voto! *repo* ente {:id (random-uuid) :votacao-id vid :vereador-id (random-uuid) :voto "sim"})
+    (repo/registrar-voto! *repo* ente {:id (random-uuid) :votacao-id vid :vereador-id (random-uuid) :voto "sim"})
+    (repo/registrar-voto! *repo* ente {:id (random-uuid) :votacao-id vid :vereador-id (random-uuid) :voto "nao"})
+    (repo/encerrar-votacao! *repo* ente {:id vid :base-membros 3 :updated-by nil :lock-version 0})
+    (let [{:keys [proposicao]} (repo/buscar-proposicao-detalhe *repo* ente pid)]
+      (is (true? (:aprovada proposicao))
+          "votacao encerrada com resultado 'aprovada' sobre a MESMA materia -> fato true"))))
+
 (deftest criar-proposicao-via-controller-seta-ente-id
   ;; Bug 1 (review ecc clojure+database, task 12): `controllers/criar-proposicao` mesclava so' {:uf
   ;; :municipio-nome} do resolver de municipio no mapa `m`, NUNCA :ente-id — e' o unico dos 3 gates de
