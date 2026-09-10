@@ -1,20 +1,32 @@
 "use client";
 
-// A inbox do vereador (Onda E fatia 1) — porte reduzido de
-// produto/design-system/o-plenario/telas/notificacoes.html: cabeçalho + badge, agrupamento temporal, a
-// nota de dedup §5.1 e a lista. FORA desta fatia (spec §5, deliberado): "marcar todas como lidas",
-// abas de filtro por tipo (com uma só categoria existindo, aba é teatro) e contador no sino do topo
-// (o sino conta PENDÊNCIAS, não notificações — mudar isso quebraria a dedup que a própria tela documenta).
+// A inbox do vereador — porte de produto/design-system/o-plenario/telas/notificacoes.html: cabeçalho +
+// badge, barra de filtro, agrupamento temporal, a nota de dedup §5.1 e a lista.
+//
+// ── DECISÃO DE DESENHO (fatia 3): as abas de filtro são DERIVADAS do dado, não cravadas ────────────
+// O design desenha seis abas fixas (Tudo/Não lidas/Falhas/Prazos/Tramitação/Sessões). Quatro delas não
+// têm produtor nenhum no backend hoje — só `norma_publicada` é emitida de fato, mais o fallback
+// `sistema`. Aba permanentemente vazia promete uma cobertura que o produto não tem: é mentira com
+// outro nome. E `categoria` é `:string` ABERTO no contrato de propósito, então cravar a lista aqui
+// criaria um segundo vocabulário no FE que drifta do backend em silêncio E esconderia a categoria que
+// a Track IA vai emitir amanhã. Derivada, a aba nasce sozinha quando o produtor nascer.
+// O racional completo, com as referências de arquivo, está no topo de src/lib/notificacoes-vista.ts.
+//
+// FORA desta fatia, e registrado: "marcar todas como lidas" (não existe rota bulk — a de
+// paineis/components/repositorio.clj marca 1 id por vez), reverter lida -> não lida (`MarcarLidaOut` é
+// unidirecional) e contador no sino do topo (o sino conta PENDÊNCIAS, não notificações — mudar isso
+// quebraria a dedup que a própria tela documenta).
 //
 // Não-lida é marcada por PONTO + NEGRITO + tinta de fundo — nunca só cor (GUIDELINES-CHECKLIST).
 // Composição: useAuth (token, já resolvido pelo GuardVereador do layout) + useMinhasNotificacoes +
-// useMarcarLida + derivarInbox (view-model puro).
+// useMarcarLida + derivarInbox (view-model puro; TODA a derivação de aba/filtro mora lá).
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { useMinhasNotificacoes } from "@/lib/use-minhas-notificacoes";
 import { useMarcarLida } from "@/lib/use-marcar-lida";
-import { derivarInbox, type NotificacaoVista } from "@/lib/notificacoes-vista";
+import { derivarInbox, FILTRO_TUDO, type NotificacaoVista } from "@/lib/notificacoes-vista";
 import { comToken } from "@/lib/nav";
 import "./notificacoes.css";
 
@@ -22,7 +34,17 @@ export default function PaginaNotificacoes() {
   const { token } = useAuth();
   const { dados, estado, recarregar } = useMinhasNotificacoes(token);
   const { marcar, estado: estadoMarcacao, erro: erroMarcacao } = useMarcarLida(token);
-  const vista = derivarInbox(dados);
+  // Estado de UI (qual aba está apertada), não regra: a derivação inteira fica em derivarInbox.
+  const [filtro, setFiltro] = useState<string>(FILTRO_TUDO);
+  // O "agora" é ESTADO, não `new Date()` solto no render: sem isto o rótulo relativo congelava no
+  // instante da montagem (a tela não tem revalidação periódica) e só saltava — 3h de uma vez — quando
+  // algum outro evento re-renderizava, o que se lê como bug. 60s é o menor passo que o rótulo enxerga.
+  const [agora, setAgora] = useState(() => new Date().toISOString());
+  useEffect(() => {
+    const t = setInterval(() => setAgora(new Date().toISOString()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  const vista = derivarInbox(dados, agora, filtro);
 
   if (estado === "erro") {
     return (
@@ -64,6 +86,39 @@ export default function PaginaNotificacoes() {
         <p className="sub">O que mudou no que é seu.</p>
       </div>
 
+      {/* O badge conta TODAS as não lidas (contagem sem teto do servidor); a lista e as contagens das
+          abas vêm da resposta cortada em 50 linhas pelo SQL. Sem esta linha, "10" no título e
+          "Não lidas 0" na aba são a mesma pergunta com duas respostas — e o vereador conclui, com razão,
+          que o contador está quebrado. Só aparece quando a diferença EXISTE (ver naoLidasForaDaLista). */}
+      {vista.naoLidasForaDaLista > 0 && (
+        <p className="nt-truncada">
+          Esta lista traz só os avisos mais recentes.{" "}
+          {vista.naoLidasForaDaLista === 1
+            ? "Há 1 aviso não lido mais antigo fora dela"
+            : `Há ${vista.naoLidasForaDaLista} avisos não lidos mais antigos fora dela`}
+          {" "}— o número ao lado do título conta todos.
+        </p>
+      )}
+
+      {/* aria-pressed num role="group": mesma convenção de sessoes/[id]/chamada e de expediente/seletor-modelo
+          (toggle single-select). NÃO usar role="status" aqui — a tela já tem uma região viva (o erro do
+          POST) e duas competiriam pelo mesmo anúncio; o estado da aba já é lido pelo aria-pressed. */}
+      {vista.filtros.length > 0 && (
+        <div className="segs" role="group" aria-label="Filtrar notificações">
+          {vista.filtros.map((f) => (
+            <button
+              key={f.chave}
+              type="button"
+              aria-pressed={f.chave === vista.filtroAtivo}
+              onClick={() => setFiltro(f.chave)}
+            >
+              {f.rotulo}
+              <span className="qt">{f.quantidade}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       <p className="dedup-nota">
         Aqui você <b>acompanha</b>. O que exige a sua ação fica em <b>Início</b> e sai de lá sozinho quando
         o ato é concluído. “Lido” mora só aqui.
@@ -77,6 +132,8 @@ export default function PaginaNotificacoes() {
       )}
 
       {vista.vazia && <p className="vazio">Nenhuma notificação por enquanto.</p>}
+      {/* distinto do vazio de verdade: a inbox TEM conteúdo, só não neste recorte. */}
+      {vista.vaziaNoFiltro && <p className="vazio">Nenhuma notificação neste filtro.</p>}
 
       {vista.grupos.map((g) => (
         <section className="grupo" key={g.chave}>
@@ -101,7 +158,11 @@ export default function PaginaNotificacoes() {
                   )}
                 </div>
                 <div className="nt-dir">
-                  <span className="nt-quando">{n.quando}</span>
+                  {/* `<time>` + `title`: o relativo defasa e não diz o DIA; o instante exato (fuso da
+                      Casa) fica sempre disponível, e prazo regimental conta da publicação. */}
+                  <time className="nt-quando" dateTime={n.criadoEm} title={n.quandoExato}>
+                    {n.quando}
+                  </time>
                   {n.lida ? (
                     <span className="nt-lida-marca">Lida</span>
                   ) : (

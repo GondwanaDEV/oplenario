@@ -4,9 +4,10 @@
    o breakpoint @620px do original vira a regra ÚNICA aqui, não uma variante). Tokens/chassi já globais
    (globals.css); `.app-topo`/`.tabbar` vivem em ../vereador-shell.css e não são duplicados aqui.
 
-   FORA desta fatia (spec §5, cabeçalho do brief): `.segs` (filtro por tipo — teatro com 1 categoria só) e
-   as classes de categoria que esta fatia não produz (`.nt-ic.prazo`, `.nt-ic.sessao`, `.nt.falha`,
-   `.nt-falha-tag`) — ficam de fora até um segundo produtor de notificação existir.
+   `.segs` (fatia 3) é o porte da barra de filtro do original, com as abas DERIVADAS do dado — ver o
+   cabeçalho de page.tsx. FORA, ainda: as classes de categoria que nenhum produtor gera hoje
+   (`.nt-ic.prazo`, `.nt-ic.sessao`, `.nt.falha`, `.nt-falha-tag`) — CSS morto enquanto o produtor não
+   existir; entram junto com o produtor, não antes.
 
    `.pg-cab` do original virou `.nt-cab` aqui: sem o botão "marcar todas" (fora de escopo), o cabeçalho é
    1 coluna, não a grade título+ação do original. */
@@ -16,6 +17,26 @@
 /* branco sobre --telha pura falha AA (4.0, armadilha §5.1 já medida 3x nesta casa) — --telha-fundo (5.44). */
 .nt-cab h1 .badge { font-family: var(--mono); font-size: var(--t-13); font-weight: 600; color: #fff; background: var(--telha-fundo); border-radius: 999px; padding: 0.1rem 0.55rem; }
 .nt-cab .sub { font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
+
+/* a lista tem teto (50 no SQL) e o badge não — quando há não lida FORA da lista, a tela diz. Sem cor
+   nova: `--aviso-texto` sobre `--surface-2` é o par de aviso do sistema, e o traço lateral usa
+   `--amarelo-traco` (o token existe justamente para borda gráfica de alerta, >=3:1 no claro).
+   Fundo `--surface-2` puro, sem color-mix nem sobreposição — o cálculo token-a-token JÁ É o pixel
+   composto. AA medido: claro 7.46 (texto) / 3.63 (traço); escuro 6.95 / 6.95. */
+.nt-truncada { font-size: var(--t-13); color: var(--aviso-texto); background: var(--surface-2); border: 1px solid var(--linha); border-left: 3px solid var(--amarelo-traco); border-radius: var(--raio-sm); padding: 0.6rem 0.8rem; margin: 0.9rem 0 0; line-height: 1.45; }
+
+/* barra de filtro — porte do `.segs` do original. Sem cor nova: `--texto-2` sobre `--surface` é o mesmo
+   par já usado em `.nt-quando`/`.nt-mid p` deste arquivo (AA nos 2 temas), e o par apertado
+   `--acao`/`--acao-texto` é o par de ação do sistema (mesmo uso de expediente.css). A contagem herda a
+   cor do botão de propósito — reduzir opacidade nela derrubaria o contraste sem avisar. `flex-wrap`
+   porque o shell do vereador é sempre estreito e a barra cresce quando um produtor novo aparecer.
+   AA medido nos 2 temas (o fundo aqui é `--surface` puro, sem color-mix nem sobreposição, então o
+   cálculo token-a-token JÁ É o pixel composto): claro 7.11 (inativa) / 9.02 (ativa);
+   escuro 6.86 / 5.63. Alvo de toque 40px, o mesmo de `.app-topo .tema-btn` no shell. */
+.segs { display: flex; flex-wrap: wrap; gap: 3px; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); padding: 3px; margin: 1.2rem 0 0; }
+.segs button { display: inline-flex; align-items: center; gap: 0.35rem; font-family: var(--corpo); font-size: var(--t-13); font-weight: 600; color: var(--texto-2); background: none; border: none; border-radius: 999px; padding: 0.4rem 0.95rem; min-height: 40px; cursor: pointer; }
+.segs button[aria-pressed="true"] { background: var(--acao); color: var(--acao-texto); }
+.segs .qt { font-family: var(--mono); font-size: var(--t-12); font-weight: 500; }
 
 .grupo { margin: 1.6rem 0 0; }
 .grupo > h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.5rem; }
