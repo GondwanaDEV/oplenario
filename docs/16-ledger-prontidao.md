@@ -1333,10 +1333,118 @@ Ou seja, o `PATCH` livre que produziu o T3-A2 nunca foi o ato previsto — mas a
 + ciência ao Plenário) e o autógrafo passar a levar *texto votado + correções registradas*. O domínio já
 tem onde: `logic/origens-versao` inclui `"redacao_final"`. Falta o ato ser autorizado e registrado.
 
-**Correlato, do mesmo documento §5.1:** `aprovada-em-votacao?` exclui `objeto_tipo = 'redacao_final'`, e a
-docstring declarava a exclusão como "conservadora de propósito". **Não é** — no regimento vigente de
+**Correlato, do mesmo documento §5.1:** `aprovada-em-votacao?` excluía `objeto_tipo = 'redacao_final'`, e a
+docstring declarava a exclusão como "conservadora de propósito". **Não era** — no regimento vigente de
 Fortaleza (Res. 1.670/2020, Art. 180 §1º) a aprovação da Redação Final é o que destrava o autógrafo. A
-regra acerta em Mossoró e **erra na casa-alvo**. Conserto: aceitar `proposicao` OU `redacao_final`.
+regra acertava em Mossoró e **errava na casa-alvo**. → **CONSERTADO em T3-A4, logo abaixo.**
+
+
+## ✅ T3-A4 · A aprovação da Redação Final não contava — e o conserto de uma linha não teria destravado nada
+
+**Conserto do correlato do T3-A3 (§5.1 de [`docs/17`](17-rito-do-autografo-fortaleza-e-ceara.md)),
+10/09/2026.** Branch `redacao-final-destrava-autografo`.
+
+O defeito declarado era de uma linha: `aprovada-em-votacao?` filtrava `objeto_tipo = 'proposicao'` e
+deixava de fora a aprovação da Redação Final — o ato que, em Fortaleza, manda a matéria à COGEL para
+elaborar o autógrafo. A leitura do código antes de escrever mostrou que **o conserto de uma linha teria
+passado nos testes e destravado exatamente nada**, por três motivos que não estavam no documento:
+
+| Achado | Por que importava |
+|---|---|
+| Não existe tabela `redacao_final` — é `origem_versao` de `proposicao_texto_versao` (mig 0015) | O que `objeto_id` significa nesse caso **não estava definido em lugar nenhum**: nenhum produtor existia (zero ocorrências em FE, semente e e2e). Decidido aqui: **é o id da proposição** — a redação final é fase da matéria, não entidade |
+| `abrir!` só congelava `texto_versao_id` quando `objeto-tipo = "proposicao"` (T3-A2, mig 0075) | Aceitar a redação final só no predicado faria o read-model dizer "aprovada" e `gerar-autografo` **continuar recusando** com `:conflito/aprovacao-sem-texto`. Destrave zero |
+| `aprovacao-vigente` tinha `:limit 1` **sem `ORDER BY`** | No rito de Fortaleza as duas aprovações coexistem (projeto e depois redação final). Sem ordem, o texto do autógrafo fica ao acaso do plano do Postgres — **e na primeira corrida do teste ele devolveu o texto do PROJETO**. Seria um T3-A2 novo, introduzido pelo conserto do T3-A |
+
+**O que mudou** (`apps/backend/src/oplenario/legislativo/db/votacao.clj`):
+
+1. `objetos-que-carregam-a-materia` = `#{"proposicao" "redacao_final"}` — **uma** fonte para os dois
+   lugares que dependem da semântica (`abrir!` congela, `aprovacao-vigente` lê de volta). Divergirem é o
+   pior dos mundos: o predicado passa e o autógrafo recusa.
+2. `abrir!` congela o texto deliberado também na votação de redação final.
+3. `aprovacao-vigente` aceita os dois `objeto_tipo` e **desempata pelo rito, não pelo relógio**: a redação
+   final vence sempre, porque só existe depois do projeto aprovado. Carimbo de tempo não serviria — `now()`
+   é o da **transação**, e duas votações encerradas na mesma tx têm `atualizado_em` idêntico.
+
+**A rota já existia:** `wire/in/votacao.clj` valida `objeto-tipo` contra `logic/objetos-votacao`, que
+sempre incluiu `redacao_final` — então `POST /sessoes/:id/votacoes` com esse tipo é alcançável por HTTP
+hoje, sem mudança de borda.
+
+**Prova:** 3 testes novos em `votacao_db_test.clj` (o destrave, o congelamento e a precedência),
+vermelhos antes / verdes depois — a corrida vermelha nomeou os três defeitos, incluindo o texto do
+projeto vindo no lugar do da redação final. Suíte cheia do backend: **2106 testes, 5632 asserções, 6
+falhas — as 6 conhecidas de `demo.*` (poluição da Casa da demo), zero regressão.**
+
+**O que este conserto NÃO faz:** escolher **por casa** qual dos dois atos é o gatilho legítimo. Numa
+câmara cujo regimento exige a redação final, a aprovação só do projeto ainda destrava o autógrafo. Isso é
+regra de tenant (Invariante 4 — compliance é dado), pertence à DSL do motor declarativo (disciplina 5), e
+não a um `if` no predicado. A forma atual aceita esse refino sem refactor.
+
+**Divergência aberta, não consertada aqui:** o evento `voto.registrado` só carrega `:proposicao-id` quando
+`objeto_tipo = 'proposicao'` — e são **dois** sites, não um: `components/repositorio.clj:567`
+(`registrar-voto!`, caminho da Mesa) e `:617` (`registrar-meu-voto!`, self-service do vereador).
+`events/votacao.clj` tem só o *schema* (o campo é `{:optional true} [:maybe :uuid]`). Sob a semântica
+fixada agora, a votação de redação final também carrega a matéria — então o elo "como votou" do perfil
+público do vereador (`transparencia.db.parlamentar`, coluna nullable desde a mig 0064) grava
+`proposicao_id` nulo e os votos de redação final entram sem link para a matéria. É coerência adjacente,
+mexe num read-model público, e ficou de fora de propósito para não alargar o diff. *(A contagem errada —
+"um site, em `events/votacao.clj`" — foi achado I-4 da revisão adversarial: quem consertasse seguindo o
+registro anterior consertaria metade.)*
+
+### Revisão adversarial `ecc` — bloqueou, e o que ela pegou
+
+A revisão **reprovou** o commit inicial (`fefb3f3`). Dois achados consertados em seguida:
+
+**C-1 (CRÍTICO) · o desempate entre duas aprovações do MESMO tipo era sorteio por UUID.** O `ORDER BY`
+era determinístico mas **semanticamente arbitrário** no segundo nível: `v.id DESC` sobre uuid v4 não tem
+relação com o tempo. E o caso é alcançável — **não existe rota de anulação nem de votação corretiva**
+(`AbrirVotacao` não expõe `votacao-corrige-id`), então refazer uma votação de redação final encerrada
+errada só é possível abrindo **outra**, e as duas ficam `encerrada`+`aprovada`+não-corrigidas. Moeda
+decidindo qual texto vai ao Prefeito. A justificativa que eu havia escrito contra usar carimbo de tempo
+era **meia-verdade**: `now()` é o da transação, mas duas votações encerradas na mesma tx só acontecem em
+teste — em produção cada encerramento é requisição própria e `atualizado_em` discrimina; e o trigger
+`trg_votacoes_imut_estado` (mig 0012 (b)) bloqueia UPDATE em row já terminal, então o carimbo de uma
+`encerrada` é o instante do encerramento, congelado. **Conserto:** `atualizado_em DESC` como segundo
+nível, `id DESC` como terceiro.
+
+**I-3 (IMPORTANTE) · o teste de precedência não podia reprovar de forma confiável.** Com uuid v4 nos dois
+lados, removido o `CASE` sobraria `id DESC` sobre uuid aleatório: o teste passaria em ~50% das corridas.
+A corrida vermelha citada no commit provava outra coisa — que *sem `ORDER BY` nenhum* o plano devolve a
+ordem de inserção —, não que o `CASE` fosse load-bearing sobre o desempate que ficou no código.
+**Conserto:** ids cravados de forma hostil (projeto com o uuid máximo, redação final com o mínimo), para
+que ordem de inserção, `id DESC` e `atualizado_em` **todos** favoreçam o errado.
+
+**Prova de que os dois testes reprovam:** cada defeito foi plantado de volta e a suíte rodada. Remover
+`atualizado_em DESC` → 1 falha; remover o `CASE` → 1 falha, em
+`aprovacao-vigente-prefere-a-redacao-final-a-aprovacao-do-projeto`. Verde não é prova; a linha do erro é.
+
+Mais: `objetos-que-carregam-a-materia-sql` pré-computado (M-1); um teste que **afirma o conjunto** em vez
+de deduzi-lo de um caso feliz — sem ele, um terceiro `objeto_tipo` entrando no set não reprovaria nada
+(M-2); exclusão provada para os três tipos, não só `emenda` (M-3); e a docstring deixou de dizer que o
+`objeto_id` de emenda/parecer/requerimento "vive em outro espaço de ids" — isso é **convenção defendida
+pelo filtro**, não invariante: `votacoes.objeto_id` não tem FK, a colisão é possível por construção (M-5).
+
+### Duas decisões que sobraram para o Daouda
+
+**I-1 · Uma redação final aprovada SOZINHA destrava — mesmo com o projeto rejeitado.** A borda não valida
+precedência (nem existência da proposição, nem estado, nem vínculo com o item de pauta). `POST
+.../votacoes` com `objeto-tipo="redacao_final"` sobre matéria rejeitada + encerramento `simbolica`
+(resultado vem do corpo) satisfaz o predicado. Não é escalada de privilégio — o mesmo ator já podia
+fabricar por `objeto-tipo="proposicao"` (limite declarado desde o T3-A) —, mas é porta nova com aparência
+legítima. Em nenhum rito pesquisado a Redação Final existe sem aprovação prévia da matéria: ela a
+**pressupõe**. Exigir a **conjunção** (redação final conta *se* houver aprovação vigente de `proposicao`)
+é decisão de domínio: em Fortaleza-2008 a redação final era votada pela CCJ e não pelo Plenário, e a
+conjunção a barraria. Declarado como limite na docstring; **não** implementado.
+
+**I-2 · `abrir!` congela "a versão vigente", não "a redação final".** Varredura confirmada: os únicos
+produtores de versão são `origem-versao "protocolo"` (`repositorio.clj:301`), `"edicao"` (`:339`) e
+`"aplicacao_emenda"` (`db/emenda.clj:113`). **`"redacao_final"` nunca é produzido**, e não há rota HTTP
+que passe origem arbitrária. Então, em produção, abrir a votação de redação final congela *o que estiver
+vigente* — tipicamente uma versão `edicao`/`protocolo` — sem nenhuma asserção de que é a redação final. A
+mig 0022 declara que `autografo.texto_versao_id` é *"a versão `origem_versao='redacao_final'` aprovada"*:
+**a promessa do schema continua não implementada.** A fixture do teste fabrica esse estado e sua docstring
+dizia "(o que o fluxo de texto faz por dentro)" — não faz; a mentira foi corrigida na fixture. A pergunta
+é do Daouda: a votação de redação final deve **exigir** que a versão congelada tenha
+`origem_versao='redacao_final'`? Se sim, falta o ato que produz essa versão (é o mesmo bolso do T3-A3).
 
 ## ✅ T3-B · Os 19 hooks de escrita nunca re-armam `vivoRef` — nenhum erro do servidor aparece em dev — CONSERTADO
 

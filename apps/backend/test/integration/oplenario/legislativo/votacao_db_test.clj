@@ -12,6 +12,7 @@
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.legislativo.db.proposicao :as prop]
+            [oplenario.legislativo.db.texto-versao :as texto]
             [oplenario.legislativo.db.votacao :as votacao]
             [oplenario.legislativo.logic :as logic]
             [oplenario.legislativo.models.votacao :as mod]
@@ -290,3 +291,133 @@
               "emenda aprovada NAO aprova a materia-mae")
           (is (false? (votacao/aprovada-em-votacao? tx outro pid))
               "o fato nao atravessa a fronteira de Casa"))))))
+
+;; ---------- T3-A4: a REDACAO FINAL aprovada tambem destrava o autografo (docs/17 §5.1) ----------
+;; A pesquisa de rito (docs/17-rito-do-autografo-fortaleza-e-ceara.md) desmentiu a exclusao que estava aqui:
+;; no regimento VIGENTE de Fortaleza (Res. 1.670/2020, Art. 180 §1º) e' a aprovacao da REDACAO FINAL em
+;; Plenario que manda a materia a' COGEL p/ elaborar o autografo; em Mossoro/RN o gatilho e' a aprovacao do
+;; projeto. A regra anterior (so' 'proposicao') acertava em Mossoro e ERRAVA na casa-alvo. Estes testes
+;; provam a UNIAO dos dois modelos — e, o mais importante, que o congelamento de texto acompanha, senao o
+;; predicado passaria e o autografo seguiria recusando por :conflito/aprovacao-sem-texto (destrave zero).
+
+(defn- versao-vigente!
+  "Cria versao com a `origem` dada e a promove a vigente. Devolve o id.
+
+  ATENCAO (achado I-2 da revisao adversarial): p/ `origem` = \"redacao_final\" esta fixture fabrica um estado
+  que a stack de PRODUCAO nao alcanca — os unicos produtores de versao sao 'protocolo' (repositorio.clj),
+  'edicao' (PATCH) e 'aplicacao_emenda' (db/emenda.clj); NENHUM cria 'redacao_final', e nao ha' rota que
+  passe origem arbitraria. O que `abrir!` congela na votacao de redacao final e' a versao VIGENTE, seja
+  qual for a origem dela — a promessa da mig 0022 (\"a versao origem_versao='redacao_final' aprovada\")
+  segue NAO implementada. Estes testes provam o congelamento, nao a proveniencia."
+  [tx ente pid origem rotulo]
+  (let [{vid :id} (texto/nova-versao! tx {:id (random-uuid) :ente-id ente :proposicao-id pid
+                                          :origem-versao origem :texto-inline rotulo :created-by nil})
+        {:keys [lock-version]} (texto/buscar tx ente vid)]
+    (texto/promover! tx {:ente-id ente :proposicao-id pid :versao-id vid
+                         :updated-by nil :lock-version lock-version})
+    vid))
+
+(defn- aprovar!
+  "A Casa APROVA o objeto: abre, um voto 'sim', encerra (maioria simples, base 1). Devolve o id da votacao."
+  [tx ente objeto-id extra]
+  (let [{vid :id lv :lock-version} (abrir! tx ente objeto-id extra)]
+    (votar! tx ente vid "sim")
+    (votacao/encerrar! tx {:id vid :ente-id ente :base-membros 1 :updated-by nil :lock-version lv})
+    vid))
+
+(deftest redacao-final-aprovada-destrava-o-autografo-no-beachhead
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [pid (protocolar! tx ente)]
+          (versao-vigente! tx ente pid "redacao_final" "TEXTO DA REDACAO FINAL")
+          (is (false? (votacao/aprovada-em-votacao? tx ente pid)) "premissa: nada aprovado ainda")
+          (aprovar! tx ente pid {:objeto-tipo "redacao_final"})
+          (is (true? (votacao/aprovada-em-votacao? tx ente pid))
+              "Fortaleza Res. 1.670/2020 Art. 180 §1º: aprovada a Redacao Final, a materia vai ao autografo"))))))
+
+(deftest abrir-congela-o-texto-tambem-na-votacao-de-redacao-final
+  ;; sem isto o conserto do predicado nao destrava NADA: `aprovada-em-votacao?` diria true, `aprovacao-vigente`
+  ;; devolveria :texto-versao-id nil e `gerar-autografo` recusaria com :conflito/aprovacao-sem-texto (T3-A2).
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [pid (protocolar! tx ente)
+              vrf (versao-vigente! tx ente pid "redacao_final" "TEXTO DA REDACAO FINAL")]
+          (aprovar! tx ente pid {:objeto-tipo "redacao_final"})
+          (is (= vrf (:texto-versao-id (votacao/aprovacao-vigente tx ente pid)))
+              "a votacao de redacao final congela o texto deliberado, como a de proposicao"))))))
+
+(deftest aprovacao-vigente-prefere-a-redacao-final-a-aprovacao-do-projeto
+  ;; as duas aprovacoes COEXISTEM no rito de Fortaleza (o projeto e depois a redacao final), e `:limit 1` sem
+  ;; ordem deixaria o TEXTO do autografo ao acaso do plano do Postgres.
+  ;;
+  ;; I-3 da revisao adversarial: com uuid v4 nos dois lados este teste passaria em ~50% das corridas MESMO
+  ;; SEM o `CASE` — sobraria `id DESC` sobre uuid aleatorio, ou seja, moeda. Uma assercao que so' reprova
+  ;; metade das vezes nao e' cobertura. Por isso os ids sao CRAVADOS de forma hostil: o do projeto e' o
+  ;; MAIOR possivel e o da redacao final o menor, entao a ordem de insercao E `id DESC` E `atualizado_em`
+  ;; (mesma tx = mesmo `now()`) TODOS favorecem o projeto. So' o `CASE` pode devolver `v-final` — se ele
+  ;; sumir, o teste reprova em 100% das corridas.
+  (let [ente (random-uuid)
+        id-projeto #uuid "ffffffff-ffff-4fff-8fff-ffffffffffff"
+        id-final   #uuid "00000000-0000-4000-8000-000000000000"]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [pid (protocolar! tx ente)
+              v-projeto (versao-vigente! tx ente pid "protocolo" "TEXTO DO PROJETO")]
+          (aprovar! tx ente pid {:id id-projeto})
+          (is (= v-projeto (:texto-versao-id (votacao/aprovacao-vigente tx ente pid)))
+              "premissa: aprovado o projeto, o texto deliberado e' o do projeto")
+          (let [v-final (versao-vigente! tx ente pid "redacao_final" "TEXTO DA REDACAO FINAL")]
+            (aprovar! tx ente pid {:id id-final :objeto-tipo "redacao_final"})
+            (is (= v-final (:texto-versao-id (votacao/aprovacao-vigente tx ente pid)))
+                "com as duas, o autografo leva a REDACAO FINAL — ela so' existe depois do projeto aprovado")))))))
+
+(deftest aprovacao-vigente-entre-DUAS-redacoes-finais-pega-a-mais-RECENTE
+  ;; C-1 da revisao adversarial. Nao ha' rota de anulacao nem de votacao corretiva, entao refazer uma
+  ;; votacao de redacao final encerrada errada hoje so' e' possivel abrindo OUTRA — e as duas ficam
+  ;; encerrada+aprovada+nao-corrigidas. Aqui o `CASE` EMPATA (mesmo tipo) e o desempate real e'
+  ;; `atualizado_em DESC`; sem ele sobraria `id DESC` sobre uuid v4 = moeda decidindo qual texto vai ao
+  ;; Prefeito. Os ids sao cravados de forma hostil (a 1a votacao com o uuid MAIOR) p/ que `id DESC` sozinho
+  ;; escolha a ERRADA — so' o carimbo de tempo pode acertar. Cada encerramento vai em SUA PROPRIA tx: e' o
+  ;; que producao faz (uma requisicao por ato), e `now()` so' empata dentro da mesma tx.
+  (let [ente (random-uuid)
+        id-velha #uuid "ffffffff-ffff-4fff-8fff-fffffffffffe"
+        id-nova  #uuid "00000000-0000-4000-8000-000000000001"
+        pid (atom nil) v-velha (atom nil)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (reset! pid (protocolar! tx ente))
+        (reset! v-velha (versao-vigente! tx ente @pid "redacao_final" "REDACAO FINAL COM INEXATIDAO"))
+        (aprovar! tx ente @pid {:id id-velha :objeto-tipo "redacao_final"})))
+    (is (= @v-velha (:texto-versao-id (tenancy/com-tenant* *ds* ente
+                                        (fn [tx] (votacao/aprovacao-vigente tx ente @pid)))))
+        "premissa: com uma so', e' ela")
+    (let [v-nova (atom nil)]
+      (tenancy/com-tenant* *ds* ente
+        (fn [tx]
+          (reset! v-nova (versao-vigente! tx ente @pid "redacao_final" "REDACAO FINAL CORRIGIDA"))
+          (aprovar! tx ente @pid {:id id-nova :objeto-tipo "redacao_final"})))
+      (is (= @v-nova (:texto-versao-id (tenancy/com-tenant* *ds* ente
+                                         (fn [tx] (votacao/aprovacao-vigente tx ente @pid)))))
+          "o autografo leva o texto da votacao MAIS RECENTE, nao o do uuid maior"))))
+
+(deftest o-conjunto-que-carrega-a-materia-e-exatamente-proposicao-e-redacao-final
+  ;; M-2: o set e' ^:private e os testes redigitam as strings — sem esta assercao, um terceiro objeto_tipo
+  ;; entrando nele (uma `emenda`, digamos) nao reprovaria NADA, e emenda aprovada voltaria a responder pela
+  ;; materia-mae. O predicado e' a pre-condicao de um ato juridico: o conjunto tem de ser afirmado, nao
+  ;; deduzido do comportamento de um caso feliz.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (doseq [tipo (disj logic/objetos-votacao "proposicao" "redacao_final")]
+          (let [pid (protocolar! tx ente)]
+            (aprovar! tx ente pid {:objeto-tipo tipo})
+            (is (false? (votacao/aprovada-em-votacao? tx ente pid))
+                (str "'" tipo "' aprovado NAO aprova a materia-mae"))))
+        (doseq [tipo ["proposicao" "redacao_final"]]
+          (let [pid (protocolar! tx ente)]
+            (versao-vigente! tx ente pid "protocolo" "TEXTO")
+            (aprovar! tx ente pid {:objeto-tipo tipo})
+            (is (true? (votacao/aprovada-em-votacao? tx ente pid))
+                (str "'" tipo "' aprovado APROVA a materia"))))))))
