@@ -12,6 +12,7 @@
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.legislativo.db.proposicao :as prop]
+            [oplenario.legislativo.db.texto-versao :as texto]
             [oplenario.legislativo.db.votacao :as votacao]
             [oplenario.legislativo.logic :as logic]
             [oplenario.legislativo.models.votacao :as mod]
@@ -290,3 +291,69 @@
               "emenda aprovada NAO aprova a materia-mae")
           (is (false? (votacao/aprovada-em-votacao? tx outro pid))
               "o fato nao atravessa a fronteira de Casa"))))))
+
+;; ---------- T3-A4: a REDACAO FINAL aprovada tambem destrava o autografo (docs/17 §5.1) ----------
+;; A pesquisa de rito (docs/17-rito-do-autografo-fortaleza-e-ceara.md) desmentiu a exclusao que estava aqui:
+;; no regimento VIGENTE de Fortaleza (Res. 1.670/2020, Art. 180 §1º) e' a aprovacao da REDACAO FINAL em
+;; Plenario que manda a materia a' COGEL p/ elaborar o autografo; em Mossoro/RN o gatilho e' a aprovacao do
+;; projeto. A regra anterior (so' 'proposicao') acertava em Mossoro e ERRAVA na casa-alvo. Estes testes
+;; provam a UNIAO dos dois modelos — e, o mais importante, que o congelamento de texto acompanha, senao o
+;; predicado passaria e o autografo seguiria recusando por :conflito/aprovacao-sem-texto (destrave zero).
+
+(defn- versao-vigente!
+  "Cria versao com a `origem` dada e a promove a vigente (o que o fluxo de texto faz por dentro). Devolve o id."
+  [tx ente pid origem rotulo]
+  (let [{vid :id} (texto/nova-versao! tx {:id (random-uuid) :ente-id ente :proposicao-id pid
+                                          :origem-versao origem :texto-inline rotulo :created-by nil})
+        {:keys [lock-version]} (texto/buscar tx ente vid)]
+    (texto/promover! tx {:ente-id ente :proposicao-id pid :versao-id vid
+                         :updated-by nil :lock-version lock-version})
+    vid))
+
+(defn- aprovar!
+  "A Casa APROVA o objeto: abre, um voto 'sim', encerra (maioria simples, base 1). Devolve o id da votacao."
+  [tx ente objeto-id extra]
+  (let [{vid :id lv :lock-version} (abrir! tx ente objeto-id extra)]
+    (votar! tx ente vid "sim")
+    (votacao/encerrar! tx {:id vid :ente-id ente :base-membros 1 :updated-by nil :lock-version lv})
+    vid))
+
+(deftest redacao-final-aprovada-destrava-o-autografo-no-beachhead
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [pid (protocolar! tx ente)]
+          (versao-vigente! tx ente pid "redacao_final" "TEXTO DA REDACAO FINAL")
+          (is (false? (votacao/aprovada-em-votacao? tx ente pid)) "premissa: nada aprovado ainda")
+          (aprovar! tx ente pid {:objeto-tipo "redacao_final"})
+          (is (true? (votacao/aprovada-em-votacao? tx ente pid))
+              "Fortaleza Res. 1.670/2020 Art. 180 §1º: aprovada a Redacao Final, a materia vai ao autografo"))))))
+
+(deftest abrir-congela-o-texto-tambem-na-votacao-de-redacao-final
+  ;; sem isto o conserto do predicado nao destrava NADA: `aprovada-em-votacao?` diria true, `aprovacao-vigente`
+  ;; devolveria :texto-versao-id nil e `gerar-autografo` recusaria com :conflito/aprovacao-sem-texto (T3-A2).
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [pid (protocolar! tx ente)
+              vrf (versao-vigente! tx ente pid "redacao_final" "TEXTO DA REDACAO FINAL")]
+          (aprovar! tx ente pid {:objeto-tipo "redacao_final"})
+          (is (= vrf (:texto-versao-id (votacao/aprovacao-vigente tx ente pid)))
+              "a votacao de redacao final congela o texto deliberado, como a de proposicao"))))))
+
+(deftest aprovacao-vigente-prefere-a-redacao-final-a-aprovacao-do-projeto
+  ;; as duas aprovacoes COEXISTEM no rito de Fortaleza (o projeto e depois a redacao final). `:limit 1` sem
+  ;; ordem deixaria o TEXTO do autografo ao acaso do plano do Postgres — o desempate e' do rito, nao do relogio
+  ;; (`now()` e' o da TRANSACAO: duas votacoes encerradas na mesma tx tem carimbo IDENTICO e nao desempatam).
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [pid (protocolar! tx ente)
+              v-projeto (versao-vigente! tx ente pid "protocolo" "TEXTO DO PROJETO")]
+          (aprovar! tx ente pid {})
+          (is (= v-projeto (:texto-versao-id (votacao/aprovacao-vigente tx ente pid)))
+              "premissa: aprovado o projeto, o texto deliberado e' o do projeto")
+          (let [v-final (versao-vigente! tx ente pid "redacao_final" "TEXTO DA REDACAO FINAL")]
+            (aprovar! tx ente pid {:objeto-tipo "redacao_final"})
+            (is (= v-final (:texto-versao-id (votacao/aprovacao-vigente tx ente pid)))
+                "com as duas, o autografo leva a REDACAO FINAL — a redacao final so' existe depois do projeto aprovado")))))))
