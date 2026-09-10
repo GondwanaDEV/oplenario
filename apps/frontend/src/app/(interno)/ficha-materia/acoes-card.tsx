@@ -5,8 +5,11 @@
 // que funcionam, com um único <EmBreve> honesto explicando o porquê (Global Constraints "sem dado falso").
 //
 // "Ver pós-aprovação" (Onda B Slice 7, spec §4) é a ÚNICA ação REAL do card — só aparece quando
-// `proposicao.estado === "aprovada"` (o ponto de entrada da rota /pos-aprovacao/:id; a própria página de
-// destino mostra "Gerar autógrafo" se ainda não existir um, evitando um 2º ponto de decisão aqui).
+// `proposicao.aprovada` (Fatia 3 do achado T3-A: `estado` é texto livre de template por câmara, nenhuma
+// rota HTTP o move para "aprovada" — o gate antigo era ao mesmo tempo frouxo e morto. `aprovada` é o
+// booleano derivado no backend da votação encerrada com resultado `aprovada`, ver controllers.clj). É o
+// ponto de entrada da rota /pos-aprovacao/:id; a própria página de destino mostra "Gerar autógrafo" se
+// ainda não existir um, evitando um 2º ponto de decisão aqui.
 
 import Link from "next/link";
 import { EmBreve } from "@/lib/em-breve";
@@ -20,7 +23,7 @@ export function AcoesCard({ proposicao, token }: { proposicao: ProposicaoDetalhe
     <div className="card">
       <h3>Ações</h3>
       <div className="card-acoes">
-        {proposicao.estado === "aprovada" && (
+        {proposicao.aprovada && (
           <Link href={comToken(`/pos-aprovacao/${proposicao.id}`, token)} className="btn btn-contorno">
             Ver pós-aprovação
           </Link>

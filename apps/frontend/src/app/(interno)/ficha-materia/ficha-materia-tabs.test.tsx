@@ -12,6 +12,7 @@ const ficha: FichaMateriaOut = {
     urnLex: "urn:x",
     ementa: "Cria o Programa Municipal de Hortas Comunitárias",
     estado: "em_comissoes",
+    aprovada: false,
     lockVersion: 3,
     atualizadoEm: "2026-05-12T10:00:00Z",
     texto: "Art. 1º Fica instituído o Programa.",

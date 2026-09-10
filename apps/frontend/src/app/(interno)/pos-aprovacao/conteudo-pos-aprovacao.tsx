@@ -145,7 +145,13 @@ export function ConteudoPosAprovacao({ id }: { id: string }) {
           </p>
         )}
 
-        {estadoPosAprovacao === "pronto" && !autografo && (
+        {/* A rota /pos-aprovacao/:id é navegável direto por URL para QUALQUER proposição — foi assim que
+            o achado T3-A fabricou 4 autógrafos de matérias nunca votadas. `proposicao.aprovada` é o MESMO
+            booleano do gate de entrada (AcoesCard) — aqui é o gate que de fato importa, porque é o único
+            que o backend também aplica (409 sem votação `aprovada` encerrada, ver controllers.clj). Botão
+            fica visível e `disabled` (mesma disciplina de AcoesCard: inerte + honesto, nunca escondido sem
+            explicação) em vez de sumir sem dizer o motivo — Global Constraint "sem dado falso". */}
+        {estadoPosAprovacao === "pronto" && !autografo && proposicao.aprovada && (
           <div className="card">
             <h2>Autógrafo</h2>
             <p>Nenhum autógrafo foi gerado ainda para esta matéria.</p>
@@ -159,6 +165,28 @@ export function ConteudoPosAprovacao({ id }: { id: string }) {
                 Gerar autógrafo e enviar ao Executivo
               </button>
             </div>
+          </div>
+        )}
+
+        {estadoPosAprovacao === "pronto" && !autografo && !proposicao.aprovada && (
+          <div className="card">
+            <h2>Autógrafo</h2>
+            <p>Esta matéria ainda não foi aprovada em votação pela Câmara.</p>
+            <div className="acoes">
+              <button
+                type="button"
+                className="btn btn-primaria"
+                disabled
+                aria-disabled="true"
+                aria-describedby="pos-aprovacao-nao-aprovada"
+              >
+                Gerar autógrafo e enviar ao Executivo
+              </button>
+            </div>
+            <p id="pos-aprovacao-nao-aprovada" className="nota-gap">
+              O autógrafo é o ato que leva a matéria aprovada ao Executivo — só pode ser gerado depois que
+              a Câmara aprovar esta matéria em votação.
+            </p>
           </div>
         )}
 

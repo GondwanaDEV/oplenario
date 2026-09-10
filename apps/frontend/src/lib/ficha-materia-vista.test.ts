@@ -22,6 +22,7 @@ const fichaBase: FichaMateriaOut = {
     urnLex: "urn:lex:br;ceara;fortaleza:camara.municipal:projeto.lei:2026;042",
     ementa: "Cria o Programa Municipal de Hortas Comunitárias",
     estado: "em_comissoes",
+    aprovada: false,
     lockVersion: 3,
     atualizadoEm: "2026-05-12T10:00:00Z",
   },

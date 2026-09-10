@@ -12,6 +12,7 @@ const proposicao: ProposicaoDetalheOut = {
   ementa: "Cria o Programa Municipal de Hortas Comunitárias",
   autorTexto: "Ver.ª Helena Matos",
   estado: "em_comissoes",
+  aprovada: false,
   lockVersion: 3,
   atualizadoEm: "2026-05-12T10:00:00Z",
 };
