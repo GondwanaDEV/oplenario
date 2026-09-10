@@ -11,6 +11,7 @@ const proposicaoBase: ProposicaoDetalheOut = {
   urnLex: "urn:x",
   ementa: "Ementa",
   estado: "em_comissoes",
+  aprovada: false,
   lockVersion: 0,
   atualizadoEm: "2026-01-01T00:00:00Z",
 };
@@ -33,14 +34,24 @@ describe("AcoesCard", () => {
     expect(screen.getByRole("status")).toBeTruthy();
   });
 
-  it("estado != 'aprovada' -> sem link 'Ver pós-aprovação'", () => {
+  it("aprovada === false -> sem link 'Ver pós-aprovação'", () => {
     render(<AcoesCard proposicao={proposicaoBase} token="tok" />);
     expect(screen.queryByRole("link", { name: /ver pós-aprovação/i })).toBeNull();
   });
 
-  it("estado 'aprovada' -> mostra o link 'Ver pós-aprovação' com o token preservado", () => {
-    render(<AcoesCard proposicao={{ ...proposicaoBase, estado: "aprovada" }} token="tok-de-teste" />);
+  it("aprovada === true -> mostra o link 'Ver pós-aprovação' com o token preservado", () => {
+    render(<AcoesCard proposicao={{ ...proposicaoBase, aprovada: true }} token="tok-de-teste" />);
     const link = screen.getByRole("link", { name: /ver pós-aprovação/i });
     expect(link.getAttribute("href")).toBe("/pos-aprovacao/p1?token=tok-de-teste");
+  });
+
+  it("aprovada === true mas estado ainda é texto livre não-'aprovada' -> link continua aparecendo (o gate é o booleano, não o rótulo)", () => {
+    render(
+      <AcoesCard
+        proposicao={{ ...proposicaoBase, estado: "aguardando_promulgacao", aprovada: true }}
+        token="tok"
+      />,
+    );
+    expect(screen.getByRole("link", { name: /ver pós-aprovação/i })).toBeTruthy();
   });
 });

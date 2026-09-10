@@ -227,3 +227,66 @@
           (is (= "anulada" (:estado (votacao/buscar tx ente v0))) "original anulada")
           (let [{v1 :id} (abrir! tx ente (:pid @ctx) {:votacao-corrige-id v0})]
             (is (= v0 (:votacao-corrige-id (votacao/buscar tx ente v1))) "nova votacao aponta a corrigida")))))))
+
+;; ---------- T3-A: o FATO da aprovacao (guarda-autografo-votacao) ----------
+;; `aprovada-em-votacao?` e' a pre-condicao do autografo. Cada `is` abaixo cobre UMA das exclusoes do
+;; predicado; se alguma cair, o autografo volta a nascer em materia que a Camara nao aprovou.
+
+(deftest aprovada-em-votacao-so-conta-o-ato-consumado
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        ;; (0) materia recem-protocolada, sem votacao nenhuma
+        (let [pid (protocolar! tx ente)]
+          (is (false? (votacao/aprovada-em-votacao? tx ente pid))
+              "sem votacao nenhuma: e' EXATAMENTE o caso dos 4 autografos fabricados na T3")
+          ;; (1) votacao ABERTA (ainda apurando) nao aprova nada
+          (let [{vid :id} (abrir! tx ente pid {})]
+            (is (false? (votacao/aprovada-em-votacao? tx ente pid))
+                "votacao aberta ainda nao e' aprovacao")
+            ;; (2) encerrada com resultado REJEITADA nao aprova
+            (votar! tx ente vid "nao")
+            (votacao/encerrar! tx {:id vid :ente-id ente :base-membros 1 :updated-by nil :lock-version 0})
+            (is (= "rejeitada" (:resultado (votacao/buscar tx ente vid))) "premissa do caso: rejeitada")
+            (is (false? (votacao/aprovada-em-votacao? tx ente pid))
+                "encerrada REJEITADA nao pode virar autografo")))))
+    ;; (3) encerrada APROVADA: o unico caso que libera
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [pid (protocolar! tx ente) {vid :id} (abrir! tx ente pid {})]
+          (votar! tx ente vid "sim")
+          (votacao/encerrar! tx {:id vid :ente-id ente :base-membros 1 :updated-by nil :lock-version 0})
+          (is (= "aprovada" (:resultado (votacao/buscar tx ente vid))) "premissa do caso: aprovada")
+          (is (true? (votacao/aprovada-em-votacao? tx ente pid)) "o ato consumado libera o autografo"))))))
+
+(deftest aprovada-em-votacao-ignora-a-votacao-que-outra-veio-corrigir
+  ;; a armadilha da correcao (migration 0021 L8): anular a corrigida e abrir a corretiva sao DOIS atos. Entre
+  ;; um e outro a corrigida segue 'encerrada' — e sozinha ela mentiria "aprovada" p/ o autografo.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [pid (protocolar! tx ente) {v0 :id} (abrir! tx ente pid {})]
+          (votar! tx ente v0 "sim")
+          (votacao/encerrar! tx {:id v0 :ente-id ente :base-membros 1 :updated-by nil :lock-version 0})
+          (is (true? (votacao/aprovada-em-votacao? tx ente pid)) "premissa: a 1a votacao aprovou")
+          ;; abre a CORRETIVA apontando a anterior — ainda sem encerrar
+          (abrir! tx ente pid {:votacao-corrige-id v0})
+          (is (false? (votacao/aprovada-em-votacao? tx ente pid))
+              "corrigida por outra deixa de contar, mesmo continuando 'encerrada'"))))))
+
+(deftest aprovada-em-votacao-nao-confunde-objeto-nem-tenant
+  ;; `objeto_id` e' polimorfico: sem o `objeto_tipo = 'proposicao'` no WHERE, uma EMENDA aprovada de id
+  ;; colidente responderia pela materia-mae. E a RLS isola o tenant, mas o ente_id explicito e' defesa
+  ;; em profundidade (mesmo padrao das outras queries deste ns).
+  (let [ente (random-uuid) outro (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [pid (protocolar! tx ente)
+              {vid :id} (abrir! tx ente pid {:objeto-tipo "emenda"})]
+          (votar! tx ente vid "sim")
+          (votacao/encerrar! tx {:id vid :ente-id ente :base-membros 1 :updated-by nil :lock-version 0})
+          (is (= "aprovada" (:resultado (votacao/buscar tx ente vid))) "premissa: a EMENDA foi aprovada")
+          (is (false? (votacao/aprovada-em-votacao? tx ente pid))
+              "emenda aprovada NAO aprova a materia-mae")
+          (is (false? (votacao/aprovada-em-votacao? tx outro pid))
+              "o fato nao atravessa a fronteira de Casa"))))))

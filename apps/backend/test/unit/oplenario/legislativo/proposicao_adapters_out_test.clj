@@ -42,7 +42,7 @@
 
 (deftest detalhe->wire-projeta-e-inclui-texto
   (let [linha {:id (random-uuid) :tipo "projeto_lei" :ano 2026 :sequencial 1 :urn-lex "urn:x"
-               :ementa "X" :estado "protocolada" :lock-version 0
+               :ementa "X" :estado "protocolada" :aprovada false :lock-version 0
                :atualizado-em (java.time.Instant/parse "2026-01-01T00:00:00Z")}
         out (adapters/detalhe->wire linha "## Art. 1o")]
     (is (= "## Art. 1o" (:texto out)))
@@ -50,6 +50,24 @@
 
 (deftest detalhe->wire-texto-nil-quando-sem-versao-vigente
   (let [linha {:id (random-uuid) :tipo "projeto_lei" :ano 2026 :sequencial 1 :urn-lex "urn:x"
-               :ementa "X" :estado "protocolada" :lock-version 0
+               :ementa "X" :estado "protocolada" :aprovada false :lock-version 0
                :atualizado-em (java.time.Instant/parse "2026-01-01T00:00:00Z")}]
     (is (nil? (:texto (adapters/detalhe->wire linha nil))))))
+
+;; ---------- Fatia 2 (guarda-autografo-votacao): :aprovada so' REPASSA, nunca decide o fato ----------
+
+(deftest detalhe->wire-repassa-aprovada-true
+  (let [linha {:id (random-uuid) :tipo "projeto_lei" :ano 2026 :sequencial 1 :urn-lex "urn:x"
+               :ementa "X" :estado "protocolada" :aprovada true :lock-version 0
+               :atualizado-em (java.time.Instant/parse "2026-01-01T00:00:00Z")}
+        out (adapters/detalhe->wire linha nil)]
+    (is (m/validate wire/ProposicaoDetalheOut out))
+    (is (true? (:aprovada out)))))
+
+(deftest detalhe->wire-repassa-aprovada-false
+  (let [linha {:id (random-uuid) :tipo "projeto_lei" :ano 2026 :sequencial 1 :urn-lex "urn:x"
+               :ementa "X" :estado "protocolada" :aprovada false :lock-version 0
+               :atualizado-em (java.time.Instant/parse "2026-01-01T00:00:00Z")}
+        out (adapters/detalhe->wire linha nil)]
+    (is (m/validate wire/ProposicaoDetalheOut out))
+    (is (false? (:aprovada out)))))

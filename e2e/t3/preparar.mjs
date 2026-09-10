@@ -296,7 +296,10 @@ for (const p of listaProps.itens) {
   if (temTexto) {
     const pa = await api(TOK.secretaria, "GET", `/legislativo/proposicoes/${p.id}/pos-aprovacao`);
     if (pa.ok && !pa.dados.autografo) {
-      semAutografo.push({ id: p.id, tipo: p.tipo, ano: p.ano, sequencial: p.sequencial, estado: p.estado, autorId: prop["autor-id"], ementa: p.ementa });
+      // `aprovada` (guarda-autografo-votacao, T3-A) vem do MESMO campo que o backend usa pra guardar o
+      // autografo (ProposicaoDetalheOut.aprovada, computado do ATO — nunca do rotulo `p.estado`). A ficha
+      // reusa o wire de detalhe (commit 86b64fa), entao ja' vem aqui sem consulta extra.
+      semAutografo.push({ id: p.id, tipo: p.tipo, ano: p.ano, sequencial: p.sequencial, estado: p.estado, aprovada: prop.aprovada === true, autorId: prop["autor-id"], ementa: p.ementa });
     }
   }
 }
@@ -314,23 +317,77 @@ if (!parecerAguardando) bloqueio("parecer-aguardando-assinatura", "nenhum parece
 else if (!parecerAguardando.identidadeLogavelDoRelator) bloqueio("parecer-relator-nao-logavel", `o parecer ${parecerAguardando.id} tem relator ${parecerAguardando["relator-id"]}, que nao e nenhuma das identidades logaveis — /parecer/:id/assinar vai 404 por posse.`);
 if (!parecerEditavel) bloqueio("parecer-editavel", "nenhum parecer em estado editavel separado do de assinatura.");
 
-// E7
-// preferencia: NAO-terminal (uma 'arquivada' e terminal e nao representa o caminho feliz) e, dentro
-// disso, de autoria da identidade :vereador (para o spec poder cruzar autor <-> quem ve o resultado).
+// E7 — guarda-autografo-votacao (254a768/86b64fa/d93b077): a pre-condicao do autografo deixou de ser o
+// rotulo `proposicao.estado` e passou a ser o ATO (votacao encerrada com resultado 'aprovada'). Dois
+// alvos DISTINTOS a partir daqui:
+//   - autografoAlvo (preferencia: NAO-terminal e, dentro disso, de autoria da identidade :vereador, para
+//     o spec poder cruzar autor <-> quem ve o resultado) — NUNCA aprovado, serve a recusa 409.
+//   - candidataAprovar / proposicaoAprovada — aprovada DE VERDADE, pelo rito real (abrir votacao +
+//     registrar voto + encerrar: as MESMAS 3 rotas que a sessao do E6, duas secoes acima, ja usa). O
+//     bloqueio antigo "e7-aprovada-sem-autografo" dizia que nao havia caminho HTTP ate' 'aprovada' —
+//     isso seguia verdade para o ROTULO (nenhuma rota transiciona legislativo.proposicoes.estado), mas
+//     deixou de importar: a pre-condicao real do autografo nunca foi o rotulo, sempre foi o ato, e o ato
+//     ja tinha rota.
 const naoTerminalSemAutografo = semAutografo.filter((p) => !TERMINAIS.has(p.estado));
 const autografoAlvo =
   naoTerminalSemAutografo.find((p) => p.autorId === vereadorIdDoVereador)
   ?? naoTerminalSemAutografo.find((p) => p.tipo === "projeto_lei")
   ?? naoTerminalSemAutografo[0] ?? semAutografo[0] ?? null;
-const aprovadaSemAutografo = semAutografo.find((p) => p.estado === "aprovada") ?? null;
-if (!aprovadaSemAutografo) {
-  bloqueio("e7-aprovada-sem-autografo",
-    "NAO EXISTE caminho pela API para levar uma proposicao ao estado 'aprovada': nenhuma das 66 rotas de " +
-    "escrita transiciona legislativo.proposicoes.estado (db/proposicao.clj:mudar-estado! so e chamado por " +
-    "db/tramitacao.clj, que nao tem borda HTTP). As 6 'aprovada' da demo ja tem autografo e as 6 " +
-    "tramitacoes executivas sao terminais. Nao forcei SQL em tabela de dominio. E7 fica exercitavel apenas " +
-    `pelo achado do proprio mapa (o backend NAO confere estado=='aprovada' em gerar-autografo): use ` +
-    `e7.proposicaoParaAutografoId, que esta em '${autografoAlvo?.estado}'.`);
+
+// candidataAprovar: nao-terminal, sem autografo, livre de qualquer id que OUTRO grupo desta MESMA corrida
+// ja reservou (o objeto da votacao do E6, a proposicao editavel do E3, a proposicao de cada parecer do
+// E4) — e nunca a mesma de autografoAlvo (que fica reservada para a recusa).
+const reservadosNestaCorrida = new Set(
+  [autografoAlvo?.id, votacaoAberta?.objetoId, editaveis[0]?.id, ...pareceres.map((p) => p.proposicaoId)]
+    .filter(Boolean),
+);
+const candidataAprovar = naoTerminalSemAutografo.find((p) => !reservadosNestaCorrida.has(p.id)) ?? null;
+
+let proposicaoAprovada = null;
+if (!candidataAprovar) {
+  bloqueio("e7-sem-candidata-para-aprovar",
+    "todas as proposicoes nao-terminais com texto vigente e sem autografo desta corrida ja estao " +
+    "reservadas por outro grupo (E3/E4/E6) ou sao a propria autografoAlvo. E7 fica sem alvo para o " +
+    "caminho feliz real; rode de novo (a ordem da varredura nao e estavel entre corridas) ou amplie o pool.");
+} else {
+  passo(`\n5b) E7 — aprovando DE VERDADE ${candidataAprovar.id} (estava '${candidataAprovar.estado}') pelo rito real`);
+  const abertura = exigir(
+    await api(TOK.secretaria, "POST", `/sessoes/${sessaoChamada}/votacoes`, {
+      "objeto-tipo": "proposicao", "objeto-id": candidataAprovar.id,
+      modalidade: "nominal", "quorum-tipo": "maioria_simples",
+    }),
+    "POST /sessoes/:id/votacoes (E7 aprovar de verdade)");
+  const votanteId = vereadorIdDoVereador ?? vereadorIdDoPresidente;
+  exigir(
+    await api(TOK.secretaria, "POST", `/sessoes/${sessaoChamada}/votacoes/${abertura.id}/votos`, {
+      voto: "sim", "vereador-id": votanteId,
+    }),
+    "POST .../votos (E7 aprovar de verdade)");
+  const encerramento = exigir(
+    await api(TOK.secretaria, "POST", `/sessoes/${sessaoChamada}/votacoes/${abertura.id}/encerramento`, {
+      "lock-version": abertura["lock-version"] ?? 0, "base-membros": chamadaNova.linhas.length,
+    }),
+    "POST .../encerramento (E7 aprovar de verdade)");
+  if (encerramento.resultado !== "aprovada") {
+    throw new Error(
+      `E7: a votacao de aprovacao (maioria_simples, 1 sim x 0 nao) fechou com resultado='${encerramento.resultado}', ` +
+      `nao 'aprovada' — logic/resultado-votacao deveria aprovar com sim>nao. Candidata ${candidataAprovar.id}, ` +
+      `votacao ${abertura.id}. Nada foi assumido: pare e investigue antes de rodar o spec.`);
+  }
+  // PROVA REAL, nao suposta: reconsulta a proposicao pela MESMA leitura que o guard do backend usa
+  // (Repo/proposicao-aprovada-em-votacao?, exposta em ProposicaoDetalheOut.aprovada) — nao confia so' no
+  // corpo do encerramento.
+  const detalhe = exigir(
+    await api(TOK.secretaria, "GET", `/legislativo/proposicoes/${candidataAprovar.id}`),
+    "GET /legislativo/proposicoes/:id (prova pos-encerramento)");
+  if (detalhe.aprovada !== true) {
+    throw new Error(
+      `E7: votacao ${abertura.id} encerrou com resultado=aprovada, mas GET /legislativo/proposicoes/` +
+      `${candidataAprovar.id} devolveu aprovada=${detalhe.aprovada}. proposicao-aprovada-em-votacao? ` +
+      `diverge do encerramento — bug real, nao presuma que preparou.`);
+  }
+  console.log(`   votacao ${abertura.id} encerrada: resultado=aprovada · GET detalhe confirma aprovada=true`);
+  proposicaoAprovada = { ...candidataAprovar, votacaoId: abertura.id };
 }
 
 // ---- 6. E1: um vereador NOVO, sem mandato (todos os 17 da demo tem mandato vigente) --------
@@ -440,8 +497,16 @@ const artefato = {
     url: autografoAlvo ? comToken(`/pos-aprovacao/${autografoAlvo.id}`, "secretaria") : null,
     candidatosSemAutografo: semAutografo,
     candidatosNaoTerminais: naoTerminalSemAutografo,
-    aprovadaSemAutografoId: aprovadaSemAutografo?.id ?? null,
-    nota: "depois que o spec gerar o autografo, a tramitacao executiva nasce 'aguardando' na MESMA tx — so entao 'registrar resposta do Executivo' fica exercitavel, na MESMA pagina.",
+    proposicaoAprovadaId: proposicaoAprovada?.id ?? null,
+    proposicaoAprovada: proposicaoAprovada,
+    urlAprovada: proposicaoAprovada ? comToken(`/pos-aprovacao/${proposicaoAprovada.id}`, "secretaria") : null,
+    nota: "guarda-autografo-votacao (254a768/86b64fa/d93b077): proposicaoParaAutografoId NUNCA foi aprovada " +
+      "(alvo da recusa 409 — gerar autografo sobre ele deve SEMPRE falhar). proposicaoAprovadaId FOI " +
+      "aprovada DE VERDADE nesta corrida, pelo rito real (abrir votacao + registrar voto + encerrar, e a " +
+      "prova e' GET /legislativo/proposicoes/:id .aprovada === true, nao o corpo do encerramento) — e' o " +
+      "unico alvo do caminho feliz de gerar autografo. Depois que o spec gerar o autografo sobre " +
+      "proposicaoAprovadaId, a tramitacao executiva nasce 'aguardando' na MESMA tx — so entao 'registrar " +
+      "resposta do Executivo' fica exercitavel, na MESMA pagina.",
   },
 
   e8: {

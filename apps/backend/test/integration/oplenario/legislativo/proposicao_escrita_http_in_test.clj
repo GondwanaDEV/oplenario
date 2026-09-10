@@ -15,7 +15,7 @@
 
 (defn- detalhe-canonico [ente id]
   {:id id :ente-id ente :tipo "projeto_lei" :ano 2026 :sequencial 1
-   :urn-lex "urn:lex:x" :ementa "X" :estado "protocolada" :lock-version 0
+   :urn-lex "urn:lex:x" :ementa "X" :estado "protocolada" :aprovada false :lock-version 0
    :atualizado-em (java.time.Instant/parse "2026-01-01T00:00:00Z")})
 
 (defn- fake-repo-legislativo [{:keys [protocolar editar detalhe]}]
@@ -142,6 +142,18 @@
                            :get (str "/legislativo/proposicoes/" id)
                            :headers (com-bearer (token ente (random-uuid))))]
     (is (= 200 (:status r)))))
+
+(deftest detalhe-proposicao-carrega-aprovada
+  ;; Fatia 2 (guarda-autografo-votacao): o campo que o FE gateia botao atravessa a borda HTTP ate' o
+  ;; corpo — nao so' o schema Malli em memoria.
+  (let [ente (random-uuid) id (random-uuid)
+        repo (fake-repo-legislativo
+              {:detalhe (fn [_id] {:proposicao (assoc (detalhe-canonico ente id) :aprovada true) :texto nil})})
+        r (pt/response-for (service-fn #{"secretario"} repo)
+                           :get (str "/legislativo/proposicoes/" id)
+                           :headers (com-bearer (token ente (random-uuid))))]
+    (is (= 200 (:status r)))
+    (is (true? (:aprovada (ler-json r))))))
 
 (deftest detalhe-proposicao-inexistente-404
   (let [repo (fake-repo-legislativo {:detalhe (fn [_id] {:proposicao nil :texto nil})})

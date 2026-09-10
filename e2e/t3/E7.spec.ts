@@ -2,30 +2,37 @@ import { test, expect } from "@playwright/test";
 import { readFileSync, mkdirSync, appendFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-// GRUPO E7 — "Pós-aprovação" (servidor). Lê e2e/t3/mapa-E7.json (o mapa das escritas, os achados e os
-// casos de erro já medidos ao vivo) e e2e/t3/.artifacts/t3-ids.json (os ids REAIS deixados pelo
-// preparar.mjs — nenhum UUID aqui é inventado). As 2 escritas do grupo:
+// GRUPO E7 — "Pós-aprovação" (servidor). Lê e2e/t3/mapa-E7.json (o mapa das escritas e os casos de erro
+// medidos ao vivo) e e2e/t3/.artifacts/t3-ids.json (os ids REAIS deixados pelo preparar.mjs — nenhum UUID
+// aqui é inventado). As 2 escritas do grupo:
 //   1) Gerar autógrafo (secretaria)         — POST /legislativo/proposicoes/:id/autografo
 //   2) Registrar resposta do Executivo      — POST /legislativo/autografos/:id/resposta
 //
-// O ACHADO CENTRAL do mapa é que (1) NÃO confere `proposicao.estado === 'aprovada'` em nenhuma ponta:
-// nem o backend (controllers.clj gerar-autografo só guarda duplicidade + texto vigente), nem a tela (o
-// gate condicional é só no LINK DE ENTRADA em ficha-materia/acoes-card.tsx — a rota /pos-aprovacao/:id
-// é navegável direto por URL para qualquer proposição). O agente de precondições mediu ao vivo que hoje
-// não existe nenhuma proposição 'aprovada' sem autógrafo no ente (as 6 já têm; T2 grupo B as esgotou) —
-// então o CAMINHO FELIZ de (1) e o ACHADO são o MESMO clique, sobre e7.proposicaoParaAutografoId
-// (8344f6b3, em_comissoes). Isso também é o que destrava (2) na mesma página: autógrafo + tramitação
-// executiva 'aguardando' nascem juntos, na MESMA tx (repo/gerar-autografo-e-abrir-tramitacao!).
+// GUARDA-AUTOGRAFO-VOTACAO (commits 254a768/86b64fa/d93b077, ledger Fase 11 — T3-A). Este spec nasceu
+// para EXERCITAR o achado T3-A: `POST .../autografo` gerava um ato jurídico numerado (o autógrafo, que vai
+// ao Prefeito) para matéria que a Câmara nunca aprovou — o único gate ficava no LINK de entrada
+// (ficha-materia/acoes-card.tsx), e /pos-aprovacao/:id era navegável direto por URL para qualquer
+// proposição. Isso foi consertado em duas camadas: `controllers/gerar-autografo` guarda na BORDA (409,
+// `:conflito/proposicao-nao-aprovada`) e `Repo/gerar-autografo-e-abrir-tramitacao!` REVERIFICA dentro da
+// tx (fecha a janela TOCTOU). A pré-condição não é o rótulo `proposicao.estado` (texto livre, chave de
+// template por câmara, sem CHECK, nenhuma rota HTTP o move) — é o ATO: existe votação ENCERRADA com
+// resultado 'aprovada' sobre esta proposição (`db/votacao.clj/aprovada-em-votacao?`), exposto ao FE em
+// `ProposicaoDetalheOut.aprovada` (booleano obrigatório). Com o conserto, os testes abaixo passaram a
+// provar a GUARDA, não mais o defeito: a rota continua navegável por URL (isso não mudou — não era o
+// achado), mas o botão fica INERTE (`disabled` + `aria-disabled` + `aria-describedby`, nunca escondido
+// sem explicação — mesma disciplina "sem dado falso" do resto da tela) e o servidor recusa com 409.
 //
-// Os 2 casos de erro "dois autógrafos" / "resposta duplicada" só são alcançáveis por CORRIDA (2 cliques/
-// 2 abas) numa sessão de 1 usuário — a tela muda de branch assim que a 1a escrita entra e o botão some.
-// Em vez de perseguir um timing de corrida real (não-determinístico, frágil pra quem for rodar depois —
-// mesma lição do preâmbulo SSE de E5/E6), reproduzimos DETERMINISTICAMENTE o que a 2a aba mandaria:
-// o MESMO POST que o botão dispara, direto no backend (mesmo idioma de E6.spec.ts, "reenviar o POST fora
-// da tela" — E6 já estabeleceu esse padrão para o caso irmão "votar duas vezes").
+// `preparar.mjs` (guarda-autografo-votacao) passou a produzir DOIS alvos distintos para este grupo:
+//   - e7.proposicaoParaAutografoId — NUNCA aprovada (em_comissoes/em_pauta/etc., texto vigente, sem
+//     autógrafo). Serve a prova da RECUSA: gerar autógrafo aqui tem de dar 409, sempre.
+//   - e7.proposicaoAprovadaId — aprovada DE VERDADE nesta corrida, pelo RITO REAL (abrir votação +
+//     registrar voto + encerrar — as mesmas 3 rotas que a sessão do E6 já usa; nominal, maioria_simples,
+//     1 voto 'sim'). Esta é o único alvo em que o caminho feliz de gerar autógrafo é alcançável — e
+//     alcançá-lo é o que destrava "registrar resposta do Executivo" (autógrafo + tramitação executiva
+//     'aguardando' nascem juntos, na MESMA tx).
 const ids = JSON.parse(readFileSync(resolve(__dirname, ".artifacts/t3-ids.json"), "utf8"));
 const mapa = JSON.parse(readFileSync(resolve(__dirname, "mapa-E7.json"), "utf8"));
-void mapa; // mantido só pra quem lê o spec ir direto na fonte do achado sem procurar o arquivo.
+void mapa; // mantido só pra quem lê o spec ir direto na fonte do achado original sem procurar o arquivo.
 
 const BACKEND: string = ids.base.backend;
 const FRONTEND: string = ids.base.frontend;
@@ -33,19 +40,24 @@ const ENTE: string = ids.ente;
 const TSEC_URL: string = ids.tokens.secretaria.url; // token url-encoded, pro browser (?token=)
 const TSEC_JSON: string = ids.tokens.secretaria.json; // token cru, pro header Authorization: Bearer
 
-// e7.proposicaoParaAutografoId — em_comissoes, texto vigente, SEM autógrafo. É o único alvo do mapa que
-// sobrou exercitável: as 6 proposições 'aprovada' do ente já têm autógrafo (esgotadas por T2 grupo B) e
-// não existe rota HTTP que transicione proposicao.estado (bloqueio "e7-aprovada-sem-autografo" em
-// t3-ids.json). Usar este id é literalmente exercitar o achado do mapa, não um desvio dele.
+// ID_ALVO — nunca aprovada (nem pelo rótulo morto, nem pelo ATO). Alvo fixo da prova de RECUSA: gerar
+// autógrafo aqui tem de devolver 409 sempre, e nenhum autógrafo pode aparecer no banco depois.
 const ID_ALVO: string = ids.e7.proposicaoParaAutografoId;
 
-// Candidato do próprio mapa (e7.candidatosSemAutografo), livre de qualquer outro grupo (E1/E3/E4/E5/E6
-// reservam 1511bc9e/3b59cdbb/c7aecac5/9c157f96/746ca24a/044ab363/eb8383d1/0539ac78 — nenhum deles é
-// este). Usado só de LEITURA no teste 7 (nunca gera autógrafo nele) — prova que a tela nunca oferece
-// "Registrar retorno" sem um autógrafo já existente, sem consumir mais nenhum candidato do grupo.
+// ID_APROVADA — aprovada DE VERDADE nesta corrida (preparar.mjs abriu a votação, registrou o voto e
+// encerrou com resultado='aprovada', e PROVOU via GET /legislativo/proposicoes/:id .aprovada===true antes
+// de escrever o artefato — ver e2e/t3/preparar.mjs, seção "E7 — aprovando DE VERDADE"). É o único alvo do
+// caminho feliz: gerar autógrafo aqui tem de devolver 201.
+const ID_APROVADA: string = ids.e7.proposicaoAprovadaId;
+
+// Candidato do próprio mapa (e7.candidatosSemAutografo), livre de ID_ALVO e ID_APROVADA — nenhum dos dois
+// grupos de teste acima o toca. Usado só de LEITURA no último teste (nunca gera autógrafo nele): prova que
+// a tela nunca oferece "Registrar retorno" sem um autógrafo já existente, qualquer que seja o estado de
+// aprovação dele (a Casa é append-only e acumula entre corridas — este teste não presume se ele está
+// aprovado ou não, só que SEM autógrafo o card de resposta ao Executivo não existe).
 const ID_SEM_AUTOGRAFO: string = (
   ids.e7.candidatosSemAutografo as Array<{ id: string }>
-).find((c) => c.id !== ID_ALVO)!.id;
+).find((c) => c.id !== ID_ALVO && c.id !== ID_APROVADA)!.id;
 
 const ID_INEXISTENTE = "00000000-0000-0000-0000-000000000000"; // formato válido, não existe no ente
 
@@ -67,69 +79,138 @@ function registrarEscrita(linha: Record<string, unknown>) {
 }
 
 test.describe.serial("E7 - Pós-aprovação (servidor)", () => {
-  // ids capturados da resposta real de T2, usados pelos casos de erro determinísticos que vêm depois
-  // (nenhum UUID inventado — tudo sai da resposta HTTP da própria corrida, mesma disciplina do preparar.mjs).
+  // ids capturados da resposta real do teste 2 (o caminho feliz), usados pelos testes determinísticos que
+  // vêm depois (nenhum UUID inventado — tudo sai da resposta HTTP da própria corrida).
   let autografoId: string | undefined;
   let tramitacaoId: string | undefined;
 
   // PRECONDIÇÃO, checada contra a API antes de qualquer clique. O grupo CONSOME uma proposição por
   // corrida (autógrafo é UNIQUE por proposição, e a Casa é append-only: não há como desfazer). Sem esta
-  // checagem, uma 2a corrida sobre os MESMOS ids falharia lá no teste 2, por timeout de locator — erro
-  // opaco que parece defeito de produto e não é. Falha (não pula) de propósito: verde fabricado é pior
-  // que vermelho, e a ação corretiva é uma linha.
+  // checagem, uma 2a corrida sobre os MESMOS ids falharia lá no teste do caminho feliz, por timeout de
+  // locator — erro opaco que parece defeito de produto e não é. Falha (não pula) de propósito: verde
+  // fabricado é pior que vermelho, e a ação corretiva é uma linha.
   test.beforeAll(async () => {
-    const r = await fetch(`${BACKEND}/legislativo/proposicoes/${ID_ALVO}/pos-aprovacao`, {
+    for (const [rotulo, id] of [
+      ["ID_ALVO (não aprovada)", ID_ALVO],
+      ["ID_APROVADA (aprovada de verdade)", ID_APROVADA],
+    ] as const) {
+      const r = await fetch(`${BACKEND}/legislativo/proposicoes/${id}/pos-aprovacao`, {
+        headers: { Authorization: `Bearer ${TSEC_JSON}` },
+      });
+      expect(r.status, `GET pos-aprovacao de ${rotulo} (${id}) devia ser 200`).toBe(200);
+      const corpo = (await r.json()) as { autografo?: unknown };
+      expect(
+        corpo.autografo ?? null,
+        `PRECONDIÇÃO ESTRAGADA: ${rotulo} (${id}) JÁ tem autógrafo (t3-ids.json está velho — este grupo ` +
+          `consome 1 proposição por corrida). Rode ./e2e/t3/preparar.sh e rode o spec de novo.`,
+      ).toBeNull();
+    }
+
+    // ID_APROVADA precisa estar REALMENTE aprovada (o ATO, não o rótulo) — prova, não suposição, mesma
+    // leitura que o guard do backend usa (ProposicaoDetalheOut.aprovada).
+    const rDetalhe = await fetch(`${BACKEND}/legislativo/proposicoes/${ID_APROVADA}`, {
       headers: { Authorization: `Bearer ${TSEC_JSON}` },
     });
-    expect(r.status, `GET pos-aprovacao de ${ID_ALVO} devia ser 200`).toBe(200);
-    const corpo = (await r.json()) as { autografo?: unknown };
+    expect(rDetalhe.status, `GET detalhe de ID_APROVADA (${ID_APROVADA}) devia ser 200`).toBe(200);
+    const detalhe = (await rDetalhe.json()) as { aprovada?: boolean };
     expect(
-      corpo.autografo ?? null,
-      `PRECONDIÇÃO ESTRAGADA: a proposição ${ID_ALVO} JÁ tem autógrafo (t3-ids.json está velho — ` +
-        `este grupo consome 1 proposição por corrida). Rode ./e2e/t3/preparar.sh e rode o spec de novo.`,
-    ).toBeNull();
+      detalhe.aprovada,
+      `PRECONDIÇÃO ESTRAGADA: ID_APROVADA (${ID_APROVADA}) tem aprovada=${detalhe.aprovada}, não true — ` +
+        `preparar.mjs deveria ter aprovado esta matéria pelo rito real antes de escrever t3-ids.json.`,
+    ).toBe(true);
   });
 
   // -----------------------------------------------------------------------------------------------
-  // [ACHADO] 0) "Ver pós-aprovação" não aparece na ficha da matéria alvo (estado 'em_comissoes', não
-  // 'aprovada') — mas a rota /pos-aprovacao/:id é navegável direto por URL, sem checar proposicao.estado
-  // em nenhuma ponta (acoes-card.tsx só usa o gate pra decidir se MOSTRA o link, não é autorização).
-  // Teste só de LEITURA: documenta o "antes", pra o próximo teste (a escrita de verdade) não parecer um
-  // desvio de fluxo, e sim exatamente o caminho que o mapa aponta como explorável hoje.
+  // 0) A rota /pos-aprovacao/:id continua navegável direto por URL para qualquer proposição — isso NÃO
+  // mudou, e não era o achado (o achado era o botão funcionar sem checar aprovação). O que mudou: o botão
+  // fica INERTE (disabled + aria-disabled + aria-describedby) e a explicação fica visível — provado pelo
+  // papel/estado acessível, não por classe CSS. "Ver pós-aprovação" (o link de entrada da ficha) continua
+  // ausente para matéria não aprovada — mas isso nunca foi autorização, só navegação.
   // -----------------------------------------------------------------------------------------------
-  test("[ACHADO] Ver pós-aprovação não aparece na ficha (estado != aprovada), mas a rota é navegável direto por URL", async ({
+  test("Ver pós-aprovação não aparece na ficha (não aprovada); a rota segue navegável por URL, mas o botão fica inerte", async ({
     page,
   }) => {
     await page.goto(urlFicha(ID_ALVO), { waitUntil: "domcontentloaded", timeout: 90_000 });
     await expect(page.getByRole("heading", { name: "Ações", exact: true })).toBeVisible({ timeout: 30_000 });
-    // [ACHADO] o único gate do mapa (o link de entrada) nem existe pra esta matéria — em_comissoes, não aprovada.
     await expect(page.getByRole("link", { name: "Ver pós-aprovação" })).toHaveCount(0);
 
-    // mas a página de destino abre normalmente por URL direta, com o CTA de gerar autógrafo disponível:
+    // a página de destino abre normalmente por URL direta (nunca foi isso que o gate de entrada impedia)
     await page.goto(urlPosAprovacao(ID_ALVO), { waitUntil: "domcontentloaded", timeout: 90_000 });
+    await expect(page.getByRole("heading", { name: "Autógrafo" })).toBeVisible({ timeout: 30_000 });
     await expect(
-      page.getByText("Nenhum autógrafo foi gerado ainda para esta matéria."),
-    ).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByRole("button", { name: "Gerar autógrafo e enviar ao Executivo" })).toBeVisible();
+      page.getByText("Esta matéria ainda não foi aprovada em votação pela Câmara."),
+    ).toBeVisible();
+
+    // o botão está lá (não escondido — "sem dado falso": some sem dizer o motivo seria pior), mas INERTE.
+    // toBeDisabled() do Playwright reconhece tanto o atributo `disabled` nativo quanto `aria-disabled="true"`
+    // — é a checagem pelo papel/estado acessível que o briefing pediu, não por classe CSS.
+    const botao = page.getByRole("button", { name: "Gerar autógrafo e enviar ao Executivo" });
+    await expect(botao).toBeVisible();
+    await expect(botao).toBeDisabled();
+    await expect(botao).toHaveAttribute("aria-disabled", "true");
+
+    // a explicação está LIGADA ao botão via aria-describedby (não é só um texto solto na página)
+    const describedBy = await botao.getAttribute("aria-describedby");
+    expect(describedBy).toBe("pos-aprovacao-nao-aprovada");
+    const explicacao = page.locator(`#${describedBy}`);
+    await expect(explicacao).toBeVisible();
+    await expect(explicacao).toHaveText(
+      "O autógrafo é o ato que leva a matéria aprovada ao Executivo — só pode ser gerado depois que a Câmara aprovar esta matéria em votação.",
+    );
   });
 
   // -----------------------------------------------------------------------------------------------
-  // 1) Gerar autógrafo — caminho feliz. Sobre ID_ALVO (em_comissoes): isto GERA um autógrafo válido
-  // pra uma matéria que nunca foi votada nem aprovada — é o próprio achado do mapa sendo exercitado, não
-  // um efeito colateral dele.
+  // 1) A RECUSA. Como o botão está inerte, o POST não sai mais de um clique — reenviamos o mesmo POST que
+  // o botão dispararia, fora da tela (mesmo idioma que este spec já usa para os casos de corrida
+  // determinísticos, e que E6.spec.ts estabeleceu para o irmão "votar duas vezes"). Sobre ID_ALVO
+  // (nunca aprovada): 409, e a prova de "nenhum autógrafo nasceu" é uma CONSULTA real ao backend
+  // (GET pos-aprovacao), não a ausência de um elemento na tela.
   // -----------------------------------------------------------------------------------------------
-  test("[ACHADO] Gerar autógrafo — caminho feliz, sobre matéria NÃO aprovada", async ({ page }) => {
-    await page.goto(urlPosAprovacao(ID_ALVO), { waitUntil: "domcontentloaded", timeout: 90_000 });
-    await expect(page.getByRole("button", { name: "Gerar autógrafo e enviar ao Executivo" })).toBeVisible({
-      timeout: 30_000,
+  test("Gerar autógrafo — matéria NÃO aprovada é recusada (409), e nenhum autógrafo aparece no banco depois", async () => {
+    const r = await fetch(`${BACKEND}/legislativo/proposicoes/${ID_ALVO}/autografo`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${TSEC_JSON}` },
+      body: JSON.stringify({}),
     });
+    expect(r.status).toBe(409);
+    const corpo = (await r.json()) as { erro?: string };
+    // a borda TRADUZ o :conflito/proposicao-nao-aprovada com a mensagem de domínio (diplomat/http/in.clj,
+    // catch dedicado) — ao contrário do :validacao/invalido do guard de duplicidade (teste abaixo), que o
+    // interceptor global troca por "requisicao invalida". Aqui a mensagem REAL chega no corpo.
+    expect(corpo.erro).toBe("gerar-autografo: a materia nao foi aprovada em votacao pela Camara");
+
+    // PROVA REAL: consulta ao backend, não ausência de elemento na tela. O guard de borda RODA PRIMEIRO
+    // (antes da re-verificação na tx) — então nem a re-verificação chega a ser exercitada por este POST,
+    // mas o resultado observável (nenhum autógrafo) é o mesmo dos dois pontos de guarda.
+    const rProva = await fetch(`${BACKEND}/legislativo/proposicoes/${ID_ALVO}/pos-aprovacao`, {
+      headers: { Authorization: `Bearer ${TSEC_JSON}` },
+    });
+    expect(rProva.status).toBe(200);
+    const prova = (await rProva.json()) as { autografo?: unknown };
+    expect(prova.autografo ?? null).toBeNull();
+  });
+
+  // -----------------------------------------------------------------------------------------------
+  // 2) Gerar autógrafo — o CAMINHO FELIZ DE VERDADE, agora que ele existe: ID_APROVADA foi aprovada pelo
+  // rito real (votação encerrada, resultado 'aprovada', provado no beforeAll). Isto também é o que
+  // destrava "registrar resposta do Executivo" na mesma página (autógrafo + tramitação executiva
+  // 'aguardando' nascem juntos, na MESMA tx).
+  // -----------------------------------------------------------------------------------------------
+  test("Gerar autógrafo — caminho feliz sobre matéria REALMENTE aprovada (201)", async ({ page }) => {
+    await page.goto(urlPosAprovacao(ID_APROVADA), { waitUntil: "domcontentloaded", timeout: 90_000 });
+    const botao = page.getByRole("button", { name: "Gerar autógrafo e enviar ao Executivo" });
+    await expect(botao).toBeVisible({ timeout: 30_000 });
+    // desta vez o botão está ATIVO — é a prova simétrica do teste 0 (mesmo papel acessível, estado oposto).
+    await expect(botao).toBeEnabled();
 
     const [resp] = await Promise.all([
       page.waitForResponse(
-        (r) => r.url().includes(`/api/legislativo/proposicoes/${ID_ALVO}/autografo`) && r.request().method() === "POST",
+        (r) =>
+          r.url().includes(`/api/legislativo/proposicoes/${ID_APROVADA}/autografo`) &&
+          r.request().method() === "POST",
         { timeout: 30_000 },
       ),
-      page.getByRole("button", { name: "Gerar autógrafo e enviar ao Executivo" }).click(),
+      botao.click(),
     ]);
 
     // b) a escrita saiu de fato
@@ -154,32 +235,32 @@ test.describe.serial("E7 - Pós-aprovação (servidor)", () => {
     await expect(page.getByRole("button", { name: "Gerar autógrafo e enviar ao Executivo" })).toHaveCount(0);
 
     registrarEscrita({
-      escrita: "Gerar autógrafo (sobre matéria não aprovada — achado do mapa)",
+      escrita: "Gerar autógrafo (caminho feliz — matéria realmente aprovada pelo rito real)",
       metodo: "POST",
-      url: `/legislativo/proposicoes/${ID_ALVO}/autografo`,
+      url: `/legislativo/proposicoes/${ID_APROVADA}/autografo`,
       status: resp.status(),
       id: autografoId,
       tabela: "legislativo.autografo",
       sql_de_prova:
         `SELECT a.id, a.numero, a.ano, a.proposicao_id, a.destinatario_texto, t.id AS tramitacao_id, t.estado ` +
         `FROM legislativo.autografo a JOIN legislativo.tramitacao_executiva t ON t.autografo_id = a.id AND t.ente_id = a.ente_id ` +
-        `WHERE a.ente_id = '${ENTE}' AND a.proposicao_id = '${ID_ALVO}'; ` +
+        `WHERE a.ente_id = '${ENTE}' AND a.proposicao_id = '${ID_APROVADA}'; ` +
         `-- espera 1 linha, t.estado = 'aguardando' (autógrafo + tramitação abertos na mesma tx)`,
     });
   });
 
   // -----------------------------------------------------------------------------------------------
-  // [ACHADO] 2) caso de erro "dois autógrafos" — bem tratado pelo backend (:validacao/invalido -> 400),
-  // mas só alcançável por corrida de 2 cliques/2 abas (assim que o 1o existe, a tela muda de branch e o
-  // botão "Gerar autógrafo" some — provado no teste anterior). Reenviamos o MESMO POST fora do clique,
-  // exatamente como o mapa descreve o cenário — determinístico, sem depender de timing de corrida real.
+  // 3) caso de erro "dois autógrafos" — bem tratado pelo backend (:validacao/invalido -> 400), mas só
+  // alcançável por corrida de 2 cliques/2 abas (assim que o 1o existe, a tela muda de branch e o botão
+  // "Gerar autógrafo" some — provado no teste anterior). Reenviamos o MESMO POST fora do clique, sobre a
+  // MESMA ID_APROVADA (que já tem autógrafo desde o teste 2) — determinístico, sem depender de timing de
+  // corrida real. A guarda de aprovação já passa (a matéria ESTÁ aprovada); quem recusa aqui é a
+  // duplicidade, não a aprovação — os dois guards são independentes.
   // -----------------------------------------------------------------------------------------------
-  test("[ACHADO] Gerar autógrafo — segunda vez sobre a mesma matéria é recusada (400, dois autógrafos)", async () => {
+  test("Gerar autógrafo — segunda vez sobre a mesma matéria é recusada (400, dois autógrafos)", async () => {
     test.skip(!autografoId, "depende do autógrafo do teste anterior já ter sido gerado");
 
-    // [NAO-E-T3] só alcançável por corrida de 2 cliques/2 abas — o botão some assim que o 1º autógrafo
-    // existe (branch muda). Reenvia o mesmo POST que o botão dispara, fora do clique (padrão de E6.spec.ts).
-    const r = await fetch(`${BACKEND}/legislativo/proposicoes/${ID_ALVO}/autografo`, {
+    const r = await fetch(`${BACKEND}/legislativo/proposicoes/${ID_APROVADA}/autografo`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${TSEC_JSON}` },
       body: JSON.stringify({}),
@@ -187,26 +268,22 @@ test.describe.serial("E7 - Pós-aprovação (servidor)", () => {
     expect(r.status).toBe(400);
     const corpo = (await r.json()) as { erro?: string };
 
-    // [ACHADO] MEDIDO AO VIVO: o corpo NAO carrega a mensagem de dominio. O controller lanca
-    // "gerar-autografo: a proposicao ja tem autografo (UNIQUE por proposicao)"
-    // (legislativo/controllers.clj:436, :tipo :validacao/invalido), mas o interceptor GLOBAL de erro
-    // (oplenario/interceptors.clj:157) troca TODA :validacao/invalido por {"erro":"requisicao invalida"}
-    // — por decisao explicita ("Nao vaza detalhe de erro interno no corpo", docstring do mesmo ns).
-    // Consequencia de INTERFACE: o hook useGerarAutografo (use-gerar-autografo.ts:66) usa corpoErro.erro
-    // como texto do role=alert — entao o servidor que clicar duas vezes le na tela "requisicao invalida",
-    // e nao "esta materia ja tem autografo". A mesma pagina trata melhor o irmao 409: a borda traduz
-    // :conflito/tramitacao-executiva com ex-message (in.clj:399-407) e a mensagem de dominio CHEGA na tela
-    // (provado no teste 5 abaixo). Duas escritas da MESMA tela, duas qualidades de erro.
+    // MEDIDO AO VIVO (achado de interface, não desta guarda): o corpo NÃO carrega a mensagem de domínio.
+    // O controller lança "gerar-autografo: a proposicao ja tem autografo (UNIQUE por proposicao)"
+    // (legislativo/controllers.clj, :tipo :validacao/invalido), mas o interceptor GLOBAL de erro
+    // (oplenario/interceptors.clj) troca TODA :validacao/invalido por {"erro":"requisicao invalida"} — por
+    // decisão explícita ("Não vaza detalhe de erro interno no corpo", docstring do mesmo ns). Ao contrário
+    // do :conflito/proposicao-nao-aprovada (teste 1 acima), que a borda traduz com ex-message.
     expect(corpo.erro).toBe("requisicao invalida");
   });
 
   // -----------------------------------------------------------------------------------------------
-  // 3) Registrar resposta do Executivo — caminho feliz. Destravado pelo teste 1 (mesma tx abriu a
+  // 4) Registrar resposta do Executivo — caminho feliz. Destravado pelo teste 2 (mesma tx abriu a
   // tramitação executiva 'aguardando'); mesma página (/pos-aprovacao/:id), agora com o card "Prazo do
   // Executivo" e o botão "Registrar retorno".
   // -----------------------------------------------------------------------------------------------
-  test("[ACHADO] Registrar resposta do Executivo — grava (200), mas a tela nunca confirma", async ({ page }) => {
-    await page.goto(urlPosAprovacao(ID_ALVO), { waitUntil: "domcontentloaded", timeout: 90_000 });
+  test("Registrar resposta do Executivo — grava (200), mas a tela nunca confirma", async ({ page }) => {
+    await page.goto(urlPosAprovacao(ID_APROVADA), { waitUntil: "domcontentloaded", timeout: 90_000 });
     await expect(page.getByRole("heading", { name: "Prazo do Executivo" })).toBeVisible({ timeout: 30_000 });
 
     await page.getByRole("button", { name: "Registrar retorno" }).click();
@@ -227,21 +304,15 @@ test.describe.serial("E7 - Pós-aprovação (servidor)", () => {
     // b) a escrita saiu de fato
     expect(resp.status()).toBe(200);
 
-    // a) [ACHADO DE INTERFACE] a confirmação "Retorno do Executivo registrado" NUNCA aparece na tela.
-    // MEDIDO nos dois lados: HTTP 200 acima + no banco a linha existe
-    //   tramitacao_executiva 597128d1 estado='sancionado', respondido_em NOT NULL, lock_version 1
-    //   (corrida de 10/09/2026 sobre a proposição c7aecac5, autógrafo 9/2026).
-    // CAUSA, na fonte (conteudo-pos-aprovacao.tsx:170): o <p role="status">{mensagemStatus}</p> do
-    // "registrar" está DENTRO do branch `{tramitacaoExecutiva?.estado === "aguardando" && (…)}`. No
-    // sucesso, o handler faz setPosAprovacaoLocal(…estado 'sancionado') e setMensagemStatus(…) no MESMO
-    // tick — o branch inteiro desmonta antes de pintar, e a mensagem morre com ele.
-    // É EXATAMENTE o defeito que o autor previu e resolveu para a ação irmã: a mensagem do "gerar" foi
-    // içada para uma região COMPARTILHADA fora dos branches (:139-141), com um comentário explicando que
-    // "sem esta região compartilhada, a confirmação de 'Gerar autógrafo' nunca apareceria". A correção
-    // não foi aplicada ao "registrar" — o mesmo `{mensagemStatus && ultimaAcao === "gerar"}` de :141
-    // precisaria de um irmão `=== "registrar"` no mesmo lugar.
-    // Efeito para o servidor: ele clica, o retorno do Executivo grava, e a única evidência é o card
-    // "Desfecho" ter trocado — nenhuma confirmação explícita da escrita.
+    // a) [ACHADO DE INTERFACE, não desta guarda] a confirmação "Retorno do Executivo registrado" NUNCA
+    // aparece na tela. MEDIDO nos dois lados: HTTP 200 acima + o card "Desfecho" troca de fato. CAUSA, na
+    // fonte (conteudo-pos-aprovacao.tsx): o <p role="status">{mensagemStatus}</p> do "registrar" está
+    // DENTRO do branch `{tramitacaoExecutiva?.estado === "aguardando" && (…)}`. No sucesso, o handler faz
+    // setPosAprovacaoLocal(…estado 'sancionado') e setMensagemStatus(…) no MESMO tick — o branch inteiro
+    // desmonta antes de pintar, e a mensagem morre com ele. É o mesmo defeito que o autor previu e
+    // resolveu para a ação irmã "gerar" (mensagem içada para região compartilhada fora dos branches) mas
+    // não aplicou ao "registrar" — não é escopo desta frente (T3-A é sobre a GUARDA, não esta confirmação),
+    // documentado aqui só para não parecer regressão nova.
     await expect(page.getByRole("heading", { name: "Desfecho" })).toBeVisible();
     await expect(
       page.getByText("A matéria foi sancionada e segue para promulgação/publicação."),
@@ -269,17 +340,15 @@ test.describe.serial("E7 - Pós-aprovação (servidor)", () => {
   });
 
   // -----------------------------------------------------------------------------------------------
-  // [ACHADO] 4) caso de erro "resposta duplicada / tramitação já respondida" — o mapa registra isto como
-  // correlato de "dois autógrafos" achado por leitura de código (não listado no enunciado original, real
-  // mesmo assim). AO CONTRÁRIO de "dois autógrafos", este NÃO depende de corrida: o teste anterior já
-  // deixou a tramitação em estado TERMINAL ('sancionado'), então qualquer POST novo pro MESMO autógrafo
-  // bate no guard "só se responde uma tramitação 'aguardando'" de forma determinística.
+  // 5) caso de erro "resposta duplicada / tramitação já respondida" — o mapa registra isto como correlato
+  // de "dois autógrafos", achado por leitura de código. AO CONTRÁRIO de "dois autógrafos", este NÃO
+  // depende de corrida: o teste anterior já deixou a tramitação em estado TERMINAL ('sancionado'), então
+  // qualquer POST novo pro MESMO autógrafo bate no guard "só se responde uma tramitação 'aguardando'" de
+  // forma determinística.
   // -----------------------------------------------------------------------------------------------
-  test("[ACHADO] Registrar resposta — tramitação já respondida (terminal) é recusada (409)", async () => {
-    test.skip(!autografoId, "depende do autógrafo gerado no teste 1");
+  test("Registrar resposta — tramitação já respondida (terminal) é recusada (409)", async () => {
+    test.skip(!autografoId, "depende do autógrafo gerado no teste 2");
 
-    // [NAO-E-T3] a tramitação já está terminal ('sancionado') desde o teste anterior — a tela nunca
-    // oferece "Registrar retorno" neste estado, então o guard só é alcançável via chamada direta.
     const r = await fetch(`${BACKEND}/legislativo/autografos/${autografoId}/resposta`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${TSEC_JSON}` },
@@ -291,14 +360,11 @@ test.describe.serial("E7 - Pós-aprovação (servidor)", () => {
   });
 
   // -----------------------------------------------------------------------------------------------
-  // 5) caso de erro "resposta sem autógrafo" — TRATADO pelo backend (404), mas NÃO alcançável pela tela
-  // em uso normal (autógrafo e tramitação nascem juntos, na mesma tx — não existe fluxo de UI que produza
-  // um autógrafo-id sem tramitação correspondente). Documentado por chamada direta com id inventado, como
-  // o próprio mapa registra (e já coberto do lado de T2 grupo B — aqui é a confirmação do lado de E7).
+  // 6) caso de erro "resposta sem autógrafo" — TRATADO pelo backend (404), mas NÃO alcançável pela tela em
+  // uso normal (autógrafo e tramitação nascem juntos, na mesma tx — não existe fluxo de UI que produza um
+  // autógrafo-id sem tramitação correspondente). Documentado por chamada direta com id inventado.
   // -----------------------------------------------------------------------------------------------
   test("Registrar resposta — autógrafo inexistente retorna 404 (não alcançável pela tela hoje)", async () => {
-    // [NAO-E-T3] não alcançável pela tela em uso normal — autógrafo e tramitação nascem juntos, na
-    // mesma tx (repo/gerar-autografo-e-abrir-tramitacao!); não há fluxo de UI com autógrafo sem tramitação.
     const r = await fetch(`${BACKEND}/legislativo/autografos/${ID_INEXISTENTE}/resposta`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${TSEC_JSON}` },
@@ -310,16 +376,16 @@ test.describe.serial("E7 - Pós-aprovação (servidor)", () => {
   });
 
   // -----------------------------------------------------------------------------------------------
-  // 6) GAP de fixture, não de UI — confirma que, SEM autógrafo, a tela nunca oferece "Registrar retorno"
+  // 7) GAP de fixture, não de UI — confirma que, SEM autógrafo, a tela nunca oferece "Registrar retorno"
   // (o card só renderiza dentro do branch `autografo &&`). Usa um candidato do próprio mapa
-  // (candidatosSemAutografo) DIFERENTE de ID_ALVO — só leitura, nenhum autógrafo é gerado aqui, pra não
-  // consumir mais um candidato do grupo à toa.
+  // (candidatosSemAutografo) livre de ID_ALVO/ID_APROVADA — só leitura, nenhum autógrafo é gerado aqui.
+  // Não presume o estado de aprovação deste candidato (a Casa é append-only e acumula aprovações reais
+  // entre corridas — ver nota de ID_SEM_AUTOGRAFO acima): a única coisa que este teste prova é que, sem
+  // autógrafo, o card de resposta ao Executivo não existe, qualquer que seja a matéria.
   // -----------------------------------------------------------------------------------------------
   test("Registrar resposta — sem autógrafo, a tela nunca oferece o botão", async ({ page }) => {
     await page.goto(urlPosAprovacao(ID_SEM_AUTOGRAFO), { waitUntil: "domcontentloaded", timeout: 90_000 });
-    await expect(
-      page.getByText("Nenhum autógrafo foi gerado ainda para esta matéria."),
-    ).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: "Autógrafo" })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByRole("button", { name: "Registrar retorno" })).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "Prazo do Executivo" })).toHaveCount(0);
   });

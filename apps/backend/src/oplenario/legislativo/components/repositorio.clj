@@ -50,10 +50,16 @@
   (editar-proposicao! [this ente-id m]
     "PATCH parcial (CAS) + promove nova versao 'edicao' se :texto presente, 1 tx.")
   (buscar-proposicao-detalhe [this ente-id id]
-    "{:proposicao ... :texto (a linha de texto/vigente, ou nil)}, uma leitura.")
+    "{:proposicao ... :texto (a linha de texto/vigente, ou nil)}, uma leitura. `:proposicao` carrega
+     `:aprovada` (Fatia 2) na MESMA tx — ver proposicao-aprovada-em-votacao? logo abaixo.")
+  (proposicao-aprovada-em-votacao? [this ente-id proposicao-id]
+    "T3-A — a Casa APROVOU esta materia? Booleano, lido do ATO (votacao encerrada com resultado
+     'aprovada'), nunca do rotulo `proposicoes.estado`. Pre-condicao do autografo; ver
+     db/votacao.clj/aprovada-em-votacao? p/ as tres exclusoes e o limite declarado.")
   (ficha-completa-da-proposicao [this ente-id id]
     "Onda B Slice 3 (ficha-materia, leitura interna): {:proposicao :texto :tramitacao :apensadas :emendas
      :pareceres} NUMA UNICA tx (mesma disciplina de buscar-proposicao-detalhe/listar-e-contar-proposicoes).
+     `:proposicao` carrega `:aprovada` (Fatia 2), mesma disciplina de buscar-proposicao-detalhe.
      Sem short-circuit no nil da proposicao (mesmo estilo de buscar-proposicao-detalhe): as demais leituras
      rodam do mesmo jeito e vem naturalmente vazias. Tetos (review MAJOR fe-9-ficha-materia — o `take`
      em memoria anterior truncava preservando os MAIS ANTIGOS): 100 p/ tramitacao, 50 p/
@@ -254,6 +260,23 @@
          (catch PSQLException e
            (if (= "23505" (.getSQLState e)) (inserir) (throw e))))))
 
+(defn- proposicao-com-aprovada
+  "A proposicao de `id` com `:aprovada` ja' resolvido, na `tx` CORRENTE — nil se ela nao existe no tenant.
+
+  Existe para que o fato T3-A nao dependa de cada leitura composta lembrar de o buscar: hoje sao duas
+  (`buscar-proposicao-detalhe` e `ficha-completa-da-proposicao`), e uma terceira que nascesse copiando a
+  vizinha erraria em silencio — `ProposicaoDetalheOut` exige `:aprovada`, entao o esquecimento vira erro de
+  validacao no wire, mas so' na rota nova, e so' quando alguem a exercitar.
+
+  `some->` e' LOAD-BEARING, nao estilo: `(assoc nil :aprovada false)` devolve `{:aprovada false}`, um mapa
+  TRUTHY, e as duas leituras contratam devolver nil p/ 'proposicao inexistente' — que a borda traduz em 404.
+  Sem ele, proposicao inexistente viraria 200 com corpo fantasma.
+
+  MESMA tx da leitura de proposito (mesmo snapshot MVCC): o fato e o registro tem de vir do mesmo mundo."
+  [tx ente-id id]
+  (some-> (proposicao/buscar tx ente-id id)
+          (assoc :aprovada (votacao/aprovada-em-votacao? tx ente-id id))))
+
 (defrecord RepoLegislativoPg [datasource bus]
   RepoLegislativo
   (transacao [_ ente-id f] (tenancy/com-tenant* (:ds datasource) ente-id f))
@@ -323,21 +346,31 @@
   ;; Onda B Slice 2: leitura composta (proposicao + texto vigente) NUMA UNICA tx — mesmo snapshot MVCC
   ;; (mesma disciplina de listar-e-contar-proposicoes). Nao lanca quando a proposicao nao existe: devolve
   ;; {:proposicao nil :texto nil} (o caller/HTTP traduz p/ 404).
+  ;; :aprovada (T3-A/Fatia 2, ledger observacao 254a768): entra NA MESMA tx da leitura (nao uma segunda
+  ;; consulta solta) — `some->` porque `(assoc nil ...)` produziria um mapa {:aprovada ...} onde o caller
+  ;; espera nil p/ "proposicao nao existe" (a borda traduz nil -> 404; um mapa truthy quebraria isso).
   (buscar-proposicao-detalhe [this ente-id id]
     (transacao this ente-id
       (fn [tx]
-        {:proposicao (proposicao/buscar tx ente-id id)
+        {:proposicao (proposicao-com-aprovada tx ente-id id)
          :texto (texto/vigente tx ente-id id)})))
+  ;; T3-A (guarda-autografo-votacao): o fato de aprovacao servido como LEITURA — o controller o consulta
+  ;; antes de gerar o autografo, e o read-model o publica p/ o FE gatear o botao na mesma verdade.
+  (proposicao-aprovada-em-votacao? [this ente-id proposicao-id]
+    (transacao this ente-id
+      (fn [tx] (votacao/aprovada-em-votacao? tx ente-id proposicao-id))))
   ;; Onda B Slice 3 (ficha-materia): composicao NUMA UNICA tx (mesma disciplina de buscar-proposicao-detalhe).
   ;; Tetos EMPURRADOS AO SQL (review MAJOR fe-9-ficha-materia — `take` em memoria truncava preservando os
   ;; MAIS ANTIGOS e descartava os MAIS RECENTES, e ainda pagava o custo de fetch da tabela inteira): cada
   ;; db/ aceita `limite` e devolve os N MAIS RECENTES (DESC+LIMIT no SQL, revertido a ASC internamente —
   ;; o contrato de ordem cronologica pro caller e' o MESMO com ou sem limite). 100 tramitacao, 50
   ;; apensadas/emendas/pareceres (mesmo teto-fixo-50 de relatores-pendentes).
+  ;; :aprovada mesma disciplina de buscar-proposicao-detalhe acima — MESMA tx, `some->` p/ nao mentir um
+  ;; mapa truthy quando a proposicao nao existe.
   (ficha-completa-da-proposicao [this ente-id id]
     (transacao this ente-id
       (fn [tx]
-        {:proposicao (proposicao/buscar tx ente-id id)
+        {:proposicao (proposicao-com-aprovada tx ente-id id)
          :texto (texto/vigente tx ente-id id)
          :tramitacao (tram/historico-da-proposicao tx ente-id id 100)
          :apensadas (apensacao/apensadas-ativas tx ente-id id 50)
@@ -637,6 +670,23 @@
   (gerar-autografo-e-abrir-tramitacao! [this ente-id m]
     (transacao this ente-id
       (fn [tx]
+        ;; T3-A — RE-VERIFICACAO DA APROVACAO DENTRO DA TX (defesa em profundidade). O controller ja' guarda
+        ;; na borda, e e' de la' que sai a mensagem util; esta leitura garante que a escrita e a decisao
+        ;; olham o MESMO snapshot. O guard de duplicidade tem o UNIQUE (ente_id, proposicao_id) como backstop
+        ;; no banco — a aprovacao NAO tem constraint equivalente (o fato mora noutra tabela), entao o
+        ;; backstop tem de ser esta linha.
+        ;;
+        ;; CORRECAO (revisao adversarial ecc, achado C-1): a versao original deste comentario dizia que isto
+        ;; "fecha a janela TOCTOU". NAO fecha, e a diferenca importa. `transacao` = `com-tenant*` =
+        ;; `with-transaction` SEM `:isolation` -> READ COMMITTED; esta e' um SELECT simples, sem FOR SHARE, e
+        ;; o que precisaria ser barrado e' um INSERT (votacao corretiva) — leitura fantasma, que row lock nao
+        ;; pega nem em REPEATABLE READ. Hoje a janela e' INALCANCAVEL, nao fechada: nao existe rota que crie
+        ;; corretiva (`AbrirVotacao` nao expoe `votacao-corrige-id`) nem que anule votacao encerrada
+        ;; (`anular-votacao!` nao tem borda). No dia em que a correcao de votacao ganhar rota, esta linha NAO
+        ;; protege: sera' preciso SERIALIZABLE ou uma constraint que amarre autografo<->votacao.
+        (when-not (votacao/aprovada-em-votacao? tx ente-id (:proposicao-id m))
+          (throw (ex-info "gerar-autografo: a materia nao foi aprovada em votacao (re-verificacao na tx)"
+                          {:tipo :conflito/proposicao-nao-aprovada :proposicao-id (:proposicao-id m)})))
         (let [{aut-id :id numero :numero} (autografo/gerar! tx (assoc m :ente-id ente-id))
               {tram-id :id} (exec/iniciar! tx {:id (random-uuid) :ente-id ente-id :autografo-id aut-id
                                                 :created-by (:created-by m)})]

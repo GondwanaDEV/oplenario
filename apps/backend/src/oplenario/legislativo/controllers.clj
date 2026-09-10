@@ -417,6 +417,16 @@
   tempo, mesmo padrao de protocolar-documento — o ano do AUTOGRAFO e' o ano civil da geracao, escopo do
   numerador gapless 'autografo:ano', nao necessariamente o ano de protocolo da proposicao).
 
+  GUARD DE APROVACAO (T3-A, o achado mais grave da T3 — ledger Fase 11). RODA PRIMEIRO, e de proposito:
+  'esta materia nunca foi aprovada' e' a verdade que o operador precisa ouvir, mesmo quando ha' tambem
+  duplicidade ou falta de texto. A pre-condicao NAO e' `proposicao.estado = 'aprovada'`: aquele rotulo e'
+  texto livre, chave de estado de TEMPLATE (config do tenant, Inv.4 — cravar a string no codigo seria
+  vocabulario de camara dentro do motor), e nenhuma rota HTTP o move hoje. E' o ATO: votacao encerrada com
+  resultado 'aprovada' sobre esta proposicao (Repo/proposicao-aprovada-em-votacao?). 409, nao 400 — o
+  pedido estava correto, o recurso e' que nao chegou la' (mesma regua dos outros 6 conflitos de estado
+  desta borda, ledger Fase 8 achado #3). O Repo REVERIFICA dentro da tx da escrita: aqui mora a mensagem,
+  la' mora a atomicidade.
+
   GUARD DE DUPLICIDADE (pre-condicao de borda, mesmo racional de encerrar-votacao — vira
   :validacao/invalido usando um recurso JA carregado, em vez de propagar a excecao opaca do UNIQUE
   (ente_id, proposicao_id) do db/autografo.clj como 500): uma proposicao que ja' tem autografo lanca ANTES
@@ -433,6 +443,9 @@
   (let [proposicao-id (:proposicao-id m)
         {:keys [proposicao texto]} (repo/buscar-proposicao-detalhe repo-legislativo ente-id proposicao-id)]
     (when proposicao
+      (when-not (repo/proposicao-aprovada-em-votacao? repo-legislativo ente-id proposicao-id)
+        (throw (ex-info "gerar-autografo: a materia nao foi aprovada em votacao pela Camara"
+                        {:tipo :conflito/proposicao-nao-aprovada :proposicao-id proposicao-id})))
       (when (repo/autografo-da-proposicao repo-legislativo ente-id proposicao-id)
         (throw (ex-info "gerar-autografo: a proposicao ja tem autografo (UNIQUE por proposicao)"
                         {:tipo :validacao/invalido :proposicao-id proposicao-id})))

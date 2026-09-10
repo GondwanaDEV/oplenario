@@ -25,8 +25,19 @@ const proposicaoAprovada = {
   "urn-lex": "urn:x",
   ementa: "Política municipal de incentivo à energia solar",
   estado: "aprovada",
+  aprovada: true,
   "lock-version": 2,
   "atualizado-em": "2026-06-10T00:00:00Z",
+};
+
+// Fatia 3 (achado T3-A): o gate do botão é `aprovada` (booleano derivado da votação no backend), NUNCA
+// `estado` — texto livre de template por câmara que nenhuma rota HTTP move. Esta proposição tem `estado`
+// num rótulo qualquer de trâmite normal e `aprovada: false`, exatamente o caso que fabricou os 4
+// autógrafos indevidos (T3-A): a rota /pos-aprovacao/:id navegada direto por URL antes de qualquer voto.
+const proposicaoNaoAprovada = {
+  ...proposicaoAprovada,
+  estado: "em_comissoes",
+  aprovada: false,
 };
 
 const semAutografo = { autografo: null, "tramitacao-executiva": null };
@@ -44,12 +55,12 @@ const comAutografoAguardando = {
   "tramitacao-executiva": { id: "te1", "autografo-id": "a1", estado: "aguardando", "lock-version": 0 },
 };
 
-function mockFetch(posAprovacaoResposta: unknown) {
+function mockFetch(posAprovacaoResposta: unknown, proposicaoResposta: unknown = proposicaoAprovada) {
   global.fetch = vi.fn(async (url: string) => {
     if (url.includes("/pos-aprovacao")) {
       return { ok: true, json: async () => posAprovacaoResposta } as Response;
     }
-    return { ok: true, json: async () => proposicaoAprovada } as Response;
+    return { ok: true, json: async () => proposicaoResposta } as Response;
   }) as unknown as typeof fetch;
 }
 
@@ -132,6 +143,33 @@ describe("ConteudoPosAprovacao", () => {
     await waitFor(() => expect(screen.getByText("Desfecho")).toBeTruthy());
     expect(screen.getByText(/sancionada e segue para promulgação/i)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^registrar retorno$/i })).toBeNull();
+  });
+
+  it("matéria NÃO aprovada e sem autógrafo -> botão de gerar fica inacessível (disabled+aria-disabled) e a explicação aparece", async () => {
+    mockFetch(semAutografo, proposicaoNaoAprovada);
+    renderComProviders();
+    await waitFor(() =>
+      expect(screen.getByText(/esta matéria ainda não foi aprovada em votação pela câmara/i)).toBeTruthy(),
+    );
+    const btn = screen.getByRole("button", { name: /gerar autógrafo e enviar ao executivo/i });
+    expect((btn as HTMLButtonElement).disabled).toBe(true);
+    expect(btn.getAttribute("aria-disabled")).toBe("true");
+    expect(btn.getAttribute("aria-describedby")).toBe("pos-aprovacao-nao-aprovada");
+    expect(
+      screen.getByText(/autógrafo é o ato que leva a matéria aprovada ao executivo/i),
+    ).toBeTruthy();
+  });
+
+  it("matéria aprovada e sem autógrafo -> botão de gerar fica habilitado (sem aria-disabled) e sem a nota de bloqueio", async () => {
+    mockFetch(semAutografo, proposicaoAprovada);
+    renderComProviders();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /gerar autógrafo e enviar ao executivo/i })).toBeTruthy(),
+    );
+    const btn = screen.getByRole("button", { name: /gerar autógrafo e enviar ao executivo/i });
+    expect((btn as HTMLButtonElement).disabled).toBe(false);
+    expect(btn.getAttribute("aria-disabled")).toBeNull();
+    expect(screen.queryByText(/esta matéria ainda não foi aprovada em votação/i)).toBeNull();
   });
 
   it("erro ao carregar a proposição -> estado de erro da página", async () => {

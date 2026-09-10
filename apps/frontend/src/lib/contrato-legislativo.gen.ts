@@ -36,6 +36,7 @@ export interface ProposicaoDetalheOut {
   tipoRequerimento?: string | null;
   categoriaMocao?: string | null;
   estado: string;
+  aprovada: boolean;
   lockVersion: number;
   atualizadoEm: string;
   texto?: string | null;

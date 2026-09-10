@@ -31,7 +31,9 @@
         pid (protocolar! ente)
         f (repo/ficha-completa-da-proposicao *repo* ente pid)]
     (is (= pid (:id (:proposicao f))))
-    (is (= "## Art. 1o" (:texto-inline (:texto f))))))
+    (is (= "## Art. 1o" (:texto-inline (:texto f))))
+    (is (false? (:aprovada (:proposicao f)))
+        "Fatia 2: sem votacao encerrada 'aprovada', o cabecalho da ficha traz o mesmo fato false")))
 
 (deftest ficha-completa-de-proposicao-inexistente-devolve-proposicao-nil
   (let [ente (random-uuid)

@@ -12,7 +12,7 @@
 
 (defn- proposicao-canonica [ente]
   {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026 :sequencial 42
-   :urn-lex "urn:lex:x" :ementa "X" :estado "protocolada" :lock-version 0
+   :urn-lex "urn:lex:x" :ementa "X" :estado "protocolada" :aprovada false :lock-version 0
    :atualizado-em (java.time.Instant/parse "2026-01-01T00:00:00Z")})
 
 (defn- header [ente & [texto]] (adapters-proposicao/detalhe->wire (proposicao-canonica ente) texto))
