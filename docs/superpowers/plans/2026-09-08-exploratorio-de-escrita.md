@@ -125,8 +125,11 @@ Criar proposição · editar. Erros: ementa vazia · espécie inválida · autor
 Editar · emitir (secretaria) · emitir "meu parecer" (vereador) · dar ciência.
 Erros: emitir sem texto · **emitir sem ser relator (posse)** · emitir duas vezes · papéis trocados.
 
-### E5 — Chamada e presença (servidor + vereador) · 6
+### E5 — Chamada e presença (servidor + vereador) · 7
 Presença · confirmar a própria · lote · conduzir chamada · justificar · decidir justificativa · folha.
+> **Correção (10/09/2026, crítico de completude da T3):** o cabeçalho dizia `· 6`, mas a linha lista
+> **7 verbos** e o mapa achou **7 endpoints distintos**. O total da T3 é **24**, não 23 — o `24` do
+> título da trilha estava certo e a soma dos grupos é que não fechava.
 Erros: presença fora do roster da data · **lote com um id inválido (a transação inteira tem de
 falhar)** · chamada em sessão encerrada · justificativa de terceiro · **decidir a própria
 justificativa** · folha duas vezes.

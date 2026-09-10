@@ -6,3 +6,6 @@
 
 # saida da ultima corrida da sonda T2 (artefato de execucao, nao fonte)
 .sonda/*-ultima-corrida.jsonl
+
+# artefatos de execucao da T3 (regenerados por t3/preparar.sh, nunca fonte)
+/t3/.artifacts

@@ -1,0 +1,214 @@
+{
+ "achados": [
+  "CPF nao existe em nenhum dos 4 escritas do grupo E1. `cadastros.vereador` (migration 20260620000010) tem colunas: ente_id, id, identidade_id (GUARD ref, sem FK), nome, nome_parlamentar, lote_id, efetivado_em, criado_em — NENHUMA coluna de CPF. CPF so aparece em `identidade` (wire/in/acesso.clj, CriarIdentidade, regex ^\\d{11}$) e na validacao do form `ConcederAcessoForm` (validarConcederAcesso em cadastro-vereadores-forms.ts). 'Conceder acesso' (ligar-identidade) NAO esta na lista das 4 escritas deste grupo (criar/editar vereador, criar mandato, registrar licenca). Os casos de erro 'CPF invalido' e 'CPF duplicado' do plano nao se aplicam a NENHUMA das 4 escritas de E1 — pertencem a uma quinta escrita (conceder acesso) fora do escopo deste grupo. Isso e um ACHADO: ou o plano atribuiu esses 2 casos ao grupo errado, ou eles precisam ser reclassificados para o grupo que cobre 'conceder acesso'.",
+  "'Licenca sem mandato' nao e testavel como uma condicao separada de input no form: o botao 'Registrar licenca' fica DESABILITADO na propria pagina (page.tsx: disabled={ficha.mandato?.estado !== 'vigente'}) sempre que o vereador nao tem mandato vigente (inclui o caso de nenhum mandato). Para exercitar o caso de erro pela INTERFACE e preciso ou (a) forcar o painel via DOM/JS ignorando o disabled, ou (b) provar o 409 so por HTTP direto (que ja foi feito na Trilha 2) — a Trilha 3 (so interface) nao alcanca esse caso de erro do jeito descrito no plano sem contornar a UI.",
+  "O double-click e tratado no cliente por uma ref sincrona (`enviandoRef.current`) em CADA hook de mutacao (use-criar-vereador, use-editar-vereador, use-registrar-mandato, use-registrar-licenca) que lanca 'envio em andamento' na segunda chamada, MAIS o botao fica disabled durante estado 'enviando' — mas a checagem do disabled e assincrona (so aplica apos o primeiro render pos-clique); um duplo-clique fisico rapido o bastante pode ainda passar pelo guard de disabled e cair no guard da ref (que e sincrono e realmente bloqueia). Confirmar na pratica com Playwright (2 cliques no mesmo frame) e nao so ler o codigo."
+ ],
+ "escritas": [
+  {
+   "nome": "criar vereador",
+   "tem_tela": true,
+   "rota_next": "apps/frontend/src/app/(interno)/cadastros/vereadores/page.tsx + novo-vereador-form.tsx",
+   "url_navegavel": "/cadastros/vereadores",
+   "endpoint_api": "POST /cadastros/vereadores (proxy Next: POST /api/cadastros/vereadores)",
+   "tabela_db": "cadastros.vereador",
+   "papel": "servidor (gate backend: papel 'secretario')",
+   "passos_browser": [
+    "Logado como usuario com papel 'secretario' no ente 10000000-0000-0000-0000-000000000001, abrir /cadastros/vereadores",
+    "Clicar no botao 'Novo vereador' (button.btn-primaria, texto literal 'Novo vereador') no topo da pagina — abre painel inline (NAO modal)",
+    "No form aria-label='Novo vereador': preencher input#nv-nome (label 'Nome*') com o nome",
+    "Opcional: preencher input#nv-parlamentar (label 'Nome parlamentar')",
+    "Clicar no botao de submit (button[type=submit], texto 'Criar vereador', vira 'Salvando…' durante o envio)",
+    "Sucesso -> painel fecha, o vereador criado passa a ser o selecionado na lista master (onSucesso seleciona o novo id e refaz o fetch)"
+   ],
+   "seletores": [
+    "button.btn-primaria.btn-mini com texto 'Novo vereador' (abre painel)",
+    "form[aria-label='Novo vereador']",
+    "input#nv-nome (label associado via htmlFor, texto do label 'Nome*')",
+    "input#nv-parlamentar (label 'Nome parlamentar')",
+    "p#nv-nome-erro[role=alert] (erro de campo, so aparece apos 'tocado')",
+    "button[type=submit].btn-primaria com texto 'Criar vereador' / 'Salvando…' quando enviando",
+    "button[type=button].btn-fantasma com texto 'Cancelar'",
+    "p[role=alert].campo-erro generico quando estado==='erro' (mensagem vinda de corpoErro.erro do backend)"
+   ],
+   "assercao_db": "SELECT id, nome, nome_parlamentar, identidade_id FROM cadastros.vereador WHERE ente_id = '10000000-0000-0000-0000-000000000001' AND nome = '<nome digitado>' ORDER BY criado_em DESC LIMIT 1;",
+   "casos_de_erro": [
+    {
+     "caso": "campo obrigatorio vazio (nome em branco)",
+     "onde_surge": "TELA trata: validarNovoVereador (cadastro-vereadores-forms.ts) marca erros.nome='Informe o nome do vereador.' e o botao de submit fica disabled quando tocado && !valido (p#nv-nome-erro exibido). BACKEND tambem recusa (adapters/in/vereador.clj criar-vereador->dominio: (when (str/blank? (:nome mm)) (invalido! ...)) -> 400 :validacao/invalido) — redundante, dupla camada."
+    },
+    {
+     "caso": "CPF invalido",
+     "onde_surge": "NAO SE APLICA — 'criar vereador' nao tem campo CPF em nenhuma camada (form, wire, tabela). Ver achado geral."
+    },
+    {
+     "caso": "CPF duplicado",
+     "onde_surge": "NAO SE APLICA — mesmo motivo acima."
+    },
+    {
+     "caso": "duplo clique",
+     "onde_surge": "TELA trata parcialmente: guard sincrono enviandoRef.current em use-criar-vereador.ts lanca erro em cliques concorrentes + botao disabled durante estado==='enviando'. Nao ha guard no BACKEND contra 2 vereadores identicos criados por 2 POSTs distintos (nao ha UNIQUE em cadastros.vereador(nome) nem idempotency-key) — 2 cliques que escapem do guard client-side (ex. requisicoes disparadas antes do primeiro setEstado) criam DOIS registros. Verificar na pratica."
+    }
+   ]
+  },
+  {
+   "nome": "editar vereador",
+   "tem_tela": true,
+   "rota_next": "apps/frontend/src/app/(interno)/cadastros/vereadores/page.tsx + editar-vereador-form.tsx",
+   "url_navegavel": "/cadastros/vereadores?v=6ad35bb6-c375-462e-bab0-1cbfc0b9a93c",
+   "endpoint_api": "PATCH /cadastros/vereadores/:id (proxy Next: PATCH /api/cadastros/vereadores/:id)",
+   "tabela_db": "cadastros.vereador",
+   "papel": "servidor (gate backend: papel 'secretario')",
+   "passos_browser": [
+    "Logado como 'secretario', abrir /cadastros/vereadores?v=6ad35bb6-c375-462e-bab0-1cbfc0b9a93c (seleciona Antonio Carlos Ferreira direto pela URL, ?v=<id>)",
+    "Na ficha (detail pane), clicar no botao 'Editar cadastro' (dentro de .ficha-acoes) — abre painel inline abaixo",
+    "No form aria-label='Editar cadastro' (pre-preenchido): alterar input#ev-nome e/ou input#ev-parlamentar",
+    "Clicar em button[type=submit] texto 'Salvar alteracoes' (vira 'Salvando…')",
+    "Sucesso -> painel fecha, ficha + lista refazem fetch (versao incrementada)"
+   ],
+   "seletores": [
+    "button.btn-contorno.btn-mini com texto 'Editar cadastro'",
+    "form[aria-label='Editar cadastro']",
+    "input#ev-nome (label 'Nome')",
+    "input#ev-parlamentar (label 'Nome parlamentar')",
+    "p#ev-nome-erro[role=alert]",
+    "p[role=alert].campo-erro para erros.geral ('Preencha ao menos um campo para salvar.')",
+    "button[type=submit].btn-primaria texto 'Salvar alteracoes' / 'Salvando…'",
+    "button[type=button].btn-fantasma texto 'Cancelar'"
+   ],
+   "assercao_db": "SELECT nome, nome_parlamentar FROM cadastros.vereador WHERE ente_id = '10000000-0000-0000-0000-000000000001' AND id = '6ad35bb6-c375-462e-bab0-1cbfc0b9a93c';",
+   "casos_de_erro": [
+    {
+     "caso": "campo obrigatorio vazio (nome esvaziado)",
+     "onde_surge": "TELA trata: validarEditar marca erros.nome='O nome nao pode ficar em branco.' quando mudouNome && branco(nome) — so dispara se o campo nome foi de fato alterado (mudouNome = nome.trim() !== inicial.nome). BACKEND tambem recusa (editar-vereador->dominio: contains :nome && blank -> 'nome nao pode ser vazio' -> 400). nome_parlamentar PODE ser esvaziado (vira NULL), isso e' comportamento valido, nao erro."
+    },
+    {
+     "caso": "CPF invalido",
+     "onde_surge": "NAO SE APLICA — editar vereador nao toca CPF/identidade."
+    },
+    {
+     "caso": "CPF duplicado",
+     "onde_surge": "NAO SE APLICA — mesmo motivo."
+    },
+    {
+     "caso": "duplo clique",
+     "onde_surge": "TELA trata parcialmente: enviandoRef.current em use-editar-vereador.ts + botao disabled durante envio. Sem idempotency-key no backend; 2 PATCHs concorrentes com o MESMO corpo sao inofensivos (ambos escrevem o mesmo valor final), diferente de criar-vereador onde duplicaria a linha — risco menor aqui, mas nao zero se os dois cliques carregarem valores diferentes de digitacao simultanea."
+    }
+   ]
+  },
+  {
+   "nome": "criar mandato",
+   "tem_tela": true,
+   "rota_next": "apps/frontend/src/app/(interno)/cadastros/vereadores/page.tsx + registrar-mandato-form.tsx",
+   "url_navegavel": "/cadastros/vereadores?v=5029fcbc-bf8d-4142-902e-ba45929e41b2",
+   "endpoint_api": "POST /cadastros/vereadores/:id/mandatos (proxy Next: POST /api/cadastros/vereadores/:id/mandatos)",
+   "tabela_db": "cadastros.mandato",
+   "papel": "servidor (gate backend: papel 'secretario')",
+   "passos_browser": [
+    "Logado como 'secretario', abrir /cadastros/vereadores?v=<id-de-um-vereador> (idealmente um SEM mandato vigente hoje, para nao colidir de imediato com o 409 de sobreposicao — ou aceitar o 409 como o teste do caso de erro)",
+    "Na ficha, clicar 'Registrar mandato' (.ficha-acoes) — abre painel",
+    "Form aria-label='Registrar mandato': a legislatura vigente ja vem fixa (exibida como texto, ex. 'Xa (2025-2029)', vem de GET /cadastros/legislatura-vigente via useLegislaturaVigente) — se nao houver legislatura vigente o form mostra so 'Cadastre a legislatura vigente primeiro.' com botao 'Fechar', sem campos",
+    "Preencher input#rm-partido (opcional)",
+    "select#rm-natureza (opcoes: 'Titular'=titular, 'Suplencia'=suplencia)",
+    "input#rm-inicio type=date (obrigatorio, label 'Inicio da vigencia*')",
+    "input#rm-fim type=date (opcional, label 'Fim da vigencia')",
+    "Clicar button[type=submit] texto 'Registrar mandato' / 'Salvando…'"
+   ],
+   "seletores": [
+    "button.btn-contorno.btn-mini com texto 'Registrar mandato'",
+    "form[aria-label='Registrar mandato']",
+    "p#rm-legislatura-rotulo (so display, nao input)",
+    "input#rm-partido (label 'Partido')",
+    "select#rm-natureza (label 'Natureza*')",
+    "input#rm-inicio (label 'Inicio da vigencia*')",
+    "input#rm-fim (label 'Fim da vigencia')",
+    "p#rm-inicio-erro[role=alert], p#rm-fim-erro[role=alert], p#rm-natureza-erro[role=alert]",
+    "button[type=submit].btn-primaria texto 'Registrar mandato' / 'Salvando…'",
+    "button[type=button].btn-fantasma texto 'Cancelar'"
+   ],
+   "assercao_db": "SELECT id, vereador_id, legislatura_id, partido, estado, natureza, vigencia_inicio, vigencia_fim FROM cadastros.mandato WHERE ente_id = '10000000-0000-0000-0000-000000000001' AND vereador_id = '<id-do-vereador>' ORDER BY criado_em DESC LIMIT 1; -- estado esperado = 'vigente' (default do insert)",
+   "casos_de_erro": [
+    {
+     "caso": "campo obrigatorio vazio (data de inicio ou natureza)",
+     "onde_surge": "TELA trata: validarMandato marca erros.vigenciaInicio='Data de inicio invalida (AAAA-MM-DD).' se vazio/mal formatado, e erros.natureza se natureza nao for 'titular'/'suplencia' (select so oferece essas 2 opcoes, entao esse ramo especifico e inatingivel pela UI, so por manipulacao de DOM). BACKEND: wire/RegistrarMandato (malli) tambem recusa corpo sem vigencia-inicio/natureza -> 400."
+    },
+    {
+     "caso": "CPF invalido",
+     "onde_surge": "NAO SE APLICA — registrar mandato nao tem CPF."
+    },
+    {
+     "caso": "CPF duplicado",
+     "onde_surge": "NAO SE APLICA — mesmo motivo."
+    },
+    {
+     "caso": "mandato com fim antes do inicio",
+     "onde_surge": "TRATADO NOS DOIS LADOS: TELA (validarMandato: 'if (ini && fim < ini) erros.vigenciaFim = O fim nao pode ser anterior ao inicio.' bloqueia o submit) E BACKEND (registrar-mandato->dominio: (.isBefore fim inicio) -> invalido! 'vigencia-fim nao pode ser anterior a vigencia-inicio' -> 400). Para exercitar o caminho do BACKEND pela interface e preciso contornar a validacao client-side (ex. digitar datas validas isoladamente e depois trocar via devtools, ou usar um par que a validacao do form nao pega mas o backend pegaria — na pratica as duas validacoes sao identicas em regra, entao nao ha gap; o unico jeito de ver o 400 do backend pela UI e desabilitar JS ou interceptar a requisicao)."
+    },
+    {
+     "caso": "licenca sem mandato",
+     "onde_surge": "NAO SE APLICA a esta escrita (criar mandato) — esse caso e do 'registrar licenca'."
+    },
+    {
+     "caso": "duplo clique / mandato sobreposto",
+     "onde_surge": "TELA/BACKEND: 2 cliques rapidos podem gerar 2 POSTs; o SEGUNDO deve bater no 409 :conflito/mandato-sobreposto (registrar-mandato-handler captura local e devolve {:erro 'ja existe mandato vigente sobreposto para este vereador'}), exibido no form via p[role=alert].campo-erro (estado==='erro' && erro). O guard client-side (enviandoRef) tenta impedir o 2o clique ANTES de chegar la, mas se um vereador ja tinha mandato vigente e o usuario tenta criar outro sobreposto em 1 unico clique, o 409 tambem aparece — mesmo texto de erro."
+    }
+   ]
+  },
+  {
+   "nome": "registrar licenca",
+   "tem_tela": true,
+   "rota_next": "apps/frontend/src/app/(interno)/cadastros/vereadores/page.tsx + registrar-licenca-form.tsx",
+   "url_navegavel": "/cadastros/vereadores?v=6ad35bb6-c375-462e-bab0-1cbfc0b9a93c",
+   "endpoint_api": "POST /cadastros/vereadores/:id/licencas (proxy Next: POST /api/cadastros/vereadores/:id/licencas)",
+   "tabela_db": "cadastros.mandato_licenca (efeito colateral: cadastros.mandato.estado vira 'licenciado')",
+   "papel": "servidor (gate backend: papel 'secretario')",
+   "passos_browser": [
+    "Logado como 'secretario', abrir /cadastros/vereadores?v=<id-de-um-vereador-com-mandato-VIGENTE> (ex. 6ad35bb6-c375-462e-bab0-1cbfc0b9a93c, Antonio Carlos Ferreira — mandato-id f6fc4e75... no seed demo)",
+    "Na ficha, o botao 'Registrar licenca' (.btn-fantasma) so fica CLICAVEL se ficha.mandato.estado === 'vigente'; caso contrario esta disabled com title='Requer um mandato vigente.'",
+    "Clicar 'Registrar licenca' — abre painel",
+    "Form aria-label='Registrar licenca': preencher input#rl-inicio type=date (obrigatorio, label 'Inicio*')",
+    "Opcional: input#rl-fim type=date (label 'Fim')",
+    "Opcional: input#rl-motivo (label 'Motivo')",
+    "Clicar button[type=submit] texto 'Registrar licenca' / 'Salvando…'"
+   ],
+   "seletores": [
+    "button.btn-fantasma.btn-mini com texto 'Registrar licenca' (disabled quando ficha.mandato?.estado !== 'vigente')",
+    "form[aria-label='Registrar licenca']",
+    "input#rl-inicio (label 'Inicio*')",
+    "input#rl-fim (label 'Fim')",
+    "input#rl-motivo (label 'Motivo')",
+    "p#rl-inicio-erro[role=alert], p#rl-fim-erro[role=alert]",
+    "button[type=submit].btn-primaria texto 'Registrar licenca' / 'Salvando…'",
+    "button[type=button].btn-fantasma texto 'Cancelar'"
+   ],
+   "assercao_db": "SELECT ml.id, ml.mandato_id, ml.inicio, ml.fim, ml.motivo FROM cadastros.mandato_licenca ml WHERE ente_id = '10000000-0000-0000-0000-000000000001' ORDER BY criado_em DESC LIMIT 1; -- e conferir: SELECT estado FROM cadastros.mandato WHERE id = '<mandato_id-do-vereador>'; -- esperado = 'licenciado'",
+   "casos_de_erro": [
+    {
+     "caso": "campo obrigatorio vazio (inicio)",
+     "onde_surge": "TELA trata: validarLicenca marca erros.inicio='Data de inicio invalida (AAAA-MM-DD).' quando vazio -> botao submit disabled apos 'tocado'. BACKEND tambem recusa (wire/RegistrarLicenca malli exige :inicio) -> 400."
+    },
+    {
+     "caso": "CPF invalido",
+     "onde_surge": "NAO SE APLICA — registrar licenca nao tem CPF."
+    },
+    {
+     "caso": "CPF duplicado",
+     "onde_surge": "NAO SE APLICA — mesmo motivo."
+    },
+    {
+     "caso": "mandato com fim antes do inicio (aqui: licenca com fim antes do inicio)",
+     "onde_surge": "TRATADO NOS DOIS LADOS: TELA (validarLicenca: fim < ini -> erros.fim='O fim nao pode ser anterior ao inicio.') e BACKEND nao tem checagem explicita de fim<inicio em registrar-licenca->dominio (so valida formato de data e o teto 'inicio <= hoje') — CONFERIR: se o form for contornado (JS off / requisicao direta), o backend pode aceitar fim<inicio sem recusar, pois so o FE valida essa ordem para licenca. Isto e um achado a validar: revisar registrar-licenca->dominio (apps/backend/src/oplenario/cadastros/adapters/in/vereador.clj) mostra SEM check de fim<inicio, ao contrario de registrar-mandato->dominio que TEM. Backend so valida: inicio no formato certo, fim no formato certo (se presente), e inicio <= hoje. NAO valida fim >= inicio."
+    },
+    {
+     "caso": "licenca sem mandato",
+     "onde_surge": "TELA bloqueia proativamente: botao 'Registrar licenca' fica disabled (nao apenas escondido) quando ficha.mandato?.estado !== 'vigente' (cobre tanto 'sem mandato nenhum' quanto 'mandato licenciado/cassado/etc'). BACKEND tambem recusa via 409 :conflito/sem-mandato-vigente (registrar-licenca-handler, mensagem 'vereador sem mandato vigente para licenciar') SE a chamada chegar la (ex. corpo enviado direto por fetch/devtools ignorando o disabled). Para provar o caso de erro PELA TELA de fato (nao so por HTTP, que ja foi feito na Trilha 2) e preciso ou remover o atributo disabled via JS no browser e clicar, ou aceitar que a tela nunca deixa o usuario chegar la organicamente — achado a reportar."
+    },
+    {
+     "caso": "duplo clique",
+     "onde_surge": "TELA trata parcialmente: enviandoRef.current em use-registrar-licenca.ts + disabled durante 'enviando'. 2a chamada que escape do guard bateria no MESMO 409 sem-mandato-vigente (a primeira ja mudou o mandato para 'licenciado'), entao o proprio dominio absorve o double-submit sem duplicar a linha — mais seguro que criar-vereador."
+    }
+   ]
+  }
+ ],
+ "grupo": "E1 — Cadastros (servidor)"
+}

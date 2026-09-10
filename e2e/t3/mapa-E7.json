@@ -1,0 +1,66 @@
+{
+ "achados": [
+  "ESTADO DA DEMO (medido agora, psql direto): as 6 proposicoes 'aprovada' do ente 10000000-...-001 (numeros 9-14/2026) JA TEM autografo, e as 6 tramitacao_executiva correspondentes estao TODAS em estado TERMINAL (4x veto_derrubado, 2x sancionado, lock_version 1-2) — esgotadas, provavelmente pela sonda HTTP da Trilha 2 (T2 grupo B). Hoje NAO existe nenhuma proposicao 'aprovada' sem autografo nem nenhuma tramitacao 'aguardando' — o caminho feliz das duas escritas de E7 nao e exercitavel pela interface sem antes promover outra proposicao a 'aprovada' (fluxo de votacao, fora deste grupo) ou reconciliar/resemear a demo.",
+  "ACHADO DE CODIGO CONFIRMADO CONTRA O BANCO: o caso de erro 'autografo de materia nao aprovada' NAO E TRATADO nem pelo backend nem pela tela. controllers/gerar-autografo (apps/backend/src/oplenario/legislativo/controllers.clj:411-443) so guarda (1) duplicidade de autografo e (2) existencia de texto vigente — nunca confere proposicao.estado=='aprovada'. Na tela, o link condicional 'Ver pos-aprovacao' (ficha-materia/acoes-card.tsx, so aparece se estado==='aprovada') e o UNICO gate, e e contornavel por URL direta: /pos-aprovacao/:id aceita qualquer proposicao-id e o botao 'Gerar autografo e enviar ao Executivo' aparece sempre que !autografo, sem checar estado. CONFIRMADO EXPLORAVEL AGORA: existem 17 proposicoes do ente com estado_versao='vigente' em texto MAS estado != 'aprovada' (4 protocolada, 4 em_comissoes, 4 aguardando_pauta, 3 em_pauta, 3 arquivada — ex.: c7aecac5-b9c2-454e-b5ca-4fb92112b4e1, em_pauta). Um servidor logado pode gerar um autografo real e valido para uma dessas materias ainda em tramitacao.",
+  "'dois autografos' e' bem tratado nas duas pontas: backend lanca :validacao/invalido -> 400 (interceptor global), e o hook useGerarAutografo (apps/frontend/src/lib/use-gerar-autografo.ts) exibe o erro via role=alert. Mas so e alcancavel por corrida de 2 cliques/2 abas, porque assim que o 1o autografo existe a tela muda de branch e o botao 'Gerar autografo' some.",
+  "'resposta sem autografo' (POST /legislativo/autografos/:id/resposta para um autografo-id sem tramitacao_executiva) e RECUSADO pelo backend com 404 (registrar-resposta-executivo-handler, apps/backend/src/oplenario/legislativo/diplomat/http/in.clj:411-430), mas NAO E ALCANCAVEL PELA TELA em uso normal: autografo e tramitacao_executiva nascem juntos na MESMA tx (repo/gerar-autografo-e-abrir-tramitacao!), entao a UI nunca produz um autografo-id sem tramitacao. So testavel via HTTP direto com id inventado (ja coberto na Trilha 2)."
+ ],
+ "escritas": [
+  {
+   "nome": "gerar autografo",
+   "tem_tela": true,
+   "rota_next": "apps/frontend/src/app/(interno)/pos-aprovacao/[id]/page.tsx",
+   "url_navegavel": "http://localhost:3000/pos-aprovacao/c7aecac5-b9c2-454e-b5ca-4fb92112b4e1?token=%7B%22sub%22%3A%22secretaria-demo%22%2C%22identidade-id%22%3A%224893207b-8487-42d6-a12d-d8721cd348ec%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%7D  (proposicao-id real do path; NENHUMA proposicao 'aprovada' esta sem autografo agora — este id (em_pauta) e a UNICA instancia hoje com texto vigente + sem autografo, e exercita-la e o proprio achado de 'autografo de materia nao aprovada'; para o caminho feliz real, primeiro levar outra materia a estado='aprovada')",
+   "endpoint_api": "POST /legislativo/proposicoes/:id/autografo (navegador chama via proxy Next POST /api/legislativo/proposicoes/:id/autografo, ver apps/frontend/src/lib/use-gerar-autografo.ts)",
+   "tabela_db": "legislativo.autografo (+ legislativo.tramitacao_executiva, aberta 'aguardando' na MESMA tx)",
+   "papel": "servidor (gate de rota: it/exige-papel \"secretario\", apps/backend/src/oplenario/legislativo/diplomat/http/in.clj:496 — identidade demo :secretaria em e2e/.artifacts/demo-ids.edn)",
+   "passos_browser": [
+    "Navegar para http://localhost:3000/proposicoes com ?token=<dev-token JSON da identidade secretaria> (modo dev do FE, apps/frontend/src/lib/modo.ts + auth.tsx — so vale com o stack em APP_ENV=dev/test)",
+    "Abrir a ficha da materia alvo: /ficha-materia/{proposicao_id} (ou ir direto para /pos-aprovacao/{proposicao_id})",
+    "Se veio de ficha-materia e a materia estiver 'aprovada': clicar no link 'Ver pos-aprovacao' (texto literal, apps/frontend/src/app/(interno)/ficha-materia/acoes-card.tsx)",
+    "Na tela /pos-aprovacao/{id}, dentro do card 'Autografo' com o paragrafo 'Nenhum autografo foi gerado ainda para esta materia.', clicar no botao 'Gerar autografo e enviar ao Executivo' (button, class btn btn-primaria, apps/frontend/src/app/(interno)/pos-aprovacao/conteudo-pos-aprovacao.tsx)",
+    "Aguardar a mensagem role=status 'Autografo gerado e enviado ao Executivo' e o card mudar para o CardAutografo preenchido (numero/ano, enviado-em, destinatario) + PipelinePosAprovacao"
+   ],
+   "assercao_db": "SELECT a.numero, a.ano, a.texto_versao_id, a.destinatario_texto, t.id AS tramitacao_id, t.estado FROM legislativo.autografo a JOIN legislativo.tramitacao_executiva t ON t.autografo_id = a.id AND t.ente_id = a.ente_id WHERE a.ente_id = '10000000-0000-0000-0000-000000000001' AND a.proposicao_id = '<proposicao_id>' AND t.estado = 'aguardando'; -- espera exatamente 1 linha (autografo + tramitacao abertos na mesma tx, apps/backend/src/oplenario/legislativo/db/autografo.clj + db/tramitacao_executiva.clj/iniciar!)",
+   "casos_de_erro": [
+    {
+     "caso": "autografo de materia nao aprovada",
+     "onde_surge": "NAO TRATADO em nenhuma das duas pontas. Backend (controllers/gerar-autografo, apps/backend/src/oplenario/legislativo/controllers.clj:411-443) so verifica duplicidade de autografo e existencia de texto vigente, nunca proposicao.estado. Tela: o gate condicional fica so no link de ENTRADA (ficha-materia/acoes-card.tsx, estado==='aprovada'), mas a rota /pos-aprovacao/:id e navegavel direto por URL para qualquer proposicao-id e o botao 'Gerar autografo' aparece sempre que !autografo — CONFIRMADO contra o banco: 17 proposicoes do ente (protocolada/em_comissoes/aguardando_pauta/em_pauta/arquivada) tem texto vigente e por isso aceitariam a escrita hoje."
+    },
+    {
+     "caso": "dois autografos",
+     "onde_surge": "Backend RECUSA: throw :validacao/invalido (mensagem 'gerar-autografo: a proposicao ja tem autografo (UNIQUE por proposicao)') -> 400 pelo interceptor global. Tela TRATA: useGerarAutografo (apps/frontend/src/lib/use-gerar-autografo.ts) captura o corpoErro.erro e ConteudoPosAprovacao exibe via role=alert (erro && ultimaAcao==='gerar' && !autografo). So alcancavel em corrida (dois cliques/duas abas), pois assim que o 1o autografo existe a branch da tela muda e o botao some."
+    }
+   ]
+  },
+  {
+   "nome": "registrar resposta do Executivo",
+   "tem_tela": true,
+   "rota_next": "apps/frontend/src/app/(interno)/pos-aprovacao/[id]/page.tsx (mesma rota da escrita anterior — o formulario vive dentro dela quando ha autografo com tramitacao 'aguardando')",
+   "url_navegavel": "http://localhost:3000/pos-aprovacao/{mesmo proposicao_id da escrita 'gerar autografo'}?token=%7B%22sub%22%3A%22secretaria-demo%22%2C%22identidade-id%22%3A%224893207b-8487-42d6-a12d-d8721cd348ec%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%7D  (SO fica exercitavel depois que a escrita 'gerar autografo' rodar naquela materia — hoje nenhuma tramitacao_executiva do ente esta em 'aguardando', todas as 6 existentes ja sao terminais)",
+   "endpoint_api": "POST /legislativo/autografos/:id/resposta (path :id = autografo-id; navegador via proxy Next, ver apps/frontend/src/lib/use-registrar-resposta.ts)",
+   "tabela_db": "legislativo.tramitacao_executiva (UPDATE: estado, veto_tipo, veto_razoes, respondido_em, lock_version+1)",
+   "papel": "servidor (mesmo gate 'secretario' da rota irma)",
+   "passos_browser": [
+    "A partir da tela /pos-aprovacao/{id} ja com autografo e tramitacaoExecutiva.estado==='aguardando' (aside mostra CardPrazoExecutivo)",
+    "Clicar no botao 'Registrar retorno' (button, class btn btn-contorno btn-mini, apps/frontend/src/app/(interno)/pos-aprovacao/conteudo-pos-aprovacao.tsx) para abrir o FormRegistrarRetorno",
+    "No radiogroup aria-label='Resultado do Executivo' (apps/frontend/src/app/(interno)/pos-aprovacao/form-registrar-retorno.tsx), marcar um radio: name='resultado', rotulo literal 'Sancionado' | 'Sancao tacita' | 'Vetado'",
+    "Se 'Vetado': marcar o radiogroup aria-label='Tipo do veto' (name='veto-tipo', rotulos 'Total'|'Parcial') e opcionalmente preencher o textarea id='veto-razoes' (label 'Razoes do veto')",
+    "Clicar no botao de submit 'Registrar retorno' (button, class btn btn-primaria, dentro do form — nao confundir com o botao-gatilho do passo 2, que ja sumiu quando o form abre)",
+    "Aguardar role=status 'Retorno do Executivo registrado'; o aside troca para o card 'Desfecho' com a mensagem correspondente ao estado"
+   ],
+   "assercao_db": "SELECT estado, veto_tipo, respondido_em, lock_version FROM legislativo.tramitacao_executiva WHERE ente_id = '10000000-0000-0000-0000-000000000001' AND autografo_id = '<autografo_id>'; -- espera estado IN ('sancionado','sancao_tacita','vetado'), respondido_em NOT NULL, lock_version incrementado em +1 frente ao valor lido antes do submit (CAS, apps/backend/src/oplenario/legislativo/db/tramitacao_executiva.clj/registrar-resposta!)",
+   "casos_de_erro": [
+    {
+     "caso": "resposta sem autografo",
+     "onde_surge": "Backend RECUSA com 404 ('tramitacao executiva nao encontrada para este autografo' — registrar-resposta-executivo-handler, apps/backend/src/oplenario/legislativo/diplomat/http/in.clj:411-430, via buscar-tramitacao-por-autografo nil). NAO ESTA ALCANCAVEL PELA TELA em uso normal: autografo e tramitacao_executiva sao criados juntos, na MESMA transacao (repo/gerar-autografo-e-abrir-tramitacao!) — nao existe fluxo de UI que produza um autografo sem tramitacao correspondente. So testavel via chamada HTTP direta com id inventado (ja coberto na Trilha 2, T2 grupo B)."
+    },
+    {
+     "caso": "resposta duplicada / tramitacao ja respondida (correlato de 'dois autografos' nesta escrita, achado por leitura do codigo, nao listado no enunciado mas real)",
+     "onde_surge": "Backend RECUSA 409 (:conflito/tramitacao-executiva, traduzido em resposta-conflito-tramitacao-executiva, mensagem \"so se responde uma tramitacao 'aguardando'\"; o mesmo caminho cobre CAS de lock-version divergente). Tela TRATA parcialmente: o formulario so renderiza quando tramitacaoExecutiva.estado==='aguardando', entao a UI normal nao reenvia — mas numa corrida (estado mudou entre o GET e o clique) o 409 cai no mesmo role=alert generico (erroRegistro) do hook use-registrar-resposta.ts."
+    }
+   ]
+  }
+ ],
+ "grupo": "E7 — Pos-aprovacao (servidor)"
+}

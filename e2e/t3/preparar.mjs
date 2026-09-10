@@ -1,0 +1,464 @@
+// e2e/t3/preparar.mjs — precondicoes da TRILHA 3 (exercitar as 24 escritas PELA INTERFACE).
+//
+// Node puro (fetch nativo), zero dependencia nova. Roda DENTRO do container de Playwright com
+// --network host (mandato Docker: nada de node no host). Ver e2e/t3/preparar.sh.
+//
+// NAO E DESTRUTIVO. So faz POST pelas rotas que existem (agendar sessao, transicionar, presenca,
+// abrir votacao, criar vereador). Nenhum DELETE/DROP/TRUNCATE, nenhum `docker compose down`,
+// nenhuma escrita em /demo-scratch/demo-ids.edn (o artefato da demo e SO LIDO, nunca reescrito).
+//
+// O que ele NAO faz (nao tem rota HTTP): documento_modelo e notificacao_caixa. Essas duas vem de
+// e2e/t3/fixtures.sql, rodado ANTES por preparar.sh. Este script CONFERE que entraram e falha
+// nomeando o bloqueio se nao entraram — nunca finge que preparou.
+//
+// Saida: e2e/t3/.artifacts/t3-ids.json
+
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const AQUI = dirname(fileURLToPath(import.meta.url));
+const RAIZ_E2E = resolve(AQUI, "..");
+const ARQ_DEMO = resolve(RAIZ_E2E, ".artifacts/demo-ids.edn");
+const ARQ_SAIDA = resolve(AQUI, ".artifacts/t3-ids.json");
+
+const BACK = process.env.T3_BACKEND ?? "http://localhost:8888";
+const FRONT = process.env.T3_FRONTEND ?? "http://localhost:3000";
+
+const bloqueios = [];
+const passos = [];
+function bloqueio(chave, texto) {
+  bloqueios.push({ chave, texto });
+  console.log(`  [BLOQUEIO] ${chave}: ${texto}`);
+}
+function passo(txt) { console.log(txt); passos.push(txt); }
+
+// ---------------------------------------------------------------- demo-ids.edn (SO LEITURA)
+function lerDemoIds() {
+  const edn = readFileSync(ARQ_DEMO, "utf8");
+  const um = (re) => { const m = edn.match(re); if (!m) throw new Error(`demo-ids.edn sem ${re}`); return m[1]; };
+  const bloco = um(/:identidades\s*\{([\s\S]*?)\}/);
+  const daBloco = (k) => {
+    const m = bloco.match(new RegExp(`:${k}\\s+#uuid\\s+"([0-9a-f-]{36})"`));
+    if (!m) throw new Error(`demo-ids.edn sem identidade :${k}`);
+    return m[1];
+  };
+  return {
+    ente: um(/:ente\s+#uuid\s+"([0-9a-f-]{36})"/),
+    legislatura: um(/:legislatura\s+#uuid\s+"([0-9a-f-]{36})"/),
+    identidades: {
+      secretaria: daBloco("secretaria"),
+      presidente: daBloco("presidente"),
+      vereador: daBloco("vereador"),
+      cidadao: daBloco("cidadao"),
+    },
+  };
+}
+
+// ---------------------------------------------------------------- HTTP
+const jsonToken = (o) => JSON.stringify(o);
+async function api(token, metodo, rota, corpo) {
+  const r = await fetch(`${BACK}${rota}`, {
+    method: metodo,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(corpo === undefined ? {} : { "Content-Type": "application/json" }),
+    },
+    body: corpo === undefined ? undefined : JSON.stringify(corpo),
+  });
+  const txt = await r.text();
+  let dados = null;
+  try { dados = txt ? JSON.parse(txt) : null; } catch { dados = { _bruto: txt.slice(0, 400) }; }
+  return { status: r.status, ok: r.ok, dados };
+}
+function exigir(res, oque) {
+  if (!res.ok) throw new Error(`${oque} falhou: HTTP ${res.status} ${JSON.stringify(res.dados).slice(0, 300)}`);
+  return res.dados;
+}
+
+// ---------------------------------------------------------------- main
+const demo = lerDemoIds();
+const ENTE = demo.ente;
+const TOK = {
+  secretaria: jsonToken({ "identidade-id": demo.identidades.secretaria, "ente-id": ENTE, papeis: ["secretario"] }),
+  presidente: jsonToken({ "identidade-id": demo.identidades.presidente, "ente-id": ENTE, papeis: ["vereador", "admin_ente"] }),
+  vereador: jsonToken({ "identidade-id": demo.identidades.vereador, "ente-id": ENTE, papeis: ["vereador"] }),
+};
+const urlTok = (papel) => encodeURIComponent(TOK[papel]);
+const comToken = (rota, papel) => `${FRONT}${rota}${rota.includes("?") ? "&" : "?"}token=${urlTok(papel)}`;
+
+console.log(`\n=== T3 preparar — ente ${ENTE} — backend ${BACK} ===\n`);
+
+// ---- 0. pre-voo: a stack esta em MODO DEV e os 3 tokens autenticam? ----------------------
+passo("0) pre-voo de autenticacao (GET /eu com os 3 tokens)");
+const papeisReais = {};
+for (const papel of ["secretaria", "presidente", "vereador"]) {
+  const r = await api(TOK[papel], "GET", "/eu");
+  if (!r.ok) {
+    throw new Error(
+      `GET /eu como ${papel} devolveu ${r.status}. A stack provavelmente NAO esta em modo dev ` +
+      `(APP_ENV != dev/test) — o dev-token so vale com o idp-dev. Nada foi preparado.`);
+  }
+  papeisReais[papel] = r.dados.ator.papeis;
+  console.log(`   ${papel.padEnd(10)} papeis-do-BANCO = ${JSON.stringify(r.dados.ator.papeis)}`);
+}
+
+// ---- 0b. identidade -> vereador (o cockpit deriva isso de GET /meu/painel) ----------------
+async function vereadorDaIdentidade(papel) {
+  const r = await api(TOK[papel], "GET", "/meu/painel");
+  if (!r.ok) return null;
+  return r.dados["vereador-id"] ?? r.dados.vereadorId ?? null;
+}
+const vereadorIdDoVereador = await vereadorDaIdentidade("vereador");
+const vereadorIdDoPresidente = await vereadorDaIdentidade("presidente");
+console.log(`   vereador-id de :vereador   = ${vereadorIdDoVereador}`);
+console.log(`   vereador-id de :presidente = ${vereadorIdDoPresidente}`);
+if (!vereadorIdDoVereador) bloqueio("meu-painel", "GET /meu/painel nao devolveu vereador-id para :vereador — o cockpit /votar nao resolve meuVereadorId e cai em 'sem-presenca' permanente.");
+
+// ---- 1. sessoes novas (E5) ---------------------------------------------------------------
+async function criarSessao(rotulo, agendadaPara) {
+  const d = exigir(
+    await api(TOK.secretaria, "POST", "/sessoes", {
+      "sessao-legislativa-id": demo.legislatura,
+      "tipo-sessao": "ordinaria",
+      modalidade: "presencial",
+      "agendada-para": agendadaPara,
+    }),
+    `POST /sessoes (${rotulo})`);
+  const id = d.id ?? d["sessao-id"];
+  if (!id) throw new Error(`POST /sessoes (${rotulo}) sem id no corpo: ${JSON.stringify(d)}`);
+  return id;
+}
+async function lockVersion(id) {
+  const d = exigir(await api(TOK.secretaria, "GET", `/sessoes/${id}`), `GET /sessoes/${id}`);
+  return { estado: d.estado, lock: d["lock-version"] };
+}
+async function transicionar(id, para) {
+  const { estado, lock } = await lockVersion(id);
+  if (estado === para) return { estado, lock };
+  exigir(await api(TOK.secretaria, "POST", `/sessoes/${id}/transicao`, { para, "lock-version": lock }),
+         `POST /sessoes/${id}/transicao -> ${para}`);
+  return await lockVersion(id);
+}
+
+const agora = new Date();
+passo("\n1) sessao LIMPA para as escritas da tela de chamada (E5)");
+const sessaoChamada = await criarSessao("E5-chamada", agora.toISOString());
+let est = await transicionar(sessaoChamada, "aberta");
+console.log(`   sessao de chamada ${sessaoChamada} -> estado=${est.estado} lock=${est.lock}`);
+const chamadaNova = exigir(await api(TOK.secretaria, "GET", `/sessoes/${sessaoChamada}/chamada`), "GET /chamada da sessao nova");
+const presentesNaNova = chamadaNova.linhas.filter((l) => l.estado !== "ausente" && l.estado !== "sem-registro").length;
+console.log(`   roster=${chamadaNova.linhas.length} linhas · ja marcados=${presentesNaNova} · chamadas conduzidas=${chamadaNova["chamadas-conduzidas"].length}`);
+if (presentesNaNova !== 0) bloqueio("sessao-chamada-suja", `a sessao nova ja nasceu com ${presentesNaNova} marcacoes — nao deveria.`);
+
+passo("\n1b) sessao ENCERRADA para a escrita 'gerar a folha' (E5) — a folha so existe em sessao FECHADA");
+const sessaoFolha = await criarSessao("E5-folha", new Date(agora.getTime() - 3600e3).toISOString());
+await transicionar(sessaoFolha, "aberta");
+est = await transicionar(sessaoFolha, "encerrada");
+console.log(`   sessao de folha ${sessaoFolha} -> estado=${est.estado} lock=${est.lock}`);
+
+// ---- 2. a sessao do /votar (E5-confirmar-presenca + E6-votar) -----------------------------
+passo("\n2) a sessao que /votar de fato abre — /votar NAO aceita parametro de sessao");
+const atual = exigir(await api(TOK.vereador, "GET", "/meu/sessao-atual"), "GET /meu/sessao-atual (vereador)");
+const sessaoVotar = atual["sessao-id"];
+console.log(`   GET /meu/sessao-atual (:vereador) => ${sessaoVotar} (situacao=${atual.situacao})`);
+if (!sessaoVotar) {
+  bloqueio("meu-sessao-atual-vazio", "GET /meu/sessao-atual devolveu sessao-id nulo — o cockpit /votar mostra 'Nenhuma sessao em curso agora' e E5-confirmar/E6-votar sao inalcancaveis.");
+} else if (sessaoVotar !== sessaoChamada) {
+  console.log(`   ATENCAO: NAO e uma das sessoes novas. sli_sessoes ordena "aberta ha mais tempo primeiro"`);
+  console.log(`   (paineis/db/sli_sessao.clj:111-132), entao uma sessao aberta AGORA sempre entra ATRAS.`);
+}
+
+let votacaoAberta = null;
+let presencaVereadorZerada = false;
+if (sessaoVotar) {
+  const ch = exigir(await api(TOK.secretaria, "GET", `/sessoes/${sessaoVotar}/chamada`), "GET /chamada da sessao do /votar");
+  const linhaDe = (vid) => ch.linhas.find((l) => l["vereador-id"] === vid) ?? null;
+  const lv = linhaDe(vereadorIdDoVereador);
+  const lp = linhaDe(vereadorIdDoPresidente);
+  console.log(`   estado na chamada: :vereador=${lv?.estado ?? "fora-do-roster"} · :presidente=${lp?.estado ?? "fora-do-roster"}`);
+
+  // (a) :vereador tem de estar AUSENTE, senao o CTA "Confirmar presenca" nunca renderiza
+  //     (meu-voto-vista.ts:36 — ciclo 'sem-presenca' exige NAO estar em estado.presentes).
+  if (lv && lv.estado !== "ausente") {
+    exigir(await api(TOK.secretaria, "POST", `/sessoes/${sessaoVotar}/presenca`, {
+      "vereador-id": vereadorIdDoVereador, tipo: "saida", modalidade: "plenario",
+      "ocorrido-em": new Date().toISOString(),
+    }), "POST /presenca (saida do :vereador)");
+    presencaVereadorZerada = true;
+    console.log(`   -> :vereador marcado 'saida' (append-only): o ciclo volta a 'sem-presenca'`);
+  } else if (lv) {
+    presencaVereadorZerada = true;
+    console.log(`   -> :vereador ja estava ausente`);
+  } else {
+    bloqueio("vereador-fora-do-roster", `o vereador de :vereador (${vereadorIdDoVereador}) nao esta no roster da sessao ${sessaoVotar}.`);
+  }
+
+  // (b) :presidente tem de estar PRESENTE para poder VOTAR sem depender de E5 rodar antes.
+  //     ACHADO ESTRUTURAL (medido em browser, nao lido no codigo): `estado.presentes` do cockpit NAO vem
+  //     de snapshot nenhum. `hidratarQuorum` (plenario-reducer.ts:289) so preenche os NUMEROS do quorum;
+  //     `presentes` so cresce com evento `presenca.registrada` vindo do SSE. Como o replay da CanalStore e
+  //     de 5 min, um vereador presente no BANCO ha horas entra na tela como AUSENTE e cai em 'sem-presenca'.
+  //     Por isso o evento e emitido SEMPRE (append-only, o mesmo que o clique 'Presente' da chamada faz),
+  //     e por ULTIMO, para ser o mais fresco possivel dentro da janela.
+  if (lp) {
+    exigir(await api(TOK.secretaria, "POST", `/sessoes/${sessaoVotar}/presenca`, {
+      "vereador-id": vereadorIdDoPresidente, tipo: "entrada", modalidade: "plenario",
+      "ocorrido-em": new Date().toISOString(),
+    }), "POST /presenca (entrada do :presidente)");
+    console.log(`   -> :presidente re-marcado PRESENTE agora (o SSE precisa do evento fresco, nao do banco)`);
+  } else {
+    bloqueio("presidente-fora-do-roster", `o vereador de :presidente (${vereadorIdDoPresidente}) nao esta no roster da sessao ${sessaoVotar}.`);
+  }
+
+  // (c) a votacao NOMINAL aberta (E6 nao tem no que votar sem ela; E5-confirmar tambem depende
+  //     dela, porque o CTA de presenca so aparece dentro do bloco de votacao do cockpit).
+  const lista = exigir(await api(TOK.secretaria, "GET", "/legislativo/proposicoes"), "GET /legislativo/proposicoes");
+  const objeto = lista.itens.find((p) => p.estado === "em_pauta") ?? lista.itens[0];
+  const rec = exigir(await api(TOK.secretaria, "POST", `/sessoes/${sessaoVotar}/votacoes`, {
+    "objeto-tipo": "proposicao", "objeto-id": objeto.id,
+    modalidade: "nominal", "quorum-tipo": "maioria_simples",
+  }), "POST /sessoes/:id/votacoes");
+  votacaoAberta = {
+    votacaoId: rec.id, lockVersion: rec["lock-version"] ?? null,
+    objetoId: objeto.id, objetoEmenta: objeto.ementa, abertaEm: new Date().toISOString(),
+    janelaReplaySse: "PT5M",
+  };
+  console.log(`   votacao NOMINAL aberta: ${rec.id} sobre ${objeto.id} (${objeto.tipo} ${objeto.sequencial}/${objeto.ano})`);
+  bloqueio("janela-sse-5min",
+    "DUAS coisas do cockpit /votar nao vem de snapshot nenhum, so do SSE: (a) o PLACAR — `estadoInicial()` " +
+    "(plenario-reducer.ts:167) nasce com placar=null; (b) a PRESENCA — `hidratarQuorum` " +
+    "(plenario-reducer.ts:289) so preenche os NUMEROS do quorum, nunca `presentes`. A CanalStore Valkey " +
+    "guarda 5 min (tempo_real/components.clj:39). Consequencia medida em browser: passada a janela, " +
+    "/votar mostra 'Nenhuma votacao aberta' e/ou trata como AUSENTE quem esta presente no banco ha horas. " +
+    "Logo E5-confirmar/E6-votar tem de abrir a pagina DENTRO DE ~5 MIN desta preparacao; fora disso, " +
+    "re-rode e2e/t3/preparar.sh (ou o proprio spec reabre a votacao: corpo em e6.reabrirVotacao) e, para " +
+    "votar, clique 'Confirmar presenca' antes (e6.preambuloObrigatorio).");
+}
+
+// ---- 3. E2: os modelos de documento (fixtures.sql) ---------------------------------------
+passo("\n3) E2 — legislativo.documento_modelo (vem de fixtures.sql; aqui so a PROVA por HTTP)");
+const modelos = exigir(await api(TOK.secretaria, "GET", "/legislativo/documento-modelos"), "GET /legislativo/documento-modelos");
+console.log(`   GET /legislativo/documento-modelos => ${modelos.itens.length} modelo(s)`);
+for (const m of modelos.itens) console.log(`     - ${m.id} ${m.chave ?? ""} "${m.nome}" (${m["tipo-documento"]})`);
+if (modelos.itens.length === 0) {
+  bloqueio("documento-modelo-vazio",
+    "nenhum modelo ativo. Rode e2e/t3/fixtures.sql antes (preparar.sh faz isso). Sem modelo, " +
+    "'Gerar documento' fica disabled para sempre e as 3 escritas de E2 sao inalcancaveis pela interface.");
+}
+
+// ---- 4. E8: notificacoes nao-lidas (fixtures.sql) -----------------------------------------
+passo("\n4) E8 — inbox de :vereador (vem de fixtures.sql; aqui so a PROVA por HTTP)");
+const inbox = await api(TOK.vereador, "GET", "/meu/notificacoes");
+let naoLidas = [];
+if (inbox.ok) {
+  // a chave do wire e `notificacoes` (paineis/wire/out), NAO `itens` — conferido contra a resposta viva.
+  const itens = inbox.dados.notificacoes ?? inbox.dados.itens ?? [];
+  naoLidas = itens.filter((n) => !n["lida-em"]).map((n) => ({ id: n.id, assunto: n.assunto, categoria: n.categoria }));
+  console.log(`   GET /meu/notificacoes => ${itens.length} item(ns), ${naoLidas.length} nao-lida(s)`);
+  for (const n of naoLidas) console.log(`     - ${n.id} "${n.assunto}"`);
+} else {
+  console.log(`   GET /meu/notificacoes => HTTP ${inbox.status}`);
+}
+if (naoLidas.length === 0) {
+  bloqueio("inbox-vazia",
+    "a identidade :vereador nao tem notificacao NAO-LIDA. Rode e2e/t3/fixtures.sql. Nao existe rota HTTP " +
+    "que gere notificacao (publicar-norma! nao tem chamador em nenhum diplomat) e seed-demo/notificacoes " +
+    "cria identidade NOVA e sobrescreve demo-ids.edn — por isso a fixture e SQL.");
+}
+
+// ---- 5. varredura das proposicoes: pareceres (E4), autografo (E7), editavel (E3) ----------
+passo("\n5) varredura das proposicoes (ficha + pos-aprovacao) — E4/E7/E3");
+// [CONSERTO DO INSTRUMENTO] GET /legislativo/proposicoes e' PAGINADO (tamanho-default=20,
+// adapters/in/proposicao.clj:30). Sem `?tamanho=100` esta varredura via 20 das 48 proposicoes e
+// perdia os pareceres cujas proposicoes cairam da 1a pagina — foi o que deixou
+// e4.parecerEditavelId=null (o parecer 50a690c2, em_elaboracao, existe no banco desde a semente).
+// tamanho-max e' 100 (idem:29); com 48 proposicoes uma pagina basta. AVISO medido: a ordem que a
+// rota devolve NAO e' estavel entre corridas (comparei dois artefatos seguidos e os mesmos ids
+// trocaram de posicao), entao e3.proposicaoEditavelId / e7.proposicaoParaAutografoId ja variavam de
+// preparacao pra preparacao ANTES desta mudanca — os specs leem o artefato em runtime e se adaptam.
+const listaProps = exigir(await api(TOK.secretaria, "GET", "/legislativo/proposicoes?tamanho=100"), "GET /legislativo/proposicoes");
+const TERMINAIS = new Set(["arquivada", "aprovada", "rejeitada", "prejudicada", "retirada", "transformada_em_norma"]);
+const pareceres = [];
+const semAutografo = [];
+const editaveis = [];
+for (const p of listaProps.itens) {
+  const f = await api(TOK.secretaria, "GET", `/legislativo/proposicoes/${p.id}/ficha`);
+  if (!f.ok) continue;
+  const prop = f.dados.proposicao;
+  for (const pa of f.dados.pareceres ?? []) {
+    pareceres.push({ ...pa, proposicaoId: p.id, proposicaoEstado: p.estado });
+  }
+  const temTexto = typeof prop.texto === "string" && prop.texto.trim().length > 0;
+  if (!TERMINAIS.has(p.estado)) {
+    editaveis.push({ id: p.id, tipo: p.tipo, ano: p.ano, sequencial: p.sequencial, estado: p.estado, lockVersion: prop["lock-version"], ementa: p.ementa });
+  }
+  if (temTexto) {
+    const pa = await api(TOK.secretaria, "GET", `/legislativo/proposicoes/${p.id}/pos-aprovacao`);
+    if (pa.ok && !pa.dados.autografo) {
+      semAutografo.push({ id: p.id, tipo: p.tipo, ano: p.ano, sequencial: p.sequencial, estado: p.estado, autorId: prop["autor-id"], ementa: p.ementa });
+    }
+  }
+}
+console.log(`   ${listaProps.itens.length} proposicoes · ${pareceres.length} parecer(es) · ${semAutografo.length} com texto vigente e SEM autografo · ${editaveis.length} editavel(is)`);
+
+// E4: casar relator com identidade logavel
+const relatorDe = (vid) => (vid === vereadorIdDoVereador ? "vereador" : vid === vereadorIdDoPresidente ? "presidente" : null);
+for (const pa of pareceres) pa.identidadeLogavelDoRelator = relatorDe(pa["relator-id"]);
+const ESTADOS_TERMINAIS_PARECER = new Set(["aprovado", "rejeitado", "prejudicado", "prazo_vencido"]);
+const parecerAguardando = pareceres.find((p) => p.estado === "aguardando_assinatura" && p.identidadeLogavelDoRelator)
+  ?? pareceres.find((p) => p.estado === "aguardando_assinatura") ?? null;
+const parecerEditavel = pareceres.find((p) => !ESTADOS_TERMINAIS_PARECER.has(p.estado) && p.id !== parecerAguardando?.id) ?? null;
+for (const pa of pareceres) console.log(`     parecer ${pa.id} estado=${pa.estado} relator=${pa["relator-id"]} logavel=${pa.identidadeLogavelDoRelator ?? "-"}`);
+if (!parecerAguardando) bloqueio("parecer-aguardando-assinatura", "nenhum parecer em 'aguardando_assinatura' — 'emitir parecer' nao mostra a transicao real.");
+else if (!parecerAguardando.identidadeLogavelDoRelator) bloqueio("parecer-relator-nao-logavel", `o parecer ${parecerAguardando.id} tem relator ${parecerAguardando["relator-id"]}, que nao e nenhuma das identidades logaveis — /parecer/:id/assinar vai 404 por posse.`);
+if (!parecerEditavel) bloqueio("parecer-editavel", "nenhum parecer em estado editavel separado do de assinatura.");
+
+// E7
+// preferencia: NAO-terminal (uma 'arquivada' e terminal e nao representa o caminho feliz) e, dentro
+// disso, de autoria da identidade :vereador (para o spec poder cruzar autor <-> quem ve o resultado).
+const naoTerminalSemAutografo = semAutografo.filter((p) => !TERMINAIS.has(p.estado));
+const autografoAlvo =
+  naoTerminalSemAutografo.find((p) => p.autorId === vereadorIdDoVereador)
+  ?? naoTerminalSemAutografo.find((p) => p.tipo === "projeto_lei")
+  ?? naoTerminalSemAutografo[0] ?? semAutografo[0] ?? null;
+const aprovadaSemAutografo = semAutografo.find((p) => p.estado === "aprovada") ?? null;
+if (!aprovadaSemAutografo) {
+  bloqueio("e7-aprovada-sem-autografo",
+    "NAO EXISTE caminho pela API para levar uma proposicao ao estado 'aprovada': nenhuma das 66 rotas de " +
+    "escrita transiciona legislativo.proposicoes.estado (db/proposicao.clj:mudar-estado! so e chamado por " +
+    "db/tramitacao.clj, que nao tem borda HTTP). As 6 'aprovada' da demo ja tem autografo e as 6 " +
+    "tramitacoes executivas sao terminais. Nao forcei SQL em tabela de dominio. E7 fica exercitavel apenas " +
+    `pelo achado do proprio mapa (o backend NAO confere estado=='aprovada' em gerar-autografo): use ` +
+    `e7.proposicaoParaAutografoId, que esta em '${autografoAlvo?.estado}'.`);
+}
+
+// ---- 6. E1: um vereador NOVO, sem mandato (todos os 17 da demo tem mandato vigente) --------
+passo("\n6) E1 — vereador novo SEM mandato (os 17 da demo ja tem mandato vigente -> 409 de sobreposicao)");
+const carimbo = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
+const novoVereador = exigir(await api(TOK.secretaria, "POST", "/cadastros/vereadores", {
+  nome: `T3 Alvo de Mandato ${carimbo}`, "nome-parlamentar": `T3 Mandato ${carimbo}`,
+}), "POST /cadastros/vereadores");
+console.log(`   vereador sem mandato: ${novoVereador.id} "T3 Alvo de Mandato ${carimbo}"`);
+
+// ---- 7. artefato -------------------------------------------------------------------------
+const artefato = {
+  geradoEm: new Date().toISOString(),
+  aviso: "Gerado por e2e/t3/preparar.mjs. Nenhum id aqui foi inventado: todos vieram de uma resposta HTTP desta corrida.",
+  base: { frontend: FRONT, backend: BACK },
+  ente: ENTE,
+  legislatura: demo.legislatura,
+  identidades: demo.identidades,
+  papeisReaisDoBanco: papeisReais,
+  vereadorPorIdentidade: { vereador: vereadorIdDoVereador, presidente: vereadorIdDoPresidente },
+  tokens: {
+    secretaria: { json: TOK.secretaria, url: urlTok("secretaria") },
+    presidente: { json: TOK.presidente, url: urlTok("presidente") },
+    vereador: { json: TOK.vereador, url: urlTok("vereador") },
+  },
+
+  e1: {
+    nota: "criar vereador e criar mandato sao criacoes do zero; so 'editar vereador' e 'registrar licenca' precisam de alvo.",
+    urlLista: comToken("/cadastros/vereadores", "secretaria"),
+    vereadorParaEditarId: "45c0a7d4-76e6-4b88-b948-1b4ca1c5946a",
+    urlVereadorParaEditar: comToken("/cadastros/vereadores?v=45c0a7d4-76e6-4b88-b948-1b4ca1c5946a", "secretaria"),
+    vereadorSemMandatoId: novoVereador.id,
+    urlVereadorSemMandato: comToken(`/cadastros/vereadores?v=${novoVereador.id}`, "secretaria"),
+    vereadorComMandatoVigenteParaLicencaId: "d54a529f-5a4d-4342-a7d5-f94189f2221c",
+    urlVereadorParaLicenca: comToken("/cadastros/vereadores?v=d54a529f-5a4d-4342-a7d5-f94189f2221c", "secretaria"),
+    avisoLicenca: "registrar licenca muda o estado do vereador para 'licenciado' e mexe no roster/quorum das sessoes — por isso o alvo e Thiago Bezerra, que NAO e nenhuma das identidades logaveis.",
+    avisoMandato: "os 17 vereadores da demo tem mandato VIGENTE; registrar mandato em qualquer um deles da 409 de sobreposicao. Use vereadorSemMandatoId.",
+  },
+
+  e2: {
+    url: comToken("/expediente", "secretaria"),
+    modelos: modelos.itens.map((m) => ({ id: m.id, chave: m.chave ?? null, nome: m.nome, tipoDocumento: m["tipo-documento"] })),
+    modeloComPlaceholderId: modelos.itens[0]?.id ?? null,
+    nota: "os dois modelos tem campo {{ }} de proposito — o plano exige exercitar 'campo nao preenchido'. Fonte: e2e/t3/fixtures.sql (nao ha rota POST de modelo).",
+  },
+
+  e3: {
+    urlEditor: comToken("/editor-proposicao", "secretaria"),
+    proposicaoEditavelId: editaveis[0]?.id ?? null,
+    proposicaoEditavel: editaveis[0] ?? null,
+    urlProposicaoEditavel: editaveis[0] ? comToken(`/ficha-materia/${editaveis[0].id}`, "secretaria") : null,
+    outrasEditaveis: editaveis.slice(1, 6),
+  },
+
+  e4: {
+    parecerEditavelId: parecerEditavel?.id ?? null,
+    parecerEditavel: parecerEditavel,
+    urlParecerEditavel: parecerEditavel ? comToken(`/parecer/${parecerEditavel.id}`, "secretaria") : null,
+    parecerAguardandoAssinaturaId: parecerAguardando?.id ?? null,
+    parecerAguardandoAssinatura: parecerAguardando,
+    urlEmitirSecretaria: parecerAguardando ? comToken(`/parecer/${parecerAguardando.id}`, "secretaria") : null,
+    urlAssinarVereador: parecerAguardando?.identidadeLogavelDoRelator
+      ? comToken(`/parecer/${parecerAguardando.id}/assinar`, parecerAguardando.identidadeLogavelDoRelator) : null,
+    identidadeDoRelator: parecerAguardando?.identidadeLogavelDoRelator ?? null,
+    todosOsPareceres: pareceres,
+    urlDarCiencia: comToken("/vereador", "vereador"),
+    avisoCiencia: "legislativo.ciencia_vereador esta VAZIA e nao ha rota HTTP que crie um evento de ciencia pendente — 'dar ciencia' pode nao ter card na home do vereador.",
+    avisoEmitirDuasVezes: "emitir um parecer que NAO transiciona para estado terminal deixa a tela oferecendo 'Emitir parecer' de novo, e o backend aceita — nao e 409.",
+  },
+
+  e5: {
+    sessaoChamadaId: sessaoChamada,
+    urlChamada: comToken(`/sessoes/${sessaoChamada}/chamada`, "secretaria"),
+    urlPlenario: comToken(`/sessoes/${sessaoChamada}/plenario`, "secretaria"),
+    rosterDaSessaoChamada: chamadaNova.linhas.map((l) => ({ vereadorId: l["vereador-id"], nome: l.nome, estado: l.estado })),
+    sessaoFolhaId: sessaoFolha,
+    urlFolha: comToken(`/sessoes/${sessaoFolha}/folha`, "secretaria"),
+    confirmarPresenca: {
+      url: comToken("/votar", "vereador"),
+      sessaoQueOVotarAbre: sessaoVotar,
+      vereadorId: vereadorIdDoVereador,
+      presencaZerada: presencaVereadorZerada,
+      nota: "/votar NAO aceita parametro de sessao — deriva de GET /meu/sessao-atual. Por isso confirmar-presenca NAO roda na sessaoChamadaId.",
+    },
+  },
+
+  e6: {
+    url: comToken("/votar", "presidente"),
+    identidadeQueVota: "presidente",
+    motivoDaIdentidade: "a identidade :presidente tem papel 'vereador' no banco E esta PRESENTE na sessao do /votar — vota sem depender de E5 rodar antes. A :vereador foi deliberadamente deixada AUSENTE para E5 exercitar 'confirmar a propria presenca'.",
+    preambuloObrigatorio: "se os botoes Sim/Nao/Abster NAO aparecerem e a tela mostrar 'Confirme sua presenca para poder votar', clique 'Confirmar presenca' PRIMEIRO e so entao vote. Isso nao e defeito do spec: `estado.presentes` do cockpit so e' alimentado por evento SSE (hidratarQuorum nao preenche presentes), e o replay da CanalStore e de 5 min — passada a janela, quem esta presente no banco aparece como ausente na tela.",
+    rotulosDosBotoes: { sim: "Sim", nao: "Não", abstencao: "Abster" },
+    sessaoId: sessaoVotar,
+    vereadorId: vereadorIdDoPresidente,
+    votacao: votacaoAberta,
+    reabrirVotacao: sessaoVotar ? {
+      metodo: "POST", url: `${BACK}/sessoes/${sessaoVotar}/votacoes`,
+      header: "Authorization: Bearer <tokens.secretaria.json>",
+      corpo: { "objeto-tipo": "proposicao", "objeto-id": votacaoAberta?.objetoId ?? null, modalidade: "nominal", "quorum-tipo": "maioria_simples" },
+      quando: "se passaram mais de ~5 min desde geradoEm — a janela de replay do SSE e de 5 min e o placar nao vem de snapshot.",
+    } : null,
+  },
+
+  e7: {
+    proposicaoParaAutografoId: autografoAlvo?.id ?? null,
+    proposicaoParaAutografo: autografoAlvo,
+    url: autografoAlvo ? comToken(`/pos-aprovacao/${autografoAlvo.id}`, "secretaria") : null,
+    candidatosSemAutografo: semAutografo,
+    candidatosNaoTerminais: naoTerminalSemAutografo,
+    aprovadaSemAutografoId: aprovadaSemAutografo?.id ?? null,
+    nota: "depois que o spec gerar o autografo, a tramitacao executiva nasce 'aguardando' na MESMA tx — so entao 'registrar resposta do Executivo' fica exercitavel, na MESMA pagina.",
+  },
+
+  e8: {
+    url: comToken("/notificacoes", "vereador"),
+    identidade: "vereador",
+    naoLidas,
+    naoLidaId: naoLidas[0]?.id ?? null,
+    nota: "cada run de E8 CONSOME uma notificacao (marcar como lida e irreversivel). Sao 3 fixtures; depois disso, re-rode fixtures.sql com chaves novas.",
+  },
+
+  bloqueios,
+};
+
+mkdirSync(dirname(ARQ_SAIDA), { recursive: true });
+writeFileSync(ARQ_SAIDA, JSON.stringify(artefato, null, 2) + "\n", "utf8");
+
+console.log(`\n=== artefato: ${ARQ_SAIDA} ===`);
+console.log(`bloqueios: ${bloqueios.length}`);
+for (const b of bloqueios) console.log(`  - ${b.chave}`);
+console.log("");

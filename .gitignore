@@ -37,3 +37,6 @@ dist/
 
 # saída do graphify (ferramenta de knowledge-graph local) — não é produto
 graphify-out/
+
+# dumps locais de banco (pre-reconstrucao) — nunca versionados
+.backups/

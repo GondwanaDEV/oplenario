@@ -1,0 +1,44 @@
+{
+ "grupo": "E8 — Notificacoes (vereador)",
+ "achados": [
+  "A canônica identidade `identidades.vereador` de e2e/.artifacts/demo-ids.edn (49c23663-c30e-4829-b3be-c7481f107275) tem ZERO linhas em paineis.notificacao_caixa no ente da demo (10000000-0000-0000-0000-000000000001) — verificado ao vivo via psql. Navegar /notificacoes com esse token mostra inbox VAZIA: vazia=true, nenhum botão 'Marcar como lida' para clicar.",
+  "A única forma no repo de POPULAR a inbox de um vereador é a semente `seed-demo/notificacoes` (apps/backend/demo/seed_demo.clj:602-648), e ela é EXPLICITAMENTE NÃO-IDEMPOTENTE: a cada chamada cria uma identidade-vereador NOVA (random-uuid), não reutiliza os ids de demo-ids.edn, e imprime um token/URL novos no stdout a cada execução. Não há seed determinística que dê uma notificação ao vereador canônico do resto da demo.",
+  "`semear-tudo.sh`/e2e/rodar.sh NÃO chamam `seed-demo/notificacoes` — confirmado por grep. Ou seja, a rota E8 fica inatingível pela interface na demo padrão sem um passo manual extra fora do fluxo de semeadura documentado.",
+  "Existe HOJE (verificado ao vivo, 09/09) 1 linha não-lida em paineis.notificacao_caixa presa ao ente da demo, mas pertencente à identidade `presidente` (a3aaef2f-ca3c-441b-92c7-d0320c989ce4, que também carrega papel 'vereador' — vinculo.tipo='vereador' + usuario_papel inclui 'vereador' e 'admin_ente'). Essa linha é resíduo do T2 grupo B (sonda HTTP), não de uma semente oficial — funciona AGORA como atalho para exercer a escrita pela interface, mas não é reproduzível: some em qualquer reset/recriação do banco (down -v, ou nova rodada limpa de semear-tudo.sh).",
+  "O caso de erro 'marcar a de outro destinatário' listado no plano NÃO é alcançável pela interface por desenho: a tela só renderiza os itens do próprio ator (destinatario-identidade-id sempre vem de (:ator req), nunca do cliente) — não existe elemento de UI que aponte para o :id de outra pessoa. Só é exercitável via chamada HTTP direta (já coberto na Trilha 2), não via clique de browser.",
+  "'Marcar duas vezes' NÃO é um caso de erro no sistema real: o backend é IDEMPOTENTE por desenho (COALESCE(lida_em, now()) — segunda chamada devolve 200 com o MESMO recibo, nunca falha). A tela reforça isso removendo o botão assim que o item vira 'Lida' e desabilitando o botão (`disabled={estadoMarcacao==='enviando'}`) durante o request em voo — não há caminho de UI normal para gerar um segundo POST genuíno após o primeiro completar; só um replay manual via devtools/network alcançaria o servidor duas vezes, e mesmo aí o resultado é sucesso, não erro."
+ ],
+ "escritas": [
+  {
+   "nome": "marcar notificação como lida",
+   "tem_tela": true,
+   "rota_next": "apps/frontend/src/app/(vereador)/notificacoes/page.tsx",
+   "url_navegavel": "http://localhost:3000/notificacoes?token=%7B%22identidade-id%22%3A%22a3aaef2f-ca3c-441b-92c7-d0320c989ce4%22%2C%22ente-id%22%3A%2210000000-0000-0000-0000-000000000001%22%2C%22papeis%22%3A%5B%22vereador%22%5D%7D — FUNCIONA HOJE (verificado ao vivo) porque essa identidade tem 1 notificação não-lida residual no banco (id=9a6c4e8b-00e0-4d5a-a9f4-ceed1323c6c0). Não é reproduzível após reset de banco — ver achados. Caminho DETERMINÍSTICO: rodar `clojure -X:seed seed-demo/notificacoes` primeiro (não-idempotente, gera identidade+token novos a cada chamada) e usar a URL impressa no stdout dessa semente em vez desta.",
+   "endpoint_api": "POST /meu/notificacoes/:id/lida (proxy Next.js em /api/meu/notificacoes/:id/lida via rewrites fallback); gate `auth` apenas, sem exigência de papel — só posse (WHERE ente_id+id+destinatario_identidade_id)",
+   "tabela_db": "paineis.notificacao_caixa (coluna lida_em: NULL=não lida; UPDATE seta lida_em=COALESCE(lida_em, now()))",
+   "papel": "vereador (mas a rota aceita qualquer ator autenticado com uma notificação sua — GET/POST /meu/notificacoes não exigem papel 'vereador' no backend, só a tela (vereador)/notificacoes exige via GuardVereador no layout)",
+   "passos_browser": [
+    "1. Confirmar stack viva: `cd apps/backend && docker compose ps` (app/frontend/postgres healthy).",
+    "2. [Recomendado, determinístico] Rodar a semente dedicada contra o mesmo ente da demo: `docker run --rm --network oplenario_default -v \"$(pwd)/apps/backend\":/app -v <mesmo-scratch-da-base>:/demo-scratch -w /app -e DATABASE_URL=jdbc:postgresql://postgres:5432/oplenario -e MINIO_ENDPOINT=http://minio:9000 -e KEYCLOAK_BASE_URL=http://keycloak:8080 clojure:temurin-21-tools-deps clojure -Sdeps '{:aliases {:seed {:extra-paths [\"demo\"]}}}' -X:seed seed-demo/notificacoes` — captura no stdout a linha `http://localhost:3000/notificacoes?token=...` já pronta.",
+    "3. Aguardar ~1s (o relay do outbox precisa drenar `notificacao.requisitada` até a projeção `paineis`).",
+    "4. Abrir no browser a URL capturada no passo 2 (ou, para o atalho de hoje sem rodar a semente, a url_navegavel acima).",
+    "5. Confirmar carregamento: heading role=heading name contendo 'Notificações', e um `span.badge` com contagem >=1 ao lado do h1.",
+    "6. Localizar `article.nt.nao-lida` cujo `h3` tem o texto 'A sua proposicao virou lei' (ou 'A sua proposicao virou lei — Lei 1/2026').",
+    "7. Dentro desse article, localizar o botão: role=button, name visível 'Marcar como lida' (classe `nt-lida`, `type=\"button\"`).",
+    "8. Clicar no botão.",
+    "9. Aguardar: o botão some e é substituído por `span.nt-lida-marca` com texto 'Lida'; o `span.nt-ponto` (bolinha de não-lida) some; o badge do h1 decresce ou desaparece (useMinhasNotificacoes.recarregar() refaz o GET)."
+   ],
+   "assercao_db": "SELECT id, lida_em FROM paineis.notificacao_caixa WHERE id = '<id-clicado>' AND lida_em IS NOT NULL; -- deve devolver 1 linha com lida_em preenchido. Para o atalho de hoje: SELECT id, lida_em FROM paineis.notificacao_caixa WHERE id='9a6c4e8b-00e0-4d5a-a9f4-ceed1323c6c0';",
+   "casos_de_erro": [
+    {
+     "caso": "marcar a de outro destinatário",
+     "onde_surge": "NÃO TRATADO NA TELA por ser inatingível: a UI só lista `n.id` dos itens do próprio ator (GET /meu/notificacoes resolve destinatário do :ator, nunca do cliente) — não existe botão nem link na interface apontando para o :id de outra pessoa. O BACKEND recusa corretamente (marcar-lida-handler em diplomat/http/in.clj:111-120): update-count 0 -> controllers/marcar-lida devolve nil -> handler responde 404 uniforme {:erro \"notificacao nao encontrada\"}, indistinguível de id inexistente ou malformado (anti-oráculo, adapters/in/notificacao.clj). Só reproduzível via chamada HTTP direta com o :id de outro ator (já coberto fora da interface, na Trilha 2), não via clique de browser."
+    },
+    {
+     "caso": "marcar duas vezes",
+     "onde_surge": "TRATADO nos dois lados, e não é um erro por desenho. TELA: botão tem `disabled={estadoMarcacao === \"enviando\"}` enquanto o POST está em voo, e some de vez assim que `n.lida` vira true após `recarregar()` — não há caminho de clique normal para reenviar depois do primeiro sucesso. BACKEND: `marcar-lida!` em db/notificacao_caixa.clj usa `SET lida_em = COALESCE(lida_em, now())`, então a 2ª chamada (via replay manual de rede/devtools, ou clique duplo simultâneo se o disabled falhar) devolve 200 com o MESMO carimbo — nunca 409/erro. Verificação real: reenviar o mesmo POST duas vezes contra o mesmo :id e conferir que `lida_em` não muda entre a 1ª e a 2ª resposta."
+    }
+   ]
+  }
+ ]
+}

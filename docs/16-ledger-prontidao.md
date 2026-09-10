@@ -963,3 +963,357 @@ experimento seguinte** — cheguei a ler uma falha do experimento anterior como 
 atual. Ambos limpos. A regra que faltava: **defeito plantado em código que ESCREVE precisa de limpeza
 explícita antes do próximo experimento**, e o próprio experimento deve ser conferido pelo nome do
 teste que falhou, nunca só pela contagem de falhas.
+
+---
+
+# Fase 11 — TRILHA 3: as 24 escritas pela interface (10/09/2026, branch `trilha-3-interface`)
+
+A T2 exerceu as 42 escritas **sem botão**, por HTTP. A T3 é o que ela não alcança: **o caminho que o
+usuário percorre**. Uma rota pode responder 201 e o botão não submeter, a mensagem de erro ser
+genérica, a tela não recarregar.
+
+## O que a T1 provou de novo, de graça, ao religar a máquina
+
+O Docker estava desligado no início da sessão. Ligar o OrbStack **fez a stack inteira voltar sozinha** —
+nenhum `compose up` foi digitado. É a prova natural do critério T1.1, que antes só tinha sido exercitada
+de propósito:
+
+| Critério | Veredicto | Prova |
+|---|---|---|
+| T1.1 sobe do zero e volta sozinha | ✅ | 5 containers `healthy` sem comando nenhum (`restart: unless-stopped`) |
+| T1.2 zero erro em log sob operação | ✅ | 0 linhas de ERROR/exception no `app` desde o boot. Os 2 erros do Postgres no período **são meus** — duas consultas `psql` minhas com nome de coluna errado |
+| T1.5 workers vivos | ✅ | `shared.outbox`: **0 pendente / 317 processado** — o relay drenou |
+
+**Ressalva honesta:** a stack esteve ociosa nessa medição. T1.2 sob carga real só é provado pela
+caminhada da própria T3.
+
+**Achado menor, registrado para não virar ruído de fundo:** o `outbox_relay` não encerra limpo. Ao
+desligar, ele morre com `java.io.EOFException` não tratada (`outbox_relay.clj:70`, `ciclo-lider`) e
+despeja stack trace. Datado: trace às 20:42:05, container reiniciado às 22:28:08. Não é erro de
+operação — mas é barulho que **mascararia** um erro real numa leitura apressada de log.
+
+## A Casa estava corrompida, e isso não era opinião
+
+Medido por `psql` antes de qualquer coisa:
+
+| Esperado (semente) | Real |
+|---|---|
+| `…0212` **agendada** | **encerrada** |
+| `…0211` aberta com votação ao vivo | única votação **encerrada** — telão sem placar |
+| Nenhuma votação órfã | **2 votações abertas em sessões encerradas** (`…0210`, `…0212`) |
+| 3 sessões | **4** — uma extra, criada pela sonda da T2 |
+
+Consequência dura: **E6 (votar) era literalmente inexecutável** — o cockpit não tinha votação aberta
+na sessão aberta. A "reconstrução limpa antes de cada trilha" que o Método Comum do plano exige
+deixou de ser higiene e virou pré-requisito.
+
+## O `down -v` foi RECUSADO pela máquina, e o desvio ficou melhor que o plano
+
+Antes de destruir qualquer coisa, o dump: `.backups/oplenario-pre-t3.dump` (4.2 MB, 1243 objetos).
+E a prova de que ele **restaura**, não só de que é legível — `pg_restore -l` prova a segunda coisa,
+não a primeira:
+
+    CREATE DATABASE restore_probe;  pg_restore -d restore_probe < dump   -> exit 0, 0 erros
+    vereadores=2801  proposicoes=4498  sessoes=2976  votos=745
+
+Com a rede armada, `docker compose down -v` foi **bloqueado pelo classificador de permissão**. Não foi
+contornado. E a recusa empurrou para a saída melhor: **as precondições da T3 são montadas pela API,
+aditivamente**, em vez de reconstruir o mundo. Sessão nova criada por `POST /sessoes` devolveu
+`201 {"numero-sequencial":2}` — de quebra, a prova ao vivo de que o **contador gapless consertado na
+T2 funciona**.
+
+## O mapa: 24/24 escritas têm tela, e o plano contava errado
+
+Dez agentes mapearam E1–E8 (rota Next, componente, handler, endpoint, tabela, seletores lidos do JSX,
+casos de erro dos dois lados). Resultado em `e2e/t3/mapa-E<N>.json`.
+
+**Nenhuma das 24 escritas está sem tela.** A premissa do plano se sustentou — ao contrário do que
+aconteceu na T2 grupo A.
+
+**Erro do plano, corrigido:** o cabeçalho de E5 dizia `· 6` mas a linha lista **7 verbos**, e o mapa
+achou **7 endpoints distintos**. A soma dos grupos dava 23 contra o `24` do título da trilha. Adotado
+**E5 = 7, total = 24** (`docs/superpowers/plans/2026-09-08-exploratorio-de-escrita.md:128`).
+
+## A autenticação não exigia Keycloak — e isso economizou a fase inteira
+
+A memória `oplenario-subir-com-login` descreve o caminho caro (Keycloak, `--profile auth`, imagem de
+produção, ~500 MiB numa VM de 3.9 GiB que já derrubou o Postgres por OOM). **Nada disso é necessário
+para a T3.** Em modo dev a credencial é um *dev-token*: JSON de claims **cru, sem assinatura**, na
+querystring da página (`?token=<json url-encoded>`), lido pelo `AuthProvider` e repassado como
+`Authorization: Bearer` pelo boundary único `apiFetch`. Verificado ao vivo: `/proposicoes` sem token
+dá 307 para `/entrar`; com token, 200. `/eu` devolve `papeis:["secretario"]` para a secretaria,
+`["vereador","admin_ente"]` para o presidente.
+
+**Observação de segurança, não defeito:** o `idp-dev` do backend confia integralmente no JSON do
+token, sem verificar assinatura. Está corretamente atrás de `APP_ENV ∈ {dev,test}` e o middleware do
+Next exige `NODE_ENV !== production`. É desenho, não buraco — mas é a razão pela qual **`APP_ENV` é
+um interruptor de segurança**, e merece estar assim nomeado em qualquer runbook de produção.
+
+## Os bloqueios de dado que o mapa destapou (nenhum deles é bug — são buracos de semente)
+
+| Grupo | Bloqueio | Natureza |
+|---|---|---|
+| **E2** | `legislativo.documento_modelo` tem **zero linhas** na semente **e não existe rota POST** para criar (só `GET /legislativo/documento-modelos`) | Bloqueia as **3** escritas do grupo. INSERT SQL é a única via |
+| **E7** | As 6 matérias `aprovada` **já têm autógrafo**; as 6 `tramitacao_executiva` são todas terminais | Sem matéria elegível, o caminho feliz não existe |
+| **E8** | A identidade canônica `:vereador` tem **zero** notificações; `semear-tudo.sh` **não chama** `seed-demo/notificacoes`, e essa semente é **não-idempotente** (cria identidade nova e **sobrescreve `demo-ids.edn`**) | Rota inatingível na demo padrão |
+| **E5** | O vereador canônico **já está presente** na `…0211` (`semear-aberta!` marca os 12 primeiros) | "Confirmar a própria presença" nunca renderiza |
+| **E4** | A identidade fixa de vereador **raramente é o `relator_id`** sorteado | Maior chance de 404 por posse |
+| **E6** | `abrir-votacao` (`POST /sessoes/:id/votacoes`) **não tem tela** | A precondição de E6 não é alcançável pela interface |
+
+**Uma escrita foi recuperada pelo crítico:** "decidir justificativa" parecia bloqueada, mas **não há
+justificativa semeada nenhuma** — logo ela se abre pela própria UI (`JustificativaAbrir`) antes de ser
+decidida. O mapa a dava como perdida por ter lido o banco sujo em vez da semente.
+
+
+## A corrida: 62 testes verdes, e a raiz que era MINHA
+
+Os 8 specs foram escritos em paralelo, revisados adversarialmente, corrigidos, e então rodados **em
+série** — escrita concorrente na mesma Casa append-only é exatamente o que não pode acontecer.
+
+**A primeira corrida travou tudo, e a causa não era o produto.** Todos os testes de tela de sessão
+morriam em ~31s uniformes, e os mais longos em 2.5 min. Cheguei a redigir isso como defeito de produto
+("a tela não reflete a escrita ao vivo") antes de ler o log do frontend, que dizia:
+
+    GET /api/sessoes/.../plenario 200 in 30.2s
+
+É o **SSE do plenário** — stream de vida longa. E `page.goto()` do Playwright espera o evento `load`,
+que **não dispara enquanto há conexão aberta**. Toda navegação para uma tela com SSE bloqueava 30s; um
+teste com dois `goto`/`reload` estourava o relógio sem nunca chegar na asserção. Corrigido com
+`waitUntil: "domcontentloaded"` em **87 navegações** dos 8 specs.
+
+**Fica registrado como erro meu, não do produto** — é a terceira vez nesta frente que o instrumento
+mede a si mesmo (as outras duas estão na Fase 10). E a segunda armadilha de instrumento da fase: o
+`npx tsc --noEmit` que o harness manda rodar **não checa nada** — `e2e/` não tem `typescript` nem
+`tsconfig.json`, então `npx` baixa um pacote homônimo que imprime *"This is not the tsc command you are
+looking for"* e sai **0**. Um gate incapaz de reprovar, achado por dois agentes independentes. O
+type-check real (typescript 5.6.3 + tsconfig próprio) foi provado capaz de reprovar com defeito
+plantado: `TS2322`, exit 2.
+
+### Placar final por grupo
+
+| Grupo | Verdes | fixme | O que o fixme guarda |
+|---|---|---|---|
+| E1 Cadastros | 16 | 2 | precondição só-de-ida (licenciar não tem volta pela tela) |
+| E2 Expediente | 8 | 0 | — |
+| E3 Matéria | 10 | 0 | — |
+| E4 Parecer | 9 | 1 | "dar ciência" não tem produtor de evento |
+| E5 Chamada | 7 | 3 | carry T3-1 (ver abaixo) |
+| E6 Votar | 3 | 2 | casos documentados por leitura |
+| E7 Pós-aprovação | 7 | 0 | — |
+| E8 Notificações | 2 | 0 | — |
+| **Total** | **62** | **8** | |
+
+---
+
+# Os achados de PRODUTO da Trilha 3
+
+Todos com evidência dos dois lados — o que a tela faz **e** o que o banco tem. Nenhum é alegação.
+
+## 🔴 T3-A · Autógrafo nasce em matéria que a Câmara nunca aprovou
+
+**Nenhuma das duas pontas confere `proposicao.estado === 'aprovada'`.** O backend
+(`legislativo/controllers.clj:432-441`) guarda só duplicidade e texto vigente. A tela põe o gate
+apenas no *link de entrada* (`ficha-materia/acoes-card.tsx:23`) — mas `/pos-aprovacao/:id` é
+**navegável direto por URL**, e ali o botão aparece sempre que não há autógrafo.
+
+Provado ao vivo, 4 vezes, e o estado ficou no banco:
+
+    8/2026  | 8344f6b3… | em_comissoes     | aguardando
+    9/2026  | c7aecac5… | em_pauta         | sancionado
+    10/2026 | 3b59cdbb… | em_pauta         | sancionado
+    11/2026 | 044ab363… | aguardando_pauta | sancionado
+
+Quatro **autógrafos numerados** — artefato legal, numeração gapless — para matérias ainda em
+tramitação. Duas delas com o Executivo "sancionando" o que a Câmara não votou. É o achado mais grave
+da frente: não corrompe dado por acidente, **fabrica um ato jurídico que não aconteceu**.
+
+## 🔴 T3-B · Os 19 hooks de escrita nunca re-armam `vivoRef` — nenhum erro do servidor aparece em dev
+
+Os hooks de escrita de `apps/frontend/src/lib/use-*.ts` fazem
+`useEffect(() => () => { vivoRef.current = false; }, [])` e **nunca re-armam o ref**. Os hooks de
+**leitura** fazem certo (`use-chamada.ts:143`). Sob React StrictMode — que roda em dev — o cleanup
+executa no mount, `vivoRef.current` nasce `false`, e todo `setEstado("erro")` vira no-op.
+
+A contagem não deixa dúvida sobre o padrão: **8 hooks armam, e são todos de leitura; 19 só desarmam, e
+são todos de escrita.**
+
+Efeito medido: 1,5 s depois de um `409 {"erro":"ja existe mandato vigente sobreposto..."}`, o botão
+continua **"Salvando…" desabilitado** e há **zero alerta na página**. O usuário não recebe pista
+nenhuma de que a Casa recusou. Falseável dos dois lados: o mesmo caso em RTL, **sem** StrictMode,
+passa. Conserto: uma linha por hook.
+
+## 🟠 T3-C · "Registrar retorno" grava e a tela nunca confirma
+
+POST 200, linha no banco (`estado='sancionado'`, `respondido_em` preenchido) — e a mensagem "Retorno do
+Executivo registrado" **não aparece em lugar nenhum**. Em
+`pos-aprovacao/conteudo-pos-aprovacao.tsx:170`, o `<p role="status">` está **dentro** do branch
+`tramitacaoExecutiva?.estado === "aguardando"`; no sucesso o handler troca o estado e a mensagem no
+mesmo tick, o branch desmonta antes de pintar, e a mensagem morre com ele.
+
+O detalhe que torna isso instrutivo: **o autor previu esse defeito e o corrigiu para a ação irmã** —
+a mensagem do "gerar" foi içada para uma região compartilhada fora dos branches (`:139-141`), com
+comentário explicando o porquê. A correção simplesmente não foi replicada.
+
+## 🟠 T3-D · Editar só a ementa cunha uma versão de TEXTO nova, byte-a-byte idêntica
+
+O textarea vem pré-preenchido e o form **reenvia o texto intacto**; o backend
+(`components/repositorio.clj:301-315`) decide promover por `(when-let [corpo (:texto m)])` — **presença
+da chave, nunca "o texto mudou"**. Em `legislativo.proposicao_texto_versao` da proposição `1511bc9e`:
+**6 versões com md5 idêntico** (`bc68d42d…`), 5 delas `origem_versao='edicao'` geradas por corridas que
+só mexeram na ementa. `lock_version` +2 com `texto`, +1 sem.
+
+Versão de texto é **ato auditado** (§22.4 eixo B). A trilha ganha uma "edição" por salvamento de
+metadado, sem edição nenhuma.
+
+## 🟠 T3-E · O parecer é invisível para o vereador, e o 403 é indistinguível de 404
+
+`GET /legislativo/pareceres/:id` exige papel `secretario` **também no `:get`**
+(`legislativo/diplomat/http/in.clj:523`), não só nas escritas. Três consequências medidas:
+
+- O vereador recebe o **chassi interno da secretaria** — não há guard de papel em `(interno)/layout.tsx`
+  (compare com o `GuardVereador` de `(vereador)/layout.tsx:47`) — incluindo o ator **hardcoded**
+  "Rita Campos · Servidora legislativa".
+- O 403 cai no **mesmo ramo de erro do 404**: "Não foi possível carregar este parecer". "Você não tem o
+  papel" fica indistinguível de "isto não existe".
+- A escrita é inalcançável pela interface, então o gate só se prova por HTTP.
+
+## 🟡 Os menores, todos reproduzidos
+
+| # | Achado | Evidência |
+|---|---|---|
+| T3-F | **Emitir parecer duas vezes não é bloqueado** | `50a690c2` foi de `lock_version` 5 → 11, ainda em `em_elaboracao`; a 2ª emissão grava com 200 |
+| T3-G | **Ementa só com espaços passa** em todas as camadas | nem `required` (só barra length 0), nem Malli (sem `:min`), nem CHECK |
+| T3-H | **Criar proposição não tem `idempotency-key`** | duas abas concorrentes = **duas** proposições distintas |
+| T3-I | **Erro do servidor chega como "requisicao invalida"** | o interceptor global (`interceptors.clj:157`) troca toda `:validacao/invalido` pelo literal opaco, e o hook o usa cru como texto do `role=alert`. Conflito de CAS fica indistinguível de JSON malformado. A rota irmã de autógrafo trata melhor (traduz `ex-message` na borda) — **duas escritas da mesma tela, duas qualidades de erro** |
+| T3-J | **"Nova chamada" mente por 30s** | dentro da `janela-de-deduplicacao-de-chamada` o botão fica clicável, o POST volta 200 `:ja-registrado`, **nenhum ato nasce** e a tela não conta isso ao operador |
+| T3-K | **Assinar parecer terminal → 500 opaco** | o trigger `trg_pareceres_imut_estado` reverte tudo (banco confirma: nada gravou), mas o erro sobe sem `:tipo` e vira 500 |
+
+## Os `[GAP]` de produto que a T3 destapou (não são bugs — são rotas que não existem)
+
+| Falta | Consequência |
+|---|---|
+| Rota que leve proposição a **`aprovada`** | o caminho feliz de E7 só é alcançável **através do defeito T3-A** |
+| Rota que **crie parecer** | E4 era spec de uso único: emitir leva a estado terminal e o trigger trava tudo depois |
+| Rota que **crie `documento_modelo`** | a aba "Modelos" é `<EmBreve>`; sem INSERT manual, "Gerar documento" fica `disabled` para sempre |
+| Produtor de evento de **ciência** | `publicar-norma!` não tem chamador em diplomat nenhum; a seção "Para sua ciência" nunca renderiza |
+| Rota que **crie remessa** | herdado da T2, segue aberto |
+
+## ERRATA — o "achado T3-1" era falso, e a causa era o instrumento pela TERCEIRA vez
+
+Esta seção registrava um carry: *"a escrita grava e a linha já renderizada não muda, nem em 2.5
+minutos"*. **Isso estava errado, e o modo como estava errado é o que interessa: foi deduzido do
+timeout, nunca observado.** O teste jamais chegou a olhar a linha.
+
+**A causa real, medida com cronômetro por passo:** `Response.json()` do Playwright **nunca resolve
+quando o código da página fez o `fetch` e não consumiu o corpo**. `marcarLinha`
+(`apps/frontend/src/lib/use-chamada.ts`) só lê o corpo no ramo de erro — no `201` o stream fica
+intacto. O helper `idDaResposta` do spec ficava pendurado ali. **149 dos 150 s eram uma única linha, e
+era minha.** O teste 1 passava porque `registrarChamada` faz `await ra.json()` no cliente, drenando o
+corpo.
+
+Dois agravantes esconderam isso por cinco ciclos: o `await` estava dentro de um `try/catch` silencioso,
+e o erro final apontava sempre o passo *seguinte* (`page.reload`), a 149 s de distância da causa.
+
+**O comportamento real, medido por sonda não-bloqueante** lendo o DOM cru em t+0 ms, t+1,5 s e t+5 s
+depois do 201 — nas três leituras:
+
+    data-estado="ausente" · pressed=[presente-plenario=false, presente-remoto=false, ausente=true]
+
+A atualização otimista chega à tela **na hora**. É verdade que `marcarLinha` é a única das 4 mutações
+do hook sem `recarregar()` no sucesso — mas isso é **desenho, não defeito**: ela aplica `linhasOtimistas`
+com rollback exato, e o SSE reconcilia logo atrás. O teste passou a **afirmar** esse comportamento, com
+teto curto de 5 s de propósito, para que a re-hidratação periódica de 30 s não "salve" a asserção e o
+teste passe a provar a coisa errada.
+
+**E5 fechou 12/12, zero fixme.**
+
+## Achado de método que esta fase pagou caro para aprender
+
+**Um timeout de teste aponta onde o relógio acabou, nunca onde o tempo foi gasto** — e aumentar o
+timeout (90 s → 150 s) **afasta** a medição em vez de aproximá-la. Um cronômetro por passo custou uma
+corrida e derrubou um "defeito de produto" que já estava escrito como conclusão em três lugares do
+spec e em uma seção deste ledger.
+
+É a terceira vez nesta frente que o instrumento mede a si mesmo, e a terceira raiz diferente:
+Fase 10 (a sonda medindo o próprio fixture), Fase 11 (o `goto` esperando `load` com SSE aberto), e
+agora o `json()` esperando um corpo que ninguém iria drenar. As três tinham a mesma assinatura — um
+resultado estável e plausível que eu quase publiquei como fato do produto.
+
+## Defeito de teste achado ao destravar, e que valia um voto errado
+
+`getByRole("button", { name: "Deferir" })` casa **por substring** e resolvia dois elementos: "Deferir" e
+"Ind**eferir**", lado a lado no mesmo bloco (`chamada/page.tsx:650-666`). O strict mode do Playwright
+pegou. **Num teste menos estrito, o clique em "Deferir" poderia ter virado indeferir em silêncio** —
+e a asserção seguinte ainda passaria, porque as duas decisões mudam o mesmo campo. Corrigido com
+`exact: true` nos dois locators.
+
+## Carry aberto — risco latente nos outros 7 specs
+
+`grep` confirma: E1, E3, E6 e outros fazem `await resposta.json()` sobre respostas de
+`page.waitForResponse` **sem teto**. Estão verdes hoje só porque, nesses casos, o código da página
+consome o corpo. **Qualquer hook novo que deixe de ler o corpo de uma resposta de sucesso reproduz o
+travamento** — com o erro apontando o lugar errado, como aconteceu aqui. A correção, se o Daouda
+quiser, é promover o `idDaResposta` com teto a helper compartilhado dos 8 specs.
+
+## A suíte da T3 fecha VERDE
+
+Corrida cheia, os 8 specs na ordem de dependência, `preparar.sh` antes de cada um:
+
+| Grupo | Verdes | fixme |
+|---|---|---|
+| E1 Cadastros | 16 | 2 |
+| E2 Expediente | 8 | 0 |
+| E3 Matéria | 10 | 0 |
+| E4 Parecer | 9 | 1 |
+| E5 Chamada | 12 | 0 |
+| E6 Votar | 3 | 2 |
+| E7 Pós-aprovação | 7 | 0 |
+| E8 Notificações | 2 | 1 |
+| **Total** | **67** | **6** |
+
+**Duas correções de fixture que a corrida cheia destapou** (e que rodar spec a spec escondia): as
+notificações de fixture do E8 ficavam lidas da corrida anterior e o INSERT idempotente não as
+restaurava — `fixtures.sql` passou a **resetá-las**; e o E3 escolhia o alvo "sem texto" por **índice
+fixo**, sendo que a ordem de `GET /proposicoes` não é estável entre corridas — passou a escolher por
+propriedade (`lockVersion === 0` ⟺ sem versão de texto, conferido por SQL).
+
+---
+
+# T3-B CONSERTADO — e o teste que documentava o defeito reprovou, como devia
+
+O achado **T3-B** (os hooks de escrita que nunca re-armam `vivoRef`) não ficou só registrado: foi
+fechado, com o gate que impede a volta.
+
+**O conserto:** 19 hooks de escrita passaram de
+`useEffect(() => () => { vivoRef.current = false; }, [])` para o mesmo padrão que os hooks de leitura
+já usavam — armar no mount, desarmar no cleanup. **Auditoria depois: 27 hooks armam, nenhum desarma
+sem armar.**
+
+**O gate estrutural:** `apps/frontend/src/lib/vivo-ref-lint.test.ts`. É lint e não teste de
+comportamento **de propósito** — o defeito é uma *omissão* que se repete a cada hook novo, e um teste
+por hook seria esquecido exatamente do mesmo jeito que o `vivoRef.current = true` foi. O gate foi
+**provado capaz de reprovar**: com a linha removida de um hook, ele falha **nomeando o arquivo**
+(`use-marcar-lida.ts`) — vermelho que aponta o defeito, não vermelho genérico. Traz também uma guarda
+contra virar vácuo: afirma que inspecionou mais de 20 arquivos, para o caso de uma renomeação de pasta
+esvaziar o glob e deixar o teste passar sem olhar nada.
+
+**A prova de que o conserto é real veio de graça, e é o melhor pedaço desta fase.** O teste
+`criar mandato — mandato sobreposto (409)` do E1 **nasceu afirmando o defeito**: 1,5 s depois do 409, o
+botão preso em "Salvando…" e zero alerta. Na primeira corrida cheia depois de mexer no hook, **ele
+reprovou** — porque o alerta passou a aparecer. É a armadilha que este projeto já tinha registrado
+(`oplenario-teste-que-afirma-o-vazamento`): **teste que exige o defeito trava o conserto**. Quem o
+escreveu previu o momento e deixou, no próprio corpo do teste, a instrução do que trocar no dia do
+conserto. Trocado: o teste virou de *vermelho-que-documenta* para *verde-que-prende*.
+
+## Estado final da Trilha 3
+
+| Gate | Resultado |
+|---|---|
+| **T3, corrida cheia 1** | **67 passou · 0 falhou · 6 fixme** |
+| **T3, corrida cheia 2** | **67 passou · 0 falhou · 6 fixme** |
+| Suíte unitária do frontend | **137 arquivos · 1132 testes · 0 falhas** |
+| Lint estrutural do `vivoRef` | verde, e **provado capaz de reprovar** |
+
+Duas corridas cheias consecutivas, 100% verdes — o critério de pronto que o plano pedia para a T1.3 e
+que a Fase 10 não conseguia cumprir por causa do conflito estrutural.
+
