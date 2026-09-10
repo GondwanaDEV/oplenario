@@ -8,6 +8,7 @@
   (:require [honey.sql :as sql]
             [next.jdbc :as jdbc]
             [oplenario.kernel.db-util :as comum]
+            [oplenario.legislativo.db.texto-versao :as texto]
             [oplenario.legislativo.logic :as logic]))
 
 (set! *warn-on-reflection* true)
@@ -15,7 +16,7 @@
 (def ^:private colunas
   [:id :ente_id :objeto_tipo :objeto_id :modalidade :quorum_tipo :estado :resultado
    :total_sim :total_nao :total_abstencao :base_membros :votacao_corrige_id
-   :sessao_id :pauta_item_id :lock_version])
+   :sessao_id :pauta_item_id :texto_versao_id :lock_version])
 
 (defn abrir!
   "Abre uma votacao (estado 'aberta') sobre o objeto polimorfico (objeto-tipo,objeto-id). `sessao-id` +
@@ -26,13 +27,23 @@
   exige, ou o encerramento fica impossivel de montar so' pela API. Devolve {:id :lock-version}."
   [tx {:keys [id ente-id objeto-tipo objeto-id modalidade quorum-tipo votacao-corrige-id
               sessao-id pauta-item-id created-by]}]
-  (let [r (comum/linha->kebab
+  (let [;; T3-A2 (mig 0075) — CONGELA a versao de texto posta em deliberacao. Resolvida AQUI, server-side,
+        ;; dentro da mesma tx do INSERT: nunca vem do corpo do request (mesma disciplina de
+        ;; `destinatario-texto` do autografo) e nao ha' janela entre resolver e gravar. O instante certo e' a
+        ;; ABERTURA, nao o encerramento: o texto sobre o qual o plenario delibera e' o que esta' na mesa
+        ;; quando a votacao abre. So' faz sentido p/ 'proposicao' — o objeto e' POLIMORFICO, e emenda/parecer/
+        ;; requerimento nao tem versao de texto de proposicao; nesses casos fica nil, e quem consome falha
+        ;; fechada (ver aprovada-em-votacao?/aprovacao-vigente).
+        texto-versao-id (when (= "proposicao" objeto-tipo)
+                          (:id (texto/vigente tx ente-id objeto-id)))
+        r (comum/linha->kebab
            (jdbc/execute-one! tx
              (sql/format {:insert-into :legislativo.votacoes
                           :values [{:id id :ente_id ente-id :objeto_tipo objeto-tipo :objeto_id objeto-id
                                     :modalidade modalidade :quorum_tipo quorum-tipo :estado "aberta"
                                     :votacao_corrige_id votacao-corrige-id :sessao_id sessao-id
-                                    :pauta_item_id pauta-item-id :created_by created-by :efetivado_em [:now]}]
+                                    :pauta_item_id pauta-item-id :texto_versao_id texto-versao-id
+                                    :created_by created-by :efetivado_em [:now]}]
                           :returning [:lock_version]})))]
     {:id id :lock-version (:lock-version r)}))
 
@@ -65,6 +76,32 @@
      (sql/format {:select colunas :from [:legislativo.votacoes]
                   :where [:and [:= :ente_id ente-id] [:= :id id]]}))))
 
+(defn aprovacao-vigente
+  "T3-A2 — a votacao que APROVOU `proposicao-id`, ou nil. Devolve {:votacao-id :texto-versao-id}; o
+  `:texto-versao-id` e' a versao que estava na mesa quando a votacao ABRIU (congelada por `abrir!`, mig
+  0075) e pode ser nil (votacao anterior a' migration, ou materia que foi a plenario sem texto vigente).
+
+  E' desta fn que sai `aprovada-em-votacao?` — mesma consulta, mesmas exclusoes, uma so' fonte de verdade.
+  A separacao existe porque as duas perguntas do sistema sao distintas e nao devem colapsar:
+  'a Casa aprovou?' (o read-model, que gateia botao) e 'entao QUAL texto ela aprovou?' (o autografo, que
+  precisa do conteudo). Quem precisa do conteudo FALHA FECHADA quando `:texto-versao-id` e' nil — nao se
+  emite ato juridico sem saber o que foi deliberado —, enquanto o read-model segue dizendo a verdade: a
+  materia foi mesmo aprovada."
+  [tx ente-id proposicao-id]
+  (some-> (jdbc/execute-one! tx
+           (sql/format {:select [[:v.id :votacao_id] :v.texto_versao_id] :from [[:legislativo.votacoes :v]]
+                        :where [:and [:= :v.ente_id ente-id]
+                                     [:= :v.objeto_tipo "proposicao"]
+                                     [:= :v.objeto_id proposicao-id]
+                                     [:= :v.estado "encerrada"]
+                                     [:= :v.resultado "aprovada"]
+                                     [:not [:exists {:select [[[:inline 1]]]
+                                                     :from [[:legislativo.votacoes :c]]
+                                                     :where [:and [:= :c.ente_id ente-id]
+                                                                  [:= :c.votacao_corrige_id :v.id]]}]]]
+                        :limit 1}))
+          comum/linha->kebab))
+
 (defn aprovada-em-votacao?
   "T3-A (guarda-autografo-votacao) — a proposicao `proposicao-id` foi APROVADA pela Casa? Devolve booleano.
 
@@ -93,23 +130,12 @@
   - a votacao pode ter sido aberta e encerrada numa sessao 'agendada' que nunca se realizou:
     `estados-sessao-fechada` e' so' #{encerrada nao_realizada arquivada}.
   - `objeto_tipo='redacao_final'` aprovada NAO conta (conservador de proposito, mas nao e' obvio).
-  - o predicado nao amarra QUAL TEXTO foi aprovado: a votacao guarda so' `objeto_id`. Ver o achado A-2 no
-    ledger — o autografo leva a versao vigente NO MOMENTO DA GERACAO, que pode nao ser a votada.
+  - (RESOLVIDO em T3-A2, mig 0075) qual TEXTO foi aprovado deixou de ser incognita: `abrir!` congela a
+    versao posta em deliberacao, e quem precisa do conteudo usa `aprovacao-vigente` logo acima.
   E' [GAP] regimental (mesmo bolso de admissibilidade-de-emenda-de-plenario), e a forma aqui aceita o
   refino sem refactor — o predicado ganha criterio, os chamadores nao mudam."
   [tx ente-id proposicao-id]
-  (some? (jdbc/execute-one! tx
-           (sql/format {:select [[[:inline 1] :existe]] :from [[:legislativo.votacoes :v]]
-                        :where [:and [:= :v.ente_id ente-id]
-                                     [:= :v.objeto_tipo "proposicao"]
-                                     [:= :v.objeto_id proposicao-id]
-                                     [:= :v.estado "encerrada"]
-                                     [:= :v.resultado "aprovada"]
-                                     [:not [:exists {:select [[[:inline 1]]]
-                                                     :from [[:legislativo.votacoes :c]]
-                                                     :where [:and [:= :c.ente_id ente-id]
-                                                                  [:= :c.votacao_corrige_id :v.id]]}]]]
-                        :limit 1}))))
+  (some? (aprovacao-vigente tx ente-id proposicao-id)))
 
 (defn buscar-com-lock
   "Como `buscar`, mas sob `SELECT ... FOR UPDATE` — serializa contra `encerrar!` (que tambem toma o lock via

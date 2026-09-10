@@ -412,8 +412,7 @@
   "Onda B Slice 7 — gera o autografo (numera gapless) + abre a tramitacao executiva 'aguardando' NUMA
   UNICA tx (Repo/gerar-autografo-e-abrir-tramitacao!). Resolve `destinatario-texto` a partir do municipio
   do ente ('Prefeito Municipal de <municipio>', reusa `resolver-municipio` — mesmo padrao injetado de
-  criar-proposicao) e `texto-versao-id` da versao VIGENTE da proposicao no momento da geracao
-  (buscar-proposicao-detalhe, mesma leitura de buscar-proposicao-ficha). `ano` vem do diplomat (kernel/
+  criar-proposicao). `texto-versao-id` NAO sai daqui: o Repo o le da VOTACAO que aprovou (T3-A2). `ano` vem do diplomat (kernel/
   tempo, mesmo padrao de protocolar-documento — o ano do AUTOGRAFO e' o ano civil da geracao, escopo do
   numerador gapless 'autografo:ano', nao necessariamente o ano de protocolo da proposicao).
 
@@ -432,16 +431,19 @@
   (ente_id, proposicao_id) do db/autografo.clj como 500): uma proposicao que ja' tem autografo lanca ANTES
   de qualquer escrita nova.
 
-  GUARD DE TEXTO VIGENTE (achado em QA manual pos-merge): protocolar sem texto e' permitido (Onda B
-  Slice 2) — uma proposicao pode chegar a 'aprovada' sem NUNCA ter tido uma versao promovida a vigente.
-  O autografo e' o ARTEFATO LEGAL (nao pode nascer vazio; CHECK autografo_efetivado_tem_texto do banco
-  bloquearia como 500 opaco). Guarda ANTES da escrita, mesmo racional do guard de duplicidade.
+  GUARD DE TEXTO DELIBERADO (era o 'guard de texto vigente'; virou isto em T3-A2). Protocolar sem texto e'
+  permitido (Onda B Slice 2), entao uma materia pode ser aprovada sem NUNCA ter tido versao vigente — e o
+  autografo e' o ARTEFATO LEGAL, nao pode nascer vazio (CHECK autografo_efetivado_tem_texto). Mudou a
+  PERGUNTA: nao e' mais 'ha texto vigente AGORA?', e sim 'a votacao que aprovou registrou QUAL texto foi
+  deliberado?'. A antiga passava quando o texto tinha sido trocado depois da aprovacao — que e' exatamente
+  o buraco do A-2 — e reprovava quando a versao aprovada existia mas fora superada por outra.
+  -> `:conflito/aprovacao-sem-texto` -> 409 (estado do recurso, nao erro de corpo).
 
   nil se a proposicao nao existe no tenant (-> 404 na borda). `m` ja' vem coagido pelo adapters/in (id do
   autografo/prazo-resposta-em/created-by; SEM ano/destinatario-texto/texto-versao-id, injetados aqui)."
   [repo-legislativo resolver-municipio ente-id ano m]
   (let [proposicao-id (:proposicao-id m)
-        {:keys [proposicao texto]} (repo/buscar-proposicao-detalhe repo-legislativo ente-id proposicao-id)]
+        {:keys [proposicao]} (repo/buscar-proposicao-detalhe repo-legislativo ente-id proposicao-id)]
     (when proposicao
       (when-not (repo/proposicao-aprovada-em-votacao? repo-legislativo ente-id proposicao-id)
         (throw (ex-info "gerar-autografo: a materia nao foi aprovada em votacao pela Camara"
@@ -449,13 +451,14 @@
       (when (repo/autografo-da-proposicao repo-legislativo ente-id proposicao-id)
         (throw (ex-info "gerar-autografo: a proposicao ja tem autografo (UNIQUE por proposicao)"
                         {:tipo :validacao/invalido :proposicao-id proposicao-id})))
-      (when (nil? (:id texto))
-        (throw (ex-info "gerar-autografo: a proposicao nao tem texto vigente (nao ha o que enviar ao Executivo)"
-                        {:tipo :validacao/invalido :proposicao-id proposicao-id})))
+      (when (nil? (:texto-versao-id (repo/aprovacao-vigente repo-legislativo ente-id proposicao-id)))
+        (throw (ex-info "gerar-autografo: a votacao que aprovou esta materia nao registrou qual texto foi deliberado"
+                        {:tipo :conflito/aprovacao-sem-texto :proposicao-id proposicao-id})))
       (let [{:keys [municipio-nome]} (resolver-municipio ente-id)]
+        ;; T3-A2: `texto-versao-id` NAO se resolve aqui. O Repo o le da VOTACAO que aprovou (a versao
+        ;; deliberada, congelada na abertura) — o vigente de agora pode ser outro.
         (repo/gerar-autografo-e-abrir-tramitacao! repo-legislativo ente-id
-          (merge m {:ano ano :texto-versao-id (:id texto)
-                    :destinatario-texto (str "Prefeito Municipal de " municipio-nome)}))))))
+          (merge m {:ano ano :destinatario-texto (str "Prefeito Municipal de " municipio-nome)}))))))
 
 (defn buscar-tramitacao-executiva
   "Onda B Slice 7 — busca a tramitacao executiva pelo SEU PROPRIO id (mesmo gate grosso). nil se inexistente

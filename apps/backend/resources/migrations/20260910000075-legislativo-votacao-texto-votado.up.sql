@@ -1,0 +1,25 @@
+-- T3-A2: a votacao passa a registrar QUAL TEXTO foi posto em deliberacao.
+--
+-- O defeito: `legislativo.votacoes` guardava so' `objeto_id` (QUAL materia), nunca a VERSAO do texto. O
+-- autografo resolvia `texto_versao_id` lendo a versao vigente NO MOMENTO DA GERACAO — entao uma promocao
+-- de versao entre a aprovacao e a geracao (PATCH /legislativo/proposicoes/:id com `texto`, permitido ate'
+-- estado terminal) fazia o autografo sair com um texto que o plenario nunca leu. O Prefeito sancionaria o
+-- que ninguem deliberou. Achado da revisao adversarial do T3-A, ledger `## T3-A2`.
+--
+-- O comentario da migration 0022 ja' declarava a semantica correta — "e' o CONTEUDO do autografo... a
+-- versao 'redacao_final' aprovada" — e o codigo nunca a implementou. Esta coluna e' o que faltava para
+-- que a declaracao do schema virasse verdade.
+--
+-- SEM FK, de proposito e com precedente: `legislativo.proposicao_texto_versao` e' HASH-PARTICIONADA
+-- (MODULUS 8, migration 0015) e a FK exigiria carregar a PK composta — exatamente o motivo ja' registrado
+-- em `legislativo.autografo.texto_versao_id` (0022 L22-23). Integridade na camada de servico + teste,
+-- mesmo criterio.
+--
+-- NULLABLE por dois motivos legitimos, nao por frouxidao: (a) a votacao e' POLIMORFICA — emenda/parecer/
+-- requerimento nao tem versao de texto de proposicao; (b) uma proposicao pode ir a plenario sem texto
+-- vigente (protocolar sem texto e' permitido desde a Onda B Slice 2). Nos dois casos a coluna fica NULL, e
+-- quem consome FALHA FECHADA: sem versao registrada nao se sabe o que foi aprovado, entao nao se emite
+-- autografo. Linhas ANTERIORES a esta migration tambem ficam NULL e caem na mesma recusa — deliberado: o
+-- sistema nao esta' em producao, e deixar o legado passar seria reabrir o buraco justamente onde ele nao
+-- pode ser auditado.
+ALTER TABLE legislativo.votacoes ADD COLUMN IF NOT EXISTS texto_versao_id uuid;

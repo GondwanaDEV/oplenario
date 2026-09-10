@@ -390,8 +390,13 @@
           ;; T3-A: materia nao aprovada -> 409 (o pedido era valido; o recurso e' que nao chegou la'). Sem
           ;; esta traducao o `:conflito/*` cai no `:else` do interceptor global e a recusa vira 500 — mesma
           ;; disciplina de `resposta-conflito-tramitacao-executiva`: cada diplomat traduz a SUA borda.
-          (if (= :conflito/proposicao-nao-aprovada (:tipo (ex-data e)))
-            (http/json-resposta 409 {:erro (ex-message e)})
+          (case (:tipo (ex-data e))
+            ;; T3-A: materia nao aprovada. T3-A2: aprovada, mas a votacao nao registrou o texto deliberado.
+            ;; Os dois sao 409 (o pedido era valido; o recurso e' que nao esta em condicao de atende-lo) e
+            ;; carregam a mensagem de DOMINIO — sem esta traducao o `:conflito/*` cai no `:else` do
+            ;; interceptor global e a recusa vira 500. Mesma disciplina de resposta-conflito-tramitacao-executiva.
+            (:conflito/proposicao-nao-aprovada
+             :conflito/aprovacao-sem-texto) (http/json-resposta 409 {:erro (ex-message e)})
             (throw e)))))))
 
 (defn- pos-aprovacao-handler
