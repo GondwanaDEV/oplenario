@@ -1,0 +1,104 @@
+/* Calendário institucional (Onda E, fatia 2) — porte de
+   produto/design-system/o-plenario/telas/calendario.html (blocos .pg-cab, .mes-nav, .legenda, .grade,
+   .cal, .dia, .ev, .rail, .rcard, .ag, .nota-gap). Tokens/chassi já globais (globals.css); .topo/.marca
+   vivem em ../topo.css e não são duplicados aqui.
+
+   O QUE SAIU do original, e por quê (a mesma poda da page.tsx — o backend não tem o dado):
+     .pt-comissao/.pt-audiencia, .ev-comissao/.ev-audiencia, .t-comissao/.t-audiencia e o rail card
+     "Recesso". Sem evento não há classe: uma legenda que promete cor para um evento que a Casa não
+     registra é dado falso pintado de CSS. Isso também tira desta tela a armadilha do âmbar
+     (branco-sobre-amarelo), que só existia por causa de .ev-audiencia.
+
+   COR NÃO É O ÚNICO CANAL: cada evento tem glifo (● sessão / ◆ prazo) além da cor, e a legenda repete
+   o par glifo+palavra — jade e telha são exatamente o par que um deuteranope não separa.
+
+   AA nos DOIS temas, sem cravar cor literal de tinta:
+     - sessão usa o par --acao/--acao-texto (claro #0C5340+branco ≈ 10:1; escuro #18A074+#06150F ≈ 8:1),
+       que é o par sancionado dos tokens — e no escuro ainda destaca do --surface, o que o --jade cru
+       (quase a luminância do fundo escuro) não faria;
+     - prazo usa --telha-fundo + branco (5.44:1, a correção §5.1 já medida nesta casa; --telha puro
+       falha em 4.0). --telha-fundo é o mesmo valor nos dois temas e passa nos dois. */
+
+.cal-pagina { padding-bottom: 1.5rem; }
+
+.pg-cab { padding: 1.4rem 0 0; display: grid; grid-template-columns: 1fr auto; gap: 0.8rem 1.4rem; align-items: end; }
+.pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
+
+.mes-nav { display: flex; align-items: center; gap: 0.5rem; }
+.mes-nav .seta { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--linha); background: var(--surface); color: var(--texto); display: grid; place-items: center; cursor: pointer; }
+.mes-nav .seta:hover { border-color: var(--texto-2); }
+.mes-nav .atual { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); min-width: 9.5rem; text-align: center; }
+
+/* aviso de FONTE que falhou (ou que ainda carrega) — nunca substitui a tela, só a qualifica */
+.aviso-fonte { margin: 1rem 0 0; padding: 0.65rem 0.9rem; border: 1px solid var(--linha); border-left: 3px solid var(--acento-texto); border-radius: var(--raio); background: var(--surface-2); color: var(--texto-2); font-size: var(--t-13); line-height: 1.5; }
+.aviso-fonte b { color: var(--texto); }
+
+.legenda { display: flex; gap: 0.5rem 1rem; flex-wrap: wrap; margin: 1.1rem 0 0; }
+.lg { display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--t-12); color: var(--texto-2); }
+.lg .pt { width: 16px; height: 16px; border-radius: 4px; flex: 0 0 auto; display: grid; place-items: center; font-size: 0.55rem; line-height: 1; }
+.pt-sessao { background: var(--acao); color: var(--acao-texto); }
+.pt-prazo { background: var(--telha-fundo); color: #fff; }
+
+.grade { display: grid; grid-template-columns: 1fr 312px; gap: 1.4rem; align-items: start; margin: 1.1rem 0 0; }
+
+/* ====================== a grade do mês ====================== */
+.cal { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; }
+/* As 7 colunas moram na LINHA, não na grade: com role="row" entre a grade e as células (exigência da
+   grade ARIA), as células deixam de ser filhas diretas de .cal-grid. */
+.cal-dows, .cal-linha { display: grid; grid-template-columns: repeat(7, 1fr); }
+.cal-dows { background: var(--surface-2); border-bottom: 1px solid var(--linha); }
+.cal-dows span { font-family: var(--mono); font-size: var(--t-12); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--texto-2); text-align: center; padding: 0.6rem 0; }
+
+.dia { min-height: 104px; border-right: 1px solid var(--linha); border-bottom: 1px solid var(--linha); padding: 0.4rem; display: flex; flex-direction: column; gap: 0.25rem; }
+.cal-linha > .dia:last-child { border-right: none; }
+.cal-grid > .cal-linha:last-child .dia { border-bottom: none; }
+.dia.fora { background: color-mix(in srgb, var(--surface-2) 60%, transparent); }
+.dia .n { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); align-self: flex-start; padding: 0.1rem 0.35rem; border-radius: 6px; }
+.dia.fora .n { color: color-mix(in srgb, var(--texto-2) 60%, transparent); }
+.dia.hoje .n { background: var(--acao); color: var(--acao-texto); font-weight: 700; }
+
+.ev-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
+.ev { font-size: 0.72rem; font-weight: 600; line-height: 1.2; border-radius: 5px; padding: 0.15rem 0.35rem; display: flex; align-items: center; gap: 0.25rem; min-width: 0; overflow-wrap: anywhere; }
+.ev .ev-glifo { font-size: 0.6rem; line-height: 1; flex: 0 0 auto; }
+.ev .hh { font-family: var(--mono); font-weight: 500; opacity: .9; flex: 0 0 auto; }
+.ev-sessao { background: var(--acao); color: var(--acao-texto); }
+.ev-prazo { background: var(--telha-fundo); color: #fff; }
+/* tarja de ESTADO dentro da pílula ("não realizada", "vencida"). Sem cor própria de propósito: herda o
+   `color` da pílula, que é o par já medido AA contra o fundo dela (--acao/--acao-texto e
+   --telha-fundo/branco, ver o cabeçalho). Uma tinta nova aqui teria de ser medida contra DOIS fundos
+   distintos em DOIS temas; herdar não tem esse custo e não pode regredir. A borda é só desenho. */
+.ev .ev-alerta { font-family: var(--mono); font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; line-height: 1; flex: 0 0 auto; margin-left: auto; padding: 0.1rem 0.3rem; border: 1px solid color-mix(in srgb, currentColor 55%, transparent); border-radius: 4px; }
+
+/* ====================== agenda lateral ====================== */
+.rail { display: grid; gap: 1rem; }
+.rcard { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.1rem 1.2rem; }
+.rcard > h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.9rem; }
+
+.ag { display: grid; grid-template-columns: auto 1fr; gap: 0.2rem 0.8rem; padding: 0.7rem 0; border-top: 1px solid var(--linha); }
+.ag:first-of-type { border-top: none; padding-top: 0; }
+.ag .data { text-align: center; }
+.ag .data b { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--marca); display: block; line-height: 1; }
+.ag .data span { font-family: var(--mono); font-size: 0.6rem; text-transform: uppercase; color: var(--texto-2); }
+.ag .info b { font-size: var(--t-13); color: var(--texto); display: block; overflow-wrap: anywhere; }
+.ag .info .meta { font-size: var(--t-12); color: var(--texto-2); display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.15rem; }
+.ag .info .tipo { font-size: 0.62rem; font-weight: 600; font-family: var(--mono); text-transform: uppercase; border-radius: 4px; padding: 0.05rem 0.3rem; }
+.t-sessao { background: var(--acao); color: var(--acao-texto); }
+.t-prazo { background: var(--telha-fundo); color: #fff; }
+
+.rcard .vazio { font-size: var(--t-13); color: var(--texto-2); margin: 0.6rem 0 0; line-height: 1.5; }
+.rcard .vazio b { color: var(--texto); }
+/* o corte do teto de "Próximos" dito em texto — 6 de 6 e 6 de 20 eram indistinguíveis */
+.rcard .mais-adiante { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin: 0.6rem 0 0; padding-top: 0.6rem; border-top: 1px solid var(--linha); }
+
+.nota-gap { font-size: var(--t-12); color: var(--texto-2); margin: 0.9rem 0 0; line-height: 1.4; }
+.nota-gap .tag { font-family: var(--mono); font-size: 0.6rem; letter-spacing: .04em; text-transform: uppercase; color: var(--aviso-texto); border: 1px solid color-mix(in srgb, var(--amarelo-traco) 45%, transparent); border-radius: 4px; padding: 0.05rem 0.3rem; margin-right: 0.25rem; }
+
+/* .em-breve — mesmo bloco duplicado por-rota de expediente.css/ficha-materia.css (CSS é page-scoped
+   nesta convenção). Aqui ele é o rail card das três famílias que a Casa não registra. */
+.em-breve { padding: 1.1rem 1.2rem; border: 1px dashed var(--linha); border-radius: var(--raio); background: var(--surface-2); }
+.em-breve-rotulo { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--texto-2); margin: 0 0 0.3rem; }
+.em-breve-titulo { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); margin: 0 0 0.3rem; }
+.em-breve-motivo { font-size: var(--t-13); color: var(--texto-2); margin: 0; line-height: 1.5; }
+
+@media (max-width: 920px) { .grade { grid-template-columns: 1fr; } .dia { min-height: 78px; } }
+@media (max-width: 560px) { .pg-cab { grid-template-columns: 1fr; } .dia .ev .hh { display: none; } }
