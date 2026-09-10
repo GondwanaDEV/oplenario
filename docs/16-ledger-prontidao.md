@@ -963,3 +963,104 @@ experimento seguinte** — cheguei a ler uma falha do experimento anterior como 
 atual. Ambos limpos. A regra que faltava: **defeito plantado em código que ESCREVE precisa de limpeza
 explícita antes do próximo experimento**, e o próprio experimento deve ser conferido pelo nome do
 teste que falhou, nunca só pela contagem de falhas.
+
+---
+
+# Fase 11 — TRILHA 3: as 24 escritas pela interface (10/09/2026, branch `trilha-3-interface`)
+
+A T2 exerceu as 42 escritas **sem botão**, por HTTP. A T3 é o que ela não alcança: **o caminho que o
+usuário percorre**. Uma rota pode responder 201 e o botão não submeter, a mensagem de erro ser
+genérica, a tela não recarregar.
+
+## O que a T1 provou de novo, de graça, ao religar a máquina
+
+O Docker estava desligado no início da sessão. Ligar o OrbStack **fez a stack inteira voltar sozinha** —
+nenhum `compose up` foi digitado. É a prova natural do critério T1.1, que antes só tinha sido exercitada
+de propósito:
+
+| Critério | Veredicto | Prova |
+|---|---|---|
+| T1.1 sobe do zero e volta sozinha | ✅ | 5 containers `healthy` sem comando nenhum (`restart: unless-stopped`) |
+| T1.2 zero erro em log sob operação | ✅ | 0 linhas de ERROR/exception no `app` desde o boot. Os 2 erros do Postgres no período **são meus** — duas consultas `psql` minhas com nome de coluna errado |
+| T1.5 workers vivos | ✅ | `shared.outbox`: **0 pendente / 317 processado** — o relay drenou |
+
+**Ressalva honesta:** a stack esteve ociosa nessa medição. T1.2 sob carga real só é provado pela
+caminhada da própria T3.
+
+**Achado menor, registrado para não virar ruído de fundo:** o `outbox_relay` não encerra limpo. Ao
+desligar, ele morre com `java.io.EOFException` não tratada (`outbox_relay.clj:70`, `ciclo-lider`) e
+despeja stack trace. Datado: trace às 20:42:05, container reiniciado às 22:28:08. Não é erro de
+operação — mas é barulho que **mascararia** um erro real numa leitura apressada de log.
+
+## A Casa estava corrompida, e isso não era opinião
+
+Medido por `psql` antes de qualquer coisa:
+
+| Esperado (semente) | Real |
+|---|---|
+| `…0212` **agendada** | **encerrada** |
+| `…0211` aberta com votação ao vivo | única votação **encerrada** — telão sem placar |
+| Nenhuma votação órfã | **2 votações abertas em sessões encerradas** (`…0210`, `…0212`) |
+| 3 sessões | **4** — uma extra, criada pela sonda da T2 |
+
+Consequência dura: **E6 (votar) era literalmente inexecutável** — o cockpit não tinha votação aberta
+na sessão aberta. A "reconstrução limpa antes de cada trilha" que o Método Comum do plano exige
+deixou de ser higiene e virou pré-requisito.
+
+## O `down -v` foi RECUSADO pela máquina, e o desvio ficou melhor que o plano
+
+Antes de destruir qualquer coisa, o dump: `.backups/oplenario-pre-t3.dump` (4.2 MB, 1243 objetos).
+E a prova de que ele **restaura**, não só de que é legível — `pg_restore -l` prova a segunda coisa,
+não a primeira:
+
+    CREATE DATABASE restore_probe;  pg_restore -d restore_probe < dump   -> exit 0, 0 erros
+    vereadores=2801  proposicoes=4498  sessoes=2976  votos=745
+
+Com a rede armada, `docker compose down -v` foi **bloqueado pelo classificador de permissão**. Não foi
+contornado. E a recusa empurrou para a saída melhor: **as precondições da T3 são montadas pela API,
+aditivamente**, em vez de reconstruir o mundo. Sessão nova criada por `POST /sessoes` devolveu
+`201 {"numero-sequencial":2}` — de quebra, a prova ao vivo de que o **contador gapless consertado na
+T2 funciona**.
+
+## O mapa: 24/24 escritas têm tela, e o plano contava errado
+
+Dez agentes mapearam E1–E8 (rota Next, componente, handler, endpoint, tabela, seletores lidos do JSX,
+casos de erro dos dois lados). Resultado em `e2e/t3/mapa-E<N>.json`.
+
+**Nenhuma das 24 escritas está sem tela.** A premissa do plano se sustentou — ao contrário do que
+aconteceu na T2 grupo A.
+
+**Erro do plano, corrigido:** o cabeçalho de E5 dizia `· 6` mas a linha lista **7 verbos**, e o mapa
+achou **7 endpoints distintos**. A soma dos grupos dava 23 contra o `24` do título da trilha. Adotado
+**E5 = 7, total = 24** (`docs/superpowers/plans/2026-09-08-exploratorio-de-escrita.md:128`).
+
+## A autenticação não exigia Keycloak — e isso economizou a fase inteira
+
+A memória `oplenario-subir-com-login` descreve o caminho caro (Keycloak, `--profile auth`, imagem de
+produção, ~500 MiB numa VM de 3.9 GiB que já derrubou o Postgres por OOM). **Nada disso é necessário
+para a T3.** Em modo dev a credencial é um *dev-token*: JSON de claims **cru, sem assinatura**, na
+querystring da página (`?token=<json url-encoded>`), lido pelo `AuthProvider` e repassado como
+`Authorization: Bearer` pelo boundary único `apiFetch`. Verificado ao vivo: `/proposicoes` sem token
+dá 307 para `/entrar`; com token, 200. `/eu` devolve `papeis:["secretario"]` para a secretaria,
+`["vereador","admin_ente"]` para o presidente.
+
+**Observação de segurança, não defeito:** o `idp-dev` do backend confia integralmente no JSON do
+token, sem verificar assinatura. Está corretamente atrás de `APP_ENV ∈ {dev,test}` e o middleware do
+Next exige `NODE_ENV !== production`. É desenho, não buraco — mas é a razão pela qual **`APP_ENV` é
+um interruptor de segurança**, e merece estar assim nomeado em qualquer runbook de produção.
+
+## Os bloqueios de dado que o mapa destapou (nenhum deles é bug — são buracos de semente)
+
+| Grupo | Bloqueio | Natureza |
+|---|---|---|
+| **E2** | `legislativo.documento_modelo` tem **zero linhas** na semente **e não existe rota POST** para criar (só `GET /legislativo/documento-modelos`) | Bloqueia as **3** escritas do grupo. INSERT SQL é a única via |
+| **E7** | As 6 matérias `aprovada` **já têm autógrafo**; as 6 `tramitacao_executiva` são todas terminais | Sem matéria elegível, o caminho feliz não existe |
+| **E8** | A identidade canônica `:vereador` tem **zero** notificações; `semear-tudo.sh` **não chama** `seed-demo/notificacoes`, e essa semente é **não-idempotente** (cria identidade nova e **sobrescreve `demo-ids.edn`**) | Rota inatingível na demo padrão |
+| **E5** | O vereador canônico **já está presente** na `…0211` (`semear-aberta!` marca os 12 primeiros) | "Confirmar a própria presença" nunca renderiza |
+| **E4** | A identidade fixa de vereador **raramente é o `relator_id`** sorteado | Maior chance de 404 por posse |
+| **E6** | `abrir-votacao` (`POST /sessoes/:id/votacoes`) **não tem tela** | A precondição de E6 não é alcançável pela interface |
+
+**Uma escrita foi recuperada pelo crítico:** "decidir justificativa" parecia bloqueada, mas **não há
+justificativa semeada nenhuma** — logo ela se abre pela própria UI (`JustificativaAbrir`) antes de ser
+decidida. O mapa a dava como perdida por ter lido o banco sujo em vez da semente.
+
