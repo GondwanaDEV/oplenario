@@ -28,13 +28,18 @@
   semente, nem e2e abriam votacao deste tipo) e o campo estava sem significado definido.
 
   As irmas polimorficas — `emenda`, `parecer`, `requerimento` — SAO entidades proprias e ficam de fora: o
-  `objeto_id` delas vive em OUTRO espaco de ids e, sem este filtro, uma delas responderia pela materia-mae
-  por colisao.
+  `objeto_id` delas aponta OUTRA tabela. Note que isso e' CONVENCAO defendida por este filtro, nao
+  invariante do banco: `votacoes.objeto_id` nao tem FK (mig 0021, disc.2), entao a colisao de uuid entre
+  espacos e' possivel por construcao — e' exatamente por isso que o filtro por tipo tem de existir.
 
   UMA fonte p/ os dois lugares que dependem disto: `abrir!` (que congela o texto deliberado) e
   `aprovacao-vigente` (que o le de volta). Divergirem e' o pior dos mundos — o predicado passa e o
   autografo recusa por falta de texto."
   #{"proposicao" "redacao_final"})
+
+(def ^:private objetos-que-carregam-a-materia-sql
+  "O mesmo conjunto, ordenado e em vetor, p/ o `IN` do HoneySQL — pre-computado (a query roda por request)."
+  (vec (sort objetos-que-carregam-a-materia)))
 
 (defn abrir!
   "Abre uma votacao (estado 'aberta') sobre o objeto polimorfico (objeto-tipo,objeto-id). `sessao-id` +
@@ -115,18 +120,27 @@
   casa e erra na outra; a uniao acerta nas duas e continua muito mais restritiva que o estado anterior a'
   guarda (nenhuma pre-condicao). Ver `docs/17-rito-do-autografo-fortaleza-e-ceara.md` §5.1.
 
-  DESEMPATE, e' load-bearing: no rito de Fortaleza as duas aprovacoes COEXISTEM (vota-se o projeto e depois
-  a redacao final), e `:limit 1` sem ordem deixaria o TEXTO do autografo ao acaso do plano do Postgres — na
-  primeira corrida deste teste ele devolveu o texto do PROJETO. A ordem e' do RITO, nao do relogio: a
-  redacao final so' existe DEPOIS do projeto aprovado, entao ela vence sempre. Nao se usa carimbo de tempo
-  porque `now()` e' o da TRANSACAO — duas votacoes encerradas na mesma tx tem `atualizado_em` IDENTICO e
-  nao desempatam. `:v.id` fecha o resto (duas redacoes finais aprovadas e nao corrigidas nao deveriam
-  existir; se existirem, a escolha ao menos e' estavel entre leituras)."
+  DESEMPATE em TRES niveis, todos load-bearing — `:limit 1` sem ordem deixaria o TEXTO do autografo ao
+  acaso do plano do Postgres (na primeira corrida do teste ele devolveu o texto do PROJETO):
+
+  1. `CASE objeto_tipo` — no rito de Fortaleza as duas aprovacoes COEXISTEM (vota-se o projeto e depois a
+     redacao final). A redacao final vence sempre porque so' existe DEPOIS do projeto aprovado. Isto e'
+     ordem do RITO, e nenhum carimbo de tempo a substitui.
+  2. `atualizado_em DESC` — desempata DUAS aprovacoes do MESMO tipo, e esse caso e' alcancavel: nao ha'
+     rota de anulacao nem de votacao corretiva (`AbrirVotacao` nao expoe `votacao-corrige-id`), entao
+     refazer uma votacao errada hoje so' e' possivel abrindo OUTRA — e as duas ficam encerrada+aprovada+
+     nao-corrigidas. Sem este nivel a escolha cairia em `id DESC` sobre uuid v4, que nao tem relacao com
+     o tempo: moeda decidindo qual texto vai ao Prefeito (achado C-1 da revisao adversarial). Em producao
+     cada encerramento e' sua propria tx, entao `now()` DISCRIMINA; e o trigger `trg_votacoes_imut_estado`
+     (mig 0012 (b)) bloqueia UPDATE em row ja' terminal, logo o carimbo de uma 'encerrada' nao se move
+     mais — e' o instante do encerramento, congelado.
+  3. `id DESC` — so' o caso patologico que sobra (mesmo tipo, mesmo carimbo: duas encerradas na MESMA tx,
+     que hoje so' acontece em teste). Arbitrario, mas ESTAVEL entre leituras."
   [tx ente-id proposicao-id]
   (some-> (jdbc/execute-one! tx
            (sql/format {:select [[:v.id :votacao_id] :v.texto_versao_id] :from [[:legislativo.votacoes :v]]
                         :where [:and [:= :v.ente_id ente-id]
-                                     [:in :v.objeto_tipo (vec (sort objetos-que-carregam-a-materia))]
+                                     [:in :v.objeto_tipo objetos-que-carregam-a-materia-sql]
                                      [:= :v.objeto_id proposicao-id]
                                      [:= :v.estado "encerrada"]
                                      [:= :v.resultado "aprovada"]
@@ -136,6 +150,7 @@
                                                                   [:= :c.votacao_corrige_id :v.id]]}]]]
                         :order-by [[[:case [:= :v.objeto_tipo [:inline "redacao_final"]] [:inline 0]
                                      :else [:inline 1]] :asc]
+                                   [:v.atualizado_em :desc]
                                    [:v.id :desc]]
                         :limit 1}))
           comum/linha->kebab))
@@ -166,7 +181,8 @@
     entao uma aprovacao com ZERO votos registrados satisfaz este predicado. Idem 'nominal' com um voto so'
     em maioria_simples, e com `base-membros` do corpo (carry sec MEDIUM-1).
   - a votacao pode ter sido aberta e encerrada numa sessao 'agendada' que nunca se realizou:
-    `estados-sessao-fechada` e' so' #{encerrada nao_realizada arquivada}.
+    `estados-sessao-fechada` e' so' #{encerrada nao_realizada arquivada}. Este limite DOBROU de superficie
+    em T3-A4 — agora vale p/ os dois `objeto_tipo`, nao so' p/ 'proposicao'.
   - (RESOLVIDO em T3-A4) a exclusao de `objeto_tipo='redacao_final'` era ERRADA para o beachhead e a
     docstring anterior a declarava 'conservadora de proposito' — a pesquisa de rito (docs/17) desmentiu.
     Hoje os dois contam; o predicado passa a ser a UNIAO dos modelos de Fortaleza e Mossoro. O que ele
@@ -176,6 +192,20 @@
     forma atual aceita esse refino sem refactor: o predicado ganha criterio, os chamadores nao mudam.
   - (RESOLVIDO em T3-A2, mig 0075) qual TEXTO foi aprovado deixou de ser incognita: `abrir!` congela a
     versao posta em deliberacao, e quem precisa do conteudo usa `aprovacao-vigente` logo acima.
+  - (NOVO em T3-A4, achado I-1 da revisao adversarial) uma REDACAO FINAL aprovada SOZINHA destrava, mesmo
+    com o projeto REJEITADO. Em nenhum rito pesquisado (docs/17 §4) a Redacao Final existe sem aprovacao
+    previa da materia — ela a PRESSUPOE. A borda nao valida precedencia (nem existencia da proposicao, nem
+    estado, nem vinculo com o item de pauta), entao `POST .../votacoes` com objeto-tipo='redacao_final'
+    sobre uma materia rejeitada + encerramento 'simbolica' (resultado vem do CORPO) satisfaz este
+    predicado. Nao e' escalada de privilegio — o MESMO ator ja' podia fabricar por 'proposicao' (limite
+    acima) —, mas e' porta nova com aparencia legitima. Exigir a CONJUNCAO (redacao final conta SE houver
+    aprovacao vigente de 'proposicao') e' decisao de dominio, nao de engenharia: em Fortaleza-2008 a
+    redacao final era votada pela CCJ, nao pelo Plenario, e a conjuncao a barraria.
+  - (M-4) o `NOT EXISTS` da correcao e' tipo-AGNOSTICO: nada amarra o `objeto_tipo` da corretiva ao da
+    corrigida. Inofensivo hoje (os dois tipos aceitos carregam a mesma materia) e inalcancavel por HTTP
+    (nao ha' rota que passe `votacao-corrige-id`), mas e' acidente, nao decisao — declarado p/ nao virar
+    'conservadorismo de proposito' como a exclusao que este commit desfez.
+
   E' [GAP] regimental (mesmo bolso de admissibilidade-de-emenda-de-plenario)."
   [tx ente-id proposicao-id]
   (some? (aprovacao-vigente tx ente-id proposicao-id)))
