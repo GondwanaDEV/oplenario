@@ -84,10 +84,19 @@
     requerimento/redacao_final compartilham a coluna) e sem isso uma emenda aprovada de id colidente
     responderia pela materia-mae.
 
-  LIMITE CONHECIDO, declarado: isto responde 'houve UMA aprovacao', nao 'o rito se completou'. Rito de dois
-  turnos e redacao final ainda passam com um turno so'. E' [GAP] regimental (mesmo bolso de
-  admissibilidade-de-emenda-de-plenario), e a forma aqui aceita o refino sem refactor — o predicado ganha
-  criterio, os chamadores nao mudam."
+  LIMITES CONHECIDOS, todos declarados (a lista cresceu com a revisao adversarial ecc — o que este
+  predicado NAO responde e' tao importante quanto o que responde):
+  - 'houve UMA aprovacao', nao 'o rito se completou': dois turnos e redacao final passam com um turno so'.
+  - votacao 'simbolica' (aclamacao) tem o `resultado` vindo do CORPO do request (ver `encerrar!` abaixo) —
+    entao uma aprovacao com ZERO votos registrados satisfaz este predicado. Idem 'nominal' com um voto so'
+    em maioria_simples, e com `base-membros` do corpo (carry sec MEDIUM-1).
+  - a votacao pode ter sido aberta e encerrada numa sessao 'agendada' que nunca se realizou:
+    `estados-sessao-fechada` e' so' #{encerrada nao_realizada arquivada}.
+  - `objeto_tipo='redacao_final'` aprovada NAO conta (conservador de proposito, mas nao e' obvio).
+  - o predicado nao amarra QUAL TEXTO foi aprovado: a votacao guarda so' `objeto_id`. Ver o achado A-2 no
+    ledger — o autografo leva a versao vigente NO MOMENTO DA GERACAO, que pode nao ser a votada.
+  E' [GAP] regimental (mesmo bolso de admissibilidade-de-emenda-de-plenario), e a forma aqui aceita o
+  refino sem refactor — o predicado ganha criterio, os chamadores nao mudam."
   [tx ente-id proposicao-id]
   (some? (jdbc/execute-one! tx
            (sql/format {:select [[[:inline 1] :existe]] :from [[:legislativo.votacoes :v]]

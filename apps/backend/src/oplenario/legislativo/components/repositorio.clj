@@ -671,10 +671,19 @@
     (transacao this ente-id
       (fn [tx]
         ;; T3-A — RE-VERIFICACAO DA APROVACAO DENTRO DA TX (defesa em profundidade). O controller ja' guarda
-        ;; na borda, e e' de la' que sai a mensagem util; esta segunda leitura fecha a janela TOCTOU entre o
-        ;; guard e a escrita. O guard de duplicidade tem o UNIQUE (ente_id, proposicao_id) como backstop no
-        ;; banco — a aprovacao NAO tem constraint equivalente (o fato mora noutra tabela), entao o backstop
-        ;; tem de ser esta linha. Um autografo e' ato juridico NUMERADO: nao se aceita janela.
+        ;; na borda, e e' de la' que sai a mensagem util; esta leitura garante que a escrita e a decisao
+        ;; olham o MESMO snapshot. O guard de duplicidade tem o UNIQUE (ente_id, proposicao_id) como backstop
+        ;; no banco — a aprovacao NAO tem constraint equivalente (o fato mora noutra tabela), entao o
+        ;; backstop tem de ser esta linha.
+        ;;
+        ;; CORRECAO (revisao adversarial ecc, achado C-1): a versao original deste comentario dizia que isto
+        ;; "fecha a janela TOCTOU". NAO fecha, e a diferenca importa. `transacao` = `com-tenant*` =
+        ;; `with-transaction` SEM `:isolation` -> READ COMMITTED; esta e' um SELECT simples, sem FOR SHARE, e
+        ;; o que precisaria ser barrado e' um INSERT (votacao corretiva) — leitura fantasma, que row lock nao
+        ;; pega nem em REPEATABLE READ. Hoje a janela e' INALCANCAVEL, nao fechada: nao existe rota que crie
+        ;; corretiva (`AbrirVotacao` nao expoe `votacao-corrige-id`) nem que anule votacao encerrada
+        ;; (`anular-votacao!` nao tem borda). No dia em que a correcao de votacao ganhar rota, esta linha NAO
+        ;; protege: sera' preciso SERIALIZABLE ou uma constraint que amarre autografo<->votacao.
         (when-not (votacao/aprovada-em-votacao? tx ente-id (:proposicao-id m))
           (throw (ex-info "gerar-autografo: a materia nao foi aprovada em votacao (re-verificacao na tx)"
                           {:tipo :conflito/proposicao-nao-aprovada :proposicao-id (:proposicao-id m)})))
