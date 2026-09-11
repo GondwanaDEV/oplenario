@@ -43,15 +43,20 @@
 (defn- ler-json [r] (json/read-value (:body r) json/keyword-keys-object-mapper))
 
 (defn- painel-canonico [ente]
+  ;; :em-aberto-total/:remessas-recentes-total DIVERGEM DE PROPOSITO da count da lista (3 e 7, nao 1) — prova
+  ;; que a rota devolve o TOTAL que o Repo mandou, nao um `count` da lista recalculado na borda (o corte
+  ;; silencioso que este total existe para matar seria invisivel se o teste usasse o mesmo numero nos dois).
   {:resumo [{:estado "pendente" :total 1} {:estado "vencida" :total 2}]   ; cumprida/dispensada/cancelada ausentes
    :em-aberto [{:id (random-uuid) :ente-id ente :template-chave "remessa_mensal_sim" :objeto-tipo "competencia"
                 :objeto-id (random-uuid) :vence-em (LocalDate/of 2099 7 31) :prazo-fonte-ref "IN 04/2019"
                 :estado "vencida" :cumprida-em nil :criado-em (Instant/now) :atualizado-em (Instant/now)}]
+   :em-aberto-total 3
    :remessas-recentes [{:id (random-uuid) :ente-id ente :template-chave "remessa_mensal_sim" :sistema "SIM"
                         :competencia "2099-07" :versao 1 :spec-layout-versao "fixture-sim-v0"
                         :registry-versao-ref "registry-v1@2026-06-20" :hash "sha256:abc"
                         :objeto-store-ref "remessas/ente/x.bin" :estado "submetida"
-                        :submetida-em (Instant/now) :resposta-em nil :criado-em (Instant/now)}]})
+                        :submetida-em (Instant/now) :resposta-em nil :criado-em (Instant/now)}]
+   :remessas-recentes-total 7})
 
 ;; ---------- GET /compliance/painel ----------
 
@@ -64,11 +69,15 @@
     (is (= {:pendente 1 :vencida 2 :cumprida 0 :dispensada 0 :cancelada 0} (:resumo body))
         "o placar 0-fila as 5 fases (normalizacao na borda); os pares crus do Repo viram o mapa completo")
     (is (= 1 (count (:em-aberto body))) "a obrigacao em aberto projetada")
+    (is (= 3 (:em-aberto-total body))
+        "o total vem do Repo verbatim, NAO de (count em-aberto) — prova que a rota nao finge completude")
     (let [o (first (:em-aberto body))]
       (is (= "2099-07-31" (:vence-em o)) "vence-em projetado como string ISO de data")
       (is (string? (:objeto-id o)) "objeto-id como string")
       (is (not (contains? o :ente-id)) "ente-id (tenant) nao vaza"))
     (is (= 1 (count (:remessas-recentes body))) "a remessa recente projetada")
+    (is (= 7 (:remessas-recentes-total body))
+        "o total de remessas vem do Repo verbatim — a mentira que o briefing achou (zero contador) esta morta")
     (let [m (first (:remessas-recentes body))]
       (is (= "SIM" (:sistema m)))
       (is (= "submetida" (:estado m)))

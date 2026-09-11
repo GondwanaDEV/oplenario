@@ -10,7 +10,11 @@
   interna de compliance (§22.10: comunicacao so' HTTP/eventos; nunca cross-schema JOIN, nunca import
   cross-modulo). O `[:map]` opaco e' deliberado: redeclarar `PainelOut` aqui duplicaria o contrato de outro
   modulo (drift garantido). Custo: o codegen TS de F1.5 tipa `complianceTce` como `Record<string, unknown>` —
-  o FE o estreita reusando o `PainelOut` que o proprio compliance ja' gera (a Mesa consome os dois contratos).")
+  e o `compliance` NAO esta no manifesto do codegen (`codegen/gerar.clj`: so' `cadastros`+`paineis`+
+  `legislativo` exportam tipo TS hoje) — NAO HA `PainelOut` gerado em TS para o FE reusar. O FE mantem DOIS
+  espelhos escritos a mao do formato de `compliance/wire/out/painel.clj`
+  (`apps/frontend/src/lib/mesa-vista.ts`): cada campo novo que aquele ns publicar tem de ser replicado
+  la' manualmente ate' compliance entrar no manifesto do codegen.")
 
 (def TramitacaoResumoOut
   "Rollup 'proposicoes por status' (§16.11): contagem por estado da maquina de tramitacao + total. `estado`

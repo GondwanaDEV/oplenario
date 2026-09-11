@@ -102,11 +102,15 @@
      cumprida por evento). Idempotente (so move pendente; ja-vencida nao re-transiciona). Devolve
      [{:id :de :para}...] das obrigacoes transicionadas.")
   (painel [this ente-id opts]
-    "Read-model do painel 'a Casa esta em dia com o TCE' (§16.11): compoe os tres reads tenant-wide numa
+    "Read-model do painel 'a Casa esta em dia com o TCE' (§16.11): compoe os CINCO reads tenant-wide numa
      UNICA tx do tenant (snapshot coerente) — resumo de obrigacoes por estado (placar; pares crus, o 0-fill
-     e' do logic na borda) + obrigacoes em aberto (o que vence) + remessas recentes (pipeline). `opts` =
-     {:limite-em-aberto :limite-remessas} (TETOS server-side, anti unbounded-read). Devolve
-     {:resumo [...] :em-aberto [...] :remessas-recentes [...]}.")
+     e' do logic na borda) + obrigacoes em aberto (o que vence) + o TOTAL real de em-aberto (sem teto) +
+     remessas recentes (pipeline) + o TOTAL real de remessas (sem teto). Os dois totais existem para que a
+     borda nunca finja completude quando o backlog ultrapassa o teto server-side — mesma tx dos outros
+     reads, por isso o total bate com o resumo (coerencia de snapshot). `opts` = {:limite-em-aberto
+     :limite-remessas} (TETOS server-side, anti unbounded-read; os totais IGNORAM este teto de proposito).
+     Devolve {:resumo [...] :em-aberto [...] :em-aberto-total N :remessas-recentes [...]
+     :remessas-recentes-total N}.")
   (buscar-obrigacao [this ente-id id])
   (obrigacoes-do-objeto [this ente-id objeto-tipo objeto-id])
   (avaliacoes-da-obrigacao [this ente-id obrigacao-id])
@@ -190,9 +194,11 @@
   (painel [this ente-id {:keys [limite-em-aberto limite-remessas] :or {limite-em-aberto 100 limite-remessas 50}}]
     (transacao this ente-id
       (fn [tx]
-        {:resumo             (db-obr/resumo-por-estado tx ente-id)
-         :em-aberto          (db-obr/listar-em-aberto tx ente-id limite-em-aberto)
-         :remessas-recentes  (db-rem/listar-recentes tx ente-id limite-remessas)})))
+        {:resumo                   (db-obr/resumo-por-estado tx ente-id)
+         :em-aberto                (db-obr/listar-em-aberto tx ente-id limite-em-aberto)
+         :em-aberto-total          (db-obr/contar-em-aberto tx ente-id)
+         :remessas-recentes        (db-rem/listar-recentes tx ente-id limite-remessas)
+         :remessas-recentes-total  (db-rem/contar-recentes tx ente-id)})))
   (buscar-obrigacao [this ente-id id] (transacao this ente-id #(db-obr/buscar % ente-id id)))
   (obrigacoes-do-objeto [this ente-id objeto-tipo objeto-id]
     (transacao this ente-id #(db-obr/listar-do-objeto % ente-id objeto-tipo objeto-id)))

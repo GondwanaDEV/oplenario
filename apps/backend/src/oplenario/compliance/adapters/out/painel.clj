@@ -34,12 +34,15 @@
    :criado-em     (->str (:criado-em r))})
 
 (defn painel->wire
-  "Read-model do painel {:resumo (pares crus) :em-aberto [...] :remessas-recentes [...]} -> PainelOut
-  (validada). O resumo e' 0-filado pelo logic (placar sempre com as 5 fases)."
-  [{:keys [resumo em-aberto remessas-recentes]}]
-  (let [out {:resumo            (logic/normalizar-resumo resumo)
-             :em-aberto         (mapv obrigacao->wire em-aberto)
-             :remessas-recentes (mapv remessa->wire remessas-recentes)}]
+  "Read-model do painel {:resumo (pares crus) :em-aberto [...] :em-aberto-total N :remessas-recentes [...]
+  :remessas-recentes-total N} -> PainelOut (validada). O resumo e' 0-filado pelo logic (placar sempre com as
+  5 fases). Os dois totais passam direto (ja' sao inteiros do Repo — nenhuma transformacao de saida)."
+  [{:keys [resumo em-aberto em-aberto-total remessas-recentes remessas-recentes-total]}]
+  (let [out {:resumo                   (logic/normalizar-resumo resumo)
+             :em-aberto                (mapv obrigacao->wire em-aberto)
+             :em-aberto-total          em-aberto-total
+             :remessas-recentes        (mapv remessa->wire remessas-recentes)
+             :remessas-recentes-total  remessas-recentes-total}]
     (when-not (m/validate wire/PainelOut out)
       ;; humanize de schema ANINHADO devolve mapa aninhado (ex.: {:resumo {:pendente [...]}}); guarda o mapa
       ;; INTEIRO (nao so `keys`, que perderia o sub-campo que falhou) — o erro global LOGA, nao vai ao corpo

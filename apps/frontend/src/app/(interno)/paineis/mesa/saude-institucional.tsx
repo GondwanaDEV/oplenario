@@ -2,6 +2,14 @@
 
 // Hero "saúde institucional" — porta .saude/.placar de paineis-mesa.html. Mapeamento fino do view-model
 // (mesa-vista.ts); sem lógica própria aqui.
+//
+// `vista.truncamento` (fatia "painel não mente") NÃO é renderizado aqui, deliberadamente: o placar deste
+// card (emDia/pendente/vencida) vem de `resumo`, que o backend calcula por COUNT GROUP BY SEM teto
+// (`compliance/db/obrigacao.clj`, `resumo-por-estado`) — os números aqui SEMPRE são completos. O teto de
+// 100 (e o `truncamento` derivado dele) atinge só a LISTA `emAberto`, que este componente nem consome.
+// Acender um aviso de corte sobre um placar que não está cortado seria o erro oposto ao que esta fatia
+// existe para consertar — fingir INCOMPLETUDE onde há completude. O aviso real mora em OQueVence, onde a
+// lista truncada de fato aparece na tela.
 
 import type { MesaVista } from "@/lib/mesa-vista";
 

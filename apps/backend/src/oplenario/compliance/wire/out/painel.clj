@@ -46,8 +46,20 @@
 
 (def PainelOut
   "O painel 'a Casa esta em dia com o TCE' (resposta de GET /compliance/painel): placar + o-que-vence +
-  pipeline de remessas. Read-model composto (§16.11)."
+  pipeline de remessas. Read-model composto (§16.11).
+
+  TRUNCAMENTO: `em-aberto` para no teto server-side (100) e `remessas-recentes` no teto 50
+  (`components/repositorio`) — cada lista sai com o seu `-total` (mesmo racional de
+  `transparencia/wire/out/parlamentar`: o par lista+total e' obrigatorio, nao opcional). AQUI o que esta em
+  jogo e' pior que uma lista incompleta na tela: a remessa que FALTA enviar ao TCE de uma Casa com backlog
+  e' exatamente o que este painel existe para denunciar. Sem o total, `em-aberto` era denunciavel so' por
+  acaso (o `:resumo` ainda soma sem teto) — mas `remessas-recentes` nao tinha NENHUM contador, e uma Casa
+  com mais de 50 remessas via a tela 'em dia' mesmo com o pipeline real travado alem do corte. `:limite` em
+  si NAO sai neste contrato — o teto e' server-side por decisao de seguranca, e nenhum wire/out do modulo
+  publica teto ao cliente."
   [:map {:closed true}
    [:resumo ResumoOut]
    [:em-aberto [:sequential ObrigacaoEmAbertoOut]]
-   [:remessas-recentes [:sequential RemessaRecenteOut]]])
+   [:em-aberto-total :int]
+   [:remessas-recentes [:sequential RemessaRecenteOut]]
+   [:remessas-recentes-total :int]])

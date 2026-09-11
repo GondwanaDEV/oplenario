@@ -38,6 +38,19 @@ export function OQueVence({ vista }: { vista: MesaVista["oQueVence"] }) {
         <span className="selo-n mono">{vista.itens.length} itens</span>
       </div>
       <div className="bloco-corpo">
+        {/* GET /compliance/painel corta `em-aberto` no teto server-side; `truncamentoCompliance` é o
+            total AUTORITATIVO que o servidor publica (`emAbertoTotal`), não uma dedução do front. Só a
+            fatia de compliance tem esse sinal — pendências de atendimento (e-SIC/LGPD/ouvidoria) não
+            carregam um total equivalente, por isso o aviso nomeia "obrigações do TCE", não a lista
+            inteira. Nunca fingir completude: quem lê precisa saber que pode haver prazo mais distante
+            fora desta página. */}
+        {vista.truncamentoCompliance && (
+          <p role="status" className="aviso-corte">
+            Mostrando <b>{vista.truncamentoCompliance.exibidos} de {vista.truncamentoCompliance.total}</b>{" "}
+            obrigações do TCE em aberto — pode haver prazos mais distantes fora desta lista. Confira o
+            painel de compliance completo.
+          </p>
+        )}
         <ul className="prazos">
           {vista.itens.map((item) => {
             const dias = diasAte(item.venceEm);
