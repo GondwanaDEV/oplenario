@@ -145,3 +145,59 @@
     (tenancy/com-tenant* *ds* a (fn [tx] (reset! tid (montar-template! tx a))))
     (is (seq (tenancy/com-tenant* *ds* a (fn [tx] (tram/transicoes-de tx a @tid "protocolada" "despachar")))) "A ve as proprias transicoes")
     (is (empty? (tenancy/com-tenant* *ds* b (fn [tx] (tram/transicoes-de tx b @tid "protocolada" "despachar")))) "B NAO ve o template de A (RLS)")))
+
+(deftest materia-inexistente-nao-se-disfarca-de-guard-bloqueado
+  ;; Fatia 2 (a borda HTTP da tramitacao) — ESPELHO do fail-closed que `transicionar-parecer!` ganhou na
+  ;; review F3.6a, cumprindo o [CARRY disc.6] que pede paridade explicita entre os dois sujeitos.
+  ;; ANTES: materia inexistente no tenant lia estado `nil` em `estado+lock`, nao casava transicao candidata
+  ;; nenhuma e SAIA COMO `{:transicionou? false}` — que o contrato de `transicionar!` define como "o guard
+  ;; bloqueou". A borda HTTP entao responderia 409 "a Casa nao permite este ato agora" sobre uma materia
+  ;; que NAO EXISTE: plausivel, confiante e errada. O 404 e o 409 dizem coisas diferentes ao operador.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (montar-template! tx ente)
+              fantasma (random-uuid)
+              e (is (thrown-with-msg? clojure.lang.ExceptionInfo #"inexistente"
+                      (transicionar tx ente tid fantasma "despachar")))]
+          (is (= :conflito/transicao (:tipo (ex-data e)))
+              "tag de conflito (a borda traduz), NUNCA {:transicionou? false}"))))))
+
+;; ======================= Fatia 3 — a LEITURA: o que a Casa permite AGORA =======================
+
+(deftest transicoes-do-estado-lista-TODOS-os-gatilhos-do-estado-atual
+  ;; `transicoes-de` (o que a ENGINE usa) filtra por gatilho: ela ja' sabe qual ato foi pedido. A LEITURA
+  ;; tem o problema inverso — o operador ainda nao sabe qual ato pedir, e sem esta lista teria de adivinhar
+  ;; a string do gatilho, o que torna a rota de escrita inutilizavel pela interface.
+  ;; O `guarda` vem JUNTO de proposito: e' ele, e so' ele, que distingue um ato que o rito declara
+  ;; incondicional de um que pode ser recusado no momento do disparo.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (montar-template! tx ente)]
+          ;; segundo gatilho a partir de 'protocolada' — e com guard, ao contrario de 'despachar'
+          (tram/criar-transicao! tx {:id (random-uuid) :ente-id ente :template-id tid :de-estado "protocolada"
+                                     :para-estado "arquivada" :gatilho "arquivar" :guarda "falso" :ordem 2})
+          (let [linhas (tram/transicoes-do-estado tx ente tid "protocolada")]
+            (is (= ["despachar" "arquivar"] (mapv :gatilho linhas))
+                "TODOS os gatilhos do estado, na ORDEM declarada no rito — nao so' os de UM gatilho")
+            (is (= [nil "falso"] (mapv :guarda linhas))
+                "o guard acompanha a linha: e' o unico dado que separa ato incondicional de ato recusavel")
+            (is (= ["em_comissoes" "arquivada"] (mapv :para-estado linhas))
+                "o destino que o rito declara p/ cada ato"))
+          (is (empty? (tram/transicoes-do-estado tx ente tid "arquivada"))
+              "estado terminal do fixture nao declara ato nenhum"))))))
+
+(deftest estado-no-template-separa-TERMINAL-de-DESCONHECIDO
+  ;; Lista de gatilhos vazia tem DUAS causas que pedem acoes opostas do operador: (a) o rito acabou
+  ;; (estado terminal) — nada a fazer; (b) o rito nao declara saida deste estado, ou nem conhece o estado —
+  ;; a materia esta' num beco, e alguem tem de mexer na CONFIG. Sem este dado a borda so' poderia dizer
+  ;; "nenhum ato disponivel", que e' verdadeiro e inutil.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (montar-template! tx ente)]
+          (is (false? (:terminal (tram/estado-no-template tx ente tid "protocolada"))))
+          (is (true? (:terminal (tram/estado-no-template tx ente tid "arquivada"))))
+          (is (nil? (tram/estado-no-template tx ente tid "estado_que_o_rito_nao_conhece"))
+              "nil = o rito NAO declara este estado (materia anterior ao rito, ou rito trocado sob os pes)"))))))

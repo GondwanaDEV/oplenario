@@ -18,12 +18,18 @@
   "Persiste um template de tramitacao. `:sujeito` ('proposicao' default | 'parecer') e' o discriminador
   do tipo de entidade que o template governa (F3.6a): as tabelas de template sao subject-agnosticas, o
   sujeito e' validado no service do sujeito (ex.: parecer/criar! recusa template de 'proposicao'). Omitir
-  = 'proposicao' (preserva os callers do eixo C)."
-  [tx {:keys [id ente-id chave versao nome estado-inicial sujeito template-pai-id]}]
+  = 'proposicao' (preserva os callers do eixo C).
+
+  `:ativo` (omitir = true, o default da coluna) e' o que APOSENTA uma versao de rito: o versionamento e'
+  por COPIA INTEGRAL (mig 0016), entao apos o primeiro bump a Casa tem mais de uma linha com o mesmo
+  `sujeito`. `db/proposicao/protocolar!` so' considera os ATIVOS ao resolver o rito de uma materia nova —
+  sem poder gravar `ativo` aqui nao havia como montar (nem testar) esse cenario."
+  [tx {:keys [id ente-id chave versao nome estado-inicial sujeito ativo template-pai-id]}]
   (jdbc/execute-one! tx
     (sql/format {:insert-into :legislativo.template_tramitacao
                  :values [{:id id :ente_id ente-id :chave chave :versao (or versao 1) :nome nome
                            :estado_inicial estado-inicial :sujeito (or sujeito "proposicao")
+                           :ativo (if (some? ativo) (boolean ativo) true)
                            :template_pai_id template-pai-id :efetivado_em [:now]}]})))
 
 (defn criar-estado! [tx {:keys [id ente-id template-id chave nome terminal ordem]}]
@@ -59,6 +65,48 @@
                    :where [:and [:= :ente_id ente-id] [:= :template_id template-id]
                            [:= :de_estado de-estado] [:= :gatilho gatilho]]
                    :order-by [[:ordem :asc] [:id :asc]]}))))
+
+(defn transicoes-do-estado
+  "Fatia 3 (a LEITURA) — TODAS as transicoes declaradas a partir de `de-estado`, de TODOS os gatilhos, na
+  ORDEM do rito. E' a irma de `transicoes-de`: aquela filtra por gatilho porque a ENGINE ja' sabe qual ato
+  foi pedido; esta nao filtra porque o OPERADOR ainda nao sabe qual pedir — sem ela ele teria de adivinhar
+  a string do gatilho e a rota de escrita ficaria inutilizavel pela interface.
+
+  Mesmo `ORDER BY` e o MESMO indice de `transicoes-de` (`idx_template_transicao_origem`, prefixo
+  ente_id+template_id+de_estado — o `gatilho` a mais no indice nao atrapalha a poda).
+
+  `:guarda` vem na projecao e NAO e' detalhe interno vazado: e' o unico dado que separa um ato que o rito
+  declara incondicional de um que tem condicao a verificar no disparo. Quem le' a lista precisa dessa
+  distincao p/ nao prometer o que o guard pode recusar.
+
+  SEM TETO, deliberadamente. Todo o resto do modulo empurra `limite` ao SQL, mas aqui truncar seria ESCONDER
+  UM ATO QUE A CASA DECLARA — o operador nao veria a opcao e concluiria que o rito nao a tem. A tabela e'
+  config escrita por humano e o recorte e' 'saidas de UM estado de UM rito': a cardinalidade e' de unidades."
+  [tx ente-id template-id de-estado]
+  (comum/linhas->kebab
+    (jdbc/execute! tx
+      (sql/format {:select [:id :de_estado :para_estado :gatilho :guarda :acao :ordem]
+                   :from [:legislativo.template_transicao]
+                   :where [:and [:= :ente_id ente-id] [:= :template_id template-id]
+                           [:= :de_estado de-estado]]
+                   :order-by [[:ordem :asc] [:id :asc]]}))))
+
+(defn estado-no-template
+  "O estado `chave` COMO O RITO O DECLARA, ou nil se o rito nao o declara.
+
+  Existe p/ desambiguar a lista de gatilhos VAZIA, que tem causas que pedem acoes OPOSTAS do operador:
+    - `{:terminal true}`  -> o rito acabou aqui. Nada a fazer, e esta' certo.
+    - `{:terminal false}` -> beco: o rito conhece o estado mas nao declara saida dele. Alguem tem de mexer
+                             na CONFIG; a materia esta' presa.
+    - `nil`               -> o rito nem conhece este estado. Materia anterior ao rito, ou rito trocado sob
+                             os pes dela (o versionamento de template e' por copia integral, mig 0016).
+  Sem este dado a borda so' poderia dizer 'nenhum ato disponivel' — verdadeiro e inutil."
+  [tx ente-id template-id chave]
+  (comum/linha->kebab
+    (jdbc/execute-one! tx
+      (sql/format {:select [:chave :nome :terminal :ordem]
+                   :from [:legislativo.template_estado]
+                   :where [:and [:= :ente_id ente-id] [:= :template_id template-id] [:= :chave chave]]}))))
 
 (defn registrar-transicao!
   "Append-only: grava a transicao OCORRIDA no historico (a prova duravel, Inv.10). RETURNING `ocorrido_em`
@@ -117,7 +165,16 @@
   lock_version (conflito de escrita) PROPAGAM como excecao — o controller distingue: resultado = dominio
   normal; excecao = erro de avaliacao/conflito."
   [tx {:keys [registro ente-id proposicao-id template-id gatilho ator-id contexto agora updated-by]}]
-  (let [{:keys [estado lock-version]} (estado+lock tx ente-id proposicao-id)
+  (let [linha (estado+lock tx ente-id proposicao-id)
+        ;; fail-closed (Fatia 2; ESPELHO do fix que `transicionar-parecer!` ganhou na review F3.6a — o
+        ;; [CARRY disc.6] daquele ns pede paridade explicita entre os dois sujeitos). Materia inexistente
+        ;; no tenant lia estado `nil`, nao casava candidata nenhuma e saia como `{:transicionou? false}` —
+        ;; que o contrato define como "o guard bloqueou". A borda entao responderia "a Casa nao permite
+        ;; este ato agora" sobre uma materia que NAO EXISTE: resposta plausivel, confiante e errada.
+        _ (when (nil? linha)
+            (throw (ex-info "transicionar!: proposicao inexistente no tenant"
+                            {:tipo :conflito/transicao :proposicao-id proposicao-id :ente-id ente-id})))
+        {:keys [estado lock-version]} linha
         candidatas (transicoes-de tx ente-id template-id estado gatilho)
         passa? (fn [t]
                  (or (nil? (:guarda t))

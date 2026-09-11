@@ -83,6 +83,16 @@
   (criar-transicao! [this ente-id transicao])
   (transicionar! [this ente-id registro args] "Engine: guard via motor + historico + muda estado, 1 tx.")
   (historico-da-proposicao [this ente-id proposicao-id])
+  (tramitacao-da-proposicao [this ente-id proposicao-id limite]
+    "Fatia 3 — tudo o que a tela de tramitacao precisa, NUMA UNICA tx (mesma disciplina de
+     ficha-completa-da-proposicao). Diferente daquela, aqui as leituras sao DEPENDENTES: as candidatas e o
+     estado-no-rito so' podem ser lidos depois de se saber o estado ATUAL e o rito da linha — o que e'
+     exatamente o motivo de ser uma tx so' e nao tres chamadas do controller (duas transicoes concorrentes
+     entre as leituras dariam um historico de um momento e uma lista de gatilhos de outro).
+     `limite` e' o teto do HISTORICO (empurrado ao SQL). O caller passa teto+1 de proposito e usa o
+     excedente como SONDA de truncamento — ver controllers/buscar-tramitacao.
+     Devolve {:proposicao :historico :candidatas :estado-no-template}; `:proposicao` nil = inexistente no
+     tenant (o caller traduz p/ 404), e nesse caso as demais chaves vem vazias/nil.")
   ;; eixo D — emendas
   (criar-emenda! [this ente-id emenda] "Numera local por mae + insere ('apresentada').")
   (buscar-emenda [this ente-id id])
@@ -304,7 +314,11 @@
                                     :updated-by (:created-by p) :lock-version 0})))
           (producers/emitir-protocolada! bus tx ente-id
             {:proposicao-id (:id r) :tipo (:tipo p) :ano (:ano p) :sequencial (:sequencial r)
-             :urn-lex (:urn-lex r) :ementa (:ementa p) :estado "protocolada"
+             ;; o estado vem do RETORNO de protocolar! (= a linha), nao de um literal: com o elo
+             ;; materia<->template (mig 0076) a materia nasce no `estado_inicial` do rito da Casa, que
+             ;; nao e' necessariamente 'protocolada'. Cravar a string aqui faria o evento publico
+             ;; AFIRMAR um estado que a linha nao tem — e o portal projeta deste evento (§22.10).
+             :urn-lex (:urn-lex r) :ementa (:ementa p) :estado (:estado r)
              :autor-tipo (:autor-tipo p) :autor-texto (:autor-texto p)
              ;; some-> : :autor-id e' nulo p/ autoria nao-parlamentar; (str nil) daria "" e quebraria
              ;; o UUID/fromString do consumer (Onda E fatia 2).
@@ -409,6 +423,22 @@
                 (:ator-id args) (assoc :ator-id (:ator-id args)))))
           r))))
   (historico-da-proposicao [this ente-id pid] (transacao this ente-id #(tram/historico-da-proposicao % ente-id pid)))
+  ;; Fatia 3 (a LEITURA da tramitacao). Sem rito (`template_id` NULL) NAO se consulta o template: nao ha'
+  ;; o que consultar, e o historico tambem vem vazio por construcao (nada jamais tramitou). Lido `nil` na
+  ;; proposicao, as outras tres leituras sao PULADAS — nao ha' recurso, nao ha' nada que dizer sobre ele.
+  (tramitacao-da-proposicao [this ente-id pid limite]
+    (transacao this ente-id
+      (fn [tx]
+        (let [p (proposicao/buscar tx ente-id pid)
+              tid (:template-id p)]
+          {:proposicao p
+           ;; o historico e' lido SEMPRE que a materia existe — inclusive sem rito. "Sem rito logo nunca
+           ;; tramitou" e' INFERENCIA (verdadeira hoje: `transicionar!` exige template-id), e uma leitura
+           ;; de auditoria que devolve uma inferencia no lugar do dado mente no dia em que a inferencia
+           ;; deixar de valer. O custo de medir e' uma query indexada.
+           :historico (if p (tram/historico-da-proposicao tx ente-id pid limite) [])
+           :candidatas (if (and p tid) (tram/transicoes-do-estado tx ente-id tid (:estado p)) [])
+           :estado-no-template (when (and p tid) (tram/estado-no-template tx ente-id tid (:estado p)))}))))
   ;; eixo D / F3.4 — emendas. aprovar! compoe (nova-versao rascunho + muda estado) numa UNICA tx do tenant.
   (criar-emenda! [this ente-id e] (transacao this ente-id #(emenda/criar! % (assoc e :ente-id ente-id))))
   (buscar-emenda [this ente-id id] (transacao this ente-id #(emenda/buscar % ente-id id)))

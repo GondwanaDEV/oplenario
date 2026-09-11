@@ -131,3 +131,80 @@
      :destinatario-id (->uuid? (:destinatario-id m) :destinatario-id)
      :destinatario-texto (:destinatario-texto m) :tipo-requerimento (:tipo-requerimento m)
      :categoria-mocao (:categoria-mocao m) :texto (:texto m) :updated-by (:identidade-id ator)}))
+
+;; ---------- Fatia 2: a borda da TRAMITACAO (eixo C) ----------
+
+(def ^:private campos-tramitar ["gatilho" "contexto"])
+
+(defn- recusa-campo-extra!
+  "Recusa (400) QUALQUER chave de topo fora de `permitidos` — em vez de descartar em silencio, que e' o que
+  `so-esperados` faz nas bordas irmas.
+
+  POR QUE ESTA BORDA E' DIFERENTE: aqui o campo extra tipico nao e' ruido de cliente desatualizado, e' um
+  `{\"para\": \"aprovada\"}` — alguem tentando escolher o destino da materia. Descartar em silencio manteria
+  o invariante (o destino continua vindo do template) mas devolveria 200 para um pedido que o servidor NAO
+  atendeu como o cliente entendeu: ele acredita que mandou a materia para 'aprovada', e a materia foi para
+  onde o rito mandou. Um 400 e' a unica resposta que corrige o modelo mental de quem chamou — e e' a licao
+  do T3-A, que nasceu justamente de o chamador achar que escolhia a regra.
+
+  As chaves ECOADAS na ex-data sao NOMES de campo do cliente (nao valores) e vao so' para o log do
+  servidor (o interceptor global responde corpo opaco); ainda assim, teto de 5 e truncadas, porque nome de
+  campo continua sendo string arbitraria vinda da rede."
+  [m permitidos]
+  (when-let [extras (seq (remove (set permitidos) (keys m)))]
+    (invalido! "campo nao permitido no corpo (esta borda aceita GATILHO, nunca estado-destino)"
+               {:campos (mapv #(subs (str %) 0 (min 40 (count (str %)))) (take 5 (sort extras)))})))
+
+(defn- contexto->dominio
+  "Contexto do corpo (mapa STRING-keyed, como o JSON chega) -> mapa KEYWORD-keyed, que e' a forma que o
+  avaliador da DSL sabe ler: `motor/runtime` resolve `contexto.x` como `(get obj (keyword \"x\"))`. Sem esta
+  coercao o guard leria `nil` para TODA chave e falharia em silencio — pior que falhar alto, porque a
+  transicao simplesmente nao aconteceria e ninguem saberia por que. Ausente -> `{}` (nunca nil: a engine
+  poe o contexto no `amb`, e `nil` ali vira `contexto` inexistente em vez de contexto vazio)."
+  [c]
+  (if (map? c) (update-keys c keyword) {}))
+
+(defn tramitar->dominio
+  "Corpo (wire/in.TramitarProposicao) + `ator` + `proposicao-id` (path, ja' UUID) + `agora` (LocalDate JA'
+  RESOLVIDO pelo caller via kernel/tempo — este adapter e' traducao PURA, nao le relogio; mesma disciplina
+  de `emitir->dominio` do parecer) -> mapa de dominio p/ Repo/transicionar!.
+
+  NAO devolve `:template-id`: o rito nao e' dado de cliente nem de borda — quem o injeta e' o controller,
+  lendo a coluna da PROPRIA linha (fatia 1). Um adapter que aceitasse template-id do corpo reabriria
+  exatamente o T3-A.
+
+  `ator-id` e `updated-by` saem do `ator` resolvido na auth, nunca do corpo (§22.5). `gatilho` e' trimado e
+  recusado em branco — o `:min 1` do Malli so' barra a string vazia, e um gatilho de espacos nao casa
+  transicao nenhuma (viraria um 409 'a Casa nao permite' enganoso em vez de um 400 honesto)."
+  [ator proposicao-id agora wire-in]
+  (when-not (map? wire-in) (invalido! "corpo deve ser objeto JSON" {:campo :corpo}))
+  (recusa-campo-extra! wire-in campos-tramitar)
+  (let [m (so-esperados wire-in campos-tramitar)]
+    (validar! wire/TramitarProposicao m "corpo de tramitar proposicao invalido")
+    (let [gatilho (str/trim (:gatilho m))]
+      (when (str/blank? gatilho)
+        (invalido! "gatilho obrigatorio (nao-branco)" {:campos [:gatilho]}))
+      {:proposicao-id proposicao-id :gatilho gatilho
+       :contexto (contexto->dominio (:contexto m))
+       :ator-id (:identidade-id ator) :updated-by (:identidade-id ator) :agora agora})))
+
+;; ---------- Fatia 3: a LEITURA da tramitacao (query-params) ----------
+
+(def ^:private limite-historico-min 1)
+(def ^:private limite-historico-max 500)
+(def ^:private limite-historico-default 100)
+
+(defn tramitacao-query->dominio
+  "query-params de GET /legislativo/proposicoes/:id/tramitacao -> `{:limite n}` (teto do HISTORICO).
+
+  MESMA disciplina de `pagina`/`tamanho` acima, e pelo mesmo motivo: default quando AUSENTE, 400 quando
+  PRESENTE e invalido (fora da faixa, nao-inteiro, repetido) — nunca absorvido em silencio, porque um teto
+  silenciosamente trocado muda quanto do processo o operador esta' vendo sem ele saber.
+
+  So' ha' `limite`, nao `pagina`: o historico de uma materia e' append-only e da ordem de dezenas de
+  linhas: paginar seria contrato a manter sem caso de uso. O teto de 500 e' o guarda-costas do payload,
+  nao o modo normal de uso — e a resposta declara `historico-truncado` sempre que ele morde (o Repo e'
+  consultado com `limite+1` como sonda; ver controllers/buscar-tramitacao)."
+  [query-params]
+  {:limite (query-inteiro-em-faixa (:limite query-params) :limite
+                                   limite-historico-min limite-historico-max limite-historico-default)})

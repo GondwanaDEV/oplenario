@@ -12,6 +12,7 @@
 
 (def ^:private colunas
   [:id :ente_id :tipo :ano :sequencial :urn_lex :ementa :autor_tipo :autor_id :autor_texto :estado
+   :template_id
    :objeto_indicacao :destinatario_id :destinatario_texto :tipo_requerimento :categoria_mocao
    :atributos_especificos :texto_vigente_versao_id :lock_version :atualizado_em])
 
@@ -19,25 +20,108 @@
   (when linha
     (update (comum/linha->kebab linha) :atributos-especificos comum/jsonb->kw)))
 
+;; ---------------------------------------------------------------------------------------------------
+;; O elo MATERIA <-> TEMPLATE (mig 0076) — espelha db/parecer/criar!
+;; ---------------------------------------------------------------------------------------------------
+
+(defn- template-meta
+  "Le estado_inicial + sujeito de UM template do tenant (mesma forma de db/parecer/template-meta). nil =
+  inexistente DAQUI: a RLS ja' esconde o template de outro ente, entao 'do vizinho' e 'nao existe' sao a
+  mesma resposta — e a FK same-tenant recusa o mesmo par por baixo, caso alguem escreva sem passar aqui."
+  [tx ente-id template-id]
+  (comum/linha->kebab
+   (jdbc/execute-one! tx
+     (sql/format {:select [:estado_inicial :sujeito] :from [:legislativo.template_tramitacao]
+                  :where [:and [:= :ente_id ente-id] [:= :id template-id]]}))))
+
+(defn- ritos-ativos-do-tenant
+  "Templates ATIVOS de sujeito 'proposicao' do tenant. Teto 2 — a decisao so' distingue nenhum / exatamente
+  um / mais de um, nao precisa arrastar a tabela de config inteira. `ativo` entra no filtro porque o
+  versionamento de template e' por COPIA INTEGRAL (mig 0016): sem ele, a primeira Casa que versionasse o
+  proprio rito passaria a ter 2 linhas e recusaria TODA materia nova por ambiguidade."
+  [tx ente-id]
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select [:id :estado_inicial] :from [:legislativo.template_tramitacao]
+                  :where [:and [:= :ente_id ente-id] [:= :sujeito [:inline "proposicao"]] [:= :ativo true]]
+                  :order-by [[:id :asc]] :limit 2}))))
+
+(defn- resolver-rito!
+  "Decide SOB QUAL RITO a materia nasce, e qual e' o estado inicial dela. FALHA FECHADA.
+
+  - `template-id` explicito VENCE sempre (inclusive sobre um tenant que seria ambiguo, e inclusive sobre
+    `ativo`: quem nomeia o template esta' declarando a intencao — importacao de acervo entra num rito
+    aposentado de proposito). Valida que existe no tenant e que e' de sujeito 'proposicao' (anti-misconfig
+    cross-sujeito — o espelho exato de db/parecer/criar!, que recusa template de 'proposicao').
+  - ausente + EXATAMENTE UM rito ativo: a materia nasce nele, e o estado vem de `template.estado_inicial`.
+    NAO do literal 'protocolada' — cravar a string de estado no codigo e' precisamente o que o Inv.4
+    proibe (os valores de `proposicoes.estado` sao chaves de `template_estado`, config do tenant).
+  - ausente + NENHUM rito ativo: devolve nil/nil. A materia nasce sem rito e nao tramita — o comportamento
+    de hoje, agora explicito. O `estado` fica a cargo do DEFAULT DA COLUNA (schema), nao do codigo.
+  - ausente + MAIS DE UM rito ativo: RECUSA. Escolher o rito da Casa por conta (o primeiro, o mais novo,
+    o de nome mais parecido) e' exatamente a classe de defeito do T3-A — o chamador escolhendo a regra.
+
+  [CARRY / DECISAO ABERTA — nao resolvida aqui de proposito] Regimentalmente, especies diferentes tem
+  ritos diferentes: requerimento nao passa por comissoes como projeto de lei passa, e mocao raramente tem
+  parecer. A prazo isto deixa de ser 'um rito por Casa' e vira um mapa `tipo -> template` (provavelmente
+  uma coluna `sujeito_tipo` no template, ou uma tabela de vinculo tipo<->rito). Hoje a resolucao automatica
+  IGNORA `tipo` — e a regra de 'mais de um recusa' e' justamente o que impede uma Casa de simular esse mapa
+  por acidente, cadastrando varios ritos e torcendo para o certo ser escolhido. Quem fecha isto e' o
+  Daouda com o regimento na mao, nao a engenharia."
+  [tx ente-id template-id]
+  (if (some? template-id)
+    (let [{:keys [estado-inicial sujeito]} (template-meta tx ente-id template-id)]
+      (when (nil? estado-inicial)
+        (throw (ex-info "protocolar: template inexistente" {:template-id template-id})))
+      (when (not= "proposicao" sujeito)
+        (throw (ex-info "protocolar: template nao e' de sujeito 'proposicao' (anti-misconfig cross-sujeito)"
+                        {:template-id template-id :sujeito sujeito})))
+      {:template-id template-id :estado estado-inicial})
+    (let [ritos (ritos-ativos-do-tenant tx ente-id)]
+      (case (count ritos)
+        0 {:template-id nil :estado nil}
+        1 {:template-id (:id (first ritos)) :estado (:estado-inicial (first ritos))}
+        (throw (ex-info (str "protocolar: mais de um template de proposicao ativo no tenant — "
+                             "informe `template-id` explicitamente (o rito nao se escolhe por conta)")
+                        {:ente-id ente-id}))))))
+
 (defn protocolar!
-  "Protocola: gera o sequencial gapless (escopo 'tipo:ano' do ente da SESSAO), computa a URN/LexML
-  (eixo H) e insere — atomico na tx. uf/municipio-nome = FATO do ente resolvido UPSTREAM (nao JOIN
-  cross-schema, §22.10). Devolve {:id :sequencial :urn-lex} (o numero so existe pos-commit)."
+  "Protocola: resolve o RITO (mig 0076), gera o sequencial gapless (escopo 'tipo:ano' do ente da SESSAO),
+  computa a URN/LexML (eixo H) e insere — atomico na tx. uf/municipio-nome = FATO do ente resolvido
+  UPSTREAM (nao JOIN cross-schema, §22.10). Devolve {:id :sequencial :urn-lex :template-id :estado} (o
+  numero so existe pos-commit).
+
+  ORDEM IMPORTA: o rito e' resolvido ANTES de `sequencial/proximo!`. A numeracao oficial e' GAPLESS (eixo
+  H) — se a recusa por config ambigua acontecesse depois, cada tentativa recusada abriria um buraco
+  permanente na numeracao da Casa.
+
+  `:estado` vem do `:returning` do proprio INSERT, nao de um chute do codigo: quando ha' rito, e' o
+  `estado_inicial` do template; quando nao ha', e' o DEFAULT DA COLUNA. Nos dois casos o literal de estado
+  mora no dado (template ou schema), nunca aqui — Inv.4. O caller (Repo) usa este retorno para montar o
+  payload publico de `proposicao.protocolada`; sem isso o evento afirmaria 'protocolada' enquanto a linha
+  diria outra coisa."
   [tx {:keys [id ente-id tipo ano uf municipio-nome ementa autor-tipo autor-id autor-texto
               objeto-indicacao destinatario-id destinatario-texto tipo-requerimento categoria-mocao
-              atributos-especificos created-by]}]
-  (let [seq-val (sequencial/proximo! tx (str tipo ":" ano))
-        urn     (logic/urn-lex {:uf uf :municipio-nome municipio-nome :tipo tipo :ano ano :sequencial seq-val})]
-    (jdbc/execute-one! tx
-      (sql/format {:insert-into :legislativo.proposicoes
-                   :values [{:id id :ente_id ente-id :tipo tipo :ano ano :sequencial seq-val :urn_lex urn
-                             :ementa ementa :autor_tipo autor-tipo :autor_id autor-id :autor_texto autor-texto
-                             :objeto_indicacao objeto-indicacao :destinatario_id destinatario-id
-                             :destinatario_texto destinatario-texto :tipo_requerimento tipo-requerimento
-                             :categoria_mocao categoria-mocao :estado "protocolada"
-                             :atributos_especificos (some-> atributos-especificos comum/->jsonb)
-                             :created_by created-by :efetivado_em [:now]}]}))
-    {:id id :sequencial seq-val :urn-lex urn}))
+              atributos-especificos template-id created-by]}]
+  (let [{rito :template-id estado-inicial :estado} (resolver-rito! tx ente-id template-id)
+        seq-val (sequencial/proximo! tx (str tipo ":" ano))
+        urn     (logic/urn-lex {:uf uf :municipio-nome municipio-nome :tipo tipo :ano ano :sequencial seq-val})
+        linha   (comum/linha->kebab
+                 (jdbc/execute-one! tx
+                   (sql/format {:insert-into :legislativo.proposicoes
+                                :values [(cond-> {:id id :ente_id ente-id :tipo tipo :ano ano :sequencial seq-val
+                                                  :urn_lex urn :ementa ementa :autor_tipo autor-tipo
+                                                  :autor_id autor-id :autor_texto autor-texto
+                                                  :objeto_indicacao objeto-indicacao :destinatario_id destinatario-id
+                                                  :destinatario_texto destinatario-texto
+                                                  :tipo_requerimento tipo-requerimento
+                                                  :categoria_mocao categoria-mocao :template_id rito
+                                                  :atributos_especificos (some-> atributos-especificos comum/->jsonb)
+                                                  :created_by created-by :efetivado_em [:now]}
+                                           ;; sem rito, o estado NAO e' setado: cai no DEFAULT da coluna
+                                           (some? estado-inicial) (assoc :estado estado-inicial))]
+                                :returning [:estado]})))]
+    {:id id :sequencial seq-val :urn-lex urn :template-id rito :estado (:estado linha)}))
 
 ;; NOTA: proposicoes e' hash-particionada por ente_id -> toda query inclui ente_id no WHERE (partition
 ;; pruning + uso do indice composto; a RLS e' funcao volatil, o planner NAO a usa p/ podar particao).
@@ -136,8 +220,14 @@
                                :lock_version [:+ :lock_version 1]}
                          :where [:and [:= :ente_id ente-id] [:= :id id] [:= :lock_version lock-version]]}))]
     (when (zero? (:next.jdbc/update-count r 0))
+      ;; `:tipo :conflito/transicao` (Fatia 2 — a borda HTTP da tramitacao): TAG, nao mudanca de
+      ;; comportamento. Sem ela a colisao de CAS caia no `:else` do interceptor global e virava 500 opaco na
+      ;; borda nova — indistinguivel de um guard que explodiu, que e' incidente de CONFIG e exige outra
+      ;; acao do operador. Mesma tag que `sessoes/db/sessao.clj` ja' usa p/ o mesmo fato (espelho
+      ;; cross-modulo deliberado). Os demais callers nao mudam: `:conflito/*` nao e' tratado pelo
+      ;; interceptor global, entao quem nao traduz explicitamente continua vendo 500, como antes.
       (throw (ex-info "conflito de escrita (lock_version desatualizado) ou proposicao inexistente"
-                      {:id id :lock-version lock-version})))
+                      {:tipo :conflito/transicao :id id :lock-version lock-version})))
     r))
 
 (defn- estado+lock [tx ente-id id]

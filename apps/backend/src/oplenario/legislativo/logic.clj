@@ -285,3 +285,42 @@
   acima de 999). O schema guarda tipo/ano/sequencial crus; isto e' a projecao de exibicao."
   [{:keys [tipo ano sequencial]}]
   (str (get tipo->sigla tipo (str/upper-case tipo)) " " (format "%03d" sequencial) "/" ano))
+
+;; ---------------------------------------------------------------------------------------------------
+;; Fatia 3 da borda de tramitacao — o que a Casa permite AGORA (puro, sobre as candidatas ja' lidas)
+;; ---------------------------------------------------------------------------------------------------
+
+(defn gatilhos-possiveis
+  "Candidatas (linhas de `template_transicao` a partir do estado ATUAL, JA' na ordem do rito) -> um item
+  por GATILHO: `{:gatilho :destinos-possiveis :pode-ser-recusado}`.
+
+  POSSIVEIS, nunca 'disponiveis'. Esta funcao NAO avalia guard — lista o que o rito DECLARA. Avaliar
+  aqui seria impossivel de acertar: o guard le' `contexto`, e o contexto e' argumento do POST, nao existe
+  no momento da leitura. `contexto.urgente` avaliado contra `{}` responderia 'nao passa' sobre um ato que
+  passaria com o corpo certo — resposta precisa e falsa, pior que imprecisa e honesta.
+
+  `pode-ser-recusado` e' o que paga essa escolha, e a definicao e' exata: o gatilho so' pode ser recusado
+  POR GUARD se TODAS as suas candidatas tem guard. Havendo UMA sem guard, a engine sempre acha uma
+  transicao que passa — o ato ocorre; so' o DESTINO e' que varia conforme os guards das demais.
+  O predicado e' `nil?` sobre `:guarda`, LITERALMENTE o mesmo de `db/tramitacao/transicionar!`: uma leitura
+  que usasse outra nocao de 'tem guard' (ex.: tratar string vazia como ausente) passaria a mentir sobre a
+  escrita por divergencia de definicao, que e' o modo de falha mais caro e mais silencioso que existe aqui.
+  `false` NAO e' promessa transacional: o estado pode mudar entre esta leitura e o disparo, e o CAS
+  continua podendo colidir — e' a mesma janela de qualquer read-then-write.
+
+  `destinos-possiveis` e' informacao, nunca escolha: o cliente ve' PARA ONDE o rito levaria, e segue sem
+  poder pedir destino nenhum (o corpo do POST so' aceita gatilho). Ordem = a do rito.
+
+  ORDEM DA LISTA: pela menor `ordem` de cada gatilho, desempate pelo nome. E' ordem de APRESENTACAO
+  (a sequencia ritual que quem escreveu o template pretendia), e NAO precedencia entre gatilhos —
+  precedencia so' existe ENTRE candidatas do MESMO gatilho, e quem a resolve e' a engine."
+  [candidatas]
+  (->> candidatas
+       (group-by :gatilho)
+       (mapv (fn [[g ts]]
+               {:gatilho g
+                :destinos-possiveis (vec (distinct (keep :para-estado ts)))
+                :pode-ser-recusado (every? #(some? (:guarda %)) ts)
+                ::ordem (reduce min Long/MAX_VALUE (map #(or (:ordem %) 0) ts))}))
+       (sort-by (juxt ::ordem :gatilho))
+       (mapv #(dissoc % ::ordem))))
