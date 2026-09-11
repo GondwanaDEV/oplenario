@@ -248,7 +248,15 @@
 
 (defprotocol RepoPaineis
   (transacao [this ente-id f] "Roda (f tx) numa UNICA tx do tenant (com-tenant*) — leitura interna.")
-  (o-que-vence [this ente-id] "Pendencias ABERTAS (pendente|vencido) do tenant, mais urgente primeiro.")
+  (o-que-vence [this ente-id opts]
+    "Pendencias ABERTAS (pendente|vencido) do tenant, mais urgente primeiro + o TOTAL real (sem teto) —
+     fatia 'GET /paineis/pendencias para de esconder prazo legal'. `opts` = {:limite} (TETO server-side,
+     anti unbounded-read; o total IGNORA este teto de proposito, mesmo racional de
+     compliance/components/repositorio/painel). Os dois reads (lista + total) rodam na MESMA tx
+     (coerencia de snapshot) e o total REUSA `db-pendencia/resumo` (o mesmo WHERE `estado IN
+     ('pendente','vencido')` de `listar-abertas` — ver docstring de ambos em db/pendencia.clj), nunca
+     uma contagem escrita a parte (evita uma 3a copia do predicado divergir em silencio). Devolve
+     {:pendencias [...] :pendencias-total N}.")
   (tramitacao-board [this ente-id] "TODAS as proposicoes do tenant, agrupadas por estado, mais estagnadas primeiro.")
   (sli-sessoes [this ente-id] "SLI de janela de sessao (Inv.9): sessoes do tenant, abertas primeiro, concluidas por recencia.")
   (dashboard-mesa [this ente-id]
@@ -284,7 +292,11 @@
 (defrecord RepoPaineisPg [datasource]
   RepoPaineis
   (transacao [_ ente-id f] (tenancy/com-tenant* (:ds datasource) ente-id f))
-  (o-que-vence [this ente-id] (transacao this ente-id #(db-pendencia/listar-abertas % ente-id teto-o-que-vence)))
+  (o-que-vence [this ente-id {:keys [limite] :or {limite teto-o-que-vence}}]
+    (transacao this ente-id
+      (fn [tx]
+        {:pendencias       (db-pendencia/listar-abertas tx ente-id limite)
+         :pendencias-total (reduce + 0 (map :n (db-pendencia/resumo tx ente-id)))})))
   (tramitacao-board [this ente-id] (transacao this ente-id #(db-tramitacao/listar-board % ente-id teto-tramitacao-board-por-estado)))
   (sli-sessoes [this ente-id] (transacao this ente-id #(db-sli-sessao/listar-sli-sessoes % ente-id teto-sli-sessoes)))
   (dashboard-mesa [this ente-id]

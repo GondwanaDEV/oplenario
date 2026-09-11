@@ -9,9 +9,10 @@
 (defn o-que-vence
   "Read-model 'o que vence' (§16.11) p/ o tenant do `ator`. A authz GROSSA (papel) ja foi exigida na rota;
   o painel e' tenant-wide (sem recurso unico p/ camada fina — o escopo e' o proprio ente do ator, isolado
-  por RLS). O teto do read e' server-side (no Repo)."
+  por RLS). O teto do read e' server-side (no Repo); `{}` cai no default de producao (mesmo padrao de
+  compliance/controllers/painel) — devolve {:pendencias [...] :pendencias-total N}."
   [repo-paineis ator]
-  (repo/o-que-vence repo-paineis (:ente-id ator)))
+  (repo/o-que-vence repo-paineis (:ente-id ator) {}))
 
 (defn tramitacao-board
   "Read-model do board de tramitacao (§16.11, F7 Slice 2) p/ o tenant do `ator`. Mesma authz/escopo

@@ -23,7 +23,7 @@ describe("useMesa", () => {
         : url.includes("/paineis/tramitacao")
           ? { itens: [] }
           : url.includes("/paineis/pendencias")
-            ? { pendencias: [] }
+            ? { pendencias: [], pendenciasTotal: 0 }
             : { sessoes: [] };
       return { ok: true, json: async () => corpo } as Response;
     }) as unknown as typeof fetch;
@@ -65,7 +65,7 @@ describe("useMesa", () => {
         : url.includes("/paineis/tramitacao")
           ? { itens: [] }
           : url.includes("/paineis/pendencias")
-            ? { pendencias: [] }
+            ? { pendencias: [], pendenciasTotal: 0 }
             : { sessoes: [] };
       return { ok: true, json: async () => corpo } as Response;
     }) as unknown as typeof fetch;
@@ -73,6 +73,26 @@ describe("useMesa", () => {
     const { result } = renderHook(() => useMesa("tok"));
     await waitFor(() => expect(result.current.estado).toBe("pronto"));
     expect(result.current.relatoresPendentes).toBeNull();
+  });
+
+  // Fatia "truncamento-familia": GET /paineis/pendencias passa a publicar pendenciasTotal (o par
+  // autoritativo, sem teto) junto da lista — o hook precisa expor os dois, não só a lista.
+  it("pendenciasTotal (o par autoritativo de GET /paineis/pendencias) chega ao estado do hook", async () => {
+    global.fetch = vi.fn(async (url: string) => {
+      const corpo = url.includes("/paineis/mesa")
+        ? mesaFake
+        : url.includes("/paineis/tramitacao")
+          ? { itens: [] }
+          : url.includes("/paineis/pendencias")
+            ? { pendencias: [{ objetoTipo: "pedido_esic", objetoId: "p1", protocolo: "A", venceEm: "2099-01-01", estado: "pendente" }], pendenciasTotal: 4 }
+            : { sessoes: [] };
+      return { ok: true, json: async () => corpo } as Response;
+    }) as unknown as typeof fetch;
+
+    const { result } = renderHook(() => useMesa("tok"));
+    await waitFor(() => expect(result.current.estado).toBe("pronto"));
+    expect(result.current.pendenciasItens).toHaveLength(1);
+    expect(result.current.pendenciasTotal).toBe(4);
   });
 
   it("sem token -> estado 'erro' já na primeira renderização (sem passar por 'carregando')", () => {
@@ -105,7 +125,7 @@ describe("useMesa", () => {
         : url.includes("/paineis/tramitacao")
           ? { itens: [] }
           : url.includes("/paineis/pendencias")
-            ? { pendencias: [] }
+            ? { pendencias: [], pendenciasTotal: 0 }
             : { sessoes: [] };
       return { ok: true, json: async () => corpo } as Response;
     }) as unknown as typeof fetch;

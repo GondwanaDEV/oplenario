@@ -47,6 +47,25 @@ function truncamentoDeCompliance(compliance: ComplianceCard): TruncamentoComplia
   return compliance.emAbertoTotal > exibidos ? { exibidos, total: compliance.emAbertoTotal } : null;
 }
 
+/** Corte da lista de pendências (e-SIC/LGPD/ouvidoria), direto do total AUTORITATIVO que
+ *  `GET /paineis/pendencias` publica (`pendenciasTotal`) — nunca deduzido, e nunca o irmão
+ *  `mesa.pendencias.abertas` (rollup de OUTRA rota, sem teto próprio e sem coerência de tx com a
+ *  lista desta página). `null` quando `pendenciasTotal` ainda não chegou (chamada de detalhe em voo/
+ *  falhou) ou quando não há corte a denunciar. */
+export interface TruncamentoPendencias {
+  exibidos: number;
+  total: number;
+}
+
+function truncamentoDePendencias(
+  pendenciasItens: PendenciaOut[] | null,
+  pendenciasTotal: number | null,
+): TruncamentoPendencias | null {
+  if (pendenciasItens === null || pendenciasTotal === null) return null;
+  const exibidos = pendenciasItens.length;
+  return pendenciasTotal > exibidos ? { exibidos, total: pendenciasTotal } : null;
+}
+
 // mesa.tramitacao.porEstado é Record<string, unknown>[] no contrato gerado (opaco, mesmo motivo do
 // ComplianceCard acima) — mas o backend sempre emite { estado, n } (confirmado no fixture de
 // mesa-vista.test.ts e no mock de paineis-mesa.html). PipelineLegislativo (Task B7) precisa desses 2
@@ -60,12 +79,13 @@ export interface MesaVistaInput {
   mesa: MesaOut | null;
   tramitacaoItens: ItemBoardOut[] | null;
   pendenciasItens: PendenciaOut[] | null;
+  pendenciasTotal: number | null;
   sliSessoes: SliSessaoOut[] | null;
   relatoresPendentes: RelatorPendenteOut[] | null;
 }
 
 export function derivarMesaVista(input: MesaVistaInput) {
-  const { mesa, tramitacaoItens, pendenciasItens, sliSessoes, relatoresPendentes } = input;
+  const { mesa, tramitacaoItens, pendenciasItens, pendenciasTotal, sliSessoes, relatoresPendentes } = input;
 
   if (!mesa) {
     return {
@@ -74,6 +94,7 @@ export function derivarMesaVista(input: MesaVistaInput) {
         estado: "indisponivel" as const,
         itens: [] as { venceEm: string; origem: "compliance" | "pendencia" }[],
         truncamentoCompliance: null as TruncamentoCompliance | null,
+        truncamentoPendencias: null as TruncamentoPendencias | null,
       },
       pipeline: {
         estado: "indisponivel" as const,
@@ -123,15 +144,18 @@ export function derivarMesaVista(input: MesaVistaInput) {
             ...compliance!.emAberto.map((i) => ({ ...i, origem: "compliance" as const })),
             ...(pendenciasItens ?? []).map((i) => ({ ...i, origem: "pendencia" as const })),
           ].sort((a, b) => a.venceEm.localeCompare(b.venceEm)),
-          // Só a fatia de COMPLIANCE tem sinal de corte publicado pelo servidor (`emAbertoTotal`);
-          // pendenciasItens não carrega total autoritativo equivalente — daqui não se afirma nada sobre
-          // ela. Nome explícito (nao `truncamento` genérico) para não sugerir que cobre a lista inteira.
+          // As duas fatias têm sinal de corte AUTORITATIVO publicado pelo servidor (compliance:
+          // `emAbertoTotal` do painel de compliance; pendências: `pendenciasTotal` de
+          // GET /paineis/pendencias — fatia "truncamento-familia"). Nomes explícitos (nao `truncamento`
+          // genérico) para não sugerir que um cobre a lista inteira do outro.
           truncamentoCompliance: truncamentoDeCompliance(compliance!),
+          truncamentoPendencias: truncamentoDePendencias(pendenciasItens, pendenciasTotal),
         }
       : {
           estado: "indisponivel" as const,
           itens: [] as { venceEm: string; origem: "compliance" | "pendencia" }[],
           truncamentoCompliance: null as TruncamentoCompliance | null,
+          truncamentoPendencias: null as TruncamentoPendencias | null,
         },
 
     pipeline:

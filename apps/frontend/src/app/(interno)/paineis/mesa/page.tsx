@@ -25,8 +25,9 @@ import "./mesa.css";
 
 export default function PaginaDashboardMesa() {
   const { token } = useAuth();
-  const { mesa, tramitacaoItens, pendenciasItens, sliSessoes, relatoresPendentes, estado } = useMesa(token);
-  const vista = derivarMesaVista({ mesa, tramitacaoItens, pendenciasItens, sliSessoes, relatoresPendentes });
+  const { mesa, tramitacaoItens, pendenciasItens, pendenciasTotal, sliSessoes, relatoresPendentes, estado } =
+    useMesa(token);
+  const vista = derivarMesaVista({ mesa, tramitacaoItens, pendenciasItens, pendenciasTotal, sliSessoes, relatoresPendentes });
 
   if (estado === "erro") {
     return (

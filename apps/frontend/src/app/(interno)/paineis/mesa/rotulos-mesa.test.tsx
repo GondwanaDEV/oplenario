@@ -92,6 +92,7 @@ describe("painel da Mesa — nenhuma chave de enum chega a tela", () => {
         },
       ],
       truncamentoCompliance: null,
+      truncamentoPendencias: null,
     };
     const { container } = render(<OQueVence vista={vista} />);
     const texto = container.textContent ?? "";
@@ -126,6 +127,7 @@ describe("painel da Mesa — nenhuma chave de enum chega a tela", () => {
       },
     ],
     truncamentoCompliance,
+    truncamentoPendencias: null,
   });
 
   it("o que vence: truncou -> o aviso de corte aparece, com exibidos DE total", () => {

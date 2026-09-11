@@ -22,6 +22,13 @@ export interface PendenciaOut {
   venceEm: string;
   estado: string;
 }
+
+// Fatia "truncamento-familia" (GET /paineis/pendencias): pendenciasTotal é o total AUTORITATIVO
+// server-side (mesmo racional de compliance.emAbertoTotal) — a lista pára no teto (100), o total não.
+interface OQueVenceOut {
+  pendencias: PendenciaOut[];
+  pendenciasTotal: number;
+}
 export interface SliSessaoOut {
   sessaoId: string;
   estadoAtual: string;
@@ -60,6 +67,7 @@ export function useMesa(token: string | null) {
   const [mesa, setMesa] = useState<MesaOut | null>(null);
   const [tramitacaoItens, setTramitacaoItens] = useState<ItemBoardOut[] | null>(null);
   const [pendenciasItens, setPendenciasItens] = useState<PendenciaOut[] | null>(null);
+  const [pendenciasTotal, setPendenciasTotal] = useState<number | null>(null);
   const [sliSessoes, setSliSessoes] = useState<SliSessaoOut[] | null>(null);
   const [relatoresPendentes, setRelatoresPendentes] = useState<RelatorPendenteOut[] | null>(null);
   const [estado, setEstado] = useState<Estado>("carregando");
@@ -81,12 +89,13 @@ export function useMesa(token: string | null) {
 
       const [tramitacao, pendencias, sli] = await Promise.all([
         buscarOuNull<{ itens: ItemBoardOut[] }>("/api/paineis/tramitacao", token),
-        buscarOuNull<{ pendencias: PendenciaOut[] }>("/api/paineis/pendencias", token),
+        buscarOuNull<OQueVenceOut>("/api/paineis/pendencias", token),
         buscarOuNull<{ sessoes: SliSessaoOut[] }>("/api/paineis/sli/sessoes", token),
       ]);
       if (!vivo) return;
       setTramitacaoItens(tramitacao ? tramitacao.itens : null);
       setPendenciasItens(pendencias ? pendencias.pendencias : null);
+      setPendenciasTotal(pendencias ? pendencias.pendenciasTotal : null);
       setSliSessoes(sli ? sli.sessoes : null);
       setEstado("pronto");
     })();
@@ -101,10 +110,11 @@ export function useMesa(token: string | null) {
       mesa: null,
       tramitacaoItens: null,
       pendenciasItens: null,
+      pendenciasTotal: null,
       sliSessoes: null,
       relatoresPendentes: null,
       estado: "erro" as Estado,
     };
   }
-  return { mesa, tramitacaoItens, pendenciasItens, sliSessoes, relatoresPendentes, estado };
+  return { mesa, tramitacaoItens, pendenciasItens, pendenciasTotal, sliSessoes, relatoresPendentes, estado };
 }
