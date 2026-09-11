@@ -120,19 +120,24 @@
     (try (f r) (finally (component/stop r)))))
 
 (deftest guarda-dsl-com-e-nao-abre-mais
+  ;; `guarda-dsl` e' o COMPILADOR chamado direto aqui — o motor nao conhece vocabulario de modulo nenhum
+  ;; (§22.10), quem declara e restringe e' o CHAMADOR (`legislativo/db/tramitacao.clj/criar-transicao!`,
+  ;; ADR-0004). A chave de fixture do `amb` mudou de `alegado` p/ `proposicao`: `alegado` deixou de ser
+  ;; vocabulario legitimo em QUALQUER guard real desde o ADR-0004, e perpetuar o nome banido aqui — mesmo
+  ;; bypassando o gate de cadastro, que este teste faz de proposito — ensinaria um exemplo agora ilegal.
   (com-registro
     (fn [registro]
       (let [g (motor/guarda-dsl {:registro registro :tx nil :ente-id (random-uuid)
-                                 :expr "verdadeiro e alegado.parecer_favoravel"
+                                 :expr "verdadeiro e proposicao.parecer_favoravel"
                                  :agora (LocalDate/of 2026 6 19)})
-            amb {"alegado" {:parecer_favoravel "nao"}}
+            amb {"proposicao" {:parecer_favoravel "nao"}}
             e (try (g amb) ::nao-lancou (catch clojure.lang.ExceptionInfo ex ex))]
         (is (instance? clojure.lang.ExceptionInfo e)
             "um unico `e` no guard devolvia o fail-closed da fatia 4 ao estado anterior: a materia avancava
              com o parecer dizendo NAO")
         (is (= :runtime (:erro (ex-data e))))
-        (is (true? (g {"alegado" {:parecer_favoravel true}})) "booleano de verdade continua passando")
-        (is (false? (g {"alegado" {:parecer_favoravel false}})) "e continua recusando por DOMINIO")))))
+        (is (true? (g {"proposicao" {:parecer_favoravel true}})) "booleano de verdade continua passando")
+        (is (false? (g {"proposicao" {:parecer_favoravel false}})) "e continua recusando por DOMINIO")))))
 
 (deftest politica-dsl-com-ou-nao-permite-mais
   (com-registro

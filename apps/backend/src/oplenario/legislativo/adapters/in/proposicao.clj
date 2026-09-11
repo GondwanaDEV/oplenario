@@ -158,21 +158,15 @@
 (defn- contexto->alegado
   "O `contexto` do corpo (mapa STRING-keyed, como o JSON chega) -> `:alegado` de dominio, KEYWORD-keyed.
 
-  DUAS COISAS ACONTECEM AQUI, e a segunda e' a que importa.
-
-  (1) A COERCAO. Keyword-keyed e' a forma que o avaliador da DSL sabe ler: `motor/runtime` resolve
-  `alegado.x` como `(get obj (keyword \"x\"))`. Sem ela o guard leria `nil` para TODA chave e falharia em
-  silencio — pior que falhar alto, porque a transicao simplesmente nao aconteceria e ninguem saberia por
-  que. Ausente -> `{}` (nunca nil: a engine poe o mapa no `amb`, e `nil` ali vira a chave inexistente em
-  vez de um mapa vazio).
-
-  (2) A TROCA DE NOME, que e' a marca de PROCEDENCIA da fatia 4. Do lado de fora o campo chama-se
-  `contexto` — e' a carga do ato, e e' assim que ele e' auditado (`proposicao_transicao_historico.contexto`).
-  Do lado de dentro, no `amb` que o guard le', ele chama-se `alegado`: o que o operador AFIRMA, ao lado de
-  `proposicao` (a linha lida pelo servidor) e dos fatos por nome (apurados pelo servidor). Um rito nao
-  pode mais confiar no cliente sem que isso esteja escrito na propria expressao. `adapters/in` e' o lugar
-  certo para a troca: e' a camada cujo trabalho e' traduzir o que veio da rede para o vocabulario do
-  dominio, e procedencia e' exatamente o tipo de coisa que so' esta camada ainda sabe."
+  [REVERTIDO por ADR-0004] Ate' 11/09/2026 esta fn tinha DUAS razoes de existir: coagir o mapa para o
+  formato que o avaliador da DSL sabe ler (o guard lia `alegado.x`) E marcar a procedencia do dado com o
+  nome. A PRIMEIRA razao sumiu — o guard nao le' `alegado` mais, entao a keywordizacao ja' nao serve para
+  isso. A fn permanece porque `:alegado` (agora so' um nome de campo interno, sem significado especial de
+  confianca) ainda e' o que `registrar-transicao!` grava em
+  `proposicao_transicao_historico.contexto` (Inv.10, auditoria NUNCA muda) — o corpo deixou de DECIDIR,
+  nao deixou de ser REGISTRADO, e o formato keyword-keyed e' so' a convencao interna de dominio deste
+  modulo (paridade com `parecer.clj`, que passa `:alegado {}`). Ausente -> `{}` (nunca nil: mantido por
+  simetria com o parametro de `transicionar!`, mesmo que hoje ele nao alimente amb nenhum)."
   [c]
   (if (map? c) (update-keys c keyword) {}))
 
@@ -185,9 +179,11 @@
   lendo a coluna da PROPRIA linha (fatia 1). Um adapter que aceitasse template-id do corpo reabriria
   exatamente o T3-A.
 
-  O `contexto` do corpo sai daqui como `:alegado` (fatia 4) — ver `contexto->alegado` logo acima: o nome
-  de dentro declara que aquele mapa e' ALEGACAO do cliente, nao apuracao do servidor, e e' sob esse nome
-  que o guard do rito o le'.
+  O `contexto` do corpo sai daqui como `:alegado` (fatia 4 antiga) — ver `contexto->alegado` logo acima.
+  [REVERTIDO por ADR-0004] Este campo JA' NAO E' lido pelo guard do rito, sob nome nenhum: `transicionar!`
+  o repassa direto para `registrar-transicao!` (auditoria, Inv.10) e nao o coloca mais no `amb` que o
+  motor avalia. Continua existindo aqui so' porque a auditoria precisa dele, nao porque alguma regra
+  decida com ele.
 
   `ator-id` e `updated-by` saem do `ator` resolvido na auth, nunca do corpo (§22.5). `gatilho` e' trimado e
   recusado em branco — o `:min 1` do Malli so' barra a string vazia, e um gatilho de espacos nao casa

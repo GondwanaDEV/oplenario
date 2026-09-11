@@ -26,9 +26,13 @@
 
   ESCOPO F3.3b = validacao SINTATICA (parseia como expressao DSL — o `guarda-dsl` faria o mesmo parse no
   runtime; antecipa-lo p/ o save move a falha p/ a config). Type-check estatico COMPLETO (a expressao tipa
-  p/ Booleano contra o vocabulario de tramitacao — registros `proposicao`/`contexto`) e' [CARRY]: depende
-  da catalogacao do eixo C no registry (analogo a §22.7.5 p/ compliance); sem isso o type-checker nao
-  conhece esses registros. Ate la, o parse e' a rede; o runtime ainda avalia o tipo ao disparar.
+  p/ Booleano contra o vocabulario de tramitacao — hoje o SUJEITO do template, `proposicao`/`parecer`, e
+  os canais fixos de autorizacao, `ator`/`recurso` — ver ADR-0004; `contexto` e `alegado` sao vocabulario
+  MORTO, nenhum guard real pode le-los) e' [CARRY]: depende da catalogacao do eixo C no registry (analogo
+  a §22.7.5 p/ compliance); sem isso o type-checker nao conhece esses registros. A aridade-2 abaixo ja'
+  cobre a metade ALLOWLIST desse type-check (identificador fora do vocabulario); o que falta ao [CARRY] e'
+  o tipo de cada campo (Booleano/String/...), nao mais quais registros existem. Ate la, o parse e' a rede;
+  o runtime ainda avalia o tipo ao disparar.
 
   Aridade-2 acrescenta a ALLOWLIST de vocabulario (a frente `guarda-so-apurado`, 11/09/2026 — um
   canal do `amb` que carrega o corpo bruto de uma requisicao nao pode ser lido dentro de um GUARD,
@@ -207,12 +211,13 @@
 (defn guarda-dsl
   "Compila o GUARD de uma transicao de tramitacao (§22.4 eixo C) num predicado `(fn [amb] -> bool)` — o
   seam que o motor de transicao do legislativo roda. disciplina 5: MESMO avaliador/registry do motor (o
-  `amb` carrega o contexto da transicao — ex.: {\"proposicao\" {...} \"contexto\" {...}}; fatos de relacao
-  resolvem por nome sobre a tx). Expressao nao-booleana / fato-sem-fn = LANCA `{:erro :runtime}` — o
-  nao-booleano por `exigir-booleano!` acima MAIS `runtime/exigir-booleano-operando!` dentro do avaliador,
-  que juntos e' que fazem esta frase ser verdadeira: ate' a fatia 4 o seam fechava com `(boolean …)` e um
-  guard que avaliasse para string/UUID/numero virava `true`; ate' a fatia 5 escrever esse mesmo guard com
-  um `e`/`ou` (`alegado.parecer_favoravel e verdadeiro`) o reabria, porque a coercao acontecia no operando
+  `amb` carrega o SUJEITO da transicao — ex.: {\"proposicao\" {...}} ou {\"parecer\" {...}}, NUNCA
+  `contexto`/`alegado` (vocabulario morto/banido, ADR-0004: o corpo do POST nao e' legivel por um guard);
+  fatos de relacao resolvem por nome sobre a tx). Expressao nao-booleana / fato-sem-fn = LANCA
+  `{:erro :runtime}` — o nao-booleano por `exigir-booleano!` acima MAIS `runtime/exigir-booleano-operando!`
+  dentro do avaliador, que juntos e' que fazem esta frase ser verdadeira: ate' a fatia 4 o seam fechava com
+  `(boolean …)` e um guard que avaliasse para string/UUID/numero virava `true`; ate' a fatia 5 escrever
+  esse mesmo guard com um `e`/`ou` (`proposicao.x e verdadeiro`) o reabria, porque a coercao acontecia no operando
   e o operador devolvia booleano. Fail-ABERTO exatamente no ponto que so' existe para negar. Quem chama trata o lance: `transicionar!`
   deixa PROPAGAR (nao transicionou) e a borda responde 500 nomeado. Sem prazo/obrigacao: avaliacao pura.
 

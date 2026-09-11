@@ -10,6 +10,7 @@
             [oplenario.config :as config]
             [oplenario.identidade.relacoes.identidade :as rel-id]
             [oplenario.kernel.components.datasource :as datasource]
+            [oplenario.kernel.db-util :as db-util]
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.legislativo.db.proposicao :as prop]
             [oplenario.legislativo.db.tramitacao :as tram]
@@ -519,15 +520,34 @@
 ;; ==============================================================================================
 ;; Fatia 4 — os tres dentes que a revisao adversarial mostrou que faltavam na ENGINE
 ;; ==============================================================================================
+;; ADR-0004 (frente `guarda-so-apurado`, 11/09/2026) REVERTEU a premissa que os quatro testes abaixo
+;; afirmavam: `alegado` (o corpo do POST) NAO E' MAIS vocabulario legitimo em guard nenhum, nem visivel
+;; nem invisivel. Os tres primeiros sobrevivem trocando a FONTE da expressao (o sujeito `proposicao`, que
+;; e' vocabulario legal) — o FENOMENO que provam (fail-closed sobre nao-booleano) e' independente de QUAL
+;; canal alimenta o guard. O quarto virou o inverso do que era: de "ler o cliente continua permitido" para
+;; "alegado e' vetado, nos dois niveis que o ADR fecha".
 
-(defn- montar-rito-que-le-o-cliente!
-  "Rito cuja unica saida de 'protocolada' tem por guard UM CAMPO DO CORPO — a forma exata do achado: o
-  regimento declara `alegado.parecer_favoravel` e o operador manda o campo no POST. Nenhuma string deste
-  rito e' conhecida do codigo (Inv.4); `guarda` e' o parametro porque e' justamente a expressao sob teste."
+(defn- inserir-transicao-legado!
+  "INSERT DIRETO em `template_transicao`, CONTORNANDO `criar-transicao!` (e o gate de vocabulario da
+  Fatia 2) — simula exatamente o caso que o gate de save nao alcanca: rito gravado por import/SQL direto,
+  ou uma linha anterior ao ADR-0004."
+  [tx ente tid de-estado para-estado gatilho guarda]
+  (jdbc/execute-one! tx
+    ["INSERT INTO legislativo.template_transicao
+      (ente_id, id, template_id, de_estado, para_estado, gatilho, guarda, ordem, efetivado_em)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1, now())"
+     ente (random-uuid) tid de-estado para-estado gatilho guarda]))
+
+(defn- montar-rito-com-guarda!
+  "Rito cuja unica saida de 'protocolada' tem por guard a EXPRESSAO passada — usado para exercitar o
+  avaliador (`exigir-booleano!`) contra vocabulario LEGITIMO (o sujeito do template). Ate' o ADR-0004 este
+  helper media o canal `alegado` (o corpo do POST); hoje so' aceita o que `criar-transicao!` deixa passar
+  no gate de vocabulario — nunca `alegado`. Nenhuma string do rito e' conhecida do codigo (Inv.4); `guarda`
+  e' o parametro porque e' justamente a expressao sob teste."
   [tx ente guarda]
   (let [tid (random-uuid)]
     (tram/criar-template! tx {:id tid :ente-id ente :chave "rito_fatia4" :versao 1
-                              :nome "Rito que le' o cliente [FIXTURE]" :estado-inicial "protocolada"})
+                              :nome "Rito com guarda parametrizada [FIXTURE]" :estado-inicial "protocolada"})
     (doseq [[ch term] [["protocolada" false] ["em_pauta" false]]]
       (tram/criar-estado! tx {:id (random-uuid) :ente-id ente :template-id tid :chave ch :nome ch :terminal term}))
     (tram/criar-transicao! tx {:id (random-uuid) :ente-id ente :template-id tid :de-estado "protocolada"
@@ -539,17 +559,18 @@
   ;; ele CONVERTE. Um guard que avaliasse para qualquer valor truthy nao-booleano virava `true`, isto e',
   ;; autorizacao concedida. Duas docstrings da borda ja' afirmavam que esse caso LANCA; nao lancava.
   ;;
-  ;; O cenario nao e' de laboratorio: o rito declara `alegado.parecer_favoravel` (sem `== verdadeiro`, que
-  ;; e' um esquecimento banal de quem escreve regimento como quem escreve planilha) e o operador manda
-  ;; `{"parecer_favoravel": "nao"}`. A string "nao" e' truthy em Clojure. A materia AVANCAVA com o parecer
-  ;; dizendo NAO, e o log nao registrava nada de anormal.
+  ;; A FONTE mudou com o ADR-0004 (antes lia `alegado`, o corpo do POST — vocabulario banido hoje), mas o
+  ;; FENOMENO e' o mesmo lendo vocabulario LEGITIMO: `proposicao.estado` (sem `== "..."`, que e' o mesmo
+  ;; esquecimento banal de quem escreve regimento como quem escreve planilha) avalia para a STRING
+  ;; "protocolada" — truthy em Clojure, nao-booleana. A materia AVANCARIA com um estado por rotulo, nao
+  ;; por decisao, se `boolean` ainda convertesse em vez de checar.
   (let [ente (random-uuid)]
     (tenancy/com-tenant* *ds* ente
       (fn [tx]
-        (let [tid (montar-rito-que-le-o-cliente! tx ente "alegado.parecer_favoravel")
+        (let [tid (montar-rito-com-guarda! tx ente "proposicao.estado")
               pid (protocolar! tx ente)
               e (is (thrown-with-msg? clojure.lang.ExceptionInfo #"(?i)booleano"
-                      (transicionar tx ente tid pid "avancar" {:parecer_favoravel "nao"})))]
+                      (transicionar tx ente tid pid "avancar")))]
           (is (= :runtime (:erro (ex-data e)))
               "tag :runtime = a mesma que fato-sem-fn usa; e' o que a borda traduz em 500 NOMEADO (rito
                inavaliavel), nunca num 409 'a Casa nao permite' — o cliente nao tem o que consertar aqui")
@@ -559,69 +580,78 @@
               "nada no historico append-only — o ato nao aconteceu"))))))
 
 (deftest guarda-booleana-de-verdade-continua-passando-e-recusando
-  ;; O par obrigatorio do teste acima: fail-closed que recusa TUDO nao e' fail-closed, e' pane. `true` e
-  ;; `false` vindos do corpo atravessam intactos, e a recusa por `false` continua sendo DOMINIO NORMAL
-  ;; (`:guarda-recusou`), nao excecao — sao desfechos diferentes e a borda responde 409 num, 500 no outro.
+  ;; O par obrigatorio do teste acima: fail-closed que recusa TUDO nao e' fail-closed, e' pane. Fonte
+  ;; trocada para um FATO (`aprovada_em_votacao`, o mesmo canal apurado que 3-B abriu — vocabulario
+  ;; legitimo, nunca `alegado`): `true`/`false` do fato atravessam intactos, e a recusa por `false`
+  ;; continua sendo DOMINIO NORMAL (`:guarda-recusou`), nao excecao.
   (let [ente (random-uuid)]
     (tenancy/com-tenant* *ds* ente
       (fn [tx]
-        (let [tid (montar-rito-que-le-o-cliente! tx ente "alegado.parecer_favoravel")]
+        (let [tid (montar-rito-que-exige-o-ato! tx ente)]
           (let [pid (protocolar! tx ente)
-                r (transicionar tx ente tid pid "avancar" {:parecer_favoravel false})]
+                r (transicionar tx ente tid pid "aprovar")]
             (is (false? (:transicionou? r)))
-            (is (= :guarda-recusou (:motivo r)) "booleano FALSO e' recusa de dominio, nao erro de rito"))
-          (let [pid (protocolar! tx ente)
-                r (transicionar tx ente tid pid "avancar" {:parecer_favoravel true})]
-            (is (true? (:transicionou? r)) "booleano VERDADEIRO passa")
-            (is (= "em_pauta" (:estado (prop/buscar tx ente pid))))))))))
+            (is (= :guarda-recusou (:motivo r)) "booleano FALSO (sem votacao) e' recusa de dominio, nao erro de rito"))
+          (let [pid (protocolar! tx ente)]
+            (votar! tx ente pid "aprovada")
+            (let [r (transicionar tx ente tid pid "aprovar")]
+              (is (true? (:transicionou? r)) "booleano VERDADEIRO (votacao aprovada) passa")
+              (is (= "aprovada" (:estado (prop/buscar tx ente pid)))))))))))
 
-(deftest campo-AUSENTE-no-alegado-nega-em-vez-de-passar
-  ;; O mesmo defeito por outra porta, e o mais provavel dos dois: o operador simplesmente NAO manda o
-  ;; campo. `alegado.parecer_favoravel` sobre `{}` avalia para `nil` — que `(boolean nil)` transformava em
-  ;; `false` (recusa muda) e que hoje LANCA. A escolha e' deliberada: `nil` no topo significa que o rito
-  ;; perguntou algo sem resposta, e chamar isso de "a Casa nao permite" e' o diagnostico errado — manda o
-  ;; operador esperar por uma condicao que ninguem nunca vai conseguir satisfazer, porque o rito esta'
-  ;; perguntando por um campo que a borda nao coleta. Quem quiser ausencia-como-negacao escreve
-  ;; `alegado.parecer_favoravel == verdadeiro` NO RITO, que e' onde a regra mora (Inv.4).
+(deftest campo-AUSENTE-no-sujeito-nega-em-vez-de-passar
+  ;; O mesmo defeito por outra porta, portado do canal `alegado` (banido) para o SUJEITO: um guard pode
+  ;; referenciar um CAMPO que o objeto `proposicao` simplesmente nao tem — `(get amb :campo)` avalia para
+  ;; `nil`, exatamente como `alegado.x` sobre um corpo que nao mandou `x`. `nil` e' TRUTHY em Clojure; que
+  ;; `(boolean nil)` transformava em `false` (recusa muda) e que hoje LANCA. A escolha e' deliberada: `nil`
+  ;; no topo significa que o rito perguntou algo sem resposta, e chamar isso de "a Casa nao permite" e' o
+  ;; diagnostico errado. O vocabulario continua legitimo (a RAIZ `proposicao` e' que o gate de save checa —
+  ;; nao o nome do campo, ver `nuc/identificadores-raiz`), entao isto passa o cadastro e so' lanca em
+  ;; runtime, que e' exatamente o que este teste prova.
   (let [ente (random-uuid)]
     (tenancy/com-tenant* *ds* ente
       (fn [tx]
-        (let [tid (montar-rito-que-le-o-cliente! tx ente "alegado.parecer_favoravel")
+        (let [tid (montar-rito-com-guarda! tx ente "proposicao.campo_que_nao_existe")
               pid (protocolar! tx ente)]
           (is (thrown-with-msg? clojure.lang.ExceptionInfo #"(?i)booleano"
-                (transicionar tx ente tid pid "avancar" {})))
+                (transicionar tx ente tid pid "avancar")))
           (is (= "protocolada" (:estado (prop/buscar tx ente pid))) "a materia nao andou"))))))
 
-(deftest o-canal-do-CLIENTE-chama-se-ALEGADO-e-contexto-nao-existe-mais-no-amb
-  ;; O ACHADO: a carga do corpo entrava no ambiente do guard sob o nome `contexto` — neutro, no mesmo plano
-  ;; de `proposicao` (a linha, lida pelo servidor) e dos fatos por nome (apurados pelo servidor). Quem
-  ;; escrevia o rito nao tinha como ver, olhando a expressao, que estava confiando no cliente; e um guard
-  ;; `contexto.parecer_favoravel == verdadeiro` deixava o secretario afirmar a propria precondicao e pular
-  ;; a comissao por escrito.
-  ;;
-  ;; A correcao e' MECANICA, nao convencao: a chave `contexto` sumiu do `amb`. Um rito antigo que a
-  ;; referencie NAO le' o corpo do cliente em silencio — o avaliador lanca "identificador sem valor".
-  ;; Sem isto, a renomeacao seria decorativa: as duas portas continuariam abertas e so' uma estaria
-  ;; documentada.
+(deftest alegado-e-VETADO-no-cadastro-e-um-rito-legado-com-ele-lanca-no-runtime
+  ;; ATE' ONTEM este teste provava o OPOSTO: que `alegado.x` no guard continuava PERMITIDO, so' com o nome
+  ;; tornado visivel (a renomeacao `contexto` -> `alegado` da fatia 4 antiga). O ADR-0004 (11/09/2026)
+  ;; pesou esse argumento e o derrubou — ver o proprio ADR, secao "O precedente que esta ADR reverte": o
+  ;; unico uso legitimo citado (escolher destino por `alegado.comissao`) e' melhor modelado como
+  ;; GATILHO-POR-DESTINO, e o segundo (carimbar quem pediu) nunca precisou da guarda — a auditoria ja'
+  ;; grava o corpo inteiro. Este teste agora prova o VETO, nos DOIS niveis que o fecham:
   (let [ente (random-uuid)]
     (tenancy/com-tenant* *ds* ente
       (fn [tx]
-        (let [tid (montar-rito-que-le-o-cliente! tx ente "contexto.parecer_favoravel == verdadeiro")
-              pid (protocolar! tx ente)
-              ;; o MESMO payload que antes destravava o rito pelo nome velho
-              e (is (thrown-with-msg? clojure.lang.ExceptionInfo #"(?i)identificador sem valor"
-                      (transicionar tx ente tid pid "avancar" {:parecer_favoravel true})))]
-          (is (= :runtime (:erro (ex-data e))))
-          (is (= "protocolada" (:estado (prop/buscar tx ente pid)))
-              "o rito escrito sob o nome antigo NAO tramita — falha alto, nunca em silencio"))))
-    ;; e o mesmo rito sob o nome NOVO le' exatamente a mesma carga: o canal nao sumiu, foi RENOMEADO
-    (let [ente2 (random-uuid)]
-      (tenancy/com-tenant* *ds* ente2
-        (fn [tx]
-          (let [tid (montar-rito-que-le-o-cliente! tx ente2 "alegado.parecer_favoravel == verdadeiro")
-                pid (protocolar! tx ente2)]
-            (is (true? (:transicionou? (transicionar tx ente2 tid pid "avancar" {:parecer_favoravel true})))
-                "`alegado.x` le' o corpo do POST — ler o cliente continua PERMITIDO, so' deixou de ser invisivel")))))))
+        (let [tid (random-uuid)]
+          (tram/criar-template! tx {:id tid :ente-id ente :chave "rito_veto_alegado" :versao 1
+                                    :nome "Rito veto alegado [FIXTURE]" :estado-inicial "protocolada"})
+          (doseq [ch ["protocolada" "em_pauta"]]
+            (tram/criar-estado! tx {:id (random-uuid) :ente-id ente :template-id tid :chave ch :nome ch :terminal false}))
+          ;; NIVEL 1 — CADASTRO: `criar-transicao!` recusa `alegado` no vocabulario da coluna guarda
+          ;; (Fatia 2/ADR-0004). A escrita NOVA nunca chega a persistir.
+          (let [e (is (thrown-with-msg? clojure.lang.ExceptionInfo #"alegado"
+                        (tram/criar-transicao! tx {:id (random-uuid) :ente-id ente :template-id tid
+                                                   :de-estado "protocolada" :para-estado "em_pauta"
+                                                   :gatilho "avancar"
+                                                   :guarda "alegado.parecer_favoravel == verdadeiro"
+                                                   :ordem 1})))]
+            (is (= :guarda-vocabulario-invalido (:erro (ex-data e)))
+                "recusado no SAVE — o cliente nao le' o rito, o rito nunca chega a existir"))
+          ;; NIVEL 2 — RUNTIME: o MESMO guard, gravado por FORA do save (import/SQL direto — a linha que o
+          ;; nivel 1 nao alcanca), escapa do gate; a REDE pega porque `alegado` nem existe mais no `amb`.
+          (inserir-transicao-legado! tx ente tid "protocolada" "em_pauta" "avancar"
+                                     "alegado.parecer_favoravel == verdadeiro")
+          (let [pid (protocolar! tx ente)
+                e2 (is (thrown-with-msg? clojure.lang.ExceptionInfo #"(?i)identificador sem valor"
+                        (transicionar tx ente tid pid "avancar")))]
+            (is (= :runtime (:erro (ex-data e2)))
+                "MESMA tag de fato-sem-fn/tipo-nao-booleano — e' a rede de RUNTIME, nao o gate de save, que pega este rito")
+            (is (= "protocolada" (:estado (prop/buscar tx ente pid)))
+                "nem o cadastro nem o import deixam o corpo decidir o guard")))))))
 
 (deftest engine-recusa-rito-que-nao-e-o-DA-MATERIA
   ;; O ACHADO: `transicionar!` recebia `template-id` por argumento e NUNCA o confrontava com o
@@ -649,3 +679,54 @@
           (is (empty? (tram/historico-da-proposicao tx ente pid)))
           ;; e o rito CERTO segue funcionando — a checagem confronta, nao trava
           (is (true? (:transicionou? (transicionar tx ente meu pid "despachar")))))))))
+
+;; ==============================================================================================
+;; ADR-0004 (frente `guarda-so-apurado`) — Fatia 3: `alegado` sai do `amb` de RUNTIME
+;; ==============================================================================================
+;; A Fatia 2 (ja' commitada) fecha o GATE DE SAVE: `criar-transicao!` recusa `alegado` no vocabulario do
+;; guard. Sozinho isso e' falso senso de seguranca — um rito gravado por FORA do save (import, SQL direto,
+;; linha anterior a esta ADR) escapa do gate e continuaria lendo o corpo em silencio. Esta secao prova a
+;; REDE DE RUNTIME: o `amb` que `transicionar!` monta nao carrega mais a chave `alegado`, entao um guard
+;; assim LANCA, nunca transiciona e nunca vira `{:transicionou? false}` disfarcado.
+;; `inserir-transicao-legado!` mora la' em cima (Fatia 4), ao lado de `montar-rito-com-guarda!` — os testes
+;; de vocabulario/cadastro e de rito legado usam o MESMO helper.
+
+(deftest rito-legado-que-le-ALEGADO-lanca-em-runtime-e-nao-transiciona
+  ;; O ACHADO que esta fatia existe para fechar: sem a REDE, um rito assim passaria batido (o gate so'
+  ;; alcanca escrita NOVA) e o guard continuaria lendo o corpo do POST como precondicao — a mesma falha
+  ;; que a Decisao B fechou um nivel acima, agora pela porta que os testes de save nao cobrem.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (random-uuid)]
+          (tram/criar-template! tx {:id tid :ente-id ente :chave "rito_legado" :versao 1
+                                    :nome "Rito legado [FIXTURE]" :estado-inicial "protocolada"})
+          (doseq [ch ["protocolada" "em_pauta"]]
+            (tram/criar-estado! tx {:id (random-uuid) :ente-id ente :template-id tid :chave ch :nome ch :terminal false}))
+          (inserir-transicao-legado! tx ente tid "protocolada" "em_pauta" "avancar" "alegado.parecer_favoravel")
+          (let [pid (protocolar! tx ente)
+                e (is (thrown-with-msg? clojure.lang.ExceptionInfo #"(?i)identificador sem valor"
+                        (transicionar tx ente tid pid "avancar" {:parecer_favoravel true})))]
+            (is (= :runtime (:erro (ex-data e)))
+                "MESMA tag de fato-sem-fn/tipo-nao-booleano — e' a rede de RUNTIME, nao o gate de save, que pega este rito")
+            (is (= "protocolada" (:estado (prop/buscar tx ente pid)))
+                "a materia NAO tramitou — nem {:transicionou? false} silencioso, nem transicao de verdade")
+            (is (empty? (tram/historico-da-proposicao tx ente pid))
+                "nada foi ao historico append-only: o ato nao aconteceu")))))))
+
+(deftest auditoria-continua-gravando-o-corpo-mesmo-que-a-guarda-nao-o-leia-mais
+  ;; O QUE NAO PODE MUDAR: `alegado` sai do `amb` (o guard nao decide mais com ele), mas continua
+  ;; alimentando `registrar-transicao!` (`:contexto alegado`) — o corpo deixa de DECIDIR, nao deixa de ser
+  ;; REGISTRADO. Le' a COLUNA e compara o CONTEUDO, nao so' que a linha existe.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (montar-template! tx ente)
+              pid (protocolar! tx ente)
+              corpo {:motivo "urgencia" :protocolo "OF-123"}]
+          (transicionar tx ente tid pid "despachar" corpo)   ; guard nil: nao le' alegado, so' EXISTE no corpo
+          (let [linha (first (tram/historico-da-proposicao tx ente pid))
+                gravado (db-util/jsonb->kw (:contexto linha))]
+            (is (= corpo gravado)
+                (str "a coluna 'contexto' segue com o corpo do POST INTEGRAL, mesmo o guard nao lendo "
+                     "mais 'alegado' — lido: " (pr-str gravado)))))))))

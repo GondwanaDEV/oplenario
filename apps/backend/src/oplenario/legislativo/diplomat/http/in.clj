@@ -308,12 +308,15 @@
 
   DUAS COISAS QUE ESTA BORDA NAO FAZ, e nenhuma das duas por preguica:
 
-  1. NAO AVALIA GUARD p/ dizer quais gatilhos passariam. O guard le' `alegado` (o `contexto` do corpo,
-     renomeado na borda), e ele e' argumento do POST — nao existe aqui. Avaliar `alegado.urgente` contra
-     `{}` responderia 'nao passa' sobre um ato
-     que passaria com o corpo certo: resposta precisa e FALSA, pior que imprecisa e honesta. Some-se que
+  1. NAO AVALIA GUARD p/ dizer quais gatilhos passariam. [REVERTIDO por ADR-0004] Ate' 11/09/2026 a razao
+     era que o guard lia `alegado` (o `contexto` do corpo, renomeado na borda), argumento do POST que nao
+     existe nesta leitura — avaliar `alegado.urgente` contra `{}` responderia 'nao passa' sobre um ato
+     que passaria com o corpo certo: resposta precisa e FALSA, pior que imprecisa e honesta. Essa razao
+     especifica sumiu: o guard nao le' mais o corpo do POST sob nome nenhum (nem `contexto`, nem
+     `alegado`), so' verdade APURADA. O que continua valendo, sozinho, e' o que ja' vinha ao lado dela:
      guard LANCA (um rito inavaliavel derrubaria a leitura, tirando do operador tambem o historico,
-     justamente quando ele mais precisa) e que guard consulta FATO (N avaliacoes por abertura de tela).
+     justamente quando ele mais precisa) e guard consulta FATO (N avaliacoes por abertura de tela, cada
+     uma uma consulta real).
      O preco — o botao que o guard vai recusar — e' pago no NOME do campo (`gatilhos-possiveis`, nunca
      'disponiveis') e em `pode-ser-recusado` por gatilho, que e' mais informacao que um aviso generico.
 

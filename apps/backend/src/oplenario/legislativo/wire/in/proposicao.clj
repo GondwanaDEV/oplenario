@@ -42,21 +42,28 @@
 ;; ---------- Fatia 2: a borda da TRAMITACAO (eixo C) ----------
 
 (def ^:private contexto-max-chaves
-  "Teto de chaves do `contexto`. O contexto e' ARGUMENTO DE GUARD (o avaliador le' `contexto.x`), nao um
-  saco de anexos: 20 chaves cobrem qualquer guard plausivel e impedem que a borda vire um canal de blob
-  para dentro de `proposicao_transicao_historico.contexto` (jsonb, append-only — o que entra la' nunca sai)."
+  "Teto de chaves do `contexto`. [REVERTIDO por ADR-0004] Ate' 11/09/2026 o contexto era ARGUMENTO DE
+  GUARD (o avaliador lia `alegado.x`, o nome de dominio para este mesmo campo — ver `contexto->alegado`);
+  hoje NAO chega mais ao avaliador de jeito nenhum, so' vira carga do ato persistida em
+  `proposicao_transicao_historico.contexto` (jsonb append-only, Inv.10 — o que entra la' nunca sai; ver
+  auditoria-continua-gravando-o-corpo-mesmo-que-a-guarda-nao-o-leia-mais). O teto de 20 chaves segue
+  existindo pelo MESMO motivo de sempre, so' que agora contra o historico, nao contra o guard: nao virar
+  canal de blob para dentro de uma tabela append-only."
   20)
 
 (def ^:private ChaveContexto
-  "Chave de contexto: minuscula, ASCII, <=60 chars. NAO e' cosmetica — o adapters/in INTERNA cada chave
-  como keyword (o avaliador acessa campo por keyword, motor/runtime `:campo`), e internar string arbitraria
-  de cliente e' superficie de abuso. O charset fechado limita o alfabeto ao que um guard consegue nomear."
+  "Chave de contexto: minuscula, ASCII, <=60 chars. [REVERTIDO por ADR-0004] NAO e' cosmetica: o
+  adapters/in continua INTERNANDO cada chave como keyword (`contexto->alegado`) para popular o `:alegado`
+  que `registrar-transicao!` grava na auditoria — nao mais porque um guard vai le-la (nenhum le'). O
+  charset fechado segue limitando o alfabeto ao que uma chave de auditoria plausivel usaria, mesmo sem
+  guard nenhum do outro lado."
   [:re #"^[a-z][a-z0-9_-]{0,59}$"])
 
 (def ^:private ValorContexto
-  "Valor de contexto: ESCALAR (ou nulo). Aninhamento fica de fora de proposito — o avaliador da DSL so'
-  sabe acessar UM nivel (`contexto.x`), entao mapa/vetor aqui seria dado que nenhum guard consegue ler e
-  que so' engorda o historico. String limitada a 500 chars pelo mesmo motivo."
+  "Valor de contexto: ESCALAR (ou nulo). [REVERTIDO por ADR-0004] Aninhamento fica de fora de proposito —
+  nao porque o avaliador da DSL so' saiba acessar um nivel (nenhum guard le' este campo mais), mas porque
+  mapa/vetor aqui so' engordaria o historico sem proposito auditavel. String limitada a 500 chars pelo
+  mesmo motivo."
   [:or [:string {:max 500}] :int :double :boolean :nil])
 
 (def TramitarProposicao
@@ -72,20 +79,22 @@
   classe de defeito do T3-A (o chamador escolhendo a regra). `:closed true` faz a recusa ser mecanica: o
   campo extra e' 400 e a engine nunca roda.
 
-  `contexto` (opcional) e' a carga do gatilho que o GUARD pode ler e que o historico persiste — entrada
-  DE CLIENTE que alimenta a avaliacao da regra. O schema limita a FORMA (escalares, teto de chaves,
-  charset); quem limita o USO e' quem escreve o rito, e e' assim que tem de ser (Inv.4: o codigo nao
-  decide o regimento).
+  `contexto` (opcional) e' a CARGA do gatilho — entrada de cliente que o historico persiste
+  (`proposicao_transicao_historico.contexto`, Inv.10). O schema limita a FORMA (escalares, teto de
+  chaves, charset) pelo mesmo motivo de sempre: nao virar canal de blob.
 
-  O QUE A FATIA 4 FEZ COM ISSO, ja' que proibir nao era opcao: tornou a confianca VISIVEL na expressao.
-  Este campo chega ao guard sob o nome `alegado`, nunca `contexto` — `adapters/in/contexto->alegado` faz a
-  troca, e a chave `contexto` NAO EXISTE mais no ambiente de avaliacao. Um rito escrito como
-  `alegado.aprovado == verdadeiro` continua permitido, e continua deixando o operador afirmar a propria
-  precondicao; a diferenca e' que agora quem le' o rito ve' a palavra `alegado` e sabe disso, em vez de
-  ler `contexto` e supor apuracao. Um rito antigo que ainda diga `contexto.aprovado` nao le' o corpo do
-  cliente em silencio: o avaliador lanca e a materia NAO tramita. Ao lado de `alegado`, o guard tem
-  `proposicao` (a linha, lida pelo servidor) e os fatos por nome (`aprovada_em_votacao(proposicao.id)` —
-  decisao 3-B), que sao os canais APURADOS. Ver `db/tramitacao/transicionar!`, secao OS DOIS CANAIS."
+  [REVERTIDO por ADR-0004] Este paragrafo dizia que o GUARD podia ler este campo (sob o nome `alegado`,
+  fatia 4 antiga) e que proibir seria decidir pelo regimento. O ADR-0004 (frente `guarda-so-apurado`,
+  11/09/2026) pesou esse argumento e o derrubou — ver o ADR, secao \"O precedente que esta ADR reverte\":
+  o unico uso legitimo citado (escolher destino por `alegado.comissao`) e' melhor modelado como
+  GATILHO-POR-DESTINO (atos distintos no regimento), nao como guard lendo o corpo. HOJE `contexto` NAO
+  chega ao guard sob nome NENHUM — nem `contexto`, nem `alegado`. Um rito que ainda referencie qualquer um
+  dos dois (por escrita nova, bloqueada no cadastro por `criar-transicao!`, ou por linha gravada fora dele
+  — import, SQL direto) lanca `{:erro :runtime}` e a materia NAO tramita, nunca le' o corpo em silencio.
+  O campo continua existindo no corpo e sendo AUDITADO integralmente (Inv.10) — deixou de DECIDIR, nao
+  deixou de ser REGISTRADO. Quem o guard pode ler hoje e' so' `proposicao`/`parecer` (a linha, lida pelo
+  servidor) e os fatos por nome (`aprovada_em_votacao(proposicao.id)` — decisao 3-B), os canais APURADOS.
+  Ver `db/tramitacao/transicionar!`, secao OS DOIS CANAIS APURADOS DO `amb`."
   [:map {:closed true}
    [:gatilho [:string {:min 1 :max 100}]]
    [:contexto {:optional true} [:maybe [:map-of {:max contexto-max-chaves} ChaveContexto ValorContexto]]]])
