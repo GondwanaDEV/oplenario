@@ -85,7 +85,7 @@
              :estado-terminal (:estado-terminal m)
              :historico (mapv historico-item->wire (:historico m))
              :historico-truncado (:historico-truncado m)
-             :gatilhos-possiveis (mapv #(select-keys % [:gatilho :destinos-possiveis :pode-ser-recusado])
+             :gatilhos-possiveis (mapv #(select-keys % [:gatilho :destinos-possiveis :pode-ser-recusado :exige-autorizacao])
                                        (:gatilhos-possiveis m))
              :nota (:nota m)}
             "tramitacao de proposicao"))

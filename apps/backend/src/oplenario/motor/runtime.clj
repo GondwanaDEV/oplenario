@@ -228,7 +228,27 @@
                                (throw (ex-info (str "parametro_tenant: " (pr-str chave) " não configurado p/ " (:ente-id ctx)) {:erro :runtime}))))
       ;; ---- FATO RESOLVIDO (sai do motor, §2/§3): tudo com forma de DOMÍNIO → o :resolver injetado
       ;;      (RegistroFatos do host). O motor chama por NOME; nunca importa o módulo (§22.10). ----
-      ((:resolver ctx) nome args))))
+      ;;
+      ;; FAIL-CLOSED EM ARGUMENTO nil (achado CRÍTICO-1 da revisão de segurança da 3-A). Um fato resolvido
+      ;; recebe CHAVES DE LOOKUP (identidade-id, comissão-id, data). `nil` ali nunca é uma pergunta legítima
+      ;; — é uma chave que não resolveu (campo ausente no `amb`, nome escrito errado, ator parcial). Sem
+      ;; esta guarda o `nil` descia ao SQL da relação, não casava linha, e voltava um `false` LIMPO E
+      ;; BOOLEANO — que `nao`/`!=` convertem em PERMISSÃO:
+      ;;
+      ;;     autorizacao = 'nao é_presidente_da_mesa(ator.identidade_id, hoje())'
+      ;;
+      ;; parseia, passa o gate do save, e autoriza TODO MUNDO — inclusive o próprio presidente. Nenhum
+      ;; erro, nenhum log, 200. A expressão é sintaticamente correta e semanticamente plausível: é
+      ;; literalmente como se escreve "o relator não pode ser quem preside".
+      ;;
+      ;; O fail-closed de `exigir-booleano!` (topo) e de `exigir-booleano-operando!` (operandos de e/ou/nao)
+      ;; não alcançava isto, porque o valor que volta JÁ É booleano — o defeito está um nível abaixo, no
+      ;; ARGUMENTO. Aqui fecha o terceiro e último ponto por onde um valor não-decidido virava decisão.
+      (do (when-let [i (first (keep-indexed (fn [i a] (when (nil? a) i)) args))]
+            (throw (ex-info (str "fato '" nome "': argumento " (inc i) " é nil (fail-closed) — chave de "
+                                 "lookup não resolvida; um fato nunca responde a uma pergunta sem sujeito")
+                            {:erro :runtime :fato nome :argumento (inc i) :aridade (count args)})))
+          ((:resolver ctx) nome args)))))
 
 ;; ===========================================================================
 ;; Resolvedor de fatos (§3/§4): o seam injetado. `resolver-vazio` = sem fatos (fail-closed, p/ exprs

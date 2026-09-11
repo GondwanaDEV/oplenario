@@ -108,11 +108,19 @@
   `destinos-possiveis` e' informacao, NUNCA escolha: mostra para onde o rito levaria, e o cliente segue sem
   poder pedir destino nenhum (`wire/in/TramitarProposicao` e' :closed e so' aceita gatilho). Mais de um
   destino = o mesmo ato leva a lugares diferentes conforme o guard; quem decide e' o template.
-  :string (nao enum) pelo mesmo Inv.4 de `:estado`: sao chaves de `template_estado`, config do tenant."
+  :string (nao enum) pelo mesmo Inv.4 de `:estado`: sao chaves de `template_estado`, config do tenant.
+
+  `exige-autorizacao` (3-A) e' a pergunta IRMA e DIFERENTE de `pode-ser-recusado`: aquela diz se o rito
+  poe condicao sobre o MUNDO ('isto aconteceu?'), esta diz se poe condicao sobre QUEM PEDE ('voce pode
+  declarar que aconteceu?'). As duas recusas vao para pessoas diferentes — 409 para o operador, 403 para
+  quem administra acesso. `false` NAO significa 'autorizado': significa que o rito nao declarou regra de
+  pessoa para este ato, e resta apenas o gate GROSSO da rota. E' de proposito que isso apareca: um rito
+  que esqueceu de declarar quem pode disparar fica visivel em vez de passar por autorizado."
   [:map {:closed true}
    [:gatilho :string]
    [:destinos-possiveis [:vector :string]]
-   [:pode-ser-recusado :boolean]])
+   [:pode-ser-recusado :boolean]
+   [:exige-autorizacao :boolean]])
 
 (def TramitacaoOut
   "GET /legislativo/proposicoes/:id/tramitacao (Fatia 3) — o historico da materia e o que a Casa permite AGORA.

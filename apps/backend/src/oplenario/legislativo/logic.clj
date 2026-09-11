@@ -318,6 +318,21 @@
                {:gatilho g
                 :destinos-possiveis (vec (distinct (keep :para-estado ts)))
                 :pode-ser-recusado (every? #(some? (:guarda %)) ts)
+                ;; 3-A. A definicao e' `some?`, e NAO `every?` como a irma acima — a assimetria e' o
+                ;; desenho, nao descuido. `pode-ser-recusado` usa `every?` porque o guard FILTRA: havendo
+                ;; uma candidata sem guard, a engine sempre acha uma que passa e o ato ocorre. A
+                ;; autorizacao NAO filtra — ela e' porta sobre a candidata que o guard JA escolheu, e
+                ;; negar NAO cai na proxima (senao o destino da materia dependeria de quem pediu). Logo
+                ;; basta UMA candidata carregar expressao para que este gatilho POSSA ser negado por
+                ;; autorizacao: se o guard escolher justamente ela, a porta existe.
+                ;;
+                ;; `false` aqui e' o que torna honesto o default permissivo da coluna (NULL = so' o gate
+                ;; da rota, mig 0079): um rito que ESQUECEU de declarar quem pode disparar aparece como
+                ;; `exige-autorizacao false` em vez de se esconder atras do silencio. `true` tambem nao e'
+                ;; promessa: diz que ha' regra de pessoa, nao que VOCE passa nela — avaliar a politica aqui
+                ;; custaria resolver fatos por gatilho numa rota de LEITURA, e e' a mesma escolha que
+                ;; `pode-ser-recusado` ja fez para o guard.
+                :exige-autorizacao (boolean (some #(some? (:autorizacao %)) ts))
                 ::ordem (reduce min Long/MAX_VALUE (map #(or (:ordem %) 0) ts))}))
        (sort-by (juxt ::ordem :gatilho))
        (mapv #(dissoc % ::ordem))))

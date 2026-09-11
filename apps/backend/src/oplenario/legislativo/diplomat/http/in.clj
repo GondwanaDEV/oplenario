@@ -14,6 +14,7 @@
   (policy.check/pode-dirigir-votacao?) no controller."
   (:require [oplenario.http :as http]
             [oplenario.interceptors :as it]
+            [oplenario.kernel.autorizacao :as authz]
             [oplenario.kernel.tempo :as tempo]
             [oplenario.legislativo.adapters.in.ciencia :as adapters-in-ciencia]
             [oplenario.legislativo.adapters.in.documento :as adapters-in-documento]
@@ -272,7 +273,7 @@
           agora (tempo/hoje relogio zona-civil)
           m (adapters-in-proposicao/tramitar->dominio ator pid agora (:json-params req))]
       (try
-        (if-let [r (controllers/tramitar-proposicao repo-leg registro ente-id m)]
+        (if-let [r (controllers/tramitar-proposicao repo-leg registro ator m)]
           (if (:transicionou? r)
             (http/json-resposta 200 (adapters-out-proposicao/recibo-transicao->wire pid (:gatilho m) r))
             (http/json-resposta 409 (assoc (recusa-de-tramitacao (:motivo r) (:gatilho m) (:de r))
@@ -280,6 +281,15 @@
           (http/json-resposta 404 {:erro "proposicao nao encontrada"}))
         (catch clojure.lang.ExceptionInfo e
           (cond
+            ;; A NEGACAO DE AUTORIZACAO VEM PRIMEIRO (3-A; achado IMPORTANTE-4 da revisao de seguranca).
+            ;; `authz/check!` embrulha a excecao da politica e a passa como CAUSA, e `guard-inavaliavel?`
+            ;; OLHA A CAUSA — entao, com a ordem invertida, toda negacao por expressao inavaliavel
+            ;; (campo de ator escrito errado, fato ausente do registry) saia como 500 'o rito nao pode ser
+            ;; avaliado' em vez de 403. A Casa recebia incidente de config onde havia recusa de acesso, e
+            ;; o teste de `db/` nao pegava porque nao atravessa o diplomat.
+            (authz/negado? e)
+            (http/json-resposta 403 {:erro "autorizacao negada" :gatilho (:gatilho m)})
+
             (guard-inavaliavel? e)
             (http/json-resposta 500 {:erro (str "o rito desta Casa nao pode ser avaliado — a materia NAO "
                                                 "tramitou; procure quem administra os templates de tramitacao")

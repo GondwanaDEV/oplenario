@@ -245,13 +245,18 @@
     nunca vai poder, ninguem escreveu o rito'.
   - o mapa da engine (`{:transicionou? true|false ...}`) = resultado de DOMINIO; guard que LANCA e conflito
     de CAS propagam como excecao, nao sao capturados aqui (a distincao entre eles e' de borda)."
-  [repo-legislativo registro ente-id m]
-  (when-let [linha (repo/buscar-proposicao repo-legislativo ente-id (:proposicao-id m))]
+  [repo-legislativo registro ator m]
+  (when-let [linha (repo/buscar-proposicao repo-legislativo (:ente-id ator) (:proposicao-id m))]
     (when (nil? (:template-id linha))
       (throw (ex-info "esta materia nao tem rito declarado (a Casa nao vinculou um template de tramitacao a ela) — nao ha o que tramitar"
                       {:tipo :conflito/sem-rito :proposicao-id (:proposicao-id m)})))
-    (repo/transicionar! repo-legislativo ente-id registro
-                        (assoc m :template-id (:template-id linha)))))
+    ;; 3-A: o ATOR INTEIRO desce ate' a engine, nao so' o `ator-id`. `motor/politica-dsl` avalia
+    ;; `(fn [ator recurso] -> bool)` com acesso a campo (`ator.identidade`) e aos fatos de relacao
+    ;; (`é_presidente_da_mesa`, `quem_exerce_presidencia`, …) — um uuid solto nao responde nenhuma dessas
+    ;; perguntas. O `:ator-id` continua indo separado porque ele e' AUTORIA no historico (quem praticou o
+    ;; ato), nao insumo de decisao: sao dois usos distintos do mesmo sujeito.
+    (repo/transicionar! repo-legislativo (:ente-id ator) registro
+                        (assoc m :template-id (:template-id linha) :ator ator))))
 
 (defn- nota-de-lista-vazia
   "Lista de gatilhos vazia tem QUATRO causas, e elas pedem acoes DIFERENTES do operador. Devolver so'

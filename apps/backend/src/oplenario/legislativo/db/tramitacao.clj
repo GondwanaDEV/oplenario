@@ -5,8 +5,10 @@
   primeira que passa, grava o historico (append-only) + muda o estado da proposicao — tudo na MESMA tx.
   Importa db/proposicao (db->db mesmo modulo) e motor/api (modulo->motor) — ambos permitidos (§22.10/§3-bis).
   Acao (handler em codigo) e' GRAVADA mas a execucao rica fica p/ F3.3b; aqui o efeito e' a mudanca de estado."
-  (:require [honey.sql :as sql]
+  (:require [clojure.string :as str]
+            [honey.sql :as sql]
             [next.jdbc :as jdbc]
+            [oplenario.kernel.autorizacao :as authz]
             [oplenario.kernel.db-util :as comum]
             [oplenario.legislativo.db.proposicao :as proposicao]
             [oplenario.legislativo.logic :as logic]
@@ -83,20 +85,40 @@
                            :terminal (boolean terminal) :ordem (or ordem 0) :efetivado_em [:now]}]})))
 
 (defn criar-transicao!
-  "Persiste uma transicao do template. GATEIA o GUARD no save (Inv.4, motor/validar-guarda): guard que
-  nao parseia NAO entra no banco — a falha de tramitacao sai do caminho critico (rejeitada na config, nao
-  no meio de um fluxo). Lanca ex-info :guarda-invalida com a causa do erro de sintaxe."
-  [tx {:keys [id ente-id template-id de-estado para-estado gatilho guarda acao ordem]}]
+  "Persiste uma transicao do template. GATEIA no save (Inv.4, motor/validar-guarda) AS DUAS expressoes —
+  `guarda` e `autorizacao` (3-A) — pelo mesmo criterio: expressao que nao parseia NAO entra no banco, e a
+  falha sai do caminho critico (rejeitada na config, nao no meio de um fluxo). Lanca ex-info
+  :guarda-invalida / :autorizacao-invalida com a causa do erro de sintaxe.
+
+  AS DUAS PERGUNTAS SAO DIFERENTES, e e' por isso que sao duas colunas e nao uma:
+    · `guarda`      — 'ISTO ACONTECEU?'  Fato sobre o mundo: houve votacao aprovada, o prazo correu, a
+                      comissao opinou. Nao fala do ator. (3-B)
+    · `autorizacao` — 'VOCE PODE DECLARAR QUE ACONTECEU?'  Fato sobre QUEM pede: e' o presidente da Mesa,
+                      e' o relator da materia, exerce a presidencia hoje. Nao fala do mundo. (3-A)
+  Colapsa-las numa expressao so' obrigaria a Casa a repetir a condicao de fato em cada regra de pessoa (e
+  vice-versa), e faria a recusa perder a causa: 'a Casa nao permite agora' e 'voce nao pode' sao respostas
+  diferentes, para pessoas diferentes, com consertos diferentes."
+  [tx {:keys [id ente-id template-id de-estado para-estado gatilho guarda autorizacao acao ordem]}]
   ;; fail-closed: SO "VALIDA" passa — qualquer outro status (incl. valor inesperado) REJEITA o save
   ;; (quem nao decide, NEGA; mesma postura do check! de authz). String casa a convencao de verificar-fonte.
   (let [{:keys [status erros]} (motor/validar-guarda guarda)]
     (when (not= "VALIDA" status)
       (throw (ex-info "guard da transicao mal-formado (rejeitado no save, Inv.4)"
                       {:erro :guarda-invalida :de-estado de-estado :gatilho gatilho :erros erros}))))
+  ;; MESMO gate p/ a autorizacao. `validar-guarda` e' o validador de expressao BOOLEANA da DSL — nao e'
+  ;; especifico de guard —, entao reusa-lo aqui e' a disciplina 5 e nao um atalho: uma expressao de
+  ;; autorizacao mal-formada que entrasse no banco so' falharia no meio de uma sessao, e `check!` traduz
+  ;; lance em NEGACAO — ou seja, config quebrada viraria "ninguem pode tramitar", descoberto no pior
+  ;; momento possivel.
+  (let [{:keys [status erros]} (motor/validar-guarda autorizacao)]
+    (when (not= "VALIDA" status)
+      (throw (ex-info "expressao de autorizacao da transicao mal-formada (rejeitada no save, Inv.4)"
+                      {:erro :autorizacao-invalida :de-estado de-estado :gatilho gatilho :erros erros}))))
   (jdbc/execute-one! tx
     (sql/format {:insert-into :legislativo.template_transicao
                  :values [{:id id :ente_id ente-id :template_id template-id :de_estado de-estado
-                           :para_estado para-estado :gatilho gatilho :guarda guarda :acao acao
+                           :para_estado para-estado :gatilho gatilho :guarda guarda
+                           :autorizacao autorizacao :acao acao
                            :ordem (or ordem 0) :efetivado_em [:now]}]})))
 
 (defn transicoes-de
@@ -104,7 +126,8 @@
   [tx ente-id template-id de-estado gatilho]
   (comum/linhas->kebab
     (jdbc/execute! tx
-      (sql/format {:select [:id :ente_id :template_id :de_estado :para_estado :gatilho :guarda :acao :ordem]
+      (sql/format {:select [:id :ente_id :template_id :de_estado :para_estado :gatilho :guarda :autorizacao
+                         :acao :ordem]
                    :from [:legislativo.template_transicao]
                    :where [:and [:= :ente_id ente-id] [:= :template_id template-id]
                            [:= :de_estado de-estado] [:= :gatilho gatilho]]
@@ -129,7 +152,7 @@
   [tx ente-id template-id de-estado]
   (comum/linhas->kebab
     (jdbc/execute! tx
-      (sql/format {:select [:id :de_estado :para_estado :gatilho :guarda :acao :ordem]
+      (sql/format {:select [:id :de_estado :para_estado :gatilho :guarda :autorizacao :acao :ordem]
                    :from [:legislativo.template_transicao]
                    :where [:and [:= :ente_id ente-id] [:= :template_id template-id]
                            [:= :de_estado de-estado]]
@@ -252,7 +275,7 @@
   O ultimo e' DIAGNOSTICO, nunca recusa: `template_transicao.de_estado` nao tem FK p/ `template_estado.chave`
   (mig 0016), entao um rito PODE declarar transicao a partir de um estado que nao listou, e recusar ali
   quebraria rito ja' em producao. `(:terminal nil)` e' nil — estado desconhecido nao e' terminal."
-  [tx {:keys [registro ente-id proposicao-id template-id gatilho ator-id alegado agora updated-by]}]
+  [tx {:keys [registro ente-id proposicao-id template-id gatilho ator ator-id alegado agora updated-by]}]
   (let [linha (proposicao/estado+lock+rito tx ente-id proposicao-id)
         ;; fail-closed (Fatia 2; ESPELHO do fix que `transicionar-parecer!` ganhou na review F3.6a — o
         ;; [CARRY disc.6] daquele ns pede paridade explicita entre os dois sujeitos). Materia inexistente
@@ -303,14 +326,47 @@
             escolhida (first (filter passa? candidatas))]
         (cond
           (some? escolhida)
-          (let [{:keys [ocorrido-em]} (registrar-transicao! tx {:id (random-uuid) :ente-id ente-id :proposicao-id proposicao-id
-                                                                :template-id template-id :de-estado estado
-                                                                :para-estado (:para-estado escolhida)
-                                                                :gatilho gatilho :contexto alegado :ator-id ator-id})]
-            (proposicao/mudar-estado! tx {:id proposicao-id :ente-id ente-id :estado (:para-estado escolhida)
-                                          :updated-by updated-by :lock-version lock-version})
-            {:transicionou? true :de estado :para (:para-estado escolhida) :transicao-id (:id escolhida)
-             :acao (:acao escolhida) :ocorrido-em ocorrido-em})
+          ;; 3-A — QUEM pode disparar. Roda DEPOIS de escolher a candidata e ANTES de aplicar, e as duas
+          ;; metades dessa frase foram decididas, nao herdadas:
+          ;;
+          ;; DEPOIS de escolher, nao como filtro junto do guard: se a autorizacao filtrasse candidatas, um
+          ;; ator sem permissao na 1a transicao CAIRIA na 2a — o destino da materia passaria a depender de
+          ;; QUEM pediu, e duas pessoas com o mesmo gatilho levariam a materia a estados diferentes. Quem
+          ;; escolhe o destino e' o rito (`ordem`); a autorizacao e' porta sobre o destino escolhido, nunca
+          ;; desempate. Sem permissao na escolhida = NEGA, ponto — nao tenta a proxima.
+          ;;
+          ;; ANTES de aplicar e DENTRO desta tx, contra o snapshot ja' travado por `estado+lock+rito`
+          ;; (`FOR UPDATE`): e' o achado CRITICO da Onda C3 (authz-tx != write-tx). Autorizar fora da tx da
+          ;; escrita deixa a janela em que o mundo muda entre o "pode" e o "fez" — la' era a Mesa encerrar a
+          ;; votacao no meio; aqui seria o mandato cair, a comissao ser recomposta ou a presidencia mudar
+          ;; entre autorizar e gravar.
+          ;;
+          ;; `check!` do kernel traduz LANCE em NEGACAO (`:tipo :autorizacao/negado` -> 403 no interceptor):
+          ;; expressao que nao consegue decidir NEGA, nunca fica indeterminada. E' a mesma postura do gate
+          ;; do save acima e do `passa?` do guard.
+          (do
+            ;; `str/blank?`, nao `when-let` (achado IMPORTANTE-7): `validar-guarda ""` devolve VALIDA — o
+            ;; gate do save deixa passar string vazia —, e `""` e' TRUTHY em Clojure, entao o `when-let`
+            ;; disparava e `parse-expr ""` lancava. Um `autorizacao = ''` vindo de import ou de formulario
+            ;; que mande vazio em vez de NULL transformava aquele gatilho em 500 PERMANENTE, descoberto no
+            ;; meio de uma sessao — exatamente o que o gate do save existe para evitar.
+            (when-not (str/blank? (:autorizacao escolhida))
+              (let [expr (:autorizacao escolhida)]
+              (authz/check! ator :legislativo/tramitar
+                            {:tipo "proposicao" :id proposicao-id :estado estado
+                             :gatilho gatilho :para (:para-estado escolhida)}
+                              (motor/politica-dsl {:registro registro :tx tx :expr expr :agora agora}))))
+            (let [{:keys [ocorrido-em]} (registrar-transicao! tx {:id (random-uuid) :ente-id ente-id
+                                                                  :proposicao-id proposicao-id
+                                                                  :template-id template-id :de-estado estado
+                                                                  :para-estado (:para-estado escolhida)
+                                                                  :gatilho gatilho :contexto alegado
+                                                                  :ator-id ator-id})]
+              (proposicao/mudar-estado! tx {:id proposicao-id :ente-id ente-id
+                                            :estado (:para-estado escolhida)
+                                            :updated-by updated-by :lock-version lock-version})
+              {:transicionou? true :de estado :para (:para-estado escolhida) :transicao-id (:id escolhida)
+               :acao (:acao escolhida) :ocorrido-em ocorrido-em}))
 
           ;; havia ato declarado e o guard negou — o unico dos desfechos que o TEMPO pode mudar.
           (seq candidatas)

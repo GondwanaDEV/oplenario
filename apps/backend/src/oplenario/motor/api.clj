@@ -117,6 +117,35 @@
                     {:erro :runtime :uso uso :expr expr
                      :tipo-avaliado (if (nil? v) "nil" (.getName (class v)))}))))
 
+(defn- alcancavel-pela-dsl
+  "Acrescenta ALIAS com `_` para toda chave kebab-case do mapa, sem remover as originais.
+
+  Por que isto precisa existir (achado CRITICO-2 da revisao de seguranca da 3-A): o acesso a campo do
+  motor e' `(keyword (:campo no))` (runtime.clj) e o lexer da DSL nao aceita `-` num identificador — `-` e'
+  o operador de SUBTRACAO. Entao `ator.identidade-id` nao e' o campo `:identidade-id`, e' `ator.identidade`
+  MENOS `id`. E `ator.identidade_id` procura `:identidade_id`, que nao existe: os mapas de dominio deste
+  repo sao kebab-case por convencao Clojure (`:identidade-id`, `:ente-id`, `:vinculo-ativo-id`).
+
+  Resultado, antes deste alias: TODA chave de mais de uma palavra era inalcancavel pela DSL. O ator de
+  producao (`identidade/autenticacao.clj`) e' `{:identidade-id :ente-id :tipo-vinculo :vinculo-ativo-id
+  :papeis}` — so' `:papeis` dava para usar. E os cinco fatos que a 3-A cita como razao de existir
+  (`é_presidente_da_mesa`, `é_secretario_da_mesa`, `quem_exerce_presidencia`, `é_membro_de_comissao`,
+  `é_presidente_de_comissao`) exigem IDENTIDADE-ID como 1o argumento: nenhum era escrevivel. A 3-A
+  entregava, na pratica, o mesmo eixo de papel estatico do gate grosso que ela existia para superar.
+
+  ADITIVO de proposito: a chave original continua la'. Politica ja' escrita nao muda de comportamento —
+  o alias so' torna alcancavel o que antes respondia nil. Combinado com o fail-closed de argumento nil
+  (runtime/a-chamada), o campo ERRADO agora NEGA em vez de virar permissao silenciosa."
+  [m]
+  (if-not (map? m)
+    m
+    (reduce-kv (fn [acc k v]
+                 (let [n (name k)]
+                   (cond-> acc
+                     (str/includes? n "-")
+                     (assoc (keyword (str/replace n "-" "_")) v))))
+               m m)))
+
 (defn politica-dsl
   "Compila uma expressao DSL de politica (booleana) num predicado `(fn [ator recurso] -> bool)` — o
   seam que `kernel/autorizacao/check!` roda na camada FINA (§22.5 eixo E). disciplina 5: a politica usa
@@ -136,7 +165,7 @@
   (let [no (nuc/parse-expr expr)
         resolver (rf/resolver-para registro tx)]
     (fn [ator recurso]
-      (let [amb {"ator" ator "recurso" recurso}
+      (let [amb {"ator" (alcancavel-pela-dsl ator) "recurso" (alcancavel-pela-dsl recurso)}
             ctx {:estado (rt/estado) :agora agora :fonte (atom nil)
                  :resolver resolver :ente-id (:ente-id ator)}]
         (exigir-booleano! (rt/avaliar no amb ctx) "politica" expr)))))
