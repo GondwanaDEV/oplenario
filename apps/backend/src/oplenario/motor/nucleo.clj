@@ -166,6 +166,29 @@
     :binop (str "(" (expr->fonte (:esq no)) " " (:op no) " " (expr->fonte (:dir no)) ")")
     (pr-str no)))
 
+(defn identificadores-raiz
+  "Devolve o conjunto dos identificadores-RAIZ que `no` (um nó de `parse-expr`) referencia — o
+  mecanismo GENÉRICO por baixo de uma allowlist de vocabulário. O núcleo não conhece vocabulário
+  de ninguém (§22.10: kernel/motor nunca importa um módulo); ele só sabe apontar QUAIS raízes uma
+  expressão usa — quem julga se uma raiz é permitida é de quem chama (o módulo dono da coluna).
+
+  Percorre os 7 `:t` de `parse-expr`. Duas regras que NÃO são 'recursa em tudo':
+    - `:campo` NÃO contribui com o nome do campo — só recursa no `:obj` (`proposicao.estado`
+      referencia `proposicao`, não `estado`: o campo em si não é vocabulário do amb).
+    - `:chamada` NÃO contribui com o seu `:nome` — é STRING do nome do FATO, resolvida pelo
+      `:resolver` do RegistroFatos, nunca pelo `amb`. Mas RECURSA em `:args`: `é_presidente(x.y)`
+      tem que acusar `x`."
+  [no]
+  (case (:t no)
+    :lit #{}
+    :ident #{(:nome no)}
+    :campo (identificadores-raiz (:obj no))
+    :conjunto-lit (reduce into #{} (map identificadores-raiz (:elementos no)))
+    :chamada (reduce into #{} (map identificadores-raiz (:args no)))
+    :unop (identificadores-raiz (:operando no))
+    :binop (into (identificadores-raiz (:esq no)) (identificadores-raiz (:dir no)))
+    (throw (erro-sintaxe (str "nó AST desconhecido: " (pr-str no))))))
+
 (defn parse-expr [s]
   (let [p (atom {:toks (tokenizar s) :i 0})
         no (expr-p p)]

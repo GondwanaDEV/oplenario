@@ -290,11 +290,15 @@
   "Candidatas (linhas de `template_transicao` a partir do estado ATUAL, JA' na ordem do rito) -> um item
   por GATILHO: `{:gatilho :destinos-possiveis :pode-ser-recusado}`.
 
-  POSSIVEIS, nunca 'disponiveis'. Esta funcao NAO avalia guard — lista o que o rito DECLARA. Avaliar
-  aqui seria impossivel de acertar: o guard le' `alegado` (o `contexto` do corpo, renomeado na borda p/
-  declarar procedencia), que e' argumento do POST e nao existe no momento da leitura. `alegado.urgente`
-  avaliado contra `{}` responderia 'nao passa' sobre um ato que
-  passaria com o corpo certo — resposta precisa e falsa, pior que imprecisa e honesta.
+  POSSIVEIS, nunca 'disponiveis'. Esta funcao NAO avalia guard — lista o que o rito DECLARA. [REVERTIDO
+  por ADR-0004] Ate' 11/09/2026 a razao citada aqui era que o guard lia `alegado` (o `contexto` do corpo),
+  argumento do POST que nao existe no momento desta leitura — avaliar contra `{}` responderia 'nao passa'
+  sobre um ato que passaria com o corpo certo. Essa razao especifica sumiu: hoje o guard so' le' verdade
+  APURADA (`proposicao`/`parecer`, a linha, e fatos por nome), nunca mais o corpo do POST. O que continua
+  tornando a pre-avaliacao ERRADA aqui e' outro par: CUSTO (cada fato e' uma consulta — N avaliacoes por
+  abertura de tela) e RISCO (guard mal-cadastrado LANCA, e derrubar esta leitura tiraria do operador o
+  historico justamente quando ele mais precisa). Ver `diplomat/http/in.clj`, mesma nota, onde os dois
+  motivos ja' estavam documentados ao lado do que caiu com o ADR.
 
   `pode-ser-recusado` e' o que paga essa escolha, e a definicao e' exata: o gatilho so' pode ser recusado
   POR GUARD se TODAS as suas candidatas tem guard. Havendo UMA sem guard, a engine sempre acha uma

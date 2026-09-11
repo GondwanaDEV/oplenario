@@ -14,3 +14,6 @@ Enforcement · Consequências · Alternativas descartadas). Complementa a SSOT (
 | ADR | Título | Status |
 |---|---|---|
 | [0001](0001-estrutura-de-pastas-e-silhueta-de-modulo.md) | Estrutura de pastas e silhueta de módulo | Aceito |
+| [0002](0002-identidade-canonica-numeracao-urn-imutabilidade.md) | Identidade canônica, numeração, URN e imutabilidade | Aceito |
+| [0003](0003-camada-relacoes-pode-tocar-o-db-do-proprio-modulo.md) | `relacoes/` pode importar o `db/` do próprio módulo | 🟡 Rascunho |
+| [0004](0004-a-guarda-de-transicao-so-le-verdade-apurada.md) | A guarda de transição só lê verdade apurada | Aceito |

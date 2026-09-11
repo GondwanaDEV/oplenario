@@ -100,8 +100,9 @@
   operador teria de adivinhar a string, e a rota de escrita ficaria inutilizavel pela interface.
 
   `pode-ser-recusado` e' o preco da honestidade desta rota. A leitura NAO avalia os guards (ver
-  `logic/gatilhos-possiveis`: o guard le' `contexto`, que so' existe no POST). `true` = ha' condicao, e o
-  rito pode recusar no disparo (409). `false` = o rito declara o ato incondicional — e ainda assim NAO e'
+  `logic/gatilhos-possiveis` para os motivos por extenso — hoje CUSTO e RISCO, nao mais 'o guard le' o
+  corpo do POST': essa razao caiu com o ADR-0004, o guard nao le' mais o corpo sob nome nenhum). `true` =
+  ha' condicao, e o rito pode recusar no disparo (409). `false` = o rito declara o ato incondicional — e ainda assim NAO e'
   promessa transacional: o estado pode mudar entre a leitura e o disparo. Uma interface que trate `false`
   como garantia estara' errada no mesmo dia em que duas pessoas mexerem na mesma materia.
 

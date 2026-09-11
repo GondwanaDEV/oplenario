@@ -269,16 +269,17 @@
 ;; Devolve (1) o HISTORICO de transicoes e (2) os GATILHOS que a Casa declara a partir do estado ATUAL.
 ;;
 ;; A DECISAO DESTA FATIA, e ela e' o eixo dos testes abaixo: a leitura lista os gatilhos DECLARADOS
-;; (opcao (a)), e NAO avalia os guards p/ dizer quais passariam (opcao (b)). Tres motivos, em ordem de
-;; peso:
+;; (opcao (a)), e NAO avalia os guards p/ dizer quais passariam (opcao (b)). [REVERTIDO por ADR-0004] Ate'
+;; 11/09/2026 o motivo de MAIOR peso era que (b) nao tinha como estar certa: o guard lia `contexto`/
+;; `alegado`, argumento do POST que nao existe na hora do GET — avaliar contra `{}` responderia "nao
+;; passa" sobre um ato que passaria com o corpo certo, resposta precisa e falsa. Esse motivo especifico
+;; SUMIU: hoje o guard nao le' o corpo sob nome nenhum (nem `contexto`, nem `alegado`), so' verdade
+;; APURADA (`proposicao`/`parecer`, a linha, e fatos por nome). Os outros dois motivos, que ja' vinham
+;; junto, seguem de pe' sozinhos e bastam para a mesma decisao:
 ;;
-;;   1. (b) NAO TEM COMO ESTAR CERTA. O guard le' `contexto`, e o contexto e' argumento do POST — ele nao
-;;      existe na hora do GET. Avaliar `contexto.urgente` contra `{}` responderia "nao passa" sobre um ato
-;;      que passaria com o corpo certo. Seria uma resposta precisa e falsa, que e' pior que uma imprecisa
-;;      e honesta.
-;;   2. guard LANCA. Um rito inavaliavel derrubaria a LEITURA — o operador perderia tambem o historico,
+;;   1. guard LANCA. Um rito inavaliavel derrubaria a LEITURA — o operador perderia tambem o historico,
 ;;      exatamente no momento em que mais precisa dele p/ entender o que houve.
-;;   3. guard consulta FATO: avaliar N guards por GET poe o resolvedor de fatos no caminho de uma tela.
+;;   2. guard consulta FATO: avaliar N guards por GET poe o resolvedor de fatos no caminho de uma tela.
 ;;
 ;; O PRECO de (a) e' o botao que o guard vai recusar — a familia de "dado falso" que o briefing proibe.
 ;; Pago em DUAS moedas, ambas testadas aqui: o campo chama-se `gatilhos-possiveis` (nunca "disponiveis"),

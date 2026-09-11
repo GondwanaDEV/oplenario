@@ -189,6 +189,21 @@
   (let [erro? #(contains? #{:runtime :sintaxe} (:erro %))]
     (boolean (or (erro? (ex-data e)) (erro? (ex-data (ex-cause e)))))))
 
+(defn- resposta-guard-inavaliavel
+  "A resposta NOMEADA de rito inavaliavel para as bordas de EMISSAO DE PARECER — ESPELHA a que
+  `tramitar-handler` ja' dava (ADR-0004, paridade de handler). Deliberadamente NAO compartilhada com ela:
+  la' a frase certa e' \"a materia NAO tramitou\", aqui e' \"o ato NAO foi registrado\" — mesma causa, dois
+  sujeitos, e uma frase generica o bastante p/ servir aos dois serviria mal a ambos. Sem isto, a excecao do avaliador sobe
+  crua ate' o interceptor global e vira `{\"erro\": \"erro interno\"}`: o operador nao tem como saber que o
+  problema esta' no TEMPLATE de tramitacao da Casa, e nao num bug do servidor.
+
+  Segue 500 de proposito — nao e' recusa de dominio (isso e' 409), e' incidente de CONFIG: alguem gravou um
+  rito que o motor nao consegue avaliar. O `:gatilho` diz QUAL ato ficou inavaliavel."
+  [gatilho]
+  (http/json-resposta 500 {:erro (str "o rito desta Casa nao pode ser avaliado — o ato NAO foi registrado; "
+                                      "procure quem administra os templates de tramitacao")
+                           :gatilho gatilho}))
+
 (defn- recusa-de-tramitacao
   "A prosa de cada `:motivo` de `{:transicionou? false}` (ver `db/tramitacao/transicionar!`) + o proprio
   motivo como campo. O `:else` cobre o contrato ANTIGO — mapa sem `:motivo`, que e' o que um Repo/fake ou
@@ -308,12 +323,15 @@
 
   DUAS COISAS QUE ESTA BORDA NAO FAZ, e nenhuma das duas por preguica:
 
-  1. NAO AVALIA GUARD p/ dizer quais gatilhos passariam. O guard le' `alegado` (o `contexto` do corpo,
-     renomeado na borda), e ele e' argumento do POST — nao existe aqui. Avaliar `alegado.urgente` contra
-     `{}` responderia 'nao passa' sobre um ato
-     que passaria com o corpo certo: resposta precisa e FALSA, pior que imprecisa e honesta. Some-se que
+  1. NAO AVALIA GUARD p/ dizer quais gatilhos passariam. [REVERTIDO por ADR-0004] Ate' 11/09/2026 a razao
+     era que o guard lia `alegado` (o `contexto` do corpo, renomeado na borda), argumento do POST que nao
+     existe nesta leitura — avaliar `alegado.urgente` contra `{}` responderia 'nao passa' sobre um ato
+     que passaria com o corpo certo: resposta precisa e FALSA, pior que imprecisa e honesta. Essa razao
+     especifica sumiu: o guard nao le' mais o corpo do POST sob nome nenhum (nem `contexto`, nem
+     `alegado`), so' verdade APURADA. O que continua valendo, sozinho, e' o que ja' vinha ao lado dela:
      guard LANCA (um rito inavaliavel derrubaria a leitura, tirando do operador tambem o historico,
-     justamente quando ele mais precisa) e que guard consulta FATO (N avaliacoes por abertura de tela).
+     justamente quando ele mais precisa) e guard consulta FATO (N avaliacoes por abertura de tela, cada
+     uma uma consulta real).
      O preco — o botao que o guard vai recusar — e' pago no NOME do campo (`gatilhos-possiveis`, nunca
      'disponiveis') e em `pode-ser-recusado` por gatilho, que e' mais informacao que um aviso generico.
 
@@ -403,9 +421,16 @@
           agora (tempo/hoje relogio zona-civil)]
       (if-let [{:keys [parecer]} (controllers/buscar-parecer-editor repo-leg resolver-comissoes ente-id id)]
         (let [m (adapters-in-parecer/emitir->dominio ator id (:template-id parecer) agora (:json-params req))]
-          (controllers/emitir-parecer repo-leg registro (assinador-icp/assinador-stub) ente-id m)
-          (http/json-resposta 200 (adapters-out-parecer/editor->wire
-                                     (controllers/buscar-parecer-editor repo-leg resolver-comissoes ente-id id))))
+          ;; ADR-0004: o guard do rito do parecer LANCA quando e' inavaliavel — traduz-se aqui, como na
+          ;; rota irma de tramitacao, senao o cliente recebe "erro interno" e nao sabe onde olhar.
+          (try
+            (controllers/emitir-parecer repo-leg registro (assinador-icp/assinador-stub) ente-id m)
+            (http/json-resposta 200 (adapters-out-parecer/editor->wire
+                                       (controllers/buscar-parecer-editor repo-leg resolver-comissoes ente-id id)))
+            (catch clojure.lang.ExceptionInfo e
+              (if (guard-inavaliavel? e)
+                (resposta-guard-inavaliavel (:gatilho m))
+                (throw e)))))
         (http/json-resposta 404 {:erro "parecer nao encontrado"})))))
 
 (defn- meu-parecer-editor-handler
@@ -431,11 +456,17 @@
           agora (tempo/hoje relogio zona-civil)]
       (if-let [{:keys [parecer]} (controllers/meu-parecer-editor repo-leg resolver-vereador resolver-comissoes ator id)]
         (let [m (adapters-in-parecer/emitir->dominio ator id (:template-id parecer) agora (:json-params req))]
-          (if (controllers/meu-emitir-parecer repo-leg registro (assinador-icp/assinador-stub)
-                                              resolver-vereador ator id m)
-            (http/json-resposta 200 (adapters-out-parecer/editor->wire
-                                       (controllers/meu-parecer-editor repo-leg resolver-vereador resolver-comissoes ator id)))
-            (http/json-resposta 404 {:erro "parecer nao encontrado"})))
+          ;; espelho do `emitir-parecer-handler` (ADR-0004, paridade de handler).
+          (try
+            (if (controllers/meu-emitir-parecer repo-leg registro (assinador-icp/assinador-stub)
+                                                resolver-vereador ator id m)
+              (http/json-resposta 200 (adapters-out-parecer/editor->wire
+                                         (controllers/meu-parecer-editor repo-leg resolver-vereador resolver-comissoes ator id)))
+              (http/json-resposta 404 {:erro "parecer nao encontrado"}))
+            (catch clojure.lang.ExceptionInfo e
+              (if (guard-inavaliavel? e)
+                (resposta-guard-inavaliavel (:gatilho m))
+                (throw e)))))
         (http/json-resposta 404 {:erro "parecer nao encontrado"})))))
 
 ;; ========================= Onda B Slice 6: expediente (documentos + protocolo geral) =========================

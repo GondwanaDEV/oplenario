@@ -14,6 +14,7 @@
             [oplenario.config :as config]
             [oplenario.identidade.relacoes.identidade :as rel-id]
             [oplenario.kernel.components.datasource :as datasource]
+            [oplenario.kernel.db-util :as db-util]
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.legislativo.db.emenda :as em]
             [oplenario.legislativo.db.parecer :as parecer]
@@ -230,3 +231,60 @@
             (is (= 1 (count itens)))
             (is (= pid (:proposicao-id (first itens))))
             (is (= "Arborização viária" (:ementa (first itens))))))))))
+
+;; ==============================================================================================
+;; ADR-0004 (frente `guarda-so-apurado`) — Fatia 3: `alegado` sai do `amb` de RUNTIME (espelho do
+;; parecer_tramitacao.clj, [CARRY disc.6] paridade com tramitacao_db_test.clj)
+;; ==============================================================================================
+
+(defn- inserir-transicao-legado!
+  "ESPELHO de tramitacao_db_test.clj/inserir-transicao-legado! — INSERT direto, contornando
+  `criar-transicao!` e o gate de vocabulario da Fatia 2."
+  [tx ente tid de-estado para-estado gatilho guarda]
+  (jdbc/execute-one! tx
+    ["INSERT INTO legislativo.template_transicao
+      (ente_id, id, template_id, de_estado, para_estado, gatilho, guarda, ordem, efetivado_em)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1, now())"
+     ente (random-uuid) tid de-estado para-estado gatilho guarda]))
+
+(deftest rito-legado-do-PARECER-que-le-ALEGADO-lanca-em-runtime-e-nao-transiciona
+  ;; ESPELHO exato de tramitacao_db_test.clj/rito-legado-que-le-ALEGADO-lanca-em-runtime-e-nao-transiciona
+  ;; — a mesma REDE de runtime, do lado do parecer: rito gravado fora de `criar-transicao!` com guard
+  ;; `alegado.x` tem de LANCAR, nunca transicionar nem virar `{:transicionou? false}` disfarcado.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (montar-template-parecer! tx ente)
+              pid (protocolar! tx ente)
+              {pcid :id} (criar-parecer! tx ente tid "proposicao" pid)]
+          (inserir-transicao-legado! tx ente tid "apresentado" "aprovado" "aprovar_legado" "alegado.aprovado")
+          (transicionar tx ente tid pcid "designar")
+          (transicionar tx ente tid pcid "apresentar")
+          (let [e (is (thrown-with-msg? clojure.lang.ExceptionInfo #"(?i)identificador sem valor"
+                        (ptram/transicionar-parecer! tx {:registro *registro* :ente-id ente :parecer-id pcid
+                                                         :template-id tid :gatilho "aprovar_legado"
+                                                         :alegado {:aprovado true} :agora data})))]
+            (is (= :runtime (:erro (ex-data e)))
+                "MESMA tag :runtime que o lado da proposicao usa — a rede de runtime, nao o gate de save")
+            (is (= "apresentado" (:estado (parecer/buscar tx ente pcid)))
+                "o parecer NAO tramitou")
+            (is (= 2 (count (ptram/historico-do-parecer tx ente pcid)))
+                "so' as 2 transicoes que OCORRERAM (designar+apresentar) foram ao historico")))))))
+
+(deftest auditoria-do-PARECER-continua-gravando-o-corpo-mesmo-que-a-guarda-nao-o-leia-mais
+  ;; ESPELHO de tramitacao_db_test.clj/auditoria-continua-gravando-o-corpo... — o `alegado` sai do `amb`
+  ;; (nao decide mais o guard), mas segue alimentando `registrar-transicao!` (:contexto alegado) em
+  ;; `parecer_transicao_historico`. Le' a COLUNA e compara o CONTEUDO.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (montar-template-parecer! tx ente)
+              pid (protocolar! tx ente)
+              {pcid :id} (criar-parecer! tx ente tid "proposicao" pid)
+              corpo {:motivo "relator indicado pelo lider"}]
+          (ptram/transicionar-parecer! tx {:registro *registro* :ente-id ente :parecer-id pcid
+                                           :template-id tid :gatilho "designar" :alegado corpo :agora data})
+          (let [linha (first (ptram/historico-do-parecer tx ente pcid))
+                gravado (db-util/jsonb->kw (:contexto linha))]
+            (is (= corpo gravado)
+                (str "a coluna 'contexto' do parecer segue com o corpo INTEGRAL — lido: " (pr-str gravado)))))))))

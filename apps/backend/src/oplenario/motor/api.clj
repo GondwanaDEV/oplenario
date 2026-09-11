@@ -3,7 +3,8 @@
   §22.10: 'kernel/motor nunca importam um modulo'; o motor e BIBLIOTECA compartilhada (coracao
   dos 4 usos da DSL — tramitacao, autorizacao, plenario, compliance), nao servico HTTP. O compliance
   OPERA este seam: materializa obrigacao/audita avaliacao nas SUAS tabelas (schema compliance, §22.7.7)."
-  (:require [clojure.string :as str]
+  (:require [clojure.set :as set]
+            [clojure.string :as str]
             [oplenario.motor.components.registro-fatos :as rf]
             [oplenario.motor.components.repositorio :as rm]
             [oplenario.motor.nucleo :as nuc]
@@ -25,17 +26,54 @@
 
   ESCOPO F3.3b = validacao SINTATICA (parseia como expressao DSL — o `guarda-dsl` faria o mesmo parse no
   runtime; antecipa-lo p/ o save move a falha p/ a config). Type-check estatico COMPLETO (a expressao tipa
-  p/ Booleano contra o vocabulario de tramitacao — registros `proposicao`/`contexto`) e' [CARRY]: depende
-  da catalogacao do eixo C no registry (analogo a §22.7.5 p/ compliance); sem isso o type-checker nao
-  conhece esses registros. Ate la, o parse e' a rede; o runtime ainda avalia o tipo ao disparar."
-  [fonte]
-  (if (str/blank? fonte)
-    {:status "VALIDA" :erros []}
-    (try
-      (nuc/parse-expr fonte)
-      {:status "VALIDA" :erros []}
-      (catch clojure.lang.ExceptionInfo e
-        {:status "INVALIDA" :erros [(ex-message e)]}))))
+  p/ Booleano contra o vocabulario de tramitacao — hoje o SUJEITO do template, `proposicao`/`parecer`, e
+  os canais fixos de autorizacao, `ator`/`recurso` — ver ADR-0004; `contexto` e `alegado` sao vocabulario
+  MORTO, nenhum guard real pode le-los) e' [CARRY]: depende da catalogacao do eixo C no registry (analogo
+  a §22.7.5 p/ compliance); sem isso o type-checker nao conhece esses registros. A aridade-2 abaixo ja'
+  cobre a metade ALLOWLIST desse type-check (identificador fora do vocabulario); o que falta ao [CARRY] e'
+  o tipo de cada campo (Booleano/String/...), nao mais quais registros existem. Ate la, o parse e' a rede;
+  o runtime ainda avalia o tipo ao disparar.
+
+  Aridade-2 acrescenta a ALLOWLIST de vocabulario (a frente `guarda-so-apurado`, 11/09/2026 — um
+  canal do `amb` que carrega o corpo bruto de uma requisicao nao pode ser lido dentro de um GUARD,
+  pois deixaria o operador afirmar a propria precondicao): `opts` traz
+  `{:vocabulario #{<identificador> ...}}`. Este `motor/` NAO conhece o vocabulario de nenhum
+  modulo — so' compara os identificadores-RAIZ que `nuc/identificadores-raiz` acha na expressao
+  (via `nuc/parse-expr`) contra o conjunto que o CHAMADOR (o modulo dono da coluna) declara.
+  Identificador fora do vocabulario = INVALIDA, com `:erros` NOMEANDO o identificador ilegal e
+  listando o vocabulario permitido — a mensagem e' a prova, quem cadastra o rito tem de saber o
+  que pode escrever. Fonte em branco/nil continua VALIDA (guarda ausente = sempre passa).
+
+  CHAMAR A ARIDADE-2 SEM VOCABULARIO LANCA, nao degrada. Se a omissao caisse de volta em
+  'so' sintatico', o gate teria um caminho PERMISSIVO acionado por ESQUECIMENTO — a mesma classe de
+  fail-open que esta frente existe p/ fechar, um nivel acima. Quem quer so' a sintaxe chama a
+  aridade-1, que declara isso na assinatura. Vocabulario VAZIO (`#{}`) e' diferente de ausente: e'
+  a declaracao legitima de 'nada e' permitido aqui' (o caso do template inexistente em
+  `criar-transicao!`) e devolve INVALIDA — resposta de dominio, nao excecao de programacao."
+  ([fonte]
+   (if (str/blank? fonte)
+     {:status "VALIDA" :erros []}
+     (try
+       (nuc/parse-expr fonte)
+       {:status "VALIDA" :erros []}
+       (catch clojure.lang.ExceptionInfo e
+         {:status "INVALIDA" :erros [(ex-message e)]}))))
+  ([fonte {:keys [vocabulario] :as opts}]
+   (when (nil? vocabulario)
+     (throw (ex-info (str "validar-guarda/2 exige :vocabulario (conjunto de identificadores permitidos); "
+                          "para validacao so' sintatica use a aridade-1")
+                     {:erro :vocabulario-ausente :opts opts})))
+   (let [base (validar-guarda fonte)]
+     (if (or (not= "VALIDA" (:status base)) (str/blank? fonte))
+       base
+       (let [no (nuc/parse-expr fonte)
+             usados (nuc/identificadores-raiz no)
+             ilegais (set/difference usados (set vocabulario))]
+         (if (empty? ilegais)
+           base
+           {:status "INVALIDA"
+            :erros [(str "identificador nao permitido no guard: " (str/join ", " (sort ilegais))
+                         " — vocabulario permitido: " (str/join ", " (sort vocabulario)))]}))))))
 
 (defn comp-chave
   "Normaliza um valor de Competencia ({:ano :mes}) p/ a chave 'AAAA-MM' — o MESMO formato que o motor usa
@@ -173,12 +211,13 @@
 (defn guarda-dsl
   "Compila o GUARD de uma transicao de tramitacao (§22.4 eixo C) num predicado `(fn [amb] -> bool)` — o
   seam que o motor de transicao do legislativo roda. disciplina 5: MESMO avaliador/registry do motor (o
-  `amb` carrega o contexto da transicao — ex.: {\"proposicao\" {...} \"contexto\" {...}}; fatos de relacao
-  resolvem por nome sobre a tx). Expressao nao-booleana / fato-sem-fn = LANCA `{:erro :runtime}` — o
-  nao-booleano por `exigir-booleano!` acima MAIS `runtime/exigir-booleano-operando!` dentro do avaliador,
-  que juntos e' que fazem esta frase ser verdadeira: ate' a fatia 4 o seam fechava com `(boolean …)` e um
-  guard que avaliasse para string/UUID/numero virava `true`; ate' a fatia 5 escrever esse mesmo guard com
-  um `e`/`ou` (`alegado.parecer_favoravel e verdadeiro`) o reabria, porque a coercao acontecia no operando
+  `amb` carrega o SUJEITO da transicao — ex.: {\"proposicao\" {...}} ou {\"parecer\" {...}}, NUNCA
+  `contexto`/`alegado` (vocabulario morto/banido, ADR-0004: o corpo do POST nao e' legivel por um guard);
+  fatos de relacao resolvem por nome sobre a tx). Expressao nao-booleana / fato-sem-fn = LANCA
+  `{:erro :runtime}` — o nao-booleano por `exigir-booleano!` acima MAIS `runtime/exigir-booleano-operando!`
+  dentro do avaliador, que juntos e' que fazem esta frase ser verdadeira: ate' a fatia 4 o seam fechava com
+  `(boolean …)` e um guard que avaliasse para string/UUID/numero virava `true`; ate' a fatia 5 escrever
+  esse mesmo guard com um `e`/`ou` (`proposicao.x e verdadeiro`) o reabria, porque a coercao acontecia no operando
   e o operador devolvia booleano. Fail-ABERTO exatamente no ponto que so' existe para negar. Quem chama trata o lance: `transicionar!`
   deixa PROPAGAR (nao transicionou) e a borda responde 500 nomeado. Sem prazo/obrigacao: avaliacao pura.
 

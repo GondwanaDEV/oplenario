@@ -58,10 +58,13 @@
       (invalido! "voto-relator obrigatorio (nao-branco)" {:campos [:voto-relator]}))
     {:parecer-id parecer-id :template-id template-id :gatilho "emitir" :voto-relator (:voto-relator m)
      :lock-version (:lock-version m)
-     ;; `alegado` (fatia 4): o canal do CLIENTE no `amb` do guard, FIXADO vazio aqui. Nenhum campo do
-     ;; corpo de emissao alimenta a avaliacao do rito — o que o relator manda e' voto e texto, e os dois
-     ;; sao ESCRITA auditada, nao premissa de guard. O nome declara a procedencia para o dia em que
-     ;; alguem quiser abrir o campo; ate' la, `{}` e' a afirmacao de que nao ha' nada alegado.
+     ;; `alegado`: parametro de `transicionar-parecer!`, FIXADO vazio aqui. [REVERTIDO por ADR-0004]
+     ;; Nunca foi lido pelo guard mesmo antes do ADR — nenhum campo do corpo de emissao alimenta a
+     ;; avaliacao do rito, o que o relator manda e' voto e texto, e os dois sao ESCRITA auditada, nao
+     ;; premissa de guard — e desde o ADR isto vale para TODO guard de parecer, nao so' este: a coluna
+     ;; nem chega mais a existir no `amb` que `transicionar-parecer!` monta. `{}` segue sendo a carga que
+     ;; `registrar-transicao!` grava em `parecer_transicao_historico.contexto` (Inv.10) — e', ate' hoje,
+     ;; sempre vazia porque nenhuma rota aceita este campo do corpo de emissao.
      ;; `:ator` INTEIRO (3-A, paridade com o engine da proposicao): `motor/politica-dsl` avalia
      ;; `(fn [ator recurso] -> bool)` com acesso a campo e aos fatos de relacao — um uuid solto nao
      ;; responde "é_presidente_da_mesa(...)". Vai ao lado de `:updated-by`, que continua sendo AUTORIA da

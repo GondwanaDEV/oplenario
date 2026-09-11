@@ -97,17 +97,22 @@
   "DECISAO B do Daouda (11/09/2026): **se o rito protege UM caminho de um ato, protege TODOS.**
 
   O que isto impede, com materia na mesa. Um gatilho pode ter MAIS DE UMA PORTA — transicoes diferentes, do
-  mesmo estado, com o mesmo verbo — e quem escolhe entre elas e' o GUARD, que le' `alegado` (o corpo do
-  POST). Rito perfeitamente razoavel:
+  mesmo estado, com o mesmo verbo — e quem escolhe entre elas e' o GUARD. [REVERTIDO por ADR-0004] No dia
+  desta decisao (11/09/2026, ANTES do ADR-0004 no mesmo dia) o exemplo abaixo usava `alegado` (o corpo do
+  POST) como fonte do guard que escolhia a porta — hoje isso e' vocabulario banido, e o roteamento por
+  escolha do cliente passou a ser modelado como GATILHO-POR-DESTINO (a propria consequencia do ADR-0004).
+  O exemplo segue valendo com uma fonte de guard LEGITIMA (verdade apurada), porque o buraco que a Decisao
+  B fecha e' ORTOGONAL a QUEM alimenta o guard — e continua valendo de graca para rito LEGADO/generico
+  (gravado antes do ADR, ou por fora de `criar-transicao!`) cujo guard ainda leia `alegado`:
 
-    ordem 1 | em_comissoes -> em_pauta   | guarda `alegado.com_parecer == verdadeiro` | so' o presidente
-    ordem 2 | em_comissoes -> arquivada  | (sem guarda)                               | (sem autorizacao)
+    ordem 1 | em_comissoes -> em_pauta   | guarda `parecer.estado == \"favoravel\"` | so' o presidente
+    ordem 2 | em_comissoes -> arquivada  | (sem guarda)                           | (sem autorizacao)
 
-  Em portugues: 'concluir a fase de comissoes — havendo parecer vai a pauta, e so' o presidente despacha;
-  nao havendo, arquiva por decurso'. Ninguem escreve isso achando que e' inseguro. Mas um secretario manda
-  `{gatilho: 'concluir', contexto: {com_parecer: false}}`, o guard da porta 1 reprova, a engine escolhe a
-  porta 2 — que nao tem fechadura — e a materia e' ARQUIVADA por quem nao podia manda-la a pauta. Ele nao
-  arrombou a porta trancada: escolheu a aberta, e escolheu escrevendo no corpo.
+  Em portugues: 'concluir a fase de comissoes — havendo parecer favoravel vai a pauta, e so' o presidente
+  despacha; nao havendo (ou sendo contrario), arquiva por decurso'. Ninguem escreve isso achando que e'
+  inseguro. Mas um secretario aciona `concluir` sobre uma materia sem parecer favoravel, o guard da porta 1
+  reprova, a engine escolhe a porta 2 — que nao tem fechadura — e a materia e' ARQUIVADA por quem nao podia
+  manda-la a pauta. Ele nao arrombou a porta trancada: escolheu a aberta.
 
   Agravante que sozinho ja' justificaria o gate: na LEITURA, `exige-autorizacao` responde `true` para esse
   gatilho (a definicao e' `some?` sobre as candidatas, e ela esta' certa para a semantica de 'negado nao
@@ -136,17 +141,48 @@
                            :de-estado de-estado :gatilho gatilho
                            :portas-com-autorizacao (count com) :portas-sem-autorizacao (count sem)})))))))
 
+(defn- sujeito-do-template
+  "Le' o `sujeito` ('proposicao'|'parecer') do template — o unico canal do `amb` de guarda que uma
+  transicao concreta pode ver (ADR-0004). MESMA consulta pontual de `db/proposicao/template-meta` (aqui
+  precisa dela ANTES do insert, para declarar o vocabulario). `template_transicao` e' subject-agnostica —
+  o MESMO insert governa proposicao e parecer —, mas cada TEMPLATE concreto so' fala de UM sujeito,
+  fixado em `criar-template!`; e' esse dado, ja' gravado, que resolve a ambiguidade — NAO a uniao dos
+  dois vocabularios. Uniao deixaria `parecer.x` passar num template de PROPOSICAO, que so' explodiria em
+  runtime quando o amb real (so' `{\"proposicao\" ...}`) nao tivesse a chave.
+
+  nil quando o template nao existe neste tenant — vira vocabulario VAZIO (fail-closed): qualquer guard
+  nao-literal e' recusado, e a FK do insert reprova o template inexistente de qualquer jeito depois."
+  [tx ente-id template-id]
+  (:sujeito (comum/linha->kebab
+              (jdbc/execute-one! tx
+                (sql/format {:select [:sujeito] :from [:legislativo.template_tramitacao]
+                             :where [:and [:= :ente_id ente-id] [:= :id template-id]]})))))
+
+(def ^:private vocabulario-autorizacao
+  "ADR-0004: `autorizacao` roda via `motor/politica-dsl`, cujo `amb` e' SEMPRE {\"ator\" ... \"recurso\"
+  ...} — nunca depende do sujeito do template. Fixo, ao contrario do vocabulario da guarda."
+  #{"ator" "recurso"})
+
 (defn criar-transicao!
   "Persiste uma transicao do template. GATEIA no save (Inv.4, motor/validar-guarda) AS DUAS expressoes —
-  `guarda` e `autorizacao` (3-A) — pelo mesmo criterio: expressao que nao parseia NAO entra no banco, e a
-  falha sai do caminho critico (rejeitada na config, nao no meio de um fluxo). Lanca ex-info
-  :guarda-invalida / :autorizacao-invalida com a causa do erro de sintaxe.
+  `guarda` e `autorizacao` (3-A) — em DOIS PASSOS por coluna: (1) SINTAXE — expressao que nao parseia NAO
+  entra no banco (:guarda-invalida / :autorizacao-invalida); (2) VOCABULARIO (ADR-0004, frente
+  `guarda-so-apurado`) — so' roda se a sintaxe ja' passou, para que o :erro devolvido seja DISTINGUIVEL: quem
+  cadastra precisa saber se o problema e' a forma da expressao ou o identificador que ela usa
+  (:guarda-vocabulario-invalido / :autorizacao-vocabulario-invalido). A falha sai do caminho critico
+  (rejeitada na config, nao no meio de um fluxo) nos dois passos.
 
   AS DUAS PERGUNTAS SAO DIFERENTES, e e' por isso que sao duas colunas e nao uma:
     · `guarda`      — 'ISTO ACONTECEU?'  Fato sobre o mundo: houve votacao aprovada, o prazo correu, a
-                      comissao opinou. Nao fala do ator. (3-B)
+                      comissao opinou. Nao fala do ator. (3-B) Vocabulario = o SUJEITO do template
+                      (`proposicao` ou `parecer`) — NUNCA `alegado`, o corpo do POST: uma guarda que
+                      afirma a propria precondicao e' a mesma falha, um nivel abaixo, que a Decisao B
+                      fechou p/ a ESCOLHA de porta.
     · `autorizacao` — 'VOCE PODE DECLARAR QUE ACONTECEU?'  Fato sobre QUEM pede: e' o presidente da Mesa,
                       e' o relator da materia, exerce a presidencia hoje. Nao fala do mundo. (3-A)
+                      Vocabulario = `ator`/`recurso` (o amb de `politica-dsl`) — fecha de graca o buraco
+                      latente de uma autorizacao que referenciasse o sujeito da tramitacao e so' falhasse
+                      em runtime, no meio do ato.
   Colapsa-las numa expressao so' obrigaria a Casa a repetir a condicao de fato em cada regra de pessoa (e
   vice-versa), e faria a recusa perder a causa: 'a Casa nao permite agora' e 'voce nao pode' sao respostas
   diferentes, para pessoas diferentes, com consertos diferentes."
@@ -157,6 +193,18 @@
     (when (not= "VALIDA" status)
       (throw (ex-info "guard da transicao mal-formado (rejeitado no save, Inv.4)"
                       {:erro :guarda-invalida :de-estado de-estado :gatilho gatilho :erros erros}))))
+  ;; PASSO 2 do guard — vocabulario (ADR-0004). So' chega aqui se a sintaxe ja' passou: o sujeito e' lido
+  ;; do PROPRIO template (subject-agnostico na tabela, mono-sujeito na linha), nao recebido do caller nem
+  ;; adivinhado por uniao.
+  (let [sujeito (sujeito-do-template tx ente-id template-id)
+        {:keys [status erros]} (motor/validar-guarda guarda {:vocabulario (if sujeito #{sujeito} #{})})]
+    (when (not= "VALIDA" status)
+      ;; a MENSAGEM nomeia o identificador (nao so' o `:erros` na ex-data) — quem cadastra le' a excecao,
+      ;; nao inspeciona ex-data no REPL.
+      (throw (ex-info (str "guard da transicao referencia vocabulario nao permitido (rejeitado no save, "
+                           "ADR-0004): " (str/join "; " erros))
+                      {:erro :guarda-vocabulario-invalido :de-estado de-estado :gatilho gatilho
+                       :sujeito sujeito :erros erros}))))
   ;; MESMO gate p/ a autorizacao. `validar-guarda` e' o validador de expressao BOOLEANA da DSL — nao e'
   ;; especifico de guard —, entao reusa-lo aqui e' a disciplina 5 e nao um atalho: uma expressao de
   ;; autorizacao mal-formada que entrasse no banco so' falharia no meio de uma sessao, e `check!` traduz
@@ -166,6 +214,13 @@
     (when (not= "VALIDA" status)
       (throw (ex-info "expressao de autorizacao da transicao mal-formada (rejeitada no save, Inv.4)"
                       {:erro :autorizacao-invalida :de-estado de-estado :gatilho gatilho :erros erros}))))
+  ;; PASSO 2 da autorizacao — vocabulario (ADR-0004). Fixo (`ator`/`recurso`), nao depende do sujeito.
+  (let [{:keys [status erros]} (motor/validar-guarda autorizacao {:vocabulario vocabulario-autorizacao})]
+    (when (not= "VALIDA" status)
+      (throw (ex-info (str "expressao de autorizacao referencia vocabulario nao permitido (rejeitada no "
+                           "save, ADR-0004): " (str/join "; " erros))
+                      {:erro :autorizacao-vocabulario-invalido :de-estado de-estado :gatilho gatilho
+                       :erros erros}))))
   (exigir-portas-coerentes! tx {:ente-id ente-id :template-id template-id :de-estado de-estado
                                 :gatilho gatilho :autorizacao autorizacao})
   (jdbc/execute-one! tx
@@ -273,13 +328,16 @@
   como `true`. Fail-ABERTO num ponto que so' existe p/ negar. Hoje a frase e' verdadeira, e a prova de
   que ela pode reprovar esta' em `guarda-nao-booleano-falha-FECHADO` (tramitacao-db-test).
 
-  OS DOIS CANAIS DO `amb`, e por que eles tem NOMES diferentes (fatia 4). O guard e' uma regra do tenant
-  lendo o mundo, e nem todo pedaco desse mundo vale o mesmo:
+  OS DOIS CANAIS APURADOS DO `amb` (ADR-0004 — antes eram tres, com `alegado` como terceiro; ver abaixo
+  por que ele saiu). O guard e' uma regra do tenant lendo o mundo, e nem todo pedaco desse mundo vale o
+  mesmo:
 
     · `proposicao`  -> a LINHA, lida pelo servidor nesta tx sob FOR UPDATE. Verdade apurada.
     · fatos por nome (`aprovada_em_votacao(proposicao.id)`, …) -> resolvidos pelo RegistroFatos contra a
       tx do tenant. Verdade apurada — e' o canal que a decisao 3-B abriu.
-    · `alegado`     -> o corpo do POST. E' o que o OPERADOR AFIRMA, e nada mais que isso.
+
+  `alegado` (o corpo do POST — o que o OPERADOR AFIRMA, nada mais) NAO E' MAIS canal deste `amb` — ver
+  [REVERTIDO por ADR-0004] logo abaixo.
 
   Ate' aqui o terceiro canal chamava-se `contexto`, um nome neutro que o punha no mesmo plano dos outros
   dois. Com um rito que declarasse `contexto.parecer_favoravel == verdadeiro` na saida de 'em_comissoes',
@@ -288,15 +346,18 @@
   correto; quem escreveu o rito e' que nao tinha como ver, olhando para ele, que estava confiando no
   cliente. O nome passa a dizer: `alegado.x` e' alegacao, `proposicao.x` e fato-por-nome sao apuracao.
 
-  Isto NAO proibe ler o cliente — ha' uso legitimo (escolher destino por `alegado.comissao`, carimbar
-  quem pediu). Proibir seria decidir pelo regimento, que e' justamente o que o Inv.4 veda. O que a fatia
-  entrega e' que a escolha fique VISIVEL na propria expressao. E ela e' MECANICA, nao convencao: a chave
-  `contexto` sumiu do `amb`, entao um rito antigo que a referencie nao le' silenciosamente o corpo do
-  cliente — o avaliador lanca `{:erro :runtime}` (identificador sem valor) e a materia NAO tramita.
+  [REVERTIDO por ADR-0004] Este paragrafo dizia que ler o cliente no guard tinha uso legitimo
+  (`alegado.comissao` p/ escolher destino) e que proibir seria decidir pelo regimento. O ADR-0004
+  (frente `guarda-so-apurado`) pesou esse argumento e o derrubou: o unico uso legitimo citado era
+  roteamento, e roteamento e' melhor modelado como GATILHO-POR-DESTINO (atos distintos no regimento),
+  nao como guard lendo o corpo. Hoje `alegado` e' proibido no guard nos DOIS niveis — `criar-transicao!`
+  recusa no SAVE (vocabulario = so' o sujeito do template) e este `amb` de runtime nem carrega mais a
+  chave: um rito que a referencie (por escrita nova bloqueada no gate, ou por linha gravada fora dele —
+  import, SQL direto) lanca `{:erro :runtime}` (identificador sem valor) e a materia NAO tramita — a
+  chave `contexto` ja' tinha sumido antes; `alegado` segue o mesmo caminho.
   O corpo HTTP e a coluna `proposicao_transicao_historico.contexto` seguem com o nome antigo de proposito:
   o primeiro descreve a carga do ato, a segunda e' auditoria append-only compartilhada com o engine do
-  parecer, e renomear um deles nao tornaria nenhum guard mais legivel — a troca de nome vale no ponto em
-  que a confianca e' decidida, que e' o `amb`.
+  parecer — o corpo deixa de DECIDIR o guard, mas continua sendo REGISTRADO integralmente (Inv.10).
 
   QUEM DIZ O QUE E' TERMINAL E' O RITO (Fatia 2). Ate' a mig 0078 quem dizia era o SQL: o trigger
   `trg_proposicoes_imut_estado` (mig 0013) cravava `imut_trava_estado_terminal('publicada','arquivada')` —
@@ -372,11 +433,14 @@
                      (or (nil? (:guarda t))
                          ((motor/guarda-dsl {:registro registro :tx tx :expr (:guarda t)
                                              :agora agora :ente-id ente-id})
-                          ;; DOIS CANAIS, e o NOME diz de qual: `proposicao` (a linha, lida pelo servidor
-                          ;; sob FOR UPDATE) e os FATOS de relacao sao verdade apurada; `alegado` e' o
-                          ;; corpo do POST — o que o operador AFIRMA. Ver a secao "OS DOIS CANAIS" na
-                          ;; docstring. `contexto` NAO existe mais neste mapa, de proposito.
-                          {"proposicao" {:id proposicao-id :estado estado} "alegado" (or alegado {})})))
+                          ;; ADR-0004 (frente `guarda-so-apurado`, Fatia 3): `alegado` SAI do `amb` de
+                          ;; runtime. So' `proposicao` (a linha, lida pelo servidor sob FOR UPDATE) e os
+                          ;; FATOS de relacao — verdade APURADA — ficam visiveis ao guard; `contexto` ja'
+                          ;; nao existia (fatia 4 antiga), e agora `alegado` segue o mesmo caminho: o gate
+                          ;; de `criar-transicao!` recusa a palavra no SAVE, e este `amb` e' a REDE por
+                          ;; baixo — um rito que a referencie por fora do save (import, SQL direto) lanca
+                          ;; `{:erro :runtime}` aqui, nunca le' o corpo em silencio.
+                          {"proposicao" {:id proposicao-id :estado estado}})))
             escolhida (first (filter passa? candidatas))]
         (cond
           (some? escolhida)

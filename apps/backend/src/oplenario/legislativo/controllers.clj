@@ -287,9 +287,10 @@
   estado ATUAL. nil = materia inexistente no tenant (a borda traduz -> 404), mesmo contrato de
   `buscar-ficha-materia`/`buscar-proposicao-detalhe`.
 
-  NAO AVALIA GUARD, e a decisao e' de desenho (ver `logic/gatilhos-possiveis`): o guard le' `alegado`, que
-  e' argumento do POST e nao existe no GET — avaliar aqui daria uma resposta precisa e FALSA. A honestidade
-  e' paga em `pode-ser-recusado`, por gatilho, que e' mais informacao que um aviso generico.
+  NAO AVALIA GUARD, e a decisao e' de desenho (ver `logic/gatilhos-possiveis`, onde os motivos completos —
+  e a nota [REVERTIDO por ADR-0004] sobre a razao que caiu — vivem por extenso): guard consulta FATO (N
+  avaliacoes por GET) e guard LANCA (derrubaria tambem o historico). A honestidade e' paga em
+  `pode-ser-recusado`, por gatilho, que e' mais informacao que um aviso generico.
 
   A SONDA DE TRUNCAMENTO: o Repo e' consultado com `limite+1`. Com um teto simples, `n` itens devolvidos
   sao indistinguiveis de 'a materia so' teve n atos', e o operador leria a linha mais antiga MOSTRADA como

@@ -171,11 +171,14 @@
               "e a materia NAO foi para 'arquivada' — o destino nao depende de quem pediu"))))))
 
 ;; ---------- DECISAO B: porta trancada nao convive com porta aberta no mesmo gatilho ----------
-;; O caso real: `em_comissoes --concluir--> em_pauta` (guarda `alegado.com_parecer`, so' o presidente) ao
-;; lado de `em_comissoes --concluir--> arquivada` (sem guarda, sem autorizacao). Um secretario manda
-;; `contexto: {com_parecer: false}`, o guard da 1a reprova, a engine escolhe a 2a — e a materia e'
-;; ARQUIVADA por quem nao podia manda-la a pauta. Ele nao arrombou a porta trancada: escolheu a aberta,
-;; escrevendo no corpo do proprio pedido.
+;; O caso real: `em_comissoes --concluir--> em_pauta` (guarda sobre verdade APURADA, ex.
+;; `parecer.estado == "favoravel"`, so' o presidente) ao lado de `em_comissoes --concluir--> arquivada`
+;; (sem guarda, sem autorizacao). Um secretario aciona o mesmo gatilho `concluir` sem que a comissao tenha
+;; opinado, o guard da 1a reprova, a engine escolhe a 2a — e a materia e' ARQUIVADA por quem nao podia
+;; manda-la a pauta. Ele nao arrombou a porta trancada: escolheu a aberta. [ADR-0004: a guarda ja' nao
+;; pode ler o corpo do pedido (`alegado`) para decidir entre portas — o roteamento por escolha do cliente
+;; e' modelado como GATILHO-POR-DESTINO, nao como porta escondida atras de um guard sobre `alegado`; a
+;; Decisao B protege o caso ortogonal, de portas do MESMO gatilho com autorizacao incoerente entre si.]
 
 (deftest B-cadastro-recusa-porta-ABERTA-ao-lado-de-TRANCADA
   (let [ente (random-uuid)]

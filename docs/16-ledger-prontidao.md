@@ -1689,3 +1689,78 @@ DENUNCIAR.** Quem consumir `em-aberto` sem essa comparação herda o defeito.
 rodapé institucional (3 páginas do portal público). Conformidade é resultado de auditoria, e não há laudo
 nem gate citável no repositório — as ocorrências de "eMAG" são plano e requisito, nenhuma é resultado.
 Reversível numa linha se houver laudo.
+
+---
+
+# 🔒 Frente `guarda-so-apurado` · A guarda de transição só lê verdade apurada (11/09/2026)
+
+**6 commits, `a1afa34`..`ac96808`.** Fecha a **Pergunta C** — *um rito pode decidir pelo que o
+requerente afirma, ou só pelo que a Casa apurou?* Resposta: **só o apurado**, a mesma que o T3-A deu um
+nível abaixo. Decisão do Daouda, com o contra-argumento na mesa. Registro completo em
+[ADR-0004](adr/0004-a-guarda-de-transicao-so-le-verdade-apurada.md).
+
+## O que a frente fechou
+
+O canal `alegado` (o corpo do POST) era legível dentro de uma guarda. Num gatilho de porta única, isso
+deixa **quem já passou pelo `autorizacao` afirmar a própria precondição** — a forma exata do T3-A, um
+nível acima: lá o operador escolhia o *estado*, aqui ele fabricava a *condição*.
+
+Defesa em dois níveis, porque nenhum basta sozinho:
+
+| Nível | Onde | O que pega |
+|---|---|---|
+| **Cadastro** | `motor/api/validar-guarda` aridade-2 + `criar-transicao!` | o rito escrito pela porta da frente |
+| **Runtime** | `alegado` fora dos dois `amb` | o rito gravado por import/SQL direto, que escapa do gate |
+
+O mecanismo **não é uma palavra proibida**: é allowlist de vocabulário declarada pelo módulo, por coluna.
+O motor é biblioteca dos 4 usos da DSL — §22.10 veda que ele conheça o vocabulário de alguém.
+
+## O que a medição derrubou
+
+- **O catálogo de fato apurado do legislativo é UM** (`aprovada_em_votacao`), e ele exclui `requerimento`
+  por decisão de domínio deliberada. A saída "reescreve com fato apurado" era **promessa, não catálogo
+  pronto**. Isso não é custo da decisão — é a medida do que ainda não foi modelado, e agora falha
+  **barulhento no cadastro** em vez de silencioso na sessão.
+- **O código documentava a decisão CONTRÁRIA, em dois lugares.** A Fatia 4 do eixo C considerou proibir e
+  **recusou**, citando o Inv.4. A medição citou esse exato bloco e extraiu só a metade compatível com o
+  briefing; só a refutação adversarial levantou como `GAP CRÍTICO`. O ADR registra a reversão em vez de
+  apagar o raciocínio antigo.
+- **"Custo zero" era verdade em produção e falso no total.** Havia **4 testes de integração ativos que
+  AFIRMAVAM o vazamento** — um assertava literalmente *"ler o cliente continua PERMITIDO"*. Travavam o
+  conserto. O refutador os achou com um grep diferente do que a medição usou.
+
+## O que foi provado, e como
+
+| Alegação | Prova |
+|---|---|
+| o gate de vocabulário pode reprovar | **mutação**: removido o `throw`, 3 falhas — uma por caminho permissivo (`{}`, `{:vocabulario nil}`, `nil`) |
+| a rede de runtime pega o que o cadastro não pega | **vermelho**: com o código velho, o rito legado por SQL direto **transicionava** — `Expected: "protocolada"  Actual: "em_pauta"` |
+| a auditoria sobreviveu | valor **lido da coluna** e comparado: `{:motivo "urgencia" :protocolo "OF-123"}` sai idêntico |
+| o veto resiste a ataque | revisão adversarial, 4 lentes, **1 achado, 0 novos** — a lente de burla comparou os 3 walkers nó a nó |
+
+## O achado que mudou de prazo por causa da própria frente
+
+A revisão confirmou o `[GAP]` que a Fatia 3 já havia **declarado** (as bordas de emissão de parecer
+devolviam `"erro interno"` opaco), e mostrou por que ele não podia esperar: **esta frente tornou o
+caminho mais frequente.** Antes, o rito legado lia o corpo em silêncio; depois do veto, lança sempre.
+Adiar seria piorar a rota que a frente acabou de esquentar. Consertado em `ac96808`, com as **duas**
+bordas testadas.
+
+## Dívida de documentação paga junto (12 pontos)
+
+Duas famílias: **vocabulário morto** (`motor/api.clj` ainda citava `contexto`, nome substituído semanas
+antes) e **posição revertida** (blocos que davam `alegado.comissao` como exemplo vivo de uso legítimo,
+inclusive na docstring da Decisão B). Marcados `[REVERTIDO por ADR-0004]`, com o raciocínio antigo
+**preservado** — ele explica por que o canal existiu, e apagá-lo esconderia a reversão.
+
+O achado mais útil da limpeza: a leitura de `gatilhos-possiveis` justificava não avaliar guards com
+**três** motivos, e o de maior peso era *"o guard lê o corpo, que não existe no GET"*. Esse motivo
+**evaporou**. Os outros dois bastam sozinhos — a decisão não muda, mas a justificativa é outra, e está
+escrito.
+
+## Aberto
+
+- **O catálogo de fatos do legislativo precisa crescer** para que guardas expressem mais que estado +
+  aprovação. Não é dívida desta frente; é a fila que ela tornou visível.
+- **Roteamento vira gatilho-por-destino** (`despachar_ccj` em vez de `alegado.comissao`). Nenhum rito do
+  repo fazia isso, então não há migração — mas o primeiro regimento real cadastrado precisa saber.
