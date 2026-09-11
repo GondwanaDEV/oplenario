@@ -98,6 +98,54 @@ describe("painel da Mesa — nenhuma chave de enum chega a tela", () => {
     expect(texto).not.toMatch(/pedido_esic/);
     expect(texto).toMatch(/Pedido e-SIC/);
   });
+
+  // O PAR DOS DOIS SENTIDOS, e o positivo e' o que faltava. `mesa-vista.test.ts` prova que o
+  // VIEW-MODEL calcula `truncamentoCompliance` certo nos dois casos, mas ele nunca importa este
+  // componente — entao o `{vista.truncamentoCompliance && (...)}` do JSX nunca foi renderizado com
+  // valor. Com so' o caso `null` coberto, trocar a condicao por `!vista.truncamentoCompliance`,
+  // desreferenciar `.total` em vez do objeto, ou perder a linha num merge apaga o aviso da tela da Mesa
+  // com a suite INTEIRA verde — o mesmo truncamento silencioso que esta frente existe p/ matar, na tela
+  // irma do calendario (que ja' tem o par completo em `calendario/page.test.tsx`).
+  // A FORMA E' A DO ITEM REAL, nao uma aproximacao: item de `origem: "compliance"` nasce de
+  // `compliance.emAberto` (ObrigacaoEmAbertoOut) e tem `id` + `templateChave`; e' `id` que o componente
+  // usa como React key, e `templateChave` que ele imprime no rotulo. A primeira versao deste fixture
+  // copiou a forma do item de PENDENCIA (`objetoId`/`protocolo`, sem `id`) — o React acusou key
+  // ausente e o rotulo teria saido "Obrigacao TCE · undefined". Fixture com forma irreal e' a semente de
+  // teste que passa sobre codigo que nao funciona.
+  const vistaComPrazo = (truncamentoCompliance: { exibidos: number; total: number } | null) => ({
+    estado: "disponivel" as const,
+    itens: [
+      {
+        origem: "compliance" as const,
+        id: "obr-1",
+        templateChave: "remessa_bimestral",
+        objetoTipo: "remessa",
+        objetoId: "o1",
+        venceEm: "2026-12-31",
+        estado: "pendente",
+      },
+    ],
+    truncamentoCompliance,
+  });
+
+  it("o que vence: truncou -> o aviso de corte aparece, com exibidos DE total", () => {
+    const { container } = render(<OQueVence vista={vistaComPrazo({ exibidos: 100, total: 347 })} />);
+    const aviso = container.querySelector(".aviso-corte");
+    expect(aviso).not.toBeNull();
+    // os DOIS numeros, nao so' a presenca do elemento: um banner que diga "100 de 100" e' pior que
+    // banner nenhum, porque afirma completude com a autoridade do servidor.
+    expect(aviso?.textContent ?? "").toMatch(/100 de 347/);
+    expect(aviso?.getAttribute("role")).toBe("status");
+    // o item de compliance renderiza com a chave do template, nao `undefined` — prova de que o fixture
+    // tem a forma REAL (ver comentario acima).
+    expect(container.textContent ?? "").toMatch(/remessa_bimestral/);
+    expect(container.textContent ?? "").not.toMatch(/undefined/);
+  });
+
+  it("o que vence: nao truncou -> nenhum aviso de corte no DOM", () => {
+    const { container } = render(<OQueVence vista={vistaComPrazo(null)} />);
+    expect(container.querySelector(".aviso-corte")).toBeNull();
+  });
 });
 
 describe("rotularObjetoPrazo — vocabulario da FONTE (CHECK de paineis.pendencia)", () => {
