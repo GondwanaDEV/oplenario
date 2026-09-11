@@ -9,9 +9,16 @@ import type { MesaOut, RelatorPendenteOut } from "./contrato-mesa.gen";
 // complianceTce é opaco no contrato gerado (Record<string, unknown> — a real materialização de
 // domínio §22.7 não é modelada estaticamente ali); esta é a forma esperada quando NÃO é o sentinel de
 // degradação {indisponivel:true}. Leitura local só, nunca exposta como tipo público.
-// emAberto espelha ObrigacaoEmAbertoOut (apps/backend .../compliance/wire/out/painel.clj) — id/vence-em
-// já eram usados aqui; template-chave/objeto-tipo/objeto-id/estado entram agora para que "O que vence"
-// (Task B6) tenha essas chaves tipadas em vez de precisar de type-cast solto no consumidor.
+// ESPELHO ESCRITO À MÃO, NÃO GERADO: `compliance` não está no manifesto do codegen (só cadastros +
+// paineis + legislativo exportam TS hoje — `codegen/gerar.clj`), então não existe `PainelOut` gerado
+// para reusar. Este tipo é mantido manualmente contra `apps/backend .../compliance/wire/out/painel.clj`
+// — cada campo novo que aquele ns publicar tem de ser replicado aqui à mão.
+// emAberto espelha ObrigacaoEmAbertoOut — id/vence-em já eram usados aqui; template-chave/objeto-tipo/
+// objeto-id/estado entram para que "O que vence" (Task B6) tenha essas chaves tipadas em vez de precisar
+// de type-cast solto no consumidor. emAbertoTotal/remessasRecentesTotal (fatia "painel não mente") são o
+// total AUTORITATIVO server-side de cada lista — NUNCA o teto (o teto não é publicado ao cliente por
+// decisão de segurança) — o par lista+total é o que permite este dashboard dizer "mostrando N de M" em
+// vez de fingir completude, mesmo racional de `transparencia/wire/out/parlamentar`.
 interface ComplianceCard {
   resumo: Record<string, number>;
   emAberto: {
@@ -22,7 +29,22 @@ interface ComplianceCard {
     venceEm: string;
     estado: string;
   }[];
+  emAbertoTotal: number;
   remessasRecentes: unknown[];
+  remessasRecentesTotal: number;
+}
+
+/** Corte da lista `emAberto` de compliance, direto do total autoritativo do servidor — nunca deduzido.
+ *  `null` quando não há corte a denunciar (total bate com o exibido) ou quando compliance está
+ *  indisponível (não há o que afirmar). */
+export interface TruncamentoCompliance {
+  exibidos: number;
+  total: number;
+}
+
+function truncamentoDeCompliance(compliance: ComplianceCard): TruncamentoCompliance | null {
+  const exibidos = compliance.emAberto.length;
+  return compliance.emAbertoTotal > exibidos ? { exibidos, total: compliance.emAbertoTotal } : null;
 }
 
 // mesa.tramitacao.porEstado é Record<string, unknown>[] no contrato gerado (opaco, mesmo motivo do
@@ -47,8 +69,12 @@ export function derivarMesaVista(input: MesaVistaInput) {
 
   if (!mesa) {
     return {
-      saude: { estado: "indisponivel" as const, resumo: undefined, emAberto: undefined },
-      oQueVence: { estado: "indisponivel" as const, itens: [] as { venceEm: string; origem: "compliance" | "pendencia" }[] },
+      saude: { estado: "indisponivel" as const, resumo: undefined, emAberto: undefined, truncamento: null as TruncamentoCompliance | null },
+      oQueVence: {
+        estado: "indisponivel" as const,
+        itens: [] as { venceEm: string; origem: "compliance" | "pendencia" }[],
+        truncamentoCompliance: null as TruncamentoCompliance | null,
+      },
       pipeline: {
         estado: "indisponivel" as const,
         comItens: false,
@@ -82,8 +108,13 @@ export function derivarMesaVista(input: MesaVistaInput) {
 
   return {
     saude: complianceOk
-      ? { estado: "disponivel" as const, resumo: compliance!.resumo, emAberto: compliance!.emAberto as unknown[] }
-      : { estado: "indisponivel" as const, resumo: undefined, emAberto: undefined },
+      ? {
+          estado: "disponivel" as const,
+          resumo: compliance!.resumo,
+          emAberto: compliance!.emAberto as unknown[],
+          truncamento: truncamentoDeCompliance(compliance!),
+        }
+      : { estado: "indisponivel" as const, resumo: undefined, emAberto: undefined, truncamento: null as TruncamentoCompliance | null },
 
     oQueVence: complianceOk
       ? {
@@ -92,8 +123,16 @@ export function derivarMesaVista(input: MesaVistaInput) {
             ...compliance!.emAberto.map((i) => ({ ...i, origem: "compliance" as const })),
             ...(pendenciasItens ?? []).map((i) => ({ ...i, origem: "pendencia" as const })),
           ].sort((a, b) => a.venceEm.localeCompare(b.venceEm)),
+          // Só a fatia de COMPLIANCE tem sinal de corte publicado pelo servidor (`emAbertoTotal`);
+          // pendenciasItens não carrega total autoritativo equivalente — daqui não se afirma nada sobre
+          // ela. Nome explícito (nao `truncamento` genérico) para não sugerir que cobre a lista inteira.
+          truncamentoCompliance: truncamentoDeCompliance(compliance!),
         }
-      : { estado: "indisponivel" as const, itens: [] as { venceEm: string; origem: "compliance" | "pendencia" }[] },
+      : {
+          estado: "indisponivel" as const,
+          itens: [] as { venceEm: string; origem: "compliance" | "pendencia" }[],
+          truncamentoCompliance: null as TruncamentoCompliance | null,
+        },
 
     pipeline:
       tramitacaoItens !== null

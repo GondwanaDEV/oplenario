@@ -91,6 +91,7 @@ describe("painel da Mesa — nenhuma chave de enum chega a tela", () => {
           estado: "em_aberto",
         },
       ],
+      truncamentoCompliance: null,
     };
     const { container } = render(<OQueVence vista={vista} />);
     const texto = container.textContent ?? "";

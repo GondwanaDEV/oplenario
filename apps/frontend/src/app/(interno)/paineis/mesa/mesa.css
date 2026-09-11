@@ -164,3 +164,12 @@
   .anel-c { width: 56px; height: 56px; }
   .anel-c svg { width: 56px; height: 56px; }
 }
+
+/* Fatia "painel não mente" apendou: .aviso-corte — aviso de truncamento de `compliance.emAberto`
+   (Onda E, o-que-vence.tsx). Âmbar (não vermelho de erro nem neutro de nota) por decisão de tratamento
+   visual: não é falha de carga (mesmo padrão de .aviso-fonte de calendario.css) nem observação de rotina
+   (.nota-gap) — é um aviso de INTEGRIDADE DE DADO ("o que você vê pode não ser tudo"), degrau de
+   severidade entre os dois. `--aviso-texto` é o par AA já validado pelo GUIDELINES-CHECKLIST (§5.1) para
+   texto sobre realce amarelo/âmbar em ambos os temas — nunca a cor crua do amarelo de marca. */
+.aviso-corte { display: flex; align-items: flex-start; gap: 0.5rem; margin: 0 0 1rem; padding: 0.65rem 0.9rem; border: 1px solid color-mix(in srgb, var(--amarelo-traco) 45%, transparent); border-left: 3px solid var(--amarelo-traco); border-radius: var(--raio-sm); background: color-mix(in srgb, var(--amarelo-traco) 12%, var(--surface-2)); color: var(--texto-2); font-size: var(--t-13); line-height: 1.5; }
+.aviso-corte b { color: var(--aviso-texto); font-weight: 700; }

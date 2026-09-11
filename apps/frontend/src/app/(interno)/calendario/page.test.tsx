@@ -212,6 +212,10 @@ describe("PaginaCalendario", () => {
     // O CRÍTICO da fatia: `GET /compliance/painel` corta `em-aberto` em 100 sem sinalizar, e a Casa com
     // backlog perde justamente os prazos FUTUROS (as vencidas ocupam os primeiros slots). Sem este aviso,
     // um mês sem nenhum losango é indistinguível de uma Casa em dia com o TCE.
+    // `em-aberto-total` é o campo AUTORITATIVO server-side (fatia "painel não mente") — o `resumo` abaixo
+    // é só contexto realista da Casa, não o sinal de corte; se fosse lido como o sinal antigo (soma
+    // pendente+vencida = 140, igual ao total real aqui), o teste ainda passaria por coincidência, então o
+    // total vem explícito para provar que é ELE que a tela lê.
     mockarRotas((p) =>
       p === "/api/sessoes"
         ? { ok: true, body: sessoesFake }
@@ -220,6 +224,7 @@ describe("PaginaCalendario", () => {
             body: {
               resumo: { pendente: 40, cumprida: 0, vencida: 100, dispensada: 0, cancelada: 0 },
               "em-aberto": painelFake["em-aberto"],
+              "em-aberto-total": 140,
               "remessas-recentes": [],
             },
           },

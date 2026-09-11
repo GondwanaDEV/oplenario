@@ -37,6 +37,7 @@ const painelFake = {
       estado: "pendente",
     },
   ],
+  "em-aberto-total": 1,
   "remessas-recentes": [],
 };
 
@@ -106,23 +107,19 @@ describe("useCalendario", () => {
     const { result } = renderHook(() => useCalendario("tok"));
     await waitFor(() => expect(result.current.estadoPrazos).toBe("pronto"));
     expect(result.current.obrigacoes).toEqual([]);
-    // sem placar não há como AFIRMAR corte — e a tela não inventa um aviso.
+    // sem `em-aberto-total` não há como AFIRMAR corte — e a tela não inventa um aviso.
     expect(result.current.truncamentoPrazos).toBeNull();
   });
 
-  // O CRÍTICO da fatia. Medido na fonte do backend, não suposto:
-  // `compliance/components/repositorio.clj` (`painel`) tem `:or {limite-em-aberto 100}`, o controller
-  // (`compliance/controllers.clj`) chama `(repo/painel repo (:ente-id ator) {})` — o default vale SEMPRE —
-  // e `compliance/db/obrigacao.clj` (`listar-em-aberto`) aplica `:limit limite` com
-  // `:order-by [[:vence_em :asc] [:id :asc]]`. `PainelOut` é `{:closed true}` com só
-  // resumo/em-aberto/remessas-recentes: NÃO existe flag de truncamento. Como `vencida` tem `vence_em` no
-  // PASSADO e entra no mesmo filtro, o backlog ocupa os primeiros slots e a remessa FUTURA do TCE cai fora.
-  // `ResumoOut` conta por fase SEM teto (`resumo-por-estado`, GROUP BY sobre a mesma tabela e o mesmo
-  // tenant), então `pendente + vencida` é o único sinal de corte que vem no payload.
-  it("lista cortada em silêncio pelo backend é DETECTADA pelo placar sem teto do mesmo payload", async () => {
+  // O CRÍTICO da fatia. `compliance/wire/out/painel.clj` agora emite `em-aberto-total` — o par
+  // lista+total, mesmo racional de `transparencia/wire/out/parlamentar` — contando TODAS as obrigações
+  // em aberto (pendente+vencida) da Casa, sem o teto de 100 que `listar-em-aberto` aplica. É o substituto
+  // AUTORITATIVO do que antes era deduzido somando `resumo.pendente + resumo.vencida`.
+  it("lista cortada em silêncio pelo backend é DETECTADA pelo total autoritativo do servidor", async () => {
     const painelCortado = {
       resumo: { pendente: 5, cumprida: 12, vencida: 3, dispensada: 0, cancelada: 0 },
       "em-aberto": [painelFake["em-aberto"][0]], // 1 item para 8 em aberto: a página é menor que o conjunto
+      "em-aberto-total": 8,
       "remessas-recentes": [],
     };
     mockarRotas((p) =>
@@ -135,17 +132,55 @@ describe("useCalendario", () => {
     expect(result.current.obrigacoes).toHaveLength(1);
   });
 
-  it("lista MAIOR que o placar não é corte — a tela não afirma truncamento por incoerência de payload", async () => {
-    const incoerente = {
+  it("total autoritativo igual ao exibido não é corte — mesmo com resumo incoerente", async () => {
+    const semCorte = {
       resumo: { pendente: 0, cumprida: 0, vencida: 0, dispensada: 0, cancelada: 0 },
       "em-aberto": [painelFake["em-aberto"][0]],
+      "em-aberto-total": 1,
       "remessas-recentes": [],
     };
     mockarRotas((p) =>
-      p === "/api/sessoes" ? { ok: true, body: sessoesFake } : { ok: true, body: incoerente },
+      p === "/api/sessoes" ? { ok: true, body: sessoesFake } : { ok: true, body: semCorte },
     );
     const { result } = renderHook(() => useCalendario("tok"));
     await waitFor(() => expect(result.current.estadoPrazos).toBe("pronto"));
     expect(result.current.truncamentoPrazos).toBeNull();
+  });
+
+  // A asserção que MATA a heurística antiga: monta um payload em que `resumo.pendente+vencida` (o sinal
+  // velho) e `em-aberto-total` (o campo novo) DISCORDAM nos dois sentidos, e prova que a tela segue
+  // SEMPRE o servidor, nunca a soma do resumo. Sem este teste, ninguém notaria se a heurística antiga
+  // tivesse ficado viva por engano ao lado do campo novo.
+  it("segue o total do servidor, não a soma do resumo, quando os dois discordam", async () => {
+    // resumo soma 1 (bateria com a lista de 1 item -> heurística antiga diria SEM corte);
+    // em-aberto-total diz 8 (o servidor sabe que há corte). A tela tem de acusar o corte.
+    const servidorDizCorte = {
+      resumo: { pendente: 1, cumprida: 0, vencida: 0, dispensada: 0, cancelada: 0 },
+      "em-aberto": [painelFake["em-aberto"][0]],
+      "em-aberto-total": 8,
+      "remessas-recentes": [],
+    };
+    mockarRotas((p) =>
+      p === "/api/sessoes" ? { ok: true, body: sessoesFake } : { ok: true, body: servidorDizCorte },
+    );
+    const { result: r1 } = renderHook(() => useCalendario("tok"));
+    await waitFor(() => expect(r1.current.estadoPrazos).toBe("pronto"));
+    expect(r1.current.truncamentoPrazos).toEqual({ exibidos: 1, total: 8 });
+
+    // resumo soma 8 (heurística antiga diria CORTE); em-aberto-total diz 1, igual ao exibido (o servidor
+    // sabe que NÃO há corte — os 8 do resumo incluem fases fora do filtro de em-aberto, p.ex.). A tela
+    // não pode acusar corte que o servidor nega.
+    const servidorDizSemCorte = {
+      resumo: { pendente: 5, cumprida: 0, vencida: 3, dispensada: 0, cancelada: 0 },
+      "em-aberto": [painelFake["em-aberto"][0]],
+      "em-aberto-total": 1,
+      "remessas-recentes": [],
+    };
+    mockarRotas((p) =>
+      p === "/api/sessoes" ? { ok: true, body: sessoesFake } : { ok: true, body: servidorDizSemCorte },
+    );
+    const { result: r2 } = renderHook(() => useCalendario("tok"));
+    await waitFor(() => expect(r2.current.estadoPrazos).toBe("pronto"));
+    expect(r2.current.truncamentoPrazos).toBeNull();
   });
 });

@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import { derivarMesaVista } from "./mesa-vista";
 
 const mesaBase = {
-  complianceTce: { resumo: { pendente: 2, cumprida: 9, vencida: 0, dispensada: 1, cancelada: 0 }, emAberto: [], remessasRecentes: [] },
+  complianceTce: {
+    resumo: { pendente: 2, cumprida: 9, vencida: 0, dispensada: 1, cancelada: 0 },
+    emAberto: [],
+    emAbertoTotal: 0,
+    remessasRecentes: [],
+    remessasRecentesTotal: 0,
+  },
   tramitacao: { total: 47, porEstado: [{ estado: "protocolada", n: 12 }] },
   pendencias: { abertas: 8, vencidas: 1, pendentes: 7 },
   sessoes: { emCurso: 0, naoRealizadas: 1, porSituacao: [] },
@@ -25,6 +31,34 @@ describe("derivarMesaVista", () => {
     const v = derivarMesaVista({ mesa: mesaBase, tramitacaoItens: [], pendenciasItens: [], sliSessoes: [], relatoresPendentes: [] });
     expect(v.saude.estado).toBe("disponivel");
     expect(v.saude.resumo?.cumprida).toBe(9);
+  });
+
+  // O CRÍTICO da fatia 2: `compliance.emAbertoTotal` (agora publicado pelo backend, `PainelOut`) é o
+  // sinal AUTORITATIVO de corte — antes deste card não tinha detecção alguma. Nos dois sentidos:
+  it("emAbertoTotal maior que a lista -> saude.truncamento denuncia o corte", () => {
+    const mesaComCorte = {
+      ...mesaBase,
+      complianceTce: { ...mesaBase.complianceTce, emAberto: [{ id: "o1", templateChave: "x", venceEm: "2026-08-01" }], emAbertoTotal: 5 },
+    };
+    const v = derivarMesaVista({ mesa: mesaComCorte, tramitacaoItens: [], pendenciasItens: [], sliSessoes: [], relatoresPendentes: [] });
+    expect(v.saude.truncamento).toEqual({ exibidos: 1, total: 5 });
+  });
+
+  it("emAbertoTotal igual à lista -> saude.truncamento é null (nada a denunciar)", () => {
+    const mesaSemCorte = {
+      ...mesaBase,
+      complianceTce: { ...mesaBase.complianceTce, emAberto: [{ id: "o1", templateChave: "x", venceEm: "2026-08-01" }], emAbertoTotal: 1 },
+    };
+    const v = derivarMesaVista({ mesa: mesaSemCorte, tramitacaoItens: [], pendenciasItens: [], sliSessoes: [], relatoresPendentes: [] });
+    expect(v.saude.truncamento).toBeNull();
+  });
+
+  it("compliance indisponivel -> saude.truncamento é null (não há o que denunciar)", () => {
+    const v = derivarMesaVista({
+      mesa: { ...mesaBase, complianceTce: { indisponivel: true } },
+      tramitacaoItens: [], pendenciasItens: [], sliSessoes: [], relatoresPendentes: [],
+    });
+    expect(v.saude.truncamento).toBeNull();
   });
 
   it("tramitacaoItens null (chamada de detalhe falhou) -> pipeline degrada pra só-contagem", () => {
@@ -71,6 +105,7 @@ describe("derivarMesaVista", () => {
       complianceTce: {
         ...mesaBase.complianceTce,
         emAberto: [{ id: "ob-1", templateChave: "remessa-mensal-pessoal", venceEm: "2026-08-01" }],
+        emAbertoTotal: 1,
       },
     };
     const pendenciasItens = [
@@ -84,5 +119,34 @@ describe("derivarMesaVista", () => {
     // pendencia (10/07) vence antes da obrigação de compliance (01/08) -> vem primeiro
     expect(v.oQueVence.itens[0]).toMatchObject({ origem: "pendencia", venceEm: "2026-07-10" });
     expect(v.oQueVence.itens[1]).toMatchObject({ origem: "compliance", venceEm: "2026-08-01" });
+    // emAbertoTotal (1) bate com a lista (1 item de compliance) -> sem corte a denunciar
+    expect(v.oQueVence.truncamentoCompliance).toBeNull();
+  });
+
+  it("oQueVence.truncamentoCompliance denuncia corte da fatia de compliance, mesmo com pendenciasItens misturadas", () => {
+    const mesaComCorte = {
+      ...mesaBase,
+      complianceTce: {
+        ...mesaBase.complianceTce,
+        emAberto: [{ id: "ob-1", templateChave: "remessa-mensal-pessoal", venceEm: "2026-08-01" }],
+        emAbertoTotal: 6, // servidor sabe que há 6 no total, a página trouxe 1
+      },
+    };
+    const pendenciasItens = [
+      { objetoTipo: "pedido_esic", objetoId: "p1", protocolo: "ESIC-1", venceEm: "2026-07-10", estado: "pendente" },
+    ];
+    const v = derivarMesaVista({
+      mesa: mesaComCorte, tramitacaoItens: [], pendenciasItens, sliSessoes: [], relatoresPendentes: [],
+    });
+    expect(v.oQueVence.itens).toHaveLength(2); // o que veio continua exibido — corte não apaga a lista
+    expect(v.oQueVence.truncamentoCompliance).toEqual({ exibidos: 1, total: 6 });
+  });
+
+  it("oQueVence.truncamentoCompliance é null quando compliance está indisponível", () => {
+    const v = derivarMesaVista({
+      mesa: { ...mesaBase, complianceTce: { indisponivel: true } },
+      tramitacaoItens: [], pendenciasItens: [], sliSessoes: [], relatoresPendentes: [],
+    });
+    expect(v.oQueVence.truncamentoCompliance).toBeNull();
   });
 });

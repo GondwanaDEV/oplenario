@@ -11,20 +11,13 @@
 // que ele não pode ver. Com dois estados, a tela mostra a agenda e diz, em texto, que os prazos não
 // vieram. Degradação parcial visível, nunca tela vazia que parece "não há nada agendado".
 //
-// TRUNCAMENTO — a razão de `resumo` ser lido aqui (e não descartado, como estava):
-// `GET /compliance/painel` corta `em-aberto` em 100 SEM sinalizar. Medido na fonte:
-// `compliance/components/repositorio.clj` (`painel`) tem `:or {limite-em-aberto 100}` e o controller
-// (`compliance/controllers.clj`, `painel`) passa `{}` — ou seja, o default vale SEMPRE; e
-// `compliance/db/obrigacao.clj` (`listar-em-aberto`) aplica `LIMIT` com `ORDER BY vence_em ASC`.
-// O `PainelOut` é `{:closed true}` e não tem flag de truncamento. A ordenação é o amplificador: `vencida`
-// também entra no filtro e tem `vence_em` no PASSADO, então ocupa os primeiros slots — a Casa ATRASADA é
-// exatamente a que perde os prazos FUTUROS da grade, e a remessa do TCE some da tela sem aviso.
-// O sinal para detectar isso vem no MESMO payload: `resumo.pendente + resumo.vencida` é contado por
-// `resumo-por-estado`, SEM teto, sobre o mesmo par de estados que `listar-em-aberto` filtra. Comparar os
-// dois é o único jeito de a tela saber que está vendo uma página, não o conjunto.
-// CARRY p/ o backend (fora desta frente, que é FE-only): alinhar `listar-em-aberto` à disciplina de
-// `GET /sessoes` — `:max-rows (inc teto)` + throw (fail-closed), ou aceitar filtro de período pela rota,
-// já que o calendário quer uma JANELA, não "as 100 mais urgentes".
+// TRUNCAMENTO — CARRY CUMPRIDO: `GET /compliance/painel` cortava `em-aberto` em 100 SEM sinalizar, e
+// este hook fazia a única defesa que existia no sistema inteiro, deduzindo o corte por
+// `resumo.pendente + resumo.vencida` (contado sem teto) contra o tamanho da lista. Agora
+// `compliance/wire/out/painel.clj` emite `em-aberto-total` — o total AUTORITATIVO server-side (mesmo par
+// lista+total de `transparencia/wire/out/parlamentar`) — e este hook lê ESSE campo, não mais deduz. Duas
+// fontes que podem discordar são piores que uma: manter a heurística ao lado do campo novo mascararia um
+// bug no cálculo do servidor. `resumo` não é mais lido aqui.
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "./api-fetch";
@@ -43,10 +36,11 @@ export interface TruncamentoPrazos {
 
 /** Espelha PainelOut (apps/backend .../compliance/wire/out/painel.clj) já camelizado. Só o que o
  *  calendário usa é declarado: o pipeline de remessas é a tela do comprador (§16.11), não a agenda.
- *  `resumo` NÃO é decoração aqui — é o contador sem teto que denuncia o corte de `emAberto`. */
+ *  `emAbertoTotal` é o total AUTORITATIVO server-side (não o teto — o teto nunca é publicado ao
+ *  cliente) — é o que permite a tela dizer "mostrando N de M" sem deduzir nada. */
 interface PainelCompliance {
   emAberto?: ObrigacaoEmAberto[];
-  resumo?: { pendente?: number; vencida?: number };
+  emAbertoTotal?: number;
 }
 
 interface PrazosCarregados {
@@ -54,13 +48,11 @@ interface PrazosCarregados {
   truncamento: TruncamentoPrazos | null;
 }
 
-/** `resumo` é 0-filado pelo backend com as 5 fases sempre presentes, mas o front não depende disso:
- *  chave ausente vira 0 e a comparação simplesmente não acusa nada. Só se AFIRMA truncamento quando o
- *  contador sem teto é maior que a lista — a direção oposta (lista maior que o placar) seria incoerência
- *  do payload, não corte, e a tela não tem o que dizer sobre ela. */
-function detectarTruncamento(painel: PainelCompliance, exibidos: number): TruncamentoPrazos | null {
-  const total = (painel.resumo?.pendente ?? 0) + (painel.resumo?.vencida ?? 0);
-  return total > exibidos ? { exibidos, total } : null;
+/** `emAbertoTotal` ausente (payload antigo, ou fixture de teste incompleta) não permite AFIRMAR
+ *  truncamento — a tela cala em vez de inventar um aviso. Só se afirma corte quando o total do servidor
+ *  é estritamente maior que o exibido; total igual ou (incoerentemente) menor não é corte. */
+function detectarTruncamento(total: number | undefined, exibidos: number): TruncamentoPrazos | null {
+  return total !== undefined && total > exibidos ? { exibidos, total } : null;
 }
 
 async function buscarPrazos(token: string | null): Promise<PrazosCarregados | null> {
@@ -70,7 +62,7 @@ async function buscarPrazos(token: string | null): Promise<PrazosCarregados | nu
   // Chave ausente vira lista vazia AQUI, no boundary: a vista nunca precisa distinguir "veio []" de
   // "não veio a chave" — as duas coisas significam "a Casa não tem prazo em aberto".
   const obrigacoes = j.emAberto ?? [];
-  return { obrigacoes, truncamento: detectarTruncamento(j, obrigacoes.length) };
+  return { obrigacoes, truncamento: detectarTruncamento(j.emAbertoTotal, obrigacoes.length) };
 }
 
 export function useCalendario(token: string | null) {
