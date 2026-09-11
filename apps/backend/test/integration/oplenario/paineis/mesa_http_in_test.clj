@@ -147,7 +147,8 @@
 (deftest mesa-ramo-de-producao-compoe-painel-wire-real
   ;; review architect MEDIUM: exercita o seam de PRODUCAO (montar sem override) — painel-wire ->
   ;; controllers/painel -> adapters/out/painel projeta o read-model de dominio num PainelOut valido embutido.
-  (let [read-model {:resumo {} :em-aberto [] :remessas-recentes []}
+  (let [read-model {:resumo {} :em-aberto [] :em-aberto-total 0
+                     :remessas-recentes [] :remessas-recentes-total 0}
         r (pt/response-for (service-fn-default #{"secretario"} (fake-repo-paineis rollups-fake)
                                                (fake-repo-compliance read-model))
                            :get "/paineis/mesa" :headers (com-bearer (token (random-uuid) (random-uuid))))

@@ -137,6 +137,19 @@
                   :order-by [[:criado_em :desc] [:id :desc]]
                   :limit limite}))))
 
+(defn contar-recentes
+  "Read-model do painel (§16.11): o TOTAL REAL de remessas do tenant, SEM o teto de `listar-recentes` — MESMO
+  escopo de tenant que a lista (nenhum filtro de estado a duplicar aqui: `listar-recentes` tambem nao filtra
+  por estado, so' o teto difere). Antes desta funcao NAO EXISTIA contador nenhum para `remessas-recentes` —
+  o painel nao tinha como o cliente descobrir que a lista visivel era so' uma fatia do pipeline real (a
+  remessa que falta enviar ao TCE e' exatamente o que este painel existe para denunciar)."
+  [tx ente-id]
+  (:total
+   (comum/linha->kebab
+    (jdbc/execute-one! tx
+      (sql/format {:select [[[:count :*] :total]] :from [:compliance.remessa_gerada]
+                   :where [:= :ente_id ente-id]})))))
+
 ;; NOTA: a COSTURA `remessa_enviada(sistema, competencia)` (so 'aceita' cumpre) NAO mora aqui — e' uma
 ;; funcao de RELACAO (compliance/relacoes), que inlina a query do proprio schema como as do cadastros
 ;; (ADR-0001 §3-bis: o db/ so e' importado pelo Repo-Component; a relacao e' injetada no motor por nome).

@@ -10,10 +10,18 @@
 
 (def ^:private card-compliance-fake
   "Um PainelOut de compliance qualquer (o adapters/out de paineis o trata como mapa opaco — nao inspeciona
-  a forma)."
+  a forma: `:compliance-tce` e' `:map` ABERTO em wire/out/mesa).
+
+  Justamente por ser opaco, ESTE fixture nao e' validado contra `PainelOut` por nada — entao ele so'
+  espelha a realidade enquanto alguem o mantiver espelhando. Os dois `-total` estao aqui de proposito:
+  um fixture que declara uma forma que producao nao produz e' a semente de um read-model morto verde
+  (mesma familia do vocabulario ficticio ja' pago neste repo). `em-aberto-total` bate com
+  `resumo.pendente + resumo.vencida` — a coerencia que o painel de verdade mantem dentro da tx."
   {:resumo {:pendente 3 :cumprida 10 :vencida 1 :dispensada 0 :cancelada 0}
    :em-aberto []
-   :remessas-recentes []})
+   :em-aberto-total 4
+   :remessas-recentes []
+   :remessas-recentes-total 0})
 
 (defn- rollups-fake []
   {:tramitacao [{:estado "em_comissao" :n 5} {:estado "protocolada" :n 2}]

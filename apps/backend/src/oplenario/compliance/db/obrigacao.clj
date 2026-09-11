@@ -86,21 +86,43 @@
                   :where [:= :ente_id ente-id]
                   :group-by [:estado] :order-by [[:estado :asc]]}))))
 
-(defn listar-em-aberto
-  "Read-model do painel — 'o que vence' (§16.11): as obrigacoes EM ABERTO (pendente + vencida) do tenant,
-  ordenadas por vencimento (a mais urgente primeiro), com TETO `limite` (anti unbounded-read — review sec).
-  Cumprida/dispensada/cancelada NAO entram (so o que ainda exige acao). `[:inline ...]` p/ os dois estados
+(defn- where-em-aberto
+  "O predicado de 'em aberto' (pendente + vencida), fonte UNICA compartilhada por `listar-em-aberto` E
+  `contar-em-aberto` — o par lista+total do painel (§16.11) so e' confiavel se os dois nascerem do MESMO
+  filtro; uma copia divergiria em silencio no dia em que um estado novo entrasse num e nao no outro
+  (achado do corte silencioso do painel, `/compliance/painel`). `[:inline ...]` p/ os dois estados
   (constantes de codigo, nunca input): casa o predicado do indice parcial idx_prazo_dominio_ativo_sweep
   (WHERE estado IN ('pendente','vencida')) — placeholder opaco impediria o planner de usa-lo (review database
   OK/MENOR; mesmo racional do sweep `pendentes-vencidas-ate`)."
+  [ente-id]
+  [:and [:= :ente_id ente-id]
+   [:in :estado [[:inline "pendente"] [:inline "vencida"]]]])
+
+(defn listar-em-aberto
+  "Read-model do painel — 'o que vence' (§16.11): as obrigacoes EM ABERTO (pendente + vencida) do tenant,
+  ordenadas por vencimento (a mais urgente primeiro), com TETO `limite` (anti unbounded-read — review sec).
+  Cumprida/dispensada/cancelada NAO entram (so o que ainda exige acao). Filtro em `where-em-aberto`,
+  compartilhado com `contar-em-aberto`."
   [tx ente-id limite]
   (comum/linhas->kebab
    (jdbc/execute! tx
      (sql/format {:select cols :from [:compliance.prazo_dominio_ativo]
-                  :where [:and [:= :ente_id ente-id]
-                          [:in :estado [[:inline "pendente"] [:inline "vencida"]]]]
+                  :where (where-em-aberto ente-id)
                   :order-by [[:vence_em :asc] [:id :asc]]
                   :limit limite}))))
+
+(defn contar-em-aberto
+  "Read-model do painel (§16.11): o TOTAL REAL de obrigacoes em aberto do tenant, SEM o teto de
+  `listar-em-aberto` — usa o MESMO predicado (`where-em-aberto`), nunca uma copia. E' o que permite a
+  borda dizer 'mostrando 100 de N' em vez de fingir completude quando o backlog ultrapassa o teto
+  server-side (a remessa/obrigacao que falta e' exatamente o que o painel de compliance existe para
+  denunciar)."
+  [tx ente-id]
+  (:total
+   (comum/linha->kebab
+    (jdbc/execute-one! tx
+      (sql/format {:select [[[:count :*] :total]] :from [:compliance.prazo_dominio_ativo]
+                   :where (where-em-aberto ente-id)})))))
 
 (defn pendentes-vencidas-ate
   "Sweep de vencimento (§22.7.7): obrigacoes PENDENTE estritamente vencidas em `data` (vence_em < data —
