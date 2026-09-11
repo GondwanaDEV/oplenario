@@ -3,7 +3,8 @@
   §22.10: 'kernel/motor nunca importam um modulo'; o motor e BIBLIOTECA compartilhada (coracao
   dos 4 usos da DSL — tramitacao, autorizacao, plenario, compliance), nao servico HTTP. O compliance
   OPERA este seam: materializa obrigacao/audita avaliacao nas SUAS tabelas (schema compliance, §22.7.7)."
-  (:require [clojure.string :as str]
+  (:require [clojure.set :as set]
+            [clojure.string :as str]
             [oplenario.motor.components.registro-fatos :as rf]
             [oplenario.motor.components.repositorio :as rm]
             [oplenario.motor.nucleo :as nuc]
@@ -27,15 +28,48 @@
   runtime; antecipa-lo p/ o save move a falha p/ a config). Type-check estatico COMPLETO (a expressao tipa
   p/ Booleano contra o vocabulario de tramitacao — registros `proposicao`/`contexto`) e' [CARRY]: depende
   da catalogacao do eixo C no registry (analogo a §22.7.5 p/ compliance); sem isso o type-checker nao
-  conhece esses registros. Ate la, o parse e' a rede; o runtime ainda avalia o tipo ao disparar."
-  [fonte]
-  (if (str/blank? fonte)
-    {:status "VALIDA" :erros []}
-    (try
-      (nuc/parse-expr fonte)
-      {:status "VALIDA" :erros []}
-      (catch clojure.lang.ExceptionInfo e
-        {:status "INVALIDA" :erros [(ex-message e)]}))))
+  conhece esses registros. Ate la, o parse e' a rede; o runtime ainda avalia o tipo ao disparar.
+
+  Aridade-2 acrescenta a ALLOWLIST de vocabulario (a frente `guarda-so-apurado`, 11/09/2026 — um
+  canal do `amb` que carrega o corpo bruto de uma requisicao nao pode ser lido dentro de um GUARD,
+  pois deixaria o operador afirmar a propria precondicao): `opts` traz
+  `{:vocabulario #{<identificador> ...}}`. Este `motor/` NAO conhece o vocabulario de nenhum
+  modulo — so' compara os identificadores-RAIZ que `nuc/identificadores-raiz` acha na expressao
+  (via `nuc/parse-expr`) contra o conjunto que o CHAMADOR (o modulo dono da coluna) declara.
+  Identificador fora do vocabulario = INVALIDA, com `:erros` NOMEANDO o identificador ilegal e
+  listando o vocabulario permitido — a mensagem e' a prova, quem cadastra o rito tem de saber o
+  que pode escrever. Fonte em branco/nil continua VALIDA (guarda ausente = sempre passa).
+
+  CHAMAR A ARIDADE-2 SEM VOCABULARIO LANCA, nao degrada. Se a omissao caisse de volta em
+  'so' sintatico', o gate teria um caminho PERMISSIVO acionado por ESQUECIMENTO — a mesma classe de
+  fail-open que esta frente existe p/ fechar, um nivel acima. Quem quer so' a sintaxe chama a
+  aridade-1, que declara isso na assinatura. Vocabulario VAZIO (`#{}`) e' diferente de ausente: e'
+  a declaracao legitima de 'nada e' permitido aqui' (o caso do template inexistente em
+  `criar-transicao!`) e devolve INVALIDA — resposta de dominio, nao excecao de programacao."
+  ([fonte]
+   (if (str/blank? fonte)
+     {:status "VALIDA" :erros []}
+     (try
+       (nuc/parse-expr fonte)
+       {:status "VALIDA" :erros []}
+       (catch clojure.lang.ExceptionInfo e
+         {:status "INVALIDA" :erros [(ex-message e)]}))))
+  ([fonte {:keys [vocabulario] :as opts}]
+   (when (nil? vocabulario)
+     (throw (ex-info (str "validar-guarda/2 exige :vocabulario (conjunto de identificadores permitidos); "
+                          "para validacao so' sintatica use a aridade-1")
+                     {:erro :vocabulario-ausente :opts opts})))
+   (let [base (validar-guarda fonte)]
+     (if (or (not= "VALIDA" (:status base)) (str/blank? fonte))
+       base
+       (let [no (nuc/parse-expr fonte)
+             usados (nuc/identificadores-raiz no)
+             ilegais (set/difference usados (set vocabulario))]
+         (if (empty? ilegais)
+           base
+           {:status "INVALIDA"
+            :erros [(str "identificador nao permitido no guard: " (str/join ", " (sort ilegais))
+                         " — vocabulario permitido: " (str/join ", " (sort vocabulario)))]}))))))
 
 (defn comp-chave
   "Normaliza um valor de Competencia ({:ano :mes}) p/ a chave 'AAAA-MM' — o MESMO formato que o motor usa
