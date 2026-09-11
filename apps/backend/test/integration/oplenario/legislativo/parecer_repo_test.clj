@@ -99,7 +99,7 @@
                                             :texto-inline "## Parecer\nFavoravel." :created-by relator})
     (repo/emitir-parecer! *repo* ente *registro*
       {:parecer-id pcid :template-id tid :gatilho "designar" :voto-relator "favoravel"
-       :lock-version 0 :updated-by relator :agora data :contexto {}
+       :lock-version 0 :updated-by relator :agora data :alegado {}
        :assinador (assinador-icp/assinador-stub)})
     (let [vigente (ptxt/vigente *ds* ente pcid)]
       (is (= "STUB-ICP-v0" (:assinatura-algoritmo vigente)) "assinada com o algoritmo stub")
@@ -118,7 +118,7 @@
                                             :texto-inline "## Parecer\nFavoravel." :created-by relator})
     (repo/emitir-parecer! *repo* ente *registro*
       {:parecer-id pcid :template-id tid :gatilho "designar" :voto-relator "favoravel"
-       :lock-version 0 :updated-by relator :agora data :contexto {}
+       :lock-version 0 :updated-by relator :agora data :alegado {}
        :assinador (assinador-icp/assinador-stub)})
     (let [vigente-1 (ptxt/vigente *ds* ente pcid)
           {:keys [lock-version]} (repo/buscar-proposicao *repo* ente pid) ;; no-op leitura p/ nao quebrar se import mudar
@@ -127,7 +127,7 @@
       ;; novo rascunho: o vigente ja existente NAO deve ser reassinado (mesmo assinatura-b64/assinado-em).
       (repo/emitir-parecer! *repo* ente *registro*
         {:parecer-id pcid :template-id tid :gatilho "bloquear" :voto-relator "favoravel"
-         :lock-version (:lock-version parecer-atual) :updated-by relator :agora data :contexto {}
+         :lock-version (:lock-version parecer-atual) :updated-by relator :agora data :alegado {}
          :assinador (assinador-icp/assinador-stub)})
       (let [vigente-2 (ptxt/vigente *ds* ente pcid)]
         (is (= (:assinatura-b64 vigente-1) (:assinatura-b64 vigente-2)) "mesma assinatura — nao reassinou")

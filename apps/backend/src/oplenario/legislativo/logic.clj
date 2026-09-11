@@ -24,10 +24,6 @@
   "Vocabulario de autor_tipo (espelha o CHECK da migration 20260620000013). 'cidadao' = iniciativa popular."
   #{"vereador" "mesa" "comissao" "executivo" "cidadao"})
 
-(def estados-proposicao-terminais
-  "Espelha o trigger trg_proposicoes_imut_estado (migration 20260620000013) — guarda o `editar!` (Task 4)."
-  #{"publicada" "arquivada"})
-
 ;; --- eixo D: emendas. Vocabularios do §22.4 (espelham os CHECK da migration 0017). ---
 (def tipos-emenda
   #{"modificativa" "supressiva" "aditiva" "substitutiva_total" "substitutiva_parcial" "aglutinativa" "redacao"})
@@ -285,3 +281,58 @@
   acima de 999). O schema guarda tipo/ano/sequencial crus; isto e' a projecao de exibicao."
   [{:keys [tipo ano sequencial]}]
   (str (get tipo->sigla tipo (str/upper-case tipo)) " " (format "%03d" sequencial) "/" ano))
+
+;; ---------------------------------------------------------------------------------------------------
+;; Fatia 3 da borda de tramitacao — o que a Casa permite AGORA (puro, sobre as candidatas ja' lidas)
+;; ---------------------------------------------------------------------------------------------------
+
+(defn gatilhos-possiveis
+  "Candidatas (linhas de `template_transicao` a partir do estado ATUAL, JA' na ordem do rito) -> um item
+  por GATILHO: `{:gatilho :destinos-possiveis :pode-ser-recusado}`.
+
+  POSSIVEIS, nunca 'disponiveis'. Esta funcao NAO avalia guard — lista o que o rito DECLARA. Avaliar
+  aqui seria impossivel de acertar: o guard le' `alegado` (o `contexto` do corpo, renomeado na borda p/
+  declarar procedencia), que e' argumento do POST e nao existe no momento da leitura. `alegado.urgente`
+  avaliado contra `{}` responderia 'nao passa' sobre um ato que
+  passaria com o corpo certo — resposta precisa e falsa, pior que imprecisa e honesta.
+
+  `pode-ser-recusado` e' o que paga essa escolha, e a definicao e' exata: o gatilho so' pode ser recusado
+  POR GUARD se TODAS as suas candidatas tem guard. Havendo UMA sem guard, a engine sempre acha uma
+  transicao que passa — o ato ocorre; so' o DESTINO e' que varia conforme os guards das demais.
+  O predicado e' `nil?` sobre `:guarda`, LITERALMENTE o mesmo de `db/tramitacao/transicionar!`: uma leitura
+  que usasse outra nocao de 'tem guard' (ex.: tratar string vazia como ausente) passaria a mentir sobre a
+  escrita por divergencia de definicao, que e' o modo de falha mais caro e mais silencioso que existe aqui.
+  `false` NAO e' promessa transacional: o estado pode mudar entre esta leitura e o disparo, e o CAS
+  continua podendo colidir — e' a mesma janela de qualquer read-then-write.
+
+  `destinos-possiveis` e' informacao, nunca escolha: o cliente ve' PARA ONDE o rito levaria, e segue sem
+  poder pedir destino nenhum (o corpo do POST so' aceita gatilho). Ordem = a do rito.
+
+  ORDEM DA LISTA: pela menor `ordem` de cada gatilho, desempate pelo nome. E' ordem de APRESENTACAO
+  (a sequencia ritual que quem escreveu o template pretendia), e NAO precedencia entre gatilhos —
+  precedencia so' existe ENTRE candidatas do MESMO gatilho, e quem a resolve e' a engine."
+  [candidatas]
+  (->> candidatas
+       (group-by :gatilho)
+       (mapv (fn [[g ts]]
+               {:gatilho g
+                :destinos-possiveis (vec (distinct (keep :para-estado ts)))
+                :pode-ser-recusado (every? #(some? (:guarda %)) ts)
+                ;; 3-A. A definicao e' `some?`, e NAO `every?` como a irma acima — a assimetria e' o
+                ;; desenho, nao descuido. `pode-ser-recusado` usa `every?` porque o guard FILTRA: havendo
+                ;; uma candidata sem guard, a engine sempre acha uma que passa e o ato ocorre. A
+                ;; autorizacao NAO filtra — ela e' porta sobre a candidata que o guard JA escolheu, e
+                ;; negar NAO cai na proxima (senao o destino da materia dependeria de quem pediu). Logo
+                ;; basta UMA candidata carregar expressao para que este gatilho POSSA ser negado por
+                ;; autorizacao: se o guard escolher justamente ela, a porta existe.
+                ;;
+                ;; `false` aqui e' o que torna honesto o default permissivo da coluna (NULL = so' o gate
+                ;; da rota, mig 0079): um rito que ESQUECEU de declarar quem pode disparar aparece como
+                ;; `exige-autorizacao false` em vez de se esconder atras do silencio. `true` tambem nao e'
+                ;; promessa: diz que ha' regra de pessoa, nao que VOCE passa nela — avaliar a politica aqui
+                ;; custaria resolver fatos por gatilho numa rota de LEITURA, e e' a mesma escolha que
+                ;; `pode-ser-recusado` ja fez para o guard.
+                :exige-autorizacao (boolean (some #(some? (:autorizacao %)) ts))
+                ::ordem (reduce min Long/MAX_VALUE (map #(or (:ordem %) 0) ts))}))
+       (sort-by (juxt ::ordem :gatilho))
+       (mapv #(dissoc % ::ordem))))

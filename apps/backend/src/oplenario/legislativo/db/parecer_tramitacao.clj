@@ -11,8 +11,10 @@
   e' DELIBERADA, nao copia/cola descuidada. Quando o 3o sujeito chegar (eleicao da Mesa, §22.5), extrair
   o core agnostico (fn ler-estado+lock / fn registrar! / fn muda-estado! / chave-do-amb) e os tres
   passam a usa-lo. Ate la, um fix de concorrencia num lado exige o espelho no outro (teste de paridade)."
-  (:require [honey.sql :as sql]
+  (:require [clojure.string :as str]
+            [honey.sql :as sql]
             [next.jdbc :as jdbc]
+            [oplenario.kernel.autorizacao :as authz]
             [oplenario.kernel.db-util :as comum]
             [oplenario.legislativo.db.parecer :as parecer]
             [oplenario.legislativo.db.tramitacao :as tram]
@@ -57,8 +59,16 @@
   o `parecer` no amb) e aplica: historico append-only + muda o estado (CAS por lock_version). Atomico na tx
   (o caller abre via Repo/transacao com o RegistroFatos do motor). Devolve {:transicionou? bool :de :para
   :transicao-id :objeto-tipo :objeto-id} — guard que bloqueia TODAS = {:transicionou? false} (dominio normal);
-  guard que LANCA (fato ausente, tipo nao-booleano) e o CAS PROPAGAM como excecao."
-  [tx {:keys [registro ente-id parecer-id template-id gatilho ator-id contexto agora updated-by]}]
+  guard que LANCA (fato ausente, tipo nao-booleano — ver `motor/api/exigir-booleano!`) e o CAS PROPAGAM
+  como excecao.
+
+  `alegado` e' o canal do CLIENTE no `amb`, com o mesmo nome que o engine da proposicao usa (fatia 4): o
+  vocabulario que um rito enxerga tem de ser UM so' entre os dois sujeitos, senao quem escreve o rito do
+  parecer precisa aprender uma segunda convencao para a mesma ideia. Aqui ele e' hoje sempre `{}` — o
+  unico caller de borda (`adapters/in/parecer/emitir->dominio`) o fixa vazio, e nenhuma rota o aceita do
+  corpo. Continua nomeado assim mesmo assim: no dia em que alguem abrir esse campo ao cliente, a regra ja'
+  vai estar escrita sob o nome que declara a procedencia, em vez de precisar ser reescrita junto."
+  [tx {:keys [registro ente-id parecer-id template-id gatilho ator ator-id alegado agora updated-by]}]
   (let [{:keys [estado lock-version objeto-tipo objeto-id] :as row} (estado+lock tx ente-id parecer-id)]
     ;; fail-closed (review F3.6a clojure-MENOR): parecer inexistente NAO se confunde com guard-bloqueado.
     ;; o {:transicionou? false} com objeto nil seria veneno p/ o consumer da mae (F3.6c) achar o objeto.
@@ -72,14 +82,52 @@
                                            :agora agora :ente-id ente-id})
                         {"parecer" {:id parecer-id :estado estado
                                     :objeto-tipo objeto-tipo :objeto-id objeto-id}
-                         "contexto" (or contexto {})})))
+                         "alegado" (or alegado {})})))
           escolhida (first (filter passa? candidatas))]
       (if-not escolhida
         {:transicionou? false :de estado :gatilho gatilho :objeto-tipo objeto-tipo :objeto-id objeto-id}
         (do
+          ;; REDE DE RUNTIME da decisao B. O gate de `criar-transicao!` so' alcanca rito NOVO — rito ja'
+          ;; gravado antes dele (ou por import/SQL direto, que nao passa pelo save) pode ter porta aberta
+          ;; ao lado de trancada, e ai o buraco continua aberto exatamente onde ninguem esta' olhando. As
+          ;; candidatas ja' estao em maos (`candidatas` e' a lista COMPLETA deste gatilho a partir deste
+          ;; estado), entao a checagem custa ZERO consulta.
+          ;;
+          ;; Fail-CLOSED: rito incoerente NAO deixa o ato passar pela porta aberta. E' 409 de config
+          ;; (`:config/*` -> 409 global), nao 403 — nao e' que VOCE nao pode, e' que o rito da Casa esta'
+          ;; incoerente e alguem tem de conserta-lo.
+          (when (and (str/blank? (:autorizacao escolhida))
+                     (some #(not (str/blank? (:autorizacao %))) candidatas))
+            (throw (ex-info (str "rito incoerente: o gatilho '" gatilho "' tem porta SEM autorizacao ao "
+                                 "lado de porta COM. O ato nao passa pela porta aberta enquanto o rito "
+                                 "nao for corrigido — senao quem pede escolhe, pelo corpo do pedido, por "
+                                 "onde passar.")
+                            {:tipo :config/portas-do-gatilho-incoerentes
+                             :gatilho gatilho :de-estado estado})))
+          ;; 3-A NO PARECER — a PARIDADE que o [CARRY disc.6] deste ns exige, e que a 3-A tinha quebrado.
+          ;; `template_transicao` e' subject-agnostica (mig 0016) e os dois engines leem as MESMAS linhas
+          ;; pela MESMA `tram/transicoes-de`: sem este gate, um rito reaproveitado entre sujeitos teria a
+          ;; regra de pessoa enforcada num caminho e ignorada no outro — e a coluna, lida e descartada em
+          ;; silencio, seria pior que ausente (quem escreve o rito a ve' gravada e supoe que vale).
+          ;;
+          ;; Espelho EXATO de `tramitacao.clj/transicionar!`, ate' nas decisoes: roda DEPOIS de escolher a
+          ;; candidata (autorizacao e' porta sobre o destino escolhido, nunca desempate — senao o destino
+          ;; dependeria de quem pediu) e ANTES de aplicar, na mesma tx, contra o snapshot ja travado por
+          ;; `estado+lock` (`FOR UPDATE`). `str/blank?` e nao `when-let` pelo mesmo motivo do irmao: o gate
+          ;; do save aceita string vazia e `""` e' truthy.
+          ;;
+          ;; O `recurso` descreve o PARECER e carrega `objeto-tipo`/`objeto-id` — a materia sobre a qual ele
+          ;; opina. Sem isso uma politica como "o relator do parecer nao vota a propria materia" seria
+          ;; inexpressavel do lado do parecer, enquanto o lado da proposicao a expressa.
+          (when-not (str/blank? (:autorizacao escolhida))
+            (authz/check! ator :legislativo/tramitar-parecer
+                          {:tipo "parecer" :id parecer-id :estado estado :gatilho gatilho
+                           :para (:para-estado escolhida) :objeto-tipo objeto-tipo :objeto-id objeto-id}
+                          (motor/politica-dsl {:registro registro :tx tx
+                                               :expr (:autorizacao escolhida) :agora agora})))
           (registrar-transicao! tx {:id (random-uuid) :ente-id ente-id :parecer-id parecer-id :template-id template-id
                                     :de-estado estado :para-estado (:para-estado escolhida)
-                                    :gatilho gatilho :contexto contexto :ator-id ator-id})
+                                    :gatilho gatilho :contexto alegado :ator-id ator-id})
           (parecer/mudar-estado! tx {:id parecer-id :ente-id ente-id :estado (:para-estado escolhida)
                                      :updated-by updated-by :lock-version lock-version})
           {:transicionou? true :de estado :para (:para-estado escolhida) :transicao-id (:id escolhida)

@@ -7,6 +7,7 @@
             [com.stuartsierra.component :as component]
             [oplenario.cadastros.relacoes.cadastro :as rel-cad]
             [oplenario.identidade.relacoes.identidade :as rel-id]
+            [oplenario.legislativo.relacoes :as rel-legis]
             [oplenario.motor.catalogo :as cat]
             [oplenario.motor.components.registro-fatos :as rf]))
 
@@ -19,6 +20,22 @@
   ;; cada fn registrada tem MESMO uma assinatura :relacao
   (doseq [nome (keys fns-reais)]
     (is (= "relacao" (:categoria (cat/buscar-assinatura nome))) (str nome " é :relacao no catálogo"))))
+
+(deftest costura-do-fato-do-legislativo-3b
+  ;; 3-B: o legislativo passou a publicar fato proprio (`aprovada_em_votacao`), e a costura dele e' o que
+  ;; impede a classe de erro mais barata desta frente — o guard de um rito ja' cadastrado escreve um nome
+  ;; que o registry nao tem mais. A costura e' fail-closed no boot; aqui vira falha de TESTE, com a causa
+  ;; escrita, em vez de um sistema que so' nao sobe.
+  (let [r (rf/verificar-costura rel-legis/relacoes)]
+    (is (:ok r) (str "costura catálogo⋈relacoes do legislativo; erros=" (:erros r))))
+  (is (contains? rel-legis/relacoes "aprovada_em_votacao")
+      "o nome canonico e' o que o guard do rito ESCREVE — renomea-lo quebra rito ja' cadastrado")
+  (is (= "relacao" (:categoria (cat/buscar-assinatura "aprovada_em_votacao"))))
+  ;; guard e' PREDICADO: o catalogo tem de tipar Booleano, senao o type-check de save-time (quando o
+  ;; eixo C for catalogado, o [CARRY] de motor/api/validar-guarda) aceitaria a expressao errada.
+  (is (= "Booleano" (:nome (:retorno (cat/buscar-assinatura "aprovada_em_votacao")))))
+  (is (:ok (rf/verificar-costura (merge fns-reais rel-legis/relacoes)))
+      "e o registry COMPLETO (como o host o funde) tambem costura"))
 
 (deftest costura-pega-aridade-divergente
   ;; populacao real é (tx) → domínio 0; finge uma fn de 2 args de domínio sob o mesmo nome

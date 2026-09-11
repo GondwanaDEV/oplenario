@@ -90,7 +90,7 @@
     (is (thrown-with-msg? Exception #"nenhum conteudo de texto"
           (repo/emitir-parecer! *repo* ente *registro*
             {:parecer-id pcid :template-id tid :gatilho "emitir" :voto-relator "favoravel"
-             :updated-by nil :agora data :contexto {} :lock-version 0})))
+             :updated-by nil :agora data :alegado {} :lock-version 0})))
     (is (empty? (eventos-parecer ente)) "nada emitido — a validacao barrou antes de qualquer escrita")))
 
 (deftest emitir-parecer-com-rascunho-promove-vota-e-transiciona
@@ -100,7 +100,7 @@
                                             :origem-versao "redacao" :formato "markdown"})
     (let [r (repo/emitir-parecer! *repo* ente *registro*
               {:parecer-id pcid :template-id tid :gatilho "emitir" :voto-relator "favoravel"
-               :updated-by nil :agora data :contexto {} :lock-version 0
+               :updated-by nil :agora data :alegado {} :lock-version 0
                :assinador (assinador-icp/assinador-stub)})]
       (is (= "emitido" (:estado r)) "transicionou (guard nil) — estado final devolvido")
       (is (= "favoravel" (:voto-relator r)))
@@ -119,7 +119,7 @@
     ;; do CLIENTE aqui e' 1, o mesmo que um GET do editor teria devolvido apos a promocao.
     (let [r (repo/emitir-parecer! *repo* ente *registro*
               {:parecer-id pcid :template-id tid :gatilho "emitir" :voto-relator "contrario"
-               :updated-by nil :agora data :contexto {} :lock-version 1})]
+               :updated-by nil :agora data :alegado {} :lock-version 1})]
       (is (= "emitido" (:estado r)) "transicionou mesmo sem rascunho novo (o vigente ja existente basta)")
       (is (= "contrario" (:voto-relator r)) "voto seta SEMPRE, mesmo sem promocao de texto novo")
       (is (= 1 (count (eventos-parecer ente)))))))
@@ -137,7 +137,7 @@
     (is (thrown-with-msg? Exception #"conflito de escrita"
           (repo/emitir-parecer! *repo* ente *registro*
             {:parecer-id pcid :template-id tid :gatilho "emitir" :voto-relator "favoravel"
-             :updated-by nil :agora data :contexto {} :lock-version 0})))
+             :updated-by nil :agora data :alegado {} :lock-version 0})))
     (is (empty? (eventos-parecer ente)) "conflito detectado ANTES de qualquer escrita (nem voto, nem promocao)")
     (is (nil? (:texto-vigente (repo/buscar-parecer-para-editor *repo* ente pcid)))
         "o rascunho NAO foi promovido — a CAS barrou antes da promocao")))

@@ -1,0 +1,384 @@
+(ns oplenario.legislativo.tramitacao-autorizacao-db-test
+  "INTEGRACAO (PG real) — 3-A: QUEM pode disparar cada gatilho.
+
+  O buraco que estes testes guardam: ate' a 3-A a unica autorizacao da borda de tramitacao era o gate
+  GROSSO da rota (`exige-papel \"secretario\"`, o MESMO papel que LISTA proposicoes), e um portador desse
+  papel levava a materia de ponta a ponta do rito sozinho.
+
+  A 3-B (guarda) e a 3-A (autorizacao) respondem perguntas DIFERENTES sobre o mesmo ato:
+    guarda      -> 'isto aconteceu?'            (fato sobre o mundo; nao fala do ator)
+    autorizacao -> 'voce pode declarar que sim?' (fato sobre quem pede; nao fala do mundo)
+  Por isso as recusas tem de ser distinguiveis: 'a Casa nao permite agora' (409, dominio) e 'voce nao
+  pode' (403, autorizacao) vao para pessoas diferentes e tem consertos diferentes."
+  (:require [clojure.test :refer [deftest is use-fixtures]]
+            [com.stuartsierra.component :as component]
+            [oplenario.cadastros.relacoes.cadastro :as rel-cad]
+            [oplenario.config :as config]
+            [oplenario.identidade.relacoes.identidade :as rel-id]
+            [oplenario.kernel.autorizacao :as authz]
+            [oplenario.kernel.components.datasource :as datasource]
+            [next.jdbc :as jdbc]
+            [oplenario.kernel.tenancy :as tenancy]
+            [oplenario.legislativo.db.parecer :as parecer]
+            [oplenario.legislativo.db.parecer-tramitacao :as ptram]
+            [oplenario.legislativo.db.proposicao :as prop]
+            [oplenario.legislativo.db.tramitacao :as tram]
+            [oplenario.legislativo.logic :as logic]
+            [oplenario.legislativo.relacoes :as rel-legis]
+            [oplenario.migracao :as migracao]
+            [oplenario.motor.components.registro-fatos :as rf])
+  (:import (java.time LocalDate)))
+
+(def ^:dynamic *ds* nil)
+(def ^:dynamic *registro* nil)
+
+(use-fixtures :once
+  (fn [t]
+    (let [c   (component/start (datasource/datasource (config/carregar)))
+          reg (component/start (rf/registro-fatos (merge rel-cad/relacoes rel-id/relacoes rel-legis/relacoes)))]
+      (migracao/migrar! (:ds c))
+      (binding [*ds* (:ds c) *registro* reg]
+        (try (t) (finally (component/stop reg) (component/stop c)))))))
+
+(def ^:private data (LocalDate/parse "2026-03-01"))
+
+;; O ator como a borda o entrega (o `amb` da politica e' {"ator" ator "recurso" recurso}). `papel`
+;; e' campo de FIXTURE, nao vocabulario de sistema: serve so' para escrever uma expressao de autorizacao
+;; que depende do ator sem arrastar o cadastro de Mesa para dentro deste teste. Os fatos reais
+;; (`é_presidente_da_mesa` e irmaos) ja tem cobertura propria em cadastros.
+;;
+;; DOIS ACHADOS DA REVISAO DE SEGURANCA, ambos consertados e guardados aqui:
+;;   CRITICO-2 — chave kebab-case era INALCANCAVEL pela DSL (`ator.identidade_id` procurava `:identidade_id`
+;;     e o mapa tem `:identidade-id`). `motor/api/alcancavel-pela-dsl` acrescenta o alias. Sem isso, os
+;;     CINCO fatos que a migration 0079 cita como razao da 3-A eram todos inescreviveis — a feature
+;;     entregava so' `ator.papeis`, o MESMO eixo do gate grosso que ela existia para superar.
+;;   CRITICO-1 — argumento nil num fato resolvido descia ao SQL, nao casava linha e voltava `false` LIMPO,
+;;     que `nao`/`!=` viravam PERMISSAO. `nao é_presidente_da_mesa(ator.identidade_id, hoje())` autorizava
+;;     todo mundo. `motor/runtime/a-chamada` agora falha fechado em argumento nil.
+(defn- ator
+  "O ator com a FORMA REAL de producao (`identidade/autenticacao.clj`): `{:identidade-id :ente-id :papeis}`.
+
+  A primeira versao deste arquivo inventava `:papel` (singular) — campo que NAO existe no ator real — e o
+  unico teste do caminho POSITIVO so' passava por causa dele. Era a armadilha da fixture com vocabulario
+  ficticio: verde sobre um mundo que o produto nao produz. Achado CRITICO-2 da revisao de seguranca.
+
+  `:papeis` e' SET, nao vetor — `identidade/db/vinculo.clj/papeis-de` devolve `(set (map ...))`. A FORMA
+  importa tanto quanto o nome: o operador `in` da DSL e' `(contains? b a)`, e em VETOR `contains?` testa
+  INDICE, nao valor — entao um papel dentro de um vetor responde `false` silenciosamente. Fail-closed
+  (nega), mas a feature inteira pareceria quebrada. A segunda versao desta fixture errou exatamente isso,
+  na correcao do erro de forma anterior."
+  [ente & papeis]
+  {:ente-id ente :identidade-id (random-uuid) :papeis (set papeis)})
+
+(defn- protocolar! [tx ente tid]
+  (:id (prop/protocolar! tx {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026 :template-id tid
+                             :uf "CE" :municipio-nome "Fortaleza" :ementa "Dispoe sobre X"})))
+
+(defn- montar-rito!
+  "Rito minimo de 1 passo. `autorizacao` e' a expressao sob teste."
+  [tx ente autorizacao]
+  (let [tid (random-uuid)]
+    ;; chave DERIVADA do id: o UNIQUE e' (ente_id, chave, versao), e um teste que monte dois ritos no
+    ;; mesmo ente com a mesma chave morre no banco em vez de provar o que queria.
+    (tram/criar-template! tx {:id tid :ente-id ente :chave (str "rito_3a_" tid) :versao 1 :tipo "projeto_lei"
+                              :nome "Rito [FIXTURE 3-A]" :estado-inicial "protocolada"})
+    (doseq [[ch term] [["protocolada" false] ["em_comissoes" false] ["arquivada" true]]]
+      (tram/criar-estado! tx {:id (random-uuid) :ente-id ente :template-id tid :chave ch :nome ch :terminal term}))
+    (tram/criar-transicao! tx {:id (random-uuid) :ente-id ente :template-id tid :de-estado "protocolada"
+                               :para-estado "em_comissoes" :gatilho "despachar" :guarda nil
+                               :autorizacao autorizacao :ordem 1})
+    tid))
+
+(defn- despachar! [tx ente pid tid a]
+  (tram/transicionar! tx {:registro *registro* :ente-id ente :proposicao-id pid :template-id tid
+                          :gatilho "despachar" :ator a :ator-id (:identidade-id a) :agora data}))
+
+;; ---------- o eixo: autorizacao ausente, satisfeita e negada ----------
+
+(deftest autorizacao-NULA-preserva-o-comportamento-de-hoje
+  ;; NULL = sem restricao ALEM do gate da rota. Espelha `guarda NULL`. Exigir a coluna preenchida
+  ;; quebraria todo rito ja cadastrado (inclusive o da semente) — o preco esta declarado na migration 0079
+  ;; e pago na LEITURA, que passa a dizer por gatilho se o ator pode dispara-lo.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (montar-rito! tx ente nil)
+              pid (protocolar! tx ente tid)]
+          (is (true? (:transicionou? (despachar! tx ente pid tid (ator ente "qualquer_um"))))
+              "sem expressao de autorizacao, a transicao corre como antes da 3-A"))))))
+
+(deftest autorizacao-SATISFEITA-deixa-passar
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (montar-rito! tx ente "\"presidente\" in ator.papeis")
+              pid (protocolar! tx ente tid)]
+          (is (true? (:transicionou? (despachar! tx ente pid tid (ator ente "presidente"))))
+              "quem a expressao autoriza, transiciona"))))))
+
+(deftest autorizacao-NEGADA-lanca-negacao-e-NAO-vira-recusa-de-dominio
+  ;; O ponto mais importante do arquivo. `{:transicionou? false}` significa "a Casa nao permite este ato
+  ;; AGORA" -> 409, e e' informacao para o OPERADOR (tente outro ato, ou depois). "Voce nao pode" e' 403 e
+  ;; e' informacao para o ADMINISTRADOR (peca acesso). Colapsar os dois manda cada um procurar no lugar
+  ;; errado — e, pior, um 409 sobre negacao de autorizacao sugere que o ato e' possivel, so' que nao agora.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (montar-rito! tx ente "\"presidente\" in ator.papeis")
+              pid (protocolar! tx ente tid)
+              e (try (despachar! tx ente pid tid (ator ente "estagiario")) nil
+                     (catch clojure.lang.ExceptionInfo ex ex))]
+          (is (some? e) "negar autorizacao LANCA — nao devolve {:transicionou? false}")
+          (is (true? (authz/negado? e)) "e lanca a NEGACAO do kernel (:autorizacao/negado -> 403)"))))))
+
+(deftest negacao-acontece-ANTES-de-gravar
+  ;; Autorizar depois de gravar seria auditoria, nao autorizacao.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (montar-rito! tx ente "\"presidente\" in ator.papeis")
+              pid (protocolar! tx ente tid)]
+          (try (despachar! tx ente pid tid (ator ente "estagiario")) (catch Exception _ nil))
+          (is (= "protocolada" (:estado (prop/buscar tx ente pid)))
+              "estado intacto: a negacao veio antes do mudar-estado!")
+          (is (empty? (tram/historico-da-proposicao tx ente pid))
+              "historico vazio: a negacao veio antes do registrar-transicao!"))))))
+
+;; ---------- a decisao de desenho: negado NAO cai na proxima candidata ----------
+
+(deftest negado-na-escolhida-NAO-cai-na-proxima-candidata
+  ;; Se a autorizacao filtrasse candidatas (junto do guard) em vez de ser porta sobre a ESCOLHIDA, um ator
+  ;; sem permissao na 1a transicao cairia na 2a — e o DESTINO da materia passaria a depender de QUEM pediu.
+  ;; Duas pessoas, o mesmo gatilho, estados finais diferentes. Quem escolhe o destino e' o rito (`ordem`).
+  ;;
+  ;; As DUAS portas sao protegidas, com expressoes DIFERENTES — e tem de ser assim desde a decisao B: um
+  ;; gatilho com porta trancada ao lado de aberta nao entra mais no banco. A 2a autoriza EXATAMENTE quem a
+  ;; 1a nega, que e' o arranjo mais hostil possivel: se houvesse qualquer escorregamento, ele aconteceria.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (montar-rito! tx ente "\"presidente\" in ator.papeis")
+              _ (tram/criar-transicao! tx {:id (random-uuid) :ente-id ente :template-id tid
+                                           :de-estado "protocolada" :para-estado "arquivada"
+                                           :gatilho "despachar" :guarda nil
+                                           :autorizacao "\"estagiario\" in ator.papeis" :ordem 2})
+              pid (protocolar! tx ente tid)
+              e (try (despachar! tx ente pid tid (ator ente "estagiario")) nil
+                     (catch clojure.lang.ExceptionInfo ex ex))]
+          (is (true? (authz/negado? e))
+              "nega na candidata ESCOLHIDA, em vez de escorregar para a seguinte que o autorizaria")
+          (is (= "protocolada" (:estado (prop/buscar tx ente pid)))
+              "e a materia NAO foi para 'arquivada' — o destino nao depende de quem pediu"))))))
+
+;; ---------- DECISAO B: porta trancada nao convive com porta aberta no mesmo gatilho ----------
+;; O caso real: `em_comissoes --concluir--> em_pauta` (guarda `alegado.com_parecer`, so' o presidente) ao
+;; lado de `em_comissoes --concluir--> arquivada` (sem guarda, sem autorizacao). Um secretario manda
+;; `contexto: {com_parecer: false}`, o guard da 1a reprova, a engine escolhe a 2a — e a materia e'
+;; ARQUIVADA por quem nao podia manda-la a pauta. Ele nao arrombou a porta trancada: escolheu a aberta,
+;; escrevendo no corpo do proprio pedido.
+
+(deftest B-cadastro-recusa-porta-ABERTA-ao-lado-de-TRANCADA
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (montar-rito! tx ente "\"presidente\" in ator.papeis")]
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo #"rito incoerente"
+                (tram/criar-transicao! tx {:id (random-uuid) :ente-id ente :template-id tid
+                                           :de-estado "protocolada" :para-estado "arquivada"
+                                           :gatilho "despachar" :guarda nil :autorizacao nil :ordem 2}))
+              "porta sem fechadura nao entra ao lado de porta com fechadura"))))))
+
+(deftest B-cadastro-recusa-TAMBEM-na-ordem-inversa
+  ;; A ordem de digitacao nao pode decidir a seguranca: os dois ritos sao o MESMO rito incoerente.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (montar-rito! tx ente nil)]
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo #"rito incoerente"
+                (tram/criar-transicao! tx {:id (random-uuid) :ente-id ente :template-id tid
+                                           :de-estado "protocolada" :para-estado "arquivada"
+                                           :gatilho "despachar" :guarda nil
+                                           :autorizacao "\"presidente\" in ator.papeis" :ordem 2}))
+              "porta com fechadura nao entra ao lado de porta sem"))))))
+
+(deftest B-runtime-recusa-o-rito-incoerente-que-JA-ESTAVA-no-banco
+  ;; O gate de cadastro so' alcanca rito NOVO. Rito gravado ANTES dele — ou por import/SQL direto, que nao
+  ;; passa pelo save — continua incoerente, e e' exatamente onde ninguem esta' olhando. Aqui o INSERT e'
+  ;; feito por SQL cru, contornando `criar-transicao!` de proposito, para reproduzir esse acervo.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (montar-rito! tx ente "\"presidente\" in ator.papeis")
+              ;; a porta TRANCADA passa a ser recusada pelo guard — senao a engine a escolhe, autoriza o
+              ;; presidente e a rede nunca e' exercitada. O cenario real e' esse: o guard da porta protegida
+              ;; reprova e a engine cai na porta aberta.
+              _ (jdbc/execute-one! tx
+                  ["UPDATE legislativo.template_transicao SET guarda = 'falso'
+                     WHERE ente_id = ? AND template_id = ? AND gatilho = 'despachar'" ente tid])
+              ;; e a porta ABERTA entra por SQL cru, contornando `criar-transicao!` — e' o acervo que ja'
+              ;; estava no banco quando o gate nasceu.
+              _ (jdbc/execute-one! tx
+                  ;; `efetivado_em` e' OBRIGATORIO p/ a linha existir: a policy de RLS
+                  ;; (mig 0016) tem `USING (... AND (efetivado_em IS NOT NULL OR lote_id = ...))` — sem ele
+                  ;; a linha nasce em STAGING e fica INVISIVEL ate' para o SELECT da propria tx. A primeira
+                  ;; versao deste teste caiu nisso e a engine via uma candidata so'.
+                  ["INSERT INTO legislativo.template_transicao
+                     (id, ente_id, template_id, de_estado, para_estado, gatilho, ordem, efetivado_em)
+                     VALUES (?, ?, ?, 'protocolada', 'arquivada', 'despachar', 2, now())"
+                   (random-uuid) ente tid])
+              pid (protocolar! tx ente tid)
+              e (try (despachar! tx ente pid tid (ator ente "presidente")) nil
+                     (catch clojure.lang.ExceptionInfo ex ex))]
+          (is (= :config/portas-do-gatilho-incoerentes (:tipo (ex-data e)))
+              "a engine RECUSA o ato pela porta aberta enquanto o rito estiver incoerente (409 de config)")
+          (is (= "protocolada" (:estado (prop/buscar tx ente pid)))
+              "fail-closed: a materia nao anda por rito incoerente"))))))
+
+;; ---------- fail-closed nas duas pontas: save e runtime ----------
+
+(deftest expressao-de-autorizacao-MAL-FORMADA-e-recusada-no-SAVE
+  ;; Mesmo gate do guard (Inv.4): config quebrada nao entra no banco. E a razao aqui e' mais forte que no
+  ;; guard — `check!` traduz LANCE em NEGACAO, entao autorizacao mal-formada que passasse o save viraria
+  ;; "ninguem pode tramitar", descoberto no meio de uma sessao.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (montar-rito! tx ente nil)]
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo #"autorizacao"
+                (tram/criar-transicao! tx {:id (random-uuid) :ente-id ente :template-id tid
+                                           :de-estado "em_comissoes" :para-estado "arquivada"
+                                           :gatilho "arquivar" :guarda nil
+                                           :autorizacao "\"presidente\" in" :ordem 1}))
+              "expressao que nao parseia NAO entra no banco"))))))
+
+(deftest expressao-que-LANCA-em-runtime-NEGA-em-vez-de-explodir
+  ;; Campo ausente no ator -> o avaliador lanca (fail-closed da fatia 5). `check!` traduz em negacao: quem
+  ;; nao consegue decidir NEGA, nunca fica indeterminado -> nunca vira 500.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (montar-rito! tx ente "ator.campo_que_nao_existe")
+              pid (protocolar! tx ente tid)
+              e (try (despachar! tx ente pid tid (ator ente "presidente")) nil
+                     (catch clojure.lang.ExceptionInfo ex ex))]
+          (is (true? (authz/negado? e))
+              "expressao inavaliavel NEGA (403), nao propaga como erro interno (500)"))))))
+
+;; ---------- os dois criticos da revisao de seguranca, guardados ----------
+
+(deftest CRITICO-1-negacao-de-fato-com-argumento-nil-NAO-autoriza
+  ;; O achado mais grave da revisao, e o mais dificil de ver: a expressao esta SINTATICAMENTE correta e
+  ;; SEMANTICAMENTE plausivel. "o relator nao pode ser quem preside" se escreve exatamente assim. Antes do
+  ;; conserto, um campo de ator que nao resolve entregava nil ao fato, o fato nao casava linha, devolvia
+  ;; `false` LIMPO E BOOLEANO — e o `nao` virava PERMISSAO PARA TODO MUNDO, sem erro e sem log.
+  ;; Aqui o campo e' propositalmente inexistente: e' a unica forma de produzir o nil agora que
+  ;; `alcancavel-pela-dsl` tornou as chaves reais alcancaveis.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (montar-rito! tx ente "nao é_presidente_da_mesa(ator.campo_que_nao_resolve, hoje())")
+              pid (protocolar! tx ente tid)
+              e (try (despachar! tx ente pid tid (ator ente "secretario")) nil
+                     (catch clojure.lang.ExceptionInfo ex ex))]
+          (is (true? (authz/negado? e))
+              "fato com argumento nil NEGA — nao devolve false p/ o `nao` transformar em permissao")
+          (is (= "protocolada" (:estado (prop/buscar tx ente pid)))
+              "e a materia nao andou"))))))
+
+(deftest CRITICO-2-a-identidade-do-ator-e-alcancavel-pela-DSL
+  ;; Os cinco fatos que a migration 0079 cita como razao da 3-A (`é_presidente_da_mesa` e irmaos) exigem
+  ;; IDENTIDADE-ID como 1o argumento. Enquanto `ator.identidade_id` respondia nil, NENHUM era escrivivel —
+  ;; a 3-A entregava so' `ator.papeis`, o mesmo eixo do gate grosso que ela existia para superar.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [a (ator ente "secretario")
+              ;; a expressao le' a identidade do ATOR e a compara com ela mesma: passa se, e so' se, o
+              ;; campo for de fato alcancavel. Com kebab inalcancavel, os dois lados seriam nil -> lanca.
+              tid (montar-rito! tx ente "ator.identidade_id == ator.identidade_id")
+              pid (protocolar! tx ente tid)]
+          (is (true? (:transicionou? (despachar! tx ente pid tid a)))
+              "`ator.identidade_id` resolve a chave kebab `:identidade-id` do ator real"))))))
+
+(deftest CRITICO-3-exige-autorizacao-diz-a-verdade-na-LEITURA
+  ;; `exige-autorizacao` era `false` SEMPRE: a consulta da LEITURA (`transicoes-do-estado`) trazia `:guarda`
+  ;; mas nao `:autorizacao` — a coluna so' entrou na consulta da ESCRITA. O campo cuja unica razao de
+  ;; existir e' tornar visivel o rito que esqueceu de declarar quem dispara estava 100% falso.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (montar-rito! tx ente "\"presidente\" in ator.papeis")
+              gs (logic/gatilhos-possiveis (tram/transicoes-do-estado tx ente tid "protocolada"))]
+          (is (true? (:exige-autorizacao (first gs)))
+              "gatilho COM expressao declarada aparece como exigindo autorizacao"))))
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (montar-rito! tx ente nil)
+              gs (logic/gatilhos-possiveis (tram/transicoes-do-estado tx ente tid "protocolada"))]
+          (is (false? (:exige-autorizacao (first gs)))
+              "e o gatilho SEM expressao aparece como nao exigindo — e' o default permissivo, visivel"))))))
+
+;; ---------- PARIDADE: o parecer enforça a mesma coluna ----------
+;; `template_transicao` é subject-agnóstica (mig 0016) e os DOIS engines leem as MESMAS linhas pela MESMA
+;; `tram/transicoes-de`. O [CARRY disc.6] de `parecer_tramitacao.clj` exige que um fix num lado ganhe o
+;; espelho no outro — a 3-A quebrou essa paridade ao nascer só do lado da proposição, e a coluna ficava
+;; lida-e-descartada em silêncio no parecer. Coluna gravada que um caminho ignora é pior que coluna
+;; ausente: quem escreve o rito a vê no banco e supõe que vale.
+
+(defn- rito-de-parecer! [tx ente autorizacao]
+  (let [tid (random-uuid)]
+    (tram/criar-template! tx {:id tid :ente-id ente :chave (str "rito_parecer_" tid) :versao 1
+                              :sujeito "parecer" :nome "Rito de parecer [FIXTURE]"
+                              :estado-inicial "apresentado"})
+    (doseq [[ch term] [["apresentado" false] ["aprovado" true]]]
+      (tram/criar-estado! tx {:id (random-uuid) :ente-id ente :template-id tid :chave ch :nome ch :terminal term}))
+    (tram/criar-transicao! tx {:id (random-uuid) :ente-id ente :template-id tid :de-estado "apresentado"
+                               :para-estado "aprovado" :gatilho "emitir" :guarda nil
+                               :autorizacao autorizacao :ordem 1})
+    tid))
+
+(defn- parecer-de!
+  "Parecer sobre uma materia REAL. `parecer/criar!` exige prova de existencia do objeto polimorfico
+  (disc.2) — um uuid solto e' recusado, e e' bom que seja: parecer sobre materia inexistente e' exatamente
+  o tipo de fantasma que o resto desta frente passou a barrar. A materia nasce SEM rito (`template-id`
+  ausente), que desde a fatia 1 e' comportamento normal e nao erro — ela nao precisa tramitar, so' existir."
+  [tx ente tid]
+  (let [pid (:id (prop/protocolar! tx {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026
+                                       :uf "CE" :municipio-nome "Fortaleza" :ementa "Materia da fixture"}))]
+    (:id (parecer/criar! tx {:id (random-uuid) :ente-id ente :objeto-tipo "proposicao"
+                             :objeto-id pid :comissao-id (random-uuid) :template-id tid}))))
+
+(defn- emitir! [tx ente pid tid a]
+  (ptram/transicionar-parecer! tx {:registro *registro* :ente-id ente :parecer-id pid :template-id tid
+                                   :gatilho "emitir" :ator a :ator-id (:identidade-id a) :agora data}))
+
+(deftest PARIDADE-o-parecer-NEGA-com-a-mesma-coluna-que-a-proposicao
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (rito-de-parecer! tx ente "\"presidente\" in ator.papeis")
+              pid (parecer-de! tx ente tid)
+              e (try (emitir! tx ente pid tid (ator ente "estagiario")) nil
+                     (catch clojure.lang.ExceptionInfo ex ex))]
+          (is (true? (authz/negado? e))
+              "o engine do PARECER honra `autorizacao` — sem isso a coluna era lida e descartada em silencio")
+          (is (= "apresentado" (:estado (parecer/buscar tx ente pid)))
+              "e o parecer nao andou"))))))
+
+(deftest PARIDADE-o-parecer-deixa-passar-quem-a-expressao-autoriza
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (rito-de-parecer! tx ente "\"presidente\" in ator.papeis")
+              pid (parecer-de! tx ente tid)]
+          (is (true? (:transicionou? (emitir! tx ente pid tid (ator ente "presidente"))))
+              "o gate nega quem nao pode, nao todo mundo — o caminho feliz do parecer segue vivo"))))))
+
+(deftest PARIDADE-autorizacao-nula-no-parecer-preserva-o-comportamento-de-hoje
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (rito-de-parecer! tx ente nil)
+              pid (parecer-de! tx ente tid)]
+          (is (true? (:transicionou? (emitir! tx ente pid tid (ator ente "qualquer_um"))))
+              "rito de parecer ja cadastrado, sem expressao, nao muda de comportamento"))))))

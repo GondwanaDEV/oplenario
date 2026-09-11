@@ -8,6 +8,9 @@
   (:require [oplenario.motor.tipos :as t]))
 
 (def CATALOGO-VERSAO "registry-v1@2026-07-11")  ; C3: +esta_presente_em(SessaoId,VereadorId,Instante)->Booleano
+                                               ; 3-B: +aprovada_em_votacao(ProposicaoId)->Booleano (aditivo: assinatura
+                                               ; NOVA nao invalida regra ja' carimbada, entao a versao NAO bumpa — mesma
+                                               ; decisao de C3. Quem REMOVER ou MUDAR uma assinatura tem de bumpar.)
 
 ;; Enums de domínio. Símbolos globalmente únicos no protótipo p/ o literal resolver
 ;; o domínio sem ambiguidade (o catálogo real qualificaria: TipoAtoLegislativo.resolucao).
@@ -34,7 +37,7 @@
    "Instante" t/INSTANTE "Duracao" t/DURACAO "Racional" t/RACIONAL
    "Competencia" t/COMPETENCIA "Maioria" t/MAIORIA
    "IdentidadeId" t/IDENTIDADE-ID "ComissaoId" t/COMISSAO-ID "SessaoId" t/SESSAO-ID
-   "VereadorId" t/VEREADOR-ID})
+   "VereadorId" t/VEREADOR-ID "ProposicaoId" t/PROPOSICAO-ID})
 
 (defn resolver-tipo-nome [nome]
   (or (get tipos-nomeados nome)
@@ -90,6 +93,11 @@
          (r "presentes_plenario" [t/SESSAO-ID t/INSTANTE] t/INTEIRO "Sessoes")
          (r "presentes_remoto"   [t/SESSAO-ID t/INSTANTE] t/INTEIRO "Sessoes")
          (r "esta_presente_em" [t/SESSAO-ID t/VEREADOR-ID t/INSTANTE] t/BOOLEANO "Sessoes")
+         ;; legislativo/relacoes (3-B, decisao do Daouda) — O ATO, nao o rotulo. A transicao de uma materia
+         ;; para o estado de aprovacao do rito deixa de depender de alguem apertar um botao e passa a
+         ;; depender de a Casa TER VOTADO. Envolve `db/votacao/aprovada-em-votacao?` (fonte unica: mesmas
+         ;; tres exclusoes — aberta/anulada, corrigida por outra, objeto_tipo polimorfico).
+         (r "aprovada_em_votacao" [t/PROPOSICAO-ID] t/BOOLEANO "Legislativo")
          ;; (b) assinaturas sem fn (módulo futuro) — remessa_enviada perde `ente` (§4-bis)
          (r "remessa_enviada" [t/TEXTO t/COMPETENCIA] t/BOOLEANO "Compliance-remessa")
          (r "publicada_no_portal" [(t/Registro "AtoDespesa")] t/BOOLEANO "Transparencia")

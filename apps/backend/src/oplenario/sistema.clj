@@ -12,6 +12,7 @@
             [oplenario.identidade.relacoes.identidade :as rel-identidade]
             [oplenario.legislativo.components.repositorio :as repo-legislativo]
             [oplenario.legislativo.diplomat.consumers :as legislativo-consumers]
+            [oplenario.legislativo.relacoes :as rel-legislativo]
             [oplenario.paineis.components.repositorio :as repo-paineis]
             [oplenario.paineis.diplomat.consumers :as paineis-consumers]
             [oplenario.participacao.components.repositorio :as repo-participacao]
@@ -123,7 +124,10 @@
    ;; entra por-chamada (quem avalia abre a tx via Repo). O `start` roda o assert de costura (fail-closed).
    :registro-fatos  (registro-fatos/registro-fatos
                      (fundir-relacoes rel-cadastros/relacoes rel-identidade/relacoes rel-sessoes/relacoes
-                                      rel-compliance/relacoes rel-participacao/relacoes)))))
+                                      rel-compliance/relacoes rel-participacao/relacoes
+                                      ;; 3-B: o legislativo passa a publicar fato proprio — `aprovada_em_votacao`,
+                                      ;; o ATO que um guard de rito exige antes de deixar a materia avancar.
+                                      rel-legislativo/relacoes)))))
 
 (defn- idp-para
   "Seleciona a impl do IdP por ambiente. dev/test usam idp-dev (confia em claims sem verificar

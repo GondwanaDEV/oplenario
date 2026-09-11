@@ -148,11 +148,15 @@
 ;; ---------- transicionar! (Repo) -> proposicao.transicionou -> materia.estado ----------
 
 (deftest transicao-atualiza-o-estado-projetado
+  ;; o rito nasce ANTES da materia (fatia 4 da borda de tramitacao): `transicionar!` passou a confrontar o
+  ;; `template-id` do argumento com o `template_id` da LINHA, e materia protocolada sem rito nao tramita
+  ;; mais por um rito passado a mao. A ordem invertida fabricava um estado que o produto nao produz — a
+  ;; borda recusa essa materia com `:conflito/sem-rito` antes de chamar a engine.
   (let [ente (random-uuid)
+        tid (tenancy/com-tenant* *ds* ente (fn [tx] (montar-template! tx ente)))
         {pid :id} (legislativo-repo/protocolar! *repo-legislativo* ente
                     {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026 :uf "CE"
-                     :municipio-nome "Fortaleza" :ementa "Dispoe sobre Y"})
-        tid (tenancy/com-tenant* *ds* ente (fn [tx] (montar-template! tx ente)))]
+                     :municipio-nome "Fortaleza" :ementa "Dispoe sobre Y"})]
     (drenar!) ; projeta o protocolo antes da transicao (protocolada precede transicionou, mesma ordem real)
     (let [r (legislativo-repo/transicionar! *repo-legislativo* ente *registro-fatos*
               {:proposicao-id pid :template-id tid :gatilho "despachar" :agora (LocalDate/of 2026 3 1)})]

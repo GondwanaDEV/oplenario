@@ -22,6 +22,11 @@
    [:autor-id {:optional true} [:maybe :uuid]]
    [:autor-texto {:optional true} [:maybe :string]]
    [:estado :string]
+   ;; o RITO sob o qual a materia corre (mig 0076) — o elo que a engine do eixo C sempre pediu como
+   ;; argumento e a proposicao nunca teve onde guardar. NULLABLE, ao contrario de Parecer/:template-id:
+   ;; existem materias protocoladas ANTES desta coluna, e nao ha' rito conhecido para atribuir
+   ;; retroativamente. `nil` significa exatamente "esta materia nao tramita" — o estado de hoje.
+   [:template-id {:optional true} [:maybe :uuid]]
    [:lock-version :int]
    [:atualizado-em km/Instante]
    ;; atributos quentes por tipo

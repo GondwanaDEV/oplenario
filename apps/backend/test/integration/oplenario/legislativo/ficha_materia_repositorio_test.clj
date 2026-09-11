@@ -45,17 +45,21 @@
     (is (= [] (:pareceres f)))))
 
 (deftest ficha-completa-traz-historico-de-tramitacao
+  ;; o rito e' montado ANTES do protocolo (fatia 4 da borda de tramitacao): `transicionar!` confronta o
+  ;; `template-id` do argumento com o `template_id` da LINHA, e a materia so' recebe o elo se o rito ja'
+  ;; existir quando ela nasce. Na ordem antiga a fixture tramitava uma materia SEM rito, que e' um estado
+  ;; que o produto nao produz (a borda recusa com `:conflito/sem-rito`).
   (let [ente (random-uuid)
         tid (random-uuid)
+        _ (repo/criar-template! *repo* ente {:id tid :chave "rito_ordinario" :versao 1
+                                             :nome "Rito Ordinario [FIXTURE]" :estado-inicial "protocolada"})
+        _ (repo/criar-estado! *repo* ente {:id (random-uuid) :template-id tid :chave "protocolada"
+                                           :nome "Protocolada" :terminal false})
+        _ (repo/criar-estado! *repo* ente {:id (random-uuid) :template-id tid :chave "em_comissoes"
+                                           :nome "Em comissoes" :terminal false})
+        _ (repo/criar-transicao! *repo* ente {:id (random-uuid) :template-id tid :de-estado "protocolada"
+                                              :para-estado "em_comissoes" :gatilho "despachar" :ordem 1})
         pid (protocolar! ente)]
-    (repo/criar-template! *repo* ente {:id tid :chave "rito_ordinario" :versao 1
-                                       :nome "Rito Ordinario [FIXTURE]" :estado-inicial "protocolada"})
-    (repo/criar-estado! *repo* ente {:id (random-uuid) :template-id tid :chave "protocolada"
-                                     :nome "Protocolada" :terminal false})
-    (repo/criar-estado! *repo* ente {:id (random-uuid) :template-id tid :chave "em_comissoes"
-                                     :nome "Em comissoes" :terminal false})
-    (repo/criar-transicao! *repo* ente {:id (random-uuid) :template-id tid :de-estado "protocolada"
-                                        :para-estado "em_comissoes" :gatilho "despachar" :ordem 1})
     (repo/transicionar! *repo* ente {} {:proposicao-id pid :template-id tid :gatilho "despachar"})
     (let [f (repo/ficha-completa-da-proposicao *repo* ente pid)]
       (is (= 1 (count (:tramitacao f))))

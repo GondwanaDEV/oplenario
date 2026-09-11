@@ -14,6 +14,7 @@
   (policy.check/pode-dirigir-votacao?) no controller."
   (:require [oplenario.http :as http]
             [oplenario.interceptors :as it]
+            [oplenario.kernel.autorizacao :as authz]
             [oplenario.kernel.tempo :as tempo]
             [oplenario.legislativo.adapters.in.ciencia :as adapters-in-ciencia]
             [oplenario.legislativo.adapters.in.documento :as adapters-in-documento]
@@ -175,6 +176,160 @@
           id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
       (if-let [{:keys [proposicao texto]} (controllers/buscar-proposicao-ficha repo-leg ente-id id)]
         (http/json-resposta 200 (adapters-out-proposicao/detalhe->wire proposicao texto))
+        (http/json-resposta 404 {:erro "proposicao nao encontrada"})))))
+
+;; ========================= Fatia 2: a BORDA da tramitacao (eixo C) =========================
+
+(defn- guard-inavaliavel?
+  "A excecao veio do AVALIADOR da DSL (motor), e nao do dominio? `:erro :runtime` (fato sem fn no registry,
+  identificador sem valor, tipo nao-booleano) e `:erro :sintaxe` (guard que nao parseia — `criar-transicao!`
+  gateia no save, mas uma linha escrita por import/SQL direto escapa desse gate) sao as duas formas. Olha
+  tambem a CAUSA, mesma disciplina do `raiz` do interceptor global — a tx do Repo pode reembrulhar."
+  [e]
+  (let [erro? #(contains? #{:runtime :sintaxe} (:erro %))]
+    (boolean (or (erro? (ex-data e)) (erro? (ex-data (ex-cause e)))))))
+
+(defn- recusa-de-tramitacao
+  "A prosa de cada `:motivo` de `{:transicionou? false}` (ver `db/tramitacao/transicionar!`) + o proprio
+  motivo como campo. O `:else` cobre o contrato ANTIGO — mapa sem `:motivo`, que e' o que um Repo/fake ou
+  um caller nao-atualizado ainda devolve: a borda degrada para a frase generica em vez de responder um
+  motivo inventado. As strings aqui sao PROSA sobre o mecanismo (fim de rito, guard, ato nao declarado);
+  nenhum nome de estado ou de gatilho de camara aparece neste codigo — os que a frase cita vem do DADO,
+  interpolados de `estado` e `gatilho`."
+  [motivo gatilho estado]
+  (case motivo
+    :estado-terminal
+    {:motivo "estado-terminal"
+     :erro (str "o rito desta Casa declara '" estado "' como fim de processo: a materia nao sai mais "
+                "deste estado, e o ato '" gatilho "' nao se aplica. Nao e' falta de permissao nem de "
+                "documento — o processo legislativo acabou aqui.")}
+
+    :guarda-recusou
+    {:motivo "guarda-recusou"
+     :erro (str "o rito desta Casa declara o ato '" gatilho "' a partir de '" estado "', mas a condicao "
+                "dele nao esta' cumprida agora — o mesmo pedido pode passar quando ela estiver.")}
+
+    :gatilho-nao-declarado
+    {:motivo "gatilho-nao-declarado"
+     :erro (str "o rito desta Casa nao declara o ato '" gatilho "' a partir de '" estado "' — repetir o "
+                "pedido nao muda isso. Os atos que ele declara estao no GET desta mesma rota.")}
+
+    :estado-fora-do-rito
+    {:motivo "estado-fora-do-rito"
+     :erro (str "o rito desta materia nao declara o estado atual '" estado "' — ela pode ser anterior a "
+                "este rito, ou o rito ter sido trocado sob os pes dela. Nenhum ato e' possivel ate' "
+                "alguem reconciliar rito e estado na configuracao.")}
+
+    {:erro (str "o rito desta Casa nao permite o ato '" gatilho "' com a materia em '" estado "'")}))
+
+(defn- tramitar-handler
+  "POST /legislativo/proposicoes/:id/tramitacao — dispara UM GATILHO na maquina do eixo C. Irma de
+  `/legislativo/pareceres/:id/emissao`: mesma fiacao (`registro` do motor injetado pelo host, `agora`
+  resolvido AQUI na borda em data civil), mesmo gate grosso ('secretario').
+
+  O CORPO ACEITA `gatilho`, JAMAIS ESTADO-DESTINO (wire :closed). Quem escolhe o destino e' o template
+  avaliando o guard; quem escolhe o rito e' a coluna da linha. Ver `wire/in/proposicao.TramitarProposicao`.
+
+  OS QUATRO DESFECHOS, e por que cada codigo:
+
+  - transicionou -> 200 + recibo (de/para/gatilho/ocorrido-em). 200 e nao 201 espelhando a irma
+    `/pareceres/:id/emissao`: a transicao grava uma linha de historico, mas nao cria recurso ENDERECAVEL
+    (nao ha `GET /tramitacoes/:id` p/ apontar num Location) — 201 prometeria uma URL que nao existe.
+
+  - a engine NAO transicionou -> 409 + `{:estado-atual :gatilho :motivo}`. E' DOMINIO NORMAL, nao erro:
+    a Casa nao permite esse ato. 409 e nao 400 porque o pedido estava correto — o MESMO corpo
+    funcionaria noutro estado, ou depois; quem recusa e' o recurso, nao a requisicao. E' o codigo que este
+    projeto ja' usa p/ conflito de estado em 7 bordas (`:conflito/votacao-terminal`, `/sessao-fechada`,
+    `/proposicao-nao-aprovada`, `/aparte`, `/inscricao`, `/fala`, `/vinculo`), e cabe aqui pelo mesmo
+    motivo. O corpo carrega estado-atual + gatilho porque 'proibido' sem 'de onde' e 'o que' obriga o
+    operador a adivinhar o regimento — e carrega `motivo`, porque as QUATRO causas de recusa pedem acoes
+    OPOSTAS e a frase generica de antes ('a Casa nao permite este ato agora') as achatava todas:
+      · `estado-terminal`       -> a Casa ENCERROU o processo (mig 0078: quem declara o fim e' o rito, nao
+                                   mais uma string cravada em SQL). Nao ha' o que esperar; parar de tentar.
+      · `guarda-recusou`        -> o ato existe, a condicao dele nao esta' cumprida AGORA. O unico dos
+                                   quatro que o tempo (ou o `contexto` certo no corpo) pode mudar.
+      · `gatilho-nao-declarado` -> o rito nao declara ESSE ato a partir desse estado. Repetir nunca
+                                   funciona; o GET irmao lista os que ele declara.
+      · `estado-fora-do-rito`   -> o rito nem conhece o estado atual da materia. Conserto e' de CONFIG.
+    O `motivo` vai como campo PROPRIO, e nao so' embutido na prosa do `:erro`: interface que precise
+    distinguir 'some o botao' de 'mostra o que falta' nao pode depender de casar substring de mensagem.
+
+  - materia sem rito (`:conflito/sem-rito`) -> 409 tambem, mas com mensagem PROPRIA: nao e' 'agora nao',
+    e' 'nunca, ate' alguem configurar'. Nao e' 400: o corpo estava certo, falta dado da Casa.
+
+  - guard que LANCA / CAS: sao coisas DIFERENTES entre si e das de cima.
+      · CAS (`:conflito/transicao`) -> 409, corpo SEM estado-atual: a escrita colidiu, ninguem sabe em que
+        estado a materia parou. Colar o estado lido antes da colisao seria afirmar um fato ja' vencido.
+      · guard inavaliavel -> 500 com corpo NOMEADO. Nao e' 4xx: nenhuma acao do cliente conserta um rito
+        que nao avalia, e chamar isso de erro do cliente ESCONDE o incidente atras da metrica errada — o
+        principio comercial da §5 do CLAUDE.md e' que regra falhando em runtime e' incidente inaceitavel,
+        entao ela tem que contar como 5xx. O que NAO pode e' o 500 OPACO ('erro interno') do interceptor
+        global: o corpo nomeia a causa (o rito da Casa nao pode ser avaliado) e o gatilho que ficou preso,
+        para o servidor saber que ligar para quem administra os templates, nao reapertar o botao."
+  [repo-leg registro relogio]
+  (fn [req]
+    (let [ator (:ator req) ente-id (:ente-id ator)
+          pid (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          agora (tempo/hoje relogio zona-civil)
+          m (adapters-in-proposicao/tramitar->dominio ator pid agora (:json-params req))]
+      (try
+        (if-let [r (controllers/tramitar-proposicao repo-leg registro ator m)]
+          (if (:transicionou? r)
+            (http/json-resposta 200 (adapters-out-proposicao/recibo-transicao->wire pid (:gatilho m) r))
+            (http/json-resposta 409 (assoc (recusa-de-tramitacao (:motivo r) (:gatilho m) (:de r))
+                                           :estado-atual (:de r) :gatilho (:gatilho m))))
+          (http/json-resposta 404 {:erro "proposicao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (cond
+            ;; A NEGACAO DE AUTORIZACAO VEM PRIMEIRO (3-A; achado IMPORTANTE-4 da revisao de seguranca).
+            ;; `authz/check!` embrulha a excecao da politica e a passa como CAUSA, e `guard-inavaliavel?`
+            ;; OLHA A CAUSA — entao, com a ordem invertida, toda negacao por expressao inavaliavel
+            ;; (campo de ator escrito errado, fato ausente do registry) saia como 500 'o rito nao pode ser
+            ;; avaliado' em vez de 403. A Casa recebia incidente de config onde havia recusa de acesso, e
+            ;; o teste de `db/` nao pegava porque nao atravessa o diplomat.
+            (authz/negado? e)
+            (http/json-resposta 403 {:erro "autorizacao negada" :gatilho (:gatilho m)})
+
+            (guard-inavaliavel? e)
+            (http/json-resposta 500 {:erro (str "o rito desta Casa nao pode ser avaliado — a materia NAO "
+                                                "tramitou; procure quem administra os templates de tramitacao")
+                                     :gatilho (:gatilho m)})
+            :else
+            (case (:tipo (ex-data e))
+              :conflito/sem-rito (http/json-resposta 409 {:erro (ex-message e) :gatilho (:gatilho m)})
+              :conflito/transicao (http/json-resposta 409 {:erro (ex-message e) :gatilho (:gatilho m)})
+              (throw e))))))))
+
+(defn- tramitacao-leitura-handler
+  "GET /legislativo/proposicoes/:id/tramitacao(?limite=) — o HISTORICO da materia + os GATILHOS que a Casa
+  declara a partir do estado ATUAL. Mesmo path e mesmo gate grosso ('secretario') do POST irmao; a lista de
+  gatilhos e' o que torna aquele POST usavel por uma interface, em vez de exigir que alguem adivinhe a
+  string do ato.
+
+  DUAS COISAS QUE ESTA BORDA NAO FAZ, e nenhuma das duas por preguica:
+
+  1. NAO AVALIA GUARD p/ dizer quais gatilhos passariam. O guard le' `alegado` (o `contexto` do corpo,
+     renomeado na borda), e ele e' argumento do POST — nao existe aqui. Avaliar `alegado.urgente` contra
+     `{}` responderia 'nao passa' sobre um ato
+     que passaria com o corpo certo: resposta precisa e FALSA, pior que imprecisa e honesta. Some-se que
+     guard LANCA (um rito inavaliavel derrubaria a leitura, tirando do operador tambem o historico,
+     justamente quando ele mais precisa) e que guard consulta FATO (N avaliacoes por abertura de tela).
+     O preco — o botao que o guard vai recusar — e' pago no NOME do campo (`gatilhos-possiveis`, nunca
+     'disponiveis') e em `pode-ser-recusado` por gatilho, que e' mais informacao que um aviso generico.
+
+  2. NAO toca `registro` nem `relogio`. Leitura que precisa do motor e' leitura que virou escrita
+     disfarcada; a ausencia desses dois argumentos na fiacao e' o que torna (1) verificavel por inspecao.
+
+  404 p/ materia inexistente no tenant (nunca vaza a diferenca entre 'nao existe' e 'e' de outra Casa').
+  Materia SEM rito nao e' 404 nem 409: e' 200 com historico vazio, nenhum gatilho e a `nota` dizendo por
+  que — o recurso existe, e a resposta correta sobre ele e' 'nao ha' o que tramitar, e eis o motivo'."
+  [repo-leg]
+  (fn [req]
+    (let [ente-id (:ente-id (:ator req))
+          id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          {:keys [limite]} (adapters-in-proposicao/tramitacao-query->dominio (:query-params req))]
+      (if-let [m (controllers/buscar-tramitacao repo-leg ente-id id limite)]
+        (http/json-resposta 200 (adapters-out-proposicao/tramitacao->wire m))
         (http/json-resposta 404 {:erro "proposicao nao encontrada"})))))
 
 (defn- ficha-materia-handler
@@ -534,6 +689,12 @@
       ["/legislativo/proposicoes/:id" :patch
        [auth papel it/corpo-json (editar-proposicao-handler repo-legislativo vereador-vinculado?)]
        :route-name :legislativo/editar-proposicao]
+      ["/legislativo/proposicoes/:id/tramitacao" :get
+       [auth papel (tramitacao-leitura-handler repo-legislativo)]
+       :route-name :legislativo/tramitacao-proposicao]
+      ["/legislativo/proposicoes/:id/tramitacao" :post
+       [auth papel it/corpo-json (tramitar-handler repo-legislativo registro relogio)]
+       :route-name :legislativo/tramitar-proposicao]
       ["/legislativo/pareceres/:id" :get [auth papel (parecer-editor-handler repo-legislativo resolver-comissoes)]
        :route-name :legislativo/parecer-editor]
       ["/legislativo/pareceres/:id" :patch

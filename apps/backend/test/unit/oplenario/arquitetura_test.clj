@@ -60,16 +60,34 @@
     (when (and (= "oplenario" (first p)) (>= (count p) 4) (modulos (second p)) (= "db" (nth p 2)))
       (second p))))
 
+(def ^:private camadas-que-podem-tocar-db
+  "As camadas que podem importar o `db/` do PROPRIO modulo (ADR-0001 §3-bis).
+
+  `components` (o Repo-Component) e `db` (db->db) sao a regra original: o controller depende do Repo,
+  nunca do `db/` direto.
+
+  `relacoes` foi ACRESCENTADA em 3-B, e a razao e' que a regra nunca falou dela. O motivo do §3-bis e'
+  que quem ABRE transacao tem de passar pelo Repo (que trata `com-tenant*`); `relacoes/` nao abre tx
+  nenhuma — ela RECEBE a tx do tenant como 1o argumento, injetada pelo motor via RegistroFatos, exatamente
+  como uma fn de `db/`. E' uma folha tenant-aware do mesmo modulo, irma do `db/`, e nao ha' caminho pelo
+  Repo que ela PUDESSE tomar: o Repo abriria uma segunda tx, fora da tx em que o guard esta' sendo
+  avaliado.
+
+  O que isso NAO abre: cross-modulo segue barrado por `violacoes-de` (uma relacao do legislativo nao
+  alcanca `cadastros.db.*`), e controller/logic/diplomat/autenticacao seguem barrados aqui."
+  #{"components" "db" "relacoes"})
+
 (defn- violacoes-db
-  "ADR-0001 §3-bis: o `db/` de um modulo so e' importado pelo SEU Repo-Component (components/) ou por outro
-  `db/` do MESMO modulo. controllers/logic/diplomat/autenticacao nunca tocam db/ direto — vao pelo Repo."
+  "ADR-0001 §3-bis: o `db/` de um modulo so e' importado por uma camada tenant-aware do MESMO modulo
+  (`components/` — o Repo-Component —, outro `db/`, ou `relacoes/`). controllers/logic/diplomat/
+  autenticacao nunca tocam db/ direto — vao pelo Repo."
   [usos]
   (vec (for [{:keys [from to]} usos
              :let [mt (modulo-db to)
                    fp (str/split (str from) #"\.")
                    from-mod (when (and (= "oplenario" (first fp)) (>= (count fp) 3)) (second fp))
                    from-camada (when (>= (count fp) 3) (nth fp 2))]
-             :when (and mt (not (and (= from-mod mt) (#{"components" "db"} from-camada))))]
+             :when (and mt (not (and (= from-mod mt) (camadas-que-podem-tocar-db from-camada))))]
          {:from from :to to})))
 
 (def ^:private analise
@@ -124,7 +142,15 @@
   (is (empty? (violacoes-db [{:from 'oplenario.cadastros.db.vereador :to 'oplenario.cadastros.db.estrutura}]))
       "db->db do MESMO modulo = permitido")
   (is (empty? (violacoes-db [{:from 'oplenario.legislativo.controllers :to 'oplenario.kernel.db-util}]))
-      "kernel/db-util nao e' db de modulo = ok"))
+      "kernel/db-util nao e' db de modulo = ok")
+  ;; 3-B: `relacoes/` e' folha tenant-aware do modulo (recebe a tx do motor, nao abre tx) -> pode o db/ do
+  ;; PROPRIO modulo. Os dois casos abaixo sao o que a permissao NAO pode arrastar junto.
+  (is (empty? (violacoes-db [{:from 'oplenario.legislativo.relacoes :to 'oplenario.legislativo.db.votacao}]))
+      "relacoes->db do MESMO modulo = permitido (3-B)")
+  (is (seq (violacoes-db [{:from 'oplenario.legislativo.relacoes :to 'oplenario.cadastros.db.vereador}]))
+      "relacoes->db de OUTRO modulo = violacao (a permissao de 3-B e' intra-modulo)")
+  (is (seq (violacoes-db [{:from 'oplenario.legislativo.controllers :to 'oplenario.legislativo.db.votacao}]))
+      "controller->db do proprio modulo CONTINUA violacao (3-B nao afrouxou o §3-bis)"))
 
 (deftest db-so-do-repo-component
   (let [usos (:namespace-usages @analise)]

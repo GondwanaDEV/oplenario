@@ -222,6 +222,101 @@
   (validar-autor! vereador-vinculado? ente-id m)
   (repo/editar-proposicao! repo-legislativo ente-id m))
 
+(defn tramitar-proposicao
+  "Fatia 2 — dispara UM GATILHO na maquina de tramitacao (eixo C) sobre a materia `(:proposicao-id m)`.
+  `m` ja' vem coagido pelo adapters/in (gatilho trimado, `contexto` do corpo virado `:alegado` e
+  keywordizado — a marca de procedencia da fatia 4 —, ator/updated-by do token,
+  `agora` resolvido na borda). `registro` (RegistroFatos do motor) e' o mesmo que o host ja' injeta p/ o
+  editor de parecer — a engine precisa dele p/ resolver os fatos do guard.
+
+  O RITO E' INJETADO AQUI, da coluna `template_id` da propria linha (fatia 1) — nunca do corpo. E' este o
+  ponto que impede o T3-A nesta borda: o cliente nomeia o ATO que quer praticar; quem decide sob qual rito
+  ele corre, e para onde ele leva, e' o servidor lendo o dado da Casa.
+
+  Tres saidas, DISTINTAS entre si (o diplomat traduz cada uma):
+  - `nil` = materia inexistente NESTE tenant -> 404 na borda. Um pre-check, nao paranoia: sem ele, a engine
+    leria estado `nil`, nao acharia candidata nenhuma e devolveria `{:transicionou? false}` — a materia
+    fantasma se disfarcaria de 'a Casa nao permite este ato', que e' resposta ERRADA sobre uma materia que
+    nao existe (mesmo fail-closed que `transicionar-parecer!` ganhou na review F3.6a).
+  - lanca `:conflito/sem-rito` = a materia existe mas a Casa nao declarou rito para ela (`template_id`
+    NULL). NAO e' erro de corpo: o pedido estava certo, falta CONFIGURACAO da Casa. Fail-closed ANTES do
+    Repo — sem template a engine nao tem transicao candidata nenhuma e devolveria o mesmo
+    `{:transicionou? false}` enganoso de cima, dizendo 'nao pode agora' quando a verdade e' 'esta materia
+    nunca vai poder, ninguem escreveu o rito'.
+  - o mapa da engine (`{:transicionou? true|false ...}`) = resultado de DOMINIO; guard que LANCA e conflito
+    de CAS propagam como excecao, nao sao capturados aqui (a distincao entre eles e' de borda)."
+  [repo-legislativo registro ator m]
+  (when-let [linha (repo/buscar-proposicao repo-legislativo (:ente-id ator) (:proposicao-id m))]
+    (when (nil? (:template-id linha))
+      (throw (ex-info "esta materia nao tem rito declarado (a Casa nao vinculou um template de tramitacao a ela) — nao ha o que tramitar"
+                      {:tipo :conflito/sem-rito :proposicao-id (:proposicao-id m)})))
+    ;; 3-A: o ATOR INTEIRO desce ate' a engine, nao so' o `ator-id`. `motor/politica-dsl` avalia
+    ;; `(fn [ator recurso] -> bool)` com acesso a campo (`ator.identidade`) e aos fatos de relacao
+    ;; (`é_presidente_da_mesa`, `quem_exerce_presidencia`, …) — um uuid solto nao responde nenhuma dessas
+    ;; perguntas. O `:ator-id` continua indo separado porque ele e' AUTORIA no historico (quem praticou o
+    ;; ato), nao insumo de decisao: sao dois usos distintos do mesmo sujeito.
+    (repo/transicionar! repo-legislativo (:ente-id ator) registro
+                        (assoc m :template-id (:template-id linha) :ator ator))))
+
+(defn- nota-de-lista-vazia
+  "Lista de gatilhos vazia tem QUATRO causas, e elas pedem acoes DIFERENTES do operador. Devolver so'
+  'nenhum ato disponivel' seria verdadeiro e inutil — a nota diz de qual das quatro se trata.
+  Nunca e' preenchida quando ha' ato a praticar: nao se explica o que nao aconteceu."
+  [estado {:keys [template-id estado-no-template]}]
+  (cond
+    (nil? template-id)
+    (str "esta materia nao tem rito de tramitacao declarado — a Casa nunca vinculou um template a ela, "
+         "e por isso ela nao tramita. Quem vincula e' a configuracao do rito, nao esta tela.")
+
+    (nil? estado-no-template)
+    (str "o rito desta materia nao declara o estado atual '" estado "' — a materia pode ser anterior a "
+         "este rito, ou o rito ter sido trocado sob os pes dela (o versionamento de template e' por copia "
+         "integral). Nenhum ato e' possivel ate' alguem reconciliar rito e estado.")
+
+    (:terminal estado-no-template)
+    (str "'" estado "' e' estado TERMINAL neste rito: o processo legislativo acabou aqui, e nao ha' ato "
+         "a praticar — nao e' falta de permissao, e' fim de rito.")
+
+    :else
+    (str "o rito nao declara nenhum ato a partir de '" estado "', e tampouco marca '" estado "' como fim "
+         "de processo: a materia esta' presa num beco. A saida depende de corrigir a configuracao do "
+         "rito, nao de tentar de novo.")))
+
+(defn buscar-tramitacao
+  "Fatia 3 — a LEITURA da tramitacao: o HISTORICO da materia + os GATILHOS que a Casa declara a partir do
+  estado ATUAL. nil = materia inexistente no tenant (a borda traduz -> 404), mesmo contrato de
+  `buscar-ficha-materia`/`buscar-proposicao-detalhe`.
+
+  NAO AVALIA GUARD, e a decisao e' de desenho (ver `logic/gatilhos-possiveis`): o guard le' `alegado`, que
+  e' argumento do POST e nao existe no GET — avaliar aqui daria uma resposta precisa e FALSA. A honestidade
+  e' paga em `pode-ser-recusado`, por gatilho, que e' mais informacao que um aviso generico.
+
+  A SONDA DE TRUNCAMENTO: o Repo e' consultado com `limite+1`. Com um teto simples, `n` itens devolvidos
+  sao indistinguiveis de 'a materia so' teve n atos', e o operador leria a linha mais antiga MOSTRADA como
+  o comeco do processo — uma mentira por omissao num artefato de auditoria. O item excedente nunca vai p/ a
+  resposta: ele so' existe p/ a borda poder DIZER que ha' mais. `take-last` porque `historico-da-proposicao`
+  ja' devolve os N mais recentes em ordem cronologica — o que sobra p/ descartar e' o mais ANTIGO."
+  [repo-legislativo ente-id proposicao-id limite]
+  (let [{:keys [proposicao historico candidatas estado-no-template]}
+        (repo/tramitacao-da-proposicao repo-legislativo ente-id proposicao-id (inc limite))]
+    (when proposicao
+      (let [truncado? (> (count historico) limite)
+            gatilhos  (logic/gatilhos-possiveis candidatas)
+            estado    (:estado proposicao)]
+        {:proposicao-id proposicao-id
+         :estado-atual estado
+         :template-id (:template-id proposicao)
+         ;; tri-valorado de proposito: true/false = o rito declara o estado e diz se e' fim; nil = o rito
+         ;; NAO declara o estado (ou nao ha' rito). "Desconhecido" e "nao-terminal" sao diagnosticos
+         ;; diferentes, e achatar os dois em `false` apagaria justamente o caso que pede intervencao.
+         :estado-terminal (:terminal estado-no-template)
+         :historico (if truncado? (vec (take-last limite historico)) (vec historico))
+         :historico-truncado truncado?
+         :gatilhos-possiveis gatilhos
+         :nota (when (empty? gatilhos)
+                 (nota-de-lista-vazia estado {:template-id (:template-id proposicao)
+                                              :estado-no-template estado-no-template}))}))))
+
 (defn- nomear-comissoes
   "Decora cada mapa de `ms` (que tem `:comissao-id`) com `:comissao-nome`, resolvendo os N ids numa
   chamada so'. A CHAVE existe sempre, mesmo quando o resolver nao acha nada: o wire/out nao pode depender

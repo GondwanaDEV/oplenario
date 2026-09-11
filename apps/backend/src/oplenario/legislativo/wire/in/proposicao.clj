@@ -38,3 +38,54 @@
          [:lock-version :int]
          [:ementa {:optional true} [:maybe [:string {:max 2000}]]]]
         campos-metadados-opcionais))
+
+;; ---------- Fatia 2: a borda da TRAMITACAO (eixo C) ----------
+
+(def ^:private contexto-max-chaves
+  "Teto de chaves do `contexto`. O contexto e' ARGUMENTO DE GUARD (o avaliador le' `contexto.x`), nao um
+  saco de anexos: 20 chaves cobrem qualquer guard plausivel e impedem que a borda vire um canal de blob
+  para dentro de `proposicao_transicao_historico.contexto` (jsonb, append-only — o que entra la' nunca sai)."
+  20)
+
+(def ^:private ChaveContexto
+  "Chave de contexto: minuscula, ASCII, <=60 chars. NAO e' cosmetica — o adapters/in INTERNA cada chave
+  como keyword (o avaliador acessa campo por keyword, motor/runtime `:campo`), e internar string arbitraria
+  de cliente e' superficie de abuso. O charset fechado limita o alfabeto ao que um guard consegue nomear."
+  [:re #"^[a-z][a-z0-9_-]{0,59}$"])
+
+(def ^:private ValorContexto
+  "Valor de contexto: ESCALAR (ou nulo). Aninhamento fica de fora de proposito — o avaliador da DSL so'
+  sabe acessar UM nivel (`contexto.x`), entao mapa/vetor aqui seria dado que nenhum guard consegue ler e
+  que so' engorda o historico. String limitada a 500 chars pelo mesmo motivo."
+  [:or [:string {:max 500}] :int :double :boolean :nil])
+
+(def TramitarProposicao
+  "Corpo de POST /legislativo/proposicoes/:id/tramitacao.
+
+  `gatilho` e' o UNICO verbo — string livre (:min 1), NUNCA enum: o vocabulario de gatilhos e' DADO do
+  tenant (`legislativo.template_transicao.gatilho`), Inv.4. Cravar um enum aqui quebraria a primeira Casa
+  cujo regimento nomeia o ato de outro jeito.
+
+  O QUE ESTE SCHEMA DELIBERADAMENTE NAO TEM: estado-destino, sob qualquer nome (`para`, `estado`,
+  `para-estado`) — e `template-id`. Quem decide PARA ONDE a materia vai e' o template avaliando o guard; o
+  rito sob o qual ela corre e' a coluna da propria linha. Deixar o cliente nomear qualquer um dos dois e' a
+  classe de defeito do T3-A (o chamador escolhendo a regra). `:closed true` faz a recusa ser mecanica: o
+  campo extra e' 400 e a engine nunca roda.
+
+  `contexto` (opcional) e' a carga do gatilho que o GUARD pode ler e que o historico persiste — entrada
+  DE CLIENTE que alimenta a avaliacao da regra. O schema limita a FORMA (escalares, teto de chaves,
+  charset); quem limita o USO e' quem escreve o rito, e e' assim que tem de ser (Inv.4: o codigo nao
+  decide o regimento).
+
+  O QUE A FATIA 4 FEZ COM ISSO, ja' que proibir nao era opcao: tornou a confianca VISIVEL na expressao.
+  Este campo chega ao guard sob o nome `alegado`, nunca `contexto` — `adapters/in/contexto->alegado` faz a
+  troca, e a chave `contexto` NAO EXISTE mais no ambiente de avaliacao. Um rito escrito como
+  `alegado.aprovado == verdadeiro` continua permitido, e continua deixando o operador afirmar a propria
+  precondicao; a diferenca e' que agora quem le' o rito ve' a palavra `alegado` e sabe disso, em vez de
+  ler `contexto` e supor apuracao. Um rito antigo que ainda diga `contexto.aprovado` nao le' o corpo do
+  cliente em silencio: o avaliador lanca e a materia NAO tramita. Ao lado de `alegado`, o guard tem
+  `proposicao` (a linha, lida pelo servidor) e os fatos por nome (`aprovada_em_votacao(proposicao.id)` —
+  decisao 3-B), que sao os canais APURADOS. Ver `db/tramitacao/transicionar!`, secao OS DOIS CANAIS."
+  [:map {:closed true}
+   [:gatilho [:string {:min 1 :max 100}]]
+   [:contexto {:optional true} [:maybe [:map-of {:max contexto-max-chaves} ChaveContexto ValorContexto]]]])
