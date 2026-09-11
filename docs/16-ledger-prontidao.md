@@ -1764,3 +1764,87 @@ escrito.
   aprovação. Não é dívida desta frente; é a fila que ela tornou visível.
 - **Roteamento vira gatilho-por-destino** (`despachar_ccj` em vez de `alegado.comissao`). Nenhum rito do
   repo fazia isso, então não há migração — mas o primeiro regimento real cadastrado precisa saber.
+
+---
+
+# 🔒 Frente `painel-nao-mente` · O painel de compliance para de fingir completude (11/09/2026)
+
+**3 commits.** Fecha o CRÍTICO que a Onda E deixou vivo: `GET /compliance/painel` truncava sem sinalizar.
+Registro do defeito original em `oplenario-onda-e-medida`.
+
+## O defeito, e o que a medição corrigiu nele
+
+O controller chama `(repo/painel repo ente {})`, então o default vale **sempre**: `em-aberto` corta em 100,
+`remessas-recentes` em 50. `PainelOut` é `{:closed true}` com três chaves e zero flag. A ordenação
+amplifica — `vence_em ASC` põe as **vencidas** (data no passado) nos primeiros slots, então a Casa
+**atrasada** é exatamente a que perde os prazos futuros, e a remessa ao TCE some da tela.
+
+**Os dois casos não eram igualmente graves**, e isso só apareceu medindo:
+
+| Lista | Detectável antes? |
+|---|---|
+| `em-aberto` | **por acaso** — `resumo.pendente + resumo.vencida` conta sem teto, e o `/calendario` deduzia dali |
+| `remessas-recentes` | **não** — nenhum contador em lugar nenhum do payload, e nenhuma tela sequer a renderiza |
+
+E havia **dois** consumidores, não um: `GET /paineis/mesa` embute o `PainelOut` inteiro sob
+`:compliance-tce`, e o dashboard da Mesa **não tinha defesa alguma** — o card chega tipado como
+`Record<string, unknown>`, então o TypeScript não obriga ninguém a olhar.
+
+## A forma seguiu o precedente, contra o rascunho do próprio orquestrador
+
+O desenho inicial era um `:tetos` aninhado publicando o `:limite`. **Descartado na medição:** seria uma
+*terceira* forma, e nenhum `wire/out` do repo publica teto ao cliente. Ficou o par
+**`<lista>-total :int`** de `transparencia/wire/out/parlamentar`, cuja docstring já dizia por quê — *"o par
+lista+total é obrigatório, não opcional: é o que permite a borda dizer 'mostrando 50 de N' em vez de
+fingir completude"*. CLAUDE.md §4: estender padrão existente, não introduzir conceito novo.
+
+## Duas armadilhas fechadas antes de nascerem
+
+- **Deriva do predicado.** `where-em-aberto` é fonte única de `listar-em-aberto` e `contar-em-aberto`. Um
+  total que repetisse o `WHERE` divergiria em silêncio no dia em que um estado novo entrasse num e não no
+  outro — e o total só serve se for confiável. O teste insere uma obrigação de **cada uma das 5 fases** e
+  prova que lista e contagem enxergam as mesmas 2.
+- **Heurística aposentada, não empilhada.** O `/calendario` deduzia o corte; manter a dedução ao lado do
+  campo novo mascararia um bug no cálculo do servidor. Teste que monta payload onde as duas
+  **discordariam** e prova que a tela segue o servidor.
+
+## Achado estrutural: `{:closed true}` derruba nos DOIS sentidos
+
+Campo **faltando** reprova a validação igual a campo sobrando. Acrescentar uma chave obriga atualizar
+**todo** produtor do read-model. Dois fixtures quebraram e foram consertados. Um terceiro **não quebrou e
+por isso é pior**: `mesa_adapters_test/card-compliance-fake` passa porque `:compliance-tce` é `:map`
+aberto — ninguém o valida. Fixture que declara forma que produção não produz é semente de read-model morto
+verde; alinhado, com a razão escrita nele.
+
+## O que a revisão adversarial achou (2 lentes)
+
+Uma lente **zero achados** — e verificou **empiricamente**, não por suposição, que `COUNT(*)` devolve
+`java.lang.Long` e que o `:int` do Malli o aceita (o contrário seria 500 em produção com o teste verde,
+porque a fixture usa literal). Também: camelização automática e recursiva (`boundary.ts`), e
+`FORCE ROW LEVEL SECURITY` nas duas tabelas.
+
+A outra achou **1 REAL**, da classe exata que a frente existe para matar: o ramo **positivo** do banner da
+Mesa nunca tinha sido renderizado. O view-model era testado nos dois sentidos, mas nenhum teste importava
+o componente com valor não-nulo. Mutação da condição reprova 3 testes; antes, reprovava **zero**.
+
+## Verificação
+
+| | |
+|---|---|
+| Backend | **2236 testes / 6049 assertions / 6 falhas** — as mesmas `demo.*` de sempre, nomeadas |
+| Frontend | **142 arquivos / 1234 testes / 0 falhas** |
+| `tsc` | 13 antes (baseline de `main`), 13 depois — zero acrescentados |
+| Mutação | condição do banner invertida → 3 reprovações |
+
+## ⚠ ABERTO — decisão do Daouda, não abri
+
+A varredura mediu **todos os 26 sítios de `:limit`/`LIMIT`** do backend: **13 MENTEM** do mesmo jeito.
+
+| # | Rota | Teto | Consequência |
+|---|---|---|---|
+| 1 | `GET /paineis/pendencias` | 100 | **pior que o do TCE** — esconde prazo legal de e-SIC/LGPD/ouvidoria; perder a janela é descumprimento de LAI (20+10), não incômodo operacional |
+| 2 | `/compliance/painel` · `remessas-recentes` | 50 | **consertado aqui** |
+| 3 | `GET /paineis/tramitacao` | 50/estado | usa `ROW_NUMBER()`, **invisível a grep por `LIMIT`** — a própria varredura tem ponto cego do mesmo tipo |
+
+O backend **já tinha 3 padrões honestos** provados, um com a regra escrita *"nada é truncado em
+silêncio"*. Era convenção sem aplicação uniforme; agora tem um quarto exemplo e um molde de teste.
