@@ -509,7 +509,7 @@
   ;; chamar o protocolo `transicionar-parecer!` diretamente (abriria SUA PROPRIA tx, quebrando a atomicidade
   ;; com promover!/registrar-voto-relator!) — por isso reusa parecer-tram/transicionar-parecer! (db/) +
   ;; producers/emitir-transicionou-parecer! INLINE, o MESMO bloco do impl acima.
-  (emitir-parecer! [this ente-id registro {:keys [parecer-id template-id gatilho voto-relator updated-by agora
+  (emitir-parecer! [this ente-id registro {:keys [ator parecer-id template-id gatilho voto-relator updated-by agora
                                                    alegado lock-version assinador]}]
     (transacao this ente-id
       (fn [tx]
@@ -551,8 +551,14 @@
         (let [{:keys [lock-version]} (parecer/buscar tx ente-id parecer-id)]
           (parecer/registrar-voto-relator! tx {:id parecer-id :ente-id ente-id :voto-relator voto-relator
                                                :updated-by updated-by :lock-version lock-version}))
+        ;; `:ator` (3-A, paridade): este call site monta o mapa EXPLICITAMENTE em vez de repassar `args`
+        ;; (ver o comentario acima — nao pode chamar o protocolo `transicionar-parecer!`, que abriria sua
+        ;; propria tx), entao uma chave nova nao flui sozinha. Sem ela, a emissao de parecer ignoraria a
+        ;; autorizacao do rito enquanto a rota irma a respeitaria: a assimetria que a paridade existe p/
+        ;; impedir, e que passaria despercebida porque o caminho feliz continua verde.
         (let [r (parecer-tram/transicionar-parecer! tx {:registro registro :ente-id ente-id :parecer-id parecer-id
                                                          :template-id template-id :gatilho gatilho :agora agora
+                                                         :ator ator
                                                          :alegado alegado :updated-by updated-by})]
           (when (:transicionou? r)
             (producers/emitir-transicionou-parecer! bus tx ente-id

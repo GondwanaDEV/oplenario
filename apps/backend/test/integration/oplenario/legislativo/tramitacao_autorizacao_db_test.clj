@@ -18,6 +18,8 @@
             [oplenario.kernel.autorizacao :as authz]
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.kernel.tenancy :as tenancy]
+            [oplenario.legislativo.db.parecer :as parecer]
+            [oplenario.legislativo.db.parecer-tramitacao :as ptram]
             [oplenario.legislativo.db.proposicao :as prop]
             [oplenario.legislativo.db.tramitacao :as tram]
             [oplenario.legislativo.logic :as logic]
@@ -245,3 +247,68 @@
               gs (logic/gatilhos-possiveis (tram/transicoes-do-estado tx ente tid "protocolada"))]
           (is (false? (:exige-autorizacao (first gs)))
               "e o gatilho SEM expressao aparece como nao exigindo — e' o default permissivo, visivel"))))))
+
+;; ---------- PARIDADE: o parecer enforça a mesma coluna ----------
+;; `template_transicao` é subject-agnóstica (mig 0016) e os DOIS engines leem as MESMAS linhas pela MESMA
+;; `tram/transicoes-de`. O [CARRY disc.6] de `parecer_tramitacao.clj` exige que um fix num lado ganhe o
+;; espelho no outro — a 3-A quebrou essa paridade ao nascer só do lado da proposição, e a coluna ficava
+;; lida-e-descartada em silêncio no parecer. Coluna gravada que um caminho ignora é pior que coluna
+;; ausente: quem escreve o rito a vê no banco e supõe que vale.
+
+(defn- rito-de-parecer! [tx ente autorizacao]
+  (let [tid (random-uuid)]
+    (tram/criar-template! tx {:id tid :ente-id ente :chave (str "rito_parecer_" tid) :versao 1
+                              :sujeito "parecer" :nome "Rito de parecer [FIXTURE]"
+                              :estado-inicial "apresentado"})
+    (doseq [[ch term] [["apresentado" false] ["aprovado" true]]]
+      (tram/criar-estado! tx {:id (random-uuid) :ente-id ente :template-id tid :chave ch :nome ch :terminal term}))
+    (tram/criar-transicao! tx {:id (random-uuid) :ente-id ente :template-id tid :de-estado "apresentado"
+                               :para-estado "aprovado" :gatilho "emitir" :guarda nil
+                               :autorizacao autorizacao :ordem 1})
+    tid))
+
+(defn- parecer-de!
+  "Parecer sobre uma materia REAL. `parecer/criar!` exige prova de existencia do objeto polimorfico
+  (disc.2) — um uuid solto e' recusado, e e' bom que seja: parecer sobre materia inexistente e' exatamente
+  o tipo de fantasma que o resto desta frente passou a barrar. A materia nasce SEM rito (`template-id`
+  ausente), que desde a fatia 1 e' comportamento normal e nao erro — ela nao precisa tramitar, so' existir."
+  [tx ente tid]
+  (let [pid (:id (prop/protocolar! tx {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026
+                                       :uf "CE" :municipio-nome "Fortaleza" :ementa "Materia da fixture"}))]
+    (:id (parecer/criar! tx {:id (random-uuid) :ente-id ente :objeto-tipo "proposicao"
+                             :objeto-id pid :comissao-id (random-uuid) :template-id tid}))))
+
+(defn- emitir! [tx ente pid tid a]
+  (ptram/transicionar-parecer! tx {:registro *registro* :ente-id ente :parecer-id pid :template-id tid
+                                   :gatilho "emitir" :ator a :ator-id (:identidade-id a) :agora data}))
+
+(deftest PARIDADE-o-parecer-NEGA-com-a-mesma-coluna-que-a-proposicao
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (rito-de-parecer! tx ente "\"presidente\" in ator.papeis")
+              pid (parecer-de! tx ente tid)
+              e (try (emitir! tx ente pid tid (ator ente "estagiario")) nil
+                     (catch clojure.lang.ExceptionInfo ex ex))]
+          (is (true? (authz/negado? e))
+              "o engine do PARECER honra `autorizacao` — sem isso a coluna era lida e descartada em silencio")
+          (is (= "apresentado" (:estado (parecer/buscar tx ente pid)))
+              "e o parecer nao andou"))))))
+
+(deftest PARIDADE-o-parecer-deixa-passar-quem-a-expressao-autoriza
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (rito-de-parecer! tx ente "\"presidente\" in ator.papeis")
+              pid (parecer-de! tx ente tid)]
+          (is (true? (:transicionou? (emitir! tx ente pid tid (ator ente "presidente"))))
+              "o gate nega quem nao pode, nao todo mundo — o caminho feliz do parecer segue vivo"))))))
+
+(deftest PARIDADE-autorizacao-nula-no-parecer-preserva-o-comportamento-de-hoje
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (rito-de-parecer! tx ente nil)
+              pid (parecer-de! tx ente tid)]
+          (is (true? (:transicionou? (emitir! tx ente pid tid (ator ente "qualquer_um"))))
+              "rito de parecer ja cadastrado, sem expressao, nao muda de comportamento"))))))

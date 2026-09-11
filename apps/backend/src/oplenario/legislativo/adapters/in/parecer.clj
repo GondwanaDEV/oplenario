@@ -62,4 +62,9 @@
      ;; corpo de emissao alimenta a avaliacao do rito — o que o relator manda e' voto e texto, e os dois
      ;; sao ESCRITA auditada, nao premissa de guard. O nome declara a procedencia para o dia em que
      ;; alguem quiser abrir o campo; ate' la, `{}` e' a afirmacao de que nao ha' nada alegado.
+     ;; `:ator` INTEIRO (3-A, paridade com o engine da proposicao): `motor/politica-dsl` avalia
+     ;; `(fn [ator recurso] -> bool)` com acesso a campo e aos fatos de relacao — um uuid solto nao
+     ;; responde "é_presidente_da_mesa(...)". Vai ao lado de `:updated-by`, que continua sendo AUTORIA da
+     ;; escrita: sao dois usos distintos do mesmo sujeito, e colapsa-los perderia um dos dois.
+     :ator ator
      :updated-by (:identidade-id ator) :agora agora :alegado {}}))
