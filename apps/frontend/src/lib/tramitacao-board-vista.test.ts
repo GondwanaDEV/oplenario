@@ -8,7 +8,7 @@ import {
   TETO_ITENS_VISIVEIS_POR_COLUNA,
 } from "./tramitacao-board-vista";
 import { formatarEspecieProposicao } from "./proposicoes-vista";
-import type { ItemBoardOut } from "./contrato-mesa.gen";
+import type { ItemBoardOut, TotalPorEstadoOut } from "./contrato-mesa.gen";
 
 // Onda B Slice 4 (tramitacao-board-vista) — agrupa ItemBoardOut (já vem agrupado/ordenado por
 // estado asc, transicionouEm asc dentro do grupo, vindo do backend) em 5 colunas FIXAS do quadro-fonte
@@ -120,6 +120,62 @@ describe("derivarBoard", () => {
     expect(protocolo.itens[0].numero).toBe("PL 42/2026");
     expect(protocolo.itens[0].especie).toBe("Projeto de Lei");
     expect(protocolo.itens[0].autor).toBe("—");
+  });
+});
+
+describe("derivarBoard — totais-por-estado (fatia 'truncamento-familia')", () => {
+  // O board corta 50 itens POR ESTADO no servidor (paineis/db/tramitacao/listar-board) — `coluna.itens`
+  // reflete esse corte. `coluna.total` tem que vir do par autoritativo `totaisPorEstado` (GET
+  // /paineis/tramitacao), NUNCA de `coluna.itens.length` (que mentiria sob corte).
+
+  function total(estado: string, n: number): TotalPorEstadoOut {
+    return { estado, total: n };
+  }
+
+  it("sem totaisPorEstado (chamada antiga/compat) -> total cai pra itens.length", () => {
+    const colunas = derivarBoard([item({ proposicaoId: "1", estado: "protocolada" })]);
+    const protocolo = colunas.find((c) => c.titulo === "Protocolo")!;
+    expect(protocolo.total).toBe(1);
+  });
+
+  it("coluna.total vem do servidor, DISCORDANDO de itens.length quando a lista foi cortada", () => {
+    // só 2 itens chegaram (a lista cortada pelo teto), mas o total real do estado é 7 — o cenário exato
+    // em que a heurística ingênua (itens.length) mentiria.
+    const colunas = derivarBoard(
+      [
+        item({ proposicaoId: "1", estado: "em_comissoes" }),
+        item({ proposicaoId: "2", estado: "em_comissoes" }),
+      ],
+      [total("em_comissoes", 7)],
+    );
+    const comissoes = colunas.find((c) => c.titulo === "Comissões")!;
+    expect(comissoes.itens).toHaveLength(2);
+    expect(comissoes.total).toBe(7);
+    expect(comissoes.total).not.toBe(comissoes.itens.length);
+  });
+
+  it("coluna que funde vários estados (Concluídas) soma o total de cada um", () => {
+    const colunas = derivarBoard(
+      [item({ proposicaoId: "1", estado: "aprovada" }), item({ proposicaoId: "2", estado: "arquivada" })],
+      [total("aprovada", 3), total("arquivada", 5), total("sancionado", 1)],
+    );
+    const concluidas = colunas.find((c) => c.titulo === "Concluídas")!;
+    expect(concluidas.total).toBe(9);
+  });
+
+  it("estado fora do mapa fixo soma no total de 'Outros'", () => {
+    const colunas = derivarBoard(
+      [item({ proposicaoId: "1", estado: "xpto-desconhecido" })],
+      [total("xpto-desconhecido", 4)],
+    );
+    const outros = colunas.find((c) => c.titulo === "Outros")!;
+    expect(outros.total).toBe(4);
+  });
+
+  it("totaisPorEstado explicitamente vazio -> total 0 (nunca cai pra itens.length quando o servidor respondeu)", () => {
+    const colunas = derivarBoard([item({ proposicaoId: "1", estado: "protocolada" })], []);
+    const protocolo = colunas.find((c) => c.titulo === "Protocolo")!;
+    expect(protocolo.total).toBe(0);
   });
 });
 

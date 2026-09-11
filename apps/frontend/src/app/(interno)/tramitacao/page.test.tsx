@@ -111,6 +111,27 @@ describe("PaginaTramitacao", () => {
     expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls.length).toBe(chamadasAntes);
   });
 
+  // Fatia "truncamento-familia": o board parava de chamar 50 (por estado) de "todas" — a contagem exibida
+  // por coluna e o rodapé "matérias em curso" tinham que parar de usar `itens.length` (que corta no teto
+  // por-estado do servidor) e passar a usar `totais-por-estado` (par autoritativo, sem teto).
+  it("mostra o TOTAL real por coluna e no rodapé, mesmo quando a lista chegou cortada pelo teto do servidor", async () => {
+    // só 2 itens chegaram em "em_comissoes" (a lista já veio cortada pelo servidor), mas o total real é 7
+    // — o payload onde itens.length e o total DISCORDAM, o cenário exato que expõe a mentira antiga.
+    const itens = [
+      itemFake,
+      { ...itemFake, "proposicao-id": "2", ementa: "Segunda matéria em comissões" },
+    ];
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ itens, "totais-por-estado": [{ estado: "em_comissoes", total: 7 }] }),
+    }) as Response) as unknown as typeof fetch;
+    renderComProviders("tok-de-teste");
+    await waitFor(() => expect(screen.getByText("Segunda matéria em comissões")).toBeTruthy());
+
+    expect(screen.getByLabelText("Comissões · 7 matérias")).toBeTruthy();
+    expect(screen.getByText((_, node) => node?.textContent === "7 matérias em curso")).toBeTruthy();
+  });
+
   it("coluna com mais matérias que o teto mostra 'Mostrar mais' e expande ao clicar", async () => {
     const itens = Array.from({ length: 35 }, (_, i) => ({
       ...itemFake,

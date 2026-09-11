@@ -28,6 +28,23 @@ describe("useTramitacaoBoard", () => {
     ]);
   });
 
+  // Fatia "truncamento-familia": totais-por-estado tem que sair do hook camelizado, par do `itens`.
+  it("cameliza e expõe totais-por-estado ao lado de itens", async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ itens: [itemFake], "totais-por-estado": [{ estado: "em_comissoes", total: 7 }] }),
+    }) as Response) as unknown as typeof fetch;
+    const { result } = renderHook(() => useTramitacaoBoard("tok"));
+    await waitFor(() => expect(result.current.estado).toBe("pronto"));
+    expect(result.current.totaisPorEstado).toEqual([{ estado: "em_comissoes", total: 7 }]);
+  });
+
+  it("carregando -> totaisPorEstado null enquanto a chamada está em voo", () => {
+    global.fetch = vi.fn(() => new Promise(() => {})) as unknown as typeof fetch;
+    const { result } = renderHook(() => useTramitacaoBoard("tok"));
+    expect(result.current.totaisPorEstado).toBeNull();
+  });
+
   it("chama a rota com o Bearer token", async () => {
     let headersCapturados: HeadersInit | undefined;
     global.fetch = vi.fn(async (_url: string, init?: RequestInit) => {

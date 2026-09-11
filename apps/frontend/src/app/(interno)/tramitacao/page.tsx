@@ -31,7 +31,7 @@ import "./tramitacao.css";
 
 export default function PaginaTramitacao() {
   const { token } = useAuth();
-  const { itens, estado } = useTramitacaoBoard(token);
+  const { itens, totaisPorEstado, estado } = useTramitacaoBoard(token);
   const [busca, setBusca] = useState("");
   const [tipoFiltro, setTipoFiltro] = useState("");
   const [colunasExpandidas, setColunasExpandidas] = useState<Record<string, boolean>>({});
@@ -45,13 +45,19 @@ export default function PaginaTramitacao() {
     );
   }
 
-  const colunasBrutas = itens ? derivarBoard(itens) : [];
+  // Fatia "truncamento-familia": `derivarBoard` só recebe `totaisPorEstado` quando o servidor já
+  // respondeu (nunca antes — passar `undefined` durante o carregamento cairia no fallback de compat
+  // itens.length, que é exatamente o número que corta no teto por-estado, e a Mesa precisa do real).
+  const colunasBrutas = itens ? derivarBoard(itens, totaisPorEstado ?? undefined) : [];
   const colunasFiltradas = filtrarColunasPorEspecie(
     filtrarColunasPorBusca(colunasBrutas, busca),
     tipoFiltro,
     formatarEspecieProposicao,
   );
-  const totalItens = itens?.length ?? 0;
+  // Total REAL da Casa (soma de totaisPorEstado, não itens.length): itens é a lista JÁ CORTADA no teto
+  // por-estado (50) do servidor — somar seu tamanho sub-contaria justo quando algum estado estourou o
+  // teto, o defeito que esta fatia fecha (era "matérias em curso" mentindo por baixo).
+  const totalItens = colunasBrutas.reduce((soma, c) => soma + c.total, 0);
 
   return (
     <>
@@ -103,12 +109,18 @@ export default function PaginaTramitacao() {
               const expandida = colunasExpandidas[coluna.chave] ?? false;
               const visivel = paginarColuna(coluna, expandida);
               const restantes = coluna.itens.length - visivel.itens.length;
+              // Sem filtro ativo: mostra o total REAL da coluna (`coluna.total`, autoritativo — sobrevive
+              // ao corte por-estado do servidor). Com filtro ativo, o servidor não sabe "quantas casariam
+              // o filtro" — o que a tela pode mostrar honestamente é quantas das que chegaram bateram
+              // (mesmo comportamento de antes desta fatia, sem regressão).
+              const semFiltro = busca.trim() === "" && tipoFiltro === "";
+              const contagemColuna = semFiltro ? coluna.total : coluna.itens.length;
               return (
-                <section key={coluna.chave} className="coluna" aria-label={`${coluna.titulo} · ${coluna.itens.length} matérias`}>
+                <section key={coluna.chave} className="coluna" aria-label={`${coluna.titulo} · ${contagemColuna} matérias`}>
                   <div className="col-cabe">
                     <span className={`azulejo-col az-${coluna.azulejo}`} aria-hidden="true" />
                     <h2 className="tit">{coluna.titulo}</h2>
-                    <span className="cnt">{coluna.itens.length}</span>
+                    <span className="cnt">{contagemColuna}</span>
                   </div>
                   <div className="col-corpo">
                     {coluna.itens.length === 0 && <p className="col-vazia">Nenhuma matéria.</p>}

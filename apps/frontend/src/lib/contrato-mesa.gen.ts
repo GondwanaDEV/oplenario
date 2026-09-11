@@ -129,6 +129,12 @@ export interface ItemBoardOut {
   transicionouEm: string;
 }
 
+export interface TotalPorEstadoOut {
+  estado: string;
+  total: number;
+}
+
 export interface TramitacaoBoardOut {
   itens: ItemBoardOut[];
+  totaisPorEstado: TotalPorEstadoOut[];
 }

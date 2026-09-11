@@ -257,7 +257,14 @@
      ('pendente','vencido')` de `listar-abertas` — ver docstring de ambos em db/pendencia.clj), nunca
      uma contagem escrita a parte (evita uma 3a copia do predicado divergir em silencio). Devolve
      {:pendencias [...] :pendencias-total N}.")
-  (tramitacao-board [this ente-id] "TODAS as proposicoes do tenant, agrupadas por estado, mais estagnadas primeiro.")
+  (tramitacao-board [this ente-id]
+    "O board de tramitacao do tenant, agrupado por estado, mais estagnadas primeiro DENTRO de cada grupo
+     (fatia 'truncamento-familia'). `itens` corta no teto POR ESTADO (`teto-tramitacao-board-por-estado` —
+     ver docstring de db.tramitacao/listar-board pro racional do corte ser por grupo, nao global) + o TOTAL
+     real por estado (sem teto). Os dois reads rodam na MESMA tx (coerencia de snapshot, mesmo racional de
+     o-que-vence acima) e o total REUSA `db-tramitacao/resumo` (MESMO predicado `WHERE ente_id = ?` da
+     lista — o board nao filtra por estado, entao e' o mesmo WHERE inteiro, nao so' um prefixo dele; nunca
+     uma 3a contagem escrita a parte). Devolve {:itens [...] :totais-por-estado [...]}.")
   (sli-sessoes [this ente-id] "SLI de janela de sessao (Inv.9): sessoes do tenant, abertas primeiro, concluidas por recencia.")
   (dashboard-mesa [this ente-id]
     "Rollups do dashboard da Mesa (F7, §16.11 item 11.4): os TRES resumos agregados dos read-models do
@@ -297,7 +304,11 @@
       (fn [tx]
         {:pendencias       (db-pendencia/listar-abertas tx ente-id limite)
          :pendencias-total (reduce + 0 (map :n (db-pendencia/resumo tx ente-id)))})))
-  (tramitacao-board [this ente-id] (transacao this ente-id #(db-tramitacao/listar-board % ente-id teto-tramitacao-board-por-estado)))
+  (tramitacao-board [this ente-id]
+    (transacao this ente-id
+      (fn [tx]
+        {:itens             (db-tramitacao/listar-board tx ente-id teto-tramitacao-board-por-estado)
+         :totais-por-estado (db-tramitacao/resumo tx ente-id)})))
   (sli-sessoes [this ente-id] (transacao this ente-id #(db-sli-sessao/listar-sli-sessoes % ente-id teto-sli-sessoes)))
   (dashboard-mesa [this ente-id]
     (transacao this ente-id
