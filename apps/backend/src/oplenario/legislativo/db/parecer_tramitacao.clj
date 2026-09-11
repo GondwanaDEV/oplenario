@@ -87,6 +87,23 @@
       (if-not escolhida
         {:transicionou? false :de estado :gatilho gatilho :objeto-tipo objeto-tipo :objeto-id objeto-id}
         (do
+          ;; REDE DE RUNTIME da decisao B. O gate de `criar-transicao!` so' alcanca rito NOVO — rito ja'
+          ;; gravado antes dele (ou por import/SQL direto, que nao passa pelo save) pode ter porta aberta
+          ;; ao lado de trancada, e ai o buraco continua aberto exatamente onde ninguem esta' olhando. As
+          ;; candidatas ja' estao em maos (`candidatas` e' a lista COMPLETA deste gatilho a partir deste
+          ;; estado), entao a checagem custa ZERO consulta.
+          ;;
+          ;; Fail-CLOSED: rito incoerente NAO deixa o ato passar pela porta aberta. E' 409 de config
+          ;; (`:config/*` -> 409 global), nao 403 — nao e' que VOCE nao pode, e' que o rito da Casa esta'
+          ;; incoerente e alguem tem de conserta-lo.
+          (when (and (str/blank? (:autorizacao escolhida))
+                     (some #(not (str/blank? (:autorizacao %))) candidatas))
+            (throw (ex-info (str "rito incoerente: o gatilho '" gatilho "' tem porta SEM autorizacao ao "
+                                 "lado de porta COM. O ato nao passa pela porta aberta enquanto o rito "
+                                 "nao for corrigido — senao quem pede escolhe, pelo corpo do pedido, por "
+                                 "onde passar.")
+                            {:tipo :config/portas-do-gatilho-incoerentes
+                             :gatilho gatilho :de-estado estado})))
           ;; 3-A NO PARECER — a PARIDADE que o [CARRY disc.6] deste ns exige, e que a 3-A tinha quebrado.
           ;; `template_transicao` e' subject-agnostica (mig 0016) e os dois engines leem as MESMAS linhas
           ;; pela MESMA `tram/transicoes-de`: sem este gate, um rito reaproveitado entre sujeitos teria a

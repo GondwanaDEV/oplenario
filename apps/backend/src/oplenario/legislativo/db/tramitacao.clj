@@ -84,6 +84,58 @@
                  :values [{:id id :ente_id ente-id :template_id template-id :chave chave :nome nome
                            :terminal (boolean terminal) :ordem (or ordem 0) :efetivado_em [:now]}]})))
 
+(defn- irmas-do-gatilho
+  "As outras transicoes do MESMO (template, de_estado, gatilho) — as PORTAS irmas do mesmo ato."
+  [tx ente-id template-id de-estado gatilho]
+  (comum/linhas->kebab
+    (jdbc/execute! tx
+      (sql/format {:select [:id :autorizacao] :from [:legislativo.template_transicao]
+                   :where [:and [:= :ente_id ente-id] [:= :template_id template-id]
+                           [:= :de_estado de-estado] [:= :gatilho gatilho]]}))))
+
+(defn- exigir-portas-coerentes!
+  "DECISAO B do Daouda (11/09/2026): **se o rito protege UM caminho de um ato, protege TODOS.**
+
+  O que isto impede, com materia na mesa. Um gatilho pode ter MAIS DE UMA PORTA — transicoes diferentes, do
+  mesmo estado, com o mesmo verbo — e quem escolhe entre elas e' o GUARD, que le' `alegado` (o corpo do
+  POST). Rito perfeitamente razoavel:
+
+    ordem 1 | em_comissoes -> em_pauta   | guarda `alegado.com_parecer == verdadeiro` | so' o presidente
+    ordem 2 | em_comissoes -> arquivada  | (sem guarda)                               | (sem autorizacao)
+
+  Em portugues: 'concluir a fase de comissoes — havendo parecer vai a pauta, e so' o presidente despacha;
+  nao havendo, arquiva por decurso'. Ninguem escreve isso achando que e' inseguro. Mas um secretario manda
+  `{gatilho: 'concluir', contexto: {com_parecer: false}}`, o guard da porta 1 reprova, a engine escolhe a
+  porta 2 — que nao tem fechadura — e a materia e' ARQUIVADA por quem nao podia manda-la a pauta. Ele nao
+  arrombou a porta trancada: escolheu a aberta, e escolheu escrevendo no corpo.
+
+  Agravante que sozinho ja' justificaria o gate: na LEITURA, `exige-autorizacao` responde `true` para esse
+  gatilho (a definicao e' `some?` sobre as candidatas, e ela esta' certa para a semantica de 'negado nao
+  cai na proxima'). A interface anuncia 'este ato exige autorizacao' enquanto um caminho por ele esta'
+  aberto — a armadilha nao so' existe, ela se disfarca.
+
+  RECUSA NOS DOIS SENTIDOS, porque a ordem de cadastro nao pode decidir a seguranca: inserir porta ABERTA
+  ao lado de trancada, e inserir porta TRANCADA ao lado de aberta, sao o MESMO rito incoerente vindo de
+  duas ordens de digitacao diferentes.
+
+  NAO engessa: portas do mesmo gatilho podem ter expressoes DIFERENTES. O gate e' sobre a ausencia — ou
+  todas declaram quem pode, ou nenhuma declara."
+  [tx {:keys [ente-id template-id de-estado gatilho autorizacao]}]
+  (let [irmas (irmas-do-gatilho tx ente-id template-id de-estado gatilho)]
+    (when (seq irmas)
+      (let [protegida? (complement (comp str/blank? :autorizacao))
+            nova-protegida? (not (str/blank? autorizacao))
+            com (filter protegida? irmas)
+            sem (remove protegida? irmas)]
+        (when (or (and nova-protegida? (seq sem)) (and (not nova-protegida?) (seq com)))
+          (throw (ex-info (str "rito incoerente: o gatilho '" gatilho "' a partir de '" de-estado "' teria "
+                               "porta COM autorizacao ao lado de porta SEM. Se o rito protege um caminho "
+                               "deste ato, protege todos — senao quem pede escolhe, pelo corpo do pedido, "
+                               "por qual caminho passar.")
+                          {:tipo :config/portas-do-gatilho-incoerentes
+                           :de-estado de-estado :gatilho gatilho
+                           :portas-com-autorizacao (count com) :portas-sem-autorizacao (count sem)})))))))
+
 (defn criar-transicao!
   "Persiste uma transicao do template. GATEIA no save (Inv.4, motor/validar-guarda) AS DUAS expressoes —
   `guarda` e `autorizacao` (3-A) — pelo mesmo criterio: expressao que nao parseia NAO entra no banco, e a
@@ -114,6 +166,8 @@
     (when (not= "VALIDA" status)
       (throw (ex-info "expressao de autorizacao da transicao mal-formada (rejeitada no save, Inv.4)"
                       {:erro :autorizacao-invalida :de-estado de-estado :gatilho gatilho :erros erros}))))
+  (exigir-portas-coerentes! tx {:ente-id ente-id :template-id template-id :de-estado de-estado
+                                :gatilho gatilho :autorizacao autorizacao})
   (jdbc/execute-one! tx
     (sql/format {:insert-into :legislativo.template_transicao
                  :values [{:id id :ente_id ente-id :template_id template-id :de_estado de-estado
@@ -345,6 +399,23 @@
           ;; expressao que nao consegue decidir NEGA, nunca fica indeterminada. E' a mesma postura do gate
           ;; do save acima e do `passa?` do guard.
           (do
+            ;; REDE DE RUNTIME da decisao B. O gate de `criar-transicao!` so' alcanca rito NOVO — rito ja'
+            ;; gravado antes dele (ou por import/SQL direto, que nao passa pelo save) pode ter porta aberta
+            ;; ao lado de trancada, e ai o buraco continua aberto exatamente onde ninguem esta' olhando. As
+            ;; candidatas ja' estao em maos (`candidatas` e' a lista COMPLETA deste gatilho a partir deste
+            ;; estado), entao a checagem custa ZERO consulta.
+            ;;
+            ;; Fail-CLOSED: rito incoerente NAO deixa o ato passar pela porta aberta. E' 409 de config
+            ;; (`:config/*` -> 409 global), nao 403 — nao e' que VOCE nao pode, e' que o rito da Casa esta'
+            ;; incoerente e alguem tem de conserta-lo.
+            (when (and (str/blank? (:autorizacao escolhida))
+                       (some #(not (str/blank? (:autorizacao %))) candidatas))
+              (throw (ex-info (str "rito incoerente: o gatilho '" gatilho "' tem porta SEM autorizacao ao "
+                                   "lado de porta COM. O ato nao passa pela porta aberta enquanto o rito "
+                                   "nao for corrigido — senao quem pede escolhe, pelo corpo do pedido, por "
+                                   "onde passar.")
+                              {:tipo :config/portas-do-gatilho-incoerentes
+                               :gatilho gatilho :de-estado estado})))
             ;; `str/blank?`, nao `when-let` (achado IMPORTANTE-7): `validar-guarda ""` devolve VALIDA — o
             ;; gate do save deixa passar string vazia —, e `""` e' TRUTHY em Clojure, entao o `when-let`
             ;; disparava e `parse-expr ""` lancava. Um `autorizacao = ''` vindo de import ou de formulario

@@ -17,6 +17,7 @@
             [oplenario.identidade.relacoes.identidade :as rel-id]
             [oplenario.kernel.autorizacao :as authz]
             [oplenario.kernel.components.datasource :as datasource]
+            [next.jdbc :as jdbc]
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.legislativo.db.parecer :as parecer]
             [oplenario.legislativo.db.parecer-tramitacao :as ptram]
@@ -149,20 +150,89 @@
   ;; Se a autorizacao filtrasse candidatas (junto do guard) em vez de ser porta sobre a ESCOLHIDA, um ator
   ;; sem permissao na 1a transicao cairia na 2a — e o DESTINO da materia passaria a depender de QUEM pediu.
   ;; Duas pessoas, o mesmo gatilho, estados finais diferentes. Quem escolhe o destino e' o rito (`ordem`).
+  ;;
+  ;; As DUAS portas sao protegidas, com expressoes DIFERENTES — e tem de ser assim desde a decisao B: um
+  ;; gatilho com porta trancada ao lado de aberta nao entra mais no banco. A 2a autoriza EXATAMENTE quem a
+  ;; 1a nega, que e' o arranjo mais hostil possivel: se houvesse qualquer escorregamento, ele aconteceria.
   (let [ente (random-uuid)]
     (tenancy/com-tenant* *ds* ente
       (fn [tx]
         (let [tid (montar-rito! tx ente "\"presidente\" in ator.papeis")
-              ;; 2a candidata do MESMO gatilho, ordem 2, SEM autorizacao e com destino DIFERENTE
               _ (tram/criar-transicao! tx {:id (random-uuid) :ente-id ente :template-id tid
                                            :de-estado "protocolada" :para-estado "arquivada"
-                                           :gatilho "despachar" :guarda nil :autorizacao nil :ordem 2})
+                                           :gatilho "despachar" :guarda nil
+                                           :autorizacao "\"estagiario\" in ator.papeis" :ordem 2})
               pid (protocolar! tx ente tid)
               e (try (despachar! tx ente pid tid (ator ente "estagiario")) nil
                      (catch clojure.lang.ExceptionInfo ex ex))]
-          (is (true? (authz/negado? e)) "nega, em vez de escorregar para a candidata seguinte")
+          (is (true? (authz/negado? e))
+              "nega na candidata ESCOLHIDA, em vez de escorregar para a seguinte que o autorizaria")
           (is (= "protocolada" (:estado (prop/buscar tx ente pid)))
               "e a materia NAO foi para 'arquivada' — o destino nao depende de quem pediu"))))))
+
+;; ---------- DECISAO B: porta trancada nao convive com porta aberta no mesmo gatilho ----------
+;; O caso real: `em_comissoes --concluir--> em_pauta` (guarda `alegado.com_parecer`, so' o presidente) ao
+;; lado de `em_comissoes --concluir--> arquivada` (sem guarda, sem autorizacao). Um secretario manda
+;; `contexto: {com_parecer: false}`, o guard da 1a reprova, a engine escolhe a 2a — e a materia e'
+;; ARQUIVADA por quem nao podia manda-la a pauta. Ele nao arrombou a porta trancada: escolheu a aberta,
+;; escrevendo no corpo do proprio pedido.
+
+(deftest B-cadastro-recusa-porta-ABERTA-ao-lado-de-TRANCADA
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (montar-rito! tx ente "\"presidente\" in ator.papeis")]
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo #"rito incoerente"
+                (tram/criar-transicao! tx {:id (random-uuid) :ente-id ente :template-id tid
+                                           :de-estado "protocolada" :para-estado "arquivada"
+                                           :gatilho "despachar" :guarda nil :autorizacao nil :ordem 2}))
+              "porta sem fechadura nao entra ao lado de porta com fechadura"))))))
+
+(deftest B-cadastro-recusa-TAMBEM-na-ordem-inversa
+  ;; A ordem de digitacao nao pode decidir a seguranca: os dois ritos sao o MESMO rito incoerente.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (montar-rito! tx ente nil)]
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo #"rito incoerente"
+                (tram/criar-transicao! tx {:id (random-uuid) :ente-id ente :template-id tid
+                                           :de-estado "protocolada" :para-estado "arquivada"
+                                           :gatilho "despachar" :guarda nil
+                                           :autorizacao "\"presidente\" in ator.papeis" :ordem 2}))
+              "porta com fechadura nao entra ao lado de porta sem"))))))
+
+(deftest B-runtime-recusa-o-rito-incoerente-que-JA-ESTAVA-no-banco
+  ;; O gate de cadastro so' alcanca rito NOVO. Rito gravado ANTES dele — ou por import/SQL direto, que nao
+  ;; passa pelo save — continua incoerente, e e' exatamente onde ninguem esta' olhando. Aqui o INSERT e'
+  ;; feito por SQL cru, contornando `criar-transicao!` de proposito, para reproduzir esse acervo.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (montar-rito! tx ente "\"presidente\" in ator.papeis")
+              ;; a porta TRANCADA passa a ser recusada pelo guard — senao a engine a escolhe, autoriza o
+              ;; presidente e a rede nunca e' exercitada. O cenario real e' esse: o guard da porta protegida
+              ;; reprova e a engine cai na porta aberta.
+              _ (jdbc/execute-one! tx
+                  ["UPDATE legislativo.template_transicao SET guarda = 'falso'
+                     WHERE ente_id = ? AND template_id = ? AND gatilho = 'despachar'" ente tid])
+              ;; e a porta ABERTA entra por SQL cru, contornando `criar-transicao!` — e' o acervo que ja'
+              ;; estava no banco quando o gate nasceu.
+              _ (jdbc/execute-one! tx
+                  ;; `efetivado_em` e' OBRIGATORIO p/ a linha existir: a policy de RLS
+                  ;; (mig 0016) tem `USING (... AND (efetivado_em IS NOT NULL OR lote_id = ...))` — sem ele
+                  ;; a linha nasce em STAGING e fica INVISIVEL ate' para o SELECT da propria tx. A primeira
+                  ;; versao deste teste caiu nisso e a engine via uma candidata so'.
+                  ["INSERT INTO legislativo.template_transicao
+                     (id, ente_id, template_id, de_estado, para_estado, gatilho, ordem, efetivado_em)
+                     VALUES (?, ?, ?, 'protocolada', 'arquivada', 'despachar', 2, now())"
+                   (random-uuid) ente tid])
+              pid (protocolar! tx ente tid)
+              e (try (despachar! tx ente pid tid (ator ente "presidente")) nil
+                     (catch clojure.lang.ExceptionInfo ex ex))]
+          (is (= :config/portas-do-gatilho-incoerentes (:tipo (ex-data e)))
+              "a engine RECUSA o ato pela porta aberta enquanto o rito estiver incoerente (409 de config)")
+          (is (= "protocolada" (:estado (prop/buscar tx ente pid)))
+              "fail-closed: a materia nao anda por rito incoerente"))))))
 
 ;; ---------- fail-closed nas duas pontas: save e runtime ----------
 
