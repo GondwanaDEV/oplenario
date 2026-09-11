@@ -148,6 +148,75 @@ describe("painel da Mesa — nenhuma chave de enum chega a tela", () => {
     const { container } = render(<OQueVence vista={vistaComPrazo(null)} />);
     expect(container.querySelector(".aviso-corte")).toBeNull();
   });
+
+  // O IRMAO do teste acima nunca existiu: os DOIS fixtures que renderizavam <OQueVence/> fixavam
+  // `truncamentoPendencias: null`, entao o ramo positivo de `{vista.truncamentoPendencias && (...)}`
+  // nunca rodou com valor. Apagar aquele bloco de JSX, ou trocar a condicao por
+  // `!vista.truncamentoPendencias`, deixava a suite inteira verde — a mesma lacuna que o teste de
+  // compliance acima ja fechou, so' que do lado das pendencias de e-SIC/LGPD/ouvidoria.
+  const vistaComPendencia = (truncamentoPendencias: { exibidos: number; total: number } | null) => ({
+    estado: "disponivel" as const,
+    itens: [
+      {
+        origem: "pendencia" as const,
+        objetoTipo: "pedido_esic",
+        objetoId: "o1",
+        protocolo: "ESIC-2026-000001",
+        venceEm: "2026-12-31",
+        estado: "em_aberto",
+      },
+    ],
+    truncamentoCompliance: null,
+    truncamentoPendencias,
+  });
+
+  it("o que vence: pendencias truncaram -> o aviso de corte aparece, com exibidos DE total", () => {
+    const { container } = render(<OQueVence vista={vistaComPendencia({ exibidos: 100, total: 347 })} />);
+    const aviso = container.querySelector(".aviso-corte");
+    expect(aviso).not.toBeNull();
+    expect(aviso?.textContent ?? "").toMatch(/100 de 347/);
+    // "pendencias de atendimento", nao "obrigacoes do TCE" — distingue este banner do irmao de
+    // compliance (os dois usam a mesma classe `.aviso-corte`).
+    expect(aviso?.textContent ?? "").toMatch(/pendências de atendimento/);
+    expect(aviso?.getAttribute("role")).toBe("status");
+  });
+
+  it("o que vence: nao truncou -> nenhum aviso de corte de pendencias no DOM", () => {
+    const { container } = render(<OQueVence vista={vistaComPendencia(null)} />);
+    expect(container.querySelector(".aviso-corte")).toBeNull();
+  });
+
+  it("o que vence: compliance E pendencias truncaram ao mesmo tempo -> DOIS avisos, um por fatia", () => {
+    const vista = {
+      estado: "disponivel" as const,
+      itens: [
+        {
+          origem: "compliance" as const,
+          id: "obr-1",
+          templateChave: "remessa_bimestral",
+          objetoTipo: "remessa",
+          objetoId: "o1",
+          venceEm: "2026-12-31",
+          estado: "pendente",
+        },
+        {
+          origem: "pendencia" as const,
+          objetoTipo: "pedido_esic",
+          objetoId: "o2",
+          protocolo: "ESIC-2026-000001",
+          venceEm: "2026-12-31",
+          estado: "em_aberto",
+        },
+      ],
+      truncamentoCompliance: { exibidos: 100, total: 250 },
+      truncamentoPendencias: { exibidos: 100, total: 347 },
+    };
+    const { container } = render(<OQueVence vista={vista} />);
+    const avisos = container.querySelectorAll(".aviso-corte");
+    expect(avisos.length).toBe(2);
+    expect(avisos[0].textContent ?? "").toMatch(/100 de 250/);
+    expect(avisos[1].textContent ?? "").toMatch(/100 de 347/);
+  });
 });
 
 describe("rotularObjetoPrazo — vocabulario da FONTE (CHECK de paineis.pendencia)", () => {

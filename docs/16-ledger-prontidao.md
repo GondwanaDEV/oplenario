@@ -1842,7 +1842,7 @@ A varredura mediu **todos os 26 sítios de `:limit`/`LIMIT`** do backend: **13 M
 
 | # | Rota | Teto | Consequência |
 |---|---|---|---|
-| 1 | `GET /paineis/pendencias` | 100 | **pior que o do TCE** — esconde prazo legal de e-SIC/LGPD/ouvidoria; perder a janela é descumprimento de LAI (20+10), não incômodo operacional |
+| 1 | `GET /paineis/pendencias` | 100 | **consertado** (commit `302b020` + achados da revisão em `truncamento-familia`) — esconde prazo legal de e-SIC/LGPD/ouvidoria; perder a janela é descumprimento de LAI (20+10), não incômodo operacional |
 | 2 | `/compliance/painel` · `remessas-recentes` | 50 | **consertado aqui** |
 | 3 | `GET /paineis/tramitacao` | 50/estado | usa `ROW_NUMBER()`, **invisível a grep por `LIMIT`** — a própria varredura tem ponto cego do mesmo tipo |
 
