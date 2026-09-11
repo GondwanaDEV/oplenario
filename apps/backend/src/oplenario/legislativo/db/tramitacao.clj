@@ -136,17 +136,48 @@
                            :de-estado de-estado :gatilho gatilho
                            :portas-com-autorizacao (count com) :portas-sem-autorizacao (count sem)})))))))
 
+(defn- sujeito-do-template
+  "Le' o `sujeito` ('proposicao'|'parecer') do template — o unico canal do `amb` de guarda que uma
+  transicao concreta pode ver (ADR-0004). MESMA consulta pontual de `db/proposicao/template-meta` (aqui
+  precisa dela ANTES do insert, para declarar o vocabulario). `template_transicao` e' subject-agnostica —
+  o MESMO insert governa proposicao e parecer —, mas cada TEMPLATE concreto so' fala de UM sujeito,
+  fixado em `criar-template!`; e' esse dado, ja' gravado, que resolve a ambiguidade — NAO a uniao dos
+  dois vocabularios. Uniao deixaria `parecer.x` passar num template de PROPOSICAO, que so' explodiria em
+  runtime quando o amb real (so' `{\"proposicao\" ...}`) nao tivesse a chave.
+
+  nil quando o template nao existe neste tenant — vira vocabulario VAZIO (fail-closed): qualquer guard
+  nao-literal e' recusado, e a FK do insert reprova o template inexistente de qualquer jeito depois."
+  [tx ente-id template-id]
+  (:sujeito (comum/linha->kebab
+              (jdbc/execute-one! tx
+                (sql/format {:select [:sujeito] :from [:legislativo.template_tramitacao]
+                             :where [:and [:= :ente_id ente-id] [:= :id template-id]]})))))
+
+(def ^:private vocabulario-autorizacao
+  "ADR-0004: `autorizacao` roda via `motor/politica-dsl`, cujo `amb` e' SEMPRE {\"ator\" ... \"recurso\"
+  ...} — nunca depende do sujeito do template. Fixo, ao contrario do vocabulario da guarda."
+  #{"ator" "recurso"})
+
 (defn criar-transicao!
   "Persiste uma transicao do template. GATEIA no save (Inv.4, motor/validar-guarda) AS DUAS expressoes —
-  `guarda` e `autorizacao` (3-A) — pelo mesmo criterio: expressao que nao parseia NAO entra no banco, e a
-  falha sai do caminho critico (rejeitada na config, nao no meio de um fluxo). Lanca ex-info
-  :guarda-invalida / :autorizacao-invalida com a causa do erro de sintaxe.
+  `guarda` e `autorizacao` (3-A) — em DOIS PASSOS por coluna: (1) SINTAXE — expressao que nao parseia NAO
+  entra no banco (:guarda-invalida / :autorizacao-invalida); (2) VOCABULARIO (ADR-0004, frente
+  `guarda-so-apurado`) — so' roda se a sintaxe ja' passou, para que o :erro devolvido seja DISTINGUIVEL: quem
+  cadastra precisa saber se o problema e' a forma da expressao ou o identificador que ela usa
+  (:guarda-vocabulario-invalido / :autorizacao-vocabulario-invalido). A falha sai do caminho critico
+  (rejeitada na config, nao no meio de um fluxo) nos dois passos.
 
   AS DUAS PERGUNTAS SAO DIFERENTES, e e' por isso que sao duas colunas e nao uma:
     · `guarda`      — 'ISTO ACONTECEU?'  Fato sobre o mundo: houve votacao aprovada, o prazo correu, a
-                      comissao opinou. Nao fala do ator. (3-B)
+                      comissao opinou. Nao fala do ator. (3-B) Vocabulario = o SUJEITO do template
+                      (`proposicao` ou `parecer`) — NUNCA `alegado`, o corpo do POST: uma guarda que
+                      afirma a propria precondicao e' a mesma falha, um nivel abaixo, que a Decisao B
+                      fechou p/ a ESCOLHA de porta.
     · `autorizacao` — 'VOCE PODE DECLARAR QUE ACONTECEU?'  Fato sobre QUEM pede: e' o presidente da Mesa,
                       e' o relator da materia, exerce a presidencia hoje. Nao fala do mundo. (3-A)
+                      Vocabulario = `ator`/`recurso` (o amb de `politica-dsl`) — fecha de graca o buraco
+                      latente de uma autorizacao que referenciasse o sujeito da tramitacao e so' falhasse
+                      em runtime, no meio do ato.
   Colapsa-las numa expressao so' obrigaria a Casa a repetir a condicao de fato em cada regra de pessoa (e
   vice-versa), e faria a recusa perder a causa: 'a Casa nao permite agora' e 'voce nao pode' sao respostas
   diferentes, para pessoas diferentes, com consertos diferentes."
@@ -157,6 +188,18 @@
     (when (not= "VALIDA" status)
       (throw (ex-info "guard da transicao mal-formado (rejeitado no save, Inv.4)"
                       {:erro :guarda-invalida :de-estado de-estado :gatilho gatilho :erros erros}))))
+  ;; PASSO 2 do guard — vocabulario (ADR-0004). So' chega aqui se a sintaxe ja' passou: o sujeito e' lido
+  ;; do PROPRIO template (subject-agnostico na tabela, mono-sujeito na linha), nao recebido do caller nem
+  ;; adivinhado por uniao.
+  (let [sujeito (sujeito-do-template tx ente-id template-id)
+        {:keys [status erros]} (motor/validar-guarda guarda {:vocabulario (if sujeito #{sujeito} #{})})]
+    (when (not= "VALIDA" status)
+      ;; a MENSAGEM nomeia o identificador (nao so' o `:erros` na ex-data) — quem cadastra le' a excecao,
+      ;; nao inspeciona ex-data no REPL.
+      (throw (ex-info (str "guard da transicao referencia vocabulario nao permitido (rejeitado no save, "
+                           "ADR-0004): " (str/join "; " erros))
+                      {:erro :guarda-vocabulario-invalido :de-estado de-estado :gatilho gatilho
+                       :sujeito sujeito :erros erros}))))
   ;; MESMO gate p/ a autorizacao. `validar-guarda` e' o validador de expressao BOOLEANA da DSL — nao e'
   ;; especifico de guard —, entao reusa-lo aqui e' a disciplina 5 e nao um atalho: uma expressao de
   ;; autorizacao mal-formada que entrasse no banco so' falharia no meio de uma sessao, e `check!` traduz
@@ -166,6 +209,13 @@
     (when (not= "VALIDA" status)
       (throw (ex-info "expressao de autorizacao da transicao mal-formada (rejeitada no save, Inv.4)"
                       {:erro :autorizacao-invalida :de-estado de-estado :gatilho gatilho :erros erros}))))
+  ;; PASSO 2 da autorizacao — vocabulario (ADR-0004). Fixo (`ator`/`recurso`), nao depende do sujeito.
+  (let [{:keys [status erros]} (motor/validar-guarda autorizacao {:vocabulario vocabulario-autorizacao})]
+    (when (not= "VALIDA" status)
+      (throw (ex-info (str "expressao de autorizacao referencia vocabulario nao permitido (rejeitada no "
+                           "save, ADR-0004): " (str/join "; " erros))
+                      {:erro :autorizacao-vocabulario-invalido :de-estado de-estado :gatilho gatilho
+                       :erros erros}))))
   (exigir-portas-coerentes! tx {:ente-id ente-id :template-id template-id :de-estado de-estado
                                 :gatilho gatilho :autorizacao autorizacao})
   (jdbc/execute-one! tx

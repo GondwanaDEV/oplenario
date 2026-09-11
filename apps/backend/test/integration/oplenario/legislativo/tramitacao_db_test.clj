@@ -110,6 +110,114 @@
                                                 :gatilho "despachar" :guarda "verdadeiro" :ordem 2}))
               "guard bem-formado persiste normalmente"))))))
 
+;; ===================== ADR-0004 — a guarda so' le' verdade apurada (frente `guarda-so-apurado`) =====
+;; O gate de SINTAXE acima (`motor/validar-guarda` aridade-1) nao basta: `alegado.parecer_favoravel` e'
+;; sintaticamente perfeito — e' vocabulario ERRADO. `criar-transicao!` agora declara, por COLUNA, quem
+;; pode aparecer no `amb`: a guarda so' o SUJEITO do template (nunca `alegado`, o corpo do POST); a
+;; autorizacao so' `ator`/`recurso` (o amb de `politica-dsl`). O motor nao conhece nenhum dos dois nomes
+;; (§22.10) — quem declara e' este ns, via `nuc/identificadores-raiz`.
+
+(deftest criar-transicao-rejeita-alegado-no-guard
+  ;; `alegado` e' o corpo do POST — a mesma afirmacao-da-propria-precondicao que a Decisao B fechou um
+  ;; nivel acima (porta escolhida pelo corpo). Aqui e' o CONTEUDO da porta unica que afirma a si mesma.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (random-uuid)]
+          (tram/criar-template! tx {:id tid :ente-id ente :chave "rito" :versao 1
+                                    :nome "Rito [FIXTURE]" :estado-inicial "protocolada"})
+          (let [e (is (thrown-with-msg? clojure.lang.ExceptionInfo #"alegado"
+                        (tram/criar-transicao! tx {:id (random-uuid) :ente-id ente :template-id tid
+                                                   :de-estado "protocolada" :para-estado "em_comissoes"
+                                                   :gatilho "avancar" :guarda "alegado.parecer_favoravel"
+                                                   :ordem 1})))]
+            (is (= :guarda-vocabulario-invalido (:erro (ex-data e)))
+                "tag DISTINTA de :guarda-invalida (sintaxe) — quem cadastra sabe qual dos dois consertar"))
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo #"alegado"
+                (tram/criar-transicao! tx {:id (random-uuid) :ente-id ente :template-id tid
+                                           :de-estado "protocolada" :para-estado "em_comissoes"
+                                           :gatilho "avancar2" :guarda "alegado.x == verdadeiro"
+                                           :ordem 1}))
+              "recusado tambem dentro de um binop — o walk nao para na raiz"))))))
+
+(deftest criar-transicao-rejeita-vocabulario-errado-na-autorizacao
+  ;; A coluna `autorizacao` roda via `politica-dsl` — o amb dela e' SEMPRE {\"ator\" ... \"recurso\" ...},
+  ;; nunca o sujeito da tramitacao. `alegado` (canal do guard) e `proposicao` (vocabulario da coluna
+  ;; ERRADA) sao os dois jeitos de escrever uma autorizacao que so' falharia em RUNTIME, no meio do ato —
+  ;; o buraco latente que o ADR-0004 fecha de graca.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (random-uuid)]
+          (tram/criar-template! tx {:id tid :ente-id ente :chave "rito" :versao 1
+                                    :nome "Rito [FIXTURE]" :estado-inicial "protocolada"})
+          (let [e (is (thrown-with-msg? clojure.lang.ExceptionInfo #"alegado"
+                        (tram/criar-transicao! tx {:id (random-uuid) :ente-id ente :template-id tid
+                                                   :de-estado "protocolada" :para-estado "em_comissoes"
+                                                   :gatilho "avancar" :guarda nil
+                                                   :autorizacao "alegado.x" :ordem 1})))]
+            (is (= :autorizacao-vocabulario-invalido (:erro (ex-data e)))))
+          (let [e (is (thrown-with-msg? clojure.lang.ExceptionInfo #"proposicao"
+                        (tram/criar-transicao! tx {:id (random-uuid) :ente-id ente :template-id tid
+                                                   :de-estado "protocolada" :para-estado "em_comissoes"
+                                                   :gatilho "avancar2" :guarda nil
+                                                   :autorizacao "proposicao.estado == \"x\"" :ordem 1})))]
+            (is (= :autorizacao-vocabulario-invalido (:erro (ex-data e)))
+                "vocabulario da coluna ERRADA (o do guard), nao so' vocabulario nenhum — recusado do mesmo jeito")))))))
+
+(deftest criar-transicao-aceita-vocabulario-legitimo-nas-duas-colunas
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (random-uuid)]
+          (tram/criar-template! tx {:id tid :ente-id ente :chave "rito" :versao 1
+                                    :nome "Rito [FIXTURE]" :estado-inicial "protocolada"})
+          (is (some? (tram/criar-transicao! tx {:id (random-uuid) :ente-id ente :template-id tid
+                                                :de-estado "protocolada" :para-estado "em_comissoes"
+                                                :gatilho "despachar"
+                                                :guarda "proposicao.estado == \"protocolada\""
+                                                ;; a MESMA forma que a 3-A usa hoje (tramitacao_autorizacao_db_test)
+                                                :autorizacao "\"presidente\" in ator.papeis" :ordem 1}))
+              "guard sobre o sujeito + autorizacao sobre ator: as DUAS colunas com vocabulario legitimo")
+          (is (some? (tram/criar-transicao! tx {:id (random-uuid) :ente-id ente :template-id tid
+                                                :de-estado "protocolada" :para-estado "arquivada"
+                                                :gatilho "arquivar" :guarda nil :autorizacao nil :ordem 2}))
+              "guard/autorizacao NIL continuam VALIDOS — sem restricao de vocabulario a aplicar"))))))
+
+(deftest criar-transicao-declara-vocabulario-PELO-SUJEITO-do-template
+  ;; `template_transicao` e' subject-agnostica (o mesmo INSERT governa proposicao E parecer), mas cada
+  ;; TEMPLATE concreto so' fala de UM sujeito — fixado em `criar-template!`. O gate resolve a ambiguidade
+  ;; lendo o `sujeito` do template (mesma consulta pontual de `db/proposicao/template-meta`), NAO com a
+  ;; uniao dos dois vocabularios: um guard `parecer.x` sobre um template de PROPOSICAO tem de ser recusado
+  ;; do mesmo jeito que `alegado.x` — senao um rito de parecer legitimo escrito por engano no template
+  ;; errado passaria pelo cadastro e so' explodiria no meio do ato.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid-parecer (random-uuid) tid-prop (random-uuid)]
+          (tram/criar-template! tx {:id tid-parecer :ente-id ente :chave "rito_parecer" :versao 1
+                                    :nome "Rito parecer [FIXTURE]" :estado-inicial "aberto" :sujeito "parecer"})
+          (tram/criar-template! tx {:id tid-prop :ente-id ente :chave "rito_prop" :versao 1
+                                    :nome "Rito proposicao [FIXTURE]" :estado-inicial "protocolada"})
+          (is (some? (tram/criar-transicao! tx {:id (random-uuid) :ente-id ente :template-id tid-parecer
+                                                :de-estado "aberto" :para-estado "emitido" :gatilho "emitir"
+                                                :guarda "parecer.estado == \"aberto\"" :ordem 1}))
+              "template de sujeito PARECER: guard sobre 'parecer' e' vocabulario legitimo")
+          (let [e (is (thrown-with-msg? clojure.lang.ExceptionInfo #"proposicao"
+                        (tram/criar-transicao! tx {:id (random-uuid) :ente-id ente :template-id tid-parecer
+                                                   :de-estado "aberto" :para-estado "emitido"
+                                                   :gatilho "emitir2" :guarda "proposicao.estado == \"x\""
+                                                   :ordem 1})))]
+            (is (= :guarda-vocabulario-invalido (:erro (ex-data e)))
+                "MESMO template de sujeito parecer: 'proposicao' e' vocabulario do OUTRO sujeito — recusado"))
+          (let [e (is (thrown-with-msg? clojure.lang.ExceptionInfo #"parecer"
+                        (tram/criar-transicao! tx {:id (random-uuid) :ente-id ente :template-id tid-prop
+                                                   :de-estado "protocolada" :para-estado "em_comissoes"
+                                                   :gatilho "avancar" :guarda "parecer.estado == \"x\""
+                                                   :ordem 1})))]
+            (is (= :guarda-vocabulario-invalido (:erro (ex-data e)))
+                "e o simetrico: template de sujeito proposicao recusa guard que fala de 'parecer'")))))))
+
 (deftest historico-com-limite-traz-os-mais-recentes-nao-os-mais-antigos
   ;; review MAJOR fe-9-ficha-materia (repositorio.clj:260/264, db/tramitacao.clj:82): o teto anterior era um
   ;; `(take 100 ...)` EM MEMORIA sobre o resultado ASC — silenciosamente preservava as transicoes MAIS
