@@ -97,17 +97,22 @@
   "DECISAO B do Daouda (11/09/2026): **se o rito protege UM caminho de um ato, protege TODOS.**
 
   O que isto impede, com materia na mesa. Um gatilho pode ter MAIS DE UMA PORTA — transicoes diferentes, do
-  mesmo estado, com o mesmo verbo — e quem escolhe entre elas e' o GUARD, que le' `alegado` (o corpo do
-  POST). Rito perfeitamente razoavel:
+  mesmo estado, com o mesmo verbo — e quem escolhe entre elas e' o GUARD. [REVERTIDO por ADR-0004] No dia
+  desta decisao (11/09/2026, ANTES do ADR-0004 no mesmo dia) o exemplo abaixo usava `alegado` (o corpo do
+  POST) como fonte do guard que escolhia a porta — hoje isso e' vocabulario banido, e o roteamento por
+  escolha do cliente passou a ser modelado como GATILHO-POR-DESTINO (a propria consequencia do ADR-0004).
+  O exemplo segue valendo com uma fonte de guard LEGITIMA (verdade apurada), porque o buraco que a Decisao
+  B fecha e' ORTOGONAL a QUEM alimenta o guard — e continua valendo de graca para rito LEGADO/generico
+  (gravado antes do ADR, ou por fora de `criar-transicao!`) cujo guard ainda leia `alegado`:
 
-    ordem 1 | em_comissoes -> em_pauta   | guarda `alegado.com_parecer == verdadeiro` | so' o presidente
-    ordem 2 | em_comissoes -> arquivada  | (sem guarda)                               | (sem autorizacao)
+    ordem 1 | em_comissoes -> em_pauta   | guarda `parecer.estado == \"favoravel\"` | so' o presidente
+    ordem 2 | em_comissoes -> arquivada  | (sem guarda)                           | (sem autorizacao)
 
-  Em portugues: 'concluir a fase de comissoes — havendo parecer vai a pauta, e so' o presidente despacha;
-  nao havendo, arquiva por decurso'. Ninguem escreve isso achando que e' inseguro. Mas um secretario manda
-  `{gatilho: 'concluir', contexto: {com_parecer: false}}`, o guard da porta 1 reprova, a engine escolhe a
-  porta 2 — que nao tem fechadura — e a materia e' ARQUIVADA por quem nao podia manda-la a pauta. Ele nao
-  arrombou a porta trancada: escolheu a aberta, e escolheu escrevendo no corpo.
+  Em portugues: 'concluir a fase de comissoes — havendo parecer favoravel vai a pauta, e so' o presidente
+  despacha; nao havendo (ou sendo contrario), arquiva por decurso'. Ninguem escreve isso achando que e'
+  inseguro. Mas um secretario aciona `concluir` sobre uma materia sem parecer favoravel, o guard da porta 1
+  reprova, a engine escolhe a porta 2 — que nao tem fechadura — e a materia e' ARQUIVADA por quem nao podia
+  manda-la a pauta. Ele nao arrombou a porta trancada: escolheu a aberta.
 
   Agravante que sozinho ja' justificaria o gate: na LEITURA, `exige-autorizacao` responde `true` para esse
   gatilho (a definicao e' `some?` sobre as candidatas, e ela esta' certa para a semantica de 'negado nao
@@ -323,13 +328,16 @@
   como `true`. Fail-ABERTO num ponto que so' existe p/ negar. Hoje a frase e' verdadeira, e a prova de
   que ela pode reprovar esta' em `guarda-nao-booleano-falha-FECHADO` (tramitacao-db-test).
 
-  OS DOIS CANAIS DO `amb`, e por que eles tem NOMES diferentes (fatia 4). O guard e' uma regra do tenant
-  lendo o mundo, e nem todo pedaco desse mundo vale o mesmo:
+  OS DOIS CANAIS APURADOS DO `amb` (ADR-0004 — antes eram tres, com `alegado` como terceiro; ver abaixo
+  por que ele saiu). O guard e' uma regra do tenant lendo o mundo, e nem todo pedaco desse mundo vale o
+  mesmo:
 
     · `proposicao`  -> a LINHA, lida pelo servidor nesta tx sob FOR UPDATE. Verdade apurada.
     · fatos por nome (`aprovada_em_votacao(proposicao.id)`, …) -> resolvidos pelo RegistroFatos contra a
       tx do tenant. Verdade apurada — e' o canal que a decisao 3-B abriu.
-    · `alegado`     -> o corpo do POST. E' o que o OPERADOR AFIRMA, e nada mais que isso.
+
+  `alegado` (o corpo do POST — o que o OPERADOR AFIRMA, nada mais) NAO E' MAIS canal deste `amb` — ver
+  [REVERTIDO por ADR-0004] logo abaixo.
 
   Ate' aqui o terceiro canal chamava-se `contexto`, um nome neutro que o punha no mesmo plano dos outros
   dois. Com um rito que declarasse `contexto.parecer_favoravel == verdadeiro` na saida de 'em_comissoes',
@@ -338,15 +346,18 @@
   correto; quem escreveu o rito e' que nao tinha como ver, olhando para ele, que estava confiando no
   cliente. O nome passa a dizer: `alegado.x` e' alegacao, `proposicao.x` e fato-por-nome sao apuracao.
 
-  Isto NAO proibe ler o cliente — ha' uso legitimo (escolher destino por `alegado.comissao`, carimbar
-  quem pediu). Proibir seria decidir pelo regimento, que e' justamente o que o Inv.4 veda. O que a fatia
-  entrega e' que a escolha fique VISIVEL na propria expressao. E ela e' MECANICA, nao convencao: a chave
-  `contexto` sumiu do `amb`, entao um rito antigo que a referencie nao le' silenciosamente o corpo do
-  cliente — o avaliador lanca `{:erro :runtime}` (identificador sem valor) e a materia NAO tramita.
+  [REVERTIDO por ADR-0004] Este paragrafo dizia que ler o cliente no guard tinha uso legitimo
+  (`alegado.comissao` p/ escolher destino) e que proibir seria decidir pelo regimento. O ADR-0004
+  (frente `guarda-so-apurado`) pesou esse argumento e o derrubou: o unico uso legitimo citado era
+  roteamento, e roteamento e' melhor modelado como GATILHO-POR-DESTINO (atos distintos no regimento),
+  nao como guard lendo o corpo. Hoje `alegado` e' proibido no guard nos DOIS niveis — `criar-transicao!`
+  recusa no SAVE (vocabulario = so' o sujeito do template) e este `amb` de runtime nem carrega mais a
+  chave: um rito que a referencie (por escrita nova bloqueada no gate, ou por linha gravada fora dele —
+  import, SQL direto) lanca `{:erro :runtime}` (identificador sem valor) e a materia NAO tramita — a
+  chave `contexto` ja' tinha sumido antes; `alegado` segue o mesmo caminho.
   O corpo HTTP e a coluna `proposicao_transicao_historico.contexto` seguem com o nome antigo de proposito:
   o primeiro descreve a carga do ato, a segunda e' auditoria append-only compartilhada com o engine do
-  parecer, e renomear um deles nao tornaria nenhum guard mais legivel — a troca de nome vale no ponto em
-  que a confianca e' decidida, que e' o `amb`.
+  parecer — o corpo deixa de DECIDIR o guard, mas continua sendo REGISTRADO integralmente (Inv.10).
 
   QUEM DIZ O QUE E' TERMINAL E' O RITO (Fatia 2). Ate' a mig 0078 quem dizia era o SQL: o trigger
   `trg_proposicoes_imut_estado` (mig 0013) cravava `imut_trava_estado_terminal('publicada','arquivada')` —
@@ -422,11 +433,14 @@
                      (or (nil? (:guarda t))
                          ((motor/guarda-dsl {:registro registro :tx tx :expr (:guarda t)
                                              :agora agora :ente-id ente-id})
-                          ;; DOIS CANAIS, e o NOME diz de qual: `proposicao` (a linha, lida pelo servidor
-                          ;; sob FOR UPDATE) e os FATOS de relacao sao verdade apurada; `alegado` e' o
-                          ;; corpo do POST — o que o operador AFIRMA. Ver a secao "OS DOIS CANAIS" na
-                          ;; docstring. `contexto` NAO existe mais neste mapa, de proposito.
-                          {"proposicao" {:id proposicao-id :estado estado} "alegado" (or alegado {})})))
+                          ;; ADR-0004 (frente `guarda-so-apurado`, Fatia 3): `alegado` SAI do `amb` de
+                          ;; runtime. So' `proposicao` (a linha, lida pelo servidor sob FOR UPDATE) e os
+                          ;; FATOS de relacao — verdade APURADA — ficam visiveis ao guard; `contexto` ja'
+                          ;; nao existia (fatia 4 antiga), e agora `alegado` segue o mesmo caminho: o gate
+                          ;; de `criar-transicao!` recusa a palavra no SAVE, e este `amb` e' a REDE por
+                          ;; baixo — um rito que a referencie por fora do save (import, SQL direto) lanca
+                          ;; `{:erro :runtime}` aqui, nunca le' o corpo em silencio.
+                          {"proposicao" {:id proposicao-id :estado estado}})))
             escolhida (first (filter passa? candidatas))]
         (cond
           (some? escolhida)

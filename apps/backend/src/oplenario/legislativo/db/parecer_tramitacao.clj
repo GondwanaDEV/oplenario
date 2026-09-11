@@ -62,12 +62,13 @@
   guard que LANCA (fato ausente, tipo nao-booleano — ver `motor/api/exigir-booleano!`) e o CAS PROPAGAM
   como excecao.
 
-  `alegado` e' o canal do CLIENTE no `amb`, com o mesmo nome que o engine da proposicao usa (fatia 4): o
-  vocabulario que um rito enxerga tem de ser UM so' entre os dois sujeitos, senao quem escreve o rito do
-  parecer precisa aprender uma segunda convencao para a mesma ideia. Aqui ele e' hoje sempre `{}` — o
-  unico caller de borda (`adapters/in/parecer/emitir->dominio`) o fixa vazio, e nenhuma rota o aceita do
-  corpo. Continua nomeado assim mesmo assim: no dia em que alguem abrir esse campo ao cliente, a regra ja'
-  vai estar escrita sob o nome que declara a procedencia, em vez de precisar ser reescrita junto."
+  [REVERTIDO por ADR-0004] `alegado` continua o PARAMETRO desta fn — a carga do gatilho como chegou, que
+  `registrar-transicao!` grava em `parecer_transicao_historico.contexto` (Inv.10, auditoria NUNCA muda) —
+  mas deixou de ser canal do `amb` de runtime: o guard nao o enxerga mais, espelhando o mesmo corte em
+  `tramitacao.clj/transicionar!`. Aqui ele e' hoje sempre `{}` — o unico caller de borda
+  (`adapters/in/parecer/emitir->dominio`) o fixa vazio, e nenhuma rota o aceita do corpo — mas o corte no
+  `amb` nao depende disso: um rito legado gravado fora de `criar-transicao!` que referencie `alegado` no
+  guard lanca `{:erro :runtime}`, nunca le' o corpo em silencio."
   [tx {:keys [registro ente-id parecer-id template-id gatilho ator ator-id alegado agora updated-by]}]
   (let [{:keys [estado lock-version objeto-tipo objeto-id] :as row} (estado+lock tx ente-id parecer-id)]
     ;; fail-closed (review F3.6a clojure-MENOR): parecer inexistente NAO se confunde com guard-bloqueado.
@@ -80,9 +81,12 @@
                    (or (nil? (:guarda t))
                        ((motor/guarda-dsl {:registro registro :tx tx :expr (:guarda t)
                                            :agora agora :ente-id ente-id})
+                        ;; ADR-0004 (frente `guarda-so-apurado`, Fatia 3), ESPELHO de tramitacao.clj:
+                        ;; `alegado` SAI do `amb` de runtime — so' `parecer` (a linha, sob FOR UPDATE)
+                        ;; fica visivel ao guard. Rito legado que ainda o referencie lanca `{:erro
+                        ;; :runtime}` aqui, nunca le' o corpo em silencio.
                         {"parecer" {:id parecer-id :estado estado
-                                    :objeto-tipo objeto-tipo :objeto-id objeto-id}
-                         "alegado" (or alegado {})})))
+                                    :objeto-tipo objeto-tipo :objeto-id objeto-id}})))
           escolhida (first (filter passa? candidatas))]
       (if-not escolhida
         {:transicionou? false :de estado :gatilho gatilho :objeto-tipo objeto-tipo :objeto-id objeto-id}
