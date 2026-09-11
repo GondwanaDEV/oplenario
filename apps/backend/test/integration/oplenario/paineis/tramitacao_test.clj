@@ -237,3 +237,27 @@
              (map #(select-keys % [:estado :proposicao-id]) (:itens board))))
       (is (= [{:estado "protocolada" :n 1}] (:totais-por-estado board))
           "totais-por-estado reusa a MESMA forma de db-tramitacao/resumo (chave :n), sem redigitar"))))
+
+(deftest tramitacao-board-nao-deriva-o-total-da-lista-ja-cortada
+  ;; Achado da revisao adversarial (IMPORTANTE): o teste acima (`tramitacao-board-devolve-o-par-...`) usa
+  ;; 1 item / total 1 — nao prova nada, porque 1 = 1 mesmo se o total fosse derivado de `(count itens)`.
+  ;; O ponto de FIACAO onde o teto privado (`teto-tramitacao-board-por-estado`, 50) encontra a contagem so'
+  ;; existe dentro de `repo/tramitacao-board` (o teste de `totais-por-estado-conta-tudo...` acima chama
+  ;; `db-tramitacao/listar-board`/`resumo` DIRETO, pulando o Repo). Sem ESTE teste, uma futura "otimizacao"
+  ;; que trocasse `(db-tramitacao/resumo tx ente-id)` por `(count-por-grupo itens)` (evitar a 2a query)
+  ;; passaria pela suite inteira em silencio — e a Mesa voltaria a ver 50 como "todas".
+  ;;
+  ;; Le' o teto PRIVADO via `#'` (tecnica padrao p/ testar um Var privado do MESMO processo, sem
+  ;; expor/duplicar a constante) — o teste nao QUEBRA se o teto mudar de valor no futuro.
+  (let [ente (random-uuid)
+        teto @#'repo/teto-tramitacao-board-por-estado
+        n-real (+ teto 2)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx] (dotimes [i n-real] (inserir-item-direto! tx ente "em_comissoes" i))))
+    (let [board (repo/tramitacao-board *repo* ente)
+          itens-em-comissoes (filter #(= "em_comissoes" (:estado %)) (:itens board))
+          n-por-estado (into {} (map (juxt :estado :n)) (:totais-por-estado board))]
+      (is (= teto (count itens-em-comissoes))
+          "a LISTA devolvida pelo Repo continua cortada no teto real")
+      (is (= n-real (get n-por-estado "em_comissoes"))
+          "o TOTAL devolvido pelo Repo e' o numero REAL (teto+2) — nao o tamanho da lista ja cortada"))))

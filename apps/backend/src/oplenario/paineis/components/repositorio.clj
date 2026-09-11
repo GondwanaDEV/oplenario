@@ -252,19 +252,30 @@
     "Pendencias ABERTAS (pendente|vencido) do tenant, mais urgente primeiro + o TOTAL real (sem teto) —
      fatia 'GET /paineis/pendencias para de esconder prazo legal'. `opts` = {:limite} (TETO server-side,
      anti unbounded-read; o total IGNORA este teto de proposito, mesmo racional de
-     compliance/components/repositorio/painel). Os dois reads (lista + total) rodam na MESMA tx
-     (coerencia de snapshot) e o total REUSA `db-pendencia/resumo` (o mesmo WHERE `estado IN
-     ('pendente','vencido')` de `listar-abertas` — ver docstring de ambos em db/pendencia.clj), nunca
-     uma contagem escrita a parte (evita uma 3a copia do predicado divergir em silencio). Devolve
-     {:pendencias [...] :pendencias-total N}.")
+     compliance/components/repositorio/painel). Os dois reads (lista + total) rodam na MESMA tx e o total
+     REUSA `db-pendencia/resumo` (o mesmo WHERE `estado IN ('pendente','vencido')` de `listar-abertas` —
+     ver docstring de ambos em db/pendencia.clj), nunca uma contagem escrita a parte (evita uma 3a copia
+     do predicado divergir em silencio). MESMA TX NAO E' MESMO SNAPSHOT — ver o CARRY DELIBERADO na
+     docstring de `tramitacao-board` abaixo, identico aqui. Devolve {:pendencias [...] :pendencias-total N}.")
   (tramitacao-board [this ente-id]
     "O board de tramitacao do tenant, agrupado por estado, mais estagnadas primeiro DENTRO de cada grupo
      (fatia 'truncamento-familia'). `itens` corta no teto POR ESTADO (`teto-tramitacao-board-por-estado` —
      ver docstring de db.tramitacao/listar-board pro racional do corte ser por grupo, nao global) + o TOTAL
-     real por estado (sem teto). Os dois reads rodam na MESMA tx (coerencia de snapshot, mesmo racional de
-     o-que-vence acima) e o total REUSA `db-tramitacao/resumo` (MESMO predicado `WHERE ente_id = ?` da
-     lista — o board nao filtra por estado, entao e' o mesmo WHERE inteiro, nao so' um prefixo dele; nunca
-     uma 3a contagem escrita a parte). Devolve {:itens [...] :totais-por-estado [...]}.")
+     real por estado (sem teto). O total REUSA `db-tramitacao/resumo` (MESMO predicado `WHERE ente_id = ?`
+     da lista — o board nao filtra por estado, entao e' o mesmo WHERE inteiro, nao so' um prefixo dele;
+     nunca uma 3a contagem escrita a parte). Devolve {:itens [...] :totais-por-estado [...]}.
+
+     CARRY DELIBERADO (achado IMPORTANTE de revisao adversarial, mesmo overclaim ja documentado em
+     transparencia/components/repositorio [perfil-parlamentar] e legislativo/components/repositorio
+     [ficha-completa-da-proposicao]): os dois reads (lista + total) rodam na MESMA tx, mas NAO no MESMO
+     SNAPSHOT MVCC — `com-tenant*` (kernel/tenancy) abre a tx sem `:isolation`, entao o nivel efetivo e'
+     READ COMMITTED, em que CADA statement toma um snapshot novo. Se o relay commitar uma
+     protocolada/transicao ENTRE os dois SELECTs, a lista e o total podem discordar por uma janela
+     ESTREITA (ex.: o total ja conta uma proposicao que a lista, lida um instante antes, ainda nao viu) —
+     auto-cura na proxima carga, nunca uma divergencia permanente. Corrigir exigiria um
+     `com-tenant-leitura*` no kernel com `:isolation :repeatable-read :read-only true` — fora do escopo
+     desta fatia (kernel COMPARTILHADO; consertar so' aqui criaria inconsistencia com os outros dois
+     pares que tem o MESMO overclaim).")
   (sli-sessoes [this ente-id] "SLI de janela de sessao (Inv.9): sessoes do tenant, abertas primeiro, concluidas por recencia.")
   (dashboard-mesa [this ente-id]
     "Rollups do dashboard da Mesa (F7, §16.11 item 11.4): os TRES resumos agregados dos read-models do
