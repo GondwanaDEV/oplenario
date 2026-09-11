@@ -24,10 +24,6 @@
   "Vocabulario de autor_tipo (espelha o CHECK da migration 20260620000013). 'cidadao' = iniciativa popular."
   #{"vereador" "mesa" "comissao" "executivo" "cidadao"})
 
-(def estados-proposicao-terminais
-  "Espelha o trigger trg_proposicoes_imut_estado (migration 20260620000013) — guarda o `editar!` (Task 4)."
-  #{"publicada" "arquivada"})
-
 ;; --- eixo D: emendas. Vocabularios do §22.4 (espelham os CHECK da migration 0017). ---
 (def tipos-emenda
   #{"modificativa" "supressiva" "aditiva" "substitutiva_total" "substitutiva_parcial" "aglutinativa" "redacao"})
@@ -295,8 +291,9 @@
   por GATILHO: `{:gatilho :destinos-possiveis :pode-ser-recusado}`.
 
   POSSIVEIS, nunca 'disponiveis'. Esta funcao NAO avalia guard — lista o que o rito DECLARA. Avaliar
-  aqui seria impossivel de acertar: o guard le' `contexto`, e o contexto e' argumento do POST, nao existe
-  no momento da leitura. `contexto.urgente` avaliado contra `{}` responderia 'nao passa' sobre um ato que
+  aqui seria impossivel de acertar: o guard le' `alegado` (o `contexto` do corpo, renomeado na borda p/
+  declarar procedencia), que e' argumento do POST e nao existe no momento da leitura. `alegado.urgente`
+  avaliado contra `{}` responderia 'nao passa' sobre um ato que
   passaria com o corpo certo — resposta precisa e falsa, pior que imprecisa e honesta.
 
   `pode-ser-recusado` e' o que paga essa escolha, e a definicao e' exata: o gatilho so' pode ser recusado

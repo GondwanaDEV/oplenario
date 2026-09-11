@@ -75,13 +75,59 @@
      :obrigacoes (vec (vals (:obrigacoes @eng)))
      :eventos    (:eventos @eng)}))
 
+(defn- exigir-booleano!
+  "Fail-closed do TOPO de uma expressao booleana (guard de tramitacao, politica de autorizacao): o valor
+  que sai do avaliador tem de ser `true` ou `false`. Qualquer outra coisa LANCA `{:erro :runtime}`.
+
+  POR QUE ISTO EXISTE (achado da revisao adversarial da borda de tramitacao, fatia 4). Ate' aqui os dois
+  seams fechavam com `(boolean (rt/avaliar ...))`, e `boolean` NAO checa nada — ele CONVERTE. Toda
+  expressao que avaliasse para um valor truthy nao-booleano virava um `true`:
+
+    guard `alegado.parecer`            -> a string 'desfavoravel' vira TRUE  (a materia avanca)
+    guard `quem_exerce_presidencia(…)` -> o UUID do presidente vira TRUE     (o guard nunca nega)
+    guard `populacao()`                -> 2 700 000 vira TRUE
+
+  Isto e' fail-ABERTO num ponto que so' existe para NEGAR, e as duas docstrings da borda ja' afirmavam o
+  contrario ('tipo nao-booleano no runtime … LANCA'). Ou o codigo passava a fazer o que a documentacao
+  dizia, ou a documentacao tinha de parar de dizer. Vale a primeira: guard e' AUTORIZACAO, e quem nao
+  decide, NEGA — a mesma postura que `criar-transicao!` ja' pratica no save (guard que nao parseia nao
+  entra) e que `autorizacao/check!` pratica na politica (lance -> negacao).
+
+  `nil` tambem lanca, e nao e' descuido: `nil` no topo significa que o rito perguntou algo que nao tem
+  resposta (campo ausente no mapa, fato que devolveu nada). Converte-lo para `false` em silencio seria
+  responder 'a Casa nao permite' sobre uma pergunta que ninguem conseguiu fazer — o mesmo diagnostico
+  errado que a fatia 2 desfez ao separar os quatro motivos de recusa. Quem quiser tratar ausencia como
+  negacao escreve isso NO RITO (`nao(...)`, `== verdadeiro`), que e' onde a regra mora (Inv.4).
+
+  O `:erro :runtime` da ex-data e' o MESMO que o avaliador ja' usa para fato-sem-fn e identificador-sem-
+  valor — e' o que `diplomat/http/in/guard-inavaliavel?` reconhece para responder 500 NOMEADO (o rito da
+  Casa nao pode ser avaliado) em vez de 500 opaco, e o que `autorizacao/check!` traduz em negacao.
+
+  ESTA FUNCAO SOZINHA NAO BASTA, e a fatia 5 mediu por que: ela olha o no' de TOPO, e os operadores
+  logicos `e`/`ou`/`nao` DEVOLVEM booleano mesmo tendo coagido um operando truthy la' dentro — bastava
+  `verdadeiro e alegado.parecer` para a String \"nao\" voltar a valer como autorizacao. A metade que falta
+  vive no avaliador, em `runtime/exigir-booleano-operando!`: os operadores logicos EXIGEM operandos
+  booleanos em vez de coagi-los. As duas juntas e' que fecham a expressao inteira — esta cobre o topo,
+  aquela cobre cada junta interna."
+  [v uso expr]
+  (if (boolean? v)
+    v
+    (throw (ex-info (str uso ": a expressao nao avaliou para booleano (fail-closed) — valor de tipo "
+                         (if (nil? v) "nil" (.getName (class v))))
+                    {:erro :runtime :uso uso :expr expr
+                     :tipo-avaliado (if (nil? v) "nil" (.getName (class v)))}))))
+
 (defn politica-dsl
   "Compila uma expressao DSL de politica (booleana) num predicado `(fn [ator recurso] -> bool)` — o
   seam que `kernel/autorizacao/check!` roda na camada FINA (§22.5 eixo E). disciplina 5: a politica usa
   o MESMO avaliador do motor e o MESMO registry de fatos (resolver-para sobre a tx do tenant). `ator` e
   `recurso` entram no `amb` (acesso a campo: `ator.identidade`, `recurso.autor`); fatos de relacao
   (`é_o_próprio`, `tem_mandato_vigente`, …) resolvem por nome. A politica declarativa MORA no modulo
-  dono do recurso (so o mecanismo aqui). Expressao nao-booleana / fato-sem-fn = lanca; o `check!`
+  dono do recurso (so o mecanismo aqui). Expressao nao-booleana / fato-sem-fn = lanca — o nao-booleano
+  por `exigir-booleano!` logo acima MAIS `runtime/exigir-booleano-operando!` dentro do avaliador, que
+  juntos e' que tornam esta frase VERDADEIRA (antes da fatia 4 o seam fechava com `(boolean …)`, que
+  converte em vez de checar, e todo truthy virava permissao; ate' a fatia 5 um unico `e`/`ou`/`nao` na
+  politica ainda coagia o operando e devolvia a permissao pelo mesmo caminho). O `check!`
   traduz lance -> negacao (quem nao decide, NEGA). Sem prazo/obrigacao: politica e' avaliacao pura.
 
   `arg-map`: :registro (RegistroFatos) :tx (tx do tenant p/ os fatos) :expr (fonte da expressao DSL)
@@ -93,14 +139,19 @@
       (let [amb {"ator" ator "recurso" recurso}
             ctx {:estado (rt/estado) :agora agora :fonte (atom nil)
                  :resolver resolver :ente-id (:ente-id ator)}]
-        (boolean (rt/avaliar no amb ctx))))))
+        (exigir-booleano! (rt/avaliar no amb ctx) "politica" expr)))))
 
 (defn guarda-dsl
   "Compila o GUARD de uma transicao de tramitacao (§22.4 eixo C) num predicado `(fn [amb] -> bool)` — o
   seam que o motor de transicao do legislativo roda. disciplina 5: MESMO avaliador/registry do motor (o
   `amb` carrega o contexto da transicao — ex.: {\"proposicao\" {...} \"contexto\" {...}}; fatos de relacao
-  resolvem por nome sobre a tx). Expressao nao-booleana / fato-sem-fn = lanca (o motor de transicao trata
-  lance -> guard nega/erro, conforme a politica de quem chama). Sem prazo/obrigacao: avaliacao pura.
+  resolvem por nome sobre a tx). Expressao nao-booleana / fato-sem-fn = LANCA `{:erro :runtime}` — o
+  nao-booleano por `exigir-booleano!` acima MAIS `runtime/exigir-booleano-operando!` dentro do avaliador,
+  que juntos e' que fazem esta frase ser verdadeira: ate' a fatia 4 o seam fechava com `(boolean …)` e um
+  guard que avaliasse para string/UUID/numero virava `true`; ate' a fatia 5 escrever esse mesmo guard com
+  um `e`/`ou` (`alegado.parecer_favoravel e verdadeiro`) o reabria, porque a coercao acontecia no operando
+  e o operador devolvia booleano. Fail-ABERTO exatamente no ponto que so' existe para negar. Quem chama trata o lance: `transicionar!`
+  deixa PROPAGAR (nao transicionou) e a borda responde 500 nomeado. Sem prazo/obrigacao: avaliacao pura.
 
   `arg-map`: :registro (RegistroFatos) :tx (tx do tenant) :expr (fonte da expressao DSL) :ente-id
   :agora (LocalDate/Instant — default de `hoje()`/`agora()`)."
@@ -108,8 +159,10 @@
   (let [no (nuc/parse-expr expr)
         resolver (rf/resolver-para registro tx)]
     (fn [amb]
-      (boolean (rt/avaliar no amb {:estado (rt/estado) :agora agora :fonte (atom nil)
-                                   :resolver resolver :ente-id ente-id})))))
+      (exigir-booleano!
+        (rt/avaliar no amb {:estado (rt/estado) :agora agora :fonte (atom nil)
+                            :resolver resolver :ente-id ente-id})
+        "guarda" expr))))
 
 ;; [SEAMs ainda NAO estabilizados — F5 (Compliance/remessa)]
 ;; - regras-aplicaveis(repo-motor, ente) : resolve POR ESCOPO juntando motor.template_compliance +

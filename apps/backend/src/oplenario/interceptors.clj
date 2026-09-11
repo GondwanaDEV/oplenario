@@ -138,10 +138,37 @@
   (some (fn [d] (when (= "limite" (some-> (:tipo d) namespace)) d))
         [(ex-data ex) (ex-data (raiz ex))]))
 
+(defn- config-do-tenant
+  "A `ex-data` de uma recusa por CONFIGURACAO DO TENANT — `:tipo` no namespace `config` (ex.:
+  `:config/rito-ambiguo-na-especie`) — na propria excecao ou na sua raiz; nil se nao e' uma. Reconhece o
+  NAMESPACE e nao cada `:tipo`, mesma disciplina do `limite-excedido` acima e pelo mesmo motivo: toda
+  recusa de config nova nasce mapeada, em vez de nascer como 500 opaco ate' alguem lembrar de registra-la
+  aqui."
+  [ex]
+  (some (fn [d] (when (= "config" (some-> (:tipo d) namespace)) d))
+        [(ex-data ex) (ex-data (raiz ex))]))
+
 (def erro
   "Interceptor de ERRO (GLOBAL/outermost via http/servico): validacao de borda -> 400; negacao de autorizacao
-  -> 403; teto de capacidade estourado -> 422 com o numero MEDIDO; resto -> 500. Nao vaza detalhe de erro
-  interno no corpo.
+  -> 403; config do tenant que impede a operacao -> 409 NOMEADO; teto de capacidade estourado -> 422 com o
+  numero MEDIDO; resto -> 500. Nao vaza detalhe de erro interno no corpo.
+
+  POR QUE CONFIG DE TENANT E' 409, e nao 400/422/500. O caso que abriu este ramo: a Casa cadastra dois
+  ritos ativos para a MESMA especie de materia e `db/proposicao/resolver-rito!` recusa em vez de escolher
+  o rito dela por conta. Nao e' 400 — o corpo do pedido estava correto, e reenvia-lo com outro corpo nao
+  ajuda; nada que o cliente escreva conserta. Nao e' 422, que neste servico ja' tem uma forma propria
+  (teto de capacidade, com `:medido`/`:teto`) e diria 'voce pediu demais', que e' falso. E nao e' 500: a
+  configuracao e' DADO DA CASA, escrito pela Casa (Inv.4), e o operador pode conserta-la — devolver 5xx
+  alarmaria quem opera a plataforma e esconderia do unico que pode agir qual e' o conserto. 409 e' o
+  codigo que este projeto ja' usa para 'o pedido estava certo; o estado atual do recurso o recusa', em 7
+  bordas — e e' EXATAMENTE o mesmo codigo que a borda irma ja' devolve para `:conflito/sem-rito` (a Casa
+  nao declarou rito nenhum). 'Nenhum rito' e 'dois ritos' sao o mesmo fato — a configuracao de rito da
+  Casa nao resolve esta materia — e dar-lhes codigos diferentes seria incoerente.
+
+  O CORPO NOMEIA A CAUSA, com a mesma parcimonia do ramo 422: nao vai a mensagem da excecao (regra do
+  corpo opaco continua valendo), vai o `name` do proprio `:tipo` como `:causa` (codigo estavel, legivel
+  por maquina) e a `:especie` quando a ex-data a traz — que e' o unico dado acionavel: diz em QUAL especie
+  de materia estao os ritos duplicados. Sem isso o operador teria de auditar a tabela de ritos inteira.
 
   POR QUE O 422 CARREGA NUMERO (unica excecao a regra de corpo opaco): um teto e' uma decisao de PRODUTO,
   nao um detalhe de implementacao — o operador que pediu um periodo grande demais precisa saber quanto
@@ -151,12 +178,19 @@
   aplicado via `:max-rows`, em que o driver para de contar no primeiro excedente)."
   {:name  ::erro
    :error (fn [ctx ex]
-            (let [teto (limite-excedido ex)]
+            (let [teto (limite-excedido ex)
+                  conf (config-do-tenant ex)]
              (cond
               (validacao? ex)
               (assoc ctx :response (http/json-resposta 400 {:erro "requisicao invalida"}))
               (or (authz/negado? ex) (authz/negado? (raiz ex)))
               (assoc ctx :response (http/json-resposta 403 {:erro "autorizacao negada"}))
+              (some? conf)
+              (assoc ctx :response
+                     (http/json-resposta 409
+                       (cond-> {:erro "a configuracao desta Casa impede esta operacao"
+                                :causa (name (:tipo conf))}
+                         (some? (:especie conf)) (assoc :especie (:especie conf)))))
               (some? teto)
               (assoc ctx :response
                      (http/json-resposta 422

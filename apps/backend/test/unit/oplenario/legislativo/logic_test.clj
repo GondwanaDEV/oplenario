@@ -70,8 +70,5 @@
 (deftest autor-tipos-espelha-o-check-da-migration-0013
   (is (= #{"vereador" "mesa" "comissao" "executivo" "cidadao"} logic/autor-tipos)))
 
-(deftest estados-proposicao-terminais-espelha-o-trigger
-  (is (= #{"publicada" "arquivada"} logic/estados-proposicao-terminais)))
-
 (deftest origens-versao-ganha-edicao-onda-b-slice-2
   (is (contains? logic/origens-versao "edicao")))

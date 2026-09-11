@@ -46,6 +46,21 @@
     (is (= #{"efetivado" "nao-efetivado"} (tenancy/com-reconciliacao* *ds* ente lote dados))
         "com-reconciliacao* (app.ver_lote) ve o lote em reconciliacao")))
 
+(deftest ente-da-sessao-le-o-tenant-de-volta-e-FALHA-LOUD-sem-ele
+  ;; 3-B: a camada `relacoes/` do motor nao recebe `ente` (a assinatura de relacao e' `(fn tx arg…)`, e
+  ;; §4-bis/C2 diz que a Casa e' implicita na tx). Quando a relacao delega a uma fn de `db/` que exige
+  ;; `ente-id` explicito, este e' o caminho — e ele tem de LANCAR quando nao ha' tenant. Devolver nil
+  ;; faria a consulta a jusante casar zero linhas e o fato responder `falso` em silencio: um guard de
+  ;; tramitacao negaria para sempre, e o sintoma seria "a Casa nao permite este ato", nunca a causa.
+  (let [ente (random-uuid)]
+    (is (= ente (tenancy/com-tenant* *ds* ente tenancy/ente-da-sessao))
+        "dentro de com-tenant*: devolve o MESMO ente que foi setado, como uuid")
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"app.ente_id nao setado"
+          (jdbc/with-transaction [tx *ds*]
+            (jdbc/execute-one! tx ["SET LOCAL ROLE oplenario_app"])
+            (tenancy/ente-da-sessao tx)))
+        "fora de com-tenant*: LANCA (nunca nil silencioso)")))
+
 (deftest rls-falha-fechado-sem-tenant-setado
   (let [a (random-uuid)]
     (inserir! a nil true "a1")

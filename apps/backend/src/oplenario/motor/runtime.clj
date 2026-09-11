@@ -71,6 +71,50 @@
 ;; ===========================================================================
 (declare avaliar a-chamada a-binop arredonda-cima prazo-vigente-lookup)
 
+(defn- nome-do-tipo [v] (if (nil? v) "nil" (.getName (class v))))
+
+(defn- exigir-booleano-operando!
+  "Operando de operador lógico (`e`, `ou`, `nao`): tem de SER booleano — nunca ser coagido a um.
+
+  POR QUE ISTO EXISTE (achado da revisão adversarial da borda de tramitação, fatia 5). `exigir-booleano!`
+  (motor/api) já fazia o guard de tramitação e a política de autorização falharem FECHADO quando a
+  expressão não avaliava para booleano — mas ele olha o nó de TOPO, e os operadores lógicos DEVOLVEM
+  booleano mesmo tendo coagido um operando truthy lá dentro. Com `contexto.x` = a String \"nao\":
+
+    contexto.x                -> lançava (fail-closed correto: o topo é a String)
+    falso ou contexto.x       -> devolvia TRUE   (o `ou` fechava com `(boolean (or …))`)
+    verdadeiro e contexto.x   -> devolvia TRUE   (o `e` fechava com `(boolean (and …))`)
+    nao contexto.x            -> devolvia FALSE  (negação SILENCIOSA de uma pergunta sem resposta)
+
+  Isto é, bastava UM `e`/`ou`/`nao` na expressão para o fail-closed evaporar — e esses operadores são
+  exatamente o que aparece em regra de rito real. Os dois seams atingidos são os que só existem para
+  NEGAR: `guarda-dsl` (guard de tramitação) e `politica-dsl` (o `policy.check` do F2). Um regimento com
+  `alegado.parecer_favoravel e verdadeiro` voltava a aceitar a String \"nao\" como autorização.
+
+  O conserto é de LINGUAGEM, não de seam, e não é regra nova: `verificador/inf-binop` já declara
+  \"operador 'e' exige Booleano\" no type-check do save time (§22.7 Eixo A dec. 2) — era o RUNTIME que
+  divergia da própria especificação de tipos do núcleo. Alinhá-lo não muda o que o type-checker aceita;
+  muda o que o avaliador faz quando não há type-checker, que é justamente o caso do guard de tramitação
+  (`validar-guarda` é só sintático — o type-check estático é [CARRY] do eixo C) e da política.
+
+  `nil` também lança, pelo mesmo motivo de `exigir-booleano!`: `nil` significa que o rito perguntou algo
+  sem resposta (campo ausente, fato que devolveu nada). Convertê-lo a `false` em silêncio responderia
+  \"a Casa não permite\" a uma pergunta que ninguém conseguiu fazer. Quem quiser ausência-como-negação
+  escreve isso NO RITO (`== verdadeiro`), que é onde a regra mora (Invariante 4).
+
+  A mensagem nomeia a SUBEXPRESSÃO culpada (via `nucleo/expr->fonte`), não a expressão inteira: sem isso
+  quem escreve o rito recebe \"não é booleano\" sobre cinco termos e não sabe onde olhar. `:erro :runtime`
+  é a MESMA tag de fato-sem-fn/identificador-sem-valor — o que `guard-inavaliavel?` traduz em 500 nomeado
+  e `autorizacao/check!` traduz em negação."
+  [v op no]
+  (if (boolean? v)
+    v
+    (throw (ex-info (str "operador '" op "': o operando `" (nuc/expr->fonte no)
+                         "` não é booleano (fail-closed) — avaliou para tipo " (nome-do-tipo v))
+                    {:erro :runtime :op op
+                     :subexpressao (nuc/expr->fonte no)
+                     :tipo-avaliado (nome-do-tipo v)}))))
+
 (defn avaliar [no amb ctx]
   (case (:t no)
     :lit (:valor no)
@@ -83,9 +127,9 @@
     :conjunto-lit (set (map #(avaliar % amb ctx) (:elementos no)))
     :chamada (a-chamada no amb ctx)
     :binop (a-binop no amb ctx)
-    :unop (let [v (avaliar (:operando no) amb ctx)]
-            (if (= (:op no) "nao") (not v)
-                (throw (ex-info (str "operador unário desconhecido: " (:op no)) {:erro :runtime}))))
+    :unop (if (= (:op no) "nao")
+            (not (exigir-booleano-operando! (avaliar (:operando no) amb ctx) "nao" (:operando no)))
+            (throw (ex-info (str "operador unário desconhecido: " (:op no)) {:erro :runtime})))
     (throw (ex-info (str "nó desconhecido: " (pr-str no)) {:erro :runtime}))))
 
 ;; Duracao em runtime = mapa-tag {:duracao-dias n} (homoicônico, comparável por valor).
@@ -110,10 +154,18 @@
 (defn- a-binop [no amb ctx]
   (let [op (:op no)]
     (case op
-      ;; curto-circuito: o lado direito só é avaliado se necessário — regra VÁLIDA com um
-      ;; ramo morto que falharia (ex.: `falso e prazo_vigente(...)`) nunca explode em runtime.
-      "e"  (boolean (and (avaliar (:esq no) amb ctx) (avaliar (:dir no) amb ctx)))
-      "ou" (boolean (or  (avaliar (:esq no) amb ctx) (avaliar (:dir no) amb ctx)))
+      ;; `e`/`ou` EXIGEM operandos booleanos (ver `exigir-booleano-operando!`): `boolean`/`and`/`or`
+      ;; do Clojure CONVERTEM truthy, e converter aqui furava o fail-closed do guard e da política.
+      ;;
+      ;; O curto-circuito é preservado: o lado direito só é avaliado — e portanto só é CHECADO — se o
+      ;; esquerdo não decidiu sozinho. Uma regra VÁLIDA com ramo morto que falharia (o clássico
+      ;; `falso e prazo_vigente(...)`) continua sem explodir; ramo morto é morto, inclusive para tipo.
+      "e"  (if (exigir-booleano-operando! (avaliar (:esq no) amb ctx) "e" (:esq no))
+             (exigir-booleano-operando! (avaliar (:dir no) amb ctx) "e" (:dir no))
+             false)
+      "ou" (if (exigir-booleano-operando! (avaliar (:esq no) amb ctx) "ou" (:esq no))
+             true
+             (exigir-booleano-operando! (avaliar (:dir no) amb ctx) "ou" (:dir no)))
       (let [a (avaliar (:esq no) amb ctx)
             b (avaliar (:dir no) amb ctx)]
         (case op

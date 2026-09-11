@@ -143,6 +143,29 @@
     (esperar! p :rb)
     {:t :conjunto-lit :elementos els}))
 
+(defn expr->fonte
+  "Renderiza um nó do AST de volta para fonte DSL legível. Existe para as MENSAGENS de erro: o AST não
+  guarda posição no texto original (o lexer descarta offsets), então a única forma de dizer ao autor do
+  rito QUAL subexpressão o runtime recusou é reimprimi-la. Sem isto, quem escreve
+  `parecer.favoravel e prazo_vigente(...) > hoje() e nao vetado` recebe 'não avaliou para booleano'
+  sobre a expressão inteira e não sabe onde olhar.
+
+  NÃO é um round-trip fiel — parênteses redundantes do original somem, e `binop` sempre imprime os seus
+  (o que preserva o SENTIDO, que é o que a mensagem precisa)."
+  [no]
+  (case (:t no)
+    :lit (case (:tipo-lit no)
+           "Texto" (str \" (:valor no) \")
+           "Booleano" (if (:valor no) "verdadeiro" "falso")
+           (str (:valor no)))
+    :ident (:nome no)
+    :campo (str (expr->fonte (:obj no)) "." (:campo no))
+    :conjunto-lit (str "{" (str/join ", " (map expr->fonte (:elementos no))) "}")
+    :chamada (str (:nome no) "(" (str/join ", " (map expr->fonte (:args no))) ")")
+    :unop (str (:op no) " " (expr->fonte (:operando no)))
+    :binop (str "(" (expr->fonte (:esq no)) " " (:op no) " " (expr->fonte (:dir no)) ")")
+    (pr-str no)))
+
 (defn parse-expr [s]
   (let [p (atom {:toks (tokenizar s) :i 0})
         no (expr-p p)]

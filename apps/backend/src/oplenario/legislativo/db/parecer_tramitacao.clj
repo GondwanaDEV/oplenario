@@ -57,8 +57,16 @@
   o `parecer` no amb) e aplica: historico append-only + muda o estado (CAS por lock_version). Atomico na tx
   (o caller abre via Repo/transacao com o RegistroFatos do motor). Devolve {:transicionou? bool :de :para
   :transicao-id :objeto-tipo :objeto-id} — guard que bloqueia TODAS = {:transicionou? false} (dominio normal);
-  guard que LANCA (fato ausente, tipo nao-booleano) e o CAS PROPAGAM como excecao."
-  [tx {:keys [registro ente-id parecer-id template-id gatilho ator-id contexto agora updated-by]}]
+  guard que LANCA (fato ausente, tipo nao-booleano — ver `motor/api/exigir-booleano!`) e o CAS PROPAGAM
+  como excecao.
+
+  `alegado` e' o canal do CLIENTE no `amb`, com o mesmo nome que o engine da proposicao usa (fatia 4): o
+  vocabulario que um rito enxerga tem de ser UM so' entre os dois sujeitos, senao quem escreve o rito do
+  parecer precisa aprender uma segunda convencao para a mesma ideia. Aqui ele e' hoje sempre `{}` — o
+  unico caller de borda (`adapters/in/parecer/emitir->dominio`) o fixa vazio, e nenhuma rota o aceita do
+  corpo. Continua nomeado assim mesmo assim: no dia em que alguem abrir esse campo ao cliente, a regra ja'
+  vai estar escrita sob o nome que declara a procedencia, em vez de precisar ser reescrita junto."
+  [tx {:keys [registro ente-id parecer-id template-id gatilho ator-id alegado agora updated-by]}]
   (let [{:keys [estado lock-version objeto-tipo objeto-id] :as row} (estado+lock tx ente-id parecer-id)]
     ;; fail-closed (review F3.6a clojure-MENOR): parecer inexistente NAO se confunde com guard-bloqueado.
     ;; o {:transicionou? false} com objeto nil seria veneno p/ o consumer da mae (F3.6c) achar o objeto.
@@ -72,14 +80,14 @@
                                            :agora agora :ente-id ente-id})
                         {"parecer" {:id parecer-id :estado estado
                                     :objeto-tipo objeto-tipo :objeto-id objeto-id}
-                         "contexto" (or contexto {})})))
+                         "alegado" (or alegado {})})))
           escolhida (first (filter passa? candidatas))]
       (if-not escolhida
         {:transicionou? false :de estado :gatilho gatilho :objeto-tipo objeto-tipo :objeto-id objeto-id}
         (do
           (registrar-transicao! tx {:id (random-uuid) :ente-id ente-id :parecer-id parecer-id :template-id template-id
                                     :de-estado estado :para-estado (:para-estado escolhida)
-                                    :gatilho gatilho :contexto contexto :ator-id ator-id})
+                                    :gatilho gatilho :contexto alegado :ator-id ator-id})
           (parecer/mudar-estado! tx {:id parecer-id :ente-id ente-id :estado (:para-estado escolhida)
                                      :updated-by updated-by :lock-version lock-version})
           {:transicionou? true :de estado :para (:para-estado escolhida) :transicao-id (:id escolhida)

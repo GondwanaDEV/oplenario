@@ -155,12 +155,24 @@
     (invalido! "campo nao permitido no corpo (esta borda aceita GATILHO, nunca estado-destino)"
                {:campos (mapv #(subs (str %) 0 (min 40 (count (str %)))) (take 5 (sort extras)))})))
 
-(defn- contexto->dominio
-  "Contexto do corpo (mapa STRING-keyed, como o JSON chega) -> mapa KEYWORD-keyed, que e' a forma que o
-  avaliador da DSL sabe ler: `motor/runtime` resolve `contexto.x` como `(get obj (keyword \"x\"))`. Sem esta
-  coercao o guard leria `nil` para TODA chave e falharia em silencio — pior que falhar alto, porque a
-  transicao simplesmente nao aconteceria e ninguem saberia por que. Ausente -> `{}` (nunca nil: a engine
-  poe o contexto no `amb`, e `nil` ali vira `contexto` inexistente em vez de contexto vazio)."
+(defn- contexto->alegado
+  "O `contexto` do corpo (mapa STRING-keyed, como o JSON chega) -> `:alegado` de dominio, KEYWORD-keyed.
+
+  DUAS COISAS ACONTECEM AQUI, e a segunda e' a que importa.
+
+  (1) A COERCAO. Keyword-keyed e' a forma que o avaliador da DSL sabe ler: `motor/runtime` resolve
+  `alegado.x` como `(get obj (keyword \"x\"))`. Sem ela o guard leria `nil` para TODA chave e falharia em
+  silencio — pior que falhar alto, porque a transicao simplesmente nao aconteceria e ninguem saberia por
+  que. Ausente -> `{}` (nunca nil: a engine poe o mapa no `amb`, e `nil` ali vira a chave inexistente em
+  vez de um mapa vazio).
+
+  (2) A TROCA DE NOME, que e' a marca de PROCEDENCIA da fatia 4. Do lado de fora o campo chama-se
+  `contexto` — e' a carga do ato, e e' assim que ele e' auditado (`proposicao_transicao_historico.contexto`).
+  Do lado de dentro, no `amb` que o guard le', ele chama-se `alegado`: o que o operador AFIRMA, ao lado de
+  `proposicao` (a linha lida pelo servidor) e dos fatos por nome (apurados pelo servidor). Um rito nao
+  pode mais confiar no cliente sem que isso esteja escrito na propria expressao. `adapters/in` e' o lugar
+  certo para a troca: e' a camada cujo trabalho e' traduzir o que veio da rede para o vocabulario do
+  dominio, e procedencia e' exatamente o tipo de coisa que so' esta camada ainda sabe."
   [c]
   (if (map? c) (update-keys c keyword) {}))
 
@@ -172,6 +184,10 @@
   NAO devolve `:template-id`: o rito nao e' dado de cliente nem de borda — quem o injeta e' o controller,
   lendo a coluna da PROPRIA linha (fatia 1). Um adapter que aceitasse template-id do corpo reabriria
   exatamente o T3-A.
+
+  O `contexto` do corpo sai daqui como `:alegado` (fatia 4) — ver `contexto->alegado` logo acima: o nome
+  de dentro declara que aquele mapa e' ALEGACAO do cliente, nao apuracao do servidor, e e' sob esse nome
+  que o guard do rito o le'.
 
   `ator-id` e `updated-by` saem do `ator` resolvido na auth, nunca do corpo (§22.5). `gatilho` e' trimado e
   recusado em branco — o `:min 1` do Malli so' barra a string vazia, e um gatilho de espacos nao casa
@@ -185,7 +201,7 @@
       (when (str/blank? gatilho)
         (invalido! "gatilho obrigatorio (nao-branco)" {:campos [:gatilho]}))
       {:proposicao-id proposicao-id :gatilho gatilho
-       :contexto (contexto->dominio (:contexto m))
+       :alegado (contexto->alegado (:contexto m))
        :ator-id (:identidade-id ator) :updated-by (:identidade-id ator) :agora agora})))
 
 ;; ---------- Fatia 3: a LEITURA da tramitacao (query-params) ----------

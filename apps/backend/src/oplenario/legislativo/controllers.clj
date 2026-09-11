@@ -224,7 +224,8 @@
 
 (defn tramitar-proposicao
   "Fatia 2 — dispara UM GATILHO na maquina de tramitacao (eixo C) sobre a materia `(:proposicao-id m)`.
-  `m` ja' vem coagido pelo adapters/in (gatilho trimado, contexto keywordizado, ator/updated-by do token,
+  `m` ja' vem coagido pelo adapters/in (gatilho trimado, `contexto` do corpo virado `:alegado` e
+  keywordizado — a marca de procedencia da fatia 4 —, ator/updated-by do token,
   `agora` resolvido na borda). `registro` (RegistroFatos do motor) e' o mesmo que o host ja' injeta p/ o
   editor de parecer — a engine precisa dele p/ resolver os fatos do guard.
 
@@ -281,7 +282,7 @@
   estado ATUAL. nil = materia inexistente no tenant (a borda traduz -> 404), mesmo contrato de
   `buscar-ficha-materia`/`buscar-proposicao-detalhe`.
 
-  NAO AVALIA GUARD, e a decisao e' de desenho (ver `logic/gatilhos-possiveis`): o guard le' `contexto`, que
+  NAO AVALIA GUARD, e a decisao e' de desenho (ver `logic/gatilhos-possiveis`): o guard le' `alegado`, que
   e' argumento do POST e nao existe no GET — avaliar aqui daria uma resposta precisa e FALSA. A honestidade
   e' paga em `pode-ser-recusado`, por gatilho, que e' mais informacao que um aviso generico.
 

@@ -188,6 +188,39 @@
   (let [erro? #(contains? #{:runtime :sintaxe} (:erro %))]
     (boolean (or (erro? (ex-data e)) (erro? (ex-data (ex-cause e)))))))
 
+(defn- recusa-de-tramitacao
+  "A prosa de cada `:motivo` de `{:transicionou? false}` (ver `db/tramitacao/transicionar!`) + o proprio
+  motivo como campo. O `:else` cobre o contrato ANTIGO — mapa sem `:motivo`, que e' o que um Repo/fake ou
+  um caller nao-atualizado ainda devolve: a borda degrada para a frase generica em vez de responder um
+  motivo inventado. As strings aqui sao PROSA sobre o mecanismo (fim de rito, guard, ato nao declarado);
+  nenhum nome de estado ou de gatilho de camara aparece neste codigo — os que a frase cita vem do DADO,
+  interpolados de `estado` e `gatilho`."
+  [motivo gatilho estado]
+  (case motivo
+    :estado-terminal
+    {:motivo "estado-terminal"
+     :erro (str "o rito desta Casa declara '" estado "' como fim de processo: a materia nao sai mais "
+                "deste estado, e o ato '" gatilho "' nao se aplica. Nao e' falta de permissao nem de "
+                "documento — o processo legislativo acabou aqui.")}
+
+    :guarda-recusou
+    {:motivo "guarda-recusou"
+     :erro (str "o rito desta Casa declara o ato '" gatilho "' a partir de '" estado "', mas a condicao "
+                "dele nao esta' cumprida agora — o mesmo pedido pode passar quando ela estiver.")}
+
+    :gatilho-nao-declarado
+    {:motivo "gatilho-nao-declarado"
+     :erro (str "o rito desta Casa nao declara o ato '" gatilho "' a partir de '" estado "' — repetir o "
+                "pedido nao muda isso. Os atos que ele declara estao no GET desta mesma rota.")}
+
+    :estado-fora-do-rito
+    {:motivo "estado-fora-do-rito"
+     :erro (str "o rito desta materia nao declara o estado atual '" estado "' — ela pode ser anterior a "
+                "este rito, ou o rito ter sido trocado sob os pes dela. Nenhum ato e' possivel ate' "
+                "alguem reconciliar rito e estado na configuracao.")}
+
+    {:erro (str "o rito desta Casa nao permite o ato '" gatilho "' com a materia em '" estado "'")}))
+
 (defn- tramitar-handler
   "POST /legislativo/proposicoes/:id/tramitacao — dispara UM GATILHO na maquina do eixo C. Irma de
   `/legislativo/pareceres/:id/emissao`: mesma fiacao (`registro` do motor injetado pelo host, `agora`
@@ -202,13 +235,23 @@
     `/pareceres/:id/emissao`: a transicao grava uma linha de historico, mas nao cria recurso ENDERECAVEL
     (nao ha `GET /tramitacoes/:id` p/ apontar num Location) — 201 prometeria uma URL que nao existe.
 
-  - guard bloqueou TODAS as candidatas -> 409 + `{:estado-atual :gatilho}`. E' DOMINIO NORMAL, nao erro:
-    a Casa nao permite esse ato AGORA. 409 e nao 400 porque o pedido estava correto — o MESMO corpo
+  - a engine NAO transicionou -> 409 + `{:estado-atual :gatilho :motivo}`. E' DOMINIO NORMAL, nao erro:
+    a Casa nao permite esse ato. 409 e nao 400 porque o pedido estava correto — o MESMO corpo
     funcionaria noutro estado, ou depois; quem recusa e' o recurso, nao a requisicao. E' o codigo que este
     projeto ja' usa p/ conflito de estado em 7 bordas (`:conflito/votacao-terminal`, `/sessao-fechada`,
     `/proposicao-nao-aprovada`, `/aparte`, `/inscricao`, `/fala`, `/vinculo`), e cabe aqui pelo mesmo
     motivo. O corpo carrega estado-atual + gatilho porque 'proibido' sem 'de onde' e 'o que' obriga o
-    operador a adivinhar o regimento.
+    operador a adivinhar o regimento — e carrega `motivo`, porque as QUATRO causas de recusa pedem acoes
+    OPOSTAS e a frase generica de antes ('a Casa nao permite este ato agora') as achatava todas:
+      · `estado-terminal`       -> a Casa ENCERROU o processo (mig 0078: quem declara o fim e' o rito, nao
+                                   mais uma string cravada em SQL). Nao ha' o que esperar; parar de tentar.
+      · `guarda-recusou`        -> o ato existe, a condicao dele nao esta' cumprida AGORA. O unico dos
+                                   quatro que o tempo (ou o `contexto` certo no corpo) pode mudar.
+      · `gatilho-nao-declarado` -> o rito nao declara ESSE ato a partir desse estado. Repetir nunca
+                                   funciona; o GET irmao lista os que ele declara.
+      · `estado-fora-do-rito`   -> o rito nem conhece o estado atual da materia. Conserto e' de CONFIG.
+    O `motivo` vai como campo PROPRIO, e nao so' embutido na prosa do `:erro`: interface que precise
+    distinguir 'some o botao' de 'mostra o que falta' nao pode depender de casar substring de mensagem.
 
   - materia sem rito (`:conflito/sem-rito`) -> 409 tambem, mas com mensagem PROPRIA: nao e' 'agora nao',
     e' 'nunca, ate' alguem configurar'. Nao e' 400: o corpo estava certo, falta dado da Casa.
@@ -232,9 +275,8 @@
         (if-let [r (controllers/tramitar-proposicao repo-leg registro ente-id m)]
           (if (:transicionou? r)
             (http/json-resposta 200 (adapters-out-proposicao/recibo-transicao->wire pid (:gatilho m) r))
-            (http/json-resposta 409 {:erro (str "o rito desta Casa nao permite o ato '" (:gatilho m)
-                                                "' com a materia em '" (:de r) "'")
-                                     :estado-atual (:de r) :gatilho (:gatilho m)}))
+            (http/json-resposta 409 (assoc (recusa-de-tramitacao (:motivo r) (:gatilho m) (:de r))
+                                           :estado-atual (:de r) :gatilho (:gatilho m))))
           (http/json-resposta 404 {:erro "proposicao nao encontrada"}))
         (catch clojure.lang.ExceptionInfo e
           (cond
@@ -256,8 +298,9 @@
 
   DUAS COISAS QUE ESTA BORDA NAO FAZ, e nenhuma das duas por preguica:
 
-  1. NAO AVALIA GUARD p/ dizer quais gatilhos passariam. O guard le' `contexto`, e `contexto` e' argumento
-     do POST — nao existe aqui. Avaliar `contexto.urgente` contra `{}` responderia 'nao passa' sobre um ato
+  1. NAO AVALIA GUARD p/ dizer quais gatilhos passariam. O guard le' `alegado` (o `contexto` do corpo,
+     renomeado na borda), e ele e' argumento do POST — nao existe aqui. Avaliar `alegado.urgente` contra
+     `{}` responderia 'nao passa' sobre um ato
      que passaria com o corpo certo: resposta precisa e FALSA, pior que imprecisa e honesta. Some-se que
      guard LANCA (um rito inavaliavel derrubaria a leitura, tirando do operador tambem o historico,
      justamente quando ele mais precisa) e que guard consulta FATO (N avaliacoes por abertura de tela).

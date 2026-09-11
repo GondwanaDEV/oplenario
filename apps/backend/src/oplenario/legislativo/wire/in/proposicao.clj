@@ -72,11 +72,20 @@
   classe de defeito do T3-A (o chamador escolhendo a regra). `:closed true` faz a recusa ser mecanica: o
   campo extra e' 400 e a engine nunca roda.
 
-  `contexto` (opcional) e' a carga do gatilho que o GUARD pode ler e que o historico persiste.
-  ⚠ ATENCAO DE DESENHO, nao de implementacao: isto e' entrada DE CLIENTE que alimenta a avaliacao da
-  regra. Um guard escrito como `contexto.aprovado == verdadeiro` deixaria o operador afirmar a propria
-  precondicao — T3-A de novo, so' que pela config. O schema limita a FORMA (escalares, teto de chaves,
-  charset); quem limita o USO e' quem escreve o rito. Ver o relatorio da fatia: e' duvida aberta p/ decisao."
+  `contexto` (opcional) e' a carga do gatilho que o GUARD pode ler e que o historico persiste — entrada
+  DE CLIENTE que alimenta a avaliacao da regra. O schema limita a FORMA (escalares, teto de chaves,
+  charset); quem limita o USO e' quem escreve o rito, e e' assim que tem de ser (Inv.4: o codigo nao
+  decide o regimento).
+
+  O QUE A FATIA 4 FEZ COM ISSO, ja' que proibir nao era opcao: tornou a confianca VISIVEL na expressao.
+  Este campo chega ao guard sob o nome `alegado`, nunca `contexto` — `adapters/in/contexto->alegado` faz a
+  troca, e a chave `contexto` NAO EXISTE mais no ambiente de avaliacao. Um rito escrito como
+  `alegado.aprovado == verdadeiro` continua permitido, e continua deixando o operador afirmar a propria
+  precondicao; a diferenca e' que agora quem le' o rito ve' a palavra `alegado` e sabe disso, em vez de
+  ler `contexto` e supor apuracao. Um rito antigo que ainda diga `contexto.aprovado` nao le' o corpo do
+  cliente em silencio: o avaliador lanca e a materia NAO tramita. Ao lado de `alegado`, o guard tem
+  `proposicao` (a linha, lida pelo servidor) e os fatos por nome (`aprovada_em_votacao(proposicao.id)` —
+  decisao 3-B), que sao os canais APURADOS. Ver `db/tramitacao/transicionar!`, secao OS DOIS CANAIS."
   [:map {:closed true}
    [:gatilho [:string {:min 1 :max 100}]]
    [:contexto {:optional true} [:maybe [:map-of {:max contexto-max-chaves} ChaveContexto ValorContexto]]]])

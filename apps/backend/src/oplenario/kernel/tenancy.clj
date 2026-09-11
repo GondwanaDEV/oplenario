@@ -13,6 +13,25 @@
   (when-not ente-id (throw (ex-info "set-tenant!: ente-id nao pode ser nil" {})))
   (jdbc/execute-one! tx ["SELECT set_config('app.ente_id', ?, true)" (str ente-id)]))
 
+(defn ente-da-sessao
+  "O ente_id da tx CORRENTE, lido de volta do GUC `app.ente_id` que `set-tenant!` escreveu.
+
+  Existe para a camada `relacoes/` (§22.5.3 disc.5): a assinatura de uma funcao de relacao e'
+  `(fn tx arg-de-dominio…)` e NAO carrega `ente` — a decisao §4-bis/C2 do catalogo e' que 'a Casa e'
+  1:1 com o tenant, implicita na tx'. Quando a relacao precisa delegar a uma fn de `db/` que recebe
+  `ente-id` explicito (defesa em profundidade sobre a RLS), este e' o unico jeito honesto de obte-lo
+  sem reintroduzir `ente` como argumento do DSL. Mesma fonte que a propria RLS usa nas policies
+  (`NULLIF(current_setting('app.ente_id', true), '')::uuid`) e que `kernel/sequencial` ja' le.
+
+  FAIL-LOUD (mesma postura de `populacao` em cadastros/relacoes): tx sem tenant setado LANCA. Devolver
+  nil aqui faria a consulta a jusante casar zero linhas e o fato responder `falso` em silencio — um
+  guard de tramitacao negaria para sempre sem que ninguem visse a causa."
+  [tx]
+  (or (-> (jdbc/execute-one! tx ["SELECT NULLIF(current_setting('app.ente_id', true), '')::uuid AS ente_id"])
+          vals first)
+      (throw (ex-info "ente-da-sessao: app.ente_id nao setado na tx (chamada fora de com-tenant*)"
+                      {:erro :tenancy/sem-tenant}))))
+
 (defn set-ver-lote!
   "Abre a visao do lote nao-efetivado `lote-id` na tx. NAO e' API publica — use com-reconciliacao*."
   [tx lote-id]

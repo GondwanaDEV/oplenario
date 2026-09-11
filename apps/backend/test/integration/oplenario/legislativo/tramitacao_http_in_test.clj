@@ -109,19 +109,60 @@
 
 ;; ================= (3) guard bloqueou TODAS as candidatas = dominio normal =================
 
+(defn- recusa
+  "Dispara a rota contra uma engine FAKE que devolve `{:transicionou? false :motivo ...}` — o contrato de
+  `db/tramitacao/transicionar!`. Devolve o corpo JSON ja' lido + o status."
+  [motivo]
+  (let [pid (random-uuid) tid (random-uuid)
+        repo (fake-repo-legislativo
+               {:buscar (fn [id] (linha-proposicao id tid "protocolada"))
+                :transicionar (fn [_r _a] (cond-> {:transicionou? false :de "protocolada" :gatilho "promulgar"}
+                                            (some? motivo) (assoc :motivo motivo)))})
+        r (post-tramitacao repo pid {:gatilho "promulgar"})]
+    (assoc (ler-json r) :status (:status r))))
+
 (deftest guard-bloqueia-todas-409-com-estado-e-gatilho
   (testing "nao e' erro: a Casa nao permite este ato AGORA. 409 (e nao 400) porque o corpo era valido — o
            MESMO corpo funcionaria noutro estado; quem recusa e' o recurso, nao o pedido."
-    (let [pid (random-uuid) tid (random-uuid)
-          repo (fake-repo-legislativo
-                 {:buscar (fn [id] (linha-proposicao id tid "protocolada"))
-                  :transicionar (fn [_r _a] {:transicionou? false :de "protocolada" :gatilho "promulgar"})})
-          r (post-tramitacao repo pid {:gatilho "promulgar"})
-          body (ler-json r)]
-      (is (= 409 (:status r)))
+    (let [body (recusa :guarda-recusou)]
+      (is (= 409 (:status body)))
       (is (= "protocolada" (:estado-atual body)) "o operador ve' de ONDE a materia nao saiu")
       (is (= "promulgar" (:gatilho body)) "e QUAL ato o rito recusou")
       (is (not (re-find #"(?i)erro interno" (str (:erro body)))) "recusa de dominio nunca e' erro opaco"))))
+
+(deftest as-quatro-recusas-de-tramitacao-nao-se-confundem-na-borda
+  ;; Fatia 2: a engine deixou de achatar os desfechos de `{:transicionou? false}` num `nil` so', e a borda
+  ;; deixou de responder a MESMA frase para situacoes que pedem acoes OPOSTAS do operador. `motivo` e'
+  ;; campo PROPRIO no corpo justamente para que a interface nao precise casar substring de prosa.
+  (testing "fim de rito: a Casa ENCERROU o processo — nao e' 'agora nao', e' 'nunca mais'"
+    (let [b (recusa :estado-terminal)]
+      (is (= 409 (:status b)))
+      (is (= "estado-terminal" (:motivo b)))
+      (is (re-find #"(?i)fim de processo" (str (:erro b))))
+      (is (not (re-find #"(?i)nao permite o ato" (str (:erro b))))
+          "nao cai na frase generica — se caisse, o `motivo` estaria mentindo sobre a prosa ao lado")))
+  (testing "guard: o ato existe, a condicao dele nao esta' cumprida — e' o unico que o tempo muda"
+    (let [b (recusa :guarda-recusou)]
+      (is (= "guarda-recusou" (:motivo b)))
+      (is (re-find #"(?i)condicao" (str (:erro b))))))
+  (testing "ato nao declarado a partir deste estado: repetir nunca funciona"
+    (let [b (recusa :gatilho-nao-declarado)]
+      (is (= "gatilho-nao-declarado" (:motivo b)))
+      (is (re-find #"(?i)nao declara o ato" (str (:erro b))))))
+  (testing "o rito nem conhece o estado atual: conserto e' de CONFIG, nao de tentativa"
+    (let [b (recusa :estado-fora-do-rito)]
+      (is (= "estado-fora-do-rito" (:motivo b)))
+      (is (re-find #"(?i)reconciliar" (str (:erro b))))))
+  (testing "motivo AUSENTE (contrato antigo) degrada p/ a frase generica, nunca inventa um motivo"
+    (let [b (recusa nil)]
+      (is (= 409 (:status b)))
+      (is (nil? (:motivo b)) "a borda nao adivinha")
+      (is (re-find #"(?i)nao permite o ato" (str (:erro b))))))
+  (testing "toda recusa, seja qual for o motivo, carrega de-onde e qual-ato"
+    (doseq [m [:estado-terminal :guarda-recusou :gatilho-nao-declarado :estado-fora-do-rito nil]]
+      (let [b (recusa m)]
+        (is (= "protocolada" (:estado-atual b)) (str "estado-atual ausente no motivo " m))
+        (is (= "promulgar" (:gatilho b)) (str "gatilho ausente no motivo " m))))))
 
 ;; ===================== (4) materia sem rito: recusa que diz POR QUE =====================
 
@@ -189,7 +230,7 @@
     (is (= pid (:proposicao-id @visto)))
     (is (= :registro-fake (::registro @visto)) "o RegistroFatos do motor chega pela fiacao do host")))
 
-(deftest contexto-opcional-chega-keywordizado-e-limitado
+(deftest contexto-do-corpo-chega-ao-dominio-como-ALEGADO-keywordizado-e-limitado
   (let [pid (random-uuid) tid (random-uuid) visto (atom nil)
         repo (fake-repo-legislativo
                {:buscar (fn [id] (linha-proposicao id tid "protocolada"))
@@ -198,10 +239,17 @@
                                  :transicao-id (random-uuid) :ocorrido-em ocorrido})})]
     (testing "contexto ausente vira {} — a engine nunca recebe nil"
       (post-tramitacao repo pid {:gatilho "despachar"})
-      (is (= {} (:contexto @visto))))
-    (testing "contexto presente chega com chaves KEYWORD (o avaliador le' `contexto.x` por keyword)"
+      (is (= {} (:alegado @visto))))
+    (testing "contexto presente chega com chaves KEYWORD (o avaliador le' `alegado.x` por keyword)"
       (post-tramitacao repo pid {:gatilho "despachar" :contexto {:comissao "ccj" :urgente true}})
-      (is (= {:comissao "ccj" :urgente true} (:contexto @visto))))
+      (is (= {:comissao "ccj" :urgente true} (:alegado @visto))))
+    (testing "o campo do corpo chama-se `contexto`; o que chega ao dominio chama-se `:alegado` (fatia 4).
+             A troca e' a marca de PROCEDENCIA: sob este nome o guard do rito le' o que o CLIENTE AFIRMA,
+             distinto de `proposicao` (a linha) e dos fatos por nome (apurados pelo servidor). A chave
+             `:contexto` NAO pode sobreviver no mapa de dominio — se sobrevivesse, a engine teria duas
+             portas para a mesma carga e a renomeacao seria decorativa."
+      (post-tramitacao repo pid {:gatilho "despachar" :contexto {:comissao "ccj"}})
+      (is (nil? (:contexto @visto)) "nada de dominio continua chamando-se :contexto"))
     (testing "contexto aninhado/gigante e' 400 — e' dado de guard, nao um saco de blobs no historico"
       (is (= 400 (:status (post-tramitacao repo pid {:gatilho "d" :contexto {:x {:y 1}}}))))
       (is (= 400 (:status (post-tramitacao repo pid
@@ -283,7 +331,7 @@
         body (ler-json r)]
     (is (= 200 (:status r)))
     (is (= (str pid) (:proposicao-id body)))
-    (is (= "em_comissoes" (:estado-atual body)) "o rotulo ATUAL, lido da linha (nao derivado do historico)")
+    (is (= "em_comissoes" (:estado-atual body)) "o rotulo atual")
     (is (= (str tid) (:template-id body)) "o rito sob o qual a materia corre")
     (is (= [{:de-estado "protocolada" :para-estado "em_comissoes" :gatilho "despachar"
              :ocorrido-em (str ocorrido)}]
@@ -333,7 +381,35 @@
     (is (= [] (:historico body)))
     (is (= [] (:gatilhos-possiveis body)))
     (is (nil? (:template-id body)))
+    (is (= "protocolada" (:estado-atual body))
+        "o rotulo vem da LINHA: aqui o historico e' VAZIO, entao derivar dele daria nil (fatia 4 — a
+         assercao equivalente no caminho feliz nao podia reprovar, porque la' a fixture poe o mesmo valor
+         nos dois lugares)")
     (is (re-find #"(?i)rito" (str (:nota body))) "a nota nomeia o que falta: a Casa nao vinculou rito")))
+
+(deftest o-rotulo-ATUAL-vem-da-LINHA-e-nao-do-ultimo-para-estado-do-historico
+  ;; A assercao original desta propriedade ("o rotulo ATUAL, lido da linha, nao derivado do historico")
+  ;; NAO PODIA REPROVAR: a fixture do caminho feliz punha `em_comissoes` na linha E como `para-estado` da
+  ;; ultima transicao, entao ler da linha e derivar do historico davam a MESMA resposta. Uma assercao que
+  ;; nao consegue distinguir as duas implementacoes nao esta' cobrindo nenhuma das duas.
+  ;;
+  ;; Aqui elas DIVERGEM, e a divergencia e' um estado real do sistema, nao um formato inventado: o
+  ;; versionamento de template e' por COPIA INTEGRAL (mig 0016), entao uma materia pode estar num rotulo
+  ;; que o rito ATUAL nem declara — e' o caso que a propria engine diagnostica como `:estado-fora-do-rito`,
+  ;; e o historico que sobrou e' o do rito ANTIGO, terminando noutro estado. Derivar o rotulo do historico
+  ;; ali responderia `em_comissoes` sobre uma materia que esta' em `estado_legado`, apagando exatamente o
+  ;; caso que pede intervencao humana.
+  (let [pid (random-uuid) tid (random-uuid)
+        repo (fake-repo-leitura
+               (leitura :proposicao (linha-proposicao pid tid "estado_legado")
+                        :historico [(hist "protocolada" "em_comissoes" "despachar" 0)]
+                        :estado-no-template nil))
+        body (ler-json (get-tramitacao repo pid))]
+    (is (= "estado_legado" (:estado-atual body))
+        "a LINHA manda; derivar do historico devolveria 'em_comissoes' e esta assercao reprovaria")
+    (is (= "em_comissoes" (:para-estado (last (:historico body))))
+        "e o historico continua sendo devolvido como esta' — as duas coisas convivem, so' nao se confundem")
+    (is (nil? (:estado-terminal body)) "tri-valorado: o rito nem declara este estado")))
 
 (deftest estado-terminal-e-beco-sem-saida-tem-notas-DIFERENTES
   (testing "'o rito acabou' e 'o rito nao declara saida daqui' pedem acoes opostas do operador — nada vs.

@@ -1,0 +1,35 @@
+-- Fatia 2 da borda de tramitacao — A TRAVA DE ESTADO TERMINAL SAI DO SQL E VIRA DADO DO RITO (Inv.4).
+--
+-- O QUE SAI. `legislativo.proposicoes` carregava, desde a mig 0013, o trigger `trg_proposicoes_imut_estado`
+-- executando `shared.imut_trava_estado_terminal('publicada', 'arquivada')`. Sao DUAS PALAVRAS DE CAMARA
+-- CRAVADAS EM SQL: o Invariante 4 diz que rito e' DADO do tenant, nunca codigo, e o argumento do trigger e'
+-- codigo — a Casa nao tem como mudar 'arquivada' de terminal para nao-terminal editando a config dela.
+--
+-- POR QUE AGORA, se estava la' desde F3.1. Era inofensivo enquanto `proposicoes.estado` nao se movia por
+-- rito nenhum. A borda `POST /legislativo/proposicoes/:id/tramitacao` acende a maquina do eixo C e o
+-- trigger passa a ABORTAR todo UPDATE que parta de 'arquivada' — mesmo quando o rito da Casa declara a
+-- transicao. O caso que isso torna IMPOSSIVEL nao e' exotico: fim de legislatura arquiva a materia nao
+-- votada, legislatura nova o autor requer o DESARQUIVAMENTO. E' ato corriqueiro em praticamente todo
+-- regimento brasileiro, e nenhuma decisao de produto o proibiu — ele estava proibido por um literal.
+--
+-- PARA ONDE A PROTECAO VAI, e por que isso nao e' afrouxamento. Ela passa a vir de
+-- `legislativo.template_estado.terminal`, que e' config do TENANT e ja' existe desde a mig 0016:
+-- `db/tramitacao/transicionar!` consulta a declaracao do estado ATUAL da materia e RECUSA a saida quando o
+-- rito o marcou terminal. A trava continua existindo; o que muda e' QUEM a define — a Casa, no rito dela,
+-- em vez de duas strings escolhidas por um programador em 2026. Ate' esta migracao o campo `terminal` era
+-- DECORATIVO na escrita (so' a leitura o consultava, e o anunciava ao cliente como se fosse garantia).
+--
+-- O QUE NAO SAI, de proposito:
+--   · `trg_proposicoes_imut_identidade` FICA. Tipo/ano/sequencial/urn_lex/ente_id sao a identidade legal da
+--     materia (eixo H) e nao tem nada de vocabulario de rito — sao imutaveis em qualquer regimento.
+--   · `shared.imut_trava_estado_terminal()` FICA, e as OUTRAS 11 tabelas que a usam ficam intactas. A
+--     funcao e' helper compartilhado (mig 0012) e os demais usos sao de ciclos de vida que NAO sao
+--     template-driven (emenda, votacao, parecer, e-SIC, ouvidoria, comentario, tribuna, sessao...). O
+--     defeito era usa-la numa tabela cujo `estado` e' chave de config do tenant, nao a funcao.
+--
+-- O CUSTO ACEITO, declarado aqui e na docstring de `transicionar!`: com a trava fora do banco, a protecao
+-- vale enquanto `transicionar!` for o UNICO caminho que escreve `proposicoes.estado`. Isso foi verificado
+-- (o unico outro escritor alcancavel era `RepoLegislativo/mudar-estado-proposicao!`, que nao tinha um so'
+-- chamador em `src/` e foi REMOVIDO nesta mesma fatia). Se alguem reintroduzir um escritor direto, a
+-- protecao evapora em SILENCIO — nao ha' mais rede embaixo.
+DROP TRIGGER IF EXISTS trg_proposicoes_imut_estado ON legislativo.proposicoes;

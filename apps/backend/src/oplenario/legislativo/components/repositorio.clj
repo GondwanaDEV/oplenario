@@ -46,7 +46,13 @@
     "Onda B Slice 1: leitura filtrada/paginada/ordenada + total do MESMO filtro, NUMA UNICA tx (review
      ecc clojure+database — compoe como `protocolar!`/`transicionar!`; evita `itens`/`total` inconsistentes
      sob escrita concorrente + o round-trip extra de duas tx separadas). Devolve {:itens [...] :total N}.")
-  (mudar-estado-proposicao! [this ente-id m])
+  ;; `mudar-estado-proposicao!` foi REMOVIDO aqui (Fatia 2, mig 0078). Era um UPDATE direto de
+  ;; `proposicoes.estado` exposto no protocolo e SEM UM SO' CHAMADOR em `src/` — enquanto o trigger
+  ;; `trg_proposicoes_imut_estado` existia, o banco ainda barrava o pior uso dele. Com a trava de estado
+  ;; terminal movida para o rito (`db/tramitacao/transicionar!` le `template_estado.terminal`), a protecao
+  ;; so' vale se a ENGINE for o unico caminho de escrita do estado: um chamador novo daqui teria pulado a
+  ;; declaracao da Casa em silencio. Quem muda estado de materia passa por `transicionar!` (gatilho -> rito),
+  ;; que e' o contrato desde o eixo C.
   (editar-proposicao! [this ente-id m]
     "PATCH parcial (CAS) + promove nova versao 'edicao' se :texto presente, 1 tx.")
   (buscar-proposicao-detalhe [this ente-id id]
@@ -79,6 +85,11 @@
   (texto-vigente [this ente-id proposicao-id])
   ;; eixo C — tramitacao por motor declarativo
   (criar-template! [this ente-id template])
+  (aposentar-template! [this ente-id id]
+    "Baixa `ativo` do template (a VALVULA do versionamento por copia integral, mig 0016). true = ESTA
+     chamada aposentou; false = ja' estava aposentado ou nao existe no tenant. `resolver-rito!` so' enxerga
+     os ATIVOS, entao sem esta operacao a Casa que bumpasse o proprio rito ficaria com dois ritos da mesma
+     especie e nao protocolaria mais nada daquela especie.")
   (criar-estado! [this ente-id estado])
   (criar-transicao! [this ente-id transicao])
   (transicionar! [this ente-id registro args] "Engine: guard via motor + historico + muda estado, 1 tx.")
@@ -333,7 +344,6 @@
       (fn [tx]
         {:itens (proposicao/listar tx ente-id filtro)
          :total (proposicao/contar tx ente-id filtro)})))
-  (mudar-estado-proposicao! [this ente-id m] (transacao this ente-id #(proposicao/mudar-estado! % (assoc m :ente-id ente-id))))
   ;; Onda B Slice 2: editar-proposicao! compoe (guard nao-terminal + PATCH parcial CAS) + versao 'edicao'
   ;; opcional numa UNICA tx (mesma disciplina de protocolar! — o texto novo so' e' vigente se o PATCH commitou).
   ;; Task 1-N1: EMITE `proposicao.editada` na MESMA tx (atomicidade outbox-com-o-ato §22.9 E2, mesma
@@ -403,6 +413,7 @@
   (versoes-da-proposicao [this ente-id pid] (transacao this ente-id #(texto/versoes-da-proposicao % ente-id pid)))
   (texto-vigente [this ente-id pid] (transacao this ente-id #(texto/vigente % ente-id pid)))
   (criar-template! [this ente-id t] (transacao this ente-id #(tram/criar-template! % (assoc t :ente-id ente-id))))
+  (aposentar-template! [this ente-id id] (transacao this ente-id #(tram/aposentar-template! % {:ente-id ente-id :id id})))
   (criar-estado! [this ente-id e] (transacao this ente-id #(tram/criar-estado! % (assoc e :ente-id ente-id))))
   (criar-transicao! [this ente-id tr] (transacao this ente-id #(tram/criar-transicao! % (assoc tr :ente-id ente-id))))
   ;; eixo C / F3.3b: ENGINE + emissao do evento de dominio na MESMA tx do tenant (atomicidade
@@ -438,7 +449,7 @@
            ;; deixar de valer. O custo de medir e' uma query indexada.
            :historico (if p (tram/historico-da-proposicao tx ente-id pid limite) [])
            :candidatas (if (and p tid) (tram/transicoes-do-estado tx ente-id tid (:estado p)) [])
-           :estado-no-template (when (and p tid) (tram/estado-no-template tx ente-id tid (:estado p)))}))))
+           :estado-no-template (when (and p tid) (proposicao/estado-no-template tx ente-id tid (:estado p)))}))))
   ;; eixo D / F3.4 — emendas. aprovar! compoe (nova-versao rascunho + muda estado) numa UNICA tx do tenant.
   (criar-emenda! [this ente-id e] (transacao this ente-id #(emenda/criar! % (assoc e :ente-id ente-id))))
   (buscar-emenda [this ente-id id] (transacao this ente-id #(emenda/buscar % ente-id id)))
@@ -499,7 +510,7 @@
   ;; com promover!/registrar-voto-relator!) — por isso reusa parecer-tram/transicionar-parecer! (db/) +
   ;; producers/emitir-transicionou-parecer! INLINE, o MESMO bloco do impl acima.
   (emitir-parecer! [this ente-id registro {:keys [parecer-id template-id gatilho voto-relator updated-by agora
-                                                   contexto lock-version assinador]}]
+                                                   alegado lock-version assinador]}]
     (transacao this ente-id
       (fn [tx]
         ;; CAS otimista contra o SNAPSHOT QUE O CLIENTE VIU (review HIGH fe-11-parecer): confere ANTES de
@@ -542,7 +553,7 @@
                                                :updated-by updated-by :lock-version lock-version}))
         (let [r (parecer-tram/transicionar-parecer! tx {:registro registro :ente-id ente-id :parecer-id parecer-id
                                                          :template-id template-id :gatilho gatilho :agora agora
-                                                         :contexto contexto :updated-by updated-by})]
+                                                         :alegado alegado :updated-by updated-by})]
           (when (:transicionou? r)
             (producers/emitir-transicionou-parecer! bus tx ente-id
               {:parecer-id parecer-id :template-id template-id
