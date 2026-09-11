@@ -189,6 +189,21 @@
   (let [erro? #(contains? #{:runtime :sintaxe} (:erro %))]
     (boolean (or (erro? (ex-data e)) (erro? (ex-data (ex-cause e)))))))
 
+(defn- resposta-guard-inavaliavel
+  "A resposta NOMEADA de rito inavaliavel para as bordas de EMISSAO DE PARECER — ESPELHA a que
+  `tramitar-handler` ja' dava (ADR-0004, paridade de handler). Deliberadamente NAO compartilhada com ela:
+  la' a frase certa e' \"a materia NAO tramitou\", aqui e' \"o ato NAO foi registrado\" — mesma causa, dois
+  sujeitos, e uma frase generica o bastante p/ servir aos dois serviria mal a ambos. Sem isto, a excecao do avaliador sobe
+  crua ate' o interceptor global e vira `{\"erro\": \"erro interno\"}`: o operador nao tem como saber que o
+  problema esta' no TEMPLATE de tramitacao da Casa, e nao num bug do servidor.
+
+  Segue 500 de proposito — nao e' recusa de dominio (isso e' 409), e' incidente de CONFIG: alguem gravou um
+  rito que o motor nao consegue avaliar. O `:gatilho` diz QUAL ato ficou inavaliavel."
+  [gatilho]
+  (http/json-resposta 500 {:erro (str "o rito desta Casa nao pode ser avaliado — o ato NAO foi registrado; "
+                                      "procure quem administra os templates de tramitacao")
+                           :gatilho gatilho}))
+
 (defn- recusa-de-tramitacao
   "A prosa de cada `:motivo` de `{:transicionou? false}` (ver `db/tramitacao/transicionar!`) + o proprio
   motivo como campo. O `:else` cobre o contrato ANTIGO — mapa sem `:motivo`, que e' o que um Repo/fake ou
@@ -406,9 +421,16 @@
           agora (tempo/hoje relogio zona-civil)]
       (if-let [{:keys [parecer]} (controllers/buscar-parecer-editor repo-leg resolver-comissoes ente-id id)]
         (let [m (adapters-in-parecer/emitir->dominio ator id (:template-id parecer) agora (:json-params req))]
-          (controllers/emitir-parecer repo-leg registro (assinador-icp/assinador-stub) ente-id m)
-          (http/json-resposta 200 (adapters-out-parecer/editor->wire
-                                     (controllers/buscar-parecer-editor repo-leg resolver-comissoes ente-id id))))
+          ;; ADR-0004: o guard do rito do parecer LANCA quando e' inavaliavel — traduz-se aqui, como na
+          ;; rota irma de tramitacao, senao o cliente recebe "erro interno" e nao sabe onde olhar.
+          (try
+            (controllers/emitir-parecer repo-leg registro (assinador-icp/assinador-stub) ente-id m)
+            (http/json-resposta 200 (adapters-out-parecer/editor->wire
+                                       (controllers/buscar-parecer-editor repo-leg resolver-comissoes ente-id id)))
+            (catch clojure.lang.ExceptionInfo e
+              (if (guard-inavaliavel? e)
+                (resposta-guard-inavaliavel (:gatilho m))
+                (throw e)))))
         (http/json-resposta 404 {:erro "parecer nao encontrado"})))))
 
 (defn- meu-parecer-editor-handler
@@ -434,11 +456,17 @@
           agora (tempo/hoje relogio zona-civil)]
       (if-let [{:keys [parecer]} (controllers/meu-parecer-editor repo-leg resolver-vereador resolver-comissoes ator id)]
         (let [m (adapters-in-parecer/emitir->dominio ator id (:template-id parecer) agora (:json-params req))]
-          (if (controllers/meu-emitir-parecer repo-leg registro (assinador-icp/assinador-stub)
-                                              resolver-vereador ator id m)
-            (http/json-resposta 200 (adapters-out-parecer/editor->wire
-                                       (controllers/meu-parecer-editor repo-leg resolver-vereador resolver-comissoes ator id)))
-            (http/json-resposta 404 {:erro "parecer nao encontrado"})))
+          ;; espelho do `emitir-parecer-handler` (ADR-0004, paridade de handler).
+          (try
+            (if (controllers/meu-emitir-parecer repo-leg registro (assinador-icp/assinador-stub)
+                                                resolver-vereador ator id m)
+              (http/json-resposta 200 (adapters-out-parecer/editor->wire
+                                         (controllers/meu-parecer-editor repo-leg resolver-vereador resolver-comissoes ator id)))
+              (http/json-resposta 404 {:erro "parecer nao encontrado"}))
+            (catch clojure.lang.ExceptionInfo e
+              (if (guard-inavaliavel? e)
+                (resposta-guard-inavaliavel (:gatilho m))
+                (throw e)))))
         (http/json-resposta 404 {:erro "parecer nao encontrado"})))))
 
 ;; ========================= Onda B Slice 6: expediente (documentos + protocolo geral) =========================
