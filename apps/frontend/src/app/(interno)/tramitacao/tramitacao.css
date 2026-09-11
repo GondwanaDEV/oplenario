@@ -72,6 +72,14 @@
 .selo { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.7rem; font-weight: 600; border-radius: 999px; padding: 0.12rem 0.5rem; border: 1px solid transparent; white-space: nowrap; }
 .selo-esp { font-family: var(--mono); font-weight: 500; color: var(--texto-2); background: var(--surface); border-color: var(--linha); }
 
+/* Fatia "truncamento-familia" (correção da revisão adversarial) apendou: .aviso-corte — aviso de corte
+   por-estado do SERVIDOR (o teto de `paineis/db/tramitacao/listar-board`), distinto de `.col-mais` (que
+   só controla a paginação CLIENTE do que já chegou). Mesma convenção visual + mesmo racional de
+   severidade de `.aviso-corte` em mesa.css (Onda E "painel não mente"): âmbar, nem erro nem nota de
+   rotina — um aviso de INTEGRIDADE DE DADO ("a coluna tem mais do que você está vendo"). */
+.aviso-corte { margin: 0.3rem 0 0; padding: 0.55rem 0.7rem; border: 1px solid color-mix(in srgb, var(--amarelo-traco) 45%, transparent); border-left: 3px solid var(--amarelo-traco); border-radius: var(--raio-sm); background: color-mix(in srgb, var(--amarelo-traco) 12%, var(--surface-2)); color: var(--texto-2); font-size: var(--t-12); line-height: 1.5; }
+.aviso-corte b { color: var(--aviso-texto); font-weight: 700; }
+
 /* ---- rodapé de contagem (substitui a barra fixa .comando fora de escopo) ---- */
 .rodape-contagem { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); text-align: center; margin: 1rem 0 0; }
 .rodape-contagem b { color: var(--marca); font-weight: 600; }
