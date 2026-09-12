@@ -23,7 +23,7 @@ export function DespachosDaMesa({ vista }: { vista: MesaVista["despachos"] }) {
     <section className="bloco" aria-labelledby="fila-titulo">
       <div className="bloco-cabeca">
         <h2 id="fila-titulo">O que só a Mesa despacha</h2>
-        <span className="selo-n mono">{relatorItens.length} item(ns)</span>
+        <span className="selo-n mono">{relatorItens.length}{vista.relator.truncado ? "+" : ""} item(ns)</span>
       </div>
       <div className="bloco-corpo">
         {vista.relator.estado === "indisponivel" && <p>Fila de relatores indisponível no momento.</p>}

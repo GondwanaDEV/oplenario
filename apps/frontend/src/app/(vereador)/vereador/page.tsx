@@ -75,6 +75,8 @@ export default function PaginaHomeVereador() {
           sessaoAoVivo={vista.sessaoAoVivo}
           ciencias={vista.ciencias.length}
           proposicoes={vista.minhasProposicoes.length}
+          cienciasTruncado={vista.cienciasTruncado}
+          proposicoesTruncado={vista.proposicoesTruncado}
           token={token}
         />
         <div className="fora-prox">
@@ -105,9 +107,14 @@ export default function PaginaHomeVereador() {
         </section>
       )}
 
-      {vista.meusPareceres.aguardando.length > 0 && (
+      {(vista.meusPareceres.aguardando.length > 0 || vista.pareceresTruncado) && (
         <section aria-label="Meus pareceres">
           <h2 className="secao-tit">Meus pareceres</h2>
+          {/* achado da revisão adversarial: este aviso vivia DENTRO do `{aguardando.length > 0 && ...}` —
+              quando o corte do servidor derruba justamente os pareceres em aberto (só sobram terminais na
+              lista cortada), a seção inteira sumia e o aviso ia junto, no único caso em que ele importa.
+              O gate da seção acima agora inclui `pareceresTruncado`; a lista de cards abaixo continua
+              mostrando só `aguardando` (pode ficar vazia — o aviso é quem carrega a informação aqui). */}
           {vista.pareceresTruncado && (
             <p role="status" className="aviso-corte">
               Mostrando os <b>{vista.meusPareceres.aguardando.length + vista.meusPareceres.concluidos.length}</b> pareceres
@@ -137,20 +144,35 @@ export default function PaginaHomeVereador() {
 }
 
 /** Resumo textual dos números de ciências/proposições — extraído para ser reaproveitado pelos 4 estados
- * de `HeroSessao` sem repetir a mesma expressão condicional 4 vezes. */
-function ResumoContagens({ ciencias, proposicoes }: { ciencias: number; proposicoes: number }) {
+ * de `HeroSessao` sem repetir a mesma expressão condicional 4 vezes.
+ *
+ * achado da revisão adversarial: este é o PRIMEIRO número que o vereador lê (herói, acima da dobra) — e
+ * `ciencias`/`proposicoes` aqui já são o TAMANHO da lista cortada, não o total. Sem `cienciasTruncado`/
+ * `proposicoesTruncado` (mesmo booleano AUTORITATIVO que os avisos das seções abaixo usam), este texto
+ * afirmava "Você tem 50 ciências" como se 50 fosse o total, exatamente quando 50 é só o teto. */
+function ResumoContagens({
+  ciencias,
+  proposicoes,
+  cienciasTruncado,
+  proposicoesTruncado,
+}: {
+  ciencias: number;
+  proposicoes: number;
+  cienciasTruncado: boolean;
+  proposicoesTruncado: boolean;
+}) {
   if (ciencias === 0 && proposicoes === 0) return null;
   return (
     <>
       {ciencias > 0 && (
         <>
-          Você tem <b>{ciencias}</b> {ciencias === 1 ? "ciência" : "ciências"} a registrar
+          Você tem <b>{cienciasTruncado ? `${ciencias}+` : ciencias}</b> {ciencias === 1 ? "ciência" : "ciências"} a registrar
           {proposicoes > 0 ? " e " : ". "}
         </>
       )}
       {proposicoes > 0 && (
         <>
-          <b>{proposicoes}</b> {proposicoes === 1 ? "proposição" : "proposições"} em andamento.
+          <b>{proposicoesTruncado ? `${proposicoes}+` : proposicoes}</b> {proposicoes === 1 ? "proposição" : "proposições"} em andamento.
         </>
       )}
     </>
@@ -168,12 +190,16 @@ function HeroSessao({
   sessaoAoVivo,
   ciencias,
   proposicoes,
+  cienciasTruncado,
+  proposicoesTruncado,
   token,
 }: {
   estadoSessoes: EstadoSessoes;
   sessaoAoVivo: HomeVereadorVista["sessaoAoVivo"];
   ciencias: number;
   proposicoes: number;
+  cienciasTruncado: boolean;
+  proposicoesTruncado: boolean;
   token: string | null;
 }) {
   if (estadoSessoes === "erro") {
@@ -186,7 +212,7 @@ function HeroSessao({
         <h2>Não foi possível confirmar</h2>
         <p className="resumo">
           Não foi possível verificar se há sessão em andamento agora.{" "}
-          <ResumoContagens ciencias={ciencias} proposicoes={proposicoes} />
+          <ResumoContagens ciencias={ciencias} proposicoes={proposicoes} cienciasTruncado={cienciasTruncado} proposicoesTruncado={proposicoesTruncado} />
         </p>
       </>
     );
@@ -200,7 +226,7 @@ function HeroSessao({
         </span>
         <h2>Um instante…</h2>
         <p className="resumo">
-          <ResumoContagens ciencias={ciencias} proposicoes={proposicoes} />
+          <ResumoContagens ciencias={ciencias} proposicoes={proposicoes} cienciasTruncado={cienciasTruncado} proposicoesTruncado={proposicoesTruncado} />
         </p>
       </>
     );
@@ -215,7 +241,7 @@ function HeroSessao({
         <h2>A sessão está acontecendo agora.</h2>
         <p className="resumo">
           <Link href={comToken("/votar", token)}>Acompanhar a sessão</Link>.{" "}
-          <ResumoContagens ciencias={ciencias} proposicoes={proposicoes} />
+          <ResumoContagens ciencias={ciencias} proposicoes={proposicoes} cienciasTruncado={cienciasTruncado} proposicoesTruncado={proposicoesTruncado} />
         </p>
       </>
     );
@@ -228,7 +254,7 @@ function HeroSessao({
       </span>
       <h2>Tudo em dia.</h2>
       <p className="resumo">
-        Nenhuma votação aberta. <ResumoContagens ciencias={ciencias} proposicoes={proposicoes} />
+        Nenhuma votação aberta. <ResumoContagens ciencias={ciencias} proposicoes={proposicoes} cienciasTruncado={cienciasTruncado} proposicoesTruncado={proposicoesTruncado} />
       </p>
     </>
   );

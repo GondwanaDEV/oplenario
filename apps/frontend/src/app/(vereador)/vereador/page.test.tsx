@@ -312,4 +312,42 @@ describe("PaginaHomeVereador", () => {
     await waitFor(() => expect(screen.getByText("Meus pareceres")).toBeTruthy());
     expect(screen.getByText(/pareceres mais recentes — pode haver mais fora desta lista/)).toBeTruthy();
   });
+
+  // achado da revisão adversarial (ambas as rodadas): o herói é o PRIMEIRO número que o vereador lê, e
+  // afirmava `vista.ciencias.length`/`vista.minhasProposicoes.length` como se fossem TOTAIS — exatamente
+  // as duas listas que o servidor acabou de marcar como cortáveis. Sem qualificador, "1" no herói é lido
+  // como "só tenho 1", mesmo quando há mais fora da lista.
+  it("heroi qualifica ciencias/proposicoes quando o servidor sinaliza corte (nao afirma total nu)", async () => {
+    global.fetch = fetchRoteado({
+      "GET /api/meu/painel": () =>
+        ({ ok: true, json: async () => ({ ...painelFake, "ciencias-truncado": true, "proposicoes-truncado": true }) }) as Response,
+      "GET /api/sessoes": semSessoes,
+    });
+    const { container } = renderComProviders("tok-de-teste");
+
+    await waitFor(() => expect(screen.getByText("Tudo em dia.")).toBeTruthy());
+    const resumo = container.querySelector(".resumo");
+    expect(resumo?.textContent).toContain("1+ ciência");
+    expect(resumo?.textContent).toContain("1+ proposição");
+  });
+
+  // achado da revisão adversarial: o aviso de corte de pareceres vivia DENTRO do gate
+  // `aguardando.length > 0` — quando o corte do servidor derruba justamente os pareceres em aberto (só
+  // sobram terminais na lista cortada), a seção some e o aviso vai junto. O sinal do servidor precisa
+  // sobreviver mesmo com `aguardando` vazio.
+  it("pareceres-truncado avisa mesmo quando o corte deixou so' pareceres em estado terminal (aguardando vazio)", async () => {
+    const painelSoTerminal = {
+      ...painelFake,
+      pareceres: [{ id: "pc9", "objeto-tipo": "proposicao", "objeto-id": "p1", "comissao-id": "c1", estado: "aprovado", "voto-relator": "favoravel", "criado-em": "2026-07-01T00:00:00Z" }],
+      "pareceres-truncado": true,
+    };
+    global.fetch = fetchRoteado({
+      "GET /api/meu/painel": () => ({ ok: true, json: async () => painelSoTerminal }) as Response,
+      "GET /api/sessoes": semSessoes,
+    });
+    renderComProviders("tok-de-teste");
+
+    await waitFor(() => expect(screen.getByText("Tudo em dia.")).toBeTruthy());
+    expect(screen.getByText(/pareceres mais recentes — pode haver mais fora desta lista/)).toBeTruthy();
+  });
 });

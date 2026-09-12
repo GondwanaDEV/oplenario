@@ -53,6 +53,9 @@ describe("DespachosDaMesa — a fila de relatores para de fingir completude", ()
       <DespachosDaMesa vista={vistaCom({ estado: "disponivel", itens: [itemDisponivel as never], truncado: true })} />,
     );
     expect(container.querySelector(".aviso-corte")).not.toBeNull();
+    // achado da revisão adversarial (MENOR): o selo do card imprimia `{itens.length} item(ns)` como se
+    // fosse o tamanho da fila — a mesma forma de total nu que o aviso logo abaixo já corrige.
+    expect(container.querySelector(".selo-n")?.textContent).toBe("1+ item(ns)");
   });
 
   it("truncado=false não mostra o aviso de corte", () => {
