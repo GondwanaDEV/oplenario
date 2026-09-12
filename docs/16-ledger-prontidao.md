@@ -1946,3 +1946,47 @@ Não é uma forma só, e a escolha é do sítio, não do gosto:
   kernel é compartilhado). As fatias corrigiram a **docstring** que prometia coerência inexistente
   e não mexeram no kernel. Consertar de verdade é frente própria.
 - **Scheduler de jobs.** Ver acima: nenhum existe, nem para `compliance`.
+
+---
+
+## 🟠 Carry `relay-observavel` · Falha de infra no relay compartilhado é engolida — falta retry + dead-letter
+
+**12/09/2026.** As frentes `relay-tolerante` (transparência), `relay-poison-tolerante` (tempo-real) e
+`relay-observavel` (`paineis`/`legislativo`, este ledger) resolveram a MESMA classe de incidente — um
+`Throwable` de um consumidor travando a cabeça da fila do `shared.outbox` para TODOS os módulos e
+TODOS os tenants — mas com **duas posturas diferentes**, nenhuma delas o remédio final:
+
+- `transparencia`/`tempo_real`: **payload malformado é descartado; qualquer OUTRA exceção PROPAGA**
+  (o `throw` sobe até o relay, que reverte a tx e deixa a linha pendente para retry na próxima
+  passada). Correto para "banco caiu por 2s" — mas o relay não tem back-off nem teto de tentativas:
+  a MESMA linha é reprocessada A CADA TICK, para sempre, se a causa não for transitória (ex.: um bug
+  de driver permanente) — vira poison de novo, só que mais devagar.
+- `paineis`/`legislativo` (este carry): **NUNCA propagam — payload malformado e falha de infra são
+  IGUALMENTE tolerados**, e esta frente só ensinou o log a distinguir os dois (`:warn` vs. `:error`,
+  `:id` da linha em ambos). Correto para não travar o relay — mas uma falha de infra aqui é **perda
+  silenciosa DEFINITIVA**: a linha é marcada `processed_at`, ninguém reprocessa, e só o `:error` no
+  log denuncia (quem não está olhando o log não vê nada).
+
+**O buraco, nos dois casos:** nem "engolir tudo" nem "propagar tudo" é o certo para uma falha
+TRANSITÓRIA de infra (conexão caiu, timeout, deadlock, disco cheio). O certo é **retentar com limite
+e, esgotado o limite, mover para uma tabela de dead-letter** — isso não existe no repo hoje.
+
+**Por que a tolerância ampla continua certa enquanto o dead-letter não existir:** um `Throwable`
+propagando de volta ao relay COMPARTILHADO (a postura de `transparencia`/`tempo_real`) é PIOR do que
+tolerar — trava o bus inteiro, não só o evento problemático. Estreitar o catch de `paineis`/
+`legislativo` para uma whitelist de classes reintroduziria exatamente esse poison (qualquer classe
+nova, não prevista na lista, voltaria a travar tudo). **Este carry não é motivo para estreitar nada.**
+
+**A forma do conserto** (fora do escopo desta fatia — é MIGRAÇÃO + DECISÃO, não refactor):
+
+1. Uma tabela `shared.outbox_dead_letter` (ou coluna `tentativas`/`proxima-tentativa-em` no próprio
+   `shared.outbox`) — decisão de esquema, precisa migration.
+2. Uma política de retry (quantas tentativas, que back-off) — decisão de produto/operação, não só
+   engenharia: quanto tempo um evento pode ficar "pendente de retry" antes de virar dead-letter é uma
+   escolha de tolerância a atraso, por tipo de evento (uma notificação in-app atrasada é diferente de
+   uma pendência de prazo legal atrasada).
+3. Uma política de REPROCESSO do dead-letter — automática (um worker que retenta periodicamente) ou
+   manual (um operador vê a fila e decide)? Isso é decisão do Daouda, não da engenharia.
+
+**Apontado na docstring** de `paineis.components.repositorio/projetar-evento!`, `projetar-inbox!` e
+`legislativo.components.repositorio/notificar-autor-da-norma!` — uma linha cada, para este carry.
