@@ -31,6 +31,8 @@ KC_HOST="$(printf '%s' "$KEYCLOAK_BASE_URL" | sed -E 's#^https?://##; s#/.*$##; 
 KC_PORT="$(printf '%s' "$KEYCLOAK_BASE_URL" | sed -E 's#^https?://[^:/]+(:([0-9]+))?.*#\2#')"
 KC_PORT="${KC_PORT:-8080}"
 
+ARTEFATOS="$(cd "$(dirname "$0")/../e2e" && pwd)/.artifacts"
+
 echo "==> checando se o Keycloak responde em $KEYCLOAK_BASE_URL (rede docker $REDE, host=$KC_HOST porta=$KC_PORT)"
 TENTATIVAS=30
 i=0
@@ -58,10 +60,20 @@ fi
 echo "==> Keycloak respondendo ($LINHA_STATUS)"
 
 echo "==> semeando as credenciais das 4 personas (secretaria/presidente/vereador/cidada)"
+# O mount de `/app` e' `:ro` (a semente nunca escreve no fonte). Por isso o artefato NAO pode cair num
+# caminho RELATIVO ao CWD do container (`-w /app`): `casa/diretorio-de-artefatos` cai em `.artifacts`
+# quando `DEMO_ARTIFACTS_DIR` esta' ausente, e `.artifacts` dentro de `/app:ro` e' "Read-only file
+# system" — defeito real, pego rodando este script contra um Keycloak de verdade. Mesma solucao de
+# `semear-tudo.sh`: um scratch montado a partir de `e2e/.artifacts`, que e' de onde o resto do
+# ferramental (sonda, e2e) le'. UMA escrita, UM arquivo, nenhuma segunda fonte de verdade.
+mkdir -p "$ARTEFATOS"
+
 docker run --rm --network "$REDE" \
   -v "$(cd "$(dirname "$0")/../apps/backend" && pwd):/app:ro" \
+  -v "$ARTEFATOS:/demo-scratch" \
   -v oplenario_e2e_m2:/root/.m2 \
   -e CLJ_CACHE=/tmp/cpcache \
+  -e DEMO_ARTIFACTS_DIR=/demo-scratch \
   -e DATABASE_URL="jdbc:postgresql://postgres:5432/oplenario" \
   -e DB_USER=oplenario -e DB_PASSWORD=dev \
   -e MINIO_ENDPOINT="http://minio:9000" \
@@ -70,4 +82,5 @@ docker run --rm --network "$REDE" \
   -w /app clojure:temurin-21-tools-deps \
   clojure -Sdeps '{:aliases {:seed {:extra-paths ["demo"]}}}' -X:seed "personas/semear-credenciais!"
 
+echo "==> credenciais gravadas em $ARTEFATOS/credenciais.edn"
 echo "==> semear-credenciais.sh OK"
