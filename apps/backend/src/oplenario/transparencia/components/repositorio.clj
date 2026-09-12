@@ -215,11 +215,17 @@
           ;; primeiros), o residuo NAO entra em nenhuma rodada futura — nao e' um teto que dreno aos poucos,
           ;; e' um apagao permanente para quem ficou de fora. Sem este log o operador nao tem NENHUM jeito de
           ;; saber que uma materia populosa esta' deixando cidadaos sem notificacao.
+          ;; achado MENOR da revisao adversarial: `(= (count destinatarios) teto-fanout)` e' o teto
+          ;; ATINGIDO, nao EXCEDIDO — com EXATAMENTE teto seguidores ativos ninguem fica de fora, mas o
+          ;; guard sozinho logaria um alarme falso ("o residuo NUNCA sera notificado" com :nao-notificados
+          ;; 0). O `when` externo so' evita a query extra no caso comum (abaixo do teto); o `>` interno e'
+          ;; quem decide se ha' de fato residuo antes de acusar.
           (when (= (count destinatarios) teto-fanout)
             (let [total (db-acompanhamento/contar-seguidores-ativos tx ente-id pid)]
-              (log/warn "transparencia: fan-out de notificacao cortado pelo teto — o residuo NUNCA sera notificado (sem cursor nesta query)"
-                        {:ente-id ente-id :proposicao-id pid :teto teto-fanout :seguidores-ativos total
-                         :nao-notificados (max 0 (- total teto-fanout))})))
+              (when (> total teto-fanout)
+                (log/warn "transparencia: fan-out de notificacao cortado pelo teto — o residuo NUNCA sera notificado (sem cursor nesta query)"
+                          {:ente-id ente-id :proposicao-id pid :teto teto-fanout :seguidores-ativos total
+                           :nao-notificados (max 0 (- total teto-fanout))}))))
           (doseq [dest destinatarios
                   :let [dest-str (str dest)]]
             (eventos/emitir! (outbox/bus) tx

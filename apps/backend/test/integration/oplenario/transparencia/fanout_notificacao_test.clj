@@ -80,6 +80,24 @@
         (is (logged? 'oplenario.transparencia.components.repositorio :warn #"fan-out")
             "o corte fica OBSERVAVEL: um log estruturado nomeia que o teto foi atingido")))))
 
+;; ---------- fronteira: EXATAMENTE o teto de seguidores — ninguem fica de fora, sem alarme falso ----------
+
+(deftest fan-out-com-exatamente-o-teto-de-seguidores-notifica-todos-e-nao-loga
+  ;; achado MENOR da revisao adversarial: a guarda antiga era `(= (count destinatarios) teto-fanout)` —
+  ;; teto ATINGIDO, nao EXCEDIDO. Com EXATAMENTE `teto-fanout` seguidores ativos, todos sao notificados e
+  ;; o log (cuja unica razao de existir e' ser o sinal de apagao de entrega) NAO deve disparar.
+  (with-redefs [repo/teto-fanout 3]
+    (let [ente (random-uuid) pid (random-uuid)]
+      (tenancy/com-tenant* *ds* ente
+        (fn [tx]
+          (criar-materia! tx ente pid)
+          (dotimes [_ 3] (seguir! tx ente pid (random-uuid)))))
+      (with-log
+        (tenancy/com-tenant* *ds* ente #(repo/fan-out-notificacao! % (evento-transicao ente pid)))
+        (is (= 3 (notificacoes-emitidas ente)) "os 3 seguidores, exatamente no teto, sao TODOS notificados")
+        (is (not (logged? 'oplenario.transparencia.components.repositorio :warn #"fan-out"))
+            "sem ninguem de fora, nao ha alarme — count==teto sozinho NAO e' motivo pra logar")))))
+
 ;; ---------- a MESMA transicao, chamada de novo: o residuo NAO entra na rodada seguinte (nao ha cursor) ----------
 
 (deftest fan-out-nao-tem-cursor-a-segunda-passada-notifica-os-MESMOS-3-de-sempre
