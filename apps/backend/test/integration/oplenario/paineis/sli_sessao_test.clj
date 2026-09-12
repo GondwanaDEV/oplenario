@@ -249,3 +249,24 @@
         (is (= 3 (db-sli-sessao/contar tx ente))
             "o total real continua 3 — e' o unico jeito de saber que t3 (a agendada que precisa de
              convocacao) esta faltando na lista")))))
+
+;; ---------- achado de revisao adversarial: a fiacao do PROPRIO Repo (o `reify`/defrecord que ESCOLHE
+;; qual funcao vira `:sessoes-total`) nunca era exercitada com corte de verdade. Os tres testes acima
+;; chamam `repo/sli-sessoes` so' sem corte (2/2, 5/5) — coincidem mesmo se a fiacao regredisse para
+;; `(count (listar ...))` em vez de `db-sli-sessao/contar` — ou chamam `db-sli-sessao/*` DIRETO,
+;; contornando o `defrecord` de todo. `:limite` vira a 2a aridade DO PROPRIO PROTOCOLO (opts map, mesmo
+;; idioma de `o-que-vence`), so' para o teste poder cortar sem pagar 201 sessoes — o caminho de PRODUCAO
+;; (controllers.clj) continua na 1a aridade, com o teto de producao.
+(deftest sessoes-total-pelo-repo-nao-e-o-tamanho-da-lista-cortada
+  (let [ente (random-uuid) t1 (random-uuid) t2 (random-uuid) t3 (random-uuid)]
+    (emitir-agendamento! ente t1 "2026-08-10T13:00:00Z" "2026-07-01T09:00:00Z")
+    (drena-eventos!)
+    (emitir-agendamento! ente t2 "2026-08-11T13:00:00Z" "2026-07-01T10:00:00Z")
+    (drena-eventos!)
+    (emitir-agendamento! ente t3 "2026-08-12T13:00:00Z" "2026-07-01T11:00:00Z")
+    (drena-eventos!)
+    (let [r (repo/sli-sessoes *repo* ente {:limite 2})]
+      (is (= 2 (count (:sessoes r))) "a lista respeita o limite injetado, via o Repo")
+      (is (= 3 (:sessoes-total r))
+          "o total, lido pelo PROPRIO Repo, continua 3 — nao o tamanho (2) da lista cortada que o Repo
+           acabou de devolver"))))

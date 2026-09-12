@@ -276,13 +276,20 @@
      `com-tenant-leitura*` no kernel com `:isolation :repeatable-read :read-only true` — fora do escopo
      desta fatia (kernel COMPARTILHADO; consertar so' aqui criaria inconsistencia com os outros dois
      pares que tem o MESMO overclaim).")
-  (sli-sessoes [this ente-id]
+  (sli-sessoes [this ente-id] [this ente-id opts]
     "SLI de janela de sessao (Inv.9): sessoes do tenant, abertas primeiro, concluidas por recencia + o TOTAL
      real (sem teto) — fatia 'truncamento-familia' sitio (a). `sessoes` corta no teto
-     (`teto-sli-sessoes`); `sessoes-total` REUSA `db-sli-sessao/contar` (MESMO WHERE `ente_id = ?` de
-     `listar-sli-sessoes` — a leitura nao filtra por estado, entao e' o WHERE inteiro). Os dois reads rodam
-     na MESMA tx (mesmo CARRY DELIBERADO de nao-mesmo-snapshot MVCC de `tramitacao-board`/`o-que-vence`
-     acima). Devolve {:sessoes [...] :sessoes-total N}.")
+     (`teto-sli-sessoes`, ou em `(:limite opts)` quando injetado); `sessoes-total` REUSA
+     `db-sli-sessao/contar` (MESMO WHERE `ente_id = ?` de `listar-sli-sessoes` — a leitura nao filtra por
+     estado, entao e' o WHERE inteiro). Os dois reads rodam na MESMA tx (mesmo CARRY DELIBERADO de
+     nao-mesmo-snapshot MVCC de `tramitacao-board`/`o-que-vence` acima). Devolve {:sessoes [...]
+     :sessoes-total N}.
+
+     2a aridade (`opts` com `:limite` opcional) existe SO' para o teste injetar um corte pequeno sem
+     pagar o custo de 201 sessoes reais (mesmo idioma de `o-que-vence`/`db-caixa/listar-do-destinatario`
+     desta familia) — e para a REVISAO ADVERSARIAL exercitar esta linha do `defrecord` com corte de
+     verdade, o que a 1a aridade sozinha nunca permitia provar. O caminho de PRODUCAO (controllers.clj)
+     continua na 1a aridade, com o teto de producao.")
   (dashboard-mesa [this ente-id]
     "Rollups do dashboard da Mesa (F7, §16.11 item 11.4): os TRES resumos agregados dos read-models do
     proprio paineis (tramitacao/pendencias/sessoes por estado), lidos numa UNICA tx do tenant. Devolve
@@ -332,10 +339,11 @@
       (fn [tx]
         {:itens             (db-tramitacao/listar-board tx ente-id teto-tramitacao-board-por-estado)
          :totais-por-estado (db-tramitacao/resumo tx ente-id)})))
-  (sli-sessoes [this ente-id]
+  (sli-sessoes [this ente-id] (sli-sessoes this ente-id {}))
+  (sli-sessoes [this ente-id {:keys [limite] :or {limite teto-sli-sessoes}}]
     (transacao this ente-id
       (fn [tx]
-        {:sessoes       (db-sli-sessao/listar-sli-sessoes tx ente-id teto-sli-sessoes)
+        {:sessoes       (db-sli-sessao/listar-sli-sessoes tx ente-id limite)
          :sessoes-total (db-sli-sessao/contar tx ente-id)})))
   (dashboard-mesa [this ente-id]
     (transacao this ente-id

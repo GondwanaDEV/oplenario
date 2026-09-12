@@ -231,6 +231,26 @@
         (is (= 3 (db-caixa/contar-do-destinatario tx ente eu))
             "o total ignora o limite injetado — continua o numero real")))))
 
+;; ---------- achado de revisao adversarial: a fiacao do PROPRIO Repo nunca era exercitada com os dois
+;; numeros DIVERGENTES. Os testes acima chamam `db-caixa/*` DIRETO (contornando o `defrecord`) ou
+;; chamam `paineis-repo/minhas-notificacoes` so' em Casas onde nao-lidas == notificacoes-total (2/2, 0/0,
+;; 55/55) — uma mutacao na linha do `reify` que trocasse `contar-do-destinatario` por `contar-nao-lidas`
+;; (o predicado ERRADO, literalmente a linha vizinha) passaria muda nesses casos. Este teste le' os DOIS
+;; campos do retorno do PROPRIO `minhas-notificacoes` do Repo, numa Casa onde eles DIVERGEM por
+;; construcao (2 lidas ficam de fora de nao-lidas, mas dentro de notificacoes-total).
+(deftest notificacoes-total-pelo-repo-diverge-de-nao-lidas-quando-ha-lida
+  (let [ente (random-uuid) eu (random-uuid)]
+    (inserir! ente eu "k-repo-total-1")
+    (inserir! ente eu "k-repo-total-2")
+    (inserir! ente eu "k-repo-total-3")
+    (let [id-para-marcar (:id (first (:notificacoes (paineis-repo/minhas-notificacoes *paineis* ente eu))))]
+      (paineis-repo/marcar-notificacao-lida! *paineis* ente {:id id-para-marcar :destinatario-identidade-id eu}))
+    (let [r (paineis-repo/minhas-notificacoes *paineis* ente eu)]
+      (is (= 2 (:nao-lidas r)) "1 das 3 foi marcada lida")
+      (is (= 3 (:notificacoes-total r))
+          "o total, lido pelo PROPRIO Repo, continua 3 — nao os 2 nao-lidas que `contar-nao-lidas`
+           devolveria se a fiacao regredisse para o predicado errado"))))
+
 (deftest isolamento-de-tenant-na-leitura
   (let [ente-a (random-uuid) ente-b (random-uuid) eu (random-uuid)]
     (inserir! ente-a eu "k-tenant-a")
