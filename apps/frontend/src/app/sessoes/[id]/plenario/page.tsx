@@ -17,6 +17,7 @@ import { Tribuna } from "./tribuna";
 import type { EstadoPlenario, PlacarVotacao, VistaQuorum } from "@/lib/plenario-reducer";
 import { vistaDoQuorum } from "@/lib/plenario-reducer";
 import { derivarPlacar, type VistaNominal, type VistaSecreta } from "@/lib/placar-vista";
+import { tituloObjetoVotacao } from "@/lib/titulo-objeto-votacao";
 import type { SessaoOut, PautaOut } from "@/lib/contrato";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import "./plenario.css";
@@ -245,39 +246,27 @@ function Palco({ sessao, estado, pauta }: { sessao: SessaoOut; estado: EstadoPle
   );
 }
 
-// Vocabulário de `objeto-tipo` da votação (`legislativo.logic/objetos-votacao`, backend) — DISTINTO de
-// `NOME_TIPO_ITEM` acima (vocabulário de item de PAUTA): só coincidem em "proposicao", os outros 4 não
-// têm equivalente na pauta (emenda/parecer/requerimento/redação final não são item-de-pauta próprio).
-const NOME_OBJETO_VOTACAO: Record<string, string> = {
-  proposicao: "Proposição",
-  redacao_final: "Redação final",
-  emenda: "Emenda",
-  parecer: "Parecer",
-  requerimento: "Requerimento",
-};
-
 /** A matéria em votação no palco (carry telão, Daouda 12/09/2026) — até esta fatia o palco só mostrava o
  * número da sessão, nunca O QUE estava sendo votado (o mesmo buraco que a Fatia 2/2b já tinham fechado
- * para o cockpit do vereador, via `useDetalheVotacao`). `placar.proposicao` já vem pronto de
- * `GET .../votacao-aberta` (hidratação `comVotacao`) — a MESMA resolução de `resolver-objeto-votacao` no
- * backend, sem uma segunda chamada a `/votacoes/:id` (gate `papel-vereador`-only, que o telão não
- * alcançaria de qualquer forma). Sem `proposicao` ainda (evento SSE ao vivo antes da próxima
- * re-hidratação periódica, ou objeto que não é proposição/redação final — emenda/parecer/requerimento não
- * resolvem por completo, ver `detalhe-votacao` no backend) degrada para o rótulo honesto do TIPO, nunca
- * título vazio nem inventado. `null` quando não há votação em curso ou ela já encerrou — o placar de
- * resultado mora em `<Placar>`, não aqui. */
-function MateriaEmVotacao({ placar }: { placar: PlacarVotacao | null }) {
-  if (!placar || placar.encerrada) return null;
+ * para o cockpit do vereador). `placar.proposicao` já vem pronto de `GET .../votacao-aberta` (hidratação
+ * `comVotacao`) — a MESMA resolução de `resolver-objeto-votacao` no backend, sem uma segunda chamada a
+ * `/votacoes/:id` (gate `papel-vereador`-only, que o telão não alcançaria de qualquer forma).
+ *
+ * Achado ao vivo (Daouda, verificação em browser, 12/09/2026): a primeira versão desta função montava o
+ * texto NA MÃO (`{tipo} {sequencial}/{ano}`) e projetava o enum CRU do domínio na parede do plenário —
+ * `projeto_lei 7/2026` em vez de `PL 7/2026`. Reusa `tituloObjetoVotacao` (a MESMA função que já resolve
+ * isto para o cockpit do vereador em `/votar` — `formatarNumeroProposicao`/`ROTULO_TIPO_HONESTO`, o
+ * dicionário tipo->sigla de `proposicoes-vista.ts`, também usado pela ficha da matéria): as duas telas não
+ * podem voltar a divergir de novo (era exatamente esse o defeito original desta fatia inteira — a tela
+ * afirmando/mostrando menos, ou pior, do que o servidor sabe). `estado: "pronto"` sempre — este
+ * componente só é chamado com `placar.objetoTipo` já resolvido (guard abaixo); os ramos "carregando"/
+ * "erro" de `tituloObjetoVotacao` existem para `useDetalheVotacao` (rede própria, com o SEU tri-estado),
+ * não para este caminho síncrono a partir do estado já hidratado. */
+export function MateriaEmVotacao({ placar }: { placar: PlacarVotacao | null }) {
+  if (!placar || placar.encerrada || !placar.objetoTipo) return null;
   return (
     <p className="palco-autoria">
-      Em votação:{" "}
-      {placar.proposicao ? (
-        <b>
-          {placar.proposicao.tipo} {placar.proposicao.sequencial}/{placar.proposicao.ano} — {placar.proposicao.ementa}
-        </b>
-      ) : (
-        <b>{(placar.objetoTipo && NOME_OBJETO_VOTACAO[placar.objetoTipo]) ?? "matéria não identificada"}</b>
-      )}
+      Em votação: <b>{tituloObjetoVotacao({ objetoTipo: placar.objetoTipo, proposicao: placar.proposicao }, "pronto")}</b>
     </p>
   );
 }

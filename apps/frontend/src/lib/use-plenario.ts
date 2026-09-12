@@ -307,6 +307,24 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
     // (I2b): `buscarTribuna` também escreve aqui quando descarta um campo do snapshot por precedência.
     let pedidoDeRebusca = false;
 
+    /** Achado ao vivo (Daouda, verificação em browser, 12/09/2026): o canal replaya a sessão INTEIRA desde
+     * `id: 1` na conexão — não só eventos futuros. O `votacao.aberta` do replay chega ENQUANTO a
+     * hidratação inicial (`comVotacao`) ainda está em voo, avança `votacaoEventoSeq`, e a regra de
+     * precedência de `hidratarVotacao` (deliberada — não afrouxada aqui: existe para não ressuscitar uma
+     * votação que a Mesa já encerrou) descarta o snapshot em voo POR INTEIRO, inclusive `proposicao` — o
+     * único campo que o evento não carrega. Sem este gatilho, a Mesa fica até a periódica de 30s sem
+     * saber o que está em votação, projetado na parede do plenário (medido: ~30-38s no navegador).
+     *
+     * Mesmo padrão de `pedidoDeRebusca` acima: o GATILHO é o EVENTO (escrito em `aoFrame`, abaixo), nunca
+     * a resposta da própria rebusca — `rehidratarVotacao`/`buscarVotacaoAberta` não escrevem aqui, então
+     * uma rebusca não pode reagendar outra (sem laço). SEM o piso `REBUSCA_MIN_MS` do quórum (que existe
+     * pra' coalescer a RAJADA de ~21 eventos de presença de uma chamada): `votacao.aberta` não tem esse
+     * perfil — no máximo um punhado por sessão inteira, mesmo com replay das votações já encerradas —, e
+     * o guarda `votacaoEmVoo` (em `buscarVotacaoAberta`) já impede uma segunda busca sobrepor a primeira
+     * se dois pedidos caírem no mesmo tick. O relógio de 500ms só limita a LATÊNCIA do gatilho a essa
+     * granularidade — de ~30s (a periódica) pra' quase instantâneo. */
+    let pedidoDeRebuscaVotacao = false;
+
     const aoFrame = (f: { event?: string; data: string; id?: string }) => {
       if (!vivo) return;
       if (f.id) lastIdRef.current = f.id;
@@ -314,6 +332,7 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
       try {
         const dados = JSON.parse(f.data);
         const evento = { tipo: f.event, seq: f.id ? Number(f.id) : 0, dados } as EventoPlenario;
+        if (evento.tipo === "votacao.aberta") pedidoDeRebuscaVotacao = true;
         setEstado((prev) => {
           if (!prev) return prev;
           const proximo = aplicarEvento(prev, evento);
@@ -330,15 +349,14 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
       }
     };
 
-    // Um único relógio governa as duas re-buscas, e nenhuma delas roda dentro de um updater de estado:
+    // Um único relógio governa as três re-buscas, e nenhuma delas roda dentro de um updater de estado:
     //   - REATIVA (debounced): houve movimento de presença e já passou o piso -> re-busca. É o que faz o
     //     número do telão andar durante a chamada, coalescendo a rajada de 21 presenças.
     //   - PERIÓDICA: auto-cura. Cobre o buraco silencioso da retenção de 5 min do canal e qualquer evento
     //     perdido — sem ela, um erro vira permanente e a tela segue exibindo "Ao vivo" com confiança.
-    // `comVotacao` (fatia "demo-tres-consertos" #2b) reusa o MESMO relógio de 500ms — sem `pedido`
-    // reativo (votação não tem um sinal "algo se mexeu" barato como presença; a rota já é indexada, e o
-    // SSE segue sendo quem entrega mudança em tempo real): só a PERIÓDICA, a mesma rede de segurança
-    // contra a retenção de 5 min do canal.
+    // `comVotacao` (fatia "demo-tres-consertos" #2b) reusa o MESMO relógio de 500ms: a PERIÓDICA (mesma
+    // rede de segurança contra a retenção de 5 min do canal) + o pedido EAGER de `votacao.aberta` (achado
+    // ao vivo acima) — SEM piso, ver a docstring de `pedidoDeRebuscaVotacao`.
     const relogio = setInterval(() => {
       if (!vivo) return;
       if (comQuorum) {
@@ -348,8 +366,12 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
           void rehidratar();
         }
       }
-      if (comVotacao && Date.now() - ultimaBuscaVotacao >= REBUSCA_PERIODICA_MS) {
-        void rehidratarVotacao();
+      if (comVotacao) {
+        const desdeVotacao = Date.now() - ultimaBuscaVotacao;
+        if (pedidoDeRebuscaVotacao || desdeVotacao >= REBUSCA_PERIODICA_MS) {
+          pedidoDeRebuscaVotacao = false;
+          void rehidratarVotacao();
+        }
       }
     }, 500);
 
