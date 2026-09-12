@@ -23,14 +23,20 @@
    - voto.registrado com modalidade INESPERADA (nem nominal nem secreta) -> LANCA. O contrato
      VotoRegistradoPayload e' um `:multi` fechado sobre {nominal,secreta}, entao isto so ocorre sob violacao
      de contrato a montante; falhar fechado aqui torna o invariante MACHINE-ENFORCED (nao so comentario) e
-     impede que uma 3a modalidade futura vaze identidade por pass-through cego se alguem esquecer este gate."
+     impede que uma 3a modalidade futura vaze identidade por pass-through cego se alguem esquecer este gate.
+
+  A `ex-info` carrega `:tempo-real/payload-malformado? true` em `ex-data` (frente 'relay-poison-tolerante') —
+  MARCADOR aditivo, nao mudanca de comportamento: o gate continua fechando fail-closed exatamente como
+  antes; a unica diferenca e' que quem captura esta excecao na fronteira de despacho (tempo_real/consumer.clj)
+  agora sabe, sem casar a MENSAGEM (string de humano), que isto e' forma-de-dado e nao infra."
   [{:keys [tipo payload]}]
   (if (= tipo "voto.registrado")
     (case (:modalidade payload)
       "secreta" (select-keys payload tick-secreto-chaves)
       "nominal" payload
       (throw (ex-info "voto.registrado com modalidade inesperada (contrato violado a montante)"
-                      {:modalidade (:modalidade payload)})))
+                      {:modalidade (:modalidade payload)
+                       :tempo-real/payload-malformado? true})))
     payload))
 
 (defn projetar
