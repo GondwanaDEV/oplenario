@@ -2055,3 +2055,83 @@ mesmos que a suíte usa).
   personas, e eu não digito credencial. O render é mapeamento puro do `resumo`
   (`saude-institucional.tsx:29-30`, `emDia = cumprida + dispensada + cancelada`) — 10 segundos de
   olhada em `/paineis/mesa` fecham o laço.
+
+---
+
+# 🔎 Exploratório de fluxo · Jornada da SERVIDORA (12/09/2026)
+
+**Método:** 1 workflow, 4 pernas em pipeline SERIAL sobre UMA matéria (a jornada é sequencial por
+natureza — fan-out só no mapeamento e na refutação). 119 agentes, 0 erros. Cada achado passou por
+**3 lentes de refutação independentes** (instrumento · já-conhecido · o-código-faz-isso); sobrevive
+quem teve menos de 2 refutações. Stack em `APP_ENV=dev` (token JSON) — **a autenticação real ficou
+fora desta rodada**, é a única perna que o modo dev não exercita.
+
+## O veredito
+
+| Perna | Completou | Como |
+|---|---|---|
+| 1/4 — PROTOCOLO | ✅ | Completou: PL 16/2026 protocolado pela interface e levado até `aguardando_pauta` (pronta para entrar em pauta). MAS os dois atos de tramitação (despac |
+| 2/4 — PAUTA | ✅ | Completou os 7 passos. A sessão nova (4ª Ordinária, 26/09/2026) existe, tem PL 16/2026 na ordem do dia, e a tela /pauta-convocacao mostra exatamente o |
+| 3/4 — CONDUÇÃO DA SESSÃO | ✅ | Os 6 passos foram cumpridos e a sessão está encerrada, mas o passo 4 exigiu um CONTORNO. A vereadora Fernanda NÃO conseguiu votar pelo cockpit: http:/ |
+| 4/4 — REMESSA AO TCE | ❌ | Passos 1, 2, 5 e 6 cumpridos. O passo 3 (promulgar/publicar a norma) é INALCANÇÁVEL e a jornada morre ali: PL 16/2026 está sancionada e não vira lei p |
+
+**32 achados confirmados · 6 derrubados.**
+
+## Os 4 críticos
+
+| Achado | Evidência |
+|---|---|
+| **A sessao nao pode ser convocada — nao existe convocacao no sistema, so um cartao derivado na tela** | cd apps/backend/src && grep -rni "convoca" --include="*.clj" . -> 11 hits, todos comentario ou o dominio de SUPLENTE convocado; nenhuma rota, nenhum handler, nenhum evento. grep -rni "edital" --include="*.clj" . -> 0 hits. grep -rn "ciencia_convocacao" --inclu |
+| **A materia sancionada nunca vira lei publicada: promulgar e publicar norma nao tem rota HTTP nenhuma** | grep -rn 'promulgar|publicar-norma' $(find src -type d -name diplomat) => zero linhas. Probes com Bearer do secretario: POST http://localhost:8888/legislativo/proposicoes/4eed3430-11f8-42e3-b558-65f92bfa5692/promulgacao -> HTTP 404 Not Found; POST .../norma -> |
+| **Nao ha como gerar uma remessa ao TCE: as 3 rotas do ciclo exigem um id que so' o Clojure produz** | Conjunto completo de rotas em src/oplenario/compliance/diplomat/http/in.clj (fn `rotas`, linhas 89-99): apenas GET /compliance/painel, POST /compliance/remessas/:id/validar, POST /compliance/remessas/:id/submeter, POST /compliance/remessas/:id/resposta. grep - |
+| **Aceitar a remessa pela rota HTTP nao move o placar de compliance — e o mesmo card se contradiz** | curl -X POST http://localhost:8888/compliance/remessas/9056fd5d-0ae3-4421-aa56-ed081134f975/resposta -H 'Authorization: Bearer <secretario>' -d '{"estado":"aceita"}' -> HTTP 200 {"estado":"aceita","competencia":"2026-09",...}. Depois (3s): curl http://localhos |
+
+## Altos
+
+- **BURACO** · Nao existe tela para agendar sessao — a rota existe e ninguem a chama
+- **BURACO** · Nao existe tela para montar a pauta — as tres rotas de escrita nao tem chamador
+- **DEFEITO** · A mesma proposicao pode ser incluida duas vezes na mesma pauta
+- **DEFEITO** · Vereador AUSENTE com falta justificada e vereador LICENCIADO votam sem recusa — 17 votos numa Casa de 16 membros com 15 presentes, e o encerramento apura 'aprovada' sem um sinal
+- **DEFEITO** · O placar NOMINAL do telão do plenário identifica cada vereador por prefixo de UUID em vez de nome
+- **BURACO** · Conduzir a sessão não tem interface: abrir, encerrar, inscrever orador, dar a palavra, cronômetro, encerrar fala, abrir e encerrar votação — 9 dos 11 atos só existem por HTTP
+- **BURACO** · O único documento que a sessão produz é a folha de PRESENÇA — a matéria, o orador e o resultado da votação não constam de lugar nenhum
+- **DEFEITO** · Materia aprovada em plenario, com autografo emitido e sancionada, continua marcada 'Aguardando pauta' em duas telas
+- **BURACO** · Os dois mundos nunca se tocam: a obrigacao de compliance nao conhece nenhuma materia
+
+## Médios e baixos
+
+- `medio` **DEFEITO** · A faixa 'ONDE ESTÁ A MATÉRIA' retrocede para 'Protocolo' quando a matéria fica pronta para pauta
+- `medio` **DEFEITO** · Ficha e quadro discordam de onde está a matéria: 'Em pauta' aparece como 'Pronta p/ pauta' e 'Em Plenário' fica zerado
+- `medio` **ATRITO** · A autoria é digitada como texto livre e não se liga ao vereador cadastrado (autor_id fica NULL)
+- `baixo` **ATRITO** · O filtro 'Espécie' da lista de proposições omite duas espécies que estão no acervo
+- `baixo` **ATRITO** · 'Concluir comissões' passa com zero pareceres — o rito da Casa da demo não tem guarda nenhuma
+- `medio` **DEFEITO** · O numero do item na pauta e global por sessao, nao por fase — o primeiro item lido aparece como 'item 5'
+- `medio` **ATRITO** · A tela da pauta segue read-only por uma justificativa que ja nao e verdade (lock-version JA e exposto)
+- `medio` **ATRITO** · Todo o caminho da pauta exige UUIDs que nenhuma tela mostra
+- `medio` **DEFEITO** · A fila da tribuna nunca esvazia: quem já falou continua listado como inscrito no telão, inclusive enquanto está com a palavra
+- `medio` **DEFEITO** · A pauta no telão não diz QUAL matéria está em pauta — 'Proposição · matéria vinculada' — enquanto a mesma tela mostra o número e a ementa no bloco de votação
+- `medio` **BURACO** · Tempo adicional concedido pela Mesa é gravado e exposto no read-model, mas nenhuma tela o mostra — o cronômetro do telão ignora o ato
+- `baixo` **DEFEITO** · A folha congelada salta da seção 5 para a 8, e a nota de rodapé 3 remete a uma 'seção de movimentações' que não existe no documento
+- `medio` **ATRITO** · Todo ato humano é atribuído a um prefixo de UUID — 'Chamada · dbf001fc', 'Congelada por dbf001fc', 'Conduzida por (id) dbf001fc'
+- `baixo` **ATRITO** · A tela promete que 'quem decide é a Mesa', mas o mesmo secretário que lança a justificativa a defere, no mesmo painel, com um clique
+- `baixo` **ATRITO** · O recibo de transição de sessão não devolve o novo lock-version, obrigando um GET extra antes do próximo ato
+- `medio` **BURACO** · O autografo e a sancao nao aparecem na linha do tempo da propria materia
+- `medio` **ATRITO** · O prazo de resposta do Executivo nao pode ser informado em lugar nenhum — e a tela reserva uma coluna inteira para ele
+- `medio` **DEFEITO** · Sessao agendada para daqui a 14 dias aparece no calendario como 'encerrada'
+- `baixo` **ATRITO** · O 409 do ciclo da remessa nao diz em que estado a remessa esta nem o que se esperava
+
+## O que a refutação DERRUBOU (e por quê — vale mais que os achados)
+
+- ~~A Mesa não consegue despachar: 'Distribuir a comissão' está morto na ficha e a rota funciona~~ — Não é artefato de instrumento (o disabled está hardcoded no fonte e o POST persistiu de verdade), mas a premissa central do achado é falsa: `despachar` NÃO é "Distribuir a comissão". No rito da Casa da demo a transição `protocolada → em_comissoes` tem `acao = NULL`, e a própria migration define NULL
+- ~~Nenhuma tela da Casa dispara ato de tramitação — e o quadro /tramitacao promete que dispara~~ — O instrumento mediu a si mesmo: contou `main button` e `[draggable=true]`, e a tela NÃO usa nenhum dos dois como affordance. Cada cartão é um `<Link>` (âncora) para `/ficha-materia/:id` — `page.tsx:153-167` —, há um `<Link className="btn btn-primaria">Nova proposição`  (`page.tsx:92-94`), um `<selec
+- ~~O despacho não nomeia a comissão: matéria fica 'Em comissões' sem nenhuma comissão designada~~ — O achado mediu o INSTRUMENTO (a semente da demo), não o produto. (1) "O template desta Casa tem uma só transição a partir de protocolada" é verdade — mas esse template é a fixture `demo/acervo.clj:64`, e o vocabulário de gatilhos/estados é DADO do tenant (colunas `text` livres, sem enum, Inv.4). (2)
+- ~~Reordenar item de pauta nao desloca os irmaos — dois itens ficam com a mesma ordem~~ — O fato observado é real (dois itens com ordem=1, confirmado no banco) e não é artefato de instrumento — mas o DANO alegado é falso e o conserto proposto já foi recusado por revisão. (1) "O desempate passa a ser o que o banco devolver" está errado: `listar-itens` faz `ORDER BY ordem ASC, criado_em AS
+- ~~O cockpit manda a vereadora votar na sessão ERRADA — /meu/sessao-atual devolve a primeira linha de uma lista que não está ordenada por 'em curso primeiro'~~ — O mecanismo central alegado não existe. O handler NÃO pega a primeira entrada crua: `adapters/out/minha_sessao_atual.clj` filtra para `#{"aberta" "suspensa"}` ANTES de escolher, e devolve `{:sessao-id nil}` se não houver viva — exatamente o cenário "agendada no topo" que o achado descreve como quebr
+- ~~O 400 da rota de resposta nao nomeia o campo invalido — e o campo se chama `estado` onde todo o resto fala 'resultado'~~ — As duas metades caem no fonte. (a) Não há colisão de vocabulário: `aceita`/`rejeitada` SÃO membros de `estados-remessa` (rascunho->validada->submetida->{aceita|rejeitada}) e a rota executa exatamente essa transição de ciclo de vida; a própria resposta 200 do POST devolve `{"estado": ...}` (RemessaOu
+
+**Correção de uma afirmação minha nesta sessão:** eu disse que ligar o botão 'Distribuir a comissão'
+era FE de meia hora. Falso. `despachar` tem `acao=NULL` no rito da Casa — move o rótulo e não grava
+comissão. O ato que distribui (`iniciar-parecer!` com comissão+relator) não tem rota: `in.clj` tem
+GET/PATCH/emissão de parecer e **nada que crie um**. O `<EmBreve>` está certo; o comentário
+desatualizado em `despachos-da-mesa.tsx:60-63` é que engana.
+
