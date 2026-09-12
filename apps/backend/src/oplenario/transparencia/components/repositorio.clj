@@ -205,8 +205,22 @@
           para (:para payload)
           tid  (:transicao-id payload)]
       (when-let [materia (db-materia/buscar tx ente-id pid)]
-        (let [{:keys [assunto corpo]} (logic-notif/renderizar materia para)]
-          (doseq [dest (db-acompanhamento/seguidores-ativos tx ente-id pid teto-fanout)
+        (let [{:keys [assunto corpo]} (logic-notif/renderizar materia para)
+              destinatarios (db-acompanhamento/seguidores-ativos tx ente-id pid teto-fanout)]
+          ;; SINAL OBSERVAVEL (frente 'truncamento-familia', sitio (b)): este e' um JOB, nao uma listagem —
+          ;; nao ha campo `-total` a publicar (regra 1 da familia: o teto nunca vai ao cliente, e aqui nao ha
+          ;; cliente nenhum, so' um consumer do bus). Quando a contagem bate no teto, MEDE o residuo real
+          ;; (`contar-seguidores-ativos`, MESMO predicado de `seguidores-ativos` — regra 3) e LOGA: sem
+          ;; cursor/paginacao nesta query (`ORDER BY seguidor_identidade_id LIMIT teto`, sempre os MESMOS N
+          ;; primeiros), o residuo NAO entra em nenhuma rodada futura — nao e' um teto que dreno aos poucos,
+          ;; e' um apagao permanente para quem ficou de fora. Sem este log o operador nao tem NENHUM jeito de
+          ;; saber que uma materia populosa esta' deixando cidadaos sem notificacao.
+          (when (= (count destinatarios) teto-fanout)
+            (let [total (db-acompanhamento/contar-seguidores-ativos tx ente-id pid)]
+              (log/warn "transparencia: fan-out de notificacao cortado pelo teto — o residuo NUNCA sera notificado (sem cursor nesta query)"
+                        {:ente-id ente-id :proposicao-id pid :teto teto-fanout :seguidores-ativos total
+                         :nao-notificados (max 0 (- total teto-fanout))})))
+          (doseq [dest destinatarios
                   :let [dest-str (str dest)]]
             (eventos/emitir! (outbox/bus) tx
               (ev-notif/requisitada

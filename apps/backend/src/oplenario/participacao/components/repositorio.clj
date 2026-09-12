@@ -76,8 +76,11 @@
      Idempotente (a ja-vencida nao re-transiciona). RETORNO PARCIAL por passada: no maximo `teto-sweep` (1000)
      transicoes por chamada (guarda anti unbounded-read) — o scheduler deve RE-INVOCAR por ente ate a passada
      voltar VAZIA p/ drenar um backlog > 1000 (ex.: migracao de e-SIC legado; um cron ingenuo de 1 chamada/tick
-     deixa o excedente 'no prazo' no painel por ate 1 tick). Job disparado por scheduler (INFRA, mesma pendencia
-     do sweep do compliance — nao ha worker/cron aqui). Devolve [{:id :objeto-tipo :objeto-id :de :para}...].")
+     deixa o excedente 'no prazo' no painel por ate 1 tick). Job disparado por scheduler — mas HOJE NAO HA
+     scheduler nenhum chamando isto em producao (CONFIRMADO por grep, prova + severidade em
+     `diplomat/consumers.clj`, frente 'truncamento-familia' sitio (a): nao e' o teto de 1000 que trunca,
+     e' a INEXISTENCIA do job — prazos de LAI/LGPD vencidos hoje ficam 'pendente' para sempre ate' alguem
+     chamar isto manualmente). Devolve [{:id :objeto-tipo :objeto-id :de :para}...].")
   ;; ---- Slice 4: LGPD — solicitacao do titular (contador SEPARADO) + Encarregado/DPO ----
   (solicitar-titular! [this ente-id m]
     "TITULAR — UMA tx: sequencial gapless 'solicitacao_titular:<ano>' + INSERT solicitacao_titular + INSERT

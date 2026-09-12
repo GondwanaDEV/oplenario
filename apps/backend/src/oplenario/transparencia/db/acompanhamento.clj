@@ -46,12 +46,24 @@
                           [:= :seguidor_identidade_id seguidor-identidade-id] [:= :estado [:inline "ativo"]]]
                   :returning [:id]}))))
 
+(defn- where-seguidores-ativos
+  "O predicado de 'seguidores ativos de uma materia' — FONTE UNICA para `seguidores-ativos` (a lista, com
+  teto) e `contar-seguidores-ativos` (o total, sem teto) — regra 3 da frente 'truncamento-familia', sitio
+  (b). As duas SEM alias (nenhuma faz JOIN), ao contrario de `where-meus` — mesmo texto de predicado nos
+  dois lugares e' o que garante que a contagem enxerga exatamente quem a lista enxergaria sem o LIMIT."
+  [ente-id proposicao-id]
+  [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id] [:= :estado [:inline "ativo"]]])
+
 (defn seguidores-ativos
   "F7 E2 — a query do FAN-OUT: os `seguidor_identidade_id` que seguem ATIVAMENTE a materia (para notificar numa
   transicao). Usa o prefixo (ente_id, proposicao_id) do UNIQUE (ente_id, proposicao_id, seguidor) — sem indice
   adicional (nota da mig 0045). `[:inline \"ativo\"]` = consent-gating por construcao (so' quem consente hoje).
   Devolve so' os UUIDs (paineis nunca ve 'quem-segue-o-que' — o evento e' 1 por destinatario ja' resolvido).
-  `teto` limita o fan-out por transicao (anti unbounded — uma materia MUITO seguida nao explode a tx do relay)."
+  `teto` limita o fan-out por transicao (anti unbounded — uma materia MUITO seguida nao explode a tx do relay).
+  O par `contar-seguidores-ativos` (MESMO predicado, `where-seguidores-ativos`) e' o que
+  `fan-out-notificacao!` usa para LOGAR quando este teto de fato cortou alguem (frente
+  'truncamento-familia', sitio (b) — aqui nao ha campo `-total` publicavel: isto e' um JOB, nao uma
+  listagem, e o cliente nunca ve este numero)."
   [tx ente-id proposicao-id teto]
   {:pre [(some? ente-id) (some? proposicao-id)]}
   (mapv :seguidor-identidade-id
@@ -59,10 +71,21 @@
          (jdbc/execute! tx
            (sql/format {:select [[:seguidor_identidade_id :seguidor-identidade-id]]
                         :from :transparencia.acompanhamento
-                        :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]
-                                [:= :estado [:inline "ativo"]]]
+                        :where (where-seguidores-ativos ente-id proposicao-id)
                         :order-by [:seguidor_identidade_id]
                         :limit teto})))))
+
+(defn contar-seguidores-ativos
+  "Quantos seguidores ATIVOS uma materia tem — companheiro de `seguidores-ativos`, MESMO predicado
+  (`where-seguidores-ativos`, regra 3). Usado SO' por `fan-out-notificacao!` para decidir se loga o corte
+  do teto (nunca para decidir quem e' notificado, e nunca publicado ao cliente — este e' um JOB, a forma
+  `-total` da familia e' para LISTAGENS que um cliente le)."
+  [tx ente-id proposicao-id]
+  (:contagem
+   (comum/linha->kebab
+    (jdbc/execute-one! tx
+      (sql/format {:select [[[:count :*] :contagem]] :from :transparencia.acompanhamento
+                   :where (where-seguidores-ativos ente-id proposicao-id)})))))
 
 (defn- where-meus
   "O predicado de 'minhas materias acompanhadas' — FONTE UNICA para `meus-da-materia` e `contar-meus`
