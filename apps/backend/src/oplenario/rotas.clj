@@ -88,9 +88,15 @@
   - TODOS os stints, nunca `mandato-vigente` (que e' LIMIT 1 na data de hoje e devolve nil p/ ex-vereador,
     justamente o perfil historico em que a janela mais importa). O vao ENTRE dois stints de um suplente
     reconvocado nao e' exercicio e nao entra.
-  - acima de `teto-de-janelas` intervalos, as janelas MAIS ANTIGAS sao DESCARTADAS (nunca fundidas: fundir
-    contaria os vaos entre stints como exercicio). O efeito na fatia 6 e' o mesmo regime, ja' declarado, de
-    `:presenca-projetada-desde` — o periodo descartado some dos DOIS lados da fracao, nunca vira falta.
+  - acima de `teto-de-janelas` intervalos, esta fn LANCA fail-closed (`:limite/janelas-excedido`) em vez de
+    truncar (frente 'truncamento-familia', sitio (c) — correcao da decisao original desta docstring, que
+    fazia `take-last` e descartava as MAIS ANTIGAS em silencio). Duas razoes para fail-closed em vez de um
+    campo `-total`/`-truncado`: (i) isto e' o DENOMINADOR de um numero PUBLICADO (a fracao de assiduidade
+    da fatia 6) — truncar o denominador produz um numero ERRADO apresentado como certo, a mesma categoria
+    de `sessoes/db/sessao.clj:listar-todas`/`cadastros/db/vereador.clj:379`, nao a das listagens de UI da
+    familia; (ii) `janela-anterior-a-projecao?` (adapters/out/parlamentar) e' calculado SOBRE estas janelas
+    — um corte silencioso tambem distorceria aquela decisao, nao so' a fracao. Rota PUBLICA e ANONIMA:
+    publicar uma assiduidade errada como se fosse certa e' pior que 422.
 
   Vereador sem mandato -> `[]`. Vazio aqui significa 'sem periodo de exercicio registrado' e a fatia 6 o
   publica como tal (0 de 0 + `:janela-de-exercicio-conhecida false`) — NUNCA como fallback p/ o
@@ -138,9 +144,10 @@
                             (map #(select-keys % [:inicio :fim])
                                  (get licencas-do-stint (:id m)))))
                          mandatos))]
-    (if (> (count janelas) teto-de-janelas)
-      (vec (take-last teto-de-janelas janelas))
-      janelas)))
+    (when (> (count janelas) teto-de-janelas)
+      (throw (ex-info "janelas de exercicio do vereador acima do teto da rota publica de perfil"
+                      {:tipo :limite/janelas-excedido :medido (count janelas) :teto teto-de-janelas})))
+    janelas))
 
 (defn ficha-e-janelas-publicas
   "Seam do host p/ a rota PUBLICA do perfil do vereador: devolve `{:ficha ... :janelas ...}`, ou nil se o
