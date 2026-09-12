@@ -279,15 +279,26 @@
     (repo-legislativo/iniciar-parecer! *repo-legislativo* ente
       {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id (protocolar! ente vereador)
        :comissao-id (random-uuid) :template-id tid :relator-id vereador})
-    (repo-legislativo/iniciar-parecer! *repo-legislativo* ente
-      {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id (protocolar! ente vereador)
-       :comissao-id (random-uuid) :template-id tid :relator-id vereador})
-    (with-redefs [repo-legislativo/teto-meu-painel 1]
-      (let [r (repo-legislativo/meu-painel *repo-legislativo* ente vereador)]
-        (is (= 1 (count (:proposicoes r))) "a LISTA de proposicoes continua cortada no teto injetado")
-        (is (true? (:proposicoes-truncado r)) "4 proposicoes reais > teto 1 -> sinaliza")
-        (is (= 1 (count (:pareceres r))) "a LISTA de pareceres continua cortada no teto injetado")
-        (is (true? (:pareceres-truncado r)) "2 pareceres reais > teto 1 -> sinaliza")))))
+    (let [pid-mais-recente (protocolar! ente vereador)
+          {pcid-mais-recente :id}
+          (repo-legislativo/iniciar-parecer! *repo-legislativo* ente
+            {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id pid-mais-recente
+             :comissao-id (random-uuid) :template-id tid :relator-id vereador})]
+      (with-redefs [repo-legislativo/teto-meu-painel 1]
+        (let [r (repo-legislativo/meu-painel *repo-legislativo* ente vereador)]
+          (is (= 1 (count (:proposicoes r))) "a LISTA de proposicoes continua cortada no teto injetado")
+          (is (true? (:proposicoes-truncado r)) "4 proposicoes reais > teto 1 -> sinaliza")
+          (is (= 1 (count (:pareceres r))) "a LISTA de pareceres continua cortada no teto injetado")
+          (is (true? (:pareceres-truncado r)) "2 pareceres reais > teto 1 -> sinaliza")
+          ;; achado da revisão adversarial: `proposicoes-do-autor`/`pareceres-do-relator` ordenam DESC
+          ;; (mais recente primeiro) sem reversao — o item que sobrevive ao corte tem de ser o MAIS
+          ;; RECENTE (`atualizado-em`/`criado-em` maior), nao o mais antigo. Uma mutacao `:fim`->`:inicio`
+          ;; aqui derrubaria a proposicao/parecer mais recente do vereador em silencio (count/-truncado
+          ;; continuam corretos) — so' esta identidade pega.
+          (is (= pid-mais-recente (:id (first (:proposicoes r))))
+              "a proposicao que sobrevive ao corte e' a mais recente (atualizado-em), nao a mais antiga")
+          (is (= pcid-mais-recente (:id (first (:pareceres r))))
+              "o parecer que sobrevive ao corte e' o mais recente (criado-em), nao o mais antigo"))))))
 
 (deftest meu-painel-sinaliza-truncamento-de-ciencias-a-fila-de-acao-mais-grave
   ;; a MAIS GRAVE das 3 listas (cada `parecer-id` de `:ciencias` e' o `evento-ref` que POST /meu/ciencias
