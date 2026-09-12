@@ -657,9 +657,16 @@
 ;; rota que recupera a votacao aberta apos a retencao MINID de ~5min do canal. Tirar o papel da borda SEM
 ;; por a politica na camada fina reabriria a mesma porta dos fundos que a docstring de
 ;; `pode-ver-quorum-da-sessao?` registra ter acontecido uma vez em `/quorum`: QUALQUER vinculo ativo da
-;; Casa — inclusive cidadao, sem papel nenhum — leria a votacao em curso de uma sessao SECRETA. Os testes
-;; abaixo cravam a politica INTEIRA (mesma Casa E (transmissao publica OU secretario)), nao so' a metade
-;; que abre.
+;; Casa — inclusive cidadao, sem papel nenhum — leria a votacao em curso de uma sessao SECRETA.
+;;
+;; Revisao do Daouda (12/09/2026): a politica final tem TRES clausulas, nao duas — mesma Casa E
+;; (transmissao publica OU 'secretario' OU 'vereador'). O vereador entra pelo MESMO argumento da docstring
+;; de `pode-ver-quorum-da-sessao?` levado ate' o fim: o gate e' de PUBLICO (quem so' assiste), nao de
+;; sessao; numa sessao secreta o vereador VOTA (`/meu-voto` e' gated 'vereador') — quem registra o voto
+;; tem direito de saber que ela esta' aberta. A composicao mora em `pode-ver-votacao-aberta?` (rotas.clj):
+;; `(or (pode-ver-quorum-da-sessao? a s) (and (pode-ver-sessao? a s) (papel vereador)))` — a disjuncao de
+;; papel entra escopada DENTRO de `pode-ver-sessao?` (mesma Casa), nunca por fora; um `(or (papel vereador)
+;; ...)` isolado deixaria passar um vereador de OUTRA Casa. Os testes abaixo cravam a politica INTEIRA.
 
 (deftest votacao-aberta-sessao-nao-publica-nega-cidadao-sem-papel-403
   (let [ente (random-uuid) sid (random-uuid)
@@ -703,22 +710,37 @@
                            :headers (com-json (token ente (random-uuid))))]
     (is (= 200 (:status r)) "o telao ('secretario') e' exatamente quem esta fatia existe para destravar")))
 
-(deftest votacao-aberta-sessao-nao-publica-nega-vereador-sem-papel-secretario-403
-  ;; O QUE O BRIEFING NAO PREVIU (registrado no relatorio, nao silenciado aqui): antes desta fatia, o
-  ;; VEREADOR (sem 'secretario') recuperava a votacao numa sessao NAO publica — a borda so' exigia
-  ;; 'vereador', e a fina (`pode-dirigir-votacao?`) so' checa mesma Casa, sem clausula de publico. Reusar
-  ;; `pode-ver-quorum-da-sessao?` (a politica pedida, e a MESMA dos 3 irmaos) fecha essa leitura tambem
-  ;; para o proprio vereador que vota, ficando so' com o SSE ao vivo (sem recuperacao pos-reconexao) numa
-  ;; sessao secreta. E' o mesmo corte que `/quorum` ja aceita para quem nao e' secretario — nao uma
-  ;; regressao desta fatia, mas uma extensao dele a um publico (o vereador-votante) que antes escapava.
-  (let [ente (random-uuid) sid (random-uuid)
+(deftest votacao-aberta-sessao-nao-publica-continua-visivel-ao-vereador-200
+  ;; Revisao do Daouda (12/09/2026), decisao tomada: o vereador (sem 'secretario') CONTINUA recuperando a
+  ;; votacao numa sessao NAO publica — nao e' concessao, e' a mesma logica que ja' deixa 'secretario'
+  ;; passar aqui, levada ate' o fim. Numa sessao secreta e' ELE quem vota (`/meu-voto` e' gated
+  ;; 'vereador'); negar-lhe esta leitura nao protege sigilo nenhum, so' devolveria "recarregou a pagina e
+  ;; nao vota" no cenario de maior consequencia. Esta prova PASSOU a ser positiva — ela e' a prova de que
+  ;; a clausula 'vereador' da composicao (rotas.clj) pegou; a mutacao abaixo (nao permanente) mostra o
+  ;; caminho inverso.
+  (let [ente (random-uuid) sid (random-uuid) vid (random-uuid) pid (random-uuid)
+        votacao (assoc (votacao-canonica ente vid sid "secreta") :objeto-tipo "proposicao" :objeto-id pid)
         repo-s (fake-repo-sessoes (fn [_ _] (sessao-nao-publica ente sid)))
+        repo-l (fake-repo-legislativo-votacao-aberta votacao (proposicao-canonica pid) nil 5)
+        r (pt/response-for (service-fn* #{"vereador"} repo-s repo-l)
+                           :get (str "/sessoes/" sid "/votacao-aberta")
+                           :headers (com-json (token ente (random-uuid))))]
+    (is (= 200 (:status r))
+        "vereador sem papel 'secretario', sessao NAO publica -> 200 (ele vota ali; negar-lhe a leitura nao protege sigilo)")))
+
+(deftest votacao-aberta-sessao-nao-publica-nega-vereador-de-outra-casa-403
+  ;; A prova de FORMA (Daouda, 12/09/2026): a clausula 'vereador' tem de estar ESCOPADA a mesma Casa, nao
+  ;; solta na disjuncao. Um vereador de OUTRA Casa, com o MESMO papel que acima passa, tem de continuar
+  ;; negado — senao a composicao teria a forma errada `(or (papel vereador) (pode-ver-quorum-da-sessao? a
+  ;; s))`, que nao escopa o papel ao tenant.
+  (let [ente (random-uuid) sid (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ id] (sessao-nao-publica (random-uuid) id)))
         repo-l (fake-repo-legislativo-votacao-aberta nil nil nil nil)
         r (pt/response-for (service-fn* #{"vereador"} repo-s repo-l)
                            :get (str "/sessoes/" sid "/votacao-aberta")
                            :headers (com-json (token ente (random-uuid))))]
     (is (= 403 (:status r))
-        "vereador sem papel 'secretario', sessao NAO publica -> 403 (ver o relatorio: carry a decidir)")))
+        "vereador de ente ALHEIO, sessao NAO publica -> 403 (a clausula 'vereador' nao vaza pra fora da mesma Casa)")))
 
 (deftest votacao-aberta-sessao-inexistente-404
   (let [ente (random-uuid)

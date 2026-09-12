@@ -172,9 +172,13 @@
   (papel 'secretario') com o MESMO buraco que a Etapa 4a ja' tinha fechado para aquelas tres: sem esta
   leitura, um cliente que conecta apos a retencao MINID de ~5min do canal (ou reconecta) nao recupera a
   votacao aberta. A politica agora mora na camada FINA (`controllers/votacao-aberta`, via
-  `pode-ver-votacao-aberta?` injetado pelo host = `sessoes.logic/pode-ver-quorum-da-sessao?`: mesma Casa E
-  (transmissao publica OU papel 'secretario')) — nunca so' na borda, para nao reabrir a porta dos fundos
-  da sessao SECRETA que aquela mesma docstring registra.
+  `pode-ver-votacao-aberta?` injetado pelo host, rotas.clj) — nunca so' na borda, para nao reabrir a porta
+  dos fundos da sessao SECRETA que a docstring de `sessoes.logic/pode-ver-quorum-da-sessao?` registra.
+
+  Revisao do Daouda (12/09/2026): a politica e' mesma Casa E (transmissao publica OU papel 'secretario' OU
+  papel 'vereador') — o vereador entra porque numa sessao secreta ele VOTA (`/meu-voto` e' gated
+  'vereador'); quem tem direito de registrar o voto tem direito de saber que ela esta' aberta. Ver a
+  docstring de `pode-ver-votacao-aberta?` (rotas.clj) para o argumento completo e a FORMA da composicao.
 
   nil (sessao inexistente/de outra Casa, OU sessao sem votacao aberta — ESTADO LEGITIMO) -> 404, mesmo
   contrato de 'recurso ausente' de toda essa familia. Sessao ja fechada -> 409 (mesmo mapeamento das
@@ -741,8 +745,9 @@
   corpo-json nas de escrita; a fina da votacao decide no controller com a sessao carregada. A borda /meu
   EXIGE papel 'vereador' (papel DISTINTO — nao 'secretario'). EXCECAO: `/votacao-aberta` (carry telao,
   Daouda 12/09/2026) nao exige papel nenhum na borda — a politica e' TODA da camada fina (ver a docstring
-  de `votacao-aberta-handler`), por isso recebe `pode-ver-votacao-aberta?` INJETADA pelo host (cross-modulo
-  p/ `sessoes.logic/pode-ver-quorum-da-sessao?`, mesma inversao de dependencia de `sessao-fechada?`)."
+  de `votacao-aberta-handler`), por isso recebe `pode-ver-votacao-aberta?` INJETADA pelo host (mesma
+  inversao de dependencia de `sessao-fechada?`; a formula e' mesma Casa E (transmissao publica OU
+  'secretario' OU 'vereador') — ver rotas.clj)."
   [{:keys [auth repo-legislativo consultar-sessao sessao-fechada? pode-ver-votacao-aberta? resolver-municipio
            resolver-vereador resolver-comissoes vereador-vinculado? registro relogio]}]
   (let [papel (it/exige-papel "secretario")
