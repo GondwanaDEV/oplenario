@@ -9,6 +9,7 @@ function nominalAberto(over: Partial<PlacarVotacao> = {}): PlacarVotacao {
     modalidade: "nominal",
     objetoTipo: "proposicao",
     objetoId: "p1",
+    proposicao: null,
     encerrada: false,
     votosNominais: {},
     votosSecretos: 0,

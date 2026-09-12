@@ -166,18 +166,31 @@
             (throw e)))))))
 
 (defn- votacao-aberta-handler
-  "GET /sessoes/:id/votacao-aberta (fatia 'demo-tres-consertos' #2b, papel 'vereador' — mesmo gate de
-  meu-voto-handler/detalhe-votacao-handler: quem VOTA precisa desta recuperacao, o telao da Mesa NAO ganha
-  acesso aqui — tem o mesmo buraco, mas resolve-lo e' decisao separada, nao ampliada sem pedir). nil
-  (sessao inexistente/de outra Casa, OU sessao sem votacao aberta — ESTADO LEGITIMO) -> 404, mesmo
+  "GET /sessoes/:id/votacao-aberta (fatia 'demo-tres-consertos' #2b). Carry telao (Daouda, 12/09/2026):
+  SEM `exige-papel` de proposito, igual aos irmaos `/quorum`/`/tribuna`/`/composicao` (sessoes) — a rota
+  nasceu papel-'vereador'-estrito (so' o cockpit de quem vota), mas isso deixava o telao da Mesa
+  (papel 'secretario') com o MESMO buraco que a Etapa 4a ja' tinha fechado para aquelas tres: sem esta
+  leitura, um cliente que conecta apos a retencao MINID de ~5min do canal (ou reconecta) nao recupera a
+  votacao aberta. A politica agora mora na camada FINA (`controllers/votacao-aberta`, via
+  `pode-ver-votacao-aberta?` injetado pelo host, rotas.clj) — nunca so' na borda, para nao reabrir a porta
+  dos fundos da sessao SECRETA que a docstring de `sessoes.logic/pode-ver-quorum-da-sessao?` registra.
+
+  Revisao do Daouda (12/09/2026): a politica e' mesma Casa E (transmissao publica OU papel 'secretario' OU
+  papel 'vereador') — o vereador entra porque numa sessao secreta ele VOTA (`/meu-voto` e' gated
+  'vereador'); quem tem direito de registrar o voto tem direito de saber que ela esta' aberta. Ver a
+  docstring de `pode-ver-votacao-aberta?` (rotas.clj) para o argumento completo e a FORMA da composicao.
+
+  nil (sessao inexistente/de outra Casa, OU sessao sem votacao aberta — ESTADO LEGITIMO) -> 404, mesmo
   contrato de 'recurso ausente' de toda essa familia. Sessao ja fechada -> 409 (mesmo mapeamento das
-  outras rotas de votacao)."
-  [repo-leg consultar-sessao sessao-fechada?]
+  outras rotas de votacao). Ator sem a politica fina (nem vereador nem secretario, sessao nao publica) ->
+  403, via `authz/check!` dentro do controller (o interceptor `erro` global mapeia a negacao)."
+  [repo-leg consultar-sessao sessao-fechada? pode-ver-votacao-aberta?]
   (fn [req]
     (let [ator (:ator req)
           sid  (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
       (try
-        (if-let [va (controllers/votacao-aberta repo-leg consultar-sessao sessao-fechada? ator sid)]
+        (if-let [va (controllers/votacao-aberta repo-leg consultar-sessao sessao-fechada?
+                                                 pode-ver-votacao-aberta? ator sid)]
           (http/json-resposta 200 (adapters-out/votacao-aberta->wire va))
           (http/json-resposta 404 {:erro "nenhuma votacao aberta nesta sessao"}))
         (catch clojure.lang.ExceptionInfo e
@@ -730,9 +743,13 @@
   ja' atravessa).
   Todas as acoes das verticais de votacao/proposicoes/parecer EXIGEM a authz GROSSA (papel 'secretario') +
   corpo-json nas de escrita; a fina da votacao decide no controller com a sessao carregada. A borda /meu
-  EXIGE papel 'vereador' (papel DISTINTO — nao 'secretario')."
-  [{:keys [auth repo-legislativo consultar-sessao sessao-fechada? resolver-municipio resolver-vereador
-           resolver-comissoes vereador-vinculado? registro relogio]}]
+  EXIGE papel 'vereador' (papel DISTINTO — nao 'secretario'). EXCECAO: `/votacao-aberta` (carry telao,
+  Daouda 12/09/2026) nao exige papel nenhum na borda — a politica e' TODA da camada fina (ver a docstring
+  de `votacao-aberta-handler`), por isso recebe `pode-ver-votacao-aberta?` INJETADA pelo host (mesma
+  inversao de dependencia de `sessao-fechada?`; a formula e' mesma Casa E (transmissao publica OU
+  'secretario' OU 'vereador') — ver rotas.clj)."
+  [{:keys [auth repo-legislativo consultar-sessao sessao-fechada? pode-ver-votacao-aberta? resolver-municipio
+           resolver-vereador resolver-comissoes vereador-vinculado? registro relogio]}]
   (let [papel (it/exige-papel "secretario")
         papel-vereador (it/exige-papel "vereador")]
     #{["/sessoes/:id/votacoes" :post
@@ -757,7 +774,7 @@
       ;; pai; o precedente seguro documentado neste repo — transparencia/diplomat/http/in.clj — só cobre
       ;; literal como FILHO de um wildcard já resolvido, nunca IRMÃO dele).
       ["/sessoes/:id/votacao-aberta" :get
-       [auth papel-vereador (votacao-aberta-handler repo-legislativo consultar-sessao sessao-fechada?)]
+       [auth (votacao-aberta-handler repo-legislativo consultar-sessao sessao-fechada? pode-ver-votacao-aberta?)]
        :route-name :legislativo/votacao-aberta]
       ["/legislativo/proposicoes" :get [auth papel (listar-proposicoes-handler repo-legislativo)]
        :route-name :legislativo/listar-proposicoes]

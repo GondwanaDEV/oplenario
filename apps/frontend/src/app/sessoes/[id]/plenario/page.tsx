@@ -17,6 +17,7 @@ import { Tribuna } from "./tribuna";
 import type { EstadoPlenario, PlacarVotacao, VistaQuorum } from "@/lib/plenario-reducer";
 import { vistaDoQuorum } from "@/lib/plenario-reducer";
 import { derivarPlacar, type VistaNominal, type VistaSecreta } from "@/lib/placar-vista";
+import { tituloObjetoVotacao } from "@/lib/titulo-objeto-votacao";
 import type { SessaoOut, PautaOut } from "@/lib/contrato";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import "./plenario.css";
@@ -63,7 +64,10 @@ function ConteudoPlenario({ id }: { id: string }) {
   const { token } = useAuth();
   // `comQuorum` é o TELÃO ligando a hidratação de `GET /sessoes/:id/quorum` — o cockpit do vereador usa o
   // mesmo hook SEM essa opção (ver a docstring de `usePlenario`).
-  const { sessao, estado, conexao, erro } = usePlenario(id, token, { comQuorum: true });
+  // `comVotacao` (carry telão, Daouda 12/09/2026): a Mesa tinha o MESMO buraco de recuperação do cockpit
+  // do vereador — sem isto, um telão que conecta (ou reconecta) fora da retenção MINID de ~5min do canal
+  // mostrava o palco sem NENHUMA matéria, com uma votação de verdade aberta no servidor.
+  const { sessao, estado, conexao, erro } = usePlenario(id, token, { comQuorum: true, comVotacao: true });
   // pauta viva (GET; re-busca quando a fase muda). Chamado ANTES dos early-returns p/ ordem de hooks estável.
   const { pauta } = usePauta(id, token, estado?.estado ?? null);
 
@@ -211,6 +215,7 @@ function Palco({ sessao, estado, pauta }: { sessao: SessaoOut; estado: EstadoPle
         {sessao["transmite-publica"] ? " · transmissão pública" : " · sessão reservada"}
         {sessao["permite-voto-secreto"] ? " · admite voto secreto" : ""}
       </p>
+      <MateriaEmVotacao placar={estado.placar} />
 
       <section className="pauta" aria-labelledby="pauta-titulo">
         <h2 id="pauta-titulo">Pauta da sessão</h2>
@@ -238,6 +243,31 @@ function Palco({ sessao, estado, pauta }: { sessao: SessaoOut; estado: EstadoPle
 
       <Placar placar={estado.placar} avisoLacuna={estado.avisoLacuna} />
     </section>
+  );
+}
+
+/** A matéria em votação no palco (carry telão, Daouda 12/09/2026) — até esta fatia o palco só mostrava o
+ * número da sessão, nunca O QUE estava sendo votado (o mesmo buraco que a Fatia 2/2b já tinham fechado
+ * para o cockpit do vereador). `placar.proposicao` já vem pronto de `GET .../votacao-aberta` (hidratação
+ * `comVotacao`) — a MESMA resolução de `resolver-objeto-votacao` no backend, sem uma segunda chamada a
+ * `/votacoes/:id` (gate `papel-vereador`-only, que o telão não alcançaria de qualquer forma).
+ *
+ * Achado ao vivo (Daouda, verificação em browser, 12/09/2026): a primeira versão desta função montava o
+ * texto NA MÃO (`{tipo} {sequencial}/{ano}`) e projetava o enum CRU do domínio na parede do plenário —
+ * `projeto_lei 7/2026` em vez de `PL 7/2026`. Reusa `tituloObjetoVotacao` (a MESMA função que já resolve
+ * isto para o cockpit do vereador em `/votar` — `formatarNumeroProposicao`/`ROTULO_TIPO_HONESTO`, o
+ * dicionário tipo->sigla de `proposicoes-vista.ts`, também usado pela ficha da matéria): as duas telas não
+ * podem voltar a divergir de novo (era exatamente esse o defeito original desta fatia inteira — a tela
+ * afirmando/mostrando menos, ou pior, do que o servidor sabe). `estado: "pronto"` sempre — este
+ * componente só é chamado com `placar.objetoTipo` já resolvido (guard abaixo); os ramos "carregando"/
+ * "erro" de `tituloObjetoVotacao` existem para `useDetalheVotacao` (rede própria, com o SEU tri-estado),
+ * não para este caminho síncrono a partir do estado já hidratado. */
+export function MateriaEmVotacao({ placar }: { placar: PlacarVotacao | null }) {
+  if (!placar || placar.encerrada || !placar.objetoTipo) return null;
+  return (
+    <p className="palco-autoria">
+      Em votação: <b>{tituloObjetoVotacao({ objetoTipo: placar.objetoTipo, proposicao: placar.proposicao }, "pronto")}</b>
+    </p>
   );
 }
 

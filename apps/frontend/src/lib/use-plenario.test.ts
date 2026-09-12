@@ -380,12 +380,111 @@ describe("usePlenario — a costura de borda da RECUPERAÇÃO de votação (fati
     const { result } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true }));
     await waitFor(() => expect(result.current.estado?.placar?.votacaoId).toBe("vt1"));
     expect(result.current.estado!.placar).toEqual({
-      votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1", encerrada: false,
+      votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1", proposicao: null, encerrada: false,
       votosNominais: { v1: "sim" }, votosSecretos: 0, resultado: null, totais: null, baseMembros: null,
     });
   });
 
-  it("SEM `comVotacao` (ex.: o telão da Mesa) a rota de recuperação NÃO é chamada", async () => {
+  // Achado ao vivo (Daouda, verificação em browser, 12/09/2026): o palco mostrava só "Proposição" (o
+  // rótulo do TIPO) em vez de "Projeto de lei 7/2026 — Institui...". O backend devolvia `proposicao`
+  // completa (curl confirmou) e `plenario-reducer.ts`/`hidratarVotacao` já a validava (`comoProposicaoResumoPlacar`,
+  // mesma disciplina de `votacaoId`/`modalidade`) — mas NENHUM teste ia da resposta CRUA do fetch até o
+  // estado passando por `usePlenario` (o caminho real do navegador): os testes da fatia anterior só
+  // chamavam `hidratarVotacao` direto, ou usavam `votacaoAbertaCrua` sem `proposicao`. O buraco de
+  // cobertura, não o código, é o que este par de testes fecha.
+  it("com `comVotacao`, a `proposicao` do corpo cru chega ao estado através do HOOK (não só de `hidratarVotacao` isolado)", async () => {
+    global.fetch = fetchFake({
+      "/votacao-aberta": () => ({ ok: true, status: 200, json: async () => ({
+        ...votacaoAbertaCrua,
+        proposicao: { tipo: "projeto_lei", ano: 2026, sequencial: 7, ementa: "Institui o Programa Municipal de Arborização Urbana." },
+      }) }) as Response,
+    });
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true }));
+    await waitFor(() => expect(result.current.estado?.placar?.votacaoId).toBe("vt1"));
+    expect(result.current.estado?.placar?.proposicao).toEqual({
+      tipo: "projeto_lei", ano: 2026, sequencial: 7, ementa: "Institui o Programa Municipal de Arborização Urbana.",
+    });
+  });
+
+  it("sem `proposicao` no corpo (caso real: emenda/parecer/requerimento) — `proposicao` fica null, `objetoTipo` sobrevive pro rótulo do tipo", async () => {
+    global.fetch = fetchFake({
+      "/votacao-aberta": () => ({ ok: true, status: 200, json: async () => ({
+        "votacao-id": "vt2", modalidade: "nominal", "objeto-tipo": "emenda", "objeto-id": "e1", votos: [],
+      }) }) as Response,
+    });
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true }));
+    await waitFor(() => expect(result.current.estado?.placar?.votacaoId).toBe("vt2"));
+    expect(result.current.estado?.placar?.proposicao).toBeNull();
+    expect(result.current.estado?.placar?.objetoTipo).toBe("emenda");
+  });
+
+  // Achado ao vivo (Daouda, verificação em browser, 12/09/2026): a ementa só aparecia ~30-38s depois de
+  // carregar o telão, sozinha, sem interação — a REBUSCA PERIÓDICA, não a hidratação inicial. Causa: o
+  // canal replaya a sessão INTEIRA desde `id: 1` na conexão, então o `votacao.aberta` que abriu a
+  // votação de verdade chega ENQUANTO T0 (`GET /votacao-aberta` da carga inicial) ainda está em voo —
+  // avança `votacaoEventoSeq`, e a precedência de `hidratarVotacao` (deliberada) descarta T0 por inteiro
+  // quando ele finalmente resolve. Sem o gatilho eager, a Mesa fica cega até a periódica de 30s; ESTE é o
+  // teste da ORDEM REAL do navegador — não a hidratação isolada, que não via a janela.
+  it("Achado ao vivo (Daouda) — replay entrega `votacao.aberta` com T0 em voo: o snapshot é descartado, mas o gatilho refaz sem esperar os 30s", async () => {
+    vi.useFakeTimers();
+    const sse = sseControlado();
+    const t0EmVoo = deferido<Response>();
+    let chamadasVotacaoAberta = 0;
+    const f = fetchFake({
+      "/plenario": () => ({ ok: true, status: 200, body: sse.body }) as unknown as Response,
+      "/votacao-aberta": () => {
+        chamadasVotacaoAberta += 1;
+        // a 1a chamada (T0) fica pendurada até o teste resolvê-la; a 2a em diante (o gatilho eager)
+        // resolve na hora, já com a proposição — é o request que o telão de verdade faria de novo.
+        if (chamadasVotacaoAberta === 1) return t0EmVoo.promise;
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({
+          "votacao-id": "vt1", modalidade: "nominal", "objeto-tipo": "proposicao", "objeto-id": "p1",
+          proposicao: { tipo: "projeto_lei", ano: 2026, sequencial: 7, ementa: "Institui o Programa Municipal de Arborização Urbana." },
+          votos: [],
+        }) } as Response);
+      },
+    });
+    global.fetch = f;
+
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true }));
+    await ateQue(() => result.current.conexao === "ao-vivo"); // SSE conectado; T0 já disparou e está em voo
+    expect(chamadasVotacaoAberta).toBe(1);
+
+    // replay: o votacao.aberta que abriu a votação de verdade chega ENQUANTO T0 ainda está em voo
+    await act(async () => {
+      sse.enviar("votacao.aberta", 1, {
+        "votacao-id": "vt1", "sessao-id": "s1", modalidade: "nominal",
+        "objeto-tipo": "proposicao", "objeto-id": "p1", "quorum-tipo": "maioria_simples",
+      });
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    expect(result.current.estado!.placar?.votacaoId).toBe("vt1"); // já sabe QUE está aberta, pelo SSE
+    expect(result.current.estado!.placar?.proposicao).toBeNull(); // mas ainda não a ementa
+
+    // T0 finalmente resolve — mas `votacaoEventoSeq` já avançou (o evento chegou primeiro): DESCARTADO
+    // por inteiro (a precedência é deliberada; ver a docstring de `hidratarVotacao`).
+    await act(async () => {
+      t0EmVoo.resolve({ ok: true, status: 200, json: async () => ({
+        "votacao-id": "vt1", modalidade: "nominal", "objeto-tipo": "proposicao", "objeto-id": "p1",
+        proposicao: { tipo: "projeto_lei", ano: 2026, sequencial: 7, ementa: "Institui o Programa Municipal de Arborização Urbana." },
+        votos: [],
+      }) } as Response);
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    expect(result.current.estado!.placar?.proposicao).toBeNull(); // confirma o descarte — a pré-condição do achado
+
+    // O GATILHO: o relógio de 500ms consome `pedidoDeRebuscaVotacao` (escrito quando o evento chegou) e
+    // refaz a busca — SEM esperar os 30s da periódica.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect(chamadasVotacaoAberta).toBe(2);
+    expect(result.current.estado!.placar?.proposicao).toEqual({
+      tipo: "projeto_lei", ano: 2026, sequencial: 7, ementa: "Institui o Programa Municipal de Arborização Urbana.",
+    });
+  });
+
+  it("SEM `comVotacao` a rota de recuperação NÃO é chamada", async () => {
     const f = fetchFake({
       "/votacao-aberta": () => ({ ok: true, status: 200, json: async () => votacaoAbertaCrua }) as Response,
       "/quorum": () => ({ ok: true, status: 200, json: async () => quorumCru }) as Response,

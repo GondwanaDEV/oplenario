@@ -183,9 +183,28 @@
   devolve a lista {vereador-id, voto} (o mesmo que os eventos `voto.registrado` teriam acumulado);
   SECRETA/SIMBOLICA devolvem so' a CONTAGEM (tick anonimo, nunca apuracao por valor — sigilo §22.6, mesma
   fronteira de VotoRegistradoPayload: uma votacao secreta em curso NUNCA vaza sim/nao/abstencao por
-  aqui, e simbolica nunca registra voto individual pra comecar, `registrar-voto`)."
-  [repo-leg consultar-sessao sessao-fechada? ator sessao-id]
-  (when (sessao-autorizada consultar-sessao sessao-fechada? ator sessao-id)
+  aqui, e simbolica nunca registra voto individual pra comecar, `registrar-voto`).
+
+  AUTHZ (carry telao, Daouda 12/09/2026): `sessao-autorizada` continua garantindo mesma Casa + sessao
+  aberta (`pode-dirigir-votacao?`, herdada das 4 escritas da familia — 403/409 de sempre). POR CIMA dela,
+  `pode-ver-votacao-aberta?` (injetada pelo host, rotas.clj) estreita para quem esta rota alcanca: mesma
+  Casa E (transmissao publica OU papel 'secretario' OU papel 'vereador'). NECESSARIO desde que a borda
+  parou de exigir papel 'vereador' — sem esta segunda checada, QUALQUER vinculo ativo da Casa (inclusive
+  cidadao, sem papel nenhum) leria a votacao em curso de uma sessao SECRETA, o mesmo defeito que a
+  docstring de `sessoes.logic/pode-ver-quorum-da-sessao?` registra ter acontecido uma vez.
+
+  A clausula 'vereador' (revisao do Daouda, 12/09/2026) NAO e' concessao — e' o MESMO argumento daquela
+  docstring levado ate' o fim: o gate e' de PUBLICO (quem so' assiste ao telao), nao de sessao; 'secretario'
+  entra porque ja' lia esse estado, nominalmente, por `/chamada`. O vereador entra pela razao mais forte
+  ainda: numa sessao secreta ele VOTA (`/meu-voto` e' gated 'vereador') — quem tem direito de REGISTRAR o
+  voto tem, por construcao, direito de saber que ela esta' aberta. Nega-lo aqui nao protege sigilo nenhum;
+  so' devolveria o defeito que esta fatia existe para consertar, no cenario de maior consequencia (sessao
+  fechada, vereador que recarregou a pagina e nao vota). Ver a docstring de `pode-ver-votacao-aberta?` em
+  rotas.clj para a FORMA exata da composicao (a disjuncao de papel entra DENTRO da conjuncao de mesma-Casa,
+  nunca por fora — senao um vereador de OUTRA Casa passaria)."
+  [repo-leg consultar-sessao sessao-fechada? pode-ver-votacao-aberta? ator sessao-id]
+  (when-let [s (sessao-autorizada consultar-sessao sessao-fechada? ator sessao-id)]
+    (authz/check! ator :votacao/ver-aberta s pode-ver-votacao-aberta?)
     (let [ente-id (:ente-id ator)]
       (when-let [v (repo/votacao-aberta-da-sessao repo-leg ente-id sessao-id)]
         (let [{:keys [objeto-tipo proposicao]} (resolver-objeto-votacao repo-leg ente-id v)

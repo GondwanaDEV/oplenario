@@ -207,6 +207,36 @@
         ;; particao que `sessoes.controllers/exigir-sessao-aberta!` usa) em vez de deixar o legislativo duplicar
         ;; o conjunto.
         sessao-fechada? (fn [sessao] (contains? sessoes-logic/estados-sessao-fechada (:estado sessao)))
+        ;; Carry telao (Daouda, 12/09/2026): `GET /sessoes/:id/votacao-aberta` tinha o MESMO buraco que a
+        ;; Etapa 4a ja' fechou para `/quorum`/`/tribuna`/`/composicao` — a borda exigia papel 'vereador'
+        ;; ESTRITO, entao o telao da Mesa (papel 'secretario') tomava 403 na unica rota que recupera a
+        ;; votacao aberta apos a retencao MINID de ~5min do canal. MESMA inversao de dependencia de
+        ;; `sessao-fechada?` acima (legislativo NAO importa sessoes, §22.10).
+        ;;
+        ;; Revisao do Daouda (12/09/2026): a politica NAO e' `pode-ver-quorum-da-sessao?` pura — ganha uma
+        ;; terceira clausula, 'vereador'. O argumento e' o PROPRIO argumento da docstring daquela fn ("o
+        ;; gate e' de PUBLICO — quem so' assiste ao telao — nao de sessao; 'secretario' nao afrouxa nada
+        ;; porque ja' lia esse estado, nominalmente, por `/chamada`"): numa sessao secreta o vereador VOTA
+        ;; (`/meu-voto` e' gated 'vereador') — quem tem direito de REGISTRAR o voto tem, por construcao,
+        ;; direito de saber que a votacao esta' aberta. Nega-lo aqui nao protege sigilo nenhum; so' devolve
+        ;; o defeito que esta fatia existe para consertar, no cenario de maior consequencia (sessao
+        ;; fechada, vereador que recarregou a pagina e nao vota).
+        ;;
+        ;; NAO e' um quarto predicado, e' o MESMO predicado + uma clausula: reusa `pode-ver-quorum-da-sessao?`
+        ;; (a formula toda, sem desmontar o AND/OR dela) OR'ado com `pode-ver-sessao? AND papel vereador`.
+        ;; A FORMA importa — a disjuncao entra DENTRO da conjuncao de mesma-Casa, nunca por fora:
+        ;;   (or (pode-ver-quorum-da-sessao? a s) (and (pode-ver-sessao? a s) (papel vereador)))
+        ;; = (or (and mesmaCasa (or publica secretario)) (and mesmaCasa vereador))
+        ;; = (and mesmaCasa (or publica secretario vereador))                      [distributiva sobre AND]
+        ;; — nunca `(or (papel vereador) (pode-ver-quorum-da-sessao? a s))`, que deixaria passar um
+        ;; vereador de OUTRA Casa (a clausula de papel, isolada, nao teria por onde escopar ao tenant).
+        ;; Cada ramo desta OR ja' checa `pode-ver-sessao?`/`pode-ver-quorum-da-sessao?` (mesma Casa embutida
+        ;; nos dois), entao a forma acima e' fail-closed por construcao, nao por disciplina de quem le'.
+        pode-ver-votacao-aberta?
+        (fn [ator sessao]
+          (or (sessoes-logic/pode-ver-quorum-da-sessao? ator sessao)
+              (and (sessoes-logic/pode-ver-sessao? ator sessao)
+                   (contains? (:papeis ator) "vereador"))))
         ;; FE Onda A1: membros-da-casa injetado em sessoes (presenca agregada) — mesma inversao de
         ;; dependencia de consultar-sessao/painel-compliance; fuso civil vindo do kernel
         ;; (`tempo/zona-civil-padrao`, I-5 fatia 2 — antes era literal aqui), mesmo racional de
@@ -354,6 +384,7 @@
         (into (legislativo-http/rotas {:auth auth :repo-legislativo repo-legislativo
                                        :consultar-sessao consultar-sessao
                                        :sessao-fechada? sessao-fechada?
+                                       :pode-ver-votacao-aberta? pode-ver-votacao-aberta?
                                        :resolver-municipio resolver-municipio
                                        :resolver-vereador resolver-vereador-fn
                                        :resolver-comissoes resolver-comissoes-fn

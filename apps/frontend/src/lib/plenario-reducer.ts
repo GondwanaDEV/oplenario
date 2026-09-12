@@ -71,6 +71,12 @@ function compararInscritos(a: Inscrito, b: Inscrito): number {
 
 export type VotoNominal = "sim" | "nao" | "abstencao";
 
+/** O resumo MÍNIMO da matéria em votação (tipo/ano/sequencial/ementa) — o MESMO molde que
+ * `ProposicaoResumoDetalheVotacao` (use-detalhe-votacao.ts) e que `ProposicaoResumoObjetoVotacaoOut`
+ * (backend, wire/out/votacao.clj) já validam; redeclarado aqui (mão-tipado, mesmo precedente do resto
+ * deste arquivo) para não criar um import cruzado só por um tipo estrutural. */
+export type ProposicaoResumoPlacar = { tipo: string; ano: number; sequencial: number; ementa: string };
+
 /** Placar da votação corrente (uma por vez no plenário). §22.6 SIGILO: na SECRETA só existe o CONTADOR
  * (votosSecretos) — JAMAIS voto por vereador; o agregado do encerramento é público mesmo na secreta. */
 export interface PlacarVotacao {
@@ -83,6 +89,22 @@ export interface PlacarVotacao {
    * `objetoTipo`, só sobrevive por reconexão (`anterior?.objetoId`); reconectar vendo só o encerramento (sem
    * ter visto a abertura) deixa `null`, mesma honestidade de `objetoTipo`. */
   objetoId: string | null;
+  /** O resumo da matéria (tipo/ano/sequencial/ementa), quando `objetoTipo` é `proposicao`/`redacao_final`
+   * (carry telão, Daouda 12/09/2026 — fatia "demo-tres-consertos" #2b): `GET .../votacao-aberta` já devolve
+   * `proposicao` pronta (a MESMA resolução da Fatia 2, `resolver-objeto-votacao` no backend) — este campo
+   * só CONSOME o que a rota de recuperação já manda, sem uma segunda chamada a `/votacoes/:id`
+   * (`useDetalheVotacao`, gate `papel-vereador`-only) que o telão não alcançaria de qualquer forma. Só
+   * `hidratarVotacao` (a recuperação via HTTP) o PREENCHE — nenhum evento SSE carrega a ementa
+   * (`AbertaPayload`/`EncerradaPayload` não têm esse campo, contrato imutável).
+   *
+   * Achado ao vivo (Daouda, 12/09/2026): o canal replaya TODOS os eventos da sessão desde `id: 1`, não só
+   * os futuros — então um `votacao.aberta` da MESMA votação chega DEPOIS da hidratação ter preenchido
+   * este campo, no fluxo normal do navegador (não é um caso raro de reconexão). Por isso `votacao.aberta`
+   * e `votacao.encerrada` PRESERVAM `proposicao` quando o `votacao-id` do evento é o mesmo do placar
+   * corrente (o evento não SABE que não há proposição; "não sei" não é "é nulo"). Só ZERA quando a
+   * votação MUDOU (matéria nova, sem ementa ainda resolvida) — nunca vaza a proposição de uma votação
+   * para outra. */
+  proposicao: ProposicaoResumoPlacar | null;
   encerrada: boolean;
   votosNominais: Record<string, VotoNominal>; // só NOMINAL: vereadorId -> voto (mostra quem votou o quê)
   votosSecretos: number; // só SECRETA: contagem de votos registrados (anônimo)
@@ -455,9 +477,25 @@ export type VotacaoAbertaSnapshot = {
   modalidade: string;
   objetoTipo: string;
   objetoId: string;
+  /** `proposicao` (carry telão, Daouda 12/09/2026): o backend (`VotacaoAbertaOut`, todo ramo) já manda este
+   * campo — `?` aqui é só a mesma tolerância mão-tipada do resto do tipo (um corpo antigo/torto não deve
+   * quebrar o parse), não uma afirmação de que o servidor às vezes o omite. */
+  proposicao?: ProposicaoResumoPlacar | null;
   votos?: { vereadorId: string; voto: VotoNominal }[];
   votosRegistrados?: number;
 };
+
+/** `cru.proposicao` -> `ProposicaoResumoPlacar | null`, fail-closed (mesmo racional de
+ * `comoProposicaoResumo` em use-detalhe-votacao.ts): um objeto com QUALQUER campo de forma errada vira
+ * `null` — nunca um título inventado/truncado no telão. */
+function comoProposicaoResumoPlacar(p: unknown): ProposicaoResumoPlacar | null {
+  if (p === null || typeof p !== "object") return null;
+  const { tipo, ano, sequencial, ementa } = p as Record<string, unknown>;
+  if (typeof tipo !== "string" || typeof ano !== "number" || typeof sequencial !== "number" || typeof ementa !== "string") {
+    return null;
+  }
+  return { tipo, ano, sequencial, ementa };
+}
 
 /** Hidrata `placar` a partir do snapshot de recuperação. PURA e TOTAL: nunca lança, um corpo de forma
  * inesperada devolve o estado inalterado.
@@ -499,6 +537,7 @@ export function hidratarVotacao(
       modalidade: cru.modalidade,
       objetoTipo: typeof cru.objetoTipo === "string" ? cru.objetoTipo : null,
       objetoId: typeof cru.objetoId === "string" ? cru.objetoId : null,
+      proposicao: comoProposicaoResumoPlacar(cru.proposicao),
       encerrada: false, // esta rota só devolve votação com estado 'aberta' no servidor
       votosNominais,
       votosSecretos: typeof cru.votosRegistrados === "number" ? cru.votosRegistrados : 0,
@@ -612,6 +651,19 @@ export function aplicarEvento(estado: EstadoPlenario, evento: EventoPlenario): E
     case "votacao.aberta": {
       // uma votação por vez no plenário: a abertura SUBSTITUI o placar anterior (zera as contagens).
       const d = evento.dados;
+      // Achado ao vivo (Daouda, verificação em browser, 12/09/2026): o canal replaya TODOS os eventos da
+      // sessão desde `id: 1` — não só os que chegam depois da conexão abrir. A SEQUÊNCIA REAL do
+      // navegador é: `hidratarVotacao` (comVotacao) preenche `proposicao` a partir do snapshot HTTP, e
+      // LOGO DEPOIS o replay do SSE entrega o `votacao.aberta` da MESMA votação (o evento que a abriu de
+      // verdade, só que reproduzido) — e este `case`, ao reconstruir o placar do zero, apagava a ementa
+      // que acabara de chegar. Não é "servidor sempre vence": o evento não SABE que não há proposição
+      // (`AbertaPayload` não carrega esse campo — nunca carregou, contrato imutável), e "não sei" não é o
+      // mesmo que "é nulo". Por isso, quando é a MESMA votação (mesmo `votacao-id`), preserva o que já
+      // foi hidratado — mesmo padrão que `votacao.encerrada` já aplica a `objetoTipo`/`objetoId`/
+      // `proposicao` (`anterior?.proposicao ?? null`, abaixo). Votação DIFERENTE (troca de matéria) ZERA
+      // mesmo — a proposição da votação anterior não pode vazar para a nova (mostraria a matéria errada
+      // sobre um placar real, pior que o rótulo honesto do tipo).
+      const mesmaVotacao = base.placar?.votacaoId === d["votacao-id"];
       return {
         ...base,
         placar: {
@@ -619,6 +671,7 @@ export function aplicarEvento(estado: EstadoPlenario, evento: EventoPlenario): E
           modalidade: d.modalidade,
           objetoTipo: d["objeto-tipo"],
           objetoId: d["objeto-id"] ?? null,
+          proposicao: mesmaVotacao ? base.placar!.proposicao : null,
           encerrada: false,
           votosNominais: {},
           votosSecretos: 0,
@@ -660,6 +713,7 @@ export function aplicarEvento(estado: EstadoPlenario, evento: EventoPlenario): E
           modalidade: anterior?.modalidade ?? d.modalidade ?? "",
           objetoTipo: anterior?.objetoTipo ?? null,
           objetoId: anterior?.objetoId ?? null,
+          proposicao: anterior?.proposicao ?? null,
           encerrada: true,
           votosNominais: anterior?.votosNominais ?? {},
           votosSecretos: anterior?.votosSecretos ?? 0,
