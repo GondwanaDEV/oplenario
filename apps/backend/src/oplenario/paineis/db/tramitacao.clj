@@ -102,8 +102,9 @@
                   :order-by [[:n :desc] [:estado :asc]]}))))
 
 (defn listar-board
-  "O board (§16.11): TODAS as proposicoes do tenant (sem filtro de estado — diferenca-chave vs. o portal
-  publico), agrupadas por `estado` e ordenadas por `transicionou_em` ASC (`proposicao_id` como desempate
+  "O board (§16.11): as proposicoes do tenant SEM FILTRO DE ESTADO (diferenca-chave vs. o portal publico,
+  que exclui estados — aqui nenhum estado e' excluido), agrupadas por `estado` e ordenadas por
+  `transicionou_em` ASC (`proposicao_id` como desempate
   deterministico, mesmo racional de compliance/db/obrigacao/listar-em-aberto e paineis/db/pendencia/
   listar-abertas) dentro do grupo — a mais estagnada primeiro, o sinal de 'precisa de atencao'. `limite' e'
   o teto POR GRUPO de estado (review database HIGH: um LIMIT global sobre `ORDER BY estado, transicionou_em`

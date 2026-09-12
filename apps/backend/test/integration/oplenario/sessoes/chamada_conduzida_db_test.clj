@@ -141,3 +141,53 @@
 (deftest vocabularios-chamada-conduzida
   (is (thrown? Exception (logic/validar-membros-da-casa -1)) "denominador negativo invalido")
   (is (nil? (logic/validar-membros-da-casa 0)) "denominador zero e' valido (Casa sem membros vigentes hoje)"))
+
+;; ---------- fatia "truncamento-familia" sitio (c): fail-closed, nao -total ----------
+;; O teto de ESCRITA (`registrar-chamada-conduzida!`, via `contar-da-sessao`) ja' impede a cardinalidade de
+;; passar de `teto-de-atos-de-chamada` pelo caminho normal da aplicacao — entao `listar-da-sessao` so' pode
+;; ver mais que o teto se ALGUEM contornar esse caminho (import de acervo legado direto no banco, o mesmo
+;; cenario que a docstring do teto ja' citava). Este teste simula exatamente isso: chama `chamada/registrar!`
+;; DIRETO (contornando o gate de `repositorio.clj`, que so' vive uma camada acima) mais vezes que o teto.
+
+(deftest listar-da-sessao-acima-do-teto-lanca-em-vez-de-truncar-em-silencio
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [sid (agendar! tx ente)]
+          ;; teto-de-atos-de-chamada + 1 registros, cada um com `conduzida-por`/`ocorrido-em` proprios (a
+          ;; dedup de `ato-recente-do-ator` vive no Repo, nao em `chamada/registrar!` — nao entra aqui).
+          (dotimes [i (inc logic/teto-de-atos-de-chamada)]
+            (registrar! tx ente sid {:conduzida-por (random-uuid) :ocorrido-em (mais f0 i)}))
+          (is (thrown? Exception (chamada/listar-da-sessao tx ente sid))
+              "acima do teto: lanca, nunca devolve uma pagina cortada calada"))))))
+
+(deftest listar-da-sessao-no-teto-exato-nao-lanca
+  ;; guarda de simetria: o teste acima nao pode passar so' porque QUALQUER excesso lanca — no teto EXATO
+  ;; (o maximo que o caminho normal da aplicacao produz) a leitura continua devolvendo a lista inteira.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [sid (agendar! tx ente)]
+          (dotimes [i logic/teto-de-atos-de-chamada]
+            (registrar! tx ente sid {:conduzida-por (random-uuid) :ocorrido-em (mais f0 i)}))
+          (is (= logic/teto-de-atos-de-chamada (count (chamada/listar-da-sessao tx ente sid)))
+              "no teto exato, a leitura NAO lanca — devolve todas as linhas"))))))
+
+(deftest listar-da-sessao-acima-do-teto-nomeia-medido-e-teto
+  ;; a `ex-data` carrega o que o interceptor global precisa para responder 422 com `:medido`/`:teto`
+  ;; (`limite-excedido` em interceptors.clj reconhece qualquer `:tipo` no namespace `limite`).
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [sid (agendar! tx ente)]
+          (dotimes [i (inc logic/teto-de-atos-de-chamada)]
+            (registrar! tx ente sid {:conduzida-por (random-uuid) :ocorrido-em (mais f0 i)}))
+          (try
+            (chamada/listar-da-sessao tx ente sid)
+            (is false "deveria ter lancado")
+            (catch Exception e
+              (let [d (ex-data e)]
+                (is (= :limite/atos-de-chamada-excedido (:tipo d)))
+                (is (= logic/teto-de-atos-de-chamada (:teto d)))
+                (is (= (inc logic/teto-de-atos-de-chamada) (:medido-ao-menos d))
+                    "medido-ao-menos = teto+1 (o driver para de materializar no primeiro excedente)")))))))))

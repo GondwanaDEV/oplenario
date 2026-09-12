@@ -92,13 +92,85 @@
           (trc/ler-desde s (canal) 0))
         "ler-desde sem start lanca ex-info clara")))
 
-;; ---------- defesa-em-profundidade: entrada de forma estranha e' DESCARTADA, nao propagada (sec-HIGH-1) ----------
+;; ---------- defesa-em-profundidade: entrada de forma estranha vira SINAL, nao e' engolida (sec-HIGH-1 +
+;; frente 'truncamento-familia' sitio (d): o descarte silencioso deixava o cliente avancar o cursor por
+;; cima do buraco como se o replay estivesse integro — sem sinal nem no servidor nem no cliente) ----------
+;;
+;; >>> revisao adversarial (2a rodada, 2 achados CRITICO/IMPORTANTE independentes provados AO VIVO contra
+;; o Valkey da stack) <<< O 1o conserto do sitio (d) reanexava ao sinal a seq LIDA da propria entrada
+;; corrompida (`"s"` no XADD cru) — exatamente o campo que um escritor NAO confiavel controla. Isso abria
+;; DOIS jeitos de derrubar o replay inteiro, nao so' de perder uma entrada:
+;;  1. CURSOR SEQUESTRADO: um XADD com `s` MAIOR que qualquer seq legitima (ex. 9999999) virava o
+;;     Last-Event-ID devolvido ao cliente — o proximo replay pula por cima de TODO evento real que vier
+;;     depois (o teste `valkey-mensagem-corrompida-nao-sequestra-cursor` abaixo reproduz).
+;;  2. LANCE EM VEZ DE SINALIZAR: `parse-long` corria ANTES da checagem `mensagem-valida?`, para TODA
+;;     entrada — `(parse-long nil)` lanca `IllegalArgumentException` quando o campo `s` nem existe (a forma
+;;     mais natural de uma escrita externa), o que sobe ate' `diplomat/sse.clj` e FECHA a conexao SSE (o
+;;     oposto exato do objetivo da fatia). O teste `valkey-mensagem-sem-campo-s-vira-sinal-sem-lancar`
+;;     abaixo reproduz.
+;; O conserto: a seq do SINAL nunca vem do campo `s` de uma entrada que reprovou `mensagem-valida?` — e'
+;; CLAMPADA a' maior seq de uma entrada de fato validada nesta mesma leitura (nunca ultrapassa uma mensagem
+;; legitima, mesmo que ainda nao tenha sido lida). `parse-long` so' roda quando `s-cru` e' string (nunca
+;; lanca em campo ausente/nil).
 
-(deftest valkey-descarta-mensagem-corrompida
+(deftest valkey-mensagem-corrompida-vira-sinal-de-lacuna-sem-perder-o-cursor
   (let [c    (canal)
         conn {:pool :none :spec {:uri (get-in (config/carregar) [:valkey :uri])}}]
     (trc/publicar! *store* c {:tipo "boa" :dados {}})        ; entrada valida (seq 1)
     ;; injeta uma entrada CRUA com "m" nao-map (corrupcao / escrita externa) direto no stream do canal
     (car/wcar conn (car/xadd (str "tr:canal:" c) "*" "m" "isto-nao-e-um-map" "s" "999"))
     (let [msgs (trc/ler-desde *store* c 0)]
-      (is (= ["boa"] (mapv :tipo msgs)) "a entrada de forma invalida e' descartada; so a valida sobrevive"))))
+      (is (= ["boa" "tempo-real.lacuna"] (mapv :tipo msgs))
+          "a entrada corrompida NAO e' descartada — vira um sinal de lacuna que o cliente recebe pelo
+           MESMO canal, na ordem de seq")
+      (is (= 1 (:seq (last msgs)))
+          "a seq do sinal NAO e' o \"999\" que a propria entrada corrompida afirma sobre si — e' CLAMPADA
+           a' ultima seq VALIDADA (1, de \"boa\"): um escritor externo nao escolhe o cursor do cliente")
+      (is (= {} (:dados (last msgs))) "o sinal nunca carrega o payload corrompido"))))
+
+(deftest valkey-mensagem-corrompida-nao-sequestra-cursor
+  ;; sitio CRITICO da revisao adversarial: boa(seq1) -> corrompida com s=9999999 -> boa(seq2) DEPOIS dela.
+  ;; Se o sinal promovesse "9999999" a seq, o cursor do cliente pularia por cima de "depois" (seq2) para
+  ;; sempre — o proximo replay (Last-Event-ID=9999999) nunca mais devolveria nada desta sessao.
+  (let [c    (canal)
+        conn {:pool :none :spec {:uri (get-in (config/carregar) [:valkey :uri])}}]
+    (trc/publicar! *store* c {:tipo "boa" :dados {}})                                   ; seq 1
+    (car/wcar conn (car/xadd (str "tr:canal:" c) "*" "m" "isto-nao-e-um-map" "s" "9999999"))
+    (trc/publicar! *store* c {:tipo "depois" :dados {}})                                ; seq 2 (real)
+    (let [msgs (trc/ler-desde *store* c 0)]
+      (is (= ["boa" "tempo-real.lacuna" "depois"] (mapv :tipo msgs))
+          "a mensagem legitima publicada DEPOIS da corrompida chega — o cursor nao pulou por cima dela")
+      (is (= 2 (:seq (last msgs))) "\"depois\" mantem sua seq REAL (2), nao e' sequestrada por 9999999")
+      (is (every? #(<= (:seq %) 2) msgs)
+          "nenhuma seq devolvida ultrapassa a maior seq VALIDA desta leitura — o \"9999999\" nunca escapa
+           do XADD cru para o cursor do cliente")
+      ;; replay desde o cursor real (2): a proxima reconexao nao deve reencontrar nem o sinal nem "boa".
+      (is (= [] (mapv :tipo (trc/ler-desde *store* c 2)))
+          "reconectando com Last-Event-ID=2 (o cursor real apos esta leitura) nao ha nada pendente —
+           prova que o sinal nao inflou o cursor para alem do que de fato foi visto"))))
+
+(deftest valkey-mensagem-sem-campo-s-vira-sinal-sem-lancar
+  ;; sitio IMPORTANTE da revisao adversarial: a forma mais natural de uma escrita externa/corrompida nem
+  ;; carrega o campo "s" — antes do conserto, `(parse-long nil)` lancava IllegalArgumentException e
+  ;; `ler-desde` MORRIA (o replay inteiro cai, nao so' uma entrada; e' o `catch Throwable` de
+  ;; diplomat/sse.clj que fecha o event-channel).
+  (let [c    (canal)
+        conn {:pool :none :spec {:uri (get-in (config/carregar) [:valkey :uri])}}]
+    (trc/publicar! *store* c {:tipo "boa" :dados {}})
+    (car/wcar conn (car/xadd (str "tr:canal:" c) "*" "m" "isto-nao-e-um-map"))   ; SEM campo "s"
+    (let [msgs (trc/ler-desde *store* c 0)]
+      (is (= ["boa" "tempo-real.lacuna"] (mapv :tipo msgs))
+          "ler-desde NAO lanca — a entrada sem \"s\" vira sinal de lacuna, como qualquer outra forma
+           invalida")
+      (is (= 1 (:seq (last msgs))) "sem \"s\" pra clampar contra nada de maior, cai na ultima seq valida"))))
+
+(deftest valkey-mensagem-com-s-nao-numerico-vira-sinal-sem-lancar
+  ;; variante do mesmo sitio: "s" existe mas nao e' numero (ex. campo forjado a mao) — `parse-long` devolve
+  ;; nil (nao lanca) so' quando o valor JA e' string; o guard `(string? s-cru)` cobre os dois casos.
+  (let [c    (canal)
+        conn {:pool :none :spec {:uri (get-in (config/carregar) [:valkey :uri])}}]
+    (trc/publicar! *store* c {:tipo "boa" :dados {}})
+    (car/wcar conn (car/xadd (str "tr:canal:" c) "*" "m" "isto-nao-e-um-map" "s" "abc"))
+    (let [msgs (trc/ler-desde *store* c 0)]
+      (is (= ["boa" "tempo-real.lacuna"] (mapv :tipo msgs)) "\"s\" nao-numerico tambem vira sinal, sem lancar")
+      (is (= 1 (:seq (last msgs))) "clampado a' ultima seq valida (1)"))))

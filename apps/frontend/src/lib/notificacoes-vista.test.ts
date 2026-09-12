@@ -17,8 +17,12 @@ function n(id: string, criadoEm: string, lidaEm: string | null = null) {
   };
 }
 
-function dados(itens: ReturnType<typeof n>[], naoLidas = itens.length): MinhasNotificacoesOut {
-  return { notificacoes: itens, naoLidas } as unknown as MinhasNotificacoesOut;
+function dados(
+  itens: ReturnType<typeof n>[],
+  naoLidas = itens.length,
+  notificacoesTotal = itens.length,
+): MinhasNotificacoesOut {
+  return { notificacoes: itens, naoLidas, notificacoesTotal } as unknown as MinhasNotificacoesOut;
 }
 
 describe("derivarInbox", () => {
@@ -194,6 +198,40 @@ describe("derivarInbox", () => {
       AGORA
     );
     expect(v.naoLidasForaDaLista).toBe(0);
+  });
+
+  // ---------- totalForaDaLista: fatia "truncamento-familia" sitio (b) ----------
+  // O achado: naoLidasForaDaLista só enxerga NÃO LIDAS. 200 lidas + 5 não lidas (as 5 dentro do teto de
+  // 50) faz naoLidasForaDaLista == 0 — e as 155 lidas cortadas não tinham NENHUM sinal. Estes testes
+  // provam que totalForaDaLista (que usa notificacoesTotal, o par AUTORITATIVO) cobre esse buraco.
+
+  it("o falso honesto: naoLidasForaDaLista diz 0, mas ha' lidas cortadas — totalForaDaLista denuncia", () => {
+    // 1 lida na lista (dentro do teto) representando as "200 lidas"; notificacoesTotal simula a Casa com
+    // muito mais no total (155 a mais, em escala reduzida: 3 no total contra 1 na lista).
+    const v = derivarInbox(dados([n("lida", "2026-07-19T09:00:00Z", "2026-07-19T10:00:00Z")], 0, 3), AGORA);
+    expect(v.naoLidasForaDaLista).toBe(0);
+    expect(v.totalForaDaLista).toBe(2);
+  });
+
+  it("regra 4: totalForaDaLista segue notificacoesTotal (autoritativo), nunca naoLidas nem count(itens)", () => {
+    // payload onde as DUAS fontes discordariam se o cálculo usasse a fonte errada: naoLidas=0 e
+    // itens.length=1 concordariam em "0 fora"; só notificacoesTotal=9 revela o corte de verdade.
+    const v = derivarInbox(dados([n("a", "2026-07-19T09:00:00Z")], 0, 9), AGORA);
+    expect(v.totalForaDaLista).toBe(8);
+  });
+
+  it("total e lista concordando -> nada fora (não se inventa aviso)", () => {
+    const v = derivarInbox(dados([n("a", "2026-07-19T09:00:00Z")], 0, 1), AGORA);
+    expect(v.totalForaDaLista).toBe(0);
+  });
+
+  it("notificacoesTotal MENOR que a lista local nao vira numero negativo", () => {
+    const v = derivarInbox(dados([n("a", "2026-07-19T09:00:00Z"), n("b", "2026-07-19T09:30:00Z")], 0, 1), AGORA);
+    expect(v.totalForaDaLista).toBe(0);
+  });
+
+  it("sem dados (fetch em voo) -> totalForaDaLista 0, nunca NaN", () => {
+    expect(derivarInbox(null, AGORA).totalForaDaLista).toBe(0);
   });
 
   it("sem dados, nada fora da lista", () => {

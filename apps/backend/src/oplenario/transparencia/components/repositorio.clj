@@ -205,8 +205,28 @@
           para (:para payload)
           tid  (:transicao-id payload)]
       (when-let [materia (db-materia/buscar tx ente-id pid)]
-        (let [{:keys [assunto corpo]} (logic-notif/renderizar materia para)]
-          (doseq [dest (db-acompanhamento/seguidores-ativos tx ente-id pid teto-fanout)
+        (let [{:keys [assunto corpo]} (logic-notif/renderizar materia para)
+              destinatarios (db-acompanhamento/seguidores-ativos tx ente-id pid teto-fanout)]
+          ;; SINAL OBSERVAVEL (frente 'truncamento-familia', sitio (b)): este e' um JOB, nao uma listagem —
+          ;; nao ha campo `-total` a publicar (regra 1 da familia: o teto nunca vai ao cliente, e aqui nao ha
+          ;; cliente nenhum, so' um consumer do bus). Quando a contagem bate no teto, MEDE o residuo real
+          ;; (`contar-seguidores-ativos`, MESMO predicado de `seguidores-ativos` — regra 3) e LOGA: sem
+          ;; cursor/paginacao nesta query (`ORDER BY seguidor_identidade_id LIMIT teto`, sempre os MESMOS N
+          ;; primeiros), o residuo NAO entra em nenhuma rodada futura — nao e' um teto que dreno aos poucos,
+          ;; e' um apagao permanente para quem ficou de fora. Sem este log o operador nao tem NENHUM jeito de
+          ;; saber que uma materia populosa esta' deixando cidadaos sem notificacao.
+          ;; achado MENOR da revisao adversarial: `(= (count destinatarios) teto-fanout)` e' o teto
+          ;; ATINGIDO, nao EXCEDIDO — com EXATAMENTE teto seguidores ativos ninguem fica de fora, mas o
+          ;; guard sozinho logaria um alarme falso ("o residuo NUNCA sera notificado" com :nao-notificados
+          ;; 0). O `when` externo so' evita a query extra no caso comum (abaixo do teto); o `>` interno e'
+          ;; quem decide se ha' de fato residuo antes de acusar.
+          (when (= (count destinatarios) teto-fanout)
+            (let [total (db-acompanhamento/contar-seguidores-ativos tx ente-id pid)]
+              (when (> total teto-fanout)
+                (log/warn "transparencia: fan-out de notificacao cortado pelo teto — o residuo NUNCA sera notificado (sem cursor nesta query)"
+                          {:ente-id ente-id :proposicao-id pid :teto teto-fanout :seguidores-ativos total
+                           :nao-notificados (max 0 (- total teto-fanout))}))))
+          (doseq [dest destinatarios
                   :let [dest-str (str dest)]]
             (eventos/emitir! (outbox/bus) tx
               (ev-notif/requisitada
@@ -227,17 +247,28 @@
 (defprotocol RepoTransparencia
   (transacao [this ente-id f] "Roda (f tx) numa UNICA tx do tenant (com-tenant*) — leitura publica.")
   (buscar-materia [this ente-id proposicao-id] "Ficha PUBLICA de uma materia, ou nil.")
-  (listar-materias [this ente-id estados-excluidos] "Portal: materias fora dos `estados-excluidos`.")
+  (listar-materias [this ente-id estados-excluidos]
+    "Portal: {:materias :materias-total} — materias fora dos `estados-excluidos`, TRUNCADAS no teto de
+     `listar-em-tramitacao` (200), mais `:materias-total` (SEM teto, `contar-em-tramitacao`) no MESMO
+     predicado — a UNICA listagem publica de proposicoes (frente 'truncamento-familia', sitio (b)). Uma
+     UNICA tx (mesma disciplina de `perfil-parlamentar` abaixo — READ COMMITTED, ver a nota la').")
   (buscar-norma [this ente-id norma-id] "Uma norma publicada por id, ou nil.")
   (norma-da-materia [this ente-id proposicao-id] "A norma publicada de uma materia, ou nil.")
-  (listar-normas [this ente-id filtro] "Portal: acervo as-enacted, com filtro opcional {:tipo :ano :numero} (ver db/norma/listar).")
+  (listar-normas [this ente-id filtro]
+    "Portal: {:normas :normas-total} — acervo as-enacted, com filtro opcional {:tipo :ano :numero} (ver
+     db/norma/listar), TRUNCADO no teto (200) mais `:normas-total` (SEM teto, `db/norma/contar`) no MESMO
+     filtro — frente 'truncamento-familia', sitio (c). Uma UNICA tx.")
   ;; F6c Slice 4b — artefato de publicacao oficial (PROJECAO; a rota publica de download resolve o ponteiro daqui)
   (artefato-mais-recente-da-norma [this ente-id norma-id]
     "Ponteiro do artefato de publicacao MAIS RECENTE de uma norma (objeto_store_ref + content_type + versao), ou nil.")
   ;; F6c Slice 2 — acompanhamento do cidadao (escritas autenticadas; consent-gated)
   (seguir! [this ente-id m] "UPSERT: cidadao segue a materia (re-seguir reativa). Devolve {:id :estado ...}.")
   (deixar-de-seguir! [this ente-id m] "Soft-cancel idempotente. Devolve {:id} se cancelou, ou nil (no-op).")
-  (meus-acompanhamentos [this ente-id seguidor-identidade-id] "Materias que o cidadao segue (ativas, c/ cabecalho).")
+  (meus-acompanhamentos [this ente-id seguidor-identidade-id]
+    "{:acompanhamentos :acompanhamentos-total} — materias que o cidadao segue (ativas, c/ cabecalho via
+     LEFT JOIN; item cuja projecao ainda nao chegou vem com `:indisponivel true`, nunca omitido), TRUNCADAS
+     no teto de `meus-da-materia` (200) mais `:acompanhamentos-total` (SEM teto, SEM join, `contar-meus`)
+     no MESMO predicado — frente 'truncamento-familia', sitios (c)/(d). Uma UNICA tx.")
   ;; Onda E fatia 2 — perfil PUBLICO do vereador (leitura COMPOSTA numa UNICA tx, mesma disciplina de
   ;; legislativo/ficha-completa-da-proposicao). O QUE A TX DE FATO ENTREGA (correcao F3a da revisao Task 3
   ;; — a afirmacao anterior, "as leituras veem o MESMO snapshot MVCC, entao o numero-card nunca discorda da
@@ -264,15 +295,27 @@
   RepoTransparencia
   (transacao [_ ente-id f] (tenancy/com-tenant* (:ds datasource) ente-id f))
   (buscar-materia [this ente-id pid] (transacao this ente-id #(db-materia/buscar % ente-id pid)))
-  (listar-materias [this ente-id excl] (transacao this ente-id #(db-materia/listar-em-tramitacao % ente-id excl)))
+  (listar-materias [this ente-id excl]
+    (transacao this ente-id
+      (fn [tx]
+        {:materias       (db-materia/listar-em-tramitacao tx ente-id excl)
+         :materias-total (db-materia/contar-em-tramitacao tx ente-id excl)})))
   (buscar-norma [this ente-id nid] (transacao this ente-id #(db-norma/buscar % ente-id nid)))
   (norma-da-materia [this ente-id pid] (transacao this ente-id #(db-norma/buscar-por-proposicao % ente-id pid)))
-  (listar-normas [this ente-id filtro] (transacao this ente-id #(db-norma/listar % ente-id filtro)))
+  (listar-normas [this ente-id filtro]
+    (transacao this ente-id
+      (fn [tx]
+        {:normas       (db-norma/listar tx ente-id filtro)
+         :normas-total (db-norma/contar tx ente-id filtro)})))
   (artefato-mais-recente-da-norma [this ente-id norma-id]
     (transacao this ente-id #(db-artefato/mais-recente-por-norma % ente-id norma-id)))
   (seguir! [this ente-id m] (transacao this ente-id #(db-acompanhamento/seguir! % (assoc m :ente-id ente-id))))
   (deixar-de-seguir! [this ente-id m] (transacao this ente-id #(db-acompanhamento/deixar-de-seguir! % (assoc m :ente-id ente-id))))
-  (meus-acompanhamentos [this ente-id sid] (transacao this ente-id #(db-acompanhamento/meus-da-materia % ente-id sid)))
+  (meus-acompanhamentos [this ente-id sid]
+    (transacao this ente-id
+      (fn [tx]
+        {:acompanhamentos       (db-acompanhamento/meus-da-materia tx ente-id sid)
+         :acompanhamentos-total (db-acompanhamento/contar-meus tx ente-id sid)})))
   (perfil-parlamentar [this ente-id vid janelas]
     (transacao this ente-id
       (fn [tx]

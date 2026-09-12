@@ -171,21 +171,39 @@
        janela: cobraria do ex-vereador sessoes de um periodo em que ele nao estava em exercicio, e o
        numerador nao cresce junto — a fracao publicada cairia sem que ele tivesse faltado a nada"))
 
-(deftest teto-de-janelas-trunca-mantendo-as-mais-recentes
-  ;; Convencao da casa: todo predicado de cardinalidade aberta em rota publica tem teto explicito (cap 2000
-  ;; na pauta, 5000 no fan-out, 4096 no incidente, 200/50 nas listas deste mesmo perfil). Cada janela vira um
-  ;; ramo de OR no WHERE da fatia 6, numa rota anonima e sem cache; `criar-mandato!` (INSERT direto, usado
-  ;; pelo seed e pelo import de acervo legado) nao limita quantidade de stints nao-sobrepostos.
+(deftest teto-de-janelas-estoura-fail-closed-em-vez-de-truncar
+  ;; Frente 'truncamento-familia', sitio (c). O corpo ANTIGO descartava as janelas MAIS ANTIGAS
+  ;; (`take-last`) e devolvia uma lista mais curta em SILENCIO — dano DUPLO, pior que uma listagem
+  ;; truncada comum: (i) a fracao de assiduidade publicada (fatia 6) passava a cobrir so' a CAUDA do
+  ;; mandato sem NENHUM marcador dizendo isso (`PerfilVereadorOut` nao tem campo `-truncado`/`-total`
+  ;; para esta lista); (ii) `janela-anterior-a-projecao?` e' calculado SOBRE as janelas ja' truncadas,
+  ;; entao um corte silencioso tambem distorce essa decisao. Publicar uma assiduidade ERRADA como se
+  ;; fosse certa e' pior que recusar a pagina — por isso a forma aqui e' FAIL-CLOSED (`:limite/*`, o
+  ;; padrao ja' usado em `cadastros/db/vereador.clj:379` e `sessoes/db/sessao.clj` `listar-todas`), NAO
+  ;; um campo `-total`/`-truncado`: isto e' o DENOMINADOR de um numero publicado (a categoria em que a
+  ;; familia ja' recusa a forma `-total`), nao uma listagem que o cliente navega.
   (let [stints (for [ano (range 1800 1960)]                 ; 160 stints disjuntos (2 anos de vao entre eles)
                  (mandato {:estado "concluido"
                            :vigencia-inicio (d (str ano "-01-01"))
-                           :vigencia-fim (d (str ano "-06-30"))}))
-        js (rotas/janelas-de-exercicio stints [])]
-    (is (= 100 (count js)) "teto de 100 janelas")
-    (is (= (iv "1959-01-01" "1959-06-30") (last js))
-        "trunca as MAIS ANTIGAS: o perfil publico fica com o periodo recente, e o descarte e' declarado na
-         docstring — nunca funde os stints num intervalo unico, que contaria os vaos como exercicio")
-    (is (= (iv "1860-01-01" "1860-06-30") (first js)))))
+                           :vigencia-fim (d (str ano "-06-30"))}))]
+    (let [ex (try (rotas/janelas-de-exercicio stints []) (catch clojure.lang.ExceptionInfo e e))]
+      (is (instance? clojure.lang.ExceptionInfo ex)
+          "acima do teto, LANCA em vez de devolver uma lista mais curta em silencio")
+      (is (= :limite/janelas-excedido (:tipo (ex-data ex)))
+          "no namespace `limite` — o interceptor global (`interceptors/limite-excedido`) reconhece
+           qualquer `:tipo` deste namespace e mapeia 422 com o numero MEDIDO, sem precisar de um caso novo")
+      (is (= 160 (:medido (ex-data ex))) "o numero MEDIDO — nao um piso: e' contagem pura em memoria, exata")
+      (is (= 100 (:teto (ex-data ex))) "o teto vai na ex-data (o 422 da borda o devolve ao operador)")))
+  (testing "abaixo do teto: comportamento inalterado (nunca lanca por engano)"
+    (let [js (rotas/janelas-de-exercicio
+              [(mandato {:vigencia-inicio (d "2025-01-01") :vigencia-fim (d "2025-12-31")})]
+              [])]
+      (is (= [(iv "2025-01-01" "2025-12-31")] js))))
+  (testing "exatamente no teto: nao lanca (so' o EXCEDENTE estoura, `>` nao `>=`)"
+    (let [stints (for [ano (range 1800 1900)] (mandato {:estado "concluido"
+                                                         :vigencia-inicio (d (str ano "-01-01"))
+                                                         :vigencia-fim (d (str ano "-06-30"))}))]
+      (is (= 100 (count (rotas/janelas-de-exercicio stints [])))))))
 
 (deftest multiplos-stints-viram-intervalos-disjuntos-sem-o-vao-entre-eles
   (let [js (rotas/janelas-de-exercicio

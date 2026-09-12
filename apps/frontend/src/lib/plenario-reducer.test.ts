@@ -702,3 +702,25 @@ describe("tribuna — o read-model reconstrói quem está com a palavra", () => 
     });
   });
 });
+
+describe("tempo-real.lacuna — sinal sintético de buraco no replay (frente truncamento-familia, sítio d)", () => {
+  it("marca avisoLacuna e pede re-hidratação (o único caminho de auto-cura que existe hoje)", () => {
+    const antes = reduzir(sessao({ estado: "aberta" }), []);
+    expect(antes.avisoLacuna).toBe(false); // estado inicial nunca começa com o aviso ligado
+
+    const depois = aplicarEvento(antes, { tipo: "tempo-real.lacuna", seq: 7, dados: {} });
+    expect(depois.avisoLacuna).toBe(true);
+    expect(depois.precisaRehidratar).toBe(true); // reusa o MESMO sinal que já dispara a re-busca de quórum/tribuna
+    expect(depois.ultimoSeq).toBe(7); // o cursor AVANÇA sobre a lacuna, não fica preso antes dela
+  });
+
+  it("é STICKY: um evento normal seguinte não apaga o aviso (a lacuna já aconteceu, não se desfaz)", () => {
+    const comLacuna = aplicarEvento(reduzir(sessao({ estado: "aberta" }), []), { tipo: "tempo-real.lacuna", seq: 1, dados: {} });
+    const depoisDeOutroEvento = aplicarEvento(comLacuna, {
+      tipo: "sessao.transicionou",
+      seq: 2,
+      dados: { "sessao-id": "s1", de: "aberta", para: "suspensa" },
+    });
+    expect(depoisDeOutroEvento.avisoLacuna).toBe(true);
+  });
+});

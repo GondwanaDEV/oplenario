@@ -87,6 +87,15 @@ export interface InboxVista {
    * aqui seria um segundo vocabulário driftando do primeiro em silêncio.
    */
   naoLidasForaDaLista: number;
+  /**
+   * Fatia "truncamento-familia" sitio (b): quantas notificações — LIDAS OU NÃO — o servidor tem que este
+   * corte não mostra. `naoLidasForaDaLista` (acima) só enxerga o UNIVERSO das não lidas: um ator com 200
+   * lidas + 5 não lidas (as 5 dentro do teto) teria `naoLidasForaDaLista === 0` e a tela concluiria, ERRADO,
+   * que nada foi cortado — as 155 lidas escondidas não tinham nenhum sinal. Este campo usa
+   * `notificacoesTotal` (o par AUTORITATIVO do servidor, mesmo WHERE da lista — nunca uma dedução
+   * client-side comparando `naoLidas` com outra contagem) e por isso cobre exatamente esse buraco.
+   */
+  totalForaDaLista: number;
   /** Não existe NENHUMA notificação (independe do filtro). */
   vazia: boolean;
   /** As abas a desenhar. `[]` quando não há o que filtrar. */
@@ -292,6 +301,9 @@ export function derivarInbox(
     itens: visiveis.filter((i) => grupoDe(i.criadoEm, agoraIso) === chave),
   })).filter((g) => g.itens.length > 0);
   const naoLidas = dados?.naoLidas ?? 0;
+  // Fatia "truncamento-familia": `notificacoesTotal` chega SEMPRE que `dados` chega (o contrato o exige) —
+  // o `??` cobre só o instante em que `dados` ainda é null (fetch em voo), nunca um valor ausente do servidor.
+  const notificacoesTotal = dados?.notificacoesTotal ?? itens.length;
   return {
     grupos,
     naoLidas,
@@ -299,6 +311,7 @@ export function derivarInbox(
     // voo pode fazer o total chegar MENOR que o local por um instante, e número negativo na tela é pior
     // que silêncio.
     naoLidasForaDaLista: Math.max(0, naoLidas - itens.filter((i) => !i.lida).length),
+    totalForaDaLista: Math.max(0, notificacoesTotal - itens.length),
     vazia: itens.length === 0,
     filtros,
     filtroAtivo,

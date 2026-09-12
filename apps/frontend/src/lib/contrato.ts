@@ -128,6 +128,11 @@ export interface VotacaoEncerrada {
   "base-membros"?: number | null;
 }
 
+/** tempo-real.lacuna — sinal SINTÉTICO (nunca um evento de domínio): o backplane Valkey da CanalStore o
+ * injeta quando o replay encontra uma entrada corrompida no meio do stream (frente 'truncamento-familia',
+ * sitio (d)). `dados` é sempre `{}` — nunca carrega o payload corrompido. */
+export type LacunaDetectada = Record<string, never>;
+
 /** Evento normalizado do canal plenário: o `tipo` discrimina o `dados`; `seq` = posição monotônica (Last-Event-ID). */
 export type EventoPlenario =
   | { tipo: "sessao.transicionou"; seq: number; dados: SessaoTransicionou }
@@ -139,9 +144,12 @@ export type EventoPlenario =
   | { tipo: "inscricao.desistida"; seq: number; dados: InscricaoDesistida }
   | { tipo: "votacao.aberta"; seq: number; dados: VotacaoAberta }
   | { tipo: "voto.registrado"; seq: number; dados: VotoRegistrado }
-  | { tipo: "votacao.encerrada"; seq: number; dados: VotacaoEncerrada };
+  | { tipo: "votacao.encerrada"; seq: number; dados: VotacaoEncerrada }
+  | { tipo: "tempo-real.lacuna"; seq: number; dados: LacunaDetectada };
 
-/** Os 10 tipos roteados ao painel — espelho de oplenario.tempo-real.canais/tipos-plenario (fonte única no backend). */
+/** Os 11 tipos que o cliente do painel reconhece — espelho de
+ * oplenario.tempo-real.canais/tipos-emitidos-ao-cliente (fonte única no backend: os 10 roteados ao painel
+ * + `tempo-real.lacuna`, o sinal sintético de buraco de replay). */
 export const TIPOS_PLENARIO = [
   "sessao.transicionou",
   "presenca.registrada",
@@ -153,4 +161,5 @@ export const TIPOS_PLENARIO = [
   "votacao.aberta",
   "voto.registrado",
   "votacao.encerrada",
+  "tempo-real.lacuna",
 ] as const;

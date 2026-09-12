@@ -56,10 +56,23 @@
   "GET /legislativo/proposicoes/:id/ficha — o envelope agregado (Onda B Slice 3). `:proposicao` reusa
   ProposicaoDetalheOut (o controller ja' gateia nil -> 404 na borda antes de chegar aqui; a wire/out so'
   projeta ficha com proposicao presente). Tetos fixos (100 tramitacao / 50 demais) sao decisao do Repo
-  (app-level), nao expostos aqui como metadado de paginacao — sem 'carregar mais' nesta fatia."
+  (app-level) e o NUMERO nunca e' exposto aqui (regra 1 da familia 'truncamento-familia') — sem
+  'carregar mais' nesta fatia.
+
+  `<lista>-truncado` (booleano, um por lista — fatia 'truncamento-familia'): a rota irma
+  GET /proposicoes/:id/tramitacao ja' sinaliza corte com `:historico-truncado` (mesma sonda teto+1); as
+  4 listas daqui adotam a MESMA forma, uniformemente (uma lista sinalizando e a vizinha nao seria pior
+  que nenhuma sinalizar — o cliente generalizaria a presenca do campo). NAO e' o par `<lista>-total`
+  (a outra forma canonica do repo): aqui nao ha' contagem barata pre-existente pra' reusar, e a sonda
+  teto+1 (ja embutida nos 4 db/ da ficha) resolve com ZERO query nova — 4 `count(*)` seriam uma 5a
+  forma que a familia pede pra' evitar."
   [:map {:closed true}
    [:proposicao proposicao/ProposicaoDetalheOut]
    [:tramitacao [:sequential HistoricoTramitacaoItemOut]]
+   [:tramitacao-truncado :boolean]
    [:apensadas [:sequential ApensacaoOut]]
+   [:apensadas-truncado :boolean]
    [:emendas [:sequential EmendaResumoOut]]
-   [:pareceres [:sequential ParecerResumoOut]]])
+   [:emendas-truncado :boolean]
+   [:pareceres [:sequential ParecerResumoOut]]
+   [:pareceres-truncado :boolean]])

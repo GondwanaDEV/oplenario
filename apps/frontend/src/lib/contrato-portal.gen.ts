@@ -12,6 +12,11 @@ export interface NormaOut {
   veiculoPublicacao: string;
 }
 
+export interface NormasOut {
+  normas: NormaOut[];
+  normasTotal: number;
+}
+
 export interface MateriaOut {
   proposicaoId: string;
   tipo: string;
@@ -22,6 +27,11 @@ export interface MateriaOut {
   autorTipo?: string | null;
   autorTexto?: string | null;
   estado: string;
+}
+
+export interface MateriasOut {
+  materias: MateriaOut[];
+  materiasTotal: number;
 }
 
 export interface FichaOut {

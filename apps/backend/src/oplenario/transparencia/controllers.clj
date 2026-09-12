@@ -10,7 +10,9 @@
             [oplenario.transparencia.components.repositorio :as repo]))
 
 (defn listar-materias
-  "Portal: materias em tramitacao (sem exclusao de estado nesta fatia — lista tudo, mais recente primeiro)."
+  "Portal: {:materias :materias-total} em tramitacao (sem exclusao de estado nesta fatia — lista tudo, mais
+  recente primeiro). `:materias-total` e' o par obrigatorio do teto de 200 (frente 'truncamento-familia',
+  sitio (b)) — ver docstring do metodo homonimo do Repo."
   [repo-transparencia ente-id]
   (repo/listar-materias repo-transparencia ente-id #{}))
 
@@ -22,8 +24,9 @@
     (assoc m :norma (repo/norma-da-materia repo-transparencia ente-id proposicao-id))))
 
 (defn listar-normas
-  "Portal: acervo de legislacao as-enacted (F6c Slice 3). `filtro` = {:tipo :ano :numero} (todos opcionais,
-  ja' coagidos na borda). Sem filtro: mais recente primeiro (compat Slice 1)."
+  "Portal: {:normas :normas-total} do acervo de legislacao as-enacted (F6c Slice 3). `filtro` = {:tipo :ano
+  :numero} (todos opcionais, ja' coagidos na borda). Sem filtro: mais recente primeiro (compat Slice 1).
+  `:normas-total` e' o par obrigatorio do teto de 200 (frente 'truncamento-familia', sitio (c))."
   [repo-transparencia ente-id filtro]
   (repo/listar-normas repo-transparencia ente-id filtro))
 
@@ -92,7 +95,9 @@
     {:proposicao-id proposicao-id :seguidor-identidade-id (:identidade-id ator)}))
 
 (defn meus-acompanhamentos
-  "'minhas materias acompanhadas' do cidadao autenticado — escopo pelo seguidor do ATOR (nunca ve as de
-  outro; sem :id, sem policy fina necessaria — a query ja filtra por seguidor)."
+  "{:acompanhamentos :acompanhamentos-total} 'minhas materias acompanhadas' do cidadao autenticado — escopo
+  pelo seguidor do ATOR (nunca ve as de outro; sem :id, sem policy fina necessaria — a query ja filtra por
+  seguidor). `:acompanhamentos-total` e' o par obrigatorio do teto de 200 (frente 'truncamento-familia',
+  sitio (c))."
   [repo-transparencia ator]
   (repo/meus-acompanhamentos repo-transparencia (:ente-id ator) (:identidade-id ator)))

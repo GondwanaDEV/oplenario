@@ -43,8 +43,14 @@ export interface ParecerAgrupado {
 
 export interface HomeVereadorVista {
   minhasProposicoes: ProposicaoResumoMeuPainelOut[];
+  proposicoesTruncado: boolean;
   meusPareceres: ParecerAgrupado;
+  pareceresTruncado: boolean;
   ciencias: CienciaPendenteOut[];
+  // Frente "truncamento-familia": a MAIS GRAVE das 3 — cada `parecerId` de `ciencias` é o `eventoRef`
+  // que POST /meu/ciencias exige, e o FE só obtém esse id POR AQUI. `cienciasTruncado` é AUTORITATIVO do
+  // servidor (sonda teto+1 do Repo), nunca deduzido comparando `ciencias.length` com nada local.
+  cienciasTruncado: boolean;
   proximaSessao: SessaoOut | null;
   sessaoAoVivo: SessaoOut | null;
 }
@@ -77,8 +83,11 @@ export function derivarHome(
   };
   return {
     minhasProposicoes: proposicoes,
+    proposicoesTruncado: painel?.proposicoesTruncado ?? false,
     meusPareceres,
+    pareceresTruncado: painel?.pareceresTruncado ?? false,
     ciencias: painel?.ciencias ?? [],
+    cienciasTruncado: painel?.cienciasTruncado ?? false,
     proximaSessao: proximaSessaoFutura(sessoes ?? [], agoraIso),
     sessaoAoVivo: sessaoAoVivoEm(sessoes ?? []),
   };

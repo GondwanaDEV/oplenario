@@ -88,6 +88,39 @@
       (is (false? (:transicionou? r)) "guard 'falso' bloqueia")
       (is (= antes (count (eventos-parecer ente))) "transicao bloqueada NAO emite evento"))))
 
+;; ========================= frente 'truncamento-familia': relatores-pendentes ganha :truncado =========
+
+(deftest relatores-pendentes-repo-devolve-itens-e-truncado-sem-corte
+  (let [ente (random-uuid)
+        tid (montar-template-parecer! ente)
+        pid (protocolar! ente)]
+    (repo/iniciar-parecer! *repo* ente {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id pid
+                                        :comissao-id (random-uuid) :template-id tid})
+    (let [r (repo/relatores-pendentes *repo* ente)]
+      (is (= 1 (count (:itens r))))
+      (is (false? (:truncado r))))))
+
+(deftest relatores-pendentes-repo-sinaliza-truncamento-sem-derivar-do-corte-ja-aplicado
+  ;; `with-redefs` baixa o teto de producao (privado em components/repositorio, 50) pra' 1 — mesmo
+  ;; racional das demais sondas desta frente.
+  (let [ente (random-uuid)
+        tid (montar-template-parecer! ente)
+        {pcid-mais-antigo :id} (repo/iniciar-parecer! *repo* ente
+                                 {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id (protocolar! ente)
+                                  :comissao-id (random-uuid) :template-id tid})]
+    (repo/iniciar-parecer! *repo* ente {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id (protocolar! ente)
+                                        :comissao-id (random-uuid) :template-id tid})
+    (with-redefs [repo/teto-relatores-pendentes 1]
+      (let [r (repo/relatores-pendentes *repo* ente)]
+        (is (= 1 (count (:itens r))) "a LISTA continua cortada no teto injetado")
+        (is (true? (:truncado r)) "2 pareceres reais > teto 1 -> sinaliza")
+        ;; achado da revisão adversarial: a fila e' FIFO (criado_em ASC) — quem sobrevive ao corte tem
+        ;; de ser o parecer MAIS ANTIGO (o que espera ha' mais tempo, o que a Mesa precisa despachar
+        ;; primeiro), nao o mais novo. Uma mutacao `:fim`->`:inicio` em `relatores-pendentes` (Repo) faz
+        ;; `take-last` devolver o mais NOVO sem derrubar `count`/`truncado` — so' esta asserção pega.
+        (is (= pcid-mais-antigo (:id (first (:itens r))))
+            "o item que sobrevive ao corte e' o MAIS ANTIGO da fila FIFO, nao o mais recente")))))
+
 (deftest emitir-parecer-assina-quando-ha-rascunho
   (let [ente (random-uuid)
         tid  (montar-template-parecer! ente)

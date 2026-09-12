@@ -1842,9 +1842,107 @@ A varredura mediu **todos os 26 sítios de `:limit`/`LIMIT`** do backend: **13 M
 
 | # | Rota | Teto | Consequência |
 |---|---|---|---|
-| 1 | `GET /paineis/pendencias` | 100 | **pior que o do TCE** — esconde prazo legal de e-SIC/LGPD/ouvidoria; perder a janela é descumprimento de LAI (20+10), não incômodo operacional |
+| 1 | `GET /paineis/pendencias` | 100 | **consertado** (commit `302b020` + achados da revisão em `truncamento-familia`) — esconde prazo legal de e-SIC/LGPD/ouvidoria; perder a janela é descumprimento de LAI (20+10), não incômodo operacional |
 | 2 | `/compliance/painel` · `remessas-recentes` | 50 | **consertado aqui** |
 | 3 | `GET /paineis/tramitacao` | 50/estado | usa `ROW_NUMBER()`, **invisível a grep por `LIMIT`** — a própria varredura tem ponto cego do mesmo tipo |
 
 O backend **já tinha 3 padrões honestos** provados, um com a regra escrita *"nada é truncado em
 silêncio"*. Era convenção sem aplicação uniforme; agora tem um quarto exemplo e um molde de teste.
+
+---
+
+# 🔒 Frente `truncamento-familia` · A família inteira para de mentir (12/09/2026)
+
+Fecha a fila que a frente `painel-nao-mente` deixou aberta — e a fila era **maior e de outra
+forma** do que o registro dizia.
+
+## O que a remedição derrubou no próprio registro
+
+O ledger anterior gravou **"13 MENTEM"** e nomeou **3**. Os outros 10 existiam só no contexto
+morto da sessão que mediu, então a retomada teve de **remedir do zero** (18 agentes: 8 famílias
+medidas × refutação adversarial + 2 varreduras de ponto cego). O resultado não bateu:
+
+| | anterior | remedição |
+|---|---|---|
+| Universo declarado | "todos os 26 sítios de `:limit`/`LIMIT`" | **30 sítios medidos**, 23 distintos após dedup |
+| Mentem | 13 | **21 no backend + 2 fora dele** |
+| Modalidade | busca textual por `:limit`/`LIMIT` | + função de janela, corte em memória, corte no cliente, JOIN sem FK |
+
+**Os dois achados mais graves não continham o token buscado**, e por isso eram invisíveis à
+varredura original:
+
+1. **`apps/frontend/src/lib/materia-vista.ts:62`** — `resto.slice(0, 3)`. O portal do cidadão
+   publicava **4 matérias de até 200**, sem contagem, sem "+N", sem página 2 — e o item
+   **"Proposições"** da barra institucional aponta para essa seção: **ela É a listagem pública**.
+   Nenhum `LIMIT` envolvido. É M5, a porta da rua.
+2. **`rotas.clj:141-142`** — `(take-last teto-de-janelas janelas)`, corte **em memória** do
+   conjunto que é o **denominador** da assiduidade publicada no perfil anônimo do vereador. Truncar
+   o denominador não encurta uma lista: produz um **número errado apresentado como certo**. Pior,
+   `janela-anterior-a-projecao?` era calculado **sobre as janelas já truncadas**.
+
+## A fila completa — desta vez gravada, não contada
+
+| # | Sítio | Consumidor | Teto | Veredito | Grav. |
+|---|---|---|---|---|---|
+| 1 | `paineis/db/pendencia.clj:131` | GET /paineis/pendencias | 100 efetivo | MENTE | CRITICO |
+| 2 | `paineis/db/tramitacao.clj:117 e 129` | GET /paineis/tramitacao | 50 POR ESTADO efetivo | MENTE | ALTO |
+| 3 | `transparencia/db/materia.clj:206` | GET /portal/casa/:ente/materias | 200 | MENTE | ALTO |
+| 4 | `legislativo/db/meu_painel.clj:33` | GET /meu/painel | 50 | MENTE | ALTO |
+| 5 | `legislativo/db/tramitacao.clj:297-315` | GET /legislativo/proposicoes/:id/ficha → aba "Tramitação" +  | 100 | MENTE | ALTO |
+| 6 | `legislativo/db/parecer.clj:74-88` | GET /legislativo/proposicoes/:id/ficha → aba "Pareceres | 50 | MENTE | ALTO |
+| 7 | `legislativo/db/apensacao.clj:54-69` | GET /legislativo/proposicoes/:id/ficha → card "Dados da maté | 50 | MENTE | ALTO |
+| 8 | `legislativo/db/emenda.clj:48-61` | GET /legislativo/proposicoes/:id/ficha → aba "Emendas | 50 | MENTE | ALTO |
+| 9 | `paineis/db/sli_sessao.clj:118-132` | GET /paineis/sli/sessoes | 200 efetivo | MENTE | MEDIO |
+| 10 | `paineis/db/notificacao_entrega.clj:38-51` | components/repositorio.clj:296-308 | 500 | MENTE | MEDIO |
+| 11 | `transparencia/db/norma.clj:86` | GET /portal/casa/:ente/legislacao | 200 | MENTE | MEDIO |
+| 12 | `transparencia/db/acompanhamento.clj:65` | `fan-out-notificacao!` | 5000 | MENTE | MEDIO |
+| 13 | `participacao/db/comentario.clj:88` | GET /portal/casa/:ente/materias/:proposicao_id/comentarios | 200 | MENTE | MEDIO |
+| 14 | `participacao/db/prazo_ativo.clj:112` | participacao/components/repositorio.clj:260-277 | 1000 | MENTE | MEDIO |
+| 15 | `paineis/db/notificacao_caixa.clj:68` | GET /meu/notificacoes | 50 rígido | MENTE | BAIXO |
+| 16 | `sessoes/db/chamada.clj:85` | TRÊS consumidores, não um: | 50 | MENTE | BAIXO |
+| 17 | `sessoes/db/presenca.clj:341` | GET /paineis/mesa | 10 | HONESTO | BAIXO |
+| 18 | `transparencia/db/parlamentar.clj:134` | GET /portal/casa/:ente/vereadores/:vereador_id | 50 | HONESTO | NENHUMA |
+| 19 | `legislativo/db/proposicao.clj:256-257` | GET /legislativo/proposicoes | `tamanho` do cliente | HONESTO | NENHUMA |
+| 20 | `compliance/db/obrigacao.clj:112` | GET /compliance/painel | 100 | HONESTO | NENHUMA |
+| 21 | `compliance/db/remessa.clj:138` | MESMA cadeia do sítio acima | 50 | HONESTO | NENHUMA |
+
+## A forma, por natureza do sítio
+
+Não é uma forma só, e a escolha é do sítio, não do gosto:
+
+| Natureza | Forma | Por quê |
+|---|---|---|
+| Lista com contagem disponível | par **`<lista>-total :int`** | permite "mostrando N de M"; precedente de `transparencia/wire/out/parlamentar` e `compliance/wire/out/painel` |
+| Lista **sem** função de contagem pré-existente | **`<lista>-truncado :boolean`** por sonda `teto+1` | escrever 4 `count(*)` novos seria a quinta forma; `legislativo` já resolvia assim (`:historico-truncado`) |
+| Corte por grupo (`PARTITION BY`) | total **por grupo** | um `itens-total` escalar seria mentira nova |
+| Artefato congelado / denominador publicado | **fail-closed `:limite/*`** | `sessoes/db/sessao.clj:83`, `cadastros/db/vereador.clj:379`; melhor recusar a página que assinar um PDF truncado |
+| Job / sweep / fan-out | sinal observável + prova do resíduo | total não ajuda ninguém; o dano é trabalho silenciado |
+
+## O que só apareceu consertando
+
+- **`(boolean x)` no adapter da ficha transformava `nil` em `false`.** Produtor que esquecesse o
+  campo publicaria "não truncado". Removida a coerção, apareceram **7 fixtures** pré-existentes
+  montando o mapa sem as chaves — a armadilha do `{:closed true}` estava **escondida atrás da
+  coerção**, não ausente.
+- **O sweep de prazo de LAI/LGPD não trunca: ele não roda.** `varrer-vencimentos!` só tem
+  chamador de teste; não há scheduler no sistema (`kernel/components/scheduler.clj` só tem o
+  advisory-lock do relay), e o mesmo vale para o de `compliance`. O achado mudou de natureza no
+  meio da fatia — virou **carry de infra com prova**, não um campo novo fingindo conserto.
+- **Um teste celebrava o defeito.** `teto-de-janelas-trunca-mantendo-as-mais-recentes` afirmava o
+  truncamento silencioso **como contrato**. Não bastou acrescentar teste: foi preciso reescrever a
+  intenção do antigo. Família de `oplenario-teste-que-afirma-o-vazamento`.
+- **O corte derrubava o item errado.** `lista-com-sonda` foi estendida com a **posição** do
+  excedente (`:inicio`/`:fim`): `meu-painel` devolve na ordem de exibição, e usar o `take-last` de
+  `ficha-materia` ali cortaria o item errado em silêncio. Nenhuma mutação de palavra única
+  derrubava teste antes disso.
+- **O codegen escreveu num diretório fantasma.** Um agente montou só `apps/backend` no container;
+  `../frontend` caiu fora do mount, o `.gen.ts` foi "gerado" com exit 0 e o arquivo do repo ficou
+  intacto. Só o `git diff` vazio denunciou — a mesma classe de defeito que esta frente combate.
+
+## Carries que a frente NÃO abriu (decisão consciente)
+
+- **`READ COMMITTED` entre a lista e o total.** O par pode derivar de snapshot. O repo já marca
+  esse overclaim como **carry deliberado** em `transparencia` e `legislativo` (o `com-tenant*` do
+  kernel é compartilhado). As fatias corrigiram a **docstring** que prometia coerência inexistente
+  e não mexeram no kernel. Consertar de verdade é frente própria.
+- **Scheduler de jobs.** Ver acima: nenhum existe, nem para `compliance`.

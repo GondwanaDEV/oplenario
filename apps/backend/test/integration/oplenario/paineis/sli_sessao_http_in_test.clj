@@ -16,10 +16,15 @@
             [oplenario.rotas :as rotas])
   (:import (java.time Instant)))
 
-(defn- fake-repo-paineis [resultado]
-  #_{:clj-kondo/ignore [:missing-protocol-method]}
-  (reify repo-paineis/RepoPaineis
-    (sli-sessoes [_ _ente-id] resultado)))
+(defn- fake-repo-paineis
+  "`total` default = (count resultado) — os testes que nao se importam com o par sessoes/sessoes-total
+  continuam validos; o teste que PROVA que sessoes-total e' autoritativo (nao derivado do tamanho da
+  lista) passa um `total` explicito e diferente."
+  ([resultado] (fake-repo-paineis resultado (count resultado)))
+  ([resultado total]
+   #_{:clj-kondo/ignore [:missing-protocol-method]}
+   (reify repo-paineis/RepoPaineis
+     (sli-sessoes [_ _ente-id] {:sessoes resultado :sessoes-total total}))))
 
 (defn- fake-repo-identidade [papeis]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
@@ -78,7 +83,21 @@
   (let [r (pt/response-for (service-fn #{"secretario"} (fake-repo-paineis []))
                            :get "/paineis/sli/sessoes" :headers (com-bearer (token (random-uuid) (random-uuid))))]
     (is (= 200 (:status r)))
-    (is (= [] (:sessoes (ler-json r))))))
+    (is (= [] (:sessoes (ler-json r))))
+    (is (= 0 (:sessoes-total (ler-json r))))))
+
+;; ---------- fatia "truncamento-familia" sitio (a): sessoes-total e' AUTORITATIVO, nao count(sessoes) ----------
+
+(deftest sli-sessoes-total-e-independente-do-tamanho-da-lista
+  ;; regra 3/4 da familia: se o wire alguma vez regredisse para `(count sessoes)` em vez de repassar o
+  ;; `sessoes-total` que o Repo mandou, este teste nomeia o numero errado — o fake devolve 2 sessoes na
+  ;; lista e um total de 7 (simulando o corte: so' 2 de 7 sessoes vistas couberam no teto).
+  (let [r (pt/response-for (service-fn #{"secretario"} (fake-repo-paineis [(sessao-encerrada) (sessao-em-curso)] 7))
+                           :get "/paineis/sli/sessoes" :headers (com-bearer (token (random-uuid) (random-uuid))))
+        body (ler-json r)]
+    (is (= 200 (:status r)))
+    (is (= 2 (count (:sessoes body))) "a lista trouxe so' 2 (o corte)")
+    (is (= 7 (:sessoes-total body)) "o total e' o numero real do servidor, nao count(sessoes)")))
 
 (deftest sli-sem-papel-403
   (let [r (pt/response-for (service-fn #{"vereador"} (fake-repo-paineis []))

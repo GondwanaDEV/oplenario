@@ -22,6 +22,13 @@ export interface PendenciaOut {
   venceEm: string;
   estado: string;
 }
+
+// Fatia "truncamento-familia" (GET /paineis/pendencias): pendenciasTotal é o total AUTORITATIVO
+// server-side (mesmo racional de compliance.emAbertoTotal) — a lista pára no teto (100), o total não.
+interface OQueVenceOut {
+  pendencias: PendenciaOut[];
+  pendenciasTotal: number;
+}
 export interface SliSessaoOut {
   sessaoId: string;
   estadoAtual: string;
@@ -60,8 +67,16 @@ export function useMesa(token: string | null) {
   const [mesa, setMesa] = useState<MesaOut | null>(null);
   const [tramitacaoItens, setTramitacaoItens] = useState<ItemBoardOut[] | null>(null);
   const [pendenciasItens, setPendenciasItens] = useState<PendenciaOut[] | null>(null);
+  const [pendenciasTotal, setPendenciasTotal] = useState<number | null>(null);
   const [sliSessoes, setSliSessoes] = useState<SliSessaoOut[] | null>(null);
+  // Fatia "truncamento-familia": o total REAL de sessões vistas (par irmão autoritativo de sliSessoes,
+  // mesmo padrão de pendenciasTotal acima).
+  const [sliSessoesTotal, setSliSessoesTotal] = useState<number | null>(null);
   const [relatoresPendentes, setRelatoresPendentes] = useState<RelatorPendenteOut[] | null>(null);
+  // Fatia "truncamento-familia": `truncado` AUTORITATIVO do servidor (mesmo par relatoresPendentes/
+  // relatoresPendentesTruncado que pendenciasItens/pendenciasTotal já usa acima) — `null` quando o card
+  // veio indisponível (nada a afirmar), nunca um booleano fingindo "sem corte".
+  const [relatoresPendentesTruncado, setRelatoresPendentesTruncado] = useState<boolean | null>(null);
   const [estado, setEstado] = useState<Estado>("carregando");
 
   useEffect(() => {
@@ -75,19 +90,25 @@ export function useMesa(token: string | null) {
         return;
       }
       setMesa(principal);
-      setRelatoresPendentes(
-        ehCardIndisponivel(principal.relatoresPendentes) ? null : principal.relatoresPendentes.itens,
-      );
+      if (ehCardIndisponivel(principal.relatoresPendentes)) {
+        setRelatoresPendentes(null);
+        setRelatoresPendentesTruncado(null);
+      } else {
+        setRelatoresPendentes(principal.relatoresPendentes.itens);
+        setRelatoresPendentesTruncado(principal.relatoresPendentes.truncado);
+      }
 
       const [tramitacao, pendencias, sli] = await Promise.all([
         buscarOuNull<{ itens: ItemBoardOut[] }>("/api/paineis/tramitacao", token),
-        buscarOuNull<{ pendencias: PendenciaOut[] }>("/api/paineis/pendencias", token),
-        buscarOuNull<{ sessoes: SliSessaoOut[] }>("/api/paineis/sli/sessoes", token),
+        buscarOuNull<OQueVenceOut>("/api/paineis/pendencias", token),
+        buscarOuNull<{ sessoes: SliSessaoOut[]; sessoesTotal: number }>("/api/paineis/sli/sessoes", token),
       ]);
       if (!vivo) return;
       setTramitacaoItens(tramitacao ? tramitacao.itens : null);
       setPendenciasItens(pendencias ? pendencias.pendencias : null);
+      setPendenciasTotal(pendencias ? pendencias.pendenciasTotal : null);
       setSliSessoes(sli ? sli.sessoes : null);
+      setSliSessoesTotal(sli ? sli.sessoesTotal : null);
       setEstado("pronto");
     })();
     return () => {
@@ -101,10 +122,16 @@ export function useMesa(token: string | null) {
       mesa: null,
       tramitacaoItens: null,
       pendenciasItens: null,
+      pendenciasTotal: null,
       sliSessoes: null,
+      sliSessoesTotal: null,
       relatoresPendentes: null,
+      relatoresPendentesTruncado: null,
       estado: "erro" as Estado,
     };
   }
-  return { mesa, tramitacaoItens, pendenciasItens, sliSessoes, relatoresPendentes, estado };
+  return {
+    mesa, tramitacaoItens, pendenciasItens, pendenciasTotal, sliSessoes, sliSessoesTotal,
+    relatoresPendentes, relatoresPendentesTruncado, estado,
+  };
 }

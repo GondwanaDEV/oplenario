@@ -23,6 +23,10 @@
 
 (def SliSessoesOut
   "O SLI de janela de sessao (resposta de GET /paineis/sli/sessoes): sessoes do tenant, em curso primeiro
-  (a ordenacao ja' vem do Repo)."
+  (a ordenacao ja' vem do Repo) + o TOTAL real de sessoes vistas (`sessoes-total`, fatia
+  'truncamento-familia' sitio a). O teto (`teto-sli-sessoes`) NUNCA e' publicado — so' o efeito dele
+  (`sessoes` cortado) e o numero real ao lado. Sem este par, uma sessao 'agendada' nova (que
+  `/pauta-convocacao` existe para convocar) pode cair fora do corte sem nenhum sinal."
   [:map {:closed true}
-   [:sessoes [:sequential SliSessaoOut]]])
+   [:sessoes [:sequential SliSessaoOut]]
+   [:sessoes-total :int]])

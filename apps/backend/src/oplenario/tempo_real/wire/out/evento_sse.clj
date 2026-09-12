@@ -10,8 +10,10 @@
   "Evento do painel ao vivo. `:tipo` = o tipo do evento de dominio (o cliente discrimina o render); `:seq` = a
   posicao monotonica no canal (vira o Last-Event-ID); `:dados` = o payload publico do evento (mapa aberto,
   especifico por tipo — os eventos de sessao nao carregam CPF nem voto secreto). `:tipo` restrito aos tipos
-  roteados ao painel (canais/tipos-plenario) — fonte unica, evita drift com o roteamento."
+  que de fato podem chegar ao cliente (`canais/tipos-emitidos-ao-cliente` = os roteados ao painel +
+  `tipo-lacuna`, o sinal sintetico de buraco de replay — frente 'truncamento-familia' sitio (d)) — fonte
+  unica, evita drift com o roteamento/backplane."
   [:map {:closed true}
-   [:tipo (enum-de canais/tipos-plenario)]
+   [:tipo (enum-de canais/tipos-emitidos-ao-cliente)]
    [:seq :int]
    [:dados [:map]]])

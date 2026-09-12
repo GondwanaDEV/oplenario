@@ -20,6 +20,7 @@ import { useSessaoPauta } from "@/lib/use-sessao-pauta";
 import { useProposicoes } from "@/lib/use-proposicoes";
 import {
   agruparPautaPorFase,
+  avisoCorteSessoes,
   derivarConvocacao,
   derivarProntasForaDaPauta,
   formatarTipoSessao,
@@ -52,7 +53,7 @@ export default function PaginaPautaConvocacao() {
 }
 
 function ConteudoPautaConvocacao({ token }: { token: string | null }) {
-  const { sessoes, estado: estadoSessoes } = useSliSessoes(token);
+  const { sessoes, sessoesTotal, estado: estadoSessoes } = useSliSessoes(token);
   const [escolhidaId, setEscolhidaId] = useState<string | null>(null);
   const alvo = selecionarSessaoAlvo(sessoes ?? [], escolhidaId);
   const { sessao, pauta, estado: estadoDetalhe } = useSessaoPauta(token, alvo?.sessaoId ?? null);
@@ -73,6 +74,9 @@ function ConteudoPautaConvocacao({ token }: { token: string | null }) {
   }
 
   const agendadas = sessoesAgendadas(sessoes ?? []);
+  // Fatia "truncamento-familia" sitio (a): sessoesTotal é o campo autoritativo do servidor — a comparação
+  // nunca é uma dedução client-side (regra 4), e null (chamada ainda em voo) não deve acusar corte.
+  const avisoCorte = sessoes && sessoesTotal != null ? avisoCorteSessoes(sessoes, sessoesTotal) : null;
   const grupos = agruparPautaPorFase(pauta);
   const proposicoesPorId = indexarProposicoesPorId(proposicoesDados?.itens ?? []);
   const rail = derivarProntasForaDaPauta(proposicoesDados?.itens ?? [], proposicoesDados?.total ?? 0, pauta);
@@ -109,6 +113,8 @@ function ConteudoPautaConvocacao({ token }: { token: string | null }) {
             </span>
           )}
         </div>
+
+        {avisoCorte && <p className="aviso-corte">{avisoCorte}</p>}
 
         {estadoSessoes === "carregando" && <p role="status">Carregando…</p>}
 

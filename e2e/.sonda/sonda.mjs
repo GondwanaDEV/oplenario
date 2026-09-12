@@ -59,10 +59,18 @@ const TVER = q({ 'identidade-id': IDENTIDADE_VEREADOR, 'ente-id': ENTE, papeis: 
 // `/pos-aprovacao`); qualquer proposição serve para as demais telas de matéria — a sonda mede
 // renderização, não narrativa.
 async function acharMaterias() {
+  // achado IMPORTANTE da revisao adversarial (frente "truncamento-familia"): a rota deixou de devolver
+  // um array cru e passou a devolver `{materias, materias-total}` (o par lista+total que sinaliza corte
+  // sem publicar o teto). `materias` é a chave da lista; sem isto, `Array.isArray(corpo)` é sempre falso
+  // e a sonda aborta acusando a SEMENTE/projeção — instrumento medindo a si mesmo, nao o sistema.
   const r = await fetch(`${BACKEND}/portal/casa/${ENTE}/materias`);
   if (!r.ok) throw new Error(`ERRO: GET /portal/casa/${ENTE}/materias devolveu ${r.status} — a semente rodou e a projeção terminou? (rode ./demo/semear-tudo.sh)`);
-  const materias = await r.json();
-  if (!Array.isArray(materias) || materias.length === 0) {
+  const corpo = await r.json();
+  const materias = corpo?.materias;
+  if (!Array.isArray(materias)) {
+    throw new Error(`ERRO: /portal/casa/${ENTE}/materias veio em forma inesperada (esperava {materias:[...]}) — o contrato da rota mudou?`);
+  }
+  if (materias.length === 0) {
     throw new Error(`ERRO: /portal/casa/${ENTE}/materias veio vazio — a semente rodou e a projeção terminou? (rode ./demo/semear-tudo.sh)`);
   }
   return materias;

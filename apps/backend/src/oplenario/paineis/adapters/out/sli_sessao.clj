@@ -38,9 +38,11 @@
    :duracao-segundos (duracao-segundos (:aberta-em s) (:encerrada-em s))})
 
 (defn sli-sessoes->wire
-  "Read-model do SLI (sequencia de linhas) -> SliSessoesOut (validada)."
-  [sessoes]
-  (let [out {:sessoes (mapv sessao->wire sessoes)}]
+  "{:sessoes [...] :sessoes-total N} (do Repo) -> SliSessoesOut (validada). `sessoes-total` sai VERBATIM
+  (`(int ...)`, nunca `(or ... 0)`) — fatia 'truncamento-familia': um total AUSENTE e' bug de servidor e tem
+  de virar 500 pela validacao Malli abaixo, nunca um zero silencioso que a UI leria como 'sem corte'."
+  [{:keys [sessoes sessoes-total]}]
+  (let [out {:sessoes (mapv sessao->wire sessoes) :sessoes-total (int sessoes-total)}]
     (when-not (m/validate wire/SliSessoesOut out)
       (throw (ex-info "projecao do SLI de sessao viola o contrato SliSessoesOut (bug de servidor)"
                       {:erros (me/humanize (m/explain wire/SliSessoesOut out))})))

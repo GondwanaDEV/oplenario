@@ -234,7 +234,10 @@ echo "--- Rotas 2-4: POST/PATCH/DELETE /sessoes/:id/pauta/itens ---"
 MATERIAS_JSON=$(curl -s "$BACKEND/portal/casa/$ENTE/materias")
 PROP=$(echo "$MATERIAS_JSON" | python3 -c "
 import json,sys
-ms = json.load(sys.stdin)
+# achado MENOR da revisao adversarial (frente 'truncamento-familia'): a rota devolve
+# {materias, materias-total}, nao mais um array cru — sem o ['materias'] o for iterava as
+# CHAVES do dict (strings) e o python morria com AttributeError, deixando PROP vazio.
+ms = json.load(sys.stdin)['materias']
 aprov = [m for m in ms if m.get('estado')=='aprovada']
 alvo = aprov[0] if aprov else ms[0]
 print(alvo['proposicao-id'])")

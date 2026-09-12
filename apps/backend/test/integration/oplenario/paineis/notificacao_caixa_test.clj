@@ -12,6 +12,7 @@
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.migracao :as migracao]
             [oplenario.paineis.components.repositorio :as paineis-repo]
+            [oplenario.paineis.db.notificacao-caixa :as db-caixa]
             [oplenario.paineis.diplomat.consumers :as paineis-consumers]))
 
 (def ^:dynamic *ds* nil)
@@ -175,24 +176,80 @@
   (let [ente (random-uuid) eu (random-uuid) outro (random-uuid)]
     (semear! ente eu 2)
     (inserir! ente outro "k-do-outro")
-    (let [{:keys [notificacoes nao-lidas]} (paineis-repo/minhas-notificacoes *paineis* ente eu)]
+    (let [{:keys [notificacoes nao-lidas notificacoes-total]} (paineis-repo/minhas-notificacoes *paineis* ente eu)]
       (is (= 2 (count notificacoes)) "criterio 4: so' as minhas — a do outro ator nunca aparece")
       (is (= 2 nao-lidas) "contagem de nao lidas")
+      (is (= 2 notificacoes-total) "fatia 'truncamento-familia': total tambem so' as minhas")
       (is (every? #(= eu (:destinatario-identidade-id %)) notificacoes)))))
 
 (deftest minhas-notificacoes-vazio
-  (let [{:keys [notificacoes nao-lidas]} (paineis-repo/minhas-notificacoes *paineis* (random-uuid) (random-uuid))]
+  (let [{:keys [notificacoes nao-lidas notificacoes-total]} (paineis-repo/minhas-notificacoes *paineis* (random-uuid) (random-uuid))]
     (is (= [] notificacoes) "criterio 3: lista vazia")
-    (is (= 0 nao-lidas) "criterio 3: contagem 0")))
+    (is (= 0 nao-lidas) "criterio 3: contagem 0")
+    (is (= 0 notificacoes-total) "criterio 3: total 0")))
 
 (deftest minhas-notificacoes-mais-recentes-primeiro-com-teto-no-sql
   (let [ente (random-uuid) eu (random-uuid)]
     (semear! ente eu 55)
-    (let [{:keys [notificacoes nao-lidas]} (paineis-repo/minhas-notificacoes *paineis* ente eu)]
+    (let [{:keys [notificacoes nao-lidas notificacoes-total]} (paineis-repo/minhas-notificacoes *paineis* ente eu)]
       (is (= 50 (count notificacoes)) "teto 50 aplicado no SQL (LIMIT), nunca em Clojure depois do fetch")
       (is (= 55 nao-lidas) "a contagem NAO e' limitada pelo teto — a UI nunca mente sobre o que existe")
+      (is (= 55 notificacoes-total) "fatia 'truncamento-familia': o total real, tambem sem o teto de 50")
       (is (apply >= (map (comp #(.toEpochMilli ^java.time.Instant %) :criado-em) notificacoes))
           "mais recentes primeiro"))))
+
+;; ---------- notificacoes-total: fatia "truncamento-familia" sitio (b) ----------
+;; `nao-lidas` filtra `lida_em IS NULL`; `listar-do-destinatario` NAO filtra estado de leitura — predicados
+;; DIVERGENTES, entao `nao-lidas` nunca foi o par irmao verdadeiro da lista. `contar-do-destinatario` e' o
+;; par de VERDADE: mesmo WHERE de `listar-do-destinatario`, sem filtro de leitura.
+
+(deftest notificacoes-total-e-o-falso-honesto-que-nao-lidas-nao-cobre
+  ;; o cenario do achado, em escala pequena: 1 lida + 1 nao lida. `nao-lidas`=1 nao diz nada sobre a lida
+  ;; que tambem esta' na lista — so' `notificacoes-total`=2 (mesmo WHERE de listar-do-destinatario) cobre
+  ;; as DUAS.
+  (let [ente (random-uuid) eu (random-uuid)]
+    (inserir! ente eu "k-total-1")
+    (inserir! ente eu "k-total-2")
+    (let [id-para-marcar (:id (first (:notificacoes (paineis-repo/minhas-notificacoes *paineis* ente eu))))]
+      (paineis-repo/marcar-notificacao-lida! *paineis* ente {:id id-para-marcar :destinatario-identidade-id eu}))
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (is (= 2 (count (db-caixa/listar-do-destinatario tx ente eu))) "a lista: as duas (lida + nao lida)")
+        (is (= 1 (db-caixa/contar-nao-lidas tx ente eu)) "nao-lidas: so' a que ficou sem carimbo")
+        (is (= 2 (db-caixa/contar-do-destinatario tx ente eu))
+            "contar-do-destinatario: o MESMO conjunto que a lista enxerga — a prova de que e' o mesmo predicado")))))
+
+(deftest notificacoes-total-com-limite-injetado-trunca-lista-mas-total-continua-real
+  ;; o teto de producao e' 50 (caro demais criar 51 no teste); a 4a aridade de `listar-do-destinatario`
+  ;; existe exatamente p/ injetar um teto pequeno e provar o corte sem pagar o custo — mesmo racional de
+  ;; compliance/painel e paineis/pendencia desta familia. O caminho de PRODUCAO continua na 3a aridade.
+  (let [ente (random-uuid) eu (random-uuid)]
+    (semear! ente eu 3)
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (is (= 2 (count (db-caixa/listar-do-destinatario tx ente eu 2))) "a lista respeita o limite INJETADO")
+        (is (= 3 (db-caixa/contar-do-destinatario tx ente eu))
+            "o total ignora o limite injetado — continua o numero real")))))
+
+;; ---------- achado de revisao adversarial: a fiacao do PROPRIO Repo nunca era exercitada com os dois
+;; numeros DIVERGENTES. Os testes acima chamam `db-caixa/*` DIRETO (contornando o `defrecord`) ou
+;; chamam `paineis-repo/minhas-notificacoes` so' em Casas onde nao-lidas == notificacoes-total (2/2, 0/0,
+;; 55/55) — uma mutacao na linha do `reify` que trocasse `contar-do-destinatario` por `contar-nao-lidas`
+;; (o predicado ERRADO, literalmente a linha vizinha) passaria muda nesses casos. Este teste le' os DOIS
+;; campos do retorno do PROPRIO `minhas-notificacoes` do Repo, numa Casa onde eles DIVERGEM por
+;; construcao (2 lidas ficam de fora de nao-lidas, mas dentro de notificacoes-total).
+(deftest notificacoes-total-pelo-repo-diverge-de-nao-lidas-quando-ha-lida
+  (let [ente (random-uuid) eu (random-uuid)]
+    (inserir! ente eu "k-repo-total-1")
+    (inserir! ente eu "k-repo-total-2")
+    (inserir! ente eu "k-repo-total-3")
+    (let [id-para-marcar (:id (first (:notificacoes (paineis-repo/minhas-notificacoes *paineis* ente eu))))]
+      (paineis-repo/marcar-notificacao-lida! *paineis* ente {:id id-para-marcar :destinatario-identidade-id eu}))
+    (let [r (paineis-repo/minhas-notificacoes *paineis* ente eu)]
+      (is (= 2 (:nao-lidas r)) "1 das 3 foi marcada lida")
+      (is (= 3 (:notificacoes-total r))
+          "o total, lido pelo PROPRIO Repo, continua 3 — nao os 2 nao-lidas que `contar-nao-lidas`
+           devolveria se a fiacao regredisse para o predicado errado"))))
 
 (deftest isolamento-de-tenant-na-leitura
   (let [ente-a (random-uuid) ente-b (random-uuid) eu (random-uuid)]

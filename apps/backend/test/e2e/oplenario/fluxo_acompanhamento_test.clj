@@ -87,17 +87,30 @@
 ;; ---------- GET /portal/acompanhamentos ----------
 
 (deftest meus-acompanhamentos-200
-  (let [repo (fake-repo {:meus [{:proposicao-id pid :tipo "projeto_lei" :ano 2026 :sequencial 1
-                                 :urn-lex "urn:x" :ementa "Dispoe sobre X" :estado "protocolada"
-                                 :seguido-em (java.time.Instant/parse "2026-07-03T12:00:00Z")}]})
+  (let [repo (fake-repo {:meus {:acompanhamentos
+                                 [{:proposicao-id pid :tipo "projeto_lei" :ano 2026 :sequencial 1
+                                   :urn-lex "urn:x" :ementa "Dispoe sobre X" :estado "protocolada"
+                                   :seguido-em (java.time.Instant/parse "2026-07-03T12:00:00Z")
+                                   :indisponivel false}]
+                                 :acompanhamentos-total 1}})
         r    (pt/response-for (service-fn repo) :get "/portal/acompanhamentos"
                               :headers (com-bearer (token ente (random-uuid))))
         body (ler-json r)]
     (is (= 200 (:status r)))
-    (is (= 1 (count body)))
-    (is (= "Dispoe sobre X" (:ementa (first body))))))
+    (is (= 1 (count (:acompanhamentos body))))
+    (is (= 1 (:acompanhamentos-total body)))
+    (is (= "Dispoe sobre X" (:ementa (first (:acompanhamentos body)))))))
+
+(deftest meus-acompanhamentos-total-diverge-de-proposito-da-count-da-lista-200
+  ;; mesma disciplina de listar-materias-total-diverge-de-proposito: a borda repassa o numero do Repo
+  ;; VERBATIM, nunca `(count acompanhamentos)`.
+  (let [repo (fake-repo {:meus {:acompanhamentos [] :acompanhamentos-total 9}})
+        r    (pt/response-for (service-fn repo) :get "/portal/acompanhamentos"
+                              :headers (com-bearer (token ente (random-uuid))))
+        body (ler-json r)]
+    (is (= 9 (:acompanhamentos-total body)) "o total vem do Repo, nao de (count acompanhamentos)")))
 
 (deftest meus-acompanhamentos-sem-token-401
-  (let [repo (fake-repo {:meus []})
+  (let [repo (fake-repo {:meus {:acompanhamentos [] :acompanhamentos-total 0}})
         r    (pt/response-for (service-fn repo) :get "/portal/acompanhamentos")]
     (is (= 401 (:status r)))))

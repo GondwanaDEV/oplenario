@@ -31,7 +31,7 @@ import "./tramitacao.css";
 
 export default function PaginaTramitacao() {
   const { token } = useAuth();
-  const { itens, estado } = useTramitacaoBoard(token);
+  const { itens, totaisPorEstado, estado } = useTramitacaoBoard(token);
   const [busca, setBusca] = useState("");
   const [tipoFiltro, setTipoFiltro] = useState("");
   const [colunasExpandidas, setColunasExpandidas] = useState<Record<string, boolean>>({});
@@ -45,13 +45,36 @@ export default function PaginaTramitacao() {
     );
   }
 
-  const colunasBrutas = itens ? derivarBoard(itens) : [];
+  // Achado da revisão adversarial (IMPORTANTE): `totaisPorEstado` é campo OBRIGATÓRIO do contrato
+  // (TramitacaoBoardOut é {:closed true}) — quando a rota já respondeu com sucesso (`itens` preenchido)
+  // mas o campo não veio, isso NÃO é "chamador antigo" nem "ainda carregando": é o CONTRATO sendo
+  // violado (backend anterior a esta fatia, proxy que descarta o campo, drift de deploy). A regra 4 da
+  // fatia "truncamento-familia" (aposentar heurística, nunca empilhar) proíbe tratar essa ausência como
+  // um número plausível por fallback silencioso — a tela falha visível, como um erro de rede.
+  if (estado === "pronto" && itens != null && totaisPorEstado == null) {
+    return (
+      <main className="tela-estado">
+        <h1>O quadro de tramitação veio incompleto</h1>
+        <p>O servidor não publicou os totais por estágio. Recarregue a página.</p>
+      </main>
+    );
+  }
+
+  const colunasBrutas = itens && totaisPorEstado ? derivarBoard(itens, totaisPorEstado) : [];
   const colunasFiltradas = filtrarColunasPorEspecie(
     filtrarColunasPorBusca(colunasBrutas, busca),
     tipoFiltro,
     formatarEspecieProposicao,
   );
-  const totalItens = itens?.length ?? 0;
+  // Total REAL da Casa "em curso" (soma de totaisPorEstado, não itens.length — itens é a lista JÁ
+  // CORTADA no teto por-estado do servidor). Achado da revisão adversarial (IMPORTANTE): a coluna
+  // "Concluídas" funde estados TERMINAIS (aprovada/arquivada/sancionado/…) — sem teto, cresce sem limite
+  // ao longo da legislatura. Somar seu total aqui trocaria "mentira por baixo" (o teto de 50) por
+  // "mentira por cima" (o acervo histórico inteiro rotulado como 'em curso'); por isso ela é EXCLUÍDA
+  // desta soma — só os estágios ativos contam como carga de trabalho em curso.
+  const totalItens = colunasBrutas
+    .filter((c) => c.chave !== "concluidas")
+    .reduce((soma, c) => soma + c.total, 0);
 
   return (
     <>
@@ -103,12 +126,27 @@ export default function PaginaTramitacao() {
               const expandida = colunasExpandidas[coluna.chave] ?? false;
               const visivel = paginarColuna(coluna, expandida);
               const restantes = coluna.itens.length - visivel.itens.length;
+              // Sem filtro ativo: mostra o total REAL da coluna (`coluna.total`, autoritativo — sobrevive
+              // ao corte por-estado do servidor). Com filtro ativo, o servidor não sabe "quantas casariam
+              // o filtro" — o que a tela pode mostrar honestamente é quantas das que chegaram bateram
+              // (mesmo comportamento de antes desta fatia, sem regressão).
+              const semFiltro = busca.trim() === "" && tipoFiltro === "";
+              const contagemColuna = semFiltro ? coluna.total : coluna.itens.length;
+              // Achado da revisão adversarial (IMPORTANTE): corte do SERVIDOR (teto por-estado) é
+              // diferente do corte do CLIENTE (`paginarColuna`, TETO_ITENS_VISIVEIS_POR_COLUNA — só
+              // controla quantos dos itens JÁ CHEGADOS aparecem de uma vez). Antes, quando o botão
+              // "Mostrar mais" esgotava os itens já carregados, nada dizia que o SERVIDOR ainda escondia
+              // mais — a Mesa via 87 no cabeçalho, 50 cards, e nenhuma explicação para o resto. Usa a
+              // coluna BRUTA (pré-filtro): sob filtro ativo o servidor não sabe "quantas bateriam", então
+              // o aviso fica calado (mesma régua de `contagemColuna`/`semFiltro` acima).
+              const bruta = colunasBrutas.find((c) => c.chave === coluna.chave);
+              const cortadoPeloServidor = semFiltro && !!bruta && bruta.total > bruta.itens.length;
               return (
-                <section key={coluna.chave} className="coluna" aria-label={`${coluna.titulo} · ${coluna.itens.length} matérias`}>
+                <section key={coluna.chave} className="coluna" aria-label={`${coluna.titulo} · ${contagemColuna} matérias`}>
                   <div className="col-cabe">
                     <span className={`azulejo-col az-${coluna.azulejo}`} aria-hidden="true" />
                     <h2 className="tit">{coluna.titulo}</h2>
-                    <span className="cnt">{coluna.itens.length}</span>
+                    <span className="cnt">{contagemColuna}</span>
                   </div>
                   <div className="col-corpo">
                     {coluna.itens.length === 0 && <p className="col-vazia">Nenhuma matéria.</p>}
@@ -136,6 +174,11 @@ export default function PaginaTramitacao() {
                       >
                         Mostrar mais {restantes} matérias
                       </button>
+                    )}
+                    {cortadoPeloServidor && bruta && (
+                      <p className="aviso-corte" role="status">
+                        Mostrando <b>{bruta.itens.length} de {bruta.total}</b> matérias — o servidor limita a lista por estágio.
+                      </p>
                     )}
                   </div>
                 </section>

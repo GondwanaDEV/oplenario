@@ -8,13 +8,16 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
-import type { ItemBoardOut, TramitacaoBoardOut } from "./contrato-mesa.gen";
+import type { ItemBoardOut, TotalPorEstadoOut, TramitacaoBoardOut } from "./contrato-mesa.gen";
 import { semCredencial } from "./modo";
 
 type Estado = "carregando" | "pronto" | "erro";
 
 export function useTramitacaoBoard(token: string | null) {
   const [itens, setItens] = useState<ItemBoardOut[] | null>(null);
+  // Fatia "truncamento-familia": o total REAL por estado (sem o corte por-estado que `itens` sofre) —
+  // ver docstring de paineis/wire/out/tramitacao/TramitacaoBoardOut no backend.
+  const [totaisPorEstado, setTotaisPorEstado] = useState<TotalPorEstadoOut[] | null>(null);
   const [estado, setEstado] = useState<Estado>("carregando");
 
   useEffect(() => {
@@ -31,6 +34,7 @@ export function useTramitacaoBoard(token: string | null) {
         const corpo = camelizarChaves(await r.json()) as TramitacaoBoardOut;
         if (!vivo) return;
         setItens(corpo.itens);
+        setTotaisPorEstado(corpo.totaisPorEstado);
         setEstado("pronto");
       } catch {
         if (vivo) setEstado("erro");
@@ -43,7 +47,7 @@ export function useTramitacaoBoard(token: string | null) {
 
   // caso de erro sem token é derivado aqui (mantém o effect livre de setState síncrono)
   if (semCredencial(token)) {
-    return { itens: null, estado: "erro" as Estado };
+    return { itens: null, totaisPorEstado: null, estado: "erro" as Estado };
   }
-  return { itens, estado };
+  return { itens, totaisPorEstado, estado };
 }

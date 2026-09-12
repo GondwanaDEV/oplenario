@@ -23,7 +23,10 @@ const itemFake = {
   ementa: "Institui o Programa Municipal de Hortas Comunitárias", "autor-texto": "Helena Matos",
   estado: "em_comissoes", "transicionou-em": "2026-05-21T10:00:00Z",
 };
-const respostaFake = { itens: [itemFake] };
+// `totais-por-estado` é campo OBRIGATÓRIO do contrato (TramitacaoBoardOut é {:closed true}) — toda
+// fixture de resposta 200 abaixo carrega o par completo (nunca só `itens`), senão o teste exercita o
+// ramo de CONTRATO VIOLADO (ver o teste dedicado a isso mais abaixo) em vez do caminho real.
+const respostaFake = { itens: [itemFake], "totais-por-estado": [{ estado: "em_comissoes", total: 1 }] };
 
 describe("PaginaTramitacao", () => {
   afterEach(() => {
@@ -52,7 +55,7 @@ describe("PaginaTramitacao", () => {
   });
 
   it("renderiza o link 'Nova proposição' apontando para /editor-proposicao (com token preservado)", async () => {
-    global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ itens: [] }) }) as Response) as unknown as typeof fetch;
+    global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ itens: [], "totais-por-estado": [] }) }) as Response) as unknown as typeof fetch;
     renderComProviders("tok-de-teste");
     const link = await screen.findByRole("link", { name: /nova proposição/i });
     expect(link.getAttribute("href")).toContain("/editor-proposicao");
@@ -75,6 +78,7 @@ describe("PaginaTramitacao", () => {
           itemFake,
           { ...itemFake, "proposicao-id": "2", ementa: "Reforma do plano de cargos dos servidores", "autor-texto": "Ana Melo" },
         ],
+        "totais-por-estado": [{ estado: "em_comissoes", total: 2 }],
       }),
     }) as Response) as unknown as typeof fetch;
     renderComProviders("tok-de-teste");
@@ -97,6 +101,7 @@ describe("PaginaTramitacao", () => {
           itemFake,
           { ...itemFake, "proposicao-id": "2", tipo: "mocao", ementa: "Moção de aplausos ao time local", "autor-texto": "Ana Melo" },
         ],
+        "totais-por-estado": [{ estado: "em_comissoes", total: 2 }],
       }),
     }) as Response) as unknown as typeof fetch;
     renderComProviders("tok-de-teste");
@@ -111,13 +116,37 @@ describe("PaginaTramitacao", () => {
     expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls.length).toBe(chamadasAntes);
   });
 
+  // Fatia "truncamento-familia": o board parava de chamar 50 (por estado) de "todas" — a contagem exibida
+  // por coluna e o rodapé "matérias em curso" tinham que parar de usar `itens.length` (que corta no teto
+  // por-estado do servidor) e passar a usar `totais-por-estado` (par autoritativo, sem teto).
+  it("mostra o TOTAL real por coluna e no rodapé, mesmo quando a lista chegou cortada pelo teto do servidor", async () => {
+    // só 2 itens chegaram em "em_comissoes" (a lista já veio cortada pelo servidor), mas o total real é 7
+    // — o payload onde itens.length e o total DISCORDAM, o cenário exato que expõe a mentira antiga.
+    const itens = [
+      itemFake,
+      { ...itemFake, "proposicao-id": "2", ementa: "Segunda matéria em comissões" },
+    ];
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ itens, "totais-por-estado": [{ estado: "em_comissoes", total: 7 }] }),
+    }) as Response) as unknown as typeof fetch;
+    renderComProviders("tok-de-teste");
+    await waitFor(() => expect(screen.getByText("Segunda matéria em comissões")).toBeTruthy());
+
+    expect(screen.getByLabelText("Comissões · 7 matérias")).toBeTruthy();
+    expect(screen.getByText((_, node) => node?.textContent === "7 matérias em curso")).toBeTruthy();
+  });
+
   it("coluna com mais matérias que o teto mostra 'Mostrar mais' e expande ao clicar", async () => {
     const itens = Array.from({ length: 35 }, (_, i) => ({
       ...itemFake,
       "proposicao-id": `p${i}`,
       ementa: `Matéria número ${i}`,
     }));
-    global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ itens }) }) as Response) as unknown as typeof fetch;
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ itens, "totais-por-estado": [{ estado: "em_comissoes", total: 35 }] }),
+    }) as Response) as unknown as typeof fetch;
     renderComProviders("tok-de-teste");
     await waitFor(() => expect(screen.getByText("Matéria número 0")).toBeTruthy());
 
@@ -127,5 +156,79 @@ describe("PaginaTramitacao", () => {
     fireEvent.click(botao);
 
     await waitFor(() => expect(screen.getByText("Matéria número 30")).toBeTruthy());
+  });
+
+  // Achado da revisão adversarial (IMPORTANTE): o rodapé somava `coluna.total` de TODAS as colunas,
+  // inclusive "Concluídas" (que funde estados TERMINAIS — aprovada/arquivada/etc, sem teto, cresce ao
+  // longo de legislaturas). "N matérias em curso" virava um número dominado pelo acervo histórico, não
+  // pela carga de trabalho ativa.
+  it("o rodapé 'em curso' NÃO soma a coluna Concluídas (estados terminais não são 'em curso')", async () => {
+    const itens = [
+      itemFake, // em_comissoes
+      { ...itemFake, "proposicao-id": "2", estado: "protocolada" },
+      { ...itemFake, "proposicao-id": "3", estado: "aprovada" }, // cai em Concluídas
+    ];
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        itens,
+        "totais-por-estado": [
+          { estado: "em_comissoes", total: 12 },
+          { estado: "protocolada", total: 3 },
+          { estado: "aprovada", total: 4000 }, // acervo histórico — não pode entrar na soma
+        ],
+      }),
+    }) as Response) as unknown as typeof fetch;
+    renderComProviders("tok-de-teste");
+    await waitFor(() => expect(screen.getByLabelText("Comissões · 12 matérias")).toBeTruthy());
+
+    // 12 (em_comissoes) + 3 (protocolada) = 15 — SEM os 4000 de Concluídas.
+    expect(screen.getByText((_, node) => node?.textContent === "15 matérias em curso")).toBeTruthy();
+    expect(screen.queryByText((_, node) => node?.textContent === "4015 matérias em curso")).toBeNull();
+  });
+
+  // Achado da revisão adversarial (IMPORTANTE): quando o servidor corta a lista no teto por-estado, a
+  // tela publicava o total real no cabeçalho da coluna mas não dizia em NENHUM lugar que a lista abaixo
+  // estava incompleta — o botão "Mostrar mais" (paginação CLIENT-SIDE sobre o que já chegou) simplesmente
+  // some quando os itens carregados acabam, sem explicar o resto que nunca chegou do servidor.
+  it("coluna cortada pelo servidor (total > itens recebidos) avisa, mesmo depois do 'Mostrar mais' se esgotar", async () => {
+    // 50 itens chegaram em em_comissoes (o teto do servidor), mas o total real é 87 — 37 nunca chegaram.
+    const itens = Array.from({ length: 50 }, (_, i) => ({
+      ...itemFake,
+      "proposicao-id": `p${i}`,
+      ementa: `Matéria número ${i}`,
+    }));
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ itens, "totais-por-estado": [{ estado: "em_comissoes", total: 87 }] }),
+    }) as Response) as unknown as typeof fetch;
+    renderComProviders("tok-de-teste");
+    await waitFor(() => expect(screen.getByText("Matéria número 0")).toBeTruthy());
+
+    // esgota a paginação client-side (30 -> 50, o que já chegou do servidor)
+    fireEvent.click(screen.getByRole("button", { name: /mostrar mais 20 matérias/i }));
+    await waitFor(() => expect(screen.getByText("Matéria número 49")).toBeTruthy());
+
+    expect(screen.queryByRole("button", { name: /mostrar mais/i })).toBeNull();
+    expect(
+      screen.getByText((_, node) => node?.textContent === "Mostrando 50 de 87 matérias — o servidor limita a lista por estágio."),
+    ).toBeTruthy();
+  });
+
+  // Achado da revisão adversarial (IMPORTANTE): `totaisPorEstado ?? undefined` em page.tsx conflava "não
+  // carregou ainda" com "o servidor violou o contrato" (TramitacaoBoardOut é {:closed true}, o campo é
+  // OBRIGATÓRIO) — as duas caíam no MESMO fallback de compat (itens.length), que é exatamente o número
+  // que corta no teto. Sob drift (backend antigo / proxy que descarta o campo), a mentira original
+  // voltava sem nenhum sinal. A regra 4 (aposentar heurística) exige tratar a ausência como FALHA de
+  // contrato, nunca como número plausível.
+  it("resposta 200 sem 'totais-por-estado' (contrato violado) mostra erro, NUNCA cai pro fallback itens.length", async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ itens: [itemFake] }), // sem totais-por-estado — violação do contrato
+    }) as Response) as unknown as typeof fetch;
+    renderComProviders("tok-de-teste");
+
+    await waitFor(() => expect(screen.getByText(/quadro de tramitação veio incompleto/i)).toBeTruthy());
+    expect(screen.queryByText("Comissões · 1 matérias")).toBeNull();
   });
 });

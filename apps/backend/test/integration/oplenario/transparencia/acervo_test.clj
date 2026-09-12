@@ -122,3 +122,48 @@
   (let [ente-a (random-uuid) ente-b (random-uuid)]
     (inserir! ente-a {:tipo-norma "lei" :numero 1 :ano 2026 :publicado-em (em! "2026-01-01T00:00:00Z")})
     (is (empty? (listar ente-b {:tipo "lei"})) "outro ente nao ve o acervo alheio (RLS)")))
+
+;; ---------- contar: o par lista+total (frente "truncamento-familia", sitio (c)) ----------
+;; GET /portal/casa/:ente/legislacao corta em `teto-listagem` (200, `db/norma.clj`) sem sinalizar — mesmo
+;; racional de `contar-em-tramitacao`/`contar-por-autor` acima no proprio modulo.
+
+(defn- contar [ente filtro]
+  (tenancy/com-tenant* *ds* ente (fn [tx] (db-norma/contar tx ente filtro))))
+
+(deftest contar-bate-com-a-lista-quando-nao-ha-corte
+  (let [ente (random-uuid)]
+    (inserir! ente {:tipo-norma "lei" :numero 10 :ano 2026 :publicado-em (em! "2026-01-01T00:00:00Z")})
+    (inserir! ente {:tipo-norma "resolucao" :numero 3 :ano 2026 :publicado-em (em! "2026-03-01T00:00:00Z")})
+    (is (= 2 (count (listar ente {}))))
+    (is (= 2 (contar ente {})) "o total bate com a lista quando nao ha corte")))
+
+(deftest contar-usa-o-mesmo-predicado-da-lista-com-filtro
+  ;; a asserção que mata a DERIVA: insere 2 especies e filtra por uma — se `contar` um dia usar um WHERE
+  ;; copiado (em vez do MESMO predicado de `listar`), esta asserção reprova no dia em que divergirem.
+  (let [ente (random-uuid)]
+    (inserir! ente {:tipo-norma "lei" :numero 10 :ano 2026 :publicado-em (em! "2026-01-01T00:00:00Z")})
+    (inserir! ente {:tipo-norma "lei" :numero 2 :ano 2026 :publicado-em (em! "2026-02-01T00:00:00Z")})
+    (inserir! ente {:tipo-norma "resolucao" :numero 3 :ano 2026 :publicado-em (em! "2026-03-01T00:00:00Z")})
+    (is (= 2 (count (listar ente {:tipo "lei"}))))
+    (is (= 2 (contar ente {:tipo "lei"}))
+        "o total: o MESMO conjunto que a lista enxerga (filtrado), a prova de que e' o mesmo predicado")
+    (is (= 3 (contar ente {})) "sem filtro, conta o acervo inteiro")))
+
+(deftest contar-com-limite-injetado-trunca-lista-mas-total-continua-real
+  ;; achado da revisao adversarial (IMPORTANTE): nenhum teste do sitio (c) provava AUSENCIA DE TETO no
+  ;; total — so' identidade de predicado com poucas linhas. `db-norma/listar` agora aceita `limite`
+  ;; INJETAVEL (4a aridade, mesmo racional de listar-em-tramitacao/pendencia/listar-abertas): cria 5
+  ;; normas, lista com limite=2 e afirma lista=2 E total=5. Producao (portal `listar` de 3 args) continua
+  ;; caindo no default teto-listagem=200.
+  (let [ente (random-uuid)]
+    (dotimes [i 5]
+      (inserir! ente {:tipo-norma "lei" :numero i :ano 2026 :publicado-em (em! "2026-01-01T00:00:00Z")}))
+    (let [lista (tenancy/com-tenant* *ds* ente (fn [tx] (db-norma/listar tx ente {} 2)))]
+      (is (= 2 (count lista)) "a lista respeita o limite INJETADO")
+      (is (= 5 (contar ente {}))
+          "o total ignora o limite injetado da lista — continua o numero real, MAIOR que a lista truncada"))))
+
+(deftest contar-rls-isola-por-ente
+  (let [ente-a (random-uuid) ente-b (random-uuid)]
+    (inserir! ente-a {:tipo-norma "lei" :numero 1 :ano 2026 :publicado-em (em! "2026-01-01T00:00:00Z")})
+    (is (zero? (contar ente-b {:tipo "lei"})) "RLS: outro ente nao conta o acervo alheio")))

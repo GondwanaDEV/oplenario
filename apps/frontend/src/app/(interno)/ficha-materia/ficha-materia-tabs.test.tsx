@@ -20,13 +20,17 @@ const ficha: FichaMateriaOut = {
   tramitacao: [
     { deEstado: "protocolada", paraEstado: "em_comissoes", gatilho: "distribuir", ocorridoEm: "2026-04-08T09:00:00Z" },
   ],
+  tramitacaoTruncado: false,
   apensadas: [],
+  apensadasTruncado: false,
   emendas: [
     { id: "e1", numeroLocal: 1, tipoEmenda: "modificativa", momentoApresentacao: "no_prazo", autorTexto: "Ver.ª Carla Souza", estado: "aprovada" },
   ],
+  emendasTruncado: false,
   pareceres: [
     { id: "p1", comissaoId: "9119889e-1111-4222-8333-444444444444", relatorId: "r1", votoRelator: "favoravel", estado: "aprovado" },
   ],
+  pareceresTruncado: false,
 };
 
 describe("FichaMateriaTabs", () => {
@@ -115,5 +119,52 @@ describe("FichaMateriaTabs", () => {
   it("sem texto vigente registrado -> honesto, sem lançar", () => {
     render(<FichaMateriaTabs ficha={{ ...ficha, proposicao: { ...ficha.proposicao, texto: null } }} />);
     expect(screen.getByText(/nenhum texto vigente/i)).toBeTruthy();
+  });
+
+  // ---------- fatia "truncamento-familia": as 3 abas com lista param de fingir completude ----------
+
+  it("*Truncado=true: o badge da aba vira 'N+' e o painel mostra o aviso de corte — nas 3 listas", () => {
+    const { container } = render(
+      <FichaMateriaTabs
+        ficha={{ ...ficha, tramitacaoTruncado: true, pareceresTruncado: true, emendasTruncado: true }}
+      />,
+    );
+    // os 5 painéis ficam montados simultaneamente (só `hidden` alterna) — o seletor tem de mirar o
+    // painel VISÍVEL, senão `querySelector` sempre acha o `.aviso-corte` da tramitação (o 1o no DOM).
+    const avisoVisivel = () => container.querySelector('[role="tabpanel"]:not([hidden]) .aviso-corte');
+
+    expect(screen.getByRole("tab", { name: /tramitação/i }).textContent).toContain("1+");
+    fireEvent.click(screen.getByRole("tab", { name: /tramitação/i }));
+    expect(avisoVisivel()?.getAttribute("role")).toBe("status");
+    expect(avisoVisivel()?.textContent ?? "").toMatch(/Mostrando as 1 transições mais recentes/);
+
+    fireEvent.click(screen.getByRole("tab", { name: /pareceres/i }));
+    expect(screen.getByRole("tab", { name: /pareceres/i }).textContent).toContain("1+");
+    expect(avisoVisivel()?.textContent ?? "").toMatch(/Mostrando os 1 pareceres mais recentes/);
+
+    fireEvent.click(screen.getByRole("tab", { name: /emendas/i }));
+    expect(screen.getByRole("tab", { name: /emendas/i }).textContent).toContain("1+");
+    expect(avisoVisivel()?.textContent ?? "").toMatch(/Mostrando as 1 emendas mais recentes/);
+  });
+
+  it("*Truncado=false: badge SEM '+' e nenhum aviso — mesmo com uma lista 'cheia' (rule 4: o sinal vem do campo do servidor, nunca do tamanho da lista)", () => {
+    // A lista de tramitação aqui tem 3 itens (pareceria "grande" pra uma heurística ingênua de
+    // tamanho), mas `tramitacaoTruncado` é `false` — se a UI deduzisse o corte comparando tamanhos, ela
+    // erraria pro lado de acusar corte que o servidor não afirmou.
+    const tramitacaoGrande = [ficha.tramitacao[0], ficha.tramitacao[0], ficha.tramitacao[0]];
+    const { container } = render(
+      <FichaMateriaTabs ficha={{ ...ficha, tramitacao: tramitacaoGrande, tramitacaoTruncado: false }} />,
+    );
+    expect(screen.getByRole("tab", { name: /tramitação/i }).textContent).toContain("3");
+    expect(screen.getByRole("tab", { name: /tramitação/i }).textContent).not.toContain("3+");
+    fireEvent.click(screen.getByRole("tab", { name: /tramitação/i }));
+    expect(container.querySelector(".aviso-corte")).toBeNull();
+  });
+
+  it("*Truncado=true mesmo com lista pequena (1 item): o aviso aparece do mesmo jeito — a UI confia no campo do servidor, não infere 'lista pequena = sem corte'", () => {
+    const { container } = render(<FichaMateriaTabs ficha={{ ...ficha, tramitacaoTruncado: true }} />);
+    fireEvent.click(screen.getByRole("tab", { name: /tramitação/i }));
+    const aviso = container.querySelector(".aviso-corte");
+    expect(aviso?.textContent ?? "").toMatch(/Mostrando as 1 transições mais recentes/);
   });
 });

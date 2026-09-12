@@ -191,16 +191,46 @@
                    :where [:and [:= :m.ente_id ente-id] [:= :m.autor_id autor-id]
                            [:= :m.autor_tipo "vereador"]]})))))
 
+(defn- where-em-tramitacao
+  "O predicado de 'materias em tramitacao' (portal PUBLICO) — FONTE UNICA para `listar-em-tramitacao` e
+  `contar-em-tramitacao` (regra 3 da frente 'truncamento-familia'): um WHERE repetido nos dois lugares
+  diverge em silencio no dia em que um estado novo entrar num e nao no outro. `estados-excluidos` e' um set
+  de string — vazio nao filtra (lista/conta tudo do ente)."
+  [ente-id estados-excluidos]
+  (if (seq estados-excluidos)
+    [:and [:= :ente_id ente-id] [:not-in :estado (vec estados-excluidos)]]
+    [:= :ente_id ente-id]))
+
 (defn listar-em-tramitacao
   "Portal PUBLICO: materias EXCLUINDO os estados terminais informados (ex.: arquivadas), mais recentes
-  primeiro. `estados-excluidos` e' um set de string — vazio lista tudo. Com teto (sem paginacao nesta fatia)."
+  primeiro. `estados-excluidos` e' um set de string — vazio lista tudo. TETO (`teto-listagem`, 200): quem
+  exibe precisa de `contar-em-tramitacao` ao lado para saber que truncou (par lista+total, mesmo racional de
+  `listar-por-autor`/`contar-por-autor` acima).
+
+  ARIDADE de 4: `limite` INJETAVEL (achado IMPORTANTE da revisao adversarial — mesmo racional de
+  paineis/db/pendencia/listar-abertas) — SO' para o teste provar o invariante 'o total nao capa' sem pagar
+  201 linhas; o caminho de PRODUCAO (repositorio.clj) usa a aridade de 3 e cai no default `teto-listagem`.
+  `(min limite teto-listagem)` — o chamador nunca CONSEGUE pedir mais que o teto server-side, so' menos."
+  ([tx ente-id estados-excluidos] (listar-em-tramitacao tx ente-id estados-excluidos teto-listagem))
+  ([tx ente-id estados-excluidos limite]
+   {:pre [(some? ente-id) (set? estados-excluidos) (pos-int? limite)]}
+   (comum/linhas->kebab
+    (jdbc/execute! tx
+      (sql/format {:select cols :from [:transparencia.materia]
+                   :where (where-em-tramitacao ente-id estados-excluidos)
+                   :order-by [[:ano :desc] [:sequencial :desc]]
+                   :limit (min limite teto-listagem)})))))
+
+(defn contar-em-tramitacao
+  "Quantas materias em tramitacao existem — SEM teto (a familia 'truncamento-familia', sitio (b)):
+  `listar-em-tramitacao` corta em `teto-listagem` (200) e o portal publico (a UNICA listagem publica de
+  proposicoes, sem outra rota — ver materia-vista.ts/escolherDestaque no FE) publicava so' os 200 primeiros
+  sem nenhum sinal de que a Casa tem mais. MESMO predicado de `listar-em-tramitacao` (`where-em-tramitacao`),
+  senao o proprio total mentiria sobre o que a lista contem."
   [tx ente-id estados-excluidos]
   {:pre [(some? ente-id) (set? estados-excluidos)]}
-  (comum/linhas->kebab
-   (jdbc/execute! tx
-     (sql/format {:select cols :from [:transparencia.materia]
-                  :where (if (seq estados-excluidos)
-                           [:and [:= :ente_id ente-id] [:not-in :estado (vec estados-excluidos)]]
-                           [:= :ente_id ente-id])
-                  :order-by [[:ano :desc] [:sequencial :desc]]
-                  :limit teto-listagem}))))
+  (:contagem
+   (comum/linha->kebab
+    (jdbc/execute-one! tx
+      (sql/format {:select [[[:count :*] :contagem]] :from [:transparencia.materia]
+                   :where (where-em-tramitacao ente-id estados-excluidos)})))))

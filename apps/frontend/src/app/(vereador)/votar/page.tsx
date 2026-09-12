@@ -14,7 +14,7 @@ import { useAuth } from "@/lib/auth";
 import { useMinhaSessaoAtual } from "@/lib/use-minha-sessao-atual";
 import { useMeuPainel } from "@/lib/use-meu-painel";
 import { usePlenario } from "@/lib/use-plenario";
-import { derivarPlacar } from "@/lib/placar-vista";
+import { derivarPlacar, type VistaPlacar } from "@/lib/placar-vista";
 import { useConfirmarPresenca } from "@/lib/use-confirmar-presenca";
 import { useMeuVoto, type VotoNominalIn } from "@/lib/use-meu-voto";
 import { derivarMeuVoto } from "@/lib/meu-voto-vista";
@@ -75,7 +75,10 @@ export default function VotarPage() {
   // que a causa é uma falha de rede, nao a ausencia real de presenca.
   const identidadeIndisponivel = estadoPainel === "erro";
   const vista = derivarMeuVoto(estadoPlenario, meuVereadorId);
-  const placar = derivarPlacar(estadoPlenario?.placar ?? null);
+  // review adversarial (frente 'truncamento-familia'): faltava o 2o argumento — o MESMO avisoLacuna que já
+  // chega em `estadoPlenario` (o reducer é compartilhado com a Mesa) ficava mudo aqui, e é o vereador quem
+  // aperta o botão de voto olhando este placar. `PlacarMini`, abaixo, é quem renderiza o aviso.
+  const placar = derivarPlacar(estadoPlenario?.placar ?? null, estadoPlenario?.avisoLacuna ?? false);
 
   async function aoConfirmarPresenca() {
     if (!sessaoId) return;
@@ -94,10 +97,6 @@ export default function VotarPage() {
       // erro já exposto via `erroVotar`.
     }
   }
-
-  const total = placar.kind === "nominal" ? placar.sim + placar.nao + placar.abstencao : 0;
-  const pctSim = total > 0 && placar.kind === "nominal" ? Math.round((placar.sim / total) * 100) : 0;
-  const pctNao = total > 0 && placar.kind === "nominal" ? Math.round((placar.nao / total) * 100) : 0;
 
   return (
     <main className="votar-pagina">
@@ -196,46 +195,72 @@ export default function VotarPage() {
               </p>
             )}
 
-            {placar.kind === "nominal" && (
-              <div className="placar-mini">
-                <div
-                  className="barra"
-                  role="img"
-                  aria-label={`Parcial: ${placar.sim} sim, ${placar.nao} não${
-                    placar.faltam !== null ? `, ${placar.faltam} ainda não votaram` : ""
-                  }`}
-                >
-                  <span className="seg-sim" style={{ width: `${pctSim}%` }} />
-                  <span className="seg-nao" style={{ width: `${pctNao}%` }} />
-                </div>
-                <div className="leg">
-                  <span>
-                    Sim <b>{placar.sim}</b>
-                  </span>
-                  <span>
-                    Não <b>{placar.nao}</b>
-                  </span>
-                  {placar.faltam !== null && (
-                    <span className="parcial">
-                      faltam <b>{placar.faltam}</b> {placar.encerrada ? "" : "· parcial"}
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {placar.kind === "secreta" && (
-              <div className="placar-mini">
-                <p className="voto-nota">
-                  {placar.encerrada && placar.totais
-                    ? `Resultado: ${placar.totais.sim} sim, ${placar.totais.nao} não, ${placar.totais.abstencao} abstenção.`
-                    : `${placar.registrados} votos lançados (contador anônimo).`}
-                </p>
-              </div>
-            )}
+            <PlacarMini placar={placar} />
           </>
         )}
       </section>
     </main>
+  );
+}
+
+/** Placar-mini do cockpit do vereador. §22.6 SIGILO: a NOMINAL mostra sim/não; a SECRETA só o contador —
+ * a distinção mora em `derivarPlacar` (testado), aqui só mapeamento. Extraído do corpo de `VotarPage`
+ * (review adversarial, frente 'truncamento-familia') para ser testável com um `VistaPlacar` direto, sem
+ * montar os 5 hooks de rede da página — mesmo racional de `Placar` em sessoes/[id]/plenario/page.tsx, que
+ * é quem já renderiza este aviso para a Mesa; aqui é o MESMO aviso pelo caminho do vereador. */
+export function PlacarMini({ placar }: { placar: VistaPlacar }) {
+  if (placar.kind === "nenhuma") return null;
+
+  const total = placar.kind === "nominal" ? placar.sim + placar.nao + placar.abstencao : 0;
+  const pctSim = total > 0 && placar.kind === "nominal" ? Math.round((placar.sim / total) * 100) : 0;
+  const pctNao = total > 0 && placar.kind === "nominal" ? Math.round((placar.nao / total) * 100) : 0;
+
+  return (
+    <>
+      {placar.kind === "nominal" && (
+        <div className="placar-mini">
+          <div
+            className="barra"
+            role="img"
+            aria-label={`Parcial: ${placar.sim} sim, ${placar.nao} não${
+              placar.faltam !== null ? `, ${placar.faltam} ainda não votaram` : ""
+            }`}
+          >
+            <span className="seg-sim" style={{ width: `${pctSim}%` }} />
+            <span className="seg-nao" style={{ width: `${pctNao}%` }} />
+          </div>
+          <div className="leg">
+            <span>
+              Sim <b>{placar.sim}</b>
+            </span>
+            <span>
+              Não <b>{placar.nao}</b>
+            </span>
+            {placar.faltam !== null && (
+              <span className="parcial">
+                faltam <b>{placar.faltam}</b> {placar.encerrada ? "" : "· parcial"}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {placar.kind === "secreta" && (
+        <div className="placar-mini">
+          <p className="voto-nota">
+            {placar.encerrada && placar.totais
+              ? `Resultado: ${placar.totais.sim} sim, ${placar.totais.nao} não, ${placar.totais.abstencao} abstenção.`
+              : `${placar.registrados} votos lançados (contador anônimo).`}
+          </p>
+        </div>
+      )}
+
+      {placar.avisoLacuna && (
+        <p className="aviso-corte" role="status">
+          o sinal do servidor teve uma <b>lacuna</b> durante esta sessão — confira o resultado oficial
+          antes de decidir por este número
+        </p>
+      )}
+    </>
   );
 }

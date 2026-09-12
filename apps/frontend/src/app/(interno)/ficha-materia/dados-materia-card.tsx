@@ -14,9 +14,27 @@ export function DadosMateriaCard({ dados }: { dados: DadosMateriaVista }) {
         <dt>Situação</dt>
         <dd>{dados.situacao}</dd>
         <dt>Apensados</dt>
-        <dd>{dados.apensadosTotal > 0 ? dados.apensadosTotal : "nenhum"}</dd>
+        <dd>
+          {dados.apensadosTotal > 0 ? dados.apensadosTotal : "nenhum"}
+          {/* fatia "truncamento-familia": o servidor manda BOOLEANO (`apensadasTruncado`), nunca um
+              total à parte — "+" é honesto (há mais que o número mostrado) sem fingir saber quantas. */}
+          {dados.apensadosTotal > 0 && dados.apensadasTruncado && (
+            <span title="Há mais apensadas do que as exibidas aqui">+</span>
+          )}
+        </dd>
         <dt>Apresentada</dt>
-        <dd className="mono">{formatarData(dados.apresentadaEm)}</dd>
+        <dd className="mono">
+          {/* fatia "truncamento-familia": sob corte, a data mais antiga sobrevivente NÃO é a apresentação
+              real (o corte mantém as mais recentes) — "anterior a" é o fato honesto que temos: a data real
+              é mais antiga que esta. */}
+          {dados.apresentadaEmIncerta ? (
+            <span title="A tramitação está cortada no registro mais antigo mantido; a data real de apresentação é anterior a esta">
+              anterior a {formatarData(dados.apresentadaEm)}
+            </span>
+          ) : (
+            formatarData(dados.apresentadaEm)
+          )}
+        </dd>
         <dt>Última ação</dt>
         <dd className="mono">{formatarData(dados.ultimaAcaoEm)}</dd>
       </dl>

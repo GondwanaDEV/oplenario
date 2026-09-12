@@ -30,7 +30,19 @@ import type {
 export type DadosMateriaVista = {
   situacao: string;
   apensadosTotal: number;
+  // Fatia "truncamento-familia": `apensadosTotal` acima é `ficha.apensadas.length` — o tamanho da lista
+  // que O SERVIDOR já cortou no teto (50), nunca uma contagem independente. Quando `apensadasTruncado`
+  // vem `true`, `apensadosTotal` deixa de ser "quantas existem" e passa a significar "pelo menos estas
+  // tantas" — o servidor manda o BOOLEANO (mesma forma de `historico-truncado` na rota irmã
+  // /tramitacao), nunca um segundo número, então a UI não pode dizer "de quantas" — só que há mais.
+  apensadasTruncado: boolean;
   apresentadaEm: string;
+  // Fatia "truncamento-familia" (achado IMPORTANTE da revisão adversarial): o corte de `tramitacao`
+  // mantém as N MAIS RECENTES — sob truncamento, `ordenado[0]` é a transição mais antiga SOBREVIVENTE,
+  // nunca a primeira de verdade. `apresentadaEm` continua sendo essa data (é o melhor limite superior que
+  // temos — a apresentação real é ANTERIOR a ela), mas o card não pode afirmá-la como fato sem este
+  // marcador: quando `true`, o rótulo vira "anterior a <data>", nunca a data nua.
+  apresentadaEmIncerta: boolean;
   ultimaAcaoEm: string;
 };
 
@@ -40,9 +52,14 @@ export function derivarDadosMateria(ficha: FichaMateriaOut): DadosMateriaVista {
   return {
     situacao: rotuloSituacao,
     apensadosTotal: ficha.apensadas.length,
+    apensadasTruncado: ficha.apensadasTruncado,
     // primeira/última transição registrada; sem histórico, cai honestamente pra atualizadoEm (nunca
     // inventa uma data de "apresentação" que não temos).
     apresentadaEm: ordenado[0]?.ocorridoEm ?? ficha.proposicao.atualizadoEm,
+    // defensivo (regra 4, mesmo padrão de `apensadasTruncado`): só marca incerta se de fato sobrou item
+    // na lista cortada — o servidor não deveria mandar truncado=true com lista vazia, mas se mandasse não
+    // há data nenhuma pra marcar como incerta.
+    apresentadaEmIncerta: ficha.tramitacaoTruncado && ordenado.length > 0,
     ultimaAcaoEm: ordenado[ordenado.length - 1]?.ocorridoEm ?? ficha.proposicao.atualizadoEm,
   };
 }

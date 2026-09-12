@@ -15,6 +15,7 @@
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.migracao :as migracao]
             [oplenario.paineis.components.repositorio :as repo]
+            [oplenario.paineis.db.sli-sessao :as db-sli-sessao]
             [oplenario.paineis.diplomat.consumers :as consumers])
   (:import (java.time Instant)))
 
@@ -45,7 +46,7 @@
                  {:sessao-id (str sid) :agendada-para agendada-para :ocorrido-em ocorrido-em})))))
 
 (defn- sli-de [ente sid]
-  (first (filter #(= sid (:sessao-id %)) (repo/sli-sessoes *repo* ente))))
+  (first (filter #(= sid (:sessao-id %)) (:sessoes (repo/sli-sessoes *repo* ente)))))
 
 ;; ---------- F7 E3 carry: o agendamento materializa a linha JA' no nascimento (no-show visivel) ----------
 
@@ -160,7 +161,7 @@
       (fn [tx]
         (repo/projetar-evento! tx payload)
         (repo/projetar-evento! tx payload)))
-    (is (= 1 (count (filter #(= sid (:sessao-id %)) (repo/sli-sessoes *repo* ente))))
+    (is (= 1 (count (filter #(= sid (:sessao-id %)) (:sessoes (repo/sli-sessoes *repo* ente)))))
         "duas projecoes do mesmo evento -> uma unica linha (UPSERT idempotente, nunca lanca)")))
 
 ;; ---------- leitura: abertas (em curso) primeiro, concluidas por recencia ----------
@@ -173,7 +174,7 @@
     (drena-eventos!)
     (emitir-transicao! ente s-aberta    "agendada" "aberta"    "2026-07-02T09:00:00Z")
     (drena-eventos!)
-    (let [ordem (map :sessao-id (repo/sli-sessoes *repo* ente))]
+    (let [ordem (map :sessao-id (:sessoes (repo/sli-sessoes *repo* ente)))]
       (is (= [s-aberta s-encerrada] ordem)
           "a sessao ainda ABERTA (encerrada_em nulo) vem antes da ja' concluida"))))
 
@@ -185,5 +186,87 @@
     (drena-eventos!)
     (emitir-transicao! ente s-antiga  "agendada" "aberta" "2026-07-01T09:00:00Z")
     (drena-eventos!)
-    (is (= [s-antiga s-recente] (map :sessao-id (repo/sli-sessoes *repo* ente)))
+    (is (= [s-antiga s-recente] (map :sessao-id (:sessoes (repo/sli-sessoes *repo* ente))))
         "a sessao aberta ha' mais tempo (09:00) vem antes da recem-aberta (14:00)")))
+
+;; ---------- sessoes-total: o TOTAL real, sem o teto — sitio (a) da familia "truncamento-familia" ----------
+;; GET /paineis/sli/sessoes:126-131 poe TODO o grupo `encerrada_em IS NULL` na frente e, dentro dele,
+;; `transicionou_em ASC` — uma 'agendada' que nunca abriu fica NESSE grupo para sempre. Quando o grupo
+;; nao-encerrado ultrapassa o teto, quem cai fora sao as linhas de MAIOR transicionou_em dentro dele: as
+;; agendadas MAIS NOVAS (as que /pauta-convocacao existe para convocar), nunca "a cauda das concluidas mais
+;; antigas" (essas vem DEPOIS na ordenacao). Um SLI sobre amostra truncada reporta o numero errado como se
+;; fosse o numero real.
+
+(deftest sessoes-total-bate-com-a-lista-quando-nao-ha-corte
+  (let [ente (random-uuid)]
+    (emitir-transicao! ente (random-uuid) "agendada" "aberta" "2026-07-01T09:00:00Z")
+    (drena-eventos!)
+    (emitir-transicao! ente (random-uuid) "agendada" "encerrada" "2026-07-01T10:00:00Z")
+    (drena-eventos!)
+    (let [r (repo/sli-sessoes *repo* ente)]
+      (is (= 2 (count (:sessoes r))))
+      (is (= 2 (:sessoes-total r)) "o total bate com a lista quando nao ha corte"))))
+
+(deftest sessoes-total-usa-o-mesmo-predicado-da-lista
+  ;; a asserção que mata a DERIVA: insere um estado de CADA fase do dominio de `estado_atual`
+  ;; (agendada/aberta/suspensa/encerrada/nao_realizada) — se `contar` um dia passar a usar um WHERE copiado
+  ;; (em vez do MESMO `ente_id = ?` que `listar-sli-sessoes` usa, sem filtro de estado), esta asserção
+  ;; reprova no dia em que os dois divergirem, nao anos depois.
+  (let [ente (random-uuid)]
+    (emitir-transicao! ente (random-uuid) "agendada" "aberta" "2026-07-01T09:00:00Z")
+    (drena-eventos!)
+    (emitir-transicao! ente (random-uuid) "aberta" "suspensa" "2026-07-01T10:00:00Z")
+    (drena-eventos!)
+    ;; a linha acima ja' passou por agendada->aberta->suspensa numa unica sessao; mais 3 sessoes novas
+    ;; cobrem os estados restantes do dominio.
+    (emitir-transicao! ente (random-uuid) "agendada" "encerrada" "2026-07-01T11:00:00Z")
+    (drena-eventos!)
+    (emitir-transicao! ente (random-uuid) "agendada" "nao_realizada" "2026-07-01T12:00:00Z")
+    (drena-eventos!)
+    (emitir-agendamento! ente (random-uuid) "2026-08-01T13:00:00Z" "2026-07-01T13:00:00Z")
+    (drena-eventos!)
+    (let [r (repo/sli-sessoes *repo* ente)]
+      (is (= 5 (count (:sessoes r))) "as 5 sessoes, uma por fase do dominio")
+      (is (= 5 (:sessoes-total r)) "o total: o MESMO conjunto que a lista enxerga (mesmo WHERE)"))))
+
+(deftest com-limite-pequeno-o-corte-derruba-a-agendada-mais-nova-nunca-o-total
+  ;; chamada DIRETA de db/sli-sessao (nao do Repo) para injetar um `limite` pequeno sem pagar o custo de
+  ;; 201 sessoes (o teto de producao e' 200) — mesmo racional de compliance/pendencias desta familia.
+  ;; 3 sessoes 'agendada' (nunca abriram) com `transicionou_em` crescente: t1 < t2 < t3. Com limite=2, a
+  ;; prova de QUEM sobrevive (nao so' quantos): t3 (a MAIS NOVA, a que precisa ser convocada) cai fora —
+  ;; nunca t1 (que seria "a cauda mais antiga", a hipotese que a medicao original errou).
+  (let [ente (random-uuid) t1 (random-uuid) t2 (random-uuid) t3 (random-uuid)]
+    (emitir-agendamento! ente t1 "2026-08-10T13:00:00Z" "2026-07-01T09:00:00Z")
+    (drena-eventos!)
+    (emitir-agendamento! ente t2 "2026-08-11T13:00:00Z" "2026-07-01T10:00:00Z")
+    (drena-eventos!)
+    (emitir-agendamento! ente t3 "2026-08-12T13:00:00Z" "2026-07-01T11:00:00Z")
+    (drena-eventos!)
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (is (= [t1 t2] (mapv :sessao-id (db-sli-sessao/listar-sli-sessoes tx ente 2)))
+            "o LIMIT 2 mantem as duas MAIS ANTIGAS (t1, t2) — t3, a mais nova, cai fora")
+        (is (= 3 (db-sli-sessao/contar tx ente))
+            "o total real continua 3 — e' o unico jeito de saber que t3 (a agendada que precisa de
+             convocacao) esta faltando na lista")))))
+
+;; ---------- achado de revisao adversarial: a fiacao do PROPRIO Repo (o `reify`/defrecord que ESCOLHE
+;; qual funcao vira `:sessoes-total`) nunca era exercitada com corte de verdade. Os tres testes acima
+;; chamam `repo/sli-sessoes` so' sem corte (2/2, 5/5) — coincidem mesmo se a fiacao regredisse para
+;; `(count (listar ...))` em vez de `db-sli-sessao/contar` — ou chamam `db-sli-sessao/*` DIRETO,
+;; contornando o `defrecord` de todo. `:limite` vira a 2a aridade DO PROPRIO PROTOCOLO (opts map, mesmo
+;; idioma de `o-que-vence`), so' para o teste poder cortar sem pagar 201 sessoes — o caminho de PRODUCAO
+;; (controllers.clj) continua na 1a aridade, com o teto de producao.
+(deftest sessoes-total-pelo-repo-nao-e-o-tamanho-da-lista-cortada
+  (let [ente (random-uuid) t1 (random-uuid) t2 (random-uuid) t3 (random-uuid)]
+    (emitir-agendamento! ente t1 "2026-08-10T13:00:00Z" "2026-07-01T09:00:00Z")
+    (drena-eventos!)
+    (emitir-agendamento! ente t2 "2026-08-11T13:00:00Z" "2026-07-01T10:00:00Z")
+    (drena-eventos!)
+    (emitir-agendamento! ente t3 "2026-08-12T13:00:00Z" "2026-07-01T11:00:00Z")
+    (drena-eventos!)
+    (let [r (repo/sli-sessoes *repo* ente {:limite 2})]
+      (is (= 2 (count (:sessoes r))) "a lista respeita o limite injetado, via o Repo")
+      (is (= 3 (:sessoes-total r))
+          "o total, lido pelo PROPRIO Repo, continua 3 — nao o tamanho (2) da lista cortada que o Repo
+           acabou de devolver"))))

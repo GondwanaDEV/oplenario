@@ -127,3 +127,27 @@ describe("derivarPlacar — view-model do placar (§22.6 sigilo no cliente)", ()
     expect(v.kind).toBe("secreta");
   });
 });
+
+describe("avisoLacuna — sinal sintético repassado do reducer (frente truncamento-familia, sítio d)", () => {
+  it("default false quando o chamador não passa o parâmetro", () => {
+    const v = derivarPlacar(nominalAberto());
+    expect(v.kind).toBe("nominal");
+    expect((v as { avisoLacuna: boolean }).avisoLacuna).toBe(false);
+  });
+
+  it("nominal EM CURSO repassa avisoLacuna=true — o placar pode estar incompleto sem que a UI minta por omissão", () => {
+    const v = derivarPlacar(nominalAberto({ votosNominais: { a: "sim" } }), true);
+    expect(v.kind).toBe("nominal");
+    expect((v as { avisoLacuna: boolean }).avisoLacuna).toBe(true);
+  });
+
+  it("secreta também repassa avisoLacuna — o contador pode ter perdido um tick sem ninguém saber", () => {
+    const v = derivarPlacar(nominalAberto({ modalidade: "secreta", votosSecretos: 3 }), true);
+    expect(v.kind).toBe("secreta");
+    expect((v as { avisoLacuna: boolean }).avisoLacuna).toBe(true);
+  });
+
+  it("sem placar nenhum: nada a avisar (não há votação para desconfiar)", () => {
+    expect(derivarPlacar(null, true)).toEqual({ kind: "nenhuma" });
+  });
+});

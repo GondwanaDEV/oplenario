@@ -13,10 +13,13 @@ import type { MateriaOut } from "./contrato-portal.gen";
 describe("useMaterias", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("busca /portal/casa/{ente}/materias e monta o estado 'pronto' com os itens", async () => {
+  it("busca /portal/casa/{ente}/materias e monta o estado 'pronto' com os itens + o total", async () => {
     global.fetch = vi.fn(async () => ({
       ok: true,
-      json: async () => [{ "proposicao-id": "1", tipo: "projeto_lei", ano: 2026, sequencial: 42 }],
+      json: async () => ({
+        materias: [{ "proposicao-id": "1", tipo: "projeto_lei", ano: 2026, sequencial: 42 }],
+        "materias-total": 1,
+      }),
     })) as unknown as typeof fetch;
 
     const { result } = renderHook(() => useMaterias("fortaleza"));
@@ -24,10 +27,29 @@ describe("useMaterias", () => {
     expect(result.current.itens).toEqual([
       { proposicaoId: "1", tipo: "projeto_lei", ano: 2026, sequencial: 42 },
     ]);
+    expect(result.current.materiasTotal).toBe(1);
+  });
+
+  it("materiasTotal DIVERGE de propósito de itens.length (5, não 1) — a borda repassa o total do backend verbatim, nunca (count itens)", async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        materias: [{ "proposicao-id": "1", tipo: "projeto_lei", ano: 2026, sequencial: 42 }],
+        "materias-total": 5,
+      }),
+    })) as unknown as typeof fetch;
+
+    const { result } = renderHook(() => useMaterias("fortaleza"));
+    await waitFor(() => expect(result.current.estado).toBe("pronto"));
+    expect(result.current.itens?.length).toBe(1);
+    expect(result.current.materiasTotal).toBe(5);
   });
 
   it("chama a URL correta (segmentos do ente + 'materias')", async () => {
-    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => [] })) as unknown as typeof fetch;
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ materias: [], "materias-total": 0 }),
+    })) as unknown as typeof fetch;
     global.fetch = fetchMock;
 
     renderHook(() => useMaterias("fortaleza"));
@@ -44,17 +66,24 @@ describe("useMaterias", () => {
   });
 
   it("lista vazia -> estado 'pronto' com itens = [] (vazio é dado válido, não erro)", async () => {
-    global.fetch = vi.fn(async () => ({ ok: true, json: async () => [] })) as unknown as typeof fetch;
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ materias: [], "materias-total": 0 }),
+    })) as unknown as typeof fetch;
     const { result } = renderHook(() => useMaterias("fortaleza"));
     await waitFor(() => expect(result.current.estado).toBe("pronto"));
     expect(result.current.itens).toEqual([]);
+    expect(result.current.materiasTotal).toBe(0);
   });
 
   it("troca de ente reseta o estado (sem vazamento cross-tenant da câmara anterior)", async () => {
     const itensFortaleza: MateriaOut[] = [
       { proposicaoId: "1", tipo: "projeto_lei", ano: 2026, sequencial: 1 } as MateriaOut,
     ];
-    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => itensFortaleza })) as unknown as typeof fetch;
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ materias: itensFortaleza, "materias-total": 1 }),
+    })) as unknown as typeof fetch;
     global.fetch = fetchMock;
 
     const { result, rerender } = renderHook(({ ente }) => useMaterias(ente), {
@@ -67,7 +96,7 @@ describe("useMaterias", () => {
     // sincronamente, o estado/itens de "fortaleza" continuariam visíveis sob "aquiraz".
     let liberar: () => void = () => {};
     const pendente = new Promise<{ ok: boolean; json: () => Promise<unknown> }>((res) => {
-      liberar = () => res({ ok: true, json: async () => [] });
+      liberar = () => res({ ok: true, json: async () => ({ materias: [], "materias-total": 0 }) });
     });
     global.fetch = vi.fn(() => pendente) as unknown as typeof fetch;
 
@@ -75,6 +104,7 @@ describe("useMaterias", () => {
 
     expect(result.current.estado).toBe("carregando");
     expect(result.current.itens).toBeNull();
+    expect(result.current.materiasTotal).toBe(0);
 
     liberar();
     await waitFor(() => expect(result.current.estado).toBe("pronto"));

@@ -21,7 +21,7 @@ import {
   formatarEspecieProposicao,
   formatarNumeroProposicao,
 } from "./proposicoes-vista";
-import type { ItemBoardOut } from "./contrato-mesa.gen";
+import type { ItemBoardOut, TotalPorEstadoOut } from "./contrato-mesa.gen";
 
 export type AzulejoCor = "jade" | "cobalto" | "amarelo" | "telha" | "verde" | "neutro";
 
@@ -39,6 +39,10 @@ export type ColunaBoard = {
   titulo: string;
   azulejo: AzulejoCor;
   itens: ItemDoBoard[];
+  // Fatia "truncamento-familia": quantidade REAL de matérias naquele agrupamento, vinda de
+  // `totaisPorEstado` (GET /paineis/tramitacao) — NUNCA `itens.length`, que corta no teto por-estado
+  // do servidor (50, `paineis/db/tramitacao/listar-board`) e mentiria justo na coluna mais cheia.
+  total: number;
 };
 
 const ESTADOS_EM_PLENARIO = new Set(["primeiro_turno", "segundo_turno", "em_sancao"]);
@@ -70,14 +74,19 @@ function paraItemDoBoard(item: ItemBoardOut): ItemDoBoard {
   };
 }
 
-export function derivarBoard(itens: ItemBoardOut[]): ColunaBoard[] {
+// `totaisPorEstado` OMITIDO (undefined) -> compat com chamador antigo: cada coluna cai pra `itens.length`
+// (o board sem a fatia "truncamento-familia" — nenhum numero pior do que o que ja existia). Quando o
+// PARAMETRO E' PASSADO (mesmo `[]`), ele vira a UNICA fonte de `total` — nunca mistura com itens.length,
+// senao uma coluna cuja lista chegou vazia por falha real do servidor pareceria ok por fallback silencioso.
+export function derivarBoard(itens: ItemBoardOut[], totaisPorEstado?: TotalPorEstadoOut[]): ColunaBoard[] {
   const colunas: ColunaBoard[] = COLUNAS_FIXAS.map((c) => ({
     chave: c.chave,
     titulo: c.titulo,
     azulejo: c.azulejo,
     itens: [],
+    total: 0,
   }));
-  const outros: ColunaBoard = { chave: "outros", titulo: "Outros", azulejo: "neutro", itens: [] };
+  const outros: ColunaBoard = { chave: "outros", titulo: "Outros", azulejo: "neutro", itens: [], total: 0 };
 
   // agrupa preservando a ordem de chegada (o backend já entrega estado asc/transicionouEm asc dentro do
   // grupo — não reordenar aqui).
@@ -87,6 +96,19 @@ export function derivarBoard(itens: ItemBoardOut[]): ColunaBoard[] {
       outros.itens.push(paraItemDoBoard(item));
     } else {
       colunas[alvo].itens.push(paraItemDoBoard(item));
+    }
+  }
+
+  if (totaisPorEstado === undefined) {
+    colunas.forEach((c) => { c.total = c.itens.length; });
+    outros.total = outros.itens.length;
+  } else {
+    // soma o total AUTORITATIVO de cada estado cru na coluna a que ele pertence — uma coluna pode fundir
+    // vários estados (ex.: "Concluídas" = aprovados + arquivados), entao o total da coluna e' a SOMA.
+    for (const { estado, total } of totaisPorEstado) {
+      const alvo = COLUNAS_FIXAS.findIndex((c) => c.pertence(estado));
+      if (alvo === -1) outros.total += total;
+      else colunas[alvo].total += total;
     }
   }
 

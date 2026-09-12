@@ -67,8 +67,10 @@
      'aprovada'), nunca do rotulo `proposicoes.estado`. Pre-condicao do autografo; ver
      db/votacao.clj/aprovada-em-votacao? p/ as tres exclusoes e o limite declarado.")
   (ficha-completa-da-proposicao [this ente-id id]
-    "Onda B Slice 3 (ficha-materia, leitura interna): {:proposicao :texto :tramitacao :apensadas :emendas
-     :pareceres} NUMA UNICA tx (mesma disciplina de buscar-proposicao-detalhe/listar-e-contar-proposicoes).
+    "Onda B Slice 3 (ficha-materia, leitura interna): {:proposicao :texto
+     :tramitacao :tramitacao-truncado :apensadas :apensadas-truncado :emendas :emendas-truncado
+     :pareceres :pareceres-truncado} NUMA UNICA tx (mesma disciplina de
+     buscar-proposicao-detalhe/listar-e-contar-proposicoes).
      `:proposicao` carrega `:aprovada` (Fatia 2), mesma disciplina de buscar-proposicao-detalhe.
      Sem short-circuit no nil da proposicao (mesmo estilo de buscar-proposicao-detalhe): as demais leituras
      rodam do mesmo jeito e vem naturalmente vazias. Tetos (review MAJOR fe-9-ficha-materia — o `take`
@@ -76,7 +78,16 @@
      apensadas/emendas/pareceres, empurrados ao SQL (mesmo padrao teto-fixo-50 de relatores-pendentes) — os
      4 db/ trazem os N MAIS RECENTES (DESC+LIMIT, revertido a ASC), nunca uma janela [0..N) do resultado
      cronologico inteiro. Apensadas = so nivel 1 (apensadas-ativas), NAO a cadeia recursiva — decisao de
-     escopo desta fatia.")
+     escopo desta fatia.
+
+     Fatia 'truncamento-familia': cada lista ganha o irmao `<lista>-truncado` (booleano, nao `-total`
+     — o par lista/total e' a forma canonica do repo quando existe uma CONTAGEM barata a reusar, mas
+     aqui o precedente e' outro: `tramitacao-da-proposicao`/`controllers/buscar-tramitacao` (a rota irma
+     GET /proposicoes/:id/tramitacao) ja' resolvia o MESMO problema com `:historico-truncado`, pedindo
+     `limite+1` ao MESMO db/ e checando o excedente — a SONDA de truncamento. Reusar essa sonda nas 4
+     listas custa ZERO query nova (o db/ ja aceita `limite`, ja' e' chamado nesta funcao); escrever 4
+     contagens `count(*)` seria a 'quinta forma' que a frente pede pra' NAO inventar. O teto nunca e'
+     publicado (regra 1 da familia) — so' o booleano.")
   ;; eixo B — versionamento de texto
   (nova-versao! [this ente-id versao] "Cria versao 'rascunho' (conteudo append-only).")
   (promover-versao! [this ente-id m] "Promove rascunho->vigente (ato auditado; reaponta o pointer).")
@@ -131,7 +142,11 @@
   (texto-vigente-parecer [this ente-id parecer-id])
   (registrar-voto-divergente! [this ente-id m] "Registra voto vencido (append-only puro).")
   (votos-divergentes-do-parecer [this ente-id parecer-id])
-  (relatores-pendentes [this ente-id] "Fila de pareceres aguardando designacao de relator (FE Onda A1).")
+  (relatores-pendentes [this ente-id]
+    "{:itens [...] :truncado bool} — fila de pareceres aguardando designacao de relator (FE Onda A1).
+     `:truncado` (frente 'truncamento-familia'): MESMA sonda teto+1. Um item cujo `objeto_id` (parecer
+     sobre proposicao, sem FK — disc.2) nao resolve vem com `:indisponivel true`, NUNCA omitido (achado
+     'classe JOIN' da mesma frente: INNER JOIN escondia esse item da fila sem contagem nem erro).")
   ;; Onda B Slice 5 — borda de edicao/emissao do parecer (agrega leitura p/ o editor + o ato de emitir)
   (buscar-parecer-para-editor [this ente-id id]
     "UMA tx: {:parecer :objeto (proposicao, se objeto-tipo='proposicao'; senao nil) :texto-rascunho
@@ -222,9 +237,12 @@
   (artefatos-da-norma [this ente-id norma-id] "Artefatos de uma norma, por versao (historico de (re)geracoes).")
   ;; Onda C1 — borda /meu do vereador (§11.2/§11.3): leitura composta escopada por autor/relator.
   (meu-painel [this ente-id vereador-id]
-    "Onda C1: {:proposicoes [...] :pareceres [...] :ciencias [...]} NUMA UNICA tx (mesma disciplina de
-     buscar-proposicao-detalhe/ficha-completa-da-proposicao). `:ciencias` = pareceres publicados sobre
-     proposicao de autoria do vereador, ainda nao acusados (Task 3).")
+    "Onda C1: {:proposicoes :proposicoes-truncado :pareceres :pareceres-truncado :ciencias
+     :ciencias-truncado} NUMA UNICA tx (mesma disciplina de buscar-proposicao-detalhe/
+     ficha-completa-da-proposicao). `:ciencias` = pareceres publicados sobre proposicao de autoria do
+     vereador, ainda nao acusados (Task 3). Os 3 `-truncado` (frente 'truncamento-familia'): MESMA sonda
+     teto+1 da ficha-materia, sem 5a forma — `:ciencias-truncado` e' o mais grave (fila de ACAO: cada
+     `parecer-id` cortado e' uma ciencia que o vereador nao tem como dar).")
   (acusar-ciencia! [this ente-id m]
     "Task 3 — INSERT append-only idempotente (Inv.10) da ciencia do vereador sobre `evento-ref`. Devolve
      {:id :ciente-em}. CALLER (controller) confirma `parecer-elegivel-para-ciencia?` antes.")
@@ -301,6 +319,47 @@
   [tx ente-id id]
   (some-> (proposicao/buscar tx ente-id id)
           (assoc :aprovada (votacao/aprovada-em-votacao? tx ente-id id))))
+
+;; Fatia 'truncamento-familia': tetos das 4 listas da ficha-materia, PRIVADOS (nao expostos ao cliente,
+;; regra 1 da familia) e nomeados (nao literais inline) so' pra' que o teste consiga baixa-los via
+;; `with-redefs` sem pagar o custo de inserir >100/>50 linhas reais — mesmo padrao de
+;; `teto-de-linhas-lote` (cadastros/db/vereador) e `teto-tramitacao-board-por-estado`
+;; (paineis/components/repositorio).
+(def ^:private teto-tramitacao-ficha 100)
+(def ^:private teto-apensadas-ficha 50)
+(def ^:private teto-emendas-ficha 50)
+(def ^:private teto-pareceres-ficha 50)
+
+;; Onda C1 (borda /meu do vereador) — mesma disciplina de teto PRIVADO/nomeado das 4 constantes acima.
+;; UM teto so' pras 3 listas do painel (proposicoes/pareceres/ciencias), mesmo desenho da constante
+;; original `db/meu-painel/teto-meu-painel` (frente 'truncamento-familia' so' MOVEU o teto pra' ca', pro
+;; mesmo lugar de onde a sonda o pede com `(inc teto)` — os 4 tetos da ficha ja' vivem aqui).
+(def ^:private teto-meu-painel 50)
+
+;; FE Onda A1 — fila de relatores pendentes (dashboard da Mesa). MOVIDO do literal `50` inline (frente
+;; 'truncamento-familia') pro mesmo padrao nomeado/privado das demais.
+(def ^:private teto-relatores-pendentes 50)
+
+(defn- lista-com-sonda
+  "A SONDA de truncamento (mesmo mecanismo de `tramitacao-da-proposicao`/`controllers/buscar-tramitacao`):
+  `linhas` ja' vieram do db/ pedidas com `(inc teto)`. `onde` diz ONDE o item excedente cai no vetor
+  devolvido — NAO a direcao do ORDER BY do SQL (que varia por lista), so' a POSICAO do excesso:
+
+  - `:inicio` (default, as 4 listas da ficha-materia): o db/ busca DESC+LIMIT e reverte a ASC antes de
+    devolver — o item excedente (o mais ANTIGO do lote top-N) fica na PRIMEIRA posicao do vetor ASC.
+    `take-last teto` descarta exatamente ele.
+  - `:fim` (painel do vereador, fila de relatores pendentes): o db/ ja' devolve na ordem de EXIBICAO, sem
+    reverter (mais-recente-primeiro OU FIFO mais-antigo-primeiro, cada lista com o seu ORDER BY) — o item
+    excedente (o (teto+1)-esimo pedido) fica na ULTIMA posicao. `take teto` descarta exatamente ele.
+
+  Devolve [lista-cortada-no-teto truncado?]."
+  ([linhas teto] (lista-com-sonda linhas teto :inicio))
+  ([linhas teto onde]
+   (let [truncado? (> (count linhas) teto)]
+     [(if truncado?
+        (vec (if (= onde :fim) (take teto linhas) (take-last teto linhas)))
+        (vec linhas))
+      truncado?])))
 
 (defrecord RepoLegislativoPg [datasource bus]
   RepoLegislativo
@@ -398,15 +457,29 @@
   ;; apensadas/emendas/pareceres (mesmo teto-fixo-50 de relatores-pendentes).
   ;; :aprovada mesma disciplina de buscar-proposicao-detalhe acima — MESMA tx, `some->` p/ nao mentir um
   ;; mapa truthy quando a proposicao nao existe.
+  ;; Fatia 'truncamento-familia': cada db/ e' chamado com `(inc teto)` (a MESMA sonda de
+  ;; `tramitacao-da-proposicao`), e `lista-com-sonda` corta+sinaliza — sem 5a forma, sem query nova.
   (ficha-completa-da-proposicao [this ente-id id]
     (transacao this ente-id
       (fn [tx]
-        {:proposicao (proposicao-com-aprovada tx ente-id id)
-         :texto (texto/vigente tx ente-id id)
-         :tramitacao (tram/historico-da-proposicao tx ente-id id 100)
-         :apensadas (apensacao/apensadas-ativas tx ente-id id 50)
-         :emendas (emenda/listar-por-mae tx ente-id id 50)
-         :pareceres (parecer/listar-por-objeto tx ente-id "proposicao" id 50)})))
+        (let [[tramitacao tramitacao-truncado]
+              (lista-com-sonda (tram/historico-da-proposicao tx ente-id id (inc teto-tramitacao-ficha))
+                                teto-tramitacao-ficha)
+              [apensadas apensadas-truncado]
+              (lista-com-sonda (apensacao/apensadas-ativas tx ente-id id (inc teto-apensadas-ficha))
+                                teto-apensadas-ficha)
+              [emendas emendas-truncado]
+              (lista-com-sonda (emenda/listar-por-mae tx ente-id id (inc teto-emendas-ficha))
+                                teto-emendas-ficha)
+              [pareceres pareceres-truncado]
+              (lista-com-sonda (parecer/listar-por-objeto tx ente-id "proposicao" id (inc teto-pareceres-ficha))
+                                teto-pareceres-ficha)]
+          {:proposicao (proposicao-com-aprovada tx ente-id id)
+           :texto (texto/vigente tx ente-id id)
+           :tramitacao tramitacao :tramitacao-truncado tramitacao-truncado
+           :apensadas apensadas :apensadas-truncado apensadas-truncado
+           :emendas emendas :emendas-truncado emendas-truncado
+           :pareceres pareceres :pareceres-truncado pareceres-truncado}))))
   (nova-versao! [this ente-id v] (transacao this ente-id #(texto/nova-versao! % (assoc v :ente-id ente-id))))
   (promover-versao! [this ente-id m] (transacao this ente-id #(texto/promover! % (assoc m :ente-id ente-id))))
   (buscar-versao [this ente-id id] (transacao this ente-id #(texto/buscar % ente-id id)))
@@ -490,8 +563,16 @@
   (texto-vigente-parecer [this ente-id pid] (transacao this ente-id #(parecer-texto/vigente % ente-id pid)))
   (registrar-voto-divergente! [this ente-id m] (transacao this ente-id #(parecer-voto/registrar! % (assoc m :ente-id ente-id))))
   (votos-divergentes-do-parecer [this ente-id pid] (transacao this ente-id #(parecer-voto/listar-por-parecer % ente-id pid)))
-  ;; FE Onda A1 (§16.11) — read-model barato, tenant-wide, teto fixo 50 (sem paginacao nesta fatia).
-  (relatores-pendentes [this ente-id] (transacao this ente-id #(parecer/relatores-pendentes % ente-id 50)))
+  ;; FE Onda A1 (§16.11) — read-model barato, tenant-wide, teto fixo (sem paginacao nesta fatia). Sonda
+  ;; teto+1 (frente 'truncamento-familia', mesmo mecanismo de meu-painel/ficha-completa-da-proposicao):
+  ;; `:fim` porque o db/ ja' devolve na ordem FIFO de exibicao (criado_em ASC), sem reverter.
+  (relatores-pendentes [this ente-id]
+    (transacao this ente-id
+      (fn [tx]
+        (let [[itens truncado]
+              (lista-com-sonda (parecer/relatores-pendentes tx ente-id (inc teto-relatores-pendentes))
+                                teto-relatores-pendentes :fim)]
+          {:itens itens :truncado truncado}))))
   ;; Onda B Slice 5 — editor/emissao do parecer. buscar-parecer-para-editor agrega LEITURA (parecer + objeto
   ;; opcional + texto rascunho/vigente) NUMA UNICA tx (mesma disciplina de ficha-completa-da-proposicao). O
   ;; objeto e' SEMPRE 'proposicao' nesta fatia (mesma decisao YAGNI de relatores-pendentes — 'emenda' fica
@@ -878,9 +959,21 @@
   (meu-painel [this ente-id vereador-id]
     (transacao this ente-id
       (fn [tx]
-        {:proposicoes (meu-painel-db/proposicoes-do-autor tx ente-id vereador-id)
-         :pareceres (meu-painel-db/pareceres-do-relator tx ente-id vereador-id)
-         :ciencias (meu-painel-db/ciencias-pendentes tx ente-id vereador-id)})))
+        (let [[proposicoes proposicoes-truncado]
+              (lista-com-sonda
+               (meu-painel-db/proposicoes-do-autor tx ente-id vereador-id (inc teto-meu-painel))
+               teto-meu-painel :fim)
+              [pareceres pareceres-truncado]
+              (lista-com-sonda
+               (meu-painel-db/pareceres-do-relator tx ente-id vereador-id (inc teto-meu-painel))
+               teto-meu-painel :fim)
+              [ciencias ciencias-truncado]
+              (lista-com-sonda
+               (meu-painel-db/ciencias-pendentes tx ente-id vereador-id (inc teto-meu-painel))
+               teto-meu-painel :fim)]
+          {:proposicoes proposicoes :proposicoes-truncado proposicoes-truncado
+           :pareceres pareceres :pareceres-truncado pareceres-truncado
+           :ciencias ciencias :ciencias-truncado ciencias-truncado}))))
   (acusar-ciencia! [this ente-id m] (transacao this ente-id #(meu-painel-db/acusar-ciencia! % (assoc m :ente-id ente-id))))
   (parecer-elegivel-para-ciencia? [this ente-id vereador-id evento-ref]
     (transacao this ente-id #(meu-painel-db/parecer-elegivel-para-ciencia? % ente-id vereador-id evento-ref)))

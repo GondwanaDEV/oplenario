@@ -40,19 +40,50 @@ describe("SecaoEmTramitacao", () => {
   });
 
   it("lista vazia -> estado honesto 'nenhuma matéria em tramitação'", async () => {
-    global.fetch = vi.fn(async () => ({ ok: true, json: async () => [] })) as unknown as typeof fetch;
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ materias: [], "materias-total": 0 }),
+    })) as unknown as typeof fetch;
     render(<SecaoEmTramitacao ente="fortaleza" />);
     await waitFor(() => expect(screen.getByRole("status")).toBeTruthy());
     expect(screen.getByRole("status").textContent).toMatch(/nenhuma matéria/i);
   });
 
   it("dado real -> renderiza o destaque (1º item)", async () => {
-    global.fetch = vi.fn(async () => ({ ok: true, json: async () => [materiaFake] })) as unknown as typeof fetch;
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ materias: [materiaFake], "materias-total": 1 }),
+    })) as unknown as typeof fetch;
     render(<SecaoEmTramitacao ente="fortaleza" />);
     await waitFor(() => expect(screen.getByText("PL 042/2026")).toBeTruthy());
     expect(
       screen.getByText("Cria o Programa Municipal de Hortas Comunitárias.").textContent,
     ).toBe("Cria o Programa Municipal de Hortas Comunitárias.");
     expect(document.getElementById("destaque")?.getAttribute("aria-busy")).toBe("false");
+  });
+
+  // ---------- frente "truncamento-familia", sitio (a) ----------
+
+  it("materiasTotal igual ao exibido -> SEM aviso de corte", async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ materias: [materiaFake], "materias-total": 1 }),
+    })) as unknown as typeof fetch;
+    render(<SecaoEmTramitacao ente="fortaleza" />);
+    await waitFor(() => expect(screen.getByText("PL 042/2026")).toBeTruthy());
+    expect(screen.queryByText(/mostrando/i)).toBeNull();
+  });
+
+  it("materiasTotal MAIOR que o exibido -> mostra 'mostrando N de M', com M o total do SERVIDOR (regra 4: nunca uma dedução de itens.length)", async () => {
+    // a resposta traz so' 1 item (itens.length = 1), mas materias-total = 250 — se a seção alguma vez
+    // recaísse numa dedução client-side (ex.: comparar contra itens.length), o corte nunca apareceria
+    // aqui (1 item = "tudo que chegou"). O total tem de vir do backend.
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ materias: [materiaFake], "materias-total": 250 }),
+    })) as unknown as typeof fetch;
+    render(<SecaoEmTramitacao ente="fortaleza" />);
+    await waitFor(() => expect(screen.getByText("PL 042/2026")).toBeTruthy());
+    expect(screen.getByText(/mostrando 1 de 250 matérias/i)).toBeTruthy();
   });
 });

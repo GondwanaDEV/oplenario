@@ -22,15 +22,27 @@
   (validar! wire/ReciboOut {:estado estado} "ReciboOut"))
 
 (defn minha->wire
-  "Item da lista (materia + seguido-em) -> MinhaMateriaOut."
+  "Item da lista (materia + seguido-em) -> MinhaMateriaOut. `:indisponivel` chega PRONTO do db (LEFT JOIN
+  sem par -> :tipo nil -> :indisponivel true, ver docstring de `meus-da-materia`) — repassado verbatim,
+  nunca recomputado aqui (uma 2a formula divergiria do db no dia em que um so' dos dois mudar)."
   [m]
   (validar! wire/MinhaMateriaOut
             {:proposicao-id (->str (:proposicao-id m)) :tipo (:tipo m) :ano (:ano m)
              :sequencial (:sequencial m) :urn-lex (:urn-lex m) :ementa (:ementa m) :estado (:estado m)
-             :seguido-em (->str (:seguido-em m))}
+             :seguido-em (->str (:seguido-em m)) :indisponivel (boolean (:indisponivel m))}
             "MinhaMateriaOut"))
 
 (defn minhas->wire
   "A lista inteira, item a item."
   [ms]
   (mapv minha->wire ms))
+
+(defn meus->wire
+  "{:acompanhamentos :acompanhamentos-total} (dominio) -> MeusAcompanhamentosOut — o par lista+total de GET
+  /portal/acompanhamentos (frente 'truncamento-familia', sitio (c)). SEM `(or ... 0)` (corrige achado
+  IMPORTANTE da revisao adversarial): `:acompanhamentos-total` ausente e' bug de servidor e tem de reprovar
+  no schema (500), nao virar `0` silencioso."
+  [{:keys [acompanhamentos acompanhamentos-total]}]
+  (validar! wire/MeusAcompanhamentosOut
+            {:acompanhamentos (minhas->wire acompanhamentos) :acompanhamentos-total acompanhamentos-total}
+            "MeusAcompanhamentosOut"))

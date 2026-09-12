@@ -16,7 +16,9 @@
             [oplenario.rotas :as rotas]))
 
 (defn- fake-repo-paineis
-  "RepoPaineis fake: `tramitacao-board` devolve `resultado`. Impl parcial proposital (so o metodo exercido)."
+  "RepoPaineis fake: `tramitacao-board` devolve `resultado` — desde a fatia 'truncamento-familia',
+  {:itens [...] :totais-por-estado [...]} (nao mais um vetor cru de itens; ver
+  paineis/components/repositorio). Impl parcial proposital (so o metodo exercido)."
   [resultado]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify repo-paineis/RepoPaineis
@@ -50,9 +52,13 @@
 
 ;; ---------- GET /paineis/tramitacao ----------
 
+(defn- resultado-vazio [] {:itens [] :totais-por-estado []})
+
 (deftest tramitacao-200
   (let [ente (random-uuid)
-        r (pt/response-for (service-fn #{"secretario"} (fake-repo-paineis [(item-canonico ente)]))
+        r (pt/response-for (service-fn #{"secretario"}
+                            (fake-repo-paineis {:itens [(item-canonico ente)]
+                                                :totais-por-estado [{:estado "em_comissao" :n 1}]}))
                            :get "/paineis/tramitacao" :headers (com-bearer (token ente (random-uuid))))
         body (ler-json r)]
     (is (= 200 (:status r)) "GET /paineis/tramitacao com papel secretario -> 200")
@@ -64,17 +70,47 @@
       (is (not (contains? i :ente-id)) "ente-id (tenant) nao vaza"))))
 
 (deftest tramitacao-vazio-200
-  (let [r (pt/response-for (service-fn #{"secretario"} (fake-repo-paineis []))
+  (let [r (pt/response-for (service-fn #{"secretario"} (fake-repo-paineis (resultado-vazio)))
                            :get "/paineis/tramitacao" :headers (com-bearer (token (random-uuid) (random-uuid))))]
     (is (= 200 (:status r)))
-    (is (= [] (:itens (ler-json r))))))
+    (is (= [] (:itens (ler-json r))))
+    (is (= [] (:totais-por-estado (ler-json r))))))
 
 (deftest tramitacao-sem-papel-403
-  (let [r (pt/response-for (service-fn #{"vereador"} (fake-repo-paineis []))
+  (let [r (pt/response-for (service-fn #{"vereador"} (fake-repo-paineis (resultado-vazio)))
                            :get "/paineis/tramitacao" :headers (com-bearer (token (random-uuid) (random-uuid))))]
     (is (= 403 (:status r)) "ator sem papel 'secretario' -> authz grossa nega -> 403")))
 
 (deftest tramitacao-sem-token-401
-  (let [r (pt/response-for (service-fn #{"secretario"} (fake-repo-paineis []))
+  (let [r (pt/response-for (service-fn #{"secretario"} (fake-repo-paineis (resultado-vazio)))
                            :get "/paineis/tramitacao")]
     (is (= 401 (:status r)) "rota de modulo herda a cadeia de auth: sem token -> 401 (fail-closed)")))
+
+;; ---------- fatia 'truncamento-familia': o par itens/totais-por-estado ----------
+
+(deftest tramitacao-totais-por-estado-e-o-total-verdadeiro-mesmo-com-a-lista-cortada
+  ;; O caso que motiva a fatia inteira: 3 proposicoes reais em "em_comissao", a LISTA cortada em 2 pelo
+  ;; teto por-estado do Repo (aqui simulado no fake — o teto real fica em components/repositorio), mas o
+  ;; TOTAL publicado tem que continuar 3. Sem isto, a Mesa achava que "em_comissao" tinha so' 2 materias.
+  (let [ente (random-uuid)
+        itens [(assoc (item-canonico ente) :estado "em_comissao")
+               (assoc (item-canonico ente) :estado "em_comissao")]
+        r (pt/response-for (service-fn #{"secretario"}
+                            (fake-repo-paineis {:itens itens
+                                                :totais-por-estado [{:estado "em_comissao" :n 3}]}))
+                           :get "/paineis/tramitacao" :headers (com-bearer (token ente (random-uuid))))
+        body (ler-json r)]
+    (is (= 200 (:status r)))
+    (is (= 2 (count (:itens body))) "a LISTA sai cortada (2, nao 3)")
+    (is (= [{:estado "em_comissao" :total 3}] (:totais-por-estado body))
+        "o TOTAL publicado e' o real (3), com a chave renomeada de :n (interno) para :total (contrato de saida)")))
+
+(deftest tramitacao-nao-publica-o-teto
+  ;; Regra 1 da forma canonica: nenhum wire/out publica o teto server-side ao cliente.
+  (let [r (pt/response-for (service-fn #{"secretario"}
+                            (fake-repo-paineis {:itens [] :totais-por-estado [{:estado "em_comissao" :n 51}]}))
+                           :get "/paineis/tramitacao" :headers (com-bearer (token (random-uuid) (random-uuid))))
+        body (ler-json r)]
+    (is (not (contains? body :limite)) "o payload nao carrega :limite em nenhum nivel")
+    (is (not (some #(contains? % :limite) (:totais-por-estado body)))
+        "nem dentro de cada item de totais-por-estado")))

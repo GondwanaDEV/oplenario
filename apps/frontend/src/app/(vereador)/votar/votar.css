@@ -50,3 +50,11 @@
 .placar-mini .leg { display: flex; gap: 1rem; margin-top: 0.5rem; font-size: var(--t-12); color: var(--palco-texto-2); flex-wrap: wrap; }
 .placar-mini .leg b { color: var(--palco-texto); font-family: var(--mono); }
 .placar-mini .leg .parcial { margin-left: auto; }
+
+/* Frente "truncamento-familia" (correção da revisão adversarial): mesma classe/forma visual de
+   ficha-materia.css/mesa.css/plenario.css .aviso-corte, redeclarada aqui pelo mesmo motivo delas (sem
+   CSS global compartilhado entre páginas) — este é o MESMO aviso de lacuna do SSE que a Mesa já via em
+   sessoes/[id]/plenario/page.tsx, agora também no cockpit do vereador (é ele quem aperta o botão de
+   voto olhando este placar). */
+.aviso-corte { display: flex; align-items: flex-start; gap: 0.5rem; margin: 0.7rem 0 0; padding: 0.65rem 0.9rem; border: 1px solid color-mix(in srgb, var(--amarelo-traco) 45%, transparent); border-left: 3px solid var(--amarelo-traco); border-radius: var(--raio-sm); background: color-mix(in srgb, var(--amarelo-traco) 12%, var(--surface-2)); color: var(--texto-2); font-size: var(--t-13); line-height: 1.5; }
+.aviso-corte b { color: var(--aviso-texto); font-weight: 700; }

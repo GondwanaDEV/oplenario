@@ -43,14 +43,29 @@
 
 (defn ficha->wire
   "`proposicao-out` = ProposicaoDetalheOut JA PROJETADO (o diplomat chamou `adapters.out.proposicao/
-  detalhe->wire` antes — reuso, nao duplicacao); `ficha` = {:tramitacao :apensadas :emendas :pareceres}
-  (dominio, kebab; :proposicao/:texto do `ficha` sao IGNORADOS aqui, ja' viraram `proposicao-out`) ->
-  FichaMateriaOut. O caller (controller) ja gateou nil de :proposicao -> 404 na borda antes de chegar aqui."
-  [proposicao-out {:keys [tramitacao apensadas emendas pareceres]}]
+  detalhe->wire` antes — reuso, nao duplicacao); `ficha` = {:tramitacao :tramitacao-truncado :apensadas
+  :apensadas-truncado :emendas :emendas-truncado :pareceres :pareceres-truncado} (dominio, kebab;
+  :proposicao/:texto do `ficha` sao IGNORADOS aqui, ja' viraram `proposicao-out`) -> FichaMateriaOut.
+  O caller (controller) ja gateou nil de :proposicao -> 404 na borda antes de chegar aqui.
+
+  Os 4 `-truncado` (fatia 'truncamento-familia') vem PRONTOS do Repo (a sonda teto+1 ja' rodou na
+  MESMA tx da lista) — este adapter so' projeta, nunca deriva. Projetados VERBATIM (nunca `(boolean x)`):
+  o Repo real so' produz `true`/`false` (`(> (count linhas) teto)`, nunca nil), entao a UNICA forma de
+  uma destas 4 chaves chegar aqui como `nil` e' um PRODUTOR incompleto (fixture de teste esquecida, ou
+  renomeacao futura que perca a chave no meio do caminho) — e nil deve REPROVAR no `validado` abaixo
+  (schema {:closed true} com :boolean), nao virar `false` silencioso fingindo lista completa (achado
+  CRITICO da revisao adversarial desta fatia: `(boolean nil)` = `false` anulava a UNICA trava que existe
+  pra' pegar exatamente esse produtor incompleto)."
+  [proposicao-out {:keys [tramitacao tramitacao-truncado apensadas apensadas-truncado
+                          emendas emendas-truncado pareceres pareceres-truncado]}]
   (validado wire/FichaMateriaOut
             {:proposicao proposicao-out
              :tramitacao (mapv tramitacao-item->wire tramitacao)
+             :tramitacao-truncado tramitacao-truncado
              :apensadas (mapv apensacao->wire apensadas)
+             :apensadas-truncado apensadas-truncado
              :emendas (mapv emenda-resumo->wire emendas)
-             :pareceres (mapv parecer-resumo->wire pareceres)}
+             :emendas-truncado emendas-truncado
+             :pareceres (mapv parecer-resumo->wire pareceres)
+             :pareceres-truncado pareceres-truncado}
             "ficha da materia"))

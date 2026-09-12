@@ -4,17 +4,17 @@
   `proposicoes` e' hash-particionada por ente_id — `idx_proposicoes_autor` ja' existe p/ este hot-path
   exato). Subconjunto ESTREITO de colunas (mesma disciplina de `proposicao/colunas-resumo`): so' o que o
   painel de fato mostra, nunca `atributos_especificos`/jsonb. `:ciencias` e' preenchido pela Task 3
-  (db/meu-painel/ciencias-pendentes, ainda inexistente aqui)."
+  (db/meu-painel/ciencias-pendentes, ainda inexistente aqui).
+
+  `limite` (frente 'truncamento-familia'): EXIGIDO em vez de fixo (mesmo racional de
+  `parecer/relatores-pendentes`, unico outro caller e' o Repo-Component) — o teto vive PRIVADO em
+  `components/repositorio` (`teto-meu-painel`), pedido com `(inc teto)` p/ a sonda de truncamento; sem
+  default escondido aqui, nada de uma 2a nocao de teto divergindo da que o Repo usa pra' sinalizar."
   (:require [honey.sql :as sql]
             [next.jdbc :as jdbc]
             [oplenario.kernel.db-util :as comum]))
 
 (set! *warn-on-reflection* true)
-
-;; teto fixo (review clojure MEDIUM: sem paginacao nesta fatia, mesmo padrao teto-fixo-50 de
-;; legislativo/db/parecer.clj/relatores-pendentes) — um vereador multi-mandato acumula proposicoes/
-;; pareceres/ciencias por anos; sem LIMIT o payload do painel cresce sem teto a cada carregamento.
-(def ^:private teto-meu-painel 50)
 
 (def ^:private colunas-proposicao
   [:id :tipo :ano :sequencial :urn_lex :ementa :estado :atualizado_em])
@@ -22,29 +22,32 @@
 (defn proposicoes-do-autor
   "Proposicoes de autoria do vereador `vereador-id` (autor_tipo='vereador') neste ente — mais recente
   primeiro (atualizado_em desc; :id asc como desempate estavel, mesma disciplina de db/proposicao/listar).
-  Teto fixo `teto-meu-painel` (sem paginacao nesta fatia)."
-  [tx ente-id vereador-id]
+  `limite` empurrado ao SQL, ja' na ordem de exibicao (DESC) — ao contrario do historico de tramitacao/
+  apensadas/emendas/pareceres da ficha-materia, aqui NAO ha' reversao: o excedente (quando o Repo pede
+  `limite+1`) cai na ULTIMA posicao do vetor devolvido, nao na primeira."
+  [tx ente-id vereador-id limite]
   (comum/linhas->kebab
    (jdbc/execute! tx
      (sql/format {:select colunas-proposicao :from [:legislativo.proposicoes]
                   :where [:and [:= :ente_id ente-id] [:= :autor_tipo [:inline "vereador"]]
                           [:= :autor_id vereador-id]]
                   :order-by [[:atualizado_em :desc] [:id :asc]]
-                  :limit teto-meu-painel}))))
+                  :limit limite}))))
 
 (def ^:private colunas-parecer
   [:id :objeto_tipo :objeto_id :comissao_id :estado :voto_relator :criado_em])
 
 (defn pareceres-do-relator
   "Pareceres em que o vereador `vereador-id` e' o relator, neste ente — mais recente primeiro (criado_em
-  desc; :id asc como desempate estavel). Teto fixo `teto-meu-painel`."
-  [tx ente-id vereador-id]
+  desc; :id asc como desempate estavel). `limite` exigido (ver docstring do ns) — mesmo racional de
+  `proposicoes-do-autor` (excedente na ULTIMA posicao, sem reversao)."
+  [tx ente-id vereador-id limite]
   (comum/linhas->kebab
    (jdbc/execute! tx
      (sql/format {:select colunas-parecer :from [:legislativo.pareceres]
                   :where [:and [:= :ente_id ente-id] [:= :relator_id vereador-id]]
                   :order-by [[:criado_em :desc] [:id :asc]]
-                  :limit teto-meu-painel}))))
+                  :limit limite}))))
 
 ;; ============================ Task 3: ciencia append-only (Inv.10) ============================
 
@@ -54,8 +57,11 @@
   ciencia_vereador — decisao assumida #2 do plano C1: ciencia DERIVADA, sem pipeline de notificacao). Join
   SAME-SCHEMA (legislativo.pareceres <-> legislativo.proposicoes <-> legislativo.ciencia_vereador), nunca
   cross-modulo (§22.10). `parecer-id` e' o `evento-ref` p/ `acusar-ciencia!` — cada parecer publicado gera
-  no maximo UM item pendente (a UNIQUE e' por parecer, nao por proposicao). Teto fixo `teto-meu-painel`."
-  [tx ente-id vereador-id]
+  no maximo UM item pendente (a UNIQUE e' por parecer, nao por proposicao). `limite` exigido — a MAIS
+  GRAVE das 3 listas do painel (`components/repositorio` docstring): cada `parecer-id` daqui e' o
+  `evento-ref` que POST /meu/ciencias exige, e o FE so' obtem esse id POR AQUI — uma ciencia que cai fora
+  do corte e' uma ciencia que o vereador nao tem como dar."
+  [tx ente-id vereador-id limite]
   (comum/linhas->kebab
    (jdbc/execute! tx
      (sql/format {:select [[:pc.id :parecer_id] [:p.id :proposicao_id] :p.tipo :p.ano :p.sequencial
@@ -71,7 +77,7 @@
                           [:= :p.autor_tipo [:inline "vereador"]] [:= :p.autor_id vereador-id]
                           [:is :cv.id nil]]
                   :order-by [[:pc.atualizado_em :desc] [:pc.id :asc]]
-                  :limit teto-meu-painel}))))
+                  :limit limite}))))
 
 (defn parecer-elegivel-para-ciencia?
   "Guard de `acusar-ciencia!` (review CRITICO clojure+database+security, 3 revisores convergentes):

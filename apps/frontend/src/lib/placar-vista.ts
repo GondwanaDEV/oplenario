@@ -17,6 +17,11 @@ export interface VistaNominal {
   baseMembros: number | null;
   votos: { vereadorId: string; voto: VotoNominal }[]; // quem votou o quê (público na nominal)
   votosParciais: boolean; // a grade local não bate com o agregado oficial (ex.: pós-reconexão) — UI avisa
+  /** Frente 'truncamento-familia' sítio (d): o canal SSE teve uma lacuna (entrada corrompida no replay
+   * do backplane) desde que esta página conectou. O placar não tem NENHUM caminho de re-busca (é só o
+   * agregado de eventos ao vivo — ao contrário de quórum/tribuna, que se auto-curam em segundos), então
+   * a UI precisa admitir que este número pode estar incompleto em vez de mostrá-lo com confiança total. */
+  avisoLacuna: boolean;
 }
 
 export interface VistaSecreta {
@@ -28,6 +33,8 @@ export interface VistaSecreta {
   faltam: number | null;
   baseMembros: number | null;
   totais: { sim: number; nao: number; abstencao: number } | null; // público SÓ no encerramento
+  /** Ver a docstring de `VistaNominal.avisoLacuna` — mesmo racional, aqui pro contador anônimo. */
+  avisoLacuna: boolean;
 }
 
 export type VistaPlacar = { kind: "nenhuma" } | VistaNominal | VistaSecreta;
@@ -40,7 +47,7 @@ const RESULTADO_PERMITIDO = new Set(["aprovada", "rejeitada"]);
 // contrato passam; qualquer outra coisa vira null (não vira token de classe inesperado). review seg LOW-1.
 const resultadoSeguro = (r: string | null): string | null => (r !== null && RESULTADO_PERMITIDO.has(r) ? r : null);
 
-export function derivarPlacar(placar: PlacarVotacao | null): VistaPlacar {
+export function derivarPlacar(placar: PlacarVotacao | null, avisoLacuna = false): VistaPlacar {
   if (!placar) return { kind: "nenhuma" };
 
   const { objetoTipo, encerrada, baseMembros, totais } = placar;
@@ -72,6 +79,7 @@ export function derivarPlacar(placar: PlacarVotacao | null): VistaPlacar {
       // grade local incompleta perante o agregado oficial (ex.: reconexão que não viu todos os votos): o Tally
       // mostra a verdade do servidor, e a UI avisa que a lista nominal está parcial em vez de mentir por omissão.
       votosParciais: usarTotais && votos.length !== apurados,
+      avisoLacuna,
     };
   }
 
@@ -86,5 +94,6 @@ export function derivarPlacar(placar: PlacarVotacao | null): VistaPlacar {
     faltam: baseMembros !== null ? Math.max(0, baseMembros - registrados) : null,
     baseMembros,
     totais: encerrada && totais !== null ? { sim: totais.sim ?? 0, nao: totais.nao ?? 0, abstencao: totais.abstencao ?? 0 } : null,
+    avisoLacuna,
   };
 }

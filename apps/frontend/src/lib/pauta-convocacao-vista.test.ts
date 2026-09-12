@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatarTipoSessao, formatarTituloSessao, selecionarSessaoAlvo, sessoesAgendadas } from "./pauta-convocacao-vista";
+import { avisoCorteSessoes, formatarTipoSessao, formatarTituloSessao, selecionarSessaoAlvo, sessoesAgendadas } from "./pauta-convocacao-vista";
 import type { SliSessaoOut } from "./use-mesa";
 import type { SessaoOut } from "./pauta-convocacao-vista";
 
@@ -16,6 +16,34 @@ function sessao(parcial: Partial<SessaoOut> = {}): SessaoOut {
     ...parcial,
   };
 }
+
+describe("avisoCorteSessoes — fatia \"truncamento-familia\" sitio (a)", () => {
+  it("sem corte (total == count) -> null", () => {
+    const sessoes = [sliSessao({ sessaoId: "a" }), sliSessao({ sessaoId: "b" })];
+    expect(avisoCorteSessoes(sessoes, 2)).toBeNull();
+  });
+
+  it("total maior que a lista -> aviso, nomeando os dois números", () => {
+    const sessoes = [sliSessao({ sessaoId: "a" })];
+    const aviso = avisoCorteSessoes(sessoes, 9);
+    expect(aviso).not.toBeNull();
+    expect(aviso).toContain("9");
+    expect(aviso).toContain("1");
+  });
+
+  // regra 4: o aviso segue SEMPRE o total autoritativo, nunca uma dedução client-side. Payload onde as
+  // duas fontes discordariam (aqui: a única fonte é sessoesTotal — mutar o CÁLCULO para comparar contra
+  // algo que não seja o parâmetro autoritativo reprova este teste).
+  it("total igual a count, mesmo com muitos itens -> null (não é 'lista grande', é 'lista incompleta')", () => {
+    const sessoes = Array.from({ length: 50 }, (_, i) => sliSessao({ sessaoId: `s${i}` }));
+    expect(avisoCorteSessoes(sessoes, 50)).toBeNull();
+  });
+
+  it("total menor que a lista (nunca deveria acontecer) -> null, nunca um aviso com número negativo", () => {
+    const sessoes = [sliSessao({ sessaoId: "a" }), sliSessao({ sessaoId: "b" })];
+    expect(avisoCorteSessoes(sessoes, 1)).toBeNull();
+  });
+});
 
 describe("sessoesAgendadas / selecionarSessaoAlvo", () => {
   it("filtra só situacao 'agendada' com agendadaPara, ordena por data crescente", () => {

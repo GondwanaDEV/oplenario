@@ -59,20 +59,25 @@
    [:percentual [:maybe :int]]])
 
 (def RelatorPendenteOut
-  "Espelha oplenario.legislativo.wire.out.relator-pendente/RelatorPendenteOut."
+  "Espelha oplenario.legislativo.wire.out.relator-pendente/RelatorPendenteOut (frente
+  'truncamento-familia': cabecalho `[:maybe ...]` + `:indisponivel`, achado 'classe JOIN')."
   [:map {:closed true}
    [:id :string]
    [:proposicao-id :string]
-   [:tipo :string]
-   [:ano :int]
-   [:sequencial :int]
-   [:urn-lex :string]
-   [:ementa :string]
-   [:criado-em :string]])
+   [:tipo [:maybe :string]]
+   [:ano [:maybe :int]]
+   [:sequencial [:maybe :int]]
+   [:urn-lex [:maybe :string]]
+   [:ementa [:maybe :string]]
+   [:criado-em :string]
+   [:indisponivel :boolean]])
 
 (def RelatoresPendentesOut
+  "Espelha oplenario.legislativo.wire.out.relator-pendente/RelatoresPendentesOut (`:truncado`, frente
+  'truncamento-familia')."
   [:map {:closed true}
-   [:itens [:sequential RelatorPendenteOut]]])
+   [:itens [:sequential RelatorPendenteOut]]
+   [:truncado :boolean]])
 
 (def CardIndisponivelOut
   "O sentinel de degradacao por card (§16.11, mesmo formato usado por compliance-tce quando a leitura

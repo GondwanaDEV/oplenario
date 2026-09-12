@@ -16,7 +16,7 @@ import { formatarData } from "@/lib/formatar-data";
 import { comToken } from "@/lib/nav";
 import type { FichaMateriaOut } from "@/lib/contrato-legislativo.gen";
 
-type Aba = { id: string; rotulo: string; contagem?: number };
+type Aba = { id: string; rotulo: string; contagem?: number; truncado?: boolean };
 
 export function FichaMateriaTabs({
   ficha,
@@ -34,11 +34,16 @@ export function FichaMateriaTabs({
   const pareceres = useMemo(() => derivarPareceres(ficha.pareceres), [ficha.pareceres]);
   const emendas = useMemo(() => derivarEmendas(ficha.emendas), [ficha.emendas]);
 
+  // fatia "truncamento-familia": o servidor sinaliza cada lista com um BOOLEANO (`*Truncado` — mesma
+  // forma de `historico-truncado` na rota irmã GET /proposicoes/:id/tramitacao), nunca um total à
+  // parte. O badge da aba vira "N+" (nunca finge que N é o total) e o painel ganha um aviso — sempre
+  // lido do CAMPO do servidor, nunca deduzido comparando o tamanho da lista com o teto (que o cliente
+  // nem conhece, regra 1 da família: o teto não é publicado).
   const abas: Aba[] = [
     { id: "texto", rotulo: "Texto vigente" },
-    { id: "tram", rotulo: "Tramitação", contagem: timeline.length },
-    { id: "pareceres", rotulo: "Pareceres", contagem: pareceres.length },
-    { id: "emendas", rotulo: "Emendas", contagem: emendas.length },
+    { id: "tram", rotulo: "Tramitação", contagem: timeline.length, truncado: ficha.tramitacaoTruncado },
+    { id: "pareceres", rotulo: "Pareceres", contagem: pareceres.length, truncado: ficha.pareceresTruncado },
+    { id: "emendas", rotulo: "Emendas", contagem: emendas.length, truncado: ficha.emendasTruncado },
     { id: "anexos", rotulo: "Anexos" },
   ];
 
@@ -91,7 +96,12 @@ export function FichaMateriaTabs({
             type="button"
           >
             {aba.rotulo}
-            {aba.contagem !== undefined && <span className="cont">{aba.contagem}</span>}
+            {aba.contagem !== undefined && (
+              <span className="cont">
+                {aba.contagem}
+                {aba.truncado ? "+" : ""}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -124,17 +134,25 @@ export function FichaMateriaTabs({
         {timeline.length === 0 ? (
           <p>Nenhuma transição de tramitação registrada ainda.</p>
         ) : (
-          <ol className="tempo">
-            {timeline.map((item, i) => (
-              <li key={`${item.ocorridoEm}-${i}`}>
-                <span className="data">{formatarData(item.ocorridoEm)}</span>
-                <p className="evt">
-                  {item.rotuloDe} → {item.rotuloPara}
-                </p>
-                <span className="quem">{item.gatilho}</span>
-              </li>
-            ))}
-          </ol>
+          <>
+            {ficha.tramitacaoTruncado && (
+              <p role="status" className="aviso-corte">
+                Mostrando as <b>{timeline.length}</b> transições mais recentes — pode haver mais fora
+                desta lista.
+              </p>
+            )}
+            <ol className="tempo">
+              {timeline.map((item, i) => (
+                <li key={`${item.ocorridoEm}-${i}`}>
+                  <span className="data">{formatarData(item.ocorridoEm)}</span>
+                  <p className="evt">
+                    {item.rotuloDe} → {item.rotuloPara}
+                  </p>
+                  <span className="quem">{item.gatilho}</span>
+                </li>
+              ))}
+            </ol>
+          </>
         )}
       </section>
 
@@ -149,22 +167,30 @@ export function FichaMateriaTabs({
         {pareceres.length === 0 ? (
           <p>Nenhum parecer registrado ainda.</p>
         ) : (
-          <ul className="tempo">
-            {pareceres.map((p) => (
-              <li key={p.id}>
-                <span className={`chip chip-${p.categoria}`}>{p.rotuloEstado}</span>
-                <p className="evt">{p.comissaoRotulo}</p>
-                <span className="quem">
-                  {p.votoRelator
-                    ? `Voto do relator: ${rotularVoto(p.votoRelator)}`
-                    : "Sem voto de relator registrado"}
-                </span>
-                <Link className="ir" href={comToken(`/parecer/${p.id}`, token)}>
-                  Abrir parecer
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <>
+            {ficha.pareceresTruncado && (
+              <p role="status" className="aviso-corte">
+                Mostrando os <b>{pareceres.length}</b> pareceres mais recentes — pode haver mais fora
+                desta lista.
+              </p>
+            )}
+            <ul className="tempo">
+              {pareceres.map((p) => (
+                <li key={p.id}>
+                  <span className={`chip chip-${p.categoria}`}>{p.rotuloEstado}</span>
+                  <p className="evt">{p.comissaoRotulo}</p>
+                  <span className="quem">
+                    {p.votoRelator
+                      ? `Voto do relator: ${rotularVoto(p.votoRelator)}`
+                      : "Sem voto de relator registrado"}
+                  </span>
+                  <Link className="ir" href={comToken(`/parecer/${p.id}`, token)}>
+                    Abrir parecer
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </section>
 
@@ -179,17 +205,25 @@ export function FichaMateriaTabs({
         {emendas.length === 0 ? (
           <p>Nenhuma emenda apresentada ainda.</p>
         ) : (
-          <ul className="tempo">
-            {emendas.map((e) => (
-              <li key={e.id}>
-                <span className={`chip chip-${e.categoria}`}>{e.rotuloEstado}</span>
-                <p className="evt">
-                  Emenda <b>{e.rotuloTipo}</b> nº {e.numeroLocal}
-                </p>
-                <span className="quem">{e.autorTexto ?? "Autoria não informada"}</span>
-              </li>
-            ))}
-          </ul>
+          <>
+            {ficha.emendasTruncado && (
+              <p role="status" className="aviso-corte">
+                Mostrando as <b>{emendas.length}</b> emendas mais recentes — pode haver mais fora desta
+                lista.
+              </p>
+            )}
+            <ul className="tempo">
+              {emendas.map((e) => (
+                <li key={e.id}>
+                  <span className={`chip chip-${e.categoria}`}>{e.rotuloEstado}</span>
+                  <p className="evt">
+                    Emenda <b>{e.rotuloTipo}</b> nº {e.numeroLocal}
+                  </p>
+                  <span className="quem">{e.autorTexto ?? "Autoria não informada"}</span>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </section>
 

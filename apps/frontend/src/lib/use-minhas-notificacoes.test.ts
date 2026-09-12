@@ -16,6 +16,7 @@ const respostaFake = {
     },
   ],
   "nao-lidas": 1,
+  "notificacoes-total": 1,
 };
 
 describe("useMinhasNotificacoes", () => {
@@ -27,6 +28,7 @@ describe("useMinhasNotificacoes", () => {
     expect(result.current.estado).toBe("carregando");
     await waitFor(() => expect(result.current.estado).toBe("pronto"));
     expect(result.current.dados?.naoLidas).toBe(1);
+    expect(result.current.dados?.notificacoesTotal).toBe(1);
     expect(result.current.dados?.notificacoes[0].objetoId).toBe("p1");
     const chamada = vi.mocked(global.fetch).mock.calls[0];
     expect(chamada[0]).toBe("/api/meu/notificacoes");

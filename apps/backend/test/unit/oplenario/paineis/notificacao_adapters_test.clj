@@ -19,23 +19,34 @@
    :lida-em nil})
 
 (deftest minhas-notificacoes-caminho-feliz-valida-o-contrato
-  (let [out (notificacao/minhas-notificacoes->wire {:notificacoes [notificacao-fake] :nao-lidas 3})]
+  (let [out (notificacao/minhas-notificacoes->wire
+             {:notificacoes [notificacao-fake] :nao-lidas 3 :notificacoes-total 7})]
     (is (m/validate wire/MinhasNotificacoesOut out) "a projecao satisfaz MinhasNotificacoesOut")
     (is (= 3 (:nao-lidas out)))
     (is (= 1 (count (:notificacoes out))))
+    ;; fatia "truncamento-familia" sitio (b): notificacoes-total DIVERGE de proposito da count da lista (7,
+    ;; nao 1) — prova que sai VERBATIM do Repo, nunca derivado do tamanho de `notificacoes`.
+    (is (= 7 (:notificacoes-total out)) "notificacoes-total sai verbatim, nao count(notificacoes)")
     (is (nil? (get-in out [:notificacoes 0 :lida-em])) "nao lida = ausencia do carimbo")))
 
 (deftest minhas-notificacoes-nao-lidas-default-zero-quando-nil
-  (let [out (notificacao/minhas-notificacoes->wire {:notificacoes [] :nao-lidas nil})]
+  (let [out (notificacao/minhas-notificacoes->wire {:notificacoes [] :nao-lidas nil :notificacoes-total 0})]
     (is (m/validate wire/MinhasNotificacoesOut out))
     (is (= 0 (:nao-lidas out)))
     (is (= [] (:notificacoes out)))))
+
+(deftest minhas-notificacoes-total-ausente-lanca
+  ;; fatia "truncamento-familia": total AUSENTE e' bug de servidor -> lanca (NullPointerException do `(int
+  ;; nil)`, antes mesmo da validacao Malli) — nunca um zero silencioso que a UI leria como "sem corte".
+  (is (thrown? Exception
+               (notificacao/minhas-notificacoes->wire {:notificacoes [] :nao-lidas 0}))))
 
 (deftest minhas-notificacoes-drift-de-contrato-lanca
   ;; categoria como keyword (nao :string) viola NotificacaoOut -> adapters/out lanca (nunca corpo malformado).
   (is (thrown? clojure.lang.ExceptionInfo
                (notificacao/minhas-notificacoes->wire
-                {:notificacoes [(assoc notificacao-fake :categoria :esic_resposta)] :nao-lidas 1}))))
+                {:notificacoes [(assoc notificacao-fake :categoria :esic_resposta)] :nao-lidas 1
+                 :notificacoes-total 1}))))
 
 (deftest marcar-lida-caminho-feliz-valida-o-contrato
   (let [out (notificacao/marcar-lida->wire {:id "550e8400-e29b-41d4-a716-446655440000"

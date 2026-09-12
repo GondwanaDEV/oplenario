@@ -77,9 +77,13 @@ export interface ParecerResumoOut {
 export interface FichaMateriaOut {
   proposicao: ProposicaoDetalheOut;
   tramitacao: HistoricoTramitacaoItemOut[];
+  tramitacaoTruncado: boolean;
   apensadas: ApensacaoOut[];
+  apensadasTruncado: boolean;
   emendas: EmendaResumoOut[];
+  emendasTruncado: boolean;
   pareceres: ParecerResumoOut[];
+  pareceresTruncado: boolean;
 }
 
 export interface ObjetoResumoOut {
@@ -216,8 +220,11 @@ export interface CienciaPendenteOut {
 export interface MeuPainelOut {
   vereadorId?: string | null;
   proposicoes: ProposicaoResumoMeuPainelOut[];
+  proposicoesTruncado: boolean;
   pareceres: ParecerResumoMeuPainelOut[];
+  pareceresTruncado: boolean;
   ciencias: CienciaPendenteOut[];
+  cienciasTruncado: boolean;
 }
 
 export interface AcusarCienciaOut {

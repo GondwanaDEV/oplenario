@@ -11,7 +11,9 @@ describe("DadosMateriaCard", () => {
         dados={{
           situacao: "Em comissões",
           apensadosTotal: 2,
+          apensadasTruncado: false,
           apresentadaEm: "2026-04-08T09:00:00Z",
+          apresentadaEmIncerta: false,
           ultimaAcaoEm: "2026-05-12T10:00:00Z",
         }}
       />,
@@ -26,9 +28,91 @@ describe("DadosMateriaCard", () => {
   it("sem apensados -> mostra 'nenhum' honesto (não '0' cru)", () => {
     render(
       <DadosMateriaCard
-        dados={{ situacao: "Protocolado", apensadosTotal: 0, apresentadaEm: "2026-01-01T00:00:00Z", ultimaAcaoEm: "2026-01-01T00:00:00Z" }}
+        dados={{
+          situacao: "Protocolado",
+          apensadosTotal: 0,
+          apensadasTruncado: false,
+          apresentadaEm: "2026-01-01T00:00:00Z",
+          apresentadaEmIncerta: false,
+          ultimaAcaoEm: "2026-01-01T00:00:00Z",
+        }}
       />,
     );
     expect(screen.getByText("nenhum")).toBeTruthy();
+  });
+
+  // ---------- fatia "truncamento-familia": apensadosTotal pode não ser o total de verdade ----------
+
+  it("apensadasTruncado=true -> '+' honesto ao lado da contagem (há mais que o exibido)", () => {
+    render(
+      <DadosMateriaCard
+        dados={{
+          situacao: "Em comissões",
+          apensadosTotal: 50,
+          apensadasTruncado: true,
+          apresentadaEm: "2026-01-01T00:00:00Z",
+          apresentadaEmIncerta: false,
+          ultimaAcaoEm: "2026-01-01T00:00:00Z",
+        }}
+      />,
+    );
+    expect(screen.getByText("50")).toBeTruthy();
+    expect(screen.getByText("+")).toBeTruthy();
+  });
+
+  it("apensadasTruncado=true mas zero apensados -> continua 'nenhum', sem '+' (rule 4: nunca inventa corte de uma lista vazia)", () => {
+    // Cenário defensivo: o servidor nunca deveria mandar truncado=true com lista vazia, mas se mandasse,
+    // a UI não pode escrever "nenhum+" — não faz sentido dizer "há mais" de uma lista que mostra zero.
+    render(
+      <DadosMateriaCard
+        dados={{
+          situacao: "Protocolado",
+          apensadosTotal: 0,
+          apensadasTruncado: true,
+          apresentadaEm: "2026-01-01T00:00:00Z",
+          apresentadaEmIncerta: false,
+          ultimaAcaoEm: "2026-01-01T00:00:00Z",
+        }}
+      />,
+    );
+    expect(screen.getByText("nenhum")).toBeTruthy();
+    expect(screen.queryByText("+")).toBeNull();
+  });
+
+  // ---------- achado IMPORTANTE da revisão adversarial: apresentadaEm sob tramitação cortada ----------
+
+  it("apresentadaEmIncerta=true -> 'anterior a <data>', nunca a data nua como fato (a real é anterior)", () => {
+    render(
+      <DadosMateriaCard
+        dados={{
+          situacao: "Em comissões",
+          apensadosTotal: 0,
+          apensadasTruncado: false,
+          apresentadaEm: "2026-04-12T15:00:00Z",
+          apresentadaEmIncerta: true,
+          ultimaAcaoEm: "2026-05-12T10:00:00Z",
+        }}
+      />,
+    );
+    expect(screen.getByText(/anterior a 12\/04\/2026/)).toBeTruthy();
+    // a data nua SEM o prefixo não pode aparecer sozinha afirmando a apresentação
+    expect(screen.queryByText("12/04/2026")).toBeNull();
+  });
+
+  it("apresentadaEmIncerta=false -> data nua, sem 'anterior a'", () => {
+    render(
+      <DadosMateriaCard
+        dados={{
+          situacao: "Em comissões",
+          apensadosTotal: 0,
+          apensadasTruncado: false,
+          apresentadaEm: "2026-04-12T15:00:00Z",
+          apresentadaEmIncerta: false,
+          ultimaAcaoEm: "2026-05-12T10:00:00Z",
+        }}
+      />,
+    );
+    expect(screen.getByText("12/04/2026")).toBeTruthy();
+    expect(screen.queryByText(/anterior a/)).toBeNull();
   });
 });

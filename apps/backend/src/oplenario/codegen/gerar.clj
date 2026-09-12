@@ -35,9 +35,11 @@
    ["RelatoresPendentesOut" mesa-wire/RelatoresPendentesOut]
    ["CardIndisponivelOut" mesa-wire/CardIndisponivelOut]
    ["MesaOut" mesa-wire/MesaOut]
-   ;; FE Onda B — board de tramitacao (paineis/wire/out/tramitacao). ItemBoardOut ANTES de
-   ;; TramitacaoBoardOut pro mesmo racional da referencia nomeada acima (campo :itens aninhado).
+   ;; FE Onda B — board de tramitacao (paineis/wire/out/tramitacao). ItemBoardOut e TotalPorEstadoOut ANTES
+   ;; de TramitacaoBoardOut pro mesmo racional da referencia nomeada acima (campos :itens/:totais-por-estado
+   ;; aninhados). TotalPorEstadoOut e' novo na fatia 'truncamento-familia'.
    ["ItemBoardOut" tramitacao-wire/ItemBoardOut]
+   ["TotalPorEstadoOut" tramitacao-wire/TotalPorEstadoOut]
    ["TramitacaoBoardOut" tramitacao-wire/TramitacaoBoardOut]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))

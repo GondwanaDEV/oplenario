@@ -21,7 +21,7 @@
   [resultado]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify repo-paineis/RepoPaineis
-    (o-que-vence [_ _ente-id] resultado)))
+    (o-que-vence [_ _ente-id _opts] resultado)))
 
 (defn- fake-repo-identidade [papeis]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
@@ -52,7 +52,8 @@
 
 (deftest pendencias-200
   (let [ente (random-uuid)
-        r (pt/response-for (service-fn #{"secretario"} (fake-repo-paineis [(pendencia-canonica ente)]))
+        r (pt/response-for (service-fn #{"secretario"}
+                              (fake-repo-paineis {:pendencias [(pendencia-canonica ente)] :pendencias-total 1}))
                            :get "/paineis/pendencias" :headers (com-bearer (token ente (random-uuid))))
         body (ler-json r)]
     (is (= 200 (:status r)) "GET /paineis/pendencias com papel secretario -> 200")
@@ -65,18 +66,35 @@
       (is (= "pendente" (:estado p)))
       (is (not (contains? p :ente-id)) "ente-id (tenant) nao vaza"))))
 
-(deftest pendencias-vazio-200
-  (let [r (pt/response-for (service-fn #{"secretario"} (fake-repo-paineis []))
-                           :get "/paineis/pendencias" :headers (com-bearer (token (random-uuid) (random-uuid))))]
+(deftest pendencias-total-vem-do-repo-verbatim-200
+  ;; :pendencias-total DIVERGE DE PROPOSITO da count da lista (4, nao 1) — mesma disciplina de
+  ;; compliance/painel-http-in-test/painel-canonico: prova que a rota devolve o TOTAL que o Repo mandou,
+  ;; nao um `count` da lista recalculado na borda (o corte silencioso que este total existe para matar
+  ;; seria invisivel se o teste usasse o mesmo numero nos dois).
+  (let [ente (random-uuid)
+        r (pt/response-for (service-fn #{"secretario"}
+                              (fake-repo-paineis {:pendencias [(pendencia-canonica ente)] :pendencias-total 4}))
+                           :get "/paineis/pendencias" :headers (com-bearer (token ente (random-uuid))))
+        body (ler-json r)]
     (is (= 200 (:status r)))
-    (is (= [] (:pendencias (ler-json r))))))
+    (is (= 1 (count (:pendencias body))) "a lista trouxe 1 (recorte da pagina)")
+    (is (= 4 (:pendencias-total body))
+        "o total vem do Repo verbatim, NAO de (count pendencias) — a rota nao finge completude")))
+
+(deftest pendencias-vazio-200
+  (let [r (pt/response-for (service-fn #{"secretario"} (fake-repo-paineis {:pendencias [] :pendencias-total 0}))
+                           :get "/paineis/pendencias" :headers (com-bearer (token (random-uuid) (random-uuid))))
+        body (ler-json r)]
+    (is (= 200 (:status r)))
+    (is (= [] (:pendencias body)))
+    (is (= 0 (:pendencias-total body)))))
 
 (deftest pendencias-sem-papel-403
-  (let [r (pt/response-for (service-fn #{"vereador"} (fake-repo-paineis []))
+  (let [r (pt/response-for (service-fn #{"vereador"} (fake-repo-paineis {:pendencias [] :pendencias-total 0}))
                            :get "/paineis/pendencias" :headers (com-bearer (token (random-uuid) (random-uuid))))]
     (is (= 403 (:status r)) "ator sem papel 'secretario' -> authz grossa nega -> 403")))
 
 (deftest pendencias-sem-token-401
-  (let [r (pt/response-for (service-fn #{"secretario"} (fake-repo-paineis []))
+  (let [r (pt/response-for (service-fn #{"secretario"} (fake-repo-paineis {:pendencias [] :pendencias-total 0}))
                            :get "/paineis/pendencias")]
     (is (= 401 (:status r)) "rota de modulo herda a cadeia de auth: sem token -> 401 (fail-closed)")))

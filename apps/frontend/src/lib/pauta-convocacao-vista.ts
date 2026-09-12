@@ -32,6 +32,20 @@ export function selecionarSessaoAlvo(sessoes: SliSessaoOut[], sessaoIdEscolhida:
   return agendadas[0];
 }
 
+// ---------- fatia "truncamento-familia" sitio (a): aviso de corte de GET /paineis/sli/sessoes ----------
+// O backend ordena o grupo não-encerrado (aberta/suspensa/agendada) por transicionou_em ASC — sob o teto de
+// 200, quem cai fora são as sessões AGENDADAS MAIS NOVAS, exatamente as que esta tela existe para convocar.
+// `sessoesTotal` é o campo AUTORITATIVO do servidor (regra 4): a comparação é sempre contra ele, nunca uma
+// dedução client-side (ex.: comparar duas contagens já buscadas por outro motivo).
+
+export function avisoCorteSessoes(sessoes: SliSessaoOut[], sessoesTotal: number): string | null {
+  if (sessoesTotal <= sessoes.length) return null;
+  return (
+    `A Casa tem ${sessoesTotal} sessões registradas, mas só ${sessoes.length} aparecem aqui. ` +
+    "Pode haver sessões agendadas mais recentes fora desta lista — confira antes de convocar."
+  );
+}
+
 // ---------- rótulos de tipo de sessão (os 5 valores fechados de logic/tipos-sessao no backend;
 // fail-closed — tipo fora do mapa cai no texto cru capitalizado, nunca é escondido) ----------
 

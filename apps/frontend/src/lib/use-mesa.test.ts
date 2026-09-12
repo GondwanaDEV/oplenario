@@ -9,7 +9,7 @@ const mesaFake = {
   sessoes: { emCurso: 0, naoRealizadas: 0, porSituacao: [] },
   presencaResumo: { mediaPercentual: 78, sessoesConsideradas: 10, membrosDaCasa: 43 },
   esicCumprimento: { totalEncerrados: 49, cumpridosNoPrazo: 47, percentual: 96 },
-  relatoresPendentes: { itens: [] },
+  relatoresPendentes: { itens: [], truncado: false },
   lacunas: ["ciencia_convocacao", "assinatura_autografo", "incidente_grant_lgpd"],
 };
 
@@ -23,7 +23,7 @@ describe("useMesa", () => {
         : url.includes("/paineis/tramitacao")
           ? { itens: [] }
           : url.includes("/paineis/pendencias")
-            ? { pendencias: [] }
+            ? { pendencias: [], pendenciasTotal: 0 }
             : { sessoes: [] };
       return { ok: true, json: async () => corpo } as Response;
     }) as unknown as typeof fetch;
@@ -65,7 +65,7 @@ describe("useMesa", () => {
         : url.includes("/paineis/tramitacao")
           ? { itens: [] }
           : url.includes("/paineis/pendencias")
-            ? { pendencias: [] }
+            ? { pendencias: [], pendenciasTotal: 0 }
             : { sessoes: [] };
       return { ok: true, json: async () => corpo } as Response;
     }) as unknown as typeof fetch;
@@ -73,6 +73,68 @@ describe("useMesa", () => {
     const { result } = renderHook(() => useMesa("tok"));
     await waitFor(() => expect(result.current.estado).toBe("pronto"));
     expect(result.current.relatoresPendentes).toBeNull();
+    expect(result.current.relatoresPendentesTruncado).toBeNull();
+  });
+
+  // ---------- frente "truncamento-familia" ----------
+
+  it("relatoresPendentesTruncado (o par autoritativo do card) chega ao estado do hook", async () => {
+    const mesaComCorte = { ...mesaFake, relatoresPendentes: { itens: [], truncado: true } };
+    global.fetch = vi.fn(async (url: string) => {
+      const corpo = url.includes("/paineis/mesa")
+        ? mesaComCorte
+        : url.includes("/paineis/tramitacao")
+          ? { itens: [] }
+          : url.includes("/paineis/pendencias")
+            ? { pendencias: [], pendenciasTotal: 0 }
+            : { sessoes: [] };
+      return { ok: true, json: async () => corpo } as Response;
+    }) as unknown as typeof fetch;
+
+    const { result } = renderHook(() => useMesa("tok"));
+    await waitFor(() => expect(result.current.estado).toBe("pronto"));
+    expect(result.current.relatoresPendentesTruncado).toBe(true);
+  });
+
+  // Fatia "truncamento-familia": GET /paineis/pendencias passa a publicar pendenciasTotal (o par
+  // autoritativo, sem teto) junto da lista — o hook precisa expor os dois, não só a lista.
+  it("pendenciasTotal (o par autoritativo de GET /paineis/pendencias) chega ao estado do hook", async () => {
+    global.fetch = vi.fn(async (url: string) => {
+      const corpo = url.includes("/paineis/mesa")
+        ? mesaFake
+        : url.includes("/paineis/tramitacao")
+          ? { itens: [] }
+          : url.includes("/paineis/pendencias")
+            ? { pendencias: [{ objetoTipo: "pedido_esic", objetoId: "p1", protocolo: "A", venceEm: "2099-01-01", estado: "pendente" }], pendenciasTotal: 4 }
+            : { sessoes: [] };
+      return { ok: true, json: async () => corpo } as Response;
+    }) as unknown as typeof fetch;
+
+    const { result } = renderHook(() => useMesa("tok"));
+    await waitFor(() => expect(result.current.estado).toBe("pronto"));
+    expect(result.current.pendenciasItens).toHaveLength(1);
+    expect(result.current.pendenciasTotal).toBe(4);
+  });
+
+  // Fatia "truncamento-familia" sitio (a): GET /paineis/sli/sessoes passa a publicar sessoesTotal (o par
+  // autoritativo, sem o teto de 200) — o hook precisa expor os dois, não só a lista, e o valor tem que ser
+  // o que o SERVIDOR mandou, não count(sliSessoes).
+  it("sliSessoesTotal (o par autoritativo de GET /paineis/sli/sessoes) chega ao estado do hook, distinto de count(sliSessoes)", async () => {
+    global.fetch = vi.fn(async (url: string) => {
+      const corpo = url.includes("/paineis/mesa")
+        ? mesaFake
+        : url.includes("/paineis/tramitacao")
+          ? { itens: [] }
+          : url.includes("/paineis/pendencias")
+            ? { pendencias: [], pendenciasTotal: 0 }
+            : { sessoes: [{ sessaoId: "s1", estadoAtual: "agendada", situacao: "agendada" }], sessoesTotal: 9 };
+      return { ok: true, json: async () => corpo } as Response;
+    }) as unknown as typeof fetch;
+
+    const { result } = renderHook(() => useMesa("tok"));
+    await waitFor(() => expect(result.current.estado).toBe("pronto"));
+    expect(result.current.sliSessoes).toHaveLength(1);
+    expect(result.current.sliSessoesTotal).toBe(9);
   });
 
   it("sem token -> estado 'erro' já na primeira renderização (sem passar por 'carregando')", () => {
@@ -96,7 +158,7 @@ describe("useMesa", () => {
       sessoes: { "em-curso": 0, "nao-realizadas": 1, "por-situacao": [] },
       "presenca-resumo": { "media-percentual": 78, "sessoes-consideradas": 10, "membros-da-casa": 43 },
       "esic-cumprimento": { "total-encerrados": 49, "cumpridos-no-prazo": 47, percentual: 96 },
-      "relatores-pendentes": { itens: [] },
+      "relatores-pendentes": { itens: [], truncado: false },
       lacunas: ["ciencia_convocacao"],
     };
     global.fetch = vi.fn(async (url: string) => {
@@ -105,7 +167,7 @@ describe("useMesa", () => {
         : url.includes("/paineis/tramitacao")
           ? { itens: [] }
           : url.includes("/paineis/pendencias")
-            ? { pendencias: [] }
+            ? { pendencias: [], pendenciasTotal: 0 }
             : { sessoes: [] };
       return { ok: true, json: async () => corpo } as Response;
     }) as unknown as typeof fetch;

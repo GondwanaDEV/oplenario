@@ -42,11 +42,14 @@
         (http/json-resposta 404 {:erro "ente nao encontrado"})))))
 
 (defn- listar-materias-handler
+  "GET /portal/casa/:ente/materias — resposta agora e' o PAR {:materias :materias-total} (frente
+  'truncamento-familia', sitio (b)): esta rota E' a listagem publica de proposicoes (sem paginacao,
+  sem outra rota — ver materia-vista.ts/escolherDestaque no FE), e o teto de 200 saia sem sinalizar."
   [repo-transparencia resolver-ente-publico]
   (fn [req]
     (let [ente-id (resolver-ente-publico (get-in req [:path-params :ente]))]
       (http/json-resposta 200
-        (adapters-out-materia/->wires (controllers/listar-materias repo-transparencia ente-id))))))
+        (adapters-out-materia/materias->wire (controllers/listar-materias repo-transparencia ente-id))))))
 
 (defn- ficha-materia-handler
   [repo-transparencia resolver-ente-publico]
@@ -59,13 +62,15 @@
 
 (defn- listar-normas-handler
   "GET /portal/casa/:ente/legislacao(?tipo=&ano=&numero=) — acervo as-enacted (F6c Slice 3). Query-params
-  OPCIONAIS coagidos na borda (ano/numero nao-inteiro -> 400); ausentes -> filtro vazio = compat Slice 1."
+  OPCIONAIS coagidos na borda (ano/numero nao-inteiro -> 400); ausentes -> filtro vazio = compat Slice 1.
+  Resposta e' o PAR {:normas :normas-total} (frente 'truncamento-familia', sitio (c)): o teto de 200 saia
+  sem sinalizar."
   [repo-transparencia resolver-ente-publico]
   (fn [req]
     (let [ente-id (resolver-ente-publico (get-in req [:path-params :ente]))
           filtro  (adapters-in/filtro-legislacao (:query-params req))]
       (http/json-resposta 200
-        (adapters-out-norma/->wires (controllers/listar-normas repo-transparencia ente-id filtro))))))
+        (adapters-out-norma/normas->wire (controllers/listar-normas repo-transparencia ente-id filtro))))))
 
 (defn- buscar-norma-handler
   [repo-transparencia resolver-ente-publico]
@@ -140,11 +145,12 @@
 
 (defn- meus-acompanhamentos-handler
   "GET /portal/acompanhamentos (cidadao, SO-auth). Lista as materias que o ATOR segue (escopo pelo seguidor
-  do token — nunca ve as de outro)."
+  do token — nunca ve as de outro). Resposta e' o PAR {:acompanhamentos :acompanhamentos-total} (frente
+  'truncamento-familia', sitio (c)): o teto de 200 saia sem sinalizar."
   [repo-transparencia]
   (fn [req]
     (http/json-resposta 200
-      (adapters-out-acomp/minhas->wire (controllers/meus-acompanhamentos repo-transparencia (:ator req))))))
+      (adapters-out-acomp/meus->wire (controllers/meus-acompanhamentos repo-transparencia (:ator req))))))
 
 (defn rotas
   "Fragmento de rotas do modulo transparencia (table syntax Pedestal). Recebe o `repo-transparencia`

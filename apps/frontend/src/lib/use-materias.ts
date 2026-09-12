@@ -10,12 +10,16 @@
 
 import { useEffect, useState } from "react";
 import { buscarPublico } from "./portal-api";
-import type { MateriaOut } from "./contrato-portal.gen";
+import type { MateriaOut, MateriasOut } from "./contrato-portal.gen";
 
 type Estado = "carregando" | "pronto" | "erro";
 
 export function useMaterias(ente: string) {
   const [itens, setItens] = useState<MateriaOut[] | null>(null);
+  // `materiasTotal` (frente "truncamento-familia" sitio (a)/(b)): o par autoritativo que veio junto de
+  // `itens` na MESMA resposta — nunca `itens.length` (capado em 200 pelo backend). `0` (nao `null`) até o
+  // 1º fetch resolver: `escolherDestaque` só o lê quando `itens` já não é null (ver secao-em-tramitacao.tsx).
+  const [materiasTotal, setMateriasTotal] = useState(0);
   const [estado, setEstado] = useState<Estado>("carregando");
   const [enteAnterior, setEnteAnterior] = useState(ente);
 
@@ -30,19 +34,21 @@ export function useMaterias(ente: string) {
   if (ente !== enteAnterior) {
     setEnteAnterior(ente);
     setItens(null);
+    setMateriasTotal(0);
     setEstado("carregando");
   }
 
   useEffect(() => {
     let vivo = true;
     (async () => {
-      const r = await buscarPublico<MateriaOut[]>(ente, "materias");
+      const r = await buscarPublico<MateriasOut>(ente, "materias");
       if (!vivo) return;
       if (!r) {
         setEstado("erro");
         return;
       }
-      setItens(r);
+      setItens(r.materias);
+      setMateriasTotal(r.materiasTotal);
       setEstado("pronto");
     })();
     return () => {
@@ -50,5 +56,5 @@ export function useMaterias(ente: string) {
     };
   }, [ente]);
 
-  return { itens, estado };
+  return { itens, materiasTotal, estado };
 }

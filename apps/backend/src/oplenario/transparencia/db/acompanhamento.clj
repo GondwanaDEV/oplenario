@@ -46,12 +46,24 @@
                           [:= :seguidor_identidade_id seguidor-identidade-id] [:= :estado [:inline "ativo"]]]
                   :returning [:id]}))))
 
+(defn- where-seguidores-ativos
+  "O predicado de 'seguidores ativos de uma materia' — FONTE UNICA para `seguidores-ativos` (a lista, com
+  teto) e `contar-seguidores-ativos` (o total, sem teto) — regra 3 da frente 'truncamento-familia', sitio
+  (b). As duas SEM alias (nenhuma faz JOIN), ao contrario de `where-meus` — mesmo texto de predicado nos
+  dois lugares e' o que garante que a contagem enxerga exatamente quem a lista enxergaria sem o LIMIT."
+  [ente-id proposicao-id]
+  [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id] [:= :estado [:inline "ativo"]]])
+
 (defn seguidores-ativos
   "F7 E2 — a query do FAN-OUT: os `seguidor_identidade_id` que seguem ATIVAMENTE a materia (para notificar numa
   transicao). Usa o prefixo (ente_id, proposicao_id) do UNIQUE (ente_id, proposicao_id, seguidor) — sem indice
   adicional (nota da mig 0045). `[:inline \"ativo\"]` = consent-gating por construcao (so' quem consente hoje).
   Devolve so' os UUIDs (paineis nunca ve 'quem-segue-o-que' — o evento e' 1 por destinatario ja' resolvido).
-  `teto` limita o fan-out por transicao (anti unbounded — uma materia MUITO seguida nao explode a tx do relay)."
+  `teto` limita o fan-out por transicao (anti unbounded — uma materia MUITO seguida nao explode a tx do relay).
+  O par `contar-seguidores-ativos` (MESMO predicado, `where-seguidores-ativos`) e' o que
+  `fan-out-notificacao!` usa para LOGAR quando este teto de fato cortou alguem (frente
+  'truncamento-familia', sitio (b) — aqui nao ha campo `-total` publicavel: isto e' um JOB, nao uma
+  listagem, e o cliente nunca ve este numero)."
   [tx ente-id proposicao-id teto]
   {:pre [(some? ente-id) (some? proposicao-id)]}
   (mapv :seguidor-identidade-id
@@ -59,28 +71,76 @@
          (jdbc/execute! tx
            (sql/format {:select [[:seguidor_identidade_id :seguidor-identidade-id]]
                         :from :transparencia.acompanhamento
-                        :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]
-                                [:= :estado [:inline "ativo"]]]
+                        :where (where-seguidores-ativos ente-id proposicao-id)
                         :order-by [:seguidor_identidade_id]
                         :limit teto})))))
 
+(defn contar-seguidores-ativos
+  "Quantos seguidores ATIVOS uma materia tem — companheiro de `seguidores-ativos`, MESMO predicado
+  (`where-seguidores-ativos`, regra 3). Usado SO' por `fan-out-notificacao!` para decidir se loga o corte
+  do teto (nunca para decidir quem e' notificado, e nunca publicado ao cliente — este e' um JOB, a forma
+  `-total` da familia e' para LISTAGENS que um cliente le)."
+  [tx ente-id proposicao-id]
+  (:contagem
+   (comum/linha->kebab
+    (jdbc/execute-one! tx
+      (sql/format {:select [[[:count :*] :contagem]] :from :transparencia.acompanhamento
+                   :where (where-seguidores-ativos ente-id proposicao-id)})))))
+
+(defn- where-meus
+  "O predicado de 'minhas materias acompanhadas' — FONTE UNICA para `meus-da-materia` e `contar-meus`
+  (regra 3 da frente 'truncamento-familia'). Alias `:a` SEMPRE, mesmo na contagem (que nao faz JOIN): so'
+  assim as duas queries usam o MESMO texto de predicado — a prova de identidade e' textual, nao so' de
+  resultado."
+  [ente-id seguidor-identidade-id]
+  [:and [:= :a.ente_id ente-id] [:= :a.seguidor_identidade_id seguidor-identidade-id]
+   [:= :a.estado [:inline "ativo"]]])
+
 (defn meus-da-materia
   "'minhas materias acompanhadas' (por seguidor autenticado): SO' as subscricoes 'ativas' do `seguidor`, com o
-  cabecalho da materia (JOIN same-schema), mais recentes primeiro, com teto. `[:inline \"ativo\"]` p/ o
-  planner usar o indice parcial idx_acompanhamento_seguidor. INNER JOIN: a listagem so' mostra follows cuja
-  materia existe no read-model (o guard do follow ja garante isso; se uma projecao sumir, esconder o item e'
-  melhor que uma linha de campos nulos inuteis ao cidadao — o registro do acompanhamento continua no banco)."
+  cabecalho da materia (LEFT JOIN same-schema), mais recentes primeiro, com teto (`teto-listagem`; o par
+  `contar-meus` diz o total real — frente 'truncamento-familia', sitio (c)). `[:inline \"ativo\"]` p/ o
+  planner usar o indice parcial idx_acompanhamento_seguidor.
+
+  LEFT JOIN, NAO INNER (achado 'outra familia' da mesma frente, corrige a decisao original desta docstring):
+  `transparencia.materia` e' uma PROJECAO ASSINCRONA sem FK (mig 0045 e' explicita: 'nao ha FK a
+  transparencia.materia... a existencia e' checada no controller, nao constraint'). Com INNER JOIN, um
+  follow cujo relay ainda nao drenou (ou cuja projecao sumiu) desaparecia de 'minhas' SEM aviso: o cidadao
+  lia 'sigo 3 materias' com 5 linhas ATIVAS no banco — a mesma mentira da familia, so' que sem LIMIT nenhum
+  produzindo o corte. `:indisponivel` (computado aqui, pos-query: `:tipo` nulo so' acontece quando o LEFT
+  JOIN nao achou par) e' o sinal que a borda usa para NUNCA fingir um cabecalho que nao existe — a subscricao
+  (VERDADE de dominio) sempre aparece; o cabecalho pode faltar.
+
+  ARIDADE de 4: `limite` INJETAVEL (achado IMPORTANTE da revisao adversarial — mesmo racional de
+  listar-em-tramitacao/pendencia) — SO' para o teste provar 'o total nao capa' sem pagar 201 linhas; o
+  caminho de PRODUCAO (repositorio.clj) usa a aridade de 3 e cai no default `teto-listagem`."
+  ([tx ente-id seguidor-identidade-id]
+   (meus-da-materia tx ente-id seguidor-identidade-id teto-listagem))
+  ([tx ente-id seguidor-identidade-id limite]
+   {:pre [(some? ente-id) (some? seguidor-identidade-id) (pos-int? limite)]}
+   (mapv #(assoc % :indisponivel (nil? (:tipo %)))
+     (comum/linhas->kebab
+      (jdbc/execute! tx
+        (sql/format {:select [[:a.proposicao_id :proposicao-id] [:a.criado_em :seguido-em]
+                              [:m.tipo :tipo] [:m.ano :ano] [:m.sequencial :sequencial]
+                              [:m.urn_lex :urn-lex] [:m.ementa :ementa] [:m.estado :estado]]
+                     :from [[:transparencia.acompanhamento :a]]
+                     :left-join [[:transparencia.materia :m]
+                                 [:and [:= :a.ente_id :m.ente_id] [:= :a.proposicao_id :m.proposicao_id]]]
+                     :where (where-meus ente-id seguidor-identidade-id)
+                     :order-by [[:a.criado_em :desc]]
+                     :limit (min limite teto-listagem)}))))))
+
+(defn contar-meus
+  "Quantos acompanhamentos ATIVOS o seguidor tem — SEM teto e SEM JOIN (frente 'truncamento-familia',
+  sitios (c) e (d)): conta a tabela DONA (`transparencia.acompanhamento`, VERDADE de dominio) direto, nao o
+  resultado do LEFT JOIN de `meus-da-materia` — a contagem nunca deve depender de uma projecao re-projetavel
+  (mesmo racional do porque a tabela em si nao leva FK a `materia`). MESMO predicado (`where-meus`) da
+  lista: e' o mesmo conjunto de linhas, so' sem o LIMIT e sem o cabecalho."
   [tx ente-id seguidor-identidade-id]
   {:pre [(some? ente-id) (some? seguidor-identidade-id)]}
-  (comum/linhas->kebab
-   (jdbc/execute! tx
-     (sql/format {:select [[:a.proposicao_id :proposicao-id] [:a.criado_em :seguido-em]
-                           [:m.tipo :tipo] [:m.ano :ano] [:m.sequencial :sequencial]
-                           [:m.urn_lex :urn-lex] [:m.ementa :ementa] [:m.estado :estado]]
-                  :from [[:transparencia.acompanhamento :a]]
-                  :join [[:transparencia.materia :m]
-                         [:and [:= :a.ente_id :m.ente_id] [:= :a.proposicao_id :m.proposicao_id]]]
-                  :where [:and [:= :a.ente_id ente-id] [:= :a.seguidor_identidade_id seguidor-identidade-id]
-                          [:= :a.estado [:inline "ativo"]]]
-                  :order-by [[:a.criado_em :desc]]
-                  :limit teto-listagem}))))
+  (:contagem
+   (comum/linha->kebab
+    (jdbc/execute-one! tx
+      (sql/format {:select [[[:count :*] :contagem]] :from [[:transparencia.acompanhamento :a]]
+                   :where (where-meus ente-id seguidor-identidade-id)})))))
