@@ -40,6 +40,7 @@
             [oplenario.paineis.db.sli-sessao :as db-sli-sessao]
             [oplenario.paineis.db.tramitacao :as db-tramitacao])
   (:import (java.time Instant LocalDate)
+           (java.time.format DateTimeParseException)
            (java.util UUID)))
 
 (set! *warn-on-reflection* true)
@@ -181,6 +182,52 @@
     "notificacao.requisitada"
     (registrar-intent-de-email! tx ente-id payload)))
 
+(defn- payload-malformado?
+  "Classifica `t` como falha de FORMA DO PAYLOAD (o dado do evento nao bate o contrato — LOGAR :warn, e'
+  rotina: dado externo malformado E' esperado) versus QUALQUER OUTRA coisa (LOGAR :error nomeando a
+  PERDA — frente 'relay-observavel'). NAO decide catch-vs-propagar (paineis continua tolerando Throwable
+  por INTEIRO — ver docstring de `projetar-evento!`); so' decide o NIVEL do log, p/ que uma falha
+  TRANSITORIA de infra (conexao caida, timeout, deadlock) pare de ficar INDISTINGUIVEL no log de um
+  payload malformado de rotina.
+
+  MEDIDO (nao copiado de transparencia) contra os DOIS caminhos deste ns (`projetar-evento!`/`despachar!`
+  e `projetar-inbox!`): as `:pre` de db/pendencia, db/tramitacao, db/sli-sessao, db/notificacao-entrega e
+  db/notificacao-caixa sao TODAS `(some? x)` — nunca uma checagem de TIPO — entao `AssertionError` e' a
+  UNICA classe que elas produzem (ao contrario de transparencia, que tem `:pre` de tipo e por isso lista
+  `ClassCastException`; aqui nenhum `:pre` medido lanca essa classe). `despachar!` chama
+  `UUID/fromString`/`LocalDate/parse`/`Instant/parse` DIRETO sobre o payload (protocolar!,
+  transicionar-tramitacao!, os ramos 'prazo.vencido'/'prazo.prorrogado', 'sessao.transicionou'/'agendada',
+  registrar-intent-de-email!) — dai as outras tres classes.
+   - AssertionError            — os `:pre` `(some? ...)` acima.
+   - IllegalArgumentException  — `UUID/fromString` com string mal-formada.
+   - NullPointerException      — `UUID/fromString` (ou `LocalDate/parse`/`Instant/parse`) sobre um campo
+                                 AUSENTE do payload (`(:x payload)` devolve nil).
+   - DateTimeParseException    — `LocalDate/parse`/`Instant/parse` com string mal-formada (NAO e'
+                                 IllegalArgumentException — `java.time.format.DateTimeParseException`
+                                 extends `DateTimeException` extends `RuntimeException`, uma hierarquia
+                                 PROPRIA; um whitelist copiado de transparencia sem medir este ns
+                                 classificaria toda data invalida como 'falha de infra' — o inverso do
+                                 que a fatia pede)."
+  [^Throwable t]
+  (boolean
+   (or (instance? AssertionError t)
+       (instance? IllegalArgumentException t)
+       (instance? NullPointerException t)
+       (instance? DateTimeParseException t))))
+
+(defn- logar-evento-tolerado!
+  "O log da fronteira de tolerancia (frente 'relay-observavel'): DUAS classes, nunca uma so' (a mensagem
+  antiga 'payload malformado ou falha de X' misturava as duas causas — uma falha de INFRA perdida em
+  silencio ficava indistinguivel de dado externo ruim). `:id` (a PK de shared.outbox, kernel/outbox/
+  row->evento) SEMPRE no log — e' o que torna a linha achavel sem um SELECT de adivinhacao."
+  [e caminho id tipo ente-id]
+  (if (payload-malformado? e)
+    (log/warn e (str "paineis: " caminho " — payload malformado, evento descartado (dado externo, rotina)")
+              {:id id :tipo tipo :ente-id ente-id})
+    (log/error e (str "paineis: " caminho " — evento NAO projetado e NAO sera' reprocessado (perda; "
+                       "ver carry 'relay-observavel/dead-letter' em docs/16-ledger-prontidao.md)")
+               {:id id :tipo tipo :ente-id ente-id})))
+
 (defn projetar-evento!
   "Dispatch por tipo de evento -> a projecao de dominio, DENTRO da `tx` corrente (a do relay). Seta o GUC de
   tenant (sem trocar de role) e escreve em paineis.pendencia ou paineis.tramitacao. `payload` ja chegou com
@@ -189,10 +236,11 @@
   POINT REAL do consumer (§22.10 diplomat/consumers) — NUNCA lanca (review security HIGH — ver docstring do
   ns): envolve `despachar!` inteiro num try/catch, entao QUALQUER excecao de `despachar!` e' tolerada aqui
   (log + nil) — payload malformado (UUID/LocalDate invalidos) OU um tipo sem branch de dispatch (drift
-  bus<->case), sem distincao (ambos sao igualmente inaceitaveis dentro do relay compartilhado em producao).
-  A distincao entre as duas causas so' importa p/ o TESTE do drift-guard, que por isso chama `despachar!`
-  DIRETO (nao este fn) — assim o drift ainda e' pego RUIDOSAMENTE em CI, antes de qualquer deploy chegar a
-  rodar este caminho tolerante contra trafego real.
+  bus<->case), sem distincao NO CATCH (ambos sao igualmente inaceitaveis dentro do relay compartilhado em
+  producao; NAO estreitar — ver docstring de `payload-malformado?` p/ a distincao que so' afeta o NIVEL do
+  log). A distincao entre 'drift de dispatch' e 'payload malformado em runtime' so' importa p/ o TESTE do
+  drift-guard, que por isso chama `despachar!` DIRETO (nao este fn) — assim o drift ainda e' pego
+  RUIDOSAMENTE em CI, antes de qualquer deploy chegar a rodar este caminho tolerante contra trafego real.
 
   `set-tenant!` DENTRO do try (frente 'relay-observavel' — buraco real: `shared.outbox.ente_id` e'
   NULLABLE, e `set-tenant!` LANCA em ente-id nil; fora do try, um evento supratenant/malformado envenenava
@@ -203,17 +251,15 @@
   db/tramitacao.clj lancam `AssertionError` — um `Error`, IRMAO de `Exception` sob `Throwable`, NAO capturado
   por `(catch Exception ...)`. Um `:pre` falhando (payload com chave ausente/nil que uma validacao Malli
   upstream deveria ter barrado, mas §22.10 nao garante contrato compartilhado entre modulos) escaparia deste
-  catch e envenenaria o relay exatamente como o caso que este ns existe p/ evitar. CARRY: o mesmo padrao de
-  `:pre` (sem guarda de AssertionError) tambem existe em `transparencia.components.repositorio/
-  projetar-evento!` — que ALEM DISSO nao tem NENHUM try/catch (nem de Exception): um alvo maior p/ correcao
-  futura, fora do escopo deste modulo."
-  [tx {:keys [tipo ente-id payload]}]
+  catch e envenenaria o relay exatamente como o caso que este ns existe p/ evitar. CARRY (retry limitado +
+  dead-letter — nem engolir tudo nem propagar e' o certo p/ falha de INFRA): docs/16-ledger-prontidao.md,
+  secao 'relay-observavel'."
+  [tx {:keys [id tipo ente-id payload]}]
   (try
     (tenancy/set-tenant! tx ente-id)
     (despachar! tx ente-id tipo payload)
     (catch Throwable e
-      (log/warn e "paineis: payload malformado ou falha de projecao — evento tolerado, nunca propaga p/ o relay compartilhado"
-                {:tipo tipo :ente-id ente-id})
+      (logar-evento-tolerado! e "projetar-evento!" id tipo ente-id)
       nil)))
 
 (def ^:private canal-in-app
@@ -229,10 +275,14 @@
   NUNCA lanca (o relay e' COMPARTILHADO por todos os modulos — um throw aqui trava a fila de todo mundo):
   try/catch Throwable envolve TUDO, INCLUSIVE `set-tenant!` (que lanca em ente-id nil, e a coluna
   shared.outbox.ente_id e' NULLABLE). `catch Throwable`, nao Exception: as `:pre` de db/ lancam
-  AssertionError, que e' Error. Payload malformado (objeto-id nao-UUID) -> log + nil, evento drenado.
+  AssertionError, que e' Error. Payload malformado (objeto-id nao-UUID) -> log :warn + nil, evento
+  drenado; qualquer OUTRA excecao -> log :error nomeando a perda (`payload-malformado?`/
+  `logar-evento-tolerado!` acima — MESMO classificador de `projetar-evento!`, medido contra este ns
+  inteiro, nao so' este handler). CARRY (retry limitado + dead-letter): docs/16-ledger-prontidao.md,
+  secao 'relay-observavel'.
 
   Canal != in_app -> no-op silencioso (o evento e' de outro projetor, nao e' erro)."
-  [tx {:keys [ente-id payload]}]
+  [tx {:keys [id ente-id payload]}]
   (try
     (tenancy/set-tenant! tx ente-id)
     (when (= canal-in-app (:canal payload))
@@ -247,8 +297,7 @@
                              :objeto-id (UUID/fromString (:objeto-id payload))
                              :idempotency-key (:idempotency-key payload)}))
     (catch Throwable e
-      (log/warn e "paineis: projecao da inbox tolerada (payload malformado ou falha de escrita)"
-                {:ente-id ente-id})
+      (logar-evento-tolerado! e "projetar-inbox!" id "notificacao.requisitada" ente-id)
       nil)))
 
 (defprotocol RepoPaineis

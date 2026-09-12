@@ -6,13 +6,16 @@
   com o relay REAL, alem dos criterios de aceitacao 1 (uma notificacao, idempotente) e 2 (autor sem
   identidade -> nada, e sem erro)."
   (:require [clojure.test :refer [deftest is use-fixtures]]
+            [clojure.tools.logging.test :refer [logged? with-log]]
             [com.stuartsierra.component :as component]
             [next.jdbc :as jdbc]
             [oplenario.config :as config]
             [oplenario.kernel.components.datasource :as datasource]
+            [oplenario.kernel.eventos :as eventos]
             [oplenario.kernel.outbox :as outbox]
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.legislativo.components.repositorio :as legislativo-repo]
+            [oplenario.legislativo.db.proposicao :as db-proposicao]
             [oplenario.legislativo.diplomat.consumers :as legislativo-consumers]
             [oplenario.migracao :as migracao]
             [oplenario.paineis.diplomat.consumers :as paineis-consumers])
@@ -156,3 +159,59 @@
     (is (empty? (caixa ente))
         "autor_tipo != 'vereador' -> nao ha' dono nominal, nao notifica (mesmo com :autor-id presente e um
          resolvedor que resolve QUALQUER id — o UNICO gate e' autor_tipo)")))
+
+;; ---------- frente 'relay-observavel': as duas classes de log ----------
+
+(defn- outbox-id-do-tipo [ente tipo]
+  (:outbox/id (jdbc/execute-one! *ds*
+                ["SELECT id FROM shared.outbox WHERE ente_id = ? AND tipo = ?" ente tipo])))
+
+(deftest evento-malformado-loga-warn-com-o-id-da-linha
+  ;; Envelope CRU de `eventos/evento` (sem passar pela validacao Malli do construtor real,
+  ;; `events.notificacao/publicada` — o mesmo truque de `transparencia.relay-tolerante-test/gravar!`):
+  ;; e' o unico jeito de por um `:proposicao-id` nao-UUID no outbox, o formato que so' um teste ou um
+  ;; redrive de payload legado escreveria.
+  (let [ente (random-uuid)
+        ev (eventos/evento "norma.publicada" ente
+             {:proposicao-id "nao-e-uuid" :norma-id (str (random-uuid))})]
+    (jdbc/with-transaction [tx *ds*] (eventos/emitir! (outbox/bus) tx ev))
+    (let [oid (outbox-id-do-tipo ente "norma.publicada")]
+      (with-log
+        (drenar! (resolver-fixo {}))
+        ;; `logged?` de 3-aridade compara o throwable contra `nil` por IGUALDADE — sempre falso quando o
+        ;; log carrega uma excecao de verdade. A 4-aridade com a CLASSE medida
+        ;; (IllegalArgumentException — UUID/fromString com string mal-formada) e' o matcher certo, mesmo
+        ;; idioma do precedente `transparencia.relay-tolerante-test`.
+        (is (logged? 'oplenario.legislativo.components.repositorio :warn
+                     IllegalArgumentException #"payload malformado")
+            "UUID/fromString invalido (:proposicao-id) e' classificado como FORMA DO PAYLOAD -> :warn")
+        (is (logged? 'oplenario.legislativo.components.repositorio :warn
+                     IllegalArgumentException (re-pattern (str oid)))
+            "o :id da linha do outbox aparece no log — achavel sem SELECT de adivinhacao")
+        (is (not (logged? 'oplenario.legislativo.components.repositorio :error Throwable #"NAO projetado"))
+            "payload malformado NUNCA loga como perda de infra")))))
+
+(deftest falha-de-infra-loga-error-nomeando-a-perda-com-o-id-da-linha
+  ;; simula falha de INFRA (nao forma do dado) na LEITURA same-schema (`autor-vereador-da-proposicao`,
+  ;; fn PLANA de nivel superior — nao metodo de protocolo num defrecord com impl INLINE; with-redefs
+  ;; funciona aqui sem cair na armadilha do fast-path de despacho de protocolo, medida na frente
+  ;; anterior). Mesma classe (`java.sql.SQLException`) do contraste de
+  ;; `transparencia.relay-tolerante-test/erro-de-infra-propaga-em-vez-de-ser-descartado` — so' que AQUI
+  ;; o guard TOLERA (legislativo nunca lanca, por desenho); so' o NIVEL do log muda.
+  (let [ente (random-uuid) vereador (random-uuid) identidade (random-uuid)]
+    (publicar-norma-de-autor! ente vereador)
+    (let [oid (outbox-id-do-tipo ente "norma.publicada")]
+      (with-redefs [db-proposicao/autor-vereador-da-proposicao
+                    (fn [& _] (throw (java.sql.SQLException. "conexao caiu (simulado)")))]
+        (with-log
+          (is (nil? (try (drenar! (resolver-fixo {vereador identidade})) nil (catch Throwable e e)))
+              "a falha de infra e' TOLERADA igual — o catch continua Throwable inteiro (NAO estreitar)")
+          (is (logged? 'oplenario.legislativo.components.repositorio :error
+                       java.sql.SQLException #"NAO projetado e NAO sera' reprocessado")
+              "SQLException nao reconhecida -> :error nomeando a PERDA, nao um :warn de rotina")
+          (is (logged? 'oplenario.legislativo.components.repositorio :error
+                       java.sql.SQLException (re-pattern (str oid)))
+              "o :id da linha do outbox aparece no log — achavel sem SELECT de adivinhacao")
+          (is (not (logged? 'oplenario.legislativo.components.repositorio :warn Throwable #"payload malformado"))
+              "falha de infra NUNCA loga como rotina de dado malformado"))))
+    (is (empty? (caixa ente)) "sem a leitura same-schema, nao ha' dono a notificar — inbox vazia")))

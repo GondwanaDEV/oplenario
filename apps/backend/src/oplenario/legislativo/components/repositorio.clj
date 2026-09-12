@@ -998,6 +998,30 @@
 
 ;; ---------- Onda E fatia 1 — 2o consumidor do proprio `norma.publicada`: notifica o autor vereador ----------
 
+(defn- payload-malformado?
+  "Classifica `t` como falha de FORMA DO PAYLOAD (LOGAR :warn — dado externo malformado, rotina) versus
+  QUALQUER OUTRA coisa (LOGAR :error, nomeando a PERDA — frente 'relay-observavel'). NAO decide
+  catch-vs-propagar (este consumer continua tolerando Throwable por INTEIRO — ver docstring de
+  `notificar-autor-da-norma!`); so' decide o NIVEL do log.
+
+  MEDIDO (nao copiado de paineis/transparencia) contra ESTE caminho: `UUID/fromString` sobre
+  `:proposicao-id`/`:norma-id` do payload -> IllegalArgumentException (string mal-formada) ou
+  NullPointerException (campo ausente) — as duas leituras a jusante
+  (db/proposicao/autor-vereador-da-proposicao, o resolvedor injetado) sao SELECT/acesso de chave puro,
+  sem `:pre` proprio, nunca lancam por si so'. O caso PROPRIO deste sitio (ausente em paineis) e' a
+  VALIDACAO MALLI do construtor do evento (`events.notificacao/requisitada`, chamada por
+  `producers/emitir-notificacao-requisitada!`): payload fora do schema RequisitadaPayload lanca `ex-info`
+  com `{:erro :payload-invalido}` — marcador em ex-data, NUNCA casamento de mensagem. `AssertionError`
+  entra por simetria estrutural com `kernel.eventos/evento` (`:pre` de tipo/ente-id/payload), a mesma
+  fonte de AssertionError que paineis/transparencia listam, ainda que o caminho vivo aqui NUNCA a dispare
+  (tipo e' literal, payload e' sempre mapa construido por este proprio ns)."
+  [^Throwable t]
+  (boolean
+   (or (instance? AssertionError t)
+       (instance? IllegalArgumentException t)
+       (instance? NullPointerException t)
+       (= :payload-invalido (:erro (ex-data t))))))
+
 (defn notificar-autor-da-norma!
   "FABRICA do handler do 2o consumidor de `legislativo` (Onda E fatia 1): recebe o resolvedor injetado
   pelo HOST e devolve `(fn [tx evento])` registravel no bus.
@@ -1016,9 +1040,15 @@
   NUNCA lanca (o relay e' COMPARTILHADO — mesmo racional de transparencia/fan-out-notificacao!): try/catch
   Throwable envolve TUDO, inclusive `set-tenant!` (que lanca em ente-id nil, e shared.outbox.ente_id e'
   NULLABLE) e a validacao Malli do construtor do evento. `Throwable`, nao `Exception`: as `:pre` de db/
-  lancam AssertionError."
+  lancam AssertionError.
+
+  LOG (frente 'relay-observavel'): `payload-malformado?` acima classifica so' o NIVEL — malformado ->
+  :warn (rotina); qualquer outra coisa -> :error nomeando que o evento NAO foi projetado e NAO sera'
+  reprocessado (o catch continua Throwable inteiro, NAO estreitar). `:id` (PK de shared.outbox) sempre no
+  log. CARRY (retry limitado + dead-letter — nem engolir tudo nem propagar e' o certo p/ falha de INFRA):
+  docs/16-ledger-prontidao.md, secao 'relay-observavel'."
   [resolver-identidade-do-vereador]
-  (fn [tx {:keys [ente-id payload]}]
+  (fn [tx {:keys [id ente-id payload]}]
     (try
       (tenancy/set-tenant! tx ente-id)
       (let [pid (UUID/fromString (:proposicao-id payload))
@@ -1043,6 +1073,11 @@
           (log/debug "legislativo: norma publicada de autor nao-vereador — sem dono nominal a notificar"
                      {:ente-id ente-id :proposicao-id pid})))
       (catch Throwable e
-        (log/warn e "legislativo: notificacao do autor tolerada (payload malformado ou falha de leitura)"
-                  {:ente-id ente-id})
+        (if (payload-malformado? e)
+          (log/warn e "legislativo: notificacao do autor — payload malformado, evento descartado (dado externo, rotina)"
+                    {:id id :ente-id ente-id})
+          (log/error e (str "legislativo: notificacao do autor — evento NAO projetado e NAO sera' "
+                             "reprocessado (perda; ver carry 'relay-observavel/dead-letter' em "
+                             "docs/16-ledger-prontidao.md)")
+                     {:id id :ente-id ente-id}))
         nil))))
