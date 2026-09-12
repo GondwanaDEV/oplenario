@@ -30,6 +30,7 @@
   (:require [casa]
             [clojure.test :refer [deftest is testing]]
             [oplenario.demo.casa-test :refer [with-sistema]]
+            [oplenario.transparencia.components.repositorio :as transparencia-repo]
             [participacao :as participacao-demo]))
 
 (deftest participacao-tem-exemplar-de-cada-estado
@@ -63,14 +64,38 @@
   ;; criava acompanhamento nenhum. `transparencia.acompanhamento` e' TABELA DE DOMINIO (a coluna do dono
   ;; e' `seguidor_identidade_id`, NAO `identidade_id` — o briefing original errou essa coluna).
   ;;
+  ;; CORRIGIDO (Daouda, 12/09/2026, contra uma Casa recem-semeada e limpa): a primeira versao lia
+  ;; `:acompanhamentos` do retorno de `participacao-demo/semear!` sem esperar a projecao — `meus-
+  ;; acompanhamentos` (RepoTransparencia) faz um LEFT JOIN contra `transparencia.materia`, que e'
+  ;; MATERIALIZADA pelo relay assincrono do `sistema` bootado por `with-sistema` (o MESMO relay que
+  ;; `demo/semear-tudo.sh` espera com a sua propria 'barreira de projecao' por poll, no fim do script —
+  ;; reusada aqui em forma Clojure, nao inventada: mesmo orcamento/idioma de `outbox_test.clj`/
+  ;; `relay-component-drena-em-background`, poll bounded + Thread/sleep, nunca sleep fixo). Sem a
+  ;; barreira, o teste e' uma CORRIDA: se o relay ainda nao rodou quando a asserção le, a ementa chega
+  ;; `nil` (o caminho `:indisponivel true` do LEFT JOIN sem par — o CONSERTO deliberado da frente
+  ;; "truncamento-familia", nao um bug) e o teste reprova por acaso, nao por defeito.
+  ;;
   ;; As 3 ementas abaixo sao as que `proposicoes-para-acompanhar` de fato resolve (verificado contra a
   ;; Casa semeada de verdade, nao suposto): o PRIMEIRO item de cada filtro de estado, na MESMA ordenacao
   ;; que a rota real usa (`atualizado_em DESC, id ASC`) — NAO a ordem de insercao do acervo. Testar por
-  ;; EMENTA (nao so' contar) e' o que reprova se o conteudo mudar sem a contagem mudar.
+  ;; EMENTA (nao so' contar) e' o que reprova se o conteudo mudar sem a contagem mudar; o QUE muda com a
+  ;; corrida e' so' QUANDO a leitura acontece, nunca o conteudo esperado.
   (with-sistema [s]
-    (let [{:keys [ente]} (casa/semear! s)
+    (let [{:keys [ente identidades]} (casa/semear! s)
+          cidadao-id (:cidadao identidades)
           r (participacao-demo/semear! s ente)
-          {:keys [acompanhamentos acompanhamentos-total]} (:acompanhamentos r)]
+          repo-transparencia (:repo-transparencia s)
+          buscar #(transparencia-repo/meus-acompanhamentos repo-transparencia ente cidadao-id)
+          projetado? (fn [{:keys [acompanhamentos]}] (every? some? (map :ementa acompanhamentos)))
+          ;; poll bounded (60 x 50ms = 3s, mesmo orcamento de outbox_test.clj) — nunca sleep fixo flaky.
+          apos-projecao (loop [i 0 lido (:acompanhamentos r)]
+                          (if (or (projetado? lido) (>= i 60))
+                            lido
+                            (do (Thread/sleep 50) (recur (inc i) (buscar)))))
+          {:keys [acompanhamentos acompanhamentos-total]} apos-projecao]
+      (testing "a projecao assincrona (relay) materializou transparencia.materia pras 3 proposicoes seguidas"
+        (is (projetado? apos-projecao)
+            "ementa nil apos 3s de poll = o caminho :indisponivel do LEFT JOIN (ver docstring) — o container 'app'/o relay do sistema bootado esta mesmo rodando?"))
       (testing "3 acompanhamentos ATIVOS — nao 0"
         (is (= 3 acompanhamentos-total))
         (is (= 3 (count acompanhamentos))))
