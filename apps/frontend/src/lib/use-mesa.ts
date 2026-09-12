@@ -69,6 +69,9 @@ export function useMesa(token: string | null) {
   const [pendenciasItens, setPendenciasItens] = useState<PendenciaOut[] | null>(null);
   const [pendenciasTotal, setPendenciasTotal] = useState<number | null>(null);
   const [sliSessoes, setSliSessoes] = useState<SliSessaoOut[] | null>(null);
+  // Fatia "truncamento-familia": o total REAL de sessões vistas (par irmão autoritativo de sliSessoes,
+  // mesmo padrão de pendenciasTotal acima).
+  const [sliSessoesTotal, setSliSessoesTotal] = useState<number | null>(null);
   const [relatoresPendentes, setRelatoresPendentes] = useState<RelatorPendenteOut[] | null>(null);
   // Fatia "truncamento-familia": `truncado` AUTORITATIVO do servidor (mesmo par relatoresPendentes/
   // relatoresPendentesTruncado que pendenciasItens/pendenciasTotal já usa acima) — `null` quando o card
@@ -98,13 +101,14 @@ export function useMesa(token: string | null) {
       const [tramitacao, pendencias, sli] = await Promise.all([
         buscarOuNull<{ itens: ItemBoardOut[] }>("/api/paineis/tramitacao", token),
         buscarOuNull<OQueVenceOut>("/api/paineis/pendencias", token),
-        buscarOuNull<{ sessoes: SliSessaoOut[] }>("/api/paineis/sli/sessoes", token),
+        buscarOuNull<{ sessoes: SliSessaoOut[]; sessoesTotal: number }>("/api/paineis/sli/sessoes", token),
       ]);
       if (!vivo) return;
       setTramitacaoItens(tramitacao ? tramitacao.itens : null);
       setPendenciasItens(pendencias ? pendencias.pendencias : null);
       setPendenciasTotal(pendencias ? pendencias.pendenciasTotal : null);
       setSliSessoes(sli ? sli.sessoes : null);
+      setSliSessoesTotal(sli ? sli.sessoesTotal : null);
       setEstado("pronto");
     })();
     return () => {
@@ -120,13 +124,14 @@ export function useMesa(token: string | null) {
       pendenciasItens: null,
       pendenciasTotal: null,
       sliSessoes: null,
+      sliSessoesTotal: null,
       relatoresPendentes: null,
       relatoresPendentesTruncado: null,
       estado: "erro" as Estado,
     };
   }
   return {
-    mesa, tramitacaoItens, pendenciasItens, pendenciasTotal, sliSessoes,
+    mesa, tramitacaoItens, pendenciasItens, pendenciasTotal, sliSessoes, sliSessoesTotal,
     relatoresPendentes, relatoresPendentesTruncado, estado,
   };
 }

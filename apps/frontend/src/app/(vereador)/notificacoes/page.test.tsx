@@ -257,10 +257,28 @@ describe("PaginaNotificacoes · a lista tem teto, o badge não", () => {
   });
 
   it("badge e lista concordando -> nenhuma linha de corte (não se avisa do que não houve)", async () => {
-    servindo({ notificacoes: [item("a", "norma_publicada")], "nao-lidas": 1 });
+    servindo({ notificacoes: [item("a", "norma_publicada")], "nao-lidas": 1, "notificacoes-total": 1 });
     render(<PaginaNotificacoes />);
     await waitFor(() => expect(screen.getByText("Assunto a")).toBeDefined());
     expect(screen.getByLabelText("1 não lida")).toBeDefined();
     expect(screen.queryByText(/só os avisos mais recentes/)).toBeNull();
+    expect(screen.queryByText(/Esta lista mostra só as mais recentes/)).toBeNull();
+  });
+
+  // O falso honesto (achado da fatia "truncamento-familia" sitio b): "nao-lidas" bate exatamente com a
+  // lista (0 fora), então o aviso ACIMA (naoLidasForaDaLista) fica calado — mas a lista tem MENOS itens
+  // que "notificacoes-total". Sem este segundo aviso, notificações LIDAS cortadas somem sem sinal nenhum.
+  it("o falso honesto: nao-lidas bate com a lista, mas ha' lidas cortadas — o segundo aviso denuncia", async () => {
+    servindo({
+      notificacoes: [item("b", "norma_publicada", "2026-07-19T10:00:00Z", "A que ja li")],
+      "nao-lidas": 0,
+      "notificacoes-total": 3,
+    });
+    render(<PaginaNotificacoes />);
+    await waitFor(() => expect(screen.getByText("A que ja li")).toBeDefined());
+    // o aviso de NÃO LIDAS continua calado — é exatamente o caso que ele não cobre.
+    expect(screen.queryByText(/só os avisos mais recentes/)).toBeNull();
+    const aviso = screen.getByText(/Esta lista mostra só as mais recentes/);
+    expect(aviso.textContent).toContain("Há 2 notificações mais antigas fora dela");
   });
 });

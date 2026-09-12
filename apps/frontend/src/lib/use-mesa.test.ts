@@ -116,6 +116,27 @@ describe("useMesa", () => {
     expect(result.current.pendenciasTotal).toBe(4);
   });
 
+  // Fatia "truncamento-familia" sitio (a): GET /paineis/sli/sessoes passa a publicar sessoesTotal (o par
+  // autoritativo, sem o teto de 200) — o hook precisa expor os dois, não só a lista, e o valor tem que ser
+  // o que o SERVIDOR mandou, não count(sliSessoes).
+  it("sliSessoesTotal (o par autoritativo de GET /paineis/sli/sessoes) chega ao estado do hook, distinto de count(sliSessoes)", async () => {
+    global.fetch = vi.fn(async (url: string) => {
+      const corpo = url.includes("/paineis/mesa")
+        ? mesaFake
+        : url.includes("/paineis/tramitacao")
+          ? { itens: [] }
+          : url.includes("/paineis/pendencias")
+            ? { pendencias: [], pendenciasTotal: 0 }
+            : { sessoes: [{ sessaoId: "s1", estadoAtual: "agendada", situacao: "agendada" }], sessoesTotal: 9 };
+      return { ok: true, json: async () => corpo } as Response;
+    }) as unknown as typeof fetch;
+
+    const { result } = renderHook(() => useMesa("tok"));
+    await waitFor(() => expect(result.current.estado).toBe("pronto"));
+    expect(result.current.sliSessoes).toHaveLength(1);
+    expect(result.current.sliSessoesTotal).toBe(9);
+  });
+
   it("sem token -> estado 'erro' já na primeira renderização (sem passar por 'carregando')", () => {
     global.fetch = vi.fn() as unknown as typeof fetch;
     const { result } = renderHook(() => useMesa(null));

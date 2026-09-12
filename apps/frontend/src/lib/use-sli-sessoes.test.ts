@@ -11,12 +11,31 @@ describe("useSliSessoes", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("busca /api/paineis/sli/sessoes e cameliza -> 'pronto'", async () => {
-    global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ sessoes: [sessaoFake] }) }) as Response) as unknown as typeof fetch;
+    global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ sessoes: [sessaoFake], "sessoes-total": 1 }) }) as Response) as unknown as typeof fetch;
     const { result } = renderHook(() => useSliSessoes("tok"));
     await waitFor(() => expect(result.current.estado).toBe("pronto"));
     expect(result.current.sessoes).toEqual([
       { sessaoId: "s1", estadoAtual: "agendada", situacao: "agendada", agendadaPara: "2026-06-24T17:00:00Z", abertaEm: null, encerradaEm: null, duracaoSegundos: null },
     ]);
+  });
+
+  // Fatia "truncamento-familia" sitio (a): sessoesTotal (o total REAL, sem o teto de 200) tem que sair do
+  // hook camelizado, par de `sessoes` — e tem que ser o numero do SERVIDOR, distinto de count(sessoes).
+  it("cameliza e expõe sessoesTotal ao lado de sessoes, distinto de count(sessoes)", async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ sessoes: [sessaoFake], "sessoes-total": 7 }),
+    }) as Response) as unknown as typeof fetch;
+    const { result } = renderHook(() => useSliSessoes("tok"));
+    await waitFor(() => expect(result.current.estado).toBe("pronto"));
+    expect(result.current.sessoes).toHaveLength(1);
+    expect(result.current.sessoesTotal).toBe(7);
+  });
+
+  it("carregando -> sessoesTotal null enquanto a chamada está em voo", () => {
+    global.fetch = vi.fn(() => new Promise(() => {})) as unknown as typeof fetch;
+    const { result } = renderHook(() => useSliSessoes("tok"));
+    expect(result.current.sessoesTotal).toBeNull();
   });
 
   it("chama a rota com o Bearer token", async () => {
