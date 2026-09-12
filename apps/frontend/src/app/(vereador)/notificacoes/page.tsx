@@ -86,32 +86,43 @@ export default function PaginaNotificacoes() {
         <p className="sub">O que mudou no que é seu.</p>
       </div>
 
-      {/* O badge conta TODAS as não lidas (contagem sem teto do servidor); a lista e as contagens das
-          abas vêm da resposta cortada em 50 linhas pelo SQL. Sem esta linha, "10" no título e
-          "Não lidas 0" na aba são a mesma pergunta com duas respostas — e o vereador conclui, com razão,
-          que o contador está quebrado. Só aparece quando a diferença EXISTE (ver naoLidasForaDaLista). */}
-      {vista.naoLidasForaDaLista > 0 && (
-        <p className="nt-truncada">
-          Esta lista traz só os avisos mais recentes.{" "}
-          {vista.naoLidasForaDaLista === 1
-            ? "Há 1 aviso não lido mais antigo fora dela"
-            : `Há ${vista.naoLidasForaDaLista} avisos não lidos mais antigos fora dela`}
-          {" "}— o número ao lado do título conta todos.
-        </p>
-      )}
+      {/*
+        Achado da revisão adversarial (fatia "truncamento-familia" sitio b, conserto): os dois avisos
+        eram MUTUAMENTE EXCLUSIVOS (`naoLidasForaDaLista === 0 && totalForaDaLista > 0`) — quando os
+        DOIS cortes coexistiam (havia não lida fora da lista E o corte total era maior), só o aviso
+        pequeno aparecia e o número grande (o par AUTORITATIVO `totalForaDaLista`) ficava calado atrás
+        dele. Um vereador com 2 não lidas fora e 497 no total via só "faltam 2".
 
-      {/* Fatia "truncamento-familia" sitio (b): naoLidasForaDaLista só enxerga o universo dos NÃO lidos —
-          um ator com 200 lidas + 5 não lidas (as 5 dentro do teto) não via NENHUM aviso, e as 155 lidas
-          cortadas somiam sem sinal. Só aparece quando naoLidasForaDaLista já não cobriu o caso (senão os
-          dois avisos diriam a mesma coisa duas vezes). */}
-      {vista.naoLidasForaDaLista === 0 && vista.totalForaDaLista > 0 && (
+        Agora é UM aviso, que sempre nomeia `totalForaDaLista` quando ele existe (é o universo cheio —
+        lidas E não lidas — e nunca é menor que `naoLidasForaDaLista` pelo caminho normal do app), e
+        dentro dele destaca quantas das que faltam são não lidas. Só cai no aviso "só não lidas" (o
+        texto antigo) no caso-limite em que o servidor conta não lida fora da lista mas o total bate
+        com o que já foi mostrado — a corrida entre a query de badge e a de listagem documentada em
+        `naoLidasForaDaLista` (marcação em voo); nesse instante o total ainda não é a informação útil.
+      */}
+      {vista.totalForaDaLista > 0 ? (
         <p className="nt-truncada">
           Esta lista mostra só as mais recentes.{" "}
           {vista.totalForaDaLista === 1
             ? "Há 1 notificação mais antiga fora dela"
             : `Há ${vista.totalForaDaLista} notificações mais antigas fora dela`}
-          {" "}(nenhuma delas não lida).
+          {vista.naoLidasForaDaLista > 0
+            ? vista.naoLidasForaDaLista === 1
+              ? ", 1 delas não lida"
+              : `, ${vista.naoLidasForaDaLista} delas não lidas`
+            : " (nenhuma delas não lida)"}
+          .
         </p>
+      ) : (
+        vista.naoLidasForaDaLista > 0 && (
+          <p className="nt-truncada">
+            Esta lista traz só os avisos mais recentes.{" "}
+            {vista.naoLidasForaDaLista === 1
+              ? "Há 1 aviso não lido mais antigo fora dela"
+              : `Há ${vista.naoLidasForaDaLista} avisos não lidos mais antigos fora dela`}
+            {" "}— o número ao lado do título conta todos.
+          </p>
+        )
       )}
 
       {/* aria-pressed num role="group": mesma convenção de sessoes/[id]/chamada e de expediente/seletor-modelo

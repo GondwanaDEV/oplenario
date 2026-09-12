@@ -281,4 +281,25 @@ describe("PaginaNotificacoes · a lista tem teto, o badge não", () => {
     const aviso = screen.getByText(/Esta lista mostra só as mais recentes/);
     expect(aviso.textContent).toContain("Há 2 notificações mais antigas fora dela");
   });
+
+  // Achado da revisão adversarial (as DUAS revisões, independentemente): os dois cortes são
+  // MUTUAMENTE EXCLUSIVOS na tela — quando naoLidasForaDaLista > 0, o segundo aviso (que usa o par
+  // AUTORITATIVO notificacoesTotal) é SUPRIMIDO mesmo quando o corte real é muito maior. O vereador lê
+  // "faltam 2" quando na verdade faltam 497.
+  it("os dois cortes coexistindo: o total nunca fica calado atras do aviso de nao lidas", async () => {
+    servindo({
+      notificacoes: [
+        item("a", "norma_publicada", null, "Ainda nao li"),
+        item("b", "norma_publicada", "2026-07-19T10:00:00Z", "Ja li 1"),
+        item("c", "norma_publicada", "2026-07-19T10:00:00Z", "Ja li 2"),
+      ],
+      "nao-lidas": 3,
+      "notificacoes-total": 500,
+    });
+    render(<PaginaNotificacoes />);
+    await waitFor(() => expect(screen.getByText("Ainda nao li")).toBeDefined());
+    // naoLidasForaDaLista = 3 - 1 = 2 (>0) — o aviso de nao lidas NAO deve mais aparecer sozinho e calar
+    // o corte real: o numero grande (497 fora da lista) precisa estar visivel em algum lugar da tela.
+    expect(screen.getByText(/497 notificações mais antigas fora dela/)).toBeDefined();
+  });
 });
