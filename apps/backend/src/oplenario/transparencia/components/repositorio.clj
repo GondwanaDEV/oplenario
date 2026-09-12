@@ -17,7 +17,21 @@
   compartilhado por TODOS os modulos consumidores; um handler que lanca faz o MESMO evento ser reprocessado
   a cada tick para sempre, bloqueando HEAD-OF-LINE todo evento de id maior no bus inteiro (nao so' desta
   projecao). Perder uma atualizacao de estado numa projecao (sem verdade propria, re-derivavel) e' um preco
-  aceitavel; travar o barramento do sistema inteiro nao e'."
+  aceitavel; travar o barramento do sistema inteiro nao e'.
+
+  TOLERANCIA A PAYLOAD MALFORMADO (frente 'relay-tolerante'): a tolerancia acima (HIGH-1) so' cobre UM
+  formato de falha — `atualizar-estado!`/`atualizar-metadados!` continuam tendo `{:pre ...}` e EXPLODEM
+  se o payload nao tiver as chaves que o contrato exige (medido: 27 `:pre` em 5 arquivos de
+  transparencia/db/, e reproduzido de verdade com uma linha `proposicao.protocolada` payload `{:numero 7}`
+  -> AssertionError em db.materia/inserir! -> poison do relay INTEIRO, 8 erros num namespace VIZINHO que so'
+  teve a infelicidade de drenar depois). `projetar-evento!` (abaixo) e' a FRONTEIRA DE DESPACHO onde essa
+  guarda mora — nao as 27 funcoes de db/: dentro de db/, o `:pre` continua sendo invariante legitima para
+  quem chama em PROCESSO (controller, semente, teste de unidade); so' o dado que atravessa o relay
+  COMPARTILHADO (fronteira de confianca) precisa de tolerancia. Ver `payload-malformado?` para a
+  classificacao exata (o que e' 'forma do dado' vs. 'infra falhou') e o RATIONALE de nao usar o schema
+  Malli do evento aqui (acoplaria este modulo a `legislativo.events.*`/`sessoes.events.*`, o que §22.10
+  proibe — o mesmo motivo pelo qual `diplomat/consumers.clj` hardcoda os tipos como STRING em vez de
+  importar o schema do produtor)."
   (:require [clojure.tools.logging :as log]
             [oplenario.kernel.eventos :as eventos]
             [oplenario.kernel.outbox :as outbox]
@@ -76,18 +90,58 @@
     (some-> s Instant/parse)
     (catch Exception _ nil)))
 
-(defn projetar-evento!
-  "Dispatch por tipo de evento -> a projecao de dominio, DENTRO da `tx` corrente (a do relay). Seta o GUC de
-  tenant (sem trocar de role — ver docstring do ns) e escreve em
-  transparencia.materia/norma/artefato_publicacao/voto_parlamentar/presenca_parlamentar/sessao_com_chamada.
-  UM evento pode virar MAIS DE UM statement: `presenca.registrada` escreve DOIS (presenca + companheira),
-  ambos na mesma tx do relay.
+(defn- payload-malformado?
+  "Classifica `t` como falha de FORMA DO PAYLOAD (o dado do evento nao bate o contrato) — o caso em que
+  `projetar-evento!` deve LOGAR e DESCARTAR — versus falha de INFRAESTRUTURA (conexao caiu, deadlock,
+  disco cheio, timeout) — o caso em que tem de PROPAGAR (capturar largo aqui trocaria uma indisponibilidade
+  TRANSITORIA por perda SILENCIOSA de evento, pior que o defeito original).
+
+  E' um WHITELIST FECHADO, de proposito, nao um blacklist ('tudo que nao e' SQLException'): um blacklist
+  deixa passar qualquer classe de excecao NOVA e desconhecida como se fosse dado malformado, exatamente o
+  erro que este seam existe para nao cometer. As quatro classes abaixo sao, medidamente, as UNICAS que o
+  dispatch e as 27 `{:pre ...}` de transparencia/db/ lancam quando falta uma chave ou o tipo/formato esta
+  errado:
+   - AssertionError            — os `:pre` de db/materia,db/norma,db/artefato-publicacao,db/parlamentar
+                                 (a causa medida do incidente: db.materia/inserir!, `(some? proposicao-id)`).
+   - IllegalArgumentException  — `UUID/fromString` com string mal-formada (inclui a subclasse
+                                 NumberFormatException, ex.: `:ano` que chega string nao-numerica).
+   - NullPointerException      — `UUID/fromString` (ou `.toUpperCase`/`.trim` etc.) sobre um campo AUSENTE
+                                 do payload que o dispatch le direto (antes de chegar em db/), ex.: o
+                                 `(UUID/fromString (:proposicao-id payload))` do ramo 'proposicao.transicionou'.
+   - ClassCastException        — um valor do TIPO errado no jsonb (nº onde se espera string, etc.).
+  Mais o marcador explicito `:transparencia/payload-malformado?` em `ex-data` — usado pela checagem de
+  `ente-id` ausente logo no topo de `projetar-evento!` (mesma familia de falha do `fan-out-notificacao!`
+  vizinho: `shared.outbox.ente_id` e' NULLABLE, um evento supratenant/malformado nao pode propagar). E' um
+  marcador INTENCIONAL, nao casamento de mensagem (`re-find` em `.getMessage`) — mensagem de excecao e'
+  string de humano, muda sem aviso; `ex-data` e' contrato."
+  [^Throwable t]
+  (boolean
+   (or (instance? AssertionError t)
+       (instance? IllegalArgumentException t)
+       (instance? NullPointerException t)
+       (instance? ClassCastException t)
+       (:transparencia/payload-malformado? (ex-data t)))))
+
+(defn despachar!
+  "O `case` de fato, SEM tolerancia — lanca em tipo sem branch (`case` sem default: 'No matching clause')
+  OU em payload malformado ({:pre ...} de db/, UUID/Instant invalidos). PUBLICA (nao `defn-`) DE
+  PROPOSITO — MESMO padrao de `paineis.components.repositorio/despachar!` (o precedente: F7 Slice 1,
+  review security HIGH), que resolveu exatamente este problema antes: e' o alvo direto do drift-guard de
+  teste (`todo-tipo-consumido-tem-branch-de-projecao`, transparencia/artefato_publicacao_test.clj), que
+  precisa distinguir 'tipo sem branch' (bug de programador — deve ficar RUIDOSO, pego em CI antes de subir)
+  de 'payload malformado em runtime' (dado externo — deve ser TOLERADO). `projetar-evento!` (abaixo) e'
+  quem chama ESTA fn dentro de um try/catch p/ a tolerancia de runtime (`payload-malformado?`); se o catch
+  estivesse AQUI, um 'No matching clause' de um tipo registrado sem branch seria silenciosamente engolido
+  (nunca propagaria ao teste), mascarando o drift em vez de barra-lo.
+
+  Escreve em transparencia.materia/norma/artefato_publicacao/voto_parlamentar/presenca_parlamentar/
+  sessao_com_chamada. UM evento pode virar MAIS DE UM statement: `presenca.registrada` escreve DOIS
+  (presenca + companheira), ambos na mesma tx do relay.
   `payload` ja chegou com chaves KEYWORD kebab (outbox/jsonb-> usa keyword-keys-object-mapper), casando 1:1 com
   o que os producers de legislativo/sessoes construiram (events/{proposicao,norma,artefato-publicacao,
   votacao,presenca}.clj) — EXCETO os campos :uuid e os de tempo (:publicado-em/:criado-em/:ocorrido-em), que
   chegam como string (ver `uuid-payload` e a re-parseacao Instant/parse; docstring de events/norma)."
-  [tx {:keys [tipo ente-id payload]}]
-  (tenancy/set-tenant! tx ente-id)
+  [tx ente-id tipo payload]
   (case tipo
     "proposicao.protocolada"
     (db-materia/inserir! tx (-> payload (uuid-payload [:proposicao-id :autor-id]) (assoc :ente-id ente-id)))
@@ -173,6 +227,31 @@
            :data (tempo/hoje-de ocorrido-em tempo/zona-civil-padrao)}))
       (log/warn "transparencia: presenca.registrada sem :ocorrido-em valido — nao projetada"
                 {:ente-id ente-id :sessao-id (:sessao-id payload)}))))
+
+(defn projetar-evento!
+  "Handler REGISTRADO no bus (§22.10 diplomat/consumers) — a fronteira de despacho ONDE MORA a guarda de
+  tolerancia (frente 'relay-tolerante', ver docstring do ns). Seta o GUC de tenant (sem trocar de role — ver
+  docstring do ns) e chama `despachar!` (o `case` de fato, sem tolerancia — ver a docstring dela p/ o
+  formato da projecao) DENTRO de um try/catch: um evento pode falhar ANTES de chegar em db/ (ex.:
+  `UUID/fromString` cru no ramo 'proposicao.transicionou') ou DENTRO (o `:pre` de db/). Se
+  `payload-malformado?` reconhece a excecao, LOGA em :error (nunca :info — isto e' anomalia, nao rotina) com
+  o suficiente para achar a linha exata (`:outbox-id`, `:idempotency-key`, `:tipo`, `:ente-id`, a razao) e
+  DESCARTA — o handler devolve normalmente, a tx do relay COMMITA, o proximo `drenar-um!` pega o proximo id
+  (sem head-of-line). Qualquer OUTRA excecao (SQLException do driver, timeout, o que for) PROPAGA sem
+  disfarce — e' o unico jeito de nao trocar 'infra caiu' por 'evento sumiu em silencio'."
+  [tx {:keys [tipo ente-id payload idempotency-key id]}]
+  (try
+    (when (nil? ente-id)
+      (throw (ex-info "transparencia: evento sem ente-id (supratenant ou malformado) — nao projetavel"
+                      {:transparencia/payload-malformado? true})))
+    (tenancy/set-tenant! tx ente-id)
+    (despachar! tx ente-id tipo payload)
+    (catch Throwable t
+      (if (payload-malformado? t)
+        (log/error t "transparencia: evento descartado no relay compartilhado — payload malformado"
+                   {:tipo tipo :ente-id ente-id :idempotency-key idempotency-key :outbox-id id
+                    :razao (ex-message t)})
+        (throw t)))))
 
 (defn fan-out-notificacao!
   "Consumer do FAN-OUT (F7 E2) — SEGUNDO consumidor de `proposicao.transicionou` (o 1o, projetar-evento!,

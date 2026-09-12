@@ -52,7 +52,13 @@
 ;; Relay
 ;; ---------------------------------------------------------------------------
 (defn- row->evento [row]
-  {:tipo            (:outbox/tipo row)
+  ;; `:id` (a PK bigint da linha em shared.outbox) entrou p/ frente 'relay-tolerante': um handler
+  ;; que TOLERA payload malformado (loga e descarta em vez de lancar) precisa nomear, no log, a linha
+  ;; EXATA que descartou — a `idempotency-key` sozinha exige um SELECT extra p/ achar a linha; o `:id`
+  ;; e' a chave primaria, direto. Chave NOVA no mapa; nenhum handler existente quebra (todos destruturam
+  ;; via `{:keys [...]}`, que ignora chaves extras).
+  {:id              (:outbox/id row)
+   :tipo            (:outbox/tipo row)
    :ente-id         (:outbox/ente_id row)
    :payload         (jsonb-> (:outbox/payload row))
    :idempotency-key (:outbox/idempotency_key row)})

@@ -94,17 +94,24 @@
 
 (deftest todo-tipo-consumido-tem-branch-de-projecao
   ;; DRIFT-GUARD (review clojure/architect MINOR): cada tipo em `tipos-consumidos` (o que o bus ENTREGA)
-  ;; DEVE ter um branch no `case` de projetar-evento! (o que a projecao TRATA). Se um tipo novo for adicionado
+  ;; DEVE ter um branch no `case` de despachar! (o que a projecao TRATA). Se um tipo novo for adicionado
   ;; ao registro do bus sem o branch, o `case` (sem default) lanca "No matching clause" DENTRO da tx do relay
   ;; COMPARTILHADO -> rollback + redrive eterno do mesmo evento = head-of-line block de TODOS os modulos. Este
-  ;; teste prova que os dois lados nao driftaram: para cada tipo, projetar-evento! com payload vazio falha por
+  ;; teste prova que os dois lados nao driftaram: para cada tipo, despachar! com payload vazio falha por
   ;; QUALQUER motivo MENOS "No matching clause" (i.e., entrou num branch). Espelha o guard de tempo_real/projetor.
+  ;;
+  ;; `despachar!` (NAO `projetar-evento!`) DE PROPOSITO — frente 'relay-tolerante': `projetar-evento!` agora
+  ;; TOLERA qualquer excecao de forma-de-dado (`payload-malformado?`, que inclui IllegalArgumentException, a
+  ;; classe de "No matching clause"), entao testar por ele mascararia o proprio drift que este guard existe
+  ;; p/ pegar. `despachar!` e' a fn SEM tolerancia — MESMO padrao de
+  ;; `paineis.components.repositorio/despachar!` (o precedente que resolveu isto antes, e que ja' apontava
+  ;; este exato caminho na docstring de `projetar-evento!` de la').
   (let [ente (random-uuid)]
     (doseq [tipo consumers/tipos-consumidos]
       (tenancy/com-tenant* *ds* ente
         (fn [tx]
           (try
-            (transparencia-repo/projetar-evento! tx {:tipo tipo :ente-id ente :payload {}})
+            (transparencia-repo/despachar! tx ente tipo {})
             (catch Throwable e
               (is (not (re-find #"No matching clause" (str (ex-message e))))
                   (str "tipo consumido sem branch de projecao (drift bus<->case): " tipo)))))))))
