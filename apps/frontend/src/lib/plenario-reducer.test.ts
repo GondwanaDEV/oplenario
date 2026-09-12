@@ -158,9 +158,37 @@ describe("votação ao vivo — placar (§22.6 sigilo)", () => {
         modalidade: "nominal", "quorum-tipo": "maioria_simples" } },
     ]);
     expect(e.placar).toEqual({
-      votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", encerrada: false,
+      votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1", encerrada: false,
       votosNominais: {}, votosSecretos: 0, resultado: null, totais: null, baseMembros: null,
     });
+  });
+
+  it("votacao.aberta carrega objeto-id (fatia 'demo-tres-consertos' #2) — o elo pra resolver O QUE está em votação", () => {
+    const e = reduzir(sessao({ estado: "aberta" }), [
+      { tipo: "votacao.aberta", seq: 1, dados: {
+        "votacao-id": "vt1", "sessao-id": "s1", "objeto-tipo": "parecer", "objeto-id": "obj-42",
+        modalidade: "nominal", "quorum-tipo": "maioria_simples" } },
+    ]);
+    expect(e.placar?.objetoId).toBe("obj-42");
+  });
+
+  it("votacao.encerrada preserva o objeto-id acumulado (mesma disciplina de objetoTipo)", () => {
+    const e = reduzir(sessao({ estado: "aberta" }), [
+      { tipo: "votacao.aberta", seq: 1, dados: {
+        "votacao-id": "vt1", "sessao-id": "s1", "objeto-tipo": "proposicao", "objeto-id": "p1",
+        modalidade: "nominal", "quorum-tipo": "maioria_simples" } },
+      { tipo: "votacao.encerrada", seq: 2, dados: {
+        "votacao-id": "vt1", "sessao-id": "s1", resultado: "aprovada", modalidade: "nominal" } },
+    ]);
+    expect(e.placar?.objetoId).toBe("p1");
+  });
+
+  it("votacao.encerrada sem aberta vista (reconexão) não inventa objeto-id — fica null (EncerradaPayload não o carrega)", () => {
+    const e = reduzir(sessao({ estado: "aberta" }), [
+      { tipo: "votacao.encerrada", seq: 9, dados: {
+        "votacao-id": "vt7", "sessao-id": "s1", resultado: "rejeitada", modalidade: "secreta" } },
+    ]);
+    expect(e.placar?.objetoId).toBeNull();
   });
 
   it("voto.registrado nominal grava o voto por vereador (quem votou o quê); re-voto sobrescreve", () => {

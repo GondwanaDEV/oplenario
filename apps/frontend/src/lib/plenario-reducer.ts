@@ -71,6 +71,12 @@ export interface PlacarVotacao {
   votacaoId: string;
   modalidade: string; // "nominal" | "secreta" (vazio se só vimos o encerramento, sem modalidade no payload)
   objetoTipo: string | null;
+  /** `objeto-id` do payload de `votacao.aberta` (fatia "demo-tres-consertos" #2) — o elo que `useDetalheVotacao`
+   * usa pra resolver O QUE está em votação (ementa/tipo/número da matéria) via GET /sessoes/:id/votacoes/:id.
+   * `votacao.encerrada` NUNCA carrega objeto-id (EncerradaPayload não tem esse campo) — por isso, como
+   * `objetoTipo`, só sobrevive por reconexão (`anterior?.objetoId`); reconectar vendo só o encerramento (sem
+   * ter visto a abertura) deixa `null`, mesma honestidade de `objetoTipo`. */
+  objetoId: string | null;
   encerrada: boolean;
   votosNominais: Record<string, VotoNominal>; // só NOMINAL: vereadorId -> voto (mostra quem votou o quê)
   votosSecretos: number; // só SECRETA: contagem de votos registrados (anônimo)
@@ -522,6 +528,7 @@ export function aplicarEvento(estado: EstadoPlenario, evento: EventoPlenario): E
           votacaoId: d["votacao-id"],
           modalidade: d.modalidade,
           objetoTipo: d["objeto-tipo"],
+          objetoId: d["objeto-id"] ?? null,
           encerrada: false,
           votosNominais: {},
           votosSecretos: 0,
@@ -562,6 +569,7 @@ export function aplicarEvento(estado: EstadoPlenario, evento: EventoPlenario): E
           votacaoId: d["votacao-id"],
           modalidade: anterior?.modalidade ?? d.modalidade ?? "",
           objetoTipo: anterior?.objetoTipo ?? null,
+          objetoId: anterior?.objetoId ?? null,
           encerrada: true,
           votosNominais: anterior?.votosNominais ?? {},
           votosSecretos: anterior?.votosSecretos ?? 0,

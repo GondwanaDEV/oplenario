@@ -132,6 +132,32 @@
                          ((motor/politica-dsl {:registro registro :tx tx :expr expr-mandato-vigente :agora hoje}) ator-dsl recurso-dsl)
                          ((motor/politica-dsl {:registro registro :tx tx :expr expr-presente-nesta-sessao :agora instante}) ator-dsl recurso-dsl))))))))))))
 
+(defn detalhe-votacao
+  "GET .../votacoes/:votacao-id (fatia 'demo-tres-consertos' #2) — O QUE esta em votacao: resolve o objeto
+  POLIMORFICO (`objeto-tipo`,`objeto-id`) da votacao pra um titulo de exibicao. Achado ao vivo (Daouda,
+  12/09/2026): o cockpit do vereador (`/votar`) e o telao da Mesa mostravam SO o placar — nenhuma ementa,
+  nenhum numero de materia; o vereador votava num objeto nao identificado. LEITURA: reusa a MESMA amarra
+  sessao<->votacao e a MESMA authz 'mesma Casa' das 4 escritas da familia (`sessao-autorizada`/
+  `votacao-na-sessao`) — nao dirige nada, mas o dado e' tenant-scoped como o resto. nil (sessao/votacao
+  inexistente ou de outra sessao) -> borda traduz 404; sessao ja fechada -> `:conflito/sessao-fechada`
+  (mesmo racional das escritas — o cockpit so' chama isto com a sessao aberta).
+
+  `proposicao`/`redacao_final` resolvem TOTALMENTE: `objetos-que-carregam-a-materia` (db/votacao.clj) fixa
+  que o `objeto-id` deles E' a propria proposicao — uma unica leitura (`repo/buscar-proposicao`, ja'
+  existente, sem query nova) devolve tipo+ano+sequencial+ementa reais. `emenda`/`parecer`/`requerimento`
+  sao entidades PROPRIAS cujo `objeto-id` aponta OUTRA tabela; a UNICA leitura hoje alcancavel por um
+  vereador para elas (`/legislativo/proposicoes/:id`) e' `secretario`-only e nao serve. Resolve-las por
+  completo e' escopo MAIOR que esta fatia (registrado, nao feito aqui) — `:proposicao` fica `nil` para
+  as 3, e quem serializa (adapters/out) devolve so' o `:objeto-tipo`, nunca um titulo vazio nem inventado."
+  [repo-leg consultar-sessao sessao-fechada? ator sessao-id votacao-id]
+  (when (sessao-autorizada consultar-sessao sessao-fechada? ator sessao-id)
+    (let [ente-id (:ente-id ator)]
+      (when-let [v (votacao-na-sessao repo-leg ente-id sessao-id votacao-id)]
+        (let [objeto-tipo (:objeto-tipo v)
+              proposicao (when (contains? #{"proposicao" "redacao_final"} objeto-tipo)
+                           (repo/buscar-proposicao repo-leg ente-id (:objeto-id v)))]
+          {:objeto-tipo objeto-tipo :proposicao proposicao})))))
+
 ;; ========================= FE Onda A1: fila de relatores pendentes (§16.11) =========================
 
 (defn relatores-pendentes

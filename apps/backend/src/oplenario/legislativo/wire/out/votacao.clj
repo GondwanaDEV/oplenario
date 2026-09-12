@@ -3,9 +3,10 @@
   dirigir a votacao, dos quais o Eixo 8 gera os tipos TS. Tudo serializavel a JSON (uuid -> string). NAO expoe
   campos internos — a defesa anti-vazamento mora no adapters/out. EXCECAO: `AberturaOut` expoe `lock-version`
   (ledger de prontidao Fase 8 achado #2) — aqui o token de CAS nao e' interno, e' PARTE DO PROTOCOLO de
-  `POST .../encerramento` (que o exige no corpo), e nao existe rota GET de detalhe da votacao: sem devolve-lo
-  no recibo de abertura, nao ha' NENHUMA forma de um cliente real encerrar a votacao so' pela API. Mesmo
-  desenho de `sessoes.wire.out/JustificativaAbertaOut` e de `legislativo.wire.out.documento`/`.../parecer`."
+  `POST .../encerramento` (que o exige no corpo). `ObjetoVotacaoOut` (fatia 'demo-tres-consertos' #2) e' a
+  rota GET de detalhe que faltava — mas e' de EXIBICAO, nunca carrega `lock-version`: continua sendo o
+  recibo de abertura, e so ele, a UNICA fonte do token de CAS. Mesmo desenho de
+  `sessoes.wire.out/JustificativaAbertaOut` e de `legislativo.wire.out.documento`/`.../parecer`."
   (:require [oplenario.kernel.malli :as km]
             [oplenario.legislativo.logic :as logic]))
 
@@ -35,3 +36,22 @@
    [:total-nao {:optional true} [:maybe :int]]
    [:total-abstencao {:optional true} [:maybe :int]]
    [:base-membros {:optional true} [:maybe :int]]])
+
+(def ProposicaoResumoObjetoVotacaoOut
+  "O resumo MINIMO pra identificar a materia na tela — nao a ficha completa (sem autor/estado/etc, que o
+  vereador votando nao precisa e a rota `secretario`-only ja' cobre pra quem tem esse papel)."
+  [:map {:closed true}
+   [:tipo :string]
+   [:ano :int]
+   [:sequencial :int]
+   [:ementa :string]])
+
+(def ObjetoVotacaoOut
+  "Recibo de GET .../votacoes/:votacao-id (200): O QUE esta em votacao (fatia 'demo-tres-consertos' #2).
+  `:proposicao` resolve quando `objeto-tipo` e' `proposicao`/`redacao_final` (o `objeto-id` da votacao E' a
+  propria materia, ver db/votacao.clj/objetos-que-carregam-a-materia); `nil` p/ `emenda`/`parecer`/
+  `requerimento` — resolve-los por completo e' escopo maior, registrado e nao feito aqui. O cliente usa
+  `objeto-tipo` pra montar um rotulo honesto do TIPO quando `:proposicao` vem nil, nunca titulo vazio."
+  [:map {:closed true}
+   [:objeto-tipo (km/enum-de logic/objetos-votacao)]
+   [:proposicao [:maybe ProposicaoResumoObjetoVotacaoOut]]])

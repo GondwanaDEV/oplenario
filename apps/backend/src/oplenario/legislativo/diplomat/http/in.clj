@@ -145,6 +145,26 @@
             :conflito/sessao-fechada (resposta-conflito-sessao-fechada e)
             (throw e)))))))
 
+(defn- detalhe-votacao-handler
+  "GET /sessoes/:id/votacoes/:votacao-id (fatia 'demo-tres-consertos' #2, papel 'vereador' — mesmo gate de
+  meu-voto-handler). Resolve O QUE esta em votacao pro cockpit do vereador (e a Mesa, se um dia precisar)
+  pararem de mostrar so' o placar sem ementa nem numero. nil (sessao/votacao inexistente ou de outra sessao)
+  -> 404, mesmo contrato dos irmaos de escrita. Sessao ja fechada -> `:conflito/sessao-fechada` -> 409
+  (mesmo mapeamento das 4 escritas — ver `resposta-conflito-sessao-fechada`)."
+  [repo-leg consultar-sessao sessao-fechada?]
+  (fn [req]
+    (let [ator (:ator req)
+          sid  (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          vid  (adapters-in/id-param->uuid (get-in req [:path-params :votacao-id]))]
+      (try
+        (if-let [detalhe (controllers/detalhe-votacao repo-leg consultar-sessao sessao-fechada? ator sid vid)]
+          (http/json-resposta 200 (adapters-out/objeto->wire detalhe))
+          (http/json-resposta 404 {:erro "votacao nao encontrada nesta sessao"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/sessao-fechada (:tipo (ex-data e)))
+            (resposta-conflito-sessao-fechada e)
+            (throw e)))))))
+
 (defn- listar-proposicoes-handler
   "GET /legislativo/proposicoes(?busca=&tipo=&estado=&autor-id=&ano=&pagina=&tamanho=&ordenar-por=&ordenar-dir=).
   Leitura tenant-wide (mesmo contrato de authz de /paineis/*, Onda B Slice 1): adapters/in coage os filtros
@@ -708,6 +728,9 @@
       ["/sessoes/:id/votacoes/:votacao-id/encerramento" :post
        [auth papel it/corpo-json (encerrar-handler repo-legislativo consultar-sessao sessao-fechada?)]
        :route-name :legislativo/encerrar-votacao]
+      ["/sessoes/:id/votacoes/:votacao-id" :get
+       [auth papel-vereador (detalhe-votacao-handler repo-legislativo consultar-sessao sessao-fechada?)]
+       :route-name :legislativo/detalhe-votacao]
       ["/legislativo/proposicoes" :get [auth papel (listar-proposicoes-handler repo-legislativo)]
        :route-name :legislativo/listar-proposicoes]
       ["/legislativo/proposicoes" :post

@@ -40,3 +40,14 @@
             {:id (->str id) :estado estado :resultado resultado
              :total-sim sim :total-nao nao :total-abstencao abstencao :base-membros base-membros}
             "encerramento de votacao"))
+
+(defn objeto->wire
+  "{:objeto-tipo :proposicao} (controllers/detalhe-votacao) -> ObjetoVotacaoOut (fatia 'demo-tres-consertos'
+  #2). `:proposicao` (quando presente) e' o registro CHEIO de `repo/buscar-proposicao` — SELECT-KEYS aqui e'
+  a defesa: so' tipo/ano/sequencial/ementa atravessam pro cliente, nunca autor/estado/atributos-especificos/
+  etc que a leitura completa carrega e este recurso nao precisa expor."
+  [{:keys [objeto-tipo proposicao]}]
+  (validado wire/ObjetoVotacaoOut
+            {:objeto-tipo objeto-tipo
+             :proposicao (when proposicao (select-keys proposicao [:tipo :ano :sequencial :ementa]))}
+            "objeto de votacao"))

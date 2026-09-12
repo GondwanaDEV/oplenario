@@ -394,6 +394,143 @@
                            :headers (com-json (token ente (random-uuid))) :body corpo)]
     (is (= 400 (:status r)) "path-param :votacao-id malformado -> 400, nunca 500")))
 
+;; ---------- GET /sessoes/:id/votacoes/:votacao-id — O QUE esta em votacao (fatia 'demo-tres-consertos' #2) ----------
+;; Achado ao vivo (Daouda, 12/09/2026): o cockpit do vereador (`/votar`) mostrava SO o placar — nenhuma
+;; ementa, nenhum numero de materia. Esta rota resolve o objeto POLIMORFICO da votacao pra exibicao.
+
+(defn- proposicao-canonica [id]
+  {:id id :tipo "projeto_lei" :ano 2026 :sequencial 42 :ementa "Alter a Lei Organica quanto a Mesa Diretora"
+   ;; campos QUE NAO devem atravessar pro wire (regressao guard, ver o teste `nunca-vaza-campos-extras`):
+   :autor-id (random-uuid) :autor-tipo "vereador" :estado "em_pauta" :lock-version 3
+   :atributos-especificos {:algum "dado interno"}})
+
+(defn- fake-repo-legislativo-com-proposicao
+  "RepoLegislativo fake pra' `detalhe-votacao`: `buscar-votacao` + `buscar-proposicao`."
+  [votacao proposicao]
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify repo-leg/RepoLegislativo
+    (buscar-votacao [_ _ente-id _id] votacao)
+    (buscar-proposicao [_ _ente-id _id] proposicao)))
+
+(deftest detalhe-votacao-proposicao-200
+  (let [ente (random-uuid) sid (random-uuid) vid (random-uuid) pid (random-uuid)
+        votacao (assoc (votacao-canonica ente vid sid "nominal") :objeto-tipo "proposicao" :objeto-id pid)
+        repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
+        repo-l (fake-repo-legislativo-com-proposicao votacao (proposicao-canonica pid))
+        r (pt/response-for (service-fn* #{"vereador"} repo-s repo-l)
+                           :get (str "/sessoes/" sid "/votacoes/" vid)
+                           :headers (com-json (token ente (random-uuid))))
+        body (ler-json r)]
+    (is (= 200 (:status r)))
+    (is (= "proposicao" (:objeto-tipo body)))
+    (is (= {:tipo "projeto_lei" :ano 2026 :sequencial 42
+            :ementa "Alter a Lei Organica quanto a Mesa Diretora"}
+           (:proposicao body))
+        "o vereador ve tipo+ano+sequencial+ementa reais — nao o placar cego de antes")))
+
+(deftest detalhe-votacao-redacao-final-200
+  ;; `objetos-que-carregam-a-materia` (db/votacao.clj) inclui 'redacao_final': o `objeto-id` E' a propria
+  ;; proposicao, mesma resolucao de 'proposicao'.
+  (let [ente (random-uuid) sid (random-uuid) vid (random-uuid) pid (random-uuid)
+        votacao (assoc (votacao-canonica ente vid sid "nominal") :objeto-tipo "redacao_final" :objeto-id pid)
+        repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
+        repo-l (fake-repo-legislativo-com-proposicao votacao (proposicao-canonica pid))
+        r (pt/response-for (service-fn* #{"vereador"} repo-s repo-l)
+                           :get (str "/sessoes/" sid "/votacoes/" vid)
+                           :headers (com-json (token ente (random-uuid))))
+        body (ler-json r)]
+    (is (= 200 (:status r)))
+    (is (= "redacao_final" (:objeto-tipo body)))
+    (is (= 42 (:sequencial (:proposicao body))))))
+
+(deftest detalhe-votacao-emenda-sem-proposicao-honesto
+  ;; 'emenda' e' entidade PROPRIA (objeto-id aponta outra tabela) — resolve-la por completo e' escopo maior
+  ;; (registrado, nao feito aqui). O cliente recebe o TIPO (rotulo honesto), nunca um titulo vazio/inventado
+  ;; nem uma tentativa de ler a proposicao com o id errado.
+  (let [ente (random-uuid) sid (random-uuid) vid (random-uuid)
+        chamou-proposicao? (atom false)
+        votacao (assoc (votacao-canonica ente vid sid "nominal") :objeto-tipo "emenda" :objeto-id (random-uuid))
+        repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
+        repo-l #_{:clj-kondo/ignore [:missing-protocol-method]}
+               (reify repo-leg/RepoLegislativo
+                 (buscar-votacao [_ _ _] votacao)
+                 (buscar-proposicao [_ _ _] (reset! chamou-proposicao? true) nil))
+        r (pt/response-for (service-fn* #{"vereador"} repo-s repo-l)
+                           :get (str "/sessoes/" sid "/votacoes/" vid)
+                           :headers (com-json (token ente (random-uuid))))
+        body (ler-json r)]
+    (is (= 200 (:status r)))
+    (is (= "emenda" (:objeto-tipo body)))
+    (is (nil? (:proposicao body)) "sem titulo inventado — o cliente monta o rotulo honesto do TIPO")
+    (is (false? @chamou-proposicao?) "nem tenta ler proposicao pelo objeto-id de uma emenda — tabelas diferentes")))
+
+(deftest detalhe-votacao-nunca-vaza-campos-extras
+  ;; regressao: `buscar-proposicao` devolve o registro CHEIO (autor/estado/lock-version/atributos internos)
+  ;; — o adapter tem de FILTRAR pro schema `:closed true`, nunca repassar o mapa inteiro.
+  (let [ente (random-uuid) sid (random-uuid) vid (random-uuid) pid (random-uuid)
+        votacao (assoc (votacao-canonica ente vid sid "nominal") :objeto-tipo "proposicao" :objeto-id pid)
+        repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
+        repo-l (fake-repo-legislativo-com-proposicao votacao (proposicao-canonica pid))
+        r (pt/response-for (service-fn* #{"vereador"} repo-s repo-l)
+                           :get (str "/sessoes/" sid "/votacoes/" vid)
+                           :headers (com-json (token ente (random-uuid))))]
+    (is (= 200 (:status r)))
+    (is (not (re-find #"autor|atributos|lock.version|em_pauta" (:body r)))
+        "so' tipo/ano/sequencial/ementa atravessam — nunca autor-id/estado/lock-version/atributos-especificos")))
+
+(deftest detalhe-votacao-sem-papel-vereador-403
+  (let [ente (random-uuid) sid (random-uuid) vid (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
+        repo-l (fake-repo-legislativo (fn [_ _] (votacao-canonica ente vid sid "nominal")) (atom []))
+        r (pt/response-for (service-fn* #{"secretario"} repo-s repo-l)
+                           :get (str "/sessoes/" sid "/votacoes/" vid)
+                           :headers (com-json (token ente (random-uuid))))]
+    (is (= 403 (:status r)) "so' 'vereador' — 'secretario' sozinho nao alcanca (mesmo gate de meu-voto)")))
+
+(deftest detalhe-votacao-de-outra-sessao-404
+  (let [ente (random-uuid) sid (random-uuid) vid (random-uuid) outra (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
+        repo-l (fake-repo-legislativo (fn [_ _] (votacao-canonica ente vid outra "nominal")) (atom []))
+        r (pt/response-for (service-fn* #{"vereador"} repo-s repo-l)
+                           :get (str "/sessoes/" sid "/votacoes/" vid)
+                           :headers (com-json (token ente (random-uuid))))]
+    (is (= 404 (:status r)) "votacao de outra sessao -> 404 (amarra votacao<->sessao)")))
+
+(deftest detalhe-votacao-inexistente-404
+  (let [ente (random-uuid) sid (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
+        repo-l (fake-repo-legislativo (fn [_ _] nil) (atom []))
+        r (pt/response-for (service-fn* #{"vereador"} repo-s repo-l)
+                           :get (str "/sessoes/" sid "/votacoes/" (random-uuid))
+                           :headers (com-json (token ente (random-uuid))))]
+    (is (= 404 (:status r)))))
+
+(deftest detalhe-votacao-sessao-encerrada-409
+  (let [ente (random-uuid) sid (random-uuid) vid (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ _] (sessao-encerrada ente sid)))
+        repo-l (fake-repo-legislativo (fn [_ _] (votacao-canonica ente vid sid "nominal")) (atom []))
+        r (pt/response-for (service-fn* #{"vereador"} repo-s repo-l)
+                           :get (str "/sessoes/" sid "/votacoes/" vid)
+                           :headers (com-json (token ente (random-uuid))))]
+    (is (= 409 (:status r)) "sessao ja encerrada -> 409, mesmo gate das 4 escritas da familia")))
+
+(deftest detalhe-votacao-votacao-id-malformado-400
+  (let [ente (random-uuid) sid (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
+        repo-l (fake-repo-legislativo (fn [_ _] nil) (atom []))
+        r (pt/response-for (service-fn* #{"vereador"} repo-s repo-l)
+                           :get (str "/sessoes/" sid "/votacoes/nao-e-uuid")
+                           :headers (com-json (token ente (random-uuid))))]
+    (is (= 400 (:status r)) "path-param :votacao-id malformado -> 400, nunca 500")))
+
+(deftest detalhe-votacao-sem-token-401
+  (let [ente (random-uuid) sid (random-uuid) vid (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
+        repo-l (fake-repo-legislativo (fn [_ _] (votacao-canonica ente vid sid "nominal")) (atom []))
+        r (pt/response-for (service-fn* #{"vereador"} repo-s repo-l)
+                           :get (str "/sessoes/" sid "/votacoes/" vid))]
+    (is (= 401 (:status r)))))
+
 (deftest encerrar-votacao-sessao-encerrada-409
   ;; T2 grupo A achado #4/#5 (ledger Fase 8): mesmo gate de `sessao-autorizada` — encerrar votacao numa
   ;; sessao ja ENCERRADA e' bloqueado ANTES de checar se a votacao em si e' terminal (achado #3, teste irmao
