@@ -13,7 +13,7 @@
 import { useAuth } from "@/lib/auth";
 import { useMeusAcompanhamentos, type MeusAcompanhamentosOut } from "@/lib/use-meus-acompanhamentos";
 import { derivarMeusAcompanhamentosVista } from "@/lib/meus-acompanhamentos-vista";
-import { formatarDataSimples } from "@/lib/formatar-data";
+import { formatarData } from "@/lib/formatar-data";
 import "./acompanhamentos.css";
 
 export default function PaginaAcompanhamentos() {
@@ -74,7 +74,12 @@ function ListaAcompanhamentos({ dados }: { dados: MeusAcompanhamentosOut }) {
               <span className={linha.situacao ? `chip chip-${linha.situacao.categoria}` : "chip chip-neutro"}>
                 {linha.situacao ? linha.situacao.rotulo : "Indisponível"}
               </span>
-              <span className="ac-desde">seguindo desde {formatarDataSimples(linha.seguidoEm)}</span>
+              {/* achado ao vivo (Daouda, 12/09/2026): `formatarDataSimples` só casa data PURA
+                  (YYYY-MM-DD) e devolve o ISO CRU pra qualquer outra forma — `seguidoEm` é timestamp
+                  completo (com hora+microssegundos+Z), então saía verbatim na tela. `formatarData` é o
+                  MESMO util que o resto do portal público já usa pra "quando aconteceu" (ver
+                  (publico)/secao-ficha.tsx, "Publicada em"/"comentário em") — nenhuma formatação nova. */}
+              <span className="ac-desde">seguindo desde {formatarData(linha.seguidoEm)}</span>
             </div>
             <p className="ac-titulo">{linha.titulo}</p>
             {linha.ementa && <p className="ac-ementa">{linha.ementa}</p>}
