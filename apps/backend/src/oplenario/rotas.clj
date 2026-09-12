@@ -207,6 +207,16 @@
         ;; particao que `sessoes.controllers/exigir-sessao-aberta!` usa) em vez de deixar o legislativo duplicar
         ;; o conjunto.
         sessao-fechada? (fn [sessao] (contains? sessoes-logic/estados-sessao-fechada (:estado sessao)))
+        ;; Carry telao (Daouda, 12/09/2026): `GET /sessoes/:id/votacao-aberta` tinha o MESMO buraco que a
+        ;; Etapa 4a ja' fechou para `/quorum`/`/tribuna`/`/composicao` — a borda exigia papel 'vereador'
+        ;; ESTRITO, entao o telao da Mesa (papel 'secretario') tomava 403 na unica rota que recupera a
+        ;; votacao aberta apos a retencao MINID de ~5min do canal. MESMA inversao de dependencia de
+        ;; `sessao-fechada?` acima (legislativo NAO importa sessoes, §22.10) — e deliberadamente o MESMO
+        ;; predicado dos tres irmaos, nao um quarto: `sessoes-logic/pode-ver-quorum-da-sessao?` (mesma Casa
+        ;; E (transmissao publica OU papel 'secretario')). Escrever uma politica nova aqui repetiria o erro
+        ;; que a docstring de `pode-ver-quorum-da-sessao?` registra (a primeira versao daquela rota copiou
+        ;; so' a metade que ABRE e deixou cair a que FECHA, vazando presenca de sessao SECRETA).
+        pode-ver-votacao-aberta? sessoes-logic/pode-ver-quorum-da-sessao?
         ;; FE Onda A1: membros-da-casa injetado em sessoes (presenca agregada) — mesma inversao de
         ;; dependencia de consultar-sessao/painel-compliance; fuso civil vindo do kernel
         ;; (`tempo/zona-civil-padrao`, I-5 fatia 2 — antes era literal aqui), mesmo racional de
@@ -354,6 +364,7 @@
         (into (legislativo-http/rotas {:auth auth :repo-legislativo repo-legislativo
                                        :consultar-sessao consultar-sessao
                                        :sessao-fechada? sessao-fechada?
+                                       :pode-ver-votacao-aberta? pode-ver-votacao-aberta?
                                        :resolver-municipio resolver-municipio
                                        :resolver-vereador resolver-vereador-fn
                                        :resolver-comissoes resolver-comissoes-fn

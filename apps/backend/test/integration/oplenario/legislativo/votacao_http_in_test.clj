@@ -30,6 +30,14 @@
   [ente-id id]
   (assoc (sessao-canonica ente-id id) :estado "encerrada"))
 
+(defn- sessao-nao-publica
+  "A MESMA sessao, mas `transmite-publica false` (carry telao, Daouda 12/09/2026) — `service-fn*` injeta o
+  `pode-ver-votacao-aberta?` REAL (`sessoes.logic/pode-ver-quorum-da-sessao?`) via `rotas/montar`, entao os
+  testes da fronteira abaixo exercitam a wiring de producao completa, nao um stub local. E' o CAMPO, nao o
+  `tipo-sessao`, que a politica le' (mesma fixture minima de `sessao-canonica`/`sessao-encerrada`)."
+  [ente-id id]
+  (assoc (sessao-canonica ente-id id) :transmite-publica false))
+
 (defn- votacao-canonica
   "Votacao como `buscar-votacao` devolve (kebab). Carrega :modalidade (p/ o dispatch nominal<->secreta) e
   :sessao-id (p/ a amarra votacao<->sessao da URL)."
@@ -64,21 +72,28 @@
       {:id (:id m) :estado "encerrada" :resultado "aprovada"
        :sim 6 :nao 3 :abstencao 1 :base-membros 11})))
 
-(defn- fake-repo-identidade [papeis]
-  #_{:clj-kondo/ignore [:missing-protocol-method]}
-  (reify repo-id/RepoIdentidade
-    (snapshot-ator [_ _ente-id _identidade-id]
-      {:vinculo-ativo {:id (random-uuid) :tipo "servidor"} :papeis papeis})))
+(defn- fake-repo-identidade
+  "`tipo-vinculo` (default \"servidor\") existe para a fronteira da sessao NAO-publica (carry telao, Daouda
+  12/09/2026): um ator com vinculo 'cidadao' e papeis vazios e' o publico REAL que `pode-ver-votacao-aberta?`
+  (= sessoes.logic/pode-ver-quorum-da-sessao?) precisa barrar — nao um servidor sem papel, que nao existe
+  como perfil real desta rota."
+  ([papeis] (fake-repo-identidade papeis "servidor"))
+  ([papeis tipo-vinculo]
+   #_{:clj-kondo/ignore [:missing-protocol-method]}
+   (reify repo-id/RepoIdentidade
+     (snapshot-ator [_ _ente-id _identidade-id]
+       {:vinculo-ativo {:id (random-uuid) :tipo tipo-vinculo} :papeis papeis}))))
 
 (defn- service-fn*
-  [papeis repo-s repo-l]
-  (-> (http/servico (config/carregar)
-                    (rotas/montar {:idp (idp-dev/idp-dev)
-                                   :repo-identidade (fake-repo-identidade papeis)
-                                   :repo-sessoes repo-s
-                                   :repo-legislativo repo-l})
-                    it/globais)
-      ph/create-server ::ph/service-fn))
+  ([papeis repo-s repo-l] (service-fn* papeis "servidor" repo-s repo-l))
+  ([papeis tipo-vinculo repo-s repo-l]
+   (-> (http/servico (config/carregar)
+                     (rotas/montar {:idp (idp-dev/idp-dev)
+                                    :repo-identidade (fake-repo-identidade papeis tipo-vinculo)
+                                    :repo-sessoes repo-s
+                                    :repo-legislativo repo-l})
+                     it/globais)
+       ph/create-server ::ph/service-fn)))
 
 (defn- token [ente-id ident-id]
   (json/write-value-as-string {:sub "u" :ente-id (str ente-id) :identidade-id (str ident-id)}))
@@ -637,15 +652,73 @@
                            :headers (com-json (token ente (random-uuid))))]
     (is (= 404 (:status r)) "sem votacao aberta -> 404, estado legitimo (nao e' erro)")))
 
-(deftest votacao-aberta-sem-papel-vereador-403
+;; ---------- B1b: a FRONTEIRA DA SESSAO NAO-PUBLICA (carry telao, Daouda 12/09/2026) ----------
+;; Ate' aqui a borda exigia papel 'vereador' ESTRITO — o telao da Mesa ('secretario') tomava 403 na unica
+;; rota que recupera a votacao aberta apos a retencao MINID de ~5min do canal. Tirar o papel da borda SEM
+;; por a politica na camada fina reabriria a mesma porta dos fundos que a docstring de
+;; `pode-ver-quorum-da-sessao?` registra ter acontecido uma vez em `/quorum`: QUALQUER vinculo ativo da
+;; Casa — inclusive cidadao, sem papel nenhum — leria a votacao em curso de uma sessao SECRETA. Os testes
+;; abaixo cravam a politica INTEIRA (mesma Casa E (transmissao publica OU secretario)), nao so' a metade
+;; que abre.
+
+(deftest votacao-aberta-sessao-nao-publica-nega-cidadao-sem-papel-403
   (let [ente (random-uuid) sid (random-uuid)
-        repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
+        repo-s (fake-repo-sessoes (fn [_ _] (sessao-nao-publica ente sid)))
+        repo-l (fake-repo-legislativo-votacao-aberta nil nil nil nil)
+        r (pt/response-for (service-fn* #{} "cidadao" repo-s repo-l)
+                           :get (str "/sessoes/" sid "/votacao-aberta")
+                           :headers (com-json (token ente (random-uuid))))]
+    (is (= 403 (:status r))
+        "vinculo 'cidadao' sem papel nenhum, mesma Casa, sessao NAO publica -> 403 (a rota nao pode virar a porta dos fundos)")))
+
+(deftest votacao-aberta-sessao-nao-publica-nega-outra-casa-403
+  (let [ente (random-uuid) sid (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ id] (sessao-nao-publica (random-uuid) id)))
         repo-l (fake-repo-legislativo-votacao-aberta nil nil nil nil)
         r (pt/response-for (service-fn* #{"secretario"} repo-s repo-l)
                            :get (str "/sessoes/" sid "/votacao-aberta")
                            :headers (com-json (token ente (random-uuid))))]
     (is (= 403 (:status r))
-        "so' 'vereador' alcanca esta recuperacao — o telao da Mesa ('secretario') tem o MESMO buraco, mas resolve-lo e' decisao separada")))
+        "sessao carregada mas de ente alheio -> nega ANTES de chegar na clausula de publico/secretario")))
+
+(deftest votacao-aberta-sessao-publica-segue-aberta-a-quem-nao-tem-papel-200
+  ;; A prova de que o aperto acima nao matou a fatia: um ator SEM papel nenhum (o 'operador de som' da
+  ;; docstring de `quorum-handler`), numa sessao com transmissao publica, continua recuperando a votacao.
+  (let [ente (random-uuid) sid (random-uuid) vid (random-uuid) pid (random-uuid)
+        votacao (assoc (votacao-canonica ente vid sid "nominal") :objeto-tipo "proposicao" :objeto-id pid)
+        repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
+        repo-l (fake-repo-legislativo-votacao-aberta votacao (proposicao-canonica pid) [] nil)
+        r (pt/response-for (service-fn* #{} repo-s repo-l)
+                           :get (str "/sessoes/" sid "/votacao-aberta")
+                           :headers (com-json (token ente (random-uuid))))]
+    (is (= 200 (:status r)) "sessao com transmissao publica + ator sem papel -> 200, a razao de existir da fatia")))
+
+(deftest votacao-aberta-sessao-nao-publica-continua-visivel-ao-secretario-200
+  (let [ente (random-uuid) sid (random-uuid) vid (random-uuid) pid (random-uuid)
+        votacao (assoc (votacao-canonica ente vid sid "secreta") :objeto-tipo "proposicao" :objeto-id pid)
+        repo-s (fake-repo-sessoes (fn [_ _] (sessao-nao-publica ente sid)))
+        repo-l (fake-repo-legislativo-votacao-aberta votacao (proposicao-canonica pid) nil 3)
+        r (pt/response-for (service-fn* #{"secretario"} repo-s repo-l)
+                           :get (str "/sessoes/" sid "/votacao-aberta")
+                           :headers (com-json (token ente (random-uuid))))]
+    (is (= 200 (:status r)) "o telao ('secretario') e' exatamente quem esta fatia existe para destravar")))
+
+(deftest votacao-aberta-sessao-nao-publica-nega-vereador-sem-papel-secretario-403
+  ;; O QUE O BRIEFING NAO PREVIU (registrado no relatorio, nao silenciado aqui): antes desta fatia, o
+  ;; VEREADOR (sem 'secretario') recuperava a votacao numa sessao NAO publica — a borda so' exigia
+  ;; 'vereador', e a fina (`pode-dirigir-votacao?`) so' checa mesma Casa, sem clausula de publico. Reusar
+  ;; `pode-ver-quorum-da-sessao?` (a politica pedida, e a MESMA dos 3 irmaos) fecha essa leitura tambem
+  ;; para o proprio vereador que vota, ficando so' com o SSE ao vivo (sem recuperacao pos-reconexao) numa
+  ;; sessao secreta. E' o mesmo corte que `/quorum` ja aceita para quem nao e' secretario — nao uma
+  ;; regressao desta fatia, mas uma extensao dele a um publico (o vereador-votante) que antes escapava.
+  (let [ente (random-uuid) sid (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ _] (sessao-nao-publica ente sid)))
+        repo-l (fake-repo-legislativo-votacao-aberta nil nil nil nil)
+        r (pt/response-for (service-fn* #{"vereador"} repo-s repo-l)
+                           :get (str "/sessoes/" sid "/votacao-aberta")
+                           :headers (com-json (token ente (random-uuid))))]
+    (is (= 403 (:status r))
+        "vereador sem papel 'secretario', sessao NAO publica -> 403 (ver o relatorio: carry a decidir)")))
 
 (deftest votacao-aberta-sessao-inexistente-404
   (let [ente (random-uuid)

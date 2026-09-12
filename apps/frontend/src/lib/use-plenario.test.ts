@@ -380,12 +380,12 @@ describe("usePlenario — a costura de borda da RECUPERAÇÃO de votação (fati
     const { result } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true }));
     await waitFor(() => expect(result.current.estado?.placar?.votacaoId).toBe("vt1"));
     expect(result.current.estado!.placar).toEqual({
-      votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1", encerrada: false,
+      votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1", proposicao: null, encerrada: false,
       votosNominais: { v1: "sim" }, votosSecretos: 0, resultado: null, totais: null, baseMembros: null,
     });
   });
 
-  it("SEM `comVotacao` (ex.: o telão da Mesa) a rota de recuperação NÃO é chamada", async () => {
+  it("SEM `comVotacao` a rota de recuperação NÃO é chamada", async () => {
     const f = fetchFake({
       "/votacao-aberta": () => ({ ok: true, status: 200, json: async () => votacaoAbertaCrua }) as Response,
       "/quorum": () => ({ ok: true, status: 200, json: async () => quorumCru }) as Response,

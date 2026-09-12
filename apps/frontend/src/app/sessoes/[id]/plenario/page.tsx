@@ -63,7 +63,10 @@ function ConteudoPlenario({ id }: { id: string }) {
   const { token } = useAuth();
   // `comQuorum` é o TELÃO ligando a hidratação de `GET /sessoes/:id/quorum` — o cockpit do vereador usa o
   // mesmo hook SEM essa opção (ver a docstring de `usePlenario`).
-  const { sessao, estado, conexao, erro } = usePlenario(id, token, { comQuorum: true });
+  // `comVotacao` (carry telão, Daouda 12/09/2026): a Mesa tinha o MESMO buraco de recuperação do cockpit
+  // do vereador — sem isto, um telão que conecta (ou reconecta) fora da retenção MINID de ~5min do canal
+  // mostrava o palco sem NENHUMA matéria, com uma votação de verdade aberta no servidor.
+  const { sessao, estado, conexao, erro } = usePlenario(id, token, { comQuorum: true, comVotacao: true });
   // pauta viva (GET; re-busca quando a fase muda). Chamado ANTES dos early-returns p/ ordem de hooks estável.
   const { pauta } = usePauta(id, token, estado?.estado ?? null);
 
@@ -211,6 +214,7 @@ function Palco({ sessao, estado, pauta }: { sessao: SessaoOut; estado: EstadoPle
         {sessao["transmite-publica"] ? " · transmissão pública" : " · sessão reservada"}
         {sessao["permite-voto-secreto"] ? " · admite voto secreto" : ""}
       </p>
+      <MateriaEmVotacao placar={estado.placar} />
 
       <section className="pauta" aria-labelledby="pauta-titulo">
         <h2 id="pauta-titulo">Pauta da sessão</h2>
@@ -238,6 +242,43 @@ function Palco({ sessao, estado, pauta }: { sessao: SessaoOut; estado: EstadoPle
 
       <Placar placar={estado.placar} avisoLacuna={estado.avisoLacuna} />
     </section>
+  );
+}
+
+// Vocabulário de `objeto-tipo` da votação (`legislativo.logic/objetos-votacao`, backend) — DISTINTO de
+// `NOME_TIPO_ITEM` acima (vocabulário de item de PAUTA): só coincidem em "proposicao", os outros 4 não
+// têm equivalente na pauta (emenda/parecer/requerimento/redação final não são item-de-pauta próprio).
+const NOME_OBJETO_VOTACAO: Record<string, string> = {
+  proposicao: "Proposição",
+  redacao_final: "Redação final",
+  emenda: "Emenda",
+  parecer: "Parecer",
+  requerimento: "Requerimento",
+};
+
+/** A matéria em votação no palco (carry telão, Daouda 12/09/2026) — até esta fatia o palco só mostrava o
+ * número da sessão, nunca O QUE estava sendo votado (o mesmo buraco que a Fatia 2/2b já tinham fechado
+ * para o cockpit do vereador, via `useDetalheVotacao`). `placar.proposicao` já vem pronto de
+ * `GET .../votacao-aberta` (hidratação `comVotacao`) — a MESMA resolução de `resolver-objeto-votacao` no
+ * backend, sem uma segunda chamada a `/votacoes/:id` (gate `papel-vereador`-only, que o telão não
+ * alcançaria de qualquer forma). Sem `proposicao` ainda (evento SSE ao vivo antes da próxima
+ * re-hidratação periódica, ou objeto que não é proposição/redação final — emenda/parecer/requerimento não
+ * resolvem por completo, ver `detalhe-votacao` no backend) degrada para o rótulo honesto do TIPO, nunca
+ * título vazio nem inventado. `null` quando não há votação em curso ou ela já encerrou — o placar de
+ * resultado mora em `<Placar>`, não aqui. */
+function MateriaEmVotacao({ placar }: { placar: PlacarVotacao | null }) {
+  if (!placar || placar.encerrada) return null;
+  return (
+    <p className="palco-autoria">
+      Em votação:{" "}
+      {placar.proposicao ? (
+        <b>
+          {placar.proposicao.tipo} {placar.proposicao.sequencial}/{placar.proposicao.ano} — {placar.proposicao.ementa}
+        </b>
+      ) : (
+        <b>{(placar.objetoTipo && NOME_OBJETO_VOTACAO[placar.objetoTipo]) ?? "matéria não identificada"}</b>
+      )}
+    </p>
   );
 }
 

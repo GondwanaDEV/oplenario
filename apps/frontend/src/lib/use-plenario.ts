@@ -107,9 +107,11 @@ const espera = (ms: number, signal: AbortSignal) =>
  * `GET /sessoes/:id/votacao-aberta` é uma leitura indexada (uma linha por sessão), não uma das "leituras
  * mais caras do módulo" que justificam manter o cockpit fora de `comQuorum`; amarrar as duas faria o
  * vereador continuar sem a recuperação que ele é quem mais precisa (é ele quem vota) só para não pagar o
- * custo de quórum/tribuna, que ele nunca usou. O cockpit passa `comVotacao: true`; o telão da Mesa (que
- * tem o MESMO buraco de recuperação, por outro ângulo) NÃO ganhou esta opção nesta fatia — ligá-lo é
- * decisão separada, não tomada aqui. */
+ * custo de quórum/tribuna, que ele nunca usou. O cockpit passa `comVotacao: true`; o telão da Mesa (carry,
+ * Daouda 12/09/2026) tinha o MESMO buraco de recuperação, por outro ângulo — a borda de
+ * `/sessoes/:id/votacao-aberta` exigia papel 'vereador' estrito, então nem ligar `comVotacao` ali
+ * adiantaria antes de a política migrar para a camada fina (`sessoes.logic/pode-ver-quorum-da-sessao?`,
+ * backend) — e agora também passa `comVotacao: true`. */
 export function usePlenario(sessaoId: string, token: string | null, opcoes?: { comQuorum?: boolean; comVotacao?: boolean }) {
   const comQuorum = opcoes?.comQuorum === true;
   const comVotacao = opcoes?.comVotacao === true;

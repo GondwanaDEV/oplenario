@@ -158,7 +158,7 @@ describe("votação ao vivo — placar (§22.6 sigilo)", () => {
         modalidade: "nominal", "quorum-tipo": "maioria_simples" } },
     ]);
     expect(e.placar).toEqual({
-      votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1", encerrada: false,
+      votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1", proposicao: null, encerrada: false,
       votosNominais: {}, votosSecretos: 0, resultado: null, totais: null, baseMembros: null,
     });
   });
@@ -189,6 +189,20 @@ describe("votação ao vivo — placar (§22.6 sigilo)", () => {
         "votacao-id": "vt7", "sessao-id": "s1", resultado: "rejeitada", modalidade: "secreta" } },
     ]);
     expect(e.placar?.objetoId).toBeNull();
+  });
+
+  it("votacao.encerrada preserva a `proposicao` acumulada (carry telão) — mesma disciplina de objetoTipo/objetoId", () => {
+    const hidratado = hidratarVotacao(
+      estadoInicial(sessao({ estado: "aberta" })),
+      { votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1",
+        proposicao: { tipo: "PL", ano: 2026, sequencial: 42, ementa: "Dispõe sobre X" }, votos: [] },
+      0,
+    );
+    const e = aplicarEvento(hidratado, {
+      tipo: "votacao.encerrada", seq: 2,
+      dados: { "votacao-id": "vt1", "sessao-id": "s1", resultado: "aprovada", modalidade: "nominal" },
+    });
+    expect(e.placar?.proposicao).toEqual({ tipo: "PL", ano: 2026, sequencial: 42, ementa: "Dispõe sobre X" });
   });
 
   it("voto.registrado nominal grava o voto por vereador (quem votou o quê); re-voto sobrescreve", () => {
@@ -296,9 +310,29 @@ describe("votação — recuperação de estado sem nenhum evento SSE (fatia 'de
       seq0,
     );
     expect(e.placar).toEqual({
-      votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1", encerrada: false,
+      votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1", proposicao: null, encerrada: false,
       votosNominais: { v1: "sim", v2: "nao" }, votosSecretos: 0, resultado: null, totais: null, baseMembros: null,
     });
+  });
+
+  it("T1b (carry telão, Daouda 12/09/2026) — a matéria (ementa/tipo/ano/sequencial) chega junto do placar, sem uma segunda chamada", () => {
+    const e = hidratarVotacao(
+      aberta(),
+      { votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1",
+        proposicao: { tipo: "PL", ano: 2026, sequencial: 42, ementa: "Dispõe sobre X" }, votos: [] },
+      seq0,
+    );
+    expect(e.placar?.proposicao).toEqual({ tipo: "PL", ano: 2026, sequencial: 42, ementa: "Dispõe sobre X" });
+  });
+
+  it("T1c (carry telão) — `proposicao` de forma torta vira null, nunca título inventado (mesmo racional de comoProposicaoResumo)", () => {
+    const e = hidratarVotacao(
+      aberta(),
+      { votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1",
+        proposicao: { tipo: "PL", ano: "2026" as unknown as number, sequencial: 42, ementa: "Dispõe sobre X" }, votos: [] },
+      seq0,
+    );
+    expect(e.placar?.proposicao).toBeNull();
   });
 
   it("T2 — sem votação aberta (cru null) é estado LEGÍTIMO: não muda nada, não inventa placar", () => {
