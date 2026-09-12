@@ -94,10 +94,16 @@ export interface PlacarVotacao {
    * `proposicao` pronta (a MESMA resolução da Fatia 2, `resolver-objeto-votacao` no backend) — este campo
    * só CONSOME o que a rota de recuperação já manda, sem uma segunda chamada a `/votacoes/:id`
    * (`useDetalheVotacao`, gate `papel-vereador`-only) que o telão não alcançaria de qualquer forma. Só
-   * `hidratarVotacao` (a recuperação via HTTP) o preenche: os eventos SSE ao vivo (`votacao.aberta`/
-   * `votacao.encerrada`) não carregam a ementa, então nasce/permanece `null` até a próxima re-hidratação
-   * periódica — mesma degradação honesta de `objetoTipo`/`objetoId` num reconecte que só viu o
-   * encerramento. */
+   * `hidratarVotacao` (a recuperação via HTTP) o PREENCHE — nenhum evento SSE carrega a ementa
+   * (`AbertaPayload`/`EncerradaPayload` não têm esse campo, contrato imutável).
+   *
+   * Achado ao vivo (Daouda, 12/09/2026): o canal replaya TODOS os eventos da sessão desde `id: 1`, não só
+   * os futuros — então um `votacao.aberta` da MESMA votação chega DEPOIS da hidratação ter preenchido
+   * este campo, no fluxo normal do navegador (não é um caso raro de reconexão). Por isso `votacao.aberta`
+   * e `votacao.encerrada` PRESERVAM `proposicao` quando o `votacao-id` do evento é o mesmo do placar
+   * corrente (o evento não SABE que não há proposição; "não sei" não é "é nulo"). Só ZERA quando a
+   * votação MUDOU (matéria nova, sem ementa ainda resolvida) — nunca vaza a proposição de uma votação
+   * para outra. */
   proposicao: ProposicaoResumoPlacar | null;
   encerrada: boolean;
   votosNominais: Record<string, VotoNominal>; // só NOMINAL: vereadorId -> voto (mostra quem votou o quê)
@@ -645,6 +651,19 @@ export function aplicarEvento(estado: EstadoPlenario, evento: EventoPlenario): E
     case "votacao.aberta": {
       // uma votação por vez no plenário: a abertura SUBSTITUI o placar anterior (zera as contagens).
       const d = evento.dados;
+      // Achado ao vivo (Daouda, verificação em browser, 12/09/2026): o canal replaya TODOS os eventos da
+      // sessão desde `id: 1` — não só os que chegam depois da conexão abrir. A SEQUÊNCIA REAL do
+      // navegador é: `hidratarVotacao` (comVotacao) preenche `proposicao` a partir do snapshot HTTP, e
+      // LOGO DEPOIS o replay do SSE entrega o `votacao.aberta` da MESMA votação (o evento que a abriu de
+      // verdade, só que reproduzido) — e este `case`, ao reconstruir o placar do zero, apagava a ementa
+      // que acabara de chegar. Não é "servidor sempre vence": o evento não SABE que não há proposição
+      // (`AbertaPayload` não carrega esse campo — nunca carregou, contrato imutável), e "não sei" não é o
+      // mesmo que "é nulo". Por isso, quando é a MESMA votação (mesmo `votacao-id`), preserva o que já
+      // foi hidratado — mesmo padrão que `votacao.encerrada` já aplica a `objetoTipo`/`objetoId`/
+      // `proposicao` (`anterior?.proposicao ?? null`, abaixo). Votação DIFERENTE (troca de matéria) ZERA
+      // mesmo — a proposição da votação anterior não pode vazar para a nova (mostraria a matéria errada
+      // sobre um placar real, pior que o rótulo honesto do tipo).
+      const mesmaVotacao = base.placar?.votacaoId === d["votacao-id"];
       return {
         ...base,
         placar: {
@@ -652,9 +671,7 @@ export function aplicarEvento(estado: EstadoPlenario, evento: EventoPlenario): E
           modalidade: d.modalidade,
           objetoTipo: d["objeto-tipo"],
           objetoId: d["objeto-id"] ?? null,
-          // o evento SSE de abertura não carrega a ementa (EventoVotacaoAberta não tem esse campo) — só a
-          // recuperação via HTTP (`hidratarVotacao`) a preenche. Ver a docstring de `proposicao`.
-          proposicao: null,
+          proposicao: mesmaVotacao ? base.placar!.proposicao : null,
           encerrada: false,
           votosNominais: {},
           votosSecretos: 0,

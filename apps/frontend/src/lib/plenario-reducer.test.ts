@@ -335,6 +335,34 @@ describe("votação — recuperação de estado sem nenhum evento SSE (fatia 'de
     expect(e.placar?.proposicao).toBeNull();
   });
 
+  it("T1d (achado ao vivo, Daouda 12/09/2026) — a ORDEM REAL do navegador: hidrata a matéria, DEPOIS o replay do SSE entrega o `votacao.aberta` da MESMA votação — a ementa sobrevive", () => {
+    // O canal replaya TODOS os eventos da sessão desde `id: 1`, não só os futuros: o `votacao.aberta` que
+    // ABRIU a votação de verdade chega DEPOIS de `hidratarVotacao` já ter preenchido `proposicao` a
+    // partir do snapshot HTTP — não é reconexão, é o fluxo NORMAL de quem conecta ao vivo. Antes deste
+    // conserto, este `case` reconstruía o placar do zero e apagava a ementa que acabara de chegar (o
+    // palco caía no rótulo honesto do TIPO, "Proposição", em vez da ementa completa).
+    const hidratado = hidratarVotacao(
+      aberta(),
+      { votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1",
+        proposicao: { tipo: "PL", ano: 2026, sequencial: 42, ementa: "Dispõe sobre X" }, votos: [] },
+      seq0,
+    );
+    const e = aplicarEvento(hidratado, votacaoAberta(1));
+    expect(e.placar?.proposicao).toEqual({ tipo: "PL", ano: 2026, sequencial: 42, ementa: "Dispõe sobre X" });
+  });
+
+  it("T1e (o espelho de T1d) — `votacao.aberta` de uma votação DIFERENTE zera `proposicao` mesmo assim: a matéria antiga não pode vazar para a nova", () => {
+    const hidratado = hidratarVotacao(
+      aberta(),
+      { votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1",
+        proposicao: { tipo: "PL", ano: 2026, sequencial: 42, ementa: "Dispõe sobre X" }, votos: [] },
+      seq0,
+    );
+    const e = aplicarEvento(hidratado, votacaoAberta(1, "vt2"));
+    expect(e.placar?.votacaoId).toBe("vt2");
+    expect(e.placar?.proposicao).toBeNull();
+  });
+
   it("T2 — sem votação aberta (cru null) é estado LEGÍTIMO: não muda nada, não inventa placar", () => {
     const e = hidratarVotacao(aberta(), null, seq0);
     expect(e.placar).toBeNull();
