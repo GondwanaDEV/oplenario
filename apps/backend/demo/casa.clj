@@ -58,10 +58,13 @@
 ;; CPFs FIXOS e validos (mesmo digito-verificador de `identidade.models.identidade/valido-cpf?` — mod-11,
 ;; pesos 10..2 e 11..2) p/ os 4 atores nomeados. FIXOS (nao `random-uuid`/aleatorio) e' o que faz
 ;; `identidade/inserir!` (idempotente por CPF) devolver o MESMO id em toda chamada de `semear!`.
-(def ^:private cpf-secretaria "12345678062")
-(def ^:private cpf-presidente "23456789092")
-(def ^:private cpf-vereador-comum "34567890175")
-(def ^:private cpf-cidadao "45678901249")
+;; PUBLICOS (nao `^:private`) de proposito: `demo/personas.clj` (a 5a semente, credenciais Keycloak)
+;; precisa resolver os MESMOS 4 identidade-ids por CPF sobre a Casa ja semeada — uma so' fonte destes
+;; literais, nunca redigitados num 2º arquivo (a mesma disciplina que motivou expor `ente-id`).
+(def cpf-secretaria "12345678062")
+(def cpf-presidente "23456789092")
+(def cpf-vereador-comum "34567890175")
+(def cpf-cidadao "45678901249")
 
 ;; 17 vereadores — nome, nome parlamentar e partido DISTINTOS (nada de "Vereador 1"). Indices usados
 ;; abaixo p/ atribuir papeis (Mesa, comissoes, licenca, identidade de login):
