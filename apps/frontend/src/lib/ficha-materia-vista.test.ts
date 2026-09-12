@@ -83,6 +83,21 @@ describe("derivarDadosMateria", () => {
     expect(r.apensadasTruncado).toBe(false);
   });
 
+  // ---------- achado IMPORTANTE da revisão adversarial: `apresentadaEm` não pode vir da lista cortada ----------
+
+  it("tramitacaoTruncado=true -> apresentadaEm fica marcada INCERTA (o item mais antigo SOBREVIVENTE não é a apresentação real)", () => {
+    // O corte mantém as N MAIS RECENTES: sob truncamento, `ordenado[0]` é a transição nº (total-N+1), não a
+    // primeira de verdade. Publicar essa data como "Apresentada" sem nenhum sinal é o mesmo defeito que a
+    // frente existe pra matar, só que num escalar em vez de numa lista.
+    const r = derivarDadosMateria({ ...fichaBase, tramitacaoTruncado: true });
+    expect(r.apresentadaEmIncerta).toBe(true);
+  });
+
+  it("tramitacaoTruncado=false -> apresentadaEmIncerta fica false (a data da lista completa é a apresentação real)", () => {
+    const r = derivarDadosMateria(fichaBase);
+    expect(r.apresentadaEmIncerta).toBe(false);
+  });
+
   // Estes dois testes AFIRMAVAM a chave crua e por isso não viram os defeitos #9/#10 do ledger. O
   // contrato mudou junto com `derivarTramitacao` (tramitacao-vista.ts): fail-closed continua sendo não
   // lançar e não fingir progresso, mas degradar não obriga a mostrar vocabulário de banco — o rótulo é

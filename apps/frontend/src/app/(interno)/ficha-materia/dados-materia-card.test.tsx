@@ -13,6 +13,7 @@ describe("DadosMateriaCard", () => {
           apensadosTotal: 2,
           apensadasTruncado: false,
           apresentadaEm: "2026-04-08T09:00:00Z",
+          apresentadaEmIncerta: false,
           ultimaAcaoEm: "2026-05-12T10:00:00Z",
         }}
       />,
@@ -32,6 +33,7 @@ describe("DadosMateriaCard", () => {
           apensadosTotal: 0,
           apensadasTruncado: false,
           apresentadaEm: "2026-01-01T00:00:00Z",
+          apresentadaEmIncerta: false,
           ultimaAcaoEm: "2026-01-01T00:00:00Z",
         }}
       />,
@@ -49,6 +51,7 @@ describe("DadosMateriaCard", () => {
           apensadosTotal: 50,
           apensadasTruncado: true,
           apresentadaEm: "2026-01-01T00:00:00Z",
+          apresentadaEmIncerta: false,
           ultimaAcaoEm: "2026-01-01T00:00:00Z",
         }}
       />,
@@ -67,11 +70,49 @@ describe("DadosMateriaCard", () => {
           apensadosTotal: 0,
           apensadasTruncado: true,
           apresentadaEm: "2026-01-01T00:00:00Z",
+          apresentadaEmIncerta: false,
           ultimaAcaoEm: "2026-01-01T00:00:00Z",
         }}
       />,
     );
     expect(screen.getByText("nenhum")).toBeTruthy();
     expect(screen.queryByText("+")).toBeNull();
+  });
+
+  // ---------- achado IMPORTANTE da revisão adversarial: apresentadaEm sob tramitação cortada ----------
+
+  it("apresentadaEmIncerta=true -> 'anterior a <data>', nunca a data nua como fato (a real é anterior)", () => {
+    render(
+      <DadosMateriaCard
+        dados={{
+          situacao: "Em comissões",
+          apensadosTotal: 0,
+          apensadasTruncado: false,
+          apresentadaEm: "2026-04-12T15:00:00Z",
+          apresentadaEmIncerta: true,
+          ultimaAcaoEm: "2026-05-12T10:00:00Z",
+        }}
+      />,
+    );
+    expect(screen.getByText(/anterior a 12\/04\/2026/)).toBeTruthy();
+    // a data nua SEM o prefixo não pode aparecer sozinha afirmando a apresentação
+    expect(screen.queryByText("12/04/2026")).toBeNull();
+  });
+
+  it("apresentadaEmIncerta=false -> data nua, sem 'anterior a'", () => {
+    render(
+      <DadosMateriaCard
+        dados={{
+          situacao: "Em comissões",
+          apensadosTotal: 0,
+          apensadasTruncado: false,
+          apresentadaEm: "2026-04-12T15:00:00Z",
+          apresentadaEmIncerta: false,
+          ultimaAcaoEm: "2026-05-12T10:00:00Z",
+        }}
+      />,
+    );
+    expect(screen.getByText("12/04/2026")).toBeTruthy();
+    expect(screen.queryByText(/anterior a/)).toBeNull();
   });
 });
