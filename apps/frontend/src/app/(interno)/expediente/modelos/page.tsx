@@ -13,7 +13,7 @@ import "../expediente.css";
 export default function PaginaExpedienteModelos() {
   return (
     <>
-      <TopoInterno area="Expediente" ator={{ nome: "Ana Ribeiro", papel: "Secretária Legislativa" }} />
+      <TopoInterno area="Expediente" />
       <AbasExpediente atual="modelos" />
       <main className="envelope">
         <div className="expediente-em-breve-wrap">

@@ -33,7 +33,7 @@ export default function PaginaEditarProposicao({ params }: { params: Promise<{ i
   if (estadoDetalhe === "carregando") {
     return (
       <>
-        <TopoInterno area="Proposições" ator={{ nome: "Rita Campos", papel: "Servidora legislativa" }} />
+        <TopoInterno area="Proposições" />
         <main className="envelope">
           <p role="status">Carregando…</p>
         </main>
@@ -44,7 +44,7 @@ export default function PaginaEditarProposicao({ params }: { params: Promise<{ i
   if (estadoDetalhe === "erro" || !dados) {
     return (
       <>
-        <TopoInterno area="Proposições" ator={{ nome: "Rita Campos", papel: "Servidora legislativa" }} />
+        <TopoInterno area="Proposições" />
         <main className="tela-estado">
           <h1>Não foi possível carregar esta proposição</h1>
         </main>
@@ -54,7 +54,7 @@ export default function PaginaEditarProposicao({ params }: { params: Promise<{ i
 
   return (
     <>
-      <TopoInterno area="Proposições" ator={{ nome: "Rita Campos", papel: "Servidora legislativa" }} />
+      <TopoInterno area="Proposições" />
       <main className="envelope">
         <div className="pagina-cab">
           <div>

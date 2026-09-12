@@ -90,7 +90,7 @@ export function ConteudoPosAprovacao({ id }: { id: string }) {
   if (estadoProposicao === "carregando" || estadoPosAprovacao === "carregando") {
     return (
       <>
-        <TopoInterno area="Proposições" ator={{ nome: "Rita Campos", papel: "Servidora legislativa" }} />
+        <TopoInterno area="Proposições" />
         <main className="envelope">
           <p role="status">Carregando…</p>
         </main>
@@ -101,7 +101,7 @@ export function ConteudoPosAprovacao({ id }: { id: string }) {
   if (estadoProposicao === "erro" || !proposicao) {
     return (
       <>
-        <TopoInterno area="Proposições" ator={{ nome: "Rita Campos", papel: "Servidora legislativa" }} />
+        <TopoInterno area="Proposições" />
         <main className="tela-estado">
           <h1>Não foi possível carregar esta matéria</h1>
         </main>
@@ -113,7 +113,7 @@ export function ConteudoPosAprovacao({ id }: { id: string }) {
 
   return (
     <>
-      <TopoInterno area="Proposições" ator={{ nome: "Rita Campos", papel: "Servidora legislativa" }} />
+      <TopoInterno area="Proposições" />
       <main className="envelope">
         <nav className="trilha" aria-label="Trilha de navegação">
           <Link href={comToken("/proposicoes", token)}>Proposições</Link>

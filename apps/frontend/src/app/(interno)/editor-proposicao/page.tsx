@@ -27,7 +27,7 @@ export default function PaginaCriarProposicao() {
 
   return (
     <>
-      <TopoInterno area="Proposições" ator={{ nome: "Rita Campos", papel: "Servidora legislativa" }} />
+      <TopoInterno area="Proposições" />
       <main className="envelope">
         <div className="pagina-cab">
           <div>

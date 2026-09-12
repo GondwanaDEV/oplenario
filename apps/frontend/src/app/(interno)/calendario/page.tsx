@@ -78,7 +78,7 @@ export default function PaginaCalendario() {
 
   return (
     <>
-      <TopoInterno area="Calendário" ator={{ nome: "Rita Campos", papel: "Servidora legislativa" }} />
+      <TopoInterno area="Calendário" />
 
       <main id="conteudo" className="envelope cal-pagina">
         <div className="pg-cab">

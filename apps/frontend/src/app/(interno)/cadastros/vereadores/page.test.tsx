@@ -396,10 +396,16 @@ describe("PaginaVereadores", () => {
       expect(chamouAcessos).toBe(true);
     });
 
-    // a ordem real das 3 chamadas de "conceder acesso" (ignora as chamadas GET de carregamento da página)
+    // a ordem real das 3 chamadas de "conceder acesso" (ignora as chamadas GET de carregamento da página —
+    // inclusive GET /api/meu/identidade, que TopoInterno agora dispara sozinho no mount e também contém a
+    // substring "/identidade"; o filtro por método, não só por URL, é o que isola as 3 mutações do fluxo)
     const chamadasDoFluxo = fetchMock.mock.calls
       .map(([url, init]) => [url, (init as RequestInit | undefined)?.method])
-      .filter(([url]) => typeof url === "string" && (url.includes("/identidade") || url === "/api/identidade/acessos"));
+      .filter(
+        ([url, metodo]) =>
+          typeof url === "string" && Boolean(metodo) &&
+          (url.includes("/identidade") || url === "/api/identidade/acessos"),
+      );
     expect(chamadasDoFluxo).toEqual([
       ["/api/identidade/identidades", "POST"],
       ["/api/cadastros/vereadores/v1/identidade", "PATCH"],

@@ -102,7 +102,7 @@ export default function PaginaExpediente() {
 
   return (
     <>
-      <TopoInterno area="Expediente" ator={{ nome: "Ana Ribeiro", papel: "Secretária Legislativa" }} />
+      <TopoInterno area="Expediente" />
       <AbasExpediente atual="gerar" />
       <main className="envelope">
         <div className="bancada">

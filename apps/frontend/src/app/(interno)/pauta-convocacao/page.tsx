@@ -84,7 +84,7 @@ function ConteudoPautaConvocacao({ token }: { token: string | null }) {
 
   return (
     <>
-      <TopoInterno area="Pauta" ator={{ nome: "Rita Campos", papel: "Servidora legislativa" }} />
+      <TopoInterno area="Pauta" />
       <main className="envelope">
         <div className="pg-cab">
           <div>

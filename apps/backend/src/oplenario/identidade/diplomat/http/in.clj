@@ -1,11 +1,13 @@
 (ns oplenario.identidade.diplomat.http.in
-  "Superficie ADMINISTRATIVA de identidade (§22.10 diplomat, ADR-0001) — gated `admin_ente`. Separada de
+  "Superficie ADMINISTRATIVA de identidade (§22.10 diplomat, ADR-0001) — gated `admin_ente`, MAIS uma
+  excecao (GET /meu/identidade, ver docstring do handler e de `rotas`): gate `auth` apenas, sem papel —
+  mesmo padrao de excecao ja usado por `paineis/diplomat/http/in.clj` (`/meu/notificacoes`). Separada de
   diplomat/http/auth_in.clj, que e' a superficie PUBLICA de login (descoberta/mint/logout): responsabilidades
   distintas, gates opostos.
 
-  Estas 3 rotas sao os passos (1) e (3) do fluxo de provisionamento; o passo (2) e' do `cadastros`. Quem
-  ORQUESTRA e' o front (§22.10:26 — a administracao do ente e' area de UI, nao modulo backend). A ordem
-  importa e e' 'acesso por ultimo': conceder-acesso! e' o unico passo que abre a porta.
+  As 3 rotas ADMINISTRATIVAS sao os passos (1) e (3) do fluxo de provisionamento; o passo (2) e' do
+  `cadastros`. Quem ORQUESTRA e' o front (§22.10:26 — a administracao do ente e' area de UI, nao modulo
+  backend). A ordem importa e e' 'acesso por ultimo': conceder-acesso! e' o unico passo que abre a porta.
 
   DESVIO do brief original (Task 8, Step 3): `criar-usuario!` (Keycloak, User Profile) EXIGE `:nome`
   (keycloak_idp.clj `nome->first-last`) — sem ele, o realm real da NPE em `str/trim` de nil. O brief
@@ -19,6 +21,7 @@
   no payload do Keycloak por aqui, em vez de depender de disciplina de destructuring."
   (:require [oplenario.http :as http]
             [oplenario.identidade.adapters.in.acesso :as adapters-in]
+            [oplenario.identidade.adapters.out.meu-identidade :as adapters-out-meu]
             [oplenario.identidade.components.repositorio :as repo]
             [oplenario.interceptors :as it]
             [oplenario.kernel.components.idp :as idp]))
@@ -102,8 +105,30 @@
               (http/json-resposta 404 {:erro "identidade nao encontrada"})
               (throw e))))))))
 
+(defn- meu-identidade-handler
+  "GET /meu/identidade — o 'quem sou eu' que QUALQUER ator autenticado le sobre SI MESMO, papel nenhum
+  exigido (mesmo racional de GET /meu/notificacoes em paineis/diplomat/http/in.clj: e' escopado por
+  IDENTIDADE, nao por cargo — a cidada, sem papel algum, tambem precisa saber quem e' pra o cabecalho da
+  tela nao mentir, ver docs/18 'defeito consertado antes deste mapa existir'). NUNCA le' `:identidade-id`
+  do cliente (path/query) — so' o `(:ator req)` que o interceptor `auth` ja resolveu do token VERIFICADO;
+  ler um id do cliente aqui seria IDOR (qualquer autenticado leria o nome de qualquer outro).
+
+  `:papeis` vem do ATOR ja resolvido (sem tocar o banco de novo); so' `:nome` precisa de uma leitura —
+  via `repo/nome-por-id`, a MESMA leitura ESTREITA sem :cpf que `conceder-acesso-handler` usa (ver
+  docstring do ns) — nunca `identidade-por-id`, que tambem devolve :cpf. O adapter (`adapters-out-meu`)
+  valida contra `MeuIdentidadeOut` (`:closed true`) antes de serializar: um `merge` descuidado que um dia
+  tentasse devolver mais campos (ex.: :cpf) reprovaria a validacao (500), nunca vazaria em silencio."
+  [repo-identidade]
+  (fn [req]
+    (let [ator (:ator req)
+          nome (:nome (repo/nome-por-id repo-identidade (:identidade-id ator)))]
+      (http/json-resposta 200 (adapters-out-meu/meu-identidade->wire {:nome nome :papeis (:papeis ator)})))))
+
 (defn rotas
-  "Fragmento administrativo. TODAS exigem `admin_ente` (§22.5.1 — 'cadastrada pelo admin do ente')."
+  "Fragmento de rotas do modulo identidade (table syntax Pedestal). As 3 primeiras sao a superficie
+  ADMINISTRATIVA — TODAS exigem `admin_ente` (§22.5.1 — 'cadastrada pelo admin do ente'). `GET
+  /meu/identidade` e' a UNICA excecao do fragmento: gate `auth` apenas, sem papel (ver docstring do
+  handler) — mesmo padrao ja usado por `paineis/diplomat/http/in.clj` (`/meu/notificacoes`)."
   [{:keys [auth repo-identidade idp]}]
   (let [papel (it/exige-papel "admin_ente")]
     #{["/identidade/identidades" :post
@@ -114,4 +139,7 @@
        :route-name :identidade/conceder-acesso]
       ["/identidade/acessos/:identidade-id/convite" :post
        [auth papel (reenviar-convite-handler idp)]
-       :route-name :identidade/reenviar-convite]}))
+       :route-name :identidade/reenviar-convite]
+      ["/meu/identidade" :get
+       [auth (meu-identidade-handler repo-identidade)]
+       :route-name :identidade/meu-identidade]}))
