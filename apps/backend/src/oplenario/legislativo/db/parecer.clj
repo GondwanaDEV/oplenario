@@ -135,16 +135,27 @@
 (defn relatores-pendentes
   "Pareceres 'aguardando_designacao' (a designacao de relator ainda nao aconteceu — designar-relator!
   transiciona daqui p/ 'com_relator'), join com a proposicao p/ mostrar ementa/urn-lex (o objeto e'
-  SEMPRE 'proposicao' nesta fatia — emenda fica fora, YAGNI). Mais antigo primeiro (fila FIFO)."
+  SEMPRE 'proposicao' nesta fatia — emenda fica fora, YAGNI). Mais antigo primeiro (fila FIFO).
+
+  LEFT JOIN, NAO INNER (achado 'classe JOIN' da frente 'truncamento-familia', corrige a decisao original
+  desta docstring): `objeto_id` e' guard ref SEM FK (disc.2, migration 20260620000019 e' explicita —
+  'SEM FK declarativa: integridade em camadas'). `criar!` prova a existencia no momento da criacao, mas
+  nada no banco impede o objeto de deixar de resolver depois — com INNER JOIN, um parecer
+  'aguardando_designacao' assim SOME da fila sem contagem nem erro: a Mesa leria '0 pendentes' com um
+  parecer de verdade esperando designacao. `:indisponivel` (computado aqui, pos-query: `:tipo` nulo so'
+  acontece quando o LEFT JOIN nao achou par, mesmo mecanismo de
+  `transparencia.db.acompanhamento/meus-da-materia`) e' o sinal que a borda usa pra' NUNCA fingir um
+  cabecalho que nao existe — a linha (a fila de ACAO em si) sempre aparece; o cabecalho pode faltar."
   [tx ente-id teto]
-  (comum/linhas->kebab
-   (jdbc/execute! tx
-     (sql/format {:select [:pc.id [:pc.objeto_id :proposicao_id] :p.tipo :p.ano :p.sequencial
-                           :p.urn_lex :p.ementa :pc.criado_em]
-                  :from [[:legislativo.pareceres :pc]]
-                  :join [[:legislativo.proposicoes :p]
-                         [:and [:= :p.id :pc.objeto_id] [:= :p.ente_id :pc.ente_id]]]
-                  :where [:and [:= :pc.ente_id ente-id] [:= :pc.objeto_tipo [:inline "proposicao"]]
-                          [:= :pc.estado [:inline "aguardando_designacao"]]]
-                  :order-by [[:pc.criado_em :asc]]
-                  :limit teto}))))
+  (mapv #(assoc % :indisponivel (nil? (:tipo %)))
+    (comum/linhas->kebab
+     (jdbc/execute! tx
+       (sql/format {:select [:pc.id [:pc.objeto_id :proposicao_id] :p.tipo :p.ano :p.sequencial
+                             :p.urn_lex :p.ementa :pc.criado_em]
+                    :from [[:legislativo.pareceres :pc]]
+                    :left-join [[:legislativo.proposicoes :p]
+                                [:and [:= :p.id :pc.objeto_id] [:= :p.ente_id :pc.ente_id]]]
+                    :where [:and [:= :pc.ente_id ente-id] [:= :pc.objeto_tipo [:inline "proposicao"]]
+                            [:= :pc.estado [:inline "aguardando_designacao"]]]
+                    :order-by [[:pc.criado_em :asc]]
+                    :limit teto})))))

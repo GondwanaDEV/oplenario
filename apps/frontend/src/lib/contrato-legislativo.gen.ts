@@ -220,8 +220,11 @@ export interface CienciaPendenteOut {
 export interface MeuPainelOut {
   vereadorId?: string | null;
   proposicoes: ProposicaoResumoMeuPainelOut[];
+  proposicoesTruncado: boolean;
   pareceres: ParecerResumoMeuPainelOut[];
+  pareceresTruncado: boolean;
   ciencias: CienciaPendenteOut[];
+  cienciasTruncado: boolean;
 }
 
 export interface AcusarCienciaOut {

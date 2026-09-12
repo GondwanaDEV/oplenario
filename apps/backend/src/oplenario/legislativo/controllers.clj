@@ -136,8 +136,9 @@
 
 (defn relatores-pendentes
   "Fila de pareceres 'aguardando_designacao' do tenant `ente-id` (leitura tenant-wide, sem ator/policy fina —
-  mesmo contrato de `resumo-presenca`/`esic-cumprimento`). Devolve as linhas cruas (kebab, do db); o
-  adapters/out projeta+valida o contrato RelatoresPendentesOut."
+  mesmo contrato de `resumo-presenca`/`esic-cumprimento`). Devolve {:itens [...] :truncado bool} cru
+  (kebab, do Repo — frente 'truncamento-familia'); o adapters/out projeta+valida o contrato
+  RelatoresPendentesOut."
   [repo-legislativo ente-id]
   (repo/relatores-pendentes repo-legislativo ente-id))
 
@@ -603,7 +604,8 @@
   [repo-legislativo resolver-vereador ator]
   (if-let [vereador-id (resolver-vereador (:ente-id ator) (:identidade-id ator))]
     (assoc (repo/meu-painel repo-legislativo (:ente-id ator) vereador-id) :vereador-id vereador-id)
-    {:vereador-id nil :proposicoes [] :pareceres [] :ciencias []}))
+    {:vereador-id nil :proposicoes [] :proposicoes-truncado false :pareceres [] :pareceres-truncado false
+     :ciencias [] :ciencias-truncado false}))
 
 (defn acusar-ciencia
   "Onda C1 — 'Dar ciencia' (Task 3): registra a ciencia do vereador ATOR sobre `evento-ref` (anti-forja:

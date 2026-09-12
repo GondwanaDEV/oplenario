@@ -36,12 +36,22 @@
 
 (def MeuPainelOut
   "A resposta de GET /meu/painel (Onda C1, §11.2/§11.3; +vereador-id Onda C3 — bootstrap de identidade p/
-  o cockpit ao vivo interpretar o placar/presenca compartilhados, ambos keyed por vereador-id)."
+  o cockpit ao vivo interpretar o placar/presenca compartilhados, ambos keyed por vereador-id).
+
+  `<lista>-truncado` (booleano, um por lista — frente 'truncamento-familia'): as 3 listas cortam num teto
+  server-side (`teto-meu-painel`, PRIVADO em `components/repositorio`, nunca exposto aqui — regra 1 da
+  familia) sem paginacao nesta fatia; mesma sonda teto+1 ja' usada por `wire/out/ficha-materia` — sem 5a
+  forma, sem `count(*)` novo. `:ciencias-truncado` e' o mais grave dos 3: cada `parecer-id` de `:ciencias`
+  e' o `evento-ref` que POST /meu/ciencias exige, e o FE so' obtem esse id POR AQUI — uma ciencia cortada
+  e' uma ciencia que o vereador nao tem como dar."
   [:map {:closed true}
    [:vereador-id {:optional true} [:maybe :string]]
    [:proposicoes [:sequential ProposicaoResumoMeuPainelOut]]
+   [:proposicoes-truncado :boolean]
    [:pareceres [:sequential ParecerResumoMeuPainelOut]]
-   [:ciencias [:sequential CienciaPendenteOut]]])
+   [:pareceres-truncado :boolean]
+   [:ciencias [:sequential CienciaPendenteOut]]
+   [:ciencias-truncado :boolean]])
 
 (def AcusarCienciaOut
   "A resposta de POST /meu/ciencias — o recibo append-only (Inv.10)."

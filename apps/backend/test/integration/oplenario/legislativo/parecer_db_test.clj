@@ -8,6 +8,7 @@
   terminal (nivel b) + historico append-only (nivel a). Decisao (b) do workflow de reuso do motor."
   (:require [clojure.test :refer [deftest is use-fixtures]]
             [com.stuartsierra.component :as component]
+            [honey.sql :as sql]
             [malli.core :as m]
             [next.jdbc :as jdbc]
             [oplenario.cadastros.relacoes.cadastro :as rel-cad]
@@ -230,7 +231,42 @@
           (let [itens (parecer/relatores-pendentes tx ente 50)]
             (is (= 1 (count itens)))
             (is (= pid (:proposicao-id (first itens))))
-            (is (= "Arborização viária" (:ementa (first itens))))))))))
+            (is (= "Arborização viária" (:ementa (first itens))))
+            (is (false? (:indisponivel (first itens)))
+                "controle: objeto que resolve nao e' marcado indisponivel")))))))
+
+;; ---------- frente 'truncamento-familia', achado 'classe JOIN' ----------
+
+(defn- inserir-parecer-orfao!
+  "INSERT direto (bypassa `criar!`, cuja prova de existencia acontece no SERVICO, nao no banco: SEM FK
+  declarativa em objeto_id, disc.2). Simula o estado que a falta de FK PERMITE — um `objeto_id` que nao
+  resolve a proposicao nenhuma neste tenant — mesmo padrao de `inserir-transicao-legado!` deste arquivo
+  (insert cru pra' exercitar um estado que o caminho normal da aplicacao nao produz, mas que a defesa em
+  profundidade (LEFT JOIN, nao INNER) tem de aguentar sem esconder a linha."
+  [tx ente tid]
+  (:id (db-util/linha->kebab
+        (jdbc/execute-one! tx
+          (sql/format {:insert-into :legislativo.pareceres
+                       :values [{:id (random-uuid) :ente_id ente :objeto_tipo [:inline "proposicao"]
+                                 :objeto_id (random-uuid) :comissao_id (random-uuid) :template_id tid
+                                 :estado [:inline "aguardando_designacao"] :efetivado_em [:now]}]
+                       :returning [:id]})))))
+
+(deftest relatores-pendentes-nao-esconde-parecer-com-objeto-orfao
+  ;; achado 'classe JOIN': INNER JOIN sobre objeto_id (sem FK, disc.2) fazia um parecer
+  ;; 'aguardando_designacao' cujo objeto_id NAO resolve SUMIR da fila sem contagem nem erro — a Mesa lia
+  ;; "0 pendentes" com 1 parecer de verdade esperando designacao. LEFT JOIN mantem a linha, marcada
+  ;; `:indisponivel true` em vez de fabricar um cabecalho que nao existe.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (montar-template-parecer! tx ente)
+              pid-orfao (inserir-parecer-orfao! tx ente tid)
+              itens (parecer/relatores-pendentes tx ente 50)]
+          (is (= 1 (count itens)) "o parecer orfao continua na fila, nao some")
+          (is (= pid-orfao (:id (first itens))))
+          (is (true? (:indisponivel (first itens))) "objeto_id que nao resolve -> marcado indisponivel")
+          (is (nil? (:ementa (first itens))) "sem par no JOIN, os campos da proposicao vem nulos, nao fabricados"))))))
 
 ;; ==============================================================================================
 ;; ADR-0004 (frente `guarda-so-apurado`) — Fatia 3: `alegado` sai do `amb` de RUNTIME (espelho do

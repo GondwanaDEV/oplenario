@@ -62,7 +62,8 @@
 (defn- ler-json [r] (json/read-value (:body r) json/keyword-keys-object-mapper))
 
 (defn- painel-fake []
-  {:proposicoes [] :pareceres [] :ciencias []})
+  {:proposicoes [] :proposicoes-truncado false :pareceres [] :pareceres-truncado false
+   :ciencias [] :ciencias-truncado false})
 
 ;; ========================= GET /meu/painel =========================
 
@@ -87,7 +88,9 @@
                            :get "/meu/painel" :headers (com-bearer (token (random-uuid) (random-uuid))))
         corpo (ler-json r)]
     (is (= 200 (:status r)))
-    (is (= {:vereador-id nil :proposicoes [] :pareceres [] :ciencias []} corpo))))
+    (is (= {:vereador-id nil :proposicoes [] :proposicoes-truncado false :pareceres []
+            :pareceres-truncado false :ciencias [] :ciencias-truncado false}
+           corpo))))
 
 (deftest meu-painel-sem-papel-vereador-403
   (doseq [papeis [#{"secretario"} #{"cidadao"}]]
@@ -136,10 +139,14 @@
         repo (fake-repo-legislativo
               {:acusar-ciencia! (fn [_e _m] (reset! acusado? true)
                                    {:id (random-uuid) :ciente-em (java.time.Instant/parse "2026-07-11T09:14:00Z")})
-               :meu-painel (fn [_e _v] (if @acusado? (painel-fake) {:proposicoes [] :pareceres []
-                                                                      :ciencias [{:parecer-id evento :proposicao-id (random-uuid)
-                                                                                  :tipo "projeto_lei" :ano 2026 :sequencial 1
-                                                                                  :urn-lex "urn:fixture" :ementa "X"}]}))})
+               :meu-painel (fn [_e _v]
+                             (if @acusado?
+                               (painel-fake)
+                               {:proposicoes [] :proposicoes-truncado false :pareceres []
+                                :pareceres-truncado false :ciencias-truncado false
+                                :ciencias [{:parecer-id evento :proposicao-id (random-uuid)
+                                            :tipo "projeto_lei" :ano 2026 :sequencial 1
+                                            :urn-lex "urn:fixture" :ementa "X"}]}))})
         resolver (fn [e i] (when (and (= e ente) (= i identidade)) vereador))
         service (service-fn #{"vereador"} repo resolver)
         r-get-antes (pt/response-for service :get "/meu/painel" :headers (com-bearer (token ente identidade)))

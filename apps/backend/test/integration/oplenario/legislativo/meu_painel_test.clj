@@ -116,7 +116,8 @@
   ;; nem chega a ser tocado: `repo-legislativo` passado como nil comprova que nao ha chamada nesse ramo).
   (let [ator {:ente-id (random-uuid) :identidade-id (random-uuid)}
         resolver-vereador (fn [_ente-id _identidade-id] nil)]
-    (is (= {:vereador-id nil :proposicoes [] :pareceres [] :ciencias []}
+    (is (= {:vereador-id nil :proposicoes [] :proposicoes-truncado false :pareceres []
+            :pareceres-truncado false :ciencias [] :ciencias-truncado false}
            (controllers/meu-painel nil resolver-vereador ator)))))
 
 (deftest controller-meu-painel-delega-ao-repo-quando-resolver-vereador-resolve
@@ -255,3 +256,56 @@
         "evento-ref de parecer de OUTRO vereador -> nil (borda traduz 404), nunca grava")
     (is (= [] (:ciencias (controllers/meu-painel *repo-legislativo* resolver-vereador ator)))
         "nada foi inserido em ciencia_vereador para vereador-a")))
+
+;; ========================= frente 'truncamento-familia': as 3 listas param de fingir completude ====
+
+(deftest meu-painel-sem-corte-nao-sinaliza-truncamento
+  ;; sanidade: abaixo do teto, as 3 listas concordam com o `-truncado` = false (nunca true por acidente).
+  (let [ente (random-uuid) vereador (random-uuid)]
+    (protocolar! ente vereador)
+    (let [r (repo-legislativo/meu-painel *repo-legislativo* ente vereador)]
+      (is (false? (:proposicoes-truncado r)))
+      (is (false? (:pareceres-truncado r)))
+      (is (false? (:ciencias-truncado r))))))
+
+(deftest meu-painel-sinaliza-truncamento-de-proposicoes-e-pareceres-sem-derivar-do-corte-ja-aplicado
+  ;; `with-redefs` baixa o teto de producao (privado em components/repositorio, 50) pra' 1 — mesmo
+  ;; racional de ficha-completa-sinaliza-truncamento-nas-4-listas: prova o corte SEM pagar 51 linhas
+  ;; reais. O teste NAO quebra se o teto de producao mudar de valor (nao le' o numero, so' redefine).
+  (let [ente (random-uuid) vereador (random-uuid)
+        tid (montar-template-parecer! ente)]
+    (protocolar! ente vereador)
+    (protocolar! ente vereador)
+    (repo-legislativo/iniciar-parecer! *repo-legislativo* ente
+      {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id (protocolar! ente vereador)
+       :comissao-id (random-uuid) :template-id tid :relator-id vereador})
+    (repo-legislativo/iniciar-parecer! *repo-legislativo* ente
+      {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id (protocolar! ente vereador)
+       :comissao-id (random-uuid) :template-id tid :relator-id vereador})
+    (with-redefs [repo-legislativo/teto-meu-painel 1]
+      (let [r (repo-legislativo/meu-painel *repo-legislativo* ente vereador)]
+        (is (= 1 (count (:proposicoes r))) "a LISTA de proposicoes continua cortada no teto injetado")
+        (is (true? (:proposicoes-truncado r)) "4 proposicoes reais > teto 1 -> sinaliza")
+        (is (= 1 (count (:pareceres r))) "a LISTA de pareceres continua cortada no teto injetado")
+        (is (true? (:pareceres-truncado r)) "2 pareceres reais > teto 1 -> sinaliza")))))
+
+(deftest meu-painel-sinaliza-truncamento-de-ciencias-a-fila-de-acao-mais-grave
+  ;; a MAIS GRAVE das 3 listas (cada `parecer-id` de `:ciencias` e' o `evento-ref` que POST /meu/ciencias
+  ;; exige, e o FE so' obtem esse id POR AQUI — uma ciencia cortada e' uma ciencia que o vereador nao tem
+  ;; como dar).
+  (let [ente (random-uuid) vereador (random-uuid)
+        tid (montar-template-parecer! ente)
+        pid1 (protocolar! ente vereador)
+        pid2 (protocolar! ente vereador)
+        {pcid1 :id} (repo-legislativo/iniciar-parecer! *repo-legislativo* ente
+                      {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id pid1
+                       :comissao-id (random-uuid) :template-id tid})
+        {pcid2 :id} (repo-legislativo/iniciar-parecer! *repo-legislativo* ente
+                      {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id pid2
+                       :comissao-id (random-uuid) :template-id tid})]
+    (publicar-parecer! ente pcid1)
+    (publicar-parecer! ente pcid2)
+    (with-redefs [repo-legislativo/teto-meu-painel 1]
+      (let [r (repo-legislativo/meu-painel *repo-legislativo* ente vereador)]
+        (is (= 1 (count (:ciencias r))) "a LISTA de ciencias continua cortada no teto injetado")
+        (is (true? (:ciencias-truncado r)) "2 ciencias reais > teto 1 -> sinaliza")))))

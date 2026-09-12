@@ -89,16 +89,18 @@ export interface EsicCumprimentoOut {
 export interface RelatorPendenteOut {
   id: string;
   proposicaoId: string;
-  tipo: string;
-  ano: number;
-  sequencial: number;
-  urnLex: string;
-  ementa: string;
+  tipo: string | null;
+  ano: number | null;
+  sequencial: number | null;
+  urnLex: string | null;
+  ementa: string | null;
   criadoEm: string;
+  indisponivel: boolean;
 }
 
 export interface RelatoresPendentesOut {
   itens: RelatorPendenteOut[];
+  truncado: boolean;
 }
 
 export interface CardIndisponivelOut {

@@ -31,7 +31,7 @@
 
 (def ^:private presenca-fake {:media-percentual 78 :sessoes-consideradas 10 :membros-da-casa 43})
 (def ^:private esic-fake {:total-encerrados 49 :cumpridos-no-prazo 47 :percentual 96})
-(def ^:private relatores-fake {:itens []})
+(def ^:private relatores-fake {:itens [] :truncado false})
 
 (deftest mesa-compoe-e-valida-o-contrato
   (let [out (mesa/mesa->wire (rollups-fake) card-compliance-fake presenca-fake esic-fake relatores-fake)]
