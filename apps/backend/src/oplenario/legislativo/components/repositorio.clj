@@ -168,7 +168,14 @@
   (encerrar-votacao! [this ente-id m] "Apura + computa resultado (quorum exato) + grava snapshot, CAS.")
   (anular-votacao! [this ente-id m] "Leva a 'anulada' (correcao = nova votacao).")
   (buscar-votacao [this ente-id id])
+  (votacao-aberta-da-sessao [this ente-id sessao-id]
+    "Fatia 'demo-tres-consertos' #2b — a votacao 'aberta' MAIS RECENTE da sessao, ou nil. Existe pra
+     RECUPERACAO de estado (cliente que conecta sem nenhum evento no stream — retencao MINID de 5min do
+     canal, `tempo_real/components`), nunca pra substituir o SSE.")
   (votos-da-votacao [this ente-id votacao-id])
+  (contar-votos-secretos-da-votacao [this ente-id votacao-id]
+    "Tick anonimo (contagem, nunca apuracao por valor) — sigilo §22.6, mesma fronteira de
+     VotoRegistradoPayload.")
   ;; F3.8a — pos-aprovacao: autografo (artefato legal append-only) + tramitacao no Executivo (sancao/veto)
   (gerar-autografo! [this ente-id m] "Numera gapless + insere o autografo (append-only); UNIQUE por proposicao.")
   (buscar-autografo [this ente-id id])
@@ -766,7 +773,11 @@
           r))))
   (anular-votacao! [this ente-id m] (transacao this ente-id #(votacao/anular! % (assoc m :ente-id ente-id))))
   (buscar-votacao [this ente-id id] (transacao this ente-id #(votacao/buscar % ente-id id)))
+  (votacao-aberta-da-sessao [this ente-id sessao-id]
+    (transacao this ente-id #(votacao/aberta-da-sessao % ente-id sessao-id)))
   (votos-da-votacao [this ente-id vid] (transacao this ente-id #(votacao/votos-da-votacao % ente-id vid)))
+  (contar-votos-secretos-da-votacao [this ente-id vid]
+    (transacao this ente-id #(votacao/contar-votos-secretos % ente-id vid)))
   ;; F3.8a — pos-aprovacao. autografo = append-only (artefato legal); tramitacao_executiva = state machine.
   ;; Apreciacao do veto carrega o id da VOTACAO (eixo G, maioria absoluta) — composicao no controller/sessao.
   (gerar-autografo! [this ente-id m] (transacao this ente-id #(autografo/gerar! % (assoc m :ente-id ente-id))))

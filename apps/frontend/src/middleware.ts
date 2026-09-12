@@ -20,6 +20,7 @@ import { NextResponse, type NextRequest } from "next/server";
 // interpreta `matcher`) — sem isto, uma rota pública chamada fora do runtime do Next seria gated por
 // engano.
 const PREFIXOS_PROTEGIDOS = [
+  "/acompanhamentos",
   "/editor-proposicao",
   "/expediente",
   "/ficha-materia",
@@ -71,6 +72,7 @@ export function middleware(request: NextRequest): NextResponse {
 
 export const config = {
   matcher: [
+    "/acompanhamentos/:path*",
     "/editor-proposicao/:path*",
     "/expediente/:path*",
     "/ficha-materia/:path*",

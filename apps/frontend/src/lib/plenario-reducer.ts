@@ -23,6 +23,12 @@ const TIPOS_EVENTO_FALA = new Set(["fala.iniciada", "fala.cronometro", "fala.enc
  * em `hidratarTribuna`. Ver a docstring de `TIPOS_EVENTO_FALA` sobre por que são dois Sets, não um. */
 const TIPOS_EVENTO_INSCRICAO = new Set(["inscricao.registrada", "inscricao.desistida"]);
 
+/** Os 3 tipos de `EventoPlenario` que tocam `placar` — FONTE ÚNICA da precedência de `hidratarVotacao`
+ * (fatia "demo-tres-consertos" #2b). Mesmo racional de `TIPOS_EVENTO_FALA`/`TIPOS_EVENTO_INSCRICAO`: um
+ * evento vivo chegado DEPOIS do disparo do snapshot de recuperação não pode ser sobrescrito por uma
+ * resposta HTTP atrasada — o snapshot só se aplica se `votacaoEventoSeq` não avançou nesse meio-tempo. */
+const TIPOS_EVENTO_VOTACAO = new Set(["votacao.aberta", "voto.registrado", "votacao.encerrada"]);
+
 export interface MarcoCronometro {
   tipo: string; // pausada | retomada | aparte_concedido | tempo_adicional_concedido
   ocorridoEm: string;
@@ -71,6 +77,12 @@ export interface PlacarVotacao {
   votacaoId: string;
   modalidade: string; // "nominal" | "secreta" (vazio se só vimos o encerramento, sem modalidade no payload)
   objetoTipo: string | null;
+  /** `objeto-id` do payload de `votacao.aberta` (fatia "demo-tres-consertos" #2) — o elo que `useDetalheVotacao`
+   * usa pra resolver O QUE está em votação (ementa/tipo/número da matéria) via GET /sessoes/:id/votacoes/:id.
+   * `votacao.encerrada` NUNCA carrega objeto-id (EncerradaPayload não tem esse campo) — por isso, como
+   * `objetoTipo`, só sobrevive por reconexão (`anterior?.objetoId`); reconectar vendo só o encerramento (sem
+   * ter visto a abertura) deixa `null`, mesma honestidade de `objetoTipo`. */
+  objetoId: string | null;
   encerrada: boolean;
   votosNominais: Record<string, VotoNominal>; // só NOMINAL: vereadorId -> voto (mostra quem votou o quê)
   votosSecretos: number; // só SECRETA: contagem de votos registrados (anônimo)
@@ -145,12 +157,21 @@ export interface EstadoPlenario {
   /** Contador monotônico dos 2 eventos de `TIPOS_EVENTO_INSCRICAO` já aplicados — a mesma PRECEDÊNCIA
    * de `falaEventoSeq`, mas só para o campo `inscritos`. Ver a docstring de `falaEventoSeq`. */
   inscricaoEventoSeq: number;
+  /** Contador monotônico dos 3 eventos de `TIPOS_EVENTO_VOTACAO` já aplicados — a mesma PRECEDÊNCIA de
+   * `falaEventoSeq`/`inscricaoEventoSeq`, agora para `placar` (fatia "demo-tres-consertos" #2b). O hook
+   * captura este valor antes de disparar `GET .../votacao-aberta`; se tiver avançado quando a resposta
+   * chega, um evento de votação ao vivo já é mais novo que o snapshot em voo, e `hidratarVotacao`
+   * descarta em vez de sobrescrever um placar que o próprio SSE já atualizou/encerrou nesse meio-tempo. */
+  votacaoEventoSeq: number;
   /** `true` desde o primeiro `tempo-real.lacuna` visto nesta conexão (frente 'truncamento-familia',
    * sítio d): o backplane encontrou uma entrada corrompida no replay e não tem como dizer QUAL campo
    * ela afetava. STICKY de propósito — nunca volta a `false` sozinho: para quórum/tribuna o próprio
    * sinal já pede re-hidratação (`precisaRehidratar`, que os corrige em segundos), mas o placar de
    * votação não tem nenhum caminho de re-busca (é só o agregado de eventos SSE), então o aviso
-   * permanece visível pelo resto da sessão em vez de fingir que o risco passou. */
+   * permanece visível pelo resto da sessão em vez de fingir que o risco passou. (Fatia "demo-tres-
+   * consertos" #2b: o placar ganhou UM caminho de re-busca — `hidratarVotacao`, para o cliente frio que
+   * nunca viu `votacao.aberta` — mas ele não desarma este aviso; um self-heal completo do aviso a partir
+   * da recuperação é decisão maior, não tomada aqui.) */
   avisoLacuna: boolean;
 }
 
@@ -176,6 +197,7 @@ export function estadoInicial(sessao: SessaoOut): EstadoPlenario {
     composicaoStatus: "carregando",
     ultimoSeq: 0,
     falaEventoSeq: 0,
+    votacaoEventoSeq: 0,
     inscricaoEventoSeq: 0,
     avisoLacuna: false,
   };
@@ -422,16 +444,90 @@ export function falharTribuna(estado: EstadoPlenario): EstadoPlenario {
   return estado;
 }
 
+/** O snapshot de GET /sessoes/:id/votacao-aberta (fatia "demo-tres-consertos" #2b — RECUPERAÇÃO de
+ * estado: o canal Valkey tem retenção MINID de ~5min, e um cliente que conecta depois disso nunca vê
+ * `votacao.aberta`, mesmo com uma votação de verdade aberta no servidor). Mão-tipado: `legislativo` ainda
+ * não participa do codegen Malli->TS nesta vertical (mesmo precedente de use-detalhe-votacao.ts).
+ * `votos`/`votosRegistrados` são MUTUAMENTE EXCLUSIVOS — o backend crava isso num `:multi` por
+ * modalidade (sigilo §22.6): `votos` só quando `modalidade === "nominal"`. */
+export type VotacaoAbertaSnapshot = {
+  votacaoId: string;
+  modalidade: string;
+  objetoTipo: string;
+  objetoId: string;
+  votos?: { vereadorId: string; voto: VotoNominal }[];
+  votosRegistrados?: number;
+};
+
+/** Hidrata `placar` a partir do snapshot de recuperação. PURA e TOTAL: nunca lança, um corpo de forma
+ * inesperada devolve o estado inalterado.
+ *
+ * `seqNoDisparo` é o `estado.votacaoEventoSeq` que o HOOK capturou no instante em que disparou o
+ * request — mesmo padrão de `hidratarTribuna`/`TribunaEventoSeqNoDisparo` (fix I2b): se um evento de
+ * VOTAÇÃO ao vivo chegar enquanto esta resposta está em voo, a hidratação DESCARTA o snapshot inteiro em
+ * vez de sobrescrever um placar que o próprio SSE já construiu/encerrou nesse meio-tempo — a alternativa
+ * ("servidor sempre vence") ressuscitaria em produção uma votação que a Mesa já havia encerrado, só
+ * porque a resposta HTTP chegou atrasada.
+ *
+ * `cru === null` é o estado LEGÍTIMO "nenhuma votação aberta" (o backend responde 404 pra isso, nunca
+ * erro) — nada a hidratar; `placar` já nasce `null` em `estadoInicial` e só sai daí por um evento ao vivo
+ * ou por este mesmo caminho. */
+export function hidratarVotacao(
+  estado: EstadoPlenario,
+  cru: VotacaoAbertaSnapshot | null,
+  seqNoDisparo: number,
+): EstadoPlenario {
+  if (estado.votacaoEventoSeq !== seqNoDisparo) return estado;
+  if (cru === null) return estado;
+  if (typeof cru !== "object" || typeof cru.votacaoId !== "string" || typeof cru.modalidade !== "string") {
+    return estado;
+  }
+
+  const votosNominais: Record<string, VotoNominal> = {};
+  if (Array.isArray(cru.votos)) {
+    for (const v of cru.votos) {
+      if (v && typeof v.vereadorId === "string" && typeof v.voto === "string") {
+        votosNominais[v.vereadorId] = v.voto as VotoNominal;
+      }
+    }
+  }
+
+  return {
+    ...estado,
+    placar: {
+      votacaoId: cru.votacaoId,
+      modalidade: cru.modalidade,
+      objetoTipo: typeof cru.objetoTipo === "string" ? cru.objetoTipo : null,
+      objetoId: typeof cru.objetoId === "string" ? cru.objetoId : null,
+      encerrada: false, // esta rota só devolve votação com estado 'aberta' no servidor
+      votosNominais,
+      votosSecretos: typeof cru.votosRegistrados === "number" ? cru.votosRegistrados : 0,
+      resultado: null,
+      totais: null,
+      baseMembros: null,
+    },
+  };
+}
+
+/** A borda de recuperação da votação falhou (rede/403/500/parse) — DISTINTO de `cru === null` acima
+ * (aquele é "não há votação", este é "não sei se há"). Mesma postura de `falharTribuna`: não muda nada,
+ * o SSE segue sendo a única fonte até a próxima tentativa. */
+export function falharVotacao(estado: EstadoPlenario): EstadoPlenario {
+  return estado;
+}
+
 export function aplicarEvento(estado: EstadoPlenario, evento: EventoPlenario): EstadoPlenario {
-  // Os dois contadores de tribuna avançam aqui, na construção de `base`, e não em cada `case`: um
-  // `case` que devolve `base` cedo (ex.: `fala.cronometro` para uma fala que não é a corrente) precisa
-  // do avanço do MESMO jeito — o evento chegou e o snapshot em voo já é mais velho, ainda que o reducer
-  // não tenha mudado nada visível a partir dele.
+  // Os contadores de precedência avançam aqui, na construção de `base`, e não em cada `case`: um `case`
+  // que devolve `base` cedo (ex.: `fala.cronometro` para uma fala que não é a corrente) precisa do avanço
+  // do MESMO jeito — o evento chegou e o snapshot em voo já é mais velho, ainda que o reducer não tenha
+  // mudado nada visível a partir dele. `votacaoEventoSeq` (fatia "demo-tres-consertos" #2b) segue a MESMA
+  // disciplina de `falaEventoSeq`/`inscricaoEventoSeq`.
   const base = {
     ...estado,
     ultimoSeq: Math.max(estado.ultimoSeq, evento.seq),
     falaEventoSeq: estado.falaEventoSeq + (TIPOS_EVENTO_FALA.has(evento.tipo) ? 1 : 0),
     inscricaoEventoSeq: estado.inscricaoEventoSeq + (TIPOS_EVENTO_INSCRICAO.has(evento.tipo) ? 1 : 0),
+    votacaoEventoSeq: estado.votacaoEventoSeq + (TIPOS_EVENTO_VOTACAO.has(evento.tipo) ? 1 : 0),
   };
 
   switch (evento.tipo) {
@@ -522,6 +618,7 @@ export function aplicarEvento(estado: EstadoPlenario, evento: EventoPlenario): E
           votacaoId: d["votacao-id"],
           modalidade: d.modalidade,
           objetoTipo: d["objeto-tipo"],
+          objetoId: d["objeto-id"] ?? null,
           encerrada: false,
           votosNominais: {},
           votosSecretos: 0,
@@ -562,6 +659,7 @@ export function aplicarEvento(estado: EstadoPlenario, evento: EventoPlenario): E
           votacaoId: d["votacao-id"],
           modalidade: anterior?.modalidade ?? d.modalidade ?? "",
           objetoTipo: anterior?.objetoTipo ?? null,
+          objetoId: anterior?.objetoId ?? null,
           encerrada: true,
           votosNominais: anterior?.votosNominais ?? {},
           votosSecretos: anterior?.votosSecretos ?? 0,

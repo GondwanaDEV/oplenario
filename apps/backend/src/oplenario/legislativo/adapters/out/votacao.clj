@@ -40,3 +40,34 @@
             {:id (->str id) :estado estado :resultado resultado
              :total-sim sim :total-nao nao :total-abstencao abstencao :base-membros base-membros}
             "encerramento de votacao"))
+
+(defn objeto->wire
+  "{:objeto-tipo :proposicao} (controllers/detalhe-votacao) -> ObjetoVotacaoOut (fatia 'demo-tres-consertos'
+  #2). `:proposicao` (quando presente) e' o registro CHEIO de `repo/buscar-proposicao` — SELECT-KEYS aqui e'
+  a defesa: so' tipo/ano/sequencial/ementa atravessam pro cliente, nunca autor/estado/atributos-especificos/
+  etc que a leitura completa carrega e este recurso nao precisa expor."
+  [{:keys [objeto-tipo proposicao]}]
+  (validado wire/ObjetoVotacaoOut
+            {:objeto-tipo objeto-tipo
+             :proposicao (when proposicao (select-keys proposicao [:tipo :ano :sequencial :ementa]))}
+            "objeto de votacao"))
+
+(defn- proposicao-resumo [p] (when p (select-keys p [:tipo :ano :sequencial :ementa])))
+
+(defn votacao-aberta->wire
+  "{:votacao-id :modalidade :objeto-tipo :proposicao :votos|:votos-registrados} (controllers/votacao-aberta)
+  -> VotacaoAbertaOut (fatia 'demo-tres-consertos' #2b). `:votos` (lista {vereador-id voto}) SO' atravessa
+  quando `:modalidade` e' EXATAMENTE 'nominal' — o schema `:multi` (`:dispatch :modalidade`) torna
+  estruturalmente impossivel uma votacao 'secreta'/'simbolica' carregar essa chave: um `merge` descuidado
+  que tentasse incluir `:votos` no ramo errado reprova a validacao (500), nunca vaza voto individual em
+  silencio (sigilo §22.6, mesma fronteira de `voto->wire`/`VotoRegistradoPayload`)."
+  [{:keys [votacao-id modalidade objeto-tipo objeto-id proposicao votos votos-registrados]}]
+  (validado wire/VotacaoAbertaOut
+            (if (= "nominal" modalidade)
+              {:votacao-id (->str votacao-id) :modalidade modalidade :objeto-tipo objeto-tipo
+               :objeto-id (->str objeto-id) :proposicao (proposicao-resumo proposicao)
+               :votos (mapv (fn [v] {:vereador-id (->str (:vereador-id v)) :voto (:voto v)}) votos)}
+              {:votacao-id (->str votacao-id) :modalidade modalidade :objeto-tipo objeto-tipo
+               :objeto-id (->str objeto-id) :proposicao (proposicao-resumo proposicao)
+               :votos-registrados votos-registrados})
+            "votacao aberta"))

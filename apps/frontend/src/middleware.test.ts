@@ -57,6 +57,22 @@ describe("middleware — gate de presença do cookie sessao em rotas protegidas"
     expect(new URL(resp.headers.get("location")!).pathname).toBe("/entrar");
   });
 
+  // fatia "demo-tres-consertos" #3 — a cidadã autenticada (vínculo `cidadao`, sem papel) tem sessão real
+  // mas nenhuma tela chamava a rota. `/acompanhamentos` é a primeira; exige SESSÃO (o mesmo gate de
+  // presença de cookie de qualquer outra rota protegida), nunca papel — não há guard de papel em (cidadao).
+  it("rota /acompanhamentos (cidadã) sem cookie → redireciona pro mesmo /entrar", async () => {
+    const resp = middleware(req("/acompanhamentos"));
+    expect(resp.status).toBe(307);
+    const location = new URL(resp.headers.get("location")!);
+    expect(location.pathname).toBe("/entrar");
+    expect(location.searchParams.get("redirect")).toBe("/acompanhamentos");
+  });
+
+  it("rota /acompanhamentos COM cookie sessao → passa (sem redirect)", async () => {
+    const resp = middleware(req("/acompanhamentos", "sessao=segredo-opaco"));
+    expect(resp.headers.get("location")).toBeNull();
+  });
+
   it("(publico) /portal sem cookie → nunca gated, passa direto", async () => {
     const resp = middleware(req("/portal/materias/123"));
     expect(resp.headers.get("location")).toBeNull();

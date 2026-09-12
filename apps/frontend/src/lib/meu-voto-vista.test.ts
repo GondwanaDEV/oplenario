@@ -35,7 +35,7 @@ describe("derivarMeuVoto", () => {
       ...BASE,
       presentes: ["v1"],
       placar: {
-        votacaoId: "vot1", modalidade: "nominal", objetoTipo: "proposicao", encerrada: false,
+        votacaoId: "vot1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1", encerrada: false,
         votosNominais: {}, votosSecretos: 0, resultado: null, totais: null, baseMembros: null,
       },
     };
@@ -47,7 +47,7 @@ describe("derivarMeuVoto", () => {
       ...BASE,
       presentes: [],
       placar: {
-        votacaoId: "vot1", modalidade: "nominal", objetoTipo: "proposicao", encerrada: false,
+        votacaoId: "vot1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1", encerrada: false,
         votosNominais: {}, votosSecretos: 0, resultado: null, totais: null, baseMembros: null,
       },
     };
@@ -59,7 +59,7 @@ describe("derivarMeuVoto", () => {
       ...BASE,
       presentes: ["v1"],
       placar: {
-        votacaoId: "vot1", modalidade: "nominal", objetoTipo: "proposicao", encerrada: false,
+        votacaoId: "vot1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1", encerrada: false,
         votosNominais: { v1: "sim" }, votosSecretos: 0, resultado: null, totais: null, baseMembros: null,
       },
     };
@@ -72,7 +72,7 @@ describe("derivarMeuVoto", () => {
     const estado: EstadoPlenario = {
       ...BASE,
       placar: {
-        votacaoId: "vot1", modalidade: "secreta", objetoTipo: "proposicao", encerrada: false,
+        votacaoId: "vot1", modalidade: "secreta", objetoTipo: "proposicao", objetoId: "p1", encerrada: false,
         votosNominais: {}, votosSecretos: 3, resultado: null, totais: null, baseMembros: null,
       },
     };
@@ -85,7 +85,7 @@ describe("derivarMeuVoto", () => {
     const estado: EstadoPlenario = {
       ...BASE,
       placar: {
-        votacaoId: "vot1", modalidade: "secreta", objetoTipo: "proposicao", encerrada: true,
+        votacaoId: "vot1", modalidade: "secreta", objetoTipo: "proposicao", objetoId: "p1", encerrada: true,
         votosNominais: {}, votosSecretos: 3, resultado: "aprovada",
         totais: { sim: 6, nao: 3, abstencao: 1 }, baseMembros: 11,
       },
@@ -97,7 +97,7 @@ describe("derivarMeuVoto", () => {
     const estado: EstadoPlenario = {
       ...BASE,
       placar: {
-        votacaoId: "vot1", modalidade: "nominal", objetoTipo: "proposicao", encerrada: true,
+        votacaoId: "vot1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1", encerrada: true,
         votosNominais: { v1: "sim" }, votosSecretos: 0, resultado: "aprovada",
         totais: { sim: 6, nao: 3, abstencao: 1 }, baseMembros: 11,
       },
@@ -110,7 +110,7 @@ describe("derivarMeuVoto", () => {
       ...BASE,
       presentes: ["v1"],
       placar: {
-        votacaoId: "vot1", modalidade: "nominal", objetoTipo: "proposicao", encerrada: false,
+        votacaoId: "vot1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1", encerrada: false,
         votosNominais: { v1: "sim" }, votosSecretos: 0, resultado: null, totais: null, baseMembros: null,
       },
     };

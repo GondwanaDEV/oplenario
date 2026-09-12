@@ -18,6 +18,8 @@ import { derivarPlacar, type VistaPlacar } from "@/lib/placar-vista";
 import { useConfirmarPresenca } from "@/lib/use-confirmar-presenca";
 import { useMeuVoto, type VotoNominalIn } from "@/lib/use-meu-voto";
 import { derivarMeuVoto } from "@/lib/meu-voto-vista";
+import { useDetalheVotacao } from "@/lib/use-detalhe-votacao";
+import { tituloObjetoVotacao } from "@/lib/titulo-objeto-votacao";
 import "./votar.css";
 
 const NOME_VOTO: Record<VotoNominalIn, string> = { sim: "Sim", nao: "Não", abstencao: "Abstenção" };
@@ -28,9 +30,22 @@ export default function VotarPage() {
   const { dados: painel, estado: estadoPainel } = useMeuPainel(token);
   const meuVereadorId = painel?.vereadorId ?? null;
 
-  const { estado: estadoPlenario, conexao, erro: erroConexao } = usePlenario(sessaoId ?? "", token);
+  // `comVotacao: true` (fatia "demo-tres-consertos" #2b): o cockpit é EXATAMENTE quem mais precisa da
+  // recuperação de votação — é ele quem vota — e independe de `comQuorum` (o cockpit continua fora do
+  // polling de quórum/tribuna, ver a docstring de `usePlenario`).
+  const { estado: estadoPlenario, conexao, erro: erroConexao } = usePlenario(sessaoId ?? "", token, { comVotacao: true });
   const { confirmar, estado: estadoConfirmar, erro: erroConfirmar } = useConfirmarPresenca(token);
   const { votar, estado: estadoVotar, erro: erroVotar } = useMeuVoto(token);
+  // fatia "demo-tres-consertos" #2 — achado ao vivo: a tela inteira era "Sim/Não/Abster" sem dizer SOBRE
+  // O QUE. `votacaoId` do placar já basta pra resolver (o servidor re-deriva objeto-tipo/objeto-id da
+  // própria votação — nunca confia em campo algum vindo do cliente). Hook chamado SEMPRE, antes de
+  // qualquer `return` condicional abaixo (Rules of Hooks) — `sessaoId`/`votacaoId` ausentes só fazem o
+  // hook devolver estado "ocioso" internamente, nunca pulam a chamada.
+  const { dados: detalheVotacao, estado: estadoDetalheVotacao } = useDetalheVotacao(
+    sessaoId,
+    estadoPlenario?.placar?.votacaoId ?? null,
+    token,
+  );
 
   // review HIGH (revisao final de branch): `estadoSessaoAtual`/`estadoPainel` "erro" NAO podem cair no
   // mesmo ramo de "sem sessao agora" (calmo) nem no de "carregando" — um vereador cuja auth falhou ou cujo
@@ -79,6 +94,7 @@ export default function VotarPage() {
   // chega em `estadoPlenario` (o reducer é compartilhado com a Mesa) ficava mudo aqui, e é o vereador quem
   // aperta o botão de voto olhando este placar. `PlacarMini`, abaixo, é quem renderiza o aviso.
   const placar = derivarPlacar(estadoPlenario?.placar ?? null, estadoPlenario?.avisoLacuna ?? false);
+  const tituloVotacao = tituloObjetoVotacao(detalheVotacao, estadoDetalheVotacao);
 
   async function aoConfirmarPresenca() {
     if (!sessaoId) return;
@@ -134,6 +150,13 @@ export default function VotarPage() {
 
         {placar.kind !== "nenhuma" && (
           <>
+            {/* achado ao vivo (fatia "demo-tres-consertos" #2): antes daqui a tela inteira era
+                "Sim/Não/Abster" sem dizer SOBRE O QUE — o vereador votava num objeto não identificado.
+                `role="status"` (não alert): é informação, não erro, mesmo quando o texto explica uma
+                falha de identificação — o `voto-erro` abaixo já cobre o caso realmente crítico. */}
+            <p className="titulo-objeto-votacao" role="status">
+              {tituloVotacao}
+            </p>
             {vista.ciclo === "sem-presenca" && (
               <div className="presenca-cta">
                 <p className="voto-nota" aria-live="polite">

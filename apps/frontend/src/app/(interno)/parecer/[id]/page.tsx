@@ -65,7 +65,7 @@ export default function PaginaParecer({ params }: { params: Promise<{ id: string
   if (estadoDetalhe === "carregando") {
     return (
       <>
-        <TopoInterno area="Proposições" ator={{ nome: "Rita Campos", papel: "Servidora legislativa" }} />
+        <TopoInterno area="Proposições" />
         <main className="envelope">
           <p role="status">Carregando…</p>
         </main>
@@ -76,7 +76,7 @@ export default function PaginaParecer({ params }: { params: Promise<{ id: string
   if (estadoDetalhe === "erro" || !dados) {
     return (
       <>
-        <TopoInterno area="Proposições" ator={{ nome: "Rita Campos", papel: "Servidora legislativa" }} />
+        <TopoInterno area="Proposições" />
         <main className="tela-estado">
           <h1>Não foi possível carregar este parecer</h1>
         </main>
@@ -92,7 +92,7 @@ export default function PaginaParecer({ params }: { params: Promise<{ id: string
 
   return (
     <>
-      <TopoInterno area="Proposições" ator={{ nome: "Rita Campos", papel: "Servidora legislativa" }} />
+      <TopoInterno area="Proposições" />
       <main className="envelope">
         <div className="doc-cab">
           <div>

@@ -51,7 +51,7 @@ export default function PaginaDashboardMesa() {
   }
   return (
     <>
-      <TopoInterno area="Painéis da Mesa" ator={{ nome: "Sérgio Lopes", papel: "Presidente da Mesa" }} />
+      <TopoInterno area="Painéis da Mesa" />
       <main className="envelope">
         <SaudeInstitucional vista={vista.saude} />
         <div className="cockpit">

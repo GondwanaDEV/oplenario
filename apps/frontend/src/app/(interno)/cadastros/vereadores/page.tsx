@@ -148,7 +148,7 @@ export default function PaginaVereadores() {
   if (estadoLista === "erro") {
     return (
       <>
-        <TopoInterno area="Vereadores" ator={{ nome: "Rita Campos", papel: "Servidora legislativa" }} />
+        <TopoInterno area="Vereadores" />
         <main className="tela-estado">
           <h1>Não foi possível carregar os vereadores</h1>
           <p>Tente novamente em instantes.</p>
@@ -159,7 +159,7 @@ export default function PaginaVereadores() {
 
   return (
     <>
-      <TopoInterno area="Vereadores" ator={{ nome: "Rita Campos", papel: "Servidora legislativa" }} />
+      <TopoInterno area="Vereadores" />
       <main className="envelope">
         <div className="pg-cab">
           <div>

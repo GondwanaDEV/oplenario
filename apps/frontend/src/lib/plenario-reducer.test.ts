@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { aplicarEvento, estadoInicial, falharComposicao, falharQuorum, falharTribuna, hidratarComposicao, hidratarQuorum, hidratarTribuna, identidadeDe, numeroDoTelao, type EstadoPlenario, vistaDoQuorum } from "./plenario-reducer";
+import { aplicarEvento, estadoInicial, falharComposicao, falharQuorum, falharTribuna, falharVotacao, hidratarComposicao, hidratarQuorum, hidratarTribuna, hidratarVotacao, identidadeDe, numeroDoTelao, type EstadoPlenario, vistaDoQuorum } from "./plenario-reducer";
 import { derivarMeuVoto } from "./meu-voto-vista";
 import type { EventoPlenario, SessaoOut } from "./contrato";
 import type { QuorumSessaoOut, TribunaOut } from "./contrato-sessoes.gen";
@@ -158,9 +158,37 @@ describe("votação ao vivo — placar (§22.6 sigilo)", () => {
         modalidade: "nominal", "quorum-tipo": "maioria_simples" } },
     ]);
     expect(e.placar).toEqual({
-      votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", encerrada: false,
+      votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1", encerrada: false,
       votosNominais: {}, votosSecretos: 0, resultado: null, totais: null, baseMembros: null,
     });
+  });
+
+  it("votacao.aberta carrega objeto-id (fatia 'demo-tres-consertos' #2) — o elo pra resolver O QUE está em votação", () => {
+    const e = reduzir(sessao({ estado: "aberta" }), [
+      { tipo: "votacao.aberta", seq: 1, dados: {
+        "votacao-id": "vt1", "sessao-id": "s1", "objeto-tipo": "parecer", "objeto-id": "obj-42",
+        modalidade: "nominal", "quorum-tipo": "maioria_simples" } },
+    ]);
+    expect(e.placar?.objetoId).toBe("obj-42");
+  });
+
+  it("votacao.encerrada preserva o objeto-id acumulado (mesma disciplina de objetoTipo)", () => {
+    const e = reduzir(sessao({ estado: "aberta" }), [
+      { tipo: "votacao.aberta", seq: 1, dados: {
+        "votacao-id": "vt1", "sessao-id": "s1", "objeto-tipo": "proposicao", "objeto-id": "p1",
+        modalidade: "nominal", "quorum-tipo": "maioria_simples" } },
+      { tipo: "votacao.encerrada", seq: 2, dados: {
+        "votacao-id": "vt1", "sessao-id": "s1", resultado: "aprovada", modalidade: "nominal" } },
+    ]);
+    expect(e.placar?.objetoId).toBe("p1");
+  });
+
+  it("votacao.encerrada sem aberta vista (reconexão) não inventa objeto-id — fica null (EncerradaPayload não o carrega)", () => {
+    const e = reduzir(sessao({ estado: "aberta" }), [
+      { tipo: "votacao.encerrada", seq: 9, dados: {
+        "votacao-id": "vt7", "sessao-id": "s1", resultado: "rejeitada", modalidade: "secreta" } },
+    ]);
+    expect(e.placar?.objetoId).toBeNull();
   });
 
   it("voto.registrado nominal grava o voto por vereador (quem votou o quê); re-voto sobrescreve", () => {
@@ -240,6 +268,110 @@ describe("votação ao vivo — placar (§22.6 sigilo)", () => {
   });
 });
 
+// Fatia "demo-tres-consertos" #2b — achado ao vivo (Daouda, 12/09/2026): a Casa recém-semeada tinha uma
+// votação 'aberta' no banco, mas o canal Valkey (retenção MINID ~5min) estava vazio — "Nenhuma votação
+// aberta no momento" com uma votação de verdade aberta. `hidratarVotacao` é o read-model que reconstrói
+// `placar` a partir de GET /sessoes/:id/votacao-aberta, sem depender de nenhum evento SSE ter sido visto —
+// MESMO desenho de `hidratarTribuna` (T1/T3/T4 abaixo espelham os testes irmãos daquele describe).
+describe("votação — recuperação de estado sem nenhum evento SSE (fatia 'demo-tres-consertos' #2b)", () => {
+  const aberta = () => estadoInicial(sessao({ estado: "aberta" }));
+  const seq0 = 0;
+
+  const votacaoAberta = (seq: number, votacaoId = "vt1", modalidade = "nominal"): EventoPlenario => ({
+    tipo: "votacao.aberta",
+    seq,
+    dados: { "votacao-id": votacaoId, "sessao-id": "s1", "objeto-tipo": "proposicao", "objeto-id": "p1", modalidade, "quorum-tipo": "maioria_simples" },
+  });
+
+  const votoRegistrado = (seq: number, vereadorId: string, voto: string, votacaoId = "vt1"): EventoPlenario => ({
+    tipo: "voto.registrado",
+    seq,
+    dados: { "votacao-id": votacaoId, "sessao-id": "s1", modalidade: "nominal", "vereador-id": vereadorId, voto },
+  });
+
+  it("T1 — o CASO DA FATIA: cliente que conecta sem NENHUM evento SSE descobre a votação aberta assim mesmo", () => {
+    const e = hidratarVotacao(
+      aberta(),
+      { votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1", votos: [{ vereadorId: "v1", voto: "sim" }, { vereadorId: "v2", voto: "nao" }] },
+      seq0,
+    );
+    expect(e.placar).toEqual({
+      votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1", encerrada: false,
+      votosNominais: { v1: "sim", v2: "nao" }, votosSecretos: 0, resultado: null, totais: null, baseMembros: null,
+    });
+  });
+
+  it("T2 — sem votação aberta (cru null) é estado LEGÍTIMO: não muda nada, não inventa placar", () => {
+    const e = hidratarVotacao(aberta(), null, seq0);
+    expect(e.placar).toBeNull();
+  });
+
+  it("T3 (MAJOR) — corpo de forma inesperada não lança e não inventa placar: TOTAL, como hidratarTribuna", () => {
+    const base = aberta();
+    expect(() => hidratarVotacao(base, {} as never, seq0)).not.toThrow();
+    expect(hidratarVotacao(base, {} as never, seq0).placar).toBeNull();
+
+    // um item torto na lista de votos não derruba os vizinhos válidos
+    const comItemTorto = hidratarVotacao(
+      base,
+      { votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1", votos: [{ vereadorId: "vOk", voto: "sim" }, { vereadorId: 42 } as never] },
+      seq0,
+    );
+    expect(comItemTorto.placar?.votosNominais).toEqual({ vOk: "sim" });
+  });
+
+  it("T4 (CRÍTICO) — PRECEDÊNCIA: um `voto.registrado` chegado DEPOIS do disparo descarta o snapshot em voo inteiro", () => {
+    // Anatomia do ruling (mesma de hidratarTribuna/T4): T0 dispara o GET; entre T0 e a resposta (T1) o SSE
+    // já abriu a MESMA votação e registrou um voto novo. Se a hidratação aplicasse o snapshot de T0 (o
+    // molde "servidor sempre vence"), o placar RETROCEDERIA — perderia o voto que o próprio SSE já
+    // aplicou. A regra correta é descartar: o SSE é mais novo que o snapshot em voo.
+    const comAbertura = aplicarEvento(aberta(), votacaoAberta(1));
+    const seqNoDisparo = comAbertura.votacaoEventoSeq; // capturado pelo hook ANTES do fetch (T0)
+
+    const comVoto = aplicarEvento(comAbertura, votoRegistrado(2, "vAoVivo", "sim")); // chega em T1
+
+    const resultado = hidratarVotacao(
+      comVoto,
+      { votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1", votos: [] }, // snapshot de T0, sem votos ainda
+      seqNoDisparo,
+    );
+    expect(resultado.placar?.votosNominais).toEqual({ vAoVivo: "sim" }); // preservado — não apagado pelo snapshot velho
+
+    // contraprova: SEM o evento no meio, o mesmo snapshot é aceito normalmente
+    const semEventoNoMeio = hidratarVotacao(
+      comAbertura,
+      { votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1", votos: [{ vereadorId: "vSnapshot", voto: "abstencao" }] },
+      seqNoDisparo,
+    );
+    expect(semEventoNoMeio.placar?.votosNominais).toEqual({ vSnapshot: "abstencao" });
+  });
+
+  it("T5 (§22.6 sigilo) — votação SECRETA hidrata só a CONTAGEM, nunca `votosNominais`", () => {
+    const e = hidratarVotacao(
+      aberta(),
+      { votacaoId: "vt1", modalidade: "secreta", objetoTipo: "proposicao", objetoId: "p1", votosRegistrados: 5 },
+      seq0,
+    );
+    expect(e.placar?.votosSecretos).toBe(5);
+    expect(e.placar?.votosNominais).toEqual({});
+  });
+
+  it("T6 — votação SIMBÓLICA hidrata como a secreta (nenhuma das duas registra voto individual)", () => {
+    const e = hidratarVotacao(
+      aberta(),
+      { votacaoId: "vt1", modalidade: "simbolica", objetoTipo: "proposicao", objetoId: "p1", votosRegistrados: 0 },
+      seq0,
+    );
+    expect(e.placar?.modalidade).toBe("simbolica");
+    expect(e.placar?.votosNominais).toEqual({});
+  });
+
+  it("falharVotacao não muda nada — o SSE segue sendo a única fonte até a próxima tentativa", () => {
+    const comAbertura = aplicarEvento(aberta(), votacaoAberta(1));
+    expect(falharVotacao(comAbertura)).toEqual(comAbertura);
+    expect(falharVotacao(aberta())).toEqual(aberta());
+  });
+});
 
 // ---------------------------------------------------------------------------------------------------
 // QUÓRUM NO TELÃO (Etapa 4) + a REGRESSÃO da revisão adversarial da branch `chamada-etapa4-quorum-hero`.

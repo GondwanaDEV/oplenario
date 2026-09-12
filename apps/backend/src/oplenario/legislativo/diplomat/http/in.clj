@@ -145,6 +145,46 @@
             :conflito/sessao-fechada (resposta-conflito-sessao-fechada e)
             (throw e)))))))
 
+(defn- detalhe-votacao-handler
+  "GET /sessoes/:id/votacoes/:votacao-id (fatia 'demo-tres-consertos' #2, papel 'vereador' — mesmo gate de
+  meu-voto-handler). Resolve O QUE esta em votacao pro cockpit do vereador (e a Mesa, se um dia precisar)
+  pararem de mostrar so' o placar sem ementa nem numero. nil (sessao/votacao inexistente ou de outra sessao)
+  -> 404, mesmo contrato dos irmaos de escrita. Sessao ja fechada -> `:conflito/sessao-fechada` -> 409
+  (mesmo mapeamento das 4 escritas — ver `resposta-conflito-sessao-fechada`)."
+  [repo-leg consultar-sessao sessao-fechada?]
+  (fn [req]
+    (let [ator (:ator req)
+          sid  (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          vid  (adapters-in/id-param->uuid (get-in req [:path-params :votacao-id]))]
+      (try
+        (if-let [detalhe (controllers/detalhe-votacao repo-leg consultar-sessao sessao-fechada? ator sid vid)]
+          (http/json-resposta 200 (adapters-out/objeto->wire detalhe))
+          (http/json-resposta 404 {:erro "votacao nao encontrada nesta sessao"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/sessao-fechada (:tipo (ex-data e)))
+            (resposta-conflito-sessao-fechada e)
+            (throw e)))))))
+
+(defn- votacao-aberta-handler
+  "GET /sessoes/:id/votacao-aberta (fatia 'demo-tres-consertos' #2b, papel 'vereador' — mesmo gate de
+  meu-voto-handler/detalhe-votacao-handler: quem VOTA precisa desta recuperacao, o telao da Mesa NAO ganha
+  acesso aqui — tem o mesmo buraco, mas resolve-lo e' decisao separada, nao ampliada sem pedir). nil
+  (sessao inexistente/de outra Casa, OU sessao sem votacao aberta — ESTADO LEGITIMO) -> 404, mesmo
+  contrato de 'recurso ausente' de toda essa familia. Sessao ja fechada -> 409 (mesmo mapeamento das
+  outras rotas de votacao)."
+  [repo-leg consultar-sessao sessao-fechada?]
+  (fn [req]
+    (let [ator (:ator req)
+          sid  (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (try
+        (if-let [va (controllers/votacao-aberta repo-leg consultar-sessao sessao-fechada? ator sid)]
+          (http/json-resposta 200 (adapters-out/votacao-aberta->wire va))
+          (http/json-resposta 404 {:erro "nenhuma votacao aberta nesta sessao"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/sessao-fechada (:tipo (ex-data e)))
+            (resposta-conflito-sessao-fechada e)
+            (throw e)))))))
+
 (defn- listar-proposicoes-handler
   "GET /legislativo/proposicoes(?busca=&tipo=&estado=&autor-id=&ano=&pagina=&tamanho=&ordenar-por=&ordenar-dir=).
   Leitura tenant-wide (mesmo contrato de authz de /paineis/*, Onda B Slice 1): adapters/in coage os filtros
@@ -708,6 +748,17 @@
       ["/sessoes/:id/votacoes/:votacao-id/encerramento" :post
        [auth papel it/corpo-json (encerrar-handler repo-legislativo consultar-sessao sessao-fechada?)]
        :route-name :legislativo/encerrar-votacao]
+      ["/sessoes/:id/votacoes/:votacao-id" :get
+       [auth papel-vereador (detalhe-votacao-handler repo-legislativo consultar-sessao sessao-fechada?)]
+       :route-name :legislativo/detalhe-votacao]
+      ;; Fatia 2b: literal PRÓPRIO ("votacao-aberta", singular, sem "votacoes/") de proposito — evita
+      ;; colocar um segmento LITERAL no MESMO nivel do wildcard `:votacao-id` acima (risco de colisao no
+      ;; prefix-tree do Pedestal 0.7 quando literal e wildcard disputam a MESMA profundidade sob o mesmo
+      ;; pai; o precedente seguro documentado neste repo — transparencia/diplomat/http/in.clj — só cobre
+      ;; literal como FILHO de um wildcard já resolvido, nunca IRMÃO dele).
+      ["/sessoes/:id/votacao-aberta" :get
+       [auth papel-vereador (votacao-aberta-handler repo-legislativo consultar-sessao sessao-fechada?)]
+       :route-name :legislativo/votacao-aberta]
       ["/legislativo/proposicoes" :get [auth papel (listar-proposicoes-handler repo-legislativo)]
        :route-name :legislativo/listar-proposicoes]
       ["/legislativo/proposicoes" :post

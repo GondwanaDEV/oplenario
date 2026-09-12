@@ -2,8 +2,16 @@
 
 // Barra institucional do App Shell interno (FE Onda A1) — porta ../sistema/chassi.css .topo (mesma
 // marca+área-tag+tema-btn já usados em sessoes/[id]/plenario/page.tsx), agora compartilhada por QUALQUER
-// página autenticada nova. `area` = o rótulo da seção atual (ex. "Painéis da Mesa"); `ator` = quem está
-// logado (nome+papel — vem do JWT decodificado, injetado pelo caller).
+// página autenticada nova. `area` = o rótulo da seção atual (ex. "Painéis da Mesa"); quem está logado
+// (nome+papel) o componente RESOLVE por conta própria via `useMeuIdentidade` — não é mais prop do caller.
+//
+// Conserto (fatia "demo-tres-consertos" #1, achado ao vivo — Daouda, 12/09/2026): até aqui `ator` era um
+// literal fixo passado por CADA página (`{ nome: "Sérgio Lopes", papel: "Presidente da Mesa" }` na Mesa,
+// "Rita Campos"/"Ana Ribeiro" alhures) — toda persona logada via o MESMO nome, sempre. GET /meu/identidade
+// (identidade/diplomat/http/in.clj) devolve o ator REAL; `rotuloPapel` deriva o rótulo de exibição dos
+// PAPÉIS (nunca do cargo de Mesa, que o backend de identidade não enxerga — ver docstring de rotulo-papel.ts).
+// Enquanto carrega ou se a busca falhar, o cabeçalho NUNCA mostra um nome inventado — mostra que está
+// carregando ou que a sessão está indisponível (mesma disciplina de honestidade da tela de votação, fatia 2).
 //
 // .topo/.marca/.tema-btn/.avatar já vivem em ../chassi.css (porte verbatim do design-system). .area-tag e
 // .quem-mesa ainda NÃO foram promovidas ao chassi — hoje só existem inline em
@@ -14,6 +22,8 @@
 import Link from "next/link";
 import { useTema } from "@/lib/tema";
 import { useAuth } from "@/lib/auth";
+import { useMeuIdentidade } from "@/lib/use-meu-identidade";
+import { rotuloPapel } from "@/lib/rotulo-papel";
 import { comToken } from "@/lib/nav";
 import "./topo.css";
 
@@ -33,9 +43,15 @@ const DESTINOS_NAV = [
   { rotulo: "Calendário", href: "/calendario" },
 ];
 
-export function TopoInterno({ area, ator }: { area: string; ator: { nome: string; papel: string } }) {
+export function TopoInterno({ area }: { area: string }) {
   const { tema, alternar } = useTema();
   const { token } = useAuth();
+  const { dados, estado } = useMeuIdentidade(token);
+  // Nunca um nome inventado: "carregando"/"erro" são rótulos HONESTOS, não um ator fixo. `estado==="erro"`
+  // cobre tanto a falha de rede quanto a resposta não-ok (ver docstring de useMeuIdentidade).
+  const nome = estado === "pronto" && dados ? dados.nome : estado === "carregando" ? "Carregando…" : "Sessão";
+  const papel =
+    estado === "pronto" && dados ? rotuloPapel(dados.papeis) : estado === "carregando" ? "" : "indisponível";
   return (
     <header className="topo">
       <div className="envelope topo-grade">
@@ -66,11 +82,11 @@ export function TopoInterno({ area, ator }: { area: string; ator: { nome: string
           </button>
           <div className="quem-mesa">
             <span className="avatar" aria-hidden="true">
-              {ator.nome.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()}
+              {nome.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()}
             </span>
             <span className="quem">
-              <b>{ator.nome}</b>
-              <span>{ator.papel}</span>
+              <b>{nome}</b>
+              <span>{papel}</span>
             </span>
           </div>
         </div>

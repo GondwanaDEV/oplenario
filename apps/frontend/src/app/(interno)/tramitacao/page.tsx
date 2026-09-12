@@ -78,7 +78,7 @@ export default function PaginaTramitacao() {
 
   return (
     <>
-      <TopoInterno area="Tramitação" ator={{ nome: "Rita Campos", papel: "Servidora legislativa" }} />
+      <TopoInterno area="Tramitação" />
       <main className="envelope">
         <div className="pg-cab">
           <div>
