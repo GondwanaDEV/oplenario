@@ -16,7 +16,7 @@
   (rodar via `clojure -Sdeps '{:aliases {:seed {:extra-paths [\"demo\"]}}}' -X:seed seed-demo/<fn>` — fora
   do alias `:dev` porque `dev/user.clj` exige `component.repl` ausente, mesma nota de oplenario-fe-execucao)"
   (:require [com.stuartsierra.component :as component]
-            [jsonista.core :as json]
+            [keycloak-admin :as kc-admin]
             [oplenario.cadastros.db.comissao :as comissao-db]
             [oplenario.cadastros.db.estrutura :as estrutura]
             [oplenario.cadastros.db.referencia :as referencia]
@@ -39,8 +39,7 @@
             [oplenario.sessoes.components.repositorio :as repo]
             [oplenario.transparencia.components.repositorio :as transparencia-repo]
             [clojure.edn :as edn])
-  (:import (java.net URI)
-           (java.net.http HttpClient HttpRequest HttpRequest$BodyPublishers HttpResponse HttpResponse$BodyHandlers)
+  (:import (java.net.http HttpClient)
            (java.time Instant LocalDate)))
 
 (def ids-file "/demo-scratch/demo-ids.edn")
@@ -486,36 +485,11 @@
 
 ;; ---------- Onda D Slice 5 (identidade do vereador, Tier 2) — admin_ente concede acesso a um vereador ----------
 
-;; --- helpers de admin-API do Keycloak (mesmo racional de `setar-senha-teste!`/`limpar-required-actions-teste!`
-;; em test/keycloak/oplenario/keycloak/ponta_a_ponta_test.clj:85-108 — `demo/` nao pode requerer `test/`,
-;; entao replicados aqui verbatim na forma, so' parametrizados por base-url/credenciais em vez de hardcode).
-(defn- admin-token-kc! [^HttpClient http base-url admin-usuario admin-senha]
-  (let [corpo (str "grant_type=password&client_id=admin-cli&username=" admin-usuario "&password=" admin-senha)
-        req (-> (HttpRequest/newBuilder) (.uri (URI/create (str base-url "/realms/master/protocol/openid-connect/token")))
-                (.header "Content-Type" "application/x-www-form-urlencoded")
-                (.POST (HttpRequest$BodyPublishers/ofString corpo)) (.build))
-        resp (.send http req (HttpResponse$BodyHandlers/ofString))]
-    (get (json/read-value (.body resp) json/keyword-keys-object-mapper) :access_token)))
-
-(defn- setar-senha-kc! [^HttpClient http base-url token realm kc-user-id senha]
-  (.send http (-> (HttpRequest/newBuilder)
-                  (.uri (URI/create (str base-url "/admin/realms/" realm "/users/" kc-user-id "/reset-password")))
-                  (.header "Authorization" (str "Bearer " token)) (.header "Content-Type" "application/json")
-                  (.PUT (HttpRequest$BodyPublishers/ofString
-                         (str "{\"type\":\"password\",\"value\":\"" senha "\",\"temporary\":false}")))
-                  (.build))
-            (HttpResponse$BodyHandlers/ofString)))
-
-(defn- limpar-required-actions-kc! [^HttpClient http base-url token realm kc-user-id]
-  (let [resp (.send http (-> (HttpRequest/newBuilder)
-                             (.uri (URI/create (str base-url "/admin/realms/" realm "/users/" kc-user-id)))
-                             (.header "Authorization" (str "Bearer " token)) (.header "Content-Type" "application/json")
-                             (.PUT (HttpRequest$BodyPublishers/ofString "{\"requiredActions\":[]}"))
-                             (.build))
-                       (HttpResponse$BodyHandlers/ofString))]
-    (when-not (= 204 (.statusCode resp))
-      (throw (ex-info "seed-demo/slice5: falha ao limpar required-actions do admin (infra)"
-                       {:status (.statusCode resp) :corpo (.body resp)})))))
+;; Os helpers de admin-API do Keycloak (token/senha/required-actions) foram ELEVADOS pra `keycloak-admin`
+;; (demo/keycloak_admin.clj) — fonte unica, agora tambem consumida por `demo/personas.clj`. Antes desta
+;; mudanca esta ns tinha sua PROPRIA copia `^:private` (`admin-token-kc!`/`setar-senha-kc!`/
+;; `limpar-required-actions-kc!`), verbatim identica (so' o nome) a de
+;; `test/keycloak/oplenario/keycloak/ponta_a_ponta_test.clj:85-108` — a 3a copia da mesma logica.
 
 (defn slice5
   "Semente da Onda D Slice 5 (identidade do vereador, Tier 2): planta o TERRENO p/ provar AO VIVO no browser
@@ -578,10 +552,10 @@
                                                                         :nome "Helena Matos"
                                                                         :email "helena@example.org"})
                realm (str realm-prefixo ente)
-               admin-tok (admin-token-kc! http base-url admin-usuario admin-senha)]
+               admin-tok (kc-admin/admin-token! http base-url admin-usuario admin-senha)]
            ;; SO' o admin — ver docstring acima (o vereador fica intocado).
-           (limpar-required-actions-kc! http base-url admin-tok realm keycloak-user-id)
-           (setar-senha-kc! http base-url admin-tok realm keycloak-user-id "senha-teste-123")
+           (kc-admin/limpar-required-actions! http base-url admin-tok realm keycloak-user-id)
+           (kc-admin/setar-senha! http base-url admin-tok realm keycloak-user-id "senha-teste-123")
 
            (println "\n=== SLICE 5 PRONTO ===")
            (println "ente-id     :" (str ente))

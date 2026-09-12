@@ -21,6 +21,8 @@
             [com.stuartsierra.component :as component]
             [oplenario.cadastros.components.repositorio :as repo-cadastros]
             [oplenario.config :as config]
+            [oplenario.identidade.db.vinculo :as vinc]
+            [oplenario.kernel.tenancy :as tenancy]
             [oplenario.migracao :as migracao]
             [oplenario.sistema :as sistema])
   (:import (java.time LocalDate)))
@@ -89,3 +91,31 @@
       (testing "o cargo do presidente na Mesa e' 'presidente' — o mesmo que a lista mostra ao lado"
         (is (= "presidente" (:cargo mesa-do-presidente))
             "cargo-mesa ficaria null na ficha, contradizendo a lista (que mostra 'PT · presidente')")))))
+
+(deftest a-cidada-tem-vinculo-ativo-sem-papel
+  ;; Defeito medido (nao cosmetico): `criar-identidades!` cria a IDENTIDADE da cidada mas nunca chamava
+  ;; `vinc/criar!` p/ ela — so' secretaria/presidente/vereador ganhavam vinculo. Sem vinculo ATIVO,
+  ;; `autenticacao/resolver-sessao` (fail-closed, ver docstring do ns) devolve nil p/ ela sempre: a
+  ;; superficie do cidadao AUTENTICADO (`GET /portal/acompanhamentos`, `GET /meu/notificacoes` — gated
+  ;; so' por `auth`, sem exigir papel) fica inalcancavel na demo. Cidadao NAO tem papel (quem trabalha na
+  ;; Casa tem papel; quem so' consulta/peticiona, nao) — por isso a asserção de papel e' vazio, nao ausente.
+  (with-sistema [s]
+    (let [{:keys [ente identidades]} (casa/semear! s)
+          ds (get-in s [:datasource :ds])
+          cidadao-id (:cidadao identidades)
+          vinculo-cidadao (tenancy/com-tenant* ds ente
+                             (fn [tx]
+                               (some #(when (= "cidadao" (:tipo %)) %)
+                                     (vinc/vinculos-de tx ente cidadao-id))))]
+      (testing "existe vinculo tipo 'cidadao' e ele esta ATIVO"
+        (is (some? vinculo-cidadao)
+            "cidada sem vinculo — resolver-sessao (fail-closed) nunca devolveria ator p/ ela")
+        (is (= "ativo" (:estado vinculo-cidadao))))
+      (testing "cidadao NAO tem papel — quem trabalha na Casa tem papel, quem so' consulta nao"
+        (is (empty? (tenancy/com-tenant* ds ente
+                      (fn [tx] (vinc/papeis-de tx ente cidadao-id))))))
+      (testing "re-executar `semear!` nao duplica o vinculo (idempotente por ente,identidade,tipo)"
+        (casa/semear! s)
+        (is (= 1 (tenancy/com-tenant* ds ente
+                   (fn [tx] (count (filter #(= "cidadao" (:tipo %))
+                                            (vinc/vinculos-de tx ente cidadao-id)))))))))))

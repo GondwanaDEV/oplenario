@@ -8,8 +8,9 @@
   vereadores (nome/nome-parlamentar/partido distintos) + 17 mandatos vigentes (1 licenciado, p/ a
   jornada de licenca/reassuncao) + Mesa Diretora (presidente/vice/1º e 2º secretarios) + 3 comissoes
   permanentes (CCJ, Financas e Orcamento, Obras e Servicos Publicos) com presidente e membros + 4
-  identidades com vinculo e papel: secretaria (`secretario`), presidente da Mesa (`vereador` +
-  `admin_ente`), vereador comum (`vereador`), cidadao (sem vinculo/papel).
+  identidades, todas com vinculo: secretaria (`servidor` + papel `secretario`), presidente da Mesa
+  (`vereador` + papeis `vereador`/`admin_ente`), vereador comum (`vereador` + papel `vereador`),
+  cidadao (`cidadao`, SEM papel — quem trabalha na Casa tem papel, quem so' consulta/peticiona nao).
 
   IDEMPOTENCIA (Task 0.7 do plano exige 'reusar-se-existir'): `ente`/`municipio` usam ON CONFLICT nos
   proprios `db/` (`estrutura/inserir-ente!`, `referencia/inserir-municipio!`) — idempotentes por
@@ -57,10 +58,13 @@
 ;; CPFs FIXOS e validos (mesmo digito-verificador de `identidade.models.identidade/valido-cpf?` — mod-11,
 ;; pesos 10..2 e 11..2) p/ os 4 atores nomeados. FIXOS (nao `random-uuid`/aleatorio) e' o que faz
 ;; `identidade/inserir!` (idempotente por CPF) devolver o MESMO id em toda chamada de `semear!`.
-(def ^:private cpf-secretaria "12345678062")
-(def ^:private cpf-presidente "23456789092")
-(def ^:private cpf-vereador-comum "34567890175")
-(def ^:private cpf-cidadao "45678901249")
+;; PUBLICOS (nao `^:private`) de proposito: `demo/personas.clj` (a 5a semente, credenciais Keycloak)
+;; precisa resolver os MESMOS 4 identidade-ids por CPF sobre a Casa ja semeada — uma so' fonte destes
+;; literais, nunca redigitados num 2º arquivo (a mesma disciplina que motivou expor `ente-id`).
+(def cpf-secretaria "12345678062")
+(def cpf-presidente "23456789092")
+(def cpf-vereador-comum "34567890175")
+(def cpf-cidadao "45678901249")
 
 ;; 17 vereadores — nome, nome parlamentar e partido DISTINTOS (nada de "Vereador 1"). Indices usados
 ;; abaixo p/ atribuir papeis (Mesa, comissoes, licenca, identidade de login):
@@ -102,10 +106,14 @@
 ;; ---------- identidades (sempre idempotentes — rodam nas duas rotas) ----------
 
 (defn- criar-identidades!
-  "As 4 identidades nomeadas + o vinculo/papel de quem tem acesso a Casa (secretaria/presidente/vereador
-  comum) — o cidadao fica SEM vinculo (a leitura publica do portal nao exige login, §1.5 do plano).
-  `identidade/inserir!`, `vinculo/criar!` e `vinculo/adicionar-papel!` sao TODOS idempotentes (upsert por
-  CPF / DO NOTHING por chave natural) — seguro chamar em toda execucao de `semear!`."
+  "As 4 identidades nomeadas + o vinculo (e, p/ quem trabalha na Casa, o papel): secretaria/presidente/
+  vereador comum ganham vinculo COM papel; o cidadao ganha vinculo tipo 'cidadao' SEM papel nenhum —
+  cidadao nao trabalha na Casa, so' consulta/peticiona (a leitura publica do portal nao exige login,
+  §1.5 do plano; o vinculo aqui e' p/ a superficie do cidadao AUTENTICADO — `GET /portal/acompanhamentos`,
+  `GET /meu/notificacoes`, gated so' por `auth` — que sem vinculo ATIVO nunca resolve sessao, ver
+  `oplenario.identidade.autenticacao/resolver-sessao`, fail-closed). `identidade/inserir!`,
+  `vinculo/criar!` e `vinculo/adicionar-papel!` sao TODOS idempotentes (upsert por CPF / DO NOTHING ou
+  DO UPDATE no-op por chave natural) — seguro chamar em toda execucao de `semear!`."
   [ds]
   (let [sec-id  (id/inserir! ds {:id (random-uuid) :cpf cpf-secretaria :nome "Marina Alencar Freire"})
         pres-id (id/inserir! ds {:id (random-uuid) :cpf cpf-presidente :nome (:nome (nth vereadores-base idx-presidente))})
@@ -119,7 +127,8 @@
         (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente-id :identidade-id pres-id :papel "vereador"})
         (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente-id :identidade-id pres-id :papel "admin_ente"})
         (vinc/criar! tx {:id (random-uuid) :ente-id ente-id :identidade-id ver-id :tipo "vereador"})
-        (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente-id :identidade-id ver-id :papel "vereador"})))
+        (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente-id :identidade-id ver-id :papel "vereador"})
+        (vinc/criar! tx {:id (random-uuid) :ente-id ente-id :identidade-id cid-id :tipo "cidadao"})))
     {:secretaria sec-id :presidente pres-id :vereador ver-id :cidadao cid-id}))
 
 ;; ---------- o bloco cadastral (so' roda na PRIMEIRA chamada — ver `ja-semeada?`) ----------
