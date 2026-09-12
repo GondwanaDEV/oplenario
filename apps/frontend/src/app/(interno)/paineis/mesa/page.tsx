@@ -26,7 +26,7 @@ import "./mesa.css";
 export default function PaginaDashboardMesa() {
   const { token } = useAuth();
   const {
-    mesa, tramitacaoItens, pendenciasItens, pendenciasTotal, sliSessoes, relatoresPendentes,
+    mesa, tramitacaoItens, pendenciasItens, pendenciasTotal, sliSessoes, sliSessoesTotal, relatoresPendentes,
     relatoresPendentesTruncado, estado,
   } = useMesa(token);
   const vista = derivarMesaVista({
@@ -59,7 +59,7 @@ export default function PaginaDashboardMesa() {
             <OQueVence vista={vista.oQueVence} />
             <DespachosDaMesa vista={vista.despachos} />
           </div>
-          <ProximaSessaoRail sliSessoes={sliSessoes} />
+          <ProximaSessaoRail sliSessoes={sliSessoes} sliSessoesTotal={sliSessoesTotal} />
         </div>
         <PipelineLegislativo vista={vista.pipeline} />
         <OrgulhoInstitucional vista={vista.orgulho} />
