@@ -34,8 +34,12 @@
   entrada do stream nao valida na leitura (corrupcao/escrita externa nao confiavel —
   `mensagem-valida?`). Frente 'truncamento-familia', sitio (d): antes, essa entrada era DESCARTADA
   (`keep` devolvendo nil) e o cursor do cliente avancava por cima do buraco como se o replay estivesse
-  integro — sem sinal nenhum, nem no servidor nem no cliente. Agora vira esta mensagem, que ocupa a MESMA
-  seq da entrada corrompida (o cursor avanca SABENDO do buraco, nao por cima dele).
+  integro — sem sinal nenhum, nem no servidor nem no cliente. Agora vira esta mensagem — mas (revisao
+  adversarial 2a rodada, CRITICO) NUNCA na seq que a propria entrada corrompida afirma sobre si (`s` e'
+  campo de um escritor NAO confiavel; um `s` forjado maior que tudo sequestraria o cursor do cliente e
+  apagaria do replay todo evento real subsequente). A seq do sinal e' CLAMPADA a' ultima seq VALIDADA na
+  mesma leitura (`tempo-real/components`) — o cursor avanca sabendo do buraco, mas nunca por CIMA de uma
+  mensagem legitima ainda por vir.
 
   NAO entra em `tipos-plenario`: aquele set e' so' para roteamento de evento de DOMINIO outbox->canal
   (`consumer/tipos-consumidos` registra 1 handler de bus POR tipo dali); registrar um consumidor de bus

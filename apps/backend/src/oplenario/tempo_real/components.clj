@@ -108,21 +108,36 @@
     (let [conn    (or @conn-atom (throw (ex-info "CanalStoreValkey nao iniciado (conn-atom nil)" {:canal canal})))
           entries (car/wcar conn (car/xrange (chave-stream canal) "-" "+"))]
       (->> entries
-           (map (fn [entry]
-                  ;; entry = [id ["m" <msg> "s" "<seq>"]] — le por NOME de campo (nao por posicao; review clj-MINOR)
-                  (let [campos    (apply hash-map (second entry))
-                        msg       (get campos "m")
-                        seq-lida  (parse-long (get campos "s"))]
-                    (if (mensagem-valida? msg)
-                      (assoc msg :seq seq-lida)
-                      ;; frente 'truncamento-familia' sitio (d): NAO descarta — vira sinal (`canais/tipo-lacuna`)
-                      ;; na MESMA seq da entrada corrompida. Descartar (o comportamento antigo) fazia o cursor do
-                      ;; cliente avancar por cima do buraco como se o replay estivesse integro; sem cursor
-                      ;; correspondente para o buraco, o resume por Last-Event-ID nunca teria como saber que
-                      ;; algo faltou. `:dados {}` nunca carrega o payload corrompido ao cliente.
-                      (do (log/warn "ler-desde: mensagem de forma invalida virou sinal de lacuna (cliente avisado, cursor preservado)"
-                                    {:canal canal :seq seq-lida})
-                          {:tipo canais/tipo-lacuna :dados {} :seq seq-lida})))))
+           (reduce
+            (fn [{:keys [saida ultima-seq-confiavel]} entry]
+              ;; entry = [id ["m" <msg> "s" "<seq>"]] — le por NOME de campo (nao por posicao; review clj-MINOR)
+              (let [campos   (apply hash-map (second entry))
+                    msg      (get campos "m")
+                    s-cru    (get campos "s")
+                    ;; `parse-long` so' roda quando `s-cru` JA e' string (review adversarial 2a rodada,
+                    ;; CRITICO/IMPORTANTE): `(parse-long nil)` lanca IllegalArgumentException — o campo `s`
+                    ;; ausente e' a forma MAIS natural de uma escrita externa/corrompida (a mesma classe que
+                    ;; `mensagem-valida?` existe pra tratar), e antes disso o `ler-desde` inteiro MORRIA no
+                    ;; meio do replay (o `catch Throwable` de diplomat/sse.clj fecha o event-channel).
+                    seq-lida (when (string? s-cru) (parse-long s-cru))]
+                (if (and (mensagem-valida? msg) seq-lida)
+                  {:saida                (conj saida (assoc msg :seq seq-lida))
+                   :ultima-seq-confiavel seq-lida}
+                  ;; frente 'truncamento-familia' sitio (d): NAO descarta — vira sinal (`canais/tipo-lacuna`).
+                  ;; A seq do sinal NUNCA vem do campo `s` de uma entrada que reprovou (review adversarial
+                  ;; 2a rodada, CRITICO): promover um `s` externo a cursor deixa um escritor nao-confiavel
+                  ;; escolher onde o cliente reconecta — um `s` forjado MAIOR que tudo sequestra o cursor e
+                  ;; apaga do replay todo evento real subsequente (provado ao vivo contra o Valkey). A seq e'
+                  ;; CLAMPADA a' `ultima-seq-confiavel` (a maior seq de uma entrada de fato validada nesta
+                  ;; MESMA leitura, em ordem de stream) — nunca ultrapassa uma mensagem legitima, vista ou por
+                  ;; vir. Descartar (comportamento anterior a esta fatia) fazia o cursor avancar por cima do
+                  ;; buraco como se o replay estivesse integro; `:dados {}` nunca carrega o payload corrompido.
+                  (do (log/warn "ler-desde: mensagem de forma invalida virou sinal de lacuna (cliente avisado, cursor preservado)"
+                                {:canal canal :s-bruta s-cru :seq-sinal ultima-seq-confiavel})
+                      {:saida                (conj saida {:tipo canais/tipo-lacuna :dados {} :seq ultima-seq-confiavel})
+                       :ultima-seq-confiavel ultima-seq-confiavel}))))
+            {:saida [] :ultima-seq-confiavel 0})
+           :saida
            (filterv #(> (long (:seq %)) (long apos-seq)))   ; replay: seq > Last-Event-ID
            (sort-by :seq)                                    ; ordem de seq (defesa; lider unico ja serializa)
            vec))))
