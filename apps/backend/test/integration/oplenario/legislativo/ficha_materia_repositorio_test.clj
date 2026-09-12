@@ -87,3 +87,69 @@
       (is (= "aditiva" (:tipo-emenda (first (:emendas f)))))
       (is (= 1 (count (:pareceres f))))
       (is (= "aguardando_designacao" (:estado (first (:pareceres f))))))))
+
+;; ---------- fatia 'truncamento-familia': as 4 listas param de fingir completude ----------
+
+(deftest ficha-completa-sem-corte-nao-sinaliza-truncamento
+  ;; sanidade: abaixo do teto, as 4 listas concordam com o `-truncado` = false (nunca true por acidente).
+  (let [ente (random-uuid)
+        pid (protocolar! ente)]
+    (let [f (repo/ficha-completa-da-proposicao *repo* ente pid)]
+      (is (false? (:tramitacao-truncado f)))
+      (is (false? (:apensadas-truncado f)))
+      (is (false? (:emendas-truncado f)))
+      (is (false? (:pareceres-truncado f))))))
+
+(deftest ficha-completa-sinaliza-truncamento-nas-4-listas-sem-derivar-do-corte-ja-aplicado
+  ;; O CRITICO desta fatia: as 4 listas da ficha (tramitacao/apensadas/emendas/pareceres) cortavam em
+  ;; 100/50/50/50 SEM avisar — "Pareceres (N)"/"Emendas (N)" mostravam um N que o usuario le' como o
+  ;; TOTAL. A rota IRMA (GET /proposicoes/:id/tramitacao, `controllers/buscar-tramitacao`) ja' resolvia
+  ;; isto com `:historico-truncado`, pedindo `limite+1` ao MESMO db/ — a SONDA. Esta fatia reusa a
+  ;; MESMA sonda nas 4 listas (nunca uma 5a forma, nunca `count(*)` novo).
+  ;;
+  ;; `with-redefs` baixa os 4 tetos de producao (100/50/50/50, privados em components/repositorio) pra 2
+  ;; — mesmo racional do teto-de-linhas-lote injetado em repositorio_roster_lote_test (T7): provar o
+  ;; corte SEM pagar o custo de inserir mais de 100 linhas reais. O teste NAO quebra se o teto de
+  ;; producao mudar de valor (nao le' o numero, so' redefine).
+  (let [ente (random-uuid)
+        tid (random-uuid)
+        tid-parecer (random-uuid)
+        ;; rito com 2 estados/2 gatilhos que se alternam — permite gerar N transicoes reais sem N estados.
+        _ (repo/criar-template! *repo* ente {:id tid :chave "rito_ficha_trunc" :versao 1
+                                             :nome "Rito ficha-trunc [FIXTURE]" :estado-inicial "e0"})
+        _ (repo/criar-estado! *repo* ente {:id (random-uuid) :template-id tid :chave "e0" :nome "E0" :terminal false})
+        _ (repo/criar-estado! *repo* ente {:id (random-uuid) :template-id tid :chave "e1" :nome "E1" :terminal false})
+        _ (repo/criar-transicao! *repo* ente {:id (random-uuid) :template-id tid :de-estado "e0"
+                                              :para-estado "e1" :gatilho "ir" :ordem 1})
+        _ (repo/criar-transicao! *repo* ente {:id (random-uuid) :template-id tid :de-estado "e1"
+                                              :para-estado "e0" :gatilho "voltar" :ordem 1})
+        ;; o rito tem de existir ANTES do protocolo (mesmo motivo de ficha-completa-traz-historico-de-
+        ;; tramitacao acima): `transicionar!` confronta o template-id do argumento com o da LINHA.
+        pid (protocolar! ente)
+        _ (repo/criar-template! *repo* ente {:id tid-parecer :chave "parecer_ficha_trunc" :versao 1
+                                             :sujeito "parecer" :nome "Parecer ficha-trunc [FIXTURE]"
+                                             :estado-inicial "aguardando"})
+        _ (repo/criar-estado! *repo* ente {:id (random-uuid) :template-id tid-parecer :chave "aguardando"
+                                           :nome "Aguardando" :terminal false})]
+    (with-redefs [repo/teto-tramitacao-ficha 2 repo/teto-apensadas-ficha 2
+                  repo/teto-emendas-ficha 2 repo/teto-pareceres-ficha 2]
+      (doseq [gatilho ["ir" "voltar" "ir" "voltar"]]
+        (repo/transicionar! *repo* ente {} {:proposicao-id pid :template-id tid :gatilho gatilho}))
+      (dotimes [_ 4]
+        (repo/apensar! *repo* ente {:id (random-uuid) :principal-id pid :apensada-id (protocolar! ente)}))
+      (dotimes [i 4]
+        (repo/criar-emenda! *repo* ente {:id (random-uuid) :proposicao-mae-id pid :tipo-emenda "aditiva"
+                                         :momento-apresentacao "no_prazo" :formato "markdown"
+                                         :texto-inline (str "Emenda " i)}))
+      (dotimes [_ 4]
+        (repo/iniciar-parecer! *repo* ente {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id pid
+                                            :comissao-id (random-uuid) :template-id tid-parecer}))
+      (let [f (repo/ficha-completa-da-proposicao *repo* ente pid)]
+        (is (= 2 (count (:tramitacao f))) "a LISTA de tramitacao continua cortada no teto injetado")
+        (is (true? (:tramitacao-truncado f)) "4 transicoes reais > teto 2 -> sinaliza")
+        (is (= 2 (count (:apensadas f))) "a LISTA de apensadas continua cortada no teto injetado")
+        (is (true? (:apensadas-truncado f)) "4 apensadas reais > teto 2 -> sinaliza")
+        (is (= 2 (count (:emendas f))) "a LISTA de emendas continua cortada no teto injetado")
+        (is (true? (:emendas-truncado f)) "4 emendas reais > teto 2 -> sinaliza")
+        (is (= 2 (count (:pareceres f))) "a LISTA de pareceres continua cortada no teto injetado")
+        (is (true? (:pareceres-truncado f)) "4 pareceres reais > teto 2 -> sinaliza")))))

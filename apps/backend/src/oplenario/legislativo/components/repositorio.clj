@@ -67,8 +67,10 @@
      'aprovada'), nunca do rotulo `proposicoes.estado`. Pre-condicao do autografo; ver
      db/votacao.clj/aprovada-em-votacao? p/ as tres exclusoes e o limite declarado.")
   (ficha-completa-da-proposicao [this ente-id id]
-    "Onda B Slice 3 (ficha-materia, leitura interna): {:proposicao :texto :tramitacao :apensadas :emendas
-     :pareceres} NUMA UNICA tx (mesma disciplina de buscar-proposicao-detalhe/listar-e-contar-proposicoes).
+    "Onda B Slice 3 (ficha-materia, leitura interna): {:proposicao :texto
+     :tramitacao :tramitacao-truncado :apensadas :apensadas-truncado :emendas :emendas-truncado
+     :pareceres :pareceres-truncado} NUMA UNICA tx (mesma disciplina de
+     buscar-proposicao-detalhe/listar-e-contar-proposicoes).
      `:proposicao` carrega `:aprovada` (Fatia 2), mesma disciplina de buscar-proposicao-detalhe.
      Sem short-circuit no nil da proposicao (mesmo estilo de buscar-proposicao-detalhe): as demais leituras
      rodam do mesmo jeito e vem naturalmente vazias. Tetos (review MAJOR fe-9-ficha-materia — o `take`
@@ -76,7 +78,16 @@
      apensadas/emendas/pareceres, empurrados ao SQL (mesmo padrao teto-fixo-50 de relatores-pendentes) — os
      4 db/ trazem os N MAIS RECENTES (DESC+LIMIT, revertido a ASC), nunca uma janela [0..N) do resultado
      cronologico inteiro. Apensadas = so nivel 1 (apensadas-ativas), NAO a cadeia recursiva — decisao de
-     escopo desta fatia.")
+     escopo desta fatia.
+
+     Fatia 'truncamento-familia': cada lista ganha o irmao `<lista>-truncado` (booleano, nao `-total`
+     — o par lista/total e' a forma canonica do repo quando existe uma CONTAGEM barata a reusar, mas
+     aqui o precedente e' outro: `tramitacao-da-proposicao`/`controllers/buscar-tramitacao` (a rota irma
+     GET /proposicoes/:id/tramitacao) ja' resolvia o MESMO problema com `:historico-truncado`, pedindo
+     `limite+1` ao MESMO db/ e checando o excedente — a SONDA de truncamento. Reusar essa sonda nas 4
+     listas custa ZERO query nova (o db/ ja aceita `limite`, ja' e' chamado nesta funcao); escrever 4
+     contagens `count(*)` seria a 'quinta forma' que a frente pede pra' NAO inventar. O teto nunca e'
+     publicado (regra 1 da familia) — so' o booleano.")
   ;; eixo B — versionamento de texto
   (nova-versao! [this ente-id versao] "Cria versao 'rascunho' (conteudo append-only).")
   (promover-versao! [this ente-id m] "Promove rascunho->vigente (ato auditado; reaponta o pointer).")
@@ -302,6 +313,26 @@
   (some-> (proposicao/buscar tx ente-id id)
           (assoc :aprovada (votacao/aprovada-em-votacao? tx ente-id id))))
 
+;; Fatia 'truncamento-familia': tetos das 4 listas da ficha-materia, PRIVADOS (nao expostos ao cliente,
+;; regra 1 da familia) e nomeados (nao literais inline) so' pra' que o teste consiga baixa-los via
+;; `with-redefs` sem pagar o custo de inserir >100/>50 linhas reais — mesmo padrao de
+;; `teto-de-linhas-lote` (cadastros/db/vereador) e `teto-tramitacao-board-por-estado`
+;; (paineis/components/repositorio).
+(def ^:private teto-tramitacao-ficha 100)
+(def ^:private teto-apensadas-ficha 50)
+(def ^:private teto-emendas-ficha 50)
+(def ^:private teto-pareceres-ficha 50)
+
+(defn- lista-com-sonda
+  "A SONDA de truncamento (mesmo mecanismo de `tramitacao-da-proposicao`/`controllers/buscar-tramitacao`):
+  `linhas` ja' vieram do db/ pedidas com `(inc teto)` — o db/ devolve os teto+1 MAIS RECENTES em ordem
+  CRONOLOGICA (DESC+LIMIT no SQL, revertido a ASC), entao o item excedente (quando ha') e' o mais ANTIGO
+  do lote, o primeiro do vetor ASC. `take-last teto` descarta exatamente ele, nunca um item do meio.
+  Devolve [lista-cortada-no-teto truncado?]."
+  [linhas teto]
+  (let [truncado? (> (count linhas) teto)]
+    [(if truncado? (vec (take-last teto linhas)) (vec linhas)) truncado?]))
+
 (defrecord RepoLegislativoPg [datasource bus]
   RepoLegislativo
   (transacao [_ ente-id f] (tenancy/com-tenant* (:ds datasource) ente-id f))
@@ -398,15 +429,29 @@
   ;; apensadas/emendas/pareceres (mesmo teto-fixo-50 de relatores-pendentes).
   ;; :aprovada mesma disciplina de buscar-proposicao-detalhe acima — MESMA tx, `some->` p/ nao mentir um
   ;; mapa truthy quando a proposicao nao existe.
+  ;; Fatia 'truncamento-familia': cada db/ e' chamado com `(inc teto)` (a MESMA sonda de
+  ;; `tramitacao-da-proposicao`), e `lista-com-sonda` corta+sinaliza — sem 5a forma, sem query nova.
   (ficha-completa-da-proposicao [this ente-id id]
     (transacao this ente-id
       (fn [tx]
-        {:proposicao (proposicao-com-aprovada tx ente-id id)
-         :texto (texto/vigente tx ente-id id)
-         :tramitacao (tram/historico-da-proposicao tx ente-id id 100)
-         :apensadas (apensacao/apensadas-ativas tx ente-id id 50)
-         :emendas (emenda/listar-por-mae tx ente-id id 50)
-         :pareceres (parecer/listar-por-objeto tx ente-id "proposicao" id 50)})))
+        (let [[tramitacao tramitacao-truncado]
+              (lista-com-sonda (tram/historico-da-proposicao tx ente-id id (inc teto-tramitacao-ficha))
+                                teto-tramitacao-ficha)
+              [apensadas apensadas-truncado]
+              (lista-com-sonda (apensacao/apensadas-ativas tx ente-id id (inc teto-apensadas-ficha))
+                                teto-apensadas-ficha)
+              [emendas emendas-truncado]
+              (lista-com-sonda (emenda/listar-por-mae tx ente-id id (inc teto-emendas-ficha))
+                                teto-emendas-ficha)
+              [pareceres pareceres-truncado]
+              (lista-com-sonda (parecer/listar-por-objeto tx ente-id "proposicao" id (inc teto-pareceres-ficha))
+                                teto-pareceres-ficha)]
+          {:proposicao (proposicao-com-aprovada tx ente-id id)
+           :texto (texto/vigente tx ente-id id)
+           :tramitacao tramitacao :tramitacao-truncado tramitacao-truncado
+           :apensadas apensadas :apensadas-truncado apensadas-truncado
+           :emendas emendas :emendas-truncado emendas-truncado
+           :pareceres pareceres :pareceres-truncado pareceres-truncado}))))
   (nova-versao! [this ente-id v] (transacao this ente-id #(texto/nova-versao! % (assoc v :ente-id ente-id))))
   (promover-versao! [this ente-id m] (transacao this ente-id #(texto/promover! % (assoc m :ente-id ente-id))))
   (buscar-versao [this ente-id id] (transacao this ente-id #(texto/buscar % ente-id id)))

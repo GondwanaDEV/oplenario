@@ -55,11 +55,30 @@
                   {:id "u" :comissao-id "u2" :relator-id "u3" :voto-relator "favoravel"
                    :estado "com_relator"})))
 
+(def ^:private ficha-minima
+  {:proposicao proposicao-minima
+   :tramitacao [] :tramitacao-truncado false
+   :apensadas [] :apensadas-truncado false
+   :emendas [] :emendas-truncado false
+   :pareceres [] :pareceres-truncado false})
+
 (deftest ficha-materia-out-minima-valida
-  (is (m/validate wire/FichaMateriaOut
-                  {:proposicao proposicao-minima :tramitacao [] :apensadas [] :emendas [] :pareceres []})))
+  (is (m/validate wire/FichaMateriaOut ficha-minima)))
 
 (deftest ficha-materia-out-sem-proposicao-invalida
-  (is (not (m/validate wire/FichaMateriaOut
-                       {:proposicao nil :tramitacao [] :apensadas [] :emendas [] :pareceres []}))
+  (is (not (m/validate wire/FichaMateriaOut (assoc ficha-minima :proposicao nil)))
       "o controller ja' gateia nil (-> 404 na borda); a wire/out so' projeta ficha com proposicao presente"))
+
+;; ---------- fatia 'truncamento-familia': os 4 `-truncado` sao OBRIGATORIOS e BOOLEANOS ----------
+
+(deftest ficha-materia-out-sem-algum-truncado-invalida
+  ;; a armadilha do {:closed true}: campo FALTANDO reprova igual a campo sobrando. Prova, uma chave de
+  ;; cada vez, que nenhum dos 4 pode faltar (dissoc "esquece" exatamente o que um produtor futuro
+  ;; poderia esquecer de preencher).
+  (doseq [k [:tramitacao-truncado :apensadas-truncado :emendas-truncado :pareceres-truncado]]
+    (is (not (m/validate wire/FichaMateriaOut (dissoc ficha-minima k)))
+        (str k " ausente tem de reprovar — schema fechado, campo obrigatorio"))))
+
+(deftest ficha-materia-out-truncado-nao-booleano-invalida
+  (is (not (m/validate wire/FichaMateriaOut (assoc ficha-minima :tramitacao-truncado "true")))
+      "string 'true' nao e' :boolean — o schema nao aceita truthy solto"))

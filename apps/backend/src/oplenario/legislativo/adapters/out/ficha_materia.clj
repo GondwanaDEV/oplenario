@@ -43,14 +43,23 @@
 
 (defn ficha->wire
   "`proposicao-out` = ProposicaoDetalheOut JA PROJETADO (o diplomat chamou `adapters.out.proposicao/
-  detalhe->wire` antes — reuso, nao duplicacao); `ficha` = {:tramitacao :apensadas :emendas :pareceres}
-  (dominio, kebab; :proposicao/:texto do `ficha` sao IGNORADOS aqui, ja' viraram `proposicao-out`) ->
-  FichaMateriaOut. O caller (controller) ja gateou nil de :proposicao -> 404 na borda antes de chegar aqui."
-  [proposicao-out {:keys [tramitacao apensadas emendas pareceres]}]
+  detalhe->wire` antes — reuso, nao duplicacao); `ficha` = {:tramitacao :tramitacao-truncado :apensadas
+  :apensadas-truncado :emendas :emendas-truncado :pareceres :pareceres-truncado} (dominio, kebab;
+  :proposicao/:texto do `ficha` sao IGNORADOS aqui, ja' viraram `proposicao-out`) -> FichaMateriaOut.
+  O caller (controller) ja gateou nil de :proposicao -> 404 na borda antes de chegar aqui.
+
+  Os 4 `-truncado` (fatia 'truncamento-familia') vem PRONTOS do Repo (a sonda teto+1 ja' rodou na
+  MESMA tx da lista) — este adapter so' projeta, nunca deriva."
+  [proposicao-out {:keys [tramitacao tramitacao-truncado apensadas apensadas-truncado
+                          emendas emendas-truncado pareceres pareceres-truncado]}]
   (validado wire/FichaMateriaOut
             {:proposicao proposicao-out
              :tramitacao (mapv tramitacao-item->wire tramitacao)
+             :tramitacao-truncado (boolean tramitacao-truncado)
              :apensadas (mapv apensacao->wire apensadas)
+             :apensadas-truncado (boolean apensadas-truncado)
              :emendas (mapv emenda-resumo->wire emendas)
-             :pareceres (mapv parecer-resumo->wire pareceres)}
+             :emendas-truncado (boolean emendas-truncado)
+             :pareceres (mapv parecer-resumo->wire pareceres)
+             :pareceres-truncado (boolean pareceres-truncado)}
             "ficha da materia"))
