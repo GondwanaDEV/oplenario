@@ -21,6 +21,7 @@
             [casa]
             [clojure.tools.logging :as log]
             [com.stuartsierra.component :as component]
+            [compliance :as compliance-demo]
             [oplenario.config :as config]
             [oplenario.migracao :as migracao]
             [oplenario.sistema :as sistema]
@@ -67,6 +68,13 @@
                   (println "    " escopo "piso=" piso "-> valor=" valor-final))
                 (when (seq levantados)
                   (println "    (nenhum contador foi abaixado — GREATEST)")))
-              (println "==> semear-tudo! OK — ente" ente)
-              {:ente ente :casa casa-r :acervo acervo-r :sessoes sessoes-r :participacao participacao-r}))))
+              ;; 6a etapa: o compliance. Fica DEPOIS de tudo por nao depender de nada das 4 (o objeto
+              ;; sob prazo e' a COMPETENCIA, nao uma proposicao) — mas antes do print final, porque e' o
+              ;; primeiro card do dashboard da Mesa e sem ele a demo abre com o placar do TCE zerado.
+              (let [compliance-r (compliance-demo/semear! sys ente)]
+                (println "==> compliance:" (pr-str (select-keys compliance-r
+                                                                [:template :resumo :vencidas-pelo-sweep])))
+                (println "==> semear-tudo! OK — ente" ente)
+                {:ente ente :casa casa-r :acervo acervo-r :sessoes sessoes-r
+                 :participacao participacao-r :compliance compliance-r})))))
       (finally (component/stop sys)))))
