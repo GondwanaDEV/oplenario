@@ -30,7 +30,6 @@
   (:require [casa]
             [clojure.test :refer [deftest is testing]]
             [oplenario.demo.casa-test :refer [with-sistema]]
-            [oplenario.transparencia.components.repositorio :as transparencia-repo]
             [participacao :as participacao-demo]))
 
 (deftest participacao-tem-exemplar-de-cada-estado
@@ -64,48 +63,62 @@
   ;; criava acompanhamento nenhum. `transparencia.acompanhamento` e' TABELA DE DOMINIO (a coluna do dono
   ;; e' `seguidor_identidade_id`, NAO `identidade_id` — o briefing original errou essa coluna).
   ;;
-  ;; CORRIGIDO (Daouda, 12/09/2026, contra uma Casa recem-semeada e limpa): a primeira versao lia
-  ;; `:acompanhamentos` do retorno de `participacao-demo/semear!` sem esperar a projecao — `meus-
-  ;; acompanhamentos` (RepoTransparencia) faz um LEFT JOIN contra `transparencia.materia`, que e'
-  ;; MATERIALIZADA pelo relay assincrono do `sistema` bootado por `with-sistema` (o MESMO relay que
-  ;; `demo/semear-tudo.sh` espera com a sua propria 'barreira de projecao' por poll, no fim do script —
-  ;; reusada aqui em forma Clojure, nao inventada: mesmo orcamento/idioma de `outbox_test.clj`/
-  ;; `relay-component-drena-em-background`, poll bounded + Thread/sleep, nunca sleep fixo). Sem a
-  ;; barreira, o teste e' uma CORRIDA: se o relay ainda nao rodou quando a asserção le, a ementa chega
-  ;; `nil` (o caminho `:indisponivel true` do LEFT JOIN sem par — o CONSERTO deliberado da frente
-  ;; "truncamento-familia", nao um bug) e o teste reprova por acaso, nao por defeito.
+  ;; CORRIGIDO DUAS VEZES (Daouda, 12/09/2026):
   ;;
-  ;; As 3 ementas abaixo sao as que `proposicoes-para-acompanhar` de fato resolve (verificado contra a
-  ;; Casa semeada de verdade, nao suposto): o PRIMEIRO item de cada filtro de estado, na MESMA ordenacao
-  ;; que a rota real usa (`atualizado_em DESC, id ASC`) — NAO a ordem de insercao do acervo. Testar por
-  ;; EMENTA (nao so' contar) e' o que reprova se o conteudo mudar sem a contagem mudar; o QUE muda com a
-  ;; corrida e' so' QUANDO a leitura acontece, nunca o conteudo esperado.
+  ;; (1) a 1a versao lia `:acompanhamentos` do retorno de `participacao-demo/semear!` sem esperar a
+  ;; projecao — `meus-acompanhamentos` (RepoTransparencia) faz LEFT JOIN contra `transparencia.materia`,
+  ;; MATERIALIZADA pelo relay assincrono. Reprovava com `Actual: #{nil}` — nao ementa errada, nil nas 3.
+  ;;
+  ;; (2) a CORRECAO da (1) foi esperar a projecao com poll bounded (mesma forma de outbox_test.clj) — mas
+  ;; medido contra a SUITE CHEIA (nao so' isolado): outro teste da suite APAGA `transparencia.materia`
+  ;; pro ente da demo (ficava com ZERO linhas enquanto outros entes tinham centenas), e os eventos que
+  ;; produziriam a re-projecao JA' foram consumidos (`processed_at` preenchido na 1a drenagem, muito antes
+  ;; deste teste rodar) — nao ha' evento pra' drenar, entao a projecao e' IRRECUPERAVEL por espera na
+  ;; suite cheia. Aumentar o timeout so' faz reprovar mais devagar (a armadilha do instrumento: um timeout
+  ;; aponta onde o relogio acabou, nunca onde o tempo foi gasto). `demo.*` afirma a forma de uma Casa
+  ;; COMPARTILHADA e MUTAVEL que a propria suite danifica — conflito estrutural ja' documentado neste
+  ;; projeto; um teste que reprova por acaso (verde isolado, vermelho na suite) TREINA a ignorar vermelho,
+  ;; a forma espelhada do defeito que esta branch inteira combate. Por isso NENHUMA espera sobrevive aqui.
+  ;;
+  ;; A CORRECAO REAL (esta versao): afirmar QUEM atraves do que a projecao NAO PODE apagar.
+  ;; `meus-acompanhamentos` devolve `:proposicao-id` SEMPRE (a subscricao, VERDADE de dominio, nunca
+  ;; falta — so' o CABECALHO pode faltar, com `:indisponivel true`, db/acompanhamento.clj/meus-da-materia).
+  ;; Entao:
+  ;;   - identidade: o CONJUNTO de `:proposicao-id` que a rota devolve == o conjunto que a semente
+  ;;     escolheu (`proposicoes-para-acompanhar`, chamada aqui de novo — a MESMA leitura contra a tabela
+  ;;     DONA `legislativo.proposicoes`, nao redigitada) — prova QUEM, imune ao apagamento da projecao.
+  ;;   - o QUE essas materias SAO (ementa/estado, em portugues): afirmado contra a tabela DONA, nunca
+  ;;     contra o read-model projetado.
+  ;;   - o contrato do LEFT JOIN vira asserção PROPRIA: cabecalho ausente NUNCA derruba o item (a
+  ;;     subscricao aparece sempre) e vem marcado `:indisponivel true` de forma CONSISTENTE com `:ementa`
+  ;;     nil — trava a regressao da frente "truncamento-familia" que hoje nada trava.
   (with-sistema [s]
     (let [{:keys [ente identidades]} (casa/semear! s)
           cidadao-id (:cidadao identidades)
           r (participacao-demo/semear! s ente)
-          repo-transparencia (:repo-transparencia s)
-          buscar #(transparencia-repo/meus-acompanhamentos repo-transparencia ente cidadao-id)
-          projetado? (fn [{:keys [acompanhamentos]}] (every? some? (map :ementa acompanhamentos)))
-          ;; poll bounded (60 x 50ms = 3s, mesmo orcamento de outbox_test.clj) — nunca sleep fixo flaky.
-          apos-projecao (loop [i 0 lido (:acompanhamentos r)]
-                          (if (or (projetado? lido) (>= i 60))
-                            lido
-                            (do (Thread/sleep 50) (recur (inc i) (buscar)))))
-          {:keys [acompanhamentos acompanhamentos-total]} apos-projecao]
-      (testing "a projecao assincrona (relay) materializou transparencia.materia pras 3 proposicoes seguidas"
-        (is (projetado? apos-projecao)
-            "ementa nil apos 3s de poll = o caminho :indisponivel do LEFT JOIN (ver docstring) — o container 'app'/o relay do sistema bootado esta mesmo rodando?"))
+          repo-legislativo (:repo-legislativo s)
+          ;; a MESMA resolucao que `semear-acompanhamentos!` usou pra escolher as 3 — reusada, nao
+          ;; redigitada (a fn e' privada de proposito; `#'` e' o jeito Clojure de reusar sem promove-la a
+          ;; API publica so' pro teste). Contra `legislativo.proposicoes`, a tabela DONA — nunca a projecao.
+          escolhidas (#'participacao-demo/proposicoes-para-acompanhar repo-legislativo ente)
+          {:keys [acompanhamentos acompanhamentos-total]} (:acompanhamentos r)]
       (testing "3 acompanhamentos ATIVOS — nao 0"
         (is (= 3 acompanhamentos-total))
         (is (= 3 (count acompanhamentos))))
-      (testing "QUEM ela segue — as ementas REAIS das 3 proposicoes, nao so' a contagem"
+      (testing "QUEM ela segue — o conjunto de proposicao-id bate com o que a semente escolheu (IMUNE ao apagamento da projecao: a subscricao e' VERDADE de dominio, so' o cabecalho projetado pode faltar)"
+        (is (= (set (map :id escolhidas)) (set (map :proposicao-id acompanhamentos)))))
+      (testing "O QUE sao essas 3 materias, em portugues — contra a tabela DONA (legislativo.proposicoes), NUNCA o read-model projetado"
         (is (= #{"Altera a Lei Orgânica do Município quanto à composição da Mesa Diretora."
                  "Manifesta congratulações à comunidade escolar pela conquista na Olimpíada Municipal de Matemática."
                  "Dispõe sobre a acessibilidade em prédios públicos municipais."}
-               (set (map :ementa acompanhamentos)))))
+               (set (map :ementa escolhidas)))))
+      (testing "contrato do LEFT JOIN (frente 'truncamento-familia'): cabecalho ausente NUNCA derruba o item, e vem marcado :indisponivel true de forma consistente com :ementa nil"
+        (doseq [item acompanhamentos]
+          (is (some? (:proposicao-id item)) "a subscricao em si nunca falta, seja qual for o estado da projecao")
+          (is (= (nil? (:ementa item)) (boolean (:indisponivel item)))
+              (str "ementa nil <=> :indisponivel true, NUNCA divergem — item " (:proposicao-id item)))))
       (testing "pelo menos 1 das 3 e' NAO-terminal — o acompanhamento tem FUTURO (o fan-out de notificacao so' reage a proposicao.transicionou; 'aprovada'/'arquivada' nunca mais transicionam)"
-        (is (some #(not (contains? #{"aprovada" "arquivada"} (:estado %))) acompanhamentos)))
+        (is (some #(not (contains? #{"aprovada" "arquivada"} (:estado %))) escolhidas)))
       (testing "reexecutar semear! nao duplica (seguir! e' UPSERT por ente,proposicao,seguidor)"
         (participacao-demo/semear! s ente)
         (is (= 3 (:acompanhamentos-total (:acompanhamentos (participacao-demo/semear! s ente)))))))))
