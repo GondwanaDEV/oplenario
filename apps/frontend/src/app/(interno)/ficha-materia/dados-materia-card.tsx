@@ -14,7 +14,14 @@ export function DadosMateriaCard({ dados }: { dados: DadosMateriaVista }) {
         <dt>Situação</dt>
         <dd>{dados.situacao}</dd>
         <dt>Apensados</dt>
-        <dd>{dados.apensadosTotal > 0 ? dados.apensadosTotal : "nenhum"}</dd>
+        <dd>
+          {dados.apensadosTotal > 0 ? dados.apensadosTotal : "nenhum"}
+          {/* fatia "truncamento-familia": o servidor manda BOOLEANO (`apensadasTruncado`), nunca um
+              total à parte — "+" é honesto (há mais que o número mostrado) sem fingir saber quantas. */}
+          {dados.apensadosTotal > 0 && dados.apensadasTruncado && (
+            <span title="Há mais apensadas do que as exibidas aqui">+</span>
+          )}
+        </dd>
         <dt>Apresentada</dt>
         <dd className="mono">{formatarData(dados.apresentadaEm)}</dd>
         <dt>Última ação</dt>

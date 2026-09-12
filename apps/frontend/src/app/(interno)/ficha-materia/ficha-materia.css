@@ -108,3 +108,10 @@
 .tela-estado { max-width: 520px; margin: 4rem auto; text-align: center; padding: 2rem; }
 .tela-estado h1 { font-family: var(--display); font-size: var(--t-21); color: var(--texto); margin: 0 0 0.5rem; }
 .tela-estado p { color: var(--texto-2); }
+
+/* Fatia "truncamento-familia": aviso de corte nas 3 abas com lista (Tramitação/Pareceres/Emendas) —
+   MESMA classe/forma visual de mesa.css .aviso-corte (paineis/mesa), aqui sem o par "N de M" (o
+   servidor manda só o booleano `*Truncado`, não um total — regra 1 da família, o teto não é
+   publicado ao cliente). */
+.aviso-corte { display: flex; align-items: flex-start; gap: 0.5rem; margin: 0 0 1rem; padding: 0.65rem 0.9rem; border: 1px solid color-mix(in srgb, var(--amarelo-traco) 45%, transparent); border-left: 3px solid var(--amarelo-traco); border-radius: var(--raio-sm); background: color-mix(in srgb, var(--amarelo-traco) 12%, var(--surface-2)); color: var(--texto-2); font-size: var(--t-13); line-height: 1.5; }
+.aviso-corte b { color: var(--aviso-texto); font-weight: 700; }

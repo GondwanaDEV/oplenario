@@ -30,6 +30,12 @@ import type {
 export type DadosMateriaVista = {
   situacao: string;
   apensadosTotal: number;
+  // Fatia "truncamento-familia": `apensadosTotal` acima é `ficha.apensadas.length` — o tamanho da lista
+  // que O SERVIDOR já cortou no teto (50), nunca uma contagem independente. Quando `apensadasTruncado`
+  // vem `true`, `apensadosTotal` deixa de ser "quantas existem" e passa a significar "pelo menos estas
+  // tantas" — o servidor manda o BOOLEANO (mesma forma de `historico-truncado` na rota irmã
+  // /tramitacao), nunca um segundo número, então a UI não pode dizer "de quantas" — só que há mais.
+  apensadasTruncado: boolean;
   apresentadaEm: string;
   ultimaAcaoEm: string;
 };
@@ -40,6 +46,7 @@ export function derivarDadosMateria(ficha: FichaMateriaOut): DadosMateriaVista {
   return {
     situacao: rotuloSituacao,
     apensadosTotal: ficha.apensadas.length,
+    apensadasTruncado: ficha.apensadasTruncado,
     // primeira/última transição registrada; sem histórico, cai honestamente pra atualizadoEm (nunca
     // inventa uma data de "apresentação" que não temos).
     apresentadaEm: ordenado[0]?.ocorridoEm ?? ficha.proposicao.atualizadoEm,

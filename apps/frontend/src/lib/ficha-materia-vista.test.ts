@@ -30,15 +30,19 @@ const fichaBase: FichaMateriaOut = {
     { deEstado: "protocolada", paraEstado: "em_comissoes", gatilho: "distribuir", ocorridoEm: "2026-04-08T09:00:00Z" },
     { deEstado: "em_comissoes", paraEstado: "em_pauta", gatilho: "incluir_pauta", ocorridoEm: "2026-05-12T10:00:00Z" },
   ],
+  tramitacaoTruncado: false,
   apensadas: [
     { apensadaId: "9", apensadaEm: "2026-04-20T00:00:00Z", motivoApensacao: "mesmo tema" },
   ],
+  apensadasTruncado: false,
   emendas: [
     { id: "e1", numeroLocal: 1, tipoEmenda: "modificativa", momentoApresentacao: "no_prazo", autorTexto: "Ver.ª Carla Souza", autorTipo: "vereador", estado: "aprovada" },
   ],
+  emendasTruncado: false,
   pareceres: [
     { id: "p1", comissaoId: "c1", relatorId: "r1", votoRelator: "favorável", estado: "aprovado" },
   ],
+  pareceresTruncado: false,
 };
 
 describe("derivarDadosMateria", () => {
@@ -59,6 +63,24 @@ describe("derivarDadosMateria", () => {
   it("sem apensadas -> contagem zero", () => {
     const r = derivarDadosMateria({ ...fichaBase, apensadas: [] });
     expect(r.apensadosTotal).toBe(0);
+  });
+
+  // ---------- fatia "truncamento-familia": apensadasTruncado vem do servidor, nunca deduzido ----------
+
+  it("apensadasTruncado é repassado verbatim do servidor (rule 4: nenhuma dedução do tamanho da lista)", () => {
+    // A lista tem só 1 item (não "parece" cortada) mas o servidor manda `apensadasTruncado: true` — se a
+    // vista deduzisse o corte olhando pro tamanho da lista, as duas leituras discordariam e o teste
+    // pegaria a UI mentindo pro usuário (dizendo "completo" quando o servidor diz "há mais").
+    const r = derivarDadosMateria({ ...fichaBase, apensadasTruncado: true });
+    expect(r.apensadosTotal).toBe(1);
+    expect(r.apensadasTruncado).toBe(true);
+  });
+
+  it("apensadasTruncado=false é repassado mesmo com uma lista grande (nenhuma heurística de 'lista grande = cortada')", () => {
+    const apensadasGrandes = [fichaBase.apensadas[0], fichaBase.apensadas[0], fichaBase.apensadas[0]];
+    const r = derivarDadosMateria({ ...fichaBase, apensadas: apensadasGrandes, apensadasTruncado: false });
+    expect(r.apensadosTotal).toBe(3);
+    expect(r.apensadasTruncado).toBe(false);
   });
 
   // Estes dois testes AFIRMAVAM a chave crua e por isso não viram os defeitos #9/#10 do ledger. O

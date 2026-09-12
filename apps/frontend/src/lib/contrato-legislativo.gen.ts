@@ -77,9 +77,13 @@ export interface ParecerResumoOut {
 export interface FichaMateriaOut {
   proposicao: ProposicaoDetalheOut;
   tramitacao: HistoricoTramitacaoItemOut[];
+  tramitacaoTruncado: boolean;
   apensadas: ApensacaoOut[];
+  apensadasTruncado: boolean;
   emendas: EmendaResumoOut[];
+  emendasTruncado: boolean;
   pareceres: ParecerResumoOut[];
+  pareceresTruncado: boolean;
 }
 
 export interface ObjetoResumoOut {
