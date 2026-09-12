@@ -1990,3 +1990,68 @@ nova, não prevista na lista, voltaria a travar tudo). **Este carry não é moti
 
 **Apontado na docstring** de `paineis.components.repositorio/projetar-evento!`, `projetar-inbox!` e
 `legislativo.components.repositorio/notificar-autor-da-norma!` — uma linha cada, para este carry.
+
+---
+
+# 🔒 Frente `compliance-semente` · O card do TCE para de abrir zerado (12/09/2026)
+
+**Commit:** `e48ee19` · **Arquivos:** `apps/backend/demo/compliance.clj` (novo, 5ª semente narrativa) ·
+`demo/semear_tudo.clj` (6ª etapa do orquestrador) · `test/integration/oplenario/demo/compliance_test.clj`
+
+## O defeito
+
+O primeiro card do dashboard da Mesa (`/paineis/mesa`, "saúde institucional") é o placar
+**EM DIA · PENDENTES · VENCIDAS** junto ao TCE-CE — e abria `0 · 0 · 0` em toda demo. Nenhuma das 4
+sementes narrativas materializa obrigação de compliance, e o catálogo do motor estava literalmente
+vazio (`motor.template_compliance` = 0 linhas). Um card zerado não prova motor nenhum; prova que a
+tela existe. É o argumento de **confiança operacional** — o que vende para o jurídico e para o
+presidente — apresentado em branco.
+
+## O que a semente faz, e o que ela recusa fazer
+
+Não escreve estado de obrigação na mão. Popula o **catálogo** (versão do registry + a definição do
+template + os prazos por competência + o binding do tenant), gera as remessas **aceitas** pelo caminho
+de produção (`gerar-remessa!` → renderiza → serializa → hash → objeto_store → ciclo
+rascunho/validada/submetida/aceita) e deixa o **runtime** decidir o placar: `avaliar-obrigacao!`
+reconcilia contra o fato real `remessa_enviada`, `varrer-vencimentos!` faz o `pendente → vencida`.
+
+Placar resultante no banco da demo: **EM DIA 6 · PENDENTES 1 · VENCIDAS 1** — a Casa em ordem nos 6
+primeiros meses de 2026, uma remessa atrasada (07/2026, venceu 30/08) e uma no prazo (08/2026, vence
+30/09). Um placar todo verde não mostraria o produto pegando o problema.
+
+## Três coisas que a implementação óbvia erraria
+
+| # | O atalho | Por que quebra |
+|---|---|---|
+| 1 | Avaliar tudo com `hoje` | `logic/proxima-fase` materializa a competência de prazo vencido **direto como `vencida`**, e o *sweep* — a única transição que evento não dispara (§22.7.7 S1) — nunca teria o que mover. O placar sairia certo com o mecanismo não exercitado. A semente avalia cada competência **na data do evento** (fim da competência); a obrigação nasce pendente e o sweep de `hoje` a vence. |
+| 2 | `objeto_id` por `random-uuid` | Nunca colidiria na UNIQUE `ente⋈template⋈objeto_tipo⋈objeto_id` — cada corrida da semente **dobraria o painel**. O id é derivado de (ente, sistema, competência). |
+| 3 | Limpar o binding com `DELETE` | Não "quase funciona": `com-tenant*` faz `SET LOCAL ROLE oplenario_app`, e esse papel tem `INSERT/SELECT/UPDATE` em `motor.compliance_regra_tenant` e **nenhum DELETE** — config de tenant se desativa (CHECK `motivo_quando_inativa`), não se apaga. Estoura `permission denied`. A semente lê e só cria se ausente. |
+
+O #3 é o achado transferível: **um helper que troca de papel dentro da transação move a matriz de
+grants junto**, e o verbo ausente costuma ser regra de domínio escrita em DDL, não lacuna de setup.
+
+## O template, e por que só um
+
+T1 de `docs/05-eixo-C-stress-test-rascunho.md` §7 (remessa mensal ao SIM), com a correção de assinatura
+de §4-bis: `remessa_enviada("SIM", competencia)`, sem o arg `ente` (implícito na tx do tenant). É o
+**único dos 4 templates do stress-test que fecha com fato REAL hoje** — T2 (transparência em tempo
+real) exigiria `publicada_no_portal` e `data_registro_contabil`, que não existem em nenhum `relacoes`
+de módulo; semeá-lo seria semear um `fato sem fn registrada` (fail-closed no runtime).
+
+`[GAP]` carregados com a marca da fonte, não inventados: o prazo (dia 30 do mês seguinte) é
+`[INF média]` de `docs/05` §6.1 — o texto exato da IN 04/2019 está num PDF escaneado; e o **layout
+físico do arquivo SIM** segue `[GAP]` (descritor e serializador são os fixtures ilustrativos, os
+mesmos que a suíte usa).
+
+## Verificação
+
+- `oplenario.demo.compliance-test` — **2 testes / 21 assertions**, verdes contra PG + MinIO reais.
+  As asserções fortes não são "o painel tem número": exigem `veredito='conforme'` **exatamente** nas
+  competências com remessa aceita, `vencidas-pelo-sweep = 1` (nomeia o *driver*, não só o resultado)
+  e placar idêntico em duas corridas seguidas (reprova a regressão do `random-uuid`).
+- `estrutura-lint-test` + `arquitetura-test` — 10 testes / 28 assertions, verdes.
+- Placar conferido no banco da demo: `cumprida 6 · pendente 1 · vencida 1`; 6 remessas em `aceita`.
+- **Não verificado:** o card renderizado no browser. A verificação exigiria autenticar com a senha das
+  personas, e eu não digito credencial. O render é mapeamento puro do `resumo`
+  (`saude-institucional.tsx:29-30`, `emDia = cumprida + dispensada + cancelada`) — 10 segundos de
+  olhada em `/paineis/mesa` fecham o laço.
