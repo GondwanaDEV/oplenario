@@ -55,3 +55,44 @@
   [:map {:closed true}
    [:objeto-tipo (km/enum-de logic/objetos-votacao)]
    [:proposicao [:maybe ProposicaoResumoObjetoVotacaoOut]]])
+
+(def VotoNominalDetalheOut
+  "Um voto nominal (fatia 'demo-tres-consertos' #2b) — a MESMA forma que `voto.registrado` nominal levaria
+  ao vivo (vereador-id+voto), pra `votacao-aberta` devolver a lista inteira quando um cliente conecta sem
+  ter visto os eventos individuais."
+  [:map {:closed true}
+   [:vereador-id :string]
+   [:voto (km/enum-de logic/tipos-voto)]])
+
+(def SemApuracaoIndividualVotacaoAbertaOut
+  "Forma compartilhada por 'secreta' e 'simbolica' em VotacaoAbertaOut — NENHUMA das duas expoe voto
+  individual (sigilo §22.6 pra secreta; simbolica simplesmente nao registra voto individual algum,
+  `controllers/registrar-voto`). `:votos-registrados` e' o MESMO tick anonimo que `voto.registrado`
+  secreto ja' expoe ao vivo — NUNCA uma apuracao por valor (sim/nao/abstencao), que vazaria MAIS do que o
+  proprio stream vivo vaza antes do encerramento."
+  [:map {:closed true}
+   [:votacao-id :string]
+   [:modalidade (km/enum-de #{"secreta" "simbolica"})]
+   [:objeto-tipo (km/enum-de logic/objetos-votacao)]
+   [:objeto-id :string]
+   [:proposicao [:maybe ProposicaoResumoObjetoVotacaoOut]]
+   [:votos-registrados :int]])
+
+(def VotacaoAbertaOut
+  "Recibo de GET .../votacao-aberta (200): QUAL votacao esta aberta na sessao, pra RECUPERACAO de estado
+  (fatia 'demo-tres-consertos' #2b — achado ao vivo: o canal Valkey tem retencao de ~5min e um cliente que
+  conecta depois disso nunca ve `votacao.aberta`). UNIAO DISCRIMINADA por `:modalidade` — MESMO desenho de
+  `VotoRegistradoPayload` (events/votacao.clj): o ramo 'nominal' e' o UNICO que admite `:votos` (a lista
+  individual); 'secreta'/'simbolica' compartilham `SemApuracaoIndividualVotacaoAbertaOut` (mapa fechado
+  SEM `:votos`) — machine-enforced, uma tentativa de vazar voto individual numa secreta falha a validacao
+  do schema ANTES de sair pela rede, nao depende de disciplina de destructuring no handler."
+  [:multi {:dispatch :modalidade}
+   ["nominal" [:map {:closed true}
+               [:votacao-id :string]
+               [:modalidade [:= "nominal"]]
+               [:objeto-tipo (km/enum-de logic/objetos-votacao)]
+               [:objeto-id :string]
+               [:proposicao [:maybe ProposicaoResumoObjetoVotacaoOut]]
+               [:votos [:sequential VotoNominalDetalheOut]]]]
+   ["secreta" SemApuracaoIndividualVotacaoAbertaOut]
+   ["simbolica" SemApuracaoIndividualVotacaoAbertaOut]])

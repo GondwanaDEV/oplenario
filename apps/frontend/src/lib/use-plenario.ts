@@ -11,7 +11,7 @@ import type { EventoPlenario, SessaoOut } from "./contrato";
 import { TIPOS_PLENARIO } from "./contrato";
 import type { ComposicaoSessaoOut, QuorumSessaoOut, TribunaOut } from "./contrato-sessoes.gen";
 import { semCredencial } from "./modo";
-import { aplicarEvento, estadoInicial, falharComposicao, falharQuorum, falharTribuna, hidratarComposicao, hidratarQuorum, hidratarTribuna, type EstadoPlenario, type TribunaEventoSeqNoDisparo } from "./plenario-reducer";
+import { aplicarEvento, estadoInicial, falharComposicao, falharQuorum, falharTribuna, falharVotacao, hidratarComposicao, hidratarQuorum, hidratarTribuna, hidratarVotacao, type EstadoPlenario, type TribunaEventoSeqNoDisparo, type VotacaoAbertaSnapshot } from "./plenario-reducer";
 import { consumirSse } from "./sse";
 
 export type EstadoConexao = "carregando" | "ao-vivo" | "reconectando" | "erro";
@@ -101,28 +101,40 @@ const espera = (ms: number, signal: AbortSignal) =>
  * votar, e (b) tira ~21 clientes por Casa do polling das leituras mais caras do módulo, deixando-o só
  * para os 1-2 telões. O nome ficou de quando só existia quórum; não foi renomeado nesta fatia — o único
  * outro chamador é o cockpit do vereador, que passa sem opções nenhumas, e tocar essa assinatura
- * compartilhada é exatamente o tipo de mudança que já derrubou o botão de votar nesta base. */
-export function usePlenario(sessaoId: string, token: string | null, opcoes?: { comQuorum?: boolean }) {
+ * compartilhada é exatamente o tipo de mudança que já derrubou o botão de votar nesta base.
+ *
+ * `comVotacao` (fatia "demo-tres-consertos" #2b) é uma opção INDEPENDENTE de `comQuorum` — DELIBERADO:
+ * `GET /sessoes/:id/votacao-aberta` é uma leitura indexada (uma linha por sessão), não uma das "leituras
+ * mais caras do módulo" que justificam manter o cockpit fora de `comQuorum`; amarrar as duas faria o
+ * vereador continuar sem a recuperação que ele é quem mais precisa (é ele quem vota) só para não pagar o
+ * custo de quórum/tribuna, que ele nunca usou. O cockpit passa `comVotacao: true`; o telão da Mesa (que
+ * tem o MESMO buraco de recuperação, por outro ângulo) NÃO ganhou esta opção nesta fatia — ligá-lo é
+ * decisão separada, não tomada aqui. */
+export function usePlenario(sessaoId: string, token: string | null, opcoes?: { comQuorum?: boolean; comVotacao?: boolean }) {
   const comQuorum = opcoes?.comQuorum === true;
+  const comVotacao = opcoes?.comVotacao === true;
   const [sessao, setSessao] = useState<SessaoOut | null>(null);
   const [estado, setEstado] = useState<EstadoPlenario | null>(null);
   const [conexao, setConexao] = useState<EstadoConexao>("carregando");
   const [erro, setErro] = useState<string | null>(null);
   const lastIdRef = useRef<string | undefined>(undefined);
   const idValido = ID_VALIDO.test(sessaoId);
-  // Espelham `estado.falaEventoSeq`/`estado.inscricaoEventoSeq` de forma SÍNCRONA — `aoFrame` só
-  // consegue escrever estado por updater funcional (`setEstado(prev => ...)`), e a busca da tribuna
-  // precisa LER os contadores no instante do disparo (T0 do ruling de precedência), antes de qualquer
-  // `await`. Zerados a cada nova sessão junto com `estadoInicial` (ver o passo 1 abaixo). Fix round 1
-  // (I2): dois refs, não um — ver a docstring de `TIPOS_EVENTO_FALA` em `plenario-reducer.ts`.
+  // Espelham `estado.falaEventoSeq`/`estado.inscricaoEventoSeq`/`estado.votacaoEventoSeq` de forma
+  // SÍNCRONA — `aoFrame` só consegue escrever estado por updater funcional (`setEstado(prev => ...)`), e
+  // a busca de tribuna/votação precisa LER os contadores no instante do disparo (T0 do ruling de
+  // precedência), antes de qualquer `await`. Zerados a cada nova sessão junto com `estadoInicial` (ver o
+  // passo 1 abaixo). Fix round 1 (I2): refs SEPARADOS, não um só — ver a docstring de `TIPOS_EVENTO_FALA`
+  // em `plenario-reducer.ts`; `votacaoEventoSeqRef` segue a MESMA disciplina (fatia "demo-tres-consertos" #2b).
   const falaEventoSeqRef = useRef(0);
   const inscricaoEventoSeqRef = useRef(0);
+  const votacaoEventoSeqRef = useRef(0);
 
   useEffect(() => {
     if (semCredencial(token) || !idValido) return; // casos de erro são derivados no retorno (sem setState síncrono no effect)
     const controller = new AbortController();
     let vivo = true;
     let ultimaRebusca = 0;
+    let ultimaBuscaVotacao = 0;
 
     // Fix round 1 (I3): guardas de in-flight INDEPENDENTES por rota (antes era um único `rebuscando`
     // compartilhado, preso até as DUAS buscas resolverem). Com um guarda só, uma `/tribuna` pendurada
@@ -131,6 +143,7 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
     // ticks; o timeout acima garante que "pendurada" também não dura para sempre.
     let quorumEmVoo = false;
     let tribunaEmVoo = false;
+    let votacaoEmVoo = false;
 
     const buscarQuorum = async () => {
       if (quorumEmVoo) return;
@@ -224,6 +237,47 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
       }
     };
 
+    /** Busca o snapshot de `GET /sessoes/:id/votacao-aberta` (fatia "demo-tres-consertos" #2b —
+     * RECUPERAÇÃO de estado). `seqNoDisparo` capturado ANTES do fetch — MESMO ruling de `buscarTribuna`
+     * (fix I2b/A4a): se um evento de VOTAÇÃO chegar pelo canal enquanto esta resposta está em voo,
+     * `hidratarVotacao` descarta o snapshot inteiro em vez de sobrescrever o que o SSE já construiu.
+     *
+     * 404 é o estado LEGÍTIMO "nenhuma votação aberta agora" (`controllers/votacao-aberta`, backend) —
+     * NÃO é falha: passa por `hidratarVotacao(prev, null, ...)`, que é um no-op seguro (o placar já
+     * nasce `null`), nunca por `falharVotacao` (reservado a rede/403/500/parse — "não sei", distinto de
+     * "sei que não há"). */
+    const buscarVotacaoAberta = async () => {
+      if (votacaoEmVoo) return;
+      votacaoEmVoo = true;
+      const seqNoDisparo = votacaoEventoSeqRef.current;
+      const { signal, limpar } = sinalComTimeout(controller.signal, TIMEOUT_REBUSCA_MS);
+      try {
+        const resp = await apiFetch(`/api/sessoes/${sessaoId}/votacao-aberta`, {
+          token: token ?? undefined,
+          signal,
+          cache: "no-store",
+        });
+        if (!vivo) return;
+        if (resp.status === 404) {
+          setEstado((prev) => (prev ? hidratarVotacao(prev, null, seqNoDisparo) : prev));
+          return;
+        }
+        if (!resp.ok) {
+          setEstado((prev) => (prev ? falharVotacao(prev) : prev));
+          return;
+        }
+        const v = camelizarChaves(await resp.json()) as VotacaoAbertaSnapshot;
+        if (!vivo) return;
+        setEstado((prev) => (prev ? hidratarVotacao(prev, v, seqNoDisparo) : prev));
+      } catch {
+        if (!vivo) return;
+        setEstado((prev) => (prev ? falharVotacao(prev) : prev));
+      } finally {
+        limpar();
+        votacaoEmVoo = false;
+      }
+    };
+
     /** Dispara o par quórum+tribuna que o TELÃO precisa para se reconstruir sozinho (ver a docstring de
      * `comQuorum`). As duas rotas são independentes (guarda de in-flight e timeout próprios — I3): uma
      * pendurada não atrasa nem bloqueia a outra. `ultimaRebusca` só marca QUANDO esta função foi
@@ -234,6 +288,15 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
       ultimaRebusca = Date.now();
       void buscarQuorum();
       void buscarTribuna();
+    };
+
+    /** Dispara a recuperação de votação, gated por `comVotacao` (INDEPENDENTE de `comQuorum` — ver a
+     * docstring de `comVotacao` acima). Chamada na carga inicial, em toda reconexão e periodicamente pelo
+     * MESMO relógio de 500ms de `rehidratar` — sem um segundo `setInterval`. */
+    const rehidratarVotacao = () => {
+      if (!comVotacao || !vivo) return;
+      ultimaBuscaVotacao = Date.now();
+      void buscarVotacaoAberta();
     };
 
     // Pedido de re-busca do quórum, levantado pelo PRÓPRIO reducer (`precisaRehidratar`) — a regra de quais
@@ -257,6 +320,7 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
           // — todo evento passa por `aplicarEvento`, então este é o ÚNICO ponto que precisa espelhar.
           falaEventoSeqRef.current = proximo.falaEventoSeq;
           inscricaoEventoSeqRef.current = proximo.inscricaoEventoSeq;
+          votacaoEventoSeqRef.current = proximo.votacaoEventoSeq;
           return proximo;
         });
       } catch {
@@ -269,12 +333,21 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
     //     número do telão andar durante a chamada, coalescendo a rajada de 21 presenças.
     //   - PERIÓDICA: auto-cura. Cobre o buraco silencioso da retenção de 5 min do canal e qualquer evento
     //     perdido — sem ela, um erro vira permanente e a tela segue exibindo "Ao vivo" com confiança.
+    // `comVotacao` (fatia "demo-tres-consertos" #2b) reusa o MESMO relógio de 500ms — sem `pedido`
+    // reativo (votação não tem um sinal "algo se mexeu" barato como presença; a rota já é indexada, e o
+    // SSE segue sendo quem entrega mudança em tempo real): só a PERIÓDICA, a mesma rede de segurança
+    // contra a retenção de 5 min do canal.
     const relogio = setInterval(() => {
-      if (!vivo || !comQuorum) return;
-      const desde = Date.now() - ultimaRebusca;
-      if ((pedidoDeRebusca && desde >= REBUSCA_MIN_MS) || desde >= REBUSCA_PERIODICA_MS) {
-        pedidoDeRebusca = false;
-        void rehidratar();
+      if (!vivo) return;
+      if (comQuorum) {
+        const desde = Date.now() - ultimaRebusca;
+        if ((pedidoDeRebusca && desde >= REBUSCA_MIN_MS) || desde >= REBUSCA_PERIODICA_MS) {
+          pedidoDeRebusca = false;
+          void rehidratar();
+        }
+      }
+      if (comVotacao && Date.now() - ultimaBuscaVotacao >= REBUSCA_PERIODICA_MS) {
+        void rehidratarVotacao();
       }
     }, 500);
 
@@ -291,9 +364,10 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
         if (!vivo) return;
         setSessao(s);
         setEstado(estadoInicial(s));
-        // nova sessão -> mesmo zero de `estadoInicial().falaEventoSeq`/`.inscricaoEventoSeq`
+        // nova sessão -> mesmo zero de `estadoInicial().falaEventoSeq`/`.inscricaoEventoSeq`/`.votacaoEventoSeq`
         falaEventoSeqRef.current = 0;
         inscricaoEventoSeqRef.current = 0;
+        votacaoEventoSeqRef.current = 0;
       } catch (e) {
         if (!vivo || controller.signal.aborted) return;
         setConexao("erro");
@@ -314,6 +388,10 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
       // segue a MESMA condição `comQuorum` que o quórum — ver o Ruling do controlador no brief desta
       // fatia — e por isso anda dentro da MESMA função, não de uma cópia da rotina de composição.)
       void rehidratar();
+      // 1b-bis) recuperação de votação (fatia "demo-tres-consertos" #2b) — o CASO DA FATIA: abrir a tela
+      // (ou reconectar) sem NENHUM evento SSE visto ainda descobre uma votação já aberta no servidor.
+      // Gated por `comVotacao`, independente de `comQuorum` — ver a docstring de `comVotacao` acima.
+      void rehidratarVotacao();
 
       // 1c) COMPOSIÇÃO — disparo ÚNICO, ao contrário do quórum e da tribuna. O quórum é re-buscado porque o NÚMERO
       // muda a cada evento de presença; a composição é "quem são os membros da Casa NA DATA desta
@@ -370,8 +448,13 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
         }
         // Toda reconexão re-hidrata: a retenção do canal é de 5 min e uma queda mais longa perde eventos em
         // SILÊNCIO (o resume pede um id já aparado). Sem isto, o badge voltaria a "Ao vivo" sobre um número
-        // errado pelo resto da sessão. Custo: 1 request por queda.
-        if (tentativa > 0) void rehidratar();
+        // errado pelo resto da sessão. Custo: 1 request por queda. `rehidratarVotacao` (fatia
+        // "demo-tres-consertos" #2b) segue a MESMA disciplina — uma queda que atravesse a retenção também
+        // pode ter perdido a abertura/o encerramento de uma votação.
+        if (tentativa > 0) {
+          void rehidratar();
+          void rehidratarVotacao();
+        }
         try {
           await espera(Math.min(1000 * 2 ** tentativa, 15000), controller.signal);
         } catch {
@@ -385,7 +468,7 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
       clearInterval(relogio);
       controller.abort();
     };
-  }, [sessaoId, token, idValido, comQuorum]);
+  }, [sessaoId, token, idValido, comQuorum, comVotacao]);
 
   // casos de erro derivados (mantêm o effect livre de setState síncrono)
   if (semCredencial(token)) return { sessao: null, estado: null, conexao: "erro" as EstadoConexao, erro: "Sem credencial de sessão (token)." };

@@ -102,6 +102,33 @@
      (sql/format {:select colunas :from [:legislativo.votacoes]
                   :where [:and [:= :ente_id ente-id] [:= :id id]]}))))
 
+(defn aberta-da-sessao
+  "A votacao 'aberta' MAIS RECENTE desta sessao, ou nil (fatia 'demo-tres-consertos' #2b — recuperacao de
+  estado). Nao ha' UNIQUE que impeca duas 'aberta' na mesma sessao (migration 0021: so' o CHECK de
+  `estado`, sem indice parcial por sessao) — `ORDER BY criado_em DESC LIMIT 1` escolhe a MAIS NOVA, mesma
+  semantica que o reducer do FE ja assume ('uma votacao por vez no plenario: a abertura SUBSTITUI o
+  placar anterior', plenario-reducer.ts). `idx_votacoes_estado (ente_id, estado)` cobre o filtro; o
+  volume por sessao e' pequeno o bastante pra nao precisar de indice dedicado por sessao_id."
+  [tx ente-id sessao-id]
+  (comum/linha->kebab
+   (jdbc/execute-one! tx
+     (sql/format {:select colunas :from [:legislativo.votacoes]
+                  :where [:and [:= :ente_id ente-id] [:= :sessao_id sessao-id] [:= :estado [:inline "aberta"]]]
+                  :order-by [[:criado_em :desc]]
+                  :limit 1}))))
+
+(defn contar-votos-secretos
+  "Quantos votos SECRETOS ja' foram registrados nesta votacao — o MESMO tick anonimo que `voto.registrado`
+  secreto ja' expoe ao vivo (§22.6), nunca uma apuracao por valor (sim/nao/abstencao): isso vazaria MAIS
+  do que o proprio stream vivo vaza antes do encerramento. Usada tambem pra 'simbolica' (sempre 0 — essa
+  modalidade nao registra voto individual, `controllers/registrar-voto`)."
+  [tx ente-id votacao-id]
+  (:contagem
+   (comum/linha->kebab
+    (jdbc/execute-one! tx
+      (sql/format {:select [[[:count :*] :contagem]] :from [:legislativo.votos_secretos]
+                   :where [:and [:= :ente_id ente-id] [:= :votacao_id votacao-id]]})))))
+
 (defn aprovacao-vigente
   "T3-A2 — a votacao que APROVOU `proposicao-id`, ou nil. Devolve {:votacao-id :texto-versao-id}; o
   `:texto-versao-id` e' a versao que estava na mesa quando a votacao ABRIU (congelada por `abrir!`, mig

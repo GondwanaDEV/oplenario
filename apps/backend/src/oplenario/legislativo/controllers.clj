@@ -132,6 +132,17 @@
                          ((motor/politica-dsl {:registro registro :tx tx :expr expr-mandato-vigente :agora hoje}) ator-dsl recurso-dsl)
                          ((motor/politica-dsl {:registro registro :tx tx :expr expr-presente-nesta-sessao :agora instante}) ator-dsl recurso-dsl))))))))))))
 
+(defn- resolver-objeto-votacao
+  "{:objeto-tipo :proposicao} pra uma votacao carregada — a resolucao compartilhada entre `detalhe-votacao`
+  (Fatia 2) e `votacao-aberta` (Fatia 2b), uma unica formula pros dois. `proposicao`/`redacao_final`
+  resolvem TOTALMENTE (`objetos-que-carregam-a-materia`, db/votacao.clj); as demais ficam `nil` — ver a
+  docstring de `detalhe-votacao` pro racional completo."
+  [repo-leg ente-id v]
+  (let [objeto-tipo (:objeto-tipo v)
+        proposicao (when (contains? #{"proposicao" "redacao_final"} objeto-tipo)
+                     (repo/buscar-proposicao repo-leg ente-id (:objeto-id v)))]
+    {:objeto-tipo objeto-tipo :proposicao proposicao}))
+
 (defn detalhe-votacao
   "GET .../votacoes/:votacao-id (fatia 'demo-tres-consertos' #2) — O QUE esta em votacao: resolve o objeto
   POLIMORFICO (`objeto-tipo`,`objeto-id`) da votacao pra um titulo de exibicao. Achado ao vivo (Daouda,
@@ -153,10 +164,38 @@
   (when (sessao-autorizada consultar-sessao sessao-fechada? ator sessao-id)
     (let [ente-id (:ente-id ator)]
       (when-let [v (votacao-na-sessao repo-leg ente-id sessao-id votacao-id)]
-        (let [objeto-tipo (:objeto-tipo v)
-              proposicao (when (contains? #{"proposicao" "redacao_final"} objeto-tipo)
-                           (repo/buscar-proposicao repo-leg ente-id (:objeto-id v)))]
-          {:objeto-tipo objeto-tipo :proposicao proposicao})))))
+        (resolver-objeto-votacao repo-leg ente-id v)))))
+
+(defn votacao-aberta
+  "GET .../votacao-aberta (fatia 'demo-tres-consertos' #2b) — QUAL votacao esta aberta nesta sessao, pra
+  RECUPERACAO de estado (achado ao vivo, Daouda 12/09/2026): o canal Valkey do plenario tem retencao MINID
+  de ~5min (`tempo_real/components`); um cliente que conecta DEPOIS dessa janela (ou perde e reconecta) nao
+  ve `votacao.aberta` nenhum e a tela mostra 'nenhuma votacao aberta' com uma votacao de verdade aberta no
+  banco — pior que a ementa faltando (Fatia 2): um voto perdido numa deliberacao real. NAO substitui o SSE
+  — e' so' a fotografia pra reconstruir o que o stream ao vivo teria mandado.
+
+  Mesma authz 'mesma Casa' + amarra de sessao das outras leituras/escritas da familia (`sessao-autorizada`).
+  nil (sessao inexistente/de outra Casa/fechada -> erro/404 mais acima) OU sessao sem votacao aberta -> nil
+  — ESTADO LEGITIMO, a borda traduz pra 404 (nao erro): 'nenhuma votacao aberta' segue certo quando e'
+  verdade, so' nao pode mais ser dito quando o servidor tem uma aberta.
+
+  Reusa `resolver-objeto-votacao` (a MESMA resolucao da Fatia 2 — uma ida, nao duas) + os votos: NOMINAL
+  devolve a lista {vereador-id, voto} (o mesmo que os eventos `voto.registrado` teriam acumulado);
+  SECRETA/SIMBOLICA devolvem so' a CONTAGEM (tick anonimo, nunca apuracao por valor — sigilo §22.6, mesma
+  fronteira de VotoRegistradoPayload: uma votacao secreta em curso NUNCA vaza sim/nao/abstencao por
+  aqui, e simbolica nunca registra voto individual pra comecar, `registrar-voto`)."
+  [repo-leg consultar-sessao sessao-fechada? ator sessao-id]
+  (when (sessao-autorizada consultar-sessao sessao-fechada? ator sessao-id)
+    (let [ente-id (:ente-id ator)]
+      (when-let [v (repo/votacao-aberta-da-sessao repo-leg ente-id sessao-id)]
+        (let [{:keys [objeto-tipo proposicao]} (resolver-objeto-votacao repo-leg ente-id v)
+              nominal? (= "nominal" (:modalidade v))]
+          (merge
+           {:votacao-id (:id v) :modalidade (:modalidade v) :objeto-tipo objeto-tipo :objeto-id (:objeto-id v)
+            :proposicao proposicao}
+           (if nominal?
+             {:votos (repo/votos-da-votacao repo-leg ente-id (:id v))}
+             {:votos-registrados (repo/contar-votos-secretos-da-votacao repo-leg ente-id (:id v))})))))))
 
 ;; ========================= FE Onda A1: fila de relatores pendentes (§16.11) =========================
 

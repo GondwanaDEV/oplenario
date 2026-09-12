@@ -352,3 +352,120 @@ describe("usePlenario — a costura de borda da TRIBUNA (#7 do ledger de prontid
     expect(numeroDoTelao(result.current.estado!)).toBe(9);
   });
 });
+
+// Fatia "demo-tres-consertos" #2b — achado ao vivo (Daouda, 12/09/2026): a Casa recém-semeada tinha uma
+// votação 'aberta' no banco, mas o canal Valkey (retenção MINID ~5min) estava vazio — o cockpit do
+// vereador mostrava "Nenhuma votação aberta no momento" com uma votação de verdade aberta. `comVotacao`
+// liga `GET /sessoes/:id/votacao-aberta`, a recuperação de estado; mesmo racional de teste da TRIBUNA
+// acima (T1/I2 espelhados aqui como o CASO DA FATIA / PRECEDÊNCIA).
+describe("usePlenario — a costura de borda da RECUPERAÇÃO de votação (fatia 'demo-tres-consertos' #2b)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  // O CORPO REAL de GET /sessoes/:id/votacao-aberta, em kebab-case, como o adapter o emite.
+  const votacaoAbertaCrua = {
+    "votacao-id": "vt1",
+    modalidade: "nominal",
+    "objeto-tipo": "proposicao",
+    "objeto-id": "p1",
+    votos: [{ "vereador-id": "v1", voto: "sim" }],
+  };
+
+  it("T1 — o CASO DA FATIA: com `comVotacao`, o cliente descobre a votação aberta sem NENHUM evento SSE", async () => {
+    global.fetch = fetchFake({
+      "/votacao-aberta": () => ({ ok: true, status: 200, json: async () => votacaoAbertaCrua }) as Response,
+    });
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true }));
+    await waitFor(() => expect(result.current.estado?.placar?.votacaoId).toBe("vt1"));
+    expect(result.current.estado!.placar).toEqual({
+      votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1", encerrada: false,
+      votosNominais: { v1: "sim" }, votosSecretos: 0, resultado: null, totais: null, baseMembros: null,
+    });
+  });
+
+  it("SEM `comVotacao` (ex.: o telão da Mesa) a rota de recuperação NÃO é chamada", async () => {
+    const f = fetchFake({
+      "/votacao-aberta": () => ({ ok: true, status: 200, json: async () => votacaoAbertaCrua }) as Response,
+      "/quorum": () => ({ ok: true, status: 200, json: async () => quorumCru }) as Response,
+    });
+    global.fetch = f;
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comQuorum: true }));
+    await waitFor(() => expect(result.current.estado?.quorumStatus).toBe("ok"));
+    expect(contarChamadas(f, "/votacao-aberta")).toBe(0);
+  });
+
+  it("404 (nenhuma votação aberta) é estado LEGÍTIMO — placar continua null, conexão segue ao vivo, sem erro", async () => {
+    global.fetch = fetchFake({ "/votacao-aberta": () => ({ ok: false, status: 404, json: async () => ({}) }) as Response });
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true }));
+    await waitFor(() => expect(result.current.conexao).toBe("ao-vivo"));
+    expect(result.current.estado?.placar).toBeNull();
+    expect(result.current.conexao).not.toBe("erro");
+  });
+
+  it("rede caída na recuperação de votação é absorvida (a sessão continua de pé, placar continua null)", async () => {
+    global.fetch = fetchFake({ "/votacao-aberta": () => Promise.reject(new Error("offline")) });
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true }));
+    await waitFor(() => expect(result.current.conexao).toBe("ao-vivo"));
+    expect(result.current.sessao).not.toBeNull();
+    expect(result.current.estado?.placar).toBeNull();
+  });
+
+  it("corpo de forma inesperada na recuperação não lança e não inventa placar", async () => {
+    global.fetch = fetchFake({ "/votacao-aberta": () => ({ ok: true, status: 200, json: async () => ({ foo: "bar" }) }) as Response });
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true }));
+    await waitFor(() => expect(result.current.conexao).toBe("ao-vivo"));
+    expect(result.current.estado?.placar).toBeNull();
+  });
+
+  it("§22.6 sigilo — votação SECRETA hidrata só a contagem, NUNCA vereador-id", async () => {
+    global.fetch = fetchFake({
+      "/votacao-aberta": () =>
+        ({
+          ok: true, status: 200,
+          json: async () => ({ "votacao-id": "vt1", modalidade: "secreta", "objeto-tipo": "proposicao", "objeto-id": "p1", "votos-registrados": 4 }),
+        }) as Response,
+    });
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true }));
+    await waitFor(() => expect(result.current.estado?.placar?.votosSecretos).toBe(4));
+    expect(result.current.estado!.placar!.votosNominais).toEqual({});
+  });
+
+  it("PRECEDÊNCIA — um `votacao.aberta` chegado ENQUANTO GET /votacao-aberta está em voo não é sobrescrito pelo snapshot atrasado", async () => {
+    // Anatomia do ruling (mesma de Fix round 1 I2, tribuna): T0 dispara o GET (nenhuma votação vista
+    // ainda); entre T0 e a resposta, o SSE entrega `votacao.aberta` de uma votação DIFERENTE (vt2). Se a
+    // hidratação aplicasse o snapshot de T0 (vt1), o placar RETROCEDERIA pra uma votação que já não é a
+    // corrente — na prática, sobre um voto real que o vereador já vê na tela.
+    vi.useFakeTimers();
+    const sse = sseControlado();
+    const votacaoEmVoo = deferido<Response>();
+    const f = fetchFake({
+      "/plenario": () => ({ ok: true, status: 200, body: sse.body }) as unknown as Response,
+      "/votacao-aberta": () => votacaoEmVoo.promise,
+    });
+    global.fetch = f;
+
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true }));
+    await ateQue(() => result.current.conexao === "ao-vivo"); // SSE conectado; GET /votacao-aberta já disparou e está em voo
+
+    // chega, pelo SSE, a abertura de OUTRA votação
+    await act(async () => {
+      sse.enviar("votacao.aberta", 1, {
+        "votacao-id": "vt2", "sessao-id": "s1", "objeto-tipo": "proposicao", "objeto-id": "p2",
+        modalidade: "nominal", "quorum-tipo": "maioria_simples",
+      });
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    expect(result.current.estado!.placar!.votacaoId).toBe("vt2");
+
+    // AGORA a resposta de T0 chega — o snapshot da vt1, desatualizado
+    await act(async () => {
+      votacaoEmVoo.resolve({ ok: true, status: 200, json: async () => votacaoAbertaCrua } as Response);
+      await vi.advanceTimersByTimeAsync(10);
+    });
+
+    // a vt2 (ao vivo) sobrevive — não é sobrescrita pelo snapshot velho da vt1
+    expect(result.current.estado!.placar!.votacaoId).toBe("vt2");
+  });
+});

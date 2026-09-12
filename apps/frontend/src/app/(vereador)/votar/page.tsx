@@ -30,7 +30,10 @@ export default function VotarPage() {
   const { dados: painel, estado: estadoPainel } = useMeuPainel(token);
   const meuVereadorId = painel?.vereadorId ?? null;
 
-  const { estado: estadoPlenario, conexao, erro: erroConexao } = usePlenario(sessaoId ?? "", token);
+  // `comVotacao: true` (fatia "demo-tres-consertos" #2b): o cockpit é EXATAMENTE quem mais precisa da
+  // recuperação de votação — é ele quem vota — e independe de `comQuorum` (o cockpit continua fora do
+  // polling de quórum/tribuna, ver a docstring de `usePlenario`).
+  const { estado: estadoPlenario, conexao, erro: erroConexao } = usePlenario(sessaoId ?? "", token, { comVotacao: true });
   const { confirmar, estado: estadoConfirmar, erro: erroConfirmar } = useConfirmarPresenca(token);
   const { votar, estado: estadoVotar, erro: erroVotar } = useMeuVoto(token);
   // fatia "demo-tres-consertos" #2 — achado ao vivo: a tela inteira era "Sim/Não/Abster" sem dizer SOBRE
