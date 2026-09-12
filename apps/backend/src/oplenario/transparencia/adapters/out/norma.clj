@@ -32,6 +32,8 @@
 
 (defn normas->wire
   "{:normas :normas-total} (dominio) -> NormasOut — o par lista+total de GET /portal/casa/:ente/legislacao
-  (frente 'truncamento-familia', sitio (c))."
+  (frente 'truncamento-familia', sitio (c)). SEM `(or ... 0)` (corrige achado IMPORTANTE da revisao
+  adversarial): `:normas-total` ausente e' bug de servidor e tem de reprovar no schema (500), nao virar `0`
+  silencioso."
   [{:keys [normas normas-total]}]
-  (validar! wire/NormasOut {:normas (->wires normas) :normas-total (or normas-total 0)} "NormasOut"))
+  (validar! wire/NormasOut {:normas (->wires normas) :normas-total normas-total} "NormasOut"))

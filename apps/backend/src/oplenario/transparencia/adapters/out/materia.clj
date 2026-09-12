@@ -43,9 +43,12 @@
 
 (defn materias->wire
   "{:materias :materias-total} (dominio) -> MateriasOut — o par lista+total de GET
-  /portal/casa/:ente/materias (frente 'truncamento-familia', sitio (b))."
+  /portal/casa/:ente/materias (frente 'truncamento-familia', sitio (b)). SEM `(or ... 0)` (corrige achado
+  IMPORTANTE da revisao adversarial): `:materias-total` ausente e' bug de servidor e tem de reprovar no
+  schema `{:closed true}` (500), nao virar `0` silencioso — um default apagaria o UNICO sinal que esta
+  fatia existe para produzir."
   [{:keys [materias materias-total]}]
-  (validar! wire/MateriasOut {:materias (->wires materias) :materias-total (or materias-total 0)} "MateriasOut"))
+  (validar! wire/MateriasOut {:materias (->wires materias) :materias-total materias-total} "MateriasOut"))
 
 (defn ficha->wire
   "Materia + norma (dominio, opcional) -> FichaOut."
