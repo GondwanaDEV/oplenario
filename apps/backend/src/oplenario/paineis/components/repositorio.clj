@@ -194,6 +194,11 @@
   DIRETO (nao este fn) — assim o drift ainda e' pego RUIDOSAMENTE em CI, antes de qualquer deploy chegar a
   rodar este caminho tolerante contra trafego real.
 
+  `set-tenant!` DENTRO do try (frente 'relay-observavel' — buraco real: `shared.outbox.ente_id` e'
+  NULLABLE, e `set-tenant!` LANCA em ente-id nil; fora do try, um evento supratenant/malformado envenenava
+  o relay ANTES de chegar ao catch, exatamente o que este ns existe p/ evitar. A irma' `projetar-inbox!`,
+  abaixo, ja' fazia certo — este era o UNICO buraco).
+
   CATCH Throwable, NAO Exception (review security HIGH, F7 Slice 2): as `:pre` de db/pendencia.clj e
   db/tramitacao.clj lancam `AssertionError` — um `Error`, IRMAO de `Exception` sob `Throwable`, NAO capturado
   por `(catch Exception ...)`. Um `:pre` falhando (payload com chave ausente/nil que uma validacao Malli
@@ -203,8 +208,8 @@
   projetar-evento!` — que ALEM DISSO nao tem NENHUM try/catch (nem de Exception): um alvo maior p/ correcao
   futura, fora do escopo deste modulo."
   [tx {:keys [tipo ente-id payload]}]
-  (tenancy/set-tenant! tx ente-id)
   (try
+    (tenancy/set-tenant! tx ente-id)
     (despachar! tx ente-id tipo payload)
     (catch Throwable e
       (log/warn e "paineis: payload malformado ou falha de projecao — evento tolerado, nunca propaga p/ o relay compartilhado"
