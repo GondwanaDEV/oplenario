@@ -16,10 +16,14 @@
             [oplenario.rotas :as rotas])
   (:import (java.time Instant)))
 
-(defn- fake-repo-paineis [resultado]
+(defn- fake-repo-paineis
+  "Fatia 'truncamento-familia' sitio (a): sli-sessoes devolve {:sessoes [...] :sessoes-total N} — este
+  endpoint (`/meu/sessao-atual`) so' usa `:sessoes` (uma sessao, nao uma lista; `sessoes-total` nao se
+  aplica aqui, ver adapters/out/minha_sessao_atual.clj)."
+  [resultado]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify repo-paineis/RepoPaineis
-    (sli-sessoes [_ _ente-id] resultado)))
+    (sli-sessoes [_ _ente-id] {:sessoes resultado :sessoes-total (count resultado)})))
 
 (defn- fake-repo-identidade [papeis]
   #_{:clj-kondo/ignore [:missing-protocol-method]}

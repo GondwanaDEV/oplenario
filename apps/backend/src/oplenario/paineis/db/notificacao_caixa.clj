@@ -56,20 +56,29 @@
 (defn listar-do-destinatario
   "As notificacoes DO PROPRIO ator, mais recentes primeiro (`:id` asc como desempate estavel, mesma
   disciplina de db/proposicao/listar). `destinatario-identidade-id` vem SEMPRE do `(:ator req)` — nunca
-  de path/query/corpo. Usa idx_notificacao_caixa_destinatario (mig 0062)."
-  [tx ente-id destinatario-identidade-id]
-  {:pre [(some? ente-id) (some? destinatario-identidade-id)]}
-  (comum/linhas->kebab
-   (jdbc/execute! tx
-     (sql/format {:select colunas :from :paineis.notificacao_caixa
-                  :where [:and [:= :ente_id ente-id]
-                          [:= :destinatario_identidade_id destinatario-identidade-id]]
-                  :order-by [[:criado_em :desc] [:id :asc]]
-                  :limit teto-inbox}))))
+  de path/query/corpo. Usa idx_notificacao_caixa_destinatario (mig 0062). `limite` (4a aridade, opcional,
+  default `teto-inbox`) existe SO' para o teste injetar um teto pequeno sem pagar o custo de 51 linhas
+  (fatia 'truncamento-familia' sitio b) — o caminho de PRODUCAO (`components/repositorio.clj`) sempre chama
+  a 3a aridade."
+  ([tx ente-id destinatario-identidade-id] (listar-do-destinatario tx ente-id destinatario-identidade-id teto-inbox))
+  ([tx ente-id destinatario-identidade-id limite]
+   {:pre [(some? ente-id) (some? destinatario-identidade-id)]}
+   (comum/linhas->kebab
+    (jdbc/execute! tx
+      (sql/format {:select colunas :from :paineis.notificacao_caixa
+                   :where [:and [:= :ente_id ente-id]
+                           [:= :destinatario_identidade_id destinatario-identidade-id]]
+                   :order-by [[:criado_em :desc] [:id :asc]]
+                   :limit limite})))))
 
 (defn contar-nao-lidas
   "Contagem TOTAL de nao lidas do ator — NAO limitada pelo teto da listagem (e' justamente o numero que
-  impede a UI de mentir quando ha' mais de 50). Usa o indice PARCIAL idx_notificacao_caixa_nao_lidas."
+  impede a UI de mentir quando ha' mais de 50). Usa o indice PARCIAL idx_notificacao_caixa_nao_lidas.
+
+  CUIDADO (fatia 'truncamento-familia' sitio b): este predicado (`lida_em IS NULL`) e' DIFERENTE do de
+  `listar-do-destinatario` (que nao filtra estado de leitura) — os dois NAO sao um par lista/total. `nao-lidas`
+  continua existindo (e' o numero certo para o badge do sino), mas NAO limita `listar-do-destinatario`; o
+  par irmao de VERDADE da lista e' `contar-do-destinatario` (abaixo), mesmo WHERE, sem o `lida_em IS NULL`."
   [tx ente-id destinatario-identidade-id]
   {:pre [(some? ente-id) (some? destinatario-identidade-id)]}
   (:c (comum/linha->kebab
@@ -78,6 +87,19 @@
                       :where [:and [:= :ente_id ente-id]
                               [:= :destinatario_identidade_id destinatario-identidade-id]
                               [:is :lida_em nil]]})))))
+
+(defn contar-do-destinatario
+  "O TOTAL real de notificacoes do ator (lidas + nao lidas) — MESMO WHERE de `listar-do-destinatario` (sem
+  filtro de `lida_em`, ao contrario de `contar-nao-lidas`). Par irmao de VERDADE da lista: sem ele, um ator
+  com 200 lidas + 5 nao lidas via `nao-lidas` bater 5 (todas dentro do teto de 50) e concluir, errado, que
+  nada foi cortado — as 155 notificacoes LIDAS que caem fora do teto somem sem nenhum sinal."
+  [tx ente-id destinatario-identidade-id]
+  {:pre [(some? ente-id) (some? destinatario-identidade-id)]}
+  (:c (comum/linha->kebab
+       (jdbc/execute-one! tx
+         (sql/format {:select [[[:count :*] :c]] :from :paineis.notificacao_caixa
+                      :where [:and [:= :ente_id ente-id]
+                              [:= :destinatario_identidade_id destinatario-identidade-id]]})))))
 
 (defn marcar-lida!
   "Marca a notificacao como lida. IDEMPOTENTE por `COALESCE(lida_em, now())`: a 2a chamada re-grava o

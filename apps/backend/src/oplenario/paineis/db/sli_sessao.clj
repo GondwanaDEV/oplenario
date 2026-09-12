@@ -116,7 +116,16 @@
   desempate DESC, sob o teto, cairiam fora justamente as abertas mais antigas — o sinal mais critico; mesmo
   racional 'mais estagnada primeiro' de db/tramitacao/listar-board). O grupo CONCLUIDO vem depois, mais
   recente primeiro (`transicionou_em` DESC); `sessao_id` desempate deterministico. `limite` teto server-side
-  (clampado por teto-sli-absoluto)."
+  (clampado por teto-sli-absoluto).
+
+  FATIA 'truncamento-familia' sitio (a): 'agendada' que nunca abriu tambem cai no grupo `encerrada_em IS
+  NULL` (o `ORDER BY` acima nao distingue 'aberta ha' muito tempo' de 'agendada ha' muito tempo' — os dois
+  sao `transicionou_em` pequeno, ASC-primeiro). Quando ESSE grupo ultrapassa o teto, quem o LIMIT corta sao
+  as linhas de MAIOR `transicionou_em` dentro dele — ou seja, as agendadas MAIS NOVAS (as que
+  `/pauta-convocacao` existe para convocar), nunca 'a cauda das concluidas mais antigas' (essas ja' estao
+  DEPOIS do grupo aberto inteiro na ordenacao, e so' cairiam fora se o grupo aberto sozinho ja' explodisse o
+  teto). `contar` (abaixo) e' o total REAL, sem teto, MESMO WHERE — ver `sessoes-total` em
+  `components/repositorio.clj`."
   [tx ente-id limite]
   {:pre [(some? ente-id) (pos-int? limite)]}
   (comum/linhas->kebab
@@ -130,3 +139,15 @@
                              [:transicionou_em :desc]
                              [:sessao_id :asc]]
                   :limit (min limite teto-sli-absoluto)}))))
+
+(defn contar
+  "O TOTAL real de sessoes vistas do tenant (SEM teto) — MESMO WHERE de `listar-sli-sessoes` (so' `ente_id`;
+  esta leitura nao filtra por estado, entao e' o WHERE inteiro, nao um prefixo dele). Par irmao de
+  `sessoes-total` (fatia 'truncamento-familia' sitio a): sem ele, uma agendada nova que caiu fora do corte
+  de `listar-sli-sessoes` desaparece do painel sem nenhum sinal — o SLI reporta o numero ERRADO como se
+  fosse o numero."
+  [tx ente-id]
+  {:pre [(some? ente-id)]}
+  (:n (jdbc/execute-one! tx
+        (sql/format {:select [[[:count :*] :n]] :from [:paineis.sli_sessao]
+                     :where [:= :ente_id ente-id]}))))

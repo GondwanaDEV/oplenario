@@ -25,11 +25,12 @@
   #{"aberta" "suspensa"})
 
 (defn minha-sessao-atual->wire
-  "Sequencia de sessoes (cru, do controller sli-sessoes — MESMO shape que `sli-sessoes->wire` consome, uma
-  seq PLANA, nao um mapa {:sessoes ...}) -> MinhaSessaoAtualOut (validado). So' a PRIMEIRA entrada cujo
-  `estado-atual` seja realmente 'viva' (`estados-sessao-viva` — nunca uma 'agendada' futura); nenhuma
-  sessao viva -> {:sessao-id nil :situacao nil}."
-  [sessoes]
+  "{:sessoes [...] :sessoes-total N} (cru, do controller sli-sessoes — MESMO shape que `sli-sessoes->wire`
+  consome, fatia 'truncamento-familia') -> MinhaSessaoAtualOut (validado). So' USA `:sessoes` — este
+  endpoint devolve UMA sessao, entao `sessoes-total` (o par irmao que sinaliza corte de uma LISTA) nao se
+  aplica aqui. So' a PRIMEIRA entrada cujo `estado-atual` seja realmente 'viva' (`estados-sessao-viva` —
+  nunca uma 'agendada' futura); nenhuma sessao viva -> {:sessao-id nil :situacao nil}."
+  [{:keys [sessoes]}]
   (let [primeira (first (filter #(contains? estados-sessao-viva (:estado-atual %)) sessoes))
         out {:sessao-id (some-> primeira :sessao-id str)
              :situacao (some-> primeira :estado-atual situacao/derivar)}]

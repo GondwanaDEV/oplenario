@@ -70,16 +70,36 @@
   denominador congelado. Uma lista VAZIA e' o sinal de 'ninguem conduziu a chamada ainda' — distinto de uma
   lista com um ato e zero presenca_evento ('a chamada aconteceu, a Casa toda faltou').
 
-  LIMIT explicito (`logic/teto-de-atos-de-chamada`): a leitura NUNCA pode depender da cardinalidade da
-  escrita. O resultado inteiro e' embutido em `GET /sessoes/:id/chamada` — o endpoint do telao do M4 — e
-  passa por tres materializacoes em heap (`linhas->kebab`, `mapv chamada-conduzida->wire`, `m/validate` de um
-  `[:sequential ChamadaConduzidaOut]`) num monolito COMPARTILHADO por todos os tenants. O teto de ESCRITA
-  (validado na tx de `registrar-chamada-conduzida!`) ja impede a lista de crescer; este LIMIT e' a segunda
-  tranca, para uma linha entrada por outro caminho (import de acervo legado) nunca virar OOM da Casa vizinha."
+  FAIL-CLOSED, nao `-total` (fatia 'truncamento-familia' sitio c — decisao tomada com a invariante na mao,
+  nao por default): o teto de ESCRITA (`logic/teto-de-atos-de-chamada`, validado na tx de
+  `registrar-chamada-conduzida!` via `contar-da-sessao` ANTES do INSERT) ja' impede a cardinalidade real de
+  passar de `teto-de-atos-de-chamada` para QUALQUER ato escrito pelo caminho da aplicacao — entao, ao
+  contrario de `sli-sessoes`/`o-que-vence`/`tramitacao-board` desta MESMA familia, aqui um `-total`
+  publicado seria sempre igual ao tamanho da lista: nao existe corte de verdade a sinalizar no caminho
+  normal. Mas ESTA leitura alimenta 3 consumidores (`repositorio.clj:338,353,435-436`): `GET
+  /sessoes/:id/chamada` (o telao do M4) e `listar-chamadas-conduzidas`, mas TAMBEM a FOLHA DA SESSAO — um
+  artefato CONGELADO (HTML+PDF, 2 hashes, mig 0073). Um ato que caisse fora de um `LIMIT` mudo sairia do
+  artefato ASSINADO PARA SEMPRE, sem caminho de reparo (o mesmo motivo pelo qual `registrar!`/
+  `chamada_conduzida` sao append-only) — exatamente o defeito que esta familia existe para fechar, so' que
+  aqui num artefato que nao pode ser corrigido depois de gerado.
+
+  A UNICA forma de esta leitura ver mais que `teto-de-atos-de-chamada` linhas e' um path FORA do app (import
+  de acervo legado direto no banco — o mesmo cenario que a docstring do teto ja' citava) violando a
+  invariante de escrita. Isso e' um BUG DE DADO, nao uma pagina cheia — fail-closed e' a resposta certa:
+  le' `teto+1` via `:max-rows` (o driver PARA de materializar no primeiro excedente, mesma tecnica de
+  `sessao/listar-todas` e `vereador/roster-da-casa-em-datas`) e lanca `:limite/atos-de-chamada-excedido`
+  (o interceptor `erro` global mapeia p/ 422 com `:medido-ao-menos`/`:teto`) em vez de servir a folha
+  truncada calada."
   [tx ente-id sessao-id]
-  (comum/linhas->kebab
-   (jdbc/execute! tx
-     (sql/format {:select cols :from [:sessoes.chamada_conduzida]
-                  :where [:and [:= :ente_id ente-id] [:= :sessao_id sessao-id]]
-                  :order-by [[:ocorrido_em :asc] [:id :asc]]
-                  :limit logic/teto-de-atos-de-chamada}))))
+  (let [teto   logic/teto-de-atos-de-chamada
+        linhas (comum/linhas->kebab
+                (jdbc/execute! tx
+                  (sql/format {:select cols :from [:sessoes.chamada_conduzida]
+                               :where [:and [:= :ente_id ente-id] [:= :sessao_id sessao-id]]
+                               :order-by [[:ocorrido_em :asc] [:id :asc]]})
+                  {:max-rows (inc teto)}))]
+    (when (> (count linhas) teto)
+      (throw (ex-info "atos de chamada conduzida da sessao acima do teto (invariante de escrita violada)"
+                      {:tipo :limite/atos-de-chamada-excedido :medido-ao-menos (count linhas)
+                       :teto teto :ente-id ente-id :sessao-id sessao-id})))
+    linhas))

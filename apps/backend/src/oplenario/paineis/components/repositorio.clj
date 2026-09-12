@@ -276,7 +276,13 @@
      `com-tenant-leitura*` no kernel com `:isolation :repeatable-read :read-only true` — fora do escopo
      desta fatia (kernel COMPARTILHADO; consertar so' aqui criaria inconsistencia com os outros dois
      pares que tem o MESMO overclaim).")
-  (sli-sessoes [this ente-id] "SLI de janela de sessao (Inv.9): sessoes do tenant, abertas primeiro, concluidas por recencia.")
+  (sli-sessoes [this ente-id]
+    "SLI de janela de sessao (Inv.9): sessoes do tenant, abertas primeiro, concluidas por recencia + o TOTAL
+     real (sem teto) — fatia 'truncamento-familia' sitio (a). `sessoes` corta no teto
+     (`teto-sli-sessoes`); `sessoes-total` REUSA `db-sli-sessao/contar` (MESMO WHERE `ente_id = ?` de
+     `listar-sli-sessoes` — a leitura nao filtra por estado, entao e' o WHERE inteiro). Os dois reads rodam
+     na MESMA tx (mesmo CARRY DELIBERADO de nao-mesmo-snapshot MVCC de `tramitacao-board`/`o-que-vence`
+     acima). Devolve {:sessoes [...] :sessoes-total N}.")
   (dashboard-mesa [this ente-id]
     "Rollups do dashboard da Mesa (F7, §16.11 item 11.4): os TRES resumos agregados dos read-models do
     proprio paineis (tramitacao/pendencias/sessoes por estado), lidos numa UNICA tx do tenant. Devolve
@@ -300,9 +306,15 @@
     (SELECT ... FOR UPDATE SKIP LOCKED LIMIT :teto) RETURNING *` + reaper de 'enviando' orfao. YAGNI ate' la'.
     Seu AGENDAMENTO (cron/loop + leader-election) e' carry infra — aqui a LOGICA de entrega, chamavel e testavel.")
   (minhas-notificacoes [this ente-id destinatario-identidade-id]
-    "Inbox do PROPRIO ator (Onda E fatia 1): {:notificacoes [...] :nao-lidas n} numa UNICA tx do tenant
-     (mesma disciplina de dashboard-mesa). O escopo por destinatario esta' no WHERE do SQL, junto do
-     tenant — a authz fina desta rota NAO e' de papel, e' de posse.")
+    "Inbox do PROPRIO ator (Onda E fatia 1): {:notificacoes [...] :nao-lidas n :notificacoes-total n} numa
+     UNICA tx do tenant (mesma disciplina de dashboard-mesa). O escopo por destinatario esta' no WHERE do
+     SQL, junto do tenant — a authz fina desta rota NAO e' de papel, e' de posse.
+
+     `notificacoes-total` (fatia 'truncamento-familia' sitio b): o total REAL do ator — REUSA
+     `db-caixa/contar-do-destinatario`, o MESMO WHERE de `listar-do-destinatario` (sem filtro de leitura).
+     `nao-lidas` continua existindo (o numero certo pro badge), mas nunca foi o par irmao da lista: filtra
+     `lida_em IS NULL`, um predicado DIFERENTE do de `listar-do-destinatario` — 200 lidas + 5 nao lidas
+     bateria `nao-lidas`=5 com as 5 dentro do teto, escondendo as 155 lidas cortadas em silencio.")
   (marcar-notificacao-lida! [this ente-id m]
     "Marca como lida a notificacao `(:id m)` do destinatario `(:destinatario-identidade-id m)` — guard de
      posse no MESMO WHERE do tenant. Idempotente; devolve {:id :lida-em} ou nil (inexistente/nao e' sua)."))
@@ -320,7 +332,11 @@
       (fn [tx]
         {:itens             (db-tramitacao/listar-board tx ente-id teto-tramitacao-board-por-estado)
          :totais-por-estado (db-tramitacao/resumo tx ente-id)})))
-  (sli-sessoes [this ente-id] (transacao this ente-id #(db-sli-sessao/listar-sli-sessoes % ente-id teto-sli-sessoes)))
+  (sli-sessoes [this ente-id]
+    (transacao this ente-id
+      (fn [tx]
+        {:sessoes       (db-sli-sessao/listar-sli-sessoes tx ente-id teto-sli-sessoes)
+         :sessoes-total (db-sli-sessao/contar tx ente-id)})))
   (dashboard-mesa [this ente-id]
     (transacao this ente-id
       (fn [tx]
@@ -343,8 +359,9 @@
   (minhas-notificacoes [this ente-id destinatario-identidade-id]
     (transacao this ente-id
       (fn [tx]
-        {:notificacoes (db-caixa/listar-do-destinatario tx ente-id destinatario-identidade-id)
-         :nao-lidas    (db-caixa/contar-nao-lidas tx ente-id destinatario-identidade-id)})))
+        {:notificacoes       (db-caixa/listar-do-destinatario tx ente-id destinatario-identidade-id)
+         :nao-lidas          (db-caixa/contar-nao-lidas tx ente-id destinatario-identidade-id)
+         :notificacoes-total (db-caixa/contar-do-destinatario tx ente-id destinatario-identidade-id)})))
   (marcar-notificacao-lida! [this ente-id m]
     (transacao this ente-id #(db-caixa/marcar-lida! % (assoc m :ente-id ente-id)))))
 

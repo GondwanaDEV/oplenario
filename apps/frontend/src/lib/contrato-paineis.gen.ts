@@ -14,6 +14,7 @@ export interface NotificacaoOut {
 export interface MinhasNotificacoesOut {
   notificacoes: NotificacaoOut[];
   naoLidas: number;
+  notificacoesTotal: number;
 }
 
 export interface MarcarLidaOut {

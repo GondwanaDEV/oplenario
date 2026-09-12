@@ -17,9 +17,13 @@
    :criado-em (->str (:criado-em n)) :lida-em (->str (:lida-em n))})
 
 (defn minhas-notificacoes->wire
-  "{:notificacoes [...] :nao-lidas n} -> MinhasNotificacoesOut (validada)."
-  [{:keys [notificacoes nao-lidas]}]
-  (let [out {:notificacoes (mapv notificacao->wire notificacoes) :nao-lidas (int (or nao-lidas 0))}]
+  "{:notificacoes [...] :nao-lidas n :notificacoes-total n} -> MinhasNotificacoesOut (validada).
+  `notificacoes-total` sai VERBATIM (`(int ...)`, nunca `(or ... 0)`) — fatia 'truncamento-familia': um
+  total AUSENTE e' bug de servidor e tem de virar 500 pela validacao Malli abaixo, nunca um zero
+  silencioso que a UI leria como 'sem corte' (o mesmo cuidado que `nao-lidas`, historicamente, nao tinha)."
+  [{:keys [notificacoes nao-lidas notificacoes-total]}]
+  (let [out {:notificacoes (mapv notificacao->wire notificacoes) :nao-lidas (int (or nao-lidas 0))
+             :notificacoes-total (int notificacoes-total)}]
     (when-not (m/validate wire/MinhasNotificacoesOut out)
       (throw (ex-info "projecao da inbox viola o contrato MinhasNotificacoesOut (bug de servidor)"
                       {:erros (me/humanize (m/explain wire/MinhasNotificacoesOut out))})))

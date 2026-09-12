@@ -50,13 +50,14 @@
 
 (deftest minhas-notificacoes-200
   (let [ente (random-uuid) eu (random-uuid) visto (atom nil)
-        repo (fake-repo-paineis visto {:notificacoes [(notificacao-canonica ente eu)] :nao-lidas 1})
+        repo (fake-repo-paineis visto {:notificacoes [(notificacao-canonica ente eu)] :nao-lidas 1 :notificacoes-total 1})
         r (pt/response-for (service-fn #{"vereador"} repo)
                            :get "/meu/notificacoes" :headers (com-bearer (token ente eu)))
         body (ler-json r)]
     (is (= 200 (:status r)))
     (is (= [ente eu] @visto) "a identidade vem do ATOR, nunca do request")
     (is (= 1 (:nao-lidas body)))
+    (is (= 1 (:notificacoes-total body)))
     (let [n (first (:notificacoes body))]
       (is (= "norma_publicada" (:categoria n)))
       (is (string? (:id n)) "uuid projetado como string")
@@ -66,7 +67,7 @@
       (is (not (contains? n :destinatario-identidade-id)) "o destinatario nao volta no wire (e' sempre 'eu')"))))
 
 (deftest minhas-notificacoes-vazio-200
-  (let [r (pt/response-for (service-fn #{"vereador"} (fake-repo-paineis (atom nil) {:notificacoes [] :nao-lidas 0}))
+  (let [r (pt/response-for (service-fn #{"vereador"} (fake-repo-paineis (atom nil) {:notificacoes [] :nao-lidas 0 :notificacoes-total 0}))
                            :get "/meu/notificacoes" :headers (com-bearer (token (random-uuid) (random-uuid))))
         body (ler-json r)]
     (is (= 200 (:status r)) "criterio 3: ator sem notificacao -> 200")
@@ -76,12 +77,27 @@
 (deftest minhas-notificacoes-sem-papel-tambem-200
   ;; gate AUTH APENAS (spec §4.5): a notificacao e' endereçada a uma identidade, nao a um cargo — um
   ;; servidor sem papel de vereador tem inbox propria e deve conseguir le-la.
-  (let [r (pt/response-for (service-fn #{} (fake-repo-paineis (atom nil) {:notificacoes [] :nao-lidas 0}))
+  (let [r (pt/response-for (service-fn #{} (fake-repo-paineis (atom nil) {:notificacoes [] :nao-lidas 0 :notificacoes-total 0}))
                            :get "/meu/notificacoes" :headers (com-bearer (token (random-uuid) (random-uuid))))]
     (is (= 200 (:status r)) "sem papel nenhum -> ainda 200 (o escopo e' de POSSE, nao de cargo)")))
 
+(deftest notificacoes-total-e-o-falso-honesto-que-nao-lidas-sozinho-nao-cobre
+  ;; fatia "truncamento-familia" sitio (b): o cenario que o achado descreve — 200 lidas + 5 nao lidas, as 5
+  ;; todas dentro do teto de 50 -> `nao-lidas`=5 nao denuncia NADA. So' `notificacoes-total` (aqui simulado
+  ;; em escala pequena: 1 item na lista, mas 205 no total real) revela que ha' corte de verdade.
+  (let [ente (random-uuid) eu (random-uuid) visto (atom nil)
+        repo (fake-repo-paineis visto {:notificacoes [(notificacao-canonica ente eu)] :nao-lidas 5
+                                        :notificacoes-total 205})
+        r (pt/response-for (service-fn #{"vereador"} repo)
+                           :get "/meu/notificacoes" :headers (com-bearer (token ente eu)))
+        body (ler-json r)]
+    (is (= 200 (:status r)))
+    (is (= 5 (:nao-lidas body)) "nao-lidas sozinho nao muda — e' o numero certo pro badge, so' isso")
+    (is (= 205 (:notificacoes-total body))
+        "notificacoes-total e' o numero real, independente de nao-lidas e de count(notificacoes)")))
+
 (deftest minhas-notificacoes-sem-token-401
-  (let [r (pt/response-for (service-fn #{"vereador"} (fake-repo-paineis (atom nil) {:notificacoes [] :nao-lidas 0}))
+  (let [r (pt/response-for (service-fn #{"vereador"} (fake-repo-paineis (atom nil) {:notificacoes [] :nao-lidas 0 :notificacoes-total 0}))
                            :get "/meu/notificacoes")]
     (is (= 401 (:status r)) "fail-closed: sem credencial -> 401")))
 
