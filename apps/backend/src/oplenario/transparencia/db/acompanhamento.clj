@@ -86,21 +86,27 @@
   lia 'sigo 3 materias' com 5 linhas ATIVAS no banco — a mesma mentira da familia, so' que sem LIMIT nenhum
   produzindo o corte. `:indisponivel` (computado aqui, pos-query: `:tipo` nulo so' acontece quando o LEFT
   JOIN nao achou par) e' o sinal que a borda usa para NUNCA fingir um cabecalho que nao existe — a subscricao
-  (VERDADE de dominio) sempre aparece; o cabecalho pode faltar."
-  [tx ente-id seguidor-identidade-id]
-  {:pre [(some? ente-id) (some? seguidor-identidade-id)]}
-  (mapv #(assoc % :indisponivel (nil? (:tipo %)))
-    (comum/linhas->kebab
-     (jdbc/execute! tx
-       (sql/format {:select [[:a.proposicao_id :proposicao-id] [:a.criado_em :seguido-em]
-                             [:m.tipo :tipo] [:m.ano :ano] [:m.sequencial :sequencial]
-                             [:m.urn_lex :urn-lex] [:m.ementa :ementa] [:m.estado :estado]]
-                    :from [[:transparencia.acompanhamento :a]]
-                    :left-join [[:transparencia.materia :m]
-                                [:and [:= :a.ente_id :m.ente_id] [:= :a.proposicao_id :m.proposicao_id]]]
-                    :where (where-meus ente-id seguidor-identidade-id)
-                    :order-by [[:a.criado_em :desc]]
-                    :limit teto-listagem})))))
+  (VERDADE de dominio) sempre aparece; o cabecalho pode faltar.
+
+  ARIDADE de 4: `limite` INJETAVEL (achado IMPORTANTE da revisao adversarial — mesmo racional de
+  listar-em-tramitacao/pendencia) — SO' para o teste provar 'o total nao capa' sem pagar 201 linhas; o
+  caminho de PRODUCAO (repositorio.clj) usa a aridade de 3 e cai no default `teto-listagem`."
+  ([tx ente-id seguidor-identidade-id]
+   (meus-da-materia tx ente-id seguidor-identidade-id teto-listagem))
+  ([tx ente-id seguidor-identidade-id limite]
+   {:pre [(some? ente-id) (some? seguidor-identidade-id) (pos-int? limite)]}
+   (mapv #(assoc % :indisponivel (nil? (:tipo %)))
+     (comum/linhas->kebab
+      (jdbc/execute! tx
+        (sql/format {:select [[:a.proposicao_id :proposicao-id] [:a.criado_em :seguido-em]
+                              [:m.tipo :tipo] [:m.ano :ano] [:m.sequencial :sequencial]
+                              [:m.urn_lex :urn-lex] [:m.ementa :ementa] [:m.estado :estado]]
+                     :from [[:transparencia.acompanhamento :a]]
+                     :left-join [[:transparencia.materia :m]
+                                 [:and [:= :a.ente_id :m.ente_id] [:= :a.proposicao_id :m.proposicao_id]]]
+                     :where (where-meus ente-id seguidor-identidade-id)
+                     :order-by [[:a.criado_em :desc]]
+                     :limit (min limite teto-listagem)}))))))
 
 (defn contar-meus
   "Quantos acompanhamentos ATIVOS o seguidor tem — SEM teto e SEM JOIN (frente 'truncamento-familia',

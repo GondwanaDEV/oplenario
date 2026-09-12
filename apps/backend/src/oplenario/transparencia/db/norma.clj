@@ -78,18 +78,24 @@
   norma podia 'sumir/trocar' entre cargas (inaceitavel em dado legal). NOTA de indice: filtro por :ano ou
   :numero SEM :tipo nao casa o prefixo do indice (tipo_norma e' o 2o nivel) — :numero-so' e' o pior caso
   (faceta menos seletiva) — e cai em scan intra-tenant; aceitavel: o acervo de UMA camara tem cardinalidade
-  modesta (RLS por ente_id) e o teto limita o custo. O uso comum inclui :tipo (a especie e' a faceta primaria)."
-  [tx ente-id {:keys [tipo ano numero] :as filtro}]
-  {:pre [(some? ente-id)]}
-  (let [filtros? (or tipo ano numero)]
-    (comum/linhas->kebab
-     (jdbc/execute! tx
-       (sql/format {:select cols :from [:transparencia.norma]
-                    :where (into [:and] (where-listar ente-id filtro))
-                    :order-by (if filtros?
-                                [[:ano :desc] [:numero :desc] [:norma_id :desc]]
-                                [[:publicado_em :desc] [:norma_id :desc]])
-                    :limit teto-listagem})))))
+  modesta (RLS por ente_id) e o teto limita o custo. O uso comum inclui :tipo (a especie e' a faceta primaria).
+
+  ARIDADE de 4: `limite` INJETAVEL (achado IMPORTANTE da revisao adversarial — mesmo racional de
+  listar-em-tramitacao/pendencia) — SO' para o teste provar 'o total nao capa' sem pagar 201 linhas; a
+  rota publica (portal, aridade de 3) cai no default `teto-listagem`. `(min limite teto-listagem)` — nunca
+  pede-se mais que o teto server-side, so' menos."
+  ([tx ente-id filtro] (listar tx ente-id filtro teto-listagem))
+  ([tx ente-id {:keys [tipo ano numero] :as filtro} limite]
+   {:pre [(some? ente-id) (pos-int? limite)]}
+   (let [filtros? (or tipo ano numero)]
+     (comum/linhas->kebab
+      (jdbc/execute! tx
+        (sql/format {:select cols :from [:transparencia.norma]
+                     :where (into [:and] (where-listar ente-id filtro))
+                     :order-by (if filtros?
+                                 [[:ano :desc] [:numero :desc] [:norma_id :desc]]
+                                 [[:publicado_em :desc] [:norma_id :desc]])
+                     :limit (min limite teto-listagem)}))))))
 
 (defn contar
   "Quantas normas do acervo (as-enacted, mesmo filtro de `listar`) existem — SEM teto (frente

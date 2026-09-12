@@ -205,15 +205,21 @@
   "Portal PUBLICO: materias EXCLUINDO os estados terminais informados (ex.: arquivadas), mais recentes
   primeiro. `estados-excluidos` e' um set de string — vazio lista tudo. TETO (`teto-listagem`, 200): quem
   exibe precisa de `contar-em-tramitacao` ao lado para saber que truncou (par lista+total, mesmo racional de
-  `listar-por-autor`/`contar-por-autor` acima)."
-  [tx ente-id estados-excluidos]
-  {:pre [(some? ente-id) (set? estados-excluidos)]}
-  (comum/linhas->kebab
-   (jdbc/execute! tx
-     (sql/format {:select cols :from [:transparencia.materia]
-                  :where (where-em-tramitacao ente-id estados-excluidos)
-                  :order-by [[:ano :desc] [:sequencial :desc]]
-                  :limit teto-listagem}))))
+  `listar-por-autor`/`contar-por-autor` acima).
+
+  ARIDADE de 4: `limite` INJETAVEL (achado IMPORTANTE da revisao adversarial — mesmo racional de
+  paineis/db/pendencia/listar-abertas) — SO' para o teste provar o invariante 'o total nao capa' sem pagar
+  201 linhas; o caminho de PRODUCAO (repositorio.clj) usa a aridade de 3 e cai no default `teto-listagem`.
+  `(min limite teto-listagem)` — o chamador nunca CONSEGUE pedir mais que o teto server-side, so' menos."
+  ([tx ente-id estados-excluidos] (listar-em-tramitacao tx ente-id estados-excluidos teto-listagem))
+  ([tx ente-id estados-excluidos limite]
+   {:pre [(some? ente-id) (set? estados-excluidos) (pos-int? limite)]}
+   (comum/linhas->kebab
+    (jdbc/execute! tx
+      (sql/format {:select cols :from [:transparencia.materia]
+                   :where (where-em-tramitacao ente-id estados-excluidos)
+                   :order-by [[:ano :desc] [:sequencial :desc]]
+                   :limit (min limite teto-listagem)})))))
 
 (defn contar-em-tramitacao
   "Quantas materias em tramitacao existem — SEM teto (a familia 'truncamento-familia', sitio (b)):

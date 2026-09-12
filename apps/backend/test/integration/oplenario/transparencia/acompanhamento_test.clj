@@ -134,3 +134,18 @@
         (is (nil? (:ementa (get por-pid pid-orfao))) "sem cabecalho para projetar, os campos vem nil")))
     (is (= 2 (:acompanhamentos-total (controllers/meus-acompanhamentos *repo* a)))
         "o total conta AMBOS (dona-table, sem depender da projecao) — o par lista+total ainda concorda")))
+
+;; ---------- sitio (c)/(d): o total NAO capa (achado IMPORTANTE da revisao adversarial) ----------
+;; os testes acima provam identidade de predicado com poucas linhas; nenhum prova AUSENCIA DE TETO.
+;; `meus-da-materia` agora aceita `limite` INJETAVEL (4a aridade, mesmo racional dos demais sitios da
+;; frente): cria 5 follows, lista com limite=2 e afirma lista=2 E total=5. Producao (`meus-acompanhamentos`
+;; do repo, 3 args) continua caindo no default teto-listagem=200.
+
+(deftest meus-com-limite-injetado-trunca-lista-mas-total-continua-real
+  (let [ente (random-uuid) cidadao (random-uuid) a (ator ente cidadao)]
+    (dotimes [_ 5] (seguir-direto! ente cidadao (random-uuid)))
+    (let [lista (tenancy/com-tenant* *ds* ente
+                  (fn [tx] (db-acompanhamento/meus-da-materia tx ente cidadao 2)))]
+      (is (= 2 (count lista)) "a lista respeita o limite INJETADO")
+      (is (= 5 (:acompanhamentos-total (controllers/meus-acompanhamentos *repo* a)))
+          "o total ignora o limite injetado da lista — continua o numero real, MAIOR que a lista truncada"))))

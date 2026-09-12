@@ -53,18 +53,23 @@
           (is (= 2 (db-materia/contar-em-tramitacao tx ente excl))
               "o total: o MESMO conjunto que a lista enxerga — a prova de que e' o mesmo predicado"))))))
 
-(deftest em-tramitacao-com-teto-injetado-trunca-lista-mas-total-continua-real
-  ;; o teto de producao (200) e' caro demais criar no teste — mesmo racional de
-  ;; paineis/pendencia-total-com-limite-injetado. `listar-em-tramitacao` nao expoe `limite` (a fatia usa a
-  ;; contagem SEM teto contra uma lista com teto fixo pequeno, criando so' 3 linhas): prova o mesmo
-  ;; INVARIANTE (total nao capa) sem pagar 201 linhas.
+(deftest em-tramitacao-com-limite-injetado-trunca-lista-mas-total-continua-real
+  ;; CORRECAO (achado da revisao adversarial, IMPORTANTE): a versao anterior deste teste criava so' 3
+  ;; linhas e afirmava 3=3 nos dois lados — provava identidade de PREDICADO, nao AUSENCIA DE TETO (o
+  ;; nome mentia cobertura que nao existia; mutacao medida: `contar-em-tramitacao` -> `(count
+  ;; (listar-em-tramitacao ...))` deixava esta suite INTEIRA verde). `listar-em-tramitacao` agora aceita
+  ;; `limite` INJETAVEL (4a aridade, mesmo racional de paineis/db/pendencia/listar-abertas e
+  ;; o-que-vence-com-limite-injetado-trunca-lista-mas-total-continua-real): cria 5 linhas, lista com
+  ;; limite=2 e afirma lista=2 E total=5 — a lista TRUNCA de verdade e o total continua MAIOR que ela.
+  ;; O caminho de PRODUCAO continua chamando a aridade de 3 args (repositorio.clj) e cai no default
+  ;; teto-listagem=200.
   (let [ente (random-uuid)]
     (tenancy/com-tenant* *ds* ente
       (fn [tx]
-        (dotimes [_ 3] (inserir-materia! tx ente (random-uuid) "protocolada"))
-        (is (= 3 (count (db-materia/listar-em-tramitacao tx ente #{}))) "3 linhas, bem abaixo do teto real")
-        (is (= 3 (db-materia/contar-em-tramitacao tx ente #{}))
-            "o total nao tem LIMIT — mesmo produzindo poucas linhas aqui, a funcao que prova isso e' a de cima")))))
+        (dotimes [_ 5] (inserir-materia! tx ente (random-uuid) "protocolada"))
+        (is (= 2 (count (db-materia/listar-em-tramitacao tx ente #{} 2))) "a lista respeita o limite INJETADO")
+        (is (= 5 (db-materia/contar-em-tramitacao tx ente #{}))
+            "o total ignora o limite injetado da lista — continua o numero real, MAIOR que a lista truncada")))))
 
 (deftest em-tramitacao-total-rls-isola-cross-tenant
   (let [ente-a (random-uuid) ente-b (random-uuid)]

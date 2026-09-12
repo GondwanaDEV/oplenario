@@ -149,6 +149,20 @@
         "o total: o MESMO conjunto que a lista enxerga (filtrado), a prova de que e' o mesmo predicado")
     (is (= 3 (contar ente {})) "sem filtro, conta o acervo inteiro")))
 
+(deftest contar-com-limite-injetado-trunca-lista-mas-total-continua-real
+  ;; achado da revisao adversarial (IMPORTANTE): nenhum teste do sitio (c) provava AUSENCIA DE TETO no
+  ;; total — so' identidade de predicado com poucas linhas. `db-norma/listar` agora aceita `limite`
+  ;; INJETAVEL (4a aridade, mesmo racional de listar-em-tramitacao/pendencia/listar-abertas): cria 5
+  ;; normas, lista com limite=2 e afirma lista=2 E total=5. Producao (portal `listar` de 3 args) continua
+  ;; caindo no default teto-listagem=200.
+  (let [ente (random-uuid)]
+    (dotimes [i 5]
+      (inserir! ente {:tipo-norma "lei" :numero i :ano 2026 :publicado-em (em! "2026-01-01T00:00:00Z")}))
+    (let [lista (tenancy/com-tenant* *ds* ente (fn [tx] (db-norma/listar tx ente {} 2)))]
+      (is (= 2 (count lista)) "a lista respeita o limite INJETADO")
+      (is (= 5 (contar ente {}))
+          "o total ignora o limite injetado da lista — continua o numero real, MAIOR que a lista truncada"))))
+
 (deftest contar-rls-isola-por-ente
   (let [ente-a (random-uuid) ente-b (random-uuid)]
     (inserir! ente-a {:tipo-norma "lei" :numero 1 :ano 2026 :publicado-em (em! "2026-01-01T00:00:00Z")})
