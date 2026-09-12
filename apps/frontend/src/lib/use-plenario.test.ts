@@ -385,6 +385,39 @@ describe("usePlenario — a costura de borda da RECUPERAÇÃO de votação (fati
     });
   });
 
+  // Achado ao vivo (Daouda, verificação em browser, 12/09/2026): o palco mostrava só "Proposição" (o
+  // rótulo do TIPO) em vez de "Projeto de lei 7/2026 — Institui...". O backend devolvia `proposicao`
+  // completa (curl confirmou) e `plenario-reducer.ts`/`hidratarVotacao` já a validava (`comoProposicaoResumoPlacar`,
+  // mesma disciplina de `votacaoId`/`modalidade`) — mas NENHUM teste ia da resposta CRUA do fetch até o
+  // estado passando por `usePlenario` (o caminho real do navegador): os testes da fatia anterior só
+  // chamavam `hidratarVotacao` direto, ou usavam `votacaoAbertaCrua` sem `proposicao`. O buraco de
+  // cobertura, não o código, é o que este par de testes fecha.
+  it("com `comVotacao`, a `proposicao` do corpo cru chega ao estado através do HOOK (não só de `hidratarVotacao` isolado)", async () => {
+    global.fetch = fetchFake({
+      "/votacao-aberta": () => ({ ok: true, status: 200, json: async () => ({
+        ...votacaoAbertaCrua,
+        proposicao: { tipo: "projeto_lei", ano: 2026, sequencial: 7, ementa: "Institui o Programa Municipal de Arborização Urbana." },
+      }) }) as Response,
+    });
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true }));
+    await waitFor(() => expect(result.current.estado?.placar?.votacaoId).toBe("vt1"));
+    expect(result.current.estado?.placar?.proposicao).toEqual({
+      tipo: "projeto_lei", ano: 2026, sequencial: 7, ementa: "Institui o Programa Municipal de Arborização Urbana.",
+    });
+  });
+
+  it("sem `proposicao` no corpo (caso real: emenda/parecer/requerimento) — `proposicao` fica null, `objetoTipo` sobrevive pro rótulo do tipo", async () => {
+    global.fetch = fetchFake({
+      "/votacao-aberta": () => ({ ok: true, status: 200, json: async () => ({
+        "votacao-id": "vt2", modalidade: "nominal", "objeto-tipo": "emenda", "objeto-id": "e1", votos: [],
+      }) }) as Response,
+    });
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true }));
+    await waitFor(() => expect(result.current.estado?.placar?.votacaoId).toBe("vt2"));
+    expect(result.current.estado?.placar?.proposicao).toBeNull();
+    expect(result.current.estado?.placar?.objetoTipo).toBe("emenda");
+  });
+
   it("SEM `comVotacao` a rota de recuperação NÃO é chamada", async () => {
     const f = fetchFake({
       "/votacao-aberta": () => ({ ok: true, status: 200, json: async () => votacaoAbertaCrua }) as Response,
