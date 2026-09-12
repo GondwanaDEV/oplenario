@@ -17,10 +17,13 @@ OPLENARIO_APP_ENV=production docker compose --profile auth up -d   # Keycloak + 
 ./demo/semear-credenciais.sh   # provisiona o realm + os 4 usuários Keycloak, imprime o cartão
 ```
 
-As credenciais também ficam gravadas em `<DEMO_ARTIFACTS_DIR ou .artifacts>/credenciais.edn` (mesma
-pasta de `demo-ids.edn`). **Senha única das 4 personas: `Plenario@2026`** — credencial de
-**demonstração local**, nunca de produção; este repositório não tem `git remote` configurado (`git
-remote -v` vazio), então não há canal de vazamento por push — é fixture de dev, não segredo.
+As credenciais também ficam gravadas em `e2e/.artifacts/credenciais.edn` (mesmo scratch de
+`demo-ids.edn` — corrigido em `0a97fe0`: a 1ª versão do script montava `apps/backend` `:ro` mas não a
+outra metade do par, o scratch gravável, e o provisionamento inteiro corria antes de estourar
+`FileNotFoundException ... Read-only file system` na gravação; defeito só alcançável contra um Keycloak
+de verdade). **Senha única das 4 personas: `Plenario@2026`** — credencial de **demonstração local**,
+nunca de produção; este repositório não tem `git remote` configurado (`git remote -v` vazio), então não
+há canal de vazamento por push — é fixture de dev, não segredo.
 
 ## O defeito consertado antes deste mapa existir
 
@@ -46,6 +49,30 @@ As 4 personas nomeadas entram pela **mesma URL** (`/entrar/<ente-id>`) — um ú
 (usados como `username` no Keycloak) saem impressos por `semear-credenciais.sh` e gravados em
 `credenciais.edn` — não são repetidos aqui porque são UUIDs gerados a partir do CPF fixo, estáveis
 entre execuções mas não literais fáceis de citar num doc estático.
+
+## Verificado AO VIVO — matriz de autorização (12/09/2026)
+
+Daouda verificou as 4 credenciais contra um Keycloak real (`docker compose --profile auth up -d`, app
+religado com `OPLENARIO_APP_ENV=production` para usar o `KeycloakIdp` de verdade, não o `idp-dev`).
+**Método: fluxo PKCE completo, não password grant** — o client `oplenario-web` nasce
+`directAccessGrantsEnabled: false` (`keycloak_idp.clj/provisionar-realm-impl`), então não existe atalho
+de trocar usuário+senha direto por token; a prova percorreu página de login → POST da credencial →
+`code` → troca por `token` → chamada à rota do backend com `Authorization: Bearer` — o mesmo caminho que
+o navegador percorre, não um substituto mais fácil de simular.
+
+| Persona | Rota | Esperado | Resultado |
+|---|---|---|---|
+| Secretária | `GET /paineis/pendencias` | 200 | **200** |
+| Presidente da Mesa | `GET /meu/painel` | 200 | **200** |
+| Vereadora | `GET /meu/painel` | 200 | **200** |
+| Cidadã | `GET /portal/acompanhamentos` | 200 | **200** |
+| Vereadora | `GET /paineis/pendencias` | **403** | **403** |
+| Cidadã | `GET /paineis/pendencias` | **403** | **403** |
+| Cidadã | `GET /meu/painel` | **403** | **403** |
+
+Os 3 negativos pesam mais que os 4 positivos: provam que o **papel** morde de verdade no ambiente real
+(não só nos testes unitários da política) — uma vereadora ou uma cidadã autenticada, com token válido,
+**não** entra numa tela que exige `secretario`/`vereador` sem ter esse papel.
 
 ---
 
@@ -159,14 +186,21 @@ solicitante/autora em tudo abaixo):
 - 5 comentários dela em proposições reais do acervo — 3 já `aprovado`, 2 ainda `pendente` (a fila que a
   secretária modera). `POST /portal/materias/:id/comentarios` para comentar mais; `POST
   /portal/comentarios/:id/denunciar` para denunciar comentário alheio.
-- `POST /portal/materias/:id/acompanhar` + `GET /portal/acompanhamentos` (auth, sem papel) — **nenhuma
-  assinatura pré-semeada** (nenhuma das 4 sementes cria acompanhamento); ela começa com a lista vazia e
-  precisa seguir uma matéria ao vivo para ver a rota preenchida.
-- `GET /meu/notificacoes` (auth, sem papel) — **começa vazia**: nada nas 4 sementes emite
-  `notificacao.requisitada` a partir de uma resposta de e-SIC/LGPD/ouvidoria (confirmado por busca no
-  código-fonte de `participacao`); o único produtor conhecido desse evento é o fan-out de mudança de
-  estado de uma matéria **seguida**, então só populam essa caixa depois que ela seguir algo E um
-  servidor avançar o rito dessa matéria.
+- **3 acompanhamentos ativos** — `GET /portal/acompanhamentos` devolve `:acompanhamentos-total 3`
+  (achado da verificação ao vivo de 12/09: a rota respondia 200, mas a lista vinha **vazia**; nenhuma das
+  4 sementes narrativas criava acompanhamento nenhum. Conserto em `participacao/semear-acompanhamentos!`,
+  escrevendo via `RepoTransparenciaPg/seguir!`, nunca `INSERT` cru — a coluna do dono é
+  `seguidor_identidade_id`, não `identidade_id`). As 3 matérias seguidas (o primeiro item que
+  `listar-e-contar-proposicoes` devolve para cada filtro de estado, na ordenação real
+  `atualizado_em DESC`): **"Altera a Lei Orgânica do Município quanto à composição da Mesa Diretora"**
+  (`em_pauta`, NÃO-terminal), **"Manifesta congratulações à comunidade escolar..."** (`em_comissoes`,
+  NÃO-terminal) e **"Dispõe sobre a acessibilidade em prédios públicos municipais"** (`aprovada`,
+  TERMINAL — de propósito, para mostrar o contraste). `POST /portal/materias/:id/acompanhar` segue mais.
+- `GET /meu/notificacoes` (auth, sem papel) — **ainda começa vazia**, mesmo com os 3 acompanhamentos
+  acima: nada nas 4 sementes emite `notificacao.requisitada` a partir de uma resposta de e-SIC/LGPD/
+  ouvidoria, e o único produtor desse evento (`transparencia.diplomat.consumers/tipos-fan-out`) reage SÓ
+  a `proposicao.transicionou` — populam essa caixa só depois que um servidor avançar o rito de uma das 2
+  matérias NÃO-terminais que ela agora segue (a `em_pauta` ou a `em_comissoes` acima).
 
 **O que NÃO dá para explorar — e é a descoberta mais importante desta persona:** o **balcão inteiro é
 API pura, sem tela nenhuma no frontend.** Busca no `apps/frontend/src/app` não encontra nenhuma página
@@ -177,8 +211,10 @@ navegador**. Pior ainda para `/meu/notificacoes`: o backend não exige papel nen
 página do frontend que chama essa rota vive sob o grupo `(vereador)`, cujo `layout.tsx` **bloqueia o
 render inteiro se o token não tiver o papel `vereador`** (é um guard de UX, não o authz real — mas
 significa que ela nunca vê essa tela mesmo tendo uma sessão válida). Ou seja: a Parte A deste trabalho
-lhe deu um **ator** (o backend agora resolve sessão para ela), mas não criou nenhuma superfície de
-clique nova — o ganho é 100% de API, hoje.
+lhe deu um **ator** (o backend agora resolve sessão para ela); os acompanhamentos desta revisão lhe deram
+**móveis no quarto** (3 acompanhamentos + 5 comentários + 3 e-SIC reais, em vez de listas vazias); mas
+nenhuma das duas coisas abriu uma **porta** nova no frontend — o ganho inteiro, hoje, só se alcança por
+API direta.
 
 ---
 

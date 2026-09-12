@@ -56,3 +56,31 @@
       (testing "1 Encarregado/DPO"
         (is (some? (:encarregado r)))
         (is (some? (:email (:encarregado r))))))))
+
+(deftest a-cidada-tem-3-acompanhamentos-reais
+  ;; Achado da verificacao AO VIVO (Daouda, 12/09/2026): a cidada alcancava a superficie autenticada
+  ;; (GET /portal/acompanhamentos, 200) mas a lista vinha VAZIA — nenhuma das 4 sementes narrativas
+  ;; criava acompanhamento nenhum. `transparencia.acompanhamento` e' TABELA DE DOMINIO (a coluna do dono
+  ;; e' `seguidor_identidade_id`, NAO `identidade_id` — o briefing original errou essa coluna).
+  ;;
+  ;; As 3 ementas abaixo sao as que `proposicoes-para-acompanhar` de fato resolve (verificado contra a
+  ;; Casa semeada de verdade, nao suposto): o PRIMEIRO item de cada filtro de estado, na MESMA ordenacao
+  ;; que a rota real usa (`atualizado_em DESC, id ASC`) — NAO a ordem de insercao do acervo. Testar por
+  ;; EMENTA (nao so' contar) e' o que reprova se o conteudo mudar sem a contagem mudar.
+  (with-sistema [s]
+    (let [{:keys [ente]} (casa/semear! s)
+          r (participacao-demo/semear! s ente)
+          {:keys [acompanhamentos acompanhamentos-total]} (:acompanhamentos r)]
+      (testing "3 acompanhamentos ATIVOS — nao 0"
+        (is (= 3 acompanhamentos-total))
+        (is (= 3 (count acompanhamentos))))
+      (testing "QUEM ela segue — as ementas REAIS das 3 proposicoes, nao so' a contagem"
+        (is (= #{"Altera a Lei Orgânica do Município quanto à composição da Mesa Diretora."
+                 "Manifesta congratulações à comunidade escolar pela conquista na Olimpíada Municipal de Matemática."
+                 "Dispõe sobre a acessibilidade em prédios públicos municipais."}
+               (set (map :ementa acompanhamentos)))))
+      (testing "pelo menos 1 das 3 e' NAO-terminal — o acompanhamento tem FUTURO (o fan-out de notificacao so' reage a proposicao.transicionou; 'aprovada'/'arquivada' nunca mais transicionam)"
+        (is (some #(not (contains? #{"aprovada" "arquivada"} (:estado %))) acompanhamentos)))
+      (testing "reexecutar semear! nao duplica (seguir! e' UPSERT por ente,proposicao,seguidor)"
+        (participacao-demo/semear! s ente)
+        (is (= 3 (:acompanhamentos-total (:acompanhamentos (participacao-demo/semear! s ente)))))))))

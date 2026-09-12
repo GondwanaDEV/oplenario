@@ -1,12 +1,16 @@
 (ns participacao
   "Semente da PARTICIPACAO CIDADA da demo (plano `docs/superpowers/plans/2026-09-07-prontidao-de-
-  apresentacao.md`, Task 0.6) — sobre a Casa de `casa/semear!` e o ACERVO de `acervo/semear!`: 3 pedidos
-  e-SIC (1 aberto no prazo, 1 respondido, 1 respondido com recurso ABERTO) + 2 solicitacoes LGPD (1 aberta,
-  1 respondida) + 2 manifestacoes de ouvidoria (1 aberta, 1 respondida) + 5 comentarios em materias REAIS do
-  acervo (3 aprovados, 2 na fila de moderacao — a fila NAO pode ficar vazia, e' o que se mostra ao servidor)
-  + 1 Encarregado/DPO. Usa SO o Repo-Component REAL do modulo (`RepoParticipacao`, ja' booted em `sistema` —
-  `(:repo-participacao sistema)`) + `(:repo-legislativo sistema)` so' para ler proposicoes reais do acervo
-  (nenhum SELECT cru); nenhuma DSL nova.
+  apresentacao.md`, Task 0.6; acompanhamentos acrescentados na verificacao ao vivo de 12/09/2026) — sobre a
+  Casa de `casa/semear!` e o ACERVO de `acervo/semear!`: 3 pedidos e-SIC (1 aberto no prazo, 1 respondido, 1
+  respondido com recurso ABERTO) + 2 solicitacoes LGPD (1 aberta, 1 respondida) + 2 manifestacoes de
+  ouvidoria (1 aberta, 1 respondida) + 5 comentarios em materias REAIS do acervo (3 aprovados, 2 na fila de
+  moderacao — a fila NAO pode ficar vazia, e' o que se mostra ao servidor) + 3 acompanhamentos em materias
+  REAIS do acervo (2 NAO-terminais + 1 terminal, ver `proposicoes-para-acompanhar`) + 1 Encarregado/DPO. Usa
+  SO o Repo-Component REAL de cada modulo (`RepoParticipacao`, ja' booted em `sistema` —
+  `(:repo-participacao sistema)`; `RepoTransparencia`, `(:repo-transparencia sistema)`, so' para os
+  acompanhamentos — `transparencia.acompanhamento` e' TABELA DE DOMINIO do cidadao, nao projecao) +
+  `(:repo-legislativo sistema)` so' para ler proposicoes reais do acervo (nenhum SELECT cru); nenhuma DSL
+  nova.
 
   VOCABULARIO — lido da FONTE, nao de memoria (regra dura do briefing da Task 0.6):
   - `participacao.pedido_esic.estado` ∈ `protocolado · em_analise · respondido · indeferido` (migration
@@ -44,7 +48,8 @@
   (:require [casa]
             [oplenario.legislativo.components.repositorio :as repo-leg]
             [oplenario.participacao.components.repositorio :as repo]
-            [oplenario.participacao.logic :as plogic])
+            [oplenario.participacao.logic :as plogic]
+            [oplenario.transparencia.components.repositorio :as transparencia-repo])
   (:import (java.time Instant LocalDate ZoneId)))
 
 ;; ---------- constantes (UUIDs FIXOS — re-executavel, mesmo racional de `casa/ente-id`/`sessoes/id-*`) ----------
@@ -62,6 +67,9 @@
    #uuid "10000000-0000-0000-0000-000000000432" #uuid "10000000-0000-0000-0000-000000000433"
    #uuid "10000000-0000-0000-0000-000000000434"])
 (def ^:private id-encarregado       #uuid "10000000-0000-0000-0000-000000000440")
+(def ^:private ids-acompanhamentos
+  [#uuid "10000000-0000-0000-0000-000000000450" #uuid "10000000-0000-0000-0000-000000000451"
+   #uuid "10000000-0000-0000-0000-000000000452"])
 
 (def ^:private zona
   "Mesmo fuso civil de `participacao.controllers/zona-civil` (America/Fortaleza — beachhead NE): os prazos
@@ -223,6 +231,55 @@
   [repo ente]
   (mapv #(select-keys (repo/buscar-comentario repo ente %) [:id :estado]) ids-comentarios))
 
+;; ---------- Acompanhamentos: a cidada segue 3 materias REAIS do acervo (2 nao-terminais, 1 terminal) ----------
+;; Achado da verificacao AO VIVO (Daouda, 12/09/2026): a cidada alcancava a superficie autenticada mas
+;; `GET /portal/acompanhamentos` devolvia `{"acompanhamentos":[],"acompanhamentos-total":0}` — nenhuma das 4
+;; sementes narrativas criava acompanhamento nenhum. `transparencia.acompanhamento` e' TABELA DE DOMINIO (nao
+;; projecao — a coluna do dono e' `seguidor_identidade_id`, NAO `identidade_id`), escrita so' via o
+;; Repo-Component real do modulo (`RepoTransparenciaPg/seguir!`), nunca INSERT cru.
+
+(defn- proposicoes-para-acompanhar
+  "3 proposicoes REAIS do acervo p/ a cidada seguir. Pelo menos 1 tem de ser NAO-terminal (protocolada/
+  em_comissoes/aguardando_pauta/em_pauta) — o fan-out de notificacao
+  (`oplenario.transparencia.diplomat.consumers/tipos-fan-out`) so' reage a `proposicao.transicionou`, e uma
+  proposicao 'aprovada'/'arquivada' e' TERMINAL: nunca mais transiciona, entao um follow so' nela nunca
+  teria FUTURO nenhum por este canal (a norma/autografo dela segue um ciclo PROPRIO, fora deste fan-out).
+
+  Escolha: o PRIMEIRO item que `listar-e-contar-proposicoes` devolve p/ cada um dos 3 filtros de estado
+  abaixo — 'em_pauta'/'em_comissoes' (NAO-terminais) + 'aprovada' (TERMINAL de proposito, p/ mostrar o
+  contraste: um follow que NAO produzira' mais notificacao por este canal). 'Primeiro' e' a MESMA
+  ordenacao que a rota real usa (`atualizado_em DESC, id ASC` — default de `legislativo.db.proposicao/
+  listar` quando `ordenar-por` esta ausente, NAO a ordem de insercao — verificado contra a Casa semeada de
+  verdade, nao suposto). A identidade exata (ementa/estado) de cada item e' o que
+  `oplenario.demo.participacao-test` afirma — nao redigitada aqui como comentario que pode driftar.
+  Falha alto se o acervo nao tiver as 3 categorias."
+  [repo-legislativo ente]
+  (letfn [(por-estado [estado]
+            (:itens (repo-leg/listar-e-contar-proposicoes repo-legislativo ente
+                      {:pagina 1 :tamanho 10 :estado estado})))]
+    (let [em-pauta (por-estado "em_pauta")
+          em-comissoes (por-estado "em_comissoes")
+          aprovada (por-estado "aprovada")]
+      (when (or (empty? em-pauta) (empty? em-comissoes) (empty? aprovada))
+        (throw (ex-info (str "participacao/semear!: acervo incompleto p/ semear acompanhamentos — "
+                             "rode acervo/semear! primeiro")
+                        {:em-pauta (count em-pauta) :em-comissoes (count em-comissoes) :aprovada (count aprovada)})))
+      [(first em-pauta) (first em-comissoes) (first aprovada)])))
+
+(defn- semear-acompanhamentos!
+  [repo-transparencia repo-legislativo ente cidadao-id]
+  (doseq [[id proposicao] (map vector ids-acompanhamentos (proposicoes-para-acompanhar repo-legislativo ente))]
+    (transparencia-repo/seguir! repo-transparencia ente
+      {:id id :proposicao-id (:id proposicao) :seguidor-identidade-id cidadao-id :created-by cidadao-id})))
+
+(defn- ler-acompanhamentos
+  "Le de volta pela MESMA leitura que `GET /portal/acompanhamentos` usa (`meus-acompanhamentos` —
+  RepoTransparencia), nunca um SELECT cru. Devolve `{:acompanhamentos :acompanhamentos-total}`, identico
+  a' forma da API (item pode vir com `:indisponivel true` se a projecao do cabecalho da materia ainda nao
+  chegou — a subscricao em si, VERDADE de dominio, nunca falta)."
+  [repo-transparencia ente cidadao-id]
+  (transparencia-repo/meus-acompanhamentos repo-transparencia ente cidadao-id))
+
 ;; ---------- Encarregado/DPO (config-like — upsert e' idempotente por ente_id, sem gate proprio) ----------
 
 (defn- semear-encarregado!
@@ -244,10 +301,19 @@
   UNIQUE de numeracao) ou re-responder um pedido ja' terminal (CAS silenciosamente ignora, deixando o
   Encarregado e a fila de moderacao incompletos se so' parte re-rodasse).
 
-  Devolve `{:esic :lgpd :ouvidoria :comentarios :moderacao-pendente :encarregado}`."
+  `semear-acompanhamentos!` fica DE PROPOSITO FORA desse gate — ACHADO REAL, nao hipotetico: a Casa da
+  demo ja' tinha `id-pedido-aberto` (semeada antes desta fatia existir) quando `seguir!` foi acrescentado
+  aqui; se `semear-acompanhamentos!` morasse dentro do `when-not`, o gate (que so' olha o e-SIC) julgaria
+  'ja' semeado' e a nova fatia NUNCA rodaria numa Casa existente — silenciosamente, sem erro nenhum.
+  `transparencia-repo/seguir!` e' UPSERT (idempotente por `(ente,proposicao,seguidor)`), entao chamar
+  sempre e' seguro E e' o unico jeito de uma fatia NOVA alcancar uma Casa ja' semeada por uma versao
+  ANTERIOR desta funcao — mesma licao que motivou o design idempotente de `vinc/criar!`/`id/inserir!`.
+
+  Devolve `{:esic :lgpd :ouvidoria :comentarios :moderacao-pendente :encarregado :acompanhamentos}`."
   [sistema ente]
   (let [repo (:repo-participacao sistema)
         repo-legislativo (:repo-legislativo sistema)
+        repo-transparencia (:repo-transparencia sistema)
         {:keys [identidades]} (casa/semear! sistema)
         {:keys [cidadao secretaria]} identidades]
     (when-not (repo/buscar-pedido repo ente id-pedido-aberto)
@@ -256,9 +322,11 @@
       (semear-ouvidoria! repo ente cidadao secretaria)
       (semear-comentarios! repo repo-legislativo ente cidadao secretaria)
       (semear-encarregado! repo ente secretaria))
+    (semear-acompanhamentos! repo-transparencia repo-legislativo ente cidadao)
     {:esic (ler-esic repo ente)
      :lgpd (ler-lgpd repo ente)
      :ouvidoria (ler-ouvidoria repo ente)
      :comentarios (ler-comentarios repo ente)
      :moderacao-pendente (repo/fila-moderacao repo ente)
-     :encarregado (repo/buscar-encarregado repo ente)}))
+     :encarregado (repo/buscar-encarregado repo ente)
+     :acompanhamentos (ler-acompanhamentos repo-transparencia ente cidadao)}))
