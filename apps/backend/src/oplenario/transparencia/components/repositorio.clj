@@ -227,17 +227,28 @@
 (defprotocol RepoTransparencia
   (transacao [this ente-id f] "Roda (f tx) numa UNICA tx do tenant (com-tenant*) — leitura publica.")
   (buscar-materia [this ente-id proposicao-id] "Ficha PUBLICA de uma materia, ou nil.")
-  (listar-materias [this ente-id estados-excluidos] "Portal: materias fora dos `estados-excluidos`.")
+  (listar-materias [this ente-id estados-excluidos]
+    "Portal: {:materias :materias-total} — materias fora dos `estados-excluidos`, TRUNCADAS no teto de
+     `listar-em-tramitacao` (200), mais `:materias-total` (SEM teto, `contar-em-tramitacao`) no MESMO
+     predicado — a UNICA listagem publica de proposicoes (frente 'truncamento-familia', sitio (b)). Uma
+     UNICA tx (mesma disciplina de `perfil-parlamentar` abaixo — READ COMMITTED, ver a nota la').")
   (buscar-norma [this ente-id norma-id] "Uma norma publicada por id, ou nil.")
   (norma-da-materia [this ente-id proposicao-id] "A norma publicada de uma materia, ou nil.")
-  (listar-normas [this ente-id filtro] "Portal: acervo as-enacted, com filtro opcional {:tipo :ano :numero} (ver db/norma/listar).")
+  (listar-normas [this ente-id filtro]
+    "Portal: {:normas :normas-total} — acervo as-enacted, com filtro opcional {:tipo :ano :numero} (ver
+     db/norma/listar), TRUNCADO no teto (200) mais `:normas-total` (SEM teto, `db/norma/contar`) no MESMO
+     filtro — frente 'truncamento-familia', sitio (c). Uma UNICA tx.")
   ;; F6c Slice 4b — artefato de publicacao oficial (PROJECAO; a rota publica de download resolve o ponteiro daqui)
   (artefato-mais-recente-da-norma [this ente-id norma-id]
     "Ponteiro do artefato de publicacao MAIS RECENTE de uma norma (objeto_store_ref + content_type + versao), ou nil.")
   ;; F6c Slice 2 — acompanhamento do cidadao (escritas autenticadas; consent-gated)
   (seguir! [this ente-id m] "UPSERT: cidadao segue a materia (re-seguir reativa). Devolve {:id :estado ...}.")
   (deixar-de-seguir! [this ente-id m] "Soft-cancel idempotente. Devolve {:id} se cancelou, ou nil (no-op).")
-  (meus-acompanhamentos [this ente-id seguidor-identidade-id] "Materias que o cidadao segue (ativas, c/ cabecalho).")
+  (meus-acompanhamentos [this ente-id seguidor-identidade-id]
+    "{:acompanhamentos :acompanhamentos-total} — materias que o cidadao segue (ativas, c/ cabecalho via
+     LEFT JOIN; item cuja projecao ainda nao chegou vem com `:indisponivel true`, nunca omitido), TRUNCADAS
+     no teto de `meus-da-materia` (200) mais `:acompanhamentos-total` (SEM teto, SEM join, `contar-meus`)
+     no MESMO predicado — frente 'truncamento-familia', sitios (c)/(d). Uma UNICA tx.")
   ;; Onda E fatia 2 — perfil PUBLICO do vereador (leitura COMPOSTA numa UNICA tx, mesma disciplina de
   ;; legislativo/ficha-completa-da-proposicao). O QUE A TX DE FATO ENTREGA (correcao F3a da revisao Task 3
   ;; — a afirmacao anterior, "as leituras veem o MESMO snapshot MVCC, entao o numero-card nunca discorda da
@@ -264,15 +275,27 @@
   RepoTransparencia
   (transacao [_ ente-id f] (tenancy/com-tenant* (:ds datasource) ente-id f))
   (buscar-materia [this ente-id pid] (transacao this ente-id #(db-materia/buscar % ente-id pid)))
-  (listar-materias [this ente-id excl] (transacao this ente-id #(db-materia/listar-em-tramitacao % ente-id excl)))
+  (listar-materias [this ente-id excl]
+    (transacao this ente-id
+      (fn [tx]
+        {:materias       (db-materia/listar-em-tramitacao tx ente-id excl)
+         :materias-total (db-materia/contar-em-tramitacao tx ente-id excl)})))
   (buscar-norma [this ente-id nid] (transacao this ente-id #(db-norma/buscar % ente-id nid)))
   (norma-da-materia [this ente-id pid] (transacao this ente-id #(db-norma/buscar-por-proposicao % ente-id pid)))
-  (listar-normas [this ente-id filtro] (transacao this ente-id #(db-norma/listar % ente-id filtro)))
+  (listar-normas [this ente-id filtro]
+    (transacao this ente-id
+      (fn [tx]
+        {:normas       (db-norma/listar tx ente-id filtro)
+         :normas-total (db-norma/contar tx ente-id filtro)})))
   (artefato-mais-recente-da-norma [this ente-id norma-id]
     (transacao this ente-id #(db-artefato/mais-recente-por-norma % ente-id norma-id)))
   (seguir! [this ente-id m] (transacao this ente-id #(db-acompanhamento/seguir! % (assoc m :ente-id ente-id))))
   (deixar-de-seguir! [this ente-id m] (transacao this ente-id #(db-acompanhamento/deixar-de-seguir! % (assoc m :ente-id ente-id))))
-  (meus-acompanhamentos [this ente-id sid] (transacao this ente-id #(db-acompanhamento/meus-da-materia % ente-id sid)))
+  (meus-acompanhamentos [this ente-id sid]
+    (transacao this ente-id
+      (fn [tx]
+        {:acompanhamentos       (db-acompanhamento/meus-da-materia tx ente-id sid)
+         :acompanhamentos-total (db-acompanhamento/contar-meus tx ente-id sid)})))
   (perfil-parlamentar [this ente-id vid janelas]
     (transacao this ente-id
       (fn [tx]

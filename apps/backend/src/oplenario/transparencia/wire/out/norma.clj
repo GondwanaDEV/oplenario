@@ -14,3 +14,11 @@
    [:ementa :string]
    [:publicado-em :string]
    [:veiculo-publicacao :string]])
+
+(def NormasOut
+  "Resposta de GET /portal/casa/:ente/legislacao (frente 'truncamento-familia', sitio (c)): o acervo publico
+  as-enacted cortava em 200 (`teto-listagem`, `db/norma.clj`) sem sinalizar. `:normas-total` e' o par
+  obrigatorio (mesmo racional de MateriasOut/PainelOut) — o teto em si NUNCA sai neste contrato."
+  [:map {:closed true}
+   [:normas [:sequential NormaOut]]
+   [:normas-total :int]])

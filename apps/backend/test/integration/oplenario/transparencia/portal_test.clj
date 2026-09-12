@@ -114,7 +114,7 @@
       (is (= sequencial (:sequencial m)))
       (is (= urn-lex (:urn-lex m)))
       (is (= "Fulano de Tal" (:autor-texto m)) "snapshot publico do autor (sem autor-id interno)"))
-    (is (empty? (transparencia-repo/listar-materias *repo-transparencia* (random-uuid) #{}))
+    (is (empty? (:materias (transparencia-repo/listar-materias *repo-transparencia* (random-uuid) #{})))
         "RLS: outro ente nao ve a materia projetada")))
 
 ;; ---------- protocolar! com :autor-id -> proposicao.protocolada -> materia.autor_id (Onda E fatia 2) ----------

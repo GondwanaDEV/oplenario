@@ -56,6 +56,16 @@
      (sql/format {:select cols :from [:transparencia.norma]
                   :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]]}))))
 
+(defn- where-listar
+  "O predicado de `listar`/`contar` (portal PUBLICO) — FONTE UNICA (regra 3 da frente
+  'truncamento-familia'): um WHERE repetido nos dois lugares diverge em silencio no dia em que um filtro
+  novo entrar num e nao no outro."
+  [ente-id {:keys [tipo ano numero]}]
+  (cond-> [[:= :ente_id ente-id]]
+    tipo   (conj [:= :tipo_norma tipo])
+    ano    (conj [:= :ano ano])
+    numero (conj [:= :numero numero])))
+
 (defn listar
   "Portal PUBLICO — acervo de legislacao as-enacted (feature 16.5, F6c Slice 3). Filtro OPCIONAL por `:tipo`
   (especie/tipo_norma), `:ano` e `:numero` — todos EXATOS e combinaveis; chave ausente/nil nao filtra
@@ -69,18 +79,27 @@
   :numero SEM :tipo nao casa o prefixo do indice (tipo_norma e' o 2o nivel) — :numero-so' e' o pior caso
   (faceta menos seletiva) — e cai em scan intra-tenant; aceitavel: o acervo de UMA camara tem cardinalidade
   modesta (RLS por ente_id) e o teto limita o custo. O uso comum inclui :tipo (a especie e' a faceta primaria)."
-  [tx ente-id {:keys [tipo ano numero]}]
+  [tx ente-id {:keys [tipo ano numero] :as filtro}]
   {:pre [(some? ente-id)]}
-  (let [filtros? (or tipo ano numero)
-        where    (cond-> [[:= :ente_id ente-id]]
-                   tipo   (conj [:= :tipo_norma tipo])
-                   ano    (conj [:= :ano ano])
-                   numero (conj [:= :numero numero]))]
+  (let [filtros? (or tipo ano numero)]
     (comum/linhas->kebab
      (jdbc/execute! tx
        (sql/format {:select cols :from [:transparencia.norma]
-                    :where (into [:and] where)
+                    :where (into [:and] (where-listar ente-id filtro))
                     :order-by (if filtros?
                                 [[:ano :desc] [:numero :desc] [:norma_id :desc]]
                                 [[:publicado_em :desc] [:norma_id :desc]])
                     :limit teto-listagem})))))
+
+(defn contar
+  "Quantas normas do acervo (as-enacted, mesmo filtro de `listar`) existem — SEM teto (frente
+  'truncamento-familia', sitio (c)): `listar` corta em `teto-listagem` (200) e a rota publica de
+  legislacao nao tinha NENHUM sinal de que o acervo tem mais que os 200 primeiros. MESMO predicado de
+  `listar` (`where-listar`), senao o proprio total mentiria sobre o que a lista contem."
+  [tx ente-id filtro]
+  {:pre [(some? ente-id)]}
+  (:contagem
+   (comum/linha->kebab
+    (jdbc/execute-one! tx
+      (sql/format {:select [[[:count :*] :contagem]] :from [:transparencia.norma]
+                   :where (into [:and] (where-listar ente-id filtro))})))))

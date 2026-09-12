@@ -75,16 +75,27 @@
 ;; ---------- GET /portal/casa/:ente/materias ----------
 
 (deftest listar-materias-200
-  (let [repo (fake-repo {:listar-materias [materia-fixture]})
+  (let [repo (fake-repo {:listar-materias {:materias [materia-fixture] :materias-total 1}})
         r    (pt/response-for (service-fn repo) :get (str "/portal/casa/" ente "/materias"))
         body (ler-json r)]
     (is (= 200 (:status r)))
-    (is (= 1 (count body)))
-    (is (= "Fulano de Tal" (:autor-texto (first body))))
-    (is (not (contains? (first body) :norma)) "listagem NAO embute a norma (so' a ficha)")))
+    (is (= 1 (count (:materias body))))
+    (is (= 1 (:materias-total body)))
+    (is (= "Fulano de Tal" (:autor-texto (first (:materias body)))))
+    (is (not (contains? (first (:materias body)) :norma)) "listagem NAO embute a norma (so' a ficha)")))
+
+(deftest listar-materias-total-diverge-de-proposito-da-count-da-lista-200
+  ;; :materias-total DIVERGE DE PROPOSITO da count da lista (5, nao 1) — mesma disciplina de
+  ;; pendencias-total-vem-do-repo-verbatim-200 (paineis): prova que a borda repassa o numero do Repo
+  ;; VERBATIM, nunca `(count materias)` (frente 'truncamento-familia', sitio (b)).
+  (let [repo (fake-repo {:listar-materias {:materias [materia-fixture] :materias-total 5}})
+        r    (pt/response-for (service-fn repo) :get (str "/portal/casa/" ente "/materias"))
+        body (ler-json r)]
+    (is (= 200 (:status r)))
+    (is (= 5 (:materias-total body)) "o total vem do Repo, nao de (count materias)")))
 
 (deftest listar-materias-ente-malformado-400
-  (let [repo (fake-repo {:listar-materias []})
+  (let [repo (fake-repo {:listar-materias {:materias [] :materias-total 0}})
         r    (pt/response-for (service-fn repo) :get "/portal/casa/nao-e-uuid/materias")]
     (is (= 400 (:status r)) "ente malformado -> 400 fail-closed (nunca vaza cross-tenant)")))
 
@@ -114,17 +125,26 @@
 
 (deftest listar-normas-200
   (let [cap  (atom :nao-chamado)
-        repo (fake-repo {:listar-normas [norma-fixture] :filtro-capturado cap})
+        repo (fake-repo {:listar-normas {:normas [norma-fixture] :normas-total 1} :filtro-capturado cap})
         r    (pt/response-for (service-fn repo) :get (str "/portal/casa/" ente "/legislacao"))
         body (ler-json r)]
     (is (= 200 (:status r)))
-    (is (= "Diario Oficial do Municipio" (:veiculo-publicacao (first body))))
+    (is (= "Diario Oficial do Municipio" (:veiculo-publicacao (first (:normas body)))))
+    (is (= 1 (:normas-total body)))
     (is (= {:tipo nil :ano nil :numero nil} @cap) "sem query-params -> filtro vazio (compat Slice 1)")))
+
+(deftest listar-normas-total-diverge-de-proposito-da-count-da-lista-200
+  ;; mesma disciplina de listar-materias-total-diverge-de-proposito: a borda repassa o numero do Repo
+  ;; VERBATIM, nunca `(count normas)`.
+  (let [repo (fake-repo {:listar-normas {:normas [norma-fixture] :normas-total 7}})
+        r    (pt/response-for (service-fn repo) :get (str "/portal/casa/" ente "/legislacao"))
+        body (ler-json r)]
+    (is (= 7 (:normas-total body)) "o total vem do Repo, nao de (count normas)")))
 
 ;; F6c Slice 3: navegacao do acervo por query-params (especie/ano/numero)
 (deftest listar-normas-repassa-filtro-coagido
   (let [cap  (atom nil)
-        repo (fake-repo {:listar-normas [norma-fixture] :filtro-capturado cap})
+        repo (fake-repo {:listar-normas {:normas [norma-fixture] :normas-total 1} :filtro-capturado cap})
         r    (pt/response-for (service-fn repo) :get
                (str "/portal/casa/" ente "/legislacao?tipo=lei&ano=2026&numero=1"))]
     (is (= 200 (:status r)))
@@ -132,13 +152,13 @@
         "query-params coagidos na borda: ano/numero viram Long; tipo string")))
 
 (deftest listar-normas-ano-malformado-400
-  (let [repo (fake-repo {:listar-normas []})
+  (let [repo (fake-repo {:listar-normas {:normas [] :normas-total 0}})
         r    (pt/response-for (service-fn repo) :get (str "/portal/casa/" ente "/legislacao?ano=abc"))]
     (is (= 400 (:status r)) "ano nao-inteiro -> 400 fail-closed (nunca 500)")))
 
 ;; review clojure MAJOR: param repetido na URL -> Pedestal entrega VETOR -> antes: ClassCastException -> 500.
 (deftest listar-normas-param-repetido-400
-  (let [repo (fake-repo {:listar-normas []})
+  (let [repo (fake-repo {:listar-normas {:normas [] :normas-total 0}})
         r    (pt/response-for (service-fn repo) :get (str "/portal/casa/" ente "/legislacao?ano=1&ano=2"))]
     (is (= 400 (:status r)) "query-param repetido -> 400 fail-closed, NUNCA 500")))
 

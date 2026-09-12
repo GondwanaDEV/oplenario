@@ -41,6 +41,12 @@
   [ms]
   (mapv ->wire ms))
 
+(defn materias->wire
+  "{:materias :materias-total} (dominio) -> MateriasOut — o par lista+total de GET
+  /portal/casa/:ente/materias (frente 'truncamento-familia', sitio (b))."
+  [{:keys [materias materias-total]}]
+  (validar! wire/MateriasOut {:materias (->wires materias) :materias-total (or materias-total 0)} "MateriasOut"))
+
 (defn ficha->wire
   "Materia + norma (dominio, opcional) -> FichaOut."
   [m norma]

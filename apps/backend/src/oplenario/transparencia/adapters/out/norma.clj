@@ -29,3 +29,9 @@
   "A lista inteira, item a item."
   [normas]
   (mapv ->wire normas))
+
+(defn normas->wire
+  "{:normas :normas-total} (dominio) -> NormasOut — o par lista+total de GET /portal/casa/:ente/legislacao
+  (frente 'truncamento-familia', sitio (c))."
+  [{:keys [normas normas-total]}]
+  (validar! wire/NormasOut {:normas (->wires normas) :normas-total (or normas-total 0)} "NormasOut"))

@@ -21,7 +21,14 @@
   (ex.: EncarregadoPublicoOut -> 'EncarregadoOut'; AcompanhamentoOut -> 'AcompanhamentoEsicOut' — dois
   schemas de nome 'AcompanhamentoOut' existem em modulos distintos, o alias evita colisao no TS)."
   [["NormaOut" norma/NormaOut]
+   ;; NormasOut (frente "truncamento-familia" sitio (c)): resposta de GET /portal/casa/:ente/legislacao, o
+   ;; par lista+total.
+   ["NormasOut" norma/NormasOut]
    ["MateriaOut" materia/MateriaOut]
+   ;; MateriasOut ANTES de FichaOut (ordem irrelevante entre os dois, mas depois de MateriaOut — referencia
+   ;; nomeada por igualdade estrutural, mesmo racional do resto deste manifesto): resposta de GET
+   ;; /portal/casa/:ente/materias, frente "truncamento-familia" sitio (b) — o par lista+total.
+   ["MateriasOut" materia/MateriasOut]
    ["FichaOut" materia/FichaOut]
    ["EncarregadoOut" encarregado/EncarregadoPublicoOut]
    ["AcompanhamentoEsicOut" ac-esic/AcompanhamentoOut]

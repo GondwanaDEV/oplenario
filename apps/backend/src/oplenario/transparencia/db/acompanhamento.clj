@@ -64,23 +64,54 @@
                         :order-by [:seguidor_identidade_id]
                         :limit teto})))))
 
+(defn- where-meus
+  "O predicado de 'minhas materias acompanhadas' — FONTE UNICA para `meus-da-materia` e `contar-meus`
+  (regra 3 da frente 'truncamento-familia'). Alias `:a` SEMPRE, mesmo na contagem (que nao faz JOIN): so'
+  assim as duas queries usam o MESMO texto de predicado — a prova de identidade e' textual, nao so' de
+  resultado."
+  [ente-id seguidor-identidade-id]
+  [:and [:= :a.ente_id ente-id] [:= :a.seguidor_identidade_id seguidor-identidade-id]
+   [:= :a.estado [:inline "ativo"]]])
+
 (defn meus-da-materia
   "'minhas materias acompanhadas' (por seguidor autenticado): SO' as subscricoes 'ativas' do `seguidor`, com o
-  cabecalho da materia (JOIN same-schema), mais recentes primeiro, com teto. `[:inline \"ativo\"]` p/ o
-  planner usar o indice parcial idx_acompanhamento_seguidor. INNER JOIN: a listagem so' mostra follows cuja
-  materia existe no read-model (o guard do follow ja garante isso; se uma projecao sumir, esconder o item e'
-  melhor que uma linha de campos nulos inuteis ao cidadao — o registro do acompanhamento continua no banco)."
+  cabecalho da materia (LEFT JOIN same-schema), mais recentes primeiro, com teto (`teto-listagem`; o par
+  `contar-meus` diz o total real — frente 'truncamento-familia', sitio (c)). `[:inline \"ativo\"]` p/ o
+  planner usar o indice parcial idx_acompanhamento_seguidor.
+
+  LEFT JOIN, NAO INNER (achado 'outra familia' da mesma frente, corrige a decisao original desta docstring):
+  `transparencia.materia` e' uma PROJECAO ASSINCRONA sem FK (mig 0045 e' explicita: 'nao ha FK a
+  transparencia.materia... a existencia e' checada no controller, nao constraint'). Com INNER JOIN, um
+  follow cujo relay ainda nao drenou (ou cuja projecao sumiu) desaparecia de 'minhas' SEM aviso: o cidadao
+  lia 'sigo 3 materias' com 5 linhas ATIVAS no banco — a mesma mentira da familia, so' que sem LIMIT nenhum
+  produzindo o corte. `:indisponivel` (computado aqui, pos-query: `:tipo` nulo so' acontece quando o LEFT
+  JOIN nao achou par) e' o sinal que a borda usa para NUNCA fingir um cabecalho que nao existe — a subscricao
+  (VERDADE de dominio) sempre aparece; o cabecalho pode faltar."
   [tx ente-id seguidor-identidade-id]
   {:pre [(some? ente-id) (some? seguidor-identidade-id)]}
-  (comum/linhas->kebab
-   (jdbc/execute! tx
-     (sql/format {:select [[:a.proposicao_id :proposicao-id] [:a.criado_em :seguido-em]
-                           [:m.tipo :tipo] [:m.ano :ano] [:m.sequencial :sequencial]
-                           [:m.urn_lex :urn-lex] [:m.ementa :ementa] [:m.estado :estado]]
-                  :from [[:transparencia.acompanhamento :a]]
-                  :join [[:transparencia.materia :m]
-                         [:and [:= :a.ente_id :m.ente_id] [:= :a.proposicao_id :m.proposicao_id]]]
-                  :where [:and [:= :a.ente_id ente-id] [:= :a.seguidor_identidade_id seguidor-identidade-id]
-                          [:= :a.estado [:inline "ativo"]]]
-                  :order-by [[:a.criado_em :desc]]
-                  :limit teto-listagem}))))
+  (mapv #(assoc % :indisponivel (nil? (:tipo %)))
+    (comum/linhas->kebab
+     (jdbc/execute! tx
+       (sql/format {:select [[:a.proposicao_id :proposicao-id] [:a.criado_em :seguido-em]
+                             [:m.tipo :tipo] [:m.ano :ano] [:m.sequencial :sequencial]
+                             [:m.urn_lex :urn-lex] [:m.ementa :ementa] [:m.estado :estado]]
+                    :from [[:transparencia.acompanhamento :a]]
+                    :left-join [[:transparencia.materia :m]
+                                [:and [:= :a.ente_id :m.ente_id] [:= :a.proposicao_id :m.proposicao_id]]]
+                    :where (where-meus ente-id seguidor-identidade-id)
+                    :order-by [[:a.criado_em :desc]]
+                    :limit teto-listagem})))))
+
+(defn contar-meus
+  "Quantos acompanhamentos ATIVOS o seguidor tem — SEM teto e SEM JOIN (frente 'truncamento-familia',
+  sitios (c) e (d)): conta a tabela DONA (`transparencia.acompanhamento`, VERDADE de dominio) direto, nao o
+  resultado do LEFT JOIN de `meus-da-materia` — a contagem nunca deve depender de uma projecao re-projetavel
+  (mesmo racional do porque a tabela em si nao leva FK a `materia`). MESMO predicado (`where-meus`) da
+  lista: e' o mesmo conjunto de linhas, so' sem o LIMIT e sem o cabecalho."
+  [tx ente-id seguidor-identidade-id]
+  {:pre [(some? ente-id) (some? seguidor-identidade-id)]}
+  (:contagem
+   (comum/linha->kebab
+    (jdbc/execute-one! tx
+      (sql/format {:select [[[:count :*] :contagem]] :from [[:transparencia.acompanhamento :a]]
+                   :where (where-meus ente-id seguidor-identidade-id)})))))
