@@ -28,6 +28,28 @@
     "inscricao.registrada" "inscricao.desistida" "incidente.registrado"
     "votacao.aberta" "voto.registrado" "votacao.encerrada"})
 
+(def tipo-lacuna
+  "Tipo SINTETICO do painel ao vivo — nunca um evento de dominio, nunca passa pelo outbox/relay. O backplane
+  da CanalStore (`tempo-real/components`, impl Valkey) o INJETA dentro do proprio `ler-desde` quando uma
+  entrada do stream nao valida na leitura (corrupcao/escrita externa nao confiavel —
+  `mensagem-valida?`). Frente 'truncamento-familia', sitio (d): antes, essa entrada era DESCARTADA
+  (`keep` devolvendo nil) e o cursor do cliente avancava por cima do buraco como se o replay estivesse
+  integro — sem sinal nenhum, nem no servidor nem no cliente. Agora vira esta mensagem, que ocupa a MESMA
+  seq da entrada corrompida (o cursor avanca SABENDO do buraco, nao por cima dele).
+
+  NAO entra em `tipos-plenario`: aquele set e' so' para roteamento de evento de DOMINIO outbox->canal
+  (`consumer/tipos-consumidos` registra 1 handler de bus POR tipo dali); registrar um consumidor de bus
+  para um tipo que o outbox nunca emite seria, na melhor das hipoteses, um registro morto. Este tipo entra
+  so' em `tipos-emitidos-ao-cliente`, a fonte do enum que `wire/out/evento-sse` aceita na SAIDA."
+  "tempo-real.lacuna")
+
+(def tipos-emitidos-ao-cliente
+  "Uniao de `tipos-plenario` (eventos de dominio roteados) + `tipo-lacuna` (sinal sintetico do backplane) —
+  a fonte unica do enum de `:tipo` que `wire/out/evento-sse` valida na SAIDA. `tipos-plenario` sozinho
+  seguiria descrevendo so' roteamento de dominio; este set e' o que de fato PODE chegar ao cliente pelo
+  canal plenario."
+  (conj tipos-plenario tipo-lacuna))
+
 (defn rotas-do-evento
   "Canais que um evento de dominio alimenta. Por ora so o canal plenario da sessao (painel ao vivo); devolve []
   p/ eventos nao-SSE. O `sessao-id` sai do payload (string ISO/uuid serializada — basta concatenar no nome)."

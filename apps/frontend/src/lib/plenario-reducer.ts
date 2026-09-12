@@ -145,6 +145,13 @@ export interface EstadoPlenario {
   /** Contador monotônico dos 2 eventos de `TIPOS_EVENTO_INSCRICAO` já aplicados — a mesma PRECEDÊNCIA
    * de `falaEventoSeq`, mas só para o campo `inscritos`. Ver a docstring de `falaEventoSeq`. */
   inscricaoEventoSeq: number;
+  /** `true` desde o primeiro `tempo-real.lacuna` visto nesta conexão (frente 'truncamento-familia',
+   * sítio d): o backplane encontrou uma entrada corrompida no replay e não tem como dizer QUAL campo
+   * ela afetava. STICKY de propósito — nunca volta a `false` sozinho: para quórum/tribuna o próprio
+   * sinal já pede re-hidratação (`precisaRehidratar`, que os corrige em segundos), mas o placar de
+   * votação não tem nenhum caminho de re-busca (é só o agregado de eventos SSE), então o aviso
+   * permanece visível pelo resto da sessão em vez de fingir que o risco passou. */
+  avisoLacuna: boolean;
 }
 
 /** A identidade PÚBLICA de um parlamentar — o subconjunto que `GET /sessoes/:id/composicao` serve, que é
@@ -170,6 +177,7 @@ export function estadoInicial(sessao: SessaoOut): EstadoPlenario {
     ultimoSeq: 0,
     falaEventoSeq: 0,
     inscricaoEventoSeq: 0,
+    avisoLacuna: false,
   };
 }
 
@@ -563,6 +571,14 @@ export function aplicarEvento(estado: EstadoPlenario, evento: EventoPlenario): E
         },
       };
     }
+
+    case "tempo-real.lacuna":
+      // Sinal SINTÉTICO (frente 'truncamento-familia', sítio d): o backplane não sabe qual dado
+      // corrompeu, então trata como se TUDO pudesse ter sido afetado — `precisaRehidratar` já é o
+      // ÚNICO caminho de auto-cura para quórum/tribuna (ver a docstring de `avisoLacuna`); o placar não
+      // tem caminho de re-busca nenhum, e por isso o aviso fica STICKY em vez de tentar "corrigir" algo
+      // que não há como buscar de novo.
+      return { ...base, avisoLacuna: true, precisaRehidratar: true };
 
     default:
       return base;

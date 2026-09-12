@@ -236,7 +236,7 @@ function Palco({ sessao, estado, pauta }: { sessao: SessaoOut; estado: EstadoPle
         )}
       </section>
 
-      <Placar placar={estado.placar} />
+      <Placar placar={estado.placar} avisoLacuna={estado.avisoLacuna} />
     </section>
   );
 }
@@ -257,8 +257,8 @@ function MarcaVoto({ voto }: { voto: string }) {
 
 /** Placar da votação corrente. §22.6 SIGILO: a NOMINAL mostra quem votou o quê; a SECRETA só o contador.
  * A escolha do que renderizar mora no view-model puro `derivarPlacar` (testado) — aqui só mapeamento. */
-function Placar({ placar }: { placar: PlacarVotacao | null }) {
-  const v = derivarPlacar(placar);
+function Placar({ placar, avisoLacuna }: { placar: PlacarVotacao | null; avisoLacuna: boolean }) {
+  const v = derivarPlacar(placar, avisoLacuna);
   if (v.kind === "nenhuma") return null;
   // aria-live NÃO fica na section inteira (anunciaria título+grade nominal a cada voto); mora só nos números
   // que mudam (Tally / contador), que já estão montados desde a abertura — review react MAJOR (a11y).
@@ -276,6 +276,12 @@ function Placar({ placar }: { placar: PlacarVotacao | null }) {
         )}
       </div>
       {v.kind === "nominal" ? <PlacarNominal v={v} /> : <PlacarSecreta v={v} />}
+      {v.avisoLacuna && (
+        <p className="aviso-corte" role="status">
+          o sinal do servidor teve uma <b>lacuna</b> durante esta sessão — confira o resultado oficial
+          antes de decidir por este número
+        </p>
+      )}
     </section>
   );
 }

@@ -92,13 +92,21 @@
           (trc/ler-desde s (canal) 0))
         "ler-desde sem start lanca ex-info clara")))
 
-;; ---------- defesa-em-profundidade: entrada de forma estranha e' DESCARTADA, nao propagada (sec-HIGH-1) ----------
+;; ---------- defesa-em-profundidade: entrada de forma estranha vira SINAL, nao e' engolida (sec-HIGH-1 +
+;; frente 'truncamento-familia' sitio (d): o descarte silencioso deixava o cliente avancar o cursor por
+;; cima do buraco como se o replay estivesse integro — sem sinal nem no servidor nem no cliente) ----------
 
-(deftest valkey-descarta-mensagem-corrompida
+(deftest valkey-mensagem-corrompida-vira-sinal-de-lacuna-sem-perder-o-cursor
   (let [c    (canal)
         conn {:pool :none :spec {:uri (get-in (config/carregar) [:valkey :uri])}}]
     (trc/publicar! *store* c {:tipo "boa" :dados {}})        ; entrada valida (seq 1)
     ;; injeta uma entrada CRUA com "m" nao-map (corrupcao / escrita externa) direto no stream do canal
     (car/wcar conn (car/xadd (str "tr:canal:" c) "*" "m" "isto-nao-e-um-map" "s" "999"))
     (let [msgs (trc/ler-desde *store* c 0)]
-      (is (= ["boa"] (mapv :tipo msgs)) "a entrada de forma invalida e' descartada; so a valida sobrevive"))))
+      (is (= ["boa" "tempo-real.lacuna"] (mapv :tipo msgs))
+          "a entrada corrompida NAO e' descartada — vira um sinal de lacuna que o cliente recebe pelo
+           MESMO canal, na ordem de seq")
+      (is (= 999 (:seq (last msgs)))
+          "a seq da entrada corrompida e' PRESERVADA no sinal: o cursor do cliente avanca sabendo do
+           buraco (Last-Event-ID=999), nao silenciosamente por cima dele")
+      (is (= {} (:dados (last msgs))) "o sinal nunca carrega o payload corrompido"))))

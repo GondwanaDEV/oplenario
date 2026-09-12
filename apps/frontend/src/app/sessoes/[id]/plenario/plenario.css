@@ -101,6 +101,12 @@
 
 .placar-meta { margin: 0.7rem 0 0; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); text-align: center; }
 .placar-meta b { color: var(--texto); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Sinal de lacuna do backplane (frente 'truncamento-familia', sítio d) — MESMA classe/forma visual de
+   ficha-materia.css/mesa.css .aviso-corte, redeclarada aqui pelo mesmo motivo delas (sem CSS global
+   compartilhado entre páginas neste projeto). */
+.aviso-corte { display: flex; align-items: flex-start; gap: 0.5rem; margin: 0.7rem 0 0; padding: 0.65rem 0.9rem; border: 1px solid color-mix(in srgb, var(--amarelo-traco) 45%, transparent); border-left: 3px solid var(--amarelo-traco); border-radius: var(--raio-sm); background: color-mix(in srgb, var(--amarelo-traco) 12%, var(--surface-2)); color: var(--texto-2); font-size: var(--t-13); line-height: 1.5; }
+.aviso-corte b { color: var(--aviso-texto); font-weight: 700; }
 .placar-parcial { margin: 0.7rem 0 0; font-size: var(--t-12); color: var(--aviso-texto); text-align: center; }
 
 .placar-contador { display: flex; align-items: baseline; gap: 0.5rem; justify-content: center; padding: 0.4rem 0; }

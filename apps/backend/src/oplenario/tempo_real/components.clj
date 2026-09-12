@@ -5,6 +5,7 @@
   e o endpoint SSE (G3, diplomat) dependem dele, NUNCA da impl. A selecao e' por config (sistema.clj)."
   (:require [clojure.tools.logging :as log]
             [com.stuartsierra.component :as component]
+            [oplenario.tempo-real.canais :as canais]
             [taoensso.carmine :as car])
   (:import (java.io Closeable)))
 
@@ -66,7 +67,8 @@
 (defn- mensagem-valida?
   "Defesa-em-profundidade (review sec-HIGH-1): valida a FORMA da mensagem descongelada antes de devolve-la. Toda
   mensagem legitima do projetor e' {:ente-id :tipo string :dados map}; uma entrada com forma estranha (corrupcao
-  ou escrita externa nao-confiavel) e' descartada+logada em vez de propagada. NOTA: nao e' escudo de RCE — um
+  ou escrita externa nao-confiavel) NAO e' propagada como se fosse integra (`ler-desde`, abaixo, vira-a sinal
+  de lacuna em vez de descarta-la — frente 'truncamento-familia' sitio (d)). NOTA: nao e' escudo de RCE — um
   gadget Nippy executa no THAW (dentro do XRANGE), antes daqui; o escudo real e' infra (auth/TLS/isolamento de
   rede do Valkey) — ver o carry HIGH-1 no docstring de `canal-store-valkey`."
   [m]
@@ -106,14 +108,21 @@
     (let [conn    (or @conn-atom (throw (ex-info "CanalStoreValkey nao iniciado (conn-atom nil)" {:canal canal})))
           entries (car/wcar conn (car/xrange (chave-stream canal) "-" "+"))]
       (->> entries
-           (keep (fn [entry]
-                   ;; entry = [id ["m" <msg> "s" "<seq>"]] — le por NOME de campo (nao por posicao; review clj-MINOR)
-                   (let [campos (apply hash-map (second entry))
-                         msg    (get campos "m")]
-                     (cond
-                       (not (mensagem-valida? msg))
-                       (do (log/warn "ler-desde: mensagem de forma invalida descartada" {:canal canal}) nil)
-                       :else (assoc msg :seq (parse-long (get campos "s")))))))
+           (map (fn [entry]
+                  ;; entry = [id ["m" <msg> "s" "<seq>"]] — le por NOME de campo (nao por posicao; review clj-MINOR)
+                  (let [campos    (apply hash-map (second entry))
+                        msg       (get campos "m")
+                        seq-lida  (parse-long (get campos "s"))]
+                    (if (mensagem-valida? msg)
+                      (assoc msg :seq seq-lida)
+                      ;; frente 'truncamento-familia' sitio (d): NAO descarta — vira sinal (`canais/tipo-lacuna`)
+                      ;; na MESMA seq da entrada corrompida. Descartar (o comportamento antigo) fazia o cursor do
+                      ;; cliente avancar por cima do buraco como se o replay estivesse integro; sem cursor
+                      ;; correspondente para o buraco, o resume por Last-Event-ID nunca teria como saber que
+                      ;; algo faltou. `:dados {}` nunca carrega o payload corrompido ao cliente.
+                      (do (log/warn "ler-desde: mensagem de forma invalida virou sinal de lacuna (cliente avisado, cursor preservado)"
+                                    {:canal canal :seq seq-lida})
+                          {:tipo canais/tipo-lacuna :dados {} :seq seq-lida})))))
            (filterv #(> (long (:seq %)) (long apos-seq)))   ; replay: seq > Last-Event-ID
            (sort-by :seq)                                    ; ordem de seq (defesa; lider unico ja serializa)
            vec))))
