@@ -39,6 +39,11 @@
    :comissao-id (random-uuid) :relator-id (random-uuid) :voto-relator "favoravel"
    :estado "com_relator" :template-id (random-uuid) :texto-vigente-versao-id nil :lock-version 0})
 
+;; Os 6 `deftest` abaixo passaram a incluir os 4 `-truncado` (fatia 'truncamento-familia', achado
+;; CRITICO da revisao adversarial): antes, `ficha->wire` coagia com `(boolean x)` e a chave AUSENTE
+;; virava `false` silencioso — nenhum destes 6 fixtures reprovava mesmo sem projetar a chave nova.
+;; Removida a coercao, os 6 REPROVAM (nil viola `:boolean` do schema `{:closed true}`) ate' aqui
+;; passarem a declarar os 4 campos — o vermelho deles E' a prova de que a trava passou a existir.
 (deftest ficha->wire-reusa-detalhe-do-cabecalho
   ;; correcao de teste pre-existente (arity mismatch achado ao rodar a suite apos o review
   ;; fe-9-ficha-materia — nao um dos achados do review, mas bloqueava o gate de suite 100% verde):
@@ -46,7 +51,8 @@
   ;; ja existia neste arquivo (linha 18) mas nunca era usado — os testes chamavam a fn com 1 arg so.
   (let [ente (random-uuid)
         out (adapters/ficha->wire (header ente "## Art. 1o")
-                                   {:tramitacao [] :apensadas [] :emendas [] :pareceres []})]
+                                   {:tramitacao [] :tramitacao-truncado false :apensadas [] :apensadas-truncado false
+                                    :emendas [] :emendas-truncado false :pareceres [] :pareceres-truncado false})]
     (is (m/validate wire/FichaMateriaOut out))
     (is (= "## Art. 1o" (:texto (:proposicao out))))
     (is (string? (:id (:proposicao out))))
@@ -55,7 +61,8 @@
 (deftest ficha->wire-tramitacao-sem-campos-internos
   (let [ente (random-uuid)
         out (adapters/ficha->wire (header ente)
-                                   {:tramitacao [(tramitacao-canonica)] :apensadas [] :emendas [] :pareceres []})
+                                   {:tramitacao [(tramitacao-canonica)] :tramitacao-truncado false :apensadas [] :apensadas-truncado false
+                                    :emendas [] :emendas-truncado false :pareceres [] :pareceres-truncado false})
         item (first (:tramitacao out))]
     (is (m/validate wire/FichaMateriaOut out))
     (is (= "protocolada" (:de-estado item)))
@@ -69,7 +76,8 @@
 (deftest ficha->wire-apensadas-projeta-uuid-e-instant-como-string
   (let [ente (random-uuid)
         out (adapters/ficha->wire (header ente)
-                                   {:tramitacao [] :apensadas [(apensacao-canonica)] :emendas [] :pareceres []})
+                                   {:tramitacao [] :tramitacao-truncado false :apensadas [(apensacao-canonica)] :apensadas-truncado false
+                                    :emendas [] :emendas-truncado false :pareceres [] :pareceres-truncado false})
         item (first (:apensadas out))]
     (is (m/validate wire/FichaMateriaOut out))
     (is (string? (:apensada-id item)))
@@ -79,7 +87,8 @@
 (deftest ficha->wire-emendas-sem-campos-de-armazenamento
   (let [ente (random-uuid)
         out (adapters/ficha->wire (header ente)
-                                   {:tramitacao [] :apensadas [] :emendas [(emenda-canonica)] :pareceres []})
+                                   {:tramitacao [] :tramitacao-truncado false :apensadas [] :apensadas-truncado false
+                                    :emendas [(emenda-canonica)] :emendas-truncado false :pareceres [] :pareceres-truncado false})
         item (first (:emendas out))]
     (is (m/validate wire/FichaMateriaOut out))
     (is (= "aditiva" (:tipo-emenda item)))
@@ -90,7 +99,8 @@
 (deftest ficha->wire-pareceres-sem-campos-internos
   (let [ente (random-uuid)
         out (adapters/ficha->wire (header ente)
-                                   {:tramitacao [] :apensadas [] :emendas [] :pareceres [(parecer-canonico)]})
+                                   {:tramitacao [] :tramitacao-truncado false :apensadas [] :apensadas-truncado false
+                                    :emendas [] :emendas-truncado false :pareceres [(parecer-canonico)] :pareceres-truncado false})
         item (first (:pareceres out))]
     (is (m/validate wire/FichaMateriaOut out))
     (is (= "com_relator" (:estado item)))
@@ -103,9 +113,11 @@
 (deftest ficha->wire-projeta-o-nome-da-comissao-de-cada-parecer
   (let [ente (random-uuid)
         out (adapters/ficha->wire (header ente nil)
-              {:tramitacao [] :apensadas [] :emendas []
+              {:tramitacao [] :tramitacao-truncado false :apensadas [] :apensadas-truncado false :emendas []
+               :emendas-truncado false
                :pareceres [(assoc (parecer-canonico) :comissao-nome "Comissão de Finanças")
-                           (parecer-canonico)]})]
+                           (parecer-canonico)]
+               :pareceres-truncado false})]
     (is (m/validate wire/FichaMateriaOut out))
     (is (= ["Comissão de Finanças" nil] (mapv :comissao-nome (:pareceres out)))
         "linha sem nome resolvido sai nil — nunca o comissao-id como substituto")))

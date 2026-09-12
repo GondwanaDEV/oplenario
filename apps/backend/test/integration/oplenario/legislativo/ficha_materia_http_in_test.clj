@@ -25,22 +25,31 @@
 
 (def ^:private ccj-id (random-uuid))
 
-(defn- ficha-canonica [ente id]
+(defn- ficha-canonica
+  "Fatia 'truncamento-familia' (achado CRITICO da revisao adversarial): os 4 `-truncado` sao
+  declarados aqui como `false` porque este fake simula o Repo em condicao NORMAL (sem corte) — sem eles,
+  a chave chegava `nil` ao adapter e `(boolean nil)` virava `false` silencioso, mascarando exatamente o
+  produtor incompleto que a trava do schema `{:closed true}` existe pra' pegar."
+  [ente id]
   {:proposicao (proposicao-canonica ente id)
    :texto {:texto-inline "## Art. 1o"}
    :tramitacao [{:de-estado "protocolada" :para-estado "em_comissoes" :gatilho "despachar"
                  :contexto {} :ator-id (random-uuid)
                  :ocorrido-em (java.time.Instant/parse "2026-05-20T10:00:00Z")}]
+   :tramitacao-truncado false
    :apensadas [{:apensada-id (random-uuid) :apensada-em (java.time.Instant/parse "2026-05-20T11:00:00Z")
                 :motivo-apensacao "materia conexa"}]
+   :apensadas-truncado false
    :emendas [{:id (random-uuid) :numero-local 1 :tipo-emenda "aditiva" :momento-apresentacao "no_prazo"
               :autor-tipo "vereador" :autor-texto "Helena Matos" :estado "apresentada"}]
+   :emendas-truncado false
    :pareceres [{:id (random-uuid) :comissao-id ccj-id :relator-id (random-uuid)
                 :voto-relator "favoravel" :estado "com_relator"}
                ;; 2a linha: comissao que o resolver NAO conhece (guard ref orfao, ou de outra Casa) —
                ;; prova que a ausencia de nome sai nil e nao derruba o 200 nem cai no id.
                {:id (random-uuid) :comissao-id (random-uuid) :relator-id nil
-                :voto-relator nil :estado "em_elaboracao"}]})
+                :voto-relator nil :estado "em_elaboracao"}]
+   :pareceres-truncado false})
 
 (defn- fake-repo-legislativo
   "So' o metodo exercido (`ficha-completa-da-proposicao`). Simula a RLS: `dono` (ente-id da fixture) e' o

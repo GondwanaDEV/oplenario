@@ -49,17 +49,23 @@
   O caller (controller) ja gateou nil de :proposicao -> 404 na borda antes de chegar aqui.
 
   Os 4 `-truncado` (fatia 'truncamento-familia') vem PRONTOS do Repo (a sonda teto+1 ja' rodou na
-  MESMA tx da lista) — este adapter so' projeta, nunca deriva."
+  MESMA tx da lista) — este adapter so' projeta, nunca deriva. Projetados VERBATIM (nunca `(boolean x)`):
+  o Repo real so' produz `true`/`false` (`(> (count linhas) teto)`, nunca nil), entao a UNICA forma de
+  uma destas 4 chaves chegar aqui como `nil` e' um PRODUTOR incompleto (fixture de teste esquecida, ou
+  renomeacao futura que perca a chave no meio do caminho) — e nil deve REPROVAR no `validado` abaixo
+  (schema {:closed true} com :boolean), nao virar `false` silencioso fingindo lista completa (achado
+  CRITICO da revisao adversarial desta fatia: `(boolean nil)` = `false` anulava a UNICA trava que existe
+  pra' pegar exatamente esse produtor incompleto)."
   [proposicao-out {:keys [tramitacao tramitacao-truncado apensadas apensadas-truncado
                           emendas emendas-truncado pareceres pareceres-truncado]}]
   (validado wire/FichaMateriaOut
             {:proposicao proposicao-out
              :tramitacao (mapv tramitacao-item->wire tramitacao)
-             :tramitacao-truncado (boolean tramitacao-truncado)
+             :tramitacao-truncado tramitacao-truncado
              :apensadas (mapv apensacao->wire apensadas)
-             :apensadas-truncado (boolean apensadas-truncado)
+             :apensadas-truncado apensadas-truncado
              :emendas (mapv emenda-resumo->wire emendas)
-             :emendas-truncado (boolean emendas-truncado)
+             :emendas-truncado emendas-truncado
              :pareceres (mapv parecer-resumo->wire pareceres)
-             :pareceres-truncado (boolean pareceres-truncado)}
+             :pareceres-truncado pareceres-truncado}
             "ficha da materia"))
