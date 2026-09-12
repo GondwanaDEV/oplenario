@@ -54,8 +54,13 @@ describe("derivarRef", () => {
 });
 
 describe("escolherDestaque", () => {
-  it("lista vazia -> destaque null, mais-tramitação vazia", () => {
-    expect(escolherDestaque([])).toEqual({ destaque: null, maisTramitacao: [] });
+  // `materiasTotal` (2º argumento, frente "truncamento-familia" sitio (a)): o backend agora publica o par
+  // {materias, materiasTotal} de GET /portal/casa/{ente}/materias (teto 200) — esta seção É a listagem
+  // pública de proposições (sem outra rota), e escolhe so' 1+3 dela. Sem o total real, "mostrando 4" nunca
+  // dizia de quantas. Molde: perfil-vereador-vista.ts (truncamentoMaterias), mesmo texto.
+
+  it("lista vazia -> destaque null, mais-tramitação vazia, sem truncamento", () => {
+    expect(escolherDestaque([], 0)).toEqual({ destaque: null, maisTramitacao: [], truncamento: null });
   });
 
   it("destaque = o 1º item (a lista já vem ordenada desc do backend); mais-tramitação = os próximos 3", () => {
@@ -66,30 +71,33 @@ describe("escolherDestaque", () => {
       materia({ proposicaoId: "4", sequencial: 22 }),
       materia({ proposicaoId: "5", sequencial: 4 }),
     ];
-    const { destaque, maisTramitacao } = escolherDestaque(itens);
+    const { destaque, maisTramitacao } = escolherDestaque(itens, 5);
     expect(destaque?.proposicaoId).toBe("1");
     expect(maisTramitacao.map((m) => m.proposicaoId)).toEqual(["2", "3", "4"]);
   });
 
   it("com menos de 4 itens, mais-tramitação tem só o que sobrar (sem lançar)", () => {
     const itens = [materia({ proposicaoId: "1" }), materia({ proposicaoId: "2" })];
-    const { destaque, maisTramitacao } = escolherDestaque(itens);
+    const { destaque, maisTramitacao } = escolherDestaque(itens, 2);
     expect(destaque?.proposicaoId).toBe("1");
     expect(maisTramitacao.map((m) => m.proposicaoId)).toEqual(["2"]);
   });
 
   it("a vista compõe ref/título/situação/permalink/estágios a partir da matéria", () => {
-    const { destaque } = escolherDestaque([
-      materia({
-        proposicaoId: "p1",
-        tipo: "projeto_lei",
-        sequencial: 42,
-        ano: 2026,
-        ementa: "Cria o Programa Municipal de Hortas Comunitárias.",
-        urnLex: "urn:lex:br;ce;fortaleza:camara.municipal:projeto.lei:2026;042",
-        estado: "segundo_turno",
-      }),
-    ]);
+    const { destaque } = escolherDestaque(
+      [
+        materia({
+          proposicaoId: "p1",
+          tipo: "projeto_lei",
+          sequencial: 42,
+          ano: 2026,
+          ementa: "Cria o Programa Municipal de Hortas Comunitárias.",
+          urnLex: "urn:lex:br;ce;fortaleza:camara.municipal:projeto.lei:2026;042",
+          estado: "segundo_turno",
+        }),
+      ],
+      1,
+    );
     expect(destaque).toEqual({
       ref: "PL 042/2026",
       titulo: "Cria o Programa Municipal de Hortas Comunitárias.",
@@ -108,7 +116,29 @@ describe("escolherDestaque", () => {
   });
 
   it("autorTexto ausente (null/undefined na origem) -> null honesto, nunca undefined/inventado", () => {
-    const { destaque } = escolherDestaque([materia({ autorTexto: undefined, autorTipo: undefined })]);
+    const { destaque } = escolherDestaque([materia({ autorTexto: undefined, autorTipo: undefined })], 1);
     expect(destaque?.autorTexto).toBeNull();
+  });
+
+  it("materiasTotal igual ao exibido (1+3=4 de 4) -> SEM truncamento", () => {
+    const itens = [1, 2, 3, 4].map((n) => materia({ proposicaoId: String(n) }));
+    const { truncamento } = escolherDestaque(itens, 4);
+    expect(truncamento).toBeNull();
+  });
+
+  it("materiasTotal maior que o exibido -> truncamento com o total REAL, texto igual ao do perfil do vereador", () => {
+    const itens = [1, 2, 3, 4, 5].map((n) => materia({ proposicaoId: String(n) }));
+    const { truncamento } = escolherDestaque(itens, 250);
+    expect(truncamento).toBe("Mostrando 4 de 250 matérias, da numeração mais alta para a mais baixa.");
+  });
+
+  it("regra 4 (aposenta heurística, nunca empilha): o truncamento segue o TOTAL DO SERVIDOR, nunca uma dedução de itens.length — payload onde as duas discordariam", () => {
+    // itens.length (5) e materiasTotal (999) DISCORDAM de propósito: se a vista alguma vez recaísse numa
+    // dedução client-side (comparar itens.length com o exibido, ou usar itens.length como "total"), o
+    // número mostrado seria 5, não 999. Prova que a tela sempre segue o campo autoritativo do backend.
+    const itens = [1, 2, 3, 4, 5].map((n) => materia({ proposicaoId: String(n) }));
+    const { truncamento } = escolherDestaque(itens, 999);
+    expect(truncamento).toContain("999");
+    expect(truncamento).not.toContain(" 5 ");
   });
 });

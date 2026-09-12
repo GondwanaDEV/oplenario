@@ -53,11 +53,32 @@ function paraVista(m: MateriaOut): MateriaVista {
   };
 }
 
-export function escolherDestaque(itens: MateriaOut[]): {
+// ---- [COPY, reusada literal de perfil-vereador-vista.ts/truncamentoMaterias] frente "truncamento-familia"
+//      sitio (a): esta seção É a listagem pública de proposições (sem outra rota — barra-institucional.tsx
+//      aponta "Proposições" pra cá) e escolhia so' 1+3 de até 200 vindos do backend, SEM contagem nenhuma.
+//      MESMA ordem (ano DESC, sequencial DESC) de `listar-em-tramitacao` — por isso o MESMO texto ("da
+//      numeração mais alta para a mais baixa") vale aqui.
+const truncamentoTramitacao = (mostradas: number, total: number) =>
+  `Mostrando ${mostradas} de ${total} matérias, da numeração mais alta para a mais baixa.`;
+
+export function escolherDestaque(
+  itens: MateriaOut[],
+  materiasTotal: number,
+): {
   destaque: MateriaVista | null;
   maisTramitacao: MateriaVista[];
+  truncamento: string | null;
 } {
-  if (itens.length === 0) return { destaque: null, maisTramitacao: [] };
+  if (itens.length === 0) return { destaque: null, maisTramitacao: [], truncamento: null };
   const [primeiro, ...resto] = itens;
-  return { destaque: paraVista(primeiro), maisTramitacao: resto.slice(0, 3).map(paraVista) };
+  const maisTramitacao = resto.slice(0, 3).map(paraVista);
+  const mostradas = 1 + maisTramitacao.length;
+  return {
+    destaque: paraVista(primeiro),
+    maisTramitacao,
+    // `materiasTotal` (regra 4): SEMPRE o campo autoritativo do backend, NUNCA `itens.length` (que já vem
+    // capado em 200 pelo backend) nem qualquer dedução client-side — a comparação certa é contra o total
+    // real, senão uma Casa com 250 matérias exibiria "mostrando 4" sem nunca dizer de quantas.
+    truncamento: materiasTotal > mostradas ? truncamentoTramitacao(mostradas, materiasTotal) : null,
+  };
 }
