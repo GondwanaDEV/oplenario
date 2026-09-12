@@ -70,6 +70,10 @@ export function useMesa(token: string | null) {
   const [pendenciasTotal, setPendenciasTotal] = useState<number | null>(null);
   const [sliSessoes, setSliSessoes] = useState<SliSessaoOut[] | null>(null);
   const [relatoresPendentes, setRelatoresPendentes] = useState<RelatorPendenteOut[] | null>(null);
+  // Fatia "truncamento-familia": `truncado` AUTORITATIVO do servidor (mesmo par relatoresPendentes/
+  // relatoresPendentesTruncado que pendenciasItens/pendenciasTotal já usa acima) — `null` quando o card
+  // veio indisponível (nada a afirmar), nunca um booleano fingindo "sem corte".
+  const [relatoresPendentesTruncado, setRelatoresPendentesTruncado] = useState<boolean | null>(null);
   const [estado, setEstado] = useState<Estado>("carregando");
 
   useEffect(() => {
@@ -83,9 +87,13 @@ export function useMesa(token: string | null) {
         return;
       }
       setMesa(principal);
-      setRelatoresPendentes(
-        ehCardIndisponivel(principal.relatoresPendentes) ? null : principal.relatoresPendentes.itens,
-      );
+      if (ehCardIndisponivel(principal.relatoresPendentes)) {
+        setRelatoresPendentes(null);
+        setRelatoresPendentesTruncado(null);
+      } else {
+        setRelatoresPendentes(principal.relatoresPendentes.itens);
+        setRelatoresPendentesTruncado(principal.relatoresPendentes.truncado);
+      }
 
       const [tramitacao, pendencias, sli] = await Promise.all([
         buscarOuNull<{ itens: ItemBoardOut[] }>("/api/paineis/tramitacao", token),
@@ -113,8 +121,12 @@ export function useMesa(token: string | null) {
       pendenciasTotal: null,
       sliSessoes: null,
       relatoresPendentes: null,
+      relatoresPendentesTruncado: null,
       estado: "erro" as Estado,
     };
   }
-  return { mesa, tramitacaoItens, pendenciasItens, pendenciasTotal, sliSessoes, relatoresPendentes, estado };
+  return {
+    mesa, tramitacaoItens, pendenciasItens, pendenciasTotal, sliSessoes,
+    relatoresPendentes, relatoresPendentesTruncado, estado,
+  };
 }

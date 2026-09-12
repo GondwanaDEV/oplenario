@@ -259,4 +259,57 @@ describe("PaginaHomeVereador", () => {
     expect((screen.getByText("Dar ciência").closest("button") as HTMLButtonElement).disabled).toBe(false);
     expect(() => clique).not.toThrow();
   });
+
+  // ---------- frente "truncamento-familia" ----------
+
+  it("ciencias-truncado avisa mesmo com 1 unica ciencia exibida (discordancia deliberada, autoritativo)", async () => {
+    // se a tela deduzisse do tamanho do array (1 ciencia), nunca mostraria o aviso — o campo do
+    // servidor e' quem decide, nao `vista.ciencias.length`.
+    global.fetch = fetchRoteado({
+      "GET /api/meu/painel": () => ({ ok: true, json: async () => ({ ...painelFake, "ciencias-truncado": true }) }) as Response,
+      "GET /api/sessoes": semSessoes,
+    });
+    renderComProviders("tok-de-teste");
+
+    await waitFor(() => expect(screen.getByText("Para sua ciência")).toBeTruthy());
+    expect(screen.getByText(/pode haver mais esperando sua ciência fora desta lista/)).toBeTruthy();
+  });
+
+  it("ciencias-truncado ausente (false) NAO mostra o aviso de corte", async () => {
+    global.fetch = fetchRoteado({
+      "GET /api/meu/painel": () => ({ ok: true, json: async () => painelFake }) as Response,
+      "GET /api/sessoes": semSessoes,
+    });
+    renderComProviders("tok-de-teste");
+
+    await waitFor(() => expect(screen.getByText("Para sua ciência")).toBeTruthy());
+    expect(screen.queryByText(/pode haver mais esperando sua ciência/)).toBeNull();
+  });
+
+  it("proposicoes-truncado avisa na secao 'Suas proposições'", async () => {
+    global.fetch = fetchRoteado({
+      "GET /api/meu/painel": () => ({ ok: true, json: async () => ({ ...painelFake, "proposicoes-truncado": true }) }) as Response,
+      "GET /api/sessoes": semSessoes,
+    });
+    renderComProviders("tok-de-teste");
+
+    await waitFor(() => expect(screen.getByText("Suas proposições")).toBeTruthy());
+    expect(screen.getByText(/proposições mais recentes — pode haver/)).toBeTruthy();
+  });
+
+  it("pareceres-truncado avisa na secao 'Meus pareceres' (quando ha' algum aguardando)", async () => {
+    const painelComParecer = {
+      ...painelFake,
+      pareceres: [{ id: "pc9", "objeto-tipo": "proposicao", "objeto-id": "p1", "comissao-id": "c1", estado: "com_relator", "voto-relator": null, "criado-em": "2026-07-01T00:00:00Z" }],
+      "pareceres-truncado": true,
+    };
+    global.fetch = fetchRoteado({
+      "GET /api/meu/painel": () => ({ ok: true, json: async () => painelComParecer }) as Response,
+      "GET /api/sessoes": semSessoes,
+    });
+    renderComProviders("tok-de-teste");
+
+    await waitFor(() => expect(screen.getByText("Meus pareceres")).toBeTruthy());
+    expect(screen.getByText(/pareceres mais recentes — pode haver mais fora desta lista/)).toBeTruthy();
+  });
 });

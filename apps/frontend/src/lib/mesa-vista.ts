@@ -82,10 +82,19 @@ export interface MesaVistaInput {
   pendenciasTotal: number | null;
   sliSessoes: SliSessaoOut[] | null;
   relatoresPendentes: RelatorPendenteOut[] | null;
+  // Fatia "truncamento-familia": mesmo par relatoresPendentes/relatoresPendentesTruncado que
+  // pendenciasItens/pendenciasTotal já usa acima — AUTORITATIVO do servidor, nunca deduzido de
+  // contagem. `null`/ausente = card indisponível ou fetch ainda em voo (nada a afirmar) — tratado como
+  // "não truncado" (`?? false` abaixo). OPCIONAL (não `pendenciasTotal`, que é obrigatório): nenhum dos
+  // ~15 call-sites de teste que já passam `relatoresPendentes: []` sem este campo precisa mudar.
+  relatoresPendentesTruncado?: boolean | null;
 }
 
 export function derivarMesaVista(input: MesaVistaInput) {
-  const { mesa, tramitacaoItens, pendenciasItens, pendenciasTotal, sliSessoes, relatoresPendentes } = input;
+  const {
+    mesa, tramitacaoItens, pendenciasItens, pendenciasTotal, sliSessoes, relatoresPendentes,
+    relatoresPendentesTruncado,
+  } = input;
 
   if (!mesa) {
     return {
@@ -103,7 +112,7 @@ export function derivarMesaVista(input: MesaVistaInput) {
         itens: [] as ItemBoardOut[],
       },
       despachos: {
-        relator: { estado: "indisponivel" as const, itens: [] as RelatorPendenteOut[] },
+        relator: { estado: "indisponivel" as const, itens: [] as RelatorPendenteOut[], truncado: false },
         distribuicao: { estado: "em-breve" as const },
         autografo: { estado: "em-breve" as const },
         ata: { estado: "em-breve" as const },
@@ -176,8 +185,9 @@ export function derivarMesaVista(input: MesaVistaInput) {
     despachos: {
       relator:
         relatoresPendentes !== null
-          ? { estado: "disponivel" as const, itens: relatoresPendentes }
-          : { estado: "indisponivel" as const, itens: [] as RelatorPendenteOut[] },
+          ? { estado: "disponivel" as const, itens: relatoresPendentes,
+              truncado: relatoresPendentesTruncado ?? false }
+          : { estado: "indisponivel" as const, itens: [] as RelatorPendenteOut[], truncado: false },
       distribuicao: { estado: "em-breve" as const },
       autografo: { estado: "em-breve" as const },
       ata: { estado: "em-breve" as const },

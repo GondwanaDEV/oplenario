@@ -90,6 +90,15 @@ export default function PaginaHomeVereador() {
               Não foi possível registrar a ciência: {erroCiencia}
             </p>
           )}
+          {/* Frente "truncamento-familia" — a MAIS GRAVE das 3 listas: cada `parecerId` cortado é uma
+              ciência que você não tem como dar (o eventoRef só existe nesta lista). AUTORITATIVO do
+              servidor, nunca deduzido de `vista.ciencias.length`. */}
+          {vista.cienciasTruncado && (
+            <p role="status" className="aviso-corte">
+              Mostrando as <b>{vista.ciencias.length}</b> ciências mais recentes — pode haver mais
+              esperando sua ciência fora desta lista.
+            </p>
+          )}
           {vista.ciencias.map((c) => (
             <CartaoCiencia key={c.parecerId} ciencia={c} onDarCiencia={() => darCiencia(c)} enviando={estadoCiencia === "enviando"} />
           ))}
@@ -99,6 +108,12 @@ export default function PaginaHomeVereador() {
       {vista.meusPareceres.aguardando.length > 0 && (
         <section aria-label="Meus pareceres">
           <h2 className="secao-tit">Meus pareceres</h2>
+          {vista.pareceresTruncado && (
+            <p role="status" className="aviso-corte">
+              Mostrando os <b>{vista.meusPareceres.aguardando.length + vista.meusPareceres.concluidos.length}</b> pareceres
+              mais recentes — pode haver mais fora desta lista.
+            </p>
+          )}
           {vista.meusPareceres.aguardando.map((p) => (
             <CartaoParecer key={p.id} parecer={p} token={token} />
           ))}
@@ -106,6 +121,12 @@ export default function PaginaHomeVereador() {
       )}
 
       <h2 className="secao-tit">Suas proposições</h2>
+      {vista.proposicoesTruncado && (
+        <p role="status" className="aviso-corte">
+          Mostrando as <b>{vista.minhasProposicoes.length}</b> proposições mais recentes — pode haver
+          mais fora desta lista.
+        </p>
+      )}
       {vista.minhasProposicoes.length === 0 ? (
         <p className="vazio">Nenhuma proposição sua ainda.</p>
       ) : (

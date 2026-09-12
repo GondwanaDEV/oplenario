@@ -57,6 +57,7 @@ describe("painel da Mesa — nenhuma chave de enum chega a tela", () => {
     const vista = {
       relator: {
         estado: "disponivel" as const,
+        truncado: false,
         itens: [{
           id: "r1",
           proposicaoId: "p5",
@@ -66,6 +67,7 @@ describe("painel da Mesa — nenhuma chave de enum chega a tela", () => {
           urnLex: "urn:lex:5",
           ementa: "Semana do Voluntariado",
           criadoEm: "2026-08-03T00:00:00Z",
+          indisponivel: false,
         }],
       },
       distribuicao: { estado: "em-breve" as const },

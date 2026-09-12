@@ -30,6 +30,21 @@ function parecer(over: Partial<ParecerResumoMeuPainelOut> = {}): ParecerResumoMe
   };
 }
 
+// Frente "truncamento-familia": os 3 `*Truncado` são obrigatórios no contrato — helper único evita
+// repetir `false` nos ~11 call-sites deste arquivo que não testam truncamento (só os testes dedicados
+// abaixo passam `true` explicitamente, via override).
+function painelBase(over: Partial<MeuPainelOut> = {}): MeuPainelOut {
+  return {
+    proposicoes: [],
+    proposicoesTruncado: false,
+    pareceres: [],
+    pareceresTruncado: false,
+    ciencias: [],
+    cienciasTruncado: false,
+    ...over,
+  };
+}
+
 function sessao(over: Partial<SessaoOut> = {}): SessaoOut {
   return {
     id: "s1",
@@ -60,21 +75,18 @@ const emDias = (d: number) => new Date(Date.now() + d * 86_400_000).toISOString(
 
 describe("derivarHome", () => {
   it("ordena minhas proposições mais-recente-primeiro", () => {
-    const painel: MeuPainelOut = {
+    const painel: MeuPainelOut = painelBase({
       proposicoes: [
         proposicao({ id: "antiga", atualizadoEm: "2026-01-01T00:00:00Z" }),
         proposicao({ id: "recente", atualizadoEm: "2026-06-01T00:00:00Z" }),
       ],
-      pareceres: [],
-      ciencias: [],
-    };
+    });
     const r = derivarHome(painel, []);
     expect(r.minhasProposicoes.map((p) => p.id)).toEqual(["recente", "antiga"]);
   });
 
   it("separa pareceres por estado: aguardando vs concluído (os 4 terminais)", () => {
-    const painel: MeuPainelOut = {
-      proposicoes: [],
+    const painel: MeuPainelOut = painelBase({
       pareceres: [
         parecer({ id: "aguardando", estado: "com_relator" }),
         parecer({ id: "aprovado", estado: "aprovado" }),
@@ -82,8 +94,7 @@ describe("derivarHome", () => {
         parecer({ id: "prejudicado", estado: "prejudicado" }),
         parecer({ id: "prazo-vencido", estado: "prazo_vencido" }),
       ],
-      ciencias: [],
-    };
+    });
     const r = derivarHome(painel, []);
     expect(r.meusPareceres.aguardando.map((p) => p.id)).toEqual(["aguardando"]);
     expect(r.meusPareceres.concluidos.map((p) => p.id)).toEqual([
@@ -95,9 +106,7 @@ describe("derivarHome", () => {
   });
 
   it("ciências pendentes passam intactas (o marcador 'para sua ciência' é a lista não-vazia)", () => {
-    const painel: MeuPainelOut = {
-      proposicoes: [],
-      pareceres: [],
+    const painel: MeuPainelOut = painelBase({
       ciencias: [
         {
           parecerId: "pc1",
@@ -109,7 +118,7 @@ describe("derivarHome", () => {
           ementa: "Ementa",
         },
       ],
-    };
+    });
     const r = derivarHome(painel, []);
     expect(r.ciencias).toHaveLength(1);
     expect(r.ciencias[0].parecerId).toBe("pc1");
@@ -120,24 +129,24 @@ describe("derivarHome", () => {
       sessao({ id: "mais-distante", agendadaPara: emDias(120) }),
       sessao({ id: "mais-proxima", agendadaPara: emDias(7) }),
     ];
-    const r = derivarHome({ proposicoes: [], pareceres: [], ciencias: [] }, sessoes);
+    const r = derivarHome(painelBase(), sessoes);
     expect(r.proximaSessao?.id).toBe("mais-proxima");
   });
 
   it("próxima sessão ignora datas passadas", () => {
     const sessoes = [sessao({ id: "passada", agendadaPara: emDias(-365) })];
-    const r = derivarHome({ proposicoes: [], pareceres: [], ciencias: [] }, sessoes);
+    const r = derivarHome(painelBase(), sessoes);
     expect(r.proximaSessao).toBeNull();
   });
 
   it("próxima sessão null quando não há sessão nenhuma", () => {
-    const r = derivarHome({ proposicoes: [], pareceres: [], ciencias: [] }, []);
+    const r = derivarHome(painelBase(), []);
     expect(r.proximaSessao).toBeNull();
   });
 
   it("próxima sessão ignora sessão sem agendada-para", () => {
     const sessoes = [sessao({ id: "sem-data", agendadaPara: null })];
-    const r = derivarHome({ proposicoes: [], pareceres: [], ciencias: [] }, sessoes);
+    const r = derivarHome(painelBase(), sessoes);
     expect(r.proximaSessao).toBeNull();
   });
 
@@ -149,13 +158,13 @@ describe("derivarHome", () => {
     const sessoes = [
       sessao({ id: "cancelada", estado: "nao_realizada", agendadaPara: emDias(7) }),
     ];
-    const r = derivarHome({ proposicoes: [], pareceres: [], ciencias: [] }, sessoes);
+    const r = derivarHome(painelBase(), sessoes);
     expect(r.proximaSessao).toBeNull();
   });
 
   it("próxima sessão ignora sessão ARQUIVADA mesmo com data futura", () => {
     const sessoes = [sessao({ id: "arquivada", estado: "arquivada", agendadaPara: emDias(7) })];
-    const r = derivarHome({ proposicoes: [], pareceres: [], ciencias: [] }, sessoes);
+    const r = derivarHome(painelBase(), sessoes);
     expect(r.proximaSessao).toBeNull();
   });
 
@@ -164,7 +173,7 @@ describe("derivarHome", () => {
       sessao({ id: "cancelada-mais-proxima", estado: "nao_realizada", agendadaPara: emDias(3) }),
       sessao({ id: "agendada-mais-distante", estado: "agendada", agendadaPara: emDias(30) }),
     ];
-    const r = derivarHome({ proposicoes: [], pareceres: [], ciencias: [] }, sessoes);
+    const r = derivarHome(painelBase(), sessoes);
     expect(r.proximaSessao?.id).toBe("agendada-mais-distante");
   });
 
@@ -172,8 +181,11 @@ describe("derivarHome", () => {
     const r = derivarHome(undefined, undefined);
     expect(r).toEqual({
       minhasProposicoes: [],
+      proposicoesTruncado: false,
       meusPareceres: { aguardando: [], concluidos: [] },
+      pareceresTruncado: false,
       ciencias: [],
+      cienciasTruncado: false,
       proximaSessao: null,
       sessaoAoVivo: null,
     });
@@ -190,7 +202,7 @@ describe("derivarHome", () => {
   // na lista — uma sessão AGENDADA (a mesma que também aparece como `proximaSessao`) não é "agora".
   it("sessão AGENDADA não conta como sessão ao vivo", () => {
     const sessoes = [sessao({ id: "s-agendada", estado: "agendada", agendadaPara: emDias(5) })];
-    const r = derivarHome({ proposicoes: [], pareceres: [], ciencias: [] }, sessoes);
+    const r = derivarHome(painelBase(), sessoes);
     expect(r.sessaoAoVivo).toBeNull();
     expect(r.proximaSessao?.id).toBe("s-agendada");
   });
@@ -200,7 +212,7 @@ describe("derivarHome", () => {
       sessao({ id: "s-aberta", estado: "aberta", agendadaPara: null }),
       sessao({ id: "s-futura", estado: "agendada", agendadaPara: emDias(10) }),
     ];
-    const r = derivarHome({ proposicoes: [], pareceres: [], ciencias: [] }, sessoes);
+    const r = derivarHome(painelBase(), sessoes);
     expect(r.sessaoAoVivo?.id).toBe("s-aberta");
     // as duas coisas coexistem: há sessão agora E há uma próxima agendada — é exatamente o caso real do
     // defeito #16 (uma ABERTA com orador na tribuna + uma AGENDADA para 14/09/2026, ao mesmo tempo).
@@ -209,7 +221,7 @@ describe("derivarHome", () => {
 
   it("sessão SUSPENSA também é sessão ao vivo (a Mesa retoma sem reabrir)", () => {
     const sessoes = [sessao({ id: "s-suspensa", estado: "suspensa", agendadaPara: null })];
-    const r = derivarHome({ proposicoes: [], pareceres: [], ciencias: [] }, sessoes);
+    const r = derivarHome(painelBase(), sessoes);
     expect(r.sessaoAoVivo?.id).toBe("s-suspensa");
   });
 
@@ -218,7 +230,33 @@ describe("derivarHome", () => {
       sessao({ id: "s-encerrada", estado: "encerrada", agendadaPara: null }),
       sessao({ id: "s-arquivada", estado: "arquivada", agendadaPara: null }),
     ];
-    const r = derivarHome({ proposicoes: [], pareceres: [], ciencias: [] }, sessoes);
+    const r = derivarHome(painelBase(), sessoes);
     expect(r.sessaoAoVivo).toBeNull();
+  });
+
+  // ---------- frente "truncamento-familia" ----------
+
+  it("os 3 *Truncado passam VERBATIM do painel — AUTORITATIVO do servidor, nunca deduzido de .length", () => {
+    // discordância deliberada: listas de 1 item cada, mas os 3 booleanos dizem 'truncado' — se
+    // `derivarHome` deduzisse do tamanho das listas, os 3 dariam `false` aqui.
+    const painel = painelBase({
+      proposicoes: [proposicao()],
+      proposicoesTruncado: true,
+      pareceres: [parecer()],
+      pareceresTruncado: true,
+      ciencias: [{ parecerId: "pc1", proposicaoId: "p1", tipo: "pl", ano: 2026, sequencial: 1, urnLex: "u", ementa: "X" }],
+      cienciasTruncado: true,
+    });
+    const r = derivarHome(painel, []);
+    expect(r.proposicoesTruncado).toBe(true);
+    expect(r.pareceresTruncado).toBe(true);
+    expect(r.cienciasTruncado).toBe(true);
+  });
+
+  it("painel ausente (fetch em voo/falhou) -> os 3 *Truncado vem false, nunca undefined/truthy por acidente", () => {
+    const r = derivarHome(undefined, undefined);
+    expect(r.proposicoesTruncado).toBe(false);
+    expect(r.pareceresTruncado).toBe(false);
+    expect(r.cienciasTruncado).toBe(false);
   });
 });

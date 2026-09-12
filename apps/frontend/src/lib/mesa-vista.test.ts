@@ -14,7 +14,7 @@ const mesaBase = {
   sessoes: { emCurso: 0, naoRealizadas: 1, porSituacao: [] },
   presencaResumo: { mediaPercentual: 78, sessoesConsideradas: 10, membrosDaCasa: 43 },
   esicCumprimento: { totalEncerrados: 49, cumpridosNoPrazo: 47, percentual: 96 },
-  relatoresPendentes: { itens: [] },
+  relatoresPendentes: { itens: [], truncado: false },
   lacunas: ["ciencia_convocacao", "assinatura_autografo", "incidente_grant_lgpd"],
 };
 
@@ -93,10 +93,30 @@ describe("derivarMesaVista", () => {
   it("despachos.relator com itens reais quando relatoresPendentes vem preenchido", () => {
     const v = derivarMesaVista({
       mesa: mesaBase, tramitacaoItens: [], pendenciasItens: [], pendenciasTotal: null, sliSessoes: [],
-      relatoresPendentes: [{ id: "1", proposicaoId: "p1", tipo: "pl", ano: 2026, sequencial: 51, urnLex: "u", ementa: "Arborização", criadoEm: "2026-07-01T00:00:00Z" }],
+      relatoresPendentes: [{ id: "1", proposicaoId: "p1", tipo: "pl", ano: 2026, sequencial: 51, urnLex: "u", ementa: "Arborização", criadoEm: "2026-07-01T00:00:00Z", indisponivel: false }],
     });
     expect(v.despachos.relator.estado).toBe("disponivel");
     expect(v.despachos.relator.itens).toHaveLength(1);
+  });
+
+  // ---------- frente "truncamento-familia" ----------
+
+  it("despachos.relator.truncado é AUTORITATIVO do servidor, não deduzido de contagem", () => {
+    // discordância deliberada: 1 item exibido, mas o servidor afirma que há mais fora da lista.
+    const v = derivarMesaVista({
+      mesa: mesaBase, tramitacaoItens: [], pendenciasItens: [], pendenciasTotal: null, sliSessoes: [],
+      relatoresPendentes: [{ id: "1", proposicaoId: "p1", tipo: "pl", ano: 2026, sequencial: 51, urnLex: "u", ementa: "Arborização", criadoEm: "2026-07-01T00:00:00Z", indisponivel: false }],
+      relatoresPendentesTruncado: true,
+    });
+    expect(v.despachos.relator.truncado).toBe(true);
+  });
+
+  it("despachos.relator.truncado ausente (card indisponível/fetch em voo) vira false, não deduzido", () => {
+    const v = derivarMesaVista({
+      mesa: mesaBase, tramitacaoItens: [], pendenciasItens: [], pendenciasTotal: null, sliSessoes: [],
+      relatoresPendentes: [],
+    });
+    expect(v.despachos.relator.truncado).toBe(false);
   });
 
   it("oQueVence une compliance.emAberto + pendenciasItens e ordena por venceEm crescente", () => {

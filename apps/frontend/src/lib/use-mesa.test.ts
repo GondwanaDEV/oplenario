@@ -9,7 +9,7 @@ const mesaFake = {
   sessoes: { emCurso: 0, naoRealizadas: 0, porSituacao: [] },
   presencaResumo: { mediaPercentual: 78, sessoesConsideradas: 10, membrosDaCasa: 43 },
   esicCumprimento: { totalEncerrados: 49, cumpridosNoPrazo: 47, percentual: 96 },
-  relatoresPendentes: { itens: [] },
+  relatoresPendentes: { itens: [], truncado: false },
   lacunas: ["ciencia_convocacao", "assinatura_autografo", "incidente_grant_lgpd"],
 };
 
@@ -73,6 +73,27 @@ describe("useMesa", () => {
     const { result } = renderHook(() => useMesa("tok"));
     await waitFor(() => expect(result.current.estado).toBe("pronto"));
     expect(result.current.relatoresPendentes).toBeNull();
+    expect(result.current.relatoresPendentesTruncado).toBeNull();
+  });
+
+  // ---------- frente "truncamento-familia" ----------
+
+  it("relatoresPendentesTruncado (o par autoritativo do card) chega ao estado do hook", async () => {
+    const mesaComCorte = { ...mesaFake, relatoresPendentes: { itens: [], truncado: true } };
+    global.fetch = vi.fn(async (url: string) => {
+      const corpo = url.includes("/paineis/mesa")
+        ? mesaComCorte
+        : url.includes("/paineis/tramitacao")
+          ? { itens: [] }
+          : url.includes("/paineis/pendencias")
+            ? { pendencias: [], pendenciasTotal: 0 }
+            : { sessoes: [] };
+      return { ok: true, json: async () => corpo } as Response;
+    }) as unknown as typeof fetch;
+
+    const { result } = renderHook(() => useMesa("tok"));
+    await waitFor(() => expect(result.current.estado).toBe("pronto"));
+    expect(result.current.relatoresPendentesTruncado).toBe(true);
   });
 
   // Fatia "truncamento-familia": GET /paineis/pendencias passa a publicar pendenciasTotal (o par
@@ -116,7 +137,7 @@ describe("useMesa", () => {
       sessoes: { "em-curso": 0, "nao-realizadas": 1, "por-situacao": [] },
       "presenca-resumo": { "media-percentual": 78, "sessoes-consideradas": 10, "membros-da-casa": 43 },
       "esic-cumprimento": { "total-encerrados": 49, "cumpridos-no-prazo": 47, percentual: 96 },
-      "relatores-pendentes": { itens: [] },
+      "relatores-pendentes": { itens: [], truncado: false },
       lacunas: ["ciencia_convocacao"],
     };
     global.fetch = vi.fn(async (url: string) => {
