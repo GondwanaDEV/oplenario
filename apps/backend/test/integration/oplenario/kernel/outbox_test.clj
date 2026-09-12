@@ -29,12 +29,12 @@
 
 (deftest emitir-grava-evento-pendente-no-outbox
   (let [bus (outbox/bus)
-        ev  (eventos/evento "proposicao.protocolada" (random-uuid) {:numero 7})]
+        ev  (eventos/evento "kernel.teste.evento-qualquer" (random-uuid) {:numero 7})]
     (jdbc/with-transaction [tx *ds*]
       (eventos/emitir! bus tx ev))
     (let [rows (jdbc/execute! *ds* ["SELECT tipo, idempotency_key, processed_at FROM shared.outbox"])]
       (is (= 1 (count rows)) "uma linha no outbox")
-      (is (= "proposicao.protocolada" (:outbox/tipo (first rows))) "tipo gravado")
+      (is (= "kernel.teste.evento-qualquer" (:outbox/tipo (first rows))) "tipo gravado")
       (is (nil? (:outbox/processed_at (first rows))) "nasce pendente (processed_at NULL)"))))
 
 (deftest emitir-respeita-a-atomicidade-da-tx
@@ -51,9 +51,9 @@
 (deftest relay-entrega-uma-vez-e-marca-processado
   (let [bus       (outbox/bus)
         recebidos (atom [])
-        registro  (outbox/registrar {} "busca" "proposicao.protocolada"
+        registro  (outbox/registrar {} "busca" "kernel.teste.evento-qualquer"
                                     (fn [_tx ev] (swap! recebidos conj ev)))
-        ev        (eventos/evento "proposicao.protocolada" (random-uuid) {:numero 7})]
+        ev        (eventos/evento "kernel.teste.evento-qualquer" (random-uuid) {:numero 7})]
     (jdbc/with-transaction [tx *ds*] (eventos/emitir! bus tx ev))
     (is (= 1 (outbox/drenar! *ds* registro)) "drena 1 evento")
     (is (= 1 (count @recebidos)) "consumidor recebeu uma vez")
