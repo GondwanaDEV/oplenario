@@ -2135,3 +2135,193 @@ comissão. O ato que distribui (`iniciar-parecer!` com comissão+relator) não t
 GET/PATCH/emissão de parecer e **nada que crie um**. O `<EmBreve>` está certo; o comentário
 desatualizado em `despachos-da-mesa.tsx:60-63` é que engana.
 
+
+---
+
+# 🔎 Exploratório de fluxo · Jornadas do PRESIDENTE e do CIDADÃO (12/09/2026)
+
+**Método:** 1 workflow, as duas jornadas em PARALELO (personas e módulos disjuntos), cada uma serial
+por dentro (3 pernas). 176 agentes, 0 erros. Refutação adversarial: **3 lentes em crítico/alto, 2 em
+médio/baixo** — economia declarada, não teto silencioso. **52 confirmados · 15 derrubados.**
+
+## O veredito
+
+| Jornada | Perna | Completou |
+|---|---|---|
+| presidente | 1/3 — O Dashboard da Mesa (Antônio Carlos Ferreira, Presiden | ❌ |
+| presidente | 2/3 — Conceder acesso (o poder de admin_ente), Antônio Carlo | ✅ |
+| presidente | 3/3 — Votar, e a integridade do voto (Antônio Carlos Ferreir | ✅ |
+| cidadao | Perna 1/3 — O portal, de fora (Roberta Costa Aguiar, cidadã, | ✅ |
+| cidadao | Perna 2/3 — Acompanhar (Roberta Costa Aguiar, cidadã) | ❌ |
+| cidadao | Perna 3/3 — e-SIC e Ouvidoria: cobrar resposta (Roberta Cost | ❌ |
+
+## Os 6 críticos
+
+### O Presidente da Mesa nao consegue abrir o Dashboard da Mesa (403 por papel)
+
+Com os meus papeis reais (vereador + admin_ente), GET /paineis/mesa devolve HTTP 403 {"erro":"autorizacao negada"} e a tela mostra 'Nao foi possivel carregar o Dashboard da Mesa'. As 4 rotas de /paineis/* estao gateadas em (it/exige-papel "secretario") — src/oplenario/paineis/diplomat/http/in.clj:134-144. O mesmo token e recusado em /paineis/pendencias, /paineis/tramitacao, /paineis/sli/sessoes, /compliance/painel e /legislativo/proposicoes; so /meu/sessao-atual e /meu/notificacoes respondem 200. O papel admin_ente, que e o papel de administrador da Casa, nao abre nada disto.
+
+**Reprodução:** `curl -s -w '%{http_code}' -H 'Authorization: Bearer {"identidade-id":"cb2a1c00-8a25-48f2-9803-983272a719de","ente-id":"10000000-0000-0000-0000-000000000001","papeis":["vereador","admin_ente"]}' http://localhost:8888/paineis/mesa  ->  403 {"erro":"autorizacao negada"}. Mesmo token com "papeis":["secretario"] -> 200 com payload completo. Na interface: http://localhost:3000/paineis/mesa?token=<urlenc`
+
+### O denominador legal vem do corpo do request: o mesmo placar dá 'rejeitada' ou 'aprovada' conforme o número que o cliente mandar — e a aprovação forjada destrava o autógrafo ao Prefeito
+
+Duas votações idênticas na mesma sessão — mesma matéria-tipo, mesmo quorum 'maioria_absoluta', mesmos 3 sim / 0 não. A encerrada com base-membros 17 (o número real de cadeiras) gravou 'rejeitada'. A encerrada com base-membros 1 gravou 'aprovada'. O campo é do corpo do POST de encerramento, e o schema (EncerrarVotacao) o aceita como :int sem piso — base-membros -2 com ZERO voto também grava 'aprovada'. A aprovação forjada não fica contida na votação: POST /legislativo/proposicoes/55e7e165.../autografo aceitou-a e emitiu o autógrafo nº 8/2026 para o 'Prefeito Municipal de Fortaleza', com tramitação executiva 'aguardando'. Um projeto de lei que legalmente foi REJEITADO (3 sim de 17, precisa de 9) está a caminho da sanção. O carry já está declarado em legislativo/controllers.clj:505-511 como s
+
+**Reprodução:** `1) POST /sessoes/:id/votacoes com quorum-tipo maioria_absoluta; 2) registrar 3 votos 'sim' pela rota da Mesa; 3) POST /sessoes/:id/votacoes/:vid/encerramento -d '{"lock-version":0,"base-membros":17}' -> 200 resultado 'rejeitada'; 4) repetir tudo numa votação gêmea e encerrar com '{"lock-version":0,"base-membros":1}' -> 200 resultado 'aprovada'; 5) POST /legislativo/proposicoes/<a mesma proposicao>`
+
+### A rota da Mesa aceita voto de quem não é vereador da Casa — não há FK nem validação contra o roster
+
+POST /sessoes/:id/votacoes/:vid/votos com vereador-id 11111111-2222-3333-4444-555555555555 (um UUID que eu inventei, inexistente em cadastros.vereador) respondeu 201 e gravou a linha. Esse voto entrou no total_sim da apuração. \d legislativo.votos confirma: as únicas FKs são (ente_id, votacao_id); vereador_id não tem FK nem CHECK, e a borda não consulta o roster. Combinado com o achado do denominador, um secretário comprometido fabrica votos E fabrica o denominador — nada no sistema o contradiz.
+
+**Reprodução:** `POST http://localhost:8888/sessoes/1fe82cbb-5bab-4939-b116-343bbf67b87b/votacoes/7aea5979-54d7-4c63-9fd5-608292ac91f8/votos -H 'Authorization: Bearer <token secretario>' -d '{"voto":"sim","vereador-id":"11111111-2222-3333-4444-555555555555"}' -> 201. Depois: set app.ente_id='...'; select vereador_id, voto from legislativo.votos where votacao_id='7aea5979-54d7-4c63-9fd5-608292ac91f8' — a linha fant`
+
+### VITRINE: os 2 votos ilegítimos estão publicados nominalmente no portal público
+
+Otávio Monteiro (ausente JUSTIFICADO na sessão, atestado médico registrado às 21:47:59) e Thiago Bezerra (ZERO registro de presença na sessão) aparecem com voto nominal em PL 016/2026 nos seus perfis públicos, sem login. Pior: a página de Thiago diz 'Presença em sessões: 0 de 3 — Compareceu a 0 das 3 sessões com registro de presença' e, três blocos abaixo, 'Como votou: PL 016/2026 · 12/09/2026 — A favor'. A própria página publica a prova de que o voto é impossível. E os dois votos compõem a proclamação: 9 sim / 5 não / 3 abstenção; sem eles seria 8 / 4 / 3.
+
+**Reprodução:** `1) docker exec oplenario-postgres-1 psql -U oplenario -d oplenario -c "set app.ente_id='10000000-0000-0000-0000-000000000001'; select vereador_id,voto,ocorrido_em from transparencia.voto_parlamentar where votacao_id='440b44c2-3782-48c4-838b-d4f837276ac9' order by ocorrido_em;" -> 17 linhas, as 2 últimas são 5df9709e 'nao' 21:54:16 e 681321a3 'sim' 21:54:26. 2) mesma query em sessoes.presenca_event`
+
+### Não existe nenhum jeito de COMEÇAR a acompanhar uma matéria pela interface
+
+Nenhuma tela do portal tem botão "Acompanhar". Na ficha pública de PL 16 os únicos botões da página são '☰' e '☾Escuro'. Em todo o FE não há uma única chamada a POST /portal/materias/:id/acompanhar. A rota do backend existe e funciona (201 {"estado":"ativo"}). Pior: a própria tela /acompanhamentos, no estado vazio, instrui "Ao ver uma proposição no portal público, use 'Acompanhar' para recebê-la aqui" — manda a pessoa usar um botão que não existe em lugar nenhum. O código de secao-perfil-vereador.tsx documenta a omissão ("subscrição é autenticada e consent-gated, e o IdP gov.br não existe"), mas essa decisão nunca chegou à cópia da tela do cidadão.
+
+**Reprodução:** `Abrir http://localhost:3000/portal/casa/10000000-0000-0000-0000-000000000001/materias/4eed3430-11f8-42e3-b558-65f92bfa5692 e rodar no console [...document.querySelectorAll('button')].map(b=>b.textContent.trim()) → ["☰","☾Escuro"]. Depois: grep -rn 'acompanhar' apps/frontend/src --include=*.tsx | grep -v test → só e-SIC, rodapé e comentários.`
+
+### A resposta a um pedido LAI é write-only: nada no produto a devolve ao cidadão
+
+A secretária respondeu ao pedido ESIC-2026-000004; o corpo foi gravado em participacao.resposta_esic. Nenhuma rota do produto devolve esse corpo. A rota pública devolve {protocolo, estado:'respondido', dias-restantes}; a rota do dono devolve {id, protocolo, assunto, descricao, estado, recibo-em, vence-em, dias-restantes} — nenhum campo de resposta. As funções db/resposta_esic/listar-do-pedido e listar-do-recurso existem e têm ZERO chamadores em src/ e em test/. Mesmo padrão em resposta_titular (LGPD) e resposta_ouvidoria: só inserir!, nunca ler. Na tela a cidadã vê 'Situação: Respondido' e mais nada.
+
+**Reprodução:** `1) POST /portal/esic/pedidos (token cidadão) → ESIC-2026-000004, id 4093f9a8-3931-4cd1-ac26-eb42d2cc594f. 2) POST /esic/pedidos/4093f9a8-.../resposta (token secretário) → 200 {respondida-em}. 3) SELECT left(corpo,80) FROM participacao.resposta_esic → o texto está lá. 4) GET /portal/casa/<ente>/esic/acompanhar/ESIC-2026-000004 → {"protocolo":"ESIC-2026-000004","estado":"respondido","dias-restantes"`
+
+## Altos
+
+- **DEFEITO** · 403 permanente e apresentado como falha transitoria, e a pagina de erro nao tem saida
+- **DEFEITO** · Obrigacao VENCIDA ha 13 dias aparece na lista como 'vence em 0 dia(s)'
+- **DEFEITO** · '25 proposicoes em tramitacao' conta as aprovadas e as arquivadas — o numero verdadeiro e 16
+- **BURACO** · admin_ente não consegue abrir a única tela que hospeda "Conceder acesso"
+- **BURACO** · Não há como tirar o acesso de ninguém — nem rota, nem tela
+- **BURACO** · Só o papel `vereador` é concedível: não há caminho de produto para dar acesso a um servidor da Casa
+- **DEFEITO** · Ausente com justificativa deferida não vota pelo celular (403) mas a Mesa vota por ele (201) — as duas portas do voto têm regras diferentes
+- **DEFEITO** · Encerrar votação de maioria absoluta sem base-membros dá 500 e deixa a votação presa aberta — e o campo é declarado OPCIONAL no contrato
+- **BURACO** · Com duas sessões abertas, o cockpit do vereador vai para a mais ANTIGA e não há como escolher a outra
+- **DEFEITO** · O cockpit pede 'Confirme sua presença' a quem a Mesa já registrou como presente — a presença não é recuperada na carga da tela, só chega por SSE
+- **BURACO** · Não existe tramitação pública — a faixa é derivada de um só campo, e a copy promete o que a página não tem
+- **BURACO** · Não existe página pública de votações — o resultado da votação não aparece em lugar nenhum
+- **BURACO** · O perfil público do vereador existe mas é inalcançável — nenhum link, nenhuma lista, só o UUID
+- **BURACO** · Não existe seção de leis/normas no portal — 4 leis publicadas, todas da semente, e nenhuma porta para elas
+- **BURACO** · Não há dados abertos nem API pública divulgada
+- **BURACO** · Nenhum item permanente do art. 8º §1º da LAI está publicado (Fortaleza não tem a dispensa de ≤10k)
+- **BURACO** · A cidadã não tem como DEIXAR de acompanhar pela interface — retirada de consentimento só por curl
+- **BURACO** · /acompanhamentos não é alcançável por navegação: zero links em todo o produto, e o único link rotulado "Acompanhar" é uma âncora morta
+- **BURACO** · A cidadã não tem porta de entrada: /entrar manda "usar o link que a sua Câmara enviou" e não oferece gov.br
+- **DEFEITO** · O servidor recebe 403 ao ler o pedido e-SIC que precisa responder — responde às cegas
+- **BURACO** · O protocolo LGPD é um número morto: nenhuma rota o aceita
+- **BURACO** · Responder um pedido não notifica ninguém — a cidadã nunca fica sabendo
+
+## Médios e baixos
+
+- `medio` **DEFEITO** · O grafico 'Carga por estagio' sai cinzento: 5 dos 6 segmentos caem no fallback de cor
+- `medio` **BURACO** · Zero acoes no painel inteiro: nada e clicavel, nem sequer para ver o detalhe
+- `medio` **BURACO** · Ha uma sessao EM CURSO agora e o Dashboard da Mesa nao diz uma palavra sobre isso
+- `medio` **BURACO** · As remessas ao TCE nao aparecem no painel — a de 2026-09 aceita ontem e invisivel
+- `medio` **DEFEITO** · 'Proxima sessao' escolhe a primeira agendada na ordem do servidor, nao a mais proxima na data
+- `baixo` **DEFEITO** · Rotulo cru na cara do utilizador: 'Obrigacao TCE · remessa_mensal_sim'
+- `baixo` **DEFEITO** · Acentos em falta no rotulo de duas familias de prazo
+- `baixo` **ATRITO** · Percentuais de vitrine sem denominador: '91% de presenca' vem de 2 sessoes, '100% LAI' de 2 pedidos
+- `baixo` **ATRITO** · Manchete do cartao-vitrine escrita com plurais entre parenteses e hora com segundos
+- `medio` **DEFEITO** · 403 de autorização aparece como falha passageira: "Tente novamente em instantes"
+- `medio` **BURACO** · Nada mostra quem já tem acesso — a concessão é cega
+- `baixo` **ATRITO** · 400 "requisicao invalida" não diz o que está errado
+- `medio` **DEFEITO** · A home do vereador diz 'A sessão está acontecendo agora' e mostra, no mesmo cartão, a data da PRÓXIMA sessão (19 set.)
+- `baixo` **ATRITO** · O 403 do voto negado não diz por quê, e o 400 do autógrafo duplicado diz só 'requisicao invalida'
+- `medio` **DEFEITO** · O e-SIC ensina um formato de protocolo que o sistema nunca emite
+- `medio` **DEFEITO** · A copy manda o cidadão para seções que não existem
+- `baixo` **ATRITO** · Três itens diferentes do menu apontam para a mesma âncora de 'Em breve'
+- `baixo` **ATRITO** · URN LexML crua impressa como texto na cara do cidadão
+- `baixo` **ATRITO** · A raiz do site não leva ao Portal do Cidadão
+- `medio` **DEFEITO** · Rótulo cru (enum do banco) no texto que vai para o cidadão: "PROJETO_LEI 16/2026" e "Nova fase: em_pauta"
+- `medio` **ATRITO** · A lista de acompanhamentos é um beco sem saída: nenhum item abre a matéria
+- `medio` **DEFEITO** · O anel de prazo continua contando 'faltam 20 dias' num pedido já Respondido
+- `medio` **BURACO** · A tela promete 'prorrogável por mais 10' e não existe prorrogação de e-SIC
+- `medio` **ATRITO** · Não existe 'os meus pedidos': o cidadão precisa guardar cada protocolo e cada UUID
+
+## O que a refutação DERRUBOU
+
+- ~~[baixo] Sessao marcada para 26/09 foi aberta e encerrada a 12/09 e desapareceu do painel sem sinal~~ — Refutado por três motivos independentes, qualquer um deles suficiente.  | # | Motivo | Peso | |---|---|---| | 1 | **É a jornada paralela.** `a36ffecc` foi criada e conduzida por `dbf001fc` = Marina Alencar Freire, papel 
+- ~~[critico] O acesso é concedido e o admin lê 500 "erro interno" — e o retry falha para sempre~~ — REFUTADO — o instrumento mediu a si mesmo nas duas metades que davam "crítico".  | Alegação do achado | Veredito | |---|---| | A escrita commita antes do IdP e sobrevive ao 500 | **Confirmado** (código + timestamp no ban
+- ~~[alto] Conduzir uma votação não tem tela nenhuma: agendar, abrir, chamar, pautar, abrir votação e encerrar são todos ~~ — Achado JÁ REGISTADO, e em três lugares independentes — o próprio texto do achado admite isso ("confirma pela jornada o que o ledger de escrita já mediu"). Não há nada de novo: nem uma rota, nem um número, nem uma consequ
+- ~~[medio] O portal público mostra 'aguardando pauta' para a matéria cujo autógrafo já foi expedido ao Prefeito~~ — A observação é reproduzível e NÃO é artefato de instrumento — mas a causa alegada é falsa, e com ela cai o defeito como reportado.  **O que se confirma (não é ferramenta):** o GET público devolve `aguardando_pauta` agora
+- ~~[baixo] Duas armadilhas de instrumento nesta perna — registradas para a próxima não as pagar~~ — Os dois itens são o instrumento a medir-se a si mesmo, e ambos reproduzem exatamente como descrito — nenhum toca o produto. (1) O `for i in $IDS` do zsh: reproduzi e imprimiu UMA linha (`LINHA a b c`), confirmando que o 
+- ~~[alto] O portal informa 'Aguardando pauta' sobre um projeto já APROVADO em plenário~~ — O achado atribui ao produto a consequência de dois atos que a própria jornada exploratória não executou, e o mecanismo que ele afirma é desmentido pelo dado.  1. "Congela e nunca mais se move" é FALSO. A projeção `transp
+- ~~[baixo] A data de publicação da lei contradiz a própria URN na mesma linha (origem: a semente)~~ — É o instrumento a medir-se a si mesmo, e a premissa da "contradição" ainda por cima lê mal a URN.  1. A data da URN NÃO é a data de publicação — é a data de promulgação, por definição LexML e por docstring do produto. `a
+- ~~[alto] A notificação é gerada corretamente e nunca é entregue: entregar-pendentes! não tem chamador~~ — Não é achado novo: é um carry de infra `[GAP]` já medido, nomeado e documentado — em três registos independentes, dois deles nomeando literalmente o worker e a ausência de agendador. A observação factual está certa (o gr
+- ~~[alto] O fan-out do cidadão emite canal "email" fixo, então a inbox in-app do produto nunca recebe a notificação dele~~ — Refutado como DEFEITO: o comportamento observado é o contrato documentado, e não uma falha. (a) `:canal "email"` no fan-out do cidadão é a decisão escrita no schema do evento — "email" = fan-out do cidadão (F7 E2), "in_a
+- ~~[baixo] A URL pública do portal exige o UUID do ente; um slug legível devolve 400~~ — O núcleo do achado — "falha silenciosa: 200 com página vazia, só o rodapé, nenhuma mensagem de erro" — NÃO reproduz. Reabri exatamente a mesma URL num browser limpo e esperei o ciclo de fetch: o `<main>` renderiza o esta
+- ~~[critico] Nenhuma das escritas do cidadão (e-SIC, LGPD, ouvidoria, comentário) tem botão em tela~~ — Achado já registado em quatro lugares independentes, e não como omissão: como escopo DIFERIDO por decisão. (1) `docs/13-plano-track-fe.md` §10 (Onda A / A2 — Portal do cidadão) declara textualmente o escopo entregue como
+- ~~[alto] O portal afirma que a Ouvidoria 'ainda [não tem] rota pública' — e ela existe e funciona~~ — O achado equipara "rota pública" (vocabulário do próprio componente = destino navegável no portal Next) a "endpoint HTTP sem auth", e mede o backend para reprovar um texto que fala do que o cidadão consegue fazer. Três f
+- ~~[medio] O recibo não diz a data-limite, e o produto nunca mostra a data de vencimento~~ — O achado mediu **uma rota só** — a pública anônima — e concluiu sobre o produto inteiro. A afirmação central ("o `vence_em` chega até `GET /paineis/pendencias` do servidor, mas **nunca ao cidadão**") é factualmente falsa
+- ~~[baixo] Nada no portal distingue e-SIC de Ouvidoria para quem não conhece a lei~~ — Refutado por duas vias independentes. (a) A premissa factual está errada: o texto de desambiguação existe dos dois lados — o card Ouvidoria nomeia o objeto ("Reclamação, denúncia, elogio ou sugestão") e o prazo (30 dias,
+- ~~[baixo] Erro 400 genérico não diz qual campo nem quais valores são aceitos~~ — O comportamento reproduz, mas o achado está mal localizado: não é atrito da rota LGPD, é o contrato de erro GLOBAL do serviço, decidido e escrito de propósito. Descartei o instrumento primeiro (não é ele): os controles d
+
+## A matriz de coerência entre as TRÊS jornadas, e a recomendação
+
+## (A) O que as duas jornadas não tentaram — e devia
+
+### Caminho infeliz: a família inteira do DESFAZER não foi varrida
+
+As jornadas só empurraram o processo para a frente. Nenhuma tentou voltar atrás — e é aí que uma câmara real vive (voto errado, matéria retirada de pauta, sessão anulada).
+
+| Não tentado | Por que importa | Evidência no código |
+|---|---|---|
+| Anular/corrigir um voto já registrado | A jornada 2 fabricou 2 votos ilegítimos e não há como removê-los | `estados-votacao-terminais` existe; nenhuma rota de anulação em `legislativo/diplomat/http/in.clj:755-778` |
+| Retirar matéria de pauta, cancelar protocolo, revogar autógrafo | "Não há revogação de acesso" foi achado; a família não foi generalizada | — |
+| Encerrar a MESMA votação de duas abas (`lock-version` obsoleta) | O contrato expõe `lock-version` e ninguém mandou uma versão velha | `controllers.clj:512` (checa terminal, não versão) |
+| Votar depois da sessão fechada / votação encerrada | Os 409 estão escritos e nunca foram exercidos ao vivo | `controllers.clj:503` `:conflito/sessao-fechada` |
+| Votação **secreta** e **simbólica** no palco | `secreta` é a única guarda de sigilo do portal público, e ela nunca correu | `logic.clj:60`; a guarda é o `(when-let [vid (:vereador-id payload)]` em `transparencia/components/repositorio.clj:180` — parece correta, mas é alegação até ser exercida |
+| Entrada suja: ementa de 10k, emoji, `<script>`, aspas, CPF inválido, mandato com datas invertidas | Só se testou forma (schema), nunca conteúdo | — |
+| Relógio andar: e-SIC vencer de verdade, prorrogação, recurso | O anel de prazo e o painel `o-que-vence` só foram vistos parados | — |
+| SSE cair no meio da votação | A jornada achou "presença não recuperada na carga"; ninguém desligou o canal no meio | memória `oplenario-cockpit-recuperacao` (o telão da Mesa tem o mesmo buraco) |
+| A jornada inteira num **segundo ente** | Só houve sonda de token forjado. O relay é UM SÓ para todos os tenants | memória `oplenario-relay-poison` |
+
+### O que só se vê OLHANDO — e não se olhou
+
+| Classe | Achado que a leitura do código já denuncia |
+|---|---|
+| **Fuso** | `apps/frontend/src/app/(interno)/paineis/mesa/proxima-sessao-rail.tsx:34` usa `new Date(...).toLocaleString("pt-BR")` **sem `timeZone`** → o Dashboard da Mesa imprime o relógio do NAVEGADOR, não o da Casa. O projeto já cravou `FUSO_DA_CASA = "America/Fortaleza"` em `apps/frontend/src/lib/calendario-vista.ts:102`, e `apps/frontend/src/lib/perfil-vereador-vista.test.ts:600` já registra o mesmo carry no perfil público do vereador. Nenhuma jornada comparou hora exibida × hora da Casa |
+| **Zero é verdade ou é projeção morta?** | "Presença em sessões: 0 de 3" no perfil público foi *lido*, não *julgado*. Idem os 4 cartões que podem devolver o sentinela `{:indisponivel true}` (`paineis/adapters/out/mesa.clj`) — ninguém forçou o sentinel para ver como o FE o desenha |
+| **Link morto** | Foram achados pontualmente (âncora morta, 3 itens do menu → mesma âncora). Nunca houve varredura de todos os `href` de cada página |
+| **Impressão** | `/sessoes/[id]/folha` e o artefato "DO-lite" são artefatos congelados HTML+PDF e ninguém abriu o PDF |
+| **Telemóvel** | O cockpit é explicitamente "o celular do vereador" e as três jornadas correram em desktop |
+| **Tema escuro + AA composto** | "O gráfico sai cinzento" foi visto num tema só; o protocolo do próprio projeto exige medir AA em pixel composto, um tema por chamada |
+| **Número que muda entre telas** | Viu-se percentual sem denominador; não se viu o inverso — casar os "25 em tramitação" do painel contra a lista interna de proposições |
+
+---
+
+## (B) Coerência entre as três jornadas
+
+Onde o mesmo facto aparece diferente. Esta é a matriz que nenhum teste por módulo pega.
+
+| # | O facto | Servidora | Presidente | Cidadã | O defeito que só aparece no cruzamento |
+|---|---|---|---|---|---|
+| 1 | **A PL 16 andou** | Protocolou e moveu | Vê o pipeline; "25 em tramitação" inclui aprovadas e arquivadas (verdadeiro: 16) | Ficha diz só "Aguardando pauta" | O portal público expõe **um único campo** — `transparencia.models.materia` só tem `:estado` — e esse campo é `proposicoes.estado`, que o próprio projeto declarou **MORTO** (texto livre por câmara). O cidadão vê o campo que a engenharia proibiu de usar para gatear; o presidente vê um pipeline construído em cima dele |
+| 2 | **A votação** | Conduziu | Votou | Vê os **votos nominais individuais** no perfil do vereador; **não existe página pública de votação** | Está invertido: o dado sensível (quem votou o quê) é público, o facto institucional (o resultado) não é. `transparencia/diplomat/http/in.clj:160-192` não tem nenhuma rota de votação |
+| 3 | **Os 2 votos ilegítimos** (UUID fora do roster + ausente justificada votada pela Mesa) | Nem sabe; não há rota de anulação | Recebeu 201 nos dois | **Publicados nominalmente no portal** | `transparencia/components/repositorio.clj:179` projeta `voto.registrado` **sem nenhuma verificação de roster**. A projeção confia no emissor e o emissor não valida. Aceito sem validação num módulo, publicado sem validação noutro, incorrigível num terceiro |
+| 4 | **A aprovação forjada → autógrafo nº 8/2026 ao Prefeito** | Morreu antes: promulgar/publicar não tem rota | 201, autógrafo emitido | Portal diz `aguardando_pauta` | Três verdades incompatíveis **simultâneas** sobre a mesma matéria: o Prefeito recebeu, o portal diz que ela espera pauta, e a Casa não tem como concluir o ciclo. O código **conhece** o risco e classificou-o MEDIUM (`legislativo/controllers.clj:505-511`, "CARRY DE SEGURANCA sec MEDIUM-1"), com a mitigação declarada "gate de papel `secretario`". A jornada mostra que a classificação por módulo estava errada: o mesmo papel que fabrica a aprovação emite o autógrafo, e o resultado sai da Casa |
+| 5 | **Há uma sessão em curso AGORA** | Conduziu-a | O Dashboard da Mesa **não diz uma palavra** | O portal público não tem sessões | O rail faz `lista.find(s => s.situacao === "agendada")` (`proxima-sessao-rail.tsx:25`) enquanto o rollup `sli-sessao` já traz `em_curso`. Pior: a **mesma pessoa**, na home de vereador, lê "A sessão está acontecendo agora" com a data da próxima ao lado. Invisível para a Mesa, contraditório para o vereador, inexistente para o cidadão |
+| 6 | **Duas sessões abertas ao mesmo tempo** | Conduzira a ...0211 | Abriu a segunda; o cockpit foi para a mais antiga | — | Determinístico, não aleatório: `paineis/db/sli_sessao.clj:136-139` ordena abertas-primeiro-mais-antiga-primeiro e `minha-sessao-atual` pega a PRIMEIRA (`paineis/diplomat/http/in.clj:42-50`). O invariante "uma sessão em curso por Casa" não existe em lado nenhum, e nenhuma das três personas consegue perceber que há duas |
+| 7 | **Remessa ao TCE 2026-09 aceita** | Não conseguiu gerar (sem rota) | Painel não mostra remessa nenhuma | — | `paineis/diplomat/consumers.clj:16-29`: `tipos-consumidos` não tem **um único** evento de compliance/remessa. O argumento comercial nº 3 (confiança operacional / TCE) não tem representação no painel de quem compra |
+| 8 | **As 4 leis publicadas** | Não consegue publicar norma nova | — | Nenhuma porta no portal | O backend **está pronto**: `/portal/casa/:ente/legislacao`, `/legislacao/:norma_id` e `/legislacao/:norma_id/artefato` (`transparencia/diplomat/http/in.clj:169-180`). O FE tem 4 páginas públicas e nenhuma é legislação. A coisa que o cidadão procura numa câmara tem API, não tem tela, e não tem como ganhar novas |
+| 9 | **A resposta ao pedido e-SIC** | Respondeu (às cegas: 403 ao ler o teor) | Cartão de orgulho: **"100% LAI"** | Nunca recebe; o texto da resposta não é devolvido por nenhuma rota | O par mais grave da matriz: o **mesmo pedido** conta como CUMPRIDO na vitrine do decisor político e como SEM RESPOSTA para a pessoa. O painel que vende compliance mede o ato interno, não a entrega |
+| 10 | **O Presidente é barrado** | — | 403 no dashboard **e** 403 em conceder acesso | — | Uma causa, não duas: `kernel/autorizacao.clj:47` `exige-papel!` é papel **único**, sem OR — não existe `exige-algum-papel!`. Todas as rotas de `paineis` e a lista de `cadastros` exigem literalmente `"secretario"`. A jornada registrou como dois BURACOS aquilo que é uma primitiva em falta |
+
+---
+
+## (C) A menor mudança que mais aumenta o valor demonstrável
+
+**Criar `exige-algum-papel!` no kernel e aplicá-lo às rotas de LEITURA do Presidente da Mesa** — as 4 de `paineis` (`/paineis/mesa`, `/pendencias`, `/tramitacao`, `/sli/sessoes`) e a lista de `cadastros/vereadores` — aceitando `#{"secretario" "admin_ente"}`.
+
+**Motivo.** É a única mudança em que uma porta trancada vira produto funcionando sem escrever domínio novo: uma função em `apps/backend/src/oplenario/kernel/autorizacao.clj` mais cinco sítios de rota. Zero migration, zero read-model, zero decisão de domínio pendente. E o dado já está todo lá — a própria jornada provou-o ao re-medir com o token da secretária: os 7 cartões renderizam, o payload vem completo. Hoje o produto tem o painel construído e o comprador não consegue vê-lo.
+
+Vale mais do que as alternativas porque é a **porta de entrada do decisor político**, o público que aprova a compra e cuja jornada morreu no primeiro passo (linha 10 da matriz, duas vezes). Um número errado no painel ainda se demonstra e corrige na frente do cliente; um 403 apresentado como "Tente novamente em instantes" não tem demo nenhuma.
+
+**Uma ressalva, não uma segunda recomendação:** o denominador forjado (linha 4) não é candidato a esta pergunta — não acrescenta valor demonstrável, é um portão. Mas nenhuma demo externa deve correr antes dele, porque a aprovação fabricada já sai da Casa em direção ao Prefeito e já se publica no portal.
