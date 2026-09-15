@@ -62,9 +62,15 @@ async function duploClique(page: Page, botao: Locator) {
 async function criarVereadorPelaTela(page: Page, rotulo: string): Promise<string> {
   const carimbo = Date.now();
   await page.goto(e1.urlLista, { waitUntil: "domcontentloaded", timeout: 90_000 });
-  await page.getByRole("button", { name: "Novo vereador" }).click();
   const form = page.locator('form[aria-label="Novo vereador"]');
-  await expect(form).toBeVisible();
+  // Corrida de hidratacao: `domcontentloaded` dispara ANTES do React hidratar, e a rota interna
+  // `/cadastros/vereadores` compila a frio no 1o acesso (next dev) — o click no botao pode chegar antes
+  // do onClick estar ligado e se perder, deixando o form fechado (timeout em toBeVisible:67 no CI).
+  // Re-clica ate' o painel abrir (toPass); se o botao genuinamente nao abrir o form, ainda falha alto.
+  await expect(async () => {
+    await page.getByRole("button", { name: "Novo vereador" }).click();
+    await expect(form).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 30_000 });
   await form.locator("#nv-nome").fill(`E2E T3 ${rotulo} ${carimbo}`);
   await form.locator("#nv-parlamentar").fill(`${rotulo} ${carimbo}`);
   const [r] = await Promise.all([
@@ -79,9 +85,12 @@ async function criarVereadorPelaTela(page: Page, rotulo: string): Promise<string
 // ficha desse vereador, com o painel fechado.
 async function darMandatoVigentePelaTela(page: Page, vereadorId: string): Promise<string> {
   await page.goto(urlFicha(vereadorId), { waitUntil: "domcontentloaded", timeout: 90_000 });
-  await page.getByRole("button", { name: "Registrar mandato" }).click();
   const form = page.locator('form[aria-label="Registrar mandato"]');
-  await expect(form).toBeVisible();
+  // Mesma corrida de hidratacao do criarVereadorPelaTela: re-clica ate' o painel abrir.
+  await expect(async () => {
+    await page.getByRole("button", { name: "Registrar mandato" }).click();
+    await expect(form).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 30_000 });
   await form.locator("#rm-inicio").fill(hoje());
   const [r] = await Promise.all([
     page.waitForResponse(
