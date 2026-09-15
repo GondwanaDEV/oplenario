@@ -2464,6 +2464,26 @@ CHEIA) roda verde, e `preparar.sh` executa. Mas duas coisas:
    `demo-ids.edn`, e reconciliar as 3 precondições de estado) é um sub-projeto próprio — não o "wire a job"
    que parecia. É reuso ainda vale, mas com trabalho de portabilidade.
 
-**Pendente (decisão do Daouda):** (a) portar a Trilha 3 para seed fresco (dynamic ids em `fixtures.sql` +
-as 3 precondições) e iterar os 8 specs ao verde no CI — o sub-projeto acima; (b) levar o verde para `main`
-(o `test` + `browser-e2e` estão verdes e estáveis; o `t3-e2e` fica `continue-on-error` ou desligado até (a)).
+**MEDIÇÃO (run #19, seed fresco de CI) — a Trilha 3 já roda ~82% verde.** Depois de portar `fixtures.sql`
+para ids dinâmicos (identidade :vereador de `demo-ids.edn`) + os 2 consertos de permissão (`--user` no
+preparar.mjs; sem mount root-owned de `node_modules`), os 8 specs RODARAM e o placar foi:
+**60 passed · 13 failed · 6 skipped · 6 did-not-run.** Triagem das 13 falhas:
+- **E1 (cadastro de vereador) — 6 falhas**, todas no helper `criarVereadorPelaTela` (`E1.spec.ts:67`,
+  `toBeVisible` timeout) + alguns `toBe`. Uma causa raiz compartilhada — melhor ROI: ou defeito real de FE
+  no fluxo de criar/editar vereador+mandato+licença, ou drift de seletor. **A investigar.**
+- **E5/E6 (sonda-precondições `/chamada`, `/votar`) — 3 falhas**, todas `Test timeout 30000ms` em
+  `toBeVisible`. São as precondições de **estado de sessão ao vivo / SSE** (janela de 5 min, "chamada
+  suja") — CI-hostis por natureza; provavelmente exigem redesenho do spec ou ficam como `[GAP]` de CI.
+- **[ACHADO] (E3 abas concorrentes, E4 papéis-trocados) — ~2 falhas.** Specs que DOCUMENTAM achados
+  adversariais de propósito; "falhar" é em parte o ponto (ou exige estado congelado).
+- **E3 "par de alvos" + E8 "marcar como lida" — 2 falhas.** Precondição residual (E3 quer um par
+  texto-com/sem que a fixture não montou) e o read-model de notificação.
+
+**Leitura:** t3 NÃO era um beco sem saída — a maior parte porta bem para seed fresco. Fechar o resto é
+graduado: E1 (6, 1 causa) tem ROI alto; E8/E3-par são pontuais; E5/E6 (SSE) e os [ACHADO] são decisão de
+design (forçar verde pode não valer). Infra do job: sólida e verde (stack + semente cheia + preparar.sh).
+
+**Pendente (decisão do Daouda):** (a) investigar/consertar o cluster E1 (6 specs, 1 helper) — o próximo
+passo de maior valor; (b) decidir o destino dos specs SSE/[ACHADO] (redesenhar vs. marcar `[GAP]`/skip
+explícito); (c) levar o verde para `main` — `test` + `browser-e2e` estão verdes/estáveis e `t3-e2e` é
+`continue-on-error` (informativo), então o merge não fica bloqueado pela cauda da Trilha 3.
