@@ -102,12 +102,16 @@ para chamar. A medição (14 telas × medir + refutar; ledger `docs/16`, seção
 
 E `vereador-estatisticas` esbarra no `proposicoes.estado` morto (4 dos 5 buckets).
 
-**4. A verificação nunca saiu desta máquina.** O repositório **não tem remote** (`git remote -v`
-vazio): o `.github/workflows/ci.yml` existe desde F0 mas **nunca executou**. Todo "CI verde" citado
-como critério de aceite das fases foi local, pela mesma sessão que escreveu o código. Não é sinal de
-baixa qualidade — a disciplina de TDD + revisão `ecc` foi seguida — mas é um buraco de verificação
-independente, e significa que o código só existe neste disco. Destravar = criar o repositório remoto
-e dar push; **é decisão do Daouda, não ação unilateral.**
+**4. A verificação independente começou — e o 1º sinal é VERMELHO.** *(atualizado 15/09/2026)* O
+repositório **agora tem remote** (`github.com/GondwanaDEV/oplenario`) e `main` está publicada. O
+`.github/workflows/ci.yml` **executou pela 1ª vez** (run #1, commit `f29102b`) e **falhou** — não nos
+testes, mas no passo de subir a infra: `docker compose up ... minio` deu `pull access denied for
+minio/minio`. O compose fixa `minio/minio` **sem tag** e o pull anônimo do Docker Hub é recusado no
+runner do GitHub. Ou seja: o "CI verde local" das fases continua sem contraparte independente **verde**
+— o CI remoto nem chega a rodar teste. Destravar de verdade = **fixar a tag do MinIO (e demais imagens)
++ `docker login`/mirror no CI**, então deixar a suíte rodar. Isso, sim, fecharia o buraco de verificação
+que o "CI verde" local nunca fechou. (O texto anterior — "não tem remote, nunca executou, decisão do
+Daouda" — está superado: o remote existe e o CI já rodou.)
 
 **Dívida técnica conhecida (não bloqueia):** assinatura ICP-Brasil ainda é `STUB-ICP-v0`; registro de
 passkey depende de secure context (carry de ambiente); PWA cerimonial e app Flutter parqueados atrás

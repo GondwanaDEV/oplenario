@@ -63,16 +63,21 @@ uma tela esperando um botão que não existe, a demo trava na sua frente.
 | Seção de **leis/normas** no portal | Não há porta. O backend tem `/portal/casa/:ente/legislacao`; o frontend não tem tela |
 | **A tela de login do Keycloak** | Diz `Sign in to ente-10000000-0000-…` — **em inglês e com o UUID cru**. É a 1ª tela depois de clicar Entrar. Faça o login ANTES do cliente entrar, ou conserte o `displayName` do realm |
 | **A capa do portal, sem preparo** | O destaque de "Em tramitação agora" mostra a matéria de **maior número**, sem filtrar estado — hoje é a **PL 015/2026, ARQUIVADA**. O título da seção promete tramitação e o item está morto |
-| **Login gov.br** | Não existe |
+| **Login gov.br** | Não existe. **Atenção:** a barra do portal público mostra um botão "gov.br Entrar" **clicável e morto** (`barra-institucional.tsx:111`, `href="#"` — só rola ao topo). Está visível na janela anônima do Ato 3; não o clique nem deixe o cliente clicar |
 | **Console do operador** (supratenant) | 3 linhas de código, zero rotas |
 
 ### §1.3 · ⚠️ Se um cliente técnico perguntar
 
 Duas perguntas que um jurídico ou um TI de câmara pode fazer, e para as quais **não invente resposta**:
 
-- **"O sistema garante que só vereador em exercício vota?"** — Hoje não. `legislativo.votos.vereador_id`
-  não tem chave estrangeira nem verificação contra o cadastro. Diga que a validação de roster está no
-  próximo ciclo e siga.
+- **"O sistema garante que só vereador em exercício vota?"** — Resposta honesta e mais forte do que uma
+  versão anterior deste runbook dizia (que era "hoje não", e subestimava o produto): **pelo celular do
+  vereador (o cockpit `/votar`, que a Fernanda usa no Ato 2), sim** — a rota `.../meu-voto` resolve o
+  vereador do próprio autenticado (nunca do corpo) e valida, sob lock, **mandato vigente + presença
+  registrada** por política declarativa (`legislativo/controllers.clj:84-133`). **A lacuna real fica em
+  dois pontos:** (a) a coluna `legislativo.votos.vereador_id` não tem chave estrangeira (integridade só
+  de schema, no próximo ciclo); e (b) a **entrada nominal pela Mesa** (`POST .../votos`) aceita
+  `vereador-id` do corpo sem checar o roster. Diga isso — não "hoje não".
 - **"Como o quórum de maioria absoluta é calculado?"** — Hoje o denominador chega no corpo da requisição
   de encerramento. **Não demonstre encerramento de votação com quórum qualificado.** A correção é
   prioridade 1 do backlog.
@@ -90,6 +95,7 @@ Ambos estão registrados em `docs/16` com reprodução. Não são hipóteses.
 | Docker / OrbStack | rodando. **4 GiB na VM bastam** — medido, ver a nota abaixo |
 | Portas livres no host | 3000 (frontend) · 8888 (backend) · 5544 (Postgres) · 9100/9101 (MinIO) · 8080 (Keycloak) · 8125 (Mailpit) · 6379 (Valkey) |
 | Repositório | `/Users/daoudatraore/oplenario`, branch `main`, árvore limpa |
+| **Imagens pré-puxadas** | ⚠️ **Verificar ANTES do dia da demo:** `docker pull minio/minio` (+ postgres:16, valkey/valkey:8, quay.io/keycloak/keycloak:26.0.0, axllent/mailpit:v1.20). O `docker-compose.yml` fixa `minio/minio` **sem tag** e esse pull **falhou** no único run de CI (máquina neutra, `pull access denied`) — numa máquina sem a imagem em cache ou sem `docker login` no Docker Hub, o `up` da demo trava aqui. Puxe (e/ou `docker login`) com folga, não na hora |
 
 > **Memória — correção de 15/09, medida.** Uma versão anterior deste runbook exigia ≥ 6 GiB na VM.
 > Estava errado, e de um jeito que inviabilizaria a demo nesta máquina (um Mac de 8 GiB no total —
@@ -231,7 +237,7 @@ Persona: **Marina Alencar Freire**, Secretária da Mesa.
 | 3 | Abra a ficha da matéria recém-criada | "Ementa, autoria, texto integral e a linha do tempo de tramitação, no mesmo lugar." |
 | 4 | `/tramitacao` | "O quadro da Casa inteira, por estágio." — **é leitura; não tente arrastar** |
 | 5 | `/sessoes/<id-da-sessão-aberta>/chamada` | **O ponto alto do ato.** "Todos presentes" em um clique, corrija um para Ausente, lance a justificativa e defira. |
-| 6 | `/sessoes/<id>/folha` | "A ata de presença sai congelada, em HTML e PDF, com hash de integridade." |
+| 6 | `/sessoes/<id-da-sessão ENCERRADA>/folha` | "A ata de presença sai congelada, em HTML e PDF, com hash de integridade." — **use a sessão ENCERRADA da semente (`…0210`), NÃO a sessão aberta do passo 5:** a folha só congela com a sessão encerrada e não há tela para encerrar, então gerar a folha sobre a sessão aberta devolve **409** na sua frente |
 
 ### Ato 2 · A Mesa (9 min) — *"isto me faz parecer bem"*
 
@@ -345,8 +351,13 @@ Se persistir, o caminho confiável é servir o build de produção em vez do `ne
 `[NÃO VERIFICADO nesta sessão]`
 
 ### §6.4 · O telão está vazio / a tribuna sumiu
-O canal SSE tem retenção de ~5 min em Valkey, e um restart do `app` apaga a sessão ao vivo. O quórum
-volta (lê do banco); a tribuna não (deriva só do SSE).
+**Correção (re-verificação 15/09):** ao contrário do que este runbook dizia antes, **a tribuna NÃO
+deriva só do SSE** — ela tem read-model persistido em Postgres (`GET /sessoes/:id/tribuna` sobre
+`sessoes.inscricao_oradores`+falas) e é re-hidratada em toda reconexão (`use-plenario.ts:200-240`),
+então volta após um restart do `app`, **igual ao quórum**. O que é volátil e expira em ~5 min é apenas o
+**replay do canal SSE** em Valkey (`tempo_real/components.clj:40-41`) — quem abre o telão depois disso
+perde a *animação* dos eventos passados, mas quórum e tribuna re-hidratam do banco. Se ainda assim algo
+faltar, re-semear regenera os eventos:
 ```bash
 cd ~/oplenario && ./demo/semear-tudo.sh     # idempotente: relê em vez de duplicar
 ```
@@ -409,5 +420,11 @@ docker compose --profile auth stop
 - **Um ciclo completo a frio** (`down -v` → `up --build` → semear → apresentar) **não foi executado
   nesta sessão** — os comandos vêm dos scripts e do compose, e cada um foi lido na fonte. Rode-o uma
   vez, sem cliente, antes da primeira apresentação real.
+- **Re-verificação estática (15/09/2026):** as correções C1/C2 (§6.4 tribuna, §1.3 voto), os avisos
+  R2/R3 (botão gov.br morto, folha exige sessão `…0210`) e o pré-requisito do pull do MinIO vêm de
+  rastreamento de código FE→backend→DB com evidência `arquivo:linha`, registrado em `docs/16`, seção
+  "🔎 Re-verificação estática de prontidão (15/09/2026)". **A stack não subiu nesta rodada** (ambiente
+  remoto com egresso de imagens Docker e Clojars bloqueado) — logo, tudo aqui é fiação verificada, não
+  runtime, o que reforça o item acima: o cold-run na máquina de demo continua obrigatório e por fazer.
 
 Achados completos que sustentam a §1: `docs/16-ledger-prontidao.md`, seções "🔎 Exploratório de fluxo".
