@@ -2416,9 +2416,33 @@ Continuei o R1 e destravei o CI de verdade, observando cada run pela API do GitH
    em vez de depender da ordem da suíte. Leem da tabela DONA `legislativo.proposicoes`, não da projeção
    que outro teste apaga, então semear o acervo basta.
 
-**Estado do CI ao fim desta sessão: VERDE pela 1ª vez** — run #6 (commit `80c213e`), **2352 testes,
-6341 asserções**, num runner independente do GitHub. Progressão: #1/#2 morriam no pull do MinIO → #3
-(quay) subiu a infra e morria por falta do Valkey → #4 (valkey) rodou a suíte com 3 erros `demo.*` → #6
-verde. O buraco de "CI verde só local" das fases F0–F7 está fechado no backend. **Pendente (decisão do
-Daouda):** levar esse verde para `main` — a branch `claude/tender-ptolemy-jy5j8x` está pronta para merge
-(os 3 consertos: MinIO→quay, Valkey no CI, testes demo auto-suficientes; mais a re-verificação de docs).
+**Estado do CI: verde alcançado (run #6, 2352 testes / 6341 asserções), MAS não-determinístico.**
+Progressão: #1/#2 morriam no pull do MinIO → #3 (quay) subiu a infra e morria por falta do Valkey → #4
+(valkey) rodou a suíte com 3 erros `demo.*` → **#6 verde**. O buraco de "CI verde só local" está fechado
+no sentido de que a suíte **roda inteira** no runner independente.
+
+**⚠️ Achado novo (a régua honesta) — a suíte de backend é FLAKY.** Observando os runs seguintes, todos de
+commits **só-de-docs** (nenhuma mudança em `apps/backend`): #6 ✓ · #7 ✓ · #8 ✓ · **#10 ✗** · #11 ✓ ·
+**#12 ✗**. ~⅓ dos runs falham, com **13 erros, 0 failures**, todos em criação de ente dentro de transação
+de teste (ex.: `folha_congelamento_test` → `criar-ente!` → `inserir-ente!`, exceção do Postgres sob carga).
+Não é regressão de código (o código não mudou entre runs verdes e vermelhos) — é **fragilidade estrutural
+sob carga/ordenação** (pool Hikari / contenção / estado compartilhado), a mesma família dos 3 erros
+`demo.*` já consertados, mas agora num conjunto maior de testes. **Consequência:** "CI verde" é verdadeiro
+por run, não garantido; um merge com gate de CI vai reprovar de forma intermitente. **Frente própria
+(decisão do time):** isolar/serializar a criação de ente nos testes de integração (schema por teste, ou
+pool maior, ou retry no boot da tx), ou marcar/reordenar — **não** afrouxar asserção. É a maior dívida de
+verificação restante do backend.
+
+**Achado novo — a Trilha 3 (`e2e/t3/`) já existe e é a maior parte da Onda T1/T2 de `docs/20`.** 8 specs
+de browser autenticadas (E1–E8, escritas internas por persona) + `preparar.sh`/`preparar.mjs` +
+`fixtures.sql` + `MAPA.json` (que documenta o dev-token `?token=<claims>` — o mecanismo de auth dos specs
+internos) + `REVISAO.md`. **Nunca foi ligada ao CI** e exige a semente CHEIA (`semear-tudo.sh`, não o
+`seed_demo.clj` do harness) + `preparar.sh` antes. Integrá-la ao CI (job próprio, stack efêmera — onde a
+mutação da Casa não colide com a suíte verde) é o caminho da Onda T1, e é reuso, não reescrita.
+
+**Onda T0 (docs/20) — feita em parte:** job de browser-e2e adicionado ao `ci.yml`; a stack inteira sobe
+verde (frontend serve o portal 200 no runner). Escopo do job = só o Portal do Cidadão anônimo
+(`portal-cidadao.spec.ts` + `smoke.spec.ts`); `t3/` fica fora do glob default (opt-in via `preparar.sh`).
+
+**Pendente (decisão do Daouda):** (a) a flakiness do backend acima — bloqueia um gate de CID confiável no
+merge; (b) integrar `t3/` ao CI (T1); (c) levar o verde para `main`.
