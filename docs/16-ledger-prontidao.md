@@ -2408,12 +2408,17 @@ Continuei o R1 e destravei o CI de verdade, observando cada run pela API do GitH
    verde local" das fases vinha de uma ordem/estado onde o acervo estava semeado e não-apagado; o CI
    independente expõe a fragilidade estrutural.
 
-**Recomendação (decisão do time, não hack de CI):** o conserto correto é tornar `sessoes_test`/
-`participacao_test` **auto-suficientes** (semear o acervo eles mesmos, como já semeiam a Casa) ou impor
-ordenação/isolamento de suíte — **não** editar asserção para forçar verde, o que o próprio arquivo alerta
-que "TREINA a ignorar vermelho" (`participacao_test.clj:80`). É uma mudança de semântica de teste que o
-time já debateu (a tensão "Casa compartilhada e mutável que a suíte danifica"), então fica como frente
-própria, não como parte do destravamento de CI.
+4. **Consertado — CI VERDE (run #6).** Tornei `sessoes_test` e `participacao_test` **auto-suficientes**:
+   cada deftest semeia o acervo ele mesmo logo após a Casa (`acervo/semear! s ente (:vereador
+   identidades)`, idempotente), como `acervo_test` já faz. Escolha deliberada de NÃO afrouxar asserção — o
+   próprio `participacao_test.clj:80` alerta que forçar verde "TREINA a ignorar vermelho"; as contagens e
+   ementas seguem idênticas, só a precondição (acervo semeado) passou a ser garantida pelo próprio teste
+   em vez de depender da ordem da suíte. Leem da tabela DONA `legislativo.proposicoes`, não da projeção
+   que outro teste apaga, então semear o acervo basta.
 
-**Estado do CI ao fim desta sessão:** infra 100% verde; a suíte roda inteira; falta só fechar a
-ordenação/isolamento dos 3 testes `demo.*` para o verde total.
+**Estado do CI ao fim desta sessão: VERDE pela 1ª vez** — run #6 (commit `80c213e`), **2352 testes,
+6341 asserções**, num runner independente do GitHub. Progressão: #1/#2 morriam no pull do MinIO → #3
+(quay) subiu a infra e morria por falta do Valkey → #4 (valkey) rodou a suíte com 3 erros `demo.*` → #6
+verde. O buraco de "CI verde só local" das fases F0–F7 está fechado no backend. **Pendente (decisão do
+Daouda):** levar esse verde para `main` — a branch `claude/tender-ptolemy-jy5j8x` está pronta para merge
+(os 3 consertos: MinIO→quay, Valkey no CI, testes demo auto-suficientes; mais a re-verificação de docs).
