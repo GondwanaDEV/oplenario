@@ -2421,17 +2421,20 @@ Progressão: #1/#2 morriam no pull do MinIO → #3 (quay) subiu a infra e morria
 (valkey) rodou a suíte com 3 erros `demo.*` → **#6 verde**. O buraco de "CI verde só local" está fechado
 no sentido de que a suíte **roda inteira** no runner independente.
 
-**⚠️ Achado novo (a régua honesta) — a suíte de backend é FLAKY.** Observando os runs seguintes, todos de
-commits **só-de-docs** (nenhuma mudança em `apps/backend`): #6 ✓ · #7 ✓ · #8 ✓ · **#10 ✗** · #11 ✓ ·
-**#12 ✗**. ~⅓ dos runs falham, com **13 erros, 0 failures**, todos em criação de ente dentro de transação
-de teste (ex.: `folha_congelamento_test` → `criar-ente!` → `inserir-ente!`, exceção do Postgres sob carga).
-Não é regressão de código (o código não mudou entre runs verdes e vermelhos) — é **fragilidade estrutural
-sob carga/ordenação** (pool Hikari / contenção / estado compartilhado), a mesma família dos 3 erros
-`demo.*` já consertados, mas agora num conjunto maior de testes. **Consequência:** "CI verde" é verdadeiro
-por run, não garantido; um merge com gate de CI vai reprovar de forma intermitente. **Frente própria
-(decisão do time):** isolar/serializar a criação de ente nos testes de integração (schema por teste, ou
-pool maior, ou retry no boot da tx), ou marcar/reordenar — **não** afrouxar asserção. É a maior dívida de
-verificação restante do backend.
+**⚠️ Achado (a régua honesta) — a suíte de backend era FLAKY; causa raiz encontrada e CONSERTADA.**
+Observando runs de commits **só-de-docs** (nenhuma mudança em `apps/backend`): #6 ✓ · #7 ✓ · #8 ✓ ·
+**#10 ✗** · #11 ✓ · **#12 ✗** — ~⅓ vermelho, sempre **13 erros, 0 failures**, todos em `folha-congelamento-test`.
+**Causa raiz (não era "carga/pool", como supus primeiro — era dado + ordem):** a exceção é
+`PSQLException: insert or update on table "ente" violates foreign key constraint "ente_municipio_ibge_fkey"
+— Key is not present in table "municipios"`. A tabela de referência `cadastros.municipios` **não é semeada
+por migration** ("seed por carga", mig 0010); cada teste de integração que cria ente **semeia o município
+ele mesmo** via `referencia/inserir-municipio!` (idempotente) — TODOS menos dois: `folha_congelamento_test`
+e `folha_controller_test`. Como o **kaocha randomiza a ordem** (seed novo a cada run), quando um desses dois
+rodava ANTES de qualquer teste que semeia `2304400`, o FK do ente estourava; quando rodava depois, passava.
+Puro order-dependence, a mesma família dos 3 `demo.*`. **Conserto (commit desta frente):** os dois `casa!`
+passam a semear `2304400` via `inserir-municipio!` (idempotente, on-conflict), igual ao `seed-municipio!`
+de `cadastros/estrutura_test`. **Nenhuma asserção afrouxada** — só a precondição garantida. Com isso não
+resta dependência de ordem para `municipios`; a flakiness é eliminada por construção (confirmar com re-runs).
 
 **Achado novo — a Trilha 3 (`e2e/t3/`) já existe e é a maior parte da Onda T1/T2 de `docs/20`.** 8 specs
 de browser autenticadas (E1–E8, escritas internas por persona) + `preparar.sh`/`preparar.mjs` +

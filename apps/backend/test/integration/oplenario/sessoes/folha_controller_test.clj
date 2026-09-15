@@ -21,6 +21,7 @@
             [com.stuartsierra.component :as component]
             [malli.core :as m]
             [oplenario.cadastros.components.repositorio :as repo-cadastros]
+            [oplenario.cadastros.db.referencia :as referencia]
             [oplenario.config :as config]
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.kernel.tempo :as tempo]
@@ -36,18 +37,26 @@
 
 (def ^:dynamic *repo-s* nil)
 (def ^:dynamic *repo-c* nil)
+(def ^:dynamic *ds* nil)
 
 (use-fixtures :once
   (fn [t]
     (let [c (component/start (datasource/datasource (config/carregar)))]
       (migracao/migrar! (:ds c))
       (binding [*repo-s* (repo-sessoes/->RepoSessoesPg c nil)
-                *repo-c* (repo-cadastros/->RepoCadastrosPg c)]
+                *repo-c* (repo-cadastros/->RepoCadastrosPg c)
+                *ds* (:ds c)]
         (try (t) (finally (component/stop c)))))))
 
 ;; ---------- seeds (produtores REAIS dos dois modulos) ----------
 
 (defn- casa! [ente]
+  ;; `cadastros.municipios` e' reference table "seed por carga" (mig 0010), NAO semeada por migration —
+  ;; sem garantir a linha, o FK `ente_municipio_ibge_fkey` estoura. Idempotente, como o `seed-municipio!`
+  ;; de cadastros/estrutura_test. Antes dependia da ordem randomizada do kaocha (outro teste semear 2304400
+  ;; primeiro) — fonte da flakiness de ~1/3 dos runs de CI.
+  (referencia/inserir-municipio! *ds*
+    {:codigo-ibge "2304400" :nome "Fortaleza" :uf "CE" :capital true :populacao 2703391})
   (repo-cadastros/criar-ente! *repo-c* ente
     {:ente-id ente :municipio-ibge "2304400" :nome-oficial "Camara Municipal de Fortaleza" :nome-curto "CMF"})
   (let [leg (random-uuid)]

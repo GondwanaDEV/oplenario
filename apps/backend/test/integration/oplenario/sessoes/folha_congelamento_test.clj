@@ -12,6 +12,7 @@
             [honey.sql :as sql]
             [next.jdbc :as jdbc]
             [oplenario.cadastros.components.repositorio :as repo-cadastros]
+            [oplenario.cadastros.db.referencia :as referencia]
             [oplenario.config :as config]
             [oplenario.kernel.components.objeto-store :as os]
             [oplenario.kernel.tempo :as tempo]
@@ -42,6 +43,13 @@
 ;; ---------- seeds (produtores REAIS dos dois modulos, mesma forma de folha-controller-test) ----------
 
 (defn- casa! [ente]
+  ;; A tabela de referencia `cadastros.municipios` NAO e' semeada por migration ("seed por carga",
+  ;; mig 0010) — cada teste que cria ente com um `municipio-ibge` precisa garantir a linha, senao o FK
+  ;; `ente_municipio_ibge_fkey` estoura. Este ns dependia de OUTRO teste (ordem randomizada do kaocha)
+  ;; ter semeado 2304400 antes — flaky: ~1/3 dos runs de CI davam 13 erros aqui quando este ns rodava
+  ;; primeiro. Idempotente (on-conflict do-update), como o `seed-municipio!` de cadastros/estrutura_test.
+  (referencia/inserir-municipio! (:ds (:datasource *sys*))
+    {:codigo-ibge "2304400" :nome "Fortaleza" :uf "CE" :capital true :populacao 2703391})
   (repo-cadastros/criar-ente! *repo-c* ente
     {:ente-id ente :municipio-ibge "2304400" :nome-oficial "Camara Municipal de Fortaleza" :nome-curto "CMF"})
   (let [leg (random-uuid)]

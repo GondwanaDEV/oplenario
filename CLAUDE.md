@@ -115,13 +115,14 @@ Com isso o CI passou de "morre em 15s sem puxar imagem" para **rodar a suíte in
 finais eram `oplenario.demo.*_test` (`participacao_test`, `sessoes_test`) dependendo de `acervo/semear!`
 ter rodado antes no MESMO banco — premissa de ordem que o runner não garante; consertado tornando cada
 teste **auto-suficiente** (semeia o acervo ele mesmo, idempotente), sem afrouxar asserção.
-**RESULTADO: o CI chegou a VERDE (run #6, 2352 testes / 6341 asserções) — mas NÃO é determinístico.**
-Runs seguintes de commits só-de-docs alternam verde/vermelho (#6✓ #7✓ #8✓ #10✗ #11✓ #12✗): a suíte de
-backend é **flaky sob carga** — ~⅓ dos runs dão 13 erros em criação de ente dentro de transação de teste
-(pool/contenção/estado compartilhado, mesma família dos 3 `demo.*` já consertados). Não é regressão de
-código. **É a maior dívida de verificação restante do backend** e bloqueia um gate de CI confiável no
-merge — frente própria: isolar/serializar a criação de ente nos testes de integração (não afrouxar
-asserção). Já existe um PR ([#1](https://github.com/GondwanaDEV/oplenario/pull/1)) com os consertos de
+**RESULTADO: o CI chegou a VERDE (run #6, 2352 testes / 6341 asserções); a flakiness que restava foi
+diagnosticada e CONSERTADA.** Runs de commits só-de-docs alternavam verde/vermelho (#6✓ #7✓ #8✓ #10✗
+#11✓ #12✗) — ~⅓ vermelho, sempre 13 erros em `folha-congelamento-test`. Causa raiz (não era carga/pool):
+a tabela de referência `cadastros.municipios` não é semeada por migration; todos os testes que criam ente
+semeiam o município via `inserir-municipio!` — menos `folha_congelamento_test`/`folha_controller_test`, e
+como o **kaocha randomiza a ordem**, quando um deles rodava antes de um seeder o FK `ente_municipio_ibge`
+estourava. Consertado: os dois passam a semear `2304400` (idempotente), sem afrouxar asserção. Detalhe e
+procedência em `docs/16`, seção "Progressão do CI". Já existe um PR ([#1](https://github.com/GondwanaDEV/oplenario/pull/1)) com os consertos de
 infra + a re-verificação; abrir/mergear é decisão do Daouda. Um plano de teste completo de toda a
 plataforma está em **`docs/20`** (4 métodos, ~8 personas reais, ondas T0–T6), e a Trilha 3 (`e2e/t3/`, 8
 specs de browser autenticadas) já cobre boa parte da Onda T1 — falta ligá-la ao CI. Detalhe e procedência
