@@ -18,7 +18,12 @@ docker exec -i oplenario-postgres-1 psql -U oplenario -d oplenario -v ON_ERROR_S
 
 echo
 echo "== 2/3 preparar.mjs (tudo o que TEM rota HTTP) =="
+# `--user $(id -u):$(id -g)`: sem isto o container escreve `.artifacts/t3-ids.json` como ROOT (uid 0),
+# e o passo 3/3 (que roda no HOST/runner como usuario nao-root) nao consegue criar t3-versoes.json no
+# mesmo diretorio -> "Permission denied" (medido no 1o run de CI do job t3-e2e). Com --user o artefato
+# nasce dono do chamador. No dev local (root no OrbStack) `id -u`=0 e o comportamento nao muda.
 docker run --rm --network host \
+  --user "$(id -u):$(id -g)" \
   -v "$E2E":/e2e \
   -v oplenario_e2e_nm:/e2e/node_modules \
   -w /e2e \

@@ -2443,9 +2443,27 @@ internos) + `REVISAO.md`. **Nunca foi ligada ao CI** e exige a semente CHEIA (`s
 `seed_demo.clj` do harness) + `preparar.sh` antes. Integrá-la ao CI (job próprio, stack efêmera — onde a
 mutação da Casa não colide com a suíte verde) é o caminho da Onda T1, e é reuso, não reescrita.
 
-**Onda T0 (docs/20) — feita em parte:** job de browser-e2e adicionado ao `ci.yml`; a stack inteira sobe
-verde (frontend serve o portal 200 no runner). Escopo do job = só o Portal do Cidadão anônimo
-(`portal-cidadao.spec.ts` + `smoke.spec.ts`); `t3/` fica fora do glob default (opt-in via `preparar.sh`).
+**Onda T0 (docs/20) — FEITA e VERDE.** Job `browser-e2e` no `ci.yml`: sobe a stack inteira (dev), semeia,
+e roda o Portal do Cidadão anônimo (`portal-cidadao.spec.ts` + `smoke.spec.ts`) — verde nos runs #13/#15.
+`t3/` fica fora do glob default (opt-in por `E2E_INCLUDE_T3`).
 
-**Pendente (decisão do Daouda):** (a) a flakiness do backend acima — bloqueia um gate de CID confiável no
-merge; (b) integrar `t3/` ao CI (T1); (c) levar o verde para `main`.
+**Onda T1 (integrar a Trilha 3 ao CI) — job criado, e o diagnóstico revelou que t3 NÃO é fresh-seed-portável.**
+O job `t3-e2e` (run #15) provou que a **infra funciona**: stack inteira sobe, `demo/semear-tudo.sh` (semente
+CHEIA) roda verde, e `preparar.sh` executa. Mas duas coisas:
+1. **Bug trivial de arquivo (CONSERTADO):** `preparar.mjs` roda no container do Playwright como ROOT e cria
+   `.artifacts/t3-ids.json` dono de root; o passo 3/3 (no runner, não-root) não conseguia escrever
+   `t3-versoes.json` → `Permission denied`. Conserto: `--user $(id -u):$(id -g)` no `docker run` de `preparar.sh`.
+2. **Acoplamento a ids CONGELADOS (o achado real, é sub-projeto):** `preparar.mjs` reportou 3 bloqueios num
+   seed fresco — `inbox-vazia`, `sessao-chamada-suja`, `janela-sse-5min`. Causa: `fixtures.sql` **crava ids
+   fixos** (ex.: vereador identidade `49c23663…`, parecer-modelo `ce76c191…`) que só existem na Casa da demo
+   CONGELADA contra a qual a Trilha 3 foi autorada. Num seed fresco de CI os ids de identidade/proposição/
+   parecer são **novos e aleatórios** (o log do run #15 mostra os pareceres/relatores reais como `cce767c0…`/
+   `be245ecc…`, não os fixos). Logo `fixtures.sql` insere contra ids obsoletos → inbox vazia, etc. Os SPECS
+   leem ids dinamicamente (via `demo-ids.edn`→`t3-ids.json`), mas `fixtures.sql` é SQL estático com ids fixos.
+   **Tornar a Trilha 3 fresh-seed-portável** (resolver os ids de `fixtures.sql` dinamicamente a partir de
+   `demo-ids.edn`, e reconciliar as 3 precondições de estado) é um sub-projeto próprio — não o "wire a job"
+   que parecia. É reuso ainda vale, mas com trabalho de portabilidade.
+
+**Pendente (decisão do Daouda):** (a) portar a Trilha 3 para seed fresco (dynamic ids em `fixtures.sql` +
+as 3 precondições) e iterar os 8 specs ao verde no CI — o sub-projeto acima; (b) levar o verde para `main`
+(o `test` + `browser-e2e` estão verdes e estáveis; o `t3-e2e` fica `continue-on-error` ou desligado até (a)).
