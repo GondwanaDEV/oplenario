@@ -84,6 +84,11 @@
 .prazo-obj b { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); display: block; line-height: 1.3; }
 .prazo-obj .base { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin-top: 2px; display: inline-flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
 .prazo-obj .quando { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+/* Prazo JA' VENCIDO. Nao inventa cor: reusa `--aviso-texto`, o par AA ja' validado pelo
+   GUIDELINES-CHECKLIST §5.1 para TEXTO (o `#F2A488` de `.ob-risco .n` e' calibrado p/ numeral
+   grande, nao p/ mono de 12px). O peso sobe junto porque a cor sozinha nao pode carregar a
+   distincao — quem nao distingue matiz continua lendo "venceu há" no proprio texto. */
+.prazo-obj .quando-atrasado { color: var(--aviso-texto); font-weight: 700; }
 .tag-urg { justify-self: end; align-self: center; display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; padding: 0.28rem 0.6rem; border-radius: 999px; white-space: nowrap; }
 .tag-urg .gl { width: 13px; height: 13px; flex: 0 0 auto; }
 .prz-urgente .tag-urg { color: #fff; background: var(--telha-fundo); }

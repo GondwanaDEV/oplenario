@@ -9,8 +9,7 @@ export function LenteJuridico() {
       <div className="bloco-cabeca"><h2 id="juridico-titulo">Recorte jurídico</h2></div>
       <div className="bloco-corpo">
         <p className="nota-gap">
-          Incidentes LGPD e grants de acesso de suporte seguem em breve — domínio de segurança ainda não
-          modelado (carry documentado no spec desta fatia).
+          O registro de incidentes de LGPD e a concessão de acesso de suporte chegam numa próxima entrega.
         </p>
       </div>
     </section>
