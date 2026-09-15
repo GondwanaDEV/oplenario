@@ -2325,3 +2325,100 @@ Onde o mesmo facto aparece diferente. Esta é a matriz que nenhum teste por mód
 Vale mais do que as alternativas porque é a **porta de entrada do decisor político**, o público que aprova a compra e cuja jornada morreu no primeiro passo (linha 10 da matriz, duas vezes). Um número errado no painel ainda se demonstra e corrige na frente do cliente; um 403 apresentado como "Tente novamente em instantes" não tem demo nenhuma.
 
 **Uma ressalva, não uma segunda recomendação:** o denominador forjado (linha 4) não é candidato a esta pergunta — não acrescenta valor demonstrável, é um portão. Mas nenhuma demo externa deve correr antes dele, porque a aprovação fabricada já sai da Casa em direção ao Prefeito e já se publica no portal.
+
+---
+
+# 🔎 Re-verificação estática de prontidão (15/09/2026) — o cold-run ficou bloqueado pelo ambiente
+
+**Método e limite honesto.** Esta passada foi pedida como "conduzir testes exploratórios para garantir
+que cada fluxo funciona e está pronto para apresentação". Tentei subir a stack a frio de verdade
+(`docker compose --profile auth up -d --build`) num ambiente de execução remoto. **Não foi possível
+rodar** — dois bloqueios independentes de política de egresso, não defeitos do projeto:
+
+- **Imagens Docker barradas.** Docker Hub (CDN de blobs, `production.cloudfront.docker.com`) e `quay.io`
+  respondem **403** pelo proxy; nada em cache. O `up` aborta ao puxar a 1ª imagem. Sem imagens-base
+  (`clojure`, `node`) o `--build` também não roda.
+- **Fallback nativo também morto.** Sem Clojure CLI (o host do instalador está barrado) e **Clojars
+  barrado** (Maven Central passa, Clojars não) — o backend não resolve dependências. Sem servidor Postgres.
+
+Logo, **esta seção é rastreamento estático** (FE→proxy→backend→DB, com evidência `arquivo:linha`), não
+uma jornada em runtime. Prova **fiação e coerência**, não comportamento ao vivo. A única perna que
+**ninguém** exercitou até hoje continua sendo o **login PKCE real** (as jornadas de 12/09 correram em
+`APP_ENV=dev` com token JSON; esta nem stack teve). O cold-run continua devendo — rodá-lo uma vez na
+máquina de demo, antes do cliente, segue sendo obrigatório (runbook §8).
+
+## O que a re-verificação achou de NOVO (e não estava no runbook)
+
+| # | Achado | Evidência | Efeito na demo |
+|---|---|---|---|
+| R1 | **O CI rodou pela 1ª vez — e está VERMELHO em `main`.** O repositório ganhou remote (`github.com/GondwanaDEV/oplenario`); a única execução do `.github/workflows/ci.yml` (run #1, commit `f29102b`) **falhou em ~17s** no passo `docker compose up ... minio` com `pull access denied for minio/minio`. | GitHub Actions run `35015699986`, job `test`. O mesmo `minio/minio` retorna `unauthorized: authentication required` (manifest) reproduzido aqui, em máquina neutra (runner do GitHub, sem política de egresso). `docker-compose.yml:33` fixa `image: minio/minio` **sem tag** (→ `:latest`). | **Risco de dia de demo.** Numa máquina que não tenha `minio/minio` em cache (ou sem `docker login`), o `up` da demo falha exatamente aqui. Atualiza o CLAUDE.md §3 item 4 ("CI nunca executou") — executou, e reprovou. |
+| R2 | **Botão "gov.br Entrar" MORTO na barra do portal público.** Visível e clicável na janela anônima do Ato 3. | `apps/frontend/src/app/(publico)/barra-institucional.tsx:111` — `<a className="govbr-topo" href="#" aria-label="Entrar com conta gov.br">`. Só rola ao topo. | Runbook §1.2 diz "Login gov.br não existe" mas **não avisa que a UI mostra o botão**. Um cliente pode clicá-lo ao vivo. |
+| R3 | **A folha (Ato 1 passo 6) exige sessão ENCERRADA — 409 na sessão aberta da demo.** | `sessoes/controllers.clj` `gerar-folha!` é fail-closed (`:conflito/folha-sessao-aberta` → 409, `in.clj:740`). A semente cria uma sessão encerrada de id fixo `10000000-0000-0000-0000-000000000210` (`demo/sessoes.clj:72,183`). | O passo 6 do roteiro tem de apontar para `…0210`, **não** para a sessão aberta usada na chamada (passo 5), ou o botão "Gerar" dá 409 na frente do cliente. |
+
+## Correções ao runbook que o código de hoje impõe (o produto está MELHOR do que o texto diz)
+
+| # | O runbook diz | O código diz | Evidência |
+|---|---|---|---|
+| C1 | §6.4 / Ato 2: "a tribuna deriva só do SSE e some após restart do `app`". | **Falso.** A tribuna tem read-model persistido em Postgres e volta após restart, igual ao quórum. O que expira em ~5 min é só o **replay do canal Valkey**. | `GET /sessoes/:id/tribuna` sobre `sessoes.inscricao_oradores`+falas (`sessoes/db/tribuna.clj`); FE re-hidrata em toda reconexão (`use-plenario.ts:200-240,414`). Retenção 5 min é do stream (`tempo_real/components.clj:40-41,62`). |
+| C2 | §1.3: "O sistema garante que só vereador em exercício vota? Hoje não." | **Enganoso para a rota que a demo usa.** O cockpit `/votar` (`POST .../meu-voto`) resolve o vereador do ATOR (nunca do corpo) e valida, sob `FOR UPDATE`, **mandato vigente + presença nesta sessão** por política DSL real. | `legislativo/controllers.clj:84-133` (`meu-voto`), fatos `tem_mandato_vigente`/`esta_presente_em` (`motor/catalogo.clj:83,95`). A demo (Fernanda, Ato 2 passo 5) usa exatamente essa rota. |
+
+**Onde §1.3 SE SUSTENTA (o buraco é real, mas está em outro lugar):** (a) no **schema** — `legislativo.votos.vereador_id` é `NOT NULL` "guard ref" **sem FK e sem CHECK** (`migrations/20260620000021-legislativo-votacao.up.sql`; única FK é `(ente_id, votacao_id)`); e (b) na **rota nominal da Mesa** `POST /sessoes/:id/votacoes/:vid/votos` (`controllers.clj:52-76` `registrar-voto`), que recebe `vereador-id` do CORPO e **não** aplica `resolver-vereador`/roster/mandato. Ali um UUID inventado grava 201 e entra na apuração (crítico já registrado, docs/16:2172-2176). **Guia corrigido para o apresentador:** se perguntarem, a resposta honesta é "pelo celular do vereador, sim — validamos cadastro, mandato e presença; a validação de roster na *entrada nominal pela Mesa* e a FK de integridade estão no próximo ciclo", não "hoje não".
+
+## O que a re-verificação CONFIRMOU do que já estava registrado (contra o código de 15/09)
+
+- **As duas afirmações técnicas do §1.3 continuam verdadeiras** no eixo que importa (schema sem FK; denominador `base-membros` vem do corpo, sem piso — `wire/in/votacao.clj:35-42`, carry declarado em `controllers.clj:505-511`). **Nenhum commit desde 12/09 tocou `legislativo/controllers.clj` nem a votação** (`git log --since=2026-09-12 -- legislativo/` vazio) — **os 10 críticos das duas jornadas de 12/09 seguem de pé.**
+- **Todas as afirmações da lista "⛔ Não abra" (§1.2) foram confirmadas VERDADEIRAS** contra o código de hoje: pauta read-only, ausência de tela para agendar/abrir/encerrar sessão, tribuna/votação sem tela de operação, promulgar/publicar norma sem rota, remessa ao TCE sem rota de geração, convocação sem rota nem tabela, "Acompanhar" inexistente, e-SIC write-only, legislação sem tela no portal, console do operador com 3 linhas, e o destaque "Em tramitação agora" pegando a matéria de MAIOR número sem filtrar estado (cadeia: `transparencia/controllers.clj:17` passa exclusão vazia → `db/materia.clj:200-221` ordena `ano/sequencial desc` → FE toma `itens[0]`).
+- **Os 3 atos estão CABEADOS ponta a ponta** (FE→API→handler→DB) onde o roteiro os toca: Ato 1 (6 telas, protocolo com numeração gapless + URN LexML server-side, chamada completa, folha com PDF openhtmltopdf + 2 hashes SHA-256), Ato 2 (dashboard gateado em `secretario`, card TCE 6·1·1 lendo de `compliance.prazo_dominio_ativo` pela semente de produção, calendário, telão SSE, cockpit), Ato 3 (capa, ficha, perfil, `/status` texto fixo, balcão e-SIC).
+
+## Veredito de prontidão
+
+**A "plataforma inteira" não é o que está pronto para apresentar — um roteiro de ~25 min em 3 atos, nos
+trilhos, é.** O runbook §3 continua sendo a demo segura, e §1.2 continua sendo a lista do que não tocar.
+Antes de qualquer demo **externa**, dois portões não-negociáveis, nesta ordem:
+
+1. **Rodar o cold-run uma vez na máquina de demo** (o único jeito de fechar o buraco de runtime que este
+   ambiente não permitiu), e **garantir o pull do MinIO** (R1): `docker pull minio/minio` com sucesso,
+   idealmente com tag fixa e `docker login`, ou a imagem pré-cacheada.
+2. **Fechar o denominador forjado** (linha 4 da matriz de coerência) — a aprovação fabricada sai da Casa
+   como autógrafo ao Prefeito e se publica no portal. É portão, não enfeite.
+
+Para demo **interna/controlada**, seguir o roteiro à risca já sustenta a história — com R2/R3/C1/C2 incorporados.
+
+## Progressão do CI (15/09/2026, tarde) — destravado na infra, 3 erros pré-existentes de teste expostos
+
+Continuei o R1 e destravei o CI de verdade, observando cada run pela API do GitHub:
+
+1. **MinIO (run #1/#2 vermelhos).** Causa raiz não era rate-limit nem `:latest` faltando: o **namespace
+   `minio/*` sumiu do Docker Hub** (a API de tags do Hub devolve 404 "object not found" para `minio/minio`
+   e `minio/mc`; `library/postgres` responde 200). Consertado em `apps/backend/docker-compose.yml`:
+   `minio/minio` → `quay.io/minio/minio:latest` (quay já era usado pelo keycloak). Com isso o CI passou a
+   subir **toda a infra verde** (Postgres, Valkey, MinIO, Keycloak, Mailpit).
+2. **Valkey (run #3 vermelho, 1 erro).** O passo de infra do CI listava `postgres minio keycloak mailpit`
+   e **omitia o `valkey`** — o teste de integração do backplane Valkey (conecta em `redis://localhost:6379`
+   direto) morria com `Connection refused`. Consertado em `.github/workflows/ci.yml` (sobe `valkey` +
+   readiness `valkey-cli ping`). Com isso o CI passou a **rodar a suíte inteira: 2352 testes, 6341
+   asserções.**
+3. **3 erros restantes (run #4) — pré-existentes, NÃO de infra e NÃO causados por esta frente.** Todos na
+   família `oplenario.demo.*_test` (2 em `participacao_test`, 1 em `sessoes_test`), todos a mesma
+   precondição não satisfeita: *"acervo incompleto … rode `acervo/semear!` primeiro"* / *"precisa de >=3
+   proposições 'em_pauta' do acervo"*. **Por quê:** esses testes de integração da semente **dependem de
+   estado compartilhado** — o docstring de `participacao_test.clj:25-29` diz que ele "não semeia o acervo,
+   só a Casa", contando que `acervo_test` tenha rodado antes contra o MESMO banco; e o próprio arquivo
+   (`:72-81`) documenta que **outro teste da suíte APAGA `transparencia.materia`** do ente da demo. O "CI
+   verde local" das fases vinha de uma ordem/estado onde o acervo estava semeado e não-apagado; o CI
+   independente expõe a fragilidade estrutural.
+
+4. **Consertado — CI VERDE (run #6).** Tornei `sessoes_test` e `participacao_test` **auto-suficientes**:
+   cada deftest semeia o acervo ele mesmo logo após a Casa (`acervo/semear! s ente (:vereador
+   identidades)`, idempotente), como `acervo_test` já faz. Escolha deliberada de NÃO afrouxar asserção — o
+   próprio `participacao_test.clj:80` alerta que forçar verde "TREINA a ignorar vermelho"; as contagens e
+   ementas seguem idênticas, só a precondição (acervo semeado) passou a ser garantida pelo próprio teste
+   em vez de depender da ordem da suíte. Leem da tabela DONA `legislativo.proposicoes`, não da projeção
+   que outro teste apaga, então semear o acervo basta.
+
+**Estado do CI ao fim desta sessão: VERDE pela 1ª vez** — run #6 (commit `80c213e`), **2352 testes,
+6341 asserções**, num runner independente do GitHub. Progressão: #1/#2 morriam no pull do MinIO → #3
+(quay) subiu a infra e morria por falta do Valkey → #4 (valkey) rodou a suíte com 3 erros `demo.*` → #6
+verde. O buraco de "CI verde só local" das fases F0–F7 está fechado no backend. **Pendente (decisão do
+Daouda):** levar esse verde para `main` — a branch `claude/tender-ptolemy-jy5j8x` está pronta para merge
+(os 3 consertos: MinIO→quay, Valkey no CI, testes demo auto-suficientes; mais a re-verificação de docs).

@@ -102,12 +102,24 @@ para chamar. A medição (14 telas × medir + refutar; ledger `docs/16`, seção
 
 E `vereador-estatisticas` esbarra no `proposicoes.estado` morto (4 dos 5 buckets).
 
-**4. A verificação nunca saiu desta máquina.** O repositório **não tem remote** (`git remote -v`
-vazio): o `.github/workflows/ci.yml` existe desde F0 mas **nunca executou**. Todo "CI verde" citado
-como critério de aceite das fases foi local, pela mesma sessão que escreveu o código. Não é sinal de
-baixa qualidade — a disciplina de TDD + revisão `ecc` foi seguida — mas é um buraco de verificação
-independente, e significa que o código só existe neste disco. Destravar = criar o repositório remoto
-e dar push; **é decisão do Daouda, não ação unilateral.**
+**4. A verificação independente começou — CI destravado na infra, 3 testes `demo.*` faltam.**
+*(atualizado 15/09/2026, tarde)* O repositório **tem remote** (`github.com/GondwanaDEV/oplenario`) e
+`main` está publicada. O `.github/workflows/ci.yml` **executou** e o buraco de verificação começou a
+fechar, em duas etapas de infra:
+- **MinIO:** o namespace `minio/*` **sumiu do Docker Hub** (API de tags do Hub → 404 "object not found";
+  `library/postgres` → 200). Não era rate-limit nem `:latest` faltando — a imagem não está mais lá.
+  Consertado: `docker-compose.yml` puxa de `quay.io/minio/minio` (mesmo registro do keycloak).
+- **Valkey:** o CI não subia o `valkey`; o teste do backplane (conecta em `redis://localhost:6379`)
+  dava `Connection refused`. Consertado: `ci.yml` sobe `valkey` + readiness.
+Com isso o CI passou de "morre em 15s sem puxar imagem" para **rodar a suíte inteira**. Os 3 erros
+finais eram `oplenario.demo.*_test` (`participacao_test`, `sessoes_test`) dependendo de `acervo/semear!`
+ter rodado antes no MESMO banco — premissa de ordem que o runner não garante; consertado tornando cada
+teste **auto-suficiente** (semeia o acervo ele mesmo, idempotente), sem afrouxar asserção.
+**RESULTADO: o CI ficou VERDE pela 1ª vez** (run #6, commit `80c213e`, `main`-equivalente na branch
+`claude/tender-ptolemy-jy5j8x`) — **2352 testes, 6341 asserções**, num runner independente do GitHub.
+O buraco de verificação da §2 (F0–F7) que "nunca saiu desta máquina" está fechado no backend. Detalhe e
+procedência em `docs/16`, seção "Progressão do CI". (Falta levar o mesmo verde para `main`: a branch
+está pronta para merge; abrir/mergear PR é decisão do Daouda.)
 
 **Dívida técnica conhecida (não bloqueia):** assinatura ICP-Brasil ainda é `STUB-ICP-v0`; registro de
 passkey depende de secure context (carry de ambiente); PWA cerimonial e app Flutter parqueados atrás

@@ -35,8 +35,11 @@ jobs:
             apps/backend/.cpcache
           key: deps-${{ hashFiles('apps/backend/deps.edn') }}
 
-      - name: Subir Postgres + MinIO + Keycloak + Mailpit (docker compose)
-        run: docker compose --profile auth up -d postgres minio keycloak mailpit
+      - name: Subir Postgres + Valkey + MinIO + Keycloak + Mailpit (docker compose)
+        # `valkey` estava de fora e o teste de integracao do backplane Valkey (que conecta em
+        # redis://localhost:6379 direto, independente do backplane :memoria default) morria com
+        # `ConnectException: Connection refused` — o unico E do run apos o pull do MinIO ser destravado.
+        run: docker compose --profile auth up -d postgres valkey minio keycloak mailpit
 
       - name: Esperar Postgres ficar pronto
         run: |
@@ -45,6 +48,14 @@ jobs:
             sleep 2
           done
           echo "Postgres nao subiu a tempo"; exit 1
+
+      - name: Esperar Valkey ficar pronto
+        run: |
+          for i in $(seq 1 30); do
+            docker compose exec -T valkey valkey-cli ping | grep -q PONG && exit 0
+            sleep 2
+          done
+          echo "Valkey nao subiu a tempo"; exit 1
 
       - name: Esperar MinIO ficar pronto
         run: |

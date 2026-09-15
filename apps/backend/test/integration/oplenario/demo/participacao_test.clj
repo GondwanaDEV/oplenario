@@ -24,17 +24,26 @@
 
   `with-sistema` reusada de `oplenario.demo.casa-test` (carry #1 do briefing — nao existe em nenhum outro
   lugar do repo, mesmo padrao de `acervo_test.clj`/`sessoes_test.clj`). DEPENDE do ACERVO
-  (`acervo/semear!`) ja' ter rodado contra este banco: os 5 comentarios apontam para proposicoes REAIS do
-  acervo, lidas via `repo-legislativo/listar-e-contar-proposicoes` (a MESMA leitura paginada do FE, nenhum
-  SELECT cru) — este teste, como `sessoes_test.clj`, nao semeia o acervo, so a Casa."
-  (:require [casa]
+  (`acervo/semear!`): os 5 comentarios apontam para proposicoes REAIS do acervo, lidas via
+  `repo-legislativo/listar-e-contar-proposicoes` (a MESMA leitura paginada do FE, nenhum SELECT cru).
+
+  AUTO-SUFICIENTE (15/09/2026): ambos os deftests passaram a semear o acervo ELES MESMOS, logo apos a
+  Casa. Antes dependiam de `acervo_test` ter rodado antes contra o MESMO banco — premissa de ORDEM que o
+  runner nao garante: no 1o CI que rodou a suite inteira, os dois morreram com `acervo incompleto p/
+  semear acompanhamentos … rode acervo/semear! primeiro`. `acervo/semear!` e' idempotente, entao semea-lo
+  aqui e' seguro mesmo quando `acervo_test` ja' rodou. Tudo o que estes testes leem do acervo vem da
+  tabela DONA `legislativo.proposicoes` (nao da projecao `transparencia.materia` que outro teste da suite
+  apaga — ver a nota longa em `a-cidada-tem-3-acompanhamentos-reais`), logo semear o acervo basta."
+  (:require [acervo :as acervo-demo]
+            [casa]
             [clojure.test :refer [deftest is testing]]
             [oplenario.demo.casa-test :refer [with-sistema]]
             [participacao :as participacao-demo]))
 
 (deftest participacao-tem-exemplar-de-cada-estado
   (with-sistema [s]
-    (let [{:keys [ente]} (casa/semear! s)
+    (let [{:keys [ente identidades]} (casa/semear! s)
+          _ (acervo-demo/semear! s ente (:vereador identidades))
           r (participacao-demo/semear! s ente)]
       (testing "3 pedidos e-SIC: aberto no prazo, respondido, e respondido com recurso aberto"
         (is (= 3 (count (:esic r))))
@@ -95,6 +104,7 @@
   (with-sistema [s]
     (let [{:keys [ente identidades]} (casa/semear! s)
           cidadao-id (:cidadao identidades)
+          _ (acervo-demo/semear! s ente (:vereador identidades))
           r (participacao-demo/semear! s ente)
           repo-legislativo (:repo-legislativo s)
           ;; a MESMA resolucao que `semear-acompanhamentos!` usou pra escolher as 3 — reusada, nao

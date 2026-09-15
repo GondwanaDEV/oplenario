@@ -17,11 +17,19 @@
      exige provar, e sem ela `sessoes/semear!` podia regredir para `random-uuid` sem nenhum teste vermelho.
 
   `with-sistema` reusada de `oplenario.demo.casa-test` (carry #1 do briefing — nao existe em nenhum outro
-  lugar do repo, mesmo padrao de `acervo_test.clj`). DEPENDE do acervo (`acervo/semear!`) ja' ter rodado
-  contra este banco (Task 0.4 — 3 proposicoes 'em_pauta' + 4 'aguardando_pauta' reais); este teste nao
-  semeia o acervo, so' a Casa (mesmo desenho de `acervo_test.clj`, que tambem nao semeia nada alem da
-  Casa)."
-  (:require [casa]
+  lugar do repo, mesmo padrao de `acervo_test.clj`). DEPENDE do acervo (`acervo/semear!`, Task 0.4 — 3
+  proposicoes 'em_pauta' + 4 'aguardando_pauta' reais).
+
+  AUTO-SUFICIENTE (15/09/2026): este teste passou a semear o acervo ELE MESMO, logo apos a Casa. Antes
+  ele dependia de `acervo_test` ter rodado antes contra o MESMO banco — premissa de ORDEM que o runner
+  nao garante: no 1o CI que rodou a suite inteira, este teste morreu com `precisa de >=3 proposicoes
+  'em_pauta' … rode acervo/semear! primeiro` porque o acervo nao estava semeado na hora. `acervo/semear!`
+  e' idempotente (relê em vez de duplicar), entao semea-lo aqui e' seguro mesmo quando `acervo_test` ja'
+  rodou. `materias-em-pauta` (sessoes.clj:135) lê a tabela DONA `legislativo.proposicoes` via
+  `listar-e-contar-proposicoes` — nao a projecao que outro teste da suite apaga — logo semear o acervo
+  basta."
+  (:require [acervo]
+            [casa]
             [clojure.set]
             [clojure.test :refer [deftest is testing]]
             [oplenario.demo.casa-test :refer [with-sistema]]
@@ -29,8 +37,9 @@
 
 (deftest tres-sessoes-em-estados-distintos
   (with-sistema [s]
-    (let [{:keys [ente vereadores]} (casa/semear! s)
+    (let [{:keys [ente vereadores identidades]} (casa/semear! s)
           ids-do-roster (set (map :id vereadores))
+          _ (acervo/semear! s ente (:vereador identidades))
           {:keys [encerrada aberta agendada]} (sessoes-demo/semear! s ente)]
       (testing "os três estados são do CHECK da migration, não inventados"
         (is (= "encerrada" (:estado (sessoes-demo/buscar s ente encerrada))))
