@@ -17,7 +17,7 @@
 
 | | |
 |---|---|
-| **Tempo total de preparo** | ~15 min a frio (a maior parte é espera de container) |
+| **Tempo total de preparo** | **~4 min** a frio, medido em 15/09 (quase tudo é espera de container) |
 | **O que demonstrar** | 3 atos, um por público decisor: servidora · Mesa · cidadão |
 | **O que NUNCA abrir** | §1.2 — a lista de telas e botões que expõem defeito conhecido |
 | **Se algo quebrar ao vivo** | §6 — os 6 modos de falha conhecidos e o conserto de cada um |
@@ -61,6 +61,8 @@ uma tela esperando um botão que não existe, a demo trava na sua frente.
 | Botão **"Acompanhar"** no portal | Não existe em tela nenhuma — embora a tela vazia de `/acompanhamentos` instrua a usá-lo |
 | **A resposta de um pedido e-SIC** | É write-only. A cidadã vê "Situação: Respondido" e nenhum texto |
 | Seção de **leis/normas** no portal | Não há porta. O backend tem `/portal/casa/:ente/legislacao`; o frontend não tem tela |
+| **A tela de login do Keycloak** | Diz `Sign in to ente-10000000-0000-…` — **em inglês e com o UUID cru**. É a 1ª tela depois de clicar Entrar. Faça o login ANTES do cliente entrar, ou conserte o `displayName` do realm |
+| **A capa do portal, sem preparo** | O destaque de "Em tramitação agora" mostra a matéria de **maior número**, sem filtrar estado — hoje é a **PL 015/2026, ARQUIVADA**. O título da seção promete tramitação e o item está morto |
 | **Login gov.br** | Não existe |
 | **Console do operador** (supratenant) | 3 linhas de código, zero rotas |
 
@@ -85,13 +87,17 @@ Ambos estão registrados em `docs/16` com reprodução. Não são hipóteses.
 
 | | |
 |---|---|
-| Docker / OrbStack | rodando, com **≥ 6 GiB** de RAM na VM |
+| Docker / OrbStack | rodando. **4 GiB na VM bastam** — medido, ver a nota abaixo |
 | Portas livres no host | 3000 (frontend) · 8888 (backend) · 5544 (Postgres) · 9100/9101 (MinIO) · 8080 (Keycloak) · 8125 (Mailpit) · 6379 (Valkey) |
 | Repositório | `/Users/daoudatraore/oplenario`, branch `main`, árvore limpa |
 
-> **A memória da VM não é detalhe.** A stack completa não cabe em 3.9 GiB: o Postgres cai por
-> `VM_FAULT_OOM` **da VM**, não do container — e a prova só aparece no `dmesg` da VM, nunca no log do
-> container. Se o Postgres morrer sozinho, é isto. Ver a memória `oplenario-vm-orbstack-teto`.
+> **Memória — correção de 15/09, medida.** Uma versão anterior deste runbook exigia ≥ 6 GiB na VM.
+> Estava errado, e de um jeito que inviabilizaria a demo nesta máquina (um Mac de 8 GiB no total —
+> reservar 6 para a VM deixaria 2 para o macOS). **A stack de demo inteira consome ~1,6 GiB**
+> (app 617 MiB · frontend 472 · keycloak 349 · minio 77 · postgres 37 · valkey 12 · mailpit 6), e
+> numa VM de 3,9 GiB sobram ~2 GiB. O que NÃO cabe em 3,9 GiB é **stack + harness Playwright + suíte
+> de testes ao mesmo tempo** — e nada disso entra numa apresentação. A armadilha registrada em
+> `oplenario-vm-orbstack-teto` continua real; o erro foi aplicá-la ao cenário errado.
 
 **Mandato Docker deste projeto:** nunca rode `node`, `npx`, `npm` ou `clj` direto no host. Tudo em
 container, sem exceção.
@@ -118,12 +124,16 @@ OPLENARIO_APP_ENV=production docker compose --profile auth up -d --build
 
 **Espere de verdade.** O `up` frio tem três relógios diferentes:
 
-| Serviço | Tempo | Como saber que terminou |
+| Serviço | Tempo **medido em 15/09** | Como saber que terminou |
 |---|---|---|
-| Postgres + migrate | ~40s | `docker compose ps migrate` mostra `Exited (0)` |
-| **Keycloak** | **~1 min** | Enquanto sobe responde **400** nas chamadas admin — isso **não** é erro de credencial |
-| Backend (`app`) | ~30s | `docker logs oplenario-app-1` imprime `[oplenario] sistema no ar` |
-| Frontend (`next dev`) | **~46s no 1º acesso a cada rota** | Compila sob demanda; a 1ª visita a cada tela é lenta |
+| `up -d --build` inteiro (imagens em cache) | **61s** | o comando retorna |
+| Backend (`app`) | **31s** até `/saude` responder 200 | `docker logs oplenario-app-1` imprime `[oplenario] sistema no ar` |
+| **Keycloak** | **~72s a frio** | Enquanto sobe responde **400** nas chamadas admin — isso **não** é erro de credencial |
+| Frontend (`next dev`) | healthy em ~49s; depois cada rota compila sob demanda no 1º acesso | A 1ª visita a cada tela é lenta — aqueça você, não o cliente |
+| `semear-tudo.sh` | **26s** | imprime `==> semear-tudo.sh OK` |
+| `semear-credenciais.sh` | **11s** | imprime `==> semear-credenciais.sh OK` |
+
+**Preparo real de ponta a ponta: ~4 minutos**, não os 15 que a §0 estimava.
 
 Portão único antes de seguir:
 
@@ -164,8 +174,9 @@ Rode isto **20 minutos antes** do cliente entrar, não na hora.
 ```bash
 cd ~/oplenario
 
-# 1. Restart do frontend — OBRIGATÓRIO por padrão.
+# 1. Restart do frontend — obrigatório APÓS UM `--build` SOBRE VOLUME EXISTENTE.
 #    O volume anônimo de /app/.next sobrevive ao --build e serve 404 em rota que existe em disco.
+#    Depois de um `down -v` o volume nasce limpo e este passo é dispensável (medido em 15/09).
 docker restart oplenario-frontend-1
 
 # 2. A JVM está viva? (crash de SIGBUS derruba TODAS as telas de uma vez)
@@ -348,6 +359,16 @@ A 6ª etapa da semente (`demo/compliance.clj`) não rodou. Verifique com a consu
 O gate do frontend lê os papéis dos claims do token; o backend lê do banco. Um token sem `papeis`
 navega como se não tivesse nenhum, mesmo com o papel gravado. Se acontecer com uma persona do
 Keycloak, é bug — reporte. Com um token de dev montado à mão, é o token que está incompleto.
+
+### §6.8 · O Keycloak sai com `Exited (255)` depois de ligar a máquina
+Medido em 15/09: ao subir o OrbStack com os containers já existentes, o Keycloak arranca junto com o
+Postgres e morre com `Acquisition timeout while waiting for new connection` no pool do Agroal — é
+corrida de boot, **não** falta de memória nem credencial errada. Subir de novo resolve, e ele responde
+em ~72s:
+```bash
+OPLENARIO_APP_ENV=production docker compose --profile auth up -d keycloak
+until curl -sf -o /dev/null http://localhost:8080/realms/master; do sleep 2; done
+```
 
 ### §6.7 · O Postgres morre sozinho
 OOM da **VM**, não do container. Suba a memória do OrbStack para ≥ 6 GiB. A prova está no `dmesg` da

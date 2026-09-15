@@ -32,7 +32,7 @@ export function ProximaSessaoRail({
           {proxima ? (
             <>
               <p>Agendada para {proxima.agendadaPara ? new Date(proxima.agendadaPara).toLocaleString("pt-BR") : "data a definir"}.</p>
-              <p className="nota-gap">Quórum de ciência e checklist de prontidão seguem em breve (carry — ciência de convocação ainda não existe no domínio).</p>
+              <p className="nota-gap">O registro de ciência da convocação e o checklist de prontidão da sessão chegam numa próxima entrega.</p>
             </>
           ) : truncado ? (
             <p role="status" className="aviso-corte">

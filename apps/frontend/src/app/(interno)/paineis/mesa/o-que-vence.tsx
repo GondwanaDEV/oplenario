@@ -16,10 +16,26 @@ import { AnelPrazo } from "@/lib/charts/anel-prazo";
 import { rotularObjetoPrazo } from "@/lib/mesa-vista";
 import type { MesaVista } from "@/lib/mesa-vista";
 
+/** Dias ate' o vencimento, COM SINAL: negativo = ja' venceu ha' N dias.
+ *
+ * O `Math.max(0, ...)` que estava aqui achatava todo o passado em zero, e o rotulo imprimia
+ * "vence em 0 dia(s)" para uma obrigacao vencida ha' semanas — no MESMO cartao cuja manchete diz
+ * "1 obrigacao venceu o prazo no TCE-CE". Duas metades do card de saude institucional afirmavam
+ * coisas diferentes sobre o mesmo prazo, e e' justamente este o card que vende confianca
+ * operacional. O clamp continua existindo, mas onde e' de facto necessario: no anel, que nao sabe
+ * desenhar angulo negativo. */
 function diasAte(dataIso: string): number {
   const alvo = new Date(dataIso).getTime();
   const hoje = new Date().getTime();
-  return Math.max(0, Math.ceil((alvo - hoje) / (1000 * 60 * 60 * 24)));
+  return Math.ceil((alvo - hoje) / (1000 * 60 * 60 * 24));
+}
+
+/** O prazo em palavras. Atrasado, hoje e futuro sao tres frases distintas — "vence em 0 dia(s)"
+ * nao distingue "vence hoje" de "venceu ha' um mes", e as duas exigem acoes opostas da Mesa. */
+function textoPrazo(dias: number): string {
+  if (dias < 0) return `venceu há ${Math.abs(dias)} dia(s)`;
+  if (dias === 0) return "vence hoje";
+  return `vence em ${dias} dia(s)`;
 }
 
 export function OQueVence({ vista }: { vista: MesaVista["oQueVence"] }) {
@@ -71,10 +87,10 @@ export function OQueVence({ vista }: { vista: MesaVista["oQueVence"] }) {
               // por `venceEm`, entao um prazo novo mais urgente entra no meio e desloca todos os
               // indices seguintes — o React reaproveitaria o <li> errado.
               <li key={item.origem === "compliance" ? item.id : item.objetoId} className="prazo-item">
-                <AnelPrazo diasRestantes={dias} diasTotal={30} rotulo={rotulo} />
+                <AnelPrazo diasRestantes={Math.max(0, dias)} diasTotal={30} rotulo={rotulo} />
                 <div className="prazo-obj">
                   <b>{rotulo}</b>
-                  <span className="quando">vence em {dias} dia(s)</span>
+                  <span className={dias < 0 ? "quando quando-atrasado" : "quando"}>{textoPrazo(dias)}</span>
                 </div>
               </li>
             );

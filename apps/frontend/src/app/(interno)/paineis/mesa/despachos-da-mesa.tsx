@@ -62,8 +62,7 @@ export function DespachosDaMesa({ vista }: { vista: MesaVista["despachos"] }) {
           <p>Nenhum parecer aguardando designação de relator.</p>
         )}
         <p className="nota-gap">
-          Despachar distribuição, assinar autógrafo e revisar ata seguem fora deste painel por ora — sem
-          rota de backend ainda (carry documentado no spec).
+          Despachar a distribuição, assinar o autógrafo e revisar a ata ainda são feitos fora deste painel.
         </p>
       </div>
     </section>
