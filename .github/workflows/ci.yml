@@ -90,3 +90,65 @@ jobs:
           KEYCLOAK_SMTP_HOST: mailpit
           MAILPIT_URL: http://localhost:8025
         run: clojure -M:test --skip :e2e
+
+  # M3 (docs/20, Onda T0): browser-e2e do Portal do Cidadao via Playwright, contra a stack INTEIRA de pe
+  # (app + frontend + infra), em modo dev (sem Keycloak — o portal e publico). E o 1o job de browser do
+  # projeto: prova o caminho FE->BFF->backend->DB->render que a suite backend nao alcanca. Specs internos
+  # (servidor/vereador) entram por cima deste job ja verde (Onda T1).
+  browser-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Subir a stack inteira (dev — app + frontend + infra, sem --profile auth)
+        # Sem `.env` no CI => a compose cai nos defaults dela (pg 5432, minio 9000, valkey 6379, app 8888,
+        # frontend 3000). `up -d --build` honra o depends_on (migrate roda e sai antes do app; frontend
+        # sobe depois do app). Nao precisa de keycloak/mailpit: o portal do cidadao e anonimo.
+        working-directory: apps/backend
+        run: docker compose up -d --build
+
+      - name: Esperar o backend (/saude=200)
+        working-directory: apps/backend
+        run: |
+          for i in $(seq 1 60); do
+            curl -sf -o /dev/null http://localhost:8888/saude && exit 0
+            sleep 2
+          done
+          echo "backend /saude nao respondeu a tempo"; docker compose logs app --tail 80; exit 1
+
+      - name: Semear a Casa do e2e (base + materias + encarregado, com a barreira de projecao)
+        # semear.sh default = portas deste dev (5544/9100); no CI a compose usa os defaults dela
+        # (5432/9000). Exporta os nomes que semear.sh le p/ casar com a compose (o proprio semear.sh
+        # documenta essa necessidade). Roda seeds em containers efemeros (clojure:temurin) via --network host.
+        env:
+          OPLENARIO_PG_PORT: '5432'
+          OPLENARIO_MINIO_PORT: '9000'
+        run: ./e2e/semear.sh
+
+      - name: Esperar o frontend (/=200 — next dev compila a rota sob demanda)
+        working-directory: apps/backend
+        run: |
+          for i in $(seq 1 90); do
+            curl -sf -o /dev/null http://localhost:3000/ && exit 0
+            sleep 2
+          done
+          echo "frontend nao respondeu a tempo"; docker compose logs frontend --tail 80; exit 1
+
+      - name: Instalar o Playwright (Chromium) e rodar os specs
+        working-directory: e2e
+        env:
+          E2E_BASE_URL: http://localhost:3000
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npx playwright test
+
+      - name: Logs da stack (so em falha)
+        if: failure()
+        working-directory: apps/backend
+        run: docker compose logs app frontend --tail 120
