@@ -20,7 +20,12 @@
 --      um :id existente). Ver o bloco E4 la embaixo para o porque de precisar de um alvo novo.
 
 \set ente '10000000-0000-0000-0000-000000000001'
-\set vereador_identidade '49c23663-c30e-4829-b3be-c7481f107275'
+-- `vereador_identidade` vem por `-v` de preparar.sh (resolvido de demo-ids.edn), NAO cravado aqui: num
+-- seed FRESCO (CI) o id da identidade e' novo/aleatorio; cravar 49c23663 (id de uma Casa congelada)
+-- fazia as notificacoes caírem numa identidade inexistente -> `inbox-vazia` no preparar.mjs. O `ente`
+-- segue fixo porque a demo usa um ente-id FIXO. preparar.sh garante o -v (falha antes de chamar o psql
+-- se demo-ids.edn nao tiver a identidade); rodar fixtures.sql direto sem o -v falha no primeiro uso de
+-- :'vereador_identidade' com ON_ERROR_STOP.
 
 -- RLS FORCE nas duas tabelas: a policy le app.ente_id do settings da sessao.
 SELECT set_config('app.ente_id', :'ente', false);

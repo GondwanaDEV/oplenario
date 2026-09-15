@@ -13,7 +13,15 @@ RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 E2E="$RAIZ/e2e"
 
 echo "== 1/2 fixtures.sql (documento_modelo + notificacao_caixa) =="
+# O id da identidade :vereador e' resolvido de demo-ids.edn (nao cravado em fixtures.sql): num seed
+# fresco ele e' novo/aleatorio. Mesma extracao por regex que preparar.mjs faz do bloco :identidades.
+DEMO_IDS="$E2E/.artifacts/demo-ids.edn"
+[ -f "$DEMO_IDS" ] || { echo "ERRO: $DEMO_IDS ausente — rode a semente CHEIA (demo/semear-tudo.sh) antes." >&2; exit 1; }
+VEREADOR_IDENTIDADE="$(grep -oE ':vereador #uuid "[0-9a-fA-F-]{36}"' "$DEMO_IDS" | head -1 | grep -oE '[0-9a-fA-F-]{36}')"
+[ -n "$VEREADOR_IDENTIDADE" ] || { echo "ERRO: nao achei a identidade :vereador em $DEMO_IDS" >&2; exit 1; }
+echo "   vereador_identidade (de demo-ids.edn) = $VEREADOR_IDENTIDADE"
 docker exec -i oplenario-postgres-1 psql -U oplenario -d oplenario -v ON_ERROR_STOP=1 \
+  -v vereador_identidade="$VEREADOR_IDENTIDADE" \
   < "$E2E/t3/fixtures.sql"
 
 echo
