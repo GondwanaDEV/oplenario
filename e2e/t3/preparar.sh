@@ -33,10 +33,12 @@ echo "== 2/3 preparar.mjs (tudo o que TEM rota HTTP) =="
 docker run --rm --network host \
   --user "$(id -u):$(id -g)" \
   -v "$E2E":/e2e \
-  -v oplenario_e2e_nm:/e2e/node_modules \
   -w /e2e \
   mcr.microsoft.com/playwright:v1.49.0-noble \
   node /e2e/t3/preparar.mjs
+# NB: preparar.mjs e' node PURO (so builtins + fetch), nao usa node_modules — por isso NAO montamos o
+# volume `oplenario_e2e_nm:/e2e/node_modules` aqui. Montar criava um mountpoint `e2e/node_modules` no host
+# DONO de root, e o `npm ci` seguinte (no runner, nao-root) batia em EACCES ao escrever @playwright.
 
 echo
 echo "== 3/3 T3-A2 — os dois texto_versao_id (votado vs. atual) — psql DIRETO, sem rota HTTP p/ isto =="

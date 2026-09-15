@@ -211,6 +211,7 @@ jobs:
           E2E_BASE_URL: http://localhost:3000
           E2E_INCLUDE_T3: '1'
         run: |
+          sudo rm -rf node_modules   # defensivo: preparar.sh pode ter deixado um mountpoint root-owned
           npm ci
           npx playwright install --with-deps chromium
           npx playwright test t3/
