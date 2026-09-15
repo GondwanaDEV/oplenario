@@ -2483,7 +2483,24 @@ preparar.mjs; sem mount root-owned de `node_modules`), os 8 specs RODARAM e o pl
 graduado: E1 (6, 1 causa) tem ROI alto; E8/E3-par são pontuais; E5/E6 (SSE) e os [ACHADO] são decisão de
 design (forçar verde pode não valer). Infra do job: sólida e verde (stack + semente cheia + preparar.sh).
 
-**Pendente (decisão do Daouda):** (a) investigar/consertar o cluster E1 (6 specs, 1 helper) — o próximo
-passo de maior valor; (b) decidir o destino dos specs SSE/[ACHADO] (redesenhar vs. marcar `[GAP]`/skip
-explícito); (c) levar o verde para `main` — `test` + `browser-e2e` estão verdes/estáveis e `t3-e2e` é
-`continue-on-error` (informativo), então o merge não fica bloqueado pela cauda da Trilha 3.
+**Cluster E1 — parcialmente consertado (run #21).** Descoberta: o comentário-cabeçalho do próprio
+`E1.spec.ts` culpava o bug do `vivoRef` (hooks de escrita não re-armavam o ref sob StrictMode) — mas
+esse bug **já foi consertado**: todos os `use-*.ts` de escrita têm `vivoRef.current = true` no setup e há
+um `vivo-ref-lint.test.ts` enforçando. Logo o comentário está **desatualizado** e não era a causa. As 6
+falhas E1 eram ≥2 causas: (a) 2 = corrida de hidratação nos helpers `criarVereadorPelaTela`/
+`darMandatoVigentePelaTela` (click em rota interna compilando a frio, antes do React hidratar → form não
+abre); **consertado** com re-click via `expect(...).toPass` → placar subiu de **60→63 passed, 13→11
+failed**. (b) 4 restantes = asserções por-teste reais (editar `toHaveText` do h2, os dois guards de
+duplo-clique `toBe(1)`, o 409 de mandato sobreposto) — **findings-or-bugs genuínos** que exigem iteração
+LOCAL de Playwright (feedback rápido); rodadas cegas de CI servem mal.
+
+**Placar atual da Trilha 3 (run #21): 63 passed · 11 failed · 6 skipped · 5 did-not-run.** As 11 falhas:
+4 E1 (acima) · 3 E3 (ementa-só-espaços, abas concorrentes `[ACHADO]`, editar-ementa) · 1 E4 `[ACHADO]` ·
+3 E5/E6 (sonda de sessão ao vivo/SSE — CI-hostis por natureza).
+
+**Recomendação de parada honesta:** a cauda restante (11) é iteração LOCAL (Playwright com feedback
+rápido, na máquina de demo) + decisões de design (SSE/[ACHADO]) — não trabalho de CI cego. O valor sólido
+já está no lugar: `test` (verde e determinístico, 5 runs seguidos), `browser-e2e` (portal, verde), e a
+Trilha 3 ligada + medida (63/79) com `t3-e2e` `continue-on-error` (informativo, não bloqueia merge).
+**Pendente (decisão do Daouda):** (a) fechar a cauda E1/E3 localmente; (b) destino dos SSE/[ACHADO]
+(redesenhar vs. `[GAP]`/skip explícito); (c) mergear o verde para `main`.
