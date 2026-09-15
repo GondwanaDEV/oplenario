@@ -102,16 +102,22 @@ para chamar. A medição (14 telas × medir + refutar; ledger `docs/16`, seção
 
 E `vereador-estatisticas` esbarra no `proposicoes.estado` morto (4 dos 5 buckets).
 
-**4. A verificação independente começou — e o 1º sinal é VERMELHO.** *(atualizado 15/09/2026)* O
-repositório **agora tem remote** (`github.com/GondwanaDEV/oplenario`) e `main` está publicada. O
-`.github/workflows/ci.yml` **executou pela 1ª vez** (run #1, commit `f29102b`) e **falhou** — não nos
-testes, mas no passo de subir a infra: `docker compose up ... minio` deu `pull access denied for
-minio/minio`. O compose fixa `minio/minio` **sem tag** e o pull anônimo do Docker Hub é recusado no
-runner do GitHub. Ou seja: o "CI verde local" das fases continua sem contraparte independente **verde**
-— o CI remoto nem chega a rodar teste. Destravar de verdade = **fixar a tag do MinIO (e demais imagens)
-+ `docker login`/mirror no CI**, então deixar a suíte rodar. Isso, sim, fecharia o buraco de verificação
-que o "CI verde" local nunca fechou. (O texto anterior — "não tem remote, nunca executou, decisão do
-Daouda" — está superado: o remote existe e o CI já rodou.)
+**4. A verificação independente começou — CI destravado na infra, 3 testes `demo.*` faltam.**
+*(atualizado 15/09/2026, tarde)* O repositório **tem remote** (`github.com/GondwanaDEV/oplenario`) e
+`main` está publicada. O `.github/workflows/ci.yml` **executou** e o buraco de verificação começou a
+fechar, em duas etapas de infra:
+- **MinIO:** o namespace `minio/*` **sumiu do Docker Hub** (API de tags do Hub → 404 "object not found";
+  `library/postgres` → 200). Não era rate-limit nem `:latest` faltando — a imagem não está mais lá.
+  Consertado: `docker-compose.yml` puxa de `quay.io/minio/minio` (mesmo registro do keycloak).
+- **Valkey:** o CI não subia o `valkey`; o teste do backplane (conecta em `redis://localhost:6379`)
+  dava `Connection refused`. Consertado: `ci.yml` sobe `valkey` + readiness.
+Com isso o CI passou de "morre em 15s sem puxar imagem" para **rodar a suíte inteira (2352 testes)**.
+**Resta 1 frente para o verde total:** 3 erros pré-existentes em `oplenario.demo.*_test`
+(`participacao_test`, `sessoes_test`) — dependem de `acervo/semear!` ter rodado antes no MESMO banco
+(estado compartilhado que a suíte não garante, e que outro teste chega a apagar). Conserto correto =
+tornar esses testes auto-suficientes / isolar a suíte, **não** afrouxar asserção. Detalhe e procedência
+em `docs/16`, seção "Progressão do CI". (Os textos anteriores — "sem remote / nunca executou" e depois
+"fixar tag + docker login" — estão superados por este.)
 
 **Dívida técnica conhecida (não bloqueia):** assinatura ICP-Brasil ainda é `STUB-ICP-v0`; registro de
 passkey depende de secure context (carry de ambiente); PWA cerimonial e app Flutter parqueados atrás

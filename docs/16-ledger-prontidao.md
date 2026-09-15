@@ -2383,3 +2383,37 @@ Antes de qualquer demo **externa**, dois portões não-negociáveis, nesta ordem
    como autógrafo ao Prefeito e se publica no portal. É portão, não enfeite.
 
 Para demo **interna/controlada**, seguir o roteiro à risca já sustenta a história — com R2/R3/C1/C2 incorporados.
+
+## Progressão do CI (15/09/2026, tarde) — destravado na infra, 3 erros pré-existentes de teste expostos
+
+Continuei o R1 e destravei o CI de verdade, observando cada run pela API do GitHub:
+
+1. **MinIO (run #1/#2 vermelhos).** Causa raiz não era rate-limit nem `:latest` faltando: o **namespace
+   `minio/*` sumiu do Docker Hub** (a API de tags do Hub devolve 404 "object not found" para `minio/minio`
+   e `minio/mc`; `library/postgres` responde 200). Consertado em `apps/backend/docker-compose.yml`:
+   `minio/minio` → `quay.io/minio/minio:latest` (quay já era usado pelo keycloak). Com isso o CI passou a
+   subir **toda a infra verde** (Postgres, Valkey, MinIO, Keycloak, Mailpit).
+2. **Valkey (run #3 vermelho, 1 erro).** O passo de infra do CI listava `postgres minio keycloak mailpit`
+   e **omitia o `valkey`** — o teste de integração do backplane Valkey (conecta em `redis://localhost:6379`
+   direto) morria com `Connection refused`. Consertado em `.github/workflows/ci.yml` (sobe `valkey` +
+   readiness `valkey-cli ping`). Com isso o CI passou a **rodar a suíte inteira: 2352 testes, 6341
+   asserções.**
+3. **3 erros restantes (run #4) — pré-existentes, NÃO de infra e NÃO causados por esta frente.** Todos na
+   família `oplenario.demo.*_test` (2 em `participacao_test`, 1 em `sessoes_test`), todos a mesma
+   precondição não satisfeita: *"acervo incompleto … rode `acervo/semear!` primeiro"* / *"precisa de >=3
+   proposições 'em_pauta' do acervo"*. **Por quê:** esses testes de integração da semente **dependem de
+   estado compartilhado** — o docstring de `participacao_test.clj:25-29` diz que ele "não semeia o acervo,
+   só a Casa", contando que `acervo_test` tenha rodado antes contra o MESMO banco; e o próprio arquivo
+   (`:72-81`) documenta que **outro teste da suíte APAGA `transparencia.materia`** do ente da demo. O "CI
+   verde local" das fases vinha de uma ordem/estado onde o acervo estava semeado e não-apagado; o CI
+   independente expõe a fragilidade estrutural.
+
+**Recomendação (decisão do time, não hack de CI):** o conserto correto é tornar `sessoes_test`/
+`participacao_test` **auto-suficientes** (semear o acervo eles mesmos, como já semeiam a Casa) ou impor
+ordenação/isolamento de suíte — **não** editar asserção para forçar verde, o que o próprio arquivo alerta
+que "TREINA a ignorar vermelho" (`participacao_test.clj:80`). É uma mudança de semântica de teste que o
+time já debateu (a tensão "Casa compartilhada e mutável que a suíte danifica"), então fica como frente
+própria, não como parte do destravamento de CI.
+
+**Estado do CI ao fim desta sessão:** infra 100% verde; a suíte roda inteira; falta só fechar a
+ordenação/isolamento dos 3 testes `demo.*` para o verde total.
