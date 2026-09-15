@@ -7,9 +7,9 @@ export default defineConfig({
   testDir: ".",
   // A suíte `t3/` (Trilha 3 — escritas internas autenticadas) é OPT-IN: exige `t3/preparar.sh` (fixtures
   // + preparar.mjs + t3-ids.json) rodado ANTES, e muta a Casa da demo. Fora do glob default (`rodar.sh` e
-  // o job de browser-e2e do CI, que só provam o Portal do Cidadão anônimo). Rodar via `npx playwright
-  // test t3/` depois do preparar.sh. Ver docs/20 (Onda T1) para o plano de integrá-la ao CI.
-  testIgnore: ["**/t3/**"],
+  // o job `browser-e2e` do CI, que só provam o Portal do Cidadão anônimo). O job `t3-e2e` do CI liga-a
+  // com `E2E_INCLUDE_T3=1` e roda `npx playwright test t3/` depois do preparar.sh. Ver docs/20 (Onda T1).
+  testIgnore: process.env.E2E_INCLUDE_T3 ? [] : ["**/t3/**"],
   // Task 2: NÃO semeia (o container do Playwright não tem CLI do docker) — só lê/valida o artefato
   // que `semear.sh` (host) já deixou em `.artifacts/demo-ids.edn` e normaliza p/ `.artifacts/ente.json`.
   globalSetup: "./global-setup.ts",

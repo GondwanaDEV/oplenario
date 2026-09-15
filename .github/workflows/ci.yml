@@ -152,3 +152,66 @@ jobs:
         if: failure()
         working-directory: apps/backend
         run: docker compose logs app frontend --tail 120
+
+  # T1 (docs/20): a Trilha 3 (`e2e/t3/`) — 8 specs de browser AUTENTICADAS (escritas internas por
+  # persona, via dev-token `?token=`). Ja' existia no repo, nunca ligada ao CI. Exige a semente CHEIA
+  # (`demo/semear-tudo.sh`, nao o seed_demo do harness — as fixtures/specs cravam ids fixos da demo) +
+  # `t3/preparar.sh` (documento_modelo + notificacoes + parecer-alvo, o que nao tem rota HTTP). Stack
+  # EFEMERA: a mutacao da Casa que a MAPA.json alerta nao colide com nada aqui (DB descartado no fim).
+  t3-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Subir a stack inteira (dev — dev-token; sem --profile auth)
+        working-directory: apps/backend
+        run: docker compose up -d --build
+
+      - name: Esperar o backend (/saude=200)
+        working-directory: apps/backend
+        run: |
+          for i in $(seq 1 60); do
+            curl -sf -o /dev/null http://localhost:8888/saude && exit 0
+            sleep 2
+          done
+          echo "backend /saude nao respondeu a tempo"; docker compose logs app --tail 80; exit 1
+
+      - name: Semear a Casa CHEIA (demo/semear-tudo.sh — escreve e2e/.artifacts/demo-ids.edn)
+        # A Trilha 3 crava ids FIXOS da demo (ente ...0001, identidades, proposicoes, parecer-modelo);
+        # so' a semente narrativa completa os produz. Portas default da compose no CI (5432/9000/8888).
+        env:
+          OPLENARIO_PG_PORT: '5432'
+          OPLENARIO_MINIO_PORT: '9000'
+        run: ./demo/semear-tudo.sh
+
+      - name: Esperar o frontend (/=200)
+        working-directory: apps/backend
+        run: |
+          for i in $(seq 1 90); do
+            curl -sf -o /dev/null http://localhost:3000/ && exit 0
+            sleep 2
+          done
+          echo "frontend nao respondeu a tempo"; docker compose logs frontend --tail 80; exit 1
+
+      - name: Preparar a Trilha 3 (fixtures.sql + preparar.mjs — precondicoes sem rota HTTP)
+        run: ./e2e/t3/preparar.sh
+
+      - name: Rodar os 8 specs da Trilha 3 (E2E_INCLUDE_T3=1)
+        working-directory: e2e
+        env:
+          E2E_BASE_URL: http://localhost:3000
+          E2E_INCLUDE_T3: '1'
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npx playwright test t3/
+
+      - name: Logs da stack (so em falha)
+        if: failure()
+        working-directory: apps/backend
+        run: docker compose logs app frontend --tail 160
