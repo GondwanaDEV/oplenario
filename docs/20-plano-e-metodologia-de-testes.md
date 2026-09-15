@@ -126,14 +126,33 @@ A matriz do que existe para testar. Método-alvo por linha; cobertura atual hone
 **Sinal claro:** `participacao` (21 rotas, 9 deftests) e `tempo_real` (SSE, 6 deftests) são os módulos com
 mais superfície por teste — candidatos a reforço M2, e onde M3/M4 mais provavelmente acham coisa.
 
-### §3.2 · Por público × fluxo (a régua da experiência)
+### §3.2 · Por persona / papel × fluxo (a régua da experiência)
 
-| Público | Fluxos-chave | Método-alvo | Cobertura hoje |
-|---|---|---|---|
-| **Servidora** (`secretario`) | protocolar → ficha → tramitação → chamada → folha; parecer; expediente/protocolo; conceder acesso | M3 + M4 | Jornada 1× (docs/16 J-servidora); **sem spec de browser** |
-| **Mesa / Presidente** | dashboard, compliance TCE, calendário, telão SSE, votar | M3 + M4 | Jornada 1× (docs/16 J-presidente, 403 crítico); **sem spec** |
-| **Vereador** | cockpit `/votar`, notificações, assinar parecer, home | M3 (inclui **mobile** — é o celular) | Jornada parcial; **mobile nunca testado** |
-| **Cidadão** (anônimo) | capa, matéria, perfil vereador, `/status`, balcão e-SIC | M3 | **Único com specs** (portal-cidadao.spec.ts) — expandir |
+> ⚠️ **Os "3 atos" do runbook `docs/19` são a lente da DEMO** (os 3 públicos decisores em licitação:
+> servidor, Mesa, cidadão). **Não são o conjunto de personas da plataforma.** Testar "tudo" exige a lista
+> completa abaixo — enumerada contra o código (papéis em `identidade`/`kernel/autorizacao`; personas
+> semeadas em `demo/casa.clj:106-132`; papéis concedíveis em `identidade/wire/in/acesso.clj:7`).
+
+**Vocabulário real (autoridade):** vínculo (tipo) ∈ `servidor · vereador · cidadao`; papel ∈
+`secretario · vereador · admin_ente · admin_sistema · :sistema` (sem CHECK — papel é dado). **Só
+`vereador` é concedível pelo produto** (`acesso.clj:7` = `#{"vereador"}`) — dar `secretario`/`admin_ente`
+não tem tela nem rota.
+
+| Persona (papel) | É ato da demo? | Fluxos-chave | Método | Cobertura hoje |
+|---|---|---|---|---|
+| **Servidor / Secretário** (`servidor`+`secretario`) | Ato 1 | protocolar → ficha → tramitação → chamada → folha; parecer; expediente/protocolo; conceder acesso; dashboard/compliance/calendário (as 4 rotas `paineis` exigem `secretario`) | M3+M4 | Jornada 1× (J-servidora); **sem spec** |
+| **Vereador** (`vereador`) | Ato 2 (parcial) | cockpit `/votar` (**mobile — é o celular**), notificações, **assinar parecer** (relator), home | M3+M4 | Jornada parcial; **mobile e parecer nunca em spec** |
+| **Presidente da Mesa** (`vereador`+`admin_ente`) | (a demo o evita) | conceder/**revogar** acesso; **NÃO abre `paineis/*` (403)** — crítico aberto; abrir/encerrar sessão (só HTTP) | M4→M2 | Jornada 1× achou o 403; **quebrado, não coberto** |
+| **admin_ente** (genérico, não-Presidente) | não | administração da Casa; hoje só "conceder acesso" e mesmo assim 403 nos painéis | M2 (matriz authz) | **surface incompleta — item da frente §3.2 CLAUDE.md** |
+| **Cidadão anônimo** (sem login) | Ato 3 | capa, matéria, perfil vereador, `/status`, **buscar** protocolo e-SIC | M3 | **Único com specs** (portal-cidadao) — expandir |
+| **Cidadão autenticado** (`cidadao` via gov.br) | não | **escrever** e-SIC/LGPD/ouvidoria, comentar, **acompanhar** matéria | M3+M4 | **BLOQUEADO — gov.br não existe** (§3.2 CLAUDE.md); backend pronto, sem porta |
+| **Operador supratenant** (`admin_sistema`) | não | console do operador, observabilidade, onboarding de tenant | — | **AUSENTE — `admin_sistema` tem 0 rotas** (stub); testa quando existir |
+| **Sub-personas funcionais** | dentro do vereador | **relator de parecer**; **presidente/membro de comissão** (CCJ etc.); **DPO/Encarregado** (resposta LGPD) | M4→M2/M3 | parcial em M2; sem jornada própria |
+
+**Leitura:** a demo cobre 3 (servidor, Mesa-como-secretário, cidadão anônimo). A plataforma tem **~8
+personas**. Três estão **quebradas/ausentes** e amarradas às frentes abertas do CLAUDE.md §3 (403 do
+admin_ente; gov.br do cidadão autenticado; console do `admin_sistema`) — o plano as **lista e prioriza**
+(T3 authz, T4 auth), não as esconde.
 
 ---
 
@@ -148,11 +167,18 @@ As ondas T1–T3 fecham o buraco de "fluxo como o usuário vive"; T4+ endereçam
 - **Método:** M2/M3 (infra). **Saída:** CI roda backend **e** browser; runbook de execução validado.
 - **Fecha quando:** um push dispara os dois e ambos passam.
 
-### Onda T1 — Caminhos felizes dos 3 atos, em browser repetível
-- **Fazer:** converter as 3 jornadas de `docs/16` em **specs Playwright** — servidora (protocolo→folha),
-  Mesa (dashboard→telão→voto), cidadão (portal→e-SIC). Uma persona por spec.
-- **Método:** M3 (a partir de M4 já feito). **Saída:** 3 specs verdes no CI.
-- **Fecha quando:** os atos do runbook `docs/19` §3 rodam sem operador humano.
+### Onda T1 — Caminho feliz **por persona** (todas as que têm surface funcionando), em browser repetível
+- **Fazer:** um spec Playwright por persona com fluxo real hoje — **não só os 3 atos da demo**:
+  (1) **servidor/secretário** (protocolo→ficha→tramitação→chamada→folha); (2) **vereador** — cockpit
+  `/votar` **em viewport mobile** + notificações + **assinar parecer** (relator); (3) **cidadão anônimo**
+  (portal→matéria→perfil→`/status`→buscar e-SIC). Uma persona por spec, autenticação via o modo do harness
+  (§2.4).
+- **Fora de T1 por dependência** (vão para T3/T4, não são esquecidas): **presidente/admin_ente** (403 nos
+  painéis — conserto antes de testar), **cidadão autenticado** (gov.br ausente), **operador supratenant**
+  (`admin_sistema` sem rotas).
+- **Método:** M3 (a partir de M4 já feito). **Saída:** 3 specs de persona verdes no CI (as demais personas
+  entram quando a surface existir).
+- **Fecha quando:** o caminho feliz de cada persona com surface funcionando roda sem operador humano.
 
 ### Onda T2 — Caminhos infelizes e a **família do DESFAZER** *(ledger §A — nunca varrida)*
 - **Fazer:** anular/corrigir voto; retirar matéria de pauta; votar em sessão/votação já fechada (os 409);
@@ -232,7 +258,9 @@ se espera" (é uma das 3 apostas da V1: experiência de produto).
 
 ## §8 · Próximo passo sugerido
 
-Executar **Onda T0 + T1**: adicionar o job de browser-e2e ao CI e converter as 3 jornadas em specs
-Playwright repetíveis. É o que transforma "testei uma vez à mão" em "o CI prova a cada push" — a maior
-alavanca de confiança para uma plataforma deste tamanho. As ondas seguintes (T2 caminhos infelizes, T3
-authz/tenant, T4 auth real) atacam o que nenhuma jornada tocou.
+Executar **Onda T0 + T1**: adicionar o job de browser-e2e ao CI e escrever um spec Playwright por
+persona com surface funcionando (servidor, vereador, cidadão anônimo). É o que transforma "testei uma
+vez à mão" em "o CI prova a cada push" — a maior alavanca de confiança para uma plataforma deste tamanho.
+As ondas seguintes atacam o que nenhuma jornada tocou e as personas quebradas/ausentes: T2 caminhos
+infelizes + desfazer, T3 authz × papel + multi-tenant (destrava o presidente/admin_ente), T4 auth real
+(destrava o cidadão autenticado), T6 sub-personas (relator, comissão, DPO).
