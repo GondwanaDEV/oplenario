@@ -128,14 +128,14 @@
   terminal` -> 409 (T2 grupo A achado #3, ledger Fase 8 — ERA 400, corrigido: 409 e' o codigo certo p/
   'seu pedido era valido, o recurso mudou'). Sessao ja fechada (`:conflito/sessao-fechada`) -> 409 (achado
   #4/#5)."
-  [repo-leg consultar-sessao sessao-fechada?]
+  [repo-leg consultar-sessao sessao-fechada? membros-da-casa]
   (fn [req]
     (let [ator (:ator req)
           sid  (adapters-in/id-param->uuid (get-in req [:path-params :id]))
           vid  (adapters-in/id-param->uuid (get-in req [:path-params :votacao-id]))
           m    (adapters-in/encerrar-votacao->dominio ator vid (:json-params req))]
       (try
-        (if-let [snap (controllers/encerrar-votacao repo-leg consultar-sessao sessao-fechada? ator sid vid m)]
+        (if-let [snap (controllers/encerrar-votacao repo-leg consultar-sessao sessao-fechada? membros-da-casa ator sid vid m)]
           (http/json-resposta 200 (adapters-out/encerramento->wire snap))
           (http/json-resposta 404 {:erro "votacao nao encontrada nesta sessao"}))
         (catch clojure.lang.ExceptionInfo e
@@ -749,7 +749,7 @@
   inversao de dependencia de `sessao-fechada?`; a formula e' mesma Casa E (transmissao publica OU
   'secretario' OU 'vereador') — ver rotas.clj)."
   [{:keys [auth repo-legislativo consultar-sessao sessao-fechada? pode-ver-votacao-aberta? resolver-municipio
-           resolver-vereador resolver-comissoes vereador-vinculado? registro relogio]}]
+           resolver-vereador resolver-comissoes vereador-vinculado? membros-da-casa registro relogio]}]
   (let [papel (it/exige-papel "secretario")
         papel-vereador (it/exige-papel "vereador")]
     #{["/sessoes/:id/votacoes" :post
@@ -763,7 +763,7 @@
                                                              resolver-vereador registro relogio)]
        :route-name :legislativo/meu-voto]
       ["/sessoes/:id/votacoes/:votacao-id/encerramento" :post
-       [auth papel it/corpo-json (encerrar-handler repo-legislativo consultar-sessao sessao-fechada?)]
+       [auth papel it/corpo-json (encerrar-handler repo-legislativo consultar-sessao sessao-fechada? membros-da-casa)]
        :route-name :legislativo/encerrar-votacao]
       ["/sessoes/:id/votacoes/:votacao-id" :get
        [auth papel-vereador (detalhe-votacao-handler repo-legislativo consultar-sessao sessao-fechada?)]

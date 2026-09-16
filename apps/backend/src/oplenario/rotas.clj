@@ -389,6 +389,12 @@
                                        :resolver-vereador resolver-vereador-fn
                                        :resolver-comissoes resolver-comissoes-fn
                                        :vereador-vinculado? vereador-vinculado?
+                                       ;; sec MEDIUM-1 FIX: o denominador do quorum (base-membros) e' computado
+                                       ;; SERVER-SIDE no encerramento a partir da composicao real da Casa —
+                                       ;; nunca mais do corpo do request. Reusa o MESMO seam `membros-da-casa`
+                                       ;; ja' injetado em sessoes (hoje no fuso civil), mesma inversao de
+                                       ;; dependencia de consultar-sessao (legislativo NAO importa cadastros, §22.10).
+                                       :membros-da-casa membros-da-casa
                                        :registro registro-fatos
                                        :relogio relogio-producao}))
         (into (compliance-http/rotas {:auth auth :repo-compliance repo-compliance}))

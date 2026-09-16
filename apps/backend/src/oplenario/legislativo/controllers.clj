@@ -502,14 +502,13 @@
 
   Sessao ja fechada -> `sessao-autorizada` lanca `:conflito/sessao-fechada` (-> 409, ledger Fase 8 achado #4/#5).
 
-  CARRY DE SEGURANCA (sec MEDIUM-1, F4 Slice 3): `base-membros` (denominador do quorum p/ maioria
-  absoluta/qualificada) vem do CORPO do request — um secretario comprometido poderia falsear o resultado legal
-  (ex.: base-membros=1 aprova tudo). Mitigacoes vivas: gate de papel 'secretario' + mesma Casa + o snapshot
-  append-only grava o base_membros usado (auditavel). FIX PROPRIO (diferido, shape de F2): resolver a composicao
-  da Casa SERVER-SIDE via a relacao `cadastros/membros_da_casa` (ja existe), injetada pelo host como o
-  `consultar-sessao` faz — e remover `base-membros` do wire/in. Cross-modulo + data de vigencia do mandato =
-  trabalho do resolvedor de fatos (§22.5.3 disc.5), nao desta fatia de borda."
-  [repo-leg consultar-sessao sessao-fechada? ator sessao-id votacao-id m]
+  SEGURANCA (sec MEDIUM-1 FECHADO): `base-membros` (denominador do quorum p/ maioria absoluta/qualificada)
+  e' resolvido SERVER-SIDE via `membros-da-casa` (relacao `cadastros/membros_da_casa`, injetada pelo host como
+  `consultar-sessao` — legislativo NAO importa cadastros, §22.10) e SOBRESCREVE qualquer valor do corpo. Antes
+  vinha do corpo do request: um secretario comprometido faria `base-membros=1` e aprovaria tudo. Agora o campo
+  saiu do wire/in (mandar no corpo -> 400 por `:closed true`) e o denominador e' a composicao REAL da Casa
+  (mandato vigente hoje, fuso civil); o snapshot append-only segue gravando o base_membros USADO (auditavel)."
+  [repo-leg consultar-sessao sessao-fechada? membros-da-casa ator sessao-id votacao-id m]
   (when (sessao-autorizada consultar-sessao sessao-fechada? ator sessao-id)
     (let [ente-id (:ente-id ator)]
       (when-let [v (votacao-na-sessao repo-leg ente-id sessao-id votacao-id)]
@@ -519,7 +518,8 @@
         (when (and (= "simbolica" (:modalidade v)) (nil? (:resultado m)))
           (throw (ex-info "votacao simbolica exige resultado explicito"
                           {:tipo :validacao/invalido :campos [:resultado]})))
-        (repo/encerrar-votacao! repo-leg ente-id m)))))
+        ;; O denominador NUNCA vem do cliente: computa-se aqui, da composicao real da Casa, e sobrescreve `m`.
+        (repo/encerrar-votacao! repo-leg ente-id (assoc m :base-membros (membros-da-casa ente-id)))))))
 
 ;; ========================= Onda B Slice 6: expediente (documentos + protocolo geral) =========================
 

@@ -34,7 +34,7 @@
 
 (def ^:private campos-abrir ["objeto-tipo" "objeto-id" "modalidade" "quorum-tipo" "pauta-item-id"])
 (def ^:private campos-voto ["voto" "vereador-id"])
-(def ^:private campos-encerrar ["lock-version" "base-membros" "resultado"])
+(def ^:private campos-encerrar ["lock-version" "resultado"])
 
 (defn abrir-votacao->dominio
   "Corpo externo (wire/in.AbrirVotacao) + `ator` -> mapa de dominio p/ Repo/abrir-votacao!. O sessao-id (da URL)
@@ -78,13 +78,13 @@
 
 (defn encerrar-votacao->dominio
   "Corpo (wire/in.EncerrarVotacao) + `ator` + `votacao-id` (UUID coagido do path) -> mapa de dominio p/
-  Repo/encerrar-votacao!. `id` = o votacao-id do path; `updated-by` = o ator."
+  Repo/encerrar-votacao!. `id` = o votacao-id do path; `updated-by` = o ator. `base-membros` NAO e' lido do
+  corpo (sec MEDIUM-1): o controller o resolve SERVER-SIDE e assoc no mapa antes do Repo."
   [ator votacao-id wire-in]
   (when-not (map? wire-in) (invalido! "corpo deve ser objeto JSON" {:campo :corpo}))
   (let [m (so-esperados wire-in campos-encerrar)]
     (validar! wire/EncerrarVotacao m "corpo de encerrar votacao invalido")
     {:id           votacao-id
      :lock-version (:lock-version m)
-     :base-membros (:base-membros m)
      :resultado    (:resultado m)
      :updated-by   (:identidade-id ator)}))

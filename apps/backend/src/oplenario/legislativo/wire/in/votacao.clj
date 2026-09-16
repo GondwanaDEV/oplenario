@@ -33,10 +33,11 @@
    [:voto (km/enum-de logic/tipos-voto)]])
 
 (def EncerrarVotacao
-  "Corpo de POST /sessoes/:id/votacoes/:votacao-id/encerramento. `lock-version` p/ o CAS; `base-membros` =
-  composicao da Casa (p/ as maiorias absoluta/qualificada); `resultado` so na modalidade 'simbolica' (aclamacao
-  sem apuracao individual)."
+  "Corpo de POST /sessoes/:id/votacoes/:votacao-id/encerramento. `lock-version` p/ o CAS; `resultado` so na
+  modalidade 'simbolica' (aclamacao sem apuracao individual). `base-membros` (denominador do quorum p/ as
+  maiorias absoluta/qualificada) NAO existe mais neste contrato (sec MEDIUM-1): e' resolvido SERVER-SIDE da
+  composicao real da Casa no controller — mandar no corpo cai em 400 por `:closed true`, anti-forja por
+  construcao (mesma disciplina do `vereador-id` que nao existe em MeuVoto)."
   [:map {:closed true}
    [:lock-version :int]
-   [:base-membros {:optional true} [:maybe :int]]
    [:resultado {:optional true} [:maybe [:enum "aprovada" "rejeitada"]]]])

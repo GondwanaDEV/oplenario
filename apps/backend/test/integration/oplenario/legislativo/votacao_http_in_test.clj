@@ -15,8 +15,24 @@
             [oplenario.interceptors :as it]
             [oplenario.kernel.components.idp-dev :as idp-dev]
             [oplenario.legislativo.components.repositorio :as repo-leg]
+            [oplenario.cadastros.components.repositorio :as repo-cad]
             [oplenario.rotas :as rotas]
             [oplenario.sessoes.components.repositorio :as repo-sessoes]))
+
+;; sec MEDIUM-1 FIX: o denominador do quorum (`base-membros`) e' computado SERVER-SIDE no encerramento via o
+;; seam `membros-da-casa` (relacao de cadastros injetada pelo host), nunca mais do corpo. Este dynamic deixa
+;; cada teste fixar a composicao REAL que o fake repo-cadastros devolve — provando que o resultado usa ESTE
+;; valor, e nao o que o cliente mandaria.
+(def ^:dynamic *membros-da-casa* 11)
+
+(defn- fake-repo-cadastros
+  "RepoCadastros fake (parcial) — so `membros-da-casa`, o unico metodo que a vertical de votacao alcanca
+   depois do fix (o host o injeta no encerramento). Devolve `*membros-da-casa*` (fuso/data ignorados: o
+   valor e' o que o teste fixou)."
+  []
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify repo-cad/RepoCadastros
+    (membros-da-casa [_ _ente-id _data] *membros-da-casa*)))
 
 (defn- sessao-canonica
   "Sessao como `consultar-sessao` (delega ao Repo de sessoes) devolve — so o que a authz le (ente-id)."
@@ -69,8 +85,10 @@
       (swap! chamadas conj :secreto) {:id (:id m)})
     (encerrar-votacao! [_ _ente-id m]
       (swap! chamadas conj :encerrar)
+      ;; ECOA o `base-membros` recebido em `m` (nao um literal): o controller o resolve SERVER-SIDE e assoc
+      ;; em `m`, entao a resposta prova QUE valor o servidor usou — se viesse do corpo, este eco denunciaria.
       {:id (:id m) :estado "encerrada" :resultado "aprovada"
-       :sim 6 :nao 3 :abstencao 1 :base-membros 11})))
+       :sim 6 :nao 3 :abstencao 1 :base-membros (:base-membros m)})))
 
 (defn- fake-repo-identidade
   "`tipo-vinculo` (default \"servidor\") existe para a fronteira da sessao NAO-publica (carry telao, Daouda
@@ -91,7 +109,9 @@
                      (rotas/montar {:idp (idp-dev/idp-dev)
                                     :repo-identidade (fake-repo-identidade papeis tipo-vinculo)
                                     :repo-sessoes repo-s
-                                    :repo-legislativo repo-l})
+                                    :repo-legislativo repo-l
+                                    ;; sec MEDIUM-1: o encerramento resolve base-membros via este repo
+                                    :repo-cadastros (fake-repo-cadastros)})
                      it/globais)
        ph/create-server ::ph/service-fn)))
 
@@ -338,7 +358,7 @@
         chamadas (atom [])
         repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
         repo-l (fake-repo-legislativo (fn [_ _] (votacao-canonica ente vid sid "nominal")) chamadas)
-        corpo (json/write-value-as-string {:base-membros 11 :lock-version 0})
+        corpo (json/write-value-as-string {:lock-version 0})
         r (pt/response-for (service-fn* #{"secretario"} repo-s repo-l)
                            :post (str "/sessoes/" sid "/votacoes/" vid "/encerramento")
                            :headers (com-json (token ente (random-uuid))) :body corpo)
@@ -347,14 +367,44 @@
     (is (= "encerrada" (:estado body)))
     (is (= "aprovada" (:resultado body)))
     (is (= 6 (:total-sim body)) "totais projetados (sim->total-sim)")
-    (is (= 11 (:base-membros body)))
+    (is (= 11 (:base-membros body)) "base-membros = composicao real da Casa (*membros-da-casa*), resolvida server-side")
     (is (some #{:encerrar} @chamadas) "chamou encerrar-votacao! do Repo")))
+
+(deftest encerrar-votacao-base-membros-no-corpo-400
+  ;; sec MEDIUM-1 FECHADO: `base-membros` NAO existe mais no wire/in.EncerrarVotacao (`:closed true`). Um
+  ;; secretario comprometido que TENTE forjar o denominador (ex.: base-membros=1 aprova tudo) e' barrado na
+  ;; BORDA com 400, antes de qualquer apuracao — a porta esta fechada por construcao, nao por vigilancia.
+  (let [ente (random-uuid) sid (random-uuid) vid (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
+        repo-l (fake-repo-legislativo (fn [_ _] (votacao-canonica ente vid sid "nominal")) (atom []))
+        corpo (json/write-value-as-string {:lock-version 0 :base-membros 1})
+        r (pt/response-for (service-fn* #{"secretario"} repo-s repo-l)
+                           :post (str "/sessoes/" sid "/votacoes/" vid "/encerramento")
+                           :headers (com-json (token ente (random-uuid))) :body corpo)]
+    (is (= 400 (:status r)) "mandar base-membros no corpo -> 400 (campo nao existe no contrato, anti-forja)")))
+
+(deftest encerrar-votacao-usa-composicao-do-servidor
+  ;; sec MEDIUM-1 FECHADO (o outro lado da prova): mesmo um corpo VALIDO nao move o denominador — ele vem
+  ;; SEMPRE de `membros-da-casa` (aqui fixado em 7). O fake repo ecoa o base-membros que RECEBEU; se o
+  ;; controller tivesse deixado o cliente influir, o eco denunciaria. 7, nao o que o cliente quisesse.
+  (let [ente (random-uuid) sid (random-uuid) vid (random-uuid)
+        chamadas (atom [])
+        repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
+        repo-l (fake-repo-legislativo (fn [_ _] (votacao-canonica ente vid sid "nominal")) chamadas)
+        corpo (json/write-value-as-string {:lock-version 0})
+        r (binding [*membros-da-casa* 7]
+            (pt/response-for (service-fn* #{"secretario"} repo-s repo-l)
+                             :post (str "/sessoes/" sid "/votacoes/" vid "/encerramento")
+                             :headers (com-json (token ente (random-uuid))) :body corpo))
+        body (ler-json r)]
+    (is (= 200 (:status r)))
+    (is (= 7 (:base-membros body)) "o denominador e' a composicao real da Casa (7), resolvida server-side")))
 
 (deftest encerrar-votacao-de-outra-sessao-404
   (let [ente (random-uuid) sid (random-uuid) vid (random-uuid) outra (random-uuid)
         repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
         repo-l (fake-repo-legislativo (fn [_ _] (votacao-canonica ente vid outra "nominal")) (atom []))
-        corpo (json/write-value-as-string {:base-membros 11 :lock-version 0})
+        corpo (json/write-value-as-string {:lock-version 0})
         r (pt/response-for (service-fn* #{"secretario"} repo-s repo-l)
                            :post (str "/sessoes/" sid "/votacoes/" vid "/encerramento")
                            :headers (com-json (token ente (random-uuid))) :body corpo)]
@@ -364,7 +414,7 @@
   (let [ente (random-uuid) sid (random-uuid) vid (random-uuid)
         repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
         repo-l (fake-repo-legislativo (fn [_ _] (votacao-canonica ente vid sid "nominal")) (atom []))
-        corpo (json/write-value-as-string {:base-membros 11 :lock-version 0})
+        corpo (json/write-value-as-string {:lock-version 0})
         r (pt/response-for (service-fn* #{"vereador"} repo-s repo-l)
                            :post (str "/sessoes/" sid "/votacoes/" vid "/encerramento")
                            :headers (com-json (token ente (random-uuid))) :body corpo)]
@@ -393,7 +443,7 @@
         v-terminal (assoc (votacao-canonica ente vid sid "nominal") :estado "encerrada")
         repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
         repo-l (fake-repo-legislativo (fn [_ _] v-terminal) (atom []))
-        corpo (json/write-value-as-string {:base-membros 11 :lock-version 0})
+        corpo (json/write-value-as-string {:lock-version 0})
         r (pt/response-for (service-fn* #{"secretario"} repo-s repo-l)
                            :post (str "/sessoes/" sid "/votacoes/" vid "/encerramento")
                            :headers (com-json (token ente (random-uuid))) :body corpo)]
@@ -403,7 +453,7 @@
   (let [ente (random-uuid) sid (random-uuid)
         repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
         repo-l (fake-repo-legislativo (fn [_ _] nil) (atom []))
-        corpo (json/write-value-as-string {:base-membros 11 :lock-version 0})
+        corpo (json/write-value-as-string {:lock-version 0})
         r (pt/response-for (service-fn* #{"secretario"} repo-s repo-l)
                            :post (str "/sessoes/" sid "/votacoes/nao-e-uuid/encerramento")
                            :headers (com-json (token ente (random-uuid))) :body corpo)]
@@ -553,7 +603,7 @@
   (let [ente (random-uuid) sid (random-uuid) vid (random-uuid)
         repo-s (fake-repo-sessoes (fn [_ _] (sessao-encerrada ente sid)))
         repo-l (fake-repo-legislativo (fn [_ _] (votacao-canonica ente vid sid "nominal")) (atom []))
-        corpo (json/write-value-as-string {:base-membros 11 :lock-version 0})
+        corpo (json/write-value-as-string {:lock-version 0})
         r (pt/response-for (service-fn* #{"secretario"} repo-s repo-l)
                            :post (str "/sessoes/" sid "/votacoes/" vid "/encerramento")
                            :headers (com-json (token ente (random-uuid))) :body corpo)]
