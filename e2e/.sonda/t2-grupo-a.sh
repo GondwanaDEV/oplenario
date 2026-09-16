@@ -396,12 +396,12 @@ http POST "/sessoes/$SESSAO/votacoes/$VOTACAO/encerramento" "$TSEC" '{}'
 esperar_status 400 "$ST" "POST /votacoes/:id/encerramento" "corpo invalido: falta lock-version" "$BODY"
 
 # erro: papel errado
-http POST "/sessoes/$SESSAO/votacoes/$VOTACAO/encerramento" "$TVER" "{\"lock-version\":$LV_VOTACAO,\"base-membros\":17}"
+http POST "/sessoes/$SESSAO/votacoes/$VOTACAO/encerramento" "$TVER" "{\"lock-version\":$LV_VOTACAO}"
 esperar_status 403 "$ST" "POST /votacoes/:id/encerramento" "papel errado (vereador)" "$BODY"
 
 # feliz: encerrar
-http POST "/sessoes/$SESSAO/votacoes/$VOTACAO/encerramento" "$TSEC" "{\"lock-version\":$LV_VOTACAO,\"base-membros\":17}"
-esperar_status 200 "$ST" "POST /votacoes/:id/encerramento" "feliz: encerrar (base-membros=17, lock-version lido via psql)" "$BODY"
+http POST "/sessoes/$SESSAO/votacoes/$VOTACAO/encerramento" "$TSEC" "{\"lock-version\":$LV_VOTACAO}"
+esperar_status 200 "$ST" "POST /votacoes/:id/encerramento" "feliz: encerrar (base-membros computado server-side; lock-version lido via psql)" "$BODY"
 echo "  totais: $BODY"
 
 DB_ESTADO_VOT=$(dbval "select estado from legislativo.votacoes where id='$VOTACAO';")
@@ -415,7 +415,7 @@ if [ "$DB_ESTADO_VOT" = "encerrada" ]; then registrar OK "votacoes" "banco confi
 # encerrar, gravacao vincular) responde 409 pela MESMA semantica de conflito de estado — so' esta
 # rota usa 400. 400 = "conserte seu pedido"; 409 = "seu pedido era valido, o recurso mudou" — a
 # 2a e' a correta aqui (o mesmo corpo teria funcionado segundos antes).
-http POST "/sessoes/$SESSAO/votacoes/$VOTACAO/encerramento" "$TSEC" "{\"lock-version\":$LV_VOTACAO,\"base-membros\":17}"
+http POST "/sessoes/$SESSAO/votacoes/$VOTACAO/encerramento" "$TSEC" "{\"lock-version\":$LV_VOTACAO}"
 if [ "$ST" = "409" ]; then
   registrar OK "POST /votacoes/:id/encerramento" "repeticao (ja encerrada) corretamente recusada -> 409" "$BODY"
 else

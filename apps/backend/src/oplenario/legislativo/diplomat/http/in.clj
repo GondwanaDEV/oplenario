@@ -79,14 +79,14 @@
   registrando votos nominais) nao tinha o catch. ESPELHA o irmao: mesma tag `:conflito/voto-duplicado`
   (lancada agora tambem por `repo/registrar-voto!`, nao so' `registrar-meu-voto!`) -> 409. Sessao ja fechada
   (`:conflito/sessao-fechada`) -> 409 (ledger Fase 8 achado #4/#5)."
-  [repo-leg consultar-sessao sessao-fechada?]
+  [repo-leg consultar-sessao sessao-fechada? vereador-no-roster?]
   (fn [req]
     (let [ator (:ator req)
           sid  (adapters-in/id-param->uuid (get-in req [:path-params :id]))
           vid  (adapters-in/id-param->uuid (get-in req [:path-params :votacao-id]))
           m    (adapters-in/registrar-voto->dominio ator vid (:json-params req))]
       (try
-        (if-let [recibo (controllers/registrar-voto repo-leg consultar-sessao sessao-fechada? ator sid vid m)]
+        (if-let [recibo (controllers/registrar-voto repo-leg consultar-sessao sessao-fechada? vereador-no-roster? ator sid vid m)]
           (http/json-resposta 201 (adapters-out/voto->wire recibo))
           (http/json-resposta 404 {:erro "votacao nao encontrada nesta sessao"}))
         (catch clojure.lang.ExceptionInfo e
@@ -128,14 +128,14 @@
   terminal` -> 409 (T2 grupo A achado #3, ledger Fase 8 — ERA 400, corrigido: 409 e' o codigo certo p/
   'seu pedido era valido, o recurso mudou'). Sessao ja fechada (`:conflito/sessao-fechada`) -> 409 (achado
   #4/#5)."
-  [repo-leg consultar-sessao sessao-fechada?]
+  [repo-leg consultar-sessao sessao-fechada? membros-da-casa]
   (fn [req]
     (let [ator (:ator req)
           sid  (adapters-in/id-param->uuid (get-in req [:path-params :id]))
           vid  (adapters-in/id-param->uuid (get-in req [:path-params :votacao-id]))
           m    (adapters-in/encerrar-votacao->dominio ator vid (:json-params req))]
       (try
-        (if-let [snap (controllers/encerrar-votacao repo-leg consultar-sessao sessao-fechada? ator sid vid m)]
+        (if-let [snap (controllers/encerrar-votacao repo-leg consultar-sessao sessao-fechada? membros-da-casa ator sid vid m)]
           (http/json-resposta 200 (adapters-out/encerramento->wire snap))
           (http/json-resposta 404 {:erro "votacao nao encontrada nesta sessao"}))
         (catch clojure.lang.ExceptionInfo e
@@ -749,21 +749,22 @@
   inversao de dependencia de `sessao-fechada?`; a formula e' mesma Casa E (transmissao publica OU
   'secretario' OU 'vereador') — ver rotas.clj)."
   [{:keys [auth repo-legislativo consultar-sessao sessao-fechada? pode-ver-votacao-aberta? resolver-municipio
-           resolver-vereador resolver-comissoes vereador-vinculado? registro relogio]}]
+           resolver-vereador resolver-comissoes vereador-vinculado? vereador-no-roster? membros-da-casa
+           registro relogio]}]
   (let [papel (it/exige-papel "secretario")
         papel-vereador (it/exige-papel "vereador")]
     #{["/sessoes/:id/votacoes" :post
        [auth papel it/corpo-json (abrir-handler repo-legislativo consultar-sessao sessao-fechada?)]
        :route-name :legislativo/abrir-votacao]
       ["/sessoes/:id/votacoes/:votacao-id/votos" :post
-       [auth papel it/corpo-json (voto-handler repo-legislativo consultar-sessao sessao-fechada?)]
+       [auth papel it/corpo-json (voto-handler repo-legislativo consultar-sessao sessao-fechada? vereador-no-roster?)]
        :route-name :legislativo/registrar-voto]
       ["/sessoes/:id/votacoes/:votacao-id/meu-voto" :post
        [auth papel-vereador it/corpo-json (meu-voto-handler repo-legislativo consultar-sessao sessao-fechada?
                                                              resolver-vereador registro relogio)]
        :route-name :legislativo/meu-voto]
       ["/sessoes/:id/votacoes/:votacao-id/encerramento" :post
-       [auth papel it/corpo-json (encerrar-handler repo-legislativo consultar-sessao sessao-fechada?)]
+       [auth papel it/corpo-json (encerrar-handler repo-legislativo consultar-sessao sessao-fechada? membros-da-casa)]
        :route-name :legislativo/encerrar-votacao]
       ["/sessoes/:id/votacoes/:votacao-id" :get
        [auth papel-vereador (detalhe-votacao-handler repo-legislativo consultar-sessao sessao-fechada?)]

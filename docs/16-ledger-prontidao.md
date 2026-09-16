@@ -2588,3 +2588,49 @@ id-congelado + E8 assunto-cravado + E4 rótulo-morto + E3 par-ausente + 3 E1 fus
 e 3 eram o custo de precondição AO VIVO do cockpit (SSE), agora quarentenados com o achado documentado e o
 caminho de conserto de produto (hidratar placar/`presentes` por snapshot no page-load) apontado. Nada foi
 forçado a verde: o único "não resolvido" é uma decisão de design (SSE), explícita e reversível.
+
+---
+
+### Gate de segurança #1 FECHADO — denominador de quórum resolvido server-side (Fatia 1)
+
+Um dos dois gates que a verificação de prontidão marcou como bloqueadores de demo externa. **Era:** o
+`base-membros` (denominador das maiorias absoluta/qualificada no encerramento da votação) vinha do **corpo
+do request** — um secretário comprometido mandaria `base-membros=1` e aprovaria qualquer matéria, que então
+viraria autógrafo ao Executivo. O próprio controller já documentava o carry (sec MEDIUM-1) e o fix próprio.
+
+**Conserto (server-authoritative, §22.10):**
+- `base-membros` **saiu** do `wire/in.EncerrarVotacao` e de `campos-encerrar` no `adapters/in` — um valor
+  forjado no corpo é **descartado na borda** (`so-esperados` não o copia, mesma disciplina das rotas irmãs)
+  e, ainda que passasse, o controller o **sobrescreve** (dupla defesa). Anti-forja por construção.
+- O controller `encerrar-votacao` resolve o denominador da **composição real da Casa** via o seam
+  `membros-da-casa` (relação `cadastros/membros_da_casa`, que conta mandatos vigentes hoje no fuso civil),
+  **injetado pelo host** como `consultar-sessao` — `legislativo` nunca importa `cadastros` (import-lint segue
+  verde). O snapshot append-only continua gravando o `base_membros` USADO (auditável).
+
+**Provas (votacao_http_in_test):** `encerrar-votacao-ignora-base-membros-forjado-no-corpo` (Casa=9, corpo
+tenta cravar 1 → resposta 9, o forjado é ignorado) e `encerrar-votacao-usa-composicao-do-servidor` (Casa=7,
+corpo sem o campo → 7; o fake repo ecoa o `base-membros` que RECEBEU: se o cliente influísse, o eco denunciaria). Testes de DB do domínio (`votacao/encerrar!`)
+seguem passando `:base-membros` no mapa de domínio — é o WIRE/HTTP que fechou a porta, não o domínio.
+
+**Falta o gate #2** (voto da Mesa aceitando vereador fora do roster) — Fatia 2, mesmo leitor injetado.
+
+---
+
+### Gate de segurança #2 FECHADO — voto da Mesa exige membro com mandato vigente (Fatia 2)
+
+O segundo bloqueador de demo externa. **Era:** a rota da Mesa `POST /sessoes/:id/votacoes/:id/votos`
+(`registrar-voto`, nominal) recebia `vereador-id` do **corpo** e só checava não-nulo — um secretário
+comprometido registraria voto para um `vereador-id` **fora do roster** (id inexistente, de outra Casa, ou
+com mandato encerrado/licenciado), inflando o placar. O `meu-voto` do celular já validava mandato vigente +
+presença por policy-fina; a rota da Mesa não tinha o equivalente.
+
+**Conserto (§22.10, mesmo padrão da Fatia 1):** o controller `registrar-voto` recebe `vereador-no-roster?`
+— predicado injetado pelo host que responde "este `vereador-id` compõe a Casa com mandato **vigente** hoje?".
+Reusa `roster-da-casa` (traz vigente E licenciado, marcados) e mantém só `vigente`, **alinhado ao denominador
+do quórum do gate #1** (o cruzado T10 já pina roster-menos-licenciado = `membros-da-casa`). Fora do roster →
+`:validacao/invalido` (**400**), antes de qualquer escrita. `legislativo` nunca importa `cadastros`
+(import-lint verde); fuso civil como os demais seams.
+
+**Provas (votacao_http_in_test):** `registrar-voto-nominal-fora-do-roster-400` (roster vazio → 400, e a
+escrita não sai) e `registrar-voto-nominal-201` (agora fixa o votante no roster). O DB/repo `registrar-voto!`
+segue coberto direto (o gate é de BORDA, não do domínio). Os dois gates de demo externa estão **fechados**.
