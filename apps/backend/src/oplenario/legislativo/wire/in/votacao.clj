@@ -36,8 +36,9 @@
   "Corpo de POST /sessoes/:id/votacoes/:votacao-id/encerramento. `lock-version` p/ o CAS; `resultado` so na
   modalidade 'simbolica' (aclamacao sem apuracao individual). `base-membros` (denominador do quorum p/ as
   maiorias absoluta/qualificada) NAO existe mais neste contrato (sec MEDIUM-1): e' resolvido SERVER-SIDE da
-  composicao real da Casa no controller — mandar no corpo cai em 400 por `:closed true`, anti-forja por
-  construcao (mesma disciplina do `vereador-id` que nao existe em MeuVoto)."
+  composicao real da Casa no controller. Um valor forjado no corpo e' DESCARTADO na borda (`so-esperados` do
+  adapters/in nao o copia, mesma disciplina das rotas irmas) e, ainda que passasse, o controller o
+  SOBRESCREVE — dupla defesa, anti-forja por construcao (mesmo espirito do `vereador-id` que nao existe em MeuVoto)."
   [:map {:closed true}
    [:lock-version :int]
    [:resultado {:optional true} [:maybe [:enum "aprovada" "rejeitada"]]]])

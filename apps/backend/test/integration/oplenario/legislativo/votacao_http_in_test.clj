@@ -370,18 +370,22 @@
     (is (= 11 (:base-membros body)) "base-membros = composicao real da Casa (*membros-da-casa*), resolvida server-side")
     (is (some #{:encerrar} @chamadas) "chamou encerrar-votacao! do Repo")))
 
-(deftest encerrar-votacao-base-membros-no-corpo-400
-  ;; sec MEDIUM-1 FECHADO: `base-membros` NAO existe mais no wire/in.EncerrarVotacao (`:closed true`). Um
-  ;; secretario comprometido que TENTE forjar o denominador (ex.: base-membros=1 aprova tudo) e' barrado na
-  ;; BORDA com 400, antes de qualquer apuracao — a porta esta fechada por construcao, nao por vigilancia.
+(deftest encerrar-votacao-ignora-base-membros-forjado-no-corpo
+  ;; sec MEDIUM-1 FECHADO: `base-membros` saiu de `campos-encerrar` no adapters/in, entao um valor forjado no
+  ;; corpo (ex.: base-membros=1, que aprovaria tudo por maioria absoluta) e' DESCARTADO na borda (mesma
+  ;; disciplina `so-esperados` das rotas irmas) — e ainda que passasse, o controller SOBRESCREVE com o valor
+  ;; server-side. Dupla defesa: aqui a Casa tem 9 membros e o corpo tenta cravar 1; a resposta prova 9, nunca 1.
   (let [ente (random-uuid) sid (random-uuid) vid (random-uuid)
         repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
         repo-l (fake-repo-legislativo (fn [_ _] (votacao-canonica ente vid sid "nominal")) (atom []))
         corpo (json/write-value-as-string {:lock-version 0 :base-membros 1})
-        r (pt/response-for (service-fn* #{"secretario"} repo-s repo-l)
-                           :post (str "/sessoes/" sid "/votacoes/" vid "/encerramento")
-                           :headers (com-json (token ente (random-uuid))) :body corpo)]
-    (is (= 400 (:status r)) "mandar base-membros no corpo -> 400 (campo nao existe no contrato, anti-forja)")))
+        r (binding [*membros-da-casa* 9]
+            (pt/response-for (service-fn* #{"secretario"} repo-s repo-l)
+                             :post (str "/sessoes/" sid "/votacoes/" vid "/encerramento")
+                             :headers (com-json (token ente (random-uuid))) :body corpo))
+        body (ler-json r)]
+    (is (= 200 (:status r)))
+    (is (= 9 (:base-membros body)) "o base-membros=1 forjado no corpo foi IGNORADO — vale a composicao real (9)")))
 
 (deftest encerrar-votacao-usa-composicao-do-servidor
   ;; sec MEDIUM-1 FECHADO (o outro lado da prova): mesmo um corpo VALIDO nao move o denominador — ele vem

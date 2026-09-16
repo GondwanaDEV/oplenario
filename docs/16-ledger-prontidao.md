@@ -2599,17 +2599,17 @@ do request** — um secretário comprometido mandaria `base-membros=1` e aprovar
 viraria autógrafo ao Executivo. O próprio controller já documentava o carry (sec MEDIUM-1) e o fix próprio.
 
 **Conserto (server-authoritative, §22.10):**
-- `base-membros` **saiu** do `wire/in.EncerrarVotacao` (`:closed true`) e do `adapters/in` — mandá-lo no
-  corpo agora é **400**, anti-forja por construção (mesma disciplina do `vereador-id` que não existe em
-  `MeuVoto`).
+- `base-membros` **saiu** do `wire/in.EncerrarVotacao` e de `campos-encerrar` no `adapters/in` — um valor
+  forjado no corpo é **descartado na borda** (`so-esperados` não o copia, mesma disciplina das rotas irmãs)
+  e, ainda que passasse, o controller o **sobrescreve** (dupla defesa). Anti-forja por construção.
 - O controller `encerrar-votacao` resolve o denominador da **composição real da Casa** via o seam
   `membros-da-casa` (relação `cadastros/membros_da_casa`, que conta mandatos vigentes hoje no fuso civil),
   **injetado pelo host** como `consultar-sessao` — `legislativo` nunca importa `cadastros` (import-lint segue
   verde). O snapshot append-only continua gravando o `base_membros` USADO (auditável).
 
-**Provas (votacao_http_in_test):** `encerrar-votacao-base-membros-no-corpo-400` (forjar no corpo → 400) e
-`encerrar-votacao-usa-composicao-do-servidor` (o denominador é o da Casa — 7 — e o fake repo ecoa o valor
-que RECEBEU: se o cliente influísse, o eco denunciaria). Testes de DB do domínio (`votacao/encerrar!`)
+**Provas (votacao_http_in_test):** `encerrar-votacao-ignora-base-membros-forjado-no-corpo` (Casa=9, corpo
+tenta cravar 1 → resposta 9, o forjado é ignorado) e `encerrar-votacao-usa-composicao-do-servidor` (Casa=7,
+corpo sem o campo → 7; o fake repo ecoa o `base-membros` que RECEBEU: se o cliente influísse, o eco denunciaria). Testes de DB do domínio (`votacao/encerrar!`)
 seguem passando `:base-membros` no mapa de domínio — é o WIRE/HTTP que fechou a porta, não o domínio.
 
 **Falta o gate #2** (voto da Mesa aceitando vereador fora do roster) — Fatia 2, mesmo leitor injetado.

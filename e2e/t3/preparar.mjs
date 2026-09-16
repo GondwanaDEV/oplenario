@@ -365,7 +365,7 @@ async function aprovarDeVerdade(candidata, rotulo) {
     `POST .../votos (${rotulo} aprovar de verdade)`);
   const encerramento = exigir(
     // sec MEDIUM-1: `base-membros` NAO vai mais no corpo (o backend o computa server-side da composicao real
-    // da Casa; mandar no corpo agora e' 400). So o lock-version do CAS.
+    // da Casa; um valor no corpo e' descartado na borda). So o lock-version do CAS.
     await api(TOK.secretaria, "POST", `/sessoes/${sessaoChamada}/votacoes/${abertura.id}/encerramento`, {
       "lock-version": abertura["lock-version"] ?? 0,
     }),

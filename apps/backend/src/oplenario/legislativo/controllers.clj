@@ -506,8 +506,9 @@
   e' resolvido SERVER-SIDE via `membros-da-casa` (relacao `cadastros/membros_da_casa`, injetada pelo host como
   `consultar-sessao` — legislativo NAO importa cadastros, §22.10) e SOBRESCREVE qualquer valor do corpo. Antes
   vinha do corpo do request: um secretario comprometido faria `base-membros=1` e aprovaria tudo. Agora o campo
-  saiu do wire/in (mandar no corpo -> 400 por `:closed true`) e o denominador e' a composicao REAL da Casa
-  (mandato vigente hoje, fuso civil); o snapshot append-only segue gravando o base_membros USADO (auditavel)."
+  saiu de `campos-encerrar` no adapters/in (valor forjado no corpo e' DESCARTADO na borda) E este controller
+  o SOBRESCREVE com a composicao REAL da Casa (mandato vigente hoje, fuso civil) — dupla defesa; o snapshot
+  append-only segue gravando o base_membros USADO (auditavel)."
   [repo-leg consultar-sessao sessao-fechada? membros-da-casa ator sessao-id votacao-id m]
   (when (sessao-autorizada consultar-sessao sessao-fechada? ator sessao-id)
     (let [ente-id (:ente-id ator)]
