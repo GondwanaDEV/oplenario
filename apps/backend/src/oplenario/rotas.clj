@@ -303,6 +303,21 @@
         ;; cliente pedir). `legislativo` recebe so' esta fn ja' resolvida, nunca importa cadastros (§22.10).
         vereador-vinculado? (fn [ente-id vereador-id]
                               (some? (repo-cadastros-comp/buscar-vereador repo-cadastros ente-id vereador-id)))
+        ;; sec MEDIUM-2 FIX (gate #2): a rota da Mesa `registrar-voto` recebe `vereador-id` do CORPO e so'
+        ;; checava nao-nulo — um secretario comprometido registraria voto nominal para um vereador FORA do
+        ;; roster (id inexistente, de outra Casa, ou com mandato encerrado/licenciado), inflando o placar. O
+        ;; `meu-voto` (celular) ja' valida mandato-vigente+presenca via policy-fina; a rota da Mesa nao tinha
+        ;; equivalente. Este predicado responde "o vereador-id compoe a Casa com mandato VIGENTE hoje?" — o
+        ;; MESMO conjunto que `membros-da-casa` (gate #1) conta: reusa `roster-da-casa` (que traz vigente E
+        ;; licenciado, marcados) e mantem SO 'vigente' aqui, alinhado ao denominador do quorum. Mesma inversao
+        ;; de dependencia de consultar-sessao/membros-da-casa (legislativo NAO importa cadastros, §22.10); fuso
+        ;; civil como os demais seams datados. Um voto ao vivo exige composicao de HOJE (nao ha `data` na aridade).
+        vereador-no-roster? (fn [ente-id vereador-id]
+                              (boolean
+                               (some (fn [l] (and (= vereador-id (:vereador-id l))
+                                                  (= "vigente" (:estado-mandato l))))
+                                     (repo-cadastros-comp/roster-da-casa repo-cadastros ente-id
+                                       (tempo/hoje (tempo/relogio-sistema) tempo/zona-civil-padrao)))))
         ;; Override injetavel (mesmo racional de `painel-compliance` — so' serve aos testes DB-free da borda
         ;; de paineis); em producao `montar` e' chamado sem estas chaves e o `or` fecha sobre o repo real.
         presenca-resumo (or presenca-resumo
@@ -389,6 +404,10 @@
                                        :resolver-vereador resolver-vereador-fn
                                        :resolver-comissoes resolver-comissoes-fn
                                        :vereador-vinculado? vereador-vinculado?
+                                       ;; sec MEDIUM-2 FIX: gate #2 — a rota da Mesa so' registra voto nominal
+                                       ;; para quem compoe a Casa com mandato vigente (roster). Mesmo seam
+                                       ;; injetado, mesma inversao de dependencia sobre cadastros (§22.10).
+                                       :vereador-no-roster? vereador-no-roster?
                                        ;; sec MEDIUM-1 FIX: o denominador do quorum (base-membros) e' computado
                                        ;; SERVER-SIDE no encerramento a partir da composicao real da Casa —
                                        ;; nunca mais do corpo do request. Reusa o MESMO seam `membros-da-casa`

@@ -25,14 +25,22 @@
 ;; valor, e nao o que o cliente mandaria.
 (def ^:dynamic *membros-da-casa* 11)
 
+;; sec MEDIUM-2 FIX (gate #2): a rota da Mesa `registrar-voto` (nominal) so' aceita quem compoe a Casa com
+;; mandato vigente. Este set de vereador-ids (UUID) e' o roster que o fake repo-cadastros devolve; cada teste
+;; o fixa para conter (ou nao) o votante. Vazio por padrao (os testes que nao exercitam o nominal-feliz nao
+;; alcancam o check — secreta/simbolica/404 barram antes).
+(def ^:dynamic *roster-vereador-ids* #{})
+
 (defn- fake-repo-cadastros
-  "RepoCadastros fake (parcial) — so `membros-da-casa`, o unico metodo que a vertical de votacao alcanca
-   depois do fix (o host o injeta no encerramento). Devolve `*membros-da-casa*` (fuso/data ignorados: o
-   valor e' o que o teste fixou)."
+  "RepoCadastros fake (parcial) — `membros-da-casa` (denominador, gate #1) e `roster-da-casa` (membership,
+   gate #2), os unicos metodos que a vertical de votacao alcanca depois dos fixes (o host os injeta).
+   Fuso/data ignorados: os valores sao os que o teste fixou via os dynamics."
   []
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify repo-cad/RepoCadastros
-    (membros-da-casa [_ _ente-id _data] *membros-da-casa*)))
+    (membros-da-casa [_ _ente-id _data] *membros-da-casa*)
+    (roster-da-casa [_ _ente-id _data]
+      (mapv (fn [vid] {:vereador-id vid :estado-mandato "vigente"}) *roster-vereador-ids*))))
 
 (defn- sessao-canonica
   "Sessao como `consultar-sessao` (delega ao Repo de sessoes) devolve — so o que a authz le (ente-id)."
@@ -215,19 +223,38 @@
 ;; ---------- POST /sessoes/:id/votacoes/:votacao-id/votos — registrar voto (dispatch por modalidade) ----------
 
 (deftest registrar-voto-nominal-201
+  (let [ente (random-uuid) sid (random-uuid) vid (random-uuid) ver (random-uuid)
+        chamadas (atom [])
+        repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
+        repo-l (fake-repo-legislativo (fn [_ _] (votacao-canonica ente vid sid "nominal")) chamadas)
+        corpo (json/write-value-as-string {:vereador-id (str ver) :voto "sim"})
+        ;; sec MEDIUM-2: o votante PRECISA compor o roster com mandato vigente (senao 400) — o fixamos aqui.
+        r (binding [*roster-vereador-ids* #{ver}]
+            (pt/response-for (service-fn* #{"secretario"} repo-s repo-l)
+                             :post (str "/sessoes/" sid "/votacoes/" vid "/votos")
+                             :headers (com-json (token ente (random-uuid))) :body corpo))
+        body (ler-json r)]
+    (is (= 201 (:status r)) "voto nominal (vereador do roster) -> 201")
+    (is (string? (:id body)) "recibo carrega o id do voto (string)")
+    (is (not (some #{:secreto} @chamadas)) "NAO chamou o caminho secreto")
+    (is (some #{:nominal} @chamadas) "dispatch: votacao nominal -> registrar-voto! (nominal)")))
+
+(deftest registrar-voto-nominal-fora-do-roster-400
+  ;; sec MEDIUM-2 FIX (gate #2): a Mesa NAO registra voto nominal para um vereador-id fora do roster (id
+  ;; inexistente, de outra Casa, ou com mandato encerrado/licenciado) — sem isto o placar seria inflavel por
+  ;; um secretario comprometido. Aqui o roster esta VAZIO e o votante nao pertence a ele -> 400, sem tocar o
+  ;; Repo de escrita (o `some #{:nominal}` prova que registrar-voto! NAO foi chamado).
   (let [ente (random-uuid) sid (random-uuid) vid (random-uuid)
         chamadas (atom [])
         repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
         repo-l (fake-repo-legislativo (fn [_ _] (votacao-canonica ente vid sid "nominal")) chamadas)
         corpo (json/write-value-as-string {:vereador-id (str (random-uuid)) :voto "sim"})
-        r (pt/response-for (service-fn* #{"secretario"} repo-s repo-l)
-                           :post (str "/sessoes/" sid "/votacoes/" vid "/votos")
-                           :headers (com-json (token ente (random-uuid))) :body corpo)
-        body (ler-json r)]
-    (is (= 201 (:status r)) "voto nominal em votacao nominal da mesma sessao -> 201")
-    (is (string? (:id body)) "recibo carrega o id do voto (string)")
-    (is (not (some #{:secreto} @chamadas)) "NAO chamou o caminho secreto")
-    (is (some #{:nominal} @chamadas) "dispatch: votacao nominal -> registrar-voto! (nominal)")))
+        r (binding [*roster-vereador-ids* #{}]
+            (pt/response-for (service-fn* #{"secretario"} repo-s repo-l)
+                             :post (str "/sessoes/" sid "/votacoes/" vid "/votos")
+                             :headers (com-json (token ente (random-uuid))) :body corpo))]
+    (is (= 400 (:status r)) "voto nominal para quem nao compoe a Casa (mandato vigente) -> 400")
+    (is (not (some #{:nominal} @chamadas)) "a escrita NAO saiu — barrado antes do Repo")))
 
 (deftest registrar-voto-duplicado-mesa-409
   ;; T2 grupo A achado #1 (ledger Fase 8): a rota da Mesa (`voto-handler`) NAO tinha `try/catch` nenhum —
@@ -238,7 +265,7 @@
   ;; irmao `voto_duplicado_mesa_repo_test.clj`). RED confirmado (removendo o catch de `voto-handler`): a
   ;; excecao `:conflito/voto-duplicado` NAO tratada cai no `:else` do interceptor global -> 500, e este `is`
   ;; reprova com `Expected: 409 Actual: 500`.
-  (let [ente (random-uuid) sid (random-uuid) vid (random-uuid)
+  (let [ente (random-uuid) sid (random-uuid) vid (random-uuid) ver (random-uuid)
         repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
         repo-l #_{:clj-kondo/ignore [:missing-protocol-method]}
                (reify repo-leg/RepoLegislativo
@@ -246,10 +273,12 @@
                  (registrar-voto! [_ _ m]
                    (throw (ex-info "voto ja registrado para este vereador nesta votacao"
                                    {:tipo :conflito/voto-duplicado :votacao-id (:votacao-id m)}))))
-        corpo (json/write-value-as-string {:vereador-id (str (random-uuid)) :voto "sim"})
-        r (pt/response-for (service-fn* #{"secretario"} repo-s repo-l)
-                           :post (str "/sessoes/" sid "/votacoes/" vid "/votos")
-                           :headers (com-json (token ente (random-uuid))) :body corpo)]
+        corpo (json/write-value-as-string {:vereador-id (str ver) :voto "sim"})
+        ;; o votante e' do roster (senao pararia no gate #2 com 400, antes do UNIQUE que este teste exercita)
+        r (binding [*roster-vereador-ids* #{ver}]
+            (pt/response-for (service-fn* #{"secretario"} repo-s repo-l)
+                             :post (str "/sessoes/" sid "/votacoes/" vid "/votos")
+                             :headers (com-json (token ente (random-uuid))) :body corpo))]
     (is (= 409 (:status r)) "2o voto do mesmo vereador -> 409 (nunca 500 opaco)")))
 
 (deftest registrar-voto-secreto-201

@@ -56,8 +56,13 @@
   (aclamacao) -> NAO registra votos individuais (o resultado e' cravado no encerramento via :resultado) ->
   :validacao/invalido (-> 400). Qualquer modalidade futura desconhecida cai no ramo fail-closed (nao no nominal).
   Devolve {:id} ou nil (sessao/votacao inexistente ou de outra sessao -> 404). Nominal sem vereador-id -> 400.
-  Sessao ja fechada -> `sessao-autorizada` lanca `:conflito/sessao-fechada` (-> 409)."
-  [repo-leg consultar-sessao sessao-fechada? ator sessao-id votacao-id m]
+  Sessao ja fechada -> `sessao-autorizada` lanca `:conflito/sessao-fechada` (-> 409).
+
+  sec MEDIUM-2 (gate #2): no NOMINAL, `vereador-id` vem do corpo — `vereador-no-roster?` (relacao de cadastros
+  injetada pelo host, §22.10) exige que ele componha a Casa com mandato VIGENTE hoje (o MESMO conjunto do
+  denominador de quorum); fora do roster -> `:validacao/invalido` (-> 400). O `meu-voto` do celular ja' fazia
+  o equivalente por policy-fina; a rota da Mesa nao tinha o gate."
+  [repo-leg consultar-sessao sessao-fechada? vereador-no-roster? ator sessao-id votacao-id m]
   (when (sessao-autorizada consultar-sessao sessao-fechada? ator sessao-id)
     (let [ente-id (:ente-id ator)]
       (when-let [v (votacao-na-sessao repo-leg ente-id sessao-id votacao-id)]
@@ -67,6 +72,13 @@
           "nominal" (do
                       (when (nil? (:vereador-id m))
                         (throw (ex-info "voto nominal exige vereador-id"
+                                        {:tipo :validacao/invalido :campos [:vereador-id]})))
+                      ;; sec MEDIUM-2 (gate #2): `vereador-id` vem do CORPO — so' pode votar quem compoe a
+                      ;; Casa com mandato VIGENTE hoje (mesmo conjunto do denominador de quorum). Sem isto, a
+                      ;; Mesa registraria voto para um id fora do roster (inexistente/outra Casa/mandato
+                      ;; encerrado) e inflaria o placar. O `meu-voto` do celular ja' faz o equivalente por policy.
+                      (when-not (vereador-no-roster? ente-id (:vereador-id m))
+                        (throw (ex-info "vereador nao e' membro com mandato vigente desta Casa"
                                         {:tipo :validacao/invalido :campos [:vereador-id]})))
                       (repo/registrar-voto! repo-leg ente-id m))
           ;; 'simbolica' (sem apuracao individual) E qualquer modalidade futura -> nao se registra voto aqui.

@@ -2613,3 +2613,24 @@ corpo sem o campo → 7; o fake repo ecoa o `base-membros` que RECEBEU: se o cli
 seguem passando `:base-membros` no mapa de domínio — é o WIRE/HTTP que fechou a porta, não o domínio.
 
 **Falta o gate #2** (voto da Mesa aceitando vereador fora do roster) — Fatia 2, mesmo leitor injetado.
+
+---
+
+### Gate de segurança #2 FECHADO — voto da Mesa exige membro com mandato vigente (Fatia 2)
+
+O segundo bloqueador de demo externa. **Era:** a rota da Mesa `POST /sessoes/:id/votacoes/:id/votos`
+(`registrar-voto`, nominal) recebia `vereador-id` do **corpo** e só checava não-nulo — um secretário
+comprometido registraria voto para um `vereador-id` **fora do roster** (id inexistente, de outra Casa, ou
+com mandato encerrado/licenciado), inflando o placar. O `meu-voto` do celular já validava mandato vigente +
+presença por policy-fina; a rota da Mesa não tinha o equivalente.
+
+**Conserto (§22.10, mesmo padrão da Fatia 1):** o controller `registrar-voto` recebe `vereador-no-roster?`
+— predicado injetado pelo host que responde "este `vereador-id` compõe a Casa com mandato **vigente** hoje?".
+Reusa `roster-da-casa` (traz vigente E licenciado, marcados) e mantém só `vigente`, **alinhado ao denominador
+do quórum do gate #1** (o cruzado T10 já pina roster-menos-licenciado = `membros-da-casa`). Fora do roster →
+`:validacao/invalido` (**400**), antes de qualquer escrita. `legislativo` nunca importa `cadastros`
+(import-lint verde); fuso civil como os demais seams.
+
+**Provas (votacao_http_in_test):** `registrar-voto-nominal-fora-do-roster-400` (roster vazio → 400, e a
+escrita não sai) e `registrar-voto-nominal-201` (agora fixa o votante no roster). O DB/repo `registrar-voto!`
+segue coberto direto (o gate é de BORDA, não do domínio). Os dois gates de demo externa estão **fechados**.
