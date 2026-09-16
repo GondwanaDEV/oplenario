@@ -43,8 +43,14 @@ function registrarProva(linha: Record<string, unknown>) {
   appendFileSync(PROVA_PATH, JSON.stringify(linha) + "\n");
 }
 
+// "Hoje" no MESMO fuso civil que o backend usa para resolver a data corrente — America/Fortaleza
+// (cadastros/diplomat/http/in.clj:30 `zona-civil`). NAO usar UTC (toISOString): entre 00:00 e 03:00 UTC a
+// data UTC ja virou mas Fortaleza (UTC-3) ainda e' o dia anterior — um mandato com vigencia_inicio=UTC-hoje
+// nasce no FUTURO para o backend (`mandato-vigente` exige vigencia_inicio <= hoje-Fortaleza) e a ficha
+// mostra "Sem mandato" em vez de "Mandato ativo". Era um flake latente de fronteira de dia, so' visivel
+// quando a suite roda naquela janela — e' o que reprovava criar-mandato/licenca-feliz no run das 00:49 UTC.
 function hoje(): string {
-  return new Date().toISOString().slice(0, 10);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Fortaleza" }).format(new Date());
 }
 
 // Duplo-clique fisico: dispara 2 dispatchEvent("click") no MESMO elemento sem esperar entre eles —
@@ -62,9 +68,15 @@ async function duploClique(page: Page, botao: Locator) {
 async function criarVereadorPelaTela(page: Page, rotulo: string): Promise<string> {
   const carimbo = Date.now();
   await page.goto(e1.urlLista, { waitUntil: "domcontentloaded", timeout: 90_000 });
-  await page.getByRole("button", { name: "Novo vereador" }).click();
   const form = page.locator('form[aria-label="Novo vereador"]');
-  await expect(form).toBeVisible();
+  // Corrida de hidratacao: `domcontentloaded` dispara ANTES do React hidratar, e a rota interna
+  // `/cadastros/vereadores` compila a frio no 1o acesso (next dev) — o click no botao pode chegar antes
+  // do onClick estar ligado e se perder, deixando o form fechado (timeout em toBeVisible:67 no CI).
+  // Re-clica ate' o painel abrir (toPass); se o botao genuinamente nao abrir o form, ainda falha alto.
+  await expect(async () => {
+    await page.getByRole("button", { name: "Novo vereador" }).click();
+    await expect(form).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 30_000 });
   await form.locator("#nv-nome").fill(`E2E T3 ${rotulo} ${carimbo}`);
   await form.locator("#nv-parlamentar").fill(`${rotulo} ${carimbo}`);
   const [r] = await Promise.all([
@@ -79,9 +91,12 @@ async function criarVereadorPelaTela(page: Page, rotulo: string): Promise<string
 // ficha desse vereador, com o painel fechado.
 async function darMandatoVigentePelaTela(page: Page, vereadorId: string): Promise<string> {
   await page.goto(urlFicha(vereadorId), { waitUntil: "domcontentloaded", timeout: 90_000 });
-  await page.getByRole("button", { name: "Registrar mandato" }).click();
   const form = page.locator('form[aria-label="Registrar mandato"]');
-  await expect(form).toBeVisible();
+  // Mesma corrida de hidratacao do criarVereadorPelaTela: re-clica ate' o painel abrir.
+  await expect(async () => {
+    await page.getByRole("button", { name: "Registrar mandato" }).click();
+    await expect(form).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 30_000 });
   await form.locator("#rm-inicio").fill(hoje());
   const [r] = await Promise.all([
     page.waitForResponse(

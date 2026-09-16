@@ -291,7 +291,7 @@ for (const p of listaProps.itens) {
   }
   const temTexto = typeof prop.texto === "string" && prop.texto.trim().length > 0;
   if (!TERMINAIS.has(p.estado)) {
-    editaveis.push({ id: p.id, tipo: p.tipo, ano: p.ano, sequencial: p.sequencial, estado: p.estado, lockVersion: prop["lock-version"], ementa: p.ementa });
+    editaveis.push({ id: p.id, tipo: p.tipo, ano: p.ano, sequencial: p.sequencial, estado: p.estado, lockVersion: prop["lock-version"], ementa: p.ementa, temTexto, autorTipo: prop["autor-tipo"] ?? null, autorId: prop["autor-id"] ?? null });
   }
   if (temTexto) {
     const pa = await api(TOK.secretaria, "GET", `/legislativo/proposicoes/${p.id}/pos-aprovacao`);
@@ -465,6 +465,55 @@ const novoVereador = exigir(await api(TOK.secretaria, "POST", "/cadastros/veread
 }), "POST /cadastros/vereadores");
 console.log(`   vereador sem mandato: ${novoVereador.id} "T3 Alvo de Mandato ${carimbo}"`);
 
+// [CONSERTO 16/09] alvos de 'editar' e 'registrar licenca' DINAMICOS, nunca UUID cravado. Ate' agora este
+// arquivo gravava `vereadorParaEditarId: "45c0a7d4-..."` (id de uma Casa CONGELADA): num seed fresco de CI
+// esse id nao existe, o ?v=<id> cai FORA da lista e a tela abre o PRIMEIRO vereador (selecaoInicial,
+// cadastro-vereadores-vista.ts:94) — as escritas de 'editar'/'registrar mandato' disparam pro vereador
+// ERRADO e o waitForResponse do spec (que casa a URL pelo id) nunca resolve. Mesma classe de bug que o
+// fixtures.sql tinha (id da identidade :vereador). O roster de sessaoChamada JA e' o conjunto de vereadores
+// com mandato VIGENTE — o unico estado que da o 409 de sobreposicao e deixa 'editar' com alvo real.
+// Excluimos as 2 identidades logaveis: 'editar' RENOMEIA o alvo e licenciar mexe no roster/quorum — nao
+// pode cair sobre quem :vereador/:presidente usam em E5/E6 (E5.spec.ts:114 tambem exclui estes ids).
+const logaveis = new Set([vereadorIdDoVereador, vereadorIdDoPresidente].filter(Boolean));
+const rosterEditavel = chamadaNova.linhas.map((l) => l["vereador-id"]).filter((vid) => vid && !logaveis.has(vid));
+const vereadorParaEditarId = rosterEditavel[0] ?? null;
+const vereadorParaLicencaId = rosterEditavel[1] ?? null;
+if (!vereadorParaEditarId) {
+  bloqueio("e1-sem-vereador-editavel",
+    "o roster da sessao de chamada nao tem vereador com mandato vigente fora das 2 identidades logaveis — " +
+    "'editar vereador' e 'mandato sobreposto (409)' ficam sem alvo. Semeie a Casa cheia (demo/semear-tudo.sh).");
+}
+console.log(`   E1 alvo editar/mandato = ${vereadorParaEditarId} · alvo licenca = ${vereadorParaLicencaId}`);
+
+// [CONSERTO 16/09] E3 [ACHADO]: o par de alvos (um COM texto vigente, um SEM) precisa vir por PROPRIEDADE,
+// nao por indice de uma lista cuja ordem nao e estavel. Classificamos os editaveis por `temTexto` (o sinal
+// real que o spec exercita: com texto -> o form reenvia `texto` e o lock sobe 2; sem texto -> nao envia e
+// sobe 1). Se o seed nao tiver nenhum editavel SEM texto, FABRICAMOS um (POST cria proposicao com lock 0 e
+// sem texto) — defensivo: se a criacao falhar, so E3 fica sem alvo (test.skip no spec), nunca derruba a prep.
+// Reserva os ids que OUTROS grupos (ou os OUTROS testes de E3) ja consomem, para o par do [ACHADO] nao
+// colidir entre arquivos que rodam em paralelo (E6 abre votacao sobre e6.objetoId; E3 usa editaveis[0..2]).
+const reservadosE3 = new Set(
+  [editaveis[0]?.id, editaveis[1]?.id, editaveis[2]?.id, votacaoAberta?.objetoId, autografoAlvo?.id].filter(Boolean),
+);
+const alvoComTexto =
+  editaveis.find((e) => e.temTexto && !reservadosE3.has(e.id)) ?? editaveis.find((e) => e.temTexto) ?? null;
+let alvoSemTexto = editaveis.find((e) => !e.temTexto && !reservadosE3.has(e.id)) ?? null;
+if (!alvoSemTexto && vereadorIdDoVereador) {
+  try {
+    const tipoValido = editaveis[0]?.tipo ?? listaProps.itens[0]?.tipo ?? "requerimento";
+    const nova = exigir(await api(TOK.secretaria, "POST", "/legislativo/proposicoes", {
+      tipo: tipoValido, ano: new Date().getFullYear(), ementa: `T3-E3 alvo sem-texto ${carimbo}`,
+      "autor-tipo": "vereador", "autor-id": vereadorIdDoVereador,
+    }), "POST /legislativo/proposicoes (E3 alvo sem-texto)");
+    alvoSemTexto = { id: nova.id, tipo: tipoValido, ano: nova.ano ?? new Date().getFullYear(), estado: "em_elaboracao", lockVersion: 0, temTexto: false };
+    console.log(`   E3 alvo sem-texto FABRICADO: ${nova.id}`);
+  } catch (e) {
+    bloqueio("e3-sem-alvo-sem-texto", `nao consegui fabricar uma proposicao sem texto para E3: ${e.message}`);
+  }
+}
+if (!alvoComTexto) bloqueio("e3-sem-alvo-com-texto", "nenhum editavel COM texto vigente no seed — E3 [ACHADO] fica sem par.");
+console.log(`   E3 alvoComTexto = ${alvoComTexto?.id ?? "-"} · alvoSemTexto = ${alvoSemTexto?.id ?? "-"}`);
+
 // ---- 7. artefato -------------------------------------------------------------------------
 const artefato = {
   geradoEm: new Date().toISOString(),
@@ -482,16 +531,16 @@ const artefato = {
   },
 
   e1: {
-    nota: "criar vereador e criar mandato sao criacoes do zero; so 'editar vereador' e 'registrar licenca' precisam de alvo.",
+    nota: "criar vereador e criar mandato sao criacoes do zero; so 'editar vereador' e 'registrar licenca' precisam de alvo. Os alvos sao DINAMICOS (roster da sessao de chamada, fora das identidades logaveis) — nunca UUID cravado, que num seed fresco cai fora da lista e a tela abre o 1o vereador.",
     urlLista: comToken("/cadastros/vereadores", "secretaria"),
-    vereadorParaEditarId: "45c0a7d4-76e6-4b88-b948-1b4ca1c5946a",
-    urlVereadorParaEditar: comToken("/cadastros/vereadores?v=45c0a7d4-76e6-4b88-b948-1b4ca1c5946a", "secretaria"),
+    vereadorParaEditarId,
+    urlVereadorParaEditar: vereadorParaEditarId ? comToken(`/cadastros/vereadores?v=${vereadorParaEditarId}`, "secretaria") : null,
     vereadorSemMandatoId: novoVereador.id,
     urlVereadorSemMandato: comToken(`/cadastros/vereadores?v=${novoVereador.id}`, "secretaria"),
-    vereadorComMandatoVigenteParaLicencaId: "d54a529f-5a4d-4342-a7d5-f94189f2221c",
-    urlVereadorParaLicenca: comToken("/cadastros/vereadores?v=d54a529f-5a4d-4342-a7d5-f94189f2221c", "secretaria"),
-    avisoLicenca: "registrar licenca muda o estado do vereador para 'licenciado' e mexe no roster/quorum das sessoes — por isso o alvo e Thiago Bezerra, que NAO e nenhuma das identidades logaveis.",
-    avisoMandato: "os 17 vereadores da demo tem mandato VIGENTE; registrar mandato em qualquer um deles da 409 de sobreposicao. Use vereadorSemMandatoId.",
+    vereadorComMandatoVigenteParaLicencaId: vereadorParaLicencaId,
+    urlVereadorParaLicenca: vereadorParaLicencaId ? comToken(`/cadastros/vereadores?v=${vereadorParaLicencaId}`, "secretaria") : null,
+    avisoLicenca: "registrar licenca muda o estado do vereador para 'licenciado' e mexe no roster/quorum das sessoes — por isso o alvo e um vereador do roster que NAO e nenhuma das identidades logaveis (vereador/presidente).",
+    avisoMandato: "os vereadores do roster tem mandato VIGENTE; registrar mandato em qualquer um deles da 409 de sobreposicao. Use vereadorSemMandatoId para o caminho feliz.",
   },
 
   e2: {
@@ -507,6 +556,11 @@ const artefato = {
     proposicaoEditavel: editaveis[0] ?? null,
     urlProposicaoEditavel: editaveis[0] ? comToken(`/ficha-materia/${editaveis[0].id}`, "secretaria") : null,
     outrasEditaveis: editaveis.slice(1, 6),
+    // Par de alvos do [ACHADO] "editar so a ementa cria versao de texto identica" — por PROPRIEDADE
+    // (temTexto), nunca por indice. alvoSemTexto pode ter sido FABRICADO (lock 0, sem texto) quando o seed
+    // nao trouxe nenhum. O spec pula (test.skip) se algum dos dois faltar, em vez de reprovar.
+    alvoComTexto: alvoComTexto && { id: alvoComTexto.id, lockVersion: alvoComTexto.lockVersion, temTexto: true },
+    alvoSemTexto: alvoSemTexto && { id: alvoSemTexto.id, lockVersion: alvoSemTexto.lockVersion, temTexto: false },
   },
 
   e4: {

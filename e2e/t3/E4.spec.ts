@@ -211,8 +211,8 @@ test.describe.serial("E4 - O parecer (servidor + vereador)", () => {
   // (interno)/layout.tsx — ele só injeta AuthProvider+TemaProvider, sem nada como o GuardVereador de
   // (vereador)/layout.tsx. A consequência observável é dupla, e é isso que este teste afirma:
   //   (a) o vereador recebe o CHASSI INTERNO da secretaria (topo institucional, nav "Painéis da
-  //       Mesa/Tramitação/...", e o ator hardcoded "Rita Campos · Servidora legislativa") em vez de
-  //       um "Acesso restrito";
+  //       Mesa/Tramitação/...") em vez de um "Acesso restrito" — e o topo carimba o PAPEL REAL do
+  //       vínculo logado (ver a asserção "Vereador(a)" abaixo), não mais o ator fixo de antes;
   //   (b) o 403 é renderizado pelo MESMO ramo de erro que um 404 — "Não foi possível carregar este
   //       parecer" — então "você não tem o papel" fica indistinguível de "este parecer não existe"
   //       (compare com o teste seguinte, que é um 404 de verdade e mostra a MESMA tela).
@@ -236,7 +236,11 @@ test.describe.serial("E4 - O parecer (servidor + vereador)", () => {
 
     // (a) sem guard client-side: o chassi INTERNO renderiza mesmo assim, com o ator da secretaria.
     await expect(page.getByRole("navigation", { name: "Navegação interna" })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("Servidora legislativa")).toBeVisible();
+    // [ATUALIZADO 16/09] o topo NAO mostra mais o ator fixo "Rita Campos · Servidora legislativa": desde o
+    // conserto da demo (12/09, rotulo-papel.ts) ele carimba o PAPEL REAL do vinculo logado. Como o token
+    // aqui e de VEREADOR (papeis trocados), o rotulo e "Vereador(a)" — prova ainda mais forte do achado: o
+    // vereador chega ao chassi INTERNO e o topo mostra o papel DELE, sem guard client-side barrando a rota.
+    await expect(page.getByText("Vereador(a)")).toBeVisible();
     // contraste: o app do vereador teria mostrado isto (GuardVereador, (vereador)/layout.tsx:47).
     await expect(page.getByRole("heading", { name: "Acesso restrito" })).toHaveCount(0);
 

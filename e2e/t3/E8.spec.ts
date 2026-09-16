@@ -25,8 +25,13 @@ const FRONTEND: string = ids.base.frontend;
 const ENTE_ID: string = ids.ente;
 const TOKEN_VEREADOR_JSON: string = ids.tokens.vereador.json;
 const URL_NOTIFICACOES: string = ids.e8.url;
-const NOTIFICACAO_ID: string = ids.e8.naoLidaId; // "3a89d4a4-..." — T3-FIXTURE 3, categoria "sistema"
-const ASSUNTO_FIXTURE = "Aviso da Secretaria [T3-FIXTURE 3]";
+// A notificacao alvo e o seu ASSUNTO vem AMBOS do mesmo item do artefato (naoLidas[0]) — consistentes por
+// construcao. Antes o assunto era um literal cravado ("[T3-FIXTURE 3]"): como a ordem de GET /meu/notificacoes
+// nao e estavel, o spec clicava o artigo de UMA fixture e assevera o id de OUTRA (naoLidas[0]) — Expected/
+// Received divergiam. Derivar os dois do mesmo item faz o clique e a asserção baterem no mesmo registro.
+const naoLidaEscolhida = ids.e8.naoLidas[0];
+const NOTIFICACAO_ID: string = naoLidaEscolhida.id;
+const ASSUNTO_FIXTURE: string = naoLidaEscolhida.assunto;
 
 const PROVA_PATH = resolve(__dirname, ".artifacts/escritas-E8.json");
 

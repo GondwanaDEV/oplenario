@@ -453,17 +453,19 @@ test.describe("E3 - A matéria nasce (servidor)", () => {
     // O discriminador e' `lockVersion`: proposicao recem-criada pelo formulario nasce com lock 0 e SEM
     // versao de texto; qualquer uma ja editada tem lock > 0 e texto vigente. Conferido por SQL contra
     // legislativo.proposicao_texto_versao nos 5 candidatos do artefato.
-    type Cand = { id: string; lockVersion: number };
-    const cands = ids.e3.outrasEditaveis as Cand[];
-    const comTextoCand = cands.find((c) => c.lockVersion > 0);
-    const semTextoCand = cands.find((c) => c.lockVersion === 0);
-    if (!comTextoCand || !semTextoCand) {
-      throw new Error(
-        "E3: o artefato nao trouxe o PAR de alvos (um com texto, um sem). Rode ./e2e/t3/preparar.sh.",
-      );
-    }
-    const comTexto: string = comTextoCand.id;
-    const semTexto: string = semTextoCand.id;
+    // O par vem do artefato POR PROPRIEDADE (temTexto), resolvido por preparar.mjs — que ate' FABRICA um
+    // alvo sem-texto (POST cria proposicao com lock 0) quando o seed nao traz nenhum. Se ainda assim faltar
+    // um dos dois (ex.: a fabricacao falhou e virou bloqueio), PULA em vez de reprovar: e' precondicao de
+    // ambiente ausente, nao defeito do produto que este [ACHADO] documenta.
+    type Cand = { id: string; lockVersion: number; temTexto: boolean };
+    const comTextoCand = ids.e3.alvoComTexto as Cand | null;
+    const semTextoCand = ids.e3.alvoSemTexto as Cand | null;
+    test.skip(
+      !comTextoCand || !semTextoCand,
+      "E3 [ACHADO] sem o PAR de alvos (com/sem texto) no artefato — ver bloqueios e3-* em t3-ids.json; rode ./e2e/t3/preparar.sh.",
+    );
+    const comTexto: string = comTextoCand!.id;
+    const semTexto: string = semTextoCand!.id;
 
     async function salvarSoAEmenta(alvo: string) {
       const antes = await page.request.get(`${ids.base.backend}/legislativo/proposicoes/${alvo}`, {

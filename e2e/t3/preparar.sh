@@ -13,17 +13,32 @@ RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 E2E="$RAIZ/e2e"
 
 echo "== 1/2 fixtures.sql (documento_modelo + notificacao_caixa) =="
+# O id da identidade :vereador e' resolvido de demo-ids.edn (nao cravado em fixtures.sql): num seed
+# fresco ele e' novo/aleatorio. Mesma extracao por regex que preparar.mjs faz do bloco :identidades.
+DEMO_IDS="$E2E/.artifacts/demo-ids.edn"
+[ -f "$DEMO_IDS" ] || { echo "ERRO: $DEMO_IDS ausente — rode a semente CHEIA (demo/semear-tudo.sh) antes." >&2; exit 1; }
+VEREADOR_IDENTIDADE="$(grep -oE ':vereador #uuid "[0-9a-fA-F-]{36}"' "$DEMO_IDS" | head -1 | grep -oE '[0-9a-fA-F-]{36}')"
+[ -n "$VEREADOR_IDENTIDADE" ] || { echo "ERRO: nao achei a identidade :vereador em $DEMO_IDS" >&2; exit 1; }
+echo "   vereador_identidade (de demo-ids.edn) = $VEREADOR_IDENTIDADE"
 docker exec -i oplenario-postgres-1 psql -U oplenario -d oplenario -v ON_ERROR_STOP=1 \
+  -v vereador_identidade="$VEREADOR_IDENTIDADE" \
   < "$E2E/t3/fixtures.sql"
 
 echo
 echo "== 2/3 preparar.mjs (tudo o que TEM rota HTTP) =="
+# `--user $(id -u):$(id -g)`: sem isto o container escreve `.artifacts/t3-ids.json` como ROOT (uid 0),
+# e o passo 3/3 (que roda no HOST/runner como usuario nao-root) nao consegue criar t3-versoes.json no
+# mesmo diretorio -> "Permission denied" (medido no 1o run de CI do job t3-e2e). Com --user o artefato
+# nasce dono do chamador. No dev local (root no OrbStack) `id -u`=0 e o comportamento nao muda.
 docker run --rm --network host \
+  --user "$(id -u):$(id -g)" \
   -v "$E2E":/e2e \
-  -v oplenario_e2e_nm:/e2e/node_modules \
   -w /e2e \
   mcr.microsoft.com/playwright:v1.49.0-noble \
   node /e2e/t3/preparar.mjs
+# NB: preparar.mjs e' node PURO (so builtins + fetch), nao usa node_modules — por isso NAO montamos o
+# volume `oplenario_e2e_nm:/e2e/node_modules` aqui. Montar criava um mountpoint `e2e/node_modules` no host
+# DONO de root, e o `npm ci` seguinte (no runner, nao-root) batia em EACCES ao escrever @playwright.
 
 echo
 echo "== 3/3 T3-A2 — os dois texto_versao_id (votado vs. atual) — psql DIRETO, sem rota HTTP p/ isto =="
