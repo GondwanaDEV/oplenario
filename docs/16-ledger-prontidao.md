@@ -2577,5 +2577,14 @@ a data em `America/Fortaleza` (`Intl.DateTimeFormat("en-CA", { timeZone: "Americ
 ao fuso civil do backend, imune à fronteira de dia. Produto correto (Fortaleza é o beachhead; um mandato
 que só começa amanhã-Fortaleza não é vigente hoje); o teste é que lia o relógio na zona errada.
 
-Com esse conserto, o `t3-e2e` deve fechar **71 passed · 0 failed · 14 skipped** (a confirmar no próximo
-run). Os 3 jobs — `test` (backend determinístico), `browser-e2e` (portal) e `t3-e2e` — ficam verdes.
+**CONFIRMADO (run #24, `a44784f`): `t3-e2e` = 71 passed · 0 failed · 14 skipped (2,7 min).** Os 3 jobs —
+`test` (backend determinístico), `browser-e2e` (portal) e `t3-e2e` — **verdes**, o run inteiro `success`.
+Os 14 skipped são a quarentena SSE opt-in (`E2E_T3_SSE`): E5 grupo B (confirmar presença ×2), E6 voto ao
+vivo, as 3 sondas de sessão ao vivo, mais os `test.fixme` documentais. O `t3-e2e` passa a ser um sinal
+**verde e estável** — pode sair de `continue-on-error` quando o Daouda quiser torná-lo gate.
+
+**Cauda fechada.** Das 11 falhas da medição original, 8 eram bugs de INSTRUMENTO/calibração (4 E1
+id-congelado + E8 assunto-cravado + E4 rótulo-morto + E3 par-ausente + 3 E1 fuso-UTC) — todos consertados;
+e 3 eram o custo de precondição AO VIVO do cockpit (SSE), agora quarentenados com o achado documentado e o
+caminho de conserto de produto (hidratar placar/`presentes` por snapshot no page-load) apontado. Nada foi
+forçado a verde: o único "não resolvido" é uma decisão de design (SSE), explícita e reversível.
