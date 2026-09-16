@@ -109,6 +109,21 @@ async function darMandatoVigentePelaTela(page: Page, vereadorId: string): Promis
   return (await r.json()).id as string;
 }
 
+// Abre o painel "Novo vereador" com retry contra a CORRIDA DE HIDRATACAO: no 1o acesso a
+// /cadastros/vereadores o next dev compila a rota a frio e o click em "Novo vereador" pode chegar ANTES do
+// React ligar o onClick e se perder, deixando o form fechado (timeout em toBeVisible). Mesmo padrao ja'
+// usado em criarVereadorPelaTela/darMandatoVigentePelaTela; se o botao genuinamente nao abrir o form, ainda
+// falha alto (nao mascara defeito). Devolve o form JA' visivel.
+async function abrirFormNovoVereador(page: Page): Promise<Locator> {
+  await page.goto(e1.urlLista, { waitUntil: "domcontentloaded", timeout: 90_000 });
+  const form = page.locator('form[aria-label="Novo vereador"]');
+  await expect(async () => {
+    await page.getByRole("button", { name: "Novo vereador" }).click();
+    await expect(form).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 30_000 });
+  return form;
+}
+
 test.describe("E1 - Cadastros de vereadores", () => {
   // fullyParallel:false no playwright.config.ts já serializa os testes deste arquivo na ordem escrita —
   // importante aqui porque "licença sem mandato" (não-mutante) precisa rodar ANTES de "criar mandato"
@@ -117,11 +132,7 @@ test.describe("E1 - Cadastros de vereadores", () => {
   // ============================== CRIAR VEREADOR ==============================
   test("criar vereador — caminho feliz + as 3 verificacoes", async ({ page }) => {
     const nome = `E2E T3 Vereador ${Date.now()}`;
-    await page.goto(e1.urlLista, { waitUntil: "domcontentloaded", timeout: 90_000 }); // 1º acesso à rota: next dev compila sob demanda
-
-    await page.getByRole("button", { name: "Novo vereador" }).click();
-    const form = page.locator('form[aria-label="Novo vereador"]');
-    await expect(form).toBeVisible();
+    const form = await abrirFormNovoVereador(page); // goto + abre o painel (retry de hidratacao)
     await form.locator("#nv-nome").fill(nome);
     await form.locator("#nv-parlamentar").fill("Nome Parlamentar E2E");
 
@@ -160,10 +171,7 @@ test.describe("E1 - Cadastros de vereadores", () => {
   });
 
   test("criar vereador — campo obrigatorio vazio (nome em branco)", async ({ page }) => {
-    await page.goto(e1.urlLista, { waitUntil: "domcontentloaded", timeout: 90_000 });
-    await page.getByRole("button", { name: "Novo vereador" }).click();
-    const form = page.locator('form[aria-label="Novo vereador"]');
-    await expect(form).toBeVisible();
+    const form = await abrirFormNovoVereador(page);
 
     let disparouRequisicao = false;
     page.on("request", (r) => {
@@ -178,9 +186,7 @@ test.describe("E1 - Cadastros de vereadores", () => {
   });
 
   test("criar vereador — duplo clique (guard sincrono enviandoRef)", async ({ page }) => {
-    await page.goto(e1.urlLista, { waitUntil: "domcontentloaded", timeout: 90_000 });
-    await page.getByRole("button", { name: "Novo vereador" }).click();
-    const form = page.locator('form[aria-label="Novo vereador"]');
+    const form = await abrirFormNovoVereador(page);
     await form.locator("#nv-nome").fill(`E2E T3 Duplo Clique ${Date.now()}`);
 
     const posts: number[] = [];
