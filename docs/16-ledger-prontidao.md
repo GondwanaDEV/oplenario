@@ -2557,6 +2557,25 @@ documentado e o caminho para des-quarentenar é o **conserto de produto real —
 por snapshot no page-load** (para o cockpit sobreviver a um cold-load além dos 5 min). As sondas
 determinísticas (E2/E7/E8/E1/E3/E4) seguem sempre ligadas.
 
-**Resultado esperado (a confirmar no próximo run):** com E1 (4) + E8 (1) + E4 (1) consertados e E3 (1)
-com par garantido, e os specs de SSE fora do CI, o `t3-e2e` deve ficar **verde e estável** (as falhas
-remanescentes, se houver, deixam de ser id-congelado/rótulo-morto). Medição real entra aqui após o run.
+**Resultado MEDIDO (run #23, 2ª tentativa — a 1ª morreu num timeout de rede puxando `valkey` do Docker
+Hub, ANTES de qualquer spec; re-run confirmou o flake de infra, jobs irmãos verdes no mesmo commit):
+`t3-e2e` = **68 passed · 3 failed · 14 skipped · 0 did-not-run**.** As 4 falhas E1 de id-congelado
+(197/254/360/398), a E8, a E4 e a E3 [ACHADO] — **todas verdes**. A cascata "did-not-run" (era 5–10)
+**zerou**: o gate SSE estabilizou a suíte (rodou em 3,6 min vs. 6+). Os 14 skipped são as sondas + E5
+grupo B + E6-voto sob `E2E_T3_SSE` (quarentena documentada).
+
+**As 3 falhas restantes eram um flake de FUSO latente, NÃO regressão nem bug de produto — e foi o gate SSE
+que o revelou** (antes esses 3 ficavam perpetuamente em "did-not-run", abortados pela cascata). As 3
+(criar-mandato-feliz, licença-feliz, licença-duplo — todas FABRICAM o alvo) falhavam na MESMA asserção:
+POST mandato 201, mas o chip da ficha ficava "Sem mandato". Causa: o teste montava `vigencia_inicio` com
+`hoje()` em **UTC** (`toISOString`), enquanto o backend resolve a data corrente em **America/Fortaleza**
+(`cadastros/diplomat/http/in.clj:30`, `zona-civil`). O run rodou 00:49 UTC = 15/09 21:49 em Fortaleza: o
+teste mandava `2026-09-16`, o backend comparava com `hoje`=`2026-09-15`, e `mandato-vigente` exige
+`vigencia_inicio <= hoje` → o mandato nascia no FUTURO (Fortaleza-wise) → não-vigente. Os runs #21/#22
+rodaram 23:xx UTC (mesmo dia-calendário) → passavam. **Conserto:** `hoje()` do E1.spec.ts passa a computar
+a data em `America/Fortaleza` (`Intl.DateTimeFormat("en-CA", { timeZone: "America/Fortaleza" })`) — alinhado
+ao fuso civil do backend, imune à fronteira de dia. Produto correto (Fortaleza é o beachhead; um mandato
+que só começa amanhã-Fortaleza não é vigente hoje); o teste é que lia o relógio na zona errada.
+
+Com esse conserto, o `t3-e2e` deve fechar **71 passed · 0 failed · 14 skipped** (a confirmar no próximo
+run). Os 3 jobs — `test` (backend determinístico), `browser-e2e` (portal) e `t3-e2e` — ficam verdes.

@@ -43,8 +43,14 @@ function registrarProva(linha: Record<string, unknown>) {
   appendFileSync(PROVA_PATH, JSON.stringify(linha) + "\n");
 }
 
+// "Hoje" no MESMO fuso civil que o backend usa para resolver a data corrente — America/Fortaleza
+// (cadastros/diplomat/http/in.clj:30 `zona-civil`). NAO usar UTC (toISOString): entre 00:00 e 03:00 UTC a
+// data UTC ja virou mas Fortaleza (UTC-3) ainda e' o dia anterior — um mandato com vigencia_inicio=UTC-hoje
+// nasce no FUTURO para o backend (`mandato-vigente` exige vigencia_inicio <= hoje-Fortaleza) e a ficha
+// mostra "Sem mandato" em vez de "Mandato ativo". Era um flake latente de fronteira de dia, so' visivel
+// quando a suite roda naquela janela — e' o que reprovava criar-mandato/licenca-feliz no run das 00:49 UTC.
 function hoje(): string {
-  return new Date().toISOString().slice(0, 10);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Fortaleza" }).format(new Date());
 }
 
 // Duplo-clique fisico: dispara 2 dispatchEvent("click") no MESMO elemento sem esperar entre eles —
