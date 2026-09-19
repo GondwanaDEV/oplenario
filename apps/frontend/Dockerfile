@@ -31,12 +31,30 @@ ARG KEYCLOAK_INTERNAL_URL=http://keycloak:8080
 ENV KEYCLOAK_INTERNAL_URL=$KEYCLOAK_INTERNAL_URL
 ARG KEYCLOAK_PUBLIC_URL=http://keycloak:8080
 ENV KEYCLOAK_PUBLIC_URL=$KEYCLOAK_PUBLIC_URL
+# Inlinada no bundle do browser. Ausente cai em modo real (o lado seguro). Explicitamos production
+# no GHA para nao depender do default vazio.
+ARG NEXT_PUBLIC_APP_ENV=production
+ENV NEXT_PUBLIC_APP_ENV=$NEXT_PUBLIC_APP_ENV
 RUN npm run build
 
 # ---- runner: so o standalone + estaticos, sem node_modules/devDeps ----
 FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+# ARG nao atravessa stage: sem redeclarar, o BFF (login/callback/logout) nasceria sem APP_ORIGIN e
+# cairia no Host header; NEXT_PUBLIC_APP_ENV do --build-arg do GHA tambem se perderia (o Next
+# inlina no client no `next build`, mas o server standalone ainda le process.env). Dokploy ainda
+# pode sobrescrever no runtime — NEXT_PUBLIC_* no client ja ficou congelado no stage build.
+ARG BACKEND_URL=http://app:8888
+ARG APP_ORIGIN=http://localhost:3000
+ARG KEYCLOAK_INTERNAL_URL=http://keycloak:8080
+ARG KEYCLOAK_PUBLIC_URL=http://keycloak:8080
+ARG NEXT_PUBLIC_APP_ENV=production
+ENV BACKEND_URL=$BACKEND_URL \
+    APP_ORIGIN=$APP_ORIGIN \
+    KEYCLOAK_INTERNAL_URL=$KEYCLOAK_INTERNAL_URL \
+    KEYCLOAK_PUBLIC_URL=$KEYCLOAK_PUBLIC_URL \
+    NEXT_PUBLIC_APP_ENV=$NEXT_PUBLIC_APP_ENV
 COPY --from=build /app/public ./public
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static

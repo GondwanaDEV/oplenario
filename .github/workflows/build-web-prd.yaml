@@ -1,0 +1,90 @@
+name: Build/Deploy Web (prd)
+
+on:
+  push:
+    branches: ["production"]
+    paths:
+      - "apps/frontend/**"
+      - ".github/workflows/build-web-prd.yaml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    concurrency:
+      group: deploy-web-prd-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # vars ausente vira string vazia; o build-push-action omite ARG vazio e o Docker
+      # cai nos defaults do Dockerfile (APP_ORIGIN=http://localhost:3000). O next build
+      # ACEITA esse valor (esta preenchido) e publica imagem de producao com config de
+      # laptop. Falhar antes do login/build.
+      - name: Fail-fast se vars de producao faltarem
+        env:
+          BACKEND_URL: ${{ vars.BACKEND_URL }}
+          APP_ORIGIN: ${{ vars.APP_ORIGIN }}
+          KEYCLOAK_INTERNAL_URL: ${{ vars.KEYCLOAK_INTERNAL_URL }}
+          KEYCLOAK_PUBLIC_URL: ${{ vars.KEYCLOAK_PUBLIC_URL }}
+          DOKPLOY_DOMAIN: ${{ vars.DOKPLOY_DOMAIN }}
+        run: |
+          missing=0
+          for name in BACKEND_URL APP_ORIGIN KEYCLOAK_INTERNAL_URL KEYCLOAK_PUBLIC_URL DOKPLOY_DOMAIN; do
+            eval "val=\${$name}"
+            if [ -z "$val" ]; then
+              echo "::error::${name} nao esta definida no Environment production (GitHub variable)."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "Defina as variables no Environment production. Sem elas o Dockerfile usaria localhost/keycloak."
+            exit 1
+          fi
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      # Contexto em apps/frontend (lockfile + source). target `runner` = Next standalone,
+      # sem o stage `dev` do compose local. Congelados no build:
+      #   BACKEND_URL              rewrite /api/* (hostname Docker do backend no Dokploy, NUNCA IP 10/172/192.168)
+      #   APP_ORIGIN               origin publica HTTPS (redirect_uri PKCE)
+      #   KEYCLOAK_INTERNAL_URL    token-exchange server-side
+      #   KEYCLOAK_PUBLIC_URL      host-pin do RP-logout
+      #   NEXT_PUBLIC_APP_ENV      inlinada no bundle; so `production` (dev/test ligam token forjado)
+      # O BFF tambem le APP_ORIGIN / KEYCLOAK_* / BACKEND_URL em runtime — o Dockerfile copia
+      # as ARGs para o stage runner; o Dokploy pode sobrescrever as mesmas chaves.
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./apps/frontend
+          file: ./apps/frontend/Dockerfile
+          target: runner
+          push: true
+          tags: |
+            ghcr.io/gondwanadev/oplenario-web-prd:latest
+          platforms: linux/amd64
+          build-args: |
+            BACKEND_URL=${{ vars.BACKEND_URL }}
+            APP_ORIGIN=${{ vars.APP_ORIGIN }}
+            KEYCLOAK_INTERNAL_URL=${{ vars.KEYCLOAK_INTERNAL_URL }}
+            KEYCLOAK_PUBLIC_URL=${{ vars.KEYCLOAK_PUBLIC_URL }}
+            NEXT_PUBLIC_APP_ENV=production
+
+      - name: Trigger Dokploy Deployment
+        run: |
+          curl --fail-with-body -sS -X 'POST' \
+          'https://${{ vars.DOKPLOY_DOMAIN }}/api/application.deploy' \
+          -H 'accept: application/json' \
+          -H 'Content-Type: application/json' \
+          -H 'x-api-key: ${{ secrets.DOKPLOY_KEY }}' \
+          -d '{
+          "applicationId": "${{ secrets.DOKPLOY_APPLICATION_ID_WEB }}"
+          }'

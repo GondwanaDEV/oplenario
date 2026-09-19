@@ -1,0 +1,55 @@
+name: Build/Deploy API (prd)
+
+on:
+  push:
+    branches: ["production"]
+    paths:
+      - "apps/backend/**"
+      - ".github/workflows/build-api-prd.yaml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    concurrency:
+      group: deploy-api-prd-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      # Contexto em apps/backend (deps.edn + src + resources). O Dockerfile nao declara ARG —
+      # DATABASE_URL, DB_*, VALKEY_URI, MINIO_*, KEYCLOAK_*, APP_ENV sao todos de runtime, entram
+      # no Dokploy. A mesma imagem serve `migrate` (command migrate) e `serve` (sem args).
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./apps/backend
+          file: ./apps/backend/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/gondwanadev/oplenario-api-prd:latest
+          platforms: linux/amd64
+
+      # O `serve` NAO aplica migration (evita corrida entre replicas). Schema novo e one-shot
+      # manual no Dokploy: a mesma imagem com command `migrate` e o user DONO do Postgres,
+      # antes deste webhook (senao a API sobe contra schema velho → `relation ... does not exist`).
+      - name: Trigger Dokploy Deployment
+        run: |
+          curl --fail-with-body -sS -X 'POST' \
+          'https://${{ vars.DOKPLOY_DOMAIN }}/api/application.deploy' \
+          -H 'accept: application/json' \
+          -H 'Content-Type: application/json' \
+          -H 'x-api-key: ${{ secrets.DOKPLOY_KEY }}' \
+          -d '{
+          "applicationId": "${{ secrets.DOKPLOY_APPLICATION_ID_API }}"
+          }'
