@@ -44,12 +44,21 @@
 (defn- listar-materias-handler
   "GET /portal/casa/:ente/materias — resposta agora e' o PAR {:materias :materias-total} (frente
   'truncamento-familia', sitio (b)): esta rota E' a listagem publica de proposicoes (sem paginacao,
-  sem outra rota — ver materia-vista.ts/escolherDestaque no FE), e o teto de 200 saia sem sinalizar."
-  [repo-transparencia resolver-ente-publico]
+  sem outra rota — ver materia-vista.ts/escolherDestaque no FE), e o teto de 200 saia sem sinalizar.
+
+  Ente inexistente -> 404, igual a /portal/casa/:ente (achado do teste exploratorio contra a homologacao,
+  metodo docs/20): esta rota devolvia 200 com colecao VAZIA para QUALQUER id, enquanto a rota-pai devolvia
+  404 para o mesmo id. O cliente nao conseguia distinguir "Casa existe e nao tem nada" de "Casa nao
+  existe" — e foi esse 200 que sustentou a capa do portal renderizando uma Casa inexistente. Casa REAL
+  vazia SEGUE 200 com lista vazia: a distincao vem de `info-ente` (o mesmo seam injetado do host que a
+  rota-pai usa, §22.10 — transparencia nunca importa cadastros), nunca do tamanho da lista."
+  [repo-transparencia resolver-ente-publico info-ente]
   (fn [req]
     (let [ente-id (resolver-ente-publico (get-in req [:path-params :ente]))]
-      (http/json-resposta 200
-        (adapters-out-materia/materias->wire (controllers/listar-materias repo-transparencia ente-id))))))
+      (if-not (info-ente ente-id)
+        (http/json-resposta 404 {:erro "ente nao encontrado"})
+        (http/json-resposta 200
+          (adapters-out-materia/materias->wire (controllers/listar-materias repo-transparencia ente-id)))))))
 
 (defn- ficha-materia-handler
   [repo-transparencia resolver-ente-publico]
@@ -64,13 +73,22 @@
   "GET /portal/casa/:ente/legislacao(?tipo=&ano=&numero=) — acervo as-enacted (F6c Slice 3). Query-params
   OPCIONAIS coagidos na borda (ano/numero nao-inteiro -> 400); ausentes -> filtro vazio = compat Slice 1.
   Resposta e' o PAR {:normas :normas-total} (frente 'truncamento-familia', sitio (c)): o teto de 200 saia
-  sem sinalizar."
-  [repo-transparencia resolver-ente-publico]
+  sem sinalizar.
+
+  Ente inexistente -> 404, igual a /portal/casa/:ente (achado do teste exploratorio contra a homologacao,
+  metodo docs/20): esta rota devolvia 200 com colecao VAZIA para QUALQUER id, enquanto a rota-pai devolvia
+  404 para o mesmo id. O cliente nao conseguia distinguir "Casa existe e nao tem nada" de "Casa nao
+  existe" — e foi esse 200 que sustentou a capa do portal renderizando uma Casa inexistente. Casa REAL
+  vazia SEGUE 200 com lista vazia: a distincao vem de `info-ente` (o mesmo seam injetado do host que a
+  rota-pai usa, §22.10 — transparencia nunca importa cadastros), nunca do tamanho da lista."
+  [repo-transparencia resolver-ente-publico info-ente]
   (fn [req]
     (let [ente-id (resolver-ente-publico (get-in req [:path-params :ente]))
           filtro  (adapters-in/filtro-legislacao (:query-params req))]
-      (http/json-resposta 200
-        (adapters-out-norma/normas->wire (controllers/listar-normas repo-transparencia ente-id filtro))))))
+      (if-not (info-ente ente-id)
+        (http/json-resposta 404 {:erro "ente nao encontrado"})
+        (http/json-resposta 200
+          (adapters-out-norma/normas->wire (controllers/listar-normas repo-transparencia ente-id filtro)))))))
 
 (defn- buscar-norma-handler
   [repo-transparencia resolver-ente-publico]
@@ -161,13 +179,13 @@
      [(info-ente-handler info-ente resolver-ente-publico)]
      :route-name :transparencia/info-ente]
     ["/portal/casa/:ente/materias" :get
-     [(listar-materias-handler repo-transparencia resolver-ente-publico)]
+     [(listar-materias-handler repo-transparencia resolver-ente-publico info-ente)]
      :route-name :transparencia/listar-materias]
     ["/portal/casa/:ente/materias/:proposicao_id" :get
      [(ficha-materia-handler repo-transparencia resolver-ente-publico)]
      :route-name :transparencia/ficha-materia]
     ["/portal/casa/:ente/legislacao" :get
-     [(listar-normas-handler repo-transparencia resolver-ente-publico)]
+     [(listar-normas-handler repo-transparencia resolver-ente-publico info-ente)]
      :route-name :transparencia/listar-normas]
     ["/portal/casa/:ente/legislacao/:norma_id" :get
      [(buscar-norma-handler repo-transparencia resolver-ente-publico)]
