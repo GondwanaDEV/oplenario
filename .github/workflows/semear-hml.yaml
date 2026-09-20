@@ -1,0 +1,79 @@
+name: Semear homologacao (demo)
+
+# NUNCA automatico: so workflow_dispatch, e ainda assim exige a frase de confirmacao.
+on:
+  workflow_dispatch:
+    inputs:
+      confirmar:
+        description: 'Digite semear-homologacao para confirmar'
+        required: true
+        type: string
+
+jobs:
+  semear:
+    runs-on: ubuntu-latest
+    env:
+      APP_ENV: production
+      # :5433 = porta externa TEMPORARIA do Postgres do O Plenario (container oplenario-database).
+      # A :5432 publica do host e' de OUTRO projeto (galeriaascal) — nunca foi o banco certo.
+      DATABASE_URL: jdbc:postgresql://204.12.227.116:5433/oplenario
+      DB_USER: oplenario-application
+      DB_PASSWORD: ${{ secrets.HML_DB_PASSWORD }}
+      # backplane :memoria — o seed so grava no Postgres; o fan-out SSE ao vivo e' do backend de
+      # producao (que roda :valkey), nunca deste job batch. Assim o boot nao exige a porta 6379 publica.
+      TEMPO_REAL_BACKPLANE: memoria
+      MINIO_ENDPOINT: bucket-api.calvetec.com.br
+      MINIO_ACCESS_KEY: ${{ secrets.HML_MINIO_ACCESS_KEY }}
+      MINIO_SECRET_KEY: ${{ secrets.HML_MINIO_SECRET_KEY }}
+      MINIO_BUCKET: oplenario
+      KEYCLOAK_BASE_URL: https://keycloak.calvetec.com.br
+      KEYCLOAK_BASE_URL_PUBLICO: https://keycloak.calvetec.com.br
+      KEYCLOAK_ADMIN_USUARIO: admin
+      KEYCLOAK_ADMIN_SENHA: ${{ secrets.HML_KEYCLOAK_ADMIN_SENHA }}
+      # Origem REAL do BFF em prod — sobrepoe o default de localhost do config.edn. Sem isto o client
+      # PKCE oplenario-web nasce/segue com redirect de localhost e o login em prod da "Invalid redirect_uri".
+      KEYCLOAK_REDIRECT_URIS: https://oplenario.calvetec.com.br/api/auth/callback
+      KEYCLOAK_WEB_ORIGINS: https://oplenario.calvetec.com.br
+      DEMO_ARTIFACTS_DIR: ${{ github.workspace }}/e2e/.artifacts
+    steps:
+      - name: Guarda de confirmacao
+        run: '[ "${{ inputs.confirmar }}" = "semear-homologacao" ] || { echo "confirmacao invalida"; exit 1; }'
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: DeLaGuardo/setup-clojure@13.0
+        with:
+          cli: latest
+
+      - run: mkdir -p "$DEMO_ARTIFACTS_DIR"
+
+      # semear-tudo! migra antes (idempotente) e sequencia casa -> acervo -> sessoes -> participacao
+      # sobre UM unico sistema Component bootado. Rodar de novo rele, nao duplica.
+      - name: Semear a Casa
+        working-directory: apps/backend
+        run: clojure -Sdeps '{:aliases {:seed {:extra-paths ["demo"]}}}' -X:seed "semear-tudo/semear-tudo!"
+
+      - name: Semear as credenciais das personas
+        working-directory: apps/backend
+        run: clojure -Sdeps '{:aliases {:seed {:extra-paths ["demo"]}}}' -X:seed "personas/semear-credenciais!"
+
+      # UUIDs de ente/vereadores/personas nao sao segredo (a senha das personas e fixture publica,
+      # documentada em docs/18). Imprimir aqui e o que permite operar a demo sem abrir shell na VPS.
+      - name: Ids da demo
+        run: |
+          echo "----- demo-ids.edn -----"
+          cat e2e/.artifacts/demo-ids.edn || echo "(ausente)"
+          echo "----- credenciais.edn -----"
+          cat e2e/.artifacts/credenciais.edn || echo "(ausente)"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ids-da-demo
+          path: e2e/.artifacts/
+          if-no-files-found: warn

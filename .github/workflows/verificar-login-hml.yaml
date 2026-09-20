@@ -1,0 +1,76 @@
+name: Verificar login PKCE (homolog)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Instalar Playwright + Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm i -D playwright@1.47.2 >/dev/null 2>&1
+          npx playwright install --with-deps chromium
+
+      - name: Escrever o teste
+        run: |
+          cat > verificar-login.mjs <<'JS'
+          import { chromium } from 'playwright';
+          const B = 'https://oplenario.calvetec.com.br';
+          const E = '10000000-0000-0000-0000-000000000001';
+          const SENHA = 'Plenario@2026';
+          const PERSONAS = [
+            ['secretaria', 'c3987c7d-858c-4e4a-a4a7-33f45642c6d6'],
+            ['vereadora',  '0eabd6df-d0cc-40bb-a0ca-043027cb3a1f'],
+            ['presidente', 'b70365f0-82f3-403e-8bda-ef0d8bfeb879'],
+          ];
+          const browser = await chromium.launch();
+          let falhas = 0;
+          for (const [nome, user] of PERSONAS) {
+            const ctx = await browser.newContext({ locale: 'pt-BR' });
+            const p = await ctx.newPage();
+            try {
+              await p.goto(`${B}/api/auth/login?ente=${E}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await p.waitForSelector('#username', { timeout: 25000 });
+              await p.fill('#username', user);
+              await p.fill('#password', SENHA);
+              await Promise.all([
+                p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {}),
+                p.click('#kc-login'),
+              ]);
+              await p.waitForTimeout(5000);
+              const url = p.url();
+              const path = (() => { try { return new URL(url).pathname; } catch { return url; } })();
+              const txt = (await p.evaluate(() => document.body?.innerText || '')).replace(/\s+/g, ' ').trim();
+              // Sucesso: o BFF processou o callback e REDIRECIONOU pra app (sai de /api/auth/* e de /entrar),
+              // sem texto de erro. Falha (ex.: mint recusa) fica no /api/auth/callback com "backend rejeitou".
+              const naB = url.startsWith(B);
+              const preso = path.startsWith('/api/auth') || path.startsWith('/entrar');
+              const temErro = /rejeitou o token|Invalid parameter|redirect_uri|We are sorry|401|Unauthorized|n[aã]o autorizado|Forbidden|Acesso restrito/i.test(txt);
+              const veredito = (naB && !preso && !temErro) ? 'PASS' : 'FALHA';
+              if (veredito !== 'PASS') falhas++;
+              console.log(`\n[${nome}] ${veredito}`);
+              console.log(`  url_final: ${url}`);
+              console.log(`  path: ${path}`);
+              console.log(`  texto: ${txt.slice(0, 220)}`);
+            } catch (e) {
+              falhas++;
+              console.log(`\n[${nome}] FALHA (excecao): ${String(e).split('\n')[0]}`);
+              console.log(`  url_no_erro: ${p.url()}`);
+              const txt = await p.evaluate(() => document.body?.innerText || '').catch(() => '');
+              console.log(`  texto_no_erro: ${txt.replace(/\s+/g, ' ').trim().slice(0, 220)}`);
+            }
+            await ctx.close();
+          }
+          await browser.close();
+          console.log(`\n==> ${falhas === 0 ? 'TODAS PASSARAM' : falhas + ' persona(s) falharam'}`);
+          process.exit(falhas === 0 ? 0 : 1);
+          JS
+
+      - name: Rodar login E2E
+        run: node verificar-login.mjs

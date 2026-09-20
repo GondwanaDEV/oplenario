@@ -52,6 +52,10 @@
   ([repo objeto-store]
    (let [rotas (transparencia-http/rotas {:auth auth-noop :repo-transparencia repo
                                           :resolver-ente-publico transparencia-http/resolver-ente-publico-uuid
+                                          ;; seam de EXISTENCIA do ente: as rotas de colecao agora 404 p/ Casa
+                                          ;; inexistente (achado B). Aqui o ente da fixture sempre existe — o
+                                          ;; 404 tem teste proprio em portal_ente_inexistente_test.clj.
+                                          :info-ente (constantly {:nome-oficial "Camara de Teste"})
                                           :objeto-store objeto-store})]
      (-> (http/servico (config/carregar) rotas it/globais)
          ph/create-server ::ph/service-fn))))

@@ -31,18 +31,37 @@
 (defn- uuid-valido? [s]
   (try (UUID/fromString s) true (catch IllegalArgumentException _ false)))
 
+(defn- prefixos-issuer
+  "Prefixos de issuer ACEITOS: a URL interna (:base-url, falada entre containers) E a publica
+  (:base-url-publico, browser-facing), ambas concatenadas com /realms/<prefixo>. Sao CONFIG DE DEPLOY,
+  as duas confiaveis. Aceitar as duas conserta o split-horizon: num deploy onde o browser alcanca o
+  Keycloak pela URL publica (reverse proxy), o token carrega o issuer PUBLICO, mas o backend so' conhecia
+  a interna — validar so' contra :base-url rejeitava TODO login real ('backend rejeitou o token', com o
+  redirect ja' corrigido). base-url-publico ausente/vazio simplesmente nao entra na lista."
+  [{:keys [base-url base-url-publico realm-prefixo]}]
+  (->> [base-url base-url-publico]
+       (remove str/blank?)
+       distinct
+       (mapv #(str % "/realms/" realm-prefixo))))
+
 (defn issuer-valido?
-  [{:keys [base-url realm-prefixo]} iss]
+  [config iss]
   (boolean
    (when iss
-     (let [prefixo (str base-url "/realms/" realm-prefixo)]
-       (and (str/starts-with? iss prefixo)
-            (uuid-valido? (subs iss (count prefixo))))))))
+     (some (fn [prefixo]
+             (and (str/starts-with? iss prefixo)
+                  (uuid-valido? (subs iss (count prefixo)))))
+           (prefixos-issuer config)))))
 
 (defn ente-id-do-issuer
-  "Deriva o ente-id do issuer JA' VALIDADO por `issuer-valido?` — nunca de um claim auto-declarado."
-  [{:keys [base-url realm-prefixo]} iss]
-  (UUID/fromString (subs iss (count (str base-url "/realms/" realm-prefixo)))))
+  "Deriva o ente-id do issuer JA' VALIDADO por `issuer-valido?` — nunca de um claim auto-declarado.
+  Usa o MESMO conjunto de prefixos (interno + publico): remove aquele que casa e le' o UUID restante."
+  [config iss]
+  (some (fn [prefixo]
+          (when (str/starts-with? iss prefixo)
+            (let [resto (subs iss (count prefixo))]
+              (when (uuid-valido? resto) (UUID/fromString resto)))))
+        (prefixos-issuer config)))
 
 ;; ---------------------------------------------------------------------------------------------
 ;; JWKS provider por-issuer (cache) — a fabrica real (HTTP) e' injetavel p/ os testes usarem uma fake.
@@ -195,14 +214,29 @@
           (throw (ex-info "keycloak-idp: falha ao declarar o atributo identidade-id (infra)" {:status status :corpo corpo})))))))
 
 (defn- garantir-client!
-  "GET-then-create idempotente de um client no realm: consulta por `client-id`; se ja existe, no-op; senao
-  POST do `payload`. Compartilhado pelos clients de audiencia (API) e web (PKCE publico) — a unica coisa
-  que difere entre eles e' o payload, entao a mecanica idempotente vive aqui uma vez so."
+  "GET-then-converge idempotente de um client no realm: consulta por `client-id`; se NAO existe, POST do
+  `payload`; se JA existe, PUT convergindo os campos declarativos que mudam entre deploys
+  (redirectUris/webOrigins) sobre a representacao atual — os mappers sao subrecursos e ficam intactos.
+  Compartilhado pelos clients de audiencia (API) e web (PKCE publico); a unica coisa que difere entre
+  eles e' o payload, entao a mecanica vive aqui uma vez so.
+
+  Por que CONVERGE e nao 'cria-ou-nada' (achado do teste da homolog, metodo docs/20): a versao anterior
+  fazia no-op quando o client existia, entao um `oplenario-web` criado uma vez com redirect de localhost
+  NUNCA era corrigido por re-provisionar — e todo login em prod quebrava com 'Invalid redirect_uri'.
+  Idempotente de verdade e' convergir pro estado desejado, nao parar no primeiro que existe."
   [http-client token base-url realm client-id payload]
   (let [{:keys [status corpo]} (admin-req! http-client token :get
                                            (str "/admin/realms/" realm "/clients?clientId=" client-id) nil base-url)
-        existe-client? (and (= 200 status) (seq corpo))]
-    (when-not existe-client?
+        existente (and (= 200 status) (first corpo))]
+    (if existente
+      ;; PUT da representacao ATUAL com os campos de lista sobrepostos (mesmo padrao GET-then-PUT de
+      ;; declarar-atributo-identidade!). Nao reescreve id/mappers/attributes — so' converge o que muda.
+      (let [alvo (merge existente (select-keys payload [:redirectUris :webOrigins]))
+            {:keys [status corpo]} (admin-req! http-client token :put
+                                               (str "/admin/realms/" realm "/clients/" (:id existente)) alvo base-url)]
+        (when-not (= 204 status)
+          (throw (ex-info "keycloak-idp: falha ao atualizar o client (infra)"
+                          {:status status :corpo corpo :client-id client-id}))))
       (let [{:keys [status corpo]} (admin-req! http-client token :post
                                                (str "/admin/realms/" realm "/clients") payload base-url)]
         (when-not (= 201 status)

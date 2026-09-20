@@ -33,7 +33,9 @@
 (defn- service-fn [repo]
   (let [auth  (it/autenticacao (idp-dev/idp-dev) (fake-repo-identidade))
         rotas (transparencia-http/rotas {:auth auth :repo-transparencia repo
-                                         :resolver-ente-publico transparencia-http/resolver-ente-publico-uuid})]
+                                         :resolver-ente-publico transparencia-http/resolver-ente-publico-uuid
+                                         ;; idem fluxo_portal_test: ente da fixture sempre existe.
+                                         :info-ente (constantly {:nome-oficial "Camara de Teste"})})]
     (-> (http/servico (config/carregar) rotas it/globais)
         ph/create-server ::ph/service-fn)))
 
