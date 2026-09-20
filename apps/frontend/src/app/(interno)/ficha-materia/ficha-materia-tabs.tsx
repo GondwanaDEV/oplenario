@@ -11,6 +11,7 @@ import { rotularVoto } from "@/lib/parecer-vista";
 import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { EmBreve } from "@/lib/em-breve";
+import { AcoesTramitacao } from "./acoes-tramitacao";
 import { derivarTimelineTramitacao, derivarPareceres, derivarEmendas } from "@/lib/ficha-materia-vista";
 import { formatarData } from "@/lib/formatar-data";
 import { comToken } from "@/lib/nav";
@@ -21,11 +22,15 @@ type Aba = { id: string; rotulo: string; contagem?: number; truncado?: boolean }
 export function FichaMateriaTabs({
   ficha,
   token = null,
+  onTramitou,
 }: {
   ficha: FichaMateriaOut;
   // token dev opcional (Onda B Slice 5) — só pra preservar ?token= no link "Abrir parecer"; recebido via
   // prop (não `useAuth()` aqui) porque esta suíte de teste renderiza o componente SEM <AuthProvider>.
   token?: string | null;
+  // chamado após uma tramitação bem-sucedida no painel de atos — a página refaz o GET da ficha para o
+  // cabeçalho/histórico refletirem o novo estado (opcional: default é no-op).
+  onTramitou?: () => void;
 }) {
   // useMemo: todos os 5 painéis ficam montados simultaneamente (só `hidden` alterna, ver abaixo) — sem
   // isto, o sort()+map() das 3 derivações reroda a cada keypress de navegação das abas (ArrowLeft/Right/
@@ -131,6 +136,7 @@ export function FichaMateriaTabs({
         tabIndex={0}
         hidden={selecionada !== 1}
       >
+        <AcoesTramitacao proposicaoId={ficha.proposicao.id} token={token} onTramitou={onTramitou} />
         {timeline.length === 0 ? (
           <p>Nenhuma transição de tramitação registrada ainda.</p>
         ) : (
