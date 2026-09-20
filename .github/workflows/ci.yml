@@ -220,3 +220,62 @@ jobs:
         if: failure()
         working-directory: apps/backend
         run: docker compose logs app frontend --tail 160
+
+  # M3 (docs/20, Onda T1) — GATE de regressao da AUTORIZACAO DE LEITURA por papel (spec E9). Diferente do
+  # t3-e2e (informativo: os specs E1-E8 cravam ids congelados via fixtures.sql/preparar.mjs), esta e'
+  # PORTAVEL — a E9 constroi os dev-tokens a partir do demo-ids.edn que `demo/semear-tudo.sh` escreve —
+  # entao BLOQUEIA. Guarda o conserto feat(authz): vereador/presidente LEEM proposicoes/tramitacao/paineis
+  # (era 403 pelo gate grosso so'-secretario). NAO roda preparar.sh: a E9 nao depende das fixtures dos E1-E8.
+  t3-autz-leitura-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Subir a stack inteira (dev — dev-token; sem --profile auth)
+        working-directory: apps/backend
+        run: docker compose up -d --build
+
+      - name: Esperar o backend (/saude=200)
+        working-directory: apps/backend
+        run: |
+          for i in $(seq 1 60); do
+            curl -sf -o /dev/null http://localhost:8888/saude && exit 0
+            sleep 2
+          done
+          echo "backend /saude nao respondeu a tempo"; docker compose logs app --tail 80; exit 1
+
+      - name: Semear a Casa CHEIA (demo/semear-tudo.sh — escreve e2e/.artifacts/demo-ids.edn)
+        env:
+          OPLENARIO_PG_PORT: '5432'
+          OPLENARIO_MINIO_PORT: '9000'
+        run: ./demo/semear-tudo.sh
+
+      - name: Esperar o frontend (/=200)
+        working-directory: apps/backend
+        run: |
+          for i in $(seq 1 90); do
+            curl -sf -o /dev/null http://localhost:3000/ && exit 0
+            sleep 2
+          done
+          echo "frontend nao respondeu a tempo"; docker compose logs frontend --tail 80; exit 1
+
+      - name: Rodar a spec de autorizacao de leitura (E9)
+        working-directory: e2e
+        env:
+          E2E_BASE_URL: http://localhost:3000
+          E2E_BACKEND_URL: http://localhost:8888
+          E2E_INCLUDE_T3: '1'
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npx playwright test t3/E9-autorizacao-leitura.spec.ts
+
+      - name: Logs da stack (so em falha)
+        if: failure()
+        working-directory: apps/backend
+        run: docker compose logs app frontend --tail 160
