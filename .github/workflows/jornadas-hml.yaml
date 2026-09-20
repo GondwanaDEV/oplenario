@@ -35,6 +35,10 @@ jobs:
               '/expediente', '/expediente/protocolo', '/expediente/recebidos', '/cadastros/vereadores' ] },
             { nome: 'presidente', user: 'b70365f0-82f3-403e-8bda-ef0d8bfeb879', rotas: [
               '/paineis/mesa', '/pauta-convocacao', '/vereador', '/votar', '/proposicoes', '/tramitacao' ] },
+            // cidada logada (Roberta): a perna autenticada do cidadao — /acompanhamentos (o seed criou 3
+            // acompanhamentos em materias reais para ela). /notificacoes tambem e' acessivel ao cidadao.
+            { nome: 'cidada', user: '75e0fbb5-7b13-4102-bfc0-d5cc928d4280', rotas: [
+              '/acompanhamentos', '/notificacoes' ] },
           ];
           async function login(ctx, user) {
             const p = await ctx.newPage();
