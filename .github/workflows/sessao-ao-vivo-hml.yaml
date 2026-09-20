@@ -1,0 +1,108 @@
+name: Sessao ao vivo / votacao (homolog)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  hero:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar Playwright + Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm i -D playwright@1.47.2 >/dev/null 2>&1
+          npx playwright install --with-deps chromium
+      - name: Escrever o teste
+        run: |
+          cat > hero.mjs <<'JS'
+          import { chromium } from 'playwright';
+          const B = 'https://oplenario.calvetec.com.br';
+          const E = '10000000-0000-0000-0000-000000000001';
+          const SENHA = 'Plenario@2026';
+          const VEREADORA = '0eabd6df-d0cc-40bb-a0ca-043027cb3a1f';
+          const browser = await chromium.launch();
+          const ctx = await browser.newContext({ locale: 'pt-BR' });
+
+          // 1) login PKCE (cookie fica no contexto)
+          {
+            const p = await ctx.newPage();
+            await p.goto(`${B}/api/auth/login?ente=${E}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await p.waitForSelector('#username', { timeout: 25000 });
+            await p.fill('#username', VEREADORA);
+            await p.fill('#password', SENHA);
+            await Promise.all([
+              p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {}),
+              p.click('#kc-login'),
+            ]);
+            await p.waitForTimeout(3000);
+            console.log('login ->', p.url());
+            await p.close();
+          }
+
+          // 2) resolve a sessao atual (cookie do contexto)
+          let sessaoId = null;
+          {
+            const p = await ctx.newPage();
+            await p.goto(`${B}/vereador`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            const r = await p.evaluate(async () => {
+              const x = await fetch('/api/meu/sessao-atual', { cache: 'no-store' });
+              return { status: x.status, body: await x.text() };
+            });
+            console.log('meu/sessao-atual ->', r.status, r.body.slice(0, 200));
+            try { const j = JSON.parse(r.body); sessaoId = j['sessao-id'] ?? j.sessaoId ?? null; } catch {}
+            await p.close();
+          }
+
+          // 3) cockpit /votar: confirmar presenca + votar Sim
+          {
+            const p = await ctx.newPage();
+            const cerr = [];
+            p.on('console', m => { if (m.type() === 'error') cerr.push(m.text().slice(0, 120)); });
+            await p.goto(`${B}/votar`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await p.waitForTimeout(4500); // SSE conecta + placar chega
+            let txt = (await p.evaluate(() => document.body.innerText)).replace(/\s+/g, ' ');
+            console.log('\nCOCKPIT inicial:', txt.slice(0, 240));
+            const temConfirmar = await p.getByRole('button', { name: /Confirmar presença/i }).count();
+            if (temConfirmar) {
+              await p.getByRole('button', { name: /Confirmar presença/i }).click();
+              await p.waitForTimeout(3000);
+              console.log('  -> presença confirmada');
+            }
+            const temSim = await p.getByRole('button', { name: /^Sim$/ }).count();
+            if (temSim) {
+              await p.getByRole('button', { name: /^Sim$/ }).click();
+              await p.waitForTimeout(3500);
+              console.log('  -> votei Sim');
+            } else {
+              console.log('  (botao Sim ausente — votacao pode estar encerrada/secreta)');
+            }
+            txt = (await p.evaluate(() => document.body.innerText)).replace(/\s+/g, ' ');
+            console.log('COCKPIT pos-voto:', txt.slice(0, 320));
+            console.log('  "Você votou":', /Você votou/i.test(txt));
+            if (cerr.length) console.log('  console-err:', [...new Set(cerr)].slice(0, 3).join(' || '));
+            await p.close();
+          }
+
+          // 4) telao /sessoes/:id/plenario (quadro ao vivo)
+          if (sessaoId) {
+            const p = await ctx.newPage();
+            const cerr = [];
+            p.on('console', m => { if (m.type() === 'error') cerr.push(m.text().slice(0, 120)); });
+            const r = await p.goto(`${B}/sessoes/${sessaoId}/plenario`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await p.waitForTimeout(5000);
+            const txt = (await p.evaluate(() => document.body.innerText)).replace(/\s+/g, ' ');
+            console.log(`\nTELAO /sessoes/${sessaoId}/plenario (HTTP ${r ? r.status() : '?'}):`, txt.slice(0, 360));
+            if (cerr.length) console.log('  console-err:', [...new Set(cerr)].slice(0, 3).join(' || '));
+            await p.close();
+          } else {
+            console.log('\n(sem sessaoId — telao nao aberto)');
+          }
+
+          await browser.close();
+          console.log('\n== HERO concluido ==');
+          JS
+      - name: Rodar HERO
+        run: node hero.mjs
