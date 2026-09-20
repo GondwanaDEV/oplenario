@@ -47,11 +47,6 @@
                                        :n-vereadores (count (:vereadores casa-r))}))
         (let [acervo-r (acervo/semear! sys ente (:vereador identidades))]
           (println "==> acervo:" (pr-str acervo-r))
-          ;; 5b: reparo de prontidao — garante que o parecer B (aguardando_assinatura) tenha voto do
-          ;; relator, senao a jornada J3 (assinatura pela UI) morre em 'sem-voto'. Idempotente e roda
-          ;; SEMPRE, porque `acervo/semear!` pula num re-seed sobre ente ja semeado (ver a fn).
-          (let [voto-r (acervo/corrigir-voto-relator-pendente! sys ente)]
-            (println "==> voto-relator:" (pr-str voto-r)))
           (let [sessoes-r (sessoes/semear! sys ente)]
             (println "==> sessoes:" (pr-str sessoes-r))
             (let [participacao-r (participacao/semear! sys ente)]
