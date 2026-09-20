@@ -35,7 +35,6 @@ jobs:
             const ctx = await browser.newContext({ locale: 'pt-BR' });
             const p = await ctx.newPage();
             try {
-              // /api/auth/login inicia o PKCE no BFF e 302 pro Keycloak (o "Entrar" e' so' um link pra ca).
               await p.goto(`${B}/api/auth/login?ente=${E}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
               await p.waitForSelector('#username', { timeout: 25000 });
               await p.fill('#username', user);
@@ -44,15 +43,20 @@ jobs:
                 p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {}),
                 p.click('#kc-login'),
               ]);
-              await p.waitForTimeout(4000);
+              await p.waitForTimeout(5000);
               const url = p.url();
+              const path = (() => { try { return new URL(url).pathname; } catch { return url; } })();
               const txt = (await p.evaluate(() => document.body?.innerText || '')).replace(/\s+/g, ' ').trim();
-              const noApp = url.startsWith(B);
-              const erroKc = /Invalid parameter|redirect_uri|We are sorry|Error/i.test(txt) && !noApp;
-              const veredito = (noApp && !erroKc) ? 'PASS' : 'FALHA';
+              // Sucesso: o BFF processou o callback e REDIRECIONOU pra app (sai de /api/auth/* e de /entrar),
+              // sem texto de erro. Falha (ex.: mint recusa) fica no /api/auth/callback com "backend rejeitou".
+              const naB = url.startsWith(B);
+              const preso = path.startsWith('/api/auth') || path.startsWith('/entrar');
+              const temErro = /rejeitou o token|Invalid parameter|redirect_uri|We are sorry|401|Unauthorized|n[aã]o autorizado|Forbidden|Acesso restrito/i.test(txt);
+              const veredito = (naB && !preso && !temErro) ? 'PASS' : 'FALHA';
               if (veredito !== 'PASS') falhas++;
               console.log(`\n[${nome}] ${veredito}`);
               console.log(`  url_final: ${url}`);
+              console.log(`  path: ${path}`);
               console.log(`  texto: ${txt.slice(0, 220)}`);
             } catch (e) {
               falhas++;
