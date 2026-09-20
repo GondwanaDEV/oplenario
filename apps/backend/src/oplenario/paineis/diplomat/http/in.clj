@@ -132,14 +132,18 @@
   (Onda E) é a única rota do módulo SEM gate de papel — só `auth`; ver a docstring do handler."
   [{:keys [auth repo-paineis painel-compliance presenca-resumo esic-cumprimento relatores-pendentes]}]
   (let [papel (it/exige-papel "secretario")
-        papel-vereador (it/exige-papel "vereador")]
-    #{["/paineis/pendencias" :get [auth papel (pendencias-handler repo-paineis)]
+        papel-vereador (it/exige-papel "vereador")
+        ;; LEITURA dos paineis (dashboard da Mesa/pendencias/tramitacao/sli) aberta a secretario OU
+        ;; vereador: o presidente e' vereador e precisava ver a Mesa (achado docs/20: gate grosso
+        ;; so'-'secretario' dava 403). Sao read-model de leitura; escrita nao existe aqui.
+        papel-leitura (it/exige-algum-papel #{"secretario" "vereador"})]
+    #{["/paineis/pendencias" :get [auth papel-leitura (pendencias-handler repo-paineis)]
        :route-name :paineis/pendencias]
-      ["/paineis/tramitacao" :get [auth papel (tramitacao-handler repo-paineis)]
+      ["/paineis/tramitacao" :get [auth papel-leitura (tramitacao-handler repo-paineis)]
        :route-name :paineis/tramitacao]
-      ["/paineis/sli/sessoes" :get [auth papel (sli-sessoes-handler repo-paineis)]
+      ["/paineis/sli/sessoes" :get [auth papel-leitura (sli-sessoes-handler repo-paineis)]
        :route-name :paineis/sli-sessoes]
-      ["/paineis/mesa" :get [auth papel (mesa-handler repo-paineis painel-compliance
+      ["/paineis/mesa" :get [auth papel-leitura (mesa-handler repo-paineis painel-compliance
                                                        presenca-resumo esic-cumprimento relatores-pendentes)]
        :route-name :paineis/mesa]
       ["/meu/sessao-atual" :get [auth papel-vereador (minha-sessao-atual-handler repo-paineis)]

@@ -752,7 +752,11 @@
            resolver-vereador resolver-comissoes vereador-vinculado? vereador-no-roster? membros-da-casa
            registro relogio]}]
   (let [papel (it/exige-papel "secretario")
-        papel-vereador (it/exige-papel "vereador")]
+        papel-vereador (it/exige-papel "vereador")
+        ;; LEITURA do acervo aberta a secretario OU vereador: o vereador legisla sobre a materia, entao
+        ;; le' proposicoes/tramitacao/ficha (achado docs/20: gate grosso so'-'secretario' dava 403 ao
+        ;; vereador nessas telas). ESCRITA/acoes seguem em `papel` (secretario).
+        papel-leitura (it/exige-algum-papel #{"secretario" "vereador"})]
     #{["/sessoes/:id/votacoes" :post
        [auth papel it/corpo-json (abrir-handler repo-legislativo consultar-sessao sessao-fechada?)]
        :route-name :legislativo/abrir-votacao]
@@ -777,20 +781,20 @@
       ["/sessoes/:id/votacao-aberta" :get
        [auth (votacao-aberta-handler repo-legislativo consultar-sessao sessao-fechada? pode-ver-votacao-aberta?)]
        :route-name :legislativo/votacao-aberta]
-      ["/legislativo/proposicoes" :get [auth papel (listar-proposicoes-handler repo-legislativo)]
+      ["/legislativo/proposicoes" :get [auth papel-leitura (listar-proposicoes-handler repo-legislativo)]
        :route-name :legislativo/listar-proposicoes]
       ["/legislativo/proposicoes" :post
        [auth papel it/corpo-json (criar-proposicao-handler repo-legislativo resolver-municipio vereador-vinculado?)]
        :route-name :legislativo/criar-proposicao]
-      ["/legislativo/proposicoes/:id" :get [auth papel (detalhe-proposicao-handler repo-legislativo)]
+      ["/legislativo/proposicoes/:id" :get [auth papel-leitura (detalhe-proposicao-handler repo-legislativo)]
        :route-name :legislativo/detalhe-proposicao]
-      ["/legislativo/proposicoes/:id/ficha" :get [auth papel (ficha-materia-handler repo-legislativo resolver-comissoes)]
+      ["/legislativo/proposicoes/:id/ficha" :get [auth papel-leitura (ficha-materia-handler repo-legislativo resolver-comissoes)]
        :route-name :legislativo/ficha-materia]
       ["/legislativo/proposicoes/:id" :patch
        [auth papel it/corpo-json (editar-proposicao-handler repo-legislativo vereador-vinculado?)]
        :route-name :legislativo/editar-proposicao]
       ["/legislativo/proposicoes/:id/tramitacao" :get
-       [auth papel (tramitacao-leitura-handler repo-legislativo)]
+       [auth papel-leitura (tramitacao-leitura-handler repo-legislativo)]
        :route-name :legislativo/tramitacao-proposicao]
       ["/legislativo/proposicoes/:id/tramitacao" :post
        [auth papel it/corpo-json (tramitar-handler repo-legislativo registro relogio)]

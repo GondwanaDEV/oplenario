@@ -1,0 +1,80 @@
+name: Jornadas autenticadas (homolog)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  jornadas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar Playwright + Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm i -D playwright@1.47.2 >/dev/null 2>&1
+          npx playwright install --with-deps chromium
+      - name: Escrever o teste
+        run: |
+          cat > jornadas.mjs <<'JS'
+          import { chromium } from 'playwright';
+          const B = 'https://oplenario.calvetec.com.br';
+          const E = '10000000-0000-0000-0000-000000000001';
+          const SENHA = 'Plenario@2026';
+          const MAT = '1cbe9905-3b04-496f-9fe4-b1dea439c219'; // PL 015/2026 (proposicao real do seed)
+          const JORNADAS = [
+            { nome: 'secretaria', user: 'c3987c7d-858c-4e4a-a4a7-33f45642c6d6', rotas: [
+              '/expediente', '/expediente/protocolo', '/expediente/recebidos', '/proposicoes',
+              '/tramitacao', '/pauta-convocacao', '/calendario', '/paineis/mesa',
+              '/cadastros/vereadores', `/ficha-materia/${MAT}` ] },
+            { nome: 'vereadora', user: '0eabd6df-d0cc-40bb-a0ca-043027cb3a1f', rotas: [
+              '/vereador', '/votar', '/notificacoes', '/calendario', '/proposicoes' ] },
+            { nome: 'presidente', user: 'b70365f0-82f3-403e-8bda-ef0d8bfeb879', rotas: [
+              '/paineis/mesa', '/pauta-convocacao', '/vereador', '/votar', '/proposicoes', '/tramitacao' ] },
+          ];
+          async function login(ctx, user) {
+            const p = await ctx.newPage();
+            await p.goto(`${B}/api/auth/login?ente=${E}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await p.waitForSelector('#username', { timeout: 25000 });
+            await p.fill('#username', user);
+            await p.fill('#password', SENHA);
+            await Promise.all([
+              p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {}),
+              p.click('#kc-login'),
+            ]);
+            await p.waitForTimeout(3000);
+            const ok = p.url().startsWith(B) && !new URL(p.url()).pathname.startsWith('/api/auth');
+            await p.close();
+            return ok;
+          }
+          const browser = await chromium.launch();
+          for (const { nome, user, rotas } of JORNADAS) {
+            const ctx = await browser.newContext({ locale: 'pt-BR' });
+            const logou = await login(ctx, user);
+            console.log(`\n======== ${nome} (login ${logou ? 'OK' : 'FALHOU'}) ========`);
+            for (const rota of rotas) {
+              const p = await ctx.newPage();
+              const cerr = [];
+              p.on('console', m => { if (m.type() === 'error') cerr.push(m.text().slice(0, 120)); });
+              let status = null, txt = '', gate = false, erro = false;
+              try {
+                const r = await p.goto(B + rota, { waitUntil: 'domcontentloaded', timeout: 25000 });
+                status = r ? r.status() : null;
+                await p.waitForTimeout(1800);
+                txt = (await p.evaluate(() => document.body?.innerText || '')).replace(/\s+/g, ' ').trim();
+                gate = /Acesso restrito/i.test(txt);
+                erro = /rejeitou o token|Application error|Internal Server|500|erro inesperado|Unhandled/i.test(txt);
+              } catch (e) { txt = '[excecao] ' + String(e).split('\n')[0]; erro = true; }
+              const flag = erro ? 'ERRO' : gate ? 'GATE' : 'ok';
+              console.log(`  [${flag}] ${rota}  (HTTP ${status})  ${txt.slice(0, 150)}`);
+              if (cerr.length) console.log(`         console-err: ${[...new Set(cerr)].slice(0,3).join(' || ')}`);
+              await p.close();
+            }
+            await ctx.close();
+          }
+          await browser.close();
+          console.log('\n== jornadas concluidas ==');
+          JS
+      - name: Rodar jornadas
+        run: node jornadas.mjs

@@ -89,10 +89,15 @@
     (is (= [] (:pendencias body)))
     (is (= 0 (:pendencias-total body)))))
 
-(deftest pendencias-sem-papel-403
+(deftest pendencias-papel-sem-leitura-403
+  (let [r (pt/response-for (service-fn #{"cidadao"} (fake-repo-paineis {:pendencias [] :pendencias-total 0}))
+                           :get "/paineis/pendencias" :headers (com-bearer (token (random-uuid) (random-uuid))))]
+    (is (= 403 (:status r)) "papel sem leitura (nem secretario nem vereador) -> 403")))
+
+(deftest pendencias-vereador-le-200
   (let [r (pt/response-for (service-fn #{"vereador"} (fake-repo-paineis {:pendencias [] :pendencias-total 0}))
                            :get "/paineis/pendencias" :headers (com-bearer (token (random-uuid) (random-uuid))))]
-    (is (= 403 (:status r)) "ator sem papel 'secretario' -> authz grossa nega -> 403")))
+    (is (= 200 (:status r)) "vereador agora LE o painel de pendencias")))
 
 (deftest pendencias-sem-token-401
   (let [r (pt/response-for (service-fn #{"secretario"} (fake-repo-paineis {:pendencias [] :pendencias-total 0}))

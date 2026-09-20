@@ -474,10 +474,18 @@
         repo (fake-repo-leitura (leitura :proposicao nil))]
     (is (= 404 (:status (get-tramitacao repo pid))))))
 
-(deftest leitura-sem-papel-secretario-403
+(deftest leitura-papel-sem-leitura-403
+  ;; docs/20: leitura de tramitacao aberta a secretario OU vereador; um papel sem nenhum dos dois
+  ;; (cidadao) segue NEGADO ANTES de tocar o Repo.
   (let [pid (random-uuid)
         repo (fake-repo-leitura (fn [& _] (throw (AssertionError. "o Repo NAO devia ter sido tocado"))))]
-    (is (= 403 (:status (get-tramitacao repo pid "" #{"vereador"}))))))
+    (is (= 403 (:status (get-tramitacao repo pid "" #{"cidadao"}))))))
+
+(deftest leitura-vereador-le-200
+  ;; o vereador legisla sobre a materia -> LE a tramitacao (era 403 pelo gate grosso so'-secretario).
+  (let [pid (random-uuid) tid (random-uuid)
+        repo (fake-repo-leitura (leitura :proposicao (linha-proposicao pid tid "em_comissoes")))]
+    (is (= 200 (:status (get-tramitacao repo pid "" #{"vereador"}))))))
 
 (deftest a-leitura-NUNCA-avalia-guard
   (testing "o `reify` de `fake-repo-leitura` nao implementa `transicionar!`: se a borda de leitura tentasse

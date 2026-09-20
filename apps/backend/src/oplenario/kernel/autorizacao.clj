@@ -52,6 +52,22 @@
     (negar! :papel-insuficiente {:papel papel :ator (:identidade-id ator)}))
   ator)
 
+(defn tem-algum-papel?
+  "O ator tem ALGUM dos papeis do conjunto?"
+  [ator papeis]
+  (boolean (some #(tem-papel? ator %) papeis)))
+
+(defn exige-algum-papel!
+  "Camada grossa (variante OU): autoriza a CATEGORIA da acao se o ator tem QUALQUER um dos `papeis`.
+  Para categorias abertas a mais de um papel — ex.: LEITURA de proposicoes/tramitacao/paineis por
+  'secretario' OU 'vereador' (o vereador legisla sobre a materia, entao le' o acervo; a ESCRITA segue
+  restrita ao papel especifico). Devolve o ator se ok."
+  [ator papeis]
+  (when (nil? ator) (negar! :ator-ausente {:papeis papeis}))
+  (when-not (tem-algum-papel? ator papeis)
+    (negar! :papel-insuficiente {:papeis papeis :ator (:identidade-id ator)}))
+  ator)
+
 ;; --------------------------------------------------------------------------
 ;; Camada FINA (in-domain) — policy.check com o recurso carregado
 ;; --------------------------------------------------------------------------

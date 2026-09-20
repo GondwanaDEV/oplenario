@@ -128,12 +128,19 @@
                            :headers (com-bearer (token outro-ente (random-uuid))))]
     (is (= 404 (:status r)) "proposicao de outro ente-id nunca vaza -> 404, nao 200")))
 
-(deftest ficha-materia-sem-papel-403
+(deftest ficha-materia-papel-sem-leitura-403
+  (let [ente (random-uuid) id (random-uuid)
+        r (pt/response-for (service-fn #{"cidadao"} (fake-repo-legislativo ente id))
+                           :get (str "/legislativo/proposicoes/" id "/ficha")
+                           :headers (com-bearer (token ente (random-uuid))))]
+    (is (= 403 (:status r)) "papel sem leitura (nem secretario nem vereador) -> 403")))
+
+(deftest ficha-materia-vereador-le-200
   (let [ente (random-uuid) id (random-uuid)
         r (pt/response-for (service-fn #{"vereador"} (fake-repo-legislativo ente id))
                            :get (str "/legislativo/proposicoes/" id "/ficha")
                            :headers (com-bearer (token ente (random-uuid))))]
-    (is (= 403 (:status r)))))
+    (is (= 200 (:status r)) "vereador agora LE a ficha da materia")))
 
 (deftest ficha-materia-sem-token-401
   (let [id (random-uuid)

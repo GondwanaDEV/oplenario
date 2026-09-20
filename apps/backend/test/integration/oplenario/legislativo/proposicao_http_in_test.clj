@@ -72,10 +72,18 @@
     (is (= 200 (:status r)))
     (is (= [] (:itens (ler-json r))))))
 
-(deftest listar-proposicoes-sem-papel-403
-  (let [r (pt/response-for (service-fn #{"vereador"} (fake-repo-legislativo [] 0 (atom nil)))
+(deftest listar-proposicoes-papel-sem-leitura-403
+  ;; docs/20: leitura de proposicoes aberta a secretario OU vereador; papel sem nenhum dos dois (cidadao) -> 403.
+  (let [r (pt/response-for (service-fn #{"cidadao"} (fake-repo-legislativo [] 0 (atom nil)))
                            :get "/legislativo/proposicoes" :headers (com-bearer (token (random-uuid) (random-uuid))))]
-    (is (= 403 (:status r)) "ator sem papel 'secretario' -> authz grossa nega -> 403")))
+    (is (= 403 (:status r)) "papel sem leitura (nem secretario nem vereador) -> 403")))
+
+(deftest listar-proposicoes-vereador-le-200
+  ;; o vereador legisla sobre a materia -> LE a lista de proposicoes (era 403 pelo gate grosso so'-secretario).
+  (let [ente (random-uuid)
+        r (pt/response-for (service-fn #{"vereador"} (fake-repo-legislativo [(item-canonico ente)] 1284 (atom nil)))
+                           :get "/legislativo/proposicoes" :headers (com-bearer (token ente (random-uuid))))]
+    (is (= 200 (:status r)) "vereador agora LE a lista de proposicoes")))
 
 (deftest listar-proposicoes-sem-token-401
   (let [r (pt/response-for (service-fn #{"secretario"} (fake-repo-legislativo [] 0 (atom nil)))
