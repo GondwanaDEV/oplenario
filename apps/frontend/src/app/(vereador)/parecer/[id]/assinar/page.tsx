@@ -6,18 +6,14 @@
 // D já decidido no plano da track) e dispara useMeuEmitirParecer.emitir(). Backend assina de verdade
 // (Repo/emitir-parecer! + assinador-icp stub) — esta página só orquestra a UI do ritual.
 //
-// ADAPTAÇÃO ao mockup (achado na leitura de "Before You Begin"): o mockup é uma página SOLTEIRA com seu
-// próprio `.app`/`.app-topo`/`.voltar`. Esta rota, porém, vive sob app/(vereador)/ — cujo layout.tsx JÁ
-// envolve todo `children` no chrome persistente do app (brasão+tema no topo, tabbar fixa embaixo —
-// `.app-vereador`/`.app-topo`/`.tabbar`, vereador-shell.css), o MESMO contrato que vereador/page.tsx e
-// votar/page.tsx já seguem (nenhuma das duas re-renderiza seu próprio topo). Portar o cabeçalho do mockup
-// 1:1 aqui (a) duplicaria a classe GLOBAL `.app-topo` (colisão de nome com vereador-shell.css) e (b)
-// aninharia um `<main>` dentro do `<main className="conteudo-vereador">` do shell (2 landmarks `main` —
-// quebra de a11y estrutural). Por isso o cabeçalho do mockup vira um "← Voltar" + título comuns, EM FLUXO
-// (não sticky, não duplicado) — o resto (toques/papel/sumario/assinar-bar/scrim/sheet) é porte fiel. A
-// `.assinar-bar` fixa também foi reancorada ACIMA da tabbar (ver assinar.css) — do jeito que ela vem do
-// mockup (fixa em bottom:0), ficaria por baixo da própria tabbar (que também é fixa em bottom:0),
-// escondendo o botão "Revisar e assinar".
+// FIX (achado docs/20 — jornada circular): quando o parecer chega SEM voto do relator ('escolher-voto'),
+// a tela agora oferece ao relator ESCOLHER o voto e assinar num ato só (o endpoint /meu/pareceres/:id/
+// emissao já aceita `voto-relator`). Antes disso o único jeito de setar o voto era a secretaria "Emitir",
+// que já terminaliza — então a assinatura pelo relator nunca fechava. A escolha é EXPLÍCITA (não um
+// default fabricado — ver assinatura-vista.ts). Se o voto JÁ vem setado, mostra como leitura, como antes.
+//
+// ADAPTAÇÃO ao mockup: esta rota vive sob app/(vereador)/, cujo layout.tsx já envolve `children` no chrome
+// persistente (topo+tabbar) — por isso o cabeçalho do mockup vira um "← Voltar" + título em fluxo.
 
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -25,7 +21,7 @@ import { useAuth } from "@/lib/auth";
 import { useMeuParecer } from "@/lib/use-meu-parecer";
 import { useMeuEmitirParecer } from "@/lib/use-meu-emitir-parecer";
 import { deriveEstadoAssinatura } from "@/lib/assinatura-vista";
-import { rotularVoto } from "@/lib/parecer-vista";
+import { rotularVoto, VOTO_OPCOES, type VotoValor } from "@/lib/parecer-vista";
 import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
 import { comToken } from "@/lib/nav";
 import "./assinar.css";
@@ -37,6 +33,7 @@ export default function PaginaAssinarParecer() {
   const { dados, estado } = useMeuParecer(token, id);
   const { emitir, estado: estadoEmissao, erro } = useMeuEmitirParecer(token, id);
   const [sheetAberta, setSheetAberta] = useState(false);
+  const [votoEscolhido, setVotoEscolhido] = useState<VotoValor | null>(null);
 
   if (estado === "carregando") {
     return (
@@ -55,16 +52,15 @@ export default function PaginaAssinarParecer() {
   }
 
   const situacao = deriveEstadoAssinatura(dados);
+  // O voto que será assinado: o já registrado (leitura) OU o escolhido agora pelo relator. NUNCA um
+  // default fabricado — sem escolha, `votoEfetivo` é null e o CTA/confirmar ficam bloqueados.
+  const votoEfetivo: string | null = dados.votoRelator ?? votoEscolhido;
+  const podeAssinar = situacao === "pronto-pra-revisar" || (situacao === "escolher-voto" && votoEscolhido !== null);
 
   async function confirmar() {
-    // FIX (review CRÍTICO): NUNCA fabricar um voto ausente. `situacao === "pronto-pra-revisar"` (única
-    // condição que renderiza o CTA que abre esta sheet) já garante `dados.votoRelator` truthy via
-    // `deriveEstadoAssinatura` — este guard é defesa em profundidade (TS narrowing), não o gate real; se
-    // ele disparar mesmo assim, a chamada é silenciosamente abortada em vez de assinar uma conclusão que o
-    // relator nunca escolheu (ato irreversível — ver docstring de assinatura-vista.ts).
-    if (!dados || !dados.votoRelator) return;
+    if (!dados || !votoEfetivo) return; // defesa em profundidade — o CTA só abre a sheet quando há voto.
     try {
-      await emitir({ votoRelator: dados.votoRelator, lockVersion: dados.lockVersion });
+      await emitir({ votoRelator: votoEfetivo, lockVersion: dados.lockVersion });
       setSheetAberta(false);
       router.push(comToken("/vereador", token));
     } catch {
@@ -108,11 +104,34 @@ export default function PaginaAssinarParecer() {
                 </>
               )}
               <span className="rot">Conclusão do relator</span>
-              <p>{rotularVoto(dados.votoRelator)}</p>
+              <p>{rotularVoto(votoEfetivo)}</p>
               <span className="rot">Fundamentação (resumo)</span>
               <p>{dados.relatorio}</p>
             </div>
           </section>
+
+          {situacao === "escolher-voto" && (
+            <section className="assinar-voto" aria-label="Escolha da conclusão do relator">
+              <p className="assinar-voto-rot">
+                Registre sua conclusão como relator antes de assinar. Ela fica gravada com a assinatura.
+              </p>
+              <div className="votos" role="radiogroup" aria-label="Conclusão do relator">
+                {VOTO_OPCOES.map((opcao) => (
+                  <div key={opcao.valor} className={`voto ${opcao.classe}`}>
+                    <input
+                      type="radio"
+                      id={`voto-${opcao.valor}`}
+                      name="voto-relator-assinar"
+                      value={opcao.valor}
+                      checked={votoEscolhido === opcao.valor}
+                      onChange={() => setVotoEscolhido(opcao.valor)}
+                    />
+                    <label htmlFor={`voto-${opcao.valor}`}>{opcao.rotulo}</label>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           <div className="sumario">
             <h3>O que você está assinando</h3>
@@ -123,17 +142,10 @@ export default function PaginaAssinarParecer() {
               A assinatura fica <b>registrada</b>, com data e hora.
             </p>
           </div>
-
-          {situacao === "sem-voto" && (
-            <p className="vazio">
-              Ainda falta registrar a conclusão (voto) do relator no editor — volte lá para completar antes
-              de assinar.
-            </p>
-          )}
         </>
       )}
 
-      {situacao === "pronto-pra-revisar" && (
+      {podeAssinar && (
         <div className="assinar-bar">
           <div className="assinar-bar-in">
             <button className="btn btn-primaria" type="button" onClick={() => setSheetAberta(true)}>

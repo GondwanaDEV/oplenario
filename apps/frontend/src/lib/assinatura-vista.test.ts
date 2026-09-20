@@ -20,9 +20,9 @@ describe("deriveEstadoAssinatura", () => {
   it("sem-texto quando dados é null", () => {
     expect(deriveEstadoAssinatura(null)).toBe("sem-texto");
   });
-  it("sem-voto quando há texto mas o relator ainda não registrou a conclusão (votoRelator null) — NUNCA pronto-pra-revisar/fabricar voto", () => {
+  it("escolher-voto quando há texto mas o relator ainda não registrou a conclusão (votoRelator null) — a tela oferece a ESCOLHA, NUNCA fabrica/assume voto", () => {
     expect(
       deriveEstadoAssinatura({ ...base, textoEstado: "rascunho", relatorio: "X", analise: "Y", votoRelator: null })
-    ).toBe("sem-voto");
+    ).toBe("escolher-voto");
   });
 });

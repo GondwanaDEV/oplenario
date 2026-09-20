@@ -276,16 +276,21 @@ test.describe.serial("E4 - O parecer (servidor + vereador)", () => {
 
   // ---------------------------------------------------------------------------------------------
   // 5) Emitir "meu parecer" (vereador) — ANTES de qualquer emissão da secretaria sobre ID_AGUARDANDO,
-  // voto_relator é NULO. `deriveEstadoAssinatura` cai em 'sem-voto': o aviso aparece e o CTA "Revisar
-  // e assinar" nem é oferecido — TRATADO pela tela (mapa). Este teste é só leitura (nenhuma escrita
-  // é possível por aqui hoje, e é exatamente isso que ele prova).
+  // voto_relator é NULO. `deriveEstadoAssinatura` cai em 'escolher-voto': a tela OFERECE ao relator
+  // escolher a conclusão (conserto do achado docs/20 — a jornada era circular: o único jeito de setar o
+  // voto era a secretaria "Emitir", que já terminaliza). O CTA "Revisar e assinar" só é oferecido DEPOIS
+  // de uma escolha EXPLÍCITA (nunca um voto fabricado). Este teste NÃO assina (só verifica a oferta), pra
+  // preservar o estado de ID_AGUARDANDO para o teste 6 (a emissão pela secretaria).
   // ---------------------------------------------------------------------------------------------
-  test("Emitir 'meu parecer' (vereador) — sem voto do relator, CTA não é oferecido", async ({ page }) => {
+  test("Emitir 'meu parecer' (vereador) — sem voto, a tela oferece escolher a conclusão (CTA só após escolher)", async ({ page }) => {
     await page.goto(urlAssinar(ID_AGUARDANDO, TVER), { waitUntil: "domcontentloaded", timeout: 90_000 });
-    await expect(
-      page.getByText("Ainda falta registrar a conclusão (voto) do relator no editor"),
-    ).toBeVisible({ timeout: 30_000 });
+    // o seletor de conclusão do relator aparece; o CTA ainda NÃO (nenhuma escolha feita).
+    const opcaoFavoravel = page.getByLabel("Favorável", { exact: true });
+    await expect(opcaoFavoravel).toBeVisible({ timeout: 30_000 });
     await expect(page.getByRole("button", { name: "Revisar e assinar" })).toHaveCount(0);
+    // escolher uma conclusão (ato client-side, sem rede — não muta o parecer) libera o CTA.
+    await opcaoFavoravel.click();
+    await expect(page.getByRole("button", { name: "Revisar e assinar" })).toBeVisible({ timeout: 30_000 });
   });
 
   // ---------------------------------------------------------------------------------------------
