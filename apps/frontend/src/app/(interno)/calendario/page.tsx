@@ -19,7 +19,7 @@
 // @/lib/use-calendario. Esta página só compõe — nenhuma regra de apresentação mora aqui.
 
 import { useEffect, useMemo, useState } from "react";
-import { useAuth } from "@/lib/auth";
+import { useAuth, usePapeis } from "@/lib/auth";
 import { EmBreve } from "@/lib/em-breve";
 import { useCalendario } from "@/lib/use-calendario";
 import {
@@ -64,7 +64,17 @@ export default function PaginaCalendario() {
     return () => clearTimeout(t);
   }, [hoje]);
 
-  const { sessoes, estadoSessoes, obrigacoes, truncamentoPrazos, estadoPrazos } = useCalendario(token);
+  // Prazos (GET /compliance/painel) sao `secretario`-only por design: em vez de o hook bater na porta e
+  // tomar 403 (ruido no console p/ um vereador), resolvemos a permissao pelo papel e a passamos. Enquanto
+  // o papel carrega (modo real, GET /eu), "aguardando" segura os prazos em "carregando"; sem acesso,
+  // "bloqueado" degrada direto (mesma tela de "prazos nao vieram"). Achado docs/20.
+  const { papeis, estado: estadoPapeis } = usePapeis();
+  const prazosPermissao =
+    estadoPapeis === "carregando" ? "aguardando" : papeis.includes("secretario") ? "buscar" : "bloqueado";
+  const { sessoes, estadoSessoes, obrigacoes, truncamentoPrazos, estadoPrazos } = useCalendario(
+    token,
+    prazosPermissao,
+  );
 
   const vista = useMemo(
     () => derivarCalendario({ ano: mes.ano, mes: mes.mes, hoje, sessoes, obrigacoes }),

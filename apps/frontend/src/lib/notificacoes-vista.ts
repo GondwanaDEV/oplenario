@@ -211,24 +211,26 @@ function instanteNaCasa(iso: string): string {
 }
 
 /**
- * Rota da tela de destino por tipo de objeto, DENTRO do shell do vereador.
- * Sem destino acessível -> "" (sem link, nunca link quebrado).
+ * Rota da tela de destino por tipo de objeto (recebe o `objetoId` p/ montar o deep-link).
+ * Sem destino conhecido -> "" (sem link, nunca link quebrado).
  *
- * Hoje nenhum tipo tem destino: `proposicao` apontava para /ficha-materia/:id, que é tela do shell
- * do SERVIDOR e cujo endpoint (GET /legislativo/proposicoes/:id/ficha — "leitura interna, servidor")
- * responde 403 ao papel `vereador`. Provado ao vivo na Task 12. Uma âncora que erra é pior que a
- * ausência dela, então a inbox informa sem prometer navegação que não existe.
+ * `proposicao` -> /ficha-materia/:id. Antes ficava sem destino porque a ficha
+ * (GET /legislativo/proposicoes/:id/ficha) respondia 403 ao papel `vereador`; isso MUDOU: a leitura de
+ * proposicoes/ficha/tramitacao passou a aceitar `secretario` OU `vereador` (feat(authz) — achado docs/20,
+ * jornadas T1/T2). Entao a inbox do vereador volta a linkar a materia. A /ficha-materia vive no shell
+ * (interno) — a "ficha da minha materia no shell do vereador" segue como carry —, mas um link que ABRE
+ * (a ficha carrega para o vereador) é melhor que uma notificacao morta.
  *
- * CARRY: quando a fatia "ficha da minha matéria no shell do vereador" existir, `proposicao` ganha uma
- * entrada em ROTAS_POR_TIPO — é o único ponto a mudar.
- *
- * A tabela é vazia HOJE e mesmo assim explícita: é ela que faz o `?? ""` ser uma guarda de verdade
- * (tipo sem rota -> sem link) em vez de um `return ""` que passa com qualquer implementação.
+ * A tabela continua a guarda de verdade: tipo SEM entrada -> "" (link ausente), nunca `undefined` que
+ * viraria uma âncora quebrada.
  */
-const ROTAS_POR_TIPO: Record<string, string | undefined> = {};
+const ROTAS_POR_TIPO: Record<string, ((objetoId: string) => string) | undefined> = {
+  proposicao: (objetoId) => `/ficha-materia/${objetoId}`,
+};
 
-function hrefDoObjeto(objetoTipo: string): string {
-  return ROTAS_POR_TIPO[objetoTipo] ?? "";
+function hrefDoObjeto(objetoTipo: string, objetoId: string): string {
+  const rota = ROTAS_POR_TIPO[objetoTipo];
+  return rota ? rota(objetoId) : "";
 }
 
 /**
@@ -273,7 +275,7 @@ function paraVista(n: NotificacaoOut, agoraIso: string): NotificacaoVista {
     objetoId: n.objetoId,
     criadoEm: n.criadoEm,
     lida: n.lidaEm != null,
-    href: hrefDoObjeto(n.objetoTipo),
+    href: hrefDoObjeto(n.objetoTipo, n.objetoId),
     quando: quandoRelativo(n.criadoEm, agoraIso),
     quandoExato: instanteNaCasa(n.criadoEm),
   };

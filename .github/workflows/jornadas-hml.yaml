@@ -28,8 +28,11 @@ jobs:
               '/expediente', '/expediente/protocolo', '/expediente/recebidos', '/proposicoes',
               '/tramitacao', '/pauta-convocacao', '/calendario', '/paineis/mesa',
               '/cadastros/vereadores', `/ficha-materia/${MAT}` ] },
+            // vereadora: alem das telas do seu papel, sonda as secretario-only p/ validar o GATE LIMPO
+            // (parte 2 do achado docs/20) — devem virar [GATE], nunca [ERRO].
             { nome: 'vereadora', user: '0eabd6df-d0cc-40bb-a0ca-043027cb3a1f', rotas: [
-              '/vereador', '/votar', '/notificacoes', '/calendario', '/proposicoes' ] },
+              '/vereador', '/votar', '/notificacoes', '/calendario', '/proposicoes', '/tramitacao',
+              '/expediente', '/expediente/protocolo', '/expediente/recebidos', '/cadastros/vereadores' ] },
             { nome: 'presidente', user: 'b70365f0-82f3-403e-8bda-ef0d8bfeb879', rotas: [
               '/paineis/mesa', '/pauta-convocacao', '/vereador', '/votar', '/proposicoes', '/tramitacao' ] },
           ];
@@ -64,7 +67,7 @@ jobs:
                 await p.waitForTimeout(1800);
                 txt = (await p.evaluate(() => document.body?.innerText || '')).replace(/\s+/g, ' ').trim();
                 gate = /Acesso restrito/i.test(txt);
-                erro = /rejeitou o token|Application error|Internal Server|500|erro inesperado|Unhandled/i.test(txt);
+                erro = /rejeitou o token|Application error|Internal Server|500|erro inesperado|Unhandled|Não foi possível carregar/i.test(txt);
               } catch (e) { txt = '[excecao] ' + String(e).split('\n')[0]; erro = true; }
               const flag = erro ? 'ERRO' : gate ? 'GATE' : 'ok';
               console.log(`  [${flag}] ${rota}  (HTTP ${status})  ${txt.slice(0, 150)}`);
