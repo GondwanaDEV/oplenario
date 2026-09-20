@@ -34,16 +34,10 @@ jobs:
           for (const [nome, user] of PERSONAS) {
             const ctx = await browser.newContext({ locale: 'pt-BR' });
             const p = await ctx.newPage();
-            let veredito = 'INDEF';
             try {
-              await p.goto(`${B}/entrar/${E}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-              await p.waitForTimeout(1200);
-              await Promise.all([
-                p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {}),
-                p.getByRole('button', { name: /Entrar/i }).first().click(),
-              ]);
-              await p.waitForTimeout(1500);
-              await p.waitForSelector('#username', { timeout: 20000 });
+              // /api/auth/login inicia o PKCE no BFF e 302 pro Keycloak (o "Entrar" e' so' um link pra ca).
+              await p.goto(`${B}/api/auth/login?ente=${E}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await p.waitForSelector('#username', { timeout: 25000 });
               await p.fill('#username', user);
               await p.fill('#password', SENHA);
               await Promise.all([
@@ -54,16 +48,18 @@ jobs:
               const url = p.url();
               const txt = (await p.evaluate(() => document.body?.innerText || '')).replace(/\s+/g, ' ').trim();
               const noApp = url.startsWith(B);
-              const erroKc = /Invalid parameter|redirect_uri|We are sorry|error/i.test(txt) && !noApp;
-              veredito = (noApp && !erroKc) ? 'PASS' : 'FALHA';
+              const erroKc = /Invalid parameter|redirect_uri|We are sorry|Error/i.test(txt) && !noApp;
+              const veredito = (noApp && !erroKc) ? 'PASS' : 'FALHA';
               if (veredito !== 'PASS') falhas++;
               console.log(`\n[${nome}] ${veredito}`);
               console.log(`  url_final: ${url}`);
-              console.log(`  texto: ${txt.slice(0, 200)}`);
+              console.log(`  texto: ${txt.slice(0, 220)}`);
             } catch (e) {
               falhas++;
               console.log(`\n[${nome}] FALHA (excecao): ${String(e).split('\n')[0]}`);
               console.log(`  url_no_erro: ${p.url()}`);
+              const txt = await p.evaluate(() => document.body?.innerText || '').catch(() => '');
+              console.log(`  texto_no_erro: ${txt.replace(/\s+/g, ' ').trim().slice(0, 220)}`);
             }
             await ctx.close();
           }
