@@ -3,7 +3,16 @@
   pontos de deploy (DATABASE_URL/DB_USER/DB_PASSWORD/VALKEY_URI/HTTP_PORT). Permite a stack coexistir
   com outras stacks locais sem hardcode (§22.9: localizacao/credencial = deploy-config, nao arquitetura)."
   (:require [clojure.edn :as edn]
-            [clojure.java.io :as io]))
+            [clojure.java.io :as io]
+            [clojure.string :as str]))
+
+(defn- lista-csv
+  "Divide uma env var CSV em vetor de itens aparados, descartando vazios. Usada para os campos do
+  Keycloak que sao LISTA (redirect-uris/web-origins): o EDN default so serve p/ dev, e prod precisa
+  sobrepor com a(s) origem(ns) reais — sem isto o client PKCE nasce com redirect de localhost e todo
+  login autenticado quebra em prod (achado do teste da homolog, metodo docs/20)."
+  [s]
+  (->> (str/split s #",") (map str/trim) (remove str/blank?) vec))
 
 (defn- base []
   (if-let [r (io/resource "config.edn")]
@@ -37,6 +46,11 @@
                                                       (Integer/parseInt (get env "KEYCLOAK_JWKS_CACHE_TTL_S")))
      (get env "KEYCLOAK_WEB_CLIENT_ID")    (assoc-in [:keycloak :web-client-id]    (get env "KEYCLOAK_WEB_CLIENT_ID"))
      (get env "KEYCLOAK_BASE_URL_PUBLICO") (assoc-in [:keycloak :base-url-publico] (get env "KEYCLOAK_BASE_URL_PUBLICO"))
+     ;; Listas (CSV): a(s) URL(s) de redirect do BFF e a(s) origem(ns) web do client PKCE. Prod DEVE
+     ;; sobrepor o default de localhost do config.edn, senao o `oplenario-web` provisionado so aceita
+     ;; redirect de http://localhost:3000 e o login em prod falha com "Invalid redirect_uri".
+     (get env "KEYCLOAK_REDIRECT_URIS")    (assoc-in [:keycloak :redirect-uris]   (lista-csv (get env "KEYCLOAK_REDIRECT_URIS")))
+     (get env "KEYCLOAK_WEB_ORIGINS")      (assoc-in [:keycloak :web-origins]     (lista-csv (get env "KEYCLOAK_WEB_ORIGINS")))
      (get env "KEYCLOAK_SMTP_HOST")      (assoc-in [:keycloak :smtp :host]     (get env "KEYCLOAK_SMTP_HOST"))
      (get env "KEYCLOAK_SMTP_PORT")      (assoc-in [:keycloak :smtp :port]     (Integer/parseInt (get env "KEYCLOAK_SMTP_PORT")))
      (get env "KEYCLOAK_SMTP_FROM")      (assoc-in [:keycloak :smtp :from]     (get env "KEYCLOAK_SMTP_FROM"))

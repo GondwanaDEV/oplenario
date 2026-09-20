@@ -195,14 +195,29 @@
           (throw (ex-info "keycloak-idp: falha ao declarar o atributo identidade-id (infra)" {:status status :corpo corpo})))))))
 
 (defn- garantir-client!
-  "GET-then-create idempotente de um client no realm: consulta por `client-id`; se ja existe, no-op; senao
-  POST do `payload`. Compartilhado pelos clients de audiencia (API) e web (PKCE publico) — a unica coisa
-  que difere entre eles e' o payload, entao a mecanica idempotente vive aqui uma vez so."
+  "GET-then-converge idempotente de um client no realm: consulta por `client-id`; se NAO existe, POST do
+  `payload`; se JA existe, PUT convergindo os campos declarativos que mudam entre deploys
+  (redirectUris/webOrigins) sobre a representacao atual — os mappers sao subrecursos e ficam intactos.
+  Compartilhado pelos clients de audiencia (API) e web (PKCE publico); a unica coisa que difere entre
+  eles e' o payload, entao a mecanica vive aqui uma vez so.
+
+  Por que CONVERGE e nao 'cria-ou-nada' (achado do teste da homolog, metodo docs/20): a versao anterior
+  fazia no-op quando o client existia, entao um `oplenario-web` criado uma vez com redirect de localhost
+  NUNCA era corrigido por re-provisionar — e todo login em prod quebrava com 'Invalid redirect_uri'.
+  Idempotente de verdade e' convergir pro estado desejado, nao parar no primeiro que existe."
   [http-client token base-url realm client-id payload]
   (let [{:keys [status corpo]} (admin-req! http-client token :get
                                            (str "/admin/realms/" realm "/clients?clientId=" client-id) nil base-url)
-        existe-client? (and (= 200 status) (seq corpo))]
-    (when-not existe-client?
+        existente (and (= 200 status) (first corpo))]
+    (if existente
+      ;; PUT da representacao ATUAL com os campos de lista sobrepostos (mesmo padrao GET-then-PUT de
+      ;; declarar-atributo-identidade!). Nao reescreve id/mappers/attributes — so' converge o que muda.
+      (let [alvo (merge existente (select-keys payload [:redirectUris :webOrigins]))
+            {:keys [status corpo]} (admin-req! http-client token :put
+                                               (str "/admin/realms/" realm "/clients/" (:id existente)) alvo base-url)]
+        (when-not (= 204 status)
+          (throw (ex-info "keycloak-idp: falha ao atualizar o client (infra)"
+                          {:status status :corpo corpo :client-id client-id}))))
       (let [{:keys [status corpo]} (admin-req! http-client token :post
                                                (str "/admin/realms/" realm "/clients") payload base-url)]
         (when-not (= 201 status)
