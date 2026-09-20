@@ -36,14 +36,36 @@ export async function buscarPublico<T>(...segmentos: string[]): Promise<T | null
 // da URL — nunca pior que o comportamento anterior a este fix.
 const backend = process.env.BACKEND_URL ?? "http://localhost:8888";
 
+// `resolverCasa` é o primitivo: distingue "esta Casa NÃO existe" de "não consegui resolver agora".
+// Motivo (achado do teste exploratório contra a homolog, método docs/20): `buscarNomeCasa` colapsava os
+// dois casos em `null`, e a CAPA (`/portal/casa/[ente]`) degradava pro slug cru nos dois — renderizando o
+// Portal do Cidadão INTEIRO para um ente inexistente ou malformado, com o id cru no cabeçalho e no
+// `© 2026 <slug>` do rodapé. Um link errado exibia um portal de transparência crível para uma Casa que
+// não existe. 404 (uuid bem-formado, sem Casa) e 400 (id malformado) são ambos veredito definitivo de
+// "não existe"; qualquer outra falha (5xx, timeout, rede) é transitória e MANTÉM a degradação documentada.
+export type ResolucaoCasa =
+  | { estado: "ok"; nomeOficial: string; nomeCurto?: string }
+  | { estado: "inexistente" }
+  | { estado: "indisponivel" };
+
+export async function resolverCasa(ente: string): Promise<ResolucaoCasa> {
+  try {
+    const r = await fetch(`${backend}/portal/casa/${codificarSegmento(ente)}`, { cache: "no-store" });
+    if (r.status === 404 || r.status === 400) return { estado: "inexistente" };
+    if (!r.ok) return { estado: "indisponivel" };
+    const c = camelizarChaves(await r.json()) as { nomeOficial: string; nomeCurto?: string };
+    return { estado: "ok", nomeOficial: c.nomeOficial, nomeCurto: c.nomeCurto };
+  } catch {
+    return { estado: "indisponivel" };
+  }
+}
+
+// Contrato preservado VERBATIM (null p/ qualquer não-ok) — as telas internas (matéria, vereador) degradam
+// pro slug de propósito: elas já têm o seu próprio "não encontrado" para o objeto que exibem, e o nome da
+// Casa ali é moldura, não o assunto. Só a CAPA precisa do veredito, e usa `resolverCasa`.
 export async function buscarNomeCasa(
   ente: string,
 ): Promise<{ nomeOficial: string; nomeCurto?: string } | null> {
-  try {
-    const r = await fetch(`${backend}/portal/casa/${codificarSegmento(ente)}`, { cache: "no-store" });
-    if (!r.ok) return null;
-    return camelizarChaves(await r.json()) as { nomeOficial: string; nomeCurto?: string };
-  } catch {
-    return null;
-  }
+  const r = await resolverCasa(ente);
+  return r.estado === "ok" ? { nomeOficial: r.nomeOficial, nomeCurto: r.nomeCurto } : null;
 }
