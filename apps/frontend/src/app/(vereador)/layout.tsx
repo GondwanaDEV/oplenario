@@ -49,6 +49,13 @@ export function GuardVereador({ children }: { children: React.ReactNode }) {
       <main className="acesso-restrito">
         <h1>Acesso restrito</h1>
         <p>Esta área é exclusiva para vereadores.</p>
+        {/* Sem uma saída, a tela era um beco: um visitante sem o papel via a mensagem e nada mais (achado do
+            teste exploratório). O caminho honesto de volta é o login por Câmara — não a home genérica. */}
+        <p>
+          <Link className="btn" href="/entrar">
+            Entrar na sua Câmara
+          </Link>
+        </p>
       </main>
     );
   }

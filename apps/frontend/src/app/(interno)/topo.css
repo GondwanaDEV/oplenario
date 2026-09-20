@@ -14,7 +14,25 @@
 .quem-mesa .quem b { font-weight: 600; font-size: var(--t-13); color: var(--texto); display: block; }
 .quem-mesa .quem span { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
 
-.nav-interna { display: flex; gap: 1rem; margin-left: 0.5rem; }
-.nav-interna a { font-family: var(--mono); font-size: var(--t-13); font-weight: 500; letter-spacing: .02em; color: var(--texto-2); text-decoration: none; padding: 0.3rem 0; border-bottom: 2px solid transparent; }
+/* `flex-wrap: wrap` + `min-width: 0`: sem isto a nav é UM filho flex largo demais (7 itens, uma linha) do
+   .topo-grade — mais largo que o envelope já em desktop, empurrando o .topo-dir (margin-left:auto) para
+   fora e cortando "quem opera" na borda direita (achado do teste exploratório em 1366px). Deixando a nav
+   quebrar internamente, os itens descem de linha e a identidade/tema ficam sempre visíveis. */
+.nav-interna { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; margin-left: 0.5rem; min-width: 0; }
+.nav-interna a { font-family: var(--mono); font-size: var(--t-13); font-weight: 500; letter-spacing: .02em; color: var(--texto-2); text-decoration: none; padding: 0.3rem 0; border-bottom: 2px solid transparent; white-space: nowrap; }
 .nav-interna a:hover { color: var(--texto); }
 .nav-interna a[aria-current="page"] { color: var(--marca); border-bottom-color: var(--marca); font-weight: 600; }
+
+/* No mobile a nav não cabe em linha nenhuma sem virar 3-4 linhas na barra fixa (come a altura da viewport)
+   e, sem tratamento, transbordava horizontalmente escondendo itens (achado do teste exploratório em 390px:
+   sem hambúrguer, "Calendário"/identidade saíam pela direita). Vira uma FAIXA de uma linha, rolável no
+   toque, ocupando a largura toda sob a marca — padrão de app-shell mobile, sem estado/JS novo. */
+@media (max-width: 720px) {
+  .nav-interna {
+    flex: 1 1 100%; order: 3; margin-left: 0;
+    flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Firefox: sem barra visível na faixa */
+    padding-bottom: 2px;
+  }
+  .nav-interna::-webkit-scrollbar { display: none; } /* WebKit/Blink: idem */
+}

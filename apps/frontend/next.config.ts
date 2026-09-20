@@ -50,6 +50,30 @@ const nextConfig: NextConfig = {
   // standalone: runtime da imagem de produção carrega só o server.js + deps podadas, sem
   // precisar de node_modules completo no container final (§22.9 Eixo 5, Docker em todo deploy).
   output: "standalone",
+  // Não anunciar o framework (X-Powered-By: Next.js) — reduz a superfície de fingerprint p/ um alvo de
+  // gestão pública. Achado do teste exploratório contra o deploy (a home não trazia nenhum header de
+  // segurança e vazava o X-Powered-By).
+  poweredByHeader: false,
+  // Endurecimento de headers (subconjunto conservador — o que é seguro sem quebrar o app). Deliberadamente
+  // FORA por ora, p/ não virar landmine: Content-Security-Policy (o Next injeta script/estilo inline; exige
+  // nonce/hash para não quebrar) e Permissions-Policy sobre microphone/camera (a gravação/tribuna da sessão
+  // é candidata a captura no browser — desabilitar agora preemptaria a Track IA). Ambos entram como fatia
+  // própria, medida, quando houver requisito. HSTS/nosniff/frame/referrer não têm esse risco e entram já.
+  async headers() {
+    const seguranca = [
+      // HSTS: força HTTPS no host e sub-hosts por 1 ano. Sem `preload` de propósito — preload é um
+      // compromisso de lista externa que não é nosso de assumir aqui (decisão de infra/marca).
+      { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
+      // Impede o navegador de "adivinhar" o content-type (defende contra MIME-sniffing).
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      // Anti-clickjacking. SAMEORIGIN (não DENY): o painel de plenário pode ser embutido numa superfície
+      // própria da Casa (projetor/telão) na mesma origem — DENY quebraria isso; embed de terceiro fica barrado.
+      { key: "X-Frame-Options", value: "SAMEORIGIN" },
+      // Não vaza o path interno completo como referer para destinos externos.
+      { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+    ];
+    return [{ source: "/:path*", headers: seguranca }];
+  },
   async rewrites() {
     // `fallback` (não array simples = afterFiles): o proxy catch-all roda DEPOIS de todas as rotas do
     // filesystem, INCLUSIVE as dinâmicas. Sem isso, `/api/:path*` (afterFiles) atropelava o Route Handler

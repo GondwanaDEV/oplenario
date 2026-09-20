@@ -70,6 +70,12 @@ export function TopoInterno({ area }: { area: string }) {
               key={d.href}
               href={comToken(d.href, token)}
               aria-current={d.rotulo === area ? "page" : undefined}
+              // prefetch={false}: cada destino da nav é autenticado e, sem sessão válida, responde 401 e
+              // redireciona para /entrar. O prefetch do Next dispara essas navegações em segundo plano — que
+              // abortam em massa (ERR_ABORTED) e nunca deixam a rede assentar (achado do teste exploratório:
+              // "prefetch storm"). Sem prefetch, a rota só é buscada no clique real. Custo: primeira navegação
+              // sem pré-aquecimento — desprezível numa barra de app interno.
+              prefetch={false}
             >
               {d.rotulo}
             </Link>
