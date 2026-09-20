@@ -17,8 +17,9 @@ jobs:
       DATABASE_URL: jdbc:postgresql://vps.calvetec.com.br:5432/oplenario
       DB_USER: oplenario-application
       DB_PASSWORD: ${{ secrets.HML_DB_PASSWORD }}
-      VALKEY_URI: ${{ secrets.HML_VALKEY_URI }}
-      TEMPO_REAL_BACKPLANE: valkey
+      # backplane :memoria — o seed so grava no Postgres; o fan-out SSE ao vivo e' do backend de
+      # producao (que roda :valkey), nunca deste job batch. Assim o boot nao exige a porta 6379 publica.
+      TEMPO_REAL_BACKPLANE: memoria
       MINIO_ENDPOINT: bucket-api.calvetec.com.br
       MINIO_ACCESS_KEY: ${{ secrets.HML_MINIO_ACCESS_KEY }}
       MINIO_SECRET_KEY: ${{ secrets.HML_MINIO_SECRET_KEY }}
