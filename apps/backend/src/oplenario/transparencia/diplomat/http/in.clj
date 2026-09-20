@@ -48,8 +48,8 @@
 
   Ente inexistente -> 404, igual a /portal/casa/:ente (achado do teste exploratorio contra a homologacao,
   metodo docs/20): esta rota devolvia 200 com colecao VAZIA para QUALQUER id, enquanto a rota-pai devolvia
-  404 para o mesmo id. O cliente nao conseguia distinguir "Casa existe e nao tem nada" de "Casa nao
-  existe" — e foi esse 200 que sustentou a capa do portal renderizando uma Casa inexistente. Casa REAL
+  404 para o mesmo id. O cliente nao conseguia distinguir Casa-que-existe-porem-vazia de
+  Casa-que-nao-existe — e foi esse 200 que sustentou a capa do portal renderizando uma Casa inexistente. Casa REAL
   vazia SEGUE 200 com lista vazia: a distincao vem de `info-ente` (o mesmo seam injetado do host que a
   rota-pai usa, §22.10 — transparencia nunca importa cadastros), nunca do tamanho da lista."
   [repo-transparencia resolver-ente-publico info-ente]
@@ -77,8 +77,8 @@
 
   Ente inexistente -> 404, igual a /portal/casa/:ente (achado do teste exploratorio contra a homologacao,
   metodo docs/20): esta rota devolvia 200 com colecao VAZIA para QUALQUER id, enquanto a rota-pai devolvia
-  404 para o mesmo id. O cliente nao conseguia distinguir "Casa existe e nao tem nada" de "Casa nao
-  existe" — e foi esse 200 que sustentou a capa do portal renderizando uma Casa inexistente. Casa REAL
+  404 para o mesmo id. O cliente nao conseguia distinguir Casa-que-existe-porem-vazia de
+  Casa-que-nao-existe — e foi esse 200 que sustentou a capa do portal renderizando uma Casa inexistente. Casa REAL
   vazia SEGUE 200 com lista vazia: a distincao vem de `info-ente` (o mesmo seam injetado do host que a
   rota-pai usa, §22.10 — transparencia nunca importa cadastros), nunca do tamanho da lista."
   [repo-transparencia resolver-ente-publico info-ente]
