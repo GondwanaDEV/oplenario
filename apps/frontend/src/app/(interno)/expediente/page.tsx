@@ -1,4 +1,5 @@
 "use client";
+import { GuardSecretaria } from "../guard-secretaria";
 
 // PaginaExpediente — a aba "Gerar documento" (Onda B Slice 6). Mirror do tratamento geral de loading/erro de
 // parecer/[id]/page.tsx, mas SEM `use(params)` (esta página não edita um registro pré-existente por id de
@@ -32,7 +33,7 @@ import "./expediente.css";
 
 type UltimaAcao = "gerar" | "rascunho" | "protocolo" | null;
 
-export default function PaginaExpediente() {
+function ConteudoPaginaExpediente() {
   const { token } = useAuth();
   const { dados: modelos, estado: estadoModelos } = useDocumentoModelos(token);
   const { dados: livro, estado: estadoLivro } = useProtocoloLivro(token);
@@ -153,5 +154,14 @@ export default function PaginaExpediente() {
         {estadoLivro === "pronto" && livro && <TabelaProtocolo itens={livro.itens} />}
       </main>
     </>
+  );
+}
+
+
+export default function PaginaExpediente() {
+  return (
+    <GuardSecretaria>
+      <ConteudoPaginaExpediente />
+    </GuardSecretaria>
   );
 }

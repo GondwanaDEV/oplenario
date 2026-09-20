@@ -1,4 +1,5 @@
 "use client";
+import { GuardSecretaria } from "../../guard-secretaria";
 
 // Cadastro de Vereadores (Task 9) — rota /cadastros/vereadores, arquétipo master-detail (porte de
 // produto/design-system/o-plenario/telas/cadastro-vereadores.html). Une useAuth (App Shell) +
@@ -57,7 +58,7 @@ function hrefComSelecao(id: string, token: string | null): string {
   return `/cadastros/vereadores?${params.toString()}`;
 }
 
-export default function PaginaVereadores() {
+function ConteudoPaginaVereadores() {
   const { token } = useAuth();
   // `admin_ente` (Task 11) — guarda só o botão/painel "Conceder acesso" (ligar identidade + abrir a
   // porta), não a página inteira: o resto do cadastro (criar/editar/mandato/licença) segue aberto a
@@ -452,5 +453,14 @@ export default function PaginaVereadores() {
         </div>
       </main>
     </>
+  );
+}
+
+
+export default function PaginaVereadores() {
+  return (
+    <GuardSecretaria>
+      <ConteudoPaginaVereadores />
+    </GuardSecretaria>
   );
 }

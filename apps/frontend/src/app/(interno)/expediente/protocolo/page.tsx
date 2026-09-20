@@ -1,4 +1,5 @@
 "use client";
+import { GuardSecretaria } from "../../guard-secretaria";
 
 // Sub-rota "Protocolo geral" do Expediente (Onda B Slice 6) — gestão dedicada do Protocolo Geral (buscar
 // por número/período, corrigir descrição, ver o objeto de origem) ainda não tem tela própria nesta fatia; o
@@ -10,7 +11,7 @@ import { TopoInterno } from "../../topo";
 import { AbasExpediente } from "../abas-expediente";
 import "../expediente.css";
 
-export default function PaginaExpedienteProtocolo() {
+function ConteudoPaginaExpedienteProtocolo() {
   return (
     <>
       <TopoInterno area="Expediente" />
@@ -24,5 +25,14 @@ export default function PaginaExpedienteProtocolo() {
         </div>
       </main>
     </>
+  );
+}
+
+
+export default function PaginaExpedienteProtocolo() {
+  return (
+    <GuardSecretaria>
+      <ConteudoPaginaExpedienteProtocolo />
+    </GuardSecretaria>
   );
 }

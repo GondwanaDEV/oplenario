@@ -1,4 +1,5 @@
 "use client";
+import { GuardSecretaria } from "../../guard-secretaria";
 
 // Sub-rota "Recebidos" do Expediente (Onda B Slice 6) — a caixa de entrada de correspondência recebida
 // (ofícios de outros órgãos, requerimentos de cidadão via e-SIC/balcão físico) ainda não tem contrato de
@@ -10,7 +11,7 @@ import { TopoInterno } from "../../topo";
 import { AbasExpediente } from "../abas-expediente";
 import "../expediente.css";
 
-export default function PaginaExpedienteRecebidos() {
+function ConteudoPaginaExpedienteRecebidos() {
   return (
     <>
       <TopoInterno area="Expediente" />
@@ -24,5 +25,14 @@ export default function PaginaExpedienteRecebidos() {
         </div>
       </main>
     </>
+  );
+}
+
+
+export default function PaginaExpedienteRecebidos() {
+  return (
+    <GuardSecretaria>
+      <ConteudoPaginaExpedienteRecebidos />
+    </GuardSecretaria>
   );
 }
