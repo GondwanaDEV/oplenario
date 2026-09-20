@@ -117,6 +117,17 @@
             (authz/exige-papel! (get-in ctx [:request :ator]) papel)
             ctx)})
 
+(defn exige-algum-papel
+  "Interceptor de AUTORIZACAO GROSSA (variante OU): exige QUALQUER um dos `papeis` (STRINGS) no ator.
+  Para categorias de LEITURA abertas a mais de um papel (ex.: proposicoes/tramitacao/paineis por
+  'secretario' OU 'vereador'). Falta de todos -> negado? -> 403. Pressupoe `autenticacao` antes."
+  [papeis]
+  (let [conj-papeis (set papeis)]
+    {:name  (keyword "oplenario.interceptors" (str "exige-algum-papel--" (str/join "+" (sort conj-papeis))))
+     :enter (fn [ctx]
+              (authz/exige-algum-papel! (get-in ctx [:request :ator]) conj-papeis)
+              ctx)}))
+
 (defn- raiz
   "Desembrulha a excecao que o Pedestal repassa ao :error: o original que a interceptor-chain pegou vem como
   CAUSE do wrapper (Pedestal 0.7); algumas versoes expoem em (:exception ex-data). Checa ambos + o proprio ex."

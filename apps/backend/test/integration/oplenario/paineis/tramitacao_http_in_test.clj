@@ -76,10 +76,15 @@
     (is (= [] (:itens (ler-json r))))
     (is (= [] (:totais-por-estado (ler-json r))))))
 
-(deftest tramitacao-sem-papel-403
+(deftest tramitacao-papel-sem-leitura-403
+  (let [r (pt/response-for (service-fn #{"cidadao"} (fake-repo-paineis (resultado-vazio)))
+                           :get "/paineis/tramitacao" :headers (com-bearer (token (random-uuid) (random-uuid))))]
+    (is (= 403 (:status r)) "papel sem leitura (nem secretario nem vereador) -> 403")))
+
+(deftest tramitacao-vereador-le-200
   (let [r (pt/response-for (service-fn #{"vereador"} (fake-repo-paineis (resultado-vazio)))
                            :get "/paineis/tramitacao" :headers (com-bearer (token (random-uuid) (random-uuid))))]
-    (is (= 403 (:status r)) "ator sem papel 'secretario' -> authz grossa nega -> 403")))
+    (is (= 200 (:status r)) "vereador agora LE o painel de tramitacao")))
 
 (deftest tramitacao-sem-token-401
   (let [r (pt/response-for (service-fn #{"secretario"} (fake-repo-paineis (resultado-vazio)))

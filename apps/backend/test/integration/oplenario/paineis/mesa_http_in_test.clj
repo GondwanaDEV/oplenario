@@ -106,11 +106,18 @@
         "presenca_agregada SAIU das lacunas na FE Onda A1 (materializada, ja' nao e' mais gap)")
     (is (not (contains? body :ente-id)) "tenant nao vaza")))
 
-(deftest mesa-sem-papel-403
+(deftest mesa-papel-sem-leitura-403
+  (let [r (pt/response-for (service-fn #{"cidadao"} (fake-repo-paineis rollups-fake) (constantly card-compliance-fake)
+                                       (constantly presenca-fake) (constantly esic-fake) (constantly relatores-fake))
+                           :get "/paineis/mesa" :headers (com-bearer (token (random-uuid) (random-uuid))))]
+    (is (= 403 (:status r)) "papel sem leitura (nem secretario nem vereador) -> 403")))
+
+(deftest mesa-vereador-le-200
+  ;; docs/20: o presidente e' vereador e precisa ver a Mesa -> leitura aberta a secretario OU vereador.
   (let [r (pt/response-for (service-fn #{"vereador"} (fake-repo-paineis rollups-fake) (constantly card-compliance-fake)
                                        (constantly presenca-fake) (constantly esic-fake) (constantly relatores-fake))
                            :get "/paineis/mesa" :headers (com-bearer (token (random-uuid) (random-uuid))))]
-    (is (= 403 (:status r)) "ator sem papel 'secretario' -> authz grossa nega -> 403")))
+    (is (= 200 (:status r)) "vereador agora LE o dashboard da Mesa")))
 
 (deftest mesa-degrada-o-card-quando-compliance-falha
   ;; review architect MAJOR: uma FALHA de leitura de compliance NAO derruba a pagina; vira o sentinel

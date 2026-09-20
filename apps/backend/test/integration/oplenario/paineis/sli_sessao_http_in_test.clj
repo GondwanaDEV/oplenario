@@ -99,10 +99,15 @@
     (is (= 2 (count (:sessoes body))) "a lista trouxe so' 2 (o corte)")
     (is (= 7 (:sessoes-total body)) "o total e' o numero real do servidor, nao count(sessoes)")))
 
-(deftest sli-sem-papel-403
+(deftest sli-papel-sem-leitura-403
+  (let [r (pt/response-for (service-fn #{"cidadao"} (fake-repo-paineis []))
+                           :get "/paineis/sli/sessoes" :headers (com-bearer (token (random-uuid) (random-uuid))))]
+    (is (= 403 (:status r)) "papel sem leitura (nem secretario nem vereador) -> 403")))
+
+(deftest sli-vereador-le-200
   (let [r (pt/response-for (service-fn #{"vereador"} (fake-repo-paineis []))
                            :get "/paineis/sli/sessoes" :headers (com-bearer (token (random-uuid) (random-uuid))))]
-    (is (= 403 (:status r)) "ator sem papel 'secretario' -> authz grossa nega -> 403")))
+    (is (= 200 (:status r)) "vereador agora LE o SLI de sessoes")))
 
 (deftest sli-sem-token-401
   (let [r (pt/response-for (service-fn #{"secretario"} (fake-repo-paineis []))
