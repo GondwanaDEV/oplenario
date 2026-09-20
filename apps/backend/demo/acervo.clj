@@ -35,7 +35,8 @@
             [oplenario.kernel.db-util :as comum]
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.legislativo.components.assinador-icp :as assinador-icp]
-            [oplenario.legislativo.components.repositorio :as repo-leg])
+            [oplenario.legislativo.components.repositorio :as repo-leg]
+            [oplenario.legislativo.db.parecer :as parecer-db])
   (:import (java.time LocalDate)))
 
 ;; ---------- constantes ----------
@@ -371,6 +372,38 @@
           (jdbc/execute! tx
             (sql/format {:select [:id :comissao_id :estado :relator_id] :from [:legislativo.pareceres]
                          :where [:= :ente_id ente]})))))))
+
+(defn corrigir-voto-relator-pendente!
+  "Reparo idempotente de prontidao (5b etapa de `semear-tudo!`, ao lado de `reconciliar-contadores!`):
+  seta `voto_relator='favoravel'` em todo parecer 'aguardando_assinatura' com voto null do ente.
+
+  POR QUE E' UM PASSO SEPARADO, e nao parte de `semear-pareceres!`: `semear!` e' idempotente POR PULAR
+  (o gate `template-do-rito` faz um re-seed sobre um ente ja' semeado NAO re-executar o acervo), entao
+  corrigir o parecer B dentro de `semear-pareceres!` NUNCA se aplicaria a um banco de homolog ja'
+  semeado. Este passo roda SEMPRE (como `reconciliar-contadores!`) e conserta o dado existente.
+
+  POR QUE O VOTO PRECISA EXISTIR: a tela (vereador)/parecer/:id/assinar so' libera o CTA 'Revisar e
+  assinar' quando `voto_relator` != null (`deriveEstadoAssinatura` -> 'pronto-pra-revisar'); sem ele o
+  parecer B (aguardando_assinatura, relator = o vereador da identidade ':vereador') fica em 'sem-voto'
+  ('volte ao editor') e a jornada J3 (assinatura do relator) nao fecha. Nao ha' porta de PRODUTO p/
+  setar o voto sem emitir (o unico caminho, `emitir-parecer!`, ja' terminaliza) — por isso este reparo
+  usa o MESMO db-helper que `emitir-parecer!` usa por dentro (`parecer-db/registrar-voto-relator!`, CAS
+  por lock_version), representando 'o relator ja' concluiu com seu voto; falta so' assinar'. Idempotente:
+  pula os que ja' tem voto (fresh seed -> 0 corrigidos). Devolve `{:corrigidos n}`."
+  [sistema ente]
+  (let [ds (get-in sistema [:datasource :ds])]
+    (tenancy/com-tenant* ds ente
+      (fn [tx]
+        (let [pendentes (comum/linhas->kebab
+                          (jdbc/execute! tx
+                            (sql/format {:select [:id :lock_version] :from [:legislativo.pareceres]
+                                         :where [:and [:= :ente_id ente]
+                                                 [:= :estado "aguardando_assinatura"]
+                                                 [:= :voto_relator nil]]})))]
+          (doseq [{:keys [id lock-version]} pendentes]
+            (parecer-db/registrar-voto-relator! tx {:id id :ente-id ente :voto-relator "favoravel"
+                                                    :updated-by nil :lock-version lock-version}))
+          {:corrigidos (count pendentes)})))))
 
 ;; ---------- o rito + as 24 proposicoes ----------
 
