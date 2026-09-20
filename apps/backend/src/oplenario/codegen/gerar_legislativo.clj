@@ -49,7 +49,13 @@
    ["ParecerResumoMeuPainelOut" meu-painel/ParecerResumoMeuPainelOut]
    ["CienciaPendenteOut" meu-painel/CienciaPendenteOut]
    ["MeuPainelOut" meu-painel/MeuPainelOut]
-   ["AcusarCienciaOut" meu-painel/AcusarCienciaOut]])
+   ["AcusarCienciaOut" meu-painel/AcusarCienciaOut]
+   ;; Tela "tramitar a materia" (GET /legislativo/proposicoes/:id/tramitacao) — GatilhoPossivelOut ANTES de
+   ;; TramitacaoOut (o composto o referencia por nome, mesma ordem-referencia-antes-do-composto de
+   ;; ficha-materia/pos-aprovacao). O `:historico` de TramitacaoOut reusa HistoricoTramitacaoItemOut (ficha,
+   ;; ja' acima) por igualdade estrutural. Substitui o tipo-espelho a mao de use-tramitacao.ts.
+   ["GatilhoPossivelOut" proposicao/GatilhoPossivelOut]
+   ["TramitacaoOut" proposicao/TramitacaoOut]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))
 

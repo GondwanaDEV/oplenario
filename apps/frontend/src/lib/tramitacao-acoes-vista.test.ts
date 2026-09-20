@@ -8,6 +8,7 @@ function base(over: Partial<TramitacaoOut> = {}): TramitacaoOut {
     estadoAtual: "protocolada",
     templateId: "t1",
     estadoTerminal: false,
+    historico: [],
     historicoTruncado: false,
     gatilhosPossiveis: [],
     nota: null,

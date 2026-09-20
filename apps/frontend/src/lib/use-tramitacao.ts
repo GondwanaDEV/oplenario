@@ -7,9 +7,10 @@
 // dirigir o POST de tramitação (o endpoint existia, mas nenhuma página o chamava — botão "Distribuir a
 // comissão" da ficha era inerte).
 //
-// TIPO-ESPELHO (não gerado): `TramitacaoOut` não está no manifesto do codegen (nenhum consumidor FE existia
-// até agora). Espelho à mão de apps/backend/.../legislativo/wire/out/proposicao.clj (TramitacaoOut /
-// GatilhoPossivelOut) — mesma disciplina de mesa-vista.ts. Adicionar ao manifesto Malli→TS é follow-up.
+// TIPO GERADO: `TramitacaoOut`/`GatilhoPossivelOut` vêm do codegen Malli→TS (manifesto em
+// apps/backend/.../codegen/gerar_legislativo.clj, fonte apps/backend/.../legislativo/wire/out/proposicao.clj) —
+// re-exportados aqui para os consumidores da tela (vista + componente). NÃO editar o .gen.ts à mão. O tipo
+// gerado inclui `historico` (que este painel não usa, só gatilhos+estado+nota).
 //
 // Mirror do idioma de use-parecer-editor.ts: 3-estados + reset em render-time ao trocar `id` + guard `vivo`
 // + `recarregar()` imperativo (depois de tramitar com sucesso, o estado/os atos mudam — o painel refaz o
@@ -19,23 +20,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import { semCredencial } from "./modo";
+import type { TramitacaoOut } from "./contrato-legislativo.gen";
 
-export interface GatilhoPossivel {
-  gatilho: string;
-  destinosPossiveis: string[];
-  podeSerRecusado: boolean;
-  exigeAutorizacao: boolean;
-}
-
-export interface TramitacaoOut {
-  proposicaoId: string;
-  estadoAtual: string;
-  templateId: string | null;
-  estadoTerminal: boolean | null;
-  historicoTruncado: boolean;
-  gatilhosPossiveis: GatilhoPossivel[];
-  nota: string | null;
-}
+export type { GatilhoPossivelOut, TramitacaoOut } from "./contrato-legislativo.gen";
 
 type Estado = "carregando" | "pronto" | "erro";
 
