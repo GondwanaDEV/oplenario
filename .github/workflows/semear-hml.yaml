@@ -8,6 +8,14 @@ on:
         description: 'Digite semear-homologacao para confirmar'
         required: true
         type: string
+      resetar:
+        description: 'Zerar o banco antes (demo limpa)? DESTRUTIVO — dropa todos os schemas do app'
+        required: true
+        default: 'nao'
+        type: choice
+        options:
+          - 'nao'
+          - 'sim'
 
 jobs:
   semear:
@@ -51,6 +59,14 @@ jobs:
           cli: latest
 
       - run: mkdir -p "$DEMO_ARTIFACTS_DIR"
+
+      # OPT-IN (resetar=sim): zera o banco (dropa schemas do app + log do Migratus) ANTES de semear, pra
+      # uma demo pristina. semear-tudo! reconstroi o schema do zero (migrar!) e semeia limpo. Sem isto as
+      # sementes so' pulam e nunca removem dado velho (artefatos de teste, pareceres assinados, etc.).
+      - name: Reset do banco (demo limpa)
+        if: ${{ inputs.resetar == 'sim' }}
+        working-directory: apps/backend
+        run: clojure -Sdeps '{:aliases {:seed {:extra-paths ["demo"]}}}' -X:seed "reset-demo/reset!"
 
       # semear-tudo! migra antes (idempotente) e sequencia casa -> acervo -> sessoes -> participacao
       # sobre UM unico sistema Component bootado. Rodar de novo rele, nao duplica.
