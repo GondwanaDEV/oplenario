@@ -30,6 +30,10 @@ jobs:
       KEYCLOAK_BASE_URL_PUBLICO: https://keycloak.calvetec.com.br
       KEYCLOAK_ADMIN_USUARIO: admin
       KEYCLOAK_ADMIN_SENHA: ${{ secrets.HML_KEYCLOAK_ADMIN_SENHA }}
+      # Origem REAL do BFF em prod — sobrepoe o default de localhost do config.edn. Sem isto o client
+      # PKCE oplenario-web nasce/segue com redirect de localhost e o login em prod da "Invalid redirect_uri".
+      KEYCLOAK_REDIRECT_URIS: https://oplenario.calvetec.com.br/api/auth/callback
+      KEYCLOAK_WEB_ORIGINS: https://oplenario.calvetec.com.br
       DEMO_ARTIFACTS_DIR: ${{ github.workspace }}/e2e/.artifacts
     steps:
       - name: Guarda de confirmacao
