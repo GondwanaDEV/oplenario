@@ -28,6 +28,15 @@ import type { ObrigacaoEmAberto } from "./calendario-vista";
 
 export type EstadoCarga = "carregando" | "pronto" | "erro";
 
+// Permissao de buscar os PRAZOS (GET /compliance/painel, `secretario`-only por design — ver cabecalho).
+// A pagina resolve isto do papel do ator e passa ao hook, em vez de o hook bater na porta e tomar 403:
+//   "buscar"     — pode ver (secretario): busca normalmente.
+//   "bloqueado"  — papel sem acesso (ex.: vereador): degrada direto para "prazos nao vieram", SEM o
+//                  request condenado que so' sujava o console com 403 (achado docs/20).
+//   "aguardando" — ainda nao se sabe o papel (GET /eu em voo no modo real): segura em "carregando".
+// Default "buscar" preserva o comportamento (e os testes) de quem chama sem informar a permissao.
+export type PrazosPermissao = "buscar" | "bloqueado" | "aguardando";
+
 /** Quando a lista de prazos é PÁGINA e não conjunto. `null` = não há divergência detectável. */
 export interface TruncamentoPrazos {
   exibidos: number;
@@ -65,7 +74,7 @@ async function buscarPrazos(token: string | null): Promise<PrazosCarregados | nu
   return { obrigacoes, truncamento: detectarTruncamento(j.emAbertoTotal, obrigacoes.length) };
 }
 
-export function useCalendario(token: string | null) {
+export function useCalendario(token: string | null, prazos: PrazosPermissao = "buscar") {
   const { sessoes, estado: estadoSessoes } = useSessoes(token);
 
   const [obrigacoes, setObrigacoes] = useState<ObrigacaoEmAberto[] | null>(null);
@@ -74,6 +83,13 @@ export function useCalendario(token: string | null) {
 
   useEffect(() => {
     if (semCredencial(token)) return; // o caso sem token é derivado no retorno (sem setState no effect)
+    if (prazos === "aguardando") return; // papel ainda desconhecido: segura em "carregando", nao busca
+    if (prazos === "bloqueado") {
+      // Papel sem acesso ao painel (ex.: vereador): `/compliance/painel` daria 403 de qualquer forma.
+      // Degrada direto para o MESMO estado visivel de "prazos nao vieram", sem o request condenado.
+      setEstadoPrazos("erro");
+      return;
+    }
     let vivo = true;
     (async () => {
       try {
@@ -93,7 +109,7 @@ export function useCalendario(token: string | null) {
     return () => {
       vivo = false;
     };
-  }, [token]);
+  }, [token, prazos]);
 
   if (semCredencial(token)) {
     return {

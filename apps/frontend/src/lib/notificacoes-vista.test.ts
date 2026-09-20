@@ -74,13 +74,12 @@ describe("derivarInbox", () => {
     expect(v.naoLidas).toBe(1);
   });
 
-  // Carry declarado: /ficha-materia é tela do shell do SERVIDOR e o endpoint por trás
-  // (GET /legislativo/proposicoes/:id/ficha) nega 403 ao papel `vereador` — provado ao vivo
-  // na Task 12. Enquanto não existir a ficha no shell do vereador, proposição não tem
-  // destino acessível: href "" (sem link) em vez de uma âncora que erra na cara do usuário.
-  it("proposição ainda não tem destino acessível ao vereador (href vazio, não um 403)", () => {
+  // A ficha (GET /legislativo/proposicoes/:id/ficha) passou a aceitar o papel `vereador` (feat(authz),
+  // achado docs/20): a inbox do vereador volta a linkar a matéria. `/ficha-materia/:id` vive no shell
+  // (interno), mas um link que ABRE é melhor que uma notificação morta.
+  it("proposição linka para a ficha da matéria (a ficha agora aceita o vereador)", () => {
     const v = derivarInbox(dados([n("a", "2026-07-19T09:00:00Z")]), AGORA);
-    expect(v.grupos[0].itens[0].href).toBe("");
+    expect(v.grupos[0].itens[0].href).toBe("/ficha-materia/pid-a");
   });
 
   // A guarda real aqui é o `?? ""` da tabela de rotas: tipo SEM rota -> sem link. Sem ela, uma tabela
