@@ -172,9 +172,9 @@ jobs:
                 const p = await cSec.newPage();
                 await p.goto(`${B}/parecer/${parecerRascunho}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
                 await p.waitForTimeout(2000);
-                const rel = p.getByLabel(/Relat/i); const ana = p.getByLabel(/An[aá]lise/i);
-                if (await rel.count()) await rel.fill('Relatorio ' + MARCA);
-                if (await ana.count()) await ana.fill('Analise ' + MARCA);
+                const rel = p.locator('textarea[aria-label="Relatório"]'); const ana = p.locator('textarea[aria-label="Análise"]');
+                if (await rel.count()) await rel.first().fill('Relatorio ' + MARCA);
+                if (await ana.count()) await ana.first().fill('Analise ' + MARCA);
                 await p.getByRole('button', { name: /Salvar rascunho/i }).click({ timeout: 15000 });
                 await p.waitForTimeout(1500);
                 const txt = (await p.evaluate(() => document.body?.innerText || ''));
@@ -190,12 +190,13 @@ jobs:
                 const p = await cVer.newPage();
                 await p.goto(`${B}/parecer/${parecerAssinavel}/assinar`, { waitUntil: 'domcontentloaded', timeout: 30000 });
                 await p.waitForTimeout(2500);
-                const txt0 = (await p.evaluate(() => document.body?.innerText || ''));
+                const txt0 = (await p.evaluate(() => document.body?.innerText || '')).replace(/\s+/g,' ').trim();
                 if (/N[aã]o foi poss[ií]vel carregar/i.test(txt0)) { await p.close(); rec('1-legislativo', 'assinar parecer (UI vereadora)', 'ERRO', '404 de posse — a vereadora nao e a relatora deste parecer'); }
+                else if (/Ainda falta registrar a conclus[aã]o|volte l[aá]/i.test(txt0)) { await p.close(); rec('1-legislativo', 'assinar parecer (UI vereadora)', 'GAP', 'parecer semeado em aguardando_assinatura mas SEM voto do relator -> tela pede "volte ao editor"; assinatura pela UI so apos a secretaria emitir (achado circular do voto)'); }
                 else {
-                  const revisar = p.getByRole('button', { name: /Revisar e assinar/i });
+                  const revisar = p.locator('.assinar-bar button.btn-primaria').or(p.getByRole('button', { name: 'Revisar e assinar' }));
                   if (await revisar.count()) {
-                    await revisar.click({ timeout: 15000 });
+                    await revisar.first().click({ timeout: 15000 });
                     await p.waitForTimeout(1000);
                     await p.getByRole('button', { name: /Confirmar com a biometria/i }).click({ timeout: 15000 });
                     await p.waitForURL(/\/vereador(\?|$)/, { timeout: 15000 }).catch(()=>{});
@@ -231,10 +232,22 @@ jobs:
             // =====================================================================
             let sTeste = null;
             try {
-              const cr = await api(cSec, 'POST', '/api/sessoes', { 'tipo-sessao': 'ordinaria', modalidade: 'presencial', 'agendada-para': new Date(Date.now()+864e5).toISOString() });
+              // resolver sessao-legislativa-id de uma sessao existente (campo obrigatorio do agendar)
+              let slid = null;
+              const base = sessoes[0];
+              if (base) {
+                slid = base['sessao-legislativa-id'] || base.sessaoLegislativaId || base['sessao_legislativa_id'] || null;
+                if (!slid) {
+                  const det = await api(cSec, 'GET', `/api/sessoes/${base.id}`);
+                  const d = det.body?.sessao || det.body || {};
+                  slid = d['sessao-legislativa-id'] || d.sessaoLegislativaId || d['sessao_legislativa_id'] || null;
+                }
+              }
+              console.log('sessao-legislativa-id resolvido: ' + slid);
+              const cr = await api(cSec, 'POST', '/api/sessoes', { 'sessao-legislativa-id': slid, 'tipo-sessao': 'ordinaria', modalidade: 'presencial', 'agendada-para': new Date(Date.now()+864e5).toISOString() });
               sTeste = cr.body?.id || cr.body?.sessao?.id || null;
               if (sTeste) rec('2-sessao', 'agendar sessao (API)', 'GAP', `criada sessao de teste ${sTeste} (HTTP ${cr.status}); sem tela dedicada de agendar`);
-              else rec('2-sessao', 'agendar sessao (API)', 'ERRO', `POST /sessoes -> HTTP ${cr.status} ${JSON.stringify(cr.body).slice(0,120)}`);
+              else rec('2-sessao', 'agendar sessao (API)', 'ERRO', `POST /sessoes -> HTTP ${cr.status} ${JSON.stringify(cr.body).slice(0,120)} (slid=${slid})`);
             } catch (e) { rec('2-sessao', 'agendar sessao (API)', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
 
             if (sTeste) {
