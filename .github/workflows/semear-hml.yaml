@@ -14,7 +14,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       APP_ENV: production
-      DATABASE_URL: jdbc:postgresql://vps.calvetec.com.br:5432/oplenario
+      # :5433 = porta externa TEMPORARIA do Postgres do O Plenario (container oplenario-database).
+      # A :5432 publica do host e' de OUTRO projeto (galeriaascal) — nunca foi o banco certo.
+      DATABASE_URL: jdbc:postgresql://204.12.227.116:5433/oplenario
       DB_USER: oplenario-application
       DB_PASSWORD: ${{ secrets.HML_DB_PASSWORD }}
       # backplane :memoria — o seed so grava no Postgres; o fan-out SSE ao vivo e' do backend de
