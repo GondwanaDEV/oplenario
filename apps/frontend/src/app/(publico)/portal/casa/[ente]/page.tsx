@@ -12,7 +12,24 @@ import { SecaoEmTramitacao } from "../../../secao-em-tramitacao";
 import { BalcaoEsic } from "../../../balcao-esic";
 import { BalcaoLgpd } from "../../../balcao-lgpd";
 import { NavegacaoCivica } from "../../../navegacao-civica";
-import { buscarNomeCasa } from "../../../../../lib/portal-api";
+import { resolverCasa } from "../../../../../lib/portal-api";
+
+// Mesma gramática de vazio/erro das telas irmãs (`.em-breve` + role="status" + motivo honesto), em vez de
+// uma 404 genérica do Next: quem chega aqui veio de um link, e merece saber POR QUE não há portal.
+function CasaNaoEncontrada() {
+  return (
+    <main id="conteudo" className="envelope" style={{ maxWidth: 640, padding: "4rem 1.5rem" }}>
+      <div className="em-breve" role="status">
+        <p className="em-breve-titulo">Câmara não encontrada</p>
+        <p className="em-breve-motivo">
+          Não existe uma Câmara publicada neste endereço — o link pode estar incorreto ou desatualizado.
+          Confira o endereço que a sua Câmara divulgou. O estado da plataforma fica em{" "}
+          <a href="/status">status</a>.
+        </p>
+      </div>
+    </main>
+  );
+}
 
 export default async function PaginaPortalCidadao({
   params,
@@ -20,7 +37,12 @@ export default async function PaginaPortalCidadao({
   params: Promise<{ ente: string }>;
 }) {
   const { ente } = await params;
-  const nomeCasa = (await buscarNomeCasa(ente))?.nomeOficial ?? ente;
+  const casa = await resolverCasa(ente);
+  // Veredito definitivo de "esta Casa não existe" (404/400) NÃO pode renderizar o portal: seria um
+  // Portal do Cidadão crível com um id arbitrário no lugar do nome da instituição. Falha transitória
+  // (`indisponivel`) mantém a degradação pro slug — a decisão original deste arquivo, intacta.
+  if (casa.estado === "inexistente") return <CasaNaoEncontrada />;
+  const nomeCasa = casa.estado === "ok" ? casa.nomeOficial : ente;
   return (
     <>
       <a className="pular" href="#conteudo">

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buscarNomeCasa, buscarPublico } from "./portal-api";
+import { buscarNomeCasa, buscarPublico, resolverCasa } from "./portal-api";
 
 // Task 0.3 (Fatia A2.0, Portal do Cidadão) — espelha buscarOuNull de use-mesa.ts, mas SEM o header
 // Authorization (superfície pública, sem auth) e degradando SEMPRE para null (nunca lança — "degradação
@@ -107,5 +107,54 @@ describe("buscarNomeCasa", () => {
     expect(url).toMatch(/^https?:\/\//);
     expect(url.endsWith("/portal/casa/fortaleza")).toBe(true);
     expect(init.cache).toBe("no-store");
+  });
+});
+
+// Achado do teste exploratório contra a homologação (método docs/20, M4): `buscarNomeCasa` colapsava
+// "esta Casa não existe" e "não consegui resolver agora" no MESMO `null`, e a capa do portal degradava
+// pro slug cru nos dois — renderizando o Portal do Cidadão inteiro para um ente inexistente/malformado,
+// com o id cru como nome da instituição. `resolverCasa` separa os dois vereditos; a capa gateia só o
+// definitivo. Reproduzido ao vivo com UUID inexistente (404) e com slug malformado (400).
+describe("resolverCasa (veredito de existência da Casa)", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("200 -> ok, com o nome camelizado", async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ "nome-oficial": "Câmara Municipal de Fortaleza" }),
+    })) as unknown as typeof fetch;
+    expect(await resolverCasa("ente-real")).toEqual({
+      estado: "ok",
+      nomeOficial: "Câmara Municipal de Fortaleza",
+      nomeCurto: undefined,
+    });
+  });
+
+  it("404 (uuid bem-formado, sem Casa) -> inexistente", async () => {
+    global.fetch = vi.fn(async () => ({ ok: false, status: 404 })) as unknown as typeof fetch;
+    expect(await resolverCasa("10000000-0000-0000-0000-000000000001")).toEqual({ estado: "inexistente" });
+  });
+
+  it("400 (id malformado) -> inexistente — um slug que não é id nunca é uma Casa", async () => {
+    global.fetch = vi.fn(async () => ({ ok: false, status: 400 })) as unknown as typeof fetch;
+    expect(await resolverCasa("xyz-invalido")).toEqual({ estado: "inexistente" });
+  });
+
+  it("500 -> indisponivel (transitório), NUNCA inexistente — não apaga uma Casa real por instabilidade", async () => {
+    global.fetch = vi.fn(async () => ({ ok: false, status: 500 })) as unknown as typeof fetch;
+    expect(await resolverCasa("ente-real")).toEqual({ estado: "indisponivel" });
+  });
+
+  it("fetch lança (backend fora do ar) -> indisponivel, nunca derruba a página", async () => {
+    global.fetch = vi.fn(async () => {
+      throw new Error("rede fora");
+    }) as unknown as typeof fetch;
+    expect(await resolverCasa("ente-real")).toEqual({ estado: "indisponivel" });
+  });
+
+  it("contrato de buscarNomeCasa intacto: indisponivel TAMBÉM vira null (telas internas seguem degradando)", async () => {
+    global.fetch = vi.fn(async () => ({ ok: false, status: 500 })) as unknown as typeof fetch;
+    expect(await buscarNomeCasa("ente-real")).toBeNull();
   });
 });

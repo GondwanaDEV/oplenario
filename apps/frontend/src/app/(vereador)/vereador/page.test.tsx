@@ -31,6 +31,12 @@ const painelFake = {
   ],
 };
 
+// Data RELATIVA ao agora, nunca literal: a fixture da sessão "agendada no futuro" nascera cravada em
+// "2026-09-14T19:00:00Z" e o teste passou a falhar sozinho quando essa data virou passado (o produto está
+// certo — uma sessão agendada para ontem não é "a próxima"; quem expirou foi a fixture). Teste que quebra
+// pelo mero passar do tempo é bomba-relógio: some do verde sem ninguém mexer em código.
+const DAQUI_A_UMA_SEMANA = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
 function sessaoCrua(over: Record<string, unknown> = {}) {
   return {
     id: "s1", "sessao-legislativa-id": "sl1", "tipo-sessao": "ordinaria", "numero-sequencial": 1,
@@ -136,7 +142,7 @@ describe("PaginaHomeVereador", () => {
         json: async () => ({
           sessoes: [
             sessaoCrua({ id: "s-aberta", estado: "aberta" }),
-            sessaoCrua({ id: "s-agendada", estado: "agendada", "agendada-para": "2026-09-14T19:00:00Z", "tipo-sessao": "ordinaria" }),
+            sessaoCrua({ id: "s-agendada", estado: "agendada", "agendada-para": DAQUI_A_UMA_SEMANA, "tipo-sessao": "ordinaria" }),
           ],
         }),
       }) as Response,

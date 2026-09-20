@@ -108,3 +108,37 @@ test.describe("Portal do Cidadão — e2e", () => {
     expect(erros, `erros de console: ${erros.join(" | ")}`).toEqual([]);
   });
 });
+
+// Regressão do achado do teste exploratório contra a homologação (método docs/20 §1, regra de ouro:
+// "um achado de M4 só está fechado quando vira M3/M2"). O defeito: a capa resolvia o nome da Casa com
+// `buscarNomeCasa`, que devolvia `null` tanto para "esta Casa não existe" quanto para "falha ao
+// resolver", e degradava pro slug da URL nos DOIS casos — renderizando o Portal do Cidadão INTEIRO
+// (hero, balcões e-SIC/LGPD, rodapé com `© <slug>`) para um ente inexistente ou malformado. Na prática,
+// um link errado exibia um portal de transparência crível para uma Casa que não existe.
+//
+// Este spec NÃO depende da semente (é o caso negativo), então roda no CI mesmo em banco vazio.
+test.describe("Portal do Cidadão — Casa inexistente não vira portal", () => {
+  // uuid bem-formado, porém sem Casa (o backend responde 404 em /portal/casa/:ente)
+  const enteInexistente = "00000000-0000-0000-0000-0000000000ff";
+  // id malformado (o backend responde 400) — o outro caso reproduzido ao vivo
+  const enteMalformado = "xyz-invalido";
+
+  for (const [rotulo, ente] of [
+    ["uuid inexistente (404)", enteInexistente],
+    ["id malformado (400)", enteMalformado],
+  ] as const) {
+    test(`${rotulo}: mostra "Câmara não encontrada" e NÃO renderiza o portal`, async ({ page }) => {
+      await page.goto(`/portal/casa/${ente}`);
+
+      await expect(page.getByText("Câmara não encontrada")).toBeVisible();
+
+      // O coração do achado: nada do portal cívico pode aparecer para uma Casa que não existe.
+      await expect(page.getByRole("heading", { name: /Os seus direitos, em dois balcões/i })).toHaveCount(0);
+      await expect(page.getByText(/Acompanhe a sua/i)).toHaveCount(0);
+
+      // E, sobretudo, o id cru NUNCA pode ser exibido como se fosse o nome da instituição.
+      await expect(page.locator(".marca-nome")).toHaveCount(0);
+      await expect(page.getByText(ente, { exact: true })).toHaveCount(0);
+    });
+  }
+});
