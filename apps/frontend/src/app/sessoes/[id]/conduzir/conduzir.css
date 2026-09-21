@@ -106,6 +106,34 @@
   min-width: 1.6rem; text-align: right;
 }
 
+/* ---- painel de votação ---- */
+.votacao .bloco-corpo { display: grid; gap: 0.9rem; }
+.votacao-abrir, .votacao-em-curso { display: grid; gap: 0.9rem; }
+.votacao .campo { display: flex; flex-direction: column; gap: 0.3rem; }
+.votacao .campo label { font-size: var(--t-13); font-weight: 600; color: var(--texto); }
+.votacao select {
+  padding: 0.55rem 0.7rem; border: 1px solid var(--linha); border-radius: 8px;
+  background: var(--surface); color: var(--texto); font: inherit; font-size: var(--t-14);
+}
+.votacao select:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }
+
+.campo-radio {
+  border: 1px solid var(--linha); border-radius: 8px; padding: 0.7rem 0.85rem;
+  display: flex; flex-wrap: wrap; gap: 0.75rem 1.2rem; margin: 0;
+}
+.campo-radio legend { font-size: var(--t-13); font-weight: 600; color: var(--texto); padding: 0 0.3rem; }
+.campo-radio label { display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--t-14); color: var(--texto); cursor: pointer; }
+
+.votacao-resumo {
+  margin: 0; display: grid; gap: 0.7rem; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+.votacao-resumo dt { font-size: var(--t-12); color: var(--texto-2); text-transform: uppercase; letter-spacing: 0.06em; }
+.votacao-resumo dd { margin: 0.1rem 0 0; font-family: var(--mono); font-size: var(--t-15); color: var(--texto); }
+.votacao-ementa {
+  margin: 0; padding: 0.6rem 0.75rem; border-left: 3px solid var(--linha);
+  font-size: var(--t-14); color: var(--texto-2);
+}
+
 /* ---- estados de tela cheia (carregando/erro) ---- */
 .tela-estado {
   max-width: 40rem; margin: 4rem auto; padding: 0 1rem; text-align: center;

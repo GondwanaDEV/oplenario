@@ -19,6 +19,7 @@ import { usePauta } from "@/lib/use-pauta";
 import { derivarConducaoSessao, type AtoConducao, type SituacaoSessao } from "@/lib/conducao-sessao-vista";
 import { nomeTipoSessao, nomeFase } from "@/lib/rotulos-sessao";
 import type { SessaoOut } from "@/lib/contrato-sessoes.gen";
+import { PainelVotacao } from "./painel-votacao";
 import "./conduzir.css";
 
 /** "2026-05-21T14:03:00Z" -> "21/05 às 14h03" (fuso do navegador — leitura humana, nunca comparação). */
@@ -296,6 +297,10 @@ function Comando({ sessao, token, transicionar, recarregar }: ComandoProps) {
             </div>
           </div>
         </section>
+
+        {sessao.estado === "aberta" && (
+          <PainelVotacao sessaoId={sessao.id} token={token} sessaoEstado={sessao.estado} />
+        )}
 
         {estadoPauta === "ok" && pauta && pauta.itens.length > 0 && (
           <section className="bloco pauta-resumo" aria-labelledby="pauta-titulo">

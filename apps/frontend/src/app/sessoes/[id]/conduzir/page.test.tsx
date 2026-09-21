@@ -17,6 +17,11 @@ vi.mock("@/lib/auth", () => ({
 }));
 vi.mock("@/lib/tema", () => ({ useTema: () => ({ tema: "claro", alternar: vi.fn() }) }));
 vi.mock("@/lib/use-pauta", () => ({ usePauta: () => ({ pauta: null, estado: "erro" }) }));
+// O painel de votação tem testes próprios (painel-votacao.test.tsx); aqui só evitamos o IO real dele
+// quando a sessão está aberta (a página o monta nesse estado).
+vi.mock("@/lib/use-votacao-mesa", () => ({
+  useVotacaoMesa: () => ({ votacaoAberta: null, itens: [], estado: "pronto", erro: null, recarregar: vi.fn(), abrir: vi.fn(), encerrar: vi.fn() }),
+}));
 
 const transicionar = vi.fn().mockResolvedValue({ ok: true, sessao: {} });
 const recarregar = vi.fn().mockResolvedValue(undefined);
