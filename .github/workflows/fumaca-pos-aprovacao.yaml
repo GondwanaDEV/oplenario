@@ -1,0 +1,140 @@
+name: Fumaca da pos-aprovacao (producao)
+
+# Smoke test SÓ-LEITURA da tela /pos-aprovacao/:id deployada em producao (oplenario.calvetec.com.br),
+# confirmando o GAP fechado no PR #8 (apreciacao de veto: a Camara mantem ou derruba pela UI). Loga de
+# verdade via Keycloak como a secretaria (papel que o pos-aprovacao exige), lista proposicoes, escolhe uma
+# APROVADA (preferindo uma VETADA, que exercita o card novo "Apreciacao do veto") e confirma que a UI
+# RENDERIZA — card do autografo + pipeline "Etapas da sancao" — e, quando ha materia vetada, que o card de
+# apreciacao aparece. NAO dispara nenhuma mutacao (nao aprecia, nao registra resposta): nada e escrito na
+# producao. Cada checagem e independente ([OK]/[ERRO]).
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fumaca:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar Playwright + Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm i -D playwright@1.47.2 >/dev/null 2>&1
+          npx playwright install --with-deps chromium
+      - name: Escrever o teste
+        run: |
+          cat > fumaca.mjs <<'JS'
+          import { chromium } from 'playwright';
+          const B = 'https://oplenario.calvetec.com.br';
+          const E = '10000000-0000-0000-0000-000000000001';
+          const SENHA = 'Plenario@2026';
+          // UUID da secretaria do ultimo reseed do homolog/producao (cartao de credenciais do semear #8).
+          // Se o banco for re-semeado, reveja o passo "Ids da demo" do semear-hml e atualize aqui.
+          const SEC = '585e6532-e754-4d45-ad82-1667fdfb220e';
+          const R = [];
+          const rec = (tela, flag, nota) => { R.push({ tela, flag, nota }); console.log(`  [${flag}] ${tela} — ${nota}`); };
+
+          async function login(ctx, user) {
+            const p = await ctx.newPage();
+            await p.goto(`${B}/api/auth/login?ente=${E}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await p.waitForSelector('#username', { timeout: 25000 });
+            await p.fill('#username', user); await p.fill('#password', SENHA);
+            await Promise.all([ p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(()=>{}), p.click('#kc-login') ]);
+            await p.waitForTimeout(2500);
+            const ok = p.url().startsWith(B) && !new URL(p.url()).pathname.startsWith('/api/auth');
+            await p.close(); return ok;
+          }
+          async function api(ctx, path) {
+            const r = await ctx.request.fetch(B + path, { headers: { accept: 'application/json' }, timeout: 25000 });
+            let j = null; try { j = await r.json(); } catch {}
+            return { status: r.status(), body: j };
+          }
+          const texto = async (p) => (await p.evaluate(() => document.body?.innerText || '')).replace(/\s+/g,' ').trim();
+
+          const browser = await chromium.launch();
+          try {
+            const cSec = await browser.newContext({ locale: 'pt-BR' });
+            const okSec = await login(cSec, SEC);
+            console.log(`login secretaria=${okSec}`);
+
+            // Lista proposicoes (ListaProposicoesOut: campo `itens`, paginado) e resolve o pos-aprovacao de
+            // cada candidata: escolhe uma APROVADA (autografo presente); prefere uma VETADA
+            // (tramitacao-executiva.estado === 'vetado') p/ exercitar o card novo do PR #8.
+            const lst = await api(cSec, '/api/legislativo/proposicoes?pagina=1&tamanho=100&ordenar-por=atualizado_em&ordenar-dir=desc');
+            const itens = Array.isArray(lst.body?.itens) ? lst.body.itens : [];
+            console.log(`proposicoes: total=${lst.body?.total ?? '?'} nesta pagina=${itens.length}`);
+            const estados = {};
+            for (const p of itens) estados[p.estado] = (estados[p.estado] || 0) + 1;
+            console.log(`estados: ${JSON.stringify(estados)}`);
+
+            // Pre-filtra por estados plausiveis de ter autografo (reduz chamadas); se vazio, varre todos.
+            const RE_POS = /aprov|autograf|sanc|veto|promulg|public|norma|^lei/i;
+            let candidatos = itens.filter(p => p?.id && RE_POS.test(String(p.estado || '')));
+            if (candidatos.length === 0) candidatos = itens.filter(p => p?.id);
+
+            let vetado = null, comAutografo = null, examinadas = 0;
+            for (const pr of candidatos) {
+              if (examinadas++ >= 60) break;
+              const pa = await api(cSec, `/api/legislativo/proposicoes/${pr.id}/pos-aprovacao`);
+              const autografo = pa.body?.autografo ?? null;
+              const te = pa.body?.['tramitacao-executiva'] ?? pa.body?.tramitacaoExecutiva ?? null;
+              if (autografo) {
+                comAutografo = comAutografo || pr;
+                if (te && String(te.estado) === 'vetado') { vetado = pr; break; }
+              }
+            }
+            console.log(`candidatos=${candidatos.length} examinadas=${examinadas} comAutografo=${comAutografo?.id || '-'} vetado=${vetado?.id || '-'}`);
+            const alvo = vetado || comAutografo;
+
+            if (!alvo) {
+              const primeira = itens.find(p => p?.id);
+              if (!primeira) { rec('/pos-aprovacao/:id', 'ERRO', 'nenhuma proposicao na producao para navegar'); }
+              else {
+                const p = await cSec.newPage();
+                await p.goto(`${B}/pos-aprovacao/${primeira.id}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                await p.waitForTimeout(3000);
+                const t = await texto(p);
+                const temErro = /Application error|Internal Server|erro inesperado|Acesso restrito/i.test(t);
+                const montou = /P[óo]s-aprova|Autógrafo|Sanç|Etapas da sanç|aprovaç/i.test(t);
+                await p.close();
+                if (montou && !temErro) rec('/pos-aprovacao/:id', 'OK', `rota montou sem autografo vivo :: ${t.slice(0,90)}`);
+                else rec('/pos-aprovacao/:id', 'ERRO', `montou=${montou} erro=${temErro} :: ${t.slice(0,140)}`);
+              }
+            } else {
+              const p = await cSec.newPage();
+              await p.goto(`${B}/pos-aprovacao/${alvo.id}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await p.waitForTimeout(3000);
+              const t = await texto(p);
+              const temErro = /Application error|Internal Server|erro inesperado|Acesso restrito/i.test(t);
+              const temAutografo = /Autógrafo/i.test(t);
+              const temPipeline = /Etapas da sanç[ãa]o/i.test(t) || (await p.getByRole('list', { name: /Etapas da sanç/i }).count()) > 0;
+              await p.close();
+              if (temAutografo && !temErro) rec('/pos-aprovacao/:id', 'OK', `tela do autografo renderizou (pipeline=${temPipeline}; alvo ${vetado ? 'VETADO' : 'aprovado'})`);
+              else rec('/pos-aprovacao/:id', 'ERRO', `autografo=${temAutografo} erro=${temErro} :: ${t.slice(0,140)}`);
+
+              if (vetado) {
+                const p2 = await cSec.newPage();
+                await p2.goto(`${B}/pos-aprovacao/${vetado.id}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                await p2.waitForTimeout(3000);
+                const t2 = await texto(p2);
+                const temApreciacao = /Apreciaç[ãa]o do veto/i.test(t2);
+                const temBotao = (await p2.getByRole('button', { name: /Apreciar|Registrar apreciaç/i }).count()) > 0;
+                await p2.close();
+                if (temApreciacao) rec('/pos-aprovacao/:id (vetado): card Apreciacao do veto', 'OK', `card do PR #8 presente (botao=${temBotao})`);
+                else rec('/pos-aprovacao/:id (vetado): card Apreciacao do veto', 'ERRO', `card ausente :: ${t2.slice(0,140)}`);
+              } else {
+                rec('/pos-aprovacao/:id (vetado): card Apreciacao do veto', 'OK', 'nenhuma materia vetada agora — card nao se aplica (esperado); rota do autografo confirmada acima');
+              }
+            }
+
+            console.log('\n===== RESUMO FUMACA (pos-aprovacao / producao) =====');
+            for (const r of R) console.log(`  [${r.flag}] ${r.tela} — ${r.nota}`);
+            const houveErro = R.some(r => r.flag === 'ERRO') || !okSec;
+            console.log(`== fumaca concluida (${houveErro ? 'COM ERRO' : 'tudo OK'}) ==`);
+            if (houveErro) process.exitCode = 1;
+          } finally { await browser.close(); }
+          JS
+      - name: Rodar fumaca
+        run: node fumaca.mjs
