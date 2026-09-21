@@ -145,6 +145,52 @@ describe("ConteudoPosAprovacao", () => {
     expect(screen.queryByRole("button", { name: /^registrar retorno$/i })).toBeNull();
   });
 
+  it("estado 'vetado' -> mostra 'Apreciação do veto' e o fluxo de apreciar (derrubar) leva ao Desfecho", async () => {
+    const comAutografoVetado = {
+      autografo: comAutografoAguardando.autografo,
+      "tramitacao-executiva": {
+        id: "te1",
+        "autografo-id": "a1",
+        estado: "vetado",
+        "veto-tipo": "total",
+        "respondido-em": "2026-07-01T00:00:00Z",
+        "lock-version": 1,
+      },
+    };
+    mockFetch(comAutografoVetado);
+    renderComProviders();
+    await waitFor(() => expect(screen.getByText("Apreciação do veto")).toBeTruthy());
+    // antes do fluxo, NÃO existe o texto-placeholder estático antigo
+    expect(screen.getByRole("button", { name: /apreciar o veto/i })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /apreciar o veto/i }));
+    fireEvent.click(screen.getByRole("radio", { name: /Veto derrubado/i }));
+    fireEvent.change(screen.getByLabelText(/ID da votação/i), { target: { value: "vt-1" } });
+
+    global.fetch = vi.fn(async (_url: string, init?: RequestInit) => {
+      const corpo = init?.body ? JSON.parse(init.body as string) : {};
+      expect(corpo).toMatchObject({ "lock-version": 1, resultado: "veto_derrubado", "veto-votacao-id": "vt-1" });
+      return {
+        ok: true,
+        json: async () => ({
+          id: "te1",
+          "autografo-id": "a1",
+          estado: "veto_derrubado",
+          "apreciado-em": "2026-07-05T00:00:00Z",
+          "lock-version": 2,
+        }),
+      } as Response;
+    }) as unknown as typeof fetch;
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /registrar apreciação/i }));
+    });
+
+    await waitFor(() => expect(screen.getByText("Desfecho")).toBeTruthy());
+    expect(screen.getByText(/derrubado pela câmara — a lei segue para promulgação/i)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /registrar apreciação/i })).toBeNull();
+  });
+
   it("matéria NÃO aprovada e sem autógrafo -> botão de gerar fica inacessível (disabled+aria-disabled) e a explicação aparece", async () => {
     mockFetch(semAutografo, proposicaoNaoAprovada);
     renderComProviders();

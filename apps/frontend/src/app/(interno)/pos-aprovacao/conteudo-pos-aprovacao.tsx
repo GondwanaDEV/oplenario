@@ -20,6 +20,7 @@ import { useProposicaoDetalhe } from "@/lib/use-proposicao-detalhe";
 import { usePosAprovacao } from "@/lib/use-pos-aprovacao";
 import { useGerarAutografo } from "@/lib/use-gerar-autografo";
 import { useRegistrarResposta } from "@/lib/use-registrar-resposta";
+import { useApreciarVeto } from "@/lib/use-apreciar-veto";
 import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
 import { derivarPipeline } from "@/lib/pos-aprovacao-vista";
 import { comToken } from "@/lib/nav";
@@ -28,10 +29,11 @@ import { PipelinePosAprovacao } from "./pipeline-pos-aprovacao";
 import { CardAutografo } from "./card-autografo";
 import { CardPrazoExecutivo } from "./card-prazo-executivo";
 import { FormRegistrarRetorno, type ValoresRetorno } from "./form-registrar-retorno";
+import { FormApreciarVeto, type ValoresApreciacao } from "./form-apreciar-veto";
 import type { PosAprovacaoOut } from "@/lib/contrato-legislativo.gen";
 import "./pos-aprovacao.css";
 
-type UltimaAcao = "gerar" | "registrar" | null;
+type UltimaAcao = "gerar" | "registrar" | "apreciar" | null;
 
 export function ConteudoPosAprovacao({ id }: { id: string }) {
   const { token } = useAuth();
@@ -40,6 +42,7 @@ export function ConteudoPosAprovacao({ id }: { id: string }) {
 
   const [posAprovacaoLocal, setPosAprovacaoLocal] = useState<PosAprovacaoOut | null>(null);
   const [mostrarForm, setMostrarForm] = useState(false);
+  const [mostrarFormApreciacao, setMostrarFormApreciacao] = useState(false);
   const [mensagemStatus, setMensagemStatus] = useState<string | null>(null);
   const [ultimaAcao, setUltimaAcao] = useState<UltimaAcao>(null);
 
@@ -52,9 +55,20 @@ export function ConteudoPosAprovacao({ id }: { id: string }) {
     token,
     autografo?.id ?? null,
   );
+  const { apreciar, estado: estadoApreciacao, erro: erroApreciacao } = useApreciarVeto(
+    token,
+    tramitacaoExecutiva?.id ?? null,
+  );
 
   // Só a AÇÃO MAIS RECENTE mostra erro (mesma disciplina de expediente/page.tsx).
-  const erro = ultimaAcao === "gerar" ? erroGeracao : ultimaAcao === "registrar" ? erroRegistro : null;
+  const erro =
+    ultimaAcao === "gerar"
+      ? erroGeracao
+      : ultimaAcao === "registrar"
+        ? erroRegistro
+        : ultimaAcao === "apreciar"
+          ? erroApreciacao
+          : null;
 
   async function aoGerarAutografo() {
     setUltimaAcao("gerar");
@@ -84,6 +98,24 @@ export function ConteudoPosAprovacao({ id }: { id: string }) {
       setMostrarForm(false);
     } catch {
       // erro já refletido pelo hook (erroRegistro).
+    }
+  }
+
+  async function aoApreciarVeto(valores: ValoresApreciacao) {
+    if (!tramitacaoExecutiva) return;
+    setUltimaAcao("apreciar");
+    setMensagemStatus(null);
+    try {
+      const atualizada = await apreciar({
+        lockVersion: tramitacaoExecutiva.lockVersion,
+        resultado: valores.resultado,
+        vetoVotacaoId: valores.vetoVotacaoId,
+      });
+      // o estado sai de "vetado" p/ veto_mantido|veto_derrubado — o card de Desfecho comunica o resultado.
+      setPosAprovacaoLocal({ autografo, tramitacaoExecutiva: atualizada });
+      setMostrarFormApreciacao(false);
+    } catch {
+      // erro já refletido pelo hook (erroApreciacao).
     }
   }
 
@@ -226,21 +258,51 @@ export function ConteudoPosAprovacao({ id }: { id: string }) {
                   </>
                 )}
 
-                {tramitacaoExecutiva && tramitacaoExecutiva.estado !== "aguardando" && (
+                {/* VETADO: a Câmara aprecia (mantém ou derruba). GAP fechado — antes era só texto estático. */}
+                {tramitacaoExecutiva?.estado === "vetado" && (
                   <div className="card">
-                    <h2>Desfecho</h2>
+                    <h2>Apreciação do veto</h2>
                     <p>
-                      {tramitacaoExecutiva.estado === "vetado" &&
-                        "Veto aguardando apreciação da Câmara (a votação de apreciação segue outro canal — o placar do plenário)."}
-                      {tramitacaoExecutiva.estado === "veto_mantido" && "Veto mantido pela Câmara — a matéria é arquivada."}
-                      {tramitacaoExecutiva.estado === "veto_derrubado" &&
-                        "Veto derrubado pela Câmara — a lei segue para promulgação."}
-                      {(tramitacaoExecutiva.estado === "sancionado" ||
-                        tramitacaoExecutiva.estado === "sancao_tacita") &&
-                        "A matéria foi sancionada e segue para promulgação/publicação."}
+                      O Executivo vetou{tramitacaoExecutiva.vetoTipo ? ` (veto ${tramitacaoExecutiva.vetoTipo})` : ""}.
+                      A Câmara aprecia o veto em votação no plenário — registre aqui o resultado.
                     </p>
+                    {!mostrarFormApreciacao && (
+                      <div className="acoes">
+                        <button
+                          type="button"
+                          className="btn btn-primaria btn-mini"
+                          onClick={() => setMostrarFormApreciacao(true)}
+                        >
+                          Apreciar o veto
+                        </button>
+                      </div>
+                    )}
+                    {mostrarFormApreciacao && (
+                      <FormApreciarVeto
+                        aoApreciar={aoApreciarVeto}
+                        aoCancelar={() => setMostrarFormApreciacao(false)}
+                        enviando={estadoApreciacao === "enviando"}
+                        erro={ultimaAcao === "apreciar" ? erroApreciacao : null}
+                      />
+                    )}
                   </div>
                 )}
+
+                {tramitacaoExecutiva &&
+                  tramitacaoExecutiva.estado !== "aguardando" &&
+                  tramitacaoExecutiva.estado !== "vetado" && (
+                    <div className="card">
+                      <h2>Desfecho</h2>
+                      <p>
+                        {tramitacaoExecutiva.estado === "veto_mantido" && "Veto mantido pela Câmara — a matéria é arquivada."}
+                        {tramitacaoExecutiva.estado === "veto_derrubado" &&
+                          "Veto derrubado pela Câmara — a lei segue para promulgação."}
+                        {(tramitacaoExecutiva.estado === "sancionado" ||
+                          tramitacaoExecutiva.estado === "sancao_tacita") &&
+                          "A matéria foi sancionada e segue para promulgação/publicação."}
+                      </p>
+                    </div>
+                  )}
               </aside>
             </div>
           </>
