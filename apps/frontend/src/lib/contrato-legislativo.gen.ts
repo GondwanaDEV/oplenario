@@ -231,3 +231,21 @@ export interface AcusarCienciaOut {
   id: string;
   cienteEm: string;
 }
+
+export interface GatilhoPossivelOut {
+  gatilho: string;
+  destinosPossiveis: string[];
+  podeSerRecusado: boolean;
+  exigeAutorizacao: boolean;
+}
+
+export interface TramitacaoOut {
+  proposicaoId: string;
+  estadoAtual: string;
+  templateId: string | null;
+  estadoTerminal: boolean | null;
+  historico: HistoricoTramitacaoItemOut[];
+  historicoTruncado: boolean;
+  gatilhosPossiveis: GatilhoPossivelOut[];
+  nota: string | null;
+}

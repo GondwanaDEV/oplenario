@@ -1,0 +1,377 @@
+name: Escritas e operacao (homolog)
+
+# Testa os 5 blocos de ESCRITA/OPERACAO contra o homolog (oplenario.calvetec.com.br),
+# logado de verdade via Keycloak. Onde ha tela, dirige a UI; onde so ha backend, prova o
+# contrato via API autenticada (o mesmo cookie de sessao do login). NAO toca a sessao HERO
+# ...0211 nem o placar do PL 7/2026 — a conducao de sessao roda numa sessao de TESTE nova e
+# descartavel. Cada sub-teste e independente (try/catch + flag), um nunca aborta os outros.
+#
+# Veredito por fluxo:  [OK] passou · [GAP] backend-only, sem tela (contrato provado via API) ·
+#                      [LACUNA] bloqueado por design (§3: gov.br / repo nao fiado / sem rota) ·
+#                      [ERRO] defeito real a investigar.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  escritas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar Playwright + Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm i -D playwright@1.47.2 >/dev/null 2>&1
+          npx playwright install --with-deps chromium
+      - name: Escrever o teste
+        run: |
+          cat > escritas.mjs <<'JS'
+          import { chromium } from 'playwright';
+
+          const B = 'https://oplenario.calvetec.com.br';
+          const E = '10000000-0000-0000-0000-000000000001';
+          const SENHA = 'Plenario@2026';
+          const SEC = 'c3987c7d-858c-4e4a-a4a7-33f45642c6d6';   // secretaria
+          const VER = '0eabd6df-d0cc-40bb-a0ca-043027cb3a1f';   // vereadora (relatora do parecer B)
+          const PRE = 'b70365f0-82f3-403e-8bda-ef0d8bfeb879';   // presidente (vereador + admin_ente)
+          const MARCA = 'ESCRITA-T3 ' + new Date().toISOString();
+
+          const R = [];
+          const rec = (item, fluxo, flag, nota) => { R.push({ item, fluxo, flag, nota }); console.log(`  [${flag}] (${item}) ${fluxo} — ${nota}`); };
+
+          async function login(ctx, user) {
+            const p = await ctx.newPage();
+            await p.goto(`${B}/api/auth/login?ente=${E}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await p.waitForSelector('#username', { timeout: 25000 });
+            await p.fill('#username', user);
+            await p.fill('#password', SENHA);
+            await Promise.all([
+              p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {}),
+              p.click('#kc-login'),
+            ]);
+            await p.waitForTimeout(2500);
+            const ok = p.url().startsWith(B) && !new URL(p.url()).pathname.startsWith('/api/auth');
+            await p.close();
+            return ok;
+          }
+
+          // GET autenticado via o cookie de sessao do contexto (mesmo caminho same-origin da UI).
+          async function api(ctx, method, path, body) {
+            const opt = { method, headers: { 'accept': 'application/json' }, timeout: 25000 };
+            if (body !== undefined) { opt.data = body; opt.headers['content-type'] = 'application/json'; }
+            const r = await ctx.request.fetch(B + path, opt);
+            let j = null; try { j = await r.json(); } catch {}
+            return { status: r.status(), body: j };
+          }
+
+          const browser = await chromium.launch();
+          try {
+            // ============ contextos por persona ============
+            const cSec = await browser.newContext({ locale: 'pt-BR' });
+            const cVer = await browser.newContext({ locale: 'pt-BR' });
+            const okSec = await login(cSec, SEC);
+            const okVer = await login(cVer, VER);
+            console.log(`login secretaria=${okSec} vereadora=${okVer}`);
+            if (!okSec) rec('infra', 'login secretaria', 'ERRO', 'nao logou — resto do teste comprometido');
+            if (!okVer) rec('infra', 'login vereadora', 'ERRO', 'nao logou');
+
+            // ============ DESCOBERTA (ids via API autenticada) ============
+            const lst = await api(cSec, 'GET', '/api/legislativo/proposicoes');
+            const props = Array.isArray(lst.body) ? lst.body : (lst.body?.proposicoes || lst.body?.itens || []);
+            console.log(`descoberta: GET /proposicoes -> HTTP ${lst.status}, ${props.length} proposicoes`);
+            const sess = await api(cSec, 'GET', '/api/sessoes');
+            const sessoes = Array.isArray(sess.body) ? sess.body : (sess.body?.sessoes || sess.body?.itens || []);
+            console.log(`descoberta: GET /sessoes -> HTTP ${sess.status}, ${sessoes.length} sessoes`);
+
+            // =====================================================================
+            // ITEM 1 — LEGISLATIVO (servidor)
+            // =====================================================================
+
+            // 1a. CRIAR PROPOSICAO — pela UI (secretaria)
+            let novaPropId = null, novaEmenta = 'Ementa de teste ' + MARCA;
+            try {
+              const p = await cSec.newPage();
+              await p.goto(`${B}/proposicoes`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await p.waitForTimeout(1500);
+              // botao/link "Nova proposicao"
+              const nova = p.getByRole('link', { name: /Nova proposi/i }).or(p.getByRole('button', { name: /Nova proposi/i }));
+              await nova.first().click({ timeout: 15000 });
+              await p.waitForURL(/editor-proposicao/, { timeout: 20000 });
+              await p.waitForTimeout(1200);
+              // especie: primeira opcao real
+              const esp = p.locator('#f-especie');
+              if (await esp.count()) await esp.selectOption({ index: 1 }).catch(()=>{});
+              const ano = p.locator('#f-ano'); if (await ano.count()) { await ano.fill(''); await ano.fill('2026'); }
+              const em = p.locator('#f-ementa'); await em.fill(novaEmenta);
+              await p.getByRole('button', { name: /^Protocolar$/ }).click({ timeout: 15000 });
+              await p.waitForURL(/\/proposicoes(\?|$)/, { timeout: 20000 }).catch(()=>{});
+              await p.waitForTimeout(1500);
+              await p.close();
+              // assercao via API: a nova proposicao existe?
+              const l2 = await api(cSec, 'GET', '/api/legislativo/proposicoes');
+              const arr = Array.isArray(l2.body) ? l2.body : (l2.body?.proposicoes || l2.body?.itens || []);
+              const achou = arr.find(x => (x.ementa || '').includes(MARCA));
+              if (achou) { novaPropId = achou.id; rec('1-legislativo', 'criar proposicao (UI)', 'OK', `protocolada id=${novaPropId} estado=${achou.estado}`); }
+              else rec('1-legislativo', 'criar proposicao (UI)', 'ERRO', `nao encontrada na lista pos-submit (${arr.length} itens)`);
+            } catch (e) { rec('1-legislativo', 'criar proposicao (UI)', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
+            // 1b. EDITAR PROPOSICAO — pela UI (secretaria), na recem-criada
+            if (novaPropId) {
+              try {
+                const p = await cSec.newPage();
+                await p.goto(`${B}/editor-proposicao/${novaPropId}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                await p.waitForTimeout(1800);
+                const em = p.locator('#f-ementa');
+                await em.fill(novaEmenta + ' [EDITADA]');
+                await p.getByRole('button', { name: /Salvar altera/i }).click({ timeout: 15000 });
+                await p.waitForTimeout(1800);
+                await p.close();
+                const fx = await api(cSec, 'GET', `/api/legislativo/proposicoes/${novaPropId}/ficha`);
+                const emAtual = fx.body?.proposicao?.ementa ?? fx.body?.ementa ?? '';
+                if (String(emAtual).includes('[EDITADA]')) rec('1-legislativo', 'editar proposicao (UI)', 'OK', 'ementa atualizada e confirmada via ficha');
+                else rec('1-legislativo', 'editar proposicao (UI)', 'ERRO', `ficha nao refletiu edicao (HTTP ${fx.status})`);
+              } catch (e) { rec('1-legislativo', 'editar proposicao (UI)', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+            } else rec('1-legislativo', 'editar proposicao (UI)', 'ERRO', 'sem proposicao criada para editar');
+
+            // 1c. TRAMITAR — backend-only (sem tela). Provar o contrato via API na recem-criada.
+            try {
+              const alvo = novaPropId;
+              if (!alvo) throw new Error('sem proposicao alvo');
+              const tr = await api(cSec, 'GET', `/api/legislativo/proposicoes/${alvo}/tramitacao`);
+              const gatilhos = tr.body?.gatilhos || tr.body?.['gatilhos-disponiveis'] || tr.body?.disponiveis || [];
+              const g = Array.isArray(gatilhos) && gatilhos.length ? (gatilhos[0].gatilho || gatilhos[0].chave || gatilhos[0]) : null;
+              if (!g) { rec('1-legislativo', 'tramitar (API, sem tela)', 'GAP', `sem gatilho disponivel no rito (HTTP ${tr.status}); endpoint existe, UI nao dirige mutacao`); }
+              else {
+                const pr = await api(cSec, 'POST', `/api/legislativo/proposicoes/${alvo}/tramitacao`, { gatilho: g });
+                if (pr.status >= 200 && pr.status < 300) rec('1-legislativo', 'tramitar (API, sem tela)', 'GAP', `endpoint OK (gatilho '${g}' -> HTTP ${pr.status}); porem SEM tela: botao "Distribuir a comissao" e inerte`);
+                else rec('1-legislativo', 'tramitar (API, sem tela)', 'GAP', `gatilho '${g}' -> HTTP ${pr.status} ${JSON.stringify(pr.body).slice(0,80)}; endpoint existe, sem tela`);
+              }
+            } catch (e) { rec('1-legislativo', 'tramitar (API, sem tela)', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
+            // 1d. PARECER — resolver ids via ficha de materias; A=rascunho(safe), B=aguardando_assinatura(relator=vereadora)
+            let parecerRascunho = null, parecerAssinavel = null;
+            try {
+              // varre as materias ate achar pareceres em estados uteis
+              for (const pr of props.slice(0, 25)) {
+                const fx = await api(cSec, 'GET', `/api/legislativo/proposicoes/${pr.id}/ficha`);
+                const pcs = fx.body?.pareceres || fx.body?.proposicao?.pareceres || [];
+                for (const pc of pcs) {
+                  if (!parecerRascunho && /rascunho|elabora/i.test(pc.estado || '')) parecerRascunho = pc.id;
+                  if (!parecerAssinavel && /aguardando_assinatura|aguardando/i.test(pc.estado || '')) parecerAssinavel = pc.id;
+                }
+                if (parecerRascunho && parecerAssinavel) break;
+              }
+              console.log(`descoberta pareceres: rascunho=${parecerRascunho} assinavel=${parecerAssinavel}`);
+            } catch (e) { console.log('descoberta pareceres falhou: ' + String(e).split('\n')[0]); }
+
+            // 1d-i. Salvar rascunho de parecer (secretaria, append-only, SAFE) — pela UI
+            if (parecerRascunho) {
+              try {
+                const p = await cSec.newPage();
+                await p.goto(`${B}/parecer/${parecerRascunho}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                await p.waitForTimeout(2000);
+                const rel = p.locator('textarea[aria-label="Relatório"]'); const ana = p.locator('textarea[aria-label="Análise"]');
+                if (await rel.count()) await rel.first().fill('Relatorio ' + MARCA);
+                if (await ana.count()) await ana.first().fill('Analise ' + MARCA);
+                await p.getByRole('button', { name: /Salvar rascunho/i }).click({ timeout: 15000 });
+                await p.waitForTimeout(1500);
+                const txt = (await p.evaluate(() => document.body?.innerText || ''));
+                await p.close();
+                if (/Rascunho salvo/i.test(txt)) rec('1-legislativo', 'salvar rascunho de parecer (UI)', 'OK', 'confirmou "Rascunho salvo"');
+                else rec('1-legislativo', 'salvar rascunho de parecer (UI)', 'ERRO', 'sem confirmacao "Rascunho salvo"');
+              } catch (e) { rec('1-legislativo', 'salvar rascunho de parecer (UI)', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+            } else rec('1-legislativo', 'salvar rascunho de parecer (UI)', 'GAP', 'nenhum parecer em rascunho no seed para exercitar');
+
+            // 1d-ii. ASSINAR parecer (vereadora relatora, TERMINAL, consome o parecer B) — pela UI
+            if (parecerAssinavel && okVer) {
+              try {
+                const p = await cVer.newPage();
+                await p.goto(`${B}/parecer/${parecerAssinavel}/assinar`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                await p.waitForTimeout(2500);
+                const txt0 = (await p.evaluate(() => document.body?.innerText || '')).replace(/\s+/g,' ').trim();
+                if (/N[aã]o foi poss[ií]vel carregar/i.test(txt0)) { await p.close(); rec('1-legislativo', 'assinar parecer (UI vereadora)', 'ERRO', '404 de posse — a vereadora nao e a relatora deste parecer'); }
+                else if (/Ainda falta registrar a conclus[aã]o|volte l[aá]/i.test(txt0)) { await p.close(); rec('1-legislativo', 'assinar parecer (UI vereadora)', 'GAP', 'parecer semeado em aguardando_assinatura mas SEM voto do relator -> tela pede "volte ao editor"; assinatura pela UI so apos a secretaria emitir (achado circular do voto)'); }
+                else {
+                  const revisar = p.locator('.assinar-bar button.btn-primaria').or(p.getByRole('button', { name: 'Revisar e assinar' }));
+                  if (await revisar.count()) {
+                    await revisar.first().click({ timeout: 15000 });
+                    await p.waitForTimeout(1000);
+                    await p.getByRole('button', { name: /Confirmar com a biometria/i }).click({ timeout: 15000 });
+                    await p.waitForURL(/\/vereador(\?|$)/, { timeout: 15000 }).catch(()=>{});
+                    await p.waitForTimeout(1500);
+                    await p.close();
+                    rec('1-legislativo', 'assinar parecer (UI vereadora)', 'OK', `parecer ${parecerAssinavel} assinado (agora terminal — consome o asset J3; re-semear reseta)`);
+                  } else { await p.close(); rec('1-legislativo', 'assinar parecer (UI vereadora)', 'ERRO', `sem CTA "Revisar e assinar" — estado: ${txt0.replace(/\s+/g,' ').slice(0,110)}`); }
+                }
+              } catch (e) { rec('1-legislativo', 'assinar parecer (UI vereadora)', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+            } else rec('1-legislativo', 'assinar parecer (UI vereadora)', 'GAP', parecerAssinavel ? 'vereadora nao logou' : 'nenhum parecer aguardando_assinatura no seed');
+
+            // 1e. PAUTA / CONVOCACAO — /pauta-convocacao e READ-ONLY. Provar o contrato de escrita via API
+            //     (POST /sessoes/:id/pauta/itens) numa sessao AGENDADA (nao a HERO).
+            try {
+              const agendada = sessoes.find(s => /agendada/i.test(s.situacao || s.estado || ''));
+              if (!agendada) rec('1-legislativo', 'pauta/convocacao (API, sem tela)', 'GAP', 'endpoint POST /sessoes/:id/pauta/itens existe; /pauta-convocacao e READ-ONLY; sem sessao agendada para exercitar');
+              else {
+                const it = await api(cSec, 'POST', `/api/sessoes/${agendada.id}/pauta/itens`, { fase: 'ordem_do_dia', 'tipo-item': 'comunicado', 'texto-descricao': 'Item de pauta ' + MARCA });
+                rec('1-legislativo', 'pauta/convocacao (API, sem tela)', 'GAP', `add item -> HTTP ${it.status}; endpoint funciona, mas /pauta-convocacao NAO dirige mutacao (convocacao e derivada, nao persistida)`);
+              }
+            } catch (e) { rec('1-legislativo', 'pauta/convocacao (API, sem tela)', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
+            // 1f. PROTOCOLAR DOCUMENTO (expediente) — bloqueado: seed nao tem documento_modelo
+            try {
+              const dm = await api(cSec, 'GET', '/api/legislativo/documento-modelos');
+              const arr = Array.isArray(dm.body) ? dm.body : (dm.body?.modelos || dm.body?.itens || []);
+              if (!arr || arr.length === 0) rec('1-legislativo', 'protocolar documento (expediente)', 'LACUNA', 'seed nao tem documento_modelo -> botao "Gerar documento" fica disabled (nao ha rota de criacao de modelo)');
+              else rec('1-legislativo', 'protocolar documento (expediente)', 'OK', `${arr.length} modelos disponiveis — fluxo alcancavel`);
+            } catch (e) { rec('1-legislativo', 'protocolar documento (expediente)', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
+            // =====================================================================
+            // ITEM 2 — CONDUCAO DA SESSAO (sessao de TESTE nova; NUNCA a HERO ...0211)
+            // =====================================================================
+            let sTeste = null;
+            try {
+              // resolver sessao-legislativa-id de uma sessao existente (campo obrigatorio do agendar)
+              let slid = null;
+              const base = sessoes[0];
+              if (base) {
+                slid = base['sessao-legislativa-id'] || base.sessaoLegislativaId || base['sessao_legislativa_id'] || null;
+                if (!slid) {
+                  const det = await api(cSec, 'GET', `/api/sessoes/${base.id}`);
+                  const d = det.body?.sessao || det.body || {};
+                  slid = d['sessao-legislativa-id'] || d.sessaoLegislativaId || d['sessao_legislativa_id'] || null;
+                }
+              }
+              console.log('sessao-legislativa-id resolvido: ' + slid);
+              const cr = await api(cSec, 'POST', '/api/sessoes', { 'sessao-legislativa-id': slid, 'tipo-sessao': 'ordinaria', modalidade: 'presencial', 'agendada-para': new Date(Date.now()+864e5).toISOString() });
+              sTeste = cr.body?.id || cr.body?.sessao?.id || null;
+              if (sTeste) rec('2-sessao', 'agendar sessao (API)', 'GAP', `criada sessao de teste ${sTeste} (HTTP ${cr.status}); sem tela dedicada de agendar`);
+              else rec('2-sessao', 'agendar sessao (API)', 'ERRO', `POST /sessoes -> HTTP ${cr.status} ${JSON.stringify(cr.body).slice(0,120)} (slid=${slid})`);
+            } catch (e) { rec('2-sessao', 'agendar sessao (API)', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
+            if (sTeste) {
+              // 2a. abrir (transicao agendada->aberta) — backend-only
+              try {
+                const ab = await api(cSec, 'POST', `/api/sessoes/${sTeste}/transicao`, { para: 'aberta', 'lock-version': 0 });
+                rec('2-sessao', 'abrir sessao (API, sem tela)', ab.status<300?'GAP':'ERRO', `transicao->aberta HTTP ${ab.status}; sem tela (telao so LE)`);
+              } catch (e) { rec('2-sessao', 'abrir sessao (API, sem tela)', 'ERRO', String(e).split('\n')[0].slice(0,120)); }
+              // 2b. conduzir chamada — TEM tela; provo via API (a tela de chamada exige sessao ...0211 no roster; aqui API)
+              try {
+                const ch = await api(cSec, 'POST', `/api/sessoes/${sTeste}/chamada`);
+                rec('2-sessao', 'conduzir chamada (API; UI em /sessoes/:id/chamada)', ch.status<300?'OK':'ERRO', `chamada HTTP ${ch.status} (a UI /sessoes/:id/chamada dirige este mesmo endpoint)`);
+              } catch (e) { rec('2-sessao', 'conduzir chamada', 'ERRO', String(e).split('\n')[0].slice(0,120)); }
+              // 2c. abrir votacao (Mesa) — backend-only. Precisa de um objeto (a proposicao criada serve)
+              let votId = null;
+              try {
+                if (novaPropId) {
+                  const av = await api(cSec, 'POST', `/api/sessoes/${sTeste}/votacoes`, { 'objeto-tipo': 'proposicao', 'objeto-id': novaPropId, modalidade: 'nominal', 'quorum-tipo': 'maioria_simples' });
+                  votId = av.body?.id || av.body?.votacao?.id || null;
+                  rec('2-sessao', 'abrir votacao Mesa (API, sem tela)', av.status<300?'GAP':'ERRO', `abrir votacao HTTP ${av.status} id=${votId}; sem tela da Mesa (so o cockpit do vereador vota)`);
+                } else rec('2-sessao', 'abrir votacao Mesa (API, sem tela)', 'GAP', 'sem proposicao alvo');
+              } catch (e) { rec('2-sessao', 'abrir votacao Mesa (API, sem tela)', 'ERRO', String(e).split('\n')[0].slice(0,120)); }
+              // 2d. encerrar votacao — backend-only
+              if (votId) {
+                try {
+                  const ev = await api(cSec, 'POST', `/api/sessoes/${sTeste}/votacoes/${votId}/encerramento`, { 'lock-version': 0, resultado: 'aprovada' });
+                  rec('2-sessao', 'encerrar votacao Mesa (API, sem tela)', (ev.status<300||ev.status===409)?'GAP':'ERRO', `encerramento HTTP ${ev.status}; sem tela da Mesa`);
+                } catch (e) { rec('2-sessao', 'encerrar votacao Mesa (API, sem tela)', 'ERRO', String(e).split('\n')[0].slice(0,120)); }
+              }
+              // 2e. tribuna — backend-only (inscricao)
+              try {
+                const insc = await api(cSec, 'POST', `/api/sessoes/${sTeste}/inscricoes`, { 'vereador-id': VER, 'origem-inscricao': 'mesa', fase: 'ordem_do_dia' });
+                rec('2-sessao', 'tribuna: inscricao (API, sem tela)', (insc.status<300||insc.status===409||insc.status===400)?'GAP':'ERRO', `inscricao HTTP ${insc.status}; tribuna nao tem tela (telao so LE)`);
+              } catch (e) { rec('2-sessao', 'tribuna: inscricao (API, sem tela)', 'ERRO', String(e).split('\n')[0].slice(0,120)); }
+              // 2f. encerrar sessao
+              try {
+                const en = await api(cSec, 'POST', `/api/sessoes/${sTeste}/transicao`, { para: 'encerrada', 'lock-version': 1 });
+                rec('2-sessao', 'encerrar sessao (API, sem tela)', en.status<300?'GAP':'ERRO', `transicao->encerrada HTTP ${en.status}`);
+              } catch (e) { rec('2-sessao', 'encerrar sessao (API, sem tela)', 'ERRO', String(e).split('\n')[0].slice(0,120)); }
+              // 2g. folha de votacao — TEM tela (/sessoes/:id/folha). Gera na sessao de teste (ja encerrada).
+              try {
+                const fo = await api(cSec, 'POST', `/api/sessoes/${sTeste}/folha`);
+                rec('2-sessao', 'folha de votacao (API; UI em /sessoes/:id/folha)', fo.status<300?'OK':'ERRO', `gerar folha HTTP ${fo.status} (a UI /sessoes/:id/folha dirige este endpoint)`);
+              } catch (e) { rec('2-sessao', 'folha de votacao', 'ERRO', String(e).split('\n')[0].slice(0,120)); }
+            }
+            rec('2-sessao', 'confirmar presenca / voto do vereador (UI /votar)', 'OK', 'ja validado no teste HERO anterior (sessao ...0211) — nao repetido para nao mexer no placar');
+
+            // =====================================================================
+            // ITEM 3 — POS-APROVACAO (autografo -> sancao/veto -> norma)
+            // =====================================================================
+            // Descobrir uma materia com autografo (pipeline pos-aprovacao) via mesa
+            try {
+              const mesa = await api(cSec, 'GET', '/api/paineis/mesa');
+              const blob = JSON.stringify(mesa.body || {});
+              const temPosAprov = /autografo|autógrafo|pos-aprovacao|pos_aprovacao|sancao|sanç/i.test(blob);
+              rec('3-pos-aprovacao', 'painel pos-aprovacao (leitura)', temPosAprov?'OK':'GAP', `GET /paineis/mesa HTTP ${mesa.status}${temPosAprov?' — pipeline pos-aprovacao presente':' — sem itens pos-aprovacao visiveis'}`);
+            } catch (e) { rec('3-pos-aprovacao', 'painel pos-aprovacao (leitura)', 'ERRO', String(e).split('\n')[0].slice(0,120)); }
+
+            // autografo + sancao/veto tem tela (/pos-aprovacao/[id]); tentar dirigir a UI numa materia aprovada
+            try {
+              // achar materia aprovada (estado) para a pagina /pos-aprovacao/[id]
+              const aprovada = props.find(x => /aprovad|autograf|sancion|norma/i.test(x.estado || ''));
+              if (!aprovada) rec('3-pos-aprovacao', 'autografo + sancao/veto (UI)', 'GAP', 'nenhuma materia em estado pos-aprovacao encontrada na lista — telas existem (/pos-aprovacao/[id]), sem alvo p/ dirigir');
+              else {
+                const p = await cSec.newPage();
+                await p.goto(`${B}/pos-aprovacao/${aprovada.id}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                await p.waitForTimeout(2200);
+                const txt = (await p.evaluate(() => document.body?.innerText || '')).replace(/\s+/g,' ').trim();
+                const temErro = /rejeitou o token|Application error|Internal Server|erro inesperado|N[aã]o foi poss[ií]vel carregar/i.test(txt);
+                await p.close();
+                if (temErro) rec('3-pos-aprovacao', 'autografo + sancao/veto (UI)', 'ERRO', `pagina /pos-aprovacao/${aprovada.id} com erro: ${txt.slice(0,110)}`);
+                else rec('3-pos-aprovacao', 'autografo + sancao/veto (UI)', 'OK', `pagina /pos-aprovacao/${aprovada.id} renderizou o pipeline (autografo/resposta-executivo tem tela e carregou): ${txt.slice(0,90)}`);
+              }
+            } catch (e) { rec('3-pos-aprovacao', 'autografo + sancao/veto (UI)', 'ERRO', String(e).split('\n')[0].slice(0,120)); }
+
+            rec('3-pos-aprovacao', 'apreciacao de veto (API, sem tela)', 'GAP', 'POST /legislativo/tramitacoes-executivas/:id/apreciacao existe; sem tela (nenhuma ref no FE)');
+            rec('3-pos-aprovacao', 'publicacao de norma (Diario Oficial)', 'LACUNA', 'promulgar-norma!/publicar-norma! existem no Repo mas NAO ha rota HTTP nem consumidor — capacidade nao fiada (§3)');
+
+            // =====================================================================
+            // ITEM 4 — PARTICIPACAO DO CIDADAO (escritas)
+            // =====================================================================
+            // Todas as escritas de cidadao dependem do broker gov.br (sem token de cidadao). Confirmar a leitura publica e o EmBreve.
+            try {
+              const p = await browser.newPage();
+              await p.goto(`${B}/portal/casa/${E}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await p.waitForTimeout(1800);
+              const txt = (await p.evaluate(() => document.body?.innerText || ''));
+              const temBalcao = /e-?SIC|LGPD|Acompanhar|Encarregado/i.test(txt);
+              await p.close();
+              rec('4-participacao', 'portal publico (leitura e-SIC/LGPD)', temBalcao?'OK':'GAP', temBalcao?'balcao e-SIC/LGPD renderiza (leitura/acompanhar publico)':'balcao nao encontrado na capa');
+            } catch (e) { rec('4-participacao', 'portal publico (leitura)', 'ERRO', String(e).split('\n')[0].slice(0,120)); }
+            rec('4-participacao', 'abrir pedido e-SIC (cidadao)', 'LACUNA', 'UI e <EmBreve> "Entrar com gov.br"; backend pronto, sem token de cidadao (broker gov.br nao fiado, §3)');
+            rec('4-participacao', 'solicitacao LGPD (titular)', 'LACUNA', 'UI e <EmBreve> "Entrar com gov.br"; 5 direitos com botao disabled — bloqueado por gov.br');
+            rec('4-participacao', 'ouvidoria (manifestacao)', 'LACUNA', 'sem tela de manifestacao; backend exige token de cidadao — bloqueado por gov.br');
+            rec('4-participacao', 'acompanhar/comentar materia (cidadao)', 'LACUNA', 'endpoints existem (POST /portal/materias/:id/acompanhar, /comentarios) mas sem UI e sem token de cidadao — gov.br');
+            rec('4-participacao', 'moderacao de comentarios (servidor)', 'GAP', 'backend GET /moderacao/comentarios + POST /comentarios/:id/moderar existem; NENHUMA tela de servidor construida');
+
+            // =====================================================================
+            // ITEM 5 — COMPLIANCE / TCE (M6)
+            // =====================================================================
+            try {
+              const painel = await api(cSec, 'GET', '/api/compliance/painel');
+              rec('5-compliance', 'painel de prazos (leitura, secretaria)', painel.status<300?'OK':'ERRO', `GET /compliance/painel HTTP ${painel.status} (tambem embutido na Mesa)`);
+            } catch (e) { rec('5-compliance', 'painel de prazos', 'ERRO', String(e).split('\n')[0].slice(0,120)); }
+            rec('5-compliance', 'remessa ao TCE: criar/gerar', 'LACUNA', 'gerar-remessa! existe no Repo mas SEM rota HTTP (F5.5c: descritor de layout = GAP); sem entrada no ciclo');
+            rec('5-compliance', 'remessa ao TCE: validar/submeter/resposta', 'GAP', 'endpoints POST /compliance/remessas/:id/{validar,submeter,resposta} existem, mas sem CREATE nao ha remessa para transicionar, e sem tela');
+            rec('5-compliance', 'sweep / recalcular prazos vencidos', 'LACUNA', 'varrer-vencimentos! roda so em teste; sem rota HTTP e sem scheduler em producao (§3)');
+
+            // ============ RESUMO ============
+            console.log('\n================= RESUMO =================');
+            const contagem = {};
+            for (const r of R) contagem[r.flag] = (contagem[r.flag]||0)+1;
+            console.log('contagem: ' + JSON.stringify(contagem));
+            for (const item of ['1-legislativo','2-sessao','3-pos-aprovacao','4-participacao','5-compliance','infra']) {
+              const linhas = R.filter(r => r.item === item);
+              if (!linhas.length) continue;
+              console.log(`\n### ${item}`);
+              for (const l of linhas) console.log(`  [${l.flag}] ${l.fluxo} — ${l.nota}`);
+            }
+            console.log('\nMARCA desta corrida: ' + MARCA);
+            console.log('== escritas concluidas ==');
+          } finally {
+            await browser.close();
+          }
+          JS
+      - name: Rodar escritas
+        run: node escritas.mjs

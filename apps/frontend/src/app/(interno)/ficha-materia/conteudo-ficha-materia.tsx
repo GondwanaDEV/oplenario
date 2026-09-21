@@ -30,7 +30,7 @@ import "./ficha-materia.css";
 
 export function ConteudoFichaMateria({ id }: { id: string }) {
   const { token } = useAuth();
-  const { dados: ficha, estado } = useFichaMateria(token, id);
+  const { dados: ficha, estado, recarregar } = useFichaMateria(token, id);
 
   if (estado === "carregando") {
     return (
@@ -74,7 +74,7 @@ export function ConteudoFichaMateria({ id }: { id: string }) {
         <FichaCabecalho proposicao={ficha.proposicao} />
 
         <div className="corpo">
-          <FichaMateriaTabs ficha={ficha} token={token} />
+          <FichaMateriaTabs ficha={ficha} token={token} onTramitou={recarregar} />
           <aside className="rail" aria-labelledby="rail-titulo">
             <h2 id="rail-titulo" className="sr-only">
               Dados e ações da matéria

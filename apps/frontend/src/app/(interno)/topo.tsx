@@ -41,6 +41,9 @@ const DESTINOS_NAV = [
   // Onda E fatia 2 — Calendário institucional (a agenda da Casa: sessões agendadas + prazos de
   // compliance). Sem esta entrada a rota existiria órfã, alcançável só por URL digitada.
   { rotulo: "Calendário", href: "/calendario" },
+  // Moderação de comentários (GAP docs/20 → tela de servidor): fila de pendentes + aprovar/rejeitar.
+  // Gated "secretario" (GuardSecretaria na página + exige-papel no backend).
+  { rotulo: "Moderação", href: "/moderacao" },
 ];
 
 export function TopoInterno({ area }: { area: string }) {

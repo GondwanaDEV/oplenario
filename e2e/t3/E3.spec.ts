@@ -51,6 +51,14 @@ function linhaDaTabela(page: import("@playwright/test").Page, id: string) {
 }
 
 test.describe("E3 - A matéria nasce (servidor)", () => {
+  // Robustez de flake (achado do CI, PR #4): sob `next dev` a rota /editor-proposicao e /proposicoes
+  // compilam SOB DEMANDA no 1o acesso; sob contenção do runner isso empurra o ciclo criar->POST->
+  // redirect->render além dos 30s e o spec timeouta (as falhas MUDAVAM de spec a cada run — assinatura de
+  // flake, nao de regressao). `timeout: 90_000` dá folga ao waitForResponse (que herda o timeout do teste);
+  // `retries: 2` reroda o spec flaky com as rotas JÁ quentes -> passa. Retry NUNCA salva um bug real (esse
+  // falha nas 3 tentativas), então não mascara regressão — só absorve a compilação a frio do dev server.
+  test.describe.configure({ retries: 2, timeout: 90_000 });
+
   test("criar proposição — caminho feliz: Projeto de Lei protocolado pela interface", async ({ page }) => {
     const marcador = `Ementa E3 criar ${Date.now()} — dispõe sobre teste de protocolo pela interface.`;
 

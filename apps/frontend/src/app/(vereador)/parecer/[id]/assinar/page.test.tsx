@@ -1,21 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, fireEvent } from "@testing-library/react";
 import PaginaAssinarParecer from "./page";
 import { AuthProvider } from "@/lib/auth";
 import { TemaProvider } from "@/lib/tema";
 
-// Regressão do guard de voto (achado da revisão final de branco, Onda C4): `deriveEstadoAssinatura`
-// (assinatura-vista.test.ts) já prova, no nível de view-model puro, que `votoRelator: null` produz
-// "sem-voto" e não "pronto-pra-revisar". O que falta é uma prova NO NÍVEL DA PÁGINA de que o CTA "Revisar
-// e assinar" — a única porta pra abrir a sheet de confirmação e chamar `confirmar()` — nunca chega a
-// renderizar nesse caso. Sem isto, um refactor futuro que trocasse a condição do CTA por outra (sem passar
-// por `deriveEstadoAssinatura`) não seria pego por nenhum teste.
+// Guard de voto NO NÍVEL DA PÁGINA (achado docs/20 — a jornada de assinatura era circular): com
+// `votoRelator: null` a tela agora está em "escolher-voto" (deriveEstadoAssinatura) — oferece ao relator
+// ESCOLHER a conclusão e só então libera o CTA "Revisar e assinar". Prova que (a) sem escolha o CTA NÃO
+// renderiza (não fabrica um voto) e (b) escolher um voto libera o CTA. Sem isto, um refactor que trocasse
+// a condição do CTA (sem passar por `deriveEstadoAssinatura` + a escolha explícita) não seria pego.
 //
-// Esta é a PRIMEIRA página com rota dinâmica ([id]) a ganhar teste próprio neste repo — nenhum outro
-// page.test.tsx mockava `next/navigation` ainda (todos usam rotas sem segmento dinâmico). O resto do
-// padrão é o MESMO dos demais page.test.tsx (vereador/page.test.tsx, tramitacao/page.test.tsx): mocka
-// `global.fetch`, deixa os hooks reais rodarem — não mocka os próprios hooks (não há precedente de
-// `vi.mock` de hook custom neste repo).
+// Padrão dos demais page.test.tsx: mocka `next/navigation` (rota dinâmica [id]) e `global.fetch`, deixa os
+// hooks reais rodarem.
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "p1" }),
   useRouter: () => ({ push: vi.fn(), back: vi.fn() }),
@@ -55,18 +51,19 @@ describe("PaginaAssinarParecer", () => {
     vi.restoreAllMocks();
   });
 
-  it("votoRelator null -> nunca renderiza o CTA 'Revisar e assinar' (não fabrica voto)", async () => {
+  it("votoRelator null -> oferece a escolha do voto; o CTA só aparece DEPOIS de escolher (nunca fabrica voto)", async () => {
     global.fetch = vi.fn(async () => ({ ok: true, json: async () => parecerSemVotoFake }) as Response) as unknown as typeof fetch;
     renderComProviders("tok-de-teste");
 
-    await waitFor(() =>
-      expect(
-        screen.getByText(/Ainda falta registrar a conclusão \(voto\) do relator/i)
-      ).toBeTruthy()
-    );
+    // o seletor de conclusão aparece; o CTA e a sheet ainda NÃO (nenhuma escolha feita).
+    const opcao = await screen.findByLabelText("Favorável");
     expect(screen.queryByRole("button", { name: /revisar e assinar/i })).toBeNull();
-    // a sheet de confirmação (e portanto o botão "Confirmar com a biometria" que dispara `confirmar()`)
-    // também fica inalcançável — ela só monta quando `sheetAberta` é setada por esse CTA ausente.
     expect(screen.queryByRole("button", { name: /confirmar com a biometria/i })).toBeNull();
+
+    // ao escolher uma conclusão, o CTA passa a ser oferecido.
+    fireEvent.click(opcao);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /revisar e assinar/i })).toBeTruthy()
+    );
   });
 });
