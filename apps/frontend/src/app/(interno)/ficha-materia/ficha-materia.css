@@ -42,7 +42,7 @@
 /* AzulejoFaixa (src/lib/charts/azulejo-faixa.tsx) — mesmo porte de (publico)/public.css, mesma
    disciplina de duplicação por-rota já documentada no topo deste arquivo (.chip/.em-breve); sem estas
    regras o SVG cai no fill preto padrão do browser (bug: tiles pretos sólidos nos 2 temas). */
-.azulejo-faixa { width: 100%; height: auto; display: block; }
+.azulejo-faixa { max-width: 100%; height: auto; display: block; }
 .azulejo-faixa text { fill: var(--texto-2); }
 .azulejo-faixa text.ativo { fill: var(--acento-texto); font-weight: 600; }
 .azulejo-faixa text.pendente { fill: var(--texto-2); opacity: .88; }

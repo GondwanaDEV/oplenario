@@ -129,7 +129,7 @@
    por SITUAÇÃO (concluido/ativo/pendente), não cor fixa por posição como o markup original hardcoded
    (portal-cidadao.html:441-445). As regras de texto abaixo são o porte verbatim; as de
    `.azulejo-tile`/`.azulejo-marca` são NOVAS (Task 0.5), necessárias para o componente generalizado. */
-.azulejo-faixa { width: 100%; height: auto; display: block; }
+.azulejo-faixa { max-width: 100%; height: auto; display: block; }
 .azulejo-faixa text { fill: var(--texto-2); }
 .azulejo-faixa text.ativo { fill: var(--acento-texto); font-weight: 600; }
 /* opacity .88 (não .62 do porte original) — Fatia A2.1 review de contraste: com dado real, o rótulo
