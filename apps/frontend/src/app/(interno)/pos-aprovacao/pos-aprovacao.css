@@ -77,6 +77,14 @@
 
 /* ---- Registrar retorno ---- */
 .form-retorno { margin-top: 1rem; }
+.form-apreciacao { margin-top: 1rem; }
+.form-apreciacao .campo { margin-top: 0.8rem; }
+.form-apreciacao .campo label { display: block; font-size: var(--t-12); color: var(--texto-2); margin-bottom: 0.3rem; }
+.form-apreciacao .campo input[type="text"] {
+  width: 100%; padding: 0.5rem 0.6rem; border: 1px solid var(--linha); border-radius: 8px;
+  background: var(--surface); color: var(--texto); font: inherit; font-size: var(--t-14);
+}
+.form-apreciacao .campo input[type="text"]:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }
 .form-erro { color: var(--acento-texto); font-size: var(--t-13); font-weight: 600; margin: 0 0 0.8rem; }
 .fr-opcoes { display: flex; flex-direction: column; gap: 0.5rem; }
 .fr-opcao { display: flex; align-items: center; gap: 0.5rem; font-size: var(--t-13); color: var(--texto); min-height: 32px; }
