@@ -1,0 +1,114 @@
+name: Fumaca da conducao de sessao (producao)
+
+# Smoke test SÓ-LEITURA das telas da frente "Condução de sessão" deployadas em producao
+# (oplenario.calvetec.com.br): /agendar-sessao e /sessoes/:id/conduzir (com os paineis de Votacao e
+# Tribuna quando a sessao esta aberta). Loga de verdade via Keycloak como a secretaria (papel que a Mesa
+# exige) e confirma que a UI RENDERIZA — NAO dispara nenhuma transicao/votacao/inscricao (nao escreve nada
+# na producao). Cada checagem e independente ([OK]/[ERRO]).
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fumaca:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar Playwright + Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm i -D playwright@1.47.2 >/dev/null 2>&1
+          npx playwright install --with-deps chromium
+      - name: Escrever o teste
+        run: |
+          cat > fumaca.mjs <<'JS'
+          import { chromium } from 'playwright';
+          const B = 'https://oplenario.calvetec.com.br';
+          const E = '10000000-0000-0000-0000-000000000001';
+          const SENHA = 'Plenario@2026';
+          // UUID da secretaria do ultimo reseed do homolog/producao (cartao de credenciais do semear #8).
+          // Se o banco for re-semeado, reveja o passo "Ids da demo" do semear-hml e atualize aqui.
+          const SEC = '585e6532-e754-4d45-ad82-1667fdfb220e';
+          const R = [];
+          const rec = (tela, flag, nota) => { R.push({ tela, flag, nota }); console.log(`  [${flag}] ${tela} — ${nota}`); };
+
+          async function login(ctx, user) {
+            const p = await ctx.newPage();
+            await p.goto(`${B}/api/auth/login?ente=${E}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await p.waitForSelector('#username', { timeout: 25000 });
+            await p.fill('#username', user); await p.fill('#password', SENHA);
+            await Promise.all([ p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(()=>{}), p.click('#kc-login') ]);
+            await p.waitForTimeout(2500);
+            const ok = p.url().startsWith(B) && !new URL(p.url()).pathname.startsWith('/api/auth');
+            await p.close(); return ok;
+          }
+          async function api(ctx, path) {
+            const r = await ctx.request.fetch(B + path, { headers: { accept: 'application/json' }, timeout: 25000 });
+            let j = null; try { j = await r.json(); } catch {}
+            return { status: r.status(), body: j };
+          }
+          const texto = async (p) => (await p.evaluate(() => document.body?.innerText || '')).replace(/\s+/g,' ').trim();
+
+          const browser = await chromium.launch();
+          try {
+            const cSec = await browser.newContext({ locale: 'pt-BR' });
+            const okSec = await login(cSec, SEC);
+            console.log(`login secretaria=${okSec}`);
+
+            // 1) AGENDAR SESSAO — rota nova (interno) + entrada na nav
+            try {
+              const p = await cSec.newPage();
+              await p.goto(`${B}/agendar-sessao`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await p.waitForTimeout(2500);
+              const t = await texto(p);
+              const temTela = /Agendar sess[aã]o/i.test(t) && /Tipo de sess[aã]o/i.test(t);
+              const temErro = /Acesso restrito|Application error|Internal Server|erro inesperado/i.test(t);
+              const temNav = /Agendar sess[aã]o/.test(await p.evaluate(() => document.querySelector('.nav-interna')?.innerText || ''));
+              await p.close();
+              if (temTela && !temErro) rec('/agendar-sessao', 'OK', `formulario renderizou (tipo de sessao); entrada na nav=${temNav}`);
+              else rec('/agendar-sessao', 'ERRO', `tela=${temTela} erro=${temErro} :: ${t.slice(0,120)}`);
+            } catch (e) { rec('/agendar-sessao', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
+            // 2) COMANDO DA MESA — resolve uma sessao (prefere ABERTA, p/ ver os paineis de votacao/tribuna)
+            try {
+              const lst = await api(cSec, '/api/sessoes');
+              const sessoes = Array.isArray(lst.body?.sessoes) ? lst.body.sessoes : (Array.isArray(lst.body) ? lst.body : []);
+              const aberta = sessoes.find(s => s.estado === 'aberta');
+              const alvo = aberta || sessoes[0];
+              if (!alvo?.id) { rec('/sessoes/:id/conduzir', 'ERRO', `sem sessao para abrir o comando (${sessoes.length} sessoes)`); }
+              else {
+                const p = await cSec.newPage();
+                await p.goto(`${B}/sessoes/${alvo.id}/conduzir`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                await p.waitForTimeout(3000);
+                const t = await texto(p);
+                const temTela = /Comando da Mesa/i.test(t) && /(Estado da sess[aã]o|O que a Mesa pode fazer agora)/i.test(t);
+                const temErro = /N[aã]o foi poss[ií]vel abrir o comando|Application error|Internal Server/i.test(t);
+                await p.close();
+                if (temTela && !temErro) rec('/sessoes/:id/conduzir', 'OK', `comando renderizou (sessao ${alvo.estado}); atos + estado presentes`);
+                else rec('/sessoes/:id/conduzir', 'ERRO', `tela=${temTela} erro=${temErro} :: ${t.slice(0,140)}`);
+
+                // 2b) paineis de Votacao + Tribuna — so aparecem com a sessao ABERTA
+                if (aberta) {
+                  const p2 = await cSec.newPage();
+                  await p2.goto(`${B}/sessoes/${alvo.id}/conduzir`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                  await p2.waitForTimeout(3000);
+                  const temVot = await p2.getByRole('heading', { name: /^Vota[cç][aã]o$/ }).count();
+                  const temTrib = await p2.getByRole('heading', { name: /^Tribuna$/ }).count();
+                  await p2.close();
+                  if (temVot > 0 && temTrib > 0) rec('conduzir: paineis Votacao+Tribuna', 'OK', 'ambos os paineis renderizaram (sessao aberta)');
+                  else rec('conduzir: paineis Votacao+Tribuna', 'ERRO', `votacao=${temVot} tribuna=${temTrib}`);
+                } else {
+                  rec('conduzir: paineis Votacao+Tribuna', 'OK', 'nenhuma sessao aberta agora — paineis nao se aplicam (esperado)');
+                }
+              }
+            } catch (e) { rec('/sessoes/:id/conduzir', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
+            console.log('\n===== RESUMO FUMACA (conducao / producao) =====');
+            for (const r of R) console.log(`  [${r.flag}] ${r.tela} — ${r.nota}`);
+            console.log('== fumaca concluida ==');
+          } finally { await browser.close(); }
+          JS
+      - name: Rodar fumaca
+        run: node fumaca.mjs
