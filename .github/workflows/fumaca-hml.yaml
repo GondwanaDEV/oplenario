@@ -1,0 +1,128 @@
+name: Fumaca das telas novas (homolog)
+
+# Smoke test SÓ-LEITURA das 3 telas novas deployadas (tramitar / moderacao / assinatura de parecer).
+# Loga de verdade via Keycloak, navega e confirma que a UI RENDERIZA (nao 404, nao erro, elementos novos
+# presentes). Nao faz nenhuma escrita. Cada checagem e independente (flag [OK]/[ERRO]).
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fumaca:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar Playwright + Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm i -D playwright@1.47.2 >/dev/null 2>&1
+          npx playwright install --with-deps chromium
+      - name: Escrever o teste
+        run: |
+          cat > fumaca.mjs <<'JS'
+          import { chromium } from 'playwright';
+          const B = 'https://oplenario.calvetec.com.br';
+          const E = '10000000-0000-0000-0000-000000000001';
+          const SENHA = 'Plenario@2026';
+          const SEC = 'c3987c7d-858c-4e4a-a4a7-33f45642c6d6';
+          const VER = '0eabd6df-d0cc-40bb-a0ca-043027cb3a1f';
+          const R = [];
+          const rec = (tela, flag, nota) => { R.push({ tela, flag, nota }); console.log(`  [${flag}] ${tela} — ${nota}`); };
+
+          async function login(ctx, user) {
+            const p = await ctx.newPage();
+            await p.goto(`${B}/api/auth/login?ente=${E}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await p.waitForSelector('#username', { timeout: 25000 });
+            await p.fill('#username', user); await p.fill('#password', SENHA);
+            await Promise.all([ p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(()=>{}), p.click('#kc-login') ]);
+            await p.waitForTimeout(2500);
+            const ok = p.url().startsWith(B) && !new URL(p.url()).pathname.startsWith('/api/auth');
+            await p.close(); return ok;
+          }
+          async function api(ctx, path) {
+            const r = await ctx.request.fetch(B + path, { headers: { accept: 'application/json' }, timeout: 25000 });
+            let j = null; try { j = await r.json(); } catch {}
+            return { status: r.status(), body: j };
+          }
+
+          const browser = await chromium.launch();
+          try {
+            const cSec = await browser.newContext({ locale: 'pt-BR' });
+            const cVer = await browser.newContext({ locale: 'pt-BR' });
+            const okSec = await login(cSec, SEC), okVer = await login(cVer, VER);
+            console.log(`login secretaria=${okSec} vereadora=${okVer}`);
+
+            // 1) MODERACAO — rota nova + entrada na nav
+            try {
+              const p = await cSec.newPage();
+              await p.goto(`${B}/moderacao`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await p.waitForTimeout(2500);
+              const txt = (await p.evaluate(() => document.body?.innerText || '')).replace(/\s+/g,' ').trim();
+              const temTela = /Modera[cç][aã]o de coment[aá]rios/i.test(txt);
+              const temErro = /Acesso restrito|Application error|Internal Server|erro inesperado|N[aã]o foi poss[ií]vel/i.test(txt);
+              const temNav = /Modera[cç][aã]o/.test(await p.evaluate(() => document.querySelector('.nav-interna')?.innerText || ''));
+              await p.close();
+              if (temTela && !temErro) rec('/moderacao', 'OK', `renderizou o titulo + fila; entrada na nav=${temNav}`);
+              else rec('/moderacao', 'ERRO', `titulo=${temTela} erro=${temErro} :: ${txt.slice(0,120)}`);
+            } catch (e) { rec('/moderacao', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
+            // 2) TRAMITAR — painel "Atos disponiveis" na aba Tramitacao da ficha
+            try {
+              const lst = await api(cSec, '/api/legislativo/proposicoes');
+              const props = Array.isArray(lst.body) ? lst.body : (lst.body?.proposicoes || lst.body?.itens || []);
+              const pid = props[0]?.id;
+              if (!pid) { rec('ficha /tramitacao', 'ERRO', 'sem proposicao para abrir a ficha'); }
+              else {
+                const p = await cSec.newPage();
+                await p.goto(`${B}/ficha-materia/${pid}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                await p.waitForTimeout(2500);
+                // clicar na aba Tramitacao
+                const aba = p.getByRole('tab', { name: /Tramita/i });
+                if (await aba.count()) await aba.first().click({ timeout: 10000 }).catch(()=>{});
+                await p.waitForTimeout(1500);
+                const txt = (await p.evaluate(() => document.body?.innerText || '')).replace(/\s+/g,' ').trim();
+                const temPainel = /Atos dispon[ií]veis|estado atual:/i.test(txt);
+                const temErro = /Application error|Internal Server|erro inesperado|N[aã]o foi poss[ií]vel carregar esta ficha/i.test(txt);
+                await p.close();
+                if (temPainel && !temErro) rec('ficha /tramitacao', 'OK', 'painel "Atos disponiveis" renderizou na aba Tramitacao');
+                else rec('ficha /tramitacao', 'ERRO', `painel=${temPainel} erro=${temErro} :: ${txt.slice(0,120)}`);
+              }
+            } catch (e) { rec('ficha /tramitacao', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
+            // 3) ASSINATURA DE PARECER — a tela renderiza (voto ja setado -> CTA; sem voto -> seletor)
+            try {
+              // resolver um parecer da vereadora via ficha das materias
+              let parecerId = null;
+              const lst = await api(cVer, '/api/legislativo/proposicoes');
+              const props = Array.isArray(lst.body) ? lst.body : (lst.body?.proposicoes || lst.body?.itens || []);
+              for (const pr of props.slice(0, 25)) {
+                const fx = await api(cVer, `/api/legislativo/proposicoes/${pr.id}/ficha`);
+                const pcs = fx.body?.pareceres || fx.body?.proposicao?.pareceres || [];
+                const alvo = pcs.find(x => /aguardando/i.test(x.estado || ''));
+                if (alvo) { parecerId = alvo.id; break; }
+              }
+              if (!parecerId) { rec('/parecer/:id/assinar', 'ERRO', 'nenhum parecer aguardando_assinatura encontrado'); }
+              else {
+                const p = await cVer.newPage();
+                await p.goto(`${B}/parecer/${parecerId}/assinar`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                await p.waitForTimeout(2500);
+                const txt = (await p.evaluate(() => document.body?.innerText || '')).replace(/\s+/g,' ').trim();
+                const cta = await p.getByRole('button', { name: /Revisar e assinar/i }).count();
+                const seletor = await p.getByRole('radiogroup', { name: /Conclus[aã]o do relator/i }).count();
+                const carregou = /Assinar parecer/i.test(txt) && !/N[aã]o foi poss[ií]vel carregar/i.test(txt);
+                await p.close();
+                if (carregou && (cta > 0 || seletor > 0)) rec('/parecer/:id/assinar', 'OK', `renderizou (CTA=${cta} seletor-de-voto=${seletor})`);
+                else if (carregou) rec('/parecer/:id/assinar', 'OK', `pagina carregou; sem CTA/seletor (estado: ${txt.slice(0,90)})`);
+                else rec('/parecer/:id/assinar', 'ERRO', `nao carregou (posse?) :: ${txt.slice(0,120)}`);
+              }
+            } catch (e) { rec('/parecer/:id/assinar', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
+            console.log('\n===== RESUMO FUMACA =====');
+            for (const r of R) console.log(`  [${r.flag}] ${r.tela} — ${r.nota}`);
+            console.log('== fumaca concluida ==');
+          } finally { await browser.close(); }
+          JS
+      - name: Rodar fumaca
+        run: node fumaca.mjs
