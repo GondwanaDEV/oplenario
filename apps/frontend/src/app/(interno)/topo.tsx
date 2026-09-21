@@ -36,6 +36,9 @@ const DESTINOS_NAV = [
   { rotulo: "Expediente", href: "/expediente" },
   // Onda C Slice C2 — leitura da pauta de uma sessão agendada + convocação derivada (gated "secretario").
   { rotulo: "Pauta", href: "/pauta-convocacao" },
+  // Agendar sessão (GAP docs/20 → tela de servidor): cria a sessão no estado agendada. Gated "secretario"
+  // (GuardSecretaria na página + exige-papel no backend). Sem esta entrada a rota ficaria órfã.
+  { rotulo: "Agendar sessão", href: "/agendar-sessao" },
   // Cadastro de Vereadores (Task 9) — cadastros estruturais, área de topo nova (arquétipo master-detail).
   { rotulo: "Vereadores", href: "/cadastros/vereadores" },
   // Onda E fatia 2 — Calendário institucional (a agenda da Casa: sessões agendadas + prazos de
