@@ -170,7 +170,8 @@ describe("GET /api/auth/callback — troca code por token (PKCE), minta sessão 
 
     const location = new URL(resp.headers.get("location")!);
     expect(location.origin).toBe(ORIGIN);
-    expect(location.pathname).toBe("/");
+    // desvia para o destino padrão pós-login (same-origin) — o que importa é NÃO ter ido para evil.example
+    expect(location.pathname).toBe("/inicio");
   });
 
   it("troca de code→token retorna não-2xx → 401", async () => {

@@ -24,6 +24,7 @@ import type {
   CienciaPendenteOut,
 } from "./contrato-legislativo.gen";
 import type { SessaoOut } from "./contrato-sessoes.gen";
+import { proximaSessaoFutura, sessaoAoVivoEm } from "./sessao-corrente";
 
 // Espelha oplenario.legislativo.logic/estados-parecer-terminais (§22.4 eixo F) — os 4 desfechos que
 // fecham um parecer. Vocabulário CRAVADO no backend (piso fixo do trigger); copiado aqui por não haver
@@ -31,10 +32,8 @@ import type { SessaoOut } from "./contrato-sessoes.gen";
 // concluídos" deste arquivo é o sinal a atualizar.
 const ESTADOS_PARECER_TERMINAIS = new Set(["aprovado", "rejeitado", "prejudicado", "prazo_vencido"]);
 
-// Espelha oplenario.sessoes.logic (a máquina de estados de SessaoOut.estado, §22.6): "aberta" e "suspensa"
-// são os dois estados em que a sessão está VIVA agora (a Mesa pode retomar uma suspensa sem reabrir) — é
-// esse o "há sessão agora?" que a home precisa responder, não só "aberta".
-const ESTADOS_SESSAO_AO_VIVO = new Set(["aberta", "suspensa"]);
+// "Há sessão agora?" / "qual é a próxima?" moraram AQUI até a home da secretaria (inicio-vista.ts) passar
+// a fazer a mesma pergunta; agora vivem em ./sessao-corrente (uma fonte de verdade para as duas homes).
 
 export interface ParecerAgrupado {
   aguardando: ParecerResumoMeuPainelOut[];
@@ -93,30 +92,4 @@ export function derivarHome(
   };
 }
 
-/** A sessão de `estado` "agendada" com menor data FUTURA (> `agoraIso`, estrito); `null` se nenhuma. Filtra
- * por ESTADO, não só por data: `agendada -> nao_realizada` é transição legal da máquina
- * (`sessoes/logic.clj`, `transicoes-sessao`) e NÃO apaga `agendada-para` — uma sessão cancelada por luto ou
- * falta de quórum continua com a data futura na projeção. Sem o filtro de estado, esta função reabre o
- * defeito #16 por outro campo: a home anunciaria como "próxima sessão" uma sessão que a Mesa já cancelou.
- * O mesmo raciocínio vale para `arquivada` chegando via `nao_realizada` — nenhum estado fora de "agendada"
- * é candidato a "próxima". */
-function proximaSessaoFutura(sessoes: SessaoOut[], agoraIso: string): SessaoOut | null {
-  const futuras = sessoes.filter(
-    (s): s is SessaoOut & { agendadaPara: string } =>
-      s.estado === "agendada" && s.agendadaPara != null && s.agendadaPara > agoraIso
-  );
-  if (futuras.length === 0) return null;
-  return futuras.reduce((maisProxima, atual) =>
-    atual.agendadaPara < maisProxima.agendadaPara ? atual : maisProxima
-  );
-}
 
-/** A sessão em `estado` "aberta" ou "suspensa" (ver `ESTADOS_SESSAO_AO_VIVO`), se houver — a resposta a
- * "há sessão agora?". `find`, não `sort`: a ordem de `sessoes` é do SERVIDOR (ele já entrega
- * aberta/suspensa primeiro) e não deve ser reordenada no cliente; mas esta função não DEPENDE dessa
- * garantia — filtra por `estado`, então continua correta mesmo se a ordem mudar por engano no futuro. Em
- * teoria só existe UMA sessão viva por vez (a Mesa não abre duas simultaneamente); se por algum motivo
- * houvesse mais de uma, a primeira do array vence — sem preferência adicional. */
-function sessaoAoVivoEm(sessoes: SessaoOut[]): SessaoOut | null {
-  return sessoes.find((s) => ESTADOS_SESSAO_AO_VIVO.has(s.estado)) ?? null;
-}

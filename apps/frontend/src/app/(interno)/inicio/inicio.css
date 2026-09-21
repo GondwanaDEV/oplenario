@@ -1,0 +1,50 @@
+/* Chrome da tela inicial (/inicio, interno). Tokens + chassi (.envelope, .btn, .eyebrow) vêm de
+   globals.css/chassi.css — aqui só o desta superfície. Auto-contido de propósito: `.card`/`.acoes` não são
+   classes globais do chassi (cada rota define as suas), então tudo que esta tela usa é escopado em
+   `.inicio` e não depende de outra rota ter sido carregada antes. */
+
+.inicio { padding: clamp(1.2rem, 3vw, 2rem) 0 4rem; display: grid; gap: 1.6rem; align-content: start; }
+
+/* --- o bloco da sessão (o herói: responde "o que está acontecendo agora?") --- */
+.inicio .card {
+  padding: 1.3rem 1.4rem; border-radius: var(--raio);
+  border: 1px solid var(--linha); background: var(--surface);
+}
+.inicio-sessao h1 {
+  font-family: var(--display); font-weight: 600; font-size: var(--t-24);
+  letter-spacing: -0.01em; color: var(--texto); margin: 0.2rem 0 0;
+}
+.inicio-detalhe { margin: 0.35rem 0 0; color: var(--texto-2); font-size: var(--t-14); }
+
+/* Sessão viva ganha acento — é a única situação em que a Mesa precisa agir AGORA. */
+.inicio-sessao--ao-vivo { border-color: color-mix(in srgb, var(--marca) 45%, var(--linha)); }
+.inicio-sessao--ao-vivo .eyebrow { color: var(--acento-texto); }
+.inicio-sessao--erro { border-color: color-mix(in srgb, var(--acento-texto) 40%, var(--linha)); }
+
+.inicio .acoes { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1rem; }
+
+/* Legenda: cada ação explica o próprio destino — a home ensina o caminho, não só lista botões. */
+.inicio-legenda {
+  list-style: none; margin: 0.9rem 0 0; padding: 0;
+  display: grid; gap: 0.3rem; font-size: var(--t-13); color: var(--texto-2);
+}
+.inicio-legenda b { color: var(--texto); font-weight: 600; }
+
+/* --- atalhos --- */
+.inicio-secao-tit {
+  font-family: var(--mono); font-size: var(--t-12); letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--texto-2); font-weight: 500; margin: 0 0 0.7rem;
+}
+.atalhos {
+  display: grid; gap: 0.7rem;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+}
+.atalho {
+  display: grid; gap: 0.2rem; padding: 0.9rem 1rem;
+  border: 1px solid var(--linha); border-radius: var(--raio);
+  background: var(--surface); color: var(--texto); text-decoration: none;
+}
+.atalho b { font-size: var(--t-14); font-weight: 600; }
+.atalho span { font-size: var(--t-13); color: var(--texto-2); }
+.atalho:hover { border-color: var(--texto-2); background: var(--surface-2); }
+.atalho:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }
