@@ -279,3 +279,64 @@ jobs:
         if: failure()
         working-directory: apps/backend
         run: docker compose logs app frontend --tail 160
+
+  # GATE DO FRONTEND — o buraco que deixou 32 testes apodrecerem sem ninguem ver.
+  #
+  # Ate' aqui o CI tocava o frontend so' de fora: `browser-e2e`, `t3-e2e` e `t3-autz-leitura-e2e` SOBEM a
+  # stack e dirigem o browser, mas nenhum job rodava `vitest`, `eslint` ou `tsc` sobre `apps/frontend`.
+  # Consequencia medida em 21/09/2026: 32 testes unitarios quebrados em 3 arquivos, verdes por ninguem os
+  # rodar. Todos da MESMA forma — a tela mudou e o teste ficou — e um unico commit (70fdd43) deixou DOIS
+  # para tras, alem de introduzir um erro de lint. Um e2e de browser nao pega nada disso: ele exercita o
+  # caminho feliz de algumas telas, nao as 176 suites de unidade.
+  #
+  # Este job e' barato de proposito: nao sobe docker, nao semeia banco, nao instala browser. Node + npm ci.
+  # Isso importa com a cota do Actions apertada — e' o job que roda em TODO push sem pesar.
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+
+      - name: Instalar deps (lockfile exato)
+        run: npm ci
+
+      # O gate que faltava. 1552 testes / 176 arquivos verdes em 21/09/2026.
+      - name: Testes de unidade (vitest)
+        run: npm test
+
+      # `react-hooks/set-state-in-effect` e o resto do eslint-config-next. Verde em 21/09/2026 depois de
+      # dois consertos reais (use-calendario, use-detalhe-votacao) — nao entra com divida pendurada.
+      - name: Lint (eslint)
+        run: npx eslint .
+
+      # Compila de verdade, com as envs que o next.config.ts EXIGE em producao (APP_ORIGIN,
+      # KEYCLOAK_INTERNAL_URL, KEYCLOAK_PUBLIC_URL — os guards fail-fast anti-SSRF/open-redirect). Valores
+      # locais de fachada: aqui so' se quer saber se a build passa, nao se fala com ninguem. Sem este passo
+      # uma quebra de build so' apareceria no deploy (build-web-prd, que so' roda em `production`).
+      - name: Build de producao (next build)
+        env:
+          APP_ORIGIN: http://localhost:3000
+          BACKEND_URL: http://localhost:8888
+          KEYCLOAK_INTERNAL_URL: http://localhost:8080
+          KEYCLOAK_PUBLIC_URL: http://localhost:8080
+        run: npx next build
+
+      # INFORMATIVO ate' a divida ser zerada (mesmo padrao do t3-e2e acima). `tsc --noEmit` acusa 39 erros
+      # em 21/09/2026, TODOS em arquivos `*.test.ts(x)` — fixtures sem campos obrigatorios do contrato
+      # (lockVersion, truncamentoCompliance) e `let res;` sem anotacao, cujo valor e' atribuido dentro de um
+      # callback assincrono e depois castado com `as` (o cast existia justamente para calar o erro).
+      # Producao passa: `next build` acima typechecka o grafo do app e esta verde. Os testes nao entram
+      # nesse grafo — e' exatamente por isso que a divida se acumulou ali sem ninguem ver.
+      # Remover o continue-on-error quando os 39 forem a zero.
+      - name: Typecheck (tsc --noEmit) — informativo, ver comentario
+        continue-on-error: true
+        run: npx tsc --noEmit
