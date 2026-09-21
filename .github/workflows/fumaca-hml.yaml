@@ -26,8 +26,12 @@ jobs:
           const B = 'https://oplenario.calvetec.com.br';
           const E = '10000000-0000-0000-0000-000000000001';
           const SENHA = 'Plenario@2026';
-          const SEC = 'c3987c7d-858c-4e4a-a4a7-33f45642c6d6';
-          const VER = '0eabd6df-d0cc-40bb-a0ca-043027cb3a1f';
+          // UUIDs das personas SAO regenerados a cada reset+reseed (casa.clj cria identidades com
+          // (random-uuid); so' `ente-id` e' constante fixa). Estes vieram do cartao de credenciais do
+          // ultimo semear-hml com resetar=sim (run #8, 2026-09-21). Se rodar outro reset, reveja o
+          // passo "Ids da demo" do semear-hml e atualize aqui.
+          const SEC = '585e6532-e754-4d45-ad82-1667fdfb220e';
+          const VER = '222dc995-c188-45f4-a9ce-01bef661c05d';
           const R = [];
           const rec = (tela, flag, nota) => { R.push({ tela, flag, nota }); console.log(`  [${flag}] ${tela} — ${nota}`); };
 
