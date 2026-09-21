@@ -13,10 +13,16 @@
 import { cleanup, render } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { OQueVence } from "./o-que-vence";
+import type { MesaVista } from "@/lib/mesa-vista";
 
 // 15/09/2026, 12:00 local — o mesmo "hoje" da checagem que achou o defeito.
 const HOJE = new Date("2026-09-15T15:00:00.000Z");
 
+// O item de origem `compliance` e' um ObrigacaoEmAberto + `origem` (ver mesa-vista.ts). O fixture
+// divergia do contrato em DOIS pontos, invisiveis ate' o helper `vista` ganhar tipo de retorno: faltava
+// `estado` (obrigatorio) e sobrava `protocolo`, que pertence a' OUTRA variante da uniao (`pendencia`).
+// O teste passava porque o componente so' le' `venceEm`/`origem` — mas o fixture afirmava uma forma que
+// a aplicacao nunca produz, que e' justamente o que um fixture nao pode fazer.
 function item(venceEm: string, id: string) {
   return {
     origem: "compliance" as const,
@@ -24,13 +30,15 @@ function item(venceEm: string, id: string) {
     objetoId: id,
     objetoTipo: "competencia",
     templateChave: "remessa_mensal_sim",
-    protocolo: null,
     venceEm,
+    estado: "pendente",
   };
 }
 
-function vista(itens: ReturnType<typeof item>[]) {
-  return { estado: "disponivel" as const, itens, truncamentoPendencias: null };
+// Tipo de retorno ANOTADO de proposito: sem ele, um campo que falte no fixture so' aparece como erro
+// em cada `render(...)` la' embaixo (eram 4), longe da causa. Anotado, o compilador acusa AQUI, uma vez.
+function vista(itens: ReturnType<typeof item>[]): MesaVista["oQueVence"] {
+  return { estado: "disponivel" as const, itens, truncamentoCompliance: null, truncamentoPendencias: null };
 }
 
 describe("OQueVence — o prazo em palavras", () => {

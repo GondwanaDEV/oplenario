@@ -330,13 +330,9 @@ jobs:
           KEYCLOAK_PUBLIC_URL: http://localhost:8080
         run: npx next build
 
-      # INFORMATIVO ate' a divida ser zerada (mesmo padrao do t3-e2e acima). `tsc --noEmit` acusa 39 erros
-      # em 21/09/2026, TODOS em arquivos `*.test.ts(x)` — fixtures sem campos obrigatorios do contrato
-      # (lockVersion, truncamentoCompliance) e `let res;` sem anotacao, cujo valor e' atribuido dentro de um
-      # callback assincrono e depois castado com `as` (o cast existia justamente para calar o erro).
-      # Producao passa: `next build` acima typechecka o grafo do app e esta verde. Os testes nao entram
-      # nesse grafo — e' exatamente por isso que a divida se acumulou ali sem ninguem ver.
-      # Remover o continue-on-error quando os 39 forem a zero.
-      - name: Typecheck (tsc --noEmit) — informativo, ver comentario
-        continue-on-error: true
+      # BLOQUEANTE desde 21/09/2026. Nasceu informativo (39 erros, todos em `*.test.ts(x)`) e a divida foi
+      # zerada na mesma sessao — nao ha continue-on-error aqui de proposito. Os testes NAO entram no grafo
+      # que o `next build` typechecka, entao sem este passo a checagem de tipos dos fixtures fica sem dono,
+      # que foi exatamente como os 39 se acumularam sem ninguem ver.
+      - name: Typecheck (tsc --noEmit)
         run: npx tsc --noEmit

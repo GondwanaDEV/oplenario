@@ -1,6 +1,12 @@
-import { describe, expect, it, vi, afterEach } from "vitest";
+import { describe, expect, it, vi, afterEach, assert } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
-import { useVotacaoMesa } from "./use-votacao-mesa";
+import { useVotacaoMesa, type ResultadoAbrir, type ResultadoEncerrar } from "./use-votacao-mesa";
+
+// Nota de tipagem (gate `tsc --noEmit`): `res` e' atribuido DENTRO do callback de `act`, entao o TS nao
+// enxerga a atribuicao e o tipo permanecia `undefined`. Dai os casts `as { ok: boolean }` que havia aqui:
+// existiam para calar o compilador e, de quebra, desligavam a checagem do payload — um `.sessao`/`.erro`
+// errado passava batido. Agora a uniao e' anotada de verdade e o discriminante e' estreitado com `assert`
+// (assinatura `asserts`), entao o acesso ao payload e' VERIFICADO: se o contrato do hook mudar, quebra aqui.
 
 const ok = (json: unknown) => ({ ok: true, status: 200, json: async () => json }) as Response;
 const notFound = () => ({ ok: false, status: 404, json: async () => ({}) }) as Response;
@@ -75,7 +81,7 @@ describe("useVotacaoMesa", () => {
     const { result } = renderHook(() => useVotacaoMesa("s1", "tok"));
     await waitFor(() => expect(result.current.estado).toBe("pronto"));
 
-    let res;
+    let res: ResultadoAbrir | undefined;
     await act(async () => {
       res = await result.current.abrir({
         objetoTipo: "proposicao",
@@ -84,7 +90,7 @@ describe("useVotacaoMesa", () => {
         quorumTipo: "maioria_absoluta",
       });
     });
-    expect((res as { ok: boolean }).ok).toBe(true);
+    expect(res?.ok).toBe(true);
     await waitFor(() => expect(result.current.votacaoAberta?.votacaoId).toBe("vtX"));
   });
 
@@ -113,11 +119,11 @@ describe("useVotacaoMesa", () => {
     });
     await waitFor(() => expect(result.current.votacaoAberta?.votacaoId).toBe("vtX"));
 
-    let res;
+    let res: ResultadoEncerrar | undefined;
     await act(async () => {
       res = await result.current.encerrar("aprovada");
     });
-    expect((res as { ok: boolean }).ok).toBe(true);
+    expect(res?.ok).toBe(true);
     expect(corpoEncerrar).toMatchObject({ "lock-version": 0, resultado: "aprovada" });
     await waitFor(() => expect(result.current.votacaoAberta).toBeNull());
   });
@@ -131,12 +137,12 @@ describe("useVotacaoMesa", () => {
     const { result } = renderHook(() => useVotacaoMesa("s1", "tok"));
     await waitFor(() => expect(result.current.votacaoAberta?.votacaoId).toBe("vtX"));
 
-    let res;
+    let res: ResultadoEncerrar | undefined;
     await act(async () => {
       res = await result.current.encerrar();
     });
-    expect((res as { ok: boolean }).ok).toBe(false);
-    expect((res as { conflito: boolean }).conflito).toBe(true);
+    assert(res?.ok === false, "esperava recusa por conflito de lock");
+    expect(res.conflito).toBe(true);
   });
 
   it("abrir sem objeto -> erro local, sem tocar a rede de escrita", async () => {
@@ -144,10 +150,10 @@ describe("useVotacaoMesa", () => {
     global.fetch = rot;
     const { result } = renderHook(() => useVotacaoMesa("s1", "tok"));
     await waitFor(() => expect(result.current.estado).toBe("pronto"));
-    let res;
+    let res: ResultadoAbrir | undefined;
     await act(async () => {
       res = await result.current.abrir({ objetoTipo: "proposicao", objetoId: "", modalidade: "nominal", quorumTipo: "maioria_simples" });
     });
-    expect((res as { ok: boolean }).ok).toBe(false);
+    expect(res?.ok).toBe(false);
   });
 });

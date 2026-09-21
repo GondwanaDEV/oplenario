@@ -1,6 +1,12 @@
-import { describe, expect, it, vi, afterEach } from "vitest";
+import { describe, expect, it, vi, afterEach, assert } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
-import { useTribunaMesa } from "./use-tribuna-mesa";
+import { useTribunaMesa, type ResultadoInscrever, type ResultadoDesistir, type ResultadoIniciarFala, type ResultadoEncerrarFala } from "./use-tribuna-mesa";
+
+// Nota de tipagem (gate `tsc --noEmit`): `res` e' atribuido DENTRO do callback de `act`, entao o TS nao
+// enxerga a atribuicao e o tipo permanecia `undefined`. Dai os casts `as { ok: boolean }` que havia aqui:
+// existiam para calar o compilador e, de quebra, desligavam a checagem do payload — um `.sessao`/`.erro`
+// errado passava batido. Agora a uniao e' anotada de verdade e o discriminante e' estreitado com `assert`
+// (assinatura `asserts`), entao o acesso ao payload e' VERIFICADO: se o contrato do hook mudar, quebra aqui.
 
 const ok = (json: unknown) => ({ ok: true, status: 200, json: async () => json }) as Response;
 const fail = (status: number, json: unknown = {}) => ({ ok: false, status, json: async () => json }) as Response;
@@ -70,11 +76,11 @@ describe("useTribunaMesa", () => {
     });
     const { result } = renderHook(() => useTribunaMesa("s1", "tok"));
     await waitFor(() => expect(result.current.estado).toBe("pronto"));
-    let res;
+    let res: ResultadoInscrever | undefined;
     await act(async () => {
       res = await result.current.inscrever("v1", "expediente");
     });
-    expect((res as { ok: boolean }).ok).toBe(true);
+    expect(res?.ok).toBe(true);
     expect(corpo).toMatchObject({ "vereador-id": "v1", "origem-inscricao": "intra_sessao_pedido", fase: "expediente" });
     await waitFor(() => expect(result.current.tribuna?.inscritos.length).toBe(1));
   });
@@ -83,11 +89,11 @@ describe("useTribunaMesa", () => {
     global.fetch = roteador({ tribuna: () => ok(tribunaJson([])) });
     const { result } = renderHook(() => useTribunaMesa("s1", "tok"));
     await waitFor(() => expect(result.current.estado).toBe("pronto"));
-    let res;
+    let res: ResultadoInscrever | undefined;
     await act(async () => {
       res = await result.current.inscrever("", "expediente");
     });
-    expect((res as { ok: boolean }).ok).toBe(false);
+    expect(res?.ok).toBe(false);
   });
 
   it("desistir envia lock-version e recarrega", async () => {
@@ -103,11 +109,11 @@ describe("useTribunaMesa", () => {
     });
     const { result } = renderHook(() => useTribunaMesa("s1", "tok"));
     await waitFor(() => expect(result.current.tribuna?.inscritos.length).toBe(1));
-    let res;
+    let res: ResultadoDesistir | undefined;
     await act(async () => {
       res = await result.current.desistir("i1", 2);
     });
-    expect((res as { ok: boolean }).ok).toBe(true);
+    expect(res?.ok).toBe(true);
     expect(corpo).toMatchObject({ "lock-version": 2 });
     await waitFor(() => expect(result.current.tribuna?.inscritos.length).toBe(0));
   });
@@ -119,12 +125,12 @@ describe("useTribunaMesa", () => {
     });
     const { result } = renderHook(() => useTribunaMesa("s1", "tok"));
     await waitFor(() => expect(result.current.tribuna?.inscritos.length).toBe(1));
-    let res;
+    let res: ResultadoDesistir | undefined;
     await act(async () => {
       res = await result.current.desistir("i1", 2);
     });
-    expect((res as { ok: boolean; conflito: boolean }).ok).toBe(false);
-    expect((res as { conflito: boolean }).conflito).toBe(true);
+    assert(res?.ok === false, "esperava recusa por conflito de lock");
+    expect(res.conflito).toBe(true);
   });
 
   it("iniciarFala POSTa {orador-id, tipo-fala, fase, iniciou-em, inscricao-id} e recarrega", async () => {
@@ -138,11 +144,11 @@ describe("useTribunaMesa", () => {
     });
     const { result } = renderHook(() => useTribunaMesa("s1", "tok"));
     await waitFor(() => expect(result.current.estado).toBe("pronto"));
-    let res;
+    let res: ResultadoIniciarFala | undefined;
     await act(async () => {
       res = await result.current.iniciarFala("v1", "expediente", { inscricaoId: "i1" });
     });
-    expect((res as { ok: boolean }).ok).toBe(true);
+    expect(res?.ok).toBe(true);
     expect(corpo).toMatchObject({ "orador-id": "v1", "tipo-fala": "principal", fase: "expediente", "inscricao-id": "i1" });
     expect(typeof corpo["iniciou-em"]).toBe("string");
   });
@@ -182,21 +188,21 @@ describe("useTribunaMesa", () => {
     });
     const { result } = renderHook(() => useTribunaMesa("s1", "tok"));
     await waitFor(() => expect(result.current.estado).toBe("pronto"));
-    let ok1;
+    let ok1: ResultadoEncerrarFala | undefined;
     await act(async () => {
       ok1 = await result.current.encerrarFala("f1", 0);
     });
-    expect((ok1 as { ok: boolean; fala: { tempoSegundos: number } }).ok).toBe(true);
-    expect((ok1 as { fala: { tempoSegundos: number } }).fala.tempoSegundos).toBe(123);
+    assert(ok1?.ok === true, "esperava encerrar a fala com sucesso");
+    expect(ok1.fala.tempoSegundos).toBe(123);
     expect(corpo).toMatchObject({ "lock-version": 0 });
     expect(typeof corpo["encerrou-em"]).toBe("string");
 
     terminal = true;
-    let res2;
+    let res2: ResultadoEncerrarFala | undefined;
     await act(async () => {
       res2 = await result.current.encerrarFala("f1", 0);
     });
-    expect((res2 as { ok: boolean; conflito: boolean }).ok).toBe(false);
-    expect((res2 as { conflito: boolean }).conflito).toBe(true);
+    assert(res2?.ok === false, "esperava recusa por estado terminal");
+    expect(res2.conflito).toBe(true);
   });
 });
