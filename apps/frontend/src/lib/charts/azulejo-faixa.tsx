@@ -20,7 +20,18 @@ export function AzulejoFaixa({
 }) {
   const largura = estagios.length * LARGURA_TILE;
   return (
-    <svg className="azulejo-faixa" viewBox={`0 0 ${largura} ${ALTURA}`} role="img" aria-label={rotuloAria}>
+    // width/height intrínsecos (mesmo padrão do AzulejoMini): sem eles o SVG não tem tamanho natural e o CSS
+    // era forçado a `width:100%`, o que ESTICAVA a faixa à largura do container — com poucos estágios os
+    // tiles viravam gigantes. Com o tamanho intrínseco aqui, o CSS só precisa limitar (`max-width:100%`): a
+    // faixa renderiza no tamanho de projeto (tile ~120px) e encolhe proporcionalmente só quando falta largura.
+    <svg
+      className="azulejo-faixa"
+      width={largura}
+      height={ALTURA}
+      viewBox={`0 0 ${largura} ${ALTURA}`}
+      role="img"
+      aria-label={rotuloAria}
+    >
       {estagios.map((estagio, i) => {
         const x = i * LARGURA_TILE + 8;
         const cx = x + TAMANHO_ICONE / 2;
