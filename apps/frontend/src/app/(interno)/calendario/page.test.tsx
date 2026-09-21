@@ -2,7 +2,17 @@ import { describe, expect, it, vi, afterEach, beforeEach } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import PaginaCalendario from "./page";
 
-vi.mock("@/lib/auth", () => ({ useAuth: () => ({ token: "tok" }) }));
+// `papeisAtual` e' mutavel para um teste poder trocar o papel ANTES do render (mesmo precedente de
+// cadastros/vereadores/page.test.tsx com `buscaParamsAtual`). O mock precisa exportar usePapeis porque a
+// pagina resolve a permissao dos PRAZOS pelo papel antes de buscar (GET /compliance/painel e'
+// `secretario`-only) — sem isto o mock parcial derruba o render inteiro.
+const { papeisAtual } = vi.hoisted(() => ({
+  papeisAtual: { papeis: ["secretario"] as string[], estado: "pronto" as "carregando" | "pronto" | "erro" },
+}));
+vi.mock("@/lib/auth", () => ({
+  useAuth: () => ({ token: "tok" }),
+  usePapeis: () => papeisAtual,
+}));
 vi.mock("@/lib/tema", () => ({ useTema: () => ({ tema: "claro", alternar: () => {} }) }));
 
 const sessoesFake = {
@@ -68,6 +78,9 @@ describe("PaginaCalendario", () => {
     // a data, o mês inicial seria o do runner e toda asserção de célula viraria loteria.
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date("2026-06-22T15:00:00Z")); // 22/06/2026, 12h em Fortaleza
+    // o papel e' mutavel (ver `papeisAtual`); repor o default evita que a mutacao de um teste vaze
+    papeisAtual.papeis = ["secretario"];
+    papeisAtual.estado = "pronto";
   });
 
   afterEach(() => {
@@ -153,6 +166,37 @@ describe("PaginaCalendario", () => {
     // não pode afirmar ausência quando UMA das fontes falhou. A asserção anterior era `/nenhum prazo/i` —
     // string que a página não renderiza em estado NENHUM, logo uma guarda que não podia reprovar.
     expect(screen.queryByText(/Nada agendado/i)).toBeNull();
+  });
+
+  // --- permissao dos PRAZOS resolvida pelo PAPEL (nao por 403 na cara do usuario) ---
+  // A pagina decide ANTES de buscar: GET /compliance/painel e' `secretario`-only, e mandar um vereador
+  // bater na porta so' para tomar 403 poluiria o console dele. Nenhum teste cobria esses dois ramos.
+
+  it("sem o papel secretario, o painel de compliance NAO e' sequer buscado — e a tela diz que os prazos não vieram", async () => {
+    papeisAtual.papeis = ["vereador"];
+    mockarRotas(tudoOk);
+    render(<PaginaCalendario />);
+
+    await waitFor(() => expect(screen.getByText(/prazos de compliance não puderam ser carregados/i)).toBeDefined());
+    // as sessões (que ele PODE ver) seguem normais
+    expect(screen.getByText("15ª Sessão Ordinária")).toBeDefined();
+    // e a porta nunca foi batida: é isto que distingue "resolvido pelo papel" de "tomou 403"
+    const caminhos = (global.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.map((c) => String(c[0]));
+    expect(caminhos).toContain("/api/sessoes");
+    expect(caminhos.some((c) => c.includes("/compliance/painel"))).toBe(false);
+  });
+
+  it("enquanto o papel carrega, a tela NAO afirma que os prazos falharam (nem os busca ainda)", async () => {
+    papeisAtual.estado = "carregando";
+    papeisAtual.papeis = [];
+    mockarRotas(tudoOk);
+    render(<PaginaCalendario />);
+
+    await waitFor(() => expect(screen.getByRole("grid", { name: "Junho de 2026" })).toBeDefined());
+    // "ainda não sei" não pode virar "falhou" — a mesma disciplina do defeito #16
+    expect(screen.queryByText(/prazos de compliance não puderam ser carregados/i)).toBeNull();
+    const caminhos = (global.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.map((c) => String(c[0]));
+    expect(caminhos.some((c) => c.includes("/compliance/painel"))).toBe(false);
   });
 
   it("erro nas sessões é dito, e a tela não afirma que nada está agendado", async () => {
