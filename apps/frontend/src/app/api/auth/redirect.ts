@@ -33,3 +33,39 @@ export function resolveRedirectPath(candidate: string | null, origin: string): s
     return DESTINO_POS_LOGIN;
   }
 }
+
+/**
+ * O `redirect` PEDIDO explicitamente por quem iniciou o login — ou `null` quando não houve pedido (ou
+ * quando o pedido não é same-origin e foi descartado).
+ *
+ * Existe separado de `resolveRedirectPath` porque o callback precisa DISTINGUIR "a pessoa pediu /inicio"
+ * de "ninguém pediu nada": só no segundo caso ele escolhe o destino pelo papel. `resolveRedirectPath`
+ * colapsa os dois em `DESTINO_POS_LOGIN`, o que é o certo para ele (defesa em profundidade, sempre devolve
+ * um caminho utilizável) e errado aqui.
+ */
+export function pedidoDeRedirect(candidate: string | null, origin: string): string | null {
+  if (!candidate) return null;
+  try {
+    const resolved = new URL(candidate, origin);
+    if (resolved.origin !== origin) return null; // hostil/externo: descarta e deixa o papel decidir
+    return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Para onde cada persona vai quando NÃO pediu destino: a home DELA.
+ *
+ * O vereador tem uma home própria e mais rica (`/vereador`: pareceres, ciências, sessões) e o chrome do app
+ * dele (topo + tabbar) mora no layout do grupo `(vereador)` — mandá-lo para `/inicio`, que vive em
+ * `(interno)`, o deixaria numa página sem casca nenhuma e a um clique de distância da tela que ele
+ * realmente quer. `secretario` vence quem acumula papéis (é a persona com mais superfície).
+ *
+ * Quem não tem papel de trabalho cai em `/inicio`, que trata esse caso sem prometer o que não existe.
+ */
+export function destinoPorPapeis(papeis: string[]): string {
+  if (papeis.includes("secretario")) return DESTINO_POS_LOGIN;
+  if (papeis.includes("vereador")) return "/vereador";
+  return DESTINO_POS_LOGIN;
+}

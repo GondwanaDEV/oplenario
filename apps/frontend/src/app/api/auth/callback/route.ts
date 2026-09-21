@@ -18,7 +18,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { resolveAppOrigin } from "../appOrigin";
-import { resolveRedirectPath } from "../redirect";
+import { destinoPorPapeis, resolveRedirectPath } from "../redirect";
 import { validarDescobertaKc } from "../kc-cookie";
 
 interface PkcePayload {
@@ -127,7 +127,13 @@ export async function receberCallback(
   }
   // A partir daqui `accessToken` nunca é referenciado de novo — só `segredo` (opaco) segue adiante.
 
-  const safeRedirectPath = resolveRedirectPath(pkce.redirectPath, appOrigin);
+  // Destino: o que a pessoa PEDIU vence; sem pedido, cada persona vai para a home dela. Os papéis são
+  // perguntados ao BACKEND (`GET /eu`, a fonte autoritativa — vêm do vínculo no banco, não das claims do
+  // Keycloak), apresentando a sessão recém-criada do mesmo jeito que o rewrite /api/* apresenta: o cookie
+  // `sessao` no header Cookie cru (interceptors.clj/cookie-sessao). Fail-closed em qualquer erro: cai no
+  // destino padrão em vez de travar o login que JÁ deu certo.
+  const pedido = pkce.redirectPath ? resolveRedirectPath(pkce.redirectPath, appOrigin) : null;
+  const safeRedirectPath = pedido ?? destinoPorPapeis(await papeisDaSessao(f, backend, segredo));
   const response = NextResponse.redirect(new URL(safeRedirectPath, appOrigin));
   response.cookies.set("sessao", segredo, {
     httpOnly: true,
@@ -153,4 +159,26 @@ export async function receberCallback(
   // (nome, path); um delete com path "/" (default) não limpa um cookie escopado a "/api/auth".
   response.cookies.delete({ name: "pkce", path: "/api/auth" });
   return response;
+}
+
+/** Os papéis do ator recém-autenticado, do backend (`GET /eu` -> {ator:{papeis}}). Fail-closed: qualquer
+ * falha (rede, !ok, corpo malformado) devolve [] — o chamador então usa o destino padrão. Nunca lança:
+ * a sessão já foi criada e o login não pode falhar por causa da escolha de tela inicial. */
+async function papeisDaSessao(
+  f: typeof fetch,
+  backend: string,
+  segredo: string,
+): Promise<string[]> {
+  try {
+    const r = await f(`${backend}/eu`, {
+      headers: { cookie: `sessao=${segredo}`, accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!r.ok) return [];
+    const d = (await r.json()) as { ator?: { papeis?: unknown } };
+    const ps = d?.ator?.papeis;
+    return Array.isArray(ps) ? ps.filter((p): p is string => typeof p === "string") : [];
+  } catch {
+    return [];
+  }
 }

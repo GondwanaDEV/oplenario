@@ -316,3 +316,83 @@ describe("GET /api/auth/callback — troca code por token (PKCE), minta sessão 
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 });
+
+// --- destino por persona (o callback escolhe a home de quem entrou) ---------------------------------
+
+/** Happy path + `GET /eu` devolvendo os papéis dados. Registra os headers do /eu para inspeção. */
+function fetchComPapeis(papeis: string[], vistos: { cookie?: string } = {}) {
+  return fetchMock(async (url, init) => {
+    const u = url.toString();
+    if (u.includes("/protocol/openid-connect/token")) {
+      return new Response(JSON.stringify({ access_token: ACCESS_TOKEN }), { status: 200 });
+    }
+    if (u.includes("/auth/sessoes")) {
+      return new Response(JSON.stringify({ sessao: SEGREDO }), { status: 200 });
+    }
+    if (u.endsWith("/eu")) {
+      vistos.cookie = new Headers(init?.headers).get("cookie") ?? undefined;
+      return new Response(JSON.stringify({ ator: { papeis } }), { status: 200 });
+    }
+    throw new Error(`URL inesperada no mock: ${u}`);
+  });
+}
+
+const destinoDe = (resp: Response) => new URL(resp.headers.get("location")!).pathname;
+
+describe("callback — sem redirect pedido, cada persona vai para a home dela", () => {
+  it("vereador cai em /vereador (a home dele), não no escritório da secretaria", async () => {
+    const fetchImpl = fetchComPapeis(["vereador"]);
+    const resp = await GET(req("/api/auth/callback?code=c&state=state-xyz", {
+      pkce: pkcePayload({ redirectPath: null }),
+    }), { fetchImpl });
+
+    expect(destinoDe(resp)).toBe("/vereador");
+  });
+
+  it("secretario cai em /inicio", async () => {
+    const fetchImpl = fetchComPapeis(["secretario"]);
+    const resp = await GET(req("/api/auth/callback?code=c&state=state-xyz", {
+      pkce: pkcePayload({ redirectPath: null }),
+    }), { fetchImpl });
+
+    expect(destinoDe(resp)).toBe("/inicio");
+  });
+
+  it("apresenta a sessão recém-criada ao /eu do jeito que o backend lê (cookie cru)", async () => {
+    const vistos: { cookie?: string } = {};
+    const fetchImpl = fetchComPapeis(["secretario"], vistos);
+    await GET(req("/api/auth/callback?code=c&state=state-xyz", {
+      pkce: pkcePayload({ redirectPath: null }),
+    }), { fetchImpl });
+
+    expect(vistos.cookie).toBe(`sessao=${SEGREDO}`);
+  });
+
+  it("um destino PEDIDO vence o papel — quem pediu /tramitacao vai para lá", async () => {
+    const fetchImpl = fetchComPapeis(["vereador"]);
+    const resp = await GET(req("/api/auth/callback?code=c&state=state-xyz", {
+      pkce: pkcePayload({ redirectPath: "/tramitacao" }),
+    }), { fetchImpl });
+
+    expect(destinoDe(resp)).toBe("/tramitacao");
+  });
+
+  it("/eu indisponível não quebra o login: cai no destino padrão, com a sessão já criada", async () => {
+    const fetchImpl = fetchMock(async (url) => {
+      const u = url.toString();
+      if (u.includes("/protocol/openid-connect/token")) {
+        return new Response(JSON.stringify({ access_token: ACCESS_TOKEN }), { status: 200 });
+      }
+      if (u.includes("/auth/sessoes")) {
+        return new Response(JSON.stringify({ sessao: SEGREDO }), { status: 200 });
+      }
+      throw new Error("backend caiu");
+    });
+    const resp = await GET(req("/api/auth/callback?code=c&state=state-xyz", {
+      pkce: pkcePayload({ redirectPath: null }),
+    }), { fetchImpl });
+
+    expect(destinoDe(resp)).toBe("/inicio");
+    expect(findCookie(resp, "sessao")).toBeTruthy(); // o login concluiu mesmo assim
+  });
+});

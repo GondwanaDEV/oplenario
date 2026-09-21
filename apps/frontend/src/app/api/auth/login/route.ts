@@ -12,7 +12,7 @@
 import { randomBytes, createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveAppOrigin } from "../appOrigin";
-import { resolveRedirectPath } from "../redirect";
+import { pedidoDeRedirect } from "../redirect";
 
 interface Descoberta {
   realm: string;
@@ -64,7 +64,8 @@ export async function iniciarLogin(
   const baseUrl = descoberta["base-url"];
   const clientId = descoberta["client-id"];
 
-  const redirectPath = resolveRedirectPath(request.nextUrl.searchParams.get("redirect"), origin);
+  // `null` = ninguém pediu destino; o callback então escolhe a home da persona (destinoPorPapeis).
+  const redirectPath = pedidoDeRedirect(request.nextUrl.searchParams.get("redirect"), origin);
   const codeVerifier = randomBytes(32).toString("base64url");
   const codeChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
   const state = randomBytes(16).toString("base64url");
