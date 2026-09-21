@@ -1,0 +1,47 @@
+/* Chrome da tela "Agendar sessão" (/agendar-sessao, interno). Tokens + chassi (.btn, .bloco, .envelope,
+   .chip) vêm de globals.css/chassi.css — aqui só o desta superfície. */
+
+.agendar-sessao { padding: clamp(1.2rem, 3vw, 2rem) 0 4rem; display: grid; gap: 1.2rem; align-content: start; }
+
+.agendar-sessao .cabecalho .eyebrow {
+  font-family: var(--mono); font-size: var(--t-12); letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--texto-2); margin: 0 0 0.2rem;
+}
+.agendar-sessao h1 {
+  font-family: var(--display); font-weight: 600; font-size: var(--t-24);
+  letter-spacing: -0.01em; color: var(--texto); margin: 0;
+}
+.agendar-sessao .subtitulo { margin: 0.35rem 0 0; color: var(--texto-2); font-size: var(--t-14); max-width: 60ch; }
+
+.form-agendar { padding: 1.2rem; display: grid; gap: 1rem; max-width: 40rem; }
+.form-agendar .campo { display: flex; flex-direction: column; gap: 0.35rem; }
+.form-agendar .campo label { font-size: var(--t-13); font-weight: 600; color: var(--texto); }
+.form-agendar select,
+.form-agendar input {
+  padding: 0.6rem 0.7rem; border: 1px solid var(--linha); border-radius: 8px;
+  background: var(--surface); color: var(--texto); font: inherit; font-size: var(--t-14);
+}
+.form-agendar select:focus-visible,
+.form-agendar input:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }
+.form-acoes { margin-top: 0.3rem; }
+
+.criada {
+  padding: 1.1rem 1.2rem; border-radius: var(--raio);
+  border: 1px solid color-mix(in srgb, var(--marca) 40%, transparent);
+  background: color-mix(in srgb, var(--marca) 8%, var(--surface));
+  display: grid; gap: 0.8rem;
+}
+.criada p { margin: 0; color: var(--texto); }
+.criada-acoes { display: flex; gap: 0.7rem; flex-wrap: wrap; }
+
+.erro-inline {
+  margin: 0; padding: 0.5rem 0.7rem; border-radius: 8px; font-size: var(--t-13);
+  color: var(--acento-texto);
+  background: color-mix(in srgb, var(--telha) 9%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--acento-texto) 40%, transparent);
+}
+.nota-terminal {
+  margin: 0; padding: 0.9rem 1rem; border-radius: var(--raio-2, 10px);
+  background: var(--surface-2); border: 1px solid var(--linha);
+  font-size: var(--t-14); color: var(--texto-2);
+}
