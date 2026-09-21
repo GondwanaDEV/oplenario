@@ -1,5 +1,10 @@
 # Runbook — apresentação de O Plenário
 
+> **⚠️ Este runbook é do stack LOCAL (docker/localhost).** Para a apresentação guiada no **deploy
+> hospedado** (https://oplenario.calvetec.com.br), use **`docs/21`** — lá as personas, credenciais, IDs
+> de sessão e fluxos estão atualizados para produção, incluindo as telas novas (agendar/conduzir sessão,
+> votação, tribuna, apreciação de veto) que a §1.2 abaixo ainda lista como ausentes.
+
 > **Para quem vai demonstrar a plataforma a um cliente.** Do zero (máquina desligada) até o fim da
 > apresentação. Cada comando aqui foi executado neste repositório; onde algo **não** foi verificado
 > nesta forma exata, está marcado `[NÃO VERIFICADO]`.
