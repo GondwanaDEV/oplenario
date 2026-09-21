@@ -1,0 +1,110 @@
+name: Dados da demo (producao, so-leitura)
+
+# Ferramenta de apoio ao runbook da apresentacao guiada (docs/21): colhe, SO-LEITURA, os dados vivos que o
+# roteiro precisa em producao (oplenario.calvetec.com.br) — sessoes e seus estados (qual esta ABERTA, qual
+# ENCERRADA), sessoes legislativas, contagem de proposicoes por estado e alguns ids uteis (uma materia
+# APROVADA para /pos-aprovacao). Loga de verdade como a secretaria via Keycloak. NAO escreve nada.
+#
+# Rode-o (workflow_dispatch) na vespera da demo e cole o bloco "=== SNAPSHOT ===" na secao de dados do
+# runbook: os ids sao regenerados a cada reseed do banco (persona/sessao/materia), entao o runbook so vale
+# com um snapshot recente.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  dados:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar Playwright + Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm i -D playwright@1.47.2 >/dev/null 2>&1
+          npx playwright install --with-deps chromium
+      - name: Escrever o coletor
+        run: |
+          cat > dados.mjs <<'JS'
+          import { chromium } from 'playwright';
+          const B = 'https://oplenario.calvetec.com.br';
+          const E = '10000000-0000-0000-0000-000000000001';
+          const SENHA = 'Plenario@2026';
+          // Username = UUID da persona no seed atual do homolog/producao (cartao "Ids da demo" do semear #8).
+          const SEC = '585e6532-e754-4d45-ad82-1667fdfb220e';
+
+          async function login(ctx, user) {
+            const p = await ctx.newPage();
+            await p.goto(`${B}/api/auth/login?ente=${E}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await p.waitForSelector('#username', { timeout: 25000 });
+            await p.fill('#username', user); await p.fill('#password', SENHA);
+            await Promise.all([ p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(()=>{}), p.click('#kc-login') ]);
+            await p.waitForTimeout(2500);
+            const ok = p.url().startsWith(B) && !new URL(p.url()).pathname.startsWith('/api/auth');
+            await p.close(); return ok;
+          }
+          async function api(ctx, path) {
+            const r = await ctx.request.fetch(B + path, { headers: { accept: 'application/json' }, timeout: 25000 });
+            let j = null; try { j = await r.json(); } catch {}
+            return { status: r.status(), body: j };
+          }
+
+          const browser = await chromium.launch();
+          try {
+            const ctx = await browser.newContext({ locale: 'pt-BR' });
+            const ok = await login(ctx, SEC);
+            console.log('===== SNAPSHOT (dados da demo / producao) =====');
+            console.log(`colhido-em: ${new Date().toISOString()}`);
+            console.log(`login secretaria=${ok}`);
+
+            // SESSOES
+            const ls = await api(ctx, '/api/sessoes');
+            const sessoes = Array.isArray(ls.body?.sessoes) ? ls.body.sessoes : (Array.isArray(ls.body) ? ls.body : []);
+            const porEstado = {};
+            for (const s of sessoes) porEstado[s.estado] = (porEstado[s.estado] || 0) + 1;
+            console.log(`\n-- SESSOES (${sessoes.length}) estados=${JSON.stringify(porEstado)}`);
+            for (const s of sessoes) {
+              console.log(`  id=${s.id} tipo=${s['tipo-sessao']||s.tipoSessao} n=${s['numero-sequencial']??s.numeroSequencial} estado=${s.estado} agendada=${s['agendada-para']||s.agendadaPara||'-'} sl=${s['sessao-legislativa-id']||s.sessaoLegislativaId}`);
+            }
+            const aberta = sessoes.find(s => s.estado === 'aberta');
+            const encerrada = sessoes.find(s => s.estado === 'encerrada');
+            const agendada = sessoes.find(s => s.estado === 'agendada');
+            console.log(`\n  ABERTA:    ${aberta ? aberta.id : '(nenhuma)'}`);
+            console.log(`  ENCERRADA: ${encerrada ? encerrada.id : '(nenhuma)'}`);
+            console.log(`  AGENDADA:  ${agendada ? agendada.id : '(nenhuma)'}`);
+
+            // SESSOES LEGISLATIVAS (derivadas)
+            const sl = {};
+            for (const s of sessoes) { const k = s['sessao-legislativa-id']||s.sessaoLegislativaId; if (k) sl[k] = (sl[k]||0)+1; }
+            console.log(`\n-- SESSOES LEGISLATIVAS (${Object.keys(sl).length})`);
+            for (const [k,v] of Object.entries(sl)) console.log(`  id=${k} sessoes=${v}`);
+
+            // PROPOSICOES
+            const lp = await api(ctx, '/api/legislativo/proposicoes?pagina=1&tamanho=100&ordenar-por=atualizado_em&ordenar-dir=desc');
+            const itens = Array.isArray(lp.body?.itens) ? lp.body.itens : [];
+            const pe = {};
+            for (const p of itens) pe[p.estado] = (pe[p.estado] || 0) + 1;
+            console.log(`\n-- PROPOSICOES total=${lp.body?.total ?? '?'} nesta-pagina=${itens.length} estados=${JSON.stringify(pe)}`);
+            // um exemplo por estado (id + rotulo curto)
+            const vistos = new Set();
+            for (const p of itens) {
+              if (vistos.has(p.estado)) continue; vistos.add(p.estado);
+              const tipo = p.tipo || p.tipoSessao || '';
+              console.log(`  [${p.estado}] id=${p.id} ${tipo} ${p.ano||''}/${p.sequencial||''} :: ${(p.ementa||'').slice(0,60)}`);
+            }
+            // materia(s) APROVADA(s) com autografo (para /pos-aprovacao)
+            const aprovadas = itens.filter(p => /aprov|autograf|sanc|veto|promulg|public/i.test(String(p.estado||''))).slice(0, 8);
+            console.log(`\n-- POS-APROVACAO: materias com autografo (candidatas a /pos-aprovacao/:id)`);
+            for (const p of aprovadas) {
+              const pa = await api(ctx, `/api/legislativo/proposicoes/${p.id}/pos-aprovacao`);
+              const temAut = !!(pa.body?.autografo);
+              const te = pa.body?.['tramitacao-executiva'] ?? pa.body?.tramitacaoExecutiva ?? null;
+              console.log(`  id=${p.id} estado=${p.estado} autografo=${temAut} tram-exec=${te?.estado||'-'} :: ${(p.ementa||'').slice(0,50)}`);
+            }
+            console.log('\n===== FIM SNAPSHOT =====');
+            if (!ok) process.exitCode = 1;
+          } finally { await browser.close(); }
+          JS
+      - name: Coletar
+        run: node dados.mjs
