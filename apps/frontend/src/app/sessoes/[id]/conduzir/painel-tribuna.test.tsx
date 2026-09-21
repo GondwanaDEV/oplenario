@@ -5,6 +5,9 @@ import type { ComposicaoSessaoOut, InscritoTribunaOut, TribunaOut } from "@/lib/
 
 const inscrever = vi.fn().mockResolvedValue({ ok: true, recibo: { id: "i9", ordem: 2 } });
 const desistir = vi.fn().mockResolvedValue({ ok: true });
+const iniciarFala = vi.fn().mockResolvedValue({ ok: true, recibo: { falaId: "f1" } });
+const registrarEventoCronometro = vi.fn().mockResolvedValue({ ok: true });
+const encerrarFala = vi.fn().mockResolvedValue({ ok: true, fala: { falaId: "f1", tempoSegundos: 100 } });
 const useTribunaMock = vi.fn();
 vi.mock("@/lib/use-tribuna-mesa", () => ({
   useTribunaMesa: (...a: unknown[]) => useTribunaMock(...a),
@@ -32,14 +35,25 @@ function montar(over: { tribuna?: TribunaOut | null; composicao?: ComposicaoSess
     recarregar: vi.fn(),
     inscrever,
     desistir,
+    iniciarFala,
+    registrarEventoCronometro,
+    encerrarFala,
   });
   return render(<PainelTribuna sessaoId="s1" token="tok" />);
 }
+
+const orador = (over: Partial<TribunaOut["oradorAtual"]> = {}): NonNullable<TribunaOut["oradorAtual"]> => ({
+  falaId: "f1", oradorId: "v1", tipoFala: "principal", fase: "expediente",
+  iniciouEm: "2026-05-21T14:00:00Z", inscricaoId: "i1", lockVersion: 4, ...over,
+} as NonNullable<TribunaOut["oradorAtual"]>);
 
 afterEach(() => {
   cleanup();
   inscrever.mockClear();
   desistir.mockClear();
+  iniciarFala.mockClear();
+  registrarEventoCronometro.mockClear();
+  encerrarFala.mockClear();
 });
 
 describe("PainelTribuna — fila", () => {
@@ -95,5 +109,59 @@ describe("PainelTribuna — desistência", () => {
     montar({ tribuna: { sessaoId: "s1", oradorAtual: null, marcosCronometro: [], inscritos: [inscrito({ lockVersion: 5 })] } });
     fireEvent.click(screen.getByRole("button", { name: /Registrar desistência/ }));
     await waitFor(() => expect(desistir).toHaveBeenCalledWith("i1", 5));
+  });
+});
+
+describe("PainelTribuna — execução (chamar à tribuna)", () => {
+  it("sem orador ativo, 'Chamar à tribuna' inicia a fala do inscrito (orador+fase+inscrição)", async () => {
+    montar({ tribuna: { sessaoId: "s1", oradorAtual: null, marcosCronometro: [], inscritos: [inscrito({ vereadorId: "v2", fase: "ordem_do_dia", inscricaoId: "iZ" })] } });
+    fireEvent.click(screen.getByRole("button", { name: /Chamar à tribuna/ }));
+    await waitFor(() => expect(iniciarFala).toHaveBeenCalledWith("v2", "ordem_do_dia", { inscricaoId: "iZ" }));
+  });
+
+  it("com um orador ativo, 'Chamar à tribuna' não aparece nas outras linhas", () => {
+    montar({
+      tribuna: {
+        sessaoId: "s1",
+        oradorAtual: orador({ oradorId: "v1", inscricaoId: "i1" }),
+        marcosCronometro: [],
+        inscritos: [inscrito({ inscricaoId: "i1", vereadorId: "v1" }), inscrito({ inscricaoId: "i2", vereadorId: "v2", ordem: 2 })],
+      },
+    });
+    expect(screen.queryByRole("button", { name: /Chamar à tribuna/ })).toBeNull();
+  });
+});
+
+describe("PainelTribuna — cronômetro", () => {
+  it("mostra o relógio da fala e o nome na tribuna", () => {
+    montar({ tribuna: { sessaoId: "s1", oradorAtual: orador(), marcosCronometro: [], inscritos: [inscrito({})] } });
+    expect(screen.getByText(/Na tribuna: Ana Prado/)).toBeTruthy();
+    // relógio no formato mm:ss (ou hh:mm:ss)
+    expect(screen.getByRole("group", { name: /Cronômetro da fala/ })).toBeTruthy();
+  });
+
+  it("Pausar registra o evento 'pausada'; Retomar registra 'retomada' quando já pausado", async () => {
+    montar({ tribuna: { sessaoId: "s1", oradorAtual: orador(), marcosCronometro: [], inscritos: [] } });
+    fireEvent.click(screen.getByRole("button", { name: /^Pausar$/ }));
+    await waitFor(() => expect(registrarEventoCronometro).toHaveBeenCalledWith("f1", "pausada", undefined));
+    registrarEventoCronometro.mockClear();
+    cleanup();
+    montar({ tribuna: { sessaoId: "s1", oradorAtual: orador(), marcosCronometro: [{ tipo: "pausada", ocorridoEm: "2026-05-21T14:01:00Z", segundosAdicionais: null }], inscritos: [] } });
+    fireEvent.click(screen.getByRole("button", { name: /^Retomar$/ }));
+    await waitFor(() => expect(registrarEventoCronometro).toHaveBeenCalledWith("f1", "retomada", undefined));
+  });
+
+  it("+1 min concede 60s; Aparte concede aparte", async () => {
+    montar({ tribuna: { sessaoId: "s1", oradorAtual: orador(), marcosCronometro: [], inscritos: [] } });
+    fireEvent.click(screen.getByRole("button", { name: /\+1 min/ }));
+    await waitFor(() => expect(registrarEventoCronometro).toHaveBeenCalledWith("f1", "tempo_adicional_concedido", 60));
+    fireEvent.click(screen.getByRole("button", { name: /^Aparte$/ }));
+    await waitFor(() => expect(registrarEventoCronometro).toHaveBeenCalledWith("f1", "aparte_concedido", undefined));
+  });
+
+  it("Encerrar fala chama encerrarFala com o lock-version do orador", async () => {
+    montar({ tribuna: { sessaoId: "s1", oradorAtual: orador({ lockVersion: 7 }), marcosCronometro: [], inscritos: [] } });
+    fireEvent.click(screen.getByRole("button", { name: /Encerrar fala/ }));
+    await waitFor(() => expect(encerrarFala).toHaveBeenCalledWith("f1", 7));
   });
 });
