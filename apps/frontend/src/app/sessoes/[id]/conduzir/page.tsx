@@ -20,6 +20,7 @@ import { derivarConducaoSessao, type AtoConducao, type SituacaoSessao } from "@/
 import { nomeTipoSessao, nomeFase } from "@/lib/rotulos-sessao";
 import type { SessaoOut } from "@/lib/contrato-sessoes.gen";
 import { PainelVotacao } from "./painel-votacao";
+import { PainelTribuna } from "./painel-tribuna";
 import "./conduzir.css";
 
 /** "2026-05-21T14:03:00Z" -> "21/05 às 14h03" (fuso do navegador — leitura humana, nunca comparação). */
@@ -300,6 +301,10 @@ function Comando({ sessao, token, transicionar, recarregar }: ComandoProps) {
 
         {sessao.estado === "aberta" && (
           <PainelVotacao sessaoId={sessao.id} token={token} sessaoEstado={sessao.estado} />
+        )}
+
+        {(sessao.estado === "aberta" || sessao.estado === "suspensa") && (
+          <PainelTribuna sessaoId={sessao.id} token={token} />
         )}
 
         {estadoPauta === "ok" && pauta && pauta.itens.length > 0 && (

@@ -22,6 +22,9 @@ vi.mock("@/lib/use-pauta", () => ({ usePauta: () => ({ pauta: null, estado: "err
 vi.mock("@/lib/use-votacao-mesa", () => ({
   useVotacaoMesa: () => ({ votacaoAberta: null, itens: [], estado: "pronto", erro: null, recarregar: vi.fn(), abrir: vi.fn(), encerrar: vi.fn() }),
 }));
+vi.mock("@/lib/use-tribuna-mesa", () => ({
+  useTribunaMesa: () => ({ tribuna: null, composicao: null, estado: "pronto", erro: null, recarregar: vi.fn(), inscrever: vi.fn(), desistir: vi.fn() }),
+}));
 
 const transicionar = vi.fn().mockResolvedValue({ ok: true, sessao: {} });
 const recarregar = vi.fn().mockResolvedValue(undefined);
