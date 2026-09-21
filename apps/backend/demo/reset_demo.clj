@@ -14,7 +14,9 @@
   `public` NAO e' dropado (pode abrigar extensoes como pgcrypto); so' a sua tabela de controle do Migratus
   e' removida, o que forca `migrar!` a re-aplicar TODAS as migrations (que recriam os schemas via
   CREATE SCHEMA IF NOT EXISTS)."
-  (:require [com.stuartsierra.component :as component]
+  (:refer-clojure :exclude [reset!])
+  (:require [clojure.string :as str]
+            [com.stuartsierra.component :as component]
             [next.jdbc :as jdbc]
             [oplenario.config :as config]
             [oplenario.sistema :as sistema]))
@@ -26,16 +28,25 @@
   (let [sys (component/start (sistema/novo-sistema (config/carregar)))
         ds  (:ds (:datasource sys))]
     (try
+      ;; `(comp val first)`: pega o VALOR da unica coluna de cada linha independentemente de como o
+      ;; next.jdbc nomeia a chave (qualificada por tabela/alias) — antes eu lia `:schema_name` e vinha nil,
+      ;; gerando `DROP SCHEMA "" CASCADE` (identificador vazio) e um erro na 1a iteracao. Guarda extra:
+      ;; remove nil/branco antes de montar o DDL.
       (let [schemas (->> (jdbc/execute! ds
-                           ["SELECT nspname AS schema_name FROM pg_namespace
+                           ["SELECT nspname FROM pg_namespace
                              WHERE nspname NOT LIKE 'pg\\_%' AND nspname NOT IN ('information_schema','public')"])
-                         (map :schema_name))]
-        (doseq [s schemas]
-          (println "DROP SCHEMA" s "CASCADE")
-          (jdbc/execute! ds [(str "DROP SCHEMA IF EXISTS \"" s "\" CASCADE")]))
-        ;; log do Migratus (:store :database, tabela default `schema_migrations` no schema default/public):
-        ;; sem remover isto, `migrar!` acha que tudo ja' rodou e NAO recria os schemas que acabamos de dropar.
-        (jdbc/execute! ds ["DROP TABLE IF EXISTS public.schema_migrations CASCADE"])
+                         (map (comp val first))
+                         (remove str/blank?))]
+        ;; ATOMICO (DDL do Postgres faz rollback): ou dropa TODOS os schemas + o log do Migratus, ou
+        ;; NENHUM. Sem a tx, um DROP que falhasse no meio (ex.: schema de outro dono) deixaria o homolog
+        ;; PARCIALMENTE dropado — um estado pior que o de partida. Com a tx, uma falha preserva o banco.
+        (jdbc/with-transaction [tx ds]
+          (doseq [s schemas]
+            (println "DROP SCHEMA" s "CASCADE")
+            (jdbc/execute! tx [(str "DROP SCHEMA IF EXISTS \"" s "\" CASCADE")]))
+          ;; log do Migratus (:store :database, tabela default `schema_migrations` no schema default/public):
+          ;; sem remover isto, `migrar!` acha que tudo ja' rodou e NAO recria os schemas que acabamos de dropar.
+          (jdbc/execute! tx ["DROP TABLE IF EXISTS public.schema_migrations CASCADE"]))
         (println "==> reset! OK — schemas dropados:" (count schemas)
                  (pr-str (vec schemas)) "+ log do Migratus. Banco pronto p/ semear-tudo! do zero."))
       (finally (component/stop sys)))))
