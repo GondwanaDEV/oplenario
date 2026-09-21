@@ -161,24 +161,28 @@ export async function receberCallback(
   return response;
 }
 
-/** Os papéis do ator recém-autenticado, do backend (`GET /eu` -> {ator:{papeis}}). Fail-closed: qualquer
- * falha (rede, !ok, corpo malformado) devolve [] — o chamador então usa o destino padrão. Nunca lança:
- * a sessão já foi criada e o login não pode falhar por causa da escolha de tela inicial. */
+/** Os papéis do ator recém-autenticado, do backend (`GET /eu` -> {ator:{papeis}}).
+ *
+ * `[]` e `null` são DIFERENTES de propósito: `[]` = o backend respondeu e a pessoa não tem papel de
+ * trabalho (é a cidadã — destino próprio); `null` = não deu para saber (rede, !ok, corpo malformado) e o
+ * chamador deve cair no destino padrão, que se adapta no cliente. Sem essa distinção, uma falha de rede
+ * mandaria a secretária para a tela da cidadã. Nunca lança: a sessão já foi criada e o login não pode
+ * falhar por causa da escolha de tela inicial. */
 async function papeisDaSessao(
   f: typeof fetch,
   backend: string,
   segredo: string,
-): Promise<string[]> {
+): Promise<string[] | null> {
   try {
     const r = await f(`${backend}/eu`, {
       headers: { cookie: `sessao=${segredo}`, accept: "application/json" },
       cache: "no-store",
     });
-    if (!r.ok) return [];
+    if (!r.ok) return null;
     const d = (await r.json()) as { ator?: { papeis?: unknown } };
     const ps = d?.ator?.papeis;
-    return Array.isArray(ps) ? ps.filter((p): p is string => typeof p === "string") : [];
+    return Array.isArray(ps) ? ps.filter((p): p is string => typeof p === "string") : null;
   } catch {
-    return [];
+    return null;
   }
 }

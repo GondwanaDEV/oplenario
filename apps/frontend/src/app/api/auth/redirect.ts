@@ -57,15 +57,21 @@ export function pedidoDeRedirect(candidate: string | null, origin: string): stri
 /**
  * Para onde cada persona vai quando NÃO pediu destino: a home DELA.
  *
- * O vereador tem uma home própria e mais rica (`/vereador`: pareceres, ciências, sessões) e o chrome do app
- * dele (topo + tabbar) mora no layout do grupo `(vereador)` — mandá-lo para `/inicio`, que vive em
- * `(interno)`, o deixaria numa página sem casca nenhuma e a um clique de distância da tela que ele
- * realmente quer. `secretario` vence quem acumula papéis (é a persona com mais superfície).
+ * Cada grupo de rota tem chrome próprio, e é por isso que isto importa: o vereador tem topo+tabbar em
+ * `(vereador)`, a cidadã tem o dela em `(cidadao)`, e `/inicio` vive em `(interno)`. Mandar alguém para o
+ * grupo errado o deixa numa página sem casca nenhuma, a um clique da tela que realmente queria.
  *
- * Quem não tem papel de trabalho cai em `/inicio`, que trata esse caso sem prometer o que não existe.
+ * - `secretario` (vence quem acumula papéis — é a persona com mais superfície) -> `/inicio`, o hub dela.
+ * - `vereador` -> `/vereador` (pareceres, ciências, sessões).
+ * - NENHUM papel de trabalho, confirmado pelo backend -> a cidadã autenticada: `/acompanhamentos`, a
+ *   única tela da superfície autenticada dela (o resto do balcão é API pura, sem tela).
+ * - `null` = não foi possível saber (o `/eu` falhou) -> `/inicio`, que re-resolve o papel no cliente e se
+ *   adapta. Não se chuta `/acompanhamentos` aqui: mandaria uma secretária para a tela da cidadã por causa
+ *   de uma falha de rede.
  */
-export function destinoPorPapeis(papeis: string[]): string {
+export function destinoPorPapeis(papeis: string[] | null): string {
+  if (papeis === null) return DESTINO_POS_LOGIN;
   if (papeis.includes("secretario")) return DESTINO_POS_LOGIN;
   if (papeis.includes("vereador")) return "/vereador";
-  return DESTINO_POS_LOGIN;
+  return "/acompanhamentos";
 }

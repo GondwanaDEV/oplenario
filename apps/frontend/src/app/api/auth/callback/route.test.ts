@@ -377,6 +377,15 @@ describe("callback — sem redirect pedido, cada persona vai para a home dela", 
     expect(destinoDe(resp)).toBe("/tramitacao");
   });
 
+  it("cidadã (sem papel de trabalho) vai para a área dela, não para o escritório", async () => {
+    const fetchImpl = fetchComPapeis([]);
+    const resp = await GET(req("/api/auth/callback?code=c&state=state-xyz", {
+      pkce: pkcePayload({ redirectPath: null }),
+    }), { fetchImpl });
+
+    expect(destinoDe(resp)).toBe("/acompanhamentos");
+  });
+
   it("/eu indisponível não quebra o login: cai no destino padrão, com a sessão já criada", async () => {
     const fetchImpl = fetchMock(async (url) => {
       const u = url.toString();

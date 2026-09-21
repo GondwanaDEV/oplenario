@@ -34,7 +34,11 @@ describe("destinoPorPapeis — cada persona na sua home", () => {
     expect(destinoPorPapeis(["vereador", "secretario"])).toBe(DESTINO_POS_LOGIN);
   });
 
-  it("sem papel de trabalho cai no início (que trata o caso)", () => {
-    expect(destinoPorPapeis([])).toBe(DESTINO_POS_LOGIN);
+  it("sem papel de trabalho é a cidadã — vai para a área dela, com o chrome dela", () => {
+    expect(destinoPorPapeis([])).toBe("/acompanhamentos");
+  });
+
+  it("papéis desconhecidos (o /eu falhou) NÃO viram a tela da cidadã — cai no início, que se adapta", () => {
+    expect(destinoPorPapeis(null)).toBe(DESTINO_POS_LOGIN);
   });
 });
