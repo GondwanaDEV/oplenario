@@ -90,11 +90,11 @@
   /* ===== trilha de acessos: SELO ENCADEADO (reusa o padrão de trilha-auditoria) ===== */
   .lacre { display: flex; align-items: center; gap: 0.9rem; background: var(--surface); color: var(--texto); border: 1px solid var(--linha); border-radius: var(--raio); padding: 1rem 1.2rem; margin: 0 0 0.9rem; }
   .lacre .selo-ic { width: 42px; height: 42px; border-radius: 11px; flex: 0 0 auto; display: grid; place-items: center; color: var(--palco-bg); background: var(--amarelo); }
-  .lacre .lc-t b { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--palco-texto); display: block; }
-  .lacre .lc-t span { font-size: var(--t-13); color: var(--palco-texto-2); }
+  .lacre .lc-t b { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); display: block; }
+  .lacre .lc-t span { font-size: var(--t-13); color: var(--texto-2); }
   .lacre .lc-cadeia { margin-left: auto; text-align: right; font-family: var(--mono); }
-  .lacre .lc-cadeia b { font-size: var(--t-16); color: var(--palco-texto); font-variant-numeric: tabular-nums; display: block; }
-  .lacre .lc-cadeia span { font-size: var(--t-12); color: var(--palco-texto-2); }
+  .lacre .lc-cadeia b { font-size: var(--t-16); color: var(--texto); font-variant-numeric: tabular-nums; display: block; }
+  .lacre .lc-cadeia span { font-size: var(--t-12); color: var(--texto-2); }
   @media (max-width: 560px) { .lacre .lc-cadeia { display: none; } }
 
   .audit { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; }
@@ -104,7 +104,7 @@
   .ev .o b { font-size: var(--t-13); color: var(--texto); font-weight: 600; }
   .ev .o span { font-size: var(--t-12); color: var(--texto-2); display: block; margin-top: 1px; }
   .ev .o .acao-tag { display: inline-flex; align-items: center; gap: 0.3rem; font-family: var(--mono); font-size: 0.64rem; letter-spacing: .05em; text-transform: uppercase; font-weight: 600; border-radius: 4px; padding: 0.1rem 0.4rem; border: 1px solid transparent; margin-bottom: 0.2rem; }
-  .acao-conced { color: #3A6B46; border-color: color-mix(in srgb, var(--marca) 40%, transparent); } [data-tema="escuro"] .acao-conced { color: #A6BFA2; }
+  .acao-conced { color: #234429; border-color: color-mix(in srgb, var(--marca) 40%, transparent); } [data-tema="escuro"] .acao-conced { color: #A6BFA2; }
   .acao-revog { color: var(--acento-texto); border-color: color-mix(in srgb, var(--telha) 42%, transparent); }
   .acao-negado { color: var(--texto-2); border-color: var(--linha); }
   /* o selo encadeado: selo atual + elo ao anterior */

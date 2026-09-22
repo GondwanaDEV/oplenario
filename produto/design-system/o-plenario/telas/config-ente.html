@@ -55,8 +55,8 @@
   .ropa-item { border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.85rem 1rem; background: var(--surface-2); }
   .ropa-item .ri-top { display: flex; align-items: center; gap: 0.6rem; }
   .ropa-item .ri-fin { font-weight: 600; font-size: var(--t-14); color: var(--texto); }
-  .ropa-item .ri-base { margin-left: auto; font-family: var(--mono); font-size: 0.64rem; text-transform: uppercase; letter-spacing: .05em; color: var(--cobalto); border: 1px solid color-mix(in srgb, var(--cobalto) 32%, transparent); border-radius: 4px; padding: 0.1rem 0.42rem; white-space: nowrap; }
-  [data-tema="escuro"] .ropa-item .ri-base { color: var(--foco); border-color: color-mix(in srgb, var(--foco) 38%, transparent); }
+  .ropa-item .ri-base { margin-left: auto; font-family: var(--mono); font-size: 0.64rem; text-transform: uppercase; letter-spacing: .05em; color: var(--cobalto-texto); border: 1px solid color-mix(in srgb, var(--cobalto) 32%, transparent); border-radius: 4px; padding: 0.1rem 0.42rem; white-space: nowrap; }
+  [data-tema="escuro"] .ropa-item .ri-base { color: var(--cobalto-texto); border-color: color-mix(in srgb, var(--foco) 38%, transparent); }
   .ropa-item .ri-meta { display: flex; gap: 0.3rem 1.2rem; flex-wrap: wrap; margin-top: 0.5rem; font-size: var(--t-12); color: var(--texto-2); }
   .ropa-item .ri-meta b { color: var(--texto); font-weight: 600; }
   .ropa-add { display: inline-flex; align-items: center; gap: 0.4rem; margin-top: 0.7rem; font-family: var(--corpo); font-weight: 600; font-size: var(--t-13); color: var(--marca); background: color-mix(in srgb, var(--marca) 7%, var(--surface)); border: 1px dashed color-mix(in srgb, var(--marca) 40%, var(--linha)); border-radius: var(--raio-sm); padding: 0.55rem 0.9rem; min-height: 42px; cursor: pointer; }
@@ -81,8 +81,8 @@
 
   /* nota de white-label diferido */
   .nota-tema { display: flex; gap: 0.6rem; align-items: flex-start; font-size: var(--t-13); color: var(--texto-2); background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.8rem 0.9rem; margin: 1.2rem 0 0; }
-  .nota-tema svg { color: var(--cobalto); flex: 0 0 auto; margin-top: 1px; }
-  [data-tema="escuro"] .nota-tema svg { color: var(--foco); }
+  .nota-tema svg { color: var(--cobalto-texto); flex: 0 0 auto; margin-top: 1px; }
+  [data-tema="escuro"] .nota-tema svg { color: var(--cobalto-texto); }
   .nota-tema b { color: var(--texto); }
 
   /* switch (flag) */

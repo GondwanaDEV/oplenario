@@ -139,6 +139,11 @@
      para o lado CLARO e lia como "mais importante"; --realce desce, que e' o que
      cabecalho e hover querem dizer. Todo texto do sistema passa AA sobre ele
      (pior caso --aviso-texto, 5.03:1). */
+  /* Gemea OPACA de --surface. Superficie de vidro sobre um SCRIM escuro deixa o scrim
+     vazar: o painel do modal virava cinza-esverdeado (#4F5F4F) e a tinta escura dele
+     caia para 1.66:1. Painel de dialogo nao e' vidro — e' o que esta na frente de tudo. */
+  --surface-solida: light-dark(#E7F0E2, #1A251C);
+
   --realce:    light-dark(color-mix(in srgb, #C7D9C4 80%, transparent), color-mix(in srgb, #233026 72%, transparent));
 
   --texto:     light-dark(#16231A, #E7F0E2);   /* 13.93:1 / 15.21:1 sobre --bg */
@@ -150,14 +155,27 @@
   --acao-texto:light-dark(#FFF7EA, #0B140C);   /*  5.27:1 /  6.07:1 sobre --acao */
 
   --acento-texto:  light-dark(#73260F, #F58A60);
+  /* O azul tinha preenchimento (--cobalto) mas nao tinha variante de TEXTO — o sistema ja'
+     separava as duas coisas para a telha (--acento-texto) e para o amarelo (--aviso-texto),
+     e so' o azul ficou de fora. Usado como tinta, --cobalto da' 4.13:1 sobre o cartao e
+     2.75:1 sobre o campo: falha nos dois. Escurecer o --cobalto resolveria o texto e
+     estragaria a peca azul do azulejo, entao a saida e' a mesma das outras duas famílias. */
+  --cobalto-texto: light-dark(#2B4C65, #7FB3E6);
   --foco:          light-dark(#1B5490, #7FB3E6);
-  --aviso-texto:   light-dark(#6E5009, #CFA65C);  /* no escuro o amarelo cheio já passa AA */
+  /* Escurecido de #6E5009 para #5F4508: o valor antigo passava sobre o cartao (5.66:1)
+     mas nao sobre o CAMPO (3.76:1), e chip de prazo pousa direto no campo. */
+  --aviso-texto:   light-dark(#5F4508, #CFA65C);  /* no escuro o amarelo cheio já passa AA */
   --amarelo-traco: light-dark(#B07D14, #CFA65C);  /* traço de alerta, piso 3:1 */
 
   /* A barra do topo e' o UNICO lugar onde o desfoque muda o pixel: o conteudo rola
      por baixo dela. Num cartao parado sobre gradiente liso, blur() e' indistinguivel
      de nao-blur — por isso o desfoque nao foi espalhado por decoracao. */
-  --topo-bg:   light-dark(color-mix(in srgb, #7A9B7A 72%, transparent), color-mix(in srgb, #1A251C 72%, transparent));
+  /* Era #7A9B7A. Com a barra TRANSLUCIDA o composto sobre o campo dava #86A585, mais
+     escuro que o proprio token — e ali pousam o nome do orgao, o papel da pessoa e o
+     eyebrow: 4.16:1 e 3.84:1, abaixo do piso, em 32 telas. Foi o maior achado da
+     varredura, e nenhum scan anterior o via. #C7D9C4 (a 2a cor da paleta) leva os
+     mesmos pares a 7.06:1 e 6.52:1 sem a barra deixar de ser verde. */
+  --topo-bg:   light-dark(color-mix(in srgb, #C7D9C4 72%, transparent), color-mix(in srgb, #1A251C 72%, transparent));
 
   /* Borda de campo de formulário: --linha é divisor decorativo e falha o piso de
      3:1 de non-text contrast (SC 1.4.11) para limite de componente. Medida contra
@@ -205,7 +223,7 @@
   --papel:         light-dark(#FFF7EA, #EDE4D2);
   --papel-2:       light-dark(#F2E9D8, #E0D5C0);
   --papel-texto:   light-dark(#1B2A20, #1B2A20);   /* 14.12:1 / 11.89:1 */
-  --papel-texto-2: light-dark(#53655A, #53655A);   /*  5.68:1 /  4.78:1 */
+  --papel-texto-2: light-dark(#4E5F55, #4E5F55);   /*  6.18:1 /  4.91:1 — era #53655A, media 4.49 no escuro */
   --papel-linha:   light-dark(#E3D8C2, #CFC4A8);
   --merge:         light-dark(#A33A19, #A33A19);
   --merge-fundo:   light-dark(rgba(163,58,25,.10), rgba(163,58,25,.12));

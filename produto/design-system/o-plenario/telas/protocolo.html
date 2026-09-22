@@ -58,14 +58,14 @@
   .campo input::placeholder, .campo textarea::placeholder { color: var(--texto-2); }
   .campo .erro { font-size: var(--t-12); color: var(--acento-texto); display: flex; align-items: center; gap: 0.35rem; }
 
-  .assist-ia { display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--t-13); font-weight: 600; color: var(--cobalto); background: color-mix(in srgb, var(--cobalto) 9%, var(--surface-2)); border: 1px solid color-mix(in srgb, var(--cobalto) 35%, transparent); border-radius: var(--raio-sm); padding: 0.4rem 0.7rem; min-height: 38px; cursor: pointer; }
-  [data-tema="escuro"] .assist-ia { color: var(--foco); border-color: color-mix(in srgb, var(--foco) 40%, transparent); }
+  .assist-ia { display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--t-13); font-weight: 600; color: var(--cobalto-texto); background: color-mix(in srgb, var(--cobalto) 9%, var(--surface-2)); border: 1px solid color-mix(in srgb, var(--cobalto) 35%, transparent); border-radius: var(--raio-sm); padding: 0.4rem 0.7rem; min-height: 38px; cursor: pointer; }
+  [data-tema="escuro"] .assist-ia { color: var(--cobalto-texto); border-color: color-mix(in srgb, var(--foco) 40%, transparent); }
   .assist-ia:hover { background: color-mix(in srgb, var(--cobalto) 14%, var(--surface-2)); }
 
   /* sugestão da IA com camada de confiança */
   .ia-sugestao { border: 1px solid var(--linha); border-left: 3px solid var(--cobalto); border-radius: var(--raio-sm); background: var(--surface-2); padding: 0.9rem 1rem; margin: 0.3rem 0 0; }
-  .ia-sugestao .selo { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; text-transform: uppercase; color: var(--cobalto); }
-  [data-tema="escuro"] .ia-sugestao .selo { color: var(--foco); }
+  .ia-sugestao .selo { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; text-transform: uppercase; color: var(--cobalto-texto); }
+  [data-tema="escuro"] .ia-sugestao .selo { color: var(--cobalto-texto); }
   .ia-sugestao p { margin: 0.5rem 0 0.7rem; color: var(--texto); font-size: var(--t-13); }
   .ia-sugestao .acoes { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
   .ia-sugestao .nota { font-size: var(--t-12); color: var(--texto-2); margin-left: auto; }

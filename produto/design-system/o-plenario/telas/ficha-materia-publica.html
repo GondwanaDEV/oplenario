@@ -39,8 +39,8 @@
   .ficha-cab .num { font-family: var(--mono); font-size: var(--t-13); font-weight: 600; color: var(--acento-texto); }
   .estado-chip { font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.18rem 0.7rem; display: inline-flex; align-items: center; gap: 0.35rem; }
   .estado-chip svg { width: 13px; height: 13px; }
-  .ec-tram { color: var(--cobalto); background: color-mix(in srgb, var(--cobalto) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--cobalto) 34%, transparent); }
-  [data-tema="escuro"] .ec-tram { color: var(--foco); }
+  .ec-tram { color: var(--cobalto-texto); background: color-mix(in srgb, var(--cobalto) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--cobalto) 34%, transparent); }
+  [data-tema="escuro"] .ec-tram { color: var(--cobalto-texto); }
   .ficha-cab h1 { font-family: var(--display); font-weight: 800; font-size: clamp(1.7rem, 4.5vw, var(--t-40)); letter-spacing: -0.02em; color: var(--texto); margin: 0.5rem 0 0; line-height: 1.08; }
 
   /* ---- A FAIXA DE AZULEJO DA TRAMITAÇÃO (assinatura) ---- */
@@ -60,7 +60,7 @@
   .etapa.atual .az { box-shadow: 0 0 0 3px color-mix(in srgb, var(--cobalto) 40%, transparent); }
   .etapa .et-nome { font-size: var(--t-13); font-weight: 600; color: var(--texto-2); display: block; }
   .etapa.feita .et-nome, .etapa.atual .et-nome { color: var(--texto); }
-  .etapa.atual .et-nome::after { content:" · agora"; font-family: var(--mono); font-weight: 500; font-size: var(--t-12); color: var(--foco); }
+  .etapa.atual .et-nome::after { content:" · agora"; font-family: var(--mono); font-weight: 500; font-size: var(--t-12); color: var(--cobalto-texto); }
   .etapa .et-data { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); display: block; margin-top: 2px; }
   .tram-nota { display: flex; align-items: center; gap: 0.4rem; margin: 1.2rem 0 0; font-size: var(--t-12); color: var(--texto-2); }
   .tram-nota svg { color: var(--amarelo-traco); flex: 0 0 auto; } [data-tema="escuro"] .tram-nota svg { color: var(--amarelo); }
@@ -78,7 +78,7 @@
   /* resumo simples + camada de confiança da IA */
   .simples-bloco { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; }
   .ia-tarja { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1.1rem; background: color-mix(in srgb, var(--cobalto) 8%, var(--surface)); border-bottom: 1px solid color-mix(in srgb, var(--cobalto) 22%, var(--linha)); font-size: var(--t-12); color: var(--texto-2); }
-  .ia-tarja .pt { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 600; color: var(--cobalto); } [data-tema="escuro"] .ia-tarja .pt { color: var(--foco); }
+  .ia-tarja .pt { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 600; color: var(--cobalto-texto); } [data-tema="escuro"] .ia-tarja .pt { color: var(--cobalto-texto); }
   .ia-tarja .rev { margin-left: auto; display: inline-flex; align-items: center; gap: 0.35rem; }
   .ia-tarja .rev svg { color: #6B9B72; } [data-tema="escuro"] .ia-tarja .rev svg { color: #A6BFA2; }
   .simples-corpo { padding: 1.2rem 1.3rem; }
@@ -91,7 +91,7 @@
   .docs { display: grid; gap: 0.6rem; }
   .doc { display: flex; align-items: center; gap: 0.8rem; padding: 0.85rem 1rem; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-sm); text-decoration: none; }
   .doc:hover { border-color: var(--texto-2); }
-  .doc .ic { width: 36px; height: 36px; border-radius: 8px; flex: 0 0 auto; display: grid; place-items: center; color: #fff; background: var(--telha); }
+  .doc .ic { width: 36px; height: 36px; border-radius: 8px; flex: 0 0 auto; display: grid; place-items: center; color: #fff; background: var(--telha-fundo); }
   .doc .nm { min-width: 0; } .doc .nm b { font-size: var(--t-13); color: var(--texto); font-weight: 600; display: block; } .doc .nm span { font-size: var(--t-12); color: var(--texto-2); }
   .doc .meta { margin-left: auto; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); white-space: nowrap; }
 
@@ -110,7 +110,7 @@
   .compor textarea { width: 100%; min-height: 80px; resize: vertical; font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 50%, var(--linha)); border-radius: var(--raio-sm); padding: 0.7rem 0.8rem; }
   .compor-rod { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; margin-top: 0.7rem; }
   .compor-rod .ident { font-size: var(--t-12); color: var(--texto-2); display: inline-flex; align-items: center; gap: 0.4rem; }
-  .compor-rod .ident svg { color: var(--cobalto); } [data-tema="escuro"] .compor-rod .ident svg { color: var(--foco); }
+  .compor-rod .ident svg { color: var(--cobalto-texto); } [data-tema="escuro"] .compor-rod .ident svg { color: var(--cobalto-texto); }
   .compor-rod .btn { margin-left: auto; }
 
   .coment { display: grid; gap: 1rem; }
@@ -120,7 +120,7 @@
   .cmt .cmt-cab { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
   .cmt .cmt-cab b { font-size: var(--t-13); color: var(--texto); font-weight: 600; }
   .cmt .cmt-cab .quando { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
-  .cmt .cmt-cab .verif { display: inline-flex; align-items: center; gap: 0.25rem; font-size: var(--t-12); color: #3A6B46; } [data-tema="escuro"] .cmt .cmt-cab .verif { color: #A6BFA2; }
+  .cmt .cmt-cab .verif { display: inline-flex; align-items: center; gap: 0.25rem; font-size: var(--t-12); color: #234429; } [data-tema="escuro"] .cmt .cmt-cab .verif { color: #A6BFA2; }
   .cmt p { font-size: var(--t-16); color: var(--texto); line-height: 1.55; margin: 0.25rem 0 0; }
   .cmt .acoes { display: flex; gap: 0.9rem; margin-top: 0.4rem; }
   .cmt .acoes button { background: none; border: none; cursor: pointer; font-family: var(--corpo); font-size: var(--t-12); color: var(--texto-2); display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0; }
@@ -266,7 +266,7 @@
         </div>
       </div>
       <div class="cmt">
-        <span class="av" style="background:var(--telha)" aria-hidden="true">RS</span>
+        <span class="av" style="background:var(--telha-fundo)" aria-hidden="true">RS</span>
         <div class="corpo">
           <div class="cmt-cab"><b>Ricardo S.</b><span class="verif"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>gov.br</span><span class="quando">há 4 dias</span></div>
           <p>Boa ideia, mas quem cuida da manutenção e da água? Espero que o regulamento deixe isso claro antes de aprovar.</p>

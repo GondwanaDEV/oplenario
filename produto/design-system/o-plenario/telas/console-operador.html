@@ -47,16 +47,16 @@
   .plano { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
   .st { display: inline-flex; align-items: center; gap: 0.35rem; font-size: var(--t-12); font-weight: 600; }
   .st .dot { width: 8px; height: 8px; border-radius: 50%; }
-  .st-ativa { color: #3A6B46; } .st-ativa .dot { background: #6B9B72; } [data-tema="escuro"] .st-ativa { color: #A6BFA2; }
-  .st-trial { color: var(--cobalto); } .st-trial .dot { background: var(--cobalto); } [data-tema="escuro"] .st-trial { color: var(--foco); } [data-tema="escuro"] .st-trial .dot { background: var(--foco); }
+  .st-ativa { color: #234429; } .st-ativa .dot { background: #6B9B72; } [data-tema="escuro"] .st-ativa { color: #A6BFA2; }
+  .st-trial { color: var(--cobalto-texto); } .st-trial .dot { background: var(--cobalto); } [data-tema="escuro"] .st-trial { color: var(--cobalto-texto); } [data-tema="escuro"] .st-trial .dot { background: var(--foco); }
   .st-susp { color: var(--aviso-texto); } .st-susp .dot { background: var(--amarelo-traco); }
-  .st-handoff { color: var(--cobalto); } .st-handoff .dot { background: var(--cobalto); } [data-tema="escuro"] .st-handoff { color: var(--foco); } [data-tema="escuro"] .st-handoff .dot { background: var(--foco); }
+  .st-handoff { color: var(--cobalto-texto); } .st-handoff .dot { background: var(--cobalto); } [data-tema="escuro"] .st-handoff { color: var(--cobalto-texto); } [data-tema="escuro"] .st-handoff .dot { background: var(--foco); }
 
   /* semântica do ciclo de vida do tenant: handoff + suspensão (preserva LAI) */
   .lifecycle { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; margin: 1rem 0 0; }
   .lifecycle .lc { display: flex; align-items: flex-start; gap: 0.55rem; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 0.9rem 1.05rem; font-size: var(--t-13); color: var(--texto-2); line-height: 1.45; }
   .lifecycle .lc svg { flex: 0 0 auto; margin-top: 1px; }
-  .lifecycle .lc.handoff svg { color: var(--cobalto); } [data-tema="escuro"] .lifecycle .lc.handoff svg { color: var(--foco); }
+  .lifecycle .lc.handoff svg { color: var(--cobalto-texto); } [data-tema="escuro"] .lifecycle .lc.handoff svg { color: var(--cobalto-texto); }
   .lifecycle .lc.susp svg { color: var(--aviso-texto); }
   .lifecycle .lc b { color: var(--texto); font-weight: 600; }
   @media (max-width: 620px) { .lifecycle { grid-template-columns: 1fr; } }
@@ -141,7 +141,7 @@
           <td><button class="u-menu" type="button" aria-label="Ações da Câmara de Caucaia"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></td>
         </tr>
         <tr>
-          <td><div class="cam"><span class="uf" style="background:var(--jade-claro)" aria-hidden="true">CE</span><span><b>Câmara de Sobral</b><span>sobral.ce</span></span></div></td>
+          <td><div class="cam"><span class="uf" style="background:var(--jade)" aria-hidden="true">CE</span><span><b>Câmara de Sobral</b><span>sobral.ce</span></span></div></td>
           <td class="plano">Legislativo · 15 vagas</td>
           <td><span class="st st-trial"><span class="dot" aria-hidden="true"></span>Trial · 12 dias</span></td>
           <td class="mrr">—</td>

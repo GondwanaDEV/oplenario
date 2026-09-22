@@ -29,8 +29,8 @@
   .doc-cab .sub { font-size: var(--t-13); color: var(--texto-2); margin: 0.4rem 0 0; }
   .doc-meta { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; justify-content: flex-end; }
   .chip { display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.28rem 0.7rem; border: 1px solid transparent; white-space: nowrap; }
-  .chip-ia { color: var(--cobalto); background: color-mix(in srgb, var(--cobalto) 9%, var(--surface)); border-color: color-mix(in srgb, var(--cobalto) 32%, transparent); }
-  [data-tema="escuro"] .chip-ia { color: var(--foco); border-color: color-mix(in srgb, var(--foco) 38%, transparent); }
+  .chip-ia { color: var(--cobalto-texto); background: color-mix(in srgb, var(--cobalto) 9%, var(--surface)); border-color: color-mix(in srgb, var(--cobalto) 32%, transparent); }
+  [data-tema="escuro"] .chip-ia { color: var(--cobalto-texto); border-color: color-mix(in srgb, var(--foco) 38%, transparent); }
   .chip-rev { color: var(--aviso-texto); background: color-mix(in srgb, var(--amarelo) 16%, var(--surface)); border-color: color-mix(in srgb, var(--amarelo-traco) 50%, transparent); }
 
   .estudio { display: grid; grid-template-columns: minmax(0, 1fr) 366px; gap: 1.5rem; align-items: start; margin: 1.4rem 0 0; }
@@ -51,7 +51,7 @@
   /* === RAIL: IA + áudio === */
   .rail { display: grid; gap: 1.1rem; position: sticky; top: 76px; }
   .ia-cabe { background: var(--surface); border: 1px solid var(--linha); border-top: 3px solid var(--cobalto); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1rem 1.1rem; }
-  [data-tema="escuro"] .ia-cabe { border-top-color: var(--foco); }
+  [data-tema="escuro"] .ia-cabe { border-top-color: var(--cobalto-texto); }
   .ia-cabe .marca-ia { display: flex; align-items: center; gap: 0.55rem; }
   .ia-cabe .glifo { width: 30px; height: 30px; border-radius: 8px; flex: 0 0 auto; display: grid; place-items: center; color: #fff; background: var(--cobalto); }
   [data-tema="escuro"] .ia-cabe .glifo { background: var(--cobalto-fundo); }
@@ -83,8 +83,8 @@
      escuro no tema escuro → texto precisa clarear p/ manter AA) */
   .pc .selo-n { width: 20px; height: 20px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--mono); font-size: 0.62rem; font-weight: 700; color: var(--aviso-texto); border: 1.5px solid var(--amarelo-traco); background: color-mix(in srgb, var(--amarelo) 16%, var(--surface)); }
   .pc .tipo { font-size: var(--t-12); font-weight: 600; color: var(--texto); }
-  .pc .ouvir { margin-left: auto; font-family: var(--mono); font-size: var(--t-12); color: var(--cobalto); background: none; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 0.3rem; }
-  [data-tema="escuro"] .pc .ouvir { color: var(--foco); }
+  .pc .ouvir { margin-left: auto; font-family: var(--mono); font-size: var(--t-12); color: var(--cobalto-texto); background: none; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 0.3rem; }
+  [data-tema="escuro"] .pc .ouvir { color: var(--cobalto-texto); }
   .pc .ouvir:hover { text-decoration: underline; }
   .pc .trecho { font-size: var(--t-13); color: var(--texto); margin: 0.5rem 0 0; line-height: 1.45; }
   .pc .trecho .sug { font-weight: 600; }
@@ -119,7 +119,7 @@
   .off-contrato h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.7rem; }
   .off-contrato ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
   .off-contrato li { display: grid; grid-template-columns: 1.3rem 1fr; gap: 0.55rem; font-size: var(--t-13); color: var(--texto); line-height: 1.45; align-items: start; }
-  .off-contrato li svg { color: #3A6B46; flex: 0 0 auto; margin-top: 2px; }
+  .off-contrato li svg { color: #234429; flex: 0 0 auto; margin-top: 2px; }
   [data-tema="escuro"] .off-contrato li svg { color: #A6BFA2; }
   .off-contrato li b { font-weight: 600; }
   .off-nota { font-size: var(--t-12); color: var(--texto-2); margin: 0.75rem 0 0; border-top: 1px dashed var(--linha); padding-top: 0.6rem; line-height: 1.45; }

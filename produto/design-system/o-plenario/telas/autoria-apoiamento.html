@@ -24,7 +24,7 @@
   .passos li { display: flex; align-items: center; gap: 0.5rem; font-size: var(--t-13); color: var(--texto-2); }
   .passos li .bola { width: 26px; height: 26px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--mono); font-size: var(--t-12); font-weight: 600; background: var(--surface-2); border: 1px solid var(--linha); color: var(--texto-2); }
   .passos li.feito .bola { background: var(--jade); border-color: var(--jade); color: #fff; }
-  .passos li.atual .bola { background: var(--cobalto); border-color: var(--cobalto); color: #fff; }
+  .passos li.atual .bola { background: var(--cobalto); border-color: var(--cobalto-texto); color: #fff; }
   .passos li.atual { color: var(--texto); font-weight: 600; }
   .passos .traco { width: 28px; height: 2px; background: var(--linha); margin: 0 0.5rem; }
   .passos .traco.ok { background: color-mix(in srgb,var(--jade) 50%,var(--linha)); }
@@ -56,7 +56,7 @@
   .ca .nm { flex: 1; min-width: 0; } .ca .nm b { font-size: var(--t-13); color: var(--texto); font-weight: 600; display: block; line-height: 1.2; } .ca .nm span { font-size: var(--t-12); color: var(--texto-2); }
   .ca-status { font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.15rem 0.6rem; display: inline-flex; align-items: center; gap: 0.3rem; white-space: nowrap; }
   .ca-status svg { width: 12px; height: 12px; }
-  .st-conf { color: #3A6B46; background: color-mix(in srgb,#6B9B72 14%,var(--surface)); border: 1px solid color-mix(in srgb,#6B9B72 38%,transparent); } [data-tema="escuro"] .st-conf { color: #A6BFA2; }
+  .st-conf { color: #234429; background: color-mix(in srgb,#6B9B72 14%,var(--surface)); border: 1px solid color-mix(in srgb,#6B9B72 38%,transparent); } [data-tema="escuro"] .st-conf { color: #A6BFA2; }
   .st-pend { color: var(--aviso-texto); background: color-mix(in srgb,var(--amarelo) 16%,var(--surface)); border: 1px solid color-mix(in srgb,var(--amarelo-traco) 45%,transparent); }
   .ca .rem { background: none; border: 1px solid var(--linha); color: var(--texto-2); cursor: pointer; border-radius: 7px; width: 30px; height: 30px; display: grid; place-items: center; flex: 0 0 auto; }
   .ca .rem:hover { color: var(--acento-texto); border-color: color-mix(in srgb,var(--telha) 50%,transparent); }
@@ -136,13 +136,13 @@
 
     <div class="coautores">
       <div class="ca">
-        <span class="av" style="background:var(--telha)" aria-hidden="true">CT</span>
+        <span class="av" style="background:var(--telha-fundo)" aria-hidden="true">CT</span>
         <div class="nm"><b>Carla Tavares</b><span>Vereadora · convite enviado</span></div>
         <span class="ca-status st-pend"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Aguarda confirmação</span>
         <button class="rem" type="button" aria-label="Remover Carla Tavares da coautoria"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>
       <div class="ca">
-        <span class="av" style="background:var(--jade-claro)" aria-hidden="true">RM</span>
+        <span class="av" style="background:var(--jade)" aria-hidden="true">RM</span>
         <div class="nm"><b>Rafael Melo</b><span>Vereador</span></div>
         <span class="ca-status st-conf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>Subscrição confirmada</span>
         <button class="rem" type="button" aria-label="Remover Rafael Melo da coautoria"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
@@ -167,8 +167,8 @@
 
     <div class="apoiadores" aria-label="Apoiadores atuais">
       <span class="ap-av" style="background:var(--cobalto)" title="Helena Past" aria-hidden="true">HP</span>
-      <span class="ap-av" style="background:var(--jade-claro)" title="Rafael Melo" aria-hidden="true">RM</span>
-      <span class="ap-av" style="background:var(--telha)" title="João Sá" aria-hidden="true">JS</span>
+      <span class="ap-av" style="background:var(--jade)" title="Rafael Melo" aria-hidden="true">RM</span>
+      <span class="ap-av" style="background:var(--telha-fundo)" title="João Sá" aria-hidden="true">JS</span>
     </div>
     <p class="nota-sub"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg>O apoiamento mede adesão formal à proposição; não se confunde com o voto, que ocorre depois, em plenário.</p>
   </div>

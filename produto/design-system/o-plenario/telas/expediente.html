@@ -83,7 +83,7 @@
     padding: 0.65rem 0.7rem; min-height: 48px;
     transition: border-color .12s ease, background-color .12s ease, transform .12s ease;
   }
-  .modelo:hover { border-color: var(--foco); transform: translateY(-1px); }
+  .modelo:hover { border-color: var(--cobalto-texto); transform: translateY(-1px); }
   .modelo .ico { width: 30px; height: 30px; display: inline-grid; vertical-align: -9px; margin-right: 0.6rem; place-items: center; border-radius: 8px; background: var(--bg); color: var(--jade-claro); }
   [data-tema="escuro"] .modelo .ico { color: var(--marca); }
   .modelo[aria-pressed="true"] { border-color: var(--acao); background: rgba(12,83,64,.06); box-shadow: inset 0 0 0 1px var(--acao); }
@@ -113,12 +113,14 @@
   .escolhido .quem { line-height: 1.25; min-width: 0; flex: 1 1 auto; }
   .escolhido .quem b { font-weight: 600; font-size: var(--t-13); color: var(--texto); display: block; }
   .escolhido .quem span { font-size: var(--t-12); color: var(--texto-2); }
-  .escolhido .trocar { font-family: var(--mono); font-size: var(--t-12); color: var(--foco); background: none; border: 0; cursor: pointer; padding: 0.2rem; }
+  .escolhido .trocar { font-family: var(--mono); font-size: var(--t-12); color: var(--cobalto-texto); background: none; border: 0; cursor: pointer; padding: 0.2rem; }
 
   .tag-cadastro {
     display: inline-flex; align-items: center; gap: 0.3rem; vertical-align: middle;
     font-family: var(--mono); font-size: 0.6875rem; font-weight: 500; letter-spacing: .04em;
-    color: var(--merge); background: var(--merge-fundo); border: 1px solid rgba(217,84,43,.3);
+    /* tingido misturado com --surface, nao com transparent: no CAMPO (mais escuro que o
+     cartao) o fundo translucido puxava o chip para baixo e o rotulo caia de AA. */
+    color: var(--merge); background: color-mix(in srgb, var(--telha) 12%, var(--surface-solida)); border: 1px solid color-mix(in srgb, var(--telha) 32%, transparent);
     border-radius: 999px; padding: 0.05rem 0.45rem; margin-left: 0.45rem;
   }
   [data-tema="escuro"] .tag-cadastro { color: var(--acento-texto); }
@@ -129,7 +131,7 @@
   .chip-materia { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); font-weight: 600; color: var(--marca); background: rgba(12,83,64,.08); border: 1px solid rgba(12,83,64,.25); border-radius: 999px; padding: 0.3rem 0.6rem; }
   [data-tema="escuro"] .chip-materia { color: var(--marca); background: rgba(24,158,118,.12); border-color: rgba(67,189,147,.3); }
   .chip-materia .x { color: var(--texto-2); }
-  .ia-link { display: inline-flex; align-items: center; gap: 0.35rem; font-family: var(--mono); font-size: var(--t-12); color: var(--foco); background: none; border: 0; cursor: pointer; padding: 0.2rem 0; }
+  .ia-link { display: inline-flex; align-items: center; gap: 0.35rem; font-family: var(--mono); font-size: var(--t-12); color: var(--cobalto-texto); background: none; border: 0; cursor: pointer; padding: 0.2rem 0; }
 
   /* ---- bloco "preenchido pelo cadastro" ---- */
   .dominio { background: var(--surface); }
@@ -156,7 +158,7 @@
   .carimbo {
     position: absolute; top: clamp(1rem, 2.5vw, 1.8rem); right: clamp(1rem, 3vw, 2.4rem);
     transform: rotate(-3deg); text-align: center;
-    border: 2.5px solid var(--telha-fundo); color: var(--telha-fundo);
+    border: 2.5px solid var(--telha-fundo); color: var(--merge);   /* carimbo vive no PAPEL (claro nos dois temas): tinta fixa, nao tematizada */
     border-radius: 10px; padding: 0.4rem 0.7rem 0.35rem; background: rgba(217,84,43,.05);
   }
   .carimbo .titulo { font-family: var(--mono); font-size: 0.625rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; display: block; }

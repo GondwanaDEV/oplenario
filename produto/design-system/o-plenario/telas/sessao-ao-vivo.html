@@ -131,8 +131,8 @@
   .voto-pill-sim .g { background: var(--jade-claro); }
   .voto-pill-nao { color: var(--acento-texto); background: rgba(217,84,43,.12); border: 1px solid rgba(217,84,43,.3); }
   .voto-pill-nao .g { background: var(--telha); }
-  .voto-pill-abs { color: var(--cobalto); background: rgba(30,95,168,.12); border: 1px solid rgba(30,95,168,.3); }
-  [data-tema="escuro"] .voto-pill-abs { color: var(--foco); }
+  .voto-pill-abs { color: var(--cobalto-texto); background: color-mix(in srgb, var(--cobalto) 14%, var(--surface-solida)); border: 1px solid color-mix(in srgb, var(--cobalto) 32%, transparent); }
+  [data-tema="escuro"] .voto-pill-abs { color: var(--cobalto-texto); }
   /* MEDIDO 4.37 no escuro com --acento-texto sobre o tint de telha — clareia o texto (o fundo já é
      translúcido; mexer no fundo mudaria a família de chips inteira). */
   [data-tema="escuro"] .voto-pill-nao { color: #FA9877; }
@@ -209,9 +209,9 @@
 
   .incidentes { display: grid; grid-template-columns: 1fr 1fr; gap: 0.55rem; }
   .inc-btn { font-family: var(--corpo); font-weight: 500; font-size: var(--t-13); text-align: left; line-height: 1.25; background: var(--surface-2); color: var(--texto); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.6rem 0.7rem; cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 0.5rem; transition: border-color .12s ease, background-color .12s ease, transform .12s ease; }
-  .inc-btn:hover { border-color: var(--foco); transform: translateY(-1px); }
-  .inc-btn svg { flex: 0 0 auto; color: var(--cobalto); }
-  [data-tema="escuro"] .inc-btn svg { color: var(--foco); }
+  .inc-btn:hover { border-color: var(--cobalto-texto); transform: translateY(-1px); }
+  .inc-btn svg { flex: 0 0 auto; color: var(--cobalto-texto); }
+  [data-tema="escuro"] .inc-btn svg { color: var(--cobalto-texto); }
 
   /* ============== 5 · BARRA DE COMANDO DA MESA ============== */
 

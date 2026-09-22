@@ -50,10 +50,10 @@
   .mat-top { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }
   .mat-num { font-family: var(--mono); font-size: var(--t-13); color: var(--acento-texto); font-weight: 600; }
   .mat-chip { font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.15rem 0.6rem; margin-left: auto; }
-  .ch-tram { color: var(--cobalto); background: color-mix(in srgb, var(--cobalto) 9%, var(--surface)); border: 1px solid color-mix(in srgb, var(--cobalto) 30%, transparent); }
-  .ch-lei { color: #3A6B46; background: color-mix(in srgb, #6B9B72 14%, var(--surface)); border: 1px solid color-mix(in srgb, #6B9B72 36%, transparent); }
+  .ch-tram { color: var(--cobalto-texto); background: color-mix(in srgb, var(--cobalto) 9%, var(--surface)); border: 1px solid color-mix(in srgb, var(--cobalto) 30%, transparent); }
+  .ch-lei { color: #234429; background: color-mix(in srgb, #6B9B72 14%, var(--surface)); border: 1px solid color-mix(in srgb, #6B9B72 36%, transparent); }
   /* cores de marca fixas precisam clarear no escuro (senão escuro-sobre-escuro) */
-  [data-tema="escuro"] .ch-tram { color: var(--foco); }
+  [data-tema="escuro"] .ch-tram { color: var(--cobalto-texto); }
   [data-tema="escuro"] .ch-lei { color: #A6BFA2; }
   .mat h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); margin: 0; line-height: 1.2; }
   .mat h2 a { color: var(--texto); text-decoration: none; }
@@ -151,7 +151,7 @@
         <i class="on"></i><i class="on"></i><i class="on"></i><i></i>
       </div>
       <div class="mat-rod">
-        <span class="autor"><span class="av" style="background:var(--telha)" aria-hidden="true">CT</span>Ver. Carla Tavares</span>
+        <span class="autor"><span class="av" style="background:var(--telha-fundo)" aria-hidden="true">CT</span>Ver. Carla Tavares</span>
         <a class="ver" href="ficha-materia-publica.html">Ver e comentar →</a>
       </div>
     </article>
@@ -167,7 +167,7 @@
         <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i>
       </div>
       <div class="mat-rod">
-        <span class="autor"><span class="av" style="background:var(--jade-claro)" aria-hidden="true">RM</span>Ver. Rafael Melo</span>
+        <span class="autor"><span class="av" style="background:var(--jade)" aria-hidden="true">RM</span>Ver. Rafael Melo</span>
         <a class="ver" href="ficha-materia-publica.html">Ver a lei →</a>
       </div>
     </article>

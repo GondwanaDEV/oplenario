@@ -52,11 +52,13 @@
   .ficha-topo .qa h2 { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--texto); margin: 0; }
   .ficha-topo .qa .cargo { font-size: var(--t-13); color: var(--texto-2); margin: 0.2rem 0 0; }
   .chip { display: inline-flex; align-items: center; gap: 0.35rem; font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.2rem 0.6rem; border: 1px solid transparent; }
-  .chip-ativo { color: #3A6B46; background: color-mix(in srgb, #6B9B72 15%, var(--surface)); border-color: color-mix(in srgb, #6B9B72 40%, transparent); }
+  .chip-ativo { color: #234429; background: color-mix(in srgb, #6B9B72 15%, var(--surface)); border-color: color-mix(in srgb, #6B9B72 40%, transparent); }
   [data-tema="escuro"] .chip-ativo { color: #A6BFA2; }
 
   .ficha-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--linha); }
-  .stat { background: var(--surface); padding: 1rem 1.2rem; }
+  /* opaca: este painel se apoia na grade de --linha (hairline por gap), e o vidro
+     deixava a linha vazar e escurecer o painel. */
+  .stat { background: var(--surface-solida); padding: 1rem 1.2rem; }
   .stat b { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: var(--marca); display: block; line-height: 1; }
   .stat span { font-size: var(--t-12); color: var(--texto-2); }
 
