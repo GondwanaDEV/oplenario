@@ -104,6 +104,14 @@
   --surface-2: light-dark(#FFF7EA, #2C3D2F);
   --linha:     light-dark(#7A9B7A, #42573F);
 
+  /* Degrau ENTRE o campo e o cartao. E' a 2a cor da paleta (#C7D9C4), que sem este
+     token ficava declarada e nunca usada — cabecalho de tabela, linha sob o ponteiro,
+     faixa de dias da semana. Usar --surface-2 (creme) nesses lugares subia o degrau
+     para o lado CLARO e lia como "mais importante"; --realce desce, que e' o que
+     cabecalho e hover querem dizer. Todo texto do sistema passa AA sobre ele
+     (pior caso --aviso-texto, 5.03:1). */
+  --realce:    light-dark(#C7D9C4, #233026);
+
   --texto:     light-dark(#16231A, #E7F0E2);   /* 13.93:1 / 15.21:1 sobre --bg */
   --texto-2:   light-dark(#2F3E33, #A6BFA2);   /*  7.05:1 /  8.97:1 sobre --bg */
 

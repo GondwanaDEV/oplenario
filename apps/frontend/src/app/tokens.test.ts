@@ -69,6 +69,32 @@ describe("tokens.css — a mecânica do tema", () => {
     }
   });
 
+  it("as CINCO cores da paleta chegam à tela — nenhuma fica declarada e órfã", () => {
+    // Defeito real, encontrado em 22/09/2026 pelo cliente olhando a tela: `--verde-2`
+    // (#C7D9C4) estava na paleta de origem e não era referenciada por NENHUM semântico.
+    // Ou seja: o sistema dizia usar cinco cores e pintava com quatro. Nada acusava —
+    // a paleta de origem é documentação, e documentação não quebra build.
+    //
+    // A ligação é por HEX cru, não por var(): os semânticos repetem o valor porque
+    // light-dark() precisa de cor literal. Então a busca é pelo hex, fora da declaração
+    // que o define.
+    const paleta = [...css.matchAll(/(--(?:verde-\d|creme))\s*:\s*(#[0-9A-Fa-f]{6})\s*;/g)]
+      .map((m) => ({ nome: m[1], hex: m[2].toUpperCase() }));
+    expect(paleta.length, "a paleta de origem tem 5 cores").toBe(5);
+
+    // Só o que está DENTRO de um light-dark() conta: é o que vira token semântico. Um hex
+    // solto em outra declaração da própria paleta não é uso.
+    const emSemanticos = [...css.matchAll(/light-dark\(([^;]*?)\)\s*;/g)]
+      .map((m) => m[1].toUpperCase())
+      .join(" | ");
+
+    for (const { nome, hex } of paleta) {
+      expect(emSemanticos.includes(hex), `${nome} (${hex}) não alimenta nenhum token semântico`).toBe(
+        true,
+      );
+    }
+  });
+
   it("nenhum token semântico é declarado duas vezes (a duplicação não voltou)", () => {
     // Sem a âncora de início de linha: uma declaração inline (`:root { --texto: #000 }`)
     // é uma duplicata igualmente real, e a versão ancorada deste teste não a via — furo

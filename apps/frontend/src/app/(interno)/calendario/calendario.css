@@ -46,7 +46,7 @@
 /* As 7 colunas moram na LINHA, não na grade: com role="row" entre a grade e as células (exigência da
    grade ARIA), as células deixam de ser filhas diretas de .cal-grid. */
 .cal-dows, .cal-linha { display: grid; grid-template-columns: repeat(7, 1fr); }
-.cal-dows { background: var(--surface-2); border-bottom: 1px solid var(--linha); }
+.cal-dows { background: var(--realce); border-bottom: 1px solid var(--linha); }
 .cal-dows span { font-family: var(--mono); font-size: var(--t-12); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--texto-2); text-align: center; padding: 0.6rem 0; }
 
 .dia { min-height: 104px; border-right: 1px solid var(--linha); border-bottom: 1px solid var(--linha); padding: 0.4rem; display: flex; flex-direction: column; gap: 0.25rem; }

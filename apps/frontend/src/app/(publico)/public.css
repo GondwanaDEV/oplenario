@@ -34,7 +34,7 @@
 .nav-publica-nav { position: relative; margin: 0 auto; }
 .nav-publica { display: flex; align-items: center; gap: 0.2rem; list-style: none; padding: 0; margin: 0; }
 .nav-publica a { font-size: var(--t-13); font-weight: 500; color: var(--texto-2); text-decoration: none; padding: 0.5rem 0.7rem; border-radius: var(--raio-sm); white-space: nowrap; transition: color .12s ease, background-color .12s ease; }
-.nav-publica a:hover { color: var(--texto); background: var(--surface); }
+.nav-publica a:hover { color: var(--texto); background: var(--realce); }
 .nav-publica a[aria-current] { color: var(--marca); font-weight: 600; }
 
 /* botão hambúrguer — só existe visualmente <1000px (ver media query); no desktop a <ul> é inline */
