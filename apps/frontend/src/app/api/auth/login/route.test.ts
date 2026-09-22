@@ -58,7 +58,8 @@ describe("GET /api/auth/login — inicia PKCE (S256) contra o Keycloak resolvido
     expect(payload).toMatchObject({
       state: expect.any(String),
       codeVerifier: expect.any(String),
-      redirectPath: "/",
+      // `null` = ninguém pediu destino; quem escolhe a home é o callback, pelo papel.
+      redirectPath: null,
       realm: `ente-${ENTE}`,
       baseUrl: "http://localhost:8090",
       clientId: "oplenario-web",
@@ -84,14 +85,15 @@ describe("GET /api/auth/login — inicia PKCE (S256) contra o Keycloak resolvido
     );
   });
 
-  it("um redirect não-same-origin é rejeitado — o cookie usa o default '/'", async () => {
+  it("um redirect não-same-origin é DESCARTADO — o cookie fica sem pedido, e o papel decide", async () => {
     const fetchImpl = fetchOk();
     const resp = await GET(
       req(`/api/auth/login?ente=${ENTE}&redirect=https://evil.example/roubado`),
       { fetchImpl },
     );
     const { payload } = pkceCookie(resp);
-    expect(payload.redirectPath).toBe("/");
+    // o que importa é NÃO ter aceitado evil.example; sem pedido válido, o callback usa a home da persona
+    expect(payload.redirectPath).toBeNull();
   });
 
   it("um redirect same-origin válido sobrevive no cookie", async () => {

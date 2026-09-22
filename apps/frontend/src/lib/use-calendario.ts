@@ -84,12 +84,11 @@ export function useCalendario(token: string | null, prazos: PrazosPermissao = "b
   useEffect(() => {
     if (semCredencial(token)) return; // o caso sem token é derivado no retorno (sem setState no effect)
     if (prazos === "aguardando") return; // papel ainda desconhecido: segura em "carregando", nao busca
-    if (prazos === "bloqueado") {
-      // Papel sem acesso ao painel (ex.: vereador): `/compliance/painel` daria 403 de qualquer forma.
-      // Degrada direto para o MESMO estado visivel de "prazos nao vieram", sem o request condenado.
-      setEstadoPrazos("erro");
-      return;
-    }
+    // Papel sem acesso ao painel (ex.: vereador): `/compliance/painel` daria 403 de qualquer forma, entao
+    // nao se faz o request condenado. O ESTADO desse caso e' derivado no retorno, nao setado aqui — mesma
+    // forma do caso sem token (acima): setState sincrono no corpo do effect provoca render em cascata
+    // (react-hooks/set-state-in-effect) e o valor ja e' funcao pura da entrada `prazos`.
+    if (prazos === "bloqueado") return;
     let vivo = true;
     (async () => {
       try {
@@ -111,7 +110,10 @@ export function useCalendario(token: string | null, prazos: PrazosPermissao = "b
     };
   }, [token, prazos]);
 
-  if (semCredencial(token)) {
+  // Os dois casos em que os prazos NAO sao buscados degradam para o mesmo estado visivel ("os prazos nao
+  // vieram"), derivado da entrada em vez de guardado em state: sem credencial e sem o papel que o painel
+  // exige. As sessoes seguem intactas — a degradacao e' parcial de proposito (ver cabecalho).
+  if (semCredencial(token) || prazos === "bloqueado") {
     return {
       sessoes,
       estadoSessoes,

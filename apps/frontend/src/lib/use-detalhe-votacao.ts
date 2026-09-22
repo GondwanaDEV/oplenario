@@ -53,44 +53,61 @@ async function buscarDetalheVotacao(
   return comoDetalheVotacao(camelizarChaves(await r.json()));
 }
 
+/** Identidade da busca em voo. Sessao e votacao sao UUIDs (sem `|`), mas o separador improvavel mantem a
+ *  chave injetora-segura mesmo se um dia virarem texto livre. */
+function chaveDe(sessaoId: string, votacaoId: string): string {
+  return `${sessaoId}|${votacaoId}`;
+}
+
+/** O resultado de uma busca JUNTO da chave que a originou — ver o comentario no hook. */
+interface Carga {
+  chave: string;
+  estado: Extract<Estado, "pronto" | "erro">;
+  dados: DetalheVotacaoOut | null;
+}
+
 export function useDetalheVotacao(
   sessaoId: string | null,
   votacaoId: string | null,
   token: string | null,
 ): { dados: DetalheVotacaoOut | null; estado: Estado } {
-  const [dados, setDados] = useState<DetalheVotacaoOut | null>(null);
-  const [estado, setEstado] = useState<Estado>(sessaoId && votacaoId ? "carregando" : "ocioso");
+  // A carga guarda a CHAVE que a produziu, e nao so' o resultado. E' isso que permite derivar "carregando"
+  // sem nenhum setState sincrono no corpo do effect (react-hooks/set-state-in-effect): quando a votacao
+  // muda, a chave atual deixa de casar com a da carga e o retorno ja' diz "carregando" no MESMO render —
+  // sem o flash de dado velho sob o rotulo da votacao nova que o `setEstado("carregando")` anterior
+  // deixava passar por um render. Todo setState daqui em diante acontece no callback assincrono.
+  const [carga, setCarga] = useState<Carga | null>(null);
+
+  const ocioso = !sessaoId || !votacaoId;
+  const semToken = semCredencial(token);
+  const chave = ocioso ? null : chaveDe(sessaoId, votacaoId);
 
   useEffect(() => {
-    if (!sessaoId || !votacaoId) {
-      setDados(null);
-      setEstado("ocioso");
-      return;
-    }
-    if (semCredencial(token)) {
-      setEstado("erro");
-      return;
-    }
+    if (chave === null || semToken) return;
     let vivo = true;
-    setEstado("carregando");
     (async () => {
       try {
-        const resultado = await buscarDetalheVotacao(sessaoId, votacaoId, token);
+        const resultado = await buscarDetalheVotacao(sessaoId!, votacaoId!, token);
         if (!vivo) return;
-        if (resultado === null) {
-          setEstado("erro");
-          return;
-        }
-        setDados(resultado);
-        setEstado("pronto");
+        setCarga(
+          resultado === null
+            ? { chave, estado: "erro", dados: null }
+            : { chave, estado: "pronto", dados: resultado },
+        );
       } catch {
-        if (vivo) setEstado("erro");
+        if (vivo) setCarga({ chave, estado: "erro", dados: null });
       }
     })();
     return () => {
       vivo = false;
     };
-  }, [sessaoId, votacaoId, token]);
+  }, [chave, semToken, sessaoId, votacaoId, token]);
 
-  return { dados, estado };
+  // Nenhuma votacao aberta nao e' falha: e' repouso. Distinguir os dois e' o que impede o cockpit de
+  // acusar erro quando simplesmente nao ha' o que votar.
+  if (ocioso) return { dados: null, estado: "ocioso" };
+  if (semToken) return { dados: null, estado: "erro" };
+  // A carga de OUTRA votacao nao vale para esta: ate' a busca desta chegar, o estado honesto e' "carregando".
+  if (carga === null || carga.chave !== chave) return { dados: null, estado: "carregando" };
+  return { dados: carga.dados, estado: carga.estado };
 }

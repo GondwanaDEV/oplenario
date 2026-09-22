@@ -62,6 +62,9 @@ function sessao(over: Partial<SessaoOut> = {}): SessaoOut {
     abertaEm: null,
     encerradaEm: null,
     motivoNaoRealizada: null,
+    // Obrigatorio em SessaoOut: sem ele aqui, o `...over` (Partial) deixava o campo opcional e o
+    // retorno deixava de ser um SessaoOut valido. `over` segue podendo sobrescrever.
+    lockVersion: 0,
     ...over,
   };
 }

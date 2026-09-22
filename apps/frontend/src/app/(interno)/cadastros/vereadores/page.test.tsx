@@ -33,6 +33,19 @@ function renderComProviders(tokenQuery: string | null) {
   );
 }
 
+// Tokens de dev (modo `test`: NEXT_PUBLIC_APP_ENV=test => usePapeis le' os papeis DO TOKEN, sincrono).
+// Precisam de `papeis` de verdade porque esta pagina e' embrulhada em <GuardSecretaria>: um token sem
+// "secretario" faz o guard renderizar "Acesso restrito" e NADA do conteudo montar — toda query aqui
+// esperaria para sempre (era exatamente por isso que este arquivo inteiro dava timeout de 5s por teste).
+const TOKEN_SECRETARIA = '{"sub":"u","papeis":["secretario"]}';
+// DOIS papeis, e isso NAO e' capricho do teste: o form "Conceder acesso" exige `admin_ente` por dentro
+// (page.tsx `podeConcederAcesso`), mas a PAGINA exige `secretario` na porta (<GuardSecretaria>). Nenhuma
+// persona real acumula os dois — sao funcoes SEGREGADAS no backend de proposito. Este token existe para
+// exercitar o form em isolamento, nao porque alguem assim exista. DECIDIDO em docs/adr/0005: o destino e'
+// area propria do admin_ente, e o guard desta pagina NAO deve ser aberto (as 8 rotas de dado daqui sao
+// `secretario`-only). O `it` logo abaixo, com TOKEN_SECRETARIA, e' quem trava o lado de ca' da regra.
+const TOKEN_SECRETARIA_ADMIN = '{"sub":"u","papeis":["secretario","admin_ente"]}';
+
 const listaFake = {
   vereadores: [
     { id: "v1", nome: "Helena Past", "nome-parlamentar": null, partido: "PT", "estado-mandato": "vigente", "cargo-mesa": "1ª Secretária" },
@@ -166,7 +179,7 @@ describe("PaginaVereadores", () => {
 
   it("mostra a lista e seleciona o 1º vereador automaticamente, sincronizando ?v= na URL", async () => {
     global.fetch = fetchMockPara(fichas);
-    renderComProviders("tok-de-teste");
+    renderComProviders(TOKEN_SECRETARIA);
 
     await screen.findByText("Helena Past");
     expect(screen.getByText("Rafael Melo")).toBeTruthy();
@@ -182,7 +195,7 @@ describe("PaginaVereadores", () => {
 
   it("selecionar outro vereador na lista atualiza a ficha e chama router.replace com o novo ?v=", async () => {
     global.fetch = fetchMockPara(fichas);
-    renderComProviders("tok-de-teste");
+    renderComProviders(TOKEN_SECRETARIA);
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy());
 
@@ -198,7 +211,7 @@ describe("PaginaVereadores", () => {
   it("deep-link ?v=<id> existente na URL seleciona aquele vereador ao montar", async () => {
     buscaParamsAtual.valor = new URLSearchParams("v=v2");
     global.fetch = fetchMockPara(fichas);
-    renderComProviders("tok-de-teste");
+    renderComProviders(TOKEN_SECRETARIA);
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Rafael Melo" })).toBeTruthy());
     expect(screen.getByRole("option", { name: /Rafael Melo/i }).getAttribute("aria-selected")).toBe("true");
@@ -207,7 +220,7 @@ describe("PaginaVereadores", () => {
 
   it("proposições e presença mostram 'Em breve' (nunca um número fabricado); comissões mostra a contagem real", async () => {
     global.fetch = fetchMockPara(fichas);
-    renderComProviders("tok-de-teste");
+    renderComProviders(TOKEN_SECRETARIA);
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy());
     expect(screen.getAllByText(/em breve/i).length).toBeGreaterThan(0);
@@ -216,7 +229,7 @@ describe("PaginaVereadores", () => {
 
   it("Novo vereador/Editar cadastro/Registrar mandato ficam habilitados; Ver proposições segue deferido (Em breve); Registrar licença só habilita com mandato vigente", async () => {
     global.fetch = fetchMockPara(fichas);
-    renderComProviders("tok-de-teste");
+    renderComProviders(TOKEN_SECRETARIA);
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy());
 
@@ -238,7 +251,7 @@ describe("PaginaVereadores", () => {
   it("abrir 'Novo vereador' revela o form; submeter nome válido POSTa e refaz o fetch da lista", async () => {
     const fetchMock = fetchMockComEscrita(fichas);
     global.fetch = fetchMock as unknown as typeof fetch;
-    renderComProviders("tok-de-teste");
+    renderComProviders(TOKEN_SECRETARIA);
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy());
 
@@ -269,7 +282,7 @@ describe("PaginaVereadores", () => {
 
   it("Novo vereador: submit fica desabilitado quando o nome está em branco após tocar", async () => {
     global.fetch = fetchMockPara(fichas);
-    renderComProviders("tok-de-teste");
+    renderComProviders(TOKEN_SECRETARIA);
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy());
 
@@ -284,7 +297,7 @@ describe("PaginaVereadores", () => {
   it("Registrar mandato: um 409 do servidor (mandato sobreposto) aparece como alerta inline, sem quebrar", async () => {
     const fetchMock = fetchMockComEscrita(fichas, { mandato409: true });
     global.fetch = fetchMock as unknown as typeof fetch;
-    renderComProviders("tok-de-teste");
+    renderComProviders(TOKEN_SECRETARIA);
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy());
 
@@ -301,7 +314,7 @@ describe("PaginaVereadores", () => {
 
   it("ArrowDown/ArrowUp no listbox move a seleção e chamam router.replace com o próximo id", async () => {
     global.fetch = fetchMockPara(fichas);
-    renderComProviders("tok-de-teste");
+    renderComProviders(TOKEN_SECRETARIA);
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy());
     routerReplace.mockClear();
@@ -325,7 +338,7 @@ describe("PaginaVereadores", () => {
 
   it("comissão com cargo 'presidente' aparece destacada na ficha", async () => {
     global.fetch = fetchMockPara(fichas);
-    renderComProviders("tok-de-teste");
+    renderComProviders(TOKEN_SECRETARIA);
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy());
     expect(screen.getByText(/Constituição e Justiça/)).toBeTruthy();
@@ -338,7 +351,7 @@ describe("PaginaVereadores", () => {
       }
       return { ok: false, status: 404 } as Response;
     }) as unknown as typeof fetch;
-    renderComProviders("tok-de-teste");
+    renderComProviders(TOKEN_SECRETARIA);
 
     await waitFor(() => expect(screen.getByText(/nenhum vereador cadastrado/i)).toBeTruthy());
   });
@@ -348,7 +361,7 @@ describe("PaginaVereadores", () => {
       if (url === "/api/cadastros/vereadores") return { ok: false, status: 500 } as Response;
       return { ok: false, status: 404 } as Response;
     }) as unknown as typeof fetch;
-    renderComProviders("tok-de-teste");
+    renderComProviders(TOKEN_SECRETARIA);
 
     await waitFor(() => expect(screen.getByText(/não foi possível carregar/i)).toBeTruthy());
   });
@@ -357,7 +370,7 @@ describe("PaginaVereadores", () => {
 
   it("sem o papel admin_ente (ex.: secretário) o botão 'Conceder acesso' nem aparece", async () => {
     global.fetch = fetchMockPara(fichas);
-    renderComProviders("tok-de-teste"); // token não-JSON -> papeisDoToken devolve [] (fail-closed)
+    renderComProviders(TOKEN_SECRETARIA); // secretário SEM admin_ente — passa na porta, não vê o form
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy());
     expect(screen.queryByRole("button", { name: /conceder acesso/i })).toBeNull();
@@ -366,7 +379,7 @@ describe("PaginaVereadores", () => {
   it("com o papel admin_ente o botão 'Conceder acesso' aparece e abre o form", async () => {
     const fetchMock = fetchMockComEscrita(fichas);
     global.fetch = fetchMock as unknown as typeof fetch;
-    renderComProviders('{"sub":"u","papeis":["admin_ente"]}');
+    renderComProviders(TOKEN_SECRETARIA_ADMIN);
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: /conceder acesso/i }));
@@ -381,7 +394,7 @@ describe("PaginaVereadores", () => {
   it("Conceder acesso: submeter CPF+e-mail válidos dispara os 3 passos NA ORDEM (acesso por último) e fecha o painel", async () => {
     const fetchMock = fetchMockComEscrita(fichas);
     global.fetch = fetchMock as unknown as typeof fetch;
-    renderComProviders('{"sub":"u","papeis":["admin_ente"]}');
+    renderComProviders(TOKEN_SECRETARIA_ADMIN);
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: /conceder acesso/i }));
@@ -419,7 +432,7 @@ describe("PaginaVereadores", () => {
   it("Conceder acesso: 409 no passo 2 (identidade já vinculada a outro vereador) aparece como alerta e o passo 3 nunca dispara", async () => {
     const fetchMock = fetchMockComEscrita(fichas, { identidadeVinculada409: true });
     global.fetch = fetchMock as unknown as typeof fetch;
-    renderComProviders('{"sub":"u","papeis":["admin_ente"]}');
+    renderComProviders(TOKEN_SECRETARIA_ADMIN);
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: /conceder acesso/i }));

@@ -28,6 +28,9 @@ import { comToken } from "@/lib/nav";
 import "./topo.css";
 
 const DESTINOS_NAV = [
+  // Primeiro da lista de propósito: é o ponto de partida (a tela que responde "o que eu faço agora?") e a
+  // única porta para as telas de sessão ao vivo, que não têm entrada de navegação própria.
+  { rotulo: "Início", href: "/inicio" },
   { rotulo: "Painéis da Mesa", href: "/paineis/mesa" },
   { rotulo: "Tramitação", href: "/tramitacao" },
   { rotulo: "Proposições", href: "/proposicoes" },

@@ -692,13 +692,13 @@ describe("tribuna — o read-model reconstrói quem está com a palavra", () => 
 
   const snap = (over: Partial<TribunaOut> = {}): TribunaOut => ({
     sessaoId: "s1",
-    oradorAtual: { falaId: "f2", oradorId: "vSnapshot", tipoFala: "principal", fase: "ordem_do_dia", iniciouEm: "2026-09-07T21:55:00Z", inscricaoId: null },
+    oradorAtual: { falaId: "f2", oradorId: "vSnapshot", tipoFala: "principal", fase: "ordem_do_dia", iniciouEm: "2026-09-07T21:55:00Z", inscricaoId: null, lockVersion: 0 },
     marcosCronometro: [{ tipo: "pausada", ocorridoEm: "2026-09-07T21:56:00Z", segundosAdicionais: null }],
     // já na ordem que o SERVIDOR manda (fase ASC, ordem ASC) — o cliente NÃO reordena (fix round 1, I1;
     // ver T7 abaixo para o caso que reprova se o sort voltar)
     inscritos: [
-      { inscricaoId: "i1", vereadorId: "v1", origemInscricao: "pre_sessao_app", fase: "ordem_do_dia", ordem: 1 },
-      { inscricaoId: "i2", vereadorId: "v2", origemInscricao: "pre_sessao_app", fase: "ordem_do_dia", ordem: 2 },
+      { inscricaoId: "i1", vereadorId: "v1", origemInscricao: "pre_sessao_app", fase: "ordem_do_dia", ordem: 1, lockVersion: 0 },
+      { inscricaoId: "i2", vereadorId: "v2", origemInscricao: "pre_sessao_app", fase: "ordem_do_dia", ordem: 2, lockVersion: 0 },
     ],
     ...over,
   });
@@ -732,7 +732,7 @@ describe("tribuna — o read-model reconstrói quem está com a palavra", () => 
     // um item torto na lista de inscritos não descarta os vizinhos válidos
     const comItemTorto = hidratarTribuna(
       base,
-      snap({ inscritos: [{ inscricaoId: "iOk", vereadorId: "vOk", origemInscricao: "pre_sessao_app", fase: "ordem_do_dia", ordem: 1 }, { inscricaoId: 42 } as never] }),
+      snap({ inscritos: [{ inscricaoId: "iOk", vereadorId: "vOk", origemInscricao: "pre_sessao_app", fase: "ordem_do_dia", ordem: 1, lockVersion: 0 }, { inscricaoId: 42 } as never] }),
       seq0,
     );
     expect(comItemTorto.inscritos).toEqual([{ inscricaoId: "iOk", vereadorId: "vOk", fase: "ordem_do_dia", ordem: 1 }]);
@@ -795,10 +795,10 @@ describe("tribuna — o read-model reconstrói quem está com a palavra", () => 
     // intercalaria as fases: [Ana(1), Bruno(1), Carla(2), Davi(2)] — ordinais repetidos no telão.
     const doisFluxos = snap({
       inscritos: [
-        { inscricaoId: "ana", vereadorId: "vAna", origemInscricao: "pre_sessao_app", fase: "expediente", ordem: 1 },
-        { inscricaoId: "carla", vereadorId: "vCarla", origemInscricao: "pre_sessao_app", fase: "expediente", ordem: 2 },
-        { inscricaoId: "bruno", vereadorId: "vBruno", origemInscricao: "pre_sessao_app", fase: "ordem_do_dia", ordem: 1 },
-        { inscricaoId: "davi", vereadorId: "vDavi", origemInscricao: "pre_sessao_app", fase: "ordem_do_dia", ordem: 2 },
+        { inscricaoId: "ana", vereadorId: "vAna", origemInscricao: "pre_sessao_app", fase: "expediente", ordem: 1, lockVersion: 0 },
+        { inscricaoId: "carla", vereadorId: "vCarla", origemInscricao: "pre_sessao_app", fase: "expediente", ordem: 2, lockVersion: 0 },
+        { inscricaoId: "bruno", vereadorId: "vBruno", origemInscricao: "pre_sessao_app", fase: "ordem_do_dia", ordem: 1, lockVersion: 0 },
+        { inscricaoId: "davi", vereadorId: "vDavi", origemInscricao: "pre_sessao_app", fase: "ordem_do_dia", ordem: 2, lockVersion: 0 },
       ],
     });
     const e = hidratarTribuna(aberta(), doisFluxos, seq0);
@@ -814,10 +814,10 @@ describe("tribuna — o read-model reconstrói quem está com a palavra", () => 
       aberta(),
       snap({
         inscritos: [
-          { inscricaoId: "ana", vereadorId: "vAna", origemInscricao: "pre_sessao_app", fase: "expediente", ordem: 1 },
-          { inscricaoId: "carla", vereadorId: "vCarla", origemInscricao: "pre_sessao_app", fase: "expediente", ordem: 2 },
-          { inscricaoId: "bruno", vereadorId: "vBruno", origemInscricao: "pre_sessao_app", fase: "ordem_do_dia", ordem: 1 },
-          { inscricaoId: "davi", vereadorId: "vDavi", origemInscricao: "pre_sessao_app", fase: "ordem_do_dia", ordem: 2 },
+          { inscricaoId: "ana", vereadorId: "vAna", origemInscricao: "pre_sessao_app", fase: "expediente", ordem: 1, lockVersion: 0 },
+          { inscricaoId: "carla", vereadorId: "vCarla", origemInscricao: "pre_sessao_app", fase: "expediente", ordem: 2, lockVersion: 0 },
+          { inscricaoId: "bruno", vereadorId: "vBruno", origemInscricao: "pre_sessao_app", fase: "ordem_do_dia", ordem: 1, lockVersion: 0 },
+          { inscricaoId: "davi", vereadorId: "vDavi", origemInscricao: "pre_sessao_app", fase: "ordem_do_dia", ordem: 2, lockVersion: 0 },
         ],
       }),
       seq0,
