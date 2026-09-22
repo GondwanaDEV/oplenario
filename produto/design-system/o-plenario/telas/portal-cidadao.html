@@ -130,8 +130,12 @@
   [data-tema="escuro"] .resumo-cab .selo-ia { color: var(--foco); }
   .resumo-ia h4 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); letter-spacing: -0.015em; color: var(--texto); margin: 0.6rem 0 0.5rem; }
   .resumo-ia p { font-size: var(--t-16); color: var(--texto); margin: 0 0 0.7rem; line-height: 1.62; }
-  .resumo-revisao { display: flex; align-items: center; gap: 0.5rem; font-size: var(--t-13); color: var(--texto-2); margin: 0.2rem 0 0; }
-  .resumo-revisao svg { color: var(--marca); flex: 0 0 auto; }
+    /* NAO usar flex aqui: o icone e' elemento, mas a frase e' um NO DE TEXTO SOLTO seguido
+     de <b>. Em flex os dois viram itens SEPARADOS e a frase se parte no meio ('...ajuda de'
+     numa coluna, 'revisado pela equipe' noutra). Ficava escondido enquanto a Hanken Grotesk
+     cabia numa linha; a Inter, mais larga, expos. Fluxo inline resolve na raiz. */
+  .resumo-revisao { display: block; font-size: var(--t-13); color: var(--texto-2); margin: 0.2rem 0 0; }
+  .resumo-revisao svg { color: var(--marca); vertical-align: -3px; margin-right: 0.45rem; }
   .resumo-rodape { margin-top: auto; padding-top: 1.2rem; display: flex; align-items: center; gap: 1rem 1.2rem; flex-wrap: wrap; }
   .resumo-rodape .reportar { font-size: var(--t-13); color: var(--texto-2); text-decoration: none; display: inline-flex; align-items: center; gap: 0.4rem; }
   .resumo-rodape .reportar:hover { color: var(--acento-texto); }
@@ -315,10 +319,10 @@
           <circle cx="24" cy="24" r="22.5" fill="#FFF7EA" stroke="#A6BFA2" stroke-width="1.5"/>
           <circle cx="24" cy="24" r="18.5" fill="none" stroke="#CFA65C" stroke-width="1"/>
           <!-- pediment + columns = casa legislativa (cores fixas: o brasão é objeto heráldico, não tematiza) -->
-          <path d="M14 19 L24 13 L34 19 Z" fill="#2C5638"/>
-          <rect x="14.5" y="20.5" width="19" height="2.2" rx="1" fill="#2C5638"/>
-          <g fill="#2C5638"><rect x="16" y="23.5" width="2.6" height="9" rx="1"/><rect x="22.7" y="23.5" width="2.6" height="9" rx="1"/><rect x="29.4" y="23.5" width="2.6" height="9" rx="1"/></g>
-          <rect x="14.5" y="33" width="19" height="2.4" rx="1" fill="#2C5638"/>
+          <path d="M14 19 L24 13 L34 19 Z" fill="#3A6A48"/>
+          <rect x="14.5" y="20.5" width="19" height="2.2" rx="1" fill="#3A6A48"/>
+          <g fill="#3A6A48"><rect x="16" y="23.5" width="2.6" height="9" rx="1"/><rect x="22.7" y="23.5" width="2.6" height="9" rx="1"/><rect x="29.4" y="23.5" width="2.6" height="9" rx="1"/></g>
+          <rect x="14.5" y="33" width="19" height="2.4" rx="1" fill="#3A6A48"/>
           <circle cx="24" cy="9.6" r="1.7" fill="#C0693F"/>
         </svg>
         <div class="brasao-nome">
@@ -434,11 +438,11 @@
                     <clipPath id="t3"><rect x="368" y="8" width="104" height="104" rx="10"/></clipPath>
                     <clipPath id="t4"><rect x="488" y="8" width="104" height="104" rx="10"/></clipPath>
                   </defs>
-                  <g clip-path="url(#t0)"><rect x="8" y="8" width="104" height="104" fill="#2C5638"/><path d="M8 112 A104 104 0 0 1 112 8 L112 112 Z" fill="#4E8259"/><circle cx="60" cy="60" r="20" fill="#C7D9C4"/></g>
+                  <g clip-path="url(#t0)"><rect x="8" y="8" width="104" height="104" fill="#3A6A48"/><path d="M8 112 A104 104 0 0 1 112 8 L112 112 Z" fill="#4E8259"/><circle cx="60" cy="60" r="20" fill="#C7D9C4"/></g>
                   <g clip-path="url(#t1)"><rect x="128" y="8" width="104" height="104" fill="#3F6E92"/><path d="M128 8 A104 104 0 0 1 232 112 L128 112 Z" fill="#355D7D"/><circle cx="180" cy="60" r="20" fill="#C7D9C4"/></g>
                   <g clip-path="url(#t2)"><rect x="248" y="8" width="104" height="104" fill="#C0693F"/><path d="M352 8 A104 104 0 0 1 248 112 L248 8 Z" fill="#A85334"/><circle cx="300" cy="60" r="20" fill="#C7D9C4"/></g>
-                  <g clip-path="url(#t3)"><rect x="368" y="8" width="104" height="104" fill="#1E4028"/><path d="M368 60 A52 52 0 0 1 420 8 L420 60 Z" fill="#CFA65C"/><path d="M420 60 A52 52 0 0 1 472 112 L420 112 Z" fill="#CFA65C"/><circle cx="420" cy="60" r="11" fill="#C7D9C4"/></g>
-                  <g clip-path="url(#t4)"><rect x="488" y="8" width="104" height="104" fill="#1E4028"/><path d="M488 8 A104 104 0 0 1 592 112" fill="none" stroke="#4E8259" stroke-width="3" stroke-dasharray="6 7"/><circle cx="540" cy="60" r="20" fill="none" stroke="#4E8259" stroke-width="3" stroke-dasharray="6 7"/></g>
+                  <g clip-path="url(#t3)"><rect x="368" y="8" width="104" height="104" fill="#4E7D5A"/><path d="M368 60 A52 52 0 0 1 420 8 L420 60 Z" fill="#CFA65C"/><path d="M420 60 A52 52 0 0 1 472 112 L420 112 Z" fill="#CFA65C"/><circle cx="420" cy="60" r="11" fill="#C7D9C4"/></g>
+                  <g clip-path="url(#t4)"><rect x="488" y="8" width="104" height="104" fill="#4E7D5A"/><path d="M488 8 A104 104 0 0 1 592 112" fill="none" stroke="#4E8259" stroke-width="3" stroke-dasharray="6 7"/><circle cx="540" cy="60" r="20" fill="none" stroke="#4E8259" stroke-width="3" stroke-dasharray="6 7"/></g>
                   <g font-family="IBM Plex Mono, monospace" font-size="12">
                     <text x="60"  y="128" text-anchor="middle">Protocolo</text>
                     <text x="180" y="128" text-anchor="middle">Comissões</text>
@@ -548,9 +552,9 @@
               <!-- conectores -->
               <line x1="74" y1="34" x2="146" y2="34" stroke="#4E8259" stroke-width="2.4"/>
               <line x1="214" y1="34" x2="286" y2="34" stroke="#4E8259" stroke-width="2.4" stroke-dasharray="5 6" opacity=".55"/>
-              <g clip-path="url(#p0)"><rect x="6" y="6" width="68" height="56" rx="9" fill="#2C5638"/><path d="M6 62 A68 68 0 0 1 74 6 L74 62 Z" fill="#4E8259"/><circle cx="40" cy="34" r="12" fill="#C7D9C4"/></g>
-              <g clip-path="url(#p1)"><rect x="146" y="6" width="68" height="56" rx="9" fill="#1E4028"/><path d="M146 34 A34 34 0 0 1 180 6 L180 34 Z" fill="#CFA65C"/><path d="M180 34 A34 34 0 0 1 214 62 L180 62 Z" fill="#CFA65C"/><circle cx="180" cy="34" r="7" fill="#C7D9C4"/></g>
-              <g clip-path="url(#p2)"><rect x="286" y="6" width="68" height="56" rx="9" fill="#1E4028"/><path d="M286 6 A68 68 0 0 1 354 62" fill="none" stroke="#4E8259" stroke-width="2.4" stroke-dasharray="5 6"/><circle cx="320" cy="34" r="12" fill="none" stroke="#4E8259" stroke-width="2.4" stroke-dasharray="5 6"/></g>
+              <g clip-path="url(#p0)"><rect x="6" y="6" width="68" height="56" rx="9" fill="#3A6A48"/><path d="M6 62 A68 68 0 0 1 74 6 L74 62 Z" fill="#4E8259"/><circle cx="40" cy="34" r="12" fill="#C7D9C4"/></g>
+              <g clip-path="url(#p1)"><rect x="146" y="6" width="68" height="56" rx="9" fill="#4E7D5A"/><path d="M146 34 A34 34 0 0 1 180 6 L180 34 Z" fill="#CFA65C"/><path d="M180 34 A34 34 0 0 1 214 62 L180 62 Z" fill="#CFA65C"/><circle cx="180" cy="34" r="7" fill="#C7D9C4"/></g>
+              <g clip-path="url(#p2)"><rect x="286" y="6" width="68" height="56" rx="9" fill="#4E7D5A"/><path d="M286 6 A68 68 0 0 1 354 62" fill="none" stroke="#4E8259" stroke-width="2.4" stroke-dasharray="5 6"/><circle cx="320" cy="34" r="12" fill="none" stroke="#4E8259" stroke-width="2.4" stroke-dasharray="5 6"/></g>
               <g font-family="IBM Plex Mono, monospace" font-size="11">
                 <text x="40"  y="80" text-anchor="middle">Protocolado</text>
                 <text x="180" y="80" text-anchor="middle" class="ativo">Em análise</text>

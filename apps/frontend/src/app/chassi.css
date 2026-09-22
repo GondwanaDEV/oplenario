@@ -300,7 +300,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
    encadeado e imutável"; a .nota-imut explica honestamente o que isso
    significa. Os tipos de ação reusam a FAMÍLIA DE CHIPS (criou→chip-ok,
    editou→chip-info, removeu→chip-risco, exportou→chip-alerta). */
-.lacre { display: flex; align-items: center; gap: 0.9rem; background: var(--palco-bg); color: var(--palco-texto); border-radius: var(--raio); padding: 1rem 1.2rem; box-shadow: var(--sombra); }
+.lacre { display: flex; align-items: center; gap: 0.9rem; background: var(--surface); color: var(--texto); border: 1px solid var(--linha); border-radius: var(--raio); padding: 1rem 1.2rem; box-shadow: var(--sombra); }
 .lacre .selo-ic { width: 42px; height: 42px; border-radius: 11px; flex: 0 0 auto; display: grid; place-items: center; color: var(--palco-bg); background: var(--amarelo); }
 .lacre .lc-t b { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--palco-texto); display: block; }
 .lacre .lc-t span { font-size: var(--t-13); color: var(--palco-texto-2); }

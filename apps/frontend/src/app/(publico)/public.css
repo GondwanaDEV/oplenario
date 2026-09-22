@@ -156,8 +156,12 @@
 [data-tema="escuro"] .resumo-cab .selo-ia { color: var(--foco); }
 .resumo-ia h4 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); letter-spacing: -0.015em; color: var(--texto); margin: 0.6rem 0 0.5rem; }
 .resumo-ia p { font-size: var(--t-16); color: var(--texto); margin: 0 0 0.7rem; line-height: 1.62; }
-.resumo-revisao { display: flex; align-items: center; gap: 0.5rem; font-size: var(--t-13); color: var(--texto-2); margin: 0.2rem 0 0; }
-.resumo-revisao svg { color: var(--marca); flex: 0 0 auto; }
+/* NAO usar flex aqui: o icone e' elemento, mas a frase e' um NO DE TEXTO SOLTO seguido
+     de <b>. Em flex os dois viram itens SEPARADOS e a frase se parte no meio ('...ajuda de'
+     numa coluna, 'revisado pela equipe' noutra). Ficava escondido enquanto a Hanken Grotesk
+     cabia numa linha; a Inter, mais larga, expos. Fluxo inline resolve na raiz. */
+.resumo-revisao { display: block; font-size: var(--t-13); color: var(--texto-2); margin: 0.2rem 0 0; }
+.resumo-revisao svg { color: var(--marca); vertical-align: -3px; margin-right: 0.45rem; }
 .resumo-rodape { margin-top: auto; padding-top: 1.2rem; display: flex; align-items: center; gap: 1rem 1.2rem; flex-wrap: wrap; }
 .resumo-rodape .reportar { font-size: var(--t-13); color: var(--texto-2); text-decoration: none; display: inline-flex; align-items: center; gap: 0.4rem; }
 .resumo-rodape .reportar:hover { color: var(--acento-texto); }

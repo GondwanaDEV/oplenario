@@ -56,7 +56,13 @@
      cobalto e amarelo PERMANECEM: não são decoração, carregam função
      (acento, foco, aviso). Um sistema monocromático apagaria a
      distinção entre esses estados. */
-  --jade:         #2C5638;
+  /* Clareado de #2C5638 para #3A6A48 em 22/09/2026. A medicao das 5 cores de etapa do
+     azulejo mostrou o jade como o unico fora de familia: luminancia 0.075 contra 0.143
+     do cobalto e 0.413 do amarelo — na tela ele nao lia como verde, lia como quase-preto,
+     e como a peca 'concluida' e' um quadrado cheio, isso deixava mancha escura em 46 das
+     50 telas do tema claro. Em 0.117 ele entra na faixa do cobalto. Texto branco sobre
+     ele (avatar, marcador de voto SIM, bolinha de passo concluido) segue em 6.30:1. */
+  --jade:         #3A6A48;
   --jade-fundo:   #1E4028;
   --jade-claro:   #7A9B7A;   /* banda do azulejo e marcador sobre o PALCO escuro */
   /* O degrau medio. Existe porque --jade-claro, ao virar #7A9B7A na troca de paleta,
