@@ -99,31 +99,31 @@
    No claro a paleta é SUPERFÍCIE; no escuro ela é TINTA sobre verde
    profundo — a mesma família serve os dois lados. */
 :root {
-  --bg:        light-dark(#E7F0E2, #111A13);
+  --bg:        light-dark(#C7D9C4, #111A13);
   --surface:   light-dark(#FFF7EA, #1A251C);
-  --surface-2: light-dark(#FFFFFF, #243226);
-  --linha:     light-dark(#C7D9C4, #334536);
+  --surface-2: light-dark(#E7F0E2, #2C3D2F);
+  --linha:     light-dark(#A6BFA2, #42573F);
 
   --texto:     light-dark(#16231A, #E7F0E2);   /* 13.93:1 / 15.21:1 sobre --bg */
-  --texto-2:   light-dark(#46584A, #A6BFA2);   /*  6.52:1 /  8.97:1 sobre --bg */
+  --texto-2:   light-dark(#425446, #A6BFA2);   /*  7.05:1 /  8.97:1 sobre --bg */
 
-  --marca:     light-dark(#2F5D3F, #8FBE92);
-  --acao:      light-dark(#2F5D3F, #7A9B7A);
-  --acao-hover:light-dark(#234A31, #8FBE92);
-  --acao-texto:light-dark(#FFFFFF, #0B140C);   /*  7.61:1 /  6.07:1 sobre --acao */
+  --marca:     light-dark(#2C5638, #A6BFA2);
+  --acao:      light-dark(#7A9B7A, #7A9B7A);
+  --acao-hover:light-dark(#A6BFA2, #8FBE92);
+  --acao-texto:light-dark(#16231A, #0B140C);   /*  5.27:1 /  6.07:1 sobre --acao */
 
-  --acento-texto:  light-dark(#A33A19, #F0794B);
+  --acento-texto:  light-dark(#993517, #F58A60);
   --foco:          light-dark(#1B5490, #7FB3E6);
   --aviso-texto:   light-dark(#6E5009, #E8B23A);  /* no escuro o amarelo cheio já passa AA */
   --amarelo-traco: light-dark(#B07D14, #E8B23A);  /* traço de alerta, piso 3:1 */
 
-  --topo-bg:   light-dark(rgba(231,240,226,.9), rgba(17,26,19,.88));
+  --topo-bg:   light-dark(#C7D9C4, #1A251C);
 
   /* Borda de campo de formulário: --linha é divisor decorativo e falha o piso de
      3:1 de non-text contrast (SC 1.4.11) para limite de componente. Medida contra
      --surface-2 (preenchimento interno) e --bg (fundo externo); pior caso 3.25:1
      no claro, 4.46:1 no escuro. */
-  --campo-borda: light-dark(#6E8A70, #7E9C80);
+  --campo-borda: light-dark(#5F7D63, #7E9C80);
 
   /* Sombras: geometria unificada (light-dark só aceita cor), só a cor troca. */
   --sombra-cor-1: light-dark(rgba(25,33,28,.04), rgba(0,0,0,.2));
