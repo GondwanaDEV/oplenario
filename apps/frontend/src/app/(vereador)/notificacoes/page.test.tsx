@@ -36,8 +36,13 @@ describe("PaginaNotificacoes", () => {
     await waitFor(() => expect(screen.getByText(/virou lei/)).toBeDefined());
     expect(screen.getByRole("heading", { level: 2, name: "Hoje" })).toBeDefined();
     expect(screen.getByLabelText("1 não lida")).toBeDefined();
-    // Sem destino acessível ao vereador, não se renderiza âncora nenhuma (ver notificacoes-vista.test.ts).
-    expect(screen.queryByRole("link", { name: /Abrir a ficha/ })).toBeNull();
+    // A âncora da ficha EXISTE e aponta para a matéria. Isto já foi o contrário: a vista esvaziava o href
+    // "porque a ficha nega 403 ao vereador". Mudou em 70fdd43 — a leitura de ficha passou a aceitar
+    // `vereador` (feat(authz)), e ROTAS_POR_TIPO religou `proposicao` -> /ficha-materia/:id para a
+    // notificação não ser link morto. Aquele commit atualizou notificacoes-vista.test.ts e esqueceu ESTE,
+    // que seguiu exigindo a ausência da âncora: o teste ficou vermelho por estar velho, não por defeito.
+    const ficha = screen.getByRole("link", { name: /Abrir a ficha/ });
+    expect(ficha.getAttribute("href")).toBe("/ficha-materia/p1?token=tok");
   });
 
   it("não-lida é sinalizada por mais que cor (ponto com rótulo acessível)", async () => {

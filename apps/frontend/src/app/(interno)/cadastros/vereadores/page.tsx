@@ -65,6 +65,14 @@ function ConteudoPaginaVereadores() {
   // `secretario`, o papel que já governa as outras rotas desta página no backend. Enquanto `estado` não é
   // "pronto" (modo real aguardando GET /eu), o botão fica ESCONDIDO, não desabilitado — evita mostrar e
   // depois sumir a ação de um admin_ente real (flash), mesmo racional de pauta-convocacao/page.tsx.
+  //
+  // ⚠️ INALCANÇÁVEL HOJE, DE PROPÓSITO — ver docs/adr/0005. A página exige `secretario` na porta e este
+  // bloco exige `admin_ente`, e os dois não co-ocorrem: são funções SEGREGADAS no backend (quem mantém o
+  // cadastro não pode fabricar para si um acesso de voto — ver `ligar-identidade-handler`). Mais fundo:
+  // nenhum `admin_ente` existe na plataforma ainda, porque o bootstrap depende de `admin_sistema`, que
+  // não tem rota nenhuma. NÃO "conserte" abrindo o GuardSecretaria a `admin_ente`: as 8 rotas de dado
+  // desta página são `secretario`-only, então ele cairia numa tela de 403s. O destino é área própria
+  // (§22.5: "a administração do ente não é módulo backend — é área de UI").
   const { papeis, estado: estadoPapeis } = usePapeis();
   const podeConcederAcesso = estadoPapeis === "pronto" && papeis.includes("admin_ente");
   const router = useRouter();

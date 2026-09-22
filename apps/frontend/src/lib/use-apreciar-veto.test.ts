@@ -1,6 +1,13 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useApreciarVeto } from "./use-apreciar-veto";
+import type { TramitacaoExecutivaOut } from "./contrato-legislativo.gen";
+
+// Nota de tipagem (gate `tsc --noEmit`): `res` e' atribuido DENTRO do callback de `act`, entao o TS nao
+// enxerga a atribuicao e o tipo permanecia `undefined`. Dai os casts `as { ok: boolean }` que havia aqui:
+// existiam para calar o compilador e, de quebra, desligavam a checagem do payload — um `.sessao`/`.erro`
+// errado passava batido. Agora a uniao e' anotada de verdade e o discriminante e' estreitado com `assert`
+// (assinatura `asserts`), entao o acesso ao payload e' VERIFICADO: se o contrato do hook mudar, quebra aqui.
 
 const ok = (json: unknown) => ({ ok: true, status: 200, json: async () => json }) as Response;
 const fail = (status: number, json: unknown = {}) => ({ ok: false, status, json: async () => json }) as Response;
@@ -29,14 +36,14 @@ describe("useApreciarVeto", () => {
     }) as unknown as typeof fetch;
 
     const { result } = renderHook(() => useApreciarVeto("tok", "te1"));
-    let res;
+    let res: TramitacaoExecutivaOut | undefined;
     await act(async () => {
       res = await result.current.apreciar({ lockVersion: 3, resultado: "veto_derrubado", vetoVotacaoId: "vt-9" });
     });
     expect(url).toBe("/api/legislativo/tramitacoes-executivas/te1/apreciacao");
     expect(corpo).toEqual({ "lock-version": 3, resultado: "veto_derrubado", "veto-votacao-id": "vt-9" });
-    expect((res as { estado: string }).estado).toBe("veto_derrubado");
-    expect((res as { lockVersion: number }).lockVersion).toBe(3);
+    expect(res?.estado).toBe("veto_derrubado");
+    expect(res?.lockVersion).toBe(3);
     expect(result.current.estado).toBe("ocioso");
   });
 

@@ -1,6 +1,12 @@
-import { describe, expect, it, vi, afterEach } from "vitest";
+import { describe, expect, it, vi, afterEach, assert } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { useAgendarSessao } from "./use-agendar-sessao";
+import { useAgendarSessao, type ResultadoAgendar } from "./use-agendar-sessao";
+
+// Nota de tipagem (gate `tsc --noEmit`): `res` e' atribuido DENTRO do callback de `act`, entao o TS nao
+// enxerga a atribuicao e o tipo permanecia `undefined`. Dai os casts `as { ok: boolean }` que havia aqui:
+// existiam para calar o compilador e, de quebra, desligavam a checagem do payload — um `.sessao`/`.erro`
+// errado passava batido. Agora a uniao e' anotada de verdade e o discriminante e' estreitado com `assert`
+// (assinatura `asserts`), entao o acesso ao payload e' VERIFICADO: se o contrato do hook mudar, quebra aqui.
 
 const ok = (json: unknown) => ({ ok: true, status: 200, json: async () => json }) as Response;
 const fail = (status: number, json: unknown = {}) => ({ ok: false, status, json: async () => json }) as Response;
@@ -16,7 +22,7 @@ describe("useAgendarSessao", () => {
     }) as unknown as typeof fetch;
 
     const { result } = renderHook(() => useAgendarSessao("tok"));
-    let res;
+    let res: ResultadoAgendar | undefined;
     await act(async () => {
       res = await result.current.agendar({
         sessaoLegislativaId: "sl-A",
@@ -24,8 +30,8 @@ describe("useAgendarSessao", () => {
         agendadaPara: "2026-05-21T17:00:00.000Z",
       });
     });
-    expect((res as { ok: boolean }).ok).toBe(true);
-    expect((res as { sessao: { id: string } }).sessao.id).toBe("s-nova");
+    assert(res?.ok === true, "esperava agendar com sucesso");
+    expect(res.sessao.id).toBe("s-nova");
     expect(corpo).toMatchObject({
       "sessao-legislativa-id": "sl-A",
       "tipo-sessao": "ordinaria",
@@ -51,23 +57,23 @@ describe("useAgendarSessao", () => {
   it("erro do servidor -> estado erro e resultado ok:false com a mensagem", async () => {
     global.fetch = vi.fn(async () => fail(400, { erro: "sessao-legislativa-id invalido" })) as unknown as typeof fetch;
     const { result } = renderHook(() => useAgendarSessao("tok"));
-    let res;
+    let res: ResultadoAgendar | undefined;
     await act(async () => {
       res = await result.current.agendar({ sessaoLegislativaId: "x", tipoSessao: "ordinaria" });
     });
-    expect((res as { ok: boolean }).ok).toBe(false);
-    expect((res as { erro: string }).erro).toMatch(/invalido/);
+    assert(res?.ok === false, "esperava a falha vinda do servidor");
+    expect(res.erro).toMatch(/invalido/);
     expect(result.current.estado).toBe("erro");
   });
 
   it("sem token -> ok:false, sem chamar fetch", async () => {
     global.fetch = vi.fn() as unknown as typeof fetch;
     const { result } = renderHook(() => useAgendarSessao(null));
-    let res;
+    let res: ResultadoAgendar | undefined;
     await act(async () => {
       res = await result.current.agendar({ sessaoLegislativaId: "sl", tipoSessao: "ordinaria" });
     });
-    expect((res as { ok: boolean }).ok).toBe(false);
+    expect(res?.ok).toBe(false);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 });
