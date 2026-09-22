@@ -1,33 +1,64 @@
 /* ============================================================
    O PLENÁRIO · tokens.css — fonte de verdade dos tokens
-   Linguagem: "República Luminosa" (Cívico Tropical) — DOIS MODOS:
-     · claro  = concreto luminoso de Brasília sob luz tropical
-     · escuro = a noite de Brasília (mesma paleta de azulejo;
-                jade-carvão de fundo; jade/telha/cobalto/amarelo
-                brilham no escuro)
+   Linguagem: "República Luminosa" — DOIS MODOS:
+     · claro  = campo de sálvia sob luz tropical, papel creme
+     · escuro = a mesma sálvia INVERTIDA: os tons claros viram
+                TINTA sobre verde profundo
 
-   Esta folha é a ÚNICA fonte dos tokens de design. Antes vivia
-   copiada inline em cada tela (~90 linhas × 4) — risco de drift.
-   Toda tela linka este arquivo; nada de redefinir token na tela.
+   Esta folha é a ÚNICA fonte dos tokens de design. Toda tela a
+   linka; nada de redefinir token na tela.
 
-   Camadas:
-     1. :root                       → tokens INVARIANTES de tema
-                                       (paleta-marca, tipografia, geometria)
-     2. :root, [data-tema="claro"]  → semânticos do tema CLARO
-     3. [data-tema="escuro"]        → semânticos do tema ESCURO
-     4. @media (prefers-color-scheme: dark) :root:not([data-tema="claro"])
-                                     → escuro automático (respeita o SO
-                                       quando o usuário não escolheu)
+   ---- COMO O TEMA FUNCIONA (mudou em 22/09/2026) ----
+   Antes havia TRÊS blocos: claro, escuro, e uma cópia manual do
+   escuro sob @media(prefers-color-scheme). O arquivo pedia
+   "MANTER EM PARIDADE" à mão — e a paridade já tinha furado
+   (`--merge` faltava na cópia; só não virou defeito porque claro e
+   escuro tinham o mesmo valor).
 
-   A paleta-marca do azulejo é FIXA — só superfícies e texto trocam.
-   Spec descritiva: ../LINGUAGEM-VISUAL.md
+   Agora cada token é declarado UMA vez com `light-dark(claro, escuro)`.
+   Quem escolhe o lado é a propriedade `color-scheme`:
+     :root                -> light dark  (segue o SO)
+     [data-tema="claro"]  -> light       (override por clique)
+     [data-tema="escuro"] -> dark
+   Não há mais o que espelhar: é impossível os dois temas divergirem
+   por esquecimento.
+
+   PRECONDIÇÃO, verificada no build: o LightningCSS (que o Next usa)
+   NÃO deixa `light-dark()` passar — reescreve para
+   `var(--lightningcss-light,A) var(--lightningcss-dark,B)` e só emite
+   essas auxiliares quando enxerga uma declaração `color-scheme`.
+   Sem os três `color-scheme` abaixo o token compila para lixo,
+   em silêncio. Não remova nenhum deles.
+
+   `light-dark()` só aceita COR. As sombras tinham geometria por tema,
+   então a geometria foi unificada (diferença de 2px, imperceptível) e
+   só a cor varia — foi o preço de não ter bloco duplicado.
+
+   Contraste: todos os pares texto/fundo dos dois temas foram medidos
+   contra AA (4.5:1 texto, 3:1 limite de componente). Mínimo do
+   conjunto: 4.78:1. Spec descritiva: ../LINGUAGEM-VISUAL.md
    ============================================================ */
 
 :root {
-  /* ---- paleta-marca FIXA (identidade do azulejo · não tematiza) ---- */
-  --jade:         #0C5340;
-  --jade-fundo:   #0A4334;
-  --jade-claro:   #16785C;
+  /* A propriedade que faz o light-dark() resolver. Ver PRECONDIÇÃO acima. */
+  color-scheme: light dark;
+
+  /* ---- a paleta de origem (sálvia + creme), nomeada para o sistema
+     documentar de onde as superfícies saem ---- */
+  --verde-1: #E7F0E2;
+  --verde-2: #C7D9C4;
+  --verde-3: #A6BFA2;
+  --verde-4: #7A9B7A;
+  --creme:   #FFF7EA;
+
+  /* ---- paleta-marca (identidade do azulejo · não tematiza) ----
+     O verde da marca foi re-afinado para a família da sálvia. Telha,
+     cobalto e amarelo PERMANECEM: não são decoração, carregam função
+     (acento, foco, aviso). Um sistema monocromático apagaria a
+     distinção entre esses estados. */
+  --jade:         #2F5D3F;
+  --jade-fundo:   #234A31;
+  --jade-claro:   #7A9B7A;
   --telha:        #D9542B;
   --telha-fundo:  #B9421F;
   --cobalto:      #1E5FA8;
@@ -55,112 +86,75 @@
   --max:     1360px;   /* superfícies internas; o portal público sobrescreve p/ 1200 */
 
   /* a marca do PAPEL (Expediente) é jade nos dois temas — o papel é claro */
-  --papel-marca: #0C5340;
+  --papel-marca: #2F5D3F;
 }
 
-/* ====================== TEMA CLARO ====================== */
-:root, [data-tema="claro"] {
-  --bg:        #F1ECDD;
-  --bg-luz:    radial-gradient(120% 80% at 88% -12%, rgba(232,178,58,.14), transparent 55%),
-               radial-gradient(90% 70% at -5% 0%, rgba(30,95,168,.07), transparent 50%);
-  --surface:   #FBF8F0;
-  --surface-2: #FFFFFF;
-  --linha:     #E0D7BF;
-  --texto:     #19211C;
-  --texto-2:   #4C574F;
-  --marca:     #0C5340;
-  --acao:      #0C5340;
-  --acao-hover:#0A4334;
-  --acao-texto:#FFFFFF;
-  --acento-texto: #B9421F;     /* telha legível como texto (passa AA sobre areia) */
-  --foco:      #1E5FA8;
-  --topo-bg:   rgba(241,236,221,.9);
-  --aviso-texto:   #6E5009;    /* texto sobre realce amarelo — versão AA do Marajó (o cheio falha) */
-  --amarelo-traco: #B07D14;    /* traço/borda gráfica de alerta que precisa de 3:1 sobre claro */
+/* Override manual do tema. Estes dois seletores não trazem valor nenhum:
+   só dizem ao navegador qual lado do light-dark() vale. */
+[data-tema="claro"]  { color-scheme: light; }
+[data-tema="escuro"] { color-scheme: dark;  }
 
-  --sombra:      0 1px 0 rgba(25,33,28,.04), 0 18px 40px -28px rgba(12,83,64,.45);
-  --sombra-alta: 0 1px 0 rgba(25,33,28,.05), 0 32px 64px -38px rgba(12,83,64,.55);
+/* ====================== OS SEMÂNTICOS ======================
+   Um token, os dois temas: light-dark(CLARO, ESCURO).
+   No claro a paleta é SUPERFÍCIE; no escuro ela é TINTA sobre verde
+   profundo — a mesma família serve os dois lados. */
+:root {
+  --bg:        light-dark(#E7F0E2, #111A13);
+  --surface:   light-dark(#FFF7EA, #1A251C);
+  --surface-2: light-dark(#FFFFFF, #243226);
+  --linha:     light-dark(#C7D9C4, #334536);
 
-  /* --- ilha-PALCO escura (placar da sessão; saúde institucional dos Painéis) --- */
-  --palco-bg:      #0A4334;
-  --palco-texto:   #F1ECDD;
-  --palco-texto-2: rgba(241,236,221,.82);
-  --palco-linha:   rgba(241,236,221,.14);
-  --palco-inset:   rgba(241,236,221,.06);
+  --texto:     light-dark(#16231A, #E7F0E2);   /* 13.93:1 / 15.21:1 sobre --bg */
+  --texto-2:   light-dark(#46584A, #A6BFA2);   /*  6.52:1 /  8.97:1 sobre --bg */
 
-  /* --- ilha-PAPEL clara (o documento do Expediente) --- */
-  --papel:         #FBF8F0;
-  --papel-2:       #F3EDDD;
-  --papel-texto:   #1B2A20;    /* tinta — quase-preto esverdeado */
-  --papel-texto-2: #586B5E;
-  --papel-linha:   #DCD2B8;
-  --merge:         #B9421F;    /* sublinhado do campo mesclado (AA no papel) */
-  --merge-fundo:   rgba(217,84,43,.10);
-  --sombra-papel:  0 1px 0 rgba(25,33,28,.05), 0 28px 60px -34px rgba(12,83,64,.5);
-}
+  --marca:     light-dark(#2F5D3F, #8FBE92);
+  --acao:      light-dark(#2F5D3F, #7A9B7A);
+  --acao-hover:light-dark(#234A31, #8FBE92);
+  --acao-texto:light-dark(#FFFFFF, #0B140C);   /*  7.61:1 /  6.07:1 sobre --acao */
 
-/* ====================== TEMA ESCURO ===================== */
-[data-tema="escuro"] {
-  --bg:        #0E1A15;
-  --bg-luz:    radial-gradient(120% 80% at 88% -12%, rgba(232,178,58,.08), transparent 55%),
-               radial-gradient(90% 70% at -5% 0%, rgba(24,158,118,.10), transparent 50%);
-  --surface:   #16271F;
-  --surface-2: #1E332A;
-  --linha:     #2C4438;
-  --texto:     #ECE7D6;
-  --texto-2:   #9FB0A4;
-  --marca:     #43BD93;
-  --acao:      #18A074;
-  --acao-hover:#1FB585;
-  --acao-texto:#06150F;
-  --acento-texto: #F0794B;
-  --foco:      #6AA6DE;
-  --topo-bg:   rgba(14,26,21,.88);
-  --aviso-texto:   #E8B23A;    /* no escuro o Marajó cheio já passa AA como texto */
-  --amarelo-traco: #E8B23A;
+  --acento-texto:  light-dark(#A33A19, #F0794B);
+  --foco:          light-dark(#1B5490, #7FB3E6);
+  --aviso-texto:   light-dark(#6E5009, #E8B23A);  /* no escuro o amarelo cheio já passa AA */
+  --amarelo-traco: light-dark(#B07D14, #E8B23A);  /* traço de alerta, piso 3:1 */
 
-  --sombra:      0 1px 0 rgba(0,0,0,.2),  0 20px 44px -28px rgba(0,0,0,.6);
-  --sombra-alta: 0 1px 0 rgba(0,0,0,.25), 0 34px 70px -36px rgba(0,0,0,.7);
+  --topo-bg:   light-dark(rgba(231,240,226,.9), rgba(17,26,19,.88));
 
-  /* palco = painel jade saturado, brilha no escuro */
-  --palco-bg:      #0B3A2B;
-  --palco-texto:   #ECE7D6;
-  --palco-texto-2: rgba(236,231,214,.82);
-  --palco-linha:   rgba(236,231,214,.14);
-  --palco-inset:   rgba(236,231,214,.06);
+  /* Borda de campo de formulário: --linha é divisor decorativo e falha o piso de
+     3:1 de non-text contrast (SC 1.4.11) para limite de componente. Medida contra
+     --surface-2 (preenchimento interno) e --bg (fundo externo); pior caso 3.25:1
+     no claro, 4.46:1 no escuro. */
+  --campo-borda: light-dark(#6E8A70, #7E9C80);
 
-  /* à noite o papel acalma (candeeiro); a tinta segue escura = AA+ */
-  --papel:         #ECE6D4;
-  --papel-2:       #E1D9C2;
-  --papel-texto:   #1B2A20;
-  --papel-texto-2: #586B5E;
-  --papel-linha:   #CFC4A8;
-  --merge:         #B9421F;
-  --merge-fundo:   rgba(185,66,31,.12);
-  --sombra-papel:  0 1px 0 rgba(0,0,0,.25), 0 30px 64px -30px rgba(0,0,0,.7);
-}
+  /* Sombras: geometria unificada (light-dark só aceita cor), só a cor troca. */
+  --sombra-cor-1: light-dark(rgba(25,33,28,.04), rgba(0,0,0,.2));
+  --sombra-cor-2: light-dark(rgba(47,93,63,.45), rgba(0,0,0,.6));
+  --sombra-cor-3: light-dark(rgba(47,93,63,.55), rgba(0,0,0,.7));
+  --sombra:      0 1px 0 var(--sombra-cor-1), 0 18px 40px -28px var(--sombra-cor-2);
+  --sombra-alta: 0 1px 0 var(--sombra-cor-1), 0 32px 64px -38px var(--sombra-cor-3);
 
-/* ============ ESCURO AUTOMÁTICO (segue o SO se o usuário não escolheu) ============
-   ⚠️ MANTER EM PARIDADE com o bloco [data-tema="escuro"] acima — o padrão
-   "respeita o SO + permite override por clique" exige os mesmos valores em
-   dois seletores (um regular, um sob @media; CSS não os combina sem build).
-   Qualquer mudança no escuro deve ser espelhada aqui. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-tema="claro"]) {
-    --bg:#0E1A15;
-    --bg-luz: radial-gradient(120% 80% at 88% -12%, rgba(232,178,58,.08), transparent 55%),
-              radial-gradient(90% 70% at -5% 0%, rgba(24,158,118,.10), transparent 50%);
-    --surface:#16271F; --surface-2:#1E332A; --linha:#2C4438;
-    --texto:#ECE7D6; --texto-2:#9FB0A4; --marca:#43BD93;
-    --acao:#18A074; --acao-hover:#1FB585; --acao-texto:#06150F;
-    --acento-texto:#F0794B; --foco:#6AA6DE; --topo-bg:rgba(14,26,21,.88);
-    --aviso-texto:#E8B23A; --amarelo-traco:#E8B23A;
-    --sombra:0 1px 0 rgba(0,0,0,.2), 0 20px 44px -28px rgba(0,0,0,.6);
-    --sombra-alta:0 1px 0 rgba(0,0,0,.25), 0 34px 70px -36px rgba(0,0,0,.7);
-    --palco-bg:#0B3A2B; --palco-texto:#ECE7D6; --palco-texto-2:rgba(236,231,214,.82);
-    --palco-linha:rgba(236,231,214,.14); --palco-inset:rgba(236,231,214,.06);
-    --papel:#ECE6D4; --papel-2:#E1D9C2; --papel-texto:#1B2A20;
-    --papel-texto-2:#586B5E; --papel-linha:#CFC4A8; --merge-fundo:rgba(185,66,31,.12);
-    --sombra-papel:0 1px 0 rgba(0,0,0,.25), 0 30px 64px -30px rgba(0,0,0,.7);
-  }
+  /* Luz ambiente: o gradiente é estrutura fixa; só os dois stops tematizam. */
+  --bg-luz-a: light-dark(rgba(232,178,58,.14), rgba(232,178,58,.08));
+  --bg-luz-b: light-dark(rgba(47,93,63,.10),   rgba(122,155,122,.10));
+  --bg-luz:   radial-gradient(120% 80% at 88% -12%, var(--bg-luz-a), transparent 55%),
+              radial-gradient(90% 70% at -5% 0%,   var(--bg-luz-b), transparent 50%);
+
+  /* --- ilha-PALCO escura (placar da sessão; saúde institucional dos Painéis) ---
+     Escura nos DOIS temas: é um palco, não uma superfície. */
+  --palco-bg:      light-dark(#234A31, #1B3A28);
+  --palco-texto:   light-dark(#E7F0E2, #E7F0E2);   /* 8.57:1 / 10.67:1 */
+  --palco-texto-2: light-dark(rgba(231,240,226,.82), rgba(231,240,226,.82));
+  --palco-linha:   light-dark(rgba(231,240,226,.14), rgba(231,240,226,.14));
+  --palco-inset:   light-dark(rgba(231,240,226,.06), rgba(231,240,226,.06));
+
+  /* --- ilha-PAPEL clara (o documento do Expediente) ---
+     Clara nos DOIS temas; à noite o papel acalma (candeeiro) e a tinta segue
+     escura, então continua AA+. */
+  --papel:         light-dark(#FFF7EA, #EDE4D2);
+  --papel-2:       light-dark(#F2E9D8, #E0D5C0);
+  --papel-texto:   light-dark(#1B2A20, #1B2A20);   /* 14.12:1 / 11.89:1 */
+  --papel-texto-2: light-dark(#53655A, #53655A);   /*  5.68:1 /  4.78:1 */
+  --papel-linha:   light-dark(#E3D8C2, #CFC4A8);
+  --merge:         light-dark(#A33A19, #A33A19);
+  --merge-fundo:   light-dark(rgba(163,58,25,.10), rgba(163,58,25,.12));
+  --sombra-papel:  0 1px 0 var(--sombra-cor-1), 0 28px 60px -34px var(--sombra-cor-2);
 }
