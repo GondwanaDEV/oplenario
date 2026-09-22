@@ -66,9 +66,16 @@
   --amarelo:      #CFA65C;
 
   /* ---- tipografia ---- */
-  --display: 'Sora', system-ui, sans-serif;
-  --corpo:   'Hanken Grotesk', system-ui, sans-serif;
-  --mono:    'IBM Plex Mono', ui-monospace, monospace;
+  /* Trocada em 22/09/2026 junto com o vidro. Sora e' uma geometrica angular, de
+     inflexao "startup"; contra superficie de vidro e paleta salvia ela brigava.
+     Plus Jakarta Sans tem a mesma familia geometrica com terminais MOLES — e' o
+     que combina com raio grande e borda especular. Inter no corpo porque a tela
+     densa deste produto (tabela de proposicoes, chamada nominal) vive em 13px, e
+     Inter foi desenhada para esse tamanho. JetBrains Mono e' mais redonda que a
+     IBM Plex Mono, entao o numero tabular nao volta ao registro anterior. */
+  --display: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --corpo:   'Inter', system-ui, sans-serif;
+  --mono:    'JetBrains Mono', ui-monospace, monospace;
 
   /* escala tipográfica: 12 · 13 · 16 · 21 · 28 · 40 · 56 */
   --t-12: 0.75rem;
@@ -80,9 +87,12 @@
   --t-56: 3.5rem;
 
   /* ---- geometria ---- */
-  --raio:    14px;
-  --raio-sm: 9px;
-  --raio-lg: 20px;
+  /* Raio maior e' metade do vocabulario do vidro liquido: canto duro le como papel
+     recortado, canto largo le como massa. Subiu ~30% em todos os degraus. */
+  --raio:    18px;
+  --raio-sm: 12px;
+  --raio-lg: 26px;
+  --raio-capsula: 999px;   /* botao e chip: pilula, nao retangulo arredondado */
   --max:     1360px;   /* superfícies internas; o portal público sobrescreve p/ 1200 */
 
   /* a marca do PAPEL (Expediente) é jade nos dois temas — o papel é claro */
@@ -100,8 +110,17 @@
    profundo — a mesma família serve os dois lados. */
 :root {
   --bg:        light-dark(#A6BFA2, #0F1711);
-  --surface:   light-dark(#E7F0E2, #1A251C);
-  --surface-2: light-dark(#FFF7EA, #2C3D2F);
+  /* ---- AS SUPERFICIES SAO VIDRO (22/09/2026) ----
+     Deixaram de ser cor chapada e viraram cor TRANSLUCIDA: o campo e a luz ambiente
+     atravessam. A cor da paleta continua escrita literalmente aqui — o color-mix com
+     `transparent` so' acrescenta o alfa, e o LightningCSS o resolve em build
+     (`#E7F0E2 76%` saiu `#e7f0e2c2`), preservando o light-dark(). Verificado no CSS
+     compilado: nao e' suposicao.
+     Contraste medido no PIXEL COMPOSTO — texto sobre a mistura real de superficie +
+     campo + gradiente de luz, nas tres regioes do gradiente. Pior par no claro:
+     --aviso-texto, 5.55:1; no escuro: --acento sobre --surface-2, 5.26:1. */
+  --surface:   light-dark(color-mix(in srgb, #E7F0E2 76%, transparent), color-mix(in srgb, #1A251C 72%, transparent));
+  --surface-2: light-dark(color-mix(in srgb, #FFF7EA 78%, transparent), color-mix(in srgb, #2C3D2F 72%, transparent));
   --linha:     light-dark(#7A9B7A, #42573F);
 
   /* Degrau ENTRE o campo e o cartao. E' a 2a cor da paleta (#C7D9C4), que sem este
@@ -110,7 +129,7 @@
      para o lado CLARO e lia como "mais importante"; --realce desce, que e' o que
      cabecalho e hover querem dizer. Todo texto do sistema passa AA sobre ele
      (pior caso --aviso-texto, 5.03:1). */
-  --realce:    light-dark(#C7D9C4, #233026);
+  --realce:    light-dark(color-mix(in srgb, #C7D9C4 80%, transparent), color-mix(in srgb, #233026 72%, transparent));
 
   --texto:     light-dark(#16231A, #E7F0E2);   /* 13.93:1 / 15.21:1 sobre --bg */
   --texto-2:   light-dark(#2F3E33, #A6BFA2);   /*  7.05:1 /  8.97:1 sobre --bg */
@@ -125,7 +144,10 @@
   --aviso-texto:   light-dark(#6E5009, #CFA65C);  /* no escuro o amarelo cheio já passa AA */
   --amarelo-traco: light-dark(#B07D14, #CFA65C);  /* traço de alerta, piso 3:1 */
 
-  --topo-bg:   light-dark(#7A9B7A, #1A251C);
+  /* A barra do topo e' o UNICO lugar onde o desfoque muda o pixel: o conteudo rola
+     por baixo dela. Num cartao parado sobre gradiente liso, blur() e' indistinguivel
+     de nao-blur — por isso o desfoque nao foi espalhado por decoracao. */
+  --topo-bg:   light-dark(color-mix(in srgb, #7A9B7A 72%, transparent), color-mix(in srgb, #1A251C 72%, transparent));
 
   /* Borda de campo de formulário: --linha é divisor decorativo e falha o piso de
      3:1 de non-text contrast (SC 1.4.11) para limite de componente. Medida contra
@@ -133,18 +155,31 @@
      no claro, 4.46:1 no escuro. */
   --campo-borda: light-dark(#3F5943, #7E9C80);
 
+  /* Aresta especular: a linha de luz no topo da peca, que e' o que faz o olho ler
+     "vidro" e nao "retangulo transparente". Entra DENTRO de --sombra como inset, e
+     assim alcanca de uma vez todo elemento que ja' usava box-shadow: var(--sombra) —
+     sem tocar em nenhuma tela. */
+  --vidro-brilho: light-dark(rgba(255,255,255,.62), rgba(231,240,226,.075));
+  --desfoque: saturate(180%) blur(20px);
+
   /* Sombras: geometria unificada (light-dark só aceita cor), só a cor troca. */
   --sombra-cor-1: light-dark(rgba(25,33,28,.04), rgba(0,0,0,.2));
   --sombra-cor-2: light-dark(rgba(47,93,63,.45), rgba(0,0,0,.6));
   --sombra-cor-3: light-dark(rgba(47,93,63,.55), rgba(0,0,0,.7));
-  --sombra:      0 1px 0 var(--sombra-cor-1), 0 18px 40px -28px var(--sombra-cor-2);
-  --sombra-alta: 0 1px 0 var(--sombra-cor-1), 0 32px 64px -38px var(--sombra-cor-3);
+  --sombra:      inset 0 1px 0 var(--vidro-brilho), 0 1px 0 var(--sombra-cor-1), 0 18px 40px -28px var(--sombra-cor-2);
+  --sombra-alta: inset 0 1px 0 var(--vidro-brilho), 0 1px 0 var(--sombra-cor-1), 0 32px 64px -38px var(--sombra-cor-3);
 
   /* Luz ambiente: o gradiente é estrutura fixa; só os dois stops tematizam. */
-  --bg-luz-a: light-dark(rgba(232,178,58,.14), rgba(232,178,58,.08));
-  --bg-luz-b: light-dark(rgba(47,93,63,.10),   rgba(122,155,122,.10));
+  /* Vidro sobre cor CHAPADA volta a parecer cor chapada: nao ha' o que atravessar.
+     Os stops subiram (.14->.22 e .10->.18) e um terceiro entrou embaixo, para que a
+     superficie translucida tenha variacao real para revelar. Isto e' condicao do
+     vidro funcionar, nao enfeite. */
+  --bg-luz-a: light-dark(rgba(232,178,58,.22), rgba(232,178,58,.10));
+  --bg-luz-b: light-dark(rgba(47,93,63,.18),   rgba(122,155,122,.14));
+  --bg-luz-c: light-dark(rgba(255,247,234,.34), rgba(63,110,146,.10));
   --bg-luz:   radial-gradient(120% 80% at 88% -12%, var(--bg-luz-a), transparent 55%),
-              radial-gradient(90% 70% at -5% 0%,   var(--bg-luz-b), transparent 50%);
+              radial-gradient(90% 70% at -5% 0%,   var(--bg-luz-b), transparent 50%),
+              radial-gradient(70% 55% at 45% 115%, var(--bg-luz-c), transparent 60%);
 
   /* --- ilha-PALCO escura (placar da sessão; saúde institucional dos Painéis) ---
      Escura nos DOIS temas: é um palco, não uma superfície. */

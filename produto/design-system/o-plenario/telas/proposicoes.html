@@ -6,7 +6,7 @@
 <title>O Plenário — Proposições</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="../sistema/tokens.css" />
 <link rel="stylesheet" href="../sistema/chassi.css" />
 <style>
@@ -67,14 +67,14 @@
   /* ---- tabela ---- */
   .tabela-wrap { margin: 1rem 0 0; border: 1px solid var(--linha); border-radius: var(--raio); overflow: hidden; box-shadow: var(--sombra); background: var(--surface); }
   table.tabela { width: 100%; border-collapse: collapse; }
-  .tabela thead th { font-family: var(--mono); font-size: var(--t-12); font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--texto-2); text-align: left; padding: 0.7rem 0.9rem; background: var(--surface-2); border-bottom: 1px solid var(--linha); white-space: nowrap; }
+  .tabela thead th { font-family: var(--mono); font-size: var(--t-12); font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--texto-2); text-align: left; padding: 0.7rem 0.9rem; background: var(--realce); border-bottom: 1px solid var(--linha); white-space: nowrap; }
   .tabela thead th.ord button { display: inline-flex; align-items: center; gap: 0.35rem; font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; background: none; border: none; cursor: pointer; padding: 0; }
   .tabela thead th.ord button:hover { color: var(--texto); }
   .tabela thead th .seta { opacity: .4; }
   .tabela thead th[aria-sort="ascending"] .seta, .tabela thead th[aria-sort="descending"] .seta { opacity: 1; color: var(--marca); }
   .tabela tbody td { padding: 0.75rem 0.9rem; border-bottom: 1px solid var(--linha); vertical-align: middle; font-size: var(--t-13); color: var(--texto); }
   .tabela tbody tr:last-child td { border-bottom: none; }
-  .tabela tbody tr:hover { background: color-mix(in srgb, var(--marca) 4%, transparent); }
+  .tabela tbody tr:hover { background: var(--realce); }
   .tabela tbody tr.sel { background: color-mix(in srgb, var(--cobalto) 9%, transparent); }
   [data-tema="escuro"] .tabela tbody tr.sel { background: color-mix(in srgb, var(--foco) 12%, transparent); }
   .col-sel { width: 40px; }
