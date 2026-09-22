@@ -39,9 +39,11 @@ function renderComProviders(tokenQuery: string | null) {
 // esperaria para sempre (era exatamente por isso que este arquivo inteiro dava timeout de 5s por teste).
 const TOKEN_SECRETARIA = '{"sub":"u","papeis":["secretario"]}';
 // DOIS papeis, e isso NAO e' capricho do teste: o form "Conceder acesso" exige `admin_ente` por dentro
-// (page.tsx `podeConcederAcesso`), mas a PAGINA exige `secretario` na porta (<GuardSecretaria>). Ou seja,
-// so' quem acumula os dois alcanca a funcao — um `admin_ente` puro (o presidente da Mesa na semente da
-// demo) bate na porta e nunca ve o form. Defeito de produto conhecido, registrado aqui pelo teste.
+// (page.tsx `podeConcederAcesso`), mas a PAGINA exige `secretario` na porta (<GuardSecretaria>). Nenhuma
+// persona real acumula os dois — sao funcoes SEGREGADAS no backend de proposito. Este token existe para
+// exercitar o form em isolamento, nao porque alguem assim exista. DECIDIDO em docs/adr/0005: o destino e'
+// area propria do admin_ente, e o guard desta pagina NAO deve ser aberto (as 8 rotas de dado daqui sao
+// `secretario`-only). O `it` logo abaixo, com TOKEN_SECRETARIA, e' quem trava o lado de ca' da regra.
 const TOKEN_SECRETARIA_ADMIN = '{"sub":"u","papeis":["secretario","admin_ente"]}';
 
 const listaFake = {
