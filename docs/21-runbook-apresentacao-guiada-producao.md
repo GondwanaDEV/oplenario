@@ -7,8 +7,12 @@
 > Este runbook é focado no **deploy atual** — para o runbook do stack local (docker/localhost) veja
 > `docs/19`, que **não** se aplica aqui.
 >
-> **Atualizado em 21/09/2026.** Os dados vivos da §2 foram colhidos nesse dia, logando de verdade em
+> **Atualizado em 22/09/2026.** Os dados vivos da §2 foram colhidos em 21/09, logando de verdade em
 > produção (ver §6). Se a Casa for re-semeada, recolha-os antes da demo — a §2 diz como.
+>
+> **O que este runbook descreve é o que está NO AR hoje.** Há correções prontas na branch que ainda
+> **não** foram deployadas (a cota do GitHub Actions está esgotada) — elas mudam a entrada pós-login.
+> A §1 tem a checagem de 5 segundos que diz em qual dos dois mundos você está.
 
 ---
 
@@ -17,7 +21,8 @@
 | | |
 |---|---|
 | **Onde** | https://oplenario.calvetec.com.br/ — sem instalar nada, num navegador |
-| **Entrada** | `/entrar/10000000-0000-0000-0000-000000000001?redirect=/proposicoes` → **Entrar** → cai direto no acervo. Sem o `?redirect=`, o login para na **capa** (`/`), que **não é o menu** — veja §1 |
+| **Entrada** | `/entrar/10000000-0000-0000-0000-000000000001?redirect=/proposicoes` → **Entrar** → cai direto no acervo. **Esta URL vale antes e depois do deploy pendente** — um destino pedido explicitamente sempre vence |
+| **Antes de apresentar** | Abra `…/inicio`. **404** = o deploy não subiu, siga este runbook como está. **Tela "Início"** = subiu, veja o box 🟡 da §1 |
 | **Senha de todas as personas** | `Plenario@2026` |
 | **Usuário** | é o **UUID** da persona (ver §1). Faça login ANTES do cliente entrar |
 | **O roteiro** | 4 atos: servidora · **condução da sessão ao vivo** · pós-aprovação · cidadão |
@@ -40,10 +45,10 @@ https://oplenario.calvetec.com.br/entrar/10000000-0000-0000-0000-000000000001
 Clique **Entrar** → cai no Keycloak → informe **usuário + senha** → o app roteia pelo papel do token.
 
 > ### ⚠️ Leia isto — o passo que falta na maioria das demos
-> **Depois do login padrão você cai na CAPA (`/`)** — a página "Onde a câmara acontece / Front-end em
-> construção", com os botões *Entrar na sua Câmara* / *Status*. **Essa capa NÃO é o menu do sistema** e
-> não leva a lugar nenhum útil: o front interno não tem um "home" com botões; você entra nas telas pela
-> **URL direta**. A barra de navegação interna (Proposições, Tramitação, Agendar sessão…) só aparece
+> **Hoje, depois do login padrão você cai na CAPA (`/`)** — a página "Onde a câmara acontece / Front-end
+> em construção", com os botões *Entrar na sua Câmara* / *Status*. **Essa capa NÃO é o menu do sistema** e
+> não leva a lugar nenhum útil: o front interno ainda não tem um "home" com botões; você entra nas telas
+> pela **URL direta**. A barra de navegação interna (Proposições, Tramitação, Agendar sessão…) só aparece
 > *dentro* de uma tela interna.
 >
 > **Duas formas de não cair no beco da capa:**
@@ -51,8 +56,29 @@ Clique **Entrar** → cai no Keycloak → informe **usuário + senha** → o app
 >    produção: entrar por
 >    `…/entrar/10000000-0000-0000-0000-000000000001?redirect=/proposicoes` **cai direto no acervo**, com
 >    a barra de navegação. Troque `/proposicoes` pelo caminho que quiser abrir primeiro.
+>    **Este caminho continua valendo depois do deploy pendente** — veja o box abaixo.
 > 2. Se caiu na capa, **cole a primeira URL interna** na barra de endereço (ex.: `…/proposicoes`). A
 >    partir daí a barra de navegação carrega você pelo resto.
+
+> ### 🟡 O que muda quando o próximo deploy subir — e ele ainda NÃO subiu
+> A correção do beco da capa está **pronta e commitada, mas não está no ar**: o build de produção está
+> parado por esgotamento da cota do GitHub Actions. Verificado em 22/09/2026 — `…/inicio` responde **404**
+> em produção.
+>
+> **Checagem de 5 segundos, na véspera e no dia:** abra `https://oplenario.calvetec.com.br/inicio`.
+>
+> - **Deu 404** → o deploy não subiu. **Siga este runbook exatamente como está.**
+> - **Abriu a tela "Início"** → subiu. Tudo neste runbook continua valendo, e além disso:
+>   - o login **sem** `?redirect=` deixa de cair na capa e passa a rotear **pela persona**: secretária →
+>     `/inicio`, vereador → `/vereador`, cidadã → `/acompanhamentos`;
+>   - **`/inicio` é o hub que faltava**: mostra o estado da sessão (acontecendo agora / próxima marcada) e
+>     dá atalho para as telas que hoje só se alcança colando URL — **inclusive o Comando da Mesa, a
+>     chamada e o telão** da sessão ao vivo;
+>   - **Início** passa a ser o primeiro item da barra de navegação interna;
+>   - o ícone gigante na ficha de matéria (Ato 1, passo 2) volta ao tamanho normal.
+>
+> **A URL de entrada da §0 não muda nos dois mundos.** Um `?redirect=` pedido explicitamente vence a
+> escolha por persona — foi desenhado assim justamente para um roteiro não depender do que mudou.
 
 **Índice de URLs do roteiro** (cole na barra; `…` = `https://oplenario.calvetec.com.br`). As telas de
 sessão e a de pós-aprovação **não** estão na barra de navegação — chegue nelas por estas URLs:
@@ -60,6 +86,7 @@ sessão e a de pós-aprovação **não** estão na barra de navegação — cheg
 | Ato | Tela | URL |
 |---|---|---|
 | entrada | Login já no acervo | `…/entrar/10000000-0000-0000-0000-000000000001?redirect=/proposicoes` |
+| entrada | **Início** (o hub) — *só existe depois do deploy pendente; hoje dá 404* | `…/inicio` |
 | 1 | Acervo de proposições | `…/proposicoes` |
 | 1 | Expediente (gerar documento) | `…/expediente` |
 | 1 | Agendar sessão | `…/agendar-sessao` |
@@ -248,6 +275,11 @@ O que **continua** sem porta de cliente — não abra, não clique, não prometa
   schema. Diga isso — não "hoje não".
 - *"Como o quórum de maioria absoluta é calculado?"* — o denominador chega no corpo hoje; correção é
   prioridade do backlog. Por isso não se demonstra encerramento com quórum qualificado.
+- *"Como se dá acesso a um vereador novo?"* — **hoje, pela semente; pela UI ainda não.** Conceder acesso
+  é função do papel `admin_ente`, **segregado de propósito** do `secretario`: quem mantém o cadastro não
+  pode ligar uma identidade a ele e sair votando. O que falta é o bootstrap do primeiro `admin_ente` (o
+  console do operador, que não tem rotas). Decisão e caminho registrados em `docs/adr/0005`. Diga isso —
+  a segregação é argumento de controle interno, não lacuna.
 
 ---
 
@@ -288,6 +320,7 @@ na véspera da demo:
 nesse dia:
 
 - **Deep-link:** entrar com `?redirect=/proposicoes` cai **direto** no acervo (não passa pela capa).
+  Esse comportamento é o mesmo antes e depois do deploy pendente — o destino pedido vence o padrão.
 - **Secretária:** `/proposicoes`, `/tramitacao`, `/expediente`, `/pauta-convocacao`, `/agendar-sessao`,
   `/paineis/mesa` (mostra "1 obrigação venceu o prazo no TCE-CE" — o argumento de compliance), `/calendario`,
   `/moderacao`, `/cadastros/vereadores`, a chamada e a folha da sessão encerrada, o Comando da Mesa e o
@@ -298,6 +331,20 @@ nesse dia:
 - **Nota sobre caminhos:** a tela do vereador é **`/vereador`** — `/meu/painel` é a **rota da API
   (backend)**, não uma página de navegador (digitá-la dá 404; é esperado, não é a tela). Idem
   notificações do vereador: a rota é `/notificacoes`, não `/vereador/notificacoes`.
+
+### Verificação de 22/09/2026 — o estado do deploy
+
+Checagem só-leitura direta contra `https://oplenario.calvetec.com.br`:
+
+| Rota | Resposta | Leitura |
+|---|---|---|
+| `/` | 200 | a capa pública segue lá (ela não muda com o deploy pendente) |
+| `/inicio` | **404** | **o deploy NÃO subiu** — a tela inicial ainda não existe em produção |
+| `/proposicoes` | 307 | redireciona para o login, como esperado de rota interna |
+| `/vereador` | 307 | idem |
+
+É esta a checagem do box 🟡 da §1. Refaça-a na véspera: quando `/inicio` deixar de dar 404, o deploy
+subiu e o comportamento pós-login passa a ser o da persona.
 
 ### Procedência (o que foi confirmado em produção em 21/09/2026)
 
