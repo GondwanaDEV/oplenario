@@ -56,14 +56,14 @@
      cobalto e amarelo PERMANECEM: não são decoração, carregam função
      (acento, foco, aviso). Um sistema monocromático apagaria a
      distinção entre esses estados. */
-  --jade:         #2F5D3F;
-  --jade-fundo:   #234A31;
+  --jade:         #2C5638;
+  --jade-fundo:   #1E4028;
   --jade-claro:   #7A9B7A;
-  --telha:        #D9542B;
-  --telha-fundo:  #B9421F;
-  --cobalto:      #1E5FA8;
-  --cobalto-fundo:#184E8A;
-  --amarelo:      #E8B23A;
+  --telha:        #C0693F;
+  --telha-fundo:  #A85334;
+  --cobalto:      #3F6E92;
+  --cobalto-fundo:#355D7D;
+  --amarelo:      #CFA65C;
 
   /* ---- tipografia ---- */
   --display: 'Sora', system-ui, sans-serif;
@@ -86,7 +86,7 @@
   --max:     1360px;   /* superfícies internas; o portal público sobrescreve p/ 1200 */
 
   /* a marca do PAPEL (Expediente) é jade nos dois temas — o papel é claro */
-  --papel-marca: #2F5D3F;
+  --papel-marca: #2C5638;
 }
 
 /* Override manual do tema. Estes dois seletores não trazem valor nenhum:
@@ -114,8 +114,8 @@
 
   --acento-texto:  light-dark(#993517, #F58A60);
   --foco:          light-dark(#1B5490, #7FB3E6);
-  --aviso-texto:   light-dark(#6E5009, #E8B23A);  /* no escuro o amarelo cheio já passa AA */
-  --amarelo-traco: light-dark(#B07D14, #E8B23A);  /* traço de alerta, piso 3:1 */
+  --aviso-texto:   light-dark(#6E5009, #CFA65C);  /* no escuro o amarelo cheio já passa AA */
+  --amarelo-traco: light-dark(#B07D14, #CFA65C);  /* traço de alerta, piso 3:1 */
 
   --topo-bg:   light-dark(#C7D9C4, #1A251C);
 
@@ -140,7 +140,7 @@
 
   /* --- ilha-PALCO escura (placar da sessão; saúde institucional dos Painéis) ---
      Escura nos DOIS temas: é um palco, não uma superfície. */
-  --palco-bg:      light-dark(#234A31, #1B3A28);
+  --palco-bg:      light-dark(#1E4028, #1B3A28);
   --palco-texto:   light-dark(#E7F0E2, #E7F0E2);   /* 8.57:1 / 10.67:1 */
   --palco-texto-2: light-dark(rgba(231,240,226,.82), rgba(231,240,226,.82));
   --palco-linha:   light-dark(rgba(231,240,226,.14), rgba(231,240,226,.14));

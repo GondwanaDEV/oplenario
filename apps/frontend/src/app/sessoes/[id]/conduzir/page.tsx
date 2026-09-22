@@ -368,11 +368,11 @@ function rotuloDoAlvo(para: AtoConducao["para"]): string {
 function Brasao() {
   return (
     <svg className="marca-simbolo" viewBox="0 0 40 40" role="img" aria-label="O Plenário">
-      <circle cx="20" cy="20" r="19" fill="#FBF8F0" stroke="#E0D7BF" />
-      <path d="M7 27 A13 13 0 0 1 33 27" fill="none" stroke="#0C5340" strokeWidth="2.4" strokeLinecap="round" />
-      <path d="M10 27 A10 10 0 0 1 30 27" fill="none" stroke="#1E5FA8" strokeWidth="2.4" strokeLinecap="round" />
-      <path d="M13.5 27 A6.5 6.5 0 0 1 26.5 27" fill="none" stroke="#D9542B" strokeWidth="2.4" strokeLinecap="round" />
-      <rect x="18.4" y="9.5" width="3.2" height="6" rx="1.2" fill="#E8B23A" />
+      <circle cx="20" cy="20" r="19" fill="#FFF7EA" stroke="#A6BFA2" />
+      <path d="M7 27 A13 13 0 0 1 33 27" fill="none" stroke="#2C5638" strokeWidth="2.4" strokeLinecap="round" />
+      <path d="M10 27 A10 10 0 0 1 30 27" fill="none" stroke="#3F6E92" strokeWidth="2.4" strokeLinecap="round" />
+      <path d="M13.5 27 A6.5 6.5 0 0 1 26.5 27" fill="none" stroke="#C0693F" strokeWidth="2.4" strokeLinecap="round" />
+      <rect x="18.4" y="9.5" width="3.2" height="6" rx="1.2" fill="#CFA65C" />
     </svg>
   );
 }

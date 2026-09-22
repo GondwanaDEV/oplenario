@@ -24,8 +24,8 @@
   .st-topo b span { font-weight: 400; color: var(--texto-2); }
   .st-topo .tema-btn { margin-left: auto; }
 
-  .banner { background: var(--surface); border: 1px solid color-mix(in srgb, #2C8A66 40%, var(--linha)); border-left: 4px solid #2C8A66; border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.4rem 1.5rem; display: flex; align-items: center; gap: 1rem; margin: 0.6rem 0 0; }
-  .banner .ic { width: 44px; height: 44px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; color: #fff; background: #2C8A66; }
+  .banner { background: var(--surface); border: 1px solid color-mix(in srgb, #6B9B72 40%, var(--linha)); border-left: 4px solid #6B9B72; border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.4rem 1.5rem; display: flex; align-items: center; gap: 1rem; margin: 0.6rem 0 0; }
+  .banner .ic { width: 44px; height: 44px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; color: #fff; background: #6B9B72; }
   .banner b { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--texto); display: block; line-height: 1.1; }
   .banner span { font-size: var(--t-13); color: var(--texto-2); }
 
@@ -36,19 +36,19 @@
   .cl .up { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
   .cl .st { display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--t-12); font-weight: 600; }
   .cl .st .dot { width: 9px; height: 9px; border-radius: 50%; }
-  .st-ok { color: #15634A; } .st-ok .dot { background: #2C8A66; } [data-tema="escuro"] .st-ok { color: #58C99E; }
+  .st-ok { color: #3A6B46; } .st-ok .dot { background: #6B9B72; } [data-tema="escuro"] .st-ok { color: #A6BFA2; }
   .st-deg { color: var(--aviso-texto); } .st-deg .dot { background: var(--amarelo-traco); }
 
   .hist { margin: 1.6rem 0 0; }
   .hist h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.8rem; }
   .inc { border-left: 2px solid var(--linha); padding: 0 0 1rem 1rem; position: relative; }
   .inc::before { content:""; position: absolute; left: -5px; top: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--texto-2); }
-  .inc.res::before { background: #2C8A66; }
+  .inc.res::before { background: #6B9B72; }
   .inc .d { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
   .inc b { font-size: var(--t-13); color: var(--texto); display: block; margin-top: 0.15rem; }
   .inc p { font-size: var(--t-13); color: var(--texto-2); margin: 0.25rem 0 0; line-height: 1.5; }
-  .inc .tag { display: inline-block; font-family: var(--mono); font-size: 0.62rem; font-weight: 600; text-transform: uppercase; color: #15634A; border: 1px solid color-mix(in srgb, #2C8A66 40%, transparent); border-radius: 4px; padding: 0.05rem 0.35rem; margin-top: 0.4rem; }
-  [data-tema="escuro"] .inc .tag { color: #58C99E; }
+  .inc .tag { display: inline-block; font-family: var(--mono); font-size: 0.62rem; font-weight: 600; text-transform: uppercase; color: #3A6B46; border: 1px solid color-mix(in srgb, #6B9B72 40%, transparent); border-radius: 4px; padding: 0.05rem 0.35rem; margin-top: 0.4rem; }
+  [data-tema="escuro"] .inc .tag { color: #A6BFA2; }
 
   .rodape { margin-top: auto; padding: 1.6rem 0 1.2rem; border-top: 1px solid var(--linha); font-size: var(--t-12); color: var(--texto-2); }
 </style>
@@ -57,7 +57,7 @@
 <a class="pular" href="#conteudo">Pular para o conteúdo</a>
 <main id="conteudo" class="envelope">
   <div class="st-topo">
-    <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+    <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#2C5638"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#C0693F"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#3F6E92"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#CFA65C"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#4E8259"/></svg>
     <b>O Plenário <span>· status do sistema</span></b>
     <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
       <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>

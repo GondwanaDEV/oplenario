@@ -39,7 +39,7 @@
 .saude-corpo { padding: clamp(1.4rem, 3.2vw, 2.1rem); }
 .saude .eyebrow { color: var(--amarelo); }
 .saude h1 { font-family: var(--display); font-weight: 800; font-size: clamp(var(--t-28), 4vw, var(--t-40)); line-height: 1.08; letter-spacing: -0.025em; color: var(--palco-texto); margin: 0.7rem 0 0; text-wrap: balance; }
-.saude h1 em { font-style: normal; color: #8FE3C6; }
+.saude h1 em { font-style: normal; color: #D2E3CE; }
 .saude-sub { color: var(--palco-texto-2); font-size: var(--t-16); margin: 0.7rem 0 0; max-width: 56ch; line-height: 1.5; }
 .saude-sub b { color: var(--palco-texto); font-weight: 600; }
 
@@ -50,12 +50,12 @@
 .ob-col .rotulo { display: flex; align-items: center; gap: 0.45rem; font-family: var(--mono); font-size: var(--t-12); text-transform: uppercase; letter-spacing: .05em; color: var(--palco-texto-2); margin: 0 0 0.3rem; }
 .ob-col .gl { width: 14px; height: 14px; flex: 0 0 auto; }
 .ob-col .n { font-family: var(--display); font-weight: 800; font-size: var(--t-40); line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; margin: 0; }
-.ob-dia .n { color: #8FE3C6; }
+.ob-dia .n { color: #D2E3CE; }
 .ob-vencer .n { color: var(--amarelo); }
 .ob-risco .n { color: #F2A488; }
 .ob-col .est { font-family: var(--mono); font-size: var(--t-12); color: var(--palco-texto-2); margin: 0.2rem 0 0; }
 .placar-nota { font-family: var(--mono); font-size: var(--t-12); color: var(--palco-texto-2); margin: 0.9rem 0 0; display: flex; align-items: center; gap: 0.45rem; }
-.placar-nota svg { color: #8FE3C6; flex: 0 0 auto; }
+.placar-nota svg { color: #D2E3CE; flex: 0 0 auto; }
 
 /* ============== bloco — contêiner genérico do cockpit (reusado por várias seções) ============== */
 .bloco { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); }

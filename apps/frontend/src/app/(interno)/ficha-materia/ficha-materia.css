@@ -50,7 +50,7 @@
 .azulejo-tile--concluido { fill: var(--jade); }
 .azulejo-tile--ativo { fill: var(--bg); stroke: var(--amarelo); stroke-width: 2; }
 .azulejo-tile--pendente { fill: none; stroke: var(--linha); stroke-dasharray: 4 5; }
-.azulejo-marca { fill: var(--papel, #F1ECDD); }
+.azulejo-marca { fill: var(--papel, #C7D9C4); }
 .azulejo-marca--ativo { fill: var(--amarelo); }
 .azulejo-marca--pendente { stroke: var(--linha); stroke-width: 2; }
 

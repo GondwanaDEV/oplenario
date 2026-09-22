@@ -81,7 +81,7 @@
 
   /* PINO de IA na margem — a assinatura (ancora texto ↔ copiloto) */
   .pino { position: absolute; left: -1.7rem; top: 0.1rem; width: 1.25rem; height: 1.25rem; border-radius: 50%; display: grid; place-items: center; font-family: var(--mono); font-size: 0.62rem; font-weight: 600; cursor: pointer; border: 1.5px solid; background: var(--papel); }
-  .pino-ok    { color: #15634A; border-color: #2C8A66; }
+  .pino-ok    { color: #3A6B46; border-color: #6B9B72; }
   .pino-aviso { color: #8A5A00; border-color: var(--amarelo-traco); }
   .pino:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
   @media (max-width: 1100px) { .pino { left: auto; right: 0.2rem; } .artigo { padding-right: 1.8rem; } }
@@ -109,8 +109,8 @@
   .checks { list-style: none; margin: 0; padding: 0; }
   .checks li { display: grid; grid-template-columns: 1.4rem 1fr; gap: 0.6rem; padding: 0.7rem 1.1rem; border-top: 1px solid var(--linha); align-items: start; }
   .checks li .ic { width: 1.4rem; height: 1.4rem; border-radius: 50%; display: grid; place-items: center; flex: 0 0 auto; margin-top: 1px; }
-  .checks .c-ok .ic { color: #15634A; background: color-mix(in srgb, #2C8A66 18%, transparent); }
-  [data-tema="escuro"] .checks .c-ok .ic { color: #58C99E; }
+  .checks .c-ok .ic { color: #3A6B46; background: color-mix(in srgb, #6B9B72 18%, transparent); }
+  [data-tema="escuro"] .checks .c-ok .ic { color: #A6BFA2; }
   .checks .c-aviso .ic { color: var(--aviso-texto); background: color-mix(in srgb, var(--amarelo) 22%, transparent); }
   .checks li .txt b { font-size: var(--t-13); color: var(--texto); font-weight: 600; display: block; }
   .checks li .txt p { font-size: var(--t-12); color: var(--texto-2); margin: 0.2rem 0 0; line-height: 1.45; }
@@ -166,8 +166,8 @@
   .off-contrato h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.7rem; }
   .off-contrato ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
   .off-contrato li { display: grid; grid-template-columns: 1.3rem 1fr; gap: 0.55rem; font-size: var(--t-13); color: var(--texto); line-height: 1.45; align-items: start; }
-  .off-contrato li svg { color: #15634A; flex: 0 0 auto; margin-top: 2px; }
-  [data-tema="escuro"] .off-contrato li svg { color: #58C99E; }
+  .off-contrato li svg { color: #3A6B46; flex: 0 0 auto; margin-top: 2px; }
+  [data-tema="escuro"] .off-contrato li svg { color: #A6BFA2; }
   .off-contrato li b { font-weight: 600; }
   .off-nota { font-size: var(--t-12); color: var(--texto-2); margin: 0.75rem 0 0; border-top: 1px dashed var(--linha); padding-top: 0.6rem; line-height: 1.45; }
 
@@ -196,7 +196,7 @@
 <header class="topo">
   <div class="envelope topo-grade">
     <div class="marca">
-      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#2C5638"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#C0693F"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#3F6E92"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#CFA65C"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#4E8259"/></svg>
       <div>
         <p class="marca-nome">O Plenário</p>
         <p class="marca-orgao">Câmara Municipal de Fortaleza</p>

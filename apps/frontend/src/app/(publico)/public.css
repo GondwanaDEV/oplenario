@@ -142,7 +142,7 @@
 .azulejo-tile--concluido { fill: var(--jade); }
 .azulejo-tile--ativo { fill: var(--bg); stroke: var(--amarelo); stroke-width: 2; }
 .azulejo-tile--pendente { fill: none; stroke: var(--linha); stroke-dasharray: 4 5; }
-.azulejo-marca { fill: var(--papel, #F1ECDD); }
+.azulejo-marca { fill: var(--papel, #C7D9C4); }
 .azulejo-marca--ativo { fill: var(--amarelo); }
 .azulejo-marca--pendente { stroke: var(--linha); stroke-width: 2; }
 
@@ -398,7 +398,7 @@
        (O `.azmini` do design usa color-mix(--jade 32%, transparent) sobre --surface; no tema escuro
        --surface é quase da cor do fill e o par ligado/desligado some. GUIDELINES §5.1.)
      • `.v-sim`/`.v-nao`/`.v-abs` — substituídos por `.chip` + `.chip-ok/.chip-risco/.chip-neutro` do
-       chassi. O `.v-sim` do design crava três hexes literais (#15634A/#2C8A66/#58C99E) e viola
+       chassi. O `.v-sim` do design crava três hexes literais (#3A6B46/#6B9B72/#A6BFA2) e viola
        GUIDELINES §1 ("não redefine nenhum token"), além de não ter override no escuro.
      • `.agenda`/`.ag`/`.data`/`.sep`/`.desc`/`.hora` — a seção "Agenda pública" saiu (sem contrato).
    Contraste desta tela: A MEDIR em pixel composto, nos dois temas (`.mrow .num` e `.ptag.mesa` usam

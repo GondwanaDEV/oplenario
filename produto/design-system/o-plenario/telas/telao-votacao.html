@@ -24,13 +24,13 @@
      ============================================================ */
 
   html, body { height: 100%; }
-  body { background: var(--jade-fundo); color: #F1ECDD; overflow: hidden; display: flex; flex-direction: column; }
+  body { background: var(--jade-fundo); color: #C7D9C4; overflow: hidden; display: flex; flex-direction: column; }
   .telao { flex: 1; display: flex; flex-direction: column; padding: clamp(1.2rem, 3vw, 2.4rem); max-width: 1600px; margin: 0 auto; width: 100%; }
 
   /* topo */
   .t-topo { display: flex; align-items: center; gap: 1rem; }
   .t-topo .marca-simbolo { width: 48px; height: 48px; flex: 0 0 auto; }
-  .t-topo .casa { font-family: var(--display); font-weight: 700; font-size: clamp(1rem, 2vw, 1.4rem); color: #F1ECDD; line-height: 1.1; }
+  .t-topo .casa { font-family: var(--display); font-weight: 700; font-size: clamp(1rem, 2vw, 1.4rem); color: #C7D9C4; line-height: 1.1; }
   .t-topo .casa span { display: block; font-family: var(--mono); font-size: 0.8rem; color: rgba(241,236,221,.7); font-weight: 400; text-transform: uppercase; letter-spacing: .1em; }
   .t-vivo { margin-left: auto; display: inline-flex; align-items: center; gap: 0.6rem; font-family: var(--mono); font-size: clamp(0.9rem, 1.6vw, 1.15rem); font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #FFD9CB; }
   .t-vivo .pulso { width: 14px; height: 14px; border-radius: 50%; background: var(--telha); box-shadow: 0 0 0 0 rgba(217,84,43,.7); animation: pulso 1.6s infinite; }
@@ -60,7 +60,7 @@
   .pl .nn { font-family: var(--display); font-weight: 800; font-size: clamp(2.4rem, 6vw, 4.4rem); line-height: 1; font-variant-numeric: tabular-nums; }
   .pl-sim { background: rgba(22,120,92,.22); border: 2px solid var(--jade-claro); color: #8FE6C2; }
   .pl-nao { background: rgba(217,84,43,.2); border: 2px solid var(--telha); color: #FFB59C; }
-  .pl-abs { background: rgba(241,236,221,.07); border: 2px solid rgba(241,236,221,.28); color: #F1ECDD; }
+  .pl-abs { background: rgba(241,236,221,.07); border: 2px solid rgba(241,236,221,.28); color: #C7D9C4; }
   .pl-meta { font-family: var(--mono); font-size: clamp(0.85rem,1.6vw,1.1rem); color: rgba(241,236,221,.78); text-align: center; padding-top: 0.4rem; }
   .pl-meta b { color: #fff; }
 
@@ -70,7 +70,7 @@
   .vt .mk { width: 26px; height: 26px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; }
   .vt .mk-sim { background: var(--jade-claro); color: #06150F; }
   .vt .mk-nao { background: var(--telha); color: #fff; }
-  .vt .mk-abs { background: rgba(241,236,221,.22); color: #F1ECDD; }
+  .vt .mk-abs { background: rgba(241,236,221,.22); color: #C7D9C4; }
   .vt .mk-aguarda { background: transparent; border: 2px dashed rgba(241,236,221,.4); color: rgba(241,236,221,.6); }
   .vt .vn { min-width: 0; line-height: 1.1; }
   .vt .vn b { font-size: clamp(0.85rem, 1.5vw, 1.05rem); color: #fff; font-weight: 600; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -88,7 +88,7 @@
 <body>
 <main class="telao" role="region" aria-label="Telão de votação ao vivo" aria-live="polite">
   <div class="t-topo">
-    <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+    <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#2C5638"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#C0693F"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#3F6E92"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#CFA65C"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#4E8259"/></svg>
     <div class="casa">Câmara Municipal de Fortaleza<span>15ª Sessão Ordinária</span></div>
     <span class="t-vivo"><span class="pulso" aria-hidden="true"></span>Votação aberta</span>
   </div>

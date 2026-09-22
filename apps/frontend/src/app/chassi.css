@@ -262,9 +262,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
    superfícies em que o azulejo mini vive hoje — `.mrow` do perfil público e a linha da tabela de
    proposições, ambas `--surface`, e `--surface-2` na variante clara de card):
      • concluído: era `--jade` (token da paleta-marca, INVARIANTE — não tematiza). Sobre `--surface` do
-       tema escuro (#16271F) media 1,73 — verde escuro sobre verde escuro, o azulejo sumia e "concluído"
+       tema escuro (#1A251C) media 1,73 — verde escuro sobre verde escuro, o azulejo sumia e "concluído"
        ficava indistinguível de "pendente" (1,31 entre si). Passa a `--marca`, que É tematizado: no CLARO
-       é o mesmo #0C5340 (8,50 — zero regressão em /proposicoes) e no ESCURO é #43BD93 (6,65).
+       é o mesmo #2C5638 (8,50 — zero regressão em /proposicoes) e no ESCURO é #A6BFA2 (6,65).
      • ativo: o traço era `--amarelo` cheio (1,82 sobre claro — a linha exata do GUIDELINES §5.1 "amarelo
        cheio como traço não sustenta contraste"). Passa a `--amarelo-traco` (3,42 claro / 8,08 escuro).
      • pendente: o traço a 40% de `--texto-2` media 1,89 (claro) e 2,27 (escuro). Passa a 70% (3,47 / 4,11).

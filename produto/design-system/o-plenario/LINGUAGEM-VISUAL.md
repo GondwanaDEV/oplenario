@@ -29,11 +29,11 @@ Três públicos, uma língua: **servidor** (eficiência), **vereador** (dignidad
 | `--jade` | `#2F5D3F` | Primário — verde da marca, re-afinado para a família da sálvia. |
 | `--jade-fundo` | `#234A31` | Blocos sólidos / hover do primário / palco. |
 | `--jade-claro` | `#7A9B7A` | Realce. |
-| `--telha` | `#D9542B` | **Acento** coral/telha — fills, faixas, azulejo. |
-| `--telha-fundo` | `#B9421F` | Telha escurecida p/ fills sólidos. |
-| `--cobalto` | `#1E5FA8` | Azul de azulejo — secundário **e anel de foco**. |
-| `--cobalto-fundo` | `#184E8A` | Cobalto sólido. |
-| `--amarelo` | `#E8B23A` | Amarelo Marajó — 4ª cor do azulejo, **escassa** (realce). |
+| `--telha` | `#C0693F` | **Acento** coral/telha — fills, faixas, azulejo. |
+| `--telha-fundo` | `#A85334` | Telha escurecida p/ fills sólidos. |
+| `--cobalto` | `#3F6E92` | Azul de azulejo — secundário **e anel de foco**. |
+| `--cobalto-fundo` | `#355D7D` | Cobalto sólido. |
+| `--amarelo` | `#CFA65C` | Amarelo Marajó — 4ª cor do azulejo, **escassa** (realce). |
 | `--bg` | `#E7F0E2` | Fundo claro — o campo de sálvia. **Semântico**: inverte no escuro. |
 | `--surface` | `#FFF7EA` | Superfície de cartão — creme. |
 | `--linha` | `#C7D9C4` | Divisórias. |
@@ -47,7 +47,7 @@ Três públicos, uma língua: **servidor** (eficiência), **vereador** (dignidad
 > Os tokens de superfície/texto são **semânticos** e resolvem por tema; os valores na tabela são os do
 > **claro**. **Fonte de verdade: `sistema/tokens.css`.**
 
-**Disciplina de cor (load-bearing):** a telha cheia `#D9542B` é para **fills/azulejo/bordas**; para
+**Disciplina de cor (load-bearing):** a telha cheia `#C0693F` é para **fills/azulejo/bordas**; para
 **texto** use `--acento-texto` (`#A33A19` no claro), medido AA sobre as superfícies novas. Cor nunca é o
 único sinal — sempre acompanha ícone/rótulo. Foco visível: anel cobalto 3px.
 
