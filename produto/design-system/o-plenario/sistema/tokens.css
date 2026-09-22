@@ -58,7 +58,11 @@
      distinção entre esses estados. */
   --jade:         #2C5638;
   --jade-fundo:   #1E4028;
-  --jade-claro:   #7A9B7A;
+  --jade-claro:   #7A9B7A;   /* banda do azulejo e marcador sobre o PALCO escuro */
+  /* O degrau medio. Existe porque --jade-claro, ao virar #7A9B7A na troca de paleta,
+     ficou claro demais para marcar estado sobre superficie clara (2.34:1), e --marca
+     e' escuro demais para conviver com --jade na mesma faixa de azulejo. */
+  --jade-medio:   #4E7D5A;
   --telha:        #C0693F;
   --telha-fundo:  #A85334;
   --cobalto:      #3F6E92;

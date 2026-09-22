@@ -24,10 +24,10 @@
 .voto label { display: flex; align-items: center; gap: 0.6rem; padding: 0.9rem; border: 1.5px solid var(--linha); border-radius: var(--raio); cursor: pointer; background: var(--surface-2); }
 .voto input:disabled + label { cursor: not-allowed; opacity: 0.7; }
 .voto label .ic { width: 30px; height: 30px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; color: #fff; }
-.ve label .ic { background: var(--jade-claro); } .vf label .ic { background: var(--amarelo-traco); } .vc label .ic { background: var(--telha); }
+.ve label .ic { background: var(--marca); } .vf label .ic { background: var(--amarelo-traco); } .vc label .ic { background: var(--telha); }
 .voto label b { font-size: var(--t-13); color: var(--texto); }
 .voto input:checked + label { border-color: var(--marca); box-shadow: inset 0 0 0 1px var(--marca); background: color-mix(in srgb, var(--marca) 6%, var(--surface-2)); }
-.ve input:checked + label { border-color: var(--jade-claro); box-shadow: inset 0 0 0 1px var(--jade-claro); }
+.ve input:checked + label { border-color: var(--marca); box-shadow: inset 0 0 0 1px var(--marca); }
 .vf input:checked + label { border-color: var(--amarelo-traco); box-shadow: inset 0 0 0 1px var(--amarelo-traco); }
 .vc input:checked + label { border-color: var(--telha); box-shadow: inset 0 0 0 1px var(--telha); }
 .voto input:focus-visible + label { outline: 3px solid var(--foco); outline-offset: 2px; }

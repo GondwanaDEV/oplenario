@@ -48,7 +48,10 @@
 .az-cobalto { background: color-mix(in srgb, var(--cobalto) 22%, transparent); --az: var(--cobalto); }
 .az-amarelo { background: color-mix(in srgb, var(--amarelo) 30%, transparent); --az: var(--amarelo-traco); }
 .az-telha { background: color-mix(in srgb, var(--telha) 22%, transparent); --az: var(--telha); }
-.az-verde { background: color-mix(in srgb, var(--jade-claro) 24%, transparent); --az: var(--jade-claro); }
+/* --jade-claro aqui dava 2.34:1 sobre a superficie clara: a peca verde do azulejo
+   ficava lavada. --marca resolveria o contraste mas colaria em --jade, e as duas
+   pecas verdes sao ESTADOS diferentes. --jade-medio e o degrau que faltava (3.62:1). */
+.az-verde { background: color-mix(in srgb, var(--jade-medio) 24%, transparent); --az: var(--jade-medio); }
 .az-neutro { background: color-mix(in srgb, var(--texto-2) 18%, transparent); --az: var(--texto-2); }
 [data-tema="escuro"] .az-amarelo { --az: var(--amarelo); }
 .col-cabe .tit { font-family: var(--display); font-weight: 700; font-size: var(--t-13); color: var(--texto); letter-spacing: .01em; margin: 0; }
