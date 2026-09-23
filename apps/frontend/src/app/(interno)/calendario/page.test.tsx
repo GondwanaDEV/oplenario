@@ -72,6 +72,14 @@ function mockarRotas(resposta: (path: string) => { ok: boolean; body?: unknown }
 const tudoOk = (p: string) =>
   p === "/api/sessoes" ? { ok: true, body: sessoesFake } : { ok: true, body: painelFake };
 
+// A grade (com as células vazias) é renderizada ANTES de a busca responder — então "a grade existe" ou
+// "a célula existe" não provam que os dados chegaram, e `findByRole("gridcell")` resolve na hora. Sob
+// carga (runner de CI), a asserção sobre o CONTEÚDO da célula corria contra a célula vazia (issue #13).
+// O sinal certo é o que a própria página dá: o "Carregando a agenda…" some quando as fontes responderam.
+async function esperarAgendaCarregada() {
+  await waitFor(() => expect(screen.queryByText("Carregando a agenda…")).toBeNull());
+}
+
 describe("PaginaCalendario", () => {
   beforeEach(() => {
     // `shouldAdvanceTime` mantém o waitFor do Testing Library funcionando com relógio falso. Sem cravar
@@ -95,6 +103,7 @@ describe("PaginaCalendario", () => {
 
     expect(screen.getByRole("heading", { level: 1, name: "Agenda da Casa" })).toBeDefined();
     await waitFor(() => expect(screen.getByRole("grid", { name: "Junho de 2026" })).toBeDefined());
+    await esperarAgendaCarregada();
 
     const celula24 = await screen.findByRole("gridcell", { name: /24 de junho/i });
     expect(celula24.textContent).toContain("15ª Ordinária");
@@ -122,6 +131,7 @@ describe("PaginaCalendario", () => {
     mockarRotas(tudoOk);
     render(<PaginaCalendario />);
     await waitFor(() => expect(screen.getByRole("grid", { name: "Junho de 2026" })).toBeDefined());
+    await esperarAgendaCarregada();
 
     fireEvent.click(screen.getByRole("button", { name: "Próximo mês" }));
     expect(screen.getByRole("grid", { name: "Julho de 2026" })).toBeDefined();
@@ -138,6 +148,7 @@ describe("PaginaCalendario", () => {
     mockarRotas(tudoOk);
     render(<PaginaCalendario />);
     await waitFor(() => expect(screen.getByRole("grid", { name: "Junho de 2026" })).toBeDefined());
+    await esperarAgendaCarregada();
 
     const emBreve = screen.getAllByRole("status").map((n) => n.textContent ?? "").join(" ");
     expect(emBreve).toMatch(/comissão/i);
@@ -178,6 +189,8 @@ describe("PaginaCalendario", () => {
     render(<PaginaCalendario />);
 
     await waitFor(() => expect(screen.getByText(/prazos de compliance não puderam ser carregados/i)).toBeDefined());
+    // o prazo falha na hora (bloqueado pelo papel), mas as sessões ainda podem estar a caminho
+    await esperarAgendaCarregada();
     // as sessões (que ele PODE ver) seguem normais
     expect(screen.getByText("15ª Sessão Ordinária")).toBeDefined();
     // e a porta nunca foi batida: é isto que distingue "resolvido pelo papel" de "tomou 403"
@@ -241,6 +254,7 @@ describe("PaginaCalendario", () => {
         : { ok: true, body: painelFake },
     );
     render(<PaginaCalendario />);
+    await esperarAgendaCarregada();
     const celula26 = await screen.findByRole("gridcell", { name: /26 de junho/i });
     expect(celula26.textContent).toContain("16ª Ordinária");
     expect(celula26.textContent).toMatch(/não realizada/i);
