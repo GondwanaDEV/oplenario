@@ -52,25 +52,39 @@
   .govbr .g { font-family: var(--display); font-weight: 800; color: var(--cobalto-texto); }
   [data-tema="escuro"] .govbr .g { color: var(--cobalto-texto); }
 
-  /* ============== 2 · CAPA (a porta da rua) ============== */
-  .capa { padding: clamp(2.2rem, 6vw, 4.2rem) 0 clamp(1.6rem, 4vw, 2.6rem); }
-  .capa-grade { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: clamp(1.4rem, 4vw, 3rem); align-items: end; }
+  /* ============== 2 · CAPA (a porta da rua) ==============
+     Eixo 3: fora do template de landing-page-de-trial (headline+sub a esquerda,
+     ilustracao circular decorativa a direita, grid simetrico). Referencia agora
+     o MASTRO do Diario Oficial — uma linha de identificacao (local + edicao ao
+     vivo, como o timbre de uma gazeta) sobre uma regua de 5 cores do azulejo
+     (a mesma receita de .destaque::before), headline de largura cheia como um
+     nome de jornal, e a coluna de busca/chips DELIBERADAMENTE mais estreita que
+     o headline — assimetria de coluna editorial, nao caixa de hero centralizada.
+     O selo circular abstrato saiu: nao sobra decoracao so' preenchendo espaco. */
+  .capa { padding: clamp(1.6rem, 4vw, 2.4rem) 0 clamp(2rem, 5vw, 3rem); border-bottom: 1px solid var(--linha); }
+  .capa-mastro { display: flex; align-items: baseline; justify-content: space-between; gap: 0.8rem 1.4rem; flex-wrap: wrap; }
+  .capa-mastro .local { font-family: var(--mono); font-size: var(--t-12); font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--texto); }
+  .capa-regua { height: 4px; margin: 0.7rem 0 clamp(1.6rem, 5vw, 2.8rem); border-radius: 2px; background: linear-gradient(90deg, var(--jade) 0 20%, var(--cobalto) 20% 40%, var(--telha) 40% 60%, var(--amarelo) 60% 80%, var(--jade-claro) 80% 100%); }
   .capa h1 {
     font-family: var(--display); font-weight: 800;
     font-size: clamp(var(--t-28), 6vw, var(--t-56)); line-height: 1.04;
-    letter-spacing: -0.025em; color: var(--texto); margin: 0.5rem 0 0; text-wrap: balance;
+    letter-spacing: -0.025em; color: var(--texto); margin: 0; text-wrap: balance;
+    max-width: 20ch;
   }
   .capa h1 .luz { color: var(--marca); }
-  .capa-sub { font-size: clamp(var(--t-16), 2.3vw, var(--t-21)); color: var(--texto-2); margin: 1rem 0 0; max-width: 34ch; line-height: 1.5; }
+  /* coluna assimetrica: mais estreita que o headline acima dela, deixando ar
+     confiante a direita em vez de uma segunda coluna com grafismo decorativo */
+  .capa-corpo { max-width: 40rem; margin: 1.3rem 0 0; }
+  .capa-sub { font-size: clamp(var(--t-16), 2.3vw, var(--t-21)); color: var(--texto-2); margin: 0; max-width: 46ch; line-height: 1.5; }
 
   .agora {
-    display: inline-flex; align-items: center; gap: 0.55rem; text-decoration: none;
-    font-family: var(--mono); font-size: var(--t-13); font-weight: 500; color: var(--acento-texto);
-    padding: 0.34rem 0.8rem; border: 1px solid rgba(217,84,43,.34); background: rgba(217,84,43,.09);
+    display: inline-flex; align-items: center; gap: 0.5rem; text-decoration: none;
+    font-family: var(--mono); font-size: var(--t-12); font-weight: 500; color: var(--acento-texto);
+    padding: 0.28rem 0.7rem; border: 1px solid rgba(217,84,43,.34); background: rgba(217,84,43,.09);
     border-radius: 999px; transition: border-color .12s ease, transform .12s ease;
   }
   .agora:hover { transform: translateY(-1px); border-color: var(--telha); }
-  .agora .pulso { width: 9px; height: 9px; border-radius: 50%; background: var(--telha); flex: 0 0 auto; animation: pulso 1.8s ease-out infinite; }
+  .agora .pulso { width: 8px; height: 8px; border-radius: 50%; background: var(--telha); flex: 0 0 auto; animation: pulso 1.8s ease-out infinite; }
   @keyframes pulso { 0% { box-shadow: 0 0 0 0 rgba(217,84,43,.5);} 70% { box-shadow: 0 0 0 7px rgba(217,84,43,0);} 100% { box-shadow: 0 0 0 0 rgba(217,84,43,0);} }
   .agora b { color: var(--texto); font-weight: 600; }
 
@@ -92,11 +106,6 @@
   .chips a { display: inline-flex; align-items: center; gap: 0.45rem; font-size: var(--t-13); font-weight: 500; color: var(--texto); text-decoration: none; background: var(--surface); border: 1px solid var(--linha); border-radius: 999px; padding: 0.45rem 0.85rem; min-height: 38px; transition: border-color .12s ease, transform .12s ease; }
   .chips a:hover { border-color: var(--cobalto-texto); transform: translateY(-1px); }
   .chips svg { color: var(--marca); flex: 0 0 auto; }
-
-  /* selo cívico ao lado da manchete (não decora: é o brasão grande da casa) */
-  .capa-selo { flex: 0 0 auto; display: grid; place-items: center; }
-  .capa-selo svg { width: clamp(120px, 18vw, 184px); height: auto; display: block; opacity: .96; }
-  @media (max-width: 860px) { .capa-selo { display: none; } }
 
   /* ============== 3 · DESTAQUE (demo power: tramitação + resumo IA) ============== */
   .secao { padding: clamp(1.4rem, 4vw, 2.4rem) 0; }
@@ -290,7 +299,6 @@
     .civico { grid-template-columns: 1fr 1fr; }
   }
   @media (max-width: 720px) {
-    .capa-grade { grid-template-columns: 1fr; }
     .balcoes { grid-template-columns: 1fr; }
     .rodape-grade { grid-template-columns: 1fr; }
     .pedido { grid-template-columns: 1fr; }
@@ -361,13 +369,19 @@
 
     <!-- ============== 2 · CAPA ============== -->
     <section class="capa" aria-labelledby="capa-titulo">
-      <div class="envelope capa-grade">
-        <div>
+      <div class="envelope">
+        <div class="capa-mastro">
+          <span class="local">Fortaleza · Ceará</span>
           <a class="agora" href="#destaque">
             <span class="pulso" aria-hidden="true"></span>
             <span><b>Sessão Ordinária nº 14</b> — ao vivo agora</span>
           </a>
-          <h1 id="capa-titulo">Acompanhe a sua <span class="luz">Câmara</span>, de perto.</h1>
+        </div>
+        <div class="capa-regua" aria-hidden="true"></div>
+
+        <h1 id="capa-titulo">Acompanhe a sua <span class="luz">Câmara</span>, de perto.</h1>
+
+        <div class="capa-corpo">
           <p class="capa-sub">Veja o que está em pauta, assista às sessões, peça acesso à informação e exerça os seus direitos. Sem cadastro para consultar.</p>
 
           <form class="busca" role="search" onsubmit="return false">
@@ -386,22 +400,6 @@
             <li><a href="#balcoes"><svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true"><circle cx="7.5" cy="7.5" r="6" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M7.5 4.5v3.2l2 1.3" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Acesso à informação</a></li>
             <li><a href="#balcoes"><svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true"><path d="M7.5 2l4.5 2v3c0 3-2 5-4.5 6C5 12 3 10 3 7V4z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>Os meus dados</a></li>
           </ul>
-        </div>
-
-        <div class="capa-selo" aria-hidden="true">
-          <svg viewBox="0 0 200 200" aria-hidden="true">
-            <circle cx="100" cy="100" r="96" fill="none" stroke="var(--linha)" stroke-width="1.5"/>
-            <circle cx="100" cy="100" r="80" fill="var(--surface)" stroke="var(--jade)" stroke-width="2"/>
-            <circle cx="100" cy="100" r="72" fill="none" stroke="var(--amarelo)" stroke-width="1"/>
-            <!-- hemiciclo cívico -->
-            <path d="M58 118 A42 42 0 0 1 142 118" fill="none" stroke="var(--jade)" stroke-width="3.4" stroke-linecap="round"/>
-            <path d="M68 118 A32 32 0 0 1 132 118" fill="none" stroke="var(--cobalto)" stroke-width="3.4" stroke-linecap="round"/>
-            <path d="M79 118 A21 21 0 0 1 121 118" fill="none" stroke="var(--telha)" stroke-width="3.4" stroke-linecap="round"/>
-            <rect x="97" y="62" width="6" height="16" rx="3" fill="var(--amarelo)"/>
-            <g font-family="IBM Plex Mono, monospace" font-size="9.5" fill="var(--texto-2)" letter-spacing="1.5">
-              <text x="100" y="150" text-anchor="middle">FORTALEZA · CEARÁ</text>
-            </g>
-          </svg>
         </div>
       </div>
     </section>
