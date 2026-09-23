@@ -267,6 +267,24 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .az-passo { width: 64px; font-size: var(--t-12); color: var(--texto-2); text-align: center; }
 .az-passo + .az-passo { margin-left: 18px; }
 
+/* ---- textura de azulejo — a MESMA gramatica de .az-peca (4 cores da marca, quarto-
+   de-circulo por peca), escalada de icone de stepper para CAMPO: os quartos convergem
+   por celula formando o medalhao que Bulcao repete em fachada. Promovido ao chassi no
+   2o uso (login.html + entrar-govbr.html, ambos ARQUETIPO: auth). Reservado a canvas
+   VAZIO — um cartao so' flutuando sobre fundo, sem texto competindo por espaco; nao
+   e' decoracao de toda tela (a ousadia mora num lugar por natureza, nao em toda parte).
+   As 4 cores nao tematizam (ver tokens.css), entao o padrao e' identico nos dois temas
+   — so' --bg (base) muda por light-dark(). */
+.textura-azulejo {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(circle at 0 0,       var(--jade)    0 40px, transparent 40px),
+    radial-gradient(circle at 96px 0,    var(--cobalto) 0 40px, transparent 40px),
+    radial-gradient(circle at 0 96px,    var(--telha)   0 40px, transparent 40px),
+    radial-gradient(circle at 96px 96px, var(--amarelo) 0 40px, transparent 40px);
+  background-size: 192px 192px;
+}
+
 /* ============== ILHAS QUE NÃO TEMATIZAM ==============
    Quando O CONTEÚDO é a coisa, a superfície fica fixa e o tema vira moldura.
    Inversão proposital: o PLACAR (votação / saúde institucional) é ilha

@@ -26,8 +26,13 @@
   .brasao-casa span { font-size: var(--t-12); color: var(--texto-2); }
   .pub-topo .tema-btn { margin-left: auto; }
 
+  /* Eixo 1 — mesmo arquetipo do login.html (auth, cartao centrado sobre canvas vazio):
+     .textura-azulejo (chassi.css) escopada ao .wrap, ja' que aqui ha' cabecalho/rodape
+     solidos em volta — diferente do login, que e' so' o cartao. */
   .wrap { flex: 1; display: grid; place-items: center; padding: 2rem 0; }
-  .cartao { width: 100%; max-width: 440px; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-lg); box-shadow: var(--sombra-alta); padding: 1.8rem 1.7rem; }
+  /* --surface-solida (opaca), nao --surface (vidro) — mesmo motivo do login: sobre o
+     azulejo de fundo o vidro deixava a cor vazar para dentro do cartao. */
+  .cartao { width: 100%; max-width: 440px; background: var(--surface-solida); border: 1px solid var(--linha); border-radius: var(--raio-lg); box-shadow: var(--sombra-alta); padding: 1.8rem 1.7rem; }
   .cartao .selo { width: 52px; height: 52px; border-radius: 13px; display: grid; place-items: center; color: #fff; background: var(--jade); margin: 0 0 1rem; }
   .cartao h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0; line-height: 1.1; }
   .cartao .lead { font-size: var(--t-16); color: var(--texto-2); margin: 0.5rem 0 0; line-height: 1.5; }
@@ -59,7 +64,7 @@
   .rodape .plat .sig { width: 16px; height: 16px; }
 </style>
 </head>
-<body class="superficie-publica">
+<body class="superficie-publica textura-azulejo">
 <a class="pular" href="#conteudo">Pular para o conteúdo</a>
 
 <header class="pub-topo">
