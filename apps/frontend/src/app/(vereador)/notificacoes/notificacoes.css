@@ -16,7 +16,7 @@
 .nt-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; display: flex; align-items: center; gap: 0.6rem; }
 /* branco sobre --telha pura falha AA (4.0, armadilha §5.1 já medida 3x nesta casa) — --telha-fundo (5.44). */
 .nt-cab h1 .badge { font-family: var(--mono); font-size: var(--t-13); font-weight: 600; color: #fff; background: var(--telha-fundo); border-radius: 999px; padding: 0.1rem 0.55rem; }
-.nt-cab .sub { font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
+.nt-cab .sub { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
 
 /* a lista tem teto (50 no SQL) e o badge não — quando há não lida FORA da lista, a tela diz. Sem cor
    nova: `--aviso-texto` sobre `--surface-2` é o par de aviso do sistema, e o traço lateral usa

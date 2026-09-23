@@ -69,9 +69,13 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   padding: 0.6rem 1rem; border-radius: 0 0 8px 0; z-index: 60;
 }
 .pular:focus { left: 0; }
-.sr-only {
+/* Classe DOBRADA de proposito: como utilitario, .sr-only precisa vencer regras de
+   componente. `.campo input { width: 100% }` (0,1,1) batia `.sr-only` (0,1,0) e devolvia
+   390px de largura a um elemento fora da tela — que passava a gerar rolagem horizontal
+   no telefone. `.sr-only.sr-only` e' (0,2,0) e nao muda mais nada. */
+.sr-only, .sr-only.sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
-  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+  overflow: hidden; clip: rect(0,0,0,0); clip-path: inset(50%); white-space: nowrap; border: 0;
 }
 
 /* ============== BARRA INSTITUCIONAL (.topo) — partes comuns ============== */

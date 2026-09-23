@@ -47,13 +47,13 @@
   .dia .n { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); align-self: flex-start; padding: 0.1rem 0.35rem; border-radius: 6px; }
   .dia.fora .n { color: color-mix(in srgb, var(--texto-2) 60%, transparent); }
   .dia.hoje .n { background: var(--acao); color: var(--acao-texto); font-weight: 700; }
-  .ev { font-size: 0.72rem; font-weight: 600; line-height: 1.2; border-radius: 5px; padding: 0.15rem 0.35rem; color: #fff; display: flex; align-items: center; gap: 0.25rem; cursor: pointer; }
+  .ev { font-size: var(--t-11); font-weight: 600; line-height: 1.2; border-radius: 5px; padding: 0.15rem 0.35rem; color: #fff; display: flex; align-items: center; gap: 0.25rem; cursor: pointer; }
   .ev .hh { font-family: var(--mono); font-weight: 500; opacity: .9; }
   .ev-sessao { background: var(--jade); } .ev-comissao { background: var(--cobalto-fundo); }
   /* âmbar é cor CLARA → fundo amarelo brilhante (invariante) + texto
      escuro (branco sobre âmbar, ou texto escuro sobre âmbar-médio, falham) */
   .ev-audiencia { background: var(--amarelo); color: #2E2102; } .ev-prazo { background: var(--telha-fundo); }
-  .ev-mais { font-size: 0.7rem; color: var(--texto-2); padding: 0 0.35rem; }
+  .ev-mais { font-size: var(--t-11); color: var(--texto-2); padding: 0 0.35rem; }
 
   /* agenda lateral */
   .rail { display: grid; gap: 1rem; }
@@ -63,14 +63,14 @@
   .ag:first-of-type { border-top: none; padding-top: 0; }
   .ag .data { text-align: center; }
   .ag .data b { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--marca); display: block; line-height: 1; }
-  .ag .data span { font-family: var(--mono); font-size: 0.6rem; text-transform: uppercase; color: var(--texto-2); }
+  .ag .data span { font-family: var(--mono); font-size: var(--t-11); text-transform: uppercase; color: var(--texto-2); }
   .ag .info b { font-size: var(--t-13); color: var(--texto); display: block; }
   .ag .info .meta { font-size: var(--t-12); color: var(--texto-2); display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
-  .ag .info .tipo { font-size: 0.62rem; font-weight: 600; font-family: var(--mono); text-transform: uppercase; border-radius: 4px; padding: 0.05rem 0.3rem; color: #fff; }
+  .ag .info .tipo { font-size: var(--t-11); font-weight: 600; font-family: var(--mono); text-transform: uppercase; border-radius: 4px; padding: 0.05rem 0.3rem; color: #fff; }
   .t-sessao { background: var(--jade); } .t-comissao { background: var(--cobalto-fundo); }
   .t-audiencia { background: var(--amarelo); color: #2E2102; } .t-prazo { background: var(--telha-fundo); }
-  .nota-gap { font-size: var(--t-12); color: var(--texto-2); margin: 0.6rem 0 0; line-height: 1.4; }
-  .nota-gap .tag { font-family: var(--mono); font-size: 0.6rem; letter-spacing: .04em; text-transform: uppercase; color: var(--aviso-texto); border: 1px solid color-mix(in srgb, var(--amarelo-traco) 45%, transparent); border-radius: 4px; padding: 0.05rem 0.3rem; }
+  .nota-gap { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; font-size: var(--t-12); color: var(--texto-2); margin: 0.6rem 0 0; line-height: 1.4; }
+  .nota-gap .tag { font-family: var(--mono); font-size: var(--t-11); letter-spacing: .04em; text-transform: uppercase; color: var(--aviso-texto); border: 1px solid color-mix(in srgb, var(--amarelo-traco) 45%, transparent); border-radius: 4px; padding: 0.05rem 0.3rem; }
 
   @media (max-width: 920px) { .grade { grid-template-columns: 1fr; } .dia { min-height: 78px; } }
   @media (max-width: 560px) { .pg-cab { grid-template-columns: 1fr; } .dia .ev .hh { display: none; } }

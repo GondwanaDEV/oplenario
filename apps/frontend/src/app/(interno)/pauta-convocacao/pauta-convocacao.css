@@ -83,7 +83,7 @@
 .conv dd .mono { font-family: var(--mono); }
 .conv .antec { margin: 0.9rem 0 0; padding: 0.6rem 0.7rem; background: var(--papel-2); border-radius: var(--raio-sm); font-size: var(--t-12); color: color-mix(in srgb, var(--papel-texto) 55%, var(--papel-texto-2)); line-height: 1.45; }
 .conv .antec b { color: var(--papel-texto); }
-.conv .antec .tag { font-family: var(--mono); font-size: 0.6rem; letter-spacing: .04em; text-transform: uppercase; color: #6E5009; border: 1px solid #B07D14; border-radius: 4px; padding: 0.02rem 0.3rem; }
+.conv .antec .tag { font-family: var(--mono); font-size: var(--t-11); letter-spacing: .04em; text-transform: uppercase; color: #6E5009; border: 1px solid #B07D14; border-radius: 4px; padding: 0.02rem 0.3rem; }
 .conv .dest { margin: 0.8rem 0 0; font-size: var(--t-13); color: var(--papel-texto); }
 
 /* ---- estados de carregando/erro/guard (mesma convenção de tramitacao.css / vereador-shell.css) ---- */

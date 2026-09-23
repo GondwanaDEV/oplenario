@@ -32,7 +32,11 @@
 .faceta label { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); }
 .faceta select { font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 55%, var(--linha)); border-radius: var(--raio-sm); padding: 0.5rem 0.6rem; min-height: 40px; cursor: pointer; }
 .busca { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 52%, var(--linha)); border-radius: 999px; padding: 0.35rem 0.9rem; min-height: 40px; min-width: 220px; }
-.busca input { border: none; background: none; outline: none; font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); width: 100%; }
+/* align-self:stretch — o envoltorio centraliza (align-items:center), entao o input
+   ficava com a altura do TEXTO (18px) dentro de um campo de 40px: clicar na moldura
+   nao focava nada, e o alvo real ficava abaixo do piso de 24px da WCAG 2.5.8.
+   Esticado, o alvo passa a ser o campo inteiro. */
+.busca input { border: none; background: none; outline: none; align-self: stretch; font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); width: 100%; }
 .busca input::placeholder { color: var(--texto-2); }
 
 /* ===== QUADRO ===== */
@@ -72,7 +76,7 @@
 .mat-pe { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .mat-autor { margin-left: auto; font-size: var(--t-12); color: var(--texto-2); }
 
-.selo { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.7rem; font-weight: 600; border-radius: 999px; padding: 0.12rem 0.5rem; border: 1px solid transparent; white-space: nowrap; }
+.selo { display: inline-flex; align-items: center; gap: 0.3rem; font-size: var(--t-11); font-weight: 600; border-radius: 999px; padding: 0.12rem 0.5rem; border: 1px solid transparent; white-space: nowrap; }
 .selo-esp { font-family: var(--mono); font-weight: 500; color: var(--texto-2); background: var(--surface); border-color: var(--linha); }
 
 /* Fatia "truncamento-familia" (correção da revisão adversarial) apendou: .aviso-corte — aviso de corte

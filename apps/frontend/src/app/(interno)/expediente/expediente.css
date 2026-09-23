@@ -46,7 +46,7 @@
 .modelo-desc { font-weight: 400; color: var(--texto-2); font-size: var(--t-12); }
 
 /* tag "do cadastro"/"merge" (destaque telha) */
-.tag-cadastro { display: inline-flex; align-items: center; gap: 0.3rem; vertical-align: middle; font-family: var(--mono); font-size: 0.6875rem; font-weight: 500; letter-spacing: .04em; color: var(--merge); background: var(--merge-fundo); border: 1px solid rgba(217,84,43,.3); border-radius: 999px; padding: 0.05rem 0.45rem; }
+.tag-cadastro { display: inline-flex; align-items: center; gap: 0.3rem; vertical-align: middle; font-family: var(--mono); font-size: var(--t-11); font-weight: 500; letter-spacing: .04em; color: var(--merge); background: var(--merge-fundo); border: 1px solid rgba(217,84,43,.3); border-radius: 999px; padding: 0.05rem 0.45rem; }
 .tag-cadastro .pin { width: 6px; height: 6px; border-radius: 50%; background: var(--telha); }
 
 /* ---- bloco "campos mesclados" (merge, read-only) ---- */
@@ -65,7 +65,7 @@
 .documento-vazio p { max-width: 32ch; margin: 0; }
 
 .carimbo { position: absolute; top: clamp(1rem, 2.5vw, 1.8rem); right: clamp(1rem, 3vw, 2.4rem); transform: rotate(-3deg); text-align: center; border: 2.5px solid var(--telha-fundo); color: var(--telha-fundo); border-radius: 10px; padding: 0.4rem 0.7rem 0.35rem; background: rgba(217,84,43,.05); }
-.carimbo .titulo { font-family: var(--mono); font-size: 0.625rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; display: block; }
+.carimbo .titulo { font-family: var(--mono); font-size: var(--t-11); font-weight: 600; letter-spacing: .14em; text-transform: uppercase; display: block; }
 .carimbo .num { font-family: var(--mono); font-size: var(--t-16); font-weight: 600; letter-spacing: .02em; display: block; line-height: 1.2; }
 .carimbo.reservar { border-style: dashed; opacity: .9; }
 .carimbo.reservar .num { font-size: var(--t-13); }
@@ -91,14 +91,14 @@
 /* ============== LIVRO DO PROTOCOLO GERAL ============== */
 .livro { padding-bottom: 1.4rem; }
 .livro .bloco-cabeca { flex-wrap: wrap; }
-.livro .sub { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); font-weight: 400; }
+.livro .sub { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); font-weight: 400; }
 .tabela-rolagem { overflow-x: auto; }
 table.protocolo { width: 100%; border-collapse: collapse; min-width: 720px; }
 table.protocolo th { font-family: var(--mono); font-size: var(--t-12); text-transform: uppercase; letter-spacing: .06em; color: var(--texto-2); font-weight: 500; text-align: left; padding: 0.7rem 1rem; border-bottom: 1px solid var(--linha); white-space: nowrap; }
 table.protocolo td { padding: 0.8rem 1rem; border-bottom: 1px solid var(--linha); font-size: var(--t-13); color: var(--texto); vertical-align: middle; }
 table.protocolo tr:last-child td { border-bottom: 0; }
 table.protocolo .np { font-family: var(--mono); font-weight: 600; color: var(--marca); white-space: nowrap; }
-table.protocolo .desc { color: var(--texto); }
+table.protocolo .desc { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch;  color: var(--texto); }
 table.protocolo .hora { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); white-space: nowrap; }
 
 .tipo-doc { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); font-weight: 500; padding: 0.2rem 0.55rem; border-radius: 999px; white-space: nowrap; border: 1px solid var(--linha); color: var(--texto-2); background: var(--surface-2); }

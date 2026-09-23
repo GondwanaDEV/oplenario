@@ -26,7 +26,7 @@
 
   .pg-cab { padding: 1.4rem 0 0; display: grid; grid-template-columns: 1fr auto; gap: 0.8rem 1.4rem; align-items: end; }
   .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
-  .pg-cab .sub { font-size: var(--t-13); color: var(--texto-2); margin: 0.4rem 0 0; }
+  .pg-cab .sub { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; font-size: var(--t-13); color: var(--texto-2); margin: 0.4rem 0 0; }
   .pg-cab .tipo-sel { display: inline-flex; background: var(--surface); border: 1px solid var(--linha); border-radius: 999px; padding: 3px; }
   .pg-cab .tipo-sel button { font-family: var(--corpo); font-size: var(--t-13); font-weight: 600; color: var(--texto-2); background: none; border: none; border-radius: 999px; padding: 0.4rem 0.9rem; min-height: 40px; cursor: pointer; }
   .pg-cab .tipo-sel button[aria-pressed="true"] { background: var(--acao); color: var(--acao-texto); }
@@ -63,7 +63,7 @@
   .pi-mid .num { font-family: var(--mono); font-size: var(--t-12); color: var(--acento-texto); }
   .pi-mid h4 { font-family: var(--corpo); font-weight: 600; font-size: var(--t-13); color: var(--texto); margin: 0.1rem 0 0; line-height: 1.3; }
   .pi-mid .regs { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.35rem; }
-  .reg { font-size: 0.68rem; font-weight: 600; border-radius: 999px; padding: 0.1rem 0.5rem; font-family: var(--mono); }
+  .reg { font-size: var(--t-11); font-weight: 600; border-radius: 999px; padding: 0.1rem 0.5rem; font-family: var(--mono); }
   .reg-vot { color: var(--cobalto-texto); background: color-mix(in srgb, var(--cobalto) 9%, var(--surface)); border: 1px solid color-mix(in srgb, var(--cobalto) 30%, transparent); }
   [data-tema="escuro"] .reg-vot { color: var(--cobalto-texto); border-color: color-mix(in srgb, var(--foco) 36%, transparent); }
   .reg-quor { color: var(--texto-2); background: var(--surface); border: 1px solid var(--linha); }
@@ -100,7 +100,7 @@
      escurecer p/ manter AA — mix toward papel-texto */
   .conv .antec { margin: 0.9rem 0 0; padding: 0.6rem 0.7rem; background: var(--papel-2); border-radius: var(--raio-sm); font-size: var(--t-12); color: color-mix(in srgb, var(--papel-texto) 55%, var(--papel-texto-2)); line-height: 1.45; }
   .conv .antec b { color: var(--papel-texto); }
-  .conv .antec .tag { font-family: var(--mono); font-size: 0.6rem; letter-spacing: .04em; text-transform: uppercase; color: #6E5009; border: 1px solid #B07D14; border-radius: 4px; padding: 0.02rem 0.3rem; }
+  .conv .antec .tag { font-family: var(--mono); font-size: var(--t-11); letter-spacing: .04em; text-transform: uppercase; color: #6E5009; border: 1px solid #B07D14; border-radius: 4px; padding: 0.02rem 0.3rem; }
   .conv .dest { margin: 0.8rem 0 0; display: flex; align-items: center; gap: 0.5rem; font-size: var(--t-13); color: var(--papel-texto); }
   .conv .dest svg { color: var(--papel-marca); flex: 0 0 auto; }
 

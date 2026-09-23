@@ -13,7 +13,7 @@
 .secao { margin: 0 0 1.4rem; }
 .secao:last-child { margin-bottom: 0; }
 .secao > h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.3rem; }
-.secao > .aj { font-size: var(--t-12); color: var(--texto-2); margin: 0 0 0.6rem; }
+.secao > .aj { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; font-size: var(--t-12); color: var(--texto-2); margin: 0 0 0.6rem; }
 .campo textarea { font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 55%, var(--linha)); border-radius: var(--raio-sm); padding: 0.75rem 0.85rem; min-height: 110px; width: 100%; line-height: 1.6; resize: vertical; }
 .campo textarea:disabled { opacity: 0.7; cursor: not-allowed; }
 

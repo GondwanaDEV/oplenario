@@ -17,7 +17,7 @@
 .fora-prox { display: flex; align-items: center; gap: 0.8rem; margin: 1rem 0 0; padding-top: 1rem; border-top: 1px solid color-mix(in srgb, var(--marca) 18%, var(--linha)); }
 .fora-prox .cal { width: 46px; height: 46px; border-radius: 11px; flex: 0 0 auto; display: grid; place-items: center; text-align: center; background: color-mix(in srgb, var(--marca) 14%, var(--surface)); color: var(--marca); line-height: 1; }
 .fora-prox .cal b { font-family: var(--display); font-weight: 800; font-size: var(--t-21); display: block; }
-.fora-prox .cal span { font-family: var(--mono); font-size: 0.6rem; text-transform: uppercase; }
+.fora-prox .cal span { font-family: var(--mono); font-size: var(--t-11); text-transform: uppercase; }
 .fora-prox .info { flex: 1; min-width: 0; }
 .fora-prox .info b { font-size: var(--t-13); color: var(--texto); display: block; }
 .fora-prox .info span { font-size: var(--t-12); color: var(--texto-2); }

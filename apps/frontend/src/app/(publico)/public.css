@@ -87,7 +87,9 @@
 .busca-campo { display: flex; align-items: stretch; gap: 0.5rem; background: var(--surface-2); border: 1.5px solid var(--campo-borda); border-radius: 999px; padding: 0.4rem 0.4rem 0.4rem 1.1rem; box-shadow: var(--sombra); max-width: 40rem; transition: border-color .15s ease, box-shadow .15s ease; }
 .busca-campo:focus-within { border-color: var(--foco); box-shadow: 0 0 0 4px color-mix(in srgb, var(--foco) 18%, transparent); }
 .busca-campo svg { color: var(--texto-2); flex: 0 0 auto; align-self: center; }
-.busca-campo input { flex: 1 1 auto; min-width: 0; border: 0; background: transparent; font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); padding: 0.6rem 0; }
+/* width:0 + basis:0 — min-width:0 sozinho nao encolhe campo de formulario: a largura
+     intrinseca do `size` (234px) virava o piso de min-content e estourava o telefone. */
+  .busca-campo input { flex: 1 1 0; width: 0; min-width: 0; border: 0; background: transparent; font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); padding: 0.6rem 0; }
 .busca-campo input::placeholder { color: var(--texto-2); }
 .busca-campo input:focus-visible { outline: none; }
 .busca-enviar { flex: 0 0 auto; border: 0; cursor: pointer; background: var(--acao); color: var(--acao-texto); font-family: var(--corpo); font-weight: 600; font-size: var(--t-16); border-radius: 999px; padding: 0 1.3rem; min-height: 48px; display: inline-flex; align-items: center; gap: 0.5rem; transition: background-color .12s ease, transform .12s ease; }
@@ -233,7 +235,7 @@
 .anel-c .arco { fill: none; stroke: var(--marca); stroke-width: 7; }
 .anel-c .centro { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; line-height: 1; }
 .anel-c .d { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--texto); font-variant-numeric: tabular-nums; }
-.anel-c .u { font-family: var(--mono); font-size: 0.68rem; letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); }
+.anel-c .u { font-family: var(--mono); font-size: var(--t-11); letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); }
 
 .pedido { display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: center; background: var(--bg); border: 1px solid var(--linha); border-radius: var(--raio); padding: 1.1rem 1.15rem; }
 .pedido .num { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
@@ -255,7 +257,7 @@
 .ja-publicado svg { color: var(--marca); flex: 0 0 auto; margin-top: 2px; }
 .ja-publicado a { font-weight: 600; }
 
-.fronteira { display: flex; align-items: flex-start; gap: 0.55rem; font-size: var(--t-13); color: var(--texto-2); background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.75rem 0.9rem; margin: 0 0 1.2rem; }
+.fronteira { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; display: flex; align-items: flex-start; gap: 0.55rem; font-size: var(--t-13); color: var(--texto-2); background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.75rem 0.9rem; margin: 0 0 1.2rem; }
 .fronteira svg { color: var(--cobalto-texto); flex: 0 0 auto; margin-top: 2px; }
 [data-tema="escuro"] .fronteira svg { color: var(--foco); }
 .fronteira a { font-weight: 600; }
@@ -377,7 +379,7 @@
 
 /* comentários aprovados (read-only nesta fatia — sem compor/moderar; a lista pública nunca expõe autor,
    `participacao/wire/out/comentario.clj` PublicoOut = id/corpo/criado-em SÓ). */
-.part-regras { display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.9rem 1.1rem; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); font-size: var(--t-13); color: var(--texto-2); line-height: 1.5; margin: 0 0 1.1rem; }
+.part-regras { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.9rem 1.1rem; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); font-size: var(--t-13); color: var(--texto-2); line-height: 1.5; margin: 0 0 1.1rem; }
 .part-regras svg { color: var(--marca); flex: 0 0 auto; margin-top: 2px; }
 .part-regras b { color: var(--texto); font-weight: 600; }
 .coment { display: grid; gap: 1rem; }

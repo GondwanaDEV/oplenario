@@ -58,8 +58,8 @@
 .dia.hoje .n { background: var(--acao); color: var(--acao-texto); font-weight: 700; }
 
 .ev-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
-.ev { font-size: 0.72rem; font-weight: 600; line-height: 1.2; border-radius: 5px; padding: 0.15rem 0.35rem; display: flex; align-items: center; gap: 0.25rem; min-width: 0; overflow-wrap: anywhere; }
-.ev .ev-glifo { font-size: 0.6rem; line-height: 1; flex: 0 0 auto; }
+.ev { font-size: var(--t-11); font-weight: 600; line-height: 1.2; border-radius: 5px; padding: 0.15rem 0.35rem; display: flex; align-items: center; gap: 0.25rem; min-width: 0; overflow-wrap: anywhere; }
+.ev .ev-glifo { font-size: var(--t-11); line-height: 1; flex: 0 0 auto; }
 .ev .hh { font-family: var(--mono); font-weight: 500; opacity: .9; flex: 0 0 auto; }
 .ev-sessao { background: var(--acao); color: var(--acao-texto); }
 .ev-prazo { background: var(--telha-fundo); color: #fff; }
@@ -67,7 +67,7 @@
    `color` da pílula, que é o par já medido AA contra o fundo dela (--acao/--acao-texto e
    --telha-fundo/branco, ver o cabeçalho). Uma tinta nova aqui teria de ser medida contra DOIS fundos
    distintos em DOIS temas; herdar não tem esse custo e não pode regredir. A borda é só desenho. */
-.ev .ev-alerta { font-family: var(--mono); font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; line-height: 1; flex: 0 0 auto; margin-left: auto; padding: 0.1rem 0.3rem; border: 1px solid color-mix(in srgb, currentColor 55%, transparent); border-radius: 4px; }
+.ev .ev-alerta { font-family: var(--mono); font-size: var(--t-11); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; line-height: 1; flex: 0 0 auto; margin-left: auto; padding: 0.1rem 0.3rem; border: 1px solid color-mix(in srgb, currentColor 55%, transparent); border-radius: 4px; }
 
 /* ====================== agenda lateral ====================== */
 .rail { display: grid; gap: 1rem; }
@@ -78,10 +78,10 @@
 .ag:first-of-type { border-top: none; padding-top: 0; }
 .ag .data { text-align: center; }
 .ag .data b { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--marca); display: block; line-height: 1; }
-.ag .data span { font-family: var(--mono); font-size: 0.6rem; text-transform: uppercase; color: var(--texto-2); }
+.ag .data span { font-family: var(--mono); font-size: var(--t-11); text-transform: uppercase; color: var(--texto-2); }
 .ag .info b { font-size: var(--t-13); color: var(--texto); display: block; overflow-wrap: anywhere; }
 .ag .info .meta { font-size: var(--t-12); color: var(--texto-2); display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.15rem; }
-.ag .info .tipo { font-size: 0.62rem; font-weight: 600; font-family: var(--mono); text-transform: uppercase; border-radius: 4px; padding: 0.05rem 0.3rem; }
+.ag .info .tipo { font-size: var(--t-11); font-weight: 600; font-family: var(--mono); text-transform: uppercase; border-radius: 4px; padding: 0.05rem 0.3rem; }
 .t-sessao { background: var(--acao); color: var(--acao-texto); }
 .t-prazo { background: var(--telha-fundo); color: #fff; }
 
@@ -90,8 +90,8 @@
 /* o corte do teto de "Próximos" dito em texto — 6 de 6 e 6 de 20 eram indistinguíveis */
 .rcard .mais-adiante { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin: 0.6rem 0 0; padding-top: 0.6rem; border-top: 1px solid var(--linha); }
 
-.nota-gap { font-size: var(--t-12); color: var(--texto-2); margin: 0.9rem 0 0; line-height: 1.4; }
-.nota-gap .tag { font-family: var(--mono); font-size: 0.6rem; letter-spacing: .04em; text-transform: uppercase; color: var(--aviso-texto); border: 1px solid color-mix(in srgb, var(--amarelo-traco) 45%, transparent); border-radius: 4px; padding: 0.05rem 0.3rem; margin-right: 0.25rem; }
+.nota-gap { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; font-size: var(--t-12); color: var(--texto-2); margin: 0.9rem 0 0; line-height: 1.4; }
+.nota-gap .tag { font-family: var(--mono); font-size: var(--t-11); letter-spacing: .04em; text-transform: uppercase; color: var(--aviso-texto); border: 1px solid color-mix(in srgb, var(--amarelo-traco) 45%, transparent); border-radius: 4px; padding: 0.05rem 0.3rem; margin-right: 0.25rem; }
 
 /* .em-breve — mesmo bloco duplicado por-rota de expediente.css/ficha-materia.css (CSS é page-scoped
    nesta convenção). Aqui ele é o rail card das três famílias que a Casa não registra. */

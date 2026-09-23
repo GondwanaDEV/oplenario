@@ -84,7 +84,7 @@ body {
   font-family: "Times New Roman", Times, serif; /* base-14, sem Georgia — ver nota acima */
   font-size: 9pt;
   line-height: 12.5pt;
-  width: 182mm;
+  width: min(182mm, calc(100% - 28mm));   /* folha de papel: mantem a medida de impressao e desconta a propria margem (14mm de cada lado), senao a soma estoura a tela estreita */
   margin: 0 auto;
   orphans: 3;
   widows: 3;
@@ -581,7 +581,7 @@ td, th {
 
 .tabela-conferencia .linha-assinatura {
   border-top: 0.5pt solid #1B2A20;
-  width: 62mm;
+  width: min(62mm, 100%);   /* mesma razao do body: medida de impressao que precisa encolher na tela */
   height: 1pt;
   margin-top: 14mm;
 }

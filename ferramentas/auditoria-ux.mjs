@@ -102,7 +102,11 @@ for (const t of telas) {
 
       // ---- E. ESCALA TIPOGRAFICA. O sistema declara 12/13/16/21/28/40/56. Tamanho fora
       //         dela e' decisao solta — some o sentido de ter escala.
-      const ESCALA = [12, 13, 16, 21, 28, 40, 56];
+      // 11 entrou na escala em 23/09/2026 (ver tokens.css). Tamanho FLUIDO por clamp()
+      // cai entre degraus por desenho, entao so' interessa o que e' FIXO fora da escala.
+      const ESCALA = [11, 12, 13, 16, 21, 28, 40, 56];
+      const impressa = document.body.className.includes('folha') ||
+                       !!document.querySelector('style, link') && /width: *min\(\d+mm/.test(document.head.innerHTML);
       const fora = new Map();
       for (const el of document.querySelectorAll('*')) {
         if (!visivel(el)) continue;
@@ -121,7 +125,15 @@ for (const t of telas) {
         const txt = (el.innerText || '').trim();
         if (txt.length < 120) continue;
         const cs = getComputedStyle(el);
-        const ch = el.getBoundingClientRect().width / (parseFloat(cs.fontSize) * 0.5);
+        // `ch` medido DE VERDADE, nao estimado como 0.5em: a largura do "0" varia por
+        // familia (nesta e' ~0.6em), e a estimativa antiga acusava 86 onde havia 72.
+        const sonda = document.createElement('span');
+        sonda.style.cssText = 'position:absolute;visibility:hidden;white-space:pre';
+        sonda.style.font = cs.font; sonda.textContent = '0';
+        el.appendChild(sonda);
+        const larguraCh = sonda.getBoundingClientRect().width || parseFloat(cs.fontSize) * 0.5;
+        sonda.remove();
+        const ch = el.getBoundingClientRect().width / larguraCh;
         if (ch > 85) add('medida-de-linha', `~${Math.round(ch)} caracteres`, nome(el));
       }
 

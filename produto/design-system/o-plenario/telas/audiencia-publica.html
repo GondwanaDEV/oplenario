@@ -36,7 +36,7 @@
   .grade { display: grid; grid-template-columns: 1fr 320px; gap: 1.6rem; align-items: start; margin: 1.4rem 0 0; }
   .card { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.3rem 1.4rem; }
   .card h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); margin: 0 0 0.3rem; }
-  .card .aj { font-size: var(--t-13); color: var(--texto-2); margin: 0 0 1.1rem; }
+  .card .aj { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; font-size: var(--t-13); color: var(--texto-2); margin: 0 0 1.1rem; }
   .dl { display: grid; grid-template-columns: auto 1fr; gap: 0.55rem 1rem; margin: 0; }
   .dl dt { font-size: var(--t-13); color: var(--texto-2); } .dl dd { font-size: var(--t-13); color: var(--texto); margin: 0; font-weight: 500; }
   .dl dd.mono { font-family: var(--mono); }
@@ -52,7 +52,7 @@
   .rcard h3 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.7rem; }
   .prox { display: grid; gap: 0.7rem; }
   .prox .it { display: grid; grid-template-columns: auto 1fr; gap: 0.2rem 0.7rem; }
-  .prox .dt { text-align: center; } .prox .dt b { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--marca); display: block; line-height: 1; } .prox .dt span { font-family: var(--mono); font-size: 0.6rem; text-transform: uppercase; color: var(--texto-2); }
+  .prox .dt { text-align: center; } .prox .dt b { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--marca); display: block; line-height: 1; } .prox .dt span { font-family: var(--mono); font-size: var(--t-11); text-transform: uppercase; color: var(--texto-2); }
   .prox .info b { font-size: var(--t-13); color: var(--texto); display: block; } .prox .info span { font-size: var(--t-12); color: var(--texto-2); }
 
   .rodape { margin-top: 2.4rem; padding: 1.4rem 0; border-top: 1px solid var(--linha); font-size: var(--t-12); color: var(--texto-2); }
