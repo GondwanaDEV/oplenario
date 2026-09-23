@@ -241,7 +241,7 @@ function Celula({ celula }: { celula: CelulaDia }) {
                 {GLIFO_TIPO[e.tipo]}
               </span>
               {e.hora && <span className="hh">{e.hora}</span>}
-              {e.rotulo}
+              <span className="ev-texto">{e.rotulo}</span>
               {/* O estado vinha SÓ no aria-label: uma sessão `nao_realizada` pintava o mesmo ● jade com o
                   mesmo "15ª Ordinária" de uma agendada, e uma obrigação `vencida` o mesmo ◆ de uma
                   pendente. Quem enxerga ficava sabendo menos que o leitor de tela. */}
