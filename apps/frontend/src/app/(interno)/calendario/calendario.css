@@ -58,9 +58,19 @@
 .dia.hoje .n { background: var(--acao); color: var(--acao-texto); font-weight: 700; }
 
 .ev-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
-.ev { font-size: var(--t-11); font-weight: 600; line-height: 1.2; border-radius: 5px; padding: 0.15rem 0.35rem; display: flex; align-items: center; gap: 0.25rem; min-width: 0; overflow-wrap: anywhere; }
+.ev { font-size: var(--t-11); font-weight: 600; line-height: 1.2; border-radius: 5px; padding: 0.15rem 0.35rem; display: flex; align-items: center; gap: 0.25rem; min-width: 0; }
 .ev .ev-glifo { font-size: var(--t-11); line-height: 1; flex: 0 0 auto; }
 .ev .hh { font-family: var(--mono); font-weight: 500; opacity: .9; flex: 0 0 auto; }
+/* .ev-texto é o unico item do flex sem flex:0 0 auto (glifo/hh/alerta nao encolhem) — sem um min-width
+   explicito, o minimo automatico dele vira o min-content da string inteira (ex. "remessa_mensal_sim",
+   19 chars sem espaco), que nunca cabe numa celula do mes: o navegador ESTOURA a celula em vez de
+   quebrar. `overflow-wrap: anywhere` no `.ev` (redacao anterior) "resolvia" isso do jeito errado —
+   anywhere MUDA o calculo do minimo automatico do item flex pra quase zero (e' a razao dele existir),
+   entao o item colapsava pra ~1 char de largura e cada letra do rotulo virava a propria linha (o
+   "espinhaco" vertical). `break-word` NAO altera o minimo automatico — so' quebra quando o texto ja
+   nao cabe na largura que o flex de fato deu ao item — e o `min-width: 0` aqui, explicito no item, e' o
+   que permite ele encolher abaixo do min-content em primeiro lugar. Duas ou tres linhas normais, nao 19. */
+.ev .ev-texto { flex: 1 1 auto; min-width: 0; overflow-wrap: break-word; }
 .ev-sessao { background: var(--acao); color: var(--acao-texto); }
 .ev-prazo { background: var(--telha-fundo); color: #fff; }
 /* tarja de ESTADO dentro da pílula ("não realizada", "vencida"). Sem cor própria de propósito: herda o
