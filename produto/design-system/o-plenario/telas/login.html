@@ -22,10 +22,33 @@
      Uma ação primária (passkey). Diferencial vs. login gov genérico.
      ============================================================ */
 
-  body { min-height: 100vh; display: grid; place-items: center; padding: 1.5rem; }
+  /* Eixo 1 — o azulejo como motivo grafico. Ate' aqui a assinatura Bulcao so' aparecia
+     encolhida a 8px (.faixa, abaixo) ou dentro do stepper de tramitacao (.az-peca no
+     chassi): a referencia nunca aparecia em escala que o olho reconhecesse como
+     PAINEL. O login e' a tela ideal para a expressao cheia: e' um so' cartao boiando
+     sobre fundo, sem texto competindo pelo espaco. 4 quartos-de-circulo convergindo
+     no centro de cada celula formam o "medalhao" que Bulcao repete em fachada — a
+     MESMA gramatica de .az-peca, so' que como CAMPO, nao como icone isolado.
+     As 4 cores da marca nao tematizam (ver tokens.css), entao o padrao e' identico
+     claro/escuro; so' --bg (base) muda. */
+  body {
+    min-height: 100vh; display: grid; place-items: center; padding: 1.5rem;
+    background-color: var(--bg);
+    background-image:
+      radial-gradient(circle at 0 0,       var(--jade)    0 40px, transparent 40px),
+      radial-gradient(circle at 96px 0,    var(--cobalto) 0 40px, transparent 40px),
+      radial-gradient(circle at 0 96px,    var(--telha)   0 40px, transparent 40px),
+      radial-gradient(circle at 96px 96px, var(--amarelo) 0 40px, transparent 40px);
+    background-size: 192px 192px;
+    background-attachment: fixed;
+  }
   .auth-tema { position: fixed; top: 1rem; right: 1rem; z-index: 5; }
 
-  .cartao { width: 100%; max-width: 416px; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-lg); box-shadow: var(--sombra-alta); overflow: hidden; }
+  /* --surface-solida (opaca), nao --surface (vidro): sobre o azulejo de fundo o vidro
+     deixava a mistura de cor vazar para dentro dos campos e do botao — o mesmo motivo
+     pelo qual o modal ja usava a opaca sobre scrim. Aqui o cartao tambem e' "o que fica
+     na frente de tudo", nao uma superficie que revela o que esta atras. */
+  .cartao { width: 100%; max-width: 416px; background: var(--surface-solida); border: 1px solid var(--linha); border-radius: var(--raio-lg); box-shadow: var(--sombra-alta); overflow: hidden; }
 
   /* faixa de azulejo — assinatura (Bulcão, 4 cores da marca) */
   .faixa { height: 8px; display: flex; }
