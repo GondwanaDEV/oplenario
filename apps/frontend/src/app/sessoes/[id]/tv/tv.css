@@ -140,8 +140,11 @@
 .tv .vt .vn b { display: block; font-size: clamp(.9rem, 1.2vw, 2rem); font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tv .vt .vn span { font-family: var(--mono); font-size: clamp(.75rem, .85vw, 1.4rem); color: var(--palco-texto-2); }
 
-.tv .secreta { display: flex; align-items: center; }
-.tv .secreta p { font-size: clamp(1.1rem, 1.8vw, 3rem); color: var(--palco-texto-2); max-width: 40ch; margin: 0; line-height: 1.35; }
+/* secreta: o miolo inteiro vira UM cartão centrado — sem grade nominal nem placar por voto (§22.6), o espaço
+   não pode sobrar vazio com a frase perdida num canto */
+.tv .secreta { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.4vw; text-align: center; min-height: 0; background: var(--tv-cartao); border: 1px dashed var(--palco-linha); border-radius: var(--raio-lg); padding: 2vw; }
+.tv .secreta svg { width: 5vw; height: 5vw; min-width: 48px; min-height: 48px; color: var(--tv-destaque); }
+.tv .secreta p { font-size: clamp(1.1rem, 1.8vw, 3rem); color: var(--palco-texto-2); max-width: 44ch; margin: 0; line-height: 1.35; }
 .tv .secreta b { color: #fff; }
 .aviso-lacuna { margin: 0; font-family: var(--mono); font-size: clamp(.85rem, 1vw, 1.7rem); color: var(--tv-destaque); }
 

@@ -463,8 +463,13 @@ function Votacao({ estado }: { estado: EstadoPlenario }) {
         </div>
       ) : (
         <div className="secreta">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="5" y="10.5" width="14" height="9.5" rx="2" />
+            <path d="M8.2 10.5V8a3.8 3.8 0 0 1 7.6 0v2.5" />
+          </svg>
           <p>
-            <b>Votação secreta.</b> A TV mostra quantos votos foram lançados — nunca quem votou o quê.
+            <b>Votação secreta.</b> A TV mostra quantos votos foram lançados — nunca quem votou o quê. O placar
+            aparece no encerramento.
           </p>
         </div>
       )}

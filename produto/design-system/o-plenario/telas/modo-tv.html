@@ -21,6 +21,11 @@
      A fase NUNCA é escolhida à mão no produto: é derivada do estado ao
      vivo (SSE). Aqui o `?fase=` só existe para fotografar/medir cada uma.
 
+     Reconciliado com o produto (apps/frontend .../sessoes/[id]/tv): sem
+     tempo-limite da fala nem estado "concluído" na pauta — o domínio não
+     expõe nenhum dos dois, e desenhá-los seria prometer dado que não existe.
+     "Em votação" destaca o item cujo proposicao-id é o objeto da votação.
+
      Cores: ilha-palco (--palco-*) + as tintas de voto do telão, como
      variáveis LOCAIS de componente (--tv-*), sem redefinir token do
      sistema. Voto sempre por ícone + palavra + cor, nunca só cor.
@@ -227,7 +232,7 @@
   <header class="tv-topo">
     <div class="tv-marca">
       <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><defs><clipPath id="mcOut"><rect width="34" height="34" rx="8"/></clipPath><clipPath id="mcTL"><rect width="17" height="17"/></clipPath><clipPath id="mcTR"><rect x="17" width="17" height="17"/></clipPath><clipPath id="mcBL"><rect y="17" width="17" height="17"/></clipPath><clipPath id="mcBR"><rect x="17" y="17" width="17" height="17"/></clipPath></defs><g clip-path="url(#mcOut)"><rect width="17" height="17" fill="#3A6A48"/><rect x="17" width="17" height="17" fill="#C0693F"/><rect y="17" width="17" height="17" fill="#3F6E92"/><rect x="17" y="17" width="17" height="17" fill="#CFA65C"/><circle cx="17" cy="17" r="10" fill="#8DA995" clip-path="url(#mcTL)"/><circle cx="17" cy="17" r="10" fill="#DBA890" clip-path="url(#mcTR)"/><circle cx="17" cy="17" r="10" fill="#90ABC0" clip-path="url(#mcBL)"/><circle cx="17" cy="17" r="10" fill="#E3CBA0" clip-path="url(#mcBR)"/></g></svg>
-      <div class="tv-casa">Câmara Municipal de Fortaleza<span>Plenário · ao vivo</span></div>
+      <div class="tv-casa">Câmara Municipal<span>Plenário · terça-feira, 23 de setembro</span></div>
     </div>
     <div class="tv-sessao">15ª Sessão Ordinária <small>Terça, 23 set 2026</small></div>
     <span class="tv-selo vivo" id="selo"><span class="pulso" aria-hidden="true"></span><span id="selo-txt">Ao vivo</span></span>
@@ -268,8 +273,7 @@
           <span class="avatar-tv" aria-hidden="true">HP</span>
           <div><b>Helena Past</b><span>Vice-presidente da Mesa</span></div>
         </div>
-        <div class="crono" role="timer" aria-label="Tempo de fala"><b>06:24</b><span>de 10:00</span></div>
-        <div class="barra" aria-hidden="true"><i></i></div>
+        <div class="crono" role="timer" aria-label="Tempo de fala"><b>06:24</b><span>no uso da palavra</span></div>
       </div>
       <div class="cartao">
         <p class="rot">Quórum</p>
@@ -279,9 +283,9 @@
     <div class="cartao" style="display:grid;grid-template-rows:auto 1fr;min-height:0">
       <p class="rot">Pauta do dia</p>
       <ol class="pauta">
-        <li class="feito"><span class="ord">1</span><span class="it"><b>Expediente</b><span>Leitura da ata da 14ª Sessão Ordinária</span></span><span class="fase">Lida</span></li>
-        <li class="feito"><span class="ord">2</span><span class="it"><b>REQ 118/2026</b><span>Requer informações sobre a manutenção das escolas municipais da Regional III</span></span><span class="fase">Aprovado</span></li>
-        <li class="atual"><span class="ord">3</span><span class="it"><b>PL 22/2026</b><span>Institui a política municipal de incentivo à energia solar em prédios públicos</span></span><span class="fase">A seguir</span></li>
+        <li><span class="ord">1</span><span class="it"><b>Leitura</b><span>Leitura da ata da 14ª Sessão Ordinária</span></span><span class="fase">Expediente</span></li>
+        <li><span class="ord">2</span><span class="it"><b>REQ 118/2026</b><span>Requer informações sobre a manutenção das escolas municipais da Regional III</span></span><span class="fase">Expediente</span></li>
+        <li><span class="ord">3</span><span class="it"><b>PL 22/2026</b><span>Institui a política municipal de incentivo à energia solar em prédios públicos</span></span><span class="fase">Ordem do dia</span></li>
         <li><span class="ord">4</span><span class="it"><b>PL 31/2026</b><span>Dispõe sobre a gratuidade no transporte para doadores de sangue</span></span><span class="fase">Ordem do dia</span></li>
         <li><span class="ord">5</span><span class="it"><b>MOC 9/2026</b><span>Moção de aplauso aos agentes comunitários de saúde</span></span><span class="fase">Ordem do dia</span></li>
       </ol>
