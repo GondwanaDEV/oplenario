@@ -40,10 +40,12 @@
                   :order-by [[:tipo_documento :asc] [:nome :asc]]}))))
 
 (defn atualizar!
-  "Edita nome/corpo_template/ativo do modelo (CAS por lock_version). Lanca em conflito ou inexistente."
+  "Edita nome/corpo_template/ativo do modelo (CAS por lock_version). Lanca em conflito ou inexistente.
+  `:tipo :validacao/invalido` no guard de CAS (mesmo contrato de db/documento.clj editar-rascunho!/emitir! —
+  409 nao se aplica aqui, o diplomat pre-checa 404 antes de chamar; so' sobra o conflito de versao, -> 400)."
   [tx {:keys [id ente-id nome corpo-template ativo updated-by lock-version]}]
   (when (not-any? some? [nome corpo-template ativo])
-    (throw (ex-info "atualizar!: nenhum campo a atualizar fornecido" {:id id})))
+    (throw (ex-info "atualizar!: nenhum campo a atualizar fornecido" {:tipo :validacao/invalido :id id})))
   (let [r (jdbc/execute-one! tx
             (sql/format {:update :legislativo.documento_modelo
                          :set (cond-> {:updated_by updated-by :atualizado_em [:now] :lock_version [:+ :lock_version 1]}
@@ -53,5 +55,5 @@
                          :where [:and [:= :ente_id ente-id] [:= :id id] [:= :lock_version lock-version]]}))]
     (when (zero? (:next.jdbc/update-count r 0))
       (throw (ex-info "atualizar!: conflito de lock_version ou modelo inexistente"
-                      {:id id :lock-version lock-version})))
+                      {:tipo :validacao/invalido :id id :lock-version lock-version})))
     {:id id}))

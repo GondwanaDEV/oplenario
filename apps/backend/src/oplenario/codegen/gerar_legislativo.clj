@@ -36,6 +36,8 @@
    ["DocumentoOut" documento/DocumentoOut]
    ["DocumentoModeloOut" documento-modelo/DocumentoModeloOut]
    ["ListaModelosOut" documento-modelo/ListaModelosOut]
+   ;; Fatia de escrita (aba "Modelos", CRUD de template) — GET/POST/PATCH /legislativo/documento-modelos(/:id).
+   ["DocumentoModeloDetalheOut" documento-modelo/DocumentoModeloDetalheOut]
    ["ProtocoloGeralOut" protocolo-geral/ProtocoloGeralOut]
    ["LivroProtocoloOut" protocolo-geral/LivroProtocoloOut]
    ;; Onda B Slice 7 (pos-aprovacao: autografo + sancao/veto, F3.8a) — entram ANTES de PosAprovacaoOut (o

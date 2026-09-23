@@ -57,6 +57,21 @@
     (is (m/validate wire-modelo/ListaModelosOut out))
     (is (= [] (:itens out)))))
 
+;; ---------- modelo->wire-detalhe (fatia de escrita, aba "Modelos") ----------
+
+(deftest modelo->wire-detalhe-inclui-corpo-e-cas
+  (let [out (modelo-out/modelo->wire-detalhe (modelo-canonico))]
+    (is (m/validate wire-modelo/DocumentoModeloDetalheOut out))
+    (is (= "Ao {{destinatario}}." (:corpo-template out)) "ao contrario de modelo->wire, o detalhe leva o corpo cru")
+    (is (true? (:ativo out)))
+    (is (= 0 (:lock-version out)))))
+
+(deftest modelo->wire-detalhe-inativo
+  (let [out (modelo-out/modelo->wire-detalhe (assoc (modelo-canonico) :ativo false :lock-version 2))]
+    (is (m/validate wire-modelo/DocumentoModeloDetalheOut out))
+    (is (false? (:ativo out)))
+    (is (= 2 (:lock-version out)))))
+
 ;; ---------- protocolo->wire / livro->wire ----------
 
 (defn- protocolo-canonico []
