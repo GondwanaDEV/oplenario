@@ -198,7 +198,11 @@
   .convoc-ok { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); color: var(--marca); margin: 0 0 1rem; }
   .convoc-ok svg { flex: 0 0 auto; }
   .quorum-num { display: flex; align-items: baseline; gap: 0.5rem; }
-  .quorum-num b { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--marca); line-height: 1; font-variant-numeric: tabular-nums; }
+  /* Eixo 6: era t-28, unico numero desta tela fora da escala dos outros stats
+     (.ob-col .n, .org-stat .n — ambos t-40) e menor que o MESMO dado (quorum)
+     em chamada.html e sessao-ao-vivo.html. Ritmo tipografico de registro
+     cerimonial/ao-vivo pede peso consistente, nao so' a cor de palco. */
+  .quorum-num b { font-family: var(--display); font-weight: 800; font-size: var(--t-40); letter-spacing: -0.02em; color: var(--marca); line-height: 1; font-variant-numeric: tabular-nums; }
   .quorum-num span { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); }
   .hemi { width: 100%; height: auto; display: block; margin: 0.5rem 0 0.2rem; }
   .hemi .presente { fill: var(--acao); }
