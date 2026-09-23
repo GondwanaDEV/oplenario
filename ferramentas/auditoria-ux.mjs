@@ -37,6 +37,11 @@ for (const t of telas) {
         (typeof el.className === 'string' && el.className ? '.' + el.className.trim().split(/\s+/)[0] : '');
       const visivel = (el) => {
         const cs = getComputedStyle(el), r = el.getBoundingClientRect();
+        // .sr-only (clip/clip-path) esconde DE PROPOSITO — visivel() nao checava isso e
+        // um <input type=file class=sr-only> (ouvidoria) entrava como alvo de toque de
+        // 1x48: o navegador nao respeita height:1px em file input, mas o clip ja o torna
+        // invisivel de qualquer forma. Mesma exempcao que 'texto-cortado' ja usava.
+        if (cs.clip !== 'auto' || cs.clipPath !== 'none') return false;
         return cs.display !== 'none' && cs.visibility !== 'hidden' && +cs.opacity > 0.1 &&
                r.width > 0 && r.height > 0 && r.left > -2000;
       };
@@ -58,10 +63,29 @@ for (const t of telas) {
         }
         return false;
       };
+      const alvoExpandido = (el, r) => {
+        // Tecnica valida do 2.5.8: alvo visual pequeno, hit-area maior via ::before/::after
+        // invisivel (inset negativo). Ler o inset do CSS e' fragil — testa a REALIDADE
+        // com elementFromPoint nos 4 pontos a 12px do centro (o minimo p/ cobrir 24px).
+        // O elemento pode estar abaixo da dobra (viewport de 1100px, pagina mais alta) —
+        // elementFromPoint so' enxerga o que esta' na viewport, entao rola pro centro
+        // antes de medir. scroll instantaneo: o chassi tem scroll-behavior:smooth no html,
+        // e ler o retangulo em cima de uma rolagem animada pegaria posicao no meio do voo.
+        el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+        const r2 = el.getBoundingClientRect();
+        const cx = r2.left + r2.width / 2, cy = r2.top + r2.height / 2;
+        const pontos = [[cx - 12, cy], [cx + 12, cy], [cx, cy - 12], [cx, cy + 12]];
+        return pontos.every(([x, y]) => {
+          if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) return false;
+          const at = document.elementFromPoint(x, y);
+          return at === el || el.contains(at) || (at && at.contains(el));
+        });
+      };
       for (const el of document.querySelectorAll('a[href],button,input:not([type=hidden]),select,textarea,[role=button],[tabindex]:not([tabindex="-1"])')) {
         if (!visivel(el)) continue;
         const r = el.getBoundingClientRect();
         if (Math.min(r.width, r.height) >= 24) continue;
+        if (alvoExpandido(el, r)) continue;
         if (emLinhaDeTexto(el)) continue;
         if (alvoDoEnvoltorio(el)) continue;
         const tipo = el.tagName === 'INPUT' ? (el.type || 'text') : el.tagName.toLowerCase();

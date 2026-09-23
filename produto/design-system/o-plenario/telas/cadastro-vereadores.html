@@ -35,7 +35,7 @@
      ficava com a altura do TEXTO (18px) dentro de um campo de 40px: clicar na moldura
      nao focava nada, e o alvo real ficava abaixo do piso de 24px da WCAG 2.5.8.
      Esticado, o alvo passa a ser o campo inteiro. */
-  .busca input { border: none; background: none; outline: none; align-self: stretch; font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); width: 100%; }
+  .busca input { border: none; background: none; outline: none; align-self: stretch; font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); width: 100%; min-height: 24px; }
   .busca input::placeholder { color: var(--texto-2); }
   .v-rows { max-height: 70vh; overflow-y: auto; }
   .v-row { display: flex; align-items: center; gap: 0.7rem; width: 100%; text-align: left; padding: 0.7rem 0.9rem; border: none; border-top: 1px solid var(--linha); background: none; cursor: pointer; }

@@ -46,7 +46,7 @@
   [data-tema="escuro"] .fchip { background: color-mix(in srgb, var(--foco) 14%, var(--surface-2)); border-color: color-mix(in srgb, var(--foco) 40%, transparent); }
   .fchip button { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 999px; border: none; background: transparent; color: var(--texto-2); cursor: pointer; }
   .fchip button:hover { background: color-mix(in srgb, var(--texto-2) 18%, transparent); color: var(--texto); }
-  .limpar { font-size: var(--t-13); color: var(--acento-texto); background: none; border: none; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+  .limpar { font-size: var(--t-13); color: var(--acento-texto); background: none; border: none; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; display: inline-flex; align-items: center; min-height: 24px; }
 
   /* ---- realce de IA na busca + degradação R-IA-1 ---- */
   .busca-ia { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); letter-spacing: .03em; color: var(--cobalto-texto); background: color-mix(in srgb, var(--cobalto) 9%, var(--surface-2)); border: 1px solid color-mix(in srgb, var(--cobalto) 32%, transparent); border-radius: 999px; padding: 0.3rem 0.7rem; min-height: 32px; white-space: nowrap; }
@@ -68,7 +68,7 @@
   .tabela-wrap { margin: 1rem 0 0; border: 1px solid var(--linha); border-radius: var(--raio); overflow: hidden; box-shadow: var(--sombra); background: var(--surface); }
   table.tabela { width: 100%; border-collapse: collapse; }
   .tabela thead th { font-family: var(--mono); font-size: var(--t-12); font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--texto-2); text-align: left; padding: 0.7rem 0.9rem; background: var(--realce); border-bottom: 1px solid var(--linha); white-space: nowrap; }
-  .tabela thead th.ord button { display: inline-flex; align-items: center; gap: 0.35rem; font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; background: none; border: none; cursor: pointer; padding: 0; }
+  .tabela thead th.ord button { display: inline-flex; align-items: center; gap: 0.35rem; font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; background: none; border: none; cursor: pointer; padding: 0; min-height: 24px; }
   .tabela thead th.ord button:hover { color: var(--texto); }
   .tabela thead th .seta { opacity: .4; }
   .tabela thead th[aria-sort="ascending"] .seta, .tabela thead th[aria-sort="descending"] .seta { opacity: 1; color: var(--marca); }
@@ -78,7 +78,9 @@
   .tabela tbody tr.sel { background: color-mix(in srgb, var(--cobalto) 9%, transparent); }
   [data-tema="escuro"] .tabela tbody tr.sel { background: color-mix(in srgb, var(--foco) 12%, transparent); }
   .col-sel { width: 40px; }
-  .col-sel input { width: 18px; height: 18px; accent-color: var(--acao); cursor: pointer; }
+  /* 24px, nao 18: o alvo real e' so' o checkbox (a celula em volta nao tem cursor:pointer
+     nem handler proprio, entao nao conta como envoltorio de alvo maior). */
+  .col-sel input { width: 24px; height: 24px; accent-color: var(--acao); cursor: pointer; }
   .num { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--marca); font-weight: 600; white-space: nowrap; }
   .especie { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; color: var(--texto-2); }
   .ementa { max-width: 38ch; }
