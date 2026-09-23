@@ -179,16 +179,30 @@
   [:map {:closed true}
    [:id :string]])
 
+(def ProposicaoResumoPautaOut
+  "O resumo MINIMO da materia de um item da pauta (Modo TV, docs/22) — sigla/numero/ementa pra quem esta na
+  galeria saber O QUE esta na pauta. Mesma FORMA de `legislativo.wire.out.votacao/ProposicaoResumoObjetoVotacaoOut`,
+  redeclarada aqui porque sessoes nao importa legislativo (§22.10); o codegen casa as duas por igualdade
+  estrutural."
+  [:map {:closed true}
+   [:tipo :string]
+   [:ano :int]
+   [:sequencial :int]
+   [:ementa :string]])
+
 (def PautaItemOut
   "Projecao publica de um item ATIVO da pauta (§22.6 eixo B). NAO expoe internos (ente-id, pauta-sessao-id,
   ativo). FK-por-tipo: 'proposicao' carrega proposicao-id (string); os demais, texto-descricao. `lock-version`
   viaja (excecao consciente, ver cabecalho do ns): `PATCH`/`DELETE .../pauta/itens/:item-id` o exigem no
-  corpo, e `GET .../pauta` e' a UNICA leitura de onde um cliente aprende o valor corrente do item."
+  corpo, e `GET .../pauta` e' a UNICA leitura de onde um cliente aprende o valor corrente do item.
+  `proposicao` (Modo TV) e' ENRIQUECIMENTO opcional: ausente quando a leitura em legislativo nao respondeu
+  ou a materia nao existe no tenant — o `proposicao-id` continua sendo a referencia."
   [:map {:closed true}
    [:id :string]
    [:fase (km/enum-de logic/fases-pauta)]
    [:tipo-item (km/enum-de logic/tipos-item-pauta)]
    [:proposicao-id {:optional true} [:maybe :string]]
+   [:proposicao {:optional true} [:maybe ProposicaoResumoPautaOut]]
    [:texto-descricao {:optional true} [:maybe :string]]
    [:ordem :int]
    [:lock-version :int]])

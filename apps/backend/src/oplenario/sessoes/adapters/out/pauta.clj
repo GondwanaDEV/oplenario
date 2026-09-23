@@ -20,26 +20,32 @@
 (defn- item->wire
   "Item de dominio (ativo) -> PautaItemOut. Inclui apenas os campos do contrato; honra o `{:optional true}` do
   schema: a chave FK-por-tipo so aparece quando presente (proposicao-id XOR texto-descricao, garantido a
-  montante) — em vez de emitir `null` explicito, que o codegen Malli->TS leria como nullable em vez de ausente."
-  [it]
-  (cond-> {:id           (->str (:id it))
-           :fase         (:fase it)
-           :tipo-item    (:tipo-item it)
-           :ordem        (:ordem it)
-           :lock-version (:lock-version it)}
-    (:proposicao-id it)   (assoc :proposicao-id   (->str (:proposicao-id it)))
-    (:texto-descricao it) (assoc :texto-descricao (:texto-descricao it))))
+  montante) — em vez de emitir `null` explicito, que o codegen Malli->TS leria como nullable em vez de ausente.
+  `resumos` ({proposicao-id -> {:tipo :ano :sequencial :ementa}}) so' acrescenta `:proposicao` quando ha' um
+  resumo para aquele id — nunca inventa."
+  [resumos it]
+  (let [resumo (some->> (:proposicao-id it) (get resumos))]
+    (cond-> {:id           (->str (:id it))
+             :fase         (:fase it)
+             :tipo-item    (:tipo-item it)
+             :ordem        (:ordem it)
+             :lock-version (:lock-version it)}
+      (:proposicao-id it)   (assoc :proposicao-id   (->str (:proposicao-id it)))
+      resumo                (assoc :proposicao      (select-keys resumo [:tipo :ano :sequencial :ementa]))
+      (:texto-descricao it) (assoc :texto-descricao (:texto-descricao it)))))
 
 (defn pauta->wire
-  "Pauta viva de dominio {:sessao-id :itens [...]} -> PautaOut (validada). itens vazio quando nao ha pauta."
-  [{:keys [sessao-id itens]}]
-  (let [out {:sessao-id (->str sessao-id)
-             :itens     (mapv item->wire itens)}]
-    (when-not (m/validate wire/PautaOut out)
-      ;; arvore completa de erros (inclui violacao aninhada em :itens[i]); `out` ja e' o projetado sem internos.
-      (throw (ex-info "projecao de pauta viola o contrato PautaOut (bug de servidor)"
-                      {:explain (me/humanize (m/explain wire/PautaOut out))})))
-    out))
+  "Pauta viva de dominio {:sessao-id :itens [...]} -> PautaOut (validada). itens vazio quando nao ha pauta.
+  `resumos` opcional (Modo TV, docs/22): o resumo das proposicoes da pauta, por id."
+  ([pauta] (pauta->wire pauta {}))
+  ([{:keys [sessao-id itens]} resumos]
+   (let [out {:sessao-id (->str sessao-id)
+              :itens     (mapv (partial item->wire resumos) itens)}]
+     (when-not (m/validate wire/PautaOut out)
+       ;; arvore completa de erros (inclui violacao aninhada em :itens[i]); `out` ja e' o projetado sem internos.
+       (throw (ex-info "projecao de pauta viola o contrato PautaOut (bug de servidor)"
+                       {:explain (me/humanize (m/explain wire/PautaOut out))})))
+     out)))
 
 (defn- validado [schema out msg]
   (when-not (m/validate schema out)

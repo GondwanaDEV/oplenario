@@ -364,6 +364,25 @@
           itens   (when pauta (repo/listar-itens repo-sessoes ente-id (:id pauta)))]
       {:sessao-id id :itens (vec itens)})))
 
+(defn resumos-da-pauta
+  "Modo TV (docs/22): o resumo (tipo/ano/sequencial/ementa) das proposicoes de uma pauta JA' autorizada e lida
+  por `pauta-da-sessao`, via o seam `resumir-proposicoes` (fn [ente-id ids] -> {id resumo}) injetado pelo host
+  sobre `legislativo` — sessoes nunca importa legislativo (§22.10). Pauta sem item de proposicao -> {} sem
+  chamar o seam.
+
+  ENRIQUECIMENTO, nao nucleo: se a leitura em legislativo falhar, a pauta sai SEM o resumo (cada item mantem o
+  `proposicao-id`) e o erro vai p/ o log. Mesma postura 'degrada, nunca zera' da composicao/quorum do painel —
+  o telao do plenario nao pode perder a pauta inteira porque a ementa de um item nao respondeu."
+  [resumir-proposicoes ente-id pauta]
+  (let [ids (into #{} (keep :proposicao-id) (:itens pauta))]
+    (if (empty? ids)
+      {}
+      (try
+        (resumir-proposicoes ente-id ids)
+        (catch Exception e
+          (log/warn e "resumo das proposicoes da pauta indisponivel; a pauta segue sem ele")
+          {})))))
+
 (defn adicionar-item-pauta
   "§22.6 eixo B (pauta viva): adiciona um item a pauta da sessao. Carrega a sessao do tenant do `ator` (nil ->
   404), roda pode-ver-sessao? (mesma Casa -> 403 fail-closed). O Repo faz get-or-create do container 1:1 +

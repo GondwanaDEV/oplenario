@@ -100,11 +100,19 @@ export interface IncidenteReciboOut {
   id: string;
 }
 
+export interface ProposicaoResumoPautaOut {
+  tipo: string;
+  ano: number;
+  sequencial: number;
+  ementa: string;
+}
+
 export interface PautaItemOut {
   id: string;
   fase: "expediente" | "explicacoes_pessoais" | "grande_expediente" | "ordem_do_dia" | "tribuna_livre_cidadao";
   tipoItem: "comunicado" | "homenagem" | "leitura" | "proposicao";
   proposicaoId?: string | null;
+  proposicao?: ProposicaoResumoPautaOut | null;
   textoDescricao?: string | null;
   ordem: number;
   lockVersion: number;
