@@ -22,26 +22,10 @@
      Uma ação primária (passkey). Diferencial vs. login gov genérico.
      ============================================================ */
 
-  /* Eixo 1 — o azulejo como motivo grafico. Ate' aqui a assinatura Bulcao so' aparecia
-     encolhida a 8px (.faixa, abaixo) ou dentro do stepper de tramitacao (.az-peca no
-     chassi): a referencia nunca aparecia em escala que o olho reconhecesse como
-     PAINEL. O login e' a tela ideal para a expressao cheia: e' um so' cartao boiando
-     sobre fundo, sem texto competindo pelo espaco. 4 quartos-de-circulo convergindo
-     no centro de cada celula formam o "medalhao" que Bulcao repete em fachada — a
-     MESMA gramatica de .az-peca, so' que como CAMPO, nao como icone isolado.
-     As 4 cores da marca nao tematizam (ver tokens.css), entao o padrao e' identico
-     claro/escuro; so' --bg (base) muda. */
-  body {
-    min-height: 100vh; display: grid; place-items: center; padding: 1.5rem;
-    background-color: var(--bg);
-    background-image:
-      radial-gradient(circle at 0 0,       var(--jade)    0 40px, transparent 40px),
-      radial-gradient(circle at 96px 0,    var(--cobalto) 0 40px, transparent 40px),
-      radial-gradient(circle at 0 96px,    var(--telha)   0 40px, transparent 40px),
-      radial-gradient(circle at 96px 96px, var(--amarelo) 0 40px, transparent 40px);
-    background-size: 192px 192px;
-    background-attachment: fixed;
-  }
+  /* Eixo 1 — o azulejo como motivo grafico (.textura-azulejo, chassi.css). O login e'
+     um so' cartao boiando sobre fundo, sem texto competindo pelo espaco: o candidato
+     natural para a expressao cheia do motivo. */
+  body { min-height: 100vh; display: grid; place-items: center; padding: 1.5rem; background-attachment: fixed; }
   .auth-tema { position: fixed; top: 1rem; right: 1rem; z-index: 5; }
 
   /* --surface-solida (opaca), nao --surface (vidro): sobre o azulejo de fundo o vidro
@@ -106,7 +90,7 @@
   .rodape .sep { color: var(--linha); margin: 0 0.5rem; }
 </style>
 </head>
-<body>
+<body class="textura-azulejo">
 <div class="auth-tema">
   <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
     <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
