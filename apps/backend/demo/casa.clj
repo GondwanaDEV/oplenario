@@ -7,14 +7,17 @@
   e' isso que torna a Casa re-executavel, nao `random-uuid`) + 1 legislatura 2025-2028 vigente + 17
   vereadores (nome/nome-parlamentar/partido distintos) + 17 mandatos vigentes (1 licenciado, p/ a
   jornada de licenca/reassuncao) + Mesa Diretora (presidente/vice/1º e 2º secretarios) + 3 comissoes
-  permanentes (CCJ, Financas e Orcamento, Obras e Servicos Publicos) com presidente e membros + 4
+  permanentes (CCJ, Financas e Orcamento, Obras e Servicos Publicos) com presidente e membros + 5
   identidades, todas com vinculo: secretaria (`servidor` + papel `secretario`), presidente da Mesa
   (`vereador` + papeis `vereador`/`admin_ente`), vereador comum (`vereador` + papel `vereador`),
-  cidadao (`cidadao`, SEM papel — quem trabalha na Casa tem papel, quem so' consulta/peticiona nao).
+  cidadao (`cidadao`, SEM papel — quem trabalha na Casa tem papel, quem so' consulta/peticiona nao),
+  apresentacao (`vereador` + papeis `vereador`/`secretario`/`admin_ente` — os 3 EMPILHADOS no MESMO
+  vinculo, mesmo desenho ja' provado pela presidente/admin_ente; existe so' p/ demo comercial de
+  visita unica: 1 login alcanca secretaria+vereador+Mesa sem trocar de sessao, ver docs/22).
 
   IDEMPOTENCIA (Task 0.7 do plano exige 'reusar-se-existir'): `ente`/`municipio` usam ON CONFLICT nos
   proprios `db/` (`estrutura/inserir-ente!`, `referencia/inserir-municipio!`) — idempotentes por
-  natureza, chamados sempre. As 4 identidades (`identidade/inserir!` por CPF, `vinculo/criar!` por
+  natureza, chamados sempre. As 5 identidades (`identidade/inserir!` por CPF, `vinculo/criar!` por
   (ente,identidade,tipo), `vinculo/adicionar-papel!` por (ente,identidade,papel)) SAO idempotentes por
   desenho (upsert/DO NOTHING) — tambem chamadas sempre, nas duas rotas. O BLOCO cadastral (legislatura +
   17 vereadores + mandatos + Mesa + comissoes) e' o UNICO sem ON CONFLICT nos `db/` que usa — por isso
@@ -56,15 +59,18 @@
   (LocalDate/of 2025 1 1))
 
 ;; CPFs FIXOS e validos (mesmo digito-verificador de `identidade.models.identidade/valido-cpf?` — mod-11,
-;; pesos 10..2 e 11..2) p/ os 4 atores nomeados. FIXOS (nao `random-uuid`/aleatorio) e' o que faz
+;; pesos 10..2 e 11..2) p/ os 5 atores nomeados. FIXOS (nao `random-uuid`/aleatorio) e' o que faz
 ;; `identidade/inserir!` (idempotente por CPF) devolver o MESMO id em toda chamada de `semear!`.
-;; PUBLICOS (nao `^:private`) de proposito: `demo/personas.clj` (a 5a semente, credenciais Keycloak)
-;; precisa resolver os MESMOS 4 identidade-ids por CPF sobre a Casa ja semeada — uma so' fonte destes
+;; PUBLICOS (nao `^:private`) de proposito: `demo/personas.clj` (a 6a semente, credenciais Keycloak)
+;; precisa resolver os MESMOS 5 identidade-ids por CPF sobre a Casa ja semeada — uma so' fonte destes
 ;; literais, nunca redigitados num 2º arquivo (a mesma disciplina que motivou expor `ente-id`).
+;; cpf-apresentacao segue a MESMA serie sequencial dos outros 4 (rotacao do digito 1..9,0 em janela de
+;; 9 + os 2 digitos verificadores mod-11 corretos) — nao e' aleatorio, e' o proximo da serie.
 (def cpf-secretaria "12345678062")
 (def cpf-presidente "23456789092")
 (def cpf-vereador-comum "34567890175")
 (def cpf-cidadao "45678901249")
+(def cpf-apresentacao "56789012303")
 
 ;; 17 vereadores — nome, nome parlamentar e partido DISTINTOS (nada de "Vereador 1"). Indices usados
 ;; abaixo p/ atribuir papeis (Mesa, comissoes, licenca, identidade de login):
@@ -94,6 +100,11 @@
 
 (def ^:private idx-presidente 0)
 (def ^:private idx-vereador-comum 5)
+;; assento sem cargo de Mesa nem presidencia de comissao (ver o mapa de indices no comentario
+;; acima) — usado so' p/ dar a' identidade "apresentacao" um cadastro de vereador REAL (mandato,
+;; partido), que e' o que `resolver-vereador` (sessoes/controllers.clj) exige p/ confirmar presenca/
+;; votar; sem isso o papel "vereador" sozinho nao chega a nenhuma acao de vereador, so' 404.
+(def ^:private idx-apresentacao 13)
 (def ^:private idx-licenciado 16)
 
 (def ^:private cargos-mesa {0 "presidente" 1 "vice" 2 "1_secretario" 3 "2_secretario"})
@@ -106,19 +117,23 @@
 ;; ---------- identidades (sempre idempotentes — rodam nas duas rotas) ----------
 
 (defn- criar-identidades!
-  "As 4 identidades nomeadas + o vinculo (e, p/ quem trabalha na Casa, o papel): secretaria/presidente/
-  vereador comum ganham vinculo COM papel; o cidadao ganha vinculo tipo 'cidadao' SEM papel nenhum —
-  cidadao nao trabalha na Casa, so' consulta/peticiona (a leitura publica do portal nao exige login,
-  §1.5 do plano; o vinculo aqui e' p/ a superficie do cidadao AUTENTICADO — `GET /portal/acompanhamentos`,
-  `GET /meu/notificacoes`, gated so' por `auth` — que sem vinculo ATIVO nunca resolve sessao, ver
-  `oplenario.identidade.autenticacao/resolver-sessao`, fail-closed). `identidade/inserir!`,
-  `vinculo/criar!` e `vinculo/adicionar-papel!` sao TODOS idempotentes (upsert por CPF / DO NOTHING ou
-  DO UPDATE no-op por chave natural) — seguro chamar em toda execucao de `semear!`."
+  "As 5 identidades nomeadas + o vinculo (e, p/ quem trabalha na Casa, o papel): secretaria/presidente/
+  vereador comum/apresentacao ganham vinculo COM papel; o cidadao ganha vinculo tipo 'cidadao' SEM
+  papel nenhum — cidadao nao trabalha na Casa, so' consulta/peticiona (a leitura publica do portal nao
+  exige login, §1.5 do plano; o vinculo aqui e' p/ a superficie do cidadao AUTENTICADO — `GET
+  /portal/acompanhamentos`, `GET /meu/notificacoes`, gated so' por `auth` — que sem vinculo ATIVO nunca
+  resolve sessao, ver `oplenario.identidade.autenticacao/resolver-sessao`, fail-closed).
+  'apresentacao' empilha os 3 papeis de trabalho (`vereador`+`secretario`+`admin_ente`) no MESMO
+  vinculo — mesma mecanica ja' provada pela presidente (`vereador`+`admin_ente`), so' com mais um
+  papel em cima; existe p/ demo comercial de visita unica (1 login, sem trocar de sessao). `identidade/
+  inserir!`, `vinculo/criar!` e `vinculo/adicionar-papel!` sao TODOS idempotentes (upsert por CPF / DO
+  NOTHING ou DO UPDATE no-op por chave natural) — seguro chamar em toda execucao de `semear!`."
   [ds]
   (let [sec-id  (id/inserir! ds {:id (random-uuid) :cpf cpf-secretaria :nome "Marina Alencar Freire"})
         pres-id (id/inserir! ds {:id (random-uuid) :cpf cpf-presidente :nome (:nome (nth vereadores-base idx-presidente))})
         ver-id  (id/inserir! ds {:id (random-uuid) :cpf cpf-vereador-comum :nome (:nome (nth vereadores-base idx-vereador-comum))})
-        cid-id  (id/inserir! ds {:id (random-uuid) :cpf cpf-cidadao :nome "Roberta Costa Aguiar"})]
+        cid-id  (id/inserir! ds {:id (random-uuid) :cpf cpf-cidadao :nome "Roberta Costa Aguiar"})
+        apr-id  (id/inserir! ds {:id (random-uuid) :cpf cpf-apresentacao :nome (:nome (nth vereadores-base idx-apresentacao))})]
     (tenancy/com-tenant* ds ente-id
       (fn [tx]
         (vinc/criar! tx {:id (random-uuid) :ente-id ente-id :identidade-id sec-id :tipo "servidor"})
@@ -128,8 +143,12 @@
         (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente-id :identidade-id pres-id :papel "admin_ente"})
         (vinc/criar! tx {:id (random-uuid) :ente-id ente-id :identidade-id ver-id :tipo "vereador"})
         (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente-id :identidade-id ver-id :papel "vereador"})
-        (vinc/criar! tx {:id (random-uuid) :ente-id ente-id :identidade-id cid-id :tipo "cidadao"})))
-    {:secretaria sec-id :presidente pres-id :vereador ver-id :cidadao cid-id}))
+        (vinc/criar! tx {:id (random-uuid) :ente-id ente-id :identidade-id cid-id :tipo "cidadao"})
+        (vinc/criar! tx {:id (random-uuid) :ente-id ente-id :identidade-id apr-id :tipo "vereador"})
+        (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente-id :identidade-id apr-id :papel "vereador"})
+        (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente-id :identidade-id apr-id :papel "secretario"})
+        (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente-id :identidade-id apr-id :papel "admin_ente"})))
+    {:secretaria sec-id :presidente pres-id :vereador ver-id :cidadao cid-id :apresentacao apr-id}))
 
 ;; ---------- o bloco cadastral (so' roda na PRIMEIRA chamada — ver `ja-semeada?`) ----------
 
@@ -156,6 +175,7 @@
                              :identidade-id (case idx
                                               0 (:presidente identidades)
                                               5 (:vereador identidades)
+                                              13 (:apresentacao identidades)
                                               nil)})
                           vereadores-base))]
         ;; 17 vereadores

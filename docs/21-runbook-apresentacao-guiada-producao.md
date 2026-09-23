@@ -108,6 +108,7 @@ sessão e a de pós-aprovação **não** estão na barra de navegação — cheg
 |---|---|---|---|
 | **Secretária da Mesa** (Marina Alencar Freire) | `secretario` | `585e6532-e754-4d45-ad82-1667fdfb220e` | **Atos 1, 2 e 3.** É a persona com mais superfície |
 | **Vereador(a)** | `vereador` | `222dc995-c188-45f4-a9ce-01bef661c05d` | A home do vereador (`/vereador`) e o cockpit de voto (`/votar`) no Ato 2 |
+| **Apresentação (acesso total)** (Patrícia Nogueira Santos) | `vereador`+`secretario`+`admin_ente` (empilhados no MESMO vínculo) | ver o cartão "Ids da demo" da rodada mais recente do `semear-hml` | **1 login só** — soma tudo que Secretária + Vereador(a) alcançam, sem trocar de sessão (ver caixa abaixo) |
 | **Cidadão** | — (sem login) | — | Ato 4: o portal público é anônimo |
 
 - **Senha de todas:** `Plenario@2026` (fixture pública de demonstração — não é segredo de produção).
@@ -122,6 +123,17 @@ sessão e a de pós-aprovação **não** estão na barra de navegação — cheg
 > **Prepare 2 janelas/perfis antes:** uma logada como **secretária** (Atos 1–3), outra como **vereador**
 > (o `/votar` do Ato 2), e uma **janela anônima** para o Ato 4. Trocar de persona ao vivo custa ~40s de
 > silêncio.
+
+> ### 🟢 Visita única, sem trocar de perfil? Use a persona "Apresentação"
+> Pedido do Rigoni (sócio comercial): quando o roteiro é uma conversa única e objetiva — não o passo a
+> passo de 30 min desta seção — logue **só uma vez** como **Apresentação (acesso total)** e navegue
+> pelas URLs do índice acima à vontade: ela cobre tudo dos Atos 1, 2 e 3 (acervo, expediente, agendar/
+> conduzir sessão, votação, tribuna, painel da Mesa, pós-aprovação) sem precisar de uma 2ª janela — só o
+> Ato 4 (portal do cidadão) continua sendo uma aba anônima à parte, porque a consulta pública não exige
+> login mesmo. **Ressalva:** esta persona empilha `admin_ente` (concede acesso) e `secretario` (mantém o
+> cadastro) na MESMA pessoa — algo que a §4 abaixo explica que a plataforma segrega de propósito em
+> produção real. É uma fixture só para esta demo pontual; se o cliente perguntar sobre governança de
+> acesso, responda com a §4, não fingindo que este login é como um tenant real seria provisionado.
 
 ---
 

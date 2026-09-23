@@ -1,9 +1,16 @@
 # 18 — Personas da demo: credenciais + roteiro de exploração
 
-Mapa das **4 personas nomeadas da Casa** (mais o **cidadão anônimo**, sem login) sobre a Casa única da
+Mapa das **5 personas nomeadas da Casa** (mais o **cidadão anônimo**, sem login) sobre a Casa única da
 demo (`ente-id` fixo `10000000-0000-0000-0000-000000000001`, Câmara Municipal de Fortaleza), semeada
 pelas 4 sementes narrativas (`casa` → `acervo` → `sessoes` → `participacao`, `./demo/semear-tudo.sh`) e
 credenciada pela 5ª semente (`./demo/semear-credenciais.sh`, `apps/backend/demo/personas.clj`).
+
+A 5ª persona nomeada (**Apresentação — acesso total**) entrou depois das outras 4, especificamente para
+demo comercial de visita única (pedido do Rigoni — sócio comercial, apresentação para presidente de
+câmara): empilha `vereador`+`secretario`+`admin_ente` no MESMO vínculo, então 1 login alcança tudo que
+as 3 outras personas de trabalho alcançam juntas, sem trocar de sessão. Ver a seção própria dela abaixo
+— ela NÃO passou pela mesma varredura de verificação ao vivo (§ "Verificado AO VIVO") que as 4
+originais, que é anterior a ela.
 
 O roteiro de cada persona abaixo está **ancorado no dado que as 4 sementes narrativas de fato criaram**
 (lido da fonte em `apps/backend/demo/*.clj`) e na **superfície HTTP real que cada rota expõe** (lida em
@@ -34,7 +41,7 @@ superfície do cidadão autenticado nunca teve ator na demo**, e por isso nunca 
 agora tem vínculo `tipo "cidadao"`, **sem papel nenhum** (quem trabalha na Casa tem papel —
 secretario/vereador/admin_ente; quem só consulta ou peticiona, não).
 
-## As 5 personas — cartão resumo
+## As 6 personas — cartão resumo
 
 | Persona | Nome | Vínculo · papéis | Username (Keycloak) | Senha | URL de entrada |
 |---|---|---|---|---|---|
@@ -42,9 +49,10 @@ secretario/vereador/admin_ente; quem só consulta ou peticiona, não).
 | **Presidente da Mesa** | Antônio Carlos Ferreira | `vereador` · `vereador`, `admin_ente` | idem | `Plenario@2026` | idem |
 | **Vereadora** | Fernanda Rocha Pinto | `vereador` · `vereador` | idem | `Plenario@2026` | idem |
 | **Cidadã** | Roberta Costa Aguiar | `cidadao` · *(sem papel)* | idem | `Plenario@2026` | idem |
+| **Apresentação (acesso total)** | Patrícia Nogueira Santos | `vereador` · `vereador`, `secretario`, `admin_ente` | idem | `Plenario@2026` | idem |
 | **Cidadão anônimo** | — | — (sem login) | — | — | `http://localhost:3000/portal/casa/10000000-0000-0000-0000-000000000001` |
 
-As 4 personas nomeadas entram pela **mesma URL** (`/entrar/<ente-id>`) — um único realm-por-tenant
+As 5 personas nomeadas entram pela **mesma URL** (`/entrar/<ente-id>`) — um único realm-por-tenant
 (§22.5.1); o app roteia cada uma pelo **papel do token** depois do login. Os `identidade-id` reais
 (usados como `username` no Keycloak) saem impressos por `semear-credenciais.sh` e gravados em
 `credenciais.edn` — não são repetidos aqui porque são UUIDs gerados a partir do CPF fixo, estáveis
@@ -52,7 +60,13 @@ entre execuções mas não literais fáceis de citar num doc estático.
 
 ## Verificado AO VIVO — matriz de autorização (12/09/2026)
 
-Daouda verificou as 4 credenciais contra um Keycloak real (`docker compose --profile auth up -d`, app
+> Esta varredura é **anterior** à persona "Apresentação (acesso total)" — cobre só as 4 originais. A
+> combinação de papéis dela (`vereador`+`secretario`+`admin_ente` no mesmo vínculo) usa a MESMA camada
+> de autorização (`(:papeis ator)`, `oplenario.kernel.autorizacao/tem-papel?`) que já está provada linha
+> por linha abaixo para a presidente (`vereador`+`admin_ente`) — empilhar um 3º papel no mesmo vínculo
+> não é mecanismo novo, só mais um elemento no mesmo conjunto.
+
+Daouda verificou as 4 credenciais originais contra um Keycloak real (`docker compose --profile auth up -d`, app
 religado com `OPLENARIO_APP_ENV=production` para usar o `KeycloakIdp` de verdade, não o `idp-dev`).
 **Método: fluxo PKCE completo, não password grant** — o client `oplenario-web` nasce
 `directAccessGrantsEnabled: false` (`keycloak_idp.clj/provisionar-realm-impl`), então não existe atalho
@@ -215,6 +229,32 @@ lhe deu um **ator** (o backend agora resolve sessão para ela); os acompanhament
 **móveis no quarto** (3 acompanhamentos + 5 comentários + 3 e-SIC reais, em vez de listas vazias); mas
 nenhuma das duas coisas abriu uma **porta** nova no frontend — o ganho inteiro, hoje, só se alcança por
 API direta.
+
+---
+
+## Apresentação (acesso total) — Patrícia Nogueira Santos (`vereador` + `secretario` + `admin_ente`)
+
+**Por que existe:** demo comercial de visita única — o Rigoni (sócio comercial) apresentando a
+plataforma para um presidente de câmara não pode gastar tempo trocando de login/perfil no meio da
+conversa. Esta persona empilha os 3 papéis de trabalho (`vereador`, `secretario`, `admin_ente`) no
+MESMO vínculo — a mesma mecânica que já prova a Presidente da Mesa (`vereador`+`admin_ente`), só com
+`secretario` a mais em cima. **1 login alcança tudo que as personas Secretária + Vereadora + Presidente
+da Mesa alcançam juntas.**
+
+**O que o dado sustenta:** o mesmo assento de vereador (idx 13 do roster, sem cargo na Mesa nem
+presidência de comissão) que dá cadastro real (mandato vigente, partido CIDADANIA) — necessário porque
+`resolver-vereador` (`sessoes/controllers.clj`) exige um `cadastros.vereador` vinculado por
+`identidade-id` para confirmar presença/votar; o papel `vereador` sozinho, sem esse cadastro, 404 em
+qualquer ação de vereador (mesmo contrato que vale para a Presidente e a Vereadora comum). Por carregar
+os 3 papéis, ela soma TUDO que as seções "Secretária", "Presidente da Mesa" e "Vereadora" acima
+descrevem — inclusive o Comando da Mesa (`/sessoes/:id/conduzir`, exige `secretario`) e conceder acesso
+(`/identidade/acessos`, exige `admin_ente`).
+
+**Ressalva deliberada, não bug:** empilhar `admin_ente` no mesmo login que `secretario` vai CONTRA a
+segregação de responsabilidade documentada em `docs/adr/0005` (§4 do `docs/21`: "quem mantém o cadastro
+não pode ligar uma identidade a ele e sair votando") — em produção real, esses dois papéis nunca
+deveriam estar na mesma pessoa. Esta persona é uma fixture de demonstração pontual, não um padrão a
+replicar para tenants reais.
 
 ---
 
