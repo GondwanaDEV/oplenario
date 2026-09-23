@@ -6,7 +6,7 @@
 <title>O Plenário — Console do operador</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="../sistema/tokens.css" />
 <link rel="stylesheet" href="../sistema/chassi.css" />
 <style>
@@ -38,25 +38,25 @@
 
   .tabela-card { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; margin: 1.1rem 0 0; }
   table { width: 100%; border-collapse: collapse; }
-  thead th { font-family: var(--mono); font-size: var(--t-12); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); text-align: left; padding: 0.8rem 1.1rem; background: var(--surface-2); border-bottom: 1px solid var(--linha); white-space: nowrap; }
+  thead th { font-family: var(--mono); font-size: var(--t-12); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); text-align: left; padding: 0.8rem 1.1rem; background: var(--realce); border-bottom: 1px solid var(--linha); white-space: nowrap; }
   tbody td { padding: 0.85rem 1.1rem; border-top: 1px solid var(--linha); vertical-align: middle; font-size: var(--t-13); color: var(--texto); }
-  tbody tr:hover { background: var(--surface-2); }
+  tbody tr:hover { background: var(--realce); }
   .cam { display: flex; align-items: center; gap: 0.7rem; }
   .cam .uf { width: 34px; height: 34px; border-radius: 8px; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--mono); font-weight: 600; font-size: var(--t-12); color: #fff; background: var(--jade); }
   .cam b { font-weight: 600; color: var(--texto); display: block; line-height: 1.2; } .cam span { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
   .plano { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
   .st { display: inline-flex; align-items: center; gap: 0.35rem; font-size: var(--t-12); font-weight: 600; }
   .st .dot { width: 8px; height: 8px; border-radius: 50%; }
-  .st-ativa { color: #15634A; } .st-ativa .dot { background: #2C8A66; } [data-tema="escuro"] .st-ativa { color: #58C99E; }
-  .st-trial { color: var(--cobalto); } .st-trial .dot { background: var(--cobalto); } [data-tema="escuro"] .st-trial { color: var(--foco); } [data-tema="escuro"] .st-trial .dot { background: var(--foco); }
+  .st-ativa { color: #234429; } .st-ativa .dot { background: #6B9B72; } [data-tema="escuro"] .st-ativa { color: #A6BFA2; }
+  .st-trial { color: var(--cobalto-texto); } .st-trial .dot { background: var(--cobalto); } [data-tema="escuro"] .st-trial { color: var(--cobalto-texto); } [data-tema="escuro"] .st-trial .dot { background: var(--foco); }
   .st-susp { color: var(--aviso-texto); } .st-susp .dot { background: var(--amarelo-traco); }
-  .st-handoff { color: var(--cobalto); } .st-handoff .dot { background: var(--cobalto); } [data-tema="escuro"] .st-handoff { color: var(--foco); } [data-tema="escuro"] .st-handoff .dot { background: var(--foco); }
+  .st-handoff { color: var(--cobalto-texto); } .st-handoff .dot { background: var(--cobalto); } [data-tema="escuro"] .st-handoff { color: var(--cobalto-texto); } [data-tema="escuro"] .st-handoff .dot { background: var(--foco); }
 
   /* semântica do ciclo de vida do tenant: handoff + suspensão (preserva LAI) */
   .lifecycle { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; margin: 1rem 0 0; }
   .lifecycle .lc { display: flex; align-items: flex-start; gap: 0.55rem; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 0.9rem 1.05rem; font-size: var(--t-13); color: var(--texto-2); line-height: 1.45; }
   .lifecycle .lc svg { flex: 0 0 auto; margin-top: 1px; }
-  .lifecycle .lc.handoff svg { color: var(--cobalto); } [data-tema="escuro"] .lifecycle .lc.handoff svg { color: var(--foco); }
+  .lifecycle .lc.handoff svg { color: var(--cobalto-texto); } [data-tema="escuro"] .lifecycle .lc.handoff svg { color: var(--cobalto-texto); }
   .lifecycle .lc.susp svg { color: var(--aviso-texto); }
   .lifecycle .lc b { color: var(--texto); font-weight: 600; }
   @media (max-width: 620px) { .lifecycle { grid-template-columns: 1fr; } }
@@ -73,7 +73,7 @@
 <header class="topo">
   <div class="envelope topo-grade">
     <div class="marca">
-      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#3A6A48"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#C0693F"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#3F6E92"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#CFA65C"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#4E8259"/></svg>
       <div><p class="marca-nome">O Plenário</p><p class="marca-orgao">Operação · console</p></div>
     </div>
     <div class="topo-sep" aria-hidden="true"></div>
@@ -141,7 +141,7 @@
           <td><button class="u-menu" type="button" aria-label="Ações da Câmara de Caucaia"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></td>
         </tr>
         <tr>
-          <td><div class="cam"><span class="uf" style="background:var(--jade-claro)" aria-hidden="true">CE</span><span><b>Câmara de Sobral</b><span>sobral.ce</span></span></div></td>
+          <td><div class="cam"><span class="uf" style="background:var(--jade)" aria-hidden="true">CE</span><span><b>Câmara de Sobral</b><span>sobral.ce</span></span></div></td>
           <td class="plano">Legislativo · 15 vagas</td>
           <td><span class="st st-trial"><span class="dot" aria-hidden="true"></span>Trial · 12 dias</span></td>
           <td class="mrr">—</td>
@@ -149,7 +149,7 @@
           <td><button class="u-menu" type="button" aria-label="Ações da Câmara de Sobral"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></td>
         </tr>
         <tr>
-          <td><div class="cam"><span class="uf" style="background:#7A4FA0" aria-hidden="true">CE</span><span><b>Câmara de Juazeiro do Norte</b><span>juazeiro.ce</span></span></div></td>
+          <td><div class="cam"><span class="uf" style="background:#6F5C8A" aria-hidden="true">CE</span><span><b>Câmara de Juazeiro do Norte</b><span>juazeiro.ce</span></span></div></td>
           <td class="plano">Suite · 19 vagas</td>
           <td><span class="st st-handoff"><span class="dot" aria-hidden="true"></span>Aguardando 1º admin</span></td>
           <td class="mrr">—</td>
@@ -157,7 +157,7 @@
           <td><button class="u-menu" type="button" aria-label="Ações da Câmara de Juazeiro do Norte"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></td>
         </tr>
         <tr>
-          <td><div class="cam"><span class="uf" style="background:#9C6B1E" aria-hidden="true">RN</span><span><b>Câmara de Mossoró</b><span>mossoro.rn</span></span></div></td>
+          <td><div class="cam"><span class="uf" style="background:#8A7038" aria-hidden="true">RN</span><span><b>Câmara de Mossoró</b><span>mossoro.rn</span></span></div></td>
           <td class="plano">Suite · 23 vagas</td>
           <td><span class="st st-susp"><span class="dot" aria-hidden="true"></span>Inadimplente</span></td>
           <td class="mrr">R$ 11.800</td>

@@ -17,11 +17,11 @@ import { derivarTramitacao } from "@/lib/tramitacao-vista";
 const rotularEstagio = (estado: string) => derivarTramitacao(estado).rotuloSituacao;
 
 const CORES_ESTAGIO: Record<string, string> = {
-  protocolada: "#0C5340",
-  em_comissao: "#1E5FA8",
-  primeiro_turno: "#D9542B",
-  segundo_turno: "#16785C",
-  sancao: "#E8B23A",
+  protocolada: "#2C5638",
+  em_comissao: "#3F6E92",
+  primeiro_turno: "#C0693F",
+  segundo_turno: "#4E8259",
+  sancao: "#CFA65C",
 };
 
 export function PipelineLegislativo({ vista }: { vista: MesaVista["pipeline"] }) {

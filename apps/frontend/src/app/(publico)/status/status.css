@@ -29,7 +29,7 @@
 }
 .st-tabela thead th {
   font-family: var(--mono); font-weight: 600; font-size: var(--t-12); letter-spacing: .06em;
-  text-transform: uppercase; color: var(--texto-2);
+  text-transform: uppercase; color: var(--texto-2); background: var(--realce);
   padding: 0.75rem 1.2rem; border-bottom: 1px solid var(--linha); white-space: nowrap;
 }
 .st-tabela tbody th {

@@ -48,7 +48,10 @@
 .az-cobalto { background: color-mix(in srgb, var(--cobalto) 22%, transparent); --az: var(--cobalto); }
 .az-amarelo { background: color-mix(in srgb, var(--amarelo) 30%, transparent); --az: var(--amarelo-traco); }
 .az-telha { background: color-mix(in srgb, var(--telha) 22%, transparent); --az: var(--telha); }
-.az-verde { background: color-mix(in srgb, var(--jade-claro) 24%, transparent); --az: var(--jade-claro); }
+/* --jade-claro aqui dava 2.34:1 sobre a superficie clara: a peca verde do azulejo
+   ficava lavada. --marca resolveria o contraste mas colaria em --jade, e as duas
+   pecas verdes sao ESTADOS diferentes. --jade-medio e o degrau que faltava (3.62:1). */
+.az-verde { background: color-mix(in srgb, var(--jade-medio) 24%, transparent); --az: var(--jade-medio); }
 .az-neutro { background: color-mix(in srgb, var(--texto-2) 18%, transparent); --az: var(--texto-2); }
 [data-tema="escuro"] .az-amarelo { --az: var(--amarelo); }
 .col-cabe .tit { font-family: var(--display); font-weight: 700; font-size: var(--t-13); color: var(--texto); letter-spacing: .01em; margin: 0; }
@@ -57,7 +60,7 @@
 .col-corpo { display: flex; flex-direction: column; gap: 0.7rem; background: color-mix(in srgb, var(--surface) 60%, transparent); border: 1px solid var(--linha); border-radius: var(--raio); padding: 0.7rem; min-height: 80px; flex: 1; }
 .col-vazia { font-size: var(--t-13); color: var(--texto-2); text-align: center; padding: 1rem 0.5rem; margin: 0; }
 .col-mais { font-family: var(--mono); font-size: var(--t-12); color: var(--acento-texto); background: none; border: 1px dashed color-mix(in srgb, var(--texto-2) 48%, var(--linha)); border-radius: var(--raio-sm); padding: 0.5rem; cursor: pointer; min-height: 40px; }
-.col-mais:hover { background: var(--surface); }
+.col-mais:hover { background: var(--realce); }
 
 /* ===== cartão de matéria ===== */
 .mat { background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); box-shadow: var(--sombra); padding: 0.8rem 0.85rem; display: grid; gap: 0.5rem; }

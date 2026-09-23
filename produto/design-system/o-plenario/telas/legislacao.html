@@ -6,7 +6,7 @@
 <title>Legislação municipal — Câmara Municipal de Fortaleza</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="../sistema/tokens.css" />
 <link rel="stylesheet" href="../sistema/chassi.css" />
 <style>
@@ -66,7 +66,7 @@
   .lei .mid h3 a:hover { text-decoration: underline; }
   .lei .mid .meta { font-size: var(--t-12); color: var(--texto-2); margin-top: 0.25rem; display: flex; align-items: center; gap: 0.5rem 0.9rem; flex-wrap: wrap; }
   .lei .mid .meta .st { display: inline-flex; align-items: center; gap: 0.3rem; font-weight: 600; }
-  .lei .mid .meta .st-vig { color: #15634A; } [data-tema="escuro"] .lei .mid .meta .st-vig { color: #58C99E; }
+  .lei .mid .meta .st-vig { color: #234429; } [data-tema="escuro"] .lei .mid .meta .st-vig { color: #A6BFA2; }
   .lei .mid .meta .st-rev { color: var(--texto-2); }
   .lei .baixar { display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 600; font-size: var(--t-13); color: var(--marca); text-decoration: none; white-space: nowrap; }
   .lei .baixar:hover { text-decoration: underline; }
@@ -79,8 +79,8 @@
 
   /* ---- realce de IA na busca + degradação R-IA-1 ---- */
   .busca-meta { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin: 0.6rem 0 0; max-width: 560px; }
-  .busca-ia { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); letter-spacing: .03em; color: var(--cobalto); background: color-mix(in srgb, var(--cobalto) 9%, var(--surface)); border: 1px solid color-mix(in srgb, var(--cobalto) 32%, transparent); border-radius: 999px; padding: 0.3rem 0.7rem; min-height: 32px; white-space: nowrap; }
-  [data-tema="escuro"] .busca-ia { color: var(--foco); background: color-mix(in srgb, var(--foco) 12%, var(--surface)); border-color: color-mix(in srgb, var(--foco) 38%, transparent); }
+  .busca-ia { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); letter-spacing: .03em; color: var(--cobalto-texto); background: color-mix(in srgb, var(--cobalto) 9%, var(--surface)); border: 1px solid color-mix(in srgb, var(--cobalto) 32%, transparent); border-radius: 999px; padding: 0.3rem 0.7rem; min-height: 32px; white-space: nowrap; }
+  [data-tema="escuro"] .busca-ia { color: var(--cobalto-texto); background: color-mix(in srgb, var(--foco) 12%, var(--surface)); border-color: color-mix(in srgb, var(--foco) 38%, transparent); }
   .busca-ia svg { flex: 0 0 auto; }
   body.ia-off .busca-ia { display: none; }
   .busca-aviso { display: none; gap: 0.55rem; align-items: flex-start; border-left: 3px solid var(--amarelo-traco); background: color-mix(in srgb, var(--amarelo) 9%, var(--surface)); border-radius: var(--raio-sm); padding: 0.6rem 0.8rem; font-size: var(--t-13); color: var(--texto); line-height: 1.45; margin: 0.6rem 0 0; max-width: 560px; }
@@ -100,7 +100,7 @@
 <header class="pub-topo">
   <div class="envelope pub-topo-in">
     <div class="brasao-casa">
-      <svg class="br" viewBox="0 0 34 34" role="img" aria-label="Câmara Municipal de Fortaleza"><rect width="34" height="34" rx="9" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <svg class="br" viewBox="0 0 34 34" role="img" aria-label="Câmara Municipal de Fortaleza"><rect width="34" height="34" rx="9" fill="#3A6A48"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#C0693F"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#3F6E92"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#CFA65C"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#4E8259"/></svg>
       <div><b>Câmara Municipal de Fortaleza</b><span>Transparência</span></div>
     </div>
     <div class="dir">
@@ -238,7 +238,7 @@
   <div class="rodape">
     <span style="font-size:var(--t-12);color:var(--texto-2)">Câmara Municipal de Fortaleza · Transparência</span>
     <span class="plat">
-      <svg class="sig" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <svg class="sig" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#3A6A48"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#C0693F"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#3F6E92"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#CFA65C"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#4E8259"/></svg>
       Plataforma O Plenário
     </span>
   </div>

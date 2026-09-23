@@ -125,17 +125,17 @@ function BrasaoGenerico() {
   // racional do <Brasao/> de TopoInterno: cores fixas, não var(--tokens).
   return (
     <svg className="brasao" viewBox="0 0 48 48" role="img" aria-label="Símbolo da Câmara">
-      <circle cx="24" cy="24" r="22.5" fill="#FBF8F0" stroke="#E0D7BF" strokeWidth="1.5" />
-      <circle cx="24" cy="24" r="18.5" fill="none" stroke="#E8B23A" strokeWidth="1" />
-      <path d="M14 19 L24 13 L34 19 Z" fill="#0C5340" />
-      <rect x="14.5" y="20.5" width="19" height="2.2" rx="1" fill="#0C5340" />
-      <g fill="#0C5340">
+      <circle cx="24" cy="24" r="22.5" fill="#FFF7EA" stroke="#A6BFA2" strokeWidth="1.5" />
+      <circle cx="24" cy="24" r="18.5" fill="none" stroke="#CFA65C" strokeWidth="1" />
+      <path d="M14 19 L24 13 L34 19 Z" fill="#2C5638" />
+      <rect x="14.5" y="20.5" width="19" height="2.2" rx="1" fill="#2C5638" />
+      <g fill="#2C5638">
         <rect x="16" y="23.5" width="2.6" height="9" rx="1" />
         <rect x="22.7" y="23.5" width="2.6" height="9" rx="1" />
         <rect x="29.4" y="23.5" width="2.6" height="9" rx="1" />
       </g>
-      <rect x="14.5" y="33" width="19" height="2.4" rx="1" fill="#0C5340" />
-      <circle cx="24" cy="9.6" r="1.7" fill="#D9542B" />
+      <rect x="14.5" y="33" width="19" height="2.4" rx="1" fill="#2C5638" />
+      <circle cx="24" cy="9.6" r="1.7" fill="#C0693F" />
     </svg>
   );
 }

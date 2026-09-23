@@ -14,11 +14,11 @@ export function SeloPlenario({ tamanho = 34, className }: { tamanho?: number; cl
       viewBox="0 0 34 34"
       aria-hidden="true"
     >
-      <rect width="34" height="34" rx="9" fill="#0C5340" />
-      <rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B" />
-      <rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8" />
-      <rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A" />
-      <rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C" />
+      <rect width="34" height="34" rx="9" fill="#2C5638" />
+      <rect x="7" y="7" width="9" height="9" rx="2" fill="#C0693F" />
+      <rect x="18" y="7" width="9" height="9" rx="2" fill="#3F6E92" />
+      <rect x="7" y="18" width="9" height="9" rx="2" fill="#CFA65C" />
+      <rect x="18" y="18" width="9" height="9" rx="2" fill="#4E8259" />
     </svg>
   );
 }

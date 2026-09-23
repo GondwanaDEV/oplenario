@@ -6,7 +6,7 @@
 <title>O Plenário — Trilha de auditoria</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="../sistema/tokens.css" />
 <link rel="stylesheet" href="../sistema/chassi.css" />
 <style>
@@ -24,13 +24,13 @@
   .pg-cab .sub { font-size: var(--t-16); color: var(--texto-2); margin: 0.5rem 0 0; max-width: 66ch; line-height: 1.5; }
 
   /* ---- selo de integridade (a assinatura) ---- */
-  .lacre { display: flex; align-items: center; gap: 0.9rem; background: var(--palco-bg); color: var(--palco-texto); border-radius: var(--raio); padding: 1rem 1.2rem; margin: 1.3rem 0 0; box-shadow: var(--sombra); }
+  .lacre { display: flex; align-items: center; gap: 0.9rem; background: var(--surface); color: var(--texto); border: 1px solid var(--linha); border-radius: var(--raio); padding: 1rem 1.2rem; margin: 1.3rem 0 0; box-shadow: var(--sombra); }
   .lacre .selo-ic { width: 42px; height: 42px; border-radius: 11px; flex: 0 0 auto; display: grid; place-items: center; color: var(--palco-bg); background: var(--amarelo); }
-  .lacre .lc-t b { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--palco-texto); display: block; }
-  .lacre .lc-t span { font-size: var(--t-13); color: var(--palco-texto-2); }
+  .lacre .lc-t b { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); display: block; }
+  .lacre .lc-t span { font-size: var(--t-13); color: var(--texto-2); }
   .lacre .lc-cadeia { margin-left: auto; text-align: right; font-family: var(--mono); }
-  .lacre .lc-cadeia b { font-size: var(--t-16); color: var(--palco-texto); font-variant-numeric: tabular-nums; display: block; }
-  .lacre .lc-cadeia span { font-size: var(--t-12); color: var(--palco-texto-2); }
+  .lacre .lc-cadeia b { font-size: var(--t-16); color: var(--texto); font-variant-numeric: tabular-nums; display: block; }
+  .lacre .lc-cadeia span { font-size: var(--t-12); color: var(--texto-2); }
   @media (max-width: 560px) { .lacre .lc-cadeia { display: none; } }
 
   /* ---- barra de filtros ---- */
@@ -57,9 +57,9 @@
 
   .acao { display: inline-flex; align-items: center; gap: 0.35rem; font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.18rem 0.6rem; white-space: nowrap; border: 1px solid transparent; }
   .acao svg { width: 13px; height: 13px; flex: 0 0 auto; }
-  .a-criou { color: #15634A; background: color-mix(in srgb, #2C8A66 14%, var(--surface)); border-color: color-mix(in srgb, #2C8A66 38%, transparent); } [data-tema="escuro"] .a-criou { color: #58C99E; }
-  .a-editou { color: var(--foco); background: color-mix(in srgb, var(--foco) 13%, var(--surface)); border-color: color-mix(in srgb, var(--foco) 40%, transparent); }
-  .a-aprovou { color: #15634A; background: color-mix(in srgb, #2C8A66 14%, var(--surface)); border-color: color-mix(in srgb, #2C8A66 38%, transparent); } [data-tema="escuro"] .a-aprovou { color: #58C99E; }
+  .a-criou { color: #234429; background: color-mix(in srgb, #6B9B72 14%, var(--surface)); border-color: color-mix(in srgb, #6B9B72 38%, transparent); } [data-tema="escuro"] .a-criou { color: #A6BFA2; }
+  .a-editou { color: var(--cobalto-texto); background: color-mix(in srgb, var(--foco) 13%, var(--surface)); border-color: color-mix(in srgb, var(--foco) 40%, transparent); }
+  .a-aprovou { color: #234429; background: color-mix(in srgb, #6B9B72 14%, var(--surface)); border-color: color-mix(in srgb, #6B9B72 38%, transparent); } [data-tema="escuro"] .a-aprovou { color: #A6BFA2; }
   .a-removeu { color: var(--acento-texto); background: var(--surface-2); border-color: color-mix(in srgb, var(--telha) 52%, transparent); }
   .a-exportou { color: var(--aviso-texto); background: color-mix(in srgb, var(--amarelo) 16%, var(--surface)); border-color: color-mix(in srgb, var(--amarelo-traco) 45%, transparent); }
   .a-entrou { color: var(--texto-2); background: var(--surface-2); border-color: var(--linha); }
@@ -98,7 +98,7 @@
 <header class="topo">
   <div class="envelope topo-grade">
     <div class="marca">
-      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#3A6A48"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#C0693F"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#3F6E92"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#CFA65C"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#4E8259"/></svg>
       <div><p class="marca-nome">O Plenário</p><p class="marca-orgao">Câmara Municipal de Fortaleza</p></div>
     </div>
     <div class="topo-sep" aria-hidden="true"></div>
@@ -173,7 +173,7 @@
 
     <div class="ev">
       <div class="quando"><b>15/06/2026</b><span>09:41:02</span></div>
-      <div class="ator"><span class="av" style="background:var(--jade-claro)" aria-hidden="true">RC</span><span class="nm"><b>Renata Costa</b><span>Procuradoria</span></span></div>
+      <div class="ator"><span class="av" style="background:var(--jade)" aria-hidden="true">RC</span><span class="nm"><b>Renata Costa</b><span>Procuradoria</span></span></div>
       <span class="acao a-exportou"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 3v12M8 11l4 4 4-4M4 21h16"/></svg>Exportou</span>
       <div class="obj"><b>Trilha de auditoria</b><span>período 01–31/05 · pacote completo</span></div>
       <div class="origem">200.18.x.x<br><span class="selo">selo c0a1·7f33</span></div>
@@ -200,7 +200,7 @@
 
     <div class="ev">
       <div class="quando"><b>13/06/2026</b><span>10:14:39</span></div>
-      <div class="ator"><span class="av" style="background:var(--telha)" aria-hidden="true">AM</span><span class="nm"><b>Ana Moreira</b><span>Administração</span></span></div>
+      <div class="ator"><span class="av" style="background:var(--telha-fundo)" aria-hidden="true">AM</span><span class="nm"><b>Ana Moreira</b><span>Administração</span></span></div>
       <span class="acao a-removeu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 7h14M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>Revogou</span>
       <div class="obj"><b>Acesso de usuário</b><span>perfil de estagiário desligado</span></div>
       <div class="origem">189.45.x.x<br><span class="selo">selo f1d2·6b44</span></div>

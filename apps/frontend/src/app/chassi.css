@@ -35,7 +35,13 @@ body {
 
 /* superfície PÚBLICA (portal do cidadão): mais ar, medida mais estreita */
 body.superficie-publica { --max: 1200px; line-height: 1.6; }
-body.superficie-publica a {
+/* :where() zera a especificidade do seletor de superficie, deixando esta regra em (0,0,1)
+   — a mais fraca possivel. Sem isso ela vencia .btn-primaria, .pular e .baixar por
+   especificidade (0,1,2 contra 0,1,0) e roubava a cor deles: dava texto 1:1 no link de
+   pular, 1.56:1 no botao primario do escuro e 1:1 no botao de baixar dos dados abertos.
+   Enumerar excecoes com :not() era remendo — QUALQUER ancora estilizada como botao caia
+   no mesmo buraco. Cor de link e' o padrao; quem tem classe propria manda. */
+:where(body.superficie-publica) a {
   color: var(--marca);
   text-decoration-color: color-mix(in srgb, var(--marca) 35%, transparent);
   text-underline-offset: 3px;
@@ -72,8 +78,11 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .topo {
   position: sticky; top: 0; z-index: 30;
   background: var(--topo-bg);
-  backdrop-filter: saturate(140%) blur(10px);
+  /* Aqui o desfoque nao e' decoracao: a pagina rola POR BAIXO da barra. */
+  backdrop-filter: var(--desfoque);
+  -webkit-backdrop-filter: var(--desfoque);
   border-bottom: 1px solid var(--linha);
+  box-shadow: inset 0 -1px 0 var(--vidro-brilho);
 }
 .topo-grade { display: flex; align-items: center; gap: 0.8rem 1.3rem; padding: 0.7rem 0; flex-wrap: wrap; }
 .topo-sep { width: 1px; align-self: stretch; background: var(--linha); margin: 2px 0; }
@@ -114,7 +123,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 /* ============== SISTEMA DE BOTÕES (.btn) ============== */
 .btn {
   font-family: var(--corpo); font-weight: 600; font-size: var(--t-16);
-  border-radius: var(--raio-sm); border: 1px solid transparent;
+  /* Pilula: o botao e' a peca que mais se repete na tela, entao e' onde a
+     geometria nova se anuncia. */
+  border-radius: var(--raio-capsula); border: 1px solid transparent;
   padding: 0.7rem 1.15rem; cursor: pointer; min-height: 44px;
   display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
   line-height: 1.2; text-decoration: none;
@@ -124,7 +135,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .btn svg { flex: 0 0 auto; }
 
 /* primária — ação afirmativa (jade). `.btn-primario` é alias tolerado. */
-.btn-primaria, .btn-primario { background: var(--acao); color: var(--acao-texto); box-shadow: 0 10px 22px -16px rgba(12,83,64,.9); }
+.btn-primaria, .btn-primario { background: var(--acao); color: var(--acao-texto); box-shadow: 0 10px 22px -16px var(--sombra-cor-3); }
 .btn-primaria:hover, .btn-primario:hover { background: var(--acao-hover); }
 
 /* encerrar — ação destrutiva/terminal (telha-fundo p/ AA: branco s/ telha = 4.0; s/ telha-fundo = 5.44, §5.1) */
@@ -137,6 +148,12 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 
 /* fantasma — terciária, baixa ênfase */
 .btn-fantasma { background: transparent; color: var(--texto-2); border-color: transparent; }
+
+/* Controle DENTRO da ilha de papel. O papel e' claro nos dois temas, mas --texto e
+   --texto-2 sao tematizados e clareiam no escuro: o rotulo do botao caia para 1.08:1
+   sobre o papel. Tinta de papel e' fixa, entao o botao dentro dela tambem tem de ser. */
+.papel .btn-contorno, .papel .btn-fantasma { color: var(--papel-texto); border-color: var(--papel-linha); }
+.papel .btn-contorno:hover, .papel .btn-fantasma:hover { background: var(--papel-2); color: var(--papel-texto); }
 .btn-fantasma:hover { background: var(--surface-2); color: var(--texto); }
 
 /* modificador compacto (mantém alvo de toque ≥44px) */
@@ -145,7 +162,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .btn[aria-disabled="true"] { opacity: .42; cursor: not-allowed; transform: none; box-shadow: none; }
 
 /* ============== BARRA DE COMANDO (.comando) — fixa no rodapé ============== */
-.comando { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--surface); border-top: 1px solid var(--linha); box-shadow: 0 -18px 44px -30px rgba(12,83,64,.55); }
+.comando { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--surface); backdrop-filter: var(--desfoque); -webkit-backdrop-filter: var(--desfoque); border-top: 1px solid var(--linha); box-shadow: inset 0 1px 0 var(--vidro-brilho), 0 -18px 44px -30px var(--sombra-cor-2); }
 .comando-grade { display: flex; align-items: center; gap: 0.7rem 1rem; padding: 0.7rem 0; flex-wrap: wrap; }
 .comando-ctx { color: var(--texto); font-size: var(--t-13); line-height: 1.25; }
 .comando-ctx b { font-family: var(--display); font-weight: 600; color: var(--texto); display: block; }
@@ -168,9 +185,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 }
 .chip svg { flex: 0 0 auto; }
 .chip-ok     { color: var(--marca);        border-color: color-mix(in srgb, var(--marca) 45%, transparent);        background: color-mix(in srgb, var(--marca) 10%, transparent); }
-.chip-alerta { color: var(--aviso-texto);  border-color: color-mix(in srgb, var(--amarelo) 65%, transparent);      background: color-mix(in srgb, var(--amarelo) 18%, var(--surface)); }
-.chip-risco  { color: var(--acento-texto); border-color: color-mix(in srgb, var(--acento-texto) 45%, transparent); background: color-mix(in srgb, var(--telha) 9%, var(--surface)); }
-.chip-info   { color: var(--cobalto);      border-color: color-mix(in srgb, var(--cobalto) 38%, transparent);      background: color-mix(in srgb, var(--cobalto) 9%, var(--surface)); }
+.chip-alerta { color: var(--aviso-texto);  border-color: color-mix(in srgb, var(--amarelo) 65%, transparent);      background: color-mix(in srgb, var(--amarelo) 18%, var(--surface-solida)); }
+.chip-risco  { color: var(--acento-texto); border-color: color-mix(in srgb, var(--acento-texto) 45%, transparent); background: color-mix(in srgb, var(--telha) 9%, var(--surface-solida)); }
+.chip-info   { color: var(--cobalto-texto);      border-color: color-mix(in srgb, var(--cobalto) 38%, transparent);      background: color-mix(in srgb, var(--cobalto) 9%, var(--surface-solida)); }
 [data-tema="escuro"] .chip-info { color: var(--foco); border-color: color-mix(in srgb, var(--foco) 42%, transparent); }
 .chip-neutro { color: var(--texto-2); background: var(--surface-2); border-color: var(--linha); }
 /* ênfase forte da gravidade crítica — o ÚNICO chip preenchido. Branco
@@ -201,7 +218,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 
 /* ícone/ator opcional */
 .sinal-ic { width: 44px; height: 44px; border-radius: 11px; flex: 0 0 auto; display: grid; place-items: center; color: var(--marca); background: color-mix(in srgb, var(--marca) 10%, var(--surface-2)); }
-.sinal-ic.ia { color: var(--cobalto); background: color-mix(in srgb, var(--cobalto) 10%, var(--surface-2)); }
+.sinal-ic.ia { color: var(--cobalto-texto); background: color-mix(in srgb, var(--cobalto) 10%, var(--surface-2)); }
 [data-tema="escuro"] .sinal-ic.ia { color: var(--foco); }
 .sinal-ic.atencao { color: var(--aviso-texto);  background: color-mix(in srgb, var(--amarelo) 16%, var(--surface-2)); }
 .sinal-ic.critico { color: var(--acento-texto); background: color-mix(in srgb, var(--telha) 12%, var(--surface-2)); }
@@ -237,7 +254,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .az-jade      { --peca: var(--jade); }
 .az-cobalto   { --peca: var(--cobalto); }
 .az-telha     { --peca: var(--telha); }
-.az-jadeclaro { --peca: var(--jade-claro); }
+.az-jademedio { --peca: var(--jade-medio); }
 .az-amarelo   { --peca: var(--amarelo); }
 .az-feita { background: var(--peca); }
 .az-feita::after { background: radial-gradient(circle at 0% 100%, color-mix(in srgb, #fff 42%, var(--peca)) 0 48%, transparent 48%); }
@@ -262,9 +279,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
    superfícies em que o azulejo mini vive hoje — `.mrow` do perfil público e a linha da tabela de
    proposições, ambas `--surface`, e `--surface-2` na variante clara de card):
      • concluído: era `--jade` (token da paleta-marca, INVARIANTE — não tematiza). Sobre `--surface` do
-       tema escuro (#16271F) media 1,73 — verde escuro sobre verde escuro, o azulejo sumia e "concluído"
+       tema escuro (#1A251C) media 1,73 — verde escuro sobre verde escuro, o azulejo sumia e "concluído"
        ficava indistinguível de "pendente" (1,31 entre si). Passa a `--marca`, que É tematizado: no CLARO
-       é o mesmo #0C5340 (8,50 — zero regressão em /proposicoes) e no ESCURO é #43BD93 (6,65).
+       é o mesmo #2C5638 (8,50 — zero regressão em /proposicoes) e no ESCURO é #A6BFA2 (6,65).
      • ativo: o traço era `--amarelo` cheio (1,82 sobre claro — a linha exata do GUIDELINES §5.1 "amarelo
        cheio como traço não sustenta contraste"). Passa a `--amarelo-traco` (3,42 claro / 8,08 escuro).
      • pendente: o traço a 40% de `--texto-2` media 1,89 (claro) e 2,27 (escuro). Passa a 70% (3,47 / 4,11).
@@ -295,7 +312,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
    encadeado e imutável"; a .nota-imut explica honestamente o que isso
    significa. Os tipos de ação reusam a FAMÍLIA DE CHIPS (criou→chip-ok,
    editou→chip-info, removeu→chip-risco, exportou→chip-alerta). */
-.lacre { display: flex; align-items: center; gap: 0.9rem; background: var(--palco-bg); color: var(--palco-texto); border-radius: var(--raio); padding: 1rem 1.2rem; box-shadow: var(--sombra); }
+.lacre { display: flex; align-items: center; gap: 0.9rem; background: var(--surface); color: var(--texto); border: 1px solid var(--linha); border-radius: var(--raio); padding: 1rem 1.2rem; box-shadow: var(--sombra); }
 .lacre .selo-ic { width: 42px; height: 42px; border-radius: 11px; flex: 0 0 auto; display: grid; place-items: center; color: var(--palco-bg); background: var(--amarelo); }
 .lacre .lc-t b { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--palco-texto); display: block; }
 .lacre .lc-t span { font-size: var(--t-13); color: var(--palco-texto-2); }
@@ -329,7 +346,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .passos li { display: flex; align-items: center; gap: 0.5rem; font-size: var(--t-13); color: var(--texto-2); }
 .passos li .bola { width: 26px; height: 26px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--mono); font-size: var(--t-12); font-weight: 600; background: var(--surface-2); border: 1px solid var(--linha); color: var(--texto-2); }
 .passos li.feito .bola { background: var(--jade); border-color: var(--jade); color: #fff; }
-.passos li.atual .bola { background: var(--cobalto); border-color: var(--cobalto); color: #fff; }
+.passos li.atual .bola { background: var(--cobalto); border-color: var(--cobalto-texto); color: #fff; }
 .passos li.atual { color: var(--texto); font-weight: 600; }
 .passos .traco { width: 28px; height: 2px; background: var(--linha); margin: 0 0.5rem; }
 .passos .traco.ok { background: color-mix(in srgb, var(--jade) 50%, var(--linha)); }

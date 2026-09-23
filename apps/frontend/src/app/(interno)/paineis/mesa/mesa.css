@@ -34,28 +34,35 @@
    de importar o CSS de outra rota). */
 
 /* ============== HERO — ILHA-PLACAR DA SAÚDE INSTITUCIONAL ============== */
-.saude { position: relative; overflow: hidden; margin: clamp(1.2rem, 3vw, 2rem) 0 0; background: var(--palco-bg); color: var(--palco-texto); border-radius: var(--raio); box-shadow: var(--sombra); }
+/* O hero da saude institucional NAO e' mais ilha-palco (22/09/2026).
+   O --palco existe para o TELAO: projetado, sala escurecida, lido a distancia — ali o
+   escuro e' funcao. Esta tela e' painel de mesa, lida em monitor sob luz de escritorio,
+   e o bloco escuro tomava metade do tema claro sem nenhuma razao alem de enfase. A
+   enfase passa a vir do que ja' e' proprio deste hero: a faixa de azulejo de 5 cores no
+   topo e a escala do titulo. O .cockpit-ao-vivo, o .lacre e as telas de sessao ao vivo
+   seguem no palco escuro — ali o motivo e' real. */
+.saude { position: relative; overflow: hidden; margin: clamp(1.2rem, 3vw, 2rem) 0 0; background: var(--surface); color: var(--texto); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); }
 .saude::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 5px; background: linear-gradient(90deg, var(--jade) 0 20%, var(--cobalto) 20% 40%, var(--telha) 40% 60%, var(--amarelo) 60% 80%, var(--jade-claro) 80% 100%); }
 .saude-corpo { padding: clamp(1.4rem, 3.2vw, 2.1rem); }
-.saude .eyebrow { color: var(--amarelo); }
-.saude h1 { font-family: var(--display); font-weight: 800; font-size: clamp(var(--t-28), 4vw, var(--t-40)); line-height: 1.08; letter-spacing: -0.025em; color: var(--palco-texto); margin: 0.7rem 0 0; text-wrap: balance; }
-.saude h1 em { font-style: normal; color: #8FE3C6; }
-.saude-sub { color: var(--palco-texto-2); font-size: var(--t-16); margin: 0.7rem 0 0; max-width: 56ch; line-height: 1.5; }
-.saude-sub b { color: var(--palco-texto); font-weight: 600; }
+.saude .eyebrow { color: var(--acento-texto); }   /* --amarelo so' passava AA sobre o palco escuro */
+.saude h1 { font-family: var(--display); font-weight: 800; font-size: clamp(var(--t-28), 4vw, var(--t-40)); line-height: 1.08; letter-spacing: -0.025em; color: var(--texto); margin: 0.7rem 0 0; text-wrap: balance; }
+.saude h1 em { font-style: normal; color: var(--marca); }
+.saude-sub { color: var(--texto-2); font-size: var(--t-16); margin: 0.7rem 0 0; max-width: 56ch; line-height: 1.5; }
+.saude-sub b { color: var(--texto); font-weight: 600; }
 
 /* placar de obrigações — UM placar (gramática de votação), não 3 cartões */
-.placar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border: 1px solid var(--palco-linha); border-radius: var(--raio-sm); overflow: hidden; margin: 1.5rem 0 0; }
-.ob-col { padding: 0.85rem 0.9rem; border-left: 1px solid var(--palco-linha); }
+.placar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border: 1px solid var(--linha); border-radius: var(--raio-sm); overflow: hidden; margin: 1.5rem 0 0; }
+.ob-col { padding: 0.85rem 0.9rem; border-left: 1px solid var(--linha); }
 .ob-col:first-child { border-left: 0; }
-.ob-col .rotulo { display: flex; align-items: center; gap: 0.45rem; font-family: var(--mono); font-size: var(--t-12); text-transform: uppercase; letter-spacing: .05em; color: var(--palco-texto-2); margin: 0 0 0.3rem; }
+.ob-col .rotulo { display: flex; align-items: center; gap: 0.45rem; font-family: var(--mono); font-size: var(--t-12); text-transform: uppercase; letter-spacing: .05em; color: var(--texto-2); margin: 0 0 0.3rem; }
 .ob-col .gl { width: 14px; height: 14px; flex: 0 0 auto; }
 .ob-col .n { font-family: var(--display); font-weight: 800; font-size: var(--t-40); line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; margin: 0; }
-.ob-dia .n { color: #8FE3C6; }
-.ob-vencer .n { color: var(--amarelo); }
-.ob-risco .n { color: #F2A488; }
-.ob-col .est { font-family: var(--mono); font-size: var(--t-12); color: var(--palco-texto-2); margin: 0.2rem 0 0; }
-.placar-nota { font-family: var(--mono); font-size: var(--t-12); color: var(--palco-texto-2); margin: 0.9rem 0 0; display: flex; align-items: center; gap: 0.45rem; }
-.placar-nota svg { color: #8FE3C6; flex: 0 0 auto; }
+.ob-dia .n { color: var(--marca); }
+.ob-vencer .n { color: var(--aviso-texto); }
+.ob-risco .n { color: var(--acento-texto); }
+.ob-col .est { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin: 0.2rem 0 0; }
+.placar-nota { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin: 0.9rem 0 0; display: flex; align-items: center; gap: 0.45rem; }
+.placar-nota svg { color: var(--marca); flex: 0 0 auto; }
 
 /* ============== bloco — contêiner genérico do cockpit (reusado por várias seções) ============== */
 .bloco { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); }
@@ -69,15 +76,14 @@
 .prazo-item { display: grid; grid-template-columns: 64px 1fr auto; gap: 0.9rem; align-items: center; padding: 0.85rem 0.95rem; background: var(--surface-2); border: 1px solid var(--linha); border-left-width: 4px; border-radius: var(--raio-sm); }
 .prz-urgente { border-left-color: var(--telha); }
 .prz-atencao { border-left-color: var(--amarelo-traco); }
-.prz-noprazo { border-left-color: var(--jade-claro); }
+.prz-noprazo { border-left-color: var(--marca); }
 .anel-c { position: relative; width: 64px; height: 64px; flex: 0 0 auto; }
 .anel-c svg { width: 64px; height: 64px; transform: rotate(-90deg); display: block; }
 .anel-c .trilho { fill: none; stroke: var(--linha); stroke-width: 6; }
 .anel-c .arco { fill: none; stroke-width: 6; stroke-linecap: round; }
 .prz-urgente .anel-c .arco { stroke: var(--telha); }
 .prz-atencao .anel-c .arco { stroke: var(--amarelo-traco); }
-.prz-noprazo .anel-c .arco { stroke: var(--jade-claro); }
-[data-tema="escuro"] .prz-noprazo .anel-c .arco { stroke: var(--marca); }
+.prz-noprazo .anel-c .arco { stroke: var(--marca); }   /* ver nota do anel em public.css */
 .anel-c .centro { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; line-height: 1; }
 .anel-c .d { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--texto); font-variant-numeric: tabular-nums; }
 .anel-c .u { font-family: var(--mono); font-size: 0.62rem; letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); }
@@ -93,8 +99,7 @@
 .tag-urg .gl { width: 13px; height: 13px; flex: 0 0 auto; }
 .prz-urgente .tag-urg { color: #fff; background: var(--telha-fundo); }
 .prz-atencao .tag-urg { color: var(--texto); background: rgba(232,178,58,.22); border: 1px solid rgba(232,178,58,.55); }
-.prz-noprazo .tag-urg { color: var(--marca); background: rgba(12,83,64,.1); border: 1px solid rgba(12,83,64,.26); }
-[data-tema="escuro"] .prz-noprazo .tag-urg { color: var(--marca); border-color: rgba(67,189,147,.4); background: rgba(67,189,147,.12); }
+.prz-noprazo .tag-urg { color: var(--marca); background: color-mix(in srgb, var(--marca) 10%, transparent); border: 1px solid color-mix(in srgb, var(--marca) 30%, transparent); }
 
 /* ---- PIPELINE LEGISLATIVO (11.3) — tabuleiro de estágios ---- */
 .pipeline-board { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.7rem; }
@@ -155,7 +160,7 @@
 }
 @media (max-width: 720px) {
   .placar { grid-template-columns: 1fr; }
-  .ob-col { display: flex; align-items: center; justify-content: space-between; border-left: 0; border-top: 1px solid var(--palco-linha); }
+  .ob-col { display: flex; align-items: center; justify-content: space-between; border-left: 0; border-top: 1px solid var(--linha); }
   .ob-col:first-child { border-top: 0; }
   .ob-col .rotulo { margin: 0; }
   .ob-col .est { display: none; }

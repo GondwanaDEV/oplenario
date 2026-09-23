@@ -6,7 +6,7 @@
 <title>O Plenário — Painéis da Mesa · Saúde institucional</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="../sistema/tokens.css" />
 <link rel="stylesheet" href="../sistema/chassi.css" />
 <style>
@@ -47,7 +47,7 @@
 
   /* sininho de notificações (11.6) */
   .sino { position: relative; display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 999px; background: var(--surface); border: 1px solid var(--linha); color: var(--texto-2); cursor: pointer; transition: border-color .12s ease, color .12s ease; }
-  .sino:hover { border-color: var(--foco); color: var(--texto); }
+  .sino:hover { border-color: var(--cobalto-texto); color: var(--texto); }
   .sino .badge { position: absolute; top: -3px; right: -3px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 999px; background: var(--telha-fundo); color: #fff; font-family: var(--mono); font-size: 0.66rem; font-weight: 600; display: grid; place-items: center; border: 2px solid var(--topo-bg); }
 
   @media (min-width: 600px) { .tema-btn .tema-rotulo { display: inline; } }
@@ -70,32 +70,36 @@
   main { padding-bottom: 8.5rem; } /* JS ajusta p/ a altura real da barra fixa */
 
   /* ============== 2 · HERO — ILHA-PLACAR DA SAÚDE INSTITUCIONAL ============== */
-  .saude { position: relative; overflow: hidden; margin: clamp(1.2rem, 3vw, 2rem) 0 0; background: var(--palco-bg); color: var(--palco-texto); border-radius: var(--raio); box-shadow: var(--sombra); }
+  .saude { position: relative; overflow: hidden; margin: clamp(1.2rem, 3vw, 2rem) 0 0; background: var(--surface); color: var(--texto); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); }
   .saude::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 5px; background: linear-gradient(90deg, var(--jade) 0 20%, var(--cobalto) 20% 40%, var(--telha) 40% 60%, var(--amarelo) 60% 80%, var(--jade-claro) 80% 100%); }
   .saude-corpo { padding: clamp(1.4rem, 3.2vw, 2.1rem); }
-  .saude .eyebrow { color: var(--amarelo); }
-  .saude h1 { font-family: var(--display); font-weight: 800; font-size: clamp(var(--t-28), 4vw, var(--t-40)); line-height: 1.08; letter-spacing: -0.025em; color: var(--palco-texto); margin: 0.7rem 0 0; text-wrap: balance; }
-  .saude h1 em { font-style: normal; color: #8FE3C6; }
-  .saude-sub { color: var(--palco-texto-2); font-size: var(--t-16); margin: 0.7rem 0 0; max-width: 56ch; line-height: 1.5; }
-  .saude-sub b { color: var(--palco-texto); font-weight: 600; }
+  .saude .eyebrow { color: var(--acento-texto); }
+  .saude h1 { font-family: var(--display); font-weight: 800; font-size: clamp(var(--t-28), 4vw, var(--t-40)); line-height: 1.08; letter-spacing: -0.025em; color: var(--texto); margin: 0.7rem 0 0; text-wrap: balance; }
+  .saude h1 em { font-style: normal; color: var(--marca); }
+  .saude-sub { color: var(--texto-2); font-size: var(--t-16); margin: 0.7rem 0 0; max-width: 56ch; line-height: 1.5; }
+  .saude-sub b { color: var(--texto); font-weight: 600; }
 
   .saude-grade { display: grid; grid-template-columns: minmax(0,1.45fr) minmax(0,1fr); gap: clamp(1.2rem, 2.6vw, 2rem); align-items: stretch; margin: 1.5rem 0 0; }
-  .saude-col { background: var(--palco-inset); border: 1px solid var(--palco-linha); border-radius: var(--raio-sm); padding: 1.1rem 1.15rem 1.2rem; }
-  .saude-col > .rotulo { display: flex; align-items: center; gap: 0.5rem; font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--palco-texto-2); margin: 0 0 0.9rem; }
+  .saude-col { background: var(--realce); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 1.1rem 1.15rem 1.2rem; }
+  .saude-col > .rotulo { display: flex; align-items: center; gap: 0.5rem; font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--texto-2); margin: 0 0 0.9rem; }
 
   /* placar de obrigações — UM placar (gramática de votação), não 3 cartões */
-  .placar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border: 1px solid var(--palco-linha); border-radius: var(--raio-sm); overflow: hidden; }
-  .ob-col { padding: 0.85rem 0.9rem; border-left: 1px solid var(--palco-linha); }
+  .placar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border: 1px solid var(--linha); border-radius: var(--raio-sm); overflow: hidden; }
+  .ob-col { padding: 0.85rem 0.9rem; border-left: 1px solid var(--linha); }
   .ob-col:first-child { border-left: 0; }
-  .ob-col .rotulo { display: flex; align-items: center; gap: 0.45rem; font-family: var(--mono); font-size: var(--t-12); text-transform: uppercase; letter-spacing: .05em; color: var(--palco-texto-2); margin: 0 0 0.3rem; }
+  .ob-col .rotulo { display: flex; align-items: center; gap: 0.45rem; font-family: var(--mono); font-size: var(--t-12); text-transform: uppercase; letter-spacing: .05em; color: var(--texto-2); margin: 0 0 0.3rem; }
   .ob-col .gl { width: 14px; height: 14px; flex: 0 0 auto; }
+  .ob-dia   .gl circle      { fill: var(--marca); }
+  .ob-dia   .gl path        { stroke: var(--acao-texto); }
+  .ob-risco .gl path[fill]  { fill: var(--acento-texto); }
+  .ob-risco .gl path[stroke]{ stroke: var(--acao-texto); }
   .ob-col .n { font-family: var(--display); font-weight: 800; font-size: var(--t-40); line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; margin: 0; }
-  .ob-dia .n { color: #8FE3C6; }
-  .ob-vencer .n { color: var(--amarelo); }
-  .ob-risco .n { color: #F2A488; }
-  .ob-col .est { font-family: var(--mono); font-size: var(--t-12); color: var(--palco-texto-2); margin: 0.2rem 0 0; }
-  .placar-nota { font-family: var(--mono); font-size: var(--t-12); color: var(--palco-texto-2); margin: 0.9rem 0 0; display: flex; align-items: center; gap: 0.45rem; }
-  .placar-nota svg { color: #8FE3C6; flex: 0 0 auto; }
+  .ob-dia .n { color: var(--marca); }
+  .ob-vencer .n { color: var(--aviso-texto); }
+  .ob-risco .n { color: var(--acento-texto); }
+  .ob-col .est { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin: 0.2rem 0 0; }
+  .placar-nota { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin: 0.9rem 0 0; display: flex; align-items: center; gap: 0.45rem; }
+  .placar-nota svg { color: var(--marca); flex: 0 0 auto; }
 
   /* próxima remessa: anel do prazo + ciclo de obrigação (3ª leitura do azulejo) */
   .remessa { display: flex; flex-direction: column; }
@@ -103,34 +107,27 @@
   .prazo-anel { position: relative; width: 92px; height: 92px; flex: 0 0 auto; }
   .prazo-anel svg { width: 92px; height: 92px; transform: rotate(-90deg); display: block; }
   .prazo-anel .trilho { fill: none; stroke: var(--linha); stroke-width: 8; }
-  .prazo-anel .arco { fill: none; stroke: var(--jade-claro); stroke-width: 8; stroke-linecap: round; }
-  [data-tema="escuro"] .prazo-anel .arco { stroke: var(--marca); }
+  .prazo-anel .arco { fill: none; stroke: var(--marca); stroke-width: 8; stroke-linecap: round; }
   .prazo-anel .centro { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
   .prazo-anel .dias { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--marca); line-height: 1; font-variant-numeric: tabular-nums; }
   .prazo-anel .un { font-family: var(--mono); font-size: 0.72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--texto-2); }
-  /* anel sobre a ilha escura: trilho/arco e número em tokens de palco */
-  .saude .prazo-anel .trilho { stroke: var(--palco-linha); }
-  .saude .prazo-anel .arco { stroke: var(--amarelo); }
-  .saude .prazo-anel .dias { color: var(--amarelo); }
-  .saude .prazo-anel .un { color: var(--palco-texto-2); }
-  .remessa-quem b { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--palco-texto); display: block; line-height: 1.25; }
-  .remessa-quem span { font-family: var(--mono); font-size: var(--t-13); color: var(--palco-texto-2); }
+  /* O hero deixou de ser ilha escura: as 4 sobrescritas de anel que existiam so'
+     para isso sairam — a regra-base ja' e' a certa sobre superficie clara. */
+  .remessa-quem b { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); display: block; line-height: 1.25; }
+  .remessa-quem span { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); }
 
   .azulejo-pedido { width: 100%; height: auto; display: block; margin: 1.1rem 0 0; }
   .azulejo-pedido text { fill: var(--texto-2); }
   .azulejo-pedido text.ativo { fill: var(--acento-texto); font-weight: 600; }
   .azulejo-pedido text.pendente { fill: var(--texto-2); opacity: .62; }
-  .saude .azulejo-pedido text { fill: var(--palco-texto-2); }
-  .saude .azulejo-pedido text.ativo { fill: var(--amarelo); font-weight: 600; }
-  .saude .azulejo-pedido text.pendente { fill: var(--palco-texto-2); opacity: .6; }
 
   /* selos de continuidade (desarmam o jurídico) */
   .continuidade { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.7rem; margin: 1.4rem 0 0; }
-  .selo-cont { display: flex; align-items: flex-start; gap: 0.6rem; background: var(--palco-inset); border: 1px solid var(--palco-linha); border-radius: var(--raio-sm); padding: 0.8rem 0.9rem; }
-  .selo-cont svg { flex: 0 0 auto; color: #8FE3C6; margin-top: 1px; }
-  .selo-cont .t { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; text-transform: uppercase; color: var(--palco-texto-2); }
-  .selo-cont .v { font-weight: 600; font-size: var(--t-13); color: var(--palco-texto); display: block; margin-top: 1px; }
-  .selo-cont a { display: inline-block; padding: 0.35rem 0; color: #8FE3C6; font-weight: 600; text-decoration-color: rgba(143,227,198,.5); text-underline-offset: 3px; }
+  .selo-cont { display: flex; align-items: flex-start; gap: 0.6rem; background: var(--realce); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.8rem 0.9rem; }
+  .selo-cont svg { flex: 0 0 auto; color: var(--marca); margin-top: 1px; }
+  .selo-cont .t { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); }
+  .selo-cont .v { font-weight: 600; font-size: var(--t-13); color: var(--texto); display: block; margin-top: 1px; }
+  .selo-cont a { display: inline-block; padding: 0.35rem 0; color: var(--marca); font-weight: 600; text-decoration-color: color-mix(in srgb, var(--marca) 50%, transparent); text-underline-offset: 3px; }
 
   /* ============== 3 · GRID DO COCKPIT ============== */
   .cockpit { display: grid; grid-template-columns: minmax(0,1fr) 372px; gap: clamp(1rem, 2.4vw, 1.6rem); padding: clamp(1.1rem, 2.6vw, 1.6rem) 0 0; align-items: start; }
@@ -162,8 +159,7 @@
   .anel-c .arco { fill: none; stroke-width: 6; stroke-linecap: round; }
   .prz-urgente .anel-c .arco { stroke: var(--telha); }
   .prz-atencao .anel-c .arco { stroke: var(--amarelo-traco); }
-  .prz-noprazo .anel-c .arco { stroke: var(--jade-claro); }
-  [data-tema="escuro"] .prz-noprazo .anel-c .arco { stroke: var(--marca); }
+  .prz-noprazo .anel-c .arco { stroke: var(--marca); }
   .anel-c .centro { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; line-height: 1; }
   .anel-c .d { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--texto); font-variant-numeric: tabular-nums; }
   .anel-c .u { font-family: var(--mono); font-size: 0.62rem; letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); }
@@ -239,11 +235,11 @@
   .distribuicao .rotulo-d { display: flex; align-items: baseline; justify-content: space-between; gap: 0.8rem; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin: 0 0 0.5rem; }
   .barra-dist { display: flex; height: 26px; border-radius: var(--raio-sm); overflow: hidden; background: var(--bg); border: 1px solid var(--linha); }
   .barra-dist span { display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: var(--t-12); font-weight: 600; color: #fff; min-width: 0; }
-  .seg-prot { background: #0C5340; }
-  .seg-comi { background: #1E5FA8; }
-  .seg-t1   { background: #D9542B; }
-  .seg-t2   { background: #16785C; }
-  .seg-sanc { background: #E8B23A; color: #4A3608; }
+  .seg-prot { background: #2C5638; }
+  .seg-comi { background: #3F6E92; }
+  .seg-t1   { background: #C0693F; }
+  .seg-t2   { background: #4E8259; }
+  .seg-sanc { background: #CFA65C; color: #4A3608; }
   .dist-legenda { display: flex; flex-wrap: wrap; gap: 0.5rem 1.1rem; margin: 0.7rem 0 0; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
   .dist-legenda span { display: inline-flex; align-items: center; gap: 0.4rem; }
   .dist-legenda i { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
@@ -284,20 +280,20 @@
   /* re-skin telha: ênfase só na coluna Vencidas (não inverte a 1ª impressão — é o mesmo placar) */
   body.estado-falha .ob-risco { background: color-mix(in srgb, var(--telha) 18%, transparent); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--telha) 55%, transparent); }
   body.estado-falha .ob-risco .n { color: #FFB59A; }
-  body.estado-falha .ob-dia .n { color: var(--palco-texto); }
+  body.estado-falha .ob-dia .n { color: var(--texto-2); }
   .placar-nota .v-falha svg { color: #FFB59A; }
 
   /* lente do jurídico: recorte por PAPEL (não faixa fixa) — prova de risco coberto */
   .juridico-cut { display: none; grid-template-columns: repeat(2, 1fr); gap: 0.7rem; margin: 1.4rem 0 0; }
   body.lente-juridico .juridico-cut { display: grid; }
-  .risco-card { display: flex; flex-direction: column; gap: 0.25rem; background: var(--palco-inset); border: 1px solid var(--palco-linha); border-left: 3px solid #8FE3C6; border-radius: var(--raio-sm); padding: 0.85rem 0.95rem; }
+  .risco-card { display: flex; flex-direction: column; gap: 0.25rem; background: var(--realce); border: 1px solid var(--linha); border-left: 3px solid var(--marca); border-radius: var(--raio-sm); padding: 0.85rem 0.95rem; }
   .risco-card.atencao { border-left-color: var(--amarelo); }
-  .risco-card .rc-top { display: flex; align-items: center; gap: 0.45rem; font-family: var(--mono); font-size: var(--t-12); text-transform: uppercase; letter-spacing: .05em; color: var(--palco-texto-2); }
-  .risco-card .rc-top svg { flex: 0 0 auto; color: #8FE3C6; }
+  .risco-card .rc-top { display: flex; align-items: center; gap: 0.45rem; font-family: var(--mono); font-size: var(--t-12); text-transform: uppercase; letter-spacing: .05em; color: var(--texto-2); }
+  .risco-card .rc-top svg { flex: 0 0 auto; color: var(--marca); }
   .risco-card.atencao .rc-top svg { color: var(--amarelo); }
-  .risco-card .rc-v { font-weight: 600; font-size: var(--t-16); color: var(--palco-texto); margin-top: 0.15rem; }
-  .risco-card .rc-meta { font-family: var(--mono); font-size: var(--t-12); color: var(--palco-texto-2); line-height: 1.4; }
-  .risco-card a { color: #8FE3C6; font-weight: 600; text-underline-offset: 3px; }
+  .risco-card .rc-v { font-weight: 600; font-size: var(--t-16); color: var(--texto); margin-top: 0.15rem; }
+  .risco-card .rc-meta { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); line-height: 1.4; }
+  .risco-card a { color: var(--marca); font-weight: 600; text-underline-offset: 3px; }
 
   /* ============== RESPONSIVO ============== */
   @media (max-width: 1040px) {
@@ -310,7 +306,7 @@
     .topo-dir { margin-left: 0; width: 100%; justify-content: space-between; flex-wrap: wrap; }
     .periodo { margin-left: 0; }
     .placar { grid-template-columns: 1fr; }
-    .ob-col { display: flex; align-items: center; justify-content: space-between; border-left: 0; border-top: 1px solid var(--palco-linha); }
+    .ob-col { display: flex; align-items: center; justify-content: space-between; border-left: 0; border-top: 1px solid var(--linha); }
     .ob-col:first-child { border-top: 0; }
     .ob-col .rotulo { margin: 0; }
     .ob-col .est { display: none; }
@@ -347,11 +343,11 @@
     <div class="envelope topo-grade">
       <div class="marca">
         <svg class="marca-simbolo" viewBox="0 0 40 40" role="img" aria-label="O Plenário">
-          <circle cx="20" cy="20" r="19" fill="#FBF8F0" stroke="#E0D7BF"/>
-          <path d="M7 27 A13 13 0 0 1 33 27" fill="none" stroke="#0C5340" stroke-width="2.4" stroke-linecap="round"/>
-          <path d="M10 27 A10 10 0 0 1 30 27" fill="none" stroke="#1E5FA8" stroke-width="2.4" stroke-linecap="round"/>
-          <path d="M13.5 27 A6.5 6.5 0 0 1 26.5 27" fill="none" stroke="#D9542B" stroke-width="2.4" stroke-linecap="round"/>
-          <rect x="18.4" y="9.5" width="3.2" height="6" rx="1.2" fill="#E8B23A"/>
+          <circle cx="20" cy="20" r="19" fill="#FFF7EA" stroke="#A6BFA2"/>
+          <path d="M7 27 A13 13 0 0 1 33 27" fill="none" stroke="#2C5638" stroke-width="2.4" stroke-linecap="round"/>
+          <path d="M10 27 A10 10 0 0 1 30 27" fill="none" stroke="#3F6E92" stroke-width="2.4" stroke-linecap="round"/>
+          <path d="M13.5 27 A6.5 6.5 0 0 1 26.5 27" fill="none" stroke="#C0693F" stroke-width="2.4" stroke-linecap="round"/>
+          <rect x="18.4" y="9.5" width="3.2" height="6" rx="1.2" fill="#CFA65C"/>
         </svg>
         <div>
           <p class="marca-nome">O&nbsp;Plenário</p>
@@ -438,7 +434,7 @@
             <div class="placar">
               <div class="ob-col ob-dia">
                 <p class="rotulo">
-                  <svg class="gl" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6" fill="#8FE3C6"/><path d="M4 7.2l2 2 4-4.4" stroke="#0A4334" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <svg class="gl" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6" fill="#D2E3CE"/><path d="M4 7.2l2 2 4-4.4" stroke="#4E7D5A" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
                   Em dia
                 </p>
                 <p class="n"><span class="v-ok">11</span><span class="v-falha">11</span></p>
@@ -446,7 +442,7 @@
               </div>
               <div class="ob-col ob-vencer">
                 <p class="rotulo">
-                  <svg class="gl" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1.5L13 12H1z" fill="#E8B23A"/><path d="M7 5.5v3M7 10h.01" stroke="#4A3608" stroke-width="1.5" stroke-linecap="round"/></svg>
+                  <svg class="gl" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1.5L13 12H1z" fill="#CFA65C"/><path d="M7 5.5v3M7 10h.01" stroke="#4A3608" stroke-width="1.5" stroke-linecap="round"/></svg>
                   A vencer
                 </p>
                 <p class="n"><span class="v-ok">1</span><span class="v-falha">0</span></p>
@@ -497,14 +493,14 @@
                 <clipPath id="o1"><rect x="146" y="6" width="68" height="56" rx="9"/></clipPath>
                 <clipPath id="o2"><rect x="286" y="6" width="68" height="56" rx="9"/></clipPath>
               </defs>
-              <line x1="74"  y1="34" x2="146" y2="34" stroke="#16785C" stroke-width="2.4"/>
-              <line x1="214" y1="34" x2="286" y2="34" stroke="#16785C" stroke-width="2.4" stroke-dasharray="5 6" opacity=".55"/>
+              <line x1="74"  y1="34" x2="146" y2="34" stroke="#4E8259" stroke-width="2.4"/>
+              <line x1="214" y1="34" x2="286" y2="34" stroke="#4E8259" stroke-width="2.4" stroke-dasharray="5 6" opacity=".55"/>
               <!-- Materializada = concluída (jade cheio + miolo areia) -->
-              <g clip-path="url(#o0)"><rect x="6" y="6" width="68" height="56" fill="#0C5340"/><path d="M6 62 A68 56 0 0 1 74 6 L74 62 Z" fill="#16785C"/><circle cx="40" cy="34" r="12" fill="#F1ECDD"/></g>
+              <g clip-path="url(#o0)"><rect x="6" y="6" width="68" height="56" fill="#3A6A48"/><path d="M6 62 A68 56 0 0 1 74 6 L74 62 Z" fill="#4E8259"/><circle cx="40" cy="34" r="12" fill="#C7D9C4"/></g>
               <!-- Em curso = jade-fundo + 2 quartos amarelo Marajó -->
-              <g clip-path="url(#o1)"><rect x="146" y="6" width="68" height="56" fill="#0A4334"/><path d="M146 34 A34 28 0 0 1 180 6 L180 34 Z" fill="#E8B23A"/><path d="M180 34 A34 28 0 0 1 214 62 L180 62 Z" fill="#E8B23A"/><circle cx="180" cy="34" r="8" fill="#F1ECDD"/></g>
+              <g clip-path="url(#o1)"><rect x="146" y="6" width="68" height="56" fill="#4E7D5A"/><path d="M146 34 A34 28 0 0 1 180 6 L180 34 Z" fill="#CFA65C"/><path d="M180 34 A34 28 0 0 1 214 62 L180 62 Z" fill="#CFA65C"/><circle cx="180" cy="34" r="8" fill="#C7D9C4"/></g>
               <!-- Aceita pelo TCE = pendente (concreto tracejado) -->
-              <g clip-path="url(#o2)"><rect x="286" y="6" width="68" height="56" fill="#0A4334"/><circle cx="320" cy="34" r="13" fill="none" stroke="#16785C" stroke-width="2.4" stroke-dasharray="5 6"/></g>
+              <g clip-path="url(#o2)"><rect x="286" y="6" width="68" height="56" fill="#4E7D5A"/><circle cx="320" cy="34" r="13" fill="none" stroke="#4E8259" stroke-width="2.4" stroke-dasharray="5 6"/></g>
               <g font-family="IBM Plex Mono, monospace" font-size="11">
                 <text x="40"  y="80" text-anchor="middle">Aberta</text>
                 <text x="180" y="80" text-anchor="middle" class="ativo">Em curso</text>
@@ -763,7 +759,7 @@
 
           <section class="estagio" aria-labelledby="e-prot">
             <div class="estagio-cab">
-              <svg class="estagio-azulejo" viewBox="0 0 46 46" aria-hidden="true"><clipPath id="ea0"><rect x="2" y="2" width="42" height="42" rx="8"/></clipPath><g clip-path="url(#ea0)"><rect x="2" y="2" width="42" height="42" fill="#0C5340"/><path d="M2 44 A42 42 0 0 1 44 2 L44 44 Z" fill="#16785C"/><circle cx="23" cy="23" r="8" fill="#F1ECDD"/></g></svg>
+              <svg class="estagio-azulejo" viewBox="0 0 46 46" aria-hidden="true"><clipPath id="ea0"><rect x="2" y="2" width="42" height="42" rx="8"/></clipPath><g clip-path="url(#ea0)"><rect x="2" y="2" width="42" height="42" fill="#3A6A48"/><path d="M2 44 A42 42 0 0 1 44 2 L44 44 Z" fill="#4E8259"/><circle cx="23" cy="23" r="8" fill="#C7D9C4"/></g></svg>
               <div class="meta"><span class="nome">Protocolo</span><span class="n" id="e-prot">12</span></div>
             </div>
             <ul class="estagio-lista">
@@ -774,7 +770,7 @@
 
           <section class="estagio" aria-labelledby="e-comi">
             <div class="estagio-cab">
-              <svg class="estagio-azulejo" viewBox="0 0 46 46" aria-hidden="true"><clipPath id="ea1"><rect x="2" y="2" width="42" height="42" rx="8"/></clipPath><g clip-path="url(#ea1)"><rect x="2" y="2" width="42" height="42" fill="#1E5FA8"/><path d="M2 2 A42 42 0 0 1 44 44 L2 44 Z" fill="#184E8A"/><circle cx="23" cy="23" r="8" fill="#F1ECDD"/></g></svg>
+              <svg class="estagio-azulejo" viewBox="0 0 46 46" aria-hidden="true"><clipPath id="ea1"><rect x="2" y="2" width="42" height="42" rx="8"/></clipPath><g clip-path="url(#ea1)"><rect x="2" y="2" width="42" height="42" fill="#3F6E92"/><path d="M2 2 A42 42 0 0 1 44 44 L2 44 Z" fill="#355D7D"/><circle cx="23" cy="23" r="8" fill="#C7D9C4"/></g></svg>
               <div class="meta"><span class="nome">Comissões</span><span class="n" id="e-comi">18</span></div>
             </div>
             <ul class="estagio-lista">
@@ -788,7 +784,7 @@
 
           <section class="estagio" aria-labelledby="e-t1">
             <div class="estagio-cab">
-              <svg class="estagio-azulejo" viewBox="0 0 46 46" aria-hidden="true"><clipPath id="ea2"><rect x="2" y="2" width="42" height="42" rx="8"/></clipPath><g clip-path="url(#ea2)"><rect x="2" y="2" width="42" height="42" fill="#D9542B"/><path d="M44 2 A42 42 0 0 1 2 44 L2 2 Z" fill="#B9421F"/><circle cx="23" cy="23" r="8" fill="#F1ECDD"/></g></svg>
+              <svg class="estagio-azulejo" viewBox="0 0 46 46" aria-hidden="true"><clipPath id="ea2"><rect x="2" y="2" width="42" height="42" rx="8"/></clipPath><g clip-path="url(#ea2)"><rect x="2" y="2" width="42" height="42" fill="#C0693F"/><path d="M44 2 A42 42 0 0 1 2 44 L2 2 Z" fill="#A85334"/><circle cx="23" cy="23" r="8" fill="#C7D9C4"/></g></svg>
               <div class="meta"><span class="nome">1º turno</span><span class="n" id="e-t1">9</span></div>
             </div>
             <ul class="estagio-lista">
@@ -799,7 +795,7 @@
 
           <section class="estagio" aria-labelledby="e-t2">
             <div class="estagio-cab">
-              <svg class="estagio-azulejo" viewBox="0 0 46 46" aria-hidden="true"><clipPath id="ea3"><rect x="2" y="2" width="42" height="42" rx="8"/></clipPath><g clip-path="url(#ea3)"><rect x="2" y="2" width="42" height="42" fill="#16785C"/><path d="M2 44 A42 42 0 0 1 44 2 L44 44 Z" fill="#0A4334"/><circle cx="23" cy="23" r="8" fill="#F1ECDD"/></g></svg>
+              <svg class="estagio-azulejo" viewBox="0 0 46 46" aria-hidden="true"><clipPath id="ea3"><rect x="2" y="2" width="42" height="42" rx="8"/></clipPath><g clip-path="url(#ea3)"><rect x="2" y="2" width="42" height="42" fill="#4E8259"/><path d="M2 44 A42 42 0 0 1 44 2 L44 44 Z" fill="#4E7D5A"/><circle cx="23" cy="23" r="8" fill="#C7D9C4"/></g></svg>
               <div class="meta"><span class="nome">2º turno</span><span class="n" id="e-t2">5</span></div>
             </div>
             <ul class="estagio-lista">
@@ -810,7 +806,7 @@
 
           <section class="estagio" aria-labelledby="e-sanc">
             <div class="estagio-cab">
-              <svg class="estagio-azulejo" viewBox="0 0 46 46" aria-hidden="true"><clipPath id="ea4"><rect x="2" y="2" width="42" height="42" rx="8"/></clipPath><g clip-path="url(#ea4)"><rect x="2" y="2" width="42" height="42" fill="#E8B23A"/><path d="M2 2 A42 42 0 0 1 44 44 L2 44 Z" fill="#C8922A"/><circle cx="23" cy="23" r="8" fill="#F1ECDD"/></g></svg>
+              <svg class="estagio-azulejo" viewBox="0 0 46 46" aria-hidden="true"><clipPath id="ea4"><rect x="2" y="2" width="42" height="42" rx="8"/></clipPath><g clip-path="url(#ea4)"><rect x="2" y="2" width="42" height="42" fill="#CFA65C"/><path d="M2 2 A42 42 0 0 1 44 44 L2 44 Z" fill="#C8922A"/><circle cx="23" cy="23" r="8" fill="#C7D9C4"/></g></svg>
               <div class="meta"><span class="nome">Sanção</span><span class="n" id="e-sanc">3</span></div>
             </div>
             <ul class="estagio-lista">
@@ -834,11 +830,11 @@
             <span class="seg-sanc" style="width:6.5%"></span>
           </div>
           <div class="dist-legenda">
-            <span><i style="background:#0C5340" aria-hidden="true"></i>Protocolo · 12</span>
-            <span><i style="background:#1E5FA8" aria-hidden="true"></i>Comissões · 18</span>
-            <span><i style="background:#D9542B" aria-hidden="true"></i>1º turno · 9</span>
-            <span><i style="background:#16785C" aria-hidden="true"></i>2º turno · 5</span>
-            <span><i style="background:#E8B23A" aria-hidden="true"></i>Sanção · 3</span>
+            <span><i style="background:#2C5638" aria-hidden="true"></i>Protocolo · 12</span>
+            <span><i style="background:#3F6E92" aria-hidden="true"></i>Comissões · 18</span>
+            <span><i style="background:#C0693F" aria-hidden="true"></i>1º turno · 9</span>
+            <span><i style="background:#4E8259" aria-hidden="true"></i>2º turno · 5</span>
+            <span><i style="background:#CFA65C" aria-hidden="true"></i>Sanção · 3</span>
           </div>
         </div>
       </div>

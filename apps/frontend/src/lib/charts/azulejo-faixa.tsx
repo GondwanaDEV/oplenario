@@ -59,7 +59,9 @@ export function AzulejoFaixa({
           </g>
         );
       })}
-      <g fontFamily="IBM Plex Mono, monospace" fontSize="12">
+      {/* a familia vem do token, nao cravada: a troca de tipografia de 22/09/2026 passou
+          por aqui sem ser vista porque este valor estava fora do CSS. */}
+      <g fontFamily="var(--mono)" fontSize="12">
         {estagios.map((estagio, i) => (
           <text
             key={estagio.rotulo}

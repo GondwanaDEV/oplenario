@@ -14,9 +14,9 @@ const PALETA_AVATAR = [
   "var(--cobalto)",
   "var(--telha)",
   "var(--jade-claro)",
-  "#7A4FA0",
+  "#6F5C8A",
   "var(--cobalto-fundo)",
-  "#9C6B1E",
+  "#8A7038",
 ] as const;
 
 export type Avatar = { iniciais: string; cor: string };

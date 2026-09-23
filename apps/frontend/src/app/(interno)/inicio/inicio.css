@@ -46,5 +46,5 @@
 }
 .atalho b { font-size: var(--t-14); font-weight: 600; }
 .atalho span { font-size: var(--t-13); color: var(--texto-2); }
-.atalho:hover { border-color: var(--texto-2); background: var(--surface-2); }
+.atalho:hover { border-color: var(--texto-2); background: var(--realce); }
 .atalho:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }

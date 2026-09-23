@@ -6,7 +6,7 @@
 <title>O Plenário — Editor de proposição · copiloto legislativo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="../sistema/tokens.css" />
 <link rel="stylesheet" href="../sistema/chassi.css" />
 <style>
@@ -43,8 +43,8 @@
   .ficha-regime-wrap { display: flex; align-items: center; gap: 0.5rem; }
   .ficha-regime-wrap .troca { font-family: var(--corpo); font-size: var(--t-12); font-weight: 600; color: var(--acento-texto); background: none; border: none; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; padding: 0; }
   .ficha-nota { flex-basis: 100%; font-size: var(--t-12); color: var(--texto-2); margin: 0.2rem 0 0; display: flex; align-items: flex-start; gap: 0.4rem; line-height: 1.4; }
-  .ficha-nota svg { flex: 0 0 auto; color: var(--cobalto); margin-top: 1px; }
-  [data-tema="escuro"] .ficha-nota svg { color: var(--foco); }
+  .ficha-nota svg { flex: 0 0 auto; color: var(--cobalto-texto); margin-top: 1px; }
+  [data-tema="escuro"] .ficha-nota svg { color: var(--cobalto-texto); }
   .doc-meta { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; justify-content: flex-end; }
 
   .chip { display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.28rem 0.7rem; border: 1px solid transparent; white-space: nowrap; }
@@ -81,7 +81,7 @@
 
   /* PINO de IA na margem — a assinatura (ancora texto ↔ copiloto) */
   .pino { position: absolute; left: -1.7rem; top: 0.1rem; width: 1.25rem; height: 1.25rem; border-radius: 50%; display: grid; place-items: center; font-family: var(--mono); font-size: 0.62rem; font-weight: 600; cursor: pointer; border: 1.5px solid; background: var(--papel); }
-  .pino-ok    { color: #15634A; border-color: #2C8A66; }
+  .pino-ok    { color: #234429; border-color: #6B9B72; }
   .pino-aviso { color: #8A5A00; border-color: var(--amarelo-traco); }
   .pino:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
   @media (max-width: 1100px) { .pino { left: auto; right: 0.2rem; } .artigo { padding-right: 1.8rem; } }
@@ -93,7 +93,7 @@
     border-top: 3px solid var(--cobalto); border-radius: var(--raio);
     box-shadow: var(--sombra); padding: 1rem 1.1rem;
   }
-  [data-tema="escuro"] .cop-cabe { border-top-color: var(--foco); }
+  [data-tema="escuro"] .cop-cabe { border-top-color: var(--cobalto-texto); }
   .cop-cabe .marca-ia { display: flex; align-items: center; gap: 0.55rem; }
   .cop-cabe .marca-ia .glifo { width: 30px; height: 30px; border-radius: 8px; flex: 0 0 auto; display: grid; place-items: center; color: #fff; background: var(--cobalto); }
   [data-tema="escuro"] .cop-cabe .marca-ia .glifo { background: var(--cobalto-fundo); }
@@ -109,8 +109,8 @@
   .checks { list-style: none; margin: 0; padding: 0; }
   .checks li { display: grid; grid-template-columns: 1.4rem 1fr; gap: 0.6rem; padding: 0.7rem 1.1rem; border-top: 1px solid var(--linha); align-items: start; }
   .checks li .ic { width: 1.4rem; height: 1.4rem; border-radius: 50%; display: grid; place-items: center; flex: 0 0 auto; margin-top: 1px; }
-  .checks .c-ok .ic { color: #15634A; background: color-mix(in srgb, #2C8A66 18%, transparent); }
-  [data-tema="escuro"] .checks .c-ok .ic { color: #58C99E; }
+  .checks .c-ok .ic { color: #234429; background: color-mix(in srgb, #6B9B72 18%, transparent); }
+  [data-tema="escuro"] .checks .c-ok .ic { color: #A6BFA2; }
   .checks .c-aviso .ic { color: var(--aviso-texto); background: color-mix(in srgb, var(--amarelo) 22%, transparent); }
   .checks li .txt b { font-size: var(--t-13); color: var(--texto); font-weight: 600; display: block; }
   .checks li .txt p { font-size: var(--t-12); color: var(--texto-2); margin: 0.2rem 0 0; line-height: 1.45; }
@@ -119,9 +119,9 @@
 
   /* sugestão ativa da IA — camada de confiança (receita promovida) */
   .ia-sugestao { border: 1px solid var(--linha); border-left: 3px solid var(--cobalto); border-radius: var(--raio); background: var(--surface); box-shadow: var(--sombra); padding: 1rem 1.1rem; }
-  [data-tema="escuro"] .ia-sugestao { border-left-color: var(--foco); }
-  .ia-sugestao .selo { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; text-transform: uppercase; color: var(--cobalto); }
-  [data-tema="escuro"] .ia-sugestao .selo { color: var(--foco); }
+  [data-tema="escuro"] .ia-sugestao { border-left-color: var(--cobalto-texto); }
+  .ia-sugestao .selo { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; text-transform: uppercase; color: var(--cobalto-texto); }
+  [data-tema="escuro"] .ia-sugestao .selo { color: var(--cobalto-texto); }
   .ia-sugestao .alvo { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin: 0.5rem 0 0; }
   .ia-sugestao .proposta { margin: 0.5rem 0 0.85rem; color: var(--texto); font-size: var(--t-13); line-height: 1.55; padding: 0.6rem 0.75rem; background: var(--surface-2); border-radius: var(--raio-sm); border: 1px solid var(--linha); }
   .ia-sugestao .acoes { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
@@ -133,8 +133,8 @@
   .relacionadas h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.65rem; }
   .relacionadas ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.55rem; }
   .relacionadas li { font-size: var(--t-13); color: var(--texto); display: flex; gap: 0.55rem; align-items: flex-start; line-height: 1.4; }
-  .relacionadas li svg { color: var(--cobalto); flex: 0 0 auto; margin-top: 3px; }
-  [data-tema="escuro"] .relacionadas li svg { color: var(--foco); }
+  .relacionadas li svg { color: var(--cobalto-texto); flex: 0 0 auto; margin-top: 3px; }
+  [data-tema="escuro"] .relacionadas li svg { color: var(--cobalto-texto); }
   .relacionadas li .ref { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); display: block; }
   .relacionadas .ressalva { font-size: var(--t-12); color: var(--texto-2); margin: 0.75rem 0 0; border-top: 1px dashed var(--linha); padding-top: 0.6rem; }
 
@@ -143,10 +143,10 @@
   .ferr { display: inline-flex; align-items: center; gap: 0.35rem; font-family: var(--corpo); font-size: var(--t-13); font-weight: 600; color: var(--texto-2); background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.4rem 0.7rem; min-height: 38px; cursor: pointer; }
   .ferr:hover { color: var(--texto); border-color: var(--texto-2); }
   .ferr svg { color: var(--marca); flex: 0 0 auto; }
-  .ferr-ia { color: var(--cobalto); border-color: color-mix(in srgb, var(--cobalto) 38%, transparent); background: color-mix(in srgb, var(--cobalto) 8%, var(--surface)); }
-  .ferr-ia svg { color: var(--cobalto); }
-  [data-tema="escuro"] .ferr-ia { color: var(--foco); border-color: color-mix(in srgb, var(--foco) 40%, transparent); }
-  [data-tema="escuro"] .ferr-ia svg { color: var(--foco); }
+  .ferr-ia { color: var(--cobalto-texto); border-color: color-mix(in srgb, var(--cobalto) 38%, transparent); background: color-mix(in srgb, var(--cobalto) 8%, var(--surface)); }
+  .ferr-ia svg { color: var(--cobalto-texto); }
+  [data-tema="escuro"] .ferr-ia { color: var(--cobalto-texto); border-color: color-mix(in srgb, var(--foco) 40%, transparent); }
+  [data-tema="escuro"] .ferr-ia svg { color: var(--cobalto-texto); }
   .ferr-sep { width: 1px; height: 24px; background: var(--linha); margin: 0 0.2rem; }
 
   /* ---------------- R-IA-1: estado degradado do copiloto ----------------
@@ -166,8 +166,8 @@
   .off-contrato h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.7rem; }
   .off-contrato ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
   .off-contrato li { display: grid; grid-template-columns: 1.3rem 1fr; gap: 0.55rem; font-size: var(--t-13); color: var(--texto); line-height: 1.45; align-items: start; }
-  .off-contrato li svg { color: #15634A; flex: 0 0 auto; margin-top: 2px; }
-  [data-tema="escuro"] .off-contrato li svg { color: #58C99E; }
+  .off-contrato li svg { color: #234429; flex: 0 0 auto; margin-top: 2px; }
+  [data-tema="escuro"] .off-contrato li svg { color: #A6BFA2; }
   .off-contrato li b { font-weight: 600; }
   .off-nota { font-size: var(--t-12); color: var(--texto-2); margin: 0.75rem 0 0; border-top: 1px dashed var(--linha); padding-top: 0.6rem; line-height: 1.45; }
 
@@ -196,7 +196,7 @@
 <header class="topo">
   <div class="envelope topo-grade">
     <div class="marca">
-      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#3A6A48"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#C0693F"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#3F6E92"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#CFA65C"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#4E8259"/></svg>
       <div>
         <p class="marca-nome">O Plenário</p>
         <p class="marca-orgao">Câmara Municipal de Fortaleza</p>

@@ -21,52 +21,63 @@ Três públicos, uma língua: **servidor** (eficiência), **vereador** (dignidad
 
 | Token | Hex | Papel |
 |---|---|---|
-| `--jade` | `#0C5340` | Primário — verde sério (NÃO bandeira). Ações, links, cabeçalhos. |
-| `--jade-fundo` | `#0A4334` | Blocos sólidos / hover do primário. |
-| `--jade-claro` | `#16785C` | Realce sobre areia. |
-| `--telha` | `#D9542B` | **Acento** coral/telha — usado com ousadia em fills, faixas, azulejo. |
-| `--telha-fundo` | `#B9421F` | Telha escurecida p/ **texto** sobre areia (passa AA). |
-| `--cobalto` | `#1E5FA8` | Azul de azulejo — secundário **e anel de foco**. |
-| `--cobalto-fundo` | `#184E8A` | Cobalto sólido. |
-| `--amarelo` | `#E8B23A` | Amarelo Marajó — 4ª cor do azulejo, **escassa** (realce). |
-| `--bg` *(areia)* | `#F1ECDD` | Fundo claro — areia quente (luz tropical difusa). **Token semântico**: escurece no tema escuro. |
-| `--surface` | `#FBF8F0` | Superfície de cartão. |
-| `--linha` | `#E0D7BF` | Divisórias quentes. |
-| `--texto` *(tinta)* | `#19211C` | Texto principal (~13:1 sobre o fundo claro). |
-| `--texto-2` | `#4C574F` | Texto secundário (AA). |
+| `--verde-1` | `#E7F0E2` | Sálvia 1 — o campo (fundo claro). No escuro vira **tinta**. |
+| `--verde-2` | `#C7D9C4` | Sálvia 2 — divisórias no claro. |
+| `--verde-3` | `#A6BFA2` | Sálvia 3 — texto secundário no escuro. |
+| `--verde-4` | `#7A9B7A` | Sálvia 4 — a mais escura da paleta; ação no escuro. |
+| `--creme` | `#FFF7EA` | Creme — superfície de cartão no claro, e o papel. |
+| `--jade` | `#2F5D3F` | Primário — verde da marca, re-afinado para a família da sálvia. |
+| `--jade-fundo` | `#234A31` | Blocos sólidos / hover do primário / palco. |
+| `--jade-claro` | `#7A9B7A` | Realce. |
+| `--telha` | `#C0693F` | **Acento** coral/telha — fills, faixas, azulejo. |
+| `--telha-fundo` | `#A85334` | Telha escurecida p/ fills sólidos. |
+| `--cobalto` | `#3F6E92` | Azul de azulejo — secundário **e anel de foco**. |
+| `--cobalto-fundo` | `#355D7D` | Cobalto sólido. |
+| `--amarelo` | `#CFA65C` | Amarelo Marajó — 4ª cor do azulejo, **escassa** (realce). |
+| `--bg` | `#E7F0E2` | Fundo claro — o campo de sálvia. **Semântico**: inverte no escuro. |
+| `--surface` | `#FFF7EA` | Superfície de cartão — creme. |
+| `--linha` | `#C7D9C4` | Divisórias. |
+| `--texto` *(tinta)* | `#16231A` | Texto principal (13.93:1 sobre `--bg`). |
+| `--texto-2` | `#46584A` | Texto secundário (6.52:1 sobre `--bg`). |
 
-> **Nota:** a paleta-marca acima (`--jade`…`--amarelo`) é **fixa** (`:root` em `sistema/tokens.css`).
-> Os tokens de superfície/texto (`--bg`, `--surface`, `--linha`, `--texto`, `--texto-2`) são
-> **semânticos** e remapeados por `[data-tema]` — os valores na tabela são os do tema **claro**;
-> os do escuro estão na seção "Tema claro e escuro". Tokens AA-legíveis derivados: `--acento-texto`
-> (telha), `--telha-fundo`, `--aviso-texto` e `--amarelo-traco` (Marajó). **Fonte de verdade:
-> `sistema/tokens.css`.**
+> **Nota:** a paleta-marca (`--jade`…`--amarelo`) é **fixa** (`:root` em `sistema/tokens.css`).
+> **Telha, cobalto e amarelo permanecem de propósito**: não são decoração, carregam função (acento,
+> foco, aviso). Um sistema monocromático verde apagaria a distinção entre esses estados — foi a razão
+> de a troca de paleta cobrir superfícies + marca, e não os hues semânticos.
+> Os tokens de superfície/texto são **semânticos** e resolvem por tema; os valores na tabela são os do
+> **claro**. **Fonte de verdade: `sistema/tokens.css`.**
 
-**Disciplina de cor (load-bearing):** a telha cheia `#D9542B` é para **fills/azulejo/bordas**; para
-**texto** sobre areia use `--telha-fundo #B9421F` (a versão cheia falha AA em texto). Cor nunca é o
+**Disciplina de cor (load-bearing):** a telha cheia `#C0693F` é para **fills/azulejo/bordas**; para
+**texto** use `--acento-texto` (`#A33A19` no claro), medido AA sobre as superfícies novas. Cor nunca é o
 único sinal — sempre acompanha ícone/rótulo. Foco visível: anel cobalto 3px.
 
 ## Tema claro e escuro
 
-A plataforma tem **dois modos da mesma língua** (decisão Daouda Traore, 21/06): o **claro** é o concreto
-luminoso sob luz tropical; o **escuro — "a noite de Brasília"** — mantém a paleta de azulejo sobre
-um fundo jade-carvão, com jade/telha/cobalto/amarelo brilhando no escuro. Implementação por **tokens
-semânticos** (`--bg`, `--surface`, `--linha`, `--texto`, `--texto-2`, `--marca`, `--acao`,
-`--acento-texto`, `--foco`, `--palco-*`) remapeados por `[data-tema]`; respeita `prefers-color-scheme`
-e lembra a escolha (`localStorage`). A **paleta-marca do azulejo é fixa** — só superfícies e texto trocam.
+A plataforma tem **dois modos da mesma língua**: o **claro** é o campo de sálvia sob luz tropical, com
+papel creme; o **escuro** é a **mesma sálvia invertida** — os tons claros da paleta deixam de ser
+superfície e viram **tinta** sobre verde profundo. É o que permite uma paleta só servir os dois temas.
+
+**Mecânica (mudou em 22/09/2026):** cada token é declarado **uma vez** com `light-dark(claro, escuro)`;
+quem escolhe o lado é a propriedade `color-scheme` (`:root` = `light dark`, e `[data-tema]` sobrescreve).
+Antes havia um bloco `@media(prefers-color-scheme)` que duplicava o escuro à mão — e a paridade já tinha
+furado. Agora é impossível os temas divergirem por esquecimento.
+
+⚠️ **Precondição:** o LightningCSS reescreve `light-dark()` e só funciona se houver declaração
+`color-scheme`. Sem ela o token compila para lixo **e a build passa**. Travado por teste
+(`src/app/tokens.test.ts`).
 
 | Token | Claro | Escuro |
 |---|---|---|
-| `--bg` fundo | `#F1ECDD` areia | `#0E1A15` jade-carvão |
-| `--surface` cartão | `#FBF8F0` | `#16271F` |
-| `--linha` | `#E0D7BF` | `#2C4438` |
-| `--texto` | `#19211C` | `#ECE7D6` |
-| `--texto-2` | `#4C574F` | `#9FB0A4` |
-| `--marca` wordmark/dados | `#0C5340` | `#43BD93` |
-| `--acao` botão primário | `#0C5340` | `#18A074` |
-| `--acento-texto` telha | `#B9421F` | `#F0794B` |
-| `--foco` | `#1E5FA8` | `#6AA6DE` |
-| `--palco-bg` placar | `#0A4334` (ilha escura) | `#0B3A2B` (painel saturado) |
+| `--bg` fundo | `#E7F0E2` sálvia | `#111A13` verde profundo |
+| `--surface` cartão | `#FFF7EA` creme | `#1A251C` |
+| `--linha` | `#C7D9C4` | `#334536` |
+| `--texto` | `#16231A` | `#E7F0E2` |
+| `--texto-2` | `#46584A` | `#A6BFA2` |
+| `--marca` wordmark/dados | `#2F5D3F` | `#8FBE92` |
+| `--acao` botão primário | `#2F5D3F` | `#7A9B7A` |
+| `--acento-texto` telha | `#A33A19` | `#F0794B` |
+| `--foco` | `#1B5490` | `#7FB3E6` |
+| `--palco-bg` placar | `#234A31` (ilha escura) | `#1B3A28` (painel saturado) |
 
 Referência viva: **`telas/sessao-ao-vivo.html`** (toggle no header). Contraste AA+ verificado nos dois modos.
 

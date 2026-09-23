@@ -6,7 +6,7 @@
 <title>O Plenário — Expediente · Gerar documento</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="../sistema/tokens.css" />
 <link rel="stylesheet" href="../sistema/chassi.css" />
 <style>
@@ -36,8 +36,7 @@
     letter-spacing: 0.06em; text-transform: uppercase; color: var(--marca);
     padding: 0.32rem 0.7rem; border: 1px solid var(--linha); background: var(--surface); border-radius: 999px;
   }
-  .local svg { color: var(--jade-claro); }
-  [data-tema="escuro"] .local svg { color: var(--marca); }
+  .local svg { color: var(--marca); }
 
   .data-hoje { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); line-height: 1.25; text-align: right; }
   .data-hoje b { display: block; font-size: var(--t-16); font-weight: 600; color: var(--marca); letter-spacing: -0.01em; }
@@ -76,14 +75,16 @@
   /* ---- escolha de modelo ---- */
   .modelos { display: grid; grid-template-columns: 1fr 1fr; gap: 0.55rem; }
   .modelo {
-    display: flex; align-items: center; gap: 0.6rem; text-align: left; cursor: pointer;
+    /* block, nao flex: o rotulo e um no de texto solto seguido de <span> — em flex
+       viravam itens separados e o rotulo largo quebrava ao meio. */
+    display: block; text-align: left; cursor: pointer;
     font-family: var(--corpo); font-weight: 600; font-size: var(--t-13); color: var(--texto); line-height: 1.2;
     background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm);
     padding: 0.65rem 0.7rem; min-height: 48px;
     transition: border-color .12s ease, background-color .12s ease, transform .12s ease;
   }
-  .modelo:hover { border-color: var(--foco); transform: translateY(-1px); }
-  .modelo .ico { width: 30px; height: 30px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 8px; background: var(--bg); color: var(--jade-claro); }
+  .modelo:hover { border-color: var(--cobalto-texto); transform: translateY(-1px); }
+  .modelo .ico { width: 30px; height: 30px; display: inline-grid; vertical-align: -9px; margin-right: 0.6rem; place-items: center; border-radius: 8px; background: var(--bg); color: var(--jade-claro); }
   [data-tema="escuro"] .modelo .ico { color: var(--marca); }
   .modelo[aria-pressed="true"] { border-color: var(--acao); background: rgba(12,83,64,.06); box-shadow: inset 0 0 0 1px var(--acao); }
   [data-tema="escuro"] .modelo[aria-pressed="true"] { background: rgba(24,158,118,.1); }
@@ -112,12 +113,14 @@
   .escolhido .quem { line-height: 1.25; min-width: 0; flex: 1 1 auto; }
   .escolhido .quem b { font-weight: 600; font-size: var(--t-13); color: var(--texto); display: block; }
   .escolhido .quem span { font-size: var(--t-12); color: var(--texto-2); }
-  .escolhido .trocar { font-family: var(--mono); font-size: var(--t-12); color: var(--foco); background: none; border: 0; cursor: pointer; padding: 0.2rem; }
+  .escolhido .trocar { font-family: var(--mono); font-size: var(--t-12); color: var(--cobalto-texto); background: none; border: 0; cursor: pointer; padding: 0.2rem; }
 
   .tag-cadastro {
     display: inline-flex; align-items: center; gap: 0.3rem; vertical-align: middle;
     font-family: var(--mono); font-size: 0.6875rem; font-weight: 500; letter-spacing: .04em;
-    color: var(--merge); background: var(--merge-fundo); border: 1px solid rgba(217,84,43,.3);
+    /* tingido misturado com --surface, nao com transparent: no CAMPO (mais escuro que o
+     cartao) o fundo translucido puxava o chip para baixo e o rotulo caia de AA. */
+    color: var(--merge); background: color-mix(in srgb, var(--telha) 12%, var(--surface-solida)); border: 1px solid color-mix(in srgb, var(--telha) 32%, transparent);
     border-radius: 999px; padding: 0.05rem 0.45rem; margin-left: 0.45rem;
   }
   [data-tema="escuro"] .tag-cadastro { color: var(--acento-texto); }
@@ -128,7 +131,7 @@
   .chip-materia { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); font-weight: 600; color: var(--marca); background: rgba(12,83,64,.08); border: 1px solid rgba(12,83,64,.25); border-radius: 999px; padding: 0.3rem 0.6rem; }
   [data-tema="escuro"] .chip-materia { color: var(--marca); background: rgba(24,158,118,.12); border-color: rgba(67,189,147,.3); }
   .chip-materia .x { color: var(--texto-2); }
-  .ia-link { display: inline-flex; align-items: center; gap: 0.35rem; font-family: var(--mono); font-size: var(--t-12); color: var(--foco); background: none; border: 0; cursor: pointer; padding: 0.2rem 0; }
+  .ia-link { display: inline-flex; align-items: center; gap: 0.35rem; font-family: var(--mono); font-size: var(--t-12); color: var(--cobalto-texto); background: none; border: 0; cursor: pointer; padding: 0.2rem 0; }
 
   /* ---- bloco "preenchido pelo cadastro" ---- */
   .dominio { background: var(--surface); }
@@ -155,7 +158,7 @@
   .carimbo {
     position: absolute; top: clamp(1rem, 2.5vw, 1.8rem); right: clamp(1rem, 3vw, 2.4rem);
     transform: rotate(-3deg); text-align: center;
-    border: 2.5px solid var(--telha-fundo); color: var(--telha-fundo);
+    border: 2.5px solid var(--telha-fundo); color: var(--merge);   /* carimbo vive no PAPEL (claro nos dois temas): tinta fixa, nao tematizada */
     border-radius: 10px; padding: 0.4rem 0.7rem 0.35rem; background: rgba(217,84,43,.05);
   }
   .carimbo .titulo { font-family: var(--mono); font-size: 0.625rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; display: block; }
@@ -274,11 +277,11 @@
     <div class="envelope topo-grade">
       <div class="marca">
         <svg class="marca-simbolo" viewBox="0 0 40 40" role="img" aria-label="O Plenário">
-          <circle cx="20" cy="20" r="19" fill="#FBF8F0" stroke="#E0D7BF"/>
-          <path d="M7 27 A13 13 0 0 1 33 27" fill="none" stroke="#0C5340" stroke-width="2.4" stroke-linecap="round"/>
-          <path d="M10 27 A10 10 0 0 1 30 27" fill="none" stroke="#1E5FA8" stroke-width="2.4" stroke-linecap="round"/>
-          <path d="M13.5 27 A6.5 6.5 0 0 1 26.5 27" fill="none" stroke="#D9542B" stroke-width="2.4" stroke-linecap="round"/>
-          <rect x="18.4" y="9.5" width="3.2" height="6" rx="1.2" fill="#E8B23A"/>
+          <circle cx="20" cy="20" r="19" fill="#FFF7EA" stroke="#A6BFA2"/>
+          <path d="M7 27 A13 13 0 0 1 33 27" fill="none" stroke="#2C5638" stroke-width="2.4" stroke-linecap="round"/>
+          <path d="M10 27 A10 10 0 0 1 30 27" fill="none" stroke="#3F6E92" stroke-width="2.4" stroke-linecap="round"/>
+          <path d="M13.5 27 A6.5 6.5 0 0 1 26.5 27" fill="none" stroke="#C0693F" stroke-width="2.4" stroke-linecap="round"/>
+          <rect x="18.4" y="9.5" width="3.2" height="6" rx="1.2" fill="#CFA65C"/>
         </svg>
         <div>
           <p class="marca-nome">O&nbsp;Plenário</p>

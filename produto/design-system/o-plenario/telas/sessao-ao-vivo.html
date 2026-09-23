@@ -6,7 +6,7 @@
 <title>O Plenário — Sessão ao vivo · Mesa de condução</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="../sistema/tokens.css" />
 <link rel="stylesheet" href="../sistema/chassi.css" />
 <style>
@@ -99,7 +99,7 @@
   .voto-col .rotulo { display: flex; align-items: center; gap: 0.45rem; font-family: var(--mono); font-size: var(--t-13); text-transform: uppercase; letter-spacing: .06em; color: var(--palco-texto-2); margin: 0 0 0.35rem; }
   .voto-col .ponto { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
   .voto-col .n { font-family: var(--display); font-weight: 800; font-size: var(--t-40); line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; margin: 0; }
-  .voto-sim .n { color: #8FE3C6; }
+  .voto-sim .n { color: #D2E3CE; }
   .voto-nao .n { color: #F2A488; }
   .voto-abs .n { color: var(--amarelo); }
 
@@ -131,8 +131,8 @@
   .voto-pill-sim .g { background: var(--jade-claro); }
   .voto-pill-nao { color: var(--acento-texto); background: rgba(217,84,43,.12); border: 1px solid rgba(217,84,43,.3); }
   .voto-pill-nao .g { background: var(--telha); }
-  .voto-pill-abs { color: var(--cobalto); background: rgba(30,95,168,.12); border: 1px solid rgba(30,95,168,.3); }
-  [data-tema="escuro"] .voto-pill-abs { color: var(--foco); }
+  .voto-pill-abs { color: var(--cobalto-texto); background: color-mix(in srgb, var(--cobalto) 14%, var(--surface-solida)); border: 1px solid color-mix(in srgb, var(--cobalto) 32%, transparent); }
+  [data-tema="escuro"] .voto-pill-abs { color: var(--cobalto-texto); }
   /* MEDIDO 4.37 no escuro com --acento-texto sobre o tint de telha — clareia o texto (o fundo já é
      translúcido; mexer no fundo mudaria a família de chips inteira). */
   [data-tema="escuro"] .voto-pill-nao { color: #FA9877; }
@@ -209,9 +209,9 @@
 
   .incidentes { display: grid; grid-template-columns: 1fr 1fr; gap: 0.55rem; }
   .inc-btn { font-family: var(--corpo); font-weight: 500; font-size: var(--t-13); text-align: left; line-height: 1.25; background: var(--surface-2); color: var(--texto); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.6rem 0.7rem; cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 0.5rem; transition: border-color .12s ease, background-color .12s ease, transform .12s ease; }
-  .inc-btn:hover { border-color: var(--foco); transform: translateY(-1px); }
-  .inc-btn svg { flex: 0 0 auto; color: var(--cobalto); }
-  [data-tema="escuro"] .inc-btn svg { color: var(--foco); }
+  .inc-btn:hover { border-color: var(--cobalto-texto); transform: translateY(-1px); }
+  .inc-btn svg { flex: 0 0 auto; color: var(--cobalto-texto); }
+  [data-tema="escuro"] .inc-btn svg { color: var(--cobalto-texto); }
 
   /* ============== 5 · BARRA DE COMANDO DA MESA ============== */
 
@@ -254,11 +254,11 @@
     <div class="envelope topo-grade">
       <div class="marca">
         <svg class="marca-simbolo" viewBox="0 0 40 40" role="img" aria-label="O Plenário">
-          <circle cx="20" cy="20" r="19" fill="#FBF8F0" stroke="#E0D7BF"/>
-          <path d="M7 27 A13 13 0 0 1 33 27" fill="none" stroke="#0C5340" stroke-width="2.4" stroke-linecap="round"/>
-          <path d="M10 27 A10 10 0 0 1 30 27" fill="none" stroke="#1E5FA8" stroke-width="2.4" stroke-linecap="round"/>
-          <path d="M13.5 27 A6.5 6.5 0 0 1 26.5 27" fill="none" stroke="#D9542B" stroke-width="2.4" stroke-linecap="round"/>
-          <rect x="18.4" y="9.5" width="3.2" height="6" rx="1.2" fill="#E8B23A"/>
+          <circle cx="20" cy="20" r="19" fill="#FFF7EA" stroke="#A6BFA2"/>
+          <path d="M7 27 A13 13 0 0 1 33 27" fill="none" stroke="#2C5638" stroke-width="2.4" stroke-linecap="round"/>
+          <path d="M10 27 A10 10 0 0 1 30 27" fill="none" stroke="#3F6E92" stroke-width="2.4" stroke-linecap="round"/>
+          <path d="M13.5 27 A6.5 6.5 0 0 1 26.5 27" fill="none" stroke="#C0693F" stroke-width="2.4" stroke-linecap="round"/>
+          <rect x="18.4" y="9.5" width="3.2" height="6" rx="1.2" fill="#CFA65C"/>
         </svg>
         <div>
           <p class="marca-nome">O&nbsp;Plenário</p>
@@ -328,11 +328,11 @@
               <clipPath id="t3"><rect x="368" y="8" width="104" height="104" rx="10"/></clipPath>
               <clipPath id="t4"><rect x="488" y="8" width="104" height="104" rx="10"/></clipPath>
             </defs>
-            <g clip-path="url(#t0)"><rect x="8" y="8" width="104" height="104" fill="#0C5340"/><path d="M8 112 A104 104 0 0 1 112 8 L112 112 Z" fill="#16785C"/><circle cx="60" cy="60" r="20" fill="#F1ECDD"/></g>
-            <g clip-path="url(#t1)"><rect x="128" y="8" width="104" height="104" fill="#1E5FA8"/><path d="M128 8 A104 104 0 0 1 232 112 L128 112 Z" fill="#184E8A"/><circle cx="180" cy="60" r="20" fill="#F1ECDD"/></g>
-            <g clip-path="url(#t2)"><rect x="248" y="8" width="104" height="104" fill="#D9542B"/><path d="M352 8 A104 104 0 0 1 248 112 L248 8 Z" fill="#B9421F"/><circle cx="300" cy="60" r="20" fill="#F1ECDD"/></g>
-            <g clip-path="url(#t3)"><rect x="368" y="8" width="104" height="104" fill="#0A4334"/><path d="M368 60 A52 52 0 0 1 420 8 L420 60 Z" fill="#E8B23A"/><path d="M420 60 A52 52 0 0 1 472 112 L420 112 Z" fill="#E8B23A"/><circle cx="420" cy="60" r="11" fill="#F1ECDD"/></g>
-            <g clip-path="url(#t4)"><rect x="488" y="8" width="104" height="104" fill="#0A4334"/><path d="M488 8 A104 104 0 0 1 592 112" fill="none" stroke="#16785C" stroke-width="3" stroke-dasharray="6 7"/><circle cx="540" cy="60" r="20" fill="none" stroke="#16785C" stroke-width="3" stroke-dasharray="6 7"/></g>
+            <g clip-path="url(#t0)"><rect x="8" y="8" width="104" height="104" fill="#3A6A48"/><path d="M8 112 A104 104 0 0 1 112 8 L112 112 Z" fill="#4E8259"/><circle cx="60" cy="60" r="20" fill="#C7D9C4"/></g>
+            <g clip-path="url(#t1)"><rect x="128" y="8" width="104" height="104" fill="#3F6E92"/><path d="M128 8 A104 104 0 0 1 232 112 L128 112 Z" fill="#355D7D"/><circle cx="180" cy="60" r="20" fill="#C7D9C4"/></g>
+            <g clip-path="url(#t2)"><rect x="248" y="8" width="104" height="104" fill="#C0693F"/><path d="M352 8 A104 104 0 0 1 248 112 L248 8 Z" fill="#A85334"/><circle cx="300" cy="60" r="20" fill="#C7D9C4"/></g>
+            <g clip-path="url(#t3)"><rect x="368" y="8" width="104" height="104" fill="#4E7D5A"/><path d="M368 60 A52 52 0 0 1 420 8 L420 60 Z" fill="#CFA65C"/><path d="M420 60 A52 52 0 0 1 472 112 L420 112 Z" fill="#CFA65C"/><circle cx="420" cy="60" r="11" fill="#C7D9C4"/></g>
+            <g clip-path="url(#t4)"><rect x="488" y="8" width="104" height="104" fill="#4E7D5A"/><path d="M488 8 A104 104 0 0 1 592 112" fill="none" stroke="#4E8259" stroke-width="3" stroke-dasharray="6 7"/><circle cx="540" cy="60" r="20" fill="none" stroke="#4E8259" stroke-width="3" stroke-dasharray="6 7"/></g>
             <g font-family="IBM Plex Mono, monospace" font-size="12">
               <text x="60"  y="128" text-anchor="middle">Protocolo</text>
               <text x="180" y="128" text-anchor="middle">Comissões</text>
@@ -357,15 +357,15 @@
 
           <div class="placar">
             <div class="voto-col voto-sim">
-              <p class="rotulo"><span class="ponto" style="background:#16785C;"></span>Sim</p>
+              <p class="rotulo"><span class="ponto" style="background:#4E8259;"></span>Sim</p>
               <p class="n" aria-live="polite"><span class="v-maioria">18</span><span class="v-empate">15</span></p>
             </div>
             <div class="voto-col voto-nao">
-              <p class="rotulo"><span class="ponto" style="background:#D9542B;"></span>Não</p>
+              <p class="rotulo"><span class="ponto" style="background:#C0693F;"></span>Não</p>
               <p class="n" aria-live="polite"><span class="v-maioria">9</span><span class="v-empate">15</span></p>
             </div>
             <div class="voto-col voto-abs">
-              <p class="rotulo"><span class="ponto" style="background:#E8B23A;"></span>Abstenção</p>
+              <p class="rotulo"><span class="ponto" style="background:#CFA65C;"></span>Abstenção</p>
               <p class="n" aria-live="polite"><span class="v-maioria">2</span><span class="v-empate">1</span></p>
             </div>
           </div>

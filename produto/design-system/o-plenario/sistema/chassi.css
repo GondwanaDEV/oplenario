@@ -35,7 +35,13 @@ body {
 
 /* superfície PÚBLICA (portal do cidadão): mais ar, medida mais estreita */
 body.superficie-publica { --max: 1200px; line-height: 1.6; }
-body.superficie-publica a {
+/* :where() zera a especificidade do seletor de superficie, deixando esta regra em (0,0,1)
+   — a mais fraca possivel. Sem isso ela vencia .btn-primaria, .pular e .baixar por
+   especificidade (0,1,2 contra 0,1,0) e roubava a cor deles: dava texto 1:1 no link de
+   pular, 1.56:1 no botao primario do escuro e 1:1 no botao de baixar dos dados abertos.
+   Enumerar excecoes com :not() era remendo — QUALQUER ancora estilizada como botao caia
+   no mesmo buraco. Cor de link e' o padrao; quem tem classe propria manda. */
+:where(body.superficie-publica) a {
   color: var(--marca);
   text-decoration-color: color-mix(in srgb, var(--marca) 35%, transparent);
   text-underline-offset: 3px;
@@ -137,6 +143,12 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 
 /* fantasma — terciária, baixa ênfase */
 .btn-fantasma { background: transparent; color: var(--texto-2); border-color: transparent; }
+
+/* Controle DENTRO da ilha de papel. O papel e' claro nos dois temas, mas --texto e
+   --texto-2 sao tematizados e clareiam no escuro: o rotulo do botao caia para 1.08:1
+   sobre o papel. Tinta de papel e' fixa, entao o botao dentro dela tambem tem de ser. */
+.papel .btn-contorno, .papel .btn-fantasma { color: var(--papel-texto); border-color: var(--papel-linha); }
+.papel .btn-contorno:hover, .papel .btn-fantasma:hover { background: var(--papel-2); color: var(--papel-texto); }
 .btn-fantasma:hover { background: var(--surface-2); color: var(--texto); }
 
 /* modificador compacto (mantém alvo de toque ≥44px) */
@@ -168,9 +180,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 }
 .chip svg { flex: 0 0 auto; }
 .chip-ok     { color: var(--marca);        border-color: color-mix(in srgb, var(--marca) 45%, transparent);        background: color-mix(in srgb, var(--marca) 10%, transparent); }
-.chip-alerta { color: var(--aviso-texto);  border-color: color-mix(in srgb, var(--amarelo) 65%, transparent);      background: color-mix(in srgb, var(--amarelo) 18%, var(--surface)); }
-.chip-risco  { color: var(--acento-texto); border-color: color-mix(in srgb, var(--acento-texto) 45%, transparent); background: color-mix(in srgb, var(--telha) 9%, var(--surface)); }
-.chip-info   { color: var(--cobalto);      border-color: color-mix(in srgb, var(--cobalto) 38%, transparent);      background: color-mix(in srgb, var(--cobalto) 9%, var(--surface)); }
+.chip-alerta { color: var(--aviso-texto);  border-color: color-mix(in srgb, var(--amarelo) 65%, transparent);      background: color-mix(in srgb, var(--amarelo) 18%, var(--surface-solida)); }
+.chip-risco  { color: var(--acento-texto); border-color: color-mix(in srgb, var(--acento-texto) 45%, transparent); background: color-mix(in srgb, var(--telha) 9%, var(--surface-solida)); }
+.chip-info   { color: var(--cobalto-texto);      border-color: color-mix(in srgb, var(--cobalto) 38%, transparent);      background: color-mix(in srgb, var(--cobalto) 9%, var(--surface-solida)); }
 [data-tema="escuro"] .chip-info { color: var(--foco); border-color: color-mix(in srgb, var(--foco) 42%, transparent); }
 .chip-neutro { color: var(--texto-2); background: var(--surface-2); border-color: var(--linha); }
 /* ênfase forte da gravidade crítica — o ÚNICO chip preenchido. Branco
@@ -201,7 +213,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 
 /* ícone/ator opcional */
 .sinal-ic { width: 44px; height: 44px; border-radius: 11px; flex: 0 0 auto; display: grid; place-items: center; color: var(--marca); background: color-mix(in srgb, var(--marca) 10%, var(--surface-2)); }
-.sinal-ic.ia { color: var(--cobalto); background: color-mix(in srgb, var(--cobalto) 10%, var(--surface-2)); }
+.sinal-ic.ia { color: var(--cobalto-texto); background: color-mix(in srgb, var(--cobalto) 10%, var(--surface-2)); }
 [data-tema="escuro"] .sinal-ic.ia { color: var(--foco); }
 .sinal-ic.atencao { color: var(--aviso-texto);  background: color-mix(in srgb, var(--amarelo) 16%, var(--surface-2)); }
 .sinal-ic.critico { color: var(--acento-texto); background: color-mix(in srgb, var(--telha) 12%, var(--surface-2)); }
@@ -306,7 +318,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .passos li { display: flex; align-items: center; gap: 0.5rem; font-size: var(--t-13); color: var(--texto-2); }
 .passos li .bola { width: 26px; height: 26px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--mono); font-size: var(--t-12); font-weight: 600; background: var(--surface-2); border: 1px solid var(--linha); color: var(--texto-2); }
 .passos li.feito .bola { background: var(--jade); border-color: var(--jade); color: #fff; }
-.passos li.atual .bola { background: var(--cobalto); border-color: var(--cobalto); color: #fff; }
+.passos li.atual .bola { background: var(--cobalto); border-color: var(--cobalto-texto); color: #fff; }
 .passos li.atual { color: var(--texto); font-weight: 600; }
 .passos .traco { width: 28px; height: 2px; background: var(--linha); margin: 0 0.5rem; }
 .passos .traco.ok { background: color-mix(in srgb, var(--jade) 50%, var(--linha)); }
