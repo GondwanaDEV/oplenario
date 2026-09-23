@@ -142,6 +142,16 @@ export interface ListaModelosOut {
   itens: DocumentoModeloOut[];
 }
 
+export interface DocumentoModeloDetalheOut {
+  id: string;
+  chave: string;
+  nome: string;
+  tipoDocumento: string;
+  corpoTemplate: string;
+  ativo: boolean;
+  lockVersion: number;
+}
+
 export interface ProtocoloGeralOut {
   id: string;
   numero: number;

@@ -28,3 +28,16 @@
       (throw (ex-info "lista de modelos de documento viola o contrato ListaModelosOut (bug de servidor)"
                       {:campos (keys (me/humanize (m/explain wire/ListaModelosOut out)))})))
     out))
+
+(defn modelo->wire-detalhe
+  "Uma linha de modelo (dominio, kebab) -> DocumentoModeloDetalheOut (validado) — GET/POST/PATCH
+  /legislativo/documento-modelos(/:id), a tela de gestao (aba 'Modelos'). Ao contrario de `modelo->wire`,
+  inclui `corpo-template`/`ativo`/`lock-version` (o cliente precisa deles pra editar e pro CAS do proximo
+  PATCH)."
+  [{:keys [id chave nome tipo-documento corpo-template ativo lock-version]}]
+  (let [out {:id (->str id) :chave chave :nome nome :tipo-documento tipo-documento
+             :corpo-template corpo-template :ativo ativo :lock-version lock-version}]
+    (when-not (m/validate wire/DocumentoModeloDetalheOut out)
+      (throw (ex-info "detalhe de modelo de documento viola o contrato DocumentoModeloDetalheOut (bug de servidor)"
+                      {:campos (keys (me/humanize (m/explain wire/DocumentoModeloDetalheOut out)))})))
+    out))
