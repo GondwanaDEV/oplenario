@@ -48,7 +48,7 @@
   /* sininho de notificações (11.6) */
   .sino { position: relative; display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 999px; background: var(--surface); border: 1px solid var(--linha); color: var(--texto-2); cursor: pointer; transition: border-color .12s ease, color .12s ease; }
   .sino:hover { border-color: var(--cobalto-texto); color: var(--texto); }
-  .sino .badge { position: absolute; top: -3px; right: -3px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 999px; background: var(--telha-fundo); color: #fff; font-family: var(--mono); font-size: 0.66rem; font-weight: 600; display: grid; place-items: center; border: 2px solid var(--topo-bg); }
+  .sino .badge { position: absolute; top: -3px; right: -3px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 999px; background: var(--telha-fundo); color: #fff; font-family: var(--mono); font-size: var(--t-11); font-weight: 600; display: grid; place-items: center; border: 2px solid var(--topo-bg); }
 
   @media (min-width: 600px) { .tema-btn .tema-rotulo { display: inline; } }
 
@@ -110,7 +110,7 @@
   .prazo-anel .arco { fill: none; stroke: var(--marca); stroke-width: 8; stroke-linecap: round; }
   .prazo-anel .centro { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
   .prazo-anel .dias { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--marca); line-height: 1; font-variant-numeric: tabular-nums; }
-  .prazo-anel .un { font-family: var(--mono); font-size: 0.72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--texto-2); }
+  .prazo-anel .un { font-family: var(--mono); font-size: var(--t-11); letter-spacing: .06em; text-transform: uppercase; color: var(--texto-2); }
   /* O hero deixou de ser ilha escura: as 4 sobrescritas de anel que existiam so'
      para isso sairam — a regra-base ja' e' a certa sobre superficie clara. */
   .remessa-quem b { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); display: block; line-height: 1.25; }
@@ -144,7 +144,7 @@
   .ancora { font-size: var(--t-13); color: var(--texto-2); margin: 0 0 0.9rem; }
   .ancora b { font-family: var(--display); font-weight: 700; color: var(--texto); }
   .ancora .urg { color: var(--acento-texto); font-weight: 600; }
-  .nota-gap { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin: 0.9rem 0 0; display: flex; align-items: flex-start; gap: 0.45rem; line-height: 1.4; }
+  .nota-gap { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin: 0.9rem 0 0; display: flex; align-items: flex-start; gap: 0.45rem; line-height: 1.4; }
   .nota-gap svg { color: var(--acento-texto); flex: 0 0 auto; margin-top: 2px; }
 
   /* ---- PRAZOS "o que vence" (11.1) — trilho por urgência ---- */
@@ -162,7 +162,7 @@
   .prz-noprazo .anel-c .arco { stroke: var(--marca); }
   .anel-c .centro { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; line-height: 1; }
   .anel-c .d { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--texto); font-variant-numeric: tabular-nums; }
-  .anel-c .u { font-family: var(--mono); font-size: 0.62rem; letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); }
+  .anel-c .u { font-family: var(--mono); font-size: var(--t-11); letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); }
   .prazo-obj b { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); display: block; line-height: 1.3; }
   .prazo-obj .base { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin-top: 2px; display: inline-flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
   .prazo-obj .quando { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
@@ -180,7 +180,7 @@
   .f-semana { border-left-color: var(--amarelo); }
   .f-livre { border-left-color: var(--linha); }
   .fila-txt { min-width: 0; }
-  .fila-txt .tag-p { display: inline-flex; align-items: center; gap: 0.35rem; font-family: var(--mono); font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; padding: 0.18rem 0.5rem; border-radius: 999px; margin-bottom: 0.3rem; }
+  .fila-txt .tag-p { display: inline-flex; align-items: center; gap: 0.35rem; font-family: var(--mono); font-size: var(--t-11); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; padding: 0.18rem 0.5rem; border-radius: 999px; margin-bottom: 0.3rem; }
   .f-hoje .tag-p { color: #fff; background: var(--telha-fundo); }
   .f-semana .tag-p { color: var(--texto); background: rgba(232,178,58,.22); border: 1px solid rgba(232,178,58,.5); }
   .f-livre .tag-p { color: var(--texto-2); background: var(--bg); border: 1px solid var(--linha); }
@@ -226,9 +226,9 @@
   .estagio-cab .n { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: var(--texto); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
   .estagio-lista { list-style: none; margin: 0.1rem 0 0; padding: 0.6rem 0 0; border-top: 1px solid var(--linha); display: grid; gap: 0.5rem; }
   .estagio-lista li { line-height: 1.25; }
-  .estagio-lista .ref { font-family: var(--mono); font-size: 0.7rem; color: var(--texto-2); }
+  .estagio-lista .ref { font-family: var(--mono); font-size: var(--t-11); color: var(--texto-2); }
   .estagio-lista .tit { font-size: var(--t-12); color: var(--texto); display: block; }
-  .parado { display: inline-flex; align-items: center; gap: 0.3rem; font-family: var(--mono); font-size: 0.68rem; color: var(--acento-texto); margin-top: 2px; }
+  .parado { display: inline-flex; align-items: center; gap: 0.3rem; font-family: var(--mono); font-size: var(--t-11); color: var(--acento-texto); margin-top: 2px; }
   .parado svg { flex: 0 0 auto; }
 
   .distribuicao { margin: 1.2rem 0 0; }
@@ -257,7 +257,7 @@
   [data-tema="escuro"] .org-nota i { background: var(--marca); }
 
   /* ============== 4 · BARRA DE COMANDO DA MESA ============== */
-  .dica-mesa { width: 100%; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); padding-bottom: 0.55rem; display: flex; align-items: center; gap: 0.45rem; }
+  .dica-mesa { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; width: 100%; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); padding-bottom: 0.55rem; display: flex; align-items: center; gap: 0.45rem; }
   .dica-mesa svg { color: var(--acento-texto); flex: 0 0 auto; }
 
   /* ============== camada de atenção: estado FALHA condicional + lente do jurídico ============== */

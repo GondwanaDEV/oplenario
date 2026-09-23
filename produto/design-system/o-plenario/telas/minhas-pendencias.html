@@ -76,10 +76,10 @@
   .anel .trilho { stroke: var(--linha); }
   .anel .arco { stroke: var(--amarelo-traco); stroke-linecap: round; }
   .anel .val { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--mono); font-weight: 600; font-size: var(--t-13); color: var(--texto); }
-  .anel .val small { font-size: 0.55rem; color: var(--texto-2); display: block; line-height: 1; margin-top: 1px; }
+  .anel .val small { font-size: var(--t-11); color: var(--texto-2); display: block; line-height: 1; margin-top: 1px; }
 
-  .nota-gap { font-size: var(--t-12); color: var(--texto-2); margin: 0.5rem 0 0; display: inline-flex; align-items: center; gap: 0.4rem; }
-  .nota-gap .tag { font-family: var(--mono); font-size: 0.62rem; letter-spacing: .04em; text-transform: uppercase; color: var(--aviso-texto); border: 1px solid color-mix(in srgb, var(--amarelo-traco) 45%, transparent); border-radius: 4px; padding: 0.05rem 0.3rem; }
+  .nota-gap { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; font-size: var(--t-12); color: var(--texto-2); margin: 0.5rem 0 0; display: inline-flex; align-items: center; gap: 0.4rem; }
+  .nota-gap .tag { font-family: var(--mono); font-size: var(--t-11); letter-spacing: .04em; text-transform: uppercase; color: var(--aviso-texto); border: 1px solid color-mix(in srgb, var(--amarelo-traco) 45%, transparent); border-radius: 4px; padding: 0.05rem 0.3rem; }
 
   .vazio-bom { text-align: center; color: var(--texto-2); font-size: var(--t-13); padding: 1.5rem; border: 1px dashed var(--linha); border-radius: var(--raio); }
 
@@ -100,7 +100,7 @@
   .item.g-legal { border-left: 3px solid var(--amarelo-traco); }
   .item.g-reg { border-left: 3px solid var(--telha); }
   .item.g-adm { border-left: 3px solid var(--marca); }
-  .gchip { display: inline-flex; align-items: center; gap: 0.32rem; font-family: var(--mono); font-size: 0.64rem; letter-spacing: .06em; text-transform: uppercase; font-weight: 600; border-radius: 4px; padding: 0.12rem 0.42rem; border: 1px solid transparent; }
+  .gchip { display: inline-flex; align-items: center; gap: 0.32rem; font-family: var(--mono); font-size: var(--t-11); letter-spacing: .06em; text-transform: uppercase; font-weight: 600; border-radius: 4px; padding: 0.12rem 0.42rem; border: 1px solid transparent; }
   .gchip::before { content: ""; width: 6px; height: 6px; border-radius: 2px; flex: 0 0 auto; }
   .gchip-legal { color: var(--aviso-texto); border-color: color-mix(in srgb, var(--amarelo-traco) 50%, transparent); }
   .gchip-legal::before { background: var(--amarelo-traco); }
@@ -110,7 +110,7 @@
   .gchip-adm::before { background: var(--marca); }
 
   /* razão de "sem prazo" — deixa de ser depósito */
-  .secao .sub { font-family: var(--corpo); font-size: var(--t-13); font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--texto-2); margin: 0.15rem 0 0.7rem; }
+  .secao .sub { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; font-family: var(--corpo); font-size: var(--t-13); font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--texto-2); margin: 0.15rem 0 0.7rem; }
 
   @media (max-width: 720px) {
     .item { grid-template-columns: 40px 1fr; }

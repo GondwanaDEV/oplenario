@@ -87,7 +87,12 @@
   --corpo:   'Inter', system-ui, sans-serif;
   --mono:    'JetBrains Mono', ui-monospace, monospace;
 
-  /* escala tipográfica: 12 · 13 · 16 · 21 · 28 · 40 · 56 */
+  /* escala tipografica: 11 · 12 · 13 · 16 · 21 · 28 · 40 · 56
+     O 11 entrou em 23/09/2026. A escala dizia comecar em 12, mas a auditoria achou ~66
+     declaracoes entre 9.6px e 11.2px — rotulo de mono, carimbo, etiqueta — cada uma com
+     valor proprio. Fingir um piso que o sistema nao respeitava so' empurrava a decisao
+     para fora da escala; declarar o degrau devolve o controle. Nada desce mais de 11px. */
+  --t-11: 0.6875rem;
   --t-12: 0.75rem;
   --t-13: 0.8125rem;
   --t-16: 1rem;

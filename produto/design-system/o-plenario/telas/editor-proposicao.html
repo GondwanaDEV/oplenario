@@ -28,7 +28,7 @@
   /* ---------------- sub-cabeçalho do documento ---------------- */
   .doc-cab { padding: 1.4rem 0 0; display: grid; grid-template-columns: 1fr auto; gap: 1rem 1.4rem; align-items: end; }
   .doc-cab .titulo h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.25rem 0 0; line-height: 1.1; }
-  .doc-cab .titulo .sub { font-size: var(--t-13); color: var(--texto-2); margin: 0.45rem 0 0; }
+  .doc-cab .titulo .sub { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; font-size: var(--t-13); color: var(--texto-2); margin: 0.45rem 0 0; }
   .doc-cab .titulo .sub b { color: var(--texto); font-weight: 600; }
 
   /* ficha técnica da proposição: espécie + tema + regime */
@@ -42,7 +42,7 @@
   .regime-urgencia { color: #fff; background: var(--telha-fundo); border: 1px solid var(--telha-fundo); }
   .ficha-regime-wrap { display: flex; align-items: center; gap: 0.5rem; }
   .ficha-regime-wrap .troca { font-family: var(--corpo); font-size: var(--t-12); font-weight: 600; color: var(--acento-texto); background: none; border: none; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; padding: 0; }
-  .ficha-nota { flex-basis: 100%; font-size: var(--t-12); color: var(--texto-2); margin: 0.2rem 0 0; display: flex; align-items: flex-start; gap: 0.4rem; line-height: 1.4; }
+  .ficha-nota { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch;  flex-basis: 100%; font-size: var(--t-12); color: var(--texto-2); margin: 0.2rem 0 0; display: flex; align-items: flex-start; gap: 0.4rem; line-height: 1.4; }
   .ficha-nota svg { flex: 0 0 auto; color: var(--cobalto-texto); margin-top: 1px; }
   [data-tema="escuro"] .ficha-nota svg { color: var(--cobalto-texto); }
   .doc-meta { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; justify-content: flex-end; }
@@ -80,7 +80,7 @@
   @keyframes piscar { 50% { opacity: 0; } }
 
   /* PINO de IA na margem — a assinatura (ancora texto ↔ copiloto) */
-  .pino { position: absolute; left: -1.7rem; top: 0.1rem; width: 1.25rem; height: 1.25rem; border-radius: 50%; display: grid; place-items: center; font-family: var(--mono); font-size: 0.62rem; font-weight: 600; cursor: pointer; border: 1.5px solid; background: var(--papel); }
+  .pino { position: absolute; left: -1.7rem; top: 0.1rem; width: 1.25rem; height: 1.25rem; border-radius: 50%; display: grid; place-items: center; font-family: var(--mono); font-size: var(--t-11); font-weight: 600; cursor: pointer; border: 1.5px solid; background: var(--papel); }
   .pino-ok    { color: #234429; border-color: #6B9B72; }
   .pino-aviso { color: #8A5A00; border-color: var(--amarelo-traco); }
   .pino:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }

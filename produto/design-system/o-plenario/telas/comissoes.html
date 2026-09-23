@@ -23,7 +23,7 @@
 
   .pg-cab { padding: 1.5rem 0 0; display: grid; grid-template-columns: 1fr auto; gap: 0.8rem 1.4rem; align-items: end; }
   .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
-  .pg-cab .sub { font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
+  .pg-cab .sub { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
 
   .segs { display: inline-flex; background: var(--surface); border: 1px solid var(--linha); border-radius: 999px; padding: 3px; margin: 1.2rem 0 0; flex-wrap: wrap; }
   .segs button { font-family: var(--corpo); font-size: var(--t-13); font-weight: 600; color: var(--texto-2); background: none; border: none; border-radius: 999px; padding: 0.4rem 0.95rem; min-height: 40px; cursor: pointer; }
@@ -35,17 +35,17 @@
   .com-sigla { width: 46px; height: 46px; border-radius: 12px; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--display); font-weight: 800; font-size: var(--t-13); color: #fff; background: var(--jade); }
   .com-top .tt { flex: 1; min-width: 0; }
   .com-top .tt h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); margin: 0; line-height: 1.25; }
-  .com-top .tt .tipo { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.68rem; font-weight: 600; font-family: var(--mono); text-transform: uppercase; border-radius: 999px; padding: 0.1rem 0.5rem; margin-top: 0.35rem; }
+  .com-top .tt .tipo { display: inline-flex; align-items: center; gap: 0.3rem; font-size: var(--t-11); font-weight: 600; font-family: var(--mono); text-transform: uppercase; border-radius: 999px; padding: 0.1rem 0.5rem; margin-top: 0.35rem; }
   .tp-perm { color: var(--marca); background: color-mix(in srgb, var(--marca) 9%, var(--surface)); border: 1px solid color-mix(in srgb, var(--marca) 30%, transparent); }
   .tp-cpi { color: #fff; background: var(--telha-fundo); }
 
   .com-pres { display: flex; align-items: center; gap: 0.55rem; font-size: var(--t-13); color: var(--texto-2); }
-  .com-pres .av { width: 28px; height: 28px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 0.66rem; color: #fff; }
+  .com-pres .av { width: 28px; height: 28px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: var(--t-11); color: #fff; }
   .com-pres b { color: var(--texto); font-weight: 600; }
 
   .com-membros { display: flex; align-items: center; gap: 0.5rem; }
   .pilha { display: flex; }
-  .pilha .m { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--surface); margin-left: -8px; display: grid; place-items: center; font-family: var(--mono); font-size: 0.6rem; font-weight: 600; color: #fff; }
+  .pilha .m { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--surface); margin-left: -8px; display: grid; place-items: center; font-family: var(--mono); font-size: var(--t-11); font-weight: 600; color: #fff; }
   .pilha .m:first-child { margin-left: 0; }
   .com-membros span { font-size: var(--t-12); color: var(--texto-2); }
 

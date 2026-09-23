@@ -23,7 +23,7 @@
 
   .pg-cab { padding: 1.5rem 0 0; display: grid; grid-template-columns: 1fr auto; gap: 0.8rem 1.4rem; align-items: end; }
   .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
-  .pg-cab .sub { font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
+  .pg-cab .sub { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
   .filtros { display: flex; gap: 0.5rem; flex-wrap: wrap; }
   .filtro { display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--t-13); font-weight: 600; color: var(--texto); background: var(--surface); border: 1px solid var(--linha); border-radius: 999px; padding: 0.4rem 0.85rem; min-height: 40px; cursor: pointer; }
   .filtro .cv { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
@@ -55,7 +55,7 @@
   .ata-row .ar-mid b { font-size: var(--t-13); color: var(--texto); font-weight: 600; display: block; }
   .ata-row .ar-mid span { font-size: var(--t-12); color: var(--texto-2); }
   .ata-row .quando { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); white-space: nowrap; }
-  .schip { font-size: 0.68rem; font-weight: 600; font-family: var(--mono); border-radius: 999px; padding: 0.12rem 0.55rem; white-space: nowrap; }
+  .schip { font-size: var(--t-11); font-weight: 600; font-family: var(--mono); border-radius: 999px; padding: 0.12rem 0.55rem; white-space: nowrap; }
   .schip-pub { color: #234429; background: color-mix(in srgb, #6B9B72 16%, var(--surface)); border: 1px solid color-mix(in srgb, #6B9B72 38%, transparent); }
   [data-tema="escuro"] .schip-pub { color: #A6BFA2; }
   .schip-rev { color: var(--aviso-texto); background: color-mix(in srgb, var(--amarelo) 16%, var(--surface)); border: 1px solid color-mix(in srgb, var(--amarelo-traco) 45%, transparent); }

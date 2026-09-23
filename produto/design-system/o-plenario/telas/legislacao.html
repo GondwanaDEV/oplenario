@@ -38,7 +38,11 @@
   .hero p { font-size: var(--t-16); color: var(--texto-2); margin: 0.6rem 0 0; max-width: 60ch; }
   .busca-grande { display: flex; align-items: center; gap: 0.6rem; background: var(--surface); border: 1px solid color-mix(in srgb, var(--texto-2) 45%, var(--linha)); border-radius: 999px; padding: 0.6rem 1.1rem; min-height: 52px; max-width: 560px; margin: 1.2rem 0 0; }
   .busca-grande svg { color: var(--texto-2); flex: 0 0 auto; }
-  .busca-grande input { border: none; background: none; outline: none; font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); width: 100%; }
+  /* align-self:stretch — o envoltorio centraliza (align-items:center), entao o input
+     ficava com a altura do TEXTO (18px) dentro de um campo de 40px: clicar na moldura
+     nao focava nada, e o alvo real ficava abaixo do piso de 24px da WCAG 2.5.8.
+     Esticado, o alvo passa a ser o campo inteiro. */
+  .busca-grande input { border: none; background: none; outline: none; align-self: stretch; font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); width: 100%; }
 
   /* Lei Orgânica em destaque */
   .lom { display: flex; align-items: center; gap: 1.1rem; background: var(--surface); border: 1px solid color-mix(in srgb, var(--marca) 28%, var(--linha)); border-radius: var(--raio-lg); box-shadow: var(--sombra); padding: 1.3rem 1.5rem; margin: 1.4rem 0 0; flex-wrap: wrap; }
@@ -58,7 +62,7 @@
   .lei:first-child { border-top: none; }
   /* fundo surface-2 puro (texto-marca sobre tinta-marca raspa AA no escuro);
      a borda jade mantém o acento da "lombada" */
-  .lei .selo { width: 44px; height: 52px; border-radius: 5px; flex: 0 0 auto; background: var(--surface-2); border-left: 3px solid var(--marca); display: grid; place-items: center; text-align: center; font-family: var(--mono); font-size: 0.6rem; font-weight: 600; color: var(--marca); line-height: 1.1; }
+  .lei .selo { width: 44px; height: 52px; border-radius: 5px; flex: 0 0 auto; background: var(--surface-2); border-left: 3px solid var(--marca); display: grid; place-items: center; text-align: center; font-family: var(--mono); font-size: var(--t-11); font-weight: 600; color: var(--marca); line-height: 1.1; }
   .lei .mid { min-width: 0; }
   .lei .mid .num { font-family: var(--mono); font-size: var(--t-12); color: var(--acento-texto); font-weight: 600; }
   .lei .mid h3 { font-family: var(--corpo); font-weight: 600; font-size: var(--t-16); color: var(--texto); margin: 0.1rem 0 0; line-height: 1.3; }

@@ -17,7 +17,7 @@
 /* ---- cabeçalho de página ---- */
 .pg-cab { padding: 1.6rem 0 0.4rem; display: flex; align-items: flex-end; gap: 0.8rem 1.4rem; flex-wrap: wrap; }
 .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
-.pg-cab .sub { font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
+.pg-cab .sub { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
 
 /* ---- grade master-detail ---- */
 .md { display: grid; grid-template-columns: 340px 1fr; gap: 1.4rem; align-items: start; margin: 1.3rem 0 0; }
@@ -26,7 +26,11 @@
 .lista-card { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; }
 .busca { display: flex; align-items: center; gap: 0.5rem; padding: 0.7rem 0.9rem; border-bottom: 1px solid var(--linha); }
 .busca svg { color: var(--texto-2); flex: 0 0 auto; }
-.busca input { border: none; background: none; outline: none; font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); width: 100%; min-height: 32px; }
+/* align-self:stretch — o envoltorio centraliza (align-items:center), entao o input
+   ficava com a altura do TEXTO (18px) dentro de um campo de 40px: clicar na moldura
+   nao focava nada, e o alvo real ficava abaixo do piso de 24px da WCAG 2.5.8.
+   Esticado, o alvo passa a ser o campo inteiro. */
+.busca input { border: none; background: none; outline: none; align-self: stretch; font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); width: 100%; min-height: 32px; }
 .busca input::placeholder { color: var(--texto-2); }
 .busca input:focus-visible { outline: none; border-color: var(--foco); box-shadow: 0 0 0 4px color-mix(in srgb, var(--foco) 18%, transparent); }
 .v-rows { max-height: 70vh; overflow-y: auto; }
@@ -38,7 +42,7 @@
 .v-mid { min-width: 0; flex: 1; }
 .v-mid b { font-size: var(--t-13); color: var(--texto); font-weight: 600; display: block; line-height: 1.2; }
 .v-mid span { font-size: var(--t-12); color: var(--texto-2); }
-.v-lic { font-family: var(--mono); font-size: 0.6rem; font-weight: 600; text-transform: uppercase; color: var(--aviso-texto); border: 1px solid color-mix(in srgb, var(--amarelo-traco) 45%, transparent); border-radius: 4px; padding: 0.05rem 0.3rem; flex: 0 0 auto; }
+.v-lic { font-family: var(--mono); font-size: var(--t-11); font-weight: 600; text-transform: uppercase; color: var(--aviso-texto); border: 1px solid color-mix(in srgb, var(--amarelo-traco) 45%, transparent); border-radius: 4px; padding: 0.05rem 0.3rem; flex: 0 0 auto; }
 
 /* ---- ficha (detail) ---- */
 .ficha { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; }
@@ -54,7 +58,7 @@
 .stat span { font-size: var(--t-12); color: var(--texto-2); }
 /* estatística sem backend fiado nesta fatia: nunca um número, "—" + nota "Em breve" honesta */
 .stat-em-breve b { color: var(--texto-2); }
-.stat-nota { display: block; font-family: var(--mono); font-size: 0.65rem; letter-spacing: .06em; text-transform: uppercase; color: var(--texto-2); margin-top: 0.15rem; }
+.stat-nota { display: block; font-family: var(--mono); font-size: var(--t-11); letter-spacing: .06em; text-transform: uppercase; color: var(--texto-2); margin-top: 0.15rem; }
 
 .ficha-corpo { padding: 1.3rem 1.4rem; }
 .bloco + .bloco { margin-top: 1.3rem; }

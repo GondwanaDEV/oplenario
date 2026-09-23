@@ -24,7 +24,7 @@
   .pg-cab { padding: 1.5rem 0 0; display: grid; grid-template-columns: 1fr auto; gap: 0.8rem 1.4rem; align-items: end; }
   .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; display: flex; align-items: center; gap: 0.6rem; }
   .pg-cab h1 .badge { font-family: var(--mono); font-size: var(--t-13); font-weight: 600; color: #fff; background: var(--telha-fundo); border-radius: 999px; padding: 0.1rem 0.55rem; }
-  .pg-cab .sub { font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
+  .pg-cab .sub { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
 
   .segs { display: inline-flex; background: var(--surface); border: 1px solid var(--linha); border-radius: 999px; padding: 3px; margin: 1.2rem 0 0; flex-wrap: wrap; }
   .segs button { font-family: var(--corpo); font-size: var(--t-13); font-weight: 600; color: var(--texto-2); background: none; border: none; border-radius: 999px; padding: 0.4rem 0.95rem; min-height: 40px; cursor: pointer; }
@@ -69,7 +69,7 @@
   .nt.falha::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--telha); }
   .nt-ic.falha { color: var(--acento-texto); background: color-mix(in srgb, var(--telha) 15%, var(--surface-2)); }
   [data-tema="escuro"] .nt-ic.falha { color: var(--telha-claro, #F58A60); }
-  .nt-falha-tag { display: inline-flex; align-items: center; gap: 0.3rem; font-family: var(--mono); font-size: 0.64rem; letter-spacing: .06em; text-transform: uppercase; font-weight: 600; color: var(--acento-texto); border: 1px solid color-mix(in srgb, var(--telha) 45%, transparent); border-radius: 4px; padding: 0.12rem 0.42rem; margin: 0 0 0.4rem; }
+  .nt-falha-tag { display: inline-flex; align-items: center; gap: 0.3rem; font-family: var(--mono); font-size: var(--t-11); letter-spacing: .06em; text-transform: uppercase; font-weight: 600; color: var(--acento-texto); border: 1px solid color-mix(in srgb, var(--telha) 45%, transparent); border-radius: 4px; padding: 0.12rem 0.42rem; margin: 0 0 0.4rem; }
   .nt-falha-tag::before { content: ""; width: 6px; height: 6px; border-radius: 2px; background: var(--telha); flex: 0 0 auto; }
 
   @media (max-width: 620px) {

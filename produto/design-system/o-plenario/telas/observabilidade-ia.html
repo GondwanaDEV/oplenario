@@ -21,7 +21,7 @@
      ============================================================ */
   .pg-cab { padding: 1.5rem 0 0; }
   .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
-  .pg-cab .sub { font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
+  .pg-cab .sub { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
 
   .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 0.9rem; margin: 1.3rem 0 0; }
   .mt { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1rem 1.1rem; }
@@ -34,7 +34,7 @@
   @media (max-width: 860px) { .grade { grid-template-columns: 1fr; } }
   .bloco { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.2rem 1.3rem; }
   .bloco h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); margin: 0 0 0.2rem; }
-  .bloco .aj { font-size: var(--t-12); color: var(--texto-2); margin: 0 0 1rem; }
+  .bloco .aj { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; font-size: var(--t-12); color: var(--texto-2); margin: 0 0 1rem; }
 
   /* por recurso: linhas com latência p95 (barra honesta) */
   .rec { display: grid; grid-template-columns: 1fr auto; gap: 0.2rem 0.8rem; align-items: center; padding: 0.7rem 0; border-top: 1px solid var(--linha); }
@@ -61,7 +61,7 @@
   .vol { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; align-items: end; height: 88px; margin: 0.6rem 0 0; }
   .vbar { background: var(--jade-claro); border-radius: 3px 3px 0 0; min-height: 4px; }
   [data-tema="escuro"] .vbar { background: #A6BFA2; }
-  .vol-leg { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 0.6rem; color: var(--texto-2); margin-top: 0.4rem; }
+  .vol-leg { display: flex; justify-content: space-between; font-family: var(--mono); font-size: var(--t-11); color: var(--texto-2); margin-top: 0.4rem; }
 
   .gov { display: flex; align-items: flex-start; gap: 0.6rem; margin: 1.4rem 0 0; padding: 0.95rem 1.2rem; background: color-mix(in srgb,var(--marca) 6%,var(--surface)); border: 1px solid color-mix(in srgb,var(--marca) 26%,var(--linha)); border-radius: var(--raio); font-size: var(--t-13); color: var(--texto-2); line-height: 1.5; }
   .gov svg { color: var(--marca); flex: 0 0 auto; margin-top: 2px; }

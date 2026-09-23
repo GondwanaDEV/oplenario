@@ -117,7 +117,7 @@
 
   .tag-cadastro {
     display: inline-flex; align-items: center; gap: 0.3rem; vertical-align: middle;
-    font-family: var(--mono); font-size: 0.6875rem; font-weight: 500; letter-spacing: .04em;
+    font-family: var(--mono); font-size: var(--t-11); font-weight: 500; letter-spacing: .04em;
     /* tingido misturado com --surface, nao com transparent: no CAMPO (mais escuro que o
      cartao) o fundo translucido puxava o chip para baixo e o rotulo caia de AA. */
     color: var(--merge); background: color-mix(in srgb, var(--telha) 12%, var(--surface-solida)); border: 1px solid color-mix(in srgb, var(--telha) 32%, transparent);
@@ -161,9 +161,9 @@
     border: 2.5px solid var(--telha-fundo); color: var(--merge);   /* carimbo vive no PAPEL (claro nos dois temas): tinta fixa, nao tematizada */
     border-radius: 10px; padding: 0.4rem 0.7rem 0.35rem; background: rgba(217,84,43,.05);
   }
-  .carimbo .titulo { font-family: var(--mono); font-size: 0.625rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; display: block; }
+  .carimbo .titulo { font-family: var(--mono); font-size: var(--t-11); font-weight: 600; letter-spacing: .14em; text-transform: uppercase; display: block; }
   .carimbo .num { font-family: var(--mono); font-size: var(--t-16); font-weight: 600; letter-spacing: .02em; display: block; line-height: 1.2; }
-  .carimbo .quando { font-family: var(--mono); font-size: 0.625rem; letter-spacing: .04em; display: block; opacity: .85; }
+  .carimbo .quando { font-family: var(--mono); font-size: var(--t-11); letter-spacing: .04em; display: block; opacity: .85; }
   .carimbo.reservar { border-style: dashed; opacity: .9; }
   .carimbo.reservar .num { font-size: var(--t-13); }
 
@@ -211,7 +211,7 @@
   /* ============== 5 · LIVRO DO PROTOCOLO GERAL (3.23) ============== */
   .livro { padding: 0 0 7.5rem; }
   .livro .bloco-cabeca { flex-wrap: wrap; }
-  .livro .sub { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); font-weight: 400; }
+  .livro .sub { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); font-weight: 400; }
   .tabela-rolagem { overflow-x: auto; }
   table.protocolo { width: 100%; border-collapse: collapse; min-width: 720px; }
   table.protocolo th { font-family: var(--mono); font-size: var(--t-12); text-transform: uppercase; letter-spacing: .06em; color: var(--texto-2); font-weight: 500; text-align: left; padding: 0.7rem 1rem; border-bottom: 1px solid var(--linha); white-space: nowrap; }
@@ -220,7 +220,7 @@
   table.protocolo tr.proximo td { background: rgba(217,84,43,.06); }
   table.protocolo .np { font-family: var(--mono); font-weight: 600; color: var(--marca); white-space: nowrap; }
   table.protocolo tr.proximo .np { color: var(--acento-texto); }
-  table.protocolo .desc { color: var(--texto); }
+  table.protocolo .desc { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch;  color: var(--texto); }
   table.protocolo .org { color: var(--texto-2); font-size: var(--t-12); }
   table.protocolo .hora { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); white-space: nowrap; }
 
@@ -243,7 +243,7 @@
   .acoes-ctx b { font-family: var(--display); font-weight: 600; color: var(--texto); display: block; }
   .acoes-ctx span { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
   .acoes-botoes { margin-left: auto; display: flex; gap: 0.6rem; flex-wrap: wrap; }
-  .dica { width: 100%; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); padding-bottom: 0.55rem; display: flex; align-items: center; gap: 0.45rem; }
+  .dica { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; width: 100%; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); padding-bottom: 0.55rem; display: flex; align-items: center; gap: 0.45rem; }
   .dica svg { color: var(--acento-texto); flex: 0 0 auto; }
 
 
@@ -335,6 +335,7 @@
   </nav>
 
   <main class="envelope">
+    <h1 class="sr-only">Expediente · gerar documento</h1>
     <div class="bancada">
 
       <!-- ============== 3 · CONTROLES ============== -->

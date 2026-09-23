@@ -43,7 +43,11 @@
   .filtro svg { color: var(--texto-2); flex: 0 0 auto; }
   .busca { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 52%, var(--linha)); border-radius: 999px; padding: 0.35rem 0.9rem; min-height: 40px; min-width: 220px; }
   .busca svg { color: var(--texto-2); flex: 0 0 auto; }
-  .busca input { border: none; background: none; outline: none; font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); width: 100%; }
+  /* align-self:stretch — o envoltorio centraliza (align-items:center), entao o input
+     ficava com a altura do TEXTO (18px) dentro de um campo de 40px: clicar na moldura
+     nao focava nada, e o alvo real ficava abaixo do piso de 24px da WCAG 2.5.8.
+     Esticado, o alvo passa a ser o campo inteiro. */
+  .busca input { border: none; background: none; outline: none; align-self: stretch; font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); width: 100%; }
   .busca input::placeholder { color: var(--texto-2); }
 
   /* ===== QUADRO ===== */
@@ -61,7 +65,7 @@
   .az-telha { background: color-mix(in srgb, var(--telha) 22%, transparent); --az: var(--telha); }
   .az-verde { background: color-mix(in srgb, var(--jade-claro) 24%, transparent); --az: var(--jade-claro); }
   [data-tema="escuro"] .az-amarelo { --az: var(--amarelo); }
-  .col-cabe .tit { font-family: var(--display); font-weight: 700; font-size: var(--t-13); color: var(--texto); letter-spacing: .01em; }
+  .col-cabe .tit { margin: 0; font-family: var(--display);   /* h2 traz margem de titulo; zerada p/ o cabecalho da coluna nao mudar de altura */ font-weight: 700; font-size: var(--t-13); color: var(--texto); letter-spacing: .01em; }
   .col-cabe .cnt { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin-left: auto; background: var(--surface); border: 1px solid var(--linha); border-radius: 999px; padding: 0.05rem 0.5rem; }
 
   .col-corpo { display: flex; flex-direction: column; gap: 0.7rem; background: color-mix(in srgb, var(--surface) 60%, transparent); border: 1px solid var(--linha); border-radius: var(--raio); padding: 0.7rem; min-height: 80px; flex: 1; }
@@ -77,10 +81,10 @@
   .mat h3 a:hover { text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--marca) 40%, transparent); text-underline-offset: 2px; }
   .mat-pe { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
   .mat-rel { display: flex; align-items: center; gap: 0.4rem; margin-left: auto; }
-  .mat-rel .av { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 0.6rem; color: #fff; background: var(--jade); flex: 0 0 auto; }
+  .mat-rel .av { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: var(--t-11); color: #fff; background: var(--jade); flex: 0 0 auto; }
   .mat-rel span { font-size: var(--t-12); color: var(--texto-2); }
 
-  .selo { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.7rem; font-weight: 600; border-radius: 999px; padding: 0.12rem 0.5rem; border: 1px solid transparent; white-space: nowrap; }
+  .selo { display: inline-flex; align-items: center; gap: 0.3rem; font-size: var(--t-11); font-weight: 600; border-radius: 999px; padding: 0.12rem 0.5rem; border: 1px solid transparent; white-space: nowrap; }
   .selo-esp { font-family: var(--mono); font-weight: 500; color: var(--texto-2); background: var(--surface); border-color: var(--linha); }
   .selo-prazo { color: var(--aviso-texto); background: color-mix(in srgb, var(--amarelo) 16%, var(--surface)); border-color: color-mix(in srgb, var(--amarelo-traco) 45%, transparent); }
   .selo-urg { color: #fff; background: var(--telha-fundo); }
@@ -165,7 +169,7 @@
     <section class="coluna" aria-label="Protocolo · 3 matérias">
       <div class="col-cabe">
         <span class="azulejo-col az-jade" aria-hidden="true"></span>
-        <span class="tit">Protocolo</span>
+        <h2 class="tit">Protocolo</h2>
         <span class="cnt">3</span>
       </div>
       <div class="col-corpo">
@@ -191,7 +195,7 @@
     <section class="coluna" aria-label="Comissões · 4 matérias">
       <div class="col-cabe">
         <span class="azulejo-col az-cobalto" aria-hidden="true"></span>
-        <span class="tit">Comissões</span>
+        <h2 class="tit">Comissões</h2>
         <span class="cnt">4</span>
       </div>
       <div class="col-corpo">
@@ -231,7 +235,7 @@
     <section class="coluna" aria-label="Pronta para pauta · 2 matérias">
       <div class="col-cabe">
         <span class="azulejo-col az-amarelo" aria-hidden="true"></span>
-        <span class="tit">Pronta p/ pauta</span>
+        <h2 class="tit">Pronta p/ pauta</h2>
         <span class="cnt">2</span>
       </div>
       <div class="col-corpo">
@@ -252,7 +256,7 @@
     <section class="coluna" aria-label="Em Plenário · 2 matérias">
       <div class="col-cabe">
         <span class="azulejo-col az-telha" aria-hidden="true"></span>
-        <span class="tit">Em Plenário</span>
+        <h2 class="tit">Em Plenário</h2>
         <span class="cnt">2</span>
       </div>
       <div class="col-corpo">
@@ -273,7 +277,7 @@
     <section class="coluna" aria-label="Concluídas neste ano · 18 matérias">
       <div class="col-cabe">
         <span class="azulejo-col az-verde" aria-hidden="true"></span>
-        <span class="tit">Concluídas</span>
+        <h2 class="tit">Concluídas</h2>
         <span class="cnt">18</span>
       </div>
       <div class="col-corpo">

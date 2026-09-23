@@ -108,7 +108,7 @@
 
 .quem { min-width: 0; line-height: 1.25; padding: 0.15rem 0; }
 .quem b { font-weight: 600; font-size: var(--t-16); color: var(--texto); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.quem .sub { font-size: var(--t-12); color: var(--texto-2); display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
+.quem .sub { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; font-size: var(--t-12); color: var(--texto-2); display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
 .quem .partido { font-family: var(--mono); }
 .cargo-mesa { font-family: var(--mono); font-size: var(--t-12); color: var(--acento-texto); font-weight: 600; }
 
@@ -147,7 +147,7 @@
 .just .motivo b { color: var(--texto); font-weight: 600; }
 .just .decidir { display: flex; gap: 0.45rem; flex: 0 0 auto; }
 
-.fora-nota { display: flex; align-items: flex-start; gap: 0.6rem; margin: 0; padding: 0.85rem 1.3rem; background: color-mix(in srgb, var(--telha) 8%, var(--surface)); border-top: 1px solid var(--linha); border-bottom: 1px solid var(--linha); font-size: var(--t-13); color: var(--texto-2); line-height: 1.45; }
+.fora-nota { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch;  display: flex; align-items: flex-start; gap: 0.6rem; margin: 0; padding: 0.85rem 1.3rem; background: color-mix(in srgb, var(--telha) 8%, var(--surface)); border-top: 1px solid var(--linha); border-bottom: 1px solid var(--linha); font-size: var(--t-13); color: var(--texto-2); line-height: 1.45; }
 .fora-nota svg { flex: 0 0 auto; color: var(--acento-texto); margin-top: 2px; }
 .fora-nota b { color: var(--texto); font-weight: 600; }
 
@@ -212,7 +212,7 @@ svg.hemi { width: 100%; height: auto; display: block; margin: 0.7rem 0 0.2rem; }
 .atos .det { grid-column: 1 / -1; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
 
 /* ============== 5 · barra de comando ============== */
-.dica { width: 100%; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); padding-bottom: 0.55rem; display: flex; align-items: flex-start; gap: 0.45rem; line-height: 1.45; }
+.dica { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; width: 100%; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); padding-bottom: 0.55rem; display: flex; align-items: flex-start; gap: 0.45rem; line-height: 1.45; }
 .dica svg { color: var(--acento-texto); flex: 0 0 auto; margin-top: 2px; }
 
 .desfazer { display: inline-flex; align-items: center; gap: 0.6rem; font-size: var(--t-13); color: var(--texto); }

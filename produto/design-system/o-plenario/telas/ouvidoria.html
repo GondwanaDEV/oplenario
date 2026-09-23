@@ -66,7 +66,7 @@
   .campo .req { color: var(--acento-texto); }
   .campo input, .campo textarea { font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 55%, var(--linha)); border-radius: var(--raio-sm); padding: 0.7rem 0.8rem; min-height: 48px; width: 100%; }
   .campo textarea { min-height: 120px; resize: vertical; line-height: 1.55; }
-  .campo .dica { font-size: var(--t-12); color: var(--texto-2); }
+  .campo .dica { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; font-size: var(--t-12); color: var(--texto-2); }
 
   .anexo { display: flex; align-items: center; gap: 0.6rem; padding: 0.8rem 1rem; border: 1px dashed color-mix(in srgb, var(--marca) 35%, var(--linha)); border-radius: var(--raio-sm); color: var(--texto-2); font-size: var(--t-13); cursor: pointer; background: color-mix(in srgb, var(--marca) 4%, var(--surface-2)); }
   .anexo svg { color: var(--marca); flex: 0 0 auto; }

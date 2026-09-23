@@ -36,7 +36,7 @@
 
   .bloco { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.2rem 1.3rem; margin: 1.2rem 0 0; }
   .bloco > h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); margin: 0 0 0.3rem; }
-  .bloco .aj { font-size: var(--t-13); color: var(--texto-2); margin: 0 0 1rem; }
+  .bloco .aj { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; font-size: var(--t-13); color: var(--texto-2); margin: 0 0 1rem; }
 
   /* autor principal */
   .autor-p { display: flex; align-items: center; gap: 0.9rem; padding: 0.9rem 1rem; background: color-mix(in srgb,var(--marca) 6%,var(--surface)); border: 1px solid color-mix(in srgb,var(--marca) 26%,var(--linha)); border-radius: var(--raio); }
@@ -48,11 +48,15 @@
   .add-row { display: flex; gap: 0.6rem; margin: 1rem 0 0; flex-wrap: wrap; }
   .add-row .busca { flex: 1 1 220px; display: flex; align-items: center; gap: 0.5rem; background: var(--surface-2); border: 1px solid color-mix(in srgb,var(--texto-2) 50%,var(--linha)); border-radius: var(--raio-sm); padding: 0.5rem 0.8rem; min-height: 44px; }
   .add-row .busca svg { color: var(--texto-2); flex: 0 0 auto; }
-  .add-row .busca input { border: none; background: none; outline: none; font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); width: 100%; }
+  .add-row /* align-self:stretch — o envoltorio centraliza (align-items:center), entao o input
+     ficava com a altura do TEXTO (18px) dentro de um campo de 40px: clicar na moldura
+     nao focava nada, e o alvo real ficava abaixo do piso de 24px da WCAG 2.5.8.
+     Esticado, o alvo passa a ser o campo inteiro. */
+  .busca input { border: none; background: none; outline: none; align-self: stretch; font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); width: 100%; }
 
   .coautores { display: grid; gap: 0.55rem; margin: 1rem 0 0; }
   .ca { display: flex; align-items: center; gap: 0.7rem; padding: 0.7rem 0.9rem; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); }
-  .ca .av { width: 32px; height: 32px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 0.66rem; color: #fff; }
+  .ca .av { width: 32px; height: 32px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: var(--t-11); color: #fff; }
   .ca .nm { flex: 1; min-width: 0; } .ca .nm b { font-size: var(--t-13); color: var(--texto); font-weight: 600; display: block; line-height: 1.2; } .ca .nm span { font-size: var(--t-12); color: var(--texto-2); }
   .ca-status { font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.15rem 0.6rem; display: inline-flex; align-items: center; gap: 0.3rem; white-space: nowrap; }
   .ca-status svg { width: 12px; height: 12px; }
@@ -60,7 +64,7 @@
   .st-pend { color: var(--aviso-texto); background: color-mix(in srgb,var(--amarelo) 16%,var(--surface)); border: 1px solid color-mix(in srgb,var(--amarelo-traco) 45%,transparent); }
   .ca .rem { background: none; border: 1px solid var(--linha); color: var(--texto-2); cursor: pointer; border-radius: 7px; width: 30px; height: 30px; display: grid; place-items: center; flex: 0 0 auto; }
   .ca .rem:hover { color: var(--acento-texto); border-color: color-mix(in srgb,var(--telha) 50%,transparent); }
-  .nota-sub { display: flex; align-items: flex-start; gap: 0.5rem; margin: 0.9rem 0 0; font-size: var(--t-12); color: var(--texto-2); line-height: 1.5; }
+  .nota-sub { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; display: flex; align-items: flex-start; gap: 0.5rem; margin: 0.9rem 0 0; font-size: var(--t-12); color: var(--texto-2); line-height: 1.5; }
   .nota-sub svg { color: var(--marca); flex: 0 0 auto; margin-top: 2px; }
 
   /* apoiamento mínimo */
@@ -74,7 +78,7 @@
   .barra-apoio .leg { display: flex; align-items: baseline; gap: 0.5rem; margin-top: 0.5rem; font-size: var(--t-13); color: var(--texto-2); }
   .barra-apoio .leg b { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--texto); font-variant-numeric: tabular-nums; }
   .apoiadores { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 1rem 0 0; }
-  .ap-av { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 0.6rem; color: #fff; border: 2px solid var(--surface); }
+  .ap-av { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: var(--t-11); color: #fff; border: 2px solid var(--surface); }
 
   .comando-ctx .reg { color: var(--aviso-texto); }
 </style>

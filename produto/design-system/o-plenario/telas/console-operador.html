@@ -20,7 +20,7 @@
      ============================================================ */
   .pg-cab { padding: 1.5rem 0 0; display: grid; grid-template-columns: 1fr auto; gap: 0.8rem 1.4rem; align-items: end; }
   .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
-  .pg-cab .sub { font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
+  .pg-cab .sub { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
 
   .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1rem; margin: 1.3rem 0 0; }
   .mt { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.1rem 1.2rem; }
@@ -34,7 +34,11 @@
   .filtro .cv { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
   .busca { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 52%, var(--linha)); border-radius: 999px; padding: 0.35rem 0.9rem; min-height: 40px; min-width: 220px; }
   .busca svg { color: var(--texto-2); flex: 0 0 auto; }
-  .busca input { border: none; background: none; outline: none; font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); width: 100%; }
+  /* align-self:stretch — o envoltorio centraliza (align-items:center), entao o input
+     ficava com a altura do TEXTO (18px) dentro de um campo de 40px: clicar na moldura
+     nao focava nada, e o alvo real ficava abaixo do piso de 24px da WCAG 2.5.8.
+     Esticado, o alvo passa a ser o campo inteiro. */
+  .busca input { border: none; background: none; outline: none; align-self: stretch; font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); width: 100%; }
 
   .tabela-card { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; margin: 1.1rem 0 0; }
   table { width: 100%; border-collapse: collapse; }

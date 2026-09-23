@@ -28,7 +28,7 @@
 
   .card { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.3rem 1.4rem; margin: 1.2rem 0 0; }
   .card h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); margin: 0 0 0.3rem; }
-  .card .aj { font-size: var(--t-13); color: var(--texto-2); margin: 0 0 1.1rem; }
+  .card .aj { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; font-size: var(--t-13); color: var(--texto-2); margin: 0 0 1.1rem; }
 
   .inclui { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.7rem; }
   .inclui .it { display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 0.8rem; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); }

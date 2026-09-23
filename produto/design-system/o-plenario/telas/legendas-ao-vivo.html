@@ -77,7 +77,7 @@
   .cc-off { display: flex; gap: 0.85rem; align-items: flex-start; }
   .cc-off .ic { color: #F2A53C; flex: 0 0 auto; margin-top: 3px; }
   .cc-off .tit { font-size: clamp(1.3rem, 3.4vw, 1.55rem); font-weight: 700; color: #FFFFFF; margin: 0; line-height: 1.25; }
-  .cc-off .sub { font-size: clamp(0.98rem, 2.2vw, 1.06rem); color: #CBD6CF; margin: 0.45rem 0 0; line-height: 1.45; }
+  .cc-off .sub { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; font-size: clamp(0.98rem, 2.2vw, 1.06rem); color: #CBD6CF; margin: 0.45rem 0 0; line-height: 1.45; }
 
   .cc-toggle .sw.off { background: var(--linha); }
   .cc-toggle .sw.off::after { left: 2px; }
