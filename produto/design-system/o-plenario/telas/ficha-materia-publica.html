@@ -32,7 +32,7 @@
   .nav-pub a:hover { color: var(--texto); }
 
   .migalha { font-size: var(--t-13); color: var(--texto-2); margin: 1.2rem 0 0; display: flex; align-items: center; gap: 0.4rem; }
-  .migalha a { color: var(--marca); font-weight: 600; text-decoration: none; } .migalha a:hover { text-decoration: underline; }
+  .migalha a { color: var(--marca); font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; min-height: 24px; } .migalha a:hover { text-decoration: underline; }
 
   .ficha-cab { margin: 0.6rem 0 0; }
   .ficha-cab .linha-id { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
@@ -85,7 +85,7 @@
   .simples-corpo p { font-size: var(--t-16); color: var(--texto); line-height: 1.6; margin: 0 0 0.8rem; } .simples-corpo p:last-child { margin: 0; }
   .ia-rod { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; padding: 0.7rem 1.3rem; border-top: 1px solid var(--linha); font-size: var(--t-12); color: var(--texto-2); }
   .ia-rod a { color: var(--marca); font-weight: 600; text-decoration: none; } .ia-rod a:hover { text-decoration: underline; }
-  .ia-rod .reportar { margin-left: auto; display: inline-flex; align-items: center; gap: 0.3rem; }
+  .ia-rod .reportar { margin-left: auto; display: inline-flex; align-items: center; gap: 0.3rem; min-height: 24px; }
 
   /* documentos oficiais (a autoridade) */
   .docs { display: grid; gap: 0.6rem; }
@@ -99,7 +99,7 @@
   .autor-card { display: flex; align-items: center; gap: 0.9rem; padding: 1rem 1.2rem; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); }
   .autor-card .av { width: 48px; height: 48px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: #fff; background: var(--cobalto); }
   .autor-card .nm b { font-family: var(--display); font-size: var(--t-16); color: var(--texto); display: block; } .autor-card .nm span { font-size: var(--t-13); color: var(--texto-2); }
-  .autor-card .ver { margin-left: auto; font-weight: 600; color: var(--marca); text-decoration: none; font-size: var(--t-13); } .autor-card .ver:hover { text-decoration: underline; }
+  .autor-card .ver { margin-left: auto; font-weight: 600; color: var(--marca); text-decoration: none; font-size: var(--t-13); display: inline-flex; align-items: center; min-height: 24px; } .autor-card .ver:hover { text-decoration: underline; }
 
   /* participação / comentários (6.3) */
   .part-regras { /* medida de linha: acima de ~80 caracteres o olho perde a linha no retorno */ max-width: 72ch; display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.9rem 1.1rem; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); font-size: var(--t-13); color: var(--texto-2); line-height: 1.5; margin: 0 0 1.1rem; }
@@ -123,7 +123,7 @@
   .cmt .cmt-cab .verif { display: inline-flex; align-items: center; gap: 0.25rem; font-size: var(--t-12); color: #234429; } [data-tema="escuro"] .cmt .cmt-cab .verif { color: #A6BFA2; }
   .cmt p { font-size: var(--t-16); color: var(--texto); line-height: 1.55; margin: 0.25rem 0 0; }
   .cmt .acoes { display: flex; gap: 0.9rem; margin-top: 0.4rem; }
-  .cmt .acoes button { background: none; border: none; cursor: pointer; font-family: var(--corpo); font-size: var(--t-12); color: var(--texto-2); display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0; }
+  .cmt .acoes button { background: none; border: none; cursor: pointer; font-family: var(--corpo); font-size: var(--t-12); color: var(--texto-2); display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0; min-height: 24px; }
   .cmt .acoes button:hover { color: var(--texto); }
 
   .rodape { margin-top: 2.6rem; padding: 1.6rem 0; border-top: 1px solid var(--linha); display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
