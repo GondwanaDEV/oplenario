@@ -6,7 +6,7 @@
 <title>O Plenário — Assinar documento</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="../sistema/tokens.css" />
 <link rel="stylesheet" href="../sistema/chassi.css" />
 <style>
@@ -45,7 +45,7 @@
   .papel .corpo { padding-top: 0.9rem; }
   .papel .corpo .rot { font-family: var(--mono); font-size: var(--t-12); color: var(--papel-texto-2); text-transform: uppercase; letter-spacing: .05em; }
   .papel .corpo p { font-size: var(--t-13); color: var(--papel-texto); line-height: 1.6; margin: 0.2rem 0 0.9rem; }
-  .papel .parecer-sel { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 700; font-size: var(--t-13); color: #14503D; background: color-mix(in srgb,#2C8A66 16%,var(--papel)); border: 1px solid color-mix(in srgb,#2C8A66 45%,transparent); border-radius: 999px; padding: 0.2rem 0.7rem; }
+  .papel .parecer-sel { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 700; font-size: var(--t-13); color: #14503D; background: color-mix(in srgb,#6B9B72 16%,var(--papel)); border: 1px solid color-mix(in srgb,#6B9B72 45%,transparent); border-radius: 999px; padding: 0.2rem 0.7rem; }
   .papel .assina-linha { margin-top: 1.1rem; padding-top: 0.9rem; border-top: 1px dashed var(--papel-linha); font-size: var(--t-12); color: var(--papel-texto-2); }
   .papel .assina-linha b { color: var(--papel-texto); display: block; font-size: var(--t-13); }
 
@@ -68,7 +68,7 @@
 
   /* ===== toque 2: folha de confirmação (sheet) ===== */
   .scrim { position: fixed; inset: 0; z-index: 40; background: rgba(8,16,12,.55); backdrop-filter: blur(2px); display: flex; align-items: flex-end; justify-content: center; }
-  .sheet { width: 100%; max-width: 460px; background: var(--surface); border-radius: var(--raio-lg) var(--raio-lg) 0 0; border-top: 1px solid var(--linha); box-shadow: 0 -24px 60px -20px rgba(0,0,0,.5); padding: 1.1rem clamp(1rem,5vw,1.3rem) max(1.3rem, env(safe-area-inset-bottom)); }
+  .sheet { width: 100%; max-width: 460px; background: var(--surface-solida); border-radius: var(--raio-lg) var(--raio-lg) 0 0; border-top: 1px solid var(--linha); box-shadow: 0 -24px 60px -20px rgba(0,0,0,.5); padding: 1.1rem clamp(1rem,5vw,1.3rem) max(1.3rem, env(safe-area-inset-bottom)); }
   .sheet .puxador { width: 40px; height: 4px; border-radius: 2px; background: var(--linha); margin: 0 auto 1rem; }
   .sheet h3 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); margin: 0; text-align: center; }
   .sheet .sub { font-size: var(--t-13); color: var(--texto-2); text-align: center; margin: 0.4rem 0 1.2rem; line-height: 1.5; }

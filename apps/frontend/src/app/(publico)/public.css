@@ -34,7 +34,7 @@
 .nav-publica-nav { position: relative; margin: 0 auto; }
 .nav-publica { display: flex; align-items: center; gap: 0.2rem; list-style: none; padding: 0; margin: 0; }
 .nav-publica a { font-size: var(--t-13); font-weight: 500; color: var(--texto-2); text-decoration: none; padding: 0.5rem 0.7rem; border-radius: var(--raio-sm); white-space: nowrap; transition: color .12s ease, background-color .12s ease; }
-.nav-publica a:hover { color: var(--texto); background: var(--surface); }
+.nav-publica a:hover { color: var(--texto); background: var(--realce); }
 .nav-publica a[aria-current] { color: var(--marca); font-weight: 600; }
 
 /* botão hambúrguer — só existe visualmente <1000px (ver media query); no desktop a <ul> é inline */
@@ -57,7 +57,7 @@
   text-decoration: none; transition: border-color .12s ease, transform .12s ease;
 }
 .govbr-topo:hover { border-color: var(--foco); transform: translateY(-1px); }
-.govbr-topo .g { font-family: var(--display); font-weight: 800; color: var(--cobalto); }
+.govbr-topo .g { font-family: var(--display); font-weight: 800; color: var(--cobalto-texto); }
 [data-tema="escuro"] .govbr-topo .g { color: var(--foco); }
 
 /* ============== 2 · CAPA (a porta da rua) ============== */
@@ -142,7 +142,7 @@
 .azulejo-tile--concluido { fill: var(--jade); }
 .azulejo-tile--ativo { fill: var(--bg); stroke: var(--amarelo); stroke-width: 2; }
 .azulejo-tile--pendente { fill: none; stroke: var(--linha); stroke-dasharray: 4 5; }
-.azulejo-marca { fill: var(--papel, #F1ECDD); }
+.azulejo-marca { fill: var(--papel, #C7D9C4); }
 .azulejo-marca--ativo { fill: var(--amarelo); }
 .azulejo-marca--pendente { stroke: var(--linha); stroke-width: 2; }
 
@@ -156,9 +156,12 @@
 [data-tema="escuro"] .resumo-cab .selo-ia { color: var(--foco); }
 .resumo-ia h4 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); letter-spacing: -0.015em; color: var(--texto); margin: 0.6rem 0 0.5rem; }
 .resumo-ia p { font-size: var(--t-16); color: var(--texto); margin: 0 0 0.7rem; line-height: 1.62; }
-.resumo-revisao { display: flex; align-items: center; gap: 0.5rem; font-size: var(--t-13); color: var(--texto-2); margin: 0.2rem 0 0; }
-.resumo-revisao svg { color: var(--jade-claro); flex: 0 0 auto; }
-[data-tema="escuro"] .resumo-revisao svg { color: var(--marca); }
+/* NAO usar flex aqui: o icone e' elemento, mas a frase e' um NO DE TEXTO SOLTO seguido
+     de <b>. Em flex os dois viram itens SEPARADOS e a frase se parte no meio ('...ajuda de'
+     numa coluna, 'revisado pela equipe' noutra). Ficava escondido enquanto a Hanken Grotesk
+     cabia numa linha; a Inter, mais larga, expos. Fluxo inline resolve na raiz. */
+.resumo-revisao { display: block; font-size: var(--t-13); color: var(--texto-2); margin: 0.2rem 0 0; }
+.resumo-revisao svg { color: var(--marca); vertical-align: -3px; margin-right: 0.45rem; }
 .resumo-rodape { margin-top: auto; padding-top: 1.2rem; display: flex; align-items: center; gap: 1rem 1.2rem; flex-wrap: wrap; }
 .resumo-rodape .reportar { font-size: var(--t-13); color: var(--texto-2); text-decoration: none; display: inline-flex; align-items: center; gap: 0.4rem; }
 .resumo-rodape .reportar:hover { color: var(--acento-texto); }
@@ -186,14 +189,14 @@
 .mais-trami .mt-sit i { width: 8px; height: 8px; border-radius: 2px; flex: 0 0 auto; }
 .mais-trami .i-andamento { background: var(--telha); }
 .mais-trami .i-comissao { background: var(--amarelo); }
-.mais-trami .i-feito { background: var(--jade-claro); border-radius: 50%; }
+.mais-trami .i-feito { background: var(--marca); border-radius: 50%; }
 
 /* ============== 4 · BALCÕES DE DIREITO (e-SIC + LGPD) ============== */
 .balcoes { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(1rem, 2.4vw, 1.6rem); }
 .balcao { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-lg); box-shadow: var(--sombra); padding: clamp(1.3rem, 3vw, 1.9rem); display: flex; flex-direction: column; }
 .balcao > .eyebrow { margin-bottom: 0.5rem; }
 .balcao-esic > .eyebrow { color: var(--acento-texto); }
-.balcao-lgpd > .eyebrow { color: var(--cobalto); }
+.balcao-lgpd > .eyebrow { color: var(--cobalto-texto); }
 [data-tema="escuro"] .balcao-lgpd > .eyebrow { color: var(--foco); }
 .balcao h3 { font-family: var(--display); font-weight: 700; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0 0 0.5rem; }
 .balcao .lead { font-size: var(--t-16); color: var(--texto-2); margin: 0 0 1.3rem; line-height: 1.55; }
@@ -216,14 +219,18 @@
    componente (.anel-c/.trilho/.arco/.centro/.d/.u) já estilizadas em mesa.css (escopo próprio daquela
    rota, não carregado aqui). Reescopado ao tamanho passado pelo prop `tamanho={92}` — sem variante de
    urgência (a Lei de Acesso não tem 3 faixas de risco como o painel interno, só o prazo corrido): cor
-   fixa de "prazo em curso" (jade-claro no claro / marca no escuro, mesmo par já usado em
+   fixa de "prazo em curso" (--marca, que ja' tematiza os dois lados, mesmo par já usado em
    `.recibo-nota svg`/`.ja-publicado svg` acima). Contraste medido (pixel composto) vs `--bg` (fundo do
    `.pedido` que o hospeda): 4.59:1 claro / 7.59:1 escuro — acima do piso 3:1 de gráfico. */
 .anel-c { position: relative; width: 92px; height: 92px; flex: 0 0 auto; }
 .anel-c svg { width: 92px; height: 92px; display: block; }
 .anel-c .trilho { fill: none; stroke: var(--linha); stroke-width: 7; }
-.anel-c .arco { fill: none; stroke: var(--jade-claro); stroke-width: 7; }
-[data-tema="escuro"] .anel-c .arco { stroke: var(--marca); }
+/* --jade-claro virou #7A9B7A na troca de paleta, o MESMO valor que --linha (o trilho):
+   o arco passou a desenhar em cima de si (1.00:1) e o anel de prazo sumiu da tela.
+   --marca e' o token que ja' significa "o verde que se le sobre a superficie atual"
+   (3.52:1 no claro, 3.97:1 no escuro) e, por ser tematizado, dispensa a sobrescrita
+   de tema escuro que existia logo abaixo. */
+.anel-c .arco { fill: none; stroke: var(--marca); stroke-width: 7; }
 .anel-c .centro { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; line-height: 1; }
 .anel-c .d { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--texto); font-variant-numeric: tabular-nums; }
 .anel-c .u { font-family: var(--mono); font-size: 0.68rem; letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); }
@@ -239,19 +246,17 @@
 .balcao-acoes { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 1.3rem 0 0; }
 .recibo-nota { display: flex; align-items: flex-start; gap: 0.55rem; margin: 1rem 0 0; padding: 0.75rem 0.9rem; background: color-mix(in srgb, var(--marca) 7%, var(--surface)); border: 1px solid color-mix(in srgb, var(--marca) 28%, var(--linha)); border-left: 3px solid var(--marca); border-radius: var(--raio-sm); font-size: var(--t-13); color: var(--texto); line-height: 1.5; }
 .recibo-nota svg { flex: 0 0 auto; color: var(--marca); margin-top: 1px; }
-[data-tema="escuro"] .recibo-nota svg { color: var(--jade-claro); }
 .recibo-nota b { font-weight: 600; }
 .recibo-nota .prot { font-family: var(--mono); color: var(--acento-texto); }
 .recurso-nota { font-size: var(--t-13); color: var(--texto-2); margin: 0.95rem 0 0; display: flex; align-items: flex-start; gap: 0.5rem; }
 .recurso-nota a { font-weight: 600; }
 .recurso-nota svg { color: var(--texto-2); flex: 0 0 auto; margin-top: 2px; }
 .ja-publicado { margin: 1.1rem 0 0; padding: 0.8rem 0.9rem; background: var(--surface-2); border: 1px dashed var(--linha); border-radius: var(--raio-sm); font-size: var(--t-13); color: var(--texto-2); display: flex; align-items: flex-start; gap: 0.55rem; }
-.ja-publicado svg { color: var(--jade-claro); flex: 0 0 auto; margin-top: 2px; }
-[data-tema="escuro"] .ja-publicado svg { color: var(--marca); }
+.ja-publicado svg { color: var(--marca); flex: 0 0 auto; margin-top: 2px; }
 .ja-publicado a { font-weight: 600; }
 
 .fronteira { display: flex; align-items: flex-start; gap: 0.55rem; font-size: var(--t-13); color: var(--texto-2); background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.75rem 0.9rem; margin: 0 0 1.2rem; }
-.fronteira svg { color: var(--cobalto); flex: 0 0 auto; margin-top: 2px; }
+.fronteira svg { color: var(--cobalto-texto); flex: 0 0 auto; margin-top: 2px; }
 [data-tema="escuro"] .fronteira svg { color: var(--foco); }
 .fronteira a { font-weight: 600; }
 
@@ -260,11 +265,11 @@
 .direitos li.larga { grid-column: 1 / -1; }
 .direito-btn { width: 100%; display: flex; align-items: center; gap: 0.6rem; text-align: left; font-family: var(--corpo); font-weight: 500; font-size: var(--t-13); color: var(--texto); background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.65rem 0.75rem; min-height: 46px; cursor: pointer; transition: border-color .12s ease, transform .12s ease, background-color .12s ease; }
 .direito-btn:hover { border-color: var(--foco); transform: translateY(-1px); }
-.direito-btn svg { color: var(--cobalto); flex: 0 0 auto; }
+.direito-btn svg { color: var(--cobalto-texto); flex: 0 0 auto; }
 [data-tema="escuro"] .direito-btn svg { color: var(--foco); }
 
 .prazo-lgpd { font-size: var(--t-13); color: var(--texto-2); margin: 0 0 1.2rem; display: flex; align-items: flex-start; gap: 0.5rem; }
-.prazo-lgpd svg { color: var(--cobalto); flex: 0 0 auto; margin-top: 2px; }
+.prazo-lgpd svg { color: var(--cobalto-texto); flex: 0 0 auto; margin-top: 2px; }
 [data-tema="escuro"] .prazo-lgpd svg { color: var(--foco); }
 
 .encarregado { display: flex; align-items: center; gap: 0.8rem; background: var(--bg); border: 1px solid var(--linha); border-radius: var(--raio); padding: 0.9rem 1rem; margin-top: auto; }
@@ -279,8 +284,7 @@
 .civico { display: grid; grid-template-columns: repeat(4, 1fr); gap: clamp(0.8rem, 1.8vw, 1.1rem); list-style: none; margin: 0; padding: 0; }
 .civico a { display: flex; flex-direction: column; gap: 0.55rem; text-decoration: none; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); padding: 1.15rem 1.15rem 1.25rem; transition: border-color .14s ease, transform .14s ease, box-shadow .14s ease; }
 .civico a:hover { border-color: var(--foco); transform: translateY(-2px); box-shadow: var(--sombra); }
-.civico .ic { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; background: rgba(12,83,64,.09); color: var(--marca); flex: 0 0 auto; }
-[data-tema="escuro"] .civico .ic { background: rgba(67,189,147,.12); }
+.civico .ic { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; background: color-mix(in srgb, var(--marca) 10%, transparent); color: var(--marca); flex: 0 0 auto; }
 .civico b { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); letter-spacing: -0.01em; }
 .civico span { font-size: var(--t-13); color: var(--texto-2); line-height: 1.45; }
 .civico .prazo-tag { font-family: var(--mono); font-size: var(--t-12); color: var(--acento-texto); margin-top: 0.1rem; }
@@ -294,8 +298,7 @@
 .rodape ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
 .rodape ul a { font-size: var(--t-13); color: var(--texto-2); text-decoration: none; display: inline-flex; align-items: center; gap: 0.45rem; }
 .rodape ul a:hover { color: var(--marca); }
-.rodape ul svg { flex: 0 0 auto; color: var(--jade-claro); }
-[data-tema="escuro"] .rodape ul svg { color: var(--marca); }
+.rodape ul svg { flex: 0 0 auto; color: var(--marca); }
 .selo-a11y { display: inline-flex; align-items: center; gap: 0.45rem; font-family: var(--mono); font-size: var(--t-12); font-weight: 600; color: var(--marca); border: 1px solid var(--linha); border-radius: 999px; padding: 0.3rem 0.65rem; }
 .rodape-fim { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; padding: 1rem 0 1.6rem; border-top: 1px solid var(--linha); font-size: var(--t-12); color: var(--texto-2); }
 .rodape-fim .plataforma { display: inline-flex; align-items: center; gap: 0.5rem; }
@@ -356,7 +359,7 @@
 .ficha-cab { margin: 0.6rem 0 0; }
 .ficha-cab .linha-id { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
 .ficha-cab .num { font-family: var(--mono); font-size: var(--t-13); font-weight: 600; color: var(--acento-texto); }
-.estado-chip { font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.18rem 0.7rem; display: inline-flex; align-items: center; gap: 0.35rem; color: var(--cobalto); background: color-mix(in srgb, var(--cobalto) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--cobalto) 34%, transparent); }
+.estado-chip { font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.18rem 0.7rem; display: inline-flex; align-items: center; gap: 0.35rem; color: var(--cobalto-texto); background: color-mix(in srgb, var(--cobalto) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--cobalto) 34%, transparent); }
 [data-tema="escuro"] .estado-chip { color: var(--foco); }
 .ficha-cab h1 { font-family: var(--display); font-weight: 800; font-size: clamp(1.7rem, 4.5vw, var(--t-40)); letter-spacing: -0.02em; color: var(--texto); margin: 0.5rem 0 0; line-height: 1.08; }
 .ficha-cab .autoria { font-size: var(--t-13); color: var(--texto-2); margin: 0.6rem 0 0; }
@@ -366,10 +369,9 @@
 .ficha-tram h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 1.1rem; }
 
 /* "virou lei" — a norma publicada (ligação matéria->lei; só aparece quando ficha.norma existe). Reusa o
-   par jade-claro/marca de .ja-publicado (mesmo racional visual: aviso positivo, borda tracejada). */
+   --marca de .ja-publicado (mesmo racional visual: aviso positivo, borda tracejada). */
 .norma-publicada { display: flex; align-items: flex-start; gap: 0.7rem; margin: 1.2rem 0 0; padding: 1rem 1.15rem; background: color-mix(in srgb, var(--jade) 7%, var(--surface)); border: 1px solid color-mix(in srgb, var(--jade) 30%, var(--linha)); border-radius: var(--raio); }
-.norma-publicada svg { color: var(--jade-claro); flex: 0 0 auto; margin-top: 2px; }
-[data-tema="escuro"] .norma-publicada svg { color: var(--marca); }
+.norma-publicada svg { color: var(--marca); flex: 0 0 auto; margin-top: 2px; }
 .norma-publicada b { color: var(--texto); font-weight: 600; display: block; font-family: var(--display); }
 .norma-publicada a { font-family: var(--mono); font-size: var(--t-12); color: var(--marca); word-break: break-all; }
 
@@ -398,7 +400,7 @@
        (O `.azmini` do design usa color-mix(--jade 32%, transparent) sobre --surface; no tema escuro
        --surface é quase da cor do fill e o par ligado/desligado some. GUIDELINES §5.1.)
      • `.v-sim`/`.v-nao`/`.v-abs` — substituídos por `.chip` + `.chip-ok/.chip-risco/.chip-neutro` do
-       chassi. O `.v-sim` do design crava três hexes literais (#15634A/#2C8A66/#58C99E) e viola
+       chassi. O `.v-sim` do design crava três hexes literais (#234429/#6B9B72/#A6BFA2) e viola
        GUIDELINES §1 ("não redefine nenhum token"), além de não ter override no escuro.
      • `.agenda`/`.ag`/`.data`/`.sep`/`.desc`/`.hora` — a seção "Agenda pública" saiu (sem contrato).
    Contraste desta tela: A MEDIR em pixel composto, nos dois temas (`.mrow .num` e `.ptag.mesa` usam

@@ -21,17 +21,17 @@
 
    PALETA (5 hex, todos literais no corpo do arquivo — esta lista e' so' referencia p/ quem le'):
      #FFFFFF  o papel — fundo da pagina e de toda celula. NUNCA o creme do design-system (`--papel`
-              #FBF8F0): creme gasta toner e baixa contraste em fotocopia. O papel aqui e' o da Casa.
+              #FFF7EA): creme gasta toner e baixa contraste em fotocopia. O papel aqui e' o da Casa.
      #1B2A20  a tinta — texto principal, titulos, valores, fios ESTRUTURAIS de 0.8pt. ~15.8:1/branco.
      #586B5E  a tinta secundaria — rotulos de coluna, unidades, notas de rodape. ~5.0:1/branco (AA
               mesmo em corpo pequeno).
      #8C8677  o fio de linha — separador de linha de tabela, 0.5pt. ~3.2:1/branco (acima do piso
               grafico de 3:1).
-     #B9421F  o unico acento (telha) — usado em DOIS lugares e so' neles: o rotulo "Sem assento na
+     #A85334  o unico acento (telha) — usado em DOIS lugares e so' neles: o rotulo "Sem assento na
               data" (secao 7) e o fio esquerdo da nota do STUB-ICP (secao 12). Nunca decorativo.
 
    Divergencia resolvida entre os dois consultores de design (ver relatorio da fatia): a proposta
-   "ESTRUTURA/UX" usava #0C5340 (jade, a marca do fornecedor) em fios estruturais e titulos de secao.
+   "ESTRUTURA/UX" usava #2C5638 (jade, a marca do fornecedor) em fios estruturais e titulos de secao.
    Ficou com a proposta "DIRECAO DE ARTE", que recusa jade neste documento por inteiro — o papel e' da
    Camara, nao nosso; o nome do sistema aparece uma unica vez, em 7pt, na linha de emissao final.
 
@@ -436,8 +436,8 @@ td, th {
 
 .rotulo-risco {
   display: inline-block;
-  border: 0.8pt solid #B9421F;
-  color: #B9421F;
+  border: 0.8pt solid #A85334;
+  color: #A85334;
   font-family: "Courier New", Courier, monospace;
   font-size: 7pt;
   text-transform: uppercase;
@@ -644,7 +644,7 @@ td, th {
 }
 
 .nota.nota-stub {
-  border-left: 2pt solid #B9421F;
+  border-left: 2pt solid #A85334;
   padding-left: 4mm;
   margin-left: 2mm;
   text-indent: 0;

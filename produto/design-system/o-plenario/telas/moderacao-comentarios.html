@@ -6,7 +6,7 @@
 <title>O Plenário — Moderação de comentários</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="../sistema/tokens.css" />
 <link rel="stylesheet" href="../sistema/chassi.css" />
 <style>
@@ -41,7 +41,7 @@
   .cm-cab .av { width: 32px; height: 32px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 0.66rem; color: #fff; }
   .cm-cab .quem b { font-size: var(--t-13); color: var(--texto); font-weight: 600; display: block; line-height: 1.2; }
   .cm-cab .quem span { font-size: var(--t-12); color: var(--texto-2); }
-  .cm-cab .verif { display: inline-flex; align-items: center; gap: 0.25rem; font-size: var(--t-12); color: #15634A; } [data-tema="escuro"] .cm-cab .verif { color: #58C99E; }
+  .cm-cab .verif { display: inline-flex; align-items: center; gap: 0.25rem; font-size: var(--t-12); color: #234429; } [data-tema="escuro"] .cm-cab .verif { color: #A6BFA2; }
   .cm-cab .sobre { margin-left: auto; font-size: var(--t-12); color: var(--texto-2); text-align: right; }
   .cm-cab .sobre a { color: var(--marca); font-weight: 600; text-decoration: none; } .cm-cab .sobre a:hover { text-decoration: underline; }
   .flag { display: inline-flex; align-items: center; gap: 0.3rem; font-size: var(--t-12); font-weight: 600; color: var(--acento-texto); background: var(--surface-2); border: 1px solid color-mix(in srgb,var(--telha) 45%,transparent); border-radius: 999px; padding: 0.12rem 0.55rem; }
@@ -60,7 +60,7 @@
   .rejeitar-form h4 { font-family: var(--display); font-weight: 600; font-size: var(--t-13); color: var(--texto); margin: 0 0 0.6rem; }
   .motivos { display: flex; gap: 0.5rem; flex-wrap: wrap; }
   .motivo { font-size: var(--t-12); font-weight: 600; color: var(--texto-2); background: var(--surface); border: 1px solid var(--linha); border-radius: 999px; padding: 0.4rem 0.85rem; cursor: pointer; min-height: 40px; }
-  .motivo[aria-pressed="true"] { color: #fff; background: var(--telha-fundo); border-color: var(--telha-fundo); }
+  .motivo[aria-pressed="true"] { color: #fff; background: var(--telha-fundo); border-color: var(--acento-texto); }
   .rejeitar-form .aviso { display: flex; align-items: center; gap: 0.4rem; margin: 0.8rem 0 0.8rem; font-size: var(--t-12); color: var(--texto-2); }
   .rejeitar-form .aviso svg { color: var(--marca); flex: 0 0 auto; }
   .rejeitar-form .form-acoes { display: flex; gap: 0.5rem; }
@@ -77,7 +77,7 @@
 <header class="topo">
   <div class="envelope topo-grade">
     <div class="marca">
-      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#3A6A48"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#C0693F"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#3F6E92"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#CFA65C"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#4E8259"/></svg>
       <div><p class="marca-nome">O Plenário</p><p class="marca-orgao">Câmara Municipal de Fortaleza</p></div>
     </div>
     <div class="topo-sep" aria-hidden="true"></div>
@@ -118,7 +118,7 @@
 
     <article class="cm denuncia">
       <div class="cm-cab">
-        <span class="av" style="background:var(--telha)" aria-hidden="true">AL</span>
+        <span class="av" style="background:var(--telha-fundo)" aria-hidden="true">AL</span>
         <div class="quem"><b>Antônio L.</b><span class="verif"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>gov.br</span></div>
         <span class="flag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 21V4h13l-2 4 2 4H4"/></svg>3 denúncias</span>
         <span class="sobre">em <a href="ficha-materia-publica.html">PL 042/2026</a><br>Hortas comunitárias</span>

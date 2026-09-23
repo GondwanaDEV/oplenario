@@ -6,7 +6,7 @@
 <title>O Plenário — Nova proposição</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="../sistema/tokens.css" />
 <link rel="stylesheet" href="../sistema/chassi.css" />
 <style>
@@ -58,14 +58,14 @@
   .campo input::placeholder, .campo textarea::placeholder { color: var(--texto-2); }
   .campo .erro { font-size: var(--t-12); color: var(--acento-texto); display: flex; align-items: center; gap: 0.35rem; }
 
-  .assist-ia { display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--t-13); font-weight: 600; color: var(--cobalto); background: color-mix(in srgb, var(--cobalto) 9%, var(--surface-2)); border: 1px solid color-mix(in srgb, var(--cobalto) 35%, transparent); border-radius: var(--raio-sm); padding: 0.4rem 0.7rem; min-height: 38px; cursor: pointer; }
-  [data-tema="escuro"] .assist-ia { color: var(--foco); border-color: color-mix(in srgb, var(--foco) 40%, transparent); }
+  .assist-ia { display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--t-13); font-weight: 600; color: var(--cobalto-texto); background: color-mix(in srgb, var(--cobalto) 9%, var(--surface-2)); border: 1px solid color-mix(in srgb, var(--cobalto) 35%, transparent); border-radius: var(--raio-sm); padding: 0.4rem 0.7rem; min-height: 38px; cursor: pointer; }
+  [data-tema="escuro"] .assist-ia { color: var(--cobalto-texto); border-color: color-mix(in srgb, var(--foco) 40%, transparent); }
   .assist-ia:hover { background: color-mix(in srgb, var(--cobalto) 14%, var(--surface-2)); }
 
   /* sugestão da IA com camada de confiança */
   .ia-sugestao { border: 1px solid var(--linha); border-left: 3px solid var(--cobalto); border-radius: var(--raio-sm); background: var(--surface-2); padding: 0.9rem 1rem; margin: 0.3rem 0 0; }
-  .ia-sugestao .selo { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; text-transform: uppercase; color: var(--cobalto); }
-  [data-tema="escuro"] .ia-sugestao .selo { color: var(--foco); }
+  .ia-sugestao .selo { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; text-transform: uppercase; color: var(--cobalto-texto); }
+  [data-tema="escuro"] .ia-sugestao .selo { color: var(--cobalto-texto); }
   .ia-sugestao p { margin: 0.5rem 0 0.7rem; color: var(--texto); font-size: var(--t-13); }
   .ia-sugestao .acoes { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
   .ia-sugestao .nota { font-size: var(--t-12); color: var(--texto-2); margin-left: auto; }
@@ -90,7 +90,7 @@
 <header class="topo">
   <div class="envelope topo-grade">
     <div class="marca">
-      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#3A6A48"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#C0693F"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#3F6E92"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#CFA65C"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#4E8259"/></svg>
       <div>
         <p class="marca-nome">O Plenário</p>
         <p class="marca-orgao">Câmara Municipal de Fortaleza</p>

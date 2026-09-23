@@ -85,7 +85,7 @@
   transition: background-color .12s ease;
 }
 .linha:last-child { border-bottom: 0; }
-.linha:hover, .linha.destacada { background: color-mix(in srgb, var(--marca) 6%, var(--surface)); }
+.linha:hover, .linha.destacada { background: var(--realce); }
 .linha:focus-within { background: color-mix(in srgb, var(--foco) 8%, var(--surface)); }
 
 .trilho { align-self: stretch; background: var(--linha); }
@@ -200,7 +200,7 @@ svg.hemi { width: 100%; height: auto; display: block; margin: 0.7rem 0 0.2rem; }
 .pend-lista .acoes { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 
 .nota-mesa { margin: 0.8rem 0 0; padding: 0.6rem 0.75rem; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); font-size: var(--t-12); color: var(--texto-2); line-height: 1.45; display: flex; gap: 0.45rem; align-items: flex-start; }
-.nota-mesa svg { flex: 0 0 auto; color: var(--cobalto); margin-top: 2px; }
+.nota-mesa svg { flex: 0 0 auto; color: var(--cobalto-texto); margin-top: 2px; }
 [data-tema="escuro"] .nota-mesa svg { color: var(--foco); }
 .nota-mesa b { color: var(--texto); font-weight: 600; }
 

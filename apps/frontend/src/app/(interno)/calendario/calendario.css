@@ -13,7 +13,7 @@
    o par glifo+palavra — jade e telha são exatamente o par que um deuteranope não separa.
 
    AA nos DOIS temas, sem cravar cor literal de tinta:
-     - sessão usa o par --acao/--acao-texto (claro #0C5340+branco ≈ 10:1; escuro #18A074+#06150F ≈ 8:1),
+     - sessão usa o par --acao/--acao-texto (claro #2C5638+branco ≈ 10:1; escuro #7A9B7A+#06150F ≈ 8:1),
        que é o par sancionado dos tokens — e no escuro ainda destaca do --surface, o que o --jade cru
        (quase a luminância do fundo escuro) não faria;
      - prazo usa --telha-fundo + branco (5.44:1, a correção §5.1 já medida nesta casa; --telha puro
@@ -46,7 +46,7 @@
 /* As 7 colunas moram na LINHA, não na grade: com role="row" entre a grade e as células (exigência da
    grade ARIA), as células deixam de ser filhas diretas de .cal-grid. */
 .cal-dows, .cal-linha { display: grid; grid-template-columns: repeat(7, 1fr); }
-.cal-dows { background: var(--surface-2); border-bottom: 1px solid var(--linha); }
+.cal-dows { background: var(--realce); border-bottom: 1px solid var(--linha); }
 .cal-dows span { font-family: var(--mono); font-size: var(--t-12); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--texto-2); text-align: center; padding: 0.6rem 0; }
 
 .dia { min-height: 104px; border-right: 1px solid var(--linha); border-bottom: 1px solid var(--linha); padding: 0.4rem; display: flex; flex-direction: column; gap: 0.25rem; }

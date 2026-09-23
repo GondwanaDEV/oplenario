@@ -6,7 +6,7 @@
 <title>O Plenário — Julgamento de contas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="../sistema/tokens.css" />
 <link rel="stylesheet" href="../sistema/chassi.css" />
 <style>
@@ -26,14 +26,17 @@
   .grade { display: grid; grid-template-columns: 1fr 320px; gap: 1.4rem; align-items: start; margin: 1.3rem 0 0; }
 
   /* parecer prévio do TCE = herói (ilha-palco) */
-  .parecer { background: var(--palco-bg); color: var(--palco-texto); border-radius: var(--raio-lg); box-shadow: var(--sombra-alta); padding: 1.5rem 1.6rem; }
-  .parecer .et { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--palco-texto-2); }
+  /* Deixou de ser ilha-palco (22/09/2026): --palco existe para o TELAO — projetado,
+     sala escurecida, lido a distancia. Esta e' tela de trabalho em monitor, e o bloco
+     escuro so' fazia mancha no tema claro. Mesmo racional do hero dos Paineis. */
+  .parecer { background: var(--surface); color: var(--texto); border: 1px solid var(--linha); border-radius: var(--raio-lg); box-shadow: var(--sombra-alta); padding: 1.5rem 1.6rem; }
+  .parecer .et { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--texto-2); }
   .parecer .res { display: flex; align-items: center; gap: 0.8rem; margin: 0.8rem 0 0; }
-  .parecer .res .ic { width: 48px; height: 48px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; color: #06150F; background: var(--jade-claro); }
-  .parecer .res b { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: #fff; line-height: 1.1; }
-  .parecer .res span { font-size: var(--t-13); color: var(--palco-texto-2); display: block; }
-  .parecer .desc { font-size: var(--t-13); color: var(--palco-texto-2); margin: 1rem 0 0; line-height: 1.55; }
-  .parecer .desc b { color: #fff; }
+  .parecer .res .ic { width: 48px; height: 48px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; color: var(--acao-texto); background: var(--marca); }
+  .parecer .res b { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: var(--texto); line-height: 1.1; }
+  .parecer .res span { font-size: var(--t-13); color: var(--texto-2); display: block; }
+  .parecer .desc { font-size: var(--t-13); color: var(--texto-2); margin: 1rem 0 0; line-height: 1.55; }
+  .parecer .desc b { color: var(--texto); }
 
   .card { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.2rem 1.3rem; }
   .card h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.7rem; }
@@ -65,7 +68,7 @@
 <header class="topo">
   <div class="envelope topo-grade">
     <div class="marca">
-      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#0C5340"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#D9542B"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#1E5FA8"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#E8B23A"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#16785C"/></svg>
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><rect width="34" height="34" rx="8" fill="#3A6A48"/><rect x="7" y="7" width="9" height="9" rx="2" fill="#C0693F"/><rect x="18" y="7" width="9" height="9" rx="2" fill="#3F6E92"/><rect x="7" y="18" width="9" height="9" rx="2" fill="#CFA65C"/><rect x="18" y="18" width="9" height="9" rx="2" fill="#4E8259"/></svg>
       <div><p class="marca-nome">O Plenário</p><p class="marca-orgao">Câmara Municipal de Fortaleza</p></div>
     </div>
     <div class="topo-sep" aria-hidden="true"></div>

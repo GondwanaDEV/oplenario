@@ -37,8 +37,12 @@
 .votar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin: 1rem 0 0; }
 .vbtn { font-family: var(--corpo); font-weight: 700; font-size: var(--t-16); border: 1.5px solid transparent; border-radius: var(--raio); padding: 0.85rem 0.5rem; min-height: 56px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.25rem; line-height: 1; }
 .vbtn:disabled { opacity: 0.6; cursor: default; }
-.vbtn-sim { background: var(--jade-claro); color: #fff; }
-.vbtn-sim:hover:not(:disabled) { background: #128a66; }
+/* O fundo segue --jade-claro: sobre o palco escuro ele separa bem (3.74:1). Quem
+   falhava era o texto BRANCO, 3.09:1, abaixo do piso de 4.5 — o botao claro pedia
+   tinta escura, e nao branca (6.07:1). O hover era #128a66, verde-agua da paleta
+   ANTIGA que sobreviveu a troca. */
+.vbtn-sim { background: var(--jade-claro); color: #0B140C; }
+.vbtn-sim:hover:not(:disabled) { background: #8FBE92; }
 /* branco sobre telha pura = 4.0 (falha AA p/ texto não-grande); usa telha-fundo = 5.44 — regra recorrente do sistema (GUIDELINES-CHECKLIST §5.1). */
 .vbtn-nao { background: var(--telha-fundo); color: #fff; }
 .vbtn-nao:hover:not(:disabled) { background: #9E3A1C; }

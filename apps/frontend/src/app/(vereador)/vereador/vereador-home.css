@@ -29,7 +29,7 @@
 .ciencia { background: color-mix(in srgb, var(--cobalto) 7%, var(--surface-2)); border: 1px solid color-mix(in srgb, var(--cobalto) 28%, var(--linha)); border-radius: var(--raio); padding: 0.9rem 1rem; }
 [data-tema="escuro"] .ciencia { background: color-mix(in srgb, var(--foco) 10%, var(--surface-2)); border-color: color-mix(in srgb, var(--foco) 30%, var(--linha)); }
 .ciencia + .ciencia { margin-top: 0.7rem; }
-.ciencia .ci-top { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); color: var(--cobalto); }
+.ciencia .ci-top { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); color: var(--cobalto-texto); }
 [data-tema="escuro"] .ciencia .ci-top { color: color-mix(in srgb, var(--foco) 78%, #fff); }
 .ciencia h3 { font-family: var(--corpo); font-weight: 600; font-size: var(--t-16); color: var(--texto); margin: 0.45rem 0 0; line-height: 1.3; }
 .ciencia .num-inline { font-family: var(--mono); font-size: var(--t-13); }

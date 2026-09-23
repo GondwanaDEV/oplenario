@@ -44,7 +44,7 @@ describe("avatar", () => {
   });
 
   it("cor vem da paleta fixa da tela-fonte, usável direto como CSS background", () => {
-    const PALETA = ["var(--jade)", "var(--cobalto)", "var(--telha)", "var(--jade-claro)", "#7A4FA0", "var(--cobalto-fundo)", "#9C6B1E"];
+    const PALETA = ["var(--jade)", "var(--cobalto)", "var(--telha)", "var(--jade-claro)", "#6F5C8A", "var(--cobalto-fundo)", "#8A7038"];
     const { cor } = avatar("Qualquer Nome", "id-x");
     expect(PALETA).toContain(cor);
   });

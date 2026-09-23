@@ -35,7 +35,7 @@
 .et.atual .az { background: color-mix(in srgb, var(--azc) 35%, transparent); }
 .et.futura .az { background: var(--linha); --azc: var(--linha); }
 .et:nth-child(1) { --azc: var(--jade); } .et:nth-child(2) { --azc: var(--cobalto); }
-.et:nth-child(3) { --azc: var(--amarelo-traco); } .et:nth-child(4) { --azc: var(--jade-claro); }
+.et:nth-child(3) { --azc: var(--amarelo-traco); } .et:nth-child(4) { --azc: var(--jade-medio); }
 .et:nth-child(5) { --azc: var(--telha); }
 .et .mk { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-family: var(--mono); font-size: var(--t-12); font-weight: 700; flex: 0 0 auto; }
 .et.feita .mk { background: var(--acao); color: var(--acao-texto); }
@@ -68,8 +68,7 @@
 .anel-c .arco { fill: none; stroke-width: 8; stroke-linecap: round; }
 .prz-urgente .anel-c .arco { stroke: var(--telha); }
 .prz-atencao .anel-c .arco { stroke: var(--amarelo-traco); }
-.prz-tranquilo .anel-c .arco { stroke: var(--jade-claro); }
-[data-tema="escuro"] .prz-tranquilo .anel-c .arco { stroke: var(--marca); }
+.prz-tranquilo .anel-c .arco { stroke: var(--marca); }   /* ver nota do anel em public.css */
 .anel-c .centro { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; line-height: 1; }
 .anel-c .d { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: var(--texto); font-variant-numeric: tabular-nums; }
 .anel-c .u { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); }
