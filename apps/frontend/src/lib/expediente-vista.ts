@@ -67,6 +67,10 @@ const TIPO_DOCUMENTO_ROTULO: Record<string, string> = {
   outro: "Outro",
 };
 
+// Fonte única das chaves (mesma ordem do <select> de tipo-documento em modelos/formulario-modelo.tsx) —
+// espelha legislativo.logic/tipos-documento (wire/in/documento-modelo.CriarModelo usa o mesmo vocabulário).
+export const TIPOS_DOCUMENTO = Object.keys(TIPO_DOCUMENTO_ROTULO);
+
 export function rotularTipoDocumento(tipo: string): string {
   return TIPO_DOCUMENTO_ROTULO[tipo] ?? tipo;
 }

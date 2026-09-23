@@ -59,6 +59,26 @@
           (is (thrown? Exception (criar-modelo! tx ente {:chave "oficio_padrao"}))
               "chave duplicada no ente barra (UNIQUE)"))))))
 
+;; ---------- modelo: atualizar (nome/corpo/ativo) + CAS ----------
+
+(deftest modelo-atualizar-edita-desativa-e-cas
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [{mid :id} (criar-modelo! tx ente {})]
+          (modelo/atualizar! tx {:id mid :ente-id ente :nome "Nome revisado" :updated-by nil :lock-version 0})
+          (let [r (modelo/buscar tx ente mid)]
+            (is (= "Nome revisado" (:nome r)) "nome editavel")
+            (is (= 1 (:lock-version r)) "CAS incrementa"))
+          ;; desativa (soft: sem DELETE, so' `ativo` baixa)
+          (modelo/atualizar! tx {:id mid :ente-id ente :ativo false :updated-by nil :lock-version 1})
+          (is (false? (:ativo (modelo/buscar tx ente mid))))
+          (is (not (some #{mid} (map :id (modelo/listar-ativos tx ente)))) "desativado some da listagem de ativos")
+          ;; CAS: lock-version desatualizado -> :validacao/invalido (mesmo contrato de documento/editar-rascunho!)
+          (is (thrown-with-msg? Exception #"conflito"
+                (modelo/atualizar! tx {:id mid :ente-id ente :nome "X" :updated-by nil :lock-version 1}))
+              "lock-version ja consumido (agora e' 2) barra"))))))
+
 ;; ---------- gerar: merge aplicado + rascunho ----------
 
 (deftest gera-documento-com-merge

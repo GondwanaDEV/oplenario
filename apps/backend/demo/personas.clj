@@ -1,21 +1,21 @@
 (ns personas
-  "A 5a semente da demo — CREDENCIAIS Keycloak p/ as 4 personas nomeadas da Casa (secretaria/presidente/
-  vereador comum/cidada), sobre a Casa JA' SEMEADA por `casa/semear!` (via `demo/semear-tudo.sh`).
+  "A 5a semente da demo — CREDENCIAIS Keycloak p/ as 5 personas nomeadas da Casa (secretaria/presidente/
+  vereador comum/cidada/apresentacao), sobre a Casa JA' SEMEADA por `casa/semear!` (via `demo/semear-tudo.sh`).
 
   ENTRYPOINT PROPRIO (nao entra em `semear_tudo.clj`): o Keycloak so' existe sob `--profile auth`;
   embutir esta semente na narrativa quebraria `semear-tudo.sh` p/ quem roda sem auth. Rodar via
   `demo/semear-credenciais.sh` (o script de host que sobe o container efemero com KEYCLOAK_BASE_URL
   apontando pro DNS do compose).
 
-  NUNCA SEMEIA A CASA — so' LE. Resolve as 4 identidades pelos CPFs fixos de `casa.clj` (publicos de
+  NUNCA SEMEIA A CASA — so' LE. Resolve as 5 identidades pelos CPFs fixos de `casa.clj` (publicos de
   proposito — ver comentario la') via `identidade.db.identidade/por-cpf` (leitura pura, sem upsert); se
   alguma faltar, a Casa nao esta semeada e a funcao FALHA ALTO com uma mensagem acionavel — nunca cria a
   Casa por conta propria (essa e' responsabilidade exclusiva de `casa/semear!`).
 
   O QUE FAZ, nesta ordem:
-   1. resolve os 4 identidade-ids pelos CPFs fixos (leitura, idempotente por natureza);
+   1. resolve os 5 identidade-ids pelos CPFs fixos (leitura, idempotente por natureza);
    2. mata a ARMADILHA DO TOKEN DE 56s (`keycloak-admin/estender-lifespan-admin-token!`) ANTES de
-      qualquer outra chamada admin — um token pego uma vez e reusado por ~8 chamadas (4 personas × 2
+      qualquer outra chamada admin — um token pego uma vez e reusado por ~10 chamadas (5 personas × 2
       operacoes) expiraria no meio numa tentativa e falharia numa etapa DIFERENTE na proxima, o que lê
       como flakiness mas e' relogio;
    3. `idp/provisionar-realm!` p/ o ente da demo (idempotente — declara o atributo `identidade-id`,
@@ -44,7 +44,7 @@
   (:import (java.net.http HttpClient)))
 
 (def senha-demo
-  "Senha UNICA das 4 personas — credencial de DEMONSTRACAO LOCAL, nunca de producao. Este repositorio
+  "Senha UNICA das 5 personas — credencial de DEMONSTRACAO LOCAL, nunca de producao. Este repositorio
   NAO TEM REMOTE (`git remote -v` vazio — confirmado, ver `docs/18-personas-da-demo.md`): nao ha' canal
   de vazamento por push, isto e' FIXTURE de dev, nao segredo. Se o Keycloak recusar por politica de
   senha do realm, a resposta e' AJUSTAR A POLITICA no provisionamento (`idp/provisionar-realm!` ou um
@@ -55,14 +55,15 @@
   falha alto) e ajusta aqui, nao no valor da senha."
   "Plenario@2026")
 
-;; As 4 personas nomeadas — MESMOS CPFs fixos e MESMOS nomes que `casa/criar-identidades!` usa. A fonte
+;; As 5 personas nomeadas — MESMOS CPFs fixos e MESMOS nomes que `casa/criar-identidades!` usa. A fonte
 ;; do dado (nome, vinculo, papeis) e' SEMPRE a Casa ja semeada (lida abaixo); os campos aqui sao so' a
 ;; CHAVE de resolucao (cpf) + o rotulo humano p/ o cartao impresso.
 (def ^:private personas
-  [{:chave :secretaria :cpf casa/cpf-secretaria :rotulo "Secretária da Mesa"}
-   {:chave :presidente :cpf casa/cpf-presidente :rotulo "Presidente da Mesa"}
-   {:chave :vereador   :cpf casa/cpf-vereador-comum :rotulo "Vereadora"}
-   {:chave :cidadao    :cpf casa/cpf-cidadao :rotulo "Cidadã"}])
+  [{:chave :secretaria    :cpf casa/cpf-secretaria :rotulo "Secretária da Mesa"}
+   {:chave :presidente    :cpf casa/cpf-presidente :rotulo "Presidente da Mesa"}
+   {:chave :vereador      :cpf casa/cpf-vereador-comum :rotulo "Vereadora"}
+   {:chave :cidadao       :cpf casa/cpf-cidadao :rotulo "Cidadã"}
+   {:chave :apresentacao  :cpf casa/cpf-apresentacao :rotulo "Apresentação (acesso total)"}])
 
 (defn- resolver-identidade
   "Le a identidade pelo CPF fixo — LEITURA PURA (`identidade/por-cpf`, sem upsert). Lanca alto e claro
@@ -85,7 +86,7 @@
        :papeis (vinc/papeis-de tx casa/ente-id identidade-id)})))
 
 (defn- url-entrada
-  "A URL de entrada e' a MESMA p/ as 4 personas — um unico realm-por-tenant (§22.5.1), o mesmo padrao
+  "A URL de entrada e' a MESMA p/ as 5 personas — um unico realm-por-tenant (§22.5.1), o mesmo padrao
   ja' usado por `seed-demo/login-kc`/`seed-demo/slice5`. Depois do login, o app roteia cada persona
   pelo PAPEL do token — o roteiro de exploracao por persona esta em `docs/18-personas-da-demo.md`."
   [ente-id]
@@ -93,8 +94,8 @@
 
 (defn- provisionar-persona!
   "Cria (ou reusa) o usuario Keycloak da persona + limpa a required-action de passkey + seta a senha
-  fixa de demo. `token` e' o token admin JA' obtido sob o lifespan estendido (reusado pelas 4 personas —
-  exatamente o cenario que `keycloak-admin/estender-lifespan-admin-token!` existe p/ proteger: ~8
+  fixa de demo. `token` e' o token admin JA' obtido sob o lifespan estendido (reusado pelas 5 personas —
+  exatamente o cenario que `keycloak-admin/estender-lifespan-admin-token!` existe p/ proteger: ~10
   chamadas admin sequenciais, 2 por persona)."
   [idp http cfg token realm {:keys [id nome]}]
   (let [{:keys [base-url]} cfg
@@ -134,7 +135,7 @@
 
 (defn semear-credenciais!
   "Ponto de entrada do `-X` (`clojure -X:seed personas/semear-credenciais!`). Le a Casa ja' semeada,
-  provisiona o realm + os 4 usuarios Keycloak, grava o artefato e imprime o cartao. FALHA ALTO em
+  provisiona o realm + os 5 usuarios Keycloak, grava o artefato e imprime o cartao. FALHA ALTO em
   qualquer etapa (Casa ausente, Keycloak fora do ar, erro de infra do admin-API) — nunca degrada em
   silencio."
   [_]
@@ -146,7 +147,7 @@
         idp          (component/start (keycloak-idp/keycloak-idp kc-cfg))
         http         (HttpClient/newHttpClient)]
     (try
-      ;; 1. resolve as 4 identidades — LEITURA, falha alto se a Casa nao existir.
+      ;; 1. resolve as 5 identidades — LEITURA, falha alto se a Casa nao existir.
       (let [resolvidas (mapv (fn [p] (assoc p :identidade (resolver-identidade ds p))) personas)]
         ;; 2. mata a armadilha do token de 56s ANTES de qualquer outra chamada admin.
         (let [tok0 (kc-admin/admin-token! http base-url admin-usuario admin-senha)]
@@ -154,7 +155,7 @@
         ;; 3. provisiona o realm do ente (idempotente).
         (idp/provisionar-realm! idp casa/ente-id)
         (let [realm (str realm-prefixo casa/ente-id)
-              ;; token NOVO, obtido DEPOIS da extensao — este e' o que vive 3600s e e' reusado pelas 4
+              ;; token NOVO, obtido DEPOIS da extensao — este e' o que vive 3600s e e' reusado pelas 5
               ;; personas (~8 chamadas admin: limpar-required-actions!+setar-senha! por persona).
               tok   (kc-admin/admin-token! http base-url admin-usuario admin-senha)
               resultado

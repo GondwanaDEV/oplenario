@@ -18,6 +18,7 @@
             [oplenario.kernel.tempo :as tempo]
             [oplenario.legislativo.adapters.in.ciencia :as adapters-in-ciencia]
             [oplenario.legislativo.adapters.in.documento :as adapters-in-documento]
+            [oplenario.legislativo.adapters.in.documento-modelo :as adapters-in-documento-modelo]
             [oplenario.legislativo.adapters.in.parecer :as adapters-in-parecer]
             [oplenario.legislativo.adapters.in.proposicao :as adapters-in-proposicao]
             [oplenario.legislativo.adapters.in.votacao :as adapters-in]
@@ -532,6 +533,44 @@
       (http/json-resposta 200 (adapters-out-documento-modelo/modelos->wire
                                  (controllers/listar-modelos-documento repo-leg ente-id))))))
 
+(defn- detalhe-modelo-documento-handler
+  "GET /legislativo/documento-modelos/:id (Onda B Slice 6, fatia de escrita) — a tela de gestao (aba
+  'Modelos') abre o editor por este detalhe (o `corpo-template` nao sai na listagem do seletor). nil
+  (inexistente no tenant) -> 404."
+  [repo-leg]
+  (fn [req]
+    (let [ente-id (:ente-id (:ator req))
+          id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [modelo (controllers/buscar-modelo-documento repo-leg ente-id id)]
+        (http/json-resposta 200 (adapters-out-documento-modelo/modelo->wire-detalhe modelo))
+        (http/json-resposta 404 {:erro "modelo de documento nao encontrado"})))))
+
+(defn- criar-modelo-documento-handler
+  "POST /legislativo/documento-modelos (Onda B Slice 6, fatia de escrita). Chave duplicada no ente ->
+  `:validacao/invalido` (guard de borda no controller, -> 400 pelo interceptor global de erro)."
+  [repo-leg]
+  (fn [req]
+    (let [ator (:ator req) ente-id (:ente-id ator)
+          m (adapters-in-documento-modelo/criar-modelo->dominio ator (:json-params req))]
+      (controllers/criar-modelo-documento! repo-leg ente-id m)
+      (let [modelo (controllers/buscar-modelo-documento repo-leg ente-id (:id m))]
+        (http/json-resposta 201 (adapters-out-documento-modelo/modelo->wire-detalhe modelo))))))
+
+(defn- atualizar-modelo-documento-handler
+  "PATCH /legislativo/documento-modelos/:id (Onda B Slice 6, fatia de escrita). PRE-CHECK 404 ANTES de
+  escrever se o modelo nao existir (mesmo contrato de editar-documento-handler). Conflito de lock-version
+  -> `:validacao/invalido` (db/documento-modelo.clj) -> 400."
+  [repo-leg]
+  (fn [req]
+    (let [ator (:ator req) ente-id (:ente-id ator)
+          id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-not (controllers/buscar-modelo-documento repo-leg ente-id id)
+        (http/json-resposta 404 {:erro "modelo de documento nao encontrado"})
+        (let [m (adapters-in-documento-modelo/atualizar-modelo->dominio ator id (:json-params req))]
+          (controllers/atualizar-modelo-documento! repo-leg ente-id m)
+          (let [modelo (controllers/buscar-modelo-documento repo-leg ente-id id)]
+            (http/json-resposta 200 (adapters-out-documento-modelo/modelo->wire-detalhe modelo))))))))
+
 (defn- gerar-documento-handler
   "POST /legislativo/documentos. `m` ja' carrega o `:id` novo (gerado pelo adapters/in) — o controller resolve
   o modelo (404 se inexistente no tenant) e gera; o handler RE-LE pelo mesmo id p/ o corpo 201 completo (mesmo
@@ -809,6 +848,14 @@
        :route-name :legislativo/emitir-parecer]
       ["/legislativo/documento-modelos" :get [auth papel (listar-modelos-documento-handler repo-legislativo)]
        :route-name :legislativo/listar-modelos-documento]
+      ["/legislativo/documento-modelos" :post
+       [auth papel it/corpo-json (criar-modelo-documento-handler repo-legislativo)]
+       :route-name :legislativo/criar-modelo-documento]
+      ["/legislativo/documento-modelos/:id" :get [auth papel (detalhe-modelo-documento-handler repo-legislativo)]
+       :route-name :legislativo/detalhe-modelo-documento]
+      ["/legislativo/documento-modelos/:id" :patch
+       [auth papel it/corpo-json (atualizar-modelo-documento-handler repo-legislativo)]
+       :route-name :legislativo/atualizar-modelo-documento]
       ["/legislativo/documentos" :post
        [auth papel it/corpo-json (gerar-documento-handler repo-legislativo)]
        :route-name :legislativo/gerar-documento]

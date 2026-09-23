@@ -542,6 +542,34 @@
   [repo-legislativo ente-id]
   (repo/listar-modelos-ativos repo-legislativo ente-id))
 
+(defn buscar-modelo-documento
+  "Onda B Slice 6 (fatia de escrita) — GET /legislativo/documento-modelos/:id, a tela de gestao (aba
+  'Modelos'). nil (inexistente no tenant) -> 404 na borda, mesmo contrato das leituras irmas."
+  [repo-legislativo ente-id id]
+  (repo/buscar-modelo repo-legislativo ente-id id))
+
+(defn criar-modelo-documento!
+  "Onda B Slice 6 (fatia de escrita) — cria um modelo novo (config do tenant). GUARD DE CHAVE DUPLICADA
+  (pre-condicao de borda, mesmo racional de gerar-autografo/GUARD DE DUPLICIDADE acima): pre-checa
+  `modelo-por-chave` ANTES de inserir, em vez de deixar a excecao opaca do UNIQUE(ente_id,chave) do
+  db/documento-modelo.clj subir crua ate' o interceptor global -> 500. `:tipo :validacao/invalido` (mesmo
+  ramo -> 400 do guard irmao). `m` ja' vem coagido pelo adapters/in (id/chave/nome/tipo-documento/
+  corpo-template/created-by)."
+  [repo-legislativo ente-id m]
+  (when (repo/modelo-por-chave repo-legislativo ente-id (:chave m))
+    (throw (ex-info "criar-modelo-documento!: chave ja utilizada por outro modelo neste ente"
+                    {:tipo :validacao/invalido :chave (:chave m)})))
+  (repo/criar-modelo! repo-legislativo ente-id m))
+
+(defn atualizar-modelo-documento!
+  "Onda B Slice 6 (fatia de escrita) — edita nome/corpo/ativo (CAS por lock-version). O diplomat PRE-CHECA
+  404 (buscar-modelo-documento) antes de chamar este controller (mesmo contrato de editar-documento) — o
+  que sobra pra `db/documento-modelo.clj atualizar!` lancar e' so' o conflito de versao real (concorrencia
+  entre o GET que abriu o editor e este PATCH), `:tipo :validacao/invalido` -> 400 (mesmo contrato de
+  db/documento.clj editar-rascunho!/emitir!, disciplina 5 — nao inventar um segundo formato de CAS)."
+  [repo-legislativo ente-id m]
+  (repo/atualizar-modelo! repo-legislativo ente-id m))
+
 (defn gerar-documento
   "Onda B Slice 6 — gera um documento a partir de um modelo (feature 3.22, merge do dominio). Busca o modelo
   PRIMEIRO — `tipo-documento`/`corpo-template` vem DAI, nunca do cliente (o wire/adapters-in ja' fecha essa

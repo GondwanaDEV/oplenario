@@ -36,12 +36,16 @@
   closure de teste; a AUSENCIA de uma chave e' PROPOSITAL em varios testes (mesmo racional de
   editar-proposicao-inexistente-404): se o handler chamar o metodo fora de ordem, a chamada nil estoura, o
   que sinaliza a regressao em vez de passar silenciosamente."
-  [{:keys [buscar-modelo listar-modelos-ativos gerar-documento! buscar-documento buscar-protocolo
+  [{:keys [buscar-modelo listar-modelos-ativos criar-modelo! modelo-por-chave atualizar-modelo!
+           gerar-documento! buscar-documento buscar-protocolo
            editar-documento! protocolar-documento! protocolos-do-ano]}]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify repo-leg/RepoLegislativo
     (buscar-modelo [_ _ente-id id] (buscar-modelo id))
     (listar-modelos-ativos [_ _ente-id] (listar-modelos-ativos))
+    (criar-modelo! [_ _ente-id m] (criar-modelo! m))
+    (modelo-por-chave [_ _ente-id chave] (modelo-por-chave chave))
+    (atualizar-modelo! [_ _ente-id m] (atualizar-modelo! m))
     (gerar-documento! [_ _ente-id m] (gerar-documento! m))
     ;; review clojure+database MAJOR: producao agora agrega documento+protocolo NUMA UNICA chamada do Repo
     ;; (`buscar-documento-para-editor`, 1 tx) — o fake compoe os MESMOS closures de teste (`buscar-documento`/
@@ -90,6 +94,122 @@
                            :get "/legislativo/documento-modelos"
                            :headers (com-bearer (token (random-uuid) (random-uuid))))]
     (is (= 403 (:status r)))))
+
+;; ========================= GET /legislativo/documento-modelos/:id =========================
+
+(deftest detalhe-modelo-documento-200
+  (let [ente (random-uuid) mid (random-uuid)
+        repo (fake-repo-legislativo {:buscar-modelo (fn [_id] (modelo-canonico ente mid))})
+        r (pt/response-for (service-fn #{"secretario"} repo)
+                           :get (str "/legislativo/documento-modelos/" mid)
+                           :headers (com-bearer (token ente (random-uuid))))
+        corpo (ler-json r)]
+    (is (= 200 (:status r)))
+    (is (= "oficio" (:chave corpo)))
+    (is (= "Ao {{destinatario}}." (:corpo-template corpo)) "detalhe inclui corpo-template (a lista GET nao inclui)")
+    (is (= 0 (:lock-version corpo)))))
+
+(deftest detalhe-modelo-documento-inexistente-404
+  (let [repo (fake-repo-legislativo {:buscar-modelo (fn [_id] nil)})
+        r (pt/response-for (service-fn #{"secretario"} repo)
+                           :get (str "/legislativo/documento-modelos/" (random-uuid))
+                           :headers (com-bearer (token (random-uuid) (random-uuid))))]
+    (is (= 404 (:status r)))))
+
+;; ========================= POST /legislativo/documento-modelos =========================
+
+(deftest criar-modelo-documento-201
+  (let [ente (random-uuid) mid (random-uuid)
+        repo (fake-repo-legislativo
+              {:modelo-por-chave (fn [_chave] nil)
+               :criar-modelo! (fn [m] {:id (:id m)})
+               :buscar-modelo (fn [_id] (modelo-canonico ente mid))})
+        r (pt/response-for (service-fn #{"secretario"} repo)
+                           :post "/legislativo/documento-modelos"
+                           :headers (com-bearer (token ente (random-uuid)))
+                           :body (json/write-value-as-string
+                                   {:chave "oficio" :nome "Oficio [FIXTURE]" :tipo-documento "oficio"
+                                    :corpo-template "Ao {{destinatario}}."}))]
+    (is (= 201 (:status r)))
+    (is (= "oficio" (:chave (ler-json r))))))
+
+(deftest criar-modelo-documento-chave-duplicada-400
+  ;; GUARD DE DUPLICIDADE (controllers.clj) — pre-checa modelo-por-chave ANTES de inserir; se achar, lanca
+  ;; :validacao/invalido -> 400 sem NUNCA chamar criar-modelo! (ausente do fake: chamaria nil se regredisse).
+  (let [ente (random-uuid) mid (random-uuid)
+        repo (fake-repo-legislativo {:modelo-por-chave (fn [_chave] (modelo-canonico ente mid))})
+        r (pt/response-for (service-fn #{"secretario"} repo)
+                           :post "/legislativo/documento-modelos"
+                           :headers (com-bearer (token ente (random-uuid)))
+                           :body (json/write-value-as-string
+                                   {:chave "oficio" :nome "Outro nome" :tipo-documento "oficio"
+                                    :corpo-template "Y"}))]
+    (is (= 400 (:status r)))))
+
+(deftest criar-modelo-documento-corpo-invalido-400
+  ;; `corpo-template` ausente -> wire/in.CriarModelo barra ANTES de qualquer Repo.
+  (let [repo (fake-repo-legislativo {})
+        r (pt/response-for (service-fn #{"secretario"} repo)
+                           :post "/legislativo/documento-modelos"
+                           :headers (com-bearer (token (random-uuid) (random-uuid)))
+                           :body (json/write-value-as-string
+                                   {:chave "oficio" :nome "X" :tipo-documento "oficio"}))]
+    (is (= 400 (:status r)))))
+
+(deftest criar-modelo-documento-sem-papel-403
+  (let [repo (fake-repo-legislativo {})
+        r (pt/response-for (service-fn #{"vereador"} repo)
+                           :post "/legislativo/documento-modelos"
+                           :headers (com-bearer (token (random-uuid) (random-uuid)))
+                           :body (json/write-value-as-string
+                                   {:chave "oficio" :nome "X" :tipo-documento "oficio" :corpo-template "Y"}))]
+    (is (= 403 (:status r)))))
+
+;; ========================= PATCH /legislativo/documento-modelos/:id =========================
+
+(deftest atualizar-modelo-documento-200
+  (let [ente (random-uuid) mid (random-uuid)
+        repo (fake-repo-legislativo {:buscar-modelo (fn [_id] (modelo-canonico ente mid))
+                                      :atualizar-modelo! (fn [m] {:id (:id m)})})
+        r (pt/response-for (service-fn #{"secretario"} repo)
+                           :patch (str "/legislativo/documento-modelos/" mid)
+                           :headers (com-bearer (token ente (random-uuid)))
+                           :body (json/write-value-as-string {:lock-version 0 :nome "Novo nome"}))]
+    (is (= 200 (:status r)))))
+
+(deftest atualizar-modelo-documento-inexistente-404
+  ;; Regressao: pre-check via buscar-modelo-documento ANTES de chamar atualizar-modelo-documento! — sem
+  ;; :atualizar-modelo! no fake-repo, se o handler chamar mesmo assim o teste estoura (nil invocada como fn).
+  (let [repo (fake-repo-legislativo {:buscar-modelo (fn [_id] nil)})
+        r (pt/response-for (service-fn #{"secretario"} repo)
+                           :patch (str "/legislativo/documento-modelos/" (random-uuid))
+                           :headers (com-bearer (token (random-uuid) (random-uuid)))
+                           :body (json/write-value-as-string {:lock-version 0 :nome "Y"}))]
+    (is (= 404 (:status r)))))
+
+(deftest atualizar-modelo-documento-conflito-lock-version-400
+  ;; db/documento-modelo.clj/atualizar! tagueia o conflito de CAS :tipo :validacao/invalido (fix desta
+  ;; fatia, mirror db/documento.clj) — nunca deveria 500 num PATCH sob concorrencia normal.
+  (let [ente (random-uuid) mid (random-uuid)
+        repo (fake-repo-legislativo
+              {:buscar-modelo (fn [_id] (modelo-canonico ente mid))
+               :atualizar-modelo! (fn [_m] (throw (ex-info "atualizar!: conflito de lock_version ou modelo inexistente"
+                                                            {:tipo :validacao/invalido :id mid :lock-version 0})))})
+        r (pt/response-for (service-fn #{"secretario"} repo)
+                           :patch (str "/legislativo/documento-modelos/" mid)
+                           :headers (com-bearer (token ente (random-uuid)))
+                           :body (json/write-value-as-string {:lock-version 0 :nome "Y"}))]
+    (is (= 400 (:status r)))))
+
+(deftest desativar-modelo-documento-200
+  (let [ente (random-uuid) mid (random-uuid)
+        repo (fake-repo-legislativo {:buscar-modelo (fn [_id] (modelo-canonico ente mid))
+                                      :atualizar-modelo! (fn [m] {:id (:id m)})})
+        r (pt/response-for (service-fn #{"secretario"} repo)
+                           :patch (str "/legislativo/documento-modelos/" mid)
+                           :headers (com-bearer (token ente (random-uuid)))
+                           :body (json/write-value-as-string {:lock-version 0 :ativo false}))]
+    (is (= 200 (:status r)))))
 
 ;; ========================= POST /legislativo/documentos =========================
 

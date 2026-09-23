@@ -108,6 +108,7 @@ sessão e a de pós-aprovação **não** estão na barra de navegação — cheg
 |---|---|---|---|
 | **Secretária da Mesa** (Marina Alencar Freire) | `secretario` | `585e6532-e754-4d45-ad82-1667fdfb220e` | **Atos 1, 2 e 3.** É a persona com mais superfície |
 | **Vereador(a)** | `vereador` | `222dc995-c188-45f4-a9ce-01bef661c05d` | A home do vereador (`/vereador`) e o cockpit de voto (`/votar`) no Ato 2 |
+| **Apresentação (acesso total)** (Patrícia Nogueira Santos) | `vereador`+`secretario`+`admin_ente` (empilhados no MESMO vínculo) | ver o cartão "Ids da demo" da rodada mais recente do `semear-hml` | **1 login só** — soma tudo que Secretária + Vereador(a) alcançam, sem trocar de sessão (ver caixa abaixo) |
 | **Cidadão** | — (sem login) | — | Ato 4: o portal público é anônimo |
 
 - **Senha de todas:** `Plenario@2026` (fixture pública de demonstração — não é segredo de produção).
@@ -122,6 +123,17 @@ sessão e a de pós-aprovação **não** estão na barra de navegação — cheg
 > **Prepare 2 janelas/perfis antes:** uma logada como **secretária** (Atos 1–3), outra como **vereador**
 > (o `/votar` do Ato 2), e uma **janela anônima** para o Ato 4. Trocar de persona ao vivo custa ~40s de
 > silêncio.
+
+> ### 🟢 Visita única, sem trocar de perfil? Use a persona "Apresentação"
+> Pedido do Rigoni (sócio comercial): quando o roteiro é uma conversa única e objetiva — não o passo a
+> passo de 30 min desta seção — logue **só uma vez** como **Apresentação (acesso total)** e navegue
+> pelas URLs do índice acima à vontade: ela cobre tudo dos Atos 1, 2 e 3 (acervo, expediente, agendar/
+> conduzir sessão, votação, tribuna, painel da Mesa, pós-aprovação) sem precisar de uma 2ª janela — só o
+> Ato 4 (portal do cidadão) continua sendo uma aba anônima à parte, porque a consulta pública não exige
+> login mesmo. **Ressalva:** esta persona empilha `admin_ente` (concede acesso) e `secretario` (mantém o
+> cadastro) na MESMA pessoa — algo que a §4 abaixo explica que a plataforma segrega de propósito em
+> produção real. É uma fixture só para esta demo pontual; se o cliente perguntar sobre governança de
+> acesso, responda com a §4, não fingindo que este login é como um tenant real seria provisionado.
 
 ---
 
@@ -203,7 +215,7 @@ Cockpit: `https://oplenario.calvetec.com.br/sessoes/10000000-0000-0000-0000-0000
 |---|---|---|
 | 1 | Abra o **Comando da Mesa** (URL acima; a sessão `…0211` está **aberta**) | "Este é o console que conduz a sessão. O telão *mostra*; aqui a Mesa *opera*." |
 | 2 | Aponte o **estado da sessão** e os atos disponíveis (Suspender / Encerrar) | "A Mesa suspende, reabre e encerra a sessão daqui — cada ato pede confirmação e registra quem fez." — **pode suspender e reabrir para mostrar; deixe a sessão ABERTA ao final** |
-| 3 | **Painel de Votação** → abrir uma votação de um item da pauta | "A votação é aberta pela Mesa: objeto, modalidade e quórum." — abra; **não encerre com quórum qualificado** (ver §4) |
+| 3 | **Painel de Votação** → abrir uma votação de um item da pauta | "A votação é aberta pela Mesa: objeto, modalidade e quórum." — abra e encerre à vontade, inclusive com quórum qualificado (o denominador é resolvido no servidor, ver §4) |
 | 4 | **Painel de Tribuna** → **Chamar à tribuna** um inscrito → o **cronômetro** dispara | "A Mesa chama o orador e o cronômetro corre ao vivo: pausar, +1 min, aparte, encerrar a fala." |
 | 5 | Telão em outra aba: `/sessoes/10000000-0000-0000-0000-000000000211/plenario` | "O telão da sessão, ao vivo por SSE: quórum, tribuna e placar." |
 | 6 | Na janela do **vereador**, abra a home dele: `/vereador` | "Do lado do vereador: a home mostra 'sessão em andamento' e o leva direto à votação." |
@@ -262,19 +274,25 @@ O que **continua** sem porta de cliente — não abra, não clique, não prometa
 |---|---|
 | **`/paineis/mesa` como vereador/presidente** | 403. `/paineis/*` exige papel `secretario`. Apresente o dashboard **como a secretária** |
 | **Promulgar / publicar norma** | Sem rota HTTP; e a publicação depende do conector do Diário Oficial (diferido). A matéria sancionada não vira lei publicada por caminho de cliente |
-| **Encerrar votação com quórum qualificado** (maioria absoluta) | O denominador ainda chega no corpo da requisição — não demonstre encerramento com quórum qualificado |
 | **Balcão e-SIC / LGPD / ouvidoria / moderação de comentários pelo cidadão** | O balcão do cidadão é API pura, sem tela. A **secretária** tem a tela de **Moderação**; o resto responde-se por API |
 | **Botão "gov.br Entrar"** no portal público | Está visível mas **morto** (`href="#"`). Não clique nem deixe o cliente clicar |
 | **Console do operador** (supratenant) | Zero rotas — não existe |
 | **Gerar remessa ao TCE** | Sem rota de cliente |
 
+> **Correção (23/09/2026):** os dois itens que estavam aqui — "encerrar votação com quórum qualificado"
+> e "voto nominal da Mesa aceita `vereador-id` fora do roster" — **já foram corrigidos** (`docs/16-ledger-
+> prontidao.md`, "Gate de segurança #1 e #2 FECHADOS"). O denominador do quórum e a checagem de roster do
+> voto nominal agora são resolvidos **server-side**, ignorando qualquer valor forjado no corpo da
+> requisição — pode demonstrar os dois à vontade. Esta seção listava um gap que já não existe; removido.
+
 ⚠️ **Se um cliente técnico perguntar** (não invente resposta):
-- *"Só vereador em exercício vota?"* — **Pelo celular do vereador (`/votar`), sim**: a rota resolve o
-  vereador do próprio autenticado e valida, sob lock, mandato vigente + presença. **Lacuna:** a entrada
-  nominal pela Mesa aceita `vereador-id` do corpo sem checar o roster, e a FK do voto ainda é só de
-  schema. Diga isso — não "hoje não".
-- *"Como o quórum de maioria absoluta é calculado?"* — o denominador chega no corpo hoje; correção é
-  prioridade do backlog. Por isso não se demonstra encerramento com quórum qualificado.
+- *"Só vereador em exercício vota?"* — **Sim, nos dois caminhos.** Pelo celular do vereador (`/votar`), a
+  rota resolve o vereador do próprio autenticado e valida, sob lock, mandato vigente + presença. Pela
+  Mesa (voto nominal), `vereador-id` vem do corpo mas é checado contra o roster com mandato vigente —
+  fora do roster, 400, antes de qualquer escrita (gate #2, fechado).
+- *"Como o quórum de maioria absoluta é calculado?"* — o denominador é resolvido **no servidor**, da
+  composição real da Casa (mandatos vigentes hoje), e sobrescreve qualquer valor enviado no corpo — pode
+  demonstrar o encerramento com quórum qualificado sem ressalva (gate #1, fechado).
 - *"Como se dá acesso a um vereador novo?"* — **hoje, pela semente; pela UI ainda não.** Conceder acesso
   é função do papel `admin_ente`, **segregado de propósito** do `secretario`: quem mantém o cadastro não
   pode ligar uma identidade a ele e sair votando. O que falta é o bootstrap do primeiro `admin_ente` (o
