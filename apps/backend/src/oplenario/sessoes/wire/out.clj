@@ -245,12 +245,31 @@
    [:ordem :int]
    [:lock-version :int]])
 
+(def EmApreciacaoOut
+  "O item em APRECIACAO da sessao (docs/23 Fatia 4b): o ultimo anuncio da Mesa, cujo item segue ativo na
+  pauta. So' o ponteiro + o instante — o item em si ja' vem em `itens`."
+  [:map {:closed true}
+   [:item-id :string]
+   [:anunciado-em :string]])
+
 (def PautaOut
   "Pauta viva da sessao (resposta de GET /sessoes/:id/pauta) — o sessao-id + os itens ativos em ordem.
-  Pauta opcional: sessao sem pauta criada projeta `itens` vazio."
+  Pauta opcional: sessao sem pauta criada projeta `itens` vazio. `em-apreciacao` (docs/23 Fatia 4b) so'
+  aparece quando a Mesa ja' anunciou um item que segue na pauta — e' o estado inicial da TV (o replay do SSE
+  so' retem 5 min)."
   [:map {:closed true}
    [:sessao-id :string]
-   [:itens [:sequential PautaItemOut]]])
+   [:itens [:sequential PautaItemOut]]
+   [:em-apreciacao {:optional true} EmApreciacaoOut]])
+
+(def ItemAnunciadoOut
+  "Recibo do anuncio de item (resposta de POST /sessoes/:id/pauta/itens/:item-id/anuncio, docs/23 Fatia 4b):
+  201 quando o anuncio foi criado, 200 quando o item ja' era o anunciado (reenvio — o corpo e' o anuncio
+  existente, no MESMO shape)."
+  [:map {:closed true}
+   [:id :string]
+   [:item-id :string]
+   [:anunciado-em :string]])
 
 (def GravacaoReciboOut
   "Recibo da ingestao de gravacao (resposta 201 de POST /gravacoes). Carrega o `id` do segmento + o

@@ -147,9 +147,21 @@ export interface PautaItemOut {
   lockVersion: number;
 }
 
+export interface EmApreciacaoOut {
+  itemId: string;
+  anunciadoEm: string;
+}
+
 export interface PautaOut {
   sessaoId: string;
   itens: PautaItemOut[];
+  emApreciacao?: EmApreciacaoOut;
+}
+
+export interface ItemAnunciadoOut {
+  id: string;
+  itemId: string;
+  anunciadoEm: string;
 }
 
 export interface GravacaoReciboOut {

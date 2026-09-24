@@ -5,6 +5,7 @@
   db/ direto. (Eventos de dominio Sessao*/real-time = eixos posteriores do F4.)"
   (:require [oplenario.kernel.tenancy :as tenancy]
             [oplenario.sessoes.diplomat.producers :as producers]
+            [oplenario.sessoes.db.anuncio :as anuncio]
             [oplenario.sessoes.db.chamada :as chamada]
             [oplenario.sessoes.db.folha :as db-folha]
             [oplenario.sessoes.db.gravacao :as gravacao]
@@ -174,6 +175,14 @@
   (registrar-incidente! [this ente-id m] "Registra incidente processual (append-only) + emite incidente.registrado (SSE) na MESMA tx.")
   (buscar-incidente [this ente-id id])
   (listar-incidentes [this ente-id sessao-id] "Incidentes da sessao em ordem cronologica (ata + painel da mesa).")
+  ;; docs/23 Fatia 4b — o anuncio do item em apreciacao (Modo TV, fase 2)
+  (anunciar-item! [this ente-id m]
+    "Registra o ANUNCIO de um item da pauta (append-only) + emite `pauta.item-anunciado` (SSE) na MESMA tx. O
+     gate de estado (so' sessao `aberta`) e o de item ATIVO rodam DENTRO da tx, com a sessao lida `FOR SHARE`
+     (mesmo desenho de `registrar-chamada-conduzida!`). Reenvio do item que JA' e' o ultimo anunciado devolve o
+     anuncio existente com `:ja-anunciado true`, sem linha nem evento novos (duplo clique nao vira dois atos).")
+  (item-em-apreciacao [this ente-id sessao-id]
+    "O ULTIMO anuncio da sessao ({:id :pauta-item-id :anunciado-em ...}) ou nil — o item em apreciacao.")
   ;; Etapa 6 fatia 2 — a apuracao de assiduidade
   (leituras-assiduidade [this ente-id periodo]
     "As leituras de SESSOES + PRESENCAS + JUSTIFICATIVAS de um PERIODO (Etapa 6 fatia 2), NUMA UNICA tx —
@@ -560,6 +569,35 @@
               (:requerente-id m) (assoc :requerente-id (:requerente-id m))))
           r))))
   (buscar-incidente [this ente-id id] (transacao this ente-id #(incidente/buscar % ente-id id)))
+  ;; docs/23 Fatia 4b — anunciar e' escrita de CONDUCAO sobre uma sessao VIVA: o gate de estado e o do item
+  ;; rodam aqui dentro, sobre a sessao lida `FOR SHARE` (sem TOCTOU com um encerramento concorrente — mesmo
+  ;; racional de `registrar-chamada-conduzida!`). `:conflito/anuncio` e' tag PROPRIA (1 tag por recurso).
+  (anunciar-item! [this ente-id {:keys [sessao-id pauta-item-id created-by] :as m}]
+    (transacao this ente-id
+      (fn [tx]
+        (let [s (sessao/janela-para-registro tx ente-id sessao-id)]
+          (when (nil? s)
+            (throw (ex-info "anunciar-item!: sessao inexistente neste ente"
+                            {:tipo :conflito/anuncio :motivo :sessao-inexistente :sessao-id sessao-id})))
+          (when-not (= "aberta" (:estado s))
+            (throw (ex-info "so' se anuncia item com a sessao aberta"
+                            {:tipo :conflito/anuncio :motivo :sessao-nao-aberta
+                             :sessao-id sessao-id :estado (:estado s)})))
+          (let [item (pauta/buscar-item tx ente-id pauta-item-id)]
+            (when-not (:ativo item)
+              (throw (ex-info "o item foi retirado da pauta; nao ha' o que anunciar"
+                              {:tipo :conflito/anuncio :motivo :item-retirado :item-id pauta-item-id})))
+            (let [ultimo (anuncio/ultimo-da-sessao tx ente-id sessao-id)]
+              (if (= pauta-item-id (:pauta-item-id ultimo))
+                (assoc ultimo :ja-anunciado true)
+                (let [r (anuncio/registrar! tx (assoc m :ente-id ente-id))]
+                  (producers/emitir-item-anunciado! bus tx ente-id
+                    (cond-> {:anuncio-id (:id r) :sessao-id sessao-id :item-id pauta-item-id
+                             :anunciado-em (str (:anunciado-em r))}
+                      (:proposicao-id item) (assoc :proposicao-id (:proposicao-id item))))
+                  (assoc r :created-by created-by)))))))))
+  (item-em-apreciacao [this ente-id sessao-id]
+    (transacao this ente-id #(anuncio/ultimo-da-sessao % ente-id sessao-id)))
   (listar-incidentes [this ente-id sessao-id] (transacao this ente-id #(incidente/listar-da-sessao % ente-id sessao-id)))
   ;; Etapa 6 fatia 2 — UMA tx do lado de `sessoes` (mesmo molde de `chamada-da-sessao`/`folha-da-sessao`): as
   ;; TRES leituras (sessoes, presencas, justificativas) veem o MESMO snapshot MVCC. O roster fica de fora

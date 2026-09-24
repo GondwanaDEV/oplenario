@@ -493,6 +493,29 @@
             :conflito/sessao-fechada (resposta-conflito-sessao-fechada e)
             (throw e)))))))
 
+(defn- anunciar-item-handler
+  "POST /sessoes/:id/pauta/itens/:item-id/anuncio (docs/23 Fatia 4b, papel 'secretario'). Sem corpo — o
+  instante e' o relogio do servidor e o autor e' o ator. adapters/in coage os path-params; o controller
+  carrega+autoriza a sessao, checa que o item e' desta sessao e registra o anuncio (+ evento SSE, mesma tx).
+  201 quando o anuncio foi CRIADO; 200 quando o item ja' era o anunciado (reenvio, `:ja-anunciado`) — o corpo
+  e' o anuncio existente, no MESMO shape. nil (sessao/pauta/item ausente) -> 404. 409 quando a sessao nao
+  esta aberta, ja' fechou, ou o item foi retirado da pauta."
+  [repo-sessoes relogio]
+  (fn [req]
+    (let [ator (:ator req)
+          m    (adapters-in-pauta/anunciar-item->dominio (get-in req [:path-params :id])
+                                                         (get-in req [:path-params :item-id]))]
+      (try
+        (if-let [recibo (controllers/anunciar-item-pauta repo-sessoes ator m (tempo/agora relogio))]
+          (http/json-resposta (if (:ja-anunciado recibo) 200 201)
+                              (adapters-out-pauta/recibo-anuncio->wire recibo))
+          (http/json-resposta 404 {:erro "sessao ou item de pauta nao encontrado"}))
+        (catch clojure.lang.ExceptionInfo e
+          (case (:tipo (ex-data e))
+            :conflito/anuncio (http/json-resposta 409 {:erro (ex-message e)})
+            :conflito/sessao-fechada (resposta-conflito-sessao-fechada e)
+            (throw e)))))))
+
 (defn- remover-item-handler
   "DELETE /sessoes/:id/pauta/itens/:item-id (§22.6 eixo B). adapters/in coage os path-params + valida o corpo
   {tipo, justificativa?, lock-version}; o controller carrega+autoriza a sessao, checa que o item e' desta sessao
@@ -1056,6 +1079,11 @@
     ["/sessoes/:id/pauta/itens/:item-id" :delete
      [auth (it/exige-papel "secretario") it/corpo-json (remover-item-handler repo-sessoes)]
      :route-name :sessoes/remover-item-pauta]
+    ;; docs/23 Fatia 4b — anunciar o item em apreciacao (sem corpo, mesmo molde de POST `/chamada`). Filho de
+    ;; `/pauta/itens/:item-id` por um segmento LITERAL a mais: sem ambiguidade com o PATCH/DELETE do item.
+    ["/sessoes/:id/pauta/itens/:item-id/anuncio" :post
+     [auth (it/exige-papel "secretario") (anunciar-item-handler repo-sessoes relogio)]
+     :route-name :sessoes/anunciar-item-pauta]
     ["/sessoes/:id/gravacao" :get [auth (listar-gravacoes-handler repo-sessoes)] :route-name :sessoes/listar-gravacoes]
     ["/sessoes/:id/gravacao/:seg-id/vincular" :post
      [auth (it/exige-papel "secretario") it/corpo-json (vincular-gravacao-handler repo-sessoes)]

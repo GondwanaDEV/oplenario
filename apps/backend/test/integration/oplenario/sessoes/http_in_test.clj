@@ -43,7 +43,9 @@
   (reify repo-sessoes/RepoSessoes
     (buscar-sessao [_ ente-id id] (busca-fn ente-id id))
     (buscar-pauta-por-sessao [_ _ente-id _sessao-id] pauta)
-    (listar-itens [_ _ente-id _pauta-sessao-id] itens)))
+    (listar-itens [_ _ente-id _pauta-sessao-id] itens)
+    ;; docs/23 Fatia 4b: a leitura da pauta pergunta pelo item em apreciacao (nenhum anuncio aqui).
+    (item-em-apreciacao [_ _ente-id _sessao-id] nil)))
 
 (defn- fake-repo-identidade [papeis]
   #_{:clj-kondo/ignore [:missing-protocol-method]}

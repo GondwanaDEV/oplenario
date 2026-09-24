@@ -48,7 +48,10 @@
    ;; Modo TV (docs/22): o resumo da materia ANTES de PautaItemOut (campo :proposicao aninhado).
    ["ProposicaoResumoPautaOut" out/ProposicaoResumoPautaOut]
    ["PautaItemOut" out/PautaItemOut]
+   ;; docs/23 Fatia 4b: EmApreciacaoOut ANTES de PautaOut (campo :em-apreciacao aninhado).
+   ["EmApreciacaoOut" out/EmApreciacaoOut]
    ["PautaOut" out/PautaOut]
+   ["ItemAnunciadoOut" out/ItemAnunciadoOut]
    ["GravacaoReciboOut" out/GravacaoReciboOut]
    ;; SegmentoOut ANTES de SegmentosOut (campo :segmentos aninhado).
    ["SegmentoOut" out/SegmentoOut]

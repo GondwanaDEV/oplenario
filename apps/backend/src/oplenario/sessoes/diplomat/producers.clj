@@ -6,6 +6,7 @@
   (:require [oplenario.kernel.eventos :as eventos]
             [oplenario.sessoes.events.gravacao :as ev-gravacao]
             [oplenario.sessoes.events.incidente :as ev-incidente]
+            [oplenario.sessoes.events.pauta :as ev-pauta]
             [oplenario.sessoes.events.presenca :as ev-presenca]
             [oplenario.sessoes.events.sessao :as ev-sessao]
             [oplenario.sessoes.events.tribuna :as ev-tribuna]))
@@ -42,3 +43,6 @@
 
 (defn emitir-incidente-registrado! [bus tx ente-id payload]
   (eventos/emitir! bus tx (ev-incidente/registrado ente-id payload)))
+
+(defn emitir-item-anunciado! [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-pauta/item-anunciado ente-id payload)))

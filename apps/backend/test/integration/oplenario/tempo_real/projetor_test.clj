@@ -59,6 +59,13 @@
          (canais/rotas-do-evento {:tipo "votacao.encerrada" :payload {:sessao-id "S"}}))
       "votacao.encerrada roteia p/ o canal plenario"))
 
+(deftest item-anunciado-roteia-e-e-consumido
+  ;; docs/23 Fatia 4b: o anuncio do item muda a TV para 'Em apreciacao' — tem de chegar ao canal plenario E
+  ;; estar registrado no bus (o roteamento sozinho nao entrega nada sem o consumidor).
+  (is (= ["sessao/S/plenario"]
+         (canais/rotas-do-evento {:tipo "pauta.item-anunciado" :payload {:sessao-id "S"}})))
+  (is (some #{"pauta.item-anunciado"} consumer/tipos-consumidos)))
+
 (deftest votacao-no-registro-do-bus
   ;; tipos-consumidos DERIVA de tipos-plenario (fonte unica) — os 3 tipos de votacao tem de estar la,
   ;; senao o roteamento conheceria o evento mas o bus nao o entregaria (drift).
