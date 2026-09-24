@@ -1,24 +1,19 @@
-/* Chrome específico da rota Pauta/convocação (Onda C Slice C2) — portado de
+/* Chrome específico da rota Pauta/convocação — portado de
    produto/design-system/o-plenario/telas/pauta-convocacao.html (<style> local). Tokens + chassi vêm de
    globals.css; `.envelope`/`.eyebrow`/`.sr-only`/`.btn` já são globais.
 
-   Escopo desta fatia (READ PURO — ver a correção de escopo no header do plano/spec): porta `.pg-cab`,
-   `.faceta`, `.card`, `.grupo`(+`.grupo-cab`), `.pauta-item`(+`.ordem-n`/`.pi-mid`), `.disp`(+`.disp-item`/
-   `.di-mid`), `.conv`(ilha-papel + `.edital-cab`/`.antec`/`.dest`), verbatim onde aplicável.
+   Onda C Slice C2 portou a leitura; docs/23 Fatia 1 porta a MONTAGEM: `.arrasta` (setas de reordenar),
+   `.pi-rem` (retirar), `.add-linha`/`.add-mat` (incluir) e `.disp-add` (incluir a partir do rail), verbatim
+   da tela-fonte.
 
-   NÃO PORTADO (fora de escopo — a fatia não tem NENHUMA mutação de pauta): `.tipo-sel` (seletor
-   EDITÁVEL de tipo de sessão — vira label estático em `.pg-cab h1`), `.grade-form`/`.campo` (form de
-   dados da sessão — vira `<dl>` read-only `.dados-sessao`), `.arrasta` (setas de reordenar — sem
-   `lock-version` não há mutação possível), `.pi-rem`/`.disp-add` (botões de remover/adicionar — mutação),
-   `.add-mat`/`.add-linha` (adicionar matéria — mutação), `.regs`/`.reg-*` (badges de votação/quórum/
-   urgência/regime/adiado — `PautaItemOut` não carrega esse metadado, nada a mostrar sem inventar dado),
-   `.roster` (ciência da convocação — sem tabela hoje, ver spec "Escopo OUT"), `.comando` (barra fixa de
-   ações — todas as 3 ações da tela-fonte são mutação: pré-visualizar/salvar rascunho/publicar).
+   AINDA NÃO PORTADO: `.tipo-sel` e `.grade-form` (editar tipo/data/local da sessão — o agendamento tem tela
+   própria), `.regs`/`.reg-*` (badges de votação/quórum/urgência — `PautaItemOut` não carrega esse metadado),
+   `.roster` (ciência da convocação — sem tabela) e `.comando` (pré-visualizar/rascunho/publicar — a
+   convocação é derivada, não há "publicar").
 
-   NOVO (não existe na tela-fonte): `.dados-sessao` (substitui `.grade-form` por leitura), `.col-vazia`
-   (nota textual de grupo/rail vazio — mesma convenção de tramitacao.css), `.rail-truncado` (aviso honesto
-   quando a página de /proposicoes buscada não cobre o total do tenant), `.tela-estado`/`.acesso-restrito`
-   (estados de carregando/erro/guard — mesma convenção das demais páginas (interno)). */
+   NOVO (não existe na tela-fonte): `.pi-retirar` (confirmação da retirada com a classificação do backend),
+   `.di-fase` (escolher a fase ao incluir do rail), `.aviso-pauta` (resultado de cada escrita), `.dados-sessao`,
+   `.col-vazia`, `.rail-truncado`, `.tela-estado`/`.acesso-restrito`. */
 
 /* ---- cabeçalho de página ---- */
 /* Fatia "truncamento-familia" sitio (a): .aviso-corte — aviso de corte do SERVIDOR (o teto de 200 de
@@ -53,12 +48,41 @@
 .grupo-cab h3 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--acento-texto); margin: 0; }
 .grupo-cab .cont { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin-left: auto; }
 
-.pauta-item { display: grid; grid-template-columns: auto 1fr; gap: 0.6rem 0.8rem; align-items: center; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.6rem 0.7rem; }
+.pauta-item { display: grid; grid-template-columns: auto auto 1fr auto; gap: 0.6rem 0.8rem; align-items: center; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.6rem 0.7rem; }
 .pauta-item + .pauta-item { margin-top: 0.55rem; }
 .ordem-n { font-family: var(--display); font-weight: 800; font-size: var(--t-16); color: var(--marca); width: 1.5rem; text-align: center; }
 .pi-mid { min-width: 0; }
 .pi-mid .num { font-family: var(--mono); font-size: var(--t-12); color: var(--acento-texto); }
+.pi-mid .num + .num::before { content: " · "; }
 .pi-mid h4 { font-family: var(--corpo); font-weight: 600; font-size: var(--t-13); color: var(--texto); margin: 0.1rem 0 0; line-height: 1.3; }
+
+/* montagem (docs/23 Fatia 1) — .arrasta/.pi-rem/.add-* verbatim da tela-fonte; disabled no lugar de aria-disabled */
+.arrasta { display: flex; flex-direction: column; gap: 2px; }
+.arrasta button { width: 30px; height: 24px; display: grid; place-items: center; background: none; border: 1px solid var(--linha); border-radius: 5px; color: var(--texto-2); cursor: pointer; }
+.arrasta button:hover:not(:disabled) { color: var(--texto); border-color: var(--texto-2); }
+.arrasta button:disabled { opacity: .4; cursor: not-allowed; }
+.pi-rem { background: none; border: none; color: var(--texto-2); cursor: pointer; width: 32px; height: 32px; border-radius: 7px; display: grid; place-items: center; }
+.pi-rem:hover:not(:disabled), .pi-rem[aria-expanded="true"] { color: var(--acento-texto); background: color-mix(in srgb, var(--telha) 9%, transparent); }
+.pi-rem:disabled { opacity: .4; cursor: not-allowed; }
+
+.pi-retirar { grid-column: 1 / -1; display: grid; gap: 0.7rem; padding: 0.8rem 0.9rem; margin-top: 0.2rem; background: var(--surface); border: 1px solid color-mix(in srgb, var(--telha) 35%, var(--linha)); border-radius: var(--raio-sm); }
+.pi-retirar fieldset { border: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.4rem 1.1rem; }
+.pi-retirar legend { font-size: var(--t-13); font-weight: 600; color: var(--texto); padding: 0; margin-bottom: 0.4rem; }
+.pi-retirar fieldset label { display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--t-14); color: var(--texto); cursor: pointer; min-height: 32px; }
+.pi-retirar .campo { display: flex; flex-direction: column; gap: 0.3rem; }
+.pi-retirar .campo label { font-size: var(--t-13); font-weight: 600; color: var(--texto); }
+.pi-retirar textarea { font-family: var(--corpo); font-size: var(--t-14); color: var(--texto); background: var(--surface); border: 1px solid color-mix(in srgb, var(--texto-2) 55%, var(--linha)); border-radius: 8px; padding: 0.55rem 0.7rem; width: 100%; resize: vertical; }
+.pi-retirar-acoes { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+
+.add-linha { margin-top: 1.2rem; }
+.add-mat { display: inline-flex; align-items: center; gap: 0.45rem; font-family: var(--corpo); font-weight: 600; font-size: var(--t-13); color: var(--marca); background: color-mix(in srgb, var(--marca) 7%, var(--surface)); border: 1px dashed color-mix(in srgb, var(--marca) 40%, var(--linha)); border-radius: var(--raio-sm); padding: 0.55rem 0.9rem; min-height: 42px; cursor: pointer; width: 100%; justify-content: center; }
+.add-mat:hover:not(:disabled) { background: color-mix(in srgb, var(--marca) 12%, var(--surface)); }
+.add-mat:disabled { opacity: .5; cursor: not-allowed; }
+
+/* resultado de cada escrita — linha fixa (vazia quando não há aviso) para o anúncio não deslocar a pauta */
+.aviso-pauta { min-height: 1.4em; margin: -0.5rem 0 0.8rem; font-size: var(--t-13); font-weight: 600; }
+.aviso-pauta.aviso-ok { color: var(--marca); }
+.aviso-pauta.aviso-erro { color: var(--acento-texto); }
 
 .col-vazia { font-size: var(--t-13); color: var(--texto-2); text-align: center; padding: 1rem 0.5rem; margin: 0; }
 
@@ -66,11 +90,19 @@
 .rail { display: grid; gap: 1.1rem; position: sticky; top: 76px; }
 
 .disp h3, .conv h3 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.7rem; }
-.disp-item { display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0; border-top: 1px solid var(--linha); }
+.disp-item { padding: 0.55rem 0; border-top: 1px solid var(--linha); }
+.di-linha { display: flex; align-items: center; gap: 0.6rem; }
 .disp-item:first-of-type { border-top: none; }
 .disp-item .di-mid { min-width: 0; flex: 1; }
 .disp-item .di-mid .num { font-family: var(--mono); font-size: var(--t-12); color: var(--acento-texto); }
 .disp-item .di-mid p { font-size: var(--t-13); color: var(--texto); margin: 0.1rem 0 0; line-height: 1.3; }
+.disp-add { background: var(--acao); color: var(--acao-texto); border: none; border-radius: 50%; width: 30px; height: 30px; display: grid; place-items: center; cursor: pointer; flex: 0 0 auto; }
+.disp-add:hover:not(:disabled) { background: var(--acao-hover); }
+.disp-add:disabled { opacity: .5; cursor: not-allowed; }
+.di-fase { display: grid; gap: 0.4rem; margin-top: 0.6rem; }
+.di-fase label { font-size: var(--t-12); font-weight: 600; color: var(--texto); }
+.di-fase select { font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 55%, var(--linha)); border-radius: var(--raio-sm); padding: 0.45rem 0.6rem; min-height: 40px; }
+.di-acoes { display: flex; gap: 0.5rem; }
 .rail-truncado { font-size: var(--t-12); color: var(--texto-2); margin: 0.6rem 0 0; }
 
 /* convocação = ilha-PAPEL (o artefato) */
