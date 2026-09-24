@@ -15,7 +15,9 @@ jobs:
       name: production
     concurrency:
       group: deploy-api-prd-${{ github.ref }}
-      cancel-in-progress: true
+      # false: um deploy novo ESPERA o anterior. Cancelar no meio do `migrate` mataria o container com a
+      # migration pela metade e deixaria o lock do Migratus preso (-1), travando os proximos migrates.
+      cancel-in-progress: false
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -31,6 +33,7 @@ jobs:
       # DATABASE_URL, DB_*, VALKEY_URI, MINIO_*, KEYCLOAK_*, APP_ENV sao todos de runtime, entram
       # no Dokploy. A mesma imagem serve `migrate` (command migrate) e `serve` (sem args).
       - name: Build and push Docker image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: ./apps/backend
@@ -40,9 +43,22 @@ jobs:
             ghcr.io/gondwanadev/oplenario-api-prd:latest
           platforms: linux/amd64
 
-      # O `serve` NAO aplica migration (evita corrida entre replicas). Schema novo e one-shot
-      # manual no Dokploy: a mesma imagem com command `migrate` e o user DONO do Postgres,
-      # antes deste webhook (senao a API sobe contra schema velho → `relation ... does not exist`).
+      # O `serve` NAO aplica migration (evita corrida entre replicas). O `migrate` roda AQUI, one-shot,
+      # com a imagem EXATA que acabou de ser publicada (pelo digest) e ANTES do webhook: se falhar, o job
+      # para e a API nao sobe contra schema velho (`relation ... does not exist`). Idempotente — o Migratus
+      # so aplica o que estiver pendente. Mesma conexao do `semear-hml.yaml` (porta externa :5433 do
+      # container oplenario-database; usuario e secret de la).
+      - name: Migrar o banco de producao
+        env:
+          APP_ENV: production
+          DATABASE_URL: jdbc:postgresql://204.12.227.116:5433/oplenario
+          DB_USER: oplenario-application
+          DB_PASSWORD: ${{ secrets.HML_DB_PASSWORD }}
+        run: |
+          docker run --rm \
+            -e APP_ENV -e DATABASE_URL -e DB_USER -e DB_PASSWORD \
+            "ghcr.io/gondwanadev/oplenario-api-prd@${{ steps.build.outputs.digest }}" migrate
+
       - name: Trigger Dokploy Deployment
         run: |
           curl --fail-with-body -sS -X 'POST' \
