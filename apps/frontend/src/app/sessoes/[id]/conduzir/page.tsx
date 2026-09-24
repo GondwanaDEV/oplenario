@@ -333,7 +333,12 @@ function Comando({ sessao, token, transicionar, recarregar }: ComandoProps) {
         </section>
 
         {sessao.estado === "aberta" && (
-          <PainelVotacao sessaoId={sessao.id} token={token} sessaoEstado={sessao.estado} />
+          <PainelVotacao
+            sessaoId={sessao.id}
+            token={token}
+            sessaoEstado={sessao.estado}
+            emApreciacaoItemId={pauta?.["em-apreciacao"]?.["item-id"] ?? null}
+          />
         )}
 
         {(sessao.estado === "aberta" || sessao.estado === "suspensa") && (

@@ -14,6 +14,7 @@ import type {
   QuorumTipo,
   VotacaoAbertaResumo,
 } from "./use-votacao-mesa";
+import { formatarNumeroProposicao } from "./proposicoes-vista";
 
 export interface OpcaoRotulada<T extends string> {
   valor: T;
@@ -65,12 +66,16 @@ export interface ItemPautaObjeto {
   proposicaoId?: string | null;
   fase: string;
   ordem: number;
+  /** Resumo que a pauta traz do item de proposição (docs/23 Fatia 4a) — dá a sigla ao seletor. */
+  proposicao?: { tipo: string; ano: number; sequencial: number } | null;
 }
 
 export interface CandidatoObjeto {
   objetoId: string;
   fase: string;
   ordem: number;
+  /** "PL 22/2026" quando a pauta traz o resumo; null sem ele (o seletor cai para fase + posição). */
+  sigla: string | null;
 }
 
 /** Os itens da pauta que servem de objeto de votação: proposições com `proposicaoId` resolvido. Emenda/
@@ -78,7 +83,12 @@ export interface CandidatoObjeto {
 export function candidatosObjeto(itens: ItemPautaObjeto[]): CandidatoObjeto[] {
   return itens
     .filter((i) => i.tipoItem === "proposicao" && typeof i.proposicaoId === "string" && i.proposicaoId)
-    .map((i) => ({ objetoId: i.proposicaoId as string, fase: i.fase, ordem: i.ordem }))
+    .map((i) => ({
+      objetoId: i.proposicaoId as string,
+      fase: i.fase,
+      ordem: i.ordem,
+      sigla: i.proposicao ? formatarNumeroProposicao(i.proposicao.tipo, i.proposicao.sequencial, i.proposicao.ano) : null,
+    }))
     .sort((a, b) => a.ordem - b.ordem);
 }
 
