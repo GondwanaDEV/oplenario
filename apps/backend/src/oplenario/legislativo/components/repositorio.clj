@@ -41,6 +41,9 @@
   (transacao [this ente-id f] "Roda (f tx) numa UNICA tx do tenant — compoe acoes atomicamente.")
   (protocolar! [this ente-id proposicao] "Gate eixo H: numera (gapless) + URN + insere, atomico.")
   (buscar-proposicao [this ente-id id])
+  (resumos-de-proposicoes [this ente-id ids]
+    "Modo TV (docs/22): {id -> {:tipo :ano :sequencial :ementa}} de um LOTE, numa tx. Id fora do tenant nao
+     volta. Consumido por `sessoes` (pauta) via seam injetado pelo host — sessoes nunca importa legislativo.")
   (listar-por-estado [this ente-id estado])
   (listar-e-contar-proposicoes [this ente-id filtro]
     "Onda B Slice 1: leitura filtrada/paginada/ordenada + total do MESMO filtro, NUMA UNICA tx (review
@@ -402,6 +405,12 @@
              :autor-id (some-> (:autor-id p) str)})
           r))))
   (buscar-proposicao [this ente-id id] (transacao this ente-id #(proposicao/buscar % ente-id id)))
+  (resumos-de-proposicoes [this ente-id ids]
+    (if (empty? ids)
+      {}
+      (transacao this ente-id
+                 #(into {} (map (juxt :id (fn [r] (select-keys r [:tipo :ano :sequencial :ementa]))))
+                        (proposicao/resumos-por-ids % ente-id ids)))))
   (listar-por-estado [this ente-id estado] (transacao this ente-id #(proposicao/listar-por-estado % ente-id estado)))
   ;; Onda B Slice 1 (review ecc): listar+contar compostos NUMA UNICA tx — mesmo filtro le' `itens`/`total`
   ;; do mesmo snapshot MVCC, sem o round-trip extra de duas tx independentes.

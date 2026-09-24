@@ -30,6 +30,9 @@ export interface PautaItemOut {
   fase: string; // logic/fases-pauta
   "tipo-item": string; // logic/tipos-item-pauta
   "proposicao-id"?: string; // presente só p/ "proposicao" (chave omitida nos demais)
+  /** Modo TV (docs/22): o resumo da matéria. Enriquecimento — ausente se a leitura em legislativo não
+   * respondeu ou a matéria não é do tenant; `proposicao-id` continua sendo a referência. */
+  proposicao?: { tipo: string; ano: number; sequencial: number; ementa: string } | null;
   "texto-descricao"?: string; // presente p/ os demais tipos (chave omitida em "proposicao")
   ordem: number;
 }

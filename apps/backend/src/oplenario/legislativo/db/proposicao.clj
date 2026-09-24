@@ -191,6 +191,18 @@
      (sql/format {:select colunas :from [:legislativo.proposicoes]
                   :where [:and [:= :ente_id ente-id] [:= :id id]]}))))
 
+(defn resumos-por-ids
+  "Modo TV (docs/22): o resumo MINIMO (tipo/ano/sequencial/ementa) de um LOTE de proposicoes numa query so' —
+  a pauta de uma sessao tem ~5-20 itens, N `buscar` seriam N round-trips. Mesmo molde de
+  ProposicaoResumoObjetoVotacaoOut. Id que nao existe no tenant simplesmente nao volta (quem chama nao inventa)."
+  [tx ente-id ids]
+  (if (empty? ids)
+    []
+    (comum/linhas->kebab
+     (jdbc/execute! tx
+       (sql/format {:select [:id :tipo :ano :sequencial :ementa] :from [:legislativo.proposicoes]
+                    :where [:and [:= :ente_id ente-id] [:in :id (vec ids)]]})))))
+
 (defn autor-vereador-da-proposicao
   "Onda E fatia 1: o `autor_id` da proposicao QUANDO o autor e' vereador — a resolucao 'dono nominal' da
   notificacao interna. SAME-SCHEMA (nunca cruza modulo, §22.10); leitura ESTREITA de proposito (so' o id;

@@ -13,6 +13,7 @@
             [oplenario.identidade.diplomat.http.in :as identidade-http]
             [oplenario.interceptors :as it]
             [oplenario.kernel.tempo :as tempo]
+            [oplenario.legislativo.components.repositorio :as repo-legislativo-comp]
             [oplenario.legislativo.diplomat.http.in :as legislativo-http]
             [oplenario.paineis.diplomat.http.in :as paineis-http]
             [oplenario.participacao.diplomat.http.in :as participacao-http]
@@ -258,6 +259,11 @@
         ;; `controllers/apurar-assiduidade` (Etapa 6 fatia 2) via a rota `GET /assiduidade` (Etapa 6 fatia 3).
         roster-da-casa-em-datas-fn (fn [ente-id datas]
                                      (repo-cadastros-comp/roster-da-casa-em-datas repo-cadastros ente-id datas))
+        ;; Modo TV (docs/22): o resumo (sigla/numero/ementa) das proposicoes da PAUTA, em lote — sessoes nunca
+        ;; importa legislativo (§22.10), entao o host fecha sobre o Repo de legislativo, mesma inversao de
+        ;; dependencia de `consultar-sessao`. Consumido pelo `pauta-handler` (que degrada se isto falhar).
+        resumir-proposicoes-fn (fn [ente-id ids]
+                                 (repo-legislativo-comp/resumos-de-proposicoes repo-legislativo ente-id ids))
         ;; Etapa 5 fatia 1: o cabecalho da FOLHA (nome/legislatura da Casa) — seam irmao LITERAL de
         ;; `roster-da-casa-fn` acima, mesma inversao de dependencia sobre `cadastros` (sessoes nunca importa
         ;; cadastros, §22.10). Leva `data` na aridade pelo MESMO motivo de `roster-da-casa-fn` (nunca fechar
@@ -388,6 +394,7 @@
                                    ;; para `controllers/apurar-assiduidade`, exposta pela rota `GET
                                    ;; /assiduidade` (Etapa 6 fatia 3).
                                    :roster-da-casa-em-datas roster-da-casa-em-datas-fn
+                                   :resumir-proposicoes resumir-proposicoes-fn
                                    ;; Etapa 5 fatia 1: `dados-da-casa-fn` chega pronto para a Fatia 5 (as
                                    ;; rotas HTTP da folha) fiar o cabecalho — sem rota nova nesta fatia,
                                    ;; `sessoes-http/rotas` ainda nao destrutura a chave (chave extra e'
