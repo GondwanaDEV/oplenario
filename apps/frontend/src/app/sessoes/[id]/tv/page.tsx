@@ -333,7 +333,7 @@ function CartaoTribuna({ estado, agora }: { estado: EstadoPlenario; agora: numbe
       <p className="rot">{tribuna ? `Na tribuna${tribuna.fase ? ` · ${tribuna.fase}` : ""}` : "Tribuna"}</p>
       {tribuna ? (
         <>
-          <div className="quem">
+          <div className="tv-quem">
             <span className="avatar-tv" aria-hidden="true">
               {tribuna.iniciais}
             </span>
@@ -379,7 +379,7 @@ function CartaoQuorum({ estado }: { estado: EstadoPlenario }) {
 function EmCurso({ estado, itens, agora }: { estado: EstadoPlenario; itens: ItemPautaTv[]; agora: number }) {
   return (
     <section className="tv-miolo f-em-curso" aria-label="Sessão em curso">
-      <div className="coluna">
+      <div className="tv-coluna">
         <CartaoTribuna estado={estado} agora={agora} />
         <CartaoQuorum estado={estado} />
       </div>
@@ -395,10 +395,10 @@ function EmApreciacao({ apreciacao, estado, agora }: { apreciacao: VistaApreciac
     <section className="tv-miolo f-em-apreciacao" aria-label="Matéria em apreciação" aria-live="polite">
       <div className="materia apreciacao">
         <p className="rot">Em apreciação · {apreciacao.fase}</p>
-        <span className="num">{apreciacao.sigla}</span>
+        <span className="tv-num">{apreciacao.sigla}</span>
         <h1>{apreciacao.descricao}</h1>
         {apreciacao.autor && (
-          <p className="autor">
+          <p className="tv-autor">
             Autoria: <b>{apreciacao.autor}</b>
           </p>
         )}
@@ -435,7 +435,7 @@ function Votacao({ estado }: { estado: EstadoPlenario }) {
   return (
     <section className="tv-miolo f-votacao" aria-label="Votação em curso">
       <div className="materia">
-        <span className="num">
+        <span className="tv-num">
           {v.numero} <small>votação {v.modalidade}</small>
         </span>
         {v.ementa && <h1>{v.ementa}</h1>}
@@ -462,7 +462,7 @@ function Votacao({ estado }: { estado: EstadoPlenario }) {
           {v.modalidade === "nominal" ? (
             <>
               <div
-                className="trilho"
+                className="tv-trilho"
                 role="img"
                 aria-label={`${v.sim} sim, ${v.nao} não, ${v.abstencao} abstenções${v.podemVotar !== null ? ` de ${v.podemVotar} presentes` : ""}`}
               >
@@ -482,7 +482,7 @@ function Votacao({ estado }: { estado: EstadoPlenario }) {
 
       {v.modalidade === "nominal" ? (
         <div className="vot-corpo">
-          <div className="placar">
+          <div className="tv-placar">
             {(["sim", "nao", "abstencao"] as const).map((k) => (
               <div key={k} className={`pl pl-${k === "abstencao" ? "abs" : k}`}>
                 <span className="r">
@@ -493,6 +493,12 @@ function Votacao({ estado }: { estado: EstadoPlenario }) {
               </div>
             ))}
           </div>
+          {v.nominais.length === 0 ? (
+            <div className="nominal-vazio" role="status">
+              <b>Votação aberta</b>
+              <span>Os votos aparecem aqui, um a um, conforme os vereadores votam.</span>
+            </div>
+          ) : (
           <ul className="nominal" aria-label="Votos nominais">
             {v.nominais.map((it, i) => (
               <li key={`${it.nome}-${i}`} className="vt">
@@ -506,6 +512,7 @@ function Votacao({ estado }: { estado: EstadoPlenario }) {
               </li>
             ))}
           </ul>
+          )}
         </div>
       ) : (
         <div className="secreta">
