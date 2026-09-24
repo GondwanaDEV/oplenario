@@ -794,14 +794,12 @@
 ;; ---------- Tribuna nominal — a COMPOSICAO da sessao (GET /sessoes/:id/composicao) ----------
 
 (defn- membro-da-composicao
-  "Uma LINHA da chamada -> um membro da COMPOSICAO. So' os tres campos que a rota PUBLICA de vereador
-  (`GET /portal/casa/:ente/vereadores/:id`, sem autenticacao nenhuma) ja' serve: `nome-parlamentar` e
-  `cargo-mesa` estao naquela lista de chaves; `partido` NAO esta (conferido campo a campo contra a rota —
-  premissa do briefing que caiu na verificacao: a justificativa original incluia `partido` por engano).
-  `nome` civil, `estado` de presenca e `justificativa` ficam para tras de proposito — nao sao identidade
-  PUBLICA, e essa e' a linha que separa esta rota de `/chamada`."
-  [{:keys [vereador-id nome-parlamentar cargo-mesa]}]
-  {:vereador-id vereador-id :nome-parlamentar nome-parlamentar :cargo-mesa cargo-mesa})
+  "Uma LINHA da chamada -> um membro da COMPOSICAO: a identidade PUBLICA do parlamentar — `nome-parlamentar`,
+  `cargo-mesa` e `partido` (docs/23 Fatia 4a: a TV do plenario mostra o partido de quem esta na tribuna; ver
+  `wire/ComposicaoMembroOut`). `nome` civil, `estado` de presenca e `justificativa` ficam para tras de
+  proposito — nao sao identidade PUBLICA, e essa e' a linha que separa esta rota de `/chamada`."
+  [{:keys [vereador-id nome-parlamentar cargo-mesa partido]}]
+  {:vereador-id vereador-id :nome-parlamentar nome-parlamentar :cargo-mesa cargo-mesa :partido partido})
 
 (defn composicao-da-sessao
   "A COMPOSICAO da sessao (`GET /sessoes/:id/composicao`) — 'quem sao os parlamentares desta sessao, por

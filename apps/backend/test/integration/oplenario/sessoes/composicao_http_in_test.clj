@@ -15,9 +15,10 @@
   abaixo cravam essa fronteira de novo para a rota nova, porque esta rota carrega NOME — o argumento de
   'nao carrega nada nominal' que justificava o `/quorum` nao vale aqui, e a authz nao pode afrouxar por isso.
 
-  PAYLOAD: so' `{vereador-id, nome-parlamentar, cargo-mesa}` por membro (sem `partido` — verificado que a
-  rota publica de vereador nao o serve; sem `nome` civil, sem `estado`, sem `justificativa`/`motivo`, sem
-  `desde`/`fonte`/`registrado-em`/`inconsistencia-cadastro` — nenhum desses e' dado de identidade PUBLICA).
+  PAYLOAD: so' `{vereador-id, nome-parlamentar, cargo-mesa, partido}` por membro (`partido` desde a docs/23
+  Fatia 4a — a TV do plenario mostra o partido de quem fala; filiacao de quem exerce mandato e' dado publico).
+  Sem `nome` civil, sem `estado`, sem `justificativa`/`motivo`, sem `desde`/`fonte`/`registrado-em`/
+  `inconsistencia-cadastro` — nenhum desses e' dado de identidade PUBLICA.
   Linhas `sem-assento` (vereador que o roster da data nao situa na Casa) NAO entram em `membros` — elas
   contam no quorum, mas nao sao 'quem compoe a Casa'."
   (:require [clojure.test :refer [deftest is]]
@@ -231,8 +232,10 @@
         "o contrato de topo e' fechado: nem `instante`, nem `sem-registro-de-presenca`, nem `quorum` (isso e' /quorum)")
     (is (= 3 (count (:membros body))) "Ana, Bruno e Dario (o licenciado SEGUE no roster) -- so' o orfao fica de fora")
     (doseq [m (:membros body)]
-      (is (= #{:vereador-id :nome-parlamentar :cargo-mesa} (set (keys m)))
-          "cada membro e' SO vereador-id + nome-parlamentar + cargo-mesa -- nunca partido, nunca estado, nunca justificativa"))))
+      (is (= #{:vereador-id :nome-parlamentar :cargo-mesa :partido} (set (keys m)))
+          "cada membro e' SO vereador-id + nome-parlamentar + cargo-mesa + partido -- nunca estado, nunca justificativa"))
+    (is (= "PDT" (:partido (first (filter #(= (str v-ana) (:vereador-id %)) (:membros body)))))
+        "docs/23 Fatia 4a: o partido do mandato que cobre a data da sessao viaja")))
 
 (deftest b3-payload-nao-carrega-o-que-e-proibido
   (let [ente (random-uuid) sid (random-uuid)
@@ -243,8 +246,6 @@
         "o `motivo` da justificativa (LGPD) nao aparece em lugar nenhum do corpo")
     (is (not (re-find #"(?i)Silva Nascimento|Costa Ferreira|Melo Junior" cru))
         "nenhum NOME CIVIL atravessa esta rota -- so' o nome parlamentar")
-    (is (not (re-find #"(?i)\"partido\"" cru))
-        "`partido` nao esta no contrato desta rota (a rota publica de vereador tambem nao o serve)")
     (is (not (re-find #"(?i)\"estado\"|\"desde\"|\"fonte\"|\"registrado-em\"|\"registradoEm\"|inconsistencia" cru))
         "nenhum campo de ESTADO de presenca atravessa a rota da composicao -- so' /chamada e /quorum sabem disso")
     (is (re-find #"Ana Nascimento" cru) "o nome PARLAMENTAR de quem tem assento aparece")))

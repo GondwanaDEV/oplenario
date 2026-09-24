@@ -3,16 +3,16 @@ import { linhaDoTempo, opcoesDePresidencia, presidentePadrao } from "./atos-mesa
 import type { AtosMesaOut, ComposicaoMembroOut } from "./contrato-sessoes.gen";
 
 const membros: ComposicaoMembroOut[] = [
-  { vereadorId: "v-ana", nomeParlamentar: "Ana Castro", cargoMesa: null },
-  { vereadorId: "v-helena", nomeParlamentar: "Helena Past", cargoMesa: "Vice-presidente" },
-  { vereadorId: "v-bruno", nomeParlamentar: "Bruno Lima", cargoMesa: "Presidente" },
-  { vereadorId: "v-carla", nomeParlamentar: null, cargoMesa: null },
+  { vereadorId: "v-ana", nomeParlamentar: "Ana Castro", cargoMesa: null, partido: null },
+  { vereadorId: "v-helena", nomeParlamentar: "Helena Past", cargoMesa: "Vice-presidente", partido: null },
+  { vereadorId: "v-bruno", nomeParlamentar: "Bruno Lima", cargoMesa: "Presidente", partido: null },
+  { vereadorId: "v-carla", nomeParlamentar: null, cargoMesa: null, partido: null },
 ];
 
 describe("presidentePadrao", () => {
   it("pré-seleciona o Presidente da Mesa, sem depender de caixa", () => {
     expect(presidentePadrao(membros)).toBe("v-bruno");
-    expect(presidentePadrao([{ vereadorId: "x", nomeParlamentar: "X", cargoMesa: "presidente" }])).toBe("x");
+    expect(presidentePadrao([{ vereadorId: "x", nomeParlamentar: "X", cargoMesa: "presidente", partido: null }])).toBe("x");
   });
 
   it("vice-presidente não é confundido com presidente; sem Presidente → null (nunca adivinha)", () => {

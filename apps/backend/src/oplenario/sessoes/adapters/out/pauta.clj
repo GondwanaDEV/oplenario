@@ -9,13 +9,22 @@
   `DELETE /sessoes/:id/pauta/itens/:item-id` o exigem no corpo, e `GET .../pauta` (esta projecao) e' a UNICA
   leitura de onde um cliente aprende o valor corrente de um item — sem ele reordenar/remover e' impossivel
   de montar so' pela API."
-  (:require [malli.core :as m]
+  (:require [clojure.string :as str]
+            [malli.core :as m]
             [malli.error :as me]
             [oplenario.sessoes.wire.out :as wire]))
 
 (set! *warn-on-reflection* true)
 
 (defn- ->str [x] (some-> x str))
+
+(defn- resumo->wire
+  "O resumo da materia -> ProposicaoResumoPautaOut. `autor-texto` so' entra quando ha' texto (docs/23 Fatia 4a):
+  ausente e' 'sem autoria textual', nunca uma string vazia que a TV exibiria como autor."
+  [resumo]
+  (let [autor (:autor-texto resumo)]
+    (cond-> (select-keys resumo [:tipo :ano :sequencial :ementa])
+      (and (string? autor) (not (str/blank? autor))) (assoc :autor-texto autor))))
 
 (defn- item->wire
   "Item de dominio (ativo) -> PautaItemOut. Inclui apenas os campos do contrato; honra o `{:optional true}` do
@@ -31,7 +40,7 @@
              :ordem        (:ordem it)
              :lock-version (:lock-version it)}
       (:proposicao-id it)   (assoc :proposicao-id   (->str (:proposicao-id it)))
-      resumo                (assoc :proposicao      (select-keys resumo [:tipo :ano :sequencial :ementa]))
+      resumo                (assoc :proposicao      (resumo->wire resumo))
       (:texto-descricao it) (assoc :texto-descricao (:texto-descricao it)))))
 
 (defn pauta->wire

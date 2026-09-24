@@ -106,7 +106,8 @@
         alheia (tenancy/com-tenant* *ds* e2 (fn [tx] (protocolar! tx e2 :ementa "Materia de outra Casa")))]
     (tenancy/com-tenant* *ds* e1
       (fn [tx]
-        (let [a (protocolar! tx e1 :tipo "projeto_lei" :ementa "Energia solar em predios publicos")
+        (let [a (protocolar! tx e1 :tipo "projeto_lei" :ementa "Energia solar em predios publicos"
+                             :autor-texto "Ver. Helena Matos")
               b (protocolar! tx e1 :tipo "requerimento" :ementa "Informacoes sobre escolas")
               rs (prop/resumos-por-ids tx e1 [a b alheia (random-uuid)])
               por-id (into {} (map (juxt :id identity)) rs)]
@@ -115,4 +116,7 @@
           (is (= "projeto_lei" (:tipo (get por-id a))))
           (is (= 2026 (:ano (get por-id a))))
           (is (pos-int? (:sequencial (get por-id a))))
+          (is (= "Ver. Helena Matos" (:autor-texto (get por-id a)))
+              "docs/23 Fatia 4a: o autor viaja no resumo (a TV mostra de quem e' a materia)")
+          (is (nil? (:autor-texto (get por-id b))) "sem autoria textual -> nil, nunca inventada")
           (is (= [] (prop/resumos-por-ids tx e1 [])) "lote vazio -> []"))))))

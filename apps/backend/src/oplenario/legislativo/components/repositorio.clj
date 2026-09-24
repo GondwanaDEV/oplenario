@@ -42,7 +42,7 @@
   (protocolar! [this ente-id proposicao] "Gate eixo H: numera (gapless) + URN + insere, atomico.")
   (buscar-proposicao [this ente-id id])
   (resumos-de-proposicoes [this ente-id ids]
-    "Modo TV (docs/22): {id -> {:tipo :ano :sequencial :ementa}} de um LOTE, numa tx. Id fora do tenant nao
+    "Modo TV (docs/22): {id -> {:tipo :ano :sequencial :ementa :autor-texto}} de um LOTE, numa tx. Id fora do tenant nao
      volta. Consumido por `sessoes` (pauta) via seam injetado pelo host — sessoes nunca importa legislativo.")
   (listar-por-estado [this ente-id estado])
   (listar-e-contar-proposicoes [this ente-id filtro]
@@ -409,7 +409,7 @@
     (if (empty? ids)
       {}
       (transacao this ente-id
-                 #(into {} (map (juxt :id (fn [r] (select-keys r [:tipo :ano :sequencial :ementa]))))
+                 #(into {} (map (juxt :id (fn [r] (select-keys r [:tipo :ano :sequencial :ementa :autor-texto]))))
                         (proposicao/resumos-por-ids % ente-id ids)))))
   (listar-por-estado [this ente-id estado] (transacao this ente-id #(proposicao/listar-por-estado % ente-id estado)))
   ;; Onda B Slice 1 (review ecc): listar+contar compostos NUMA UNICA tx — mesmo filtro le' `itens`/`total`

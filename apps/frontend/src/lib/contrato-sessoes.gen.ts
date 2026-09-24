@@ -133,6 +133,7 @@ export interface ProposicaoResumoPautaOut {
   ano: number;
   sequencial: number;
   ementa: string;
+  autorTexto?: string | null;
 }
 
 export interface PautaItemOut {
@@ -257,6 +258,7 @@ export interface ComposicaoMembroOut {
   vereadorId: string;
   nomeParlamentar: string | null;
   cargoMesa: string | null;
+  partido: string | null;
 }
 
 export interface ComposicaoSessaoOut {
