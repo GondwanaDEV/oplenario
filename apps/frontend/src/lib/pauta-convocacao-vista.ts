@@ -65,15 +65,29 @@ export function formatarTituloSessao(sessao: SessaoOut): string {
   return `${sessao.numeroSequencial}ª Sessão ${formatarTipoSessao(sessao.tipoSessao)}`;
 }
 
-// ---------- agrupamento da pauta por fase (os 5 valores fechados de logic/fases-pauta no backend;
-// "Outras fases" é o catch-all honesto — tudo que não é Expediente/Ordem do Dia cai aqui, nunca descarta
-// item em silêncio, mesmo princípio da coluna "Outros" de tramitacao-board-vista.ts) ----------
+// ---------- agrupamento da pauta por fase (os 5 valores fechados de logic/fases-pauta no backend, na ordem
+// do rito). Expediente e Ordem do Dia sempre aparecem (mesmo vazios: é onde a montagem começa); as demais
+// fases ganham grupo próprio quando têm item — cada grupo é também o escopo do "subir/descer" (docs/23), então
+// misturar fases num balaio faria a seta trocar um item de Explicações Pessoais com um da Tribuna Livre.
+// "Outras fases" segue como catch-all honesto para fase FORA do enum — nunca descarta item em silêncio, mesmo
+// princípio da coluna "Outros" de tramitacao-board-vista.ts. ----------
 
 export interface GrupoPauta {
   chave: string;
+  /** A fase do backend quando o grupo é de uma fase conhecida (é a fase default ao incluir nele). */
+  fase: string | null;
   titulo: string;
   itens: PautaItemOut[];
 }
+
+/** As fases do rito, na ordem da sessão (espelha `logic/fases-pauta`). */
+export const FASES_DO_RITO: { fase: string; chave: string; titulo: string; sempre: boolean }[] = [
+  { fase: "expediente", chave: "expediente", titulo: "Expediente", sempre: true },
+  { fase: "grande_expediente", chave: "grande-expediente", titulo: "Grande Expediente", sempre: false },
+  { fase: "ordem_do_dia", chave: "ordem-do-dia", titulo: "Ordem do Dia", sempre: true },
+  { fase: "explicacoes_pessoais", chave: "explicacoes-pessoais", titulo: "Explicações Pessoais", sempre: false },
+  { fase: "tribuna_livre_cidadao", chave: "tribuna-livre", titulo: "Tribuna Livre", sempre: false },
+];
 
 function porOrdem(itens: PautaItemOut[]): PautaItemOut[] {
   return itens.slice().sort((a, b) => a.ordem - b.ordem);
@@ -81,18 +95,32 @@ function porOrdem(itens: PautaItemOut[]): PautaItemOut[] {
 
 export function agruparPautaPorFase(pauta: PautaOut | null): GrupoPauta[] {
   const itens = pauta?.itens ?? [];
-  const expediente = itens.filter((i) => i.fase === "expediente");
-  const ordemDoDia = itens.filter((i) => i.fase === "ordem_do_dia");
-  const outras = itens.filter((i) => i.fase !== "expediente" && i.fase !== "ordem_do_dia");
-  const grupos: GrupoPauta[] = [
-    { chave: "expediente", titulo: "Expediente", itens: porOrdem(expediente) },
-    { chave: "ordem-do-dia", titulo: "Ordem do Dia", itens: porOrdem(ordemDoDia) },
-  ];
+  const conhecidas = new Set(FASES_DO_RITO.map((f) => f.fase));
+  const grupos: GrupoPauta[] = [];
+  for (const f of FASES_DO_RITO) {
+    const daFase = itens.filter((i) => i.fase === f.fase);
+    if (f.sempre || daFase.length > 0) {
+      grupos.push({ chave: f.chave, fase: f.fase, titulo: f.titulo, itens: porOrdem(daFase) });
+    }
+  }
+  const outras = itens.filter((i) => !conhecidas.has(i.fase));
   if (outras.length > 0) {
-    grupos.push({ chave: "outras", titulo: "Outras fases", itens: porOrdem(outras) });
+    grupos.push({ chave: "outras", fase: null, titulo: "Outras fases", itens: porOrdem(outras) });
   }
   return grupos;
 }
+
+/** Os vizinhos de um item DENTRO do grupo (o escopo das setas de reordenar). */
+export function vizinhosNoGrupo(itens: PautaItemOut[], indice: number): { acima: PautaItemOut | null; abaixo: PautaItemOut | null } {
+  return { acima: itens[indice - 1] ?? null, abaixo: itens[indice + 1] ?? null };
+}
+
+/** Rótulo dos tipos de item de texto (os não-`proposicao` de `logic/tipos-item-pauta`). */
+export const TIPOS_ITEM_TEXTO: { valor: "leitura" | "comunicado" | "homenagem"; rotulo: string }[] = [
+  { valor: "leitura", rotulo: "Leitura" },
+  { valor: "comunicado", rotulo: "Comunicado" },
+  { valor: "homenagem", rotulo: "Homenagem" },
+];
 
 // ---------- título de exibição de um item de pauta (tipo "proposicao" resolve via lookup na lista de
 // proposições já buscada pro rail — mesma rede, sem 2º round-trip; os demais tipos usam texto_descricao
@@ -106,7 +134,9 @@ export interface TituloItemPauta {
 
 export function resolverTituloItem(item: PautaItemOut, proposicoesPorId: Map<string, ProposicaoResumoOut>): TituloItemPauta {
   if (item.tipoItem === "proposicao") {
-    const prop = item.proposicaoId ? proposicoesPorId.get(item.proposicaoId) : undefined;
+    // O resumo que o próprio GET da pauta já traz (enriquecimento do Modo TV) vence o índice: cobre a matéria
+    // que ficou fora da página de 100 proposições buscada para o rail.
+    const prop = item.proposicao ?? (item.proposicaoId ? proposicoesPorId.get(item.proposicaoId) : undefined);
     if (prop) {
       return {
         numero: formatarNumeroProposicao(prop.tipo, prop.sequencial, prop.ano),

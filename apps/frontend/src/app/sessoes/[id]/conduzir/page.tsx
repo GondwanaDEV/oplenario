@@ -16,12 +16,14 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 import { useTema } from "@/lib/tema";
 import { useConducaoSessao } from "@/lib/use-conducao-sessao";
 import { usePauta } from "@/lib/use-pauta";
+import { useEditarPauta, type NovoItemPauta, type ResultadoPauta } from "@/lib/use-editar-pauta";
 import { derivarConducaoSessao, type AtoConducao, type SituacaoSessao } from "@/lib/conducao-sessao-vista";
 import { nomeTipoSessao, nomeFase } from "@/lib/rotulos-sessao";
 import type { SessaoOut } from "@/lib/contrato-sessoes.gen";
 import { PainelVotacao } from "./painel-votacao";
 import { PainelTribuna } from "./painel-tribuna";
 import { BotaoModoTv } from "../botao-modo-tv";
+import { FormItemPauta } from "../form-item-pauta";
 import "./conduzir.css";
 
 /** "2026-05-21T14:03:00Z" -> "21/05 às 14h03" (fuso do navegador — leitura humana, nunca comparação). */
@@ -85,8 +87,26 @@ interface ComandoProps {
 
 function Comando({ sessao, token, transicionar, recarregar }: ComandoProps) {
   const { tema, alternar } = useTema();
-  const { pauta, estado: estadoPauta } = usePauta(sessao.id, token, sessao.estado);
+  const { pauta, estado: estadoPauta, recarregar: recarregarPauta } = usePauta(sessao.id, token, sessao.estado);
   const vista = derivarConducaoSessao(sessao);
+  // Item extrapauta (docs/23 Fatia 1): com a sessão em curso, a Mesa inclui na pauta o que surgiu na hora —
+  // o mesmo POST da montagem (o backend só recusa sessão FECHADA).
+  const edicaoPauta = useEditarPauta(sessao.id, token);
+  const [incluindoExtra, setIncluindoExtra] = useState(false);
+  const [avisoPauta, setAvisoPauta] = useState<string | null>(null);
+  const podeExtrapauta = sessao.estado === "aberta" || sessao.estado === "suspensa";
+  const temItens = estadoPauta === "ok" && !!pauta && pauta.itens.length > 0;
+  const idsNaPauta = new Set((pauta?.itens ?? []).flatMap((i) => (i["proposicao-id"] ? [i["proposicao-id"]] : [])));
+
+  async function incluirExtrapauta(novo: NovoItemPauta): Promise<ResultadoPauta> {
+    const r = await edicaoPauta.incluir(novo);
+    if (r.ok || r.conflito) recarregarPauta();
+    if (r.ok) {
+      setIncluindoExtra(false);
+      setAvisoPauta("Item extrapauta incluído.");
+    }
+    return r;
+  }
 
   const [aberto, setAberto] = useState<AtoConducao["para"] | null>(null);
   const [motivo, setMotivo] = useState("");
@@ -309,14 +329,43 @@ function Comando({ sessao, token, transicionar, recarregar }: ComandoProps) {
           <PainelTribuna sessaoId={sessao.id} token={token} />
         )}
 
-        {estadoPauta === "ok" && pauta && pauta.itens.length > 0 && (
+        {(temItens || podeExtrapauta) && (
           <section className="bloco pauta-resumo" aria-labelledby="pauta-titulo">
             <div className="bloco-cabeca">
               <h2 id="pauta-titulo">Pauta desta sessão</h2>
-              <span className="eyebrow">{pauta.itens.length} item(ns)</span>
+              {temItens && <span className="eyebrow">{pauta!.itens.length} item(ns)</span>}
             </div>
             <div className="bloco-corpo">
-              <ResumoFases itens={pauta.itens} />
+              {temItens && <ResumoFases itens={pauta!.itens} />}
+              {podeExtrapauta && (
+                <div className="extrapauta">
+                  <p className="aviso-extrapauta" role="status">
+                    {avisoPauta ?? ""}
+                  </p>
+                  {incluindoExtra ? (
+                    <FormItemPauta
+                      token={token}
+                      faseInicial="ordem_do_dia"
+                      idsNaPauta={idsNaPauta}
+                      enviando={edicaoPauta.enviando}
+                      onIncluir={incluirExtrapauta}
+                      onCancelar={() => setIncluindoExtra(false)}
+                      rotuloEnviar="Incluir extrapauta"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-contorno btn-mini"
+                      onClick={() => {
+                        setAvisoPauta(null);
+                        setIncluindoExtra(true);
+                      }}
+                    >
+                      Incluir item extrapauta
+                    </button>
+                  )}
+                </div>
+              )}
               <p className="nota-mesa">
                 <span>
                   A ordem dos trabalhos segue a pauta. A abertura e o encerramento das votações item a item têm

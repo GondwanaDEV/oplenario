@@ -1,0 +1,48 @@
+/* Formulário de incluir item na pauta (docs/23 Fatia 1) — compartilhado por /pauta-convocacao e pelo cockpit.
+   Só tokens do chassi; campos seguem a receita de `.campo` do cockpit (conduzir.css) e os números de matéria a
+   de `.pi-mid .num` da tela-fonte (pauta-convocacao.html). */
+
+.form-item-pauta { display: grid; gap: 0.9rem; padding: 1rem 1.1rem; border: 1px solid var(--linha); border-radius: var(--raio-sm); background: var(--surface-2); }
+
+.fip-tipo { border: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.4rem 1.1rem; }
+.fip-tipo legend { font-size: var(--t-13); font-weight: 600; color: var(--texto); padding: 0; margin-bottom: 0.4rem; }
+.fip-tipo label { display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--t-14); color: var(--texto); cursor: pointer; min-height: 32px; }
+
+.fip-campo { display: flex; flex-direction: column; gap: 0.3rem; }
+.fip-campo label { font-size: var(--t-13); font-weight: 600; color: var(--texto); }
+.fip-campo select,
+.fip-campo input,
+.fip-campo textarea {
+  font-family: var(--corpo); font-size: var(--t-14); color: var(--texto); background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--texto-2) 55%, var(--linha)); border-radius: 8px;
+  padding: 0.55rem 0.7rem; min-height: 42px; width: 100%;
+}
+.fip-campo textarea { resize: vertical; line-height: 1.45; }
+
+.fip-busca { display: flex; align-items: flex-end; gap: 0.6rem; }
+.fip-busca .fip-campo { flex: 1 1 auto; }
+
+.form-item-pauta .num { font-family: var(--mono); font-size: var(--t-12); color: var(--acento-texto); }
+
+.fip-resultados { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 0.4rem; }
+.fip-resultados li,
+.fip-escolhida {
+  display: flex; align-items: center; gap: 0.7rem; justify-content: space-between;
+  padding: 0.55rem 0.7rem; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-sm);
+}
+.fip-resultados li > div,
+.fip-escolhida > div { min-width: 0; }
+.fip-resultados p,
+.fip-escolhida p { font-size: var(--t-13); color: var(--texto); margin: 0.1rem 0 0; line-height: 1.3; }
+.fip-escolhida { border-color: color-mix(in srgb, var(--marca) 45%, var(--linha)); }
+.fip-resultados li.fip-nota { display: block; background: none; border: none; padding: 0.2rem 0; }
+.fip-ja { font-size: var(--t-12); color: var(--texto-2); white-space: nowrap; }
+
+.fip-nota { font-size: var(--t-13); color: var(--texto-2); margin: 0.5rem 0 0; }
+.fip-erro { font-size: var(--t-13); color: var(--acento-texto); margin: 0; }
+
+.fip-acoes { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+
+@media (max-width: 560px) {
+  .fip-busca { flex-direction: column; align-items: stretch; }
+}

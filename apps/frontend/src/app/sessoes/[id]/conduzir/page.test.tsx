@@ -16,7 +16,7 @@ vi.mock("@/lib/auth", () => ({
   useAuth: () => ({ token: "tok" }),
 }));
 vi.mock("@/lib/tema", () => ({ useTema: () => ({ tema: "claro", alternar: vi.fn() }) }));
-vi.mock("@/lib/use-pauta", () => ({ usePauta: () => ({ pauta: null, estado: "erro" }) }));
+vi.mock("@/lib/use-pauta", () => ({ usePauta: () => ({ pauta: null, estado: "erro", recarregar: () => {} }) }));
 // O painel de votação tem testes próprios (painel-votacao.test.tsx); aqui só evitamos o IO real dele
 // quando a sessão está aberta (a página o monta nesse estado).
 vi.mock("@/lib/use-votacao-mesa", () => ({
@@ -24,6 +24,12 @@ vi.mock("@/lib/use-votacao-mesa", () => ({
 }));
 vi.mock("@/lib/use-tribuna-mesa", () => ({
   useTribunaMesa: () => ({ tribuna: null, composicao: null, estado: "pronto", erro: null, recarregar: vi.fn(), inscrever: vi.fn(), desistir: vi.fn() }),
+}));
+
+// Item extrapauta (docs/23): a escrita tem testes próprios (use-editar-pauta.test.ts); aqui só a página.
+const incluirPauta = vi.fn().mockResolvedValue({ ok: true });
+vi.mock("@/lib/use-editar-pauta", () => ({
+  useEditarPauta: () => ({ incluir: incluirPauta, mover: vi.fn(), retirar: vi.fn(), enviando: false }),
 }));
 
 const transicionar = vi.fn().mockResolvedValue({ ok: true, sessao: {} });
@@ -122,5 +128,27 @@ describe("Comando da Mesa — disparo dos atos", () => {
     montar("aberta");
     fireEvent.click(screen.getByRole("button", { name: /Atualizar estado/ }));
     expect(recarregar).toHaveBeenCalled();
+  });
+});
+
+describe("Comando da Mesa — item extrapauta (docs/23)", () => {
+  it("sessão aberta: inclui um item de texto extrapauta na ordem do dia e avisa", async () => {
+    montar("aberta");
+    fireEvent.click(screen.getByRole("button", { name: "Incluir item extrapauta" }));
+    fireEvent.click(screen.getByLabelText("Homenagem"));
+    fireEvent.change(screen.getByLabelText("Descrição do item"), { target: { value: "Homenagem aos 100 anos da escola" } });
+    fireEvent.click(screen.getByRole("button", { name: "Incluir extrapauta" }));
+    await screen.findByText("Item extrapauta incluído.");
+    expect(incluirPauta).toHaveBeenCalledWith({
+      fase: "ordem_do_dia",
+      tipoItem: "homenagem",
+      textoDescricao: "Homenagem aos 100 anos da escola",
+    });
+    expect(screen.queryByLabelText("Descrição do item")).toBeNull();
+  });
+
+  it("sessão agendada: sem extrapauta (a pauta se monta na tela de pauta)", () => {
+    montar("agendada", { agendadaPara: "2026-05-21T14:00:00Z" });
+    expect(screen.queryByRole("button", { name: "Incluir item extrapauta" })).toBeNull();
   });
 });
