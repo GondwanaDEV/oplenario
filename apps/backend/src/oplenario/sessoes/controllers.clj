@@ -389,14 +389,23 @@
 
   `:em-apreciacao` (docs/23 Fatia 4b): o ULTIMO anuncio da sessao, SO' quando o item anunciado ainda esta
   ativo na pauta (item retirado depois de anunciado nao fica 'em apreciacao'). E' o estado inicial da TV: o
-  canal SSE so' retem 5 min de replay, entao uma TV aberta depois do anuncio nao o veria pelo evento."
+  canal SSE so' retem 5 min de replay, entao uma TV aberta depois do anuncio nao o veria pelo evento.
+  ENRIQUECIMENTO, nao nucleo (mesma postura de `resumos-da-pauta`): se a leitura do anuncio falhar, a pauta
+  sai SEM `:em-apreciacao` e o erro vai p/ o log. Isso tambem torna o deploy independente de ordem — o `serve`
+  de producao nao aplica migration, e uma API nova contra o schema sem `item_anunciado` (mig 0080) nao pode
+  derrubar a pauta inteira (a TV, o Comando da Mesa e a Central leem dela)."
   [repo-sessoes ator id]
   (when-let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) id)]
     (authz/check! ator :sessao/ver s logic/pode-ver-sessao?)
     (let [ente-id (:ente-id ator)
           pauta   (repo/buscar-pauta-por-sessao repo-sessoes ente-id id)
           itens   (when pauta (repo/listar-itens repo-sessoes ente-id (:id pauta)))
-          anuncio (when (seq itens) (repo/item-em-apreciacao repo-sessoes ente-id id))]
+          anuncio (when (seq itens)
+                    (try
+                      (repo/item-em-apreciacao repo-sessoes ente-id id)
+                      (catch Exception e
+                        (log/warn e "item em apreciacao indisponivel; a pauta segue sem ele")
+                        nil)))]
       (cond-> {:sessao-id id :itens (vec itens)}
         (and anuncio (some #(= (:pauta-item-id anuncio) (:id %)) itens))
         (assoc :em-apreciacao anuncio)))))
