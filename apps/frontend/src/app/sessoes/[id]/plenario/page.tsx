@@ -14,10 +14,12 @@ import { formatarTempo } from "@/lib/cronometro";
 import { assentosHemiciclo } from "@/lib/hemiciclo";
 import { nomeFase, nomeTipoSessao } from "@/lib/rotulos-sessao";
 import { Tribuna } from "./tribuna";
+import { BotaoModoTv } from "../botao-modo-tv";
 import type { EstadoPlenario, PlacarVotacao, VistaQuorum } from "@/lib/plenario-reducer";
 import { vistaDoQuorum } from "@/lib/plenario-reducer";
 import { derivarPlacar, type VistaNominal, type VistaSecreta } from "@/lib/placar-vista";
 import { tituloObjetoVotacao } from "@/lib/titulo-objeto-votacao";
+import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
 import type { SessaoOut, PautaOut } from "@/lib/contrato";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import "./plenario.css";
@@ -87,14 +89,14 @@ function ConteudoPlenario({ id }: { id: string }) {
       </main>
     );
   }
-  return <Painel sessao={sessao} estado={estado} conexao={conexao} pauta={pauta} />;
+  return <Painel sessao={sessao} estado={estado} conexao={conexao} pauta={pauta} token={token} />;
 }
 
-function Painel({ sessao, estado, conexao, pauta }: { sessao: SessaoOut; estado: EstadoPlenario; conexao: EstadoConexao; pauta: PautaOut | null }) {
+function Painel({ sessao, estado, conexao, pauta, token }: { sessao: SessaoOut; estado: EstadoPlenario; conexao: EstadoConexao; pauta: PautaOut | null; token: string | null }) {
   const agora = useAgora(); // um único relógio p/ a página inteira (review react MEDIUM: evita 2 intervals e drift)
   return (
     <>
-      <Topo sessao={sessao} estado={estado} conexao={conexao} agora={agora} />
+      <Topo sessao={sessao} estado={estado} conexao={conexao} agora={agora} token={token} />
       <Fases estado={estado.estado} />
       <main className="envelope">
         <div className="cabine">
@@ -109,7 +111,7 @@ function Painel({ sessao, estado, conexao, pauta }: { sessao: SessaoOut; estado:
   );
 }
 
-function Topo({ sessao, estado, conexao, agora }: { sessao: SessaoOut; estado: EstadoPlenario; conexao: EstadoConexao; agora: number }) {
+function Topo({ sessao, estado, conexao, agora, token }: { sessao: SessaoOut; estado: EstadoPlenario; conexao: EstadoConexao; agora: number; token: string | null }) {
   const { tema, alternar } = useTema();
   const aoVivo = estado.estado === "aberta";
   const elapsed = sessao["aberta-em"] ? Math.max(0, Math.floor((agora - Date.parse(sessao["aberta-em"])) / 1000)) : 0;
@@ -132,6 +134,7 @@ function Topo({ sessao, estado, conexao, agora }: { sessao: SessaoOut; estado: E
           <span className="quando">{sessao.modalidade}</span>
         </div>
         <div className="topo-dir">
+          <BotaoModoTv sessaoId={sessao.id} token={token} />
           <button className="tema-btn" type="button" aria-pressed={tema === "escuro"} onClick={alternar} title="Alternar tema claro / escuro">
             {tema === "escuro" ? "☾" : "☀"}
             <span className="tema-rotulo">{tema === "escuro" ? "Escuro" : "Claro"}</span>
@@ -230,7 +233,9 @@ function Palco({ sessao, estado, pauta }: { sessao: SessaoOut; estado: EstadoPle
                   <span className="pauta-fase">{nomeFase(it.fase)}</span>
                   <span className="pauta-desc">
                     {it["tipo-item"] === "proposicao"
-                      ? `${NOME_TIPO_ITEM.proposicao} · matéria vinculada`
+                      ? it.proposicao
+                        ? `${formatarNumeroProposicao(it.proposicao.tipo, it.proposicao.sequencial, it.proposicao.ano)} — ${it.proposicao.ementa}`
+                        : `${NOME_TIPO_ITEM.proposicao} · matéria vinculada`
                       : it["texto-descricao"] ?? (NOME_TIPO_ITEM[it["tipo-item"]] ?? it["tipo-item"])}
                   </span>
                 </span>

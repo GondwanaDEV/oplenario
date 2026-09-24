@@ -98,3 +98,21 @@
           (is (= [2024 2026] (mapv :ano asc))))
         (let [desc (prop/listar tx ente (assoc filtro-base :ordenar-por "ano" :ordenar-dir "desc"))]
           (is (= [2026 2024] (mapv :ano desc))))))))
+
+(deftest resumos-por-ids-lote-so-do-proprio-ente
+  ;; Modo TV (docs/22): o resumo da pauta em UMA query. Id de outro ente nao volta (a RLS + o ente_id no WHERE
+  ;; isolam) e id inexistente simplesmente some — quem chama nao inventa. Lote vazio nao toca o banco.
+  (let [e1 (random-uuid) e2 (random-uuid)
+        alheia (tenancy/com-tenant* *ds* e2 (fn [tx] (protocolar! tx e2 :ementa "Materia de outra Casa")))]
+    (tenancy/com-tenant* *ds* e1
+      (fn [tx]
+        (let [a (protocolar! tx e1 :tipo "projeto_lei" :ementa "Energia solar em predios publicos")
+              b (protocolar! tx e1 :tipo "requerimento" :ementa "Informacoes sobre escolas")
+              rs (prop/resumos-por-ids tx e1 [a b alheia (random-uuid)])
+              por-id (into {} (map (juxt :id identity)) rs)]
+          (is (= #{a b} (set (keys por-id))) "so' as do proprio ente, e so' as que existem")
+          (is (= "Energia solar em predios publicos" (:ementa (get por-id a))))
+          (is (= "projeto_lei" (:tipo (get por-id a))))
+          (is (= 2026 (:ano (get por-id a))))
+          (is (pos-int? (:sequencial (get por-id a))))
+          (is (= [] (prop/resumos-por-ids tx e1 [])) "lote vazio -> []"))))))

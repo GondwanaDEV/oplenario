@@ -501,13 +501,16 @@
 
 (defn- pauta-handler
   "GET /sessoes/:id/pauta. adapters/in coage o :id; controller carrega+autoriza a sessao e le a pauta viva;
-  adapters/out projeta. nil (sessao inexistente) -> 404."
-  [repo-sessoes]
+  adapters/out projeta. nil (sessao inexistente) -> 404. Modo TV (docs/22): depois da authz, enriquece os
+  itens de proposicao com o resumo da materia (`resumir-proposicoes`, seam do host) — so' depois, nunca antes:
+  quem nao pode ver a sessao nao dispara leitura nenhuma em legislativo."
+  [repo-sessoes resumir-proposicoes]
   (fn [req]
     (let [ator (:ator req)
           id   (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
       (if-let [p (controllers/pauta-da-sessao repo-sessoes ator id)]
-        (http/json-resposta 200 (adapters-out-pauta/pauta->wire p))
+        (http/json-resposta 200 (adapters-out-pauta/pauta->wire
+                                  p (controllers/resumos-da-pauta resumir-proposicoes (:ente-id ator) p)))
         (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
 
 (defn- agendar-handler
@@ -889,7 +892,7 @@
   controller) — EXCETO `/chamada`, `/assiduidade` e as quatro rotas da FOLHA, que exigem 'secretario' na
   borda (leitura operacional da Mesa, nao um read-model publico)."
   [{:keys [auth repo-sessoes objeto-store resolver-vereador relogio roster-da-casa dados-da-casa
-           serializador-folha renderizador-pdf roster-da-casa-em-datas]}]
+           serializador-folha renderizador-pdf roster-da-casa-em-datas resumir-proposicoes]}]
   ;; ASSERCAO DE BOOT do seam — o carry que as revisoes das Fatias 1 e 2 registraram DUAS vezes e que a
   ;; Fatia 3, que e' quem finalmente destrutura a chave, nao tinha. O mapa que `rotas.clj` passa aqui NAO e'
   ;; `:closed`: uma chave com o nome errado (`:roster-da-casa-em-data`, um typo num refactor) destruturaria
@@ -901,6 +904,12 @@
     (throw (ex-info "sessoes/rotas: seam :roster-da-casa-em-datas ausente ou nao-funcao"
                     {:tipo :servidor/erro
                      :classe (some-> roster-da-casa-em-datas class .getName)})))
+  ;; Modo TV (docs/22): mesmo guard-rail de boot para o seam do resumo da pauta — um typo na chave em
+  ;; `rotas.clj` faria a pauta sair sem ementa em silencio (o controller degrada), e ninguem notaria.
+  (when-not (ifn? resumir-proposicoes)
+    (throw (ex-info "sessoes/rotas: seam :resumir-proposicoes ausente ou nao-funcao"
+                    {:tipo :servidor/erro
+                     :classe (some-> resumir-proposicoes class .getName)})))
   (let [papel-vereador (it/exige-papel "vereador")]
    #{["/sessoes"     :post [auth (it/exige-papel "secretario") it/corpo-json (agendar-handler repo-sessoes)]
      :route-name :sessoes/agendar]
@@ -1016,7 +1025,7 @@
     ["/sessoes/:id/incidentes" :post
      [auth (it/exige-papel "secretario") it/corpo-json (incidente-handler repo-sessoes)]
      :route-name :sessoes/registrar-incidente]
-    ["/sessoes/:id/pauta" :get [auth (pauta-handler repo-sessoes)] :route-name :sessoes/pauta]
+    ["/sessoes/:id/pauta" :get [auth (pauta-handler repo-sessoes resumir-proposicoes)] :route-name :sessoes/pauta]
     ["/sessoes/:id/pauta/itens" :post
      [auth (it/exige-papel "secretario") it/corpo-json (adicionar-item-handler repo-sessoes)]
      :route-name :sessoes/adicionar-item-pauta]

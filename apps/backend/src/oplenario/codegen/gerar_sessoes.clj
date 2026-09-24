@@ -42,6 +42,8 @@
    ["DecisaoMesaReciboOut" out/DecisaoMesaReciboOut]
    ["IncidenteReciboOut" out/IncidenteReciboOut]
    ;; PautaItemOut ANTES de PautaOut (campo :itens aninhado).
+   ;; Modo TV (docs/22): o resumo da materia ANTES de PautaItemOut (campo :proposicao aninhado).
+   ["ProposicaoResumoPautaOut" out/ProposicaoResumoPautaOut]
    ["PautaItemOut" out/PautaItemOut]
    ["PautaOut" out/PautaOut]
    ["GravacaoReciboOut" out/GravacaoReciboOut]

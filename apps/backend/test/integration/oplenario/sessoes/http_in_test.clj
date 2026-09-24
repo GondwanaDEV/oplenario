@@ -12,6 +12,7 @@
             [oplenario.identidade.components.repositorio :as repo-id]
             [oplenario.interceptors :as it]
             [oplenario.kernel.components.idp-dev :as idp-dev]
+            [oplenario.legislativo.components.repositorio :as repo-leg]
             [oplenario.rotas :as rotas]
             [oplenario.sessoes.components.repositorio :as repo-sessoes]))
 
@@ -51,14 +52,24 @@
       {:vinculo-ativo {:id (random-uuid) :tipo "servidor"} :papeis papeis})))
 
 (defn- service-fn*
-  "Monta o service-fn com um RepoSessoes ja construido (deixa cada teste injetar o fake que precisa)."
-  [papeis repo-s]
-  (-> (http/servico (config/carregar)
-                    (rotas/montar {:idp (idp-dev/idp-dev)
-                                   :repo-identidade (fake-repo-identidade papeis)
-                                   :repo-sessoes repo-s})
-                    it/globais)
-      ph/create-server ::ph/service-fn))
+  "Monta o service-fn com um RepoSessoes ja construido (deixa cada teste injetar o fake que precisa). A aridade
+  com `repo-l` injeta um RepoLegislativo (Modo TV: o seam do resumo da pauta fecha sobre ele no host)."
+  ([papeis repo-s] (service-fn* papeis repo-s nil))
+  ([papeis repo-s repo-l]
+   (-> (http/servico (config/carregar)
+                     (rotas/montar (cond-> {:idp (idp-dev/idp-dev)
+                                            :repo-identidade (fake-repo-identidade papeis)
+                                            :repo-sessoes repo-s}
+                                     repo-l (assoc :repo-legislativo repo-l)))
+                     it/globais)
+       ph/create-server ::ph/service-fn)))
+
+(defn- fake-repo-legislativo-resumos
+  "RepoLegislativo fake so' com `resumos-de-proposicoes` (Modo TV). `resumos-fn` = (fn [ids] -> {id resumo})."
+  [resumos-fn]
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify repo-leg/RepoLegislativo
+    (resumos-de-proposicoes [_ _ente-id ids] (resumos-fn ids))))
 
 (defn- service-fn [papeis busca-fn]
   (service-fn* papeis (fake-repo-sessoes busca-fn)))
@@ -140,6 +151,52 @@
         "ledger de prontidao Fase 8 achado #2: GET .../pauta e' a UNICA fonte do lock-version que PATCH/DELETE .../pauta/itens/:item-id exigem no corpo")
     (is (not (contains? (first (:itens body)) :ente-id)) "ente-id nao vaza")
     (is (not (contains? (first (:itens body)) :pauta-sessao-id)) "pauta-sessao-id interno nao vaza")))
+
+(deftest pauta-da-sessao-enriquece-proposicao-com-resumo
+  ;; Modo TV (docs/22): o item de proposicao ganha `proposicao` {tipo ano sequencial ementa}; o item de
+  ;; comunicado nao; e o seam recebe SO os ids de proposicao da pauta.
+  (let [ente (random-uuid) id (random-uuid) ps (random-uuid) prop (random-uuid)
+        pedidos (atom nil)
+        itens [(item-canonico ente ps 1 "proposicao" prop nil)
+               (item-canonico ente ps 2 "comunicado" nil "Comunicado da Mesa")]
+        repo (fake-repo-pauta (fn [_ _] (sessao-canonica ente id)) (pauta-canonica ente ps id) itens)
+        repo-l (fake-repo-legislativo-resumos
+                (fn [ids] (reset! pedidos ids)
+                  {prop {:tipo "projeto_lei" :ano 2026 :sequencial 22 :ementa "Energia solar [FIXTURE]"}}))
+        r (pt/response-for (service-fn* #{} repo repo-l)
+                           :get (str "/sessoes/" id "/pauta") :headers (com-bearer (token ente (random-uuid))))
+        [i1 i2] (:itens (ler-json r))]
+    (is (= 200 (:status r)))
+    (is (= #{prop} (set @pedidos)) "o seam recebe so' os ids de proposicao")
+    (is (= {:tipo "projeto_lei" :ano 2026 :sequencial 22 :ementa "Energia solar [FIXTURE]"} (:proposicao i1)))
+    (is (= (str prop) (:proposicao-id i1)) "o proposicao-id continua sendo a referencia")
+    (is (not (contains? i2 :proposicao)) "item sem proposicao nao ganha o campo")))
+
+(deftest pauta-da-sessao-resumo-indisponivel-degrada-sem-derrubar
+  ;; A leitura em legislativo falhou: a pauta sai 200, com o proposicao-id e SEM o resumo (nunca 500 —
+  ;; o telao do plenario nao pode perder a pauta inteira por causa da ementa de um item).
+  (let [ente (random-uuid) id (random-uuid) ps (random-uuid) prop (random-uuid)
+        itens [(item-canonico ente ps 1 "proposicao" prop nil)]
+        repo (fake-repo-pauta (fn [_ _] (sessao-canonica ente id)) (pauta-canonica ente ps id) itens)
+        repo-l (fake-repo-legislativo-resumos (fn [_] (throw (ex-info "legislativo fora [FIXTURE]" {}))))
+        r (pt/response-for (service-fn* #{} repo repo-l)
+                           :get (str "/sessoes/" id "/pauta") :headers (com-bearer (token ente (random-uuid))))
+        i1 (first (:itens (ler-json r)))]
+    (is (= 200 (:status r)))
+    (is (= (str prop) (:proposicao-id i1)))
+    (is (not (contains? i1 :proposicao)))))
+
+(deftest pauta-da-sessao-sem-proposicao-nao-chama-legislativo
+  ;; Pauta so' com itens de texto: o seam nao e' chamado (o fake estouraria se fosse).
+  (let [ente (random-uuid) id (random-uuid) ps (random-uuid)
+        itens [(item-canonico ente ps 1 "comunicado" nil "Comunicado da Mesa")]
+        repo (fake-repo-pauta (fn [_ _] (sessao-canonica ente id)) (pauta-canonica ente ps id) itens)
+        chamou (atom false)
+        repo-l (fake-repo-legislativo-resumos (fn [_] (reset! chamou true) {}))
+        r (pt/response-for (service-fn* #{} repo repo-l)
+                           :get (str "/sessoes/" id "/pauta") :headers (com-bearer (token ente (random-uuid))))]
+    (is (= 200 (:status r)))
+    (is (false? @chamou))))
 
 (deftest pauta-da-sessao-sem-pauta-200-vazia
   (let [ente (random-uuid) id (random-uuid)
