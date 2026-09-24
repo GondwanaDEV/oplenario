@@ -5,9 +5,22 @@ name: Fumaca da conducao de sessao (producao)
 # Tribuna quando a sessao esta aberta). Loga de verdade via Keycloak como a secretaria (papel que a Mesa
 # exige) e confirma que a UI RENDERIZA — NAO dispara nenhuma transicao/votacao/inscricao (nao escreve nada
 # na producao). Cada checagem e independente ([OK]/[ERRO]).
+#
+# docs/23 (Central da Casa + trilha preparar → conduzir → fechar): cobre tambem a Central (/inicio), a
+# pauta editavel (/pauta-convocacao), as leituras novas da API (pauta com `em-apreciacao`, atos da Mesa),
+# os blocos Atos da Mesa e Em apreciacao do Comando, a TV (/sessoes/:id/tv) e a folha. Tira screenshot de
+# cada tela (artifact `fumaca-conducao`) e o job FALHA se alguma checagem der [ERRO].
 
 on:
   workflow_dispatch:
+    inputs:
+      secretaria:
+        # Username (= identidade-id) da secretaria no seed ATUAL de producao — muda a cada reset do banco.
+        # O valor novo sai no passo "Ids da demo" do semear-hml (credenciais.edn, persona :secretaria).
+        description: 'identidade-id da secretaria (ver "Ids da demo" do ultimo semear)'
+        required: true
+        default: '60ac7fcd-ab93-4c28-95bb-46761b4a2a52'
+        type: string
 
 jobs:
   fumaca:
@@ -25,12 +38,13 @@ jobs:
         run: |
           cat > fumaca.mjs <<'JS'
           import { chromium } from 'playwright';
+          import fs from 'node:fs';
+          fs.mkdirSync('shots', { recursive: true });
           const B = 'https://oplenario.calvetec.com.br';
           const E = '10000000-0000-0000-0000-000000000001';
           const SENHA = 'Plenario@2026';
-          // UUID da secretaria do ultimo reseed do homolog/producao (cartao de credenciais do semear #8).
-          // Se o banco for re-semeado, reveja o passo "Ids da demo" do semear-hml e atualize aqui.
-          const SEC = '585e6532-e754-4d45-ad82-1667fdfb220e';
+          // Username da secretaria no seed atual (input `secretaria` do workflow_dispatch).
+          const SEC = process.env.SEC_ID;
           const R = [];
           const rec = (tela, flag, nota) => { R.push({ tela, flag, nota }); console.log(`  [${flag}] ${tela} — ${nota}`); };
 
@@ -50,6 +64,8 @@ jobs:
             return { status: r.status(), body: j };
           }
           const texto = async (p) => (await p.evaluate(() => document.body?.innerText || '')).replace(/\s+/g,' ').trim();
+          const shot = async (p, nome) => { try { await p.screenshot({ path: `shots/${nome}.png`, fullPage: true }); } catch {} };
+          const ERRO_TELA = /Acesso restrito|Application error|Internal Server|erro inesperado|N[aã]o foi poss[ií]vel/i;
 
           const browser = await chromium.launch();
           try {
@@ -105,10 +121,132 @@ jobs:
               }
             } catch (e) { rec('/sessoes/:id/conduzir', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
 
+            // ---------- docs/23: Central da Casa + trilha preparar -> conduzir -> fechar ----------
+            const lst = await api(cSec, '/api/sessoes');
+            const sessoes = Array.isArray(lst.body?.sessoes) ? lst.body.sessoes : (Array.isArray(lst.body) ? lst.body : []);
+            const porEstado = (e) => sessoes.find(s => s.estado === e);
+            const aberta = porEstado('aberta');
+            const agendada = porEstado('agendada');
+            const encerrada = porEstado('encerrada');
+            const alvo = aberta || agendada || sessoes[0];
+            console.log(`sessoes=${sessoes.length} aberta=${aberta?.id ?? '-'} agendada=${agendada?.id ?? '-'} encerrada=${encerrada?.id ?? '-'}`);
+
+            // 3) CENTRAL DA CASA — o /inicio da secretaria
+            try {
+              const p = await cSec.newPage();
+              await p.goto(`${B}/inicio`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              const foco = await p.locator('.cc-foco').first().waitFor({ timeout: 25000 }).then(() => true).catch(() => false);
+              await p.waitForFunction(() => !document.querySelector('[aria-busy="true"]'), null, { timeout: 20000 }).catch(() => {});
+              await p.waitForTimeout(1000);
+              const t = await texto(p);
+              await shot(p, '3-central');
+              await p.close();
+              const ok = foco && /Central da Casa/i.test(t) && /Fila de trabalho|tudo em dia/i.test(t) && !ERRO_TELA.test(t);
+              rec('/inicio (Central da Casa)', ok ? 'OK' : 'ERRO', ok ? 'foco da sessao + fila de trabalho renderizaram' : `foco=${foco} :: ${t.slice(0,160)}`);
+            } catch (e) { rec('/inicio (Central da Casa)', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
+            // 4) PAUTA EDITAVEL — /pauta-convocacao da sessao alvo (so abre; nao inclui/move/retira nada)
+            if (!alvo?.id) rec('/pauta-convocacao', 'ERRO', 'sem sessao para abrir a pauta');
+            else try {
+              const p = await cSec.newPage();
+              await p.goto(`${B}/pauta-convocacao?sessao=${alvo.id}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await p.waitForTimeout(3500);
+              const t = await texto(p);
+              const botao = await p.getByRole('button', { name: /Incluir item na pauta/ }).count();
+              await shot(p, '4-pauta');
+              await p.close();
+              const ok = /Montar pauta/i.test(t) && /Convoca[cç][aã]o/i.test(t) && botao > 0 && !ERRO_TELA.test(t);
+              rec('/pauta-convocacao', ok ? 'OK' : 'ERRO', ok ? `pauta + convocacao + "Incluir item na pauta" (sessao ${alvo.estado})` : `botao=${botao} :: ${t.slice(0,160)}`);
+            } catch (e) { rec('/pauta-convocacao', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
+            // 5) API — a pauta (com o resumo + `em-apreciacao`) e os atos da Mesa respondem
+            let pautaAlvo = null;
+            if (alvo?.id) {
+              try {
+                const r = await api(cSec, `/api/sessoes/${alvo.id}/pauta`);
+                const itens = Array.isArray(r.body?.itens) ? r.body.itens : null;
+                pautaAlvo = r.body;
+                const comResumo = (itens ?? []).filter(i => i['tipo-item'] === 'proposicao' && i.proposicao).length;
+                const apr = r.body?.['em-apreciacao']?.['item-id'] ?? null;
+                rec('GET /sessoes/:id/pauta', r.status === 200 && itens ? 'OK' : 'ERRO',
+                  `status=${r.status} itens=${itens?.length ?? '-'} com-resumo=${comResumo} em-apreciacao=${apr ?? 'nenhum'}`);
+              } catch (e) { rec('GET /sessoes/:id/pauta', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+              const alvoAtos = aberta || encerrada;
+              if (alvoAtos) try {
+                const r = await api(cSec, `/api/sessoes/${alvoAtos.id}/atos-mesa`);
+                const ok = r.status === 200 && Array.isArray(r.body?.decisoes) && Array.isArray(r.body?.incidentes);
+                rec('GET /sessoes/:id/atos-mesa', ok ? 'OK' : 'ERRO', `status=${r.status} decisoes=${r.body?.decisoes?.length ?? '-'} incidentes=${r.body?.incidentes?.length ?? '-'} (sessao ${alvoAtos.estado})`);
+              } catch (e) { rec('GET /sessoes/:id/atos-mesa', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+              else rec('GET /sessoes/:id/atos-mesa', 'OK', 'nenhuma sessao aberta/encerrada — nao se aplica (esperado)');
+            }
+
+            // 6) COMANDO DA MESA — blocos novos: Atos da Mesa (aberta/encerrada) e Em apreciacao (aberta, com pauta)
+            const alvoCmd = aberta || encerrada;
+            if (!alvoCmd) rec('conduzir: Atos da Mesa / Em apreciacao', 'OK', 'nenhuma sessao aberta/encerrada — nao se aplica (esperado)');
+            else try {
+              const p = await cSec.newPage();
+              await p.goto(`${B}/sessoes/${alvoCmd.id}/conduzir`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await p.waitForTimeout(3500);
+              const atos = await p.getByRole('heading', { name: /^Atos da Mesa$/ }).count();
+              let apr = 'n/a';
+              let vot = 'n/a';
+              if (alvoCmd === aberta) {
+                const r = await api(cSec, `/api/sessoes/${aberta.id}/pauta`);
+                const itens = Array.isArray(r.body?.itens) ? r.body.itens : [];
+                if (itens.length) apr = String(await p.getByRole('heading', { name: /^Em aprecia[cç][aã]o$/ }).count());
+                // matéria anunciada -> a Votação a traz pré-escolhida (quando não há votação em curso)
+                const itemApr = itens.find(i => i.id === r.body?.['em-apreciacao']?.['item-id']);
+                const sel = p.locator('#objeto');
+                if (itemApr?.['proposicao-id'] && await sel.count()) vot = (await sel.inputValue()) === itemApr['proposicao-id'] ? 'pre-escolhida' : 'NAO-pre-escolhida';
+              }
+              await shot(p, '6-conduzir');
+              await p.close();
+              const ok = atos > 0 && apr !== '0' && vot !== 'NAO-pre-escolhida';
+              rec('conduzir: Atos da Mesa / Em apreciacao', ok ? 'OK' : 'ERRO', `sessao ${alvoCmd.estado}: atos=${atos} em-apreciacao=${apr} votacao=${vot}`);
+            } catch (e) { rec('conduzir: Atos da Mesa / Em apreciacao', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
+            // 7) MODO TV — abre e oferece a tela cheia (headless nao entra; so confere que renderizou)
+            if (!alvo?.id) rec('/sessoes/:id/tv', 'ERRO', 'sem sessao para abrir a TV');
+            else try {
+              const p = await cSec.newPage();
+              await p.setViewportSize({ width: 1920, height: 1080 });
+              await p.goto(`${B}/sessoes/${alvo.id}/tv`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              const entrar = await p.getByRole('button', { name: /Entrar em tela cheia/ }).first().waitFor({ timeout: 25000 }).then(() => true).catch(() => false);
+              await p.waitForTimeout(2500);
+              const fase = await p.locator('main.tv').getAttribute('data-fase').catch(() => null);
+              const t = await texto(p);
+              await shot(p, '7-tv');
+              await p.close();
+              const ok = entrar && !!fase && !ERRO_TELA.test(t);
+              rec('/sessoes/:id/tv', ok ? 'OK' : 'ERRO', ok ? `TV renderizou (sessao ${alvo.estado}, fase ${fase})` : `entrar=${entrar} fase=${fase} :: ${t.slice(0,140)}`);
+            } catch (e) { rec('/sessoes/:id/tv', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
+            // 8) FOLHA — so leitura das versoes congeladas (nao gera versao nova)
+            if (!encerrada) rec('/sessoes/:id/folha', 'OK', 'nenhuma sessao encerrada — nao se aplica (esperado)');
+            else try {
+              const p = await cSec.newPage();
+              await p.goto(`${B}/sessoes/${encerrada.id}/folha`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await p.waitForTimeout(3000);
+              const t = await texto(p);
+              await shot(p, '8-folha');
+              await p.close();
+              const ok = /A folha de presen[cç]a/i.test(t) && !ERRO_TELA.test(t);
+              rec('/sessoes/:id/folha', ok ? 'OK' : 'ERRO', ok ? 'folha renderizou (sessao encerrada)' : t.slice(0,160));
+            } catch (e) { rec('/sessoes/:id/folha', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
             console.log('\n===== RESUMO FUMACA (conducao / producao) =====');
             for (const r of R) console.log(`  [${r.flag}] ${r.tela} — ${r.nota}`);
             console.log('== fumaca concluida ==');
+            if (!okSec || R.some(r => r.flag === 'ERRO')) process.exitCode = 1;
           } finally { await browser.close(); }
           JS
       - name: Rodar fumaca
+        env:
+          SEC_ID: ${{ inputs.secretaria }}
         run: node fumaca.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fumaca-conducao
+          path: shots/
+          if-no-files-found: warn

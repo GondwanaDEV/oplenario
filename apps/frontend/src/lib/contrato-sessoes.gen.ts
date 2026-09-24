@@ -320,6 +320,7 @@ export interface FolhaMetadadosOut {
   htmlHash: string;
   pdfHash: string;
   geradaPor: string;
+  geradaPorNome?: string;
   geradaEm: string;
   jaCongelada?: boolean;
 }

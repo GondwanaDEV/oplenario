@@ -1,0 +1,104 @@
+name: Encerrar sessoes (producao)
+
+# Operacao manual de LIMPEZA: encerra sessoes plenarias de teste que ficaram abertas em producao
+# (oplenario.calvetec.com.br). Loga de verdade como a secretaria e usa a MESMA rota do Comando da Mesa
+# (POST /sessoes/:id/transicao para "encerrada", com o lock-version lido na hora — CAS).
+#
+# Guardas: so roda com a frase de confirmacao; recusa a sessao HERO da demo (...0211); so encerra sessao
+# que esteja ABERTA ou SUSPENSA agora (qualquer outro estado e pulado e reportado). Encerrar e definitivo:
+# a presenca e as votacoes da sessao deixam de aceitar alteracao.
+
+on:
+  workflow_dispatch:
+    inputs:
+      sessoes:
+        description: 'ids das sessoes a encerrar, separados por virgula'
+        required: true
+        type: string
+      confirmar:
+        description: 'Digite encerrar-sessoes-de-teste para confirmar'
+        required: true
+        type: string
+      secretaria:
+        description: 'identidade-id da secretaria (ver "Ids da demo" do ultimo semear)'
+        required: true
+        default: '60ac7fcd-ab93-4c28-95bb-46761b4a2a52'
+        type: string
+
+jobs:
+  encerrar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Guarda de confirmacao
+        run: '[ "${{ inputs.confirmar }}" = "encerrar-sessoes-de-teste" ] || { echo "confirmacao invalida"; exit 1; }'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar Playwright + Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm i -D playwright@1.47.2 >/dev/null 2>&1
+          npx playwright install --with-deps chromium
+      - name: Escrever o operador
+        run: |
+          cat > encerrar.mjs <<'JS'
+          import { chromium } from 'playwright';
+          const B = 'https://oplenario.calvetec.com.br';
+          const E = '10000000-0000-0000-0000-000000000001';
+          const SENHA = 'Plenario@2026';
+          const SEC = process.env.SEC_ID;
+          const HERO = '10000000-0000-0000-0000-000000000211'; // sessao da demo — nunca encerrar por aqui
+          const IDS = (process.env.SESSOES || '').split(',').map(s => s.trim()).filter(Boolean);
+
+          async function login(ctx, user) {
+            const p = await ctx.newPage();
+            await p.goto(`${B}/api/auth/login?ente=${E}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await p.waitForSelector('#username', { timeout: 25000 });
+            await p.fill('#username', user); await p.fill('#password', SENHA);
+            await Promise.all([ p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(()=>{}), p.click('#kc-login') ]);
+            await p.waitForTimeout(2500);
+            const ok = p.url().startsWith(B) && !new URL(p.url()).pathname.startsWith('/api/auth');
+            await p.close(); return ok;
+          }
+          async function api(ctx, method, path, body) {
+            const r = await ctx.request.fetch(B + path, { method, headers: { accept: 'application/json', 'content-type': 'application/json' }, data: body ? JSON.stringify(body) : undefined, timeout: 25000 });
+            let j = null; try { j = await r.json(); } catch {}
+            return { status: r.status(), body: j };
+          }
+
+          let falhou = false;
+          const browser = await chromium.launch();
+          try {
+            const ctx = await browser.newContext({ locale: 'pt-BR' });
+            const ok = await login(ctx, SEC);
+            console.log(`login secretaria=${ok}`);
+            if (!ok) { falhou = true; throw new Error('login falhou'); }
+            if (!IDS.length) { falhou = true; throw new Error('nenhuma sessao informada'); }
+            for (const id of IDS) {
+              if (id === HERO) { console.log(`[PULADA] ${id} — sessao HERO da demo, nao se encerra por aqui`); continue; }
+              const s = await api(ctx, 'GET', `/api/sessoes/${id}`);
+              if (s.status !== 200) { console.log(`[ERRO] ${id} — GET /sessoes/:id HTTP ${s.status}`); falhou = true; continue; }
+              const { estado, 'numero-sequencial': n, 'lock-version': lv } = s.body;
+              if (estado !== 'aberta' && estado !== 'suspensa') { console.log(`[PULADA] ${id} (n=${n}) — estado ${estado}, nada a encerrar`); continue; }
+              const t = await api(ctx, 'POST', `/api/sessoes/${id}/transicao`, { para: 'encerrada', 'lock-version': lv });
+              if (t.status < 300) {
+                const d = await api(ctx, 'GET', `/api/sessoes/${id}`);
+                console.log(`[OK] ${id} (n=${n}) — ${estado} -> ${d.body?.estado} (encerrada-em ${d.body?.['encerrada-em']})`);
+              } else {
+                console.log(`[ERRO] ${id} (n=${n}) — transicao HTTP ${t.status} ${JSON.stringify(t.body).slice(0,200)}`);
+                falhou = true;
+              }
+            }
+            const lst = await api(ctx, 'GET', '/api/sessoes');
+            const sessoes = Array.isArray(lst.body?.sessoes) ? lst.body.sessoes : [];
+            console.log('\n-- sessoes agora --');
+            for (const s of sessoes) console.log(`  n=${s['numero-sequencial']} ${s.estado} id=${s.id}`);
+          } catch (e) { console.log('[ERRO]', String(e).split('\n')[0]); }
+          finally { await browser.close(); }
+          if (falhou) process.exitCode = 1;
+          JS
+      - name: Encerrar
+        env:
+          SEC_ID: ${{ inputs.secretaria }}
+          SESSOES: ${{ inputs.sessoes }}
+        run: node encerrar.mjs

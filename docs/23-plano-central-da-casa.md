@@ -168,8 +168,9 @@ Com capturas das telas reais.
   aparecia com o tipo cru do fio (`projeto_lei 22/2026`) e o seletor nomeava a matéria por posição ("Ordem do
   Dia · item 3"). Agora é "PL 22/2026 · Ordem do Dia", e a **matéria anunciada vem pré-escolhida** (o rito é
   anunciar → discutir → votar a mesma matéria; a Mesa pode trocar, e um anúncio novo volta a pré-escolher).
-- **Achados que ficam registrados (não consertados aqui):** a folha mostra "Congelada por" com o id da
-  identidade, não o nome; a ata segue fora do sistema (Track IA).
+- **Achados do roteiro:** a folha mostrava "Congelada por" com o id da identidade, não o nome — **consertado**
+  (seam `nome-na-casa` do host: `GET /sessoes/:id/folhas` traz `gerada-por-nome`, só para quem tem vínculo nesta
+  Casa; a tela cai para "usuário <id curto>" sem ele). A ata segue fora do sistema (Track IA).
 
 ## Verificação (por fatia)
 

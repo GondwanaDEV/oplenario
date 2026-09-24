@@ -1195,6 +1195,25 @@
     (authz/check! ator :sessao/ver-folha sessao logic/pode-ver-sessao?)
     (repo/folhas-da-sessao repo-sessoes (:ente-id ator) sessao-id)))
 
+(defn nomes-de-quem-congelou
+  "docs/23 Fatia 5: {identidade-id nome} de quem congelou as versoes `folhas` (ja' autorizadas e lidas por
+  `folhas-da-sessao-metadados`), via o seam `nome-na-casa` (fn [ente-id identidade-id] -> nome|nil) injetado
+  pelo host sobre `identidade` — sessoes nunca importa identidade (§22.10). Um nome por identidade distinta
+  (o mesmo operador costuma congelar todas as versoes).
+
+  ENRIQUECIMENTO, nao nucleo (mesma postura de `resumos-da-pauta`): se a leitura falhar, a versao sai sem o
+  nome e o erro vai p/ o log — a lista de versoes congeladas nunca cai por causa de um rotulo."
+  [nome-na-casa ente-id folhas]
+  (into {}
+        (keep (fn [identidade-id]
+                (try
+                  (when-let [nome (nome-na-casa ente-id identidade-id)]
+                    [identidade-id nome])
+                  (catch Exception e
+                    (log/warn e "nome de quem congelou a folha indisponivel; a versao segue sem ele")
+                    nil))))
+        (distinct (keep :gerada-por folhas))))
+
 (defn folha-conteudo
   "Le' o BINARIO CONGELADO (`qual` = :html ou :pdf) da versao `versao` da folha da sessao `sessao-id` do
   objeto_store — NUNCA re-renderiza (o proposito do congelamento e' que a leitura mostre exatamente os

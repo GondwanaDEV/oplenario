@@ -11,6 +11,14 @@ name: Dados da demo (producao, so-leitura)
 
 on:
   workflow_dispatch:
+    inputs:
+      secretaria:
+        # Username (= identidade-id) da secretaria no seed ATUAL de producao — muda a cada reset do banco.
+        # O valor novo sai no passo "Ids da demo" do semear-hml (credenciais.edn, persona :secretaria).
+        description: 'identidade-id da secretaria (ver "Ids da demo" do ultimo semear)'
+        required: true
+        default: '60ac7fcd-ab93-4c28-95bb-46761b4a2a52'
+        type: string
 
 jobs:
   dados:
@@ -31,8 +39,8 @@ jobs:
           const B = 'https://oplenario.calvetec.com.br';
           const E = '10000000-0000-0000-0000-000000000001';
           const SENHA = 'Plenario@2026';
-          // Username = UUID da persona no seed atual do homolog/producao (cartao "Ids da demo" do semear #8).
-          const SEC = '585e6532-e754-4d45-ad82-1667fdfb220e';
+          // Username da secretaria no seed atual (input `secretaria` do workflow_dispatch).
+          const SEC = process.env.SEC_ID;
 
           async function login(ctx, user) {
             const p = await ctx.newPage();
@@ -107,4 +115,6 @@ jobs:
           } finally { await browser.close(); }
           JS
       - name: Coletar
+        env:
+          SEC_ID: ${{ inputs.secretaria }}
         run: node dados.mjs

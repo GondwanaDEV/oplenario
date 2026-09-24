@@ -274,7 +274,10 @@ function VersaoItem({
           {formatarData(versao.geradaEm)} às {formatarHora(versao.geradaEm)}
         </span>
       </div>
-      <span className="versao-por">Congelada por {versao.geradaPor.slice(0, 8)}</span>
+      <span className="versao-por">
+        {/* O nome vem do servidor só para quem tem vínculo nesta Casa (docs/23 Fatia 5); sem ele, o id curto. */}
+        Congelada por {versao.geradaPorNome ?? `usuário ${versao.geradaPor.slice(0, 8)}`}
+      </span>
       {selecionada && <span className="chip chip-ok" style={{ width: "fit-content" }}>Selecionada</span>}
 
       <div className="versao-hashes">
