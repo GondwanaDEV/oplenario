@@ -4,7 +4,7 @@
 // vivo (não há evento de pauta no canal) — então re-busca quando a `fase` da sessão muda (ex.: abertura),
 // que é quando a pauta tende a mudar de forma observável. Mesmo padrão de auth/validação do use-plenario.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "./api-fetch";
 import type { PautaOut } from "./contrato";
 import { semCredencial } from "./modo";
@@ -17,6 +17,9 @@ export function usePauta(sessaoId: string, token: string | null, fase: string | 
   const [pauta, setPauta] = useState<PautaOut | null>(null);
   const [estado, setEstado] = useState<EstadoPauta>("carregando");
   const idValido = ID_VALIDO.test(sessaoId);
+  // Sobe a cada `recarregar()` — depois de uma escrita na pauta (item extrapauta no cockpit, docs/23).
+  const [versao, setVersao] = useState(0);
+  const recarregar = useCallback(() => setVersao((v) => v + 1), []);
 
   useEffect(() => {
     if (semCredencial(token) || !idValido) return; // sem credencial/id válido: não busca (a UI degrada p/ "indisponível")
@@ -43,7 +46,7 @@ export function usePauta(sessaoId: string, token: string | null, fase: string | 
       vivo = false;
       controller.abort();
     };
-  }, [sessaoId, token, idValido, fase]);
+  }, [sessaoId, token, idValido, fase, versao]);
 
-  return { pauta, estado };
+  return { pauta, estado, recarregar };
 }

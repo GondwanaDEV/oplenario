@@ -106,12 +106,13 @@ import {
   derivarProntasForaDaPauta,
   indexarProposicoesPorId,
   resolverTituloItem,
+  vizinhosNoGrupo,
 } from "./pauta-convocacao-vista";
 import type { PautaItemOut, PautaOut } from "./pauta-convocacao-vista";
 import type { ProposicaoResumoOut } from "./contrato-legislativo.gen";
 
 function pautaItem(parcial: Partial<PautaItemOut> & { id: string; fase: string; tipoItem: string; ordem: number }): PautaItemOut {
-  return parcial;
+  return { lockVersion: 0, ...parcial };
 }
 
 function proposicao(parcial: Partial<ProposicaoResumoOut> & { id: string }): ProposicaoResumoOut {
@@ -142,14 +143,41 @@ describe("agruparPautaPorFase", () => {
     expect(grupos.find((g) => g.chave === "expediente")?.itens.map((i) => i.id)).toEqual(["1"]);
   });
 
-  it("fase fora de expediente/ordem_do_dia cai em 'Outras fases' (fail-closed, nunca some em silêncio)", () => {
+  it("fase conhecida além de expediente/ordem do dia ganha grupo próprio, na ordem do rito", () => {
     const pauta: PautaOut = {
       sessaoId: "s1",
-      itens: [pautaItem({ id: "1", fase: "tribuna_livre_cidadao", tipoItem: "leitura", ordem: 1 })],
+      itens: [
+        pautaItem({ id: "1", fase: "tribuna_livre_cidadao", tipoItem: "leitura", ordem: 1 }),
+        pautaItem({ id: "2", fase: "grande_expediente", tipoItem: "leitura", ordem: 2 }),
+      ],
+    };
+    const grupos = agruparPautaPorFase(pauta);
+    expect(grupos.map((g) => g.titulo)).toEqual(["Expediente", "Grande Expediente", "Ordem do Dia", "Tribuna Livre"]);
+    expect(grupos.find((g) => g.chave === "tribuna-livre")).toMatchObject({ fase: "tribuna_livre_cidadao" });
+  });
+
+  it("fase fora do enum cai em 'Outras fases' (fail-closed, nunca some em silêncio)", () => {
+    const pauta: PautaOut = {
+      sessaoId: "s1",
+      itens: [pautaItem({ id: "1", fase: "fase_nova_do_backend", tipoItem: "leitura", ordem: 1 })],
     };
     const grupos = agruparPautaPorFase(pauta);
     expect(grupos.map((g) => g.titulo)).toContain("Outras fases");
+    expect(grupos.find((g) => g.chave === "outras")).toMatchObject({ fase: null });
     expect(grupos.find((g) => g.chave === "outras")?.itens[0].id).toBe("1");
+  });
+});
+
+describe("vizinhosNoGrupo", () => {
+  const itens = [
+    pautaItem({ id: "a", fase: "expediente", tipoItem: "leitura", ordem: 1 }),
+    pautaItem({ id: "b", fase: "expediente", tipoItem: "leitura", ordem: 2 }),
+    pautaItem({ id: "c", fase: "expediente", tipoItem: "leitura", ordem: 3 }),
+  ];
+  it("primeiro não tem acima; último não tem abaixo", () => {
+    expect(vizinhosNoGrupo(itens, 0)).toEqual({ acima: null, abaixo: itens[1] });
+    expect(vizinhosNoGrupo(itens, 2)).toEqual({ acima: itens[1], abaixo: null });
+    expect(vizinhosNoGrupo(itens, 1)).toEqual({ acima: itens[0], abaixo: itens[2] });
   });
 });
 
@@ -158,6 +186,14 @@ describe("resolverTituloItem", () => {
     const item = pautaItem({ id: "1", fase: "ordem_do_dia", tipoItem: "proposicao", proposicaoId: "p1", ordem: 1 });
     const indice = indexarProposicoesPorId([proposicao({ id: "p1", tipo: "projeto_lei", sequencial: 29, ano: 2026, ementa: "Cria o programa X" })]);
     expect(resolverTituloItem(item, indice)).toEqual({ numero: "PL 29/2026", rotulo: "Cria o programa X", indisponivel: false });
+  });
+
+  it("tipo 'proposicao' com resumo vindo da própria pauta -> usa o resumo, mesmo fora do índice", () => {
+    const item = pautaItem({
+      id: "1", fase: "ordem_do_dia", tipoItem: "proposicao", proposicaoId: "p-fora", ordem: 1,
+      proposicao: { tipo: "requerimento", ano: 2026, sequencial: 12, ementa: "Requer informações" },
+    });
+    expect(resolverTituloItem(item, new Map())).toEqual({ numero: "REQ 12/2026", rotulo: "Requer informações", indisponivel: false });
   });
 
   it("tipo 'proposicao' fora do índice -> rótulo honesto de indisponível, não quebra", () => {
