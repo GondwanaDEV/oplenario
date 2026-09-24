@@ -164,7 +164,6 @@
   ;; §22.6 eixo F — tribuna: decisao da mesa (questao de ordem)
   (registrar-decisao-mesa! [this ente-id m] "Registra a decisao do presidente sobre questao de ordem (ato p/ ata, append-only).")
   (buscar-decisao-mesa [this ente-id id])
-  (listar-decisoes-mesa [this ente-id sessao-id] "Decisoes da mesa da sessao em ordem cronologica (ata + cockpit da Mesa, docs/23).")
   (listar-decisoes-mesa [this ente-id sessao-id] "Decisoes da mesa da sessao em ordem cronologica (ata).")
   ;; §22.6 eixo F — tribuna: a LEITURA AGREGADA (read-model do telao, GET /sessoes/:id/tribuna)
   (tribuna-da-sessao [this ente-id sessao-id]
@@ -530,7 +529,6 @@
   (listar-eventos-cronometro [this ente-id fala-id] (transacao this ente-id #(tribuna/listar-eventos-cronometro % ente-id fala-id)))
   (registrar-decisao-mesa! [this ente-id m] (transacao this ente-id #(tribuna/registrar-decisao-mesa! % (assoc m :ente-id ente-id))))
   (buscar-decisao-mesa [this ente-id id] (transacao this ente-id #(tribuna/buscar-decisao-mesa % ente-id id)))
-  (listar-decisoes-mesa [this ente-id sessao-id] (transacao this ente-id #(tribuna/listar-decisoes-mesa % ente-id sessao-id)))
   (listar-decisoes-mesa [this ente-id sessao-id] (transacao this ente-id #(tribuna/listar-decisoes-mesa % ente-id sessao-id)))
   ;; UMA tx (molde LITERAL de `chamada-da-sessao` acima): sessao + fala em curso + marcos DAQUELA fala +
   ;; fila, tudo na MESMA leitura — em tx separadas, a Mesa podia encerrar a fala no meio do request e o
