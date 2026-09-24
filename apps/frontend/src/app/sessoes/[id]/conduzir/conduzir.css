@@ -209,3 +209,39 @@
 .extrapauta .form-item-pauta { justify-self: stretch; }
 .aviso-extrapauta { margin: 0; min-height: 1.2em; font-size: var(--t-13); font-weight: 600; color: var(--marca); }
 .aviso-extrapauta:empty { min-height: 0; }
+
+/* ---- atos da Mesa (docs/23 Fatia 2): questão de ordem + incidentes. Prefixo `am-` porque `.ato-*` já é o
+   bloco de transições da sessão acima. Campos na receita de `.ato-detalhe .campo`; lista na de `.fila-item`. ---- */
+.atos-mesa .bloco-corpo { display: grid; gap: 0.8rem; }
+.am-botoes { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.am-form {
+  display: grid; gap: 0.75rem; padding: 0.9rem 1rem;
+  border: 1px solid var(--linha); border-radius: 8px; background: var(--surface-2);
+}
+.am-form .tribuna-sub { margin: 0; }
+.am-ajuda { margin: -0.4rem 0 0; font-size: var(--t-13); color: var(--texto-2); }
+.am-form .campo { display: flex; flex-direction: column; gap: 0.3rem; }
+.am-form .campo label { font-size: var(--t-13); font-weight: 600; color: var(--texto); }
+.am-form select,
+.am-form input[type="text"],
+.am-form textarea {
+  width: 100%; padding: 0.55rem 0.7rem; border: 1px solid color-mix(in srgb, var(--texto-2) 55%, var(--linha));
+  border-radius: 8px; background: var(--surface); color: var(--texto); font: inherit; font-size: var(--t-14);
+}
+.am-form textarea { resize: vertical; line-height: 1.45; }
+.am-check { display: inline-flex; align-items: center; gap: 0.45rem; font-size: var(--t-14); color: var(--texto); cursor: pointer; min-height: 32px; }
+.am-acoes { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+
+.am-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.am-item {
+  display: grid; gap: 0.3rem; padding: 0.65rem 0.8rem;
+  border: 1px solid var(--linha); border-radius: 8px; background: var(--surface-2);
+}
+.am-topo { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.am-hora { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); font-variant-numeric: tabular-nums; }
+.am-titulo { font-family: var(--display); font-weight: 600; font-size: var(--t-14); color: var(--texto); }
+.am-texto { margin: 0; font-size: var(--t-14); color: var(--texto); line-height: 1.4; }
+.am-desfecho { margin: 0; font-size: var(--t-14); color: var(--texto); }
+.am-desfecho span { font-weight: 600; }
+.am-nota { margin: 0; font-size: var(--t-13); color: var(--texto-2); }
+.am-pessoa { margin: 0; font-size: var(--t-12); color: var(--texto-2); }

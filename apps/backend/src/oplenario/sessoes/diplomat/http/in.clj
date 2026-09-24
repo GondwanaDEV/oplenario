@@ -17,6 +17,7 @@
             [oplenario.sessoes.adapters.out.assiduidade :as adapters-out-assiduidade]
             [oplenario.sessoes.adapters.out.folha :as adapters-out-folha]
             [oplenario.sessoes.adapters.out.gravacao :as adapters-out-grav]
+            [oplenario.sessoes.adapters.out.atos-mesa :as adapters-out-atos-mesa]
             [oplenario.sessoes.adapters.out.incidente :as adapters-out-incidente]
             [oplenario.sessoes.adapters.out.pauta :as adapters-out-pauta]
             [oplenario.sessoes.adapters.out.presenca :as adapters-out-presenca]
@@ -397,23 +398,39 @@
 
 (defn- decisao-mesa-handler
   "POST /sessoes/:id/decisoes-mesa (§22.6 eixo F, tribuna). adapters/in coage o :id + valida o corpo {questao,
-  decisao, decidido-em, fundamentacao?, fala-id?} INCL. o nao-vazio de questao/decisao (-> 400 na borda); o
-  controller carrega+autoriza a sessao, injeta presidente-id/created-by do ator e registra a decisao append-only
-  (sem CAS, sem evento; se fala-id veio, tem de ser desta sessao -> senao 404); adapters/out projeta o recibo
-  {:id}. nil (sessao inexistente / fala alheia) -> 404; sessao ja fechada (`:conflito/sessao-fechada`) -> 409
-  (ledger Fase 8); sucesso -> 201 (cria o ato — append-only, sem outro 409)."
-  [repo-sessoes]
+  decisao, decidido-em, presidente-id, fundamentacao?, fala-id?} INCL. o nao-vazio de questao/decisao (-> 400 na
+  borda); o controller carrega+autoriza a sessao, exige que o presidente componha a Casa na data da sessao (seam
+  `roster-da-casa`), injeta created-by do ator e registra a decisao append-only (sem CAS, sem evento; se fala-id
+  veio, tem de ser desta sessao -> senao 404); adapters/out projeta o recibo {:id}. nil (sessao inexistente /
+  fala alheia) -> 404; sessao ja fechada (`:conflito/sessao-fechada`) -> 409 (ledger Fase 8); presidente fora da
+  composicao (`:conflito/decisao-mesa`, docs/23) -> 409; sucesso -> 201 (cria o ato)."
+  [repo-sessoes roster-da-casa]
   (fn [req]
     (let [ator (:ator req)
           m    (adapters-in-tribuna/decisao-mesa->dominio (get-in req [:path-params :id]) (:json-params req))]
       (try
-        (if-let [recibo (controllers/registrar-decisao-mesa repo-sessoes ator m)]
+        (if-let [recibo (controllers/registrar-decisao-mesa repo-sessoes roster-da-casa ator m)]
           (http/json-resposta 201 (adapters-out-tribuna/recibo-decisao-mesa->wire recibo))
           (http/json-resposta 404 {:erro "sessao nao encontrada"}))
         (catch clojure.lang.ExceptionInfo e
-          (if (= :conflito/sessao-fechada (:tipo (ex-data e)))
-            (resposta-conflito-sessao-fechada e)
+          (case (:tipo (ex-data e))
+            :conflito/sessao-fechada (resposta-conflito-sessao-fechada e)
+            :conflito/decisao-mesa   (http/json-resposta 409 {:erro (ex-message e)})
+            :conflito/sessao-sem-data
+            (http/json-resposta 409 {:erro "sessao sem data marcada: informe a data da sessao antes de registrar a decisao"})
             (throw e)))))))
+
+(defn- atos-mesa-handler
+  "GET /sessoes/:id/atos-mesa (docs/23 Fatia 2, papel 'secretario'). As decisoes da Mesa e os incidentes da
+  sessao, cada lista em ordem cronologica — a leitura que o cockpit da Mesa usa para mostrar o que ja foi
+  registrado. Exige papel na BORDA: e' leitura operacional da Mesa, nao read-model publico. :id malformado ->
+  400; sessao inexistente -> 404; outra Casa -> 403 (camada fina no controller)."
+  [repo-sessoes]
+  (fn [req]
+    (let [sessao-id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [atos (controllers/listar-atos-mesa repo-sessoes (:ator req) sessao-id)]
+        (http/json-resposta 200 (adapters-out-atos-mesa/atos-mesa->wire atos))
+        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
 
 (defn- incidente-handler
   "POST /sessoes/:id/incidentes (§16.13). adapters/in coage o :id + valida o corpo {tipo, resultado, descricao,
@@ -1020,8 +1037,12 @@
      [auth (it/exige-papel "secretario") it/corpo-json (encerrar-fala-handler repo-sessoes)]
      :route-name :sessoes/encerrar-fala]
     ["/sessoes/:id/decisoes-mesa" :post
-     [auth (it/exige-papel "secretario") it/corpo-json (decisao-mesa-handler repo-sessoes)]
+     [auth (it/exige-papel "secretario") it/corpo-json (decisao-mesa-handler repo-sessoes roster-da-casa)]
      :route-name :sessoes/registrar-decisao-mesa]
+    ;; docs/23 Fatia 2 — a LEITURA dos atos da Mesa (decisoes + incidentes), para o cockpit.
+    ["/sessoes/:id/atos-mesa" :get
+     [auth (it/exige-papel "secretario") (atos-mesa-handler repo-sessoes)]
+     :route-name :sessoes/atos-mesa]
     ["/sessoes/:id/incidentes" :post
      [auth (it/exige-papel "secretario") it/corpo-json (incidente-handler repo-sessoes)]
      :route-name :sessoes/registrar-incidente]
