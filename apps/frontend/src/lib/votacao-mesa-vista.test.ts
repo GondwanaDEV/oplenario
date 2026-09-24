@@ -31,6 +31,13 @@ describe("candidatosObjeto", () => {
     expect(c.map((x) => x.objetoId)).toEqual(["pA", "pB"]);
     expect(c[0]).toMatchObject({ objetoId: "pA", fase: "ordem_do_dia", ordem: 2 });
   });
+  it("carrega a sigla da matéria quando a pauta traz o resumo (null sem ele)", () => {
+    const c = candidatosObjeto([
+      { tipoItem: "proposicao", proposicaoId: "p22", fase: "ordem_do_dia", ordem: 3, proposicao: { tipo: "projeto_lei", ano: 2026, sequencial: 22 } },
+      { tipoItem: "proposicao", proposicaoId: "p9", fase: "ordem_do_dia", ordem: 4 },
+    ]);
+    expect(c.map((x) => x.sigla)).toEqual(["PL 22/2026", null]);
+  });
   it("pauta sem proposições -> lista vazia", () => {
     expect(candidatosObjeto([{ tipoItem: "homenagem", fase: "expediente", ordem: 1 }])).toEqual([]);
   });
