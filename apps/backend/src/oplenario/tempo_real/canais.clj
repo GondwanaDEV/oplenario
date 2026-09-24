@@ -26,7 +26,9 @@
   do voto secreto — o `voto.registrado` secreto vira so contador, nunca identidade."
   #{"sessao.transicionou" "presenca.registrada" "fala.iniciada" "fala.encerrada" "fala.cronometro"
     "inscricao.registrada" "inscricao.desistida" "incidente.registrado"
-    "votacao.aberta" "voto.registrado" "votacao.encerrada"})
+    "votacao.aberta" "voto.registrado" "votacao.encerrada"
+    ;; docs/23 Fatia 4b: a Mesa anunciou a materia — a TV passa a 'Em apreciacao'.
+    "pauta.item-anunciado"})
 
 (def tipo-lacuna
   "Tipo SINTETICO do painel ao vivo — nunca um evento de dominio, nunca passa pelo outbox/relay. O backplane

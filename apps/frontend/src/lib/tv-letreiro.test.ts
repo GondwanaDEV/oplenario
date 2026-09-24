@@ -56,4 +56,18 @@ describe("frasesDoLetreiro — derivado do estado ATUAL", () => {
   it("sessão agendada, sem dado nenhum: lista vazia (o rodapé não inventa frase)", () => {
     expect(frasesDoLetreiro({ "aberta-em": null }, base({ estado: "agendada" }), null, 0)).toEqual([]);
   });
+
+  it("matéria anunciada: 'Em apreciação' com a autoria — some quando a votação abre", () => {
+    const pauta: PautaOut = {
+      "sessao-id": "s1",
+      itens: [{
+        id: "i22", fase: "ordem_do_dia", "tipo-item": "proposicao", "proposicao-id": "p22", ordem: 1,
+        proposicao: { tipo: "projeto_lei", ano: 2026, sequencial: 22, ementa: "Energia solar", "autor-texto": "Ver. Ana Castro" },
+      }],
+      "em-apreciacao": { "item-id": "i22", "anunciado-em": "2026-09-24T12:05:00Z" },
+    };
+    expect(texto(frasesDoLetreiro(sessao, base(), pauta, 0))).toContain("Em apreciação: PL 22/2026 — autoria de Ver. Ana Castro");
+    const votando = texto(frasesDoLetreiro(sessao, base({ placar: placar() }), pauta, 0));
+    expect(votando.some((t) => t.startsWith("Em apreciação:"))).toBe(false);
+  });
 });

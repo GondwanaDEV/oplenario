@@ -182,3 +182,48 @@ describe("Modo TV — letreiro", () => {
     expect(letreiro.textContent).toMatch(/Quórum: 18 de 21 vereadores presentes/);
   });
 });
+
+describe("Modo TV — em apreciação (docs/23 Fatia 4b)", () => {
+  const pautaComMateria: PautaOut = {
+    "sessao-id": "s1",
+    itens: [
+      {
+        id: "i22", fase: "ordem_do_dia", "tipo-item": "proposicao", "proposicao-id": "p22", ordem: 3,
+        proposicao: { tipo: "projeto_lei", ano: 2026, sequencial: 22, ementa: "Energia solar em prédios públicos", "autor-texto": "Ver. Ana Castro" },
+      },
+    ],
+  };
+  const orador = { falaId: "f1", oradorId: "ver-c", tipoFala: "principal", fase: "ordem_do_dia", iniciouEm: "2026-09-23T17:30:00Z" };
+
+  it("anúncio ao vivo: a matéria vira o herói, com autoria, quem fala (com partido) e o quórum", () => {
+    const { container } = montar({
+      pauta: pautaComMateria,
+      estado: {
+        quorum,
+        oradorAtual: orador,
+        composicao: new Map([["ver-c", { nomeParlamentar: "Carlos Tavares", cargoMesa: null, partido: "PDT" }]]),
+        anuncio: { itemId: "i22", anunciadoEm: "2026-09-24T12:05:00Z", proposicaoId: "p22", votacaoNoAnuncio: null },
+      },
+    });
+    expect(container.querySelector("main")?.getAttribute("data-fase")).toBe("em-apreciacao");
+    const secao = screen.getByRole("region", { name: "Matéria em apreciação" });
+    expect(secao.textContent).toContain("Em apreciação · Ordem do Dia");
+    expect(screen.getByRole("heading", { level: 1, name: "Energia solar em prédios públicos" })).toBeTruthy();
+    expect(secao.textContent).toContain("Autoria: Ver. Ana Castro");
+    expect(secao.textContent).toContain("Fala principal · PDT");
+    expect(secao.textContent).toContain("18 de 21");
+  });
+
+  it("o anúncio pede a pauta de novo (item extrapauta incluído depois que a TV abriu)", () => {
+    montar({ pauta: pautaComMateria, estado: { anuncio: { itemId: "i-novo", anunciadoEm: "2026-09-24T12:05:00Z", proposicaoId: null, votacaoNoAnuncio: null } } });
+    expect(usePautaMock).toHaveBeenCalledWith("s1", "tok", "aberta|i-novo");
+  });
+
+  it("com a votação aberta, a votação vence", () => {
+    const { container } = montar({
+      pauta: pautaComMateria,
+      estado: { quorum, placar: placar(), anuncio: { itemId: "i22", anunciadoEm: "2026-09-24T12:05:00Z", proposicaoId: "p22", votacaoNoAnuncio: null } },
+    });
+    expect(container.querySelector("main")?.getAttribute("data-fase")).toBe("votacao");
+  });
+});

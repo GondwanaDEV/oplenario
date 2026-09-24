@@ -24,6 +24,7 @@ import { PainelVotacao } from "./painel-votacao";
 import { PainelTribuna } from "./painel-tribuna";
 import { BotaoModoTv } from "../botao-modo-tv";
 import { FormItemPauta } from "../form-item-pauta";
+import { PainelApreciacao } from "./painel-apreciacao";
 import { PainelAtosMesa, type MateriaDaPauta } from "./painel-atos-mesa";
 import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
 import "./conduzir.css";
@@ -351,6 +352,9 @@ function Comando({ sessao, token, transicionar, recarregar }: ComandoProps) {
             </div>
             <div className="bloco-corpo">
               {temItens && <ResumoFases itens={pauta!.itens} />}
+              {temItens && sessao.estado === "aberta" && (
+                <PainelApreciacao sessaoId={sessao.id} token={token} pauta={pauta!} onAnunciado={recarregarPauta} />
+              )}
               {podeExtrapauta && (
                 <div className="extrapauta">
                   <p className="aviso-extrapauta" role="status">

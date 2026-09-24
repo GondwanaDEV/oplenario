@@ -9,7 +9,7 @@
 import type { PautaOut, SessaoOut } from "./contrato";
 import { formatarHora } from "./formatar-data";
 import type { EstadoPlenario } from "./plenario-reducer";
-import { materiaDoPlacar, vistaTribunaTv, vistaVotacaoTv } from "./tv-vista";
+import { materiaDoPlacar, vistaApreciacaoTv, vistaTribunaTv, vistaVotacaoTv } from "./tv-vista";
 
 /** Uma frase com UM trecho em destaque (renderizado em negrito/âmbar): `antes` + `destaque` + `depois`. */
 export interface FraseLetreiro {
@@ -39,6 +39,12 @@ export function frasesDoLetreiro(
         ? ` — ${votacao.faltam === 0 ? "todos os presentes votaram" : `faltam ${votacao.faltam} ${votacao.faltam === 1 ? "voto" : "votos"}`}`
         : ` — ${votacao.votaram} ${votacao.votaram === 1 ? "voto registrado" : "votos registrados"}`;
     frases.push(f("Em votação: ", votacao.numero, resto));
+  } else {
+    // docs/23 Fatia 4b: a matéria anunciada pela Mesa — só enquanto não há votação aberta (aí ela é o assunto).
+    const apreciacao = vistaApreciacaoTv(estado, pauta);
+    if (apreciacao) {
+      frases.push(f("Em apreciação: ", apreciacao.sigla, apreciacao.autor ? ` — autoria de ${apreciacao.autor}` : ""));
+    }
   }
 
   const tribuna = vistaTribunaTv(estado, agoraMs);

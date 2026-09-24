@@ -99,7 +99,7 @@ Dois achados que o plano corrige:
 - Testes: controller/http-in (presidente fora da composição → 400; sessão fechada → 409; leitura só do
   tenant), hooks e gaveta.
 
-### Fatia 3 — Central da Casa — ✅ implementada (PR desta fatia)
+### Fatia 3 — Central da Casa — ✅ PR #26 (em produção 24/09/2026)
 
 > Resultado da medição (24/09/2026): 8 dos 10 sinais entram. **Documentos a protocolar ficou de fora** — não
 > existe `GET` de listagem em `/legislativo/documentos` (só criar/ler um/editar/protocolar); o Expediente segue
@@ -136,7 +136,15 @@ Dois achados que o plano corrige:
 - **3c. Porte:** view-model puro `lib/central-vista.ts` (testado) + `/inicio` renderiza a Central para a
   persona secretaria; o `TopoInterno` passa a abrir com "Central".
 
-### Fatia 4 — Modo TV, fase 2
+### Fatia 4 — Modo TV, fase 2 — ✅ 4a e 4b implementadas (PR desta fatia); 4c segue bloqueada
+
+> 4a: `ComposicaoMembroOut.partido` (do mandato que cobre a data da sessão) e `autor-texto` no resumo da matéria
+> da pauta. 4b: o anúncio é ato da Mesa gravado em `sessoes.item_anunciado` (mig 0080, append-only), com o
+> evento `pauta.item-anunciado` no canal plenário e `em-apreciacao` na pauta (estado inicial da TV — o replay do
+> SSE só retém 5 min). O item deixa de estar "em apreciação" quando outro é anunciado ou quando uma votação DELE
+> encerra depois do anúncio. No cockpit, "Em apreciação" lista a pauta com um Anunciar por item (só com a
+> sessão aberta). O telão (`/plenario`) não ganhou a fase — só a TV, como o plano pede.
+
 
 - **4a. Autor e mandato:** `ProposicaoResumoPautaOut` ganha o autor (`autor-texto` já existe na proposição);
   a composição ganha o partido — hoje o roster que `sessoes` recebe **não** carrega partido (docstring em

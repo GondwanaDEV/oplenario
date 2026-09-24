@@ -160,6 +160,9 @@ export interface EstadoPlenario {
   ultimaFalaEncerrada: { falaId: string; tempoSegundos: number } | null;
   inscritos: Inscrito[]; // fila ordenada por `ordem`
   placar: PlacarVotacao | null; // votação corrente/última (null = nenhuma votação vista)
+  /** O último item anunciado visto pelo SSE (docs/23 Fatia 4b); `null` = nenhum anúncio ao vivo. O estado
+   * inicial vem da pauta (`em-apreciacao`) — quem junta os dois é `tv-vista/anuncioCorrente`. */
+  anuncio: AnuncioItem | null;
   /** vereadorId -> identidade PÚBLICA (nome parlamentar, cargo na Mesa), de GET /sessoes/:id/composicao.
    * Existe porque o SSE carrega só o `orador-id`/`vereador-id` no evento: sem este mapa a tribuna não
    * tem como dizer QUEM está com a palavra, e o telão exibia o prefixo do UUID no lugar do nome.
@@ -200,7 +203,18 @@ export interface EstadoPlenario {
 /** A identidade PÚBLICA de um parlamentar — o subconjunto que `GET /sessoes/:id/composicao` serve, que é
  * por sua vez o subconjunto que a rota pública de perfil de vereador já serve sem autenticação nenhuma.
  * Nunca nome civil, nunca estado de presença: esses são da chamada nominal, atrás do papel 'secretario'. */
-export type IdentidadeParlamentar = { nomeParlamentar: string | null; cargoMesa: string | null };
+export type IdentidadeParlamentar = { nomeParlamentar: string | null; cargoMesa: string | null; partido?: string | null };
+
+/** O último item ANUNCIADO pela Mesa visto AO VIVO (docs/23 Fatia 4b). `votacaoNoAnuncio` é o `votacaoId` do
+ * placar no momento do anúncio: a matéria deixa de estar "em apreciação" quando uma votação DELA encerra
+ * DEPOIS do anúncio — e só o id distingue "a votação que encerrou antes de a Mesa voltar à matéria" (segundo
+ * turno, matéria adiada) de "a votação que encerrou a apreciação", já que o placar não carrega horário. */
+export interface AnuncioItem {
+  itemId: string;
+  anunciadoEm: string;
+  proposicaoId: string | null;
+  votacaoNoAnuncio: string | null;
+}
 
 export function estadoInicial(sessao: SessaoOut): EstadoPlenario {
   return {
@@ -215,6 +229,7 @@ export function estadoInicial(sessao: SessaoOut): EstadoPlenario {
     ultimaFalaEncerrada: null,
     inscritos: [],
     placar: null,
+    anuncio: null,
     composicao: null,
     composicaoStatus: "carregando",
     ultimoSeq: 0,
@@ -237,7 +252,7 @@ export function hidratarComposicao(estado: EstadoPlenario, cru: ComposicaoSessao
   const indice = new Map<string, IdentidadeParlamentar>();
   for (const m of membros) {
     if (m && typeof m.vereadorId === "string") {
-      indice.set(m.vereadorId, { nomeParlamentar: m.nomeParlamentar ?? null, cargoMesa: m.cargoMesa ?? null });
+      indice.set(m.vereadorId, { nomeParlamentar: m.nomeParlamentar ?? null, cargoMesa: m.cargoMesa ?? null, partido: m.partido ?? null });
     }
   }
   return { ...estado, composicao: indice, composicaoStatus: "ok" };
@@ -720,6 +735,19 @@ export function aplicarEvento(estado: EstadoPlenario, evento: EventoPlenario): E
           resultado: d.resultado,
           totais: { sim: d["total-sim"] ?? null, nao: d["total-nao"] ?? null, abstencao: d["total-abstencao"] ?? null },
           baseMembros: d["base-membros"] ?? null,
+        },
+      };
+    }
+
+    case "pauta.item-anunciado": {
+      const d = evento.dados;
+      return {
+        ...base,
+        anuncio: {
+          itemId: d["item-id"],
+          anunciadoEm: d["anunciado-em"],
+          proposicaoId: d["proposicao-id"] ?? null,
+          votacaoNoAnuncio: base.placar?.votacaoId ?? null,
         },
       };
     }

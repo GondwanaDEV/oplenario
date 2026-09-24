@@ -218,13 +218,15 @@
 (def ProposicaoResumoPautaOut
   "O resumo MINIMO da materia de um item da pauta (Modo TV, docs/22) — sigla/numero/ementa pra quem esta na
   galeria saber O QUE esta na pauta. Mesma FORMA de `legislativo.wire.out.votacao/ProposicaoResumoObjetoVotacaoOut`,
-  redeclarada aqui porque sessoes nao importa legislativo (§22.10); o codegen casa as duas por igualdade
-  estrutural."
+  redeclarada aqui porque sessoes nao importa legislativo (§22.10). `autor-texto` (docs/23 Fatia 4a) e' o
+  texto de autoria da materia — o mesmo que a ficha publica ja' publica — para a TV dizer DE QUEM e' a
+  materia; opcional porque materia sem autoria textual (acervo antigo) nao ganha um autor inventado."
   [:map {:closed true}
    [:tipo :string]
    [:ano :int]
    [:sequencial :int]
-   [:ementa :string]])
+   [:ementa :string]
+   [:autor-texto {:optional true} [:maybe :string]]])
 
 (def PautaItemOut
   "Projecao publica de um item ATIVO da pauta (§22.6 eixo B). NAO expoe internos (ente-id, pauta-sessao-id,
@@ -243,12 +245,31 @@
    [:ordem :int]
    [:lock-version :int]])
 
+(def EmApreciacaoOut
+  "O item em APRECIACAO da sessao (docs/23 Fatia 4b): o ultimo anuncio da Mesa, cujo item segue ativo na
+  pauta. So' o ponteiro + o instante — o item em si ja' vem em `itens`."
+  [:map {:closed true}
+   [:item-id :string]
+   [:anunciado-em :string]])
+
 (def PautaOut
   "Pauta viva da sessao (resposta de GET /sessoes/:id/pauta) — o sessao-id + os itens ativos em ordem.
-  Pauta opcional: sessao sem pauta criada projeta `itens` vazio."
+  Pauta opcional: sessao sem pauta criada projeta `itens` vazio. `em-apreciacao` (docs/23 Fatia 4b) so'
+  aparece quando a Mesa ja' anunciou um item que segue na pauta — e' o estado inicial da TV (o replay do SSE
+  so' retem 5 min)."
   [:map {:closed true}
    [:sessao-id :string]
-   [:itens [:sequential PautaItemOut]]])
+   [:itens [:sequential PautaItemOut]]
+   [:em-apreciacao {:optional true} EmApreciacaoOut]])
+
+(def ItemAnunciadoOut
+  "Recibo do anuncio de item (resposta de POST /sessoes/:id/pauta/itens/:item-id/anuncio, docs/23 Fatia 4b):
+  201 quando o anuncio foi criado, 200 quando o item ja' era o anunciado (reenvio — o corpo e' o anuncio
+  existente, no MESMO shape)."
+  [:map {:closed true}
+   [:id :string]
+   [:item-id :string]
+   [:anunciado-em :string]])
 
 (def GravacaoReciboOut
   "Recibo da ingestao de gravacao (resposta 201 de POST /gravacoes). Carrega o `id` do segmento + o
@@ -453,17 +474,20 @@
 ;; ---------- Tribuna nominal — a COMPOSICAO da sessao (resposta de GET /sessoes/:id/composicao) ----------
 
 (def ComposicaoMembroOut
-  "Um membro da COMPOSICAO. So' os campos que a rota PUBLICA de vereador (`GET
-  /portal/casa/:ente/vereadores/:id`, sem autenticacao nenhuma) ja' devolve — `nome-parlamentar` e
-  `cargo-mesa` estao no payload dela; `partido` NAO esta, e por isso nao entra aqui (verificado campo a
-  campo contra a rota real — a primeira versao deste contrato o incluia por uma premissa que nao se
-  sustentou). Nulaveis pelo MESMO motivo de `LinhaChamadaOut` (roster incompleto, ou vereador sem cargo).
+  "Um membro da COMPOSICAO: a identidade PUBLICA do parlamentar no exercicio do mandato — `nome-parlamentar`,
+  `cargo-mesa` e `partido`. `partido` entrou na docs/23 Fatia 4a (pedido de cliente: a TV do plenario
+  mostrava o partido de quem esta na tribuna no sistema antigo), revertendo a decisao 2 do docs/22, que o
+  deixava de fora so' porque a rota publica de vereador ainda nao o servia; a filiacao partidaria de quem
+  exerce mandato e' dado publico (registro da Justica Eleitoral). Vem do MANDATO que cobre a data da sessao
+  (o mesmo roster da chamada), entao o partido e' o daquela data, nao o de hoje. Nulaveis pelo MESMO motivo de
+  `LinhaChamadaOut` (roster incompleto, vereador sem cargo, mandato sem partido registrado).
   NUNCA `:nome` civil nem qualquer campo de ESTADO de presenca — esses so' saem pela chamada NOMINAL
   (papel 'secretario', `GET /sessoes/:id/chamada`)."
   [:map {:closed true}
    [:vereador-id :string]
    [:nome-parlamentar [:maybe :string]]
-   [:cargo-mesa [:maybe :string]]])
+   [:cargo-mesa [:maybe :string]]
+   [:partido [:maybe :string]]])
 
 (def ComposicaoSessaoOut
   "A COMPOSICAO da sessao (resposta de `GET /sessoes/:id/composicao`) — resolve o NOME de quem o painel ao

@@ -133,6 +133,7 @@ export interface ProposicaoResumoPautaOut {
   ano: number;
   sequencial: number;
   ementa: string;
+  autorTexto?: string | null;
 }
 
 export interface PautaItemOut {
@@ -146,9 +147,21 @@ export interface PautaItemOut {
   lockVersion: number;
 }
 
+export interface EmApreciacaoOut {
+  itemId: string;
+  anunciadoEm: string;
+}
+
 export interface PautaOut {
   sessaoId: string;
   itens: PautaItemOut[];
+  emApreciacao?: EmApreciacaoOut;
+}
+
+export interface ItemAnunciadoOut {
+  id: string;
+  itemId: string;
+  anunciadoEm: string;
 }
 
 export interface GravacaoReciboOut {
@@ -257,6 +270,7 @@ export interface ComposicaoMembroOut {
   vereadorId: string;
   nomeParlamentar: string | null;
   cargoMesa: string | null;
+  partido: string | null;
 }
 
 export interface ComposicaoSessaoOut {

@@ -385,14 +385,30 @@
   pauta. Devolve {:sessao-id :itens [...]} (itens ativos em ordem) ou nil se a sessao nao existe (o diplomat
   traduz nil -> 404). Pauta opcional: sessao sem pauta criada -> itens vazios. Sao tres leituras de tenant em
   tx separadas (sessao, pauta, itens) — consistencia eventual entre snapshots e' aceitavel p/ um read-model de
-  painel ao vivo."
+  painel ao vivo.
+
+  `:em-apreciacao` (docs/23 Fatia 4b): o ULTIMO anuncio da sessao, SO' quando o item anunciado ainda esta
+  ativo na pauta (item retirado depois de anunciado nao fica 'em apreciacao'). E' o estado inicial da TV: o
+  canal SSE so' retem 5 min de replay, entao uma TV aberta depois do anuncio nao o veria pelo evento.
+  ENRIQUECIMENTO, nao nucleo (mesma postura de `resumos-da-pauta`): se a leitura do anuncio falhar, a pauta
+  sai SEM `:em-apreciacao` e o erro vai p/ o log. Isso tambem torna o deploy independente de ordem — o `serve`
+  de producao nao aplica migration, e uma API nova contra o schema sem `item_anunciado` (mig 0080) nao pode
+  derrubar a pauta inteira (a TV, o Comando da Mesa e a Central leem dela)."
   [repo-sessoes ator id]
   (when-let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) id)]
     (authz/check! ator :sessao/ver s logic/pode-ver-sessao?)
     (let [ente-id (:ente-id ator)
           pauta   (repo/buscar-pauta-por-sessao repo-sessoes ente-id id)
-          itens   (when pauta (repo/listar-itens repo-sessoes ente-id (:id pauta)))]
-      {:sessao-id id :itens (vec itens)})))
+          itens   (when pauta (repo/listar-itens repo-sessoes ente-id (:id pauta)))
+          anuncio (when (seq itens)
+                    (try
+                      (repo/item-em-apreciacao repo-sessoes ente-id id)
+                      (catch Exception e
+                        (log/warn e "item em apreciacao indisponivel; a pauta segue sem ele")
+                        nil)))]
+      (cond-> {:sessao-id id :itens (vec itens)}
+        (and anuncio (some #(= (:pauta-item-id anuncio) (:id %)) itens))
+        (assoc :em-apreciacao anuncio)))))
 
 (defn resumos-da-pauta
   "Modo TV (docs/22): o resumo (tipo/ano/sequencial/ementa) das proposicoes de uma pauta JA' autorizada e lida
@@ -435,6 +451,24 @@
   (when-let [pauta (repo/buscar-pauta-por-sessao repo-sessoes ente-id sessao-id)]
     (when-let [item (repo/buscar-item repo-sessoes ente-id item-id)]
       (when (= (:id pauta) (:pauta-sessao-id item)) item))))
+
+(defn anunciar-item-pauta
+  "docs/23 Fatia 4b: a Mesa ANUNCIA o item da pauta que passa a ser apreciado — o fato que muda a TV e o
+  telao para 'Em apreciacao' (decisao 4 do docs/23: e' ato da Mesa, nao controle da TV). Carrega a sessao
+  (nil -> 404), pode-ver-sessao? (mesma Casa -> 403), fecha a porta da sessao fechada (409) e checa que o
+  item e' DESTA sessao (anti confused-deputy -> 404, mesmo guard de reordenar/remover). O gate de sessao
+  `aberta` e o de item ativo rodam DENTRO da tx do Repo (`:conflito/anuncio` -> 409). `anunciado-em` = o
+  relogio do servidor (`agora`, lido na borda), nunca do cliente; `created-by` = o ator.
+
+  Devolve {:id :pauta-item-id :anunciado-em ... [:ja-anunciado]} ou nil (sessao/pauta/item ausente)."
+  [repo-sessoes ator {:keys [sessao-id item-id]} agora]
+  (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/anunciar-item sessao logic/pode-ver-sessao?)
+    (exigir-sessao-aberta! sessao)
+    (when (item-desta-sessao repo-sessoes (:ente-id ator) sessao-id item-id)
+      (repo/anunciar-item! repo-sessoes (:ente-id ator)
+        {:id (random-uuid) :sessao-id sessao-id :pauta-item-id item-id :anunciado-em agora
+         :created-by (:identidade-id ator)}))))
 
 (defn reordenar-item-pauta
   "§22.6 eixo B: move um item da pauta para `nova-ordem` (CAS por lock_version). Carrega a sessao (nil -> 404),
@@ -794,14 +828,12 @@
 ;; ---------- Tribuna nominal — a COMPOSICAO da sessao (GET /sessoes/:id/composicao) ----------
 
 (defn- membro-da-composicao
-  "Uma LINHA da chamada -> um membro da COMPOSICAO. So' os tres campos que a rota PUBLICA de vereador
-  (`GET /portal/casa/:ente/vereadores/:id`, sem autenticacao nenhuma) ja' serve: `nome-parlamentar` e
-  `cargo-mesa` estao naquela lista de chaves; `partido` NAO esta (conferido campo a campo contra a rota —
-  premissa do briefing que caiu na verificacao: a justificativa original incluia `partido` por engano).
-  `nome` civil, `estado` de presenca e `justificativa` ficam para tras de proposito — nao sao identidade
-  PUBLICA, e essa e' a linha que separa esta rota de `/chamada`."
-  [{:keys [vereador-id nome-parlamentar cargo-mesa]}]
-  {:vereador-id vereador-id :nome-parlamentar nome-parlamentar :cargo-mesa cargo-mesa})
+  "Uma LINHA da chamada -> um membro da COMPOSICAO: a identidade PUBLICA do parlamentar — `nome-parlamentar`,
+  `cargo-mesa` e `partido` (docs/23 Fatia 4a: a TV do plenario mostra o partido de quem esta na tribuna; ver
+  `wire/ComposicaoMembroOut`). `nome` civil, `estado` de presenca e `justificativa` ficam para tras de
+  proposito — nao sao identidade PUBLICA, e essa e' a linha que separa esta rota de `/chamada`."
+  [{:keys [vereador-id nome-parlamentar cargo-mesa partido]}]
+  {:vereador-id vereador-id :nome-parlamentar nome-parlamentar :cargo-mesa cargo-mesa :partido partido})
 
 (defn composicao-da-sessao
   "A COMPOSICAO da sessao (`GET /sessoes/:id/composicao`) — 'quem sao os parlamentares desta sessao, por

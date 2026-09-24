@@ -9,9 +9,9 @@ import {
 import type { ComposicaoMembroOut, InscritoTribunaOut, OradorAtualOut } from "./contrato-sessoes.gen";
 
 const membros: ComposicaoMembroOut[] = [
-  { vereadorId: "v1", nomeParlamentar: "Ana Prado", cargoMesa: "Presidente" },
-  { vereadorId: "v2", nomeParlamentar: "Beto Lima", cargoMesa: null },
-  { vereadorId: "v3", nomeParlamentar: null, cargoMesa: null },
+  { vereadorId: "v1", nomeParlamentar: "Ana Prado", cargoMesa: "Presidente", partido: null },
+  { vereadorId: "v2", nomeParlamentar: "Beto Lima", cargoMesa: null, partido: null },
+  { vereadorId: "v3", nomeParlamentar: null, cargoMesa: null, partido: null },
 ];
 
 const inscrito = (over: Partial<InscritoTribunaOut>): InscritoTribunaOut => ({

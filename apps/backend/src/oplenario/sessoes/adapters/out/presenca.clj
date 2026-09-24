@@ -179,10 +179,11 @@
   mas construir aqui de novo, nomeando cada chave, e' o que faz um campo nominal novo em `logic` precisar de
   uma decisao EXPLICITA nesta funcao antes de poder viajar — o mesmo racional documentado em
   `quorum-sessao->wire`."
-  [{:keys [vereador-id nome-parlamentar cargo-mesa]}]
+  [{:keys [vereador-id nome-parlamentar cargo-mesa partido]}]
   {:vereador-id (str vereador-id)
    :nome-parlamentar nome-parlamentar
-   :cargo-mesa cargo-mesa})
+   :cargo-mesa cargo-mesa
+   :partido partido})
 
 (defn composicao-sessao->wire
   "A COMPOSICAO de dominio (`sessoes.controllers/composicao-da-sessao`) -> ComposicaoSessaoOut (validado).
