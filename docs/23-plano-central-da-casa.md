@@ -79,7 +79,7 @@ Dois achados que o plano corrige:
 - Testes: hooks (`use-adicionar-item-pauta`, `use-reordenar-item-pauta`, `use-retirar-item-pauta`) +
   página (fluxo feliz, 409, 400, sessão fechada).
 
-### Fatia 2 — Atos da Mesa no cockpit — ✅ implementada (PR desta fatia)
+### Fatia 2 — Atos da Mesa no cockpit — ✅ PR #25 (em produção 24/09/2026)
 
 > Linhas antigas (decisão 2): nenhuma tela registrava decisão da Mesa antes desta fatia e o seed da demo não cria
 > nenhuma — não há histórico a migrar. `presidente-id` passa a ser OBRIGATÓRIO no corpo (o vereador que presidiu,
@@ -99,7 +99,16 @@ Dois achados que o plano corrige:
 - Testes: controller/http-in (presidente fora da composição → 400; sessão fechada → 409; leitura só do
   tenant), hooks e gaveta.
 
-### Fatia 3 — Central da Casa
+### Fatia 3 — Central da Casa — ✅ implementada (PR desta fatia)
+
+> Resultado da medição (24/09/2026): 8 dos 10 sinais entram. **Documentos a protocolar ficou de fora** — não
+> existe `GET` de listagem em `/legislativo/documentos` (só criar/ler um/editar/protocolar); o Expediente segue
+> sendo a porta. **Notificações** continuam na inbox própria (§5.1). A convocação não virou etapa (decisão 3).
+> Porte: `lib/central-vista.ts` (puro, 24 testes) + `lib/use-central.ts` (cada fonte best-effort e independente;
+> só detalha as sessões que a tela mostra) + `/inicio` → `CentralDaCasa` para quem tem `secretario`; o vereador
+> segue na home dele. `/pauta-convocacao?sessao=<id>` pré-seleciona a sessão (o "Montar a pauta" da Central).
+> AA na página real: 1880 textos, 6 cenários × 2 temas × 1440/390 px, 0 falhas.
+
 
 - **3a. Medir os sinais** (lição da Onda E: nada entra sem API). Estado da medição inicial:
 
@@ -113,7 +122,7 @@ Dois achados que o plano corrige:
   | Compliance em aberto | `GET /compliance/painel` | ✅ existe |
   | Comentários para moderar | `GET /moderacao/comentarios` | ✅ existe |
   | Matérias prontas para pauta | `GET /paineis/tramitacao` (coluna "Pronta p/ pauta") | ✅ existe |
-  | Documentos recebidos a protocolar | `/legislativo/documentos` | ⚠️ verificar se há filtro |
+  | Documentos recebidos a protocolar | `/legislativo/documentos` | ❌ sem rota de listagem — fora |
   | Notificações | `GET /meu/notificacoes` | inbox distinta — só contador (INVENTARIO §5.1) |
 
 - **3b. Design** `telas/central-da-casa.html`: parte de `minhas-pendencias.html` (que o INVENTARIO §5.1 já

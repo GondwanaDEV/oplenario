@@ -13,4 +13,8 @@ describe("comToken", () => {
   it("URL-encoda o token (claims JSON de dev tem caracteres especiais)", () => {
     expect(comToken("/proposicoes", '{"a":1}')).toBe(`/proposicoes?token=${encodeURIComponent('{"a":1}')}`);
   });
+
+  it("href que já tem querystring recebe o token com &", () => {
+    expect(comToken("/pauta-convocacao?sessao=s1", "abc")).toBe("/pauta-convocacao?sessao=s1&token=abc");
+  });
 });
