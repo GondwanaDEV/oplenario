@@ -43,7 +43,9 @@
   (reify repo-sessoes/RepoSessoes
     (buscar-sessao [_ ente-id id] (busca-fn ente-id id))
     (buscar-pauta-por-sessao [_ _ente-id _sessao-id] pauta)
-    (listar-itens [_ _ente-id _pauta-sessao-id] itens)))
+    (listar-itens [_ _ente-id _pauta-sessao-id] itens)
+    ;; docs/23 Fatia 4b: a leitura da pauta pergunta pelo item em apreciacao (nenhum anuncio aqui).
+    (item-em-apreciacao [_ _ente-id _sessao-id] nil)))
 
 (defn- fake-repo-identidade [papeis]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
@@ -171,6 +173,26 @@
     (is (= {:tipo "projeto_lei" :ano 2026 :sequencial 22 :ementa "Energia solar [FIXTURE]"} (:proposicao i1)))
     (is (= (str prop) (:proposicao-id i1)) "o proposicao-id continua sendo a referencia")
     (is (not (contains? i2 :proposicao)) "item sem proposicao nao ganha o campo")))
+
+(deftest pauta-da-sessao-resumo-leva-o-autor-quando-ha
+  ;; docs/23 Fatia 4a: a TV mostra DE QUEM e' a materia. Autor com texto viaja; autor em branco NAO vira
+  ;; `autor-texto ""` (a TV exibiria um autor vazio) — o campo simplesmente some.
+  (let [ente (random-uuid) id (random-uuid) ps (random-uuid) p1 (random-uuid) p2 (random-uuid)
+        itens [(item-canonico ente ps 1 "proposicao" p1 nil)
+               (item-canonico ente ps 2 "proposicao" p2 nil)]
+        repo (fake-repo-pauta (fn [_ _] (sessao-canonica ente id)) (pauta-canonica ente ps id) itens)
+        repo-l (fake-repo-legislativo-resumos
+                (fn [_ids]
+                  {p1 {:tipo "requerimento" :ano 2026 :sequencial 118 :ementa "Informacoes [FIXTURE]"
+                       :autor-texto "Ver. Ana Castro"}
+                   p2 {:tipo "projeto_lei" :ano 2026 :sequencial 22 :ementa "Energia solar [FIXTURE]"
+                       :autor-texto "  "}}))
+        r (pt/response-for (service-fn* #{} repo repo-l)
+                           :get (str "/sessoes/" id "/pauta") :headers (com-bearer (token ente (random-uuid))))
+        [i1 i2] (:itens (ler-json r))]
+    (is (= 200 (:status r)))
+    (is (= "Ver. Ana Castro" (get-in i1 [:proposicao :autor-texto])))
+    (is (not (contains? (:proposicao i2) :autor-texto)) "autor em branco nao viaja")))
 
 (deftest pauta-da-sessao-resumo-indisponivel-degrada-sem-derrubar
   ;; A leitura em legislativo falhou: a pauta sai 200, com o proposicao-id e SEM o resumo (nunca 500 —

@@ -32,7 +32,7 @@ export interface PautaItemOut {
   "proposicao-id"?: string; // presente só p/ "proposicao" (chave omitida nos demais)
   /** Modo TV (docs/22): o resumo da matéria. Enriquecimento — ausente se a leitura em legislativo não
    * respondeu ou a matéria não é do tenant; `proposicao-id` continua sendo a referência. */
-  proposicao?: { tipo: string; ano: number; sequencial: number; ementa: string } | null;
+  proposicao?: { tipo: string; ano: number; sequencial: number; ementa: string; "autor-texto"?: string | null } | null;
   "texto-descricao"?: string; // presente p/ os demais tipos (chave omitida em "proposicao")
   ordem: number;
 }
@@ -40,6 +40,9 @@ export interface PautaItemOut {
 export interface PautaOut {
   "sessao-id": string;
   itens: PautaItemOut[];
+  /** docs/23 Fatia 4b: o último item ANUNCIADO pela Mesa, quando segue na pauta — o estado inicial da TV (o
+   * replay do SSE só retém 5 min). Ausente quando nada foi anunciado. */
+  "em-apreciacao"?: { "item-id": string; "anunciado-em": string };
 }
 
 // ---- payloads dos 7 eventos do canal plenário (= o :dados de cada evento, JSON kebab-case) ----
@@ -99,6 +102,16 @@ export interface InscricaoDesistida {
   "sessao-id": string;
 }
 
+/** pauta.item-anunciado (docs/23 Fatia 4b) — a Mesa passou a apreciar um item da pauta. Só ids + instante: o
+ * item em si (sigla, ementa, autor) vem da pauta. `proposicao-id` só quando o item é matéria. */
+export interface ItemAnunciado {
+  "anuncio-id": string;
+  "sessao-id": string;
+  "item-id": string;
+  "anunciado-em": string;
+  "proposicao-id"?: string | null;
+}
+
 // ---- votação ao vivo (3 eventos; legislativo.events.votacao + projeção §22.6 sigilo) ----
 
 /** votacao.aberta — a Mesa abre a votação sobre a matéria. `modalidade` diz ao painel se mostra placar nominal
@@ -148,11 +161,13 @@ export type EventoPlenario =
   | { tipo: "votacao.aberta"; seq: number; dados: VotacaoAberta }
   | { tipo: "voto.registrado"; seq: number; dados: VotoRegistrado }
   | { tipo: "votacao.encerrada"; seq: number; dados: VotacaoEncerrada }
+  | { tipo: "pauta.item-anunciado"; seq: number; dados: ItemAnunciado }
   | { tipo: "tempo-real.lacuna"; seq: number; dados: LacunaDetectada };
 
-/** Os 11 tipos que o cliente do painel reconhece — espelho de
- * oplenario.tempo-real.canais/tipos-emitidos-ao-cliente (fonte única no backend: os 10 roteados ao painel
- * + `tempo-real.lacuna`, o sinal sintético de buraco de replay). */
+/** Os tipos que o cliente do painel reconhece — subconjunto de
+ * oplenario.tempo-real.canais/tipos-emitidos-ao-cliente (fonte única no backend: os roteados ao painel
+ * + `tempo-real.lacuna`, o sinal sintético de buraco de replay). `incidente.registrado` chega ao canal mas
+ * nenhuma tela o consome ainda. */
 export const TIPOS_PLENARIO = [
   "sessao.transicionou",
   "presenca.registrada",
@@ -164,5 +179,6 @@ export const TIPOS_PLENARIO = [
   "votacao.aberta",
   "voto.registrado",
   "votacao.encerrada",
+  "pauta.item-anunciado",
   "tempo-real.lacuna",
 ] as const;

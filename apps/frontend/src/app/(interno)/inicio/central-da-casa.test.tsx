@@ -51,6 +51,12 @@ function servidor() {
   }) as unknown as typeof fetch;
 }
 
+// Cleanup no nível do ARQUIVO, para os dois `describe`: a suíte roda sem `globals`, então o Testing Library não
+// desmonta sozinho. Sem isto as árvores do `PainelCentral` ficavam montadas até o fim do arquivo e os `<Link>`
+// do Next agendavam trabalho depois que o jsdom já tinha caído — os "3 unhandled errors" (`window is not
+// defined`, um por teste do describe) que apareciam sob carga no CI.
+afterEach(() => cleanup());
+
 describe("CentralDaCasa", () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -60,7 +66,6 @@ describe("CentralDaCasa", () => {
     servidor();
   });
   afterEach(() => {
-    cleanup();
     vi.useRealTimers();
     vi.restoreAllMocks();
   });

@@ -7,7 +7,7 @@
 // A regra da casa vale dobrado aqui, porque é a tela que o PÚBLICO lê: nunca um número que não se sabe. Onde
 // o painel mostra "—", a TV mostra "—".
 
-import type { PautaOut, SessaoOut } from "./contrato";
+import type { PautaItemOut, PautaOut, SessaoOut } from "./contrato";
 import { formatarTempo, segundosDecorridos } from "./cronometro";
 import { formatarHora } from "./formatar-data";
 import { iniciais } from "./iniciais";
@@ -19,17 +19,24 @@ import { nomeFase, nomeTipoFala, nomeTipoSessao } from "./rotulos-sessao";
 
 // ---------------------------------------------------------------- fase
 
-export type FaseTv = "abertura" | "em-curso" | "votacao" | "resultado" | "pausa" | "encerrada";
+export type FaseTv = "abertura" | "em-curso" | "em-apreciacao" | "votacao" | "resultado" | "pausa" | "encerrada";
 
 /** A fase é DERIVADA do estado ao vivo — nunca escolhida à mão. `exibindoResultado` é o único insumo que
  * não vem do servidor: o intervalo de ~8 s em que a TV segura o veredito em tela cheia (ver
- * `encerrouAoVivo`). */
-export function faseDaTv(estadoSessao: string, placar: PlacarVotacao | null, exibindoResultado: boolean): FaseTv {
+ * `encerrouAoVivo`). `emApreciacao` (docs/23 Fatia 4b) = há matéria ANUNCIADA pela Mesa ainda não votada
+ * (`vistaApreciacaoTv`): ela vira o herói da tela até a votação abrir — a votação aberta sempre vence. */
+export function faseDaTv(
+  estadoSessao: string,
+  placar: PlacarVotacao | null,
+  exibindoResultado: boolean,
+  emApreciacao = false,
+): FaseTv {
   if (estadoSessao === "agendada") return "abertura";
   if (estadoSessao === "suspensa") return "pausa";
   if (estadoSessao !== "aberta") return "encerrada";
   if (exibindoResultado && placar?.encerrada) return "resultado";
   if (placar && !placar.encerrada) return "votacao";
+  if (emApreciacao) return "em-apreciacao";
   return "em-curso";
 }
 
@@ -111,6 +118,8 @@ export interface ItemPautaTv {
   descricao: string;
   fase: string; // "Ordem do Dia"
   emVotacao: boolean;
+  /** O item que a Mesa anunciou e está em apreciação (docs/23 Fatia 4b). */
+  emApreciacao: boolean;
 }
 
 const NOME_TIPO_ITEM: Record<string, string> = {
@@ -120,26 +129,88 @@ const NOME_TIPO_ITEM: Record<string, string> = {
   homenagem: "Homenagem",
 };
 
-/** Os itens da pauta como a TV os mostra. Item de proposição usa o resumo que a pauta passou a trazer
- * (sigla/número/ementa); sem ele (a leitura em legislativo não respondeu), cai no rótulo honesto — nunca
- * no UUID. `emVotacao` casa o item com a votação ABERTA pelo `proposicao-id` (o `objeto-id` do placar). */
-export function itensDaPautaTv(pauta: PautaOut | null, placar: PlacarVotacao | null): ItemPautaTv[] {
+/** Sigla + descrição de um item da pauta. Item de proposição usa o resumo que a pauta traz (sigla/número/
+ * ementa); sem ele (a leitura em legislativo não respondeu), cai no rótulo honesto — nunca no UUID. */
+function siglaEDescricao(it: PautaItemOut): { sigla: string; descricao: string } {
+  const tipo = it["tipo-item"];
+  const r = tipo === "proposicao" ? it.proposicao ?? null : null;
+  const sigla = r ? formatarNumeroProposicao(r.tipo, r.sequencial, r.ano) : NOME_TIPO_ITEM[tipo] ?? tipo;
+  const descricao = r ? r.ementa : tipo === "proposicao" ? "Matéria da ordem do dia" : it["texto-descricao"] ?? sigla;
+  return { sigla, descricao };
+}
+
+/** Os itens da pauta como a TV os mostra. `emVotacao` casa o item com a votação ABERTA pelo `proposicao-id`
+ * (o `objeto-id` do placar); `emApreciacao` marca o item anunciado (`vistaApreciacaoTv(...).itemId`). */
+export function itensDaPautaTv(
+  pauta: PautaOut | null,
+  placar: PlacarVotacao | null,
+  itemEmApreciacao: string | null = null,
+): ItemPautaTv[] {
   if (!pauta) return [];
   const votando = placar && !placar.encerrada ? placar.objetoId : null;
   return pauta.itens.map((it) => {
-    const tipo = it["tipo-item"];
-    const r = tipo === "proposicao" ? it.proposicao ?? null : null;
-    const sigla = r ? formatarNumeroProposicao(r.tipo, r.sequencial, r.ano) : NOME_TIPO_ITEM[tipo] ?? tipo;
-    const descricao = r ? r.ementa : tipo === "proposicao" ? "Matéria da ordem do dia" : it["texto-descricao"] ?? sigla;
+    const emVotacao = votando !== null && it["proposicao-id"] === votando;
     return {
       id: it.id,
       ordem: it.ordem,
-      sigla,
-      descricao,
+      ...siglaEDescricao(it),
       fase: nomeFase(it.fase),
-      emVotacao: votando !== null && it["proposicao-id"] === votando,
+      emVotacao,
+      emApreciacao: !emVotacao && itemEmApreciacao !== null && it.id === itemEmApreciacao,
     };
   });
+}
+
+// ---------------------------------------------------------------- em apreciação (docs/23 Fatia 4b)
+
+export interface AnuncioCorrente {
+  itemId: string;
+  anunciadoEm: string;
+  /** `undefined` quando o anúncio veio da PAUTA (HTTP), não do SSE: aí não se sabe qual votação era a corrente
+   * no anúncio, e uma votação encerrada da mesma matéria conta como fim da apreciação (conservador). */
+  votacaoNoAnuncio: string | null | undefined;
+}
+
+/** O anúncio que vale AGORA: o visto ao vivo (SSE) ou o que a pauta trouxe (`em-apreciacao`, o estado inicial
+ * — o replay do canal só retém 5 min). Vale o mais recente; empate de item, o do SSE (sabe a votação). */
+export function anuncioCorrente(estado: EstadoPlenario, pauta: PautaOut | null): AnuncioCorrente | null {
+  const vivo = estado.anuncio;
+  const inicial = pauta?.["em-apreciacao"] ?? null;
+  const doVivo = vivo ? { itemId: vivo.itemId, anunciadoEm: vivo.anunciadoEm, votacaoNoAnuncio: vivo.votacaoNoAnuncio } : null;
+  const daPauta = inicial ? { itemId: inicial["item-id"], anunciadoEm: inicial["anunciado-em"], votacaoNoAnuncio: undefined } : null;
+  if (!doVivo || !daPauta) return doVivo ?? daPauta;
+  if (doVivo.itemId === daPauta.itemId) return doVivo;
+  const tv = Date.parse(doVivo.anunciadoEm);
+  const tp = Date.parse(daPauta.anunciadoEm);
+  if (Number.isNaN(tp)) return doVivo;
+  if (Number.isNaN(tv)) return daPauta;
+  return tv >= tp ? doVivo : daPauta;
+}
+
+export interface VistaApreciacaoTv {
+  itemId: string;
+  sigla: string;
+  descricao: string;
+  fase: string;
+  /** Texto de autoria da matéria; `null` em item de texto ou matéria sem autoria textual. */
+  autor: string | null;
+}
+
+/** A matéria em apreciação como a TV mostra, ou `null` quando não há: nada anunciado, item fora da pauta
+ * carregada (retirado, ou incluído depois — a TV rebusca a pauta a cada anúncio), ou já VOTADA — uma votação
+ * da mesma matéria encerrou depois do anúncio (`votacaoId` diferente do que estava no placar ao anunciar). */
+export function vistaApreciacaoTv(estado: EstadoPlenario, pauta: PautaOut | null): VistaApreciacaoTv | null {
+  const a = anuncioCorrente(estado, pauta);
+  if (!a || !pauta) return null;
+  const it = pauta.itens.find((i) => i.id === a.itemId);
+  if (!it) return null;
+  const placar = estado.placar;
+  const propId = it["proposicao-id"] ?? null;
+  if (placar?.encerrada && propId !== null && placar.objetoId === propId && placar.votacaoId !== a.votacaoNoAnuncio) {
+    return null;
+  }
+  const autor = it["tipo-item"] === "proposicao" ? it.proposicao?.["autor-texto"]?.trim() || null : null;
+  return { itemId: it.id, ...siglaEDescricao(it), fase: nomeFase(it.fase), autor };
 }
 
 // ---------------------------------------------------------------- matéria em votação (título)
@@ -269,7 +340,8 @@ export function vistaTribunaTv(estado: EstadoPlenario, agoraMs: number): VistaTr
   return {
     nome: nome ?? ORADOR_SEM_NOME,
     iniciais: nome ? iniciais(nome) : "—",
-    detalhe: [nomeTipoFala(o.tipoFala), id?.cargoMesa].filter(Boolean).join(" · "),
+    // docs/23 Fatia 4a: o partido (do mandato na data da sessão) entre o tipo de fala e o cargo na Mesa.
+    detalhe: [nomeTipoFala(o.tipoFala), id?.partido, id?.cargoMesa].filter(Boolean).join(" · "),
     fase: nomeFase(o.fase),
     decorrido: formatarTempo(segundosDecorridos(o.iniciouEm, marcos, agoraMs)),
     pausado,

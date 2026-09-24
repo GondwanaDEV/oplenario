@@ -9,13 +9,22 @@
   `DELETE /sessoes/:id/pauta/itens/:item-id` o exigem no corpo, e `GET .../pauta` (esta projecao) e' a UNICA
   leitura de onde um cliente aprende o valor corrente de um item — sem ele reordenar/remover e' impossivel
   de montar so' pela API."
-  (:require [malli.core :as m]
+  (:require [clojure.string :as str]
+            [malli.core :as m]
             [malli.error :as me]
             [oplenario.sessoes.wire.out :as wire]))
 
 (set! *warn-on-reflection* true)
 
 (defn- ->str [x] (some-> x str))
+
+(defn- resumo->wire
+  "O resumo da materia -> ProposicaoResumoPautaOut. `autor-texto` so' entra quando ha' texto (docs/23 Fatia 4a):
+  ausente e' 'sem autoria textual', nunca uma string vazia que a TV exibiria como autor."
+  [resumo]
+  (let [autor (:autor-texto resumo)]
+    (cond-> (select-keys resumo [:tipo :ano :sequencial :ementa])
+      (and (string? autor) (not (str/blank? autor))) (assoc :autor-texto autor))))
 
 (defn- item->wire
   "Item de dominio (ativo) -> PautaItemOut. Inclui apenas os campos do contrato; honra o `{:optional true}` do
@@ -31,16 +40,18 @@
              :ordem        (:ordem it)
              :lock-version (:lock-version it)}
       (:proposicao-id it)   (assoc :proposicao-id   (->str (:proposicao-id it)))
-      resumo                (assoc :proposicao      (select-keys resumo [:tipo :ano :sequencial :ementa]))
+      resumo                (assoc :proposicao      (resumo->wire resumo))
       (:texto-descricao it) (assoc :texto-descricao (:texto-descricao it)))))
 
 (defn pauta->wire
   "Pauta viva de dominio {:sessao-id :itens [...]} -> PautaOut (validada). itens vazio quando nao ha pauta.
   `resumos` opcional (Modo TV, docs/22): o resumo das proposicoes da pauta, por id."
   ([pauta] (pauta->wire pauta {}))
-  ([{:keys [sessao-id itens]} resumos]
-   (let [out {:sessao-id (->str sessao-id)
-              :itens     (mapv (partial item->wire resumos) itens)}]
+  ([{:keys [sessao-id itens em-apreciacao]} resumos]
+   (let [out (cond-> {:sessao-id (->str sessao-id)
+                      :itens     (mapv (partial item->wire resumos) itens)}
+               em-apreciacao (assoc :em-apreciacao {:item-id      (->str (:pauta-item-id em-apreciacao))
+                                                    :anunciado-em (->str (:anunciado-em em-apreciacao))}))]
      (when-not (m/validate wire/PautaOut out)
        ;; arvore completa de erros (inclui violacao aninhada em :itens[i]); `out` ja e' o projetado sem internos.
        (throw (ex-info "projecao de pauta viola o contrato PautaOut (bug de servidor)"
@@ -69,3 +80,10 @@
   [{:keys [id]}]
   (validado wire/PautaItemRemovidoOut {:id (->str id)}
             "recibo de remocao viola o contrato PautaItemRemovidoOut (bug de servidor)"))
+
+(defn recibo-anuncio->wire
+  "Recibo de dominio do anuncio {:id :pauta-item-id :anunciado-em ...} -> ItemAnunciadoOut (validado). So' o
+  anuncio: `created-by`/`registrado-em`/`ja-anunciado` nao viajam (o 200 vs 201 ja' diz se era reenvio)."
+  [{:keys [id pauta-item-id anunciado-em]}]
+  (validado wire/ItemAnunciadoOut {:id (->str id) :item-id (->str pauta-item-id) :anunciado-em (->str anunciado-em)}
+            "recibo de anuncio viola o contrato ItemAnunciadoOut (bug de servidor)"))

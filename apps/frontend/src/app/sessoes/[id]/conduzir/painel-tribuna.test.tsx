@@ -14,8 +14,8 @@ vi.mock("@/lib/use-tribuna-mesa", () => ({
 }));
 
 const membros = [
-  { vereadorId: "v1", nomeParlamentar: "Ana Prado", cargoMesa: "Presidente" },
-  { vereadorId: "v2", nomeParlamentar: "Beto Lima", cargoMesa: null },
+  { vereadorId: "v1", nomeParlamentar: "Ana Prado", cargoMesa: "Presidente", partido: null },
+  { vereadorId: "v2", nomeParlamentar: "Beto Lima", cargoMesa: null, partido: null },
 ];
 const composicao: ComposicaoSessaoOut = {
   sessaoId: "s1", sessaoEstado: "aberta", dataDeComposicao: "2026-05-21",

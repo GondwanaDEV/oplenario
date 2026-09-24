@@ -194,13 +194,15 @@
 (defn resumos-por-ids
   "Modo TV (docs/22): o resumo MINIMO (tipo/ano/sequencial/ementa) de um LOTE de proposicoes numa query so' —
   a pauta de uma sessao tem ~5-20 itens, N `buscar` seriam N round-trips. Mesmo molde de
-  ProposicaoResumoObjetoVotacaoOut. Id que nao existe no tenant simplesmente nao volta (quem chama nao inventa)."
+  ProposicaoResumoObjetoVotacaoOut. Id que nao existe no tenant simplesmente nao volta (quem chama nao inventa).
+  `autor_texto` (docs/23 Fatia 4a): a TV do plenario mostra de quem e' a materia ('o requerimento do vereador
+  X') — e' o mesmo texto de autoria que a ficha publica da materia ja' publica."
   [tx ente-id ids]
   (if (empty? ids)
     []
     (comum/linhas->kebab
      (jdbc/execute! tx
-       (sql/format {:select [:id :tipo :ano :sequencial :ementa] :from [:legislativo.proposicoes]
+       (sql/format {:select [:id :tipo :ano :sequencial :ementa :autor_texto] :from [:legislativo.proposicoes]
                     :where [:and [:= :ente_id ente-id] [:in :id (vec ids)]]})))))
 
 (defn autor-vereador-da-proposicao

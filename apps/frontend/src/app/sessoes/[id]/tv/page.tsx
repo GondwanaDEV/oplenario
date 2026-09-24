@@ -26,11 +26,13 @@ import {
   seloDaTv,
   subRelogioDaTv,
   tituloDaSessao,
+  vistaApreciacaoTv,
   vistaResultadoTv,
   vistaTribunaTv,
   vistaVotacaoTv,
   type FaseTv,
   type ItemPautaTv,
+  type VistaApreciacaoTv,
 } from "@/lib/tv-vista";
 import { frasesDoLetreiro } from "@/lib/tv-letreiro";
 import "./tv.css";
@@ -142,7 +144,9 @@ function useCursorOculto(): boolean {
 function ConteudoTv({ id }: { id: string }) {
   const { token } = useAuth();
   const { sessao, estado, conexao, erro } = usePlenario(id, token, { comQuorum: true, comVotacao: true });
-  const { pauta } = usePauta(id, token, estado?.estado ?? null);
+  // A pauta é rebuscada quando a fase da sessão muda E a cada anúncio (docs/23 Fatia 4b): o item anunciado
+  // pode ser um extrapauta incluído depois que a TV carregou, e é da pauta que vêm sigla, ementa e autor.
+  const { pauta } = usePauta(id, token, estado ? `${estado.estado}|${estado.anuncio?.itemId ?? ""}` : null);
   const agora = useRelogio();
   const exibindoVeredito = useVeredito(estado?.placar ?? null, agora);
   const telaCheia = useTelaCheia();
@@ -161,8 +165,9 @@ function ConteudoTv({ id }: { id: string }) {
   } else if (!sessao || !estado) {
     miolo = <Aviso titulo="Conectando ao plenário…" texto="A TV mostra a sessão assim que o sinal ao vivo chegar." />;
   } else {
-    fase = faseDaTv(estado.estado, estado.placar, exibindoVeredito);
-    miolo = <Miolo fase={fase} sessao={sessao} estado={estado} pauta={pauta} agora={agora} />;
+    const apreciacao = vistaApreciacaoTv(estado, pauta);
+    fase = faseDaTv(estado.estado, estado.placar, exibindoVeredito, apreciacao !== null);
+    miolo = <Miolo fase={fase} sessao={sessao} estado={estado} pauta={pauta} apreciacao={apreciacao} agora={agora} />;
   }
 
   return (
@@ -257,8 +262,10 @@ function Aviso({ titulo, texto }: { titulo: string; texto: string }) {
 
 // ---------------------------------------------------------------- miolo por fase
 
-function Miolo({ fase, sessao, estado, pauta, agora }: { fase: FaseTv; sessao: SessaoOut; estado: EstadoPlenario; pauta: PautaOut | null; agora: number }) {
-  const itens = itensDaPautaTv(pauta, estado.placar);
+function Miolo({
+  fase, sessao, estado, pauta, apreciacao, agora,
+}: { fase: FaseTv; sessao: SessaoOut; estado: EstadoPlenario; pauta: PautaOut | null; apreciacao: VistaApreciacaoTv | null; agora: number }) {
+  const itens = itensDaPautaTv(pauta, estado.placar, apreciacao?.itemId ?? null);
   switch (fase) {
     case "abertura":
       return (
@@ -271,6 +278,8 @@ function Miolo({ fase, sessao, estado, pauta, agora }: { fase: FaseTv; sessao: S
           <Pauta itens={itens} rotulo={itens.length > 0 ? `Pauta do dia · ${itens.length} ${itens.length === 1 ? "item" : "itens"}` : "Pauta do dia"} />
         </section>
       );
+    case "em-apreciacao":
+      return apreciacao ? <EmApreciacao apreciacao={apreciacao} estado={estado} agora={agora} /> : <EmCurso estado={estado} itens={itens} agora={agora} />;
     case "votacao":
       return <Votacao estado={estado} />;
     case "resultado":
@@ -301,13 +310,13 @@ function Pauta({ itens, rotulo }: { itens: ItemPautaTv[]; rotulo: string }) {
       ) : (
         <ol className="pauta">
           {itens.map((it) => (
-            <li key={it.id} className={it.emVotacao ? "atual" : undefined}>
+            <li key={it.id} className={it.emVotacao || it.emApreciacao ? "atual" : undefined}>
               <span className="ord">{it.ordem}</span>
               <span className="it">
                 <b>{it.sigla}</b>
                 <span>{it.descricao}</span>
               </span>
-              <span className="fase">{it.emVotacao ? "Em votação" : it.fase}</span>
+              <span className="fase">{it.emVotacao ? "Em votação" : it.emApreciacao ? "Em apreciação" : it.fase}</span>
             </li>
           ))}
         </ol>
@@ -316,51 +325,88 @@ function Pauta({ itens, rotulo }: { itens: ItemPautaTv[]; rotulo: string }) {
   );
 }
 
-function EmCurso({ estado, itens, agora }: { estado: EstadoPlenario; itens: ItemPautaTv[]; agora: number }) {
+/** Quem está com a palavra — compartilhado por "em curso" e "em apreciação". */
+function CartaoTribuna({ estado, agora }: { estado: EstadoPlenario; agora: number }) {
   const tribuna = vistaTribunaTv(estado, agora);
+  return (
+    <div className="cartao tribuna">
+      <p className="rot">{tribuna ? `Na tribuna${tribuna.fase ? ` · ${tribuna.fase}` : ""}` : "Tribuna"}</p>
+      {tribuna ? (
+        <>
+          <div className="quem">
+            <span className="avatar-tv" aria-hidden="true">
+              {tribuna.iniciais}
+            </span>
+            <div>
+              <b>{tribuna.nome}</b>
+              {tribuna.detalhe && <span>{tribuna.detalhe}</span>}
+            </div>
+          </div>
+          <div className="crono" role="timer" aria-label="Tempo de fala">
+            <b>{tribuna.decorrido}</b>
+            <span>{tribuna.pausado ? "pausado" : "no uso da palavra"}</span>
+          </div>
+        </>
+      ) : (
+        <p className="tribuna-livre">Ninguém com a palavra no momento.</p>
+      )}
+    </div>
+  );
+}
+
+/** O quórum oficial do servidor — compartilhado por "em curso" e "em apreciação". */
+function CartaoQuorum({ estado }: { estado: EstadoPlenario }) {
   const q = vistaDoQuorum(estado);
+  return (
+    <div className="cartao">
+      <p className="rot">Quórum</p>
+      <div className="quorum-tv" aria-live="polite" aria-atomic="true">
+        {q.status === "ok" ? (
+          <>
+            <b>
+              {q.presentes} de {q.membrosDaCasa}
+            </b>
+            <span>vereadores presentes</span>
+          </>
+        ) : (
+          <span>{q.status === "carregando" ? "Carregando o quórum…" : "Contagem de quórum indisponível no momento."}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function EmCurso({ estado, itens, agora }: { estado: EstadoPlenario; itens: ItemPautaTv[]; agora: number }) {
   return (
     <section className="tv-miolo f-em-curso" aria-label="Sessão em curso">
       <div className="coluna">
-        <div className="cartao tribuna">
-          <p className="rot">{tribuna ? `Na tribuna${tribuna.fase ? ` · ${tribuna.fase}` : ""}` : "Tribuna"}</p>
-          {tribuna ? (
-            <>
-              <div className="quem">
-                <span className="avatar-tv" aria-hidden="true">
-                  {tribuna.iniciais}
-                </span>
-                <div>
-                  <b>{tribuna.nome}</b>
-                  {tribuna.detalhe && <span>{tribuna.detalhe}</span>}
-                </div>
-              </div>
-              <div className="crono" role="timer" aria-label="Tempo de fala">
-                <b>{tribuna.decorrido}</b>
-                <span>{tribuna.pausado ? "pausado" : "no uso da palavra"}</span>
-              </div>
-            </>
-          ) : (
-            <p className="tribuna-livre">Ninguém com a palavra no momento.</p>
-          )}
-        </div>
-        <div className="cartao">
-          <p className="rot">Quórum</p>
-          <div className="quorum-tv" aria-live="polite" aria-atomic="true">
-            {q.status === "ok" ? (
-              <>
-                <b>
-                  {q.presentes} de {q.membrosDaCasa}
-                </b>
-                <span>vereadores presentes</span>
-              </>
-            ) : (
-              <span>{q.status === "carregando" ? "Carregando o quórum…" : "Contagem de quórum indisponível no momento."}</span>
-            )}
-          </div>
-        </div>
+        <CartaoTribuna estado={estado} agora={agora} />
+        <CartaoQuorum estado={estado} />
       </div>
       <Pauta itens={itens} rotulo="Pauta do dia" />
+    </section>
+  );
+}
+
+/** docs/23 Fatia 4b — a matéria que a Mesa anunciou, em destaque, com a autoria; embaixo, quem fala sobre ela
+ * e o quórum. Segue até a votação dela abrir (aí a fase é "votacao"). */
+function EmApreciacao({ apreciacao, estado, agora }: { apreciacao: VistaApreciacaoTv; estado: EstadoPlenario; agora: number }) {
+  return (
+    <section className="tv-miolo f-em-apreciacao" aria-label="Matéria em apreciação" aria-live="polite">
+      <div className="materia apreciacao">
+        <p className="rot">Em apreciação · {apreciacao.fase}</p>
+        <span className="num">{apreciacao.sigla}</span>
+        <h1>{apreciacao.descricao}</h1>
+        {apreciacao.autor && (
+          <p className="autor">
+            Autoria: <b>{apreciacao.autor}</b>
+          </p>
+        )}
+      </div>
+      <div className="apr-corpo">
+        <CartaoTribuna estado={estado} agora={agora} />
+        <CartaoQuorum estado={estado} />
+      </div>
     </section>
   );
 }

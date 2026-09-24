@@ -73,6 +73,13 @@
    :nova-ordem   (->int4 (get json-params "nova-ordem") :nova-ordem)
    :lock-version (->int4 (get json-params "lock-version") :lock-version)})
 
+(defn anunciar-item->dominio
+  "Path-params `:id` (sessao) + `:item-id` -> mapa de dominio p/ controllers/anunciar-item-pauta (docs/23
+  Fatia 4b). Sem corpo: o instante e o autor sao do servidor. Coage os uuids (malformado -> 400)."
+  [sessao-id-str item-id-str]
+  {:sessao-id (->uuid sessao-id-str :id)
+   :item-id   (->uuid item-id-str :item-id)})
+
 (defn remover-item->dominio
   "Path-params `:id` (sessao) + `:item-id` + corpo JSON {tipo, justificativa?, lock-version} -> mapa de dominio
   p/ controllers/remover-item-pauta. `tipo` ∈ {exclusao, retirada_pedido_autor} (fail-closed -> 400, nunca o
