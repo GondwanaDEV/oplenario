@@ -179,6 +179,42 @@
   [:map {:closed true}
    [:id :string]])
 
+(def DecisaoMesaOut
+  "Uma decisao da Mesa sobre questao de ordem, como a leitura dos atos a projeta (docs/23 Fatia 2). `presidente-id` =
+  o vereador que presidiu e decidiu (nao quem registrou — `created-by` nao sai: e' auditoria, nao ata).
+  `decidido-em` ISO-8601. `fala-id`/`fundamentacao` so' quando existem."
+  [:map {:closed true}
+   [:id :string]
+   [:presidente-id :string]
+   [:questao :string]
+   [:decisao :string]
+   [:decidido-em :string]
+   [:fundamentacao {:optional true} [:maybe :string]]
+   [:fala-id {:optional true} [:maybe :string]]])
+
+(def IncidenteOut
+  "Um incidente processual (§16.13) como a leitura dos atos o projeta (docs/23 Fatia 2). `ocorrido-em` ISO-8601;
+  `objeto-*`/`requerente-id`/`deliberacao` so' quando existem. Enums fechados = os mesmos da escrita."
+  [:map {:closed true}
+   [:id :string]
+   [:tipo (km/enum-de logic/tipos-incidente)]
+   [:resultado (km/enum-de logic/resultados-incidente)]
+   [:descricao :string]
+   [:ocorrido-em :string]
+   [:objeto-tipo {:optional true} [:maybe (km/enum-de logic/tipos-objeto-incidente)]]
+   [:objeto-id {:optional true} [:maybe :string]]
+   [:requerente-id {:optional true} [:maybe :string]]
+   [:deliberacao {:optional true} [:maybe :string]]])
+
+(def AtosMesaOut
+  "Os ATOS DA MESA de uma sessao (resposta de GET /sessoes/:id/atos-mesa, docs/23 Fatia 2): decisoes e incidentes,
+  cada lista em ordem cronologica. As duas escritas sao append-only e nao tinham leitura — o cockpit da Mesa
+  perdia o que registrou ao recarregar."
+  [:map {:closed true}
+   [:sessao-id :string]
+   [:decisoes [:sequential DecisaoMesaOut]]
+   [:incidentes [:sequential IncidenteOut]]])
+
 (def ProposicaoResumoPautaOut
   "O resumo MINIMO da materia de um item da pauta (Modo TV, docs/22) — sigla/numero/ementa pra quem esta na
   galeria saber O QUE esta na pauta. Mesma FORMA de `legislativo.wire.out.votacao/ProposicaoResumoObjetoVotacaoOut`,

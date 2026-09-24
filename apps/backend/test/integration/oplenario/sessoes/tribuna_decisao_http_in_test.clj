@@ -2,7 +2,9 @@
   "Slice F4 — eixo F (§22.6), tribuna: a DECISAO DA MESA (F4.5c, FECHA a tribuna). `POST /sessoes/:id/decisoes-mesa`
   registra o ato regimental do presidente sobre questao de ordem (corpo {questao, decisao, fundamentacao?,
   decidido-em, fala-id?}) -> 201 {:id}. APPEND-ONLY puro: sem evento, sem CAS, sem 409 (a decisao e' tomada uma
-  vez; corrigir = nova decisao). presidente-id e created-by sao INJETADOS do `ator` (nunca vem do corpo);
+  vez; corrigir = nova decisao). docs/23 Fatia 2: `presidente-id` VEM do corpo (o vereador que presidiu — quem
+  opera o sistema e' o operador da Casa, nao o presidente) e tem de compor a Casa na data da sessao (seam
+  `roster-da-casa`, fake aqui; fora -> 409); `created-by` continua INJETADO do `ator`.
   questao/decisao nao-vazias (apos trim) sao validadas na BORDA -> 400 (nunca o CHECK da migration -> 500).
   `fala-id` opcional: se presente, tem de pertencer A ESTA sessao (anti confused-deputy, espelha cronometro/
   encerrar). Carrega a sessao (nil->404), pode-ver-sessao? (mesma Casa->403). DB-free: RepoSessoes FAKE +
@@ -11,6 +13,7 @@
             [io.pedestal.http :as ph]
             [io.pedestal.test :as pt]
             [jsonista.core :as json]
+            [oplenario.cadastros.components.repositorio :as repo-cadastros-comp]
             [oplenario.config :as config]
             [oplenario.http :as http]
             [oplenario.identidade.components.repositorio :as repo-id]
@@ -21,7 +24,11 @@
   (:import (java.time Instant)))
 
 (defn- sessao-canonica [ente-id id]
-  {:id id :ente-id ente-id :estado "aberta" :tipo-sessao "ordinaria"})
+  {:id id :ente-id ente-id :estado "aberta" :tipo-sessao "ordinaria"
+   :aberta-em (Instant/parse "2026-06-30T13:00:00Z")})
+
+;; O Presidente da Mesa da composicao fake — o `presidente-id` valido do corpo.
+(def ^:private presidente-da-casa (random-uuid))
 
 (defn- fake-repo-sessoes
   "RepoSessoes fake (parcial): `buscar-sessao` resolve a sessao; `buscar-fala` resolve a fala (sessao-id =
@@ -44,11 +51,23 @@
     (snapshot-ator [_ _ente-id _identidade-id]
       {:vinculo-ativo {:id (random-uuid) :tipo "servidor"} :papeis papeis})))
 
-(defn- service-fn* [papeis repo-s]
+(defn- fake-repo-cadastros
+  "O seam `roster-da-casa` que o host injeta: a Casa tem o Presidente e mais um membro. `consultas` guarda as
+  datas pedidas (a composicao e' a da DATA DA SESSAO, nunca a de hoje)."
+  [consultas]
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify repo-cadastros-comp/RepoCadastros
+    (roster-da-casa [_ _ente-id data]
+      (swap! consultas conj data)
+      [{:vereador-id presidente-da-casa :cargo-mesa "presidente"}
+       {:vereador-id (random-uuid) :cargo-mesa nil}])))
+
+(defn- service-fn* [papeis repo-s & {:keys [consultas] :or {consultas (atom [])}}]
   (-> (http/servico (config/carregar)
                     (rotas/montar {:idp (idp-dev/idp-dev)
                                    :repo-identidade (fake-repo-identidade papeis)
                                    :repo-sessoes repo-s
+                                   :repo-cadastros (fake-repo-cadastros consultas)
                                    :objeto-store nil})
                     it/globais)
       ph/create-server ::ph/service-fn))
@@ -63,17 +82,18 @@
 (def ^:private decisao-valida
   {"questao" "Apreciacao de questao de ordem sobre o quorum"
    "decisao" "Indeferida; o quorum esta regular nos termos do art. 90"
-   "decidido-em" "2026-06-30T14:00:00Z"})
+   "decidido-em" "2026-06-30T14:00:00Z"
+   "presidente-id" (str presidente-da-casa)})
 
 ;; ---------- POST /sessoes/:id/decisoes-mesa (sucesso) ----------
 
 (deftest decisao-201
-  (let [ente (random-uuid) sid (random-uuid) pres (random-uuid)
-        cap (atom nil)
+  (let [ente (random-uuid) sid (random-uuid) operador (random-uuid)
+        cap (atom nil) consultas (atom [])
         repo-s (fake-repo-sessoes (fn [_ id] (sessao-canonica ente id)) cap)
-        r (pt/response-for (service-fn* #{"secretario"} repo-s)
+        r (pt/response-for (service-fn* #{"secretario"} repo-s :consultas consultas)
                            :post (url-decisoes sid)
-                           :headers (com-json (token ente pres))
+                           :headers (com-json (token ente operador))
                            :body (corpo decisao-valida))
         body (ler-json r)]
     (is (= 201 (:status r)) "papel + mesma Casa + corpo valido -> 201")
@@ -82,8 +102,10 @@
     (is (= "Apreciacao de questao de ordem sobre o quorum" (:questao @cap)) "Repo recebeu a questao")
     (is (= "Indeferida; o quorum esta regular nos termos do art. 90" (:decisao @cap)) "Repo recebeu a decisao")
     (is (= (Instant/parse "2026-06-30T14:00:00Z") (:decidido-em @cap)) "Repo recebeu o decidido-em coagido a Instant")
-    (is (= pres (:presidente-id @cap)) "presidente-id INJETADO do ator (nunca do corpo)")
-    (is (= pres (:created-by @cap)) "created-by INJETADO do ator")
+    (is (= presidente-da-casa (:presidente-id @cap)) "presidente-id = o vereador que presidiu (do corpo, coagido a uuid)")
+    (is (= operador (:created-by @cap)) "created-by INJETADO do ator (quem registrou), distinto de quem decidiu")
+    (is (= [(java.time.LocalDate/parse "2026-06-30")] @consultas)
+        "a composicao consultada e' a da DATA DA SESSAO (aberta-em), nunca a de hoje")
     (is (nil? (:fala-id @cap)) "sem fala-id no corpo -> nil")
     (is (some? (:id @cap)) "id gerado server-side (PK NOT NULL, nunca nil)")))
 
@@ -239,23 +261,46 @@
                            :body (corpo (assoc decisao-valida "fundamentacao" "   ")))]
     (is (= 400 (:status r)) "fundamentacao presente mas em branco -> 400 (espelha o CHECK)")))
 
-(deftest decisao-presidente-id-do-corpo-ignorado-201
+;; ---------- autoria (docs/23 Fatia 2): quem presidiu vem do corpo e tem de compor a Casa ----------
+
+(deftest decisao-presidente-fora-da-composicao-409
+  (let [ente (random-uuid)
+        cap (atom nil)
+        repo-s (fake-repo-sessoes (fn [_ id] (sessao-canonica ente id)) cap)
+        r (pt/response-for (service-fn* #{"secretario"} repo-s)
+                           :post (url-decisoes (random-uuid))
+                           :headers (com-json (token ente (random-uuid)))
+                           :body (corpo (assoc decisao-valida "presidente-id" (str (random-uuid)))))]
+    (is (= 409 (:status r)) "presidente que nao compoe a Casa na data -> 409 (estado do sistema, nao corpo)")
+    (is (= "quem presidiu nao compoe a Casa na data da sessao" (:erro (ler-json r))) "mensagem acionavel")
+    (is (nil? @cap) "nada gravado")))
+
+(deftest decisao-presidente-ausente-400
   (let [ente (random-uuid)
         repo-s (fake-repo-sessoes (fn [_ id] (sessao-canonica ente id)) (atom nil))
         r (pt/response-for (service-fn* #{"secretario"} repo-s)
                            :post (url-decisoes (random-uuid))
                            :headers (com-json (token ente (random-uuid)))
-                           ;; presidente-id NAO vem do corpo (injetado do ator); um cliente que tenta forja-lo
-                           ;; e' barrado pelo allowlist do adapter (so-esperados) -> nunca chega ao Repo.
-                           :body (corpo (assoc decisao-valida "presidente-id" (str (random-uuid)))))
-        body (ler-json (pt/response-for (service-fn* #{"secretario"} repo-s)
-                                        :post (url-decisoes (random-uuid))
-                                        :headers (com-json (token ente (random-uuid)))
-                                        :body (corpo decisao-valida)))]
-    ;; o campo extra e' IGNORADO pelo allowlist (nao 400; espelha a defesa dos outros adapters da tribuna) — o
-    ;; importante e' que NUNCA vira presidente-id no Repo (coberto por decisao-201). Aqui so confirmamos 201.
-    (is (= 201 (:status r)) "campo extra 'presidente-id' ignorado pelo allowlist -> 201")
-    (is (some? body) "corpo limpo segue 201")))
+                           :body (corpo (dissoc decisao-valida "presidente-id")))]
+    (is (= 400 (:status r)) "corpo sem presidente-id (obrigatorio) -> 400")))
+
+(deftest decisao-presidente-malformado-400
+  (let [ente (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ id] (sessao-canonica ente id)) (atom nil))
+        r (pt/response-for (service-fn* #{"secretario"} repo-s)
+                           :post (url-decisoes (random-uuid))
+                           :headers (com-json (token ente (random-uuid)))
+                           :body (corpo (assoc decisao-valida "presidente-id" "nao-e-uuid")))]
+    (is (= 400 (:status r)) "presidente-id malformado -> 400, nunca 500")))
+
+(deftest decisao-sessao-sem-data-409
+  (let [ente (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ id] (dissoc (sessao-canonica ente id) :aberta-em)) (atom nil))
+        r (pt/response-for (service-fn* #{"secretario"} repo-s)
+                           :post (url-decisoes (random-uuid))
+                           :headers (com-json (token ente (random-uuid)))
+                           :body (corpo decisao-valida))]
+    (is (= 409 (:status r)) "sessao sem data: sem composicao de referencia -> 409 acionavel, nunca 500")))
 
 ;; ---------- anti confused-deputy (fala-id de outra sessao) -> 404 ----------
 

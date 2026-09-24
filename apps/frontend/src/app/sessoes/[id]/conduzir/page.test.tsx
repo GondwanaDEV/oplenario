@@ -26,6 +26,14 @@ vi.mock("@/lib/use-tribuna-mesa", () => ({
   useTribunaMesa: () => ({ tribuna: null, composicao: null, estado: "pronto", erro: null, recarregar: vi.fn(), inscrever: vi.fn(), desistir: vi.fn() }),
 }));
 
+// Atos da Mesa (docs/23 Fatia 2) têm testes próprios (painel-atos-mesa.test.tsx); aqui só evitamos o IO real.
+vi.mock("@/lib/use-atos-mesa", () => ({
+  useAtosMesa: () => ({
+    atos: null, membros: [], estado: "pronto", enviando: false, recarregar: vi.fn(),
+    buscarFalaAtual: vi.fn(), registrarDecisao: vi.fn(), registrarIncidente: vi.fn(),
+  }),
+}));
+
 // Item extrapauta (docs/23): a escrita tem testes próprios (use-editar-pauta.test.ts); aqui só a página.
 const incluirPauta = vi.fn().mockResolvedValue({ ok: true });
 vi.mock("@/lib/use-editar-pauta", () => ({
@@ -150,5 +158,22 @@ describe("Comando da Mesa — item extrapauta (docs/23)", () => {
   it("sessão agendada: sem extrapauta (a pauta se monta na tela de pauta)", () => {
     montar("agendada", { agendadaPara: "2026-05-21T14:00:00Z" });
     expect(screen.queryByRole("button", { name: "Incluir item extrapauta" })).toBeNull();
+  });
+});
+
+describe("Comando da Mesa — atos da Mesa (docs/23 Fatia 2)", () => {
+  it("sessão aberta mostra o painel com os dois registros", () => {
+    montar("aberta");
+    expect(screen.getByRole("heading", { name: "Atos da Mesa" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Registrar questão de ordem" })).toBeTruthy();
+  });
+
+  it("sessão encerrada mostra os atos só para leitura; agendada não mostra o painel", () => {
+    montar("encerrada");
+    expect(screen.getByRole("heading", { name: "Atos da Mesa" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Registrar questão de ordem" })).toBeNull();
+    cleanup();
+    montar("agendada", { agendadaPara: "2026-05-21T14:00:00Z" });
+    expect(screen.queryByRole("heading", { name: "Atos da Mesa" })).toBeNull();
   });
 });

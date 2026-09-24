@@ -100,6 +100,34 @@ export interface IncidenteReciboOut {
   id: string;
 }
 
+export interface DecisaoMesaOut {
+  id: string;
+  presidenteId: string;
+  questao: string;
+  decisao: string;
+  decididoEm: string;
+  fundamentacao?: string | null;
+  falaId?: string | null;
+}
+
+export interface IncidenteOut {
+  id: string;
+  tipo: "pedido_vista" | "urgencia" | "verificacao_votacao" | "votacao_em_bloco";
+  resultado: "deferido" | "indeferido" | "prejudicado" | "retirado";
+  descricao: string;
+  ocorridoEm: string;
+  objetoTipo?: "emenda" | "proposicao" | "votacao" | null;
+  objetoId?: string | null;
+  requerenteId?: string | null;
+  deliberacao?: string | null;
+}
+
+export interface AtosMesaOut {
+  sessaoId: string;
+  decisoes: DecisaoMesaOut[];
+  incidentes: IncidenteOut[];
+}
+
 export interface ProposicaoResumoPautaOut {
   tipo: string;
   ano: number;

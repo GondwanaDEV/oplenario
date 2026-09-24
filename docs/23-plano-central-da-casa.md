@@ -64,7 +64,7 @@ Dois achados que o plano corrige:
 
 ## Fatias (uma branch/PR por fatia; TDD; revisão antes do merge)
 
-### Fatia 1 — Montar a pauta (frontend sobre backend pronto)
+### Fatia 1 — Montar a pauta (frontend sobre backend pronto) — ✅ PR #24 (em produção 24/09/2026)
 
 - `/pauta-convocacao` vira editável para a sessão agendada **ou aberta**:
   - **incluir**: proposição (busca no acervo, com atalho para as da coluna "Pronta p/ pauta" do quadro de
@@ -79,7 +79,12 @@ Dois achados que o plano corrige:
 - Testes: hooks (`use-adicionar-item-pauta`, `use-reordenar-item-pauta`, `use-retirar-item-pauta`) +
   página (fluxo feliz, 409, 400, sessão fechada).
 
-### Fatia 2 — Atos da Mesa no cockpit
+### Fatia 2 — Atos da Mesa no cockpit — ✅ implementada (PR desta fatia)
+
+> Linhas antigas (decisão 2): nenhuma tela registrava decisão da Mesa antes desta fatia e o seed da demo não cria
+> nenhuma — não há histórico a migrar. `presidente-id` passa a ser OBRIGATÓRIO no corpo (o vereador que presidiu,
+> validado contra a composição da data da sessão → 409); `created-by` segue sendo o operador. A leitura ficou
+> `GET /sessoes/:id/atos-mesa` (papel `secretario`), com as duas listas em ordem cronológica.
 
 - **Backend:**
   - autoria correta (decisão 2): `registrar-decisao-mesa` recebe `presidente-id` no corpo, validado contra a

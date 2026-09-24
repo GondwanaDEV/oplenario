@@ -24,6 +24,8 @@ import { PainelVotacao } from "./painel-votacao";
 import { PainelTribuna } from "./painel-tribuna";
 import { BotaoModoTv } from "../botao-modo-tv";
 import { FormItemPauta } from "../form-item-pauta";
+import { PainelAtosMesa, type MateriaDaPauta } from "./painel-atos-mesa";
+import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
 import "./conduzir.css";
 
 /** "2026-05-21T14:03:00Z" -> "21/05 às 14h03" (fuso do navegador — leitura humana, nunca comparação). */
@@ -96,6 +98,14 @@ function Comando({ sessao, token, transicionar, recarregar }: ComandoProps) {
   const [avisoPauta, setAvisoPauta] = useState<string | null>(null);
   const podeExtrapauta = sessao.estado === "aberta" || sessao.estado === "suspensa";
   const temItens = estadoPauta === "ok" && !!pauta && pauta.itens.length > 0;
+  // Matérias da pauta para o incidente apontar a que atinge (pedido de vista, urgência…).
+  const materias: MateriaDaPauta[] = (pauta?.itens ?? []).flatMap((i) => {
+    const id = i["proposicao-id"];
+    if (!id) return [];
+    const p = i.proposicao;
+    return [{ proposicaoId: id, rotulo: p ? `${formatarNumeroProposicao(p.tipo, p.sequencial, p.ano)} — ${p.ementa}` : "Matéria da pauta" }];
+  });
+  const mostraAtos = sessao.estado !== "agendada" && sessao.estado !== "nao_realizada";
   const idsNaPauta = new Set((pauta?.itens ?? []).flatMap((i) => (i["proposicao-id"] ? [i["proposicao-id"]] : [])));
 
   async function incluirExtrapauta(novo: NovoItemPauta): Promise<ResultadoPauta> {
@@ -327,6 +337,10 @@ function Comando({ sessao, token, transicionar, recarregar }: ComandoProps) {
 
         {(sessao.estado === "aberta" || sessao.estado === "suspensa") && (
           <PainelTribuna sessaoId={sessao.id} token={token} />
+        )}
+
+        {mostraAtos && (
+          <PainelAtosMesa sessaoId={sessao.id} token={token} podeRegistrar={podeExtrapauta} materias={materias} />
         )}
 
         {(temItens || podeExtrapauta) && (

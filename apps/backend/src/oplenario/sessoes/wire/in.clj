@@ -135,13 +135,17 @@
   (ato regimental p/ a ata, APPEND-ONLY). `questao`/`decisao` = texto OBRIGATORIO e nao-vazio (apos trim — o
   adapters/in valida -> 400, nunca o CHECK da migration -> 500); `fundamentacao` opcional (se presente, nao-vazia
   — campo de peso juridico); `decidido-em` = instante de DOMINIO (ISO-8601 string, OBRIGATORIO) em que o
-  presidente decidiu; `fala-id` opcional (uuid — a questao pode ser decidida sem uma fala registrada). NAO carrega
-  `presidente-id` (INJETADO do ator no servidor — um cliente nao forja quem decidiu) nem autor/tenant/sessao-id.
+  presidente decidiu; `fala-id` opcional (uuid — a questao pode ser decidida sem uma fala registrada).
+  `presidente-id` (uuid, OBRIGATORIO) = o VEREADOR que presidia e decidiu (docs/23 Fatia 2): quem opera o sistema
+  e' o operador da Casa (papel secretario), nao o presidente — antes o servidor injetava o ATOR como presidente
+  e a ata atribuia a decisao a quem clicou. O controller exige que ele componha a Casa na data da sessao (409
+  se nao); `created-by` continua INJETADO do ator (quem registrou). NAO carrega autor/tenant/sessao-id.
   `:closed true` recusa campos extra (defesa de borda)."
   [:map {:closed true}
    [:questao :string]
    [:decisao :string]
    [:decidido-em :string]
+   [:presidente-id :string]
    [:fundamentacao {:optional true} [:maybe :string]]
    [:fala-id {:optional true} [:maybe :string]]])
 

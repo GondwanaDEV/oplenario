@@ -312,17 +312,34 @@
       (repo/encerrar-fala! repo-sessoes (:ente-id ator)
         {:id fala-id :encerrou-em encerrou-em :lock-version lock-version :updated-by (:identidade-id ator)}))))
 
+(defn- exigir-presidente-na-composicao!
+  "Fail-closed: o `presidente-id` de uma decisao da Mesa tem de compor a Casa na DATA DE REFERENCIA da sessao (o
+  mesmo roster da chamada — seam `roster-da-casa`). Sem isto a ata poderia atribuir a decisao a um uuid qualquer
+  (a coluna e' forward-ref, sem FK, §22.10). Lanca `:conflito/decisao-mesa` (409, nao 400): o corpo esta bem
+  formado, o que nao bate e' a COMPOSICAO da Casa naquela data — estado do sistema, mesmo racional de
+  `exigir-assento!`. Mesmo TOCTOU aceito de `exigir-assento!` (roster lido fora da tx do Repo)."
+  [roster-da-casa ente-id sessao presidente-id]
+  (let [data (data-de-referencia sessao)]
+    (when-not (some #(= presidente-id (:vereador-id %)) (roster-da-casa ente-id data))
+      (throw (ex-info "quem presidiu nao compoe a Casa na data da sessao"
+                      {:tipo :conflito/decisao-mesa :motivo :presidente-sem-assento
+                       :sessao-id (:id sessao) :data-de-composicao data})))))
+
 (defn registrar-decisao-mesa
   "§22.6 eixo F (tribuna): registra a DECISAO DA MESA sobre questao de ordem — ato regimental com efeito juridico
   que vai para a ata. APPEND-ONLY puro: sem CAS, sem evento (a decisao e' tomada uma vez; corrigir = nova
   decisao). Carrega a sessao do tenant do `ator` (nil -> 404), roda pode-ver-sessao? (mesma Casa -> 403
   fail-closed). Se `fala-id` veio no corpo, tem de pertencer A ESTA sessao (anti confused-deputy, mesma guarda do
   cronometro/encerrar: senao um secretario poderia atrelar a decisao a uma fala de OUTRA sessao da mesma Casa) —
-  mismatch/inexistente -> nil -> 404. `presidente-id` e `created-by` sao INJETADOS do ator (um cliente nao forja
-  quem decidiu). `id` gerado server-side (PK NOT NULL). Devolve {:id} ou nil (sessao inexistente / fala alheia).
-  (Refinamento futuro: resolver o presidente REAL da Mesa via relacao é-presidente-da-mesa em vez do ator-operador
-  — carry; hoje presidente-id = o operador autenticado que registrou o ato.)"
-  [repo-sessoes ator {:keys [sessao-id fala-id] :as m}]
+  mismatch/inexistente -> nil -> 404.
+
+  AUTORIA (docs/23 Fatia 2): quem DECIDE e quem REGISTRA sao pessoas diferentes. `presidente-id` vem do corpo — o
+  vereador que presidia (o operador da Casa escolhe; o formulario pre-seleciona o Presidente da Mesa, e o vice em
+  exercicio e' escolha legitima) — e tem de compor a Casa na data da sessao (`exigir-presidente-na-composicao!`,
+  409). `created-by` continua INJETADO do ator (um cliente nao forja quem registrou). Antes, `presidente-id` era o
+  proprio ator: com o operador conduzindo, a ata diria que ele decidiu. `id` gerado server-side (PK NOT NULL).
+  Devolve {:id} ou nil (sessao inexistente / fala alheia)."
+  [repo-sessoes roster-da-casa ator {:keys [sessao-id fala-id presidente-id] :as m}]
   (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
     (authz/check! ator :sessao/registrar-decisao-mesa sessao logic/pode-ver-sessao?)
     (exigir-sessao-aberta! sessao)
@@ -330,10 +347,23 @@
     ;; cronometro/encerrar. fala-id ausente = decisao sem fala associada (regimentalmente valido).
     (when (or (nil? fala-id)
               (= sessao-id (:sessao-id (repo/buscar-fala repo-sessoes (:ente-id ator) fala-id))))
+      (exigir-presidente-na-composicao! roster-da-casa (:ente-id ator) sessao presidente-id)
       (repo/registrar-decisao-mesa! repo-sessoes (:ente-id ator)
         (assoc m :id (random-uuid)
-                 :presidente-id (:identidade-id ator)
                  :created-by (:identidade-id ator))))))
+
+(defn listar-atos-mesa
+  "docs/23 Fatia 2 — os ATOS DA MESA de uma sessao (decisoes sobre questao de ordem + incidentes processuais), cada
+  lista em ordem cronologica. E' o que o cockpit da Mesa mostra depois de recarregar: as duas escritas sao
+  append-only e nao tinham leitura nenhuma exposta. Carrega a sessao do tenant do `ator` (nil -> 404) e roda
+  pode-ver-sessao? (mesma Casa -> 403). Sessao fechada continua legivel (e' historia da ata). Devolve
+  {:sessao-id :decisoes [...] :incidentes [...]} ou nil."
+  [repo-sessoes ator sessao-id]
+  (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/listar-atos-mesa sessao logic/pode-ver-sessao?)
+    {:sessao-id  sessao-id
+     :decisoes   (repo/listar-decisoes-mesa repo-sessoes (:ente-id ator) sessao-id)
+     :incidentes (repo/listar-incidentes repo-sessoes (:ente-id ator) sessao-id)}))
 
 (defn registrar-incidente
   "§16.13: registra um INCIDENTE PROCESSUAL da sessao (pedido de vista, verificacao de votacao, urgencia, votacao

@@ -565,26 +565,26 @@ echo
 echo "--- Rota 13: POST /sessoes/:id/decisoes-mesa ---"
 
 # erro: corpo invalido (questao vazia apos trim)
-http POST "/sessoes/$SESSAO/decisoes-mesa" "$TSEC" "{\"questao\":\"   \",\"decisao\":\"deferida\",\"decidido-em\":\"$AGORA\"}"
+http POST "/sessoes/$SESSAO/decisoes-mesa" "$TSEC" "{\"questao\":\"   \",\"decisao\":\"deferida\",\"decidido-em\":\"$AGORA\",\"presidente-id\":\"$VEREADOR1\"}"
 esperar_status 400 "$ST" "POST /decisoes-mesa" "corpo invalido: questao vazia apos trim" "$BODY"
 
 # erro: papel errado
-http POST "/sessoes/$SESSAO/decisoes-mesa" "$TVER" "{\"questao\":\"prazo de tribuna\",\"decisao\":\"mantido\",\"decidido-em\":\"$AGORA\"}"
+http POST "/sessoes/$SESSAO/decisoes-mesa" "$TVER" "{\"questao\":\"prazo de tribuna\",\"decisao\":\"mantido\",\"decidido-em\":\"$AGORA\",\"presidente-id\":\"$VEREADOR1\"}"
 esperar_status 403 "$ST" "POST /decisoes-mesa" "papel errado (vereador)" "$BODY"
 
 # erro: fala de outra sessao (confused-deputy)
 if [ -n "$FALA_ALHEIA" ]; then
-  http POST "/sessoes/$SESSAO/decisoes-mesa" "$TSEC" "{\"questao\":\"q\",\"decisao\":\"d\",\"decidido-em\":\"$AGORA\",\"fala-id\":\"$FALA_ALHEIA\"}"
+  http POST "/sessoes/$SESSAO/decisoes-mesa" "$TSEC" "{\"questao\":\"q\",\"decisao\":\"d\",\"decidido-em\":\"$AGORA\",\"presidente-id\":\"$VEREADOR1\",\"fala-id\":\"$FALA_ALHEIA\"}"
   esperar_status 404 "$ST" "POST /decisoes-mesa" "confused-deputy: fala-id de outra sessao" "$BODY"
 fi
 
 # feliz: decisao sem fala-id
-http POST "/sessoes/$SESSAO/decisoes-mesa" "$TSEC" "{\"questao\":\"Pode o vereador falar por mais 2 minutos?\",\"decisao\":\"Deferido, +2min, por acordo de lideranca.\",\"decidido-em\":\"$AGORA\"}"
+http POST "/sessoes/$SESSAO/decisoes-mesa" "$TSEC" "{\"questao\":\"Pode o vereador falar por mais 2 minutos?\",\"decisao\":\"Deferido, +2min, por acordo de lideranca.\",\"decidido-em\":\"$AGORA\",\"presidente-id\":\"$VEREADOR1\"}"
 esperar_status 201 "$ST" "POST /decisoes-mesa" "feliz: decisao sem fala-id" "$BODY"
 DECISAO1=$(jget id)
 
 # feliz: decisao vinculada a fala1 (desta sessao)
-http POST "/sessoes/$SESSAO/decisoes-mesa" "$TSEC" "{\"questao\":\"Questao de ordem sobre a fala encerrada\",\"decisao\":\"Mantida a ordem\",\"decidido-em\":\"$AGORA\",\"fala-id\":\"$FALA1\"}"
+http POST "/sessoes/$SESSAO/decisoes-mesa" "$TSEC" "{\"questao\":\"Questao de ordem sobre a fala encerrada\",\"decisao\":\"Mantida a ordem\",\"decidido-em\":\"$AGORA\",\"presidente-id\":\"$VEREADOR1\",\"fala-id\":\"$FALA1\"}"
 esperar_status 201 "$ST" "POST /decisoes-mesa" "feliz: decisao vinculada a fala1" "$BODY"
 
 DB_N_DECISAO=$(dbval "select count(*) from sessoes.decisao_mesa where sessao_id='$SESSAO';")
