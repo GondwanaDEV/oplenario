@@ -16,7 +16,11 @@
      escuro, read-only, glanceável a 15 m, sem chrome interativo. O que
      este acrescenta ao telão é o TEMPO: uma moldura fixa de telejornal
      (topo com relógio + letreiro no rodapé) e um miolo que muda com a
-     FASE da sessão — abertura, em curso, votação, resultado, pausa.
+     FASE da sessão — abertura, em curso, em apreciação, votação,
+     resultado, pausa. "Em apreciação" (docs/23 Fatia 4b) aparece quando a
+     Mesa ANUNCIA a matéria no Comando da Mesa — é ato da Mesa, não um
+     controle da TV — e segue até a votação dela encerrar ou outro item ser
+     anunciado. A tribuna mostra o partido (do mandato na data da sessão).
 
      A fase NUNCA é escolhida à mão no produto: é derivada do estado ao
      vivo (SSE). Aqui o `?fase=` só existe para fotografar/medir cada uma.
@@ -89,6 +93,7 @@
   .tv-miolo { min-height: 0; padding: 1.6vw 2.4vw; display: none; overflow: hidden; }
   body[data-fase="abertura"]  .f-abertura,
   body[data-fase="em-curso"]  .f-em-curso,
+  body[data-fase="em-apreciacao"] .f-em-apreciacao,
   body[data-fase="votacao"]   .f-votacao,
   body[data-fase="resultado"] .f-resultado,
   body[data-fase="pausa"]     .f-pausa { display: grid; }
@@ -135,6 +140,18 @@
   .quorum-tv b { white-space: nowrap; font-family: var(--display); font-weight: 800; font-size: clamp(2.4rem, 4.4vw, 7.4rem); color: #fff; line-height: 1; font-variant-numeric: tabular-nums; }
   .quorum-tv span { font-size: clamp(1rem, 1.4vw, 2.4rem); color: var(--palco-texto-2); }
   .quorum-tv .ok { flex-basis: 100%; font-family: var(--mono); font-weight: 600; font-size: clamp(.8rem, .95vw, 1.6rem); letter-spacing: .1em; text-transform: uppercase; color: var(--tv-sim); }
+
+  /* 2b · em apreciação (docs/23 Fatia 4b) — a Mesa ANUNCIOU a matéria: ela vira o herói da tela até a
+     votação abrir. Quem está na tribuna fala SOBRE ela; o quórum diz se dá para votar. */
+  .f-em-apreciacao { grid-template-rows: auto minmax(0, 1fr); gap: 2vw; }
+  .apreciacao .rot { color: var(--tv-destaque); }
+  .apreciacao .num { font-family: var(--mono); font-weight: 700; font-size: clamp(1.2rem, 2vw, 3.4rem); color: var(--tv-destaque); letter-spacing: .02em; }
+  .apreciacao h1 { font-family: var(--display); font-weight: 800; font-size: clamp(2rem, 3.6vw, 6rem); line-height: 1.05; letter-spacing: -0.02em; color: #fff; margin: .4vw 0 0; max-width: 40ch; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+  .apreciacao .autor { font-size: clamp(1.1rem, 1.6vw, 2.6rem); color: var(--palco-texto-2); margin: 1vw 0 0; }
+  .apreciacao .autor b { color: #fff; font-weight: 700; }
+  /* "a seguir na pauta" NÃO entra aqui: a 1080p não cabe junto da matéria em destaque sem cortar, e o
+     letreiro do rodapé já diz o próximo item. */
+  .apr-corpo { display: grid; grid-template-columns: 1.3fr 1fr; gap: 2vw; min-height: 0; align-items: start; }
 
   /* 3 · votação */
   .f-votacao { grid-template-rows: auto auto minmax(0, 1fr); gap: 1.3vw; }
@@ -219,7 +236,7 @@
   @media (max-width: 1100px) {
     body { overflow: auto; }
     .tv { height: auto; min-height: 100vh; }
-    .f-abertura, .f-em-curso, .vot-corpo { grid-template-columns: 1fr; }
+    .f-abertura, .f-em-curso, .vot-corpo, .apr-corpo { grid-template-columns: 1fr; }
     .contagem { grid-template-columns: repeat(3, 1fr); }
     .contagem .progresso { grid-column: 1 / -1; }
   }
@@ -271,7 +288,7 @@
         <p class="rot">Na tribuna · Grande expediente</p>
         <div class="quem">
           <span class="avatar-tv" aria-hidden="true">HP</span>
-          <div><b>Helena Past</b><span>Vice-presidente da Mesa</span></div>
+          <div><b>Helena Past</b><span>PSB · Vice-presidente da Mesa</span></div>
         </div>
         <div class="crono" role="timer" aria-label="Tempo de fala"><b>06:24</b><span>no uso da palavra</span></div>
       </div>
@@ -289,6 +306,30 @@
         <li><span class="ord">4</span><span class="it"><b>PL 31/2026</b><span>Dispõe sobre a gratuidade no transporte para doadores de sangue</span></span><span class="fase">Ordem do dia</span></li>
         <li><span class="ord">5</span><span class="it"><b>MOC 9/2026</b><span>Moção de aplauso aos agentes comunitários de saúde</span></span><span class="fase">Ordem do dia</span></li>
       </ol>
+    </div>
+  </section>
+
+  <!-- ============ 2b · EM APRECIAÇÃO (a Mesa anunciou a matéria) ============ -->
+  <section class="tv-miolo f-em-apreciacao" aria-label="Matéria em apreciação">
+    <div class="materia apreciacao">
+      <p class="rot">Em apreciação · Ordem do dia</p>
+      <span class="num">PL 22/2026</span>
+      <h1>Institui a política municipal de incentivo à energia solar em prédios públicos</h1>
+      <p class="autor">Autoria: <b>Ver. Ana Castro</b></p>
+    </div>
+    <div class="apr-corpo">
+      <div class="cartao tribuna">
+        <p class="rot">Na tribuna · Discussão da matéria</p>
+        <div class="quem">
+          <span class="avatar-tv" aria-hidden="true">CT</span>
+          <div><b>Carlos Tavares</b><span>PDT · Fala principal</span></div>
+        </div>
+        <div class="crono" role="timer" aria-label="Tempo de fala"><b>02:48</b><span>no uso da palavra</span></div>
+      </div>
+      <div class="cartao">
+        <p class="rot">Quórum</p>
+        <div class="quorum-tv" aria-live="polite"><b>18 de 21</b><span>vereadores presentes</span><span class="ok">✓ quórum atingido</span></div>
+      </div>
     </div>
   </section>
 
@@ -361,6 +402,7 @@
     <div class="letreiro" aria-label="Acontecimentos da sessão">
       <ul>
         <li><span>Em votação: <b>PL 22/2026</b> — faltam 3 votos</span></li>
+        <li><span>Em apreciação: <b>PL 22/2026</b> — autoria de Ver. Ana Castro</span></li>
         <li><span>Quórum: <b>18 de 21</b> vereadores presentes</span></li>
         <li><span>Última votação: <b>REQ 118/2026</b> aprovado por 17 × 0</span></li>
         <li><span>A seguir na pauta: <b>PL 31/2026</b> — gratuidade no transporte para doadores de sangue</span></li>
@@ -372,11 +414,11 @@
 </main>
 
 <script>
-  /* Só para fotografar/medir cada fase (?fase=abertura|em-curso|votacao|resultado|pausa).
+  /* Só para fotografar/medir cada fase (?fase=abertura|em-curso|em-apreciacao|votacao|resultado|pausa).
      No produto a fase é DERIVADA do estado ao vivo — não existe seletor. */
   (function () {
     var f = new URLSearchParams(location.search).get("fase");
-    var validas = ["abertura", "em-curso", "votacao", "resultado", "pausa"];
+    var validas = ["abertura", "em-curso", "em-apreciacao", "votacao", "resultado", "pausa"];
     if (validas.indexOf(f) >= 0) document.body.dataset.fase = f;
     var selo = document.getElementById("selo"), txt = document.getElementById("selo-txt");
     if (f === "pausa") { selo.className = "tv-selo pausa"; txt.textContent = "Suspensa"; }
