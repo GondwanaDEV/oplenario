@@ -833,13 +833,16 @@
 
 (defn- listar-folhas-handler
   "GET /sessoes/:id/folhas (Etapa 5 fatia 5). MESMO gate do congelamento. Metadados apenas, SEM binario —
-  lista vazia (sessao existe, nunca foi congelada) e' 200, distinto de sessao inexistente (404)."
-  [repo-sessoes]
+  lista vazia (sessao existe, nunca foi congelada) e' 200, distinto de sessao inexistente (404). docs/23
+  Fatia 5: depois da authz, cada versao ganha o nome de quem congelou (`nome-na-casa`, seam do host) — so'
+  depois, nunca antes: quem nao pode ver a folha nao dispara leitura nenhuma em identidade."
+  [repo-sessoes nome-na-casa]
   (fn [req]
     (let [ator (:ator req)
           id   (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
       (if-let [folhas (controllers/folhas-da-sessao-metadados repo-sessoes ator id)]
-        (http/json-resposta 200 (adapters-out-folha/folhas-da-sessao->wire id folhas))
+        (http/json-resposta 200 (adapters-out-folha/folhas-da-sessao->wire
+                                  id folhas (controllers/nomes-de-quem-congelou nome-na-casa (:ente-id ator) folhas)))
         (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
 
 (defn- resposta-folha-conteudo
@@ -932,7 +935,7 @@
   controller) — EXCETO `/chamada`, `/assiduidade` e as quatro rotas da FOLHA, que exigem 'secretario' na
   borda (leitura operacional da Mesa, nao um read-model publico)."
   [{:keys [auth repo-sessoes objeto-store resolver-vereador relogio roster-da-casa dados-da-casa
-           serializador-folha renderizador-pdf roster-da-casa-em-datas resumir-proposicoes]}]
+           serializador-folha renderizador-pdf roster-da-casa-em-datas resumir-proposicoes nome-na-casa]}]
   ;; ASSERCAO DE BOOT do seam — o carry que as revisoes das Fatias 1 e 2 registraram DUAS vezes e que a
   ;; Fatia 3, que e' quem finalmente destrutura a chave, nao tinha. O mapa que `rotas.clj` passa aqui NAO e'
   ;; `:closed`: uma chave com o nome errado (`:roster-da-casa-em-data`, um typo num refactor) destruturaria
@@ -950,6 +953,12 @@
     (throw (ex-info "sessoes/rotas: seam :resumir-proposicoes ausente ou nao-funcao"
                     {:tipo :servidor/erro
                      :classe (some-> resumir-proposicoes class .getName)})))
+  ;; docs/23 Fatia 5: idem para o nome de quem congelou a folha — sem o guard, um typo na chave faria a lista
+  ;; de versoes voltar a mostrar so' o id, em silencio.
+  (when-not (ifn? nome-na-casa)
+    (throw (ex-info "sessoes/rotas: seam :nome-na-casa ausente ou nao-funcao"
+                    {:tipo :servidor/erro
+                     :classe (some-> nome-na-casa class .getName)})))
   (let [papel-vereador (it/exige-papel "vereador")]
    #{["/sessoes"     :post [auth (it/exige-papel "secretario") it/corpo-json (agendar-handler repo-sessoes)]
      :route-name :sessoes/agendar]
@@ -1098,7 +1107,7 @@
                            serializador-folha renderizador-pdf objeto-store)]
      :route-name :sessoes/gerar-folha]
     ["/sessoes/:id/folhas" :get
-     [auth (it/exige-papel "secretario") (listar-folhas-handler repo-sessoes)]
+     [auth (it/exige-papel "secretario") (listar-folhas-handler repo-sessoes nome-na-casa)]
      :route-name :sessoes/listar-folhas]
     ["/sessoes/:id/folhas/:versao" :get
      [auth (it/exige-papel "secretario") (folha-html-handler repo-sessoes objeto-store)]

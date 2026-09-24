@@ -35,21 +35,27 @@
 
 (defn folha->wire
   "Linha de `sessoes.folha_sessao` (dominio, kebab, de `repo/inserir-folha-dedup!`/`repo/buscar-folha`/
-  `repo/folhas-da-sessao`) -> FolhaMetadadosOut (validado)."
-  [{:keys [id versao spec-versao html-hash pdf-hash gerada-por gerada-em ja-congelada]}]
-  (validar! wire/FolhaMetadadosOut
-            (cond-> {:id (str id) :versao versao :spec-versao spec-versao
-                     :html-hash html-hash :pdf-hash pdf-hash
-                     :gerada-por (str gerada-por) :gerada-em (str gerada-em)}
-              ja-congelada (assoc :ja-congelada true))
-            "FolhaMetadadosOut"))
+  `repo/folhas-da-sessao`) -> FolhaMetadadosOut (validado). `nome` (opcional) = o nome de quem congelou, ja'
+  resolvido pelo chamador; ausente/nil -> a chave `:gerada-por-nome` nao aparece."
+  ([row] (folha->wire row nil))
+  ([{:keys [id versao spec-versao html-hash pdf-hash gerada-por gerada-em ja-congelada]} nome]
+   (validar! wire/FolhaMetadadosOut
+             (cond-> {:id (str id) :versao versao :spec-versao spec-versao
+                      :html-hash html-hash :pdf-hash pdf-hash
+                      :gerada-por (str gerada-por) :gerada-em (str gerada-em)}
+               nome (assoc :gerada-por-nome nome)
+               ja-congelada (assoc :ja-congelada true))
+             "FolhaMetadadosOut")))
 
 (defn folhas-da-sessao->wire
-  "N linhas -> FolhasDaSessaoOut (validado, resposta 200 de GET /sessoes/:id/folhas)."
-  [sessao-id folhas]
-  (validar! wire/FolhasDaSessaoOut
-            {:sessao-id (str sessao-id) :folhas (mapv folha->wire folhas)}
-            "FolhasDaSessaoOut"))
+  "N linhas -> FolhasDaSessaoOut (validado, resposta 200 de GET /sessoes/:id/folhas). `nomes` = {identidade-id
+  nome} de quem congelou (docs/23 Fatia 5); id fora do mapa sai sem `:gerada-por-nome`."
+  ([sessao-id folhas] (folhas-da-sessao->wire sessao-id folhas {}))
+  ([sessao-id folhas nomes]
+   (validar! wire/FolhasDaSessaoOut
+             {:sessao-id (str sessao-id)
+              :folhas (mapv #(folha->wire % (get nomes (:gerada-por %))) folhas)}
+             "FolhasDaSessaoOut")))
 
 (def ^:const csp-html
   "CSP da resposta do HTML CONGELADO — o SERVIDOR fecha a porta, sem depender de o frontend lembrar do

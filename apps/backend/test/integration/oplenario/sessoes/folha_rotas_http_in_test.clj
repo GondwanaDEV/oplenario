@@ -114,11 +114,20 @@
     (buscar-ente [_ _ente-id] {:nome-oficial "Camara Municipal de Fortaleza" :nome-curto "CMF"})
     (legislatura-vigente [_ _ente-id] {:numero 19 :ano-inicio 2025 :ano-fim 2028})))
 
-(defn- fake-repo-identidade [papeis]
-  #_{:clj-kondo/ignore [:missing-protocol-method]}
-  (reify repo-id/RepoIdentidade
-    (snapshot-ator [_ _ente-id _identidade-id]
-      {:vinculo-ativo {:id (random-uuid) :tipo "servidor"} :papeis papeis})))
+(defn- fake-repo-identidade
+  "`nomes` = {identidade-id nome} de quem tem VINCULO nesta Casa (docs/23 Fatia 5, seam `nome-na-casa` do
+  host); fora do mapa = sem vinculo aqui. `falha-nome?` faz a leitura do nome lancar (degradacao)."
+  ([papeis] (fake-repo-identidade papeis {} false))
+  ([papeis nomes falha-nome?]
+   #_{:clj-kondo/ignore [:missing-protocol-method]}
+   (reify repo-id/RepoIdentidade
+     (snapshot-ator [_ _ente-id _identidade-id]
+       {:vinculo-ativo {:id (random-uuid) :tipo "servidor"} :papeis papeis})
+     (vinculos-de [_ _ente-id identidade-id]
+       (when falha-nome? (throw (ex-info "identidade indisponivel" {})))
+       (if (contains? nomes identidade-id) [{:id (random-uuid) :tipo "servidor" :estado "ativo"}] []))
+     (nome-por-id [_ identidade-id]
+       {:id identidade-id :nome (get nomes identidade-id)}))))
 
 (defn- fake-objeto-store []
   (let [dados (atom {})]
@@ -139,10 +148,11 @@
 
 (defn- service-fn*
   ([papeis repo-s] (service-fn* papeis repo-s (fake-objeto-store)))
-  ([papeis repo-s store]
+  ([papeis repo-s store] (service-fn* papeis repo-s store (fake-repo-identidade papeis)))
+  ([_papeis repo-s store repo-identidade]
    (-> (http/servico (config/carregar)
                      (rotas/montar {:idp (idp-dev/idp-dev)
-                                    :repo-identidade (fake-repo-identidade papeis)
+                                    :repo-identidade repo-identidade
                                     :repo-sessoes repo-s
                                     :repo-cadastros (fake-repo-cadastros)
                                     :objeto-store store})
@@ -199,6 +209,39 @@
       (is (pos? (count (:body r-pdf)))))))
 
 ;; ---------- 401 / 403 ----------
+
+;; ---------- docs/23 Fatia 5: quem congelou, pelo NOME ----------
+
+(defn- congelar-e-listar
+  "Congela a folha de uma sessao encerrada como `ident` e devolve o corpo da LISTA, com a identidade `repo-id`."
+  [ident repo-id]
+  (let [ente (random-uuid) sid (random-uuid)
+        repo-s (fake-repo-sessoes {:sessao-fn (fn [_ id] (sessao-encerrada ente id))
+                                   :folha-fn (fn [_ id] (lido-fechada ente id))})
+        svc (service-fn* #{"secretario"} repo-s (fake-objeto-store) repo-id)
+        auth (com-auth (token ente ident))]
+    (is (= 201 (:status (pt/response-for svc :post (url-gerar sid) :headers auth))))
+    (let [r (pt/response-for svc :get (url-listar sid) :headers auth)]
+      (is (= 200 (:status r)))
+      (ler-json r))))
+
+(deftest listar-traz-o-nome-de-quem-congelou-quando-tem-vinculo-na-casa
+  (let [ident (random-uuid)
+        body (congelar-e-listar ident (fake-repo-identidade #{"secretario"} {ident "Marina Alencar Freire"} false))
+        v1 (first (:folhas body))]
+    (is (= (str ident) (:gerada-por v1)) "o id continua la' (proveniencia)")
+    (is (= "Marina Alencar Freire" (:gerada-por-nome v1)))))
+
+(deftest listar-sem-nome-quando-a-identidade-nao-tem-vinculo-nesta-casa
+  (let [body (congelar-e-listar (random-uuid) (fake-repo-identidade #{"secretario"} {(random-uuid) "Outra Pessoa"} false))]
+    (is (not (contains? (first (:folhas body)) :gerada-por-nome))
+        "sem vinculo nesta Casa, o nome nao sai — ausente, nunca null")))
+
+(deftest listar-degrada-sem-nome-quando-a-leitura-do-nome-falha
+  (let [ident (random-uuid)
+        body (congelar-e-listar ident (fake-repo-identidade #{"secretario"} {ident "Marina"} true))]
+    (is (= 1 (count (:folhas body))) "a lista de versoes nao cai por causa do rotulo")
+    (is (not (contains? (first (:folhas body)) :gerada-por-nome)))))
 
 (deftest sem-token-401
   (let [repo-s (fake-repo-sessoes {:sessao-fn (fn [_ _] nil) :folha-fn (fn [_ _] nil)})

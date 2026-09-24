@@ -116,6 +116,19 @@ describe("PaginaFolha — lista com versões", () => {
     expect(within(itens[0]).getByText(/sha256:1111222233334444/)).toBeTruthy();
   });
 
+  it("mostra o NOME de quem congelou quando o servidor o traz (docs/23 Fatia 5)", () => {
+    mockRetorno([versao({ geradaPorNome: "Marina Alencar Freire" })]);
+    render(<PaginaFolha />);
+    expect(screen.getByText("Congelada por Marina Alencar Freire")).toBeTruthy();
+    expect(screen.queryByText(/8b6f1c2a/)).toBeNull();
+  });
+
+  it("sem o nome (fora da Casa ou leitura indisponível), cai para o id curto rotulado", () => {
+    mockRetorno([versao()]);
+    render(<PaginaFolha />);
+    expect(screen.getByText("Congelada por usuário 8b6f1c2a")).toBeTruthy();
+  });
+
   it("aciona `gerar` ao clicar em 'Gerar nova versão'", async () => {
     gerar.mockResolvedValue({ ok: true, folha: versao({ versao: 2, id: "f2" }) });
     mockRetorno([versao({ id: "f1", versao: 1 })]);
