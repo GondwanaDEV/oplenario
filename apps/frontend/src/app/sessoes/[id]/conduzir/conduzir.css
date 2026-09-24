@@ -1,6 +1,19 @@
-/* Chrome específico do "Comando da Mesa" (/sessoes/:id/conduzir). Tokens + chassi (.btn, .chip, .bloco,
-   .topo, .envelope) vêm de globals.css/chassi.css — aqui só o que é desta superfície. Mesma família visual
+/* Chrome específico do "Comando da Mesa" (/sessoes/:id/conduzir). Tokens + chassi (.btn, .chip, .topo,
+   .envelope) vêm de globals.css/chassi.css — aqui só o que é desta superfície. Mesma família visual
    de chamada/plenário (envelope, blocos, selo de estado), sem reinventar componente. */
+
+/* Bloco + cabeçalho da sessão — cópia VERBATIM de chamada.css/plenario.css. O cabeçalho deste arquivo dizia
+   que `.bloco` vinha do chassi, mas ele nunca esteve lá (cada tela de sessão carrega a própria cópia): aberto
+   direto (sem passar antes pelo plenário ou pela chamada), o cockpit rendia sem cartões e com o título colado
+   no número da sessão. Achado na verificação visual de docs/23 Fatia 1. Promover ao chassi é decisão do
+   design system (gatilho 2º-uso já batido — 4 cópias). */
+.sessao-meta { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+.sessao-meta .tipo { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); }
+.sessao-meta .quando { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); }
+.bloco { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); }
+.bloco-cabeca { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0.9rem 1.1rem; border-bottom: 1px solid var(--linha); }
+.bloco-cabeca h2 { font-family: var(--display); font-weight: 600; font-size: var(--t-16); letter-spacing: -0.01em; color: var(--texto); margin: 0; }
+.bloco-corpo { padding: 1.1rem; }
 
 .conduzir {
   display: grid;
@@ -190,3 +203,9 @@
 }
 .tela-estado h1 { font-family: var(--display); font-weight: 600; font-size: var(--t-22); color: var(--texto); }
 .tela-estado p { color: var(--texto-2); }
+
+/* item extrapauta (docs/23 Fatia 1) — o formulário vem de ../form-item-pauta.css */
+.extrapauta { display: grid; gap: 0.6rem; margin: 0 0 0.9rem; justify-items: start; }
+.extrapauta .form-item-pauta { justify-self: stretch; }
+.aviso-extrapauta { margin: 0; min-height: 1.2em; font-size: var(--t-13); font-weight: 600; color: var(--marca); }
+.aviso-extrapauta:empty { min-height: 0; }
