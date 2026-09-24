@@ -245,3 +245,24 @@
 .am-desfecho span { font-weight: 600; }
 .am-nota { margin: 0; font-size: var(--t-13); color: var(--texto-2); }
 .am-pessoa { margin: 0; font-size: var(--t-12); color: var(--texto-2); }
+
+/* ---- Em apreciação (docs/23 Fatia 4b): a lista da pauta com UM botão por item — Anunciar. O item anunciado
+   ganha o selo e a borda de destaque; a cor nunca é o único sinal (o selo diz "Em apreciação"). ---- */
+.apreciacao-mesa { margin: 0.4rem 0 1rem; }
+.apr-tit { font-family: var(--corpo); font-size: var(--t-16); font-weight: 700; color: var(--texto); margin: 0; }
+.apr-ajuda { font-size: var(--t-13); color: var(--texto-2); margin: 0.25rem 0 0.7rem; max-width: 64ch; line-height: 1.45; }
+.apr-aviso { font-size: var(--t-13); margin: 0 0 0.6rem; }
+.apr-aviso--ok { color: var(--marca); }
+.apr-aviso--erro { color: var(--acento-texto); }
+.apr-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+.apr-lista li { display: grid; grid-template-columns: 2rem minmax(0, 1fr) auto; gap: 0.3rem 0.8rem; align-items: center; padding: 0.55rem 0.7rem; border: 1px solid var(--linha); border-radius: var(--raio-sm); background: var(--surface); }
+.apr-lista li.apr-atual { border-color: var(--amarelo-traco); border-left-width: 3px; background: color-mix(in srgb, var(--amarelo) 10%, var(--surface)); }
+.apr-ord { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); text-align: center; }
+.apr-it { min-width: 0; }
+.apr-it b { display: block; font-family: var(--mono); font-size: var(--t-12); font-weight: 600; color: var(--acento-texto); }
+.apr-it span { display: block; font-size: var(--t-13); color: var(--texto); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.apr-selo { font-family: var(--mono); font-size: var(--t-11); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--aviso-texto); border: 1px solid color-mix(in srgb, var(--amarelo-traco) 50%, transparent); border-radius: 999px; padding: 0.15rem 0.55rem; white-space: nowrap; }
+@media (max-width: 560px) {
+  .apr-lista li { grid-template-columns: 1.6rem minmax(0, 1fr); }
+  .apr-lista li > .btn, .apr-lista li > .apr-selo { grid-column: 2; justify-self: start; }
+}

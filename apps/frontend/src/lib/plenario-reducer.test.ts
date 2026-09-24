@@ -622,15 +622,15 @@ describe("composição — o índice de nomes sobrevive ao fluxo de eventos", ()
     dataDeComposicao: "2026-09-01",
     composicaoResolvidaEm: "2026-09-01T23:00:00Z",
     membros: [
-      { vereadorId: "v1", nomeParlamentar: "Ana Ribeiro", cargoMesa: "presidente" },
-      { vereadorId: "v2", nomeParlamentar: null, cargoMesa: null },
+      { vereadorId: "v1", nomeParlamentar: "Ana Ribeiro", cargoMesa: "presidente", partido: "PDT" },
+      { vereadorId: "v2", nomeParlamentar: null, cargoMesa: null, partido: null },
     ],
   } as never;
 
-  it("indexa por vereadorId e resolve nome + cargo", () => {
+  it("indexa por vereadorId e resolve nome + cargo + partido (docs/23 Fatia 4a)", () => {
     const e = hidratarComposicao(aberta(), composicao);
     expect(e.composicaoStatus).toBe("ok");
-    expect(identidadeDe(e, "v1")).toEqual({ nomeParlamentar: "Ana Ribeiro", cargoMesa: "presidente" });
+    expect(identidadeDe(e, "v1")).toEqual({ nomeParlamentar: "Ana Ribeiro", cargoMesa: "presidente", partido: "PDT" });
   });
 
   it("membro SEM nome parlamentar resolve para null — a tela cai no rótulo neutro, não num nome vazio", () => {
@@ -662,7 +662,7 @@ describe("composição — o índice de nomes sobrevive ao fluxo de eventos", ()
       seq: 1,
       dados: { "sessao-id": "s1", "vereador-id": "v1", tipo: "entrada", "ocorrido-em": "2026-09-01T23:05:00Z" },
     } as never);
-    expect(identidadeDe(depois, "v1")).toEqual({ nomeParlamentar: "Ana Ribeiro", cargoMesa: "presidente" });
+    expect(identidadeDe(depois, "v1")).toEqual({ nomeParlamentar: "Ana Ribeiro", cargoMesa: "presidente", partido: "PDT" });
     expect(depois.composicaoStatus).toBe("ok");
   });
 });
@@ -916,5 +916,35 @@ describe("tempo-real.lacuna — sinal sintético de buraco no replay (frente tru
       dados: { "sessao-id": "s1", de: "aberta", para: "suspensa" },
     });
     expect(depoisDeOutroEvento.avisoLacuna).toBe(true);
+  });
+});
+
+describe("pauta.item-anunciado (docs/23 Fatia 4b)", () => {
+  const aberta = () => estadoInicial(sessao({ estado: "aberta" }));
+  const anuncio = (seq: number, item: string, prop?: string): EventoPlenario => ({
+    tipo: "pauta.item-anunciado",
+    seq,
+    dados: { "anuncio-id": `a${seq}`, "sessao-id": "s1", "item-id": item, "anunciado-em": "2026-09-24T12:05:00Z", ...(prop ? { "proposicao-id": prop } : {}) },
+  });
+
+  it("guarda o item anunciado e avança o seq", () => {
+    const e = aplicarEvento(aberta(), anuncio(3, "i22", "p22"));
+    expect(e.anuncio).toEqual({ itemId: "i22", anunciadoEm: "2026-09-24T12:05:00Z", proposicaoId: "p22", votacaoNoAnuncio: null });
+    expect(e.ultimoSeq).toBe(3);
+  });
+
+  it("registra QUAL votação era a corrente no anúncio (a regra de 'apreciação vencida' compara por id)", () => {
+    const comVotacao = aplicarEvento(aberta(), {
+      tipo: "votacao.aberta", seq: 1,
+      dados: { "votacao-id": "vt1", "sessao-id": "s1", "objeto-tipo": "proposicao", "objeto-id": "p22", modalidade: "nominal", "quorum-tipo": "maioria_simples" },
+    });
+    const e = aplicarEvento(comVotacao, anuncio(2, "i31"));
+    expect(e.anuncio?.votacaoNoAnuncio).toBe("vt1");
+    expect(e.anuncio?.proposicaoId).toBeNull();
+  });
+
+  it("um anúncio novo substitui o anterior", () => {
+    const e = aplicarEvento(aplicarEvento(aberta(), anuncio(1, "i22")), anuncio(2, "i31"));
+    expect(e.anuncio?.itemId).toBe("i31");
   });
 });

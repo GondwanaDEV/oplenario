@@ -101,6 +101,16 @@
 .quorum-tv b { white-space: nowrap; font-family: var(--display); font-weight: 800; font-size: clamp(2.4rem, 4.4vw, 7.4rem); color: #fff; line-height: 1; font-variant-numeric: tabular-nums; }
 .quorum-tv span { font-size: clamp(1rem, 1.4vw, 2.4rem); color: var(--palco-texto-2); }
 
+/* 2b · em apreciação (docs/23 Fatia 4b) — a matéria ANUNCIADA pela Mesa é o herói até a votação abrir. O
+   "a seguir na pauta" não entra: a 1080p não cabe junto sem cortar, e o letreiro já diz o próximo item. */
+.f-em-apreciacao { grid-template-rows: auto minmax(0, 1fr); gap: 2vw; }
+.apreciacao .rot { color: var(--tv-destaque); }
+.apreciacao .num { font-family: var(--mono); font-weight: 700; font-size: clamp(1.2rem, 2vw, 3.4rem); color: var(--tv-destaque); letter-spacing: .02em; }
+.apreciacao h1 { font-family: var(--display); font-weight: 800; font-size: clamp(2rem, 3.6vw, 6rem); line-height: 1.05; letter-spacing: -0.02em; color: #fff; margin: .4vw 0 0; max-width: 40ch; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+.apreciacao .autor { font-size: clamp(1.1rem, 1.6vw, 2.6rem); color: var(--palco-texto-2); margin: 1vw 0 0; }
+.apreciacao .autor b { color: #fff; font-weight: 700; }
+.apr-corpo { display: grid; grid-template-columns: 1.3fr 1fr; gap: 2vw; min-height: 0; align-items: start; }
+
 /* 3 · votação */
 .f-votacao { grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 1.3vw; }
 .materia .num { font-family: var(--mono); font-weight: 700; font-size: clamp(1.1rem, 1.7vw, 2.8rem); color: var(--tv-destaque); letter-spacing: .02em; }
@@ -195,7 +205,7 @@
 @media (max-width: 1100px) {
   .tv { overflow-y: auto; grid-template-rows: auto auto auto auto; }
   .tv-topo { grid-template-columns: 1fr auto; }
-  .f-abertura, .f-em-curso, .vot-corpo { grid-template-columns: 1fr; }
+  .f-abertura, .f-em-curso, .vot-corpo, .apr-corpo { grid-template-columns: 1fr; }
   .contagem { grid-template-columns: repeat(3, 1fr); }
   .contagem .progresso { grid-column: 1 / -1; }
   .tv-miolo { height: auto; }

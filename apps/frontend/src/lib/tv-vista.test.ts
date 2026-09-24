@@ -13,6 +13,8 @@ import {
   vistaResultadoTv,
   vistaTribunaTv,
   vistaVotacaoTv,
+  anuncioCorrente,
+  vistaApreciacaoTv,
 } from "./tv-vista";
 
 const sessao = (over: Partial<SessaoOut> = {}): SessaoOut => ({
@@ -258,5 +260,92 @@ describe("vistaTribunaTv", () => {
 
   it("sem orador → null", () => {
     expect(vistaTribunaTv(estado(), Date.now())).toBeNull();
+  });
+});
+
+describe("vistaTribunaTv — partido (docs/23 Fatia 4a)", () => {
+  it("o partido entra entre o tipo de fala e o cargo na Mesa", () => {
+    const t = vistaTribunaTv(
+      estado({
+        oradorAtual: { falaId: "f1", oradorId: "ver-a", tipoFala: "principal", fase: "ordem_do_dia", iniciouEm: "2026-09-23T17:30:00Z" },
+        composicao: new Map([["ver-a", { nomeParlamentar: "Helena Past", cargoMesa: "Vice-presidente", partido: "PSB" }]]),
+      }),
+      Date.parse("2026-09-23T17:31:00Z"),
+    )!;
+    expect(t.detalhe).toBe("Fala principal · PSB · Vice-presidente");
+  });
+});
+
+describe("em apreciação (docs/23 Fatia 4b)", () => {
+  const pauta = (emApreciacao?: { "item-id": string; "anunciado-em": string }): PautaOut => ({
+    "sessao-id": "s1",
+    itens: [
+      { id: "i1", fase: "expediente", "tipo-item": "leitura", "texto-descricao": "Leitura da ata", ordem: 1 },
+      {
+        id: "i22", fase: "ordem_do_dia", "tipo-item": "proposicao", "proposicao-id": "p22", ordem: 2,
+        proposicao: { tipo: "projeto_lei", ano: 2026, sequencial: 22, ementa: "Energia solar em prédios públicos", "autor-texto": "Ver. Ana Castro" },
+      },
+    ],
+    ...(emApreciacao ? { "em-apreciacao": emApreciacao } : {}),
+  });
+  const vivo = (itemId: string, anunciadoEm = "2026-09-24T12:05:00Z", votacaoNoAnuncio: string | null = null) =>
+    estado({ anuncio: { itemId, anunciadoEm, proposicaoId: itemId === "i22" ? "p22" : null, votacaoNoAnuncio } });
+
+  it("sem anúncio (nem ao vivo, nem na pauta) → nada em apreciação, a fase segue em curso", () => {
+    expect(vistaApreciacaoTv(estado(), pauta())).toBeNull();
+    expect(faseDaTv("aberta", null, false, false)).toBe("em-curso");
+  });
+
+  it("anúncio ao vivo: sigla, ementa, fase e autoria da matéria", () => {
+    expect(vistaApreciacaoTv(vivo("i22"), pauta())).toEqual({
+      itemId: "i22", sigla: "PL 22/2026", descricao: "Energia solar em prédios públicos", fase: "Ordem do Dia", autor: "Ver. Ana Castro",
+    });
+  });
+
+  it("item de texto: sem autor", () => {
+    expect(vistaApreciacaoTv(vivo("i1"), pauta())).toMatchObject({ sigla: "Leitura", descricao: "Leitura da ata", autor: null });
+  });
+
+  it("estado inicial vem da pauta quando o SSE não trouxe o anúncio (TV aberta depois)", () => {
+    expect(vistaApreciacaoTv(estado(), pauta({ "item-id": "i22", "anunciado-em": "2026-09-24T12:05:00Z" }))?.itemId).toBe("i22");
+  });
+
+  it("vale o anúncio mais recente entre o do SSE e o da pauta", () => {
+    const p = pauta({ "item-id": "i1", "anunciado-em": "2026-09-24T12:00:00Z" });
+    expect(anuncioCorrente(vivo("i22", "2026-09-24T12:05:00Z"), p)?.itemId).toBe("i22");
+    const pMaisNova = pauta({ "item-id": "i1", "anunciado-em": "2026-09-24T12:10:00Z" });
+    expect(anuncioCorrente(vivo("i22", "2026-09-24T12:05:00Z"), pMaisNova)?.itemId).toBe("i1");
+  });
+
+  it("item que não está na pauta carregada → null (a TV rebusca a pauta a cada anúncio)", () => {
+    expect(vistaApreciacaoTv(vivo("i-extrapauta"), pauta())).toBeNull();
+  });
+
+  it("a votação DELA encerrou depois do anúncio → a apreciação acabou", () => {
+    const e = { ...vivo("i22", "2026-09-24T12:05:00Z", null), placar: placar({ votacaoId: "vt9", objetoId: "p22", encerrada: true, resultado: "aprovada" }) };
+    expect(vistaApreciacaoTv(e, pauta())).toBeNull();
+  });
+
+  it("re-anúncio depois de uma votação já encerrada da mesma matéria (2º turno) segue em apreciação", () => {
+    const e = { ...vivo("i22", "2026-09-24T12:30:00Z", "vt9"), placar: placar({ votacaoId: "vt9", objetoId: "p22", encerrada: true, resultado: "aprovada" }) };
+    expect(vistaApreciacaoTv(e, pauta())?.itemId).toBe("i22");
+  });
+
+  it("vindo só da pauta, votação encerrada da matéria encerra a apreciação (conservador: não se sabe a ordem)", () => {
+    const e = estado({ placar: placar({ votacaoId: "vt9", objetoId: "p22", encerrada: true, resultado: "aprovada" }) });
+    expect(vistaApreciacaoTv(e, pauta({ "item-id": "i22", "anunciado-em": "2026-09-24T12:05:00Z" }))).toBeNull();
+  });
+
+  it("a fase: votação aberta vence a apreciação; sem votação, 'em-apreciacao'", () => {
+    expect(faseDaTv("aberta", placar(), false, true)).toBe("votacao");
+    expect(faseDaTv("aberta", null, false, true)).toBe("em-apreciacao");
+    expect(faseDaTv("suspensa", null, false, true)).toBe("pausa");
+  });
+
+  it("a pauta marca o item em apreciação — mas nunca junto com 'em votação'", () => {
+    const itens = itensDaPautaTv(pauta(), null, "i22");
+    expect(itens.find((i) => i.id === "i22")).toMatchObject({ emApreciacao: true, emVotacao: false });
+    const votando = itensDaPautaTv(pauta(), placar({ objetoId: "p22" }), "i22");
+    expect(votando.find((i) => i.id === "i22")).toMatchObject({ emApreciacao: false, emVotacao: true });
   });
 });

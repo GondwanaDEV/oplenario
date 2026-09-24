@@ -16,7 +16,10 @@ vi.mock("@/lib/auth", () => ({
   useAuth: () => ({ token: "tok" }),
 }));
 vi.mock("@/lib/tema", () => ({ useTema: () => ({ tema: "claro", alternar: vi.fn() }) }));
-vi.mock("@/lib/use-pauta", () => ({ usePauta: () => ({ pauta: null, estado: "erro", recarregar: () => {} }) }));
+const pautaMock = vi.hoisted(() => ({ atual: null as unknown }));
+vi.mock("@/lib/use-pauta", () => ({
+  usePauta: () => ({ pauta: pautaMock.atual, estado: pautaMock.atual ? "ok" : "erro", recarregar: () => {} }),
+}));
 // O painel de votação tem testes próprios (painel-votacao.test.tsx); aqui só evitamos o IO real dele
 // quando a sessão está aberta (a página o monta nesse estado).
 vi.mock("@/lib/use-votacao-mesa", () => ({
@@ -78,6 +81,7 @@ function montar(estado: SessaoOut["estado"], over: Partial<SessaoOut> = {}) {
 
 afterEach(() => {
   cleanup();
+  pautaMock.atual = null;
   transicionar.mockClear();
   recarregar.mockClear();
 });
@@ -175,5 +179,28 @@ describe("Comando da Mesa — atos da Mesa (docs/23 Fatia 2)", () => {
     cleanup();
     montar("agendada", { agendadaPara: "2026-05-21T14:00:00Z" });
     expect(screen.queryByRole("heading", { name: "Atos da Mesa" })).toBeNull();
+  });
+});
+
+describe("Comando da Mesa — em apreciação (docs/23 Fatia 4b)", () => {
+  const pauta = {
+    "sessao-id": "s1",
+    itens: [
+      { id: "i22", fase: "ordem_do_dia", "tipo-item": "proposicao", "proposicao-id": "p22", ordem: 1,
+        proposicao: { tipo: "projeto_lei", ano: 2026, sequencial: 22, ementa: "Energia solar" } },
+    ],
+  };
+
+  it("sessão aberta com pauta: a lista com Anunciar por item", () => {
+    pautaMock.atual = pauta;
+    montar("aberta");
+    expect(screen.getByRole("heading", { name: "Em apreciação" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Anunciar PL 22/2026" })).toBeTruthy();
+  });
+
+  it("sessão suspensa: sem anúncio (o servidor só aceita com a sessão aberta)", () => {
+    pautaMock.atual = pauta;
+    montar("suspensa");
+    expect(screen.queryByRole("heading", { name: "Em apreciação" })).toBeNull();
   });
 });
