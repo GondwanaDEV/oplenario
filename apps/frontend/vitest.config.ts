@@ -23,6 +23,12 @@ export default defineConfig({
     env: { NEXT_PUBLIC_APP_ENV: "test", TZ: "America/Fortaleza" },
     // Sobe o teto do `waitFor`/`findBy*` do Testing Library — ver o porquê medido em vitest.setup.ts.
     setupFiles: ["./vitest.setup.ts"],
+    // O teto do TESTE precisa caber os `waitFor` que ele faz. O setup dá 5s a cada `waitFor` (fome de event
+    // loop no CI), e o default do Vitest para o teste inteiro também é 5s: um teste com dois `waitFor` em
+    // sequência estourava o teste ANTES de o `waitFor` usar a janela que o setup lhe deu (24/09/2026:
+    // `painel-tribuna` "+1 min concede 60s; Aparte concede aparte", "Test timed out in 5000ms" só no CI,
+    // 12/12 verdes isolado). 15s = três janelas; um teste que de fato trava continua reprovando.
+    testTimeout: 15000,
   },
   resolve: {
     alias: {
