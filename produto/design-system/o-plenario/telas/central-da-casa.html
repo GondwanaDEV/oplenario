@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Central da Casa</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Central da Casa — ARQUÉTIPO: cockpit / lista
+     Linguagem: República Luminosa (linka a fundação · sistema/).
+
+     O /inicio do OPERADOR da Casa (papel `secretario` — quem prepara,
+     conduz e fecha a sessão; docs/23). Parte de minhas-pendencias.html
+     (a "home do servidor" do INVENTARIO §5.1) e põe ACIMA da fila o que
+     só o operador tem: a TRILHA DA SESSÃO DO DIA.
+
+     Três blocos, em ordem de altitude:
+       1. Sessão em foco — a faixa de azulejo (chassi .azulejo) com as
+          5 etapas reais do domínio (Agendada → Pauta → Em curso →
+          Encerrada → Folha) e UMA ação: a da etapa atual.
+       2. Fila de trabalho — só sinais que TÊM API (medição 3a do
+          docs/23). Cada item sai sozinho pelo evento de conclusão
+          (regra de fronteira §5.1): não há botão "feito".
+       3. Próximas sessões e prontidão — pauta vazia vira alerta.
+
+     A ação por etapa (a regra que o porte implementa em central-vista):
+       agendada, pauta vazia   → Montar a pauta
+       agendada, pauta montada → Abrir no Comando da Mesa
+       aberta / suspensa       → Conduzir (+ Chamada, Modo TV)
+       encerrada, sem folha    → Gerar a folha
+       encerrada, com folha    → Ver a folha
+     A convocação NÃO é etapa: é derivada da pauta (decisão 3 do
+     docs/23) — aparece como ação secundária, nunca como "publicada".
+     ============================================================ */
+
+  .pg-cab { padding: 1.5rem 0 0; }
+  .pg-cab .saud { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
+  .pg-cab .lede { font-size: var(--t-16); color: var(--texto); max-width: 64ch; margin: 0.6rem 0 0; line-height: 1.5; }
+  .pg-cab .lede b { font-weight: 700; }
+  .pg-cab .lede .ok { color: var(--marca); font-weight: 700; }
+
+  /* ===== 1. sessão em foco ===== */
+  .foco { margin: 1.4rem 0 0; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.2rem 1.3rem 1.3rem; display: grid; grid-template-columns: 1fr auto; gap: 1rem 2rem; align-items: start; }
+  .foco-cab { grid-column: 1 / -1; display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem 1rem; flex-wrap: wrap; }
+  .foco-cab h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); margin: 0.15rem 0 0; letter-spacing: -0.01em; }
+  .foco-cab .quando { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); }
+  .selo-vivo { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-11); letter-spacing: .08em; text-transform: uppercase; font-weight: 600; color: var(--acento-texto); border: 1px solid color-mix(in srgb, var(--telha) 42%, transparent); border-radius: 999px; padding: 0.15rem 0.55rem; }
+  .selo-vivo::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--telha); }
+
+  /* a trilha: as peças de azulejo do chassi (.az-peca + estado) numa <ol> — cada peça junto do seu rótulo,
+     para o texto nunca se desalinhar da peça (horizontal no desktop, vertical no telefone). O estado vai em
+     texto para leitor de tela (.sr-only): cor nunca é o único sinal. */
+  .trilha-sessao { display: flex; list-style: none; margin: 0.2rem 0 0; padding: 0; gap: 18px; }
+  .etapa { position: relative; display: grid; justify-items: center; align-content: start; gap: 0.4rem; width: 64px; text-align: center; font-size: var(--t-12); color: var(--texto-2); }
+  .etapa .az-peca { width: 56px; height: 56px; }
+  .etapa + .etapa::before { content: ""; position: absolute; left: -18px; top: 26px; width: 18px; height: 4px; background: var(--linha); }
+  .etapa.feita + .etapa::before { background: color-mix(in srgb, var(--jade) 55%, var(--linha)); }
+  .etapa b { display: block; color: var(--texto); font-weight: 600; }
+  .etapa.atual b { color: var(--acento-texto); }
+  .etapa small { display: block; font-size: var(--t-11); line-height: 1.3; margin-top: 0.1rem; }
+
+  .foco-acao { display: grid; gap: 0.55rem; justify-items: stretch; min-width: 15rem; }
+  .foco-acao .porque { font-size: var(--t-13); color: var(--texto-2); margin: 0; max-width: 32ch; line-height: 1.45; }
+  .foco-acao .sec { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+  /* ===== grade: fila (principal) + próximas sessões (trilho) ===== */
+  .grade { display: grid; grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr); gap: 1.6rem; margin: 1.8rem 0 0; align-items: start; }
+  .col > h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.7rem; display: flex; align-items: center; gap: 0.5rem; }
+  .col > h2 .qt { color: var(--texto-2); }
+
+  /* item da fila — mesma receita de minhas-pendencias (.item + borda = gravidade) */
+  .fila { display: grid; gap: 0.7rem; list-style: none; margin: 0; padding: 0; }
+  .item { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 0.9rem 1rem; display: grid; grid-template-columns: 40px 1fr auto; gap: 0.4rem 0.9rem; align-items: center; }
+  .item.g-legal { border-left: 3px solid var(--amarelo-traco); }
+  .item.g-reg { border-left: 3px solid var(--telha); }
+  .item.g-adm { border-left: 3px solid var(--marca); }
+  .item-ic { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; color: var(--marca); background: color-mix(in srgb, var(--marca) 10%, var(--surface-2)); }
+  .item-ic.legal { color: var(--aviso-texto); background: color-mix(in srgb, var(--amarelo) 16%, var(--surface-2)); }
+  .item-ic.reg { color: var(--acento-texto); background: color-mix(in srgb, var(--telha) 10%, var(--surface-2)); }
+  .item-mid { min-width: 0; }
+  .item-mid h3 { font-family: var(--corpo); font-weight: 600; font-size: var(--t-16); color: var(--texto); margin: 0; line-height: 1.3; }
+  .item-mid .ctx { font-size: var(--t-13); color: var(--texto-2); margin: 0.2rem 0 0; }
+  .gchip { display: inline-flex; align-items: center; gap: 0.32rem; font-family: var(--mono); font-size: var(--t-11); letter-spacing: .06em; text-transform: uppercase; font-weight: 600; border-radius: 4px; padding: 0.1rem 0.4rem; border: 1px solid transparent; margin-right: 0.4rem; }
+  .gchip::before { content: ""; width: 6px; height: 6px; border-radius: 2px; }
+  .gchip-legal { color: var(--aviso-texto); border-color: color-mix(in srgb, var(--amarelo-traco) 50%, transparent); }
+  .gchip-legal::before { background: var(--amarelo-traco); }
+  .gchip-reg { color: var(--acento-texto); border-color: color-mix(in srgb, var(--telha) 42%, transparent); }
+  .gchip-reg::before { background: var(--telha); }
+  .gchip-adm { color: var(--marca); border-color: color-mix(in srgb, var(--marca) 42%, transparent); }
+  .gchip-adm::before { background: var(--marca); }
+  .prazo { font-size: var(--t-12); font-weight: 600; color: var(--aviso-texto); }
+  .prazo.atrasado { color: var(--acento-texto); }
+
+  .esvazia-nota { display: flex; align-items: flex-start; gap: 0.5rem; font-size: var(--t-13); color: var(--texto-2); margin: 0.9rem 0 0; padding: 0.6rem 0.8rem; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); line-height: 1.45; }
+  .esvazia-nota svg { flex: 0 0 auto; color: var(--marca); margin-top: 1px; }
+
+  /* próximas sessões — prontidão */
+  .proximas { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); }
+  .proximas li { padding: 0.85rem 1rem; display: grid; gap: 0.3rem; }
+  .proximas li + li { border-top: 1px solid var(--linha); }
+  .proximas .qual { font-weight: 600; color: var(--texto); font-size: var(--t-16); }
+  .proximas .data { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+  .proximas .pront { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; }
+  .pchip { display: inline-flex; align-items: center; gap: 0.35rem; font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.15rem 0.6rem; border: 1px solid transparent; }
+  .pchip-ok { color: var(--marca); background: color-mix(in srgb, var(--marca) 8%, var(--surface)); border-color: color-mix(in srgb, var(--marca) 35%, transparent); }
+  .pchip-alerta { color: var(--aviso-texto); background: color-mix(in srgb, var(--amarelo) 15%, var(--surface)); border-color: color-mix(in srgb, var(--amarelo-traco) 45%, transparent); }
+  .link-acao { font-size: var(--t-13); font-weight: 600; color: var(--marca); }
+
+  /* áreas de trabalho — atalhos que já existem em /inicio */
+  .areas { margin: 2rem 0 0; }
+  .areas > h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--texto-2); margin: 0 0 0.6rem; }
+  .areas nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .areas a { font-size: var(--t-13); font-weight: 600; color: var(--texto); text-decoration: none; border: 1px solid var(--linha); background: var(--surface); border-radius: 999px; padding: 0.4rem 0.85rem; min-height: 40px; display: inline-flex; align-items: center; }
+
+  @media (max-width: 900px) {
+    .grade { grid-template-columns: 1fr; }
+    .foco { grid-template-columns: 1fr; }
+    .foco-acao { min-width: 0; }
+  }
+  @media (max-width: 560px) {
+    .item { grid-template-columns: 36px 1fr; }
+    .item .btn { grid-column: 1 / -1; justify-self: end; }
+    .item-ic { width: 36px; height: 36px; }
+    .trilha-sessao { flex-direction: column; gap: 8px; }
+    .etapa { width: auto; grid-template-columns: 32px 1fr; justify-items: start; align-items: center; text-align: left; gap: 0 0.7rem; }
+    .etapa .az-peca { width: 32px; height: 32px; border-radius: 7px; }
+    .etapa + .etapa::before { left: 14px; top: -8px; width: 4px; height: 8px; }
+    .etapa small { display: inline; margin: 0 0 0 0.4rem; }
+    .etapa b { display: inline; }
+  }
+</style>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+
+<header class="topo">
+  <div class="envelope topo-grade">
+    <div class="marca">
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><defs><clipPath id="mcOut"><rect width="34" height="34" rx="8"/></clipPath><clipPath id="mcTL"><rect width="17" height="17"/></clipPath><clipPath id="mcTR"><rect x="17" width="17" height="17"/></clipPath><clipPath id="mcBL"><rect y="17" width="17" height="17"/></clipPath><clipPath id="mcBR"><rect x="17" y="17" width="17" height="17"/></clipPath></defs><g clip-path="url(#mcOut)"><rect width="17" height="17" fill="#3A6A48"/><rect x="17" width="17" height="17" fill="#C0693F"/><rect y="17" width="17" height="17" fill="#3F6E92"/><rect x="17" y="17" width="17" height="17" fill="#CFA65C"/><circle cx="17" cy="17" r="10" fill="#8DA995" clip-path="url(#mcTL)"/><circle cx="17" cy="17" r="10" fill="#DBA890" clip-path="url(#mcTR)"/><circle cx="17" cy="17" r="10" fill="#90ABC0" clip-path="url(#mcBL)"/><circle cx="17" cy="17" r="10" fill="#E3CBA0" clip-path="url(#mcBR)"/></g></svg>
+      <div>
+        <p class="marca-nome">O Plenário</p>
+        <p class="marca-orgao">Câmara Municipal de Fortaleza</p>
+      </div>
+    </div>
+    <div class="topo-sep" aria-hidden="true"></div>
+    <span class="topo-trilha">Central da Casa</span>
+    <div class="topo-dir">
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+      <span class="presidente">
+        <span class="avatar" aria-hidden="true">RC</span>
+        <span class="quem"><b>Rita Campos</b><span>Secretaria legislativa</span></span>
+      </span>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope">
+  <div class="pg-cab">
+    <span class="rotulo-secao">Central da Casa · quinta, 24 de setembro</span>
+    <h1 class="saud">Bom dia, Rita.</h1>
+    <p class="lede" aria-live="polite">A <b>15ª sessão ordinária é hoje, às 9h</b>, com a pauta montada. <b>5 itens</b> pedem você — o mais urgente é um pedido e-SIC que <b>vence em 2 dias</b>.</p>
+  </div>
+
+  <!-- ===== 1. SESSÃO EM FOCO (a trilha) ===== -->
+  <section class="foco" aria-labelledby="foco-tit">
+    <div class="foco-cab">
+      <div>
+        <span class="rotulo-secao">Sessão de hoje</span>
+        <h2 id="foco-tit">15ª sessão ordinária</h2>
+      </div>
+      <span class="quando">24/09 · 09:00 · presencial</span>
+    </div>
+
+    <ol class="trilha-sessao" aria-label="Trilha da sessão">
+      <li class="etapa feita"><span class="az-peca az-jade az-feita" aria-hidden="true"></span><span><b>Agendada</b><small>18/09</small><span class="sr-only"> — concluída</span></span></li>
+      <li class="etapa feita"><span class="az-peca az-cobalto az-feita" aria-hidden="true"></span><span><b>Pauta</b><small>8 itens</small><span class="sr-only"> — concluída</span></span></li>
+      <li class="etapa atual" aria-current="step"><span class="az-peca az-curso" aria-hidden="true"></span><span><b>Em curso</b><small>a abrir</small><span class="sr-only"> — etapa atual</span></span></li>
+      <li class="etapa"><span class="az-peca az-pend" aria-hidden="true"></span><span><b>Encerrada</b><span class="sr-only"> — pendente</span></span></li>
+      <li class="etapa"><span class="az-peca az-pend" aria-hidden="true"></span><span><b>Folha</b><span class="sr-only"> — pendente</span></span></li>
+    </ol>
+
+    <div class="foco-acao">
+      <p class="porque">A pauta está montada. Abra a sessão no Comando da Mesa quando o presidente der início.</p>
+      <a class="btn btn-primaria" href="#">Abrir no Comando da Mesa</a>
+      <div class="sec">
+        <a class="btn btn-contorno btn-mini" href="pauta-convocacao.html">Ver pauta e convocação</a>
+        <a class="btn btn-contorno btn-mini" href="modo-tv.html">Modo TV</a>
+      </div>
+    </div>
+  </section>
+
+  <div class="grade">
+    <!-- ===== 2. FILA DE TRABALHO ===== -->
+    <section class="col" aria-labelledby="fila-tit">
+      <h2 id="fila-tit">Fila de trabalho <span class="qt">· 5</span></h2>
+      <ul class="fila">
+        <li class="item g-legal">
+          <span class="item-ic legal" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+          <div class="item-mid">
+            <h3>Pedido e-SIC 2026/0112</h3>
+            <p class="ctx"><span class="gchip gchip-legal">Legal</span><span class="prazo">vence em 2 dias</span></p>
+          </div>
+          <a class="btn btn-contorno btn-mini" href="paineis-mesa.html">Ver prazos</a>
+        </li>
+        <li class="item g-legal">
+          <span class="item-ic legal" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6"/></svg></span>
+          <div class="item-mid">
+            <h3>Obrigação TCE-CE em aberto · balancete mensal</h3>
+            <p class="ctx"><span class="gchip gchip-legal">Legal</span><span class="prazo">vence em 5 dias</span></p>
+          </div>
+          <a class="btn btn-contorno btn-mini" href="paineis-mesa.html">Ver compliance</a>
+        </li>
+        <li class="item g-reg">
+          <span class="item-ic reg" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"/><path d="M9 13h6M9 17h4"/></svg></span>
+          <div class="item-mid">
+            <h3>Gerar a folha da 14ª sessão ordinária</h3>
+            <p class="ctx"><span class="gchip gchip-reg">Regimental</span>encerrada em 17/09, ainda sem folha</p>
+          </div>
+          <a class="btn btn-contorno btn-mini" href="folha-sessao.html">Gerar folha</a>
+        </li>
+        <li class="item g-reg">
+          <span class="item-ic reg" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m17 11 2 2 4-4"/></svg></span>
+          <div class="item-mid">
+            <h3>2 justificativas de ausência a decidir</h3>
+            <p class="ctx"><span class="gchip gchip-reg">Regimental</span>14ª sessão ordinária</p>
+          </div>
+          <a class="btn btn-contorno btn-mini" href="chamada.html">Decidir</a>
+        </li>
+        <li class="item g-adm">
+          <span class="item-ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="item-mid">
+            <h3>3 comentários do portal para moderar</h3>
+            <p class="ctx"><span class="gchip gchip-adm">Administrativa</span>1 denunciado</p>
+          </div>
+          <a class="btn btn-contorno btn-mini" href="moderacao-comentarios.html">Moderar</a>
+        </li>
+      </ul>
+      <p class="esvazia-nota">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+        <span>Cada item <b>sai sozinho</b> quando o ato é concluído — folha gerada, justificativa decidida, comentário moderado. Não há botão “feito”.</span>
+      </p>
+    </section>
+
+    <!-- ===== 3. PRÓXIMAS SESSÕES ===== -->
+    <section class="col" aria-labelledby="prox-tit">
+      <h2 id="prox-tit">Próximas sessões <span class="qt">· 2</span></h2>
+      <ul class="proximas">
+        <li>
+          <span class="qual">16ª sessão ordinária</span>
+          <span class="data">ter 29/09 · 09:00</span>
+          <div class="pront"><span class="pchip pchip-ok">Pauta: 5 itens</span><a class="link-acao" href="pauta-convocacao.html">Ver pauta</a></div>
+        </li>
+        <li>
+          <span class="qual">1ª sessão extraordinária</span>
+          <span class="data">qui 01/10 · 15:00</span>
+          <div class="pront"><span class="pchip pchip-alerta">Pauta vazia</span><a class="link-acao" href="pauta-convocacao.html">Montar a pauta</a></div>
+        </li>
+      </ul>
+      <p class="esvazia-nota">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        <span><b>4 matérias</b> estão prontas para pauta no quadro de tramitação.</span>
+      </p>
+    </section>
+  </div>
+
+  <section class="areas" aria-labelledby="areas-tit">
+    <h2 id="areas-tit">Áreas de trabalho</h2>
+    <nav aria-label="Áreas de trabalho">
+      <a href="proposicoes.html">Proposições</a><a href="tramitacao-board.html">Tramitação</a><a href="expediente.html">Expediente</a>
+      <a href="pauta-convocacao.html">Pauta</a><a href="#">Agendar sessão</a><a href="cadastro-vereadores.html">Vereadores</a>
+      <a href="calendario.html">Calendário</a><a href="moderacao-comentarios.html">Moderação</a><a href="paineis-mesa.html">Painéis da Mesa</a>
+    </nav>
+  </section>
+
+  <div style="height:1.5rem"></div>
+</main>
+
+<script src="../sistema/tema.js"></script>
+</body>
+</html>

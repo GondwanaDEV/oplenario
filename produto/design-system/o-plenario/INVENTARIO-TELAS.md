@@ -64,6 +64,7 @@ POC) · **MÉDIA** (paridade institucional, admin) · **BAIXA** (diferível, nic
 | 4.12 Transcrição · 4.13 Ata-IA · 8.5 revisão humana | **Revisão de ata-IA** | balcão+IA | ⬜ | ALTA |
 | 4.2 Painel eletrônico (telão) · 4.3 votação | **Telão de votação** | display | ⬜ | MÉDIA |
 | 4.2 Painel eletrônico — sessão inteira (pedido de cliente, 23/09/2026) | **Modo TV da sessão** (`modo-tv.html`: moldura de telejornal + 5 fases — abertura, em curso, votação, resultado, pausa) | display | ✅ | ALTA |
+| Operador da Casa — preparar → conduzir → fechar (áudio de stakeholder, 24/09/2026; `docs/23`) | **Central da Casa** (`central-da-casa.html`: trilha da sessão em foco + fila de trabalho + próximas sessões; o `/inicio` da secretaria) | cockpit/lista | ✅ | ALTA |
 | 4.21 Livro de atas · 4.11 anexar ata | **Livro de atas** | lista+ficha | ⬜ | MÉDIA |
 | 4.18 Audiência pública · 4.19 Julgamento de contas | variantes de pauta/votação | ⤵ | ⬜ | BAIXA |
 | 4.5/4.7-4.10/4.20 | presença, captação, caption | 🔩/⤵ | — | — |
