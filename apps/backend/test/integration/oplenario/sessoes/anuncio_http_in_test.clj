@@ -34,7 +34,8 @@
     (buscar-pauta-por-sessao [_ _ente-id _sessao-id] {:id pauta-id})
     (buscar-item [_ _ente-id id] (when item (assoc item :id id)))
     (listar-itens [_ _ente-id _pauta-sessao-id] itens)
-    (item-em-apreciacao [_ _ente-id _sessao-id] anuncio)
+    (item-em-apreciacao [_ _ente-id _sessao-id]
+      (if (instance? Exception anuncio) (throw anuncio) anuncio))
     (anunciar-item! [_ ente-id m]
       (reset! cap (assoc m :ente-id ente-id))
       ((or anunciar-fn (fn [mm] {:id (:id mm) :pauta-item-id (:pauta-item-id mm) :anunciado-em anunciado-em})) m))))
@@ -148,3 +149,15 @@
                            :get (str "/sessoes/" (random-uuid) "/pauta") :headers (com-bearer (token (random-uuid) (random-uuid))))]
     (is (= 200 (:status r)))
     (is (not (contains? (ler-json r) :em-apreciacao)) "item retirado depois de anunciado nao fica 'em apreciacao'")))
+
+(deftest pauta-sai-sem-em-apreciacao-quando-a-leitura-do-anuncio-falha
+  ;; Enriquecimento, nao nucleo: API nova contra schema sem `item_anunciado` (o `serve` de producao nao aplica
+  ;; migration) — a pauta segue 200, sem o campo, em vez de derrubar a TV, o Comando da Mesa e a Central.
+  (let [r (pt/response-for (service-fn* #{"secretario"}
+                                        (fake-repo-sessoes :itens [(item-ativo (random-uuid))]
+                                                           :anuncio (ex-info "ERROR: relation \"sessoes.item_anunciado\" does not exist" {})))
+                           :get (str "/sessoes/" (random-uuid) "/pauta") :headers (com-bearer (token (random-uuid) (random-uuid))))
+        body (ler-json r)]
+    (is (= 200 (:status r)))
+    (is (= 1 (count (:itens body))) "os itens da pauta continuam la'")
+    (is (not (contains? body :em-apreciacao)))))
