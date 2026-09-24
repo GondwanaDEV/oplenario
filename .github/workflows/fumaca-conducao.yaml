@@ -13,6 +13,14 @@ name: Fumaca da conducao de sessao (producao)
 
 on:
   workflow_dispatch:
+    inputs:
+      secretaria:
+        # Username (= identidade-id) da secretaria no seed ATUAL de producao — muda a cada reset do banco.
+        # O valor novo sai no passo "Ids da demo" do semear-hml (credenciais.edn, persona :secretaria).
+        description: 'identidade-id da secretaria (ver "Ids da demo" do ultimo semear)'
+        required: true
+        default: '60ac7fcd-ab93-4c28-95bb-46761b4a2a52'
+        type: string
 
 jobs:
   fumaca:
@@ -35,9 +43,8 @@ jobs:
           const B = 'https://oplenario.calvetec.com.br';
           const E = '10000000-0000-0000-0000-000000000001';
           const SENHA = 'Plenario@2026';
-          // UUID da secretaria do ultimo reseed do homolog/producao (cartao de credenciais do semear #8).
-          // Se o banco for re-semeado, reveja o passo "Ids da demo" do semear-hml e atualize aqui.
-          const SEC = '585e6532-e754-4d45-ad82-1667fdfb220e';
+          // Username da secretaria no seed atual (input `secretaria` do workflow_dispatch).
+          const SEC = process.env.SEC_ID;
           const R = [];
           const rec = (tela, flag, nota) => { R.push({ tela, flag, nota }); console.log(`  [${flag}] ${tela} — ${nota}`); };
 
@@ -234,6 +241,8 @@ jobs:
           } finally { await browser.close(); }
           JS
       - name: Rodar fumaca
+        env:
+          SEC_ID: ${{ inputs.secretaria }}
         run: node fumaca.mjs
       - uses: actions/upload-artifact@v4
         if: always()
