@@ -599,6 +599,9 @@
    [:html-hash :string]
    [:pdf-hash :string]
    [:gerada-por :string]
+   ;; docs/23 Fatia 5: o NOME de quem congelou (seam `nome-na-casa` do host, so' p/ quem tem vinculo nesta
+   ;; Casa). So' na LISTA (`GET /sessoes/:id/folhas`) e so' quando resolvido — ausente, nunca null.
+   [:gerada-por-nome {:optional true} :string]
    [:gerada-em :string]
    [:ja-congelada {:optional true} :boolean]])
 

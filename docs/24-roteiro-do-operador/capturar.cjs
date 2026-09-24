@@ -117,7 +117,7 @@ const FOLHA_HTML = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8
 <table><thead><tr><th>Vereador(a)</th><th>Partido</th><th>Situação</th><th>Registro</th></tr></thead><tbody>
 ${VER.map((n, i) => `<tr><td>${n}</td><td>${PART[i % PART.length]}</td><td>${({ 17: 'Ausente', 18: 'Ausente — justificativa pendente', 20: 'Licenciado' })[i] ?? 'Presente'}</td><td>${AUSENTES[i] ? '—' : '09:04'}</td></tr>`).join('')}
 </tbody></table></body></html>`;
-const FOLHAS = [{ id: 'f1', versao: 1, 'spec-versao': 'folha-v1', 'html-hash': 'a3f9c2e81b7d4f06c5e2a9d18b3f7c4e2d9a6b1f8c3e7d2a5b9f4c1e6d8a3b7f', 'pdf-hash': '9e1b7c3d5f2a8e4b6c9d1f3a7e5b2c8d4f6a9e1b3c7d5f2a8e4b6c9d1f3a7e5b', 'gerada-por': 'i1', 'gerada-em': iso(185) }];
+const FOLHAS = [{ id: 'f1', versao: 1, 'spec-versao': 'folha-v1', 'html-hash': 'a3f9c2e81b7d4f06c5e2a9d18b3f7c4e2d9a6b1f8c3e7d2a5b9f4c1e6d8a3b7f', 'pdf-hash': '9e1b7c3d5f2a8e4b6c9d1f3a7e5b2c8d4f6a9e1b3c7d5f2a8e4b6c9d1f3a7e5b', 'gerada-por': 'i1', 'gerada-por-nome': 'Elvis Nogueira', 'gerada-em': iso(185) }];
 
 const TRIB = { 'sessao-id': 's15', 'orador-atual': { 'fala-id': 'f1', 'orador-id': 'v2', 'tipo-fala': 'principal', fase: 'ordem_do_dia', 'iniciou-em': iso(88), 'inscricao-id': 'ins1', 'lock-version': 0 }, 'marcos-cronometro': [],
   inscritos: [{ 'inscricao-id': 'ins2', 'vereador-id': 'v3', fase: 'ordem_do_dia', ordem: 2, 'tipo-fala': 'principal' }, { 'inscricao-id': 'ins3', 'vereador-id': 'v6', fase: 'ordem_do_dia', ordem: 3, 'tipo-fala': 'principal' }] };

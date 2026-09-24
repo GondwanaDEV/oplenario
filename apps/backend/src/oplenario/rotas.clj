@@ -56,6 +56,18 @@
   [repo-cadastros ente-id ids]
   (repo-cadastros-comp/nomes-de-comissoes repo-cadastros ente-id ids))
 
+(defn nome-na-casa
+  "identidade-id -> nome, SO' de quem tem vinculo NESTA Casa — host wiring (§22.5.3, exceção nomeada, mesma
+  forma de `resolver-vereador`). O `sessoes` guarda o `gerada-por` da folha como id de identidade e nunca soube
+  o nome: a tela da folha exibia \"Congelada por 60ac7fcd\" (achado do roteiro do operador, docs/23 Fatia 5).
+
+  O vinculo NESTE ente e' a guarda: `vinculos-de` corre sob a RLS do tenant, entao uma identidade sem vinculo
+  aqui (de outra Casa, ou um id qualquer) devolve nil — o nome de quem nao pertence a Casa nunca sai por
+  esta porta. Le' pela via ESTREITA `nome-por-id` (nunca materializa CPF). Nunca inventa nome."
+  [repo-identidade ente-id identidade-id]
+  (when (seq (repo-identidade-comp/vinculos-de repo-identidade ente-id identidade-id))
+    (:nome (repo-identidade-comp/nome-por-id repo-identidade identidade-id))))
+
 (def ^:private teto-de-janelas
   "Teto de intervalos devolvidos por `janelas-de-exercicio`. Cada janela vira um ramo de OR sobre `data` no
   WHERE da fatia 6, numa rota PUBLICA, anonima e sem cache; `criar-mandato!` (INSERT direto — o caminho do
@@ -288,6 +300,9 @@
         ;; existir superficie HTTP (`POST /sessoes/:id/folha`, fiada abaixo, e' essa superficie); as outras
         ;; duas vieram da revisao adversarial da fatia 5 (o teto era assimetrico; o timeout limitava latencia,
         ;; nao consumo).
+        ;; docs/23 Fatia 5: quem congelou cada versao da folha, pelo NOME (so' de quem tem vinculo nesta Casa) —
+        ;; sessoes nunca importa identidade (§22.10), mesma inversao de dependencia dos seams acima.
+        nome-na-casa-fn (fn [ente-id identidade-id] (nome-na-casa repo-identidade ente-id identidade-id))
         serializador-folha-fn (serializador-folha/serializador-folha-html-com-teto)
         renderizador-pdf-fn (renderizador-pdf/renderizador-pdf-guardado)
         ;; Onda B Slice 2: uf/nome-do-municipio do ente, p/ o legislativo computar a URN em protocolar! —
@@ -402,7 +417,8 @@
                                    :dados-da-casa dados-da-casa-fn
                                    ;; Etapa 5 fatia 5: os dois ports da folha, ja' construidos+decorados acima.
                                    :serializador-folha serializador-folha-fn
-                                   :renderizador-pdf renderizador-pdf-fn}))
+                                   :renderizador-pdf renderizador-pdf-fn
+                                   :nome-na-casa nome-na-casa-fn}))
         (into (legislativo-http/rotas {:auth auth :repo-legislativo repo-legislativo
                                        :consultar-sessao consultar-sessao
                                        :sessao-fechada? sessao-fechada?
