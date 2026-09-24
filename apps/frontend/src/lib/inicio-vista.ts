@@ -67,11 +67,11 @@ function personaDe(papeis: string[]): Persona {
 /** Rótulo humano da sessão ("2ª sessão ordinária"). Usa `nomeTipoSessao` — o enum do backend
  * (`ordinaria`, `extraordinaria`) sem acento é erro de português visível, e esse rótulo já existe no
  * projeto para isto. Sem inventar dado: só o que SessaoOut traz. */
-function rotuloSessao(s: SessaoOut): string {
+export function rotuloSessao(s: SessaoOut): string {
   return `${s.numeroSequencial}ª sessão ${nomeTipoSessao(s.tipoSessao)}`.trim();
 }
 
-const ATALHOS_SECRETARIA: AcaoInicio[] = [
+export const ATALHOS_SECRETARIA: AcaoInicio[] = [
   { rotulo: "Proposições", href: "/proposicoes", tom: "neutra", descricao: "O acervo de matérias da Casa" },
   { rotulo: "Tramitação", href: "/tramitacao", tom: "neutra", descricao: "O quadro da Casa por estágio" },
   { rotulo: "Expediente", href: "/expediente", tom: "neutra", descricao: "Documentos e protocolo geral" },

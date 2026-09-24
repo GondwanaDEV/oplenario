@@ -223,8 +223,8 @@ export function derivarMesaVista(input: MesaVistaInput) {
 const OBJETO_PRAZO_ROTULO: Record<string, string> = {
   pedido_esic: "Pedido e-SIC",
   recurso_esic: "Recurso e-SIC",
-  solicitacao_titular: "Solicitacao do titular (LGPD)",
-  manifestacao_ouvidoria: "Manifestacao de ouvidoria",
+  solicitacao_titular: "Solicitação do titular (LGPD)",
+  manifestacao_ouvidoria: "Manifestação de ouvidoria",
 };
 
 export function rotularObjetoPrazo(objetoTipo: string): string {

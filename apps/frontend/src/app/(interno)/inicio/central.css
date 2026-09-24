@@ -1,0 +1,110 @@
+/* Central da Casa (/inicio da secretaria — docs/23 Fatia 3). Porte de
+   produto/design-system/o-plenario/telas/central-da-casa.html. Tokens + chassi (.envelope, .btn, .eyebrow,
+   .az-peca, .sr-only) vêm de globals.css/chassi.css; tudo desta superfície leva o prefixo `cc-` para não colidir
+   com classes de mesmo nome de outras rotas (`.item`, `.fila`, `.trilha` já existem alhures). */
+
+.cc { padding-top: 1.5rem; padding-bottom: 4rem; } /* só vertical: o gutter horizontal é do .envelope */
+
+.cc-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
+.cc-lede { font-size: var(--t-16); color: var(--texto); max-width: 64ch; margin: 0.6rem 0 0; line-height: 1.5; }
+.cc-lede b { font-weight: 700; }
+
+/* ===== 1. sessão em foco ===== */
+.cc-foco { margin: 1.4rem 0 0; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.2rem 1.3rem 1.3rem; display: grid; grid-template-columns: 1fr auto; gap: 1rem 2rem; align-items: start; }
+.cc-foco--estado { grid-template-columns: 1fr; justify-items: start; gap: 0.6rem; }
+.cc-estado-tit { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); margin: 0; }
+.cc-foco-cab { grid-column: 1 / -1; display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem 1rem; flex-wrap: wrap; }
+.cc-foco-cab h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); margin: 0.15rem 0 0; letter-spacing: -0.01em; }
+.cc-quando { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); }
+.cc-selo-vivo { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-11); letter-spacing: .08em; text-transform: uppercase; font-weight: 600; color: var(--acento-texto); border: 1px solid color-mix(in srgb, var(--telha) 42%, transparent); border-radius: 999px; padding: 0.15rem 0.55rem; }
+.cc-selo-vivo::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--telha); }
+
+/* a trilha: peças de azulejo do chassi numa <ol>, cada peça junto do seu rótulo (horizontal no desktop,
+   vertical no telefone). O estado vai em texto para leitor de tela: cor nunca é o único sinal. */
+.cc-trilha { display: flex; list-style: none; margin: 0.2rem 0 0; padding: 0; gap: 18px; }
+.cc-etapa { position: relative; display: grid; justify-items: center; align-content: start; gap: 0.4rem; width: 64px; text-align: center; font-size: var(--t-12); color: var(--texto-2); }
+.cc-etapa .az-peca { width: 56px; height: 56px; }
+.cc-etapa .az-jadeclaro { --peca: var(--jade-claro); }
+.cc-etapa + .cc-etapa::before { content: ""; position: absolute; left: -18px; top: 26px; width: 18px; height: 4px; background: var(--linha); }
+.cc-etapa--feita + .cc-etapa::before { background: color-mix(in srgb, var(--jade) 55%, var(--linha)); }
+.cc-etapa b { display: block; color: var(--texto); font-weight: 600; }
+.cc-etapa--atual b { color: var(--acento-texto); }
+.cc-etapa small { display: block; font-size: var(--t-11); line-height: 1.3; margin-top: 0.1rem; }
+
+.cc-foco-acao { display: grid; gap: 0.55rem; justify-items: stretch; min-width: 15rem; }
+.cc-porque { font-size: var(--t-13); color: var(--texto-2); margin: 0; max-width: 32ch; line-height: 1.45; }
+.cc-foco--estado .cc-porque { max-width: 64ch; }
+.cc-sec { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+/* ===== grade: fila (principal) + próximas sessões (trilho) ===== */
+.cc-grade { display: grid; grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr); gap: 1.6rem; margin: 1.8rem 0 0; align-items: start; }
+.cc-col > h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--acento-texto); font-weight: 600; margin: 0 0 0.7rem; display: flex; align-items: center; gap: 0.5rem; }
+.cc-qt { color: var(--texto-2); }
+
+.cc-fila { display: grid; gap: 0.7rem; list-style: none; margin: 0; padding: 0; }
+.cc-item { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 0.9rem 1rem; display: grid; grid-template-columns: 40px 1fr auto; gap: 0.4rem 0.9rem; align-items: center; }
+.cc-item--legal { border-left: 3px solid var(--amarelo-traco); }
+.cc-item--reg { border-left: 3px solid var(--telha); }
+.cc-item--adm { border-left: 3px solid var(--marca); }
+.cc-item-ic { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; color: var(--marca); background: color-mix(in srgb, var(--marca) 10%, var(--surface-2)); }
+.cc-item-ic--legal { color: var(--aviso-texto); background: color-mix(in srgb, var(--amarelo) 16%, var(--surface-2)); }
+.cc-item-ic--reg { color: var(--acento-texto); background: color-mix(in srgb, var(--telha) 10%, var(--surface-2)); }
+.cc-item-mid { min-width: 0; }
+.cc-item-mid h3 { font-family: var(--corpo); font-weight: 600; font-size: var(--t-16); color: var(--texto); margin: 0; line-height: 1.3; overflow-wrap: anywhere; }
+.cc-ctx { font-size: var(--t-13); color: var(--texto-2); margin: 0.2rem 0 0; }
+.cc-gchip { display: inline-flex; align-items: center; gap: 0.32rem; font-family: var(--mono); font-size: var(--t-11); letter-spacing: .06em; text-transform: uppercase; font-weight: 600; border-radius: 4px; padding: 0.1rem 0.4rem; border: 1px solid transparent; margin-right: 0.4rem; }
+.cc-gchip::before { content: ""; width: 6px; height: 6px; border-radius: 2px; }
+.cc-gchip--legal { color: var(--aviso-texto); border-color: color-mix(in srgb, var(--amarelo-traco) 50%, transparent); }
+.cc-gchip--legal::before { background: var(--amarelo-traco); }
+.cc-gchip--reg { color: var(--acento-texto); border-color: color-mix(in srgb, var(--telha) 42%, transparent); }
+.cc-gchip--reg::before { background: var(--telha); }
+.cc-gchip--adm { color: var(--marca); border-color: color-mix(in srgb, var(--marca) 42%, transparent); }
+.cc-gchip--adm::before { background: var(--marca); }
+.cc-prazo { font-size: var(--t-12); font-weight: 600; color: var(--aviso-texto); }
+.cc-prazo--atrasado { color: var(--acento-texto); }
+
+.cc-nota { display: flex; align-items: flex-start; gap: 0.5rem; font-size: var(--t-13); color: var(--texto-2); margin: 0.9rem 0 0; padding: 0.6rem 0.8rem; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); line-height: 1.45; }
+.cc-nota svg { flex: 0 0 auto; color: var(--marca); margin-top: 1px; }
+.cc-nota b { color: var(--texto); }
+.cc-nota a, .cc-mais a { color: var(--marca); font-weight: 600; }
+.cc-aviso { font-size: var(--t-13); color: var(--aviso-texto); margin: 0 0 0.7rem; }
+.cc-mais { font-size: var(--t-13); color: var(--texto-2); margin: 0.7rem 0 0; }
+.cc-vazio { text-align: center; color: var(--texto-2); font-size: var(--t-13); padding: 1.2rem; border: 1px dashed var(--linha); border-radius: var(--raio); margin: 0; }
+
+/* próximas sessões — prontidão */
+.cc-proximas { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); }
+.cc-proximas li { padding: 0.85rem 1rem; display: grid; gap: 0.3rem; }
+.cc-proximas li + li { border-top: 1px solid var(--linha); }
+.cc-qual { font-weight: 600; color: var(--texto); font-size: var(--t-16); }
+.cc-data { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+.cc-pront { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; }
+.cc-pchip { display: inline-flex; align-items: center; font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.15rem 0.6rem; border: 1px solid transparent; }
+.cc-pchip--ok { color: var(--marca); background: color-mix(in srgb, var(--marca) 8%, var(--surface)); border-color: color-mix(in srgb, var(--marca) 35%, transparent); }
+.cc-pchip--alerta { color: var(--aviso-texto); background: color-mix(in srgb, var(--amarelo) 15%, var(--surface)); border-color: color-mix(in srgb, var(--amarelo-traco) 45%, transparent); }
+.cc-pchip--neutro { color: var(--texto-2); background: var(--surface-2); border-color: var(--linha); }
+.cc-link { font-size: var(--t-13); font-weight: 600; color: var(--marca); min-height: 32px; display: inline-flex; align-items: center; }
+
+/* áreas de trabalho */
+.cc-areas { margin: 2rem 0 0; }
+.cc-areas > h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--texto-2); font-weight: 500; margin: 0 0 0.6rem; }
+.cc-areas nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.cc-areas a { font-size: var(--t-13); font-weight: 600; color: var(--texto); text-decoration: none; border: 1px solid var(--linha); background: var(--surface); border-radius: 999px; padding: 0.4rem 0.85rem; min-height: 40px; display: inline-flex; align-items: center; }
+.cc-areas a:hover { border-color: var(--texto-2); }
+
+@media (max-width: 900px) {
+  .cc-grade { grid-template-columns: 1fr; }
+  .cc-foco { grid-template-columns: 1fr; }
+  .cc-foco-acao { min-width: 0; }
+  .cc-porque { max-width: 64ch; }
+}
+@media (max-width: 560px) {
+  .cc-item { grid-template-columns: 36px 1fr; }
+  .cc-item .btn { grid-column: 1 / -1; justify-self: end; }
+  .cc-item-ic { width: 36px; height: 36px; }
+  .cc-trilha { flex-direction: column; gap: 8px; }
+  .cc-etapa { width: auto; grid-template-columns: 32px 1fr; justify-items: start; align-items: center; text-align: left; gap: 0 0.7rem; }
+  .cc-etapa .az-peca { width: 32px; height: 32px; border-radius: 7px; }
+  .cc-etapa + .cc-etapa::before { left: 14px; top: -8px; width: 4px; height: 8px; }
+  .cc-etapa small { display: inline; margin: 0 0 0 0.4rem; }
+  .cc-etapa b { display: inline; }
+}

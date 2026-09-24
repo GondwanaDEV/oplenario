@@ -226,8 +226,8 @@ describe("rotularObjetoPrazo — vocabulario da FONTE (CHECK de paineis.pendenci
   it.each([
     ["pedido_esic", "Pedido e-SIC"],
     ["recurso_esic", "Recurso e-SIC"],
-    ["solicitacao_titular", "Solicitacao do titular (LGPD)"],
-    ["manifestacao_ouvidoria", "Manifestacao de ouvidoria"],
+    ["solicitacao_titular", "Solicitação do titular (LGPD)"],
+    ["manifestacao_ouvidoria", "Manifestação de ouvidoria"],
   ])("%s -> %s", (chave, rotulo) => {
     expect(rotularObjetoPrazo(chave)).toBe(rotulo);
   });

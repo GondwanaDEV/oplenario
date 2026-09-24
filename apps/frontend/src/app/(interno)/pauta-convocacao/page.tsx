@@ -11,6 +11,7 @@
 // guard client-side só por UX (mesmo padrão de GuardVereador em (vereador)/layout.tsx).
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAuth, usePapeis } from "@/lib/auth";
 import { useSliSessoes } from "@/lib/use-sli-sessoes";
 import { useSessaoPauta } from "@/lib/use-sessao-pauta";
@@ -61,7 +62,10 @@ const ROTULO_TIPO_TEXTO: Record<string, string> = { leitura: "Leitura", comunica
 
 function ConteudoPautaConvocacao({ token }: { token: string | null }) {
   const { sessoes, sessoesTotal, estado: estadoSessoes } = useSliSessoes(token);
-  const [escolhidaId, setEscolhidaId] = useState<string | null>(null);
+  // `?sessao=<id>` (vindo da Central da Casa — "Montar a pauta" de uma sessão específica) pré-seleciona a sessão;
+  // id desconhecido cai no padrão de `selecionarSessaoAlvo` (a próxima agendada), nunca numa tela vazia.
+  const params = useSearchParams();
+  const [escolhidaId, setEscolhidaId] = useState<string | null>(() => params?.get("sessao") ?? null);
   const alvo = selecionarSessaoAlvo(sessoes ?? [], escolhidaId);
   const { sessao, pauta, estado: estadoDetalhe, recarregar } = useSessaoPauta(token, alvo?.sessaoId ?? null);
   const { dados: proposicoesDados, estado: estadoProposicoes } = useProposicoes(token, {

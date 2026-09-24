@@ -1,7 +1,9 @@
 "use client";
 
-// ConteudoInicio — o corpo de /inicio. Compõe os hooks (papéis + sessões) e entrega a vista derivada ao
-// PainelInicio. O split é o mesmo de conteudo-agendar-sessao.tsx: aqui mora o IO, lá o desenho.
+// ConteudoInicio — o corpo de /inicio. Decide a persona pelos papéis e entrega cada uma à sua home:
+//   · secretaria → a CENTRAL DA CASA (docs/23 Fatia 3): o cockpit do operador, com o próprio IO (useCentral);
+//   · vereador / sem área → PainelInicio, alimentado aqui por useSessoes + derivarInicio.
+// Cada ramo é um componente próprio para que só a home escolhida faça as suas buscas.
 //
 // Sem <GuardSecretaria> DE PROPÓSITO: esta é a porta de entrada de QUALQUER pessoa autenticada — é ela que
 // resolve "para onde eu vou". Gatear por `secretario` devolveria "Acesso restrito" ao vereador que acabou
@@ -16,23 +18,30 @@ import { useSessoes } from "@/lib/use-sessoes";
 import { derivarInicio } from "@/lib/inicio-vista";
 import { TopoInterno } from "../topo";
 import { PainelInicio } from "./painel-inicio";
+import { CentralDaCasa } from "./central-da-casa";
 import "./inicio.css";
+
+function InicioPessoal({ token, papeis }: { token: string | null; papeis: string[] }) {
+  const { sessoes, estado: estadoSessoes } = useSessoes(token);
+  return <PainelInicio vista={derivarInicio({ papeis, sessoes, estadoSessoes })} />;
+}
 
 export function ConteudoInicio() {
   const { token } = useAuth();
   const { papeis, estado: estadoPapeis } = usePapeis();
-  const { sessoes, estado: estadoSessoes } = useSessoes(token);
 
   // Segura o render enquanto /eu não respondeu — sem isso a tela decidiria a persona com `papeis=[]` e
   // piscaria a home do cidadão para a secretária (mesmo racional dos guards de papel).
   if (estadoPapeis === "carregando") return null;
 
-  const vista = derivarInicio({ papeis, sessoes, estadoSessoes });
-
-  return (
-    <>
-      {vista.persona === "secretaria" && <TopoInterno area="Início" />}
-      <PainelInicio vista={vista} />
-    </>
-  );
+  // `secretario` vence quando alguém acumula papéis — a mesma regra de `personaDe` em inicio-vista.ts.
+  if (papeis.includes("secretario")) {
+    return (
+      <>
+        <TopoInterno area="Central da Casa" />
+        <CentralDaCasa token={token} />
+      </>
+    );
+  }
+  return <InicioPessoal token={token} papeis={papeis} />;
 }

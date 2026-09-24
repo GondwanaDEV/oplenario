@@ -13,6 +13,11 @@ vi.mock("@/lib/auth", () => ({
   useAuth: () => ({ token: "tok" }),
   usePapeis: () => papeisAtual,
 }));
+const { query } = vi.hoisted(() => ({ query: { sessao: null as string | null } }));
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/navigation")>()),
+  useSearchParams: () => new URLSearchParams(query.sessao ? { sessao: query.sessao } : {}),
+}));
 vi.mock("@/lib/tema", () => ({ useTema: () => ({ tema: "claro", alternar: () => {} }) }));
 
 const SESSAO = {
@@ -76,8 +81,16 @@ function servidorFalso() {
       return json(200, { id: itemId });
     }
     if (url === "/api/paineis/sli/sessoes") {
-      return json(200, { sessoes: [{ "sessao-id": "s1", "estado-atual": "agendada", situacao: "agendada", "agendada-para": "2026-09-30T17:00:00Z" }], "sessoes-total": 1 });
+      return json(200, {
+        sessoes: [
+          { "sessao-id": "s1", "estado-atual": "agendada", situacao: "agendada", "agendada-para": "2026-09-30T17:00:00Z" },
+          { "sessao-id": "s2", "estado-atual": "agendada", situacao: "agendada", "agendada-para": "2026-10-07T17:00:00Z" },
+        ],
+        "sessoes-total": 2,
+      });
     }
+    if (url === "/api/sessoes/s2") return json(200, { ...SESSAO, id: "s2", "numero-sequencial": 16, "agendada-para": "2026-10-07T17:00:00Z" });
+    if (url === "/api/sessoes/s2/pauta") return json(200, { "sessao-id": "s2", itens: [] });
     if (url === "/api/sessoes/s1") return json(200, SESSAO);
     if (url === "/api/sessoes/s1/pauta") return json(200, { "sessao-id": "s1", itens: itens.map((i) => ({ ...i })) });
     if (url.startsWith("/api/legislativo/proposicoes?")) {
@@ -101,6 +114,7 @@ function grupo(titulo: string) {
 describe("PaginaPautaConvocacao — montar a pauta", () => {
   beforeEach(() => {
     papeisAtual.papeis = ["secretario"];
+    query.sessao = null;
     itens = pautaInicial();
     chamadas = [];
     proximoStatus = null;
@@ -212,6 +226,20 @@ describe("PaginaPautaConvocacao — montar a pauta", () => {
     fireEvent.click(screen.getByRole("button", { name: "Incluir na pauta" }));
     expect((await screen.findByRole("alert")).textContent).toBe("Busque e escolha a matéria que entra na pauta.");
     expect(chamadas).toEqual([]);
+  });
+
+  it("?sessao= (vindo da Central da Casa) abre a pauta daquela sessão; id desconhecido cai na próxima", async () => {
+    query.sessao = "s2";
+    render(<PaginaPautaConvocacao />);
+    await waitFor(() => expect((screen.getByLabelText("Sessão") as HTMLSelectElement).value).toBe("s2"));
+    const urls = () => (global.fetch as unknown as { mock: { calls: [string][] } }).mock.calls.map((c) => String(c[0]));
+    await waitFor(() => expect(urls()).toContain("/api/sessoes/s2/pauta"));
+    cleanup();
+
+    query.sessao = "nao-existe";
+    render(<PaginaPautaConvocacao />);
+    await pautaCarregada();
+    expect((screen.getByLabelText("Sessão") as HTMLSelectElement).value).toBe("s1");
   });
 
   it("quem não é secretaria vê acesso restrito", () => {
