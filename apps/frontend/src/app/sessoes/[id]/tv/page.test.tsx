@@ -137,6 +137,17 @@ describe("Modo TV — fases", () => {
     expect(screen.getByText("Energia solar em prédios públicos")).toBeTruthy();
   });
 
+  it("nominal sem nenhum voto: placar em cartões próprios (tv-placar) e o miolo ganha estado vazio, nunca um buraco", () => {
+    const { container } = montar({ estado: { quorum, placar: placar({ votosNominais: {} }) } });
+    // `.placar` é classe GLOBAL do dashboard da Mesa (grade 3 colunas + borda + overflow:hidden): o telão
+    // usa `tv-placar` para não herdá-la — o placar saiu cortado num quadro estreito em produção.
+    expect(container.querySelector(".tv-placar")).not.toBeNull();
+    expect(container.querySelector(".placar")).toBeNull();
+    expect(container.querySelectorAll(".tv-placar .pl")).toHaveLength(3);
+    expect(screen.getByRole("status").textContent).toMatch(/Os votos aparecem aqui/);
+    expect(container.querySelector(".nominal")).toBeNull();
+  });
+
   it("votação sem quórum conhecido: '—', nunca um número inventado", () => {
     montar({ estado: { placar: placar({ votosNominais: { a: "sim" } }) } });
     const kpi = (rot: string) => screen.getByText(rot).closest(".kpi")!.querySelector("b")!.textContent;

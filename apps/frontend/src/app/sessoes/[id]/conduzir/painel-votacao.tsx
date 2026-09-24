@@ -7,8 +7,12 @@
 // Gate visual = estado da sessão: só aparece com a sessão ABERTA (o backend recusa fora disso; a UI não
 // oferece). Com uma votação em curso, mostra o resumo + Encerrar (simbólica pede o resultado declarado);
 // sem nenhuma, mostra o formulário de abrir (objeto da pauta + modalidade + quórum).
+//
+// A matéria que a Mesa ANUNCIOU (em apreciação, docs/23 Fatia 4b) vem pré-escolhida no seletor: o rito é
+// anunciar → discutir → votar a mesma matéria. A Mesa pode trocar; depois de abrir, o seletor volta vazio.
 
 import { useState } from "react";
+import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
 import { useVotacaoMesa, type ModalidadeVotacao, type QuorumTipo, type ResultadoVotacao } from "@/lib/use-votacao-mesa";
 import {
   candidatosObjeto,
@@ -25,15 +29,20 @@ export function PainelVotacao({
   sessaoId,
   token,
   sessaoEstado,
+  emApreciacaoItemId = null,
 }: {
   sessaoId: string;
   token: string | null;
   sessaoEstado: string;
+  /** O item da pauta anunciado pela Mesa (`em-apreciacao` da pauta) — pré-escolhe a matéria. */
+  emApreciacaoItemId?: string | null;
 }) {
   const { votacaoAberta, itens, estado, abrir, encerrar } = useVotacaoMesa(sessaoId, token);
   const painel = derivarPainelVotacao({ sessaoEstado, votacaoAberta });
 
-  const [objetoId, setObjetoId] = useState("");
+  // A escolha da Mesa vale sob o anúncio em que foi feita; um anúncio novo volta a pré-escolher a matéria.
+  const [escolha, setEscolha] = useState<{ valor: string; sob: string | null } | null>(null);
+  const setObjetoId = (valor: string) => setEscolha({ valor, sob: emApreciacaoItemId });
   const [modalidade, setModalidade] = useState<ModalidadeVotacao>("nominal");
   const [quorumTipo, setQuorumTipo] = useState<QuorumTipo>("maioria_simples");
   const [resultado, setResultado] = useState<ResultadoVotacao | "">("");
@@ -42,6 +51,13 @@ export function PainelVotacao({
   const [aviso, setAviso] = useState<string | null>(null);
 
   const candidatos = candidatosObjeto(itens);
+  const sugerido = itens.find((i) => i.id === emApreciacaoItemId)?.proposicaoId ?? null;
+  const objetoId =
+    escolha && escolha.sob === emApreciacaoItemId
+      ? escolha.valor
+      : candidatos.some((c) => c.objetoId === sugerido)
+        ? sugerido!
+        : "";
 
   async function onAbrir() {
     if (!objetoId) {
@@ -117,7 +133,11 @@ export function PainelVotacao({
                 <dt>Objeto</dt>
                 <dd>
                   {painel.votacao.proposicao
-                    ? `${painel.votacao.proposicao.tipo} ${painel.votacao.proposicao.sequencial}/${painel.votacao.proposicao.ano}`
+                    ? formatarNumeroProposicao(
+                        painel.votacao.proposicao.tipo,
+                        painel.votacao.proposicao.sequencial,
+                        painel.votacao.proposicao.ano,
+                      )
                     : rotuloObjetoTipo(painel.votacao.objetoTipo)}
                 </dd>
               </div>
@@ -180,7 +200,7 @@ export function PainelVotacao({
                     <option value="">— escolha a matéria —</option>
                     {candidatos.map((c) => (
                       <option key={c.objetoId} value={c.objetoId}>
-                        {nomeFase(c.fase)} · item {c.ordem}
+                        {c.sigla ? `${c.sigla} · ${nomeFase(c.fase)}` : `${nomeFase(c.fase)} · item ${c.ordem}`}
                       </option>
                     ))}
                   </select>

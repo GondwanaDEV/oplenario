@@ -1,0 +1,641 @@
+<title>Roteiro do Elvis</title>
+<meta name="description" content="Passo a passo de um dia de sessão no O Plenário, da Central da Casa à folha de presença.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --papel: #FFF7EA;
+    --papel-2: #F2E9D8;
+    --superficie: #FFFDF8;
+    --tinta: #16231A;
+    --tinta-2: #3B4A40;
+    --linha: #D9CFBB;
+    --jade: #2F5D3F;
+    --jade-suave: #E4EDDF;
+    --telha: #A0482A;
+    --telha-suave: #F6E3D8;
+    --cobalto: #3F6E92;
+    --amarelo: #B7862A;
+    --palco: #13241A;
+    --display: 'Plus Jakarta Sans', system-ui, sans-serif;
+    --corpo: 'Inter', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --papel: #0F1711;
+      --papel-2: #17221A;
+      --superficie: #1A271E;
+      --tinta: #E7F0E2;
+      --tinta-2: #A9BCA6;
+      --linha: #33463A;
+      --jade: #9FC39F;
+      --jade-suave: #1F3326;
+      --telha: #F2926A;
+      --telha-suave: #3A2219;
+      --cobalto: #8DB4D3;
+      --amarelo: #D9B060;
+      --palco: #0A130D;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --papel: #0F1711;
+    --papel-2: #17221A;
+    --superficie: #1A271E;
+    --tinta: #E7F0E2;
+    --tinta-2: #A9BCA6;
+    --linha: #33463A;
+    --jade: #9FC39F;
+    --jade-suave: #1F3326;
+    --telha: #F2926A;
+    --telha-suave: #3A2219;
+    --cobalto: #8DB4D3;
+    --amarelo: #D9B060;
+    --palco: #0A130D;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--papel);
+    color: var(--tinta);
+    font: 400 16px/1.6 var(--corpo);
+    padding-inline: 20px;
+    padding-block: 0 64px;
+  }
+  .folha { max-width: 1080px; margin: 0 auto; }
+
+  /* ---------- cabeça ---------- */
+  .cabeca { padding-block: 48px 28px; border-bottom: 1px solid var(--linha); }
+  .eyebrow {
+    font: 600 12px/1.4 var(--mono);
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--telha);
+    margin: 0 0 14px;
+  }
+  h1 {
+    font: 800 clamp(2.2rem, 5vw, 3.4rem)/1.05 var(--display);
+    letter-spacing: -.02em;
+    margin: 0 0 16px;
+    text-wrap: balance;
+  }
+  .lede { font-size: 1.15rem; max-width: 62ch; margin: 0 0 18px; color: var(--tinta); }
+  .exemplo {
+    font: 400 14px/1.5 var(--corpo);
+    color: var(--tinta-2);
+    margin: 0;
+    max-width: 70ch;
+  }
+
+  /* ---------- trilha (as 5 etapas da Central) ---------- */
+  .trilha {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin: 28px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .trilha a {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding: 12px 14px;
+    border: 1px solid var(--linha);
+    border-radius: 12px;
+    background: var(--superficie);
+    color: inherit;
+    text-decoration: none;
+  }
+  .trilha a:hover, .trilha a:focus-visible { border-color: var(--jade); }
+  .trilha a:focus-visible { outline: 2px solid var(--jade); outline-offset: 2px; }
+  .pecas { display: flex; gap: 4px; flex: none; }
+  .peca { width: 14px; height: 14px; border-radius: 4px 4px 4px 0; }
+  .p-jade { background: #3A6A48; }
+  .p-cobalto { background: #3F6E92; }
+  .p-telha { background: #C0693F; }
+  .p-jadeclaro { background: #7A9B7A; }
+  .p-amarelo { background: #D9A441; }
+  .trilha b { font: 700 1rem/1.2 var(--display); display: block; }
+  .trilha span.sub { font: 500 12px/1.3 var(--mono); color: var(--tinta-2); }
+
+  /* ---------- partes e passos ---------- */
+  .parte { padding-top: 56px; }
+  .parte-cabeca { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; }
+  .parte h2 {
+    font: 800 clamp(1.7rem, 3.4vw, 2.3rem)/1.1 var(--display);
+    letter-spacing: -.015em;
+    margin: 0;
+  }
+  .parte-cabeca .quando { font: 500 13px/1 var(--mono); color: var(--tinta-2); }
+  .parte > p.intro { max-width: 64ch; margin: 0 0 8px; color: var(--tinta-2); }
+
+  .passo {
+    display: grid;
+    grid-template-columns: 88px minmax(0, 1fr);
+    gap: 4px 24px;
+    padding-top: 36px;
+    margin-top: 36px;
+    border-top: 1px solid var(--linha);
+  }
+  .passo:first-of-type { border-top: 0; margin-top: 12px; }
+  .marca-passo { grid-row: span 2; }
+  .num {
+    font: 800 2.4rem/1 var(--display);
+    color: var(--jade);
+    display: block;
+  }
+  .hora {
+    font: 600 13px/1.3 var(--mono);
+    color: var(--tinta-2);
+    display: block;
+    margin-top: 6px;
+  }
+  .passo h3 {
+    font: 700 1.35rem/1.25 var(--display);
+    margin: 0 0 6px;
+    text-wrap: balance;
+  }
+  .onde {
+    font: 500 13px/1.5 var(--mono);
+    color: var(--tinta-2);
+    margin: 0 0 12px;
+  }
+  .onde b { color: var(--tinta); font-weight: 600; }
+  .texto { max-width: 66ch; }
+  .texto p { margin: 0 0 12px; }
+  .texto ol, .texto ul { margin: 0 0 12px; padding-left: 1.2em; }
+  .texto li { margin-bottom: 6px; }
+  .texto li::marker { color: var(--jade); font-weight: 600; }
+
+  /* o nome do botão, como aparece na tela */
+  .bt {
+    display: inline-block;
+    font: 600 .85em/1.3 var(--corpo);
+    padding: .08em .6em .12em;
+    border-radius: 999px;
+    border: 1px solid var(--jade);
+    color: var(--jade);
+    background: var(--jade-suave);
+    white-space: nowrap;
+  }
+  .bt.perigo { border-color: var(--telha); color: var(--telha); background: var(--telha-suave); }
+
+  .atencao {
+    border-left: 3px solid var(--amarelo);
+    background: var(--papel-2);
+    padding: 10px 14px;
+    border-radius: 0 8px 8px 0;
+    margin: 4px 0 14px;
+    max-width: 66ch;
+    font-size: .95rem;
+  }
+  .atencao b { font-weight: 600; }
+
+  figure { margin: 18px 0 0; grid-column: 2; }
+  figure img {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    border: 1px solid var(--linha);
+    border-radius: 10px;
+    background: var(--superficie);
+  }
+  figure.tv img { border-color: var(--palco); background: var(--palco); }
+  figure.estreita img { max-width: 900px; }
+  figcaption {
+    font: 500 12.5px/1.5 var(--mono);
+    color: var(--tinta-2);
+    margin-top: 8px;
+    max-width: 90ch;
+  }
+  .par { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; grid-column: 2; }
+  .par figure { grid-column: auto; }
+
+  /* ---------- se algo sair do roteiro ---------- */
+  .imprevistos { padding-top: 56px; }
+  .imprevistos h2 { font: 800 1.8rem/1.1 var(--display); margin: 0 0 18px; letter-spacing: -.015em; }
+  .tabela { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; min-width: 560px; }
+  th, td { text-align: left; vertical-align: top; padding: 12px 14px; border-top: 1px solid var(--linha); }
+  th { font: 600 12px/1.3 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--tinta-2); border-top: 0; }
+  td:first-child { font-weight: 600; width: 38%; }
+
+  .rodape {
+    margin-top: 56px;
+    padding-top: 20px;
+    border-top: 1px solid var(--linha);
+    font: 500 12.5px/1.6 var(--mono);
+    color: var(--tinta-2);
+  }
+  .rodape p { margin: 0 0 6px; max-width: 90ch; }
+
+  figure img { cursor: zoom-in; }
+  .lupa {
+    border: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    max-width: 100vw;
+    max-height: 100vh;
+    background: rgba(8, 14, 10, .92);
+    overflow: auto;
+  }
+  .lupa::backdrop { background: rgba(8, 14, 10, .6); }
+  .lupa img { display: block; max-width: none; width: min(1920px, 200vw); margin: 56px auto 24px; border-radius: 8px; }
+  .lupa button {
+    position: fixed;
+    top: calc(12px + env(safe-area-inset-top, 0px));
+    right: 16px;
+    font: 600 14px/1 var(--corpo);
+    padding: 10px 16px;
+    border-radius: 999px;
+    border: 1px solid #A6BFA2;
+    background: #13241A;
+    color: #E7F0E2;
+    cursor: pointer;
+  }
+  .lupa button:focus-visible { outline: 2px solid #E7F0E2; outline-offset: 2px; }
+  @media (min-width: 761px) { .lupa img { width: min(1920px, 96vw); } }
+
+  @media (max-width: 760px) {
+    body { font-size: 15.5px; padding-inline: 16px; }
+    .trilha { grid-template-columns: 1fr; }
+    .passo { grid-template-columns: minmax(0, 1fr); }
+    .marca-passo { grid-row: auto; display: flex; align-items: baseline; gap: 12px; }
+    .num { font-size: 1.9rem; }
+    .hora { margin-top: 0; }
+    figure, .par { grid-column: 1; }
+    .par { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    html { scroll-behavior: smooth; }
+  }
+</style>
+
+<div class="folha">
+  <header class="cabeca">
+    <p class="eyebrow">O Plenário · Câmara Municipal</p>
+    <h1>Roteiro do Elvis</h1>
+    <p class="lede">Um dia de sessão, do começo ao fim. Tudo começa na <b>Central da Casa</b>, a primeira tela depois de entrar no sistema. Ela mostra a sessão do dia e o botão do próximo passo.</p>
+    <p class="exemplo">Exemplo usado nas telas: 15ª Sessão Ordinária, quinta-feira, 24/09/2026, às 9h. As telas são do sistema de verdade, com nomes e matérias de exemplo.</p>
+    <ul class="trilha" aria-label="As três partes do dia">
+      <li><a href="#preparar"><span class="pecas" aria-hidden="true"><span class="peca p-jade"></span><span class="peca p-cobalto"></span></span><span><b>Preparar</b><span class="sub">agendar · pauta · convocação</span></span></a></li>
+      <li><a href="#conduzir"><span class="pecas" aria-hidden="true"><span class="peca p-telha"></span></span><span><b>Conduzir</b><span class="sub">abrir · chamada · TV · votação</span></span></a></li>
+      <li><a href="#fechar"><span class="pecas" aria-hidden="true"><span class="peca p-jadeclaro"></span><span class="peca p-amarelo"></span></span><span><b>Fechar</b><span class="sub">encerrar · folha</span></span></a></li>
+    </ul>
+  </header>
+
+  <!-- ===================================================== PREPARAR -->
+  <section class="parte" id="preparar" aria-labelledby="t-preparar">
+    <div class="parte-cabeca">
+      <h2 id="t-preparar">Preparar</h2>
+      <span class="quando">dias antes até a manhã da sessão</span>
+    </div>
+    <p class="intro">Agendar, montar a pauta e conferir a convocação. Na Central, as etapas <b>Agendada</b> e <b>Pauta</b> ficam cheias quando isso está feito.</p>
+
+    <article class="passo" id="agendar">
+      <div class="marca-passo"><span class="num">1</span><span class="hora">dias antes</span></div>
+      <div>
+        <h3>Agendar a sessão</h3>
+        <p class="onde">Menu <b>Agendar sessão</b> (ou o botão da Central quando não há sessão marcada)</p>
+        <div class="texto">
+          <ol>
+            <li>Escolha o <b>Tipo de sessão</b>: ordinária, extraordinária, solene…</li>
+            <li>Deixe a <b>Modalidade</b> em "Usar o padrão da Casa", a não ser que a sessão seja remota ou híbrida.</li>
+            <li>Preencha <b>Data e hora</b> e clique em <span class="bt">Agendar sessão</span>.</li>
+          </ol>
+          <p>A sessão nasce <b>agendada</b>. Abrir, fazer a chamada e votar só acontecem no dia, no Comando da Mesa.</p>
+        </div>
+      </div>
+      <figure class="estreita">
+        <img src="telas/02-agendar.png" width="1280" height="640" alt="Tela Agendar sessão com tipo Ordinária, modalidade padrão da Casa, data preenchida e o botão Agendar sessão." loading="lazy">
+        <figcaption>Agendar sessão. No seu computador a data aparece no formato dd/mm/aaaa.</figcaption>
+      </figure>
+    </article>
+
+    <article class="passo" id="pauta">
+      <div class="marca-passo"><span class="num">2</span><span class="hora">dias antes</span></div>
+      <div>
+        <h3>Montar a pauta</h3>
+        <p class="onde">Central → <b>Montar a pauta</b> · ou menu <b>Pauta</b> e escolha a sessão no seletor <b>Sessão</b></p>
+        <div class="texto">
+          <ul>
+            <li>Na caixa <b>Prontas, fora da pauta</b> ficam as matérias liberadas pela tramitação. O <span class="bt">+</span> põe a matéria na pauta.</li>
+            <li><span class="bt">Incluir item na pauta</span> abre o formulário: escolha <b>Matéria</b>, <b>Leitura</b>, <b>Comunicado</b> ou <b>Homenagem</b>, a fase (Expediente ou Ordem do Dia) e busque a matéria pelo assunto.</li>
+            <li>As <b>setas</b> mudam a ordem dentro da fase. O <b>×</b> retira o item e pede o motivo.</li>
+          </ul>
+          <p>Cada mudança é gravada na hora e fica no histórico da pauta. Não existe botão "salvar".</p>
+        </div>
+      </div>
+      <div class="par">
+        <figure>
+          <img src="telas/03-pauta.png" width="1280" height="1133" alt="Tela Montar pauta da 15ª Sessão Ordinária: itens do Expediente e da Ordem do Dia com setas e botão de retirar; à direita, matérias prontas e a convocação." loading="lazy">
+          <figcaption>A pauta por fase. À direita, as prontas para pautar e a convocação.</figcaption>
+        </figure>
+        <figure>
+          <img src="telas/04-pauta-incluir.png" width="1280" height="1480" alt="Formulário de inclusão aberto: tipo Matéria, fase Ordem do Dia, busca por mobilidade encontrando o REQ 241/2026 com botão Escolher." loading="lazy">
+          <figcaption>Incluir item: busque, clique em Escolher e depois em Incluir na pauta.</figcaption>
+        </figure>
+      </div>
+    </article>
+
+    <article class="passo" id="convocacao">
+      <div class="marca-passo"><span class="num">3</span><span class="hora">dias antes</span></div>
+      <div>
+        <h3>Conferir a convocação</h3>
+        <p class="onde">Mesma tela da pauta, cartão <b>Convocação</b> à direita</p>
+        <div class="texto">
+          <p>A convocação é montada a partir da pauta: data, hora de início e o que entra em cada fase. Mudou a pauta, a convocação muda junto. Não há nada para preencher.</p>
+          <p class="atencao"><b>Regimento:</b> a convocação deve ser publicada com a antecedência mínima prevista no Regimento Interno. A publicação é feita pelo caminho de sempre da Casa.</p>
+        </div>
+      </div>
+    </article>
+
+    <article class="passo" id="central">
+      <div class="marca-passo"><span class="num">4</span><span class="hora">08:10</span></div>
+      <div>
+        <h3>Começar o dia pela Central</h3>
+        <p class="onde">Primeira tela depois de entrar · menu <b>Central</b></p>
+        <div class="texto">
+          <ul>
+            <li>O cartão <b>Sessão de hoje</b> mostra em que etapa a sessão está e o botão do próximo passo. Hoje é <span class="bt">Abrir no Comando da Mesa</span>.</li>
+            <li>A <b>Fila de trabalho</b> junta o que depende de você: prazos de e-SIC e ouvidoria, obrigações do TCE, comentários do portal para moderar, justificativas de ausência.</li>
+            <li>Cada item sai da fila sozinho quando o trabalho é feito. Não existe botão "feito".</li>
+          </ul>
+        </div>
+      </div>
+      <figure>
+        <img src="telas/01-central-manha.png" width="1280" height="1189" alt="Central da Casa às 8h10: Bom dia, Elvis; a 15ª sessão ordinária é hoje às 9h com a pauta montada; trilha com Agendada e Pauta feitas; botão Abrir no Comando da Mesa; fila de trabalho com 4 itens." loading="lazy">
+        <figcaption>Central da Casa, manhã da sessão. A trilha tem Agendada e Pauta feitas; falta abrir.</figcaption>
+      </figure>
+    </article>
+  </section>
+
+  <!-- ===================================================== CONDUZIR -->
+  <section class="parte" id="conduzir" aria-labelledby="t-conduzir">
+    <div class="parte-cabeca">
+      <h2 id="t-conduzir">Conduzir</h2>
+      <span class="quando">da abertura ao encerramento</span>
+    </div>
+    <p class="intro">Tudo acontece no <b>Comando da Mesa</b>. O presidente preside; você registra o que a Mesa faz. A TV do plenário acompanha sozinha.</p>
+
+    <article class="passo" id="abrir">
+      <div class="marca-passo"><span class="num">5</span><span class="hora">08:55</span></div>
+      <div>
+        <h3>Ligar a TV e abrir a sessão</h3>
+        <p class="onde">Central → <b>Abrir no Comando da Mesa</b></p>
+        <div class="texto">
+          <ol>
+            <li>Clique em <span class="bt">Modo TV</span> no alto da tela. Abre uma janela nova com a TV da sessão.</li>
+            <li>Arraste essa janela para a TV do plenário (o computador precisa estar com a tela estendida para a TV) e clique uma vez em <b>Entrar em tela cheia</b>.</li>
+            <li>Quando o presidente declarar a sessão aberta, clique em <span class="bt">Abrir a sessão</span>.</li>
+          </ol>
+          <p>Cada mudança de estado fica registrada com o seu nome e a hora. Se a sessão não acontecer, use <span class="bt perigo">Marcar como não realizada</span> e escreva o motivo.</p>
+        </div>
+      </div>
+      <figure>
+        <img src="telas/05-conduzir-abrir.png" width="1280" height="1004" alt="Comando da Mesa da sessão ordinária nº 15, agendada para 24/09 às 9h: botões Abrir a sessão e Marcar como não realizada; no alto, os botões Modo TV e tema." loading="lazy">
+        <figcaption>Comando da Mesa antes da abertura. O botão Modo TV fica no canto de cima.</figcaption>
+      </figure>
+    </article>
+
+    <article class="passo" id="chamada">
+      <div class="marca-passo"><span class="num">6</span><span class="hora">09:06</span></div>
+      <div>
+        <h3>Fazer a chamada</h3>
+        <p class="onde">Central → <b>Chamada de presença</b> (aparece enquanto a sessão está ao vivo)</p>
+        <div class="texto">
+          <ul>
+            <li>Os vereadores marcam presença pelo próprio celular. Para quem não marcou, use <span class="bt">Presente</span>, <span class="bt">Remoto</span> ou <span class="bt">Ausente</span> na linha do vereador.</li>
+            <li>O <b>Quórum</b> à direita conta ao vivo.</li>
+            <li>Justificativa de ausência: <span class="bt">Lançar justificativa</span> registra o pedido; <b>Deferir</b> ou <b>Indeferir</b> é decisão da Mesa e fica com nome e hora.</li>
+          </ul>
+          <p>Entradas e saídas durante a sessão também se marcam aqui. Cada marcação é gravada na hora.</p>
+        </div>
+      </div>
+      <figure class="estreita">
+        <img src="telas/06b-central-ao-vivo.png" width="1216" height="282" alt="Cartão da sessão na Central com o selo Ao vivo: botões Conduzir a sessão, Chamada de presença, Modo TV e Telão." loading="lazy">
+        <figcaption>Com a sessão aberta, a Central mostra os atalhos do dia: Conduzir a sessão, Chamada, Modo TV e Telão.</figcaption>
+      </figure>
+      <figure>
+        <img src="telas/06-chamada.png" width="1280" height="860" alt="Tela A chamada: Mesa Diretora e demais vereadores com botões Presente, Remoto e Ausente e hora de registro; à direita, quórum de 18 de 21 e uma justificativa pendente." loading="lazy">
+        <figcaption>A chamada: 18 de 21 presentes, uma justificativa esperando decisão.</figcaption>
+      </figure>
+    </article>
+
+    <article class="passo" id="anunciar">
+      <div class="marca-passo"><span class="num">7</span><span class="hora">10:25</span></div>
+      <div>
+        <h3>Anunciar a matéria</h3>
+        <p class="onde">Comando da Mesa → bloco <b>Pauta desta sessão</b> → <b>Em apreciação</b></p>
+        <div class="texto">
+          <p>Quando o presidente disser "passamos ao PL 22/2026", clique em <span class="bt">Anunciar</span> na linha da matéria.</p>
+          <ul>
+            <li>A linha ganha o selo <b>Em apreciação</b>.</li>
+            <li>A TV do plenário mostra a matéria, a autoria e quem está na tribuna. O letreiro de baixo repete a informação.</li>
+            <li>Anunciou a errada? Clique em <span class="bt">Anunciar</span> na certa. Vale sempre o último anúncio.</li>
+          </ul>
+          <p>Item que não estava na pauta: <span class="bt">Incluir item extrapauta</span>, no mesmo bloco.</p>
+        </div>
+      </div>
+      <figure>
+        <img src="telas/08-anunciar.png" width="1280" height="758" alt="Bloco Pauta desta sessão com a lista Em apreciação: o PL 22/2026 destacado com o selo Em apreciação e os outros itens com o botão Anunciar." loading="lazy">
+        <figcaption>PL 22/2026 anunciado. Os outros itens seguem com o botão Anunciar.</figcaption>
+      </figure>
+      <figure class="tv">
+        <img src="telas/16-tv-apreciacao.png" width="1920" height="1080" alt="TV do plenário: Em apreciação, Ordem do Dia, PL 22/2026 com a ementa e Autoria Ver. Ana Castro; Ana Castro na tribuna com cronômetro 02:00; quórum 18 de 21." loading="lazy">
+        <figcaption>O que o plenário vê na TV depois do anúncio.</figcaption>
+      </figure>
+    </article>
+
+    <article class="passo" id="tribuna">
+      <div class="marca-passo"><span class="num">8</span><span class="hora">10:28</span></div>
+      <div>
+        <h3>Controlar a tribuna</h3>
+        <p class="onde">Comando da Mesa → bloco <b>Tribuna</b></p>
+        <div class="texto">
+          <ol>
+            <li>Em <b>Inscrever orador</b>, escolha o vereador e a fase e clique em <span class="bt">Inscrever</span>. Ele entra na <b>Fila de oradores</b>.</li>
+            <li>Na vez dele, <span class="bt">Chamar à tribuna</span>. O cronômetro começa e aparece na TV.</li>
+            <li>Durante a fala: <span class="bt">Pausar</span>, <span class="bt">+1 min</span>, <span class="bt">Aparte</span>. No fim, <span class="bt perigo">Encerrar fala</span>.</li>
+          </ol>
+          <p>Vereador desistiu? <b>Registrar desistência</b> na linha dele.</p>
+        </div>
+      </div>
+      <figure>
+        <img src="telas/09-tribuna.png" width="1280" height="519" alt="Bloco Tribuna: Ana Castro falando com 02:00 e botões Pausar, +1 min, Aparte e Encerrar fala; fila com Carlos Tavares e Beatriz Rocha; formulário Inscrever orador." loading="lazy">
+        <figcaption>Ana Castro na tribuna, dois inscritos na fila.</figcaption>
+      </figure>
+    </article>
+
+    <article class="passo" id="votacao">
+      <div class="marca-passo"><span class="num">9</span><span class="hora">10:40</span></div>
+      <div>
+        <h3>Abrir e encerrar a votação</h3>
+        <p class="onde">Comando da Mesa → bloco <b>Votação</b></p>
+        <div class="texto">
+          <ol>
+            <li>A matéria anunciada já vem escolhida em <b>Objeto da votação</b>. Confira.</li>
+            <li>Escolha a <b>Modalidade</b> (nominal, simbólica ou secreta) e o <b>Quórum exigido</b> que o presidente indicar.</li>
+            <li>Clique em <span class="bt">Abrir votação</span>. Os vereadores votam pelo celular e o placar aparece na TV, voto a voto.</li>
+            <li>Quando o presidente encerrar, clique em <span class="bt perigo">Encerrar votação</span>. Na simbólica, marque antes se foi <b>Aprovada</b> ou <b>Rejeitada</b>.</li>
+          </ol>
+          <p>O resultado fica alguns segundos em tela cheia na TV. Depois a TV volta para a sessão e o letreiro guarda a última votação.</p>
+        </div>
+      </div>
+      <div class="par">
+        <figure>
+          <img src="telas/10-votacao-abrir.png" width="1280" height="381" alt="Bloco Votação: objeto PL 22/2026 · Ordem do Dia já escolhido, modalidade Nominal, quórum Maioria simples e o botão Abrir votação." loading="lazy">
+          <figcaption>Antes: a matéria anunciada já vem escolhida.</figcaption>
+        </figure>
+        <figure>
+          <img src="telas/11-votacao-aberta.png" width="1280" height="311" alt="Bloco Votação em curso: objeto PL 22/2026, modalidade Nominal, ementa e o botão Encerrar votação." loading="lazy">
+          <figcaption>Durante: só falta encerrar.</figcaption>
+        </figure>
+      </div>
+      <div class="par">
+        <figure class="tv">
+          <img src="telas/17-tv-votacao.png" width="1920" height="1080" alt="TV em votação nominal do PL 22/2026: 18 podem votar, 16 já votaram, faltam 2; 13 sim, 2 não, 1 abstenção; grade com o voto de cada vereador." loading="lazy">
+          <figcaption>TV durante a votação nominal.</figcaption>
+        </figure>
+        <figure class="tv">
+          <img src="telas/18-tv-resultado.png" width="1920" height="1080" alt="TV com o resultado: PL 22/2026, votação nominal, Aprovada, 13 sim, 2 não, 1 abstenção." loading="lazy">
+          <figcaption>TV logo depois do encerramento.</figcaption>
+        </figure>
+      </div>
+    </article>
+
+    <article class="passo" id="atos">
+      <div class="marca-passo"><span class="num">10</span><span class="hora">quando houver</span></div>
+      <div>
+        <h3>Registrar os atos da Mesa</h3>
+        <p class="onde">Comando da Mesa → bloco <b>Atos da Mesa</b></p>
+        <div class="texto">
+          <ul>
+            <li><span class="bt">Registrar questão de ordem</span>: o presidente já vem escolhido em <b>Quem presidiu e decidiu</b>. Troque se foi o vice. Escreva a questão, a decisão e, se houver, a fundamentação.</li>
+            <li><span class="bt">Registrar incidente</span>: pedido de vista, verificação de votação, urgência e os outros incidentes do rito.</li>
+          </ul>
+          <p>A decisão fica no nome de quem presidiu. Você aparece só como quem registrou.</p>
+          <p class="atencao"><b>Atos não se apagam.</b> Registrou errado? Registre um novo ato corrigindo. Os dois vão para o histórico da sessão.</p>
+        </div>
+      </div>
+      <figure>
+        <img src="telas/12-atos.png" width="1280" height="947" alt="Bloco Atos da Mesa com o formulário Questão de ordem aberto (Bruno Lima, Presidente, escolhido) e dois atos registrados: um pedido de vista deferido e uma questão de ordem indeferida." loading="lazy">
+        <figcaption>Questão de ordem sendo registrada. Abaixo, os atos da sessão até agora.</figcaption>
+      </figure>
+    </article>
+  </section>
+
+  <!-- ===================================================== FECHAR -->
+  <section class="parte" id="fechar" aria-labelledby="t-fechar">
+    <div class="parte-cabeca">
+      <h2 id="t-fechar">Fechar</h2>
+      <span class="quando">logo depois da sessão</span>
+    </div>
+    <p class="intro">Encerrar, gerar a folha de presença e voltar para a Central para ver o que sobrou.</p>
+
+    <article class="passo" id="encerrar">
+      <div class="marca-passo"><span class="num">11</span><span class="hora">11:58</span></div>
+      <div>
+        <h3>Encerrar a sessão</h3>
+        <p class="onde">Comando da Mesa → <b>O que a Mesa pode fazer agora</b></p>
+        <div class="texto">
+          <p>Quando o presidente encerrar, clique em <span class="bt perigo">Encerrar a sessão</span> e depois em <span class="bt perigo">Confirmar: Encerrar a sessão</span>.</p>
+          <p class="atencao"><b>Depois de encerrar, a presença e as votações da sessão não aceitam mais alteração.</b> Confira a chamada antes. Para uma pausa, use <b>Suspender</b>; a sessão pode ser reaberta em seguida.</p>
+        </div>
+      </div>
+      <figure>
+        <img src="telas/13-encerrar.png" width="1280" height="454" alt="Bloco O que a Mesa pode fazer agora com Encerrar a sessão aberto: a pergunta de confirmação e os botões Confirmar: Encerrar a sessão e Cancelar." loading="lazy">
+        <figcaption>O encerramento pede confirmação.</figcaption>
+      </figure>
+    </article>
+
+    <article class="passo" id="folha">
+      <div class="marca-passo"><span class="num">12</span><span class="hora">12:05</span></div>
+      <div>
+        <h3>Gerar a folha de presença</h3>
+        <p class="onde">Central → <b>Gerar a folha</b></p>
+        <div class="texto">
+          <ol>
+            <li>Clique em <span class="bt">Gerar a folha desta sessão</span>. O sistema congela a folha como <b>Versão 1</b>.</li>
+            <li>Confira o documento à direita e use <span class="bt">Baixar PDF desta versão</span> para arquivar ou publicar.</li>
+          </ol>
+          <p>Uma versão congelada não muda mais. Os dois códigos (HTML e PDF) provam que o arquivo é o original. Se algo mudar depois, por exemplo uma justificativa decidida, gere uma nova versão com <span class="bt">Gerar nova versão</span>.</p>
+        </div>
+      </div>
+      <figure>
+        <img src="telas/14-folha.png" width="1280" height="982" alt="Tela A folha de presença: Versão 1 congelada com os códigos HTML e PDF, botão Gerar nova versão e o documento da Câmara Municipal com a lista de vereadores, partido, situação e hora de registro." loading="lazy">
+        <figcaption>A folha da 15ª Sessão, versão 1, com o documento ao lado.</figcaption>
+      </figure>
+    </article>
+
+    <article class="passo" id="fim">
+      <div class="marca-passo"><span class="num">13</span><span class="hora">12:10</span></div>
+      <div>
+        <h3>Voltar para a Central</h3>
+        <p class="onde">Menu <b>Central</b></p>
+        <div class="texto">
+          <p>A trilha mostra a sessão encerrada. Depois que a folha é gerada, a etapa <b>Folha</b> fica cheia e o botão vira <b>Ver a folha</b>. Na fila aparece o que a sessão deixou, como a justificativa de ausência que ainda espera a Mesa (<span class="bt">Decidir</span> leva direto para a chamada).</p>
+          <p>A ata ainda é feita fora do sistema.</p>
+        </div>
+      </div>
+      <figure>
+        <img src="telas/15-central-fim.png" width="1280" height="1259" alt="Central da Casa à tarde: a 15ª sessão foi encerrada hoje e falta gerar a folha; botão Gerar a folha; fila com uma justificativa de ausência a decidir." loading="lazy">
+        <figcaption>Central logo depois do encerramento, antes de gerar a folha: o botão do próximo passo já é Gerar a folha.</figcaption>
+      </figure>
+    </article>
+  </section>
+
+  <!-- ===================================================== IMPREVISTOS -->
+  <section class="imprevistos" id="imprevistos" aria-labelledby="t-imprevistos">
+    <h2 id="t-imprevistos">Se algo sair do roteiro</h2>
+    <div class="tabela">
+      <table>
+        <thead><tr><th scope="col">Aconteceu</th><th scope="col">O que fazer</th></tr></thead>
+        <tbody>
+          <tr><td>A TV saiu da tela cheia</td><td>Clique uma vez na janela da TV, em <b>Entrar em tela cheia</b>.</td></tr>
+          <tr><td>Outra pessoa mudou o estado da sessão ao mesmo tempo</td><td>O sistema recusa o seu clique e recarrega o estado real. Confira e repita, se ainda fizer sentido. <b>Atualizar estado</b> recarrega na hora.</td></tr>
+          <tr><td>Marcou a presença errada</td><td>Marque de novo na linha do vereador, antes de encerrar. Cada marcação fica gravada com a hora.</td></tr>
+          <tr><td>Anunciou a matéria errada</td><td>Anuncie a certa. A TV passa para o último anúncio.</td></tr>
+          <tr><td>Registrou um ato da Mesa errado</td><td>Registre um novo ato corrigindo. Atos não se apagam.</td></tr>
+          <tr><td>Precisa pautar algo com a sessão aberta</td><td><b>Incluir item extrapauta</b>, no bloco Pauta desta sessão.</td></tr>
+          <tr><td>A sessão precisa parar</td><td><b>Suspender</b>. Para voltar, <b>Reabrir</b>.</td></tr>
+          <tr><td>A folha ficou desatualizada</td><td>Na tela da folha, <b>Gerar nova versão</b>. A versão antiga continua guardada.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <dialog class="lupa" id="lupa" aria-label="Tela ampliada">
+    <button type="button" id="lupa-fechar">Fechar</button>
+    <img id="lupa-img" alt="">
+  </dialog>
+
+  <footer class="rodape">
+    <p>O Plenário · roteiro do operador da sessão (papel secretaria) · setembro de 2026.</p>
+    <p>Telas capturadas do sistema com dados de exemplo; nomes de vereadores e matérias são fictícios.</p>
+  </footer>
+</div>
+<script>
+  (function () {
+    var lupa = document.getElementById('lupa');
+    var img = document.getElementById('lupa-img');
+    if (!lupa || typeof lupa.showModal !== 'function') return;
+    document.querySelectorAll('figure img').forEach(function (fig) {
+      fig.tabIndex = 0;
+      fig.setAttribute('role', 'button');
+      fig.setAttribute('aria-label', 'Ampliar: ' + fig.alt);
+      function abrir() { img.src = fig.src; img.alt = fig.alt; lupa.showModal(); lupa.scrollTop = 0; }
+      fig.addEventListener('click', abrir);
+      fig.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrir(); } });
+    });
+    document.getElementById('lupa-fechar').addEventListener('click', function () { lupa.close(); });
+    lupa.addEventListener('click', function (e) { if (e.target === lupa) lupa.close(); });
+  })();
+</script>

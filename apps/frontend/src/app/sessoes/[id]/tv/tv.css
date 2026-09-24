@@ -88,12 +88,12 @@
 
 /* 2 · em curso */
 .f-em-curso { grid-template-columns: 1fr 1.25fr; gap: 2vw; }
-.tv .coluna { display: grid; gap: 2vw; align-content: start; min-height: 0; }
-.tribuna .quem { display: flex; align-items: center; gap: 1.4vw; }
+.tv .tv-coluna { display: grid; gap: 2vw; align-content: start; min-height: 0; }
+.tribuna .tv-quem { display: flex; align-items: center; gap: 1.4vw; }
 .tribuna .avatar-tv { width: 5.2vw; height: 5.2vw; min-width: 56px; min-height: 56px; border-radius: 50%; background: var(--jade-medio); color: #fff; display: grid; place-items: center; font-family: var(--display); font-weight: 800; font-size: clamp(1.2rem, 1.9vw, 3.2rem); flex: 0 0 auto; }
-/* escopado ao div do nome: `.quem span` venceria o avatar (armadilha §5.1 do checklist) */
-.tribuna .quem div b { display: block; font-family: var(--display); font-weight: 800; font-size: clamp(1.6rem, 2.6vw, 4.4rem); color: #fff; line-height: 1.05; }
-.tribuna .quem div span { display: block; font-size: clamp(1rem, 1.3vw, 2.2rem); color: var(--palco-texto-2); margin-top: .3vw; }
+/* escopado ao div do nome: `.tv-quem span` venceria o avatar (armadilha §5.1 do checklist) */
+.tribuna .tv-quem div b { display: block; font-family: var(--display); font-weight: 800; font-size: clamp(1.6rem, 2.6vw, 4.4rem); color: #fff; line-height: 1.05; }
+.tribuna .tv-quem div span { display: block; font-size: clamp(1rem, 1.3vw, 2.2rem); color: var(--palco-texto-2); margin-top: .3vw; }
 .tribuna .crono { margin-top: 1.4vw; display: flex; align-items: baseline; gap: 1vw; flex-wrap: wrap; }
 .tribuna .crono b { font-family: var(--mono); font-weight: 600; font-size: clamp(3rem, 6.4vw, 11rem); color: #fff; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
 .tribuna .crono span { font-family: var(--mono); font-size: clamp(.9rem, 1.1vw, 1.8rem); color: var(--palco-texto-2); }
@@ -105,16 +105,16 @@
    "a seguir na pauta" não entra: a 1080p não cabe junto sem cortar, e o letreiro já diz o próximo item. */
 .f-em-apreciacao { grid-template-rows: auto minmax(0, 1fr); gap: 2vw; }
 .apreciacao .rot { color: var(--tv-destaque); }
-.apreciacao .num { font-family: var(--mono); font-weight: 700; font-size: clamp(1.2rem, 2vw, 3.4rem); color: var(--tv-destaque); letter-spacing: .02em; }
+.apreciacao .tv-num { font-family: var(--mono); font-weight: 700; font-size: clamp(1.2rem, 2vw, 3.4rem); color: var(--tv-destaque); letter-spacing: .02em; }
 .apreciacao h1 { font-family: var(--display); font-weight: 800; font-size: clamp(2rem, 3.6vw, 6rem); line-height: 1.05; letter-spacing: -0.02em; color: #fff; margin: .4vw 0 0; max-width: 40ch; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
-.apreciacao .autor { font-size: clamp(1.1rem, 1.6vw, 2.6rem); color: var(--palco-texto-2); margin: 1vw 0 0; }
-.apreciacao .autor b { color: #fff; font-weight: 700; }
+.apreciacao .tv-autor { font-size: clamp(1.1rem, 1.6vw, 2.6rem); color: var(--palco-texto-2); margin: 1vw 0 0; }
+.apreciacao .tv-autor b { color: #fff; font-weight: 700; }
 .apr-corpo { display: grid; grid-template-columns: 1.3fr 1fr; gap: 2vw; min-height: 0; align-items: start; }
 
 /* 3 · votação */
 .f-votacao { grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 1.3vw; }
-.materia .num { font-family: var(--mono); font-weight: 700; font-size: clamp(1.1rem, 1.7vw, 2.8rem); color: var(--tv-destaque); letter-spacing: .02em; }
-.materia .num small { font-weight: 500; color: var(--palco-texto-2); margin-left: 1vw; font-size: .7em; letter-spacing: .1em; text-transform: uppercase; }
+.materia .tv-num { font-family: var(--mono); font-weight: 700; font-size: clamp(1.1rem, 1.7vw, 2.8rem); color: var(--tv-destaque); letter-spacing: .02em; }
+.materia .tv-num small { font-weight: 500; color: var(--palco-texto-2); margin-left: 1vw; font-size: .7em; letter-spacing: .1em; text-transform: uppercase; }
 .materia h1 { font-family: var(--display); font-weight: 800; font-size: clamp(1.6rem, 2.6vw, 4.4rem); line-height: 1.08; letter-spacing: -0.02em; color: #fff; margin: .3vw 0 0; max-width: 46ch; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .contagem { display: grid; grid-template-columns: repeat(3, 1fr) 1.5fr; gap: 1.2vw; }
 .kpi { background: var(--tv-cartao); border: 1px solid var(--palco-linha); border-radius: var(--raio-lg); padding: .9vw 1.4vw; }
@@ -123,14 +123,14 @@
 .kpi.faltam b { color: var(--tv-destaque); }
 .kpi .sub { font-size: clamp(.85rem, 1vw, 1.7rem); color: var(--palco-texto-2); margin-top: .4vw; display: block; }
 .kpi.progresso { display: flex; flex-direction: column; justify-content: center; }
-.kpi.progresso .trilho { height: 1.4vw; min-height: 14px; border-radius: 999px; background: var(--tv-cartao-2); overflow: hidden; display: flex; margin-top: .6vw; }
-.kpi.progresso .trilho i { display: block; height: 100%; }
-.kpi.progresso .trilho .t-sim { background: var(--tv-sim-borda); }
-.kpi.progresso .trilho .t-nao { background: var(--tv-nao-borda); }
-.kpi.progresso .trilho .t-abs { background: var(--tv-abs-borda); }
+.kpi.progresso .tv-trilho { height: 1.4vw; min-height: 14px; border-radius: 999px; background: var(--tv-cartao-2); overflow: hidden; display: flex; margin-top: .6vw; }
+.kpi.progresso .tv-trilho i { display: block; height: 100%; }
+.kpi.progresso .tv-trilho .t-sim { background: var(--tv-sim-borda); }
+.kpi.progresso .tv-trilho .t-nao { background: var(--tv-nao-borda); }
+.kpi.progresso .tv-trilho .t-abs { background: var(--tv-abs-borda); }
 
 .vot-corpo { display: grid; grid-template-columns: 26vw 1fr; gap: 2vw; min-height: 0; }
-.tv .placar { display: grid; gap: .8vw; grid-template-rows: repeat(3, minmax(0, 1fr)); min-height: 0; }
+.tv .tv-placar { display: grid; gap: .8vw; grid-template-rows: repeat(3, minmax(0, 1fr)); min-height: 0; }
 .tv .pl { min-height: 0; border-radius: var(--raio-lg); padding: .6vw 1.5vw; display: flex; align-items: center; justify-content: space-between; gap: 1vw; border: 2px solid; }
 .tv .pl .r { display: inline-flex; align-items: center; gap: .7vw; font-family: var(--display); font-weight: 700; font-size: clamp(1.2rem, 1.9vw, 3.2rem); }
 .tv .pl .r svg { width: 2vw; height: 2vw; min-width: 20px; min-height: 20px; }
@@ -149,6 +149,11 @@
 .tv .vt .vn { min-width: 0; line-height: 1.15; }
 .tv .vt .vn b { display: block; font-size: clamp(.9rem, 1.2vw, 2rem); font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tv .vt .vn span { font-family: var(--mono); font-size: clamp(.75rem, .85vw, 1.4rem); color: var(--palco-texto-2); }
+
+/* nominal sem nenhum voto ainda: o miolo não pode ficar um vazio com o placar num canto (mesmo tratamento da secreta) */
+.tv .nominal-vazio { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1vw; text-align: center; min-height: 0; background: var(--tv-cartao); border: 1px dashed var(--palco-linha); border-radius: var(--raio-lg); padding: 2vw; }
+.tv .nominal-vazio b { font-family: var(--display); font-weight: 800; font-size: clamp(1.6rem, 2.6vw, 4.4rem); color: #fff; }
+.tv .nominal-vazio span { font-size: clamp(1.1rem, 1.6vw, 2.8rem); color: var(--palco-texto-2); max-width: 34ch; line-height: 1.35; }
 
 /* secreta: o miolo inteiro vira UM cartão centrado — sem grade nominal nem placar por voto (§22.6), o espaço
    não pode sobrar vazio com a frase perdida num canto */

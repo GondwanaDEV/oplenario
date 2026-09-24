@@ -136,7 +136,7 @@ Dois achados que o plano corrige:
 - **3c. Porte:** view-model puro `lib/central-vista.ts` (testado) + `/inicio` renderiza a Central para a
   persona secretaria; o `TopoInterno` passa a abrir com "Central".
 
-### Fatia 4 — Modo TV, fase 2 — ✅ 4a e 4b implementadas (PR desta fatia); 4c segue bloqueada
+### Fatia 4 — Modo TV, fase 2 — ✅ 4a e 4b PR #27 + #28 (em produção 24/09/2026; o `migrate` ativa o Anunciar); 4c segue bloqueada
 
 > 4a: `ComposicaoMembroOut.partido` (do mandato que cobre a data da sessão) e `autor-texto` no resumo da matéria
 > da pauta. 4b: o anúncio é ato da Mesa gravado em `sessoes.item_anunciado` (mig 0080, append-only), com o
@@ -155,11 +155,21 @@ Dois achados que o plano corrige:
 - **4c. Foto do vereador:** upload no cadastro de vereadores, leitura autenticada, exibição na tribuna da
   TV e do telão (e no perfil público, se a Casa autorizar). Bloqueada pelas fotos da Câmara.
 
-### Fatia 5 — Roteiro do Elvis
+### Fatia 5 — Roteiro do Elvis — ✅ `docs/24-roteiro-do-operador/`
 
 Passo a passo de um dia de sessão, começando sempre pela Central: preparar (agendar, montar pauta,
 convocação) → conduzir (chamada, tribuna, votação, atos da Mesa, Modo TV) → fechar (encerrar, folha).
 Com capturas das telas reais.
+
+- **Entregue:** `docs/24-roteiro-do-operador/roteiro-do-elvis.html` — 13 passos + "se algo sair do roteiro",
+  18 telas reais em `telas/` (página real no `next dev`, API simulada, um "mundo" só: a 15ª Sessão Ordinária
+  de 24/09/2026). Publicado como página para o Elvis. `capturar.cjs` regera as telas quando a UI mudar.
+- **O roteiro achou dois buracos na Votação do `/conduzir`, consertados na mesma fatia:** o objeto em curso
+  aparecia com o tipo cru do fio (`projeto_lei 22/2026`) e o seletor nomeava a matéria por posição ("Ordem do
+  Dia · item 3"). Agora é "PL 22/2026 · Ordem do Dia", e a **matéria anunciada vem pré-escolhida** (o rito é
+  anunciar → discutir → votar a mesma matéria; a Mesa pode trocar, e um anúncio novo volta a pré-escolher).
+- **Achados que ficam registrados (não consertados aqui):** a folha mostra "Congelada por" com o id da
+  identidade, não o nome; a ata segue fora do sistema (Track IA).
 
 ## Verificação (por fatia)
 

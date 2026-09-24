@@ -20,6 +20,7 @@ function montar(over: {
   itens?: ItemPautaVotacao[];
   estado?: string;
   sessaoEstado?: string;
+  emApreciacaoItemId?: string | null;
 }) {
   useVotacaoMock.mockReturnValue({
     votacaoAberta: over.votacaoAberta ?? null,
@@ -30,7 +31,14 @@ function montar(over: {
     abrir,
     encerrar,
   });
-  return render(<PainelVotacao sessaoId="s1" token="tok" sessaoEstado={over.sessaoEstado ?? "aberta"} />);
+  return render(
+    <PainelVotacao
+      sessaoId="s1"
+      token="tok"
+      sessaoEstado={over.sessaoEstado ?? "aberta"}
+      emApreciacaoItemId={over.emApreciacaoItemId ?? null}
+    />,
+  );
 }
 
 afterEach(() => {
@@ -57,6 +65,48 @@ describe("PainelVotacao — abrir", () => {
         }),
       ),
     );
+  });
+
+  it("o seletor nomeia a matéria pela sigla quando a pauta traz o resumo", () => {
+    montar({
+      votacaoAberta: null,
+      itens: [{ id: "it3", tipoItem: "proposicao", proposicaoId: "p22", fase: "ordem_do_dia", ordem: 3, proposicao: { tipo: "projeto_lei", ano: 2026, sequencial: 22, ementa: "Energia solar" } }],
+    });
+    expect(screen.getByRole("option", { name: "PL 22/2026 · Ordem do Dia" })).toBeTruthy();
+  });
+
+  it("a matéria anunciada (em apreciação) vem pré-escolhida — Abrir votação direto", async () => {
+    montar({
+      votacaoAberta: null,
+      itens: [
+        { id: "it1", tipoItem: "proposicao", proposicaoId: "p1", fase: "ordem_do_dia", ordem: 1 },
+        { id: "it3", tipoItem: "proposicao", proposicaoId: "p22", fase: "ordem_do_dia", ordem: 3 },
+      ],
+      emApreciacaoItemId: "it3",
+    });
+    expect((screen.getByLabelText(/Objeto da votação/) as HTMLSelectElement).value).toBe("p22");
+    fireEvent.click(screen.getByRole("button", { name: /Abrir votação/ }));
+    await waitFor(() => expect(abrir).toHaveBeenCalledWith(expect.objectContaining({ objetoId: "p22", pautaItemId: "it3" })));
+  });
+
+  it("a Mesa pode trocar a matéria pré-escolhida", async () => {
+    montar({ votacaoAberta: null, emApreciacaoItemId: "it1", itens: [...itens, { id: "it9", tipoItem: "proposicao", proposicaoId: "p9", fase: "ordem_do_dia", ordem: 9 }] });
+    fireEvent.change(screen.getByLabelText(/Objeto da votação/), { target: { value: "p9" } });
+    fireEvent.click(screen.getByRole("button", { name: /Abrir votação/ }));
+    await waitFor(() => expect(abrir).toHaveBeenCalledWith(expect.objectContaining({ objetoId: "p9", pautaItemId: "it9" })));
+  });
+
+  it("um anúncio novo volta a pré-escolher, mesmo depois de a Mesa ter mexido no seletor", () => {
+    const doisItens: ItemPautaVotacao[] = [
+      { id: "it1", tipoItem: "proposicao", proposicaoId: "p1", fase: "ordem_do_dia", ordem: 1 },
+      { id: "it3", tipoItem: "proposicao", proposicaoId: "p22", fase: "ordem_do_dia", ordem: 3 },
+    ];
+    const { rerender } = montar({ votacaoAberta: null, itens: doisItens, emApreciacaoItemId: "it1" });
+    const sel = () => screen.getByLabelText(/Objeto da votação/) as HTMLSelectElement;
+    fireEvent.change(sel(), { target: { value: "" } });
+    expect(sel().value).toBe("");
+    rerender(<PainelVotacao sessaoId="s1" token="tok" sessaoEstado="aberta" emApreciacaoItemId="it3" />);
+    expect(sel().value).toBe("p22");
   });
 
   it("abrir sem escolher objeto mostra erro e não chama abrir()", async () => {
@@ -89,6 +139,12 @@ describe("PainelVotacao — encerrar", () => {
     expect(screen.queryByText(/Resultado declarado/i)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Encerrar votação/ }));
     await waitFor(() => expect(encerrar).toHaveBeenCalledWith(undefined));
+  });
+
+  it("o objeto em curso aparece pela sigla, nunca pelo tipo cru do fio", () => {
+    montar({ votacaoAberta: { ...vaNominal, proposicao: { tipo: "projeto_lei", ano: 2026, sequencial: 22, ementa: "Energia solar" } } });
+    expect(screen.getByText("PL 22/2026")).toBeTruthy();
+    expect(screen.queryByText(/projeto_lei/)).toBeNull();
   });
 
   it("votação simbólica: exige resultado — vazio bloqueia, escolhido dispara", async () => {

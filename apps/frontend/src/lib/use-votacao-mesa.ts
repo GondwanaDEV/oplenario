@@ -74,6 +74,7 @@ export interface ItemPautaVotacao {
   proposicaoId?: string | null;
   fase: string;
   ordem: number;
+  proposicao?: ProposicaoResumoVotacao | null;
 }
 
 export type EstadoDados = "carregando" | "pronto" | "erro";

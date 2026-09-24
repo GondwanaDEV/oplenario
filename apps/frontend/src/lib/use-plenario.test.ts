@@ -1,7 +1,12 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { renderHook, act, waitFor } from "@testing-library/react";
+import { renderHook, act, waitFor, cleanup } from "@testing-library/react";
 import { usePlenario, TIMEOUT_REBUSCA_MS } from "./use-plenario";
 import { numeroDoTelao } from "./plenario-reducer";
+
+// Sem `globals` no vitest, o RTL não desmonta sozinho: um hook de um teste anterior seguia montado, com o
+// relógio de 500ms REAL lendo o `Date.now()` FALSO do teste seguinte — num runner lento ele disparava a
+// periódica e chamava o `global.fetch` do teste corrente, somando `/quorum` que não eram dele (A3 no CI).
+afterEach(() => cleanup());
 
 // O ÚNICO hook de `lib/` que não tinha teste — e é o que carrega a costura de BORDA do quórum: o fetch em
 // paralelo ao SSE, o `camelizarChaves`, o cast sem validação, o guard de unmount e o tri-estado da falha.
