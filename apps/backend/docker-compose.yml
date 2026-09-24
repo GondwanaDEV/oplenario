@@ -30,14 +30,15 @@ services:
       retries: 12
 
   minio:
-    # Docker Hub REMOVEU o namespace `minio/*` (o repo `minio/minio` devolve 404 "object not found" na
-    # API de tags do Hub, enquanto `library/postgres` responde 200 — 15/09/2026). Era a unica imagem sem
-    # tag do arquivo (`minio/minio` = `:latest`), e o pull anonimo falhava com `pull access denied` —
-    # exatamente onde o 1o run de CI (commit f29102b) morreu. A imagem oficial vive em quay.io (mesmo
-    # registro ja' usado pelo keycloak abaixo, logo alcancavel no CI e na maquina de demo). TODO: fixar
-    # uma tag RELEASE.* exata assim que houver acesso ao registro p/ escolher uma verificada (o resto do
-    # arquivo pina versao; aqui ficou `:latest` porque foi o unico valor confirmavel sem puxar a imagem).
-    image: quay.io/minio/minio:latest
+    # A MinIO parou de publicar imagem da edicao comunitaria. Primeiro sumiu o namespace `minio/*` do Docker
+    # Hub (15/09/2026: API de tags -> 404, `pull access denied` no 1o run de CI); depois o `quay.io/minio/minio`
+    # passou a negar o pull anonimo (24/09/2026: `unauthorized: access to the requested resource is not
+    # authorized` no CI, com o keycloak do MESMO registro puxando normalmente). `pgsty/minio` e' o fork
+    # comunitario mantido pelo Pigsty, publicado no Docker Hub com tag versionada: na tag abaixo o binario
+    # ainda e' `minio`, o entrypoint prefixa `minio` quando o comando comeca com `server`, e a imagem traz o
+    # `curl` que o healthcheck usa (conferido no Dockerfile.goreleaser e no docker-entrypoint.sh da tag). Tag
+    # FIXADA (nunca `:latest`): o `master` do fork ja' renomeou o binario para `silo`.
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment: { MINIO_ROOT_USER: oplenario, MINIO_ROOT_PASSWORD: dev12345 }
