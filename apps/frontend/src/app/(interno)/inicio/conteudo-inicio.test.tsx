@@ -43,6 +43,12 @@ vi.mock("@/lib/use-sessoes", () => ({
   },
 }));
 
+// A Central da Casa tem teste próprio (central-da-casa.test.tsx) e IO próprio (useCentral); aqui só importa
+// QUEM a recebe e com qual token.
+vi.mock("./central-da-casa", () => ({
+  CentralDaCasa: ({ token }: { token: string | null }) => <main data-testid="central-da-casa">{token}</main>,
+}));
+
 vi.mock("../topo", () => ({
   TopoInterno: ({ area }: { area: string }) => <nav data-testid="topo-interno">{area}</nav>,
 }));
@@ -104,7 +110,7 @@ describe("ConteudoInicio — o topo é o menu da secretaria", () => {
     estado.papeis = ["secretario"];
     render(<ConteudoInicio />);
 
-    expect(screen.getByTestId("topo-interno").textContent).toBe("Início");
+    expect(screen.getByTestId("topo-interno").textContent).toBe("Central da Casa");
   });
 
   it("vereador NÃO recebe o topo da secretaria (o chrome dele é do grupo (vereador))", () => {
@@ -127,28 +133,29 @@ describe("ConteudoInicio — o topo é o menu da secretaria", () => {
 });
 
 describe("ConteudoInicio — a fiação dos dados", () => {
-  it("o token do useAuth chega ao useSessoes", () => {
+  it("secretaria recebe a Central da Casa com o token do useAuth — e não a home genérica", () => {
     estado.token = "tok-da-sessao";
-    estado.papeis = ["secretario"];
+    estado.papeis = ["secretario", "vereador"]; // acumula papéis: secretaria vence
+    render(<ConteudoInicio />);
+
+    expect(screen.getByTestId("central-da-casa").textContent).toBe("tok-da-sessao");
+    // A Central faz o próprio IO: a home genérica (e a busca dela) não roda junto.
+    expect(estado.tokenRecebido).toBeUndefined();
+    expect(screen.queryByRole("link", { name: /^Votar$/ })).toBeNull();
+  });
+
+  it("o token do useAuth chega ao useSessoes da home do vereador", () => {
+    estado.token = "tok-da-sessao";
+    estado.papeis = ["vereador"];
     render(<ConteudoInicio />);
 
     expect(estado.tokenRecebido).toBe("tok-da-sessao");
   });
 
-  it("as sessões buscadas chegam à derivação — a sessão viva vira o Comando da Mesa", () => {
-    estado.papeis = ["secretario"];
-    estado.sessoes = [ABERTA];
-    render(<ConteudoInicio />);
-
-    expect(screen.getByRole("link", { name: /Comando da Mesa/ }).getAttribute("href")).toBe(
-      "/sessoes/s-viva/conduzir",
-    );
-  });
-
   it("o estadoSessoes é REPASSADO, não engolido: com a busca em voo a tela não afirma que não há sessão", () => {
     // Se a fiação passasse um `estadoSessoes` fixo (ou omitisse o campo), este caso viraria "nenhuma
     // sessão agendada" — a tela mentiria com cara de certeza enquanto o fetch ainda está voando.
-    estado.papeis = ["secretario"];
+    estado.papeis = ["vereador"];
     estado.sessoes = null;
     estado.estadoSessoes = "carregando";
     const { container } = render(<ConteudoInicio />);
@@ -158,7 +165,7 @@ describe("ConteudoInicio — a fiação dos dados", () => {
   });
 
   it("erro ao carregar as sessões é dito, e é distinto de 'não há sessão'", () => {
-    estado.papeis = ["secretario"];
+    estado.papeis = ["vereador"];
     estado.sessoes = null;
     estado.estadoSessoes = "erro";
     render(<ConteudoInicio />);

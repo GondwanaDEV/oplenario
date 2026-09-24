@@ -3,5 +3,7 @@
 // fatia introduz o primeiro loop real de navegacao ida-e-volta (lista -> editor -> lista).
 export function comToken(href: string, token: string | null): string {
   if (!token) return href;
-  return `${href}?token=${encodeURIComponent(token)}`;
+  // href que já traz querystring (ex.: `/pauta-convocacao?sessao=…`, da Central da Casa) recebe `&`, não um
+  // segundo `?` — que faria o token virar parte do valor do parâmetro anterior.
+  return `${href}${href.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`;
 }
