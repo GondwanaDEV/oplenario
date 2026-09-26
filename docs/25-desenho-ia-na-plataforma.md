@@ -301,8 +301,9 @@ Sub-decisões (todas confirmadas):
   da transcrição; gravação via **OBS com transmissão ao YouTube**; boa qualidade de áudio.
 - Daouda: gov.br **só para assinatura** (não login do vereador); consulta LOM/RI **entra na V1**; LOM/RI são dados
   públicos e a solução é **multi-município** — nada especializado em uma Casa.
-- Ordem de funcionalidades provável depois do desenho: consulta LOM/RI → copiloto do requerimento (sobre a tela da
-  fatia 2a, PR #37) → ata-IA + leitura → resumo/busca.
+- Ordem de execução: ver `docs/26` (revisão 2) — base comum + **Faixa A** (áudio → ata-IA → leitura; índice →
+  busca; resumo — prioritária, é a feature-âncora de compra) e **Faixa B** (catálogo → consulta LOM/RI → copiloto do
+  requerimento → conferência) em paralelo; MCP externo pós-V1 atrás de gatilho.
 
 ## 10. Registro da sessão
 
