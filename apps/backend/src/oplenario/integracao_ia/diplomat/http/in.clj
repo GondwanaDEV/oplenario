@@ -57,6 +57,20 @@
                                     (:audio-hash r) (assoc "X-Conteudo-Sha256" (:audio-hash r)))
                          :body    (:stream r)}))))
 
+(defn- ata-handler
+  "A.6c: o texto de uma ata publicada, para a IA medir a revisao humana. Sessao secreta: 403 (a IA nunca redigiu ata
+  de sessao secreta; a trava e' a mesma do contexto)."
+  [ata-para-ia]
+  (fn [req]
+    (let [ente (adapters-in/id-de-caminho (get-in req [:path-params :ente-id]) "ente-id")
+          sid  (adapters-in/id-de-caminho (get-in req [:path-params :sessao-id]) "sessao-id")
+          v    (adapters-in/versao-de-caminho (get-in req [:path-params :versao]))
+          r    (ata-para-ia ente sid v)]
+      (cond
+        (nil? r)        (http/json-resposta 404 {:erro "ata nao encontrada"})
+        (= :restrita r) (http/json-resposta 403 {:erro "sessao sigilosa nao vai para a IA"})
+        :else           (http/json-resposta 200 (adapters-out/ata->wire r))))))
+
 (defn- receber-handler [repo-ia efeitos]
   (fn [req]
     (try
@@ -73,7 +87,8 @@
 
 (defn rotas
   "Fragmento de rotas da fronteira. `segredo` = OPLENARIO_IA_SEGREDO; os seams vem do host (rotas/montar)."
-  [{:keys [repo-integracao-ia segredo contexto-da-sessao abrir-gravacao registrar-transcricao registrar-rascunho-ata]}]
+  [{:keys [repo-integracao-ia segredo contexto-da-sessao abrir-gravacao registrar-transcricao registrar-rascunho-ata
+           ata-para-ia]}]
   (let [servico (exige-servico-ia segredo)]
     #{[(str logic/prefixo "/eventos") :get [servico (feed-handler repo-integracao-ia)]
        :route-name :integracao-ia/feed]
@@ -84,6 +99,9 @@
       [(str logic/prefixo "/entes/:ente-id/sessoes/:sessao-id/contexto") :get
        [servico (contexto-handler contexto-da-sessao)]
        :route-name :integracao-ia/contexto]
+      [(str logic/prefixo "/entes/:ente-id/sessoes/:sessao-id/atas/:versao") :get
+       [servico (ata-handler (or ata-para-ia (fn [_ _ _] nil)))]
+       :route-name :integracao-ia/ata]
       [(str logic/prefixo "/entes/:ente-id/gravacoes/:segmento-id/conteudo") :get
        [servico (conteudo-handler abrir-gravacao)]
        :route-name :integracao-ia/conteudo]}))

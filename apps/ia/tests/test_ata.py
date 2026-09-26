@@ -3,6 +3,7 @@ de Confiança, o trabalho `redigir_ata` de ponta a ponta contra o core falso e a
 
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -14,7 +15,8 @@ from oplenario_ia.armazem.porta import TranscricaoGuardada
 from oplenario_ia.ata import fake
 from oplenario_ia.ata.redacao import OPERACAO, blocos, pedido_de_ata, pontos_a_confirmar, texto_limpo
 from oplenario_ia.confianca.indisponivel import Indisponivel
-from oplenario_ia.confianca.registro import RegistroMemoria
+from oplenario_ia.confianca.metricas import por_ente_e_operacao
+from oplenario_ia.confianca.registro import RegistroMemoria, RevisaoHumana
 from oplenario_ia.config import Config
 from oplenario_ia.erros import Categoria, ErroIA
 from oplenario_ia.fronteira.cliente import ClienteCore
@@ -237,3 +239,112 @@ def test_core_le_o_rascunho_com_citacoes_texto_limpo_e_pontos_a_confirmar() -> N
     assert c.get(f"/v1/entes/{ENTE}/atas/rascunhos/nao-existe", headers=h).status_code == 404
     assert c.get(f"/v1/entes/{ENTE}/atas/rascunhos/{rid}").status_code == 401
     assert datetime.fromisoformat(b["criado-em"]).tzinfo == UTC
+
+
+# ---------- A.6c: a revisão humana volta ----------
+
+
+class CoreComAta(CoreFalso):
+    """O core falso que também serve a ata publicada (o texto que a secretaria publicou)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.ata_texto = ""
+        self.hash_informado: str | None = None
+
+    def __call__(self, req: httpx.Request) -> httpx.Response:
+        if "/atas/" in req.url.path:
+            h = "sha256:" + hashlib.sha256(self.ata_texto.encode()).hexdigest()
+            return httpx.Response(
+                200,
+                json={
+                    "versao": 1,
+                    "texto": self.ata_texto,
+                    "conteudo-sha256": self.hash_informado or h,
+                    "origem-redacao": "gerada_automaticamente",
+                },
+            )
+        return super().__call__(req)
+
+
+def evento_publicada(seq: int, rid: str, texto: str, ata: str = "a1", versao: int = 1) -> dict[str, object]:
+    return {
+        "seq": seq,
+        "ente-id": ENTE,
+        "tipo": "AtaRevisadaEPublicada",
+        "versao": 1,
+        "chave": f"AtaRevisadaEPublicada:v1:{ata}",
+        "criado-em": "2026-09-26T22:00:00Z",
+        "payload": {
+            "sessao-id": SID,
+            "rascunho-id": rid,
+            "versao-ata": versao,
+            "publicada-por": "p-marina",
+            "conteudo-sha256": "sha256:" + hashlib.sha256(texto.encode()).hexdigest(),
+            "conteudo-uri": f"/integracao/ia/v1/entes/{ENTE}/sessoes/{SID}/atas/{versao}",
+        },
+    }
+
+
+def com_rascunho() -> tuple[CoreComAta, Trabalhador, ArmazemMemoria, RegistroMemoria, str]:
+    core = CoreComAta()
+    arm, rel, reg = ArmazemMemoria(), Relogio(), RegistroMemoria()
+    t = Trabalhador(
+        ClienteCore("http://core", "seg", cliente=httpx.Client(transport=httpx.MockTransport(core))),
+        arm,
+        TranscritorFake(FRASES),
+        DiarizadorFake(VOZES),
+        nucleo=Nucleo(PortaFake({OPERACAO: fake.redigir}), reg, agora=rel),
+        agora=rel,
+    )
+    t.ciclo()
+    core.eventos.append(evento_ata(2))
+    t.ciclo()
+    return core, t, arm, reg, core.recebidos[-1]["payload"]["rascunho-id"]
+
+
+def test_ata_publicada_editada_vira_revisao_humana_com_a_proporcao() -> None:
+    core, t, arm, reg, rid = com_rascunho()
+    g = arm.rascunho(rid)
+    assert g is not None
+    final = texto_limpo(g.texto).replace("[confirmar: horário de encerramento]", "Eram 21h15.")
+    core.ata_texto = final
+    core.eventos.append(evento_publicada(3, rid, final))
+    assert t.ciclo() == 1
+    [rev] = [e for e in reg.eventos() if isinstance(e, RevisaoHumana)]
+    assert (rev.desfecho, rev.revisor, rev.operacao) == ("editado", "p-marina", OPERACAO)
+    assert rev.execucao_id == g.execucao_id, "a revisão aponta a execução que redigiu"
+    assert 0 < rev.proporcao_alterada < 0.2, "trocou só o ponto a confirmar"
+    m = por_ente_e_operacao(reg.eventos())[(ENTE, OPERACAO)]
+    assert (m.editados, m.taxa_aceitacao) == (1, 1.0)
+
+
+def test_publicada_sem_mudar_nada_e_aprovado_e_reentrega_nao_conta_duas_vezes() -> None:
+    core, t, arm, reg, rid = com_rascunho()
+    g = arm.rascunho(rid)
+    assert g is not None
+    core.ata_texto = texto_limpo(g.texto)
+    core.eventos.append(evento_publicada(3, rid, core.ata_texto))
+    core.eventos.append(evento_publicada(4, rid, core.ata_texto, ata="a1-reenviado"))  # mesma versão, chave outra
+    t.ciclo()
+    revs = [e for e in reg.eventos() if isinstance(e, RevisaoHumana)]
+    assert [(r.desfecho, r.proporcao_alterada) for r in revs] == [("aprovado", 0.0)]
+
+
+def test_texto_que_nao_bate_com_o_hash_nao_e_medido() -> None:
+    core, t, arm, reg, rid = com_rascunho()
+    core.ata_texto = "outro texto"
+    core.eventos.append(evento_publicada(3, rid, "o texto que foi congelado"))
+    t.ciclo()
+    assert not [e for e in reg.eventos() if isinstance(e, RevisaoHumana)]
+    [x] = [x for x in arm.trabalhos() if x["tipo"] == "registrar_revisao"]
+    assert x["estado"] == "pendente" and "hash" in x["erro"], "tenta de novo mais tarde; nunca mede texto errado"
+
+
+def test_rascunho_de_outro_satelite_desiste_sem_avisar() -> None:
+    core, t, arm, _, _ = com_rascunho()
+    core.eventos.append(evento_publicada(3, "70000000-0000-0000-0000-000000000007", "x"))
+    n = len(core.recebidos)
+    t.ciclo()
+    [x] = [x for x in arm.trabalhos() if x["tipo"] == "registrar_revisao"]
+    assert x["estado"] == "falhou" and len(core.recebidos) == n

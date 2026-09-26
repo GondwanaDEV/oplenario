@@ -159,6 +159,23 @@ class Nucleo:
         )
         return revisado
 
+    def registrar_revisao(
+        self, execucao_id: str, ente_id: str, operacao: str, revisor: str, desfecho: Desfecho, proporcao: float
+    ) -> None:
+        """A revisão que aconteceu FORA do satélite (a ata publicada no core, A.6c): o mesmo evento do registro, para a
+        taxa de aceitação por Casa e operação (§22.11.8) contar a ata como conta o resto."""
+        self._registro.anexar(
+            RevisaoHumana(
+                execucao_id=execucao_id,
+                instante=self._agora(),
+                ente_id=ente_id,
+                operacao=operacao,
+                revisor=revisor,
+                desfecho=desfecho,
+                proporcao_alterada=proporcao,
+            )
+        )
+
     def reportar_erro(self, artefato: Artefato, quem: str, categoria: CategoriaReporte) -> None:
         self._registro.anexar(
             ReporteErro(

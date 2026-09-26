@@ -157,7 +157,9 @@
     atribuir falas pelo Caminho C. nil = sessao inexistente no tenant. O SIGILO (secreta/restrito) e' decidido
     pelo chamador (host), que ve a sessao inteira.")
   (listar-transcricoes [this ente-id sessao-id] "Ponteiros de transcricao da sessao (mais recentes primeiro).")
-  (publicar-ata! [this ente-id m] "Faixa A / A.6: publica a proxima versao da ata (append-only, versao MAX+1).")
+  (publicar-ata! [this ente-id m]
+    "Faixa A / A.6: publica a proxima versao da ata (append-only, versao MAX+1) e emite `ata.publicada` na MESMA tx.")
+  (ata-versao [this ente-id sessao-id versao] "A.6c: a versao publicada (com texto), ou nil.")
   (ata-da-sessao [this ente-id sessao-id]
     "{:atual (com texto) :versoes (metadados) :rascunho (situacao do pedido de rascunho mais recente)} numa tx.")
   (solicitar-rascunho-ata! [this ente-id m]
@@ -521,7 +523,17 @@
   (listar-transcricoes [this ente-id sessao-id]
     (transacao this ente-id #(transcricao/listar-da-sessao % ente-id sessao-id)))
   (publicar-ata! [this ente-id m]
-    (transacao this ente-id #(ata/publicar! % (assoc m :ente-id ente-id))))
+    (transacao this ente-id
+      (fn [tx]
+        (let [r (ata/publicar! tx (assoc m :ente-id ente-id))]
+          (producers/emitir-ata-publicada! bus tx ente-id
+            (cond-> {:ata-id (:id r) :sessao-id (:sessao-id m) :versao (:versao r)
+                     :origem-redacao (:origem-redacao m) :publicada-por (:publicada-por m)
+                     :conteudo-sha256 (:conteudo-sha256 m)}
+              (:rascunho-id m) (assoc :rascunho-id (:rascunho-id m))))
+          r))))
+  (ata-versao [this ente-id sessao-id versao]
+    (transacao this ente-id #(ata/versao % ente-id sessao-id versao)))
   (ata-da-sessao [this ente-id sessao-id]
     (transacao this ente-id (fn [tx] {:atual    (ata/atual tx ente-id sessao-id)
                                       :versoes  (ata/listar-versoes tx ente-id sessao-id)

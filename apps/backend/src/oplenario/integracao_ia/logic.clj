@@ -51,11 +51,31 @@
              :sessao-id      (str sessao-id)
              :contexto-uri   (uri-contexto-sessao ente-id sessao-id)}})
 
+(defn uri-ata-publicada [ente-id sessao-id versao]
+  (str prefixo "/entes/" ente-id "/sessoes/" sessao-id "/atas/" versao))
+
+(defn- promover-ata-publicada
+  "`ata.publicada` -> `AtaRevisadaEPublicada` v1 (A.6c), SO' a que partiu de um rascunho da IA: e' o retorno da
+  revisao humana (§22.3.3) que a IA mede (aprovado/editado, proporcao alterada). Ata redigida pela Casa: nil."
+  [ente-id {:keys [ata-id sessao-id versao rascunho-id publicada-por conteudo-sha256]}]
+  (when rascunho-id
+    {:ente-id ente-id
+     :tipo    "AtaRevisadaEPublicada"
+     :versao  1
+     :chave   (str "AtaRevisadaEPublicada:v1:" ata-id)
+     :payload {:sessao-id       (str sessao-id)
+               :rascunho-id     (str rascunho-id)
+               :versao-ata      versao
+               :publicada-por   (str publicada-por)
+               :conteudo-sha256 conteudo-sha256
+               :conteudo-uri    (uri-ata-publicada ente-id sessao-id versao)}}))
+
 (def promocoes
   "tipo de dominio -> (fn [ente-id payload] -> evento de integracao | nil). FONTE UNICA do que atravessa."
   {"gravacao.segmento-vinculado" promover-gravacao-vinculada
    "gravacao.segmento-captado"   promover-gravacao-captada
-   "ata.rascunho-solicitado"     promover-ata-solicitada})
+   "ata.rascunho-solicitado"     promover-ata-solicitada
+   "ata.publicada"               promover-ata-publicada})
 
 (defn promover
   "O evento de integracao para um evento de dominio, ou nil (tipo nao promovido, ou conteudo restrito)."

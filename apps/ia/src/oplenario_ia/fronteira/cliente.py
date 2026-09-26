@@ -20,7 +20,7 @@ from typing import Any
 import httpx
 
 from oplenario_ia.erros import Categoria, ErroIA
-from oplenario_ia.fronteira.contrato import ContextoSessao, EventoParaCore, Feed, ReciboCore
+from oplenario_ia.fronteira.contrato import AtaPublicada, ContextoSessao, EventoParaCore, Feed, ReciboCore
 
 
 class Sigiloso(Exception):
@@ -70,6 +70,9 @@ class ClienteCore:
 
     def contexto(self, uri: str) -> ContextoSessao:
         return ContextoSessao.model_validate(self._pedir("GET", uri, "contexto").json())
+
+    def ata_publicada(self, uri: str) -> AtaPublicada:
+        return AtaPublicada.model_validate(self._pedir("GET", uri, "ata").json())
 
     def baixar(self, uri: str, destino: Path) -> str:
         """Baixa a gravação em streaming para `destino` e confere o sha256 que o core informa. Devolve o hash."""

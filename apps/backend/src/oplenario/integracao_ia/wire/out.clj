@@ -53,6 +53,14 @@
    [:segmentos [:sequential SegmentoContextoOut]]
    [:falas [:sequential FalaContextoOut]]])
 
+(def AtaPublicadaOut
+  "A.6c: o texto final de uma versao publicada da ata (a IA compara com o rascunho que redigiu)."
+  [:map {:closed true}
+   [:versao :int]
+   [:texto :string]
+   [:conteudo-sha256 :string]
+   [:origem-redacao :string]])
+
 (def ReciboEventoOut
   [:map {:closed true}
    [:chave :string]

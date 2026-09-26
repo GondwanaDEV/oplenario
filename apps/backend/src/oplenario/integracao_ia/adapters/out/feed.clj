@@ -46,3 +46,8 @@
 (defn recibo->wire [chave {:keys [aplicado]}]
   (validado wire/ReciboEventoOut {:chave chave :aplicado (boolean aplicado)}
             "recibo viola o contrato ReciboEventoOut (bug de servidor)"))
+
+(defn ata->wire [a]
+  (validado wire/AtaPublicadaOut {:versao (:versao a) :texto (:texto a) :conteudo-sha256 (:conteudo-sha256 a)
+                                  :origem-redacao (:origem-redacao a)}
+            "ata viola o contrato AtaPublicadaOut (bug de servidor)"))

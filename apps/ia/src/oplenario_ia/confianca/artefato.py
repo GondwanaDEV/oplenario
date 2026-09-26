@@ -34,6 +34,11 @@ class Artefato(BaseModel):
     texto_final: str | None = None
 
 
+def proporcao_alterada(rascunho: str, final: str) -> float:
+    """Quanto do rascunho a pessoa mudou (0 = nada, 1 = tudo): a mesma medida da revisão feita aqui e no core."""
+    return round(1 - SequenceMatcher(None, rascunho, final, autojunk=False).ratio(), 4)
+
+
 class TransicaoInvalida(ValueError):
     pass
 
@@ -47,7 +52,7 @@ def revisar(
     if desfecho == "editado":
         if texto_final is None or texto_final == artefato.texto:
             raise TransicaoInvalida("'editado' exige o texto final, diferente do rascunho")
-        proporcao = 1 - SequenceMatcher(None, artefato.texto, texto_final, autojunk=False).ratio()
+        proporcao = proporcao_alterada(artefato.texto, texto_final)
     elif desfecho == "aprovado":
         if texto_final is not None and texto_final != artefato.texto:
             raise TransicaoInvalida("texto mudou: isso é 'editado', não 'aprovado'")

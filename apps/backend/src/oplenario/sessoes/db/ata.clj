@@ -60,3 +60,11 @@
    (jdbc/execute-one! tx (sql/format {:select (conj meta-cols :texto) :from [:sessoes.ata]
                                       :where [:and [:= :ente_id ente-id] [:= :sessao_id sessao-id]]
                                       :order-by [[:versao :desc]] :limit 1}))))
+
+(defn versao
+  "A versao `versao` da ata da sessao, com o texto, ou nil."
+  [tx ente-id sessao-id versao]
+  (comum/linha->kebab
+   (jdbc/execute-one! tx (sql/format {:select (conj meta-cols :texto) :from [:sessoes.ata]
+                                      :where [:and [:= :ente_id ente-id] [:= :sessao_id sessao-id]
+                                              [:= :versao versao]]}))))

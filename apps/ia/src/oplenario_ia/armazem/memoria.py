@@ -13,6 +13,7 @@ from oplenario_ia.armazem.porta import (
     NovoRascunho,
     NovoTrabalho,
     RascunhoGuardado,
+    RevisaoAta,
     Trabalho,
     TranscricaoGuardada,
 )
@@ -26,6 +27,7 @@ class ArmazemMemoria:
         self._chaves: set[str] = set()
         self._transc: dict[str, TranscricaoGuardada] = {}
         self._rasc: dict[str, RascunhoGuardado] = {}
+        self._revisoes: dict[tuple[str, int], RevisaoAta] = {}
 
     def cursor(self) -> int:
         return self._cursor
@@ -110,6 +112,13 @@ class ArmazemMemoria:
 
     def rascunho(self, rascunho_id: str) -> RascunhoGuardado | None:
         return self._rasc.get(rascunho_id)
+
+    def registrar_revisao(self, revisao: RevisaoAta) -> bool:
+        k = (revisao.rascunho_id, revisao.versao_ata)
+        if k in self._revisoes:
+            return False
+        self._revisoes[k] = revisao
+        return True
 
     def trabalhos(self) -> list[dict[str, Any]]:
         return [{k: t[k] for k in ("id", "tipo", "chave", "estado", "tentativas", "erro")} for t in self._trab.values()]

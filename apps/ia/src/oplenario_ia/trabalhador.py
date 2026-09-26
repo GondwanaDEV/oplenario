@@ -6,6 +6,8 @@ Três tipos de trabalho na fila própria do satélite:
   transcrição e enfileira a notificação NA MESMA operação (reiniciar no meio não transcreve de novo).
 - `redigir_ata` (um por evento `AtaSolicitada`, A.6b): contexto + as transcrições guardadas aqui -> núcleo (filtro,
   porta, citação conferida, incerteza, registro); guarda o rascunho e enfileira `AtaRascunhoPronta` junto.
+- `registrar_revisao` (um por `AtaRevisadaEPublicada`, A.6c): lê a ata publicada, confere o hash e mede quanto a pessoa
+  mudou do rascunho — vira `RevisaoHumana` no registro (a taxa de aceitação da ata por Casa). Uma vez por versão.
 - `notificar`: entrega os eventos ao core (`Transcricao*`, `Ata*`); tenta até o core aceitar.
 
 Falhas seguem o §22.3.5: infraestrutura/sobrecarga tentam de novo com espera crescente (limite por tipo); entrada
@@ -14,6 +16,7 @@ falha na hora; sigilo (403 do core) DESCARTA o trabalho sem avisar ninguém — 
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import tempfile
 import time
@@ -28,16 +31,21 @@ from oplenario_ia.armazem.porta import (
     NovoRascunho,
     NovoTrabalho,
     RascunhoGuardado,
+    RevisaoAta,
     Trabalho,
     TranscricaoGuardada,
 )
-from oplenario_ia.ata.redacao import PROMPT_VERSAO, pedido_de_ata, pontos_a_confirmar
+from oplenario_ia.ata.redacao import OPERACAO as ATA_REDIGIR
+from oplenario_ia.ata.redacao import PROMPT_VERSAO, pedido_de_ata, pontos_a_confirmar, texto_limpo
+from oplenario_ia.confianca.artefato import proporcao_alterada
 from oplenario_ia.confianca.indisponivel import Indisponivel
+from oplenario_ia.confianca.registro import Desfecho
 from oplenario_ia.erros import Categoria, ErroIA
 from oplenario_ia.fronteira.cliente import ClienteCore, Sigiloso
 from oplenario_ia.fronteira.contrato import (
     AtaFalhouV1,
     AtaRascunhoProntaV1,
+    AtaRevisadaEPublicadaV1,
     AtaSolicitadaV1,
     EventoParaCore,
     GravacaoVinculadaV1,
@@ -50,7 +58,7 @@ from oplenario_ia.transcricao.servico import transcrever_segmento
 
 log = logging.getLogger("oplenario_ia.trabalhador")
 
-MAX_TENTATIVAS = {"transcrever": 5, "redigir_ata": 5, "notificar": 20}
+MAX_TENTATIVAS = {"transcrever": 5, "redigir_ata": 5, "registrar_revisao": 10, "notificar": 20}
 CATEGORIAS_DE_FALHA = {"infraestrutura", "sobrecarga", "entrada", "modelo"}  # 5 e 6 nunca viajam como falha
 ESPERA_BASE_S = 30.0
 ESPERA_MAX_S = 1800.0
@@ -92,6 +100,8 @@ class Trabalhador:
                 novos.append(
                     NovoTrabalho("transcrever", ev.chave, ev.ente_id, ev.payload | {"correlation-id": ev.chave})
                 )
+            elif (ev.tipo, ev.versao) == ("AtaRevisadaEPublicada", 1):
+                novos.append(NovoTrabalho("registrar_revisao", ev.chave, ev.ente_id, ev.payload))
             elif (ev.tipo, ev.versao) == ("AtaSolicitada", 1):
                 novos.append(
                     NovoTrabalho("redigir_ata", ev.chave, ev.ente_id, ev.payload | {"correlation-id": ev.chave})
@@ -111,6 +121,8 @@ class Trabalhador:
                 self._transcrever(t)
             elif t.tipo == "redigir_ata":
                 self._redigir_ata(t)
+            elif t.tipo == "registrar_revisao":
+                self._registrar_revisao(t)
             elif t.tipo == "notificar":
                 self.core.enviar(EventoParaCore.model_validate(t.payload))
                 self.armazem.concluir(t.id)
@@ -220,6 +232,31 @@ class Trabalhador:
             transcricoes=[x.id for x in transcricoes],
         )
         self.armazem.concluir_rascunho(t.id, novo, lambda g: self._aviso_ata_pronta(g, correlacao))
+
+    # ---------- a revisão humana (A.6c) ----------
+
+    def _registrar_revisao(self, t: Trabalho) -> None:
+        ev = AtaRevisadaEPublicadaV1.model_validate(t.payload)
+        g = self.armazem.rascunho(ev.rascunho_id)
+        if g is None or g.ente_id != t.ente_id:
+            raise ErroIA(Categoria.ENTRADA, "rascunho desconhecido neste satélite", retentavel=False)
+        ata = self.core.ata_publicada(ev.conteudo_uri)
+        obtido = "sha256:" + hashlib.sha256(ata.texto.encode("utf-8")).hexdigest()
+        if obtido != ev.conteudo_sha256 or ata.conteudo_sha256 != ev.conteudo_sha256:
+            # o texto lido não é o que foi congelado: nunca mede sobre texto errado (tenta de novo mais tarde)
+            raise ErroIA(Categoria.INFRAESTRUTURA, "ata: hash do texto não confere com o publicado", retentavel=True)
+        # mede contra o texto LIMPO (o que foi para o editor): marcas de citação não são edição da pessoa
+        limpo = texto_limpo(g.texto)
+        desfecho: Desfecho = "aprovado" if ata.texto == limpo else "editado"
+        proporcao = 0.0 if desfecho == "aprovado" else proporcao_alterada(limpo, ata.texto)
+        nova = self.armazem.registrar_revisao(
+            RevisaoAta(t.ente_id, g.id, ev.versao_ata, desfecho, proporcao, ev.conteudo_sha256, ev.publicada_por)
+        )
+        # reentrega (a mesma versão já medida) não conta duas vezes; perder a métrica num crash entre as duas linhas
+        # é preferível a contá-la em dobro
+        if nova and self.nucleo is not None:
+            self.nucleo.registrar_revisao(g.execucao_id, t.ente_id, ATA_REDIGIR, ev.publicada_por, desfecho, proporcao)
+        self.armazem.concluir(t.id)
 
     def _aviso_ata_pronta(self, g: RascunhoGuardado, correlacao: str) -> NovoTrabalho:
         payload = AtaRascunhoProntaV1(
