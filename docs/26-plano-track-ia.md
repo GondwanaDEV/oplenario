@@ -6,7 +6,7 @@
 > §18 (ordem de construção da V1) e `docs/11` (Track IA como plano próprio; marcos M3/M4). **Ler o `docs/25` antes.**
 >
 > **Status (26/09/2026):** plano proposto — **revisão 2** (a revisão 1 não respeitava o roadmap; ver §7).
-> **"Confirmo" do Daouda dado com o merge do PR #38 (26/09/2026)**; desenho consolidado no doc-mestre v1.46 (§22.11). **Base comum (0.1–0.5) entregue** — `apps/ia/`, ADR-0006, [PR #42](https://github.com/GondwanaDEV/oplenario/pull/42) (branch `claude/track-ia-base`). Próximo: Faixas A e B em paralelo.
+> **"Confirmo" do Daouda dado com o merge do PR #38 (26/09/2026)**; desenho consolidado no doc-mestre v1.46 (§22.11). **Base comum (0.1–0.5) entregue** — `apps/ia/`, ADR-0006, [PR #42](https://github.com/GondwanaDEV/oplenario/pull/42) (branch `claude/track-ia-base`). **Faixa A:** A.2 captação na main ([PR #43](https://github.com/GondwanaDEV/oplenario/pull/43)); A.3 transcrição + Caminho C + fronteira core↔IA (ADR-0008) em PR. A.1 (medir com áudio real) segue esperando o áudio de Baturité.
 > **Branch da frente:** `claude/track-ia` (aberta de `main` em 26/09/2026 com o desenho e este plano; as fatias
 > seguem o trilho "uma branch por frente").
 >

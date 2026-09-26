@@ -1,0 +1,27 @@
+/* Transcrição da sessão (Faixa A / A.3). Chassi (topo/envelope/marca/tema) vem de globals; aqui só esta
+   superfície. Nenhuma cor nova: `--texto`/`--texto-2`/`--aviso-texto`/`--acento-texto`/`--linha`/`--surface`
+   já medidos AA no chassi. Leitura longa: medida de linha contida (68ch) e altura de linha generosa. */
+.sessao-meta { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+.sessao-meta .tipo { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); }
+
+.transc { padding-top: clamp(1.2rem, 3vw, 2rem); padding-bottom: 4rem; }
+.transc-cabeca h1 {
+  font-family: var(--display); font-weight: 700; font-size: var(--t-28); letter-spacing: -0.02em;
+  color: var(--texto); margin: 0 0 0.35rem; line-height: 1.15;
+}
+.transc-sub { margin: 0; color: var(--texto-2); max-width: 64ch; line-height: 1.55; }
+.transc-vazia { margin-top: 1.5rem; color: var(--texto-2); max-width: 64ch; }
+
+.transc-gravacao { margin-top: 1.6rem; padding: 1.1rem 1.2rem; border: 1px solid var(--linha); border-radius: 12px; background: var(--surface); min-width: 0; }
+.transc-gravacao h2 { margin: 0 0 0.3rem; font-size: var(--t-16); color: var(--texto); }
+.transc-situacao { margin: 0; font-family: var(--mono); font-size: var(--t-12); letter-spacing: 0.03em; color: var(--texto-2); }
+.transc-falha { margin: 0.6rem 0 0; color: var(--acento-texto); font-family: inherit; font-size: var(--t-14, 0.875rem); letter-spacing: 0; }
+.transc-aviso { margin: 0.8rem 0 0; padding: 0.6rem 0.8rem; border-left: 3px solid var(--aviso-texto); background: var(--surface-2); color: var(--texto); font-size: var(--t-13); line-height: 1.5; }
+
+.transc-falas { list-style: none; margin: 1rem 0 0; padding: 0; display: grid; gap: 1rem; }
+.transc-fala { min-width: 0; }
+.transc-quem { margin: 0 0 0.2rem; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 0.6rem; }
+.transc-orador { font-weight: 700; color: var(--texto); }
+.transc-sem-nome { font-weight: 600; font-style: italic; color: var(--texto-2); }
+.transc-tempo { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+.transc-texto { margin: 0; color: var(--texto); line-height: 1.65; max-width: 68ch; overflow-wrap: anywhere; }

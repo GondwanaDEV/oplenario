@@ -13,6 +13,7 @@
             [oplenario.sessoes.db.pauta :as pauta]
             [oplenario.sessoes.db.presenca :as presenca]
             [oplenario.sessoes.db.sessao :as sessao]
+            [oplenario.sessoes.db.transcricao :as transcricao]
             [oplenario.sessoes.db.tribuna :as tribuna]
             [oplenario.sessoes.logic :as logic]
             [oplenario.sessoes.relacoes.presenca :as rel-presenca])
@@ -149,6 +150,12 @@
   (vincular-segmento! [this ente-id m] "Vincula um segmento a sessao (uma-vez, CAS). `forcar-acesso-restrito` (sigilo §22.6) eleva acesso_restrito; emite gravacao.segmento-vinculado (core->IA) com o sigilo definitivo, atomico.")
   (buscar-segmento [this ente-id id])
   (listar-segmentos-da-sessao [this ente-id sessao-id] "Segmentos da sessao em ordem cronologica (read-model).")
+  (contexto-para-ia [this ente-id sessao-id]
+    "Faixa A / A.3 (ADR-0008): {:sessao :segmentos :falas} numa tx do tenant — o que a IA le para transcrever e
+    atribuir falas pelo Caminho C. nil = sessao inexistente no tenant. O SIGILO (secreta/restrito) e' decidido
+    pelo chamador (host), que ve a sessao inteira.")
+  (listar-transcricoes [this ente-id sessao-id] "Ponteiros de transcricao da sessao (mais recentes primeiro).")
+  (buscar-transcricao [this ente-id sessao-id transcricao-id] "O ponteiro concluido desta sessao, ou nil.")
   (listar-gravacoes-pendentes [this ente-id limite]
     "Faixa A / A.2: {:segmentos [...sem sessao, mais recentes primeiro] :sessoes [...candidatas a vinculo, na
     janela das gravacoes (1 dia)]}, numa tx. A sugestao (qual sessao) e' pura, no controller.")
@@ -495,6 +502,17 @@
           r))))
   (buscar-segmento [this ente-id id] (transacao this ente-id #(gravacao/buscar % ente-id id)))
   (listar-segmentos-da-sessao [this ente-id sessao-id] (transacao this ente-id #(gravacao/listar-segmentos-da-sessao % ente-id sessao-id)))
+  (contexto-para-ia [this ente-id sessao-id]
+    (transacao this ente-id
+      (fn [tx]
+        (when-let [s (sessao/buscar tx ente-id sessao-id)]
+          {:sessao    s
+           :segmentos (gravacao/listar-segmentos-da-sessao tx ente-id sessao-id)
+           :falas     (tribuna/listar-falas-da-sessao tx ente-id sessao-id)}))))
+  (listar-transcricoes [this ente-id sessao-id]
+    (transacao this ente-id #(transcricao/listar-da-sessao % ente-id sessao-id)))
+  (buscar-transcricao [this ente-id sessao-id transcricao-id]
+    (transacao this ente-id #(transcricao/buscar-da-sessao % ente-id sessao-id transcricao-id)))
   (listar-gravacoes-pendentes [this ente-id limite]
     (transacao this ente-id
       (fn [tx] {:segmentos (gravacao/listar-pendentes tx ente-id limite)
@@ -653,3 +671,10 @@
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."
   []
   (->RepoSessoesPg nil nil))
+
+(defn registrar-transcricao-em-tx!
+  "Faixa A / A.3 (ADR-0008): grava o ponteiro da transcricao NA TX DO CHAMADOR (a caixa de entrada da fronteira
+  com a IA registra o evento e aplica o efeito na mesma tx do tenant — dedup e efeito sao atomicos). Mesmo
+  molde de `identidade-do-vereador-em-tx` (fn de topo sobre tx, injetada pelo host)."
+  [tx ente-id m]
+  (transcricao/registrar! tx (assoc m :ente-id ente-id)))

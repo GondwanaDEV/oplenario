@@ -12,18 +12,26 @@ dependencies = [
   "fastapi>=0.115,<1",
   "uvicorn>=0.30,<1",
   "anthropic>=1.8,<2",
+  "httpx>=0.27,<1",                # cliente do core (ADR-0008)
+  "psycopg[binary]>=3.2,<4",       # armazenamento próprio do satélite (schema `ia`)
 ]
 
 [project.optional-dependencies]
+# ASR + diarização self-host (Faixa A / A.3). Pesado: fora do CI e do padrão de deploy, que usam o fake.
+asr = [
+  "sherpa-onnx>=1.13,<2",
+  "numpy>=2,<3",
+  "imageio-ffmpeg>=0.6,<1",
+]
 dev = [
   "pytest>=8",
-  "httpx>=0.27",     # só para o TestClient do FastAPI; o SDK anthropic 1.x traz o próprio httpx2
   "ruff>=0.16,<0.17",  # fixados: formatter/lint novos mudariam o veredito do CI sem mudança de código
   "mypy>=2.3,<3",
 ]
 
 [project.scripts]
 oplenario-ia-avaliar = "oplenario_ia.avaliacao.cli:main"
+oplenario-ia-trabalhador = "oplenario_ia.trabalhador_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -49,3 +57,7 @@ python_version = "3.12"
 strict = true
 files = ["src"]
 plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["sherpa_onnx", "imageio_ffmpeg", "numpy"]
+ignore_missing_imports = true

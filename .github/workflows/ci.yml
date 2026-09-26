@@ -299,6 +299,19 @@ jobs:
     defaults:
       run:
         working-directory: apps/ia
+    # ADR-0008: o armazenamento proprio do satelite (schema `ia`). Banco descartavel so' para a bateria de contrato.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ia
+          POSTGRES_PASSWORD: ia
+          POSTGRES_DB: ia_teste
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ia" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      OPLENARIO_IA_DATABASE_URL_TESTE: postgresql://ia:ia@localhost:5432/ia_teste
     steps:
       - uses: actions/checkout@v4
 

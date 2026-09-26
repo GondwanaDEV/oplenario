@@ -330,6 +330,46 @@
   [:map {:closed true}
    [:segmentos [:sequential GravacaoPendenteOut]]])
 
+(def TranscricaoPonteiroOut
+  "Faixa A / A.3: a situacao de UMA transcricao de um segmento da sessao (o texto vive na IA). Metricas e modelos
+  usados aparecem (proveniencia, §22.3.5); na falha, a categoria do §22.3.5 e o detalhe."
+  [:map {:closed true}
+   [:id :string]
+   [:segmento-id :string]
+   [:situacao [:enum "concluida" "falhou"]]
+   [:transcricao-id {:optional true} [:maybe :string]]
+   [:versao {:optional true} [:maybe :int]]
+   [:idioma {:optional true} [:maybe :string]]
+   [:duracao-s {:optional true} [:maybe :double]]
+   [:n-trechos {:optional true} [:maybe :int]]
+   [:cobertura-atribuida {:optional true} [:maybe :double]]
+   [:modelo-asr {:optional true} [:maybe :string]]
+   [:modelo-diarizacao {:optional true} [:maybe :string]]
+   [:categoria-erro {:optional true} [:maybe :string]]
+   [:detalhe-erro {:optional true} [:maybe :string]]
+   [:retentavel {:optional true} [:maybe :boolean]]
+   [:ocorrido-em :string]])
+
+(def TranscricoesOut
+  [:map {:closed true}
+   [:sessao-id :string]
+   [:itens [:sequential TranscricaoPonteiroOut]]])
+
+(def TrechoTranscricaoOut
+  "Uma frase da transcricao. `orador-nome` nil = o Caminho C nao soube quem falou (melhor 'nao sei' do que a fala na
+  boca da pessoa errada). Tempos em segundos desde o inicio da gravacao."
+  [:map {:closed true}
+   [:inicio :double]
+   [:fim :double]
+   [:texto :string]
+   [:orador-id {:optional true} [:maybe :string]]
+   [:orador-nome {:optional true} [:maybe :string]]])
+
+(def TranscricaoConteudoOut
+  [:map {:closed true}
+   [:ponteiro TranscricaoPonteiroOut]
+   [:trechos [:sequential TrechoTranscricaoOut]]])
+
 (def VinculoGravacaoOut
   "Recibo da VINCULACAO de um segmento a uma sessao (resposta 201 de POST /sessoes/:id/gravacao/:seg-id/vincular,
   Opcao A pos-upload). Carrega o `id` do segmento + a `sessao-id` a que foi vinculado. NAO expoe internos

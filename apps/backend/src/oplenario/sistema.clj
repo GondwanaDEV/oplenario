@@ -9,6 +9,8 @@
             [oplenario.compliance.components.repositorio :as repo-compliance]
             [oplenario.compliance.relacoes :as rel-compliance]
             [oplenario.identidade.components.repositorio :as repo-identidade]
+            [oplenario.integracao-ia.components.repositorio :as repo-integracao-ia]
+            [oplenario.integracao-ia.diplomat.consumers :as integracao-ia-consumers]
             [oplenario.identidade.relacoes.identidade :as rel-identidade]
             [oplenario.legislativo.components.repositorio :as repo-legislativo]
             [oplenario.legislativo.diplomat.consumers :as legislativo-consumers]
@@ -77,7 +79,10 @@
         registro    (-> (tr-consumer/registro canal-store)
                         (transparencia-consumers/registrar)
                         (paineis-consumers/registrar)
-                        (legislativo-consumers/registrar resolver-identidade-do-vereador))]
+                        (legislativo-consumers/registrar resolver-identidade-do-vereador)
+                        ;; Faixa A / A.3 (ADR-0008): a fronteira com a IA promove eventos de dominio escolhidos
+                        ;; (gravacao vinculada) a eventos de integracao no feed que o satelite puxa.
+                        (integracao-ia-consumers/registrar))]
    (component/system-map
    :datasource      (datasource/datasource config)
    ;; EventBus (producer): grava no shared.outbox na tx do ato. Stateless (sem Lifecycle); os Repo que
@@ -119,6 +124,8 @@
    ;; F7 (paineis): SO LEITURA (o painel projeta por consumer/tx do relay, nao por este Repo) — recebe so
    ;; :datasource via `using`, sem :bus (o modulo nao emite eventos proprios nesta fatia).
    :repo-paineis    (component/using (repo-paineis/repositorio) [:datasource])
+   ;; Faixa A / A.3 (ADR-0008): o feed core->IA e a caixa de entrada IA->core. So' :datasource.
+   :repo-integracao-ia (component/using (repo-integracao-ia/repositorio) [:datasource])
    ;; o host É a fronteira (§22.10): importa as `relacoes` dos módulos e as injeta no registry do motor.
    ;; O motor chama por nome (resolver-para), nunca importa o módulo. Sem :datasource — a `tx` do tenant
    ;; entra por-chamada (quem avalia abre a tx via Repo). O `start` roda o assert de costura (fail-closed).
@@ -165,4 +172,4 @@
                          (http-servidor/servidor-http config rotas/montar)
                          [:idp :repo-identidade :repo-sessoes :repo-legislativo :repo-compliance
                           :repo-participacao :repo-transparencia :repo-paineis :repo-cadastros
-                          :canal-store :objeto-store :registro-fatos])))
+                          :canal-store :objeto-store :registro-fatos :repo-integracao-ia])))

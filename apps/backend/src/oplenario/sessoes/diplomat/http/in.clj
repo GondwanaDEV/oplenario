@@ -770,6 +770,33 @@
     (http/json-resposta 200 (adapters-out-grav/pendentes->wire
                              (controllers/gravacoes-pendentes repo-sessoes (:ator req))))))
 
+(defn- transcricoes-handler
+  "GET /sessoes/:id/transcricoes (Faixa A / A.3): a situacao da transcricao de cada gravacao da sessao."
+  [repo-sessoes]
+  (fn [req]
+    (let [ator (:ator req)
+          id   (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [r (controllers/transcricoes-da-sessao repo-sessoes ator id)]
+        (http/json-resposta 200 (adapters-out-grav/transcricoes->wire r))
+        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+
+(defn- transcricao-handler
+  "GET /sessoes/:id/transcricoes/:tid (Faixa A / A.3): o texto, lido da IA. IA fora -> 503 com a mensagem R-IA-1:
+  a tela diz para seguir sem a IA, nunca 'erro interno'."
+  [repo-sessoes ler-transcricao]
+  (fn [req]
+    (let [ator (:ator req)
+          id   (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          tid  (adapters-in/id-param->uuid (get-in req [:path-params :tid]))]
+      (try
+        (if-let [t (controllers/transcricao-da-sessao repo-sessoes ler-transcricao ator id tid)]
+          (http/json-resposta 200 (adapters-out-grav/transcricao-conteudo->wire t))
+          (http/json-resposta 404 {:erro "transcricao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :ia/indisponivel (:tipo (ex-data e)))
+            (http/json-resposta 503 {:erro "A IA está indisponível agora. Siga pela tela — a gravação está guardada."})
+            (throw e)))))))
+
 (defn- listar-gravacoes-handler
   "GET /sessoes/:id/gravacao. adapters/in coage o :id; controller carrega+autoriza a sessao e lista os
   segmentos vinculados; adapters/out projeta (filtra internos). nil (sessao inexistente) -> 404."
@@ -961,7 +988,8 @@
   controller) — EXCETO `/chamada`, `/assiduidade` e as quatro rotas da FOLHA, que exigem 'secretario' na
   borda (leitura operacional da Mesa, nao um read-model publico)."
   [{:keys [auth repo-sessoes objeto-store resolver-vereador relogio roster-da-casa dados-da-casa
-           serializador-folha renderizador-pdf roster-da-casa-em-datas resumir-proposicoes nome-na-casa]}]
+           serializador-folha renderizador-pdf roster-da-casa-em-datas resumir-proposicoes nome-na-casa
+           ler-transcricao]}]
   ;; ASSERCAO DE BOOT do seam — o carry que as revisoes das Fatias 1 e 2 registraram DUAS vezes e que a
   ;; Fatia 3, que e' quem finalmente destrutura a chave, nao tinha. O mapa que `rotas.clj` passa aqui NAO e'
   ;; `:closed`: uma chave com o nome errado (`:roster-da-casa-em-data`, um typo num refactor) destruturaria
@@ -1132,6 +1160,15 @@
      [auth (it/exige-papel "secretario") (anunciar-item-handler repo-sessoes relogio)]
      :route-name :sessoes/anunciar-item-pauta]
     ["/sessoes/:id/gravacao" :get [auth (listar-gravacoes-handler repo-sessoes)] :route-name :sessoes/listar-gravacoes]
+    ;; Faixa A / A.3 — a transcricao (ADR-0008). Leitura operacional da secretaria; o texto vem da IA pelo seam
+    ;; `ler-transcricao` (host). Sem o seam (testes de outras verticais), a leitura do texto responde 503 (R-IA-1).
+    ["/sessoes/:id/transcricoes" :get [auth (it/exige-papel "secretario") (transcricoes-handler repo-sessoes)]
+     :route-name :sessoes/transcricoes]
+    ["/sessoes/:id/transcricoes/:tid" :get
+     [auth (it/exige-papel "secretario")
+      (transcricao-handler repo-sessoes (or ler-transcricao
+                                            (fn [_ _] (throw (ex-info "sem IA" {:tipo :ia/indisponivel})))))]
+     :route-name :sessoes/transcricao]
     ["/sessoes/:id/gravacao/:seg-id/vincular" :post
      [auth (it/exige-papel "secretario") it/corpo-json (vincular-gravacao-handler repo-sessoes)]
      :route-name :sessoes/vincular-gravacao]
