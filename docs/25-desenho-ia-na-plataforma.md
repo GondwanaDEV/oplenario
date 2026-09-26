@@ -43,8 +43,8 @@ JSON Schema para ferramentas.
 | 1 | Lugar da IA | **CONFIRMADO — B**: produz artefatos **e** age sobre a plataforma |
 | 2 | Catálogo de ações | **CONFIRMADO — B** + 2 regras (§6) |
 | 3 | Identidade do agente | **CONFIRMADO** — 3.1 (b) + 3.2 a 3.5 (§7) |
-| 4 | Fronteira do ato | Direção confirmada; **sub-decisões em debate (§7a)** |
-| 5 | Onde roda o agente | Direção confirmada (satélite de IA, chamando o core pelo catálogo; core nunca embute modelo); a abrir |
+| 4 | Fronteira do ato | **CONFIRMADO** — 4.2 (B) + 4.1, 4.3–4.6 (§7a) |
+| 5 | Onde roda o agente | Direção confirmada (satélite de IA, chamando o core pelo catálogo; core nunca embute modelo); **sub-decisões em debate (§7b)** |
 | 6 | MCP externo | A abrir — explicação no §8 |
 | 7 | Conhecimento (LOM/RI/leis em camadas por município) | Direção confirmada; a abrir |
 | 8 | Qualidade e custo | Direção confirmada; a abrir |
@@ -114,7 +114,7 @@ Sub-decisões (todas confirmadas):
   regra de hoje para as telas (acesso a dado pessoal/sigiloso vai ao audit), acrescida da identificação do agente;
   o registro completo de ferramentas chamadas por execução fica no log de inferência do satélite (§22.3.4).
 
-## 7a. Eixo 4 — Fronteira do ato · EM DEBATE
+## 7a. Eixo 4 — Fronteira do ato · CONFIRMADO (26/09/2026)
 
 Direção confirmada: o que o agente faz sozinho × o que só uma pessoa faz; defesa contra instruções escondidas em
 texto de terceiros. As três classes vêm do catálogo (Eixo 2): `leitura`, `rascunho`, `ato`.
@@ -126,7 +126,7 @@ texto de terceiros. As três classes vêm do catálogo (Eixo 2): `leitura`, `ras
 - **4.2 O que o agente pode fazer com um `ato`.** (A) nunca — prepara e manda a pessoa para a tela · (B) cria uma
   **proposta de ato** com o conteúdo exato; a pessoa confirma **na interface da própria plataforma** (não no chat
   do agente), com o mesmo ritual da tela (assinatura em 2 toques, step-up quando houver) · (C) executa sozinho
-  sob pré-autorização ("pode protocolar requerimento de informação"). *(Recomendado: B.)* Confirmar fora do canal
+  sob pré-autorização ("pode protocolar requerimento de informação"). **Confirmado: B.** Confirmar fora do canal
   do agente impede que um agente (ou um LLM externo, Eixo 6) descreva uma coisa e assine outra.
 - **4.3 Atos que o agente nem propõe** (pessoais e intransferíveis): **voto**, **registro de presença** e
   **condução da sessão ao vivo** (abrir/encerrar votação, conceder tempo). Continuam só pela tela, pela pessoa.
@@ -143,6 +143,37 @@ texto de terceiros. As três classes vêm do catálogo (Eixo 2): `leitura`, `ras
   3. *Delimitação no prompt* (conteúdo de terceiro entre marcadores, tratado como dado) — reforço, nunca a defesa.
 - **4.6 Ligação com o que existe:** a pessoa que confirma um ato vindo de rascunho de IA assume a autoria
   ("revisado e assinado por"), como a Camada de Confiança já exige; R-IA-1 continua — sem IA, a tela faz tudo.
+
+## 7b. Eixo 5 — Onde roda o agente · EM DEBATE
+
+Direção confirmada: o laço do agente roda no **satélite de IA** (Python, §22.2) e chama o core **pelo catálogo**; o
+core nunca embute modelo. Sub-decisões propostas:
+
+- **5.1 Por onde o satélite chama o core.** (a) API HTTP interna própria · (b) **o mesmo servidor MCP** que os
+  clientes de fora usarão (Eixo 6), com outro login e outro conjunto de ferramentas. *(Recomendado: b — um caminho
+  só; o MCP externo deixa de ser um produto à parte e vira "o mesmo, aberto para fora".)* O servidor MCP mora no
+  **core, como mais um adaptador de entrada** (Inv. 5), ao lado do HTTP; cada módulo declara as entradas do
+  catálogo que são suas. Vira **ADR** na implementação (nova peça na silhueta do ADR-0001).
+- **5.2 Por onde a tela fala com o agente.** (a) navegador → satélite direto · (b) **navegador → core → satélite**.
+  *(Recomendado: b.)* O core emite o token delegado (3.4), aplica tenancy, limite por Casa e auditoria num lugar
+  só, e devolve a resposta em **SSE**, que já é o protocolo de streaming (§22.3.2, §22.6 eixo G). O satélite nunca
+  fica exposto ao navegador.
+- **5.3 Onde fica o registro de cada execução.** A conversa/execução (mensagens, ferramentas chamadas) é artefato
+  técnico do **satélite** (como o log de inferência, §22.3.4). O que tem valor institucional mora no **core**:
+  rascunhos, propostas de ato (4.2) e auditoria (3.5). Retenção da conversa (contém dado pessoal) = `[GAP]`
+  LGPD, junto com os demais prazos de retenção.
+- **5.4 O que é um agente.** Um agente = **definição versionada** (instruções + conjunto de ferramentas + classe de
+  modelo + avaliações do Eixo 8), mantida pelo produto no satélite, com `agente_id` (o que aparece em "via agente
+  X"). Na V1 a Casa **liga/desliga e parametriza**; não escreve agentes próprios.
+- **5.5 Como o laço é construído.** Laço **próprio e fino** sobre a porta de inferência (que normaliza a chamada
+  de ferramentas entre fornecedores) + cliente MCP oficial. **Sem framework pesado de agentes** preso a um
+  fornecedor — a porta vendor-agnóstica e o failover (Eixos 10 e 13) exigem trocar de fornecedor sem reescrever.
+- **5.6 Falha no meio (reuso do Eixo 13, sem regra nova).** Agente **interativo** que perde o fornecedor não troca
+  no meio: encerra com "IA indisponível, siga pela tela" (R-IA-1). Agente **institucional** (assíncrono, 3.1 b)
+  recomeça a execução inteira no secundário sob a mesma chave de dedup; **nunca costura dois fornecedores**.
+- **5.7 Como cada tipo de agente dispara** (topologia do §22.3.1, sem regra nova): interativo = streaming SSE a
+  partir da tela; institucional = fila, disparado por **evento de integração** que já existe (ex.:
+  `ProposicaoProtocolada` → conferência contra LOM/RI).
 
 ## 8. Eixo 6 — MCP externo · explicação (a abrir)
 
@@ -171,5 +202,6 @@ consultas**; (3) ações com efeito.
 
 | Data | O quê |
 |---|---|
+| 26/09/2026 | Eixo 4 CONFIRMADO (4.2 B + demais); Eixo 5 aberto em sub-decisões |
 | 26/09/2026 | Eixo 3 CONFIRMADO (3.1 b + 3.2–3.5); Eixo 4 aberto em sub-decisões |
 | 26/09/2026 | Sessão aberta; 8 eixos definidos; Eixo 1 e Eixo 2 CONFIRMADOS (B); direção dos Eixos 3, 4, 5, 7, 8 confirmada; Eixo 3 aberto em sub-decisões |
