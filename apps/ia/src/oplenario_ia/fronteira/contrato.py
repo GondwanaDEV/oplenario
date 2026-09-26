@@ -50,6 +50,24 @@ class AtaSolicitadaV1(Fio):
     contexto_uri: str
 
 
+class AtaRevisadaEPublicadaV1(Fio):
+    """A secretaria publicou uma ata que partiu de um rascunho nosso (A.6c): a revisão humana volta para medir."""
+
+    sessao_id: str
+    rascunho_id: str
+    versao_ata: int = Field(ge=1)
+    publicada_por: str
+    conteudo_sha256: str
+    conteudo_uri: str
+
+
+class AtaPublicada(Fio):
+    versao: int
+    texto: str
+    conteudo_sha256: str
+    origem_redacao: str
+
+
 class SessaoContexto(Fio):
     id: str
     tipo_sessao: str

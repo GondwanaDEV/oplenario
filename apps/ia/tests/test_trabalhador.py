@@ -220,7 +220,7 @@ def test_core_fora_ao_avisar_nao_transcreve_de_novo() -> None:
 
 def test_evento_desconhecido_no_feed_e_ignorado_e_o_cursor_anda() -> None:
     core = CoreFalso()
-    core.eventos = [CoreFalso.evento(1) | {"tipo": "AtaRevisadaEPublicada"}]
+    core.eventos = [CoreFalso.evento(1) | {"tipo": "ResumoCidadaoSolicitado"}]
     t, arm, _ = montar(core)
     assert t.ciclo() == 0
     assert arm.cursor() == 1

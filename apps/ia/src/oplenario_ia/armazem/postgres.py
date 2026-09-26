@@ -17,6 +17,7 @@ from oplenario_ia.armazem.porta import (
     NovoRascunho,
     NovoTrabalho,
     RascunhoGuardado,
+    RevisaoAta,
     Trabalho,
     TranscricaoGuardada,
 )
@@ -77,6 +78,20 @@ MIGRACOES: list[str] = [
       criado_em      timestamptz NOT NULL DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS idx_transcricao_sessao ON ia.transcricao (ente_id, sessao_id);
+    """,
+    # 3 — a revisão humana de cada rascunho de ata, medida na publicação (A.6c): números, nunca o texto
+    """
+    CREATE TABLE IF NOT EXISTS ia.revisao_ata (
+      rascunho_id        uuid NOT NULL REFERENCES ia.rascunho_ata (id),
+      versao_ata         integer NOT NULL,
+      ente_id            uuid NOT NULL,
+      desfecho           text NOT NULL CHECK (desfecho IN ('aprovado', 'editado')),
+      proporcao_alterada double precision NOT NULL CHECK (proporcao_alterada BETWEEN 0 AND 1),
+      conteudo_sha256    text NOT NULL,
+      publicada_por      uuid NOT NULL,
+      criado_em          timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (rascunho_id, versao_ata)
+    );
     """,
 ]
 
@@ -299,6 +314,24 @@ class ArmazemPostgres:
             except psycopg.errors.InvalidTextRepresentation:
                 return None
         return _rascunho(r) if r else None
+
+    def registrar_revisao(self, revisao: RevisaoAta) -> bool:
+        with self._conectar() as c:
+            r = c.execute(
+                """INSERT INTO ia.revisao_ata (rascunho_id, versao_ata, ente_id, desfecho, proporcao_alterada,
+                                               conteudo_sha256, publicada_por)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING RETURNING rascunho_id""",
+                (
+                    revisao.rascunho_id,
+                    revisao.versao_ata,
+                    revisao.ente_id,
+                    revisao.desfecho,
+                    revisao.proporcao_alterada,
+                    revisao.conteudo_sha256,
+                    revisao.publicada_por,
+                ),
+            ).fetchone()
+        return r is not None
 
     def trabalhos(self) -> list[dict[str, Any]]:
         with self._conectar() as c:

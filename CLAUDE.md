@@ -71,9 +71,13 @@ abertas, em ordem de importância:
 padrão + Anthropic), filtro de governança B1–B4 (único caminho até o LLM), Camada de Confiança mínima (citação conferida,
 incerteza, registro sem conteúdo, revisão humana, R-IA-1), `nucleo.Nucleo` (o pipeline que **toda** capacidade compõe) e
 avaliação no CI (`oplenario-ia-avaliar avaliacoes`) + custo por Casa — [PR #42](https://github.com/GondwanaDEV/oplenario/pull/42).
-**Ainda não há nenhuma capacidade de IA** (ata, resumo, busca, copiloto, consulta LOM/RI): elas são as Faixas A e B do
-`docs/26`. O lado core do contrato já emite `gravacao.segmento-captado`/`-vinculado` — falta o consumidor (Faixa A).
-**Trava a Aposta 1** e é o que impede M4 de fechar. Uso real de fornecedor segue travado no `[GAP]` jurídico (DPA de
+**Faixa A em curso (26/09/2026):** captação (A.2), transcrição com Caminho C + fronteira core↔IA
+([ADR-0008](docs/adr/0008-fronteira-core-ia-eventos-de-integracao.md), A.3) e **ata-IA completa (A.6)** — ata como
+artefato legal do core com retificação, rascunho pelo núcleo com citação conferida e `[confirmar: …]`, revisão humana
+medida de volta na IA — PRs #43–#46 + A.6c. **Tudo roda com o fornecedor fake** (conferência real, texto de roteiro).
+Faltam A.4/A.5 (busca), A.7 (leitura da ata) e A.8 (resumo cidadão); a A.1 (qualidade medida) espera o áudio de
+Baturité com 15 min anotados. A Faixa B (agente, consulta LOM/RI, copiloto) não começou. M4 fecha em código com a
+A.6; a qualidade real depende da A.1 e do fornecedor real. Uso real de fornecedor segue travado no `[GAP]` jurídico (DPA de
 não-treino, LGPD art. 33) — o fake não espera. Desenho: **`docs/25`** + doc-mestre §22.11 (v1.46); plano: **`docs/26`**
 (rev. 2, "Confirmo" do Daouda com o merge do PR #38). **Ler os dois antes de escrever qualquer feature de IA.**
 `prototipos/governanca-ia/` é só referência histórica (o filtro de produção está em `apps/ia/`).

@@ -116,5 +116,9 @@
               padrao))]
     {:depois (max 0 (n :depois 0)) :limite (logic/limite-do-feed (n :limite 100))}))
 
+(defn versao-de-caminho [s]
+  (let [n (try (Integer/parseInt s) (catch Exception _ 0))]
+    (if (pos? n) n (invalido! "versao invalida" "versao"))))
+
 (defn id-de-caminho [s campo]
   (try (UUID/fromString s) (catch Exception _ (invalido! "uuid invalido" campo))))

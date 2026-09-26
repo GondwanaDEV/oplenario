@@ -87,5 +87,10 @@ sob demanda).
   confirmar). O texto fica no satélite (`ia.rascunho_ata`, §22.3.4: "ata em rascunho" é transitória da IA) e o core o
   lê sob demanda (`GET /v1/entes/{ente}/atas/rascunhos/{id}`), só para um id que ele mesmo registrou para a sessão.
 - **A promoção rascunho → publicado** é o POST da ata no core com `origem_redacao = gerada_automaticamente` e o
-  `rascunho-id`; modelo e versão do prompt vêm do ponteiro do core, nunca do cliente. `AtaRevisadaEPublicada`
-  (core → IA, métrica de aceitação) fica para a A.6c.
+  `rascunho-id`; modelo e versão do prompt vêm do ponteiro do core, nunca do cliente.
+- **core → IA: `AtaRevisadaEPublicada` v1 (A.6c)**, promovido de `ata.publicada` (que toda publicação emite, na mesma
+  tx) **só quando a versão partiu de um rascunho da IA**. Leva o hash e a `conteudo-uri` da versão; o texto é lido em
+  `GET /integracao/ia/v1/entes/{ente}/sessoes/{sessao}/atas/{versao}` (sessão secreta: 403). A IA confere o hash,
+  compara com o texto LIMPO do rascunho e registra `RevisaoHumana` (aprovado/editado + proporção alterada) — a
+  métrica fica no registro de confiança do satélite, uma vez por (rascunho, versão). A coluna `proporcao_alterada` de
+  `sessoes.ata` fica nula: a medida é da IA e não volta ao artefato legal.
