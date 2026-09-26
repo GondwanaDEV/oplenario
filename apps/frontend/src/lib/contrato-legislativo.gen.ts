@@ -259,3 +259,26 @@ export interface TramitacaoOut {
   gatilhosPossiveis: GatilhoPossivelOut[];
   nota: string | null;
 }
+
+export interface ModeloRequerimentoOut {
+  id: string;
+  nome: string;
+  campos: string[];
+}
+
+export interface ModelosRequerimentoOut {
+  itens: ModeloRequerimentoOut[];
+}
+
+export interface PreviaRequerimentoOut {
+  texto: string;
+}
+
+export interface RequerimentoProtocoladoOut {
+  proposicaoId: string;
+  ano: number;
+  sequencial: number;
+  urnLex: string;
+  estado: string;
+  assinaturaAlgoritmo: string;
+}

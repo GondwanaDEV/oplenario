@@ -15,6 +15,7 @@
             [oplenario.legislativo.wire.out.pos-aprovacao :as pos-aprovacao]
             [oplenario.legislativo.wire.out.proposicao :as proposicao]
             [oplenario.legislativo.wire.out.protocolo-geral :as protocolo-geral]
+            [oplenario.legislativo.wire.out.requerimento :as requerimento]
             [oplenario.legislativo.wire.out.tramitacao-executiva :as tramitacao-executiva]))
 
 (def manifesto
@@ -57,7 +58,12 @@
    ;; ficha-materia/pos-aprovacao). O `:historico` de TramitacaoOut reusa HistoricoTramitacaoItemOut (ficha,
    ;; ja' acima) por igualdade estrutural. Substitui o tipo-espelho a mao de use-tramitacao.ts.
    ["GatilhoPossivelOut" proposicao/GatilhoPossivelOut]
-   ["TramitacaoOut" proposicao/TramitacaoOut]])
+   ["TramitacaoOut" proposicao/TramitacaoOut]
+   ;; Fatia 2a (o requerimento do vereador, borda /meu) — ModeloRequerimentoOut ANTES da lista que o referencia.
+   ["ModeloRequerimentoOut" requerimento/ModeloRequerimentoOut]
+   ["ModelosRequerimentoOut" requerimento/ModelosRequerimentoOut]
+   ["PreviaRequerimentoOut" requerimento/PreviaRequerimentoOut]
+   ["RequerimentoProtocoladoOut" requerimento/RequerimentoProtocoladoOut]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))
 

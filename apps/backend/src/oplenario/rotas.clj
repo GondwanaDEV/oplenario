@@ -38,6 +38,15 @@
   [repo-cadastros ente-id identidade-id]
   (:id (repo-cadastros-comp/vereador-por-identidade repo-cadastros ente-id identidade-id)))
 
+(defn resolver-autor-vereador
+  "identidade-id -> {:id :nome} do vereador NESTA Casa, para a AUTORIA do requerimento que ele protocola
+  (fatia 2a) — mesma exceção nomeada de `resolver-vereador` (§22.5.3), só que devolve também o nome de
+  exibição: o nome parlamentar, ou o civil quando não há parlamentar. `nil` sem cadastro de vereador neste
+  ente (a borda traduz → 404, nunca 500)."
+  [repo-cadastros ente-id identidade-id]
+  (when-let [v (repo-cadastros-comp/vereador-por-identidade repo-cadastros ente-id identidade-id)]
+    {:id (:id v) :nome (or (not-empty (:nome-parlamentar v)) (:nome v))}))
+
 (defn resolver-comissoes
   "comissao-ids -> {comissao-id nome} NESTA Casa — host wiring (§22.5.3, exceção nomeada, mesma forma de
   `resolver-vereador`/`membros-da-casa`). Resolve via o Repo-Component de `cadastros`
@@ -425,6 +434,8 @@
                                        :pode-ver-votacao-aberta? pode-ver-votacao-aberta?
                                        :resolver-municipio resolver-municipio
                                        :resolver-vereador resolver-vereador-fn
+                                       :resolver-autor (fn [ente-id identidade-id]
+                                                         (resolver-autor-vereador repo-cadastros ente-id identidade-id))
                                        :resolver-comissoes resolver-comissoes-fn
                                        :vereador-vinculado? vereador-vinculado?
                                        ;; sec MEDIUM-2 FIX: gate #2 — a rota da Mesa so' registra voto nominal

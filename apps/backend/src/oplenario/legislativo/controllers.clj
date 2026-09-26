@@ -580,6 +580,11 @@
   cobrir algum placeholder do template — nunca 500 por um formulario incompleto."
   [repo-legislativo ente-id m]
   (when-let [modelo (repo/buscar-modelo repo-legislativo ente-id (:modelo-id m))]
+    ;; fatia 2a: o modelo de requerimento do VEREADOR vira proposicao pela borda /meu, nunca documento
+    ;; administrativo (a tabela `documento` nem aceita o tipo — sem este guard, o CHECK viraria 500).
+    (when (= logic/tipo-modelo-requerimento (:tipo-documento modelo))
+      (throw (ex-info "gerar-documento: modelo de requerimento de vereador nao gera documento do Expediente"
+                      {:tipo :validacao/invalido :campos [:modelo-id]})))
     (repo/gerar-documento! repo-legislativo ente-id
                            (merge m {:ente-id ente-id
                                      :tipo-documento (:tipo-documento modelo)
@@ -749,3 +754,57 @@
   (when-let [vereador-id (resolver-vereador (:ente-id ator) (:identidade-id ator))]
     (when (repo/parecer-elegivel-para-ciencia? repo-legislativo (:ente-id ator) vereador-id (:evento-ref m))
       (repo/acusar-ciencia! repo-legislativo (:ente-id ator) (assoc m :vereador-id vereador-id)))))
+
+;; ========================= Fatia 2a: o requerimento do VEREADOR (borda /meu) =========================
+
+(defn- modelo-de-requerimento
+  "O modelo `id` SE for um modelo de requerimento de vereador ATIVO desta Casa; senao nil (-> 404 na borda:
+  modelo inexistente, inativo ou de outro tipo nao se distinguem — o vereador so' ve os que a lista oferece)."
+  [repo-legislativo ente-id id]
+  (let [m (repo/buscar-modelo repo-legislativo ente-id id)]
+    (when (and m (:ativo m) (= logic/tipo-modelo-requerimento (:tipo-documento m))) m)))
+
+(defn modelos-de-requerimento
+  "GET /meu/modelos-requerimento — os modelos ATIVOS de requerimento da Casa, cada um com os CAMPOS que o
+  formulario pede (os placeholders MENOS os automaticos: `logic/campos-do-requerimento`). Sem gate de posse:
+  e' config da Casa, igual para todo vereador; o gate e' o papel 'vereador' da rota."
+  [repo-legislativo ator]
+  (->> (repo/listar-modelos-ativos repo-legislativo (:ente-id ator))
+       (filter #(= logic/tipo-modelo-requerimento (:tipo-documento %)))
+       (sort-by :nome)
+       (mapv (fn [m] {:id (:id m) :nome (:nome m) :campos (logic/campos-do-requerimento (:corpo-template m))}))))
+
+(defn- texto-do-requerimento
+  [modelo campos autor hoje]
+  (logic/renderizar-documento (:corpo-template modelo)
+                              (logic/dados-do-requerimento campos {:nome-vereador (:nome autor) :hoje hoje})))
+
+(defn previa-requerimento
+  "POST /meu/requerimentos/previa — o texto FORMATADO que sera' assinado, sem gravar nada: o mesmo merge do
+  protocolo (autor e data do servidor), para o vereador revisar antes de assinar. nil (ator sem cadastro de
+  vereador, ou modelo fora da lista) -> 404. Campo faltando -> 400 (fail-closed do renderizador)."
+  [repo-legislativo resolver-autor ator {:keys [modelo-id campos hoje]}]
+  (when-let [autor (resolver-autor (:ente-id ator) (:identidade-id ator))]
+    (when-let [modelo (modelo-de-requerimento repo-legislativo (:ente-id ator) modelo-id)]
+      {:texto (texto-do-requerimento modelo campos autor hoje)})))
+
+(defn meu-protocolar-requerimento
+  "POST /meu/requerimentos — o vereador ASSINA e protocola o proprio requerimento (fatia 2a). Anti-forja: o
+  AUTOR e' o vereador do LOGIN (`resolver-autor`, host wiring), nunca o corpo; `autor-tipo` 'vereador',
+  `autor-id`/`autor-texto` = o cadastro dele. O texto e' o merge do modelo da Casa (o MESMO da previa); o
+  `tipo-requerimento` (exigido pelo CHECK da mig 0013) e' o NOME do modelo. `assinador` (porta AssinadorICP,
+  construida pelo diplomat — mesmo padrao de emitir-parecer) assina os bytes do texto no Repo, na MESMA tx
+  do protocolo. nil (sem cadastro de vereador / modelo fora da lista) -> 404."
+  [repo-legislativo resolver-municipio resolver-autor assinador ator {:keys [id modelo-id campos ementa hoje]}]
+  (when-let [autor (resolver-autor (:ente-id ator) (:identidade-id ator))]
+    (when-let [modelo (modelo-de-requerimento repo-legislativo (:ente-id ator) modelo-id)]
+      (let [{:keys [uf municipio-nome]} (resolver-municipio (:ente-id ator))
+            r (repo/protocolar! repo-legislativo (:ente-id ator)
+                                {:id id :tipo "requerimento" :ano (.getYear ^java.time.LocalDate hoje)
+                                 :ementa ementa :tipo-requerimento (:nome modelo)
+                                 :autor-tipo "vereador" :autor-id (:id autor) :autor-texto (:nome autor)
+                                 :texto (texto-do-requerimento modelo campos autor hoje)
+                                 :created-by (:identidade-id ator)
+                                 :assinador assinador :assinado-por (:identidade-id ator)
+                                 :uf uf :municipio-nome municipio-nome})]
+        (assoc r :ano (.getYear ^java.time.LocalDate hoje))))))

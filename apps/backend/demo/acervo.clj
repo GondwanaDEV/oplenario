@@ -559,6 +559,48 @@
 
 ;; ---------- a funcao publica ----------
 
+;; ---------- modelos de requerimento do vereador (fatia 2a, mig 0082) ----------
+
+(def modelos-de-requerimento
+  "Os modelos com que o vereador da demo redige o requerimento pelo proprio login. `{{vereador}}` e
+  `{{data}}` o sistema preenche (autor do login, data do servidor); os demais viram campos do formulario.
+  Textos de DEMONSTRACAO no formato usual de requerimento de Camara — a Casa real edita os seus na aba
+  'Modelos' do Expediente."
+  [{:chave "req-informacao" :nome "Requerimento de informação"
+    :corpo-template (str "REQUERIMENTO DE INFORMAÇÃO\n\n"
+                         "Senhor Presidente,\n\n"
+                         "O Vereador que este subscreve, {{vereador}}, no uso das atribuições que lhe confere o "
+                         "Regimento Interno, requer que seja encaminhado a {{destinatario}} pedido de informações "
+                         "sobre {{assunto}}.\n\n"
+                         "JUSTIFICATIVA\n\n{{justificativa}}\n\n"
+                         "Plenário da Câmara Municipal de Fortaleza, {{data}}.\n\n"
+                         "{{vereador}}\nVereador(a)")}
+   {:chave "req-voto-pesar" :nome "Requerimento de voto de pesar"
+    :corpo-template (str "REQUERIMENTO DE VOTO DE PESAR\n\n"
+                         "Senhor Presidente,\n\n"
+                         "O Vereador que este subscreve, {{vereador}}, requer, ouvido o Plenário, que seja "
+                         "consignado em ata voto de profundo pesar pelo falecimento de {{falecido}}, "
+                         "dando-se ciência desta homenagem à família, no endereço {{endereco_familia}}.\n\n"
+                         "Plenário da Câmara Municipal de Fortaleza, {{data}}.\n\n"
+                         "{{vereador}}\nVereador(a)")}
+   {:chave "req-generico" :nome "Requerimento (texto livre)"
+    :corpo-template (str "REQUERIMENTO\n\n"
+                         "Senhor Presidente,\n\n"
+                         "O Vereador que este subscreve, {{vereador}}, requer, na forma regimental, {{pedido}}.\n\n"
+                         "JUSTIFICATIVA\n\n{{justificativa}}\n\n"
+                         "Plenário da Câmara Municipal de Fortaleza, {{data}}.\n\n"
+                         "{{vereador}}\nVereador(a)")}])
+
+(defn- semear-modelos-de-requerimento!
+  "Cria os `modelos-de-requerimento` que faltam (idempotente por `chave`: nunca sobrescreve um modelo que a
+  Casa ja' editou)."
+  [repo ente]
+  (doseq [{:keys [chave nome corpo-template]} modelos-de-requerimento]
+    (when-not (repo-leg/modelo-por-chave repo ente chave)
+      (repo-leg/criar-modelo! repo ente {:id (random-uuid) :chave chave :nome nome
+                                         :tipo-documento "requerimento_proposicao"
+                                         :corpo-template corpo-template :created-by nil}))))
+
 (defn semear!
   "Semeia (ou rele, se ja' semeada) o ACERVO LEGISLATIVO da Casa `ente`. `sistema` e' um sistema
   Component BOOTADO (mesmo contrato de `casa/semear!`) — usa `(:repo-legislativo sistema)` +
@@ -583,6 +625,8 @@
         repo-cad (:repo-cadastros sistema)
         ds (get-in sistema [:datasource :ds])
         existente (tenancy/com-tenant* ds ente (fn [tx] (template-do-rito tx ente)))]
+    ;; fora do gate do acervo: uma demo semeada antes da fatia 2a tambem ganha os modelos ao re-rodar o seed
+    (semear-modelos-de-requerimento! repo ente)
     (if existente
       {:template-id existente}
       (let [vereadores (tenancy/com-tenant* ds ente (fn [tx] (vereador/listar tx ente hoje)))

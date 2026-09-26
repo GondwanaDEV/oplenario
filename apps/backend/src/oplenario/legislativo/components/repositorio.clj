@@ -384,12 +384,23 @@
           (when (= :objeto-store (logic/decidir-armazenamento corpo))
             (throw (ex-info "texto excede o limite inline (32KB); objeto_store fora do escopo desta fatia"
                             {:tipo :validacao/invalido :campos [:texto]}))))
-        (let [r (proposicao/protocolar! tx (assoc p :ente-id ente-id))]
+        (let [r (proposicao/protocolar! tx (assoc p :ente-id ente-id))
+              ;; fatia 2a: o requerimento do VEREADOR chega com `:assinador` + `:assinado-por` — assina os
+              ;; bytes do texto protocolado e grava o selo no MESMO insert da versao (mig 0082). Sem
+              ;; assinador (o protocolo da Mesa), a versao nasce sem assinatura do autor, como antes.
+              assinatura (when-let [assinador (:assinador p)]
+                           (when-not (:texto p)
+                             (throw (ex-info "protocolar!: assinatura exige texto (nao ha' o que assinar)"
+                                             {:tipo :validacao/invalido :campos [:texto]})))
+                           (assinador-icp/assinar assinador (.getBytes ^String (:texto p) "UTF-8")))]
           (when-let [corpo (:texto p)]
             (let [versao-id (random-uuid)]
-              (texto/nova-versao! tx {:id versao-id :ente-id ente-id :proposicao-id (:id r)
-                                       :origem-versao "protocolo" :formato "markdown"
-                                       :texto-inline corpo :created-by (:created-by p)})
+              (texto/nova-versao! tx (cond-> {:id versao-id :ente-id ente-id :proposicao-id (:id r)
+                                              :origem-versao "protocolo" :formato "markdown"
+                                              :texto-inline corpo :created-by (:created-by p)}
+                                       assinatura (assoc :assinatura-algoritmo (:algoritmo assinatura)
+                                                         :assinatura-b64 (:assinatura-b64 assinatura)
+                                                         :assinado-por (:assinado-por p))))
               (texto/promover! tx {:ente-id ente-id :proposicao-id (:id r) :versao-id versao-id
                                     :updated-by (:created-by p) :lock-version 0})))
           (producers/emitir-protocolada! bus tx ente-id
@@ -403,7 +414,7 @@
              ;; some-> : :autor-id e' nulo p/ autoria nao-parlamentar; (str nil) daria "" e quebraria
              ;; o UUID/fromString do consumer (Onda E fatia 2).
              :autor-id (some-> (:autor-id p) str)})
-          r))))
+          (cond-> r assinatura (assoc :assinatura assinatura))))))
   (buscar-proposicao [this ente-id id] (transacao this ente-id #(proposicao/buscar % ente-id id)))
   (resumos-de-proposicoes [this ente-id ids]
     (if (empty? ids)
