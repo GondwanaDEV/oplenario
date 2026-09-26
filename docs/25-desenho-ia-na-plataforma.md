@@ -46,8 +46,8 @@ JSON Schema para ferramentas.
 | 4 | Fronteira do ato | **CONFIRMADO** — 4.2 (B) + 4.1, 4.3–4.6 (§7a) |
 | 5 | Onde roda o agente | **CONFIRMADO** — 5.1 (b), 5.2 (b) + 5.3–5.7 (§7b) |
 | 6 | MCP externo | **CONFIRMADO** — 6.1 (B), 6.3 (i)+(ii) + 6.2, 6.4, 6.5 (§8) |
-| 7 | Conhecimento (LOM/RI/leis em camadas por município) | Direção confirmada; **sub-decisões em debate (§8a)** |
-| 8 | Qualidade e custo | Direção confirmada; a abrir |
+| 7 | Conhecimento (LOM/RI/leis em camadas por município) | **CONFIRMADO** — 7.2 (B) + 7.1, 7.3–7.7 (§8a) |
+| 8 | Qualidade e custo | Direção confirmada; **sub-decisões em debate (§8b)** |
 
 ## 5. Eixo 1 — Lugar da IA · CONFIRMADO (B)
 
@@ -213,7 +213,7 @@ Sub-decisões (todas confirmadas):
   com mudança incompatível coexistindo em transição — **a mesma disciplina dos eventos de integração**
   (§22.3.3). O conjunto público começa pequeno.
 
-## 8a. Eixo 7 — Conhecimento normativo · EM DEBATE
+## 8a. Eixo 7 — Conhecimento normativo · CONFIRMADO (26/09/2026)
 
 Direção confirmada: Lei Orgânica, Regimento Interno e leis federais/estaduais **em camadas por município**, sem
 nada especializado em uma Casa (Daouda: são dados públicos; a plataforma é multi-município).
@@ -225,7 +225,7 @@ automática por IA fora da V1); o motor de regras já separa as fontes normativa
 `referencia_normativa`; embeddings self-host + `pgvector` no satélite (§22.9 Eixo 10, §22.3.4); staging por lote
 com efetivação (fundação #2, §22.2).
 
-Sub-decisões propostas:
+Sub-decisões (todas confirmadas):
 
 - **7.1 As camadas** — a **mesma taxonomia do motor**, sem inventar outra:
   - **federal** (CF, LC 95/1998 de técnica legislativa, LRF, LAI, LGPD, Lei 14.063…) — uma cópia para todos,
@@ -235,7 +235,7 @@ Sub-decisões propostas:
     Prefeitura); o **Regimento Interno e as resoluções pertencem à Câmara** (ente); leis municipais, ao Município.
 - **7.2 Forma do texto.** (A) PDFs + busca por trechos · (B) **norma estruturada por dispositivo** (artigo,
   parágrafo, inciso, alínea), cada um com endereço estável (URN LexML + fragmento) · (C) consolidação automática
-  por IA. *(Recomendado: B.)* A Camada de Confiança exige citar a fonte; com (B) a citação é "art. 12, § 1º, da LOM
+  por IA. **Confirmado: B.** A Camada de Confiança exige citar a fonte; com (B) a citação é "art. 12, § 1º, da LOM
   de Baturité", clicável e conferível. (C) já está fora da V1 (v1.14).
 - **7.3 Como o acervo entra (proativo, sem esperar a Casa mandar PDF).** Pipeline de coleta de fontes públicas
   (LexML, sites de câmaras/prefeituras, diários oficiais) + upload da Casa; OCR quando for imagem; a IA quebra em
@@ -259,6 +259,41 @@ Sub-decisões propostas:
   (3.1 b) disparado por `ProposicaoProtocolada` (5.7), que lê os dispositivos aplicáveis e produz um **rascunho
   de nota técnica com citações** para a secretaria — nunca uma decisão.
 
+## 8b. Eixo 8 — Qualidade e custo · EM DEBATE
+
+Direção confirmada: avaliação por ação, teto de custo por Câmara, painel de acompanhamento da IA. Já existe e é
+reaproveitado: métricas obrigatórias da fronteira (categoria de erro, latência, custo, confiança — §22.3.5);
+**R-IA-3** (teto de custo por ente) e **R-IA-4** (detectar piora de qualidade ao trocar de fornecedor), ambos
+`fast_follow` em `produto/17`; a tela **`observabilidade-ia`** já desenhada (cockpit do operador: volume, p95,
+custo, fallback por recurso e fornecedor); botão "reportar erro" e revisão humana (§16.8); a versão robusta da
+governança (amostragem de auditoria, qualidade por Câmara) já está na Onda 2 — não se reabre.
+
+Sub-decisões propostas:
+
+- **8.1 Avaliação antes de ir ao ar.** (A) só revisão manual · (B) **cada agente e cada capacidade de IA tem um
+  conjunto de avaliação, rodado no CI do satélite e obrigatoriamente antes de trocar fornecedor ou modelo** · (C) B
+  + juiz automático sobre amostras de produção. *(Recomendado: B agora; C na Onda 2, junto da camada robusta.)*
+  O conjunto tem três partes: **casos reais conferidos** (atas humanas × geradas, requerimentos, conferências
+  contra LOM/RI com resposta conhecida); **casos de segurança** (instruções escondidas do 4.5, tentativa de ato
+  sem confirmação, atos que o agente nem propõe do 4.3); **checagens objetivas** (a citação existe e diz o que o
+  agente afirmou — 7.5; ferramenta certa chamada). Versão de agente que piora não sobe — fecha R-IA-4.
+- **8.2 Qualidade em produção medida pelo que a pessoa faz**, sem trabalho extra de anotação: rascunho aceito
+  como veio / editado (quanto) / descartado; proposta de ato confirmada / recusada; "reportar erro". São eventos
+  de domínio que já passam pelo core → métricas por agente, versão e Casa. Casos reais só viram conjunto de
+  avaliação anonimizados — `[GAP]` LGPD junto da retenção (5.3).
+- **8.3 Custo.** Toda execução registra tokens, fornecedor, agente, ferramenta e `ente_id` (§22.3.5 + Inv. 8).
+  **Orçamento mensal por Casa** (tunable, §22.5 disc. 7) com aviso a 80%; ao estourar: **agentes institucionais
+  (segundo plano) pausam primeiro**; os interativos seguem até um teto duro e então mostram "IA indisponível — cota
+  da Casa", com a tela fazendo tudo (R-IA-1). **Nunca troca para um modelo pior em silêncio por causa de custo.**
+  Alavancas de custo ficam na definição do agente (5.4): classe de modelo por tarefa (modelo menor para
+  classificar, de fronteira para redigir) — escolhida **pela avaliação**, não só pelo preço; cache de prompt.
+  Valores do orçamento = `[GAP]` comercial (dependem do preço do plano).
+- **8.4 Painéis — dois públicos, no módulo `paineis`** (read-model, F7): **operador** = a tela
+  `observabilidade-ia` já desenhada (fast-follow); **Casa** (`admin_ente`) = consumo × orçamento, taxa de
+  aceitação por agente e erros reportados, na área de administração do ente.
+- **8.5 Métrica sem conteúdo.** Painéis e métricas carregam contagens e identificadores, nunca o texto (mesma
+  regra B4 da auditoria da porta). O conteúdo das execuções fica só no satélite, sob a retenção do 5.3.
+
 ## 9. Contexto que alimenta os eixos seguintes
 
 - Stakeholder (Rigoni, Baturité): leitura da ata **opcional** (IA, presencial ou nenhuma); a IA lê a ata que gerou
@@ -272,6 +307,7 @@ Sub-decisões propostas:
 
 | Data | O quê |
 |---|---|
+| 26/09/2026 | Eixo 7 CONFIRMADO (7.2 B + demais); Eixo 8 aberto em sub-decisões |
 | 26/09/2026 | Eixo 6 CONFIRMADO (6.1 B, 6.3 i+ii + demais); Eixo 7 aberto em sub-decisões |
 | 26/09/2026 | Eixo 5 CONFIRMADO (5.1 b, 5.2 b + demais); Eixo 6 aberto em sub-decisões |
 | 26/09/2026 | Eixo 4 CONFIRMADO (4.2 B + demais); Eixo 5 aberto em sub-decisões |
