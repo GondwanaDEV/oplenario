@@ -215,6 +215,42 @@ export interface GravacoesPendentesOut {
   segmentos: GravacaoPendenteOut[];
 }
 
+export interface TranscricaoPonteiroOut {
+  id: string;
+  segmentoId: string;
+  situacao: "concluida" | "falhou";
+  transcricaoId?: string | null;
+  versao?: number | null;
+  idioma?: string | null;
+  duracaoS?: number | null;
+  nTrechos?: number | null;
+  coberturaAtribuida?: number | null;
+  modeloAsr?: string | null;
+  modeloDiarizacao?: string | null;
+  categoriaErro?: string | null;
+  detalheErro?: string | null;
+  retentavel?: boolean | null;
+  ocorridoEm: string;
+}
+
+export interface TranscricoesOut {
+  sessaoId: string;
+  itens: TranscricaoPonteiroOut[];
+}
+
+export interface TrechoTranscricaoOut {
+  inicio: number;
+  fim: number;
+  texto: string;
+  oradorId?: string | null;
+  oradorNome?: string | null;
+}
+
+export interface TranscricaoConteudoOut {
+  ponteiro: TranscricaoPonteiroOut;
+  trechos: TrechoTranscricaoOut[];
+}
+
 export interface PautaItemAdicionadoOut {
   id: string;
   ordem: number;
