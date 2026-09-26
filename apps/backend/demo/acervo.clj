@@ -35,7 +35,9 @@
             [oplenario.kernel.db-util :as comum]
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.legislativo.components.assinador-icp :as assinador-icp]
-            [oplenario.legislativo.components.repositorio :as repo-leg])
+            [oplenario.legislativo.components.repositorio :as repo-leg]
+            [oplenario.legislativo.controllers :as controllers]
+            [oplenario.rotas :as rotas])
   (:import (java.time LocalDate)))
 
 ;; ---------- constantes ----------
@@ -612,6 +614,40 @@
       (repo-leg/criar-modelo! repo ente {:id (random-uuid) :chave chave :nome nome
                                          :tipo-documento "requerimento_proposicao"
                                          :corpo-template corpo-template :created-by nil}))))
+
+(def ^:private id-proposta-coletiva
+  "Id FIXO da proposta de requerimento coletivo da demo — o gate de idempotencia (mesmo padrao dos ids fixos de
+  `sessoes`): rodar a semente de novo rele em vez de convidar duas vezes."
+  #uuid "10000000-0000-0000-0000-000000000520")
+
+(defn semear-proposta-coletiva!
+  "Fatia 2c: um requerimento COLETIVO esperando subscricoes, para a demo mostrar os dois lados — o PRESIDENTE
+  (que tambem e' vereador, com login) e' o autor e convida o vereador da jornada J3 e mais um colega. O login do
+  vereador ve o pedido na home e pode assinar; o do presidente acompanha e protocola. Passa pelo MESMO controller
+  da rota (texto do modelo da Casa, colegas com mandato vigente), nao por insert direto. Idempotente pelo id
+  fixo. Devolve o id da proposta, ou nil quando falta cadastro (Casa nao semeada)."
+  [sistema ente identidade-presidente identidade-vereador]
+  (let [repo (:repo-legislativo sistema)
+        repo-cad (:repo-cadastros sistema)
+        resolver-autor (fn [e i] (rotas/resolver-autor-vereador repo-cad e i))
+        colegas (fn [e] (rotas/colegas-da-casa repo-cad e hoje))
+        pres (resolver-autor ente identidade-presidente)
+        ver (resolver-autor ente identidade-vereador)
+        modelo (repo-leg/modelo-por-chave repo ente "req-informacao")]
+    (when (and pres ver modelo)
+      (if (repo-leg/buscar-proposta-requerimento repo ente id-proposta-coletiva (:id pres))
+        id-proposta-coletiva
+        (let [outro (first (remove #(#{(:id pres) (:id ver)} (:id %)) (colegas ente)))]
+          (controllers/criar-proposta-requerimento
+            repo resolver-autor colegas {:ente-id ente :identidade-id identidade-presidente}
+            {:id id-proposta-coletiva :modelo-id (:id modelo)
+             :ementa "Requer informações à Secretaria de Infraestrutura sobre o cronograma de recuperação da Av. Bezerra de Menezes."
+             :campos {"destinatario" "Secretaria Municipal de Infraestrutura (SEINF)"
+                      "assunto" "o cronograma, o orçamento e o prazo de conclusão da recuperação do pavimento da Av. Bezerra de Menezes"
+                      "justificativa" "Os moradores e comerciantes relatam buracos e alagamentos recorrentes no trecho, sem previsão pública de conclusão. A informação é necessária para o acompanhamento da obra por esta Casa."}
+             :coautores (cond-> [(:id ver)] outro (conj (:id outro)))
+             :hoje (java.time.LocalDate/now)})
+          id-proposta-coletiva)))))
 
 (defn semear!
   "Semeia (ou rele, se ja' semeada) o ACERVO LEGISLATIVO da Casa `ente`. `sistema` e' um sistema

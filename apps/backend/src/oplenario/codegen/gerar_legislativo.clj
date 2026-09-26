@@ -30,6 +30,7 @@
    ["ApensacaoOut" ficha/ApensacaoOut]
    ["EmendaResumoOut" ficha/EmendaResumoOut]
    ["ParecerResumoOut" ficha/ParecerResumoOut]
+   ["CoautorOut" ficha/CoautorOut]
    ["FichaMateriaOut" ficha/FichaMateriaOut]
    ;; Onda B Slice 5 (editor de parecer) — schema PROPRIO (nao reusa ParecerResumoOut, que e' o resumo
    ;; dentro da ficha da materia).
@@ -70,7 +71,18 @@
    ["ModeloRequerimentoOut" requerimento/ModeloRequerimentoOut]
    ["ModelosRequerimentoOut" requerimento/ModelosRequerimentoOut]
    ["PreviaRequerimentoOut" requerimento/PreviaRequerimentoOut]
-   ["RequerimentoProtocoladoOut" requerimento/RequerimentoProtocoladoOut]])
+   ["RequerimentoProtocoladoOut" requerimento/RequerimentoProtocoladoOut]
+   ;; Fatia 2c (requerimento coletivo) — referencias antes dos compostos.
+   ["ColegaOut" requerimento/ColegaOut]
+   ["ColegasOut" requerimento/ColegasOut]
+   ["SubscricaoOut" requerimento/SubscricaoOut]
+   ["PropostaRequerimentoOut" requerimento/PropostaRequerimentoOut]
+   ["PropostaResumoOut" requerimento/PropostaResumoOut]
+   ["PropostasOut" requerimento/PropostasOut]
+   ["ConviteSubscricaoOut" requerimento/ConviteSubscricaoOut]
+   ["ConvitesSubscricaoOut" requerimento/ConvitesSubscricaoOut]
+   ["RespostaSubscricaoOut" requerimento/RespostaSubscricaoOut]
+   ["RequerimentoColetivoProtocoladoOut" requerimento/RequerimentoColetivoProtocoladoOut]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))
 

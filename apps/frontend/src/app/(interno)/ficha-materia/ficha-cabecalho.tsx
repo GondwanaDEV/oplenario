@@ -11,9 +11,16 @@ import { formatarNumeroProposicao, formatarEspecieProposicao, categorizarSituaca
 import { derivarTramitacao, descreverFaixa } from "@/lib/tramitacao-vista";
 import { AzulejoFaixa } from "@/lib/charts/azulejo-faixa";
 import { formatarData } from "@/lib/formatar-data";
-import type { ProposicaoDetalheOut } from "@/lib/contrato-legislativo.gen";
+import type { CoautorOut, ProposicaoDetalheOut } from "@/lib/contrato-legislativo.gen";
 
-export function FichaCabecalho({ proposicao }: { proposicao: ProposicaoDetalheOut }) {
+export function FichaCabecalho({
+  proposicao,
+  coautores = [],
+}: {
+  proposicao: ProposicaoDetalheOut;
+  /** fatia 2c: quem subscreveu o requerimento coletivo (assinou antes do protocolo). */
+  coautores?: CoautorOut[];
+}) {
   const numero = formatarNumeroProposicao(proposicao.tipo, proposicao.sequencial, proposicao.ano);
   const especie = formatarEspecieProposicao(proposicao.tipo);
   const { estagios, rotuloSituacao } = derivarTramitacao(proposicao.estado);
@@ -33,6 +40,11 @@ export function FichaCabecalho({ proposicao }: { proposicao: ProposicaoDetalheOu
             Autoria{" "}
             {proposicao.autorTexto ? <b>{proposicao.autorTexto}</b> : "não informada"}
           </span>
+          {coautores.length > 0 && (
+            <span>
+              {coautores.length === 1 ? "Coautor" : "Coautores"} <b>{coautores.map((c) => c.nome).join(", ")}</b>
+            </span>
+          )}
           <span>
             Atualizada em <b>{formatarData(proposicao.atualizadoEm)}</b>
           </span>

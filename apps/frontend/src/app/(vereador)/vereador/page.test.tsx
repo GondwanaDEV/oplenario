@@ -368,3 +368,43 @@ describe("PaginaHomeVereador", () => {
     expect(screen.getByText(/pareceres mais recentes — pode haver mais fora desta lista/)).toBeTruthy();
   });
 });
+
+describe("PaginaHomeVereador — requerimento coletivo (fatia 2c)", () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it("mostra os pedidos de subscrição e os requerimentos esperando coautores", async () => {
+    global.fetch = fetchRoteado({
+      "GET /api/meu/painel": () => ({ ok: true, json: async () => painelFake }) as Response,
+      "GET /api/sessoes": semSessoes,
+      "GET /api/meu/subscricoes": () =>
+        ({
+          ok: true,
+          json: async () => ({
+            itens: [
+              { "proposta-id": "p-9", ementa: "Informações sobre a Av. Bezerra", "tipo-requerimento": "Requerimento de informação",
+                "autor-nome": "Sérgio Lopes", "convidada-em": "2026-09-26T12:00:00Z" },
+            ],
+          }),
+        }) as Response,
+      "GET /api/meu/requerimentos/propostas": () =>
+        ({
+          ok: true,
+          json: async () => ({
+            itens: [
+              { id: "p-7", ementa: "Voto de pesar", "tipo-requerimento": "Requerimento de voto de pesar",
+                "criada-em": "2026-09-25T12:00:00Z", confirmadas: 1, pendentes: 2, recusadas: 0 },
+            ],
+          }),
+        }) as Response,
+    });
+    renderComProviders('{"sub":"u"}');
+    expect(await screen.findByRole("heading", { name: "Pedidos de subscrição" })).toBeTruthy();
+    expect(screen.getByText("Sérgio Lopes convidou você para subscrever.")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Ler e responder" }).getAttribute("href")).toContain("/requerimento/proposta/p-9");
+    expect(screen.getByRole("heading", { name: "Esperando coautores" })).toBeTruthy();
+    expect(screen.getByText("1 confirmou · 2 aguardam")).toBeTruthy();
+  });
+});

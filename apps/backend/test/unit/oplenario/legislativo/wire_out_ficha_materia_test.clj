@@ -66,7 +66,8 @@
    :tramitacao [] :tramitacao-truncado false
    :apensadas [] :apensadas-truncado false
    :emendas [] :emendas-truncado false
-   :pareceres [] :pareceres-truncado false})
+   :pareceres [] :pareceres-truncado false
+   :coautores []})
 
 (deftest ficha-materia-out-minima-valida
   (is (m/validate wire/FichaMateriaOut ficha-minima)))

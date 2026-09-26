@@ -855,3 +855,97 @@
                                  :assinador assinador :assinado-por (:identidade-id ator)
                                  :uf uf :municipio-nome municipio-nome})]
         (assoc r :ano (.getYear ^java.time.LocalDate hoje))))))
+
+;; ========================= Fatia 2c: o requerimento COLETIVO (subscricao) =========================
+;; Desenho: autoria-apoiamento.html. O autor redige e convida coautores; cada um confirma com a propria
+;; assinatura (sobre o texto congelado) ou recusa; o autor protocola quando quiser, e quem nao confirmou NAO
+;; CONSTA. Quem e' quem vem SEMPRE do login (resolver-autor/resolver-vereador do host), nunca do corpo.
+
+(defn- invalido! [msg info] (throw (ex-info msg (assoc info :tipo :validacao/invalido))))
+
+(defn colegas-para-subscricao
+  "GET /meu/colegas — quem o vereador pode convidar: os vereadores com mandato VIGENTE nesta Casa (seam
+  `colegas-da-casa` do host), menos ele mesmo. nil = o login nao e' vereador cadastrado aqui (-> 404)."
+  [resolver-autor colegas-da-casa ator]
+  (when-let [autor (resolver-autor (:ente-id ator) (:identidade-id ator))]
+    (vec (remove #(= (:id autor) (:id %)) (colegas-da-casa (:ente-id ator))))))
+
+(defn criar-proposta-requerimento
+  "POST /meu/requerimentos/propostas — o requerimento COLETIVO: mesmo formulario do individual (modelo, campos,
+  ementa) + os COAUTORES (vereador-ids). Grava a proposta com o texto CONGELADO (o mesmo merge do protocolo: autor
+  e data do servidor) e um convite por coautor. Nada e' assinado nem numerado aqui.
+
+  Coautor que nao compoe a Casa (mandato vigente), repetido, ou o proprio autor -> 400: o convite e' para um
+  colega de plenario, e um id solto no corpo nao vira convite. nil (sem cadastro de vereador / modelo fora da
+  lista) -> 404."
+  [repo-legislativo resolver-autor colegas-da-casa ator {:keys [id modelo-id campos ementa coautores hoje]}]
+  (when-let [autor (resolver-autor (:ente-id ator) (:identidade-id ator))]
+    (when-let [modelo (modelo-de-requerimento repo-legislativo (:ente-id ator) modelo-id)]
+      (let [pedidos (distinct coautores)
+            _ (when (not= (count pedidos) (count coautores))
+                (invalido! "coautor repetido" {:campos [:coautores]}))
+            _ (when (some #(= (:id autor) %) pedidos)
+                (invalido! "o autor nao se convida como coautor" {:campos [:coautores]}))
+            por-id (into {} (map (juxt :id identity)) (colegas-da-casa (:ente-id ator)))
+            fora (remove por-id pedidos)
+            _ (when (seq fora)
+                (invalido! "coautor que nao compoe a Casa (mandato vigente)" {:campos [:coautores]}))
+            texto (texto-do-requerimento modelo campos autor hoje)]
+        (repo/criar-proposta-requerimento! repo-legislativo (:ente-id ator)
+          {:id id :autor-vereador-id (:id autor) :autor-identidade-id (:identidade-id ator)
+           :autor-nome (:nome autor) :modelo-id modelo-id :tipo-requerimento (:nome modelo)
+           :ementa ementa :texto texto
+           :coautores (mapv (fn [vid] {:id vid :nome (:nome (por-id vid))}) pedidos)})
+        (assoc (repo/buscar-proposta-requerimento repo-legislativo (:ente-id ator) id (:id autor))
+               :sou-autor true)))))
+
+(defn buscar-proposta-requerimento
+  "GET /meu/requerimentos/propostas/:id — a proposta para quem PARTICIPA (autor ou convidado); nil p/ os demais
+  (-> 404, nao vaza). Marca `:sou-autor` e a `:minha-subscricao` (o estado do convite do leitor, se for coautor)."
+  [repo-legislativo resolver-vereador ator id]
+  (when-let [vid (resolver-vereador (:ente-id ator) (:identidade-id ator))]
+    (when-let [p (repo/buscar-proposta-requerimento repo-legislativo (:ente-id ator) id vid)]
+      (assoc p :sou-autor (= vid (:autor-vereador-id p))
+               :minha-subscricao (:estado (first (filter #(= vid (:vereador-id %)) (:subscricoes p))))))))
+
+(defn responder-subscricao
+  "POST /meu/requerimentos/propostas/:id/resposta — o coautor CONFIRMA (assina) ou RECUSA. nil = sem convite
+  para este login (-> 404). Conflitos (ja' respondeu / ja' protocolada) propagam -> 409 na borda."
+  [repo-legislativo resolver-vereador assinador ator id acao]
+  (when-let [vid (resolver-vereador (:ente-id ator) (:identidade-id ator))]
+    (repo/responder-subscricao! repo-legislativo (:ente-id ator)
+                                {:proposta-id id :vereador-id vid :identidade-id (:identidade-id ator)
+                                 :acao acao :assinador assinador})))
+
+(defn protocolar-proposta-requerimento
+  "POST /meu/requerimentos/propostas/:id/protocolo — o AUTOR assina e protocola o texto congelado (o mesmo que
+  os coautores assinaram). Entram os coautores que CONFIRMARAM; os pendentes ficam registrados como 'nao
+  consta'. nil = proposta inexistente ou de outro autor (-> 404). Ja' protocolada -> 409."
+  [repo-legislativo resolver-municipio resolver-autor assinador ator id hoje]
+  (when-let [autor (resolver-autor (:ente-id ator) (:identidade-id ator))]
+    (when-let [prop (repo/buscar-proposta-requerimento repo-legislativo (:ente-id ator) id (:id autor))]
+      (when (= (:id autor) (:autor-vereador-id prop))
+        (let [{:keys [uf municipio-nome]} (resolver-municipio (:ente-id ator))
+              ano (.getYear ^java.time.LocalDate hoje)]
+          (when-let [r (repo/protocolar-proposta-requerimento! repo-legislativo (:ente-id ator) id (:id autor)
+                         {:id (random-uuid) :tipo "requerimento" :ano ano
+                          :ementa (:ementa prop) :tipo-requerimento (:tipo-requerimento prop)
+                          :autor-tipo "vereador" :autor-id (:id autor) :autor-texto (:autor-nome prop)
+                          :texto (:texto prop) :created-by (:identidade-id ator)
+                          :assinador assinador :assinado-por (:identidade-id ator)
+                          :uf uf :municipio-nome municipio-nome})]
+            (assoc r :ano ano)))))))
+
+(defn convites-de-subscricao
+  "GET /meu/subscricoes — os pedidos de subscricao esperando a resposta deste vereador. Sem cadastro -> []."
+  [repo-legislativo resolver-vereador ator]
+  (if-let [vid (resolver-vereador (:ente-id ator) (:identidade-id ator))]
+    (repo/convites-de-subscricao repo-legislativo (:ente-id ator) vid)
+    []))
+
+(defn propostas-abertas
+  "GET /meu/requerimentos/propostas — as propostas do autor ainda esperando subscricoes. Sem cadastro -> []."
+  [repo-legislativo resolver-vereador ator]
+  (if-let [vid (resolver-vereador (:ente-id ator) (:identidade-id ator))]
+    (repo/propostas-abertas-do-autor repo-legislativo (:ente-id ator) vid)
+    []))

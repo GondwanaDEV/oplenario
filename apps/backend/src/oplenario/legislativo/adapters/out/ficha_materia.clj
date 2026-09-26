@@ -66,7 +66,7 @@
   CRITICO da revisao adversarial desta fatia: `(boolean nil)` = `false` anulava a UNICA trava que existe
   pra' pegar exatamente esse produtor incompleto)."
   [proposicao-out {:keys [tramitacao tramitacao-truncado apensadas apensadas-truncado
-                          emendas emendas-truncado pareceres pareceres-truncado]}]
+                          emendas emendas-truncado pareceres pareceres-truncado coautores]}]
   (validado wire/FichaMateriaOut
             {:proposicao proposicao-out
              :tramitacao (mapv tramitacao-item->wire tramitacao)
@@ -76,5 +76,8 @@
              :emendas (mapv emenda-resumo->wire emendas)
              :emendas-truncado emendas-truncado
              :pareceres (mapv parecer-resumo->wire pareceres)
-             :pareceres-truncado pareceres-truncado}
+             :pareceres-truncado pareceres-truncado
+             ;; fatia 2c: so' materia de requerimento coletivo tem coautores; as demais saem com []
+             :coautores (mapv (fn [c] {:nome (:vereador-nome c) :assinado-em (->str (:assinado-em c))})
+                              coautores)}
             "ficha da materia"))

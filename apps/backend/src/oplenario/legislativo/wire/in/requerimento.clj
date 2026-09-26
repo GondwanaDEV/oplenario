@@ -23,3 +23,20 @@
    [:modelo-id [:string {:min 1 :max 36}]]
    [:campos {:optional true} [:maybe Campos]]
    [:ementa [:string {:min 1 :max 2000}]]])
+
+;; ---------- fatia 2c: o requerimento COLETIVO ----------
+
+(def CriarPropostaRequerimento
+  "Corpo de POST /meu/requerimentos/propostas: o mesmo do protocolo + os COAUTORES convidados (vereador-ids de
+  colegas da Casa; ao menos um — sem coautor, o requerimento e' individual e vai direto ao protocolo). O teto
+  cobre a Casa inteira; quem e' colega de verdade o controller confere no roster."
+  [:map {:closed true}
+   [:modelo-id [:string {:min 1 :max 36}]]
+   [:campos {:optional true} [:maybe Campos]]
+   [:ementa [:string {:min 1 :max 2000}]]
+   [:coautores [:vector {:min 1 :max 60} [:string {:min 36 :max 36}]]]])
+
+(def ResponderSubscricao
+  "Corpo de POST /meu/requerimentos/propostas/:id/resposta: confirmar (assina) ou recusar."
+  [:map {:closed true}
+   [:acao [:enum "confirmar" "recusar"]]])

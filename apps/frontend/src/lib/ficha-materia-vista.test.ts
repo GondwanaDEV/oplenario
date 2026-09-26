@@ -43,6 +43,7 @@ const fichaBase: FichaMateriaOut = {
     { id: "p1", comissaoId: "c1", relatorId: "r1", votoRelator: "favorável", estado: "aprovado" },
   ],
   pareceresTruncado: false,
+  coautores: [],
 };
 
 describe("derivarDadosMateria", () => {

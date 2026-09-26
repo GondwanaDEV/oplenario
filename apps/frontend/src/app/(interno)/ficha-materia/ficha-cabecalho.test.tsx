@@ -34,4 +34,18 @@ describe("FichaCabecalho", () => {
     render(<FichaCabecalho proposicao={{ ...proposicao, autorTexto: null }} />);
     expect(screen.getByText(/não informada/)).toBeTruthy();
   });
+
+  it("fatia 2c: requerimento coletivo mostra os coautores que assinaram", () => {
+    render(
+      <FichaCabecalho
+        proposicao={proposicao}
+        coautores={[
+          { nome: "Bia Lima", assinadoEm: "2026-09-26T12:00:00Z" },
+          { nome: "Caio Reis", assinadoEm: "2026-09-26T12:05:00Z" },
+        ]}
+      />,
+    );
+    expect(screen.getByText("Bia Lima, Caio Reis")).toBeTruthy();
+    expect(screen.getByText(/Coautores/)).toBeTruthy();
+  });
 });

@@ -47,6 +47,17 @@
   (when-let [v (repo-cadastros-comp/vereador-por-identidade repo-cadastros ente-id identidade-id)]
     {:id (:id v) :nome (or (not-empty (:nome-parlamentar v)) (:nome v))}))
 
+(defn colegas-da-casa
+  "ente-id -> [{:id :nome :partido}] dos vereadores com mandato VIGENTE hoje nesta Casa, para o convite de
+  subscricao do requerimento coletivo (fatia 2c) — mesma excecao nomeada de `resolver-vereador` (§22.5.3).
+  Parte de `roster-da-casa` (o conjunto que compoe a Casa) e mantem so' 'vigente': licenciado nao subscreve
+  como parlamentar em exercicio. Nome de exibicao = o parlamentar, ou o civil quando nao ha'."
+  [repo-cadastros ente-id hoje]
+  (->> (repo-cadastros-comp/roster-da-casa repo-cadastros ente-id hoje)
+       (filter #(= "vigente" (:estado-mandato %)))
+       (mapv (fn [l] {:id (:vereador-id l) :nome (or (not-empty (:nome-parlamentar l)) (:nome l))
+                      :partido (:partido l)}))))
+
 (defn resolver-comissoes
   "comissao-ids -> {comissao-id nome} NESTA Casa — host wiring (§22.5.3, exceção nomeada, mesma forma de
   `resolver-vereador`/`membros-da-casa`). Resolve via o Repo-Component de `cadastros`
@@ -439,6 +450,11 @@
                                        :resolver-comissoes resolver-comissoes-fn
                                        ;; fatia 2b: quem RECEBEU cada movimentacao, no historico da tramitacao
                                        :nome-na-casa nome-na-casa-fn
+                                       ;; fatia 2c: quem pode ser convidado a subscrever um requerimento
+                                       :colegas-da-casa (fn [ente-id]
+                                                          (colegas-da-casa repo-cadastros ente-id
+                                                                           (tempo/hoje (tempo/relogio-sistema)
+                                                                                       tempo/zona-civil-padrao)))
                                        :vereador-vinculado? vereador-vinculado?
                                        ;; sec MEDIUM-2 FIX: gate #2 — a rota da Mesa so' registra voto nominal
                                        ;; para quem compoe a Casa com mandato vigente (roster). Mesmo seam
