@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from oplenario_ia.armazem.memoria import ArmazemMemoria
-from oplenario_ia.armazem.porta import Armazem, NovaTranscricao, NovoRascunho, NovoTrabalho
+from oplenario_ia.armazem.porta import Armazem, NovaTranscricao, NovoRascunho, NovoTrabalho, RevisaoAta
 from oplenario_ia.transcricao.modelo import Trecho
 
 URL = os.environ.get("OPLENARIO_IA_DATABASE_URL_TESTE")
@@ -164,3 +164,19 @@ def test_reabrir_nao_reaplica_migracao_e_preserva_os_dados() -> None:
     reaberto = ArmazemPostgres(URL)  # o segundo processo (ou o reinício) sobe sobre o schema existente
     assert reaberto.cursor() == 9
     assert [t["chave"] for t in reaberto.trabalhos()] == ["persistente"]
+
+
+def test_revisao_da_ata_e_uma_por_versao(armazem: Armazem) -> None:
+    armazem.registrar_feed([novo("r", "redigir_ata")], 1)
+    t = armazem.proximo(AGORA)
+    assert t is not None
+    g = armazem.concluir_rascunho(
+        t.id,
+        NovoRascunho(ENTE, SESSAO, SOLIC, "e", "Ata.", [], [], {"nivel": "normal", "motivos": []}, "f", "m", "v", []),
+        lambda g: novo("aviso", "notificar"),
+    )
+    r = RevisaoAta(ENTE, g.id, 1, "editado", 0.12, "sha256:aa", "b0000000-0000-0000-0000-00000000000b")
+    assert armazem.registrar_revisao(r) is True
+    assert armazem.registrar_revisao(r) is False, "reentrega"
+    v2 = RevisaoAta(**{**r.__dict__, "versao_ata": 2})
+    assert armazem.registrar_revisao(v2) is True, "retificação é outra versão"

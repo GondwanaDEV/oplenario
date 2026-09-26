@@ -110,6 +110,14 @@
                   {})]
       (assoc c :nomes nomes))))
 
+(defn ata-para-ia
+  "A.6c: a versao publicada da ata para a IA medir a revisao | :restrita (sessao secreta) | nil (host wiring)."
+  [repo-sessoes ente-id sessao-id versao]
+  (when-let [s (repo-sessoes-comp/buscar-sessao repo-sessoes ente-id sessao-id)]
+    (if (= "secreta" (:tipo-sessao s))
+      :restrita
+      (repo-sessoes-comp/ata-versao repo-sessoes ente-id sessao-id versao))))
+
 (defn abrir-gravacao-para-ia
   "segmento -> {:stream :audio-hash} | :restrita | nil (host wiring). So' serve gravacao VINCULADA a uma sessao
   (a IA so' conhece o que o core promoveu) e NUNCA a restrita — mesmo que alguem peca pelo id."
@@ -542,5 +550,6 @@
                   :contexto-da-sessao (fn [ente-id sessao-id] (contexto-para-ia repo-sessoes repo-cadastros ente-id sessao-id))
                   :abrir-gravacao (fn [ente-id seg-id] (abrir-gravacao-para-ia repo-sessoes objeto-store ente-id seg-id))
                   :registrar-transcricao repo-sessoes-comp/registrar-transcricao-em-tx!
-                  :registrar-rascunho-ata repo-sessoes-comp/registrar-rascunho-ata-em-tx!})
+                  :registrar-rascunho-ata repo-sessoes-comp/registrar-rascunho-ata-em-tx!
+                  :ata-para-ia (fn [ente-id sessao-id versao] (ata-para-ia repo-sessoes ente-id sessao-id versao))})
                 #{})))))

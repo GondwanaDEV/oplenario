@@ -194,3 +194,25 @@
              :ocorrido-em (Instant/parse "2026-09-26T22:00:00Z")
              :payload {:sessao-id sid :solicitacao-id (random-uuid) :categoria "entrada" :detalhe "x" :retentavel false}
              :bruto {}})))))
+
+;; ---------- A.6c: a revisao humana volta para a IA ----------
+
+(deftest ata-publicada-do-rascunho-vira-revisada-e-publicada-no-feed-e-a-da-casa-nao
+  (let [ente (random-uuid) [sid _] (sessao-com-segmento! ente) [sid2 _] (sessao-com-segmento! ente)
+        rs (repo-sessoes/map->RepoSessoesPg {:datasource {:ds *ds*} :bus (outbox/bus)})
+        rid (random-uuid) quem (random-uuid)
+        v1 (repo-sessoes/publicar-ata! rs ente {:sessao-id sid :texto "Ata final." :origem-redacao "gerada_automaticamente"
+                                                :rascunho-id rid :modelo-llm-id "fake:fake-1" :prompt-versao "ata-v1"
+                                                :conteudo-sha256 "sha256:aa" :publicada-por quem})]
+    (repo-sessoes/publicar-ata! rs ente {:sessao-id sid2 :texto "Ata da Casa." :origem-redacao "redigida_externamente"
+                                         :conteudo-sha256 "sha256:bb" :publicada-por quem})
+    (drena!)
+    (let [[e :as evs] (do-ente ente)]
+      (is (= 1 (count evs)) "a ata redigida pela Casa nao vai para a IA")
+      (is (= "AtaRevisadaEPublicada" (:tipo e)))
+      (is (= (str "AtaRevisadaEPublicada:v1:" (:id v1)) (:chave e)))
+      (is (= [(str rid) 1 (str quem) "sha256:aa"]
+             ((juxt :rascunho-id :versao-ata :publicada-por :conteudo-sha256) (:payload e))))
+      (is (re-find #"/sessoes/.+/atas/1$" (get-in e [:payload :conteudo-uri]))))
+    (is (= "Ata final." (:texto (repo-sessoes/ata-versao rs ente sid 1))))
+    (is (nil? (repo-sessoes/ata-versao rs ente sid 2)))))

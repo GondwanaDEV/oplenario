@@ -96,6 +96,19 @@ class RascunhoGuardado:
     criado_em: datetime | None = None
 
 
+@dataclass(frozen=True)
+class RevisaoAta:
+    """A revisão humana de um rascunho nosso, medida quando a ata foi publicada no core (A.6c). Só números e hashes."""
+
+    ente_id: str
+    rascunho_id: str
+    versao_ata: int
+    desfecho: str  # "aprovado" | "editado"
+    proporcao_alterada: float
+    conteudo_sha256: str
+    publicada_por: str
+
+
 class Armazem(Protocol):
     def cursor(self) -> int: ...
 
@@ -135,6 +148,10 @@ class Armazem(Protocol):
         ...
 
     def rascunho(self, rascunho_id: str) -> RascunhoGuardado | None: ...
+
+    def registrar_revisao(self, revisao: RevisaoAta) -> bool:
+        """Guarda a revisão uma vez por (rascunho, versão da ata). True = nova; False = já estava (reentrega)."""
+        ...
 
     def trabalhos(self) -> list[dict[str, Any]]:
         """Visão de operação (estado, tentativas, último erro) — sem conteúdo."""

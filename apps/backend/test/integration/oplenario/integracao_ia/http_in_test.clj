@@ -41,7 +41,7 @@
             :encerrou-em (Instant/parse "2026-09-22T21:15:00Z")}]
    :nomes {#uuid "40000000-0000-0000-0000-000000000004" "Ana Ribeiro"}})
 
-(defn- servico [& {:keys [seg-redo contexto abrir efeitos recebidos]
+(defn- servico [& {:keys [seg-redo contexto abrir efeitos recebidos ata]
                    :or {seg-redo segredo recebidos (atom [])}}]
   (-> (http/servico (config/carregar)
                     (ia-http/rotas {:repo-integracao-ia (fake-repo recebidos)
@@ -49,7 +49,8 @@
                                     :contexto-da-sessao (or contexto (fn [_ _] contexto-ok))
                                     :abrir-gravacao (or abrir (fn [_ _] nil))
                                     :registrar-transcricao (fn [_tx e m] (some-> efeitos (swap! conj [e m])))
-                                    :registrar-rascunho-ata (fn [_tx e m] (some-> efeitos (swap! conj [:ata e m])))})
+                                    :registrar-rascunho-ata (fn [_tx e m] (some-> efeitos (swap! conj [:ata e m])))
+                                    :ata-para-ia (or ata (fn [_ _ _] nil))})
                     it/globais)
       ph/create-server ::ph/service-fn))
 
@@ -172,3 +173,22 @@
                                                     "n-citacoes" 0 "n-citacoes-conferidas" 0
                                                     "n-paragrafos-sem-fonte" 0 "n-pontos-a-confirmar" 0}))))
         "incerteza fora do vocabulario")))
+
+(deftest texto-da-ata-publicada
+  (let [pedidos (atom [])
+        svc (servico :ata (fn [e s v] (swap! pedidos conj [e s v])
+                            (case v
+                              1 {:versao 1 :texto "Ata final." :conteudo-sha256 "sha256:aa"
+                                 :origem-redacao "gerada_automaticamente" :publicada-por (random-uuid)}
+                              2 :restrita
+                              nil)))
+        url (fn [v] (str "/integracao/ia/v1/entes/" ente "/sessoes/" sid "/atas/" v))
+        r (pt/response-for svc :get (url 1) :headers (com-segredo))]
+    (is (= 200 (:status r)))
+    (is (= {:versao 1 :texto "Ata final." :conteudo-sha256 "sha256:aa" :origem-redacao "gerada_automaticamente"}
+           (ler r)) "so' o contrato (quem publicou nao sai)")
+    (is (= [ente sid 1] (first @pedidos)) "o tenant do caminho")
+    (is (= 403 (:status (pt/response-for svc :get (url 2) :headers (com-segredo)))))
+    (is (= 404 (:status (pt/response-for svc :get (url 3) :headers (com-segredo)))))
+    (is (= 400 (:status (pt/response-for svc :get (url "x") :headers (com-segredo)))))
+    (is (= 401 (:status (pt/response-for svc :get (url 1) :headers (com-segredo "errado")))))))

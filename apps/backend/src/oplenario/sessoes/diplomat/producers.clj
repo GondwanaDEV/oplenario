@@ -42,6 +42,9 @@
 (defn emitir-ata-rascunho-solicitado! [bus tx ente-id payload]
   (eventos/emitir! bus tx (ev-ata/rascunho-solicitado ente-id payload)))
 
+(defn emitir-ata-publicada! [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-ata/publicada ente-id payload)))
+
 (defn emitir-gravacao-segmento-captado! [bus tx ente-id payload]
   (eventos/emitir! bus tx (ev-gravacao/segmento-captado ente-id payload)))
 
