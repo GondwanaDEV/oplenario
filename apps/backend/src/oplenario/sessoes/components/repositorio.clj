@@ -155,6 +155,7 @@
     atribuir falas pelo Caminho C. nil = sessao inexistente no tenant. O SIGILO (secreta/restrito) e' decidido
     pelo chamador (host), que ve a sessao inteira.")
   (listar-transcricoes [this ente-id sessao-id] "Ponteiros de transcricao da sessao (mais recentes primeiro).")
+  (buscar-transcricao [this ente-id sessao-id transcricao-id] "O ponteiro concluido desta sessao, ou nil.")
   (listar-gravacoes-pendentes [this ente-id limite]
     "Faixa A / A.2: {:segmentos [...sem sessao, mais recentes primeiro] :sessoes [...candidatas a vinculo, na
     janela das gravacoes (1 dia)]}, numa tx. A sugestao (qual sessao) e' pura, no controller.")
@@ -510,6 +511,8 @@
            :falas     (tribuna/listar-falas-da-sessao tx ente-id sessao-id)}))))
   (listar-transcricoes [this ente-id sessao-id]
     (transacao this ente-id #(transcricao/listar-da-sessao % ente-id sessao-id)))
+  (buscar-transcricao [this ente-id sessao-id transcricao-id]
+    (transacao this ente-id #(transcricao/buscar-da-sessao % ente-id sessao-id transcricao-id)))
   (listar-gravacoes-pendentes [this ente-id limite]
     (transacao this ente-id
       (fn [tx] {:segmentos (gravacao/listar-pendentes tx ente-id limite)

@@ -592,6 +592,24 @@
     (authz/check! ator :sessao/ver s logic/pode-ver-sessao?)
     {:sessao-id id :segmentos (vec (repo/listar-segmentos-da-sessao repo-sessoes (:ente-id ator) id))}))
 
+(defn transcricoes-da-sessao
+  "Faixa A / A.3: os ponteiros de transcricao da sessao (situacao por segmento). Authz no recurso sessao."
+  [repo-sessoes ator id]
+  (when-let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) id)]
+    (authz/check! ator :sessao/ver s logic/pode-ver-sessao?)
+    {:sessao-id id :itens (vec (repo/listar-transcricoes repo-sessoes (:ente-id ator) id))}))
+
+(defn transcricao-da-sessao
+  "Faixa A / A.3: o TEXTO de uma transcricao, lido da IA (onde ele vive, §22.3.4) pelo seam `ler-transcricao`.
+  So' pede a IA um id que o core registrou para ESTA sessao (o ponteiro) — nunca repassa id arbitrario. nil =
+  sessao ou transcricao inexistente. IA fora do ar -> `:ia/indisponivel` (a borda traduz em 503, R-IA-1)."
+  [repo-sessoes ler-transcricao ator sessao-id transcricao-id]
+  (when-let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/ver s logic/pode-ver-sessao?)
+    (when-let [p (repo/buscar-transcricao repo-sessoes (:ente-id ator) sessao-id transcricao-id)]
+      (when-let [t (ler-transcricao (:ente-id ator) transcricao-id)]
+        (assoc t :ponteiro p)))))
+
 (defn resumo-presenca
   "Read-model da presenca agregada (F7/FE Onda A1), tenant-wide — sem recurso unico p/ camada fina (mesmo
   contrato de `compliance.controllers/painel`). `membros-da-casa` chega JA RESOLVIDO pelo caller (inversao de

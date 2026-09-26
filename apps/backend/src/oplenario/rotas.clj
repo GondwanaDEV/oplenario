@@ -12,6 +12,7 @@
             [oplenario.identidade.diplomat.http.auth-in :as auth-http]
             [oplenario.identidade.diplomat.http.in :as identidade-http]
             [oplenario.integracao-ia.diplomat.http.in :as integracao-ia-http]
+            [oplenario.integracao-ia.diplomat.http.out :as plataforma-ia]
             [oplenario.interceptors :as it]
             [oplenario.kernel.components.objeto-store :as objeto-store-comp]
             [oplenario.kernel.tempo :as tempo]
@@ -449,7 +450,12 @@
         ;; (:absoluta-h/:ociosa-min) — mesmo padrao `or` de `keycloak`/`info-ente` acima (fallback pra
         ;; config/carregar aqui no HOST; auth-http/rotas recebe ja' resolvido, nunca chama config/carregar
         ;; ela mesma).
-        sessao (or sessao (:sessao (config/carregar)))]
+        sessao (or sessao (:sessao (config/carregar)))
+        integracao-ia (or integracao-ia (:integracao-ia (config/carregar)))
+        ;; ADR-0008: o cliente core -> IA (leitura da transcricao). Construido uma vez; sem url/segredo toda leitura
+        ;; responde indisponivel (R-IA-1), nunca 500.
+        ia (plataforma-ia/plataforma-ia integracao-ia)
+        ler-transcricao-fn (fn [ente-id tid] (plataforma-ia/ler-transcricao ia ente-id tid))]
     (-> #{["/saude"             :get http/saude :route-name :saude]
           ["/eu"                :get [auth http/eu] :route-name :eu]
           ["/painel-secretaria" :get [auth (it/exige-papel "secretario") http/painel-secretaria]
@@ -470,7 +476,8 @@
                                    ;; Etapa 5 fatia 5: os dois ports da folha, ja' construidos+decorados acima.
                                    :serializador-folha serializador-folha-fn
                                    :renderizador-pdf renderizador-pdf-fn
-                                   :nome-na-casa nome-na-casa-fn}))
+                                   :nome-na-casa nome-na-casa-fn
+                                   :ler-transcricao ler-transcricao-fn}))
         (into (legislativo-http/rotas {:auth auth :repo-legislativo repo-legislativo
                                        :consultar-sessao consultar-sessao
                                        :sessao-fechada? sessao-fechada?
@@ -529,7 +536,7 @@
         (into (if repo-integracao-ia
                 (integracao-ia-http/rotas
                  {:repo-integracao-ia repo-integracao-ia
-                  :segredo (:segredo (or integracao-ia (:integracao-ia (config/carregar))))
+                  :segredo (:segredo integracao-ia)
                   :contexto-da-sessao (fn [ente-id sessao-id] (contexto-para-ia repo-sessoes repo-cadastros ente-id sessao-id))
                   :abrir-gravacao (fn [ente-id seg-id] (abrir-gravacao-para-ia repo-sessoes objeto-store ente-id seg-id))
                   :registrar-transcricao repo-sessoes-comp/registrar-transcricao-em-tx!})

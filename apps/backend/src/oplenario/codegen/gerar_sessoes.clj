@@ -61,6 +61,11 @@
    ["SugestaoSessaoOut" out/SugestaoSessaoOut]
    ["GravacaoPendenteOut" out/GravacaoPendenteOut]
    ["GravacoesPendentesOut" out/GravacoesPendentesOut]
+   ;; Faixa A / A.3 — a transcricao. Folhas ANTES dos agregados.
+   ["TranscricaoPonteiroOut" out/TranscricaoPonteiroOut]
+   ["TranscricoesOut" out/TranscricoesOut]
+   ["TrechoTranscricaoOut" out/TrechoTranscricaoOut]
+   ["TranscricaoConteudoOut" out/TranscricaoConteudoOut]
    ["PautaItemAdicionadoOut" out/PautaItemAdicionadoOut]
    ["PautaItemReordenadoOut" out/PautaItemReordenadoOut]
    ["PautaItemRemovidoOut" out/PautaItemRemovidoOut]

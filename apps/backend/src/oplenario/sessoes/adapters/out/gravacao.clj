@@ -76,3 +76,30 @@
                                        :sugestao        (sugestao->wire (:sugestao s))})
                               segmentos)}
             "gravacoes pendentes violam o contrato GravacoesPendentesOut (bug de servidor)"))
+
+;; ---------- Faixa A / A.3: transcricao ----------
+
+(defn- ->double [x] (some-> x double))
+
+(defn- ponteiro->wire [p]
+  {:id (->str (:id p)) :segmento-id (->str (:segmento-id p)) :situacao (:situacao p)
+   :transcricao-id (->str (:transcricao-id p)) :versao (:versao p) :idioma (:idioma p)
+   :duracao-s (->double (:duracao-s p)) :n-trechos (:n-trechos p)
+   :cobertura-atribuida (->double (:cobertura-atribuida p)) :modelo-asr (:modelo-asr p)
+   :modelo-diarizacao (:modelo-diarizacao p) :categoria-erro (:categoria-erro p) :detalhe-erro (:detalhe-erro p)
+   :retentavel (:retentavel p) :ocorrido-em (->str (:ocorrido-em p))})
+
+(defn transcricoes->wire [{:keys [sessao-id itens]}]
+  (validado wire/TranscricoesOut {:sessao-id (->str sessao-id) :itens (mapv ponteiro->wire itens)}
+            "transcricoes violam o contrato TranscricoesOut (bug de servidor)"))
+
+(defn transcricao-conteudo->wire
+  "O que a IA devolveu + o ponteiro do core -> TranscricaoConteudoOut. So' os campos de exibicao passam (o grupo de
+  voz da diarizacao e' interno da IA)."
+  [t]
+  (validado wire/TranscricaoConteudoOut
+            {:ponteiro (ponteiro->wire (:ponteiro t))
+             :trechos  (mapv (fn [x] {:inicio (->double (:inicio x)) :fim (->double (:fim x)) :texto (str (:texto x))
+                                      :orador-id (:orador-id x) :orador-nome (:orador-nome x)})
+                             (:trechos t))}
+            "transcricao viola o contrato TranscricaoConteudoOut (bug de servidor)"))

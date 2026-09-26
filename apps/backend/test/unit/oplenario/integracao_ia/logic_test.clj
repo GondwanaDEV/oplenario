@@ -20,8 +20,17 @@
   (is (nil? (logic/promover "gravacao.segmento-vinculado" ente {:segmento-id (str seg) :sessao-id (str sid)
                                                                  :acesso-restrito true}))))
 
+(deftest captada-ja-com-sessao-e-uma-gravacao-vinculada
+  ;; link-at-ingest (`oplenario-captar enviar --sessao`): o core so' emite `segmento-captado` — sem esta promocao a
+  ;; gravacao nunca chegaria a IA. Mesma chave do vinculo: as duas promocoes nunca duplicam o evento.
+  (let [p {:segmento-id (str seg) :sessao-id (str sid) :acesso-restrito false}]
+    (is (= (logic/promover "gravacao.segmento-vinculado" ente p) (logic/promover "gravacao.segmento-captado" ente p))))
+  (is (nil? (logic/promover "gravacao.segmento-captado" ente {:segmento-id (str seg) :sessao-id (str sid)
+                                                               :acesso-restrito true}))
+      "restrita, nem assim"))
+
 (deftest so-o-que-esta-na-lista-e-promovido
-  (is (nil? (logic/promover "gravacao.segmento-captado" ente {:segmento-id (str seg)}))
+  (is (nil? (logic/promover "gravacao.segmento-captado" ente {:segmento-id (str seg) :acesso-restrito false}))
       "captado sem vinculo nao vai: a IA so' trabalha gravacao que a secretaria pos numa sessao")
   (is (nil? (logic/promover "presenca.registrada" ente {}))))
 

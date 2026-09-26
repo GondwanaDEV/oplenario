@@ -31,9 +31,18 @@
                :conteudo-uri (uri-conteudo-gravacao ente-id segmento-id)
                :contexto-uri (uri-contexto-sessao ente-id sessao-id)}}))
 
+(defn- promover-gravacao-captada
+  "`gravacao.segmento-captado` COM sessao (link-at-ingest: o utilitario de captacao enviou com `--sessao`) e' uma
+  gravacao vinculada desde o nascimento — o core nunca emite `segmento-vinculado` para ela. Mesma chave da
+  promocao do vinculo: se as duas acontecerem, o feed tem um evento so'. Sem sessao: nil (espera o vinculo)."
+  [ente-id payload]
+  (when (:sessao-id payload)
+    (promover-gravacao-vinculada ente-id payload)))
+
 (def promocoes
   "tipo de dominio -> (fn [ente-id payload] -> evento de integracao | nil). FONTE UNICA do que atravessa."
-  {"gravacao.segmento-vinculado" promover-gravacao-vinculada})
+  {"gravacao.segmento-vinculado" promover-gravacao-vinculada
+   "gravacao.segmento-captado"   promover-gravacao-captada})
 
 (defn promover
   "O evento de integracao para um evento de dominio, ou nil (tipo nao promovido, ou conteudo restrito)."

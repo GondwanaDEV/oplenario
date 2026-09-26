@@ -50,6 +50,17 @@
       (is (= (str seg) (get-in e [:payload :segmento-id])))
       (is (pos? (:seq e))))))
 
+(deftest captada-com-sessao-e-depois-vinculada-da-um-evento-so
+  (let [ente (random-uuid) sid (random-uuid) seg (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx] (eventos/emitir! (outbox/bus) tx
+                 (eventos/evento "gravacao.segmento-captado" ente
+                   {:segmento-id seg :container-bruto-uri "gravacao/x" :fonte-ingestao "gravacao_local_pos_sessao"
+                    :acesso-restrito false :sessao-id sid}))))
+    (vinculado! ente sid seg false)
+    (drena!)
+    (is (= 1 (count (do-ente ente))))))
+
 (deftest feed-pagina-pelo-cursor
   (let [ente (random-uuid) sid (random-uuid)]
     (dotimes [_ 3] (vinculado! ente sid (random-uuid) false))
@@ -123,3 +134,14 @@
             (concluida intruso sid seg (str "i-" (random-uuid)))))
         "evento com ente errado nao enxerga a sessao do outro tenant (RLS) — nao grava nada")
     (is (empty? (ponteiros ente sid)))))
+
+(deftest ponteiro-so-e-achado-na-propria-sessao-e-concluido
+  (let [ente (random-uuid) [sid seg] (sessao-com-segmento! ente) [sid2 _] (sessao-com-segmento! ente)
+        ev (concluida ente sid seg (str "p-" (random-uuid)))
+        tid (get-in ev [:payload :transcricao-id])
+        rs (repo-sessoes/map->RepoSessoesPg {:datasource {:ds *ds*}})]
+    (controllers/receber! *repo* repo-sessoes/registrar-transcricao-em-tx! ev)
+    (is (= tid (:transcricao-id (repo-sessoes/buscar-transcricao rs ente sid tid))))
+    (is (nil? (repo-sessoes/buscar-transcricao rs ente sid2 tid)) "outra sessao: nao acha")
+    (is (nil? (repo-sessoes/buscar-transcricao rs (random-uuid) sid tid)) "outro tenant: nao acha")
+    (is (= 1 (count (repo-sessoes/listar-transcricoes rs ente sid))))))

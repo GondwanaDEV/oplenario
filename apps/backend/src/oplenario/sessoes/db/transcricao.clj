@@ -43,3 +43,14 @@
      (sql/format {:select colunas :from [:sessoes.transcricao_sessao]
                   :where [:and [:= :ente_id ente-id] [:= :sessao_id sessao-id]]
                   :order-by [[:ocorrido_em :desc] [:recebido_em :desc]]}))))
+
+(defn buscar-da-sessao
+  "O ponteiro da transcricao `transcricao-id` DESTA sessao (concluida), ou nil. E' a prova de que a transcricao
+  pertence a sessao que o ator pode ver — o core nunca pede a IA um id que ele mesmo nao registrou."
+  [tx ente-id sessao-id transcricao-id]
+  (comum/linha->kebab
+   (jdbc/execute-one! tx
+     (sql/format {:select colunas :from [:sessoes.transcricao_sessao]
+                  :where [:and [:= :ente_id ente-id] [:= :sessao_id sessao-id]
+                          [:= :transcricao_id transcricao-id] [:= :situacao "concluida"]]
+                  :limit 1}))))
