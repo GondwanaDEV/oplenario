@@ -45,7 +45,7 @@
       (let [{:keys [ente identidades] :as casa-r} (casa/semear! sys)]
         (println "==> casa:" (pr-str {:ente ente :legislatura (:legislatura casa-r)
                                        :n-vereadores (count (:vereadores casa-r))}))
-        (let [acervo-r (acervo/semear! sys ente (:vereador identidades))]
+        (let [acervo-r (acervo/semear! sys ente (:vereador identidades) (:secretaria identidades))]
           (println "==> acervo:" (pr-str acervo-r))
           (let [sessoes-r (sessoes/semear! sys ente)]
             (println "==> sessoes:" (pr-str sessoes-r))

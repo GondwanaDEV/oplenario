@@ -18,7 +18,7 @@ const ficha: FichaMateriaOut = {
     texto: "Art. 1º Fica instituído o Programa.",
   },
   tramitacao: [
-    { deEstado: "protocolada", paraEstado: "em_comissoes", gatilho: "distribuir", ocorridoEm: "2026-04-08T09:00:00Z" },
+    { deEstado: "protocolada", paraEstado: "em_comissoes", gatilho: "distribuir", ocorridoEm: "2026-04-08T09:00:00Z", recebimento: null },
   ],
   tramitacaoTruncado: false,
   apensadas: [],

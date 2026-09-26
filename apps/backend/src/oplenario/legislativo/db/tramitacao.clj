@@ -11,6 +11,7 @@
             [oplenario.kernel.autorizacao :as authz]
             [oplenario.kernel.db-util :as comum]
             [oplenario.legislativo.db.proposicao :as proposicao]
+            [oplenario.legislativo.db.recebimento :as recebimento]
             [oplenario.legislativo.logic :as logic]
             [oplenario.motor.api :as motor]))
 
@@ -78,11 +79,35 @@
                   :where [:and [:= :ente_id ente-id] [:= :id id] [:= :ativo true]]
                   :returning [:id]}))))
 
-(defn criar-estado! [tx {:keys [id ente-id template-id chave nome terminal ordem]}]
+(def ^:private vocabulario-autorizacao
+  "ADR-0004: `autorizacao` roda via `motor/politica-dsl`, cujo `amb` e' SEMPRE {\"ator\" ... \"recurso\"
+  ...} — nunca depende do sujeito do template. Fixo, ao contrario do vocabulario da guarda."
+  #{"ator" "recurso"})
+
+(defn criar-estado!
+  "Persiste um estado do rito. `:exige-recebimento` (fatia 2b, mig 0083) = a materia que chega aqui entra em
+  CARGA: alguem tem de receber e assinar antes de ela sair. `:recebedor` = QUEM pode receber, expressao da MESMA
+  DSL de `template_transicao.autorizacao` (vocabulario ator/recurso) — gateada no SAVE pelos mesmos dois passos
+  de `criar-transicao!`: expressao que nao parseia ou que cita vocabulario de fora nao entra no rito (senao a
+  falha apareceria no meio do expediente, e `check!` traduz lance em negacao: 'ninguem pode receber')."
+  [tx {:keys [id ente-id template-id chave nome terminal ordem exige-recebimento recebedor]}]
+  (when-not (str/blank? recebedor)
+    (let [{:keys [status erros]} (motor/validar-guarda recebedor)]
+      (when (not= "VALIDA" status)
+        (throw (ex-info "expressao de quem recebe mal-formada (rejeitada no save, Inv.4)"
+                        {:erro :recebedor-invalido :estado chave :erros erros}))))
+    (let [{:keys [status erros]} (motor/validar-guarda recebedor {:vocabulario vocabulario-autorizacao})]
+      (when (not= "VALIDA" status)
+        (throw (ex-info (str "expressao de quem recebe referencia vocabulario nao permitido (rejeitada no "
+                             "save, ADR-0004): " (str/join "; " erros))
+                        {:erro :recebedor-vocabulario-invalido :estado chave :erros erros})))))
   (jdbc/execute-one! tx
     (sql/format {:insert-into :legislativo.template_estado
                  :values [{:id id :ente_id ente-id :template_id template-id :chave chave :nome nome
-                           :terminal (boolean terminal) :ordem (or ordem 0) :efetivado_em [:now]}]})))
+                           :terminal (boolean terminal) :ordem (or ordem 0)
+                           :exige_recebimento (boolean exige-recebimento)
+                           :recebedor (when-not (str/blank? recebedor) recebedor)
+                           :efetivado_em [:now]}]})))
 
 (defn- irmas-do-gatilho
   "As outras transicoes do MESMO (template, de_estado, gatilho) — as PORTAS irmas do mesmo ato."
@@ -157,11 +182,6 @@
               (jdbc/execute-one! tx
                 (sql/format {:select [:sujeito] :from [:legislativo.template_tramitacao]
                              :where [:and [:= :ente_id ente-id] [:= :id template-id]]})))))
-
-(def ^:private vocabulario-autorizacao
-  "ADR-0004: `autorizacao` roda via `motor/politica-dsl`, cujo `amb` e' SEMPRE {\"ator\" ... \"recurso\"
-  ...} — nunca depende do sujeito do template. Fixo, ao contrario do vocabulario da guarda."
-  #{"ator" "recurso"})
 
 (defn criar-transicao!
   "Persiste uma transicao do template. GATEIA no save (Inv.4, motor/validar-guarda) AS DUAS expressoes —
@@ -428,6 +448,11 @@
       ;; decidir o que ja' esta' decidido, e um guard que LANCA transformaria "o processo acabou" (dominio
       ;; normal, 409) em incidente de config (500) — trocando o diagnostico certo pelo errado.
       {:transicionou? false :motivo :estado-terminal :de estado :gatilho gatilho}
+      (if (recebimento/pendente-para-transitar tx ente-id proposicao-id estado-declarado estado)
+      ;; fatia 2b (mig 0083): o rito marca este estado como CARGA a receber, e a movimentacao que trouxe a
+      ;; materia ainda nao foi recebida e assinada. Recusa de DOMINIO (409), antes de guard e autorizacao: nao
+      ;; e' 'voce nao pode' nem 'a condicao nao vale', e' 'ninguem recebeu ainda' — resolve-se recebendo.
+      {:transicionou? false :motivo :recebimento-pendente :de estado :gatilho gatilho}
       (let [candidatas (transicoes-de tx ente-id template-id estado gatilho)
             passa? (fn [t]
                      (or (nil? (:guarda t))
@@ -512,4 +537,4 @@
           {:transicionou? false :motivo :estado-fora-do-rito :de estado :gatilho gatilho}
 
           :else
-          {:transicionou? false :motivo :gatilho-nao-declarado :de estado :gatilho gatilho})))))
+          {:transicionou? false :motivo :gatilho-nao-declarado :de estado :gatilho gatilho}))))))

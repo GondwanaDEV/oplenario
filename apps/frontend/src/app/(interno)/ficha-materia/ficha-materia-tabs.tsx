@@ -155,6 +155,7 @@ export function FichaMateriaTabs({
                     {item.rotuloDe} → {item.rotuloPara}
                   </p>
                   <span className="quem">{item.gatilho}</span>
+                  {item.recebimentoTexto && <span className="recebido">{item.recebimentoTexto}</span>}
                 </li>
               ))}
             </ol>

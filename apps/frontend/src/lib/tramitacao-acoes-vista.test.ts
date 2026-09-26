@@ -12,6 +12,7 @@ function base(over: Partial<TramitacaoOut> = {}): TramitacaoOut {
     historicoTruncado: false,
     gatilhosPossiveis: [],
     nota: null,
+    recebimentoPendente: null,
     ...over,
   };
 }
@@ -53,5 +54,28 @@ describe("derivarAcoesTramitacao", () => {
     const v = derivarAcoesTramitacao(base({ nota: null }));
     if (v.tipo !== "sem-atos") throw new Error("esperava sem-atos");
     expect(v.nota).toMatch(/nenhum ato dispon/i);
+  });
+
+  it("carga pendente → tipo carga, sem atos (o backend recusaria todos até alguém receber)", () => {
+    const v = derivarAcoesTramitacao(
+      base({
+        estadoAtual: "em_comissoes",
+        gatilhosPossiveis: [
+          { gatilho: "concluir", destinosPossiveis: ["em_pauta"], podeSerRecusado: false, exigeAutorizacao: false },
+        ],
+        recebimentoPendente: {
+          movimentacaoId: "m1",
+          deEstado: "protocolada",
+          estado: "em_comissoes",
+          estadoNome: "Em Comissões",
+          desde: "2026-09-26T10:00:00",
+          restrito: false,
+        },
+      }),
+      new Date("2026-09-26T11:00:00"),
+    );
+    expect(v.tipo).toBe("carga");
+    if (v.tipo !== "carga") return;
+    expect(v.carga).toMatchObject({ movimentacaoId: "m1", estadoNome: "Em Comissões", restrito: false });
   });
 });

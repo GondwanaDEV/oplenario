@@ -33,6 +33,9 @@ const DESTINOS_NAV = [
   { rotulo: "Central", href: "/inicio" },
   { rotulo: "Painéis da Mesa", href: "/paineis/mesa" },
   { rotulo: "Tramitação", href: "/tramitacao" },
+  // Fatia 2b — a fila de cargas não recebidas (o rito exige que quem recebe assine). Ao lado de Tramitação:
+  // é a outra metade do mesmo trabalho. Gated "secretario" (GuardSecretaria + exige-papel no backend).
+  { rotulo: "Recebimentos", href: "/recebimentos" },
   { rotulo: "Proposições", href: "/proposicoes" },
   // Onda B Slice 6 — Expediente (gerar documento + Protocolo Geral) é área de topo nova, não sub-rota de
   // Proposições (documento administrativo não é matéria legislativa).

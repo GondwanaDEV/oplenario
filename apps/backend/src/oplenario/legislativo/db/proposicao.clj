@@ -53,7 +53,7 @@
   [tx ente-id template-id chave]
   (comum/linha->kebab
     (jdbc/execute-one! tx
-      (sql/format {:select [:chave :nome :terminal :ordem]
+      (sql/format {:select [:chave :nome :terminal :ordem :exige_recebimento :recebedor]
                    :from [:legislativo.template_estado]
                    :where [:and [:= :ente_id ente-id] [:= :template_id template-id] [:= :chave chave]]}))))
 

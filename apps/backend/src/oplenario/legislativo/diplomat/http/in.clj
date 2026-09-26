@@ -291,6 +291,11 @@
                 "este rito, ou o rito ter sido trocado sob os pes dela. Nenhum ato e' possivel ate' "
                 "alguem reconciliar rito e estado na configuracao.")}
 
+    :recebimento-pendente
+    {:motivo "recebimento-pendente"
+     :erro (str "a materia chegou a '" estado "' e ainda nao foi RECEBIDA: o rito desta Casa exige que quem "
+                "recebe a carga assine o recebimento antes de qualquer outro ato. Receba primeiro e tente de novo.")}
+
     {:erro (str "o rito desta Casa nao permite o ato '" gatilho "' com a materia em '" estado "'")}))
 
 (defn- tramitar-handler
@@ -371,6 +376,52 @@
               :conflito/transicao (http/json-resposta 409 {:erro (ex-message e) :gatilho (:gatilho m)})
               (throw e))))))))
 
+(defn- receber-handler
+  "POST /legislativo/proposicoes/:id/recebimento — fatia 2b: quem recebe a carga ASSINA o recebimento da
+  movimentacao pendente. Corpo `{movimentacao-id}` (a que a pessoa viu na tela). Gate grosso 'secretario'
+  (quem opera o expediente); a regra FINA de quem recebe e' do rito da Casa (`template_estado.recebedor`, a
+  mesma DSL de autorizacao — Disciplina 5), avaliada dentro da tx.
+
+  201 + recibo (o recebimento e' registro novo, imutavel). 404 materia inexistente. 409 com `motivo`:
+  `sem-recebimento-pendente` (nada a receber, ou ja' recebida — o duplo clique cai aqui, nao duplica) e
+  `movimentacao-divergente` (a materia andou depois que a tela carregou — recarregar e conferir). 403 regra
+  de quem recebe negada. O assinador e' o STUB (mesmo padrao do parecer e do requerimento)."
+  [repo-leg registro relogio]
+  (fn [req]
+    (let [ator (:ator req)
+          pid (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          m (adapters-in-proposicao/receber->dominio pid (tempo/hoje relogio zona-civil) (:json-params req))]
+      (try
+        (if-let [r (controllers/receber-movimentacao repo-leg registro (assinador-icp/assinador-stub) ator m)]
+          (http/json-resposta 201 (adapters-out-proposicao/recibo-recebimento->wire r))
+          (http/json-resposta 404 {:erro "proposicao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (cond
+            (authz/negado? e)
+            (http/json-resposta 403 {:erro "voce nao esta' entre quem o rito desta Casa autoriza a receber esta carga"})
+
+            (guard-inavaliavel? e)
+            (http/json-resposta 500 {:erro (str "a regra de quem recebe, no rito desta Casa, nao pode ser avaliada — "
+                                                "o recebimento NAO foi registrado; procure quem administra os "
+                                                "templates de tramitacao")})
+            :else
+            (case (:tipo (ex-data e))
+              :conflito/sem-recebimento-pendente
+              (http/json-resposta 409 {:motivo "sem-recebimento-pendente"
+                                       :erro "esta materia nao tem recebimento pendente — ja' foi recebida, ou nao exige recebimento"})
+              :conflito/movimentacao-divergente
+              (http/json-resposta 409 {:motivo "movimentacao-divergente"
+                                       :erro (str "a materia se movimentou depois que esta tela carregou — atualize "
+                                                  "e confira o que esta' recebendo antes de assinar")})
+              (throw e))))))))
+
+(defn- recebimentos-pendentes-handler
+  "GET /legislativo/recebimentos-pendentes — fatia 2b: a fila de cargas nao recebidas da Casa."
+  [repo-leg]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out-proposicao/recebimentos-pendentes->wire
+                              (controllers/recebimentos-pendentes repo-leg (:ente-id (:ator req)))))))
+
 (defn- tramitacao-leitura-handler
   "GET /legislativo/proposicoes/:id/tramitacao(?limite=) — o HISTORICO da materia + os GATILHOS que a Casa
   declara a partir do estado ATUAL. Mesmo path e mesmo gate grosso ('secretario') do POST irmao; a lista de
@@ -397,12 +448,12 @@
   404 p/ materia inexistente no tenant (nunca vaza a diferenca entre 'nao existe' e 'e' de outra Casa').
   Materia SEM rito nao e' 404 nem 409: e' 200 com historico vazio, nenhum gatilho e a `nota` dizendo por
   que — o recurso existe, e a resposta correta sobre ele e' 'nao ha' o que tramitar, e eis o motivo'."
-  [repo-leg]
+  [repo-leg nome-na-casa]
   (fn [req]
     (let [ente-id (:ente-id (:ator req))
           id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
           {:keys [limite]} (adapters-in-proposicao/tramitacao-query->dominio (:query-params req))]
-      (if-let [m (controllers/buscar-tramitacao repo-leg ente-id id limite)]
+      (if-let [m (controllers/buscar-tramitacao repo-leg nome-na-casa ente-id id limite)]
         (http/json-resposta 200 (adapters-out-proposicao/tramitacao->wire m))
         (http/json-resposta 404 {:erro "proposicao nao encontrada"})))))
 
@@ -412,11 +463,11 @@
   DOIS adapters/out (proposicao p/ o cabecalho + ficha-materia p/ o envelope) — adapters/ nunca chama outro
   adapters/ (ADR-0001 §3). `:texto` ja' chega EXTRAIDO do controller (string/nil — review MENOR
   fe-9-ficha-materia: o diplomat nunca decide nome de campo do model, so' compoe)."
-  [repo-leg resolver-comissoes]
+  [repo-leg resolver-comissoes nome-na-casa]
   (fn [req]
     (let [ente-id (:ente-id (:ator req))
           id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
-      (if-let [{:keys [proposicao texto] :as ficha} (controllers/buscar-ficha-materia repo-leg resolver-comissoes ente-id id)]
+      (if-let [{:keys [proposicao texto] :as ficha} (controllers/buscar-ficha-materia repo-leg resolver-comissoes nome-na-casa ente-id id)]
         (http/json-resposta 200 (adapters-out-ficha/ficha->wire
                                    (adapters-out-proposicao/detalhe->wire proposicao texto)
                                    ficha))
@@ -821,11 +872,14 @@
   Daouda 12/09/2026) nao exige papel nenhum na borda — a politica e' TODA da camada fina (ver a docstring
   de `votacao-aberta-handler`), por isso recebe `pode-ver-votacao-aberta?` INJETADA pelo host (mesma
   inversao de dependencia de `sessao-fechada?`; a formula e' mesma Casa E (transmissao publica OU
-  'secretario' OU 'vereador') — ver rotas.clj)."
+  'secretario' OU 'vereador') — ver rotas.clj). `nome-na-casa` (fatia 2b, injetada pelo host — mesma porta
+  da folha de sessao: identidade -> nome SO' de quem tem vinculo nesta Casa) nomeia quem RECEBEU cada
+  movimentacao no historico; ausente, o historico sai sem nome (degrada p/ 'recebida', nunca inventa)."
   [{:keys [auth repo-legislativo consultar-sessao sessao-fechada? pode-ver-votacao-aberta? resolver-municipio
            resolver-vereador resolver-comissoes vereador-vinculado? vereador-no-roster? membros-da-casa
-           registro relogio resolver-autor]}]
-  (let [papel (it/exige-papel "secretario")
+           registro relogio resolver-autor nome-na-casa]}]
+  (let [nome-na-casa (or nome-na-casa (constantly nil))
+        papel (it/exige-papel "secretario")
         papel-vereador (it/exige-papel "vereador")
         ;; LEITURA do acervo aberta a secretario OU vereador: o vereador legisla sobre a materia, entao
         ;; le' proposicoes/tramitacao/ficha (achado docs/20: gate grosso so'-'secretario' dava 403 ao
@@ -862,17 +916,24 @@
        :route-name :legislativo/criar-proposicao]
       ["/legislativo/proposicoes/:id" :get [auth papel-leitura (detalhe-proposicao-handler repo-legislativo)]
        :route-name :legislativo/detalhe-proposicao]
-      ["/legislativo/proposicoes/:id/ficha" :get [auth papel-leitura (ficha-materia-handler repo-legislativo resolver-comissoes)]
+      ["/legislativo/proposicoes/:id/ficha" :get [auth papel-leitura (ficha-materia-handler repo-legislativo resolver-comissoes nome-na-casa)]
        :route-name :legislativo/ficha-materia]
       ["/legislativo/proposicoes/:id" :patch
        [auth papel it/corpo-json (editar-proposicao-handler repo-legislativo vereador-vinculado?)]
        :route-name :legislativo/editar-proposicao]
       ["/legislativo/proposicoes/:id/tramitacao" :get
-       [auth papel-leitura (tramitacao-leitura-handler repo-legislativo)]
+       [auth papel-leitura (tramitacao-leitura-handler repo-legislativo nome-na-casa)]
        :route-name :legislativo/tramitacao-proposicao]
       ["/legislativo/proposicoes/:id/tramitacao" :post
        [auth papel it/corpo-json (tramitar-handler repo-legislativo registro relogio)]
        :route-name :legislativo/tramitar-proposicao]
+      ;; fatia 2b: o recebimento ASSINADO da carga + a fila de cargas nao recebidas da Casa
+      ["/legislativo/proposicoes/:id/recebimento" :post
+       [auth papel it/corpo-json (receber-handler repo-legislativo registro relogio)]
+       :route-name :legislativo/receber-movimentacao]
+      ["/legislativo/recebimentos-pendentes" :get
+       [auth papel (recebimentos-pendentes-handler repo-legislativo)]
+       :route-name :legislativo/recebimentos-pendentes]
       ["/legislativo/pareceres/:id" :get [auth papel (parecer-editor-handler repo-legislativo resolver-comissoes)]
        :route-name :legislativo/parecer-editor]
       ["/legislativo/pareceres/:id" :patch

@@ -24,6 +24,8 @@
    ["ProposicaoDetalheOut" proposicao/ProposicaoDetalheOut]
    ;; Onda B Slice 3 (ficha-materia) — entram DEPOIS de ProposicaoDetalheOut (referencia nomeada casa por
    ;; igualdade estrutural, mesma disciplina do manifesto de paineis/mesa).
+   ;; fatia 2b: o recibo de carga de cada movimentacao — ANTES do item de historico que o referencia.
+   ["RecebimentoOut" proposicao/RecebimentoOut]
    ["HistoricoTramitacaoItemOut" ficha/HistoricoTramitacaoItemOut]
    ["ApensacaoOut" ficha/ApensacaoOut]
    ["EmendaResumoOut" ficha/EmendaResumoOut]
@@ -58,7 +60,12 @@
    ;; ficha-materia/pos-aprovacao). O `:historico` de TramitacaoOut reusa HistoricoTramitacaoItemOut (ficha,
    ;; ja' acima) por igualdade estrutural. Substitui o tipo-espelho a mao de use-tramitacao.ts.
    ["GatilhoPossivelOut" proposicao/GatilhoPossivelOut]
+   ["RecebimentoPendenteOut" proposicao/RecebimentoPendenteOut]
    ["TramitacaoOut" proposicao/TramitacaoOut]
+   ;; Fatia 2b (recebimento assinado da tramitacao) — o recibo do POST e a fila de pendentes.
+   ["RecebimentoReciboOut" proposicao/RecebimentoReciboOut]
+   ["RecebimentoPendenteItemOut" proposicao/RecebimentoPendenteItemOut]
+   ["RecebimentosPendentesOut" proposicao/RecebimentosPendentesOut]
    ;; Fatia 2a (o requerimento do vereador, borda /meu) — ModeloRequerimentoOut ANTES da lista que o referencia.
    ["ModeloRequerimentoOut" requerimento/ModeloRequerimentoOut]
    ["ModelosRequerimentoOut" requerimento/ModelosRequerimentoOut]

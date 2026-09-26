@@ -21,9 +21,18 @@
                     {:campos (keys (me/humanize (m/explain schema out)))})))
   out)
 
+(defn- recebimento->wire
+  "Fatia 2b — o recibo de carga anotado pelo controller (ou nil). Mesma projecao de
+  `adapters.out.proposicao/recebimento->wire` (adapters/ nao chama adapters/, ADR-0001 §3 — os dois mudam juntos)."
+  [r]
+  (when r
+    {:recebido-por-nome (:recebido-por-nome r) :recebido-em (->str (:recebido-em r))
+     :assinatura-algoritmo (:assinatura-algoritmo r)}))
+
 (defn- tramitacao-item->wire [linha]
   {:de-estado (:de-estado linha) :para-estado (:para-estado linha) :gatilho (:gatilho linha)
-   :ocorrido-em (->str (:ocorrido-em linha))})
+   :ocorrido-em (->str (:ocorrido-em linha))
+   :recebimento (recebimento->wire (:recebimento linha))})
 
 (defn- apensacao->wire [linha]
   {:apensada-id (->str (:apensada-id linha)) :apensada-em (->str (:apensada-em linha))

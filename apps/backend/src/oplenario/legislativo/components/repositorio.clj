@@ -25,6 +25,7 @@
             [oplenario.legislativo.db.parecer-voto-divergente :as parecer-voto]
             [oplenario.legislativo.db.proposicao :as proposicao]
             [oplenario.legislativo.db.protocolo-geral :as protocolo]
+            [oplenario.legislativo.db.recebimento :as recebimento]
             [oplenario.legislativo.db.texto-versao :as texto]
             [oplenario.legislativo.db.tramitacao :as tram]
             [oplenario.legislativo.db.tramitacao-executiva :as exec]
@@ -108,6 +109,10 @@
   (criar-transicao! [this ente-id transicao])
   (transicionar! [this ente-id registro args] "Engine: guard via motor + historico + muda estado, 1 tx.")
   (historico-da-proposicao [this ente-id proposicao-id])
+  (receber-movimentacao! [this ente-id registro args]
+    "Fatia 2b: recebe e ASSINA a movimentacao pendente (db/recebimento/receber!) + emite proposicao.recebida,
+     na MESMA tx. `args` = {:proposicao-id :transicao-id :ator :agora :assinador}.")
+  (recebimentos-pendentes [this ente-id] "Fatia 2b: as materias da Casa em carga ainda nao recebida.")
   (tramitacao-da-proposicao [this ente-id proposicao-id limite]
     "Fatia 3 — tudo o que a tela de tramitacao precisa, NUMA UNICA tx (mesma disciplina de
      ficha-completa-da-proposicao). Diferente daquela, aqui as leituras sao DEPENDENTES: as candidatas e o
@@ -506,7 +511,9 @@
            :tramitacao tramitacao :tramitacao-truncado tramitacao-truncado
            :apensadas apensadas :apensadas-truncado apensadas-truncado
            :emendas emendas :emendas-truncado emendas-truncado
-           :pareceres pareceres :pareceres-truncado pareceres-truncado}))))
+           :pareceres pareceres :pareceres-truncado pareceres-truncado
+           ;; fatia 2b: quem recebeu cada movimentacao (o controller anota o historico com o nome)
+           :recebimentos (recebimento/recebimentos-da-proposicao tx ente-id id)}))))
   (nova-versao! [this ente-id v] (transacao this ente-id #(texto/nova-versao! % (assoc v :ente-id ente-id))))
   (promover-versao! [this ente-id m] (transacao this ente-id #(texto/promover! % (assoc m :ente-id ente-id))))
   (buscar-versao [this ente-id id] (transacao this ente-id #(texto/buscar % ente-id id)))
@@ -534,6 +541,16 @@
                 (:ator-id args) (assoc :ator-id (:ator-id args)))))
           r))))
   (historico-da-proposicao [this ente-id pid] (transacao this ente-id #(tram/historico-da-proposicao % ente-id pid)))
+  (receber-movimentacao! [this ente-id registro args]
+    (transacao this ente-id
+      (fn [tx]
+        (let [r (recebimento/receber! tx (assoc args :registro registro :ente-id ente-id))]
+          (producers/emitir-recebida! bus tx ente-id
+            {:proposicao-id (:proposicao-id r) :movimentacao-id (:transicao-id r) :estado (:estado r)
+             :recebido-por (:recebido-por r) :recebido-em (str (:recebido-em r))
+             :assinatura-algoritmo (:assinatura-algoritmo r)})
+          r))))
+  (recebimentos-pendentes [this ente-id] (transacao this ente-id #(recebimento/listar-pendentes % ente-id)))
   ;; Fatia 3 (a LEITURA da tramitacao). Sem rito (`template_id` NULL) NAO se consulta o template: nao ha'
   ;; o que consultar, e o historico tambem vem vazio por construcao (nada jamais tramitou). Lido `nil` na
   ;; proposicao, as outras tres leituras sao PULADAS — nao ha' recurso, nao ha' nada que dizer sobre ele.
@@ -549,7 +566,10 @@
            ;; deixar de valer. O custo de medir e' uma query indexada.
            :historico (if p (tram/historico-da-proposicao tx ente-id pid limite) [])
            :candidatas (if (and p tid) (tram/transicoes-do-estado tx ente-id tid (:estado p)) [])
-           :estado-no-template (when (and p tid) (proposicao/estado-no-template tx ente-id tid (:estado p)))}))))
+           :estado-no-template (when (and p tid) (proposicao/estado-no-template tx ente-id tid (:estado p)))
+           ;; fatia 2b: quem recebeu cada movimentacao + a carga que a materia espera AGORA (se houver)
+           :recebimentos (if p (recebimento/recebimentos-da-proposicao tx ente-id pid) {})
+           :recebimento-pendente (when p (recebimento/pendente tx ente-id pid))}))))
   ;; eixo D / F3.4 — emendas. aprovar! compoe (nova-versao rascunho + muda estado) numa UNICA tx do tenant.
   (criar-emenda! [this ente-id e] (transacao this ente-id #(emenda/criar! % (assoc e :ente-id ente-id))))
   (buscar-emenda [this ente-id id] (transacao this ente-id #(emenda/buscar % ente-id id)))

@@ -13,6 +13,7 @@
 import { useTramitacao } from "@/lib/use-tramitacao";
 import { useTramitar } from "@/lib/use-tramitar";
 import { derivarAcoesTramitacao } from "@/lib/tramitacao-acoes-vista";
+import { ReceberCarga } from "../receber-carga";
 
 export function AcoesTramitacao({
   proposicaoId,
@@ -60,7 +61,19 @@ export function AcoesTramitacao({
         Atos disponíveis <span className="tram-estado">· estado atual: {vista.estadoAtual}</span>
       </h4>
 
-      {vista.tipo === "sem-atos" ? (
+      {vista.tipo === "carga" ? (
+        // fatia 2b: a matéria está em carga não recebida — o único ato possível é receber. Depois de receber,
+        // o painel refaz o GET (os atos voltam) e a ficha recarrega (o histórico ganha o recibo).
+        <ReceberCarga
+          proposicaoId={proposicaoId}
+          carga={vista.carga}
+          token={token}
+          onMudou={async () => {
+            await recarregar();
+            onTramitou?.();
+          }}
+        />
+      ) : vista.tipo === "sem-atos" ? (
         <p className="tram-nota" role="status">
           {vista.nota}
         </p>
