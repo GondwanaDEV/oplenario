@@ -66,17 +66,17 @@ O detalhe rolling de cada fase vive nas memórias de sessão (`oplenario-f0-exec
 **Estado (19/07/2026):** o caminho crítico do plano de engenharia está cumprido. As frentes
 abertas, em ordem de importância:
 
-**1. Track IA (satélite §22.3) — não iniciada, e é o maior bloco restante.** Zero código. O lado
-core do contrato já cumpre a sua metade: `sessoes/events/gravacao.clj` emite
-`gravacao.segmento-captado` e `gravacao.segmento-vinculado` com payload validado — não há consumidor
-do outro lado. **Trava a Aposta 1 inteira** (copiloto legislativo, ata-IA, resumo cidadão em
-linguagem simples, busca semântica) e é o que impede M4 de fechar. Atenção: `prototipos/governanca-ia/`
-é o arco de escolha de vendor de LLM, **não** é o satélite.
-**Desenho fechado na sessão de 26/09/2026 — `docs/25-desenho-ia-na-plataforma.md`** (8 eixos: IA como ator
-sobre a plataforma, catálogo único de ações, identidade delegada, fronteira do ato, MCP, conhecimento normativo,
-qualidade e custo) **+ plano de execução `docs/26-plano-track-ia.md`** (rev. 2: base comum + Faixa A artefatos/ata-IA + Faixa B
-agente, em paralelo; MCP externo pós-V1 atrás de gatilho). Aguardam o
-"Confirmo" do Daouda. **Ler os dois antes de escrever qualquer feature de IA.**
+**1. Track IA — base comum ENTREGUE (26/09/2026); Faixas A e B são o maior bloco restante.** O satélite existe:
+`apps/ia/` (Python 3.12, **[ADR-0006](docs/adr/0006-satelite-de-ia-apps-ia.md)**), com porta de inferência (fake por
+padrão + Anthropic), filtro de governança B1–B4 (único caminho até o LLM), Camada de Confiança mínima (citação conferida,
+incerteza, registro sem conteúdo, revisão humana, R-IA-1), `nucleo.Nucleo` (o pipeline que **toda** capacidade compõe) e
+avaliação no CI (`oplenario-ia-avaliar avaliacoes`) + custo por Casa — [PR #42](https://github.com/GondwanaDEV/oplenario/pull/42).
+**Ainda não há nenhuma capacidade de IA** (ata, resumo, busca, copiloto, consulta LOM/RI): elas são as Faixas A e B do
+`docs/26`. O lado core do contrato já emite `gravacao.segmento-captado`/`-vinculado` — falta o consumidor (Faixa A).
+**Trava a Aposta 1** e é o que impede M4 de fechar. Uso real de fornecedor segue travado no `[GAP]` jurídico (DPA de
+não-treino, LGPD art. 33) — o fake não espera. Desenho: **`docs/25`** + doc-mestre §22.11 (v1.46); plano: **`docs/26`**
+(rev. 2, "Confirmo" do Daouda com o merge do PR #38). **Ler os dois antes de escrever qualquer feature de IA.**
+`prototipos/governanca-ia/` é só referência histórica (o filtro de produção está em `apps/ia/`).
 
 **2. Dois IdPs abertos.** O broker **gov.br** (cidadão) não tem uma linha — bloqueia os fluxos de
 escrita autenticados do cidadão (a consulta pública não exige login, então M5 não está bloqueado).
@@ -205,7 +205,7 @@ que justifica type-checking estático no momento de salvar a regra (decisão do 
 
 | Arquivo | Para quê |
 |---|---|
-| `apps/` | **Monorepo — os 3 componentes de código** (decisão Daouda Traore, 27/06/2026): `apps/backend/` (Clojure, o monólito modular — internamente em `STRUCTURE.md`), `apps/frontend/` (Next.js — porta o design-system), `apps/mobile/` (Flutter — diferido, PWA-first na V1). **Rodar/testar o backend é de dentro de `apps/backend/`** (ver memória `oplenario-rodar-local`). |
+| `apps/` | **Monorepo — os componentes de código** (decisão Daouda Traore, 27/06/2026): `apps/backend/` (Clojure, o monólito modular — internamente em `STRUCTURE.md`), `apps/frontend/` (Next.js — porta o design-system), `apps/ia/` (Python — o satélite de IA, ADR-0006), `apps/mobile/` (Flutter — diferido, PWA-first na V1). **Rodar/testar o backend é de dentro de `apps/backend/`** (ver memória `oplenario-rodar-local`). |
 | `e2e/` | **Harness de browser-e2e (Playwright) do Portal do Cidadão** — projeto Node isolado (`package.json` próprio, só `@playwright/test`), fora de `apps/` porque não é um componente deployável: atravessa a stack inteira (frontend+backend+DB) já de pé. Comando canônico `./e2e/rodar.sh` (semeia via `seed_demo.clj` em container efêmero + roda o Playwright no container oficial). Nunca muta o mount vivo de `apps/frontend`. |
 | `prototipos/` | **Referência histórica (não é produto)** — `motor-dsl/` (protótipo do avaliador da DSL) e `governanca-ia/` (arco da porta de IA). Superseded por `apps/backend/`; mantidos para consulta. Não buildados pelo CI. |
 | `documento-mestre-camaras.md` | **Single source of truth.** Decisões consolidadas. Em conflito, prevalece. **A versão vive no cabeçalho + §24, nunca no nome do arquivo** (evita trocar referências a cada bump). |
