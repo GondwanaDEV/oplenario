@@ -45,8 +45,8 @@ JSON Schema para ferramentas.
 | 3 | Identidade do agente | **CONFIRMADO** — 3.1 (b) + 3.2 a 3.5 (§7) |
 | 4 | Fronteira do ato | **CONFIRMADO** — 4.2 (B) + 4.1, 4.3–4.6 (§7a) |
 | 5 | Onde roda o agente | **CONFIRMADO** — 5.1 (b), 5.2 (b) + 5.3–5.7 (§7b) |
-| 6 | MCP externo | **Sub-decisões em debate (§8)** |
-| 7 | Conhecimento (LOM/RI/leis em camadas por município) | Direção confirmada; a abrir |
+| 6 | MCP externo | **CONFIRMADO** — 6.1 (B), 6.3 (i)+(ii) + 6.2, 6.4, 6.5 (§8) |
+| 7 | Conhecimento (LOM/RI/leis em camadas por município) | Direção confirmada; **sub-decisões em debate (§8a)** |
 | 8 | Qualidade e custo | Direção confirmada; a abrir |
 
 ## 5. Eixo 1 — Lugar da IA · CONFIRMADO (B)
@@ -175,16 +175,16 @@ core nunca embute modelo. Sub-decisões (todas confirmadas):
   partir da tela; institucional = fila, disparado por **evento de integração** que já existe (ex.:
   `ProposicaoProtocolada` → conferência contra LOM/RI).
 
-## 8. Eixo 6 — MCP externo · EM DEBATE
+## 8. Eixo 6 — MCP externo · CONFIRMADO (26/09/2026)
 
 **O que é:** deixar IAs que **não são nossas** (o Claude/ChatGPT do vereador, a IA de um jornalista, outro sistema)
 se conectarem ao O Plenário. Pelo Eixo 5.1 é **o mesmo servidor MCP** dos nossos agentes, com outro login e outro
 conjunto de ferramentas.
 
-Sub-decisões propostas:
+Sub-decisões (todas confirmadas):
 
 - **6.1 Para quem e em que ordem.** (A) tudo de uma vez · (B) **em fases** · (C) só agentes internos por ora.
-  *(Recomendado: B.)*
+  **Confirmado: B.**
   1. **Público, sem login, só consulta** — proposições, pautas, votações nominais, atas publicadas, leis: o que já
      está no portal/dados abertos. Risco baixo; argumento de venda para o presidente da Mesa (transparência) e
      para observatórios sociais, imprensa, pesquisa.
@@ -213,6 +213,52 @@ Sub-decisões propostas:
   com mudança incompatível coexistindo em transição — **a mesma disciplina dos eventos de integração**
   (§22.3.3). O conjunto público começa pequeno.
 
+## 8a. Eixo 7 — Conhecimento normativo · EM DEBATE
+
+Direção confirmada: Lei Orgânica, Regimento Interno e leis federais/estaduais **em camadas por município**, sem
+nada especializado em uma Casa (Daouda: são dados públicos; a plataforma é multi-município).
+
+O que já existe no código e é reaproveitado: `legislativo.norma` (lei/ato promulgado **dentro** da plataforma, com
+URN LexML e imutabilidade); a decisão v1.14 (repositório *as-enacted* + consolidação manual assistida; consolidação
+automática por IA fora da V1); o motor de regras já separa as fontes normativas em `federal` ·
+`tribunal_de_contas` · `regimento_tenant` (`motor/models/catalogo.clj`); regras como `tempo_regimental` já têm
+`referencia_normativa`; embeddings self-host + `pgvector` no satélite (§22.9 Eixo 10, §22.3.4); staging por lote
+com efetivação (fundação #2, §22.2).
+
+Sub-decisões propostas:
+
+- **7.1 As camadas** — a **mesma taxonomia do motor**, sem inventar outra:
+  - **federal** (CF, LC 95/1998 de técnica legislativa, LRF, LAI, LGPD, Lei 14.063…) — uma cópia para todos,
+    curada pelo produto;
+  - **estadual** (Constituição Estadual, resoluções do TCE) — uma cópia por UF;
+  - **municipal** — a **LOM pertence ao Município** (entidade de referência do Inv. 1, compartilhada com a futura
+    Prefeitura); o **Regimento Interno e as resoluções pertencem à Câmara** (ente); leis municipais, ao Município.
+- **7.2 Forma do texto.** (A) PDFs + busca por trechos · (B) **norma estruturada por dispositivo** (artigo,
+  parágrafo, inciso, alínea), cada um com endereço estável (URN LexML + fragmento) · (C) consolidação automática
+  por IA. *(Recomendado: B.)* A Camada de Confiança exige citar a fonte; com (B) a citação é "art. 12, § 1º, da LOM
+  de Baturité", clicável e conferível. (C) já está fora da V1 (v1.14).
+- **7.3 Como o acervo entra (proativo, sem esperar a Casa mandar PDF).** Pipeline de coleta de fontes públicas
+  (LexML, sites de câmaras/prefeituras, diários oficiais) + upload da Casa; OCR quando for imagem; a IA quebra em
+  dispositivos; **uma pessoa confere** antes de valer. Entra como **lote com efetivação** (fundação #2): não
+  conferido não aparece para ninguém. Cada norma diz "conferida por X em dd/mm". A curadoria federal/estadual é do
+  produto (especialista em regimento, §10). `[GAP]`: licença de agregadores privados (ex.: portais de leis
+  municipais) — preferir fonte oficial.
+- **7.4 Onde vive.** Texto e dispositivos = **artefato legal no core** (camadas federal/estadual = tabelas de
+  referência supratenant, como `cadastros.municipios`; municipal com `ente_id`/município). Índice de busca e
+  embeddings = **satélite** (já decidido, §22.3.4), alimentado pelo evento de efetivação.
+- **7.5 Como o agente consulta.** Duas ferramentas no catálogo (Eixo 2): **buscar dispositivos** (busca híbrida
+  — palavra exata + semântica, porque "art. 45" precisa casar literalmente) e **ler dispositivo** pelo endereço.
+  Regra de resposta: **toda afirmação normativa do agente cita um dispositivo lido na mesma execução**; sem
+  citação, a resposta sai marcada "sem fonte". A versão usada aparece sempre ("consolidação conferida até
+  dd/mm").
+- **7.6 Ligação com o motor de regras.** A `referencia_normativa` das regras (tempo de tribuna, quórum…) passa a
+  apontar para o endereço do dispositivo. Isso permite ao agente explicar "por que 3 minutos" e ao agente
+  institucional apontar **divergência entre a regra configurada e o texto** — como aviso para uma pessoa; a IA
+  **nunca altera regra** (configuração é ato, Eixo 4).
+- **7.7 A conferência de requerimento contra LOM/RI** (o pedido do stakeholder) sai daqui: agente institucional
+  (3.1 b) disparado por `ProposicaoProtocolada` (5.7), que lê os dispositivos aplicáveis e produz um **rascunho
+  de nota técnica com citações** para a secretaria — nunca uma decisão.
+
 ## 9. Contexto que alimenta os eixos seguintes
 
 - Stakeholder (Rigoni, Baturité): leitura da ata **opcional** (IA, presencial ou nenhuma); a IA lê a ata que gerou
@@ -226,6 +272,7 @@ Sub-decisões propostas:
 
 | Data | O quê |
 |---|---|
+| 26/09/2026 | Eixo 6 CONFIRMADO (6.1 B, 6.3 i+ii + demais); Eixo 7 aberto em sub-decisões |
 | 26/09/2026 | Eixo 5 CONFIRMADO (5.1 b, 5.2 b + demais); Eixo 6 aberto em sub-decisões |
 | 26/09/2026 | Eixo 4 CONFIRMADO (4.2 B + demais); Eixo 5 aberto em sub-decisões |
 | 26/09/2026 | Eixo 3 CONFIRMADO (3.1 b + 3.2–3.5); Eixo 4 aberto em sub-decisões |
