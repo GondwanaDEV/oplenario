@@ -169,6 +169,8 @@ Padrões que aparecem repetidamente nos sete eixos e viram regra geral, não dec
 
 **10. Apagamento LGPD é política diferenciada, nunca DELETE silencioso.** Política por classe de evento decide se apaga, pseudonimiza, ou recusa com motivo. Apagamento é ato auditado com escopo e base legal. Auditoria do apagamento sobrevive ao apagado.
 
+**Nota v1.46 (§22.11.3) — agente como sujeito.** A taxonomia de sujeitos ganha o **principal delegado** (agente agindo em nome de uma pessoa: permissão = interseção do que a pessoa pode agora ∩ ferramentas do agente ∩ classes concedidas, reavaliada a cada chamada; token com a pessoa como sujeito e o agente como ator, RFC 8693; o ator do core ganha `:via {:agente-id :execucao-id}`) e o **agente institucional da Casa** (sem pessoa, só `leitura` + `rascunho`, concedido pelo `admin_ente`). Auditoria "Fulano, via agente X". Estende a taxonomia desta seção; o `policy.check` in-domain continua o ponto único de decisão.
+
 ## 22.5.4 Decisões deferidas e pontos a confirmar
 
 Decisões concretas de implementação deferidas para outros chats:

@@ -6,7 +6,7 @@
 > §18 (ordem de construção da V1) e `docs/11` (Track IA como plano próprio; marcos M3/M4). **Ler o `docs/25` antes.**
 >
 > **Status (26/09/2026):** plano proposto — **revisão 2** (a revisão 1 não respeitava o roadmap; ver §7).
-> Depende do **"Confirmo" do Daouda** sobre o `docs/25` + este plano. Nenhuma fatia começou.
+> **"Confirmo" do Daouda dado com o merge do PR #38 (26/09/2026)**; desenho consolidado no doc-mestre v1.46 (§22.11). **Em execução: base comum** (branch `claude/track-ia-base`).
 > **Branch da frente:** `claude/track-ia` (aberta de `main` em 26/09/2026 com o desenho e este plano; as fatias
 > seguem o trilho "uma branch por frente").
 >

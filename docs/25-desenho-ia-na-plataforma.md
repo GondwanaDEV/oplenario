@@ -1,6 +1,6 @@
 # 25 — Desenho: o lugar da IA na plataforma (IA como núcleo, catálogo de ações, MCP)
 
-> **Status: os 8 eixos CONFIRMADOS na sessão (26/09/2026); aguardando o "Confirmo" do Daouda para consolidar.**
+> **Status: os 8 eixos CONFIRMADOS na sessão (26/09/2026); "Confirmo" do Daouda dado com o merge do PR #38 — consolidado no documento-mestre v1.46 como §22.11 (`arquitetura/22-11-ia-como-ator.md`).**
 > **Plano de execução derivado: `docs/26-plano-track-ia.md`.** Sessão aberta em 26/09/2026. Eixo por eixo, com "Confirma?" em cada.
 > Decisões marcadas **CONFIRMADO** foram confirmadas na sessão; a consolidação no `documento-mestre-camaras.md`
 > (e em `arquitetura/`) só acontece com o **"Confirmo" do Daouda** sobre o conjunto, ao final dos 8 eixos.
