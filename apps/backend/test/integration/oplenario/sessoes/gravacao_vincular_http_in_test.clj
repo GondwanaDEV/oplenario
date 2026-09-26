@@ -93,15 +93,41 @@
     (is (true? (:forcar-acesso-restrito @cap))
         "sessao secreta -> servidor FORCA acesso-restrito=true no vinculo (sigilo)")))
 
-(deftest vincular-sessao-encerrada-409
-  ;; T2 grupo A achado #4 (ledger de prontidao Fase 8): mesmo gate `exigir-sessao-aberta!` — a rota
-  ;; #17 (gravacao/vincular) do grupo A.
+(deftest vincular-depois-da-sessao-200
+  ;; Faixa A / A.2 (§22.3.4 fonte PRIMARIA = gravacao local POS-sessao): o arquivo do OBS sobe depois que a
+  ;; sessao encerrou, e o vinculo tem de passar — a gravacao e' o REGISTRO da sessao fechada, nao uma escrita de
+  ;; conducao (o gate `exigir-sessao-aberta!` continua valendo p/ pauta/tribuna/mesa/incidente). 'arquivada'
+  ;; tambem: e' o caminho da importacao de audio historico (fonte `importacao_legado`).
+  (doseq [estado ["encerrada" "arquivada"]]
+    (let [ente (random-uuid) sid (random-uuid) seg (random-uuid)
+          cap (atom nil)
+          repo-s (fake-repo-sessoes (fn [_ id] (assoc (sessao-canonica ente id) :estado estado)) cap)
+          r (pt/response-for (service-fn* #{"secretario"} repo-s)
+                             :post (url sid seg)
+                             :headers (com-json (token ente (random-uuid))) :body (corpo-lv 0))]
+      (is (= 200 (:status r)) (str "sessao " estado " aceita o vinculo da gravacao"))
+      (is (= sid (:sessao-id @cap)) (str "o Repo vinculou o segmento a sessao " estado)))))
+
+(deftest vincular-sessao-nao-realizada-409
+  ;; a sessao que nao aconteceu nao tem gravacao: vincular um arquivo a ela e' erro de operacao, nao registro.
   (let [ente (random-uuid)
-        repo-s (fake-repo-sessoes (fn [_ id] (assoc (sessao-canonica ente id) :estado "encerrada")) (atom nil))
+        cap (atom nil)
+        repo-s (fake-repo-sessoes (fn [_ id] (assoc (sessao-canonica ente id) :estado "nao_realizada")) cap)
         r (pt/response-for (service-fn* #{"secretario"} repo-s)
                            :post (url (random-uuid) (random-uuid))
                            :headers (com-json (token ente (random-uuid))) :body (corpo-lv 0))]
-    (is (= 409 (:status r)) "sessao ja encerrada -> 409")))
+    (is (= 409 (:status r)) "sessao nao realizada -> 409")
+    (is (re-find #"n[aã]o realizada" (:erro (ler-json r))) "a mensagem diz por que")
+    (is (nil? @cap) "nada foi vinculado")))
+
+(deftest vincular-papel-captacao-403
+  ;; o papel `captacao` (a credencial do PC do OBS) SO' envia arquivos; vincular e' decisao da secretaria.
+  (let [ente (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ id] (sessao-canonica ente id)) (atom nil))
+        r (pt/response-for (service-fn* #{"captacao"} repo-s)
+                           :post (url (random-uuid) (random-uuid))
+                           :headers (com-json (token ente (random-uuid))) :body (corpo-lv 0))]
+    (is (= 403 (:status r)) "captacao nao vincula")))
 
 (deftest vincular-sessao-inexistente-404
   (let [ente (random-uuid)

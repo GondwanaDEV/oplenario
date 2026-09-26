@@ -171,3 +171,34 @@
                                            :updated-by nil :forcar-acesso-restrito false})
           (is (true? (:acesso-restrito (gravacao/buscar tx ente gid)))
               "vinculo a sessao nao-secreta PRESERVA o acesso_restrito ja gravado (nao reabre o sigilo)"))))))
+
+;; ---------- Faixa A / A.2: a fila de gravacoes sem sessao + as sessoes candidatas ----------
+
+(deftest pendentes-e-sessoes-candidatas
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [perto (:id (sessao/agendar! tx {:id (random-uuid) :ente-id ente :sessao-legislativa-id (random-uuid)
+                                               :tipo-sessao "ordinaria" :modalidade "presencial"
+                                               :agendada-para (java.time.Instant/parse "2026-06-29T13:30:00Z")}))
+              _longe (sessao/agendar! tx {:id (random-uuid) :ente-id ente :sessao-legislativa-id (random-uuid)
+                                          :tipo-sessao "ordinaria" :modalidade "presencial"
+                                          :agendada-para (java.time.Instant/parse "2026-07-15T13:30:00Z")})
+              vinculada (agendar! tx ente)
+              {antiga :id} (registrar! tx ente {:iniciou-em (java.time.Instant/parse "2026-06-28T14:00:00Z")})
+              {nova :id}   (registrar! tx ente {})
+              _ja          (registrar! tx ente {:sessao-id vinculada})
+              pend (gravacao/listar-pendentes tx ente 10)]
+          (is (= [nova antiga] (mapv :id pend)) "so' as sem sessao, mais recentes primeiro")
+          (is (every? #(some? (:lock-version %)) pend) "o token de CAS vem junto")
+          (is (= [nova] (mapv :id (gravacao/listar-pendentes tx ente 1))) "o limite corta")
+          (is (= [perto] (mapv :id (gravacao/sessoes-candidatas-a-pendentes tx ente)))
+              "so' a sessao a ate 1 dia das gravacoes pendentes"))))))
+
+(deftest sem-pendentes-sem-candidatas
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (agendar! tx ente)
+        (is (= [] (gravacao/listar-pendentes tx ente 10)))
+        (is (= [] (gravacao/sessoes-candidatas-a-pendentes tx ente)))))))
