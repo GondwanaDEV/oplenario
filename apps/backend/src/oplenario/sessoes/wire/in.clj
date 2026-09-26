@@ -186,3 +186,20 @@
       (if (logic/item-requer-proposicao? tipo-item)
         (and (some? proposicao-id) (nil? texto-descricao))
         (and (nil? proposicao-id) (string? texto-descricao) (not (str/blank? texto-descricao)))))]])
+
+(def ItemTempoRegimental
+  "Uma linha da tabela de tempos da Casa: `tipo-fala` + `fase` (ausente/nil = vale em qualquer fase) +
+  `segundos` inteiros + `referencia-normativa` opcional (de onde o numero vem, ex.: 'RI art. 98'). Limites
+  de valor e a unicidade (fase, tipo) sao de `logic/validar-tempos-regimentais!`. `:closed true`."
+  [:map {:closed true}
+   [:fase {:optional true} [:maybe (km/enum-de logic/fases-pauta)]]
+   [:tipo-fala (km/enum-de logic/tipos-fala)]
+   [:segundos :int]
+   [:referencia-normativa {:optional true} [:maybe :string]]])
+
+(def DefinirTemposRegimentais
+  "Corpo de PUT /tempos-regimentais (tela \"Tempos da tribuna\", papel 'secretario'): a TABELA INTEIRA da Casa
+  — o que nao vier, sai; `itens` vazio = a Casa volta a nao ter limite. A Casa e o autor vem do ator, nunca
+  do corpo. O teto de linhas e' folgado sobre o maximo real (6 tipos x (5 fases + generica) = 36)."
+  [:map {:closed true}
+   [:itens [:vector {:max 64} ItemTempoRegimental]]])

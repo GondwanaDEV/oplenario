@@ -77,3 +77,21 @@
 
 (defn inscricao-desistida [ente-id payload]
   (eventos/evento-validado InscricaoDesistidaPayload inscricao-desistida-tipo ente-id payload))
+
+(def tempos-regimentais-definidos-tipo "tempos.regimentais-definidos")
+
+(def TemposRegimentaisDefinidosPayload
+  "A secretaria trocou a tabela de tempos regimentais da Casa (tela \"Tempos da tribuna\"). Mudar configuracao
+  e' ato auditavel (§22.5 disc.7): o payload leva QUEM mudou e a tabela que PASSOU a valer, inteira. Nao e'
+  evento de tempo real (fora de `tempo_real/canais`): falas ja' iniciadas nao mudam — o limite foi fotografado
+  nelas (mig 0081)."
+  [:map {:closed true}
+   [:definido-por :uuid]
+   [:itens [:vector [:map {:closed true}
+                     [:fase [:maybe :string]]
+                     [:tipo-fala :string]
+                     [:segundos :int]
+                     [:referencia-normativa [:maybe :string]]]]]])
+
+(defn tempos-regimentais-definidos [ente-id payload]
+  (eventos/evento-validado TemposRegimentaisDefinidosPayload tempos-regimentais-definidos-tipo ente-id payload))

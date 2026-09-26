@@ -383,3 +383,14 @@ export interface AssiduidadeOut {
   detalhe: AssiduidadeDetalheLinhaOut[];
   totais: AssiduidadeTotaisOut;
 }
+
+export interface TempoRegimentalOut {
+  fase: string | null;
+  tipoFala: string;
+  segundos: number;
+  referenciaNormativa: string | null;
+}
+
+export interface TemposRegimentaisOut {
+  itens: TempoRegimentalOut[];
+}

@@ -91,7 +91,10 @@
    ["AssiduidadePorVereadorOut" out/AssiduidadePorVereadorOut]
    ["AssiduidadeDetalheLinhaOut" out/AssiduidadeDetalheLinhaOut]
    ["AssiduidadeTotaisOut" out/AssiduidadeTotaisOut]
-   ["AssiduidadeOut" out/AssiduidadeOut]])
+   ["AssiduidadeOut" out/AssiduidadeOut]
+   ;; Tela "Tempos da tribuna" — TempoRegimentalOut ANTES de TemposRegimentaisOut (campo :itens aninhado).
+   ["TempoRegimentalOut" out/TempoRegimentalOut]
+   ["TemposRegimentaisOut" out/TemposRegimentaisOut]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))
 

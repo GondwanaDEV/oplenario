@@ -141,6 +141,38 @@
                            :efetivado_em [:now]}]}))
   {:segundos segundos})
 
+(defn listar-tempos-regimentais
+  "A tabela de tempos regimentais DESTA Casa (tela \"Tempos da tribuna\"): [{:fase :tipo-fala :segundos
+  :referencia-normativa}], por tipo de fala e, dentro dele, a linha generica (fase nil) antes das especificas.
+  Vazia = a Casa nao configurou (as falas correm sem limite). RLS isola."
+  [tx ente-id]
+  (->> (jdbc/execute! tx
+         (sql/format {:select [:fase :tipo_fala :segundos :referencia_normativa]
+                      :from [:sessoes.tempo_regimental]
+                      :where [:= :ente_id ente-id]}))
+       comum/linhas->kebab
+       (sort-by (juxt :tipo-fala #(or (:fase %) "")))
+       vec))
+
+(defn substituir-tempos-regimentais!
+  "Troca a tabela INTEIRA de tempos da Casa pela `itens` ([{:fase :tipo-fala :segundos :referencia-normativa?}])
+  — o que nao veio, sai (a tela salva a tabela toda; vazia = sem limite). DELETE + INSERT na MESMA tx do
+  chamador: uma fala iniciada ao mesmo tempo ve a tabela velha ou a nova, nunca metade. Valida a tabela
+  (`logic/validar-tempos-regimentais!`) antes de tocar o banco. As falas ja' iniciadas nao mudam: o limite foi
+  fotografado nelas (mig 0081). Devolve a tabela como ficou."
+  [tx ente-id itens created-by]
+  (logic/validar-tempos-regimentais! itens)
+  (jdbc/execute-one! tx
+    (sql/format {:delete-from :sessoes.tempo_regimental :where [:= :ente_id ente-id]}))
+  (when (seq itens)
+    (jdbc/execute-one! tx
+      (sql/format {:insert-into :sessoes.tempo_regimental
+                   :values (for [{:keys [fase tipo-fala segundos referencia-normativa]} itens]
+                             {:ente_id ente-id :fase fase :tipo_fala tipo-fala :segundos segundos
+                              :referencia_normativa referencia-normativa :created_by created-by
+                              :efetivado_em [:now]})})))
+  (listar-tempos-regimentais tx ente-id))
+
 (defn iniciar-fala!
   "Inicia uma fala (execucao): INSERE a fala (em curso) e LOGA o evento 'iniciada' (ocorrido_em = iniciou-em),
   atomico. Valida tipo-fala/fase + nil-guard de auditoria (fail-closed); a coerencia aparte<->fala_pai_id e' o

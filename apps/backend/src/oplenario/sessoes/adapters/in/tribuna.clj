@@ -179,3 +179,25 @@
              :decidido-em   (->instante (:decidido-em mp) :decidido-em)}
       (:fundamentacao mp) (assoc :fundamentacao (:fundamentacao mp))
       (:fala-id mp)       (assoc :fala-id (->uuid (:fala-id mp) :fala-id)))))
+
+(defn definir-tempos->dominio
+  "Corpo JSON de PUT /tempos-regimentais {itens: [{fase?, tipo-fala, segundos, referencia-normativa?}]} ->
+  vetor de itens de dominio p/ controllers/definir-tempos-regimentais. Diferente dos outros corpos, CADA ITEM
+  e' validado FECHADO (campo a mais -> 400, nao descartado): a tabela e' configuracao, e um campo que a tela
+  mandou e o servidor ignorou em silencio e' a Casa achando que salvou o que nao salvou. Referencia normativa
+  em branco vira nil. Limites e unicidade (fase, tipo) -> `logic/validar-tempos-regimentais!` (400)."
+  [json-params]
+  (when-not (map? json-params)
+    (invalido! "corpo deve ser objeto JSON {itens}" {:campo :corpo}))
+  (let [itens (get json-params "itens")
+        mp    {:itens (if (sequential? itens)
+                        (mapv #(if (map? %) (update-keys % keyword) %) itens)
+                        itens)}]
+    (when-let [erros (m/explain wire/DefinirTemposRegimentais mp)]
+      (invalido! "corpo de tempos regimentais invalido" {:campos (keys (me/humanize erros))}))
+    (mapv (fn [{:keys [fase tipo-fala segundos referencia-normativa]}]
+            {:fase fase
+             :tipo-fala tipo-fala
+             :segundos (long segundos)
+             :referencia-normativa (when-not (str/blank? referencia-normativa) (str/trim referencia-normativa))})
+          (:itens mp))))
