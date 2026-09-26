@@ -198,7 +198,7 @@ export function useTribunaMesa(sessaoId: string, token: string | null) {
     async (
       oradorId: string,
       fase: string,
-      opcoes?: { tipoFala?: string; inscricaoId?: string | null },
+      opcoes?: { tipoFala?: string; inscricaoId?: string | null; tempoConcedidoSegundos?: number | null },
     ): Promise<ResultadoIniciarFala> => {
       if (semCredencial(token)) return { ok: false, erro: "sem token de autenticacao" };
       if (!oradorId) return { ok: false, erro: "Sem orador para chamar à tribuna." };
@@ -209,6 +209,10 @@ export function useTribunaMesa(sessaoId: string, token: string | null) {
         "iniciou-em": new Date().toISOString(),
       };
       if (opcoes?.inscricaoId) corpo["inscricao-id"] = opcoes.inscricaoId;
+      // mig 0081: ausente = o servidor resolve o tempo regimental da Casa (ou sem limite)
+      if (typeof opcoes?.tempoConcedidoSegundos === "number" && opcoes.tempoConcedidoSegundos > 0) {
+        corpo["tempo-concedido-segundos"] = Math.round(opcoes.tempoConcedidoSegundos);
+      }
       let r: Response;
       try {
         r = await apiFetch(`/api/sessoes/${sessaoId}/falas`, {
