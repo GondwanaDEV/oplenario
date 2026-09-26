@@ -103,3 +103,23 @@
                                       :orador-id (:orador-id x) :orador-nome (:orador-nome x)})
                              (:trechos t))}
             "transcricao viola o contrato TranscricaoConteudoOut (bug de servidor)"))
+
+;; ---------- Faixa A / A.6: a ata ----------
+
+(defn- versao-ata->wire [v]
+  {:id (->str (:id v)) :versao (:versao v) :origem-redacao (:origem-redacao v)
+   :conteudo-sha256 (:conteudo-sha256 v) :motivo-retificacao (:motivo-retificacao v)
+   :rascunho-id (->str (:rascunho-id v)) :modelo-llm-id (:modelo-llm-id v) :prompt-versao (:prompt-versao v)
+   :proporcao-alterada (->double (:proporcao-alterada v)) :publicada-por-nome (:publicada-por-nome v)
+   :publicada-em (->str (:publicada-em v))})
+
+(defn ata-da-sessao->wire [{:keys [sessao-id pode-ter-ata atual versoes]}]
+  (validado wire/AtaSessaoOut
+            {:sessao-id (->str sessao-id) :pode-ter-ata (boolean pode-ter-ata)
+             :atual (when atual {:versao (versao-ata->wire atual) :texto (:texto atual)})
+             :versoes (mapv versao-ata->wire versoes)}
+            "ata viola o contrato AtaSessaoOut (bug de servidor)"))
+
+(defn recibo-ata->wire [r]
+  (validado wire/AtaReciboOut {:id (->str (:id r)) :versao (:versao r) :conteudo-sha256 (:conteudo-sha256 r)}
+            "recibo da ata viola o contrato AtaReciboOut (bug de servidor)"))

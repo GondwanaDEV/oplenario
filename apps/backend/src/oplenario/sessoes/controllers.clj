@@ -610,6 +610,41 @@
       (when-let [t (ler-transcricao (:ente-id ator) transcricao-id)]
         (assoc t :ponteiro p)))))
 
+(declare nomes-de-quem-congelou sha256-hex)
+
+(defn ata-da-sessao
+  "Faixa A / A.6: a ata vigente (com o nome de quem publicou, pelo seam `nome-na-casa`) e o historico de versoes.
+  Authz no recurso sessao. nil = sessao inexistente."
+  [repo-sessoes nome-na-casa ator sessao-id]
+  (when-let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/ver s logic/pode-ver-sessao?)
+    (let [{:keys [atual versoes]} (repo/ata-da-sessao repo-sessoes (:ente-id ator) sessao-id)
+          nomes (nomes-de-quem-congelou nome-na-casa (:ente-id ator) (map #(assoc % :gerada-por (:publicada-por %)) versoes))
+          nome (fn [v] (assoc v :publicada-por-nome (get nomes (:publicada-por v))))]
+      {:sessao-id sessao-id
+       :pode-ter-ata (logic/pode-ter-ata? s)
+       :atual (some-> atual nome)
+       :versoes (mapv nome versoes)})))
+
+(defn publicar-ata!
+  "Faixa A / A.6a: publica (ou retifica) a ata da sessao. Regras: a sessao gera ata e ja' acabou
+  (`logic/pode-ter-ata?`, senao `:conflito/sessao-sem-ata`); retificacao (ja' existe versao) exige o motivo
+  (`:validacao/retificacao-sem-motivo`, decidido no db sobre a versao da mesma tx); nesta fatia so' a origem `redigida_externamente` (o rascunho da IA chega na
+  A.6b). O texto e' congelado por SHA-256; quem publica vem do `ator`, nunca do cliente. nil = sessao inexistente."
+  [repo-sessoes ator sessao-id {:keys [texto origem-redacao motivo-retificacao]}]
+  (when-let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/ver s logic/pode-ver-sessao?)
+    (when-not (logic/pode-ter-ata? s)
+      (throw (ex-info "esta sessao nao tem ata: ela ainda nao acabou, ou o tipo de sessao nao gera ata regimental"
+                      {:tipo :conflito/sessao-sem-ata :sessao-id sessao-id :estado (:estado s)})))
+    (when-not (= "redigida_externamente" origem-redacao)
+      (throw (ex-info "origem de redacao ainda nao suportada" {:tipo :validacao/invalido :campo :origem-redacao})))
+    (repo/publicar-ata! repo-sessoes (:ente-id ator)
+      {:sessao-id sessao-id :texto texto :origem-redacao origem-redacao
+       :motivo-retificacao motivo-retificacao
+       :conteudo-sha256 (sha256-hex (.getBytes ^String texto "UTF-8"))
+       :publicada-por (:identidade-id ator)})))
+
 (defn resumo-presenca
   "Read-model da presenca agregada (F7/FE Onda A1), tenant-wide — sem recurso unico p/ camada fina (mesmo
   contrato de `compliance.controllers/painel`). `membros-da-casa` chega JA RESOLVIDO pelo caller (inversao de

@@ -251,6 +251,38 @@ export interface TranscricaoConteudoOut {
   trechos: TrechoTranscricaoOut[];
 }
 
+export interface AtaVersaoOut {
+  id: string;
+  versao: number;
+  origemRedacao: "gerada_automaticamente" | "redigida_externamente";
+  conteudoSha256: string;
+  motivoRetificacao?: string | null;
+  rascunhoId?: string | null;
+  modeloLlmId?: string | null;
+  promptVersao?: string | null;
+  proporcaoAlterada?: number | null;
+  publicadaPorNome?: string | null;
+  publicadaEm: string;
+}
+
+export interface AtaAtualOut {
+  versao: AtaVersaoOut;
+  texto: string;
+}
+
+export interface AtaSessaoOut {
+  sessaoId: string;
+  podeTerAta: boolean;
+  atual?: AtaAtualOut | null;
+  versoes: AtaVersaoOut[];
+}
+
+export interface AtaReciboOut {
+  id: string;
+  versao: number;
+  conteudoSha256: string;
+}
+
 export interface PautaItemAdicionadoOut {
   id: string;
   ordem: number;

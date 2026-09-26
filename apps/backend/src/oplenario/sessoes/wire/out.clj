@@ -370,6 +370,41 @@
    [:ponteiro TranscricaoPonteiroOut]
    [:trechos [:sequential TrechoTranscricaoOut]]])
 
+(def AtaVersaoOut
+  "Faixa A / A.6: os metadados de uma versao publicada da ata (sem o texto). `publicada-por-nome` nil = o nome nao
+  resolveu nesta Casa (a tela diz 'publicada', nunca mostra o id)."
+  [:map {:closed true}
+   [:id :string]
+   [:versao :int]
+   [:origem-redacao (km/enum-de logic/origens-redacao-ata)]
+   [:conteudo-sha256 :string]
+   [:motivo-retificacao {:optional true} [:maybe :string]]
+   [:rascunho-id {:optional true} [:maybe :string]]
+   [:modelo-llm-id {:optional true} [:maybe :string]]
+   [:prompt-versao {:optional true} [:maybe :string]]
+   [:proporcao-alterada {:optional true} [:maybe :double]]
+   [:publicada-por-nome {:optional true} [:maybe :string]]
+   [:publicada-em :string]])
+
+(def AtaAtualOut
+  [:map {:closed true}
+   [:versao AtaVersaoOut]
+   [:texto :string]])
+
+(def AtaSessaoOut
+  "A ata da sessao: a vigente (com texto) e o historico de versoes. `pode-ter-ata` = a sessao gera ata e ja' acabou."
+  [:map {:closed true}
+   [:sessao-id :string]
+   [:pode-ter-ata :boolean]
+   [:atual {:optional true} [:maybe AtaAtualOut]]
+   [:versoes [:sequential AtaVersaoOut]]])
+
+(def AtaReciboOut
+  [:map {:closed true}
+   [:id :string]
+   [:versao :int]
+   [:conteudo-sha256 :string]])
+
 (def VinculoGravacaoOut
   "Recibo da VINCULACAO de um segmento a uma sessao (resposta 201 de POST /sessoes/:id/gravacao/:seg-id/vincular,
   Opcao A pos-upload). Carrega o `id` do segmento + a `sessao-id` a que foi vinculado. NAO expoe internos

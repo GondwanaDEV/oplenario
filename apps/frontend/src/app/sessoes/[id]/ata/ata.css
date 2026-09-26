@@ -1,0 +1,53 @@
+/* Ata da sessão (Faixa A / A.6a). Chassi (topo/envelope/marca/tema/btn/papel) vem de globals; aqui só esta
+   superfície. Nenhuma cor nova: tokens já medidos AA no chassi (`--texto`/`--texto-2`/`--aviso-texto`/
+   `--acento-texto`/`--linha`/`--surface`/`--papel*`). O documento é lido longo: medida de linha contida. */
+.sessao-meta { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+.sessao-meta .tipo { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); }
+
+.ata { padding-top: clamp(1.2rem, 3vw, 2rem); padding-bottom: 4rem; }
+.ata-cabeca h1 {
+  font-family: var(--display); font-weight: 700; font-size: var(--t-28); letter-spacing: -0.02em;
+  color: var(--texto); margin: 0 0 0.35rem; line-height: 1.15;
+}
+.ata-sub { margin: 0; color: var(--texto-2); max-width: 64ch; line-height: 1.55; }
+.ata-vazia { margin: 1.5rem 0 0; color: var(--texto-2); max-width: 64ch; }
+.ata-ok { margin: 1.2rem 0 0; padding: 0.6rem 0.8rem; border-left: 3px solid var(--acao); background: var(--surface-2); color: var(--texto); }
+
+.ata-vigente { margin-top: 1.4rem; min-width: 0; }
+.ata-meta { display: grid; gap: 0.2rem; min-width: 0; }
+.ata-meta p { margin: 0; }
+.ata-linha { font-weight: 700; color: var(--texto); }
+.ata-origem, .ata-motivo { color: var(--texto-2); font-size: var(--t-13); }
+.ata-hash { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); overflow-wrap: anywhere; }
+/* O documento publicado vai no PAPEL (mesma receita de `assinar.css`: `.papel` não é global) — nos dois temas o
+   papel é claro, como a folha congelada: é um documento, não um painel. */
+.ata-texto {
+  margin-top: 1rem; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; max-width: 76ch;
+  font-size: var(--t-16); background: var(--papel); color: var(--papel-texto); border: 1px solid var(--papel-linha);
+  border-radius: var(--raio); box-shadow: var(--sombra-papel); padding: clamp(1rem, 3vw, 1.6rem);
+}
+.ata-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin-top: 1rem; }
+.ata-falta { flex-basis: 100%; margin: 0; color: var(--texto-2); font-size: var(--t-13); }
+
+.ata-editor { margin-top: 1.4rem; display: grid; gap: 0.9rem; min-width: 0; max-width: 80ch; }
+.ata-editor h2 { margin: 0; font-size: var(--t-21); color: var(--texto); }
+.ata-dica { margin: 0; color: var(--texto-2); line-height: 1.5; }
+.ata-dica a { color: var(--acento-texto); }
+.ata-editor .campo { display: grid; gap: 0.3rem; min-width: 0; }
+.ata-editor .campo label { font-size: var(--t-12); font-weight: 600; color: var(--texto-2); letter-spacing: .01em; }
+.ata-editor .campo input, .ata-editor .campo textarea {
+  font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); background: var(--surface-2);
+  border: 1px solid color-mix(in srgb, var(--texto-2) 78%, transparent);
+  border-radius: var(--raio-sm); padding: 0.6rem 0.7rem; min-height: 44px; width: 100%;
+}
+.ata-editor .campo textarea { resize: vertical; line-height: 1.6; min-height: 16rem; }
+.ata-editor [readonly] { opacity: 0.85; }
+.ata-erro { margin: 0; color: var(--acento-texto); }
+.ata-confirmacao { padding: 0.9rem 1rem; border: 1px solid var(--linha); border-left: 3px solid var(--aviso-texto); border-radius: 12px; background: var(--surface); }
+.ata-confirmacao p { margin: 0; color: var(--texto); line-height: 1.5; }
+.ata-confirmacao b { font-weight: 700; }
+
+.ata-historico { margin-top: 2.2rem; max-width: 80ch; }
+.ata-historico h2 { margin: 0 0 0.6rem; font-size: var(--t-16); color: var(--texto); }
+.ata-historico ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.8rem; }
+.ata-historico li { padding: 0.8rem 1rem; border: 1px solid var(--linha); border-radius: 12px; background: var(--surface); min-width: 0; }

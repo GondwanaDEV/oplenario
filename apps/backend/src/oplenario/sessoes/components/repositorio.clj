@@ -6,6 +6,7 @@
   (:require [oplenario.kernel.tenancy :as tenancy]
             [oplenario.sessoes.diplomat.producers :as producers]
             [oplenario.sessoes.db.anuncio :as anuncio]
+            [oplenario.sessoes.db.ata :as ata]
             [oplenario.sessoes.db.chamada :as chamada]
             [oplenario.sessoes.db.folha :as db-folha]
             [oplenario.sessoes.db.gravacao :as gravacao]
@@ -155,6 +156,8 @@
     atribuir falas pelo Caminho C. nil = sessao inexistente no tenant. O SIGILO (secreta/restrito) e' decidido
     pelo chamador (host), que ve a sessao inteira.")
   (listar-transcricoes [this ente-id sessao-id] "Ponteiros de transcricao da sessao (mais recentes primeiro).")
+  (publicar-ata! [this ente-id m] "Faixa A / A.6: publica a proxima versao da ata (append-only, versao MAX+1).")
+  (ata-da-sessao [this ente-id sessao-id] "{:atual (com texto) :versoes (metadados)} numa tx.")
   (buscar-transcricao [this ente-id sessao-id transcricao-id] "O ponteiro concluido desta sessao, ou nil.")
   (listar-gravacoes-pendentes [this ente-id limite]
     "Faixa A / A.2: {:segmentos [...sem sessao, mais recentes primeiro] :sessoes [...candidatas a vinculo, na
@@ -511,6 +514,11 @@
            :falas     (tribuna/listar-falas-da-sessao tx ente-id sessao-id)}))))
   (listar-transcricoes [this ente-id sessao-id]
     (transacao this ente-id #(transcricao/listar-da-sessao % ente-id sessao-id)))
+  (publicar-ata! [this ente-id m]
+    (transacao this ente-id #(ata/publicar! % (assoc m :ente-id ente-id))))
+  (ata-da-sessao [this ente-id sessao-id]
+    (transacao this ente-id (fn [tx] {:atual   (ata/atual tx ente-id sessao-id)
+                                      :versoes (ata/listar-versoes tx ente-id sessao-id)})))
   (buscar-transcricao [this ente-id sessao-id transcricao-id]
     (transacao this ente-id #(transcricao/buscar-da-sessao % ente-id sessao-id transcricao-id)))
   (listar-gravacoes-pendentes [this ente-id limite]
