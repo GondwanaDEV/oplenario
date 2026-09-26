@@ -97,6 +97,16 @@
 .tribuna .crono { margin-top: 1.4vw; display: flex; align-items: baseline; gap: 1vw; flex-wrap: wrap; }
 .tribuna .crono b { font-family: var(--mono); font-weight: 600; font-size: clamp(3rem, 6.4vw, 11rem); color: #fff; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
 .tribuna .crono span { font-family: var(--mono); font-size: clamp(.9rem, 1.1vw, 1.8rem); color: var(--palco-texto-2); }
+/* tempo-limite da fala (mig 0081): último minuto em âmbar; esgotado em telha, com o cartão marcado — a cor
+   nunca é o único sinal (a legenda diz "tempo esgotado" e o relógio vira "+excedido") */
+.tribuna .crono.ultimo-minuto b { color: var(--amarelo); }
+.tribuna .crono.esgotado b, .tribuna .crono.esgotado span { color: var(--tv-nao); }
+.tribuna .crono.esgotado span { font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.tv .cartao.tribuna.esgotado { border-color: var(--tv-nao-borda); box-shadow: inset 0 0 0 2px var(--tv-nao-borda); }
+@media (prefers-reduced-motion: no-preference) {
+  .tribuna .crono.esgotado b { animation: tv-esgotado 1.2s ease-in-out infinite; }
+}
+@keyframes tv-esgotado { 50% { opacity: .55; } }
 .quorum-tv { display: flex; align-items: baseline; gap: 1.2vw; flex-wrap: wrap; }
 .quorum-tv b { white-space: nowrap; font-family: var(--display); font-weight: 800; font-size: clamp(2.4rem, 4.4vw, 7.4rem); color: #fff; line-height: 1; font-variant-numeric: tabular-nums; }
 .quorum-tv span { font-size: clamp(1rem, 1.4vw, 2.4rem); color: var(--palco-texto-2); }
@@ -195,6 +205,8 @@
 .tv-rodape .dir { display: flex; align-items: center; padding: 0 1.6vw; font-family: var(--mono); font-size: clamp(.75rem, .85vw, 1.4rem); color: var(--palco-texto-2); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
 
 /* ---------------- overlay "entrar em tela cheia" (um clique, exigido pelo navegador) ---------------- */
+.tv-som { position: absolute; right: 1.6vw; bottom: 5.5vw; z-index: 2; border: 2px solid var(--amarelo); border-radius: 999px; background: rgba(8,20,13,.85); color: var(--amarelo); font-family: var(--mono); font-weight: 600; font-size: clamp(.8rem, .95vw, 1.6rem); letter-spacing: .06em; padding: .6vw 1.2vw; cursor: pointer; }
+.tv-som:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
 .tv-entrar { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1vw; border: 0; cursor: pointer; background: rgba(8,20,13,.78); color: #fff; font-family: var(--display); }
 .tv-entrar:focus-visible { outline: 4px solid var(--amarelo); outline-offset: -8px; }
 .tv-entrar-titulo { font-weight: 800; font-size: clamp(2rem, 4vw, 6rem); letter-spacing: -0.02em; padding: 1.2vw 2.4vw; border: 3px solid var(--amarelo); border-radius: var(--raio-lg); }

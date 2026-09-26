@@ -101,7 +101,9 @@
     (is (= 1 (count (eventos-por-tipo ente "fala.iniciada"))) "fala.iniciada emitido")
     (let [pl (:payload (first (eventos-por-tipo ente "fala.iniciada")))]
       (is (re-find (re-pattern (str orad)) pl) "carrega o orador")
-      (is (re-find #"principal" pl) "carrega o tipo de fala"))
+      (is (re-find #"principal" pl) "carrega o tipo de fala")
+      (is (not (re-find #"tempo-concedido-segundos" pl))
+          "mig 0081: sem limite (Casa sem configuracao, Mesa nao informou) -> o campo nem viaja"))
     (repo/registrar-evento-cronometro! *repo* ente {:fala-id fid :tipo "pausada"
                                                     :ocorrido-em (mais t0 100) :created-by (random-uuid)})
     (repo/registrar-evento-cronometro! *repo* ente {:fala-id fid :tipo "retomada"
@@ -113,6 +115,17 @@
       (is (= 1 (count evs)) "fala.encerrada emitido")
       (is (re-find #"\"tempo-segundos\":\s*240" (:payload (first evs)))
           "carrega o tempo efetivamente usado (300 - 60 de pausa = 240)"))))
+
+(deftest fala-iniciada-carrega-o-tempo-concedido
+  ;; mig 0081: o limite RESOLVIDO viaja no evento — e' dele que a TV tira a contagem regressiva e a campainha.
+  (let [ente (random-uuid)
+        sid  (agendar! ente)
+        fid  (random-uuid)]
+    (repo/iniciar-fala! *repo* ente {:id fid :sessao-id sid :orador-id (random-uuid) :tipo-fala "principal"
+                                     :fase "ordem_do_dia" :iniciou-em t0 :created-by (random-uuid)
+                                     :tempo-concedido-segundos 300})
+    (is (re-find #"\"tempo-concedido-segundos\":\s*300"
+                 (:payload (first (eventos-por-tipo ente "fala.iniciada")))))))
 
 ;; ---------- G1b: inscricao.registrada / inscricao.desistida ----------
 

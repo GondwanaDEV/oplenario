@@ -59,9 +59,12 @@
 
 ;; ---------- Tribuna nominal — o ORADOR e a FILA (GET /sessoes/:id/tribuna) ----------
 
-(defn- orador-atual->wire [{:keys [fala-id orador-id tipo-fala fase iniciou-em inscricao-id lock-version]}]
+(defn- orador-atual->wire [{:keys [fala-id orador-id tipo-fala fase iniciou-em inscricao-id lock-version
+                                  tempo-concedido-segundos]}]
   {:fala-id (->str fala-id) :orador-id (->str orador-id) :tipo-fala tipo-fala :fase fase
-   :iniciou-em (->str iniciou-em) :inscricao-id (->str inscricao-id) :lock-version lock-version})
+   :iniciou-em (->str iniciou-em) :inscricao-id (->str inscricao-id)
+   ;; mig 0081: int4 do banco -> long (o contrato e' :int); nil passa como nil (sem limite)
+   :tempo-concedido-segundos (some-> tempo-concedido-segundos long) :lock-version lock-version})
 
 (defn- marco->wire [{:keys [tipo ocorrido-em segundos-adicionais]}]
   {:tipo tipo :ocorrido-em (->str ocorrido-em) :segundos-adicionais segundos-adicionais})

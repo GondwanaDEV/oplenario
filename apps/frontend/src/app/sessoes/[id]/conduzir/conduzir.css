@@ -183,6 +183,23 @@
   color: var(--aviso-texto);
 }
 .crono-extra { margin: 0; display: flex; gap: 1rem; font-size: var(--t-12); color: var(--texto-2); }
+/* tempo-limite da fala (mig 0081): âmbar no último minuto, telha esgotado — sempre com texto junto (a cor
+   nunca é o único sinal). Tokens de TEXTO (--aviso-texto/--acento-texto), que passam AA nos dois temas. */
+.crono-tempo.ultimo-minuto { color: var(--aviso-texto); }
+.crono-tempo.esgotado { color: var(--acento-texto); }
+.crono-limite { margin: 0; font-size: var(--t-12); color: var(--texto-2); }
+.crono-esgotado {
+  margin: 0; padding: 0.5rem 0.7rem; border-radius: 8px; font-size: var(--t-13); font-weight: 600;
+  color: var(--acento-texto); border: 1px solid currentColor;
+  background: color-mix(in srgb, var(--telha) 8%, var(--surface));
+}
+.tribuna-sub-linha { display: flex; align-items: flex-end; justify-content: space-between; gap: 0.7rem 1rem; flex-wrap: wrap; }
+.campo-tempo { display: flex; flex-direction: column; gap: 0.3rem; }
+.campo-tempo label { font-size: var(--t-12); font-weight: 600; color: var(--texto-2); }
+.campo-tempo select {
+  padding: 0.4rem 0.6rem; border: 1px solid var(--linha); border-radius: 8px;
+  background: var(--surface); color: var(--texto); font: inherit; font-size: var(--t-13);
+}
 .crono-acoes { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 
 .fila-acoes { display: inline-flex; gap: 0.45rem; flex-wrap: wrap; }
@@ -266,3 +283,4 @@
   .apr-lista li { grid-template-columns: 1.6rem minmax(0, 1fr); }
   .apr-lista li > .btn, .apr-lista li > .apr-selo { grid-column: 2; justify-self: start; }
 }
+.campo-tempo select:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }

@@ -9,8 +9,15 @@
 import { useEffect, useState } from "react";
 import { useTribunaMesa, type EventoCronometroManual } from "@/lib/use-tribuna-mesa";
 import { derivarFila, membrosInscriveis, rotuloOradorAtual, FASES_TRIBUNA } from "@/lib/tribuna-mesa-vista";
-import { segundosDecorridos, formatarTempo } from "@/lib/cronometro";
+import { segundosDecorridos, formatarTempo, relogioDaFala, tempoDaFala } from "@/lib/cronometro";
 import { estaPausado, segundosAdicionaisConcedidos, apartesConcedidos } from "@/lib/cronometro-mesa-vista";
+
+/** Tempos que a Mesa pode conceder ao chamar o orador (mig 0081). "" = o regimental da Casa: o servidor resolve
+ * pelo (fase, tipo de fala) configurado — e, se a Casa não configurou, a fala corre sem limite. */
+const TEMPOS_DA_FALA: { valor: string; rotulo: string }[] = [
+  { valor: "", rotulo: "Regimental da Casa" },
+  ...[1, 2, 3, 5, 10, 15, 20].map((min) => ({ valor: String(min * 60), rotulo: `${min} min` })),
+];
 
 /** Date.now() reavaliado a cada segundo (relógio ao vivo); pausa sob prefers-reduced-motion. Mesmo padrão do
  * telão (`/plenario`). */
@@ -39,6 +46,7 @@ export function PainelTribuna({ sessaoId, token }: { sessaoId: string; token: st
 
   const [vereadorId, setVereadorId] = useState("");
   const [fase, setFase] = useState(FASES_TRIBUNA[0].valor);
+  const [tempoDaFalaEscolhido, setTempoDaFalaEscolhido] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [erroAcao, setErroAcao] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -75,8 +83,11 @@ export function PainelTribuna({ sessaoId, token }: { sessaoId: string; token: st
   const onDesistir = (inscricaoId: string, lockVersion: number) =>
     comAcao(() => desistir(inscricaoId, lockVersion), "Desistência registrada.");
 
-  const onChamar = (oradorId: string, faseInscricao: string, inscricaoId: string) =>
-    comAcao(() => iniciarFala(oradorId, faseInscricao, { inscricaoId }), "Orador chamado à tribuna.");
+  const onChamar = (oradorId: string, faseInscricao: string, inscricaoId: string) => {
+    const segundos = Number(tempoDaFalaEscolhido);
+    const opcoes = segundos > 0 ? { inscricaoId, tempoConcedidoSegundos: segundos } : { inscricaoId };
+    return comAcao(() => iniciarFala(oradorId, faseInscricao, opcoes), "Orador chamado à tribuna.");
+  };
 
   const onEvento = (tipo: EventoCronometroManual, segundos?: number, msg = "Cronômetro atualizado.") => {
     if (!oradorObj) return;
@@ -91,6 +102,8 @@ export function PainelTribuna({ sessaoId, token }: { sessaoId: string; token: st
   const pausado = estaPausado(marcos);
   const decorrido = oradorObj ? segundosDecorridos(oradorObj.iniciouEm, marcos, agora) : 0;
   const adicionais = segundosAdicionaisConcedidos(marcos);
+  const tempo = tempoDaFala(oradorObj?.tempoConcedidoSegundos, marcos, decorrido);
+  const esgotado = tempo.situacao === "esgotado";
   const apartes = apartesConcedidos(marcos);
 
   return (
@@ -121,11 +134,19 @@ export function PainelTribuna({ sessaoId, token }: { sessaoId: string; token: st
           <div className="cronometro" role="group" aria-label="Cronômetro da fala">
             <div className="crono-topo">
               <span className="crono-orador">{oradorAtualNome}</span>
-              <span className={pausado ? "crono-tempo pausado" : "crono-tempo"} aria-live="off">
-                {formatarTempo(decorrido)}
+              <span className={`crono-tempo ${tempo.situacao}${pausado ? " pausado" : ""}`} aria-live="off">
+                {relogioDaFala(tempo, decorrido)}
                 {pausado && <span className="crono-flag">pausado</span>}
               </span>
             </div>
+            {tempo.limite !== null && !esgotado && (
+              <p className="crono-limite">restantes de {formatarTempo(tempo.limite)}</p>
+            )}
+            {esgotado && (
+              <p role="alert" className="crono-esgotado">
+                Tempo esgotado — conceda +1 min ou encerre a fala.
+              </p>
+            )}
             {(adicionais > 0 || apartes > 0) && (
               <p className="crono-extra">
                 {adicionais > 0 && <span>+{formatarTempo(adicionais)} concedidos</span>}
@@ -152,7 +173,19 @@ export function PainelTribuna({ sessaoId, token }: { sessaoId: string; token: st
           </div>
         )}
 
-        <h3 className="tribuna-sub">Fila de oradores</h3>
+        <div className="tribuna-sub-linha">
+          <h3 className="tribuna-sub">Fila de oradores</h3>
+          <div className="campo campo-tempo">
+            <label htmlFor="tempo-da-fala">Tempo da fala</label>
+            <select id="tempo-da-fala" value={tempoDaFalaEscolhido} onChange={(e) => setTempoDaFalaEscolhido(e.target.value)}>
+              {TEMPOS_DA_FALA.map((t) => (
+                <option key={t.valor} value={t.valor}>
+                  {t.rotulo}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
         {fila.length === 0 ? (
           <p className="nota-mesa">
             <span>Ninguém inscrito. Inscreva um orador abaixo.</span>

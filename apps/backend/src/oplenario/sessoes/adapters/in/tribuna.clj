@@ -62,7 +62,8 @@
 ;; ---------- fala_executada + cronometro (execucao, F4.5b) ----------
 
 (def ^:private campos-iniciar
-  ["orador-id" "tipo-fala" "fase" "iniciou-em" "inscricao-id" "fala-pai-id" "proposicao-ref-id"])
+  ["orador-id" "tipo-fala" "fase" "iniciou-em" "inscricao-id" "fala-pai-id" "proposicao-ref-id"
+   "tempo-concedido-segundos"])
 
 (defn iniciar-fala->dominio
   "Path-param `:id` (sessao) + corpo JSON {orador-id, tipo-fala, fase, iniciou-em, inscricao-id?, fala-pai-id?,
@@ -75,6 +76,11 @@
   (let [mp (so-esperados json-params campos-iniciar)]
     (when-let [erros (m/explain wire/IniciarFala mp)]
       (invalido! "corpo de iniciar fala invalido" {:campos (keys (me/humanize erros))}))
+    ;; tempo-limite (mig 0081): > 0 e dentro do int4 da coluna — na BORDA (400), nunca o CHECK do banco (500).
+    ;; Mesma defesa de `segundos-adicionais` em `validar-coerencia-cronometro!`.
+    (when-let [seg (:tempo-concedido-segundos mp)]
+      (when-not (and (integer? seg) (pos? seg) (<= seg Integer/MAX_VALUE))
+        (invalido! "tempo-concedido-segundos deve ser inteiro entre 1 e 2147483647" {:campo :tempo-concedido-segundos})))
     (cond-> {:sessao-id  (->uuid sessao-id-str :id)
              :orador-id  (->uuid (:orador-id mp) :orador-id)
              :tipo-fala  (:tipo-fala mp)
@@ -82,7 +88,8 @@
              :iniciou-em (->instante (:iniciou-em mp) :iniciou-em)}
       (:inscricao-id mp)      (assoc :inscricao-id (->uuid (:inscricao-id mp) :inscricao-id))
       (:fala-pai-id mp)       (assoc :fala-pai-id (->uuid (:fala-pai-id mp) :fala-pai-id))
-      (:proposicao-ref-id mp) (assoc :proposicao-ref-id (->uuid (:proposicao-ref-id mp) :proposicao-ref-id)))))
+      (:proposicao-ref-id mp) (assoc :proposicao-ref-id (->uuid (:proposicao-ref-id mp) :proposicao-ref-id))
+      (:tempo-concedido-segundos mp) (assoc :tempo-concedido-segundos (long (:tempo-concedido-segundos mp))))))
 
 (def ^:private campos-cronometro ["tipo" "ocorrido-em" "segundos-adicionais"])
 

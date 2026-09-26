@@ -288,6 +288,7 @@ export interface OradorAtualOut {
   fase: "expediente" | "explicacoes_pessoais" | "grande_expediente" | "ordem_do_dia" | "tribuna_livre_cidadao";
   iniciouEm: string;
   inscricaoId: string | null;
+  tempoConcedidoSegundos: number | null;
   lockVersion: number;
 }
 

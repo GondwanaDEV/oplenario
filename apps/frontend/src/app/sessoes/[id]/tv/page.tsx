@@ -35,6 +35,7 @@ import {
   type VistaApreciacaoTv,
 } from "@/lib/tv-vista";
 import { frasesDoLetreiro } from "@/lib/tv-letreiro";
+import { useCampainha } from "@/lib/use-campainha";
 import "./tv.css";
 
 export default function PaginaTv() {
@@ -152,6 +153,10 @@ function ConteudoTv({ id }: { id: string }) {
   const telaCheia = useTelaCheia();
   const cursorOculto = useCursorOculto();
   useManterAcesa();
+  // A campainha segue a tribuna em QUALQUER fase da TV (a fala pode esgotar com a votação em tela).
+  const tribunaAgora = estado ? vistaTribunaTv(estado, agora) : null;
+  const campainha = useCampainha(tribunaAgora ? { falaId: tribunaAgora.falaId, esgotado: tribunaAgora.esgotado } : null);
+  const avisarSomBloqueado = !campainha.somLiberado && !!tribunaAgora && tribunaAgora.situacao !== "sem-limite";
 
   let miolo: React.ReactNode;
   let fase: FaseTv | "aviso" = "aviso";
@@ -181,6 +186,11 @@ function ConteudoTv({ id }: { id: string }) {
       </div>
       <div className="tv-miolo-area">{miolo}</div>
       <Rodape sessao={sessao} estado={estado} pauta={pauta} agora={agora} />
+      {avisarSomBloqueado && !telaCheia.pedir && (
+        <button type="button" className="tv-som" onClick={campainha.liberarSom}>
+          Campainha sem som — clique para ativar
+        </button>
+      )}
       {telaCheia.pedir && (
         <button type="button" className="tv-entrar" onClick={() => void telaCheia.entrar()}>
           <span className="tv-entrar-titulo">Entrar em tela cheia</span>
@@ -329,7 +339,7 @@ function Pauta({ itens, rotulo }: { itens: ItemPautaTv[]; rotulo: string }) {
 function CartaoTribuna({ estado, agora }: { estado: EstadoPlenario; agora: number }) {
   const tribuna = vistaTribunaTv(estado, agora);
   return (
-    <div className="cartao tribuna">
+    <div className={`cartao tribuna${tribuna?.esgotado ? " esgotado" : ""}`}>
       <p className="rot">{tribuna ? `Na tribuna${tribuna.fase ? ` · ${tribuna.fase}` : ""}` : "Tribuna"}</p>
       {tribuna ? (
         <>
@@ -342,9 +352,9 @@ function CartaoTribuna({ estado, agora }: { estado: EstadoPlenario; agora: numbe
               {tribuna.detalhe && <span>{tribuna.detalhe}</span>}
             </div>
           </div>
-          <div className="crono" role="timer" aria-label="Tempo de fala">
-            <b>{tribuna.decorrido}</b>
-            <span>{tribuna.pausado ? "pausado" : "no uso da palavra"}</span>
+          <div className={`crono ${tribuna.situacao}`} role="timer" aria-label="Tempo de fala">
+            <b>{tribuna.relogio}</b>
+            <span>{tribuna.legenda}</span>
           </div>
         </>
       ) : (

@@ -986,6 +986,14 @@
 
 (defn aparte? [tipo-fala] (= "aparte" tipo-fala))
 
+(defn escolher-tempo-regimental
+  "Das linhas candidatas de `tempo_regimental` para um (fase, tipo) — [{:fase :segundos}], a da fase e/ou a
+  generica (fase nil) — devolve os segundos que valem: a linha com fase EXPLICITA vence a generica; sem
+  nenhuma, nil (sem limite). Pura (mig 0081)."
+  [linhas]
+  (or (some #(when (some? (:fase %)) (:segundos %)) linhas)
+      (some #(when (nil? (:fase %)) (:segundos %)) linhas)))
+
 (defn validar-tipo-fala [tipo]
   (when-not (contains? tipos-fala tipo)
     (throw (ex-info "tipo de fala invalido" {:tipo tipo :validos tipos-fala}))))

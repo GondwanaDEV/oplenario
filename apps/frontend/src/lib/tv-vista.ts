@@ -8,7 +8,7 @@
 // o painel mostra "—", a TV mostra "—".
 
 import type { PautaItemOut, PautaOut, SessaoOut } from "./contrato";
-import { formatarTempo, segundosDecorridos } from "./cronometro";
+import { formatarTempo, relogioDaFala, segundosDecorridos, tempoDaFala, type SituacaoTempo } from "./cronometro";
 import { formatarHora } from "./formatar-data";
 import { iniciais } from "./iniciais";
 import { derivarPlacar } from "./placar-vista";
@@ -317,19 +317,28 @@ export function vistaResultadoTv(estado: EstadoPlenario): VistaResultadoTv | nul
 // ---------------------------------------------------------------- tribuna
 
 export interface VistaTribunaTv {
+  falaId: string;
   nome: string;
   iniciais: string;
   detalhe: string; // "Fala principal · Vice-presidente"
   fase: string;
   decorrido: string; // "06:24"
   pausado: boolean;
+  /** O número grande do cartão: o restante (com limite), "+excedido" (esgotado) ou o decorrido (sem limite). */
+  relogio: string;
+  /** A linha sob o relógio: "restantes de 05:00" · "tempo esgotado" · "pausado" · "no uso da palavra". */
+  legenda: string;
+  situacao: SituacaoTempo;
+  /** Gatilho da campainha (a TRANSIÇÃO é decidida por `deveTocarCampainha`, não aqui). */
+  esgotado: boolean;
 }
 
 const ORADOR_SEM_NOME = "Orador com a palavra";
 
 /** Quem está com a palavra. Sem nome (cidadão na tribuna livre, cadastro incompleto) → rótulo neutro e
- * avatar "—": nunca caracteres do UUID, que leriam como identidade. Só o tempo DECORRIDO: o painel não
- * conhece o tempo-limite da fala (o servidor só emite os marcos), então a TV não inventa um. */
+ * avatar "—": nunca caracteres do UUID, que leriam como identidade. O TEMPO: com limite (mig 0081 — o servidor
+ * fotografa o regimental ou o que a Mesa informou, e o "+1 min" soma pelos marcos), a TV faz a contagem
+ * regressiva e, esgotado, mostra o excedido; sem limite, só o decorrido — nunca inventa um limite. */
 export function vistaTribunaTv(estado: EstadoPlenario, agoraMs: number): VistaTribunaTv | null {
   const o = estado.oradorAtual;
   if (!o) return null;
@@ -337,13 +346,27 @@ export function vistaTribunaTv(estado: EstadoPlenario, agoraMs: number): VistaTr
   const nome = id?.nomeParlamentar ?? null;
   const marcos = estado.marcosCronometro;
   const pausado = marcos.length > 0 && marcos[marcos.length - 1].tipo === "pausada";
+  const decorridoS = segundosDecorridos(o.iniciouEm, marcos, agoraMs);
+  const tempo = tempoDaFala(o.tempoConcedidoSegundos, marcos, decorridoS);
+  const esgotado = tempo.situacao === "esgotado";
+  const relogio = relogioDaFala(tempo, decorridoS);
+  const legenda =
+    pausado ? "pausado"
+    : esgotado ? "tempo esgotado"
+    : tempo.limite !== null ? `restantes de ${formatarTempo(tempo.limite)}`
+    : "no uso da palavra";
   return {
+    falaId: o.falaId,
     nome: nome ?? ORADOR_SEM_NOME,
     iniciais: nome ? iniciais(nome) : "—",
     // docs/23 Fatia 4a: o partido (do mandato na data da sessão) entre o tipo de fala e o cargo na Mesa.
     detalhe: [nomeTipoFala(o.tipoFala), id?.partido, id?.cargoMesa].filter(Boolean).join(" · "),
     fase: nomeFase(o.fase),
-    decorrido: formatarTempo(segundosDecorridos(o.iniciouEm, marcos, agoraMs)),
+    decorrido: formatarTempo(decorridoS),
     pausado,
+    relogio,
+    legenda,
+    situacao: tempo.situacao,
+    esgotado,
   };
 }

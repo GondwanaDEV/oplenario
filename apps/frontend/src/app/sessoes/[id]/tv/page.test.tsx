@@ -238,3 +238,42 @@ describe("Modo TV — em apreciação (docs/23 Fatia 4b)", () => {
     expect(container.querySelector("main")?.getAttribute("data-fase")).toBe("votacao");
   });
 });
+
+describe("Modo TV — tempo da fala e campainha (mig 0081)", () => {
+  const falaHa = (segundos: number, tempoConcedidoSegundos: number | null) => ({
+    falaId: "f1",
+    oradorId: "ver-c",
+    tipoFala: "principal",
+    fase: "ordem_do_dia",
+    iniciouEm: new Date(Date.now() - segundos * 1000).toISOString(),
+    tempoConcedidoSegundos,
+  });
+
+  it("com limite: contagem regressiva e 'restantes de'", () => {
+    const { container } = montar({ estado: { quorum, oradorAtual: falaHa(60, 300) } });
+    const crono = container.querySelector(".crono");
+    expect(crono?.className).toContain("correndo");
+    expect(crono?.textContent).toMatch(/0[34]:[0-5]\d/);
+    expect(crono?.textContent).toContain("restantes de 05:00");
+  });
+
+  it("esgotado: 'tempo esgotado', o excedido e o cartão marcado (a cor nunca é o único sinal)", () => {
+    const { container } = montar({ estado: { quorum, oradorAtual: falaHa(400, 300) } });
+    const crono = container.querySelector(".crono");
+    expect(crono?.className).toContain("esgotado");
+    expect(crono?.textContent).toContain("tempo esgotado");
+    expect(crono?.textContent).toMatch(/\+01:[34]\d/);
+    expect(container.querySelector(".cartao.tribuna.esgotado")).toBeTruthy();
+  });
+
+  it("sem limite: o relógio só conta, como antes", () => {
+    const { container } = montar({ estado: { quorum, oradorAtual: falaHa(90, null) } });
+    expect(container.querySelector(".crono")?.textContent).toContain("no uso da palavra");
+  });
+
+  it("o aviso de campainha sem som não disputa a tela com o convite de tela cheia", () => {
+    montar({ estado: { quorum, oradorAtual: falaHa(60, 300) } });
+    expect(screen.getByRole("button", { name: /Entrar em tela cheia/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Campainha sem som/ })).toBeNull();
+  });
+});
