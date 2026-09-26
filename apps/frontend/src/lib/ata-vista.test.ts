@@ -30,6 +30,9 @@ describe("ata-vista", () => {
     expect(faltaParaPublicar({ texto: "Ata.", motivo: " ", retificando: true })).toMatch(/motivo da retificação/);
     expect(faltaParaPublicar({ texto: "Ata.", motivo: "erro", retificando: true })).toBeNull();
     expect(faltaParaPublicar({ texto: "a".repeat(TETO_TEXTO_ATA + 1), motivo: "", retificando: false })).toMatch(/limite/);
+    expect(faltaParaPublicar({ texto: "Ata. [confirmar: hora] [Confirmar: nome]", motivo: "", retificando: false })).toBe(
+      "Resolva os 2 pontos a confirmar ([confirmar: …]) antes de publicar.",
+    );
   });
 
   it("recusa do servidor vira frase da tela", () => {

@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 
 from oplenario_ia import __version__
 from oplenario_ia.armazem.porta import Armazem
+from oplenario_ia.ata.redacao import pontos_a_confirmar, texto_limpo
 from oplenario_ia.config import Config, carregar
 from oplenario_ia.erros import ErroIA, para_estruturado
 
@@ -79,6 +80,42 @@ def criar_app(config: Config | None = None, armazem: Armazem | None = None) -> F
                 }
                 for t in g.trechos
             ],
+        }
+
+    @app.get("/v1/entes/{ente_id}/atas/rascunhos/{rascunho_id}", dependencies=[Depends(servico)])
+    def rascunho_ata(ente_id: str, rascunho_id: str) -> dict[str, Any]:
+        """O rascunho da ata para a tela de revisão do core (A.6b): o texto com as marcas de citação, o texto LIMPO
+        (o que vai para o editor), cada citação com o resultado da conferência, os parágrafos sem fonte e os pontos a
+        confirmar. De outra Casa: 404."""
+        if arm is None:
+            raise HTTPException(503, "armazenamento do satélite não configurado")
+        g = arm.rascunho(rascunho_id)
+        if g is None or g.ente_id != ente_id:
+            raise HTTPException(404, "rascunho não encontrado")
+        return {
+            "id": g.id,
+            "sessao-id": g.sessao_id,
+            "solicitacao-id": g.solicitacao_id,
+            "texto": g.texto,
+            "texto-limpo": texto_limpo(g.texto),
+            "prompt-versao": g.prompt_versao,
+            "vendor": g.vendor,
+            "modelo": g.modelo,
+            "incerteza": {"nivel": g.incerteza["nivel"], "motivos": g.incerteza.get("motivos", [])},
+            "citacoes": [
+                {
+                    "fonte-id": c["fonte_id"],
+                    "trecho": c.get("trecho"),
+                    "inicio": c["inicio"],
+                    "fim": c["fim"],
+                    "status": c["status"],
+                    "rotulo": c.get("rotulo"),
+                }
+                for c in g.citacoes
+            ],
+            "paragrafos-sem-fonte": g.paragrafos_sem_fonte,
+            "pontos-a-confirmar": pontos_a_confirmar(g.texto),
+            "criado-em": g.criado_em.isoformat() if g.criado_em else None,
         }
 
     return app

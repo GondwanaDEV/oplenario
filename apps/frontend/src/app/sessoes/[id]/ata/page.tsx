@@ -5,18 +5,23 @@
 //
 // A ata é artefato LEGAL do core (§22.3.4): esta fatia é o caminho da Casa — a secretaria redige ou cola a ata e
 // publica. Publicar CONGELA o texto (hash SHA-256); corrigir depois é RETIFICAR (nova versão com motivo, a anterior
-// fica guardada). Por isso a publicação tem dois passos: revisar e confirmar. O rascunho da IA entra na A.6b pelo
-// mesmo formulário (origem "gerada_automaticamente") — a tela já diz de onde veio cada versão.
+// fica guardada). Por isso a publicação tem dois passos: revisar e confirmar.
+//
+// A.6b — o RASCUNHO DA IA: a secretaria pede, a IA redige em segundo plano (a tela acompanha), e a revisão mostra
+// cada citação conferida contra a transcrição, os parágrafos sem fonte e os pontos a confirmar. "Usar este rascunho"
+// leva o texto LIMPO ao mesmo editor; publicar grava a origem "gerada_automaticamente" com o rascunho de origem. Os
+// pontos [confirmar: …] bloqueiam a publicação até serem resolvidos. IA fora: R-IA-1, e o caminho manual segue.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { useTema } from "@/lib/tema";
 import { useAta } from "@/lib/use-ata";
 import { faltaParaPublicar, linhaDaVersao, origemDaRedacao, semAta } from "@/lib/ata-vista";
+import { avisoDoRascunho, paragrafosDoRascunho, rotuloDaCitacao, situacaoDoRascunho } from "@/lib/rascunho-ata-vista";
 import { formatarHash } from "@/lib/folha-vista";
-import type { AtaSessaoOut, AtaVersaoOut } from "@/lib/contrato-sessoes.gen";
+import type { AtaRascunhoConteudoOut, AtaRascunhoOut, AtaSessaoOut, AtaVersaoOut } from "@/lib/contrato-sessoes.gen";
 import "./ata.css";
 
 export default function PaginaAta() {
@@ -29,7 +34,7 @@ export default function PaginaAta() {
   );
 }
 
-type Modo = "ler" | "editar" | "confirmar";
+type Modo = "ler" | "editar" | "confirmar" | "revisar";
 
 export function ConteudoAta({ id }: { id: string }) {
   const { token } = useAuth();
@@ -75,26 +80,32 @@ export function ConteudoAta({ id }: { id: string }) {
         {r.estado === "erro" && <p role="status">Não foi possível carregar a ata desta sessão.</p>}
         {r.estado === "pronto" && (
           <Ata key={r.ata.atual?.versao.id ?? "sem"} id={id} ata={r.ata} publicar={r.publicar} enviando={r.enviando}
-            aviso={aviso} setAviso={setAviso} />
+            aviso={aviso} setAviso={setAviso} pedirRascunho={r.pedirRascunho} lerRascunho={r.lerRascunho} />
         )}
       </main>
     </>
   );
 }
 
-function Ata({ id, ata, publicar, enviando, aviso, setAviso }: {
+type Hook = ReturnType<typeof useAta>;
+
+function Ata({ id, ata, publicar, enviando, aviso, setAviso, pedirRascunho, lerRascunho }: {
   id: string;
   ata: AtaSessaoOut;
-  publicar: ReturnType<typeof useAta>["publicar"];
+  publicar: Hook["publicar"];
   enviando: boolean;
   aviso: string | null;
   setAviso: (a: string | null) => void;
+  pedirRascunho: Hook["pedirRascunho"];
+  lerRascunho: Hook["lerRascunho"];
 }) {
   const atual = ata.atual ?? null;
   const [modo, setModo] = useState<Modo>("ler");
   const [texto, setTexto] = useState(atual?.texto ?? "");
   const [motivo, setMotivo] = useState("");
   const [erro, setErro] = useState<string | null>(null);
+  // o editor aberto a partir do rascunho da IA publica com a origem e o rascunho de origem
+  const [rascunhoId, setRascunhoId] = useState<string | null>(null);
   const retificando = atual !== null;
   const falta = faltaParaPublicar({ texto, motivo, retificando });
   const bloqueio = semAta(ata);
@@ -103,7 +114,11 @@ function Ata({ id, ata, publicar, enviando, aviso, setAviso }: {
   async function confirmar() {
     setErro(null);
     try {
-      const recibo = await publicar({ texto, motivoRetificacao: retificando ? motivo.trim() : undefined });
+      const recibo = await publicar({
+        texto,
+        motivoRetificacao: retificando ? motivo.trim() : undefined,
+        rascunhoId: rascunhoId ?? undefined,
+      });
       setAviso(`Ata publicada — versão ${recibo.versao}.`);
       setModo("ler");
     } catch (e) {
@@ -114,15 +129,40 @@ function Ata({ id, ata, publicar, enviando, aviso, setAviso }: {
 
   if (bloqueio) return <p role="status" className="ata-vazia">{bloqueio}</p>;
 
+  if (modo === "revisar" && ata.rascunho?.rascunhoId) {
+    return (
+      <RevisaoDoRascunho
+        rascunhoId={ata.rascunho.rascunhoId}
+        lerRascunho={lerRascunho}
+        voltar={() => setModo("ler")}
+        usar={(c) => {
+          setTexto(c.textoLimpo);
+          setRascunhoId(c.rascunhoId);
+          setErro(null);
+          setModo("editar");
+        }}
+      />
+    );
+  }
+
   if (modo !== "ler") {
     const proxima = (atual?.versao.versao ?? 0) + 1;
     return (
       <section className="ata-editor" aria-label={retificando ? "Retificar a ata" : "Redigir a ata"}>
-        <h2>{retificando ? `Retificar a ata (versão ${proxima})` : "Redigir a ata"}</h2>
-        <p className="ata-dica">
-          Redija ou cole a ata aprovada pela Casa. A <Link href={transcricao}>transcrição da sessão</Link> ajuda a
-          conferir quem falou e o que foi dito.
-        </p>
+        <h2>
+          {retificando ? `Retificar a ata (versão ${proxima})` : rascunhoId ? "Revisar o rascunho e publicar" : "Redigir a ata"}
+        </h2>
+        {rascunhoId ? (
+          <p className="ata-dica">
+            Texto do rascunho da IA, já sem as marcas de citação. Corrija o que for preciso e resolva cada{" "}
+            <b>[confirmar: …]</b> — a ata publicada registra que partiu do rascunho.
+          </p>
+        ) : (
+          <p className="ata-dica">
+            Redija ou cole a ata aprovada pela Casa. A <Link href={transcricao}>transcrição da sessão</Link> ajuda a
+            conferir quem falou e o que foi dito.
+          </p>
+        )}
         <div className="campo">
           <label htmlFor="ata-texto">Texto da ata</label>
           <textarea id="ata-texto" value={texto} readOnly={modo === "confirmar"} rows={16}
@@ -142,7 +182,7 @@ function Ata({ id, ata, publicar, enviando, aviso, setAviso }: {
             <button type="button" className="btn btn-primaria" disabled={falta !== null} onClick={() => { setErro(null); setModo("confirmar"); }}>
               Revisar para publicar
             </button>
-            <button type="button" className="btn btn-fantasma" onClick={() => { setModo("ler"); setErro(null); setTexto(atual?.texto ?? ""); setMotivo(""); }}>
+            <button type="button" className="btn btn-fantasma" onClick={() => { setModo("ler"); setErro(null); setTexto(atual?.texto ?? ""); setMotivo(""); setRascunhoId(null); }}>
               Cancelar
             </button>
           </div>
@@ -187,6 +227,7 @@ function Ata({ id, ata, publicar, enviando, aviso, setAviso }: {
             <button type="button" className="btn btn-primaria" onClick={() => { setAviso(null); setModo("editar"); }}>Redigir a ata</button>
             <Link className="btn btn-fantasma" href={transcricao}>Ver a transcrição</Link>
           </div>
+          <PainelRascunho rascunho={ata.rascunho ?? null} pedir={pedirRascunho} revisar={() => { setAviso(null); setModo("revisar"); }} />
         </section>
       )}
       {ata.versoes.length > 1 && (
@@ -229,5 +270,124 @@ function Brasao() {
       <path d="M13.5 27 A6.5 6.5 0 0 1 26.5 27" fill="none" stroke="#C0693F" strokeWidth="2.4" strokeLinecap="round" />
       <rect x="18.4" y="9.5" width="3.2" height="6" rx="1.2" fill="#CFA65C" />
     </svg>
+  );
+}
+
+function PainelRascunho({ rascunho, pedir, revisar }: {
+  rascunho: AtaRascunhoOut | null;
+  pedir: Hook["pedirRascunho"];
+  revisar: () => void;
+}) {
+  const s = situacaoDoRascunho(rascunho);
+  const [pedindo, setPedindo] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  async function pedirAgora() {
+    setPedindo(true);
+    setErro(null);
+    try {
+      await pedir();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não foi possível pedir o rascunho agora.");
+    } finally {
+      setPedindo(false);
+    }
+  }
+  const redigindo = rascunho?.situacao === "solicitado";
+  return (
+    <section className={redigindo ? "ata-ia ata-ia-redigindo" : "ata-ia"} aria-label="Rascunho pela IA" aria-live="polite">
+      <h2>{s.titulo}</h2>
+      <p>{s.detalhe}</p>
+      {erro && <p className="ata-erro" role="alert">{erro}</p>}
+      <div className="ata-acoes">
+        {s.revisar && (
+          <button type="button" className="btn btn-primaria" onClick={revisar}>Revisar o rascunho</button>
+        )}
+        {s.podePedir && (
+          <button type="button" className={s.revisar ? "btn btn-fantasma" : "btn btn-contorno"} disabled={pedindo} onClick={pedirAgora}>
+            {pedindo ? "Pedindo…" : rascunho ? "Pedir um novo rascunho" : "Pedir rascunho à IA"}
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function RevisaoDoRascunho({ rascunhoId, lerRascunho, voltar, usar }: {
+  rascunhoId: string;
+  lerRascunho: Hook["lerRascunho"];
+  voltar: () => void;
+  usar: (c: AtaRascunhoConteudoOut) => void;
+}) {
+  const [conteudo, setConteudo] = useState<AtaRascunhoConteudoOut | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    lerRascunho(rascunhoId).then(
+      (c) => vivo && setConteudo(c),
+      (e) => vivo && setErro(e instanceof Error ? e.message : "Não foi possível abrir o rascunho agora."),
+    );
+    return () => {
+      vivo = false;
+    };
+  }, [rascunhoId, lerRascunho]);
+
+  if (erro)
+    return (
+      <section className="ata-revisao" aria-label="Revisão do rascunho">
+        <p className="ata-erro" role="alert">{erro}</p>
+        <div className="ata-acoes">
+          <button type="button" className="btn btn-contorno" onClick={voltar}>Voltar</button>
+        </div>
+      </section>
+    );
+  if (!conteudo) return <p role="status">Abrindo o rascunho…</p>;
+
+  const aviso = avisoDoRascunho(conteudo.incerteza.nivel, conteudo.incerteza.motivos);
+  const paragrafos = paragrafosDoRascunho(conteudo.texto, conteudo.citacoes, conteudo.paragrafosSemFonte);
+  return (
+    <section className="ata-revisao" aria-label="Revisão do rascunho">
+      <h2>Rascunho da IA</h2>
+      <p className="ata-dica">
+        Cada número remete ao trecho da transcrição que sustenta a frase. Um rascunho é um ponto de partida: nada é
+        publicado sem a sua revisão.
+      </p>
+      {aviso && <p className="ata-aviso" role="note">{aviso}</p>}
+      <article className="papel ata-texto ata-rascunho">
+        {paragrafos.map((p, i) => (
+          <p key={i} className={p.semFonte ? "ata-sem-fonte" : undefined}>
+            {p.semFonte && <span className="ata-selo">sem fonte — confira</span>}
+            {p.partes.map((x, j) =>
+              x.tipo === "texto" ? (
+                <span key={j}>{x.texto}</span>
+              ) : x.tipo === "confirmar" ? (
+                <mark key={j} className="ata-confirmar">[confirmar: {x.texto}]</mark>
+              ) : (
+                <sup key={j} className={x.citacao?.status === "conferida" ? "ata-cita" : "ata-cita ata-cita-falha"}
+                  title={rotuloDaCitacao(x.citacao)}>
+                  {x.n}
+                </sup>
+              ),
+            )}
+          </p>
+        ))}
+      </article>
+      {conteudo.citacoes.length > 0 && (
+        <details className="ata-fontes">
+          <summary>Fontes citadas ({conteudo.citacoes.length})</summary>
+          <ol>
+            {conteudo.citacoes.map((c, i) => (
+              <li key={i} className={c.status === "conferida" ? undefined : "ata-cita-falha"}>
+                <b>{rotuloDaCitacao(c)}</b>
+                {c.trecho && <span> — “{c.trecho}”</span>}
+              </li>
+            ))}
+          </ol>
+        </details>
+      )}
+      <div className="ata-acoes">
+        <button type="button" className="btn btn-primaria" onClick={() => usar(conteudo)}>Usar este rascunho</button>
+        <button type="button" className="btn btn-fantasma" onClick={voltar}>Voltar</button>
+      </div>
+    </section>
   );
 }

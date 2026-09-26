@@ -51,3 +51,24 @@
 .ata-historico h2 { margin: 0 0 0.6rem; font-size: var(--t-16); color: var(--texto); }
 .ata-historico ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.8rem; }
 .ata-historico li { padding: 0.8rem 1rem; border: 1px solid var(--linha); border-radius: 12px; background: var(--surface); min-width: 0; }
+
+/* A.6b — o rascunho da IA. Mesmos tokens (nenhuma cor nova): aviso = `--aviso-texto`, falha = `--acento-texto`. */
+.ata-ia { margin-top: 1.6rem; padding: 1rem 1.1rem; border: 1px dashed var(--linha); border-radius: 12px; background: var(--surface); max-width: 80ch; }
+.ata-ia h2 { margin: 0 0 0.3rem; font-size: var(--t-16); color: var(--texto); }
+.ata-ia p { margin: 0; color: var(--texto-2); line-height: 1.5; }
+.ata-ia-redigindo { border-style: solid; border-left: 3px solid var(--acao); }
+.ata-revisao { margin-top: 1.4rem; display: grid; gap: 0.9rem; min-width: 0; max-width: 80ch; }
+.ata-revisao h2 { margin: 0; font-size: var(--t-21); color: var(--texto); }
+.ata-aviso { margin: 0; padding: 0.6rem 0.8rem; border-left: 3px solid var(--aviso-texto); background: var(--surface-2); color: var(--texto); font-size: var(--t-13); line-height: 1.5; }
+.ata-rascunho { white-space: normal; }
+.ata-rascunho p { margin: 0 0 1rem; white-space: pre-wrap; }
+.ata-rascunho p:last-child { margin-bottom: 0; }
+.ata-sem-fonte { border-left: 3px solid var(--aviso-texto); padding-left: 0.7rem; margin-left: -0.85rem; }
+.ata-selo { display: block; font-size: var(--t-11); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--papel-texto-2); margin-bottom: 0.2rem; }
+.ata-cita { font-family: var(--mono); font-size: var(--t-11); font-weight: 700; margin-left: 0.15rem; color: var(--papel-texto-2); cursor: help; }
+.ata-cita-falha { color: var(--acento-texto); }
+.ata-rascunho .ata-cita-falha { color: var(--telha-fundo); }
+.ata-confirmar { background: var(--papel-2); color: var(--papel-texto); border-bottom: 2px solid var(--telha-fundo); padding: 0 0.15rem; font-weight: 600; }
+.ata-fontes summary { cursor: pointer; color: var(--texto); font-weight: 600; min-height: 44px; display: flex; align-items: center; }
+.ata-fontes ol { margin: 0.4rem 0 0; padding-left: 1.4rem; display: grid; gap: 0.35rem; color: var(--texto-2); font-size: var(--t-13); line-height: 1.5; }
+.ata-fontes b { color: var(--texto); font-weight: 600; }

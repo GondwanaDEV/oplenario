@@ -42,6 +42,14 @@ class GravacaoVinculadaV1(Fio):
     contexto_uri: str
 
 
+class AtaSolicitadaV1(Fio):
+    """A secretaria pediu o rascunho da ata (Faixa A / A.6b). A IA usa as transcrições que ela mesma guarda."""
+
+    solicitacao_id: str
+    sessao_id: str
+    contexto_uri: str
+
+
 class SessaoContexto(Fio):
     id: str
     tipo_sessao: str
@@ -103,8 +111,34 @@ class TranscricaoFalhouV1(Fio):
     retentavel: bool
 
 
+IncertezaNivel = Literal["normal", "revisar_com_atencao"]
+
+
+class AtaRascunhoProntaV1(Fio):
+    """O rascunho existe no satélite. O texto NÃO viaja: o core o lê sob demanda, como a transcrição."""
+
+    solicitacao_id: str
+    sessao_id: str
+    rascunho_id: str
+    modelo_llm_id: str
+    prompt_versao: str
+    incerteza: IncertezaNivel
+    n_citacoes: int = Field(ge=0)
+    n_citacoes_conferidas: int = Field(ge=0)
+    n_paragrafos_sem_fonte: int = Field(ge=0)
+    n_pontos_a_confirmar: int = Field(ge=0)
+
+
+class AtaFalhouV1(Fio):
+    solicitacao_id: str
+    sessao_id: str
+    categoria: CategoriaFalha
+    detalhe: str = Field(max_length=2000)
+    retentavel: bool
+
+
 class EventoParaCore(Fio):
-    tipo: Literal["TranscricaoConcluida", "TranscricaoFalhou"]
+    tipo: Literal["TranscricaoConcluida", "TranscricaoFalhou", "AtaRascunhoPronta", "AtaFalhou"]
     versao: int = 1
     chave: str
     ente_id: str

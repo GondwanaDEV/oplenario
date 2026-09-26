@@ -113,12 +113,40 @@
    :proporcao-alterada (->double (:proporcao-alterada v)) :publicada-por-nome (:publicada-por-nome v)
    :publicada-em (->str (:publicada-em v))})
 
-(defn ata-da-sessao->wire [{:keys [sessao-id pode-ter-ata atual versoes]}]
+(defn- rascunho-ata->wire [r]
+  {:solicitacao-id (->str (:solicitacao-id r)) :situacao (:situacao r) :solicitado-em (->str (:solicitado-em r))
+   :rascunho-id (->str (:rascunho-id r)) :modelo-llm-id (:modelo-llm-id r) :prompt-versao (:prompt-versao r)
+   :incerteza (:incerteza r) :n-citacoes (:n-citacoes r) :n-citacoes-conferidas (:n-citacoes-conferidas r)
+   :n-paragrafos-sem-fonte (:n-paragrafos-sem-fonte r) :n-pontos-a-confirmar (:n-pontos-a-confirmar r)
+   :categoria-erro (:categoria-erro r) :detalhe-erro (:detalhe-erro r) :retentavel (:retentavel r)
+   :ocorrido-em (->str (:ocorrido-em r))})
+
+(defn ata-da-sessao->wire [{:keys [sessao-id pode-ter-ata atual versoes rascunho]}]
   (validado wire/AtaSessaoOut
             {:sessao-id (->str sessao-id) :pode-ter-ata (boolean pode-ter-ata)
              :atual (when atual {:versao (versao-ata->wire atual) :texto (:texto atual)})
-             :versoes (mapv versao-ata->wire versoes)}
+             :versoes (mapv versao-ata->wire versoes)
+             :rascunho (some-> rascunho rascunho-ata->wire)}
             "ata viola o contrato AtaSessaoOut (bug de servidor)"))
+
+(defn conteudo-rascunho-ata->wire
+  "O mapa que a IA devolveu (chaves kebab ja' keyword) + o ponteiro do core -> AtaRascunhoConteudoOut. So' as chaves
+  do contrato atravessam (o satelite pode mandar mais; o core nao repassa o que nao conhece)."
+  [{:keys [ponteiro] :as r}]
+  (validado wire/AtaRascunhoConteudoOut
+            {:rascunho-id (->str (:rascunho-id ponteiro)) :texto (:texto r) :texto-limpo (:texto-limpo r)
+             :incerteza {:nivel (get-in r [:incerteza :nivel]) :motivos (vec (get-in r [:incerteza :motivos]))}
+             :citacoes (mapv (fn [c] {:fonte-id (:fonte-id c) :trecho (:trecho c) :inicio (:inicio c) :fim (:fim c)
+                                      :status (:status c) :rotulo (:rotulo c)})
+                             (:citacoes r))
+             :paragrafos-sem-fonte (vec (:paragrafos-sem-fonte r))
+             :pontos-a-confirmar (vec (:pontos-a-confirmar r))
+             :modelo-llm-id (:modelo-llm-id ponteiro) :prompt-versao (:prompt-versao ponteiro)}
+            "rascunho da IA viola o contrato AtaRascunhoConteudoOut"))
+
+(defn solicitacao-rascunho->wire [r]
+  (validado wire/SolicitacaoRascunhoOut {:solicitacao-id (->str (:solicitacao-id r))}
+            "solicitacao de rascunho viola o contrato (bug de servidor)"))
 
 (defn recibo-ata->wire [r]
   (validado wire/AtaReciboOut {:id (->str (:id r)) :versao (:versao r) :conteudo-sha256 (:conteudo-sha256 r)}

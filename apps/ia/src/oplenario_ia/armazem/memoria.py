@@ -5,10 +5,17 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 from dataclasses import replace
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
-from oplenario_ia.armazem.porta import NovaTranscricao, NovoTrabalho, Trabalho, TranscricaoGuardada
+from oplenario_ia.armazem.porta import (
+    NovaTranscricao,
+    NovoRascunho,
+    NovoTrabalho,
+    RascunhoGuardado,
+    Trabalho,
+    TranscricaoGuardada,
+)
 
 
 class ArmazemMemoria:
@@ -18,6 +25,7 @@ class ArmazemMemoria:
         self._trab: dict[int, dict[str, Any]] = {}
         self._chaves: set[str] = set()
         self._transc: dict[str, TranscricaoGuardada] = {}
+        self._rasc: dict[str, RascunhoGuardado] = {}
 
     def cursor(self) -> int:
         return self._cursor
@@ -73,7 +81,7 @@ class ArmazemMemoria:
         self, trabalho_id: int, nova: NovaTranscricao, notificar: Callable[[TranscricaoGuardada], NovoTrabalho]
     ) -> TranscricaoGuardada:
         versao = 1 + sum(1 for t in self._transc.values() if t.segmento_id == nova.segmento_id)
-        g = TranscricaoGuardada(id=str(uuid.uuid4()), versao=versao, **nova.__dict__)
+        g = TranscricaoGuardada(id=str(uuid.uuid4()), versao=versao, criado_em=datetime.now(UTC), **nova.__dict__)
         self._transc[g.id] = g
         self.concluir(trabalho_id, [notificar(g)])
         return g
@@ -81,6 +89,27 @@ class ArmazemMemoria:
     def transcricao(self, transcricao_id: str) -> TranscricaoGuardada | None:
         g = self._transc.get(transcricao_id)
         return replace(g) if g else None
+
+    def transcricoes_da_sessao(self, ente_id: str, sessao_id: str) -> list[TranscricaoGuardada]:
+        ultimas: dict[str, TranscricaoGuardada] = {}
+        for t in self._transc.values():
+            da_sessao = t.ente_id == ente_id and t.sessao_id == sessao_id
+            if da_sessao and (t.segmento_id not in ultimas or t.versao > ultimas[t.segmento_id].versao):
+                ultimas[t.segmento_id] = t
+        return sorted(ultimas.values(), key=lambda t: (t.criado_em or datetime.min.replace(tzinfo=UTC), t.id))
+
+    def concluir_rascunho(
+        self, trabalho_id: int, novo: NovoRascunho, notificar: Callable[[RascunhoGuardado], NovoTrabalho]
+    ) -> RascunhoGuardado:
+        if any(r.solicitacao_id == novo.solicitacao_id for r in self._rasc.values()):
+            raise ValueError("já existe rascunho para esta solicitação")  # o UNIQUE do Postgres
+        g = RascunhoGuardado(id=str(uuid.uuid4()), criado_em=datetime.now(UTC), **novo.__dict__)
+        self._rasc[g.id] = g
+        self.concluir(trabalho_id, [notificar(g)])
+        return g
+
+    def rascunho(self, rascunho_id: str) -> RascunhoGuardado | None:
+        return self._rasc.get(rascunho_id)
 
     def trabalhos(self) -> list[dict[str, Any]]:
         return [{k: t[k] for k in ("id", "tipo", "chave", "estado", "tentativas", "erro")} for t in self._trab.values()]

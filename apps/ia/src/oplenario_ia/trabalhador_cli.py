@@ -15,8 +15,11 @@ from pathlib import Path
 
 from oplenario_ia.armazem.memoria import ArmazemMemoria
 from oplenario_ia.armazem.porta import Armazem
+from oplenario_ia.confianca.registro import RegistroConfianca, RegistroJsonl, RegistroMemoria
 from oplenario_ia.config import Config, carregar
 from oplenario_ia.fronteira.cliente import ClienteCore
+from oplenario_ia.inferencia.fabrica import criar_porta
+from oplenario_ia.nucleo import Nucleo
 from oplenario_ia.trabalhador import Trabalhador
 from oplenario_ia.transcricao.fake import DiarizadorFake, TranscritorFake
 from oplenario_ia.transcricao.porta import Diarizador, Transcritor
@@ -42,8 +45,14 @@ def montar(config: Config) -> Trabalhador:
         diarizador = DiarizadorSherpa(Path(config.modelos_dir))
     else:
         transcritor, diarizador = TranscritorFake(), DiarizadorFake()
+    registro: RegistroConfianca = RegistroJsonl(config.registro_jsonl) if config.registro_jsonl else RegistroMemoria()
     return Trabalhador(
-        ClienteCore(config.core_url, config.segredo), armazem, transcritor, diarizador, idioma=config.idioma
+        ClienteCore(config.core_url, config.segredo),
+        armazem,
+        transcritor,
+        diarizador,
+        idioma=config.idioma,
+        nucleo=Nucleo(criar_porta(config), registro),
     )
 
 

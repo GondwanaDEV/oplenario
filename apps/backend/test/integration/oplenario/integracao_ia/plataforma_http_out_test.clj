@@ -39,3 +39,11 @@
   (is (indisponivel? #(out/ler-transcricao (out/plataforma-ia {:url "http://127.0.0.1:9" :segredo "s"}) "e" "t"))
       "IA fora do ar")
   (is (indisponivel? #(out/ler-transcricao (out/plataforma-ia {:url nil :segredo nil}) "e" "t")) "nao configurada"))
+
+(deftest le-o-rascunho-da-ata
+  (com-servidor 200 "{\"texto\":\"Ata.\",\"pontos-a-confirmar\":[\"hora\"]}"
+    (fn [url visto]
+      (let [r (out/ler-rascunho-ata (out/plataforma-ia {:url url :segredo "s"}) "e1" "r1")]
+        (is (= ["Ata." ["hora"]] [(:texto r) (:pontos-a-confirmar r)]))
+        (is (= "/v1/entes/e1/atas/rascunhos/r1" (:path @visto))))))
+  (is (indisponivel? #(out/ler-rascunho-ata (out/plataforma-ia {:url nil :segredo nil}) "e" "r"))))

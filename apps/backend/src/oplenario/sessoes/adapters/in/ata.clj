@@ -3,7 +3,8 @@
   STRING (corpo-json); so' le o allowlist. Fail-closed -> 400, nunca 500 do CHECK do banco. Quem publica vem do
   `ator`, nunca do corpo."
   (:require [clojure.string :as str]
-            [oplenario.sessoes.logic :as logic]))
+            [oplenario.sessoes.logic :as logic])
+  (:import (java.util UUID)))
 
 (set! *warn-on-reflection* true)
 
@@ -20,4 +21,9 @@
       (invalido! "origem de redacao desconhecida" :origem-redacao))
     (when (and (some? motivo) (not (and (string? motivo) (<= (count motivo) 2000))))
       (invalido! "motivo da retificacao invalido (ate' 2000 caracteres)" :motivo-retificacao))
-    {:texto texto :origem-redacao origem :motivo-retificacao (some-> motivo str/trim not-empty)}))
+    ;; A.6b: a ata que partiu do rascunho da IA diz QUAL rascunho (o controller confere que e' desta sessao)
+    (let [rid (when (= "gerada_automaticamente" origem)
+                (try (UUID/fromString ^String (get json "rascunho-id"))
+                     (catch Exception _ (invalido! "ata gerada pela IA exige o rascunho-id de origem" :rascunho-id))))]
+      (cond-> {:texto texto :origem-redacao origem :motivo-retificacao (some-> motivo str/trim not-empty)}
+        rid (assoc :rascunho-id rid)))))

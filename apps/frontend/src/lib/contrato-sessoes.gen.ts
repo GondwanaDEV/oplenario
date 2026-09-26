@@ -270,17 +270,66 @@ export interface AtaAtualOut {
   texto: string;
 }
 
+export interface AtaRascunhoOut {
+  solicitacaoId: string;
+  situacao: "solicitado" | "pronto" | "falhou";
+  solicitadoEm: string;
+  rascunhoId?: string | null;
+  modeloLlmId?: string | null;
+  promptVersao?: string | null;
+  incerteza?: "normal" | "revisar_com_atencao" | null;
+  nCitacoes?: number | null;
+  nCitacoesConferidas?: number | null;
+  nParagrafosSemFonte?: number | null;
+  nPontosAConfirmar?: number | null;
+  categoriaErro?: string | null;
+  detalheErro?: string | null;
+  retentavel?: boolean | null;
+  ocorridoEm: string;
+}
+
 export interface AtaSessaoOut {
   sessaoId: string;
   podeTerAta: boolean;
   atual?: AtaAtualOut | null;
   versoes: AtaVersaoOut[];
+  rascunho?: AtaRascunhoOut | null;
 }
 
 export interface AtaReciboOut {
   id: string;
   versao: number;
   conteudoSha256: string;
+}
+
+export interface CitacaoRascunhoOut {
+  fonteId: string;
+  trecho?: string | null;
+  inicio: number;
+  fim: number;
+  status: "conferida" | "sem_trecho" | "trecho_nao_encontrado" | "fonte_nao_lida";
+  rotulo?: string | null;
+}
+
+export interface IncertezaRascunhoOut {
+  nivel: "normal" | "revisar_com_atencao";
+  motivos: string[];
+}
+
+export interface AtaRascunhoConteudoOut {
+  rascunhoId: string;
+  texto: string;
+  textoLimpo: string;
+  incerteza: IncertezaRascunhoOut;
+  citacoes: CitacaoRascunhoOut[];
+  paragrafosSemFonte: number[];
+  pontosAConfirmar: string[];
+  modeloLlmId: string;
+  promptVersao: string;
+}
+
+export interface SolicitacaoRascunhoOut {
+  solicitacaoId: string;
 }
 
 export interface PautaItemAdicionadoOut {

@@ -1,10 +1,12 @@
-"""O trabalhador da Faixa A (ADR-0008): puxa o feed do core, transcreve cada gravação vinculada e devolve o
-resultado à caixa de entrada do core.
+"""O trabalhador da Faixa A (ADR-0008): puxa o feed do core, transcreve cada gravação vinculada, redige o rascunho
+da ata quando a secretaria pede, e devolve o resultado à caixa de entrada do core.
 
-Dois tipos de trabalho na fila própria do satélite:
+Três tipos de trabalho na fila própria do satélite:
 - `transcrever` (um por evento `GravacaoVinculada`): contexto + download + ASR + diarização + Caminho C; guarda a
   transcrição e enfileira a notificação NA MESMA operação (reiniciar no meio não transcreve de novo).
-- `notificar`: entrega `TranscricaoConcluida`/`TranscricaoFalhou` ao core; tenta até o core aceitar.
+- `redigir_ata` (um por evento `AtaSolicitada`, A.6b): contexto + as transcrições guardadas aqui -> núcleo (filtro,
+  porta, citação conferida, incerteza, registro); guarda o rascunho e enfileira `AtaRascunhoPronta` junto.
+- `notificar`: entrega os eventos ao core (`Transcricao*`, `Ata*`); tenta até o core aceitar.
 
 Falhas seguem o §22.3.5: infraestrutura/sobrecarga tentam de novo com espera crescente (limite por tipo); entrada
 falha na hora; sigilo (403 do core) DESCARTA o trabalho sem avisar ninguém — fail-closed, não é erro.
@@ -21,21 +23,35 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from oplenario_ia.armazem.porta import Armazem, NovoTrabalho, Trabalho, TranscricaoGuardada
+from oplenario_ia.armazem.porta import (
+    Armazem,
+    NovoRascunho,
+    NovoTrabalho,
+    RascunhoGuardado,
+    Trabalho,
+    TranscricaoGuardada,
+)
+from oplenario_ia.ata.redacao import PROMPT_VERSAO, pedido_de_ata, pontos_a_confirmar
+from oplenario_ia.confianca.indisponivel import Indisponivel
 from oplenario_ia.erros import Categoria, ErroIA
 from oplenario_ia.fronteira.cliente import ClienteCore, Sigiloso
 from oplenario_ia.fronteira.contrato import (
+    AtaFalhouV1,
+    AtaRascunhoProntaV1,
+    AtaSolicitadaV1,
     EventoParaCore,
     GravacaoVinculadaV1,
     TranscricaoConcluidaV1,
     TranscricaoFalhouV1,
 )
+from oplenario_ia.nucleo import Nucleo
 from oplenario_ia.transcricao.porta import Diarizador, Transcritor
 from oplenario_ia.transcricao.servico import transcrever_segmento
 
 log = logging.getLogger("oplenario_ia.trabalhador")
 
-MAX_TENTATIVAS = {"transcrever": 5, "notificar": 20}
+MAX_TENTATIVAS = {"transcrever": 5, "redigir_ata": 5, "notificar": 20}
+CATEGORIAS_DE_FALHA = {"infraestrutura", "sobrecarga", "entrada", "modelo"}  # 5 e 6 nunca viajam como falha
 ESPERA_BASE_S = 30.0
 ESPERA_MAX_S = 1800.0
 
@@ -53,6 +69,7 @@ class Trabalhador:
         diarizador: Diarizador | None,
         *,
         idioma: str = "pt",
+        nucleo: Nucleo | None = None,
         agora: Callable[[], datetime] = lambda: datetime.now(UTC),
         dir_temp: Path | None = None,
     ) -> None:
@@ -61,6 +78,7 @@ class Trabalhador:
         self.transcritor = transcritor
         self.diarizador = diarizador
         self.idioma = idioma
+        self.nucleo = nucleo
         self.agora = agora
         self.dir_temp = dir_temp
 
@@ -73,6 +91,10 @@ class Trabalhador:
             if (ev.tipo, ev.versao) == ("GravacaoVinculada", 1):
                 novos.append(
                     NovoTrabalho("transcrever", ev.chave, ev.ente_id, ev.payload | {"correlation-id": ev.chave})
+                )
+            elif (ev.tipo, ev.versao) == ("AtaSolicitada", 1):
+                novos.append(
+                    NovoTrabalho("redigir_ata", ev.chave, ev.ente_id, ev.payload | {"correlation-id": ev.chave})
                 )
             else:
                 log.info("evento de integração ignorado (tipo/versão desconhecidos): %s v%s", ev.tipo, ev.versao)
@@ -87,6 +109,8 @@ class Trabalhador:
         try:
             if t.tipo == "transcrever":
                 self._transcrever(t)
+            elif t.tipo == "redigir_ata":
+                self._redigir_ata(t)
             elif t.tipo == "notificar":
                 self.core.enviar(EventoParaCore.model_validate(t.payload))
                 self.armazem.concluir(t.id)
@@ -110,7 +134,13 @@ class Trabalhador:
         if insiste and t.tentativas + 1 < MAX_TENTATIVAS.get(t.tipo, 1):
             self.armazem.adiar(t.id, erro, self.agora() + espera(t.tentativas))
             return
-        seguintes = [self._aviso_de_falha(t, e)] if t.tipo == "transcrever" else []
+        seguintes = (
+            [self._aviso_de_falha(t, e)]
+            if t.tipo == "transcrever"
+            else [self._aviso_de_falha_da_ata(t, e)]
+            if t.tipo == "redigir_ata"
+            else []
+        )
         self.armazem.desistir(t.id, erro, seguintes)
 
     # ---------- transcrever ----------
@@ -157,6 +187,69 @@ class Trabalhador:
         )
         correlacao = str(t.payload.get("correlation-id") or t.chave)
         return self._notificacao("TranscricaoFalhou", chave, t.ente_id, correlacao, payload.model_dump(by_alias=True))
+
+    # ---------- redigir a ata (A.6b) ----------
+
+    def _redigir_ata(self, t: Trabalho) -> None:
+        ev = AtaSolicitadaV1.model_validate(t.payload)
+        if self.nucleo is None:
+            raise ErroIA(Categoria.INFRAESTRUTURA, "o núcleo de IA não está configurado", retentavel=False)
+        ctx = self.core.contexto(ev.contexto_uri)
+        transcricoes = self.armazem.transcricoes_da_sessao(t.ente_id, ev.sessao_id)
+        if not transcricoes:
+            raise ErroIA(
+                Categoria.ENTRADA, "a sessão ainda não tem transcrição concluída para a IA redigir", retentavel=False
+            )
+        correlacao = str(t.payload.get("correlation-id") or t.chave)
+        r = self.nucleo.executar(pedido_de_ata(ctx, transcricoes, t.ente_id, correlacao), "por_paragrafo")
+        if isinstance(r, Indisponivel):
+            # o núcleo já registrou a execução; aqui só decide se tenta de novo (categoria) ou avisa o core
+            raise ErroIA(r.categoria or Categoria.ENTRADA, r.mensagem, retentavel=r.retentavel)
+        novo = NovoRascunho(
+            ente_id=t.ente_id,
+            sessao_id=ev.sessao_id,
+            solicitacao_id=ev.solicitacao_id,
+            execucao_id=r.execucao_id,
+            texto=r.texto,
+            citacoes=[c.model_dump(mode="json") for c in r.citacoes],
+            paragrafos_sem_fonte=list(r.paragrafos_sem_fonte),
+            incerteza=r.incerteza.model_dump(mode="json"),
+            vendor=r.vendor,
+            modelo=r.modelo,
+            prompt_versao=PROMPT_VERSAO,
+            transcricoes=[x.id for x in transcricoes],
+        )
+        self.armazem.concluir_rascunho(t.id, novo, lambda g: self._aviso_ata_pronta(g, correlacao))
+
+    def _aviso_ata_pronta(self, g: RascunhoGuardado, correlacao: str) -> NovoTrabalho:
+        payload = AtaRascunhoProntaV1(
+            solicitacao_id=g.solicitacao_id,
+            sessao_id=g.sessao_id,
+            rascunho_id=g.id,
+            modelo_llm_id=f"{g.vendor}:{g.modelo}",
+            prompt_versao=g.prompt_versao,
+            incerteza=g.incerteza["nivel"],
+            n_citacoes=len(g.citacoes),
+            n_citacoes_conferidas=sum(c["status"] == "conferida" for c in g.citacoes),
+            n_paragrafos_sem_fonte=len(g.paragrafos_sem_fonte),
+            n_pontos_a_confirmar=len(pontos_a_confirmar(g.texto)),
+        )
+        chave = f"AtaRascunhoPronta:v1:{g.solicitacao_id}"
+        return self._notificacao("AtaRascunhoPronta", chave, g.ente_id, correlacao, payload.model_dump(by_alias=True))
+
+    def _aviso_de_falha_da_ata(self, t: Trabalho, e: ErroIA) -> NovoTrabalho:
+        ev = AtaSolicitadaV1.model_validate(t.payload)
+        categoria = e.categoria if e.categoria.value in CATEGORIAS_DE_FALHA else Categoria.MODELO
+        payload = AtaFalhouV1(
+            solicitacao_id=ev.solicitacao_id,
+            sessao_id=ev.sessao_id,
+            categoria=categoria.value,
+            detalhe=e.detalhe[:2000],
+            retentavel=e.retentavel,
+        )
+        correlacao = str(t.payload.get("correlation-id") or t.chave)
+        chave = f"AtaFalhou:v1:{ev.solicitacao_id}"
+        return self._notificacao("AtaFalhou", chave, t.ente_id, correlacao, payload.model_dump(by_alias=True))
 
     def _notificacao(
         self, tipo: str, chave: str, ente_id: str, correlacao: str, payload: dict[str, Any]

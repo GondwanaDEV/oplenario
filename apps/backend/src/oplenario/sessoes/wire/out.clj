@@ -391,13 +391,71 @@
    [:versao AtaVersaoOut]
    [:texto :string]])
 
+(def AtaRascunhoOut
+  "Faixa A / A.6b: a situacao do pedido de rascunho mais recente (o texto vive na IA). `solicitado` = a IA esta'
+  redigindo; `pronto` = ha' rascunho para revisar (com os sinais da Camada de Confianca); `falhou` = a categoria do
+  §22.3.5 e o detalhe."
+  [:map {:closed true}
+   [:solicitacao-id :string]
+   [:situacao [:enum "solicitado" "pronto" "falhou"]]
+   [:solicitado-em :string]
+   [:rascunho-id {:optional true} [:maybe :string]]
+   [:modelo-llm-id {:optional true} [:maybe :string]]
+   [:prompt-versao {:optional true} [:maybe :string]]
+   [:incerteza {:optional true} [:maybe [:enum "normal" "revisar_com_atencao"]]]
+   [:n-citacoes {:optional true} [:maybe :int]]
+   [:n-citacoes-conferidas {:optional true} [:maybe :int]]
+   [:n-paragrafos-sem-fonte {:optional true} [:maybe :int]]
+   [:n-pontos-a-confirmar {:optional true} [:maybe :int]]
+   [:categoria-erro {:optional true} [:maybe :string]]
+   [:detalhe-erro {:optional true} [:maybe :string]]
+   [:retentavel {:optional true} [:maybe :boolean]]
+   [:ocorrido-em :string]])
+
 (def AtaSessaoOut
-  "A ata da sessao: a vigente (com texto) e o historico de versoes. `pode-ter-ata` = a sessao gera ata e ja' acabou."
+  "A ata da sessao: a vigente (com texto), o historico de versoes e o pedido de rascunho a IA mais recente.
+  `pode-ter-ata` = a sessao gera ata e ja' acabou."
   [:map {:closed true}
    [:sessao-id :string]
    [:pode-ter-ata :boolean]
    [:atual {:optional true} [:maybe AtaAtualOut]]
-   [:versoes [:sequential AtaVersaoOut]]])
+   [:versoes [:sequential AtaVersaoOut]]
+   [:rascunho {:optional true} [:maybe AtaRascunhoOut]]])
+
+(def CitacaoRascunhoOut
+  "Uma citacao do rascunho, com o resultado da conferencia objetiva (§22.11.8): `conferida` | `sem_trecho` |
+  `trecho_nao_encontrado` | `fonte_nao_lida`. `inicio`/`fim` = posicao da marca no `texto`."
+  [:map {:closed true}
+   [:fonte-id :string]
+   [:trecho {:optional true} [:maybe :string]]
+   [:inicio :int]
+   [:fim :int]
+   [:status [:enum "conferida" "sem_trecho" "trecho_nao_encontrado" "fonte_nao_lida"]]
+   [:rotulo {:optional true} [:maybe :string]]])
+
+(def IncertezaRascunhoOut
+  "A indicacao de incerteza do rascunho (§16.8): `revisar_com_atencao` com os motivos deterministicos do satelite."
+  [:map {:closed true}
+   [:nivel [:enum "normal" "revisar_com_atencao"]]
+   [:motivos [:sequential :string]]])
+
+(def AtaRascunhoConteudoOut
+  "Faixa A / A.6b: o rascunho para a tela de revisao — lido da IA sob demanda. `texto` traz as marcas de citacao
+  (`[[fonte | trecho]]`); `texto-limpo` e' o que vai para o editor (sem marcas, com os pontos a confirmar)."
+  [:map {:closed true}
+   [:rascunho-id :string]
+   [:texto :string]
+   [:texto-limpo :string]
+   [:incerteza IncertezaRascunhoOut]
+   [:citacoes [:sequential CitacaoRascunhoOut]]
+   [:paragrafos-sem-fonte [:sequential :int]]
+   [:pontos-a-confirmar [:sequential :string]]
+   [:modelo-llm-id :string]
+   [:prompt-versao :string]])
+
+(def SolicitacaoRascunhoOut
+  [:map {:closed true}
+   [:solicitacao-id :string]])
 
 (def AtaReciboOut
   [:map {:closed true}

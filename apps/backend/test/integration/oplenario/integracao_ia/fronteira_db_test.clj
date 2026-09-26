@@ -93,13 +93,16 @@
              :modelo-diarizacao "pyannote-3.0"}
    :bruto {"segmento-id" (str seg)}})
 
+(def efeitos {:registrar-transcricao  repo-sessoes/registrar-transcricao-em-tx!
+              :registrar-rascunho-ata repo-sessoes/registrar-rascunho-ata-em-tx!})
+
 (defn- ponteiros [ente sid]
   (tenancy/com-tenant* *ds* ente (fn [tx] (oplenario.sessoes.db.transcricao/listar-da-sessao tx ente sid))))
 
 (deftest transcricao-concluida-grava-o-ponteiro-uma-vez-so
   (let [ente (random-uuid) [sid seg] (sessao-com-segmento! ente) ev (concluida ente sid seg (str "k-" (random-uuid)))]
-    (is (= {:aplicado true} (controllers/receber! *repo* repo-sessoes/registrar-transcricao-em-tx! ev)))
-    (is (= {:aplicado false} (controllers/receber! *repo* repo-sessoes/registrar-transcricao-em-tx! ev))
+    (is (= {:aplicado true} (controllers/receber! *repo* efeitos ev)))
+    (is (= {:aplicado false} (controllers/receber! *repo* efeitos ev))
         "reenvio da mesma chave: 200 sem efeito novo")
     (let [[p :as ps] (ponteiros ente sid)]
       (is (= 1 (count ps)))
@@ -108,7 +111,7 @@
 
 (deftest transcricao-falhou-grava-a-categoria
   (let [ente (random-uuid) [sid seg] (sessao-com-segmento! ente)]
-    (controllers/receber! *repo* repo-sessoes/registrar-transcricao-em-tx!
+    (controllers/receber! *repo* efeitos
       {:tipo "TranscricaoFalhou" :versao 1 :chave (str "f-" (random-uuid)) :ente-id ente
        :ocorrido-em (Instant/parse "2026-09-26T22:00:00Z")
        :payload {:sessao-id sid :segmento-id seg :categoria "entrada" :detalhe "audio corrompido" :retentavel false}
@@ -119,10 +122,10 @@
   (let [ente (random-uuid) [sid seg] (sessao-com-segmento! ente) [_ seg-alheio] (sessao-com-segmento! ente)
         chave (str "x-" (random-uuid))]
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"nao pertence"
-          (controllers/receber! *repo* repo-sessoes/registrar-transcricao-em-tx! (concluida ente sid seg-alheio chave))))
+          (controllers/receber! *repo* efeitos (concluida ente sid seg-alheio chave))))
     (is (empty? (ponteiros ente sid)))
     (is (= {:aplicado true}
-           (controllers/receber! *repo* repo-sessoes/registrar-transcricao-em-tx!
+           (controllers/receber! *repo* efeitos
              (concluida ente sid seg chave)))
         "a chave nao ficou queimada: o registro da entrada foi desfeito junto (mesma tx)")))
 
@@ -130,7 +133,7 @@
   (let [ente (random-uuid) [sid seg] (sessao-com-segmento! ente)
         intruso (random-uuid)]
     (is (thrown? Exception
-          (controllers/receber! *repo* repo-sessoes/registrar-transcricao-em-tx!
+          (controllers/receber! *repo* efeitos
             (concluida intruso sid seg (str "i-" (random-uuid)))))
         "evento com ente errado nao enxerga a sessao do outro tenant (RLS) — nao grava nada")
     (is (empty? (ponteiros ente sid)))))
@@ -140,8 +143,54 @@
         ev (concluida ente sid seg (str "p-" (random-uuid)))
         tid (get-in ev [:payload :transcricao-id])
         rs (repo-sessoes/map->RepoSessoesPg {:datasource {:ds *ds*}})]
-    (controllers/receber! *repo* repo-sessoes/registrar-transcricao-em-tx! ev)
+    (controllers/receber! *repo* efeitos ev)
     (is (= tid (:transcricao-id (repo-sessoes/buscar-transcricao rs ente sid tid))))
     (is (nil? (repo-sessoes/buscar-transcricao rs ente sid2 tid)) "outra sessao: nao acha")
     (is (nil? (repo-sessoes/buscar-transcricao rs (random-uuid) sid tid)) "outro tenant: nao acha")
     (is (= 1 (count (repo-sessoes/listar-transcricoes rs ente sid))))))
+
+;; ---------- A.6b: o rascunho da ata ----------
+
+(deftest pedido-de-rascunho-vira-ata-solicitada-no-feed-e-a-resposta-grava-o-ponteiro
+  (let [ente (random-uuid) [sid _] (sessao-com-segmento! ente)
+        rs (repo-sessoes/map->RepoSessoesPg {:datasource {:ds *ds*} :bus (outbox/bus)})
+        agora (Instant/parse "2026-09-26T22:00:00Z")
+        {:keys [solicitacao-id]} (repo-sessoes/solicitar-rascunho-ata! rs ente
+                                   {:sessao-id sid :solicitacao-id (random-uuid) :solicitado-por (random-uuid)
+                                    :ocorrido-em agora :pode-pedir? (constantly true)})]
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"ja' esta' redigindo"
+          (repo-sessoes/solicitar-rascunho-ata! rs ente
+            {:sessao-id sid :solicitacao-id (random-uuid) :solicitado-por (random-uuid) :ocorrido-em agora
+             :pode-pedir? (constantly false)}))
+        "a decisao de 'pedido em curso' roda DENTRO da tx")
+    (drena!)
+    (let [[e :as evs] (do-ente ente)]
+      (is (= 1 (count evs)) "o segundo pedido foi recusado: nada saiu dele")
+      (is (= ["AtaSolicitada" (str solicitacao-id) (str sid)]
+             [(:tipo e) (get-in e [:payload :solicitacao-id]) (get-in e [:payload :sessao-id])]))
+      (is (re-find #"/sessoes/.+/contexto$" (get-in e [:payload :contexto-uri]))))
+    (is (= "solicitado" (:situacao (:rascunho (repo-sessoes/ata-da-sessao rs ente sid)))))
+    (let [rid (random-uuid)
+          pronta {:tipo "AtaRascunhoPronta" :versao 1 :chave (str "AtaRascunhoPronta:v1:" solicitacao-id) :ente-id ente
+                  :ocorrido-em (Instant/parse "2026-09-26T22:03:00Z")
+                  :payload {:sessao-id sid :solicitacao-id solicitacao-id :rascunho-id rid :modelo-llm-id "fake:fake-1"
+                            :prompt-versao "ata-v1" :incerteza "revisar_com_atencao" :n-citacoes 3
+                            :n-citacoes-conferidas 3 :n-paragrafos-sem-fonte 1 :n-pontos-a-confirmar 1}
+                  :bruto {}}]
+      (is (= {:aplicado true} (controllers/receber! *repo* efeitos pronta)))
+      (is (= {:aplicado false} (controllers/receber! *repo* efeitos pronta)))
+      (let [r (:rascunho (repo-sessoes/ata-da-sessao rs ente sid))]
+        (is (= ["pronto" rid "ata-v1" 1 agora] [(:situacao r) (:rascunho-id r) (:prompt-versao r)
+                                                (:n-pontos-a-confirmar r) (:solicitado-em r)])))
+      (is (= rid (:rascunho-id (repo-sessoes/buscar-rascunho-pronto rs ente sid rid))))
+      (is (nil? (repo-sessoes/buscar-rascunho-pronto rs ente (first (sessao-com-segmento! ente)) rid))
+          "de outra sessao: nao acha"))))
+
+(deftest resposta-de-pedido-desconhecido-e-recusada
+  (let [ente (random-uuid) [sid _] (sessao-com-segmento! ente)]
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"nao pertence"
+          (controllers/receber! *repo* efeitos
+            {:tipo "AtaFalhou" :versao 1 :chave (str "af-" (random-uuid)) :ente-id ente
+             :ocorrido-em (Instant/parse "2026-09-26T22:00:00Z")
+             :payload {:sessao-id sid :solicitacao-id (random-uuid) :categoria "entrada" :detalhe "x" :retentavel false}
+             :bruto {}})))))

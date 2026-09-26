@@ -619,6 +619,26 @@
   [sessao]
   (boolean (and (:gera-ata-regimental sessao) (contains? estados-com-ata (:estado sessao)))))
 
+;; ---------- Faixa A / A.6b: o RASCUNHO da ata pela IA ----------
+
+(def minutos-de-rascunho-em-curso
+  "Janela em que um pedido ainda sem resposta da IA conta como EM CURSO (outro pedido e' recusado). Passada a janela,
+  a secretaria pode pedir de novo — a IA pode ter perdido o pedido; a resposta tardia do primeiro continua valendo."
+  30)
+
+(defn sessao-vai-para-ia?
+  "Sessao secreta nunca vai para a IA (o sigilo e' da sessao inteira) — o mesmo corte da fronteira (ADR-0008)."
+  [sessao]
+  (not= "secreta" (:tipo-sessao sessao)))
+
+(defn pode-pedir-rascunho?
+  "PURO: sem pedido, pedido ja' respondido (pronto/falhou) ou pedido em aberto ha' mais que a janela."
+  [ultimo ^java.time.Instant agora]
+  (or (nil? ultimo)
+      (not= "solicitado" (:situacao ultimo))
+      (.isBefore ^java.time.Instant (:solicitado-em ultimo)
+                 (.minusSeconds agora (* 60 minutos-de-rascunho-em-curso)))))
+
 (def estados-sem-gravacao
   "Estados de sessao que NAO recebem gravacao (Faixa A / A.2). So' 'nao_realizada': a sessao que nao aconteceu nao
   tem registro de audio. 'encerrada' e 'arquivada' RECEBEM — a fonte primaria da V1 e' a gravacao local enviada

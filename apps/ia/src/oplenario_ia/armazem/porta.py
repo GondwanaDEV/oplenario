@@ -14,7 +14,7 @@ EstadoTrabalho = str  # "pendente" | "em_curso" | "concluido" | "falhou" | "desc
 
 @dataclass(frozen=True)
 class NovoTrabalho:
-    tipo: str  # "transcrever" | "notificar"
+    tipo: str  # "transcrever" | "redigir_ata" | "notificar"
     chave: str  # idempotência: o mesmo evento nunca vira dois trabalhos
     ente_id: str
     payload: dict[str, Any]
@@ -59,6 +59,43 @@ class TranscricaoGuardada:
     criado_em: datetime | None = None
 
 
+@dataclass(frozen=True)
+class NovoRascunho:
+    """O rascunho de ata que o núcleo produziu (Faixa A / A.6b). Citações e incerteza como dados simples: o
+    armazenamento não depende da Camada de Confiança."""
+
+    ente_id: str
+    sessao_id: str
+    solicitacao_id: str
+    execucao_id: str
+    texto: str
+    citacoes: list[dict[str, Any]]
+    paragrafos_sem_fonte: list[int]
+    incerteza: dict[str, Any]
+    vendor: str
+    modelo: str
+    prompt_versao: str
+    transcricoes: list[str]
+
+
+@dataclass(frozen=True)
+class RascunhoGuardado:
+    id: str
+    ente_id: str
+    sessao_id: str
+    solicitacao_id: str
+    execucao_id: str
+    texto: str
+    citacoes: list[dict[str, Any]]
+    paragrafos_sem_fonte: list[int]
+    incerteza: dict[str, Any]
+    vendor: str
+    modelo: str
+    prompt_versao: str
+    transcricoes: list[str]
+    criado_em: datetime | None = None
+
+
 class Armazem(Protocol):
     def cursor(self) -> int: ...
 
@@ -86,6 +123,18 @@ class Armazem(Protocol):
         ...
 
     def transcricao(self, transcricao_id: str) -> TranscricaoGuardada | None: ...
+
+    def transcricoes_da_sessao(self, ente_id: str, sessao_id: str) -> list[TranscricaoGuardada]:
+        """A versão mais recente de cada gravação da sessão (o insumo da ata), da mais antiga para a mais nova."""
+        ...
+
+    def concluir_rascunho(
+        self, trabalho_id: int, novo: NovoRascunho, notificar: Callable[[RascunhoGuardado], NovoTrabalho]
+    ) -> RascunhoGuardado:
+        """Guarda o rascunho, conclui o trabalho e enfileira o aviso ao core, de uma vez (como a transcrição)."""
+        ...
+
+    def rascunho(self, rascunho_id: str) -> RascunhoGuardado | None: ...
 
     def trabalhos(self) -> list[dict[str, Any]]:
         """Visão de operação (estado, tentativas, último erro) — sem conteúdo."""
