@@ -1,6 +1,7 @@
 # 25 — Desenho: o lugar da IA na plataforma (IA como núcleo, catálogo de ações, MCP)
 
-> **Status: sessão de desenho EM ANDAMENTO** (aberta em 26/09/2026). Eixo por eixo, com "Confirma?" em cada.
+> **Status: os 8 eixos CONFIRMADOS na sessão (26/09/2026); aguardando o "Confirmo" do Daouda para consolidar.**
+> **Plano de execução derivado: `docs/26-plano-track-ia.md`.** Sessão aberta em 26/09/2026. Eixo por eixo, com "Confirma?" em cada.
 > Decisões marcadas **CONFIRMADO** foram confirmadas na sessão; a consolidação no `documento-mestre-camaras.md`
 > (e em `arquitetura/`) só acontece com o **"Confirmo" do Daouda** sobre o conjunto, ao final dos 8 eixos.
 > **Para retomar:** leia §1–§3, veja a tabela do §4 e continue do primeiro eixo que não está CONFIRMADO.
@@ -47,7 +48,7 @@ JSON Schema para ferramentas.
 | 5 | Onde roda o agente | **CONFIRMADO** — 5.1 (b), 5.2 (b) + 5.3–5.7 (§7b) |
 | 6 | MCP externo | **CONFIRMADO** — 6.1 (B), 6.3 (i)+(ii) + 6.2, 6.4, 6.5 (§8) |
 | 7 | Conhecimento (LOM/RI/leis em camadas por município) | **CONFIRMADO** — 7.2 (B) + 7.1, 7.3–7.7 (§8a) |
-| 8 | Qualidade e custo | Direção confirmada; **sub-decisões em debate (§8b)** |
+| 8 | Qualidade e custo | **CONFIRMADO** — 8.1 (B; C na Onda 2) + 8.2–8.5 (§8b) |
 
 ## 5. Eixo 1 — Lugar da IA · CONFIRMADO (B)
 
@@ -259,7 +260,7 @@ Sub-decisões (todas confirmadas):
   (3.1 b) disparado por `ProposicaoProtocolada` (5.7), que lê os dispositivos aplicáveis e produz um **rascunho
   de nota técnica com citações** para a secretaria — nunca uma decisão.
 
-## 8b. Eixo 8 — Qualidade e custo · EM DEBATE
+## 8b. Eixo 8 — Qualidade e custo · CONFIRMADO (26/09/2026)
 
 Direção confirmada: avaliação por ação, teto de custo por Câmara, painel de acompanhamento da IA. Já existe e é
 reaproveitado: métricas obrigatórias da fronteira (categoria de erro, latência, custo, confiança — §22.3.5);
@@ -268,11 +269,11 @@ reaproveitado: métricas obrigatórias da fronteira (categoria de erro, latênci
 custo, fallback por recurso e fornecedor); botão "reportar erro" e revisão humana (§16.8); a versão robusta da
 governança (amostragem de auditoria, qualidade por Câmara) já está na Onda 2 — não se reabre.
 
-Sub-decisões propostas:
+Sub-decisões (todas confirmadas):
 
 - **8.1 Avaliação antes de ir ao ar.** (A) só revisão manual · (B) **cada agente e cada capacidade de IA tem um
   conjunto de avaliação, rodado no CI do satélite e obrigatoriamente antes de trocar fornecedor ou modelo** · (C) B
-  + juiz automático sobre amostras de produção. *(Recomendado: B agora; C na Onda 2, junto da camada robusta.)*
+  + juiz automático sobre amostras de produção. **Confirmado: B agora; C na Onda 2, junto da camada robusta.**
   O conjunto tem três partes: **casos reais conferidos** (atas humanas × geradas, requerimentos, conferências
   contra LOM/RI com resposta conhecida); **casos de segurança** (instruções escondidas do 4.5, tentativa de ato
   sem confirmação, atos que o agente nem propõe do 4.3); **checagens objetivas** (a citação existe e diz o que o
@@ -307,6 +308,7 @@ Sub-decisões propostas:
 
 | Data | O quê |
 |---|---|
+| 26/09/2026 | Eixo 8 CONFIRMADO — **os 8 eixos fechados na sessão**; plano de execução em `docs/26` |
 | 26/09/2026 | Eixo 7 CONFIRMADO (7.2 B + demais); Eixo 8 aberto em sub-decisões |
 | 26/09/2026 | Eixo 6 CONFIRMADO (6.1 B, 6.3 i+ii + demais); Eixo 7 aberto em sub-decisões |
 | 26/09/2026 | Eixo 5 CONFIRMADO (5.1 b, 5.2 b + demais); Eixo 6 aberto em sub-decisões |
