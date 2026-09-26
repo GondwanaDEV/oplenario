@@ -303,6 +303,17 @@ describe("PaginaHomeVereador", () => {
     expect(screen.getByText(/proposições mais recentes — pode haver/)).toBeTruthy();
   });
 
+  it("'Novo requerimento' ao lado de 'Suas proposições' leva à tela de redigir (fatia 2a), com o token", async () => {
+    global.fetch = fetchRoteado({
+      "GET /api/meu/painel": () => ({ ok: true, json: async () => painelFake }) as Response,
+      "GET /api/sessoes": semSessoes,
+    });
+    renderComProviders("tok-de-teste");
+
+    const link = await screen.findByRole("link", { name: "Novo requerimento" });
+    expect(link.getAttribute("href")).toContain("/requerimento/novo");
+  });
+
   it("pareceres-truncado avisa na secao 'Meus pareceres' (quando ha' algum aguardando)", async () => {
     const painelComParecer = {
       ...painelFake,

@@ -65,7 +65,19 @@ const TIPO_DOCUMENTO_ROTULO: Record<string, string> = {
   convite: "Convite",
   mala_direta: "Mala-direta",
   outro: "Outro",
+  // fatia 2a: modelo com que o VEREADOR redige o requerimento pelo próprio login (vira proposição, não
+  // documento do Expediente — por isso fica fora do seletor de "Gerar documento", ver `modelosParaGerar`).
+  requerimento_proposicao: "Requerimento de vereador",
 };
+
+/** O tipo de modelo que só a borda do vereador usa (espelha legislativo.logic/tipo-modelo-requerimento). */
+export const TIPO_MODELO_REQUERIMENTO = "requerimento_proposicao";
+
+/** Os modelos que a aba "Gerar documento" oferece: todos MENOS os de requerimento de vereador (o backend
+ * recusa gerar documento administrativo a partir deles). A aba "Modelos" continua listando todos. */
+export function modelosParaGerar<T extends { tipoDocumento: string }>(modelos: T[]): T[] {
+  return modelos.filter((m) => m.tipoDocumento !== TIPO_MODELO_REQUERIMENTO);
+}
 
 // Fonte única das chaves (mesma ordem do <select> de tipo-documento em modelos/formulario-modelo.tsx) —
 // espelha legislativo.logic/tipos-documento (wire/in/documento-modelo.CriarModelo usa o mesmo vocabulário).
