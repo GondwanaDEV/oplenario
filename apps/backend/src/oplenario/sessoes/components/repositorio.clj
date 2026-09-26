@@ -149,6 +149,9 @@
   (vincular-segmento! [this ente-id m] "Vincula um segmento a sessao (uma-vez, CAS). `forcar-acesso-restrito` (sigilo §22.6) eleva acesso_restrito; emite gravacao.segmento-vinculado (core->IA) com o sigilo definitivo, atomico.")
   (buscar-segmento [this ente-id id])
   (listar-segmentos-da-sessao [this ente-id sessao-id] "Segmentos da sessao em ordem cronologica (read-model).")
+  (listar-gravacoes-pendentes [this ente-id limite]
+    "Faixa A / A.2: {:segmentos [...sem sessao, mais recentes primeiro] :sessoes [...candidatas a vinculo, na
+    janela das gravacoes (1 dia)]}, numa tx. A sugestao (qual sessao) e' pura, no controller.")
   ;; §22.6 eixo F — tribuna: inscricao de oradores (intencao)
   (inscrever! [this ente-id m] "Inscreve um orador (intencao); numera a fila por (sessao, fase). Devolve {:id :ordem}.")
   (buscar-inscricao [this ente-id id])
@@ -492,6 +495,10 @@
           r))))
   (buscar-segmento [this ente-id id] (transacao this ente-id #(gravacao/buscar % ente-id id)))
   (listar-segmentos-da-sessao [this ente-id sessao-id] (transacao this ente-id #(gravacao/listar-segmentos-da-sessao % ente-id sessao-id)))
+  (listar-gravacoes-pendentes [this ente-id limite]
+    (transacao this ente-id
+      (fn [tx] {:segmentos (gravacao/listar-pendentes tx ente-id limite)
+                :sessoes   (gravacao/sessoes-candidatas-a-pendentes tx ente-id)})))
   (inscrever! [this ente-id m]
     (transacao this ente-id
       (fn [tx]

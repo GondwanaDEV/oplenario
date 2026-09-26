@@ -118,8 +118,8 @@
 (defn- resposta-conflito-sessao-fechada
   "Traduz `controllers/exigir-sessao-aberta!` (`:conflito/sessao-fechada`) -> 409 com a mensagem DO DOMINIO
   (T2 grupo A achado #4/#5, ledger de prontidao Fase 8: sessao ENCERRADA aceitava POST de item de pauta e
-  abertura de votacao — nenhum controller de conducao checava `estado`). UMA fn so', reusada pelas 11 rotas
-  de escrita de conducao (pauta/tribuna/decisao-mesa/incidente/vinculo-gravacao) — mesma disciplina de
+  abertura de votacao — nenhum controller de conducao checava `estado`). UMA fn so', reusada pelas 10 rotas
+  de escrita de conducao (pauta/tribuna/decisao-mesa/incidente; o vinculo de gravacao saiu na Faixa A / A.2) — mesma disciplina de
   `resposta-conflito-presenca`/`resposta-conflito-justificativa` acima."
   [e]
   (http/json-resposta 409 {:erro (ex-message e)}))
@@ -582,8 +582,9 @@
           (http/json-resposta 201 (adapters-out-grav/recibo-ingestao->wire recibo))
           (http/json-resposta 404 {:erro "sessao nao encontrada"}))
         (catch clojure.lang.ExceptionInfo e
-          (if (= :corpo/grande (:tipo (ex-data e)))
-            (http/json-resposta 413 {:erro "upload grande demais"})
+          (case (:tipo (ex-data e))
+            :corpo/grande                 (http/json-resposta 413 {:erro "upload grande demais"})
+            :conflito/sessao-sem-gravacao (http/json-resposta 409 {:erro (ex-message e)})
             (throw e)))))))
 
 (defn- vincular-gravacao-handler
@@ -608,7 +609,7 @@
           (case (:tipo (ex-data e))
             :conflito/vinculo
             (http/json-resposta 409 {:erro "segmento ja vinculado ou lock-version desatualizado"})
-            :conflito/sessao-fechada (resposta-conflito-sessao-fechada e)
+            :conflito/sessao-sem-gravacao (http/json-resposta 409 {:erro (ex-message e)})
             (throw e)))))))
 
 (defn- chamada-handler
@@ -761,6 +762,13 @@
             :conflito/sessao-sem-data
             (http/json-resposta 409 {:erro "sessao sem data marcada: informe a data da sessao antes de conduzir a chamada"})
             (throw e)))))))
+
+(defn- gravacoes-pendentes-handler
+  "GET /gravacoes/pendentes (Faixa A / A.2): a fila de gravacoes recebidas sem sessao, com a sugestao de vinculo."
+  [repo-sessoes]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out-grav/pendentes->wire
+                             (controllers/gravacoes-pendentes repo-sessoes (:ator req))))))
 
 (defn- listar-gravacoes-handler
   "GET /sessoes/:id/gravacao. adapters/in coage o :id; controller carrega+autoriza a sessao e lista os
@@ -986,8 +994,13 @@
     ["/sessoes"     :get  [auth (listar-handler repo-sessoes)] :route-name :sessoes/listar]
     ;; ingestao no TOPO (nao /sessoes/...): o segmento e' agnostico de sessao (Opcao A) e isto evita a colisao
     ;; de roteamento literal-vs-param com /sessoes/:id (o param sombrearia o POST -> 404).
-    ["/gravacoes" :post [auth (it/exige-papel "secretario") (ingestao-handler repo-sessoes objeto-store)]
+    ;; `captacao` (Faixa A / A.2): a credencial do PC do OBS — so' ENVIA arquivos (vincular segue da secretaria).
+    ["/gravacoes" :post [auth (it/exige-algum-papel #{"secretario" "captacao"})
+                         (ingestao-handler repo-sessoes objeto-store)]
      :route-name :sessoes/ingerir-gravacao]
+    ;; filho LITERAL de /gravacoes (sem /gravacoes/:id irmao): sem sombreamento.
+    ["/gravacoes/pendentes" :get [auth (it/exige-papel "secretario") (gravacoes-pendentes-handler repo-sessoes)]
+     :route-name :sessoes/gravacoes-pendentes]
     ;; Etapa 6 fatia 3 — a APURACAO DE ASSIDUIDADE. TAMBEM no TOPO, pela MESMA razao de `/gravacoes` acima —
     ;; e NAO por precaucao: `/sessoes/assiduidade` foi MEDIDO (repro isolada com `io.pedestal.test/response-
     ;; for` contra um service minimo com so' as duas rotas) e o `:id` de `/sessoes/:id` SOMBREIA o literal

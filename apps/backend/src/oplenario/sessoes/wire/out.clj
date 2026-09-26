@@ -303,6 +303,33 @@
    [:sessao-id :string]
    [:segmentos [:sequential SegmentoOut]]])
 
+(def SugestaoSessaoOut
+  "A sessao SUGERIDA para vincular uma gravacao pendente (pelo horario; quem decide e' a secretaria)."
+  [:map {:closed true}
+   [:sessao-id :string]
+   [:tipo-sessao (km/enum-de logic/tipos-sessao)]
+   [:numero-sequencial :int]
+   [:estado (km/enum-de logic/estados-sessao)]
+   [:inicio :string]])
+
+(def GravacaoPendenteOut
+  "Gravacao recebida SEM sessao (Faixa A / A.2, GET /gravacoes/pendentes). Expoe `lock-version` (o token de CAS
+  que o vinculo exige — mesma excecao consciente do recibo de ingestao) e `audio-hash` (a secretaria confere o
+  arquivo). NAO expoe a chave do store."
+  [:map {:closed true}
+   [:id :string]
+   [:iniciou-em :string]
+   [:encerrou-em {:optional true} [:maybe :string]]
+   [:fonte-ingestao (km/enum-de logic/fontes-ingestao-gravacao)]
+   [:acesso-restrito :boolean]
+   [:audio-hash {:optional true} [:maybe :string]]
+   [:lock-version :int]
+   [:sugestao {:optional true} [:maybe SugestaoSessaoOut]]])
+
+(def GravacoesPendentesOut
+  [:map {:closed true}
+   [:segmentos [:sequential GravacaoPendenteOut]]])
+
 (def VinculoGravacaoOut
   "Recibo da VINCULACAO de um segmento a uma sessao (resposta 201 de POST /sessoes/:id/gravacao/:seg-id/vincular,
   Opcao A pos-upload). Carrega o `id` do segmento + a `sessao-id` a que foi vinculado. NAO expoe internos

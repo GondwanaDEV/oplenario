@@ -1,0 +1,20 @@
+/* /gravacoes — fila de gravacoes sem sessao (Faixa A / A.2). Mesmo arquetipo "fila de trabalho" de /recebimentos:
+   cabeca + lista de cartoes com a acao inline. Padding so' vertical: o gutter lateral e' do .envelope. */
+.grav { padding-top: 1.5rem; padding-bottom: 3rem; }
+.grav-cabeca h1 { margin: 0 0 0.35rem; }
+.grav-sub { margin: 0; color: var(--texto-2); max-width: 60ch; }
+.grav-resumo { margin: 0.8rem 0 0; font-family: var(--mono); font-size: var(--t-12); letter-spacing: 0.04em; text-transform: uppercase; color: var(--texto-2); }
+.grav-lista { list-style: none; padding: 0; margin: 1.4rem 0 0; display: grid; gap: 1rem; }
+.grav-item { min-width: 0; padding: 1rem 1.1rem; border: 1px solid var(--linha); border-radius: 12px; background: var(--surface); }
+.grav-titulo { margin: 0; font-weight: 600; color: var(--texto); display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.grav-tag { font-family: var(--mono); font-size: var(--t-12); font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: var(--aviso-texto); border: 1px solid currentColor; border-radius: 999px; padding: 0.05rem 0.5rem; }
+.grav-detalhe { margin: 0.2rem 0 0; font-size: var(--t-13); color: var(--texto-2); }
+.grav-sugestao p, .grav-escolha p { margin: 0.75rem 0 0.5rem; color: var(--texto); }
+.grav-acoes { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.grav-escolha { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.4rem; margin-top: 0.75rem; max-width: 34rem; }
+.grav-rotulo { font-size: var(--t-13); font-weight: 600; color: var(--texto-2); }
+.grav-escolha select { width: 100%; min-width: 0; min-height: 44px; padding: 0 0.6rem; border: 1px solid var(--linha); border-radius: 8px; background: var(--fundo); color: var(--texto); font: inherit; }
+.grav-escolha .btn { justify-self: start; }
+/* `--erro-texto` nao existe em tokens.css: `--acento-texto` (telha legivel como texto, AA — mesma nota de
+   formulario-parecer.css). */
+.grav-erro { margin: 0.6rem 0 0; color: var(--acento-texto); font-size: var(--t-13); }

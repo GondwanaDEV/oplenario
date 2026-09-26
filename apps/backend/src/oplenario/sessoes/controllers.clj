@@ -85,14 +85,15 @@
 ;; declarativo compartilhado) e' o vocabulario certo — nao um segundo conjunto para a mesma ideia.
 
 (defn- exigir-sessao-aberta!
-  "Fail-closed nas ESCRITAS DE CONDUCAO (pauta/tribuna/decisao-mesa/incidente/vinculo-de-gravacao): recusa
+  "Fail-closed nas ESCRITAS DE CONDUCAO (pauta/tribuna/decisao-mesa/incidente): recusa
   quando a sessao ja fechou (`logic/estados-sessao-fechada` — encerrada/nao_realizada/arquivada). Uma sessao
   fechada e' um capitulo congelado da ata; nenhuma dessas verticais tem escrita legitima nela. UMA fn so',
-  chamada apos `authz/check!` em cada controller de escrita das 5 familias — repetir o `if` em cada uma seria
-  reabrir o mesmo defeito por 11 portas em vez de uma (mesma disciplina de `exigir-assento-para-presenca!`
+  chamada apos `authz/check!` em cada controller de escrita das 4 familias — repetir o `if` em cada uma seria
+  reabrir o mesmo defeito por 10 portas em vez de uma (mesma disciplina de `exigir-assento-para-presenca!`
   acima). NAO decide sobre 'agendada'/'suspensa' (fora do escopo provado; `[GAP]` de regimento p/ o Daouda) —
   so' o conjunto que JA' e' lei em `estados-sessao-fechada`. Lanca `:conflito/sessao-fechada` (o diplomat mapeia
-  409, mesmo padrao de `:conflito/pauta|fala|inscricao|vinculo` neste modulo)."
+  409, mesmo padrao de `:conflito/pauta|fala|inscricao|vinculo` neste modulo). O vinculo de GRAVACAO saiu deste gate na
+  Faixa A / A.2: e' registro da sessao, nao conducao (ver `exigir-sessao-com-gravacao!`)."
   [sessao]
   (when (contains? logic/estados-sessao-fechada (:estado sessao))
     (throw (ex-info "sessao ja fechada (encerrada/nao_realizada/arquivada); escrita bloqueada"
@@ -506,6 +507,15 @@
   [repo-sessoes ator m]
   (repo/agendar-sessao! repo-sessoes (:ente-id ator) m))
 
+(defn- exigir-sessao-com-gravacao!
+  "A sessao-alvo de um vinculo/ingestao de gravacao existiu? `logic/estados-sem-gravacao` ('nao_realizada') ->
+  `:conflito/sessao-sem-gravacao` (o diplomat mapeia 409). Encerrada/arquivada passam: a gravacao local sobe
+  depois da sessao (§22.3.4, fonte primaria da V1)."
+  [sessao]
+  (when (contains? logic/estados-sem-gravacao (:estado sessao))
+    (throw (ex-info "sessao nao realizada nao recebe gravacao"
+                    {:tipo :conflito/sessao-sem-gravacao :sessao-id (:id sessao) :estado (:estado sessao)}))))
+
 (defn ingerir-segmento
   "Ingesta um segmento de gravacao (§22.6 eixo D / §22.3.4): TRANSMITE o `body-stream` (container bruto) ao
   objeto_store computando o sha256 NO FLUXO (DigestInputStream — sem bufferizar heap), registra o segmento +
@@ -524,7 +534,9 @@
       nil                          ; sessao-id informado mas inexistente no tenant -> 404 (diplomat traduz nil)
       (do
         ;; camada FINA: se vinculado, a sessao tem de ser da mesma Casa (-> 403 fail-closed) ANTES de gravar
-        (when sessao (authz/check! ator :sessao/ver sessao logic/pode-ver-sessao?))
+        (when sessao
+          (authz/check! ator :sessao/ver sessao logic/pode-ver-sessao?)
+          (exigir-sessao-com-gravacao! sessao))
         (let [seg-id    (random-uuid)
               chave     (str "gravacao/" ente-id "/" seg-id)
               ;; sigilo §22.6 (review sec CRÍTICO): sessao SECRETA -> acesso-restrito SEMPRE true, NUNCA confia
@@ -548,15 +560,28 @@
   sessao SECRETA forca acesso-restrito=true no vinculo (o flag do cliente na ingestao Opcao A pode ter vindo
   false — mesmo guard de `ingerir-segmento`). O Repo vincula UMA-VEZ (CAS WHERE sessao_id IS NULL + lock_version);
   conflito/ja-vinculado/lock-stale -> lanca `:conflito/vinculo` (o diplomat mapeia 409). updated-by = o ator.
+  Aceita sessao encerrada/arquivada (gravacao pos-sessao); 'nao_realizada' -> `:conflito/sessao-sem-gravacao`.
   Devolve o recibo {:id :sessao-id} ou nil (sessao inexistente)."
   [repo-sessoes ator {:keys [sessao-id segmento-id lock-version]}]
   (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
     (authz/check! ator :sessao/ver sessao logic/pode-ver-sessao?)
-    (exigir-sessao-aberta! sessao)
+    ;; NAO `exigir-sessao-aberta!`: o vinculo e' o registro da sessao, nao conducao — a gravacao local sobe
+    ;; DEPOIS da sessao (Faixa A / A.2). So' a sessao que nao aconteceu recusa.
+    (exigir-sessao-com-gravacao! sessao)
     (repo/vincular-segmento! repo-sessoes (:ente-id ator)
       {:id segmento-id :sessao-id sessao-id :lock-version lock-version
        :updated-by (:identidade-id ator)
        :forcar-acesso-restrito (= "secreta" (:tipo-sessao sessao))})))
+
+(def ^:private limite-pendentes 100)
+
+(defn gravacoes-pendentes
+  "Faixa A / A.2: as gravacoes da Casa que chegaram SEM sessao (utilitario de captacao), cada uma com a sessao
+  SUGERIDA pelo horario (`logic/sugerir-sessao-da-gravacao`, pura) — ou nil. A rota exige 'secretario' e o
+  tenant vem do `ator` (RLS). Devolve [segmento+:sugestao ...]."
+  [repo-sessoes ator]
+  (let [{:keys [segmentos sessoes]} (repo/listar-gravacoes-pendentes repo-sessoes (:ente-id ator) limite-pendentes)]
+    (mapv #(assoc % :sugestao (logic/sugerir-sessao-da-gravacao (:iniciou-em %) sessoes)) segmentos)))
 
 (defn listar-gravacoes
   "Read-model dos segmentos de gravacao da sessao `id` p/ o painel. A authz mora no recurso sessao: carrega a

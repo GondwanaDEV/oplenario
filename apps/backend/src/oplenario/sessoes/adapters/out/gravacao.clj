@@ -53,3 +53,26 @@
   (validado wire/SegmentosOut
             {:sessao-id (->str sessao-id) :segmentos (mapv segmento->wire segmentos)}
             "read-model de gravacao viola o contrato SegmentosOut (bug de servidor)"))
+
+(defn- sugestao->wire [s]
+  (when s
+    {:sessao-id         (->str (:id s))
+     :tipo-sessao       (:tipo-sessao s)
+     :numero-sequencial (:numero-sequencial s)
+     :estado            (:estado s)
+     :inicio            (->str (or (:aberta-em s) (:agendada-para s)))}))
+
+(defn pendentes->wire
+  "[segmento+:sugestao ...] -> GravacoesPendentesOut (validado). Faixa A / A.2."
+  [segmentos]
+  (validado wire/GravacoesPendentesOut
+            {:segmentos (mapv (fn [s] {:id              (->str (:id s))
+                                       :iniciou-em      (->str (:iniciou-em s))
+                                       :encerrou-em     (->str (:encerrou-em s))
+                                       :fonte-ingestao  (:fonte-ingestao s)
+                                       :acesso-restrito (boolean (:acesso-restrito s))
+                                       :audio-hash      (:audio-hash s)
+                                       :lock-version    (:lock-version s)
+                                       :sugestao        (sugestao->wire (:sugestao s))})
+                              segmentos)}
+            "gravacoes pendentes violam o contrato GravacoesPendentesOut (bug de servidor)"))

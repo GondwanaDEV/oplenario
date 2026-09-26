@@ -57,6 +57,10 @@
    ["SegmentoOut" out/SegmentoOut]
    ["SegmentosOut" out/SegmentosOut]
    ["VinculoGravacaoOut" out/VinculoGravacaoOut]
+   ;; Faixa A / A.2 — a fila de gravacoes sem sessao. Folhas ANTES do agregado (campos aninhados).
+   ["SugestaoSessaoOut" out/SugestaoSessaoOut]
+   ["GravacaoPendenteOut" out/GravacaoPendenteOut]
+   ["GravacoesPendentesOut" out/GravacoesPendentesOut]
    ["PautaItemAdicionadoOut" out/PautaItemAdicionadoOut]
    ["PautaItemReordenadoOut" out/PautaItemReordenadoOut]
    ["PautaItemRemovidoOut" out/PautaItemRemovidoOut]

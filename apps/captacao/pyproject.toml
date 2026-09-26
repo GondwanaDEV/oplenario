@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oplenario-captacao"
+version = "0.1.0"
+description = "Utilitário de captação do O Plenário: envia a gravação local do OBS ao core (§16.4, §22.3.4). Ver docs/adr/0007."
+requires-python = ">=3.10"
+dependencies = []  # só a biblioteca padrão: roda no PC da transmissão sem instalar nada além do Python
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8",
+  "ruff>=0.16,<0.17",
+  "mypy>=2.3,<3",
+]
+
+[project.scripts]
+oplenario-captar = "oplenario_captacao.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+oplenario_captacao = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+files = ["src"]

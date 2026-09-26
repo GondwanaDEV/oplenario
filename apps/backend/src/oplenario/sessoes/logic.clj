@@ -602,6 +602,46 @@
 ;; da tx. Calcular no controller a partir de uma leitura ANTERIOR deixa a janela em que a Mesa encerra a
 ;; sessao no meio do request e a chamada avalia 'agora' uma sessao que ja fechou.
 
+(def estados-sem-gravacao
+  "Estados de sessao que NAO recebem gravacao (Faixa A / A.2). So' 'nao_realizada': a sessao que nao aconteceu nao
+  tem registro de audio. 'encerrada' e 'arquivada' RECEBEM — a fonte primaria da V1 e' a gravacao local enviada
+  DEPOIS da sessao (§22.3.4), e a importacao de audio historico vincula a sessoes arquivadas. O vinculo da
+  gravacao nao e' escrita de conducao (o gate `estados-sessao-fechada` continua valendo para estas)."
+  #{"nao_realizada"})
+
+(def ^:private ^java.time.Duration folga-sugestao-gravacao
+  "Folga em torno da janela da sessao para casar uma gravacao (o OBS costuma comecar antes da abertura e parar
+  depois do encerramento)."
+  (java.time.Duration/ofHours 2))
+
+(def ^:private ^java.time.Duration duracao-presumida-sessao
+  "Janela presumida quando a sessao nao tem encerrada-em (ainda aberta, ou so' agendada)."
+  (java.time.Duration/ofHours 6))
+
+(defn sugerir-sessao-da-gravacao
+  "PURO (Faixa A / A.2): a sessao mais provavel de uma gravacao recebida sem vinculo, pelo HORARIO. Janela de uma
+  sessao = [inicio - 2h, fim + 2h], com inicio = aberta-em (ou agendada-para) e fim = encerrada-em (ou inicio +
+  6h). Entre as sessoes cuja janela contem o `iniciou-em` da gravacao, vence a de inicio mais proximo. Sessoes em
+  `estados-sem-gravacao` nunca sao sugeridas. So' SUGERE: quem vincula e' a secretaria. nil = nenhuma casa."
+  [iniciou-em sessoes]
+  (let [inst (fn [x] (cond (instance? java.time.Instant x) x
+                           (instance? java.time.OffsetDateTime x) (.toInstant ^java.time.OffsetDateTime x)
+                           (instance? java.util.Date x) (.toInstant ^java.util.Date x)
+                           (string? x) (java.time.Instant/parse x)
+                           :else nil))
+        t (inst iniciou-em)
+        candidatas
+        (for [s sessoes
+              :when (not (contains? estados-sem-gravacao (:estado s)))
+              :let [ini (inst (or (:aberta-em s) (:agendada-para s)))]
+              :when (and t ini)
+              :let [fim (or (inst (:encerrada-em s)) (.plus ^java.time.Instant ini duracao-presumida-sessao))
+                    de  (.minus ^java.time.Instant ini folga-sugestao-gravacao)
+                    ate (.plus ^java.time.Instant fim folga-sugestao-gravacao)]
+              :when (and (not (.isBefore ^java.time.Instant t de)) (not (.isAfter ^java.time.Instant t ate)))]
+          [(Math/abs (.toMillis (java.time.Duration/between ini t))) (str (:id s)) s])]
+    (some-> (sort-by (juxt first second) candidatas) first peek)))
+
 (def estados-sessao-fechada
   "Estados em que a sessao JA fechou — a chamada tem de congelar no instante em que ela fechou (um evento
   inferido/registrado DEPOIS nao pode mudar uma chamada que ja foi para a ata). O CHECK
