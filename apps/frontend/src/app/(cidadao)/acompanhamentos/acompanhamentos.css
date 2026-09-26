@@ -3,7 +3,8 @@
    RECEITA REUSADA verbatim de (interno)/proposicoes/proposicoes.css e (interno)/ficha-materia/
    ficha-materia.css — mesmas 4 categorias de situação, nenhum vocabulário/cor nova inventada aqui. */
 
-.ac-pagina { padding: 2rem 0 4rem; max-width: 760px; }
+/* só topo/base: o recuo lateral é o do .envelope (chassi) — um `padding` inteiro aqui o zerava no celular */
+.ac-pagina { padding-top: 2rem; padding-bottom: 4rem; max-width: 760px; }
 
 .ac-cab { margin-bottom: 1.5rem; }
 .ac-cab h1 { font-family: var(--display); font-size: var(--t-28); color: var(--texto); margin: 0.35rem 0 0; }
