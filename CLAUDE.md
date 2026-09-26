@@ -72,6 +72,9 @@ core do contrato já cumpre a sua metade: `sessoes/events/gravacao.clj` emite
 do outro lado. **Trava a Aposta 1 inteira** (copiloto legislativo, ata-IA, resumo cidadão em
 linguagem simples, busca semântica) e é o que impede M4 de fechar. Atenção: `prototipos/governanca-ia/`
 é o arco de escolha de vendor de LLM, **não** é o satélite.
+**Sessão de desenho aberta em 26/09/2026 — `docs/25-desenho-ia-na-plataforma.md`** (IA como ator sobre a
+plataforma, catálogo único de ações, identidade do agente, MCP). **Ler antes de escrever qualquer feature de IA**
+e retomar do primeiro eixo não confirmado.
 
 **2. Dois IdPs abertos.** O broker **gov.br** (cidadão) não tem uma linha — bloqueia os fluxos de
 escrita autenticados do cidadão (a consulta pública não exige login, então M5 não está bloqueado).
