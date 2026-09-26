@@ -2,7 +2,9 @@
    ../../parecer/[id]/assinar/assinar.css (mesmo ritual de assinatura); aqui só o formulário do passo 1, o
    texto do documento e o recibo. Tokens de tokens.css — nenhuma cor nova. */
 
-.req-form { display: grid; gap: 1rem; }
+/* respiro extra no fim: a barra fixa (e a linha "Falta preencher") somam-se à tabbar — sem isto o último
+   texto do formulário encosta na barra ao rolar até o fim (medido: 10px de folga no celular de 390px). */
+.req-form { display: grid; gap: 1rem; padding-bottom: 3rem; }
 
 .req-modelos { border: 0; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
 .req-modelos legend { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--acento-texto); margin-bottom: 0.5rem; }
@@ -30,7 +32,7 @@
 /* o texto do documento preserva as quebras do modelo (parágrafos, assinatura ao pé) */
 .papel .corpo .req-texto { white-space: pre-wrap; font-size: var(--t-14); line-height: 1.65; }
 
-.req-editar { margin-top: 0.9rem; width: 100%; }
+.req-editar { margin: 0.9rem 0 3rem; width: 100%; }
 
 /* recibo */
 .req-feito { padding-top: 1.5rem; text-align: center; }
