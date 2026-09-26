@@ -10,6 +10,8 @@ import {
   textoCarimbo,
   destacarMerge,
   paresParaMapaDados,
+  modelosParaGerar,
+  TIPOS_DOCUMENTO,
 } from "./expediente-vista";
 
 describe("rotularObjetoTipo / corObjetoTipo", () => {
@@ -152,5 +154,20 @@ describe("paresParaMapaDados", () => {
   });
   it("lista vazia -> mapa vazio", () => {
     expect(paresParaMapaDados([])).toEqual({});
+  });
+});
+
+describe("modelosParaGerar — o modelo de requerimento de vereador não gera documento do Expediente", () => {
+  it("tira só os de requerimento_proposicao", () => {
+    const ms = [
+      { id: "a", tipoDocumento: "oficio" },
+      { id: "b", tipoDocumento: "requerimento_proposicao" },
+      { id: "c", tipoDocumento: "requerimento_administrativo" },
+    ];
+    expect(modelosParaGerar(ms).map((m) => m.id)).toEqual(["a", "c"]);
+  });
+  it("o tipo novo tem rótulo próprio na aba Modelos", () => {
+    expect(rotularTipoDocumento("requerimento_proposicao")).toBe("Requerimento de vereador");
+    expect(TIPOS_DOCUMENTO).toContain("requerimento_proposicao");
   });
 });

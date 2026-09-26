@@ -127,7 +127,13 @@ export default function PaginaHomeVereador() {
         </section>
       )}
 
-      <h2 className="secao-tit">Suas proposições</h2>
+      <div className="secao-linha">
+        <h2 className="secao-tit">Suas proposições</h2>
+        {/* fatia 2a: o requerimento nasce aqui, no login do vereador (modelo da Casa + assinatura) */}
+        <Link className="btn btn-primaria btn-mini" href={comToken("/requerimento/novo", token)}>
+          Novo requerimento
+        </Link>
+      </div>
       {vista.proposicoesTruncado && (
         <p role="status" className="aviso-corte">
           Mostrando as <b>{vista.minhasProposicoes.length}</b> proposições mais recentes — pode haver

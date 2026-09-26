@@ -5,6 +5,9 @@
 
 .secao-tit { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--acento-texto); margin: 1.5rem 0 0.7rem; }
 .secao-tit:first-child { margin-top: 0; }
+/* título de seção com ação ao lado (fatia 2a: "Suas proposições" + "Novo requerimento") */
+.secao-linha { display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; margin: 1.5rem 0 0.7rem; }
+.secao-linha .secao-tit { margin: 0; }
 
 .vazio { font-size: var(--t-13); color: var(--texto-2); }
 

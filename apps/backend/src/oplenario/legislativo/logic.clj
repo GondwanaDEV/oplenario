@@ -152,7 +152,13 @@
 
 ;; --- F3.9b EXPEDIENTE: geracao de documentos por modelo (feature 3.22). Espelham os CHECK da mig 0025. ---
 (def tipos-documento
-  #{"oficio" "certidao" "requerimento_administrativo" "convite" "mala_direta" "outro"})
+  "Espelha o CHECK de documento_modelo (mig 0025 + 0082). `requerimento_proposicao` (fatia 2a) e' o modelo que
+  o VEREADOR usa para redigir o requerimento (proposicao) — o Expediente nao gera documento dele."
+  #{"oficio" "certidao" "requerimento_administrativo" "convite" "mala_direta" "outro" "requerimento_proposicao"})
+
+(def tipo-modelo-requerimento
+  "O tipo de `documento_modelo` que alimenta o requerimento do vereador (fatia 2a, mig 0082)."
+  "requerimento_proposicao")
 (def estados-documento #{"rascunho" "emitido"})
 (def estados-documento-terminais
   "Emitido = artefato congelado (imutabilidade b; espelha o arg do trigger trg_documento_imut_estado)."
@@ -177,6 +183,44 @@
                      (throw (ex-info "renderizar-documento: placeholder sem valor em dados (campo nao-preenchido)"
                                      {:tipo :validacao/invalido :chave chave})))
                    (str v)))))
+
+(def ^:private re-placeholder #"\{\{\s*([-\p{Alnum}_.]+)\s*\}\}")
+
+(defn placeholders-do-template
+  "As chaves {{...}} de um template, na ordem da PRIMEIRA aparicao, sem repeticao (a MESMA gramatica de
+  `renderizar-documento`). nil/sem placeholder -> []. Pura."
+  [template]
+  (if (nil? template)
+    []
+    (into [] (distinct) (map second (re-seq re-placeholder template)))))
+
+(def campos-automaticos-do-requerimento
+  "Placeholders que o SISTEMA preenche no requerimento do vereador (fatia 2a) — nunca o formulario:
+  `vereador` = nome do autor resolvido do LOGIN; `data` = hoje, por extenso, do relogio do servidor."
+  #{"vereador" "data"})
+
+(defn campos-do-requerimento
+  "Os campos que o formulario do vereador pede: os placeholders do modelo MENOS os automaticos. Pura."
+  [template]
+  (into [] (remove campos-automaticos-do-requerimento) (placeholders-do-template template)))
+
+(def ^:private meses
+  ["janeiro" "fevereiro" "março" "abril" "maio" "junho" "julho" "agosto" "setembro" "outubro" "novembro"
+   "dezembro"])
+
+(defn data-por-extenso
+  "LocalDate -> '26 de setembro de 2026' (dia 1 = '1º', como nos atos oficiais). Pura."
+  [^java.time.LocalDate d]
+  (let [dia (.getDayOfMonth d)]
+    (str (if (= 1 dia) "1º" dia) " de " (nth meses (dec (.getMonthValue d))) " de " (.getYear d))))
+
+(defn dados-do-requerimento
+  "Junta os campos que o vereador preencheu com os automaticos. Os AUTOMATICOS VENCEM: um corpo que traga
+  'vereador' ou 'data' e' ignorado nesses campos — autoria e data de um ato assinado nao vem do cliente
+  (anti-forja, mesmo contrato de `resolver-vereador` na borda /meu). Pura."
+  [campos {:keys [nome-vereador hoje]}]
+  (merge (apply dissoc campos campos-automaticos-do-requerimento)
+         {"vereador" nome-vereador "data" (data-por-extenso hoje)}))
 
 (def limite-inline-bytes
   "Threshold inline/URI (§22.4 eixo B; calibravel por observabilidade). Acima disso o conteudo vai p/

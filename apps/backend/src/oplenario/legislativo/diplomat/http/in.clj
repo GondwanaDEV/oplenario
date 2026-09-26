@@ -21,6 +21,7 @@
             [oplenario.legislativo.adapters.in.documento-modelo :as adapters-in-documento-modelo]
             [oplenario.legislativo.adapters.in.parecer :as adapters-in-parecer]
             [oplenario.legislativo.adapters.in.proposicao :as adapters-in-proposicao]
+            [oplenario.legislativo.adapters.in.requerimento :as adapters-in-requerimento]
             [oplenario.legislativo.adapters.in.votacao :as adapters-in]
             [oplenario.legislativo.adapters.out.documento :as adapters-out-documento]
             [oplenario.legislativo.adapters.out.documento-modelo :as adapters-out-documento-modelo]
@@ -33,6 +34,7 @@
             [oplenario.legislativo.adapters.out.proposicao :as adapters-out-proposicao]
             [oplenario.legislativo.adapters.out.protocolo-geral :as adapters-out-protocolo]
             [oplenario.legislativo.adapters.out.relator-pendente :as adapters-out-relator]
+            [oplenario.legislativo.adapters.out.requerimento :as adapters-out-requerimento]
             [oplenario.legislativo.adapters.out.tramitacao-executiva :as adapters-out-tramitacao-executiva]
             [oplenario.legislativo.adapters.out.votacao :as adapters-out]
             [oplenario.legislativo.components.assinador-icp :as assinador-icp]
@@ -523,6 +525,39 @@
                 (throw e)))))
         (http/json-resposta 404 {:erro "parecer nao encontrado"})))))
 
+;; ========================= Fatia 2a: o requerimento do VEREADOR =========================
+
+(defn- meus-modelos-requerimento-handler
+  "GET /meu/modelos-requerimento — os modelos de requerimento ATIVOS da Casa com os campos que o formulario pede."
+  [repo-leg]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out-requerimento/modelos->wire
+                               (controllers/modelos-de-requerimento repo-leg (:ator req))))))
+
+(defn- previa-requerimento-handler
+  "POST /meu/requerimentos/previa — o texto formatado (autor e data do servidor), sem gravar. 404 quando o
+  ator nao e' vereador cadastrado nesta Casa ou o modelo nao esta' na lista; 400 com campo faltando."
+  [repo-leg resolver-autor relogio]
+  (fn [req]
+    (let [m (adapters-in-requerimento/previa->dominio (:json-params req))]
+      (if-let [r (controllers/previa-requerimento repo-leg resolver-autor (:ator req)
+                                                  (assoc m :hoje (tempo/hoje relogio zona-civil)))]
+        (http/json-resposta 200 (adapters-out-requerimento/previa->wire r))
+        (http/json-resposta 404 {:erro "modelo de requerimento nao encontrado"})))))
+
+(defn- protocolar-requerimento-handler
+  "POST /meu/requerimentos — o vereador assina e protocola o proprio requerimento (201). O assinador STUB e'
+  construido aqui (mesmo padrao de emitir-parecer-handler); a assinatura acontece no Repo, na tx do
+  protocolo. `hoje` do relogio do servidor (ano da numeracao + data do texto), nunca do cliente."
+  [repo-leg resolver-municipio resolver-autor relogio]
+  (fn [req]
+    (let [m (adapters-in-requerimento/protocolar->dominio (:json-params req))]
+      (if-let [r (controllers/meu-protocolar-requerimento repo-leg resolver-municipio resolver-autor
+                                                          (assinador-icp/assinador-stub) (:ator req)
+                                                          (assoc m :hoje (tempo/hoje relogio zona-civil)))]
+        (http/json-resposta 201 (adapters-out-requerimento/protocolado->wire r))
+        (http/json-resposta 404 {:erro "modelo de requerimento nao encontrado"})))))
+
 ;; ========================= Onda B Slice 6: expediente (documentos + protocolo geral) =========================
 
 (defn- listar-modelos-documento-handler
@@ -789,7 +824,7 @@
   'secretario' OU 'vereador') — ver rotas.clj)."
   [{:keys [auth repo-legislativo consultar-sessao sessao-fechada? pode-ver-votacao-aberta? resolver-municipio
            resolver-vereador resolver-comissoes vereador-vinculado? vereador-no-roster? membros-da-casa
-           registro relogio]}]
+           registro relogio resolver-autor]}]
   (let [papel (it/exige-papel "secretario")
         papel-vereador (it/exige-papel "vereador")
         ;; LEITURA do acervo aberta a secretario OU vereador: o vereador legisla sobre a materia, entao
@@ -889,7 +924,18 @@
        :route-name :legislativo/meu-parecer-editor]
       ["/meu/pareceres/:id/emissao" :post
        [auth papel-vereador it/corpo-json (meu-emitir-parecer-handler repo-legislativo registro relogio resolver-vereador resolver-comissoes)]
-       :route-name :legislativo/meu-emitir-parecer]}))
+       :route-name :legislativo/meu-emitir-parecer]
+      ;; fatia 2a: o vereador redige, assina e protocola o proprio requerimento. `resolver-autor` (host,
+      ;; cross-modulo p/ cadastros) resolve identidade -> {:id :nome} do vereador NESTA Casa.
+      ["/meu/modelos-requerimento" :get [auth papel-vereador (meus-modelos-requerimento-handler repo-legislativo)]
+       :route-name :legislativo/meus-modelos-requerimento]
+      ["/meu/requerimentos/previa" :post
+       [auth papel-vereador it/corpo-json (previa-requerimento-handler repo-legislativo resolver-autor relogio)]
+       :route-name :legislativo/previa-requerimento]
+      ["/meu/requerimentos" :post
+       [auth papel-vereador it/corpo-json
+        (protocolar-requerimento-handler repo-legislativo resolver-municipio resolver-autor relogio)]
+       :route-name :legislativo/protocolar-requerimento]}))
 
 ;; ========================= FE Onda A1: fila de relatores pendentes (§16.11) =========================
 
