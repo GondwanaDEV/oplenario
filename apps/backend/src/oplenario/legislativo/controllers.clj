@@ -355,6 +355,25 @@
     (repo/transicionar! repo-legislativo (:ente-id ator) registro
                         (assoc m :template-id (:template-id linha) :ator ator))))
 
+(defn receber-movimentacao
+  "Fatia 2b — quem RECEBE a carga assina o recebimento da movimentacao pendente (pedido do stakeholder: 'toda
+  movimentacao do documento assinada por quem recebe'). `m` = {:proposicao-id :transicao-id :agora} ja'
+  coagido pelo adapters/in; o ator vem do token e e' ELE quem assina (`recebido-por`), nunca o corpo.
+
+  nil = materia inexistente no tenant (-> 404), mesmo pre-check de `tramitar-proposicao`. O resto propaga:
+  `:conflito/sem-recebimento-pendente` / `:conflito/movimentacao-divergente` (-> 409) e a negacao da regra
+  de quem recebe (-> 403) — a traducao e' da borda. `assinador` = o AssinadorICP (hoje o STUB-ICP-v0, a mesma
+  divida conhecida do parecer e do requerimento)."
+  [repo-legislativo registro assinador ator m]
+  (when (repo/buscar-proposicao repo-legislativo (:ente-id ator) (:proposicao-id m))
+    (repo/receber-movimentacao! repo-legislativo (:ente-id ator) registro
+                                (assoc m :ator ator :assinador assinador))))
+
+(defn recebimentos-pendentes
+  "Fatia 2b — a fila de cargas da Casa ainda nao recebidas (mais antigas primeiro, teto 200 no db/)."
+  [repo-legislativo ente-id]
+  (repo/recebimentos-pendentes repo-legislativo ente-id))
+
 (defn- nota-de-lista-vazia
   "Lista de gatilhos vazia tem QUATRO causas, e elas pedem acoes DIFERENTES do operador. Devolver so'
   'nenhum ato disponivel' seria verdadeiro e inutil — a nota diz de qual das quatro se trata.
@@ -379,6 +398,24 @@
          "de processo: a materia esta' presa num beco. A saida depende de corrigir a configuracao do "
          "rito, nao de tentar de novo.")))
 
+(defn- anotar-recebimentos
+  "Fatia 2b — cada linha do historico ganha `:recebimento` ({:recebido-por-nome :recebido-em
+  :assinatura-algoritmo}, ou nil quando a movimentacao nao foi recebida — ou nao exigia recebimento).
+  `recebimentos` = transicao-id -> recibo (db/recebimento/recebimentos-da-proposicao). O NOME vem do seam
+  `nome-na-casa` do host (§22.5.3 — o legislativo guarda o id de identidade e nunca soube o nome; mesma porta
+  da folha de sessao): so' sai nome de quem tem vinculo NESTA Casa, senao nil e a tela diz 'recebida'. Um
+  nome por PESSOA, nao por linha: a mesma servidora recebe dezenas de cargas."
+  [nome-na-casa ente-id historico recebimentos]
+  (let [nomes (into {} (map (fn [id] [id (nome-na-casa ente-id id)]))
+                    (distinct (keep :recebido-por (vals recebimentos))))]
+    (mapv (fn [linha]
+            (assoc linha :recebimento
+                   (when-let [r (get recebimentos (:id linha))]
+                     {:recebido-por-nome (get nomes (:recebido-por r))
+                      :recebido-em (:recebido-em r)
+                      :assinatura-algoritmo (:assinatura-algoritmo r)})))
+          historico)))
+
 (defn buscar-tramitacao
   "Fatia 3 — a LEITURA da tramitacao: o HISTORICO da materia + os GATILHOS que a Casa declara a partir do
   estado ATUAL. nil = materia inexistente no tenant (a borda traduz -> 404), mesmo contrato de
@@ -394,13 +431,16 @@
   o comeco do processo — uma mentira por omissao num artefato de auditoria. O item excedente nunca vai p/ a
   resposta: ele so' existe p/ a borda poder DIZER que ha' mais. `take-last` porque `historico-da-proposicao`
   ja' devolve os N mais recentes em ordem cronologica — o que sobra p/ descartar e' o mais ANTIGO."
-  [repo-legislativo ente-id proposicao-id limite]
-  (let [{:keys [proposicao historico candidatas estado-no-template]}
+  ([repo-legislativo ente-id proposicao-id limite]
+   (buscar-tramitacao repo-legislativo (constantly nil) ente-id proposicao-id limite))
+  ([repo-legislativo nome-na-casa ente-id proposicao-id limite]
+  (let [{:keys [proposicao historico candidatas estado-no-template recebimentos recebimento-pendente]}
         (repo/tramitacao-da-proposicao repo-legislativo ente-id proposicao-id (inc limite))]
     (when proposicao
       (let [truncado? (> (count historico) limite)
             gatilhos  (logic/gatilhos-possiveis candidatas)
-            estado    (:estado proposicao)]
+            estado    (:estado proposicao)
+            historico (if truncado? (vec (take-last limite historico)) (vec historico))]
         {:proposicao-id proposicao-id
          :estado-atual estado
          :template-id (:template-id proposicao)
@@ -408,12 +448,15 @@
          ;; NAO declara o estado (ou nao ha' rito). "Desconhecido" e "nao-terminal" sao diagnosticos
          ;; diferentes, e achatar os dois em `false` apagaria justamente o caso que pede intervencao.
          :estado-terminal (:terminal estado-no-template)
-         :historico (if truncado? (vec (take-last limite historico)) (vec historico))
+         :historico (anotar-recebimentos nome-na-casa ente-id historico recebimentos)
          :historico-truncado truncado?
+         ;; fatia 2b: a carga que a materia espera AGORA. Enquanto houver, a engine recusa qualquer ato
+         ;; (`:recebimento-pendente`) — a tela oferece RECEBER antes de oferecer tramitar.
+         :recebimento-pendente recebimento-pendente
          :gatilhos-possiveis gatilhos
          :nota (when (empty? gatilhos)
                  (nota-de-lista-vazia estado {:template-id (:template-id proposicao)
-                                              :estado-no-template estado-no-template}))}))))
+                                              :estado-no-template estado-no-template}))})))))
 
 (defn- nomear-comissoes
   "Decora cada mapa de `ms` (que tem `:comissao-id`) com `:comissao-nome`, resolvendo os N ids numa
@@ -438,12 +481,16 @@
   do model, nunca o diplomat/http/in (que so' compoe adapters/out ja' prontos).
 
   Cada parecer sai com `:comissao-nome` (defeito #11 do ledger de prontidao — a aba mostrava o UUID)."
-  [repo-legislativo resolver-comissoes ente-id id]
-  (let [{:keys [proposicao texto] :as ficha} (repo/ficha-completa-da-proposicao repo-legislativo ente-id id)]
-    (when proposicao
-      (-> ficha
-          (assoc :texto (:texto-inline texto))
-          (update :pareceres #(nomear-comissoes resolver-comissoes ente-id %))))))
+  ([repo-legislativo resolver-comissoes ente-id id]
+   (buscar-ficha-materia repo-legislativo resolver-comissoes (constantly nil) ente-id id))
+  ([repo-legislativo resolver-comissoes nome-na-casa ente-id id]
+   (let [{:keys [proposicao texto recebimentos] :as ficha} (repo/ficha-completa-da-proposicao repo-legislativo ente-id id)]
+     (when proposicao
+       (-> (dissoc ficha :recebimentos)
+           (assoc :texto (:texto-inline texto))
+           ;; fatia 2b: o historico da ficha mostra quem recebeu cada movimentacao (mesma anotacao da rota irma)
+           (update :tramitacao #(anotar-recebimentos nome-na-casa ente-id % (or recebimentos {})))
+           (update :pareceres #(nomear-comissoes resolver-comissoes ente-id %)))))))
 
 ;; ========================= Onda B Slice 5: editor/emissao do parecer =========================
 

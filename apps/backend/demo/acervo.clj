@@ -54,7 +54,9 @@
 
 (def ^:private estados-rito
   [{:chave "protocolada"      :nome "Protocolada"            :ordem 1 :terminal false}
-   {:chave "em_comissoes"     :nome "Em Comissões"           :ordem 2 :terminal false}
+   ;; fatia 2b: a carga que chega as comissoes precisa ser RECEBIDA (e assinada) antes de andar. Sem regra de
+   ;; quem recebe (`recebedor` nil): vale o gate da rota (quem opera o expediente).
+   {:chave "em_comissoes"     :nome "Em Comissões"           :ordem 2 :terminal false :exige-recebimento true}
    {:chave "aguardando_pauta" :nome "Aguardando Pauta"       :ordem 3 :terminal false}
    {:chave "em_pauta"         :nome "Em Pauta"               :ordem 4 :terminal false}
    {:chave "aprovada"         :nome "Aprovada"               :ordem 5 :terminal true}
@@ -160,14 +162,14 @@
               "Os convênios de que trata esta Lei observarão critérios objetivos de habilitação das entidades, definidos em regulamento, serão precedidos de chamamento público, nos termos da legislação aplicável, e exigirão prestação de contas anual ao órgão municipal repassador."
               "As despesas decorrentes da execução desta Lei correrão por conta de dotações orçamentárias próprias, suplementadas se necessário."
               "Esta Lei entra em vigor na data de sua publicação."])}
-   {:ref :em-comissoes-3 :tipo "projeto_lei_complementar"
+   {:ref :em-comissoes-3 :em-carga true :tipo "projeto_lei_complementar"
     :ementa "Altera o Código de Posturas do Município quanto ao horário de funcionamento do comércio."
     :caminho ["despachar"]
     :texto (artigos->texto "Lei Complementar"
              ["O dispositivo do Código de Posturas do Município que trata do horário de funcionamento do comércio passa a vigorar de modo a permitir o funcionamento dos estabelecimentos comerciais de segunda-feira a sábado, das 6h às 22h, e aos domingos e feriados, das 8h às 18h."
               "Os estabelecimentos que exerçam atividade de interesse turístico ou de lazer poderão requerer horário especial de funcionamento, mediante autorização do órgão municipal competente."
               "Esta Lei Complementar entra em vigor na data de sua publicação."])}
-   {:ref :em-comissoes-4 :tipo "mocao"
+   {:ref :em-comissoes-4 :em-carga true :tipo "mocao"
     :ementa "Manifesta congratulações à comunidade escolar pela conquista na Olimpíada Municipal de Matemática."
     :categoria-mocao "congratulacoes" :caminho ["despachar"]
     :texto (texto-mocao "Congratulações"
@@ -409,22 +411,32 @@
   a mao. DECISAO DO CONTROLADOR (nao ampliar): so' as 24 proposicoes entram no Livro por esta fatia;
   oficios/documentos administrativos ficam fora de escopo.
 
+  Fatia 2b: a cada chegada a um estado que exige recebimento, a secretaria (`recebedor`, identidade real
+  da Casa — o historico mostra o nome dela) RECEBE e assina, pelo mesmo `receber-movimentacao!` da rota.
+  `:em-carga true` deixa a ULTIMA chegada sem receber: a fila de recebimentos pendentes da demo nao nasce vazia.
+
   Devolve o `id` da proposicao. Falha alto se algum gatilho do caminho NAO transicionar (guard bloqueado
   ou rito mal-formado — bug deste ns, nao dado esperado)."
-  [repo registro ente template-id vereadores idx
-   {:keys [tipo ementa caminho objeto-indicacao tipo-requerimento categoria-mocao texto]}]
+  [repo registro ente template-id vereadores recebedor idx
+   {:keys [tipo ementa caminho objeto-indicacao tipo-requerimento categoria-mocao texto em-carga]}]
   (let [autor (nth vereadores (mod idx (count vereadores)))
         {pid :id} (repo-leg/protocolar! repo ente
                     {:id (random-uuid) :ente-id ente :tipo tipo :ano 2026 :uf "CE" :municipio-nome "Fortaleza"
                      :ementa ementa :autor-tipo "vereador" :autor-id (:id autor) :autor-texto (:nome-parlamentar autor)
                      :objeto-indicacao objeto-indicacao :tipo-requerimento tipo-requerimento
                      :categoria-mocao categoria-mocao :texto texto})]
-    (doseq [gatilho caminho]
+    (doseq [[i gatilho] (map-indexed vector caminho)]
       (let [r (repo-leg/transicionar! repo ente registro
                 {:proposicao-id pid :template-id template-id :gatilho gatilho})]
         (when-not (:transicionou? r)
           (throw (ex-info "acervo/semear!: gatilho do caminho nao transicionou (guard bloqueado ou rito mal-formado)"
-                          {:proposicao-id pid :gatilho gatilho :de (:de r)})))))
+                          {:proposicao-id pid :gatilho gatilho :de (:de r)})))
+        (when-let [carga (:recebimento-pendente (repo-leg/tramitacao-da-proposicao repo ente pid 1))]
+          (when-not (and em-carga (= i (dec (count caminho))))
+            (repo-leg/receber-movimentacao! repo ente registro
+              {:proposicao-id pid :transicao-id (:transicao-id carga) :agora hoje
+               :ator {:ente-id ente :identidade-id recebedor :papeis #{"secretario"}}
+               :assinador (assinador-icp/assinador-stub)})))))
     (repo-leg/protocolar-geral! repo ente
       {:id (random-uuid) :ano 2026 :objeto-tipo "proposicao" :objeto-id pid :sentido "interno"
        :assunto ementa :interessado-texto (:nome-parlamentar autor)})
@@ -618,8 +630,13 @@
   `rito-chave` v1 neste ente. Se ja' existe, RELE (devolve so' `:template-id`, sem duplicar as 24
   proposicoes) em vez de tentar recriar — chamar de novo NAO cria um segundo acervo.
 
+  `identidade-secretaria` (fatia 2b) = quem RECEBE as cargas do acervo (`:secretaria` de
+  `casa/semear!`). A aridade-3 (testes antigos) recebe em nome do vereador — o recibo so' precisa de uma
+  identidade real da Casa.
+
   Devolve `{:template-id}`."
-  [sistema ente identidade-vereador]
+  ([sistema ente identidade-vereador] (semear! sistema ente identidade-vereador identidade-vereador))
+  ([sistema ente identidade-vereador identidade-secretaria]
   (let [repo (:repo-legislativo sistema)
         registro (:registro-fatos sistema)
         repo-cad (:repo-cadastros sistema)
@@ -639,11 +656,12 @@
             template-id (criar-rito! repo ente)
             por-ref (into {}
                       (map-indexed
-                        (fn [i m] [(:ref m) (protocolar-e-tramitar! repo registro ente template-id vereadores i m)])
+                        (fn [i m] [(:ref m) (protocolar-e-tramitar! repo registro ente template-id vereadores
+                                                                     identidade-secretaria i m)])
                         materias))
             materias-por-ref (into {} (map (juxt :ref identity) materias))
             template-parecer-id (criar-template-parecer! repo ente)]
         (semear-pareceres! repo registro ente template-parecer-id vereadores relator-vereador-id comissoes-reais por-ref)
         (semear-pos-aprovacao! repo ente por-ref)
         (semear-normas! repo ente por-ref materias-por-ref)
-        {:template-id template-id}))))
+        {:template-id template-id})))))

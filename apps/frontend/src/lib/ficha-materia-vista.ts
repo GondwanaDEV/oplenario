@@ -16,6 +16,7 @@
 import { rotularComissao } from "./comissao-vista";
 import { derivarTramitacao } from "./tramitacao-vista";
 import { categorizarSituacao, type CategoriaSituacao } from "./proposicoes-vista";
+import { textoRecebimento } from "./recebimento-vista";
 import type {
   FichaMateriaOut,
   HistoricoTramitacaoItemOut,
@@ -72,6 +73,8 @@ export function derivarDadosMateria(ficha: FichaMateriaOut): DadosMateriaVista {
 export type ItemTimelineVista = HistoricoTramitacaoItemOut & {
   rotuloDe: string;
   rotuloPara: string;
+  /** fatia 2b: "Recebida por X em … · assinada", ou null quando a movimentação não tem recibo de carga. */
+  recebimentoTexto: string | null;
 };
 
 export function derivarTimelineTramitacao(
@@ -85,6 +88,7 @@ export function derivarTimelineTramitacao(
       // vocabulário ilustrativo (ex. vocabulário template-driven de um tenant real).
       rotuloDe: derivarTramitacao(item.deEstado).rotuloSituacao,
       rotuloPara: derivarTramitacao(item.paraEstado).rotuloSituacao,
+      recebimentoTexto: textoRecebimento(item.recebimento),
     }));
 }
 

@@ -1,0 +1,24 @@
+/* O "canhoto" da carga (fatia 2b). A borda tracejada e' o recibo de protocolo em papel que o servidor ja'
+   conhece — o picote que se destaca e assina. Amarelo de ALERTA (nao telha): esperar recebimento nao e' erro,
+   e' pendencia. Tinta do texto em --aviso-texto (GUIDELINES §5.1: nunca o amarelo cheio como texto). */
+.canhoto {
+  border: 1.5px dashed var(--amarelo-traco);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  background: var(--surface-2);
+}
+.canhoto-rotulo {
+  font-family: var(--mono);
+  font-size: var(--t-12);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--aviso-texto);
+  margin: 0 0 0.35rem;
+}
+.canhoto-linha { margin: 0; color: var(--texto); }
+.canhoto-espera { color: var(--aviso-texto); }
+.canhoto-nota { font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
+.canhoto-confirma { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--linha); }
+.canhoto-declara { margin: 0; font-size: var(--t-13); color: var(--texto); }
+.canhoto-botoes { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }

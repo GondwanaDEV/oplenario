@@ -3,7 +3,8 @@
   1). Projeta cada linha (kebab, uuid/instant) para ProposicaoResumoOut — nunca vaza
   atributos_especificos/texto_vigente_versao_id/lock_version/created_by/updated_by/ente_id. Validado contra
   o contrato (drift de campo = bug de servidor -> 500, nunca resposta malformada que envenena o codegen)."
-  (:require [malli.core :as m]
+  (:require [clojure.string :as str]
+            [malli.core :as m]
             [malli.error :as me]
             [oplenario.legislativo.wire.out.proposicao :as wire]))
 
@@ -61,9 +62,24 @@
              :gatilho gatilho :ocorrido-em (->str (:ocorrido-em r))}
             "recibo de tramitacao"))
 
+(defn- recebimento->wire
+  "Fatia 2b — `:recebimento` anotado pelo controller (ou nil) -> RecebimentoOut. A ficha projeta o MESMO
+  recibo no seu adapter (os dois historicos mudam juntos)."
+  [r]
+  (when r
+    {:recebido-por-nome (:recebido-por-nome r) :recebido-em (->str (:recebido-em r))
+     :assinatura-algoritmo (:assinatura-algoritmo r)}))
+
 (defn- historico-item->wire [l]
   {:de-estado (:de-estado l) :para-estado (:para-estado l) :gatilho (:gatilho l)
-   :ocorrido-em (->str (:ocorrido-em l))})
+   :ocorrido-em (->str (:ocorrido-em l))
+   :recebimento (recebimento->wire (:recebimento l))})
+
+(defn- pendente->wire [p]
+  (when p
+    {:movimentacao-id (->str (:transicao-id p)) :de-estado (:de-estado p) :estado (:estado p)
+     :estado-nome (:estado-nome p) :desde (->str (:desde p))
+     :restrito (not (str/blank? (:recebedor p)))}))
 
 (defn tramitacao->wire
   "Model de `controllers/buscar-tramitacao` -> TramitacaoOut (Fatia 3).
@@ -87,5 +103,27 @@
              :historico-truncado (:historico-truncado m)
              :gatilhos-possiveis (mapv #(select-keys % [:gatilho :destinos-possiveis :pode-ser-recusado :exige-autorizacao])
                                        (:gatilhos-possiveis m))
-             :nota (:nota m)}
+             :nota (:nota m)
+             :recebimento-pendente (pendente->wire (:recebimento-pendente m))}
             "tramitacao de proposicao"))
+
+(defn recibo-recebimento->wire
+  "Resultado de Repo/receber-movimentacao! -> RecebimentoReciboOut (fatia 2b)."
+  [r]
+  (validado wire/RecebimentoReciboOut
+            {:id (->str (:id r)) :proposicao-id (->str (:proposicao-id r))
+             :movimentacao-id (->str (:transicao-id r)) :estado (:estado r)
+             :recebido-em (->str (:recebido-em r)) :assinatura-algoritmo (:assinatura-algoritmo r)}
+            "recibo de recebimento"))
+
+(defn recebimentos-pendentes->wire
+  "Linhas de db/recebimento/listar-pendentes -> RecebimentosPendentesOut (fatia 2b)."
+  [linhas]
+  (validado wire/RecebimentosPendentesOut
+            {:itens (mapv (fn [l]
+                            {:proposicao-id (->str (:proposicao-id l)) :tipo (:tipo l) :sequencial (:sequencial l)
+                             :ano (:ano l) :ementa (:ementa l) :estado (:estado l) :estado-nome (:estado-nome l)
+                             :movimentacao-id (->str (:transicao-id l)) :de-estado (:de-estado l)
+                             :desde (->str (:desde l)) :restrito (boolean (:restrito l))})
+                          linhas)}
+            "fila de recebimentos pendentes"))

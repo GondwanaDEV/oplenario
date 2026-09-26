@@ -20,7 +20,9 @@
    [:de-estado :string]
    [:para-estado :string]
    [:gatilho :string]
-   [:ocorrido-em :string]])
+   [:ocorrido-em :string]
+   ;; fatia 2b: o MESMO recibo de carga da rota irma (TramitacaoHistoricoItemOut — os dois mudam juntos)
+   [:recebimento [:maybe proposicao/RecebimentoOut]]])
 
 (def ApensacaoOut
   "Uma apensada ATIVA de nivel 1 (nao a cadeia recursiva — decisao de escopo desta fatia)."

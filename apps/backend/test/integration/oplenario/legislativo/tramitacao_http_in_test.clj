@@ -335,9 +335,9 @@
     (is (= "em_comissoes" (:estado-atual body)) "o rotulo atual")
     (is (= (str tid) (:template-id body)) "o rito sob o qual a materia corre")
     (is (= [{:de-estado "protocolada" :para-estado "em_comissoes" :gatilho "despachar"
-             :ocorrido-em (str ocorrido)}]
+             :ocorrido-em (str ocorrido) :recebimento nil}]
            (:historico body))
-        "historico em ordem CRONOLOGICA, com o instante REAL da transicao")
+        "historico em ordem CRONOLOGICA, com o instante REAL da transicao (fatia 2b: + o recibo de carga, nil aqui)")
     (is (false? (:historico-truncado body)))
     (is (= ["concluir" "arquivar"] (mapv :gatilho (:gatilhos-possiveis body)))
         "os gatilhos vem na ORDEM do rito (`ordem`), nao em alfabetica — e' a ordem ritual que o operador le'")

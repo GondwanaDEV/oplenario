@@ -13,6 +13,7 @@ function tramitacaoFake(over: Record<string, unknown> = {}) {
       { gatilho: "aprovar_parecer", "destinos-possiveis": ["aprovada"], "pode-ser-recusado": true, "exige-autorizacao": false },
     ],
     nota: null,
+    "recebimento-pendente": null,
     ...over,
   };
 }
@@ -72,5 +73,81 @@ describe("AcoesTramitacao", () => {
 
     const alerta = await screen.findByRole("alert");
     expect(alerta.textContent).toContain("o rito recusou o ato");
+  });
+
+  it("carga pendente: esconde os atos; receber pede 2 toques e o 2º assina a movimentação vista", async () => {
+    const onTramitou = vi.fn();
+    let recebida = false;
+    const fetchMock = vi.fn(async (_url: string, opts?: { method?: string }) => {
+      if (opts?.method === "POST") {
+        recebida = true;
+        return { ok: true, status: 201, json: async () => ({ id: "r1" }) } as Response;
+      }
+      return {
+        ok: true,
+        json: async () =>
+          tramitacaoFake({
+            "recebimento-pendente": recebida
+              ? null
+              : {
+                  "movimentacao-id": "m1",
+                  "de-estado": "protocolada",
+                  estado: "em_comissoes",
+                  "estado-nome": "Em Comissões",
+                  desde: "2026-09-26T10:00:00",
+                  restrito: false,
+                },
+          }),
+      } as Response;
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    render(<AcoesTramitacao proposicaoId="p1" token="tok" onTramitou={onTramitou} />);
+
+    expect(await screen.findByText(/Aguardando recebimento/i)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Aprovar parecer" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Receber e assinar" }));
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining("/recebimento"), expect.anything());
+    fireEvent.click(await screen.findByRole("button", { name: "Assinar recebimento" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/legislativo/proposicoes/p1/recebimento",
+        expect.objectContaining({ method: "POST", body: JSON.stringify({ "movimentacao-id": "m1" }) }),
+      ),
+    );
+    // recebida: o painel recarrega, os atos voltam, e a ficha é avisada (o histórico ganha o recibo)
+    expect(await screen.findByRole("button", { name: "Aprovar parecer" })).toBeTruthy();
+    await waitFor(() => expect(onTramitou).toHaveBeenCalled());
+  });
+
+  it("carga: a matéria andou depois que a tela carregou → alerta e recarrega", async () => {
+    const fetchMock = vi.fn(async (_url: string, opts?: { method?: string }) => {
+      if (opts?.method === "POST")
+        return { ok: false, status: 409, json: async () => ({ motivo: "movimentacao-divergente" }) } as Response;
+      return {
+        ok: true,
+        json: async () =>
+          tramitacaoFake({
+            "recebimento-pendente": {
+              "movimentacao-id": "m1",
+              "de-estado": null,
+              estado: "em_comissoes",
+              "estado-nome": "Em Comissões",
+              desde: "2026-09-26T10:00:00",
+              restrito: true,
+            },
+          }),
+      } as Response;
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    render(<AcoesTramitacao proposicaoId="p1" token="tok" />);
+    expect(await screen.findByText(/pode ser recusado/i)).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "Receber e assinar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Assinar recebimento" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/se movimentou/);
+    await waitFor(() => expect(fetchMock.mock.calls.filter((c) => !c[1]?.method).length).toBeGreaterThan(1));
   });
 });

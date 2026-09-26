@@ -9,6 +9,7 @@
 // — a leitura não avalia guards, então a tela não promete sucesso (ver GatilhoPossivelOut no backend).
 
 import type { TramitacaoOut } from "./use-tramitacao";
+import { vistaCarga, type VistaCarga } from "./recebimento-vista";
 
 export interface AtoTramitacao {
   gatilho: string;
@@ -20,7 +21,10 @@ export interface AtoTramitacao {
 
 export type VistaAcoesTramitacao =
   | { tipo: "com-atos"; estadoAtual: string; atos: AtoTramitacao[] }
-  | { tipo: "sem-atos"; estadoAtual: string; nota: string };
+  | { tipo: "sem-atos"; estadoAtual: string; nota: string }
+  // fatia 2b: a matéria chegou a um estado que exige RECEBIMENTO e ninguém recebeu. Os atos ficam de fora de
+  // propósito: o backend recusaria todos (409 `recebimento-pendente`) — o único ato possível é receber.
+  | { tipo: "carga"; estadoAtual: string; carga: VistaCarga };
 
 const NOTA_PADRAO = "Nenhum ato disponível a partir do estado atual.";
 
@@ -30,7 +34,10 @@ export function humanizarGatilho(gatilho: string): string {
   return semSep.charAt(0).toUpperCase() + semSep.slice(1);
 }
 
-export function derivarAcoesTramitacao(t: TramitacaoOut): VistaAcoesTramitacao {
+export function derivarAcoesTramitacao(t: TramitacaoOut, agora: Date = new Date()): VistaAcoesTramitacao {
+  if (t.recebimentoPendente) {
+    return { tipo: "carga", estadoAtual: t.estadoAtual, carga: vistaCarga(t.recebimentoPendente, agora) };
+  }
   const gatilhos = t.gatilhosPossiveis ?? [];
   if (gatilhos.length === 0) {
     return { tipo: "sem-atos", estadoAtual: t.estadoAtual, nota: t.nota ?? NOTA_PADRAO };

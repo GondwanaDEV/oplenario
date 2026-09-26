@@ -200,6 +200,23 @@
        :alegado (contexto->alegado (:contexto m))
        :ator-id (:identidade-id ator) :updated-by (:identidade-id ator) :agora agora})))
 
+;; ---------- Fatia 2b: o RECEBIMENTO assinado da movimentacao ----------
+
+(def ^:private campos-receber ["movimentacao-id"])
+
+(defn receber->dominio
+  "Corpo (wire/in.ReceberMovimentacao) + `proposicao-id` (path, ja' UUID) + `agora` (resolvido na borda) ->
+  {:proposicao-id :transicao-id :agora}. Campo extra e' 400 (mesmo `recusa-campo-extra!` da tramitacao): o
+  cliente nao escolhe quem recebe, nem o estado, nem a hora."
+  [proposicao-id agora wire-in]
+  (when-not (map? wire-in) (invalido! "corpo deve ser objeto JSON" {:campo :corpo}))
+  (recusa-campo-extra! wire-in campos-receber)
+  (let [m (so-esperados wire-in campos-receber)]
+    (validar! wire/ReceberMovimentacao m "corpo de receber movimentacao invalido")
+    {:proposicao-id proposicao-id
+     :transicao-id (->uuid (:movimentacao-id m) :movimentacao-id)
+     :agora agora}))
+
 ;; ---------- Fatia 3: a LEITURA da tramitacao (query-params) ----------
 
 (def ^:private limite-historico-min 1)

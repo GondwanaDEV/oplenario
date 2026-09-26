@@ -42,11 +42,18 @@ export interface ProposicaoDetalheOut {
   texto?: string | null;
 }
 
+export interface RecebimentoOut {
+  recebidoPorNome: string | null;
+  recebidoEm: string;
+  assinaturaAlgoritmo: string;
+}
+
 export interface HistoricoTramitacaoItemOut {
   deEstado: string;
   paraEstado: string;
   gatilho: string;
   ocorridoEm: string;
+  recebimento: RecebimentoOut | null;
 }
 
 export interface ApensacaoOut {
@@ -249,6 +256,15 @@ export interface GatilhoPossivelOut {
   exigeAutorizacao: boolean;
 }
 
+export interface RecebimentoPendenteOut {
+  movimentacaoId: string;
+  deEstado: string | null;
+  estado: string;
+  estadoNome: string;
+  desde: string;
+  restrito: boolean;
+}
+
 export interface TramitacaoOut {
   proposicaoId: string;
   estadoAtual: string;
@@ -258,6 +274,34 @@ export interface TramitacaoOut {
   historicoTruncado: boolean;
   gatilhosPossiveis: GatilhoPossivelOut[];
   nota: string | null;
+  recebimentoPendente: RecebimentoPendenteOut | null;
+}
+
+export interface RecebimentoReciboOut {
+  id: string;
+  proposicaoId: string;
+  movimentacaoId: string;
+  estado: string;
+  recebidoEm: string;
+  assinaturaAlgoritmo: string;
+}
+
+export interface RecebimentoPendenteItemOut {
+  proposicaoId: string;
+  tipo: string;
+  sequencial: number;
+  ano: number;
+  ementa: string;
+  estado: string;
+  estadoNome: string;
+  movimentacaoId: string;
+  deEstado: string | null;
+  desde: string;
+  restrito: boolean;
+}
+
+export interface RecebimentosPendentesOut {
+  itens: RecebimentoPendenteItemOut[];
 }
 
 export interface ModeloRequerimentoOut {

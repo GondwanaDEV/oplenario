@@ -96,3 +96,25 @@
         (is (seq ids-comissoes-dos-pareceres) "nenhum parecer achado — a semente rodou?")
         (is (empty? (clojure.set/difference ids-comissoes-dos-pareceres ids-comissoes-reais))
             "comissao-id do parecer nao bate com nenhuma comissao real da Casa — guard ref orfao")))))
+
+;; Fatia 2b: o rito da demo exige RECEBIMENTO na chegada as comissoes. O acervo recebe (assinado, em nome da
+;; secretaria) toda carga do caminho — senao as materias que ja' sairam de 'em_comissoes' nem teriam saido —
+;; e deixa exatamente 2 em carga, para a fila de pendentes da demo nao nascer vazia.
+(deftest acervo-recebe-as-cargas-e-deixa-duas-na-fila
+  (with-sistema [s]
+    (let [{:keys [ente identidades]} (casa/semear! s)
+          _ (acervo/semear! s ente (:vereador identidades) (:secretaria identidades))
+          repo-leg (:repo-legislativo s)
+          pendentes (repo-legislativo/recebimentos-pendentes repo-leg ente)]
+      (is (= 2 (count pendentes)) "em-comissoes-3 e em-comissoes-4 ficam em carga")
+      (is (every? #(= "em_comissoes" (:estado %)) pendentes))
+      (let [recebida (->> (repo-legislativo/listar-e-contar-proposicoes repo-leg ente {:estado "aguardando_pauta" :pagina 1 :tamanho 1
+                                                                                   :ordenar-por "atualizado_em" :ordenar-dir "desc"})
+                          :itens first :id)
+            {:keys [historico recebimentos]} (repo-legislativo/tramitacao-da-proposicao repo-leg ente recebida 10)
+            chegada (first (filter #(= "em_comissoes" (:para-estado %)) historico))]
+        ;; `uuid?`, nao `= (:secretaria ...)`: o acervo e' idempotente e o ente da demo e' fixo — quem semeia
+        ;; PRIMEIRO no banco (a aridade-3, em outro deftest, recebe em nome do vereador) decide o recebedor, e
+        ;; o kaocha randomiza a ordem. A secretaria como recebedora e' provada pelo seed_demo/e2e.
+        (is (uuid? (:recebido-por (get recebimentos (:id chegada))))
+            "a carga que andou foi recebida, com recibo ligado a movimentacao")))))

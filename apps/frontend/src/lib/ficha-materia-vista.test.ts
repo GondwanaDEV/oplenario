@@ -27,8 +27,8 @@ const fichaBase: FichaMateriaOut = {
     atualizadoEm: "2026-05-12T10:00:00Z",
   },
   tramitacao: [
-    { deEstado: "protocolada", paraEstado: "em_comissoes", gatilho: "distribuir", ocorridoEm: "2026-04-08T09:00:00Z" },
-    { deEstado: "em_comissoes", paraEstado: "em_pauta", gatilho: "incluir_pauta", ocorridoEm: "2026-05-12T10:00:00Z" },
+    { deEstado: "protocolada", paraEstado: "em_comissoes", gatilho: "distribuir", ocorridoEm: "2026-04-08T09:00:00Z", recebimento: null },
+    { deEstado: "em_comissoes", paraEstado: "em_pauta", gatilho: "incluir_pauta", ocorridoEm: "2026-05-12T10:00:00Z", recebimento: null },
   ],
   tramitacaoTruncado: false,
   apensadas: [
@@ -110,6 +110,21 @@ describe("derivarDadosMateria", () => {
 });
 
 describe("derivarTimelineTramitacao", () => {
+  it("fatia 2b: cada movimentação traz o texto do recibo de carga (ou null quando não foi recebida)", () => {
+    const r = derivarTimelineTramitacao([
+      {
+        deEstado: "protocolada",
+        paraEstado: "em_comissoes",
+        gatilho: "despachar",
+        ocorridoEm: "2026-04-08T09:00:00",
+        recebimento: { recebidoPorNome: "Marina Alencar Freire", recebidoEm: "2026-04-08T11:15:00", assinaturaAlgoritmo: "STUB-ICP-v0" },
+      },
+      { deEstado: "em_comissoes", paraEstado: "em_pauta", gatilho: "incluir", ocorridoEm: "2026-05-12T10:00:00", recebimento: null },
+    ]);
+    expect(r[1].recebimentoTexto).toBe("Recebida por Marina Alencar Freire em 08/04/2026, 11:15 · assinada");
+    expect(r[0].recebimentoTexto).toBeNull();
+  });
+
   it("ordena do mais recente pro mais antigo, com rótulos amigáveis de/para (fail-closed via derivarTramitacao)", () => {
     const r = derivarTimelineTramitacao(fichaBase.tramitacao);
     expect(r.map((i) => i.ocorridoEm)).toEqual(["2026-05-12T10:00:00Z", "2026-04-08T09:00:00Z"]);
@@ -128,7 +143,7 @@ describe("derivarTimelineTramitacao", () => {
 
   it("de-estado/para-estado fora do vocabulário ilustrativo -> rótulo HUMANIZADO, sem lançar", () => {
     const r = derivarTimelineTramitacao([
-      { deEstado: "xpto_de", paraEstado: "xpto_para", gatilho: "g", ocorridoEm: "2026-01-01T00:00:00Z" },
+      { deEstado: "xpto_de", paraEstado: "xpto_para", gatilho: "g", ocorridoEm: "2026-01-01T00:00:00Z", recebimento: null },
     ]);
     expect(r[0].rotuloDe).toBe("Xpto de");
     expect(r[0].rotuloPara).toBe("Xpto para");

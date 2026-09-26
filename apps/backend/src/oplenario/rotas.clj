@@ -437,6 +437,8 @@
                                        :resolver-autor (fn [ente-id identidade-id]
                                                          (resolver-autor-vereador repo-cadastros ente-id identidade-id))
                                        :resolver-comissoes resolver-comissoes-fn
+                                       ;; fatia 2b: quem RECEBEU cada movimentacao, no historico da tramitacao
+                                       :nome-na-casa nome-na-casa-fn
                                        :vereador-vinculado? vereador-vinculado?
                                        ;; sec MEDIUM-2 FIX: gate #2 — a rota da Mesa so' registra voto nominal
                                        ;; para quem compoe a Casa com mandato vigente (roster). Mesmo seam
