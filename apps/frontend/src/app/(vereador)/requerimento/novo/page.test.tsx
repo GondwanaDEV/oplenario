@@ -2,11 +2,22 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import PaginaNovoRequerimento from "./page";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), back: vi.fn() }) }));
+const nav = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: nav.push, back: vi.fn() }) }));
+vi.mock("@/lib/use-subscricao", () => ({
+  useColegas: () => ({
+    colegas: [
+      { id: "v-bia", nome: "Bia Lima", partido: "PSB" },
+      { id: "v-caio", nome: "Caio Reis", partido: null },
+    ],
+    estado: "pronto",
+  }),
+}));
 vi.mock("@/lib/auth", () => ({ useAuth: () => ({ token: "tok" }) }));
 
 const previa = vi.fn();
 const protocolar = vi.fn();
+const enviarParaSubscricao = vi.fn();
 const useNovoMock = vi.fn();
 vi.mock("@/lib/use-novo-requerimento", () => ({ useNovoRequerimento: (...a: unknown[]) => useNovoMock(...a) }));
 
@@ -16,7 +27,7 @@ const modelos = [
 ];
 
 function montar(over: Record<string, unknown> = {}) {
-  useNovoMock.mockReturnValue({ modelos, estadoModelos: "pronto", estado: "ocioso", erro: null, previa, protocolar, ...over });
+  useNovoMock.mockReturnValue({ modelos, estadoModelos: "pronto", estado: "ocioso", erro: null, previa, protocolar, enviarParaSubscricao, ...over });
   return render(<PaginaNovoRequerimento />);
 }
 
@@ -24,6 +35,8 @@ afterEach(() => {
   cleanup();
   previa.mockReset();
   protocolar.mockReset();
+  enviarParaSubscricao.mockReset();
+  nav.push.mockReset();
 });
 
 function preencher() {
@@ -115,5 +128,43 @@ describe("Novo requerimento — passo 2 (revisar e assinar)", () => {
     useNovoMock.mockReturnValue({ modelos, estadoModelos: "pronto", estado: "erro", erro: "falha no servidor", previa, protocolar });
     rerender(<PaginaNovoRequerimento />);
     expect(screen.getByText(/Não foi possível protocolar: falha no servidor/)).toBeTruthy();
+  });
+});
+
+describe("Novo requerimento — coletivo (fatia 2c)", () => {
+  it("com coautor: não abre a folha de assinatura; envia para subscrição e vai para a proposta", async () => {
+    previa.mockResolvedValue("TEXTO FORMATADO");
+    enviarParaSubscricao.mockResolvedValue({ id: "p-1" });
+    montar();
+    preencher();
+    fireEvent.change(screen.getByLabelText("Adicionar colega"), { target: { value: "bia" } });
+    fireEvent.click(screen.getByRole("button", { name: /Bia Lima/ }));
+    expect(screen.getByRole("list", { name: "Coautores convidados" }).textContent).toContain("Bia Lima");
+    fireEvent.click(screen.getByRole("button", { name: /Ver o texto formatado/ }));
+    await screen.findByText("TEXTO FORMATADO");
+    expect(screen.queryByRole("button", { name: "Revisar e assinar" })).toBeNull();
+    expect(screen.getByText(/Antes do protocolo, as subscrições/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Enviar para subscrição" }));
+    await waitFor(() =>
+      expect(enviarParaSubscricao).toHaveBeenCalledWith({
+        modeloId: "m1",
+        campos: { destinatario: "Secretaria de Obras", justificativa: "Transparência." },
+        ementa: "Informações sobre a obra X",
+        coautores: ["v-bia"],
+      }),
+    );
+    await waitFor(() => expect(nav.push).toHaveBeenCalledWith(expect.stringContaining("/requerimento/proposta/p-1")));
+  });
+
+  it("tirar o coautor volta ao fluxo individual", async () => {
+    previa.mockResolvedValue("TEXTO");
+    montar();
+    preencher();
+    fireEvent.change(screen.getByLabelText("Adicionar colega"), { target: { value: "caio" } });
+    fireEvent.click(screen.getByRole("button", { name: /Caio Reis/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Tirar Caio Reis" }));
+    fireEvent.click(screen.getByRole("button", { name: /Ver o texto formatado/ }));
+    await screen.findByText("TEXTO");
+    expect(screen.getByRole("button", { name: "Revisar e assinar" })).toBeTruthy();
   });
 });

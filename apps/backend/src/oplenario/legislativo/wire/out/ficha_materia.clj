@@ -24,6 +24,13 @@
    ;; fatia 2b: o MESMO recibo de carga da rota irma (TramitacaoHistoricoItemOut — os dois mudam juntos)
    [:recebimento [:maybe proposicao/RecebimentoOut]]])
 
+(def CoautorOut
+  "Fatia 2c — um coautor que CONSTA do requerimento coletivo (subscricao confirmada, com assinatura, antes do
+  protocolo). Nome como estava no convite; o id do cadastro nao sai (a tela so' mostra quem assinou)."
+  [:map {:closed true}
+   [:nome :string]
+   [:assinado-em :string]])
+
 (def ApensacaoOut
   "Uma apensada ATIVA de nivel 1 (nao a cadeia recursiva — decisao de escopo desta fatia)."
   [:map {:closed true}
@@ -77,4 +84,5 @@
    [:emendas [:sequential EmendaResumoOut]]
    [:emendas-truncado :boolean]
    [:pareceres [:sequential ParecerResumoOut]]
-   [:pareceres-truncado :boolean]])
+   [:pareceres-truncado :boolean]
+   [:coautores [:sequential CoautorOut]]])

@@ -609,6 +609,89 @@
         (http/json-resposta 201 (adapters-out-requerimento/protocolado->wire r))
         (http/json-resposta 404 {:erro "modelo de requerimento nao encontrado"})))))
 
+;; ========================= Fatia 2c: o requerimento COLETIVO (subscricao) =========================
+
+(defn- conflito-subscricao
+  "Os dois conflitos da subscricao -> 409 com `motivo` proprio (a tela decide o que dizer sem casar prosa)."
+  [e]
+  (case (:tipo (ex-data e))
+    :conflito/proposta-protocolada
+    (http/json-resposta 409 {:motivo "proposta-protocolada"
+                             :erro "este requerimento ja' foi protocolado — a lista de coautores fechou"})
+    :conflito/subscricao-respondida
+    (http/json-resposta 409 {:motivo "subscricao-respondida" :erro "voce ja' respondeu a este convite"})
+    (throw e)))
+
+(defn- meus-colegas-handler
+  "GET /meu/colegas — quem o vereador pode convidar a subscrever (mandato vigente nesta Casa, menos ele)."
+  [resolver-autor colegas-da-casa]
+  (fn [req]
+    (if-let [cs (controllers/colegas-para-subscricao resolver-autor colegas-da-casa (:ator req))]
+      (http/json-resposta 200 (adapters-out-requerimento/colegas->wire cs))
+      (http/json-resposta 404 {:erro "seu login nao tem cadastro de vereador nesta Casa"}))))
+
+(defn- criar-proposta-handler
+  "POST /meu/requerimentos/propostas — o requerimento coletivo: grava o texto e convida os coautores (201).
+  Nada e' assinado nem numerado aqui; o autor protocola depois, na propria proposta."
+  [repo-leg resolver-autor colegas-da-casa relogio]
+  (fn [req]
+    (let [m (adapters-in-requerimento/proposta->dominio (:json-params req))]
+      (if-let [p (controllers/criar-proposta-requerimento repo-leg resolver-autor colegas-da-casa (:ator req)
+                                                          (assoc m :hoje (tempo/hoje relogio zona-civil)))]
+        (http/json-resposta 201 (adapters-out-requerimento/proposta->wire p))
+        (http/json-resposta 404 {:erro "modelo de requerimento nao encontrado"})))))
+
+(defn- minhas-propostas-handler
+  "GET /meu/requerimentos/propostas — as propostas do autor ainda esperando subscricoes."
+  [repo-leg resolver-vereador]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out-requerimento/propostas->wire
+                              (controllers/propostas-abertas repo-leg resolver-vereador (:ator req))))))
+
+(defn- proposta-handler
+  "GET /meu/requerimentos/propostas/:id — so' para o autor e os convidados; os demais recebem 404."
+  [repo-leg resolver-vereador]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [p (controllers/buscar-proposta-requerimento repo-leg resolver-vereador (:ator req) id)]
+        (http/json-resposta 200 (adapters-out-requerimento/proposta->wire p))
+        (http/json-resposta 404 {:erro "proposta de requerimento nao encontrada"})))))
+
+(defn- responder-subscricao-handler
+  "POST /meu/requerimentos/propostas/:id/resposta — o coautor confirma (assina o texto congelado, STUB-ICP-v0)
+  ou recusa. 200; 404 sem convite; 409 ja' respondeu / ja' protocolada."
+  [repo-leg resolver-vereador]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          acao (adapters-in-requerimento/resposta->dominio (:json-params req))]
+      (try
+        (if-let [r (controllers/responder-subscricao repo-leg resolver-vereador (assinador-icp/assinador-stub)
+                                                     (:ator req) id acao)]
+          (http/json-resposta 200 (adapters-out-requerimento/resposta->wire r))
+          (http/json-resposta 404 {:erro "voce nao tem convite para subscrever este requerimento"}))
+        (catch clojure.lang.ExceptionInfo e (conflito-subscricao e))))))
+
+(defn- protocolar-proposta-handler
+  "POST /meu/requerimentos/propostas/:id/protocolo — o AUTOR assina e protocola (201). Entram so' os coautores
+  que confirmaram. 404 proposta de outro/inexistente; 409 ja' protocolada."
+  [repo-leg resolver-municipio resolver-autor relogio]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (try
+        (if-let [r (controllers/protocolar-proposta-requerimento repo-leg resolver-municipio resolver-autor
+                                                                 (assinador-icp/assinador-stub) (:ator req) id
+                                                                 (tempo/hoje relogio zona-civil))]
+          (http/json-resposta 201 (adapters-out-requerimento/coletivo-protocolado->wire r))
+          (http/json-resposta 404 {:erro "proposta de requerimento nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e (conflito-subscricao e))))))
+
+(defn- meus-convites-handler
+  "GET /meu/subscricoes — os pedidos de subscricao esperando a resposta deste vereador."
+  [repo-leg resolver-vereador]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out-requerimento/convites->wire
+                              (controllers/convites-de-subscricao repo-leg resolver-vereador (:ator req))))))
+
 ;; ========================= Onda B Slice 6: expediente (documentos + protocolo geral) =========================
 
 (defn- listar-modelos-documento-handler
@@ -877,8 +960,10 @@
   movimentacao no historico; ausente, o historico sai sem nome (degrada p/ 'recebida', nunca inventa)."
   [{:keys [auth repo-legislativo consultar-sessao sessao-fechada? pode-ver-votacao-aberta? resolver-municipio
            resolver-vereador resolver-comissoes vereador-vinculado? vereador-no-roster? membros-da-casa
-           registro relogio resolver-autor nome-na-casa]}]
+           registro relogio resolver-autor nome-na-casa colegas-da-casa]}]
   (let [nome-na-casa (or nome-na-casa (constantly nil))
+        ;; fatia 2c: sem o seam, ninguem e' colega (fail-closed: nenhum convite passa na validacao)
+        colegas-da-casa (or colegas-da-casa (constantly []))
         papel (it/exige-papel "secretario")
         papel-vereador (it/exige-papel "vereador")
         ;; LEITURA do acervo aberta a secretario OU vereador: o vereador legisla sobre a materia, entao
@@ -993,6 +1078,26 @@
       ["/meu/requerimentos/previa" :post
        [auth papel-vereador it/corpo-json (previa-requerimento-handler repo-legislativo resolver-autor relogio)]
        :route-name :legislativo/previa-requerimento]
+      ;; fatia 2c — requerimento COLETIVO (subscricao antes do protocolo)
+      ["/meu/colegas" :get [auth papel-vereador (meus-colegas-handler resolver-autor colegas-da-casa)]
+       :route-name :legislativo/meus-colegas]
+      ["/meu/subscricoes" :get [auth papel-vereador (meus-convites-handler repo-legislativo resolver-vereador)]
+       :route-name :legislativo/meus-convites-subscricao]
+      ["/meu/requerimentos/propostas" :get
+       [auth papel-vereador (minhas-propostas-handler repo-legislativo resolver-vereador)]
+       :route-name :legislativo/minhas-propostas-requerimento]
+      ["/meu/requerimentos/propostas" :post
+       [auth papel-vereador it/corpo-json (criar-proposta-handler repo-legislativo resolver-autor colegas-da-casa relogio)]
+       :route-name :legislativo/criar-proposta-requerimento]
+      ["/meu/requerimentos/propostas/:id" :get
+       [auth papel-vereador (proposta-handler repo-legislativo resolver-vereador)]
+       :route-name :legislativo/proposta-requerimento]
+      ["/meu/requerimentos/propostas/:id/resposta" :post
+       [auth papel-vereador it/corpo-json (responder-subscricao-handler repo-legislativo resolver-vereador)]
+       :route-name :legislativo/responder-subscricao]
+      ["/meu/requerimentos/propostas/:id/protocolo" :post
+       [auth papel-vereador (protocolar-proposta-handler repo-legislativo resolver-municipio resolver-autor relogio)]
+       :route-name :legislativo/protocolar-proposta-requerimento]
       ["/meu/requerimentos" :post
        [auth papel-vereador it/corpo-json
         (protocolar-requerimento-handler repo-legislativo resolver-municipio resolver-autor relogio)]

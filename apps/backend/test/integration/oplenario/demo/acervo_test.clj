@@ -118,3 +118,17 @@
         ;; o kaocha randomiza a ordem. A secretaria como recebedora e' provada pelo seed_demo/e2e.
         (is (uuid? (:recebido-por (get recebimentos (:id chegada))))
             "a carga que andou foi recebida, com recibo ligado a movimentacao")))))
+
+;; Fatia 2c: o requerimento COLETIVO da demo — o presidente convida o vereador da jornada J3, que ve o pedido na home.
+(deftest acervo-deixa-um-pedido-de-subscricao-para-o-vereador
+  (with-sistema [s]
+    (let [{:keys [ente identidades]} (casa/semear! s)
+          _ (acervo/semear! s ente (:vereador identidades) (:secretaria identidades))
+          id (acervo/semear-proposta-coletiva! s ente (:presidente identidades) (:vereador identidades))
+          repo-leg (:repo-legislativo s)
+          vereador-id (:id (repo-cadastros/vereador-por-identidade (:repo-cadastros s) ente (:vereador identidades)))]
+      (is (some? id))
+      (is (some #(= id (:proposta-id %)) (repo-legislativo/convites-de-subscricao repo-leg ente vereador-id))
+          "o vereador da demo tem o pedido do presidente esperando resposta")
+      (is (= id (acervo/semear-proposta-coletiva! s ente (:presidente identidades) (:vereador identidades)))
+          "idempotente: rodar de novo rele, nao convida duas vezes"))))

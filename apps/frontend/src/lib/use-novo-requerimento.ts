@@ -4,6 +4,8 @@
 //   GET  /api/meu/modelos-requerimento   → os modelos da Casa + os campos que cada um pede
 //   POST /api/meu/requerimentos/previa   → o texto EXATO que será assinado (autor e data do servidor)
 //   POST /api/meu/requerimentos          → assina e protocola (201)
+//   POST /api/meu/requerimentos/propostas → (fatia 2c) com COAUTORES: grava o texto e convida; nada é assinado
+//                                            nem numerado ainda — o autor protocola depois, na proposta
 // Autor, data e texto final nunca saem daqui: o servidor resolve do login, do relógio e do modelo. Tipos
 // GERADOS (contrato-legislativo.gen.ts). Os `campos` vão com as chaves do modelo INTACTAS (não passam pelo
 // kebab/camel — são nomes de placeholder, não chaves de contrato).
@@ -11,7 +13,12 @@
 import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
-import type { ModeloRequerimentoOut, ModelosRequerimentoOut, RequerimentoProtocoladoOut } from "./contrato-legislativo.gen";
+import type {
+  ModeloRequerimentoOut,
+  ModelosRequerimentoOut,
+  PropostaRequerimentoOut,
+  RequerimentoProtocoladoOut,
+} from "./contrato-legislativo.gen";
 import { semCredencial } from "./modo";
 
 type EstadoLeitura = "carregando" | "pronto" | "erro";
@@ -119,7 +126,17 @@ export function useNovoRequerimento(token: string | null) {
     );
   }
 
+  /** Fatia 2c — requerimento coletivo: envia para subscrição dos coautores (vereador-ids). */
+  function enviarParaSubscricao(r: RascunhoRequerimento & { coautores: string[] }): Promise<PropostaRequerimentoOut> {
+    return enviar<PropostaRequerimentoOut>(
+      "/api/meu/requerimentos/propostas",
+      { "modelo-id": r.modeloId, campos: r.campos, ementa: r.ementa, coautores: r.coautores },
+      "falha ao enviar para subscrição",
+    );
+  }
+
   return {
+    enviarParaSubscricao,
     modelos,
     estadoModelos: semCredencial(token) ? ("erro" as EstadoLeitura) : estadoModelos,
     estado,

@@ -40,3 +40,25 @@
       (invalido! "ementa nao pode ser vazia" {:campo :ementa}))
     {:id (random-uuid) :modelo-id (->uuid (:modelo-id mp) :modelo-id) :campos (or (:campos mp) {})
      :ementa (:ementa mp)}))
+
+;; ---------- fatia 2c: o requerimento COLETIVO ----------
+
+(defn proposta->dominio
+  "Corpo (wire/in.CriarPropostaRequerimento) -> {:id :modelo-id :campos :ementa :coautores}. `:id` novo (a proposta)."
+  [json]
+  (when-not (map? json)
+    (invalido! "corpo deve ser objeto JSON {modelo-id, campos, ementa, coautores}" {:campo :corpo}))
+  (let [mp (so-esperados json ["modelo-id" "campos" "ementa" "coautores"])]
+    (validar! wire/CriarPropostaRequerimento mp "corpo de proposta de requerimento invalido")
+    (when (re-matches #"\s*" (:ementa mp))
+      (invalido! "ementa nao pode ser vazia" {:campo :ementa}))
+    {:id (random-uuid) :modelo-id (->uuid (:modelo-id mp) :modelo-id) :campos (or (:campos mp) {})
+     :ementa (:ementa mp) :coautores (mapv #(->uuid % :coautores) (:coautores mp))}))
+
+(defn resposta->dominio
+  "Corpo (wire/in.ResponderSubscricao) -> :confirmar | :recusar."
+  [json]
+  (when-not (map? json) (invalido! "corpo deve ser objeto JSON {acao}" {:campo :corpo}))
+  (let [mp (so-esperados json ["acao"])]
+    (validar! wire/ResponderSubscricao mp "corpo de resposta de subscricao invalido")
+    (keyword (:acao mp))))

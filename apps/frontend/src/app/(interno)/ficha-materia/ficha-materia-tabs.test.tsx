@@ -31,6 +31,7 @@ const ficha: FichaMateriaOut = {
     { id: "p1", comissaoId: "9119889e-1111-4222-8333-444444444444", relatorId: "r1", votoRelator: "favoravel", estado: "aprovado" },
   ],
   pareceresTruncado: false,
+  coautores: [],
 };
 
 describe("FichaMateriaTabs", () => {

@@ -6,6 +6,8 @@
 //   1. Escrever — escolhe um MODELO da Casa, dá a ementa e preenche os campos que o modelo pede.
 //   2. Revisar e assinar — o SERVIDOR monta o texto (autor do login, data de hoje) e a tela o mostra na
 //      ilha-papel; "Revisar e assinar" abre a folha de confirmação; confirmar assina e protocola.
+// Fatia 2c: com COAUTORES escolhidos no passo 1, o passo 2 não assina — "Enviar para subscrição" grava o texto e
+// convida os colegas; o autor assina e protocola depois, na página da proposta (/requerimento/proposta/:id).
 // A IA de redação (copiloto, feature 3.11) entra depois NESTE formulário — hoje o texto vem do modelo.
 //
 // A folha de confirmação e a ilha-papel REUSAM o CSS da assinatura do parecer (mesmo ritual, mesma
@@ -17,16 +19,22 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { useNovoRequerimento } from "@/lib/use-novo-requerimento";
+import { useColegas } from "@/lib/use-subscricao";
+import { Coautores } from "../coautores";
 import { campoLongo, faltando, podeVerPrevia, rotuloCampo, seloDaAssinatura } from "@/lib/requerimento-vista";
 import type { RequerimentoProtocoladoOut } from "@/lib/contrato-legislativo.gen";
 import { comToken } from "@/lib/nav";
 import "../../parecer/[id]/assinar/assinar.css";
 import "./requerimento.css";
+import "../subscricao.css";
 
 export default function PaginaNovoRequerimento() {
   const router = useRouter();
   const { token } = useAuth();
-  const { modelos, estadoModelos, estado, erro, previa, protocolar } = useNovoRequerimento(token);
+  const { modelos, estadoModelos, estado, erro, previa, protocolar, enviarParaSubscricao } = useNovoRequerimento(token);
+  const { colegas } = useColegas(token);
+  const [coautores, setCoautores] = useState<string[]>([]);
+  const coletivo = coautores.length > 0;
 
   const [modeloId, setModeloId] = useState<string | null>(null);
   const [ementa, setEmenta] = useState("");
@@ -59,6 +67,16 @@ export default function PaginaNovoRequerimento() {
       setRecibo(r);
     } catch {
       // a folha mostra `erro`
+    }
+  }
+
+  async function enviarSubscricao() {
+    if (!modeloId) return;
+    try {
+      const p = await enviarParaSubscricao({ modeloId, campos: camposDoModelo, ementa: ementa.trim(), coautores });
+      router.push(comToken(`/requerimento/proposta/${p.id}`, token));
+    } catch {
+      // a mensagem do servidor já está em `erro`
     }
   }
 
@@ -178,6 +196,7 @@ export default function PaginaNovoRequerimento() {
                   </div>
                 ))}
                 <p className="req-ajuda">Seu nome e a data de hoje entram no texto automaticamente.</p>
+                <Coautores colegas={colegas} selecionados={coautores} onMudar={setCoautores} />
                 {erro && (
                   <p role="alert" className="erro-inline">
                     {erro}
@@ -209,24 +228,50 @@ export default function PaginaNovoRequerimento() {
             </div>
           </section>
 
-          <div className="sumario">
-            <h3>O que você está assinando</h3>
-            <p>
-              Ao confirmar, o requerimento é <b>protocolado</b> com número oficial e entra na tramitação da Casa.
-            </p>
-            <p>
-              A assinatura fica <b>registrada</b> com o seu nome, data e hora.
-            </p>
-          </div>
+          {coletivo ? (
+            <div className="sumario">
+              <h3>Antes do protocolo, as subscrições</h3>
+              <p>
+                {coautores.length === 1 ? "O colega convidado recebe" : `Os ${coautores.length} colegas convidados recebem`}{" "}
+                o pedido e confirmam com a própria assinatura, sobre <b>este texto</b>.
+              </p>
+              <p>
+                Você acompanha as respostas e <b>protocola quando quiser</b>. Quem não tiver confirmado até lá não consta.
+              </p>
+            </div>
+          ) : (
+            <div className="sumario">
+              <h3>O que você está assinando</h3>
+              <p>
+                Ao confirmar, o requerimento é <b>protocolado</b> com número oficial e entra na tramitação da Casa.
+              </p>
+              <p>
+                A assinatura fica <b>registrada</b> com o seu nome, data e hora.
+              </p>
+            </div>
+          )}
           <button type="button" className="btn btn-fantasma req-editar" onClick={() => setTexto(null)}>
             Editar
           </button>
 
           <div className="assinar-bar">
             <div className="assinar-bar-in">
-              <button className="btn btn-primaria" type="button" onClick={() => setSheetAberta(true)}>
-                Revisar e assinar
-              </button>
+              {coletivo ? (
+                <>
+                  {erro && (
+                    <p role="alert" className="erro-inline">
+                      {erro}
+                    </p>
+                  )}
+                  <button className="btn btn-primaria" type="button" onClick={enviarSubscricao} disabled={enviando}>
+                    {enviando ? "Enviando…" : "Enviar para subscrição"}
+                  </button>
+                </>
+              ) : (
+                <button className="btn btn-primaria" type="button" onClick={() => setSheetAberta(true)}>
+                  Revisar e assinar
+                </button>
+              )}
             </div>
           </div>
         </>

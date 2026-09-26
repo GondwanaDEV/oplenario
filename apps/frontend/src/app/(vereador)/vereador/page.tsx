@@ -18,6 +18,7 @@ import { useAuth } from "@/lib/auth";
 import { useMeuPainel } from "@/lib/use-meu-painel";
 import { useSessoes, type EstadoSessoes } from "@/lib/use-sessoes";
 import { useAcusarCiencia } from "@/lib/use-acusar-ciencia";
+import { useSubscricoesHome } from "@/lib/use-subscricao";
 import { derivarHome, type HomeVereadorVista } from "@/lib/meu-painel-vista";
 import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
 import { formatarTipoSessao } from "@/lib/pauta-convocacao-vista";
@@ -36,6 +37,8 @@ export default function PaginaHomeVereador() {
   const { sessoes, estado: estadoSessoes } = useSessoes(token);
   const { acusar, estado: estadoCiencia, erro: erroCiencia } = useAcusarCiencia(token);
   const vista = derivarHome(dados, sessoes);
+  // fatia 2c: pedidos de subscrição para mim + meus requerimentos coletivos esperando coautores
+  const { convites, propostas } = useSubscricoesHome(token);
 
   if (estado === "erro") {
     return (
@@ -103,6 +106,50 @@ export default function PaginaHomeVereador() {
           )}
           {vista.ciencias.map((c) => (
             <CartaoCiencia key={c.parecerId} ciencia={c} onDarCiencia={() => darCiencia(c)} enviando={estadoCiencia === "enviando"} />
+          ))}
+        </section>
+      )}
+
+      {convites.length > 0 && (
+        <section aria-label="Pedidos de subscrição">
+          <h2 className="secao-tit">Pedidos de subscrição</h2>
+          {convites.map((c) => (
+            <article key={c.propostaId} className="card">
+              <div className="card-top">
+                <span className="num">{c.tipoRequerimento}</span>
+              </div>
+              <h3>{c.ementa}</h3>
+              <p className="meta">{c.autorNome} convidou você para subscrever.</p>
+              <div className="card-acao">
+                <Link className="btn btn-primaria btn-mini" href={comToken(`/requerimento/proposta/${c.propostaId}`, token)}>
+                  Ler e responder
+                </Link>
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
+
+      {propostas.length > 0 && (
+        <section aria-label="Requerimentos esperando coautores">
+          <h2 className="secao-tit">Esperando coautores</h2>
+          {propostas.map((p) => (
+            <article key={p.id} className="card">
+              <div className="card-top">
+                <span className="num">{p.tipoRequerimento}</span>
+              </div>
+              <h3>{p.ementa}</h3>
+              <p className="meta">
+                {p.confirmadas} {p.confirmadas === 1 ? "confirmou" : "confirmaram"} · {p.pendentes}{" "}
+                {p.pendentes === 1 ? "aguarda" : "aguardam"}
+                {p.recusadas > 0 ? ` · ${p.recusadas} ${p.recusadas === 1 ? "recusou" : "recusaram"}` : ""}
+              </p>
+              <div className="card-acao">
+                <Link className="btn btn-contorno btn-mini" href={comToken(`/requerimento/proposta/${p.id}`, token)}>
+                  Acompanhar e protocolar
+                </Link>
+              </div>
+            </article>
           ))}
         </section>
       )}

@@ -81,6 +81,11 @@ export interface ParecerResumoOut {
   estado: string;
 }
 
+export interface CoautorOut {
+  nome: string;
+  assinadoEm: string;
+}
+
 export interface FichaMateriaOut {
   proposicao: ProposicaoDetalheOut;
   tramitacao: HistoricoTramitacaoItemOut[];
@@ -91,6 +96,7 @@ export interface FichaMateriaOut {
   emendasTruncado: boolean;
   pareceres: ParecerResumoOut[];
   pareceresTruncado: boolean;
+  coautores: CoautorOut[];
 }
 
 export interface ObjetoResumoOut {
@@ -325,4 +331,76 @@ export interface RequerimentoProtocoladoOut {
   urnLex: string;
   estado: string;
   assinaturaAlgoritmo: string;
+}
+
+export interface ColegaOut {
+  id: string;
+  nome: string;
+  partido: string | null;
+}
+
+export interface ColegasOut {
+  itens: ColegaOut[];
+}
+
+export interface SubscricaoOut {
+  vereadorNome: string;
+  estado: "pendente" | "confirmada" | "recusada" | "nao_consta";
+  respondidaEm: string | null;
+}
+
+export interface PropostaRequerimentoOut {
+  id: string;
+  ementa: string;
+  tipoRequerimento: string;
+  texto: string;
+  autorNome: string;
+  estado: "aguardando_subscricoes" | "protocolada";
+  proposicaoId: string | null;
+  criadaEm: string;
+  souAutor: boolean;
+  minhaSubscricao: string | null;
+  subscricoes: SubscricaoOut[];
+}
+
+export interface PropostaResumoOut {
+  id: string;
+  ementa: string;
+  tipoRequerimento: string;
+  criadaEm: string;
+  confirmadas: number;
+  pendentes: number;
+  recusadas: number;
+}
+
+export interface PropostasOut {
+  itens: PropostaResumoOut[];
+}
+
+export interface ConviteSubscricaoOut {
+  propostaId: string;
+  ementa: string;
+  tipoRequerimento: string;
+  autorNome: string;
+  convidadaEm: string;
+}
+
+export interface ConvitesSubscricaoOut {
+  itens: ConviteSubscricaoOut[];
+}
+
+export interface RespostaSubscricaoOut {
+  propostaId: string;
+  estado: "confirmada" | "recusada";
+  assinaturaAlgoritmo: string | null;
+}
+
+export interface RequerimentoColetivoProtocoladoOut {
+  proposicaoId: string;
+  ano: number;
+  sequencial: number;
+  urnLex: string;
+  estado: string;
+  assinaturaAlgoritmo: string;
+  coautores: string[];
 }
