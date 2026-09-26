@@ -44,8 +44,8 @@ JSON Schema para ferramentas.
 | 2 | Catálogo de ações | **CONFIRMADO — B** + 2 regras (§6) |
 | 3 | Identidade do agente | **CONFIRMADO** — 3.1 (b) + 3.2 a 3.5 (§7) |
 | 4 | Fronteira do ato | **CONFIRMADO** — 4.2 (B) + 4.1, 4.3–4.6 (§7a) |
-| 5 | Onde roda o agente | Direção confirmada (satélite de IA, chamando o core pelo catálogo; core nunca embute modelo); **sub-decisões em debate (§7b)** |
-| 6 | MCP externo | A abrir — explicação no §8 |
+| 5 | Onde roda o agente | **CONFIRMADO** — 5.1 (b), 5.2 (b) + 5.3–5.7 (§7b) |
+| 6 | MCP externo | **Sub-decisões em debate (§8)** |
 | 7 | Conhecimento (LOM/RI/leis em camadas por município) | Direção confirmada; a abrir |
 | 8 | Qualidade e custo | Direção confirmada; a abrir |
 
@@ -144,18 +144,18 @@ texto de terceiros. As três classes vêm do catálogo (Eixo 2): `leitura`, `ras
 - **4.6 Ligação com o que existe:** a pessoa que confirma um ato vindo de rascunho de IA assume a autoria
   ("revisado e assinado por"), como a Camada de Confiança já exige; R-IA-1 continua — sem IA, a tela faz tudo.
 
-## 7b. Eixo 5 — Onde roda o agente · EM DEBATE
+## 7b. Eixo 5 — Onde roda o agente · CONFIRMADO (26/09/2026)
 
 Direção confirmada: o laço do agente roda no **satélite de IA** (Python, §22.2) e chama o core **pelo catálogo**; o
-core nunca embute modelo. Sub-decisões propostas:
+core nunca embute modelo. Sub-decisões (todas confirmadas):
 
 - **5.1 Por onde o satélite chama o core.** (a) API HTTP interna própria · (b) **o mesmo servidor MCP** que os
-  clientes de fora usarão (Eixo 6), com outro login e outro conjunto de ferramentas. *(Recomendado: b — um caminho
+  clientes de fora usarão (Eixo 6), com outro login e outro conjunto de ferramentas. **Confirmado: b** *(um caminho
   só; o MCP externo deixa de ser um produto à parte e vira "o mesmo, aberto para fora".)* O servidor MCP mora no
   **core, como mais um adaptador de entrada** (Inv. 5), ao lado do HTTP; cada módulo declara as entradas do
   catálogo que são suas. Vira **ADR** na implementação (nova peça na silhueta do ADR-0001).
 - **5.2 Por onde a tela fala com o agente.** (a) navegador → satélite direto · (b) **navegador → core → satélite**.
-  *(Recomendado: b.)* O core emite o token delegado (3.4), aplica tenancy, limite por Casa e auditoria num lugar
+  **Confirmado: b.** O core emite o token delegado (3.4), aplica tenancy, limite por Casa e auditoria num lugar
   só, e devolve a resposta em **SSE**, que já é o protocolo de streaming (§22.3.2, §22.6 eixo G). O satélite nunca
   fica exposto ao navegador.
 - **5.3 Onde fica o registro de cada execução.** A conversa/execução (mensagens, ferramentas chamadas) é artefato
@@ -175,19 +175,43 @@ core nunca embute modelo. Sub-decisões propostas:
   partir da tela; institucional = fila, disparado por **evento de integração** que já existe (ex.:
   `ProposicaoProtocolada` → conferência contra LOM/RI).
 
-## 8. Eixo 6 — MCP externo · explicação (a abrir)
+## 8. Eixo 6 — MCP externo · EM DEBATE
 
-Até aqui "agente" = IA que **nós** construímos dentro do O Plenário. O Eixo 6 trata de **deixar IAs que não são
-nossas se conectarem** ao O Plenário via MCP: o vereador no Claude/ChatGPT dele perguntando "quais projetos meus
-estão parados na comissão?"; jornalista/cidadão consultando dados públicos; outro sistema (Prefeitura) usando o
-mesmo caminho.
+**O que é:** deixar IAs que **não são nossas** (o Claude/ChatGPT do vereador, a IA de um jornalista, outro sistema)
+se conectarem ao O Plenário. Pelo Eixo 5.1 é **o mesmo servidor MCP** dos nossos agentes, com outro login e outro
+conjunto de ferramentas.
 
-Decisões que o eixo terá de tomar: para quem abrir e em que ordem · como a IA de fora faz login em nome da pessoa
-(Keycloak) · responsabilidade LGPD quando o dado da Câmara vai para o modelo que a pessoa escolheu (sai do nosso
-controle) · custo e limite de abuso.
+Sub-decisões propostas:
 
-Direção provável a recomendar, em fases: (1) **dados públicos**, sem login; (2) **vereador autenticado, só
-consultas**; (3) ações com efeito.
+- **6.1 Para quem e em que ordem.** (A) tudo de uma vez · (B) **em fases** · (C) só agentes internos por ora.
+  *(Recomendado: B.)*
+  1. **Público, sem login, só consulta** — proposições, pautas, votações nominais, atas publicadas, leis: o que já
+     está no portal/dados abertos. Risco baixo; argumento de venda para o presidente da Mesa (transparência) e
+     para observatórios sociais, imprensa, pesquisa.
+  2. **Vereador e servidor autenticados** — leitura + rascunho (o rascunho cai na plataforma para a pessoa revisar).
+  3. **Propostas de ato** — sempre confirmadas na tela da plataforma (4.2 B), nunca na IA de fora.
+  Integração sistema-a-sistema (Prefeitura, contábil) **fica fora**: é outro tipo de principal e pertence à API
+  pública da V2 (Inv. 5).
+- **6.2 Login e município.** Padrão de autorização do MCP (OAuth 2.1): o **Keycloak** é o servidor de autorização;
+  a pessoa entra com o login normal (passkey), vê a tela de consentimento (3.3: o que a IA pode, por quanto tempo,
+  revogável) e o token sai com `ente_id` + pessoa + cliente como agente (3.4). **Um endereço MCP por Casa**, no
+  mesmo domínio do portal white-label — o token é sempre de uma Casa, como hoje. Consulta agregando vários
+  municípios fica parqueada.
+- **6.3 LGPD — o dado vai para a IA que a pessoa escolheu.** A Câmara é controladora; mandar dado a um fornecedor
+  que ela não contratou pode ser compartilhamento irregular. Proposta:
+  - **(i) a saída do MCP externo passa pelo MESMO filtro fail-closed** que protege a nossa saída para o LLM
+    (`prototipos/governanca-ia/`, B1–B4): só cruza o que é comprovadamente público ou do próprio trabalho da
+    pessoa sem dado pessoal de terceiro; sigiloso/restrito nunca sai. É o mesmo problema (dado saindo para LLM de
+    terceiro), então é o mesmo mecanismo — não um segundo;
+  - **(ii) o `admin_ente` escolhe quais clientes externos podem se conectar** com login (padrão: nenhum; o público
+    fica aberto);
+  - `[GAP]` jurídico: confirmar (i)+(ii) na passada de LGPD (art. 33 e termo de uso do agente público).
+- **6.4 Custo e abuso.** O modelo roda na conta de quem conecta — nosso custo é só consulta. Limite por token/IP e
+  por Casa como **tunable** (§22.5 disc. 7); camada pública com cache. Preço (incluso no plano ou à parte) =
+  `[GAP]` comercial, não de arquitetura.
+- **6.5 O catálogo externo é contrato público.** Promover uma ferramenta para fora é decisão com revisão, versionada,
+  com mudança incompatível coexistindo em transição — **a mesma disciplina dos eventos de integração**
+  (§22.3.3). O conjunto público começa pequeno.
 
 ## 9. Contexto que alimenta os eixos seguintes
 
@@ -202,6 +226,7 @@ consultas**; (3) ações com efeito.
 
 | Data | O quê |
 |---|---|
+| 26/09/2026 | Eixo 5 CONFIRMADO (5.1 b, 5.2 b + demais); Eixo 6 aberto em sub-decisões |
 | 26/09/2026 | Eixo 4 CONFIRMADO (4.2 B + demais); Eixo 5 aberto em sub-decisões |
 | 26/09/2026 | Eixo 3 CONFIRMADO (3.1 b + 3.2–3.5); Eixo 4 aberto em sub-decisões |
 | 26/09/2026 | Sessão aberta; 8 eixos definidos; Eixo 1 e Eixo 2 CONFIRMADOS (B); direção dos Eixos 3, 4, 5, 7, 8 confirmada; Eixo 3 aberto em sub-decisões |
