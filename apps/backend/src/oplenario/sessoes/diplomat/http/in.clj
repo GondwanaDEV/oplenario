@@ -885,6 +885,24 @@
 
 ;; ---------- Etapa 6 fatia 3 — a APURACAO DE ASSIDUIDADE (rota) ----------
 
+(defn- tempos-regimentais-handler
+  "GET /tempos-regimentais (tela \"Tempos da tribuna\", papel 'secretario'): a tabela de tempos da Casa do
+  ator. O controller repete a authz grossa por dentro (mesma dupla camada de `assiduidade-handler`)."
+  [repo-sessoes]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out-tribuna/tempos-regimentais->wire
+                             (controllers/tempos-regimentais repo-sessoes (:ator req))))))
+
+(defn- definir-tempos-regimentais-handler
+  "PUT /tempos-regimentais: troca a tabela INTEIRA de tempos da Casa (idempotente — mesmo corpo, mesma tabela;
+  por isso PUT). adapters/in valida o corpo (item fechado; 400); o controller valida limites e unicidade (400
+  pelo interceptor global) e substitui + emite o evento de auditoria na mesma tx. 200 com a tabela como ficou."
+  [repo-sessoes]
+  (fn [req]
+    (let [itens (adapters-in-tribuna/definir-tempos->dominio (:json-params req))]
+      (http/json-resposta 200 (adapters-out-tribuna/tempos-regimentais->wire
+                               (controllers/definir-tempos-regimentais repo-sessoes (:ator req) itens))))))
+
 (defn- assiduidade-handler
   "GET /assiduidade?de=&ate=&tipos=&formato=json|csv&recorte=resumo|detalhe (Etapa 6 fatia 3, papel
   'secretario'). adapters/in coage os query params EM DUAS PARTES: `query->periodo` (`de`/`ate`/`tipos`,
@@ -981,6 +999,13 @@
     ;; roteamento desta fatia (`assiduidade-rotas-http-in-test`) prova as duas coisas.
     ["/assiduidade" :get [auth (it/exige-papel "secretario") (assiduidade-handler repo-sessoes roster-da-casa-em-datas)]
      :route-name :sessoes/assiduidade]
+    ;; Tela "Tempos da tribuna" — no TOPO pela mesma razao de `/assiduidade` (o `:id` de `/sessoes/:id`
+    ;; sombrearia o literal). GET le a tabela da Casa; PUT a troca inteira (idempotente).
+    ["/tempos-regimentais" :get [auth (it/exige-papel "secretario") (tempos-regimentais-handler repo-sessoes)]
+     :route-name :sessoes/tempos-regimentais]
+    ["/tempos-regimentais" :put
+     [auth (it/exige-papel "secretario") it/corpo-json (definir-tempos-regimentais-handler repo-sessoes)]
+     :route-name :sessoes/definir-tempos-regimentais]
     ["/sessoes/:id" :get  [auth (buscar-handler repo-sessoes)] :route-name :sessoes/buscar]
     ["/sessoes/:id/transicao" :post
      [auth (it/exige-papel "secretario") it/corpo-json (transicionar-handler repo-sessoes)]

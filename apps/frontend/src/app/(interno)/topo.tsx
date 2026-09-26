@@ -42,6 +42,10 @@ const DESTINOS_NAV = [
   // Agendar sessão (GAP docs/20 → tela de servidor): cria a sessão no estado agendada. Gated "secretario"
   // (GuardSecretaria na página + exige-papel no backend). Sem esta entrada a rota ficaria órfã.
   { rotulo: "Agendar sessão", href: "/agendar-sessao" },
+  // Tempos da tribuna (pedido do stakeholder: "3 min e adicionais de 1 min") — a tabela de tempos regimentais
+  // da Casa. Gated "secretario" (GuardSecretaria na página + exige-papel no backend). Sem esta entrada a rota
+  // ficaria órfã.
+  { rotulo: "Tempos da tribuna", href: "/tempos-da-tribuna" },
   // Cadastro de Vereadores (Task 9) — cadastros estruturais, área de topo nova (arquétipo master-detail).
   { rotulo: "Vereadores", href: "/cadastros/vereadores" },
   // Onda E fatia 2 — Calendário institucional (a agenda da Casa: sessões agendadas + prazos de

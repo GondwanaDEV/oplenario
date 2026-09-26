@@ -23,6 +23,9 @@
 (defn emitir-fala-iniciada! [bus tx ente-id payload]
   (eventos/emitir! bus tx (ev-tribuna/fala-iniciada ente-id payload)))
 
+(defn emitir-tempos-regimentais-definidos! [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-tribuna/tempos-regimentais-definidos ente-id payload)))
+
 (defn emitir-fala-encerrada! [bus tx ente-id payload]
   (eventos/emitir! bus tx (ev-tribuna/fala-encerrada ente-id payload)))
 

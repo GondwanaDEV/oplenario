@@ -205,3 +205,20 @@
         (is (re-find (re-pattern (str gid)) pl) "carrega o segmento-id")
         (is (re-find #"\"acesso-restrito\":\s*true" pl)
             "carrega o acesso-restrito DEFINITIVO (re-derivado true p/ sessao secreta)")))))
+
+;; ---------- tempos.regimentais-definidos (tela "Tempos da tribuna": mudar config e' ato auditavel, §22.5 disc.7) ----------
+
+(deftest substituir-tempos-regimentais-emite-evento-e-devolve-a-tabela
+  (let [ente (random-uuid) autor (random-uuid)
+        lista (repo/substituir-tempos-regimentais!
+               *repo* ente [{:fase nil :tipo-fala "principal" :segundos 180 :referencia-normativa "RI art. 98"}
+                            {:fase "ordem_do_dia" :tipo-fala "aparte" :segundos 60}]
+               autor)]
+    (is (= 2 (count lista)) "devolve a tabela como ficou (lida na mesma tx)")
+    (is (= lista (repo/listar-tempos-regimentais *repo* ente)))
+    (let [evs (eventos-por-tipo ente "tempos.regimentais-definidos")]
+      (is (= 1 (count evs)) "uma troca da tabela = um evento")
+      (let [pl (:payload (first evs))]
+        (is (re-find (re-pattern (str autor)) pl) "quem mudou")
+        (is (re-find #"\"principal\"" pl) "a tabela nova vai no payload (auditoria do que passou a valer)")
+        (is (re-find #"RI art. 98" pl))))))
