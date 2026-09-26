@@ -18,9 +18,16 @@ Capacidade nova (ata, resumo, busca, copiloto, conferência) compõe o `Nucleo` 
 
 ```python
 nucleo = Nucleo(criar_porta(carregar()), RegistroJsonl("registro.jsonl"))
-r = nucleo.executar(PedidoGovernado(ente_id=..., correlation_id=..., operacao="consulta_norma",
-                                    instrucoes=..., pecas=[Peca(texto=..., proveniencia=..., fonte=...)]),
-                    politica="por_paragrafo")
+r = nucleo.executar(
+    PedidoGovernado(
+        ente_id=...,
+        correlation_id=...,
+        operacao="consulta_norma",
+        instrucoes=...,
+        pecas=[Peca(texto=..., proveniencia=..., fonte=...)],
+    ),
+    politica="por_paragrafo",
+)
 # r é Artefato (rascunho proposto, com citações e incerteza) ou Indisponivel (R-IA-1, "siga pela tela")
 ```
 

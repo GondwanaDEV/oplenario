@@ -18,8 +18,8 @@ dependencies = [
 dev = [
   "pytest>=8",
   "httpx>=0.27",     # só para o TestClient do FastAPI; o SDK anthropic 1.x traz o próprio httpx2
-  "ruff>=0.6",
-  "mypy>=1.11",
+  "ruff>=0.16,<0.17",  # fixados: formatter/lint novos mudariam o veredito do CI sem mudança de código
+  "mypy>=2.3,<3",
 ]
 
 [project.scripts]
