@@ -994,6 +994,39 @@
   (or (some #(when (some? (:fase %)) (:segundos %)) linhas)
       (some #(when (nil? (:fase %)) (:segundos %)) linhas)))
 
+(def tempo-regimental-maximo-segundos
+  "Teto de um tempo regimental (1 hora). Nao e' regra do regimento — e' defesa contra digitacao errada na tela
+  da secretaria (3000 minutos no lugar de 30). Um regimento que de' mais que isso a uma fala e' caso a
+  reabrir, nao a aceitar em silencio."
+  3600)
+
+(def referencia-normativa-maximo-caracteres 200)
+
+(defn validar-tempos-regimentais!
+  "A TABELA INTEIRA de tempos da Casa, como a secretaria a salva (tela \"Tempos da tribuna\"): vocabulario
+  fechado (tipo-fala, fase ou nil), segundos inteiros em 1..`tempo-regimental-maximo-segundos`, referencia
+  normativa curta, e NO MAXIMO uma linha por (fase, tipo) — duas diriam valores diferentes para a mesma fala.
+  Tabela vazia e' valida (a Casa volta a nao ter limite). Falha = ex-info `:validacao/invalido` (400 na borda,
+  nunca o CHECK/indice unico do banco -> 500). Pura."
+  [itens]
+  (let [invalido! (fn [msg info] (throw (ex-info msg (assoc info :tipo :validacao/invalido))))]
+    (doseq [{:keys [fase tipo-fala segundos referencia-normativa]} itens]
+      (when-not (contains? tipos-fala tipo-fala)
+        (invalido! "tipo de fala invalido" {:campo :tipo-fala}))
+      (when-not (or (nil? fase) (contains? fases-pauta fase))
+        (invalido! "fase invalida" {:campo :fase}))
+      (when-not (and (int? segundos) (<= 1 segundos tempo-regimental-maximo-segundos))
+        (invalido! (str "segundos deve ser inteiro entre 1 e " tempo-regimental-maximo-segundos)
+                   {:campo :segundos}))
+      (when (and referencia-normativa (> (count referencia-normativa) referencia-normativa-maximo-caracteres))
+        (invalido! (str "referencia-normativa com mais de " referencia-normativa-maximo-caracteres " caracteres")
+                   {:campo :referencia-normativa})))
+    (when-let [repetido (some (fn [[par n]] (when (> n 1) par))
+                              (frequencies (map (juxt :fase :tipo-fala) itens)))]
+      (invalido! "o mesmo tipo de fala aparece duas vezes para a mesma fase"
+                 {:campo :itens :fase (first repetido) :tipo-fala (second repetido)}))
+    nil))
+
 (defn validar-tipo-fala [tipo]
   (when-not (contains? tipos-fala tipo)
     (throw (ex-info "tipo de fala invalido" {:tipo tipo :validos tipos-fala}))))

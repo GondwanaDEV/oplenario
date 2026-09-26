@@ -155,6 +155,10 @@
   (listar-inscricoes [this ente-id sessao-id] "Fila de oradores da sessao (por fase + ordem).")
   (desistir! [this ente-id m] "Move a inscricao para 'desistencia' (terminal) via maquina + CAS.")
   ;; §22.6 eixo F — tribuna: fala executada + cronometro (execucao)
+  (listar-tempos-regimentais [this ente-id]
+    "A tabela de tempos regimentais da Casa: [{:fase :tipo-fala :segundos :referencia-normativa}].")
+  (substituir-tempos-regimentais! [this ente-id itens definido-por]
+    "Troca a tabela inteira + emite tempos.regimentais-definidos, na MESMA tx. Devolve a tabela como ficou.")
   (iniciar-fala! [this ente-id m] "Inicia a fala + loga 'iniciada', atomico. Devolve {:id}.")
   (registrar-evento-cronometro! [this ente-id m] "Evento manual do cronometro (pausada/retomada/aparte/tempo-adicional).")
   (encerrar-fala! [this ente-id m] "Encerra a fala, COMPUTA o tempo dos eventos + loga 'encerrada' (uma vez, CAS).")
@@ -505,6 +509,16 @@
               r   (tribuna/desistir! tx (assoc m :ente-id ente-id))]
           (producers/emitir-inscricao-desistida! bus tx ente-id {:inscricao-id (:id m) :sessao-id sid})
           r))))
+  (listar-tempos-regimentais [this ente-id]
+    (transacao this ente-id #(tribuna/listar-tempos-regimentais % ente-id)))
+  (substituir-tempos-regimentais! [this ente-id itens definido-por]
+    (transacao this ente-id
+      (fn [tx]
+        (let [tabela (tribuna/substituir-tempos-regimentais! tx ente-id itens definido-por)]
+          (producers/emitir-tempos-regimentais-definidos! bus tx ente-id
+            {:definido-por definido-por
+             :itens (mapv #(select-keys % [:fase :tipo-fala :segundos :referencia-normativa]) tabela)})
+          tabela))))
   (iniciar-fala! [this ente-id m]
     (transacao this ente-id
       (fn [tx]

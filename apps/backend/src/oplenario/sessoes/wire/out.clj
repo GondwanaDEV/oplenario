@@ -708,3 +708,20 @@
    [:por-vereador [:sequential AssiduidadePorVereadorOut]]
    [:detalhe [:sequential AssiduidadeDetalheLinhaOut]]
    [:totais AssiduidadeTotaisOut]])
+
+;; ---------- Tempos regimentais da Casa (tela "Tempos da tribuna", GET/PUT /tempos-regimentais) ----------
+
+(def TempoRegimentalOut
+  "Uma linha da tabela de tempos da Casa. `fase` nil = vale em qualquer fase (a linha generica); a linha de
+  fase explicita vence a generica ao iniciar a fala (`logic/escolher-tempo-regimental`)."
+  [:map {:closed true}
+   [:fase [:maybe :string]]
+   [:tipo-fala :string]
+   [:segundos :int]
+   [:referencia-normativa [:maybe :string]]])
+
+(def TemposRegimentaisOut
+  "A tabela inteira de tempos da Casa (resposta de GET e de PUT /tempos-regimentais). Vazia = a Casa nao
+  configurou: as falas correm sem limite (o cronometro so' conta)."
+  [:map {:closed true}
+   [:itens [:sequential TempoRegimentalOut]]])

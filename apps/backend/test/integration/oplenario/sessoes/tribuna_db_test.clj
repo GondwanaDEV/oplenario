@@ -426,3 +426,31 @@
               (is (= 600 (:tempo-concedido-segundos r))
                   "reconfigurar a Casa NAO muda a fala ja' iniciada (o limite foi fotografado)")
               (is (m/validate mod/FalaExecutada r) "bate o model"))))))))
+
+;; ---------- a tabela inteira (tela "Tempos da tribuna" da secretaria) ----------
+
+(deftest substituir-tempos-regimentais-troca-a-tabela-inteira
+  (let [ente (random-uuid) outro (random-uuid) autor (random-uuid)]
+    (tenancy/com-tenant* *ds* outro
+      (fn [tx] (definir! tx outro nil "principal" 900)))
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (is (= [] (tribuna/listar-tempos-regimentais tx ente)) "Casa sem configuracao -> lista vazia")
+        (definir! tx ente nil "comunicado" 120)
+        (tribuna/substituir-tempos-regimentais!
+         tx ente [{:fase nil :tipo-fala "principal" :segundos 180 :referencia-normativa "RI art. 98"}
+                  {:fase "ordem_do_dia" :tipo-fala "principal" :segundos 600}
+                  {:fase nil :tipo-fala "aparte" :segundos 60}]
+         autor)
+        (let [lista (tribuna/listar-tempos-regimentais tx ente)]
+          (is (= #{[nil "principal" 180 "RI art. 98"] ["ordem_do_dia" "principal" 600 nil] [nil "aparte" 60 nil]}
+                 (set (map (juxt :fase :tipo-fala :segundos :referencia-normativa) lista)))
+              "a tabela nova substitui a antiga inteira — o 'comunicado' que nao veio saiu")
+          (is (= 180 (tribuna/tempo-regimental tx ente "expediente" "principal"))
+              "o que a fala le ao iniciar e' a tabela nova"))
+        (tribuna/substituir-tempos-regimentais! tx ente [] autor)
+        (is (= [] (tribuna/listar-tempos-regimentais tx ente)) "tabela vazia = a Casa volta a nao ter limite")))
+    (tenancy/com-tenant* *ds* outro
+      (fn [tx]
+        (is (= 900 (tribuna/tempo-regimental tx outro "expediente" "principal"))
+            "substituir a tabela de uma Casa nao toca a de outra")))))

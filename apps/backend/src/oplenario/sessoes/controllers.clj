@@ -1308,3 +1308,22 @@
     (logic/apurar-assiduidade sessoes rosters-por-data presencas-por-sessao justificativas-por-sessao
                               {:sessoes-sem-data-de-referencia sessoes-sem-data-de-referencia
                                :com-detalhe? com-detalhe?}))))
+
+;; ---------- Tempos regimentais da Casa (tela "Tempos da tribuna") ----------
+
+(defn tempos-regimentais
+  "A tabela de tempos regimentais da Casa do `ator`. Papel GROSSO ('secretario'), como `apurar-assiduidade`:
+  e' configuracao tenant-wide, sem um recurso unico carregado para uma politica fina avaliar contra."
+  [repo-sessoes ator]
+  (authz/exige-papel! ator "secretario")
+  (repo/listar-tempos-regimentais repo-sessoes (:ente-id ator)))
+
+(defn definir-tempos-regimentais
+  "Troca a tabela INTEIRA de tempos da Casa do `ator` por `itens` (vazia = sem limite). Valida ANTES de abrir a
+  tx (rejeicao nao empresta conexao do pool; o `db/` repete a checagem como rede). O autor e' o ator — mudar
+  configuracao e' ato auditavel (evento tempos.regimentais-definidos, §22.5 disc.7). Devolve a tabela como
+  ficou. Falas ja' iniciadas nao mudam: o limite foi fotografado nelas (mig 0081)."
+  [repo-sessoes ator itens]
+  (authz/exige-papel! ator "secretario")
+  (logic/validar-tempos-regimentais! itens)
+  (repo/substituir-tempos-regimentais! repo-sessoes (:ente-id ator) itens (:identidade-id ator)))

@@ -85,3 +85,13 @@
              :marcos-cronometro (mapv marco->wire marcos-cronometro)
              :inscritos (mapv inscrito->wire inscritos)}
             "tribuna viola o contrato TribunaOut (bug de servidor)"))
+
+(defn tempos-regimentais->wire
+  "A tabela de tempos da Casa -> TemposRegimentaisOut (validado; resposta de GET e de PUT)."
+  [itens]
+  (validado wire/TemposRegimentaisOut
+            {:itens (mapv (fn [{:keys [fase tipo-fala segundos referencia-normativa]}]
+                            {:fase fase :tipo-fala tipo-fala :segundos (long segundos)
+                             :referencia-normativa referencia-normativa})
+                          itens)}
+            "tabela de tempos viola o contrato TemposRegimentaisOut (bug de servidor)"))
