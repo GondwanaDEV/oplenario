@@ -25,7 +25,9 @@ de um lado à do outro.
 2. **Promoção explícita (core → IA).** Um consumidor do outbox traduz evento de domínio em **evento de integração**
    e o grava num **feed append-only** (`integracao_ia.evento_saida`: `seq` crescente, `ente_id`, `tipo`, `versao`,
    `chave` de idempotência única, `payload`). A lista de promoções é código revisado: promover um evento é decisão
-   de contrato (§22.3.3). Primeira promoção: `gravacao.segmento-vinculado` → **`GravacaoVinculada` v1**.
+   de contrato (§22.3.3). Primeira promoção: **`GravacaoVinculada` v1**, a partir de `gravacao.segmento-vinculado` e
+   também de `gravacao.segmento-captado` quando a gravação já chega com sessão (o utilitário enviou com `--sessao`;
+   o core não emite "vinculado" para ela). Mesma chave nas duas: o feed tem um evento só.
 3. **O satélite puxa (feed com cursor).** `GET /integracao/ia/v1/eventos?depois=<seq>` devolve os próximos eventos;
    o satélite guarda o cursor e é idempotente pela `chave`. O core **nunca** chama o satélite para entregar evento:
    IA fora do ar não trava o relay nem o ato de ninguém; ao voltar, ela retoma do cursor.
