@@ -42,8 +42,8 @@ JSON Schema para ferramentas.
 |---|---|---|
 | 1 | Lugar da IA | **CONFIRMADO — B**: produz artefatos **e** age sobre a plataforma |
 | 2 | Catálogo de ações | **CONFIRMADO — B** + 2 regras (§6) |
-| 3 | Identidade do agente | Direção confirmada ("em nome de", escopo reduzido, "Fulano via agente X"); **sub-decisões em debate (§7)** |
-| 4 | Fronteira do ato | Direção confirmada; a abrir |
+| 3 | Identidade do agente | **CONFIRMADO** — 3.1 (b) + 3.2 a 3.5 (§7) |
+| 4 | Fronteira do ato | Direção confirmada; **sub-decisões em debate (§7a)** |
 | 5 | Onde roda o agente | Direção confirmada (satélite de IA, chamando o core pelo catálogo; core nunca embute modelo); a abrir |
 | 6 | MCP externo | A abrir — explicação no §8 |
 | 7 | Conhecimento (LOM/RI/leis em camadas por município) | Direção confirmada; a abrir |
@@ -90,17 +90,17 @@ precisarem — começando pelas consultas do legislativo (situação da matéria
 **Conjuntos por público** (vereador, secretaria, cidadão) ficam sobre o catálogo e **expõem menos** do que a
 permissão da pessoa — é o "escopo reduzido" do Eixo 3.
 
-## 7. Eixo 3 — Identidade do agente · EM DEBATE
+## 7. Eixo 3 — Identidade do agente · CONFIRMADO (26/09/2026)
 
 Direção confirmada: o agente age **em nome de** uma pessoa, com **escopo reduzido**, auditado como **"Fulano, via
 agente X"**. Ponto de partida no código: o ator é `{:identidade-id :papeis :ente-id}` e já existe `ator-sistema`
 para jobs (`kernel/autorizacao.clj`).
 
-Sub-decisões propostas (recomendação entre parênteses — aguardando "Confirma?"):
+Sub-decisões (todas confirmadas):
 
 - **3.1 Tipos de principal.** (a) só delegado · (b) delegado **+ agente institucional da Casa** (sem pessoa por
   trás — ex.: conferir todo requerimento protocolado contra a LOM/RI), restrito a `leitura` + `rascunho`, com todo
-  resultado caindo numa fila para uma pessoa. *(Recomendado: b.)*
+  resultado caindo numa fila para uma pessoa. **Confirmado: (b).**
 - **3.2 Permissão efetiva = interseção**, nunca união: o que a pessoa pode **agora** ∩ conjunto de ferramentas do
   agente ∩ classes concedidas. Avaliada **a cada chamada** (mandato encerrado ou vínculo suspenso derruba o agente
   na hora, como já acontece com as telas).
@@ -113,6 +113,36 @@ Sub-decisões propostas (recomendação entre parênteses — aguardando "Confir
 - **3.5 Auditoria.** Escritas: sempre no audit com pessoa + agente + execução + ferramenta + classe. Leituras: mesma
   regra de hoje para as telas (acesso a dado pessoal/sigiloso vai ao audit), acrescida da identificação do agente;
   o registro completo de ferramentas chamadas por execução fica no log de inferência do satélite (§22.3.4).
+
+## 7a. Eixo 4 — Fronteira do ato · EM DEBATE
+
+Direção confirmada: o que o agente faz sozinho × o que só uma pessoa faz; defesa contra instruções escondidas em
+texto de terceiros. As três classes vêm do catálogo (Eixo 2): `leitura`, `rascunho`, `ato`.
+
+- **4.1 Definição de `ato`.** Tudo o que produz efeito institucional ou fala pela Casa para outra pessoa:
+  protocolar, assinar, emitir parecer, tramitar/despachar, publicar (ata, resumo no portal), responder e-SIC,
+  alterar pauta, enviar comunicação a terceiros. `rascunho` = algo que só o dono (pessoa ou setor) vê até alguém
+  promover; sempre carimbado "produzido por IA" (proveniência, §16.8). `leitura` = livre dentro da permissão (3.2).
+- **4.2 O que o agente pode fazer com um `ato`.** (A) nunca — prepara e manda a pessoa para a tela · (B) cria uma
+  **proposta de ato** com o conteúdo exato; a pessoa confirma **na interface da própria plataforma** (não no chat
+  do agente), com o mesmo ritual da tela (assinatura em 2 toques, step-up quando houver) · (C) executa sozinho
+  sob pré-autorização ("pode protocolar requerimento de informação"). *(Recomendado: B.)* Confirmar fora do canal
+  do agente impede que um agente (ou um LLM externo, Eixo 6) descreva uma coisa e assine outra.
+- **4.3 Atos que o agente nem propõe** (pessoais e intransferíveis): **voto**, **registro de presença** e
+  **condução da sessão ao vivo** (abrir/encerrar votação, conceder tempo). Continuam só pela tela, pela pessoa.
+- **4.4 Classificação fail-closed.** A classe é dado no catálogo, revisada em PR; ação sem classe = `ato`.
+- **4.5 Instruções escondidas em texto de terceiros** (e-SIC, participação cidadã, e-mail, PDF enviado,
+  transcrição de fala em plenário):
+  1. *Defesa principal — estrutural:* o agente só tem a permissão da interseção (3.2) e ato exige confirmação
+     humana (4.2) → o pior caso de uma injeção é um rascunho ruim ou uma proposta que a pessoa recusa. Não se
+     depende de o modelo "resistir".
+  2. *Marcação de origem:* toda saída de ferramenta diz se o conteúdo é interno ou de terceiro. Execução que leu
+     conteúdo de terceiro fica **contaminada**: a proposta de ato mostra ao confirmador "feita depois de ler
+     e-SIC nº X"; e proposta que **leva para fora** dado restrito/sigiloso lido na mesma execução é bloqueada
+     (defesa contra vazamento).
+  3. *Delimitação no prompt* (conteúdo de terceiro entre marcadores, tratado como dado) — reforço, nunca a defesa.
+- **4.6 Ligação com o que existe:** a pessoa que confirma um ato vindo de rascunho de IA assume a autoria
+  ("revisado e assinado por"), como a Camada de Confiança já exige; R-IA-1 continua — sem IA, a tela faz tudo.
 
 ## 8. Eixo 6 — MCP externo · explicação (a abrir)
 
@@ -141,4 +171,5 @@ consultas**; (3) ações com efeito.
 
 | Data | O quê |
 |---|---|
+| 26/09/2026 | Eixo 3 CONFIRMADO (3.1 b + 3.2–3.5); Eixo 4 aberto em sub-decisões |
 | 26/09/2026 | Sessão aberta; 8 eixos definidos; Eixo 1 e Eixo 2 CONFIRMADOS (B); direção dos Eixos 3, 4, 5, 7, 8 confirmada; Eixo 3 aberto em sub-decisões |
