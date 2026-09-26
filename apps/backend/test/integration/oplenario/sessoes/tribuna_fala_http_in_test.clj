@@ -156,6 +156,43 @@
                            :body (corpo (assoc fala-valida "orador-id" (str (random-uuid)))))]
     (is (= 401 (:status r)) "sem token -> 401")))
 
+(deftest iniciar-com-tempo-concedido-201
+  ;; mig 0081: a Mesa informa o tempo desta fala ao chamar o orador (vence o regimental da Casa).
+  (let [ente (random-uuid) sid (random-uuid)
+        cap (atom nil)
+        repo-s (fake-repo-sessoes (fn [_ id] (sessao-canonica ente id)) cap)
+        r (pt/response-for (service-fn* #{"secretario"} repo-s)
+                           :post (url-falas sid)
+                           :headers (com-json (token ente (random-uuid)))
+                           :body (corpo (assoc fala-valida "orador-id" (str (random-uuid))
+                                               "tempo-concedido-segundos" 300)))]
+    (is (= 201 (:status r)))
+    (is (= 300 (:tempo-concedido-segundos @cap)) "Repo recebeu o tempo concedido")))
+
+(deftest iniciar-sem-tempo-concedido-nao-inventa-um
+  (let [ente (random-uuid) cap (atom nil)
+        repo-s (fake-repo-sessoes (fn [_ id] (sessao-canonica ente id)) cap)
+        _ (pt/response-for (service-fn* #{"secretario"} repo-s)
+                           :post (url-falas (random-uuid))
+                           :headers (com-json (token ente (random-uuid)))
+                           :body (corpo (assoc fala-valida "orador-id" (str (random-uuid)))))]
+    (is (not (contains? @cap :tempo-concedido-segundos))
+        "sem tempo no corpo -> o Repo resolve o regimental; a borda nao inventa um default")))
+
+(deftest iniciar-tempo-concedido-invalido-400
+  (let [ente (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ id] (sessao-canonica ente id)) (atom nil))
+        post (fn [v] (pt/response-for (service-fn* #{"secretario"} repo-s)
+                                      :post (url-falas (random-uuid))
+                                      :headers (com-json (token ente (random-uuid)))
+                                      :body (corpo (assoc fala-valida "orador-id" (str (random-uuid))
+                                                          "tempo-concedido-segundos" v))))]
+    (is (= 400 (:status (post 0))) "zero -> 400 (na borda, nunca o CHECK do banco)")
+    (is (= 400 (:status (post -60))) "negativo -> 400")
+    (is (= 400 (:status (post 90.5))) "fracionario -> 400")
+    (is (= 400 (:status (post "300"))) "string -> 400")
+    (is (= 400 (:status (post 3000000000))) "alem do int4 da coluna -> 400, nunca 500")))
+
 (deftest iniciar-tipo-fala-invalido-400
   (let [ente (random-uuid)
         repo-s (fake-repo-sessoes (fn [_ id] (sessao-canonica ente id)) (atom nil))

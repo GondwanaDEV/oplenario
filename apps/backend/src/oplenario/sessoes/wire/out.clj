@@ -530,6 +530,9 @@
    [:fase (km/enum-de logic/fases-pauta)]
    [:iniciou-em :string]
    [:inscricao-id [:maybe :string]]
+   ;; mig 0081: o tempo-limite da fala (segundos), o MESMO que `fala.iniciada` carrega. nil = sem limite.
+   ;; Chave sempre presente (como `inscricao-id`): a TV distingue "sem limite" de "campo que nao veio".
+   [:tempo-concedido-segundos [:maybe :int]]
    [:lock-version :int]])
 
 (def MarcoCronometroOut

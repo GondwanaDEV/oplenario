@@ -11,6 +11,7 @@
             [honey.sql]
             [malli.core :as m]
             [next.jdbc]
+            [next.jdbc.result-set]
             [oplenario.config :as config]
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.kernel.tenancy :as tenancy]
@@ -357,3 +358,71 @@
                                               :set {:decisao "alterada"}
                                               :where [:and [:= :ente_id ente] [:= :id did]]})))
               "UPDATE numa decisao da mesa e' barrado (append-only: ato regimental imutavel)"))))))
+
+;; ============================================================================
+;; mig 0081 — o TEMPO-LIMITE da fala (pedido do stakeholder: tempo de tribuna com campainha). O limite e'
+;; FOTOGRAFADO na fala ao iniciar: o que a Mesa informou vence; sem isso, o regimental da Casa para (fase, tipo),
+;; com a linha de fase explicita vencendo a generica; sem nenhum dos dois, nil (sem limite, como antes).
+;; ============================================================================
+
+(defn- sessao! [tx ente]
+  (:id (sessao/agendar! tx {:id (random-uuid) :ente-id ente :sessao-legislativa-id (random-uuid)
+                            :tipo-sessao "ordinaria" :modalidade "presencial"})))
+
+(defn- definir! [tx ente fase tipo seg]
+  (tribuna/definir-tempo-regimental! tx {:ente-id ente :fase fase :tipo-fala tipo :segundos seg
+                                         :created-by (random-uuid)}))
+
+(deftest tempo-regimental-especifico-vence-generico
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (is (nil? (tribuna/tempo-regimental tx ente "ordem_do_dia" "principal"))
+            "Casa sem configuracao -> nil (sem limite)")
+        (definir! tx ente nil "principal" 300)
+        (is (= 300 (tribuna/tempo-regimental tx ente "ordem_do_dia" "principal"))
+            "so' a generica -> vale em qualquer fase")
+        (definir! tx ente "ordem_do_dia" "principal" 600)
+        (is (= 600 (tribuna/tempo-regimental tx ente "ordem_do_dia" "principal"))
+            "a linha da fase explicita vence a generica")
+        (is (= 300 (tribuna/tempo-regimental tx ente "expediente" "principal"))
+            "em outra fase continua valendo a generica")
+        (is (nil? (tribuna/tempo-regimental tx ente "ordem_do_dia" "aparte"))
+            "outro tipo de fala nao herda o tempo da principal")))))
+
+(deftest definir-tempo-regimental-substitui-o-mesmo-par
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (definir! tx ente nil "aparte" 60)
+        (definir! tx ente nil "aparte" 90)
+        (definir! tx ente "expediente" "aparte" 45)
+        (definir! tx ente "expediente" "aparte" 30)
+        (is (= 90 (tribuna/tempo-regimental tx ente "ordem_do_dia" "aparte")) "a generica foi substituida")
+        (is (= 30 (tribuna/tempo-regimental tx ente "expediente" "aparte")) "a especifica foi substituida")
+        (is (= 2 (:c (next.jdbc/execute-one!
+                      tx ["SELECT count(*) c FROM sessoes.tempo_regimental WHERE ente_id = ?" ente]
+                      {:builder-fn next.jdbc.result-set/as-unqualified-maps})))
+            "uma linha por (fase, tipo) — redefinir nao acumula")
+        (is (thrown? Exception (definir! tx ente nil "aparte" 0)) "segundos > 0 (fail-closed antes do banco)")
+        (is (thrown? Exception (definir! tx ente nil "cochicho" 60)) "tipo de fala fora do vocabulario")
+        (is (thrown? Exception (definir! tx ente "recreio" "aparte" 60)) "fase fora do vocabulario")))))
+
+(deftest iniciar-fala-fotografa-o-tempo-concedido
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [sid (sessao! tx ente)
+              sem-config (iniciar! tx ente sid {})]
+          (is (nil? (:tempo-concedido-segundos sem-config)) "sem configuracao e sem tempo informado -> sem limite")
+          (is (nil? (:tempo-concedido-segundos (tribuna/buscar-fala tx ente (:id sem-config)))))
+          (definir! tx ente "ordem_do_dia" "principal" 600)
+          (let [regimental (iniciar! tx ente sid {})
+                informado  (iniciar! tx ente sid {:tempo-concedido-segundos 120})]
+            (is (= 600 (:tempo-concedido-segundos regimental)) "sem tempo informado -> o regimental da Casa")
+            (is (= 120 (:tempo-concedido-segundos informado)) "o tempo que a Mesa informou vence o regimental")
+            (definir! tx ente "ordem_do_dia" "principal" 900)
+            (let [r (tribuna/buscar-fala tx ente (:id regimental))]
+              (is (= 600 (:tempo-concedido-segundos r))
+                  "reconfigurar a Casa NAO muda a fala ja' iniciada (o limite foi fotografado)")
+              (is (m/validate mod/FalaExecutada r) "bate o model"))))))))

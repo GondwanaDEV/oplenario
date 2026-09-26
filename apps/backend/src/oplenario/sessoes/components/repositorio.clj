@@ -512,7 +512,9 @@
           (producers/emitir-fala-iniciada! bus tx ente-id
             (cond-> {:fala-id (:id m) :sessao-id (:sessao-id m) :orador-id (:orador-id m)
                      :tipo-fala (:tipo-fala m) :fase (:fase m) :iniciou-em (str (:iniciou-em m))}
-              (:inscricao-id m) (assoc :inscricao-id (:inscricao-id m))))
+              (:inscricao-id m) (assoc :inscricao-id (:inscricao-id m))
+              ;; o limite RESOLVIDO (informado ou regimental), nao o do corpo: e' o que a fala fotografou
+              (:tempo-concedido-segundos r) (assoc :tempo-concedido-segundos (:tempo-concedido-segundos r))))
           r))))
   (registrar-evento-cronometro! [this ente-id m]
     (transacao this ente-id

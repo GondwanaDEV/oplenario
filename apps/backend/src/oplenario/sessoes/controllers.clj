@@ -877,9 +877,9 @@
   fala) vira `fala-id`; o resto passa direto. `lock-version` QUEBRA deliberadamente essa uniao-exata-com-o-
   SSE (ledger de prontidao Fase 8 achado #2): `POST .../falas/:fala-id/encerrar` o exige no corpo, e esta
   leitura e' a UNICA fonte do token de CAS de uma fala alheia."
-  [{:keys [id orador-id tipo-fala fase iniciou-em inscricao-id lock-version]}]
+  [{:keys [id orador-id tipo-fala fase iniciou-em inscricao-id lock-version tempo-concedido-segundos]}]
   {:fala-id id :orador-id orador-id :tipo-fala tipo-fala :fase fase :iniciou-em iniciou-em
-   :inscricao-id inscricao-id :lock-version lock-version})
+   :inscricao-id inscricao-id :tempo-concedido-segundos tempo-concedido-segundos :lock-version lock-version})
 
 (defn- marco-da-tribuna
   "Um evento de cronometro de dominio -> um marco do payload. So' os campos de `events.tribuna/

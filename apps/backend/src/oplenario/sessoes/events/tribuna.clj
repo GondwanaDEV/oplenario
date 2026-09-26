@@ -16,7 +16,10 @@
    [:tipo-fala :string]
    [:fase :string]
    [:iniciou-em :string]
-   [:inscricao-id {:optional true} [:maybe :uuid]]])
+   [:inscricao-id {:optional true} [:maybe :uuid]]
+   ;; mig 0081: o tempo-limite fotografado na fala (segundos). Ausente/nil = sem limite — o cliente so' conta o
+   ;; decorrido. O limite EFETIVO soma os marcos `tempo_adicional_concedido` (calculo client-side, eixo G).
+   [:tempo-concedido-segundos {:optional true} [:maybe :int]]])
 
 (defn fala-iniciada [ente-id payload]
   (eventos/evento-validado FalaIniciadaPayload fala-iniciada-tipo ente-id payload))

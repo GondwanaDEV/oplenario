@@ -108,7 +108,9 @@
    [:iniciou-em :string]
    [:inscricao-id {:optional true} [:maybe :string]]
    [:fala-pai-id {:optional true} [:maybe :string]]
-   [:proposicao-ref-id {:optional true} [:maybe :string]]])
+   [:proposicao-ref-id {:optional true} [:maybe :string]]
+   ;; mig 0081: tempo que a Mesa concede a ESTA fala (segundos). Ausente = o regimental da Casa (ou sem limite).
+   [:tempo-concedido-segundos {:optional true} [:maybe :int]]])
 
 (def RegistrarEventoCronometro
   "Corpo de POST /sessoes/:id/falas/:fala-id/cronometro (§22.6 eixo F). `tipo` so os eventos MANUAIS que a Mesa
