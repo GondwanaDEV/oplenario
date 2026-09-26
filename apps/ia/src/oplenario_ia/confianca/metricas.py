@@ -1,11 +1,14 @@
 """Qualidade em produção medida pelo que a pessoa faz (§22.11.8): aceito / editado / descartado e erros reportados,
-por Casa e por operação. Só contagens — o insumo do painel da Casa (B.9)."""
+por Casa e por operação; e o consumo de cada Casa (Eixo 8.3). Só contagens e valores — o insumo do orçamento e do
+painel da Casa (B.9)."""
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from pydantic import BaseModel
 
-from oplenario_ia.confianca.registro import Evento, ReporteErro, RevisaoHumana
+from oplenario_ia.confianca.registro import Evento, RegistroExecucao, ReporteErro, RevisaoHumana
 
 
 class MetricaOperacao(BaseModel):
@@ -38,3 +41,34 @@ def por_ente_e_operacao(eventos: list[Evento]) -> dict[tuple[str, str], MetricaO
         else:
             alvo.descartados += 1
     return m
+
+
+class ConsumoEnte(BaseModel):
+    execucoes: int = 0
+    tokens_entrada: int = 0
+    tokens_saida: int = 0
+    tokens_cache: int = 0
+    custo: Decimal = Decimal(0)
+    moeda: str | None = None
+    parcial: bool = False  # alguma execução usou modelo sem preço na tabela: o custo real é MAIOR que o somado
+
+
+def consumo_por_ente(eventos: list[Evento]) -> dict[str, ConsumoEnte]:
+    c: dict[str, ConsumoEnte] = {}
+    for e in eventos:
+        if not isinstance(e, RegistroExecucao):
+            continue
+        alvo = c.setdefault(e.ente_id, ConsumoEnte())
+        alvo.execucoes += 1
+        if e.uso is not None:
+            alvo.tokens_entrada += e.uso.entrada
+            alvo.tokens_saida += e.uso.saida
+            alvo.tokens_cache += e.uso.cache_leitura + e.uso.cache_escrita
+        if e.custo is None:
+            continue
+        if e.custo.valor is None:
+            alvo.parcial = True
+        else:
+            alvo.custo += e.custo.valor
+            alvo.moeda = e.custo.moeda
+    return c
