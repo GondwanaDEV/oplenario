@@ -332,6 +332,39 @@ export interface SolicitacaoRascunhoOut {
   solicitacaoId: string;
 }
 
+export interface SessaoAnteriorOut {
+  id: string;
+  tipoSessao: string;
+  numeroSequencial: number;
+  abertaEm?: string | null;
+  encerradaEm?: string | null;
+}
+
+export interface AtaParaLerOut {
+  versao: number;
+  texto: string;
+  conteudoSha256: string;
+  origemRedacao: string;
+  publicadaEm: string;
+  publicadaPorNome?: string | null;
+}
+
+export interface LeituraAtaRegistradaOut {
+  modo: "dispensada" | "presencial" | "voz_sintetizada";
+  ataSessaoId: string;
+  ataVersao: number;
+  registradaEm: string;
+  registradaPorNome?: string | null;
+}
+
+export interface LeituraAtaOut {
+  sessaoId: string;
+  podeRegistrar: boolean;
+  anterior?: SessaoAnteriorOut | null;
+  ata?: AtaParaLerOut | null;
+  leitura?: LeituraAtaRegistradaOut | null;
+}
+
 export interface PautaItemAdicionadoOut {
   id: string;
   ordem: number;

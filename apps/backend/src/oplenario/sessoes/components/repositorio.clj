@@ -8,6 +8,7 @@
             [oplenario.sessoes.db.anuncio :as anuncio]
             [oplenario.sessoes.db.ata :as ata]
             [oplenario.sessoes.db.ata-rascunho :as ata-rascunho]
+            [oplenario.sessoes.db.leitura-ata :as leitura-ata]
             [oplenario.sessoes.db.chamada :as chamada]
             [oplenario.sessoes.db.folha :as db-folha]
             [oplenario.sessoes.db.gravacao :as gravacao]
@@ -166,6 +167,12 @@
     "Faixa A / A.6b: grava o pedido de rascunho e emite `ata.rascunho-solicitado` (core->IA) na MESMA tx. `pode-pedir?`
     (fn [ultimo] -> bool) decide DENTRO da tx se ja' ha' pedido em curso — dois cliques nao viram dois pedidos.")
   (buscar-rascunho-pronto [this ente-id sessao-id rascunho-id] "O ponteiro 'pronto' desta sessao, ou nil.")
+  (leitura-da-ata [this ente-id sessao]
+    "Faixa A / A.7: {:anterior (sessao cuja ata esta' le) :ata (a vigente dela, com texto) :leitura (o ato, se ja'
+    registrado)} numa tx.")
+  (registrar-leitura-ata! [this ente-id m]
+    "Faixa A / A.7: grava a leitura. A versao informada TEM de ser a vigente da sessao anterior, conferido NA tx
+    (`:conflito/ata-mudou` se uma retificacao foi publicada entre abrir a tela e registrar).")
   (buscar-transcricao [this ente-id sessao-id transcricao-id] "O ponteiro concluido desta sessao, ou nil.")
   (listar-gravacoes-pendentes [this ente-id limite]
     "Faixa A / A.2: {:segmentos [...sem sessao, mais recentes primeiro] :sessoes [...candidatas a vinculo, na
@@ -550,6 +557,24 @@
           r))))
   (buscar-rascunho-pronto [this ente-id sessao-id rascunho-id]
     (transacao this ente-id #(ata-rascunho/buscar-pronto % ente-id sessao-id rascunho-id)))
+  (leitura-da-ata [this ente-id s]
+    (transacao this ente-id
+      (fn [tx]
+        (let [anterior (leitura-ata/sessao-anterior tx ente-id s)]
+          {:anterior anterior
+           :ata      (when anterior (ata/atual tx ente-id (:id anterior)))
+           :leitura  (leitura-ata/da-sessao tx ente-id (:id s))}))))
+  (registrar-leitura-ata! [this ente-id {:keys [sessao ata-sessao-id ata-versao] :as m}]
+    (transacao this ente-id
+      (fn [tx]
+        (let [anterior (leitura-ata/sessao-anterior tx ente-id sessao)
+              vigente  (when anterior (ata/atual tx ente-id (:id anterior)))]
+          (when-not (and vigente (= ata-sessao-id (:id anterior)) (= ata-versao (:versao vigente)))
+            (throw (ex-info "a ata a ler mudou (outra versao foi publicada, ou a sessao anterior mudou): recarregue"
+                            {:tipo :conflito/ata-mudou :sessao-id (:id sessao)})))
+          (leitura-ata/registrar! tx (-> (dissoc m :sessao)
+                                         (assoc :ente-id ente-id :sessao-id (:id sessao)
+                                                :ata-conteudo-sha256 (:conteudo-sha256 vigente))))))))
   (buscar-transcricao [this ente-id sessao-id transcricao-id]
     (transacao this ente-id #(transcricao/buscar-da-sessao % ente-id sessao-id transcricao-id)))
   (listar-gravacoes-pendentes [this ente-id limite]

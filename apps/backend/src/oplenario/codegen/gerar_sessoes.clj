@@ -76,6 +76,11 @@
    ["IncertezaRascunhoOut" out/IncertezaRascunhoOut]
    ["AtaRascunhoConteudoOut" out/AtaRascunhoConteudoOut]
    ["SolicitacaoRascunhoOut" out/SolicitacaoRascunhoOut]
+   ;; Faixa A / A.7 — a leitura da ata anterior. Folhas antes do agregado.
+   ["SessaoAnteriorOut" out/SessaoAnteriorOut]
+   ["AtaParaLerOut" out/AtaParaLerOut]
+   ["LeituraAtaRegistradaOut" out/LeituraAtaRegistradaOut]
+   ["LeituraAtaOut" out/LeituraAtaOut]
    ["PautaItemAdicionadoOut" out/PautaItemAdicionadoOut]
    ["PautaItemReordenadoOut" out/PautaItemReordenadoOut]
    ["PautaItemRemovidoOut" out/PautaItemRemovidoOut]
