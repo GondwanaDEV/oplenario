@@ -1,0 +1,11 @@
+{
+  "fonte": "Anthropic, preços públicos da API por modelo (platform.claude.com, página de modelos e preços)",
+  "consultado_em": "2026-09-26",
+  "moeda": "USD",
+  "unidade_tokens": 1000000,
+  "observacao": "cache_escrita = 1,25x a entrada (TTL de 5 minutos); cache_leitura = 0,1x. Atualizar esta tabela é obrigatório ao trocar fornecedor ou modelo (§22.11.8), junto com a avaliação.",
+  "precos": {
+    "fake/fake-1": {"entrada": "0", "saida": "0", "cache_leitura": "0", "cache_escrita": "0"},
+    "anthropic/claude-opus-5": {"entrada": "5.00", "saida": "25.00", "cache_leitura": "0.50", "cache_escrita": "6.25"}
+  }
+}

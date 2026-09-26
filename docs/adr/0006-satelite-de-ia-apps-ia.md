@@ -66,8 +66,8 @@ Confiança mínima (0.4) e avaliação + custo (0.5). Sem uma forma decidida, ca
   cluster até alguém configurar um fornecedor com DPA de não-treino (`[GAP]` jurídico).
 - O fallback de modelo **server-side** que alguns fornecedores oferecem (reexecutar em outro modelo em caso de
   recusa) **fica desligado**: trocaria o modelo por conta própria, contra a regra de nunca trocar de modelo em
-  silêncio (§22.3.5, §22.11.8). Recusa volta como resultado explícito, com incerteza, e o failover é nosso (Eixo 13,
-  fast-follow).
+  silêncio (§22.3.5, §22.11.8). Recusa volta como resultado explícito — o piso R-IA-1 com motivo `recusa`, tokens e
+  custo registrados — e o failover é nosso (Eixo 13, fast-follow).
 - Streaming (SSE) e fila entram com as capacidades que precisam deles (copiloto interativo; transcrição/ata).
 
 ## Alternativas descartadas

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Sigilo(StrEnum):
@@ -27,9 +27,22 @@ class Proveniencia(BaseModel):
     terceiro: bool = False
 
 
+class Fonte(BaseModel):
+    """A peça é uma FONTE citável: um dispositivo de norma, um trecho de transcrição, uma proposição (§22.11.7).
+
+    `id` é o endereço estável (URN LexML + fragmento, `transcricao:<sessao>#<segmento>`, …) — é o que o modelo cita e
+    o que a Camada de Confiança confere. `versao` diz qual texto foi lido (a norma consolidada até dd/mm).
+    """
+
+    id: str = Field(min_length=1, pattern=r"^[^|\]\s\"]+$")
+    rotulo: str
+    versao: str | None = None
+
+
 class Peca(BaseModel):
     texto: str
     proveniencia: Proveniencia | None = None
+    fonte: Fonte | None = None
 
 
 def liberada(peca: Peca) -> bool:
