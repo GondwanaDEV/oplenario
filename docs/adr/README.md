@@ -18,3 +18,4 @@ Enforcement · Consequências · Alternativas descartadas). Complementa a SSOT (
 | [0003](0003-camada-relacoes-pode-tocar-o-db-do-proprio-modulo.md) | `relacoes/` pode importar o `db/` do próprio módulo | 🟡 Rascunho |
 | [0004](0004-a-guarda-de-transicao-so-le-verdade-apurada.md) | A guarda de transição só lê verdade apurada | Aceito |
 | [0005](0005-conceder-acesso-e-area-do-admin-ente.md) | "Conceder acesso" pertence à área do `admin_ente`, não à tela de cadastro | Aceito |
+| [0006](0006-satelite-de-ia-apps-ia.md) | Satélite de IA em `apps/ia/` (Python): silhueta, porta de inferência e trilho de CI | Aceito |

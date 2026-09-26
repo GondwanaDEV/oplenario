@@ -6,7 +6,7 @@
 > §18 (ordem de construção da V1) e `docs/11` (Track IA como plano próprio; marcos M3/M4). **Ler o `docs/25` antes.**
 >
 > **Status (26/09/2026):** plano proposto — **revisão 2** (a revisão 1 não respeitava o roadmap; ver §7).
-> Depende do **"Confirmo" do Daouda** sobre o `docs/25` + este plano. Nenhuma fatia começou.
+> **"Confirmo" do Daouda dado com o merge do PR #38 (26/09/2026)**; desenho consolidado no doc-mestre v1.46 (§22.11). **Base comum (0.1–0.5) entregue** — `apps/ia/`, ADR-0006, [PR #42](https://github.com/GondwanaDEV/oplenario/pull/42) (branch `claude/track-ia-base`). Próximo: Faixas A e B em paralelo.
 > **Branch da frente:** `claude/track-ia` (aberta de `main` em 26/09/2026 com o desenho e este plano; as fatias
 > seguem o trilho "uma branch por frente").
 >
@@ -60,6 +60,8 @@ Base comum ─┤
 ```
 
 ### Base comum (as duas faixas dependem dela — pequena, primeiro)
+
+> ✅ **Entregue em 26/09/2026** ([PR #42](https://github.com/GondwanaDEV/oplenario/pull/42)): as cinco fatias abaixo, com 71 testes e o conjunto de avaliação `base-comum` (15 casos) no CI.
 
 | Fatia | O quê | Origem |
 |---|---|---|
