@@ -170,6 +170,7 @@ const rotas = {
   telao: (id: string) => `/sessoes/${enc(id)}/plenario`,
   folha: (id: string) => `/sessoes/${enc(id)}/folha`,
   transcricao: (id: string) => `/sessoes/${enc(id)}/transcricao`,
+  ata: (id: string) => `/sessoes/${enc(id)}/ata`,
   pauta: (id: string) => `/pauta-convocacao?sessao=${enc(id)}`,
 };
 
@@ -298,8 +299,9 @@ function montarFoco(s: SessaoOut, det: DetalheSessao, agoraIso: string): FocoSes
         ? "A sessão foi encerrada. Não foi possível conferir se a folha já foi gerada."
         : "A sessão foi encerrada. Gere a folha da sessão para o registro.";
     principal = { rotulo: temFolha ? "Ver a folha" : "Gerar a folha", href: rotas.folha(id) };
-    // Faixa A / A.3: a transcrição da gravação (rascunho da IA) — o insumo da ata.
+    // Faixa A / A.3 e A.6: a transcrição da gravação (rascunho da IA) e a ata que sai dela.
     secundarias = [{ rotulo: "Chamada de presença", href: rotas.chamada(id) },
+                   { rotulo: "Ata", href: rotas.ata(id) },
                    { rotulo: "Transcrição", href: rotas.transcricao(id) }];
   } else if (pautaVazia) {
     porque = "A pauta está vazia. Monte-a antes da sessão: é dela que sai a convocação.";

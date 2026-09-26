@@ -7,6 +7,7 @@
   (:require [oplenario.http :as http]
             [oplenario.interceptors :as it]
             [oplenario.kernel.tempo :as tempo]
+            [oplenario.sessoes.adapters.in.ata :as adapters-in-ata]
             [oplenario.sessoes.adapters.in.gravacao :as adapters-in-grav]
             [oplenario.sessoes.adapters.in.incidente :as adapters-in-incidente]
             [oplenario.sessoes.adapters.in.pauta :as adapters-in-pauta]
@@ -797,6 +798,31 @@
             (http/json-resposta 503 {:erro "A IA está indisponível agora. Siga pela tela — a gravação está guardada."})
             (throw e)))))))
 
+(defn- ata-handler
+  "GET /sessoes/:id/ata (Faixa A / A.6): a ata vigente e o historico de versoes."
+  [repo-sessoes nome-na-casa]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [r (controllers/ata-da-sessao repo-sessoes nome-na-casa (:ator req) id)]
+        (http/json-resposta 200 (adapters-out-grav/ata-da-sessao->wire r))
+        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+
+(defn- publicar-ata-handler
+  "POST /sessoes/:id/ata (Faixa A / A.6a): publica ou retifica a ata. 201 com o recibo (versao + hash)."
+  [repo-sessoes]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          m  (adapters-in-ata/publicar->dominio (:json-params req))]
+      (try
+        (if-let [r (controllers/publicar-ata! repo-sessoes (:ator req) id m)]
+          (http/json-resposta 201 (adapters-out-grav/recibo-ata->wire r))
+          (http/json-resposta 404 {:erro "sessao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (case (:tipo (ex-data e))
+            (:conflito/sessao-sem-ata :conflito/ata-versao) (http/json-resposta 409 {:erro (ex-message e)})
+            :validacao/retificacao-sem-motivo (http/json-resposta 422 {:erro (ex-message e)})
+            (throw e)))))))
+
 (defn- listar-gravacoes-handler
   "GET /sessoes/:id/gravacao. adapters/in coage o :id; controller carrega+autoriza a sessao e lista os
   segmentos vinculados; adapters/out projeta (filtra internos). nil (sessao inexistente) -> 404."
@@ -1169,6 +1195,11 @@
       (transcricao-handler repo-sessoes (or ler-transcricao
                                             (fn [_ _] (throw (ex-info "sem IA" {:tipo :ia/indisponivel})))))]
      :route-name :sessoes/transcricao]
+    ;; Faixa A / A.6 — a ATA da sessao (artefato legal do core; secretaria le e publica/retifica).
+    ["/sessoes/:id/ata" :get [auth (it/exige-papel "secretario") (ata-handler repo-sessoes nome-na-casa)]
+     :route-name :sessoes/ata]
+    ["/sessoes/:id/ata" :post [auth (it/exige-papel "secretario") it/corpo-json (publicar-ata-handler repo-sessoes)]
+     :route-name :sessoes/publicar-ata]
     ["/sessoes/:id/gravacao/:seg-id/vincular" :post
      [auth (it/exige-papel "secretario") it/corpo-json (vincular-gravacao-handler repo-sessoes)]
      :route-name :sessoes/vincular-gravacao]

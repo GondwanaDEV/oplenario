@@ -602,6 +602,23 @@
 ;; da tx. Calcular no controller a partir de uma leitura ANTERIOR deixa a janela em que a Mesa encerra a
 ;; sessao no meio do request e a chamada avalia 'agora' uma sessao que ja fechou.
 
+;; ---------- Faixa A / A.6: a ATA ----------
+
+(def origens-redacao-ata
+  "O discriminador da ata publicada (§22.6): redigida pela Casa, ou partida de um rascunho da IA revisado por uma pessoa."
+  #{"redigida_externamente" "gerada_automaticamente"})
+
+(def estados-com-ata
+  "A ata e' o registro da sessao que ACONTECEU e ACABOU: encerrada, ou arquivada (acervo historico)."
+  #{"encerrada" "arquivada"})
+
+(def teto-texto-ata 200000)
+
+(defn pode-ter-ata?
+  "PURO: a sessao gera ata regimental (capability — solene e especial, por exemplo, nao geram) e ja' acabou."
+  [sessao]
+  (boolean (and (:gera-ata-regimental sessao) (contains? estados-com-ata (:estado sessao)))))
+
 (def estados-sem-gravacao
   "Estados de sessao que NAO recebem gravacao (Faixa A / A.2). So' 'nao_realizada': a sessao que nao aconteceu nao
   tem registro de audio. 'encerrada' e 'arquivada' RECEBEM — a fonte primaria da V1 e' a gravacao local enviada

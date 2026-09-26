@@ -66,6 +66,11 @@
    ["TranscricoesOut" out/TranscricoesOut]
    ["TrechoTranscricaoOut" out/TrechoTranscricaoOut]
    ["TranscricaoConteudoOut" out/TranscricaoConteudoOut]
+   ;; Faixa A / A.6 — a ata. Folhas ANTES dos agregados.
+   ["AtaVersaoOut" out/AtaVersaoOut]
+   ["AtaAtualOut" out/AtaAtualOut]
+   ["AtaSessaoOut" out/AtaSessaoOut]
+   ["AtaReciboOut" out/AtaReciboOut]
    ["PautaItemAdicionadoOut" out/PautaItemAdicionadoOut]
    ["PautaItemReordenadoOut" out/PautaItemReordenadoOut]
    ["PautaItemRemovidoOut" out/PautaItemRemovidoOut]
