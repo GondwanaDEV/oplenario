@@ -7,6 +7,8 @@
 >
 > **Status (26/09/2026):** plano proposto — **revisão 2** (a revisão 1 não respeitava o roadmap; ver §7).
 > Depende do **"Confirmo" do Daouda** sobre o `docs/25` + este plano. Nenhuma fatia começou.
+> **Branch da frente:** `claude/track-ia` (aberta de `main` em 26/09/2026 com o desenho e este plano; as fatias
+> seguem o trilho "uma branch por frente").
 >
 > **Regra-mãe (Eixo 1):** nenhuma feature de IA abre caminho próprio até os dados. Toda ação sobre a plataforma é
 > **cliente do catálogo** (Eixo 2); o que faltar entra no catálogo, na mesma fatia.
