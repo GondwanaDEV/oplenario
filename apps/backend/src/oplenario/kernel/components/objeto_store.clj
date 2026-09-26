@@ -23,6 +23,9 @@
     "Transmite o InputStream `in` (tamanho desconhecido) ao store em partes, sem bufferizar tudo em heap;
      devolve a chave. O chamador e' dono do ciclo de vida de `in` (fecha apos).")
   (obter    [this chave] "Devolve os bytes do blob (byte-array), ou nil se ausente.")
+  (abrir    [this chave]
+    "Devolve um InputStream do blob (sem materializar em heap — gravacao de sessao passa de 1 GB), ou nil se
+     ausente. O CHAMADOR fecha o stream (ADR-0008: servir a gravacao ao satelite de IA).")
   (remover! [this chave] "Remove o blob da `chave`."))
 
 (defrecord ObjetoStoreS3 [config client bucket]
@@ -70,6 +73,14 @@
         (if (= "NoSuchKey" (some-> e .errorResponse .code))
           nil
           (do (log/error e "objeto-store/obter: erro S3" {:chave chave :code (some-> e .errorResponse .code)})
+              (throw e))))))
+  (abrir [_ chave]
+    (try
+      (.getObject client (-> (GetObjectArgs/builder) (.bucket bucket) (.object chave) (.build)))
+      (catch ErrorResponseException e
+        (if (= "NoSuchKey" (some-> e .errorResponse .code))
+          nil
+          (do (log/error e "objeto-store/abrir: erro S3" {:chave chave :code (some-> e .errorResponse .code)})
               (throw e))))))
   (remover! [_ chave]
     (.removeObject client (-> (RemoveObjectArgs/builder) (.bucket bucket) (.object chave) (.build)))

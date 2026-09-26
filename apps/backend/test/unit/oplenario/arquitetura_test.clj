@@ -17,7 +17,7 @@
 (def ^:private modulos
   "Os bounded contexts (dominio + projecao + supratenant) — cada um e' um modulo isolado (§22.10)."
   #{"identidade" "cadastros" "legislativo" "sessoes" "transparencia" "participacao"
-    "compliance" "paineis" "tempo_real" "admin_sistema"})
+    "compliance" "paineis" "tempo_real" "admin_sistema" "integracao_ia"})
 
 (defn- modulo-de
   "oplenario.<modulo>.* -> \"<modulo>\"; nil p/ kernel/motor/host."

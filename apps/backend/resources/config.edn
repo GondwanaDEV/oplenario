@@ -38,6 +38,8 @@
  ;; resolve a partir do SEU proprio default). Mudar um sem o outro dessincroniza; reconciliar fazendo o Repo
  ;; ler este valor em vez de ter default proprio.
  :sessao {:absoluta-h 12 :ociosa-min 30}
+ ;; ADR-0008: fronteira com o satelite de IA. Segredo SO' por ambiente (OPLENARIO_IA_SEGREDO); nil = desligada.
+ :integracao-ia {:segredo nil}
  ;; URL por modulo p/ os http_client (local agora, remoto apos extracao — §22.10)
  :modulos {:cadastros {:base-url "http://localhost:8888"} :identidade {:base-url "http://localhost:8888"}
            :legislativo {:base-url "http://localhost:8888"} :sessoes {:base-url "http://localhost:8888"}

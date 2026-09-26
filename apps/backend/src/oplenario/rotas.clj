@@ -11,7 +11,9 @@
             [oplenario.identidade.components.repositorio :as repo-identidade-comp]
             [oplenario.identidade.diplomat.http.auth-in :as auth-http]
             [oplenario.identidade.diplomat.http.in :as identidade-http]
+            [oplenario.integracao-ia.diplomat.http.in :as integracao-ia-http]
             [oplenario.interceptors :as it]
+            [oplenario.kernel.components.objeto-store :as objeto-store-comp]
             [oplenario.kernel.tempo :as tempo]
             [oplenario.legislativo.components.repositorio :as repo-legislativo-comp]
             [oplenario.legislativo.diplomat.http.in :as legislativo-http]
@@ -87,6 +89,36 @@
   [repo-identidade ente-id identidade-id]
   (when (seq (repo-identidade-comp/vinculos-de repo-identidade ente-id identidade-id))
     (:nome (repo-identidade-comp/nome-por-id repo-identidade identidade-id))))
+
+;; ---------- Faixa A / A.3 (ADR-0008): os seams da fronteira com a IA ----------
+
+(defn contexto-para-ia
+  "sessao -> {:sessao :segmentos :falas :nomes} para a IA (host wiring, §22.10: integracao_ia nunca importa
+  sessoes nem cadastros). `nomes` = {vereador-id nome} da composicao da Casa NA DATA da sessao — o nome
+  parlamentar, ou o civil. nil = sessao inexistente no tenant. O sigilo e' decidido por integracao_ia em cima
+  disto (sessao secreta, segmento restrito)."
+  [repo-sessoes repo-cadastros ente-id sessao-id]
+  (when-let [c (repo-sessoes-comp/contexto-para-ia repo-sessoes ente-id sessao-id)]
+    ;; mesma data de referencia da /chamada (sessoes-logic): a composicao DE ENTAO, nunca a de hoje. Sessao sem
+    ;; data nenhuma nao tem composicao conhecida — vai sem nomes (a IA marca os oradores como nao nomeados).
+    (let [data  (try (sessoes-logic/data-de-referencia-da-sessao (:sessao c))
+                     (catch clojure.lang.ExceptionInfo _ nil))
+          nomes (if data
+                  (into {} (map (fn [l] [(:vereador-id l) (or (not-empty (:nome-parlamentar l)) (:nome l))]))
+                        (repo-cadastros-comp/roster-da-casa repo-cadastros ente-id data))
+                  {})]
+      (assoc c :nomes nomes))))
+
+(defn abrir-gravacao-para-ia
+  "segmento -> {:stream :audio-hash} | :restrita | nil (host wiring). So' serve gravacao VINCULADA a uma sessao
+  (a IA so' conhece o que o core promoveu) e NUNCA a restrita — mesmo que alguem peca pelo id."
+  [repo-sessoes objeto-store ente-id segmento-id]
+  (when-let [seg (repo-sessoes-comp/buscar-segmento repo-sessoes ente-id segmento-id)]
+    (cond
+      (nil? (:sessao-id seg))   nil
+      (:acesso-restrito seg)    :restrita
+      :else (when-let [in (objeto-store-comp/abrir objeto-store (:container-bruto-uri seg))]
+              {:stream in :audio-hash (:audio-hash seg)}))))
 
 (def ^:private teto-de-janelas
   "Teto de intervalos devolvidos por `janelas-de-exercicio`. Cada janela vira um ramo de OR sobre `data` no
@@ -215,7 +247,7 @@
   [{:keys [idp repo-identidade repo-sessoes repo-legislativo repo-compliance repo-participacao
            repo-transparencia repo-paineis repo-cadastros canal-store objeto-store painel-compliance
            presenca-resumo esic-cumprimento relatores-pendentes info-ente registro-fatos
-           keycloak sessao identidade-existe?]
+           keycloak sessao identidade-existe? repo-integracao-ia integracao-ia]
     ;; nome LOCAL distinto da defn de topo `ficha-e-janelas-publicas` p/ nao sombrea-la (mesmo cuidado de
     ;; `resolver-vereador`/`resolver-vereador-fn`); a chave do mapa segue sendo :ficha-e-janelas-publicas.
     ficha-e-janelas-override :ficha-e-janelas-publicas}]
@@ -491,4 +523,14 @@
         (into (auth-http/rotas {:info-ente info-ente :keycloak keycloak
                                 :idp idp :repo-identidade repo-identidade
                                 :relogio relogio-producao :sessao sessao}))
-        (into (identidade-http/rotas {:auth auth :repo-identidade repo-identidade :idp idp})))))
+        (into (identidade-http/rotas {:auth auth :repo-identidade repo-identidade :idp idp}))
+        ;; Faixa A / A.3 (ADR-0008): a fronteira de SERVICO com o satelite de IA. So' entra com o Repo (os testes de
+        ;; outras verticais montam sem ele). Os seams abaixo sao o unico caminho da IA ate' sessoes/cadastros.
+        (into (if repo-integracao-ia
+                (integracao-ia-http/rotas
+                 {:repo-integracao-ia repo-integracao-ia
+                  :segredo (:segredo (or integracao-ia (:integracao-ia (config/carregar))))
+                  :contexto-da-sessao (fn [ente-id sessao-id] (contexto-para-ia repo-sessoes repo-cadastros ente-id sessao-id))
+                  :abrir-gravacao (fn [ente-id seg-id] (abrir-gravacao-para-ia repo-sessoes objeto-store ente-id seg-id))
+                  :registrar-transcricao repo-sessoes-comp/registrar-transcricao-em-tx!})
+                #{})))))
