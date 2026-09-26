@@ -56,9 +56,35 @@
      :detalhe     (texto! p "detalhe" 2000)
      :retentavel  (get p "retentavel")}))
 
+(defn- payload-ata-rascunho-pronta [p]
+  (let [inc (get p "incerteza")]
+    (when-not (contains? #{"normal" "revisar_com_atencao"} inc) (invalido! "incerteza desconhecida" "incerteza"))
+    {:sessao-id              (uuid! p "sessao-id")
+     :solicitacao-id         (uuid! p "solicitacao-id")
+     :rascunho-id            (uuid! p "rascunho-id")
+     :modelo-llm-id          (texto! p "modelo-llm-id" 200)
+     :prompt-versao          (texto! p "prompt-versao" 80)
+     :incerteza              inc
+     :n-citacoes             (inteiro! p "n-citacoes" 0)
+     :n-citacoes-conferidas  (inteiro! p "n-citacoes-conferidas" 0)
+     :n-paragrafos-sem-fonte (inteiro! p "n-paragrafos-sem-fonte" 0)
+     :n-pontos-a-confirmar   (inteiro! p "n-pontos-a-confirmar" 0)}))
+
+(defn- payload-ata-falhou [p]
+  (let [cat (get p "categoria")]
+    (when-not (contains? logic/categorias-falha cat) (invalido! "categoria de falha desconhecida" "categoria"))
+    (when-not (boolean? (get p "retentavel")) (invalido! "retentavel deve ser booleano" "retentavel"))
+    {:sessao-id      (uuid! p "sessao-id")
+     :solicitacao-id (uuid! p "solicitacao-id")
+     :categoria      cat
+     :detalhe        (texto! p "detalhe" 2000)
+     :retentavel     (get p "retentavel")}))
+
 (def ^:private leitores
   {["TranscricaoConcluida" 1] payload-transcricao-concluida
-   ["TranscricaoFalhou" 1]    payload-transcricao-falhou})
+   ["TranscricaoFalhou" 1]    payload-transcricao-falhou
+   ["AtaRascunhoPronta" 1]    payload-ata-rascunho-pronta
+   ["AtaFalhou" 1]            payload-ata-falhou})
 
 (defn evento->dominio
   "Corpo JSON -> {:tipo :versao :chave :ente-id :correlation-id :ocorrido-em :payload}. (tipo, versao)

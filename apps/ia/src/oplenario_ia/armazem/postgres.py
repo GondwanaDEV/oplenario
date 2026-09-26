@@ -12,7 +12,14 @@ import psycopg
 from psycopg.rows import dict_row, tuple_row
 from psycopg.types.json import Jsonb
 
-from oplenario_ia.armazem.porta import NovaTranscricao, NovoTrabalho, Trabalho, TranscricaoGuardada
+from oplenario_ia.armazem.porta import (
+    NovaTranscricao,
+    NovoRascunho,
+    NovoTrabalho,
+    RascunhoGuardado,
+    Trabalho,
+    TranscricaoGuardada,
+)
 from oplenario_ia.transcricao.modelo import Trecho
 
 MIGRACOES: list[str] = [
@@ -51,6 +58,26 @@ MIGRACOES: list[str] = [
       UNIQUE (segmento_id, versao)
     );
     """,
+    # 2 — rascunhos de ata (Faixa A / A.6b): o texto proposto fica aqui até a secretaria publicar no core
+    """
+    CREATE TABLE IF NOT EXISTS ia.rascunho_ata (
+      id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      ente_id        uuid NOT NULL,
+      sessao_id      uuid NOT NULL,
+      solicitacao_id uuid NOT NULL UNIQUE,
+      execucao_id    text NOT NULL,
+      texto          text NOT NULL,
+      citacoes       jsonb NOT NULL,
+      paragrafos_sem_fonte jsonb NOT NULL,
+      incerteza      jsonb NOT NULL,
+      vendor         text NOT NULL,
+      modelo         text NOT NULL,
+      prompt_versao  text NOT NULL,
+      transcricoes   jsonb NOT NULL,
+      criado_em      timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_transcricao_sessao ON ia.transcricao (ente_id, sessao_id);
+    """,
 ]
 
 
@@ -86,6 +113,25 @@ def _guardada(r: dict[str, Any]) -> TranscricaoGuardada:
         modelo_diarizacao=r["modelo_diarizacao"],
         cobertura=r["cobertura"],
         trechos=[Trecho(**t) for t in r["trechos"]],
+        criado_em=r["criado_em"],
+    )
+
+
+def _rascunho(r: dict[str, Any]) -> RascunhoGuardado:
+    return RascunhoGuardado(
+        id=str(r["id"]),
+        ente_id=str(r["ente_id"]),
+        sessao_id=str(r["sessao_id"]),
+        solicitacao_id=str(r["solicitacao_id"]),
+        execucao_id=r["execucao_id"],
+        texto=r["texto"],
+        citacoes=r["citacoes"],
+        paragrafos_sem_fonte=r["paragrafos_sem_fonte"],
+        incerteza=r["incerteza"],
+        vendor=r["vendor"],
+        modelo=r["modelo"],
+        prompt_versao=r["prompt_versao"],
+        transcricoes=r["transcricoes"],
         criado_em=r["criado_em"],
     )
 
@@ -203,6 +249,56 @@ class ArmazemPostgres:
             except psycopg.errors.InvalidTextRepresentation:
                 return None
         return _guardada(r) if r else None
+
+    def transcricoes_da_sessao(self, ente_id: str, sessao_id: str) -> list[TranscricaoGuardada]:
+        with self._conectar() as c:
+            rows = c.execute(
+                """SELECT * FROM (SELECT DISTINCT ON (segmento_id) * FROM ia.transcricao
+                                  WHERE ente_id = %s AND sessao_id = %s ORDER BY segmento_id, versao DESC) u
+                   ORDER BY criado_em, id""",
+                (ente_id, sessao_id),
+            ).fetchall()
+        return [_guardada(r) for r in rows]
+
+    def concluir_rascunho(
+        self, trabalho_id: int, novo: NovoRascunho, notificar: Callable[[RascunhoGuardado], NovoTrabalho]
+    ) -> RascunhoGuardado:
+        with self._conectar() as c, c.transaction():
+            r = c.execute(
+                """INSERT INTO ia.rascunho_ata (ente_id, sessao_id, solicitacao_id, execucao_id, texto, citacoes,
+                                                paragrafos_sem_fonte, incerteza, vendor, modelo, prompt_versao,
+                                                transcricoes)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *""",
+                (
+                    novo.ente_id,
+                    novo.sessao_id,
+                    novo.solicitacao_id,
+                    novo.execucao_id,
+                    novo.texto,
+                    Jsonb(novo.citacoes),
+                    Jsonb(novo.paragrafos_sem_fonte),
+                    Jsonb(novo.incerteza),
+                    novo.vendor,
+                    novo.modelo,
+                    novo.prompt_versao,
+                    Jsonb(novo.transcricoes),
+                ),
+            ).fetchone()
+            assert r is not None
+            g = _rascunho(r)
+            c.execute(
+                "UPDATE ia.trabalho SET estado = 'concluido', atualizado_em = now() WHERE id = %s", (trabalho_id,)
+            )
+            self._enfileirar(c, notificar(g))
+            return g
+
+    def rascunho(self, rascunho_id: str) -> RascunhoGuardado | None:
+        with self._conectar() as c:
+            try:
+                r = c.execute("SELECT * FROM ia.rascunho_ata WHERE id = %s", (rascunho_id,)).fetchone()
+            except psycopg.errors.InvalidTextRepresentation:
+                return None
+        return _rascunho(r) if r else None
 
     def trabalhos(self) -> list[dict[str, Any]]:
         with self._conectar() as c:

@@ -7,6 +7,7 @@
             [oplenario.sessoes.diplomat.producers :as producers]
             [oplenario.sessoes.db.anuncio :as anuncio]
             [oplenario.sessoes.db.ata :as ata]
+            [oplenario.sessoes.db.ata-rascunho :as ata-rascunho]
             [oplenario.sessoes.db.chamada :as chamada]
             [oplenario.sessoes.db.folha :as db-folha]
             [oplenario.sessoes.db.gravacao :as gravacao]
@@ -157,7 +158,12 @@
     pelo chamador (host), que ve a sessao inteira.")
   (listar-transcricoes [this ente-id sessao-id] "Ponteiros de transcricao da sessao (mais recentes primeiro).")
   (publicar-ata! [this ente-id m] "Faixa A / A.6: publica a proxima versao da ata (append-only, versao MAX+1).")
-  (ata-da-sessao [this ente-id sessao-id] "{:atual (com texto) :versoes (metadados)} numa tx.")
+  (ata-da-sessao [this ente-id sessao-id]
+    "{:atual (com texto) :versoes (metadados) :rascunho (situacao do pedido de rascunho mais recente)} numa tx.")
+  (solicitar-rascunho-ata! [this ente-id m]
+    "Faixa A / A.6b: grava o pedido de rascunho e emite `ata.rascunho-solicitado` (core->IA) na MESMA tx. `pode-pedir?`
+    (fn [ultimo] -> bool) decide DENTRO da tx se ja' ha' pedido em curso — dois cliques nao viram dois pedidos.")
+  (buscar-rascunho-pronto [this ente-id sessao-id rascunho-id] "O ponteiro 'pronto' desta sessao, ou nil.")
   (buscar-transcricao [this ente-id sessao-id transcricao-id] "O ponteiro concluido desta sessao, ou nil.")
   (listar-gravacoes-pendentes [this ente-id limite]
     "Faixa A / A.2: {:segmentos [...sem sessao, mais recentes primeiro] :sessoes [...candidatas a vinculo, na
@@ -517,8 +523,21 @@
   (publicar-ata! [this ente-id m]
     (transacao this ente-id #(ata/publicar! % (assoc m :ente-id ente-id))))
   (ata-da-sessao [this ente-id sessao-id]
-    (transacao this ente-id (fn [tx] {:atual   (ata/atual tx ente-id sessao-id)
-                                      :versoes (ata/listar-versoes tx ente-id sessao-id)})))
+    (transacao this ente-id (fn [tx] {:atual    (ata/atual tx ente-id sessao-id)
+                                      :versoes  (ata/listar-versoes tx ente-id sessao-id)
+                                      :rascunho (ata-rascunho/ultimo-da-sessao tx ente-id sessao-id)})))
+  (solicitar-rascunho-ata! [this ente-id {:keys [sessao-id solicitacao-id pode-pedir?] :as m}]
+    (transacao this ente-id
+      (fn [tx]
+        (when-not (pode-pedir? (ata-rascunho/ultimo-da-sessao tx ente-id sessao-id))
+          (throw (ex-info "a IA ja' esta' redigindo o rascunho desta ata: aguarde"
+                          {:tipo :conflito/rascunho-em-curso :sessao-id sessao-id})))
+        (let [r (ata-rascunho/solicitar! tx (assoc m :ente-id ente-id))]
+          (producers/emitir-ata-rascunho-solicitado! bus tx ente-id
+            {:solicitacao-id solicitacao-id :sessao-id sessao-id})
+          r))))
+  (buscar-rascunho-pronto [this ente-id sessao-id rascunho-id]
+    (transacao this ente-id #(ata-rascunho/buscar-pronto % ente-id sessao-id rascunho-id)))
   (buscar-transcricao [this ente-id sessao-id transcricao-id]
     (transacao this ente-id #(transcricao/buscar-da-sessao % ente-id sessao-id transcricao-id)))
   (listar-gravacoes-pendentes [this ente-id limite]
@@ -679,6 +698,12 @@
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."
   []
   (->RepoSessoesPg nil nil))
+
+(defn registrar-rascunho-ata-em-tx!
+  "Faixa A / A.6b (ADR-0008): grava o fato que a IA devolveu sobre um pedido de rascunho de ata NA TX DO CHAMADOR (a
+  caixa de entrada da fronteira) — mesmo molde de `registrar-transcricao-em-tx!`."
+  [tx ente-id m]
+  (ata-rascunho/registrar! tx (assoc m :ente-id ente-id)))
 
 (defn registrar-transcricao-em-tx!
   "Faixa A / A.3 (ADR-0008): grava o ponteiro da transcricao NA TX DO CHAMADOR (a caixa de entrada da fronteira

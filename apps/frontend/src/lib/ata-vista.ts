@@ -33,6 +33,9 @@ export function faltaParaPublicar(f: Formulario): string | null {
   if (f.texto.trim() === "") return "Escreva ou cole o texto da ata.";
   if (f.texto.length > TETO_TEXTO_ATA) return `O texto passou do limite de ${TETO_TEXTO_ATA.toLocaleString("pt-BR")} caracteres.`;
   if (f.retificando && f.motivo.trim() === "") return "Diga o motivo da retificação — ele fica registrado junto da nova versão.";
+  const pontos = f.texto.match(/\[\s*confirmar\s*:/gi)?.length ?? 0;
+  if (pontos)
+    return `Resolva ${pontos === 1 ? "o ponto" : `os ${pontos} pontos`} a confirmar ([confirmar: …]) antes de publicar.`;
   return null;
 }
 

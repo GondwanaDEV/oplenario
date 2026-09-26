@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from oplenario_ia.armazem.memoria import ArmazemMemoria
-from oplenario_ia.armazem.porta import Armazem, NovaTranscricao, NovoTrabalho
+from oplenario_ia.armazem.porta import Armazem, NovaTranscricao, NovoRascunho, NovoTrabalho
 from oplenario_ia.transcricao.modelo import Trecho
 
 URL = os.environ.get("OPLENARIO_IA_DATABASE_URL_TESTE")
@@ -91,6 +91,55 @@ def test_concluir_transcricao_versiona_por_segmento_e_enfileira_o_aviso(armazem:
     assert tipos == [("notificar", "pendente")] * 2 + [("transcrever", "concluido")] * 2
     assert armazem.transcricao("nao-e-uuid") is None
     assert armazem.transcricao("00000000-0000-0000-0000-000000000000") is None
+
+
+SESSAO = "30000000-0000-0000-0000-000000000003"
+SOLIC = "90000000-0000-0000-0000-000000000009"
+SEG_A = "a0000000-0000-0000-0000-00000000000a"
+SEG_B = "b0000000-0000-0000-0000-00000000000b"
+
+
+def test_transcricoes_da_sessao_trazem_so_a_ultima_versao_de_cada_gravacao(armazem: Armazem) -> None:
+    armazem.registrar_feed([novo("t1"), novo("t2"), novo("t3")], 3)
+    for seg in (SEG_A, SEG_A, SEG_B):
+        t = armazem.proximo(AGORA)
+        assert t is not None
+        armazem.concluir_transcricao(t.id, nova(seg), lambda g: novo(f"aviso-{g.id}", "notificar"))
+    ts = armazem.transcricoes_da_sessao(ENTE, SESSAO)
+    assert sorted((t.segmento_id, t.versao) for t in ts) == [(SEG_A, 2), (SEG_B, 1)]
+    assert armazem.transcricoes_da_sessao("20000000-0000-0000-0000-000000000002", SESSAO) == [], "outra Casa"
+
+
+def test_concluir_rascunho_guarda_conclui_e_avisa_uma_vez_por_solicitacao(armazem: Armazem) -> None:
+    armazem.registrar_feed([novo("r", "redigir_ata")], 1)
+    t = armazem.proximo(AGORA)
+    assert t is not None
+    r = NovoRascunho(
+        ENTE,
+        SESSAO,
+        SOLIC,
+        "exec-1",
+        "Ata. [[transcricao:x#1 | Declaro aberta a sessão]]",
+        [{"fonte_id": "transcricao:x#1", "status": "conferida", "inicio": 5, "fim": 50}],
+        [1],
+        {"nivel": "revisar_com_atencao", "motivos": ["sem_fonte"]},
+        "fake",
+        "fake-1",
+        "ata-v1",
+        ["x"],
+    )
+    g = armazem.concluir_rascunho(t.id, r, lambda g: novo(f"AtaRascunhoPronta:{g.solicitacao_id}", "notificar"))
+    lido = armazem.rascunho(g.id)
+    assert lido is not None and lido.texto == r.texto and lido.citacoes == r.citacoes and lido.incerteza == r.incerteza
+    assert lido.criado_em is not None and lido.transcricoes == ["x"]
+    estados = {x["tipo"]: x["estado"] for x in armazem.trabalhos()}
+    assert estados == {"redigir_ata": "concluido", "notificar": "pendente"}
+    assert armazem.rascunho("nao-e-uuid") is None
+    armazem.registrar_feed([novo("r2", "redigir_ata")], 2)
+    t2 = armazem.proximo(AGORA)
+    assert t2 is not None
+    with pytest.raises(Exception):  # noqa: B017 — o UNIQUE da solicitação (memória e Postgres)
+        armazem.concluir_rascunho(t2.id, r, lambda g: novo("outro", "notificar"))
 
 
 def test_descartado_nao_volta(armazem: Armazem) -> None:

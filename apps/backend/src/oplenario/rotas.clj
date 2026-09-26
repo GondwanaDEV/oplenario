@@ -455,7 +455,8 @@
         ;; ADR-0008: o cliente core -> IA (leitura da transcricao). Construido uma vez; sem url/segredo toda leitura
         ;; responde indisponivel (R-IA-1), nunca 500.
         ia (plataforma-ia/plataforma-ia integracao-ia)
-        ler-transcricao-fn (fn [ente-id tid] (plataforma-ia/ler-transcricao ia ente-id tid))]
+        ler-transcricao-fn (fn [ente-id tid] (plataforma-ia/ler-transcricao ia ente-id tid))
+        ler-rascunho-ata-fn (fn [ente-id rid] (plataforma-ia/ler-rascunho-ata ia ente-id rid))]
     (-> #{["/saude"             :get http/saude :route-name :saude]
           ["/eu"                :get [auth http/eu] :route-name :eu]
           ["/painel-secretaria" :get [auth (it/exige-papel "secretario") http/painel-secretaria]
@@ -477,7 +478,8 @@
                                    :serializador-folha serializador-folha-fn
                                    :renderizador-pdf renderizador-pdf-fn
                                    :nome-na-casa nome-na-casa-fn
-                                   :ler-transcricao ler-transcricao-fn}))
+                                   :ler-transcricao ler-transcricao-fn
+                                   :ler-rascunho-ata ler-rascunho-ata-fn}))
         (into (legislativo-http/rotas {:auth auth :repo-legislativo repo-legislativo
                                        :consultar-sessao consultar-sessao
                                        :sessao-fechada? sessao-fechada?
@@ -539,5 +541,6 @@
                   :segredo (:segredo integracao-ia)
                   :contexto-da-sessao (fn [ente-id sessao-id] (contexto-para-ia repo-sessoes repo-cadastros ente-id sessao-id))
                   :abrir-gravacao (fn [ente-id seg-id] (abrir-gravacao-para-ia repo-sessoes objeto-store ente-id seg-id))
-                  :registrar-transcricao repo-sessoes-comp/registrar-transcricao-em-tx!})
+                  :registrar-transcricao repo-sessoes-comp/registrar-transcricao-em-tx!
+                  :registrar-rascunho-ata repo-sessoes-comp/registrar-rascunho-ata-em-tx!})
                 #{})))))

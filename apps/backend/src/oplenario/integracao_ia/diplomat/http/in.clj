@@ -57,28 +57,29 @@
                                     (:audio-hash r) (assoc "X-Conteudo-Sha256" (:audio-hash r)))
                          :body    (:stream r)}))))
 
-(defn- receber-handler [repo-ia registrar-transcricao]
+(defn- receber-handler [repo-ia efeitos]
   (fn [req]
     (try
       (let [ev (adapters-in/evento->dominio (:json-params req))
-            r  (controllers/receber! repo-ia registrar-transcricao ev)]
+            r  (controllers/receber! repo-ia efeitos ev)]
         (http/json-resposta (if (:aplicado r) 201 200) (adapters-out/recibo->wire (:chave ev) r)))
       (catch clojure.lang.ExceptionInfo e
         (case (:tipo (ex-data e))
           :validacao/evento-desconhecido
           (http/json-resposta 422 {:erro (ex-message e) :evento (:evento (ex-data e)) :versao (:versao (ex-data e))})
-          :validacao/transcricao-fora-da-sessao
+          (:validacao/transcricao-fora-da-sessao :validacao/rascunho-fora-da-sessao)
           (http/json-resposta 422 {:erro (ex-message e)})
           (throw e))))))
 
 (defn rotas
   "Fragmento de rotas da fronteira. `segredo` = OPLENARIO_IA_SEGREDO; os seams vem do host (rotas/montar)."
-  [{:keys [repo-integracao-ia segredo contexto-da-sessao abrir-gravacao registrar-transcricao]}]
+  [{:keys [repo-integracao-ia segredo contexto-da-sessao abrir-gravacao registrar-transcricao registrar-rascunho-ata]}]
   (let [servico (exige-servico-ia segredo)]
     #{[(str logic/prefixo "/eventos") :get [servico (feed-handler repo-integracao-ia)]
        :route-name :integracao-ia/feed]
       [(str logic/prefixo "/eventos") :post
-       [servico it/corpo-json (receber-handler repo-integracao-ia registrar-transcricao)]
+       [servico it/corpo-json (receber-handler repo-integracao-ia {:registrar-transcricao registrar-transcricao
+                                                                  :registrar-rascunho-ata registrar-rascunho-ata})]
        :route-name :integracao-ia/receber]
       [(str logic/prefixo "/entes/:ente-id/sessoes/:sessao-id/contexto") :get
        [servico (contexto-handler contexto-da-sessao)]

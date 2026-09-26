@@ -69,8 +69,13 @@
    ;; Faixa A / A.6 — a ata. Folhas ANTES dos agregados.
    ["AtaVersaoOut" out/AtaVersaoOut]
    ["AtaAtualOut" out/AtaAtualOut]
+   ["AtaRascunhoOut" out/AtaRascunhoOut]
    ["AtaSessaoOut" out/AtaSessaoOut]
    ["AtaReciboOut" out/AtaReciboOut]
+   ["CitacaoRascunhoOut" out/CitacaoRascunhoOut]
+   ["IncertezaRascunhoOut" out/IncertezaRascunhoOut]
+   ["AtaRascunhoConteudoOut" out/AtaRascunhoConteudoOut]
+   ["SolicitacaoRascunhoOut" out/SolicitacaoRascunhoOut]
    ["PautaItemAdicionadoOut" out/PautaItemAdicionadoOut]
    ["PautaItemReordenadoOut" out/PautaItemReordenadoOut]
    ["PautaItemRemovidoOut" out/PautaItemRemovidoOut]

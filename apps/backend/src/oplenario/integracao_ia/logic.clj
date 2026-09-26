@@ -39,10 +39,23 @@
   (when (:sessao-id payload)
     (promover-gravacao-vinculada ente-id payload)))
 
+(defn- promover-ata-solicitada
+  "`ata.rascunho-solicitado` -> `AtaSolicitada` v1 (Faixa A / A.6b). Sessao secreta nunca chega aqui (o controller de
+  sessoes recusa o pedido) e, se chegasse, o contexto responderia 403 — o sigilo tem duas travas."
+  [ente-id {:keys [solicitacao-id sessao-id]}]
+  {:ente-id ente-id
+   :tipo    "AtaSolicitada"
+   :versao  1
+   :chave   (str "AtaSolicitada:v1:" solicitacao-id)
+   :payload {:solicitacao-id (str solicitacao-id)
+             :sessao-id      (str sessao-id)
+             :contexto-uri   (uri-contexto-sessao ente-id sessao-id)}})
+
 (def promocoes
   "tipo de dominio -> (fn [ente-id payload] -> evento de integracao | nil). FONTE UNICA do que atravessa."
   {"gravacao.segmento-vinculado" promover-gravacao-vinculada
-   "gravacao.segmento-captado"   promover-gravacao-captada})
+   "gravacao.segmento-captado"   promover-gravacao-captada
+   "ata.rascunho-solicitado"     promover-ata-solicitada})
 
 (defn promover
   "O evento de integracao para um evento de dominio, ou nil (tipo nao promovido, ou conteudo restrito)."
@@ -58,7 +71,9 @@
 
 (def eventos-aceitos
   "(tipo, versao) que a caixa de entrada conhece. Desconhecido -> 422 (a IA esta' a frente do core: nao aplica)."
-  #{["TranscricaoConcluida" 1] ["TranscricaoFalhou" 1]})
+  #{["TranscricaoConcluida" 1] ["TranscricaoFalhou" 1] ["AtaRascunhoPronta" 1] ["AtaFalhou" 1]})
+
+(def eventos-de-ata #{"AtaRascunhoPronta" "AtaFalhou"})
 
 ;; ---------- sigilo e contexto ----------
 
@@ -95,3 +110,13 @@
     "TranscricaoFalhou"    {:situacao "falhou" :sessao-id (:sessao-id payload) :segmento-id (:segmento-id payload)
                             :categoria-erro (:categoria payload) :detalhe-erro (:detalhe payload)
                             :retentavel (:retentavel payload) :ocorrido-em ocorrido-em}))
+
+(defn fato-do-rascunho
+  "Evento `AtaRascunhoPronta`/`AtaFalhou` (dominio) -> o fato que `sessoes` grava no ponteiro do rascunho. O texto
+  nunca vem: so' o id na IA, a proveniencia e os sinais da Camada de Confianca."
+  [{:keys [tipo payload ocorrido-em]}]
+  (case tipo
+    "AtaRascunhoPronta" (assoc payload :situacao "pronto" :ocorrido-em ocorrido-em)
+    "AtaFalhou"         {:situacao "falhou" :sessao-id (:sessao-id payload) :solicitacao-id (:solicitacao-id payload)
+                         :categoria-erro (:categoria payload) :detalhe-erro (:detalhe payload)
+                         :retentavel (:retentavel payload) :ocorrido-em ocorrido-em}))

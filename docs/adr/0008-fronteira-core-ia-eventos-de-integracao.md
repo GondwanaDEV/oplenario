@@ -71,3 +71,21 @@ de um lado à do outro.
   objeto (inclusive gravação restrita); pelo core, cada leitura passa pelo tenant e pelo sigilo.
 - **Broker de mensagens dedicado** — infra nova sem necessidade: o volume é de dezenas de eventos por sessão, e o
   Postgres já é a fila da plataforma (§22.9).
+
+## Adendo (26/09/2026) — a ata na mesma fronteira (Faixa A / A.6b)
+
+Extensão sem conceito novo: dois eventos a mais em cada sentido, mesmos mecanismos (feed, caixa de entrada, leitura
+sob demanda).
+
+- **core → IA: `AtaSolicitada` v1** (`solicitacao-id`, `sessao-id`, `contexto-uri`), promovido de
+  `ata.rascunho-solicitado`. O gatilho é o **pedido explícito da secretaria**, não o `SessaoEncerrada` da lista do
+  §22.3.3: no encerramento as transcrições ainda não existem, e rascunho redigido sem elas seria rascunho vazio. O
+  pedido só é aceito com ≥1 transcrição concluída, sessão não secreta (o sigilo tem duas travas: o controller recusa e
+  o contexto responde 403) e sem outro pedido em curso nos últimos 30 min (decidido na tx).
+- **IA → core: `AtaRascunhoPronta` v1 / `AtaFalhou` v1**. Só metadados: o id do rascunho **na IA**, modelo, versão do
+  prompt e os sinais da Camada de Confiança (incerteza, citações conferidas, parágrafos sem fonte, pontos a
+  confirmar). O texto fica no satélite (`ia.rascunho_ata`, §22.3.4: "ata em rascunho" é transitória da IA) e o core o
+  lê sob demanda (`GET /v1/entes/{ente}/atas/rascunhos/{id}`), só para um id que ele mesmo registrou para a sessão.
+- **A promoção rascunho → publicado** é o POST da ata no core com `origem_redacao = gerada_automaticamente` e o
+  `rascunho-id`; modelo e versão do prompt vêm do ponteiro do core, nunca do cliente. `AtaRevisadaEPublicada`
+  (core → IA, métrica de aceitação) fica para a A.6c.

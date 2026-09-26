@@ -48,7 +48,8 @@
                                     :segredo seg-redo
                                     :contexto-da-sessao (or contexto (fn [_ _] contexto-ok))
                                     :abrir-gravacao (or abrir (fn [_ _] nil))
-                                    :registrar-transcricao (fn [_tx e m] (some-> efeitos (swap! conj [e m])))})
+                                    :registrar-transcricao (fn [_tx e m] (some-> efeitos (swap! conj [e m])))
+                                    :registrar-rascunho-ata (fn [_tx e m] (some-> efeitos (swap! conj [:ata e m])))})
                     it/globais)
       ph/create-server ::ph/service-fn))
 
@@ -140,10 +141,34 @@
       (is (= "entrada" (:categoria-erro (second (first @efeitos)))))))
   (testing "contrato desconhecido ou invalido nao e' aplicado"
     (is (= 422 (:status (post (servico) (evento "k-2" :versao 2)))) "versao que o core ainda nao conhece")
-    (is (= 422 (:status (post (servico) (evento "k-3" :tipo "AtaRascunhoPronta")))))
+    (is (= 422 (:status (post (servico) (evento "k-3" :tipo "ResumoCidadaoPronto")))))
     (is (= 400 (:status (post (servico) (evento "k-4" :payload {"sessao-id" "x"})))))
     (is (= 400 (:status (post (servico) (evento "k-5" :tipo "TranscricaoFalhou"
                                               :payload {"sessao-id" (str sid) "segmento-id" (str seg)
                                                         "categoria" "saida_plausivel_errada" "detalhe" "x"
                                                         "retentavel" false}))))
         "categoria 5 nao e' falha tecnica (§22.3.5)")))
+
+(deftest caixa-de-entrada-da-ata
+  (let [efeitos (atom []) svc (servico :efeitos efeitos) solic (str (random-uuid)) rid (str (random-uuid))]
+    (is (= 201 (:status (post svc (evento "a-1" :tipo "AtaRascunhoPronta"
+                                          :payload {"sessao-id" (str sid) "solicitacao-id" solic "rascunho-id" rid
+                                                    "modelo-llm-id" "fake:fake-1" "prompt-versao" "ata-v1"
+                                                    "incerteza" "revisar_com_atencao" "n-citacoes" 3
+                                                    "n-citacoes-conferidas" 3 "n-paragrafos-sem-fonte" 1
+                                                    "n-pontos-a-confirmar" 1})))))
+    (let [[marca e m] (first @efeitos)]
+      (is (= [:ata ente] [marca e]) "o rascunho vai para o seam da ata, nao para o da transcricao")
+      (is (= ["pronto" "ata-v1" "revisar_com_atencao" 1]
+             [(:situacao m) (:prompt-versao m) (:incerteza m) (:n-pontos-a-confirmar m)])))
+    (is (= 201 (:status (post svc (evento "a-2" :tipo "AtaFalhou"
+                                          :payload {"sessao-id" (str sid) "solicitacao-id" solic
+                                                    "categoria" "entrada" "detalhe" "sem transcricao"
+                                                    "retentavel" false})))))
+    (is (= ["falhou" "entrada"] ((juxt :situacao :categoria-erro) (nth (second @efeitos) 2))))
+    (is (= 400 (:status (post svc (evento "a-3" :tipo "AtaRascunhoPronta"
+                                          :payload {"sessao-id" (str sid) "solicitacao-id" solic "rascunho-id" rid
+                                                    "modelo-llm-id" "m" "prompt-versao" "p" "incerteza" "talvez"
+                                                    "n-citacoes" 0 "n-citacoes-conferidas" 0
+                                                    "n-paragrafos-sem-fonte" 0 "n-pontos-a-confirmar" 0}))))
+        "incerteza fora do vocabulario")))

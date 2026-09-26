@@ -618,32 +618,72 @@
   [repo-sessoes nome-na-casa ator sessao-id]
   (when-let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
     (authz/check! ator :sessao/ver s logic/pode-ver-sessao?)
-    (let [{:keys [atual versoes]} (repo/ata-da-sessao repo-sessoes (:ente-id ator) sessao-id)
+    (let [{:keys [atual versoes rascunho]} (repo/ata-da-sessao repo-sessoes (:ente-id ator) sessao-id)
           nomes (nomes-de-quem-congelou nome-na-casa (:ente-id ator) (map #(assoc % :gerada-por (:publicada-por %)) versoes))
           nome (fn [v] (assoc v :publicada-por-nome (get nomes (:publicada-por v))))]
       {:sessao-id sessao-id
        :pode-ter-ata (logic/pode-ter-ata? s)
        :atual (some-> atual nome)
-       :versoes (mapv nome versoes)})))
+       :versoes (mapv nome versoes)
+       :rascunho rascunho})))
+
+(defn- exigir-sessao-com-ata! [s sessao-id]
+  (when-not (logic/pode-ter-ata? s)
+    (throw (ex-info "esta sessao nao tem ata: ela ainda nao acabou, ou o tipo de sessao nao gera ata regimental"
+                    {:tipo :conflito/sessao-sem-ata :sessao-id sessao-id :estado (:estado s)}))))
 
 (defn publicar-ata!
-  "Faixa A / A.6a: publica (ou retifica) a ata da sessao. Regras: a sessao gera ata e ja' acabou
+  "Faixa A / A.6: publica (ou retifica) a ata da sessao. Regras: a sessao gera ata e ja' acabou
   (`logic/pode-ter-ata?`, senao `:conflito/sessao-sem-ata`); retificacao (ja' existe versao) exige o motivo
-  (`:validacao/retificacao-sem-motivo`, decidido no db sobre a versao da mesma tx); nesta fatia so' a origem `redigida_externamente` (o rascunho da IA chega na
-  A.6b). O texto e' congelado por SHA-256; quem publica vem do `ator`, nunca do cliente. nil = sessao inexistente."
-  [repo-sessoes ator sessao-id {:keys [texto origem-redacao motivo-retificacao]}]
+  (`:validacao/retificacao-sem-motivo`, decidido no db sobre a versao da mesma tx). Origem `gerada_automaticamente`
+  (A.6b) exige o `rascunho-id` de um rascunho PRONTO desta sessao — modelo e versao do prompt vem do ponteiro, nunca
+  do cliente (proveniencia, §22.3.5). O texto e' congelado por SHA-256; quem publica vem do `ator`. nil = sessao
+  inexistente."
+  [repo-sessoes ator sessao-id {:keys [texto origem-redacao motivo-retificacao rascunho-id]}]
   (when-let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
     (authz/check! ator :sessao/ver s logic/pode-ver-sessao?)
-    (when-not (logic/pode-ter-ata? s)
-      (throw (ex-info "esta sessao nao tem ata: ela ainda nao acabou, ou o tipo de sessao nao gera ata regimental"
-                      {:tipo :conflito/sessao-sem-ata :sessao-id sessao-id :estado (:estado s)})))
-    (when-not (= "redigida_externamente" origem-redacao)
-      (throw (ex-info "origem de redacao ainda nao suportada" {:tipo :validacao/invalido :campo :origem-redacao})))
-    (repo/publicar-ata! repo-sessoes (:ente-id ator)
-      {:sessao-id sessao-id :texto texto :origem-redacao origem-redacao
-       :motivo-retificacao motivo-retificacao
-       :conteudo-sha256 (sha256-hex (.getBytes ^String texto "UTF-8"))
-       :publicada-por (:identidade-id ator)})))
+    (exigir-sessao-com-ata! s sessao-id)
+    (let [rascunho (when (= "gerada_automaticamente" origem-redacao)
+                     (or (repo/buscar-rascunho-pronto repo-sessoes (:ente-id ator) sessao-id rascunho-id)
+                         (throw (ex-info "o rascunho informado nao e' um rascunho pronto desta sessao"
+                                         {:tipo :conflito/rascunho-desconhecido :sessao-id sessao-id}))))]
+      (repo/publicar-ata! repo-sessoes (:ente-id ator)
+        (cond-> {:sessao-id sessao-id :texto texto :origem-redacao origem-redacao
+                 :motivo-retificacao motivo-retificacao
+                 :conteudo-sha256 (sha256-hex (.getBytes ^String texto "UTF-8"))
+                 :publicada-por (:identidade-id ator)}
+          rascunho (assoc :rascunho-id rascunho-id :modelo-llm-id (:modelo-llm-id rascunho)
+                          :prompt-versao (:prompt-versao rascunho)))))))
+
+(defn solicitar-rascunho-ata!
+  "Faixa A / A.6b: a secretaria pede o rascunho da ata a IA. Regras, na ordem: a sessao tem ata
+  (`:conflito/sessao-sem-ata`); nao e' secreta (`:conflito/sessao-sigilosa` — nunca vai para a IA); ja' ha' ao menos
+  uma transcricao concluida (`:conflito/sem-transcricao`); nao ha' pedido em curso (`:conflito/rascunho-em-curso`,
+  decidido na tx). Devolve {:solicitacao-id}; nil = sessao inexistente."
+  [repo-sessoes ator sessao-id agora]
+  (when-let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/ver s logic/pode-ver-sessao?)
+    (exigir-sessao-com-ata! s sessao-id)
+    (when-not (logic/sessao-vai-para-ia? s)
+      (throw (ex-info "sessao secreta nao vai para a IA: redija a ata pela tela"
+                      {:tipo :conflito/sessao-sigilosa :sessao-id sessao-id})))
+    (when-not (some #(= "concluida" (:situacao %)) (repo/listar-transcricoes repo-sessoes (:ente-id ator) sessao-id))
+      (throw (ex-info "ainda nao ha' transcricao concluida desta sessao para a IA redigir a ata"
+                      {:tipo :conflito/sem-transcricao :sessao-id sessao-id})))
+    (repo/solicitar-rascunho-ata! repo-sessoes (:ente-id ator)
+      {:sessao-id sessao-id :solicitacao-id (random-uuid) :solicitado-por (:identidade-id ator) :ocorrido-em agora
+       :pode-pedir? #(logic/pode-pedir-rascunho? % agora)})))
+
+(defn rascunho-ata
+  "Faixa A / A.6b: o CONTEUDO do rascunho, lido da IA pelo seam `ler-rascunho-ata` (fn [ente-id rascunho-id] ->
+  mapa | nil; lanca `:ia/indisponivel`). Authz na sessao; o rascunho TEM de ser um ponteiro pronto desta sessao —
+  senao nil sem perguntar a IA. nil = sessao ou rascunho inexistente."
+  [repo-sessoes ler-rascunho-ata ator sessao-id rascunho-id]
+  (when-let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/ver s logic/pode-ver-sessao?)
+    (when-let [p (repo/buscar-rascunho-pronto repo-sessoes (:ente-id ator) sessao-id rascunho-id)]
+      (when-let [r (ler-rascunho-ata (:ente-id ator) rascunho-id)]
+        (assoc r :ponteiro p)))))
 
 (defn resumo-presenca
   "Read-model da presenca agregada (F7/FE Onda A1), tenant-wide — sem recurso unico p/ camada fina (mesmo
