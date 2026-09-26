@@ -192,6 +192,29 @@ export interface VinculoGravacaoOut {
   sessaoId: string;
 }
 
+export interface SugestaoSessaoOut {
+  sessaoId: string;
+  tipoSessao: "especial" | "extraordinaria" | "ordinaria" | "secreta" | "solene";
+  numeroSequencial: number;
+  estado: "aberta" | "agendada" | "arquivada" | "encerrada" | "nao_realizada" | "suspensa";
+  inicio: string;
+}
+
+export interface GravacaoPendenteOut {
+  id: string;
+  iniciouEm: string;
+  encerrouEm?: string | null;
+  fonteIngestao: "gravacao_local_pos_sessao" | "importacao_legado" | "rtmp_duplicado_ao_vivo" | "youtube_api_fallback";
+  acessoRestrito: boolean;
+  audioHash?: string | null;
+  lockVersion: number;
+  sugestao?: SugestaoSessaoOut | null;
+}
+
+export interface GravacoesPendentesOut {
+  segmentos: GravacaoPendenteOut[];
+}
+
 export interface PautaItemAdicionadoOut {
   id: string;
   ordem: number;

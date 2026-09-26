@@ -36,6 +36,9 @@ const DESTINOS_NAV = [
   // Fatia 2b — a fila de cargas não recebidas (o rito exige que quem recebe assine). Ao lado de Tramitação:
   // é a outra metade do mesmo trabalho. Gated "secretario" (GuardSecretaria + exige-papel no backend).
   { rotulo: "Recebimentos", href: "/recebimentos" },
+  // Faixa A / A.2 da Track IA — gravações enviadas pelo PC da transmissão que ainda não têm sessão. Gated
+  // "secretario" (GuardSecretaria + exige-papel no backend). Vincular leva a gravação à transcrição e à ata.
+  { rotulo: "Gravações", href: "/gravacoes" },
   { rotulo: "Proposições", href: "/proposicoes" },
   // Onda B Slice 6 — Expediente (gerar documento + Protocolo Geral) é área de topo nova, não sub-rota de
   // Proposições (documento administrativo não é matéria legislativa).
