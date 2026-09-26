@@ -685,6 +685,36 @@
       (when-let [r (ler-rascunho-ata (:ente-id ator) rascunho-id)]
         (assoc r :ponteiro p)))))
 
+(defn leitura-da-ata
+  "Faixa A / A.7: a ata que esta sessao le (a vigente da sessao anterior, com o nome de quem publicou) e a leitura ja'
+  registrada. Authz na sessao. nil = sessao inexistente."
+  [repo-sessoes nome-na-casa ator sessao-id]
+  (when-let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/ver s logic/pode-ver-sessao?)
+    (let [{:keys [anterior ata leitura]} (repo/leitura-da-ata repo-sessoes (:ente-id ator) s)
+          nomes (nomes-de-quem-congelou nome-na-casa (:ente-id ator)
+                                        (keep (fn [[k x]] (when x {:gerada-por (get x k)}))
+                                              [[:publicada-por ata] [:registrada-por leitura]]))]
+      {:sessao-id sessao-id
+       :pode-registrar (and (logic/pode-registrar-leitura? s) (nil? leitura))
+       :anterior anterior
+       :ata (some-> ata (assoc :publicada-por-nome (get nomes (:publicada-por ata))))
+       :leitura (some-> leitura (assoc :registrada-por-nome (get nomes (:registrada-por leitura))))})))
+
+(defn registrar-leitura-ata!
+  "Faixa A / A.7: a Mesa registra como a ata anterior foi apresentada (voz sintetizada, presencial ou dispensada).
+  So' com a sessao ABERTA (`:conflito/sessao-nao-aberta`); a versao TEM de ser a vigente (conferido na tx); uma
+  leitura por sessao (`:conflito/leitura-registrada`). Quem registra vem do ator. nil = sessao inexistente."
+  [repo-sessoes ator sessao-id {:keys [modo ata-sessao-id ata-versao]}]
+  (when-let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/conduzir s logic/pode-ver-sessao?)
+    (when-not (logic/pode-registrar-leitura? s)
+      (throw (ex-info "a leitura da ata e' registrada com a sessao aberta"
+                      {:tipo :conflito/sessao-nao-aberta :sessao-id sessao-id :estado (:estado s)})))
+    (repo/registrar-leitura-ata! repo-sessoes (:ente-id ator)
+      {:sessao s :ata-sessao-id ata-sessao-id :ata-versao ata-versao :modo modo
+       :registrada-por (:identidade-id ator)})))
+
 (defn resumo-presenca
   "Read-model da presenca agregada (F7/FE Onda A1), tenant-wide — sem recurso unico p/ camada fina (mesmo
   contrato de `compliance.controllers/painel`). `membros-da-casa` chega JA RESOLVIDO pelo caller (inversao de

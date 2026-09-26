@@ -463,6 +463,42 @@
    [:versao :int]
    [:conteudo-sha256 :string]])
 
+(def SessaoAnteriorOut
+  [:map {:closed true}
+   [:id :string]
+   [:tipo-sessao :string]
+   [:numero-sequencial :int]
+   [:aberta-em {:optional true} [:maybe :string]]
+   [:encerrada-em {:optional true} [:maybe :string]]])
+
+(def AtaParaLerOut
+  "A versao VIGENTE da ata da sessao anterior — a unica que se le (revisada e publicada)."
+  [:map {:closed true}
+   [:versao :int]
+   [:texto :string]
+   [:conteudo-sha256 :string]
+   [:origem-redacao :string]
+   [:publicada-em :string]
+   [:publicada-por-nome {:optional true} [:maybe :string]]])
+
+(def LeituraAtaRegistradaOut
+  [:map {:closed true}
+   [:modo (km/enum-de logic/modos-leitura-ata)]
+   [:ata-sessao-id :string]
+   [:ata-versao :int]
+   [:registrada-em :string]
+   [:registrada-por-nome {:optional true} [:maybe :string]]])
+
+(def LeituraAtaOut
+  "Faixa A / A.7: o painel da leitura da ata anterior. `anterior` nil = nao ha' sessao anterior com ata; `ata` nil =
+  a sessao anterior existe mas a ata dela ainda nao foi publicada."
+  [:map {:closed true}
+   [:sessao-id :string]
+   [:pode-registrar :boolean]
+   [:anterior {:optional true} [:maybe SessaoAnteriorOut]]
+   [:ata {:optional true} [:maybe AtaParaLerOut]]
+   [:leitura {:optional true} [:maybe LeituraAtaRegistradaOut]]])
+
 (def VinculoGravacaoOut
   "Recibo da VINCULACAO de um segmento a uma sessao (resposta 201 de POST /sessoes/:id/gravacao/:seg-id/vincular,
   Opcao A pos-upload). Carrega o `id` do segmento + a `sessao-id` a que foi vinculado. NAO expoe internos

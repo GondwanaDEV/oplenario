@@ -151,3 +151,20 @@
 (defn recibo-ata->wire [r]
   (validado wire/AtaReciboOut {:id (->str (:id r)) :versao (:versao r) :conteudo-sha256 (:conteudo-sha256 r)}
             "recibo da ata viola o contrato AtaReciboOut (bug de servidor)"))
+
+;; ---------- Faixa A / A.7: a leitura da ata anterior ----------
+
+(defn leitura-ata->wire [{:keys [sessao-id pode-registrar anterior ata leitura]}]
+  (validado wire/LeituraAtaOut
+            {:sessao-id (->str sessao-id) :pode-registrar (boolean pode-registrar)
+             :anterior (when anterior {:id (->str (:id anterior)) :tipo-sessao (:tipo-sessao anterior)
+                                       :numero-sequencial (:numero-sequencial anterior)
+                                       :aberta-em (->str (:aberta-em anterior))
+                                       :encerrada-em (->str (:encerrada-em anterior))})
+             :ata (when ata {:versao (:versao ata) :texto (:texto ata) :conteudo-sha256 (:conteudo-sha256 ata)
+                             :origem-redacao (:origem-redacao ata) :publicada-em (->str (:publicada-em ata))
+                             :publicada-por-nome (:publicada-por-nome ata)})
+             :leitura (when leitura {:modo (:modo leitura) :ata-sessao-id (->str (:ata-sessao-id leitura))
+                                     :ata-versao (:ata-versao leitura) :registrada-em (->str (:registrada-em leitura))
+                                     :registrada-por-nome (:registrada-por-nome leitura)})}
+            "leitura da ata viola o contrato LeituraAtaOut (bug de servidor)"))

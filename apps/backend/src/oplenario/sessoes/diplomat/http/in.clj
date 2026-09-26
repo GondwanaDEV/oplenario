@@ -9,6 +9,7 @@
             [oplenario.kernel.tempo :as tempo]
             [oplenario.sessoes.adapters.in.ata :as adapters-in-ata]
             [oplenario.sessoes.adapters.in.gravacao :as adapters-in-grav]
+            [oplenario.sessoes.adapters.in.leitura-ata :as adapters-in-leitura]
             [oplenario.sessoes.adapters.in.incidente :as adapters-in-incidente]
             [oplenario.sessoes.adapters.in.pauta :as adapters-in-pauta]
             [oplenario.sessoes.adapters.in.assiduidade :as adapters-in-assiduidade]
@@ -859,6 +860,30 @@
             (http/json-resposta 503 {:erro msg-ia-fora})
             (throw e)))))))
 
+(defn- leitura-ata-handler
+  "GET /sessoes/:id/leitura-ata (Faixa A / A.7): a ata anterior a ler e a leitura registrada."
+  [repo-sessoes nome-na-casa]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [r (controllers/leitura-da-ata repo-sessoes nome-na-casa (:ator req) id)]
+        (http/json-resposta 200 (adapters-out-grav/leitura-ata->wire r))
+        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+
+(defn- registrar-leitura-ata-handler
+  "POST /sessoes/:id/leitura-ata (Faixa A / A.7): registra como a ata anterior foi apresentada. 201; 409 com a razao."
+  [repo-sessoes]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          m  (adapters-in-leitura/registrar->dominio (:json-params req))]
+      (try
+        (if (controllers/registrar-leitura-ata! repo-sessoes (:ator req) id m)
+          (http/json-resposta 201 {:modo (:modo m)})
+          (http/json-resposta 404 {:erro "sessao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (#{:conflito/sessao-nao-aberta :conflito/ata-mudou :conflito/leitura-registrada} (:tipo (ex-data e)))
+            (http/json-resposta 409 {:erro (ex-message e)})
+            (throw e)))))))
+
 (defn- listar-gravacoes-handler
   "GET /sessoes/:id/gravacao. adapters/in coage o :id; controller carrega+autoriza a sessao e lista os
   segmentos vinculados; adapters/out projeta (filtra internos). nil (sessao inexistente) -> 404."
@@ -1236,6 +1261,12 @@
      :route-name :sessoes/ata]
     ["/sessoes/:id/ata" :post [auth (it/exige-papel "secretario") it/corpo-json (publicar-ata-handler repo-sessoes)]
      :route-name :sessoes/publicar-ata]
+    ;; Faixa A / A.7 — a LEITURA da ata anterior, ato da Mesa com a sessao aberta.
+    ["/sessoes/:id/leitura-ata" :get [auth (it/exige-papel "secretario") (leitura-ata-handler repo-sessoes nome-na-casa)]
+     :route-name :sessoes/leitura-ata]
+    ["/sessoes/:id/leitura-ata" :post
+     [auth (it/exige-papel "secretario") it/corpo-json (registrar-leitura-ata-handler repo-sessoes)]
+     :route-name :sessoes/registrar-leitura-ata]
     ;; Faixa A / A.6b — o RASCUNHO da IA: pedir (202, a IA redige em segundo plano) e ler para revisar (o texto vem da
     ;; IA pelo seam `ler-rascunho-ata`; sem o seam, 503 R-IA-1 — mesmo molde da transcricao).
     ["/sessoes/:id/ata/rascunhos" :post

@@ -619,6 +619,18 @@
   [sessao]
   (boolean (and (:gera-ata-regimental sessao) (contains? estados-com-ata (:estado sessao)))))
 
+;; ---------- Faixa A / A.7: a LEITURA da ata anterior ----------
+
+(def modos-leitura-ata
+  "Como a ata anterior foi apresentada ao plenario (pedido de Baturite): lida em voz sintetizada, lida pelo secretario,
+  ou dispensada (ata distribuida antes). Qual deles a Casa usa e' decisao dela, sessao a sessao."
+  #{"voz_sintetizada" "presencial" "dispensada"})
+
+(defn pode-registrar-leitura?
+  "PURO: a leitura e' ato de uma sessao EM ANDAMENTO (aberta) — antes de abrir nao se le, depois de encerrar e' tarde."
+  [sessao]
+  (= "aberta" (:estado sessao)))
+
 ;; ---------- Faixa A / A.6b: o RASCUNHO da ata pela IA ----------
 
 (def minutos-de-rascunho-em-curso

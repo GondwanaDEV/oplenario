@@ -74,8 +74,9 @@ avaliação no CI (`oplenario-ia-avaliar avaliacoes`) + custo por Casa — [PR #
 **Faixa A em curso (26/09/2026):** captação (A.2), transcrição com Caminho C + fronteira core↔IA
 ([ADR-0008](docs/adr/0008-fronteira-core-ia-eventos-de-integracao.md), A.3) e **ata-IA completa (A.6)** — ata como
 artefato legal do core com retificação, rascunho pelo núcleo com citação conferida e `[confirmar: …]`, revisão humana
-medida de volta na IA — PRs #43–#46 + A.6c. **Tudo roda com o fornecedor fake** (conferência real, texto de roteiro).
-Faltam A.4/A.5 (busca), A.7 (leitura da ata) e A.8 (resumo cidadão); a A.1 (qualidade medida) espera o áudio de
+medida de volta na IA — PRs #43–#47 — e **leitura da ata anterior (A.7)** como ato da sessão (voz sintetizada,
+presencial ou dispensada; a voz é a do navegador da Mesa, provisória até a decisão do fornecedor de voz). **Tudo roda
+com o fornecedor fake** (conferência real, texto de roteiro). Faltam A.4/A.5 (busca) e A.8 (resumo cidadão); a A.1 (qualidade medida) espera o áudio de
 Baturité com 15 min anotados. A Faixa B (agente, consulta LOM/RI, copiloto) não começou. M4 fecha em código com a
 A.6; a qualidade real depende da A.1 e do fornecedor real. Uso real de fornecedor segue travado no `[GAP]` jurídico (DPA de
 não-treino, LGPD art. 33) — o fake não espera. Desenho: **`docs/25`** + doc-mestre §22.11 (v1.46); plano: **`docs/26`**
