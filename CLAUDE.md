@@ -74,7 +74,8 @@ linguagem simples, busca semântica) e é o que impede M4 de fechar. Atenção: 
 é o arco de escolha de vendor de LLM, **não** é o satélite.
 **Desenho fechado na sessão de 26/09/2026 — `docs/25-desenho-ia-na-plataforma.md`** (8 eixos: IA como ator
 sobre a plataforma, catálogo único de ações, identidade delegada, fronteira do ato, MCP, conhecimento normativo,
-qualidade e custo) **+ plano de execução `docs/26-plano-track-ia.md`** (Ondas 0–4, marcos MIA-1..5). Aguardam o
+qualidade e custo) **+ plano de execução `docs/26-plano-track-ia.md`** (rev. 2: base comum + Faixa A artefatos/ata-IA + Faixa B
+agente, em paralelo; MCP externo pós-V1 atrás de gatilho). Aguardam o
 "Confirmo" do Daouda. **Ler os dois antes de escrever qualquer feature de IA.**
 
 **2. Dois IdPs abertos.** O broker **gov.br** (cidadão) não tem uma linha — bloqueia os fluxos de
