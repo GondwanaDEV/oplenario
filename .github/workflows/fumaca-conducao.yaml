@@ -221,11 +221,19 @@ jobs:
               rec('/sessoes/:id/tv', ok ? 'OK' : 'ERRO', ok ? `TV renderizou (sessao ${alvo.estado}, fase ${fase})` : `entrar=${entrar} fase=${fase} :: ${t.slice(0,140)}`);
             } catch (e) { rec('/sessoes/:id/tv', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
 
-            // 8) FOLHA — so leitura das versoes congeladas (nao gera versao nova)
-            if (!encerrada) rec('/sessoes/:id/folha', 'OK', 'nenhuma sessao encerrada — nao se aplica (esperado)');
+            // 8) FOLHA — so leitura das versoes congeladas (nao gera versao nova). Prefere uma sessao que JA'
+            // tenha versao congelada (senao a checagem do nome nao testa nada); sem nenhuma, cai na 1a encerrada.
+            let folhaAlvo = encerrada, versoesAlvo = null;
+            for (const s of sessoes) {
+              const r = await api(cSec, `/api/sessoes/${s.id}/folhas`).catch(() => null);
+              const n = r?.status === 200 ? (r.body?.folhas || []).length : 0;
+              if (n > 0) { folhaAlvo = s; versoesAlvo = r.body.folhas; break; }
+            }
+            console.log(`folha: alvo=${folhaAlvo?.id ?? '-'} (${folhaAlvo?.estado ?? '-'}) versoes=${versoesAlvo?.length ?? 0}`);
+            if (!folhaAlvo) rec('/sessoes/:id/folha', 'OK', 'nenhuma sessao encerrada nem com folha — nao se aplica (esperado)');
             else try {
               const p = await cSec.newPage();
-              await p.goto(`${B}/sessoes/${encerrada.id}/folha`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await p.goto(`${B}/sessoes/${folhaAlvo.id}/folha`, { waitUntil: 'domcontentloaded', timeout: 30000 });
               await p.waitForTimeout(3000);
               const t = await texto(p);
               await shot(p, '8-folha');
@@ -233,15 +241,15 @@ jobs:
                 .map(s => s.replace(/\s+/g, ' ').replace(/^Congelada por /, '').trim());
               await p.close();
               const ok = /A folha de presen[cç]a/i.test(t) && !ERRO_TELA.test(t);
-              rec('/sessoes/:id/folha', ok ? 'OK' : 'ERRO', ok ? 'folha renderizou (sessao encerrada)' : t.slice(0,160));
+              rec('/sessoes/:id/folha', ok ? 'OK' : 'ERRO', ok ? `folha renderizou (sessao ${folhaAlvo.estado})` : t.slice(0,160));
               // "Congelada por" mostra o NOME de quem congelou (PR #35), nunca o fallback "usuário <id curto>".
               const semNome = autores.filter(a => /^usu[aá]rio [0-9a-f]{8}\b/i.test(a));
-              if (!autores.length) rec('folha: Congelada por <nome>', 'OK', 'nenhuma versao congelada na tela — nao se aplica');
+              if (!autores.length) rec('folha: Congelada por <nome>', versoesAlvo ? 'ERRO' : 'OK', versoesAlvo ? `API tem ${versoesAlvo.length} versao(oes) mas a tela nao mostrou nenhuma` : 'nenhuma sessao com versao congelada — nao se aplica');
               else rec('folha: Congelada por <nome>', semNome.length ? 'ERRO' : 'OK',
                        semNome.length ? `fallback sem nome: ${semNome.join(' | ').slice(0,140)}` : `versoes=${autores.length} autor="${autores[0].slice(0,60)}"`);
             } catch (e) { rec('/sessoes/:id/folha', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
-            if (encerrada) try {
-              const r = await api(cSec, `/api/sessoes/${encerrada.id}/folhas`);
+            if (folhaAlvo) try {
+              const r = await api(cSec, `/api/sessoes/${folhaAlvo.id}/folhas`);
               const fs_ = r.body?.folhas || [];
               const sem = fs_.filter(f => !f['gerada-por-nome']);
               const ok = r.status === 200 && !sem.length;
