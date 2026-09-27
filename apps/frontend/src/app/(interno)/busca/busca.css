@@ -6,7 +6,7 @@
 .busca-form { margin-top: 1.4rem; display: grid; gap: 0.5rem; max-width: 46rem; }
 .busca-rotulo { font-size: var(--t-13); font-weight: 600; color: var(--texto-2); }
 .busca-linha { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-.busca-linha input { flex: 1 1 16rem; min-width: 0; min-height: 44px; padding: 0 0.75rem; border: 1px solid var(--linha); border-radius: 8px; background: var(--fundo); color: var(--texto); font: inherit; }
+.busca-linha input { flex: 1 1 16rem; min-width: 0; min-height: 44px; padding: 0 0.75rem; border: 1px solid var(--linha); border-radius: 8px; background: var(--surface-2); color: var(--texto); font: inherit; }
 .busca-filtros { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .busca-filtro { min-height: 36px; padding: 0 0.8rem; border: 1px solid var(--linha); border-radius: 999px; background: transparent; color: var(--texto-2); font: inherit; font-size: var(--t-13); cursor: pointer; }
 .busca-filtro[aria-pressed="true"] { border-color: var(--texto); color: var(--texto); font-weight: 600; }

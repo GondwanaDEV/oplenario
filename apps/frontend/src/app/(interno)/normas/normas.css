@@ -1,0 +1,59 @@
+/* /normas — as normas de referencia (Faixa B / B.4). Arquetipos ja' provados: "consulta" (cabeca + lista de cartoes,
+   o vocabulario de /busca e /recebimentos), formulario (o de /agendar-sessao) e a ilha de PAPEL para o texto normativo
+   (a mesma do resumo cidadao e do parecer). Padding so' vertical: o gutter lateral e' do .envelope. */
+.normas { padding-top: 1.5rem; padding-bottom: 3rem; display: grid; gap: 1.2rem; align-content: start; }
+.normas-cabeca { display: flex; flex-wrap: wrap; gap: 0.8rem 1.2rem; align-items: flex-end; justify-content: space-between; }
+.normas-cabeca h1 { margin: 0 0 0.35rem; font-family: var(--display); font-weight: 700; font-size: var(--t-28); letter-spacing: -0.015em; line-height: 1.15; color: var(--texto); }
+.normas-sub { margin: 0; color: var(--texto-2); max-width: 64ch; }
+.normas-secao { margin: 0.4rem 0 0.6rem; font-size: var(--t-16); font-weight: 600; color: var(--texto); }
+.normas-vazio { margin: 0; color: var(--texto-2); max-width: 60ch; }
+.normas-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.8rem; max-width: 52rem; }
+.normas-item { min-width: 0; padding: 0.9rem 1.1rem; border: 1px solid var(--linha); border-radius: 12px; background: var(--surface); display: grid; gap: 0.25rem; }
+.normas-tipo { margin: 0; font-family: var(--mono); font-size: var(--t-12); letter-spacing: 0.04em; text-transform: uppercase; color: var(--texto-2); }
+.normas-titulo { margin: 0; font-weight: 600; color: var(--texto); }
+.normas-detalhe { margin: 0; font-size: var(--t-13); color: var(--texto-2); overflow-wrap: anywhere; }
+.normas-detalhe a { color: var(--marca); font-weight: 600; }
+.normas-pendente { margin-top: 0.5rem; padding: 0.7rem 0.8rem; border: 1px dashed var(--amarelo-traco); border-radius: 10px; display: flex; flex-wrap: wrap; gap: 0.6rem 1rem; align-items: center; justify-content: space-between; }
+.normas-pendente p { margin: 0; font-size: var(--t-13); color: var(--texto); }
+.normas-erro { margin: 0; color: var(--acento-texto); }
+
+.normas-form { display: grid; gap: 1rem; max-width: 44rem; padding: 1.2rem; border: 1px solid var(--linha); border-radius: var(--raio); background: var(--surface); }
+.normas-campo { display: grid; gap: 0.35rem; min-width: 0; }
+.normas-campo > label { font-size: var(--t-13); font-weight: 600; color: var(--texto); }
+.normas-campo input, .normas-campo select, .normas-campo textarea {
+  min-height: 44px; padding: 0.55rem 0.7rem; border: 1px solid var(--campo-borda); border-radius: 8px;
+  background: var(--surface-2); color: var(--texto); font: inherit;
+}
+.normas-campo textarea { font-family: var(--mono); font-size: var(--t-13); line-height: 1.5; resize: vertical; }
+.normas-linha { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 1rem; }
+.normas-arquivo { font-size: var(--t-13); color: var(--texto-2); display: grid; gap: 0.3rem; }
+.normas-acoes { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
+.normas-confirma { flex: 1 1 100%; margin: 0; color: var(--texto); }
+
+.normas-conferir { max-width: 52rem; padding: 0.9rem 1.1rem; border: 1px solid var(--linha); border-left: 3px solid var(--aviso-texto); border-radius: 10px; background: var(--surface); display: grid; gap: 0.7rem; }
+.normas-conferir > p { margin: 0; color: var(--texto); }
+.normas-alertas { margin: 0; padding-left: 1.2rem; display: grid; gap: 0.3rem; color: var(--texto); font-size: var(--t-13); }
+.normas-estado { font-weight: 600; color: var(--texto); }
+.normas-estado-em_conferencia { color: var(--aviso-texto); }
+
+.normas-papel {
+  max-width: 52rem; background: var(--papel); color: var(--papel-texto); border: 1px solid var(--papel-linha);
+  border-radius: var(--raio); box-shadow: var(--sombra-papel); padding: clamp(1rem, 3vw, 1.8rem); line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.normas-agrupador { margin: 1.2rem 0 0.6rem; font-family: var(--display); font-size: var(--t-13); letter-spacing: 0.04em; text-transform: uppercase; color: var(--papel-texto); text-align: center; }
+.normas-papel section:first-child .normas-agrupador { margin-top: 0; }
+.normas-disp { margin: 0 0 0.45rem; }
+.normas-disp b { color: var(--papel-texto); }
+.normas-disp-preambulo { color: var(--papel-texto-2); font-style: italic; }
+.normas-disp-artigo { margin-top: 0.8rem; }
+.normas-disp-paragrafo { padding-left: 1.2rem; }
+.normas-disp-inciso { padding-left: 2rem; }
+.normas-disp-alinea { padding-left: 2.8rem; }
+.normas-disp-item { padding-left: 3.6rem; }
+@media (max-width: 560px) {
+  .normas-disp-paragrafo { padding-left: 0.6rem; }
+  .normas-disp-inciso { padding-left: 1rem; }
+  .normas-disp-alinea { padding-left: 1.4rem; }
+  .normas-disp-item { padding-left: 1.8rem; }
+}

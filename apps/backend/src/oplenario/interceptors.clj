@@ -81,22 +81,18 @@
             (.write out buf 0 n)
             (recur t)))))))
 
-(def corpo-json
-  "Interceptor de NEGOCIACAO DE CONTEUDO de entrada (a borda anunciada em W1): parseia o corpo JSON em
-  (:request :json-params) com chaves STRING. So age em content-type application/json com corpo presente
-  (GET/sem-corpo passam direto). Decisoes de seguranca (review W3): (1) corpo limitado a max-corpo-bytes ->
-  413 (anti-DoS de heap); (2) chaves STRING, NUNCA keyword — keyword JSON interna no metaspace e nao e' GC'd,
-  entao chaves arbitrarias do cliente seriam um vazamento permanente (DoS). Cada adapters/in coage so as
-  chaves esperadas p/ keyword. JSON malformado -> 400 fail-closed (nunca 500). Reusavel por toda rota de escrita
-  no fan-out W3+; o Pedestal 0.7 default-interceptors NAO parseia corpo."
-  {:name  ::corpo-json
+(defn corpo-json-ate
+  "O `corpo-json` com outro teto (bytes), para a rara rota que recebe um documento inteiro (o texto de uma norma, B.4).
+  O resto da borda segue com o teto padrao."
+  [teto]
+  {:name  (keyword "oplenario.interceptors" (str "corpo-json-ate-" teto))
    :enter (fn [ctx]
             (let [req (:request ctx)
                   ct  (get-in req [:headers "content-type"])]
               (if (and ct (str/starts-with? ct "application/json") (:body req))
                 (try
                   (assoc-in ctx [:request :json-params]
-                            (json/read-value (ler-limitado (:body req) max-corpo-bytes)))
+                            (json/read-value (ler-limitado (:body req) teto)))
                   (catch clojure.lang.ExceptionInfo e
                     (if (= :corpo/grande (:tipo (ex-data e)))
                       (chain/terminate (assoc ctx :response (http/json-resposta 413 {:erro "corpo grande demais"})))
@@ -107,6 +103,16 @@
                     (log/debug e "corpo JSON invalido na borda; respondendo 400")
                     (chain/terminate (assoc ctx :response (http/json-resposta 400 {:erro "json invalido"})))))
                 ctx)))})
+
+(def corpo-json
+  "Interceptor de NEGOCIACAO DE CONTEUDO de entrada (a borda anunciada em W1): parseia o corpo JSON em
+  (:request :json-params) com chaves STRING. So age em content-type application/json com corpo presente
+  (GET/sem-corpo passam direto). Decisoes de seguranca (review W3): (1) corpo limitado a max-corpo-bytes ->
+  413 (anti-DoS de heap); (2) chaves STRING, NUNCA keyword — keyword JSON interna no metaspace e nao e' GC'd,
+  entao chaves arbitrarias do cliente seriam um vazamento permanente (DoS). Cada adapters/in coage so as
+  chaves esperadas p/ keyword. JSON malformado -> 400 fail-closed (nunca 500). Reusavel por toda rota de escrita
+  no fan-out W3+; o Pedestal 0.7 default-interceptors NAO parseia corpo."
+  (assoc (corpo-json-ate max-corpo-bytes) :name ::corpo-json))
 
 (defn exige-papel
   "Interceptor de AUTORIZACAO GROSSA: exige o `papel` estatico (STRING — os papeis do snapshot sao strings) no

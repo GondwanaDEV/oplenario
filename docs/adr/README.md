@@ -23,3 +23,4 @@ Enforcement · Consequências · Alternativas descartadas). Complementa a SSOT (
 | [0008](0008-fronteira-core-ia-eventos-de-integracao.md) | Fronteira core ↔ IA: eventos de integração por feed e caixa de entrada, conteúdo sob demanda | Aceito |
 | [0009](0009-catalogo-de-acoes-e-adaptador-mcp-no-core.md) | Catálogo de ações no core: uma entrada por ação de domínio, `diplomat/catalogo.clj` e lint de rotas | Aceito |
 | [0010](0010-identidade-delegada-do-agente.md) | Identidade delegada do agente: credencial opaca emitida pelo core, ator com `:via`, interseção a cada chamada | Aceito |
+| [0011](0011-normas-de-referencia-por-dispositivo.md) | Normas de referência por dispositivo: módulo `normas`, parser determinístico e conferência humana | Aceito |
