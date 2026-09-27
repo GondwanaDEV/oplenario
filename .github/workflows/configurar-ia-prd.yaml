@@ -1,8 +1,8 @@
 name: Configurar satelite de IA no Dokploy (prd)
 
-# DIAGNOSTICO (so' leitura) da fronteira core <-> satelite no Dokploy. Nada e' gravado; nenhum valor de segredo
-# e' impresso — so' nomes de variaveis, status, imagem/comando, o host de OPLENARIO_IA_URL e se o segredo e' IGUAL
-# nos dois lados (sim/nao).
+# LIMPEZA: remove os dois apps de IA duplicados criados por uma versao anterior deste workflow (vazios, sem
+# credencial, nunca deployados). Trava: so' apaga os appNames EXATOS abaixo e se recusa a tocar nos apps em uso
+# (oplenario-iaapi-h9hzqw / oplenario-iatrabalhador-izlwf3). Nenhum valor de segredo e' lido ou impresso.
 
 on:
   push:
@@ -11,7 +11,7 @@ on:
       - ".github/workflows/configurar-ia-prd.yaml"
 
 jobs:
-  diagnosticar:
+  limpar:
     runs-on: ubuntu-latest
     environment:
       name: production
@@ -19,45 +19,34 @@ jobs:
       DK: https://${{ vars.DOKPLOY_DOMAIN }}/api
       DK_KEY: ${{ secrets.DOKPLOY_KEY }}
       APP_CORE: ${{ secrets.DOKPLOY_APPLICATION_ID_API }}
-      APPNAME_API: oplenario-iaapi-h9hzqw
-      APPNAME_TRABALHADOR: oplenario-iatrabalhador-izlwf3
+      APAGAR: "oplenario-ia-api-lxzklp oplenario-ia-trabalhador-9blnqb"
+      MANTER: "oplenario-iaapi-h9hzqw oplenario-iatrabalhador-izlwf3 oplenario-backend-zvr55n"
     steps:
-      - name: Diagnostico (so' leitura)
+      - name: Apagar os apps duplicados (so' os dois appNames exatos)
         run: |
           set -euo pipefail
           get() { curl --fail-with-body -sS -H "x-api-key: $DK_KEY" -H 'accept: application/json' "$DK/$1"; }
-          T=$(mktemp -d)
-          valor() { jq -r '.env // ""' "$1" | grep -E "^$2=" | head -1 | cut -d= -f2- || true; }
-          resumo() {  # arquivo rotulo
-            jq -r --arg r "$2" '
-              "== \($r): appName=\(.appName) status=\(.applicationStatus) imagem=\(.dockerImage // "-") comando=\(.command // "-") registro-login? \((.username // "") != "")",
-              "   variaveis: \((.env // "") | split("\n") | map(select(test("^[A-Za-z_][A-Za-z0-9_]*=")) | split("=")[0]) | join(","))",
-              "   ultimos deploys: \((.deployments // []) | sort_by(.createdAt) | reverse | .[0:3] | map("\(.createdAt) \(.status) \(.title // "")\(if .errorMessage then " ERRO=" + .errorMessage else "" end)") | join(" | "))"' "$1"
-          }
-
-          get "application.one?applicationId=$APP_CORE" > "$T/core.json"
-          ENV_ID=$(jq -r '.environmentId' "$T/core.json")
+          ENV_ID=$(get "application.one?applicationId=$APP_CORE" | jq -r '.environmentId')
           IDS=$({ get "environment.one?environmentId=$ENV_ID" 2>/dev/null | jq -r '(.applications // [])[] | .applicationId' \
                   || get project.all | jq -r --arg e "$ENV_ID" '.[] | (.environments // [])[] | select(.environmentId == $e) | (.applications // [])[] | .applicationId'; })
+          apagados=0
           for id in $IDS; do
-            get "application.one?applicationId=$id" > "$T/a.json"
-            an=$(jq -r '.appName' "$T/a.json")
-            case "$an" in "$APPNAME_API") cp "$T/a.json" "$T/api.json";; "$APPNAME_TRABALHADOR") cp "$T/a.json" "$T/trab.json";; esac
-            case "$an" in oplenario-ia*) echo "app de IA no ambiente: $an ($(jq -r '.name' "$T/a.json"))";; esac
+            info=$(get "application.one?applicationId=$id" | jq -c '{appName, name, deploys: ((.deployments // []) | length)}')
+            an=$(jq -r '.appName' <<<"$info")
+            for m in $MANTER; do [ "$an" = "$m" ] && continue 2; done
+            for a in $APAGAR; do
+              if [ "$an" = "$a" ]; then
+                echo "::add-mask::$id"
+                echo "apagando: $info"
+                curl --fail-with-body -sS -X POST -H "x-api-key: $DK_KEY" -H 'Content-Type: application/json' \
+                  -d "{\"applicationId\": \"$id\"}" "$DK/application.delete" > /dev/null
+                apagados=$((apagados+1))
+              fi
+            done
           done
-
-          resumo "$T/core.json" backend
-          [ -f "$T/api.json" ]  && resumo "$T/api.json" ia-api          || echo "::error::ia-api ($APPNAME_API) nao encontrado"
-          [ -f "$T/trab.json" ] && resumo "$T/trab.json" ia-trabalhador || echo "::error::ia-trabalhador ($APPNAME_TRABALHADOR) nao encontrado"
-
-          echo "== fronteira"
-          echo "backend OPLENARIO_IA_URL = $(valor "$T/core.json" OPLENARIO_IA_URL)"
-          for f in api trab; do
-            [ -f "$T/$f.json" ] || continue
-            echo "$f OPLENARIO_CORE_URL = $(valor "$T/$f.json" OPLENARIO_CORE_URL)"
-            S1=$(valor "$T/core.json" OPLENARIO_IA_SEGREDO); S2=$(valor "$T/$f.json" OPLENARIO_IA_SEGREDO)
-            echo "$f segredo igual ao do backend? $([ -n "$S1" ] && [ "$S1" = "$S2" ] && echo sim || echo NAO) (backend tem? $([ -n "$S1" ] && echo sim || echo nao); $f tem? $([ -n "$S2" ] && echo sim || echo nao))"
-            D=$(valor "$T/$f.json" OPLENARIO_IA_DATABASE_URL)
-            echo "$f banco: $(printf '%s' "$D" | sed -E 's#^(postgresql://)[^@]*@#\1<credenciais>@#')"
+          echo "apagados: $apagados"
+          echo "== apps de IA que restam no ambiente"
+          for id in $({ get "environment.one?environmentId=$ENV_ID" 2>/dev/null | jq -r '(.applications // [])[] | .applicationId' \
+                  || get project.all | jq -r --arg e "$ENV_ID" '.[] | (.environments // [])[] | select(.environmentId == $e) | (.applications // [])[] | .applicationId'; }); do
+            get "application.one?applicationId=$id" | jq -r 'select(.appName | startswith("oplenario-ia")) | "\(.appName) (\(.name)) comando=\(.command // "-")"'
           done
-          rm -rf "$T"
