@@ -8,6 +8,7 @@ citação — e nunca chama a porta direto. Tudo o que a Camada de Confiança ex
 from __future__ import annotations
 
 import hashlib
+import logging
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -15,6 +16,7 @@ from datetime import UTC, datetime
 from oplenario_ia.avaliacao.custo import TabelaPrecos, calcular, tabela_padrao
 from oplenario_ia.confianca.artefato import Artefato, revisar
 from oplenario_ia.confianca.citacao import FonteLida, PoliticaCitacao, conferir, paragrafos_sem_fonte
+from oplenario_ia.confianca.cota import Cota
 from oplenario_ia.confianca.incerteza import avaliar
 from oplenario_ia.confianca.indisponivel import POR_CATEGORIA, Indisponivel, MotivoIndisponivel, indisponivel
 from oplenario_ia.confianca.registro import (
@@ -25,9 +27,12 @@ from oplenario_ia.confianca.registro import (
     ReporteErro,
     RevisaoHumana,
 )
+from oplenario_ia.governanca.auditoria import hash_pecas
 from oplenario_ia.governanca.filtro import Chamada, PedidoGovernado, chamar_com_governanca
 from oplenario_ia.governanca.redator import redigir
 from oplenario_ia.inferencia.porta import PortaInferencia
+
+log = logging.getLogger("oplenario_ia.nucleo")
 
 INSTRUCAO_CITACAO = (
     "Cite cada afirmação com a fonte de onde ela vem, logo depois dela, no formato "
@@ -49,8 +54,10 @@ class Nucleo:
         agora: Callable[[], datetime] = lambda: datetime.now(UTC),
         novo_id: Callable[[], str] = lambda: str(uuid.uuid4()),
         precos: TabelaPrecos | None = None,
+        cota: Cota | None = None,
     ) -> None:
         self._porta = porta
+        self._cota = cota
         self._registro = registro
         self._agora = agora
         self._novo_id = novo_id
@@ -58,6 +65,26 @@ class Nucleo:
 
     def executar(self, pedido: PedidoGovernado, politica: PoliticaCitacao = "nenhuma") -> Artefato | Indisponivel:
         execucao_id = self._novo_id()
+        if not self._cota_liberada(pedido):
+            # B.9: a cota da Casa fechou para esta operação — nada vai ao fornecedor; a execução fica registrada
+            self._registro.anexar(
+                RegistroExecucao(
+                    execucao_id=execucao_id,
+                    instante=self._agora(),
+                    ente_id=pedido.ente_id,
+                    correlation_id=pedido.correlation_id,
+                    operacao=pedido.operacao,
+                    decisao_governanca="cota",
+                    motivos_bloqueio=[],
+                    redacoes={},
+                    terceiros=0,
+                    hash_entrada=hash_pecas(pedido.pecas),
+                    vendor=self._porta.vendor,
+                    resultado="indisponivel",
+                    motivo_indisponivel="cota",
+                )
+            )
+            return indisponivel(execucao_id, "cota")
         if politica != "nenhuma":
             pedido = pedido.model_copy(update={"instrucoes": f"{pedido.instrucoes}\n\n{INSTRUCAO_CITACAO}"})
         chamada = chamar_com_governanca(pedido, self._porta, self._agora)
@@ -130,6 +157,16 @@ class Nucleo:
             )
         )
         return artefato
+
+    def _cota_liberada(self, pedido: PedidoGovernado) -> bool:
+        if self._cota is None:
+            return True
+        try:
+            return self._cota.liberada(pedido.ente_id, pedido.operacao)
+        except Exception:
+            # a medição fora do ar não para a Casa (R-IA-1 é sobre a IA faltar, não sobre a conta): segue e avisa
+            log.exception("cota indisponível para %s; a execução segue sem a checagem", pedido.ente_id)
+            return True
 
     def _falha(self, execucao_id: str, chamada: Chamada) -> Indisponivel | None:
         motivo: MotivoIndisponivel

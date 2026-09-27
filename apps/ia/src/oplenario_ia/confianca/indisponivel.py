@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from oplenario_ia.erros import Categoria
 
 MotivoIndisponivel = Literal[
-    "sigilo", "nada_a_enviar", "fornecedor_fora", "sobrecarga", "entrada_invalida", "saida_invalida", "recusa"
+    "sigilo", "nada_a_enviar", "fornecedor_fora", "sobrecarga", "entrada_invalida", "saida_invalida", "recusa", "cota"
 ]
 
 MENSAGENS: dict[MotivoIndisponivel, str] = {
@@ -24,6 +24,8 @@ MENSAGENS: dict[MotivoIndisponivel, str] = {
     "entrada_invalida": "A IA não aceitou este pedido. Siga pela tela.",
     "saida_invalida": "A IA devolveu uma resposta inválida. Siga pela tela.",
     "recusa": "A IA não produziu resposta para este conteúdo. Siga pela tela.",
+    "cota": "A IA da Casa atingiu o limite de uso deste mês (cota da Casa). Siga pela tela — nada do seu trabalho "
+    "depende dela.",
 }
 
 POR_CATEGORIA: dict[Categoria, MotivoIndisponivel] = {

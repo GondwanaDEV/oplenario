@@ -31,7 +31,7 @@ def caso(**kw: object) -> dict[str, object]:
 
 
 def test_conjunto_da_base_comum_passa_inteiro_no_fake() -> None:
-    [arquivo] = sorted(AVALIACOES.glob("*.json"))
+    arquivo = AVALIACOES / "base-comum.json"  # o conjunto do agente (B.9) tem harness próprio
     r = avaliar(Conjunto.model_validate_json(arquivo.read_text()))
     assert r.aprovado, [c for c in r.casos if not c.passou]
     assert {c.tipo for c in r.casos} >= {"seguranca", "objetiva"}

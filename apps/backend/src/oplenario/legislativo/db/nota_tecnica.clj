@@ -4,6 +4,7 @@
   secretaria decide (aproveita, com ou sem edicao, ou descarta). Uma nota por proposicao e agente."
   (:require [honey.sql :as sql]
             [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as rs]
             [oplenario.kernel.db-util :as comum]))
 
 (set! *warn-on-reflection* true)
@@ -71,3 +72,14 @@
                        :where [:and [:= :ente_id ente-id] [:= :id id] [:= :estado "pendente"]]
                        :returning [:id]}))
     (buscar tx ente-id id)))
+
+(defn contar-por-estado
+  "B.9: quantas notas por estado, das criadas em [desde, ate) — o painel da IA da Casa."
+  [tx ente-id desde ate]
+  (into {} (map (juxt :estado :n))
+        (jdbc/execute! tx (sql/format {:select [:estado [[:count :*] :n]] :from [:legislativo.nota_tecnica]
+                                       :where [:and [:= :ente_id ente-id]
+                                               [:>= :criada_em (java.sql.Timestamp/from ^java.time.Instant desde)]
+                                               [:< :criada_em (java.sql.Timestamp/from ^java.time.Instant ate)]]
+                                       :group-by [:estado]})
+                       {:builder-fn rs/as-unqualified-maps})))

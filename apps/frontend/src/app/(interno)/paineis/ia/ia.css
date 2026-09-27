@@ -1,0 +1,42 @@
+/* /paineis/ia — a IA da Casa (Faixa B / B.9). Arquétipo "painel": cabeça + cartões empilhados (o vocabulário de
+   /conferencias e /normas). O medidor é uma barra com as marcas de 80% e do orçamento; a cor segue o tom do estado
+   (ok = jade, aviso = âmbar via --aviso-texto, alerta = telha). Padding só vertical: o gutter é do .envelope. */
+.ia { padding-top: 1.5rem; padding-bottom: 3rem; display: grid; gap: 1rem; align-content: start; min-width: 0; }
+.ia-cabeca { display: grid; gap: 0.35rem; max-width: 52rem; }
+.ia-cabeca h1 { margin: 0; font-family: var(--display); font-weight: 700; font-size: var(--t-28); letter-spacing: -0.015em; line-height: 1.15; color: var(--texto); }
+.ia-sub { margin: 0; color: var(--texto-2); max-width: 64ch; line-height: 1.5; }
+.ia-erro { margin: 0; color: var(--acento-texto); }
+.ia-meses { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.4rem; max-width: 30rem; }
+.ia-meses b { color: var(--texto); text-align: center; }
+.ia-meses .btn { white-space: nowrap; padding-inline: 0.6rem; }
+
+.ia-cartao { max-width: 52rem; padding: 1rem 1.1rem; border: 1px solid var(--linha); border-radius: 12px; background: var(--surface); display: grid; gap: 0.5rem; min-width: 0; }
+.ia-cartao h2 { margin: 0; font-size: var(--t-16); font-weight: 600; color: var(--texto); }
+.ia-consumo { border-left: 3px solid var(--linha); }
+.ia-tom-ok { border-left-color: var(--jade-medio); }
+.ia-tom-aviso { border-left-color: var(--aviso-texto); }
+.ia-tom-alerta { border-left-color: var(--acento-texto); }
+.ia-valor { margin: 0; color: var(--texto-2); font-size: var(--t-16); }
+.ia-valor b { font-family: var(--display); font-size: var(--t-28); color: var(--texto); font-weight: 700; margin-right: 0.2rem; }
+.ia-detalhe { margin: 0; color: var(--texto); line-height: 1.5; }
+.ia-nota { margin: 0; color: var(--texto-2); font-size: var(--t-13); line-height: 1.5; }
+
+.ia-medidor { position: relative; height: 0.75rem; border-radius: var(--raio-capsula); background: var(--surface-2); border: 1px solid var(--linha); overflow: visible; margin: 0.4rem 0; }
+.ia-medidor-barra { height: 100%; border-radius: var(--raio-capsula); }
+.ia-medidor-ok { background: var(--jade-medio); }
+.ia-medidor-aviso { background: var(--aviso-texto); }
+.ia-medidor-alerta { background: var(--acento-texto); }
+.ia-marca { position: absolute; top: -0.25rem; bottom: -0.25rem; width: 2px; background: var(--texto-2); transform: translateX(-1px); }
+.ia-marca-100 { background: var(--texto); }
+
+.ia-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.7rem; }
+.ia-lista li { display: grid; gap: 0.15rem; padding-top: 0.6rem; border-top: 1px solid var(--linha); }
+.ia-lista li:first-child { border-top: 0; padding-top: 0; }
+.ia-linha-titulo { margin: 0; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.2rem 1rem; color: var(--texto); }
+.ia-linha-titulo span { font-family: var(--mono); font-size: var(--t-13); color: var(--texto); }
+.ia-linha-detalhe { margin: 0; color: var(--texto-2); font-size: var(--t-13); }
+.ia-erros { color: var(--acento-texto); }
+.ia-desfechos { margin: 0; display: grid; gap: 0.6rem; }
+.ia-desfechos div { display: grid; gap: 0.1rem; }
+.ia-desfechos dt { font-weight: 600; color: var(--texto); }
+.ia-desfechos dd { margin: 0; color: var(--texto-2); font-size: var(--t-13); }

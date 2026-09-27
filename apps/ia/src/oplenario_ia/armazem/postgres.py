@@ -26,6 +26,7 @@ from oplenario_ia.armazem.porta import (
     TrechoIndice,
 )
 from oplenario_ia.busca.indice import RRF_K
+from oplenario_ia.confianca.cota import Orcamento
 from oplenario_ia.transcricao.modelo import Trecho as TrechoTranscricao
 
 MIGRACOES: list[str] = [
@@ -144,6 +145,29 @@ MIGRACOES: list[str] = [
     ALTER TABLE ia.indice_trecho DROP CONSTRAINT IF EXISTS indice_trecho_tipo_check;
     ALTER TABLE ia.indice_trecho ADD CONSTRAINT indice_trecho_tipo_check
       CHECK (tipo IN ('proposicao', 'transcricao', 'dispositivo'));
+    """,
+    # 7 — B.9 (ADR-0014): o registro da Camada de Confiança compartilhado (API + trabalhador), de onde sai o gasto
+    # do mês de cada Casa; e o orçamento que o core define para cada Casa (substituído quando o plano muda)
+    """
+    CREATE TABLE IF NOT EXISTS ia.registro_evento (
+      id                 bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      tipo               text NOT NULL CHECK (tipo IN ('execucao', 'reporte_erro', 'revisao')),
+      ente_id            text NOT NULL,
+      operacao           text NOT NULL,
+      instante           timestamptz NOT NULL,
+      custo              numeric,
+      custo_desconhecido boolean NOT NULL DEFAULT false,
+      corpo              jsonb NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_registro_evento_ente ON ia.registro_evento (ente_id, instante);
+    CREATE TABLE IF NOT EXISTS ia.orcamento (
+      ente_id     uuid PRIMARY KEY,
+      mensal      numeric NOT NULL CHECK (mensal >= 0),
+      teto_duro   numeric NOT NULL CHECK (teto_duro >= mensal),
+      moeda       text NOT NULL,
+      definido_em timestamptz NOT NULL,
+      chave       text NOT NULL
+    );
     """,
 ]
 
@@ -287,6 +311,31 @@ class ArmazemPostgres:
                 " ultimo_erro = %s, atualizado_em = now() WHERE id = %s",
                 (quando, erro[:2000], trabalho_id),
             )
+
+    def pausar(self, trabalho_id: int, motivo: str, ate: datetime) -> None:
+        with self._conectar() as c:
+            c.execute(
+                "UPDATE ia.trabalho SET estado = 'pendente', proxima_tentativa = %s, ultimo_erro = %s,"
+                " atualizado_em = now() WHERE id = %s",
+                (ate, motivo[:2000], trabalho_id),
+            )
+
+    def definir_orcamento(self, ente_id: str, orcamento: Orcamento, definido_em: datetime, chave: str) -> None:
+        # a definição mais recente vale; um evento atrasado (definido antes) não volta o orçamento para trás
+        with self._conectar() as c:
+            c.execute(
+                "INSERT INTO ia.orcamento (ente_id, mensal, teto_duro, moeda, definido_em, chave)"
+                " VALUES (%s, %s, %s, %s, %s, %s)"
+                " ON CONFLICT (ente_id) DO UPDATE SET mensal = excluded.mensal, teto_duro = excluded.teto_duro,"
+                " moeda = excluded.moeda, definido_em = excluded.definido_em, chave = excluded.chave"
+                " WHERE ia.orcamento.definido_em <= excluded.definido_em",
+                (ente_id, orcamento.mensal, orcamento.teto_duro, orcamento.moeda, definido_em, chave),
+            )
+
+    def orcamento(self, ente_id: str) -> Orcamento | None:
+        with self._conectar() as c:
+            r = c.execute("SELECT mensal, teto_duro, moeda FROM ia.orcamento WHERE ente_id = %s", (ente_id,)).fetchone()
+            return Orcamento(mensal=r["mensal"], teto_duro=r["teto_duro"], moeda=r["moeda"]) if r else None
 
     def desistir(self, trabalho_id: int, erro: str, seguintes: list[NovoTrabalho] | None = None) -> None:
         with self._conectar() as c, c.transaction():

@@ -5,6 +5,7 @@
   (:require [next.jdbc :as jdbc]
             [oplenario.integracao-ia.db.chamada-agente :as chamada-agente]
             [oplenario.integracao-ia.db.eventos :as eventos]
+            [oplenario.integracao-ia.db.orcamento :as orcamento]
             [oplenario.integracao-ia.db.proposta-ato :as proposta]
             [oplenario.integracao-ia.logic :as logic]
             [oplenario.kernel.tenancy :as tenancy]))
@@ -27,7 +28,13 @@
   (mudar-estado-proposta! [this ente-id id de mudanca]
     "Condicional: so' se o estado atual for `de`; nil se outro chegou antes. `mudanca` = {:estado :resultado :erro :decidida?}.")
   (registrar-leitura-de-terceiro! [this leitura])
-  (leituras-de-terceiro [this ente-id execucao-id]))
+  (leituras-de-terceiro [this ente-id execucao-id])
+  ;; B.9 / ADR-0014: o orcamento de IA da Casa
+  (definir-orcamento! [this orcamento]
+    "Grava a definicao ({:ente-id :mensal :teto-duro :moeda :definido-por}) e publica `OrcamentoIADefinido` no feed,
+    na mesma tx. Devolve a definicao.")
+  (orcamento-atual [this ente-id] "A definicao mais recente, ou nil.")
+  (contar-propostas [this ente-id desde ate] "B.9: {estado n} das propostas criadas em [desde, ate)."))
 
 (defrecord RepoIntegracaoIAPg [datasource]
   RepoIntegracaoIA
@@ -57,7 +64,17 @@
   (registrar-leitura-de-terceiro! [_ l]
     (tenancy/com-tenant* (:ds datasource) (:ente-id l) #(proposta/registrar-leitura-de-terceiro! % l)))
   (leituras-de-terceiro [_ ente-id execucao-id]
-    (tenancy/com-tenant* (:ds datasource) ente-id #(proposta/leituras-de-terceiro % ente-id execucao-id))))
+    (tenancy/com-tenant* (:ds datasource) ente-id #(proposta/leituras-de-terceiro % ente-id execucao-id)))
+  (definir-orcamento! [_ o]
+    (tenancy/com-tenant* (:ds datasource) (:ente-id o)
+      (fn [tx]
+        (let [d (orcamento/inserir! tx o)]
+          (eventos/inserir-saida! tx (logic/evento-orcamento d))
+          d))))
+  (orcamento-atual [_ ente-id]
+    (tenancy/com-tenant* (:ds datasource) ente-id #(orcamento/atual % ente-id)))
+  (contar-propostas [_ ente-id desde ate]
+    (tenancy/com-tenant* (:ds datasource) ente-id #(proposta/contar-por-estado % ente-id desde ate))))
 
 (defn repositorio [] (map->RepoIntegracaoIAPg {}))
 

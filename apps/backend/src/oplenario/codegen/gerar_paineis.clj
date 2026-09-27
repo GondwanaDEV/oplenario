@@ -7,6 +7,7 @@
   Default = target/generated-ts/contrato-paineis.gen.ts."
   (:require [clojure.java.io :as io]
             [oplenario.codegen.malli-ts :as ts]
+            [oplenario.paineis.wire.out.ia :as ia]
             [oplenario.paineis.wire.out.notificacao :as notificacao]))
 
 (def manifesto
@@ -15,7 +16,13 @@
   racional do manifesto do portal)."
   [["NotificacaoOut" notificacao/NotificacaoOut]
    ["MinhasNotificacoesOut" notificacao/MinhasNotificacoesOut]
-   ["MarcarLidaOut" notificacao/MarcarLidaOut]])
+   ["MarcarLidaOut" notificacao/MarcarLidaOut]
+   ;; Faixa B / B.9 (painel da IA da Casa) — referencias antes do composto.
+   ["OrcamentoIAOut" ia/OrcamentoIAOut]
+   ["CapacidadeIAOut" ia/CapacidadeIAOut]
+   ["DesfechosNotasOut" ia/DesfechosNotasOut]
+   ["DesfechosPropostasOut" ia/DesfechosPropostasOut]
+   ["PainelIAOut" ia/PainelIAOut]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))
 

@@ -16,6 +16,7 @@ from oplenario_ia.agente.laco import Porta, acrescentar, pecas_do_resultado
 from oplenario_ia.agente.mcp import ResultadoFerramenta
 from oplenario_ia.confianca.artefato import Artefato
 from oplenario_ia.confianca.citacao import Citacao
+from oplenario_ia.confianca.cota import CotaFechada
 from oplenario_ia.confianca.indisponivel import Indisponivel
 from oplenario_ia.erros import Categoria, ErroIA
 from oplenario_ia.governanca.filtro import PedidoGovernado
@@ -155,6 +156,8 @@ def conferir(nucleo: Nucleo, mcp: Porta, ente_id: str, proposicao_id: str, corre
         ),
         politica="por_paragrafo",
     )
+    if isinstance(r, Indisponivel) and r.motivo == "cota":
+        raise CotaFechada(ente_id)  # segundo plano: pausa, não falha (B.9)
     if isinstance(r, Indisponivel):
         raise ErroIA(r.categoria or Categoria.ENTRADA, r.mensagem, retentavel=r.retentavel)
     registro = mcp.chamar("registrar_nota_tecnica", pedido_de_registro(proposicao_id, r))

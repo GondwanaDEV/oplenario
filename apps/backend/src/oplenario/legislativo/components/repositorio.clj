@@ -85,6 +85,7 @@
   (nota-tecnica [this ente-id id] "B.8: uma nota, com a identificacao da proposicao; nil = inexistente nesta Casa.")
   (decidir-nota-tecnica! [this ente-id id decisao]
     "B.8: a secretaria aproveita ou descarta uma nota PENDENTE; nil = inexistente ou ja' decidida.")
+  (contar-notas-tecnicas [this ente-id desde ate] "B.9: {estado n} das notas criadas em [desde, ate).")
   (texto-para-ia [this ente-id proposicao-id]
     "O texto PUBLICO da proposicao para a IA redigir o resumo (ADR-0008): tipo, numero, ementa, autoria, texto vigente
      inline e o `texto-sha256` da versao. nil = inexistente.")
@@ -565,6 +566,8 @@
   (nota-tecnica [this ente-id id] (transacao this ente-id #(nota-tecnica/buscar % ente-id id)))
   (decidir-nota-tecnica! [this ente-id id decisao]
     (transacao this ente-id #(nota-tecnica/decidir! % ente-id id decisao)))
+  (contar-notas-tecnicas [this ente-id desde ate]
+    (transacao this ente-id #(nota-tecnica/contar-por-estado % ente-id desde ate)))
   (texto-para-ia [this ente-id proposicao-id]
     (transacao this ente-id
       (fn [tx]

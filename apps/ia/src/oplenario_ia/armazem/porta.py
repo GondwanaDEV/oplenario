@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol
 
+from oplenario_ia.confianca.cota import Orcamento
 from oplenario_ia.transcricao.modelo import Trecho
 
 EstadoTrabalho = str  # "pendente" | "em_curso" | "concluido" | "falhou" | "descartado"
@@ -180,6 +181,16 @@ class Armazem(Protocol):
     def adiar(self, trabalho_id: int, erro: str, quando: datetime) -> None: ...
 
     def desistir(self, trabalho_id: int, erro: str, seguintes: list[NovoTrabalho] | None = None) -> None: ...
+
+    def pausar(self, trabalho_id: int, motivo: str, ate: datetime) -> None:
+        """Devolve o trabalho à fila para depois de `ate` SEM contar tentativa: não é falha (a cota da Casa, B.9)."""
+        ...
+
+    def definir_orcamento(self, ente_id: str, orcamento: Orcamento, definido_em: datetime, chave: str) -> None:
+        """O orçamento de IA da Casa (B.9), vindo do core; o mais recente substitui o anterior."""
+        ...
+
+    def orcamento(self, ente_id: str) -> Orcamento | None: ...
 
     def concluir_transcricao(
         self, trabalho_id: int, nova: NovaTranscricao, notificar: Callable[[TranscricaoGuardada], NovoTrabalho]

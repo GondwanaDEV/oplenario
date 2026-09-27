@@ -26,3 +26,4 @@ Enforcement · Consequências · Alternativas descartadas). Complementa a SSOT (
 | [0011](0011-normas-de-referencia-por-dispositivo.md) | Normas de referência por dispositivo: módulo `normas`, parser determinístico e conferência humana | Aceito |
 | [0012](0012-proposta-de-ato.md) | Proposta de ato: o agente prepara, a pessoa confirma na tela | Aceito |
 | [0013](0013-agente-institucional-e-conferencia.md) | Agente institucional da Casa (concessão do admin) e a conferência das proposições | Aceito |
+| [0014](0014-orcamento-de-ia-e-painel-da-casa.md) | Orçamento de IA por Casa, a cota no satélite e o painel da Casa | Aceito |

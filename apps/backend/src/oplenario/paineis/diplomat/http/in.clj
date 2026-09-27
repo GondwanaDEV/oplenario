@@ -7,14 +7,17 @@
   (:require [clojure.tools.logging :as log]
             [oplenario.http :as http]
             [oplenario.interceptors :as it]
+            [oplenario.kernel.tempo :as tempo]
             [oplenario.paineis.adapters.in.notificacao :as adapters-in-notificacao]
+            [oplenario.paineis.adapters.out.ia :as adapters-out-ia]
             [oplenario.paineis.adapters.out.mesa :as adapters-out-mesa]
             [oplenario.paineis.adapters.out.minha-sessao-atual :as adapters-out-minha-sessao-atual]
             [oplenario.paineis.adapters.out.notificacao :as adapters-out-notificacao]
             [oplenario.paineis.adapters.out.pendencia :as adapters-out-pendencia]
             [oplenario.paineis.adapters.out.sli-sessao :as adapters-out-sli-sessao]
             [oplenario.paineis.adapters.out.tramitacao :as adapters-out-tramitacao]
-            [oplenario.paineis.controllers :as controllers]))
+            [oplenario.paineis.controllers :as controllers]
+            [oplenario.paineis.logic.ia :as logic-ia]))
 
 (set! *warn-on-reflection* true)
 
@@ -120,6 +123,13 @@
         (http/json-resposta 404 {:erro "notificacao nao encontrada"}))
       (http/json-resposta 404 {:erro "notificacao nao encontrada"}))))
 
+(defn- painel-ia-handler
+  "GET /paineis/ia?mes=AAAA-MM (B.9) — o painel da IA da Casa, do `admin_ente`."
+  [seams relogio]
+  (fn [req]
+    (let [intervalo (logic-ia/mes (get-in req [:query-params :mes]) (tempo/agora (or relogio (tempo/relogio-sistema))))]
+      (http/json-resposta 200 (adapters-out-ia/painel->wire (controllers/painel-ia seams (:ator req) intervalo))))))
+
 (defn rotas
   "Fragmento de rotas do modulo paineis (table syntax Pedestal). Recebe o interceptor `auth` (compartilhado)
   + o `repo-paineis` (Repo-Component) + as 4 fns cross-modulo injetadas pelo host (`painel-compliance`,
@@ -130,14 +140,15 @@
   /meu/sessao-atual` (Onda C3) e' outra excecao — gate 'vereador' (o cockpit do celular descobre a
   sessao viva sem o papel secretario), reusando a MESMA leitura de `sli-sessoes`. `GET /meu/notificacoes`
   (Onda E) é a única rota do módulo SEM gate de papel — só `auth`; ver a docstring do handler."
-  [{:keys [auth repo-paineis painel-compliance presenca-resumo esic-cumprimento relatores-pendentes]}]
+  [{:keys [auth repo-paineis painel-compliance presenca-resumo esic-cumprimento relatores-pendentes ia relogio]}]
   (let [papel (it/exige-papel "secretario")
         papel-vereador (it/exige-papel "vereador")
         ;; LEITURA dos paineis (dashboard da Mesa/pendencias/tramitacao/sli) aberta a secretario OU
         ;; vereador: o presidente e' vereador e precisava ver a Mesa (achado docs/20: gate grosso
         ;; so'-'secretario' dava 403). Sao read-model de leitura; escrita nao existe aqui.
         papel-leitura (it/exige-algum-papel #{"secretario" "vereador"})]
-    #{["/paineis/pendencias" :get [auth papel-leitura (pendencias-handler repo-paineis)]
+    (cond->
+     #{["/paineis/pendencias" :get [auth papel-leitura (pendencias-handler repo-paineis)]
        :route-name :paineis/pendencias]
       ["/paineis/tramitacao" :get [auth papel-leitura (tramitacao-handler repo-paineis)]
        :route-name :paineis/tramitacao]
@@ -151,4 +162,8 @@
       ["/meu/notificacoes" :get [auth (minhas-notificacoes-handler repo-paineis)]
        :route-name :paineis/minhas-notificacoes]
       ["/meu/notificacoes/:id/lida" :post [auth (marcar-lida-handler repo-paineis)]
-       :route-name :paineis/marcar-notificacao-lida]}))
+       :route-name :paineis/marcar-notificacao-lida]}
+      ;; B.9 (ADR-0014): a IA da Casa — consumo x orcamento e o que as pessoas fizeram com o resultado. Do admin da
+      ;; Casa (docs/25 8.4). Sem os seams do host (testes de outras verticais), a rota nao existe.
+      ia (conj ["/paineis/ia" :get [auth (it/exige-papel "admin_ente") (painel-ia-handler ia relogio)]
+                :route-name :paineis/ia]))))

@@ -37,6 +37,9 @@
                             :motivo "a tela onde a secretaria le o rascunho da IA antes de decidir"}
  :legislativo/decidir-nota-tecnica {:categoria :so-tela
                                     :motivo "aproveitar ou descartar a nota e' decisao da pessoa (revisao humana, §16.8); a IA nunca decide"}
+ ;; ---------- B.9 / ADR-0014: o painel da IA da Casa ----------
+ :paineis/ia {:categoria :so-tela
+              :motivo "o painel do admin da Casa (consumo x orcamento da IA, desfechos); o agente nao le o proprio custo"}
  ;; ---------- B.6 / ADR-0012: a confirmacao de proposta de ato e' so' da tela ----------
  :propostas/listar {:categoria :so-tela
                     :motivo "as propostas de ato que esperam a pessoa (Eixo 4.2 B); o agente cria proposta pela ferramenta do ato"}

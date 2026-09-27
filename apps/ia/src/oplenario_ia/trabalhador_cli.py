@@ -12,12 +12,14 @@ import argparse
 import logging
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from oplenario_ia.agente.mcp import ClienteMCP
 from oplenario_ia.armazem.memoria import ArmazemMemoria
 from oplenario_ia.armazem.porta import Armazem
 from oplenario_ia.busca.embeddings import criar_embedder
-from oplenario_ia.confianca.registro import RegistroConfianca, RegistroJsonl, RegistroMemoria
+from oplenario_ia.confianca.cota import Cota, Fonte
+from oplenario_ia.confianca.registro import RegistroJsonl, RegistroMemoria
 from oplenario_ia.config import Config, carregar
 from oplenario_ia.fronteira.cliente import ClienteCore
 from oplenario_ia.inferencia.fabrica import criar_porta
@@ -25,6 +27,9 @@ from oplenario_ia.nucleo import Nucleo
 from oplenario_ia.trabalhador import Trabalhador
 from oplenario_ia.transcricao.fake import DiarizadorFake, TranscritorFake
 from oplenario_ia.transcricao.porta import Diarizador, Transcritor
+
+if TYPE_CHECKING:
+    from oplenario_ia.confianca.registro_postgres import RegistroPostgres
 
 
 def montar(config: Config) -> Trabalhador:
@@ -48,14 +53,23 @@ def montar(config: Config) -> Trabalhador:
         diarizador = DiarizadorSherpa(Path(config.modelos_dir))
     else:
         transcritor, diarizador = TranscritorFake(), DiarizadorFake()
-    registro: RegistroConfianca = RegistroJsonl(config.registro_jsonl) if config.registro_jsonl else RegistroMemoria()
+    registro: RegistroMemoria | RegistroJsonl | RegistroPostgres
+    if config.database_url:
+        # B.9: o registro no Postgres do satélite é o mesmo da API — a cota da Casa soma o gasto de todos
+        from oplenario_ia.confianca.registro_postgres import RegistroPostgres as _RegistroPostgres
+
+        registro = _RegistroPostgres(config.database_url)
+    elif config.registro_jsonl:
+        registro = RegistroJsonl(config.registro_jsonl)
+    else:
+        registro = RegistroMemoria()
     return Trabalhador(
         ClienteCore(core_url, config.segredo),
         armazem,
         transcritor,
         diarizador,
         idioma=config.idioma,
-        nucleo=Nucleo(criar_porta(config), registro),
+        nucleo=Nucleo(criar_porta(config), registro, cota=Cota(Fonte(armazem, registro))),
         embedder=criar_embedder(config),
         # B.8: o agente institucional fala com o core pelo MESMO servidor MCP, com a credencial de cada execução
         abrir_mcp=lambda credencial: ClienteMCP(core_url, credencial),
