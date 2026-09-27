@@ -1,8 +1,13 @@
 name: Configurar satelite de IA no Dokploy (prd)
 
-# Provisiona o satelite de IA (apps/ia) no Dokploy usando os secrets que os deploys ja' usam — nenhum valor
-# sensivel passa pelo log (so' nomes; valores de variavel NUNCA sao impressos).
-# Fase atual: RECONHECIMENTO (so' leitura) — lista projetos/ambientes/apps e a forma do app da API do core.
+# Cria os apps do satelite de IA (apps/ia, ADR-0006) no Dokploy — SO' a parte sem segredo. IDEMPOTENTE.
+#   projeto `oplenario` / ambiente `production` (o mesmo do app `backend`):
+#     - ia-api          imagem ghcr.io/gondwanadev/oplenario-ia-prd:latest, comando default (uvicorn :8090)
+#     - ia-trabalhador  mesma imagem, comando `oplenario-ia-trabalhador`
+#   Variavel sem segredo: OPLENARIO_CORE_URL (rede interna do Dokploy).
+# O que tem segredo entra PELA INTERFACE do Dokploy, por uma pessoa: login do ghcr nos dois apps,
+# OPLENARIO_IA_DATABASE_URL e OPLENARIO_IA_SEGREDO nos dois apps, e no `backend` o mesmo OPLENARIO_IA_SEGREDO +
+# OPLENARIO_IA_URL. Este workflow nao le nem grava nenhum desses valores e nao mexe no ambiente do `backend`.
 
 on:
   push:
@@ -22,25 +27,56 @@ jobs:
       DK: https://${{ vars.DOKPLOY_DOMAIN }}/api
       DK_KEY: ${{ secrets.DOKPLOY_KEY }}
       APP_API: ${{ secrets.DOKPLOY_APPLICATION_ID_API }}
+      IMAGEM: ghcr.io/gondwanadev/oplenario-ia-prd:latest
     steps:
-      - name: Reconhecimento (so' leitura, so' nomes)
+      - name: Criar os apps do satelite (sem segredo)
         run: |
           set -euo pipefail
-          get() { curl --fail-with-body -sS -H "x-api-key: $DK_KEY" -H 'accept: application/json' "$DK/$1"; }
+          get()  { curl --fail-with-body -sS -H "x-api-key: $DK_KEY" -H 'accept: application/json' "$DK/$1"; }
+          post() { curl --fail-with-body -sS -X POST -H "x-api-key: $DK_KEY" -H 'accept: application/json' \
+                        -H 'Content-Type: application/json' --data-binary @"$2" "$DK/$1"; }
+          T=$(mktemp -d)
 
-          echo "== projetos / ambientes / servicos (nomes)"
-          get project.all | jq -r '
-            .[] | "projeto: \(.name)",
-              ( (.environments // [{name:"(sem ambientes)", applications:.applications, postgres:.postgres}])[]
-                | "  ambiente: \(.name)",
-                  ( (.applications // [])[] | "    app: \(.name) | appName=\(.appName) | fonte=\(.sourceType) | imagem=\(.dockerImage // "-")" ),
-                  ( (.postgres // [])[]     | "    postgres: \(.name) | appName=\(.appName)" ) )'
+          # so' o que nao e' segredo do app do core: ambiente e appName
+          get "application.one?applicationId=$APP_API" | jq '{environmentId, appName}' > "$T/core.json"
+          ENV_ID=$(jq -r '.environmentId' "$T/core.json"); CORE_APPNAME=$(jq -r '.appName' "$T/core.json")
 
-          echo "== app da API do core (forma, sem valores)"
-          get "application.one?applicationId=$APP_API" | jq -r '
-            "nome=\(.name) appName=\(.appName) fonte=\(.sourceType) imagem=\(.dockerImage // "-")",
-            "registryId? \(.registryId != null)  username? \((.username // "") != "")  registryUrl=\(.registryUrl // "-")",
-            "command=\(.command // "-")  environmentId? \(.environmentId != null)  projectId? \(.projectId != null)  serverId? \(.serverId != null)",
-            "chaves do objeto: \(keys | join(","))",
-            "variaveis (so nomes): \((.env // "") | split("\n") | map(select(test("^[A-Za-z_][A-Za-z0-9_]*=")) | split("=")[0]) | join(","))",
-            "dominios: \((.domains // []) | map("\(.host):\(.port)") | join(","))"'
+          app_id() {  # environment.one; se nao existir nesta versao do Dokploy, cai no project.all
+            { get "environment.one?environmentId=$ENV_ID" 2>/dev/null \
+                | jq -r --arg n "$1" '(.applications // [])[] | select(.name == $n) | .applicationId // empty' \
+              || get project.all | jq -r --arg e "$ENV_ID" --arg n "$1" \
+                   '.[] | (.environments // [])[] | select(.environmentId == $e) | (.applications // [])[] | select(.name == $n) | .applicationId // empty'
+            } | head -1
+          }
+          garantir_app() {  # nome appName descricao comando -> configura
+            local id; id=$(app_id "$1")
+            if [ -z "$id" ]; then
+              jq -n --arg name "$1" --arg appName "$2" --arg d "$3" --arg e "$ENV_ID" \
+                '{name:$name, appName:$appName, description:$d, environmentId:$e}' > "$T/criar.json"
+              post application.create "$T/criar.json" > /dev/null
+              id=$(app_id "$1"); echo "app $1: criado"
+            else echo "app $1: ja existia"; fi
+            [ -n "$id" ] || { echo "::error::nao achei o applicationId de $1"; exit 1; }
+            echo "::add-mask::$id"
+            jq -n --arg id "$id" --arg img "$IMAGEM" \
+              '{applicationId:$id, dockerImage:$img, username:null, password:null, registryUrl:"ghcr.io"}' > "$T/prov.json"
+            post application.saveDockerProvider "$T/prov.json" > /dev/null
+            # so' a variavel sem segredo; as outras a pessoa cola na interface (nao sobrescreve se ja houver)
+            ATUAL=$(get "application.one?applicationId=$id" | jq -r '.env // ""')
+            if ! printf '%s' "$ATUAL" | grep -q '^OPLENARIO_CORE_URL='; then
+              if [ -z "$ATUAL" ]; then
+                jq -n --arg id "$id" --arg env "OPLENARIO_CORE_URL=http://$CORE_APPNAME:8888" \
+                  '{applicationId:$id, env:$env, buildArgs:"", buildSecrets:"", createEnvFile:false}' > "$T/env.json"
+                post application.saveEnvironment "$T/env.json" > /dev/null
+              else echo "::warning::$1 ja tem ambiente; OPLENARIO_CORE_URL=http://$CORE_APPNAME:8888 entra pela interface"; fi
+            fi
+            if [ -n "$4" ]; then
+              jq -n --arg id "$id" --arg c "$4" '{applicationId:$id, command:$c}' > "$T/cmd.json"
+              post application.update "$T/cmd.json" > /dev/null
+            fi
+            echo "app $1: appName=$(get "application.one?applicationId=$id" | jq -r '.appName') imagem+comando+OPLENARIO_CORE_URL ok"
+          }
+          garantir_app ia-api oplenario-ia-api "Satelite de IA — API (ADR-0006)" ""
+          garantir_app ia-trabalhador oplenario-ia-trabalhador "Satelite de IA — trabalhador (ADR-0006)" "oplenario-ia-trabalhador"
+          rm -rf "$T"
+          echo "::notice::Falta pela interface do Dokploy: login do ghcr, OPLENARIO_IA_DATABASE_URL e OPLENARIO_IA_SEGREDO nos dois apps; no backend, OPLENARIO_IA_SEGREDO + OPLENARIO_IA_URL; depois o deploy dos tres."
