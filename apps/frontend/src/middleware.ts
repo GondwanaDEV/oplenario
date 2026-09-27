@@ -21,6 +21,7 @@ import { NextResponse, type NextRequest } from "next/server";
 // engano.
 const PREFIXOS_PROTEGIDOS = [
   "/acompanhamentos",
+  "/meus-protocolos",
   "/editor-proposicao",
   "/expediente",
   "/ficha-materia",
@@ -73,6 +74,7 @@ export function middleware(request: NextRequest): NextResponse {
 export const config = {
   matcher: [
     "/acompanhamentos/:path*",
+    "/meus-protocolos/:path*",
     "/editor-proposicao/:path*",
     "/expediente/:path*",
     "/ficha-materia/:path*",

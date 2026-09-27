@@ -50,7 +50,25 @@
                          (contains? % :descricao) (contains? % :detalhe))
                     (concat (:pedidos-esic wire) (:solicitacoes-lgpd wire) (:manifestacoes wire)))
           "sem tenant, sem PII e sem o corpo do pedido na lista")
-      (is (string? (:id (first (:pedidos-esic wire))))))))
+      (is (string? (:id (first (:pedidos-esic wire)))))
+      (is (nil? (:resposta (first (:pedidos-esic wire)))) "sem resposta ainda"))))
+
+(deftest a-resposta-da-casa-vem-junto
+  (let [ente (random-uuid) eu (random-uuid) servidor {:ente-id ente :identidade-id (random-uuid) :papeis #{"secretario"}}
+        p (controllers/protocolar-pedido *repo* relogio (ator ente eu) {:assunto "Diarias" :descricao "De 2025."})
+        s (controllers/solicitar-titular! *repo* relogio (ator ente eu) {:tipo "acessar" :detalhe nil})
+        m (controllers/protocolar-manifestacao! *repo* relogio (ator ente eu)
+                                                {:tipo "reclamacao" :assunto "Fila" :descricao "Demora." :anonima false})]
+    (controllers/responder-pedido! *repo* relogio servidor (:id p) {:corpo "Segue a planilha em anexo."})
+    (controllers/responder-solicitacao! *repo* relogio servidor (:id s) {:corpo "Seus dados: nome e CPF."})
+    (controllers/responder-manifestacao! *repo* relogio servidor (:id m) {:corpo "Ampliamos o atendimento."})
+    (let [r (controllers/meus-protocolos *repo* (ator ente eu) relogio)
+          wire (out/meus-protocolos->wire r)]
+      (is (= "respondido" (:estado (first (:pedidos-esic wire)))))
+      (is (= "Segue a planilha em anexo." (get-in wire [:pedidos-esic 0 :resposta :corpo])))
+      (is (string? (get-in wire [:pedidos-esic 0 :resposta :respondida-em])))
+      (is (= "Seus dados: nome e CPF." (get-in wire [:solicitacoes-lgpd 0 :resposta :corpo])))
+      (is (= "Ampliamos o atendimento." (get-in wire [:manifestacoes 0 :resposta :corpo]))))))
 
 (deftest sem-nada-protocolado-listas-vazias
   (is (= {:pedidos-esic [] :solicitacoes-lgpd [] :manifestacoes []}

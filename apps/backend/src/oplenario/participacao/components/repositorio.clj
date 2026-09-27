@@ -461,13 +461,17 @@
   (meus-protocolos [this ente-id identidade-id]
     (transacao this ente-id
       (fn [tx]
-        (let [com-prazo (fn [objeto-tipo itens]
-                          (mapv (fn [i] {:item i :prazo (db-prazo/buscar-do-objeto tx ente-id objeto-tipo (:id i))})
+        ;; cada item com o seu prazo e a resposta MAIS RECENTE (a cidada precisa le-la para decidir se recorre)
+        (let [com-prazo (fn [objeto-tipo respostas itens]
+                          (mapv (fn [i] {:item i
+                                         :prazo (db-prazo/buscar-do-objeto tx ente-id objeto-tipo (:id i))
+                                         :resposta (last (respostas tx ente-id (:id i)))})
                                 itens))]
-          {:pedidos-esic      (com-prazo "pedido_esic" (db-pedido/listar-por-solicitante tx ente-id identidade-id))
-           :solicitacoes-lgpd (com-prazo "solicitacao_titular"
+          {:pedidos-esic      (com-prazo "pedido_esic" db-resposta/listar-do-pedido
+                                         (db-pedido/listar-por-solicitante tx ente-id identidade-id))
+           :solicitacoes-lgpd (com-prazo "solicitacao_titular" db-resposta-titular/listar-da-solicitacao
                                          (db-solicitacao/listar-por-titular tx ente-id identidade-id))
-           :manifestacoes     (com-prazo "manifestacao_ouvidoria"
+           :manifestacoes     (com-prazo "manifestacao_ouvidoria" db-resposta-ouvidoria/listar-da-manifestacao
                                          (db-manifestacao/listar-por-manifestante tx ente-id identidade-id))})))))
 
 (defn repositorio

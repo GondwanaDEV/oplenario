@@ -12,7 +12,8 @@
 
 (defn- base [i]
   {:id (->str (:id i)) :protocolo (:protocolo i) :estado (:estado i) :recibo-em (->str (:recibo-em i))
-   :vence-em (->str (:vence-em i)) :dias-restantes (:dias-restantes i)})
+   :vence-em (->str (:vence-em i)) :dias-restantes (:dias-restantes i)
+   :resposta (when-let [r (:resposta i)] {:corpo (:corpo r) :respondida-em (->str (:respondida-em r))})})
 
 (defn meus-protocolos->wire
   [{:keys [pedidos-esic solicitacoes-lgpd manifestacoes]}]

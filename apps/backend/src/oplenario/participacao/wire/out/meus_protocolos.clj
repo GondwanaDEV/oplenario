@@ -8,7 +8,9 @@
 (def ^:private prazo
   [[:recibo-em :string]
    [:vence-em [:maybe :string]]
-   [:dias-restantes [:maybe :int]]])
+   [:dias-restantes [:maybe :int]]
+   ;; a resposta MAIS RECENTE da Casa, para a propria cidada ler (e decidir se recorre); nil enquanto nao ha'.
+   [:resposta [:maybe [:map {:closed true} [:corpo :string] [:respondida-em :string]]]]])
 
 (def PedidoEsicItem
   (into [:map {:closed true}
