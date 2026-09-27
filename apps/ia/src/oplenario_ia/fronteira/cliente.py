@@ -20,7 +20,14 @@ from typing import Any
 import httpx
 
 from oplenario_ia.erros import Categoria, ErroIA
-from oplenario_ia.fronteira.contrato import AtaPublicada, ContextoSessao, EventoParaCore, Feed, ReciboCore
+from oplenario_ia.fronteira.contrato import (
+    AtaPublicada,
+    ContextoSessao,
+    EventoParaCore,
+    Feed,
+    ReciboCore,
+    TextoProposicao,
+)
 
 
 class Sigiloso(Exception):
@@ -73,6 +80,10 @@ class ClienteCore:
 
     def ata_publicada(self, uri: str) -> AtaPublicada:
         return AtaPublicada.model_validate(self._pedir("GET", uri, "ata").json())
+
+    def texto_proposicao(self, ente_id: str, proposicao_id: str) -> TextoProposicao:
+        caminho = f"/integracao/ia/v1/entes/{ente_id}/proposicoes/{proposicao_id}/texto"
+        return TextoProposicao.model_validate(self._pedir("GET", caminho, "texto da proposição").json())
 
     def baixar(self, uri: str, destino: Path) -> str:
         """Baixa a gravação em streaming para `destino` e confere o sha256 que o core informa. Devolve o hash."""

@@ -70,6 +70,20 @@ class ProposicaoIndexavelV1(Fio):
     autor_texto: str | None = None
 
 
+class TextoProposicao(Fio):
+    """O texto público de uma proposição, lido no core para o resumo cidadão (A.8). `texto-sha256` identifica a versão
+    lida (ementa + texto): é o que decide se o resumo precisa ser refeito."""
+
+    proposicao_id: str
+    tipo: str
+    ano: int
+    sequencial: int
+    ementa: str
+    autor_texto: str | None = None
+    texto: str | None = None
+    texto_sha256: str
+
+
 class AtaPublicada(Fio):
     versao: int
     texto: str
@@ -164,8 +178,36 @@ class AtaFalhouV1(Fio):
     retentavel: bool
 
 
+class ResumoCidadaoProntoV1(Fio):
+    """O rascunho do resumo existe no satélite (A.8). O texto NÃO viaja: o core o lê sob demanda, como o da ata."""
+
+    proposicao_id: str
+    rascunho_id: str
+    texto_base_sha256: str
+    modelo_llm_id: str
+    prompt_versao: str
+    incerteza: IncertezaNivel
+    n_citacoes: int = Field(ge=0)
+    n_citacoes_conferidas: int = Field(ge=0)
+    n_paragrafos_sem_fonte: int = Field(ge=0)
+
+
+class ResumoFalhouV1(Fio):
+    proposicao_id: str
+    categoria: CategoriaFalha
+    detalhe: str = Field(max_length=2000)
+    retentavel: bool
+
+
 class EventoParaCore(Fio):
-    tipo: Literal["TranscricaoConcluida", "TranscricaoFalhou", "AtaRascunhoPronta", "AtaFalhou"]
+    tipo: Literal[
+        "TranscricaoConcluida",
+        "TranscricaoFalhou",
+        "AtaRascunhoPronta",
+        "AtaFalhou",
+        "ResumoCidadaoPronto",
+        "ResumoFalhou",
+    ]
     versao: int = 1
     chave: str
     ente_id: str

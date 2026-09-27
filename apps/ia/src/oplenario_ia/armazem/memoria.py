@@ -11,9 +11,11 @@ from typing import Any
 from oplenario_ia.armazem.porta import (
     NovaTranscricao,
     NovoRascunho,
+    NovoResumo,
     NovoTrabalho,
     RascunhoGuardado,
     Resultado,
+    ResumoGuardado,
     RevisaoAta,
     Trabalho,
     TranscricaoGuardada,
@@ -31,6 +33,7 @@ class ArmazemMemoria:
         self._chaves: set[str] = set()
         self._transc: dict[str, TranscricaoGuardada] = {}
         self._rasc: dict[str, RascunhoGuardado] = {}
+        self._resumos: dict[str, ResumoGuardado] = {}
         self._revisoes: dict[tuple[str, int], RevisaoAta] = {}
         self._indice: dict[tuple[str, str], list[tuple[str, TrechoIndice, list[float], str]]] = {}
 
@@ -117,6 +120,21 @@ class ArmazemMemoria:
 
     def rascunho(self, rascunho_id: str) -> RascunhoGuardado | None:
         return self._rasc.get(rascunho_id)
+
+    def concluir_resumo(
+        self, trabalho_id: int, novo: NovoResumo, notificar: Callable[[ResumoGuardado], NovoTrabalho]
+    ) -> ResumoGuardado:
+        g = ResumoGuardado(id=str(uuid.uuid4()), criado_em=datetime.now(UTC), **novo.__dict__)
+        self._resumos[g.id] = g
+        self.concluir(trabalho_id, [notificar(g)])
+        return g
+
+    def resumo(self, resumo_id: str) -> ResumoGuardado | None:
+        return self._resumos.get(resumo_id)
+
+    def ultimo_resumo(self, ente_id: str, proposicao_id: str) -> ResumoGuardado | None:
+        da = [r for r in self._resumos.values() if r.ente_id == ente_id and r.proposicao_id == proposicao_id]
+        return da[-1] if da else None
 
     def enfileirar(self, novos: list[NovoTrabalho]) -> int:
         return sum(self._enfileirar(t) for t in novos)

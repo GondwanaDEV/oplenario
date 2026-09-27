@@ -12,10 +12,10 @@ import re
 
 from oplenario_ia.inferencia.modelo import PedidoInferencia
 
-_FONTE = re.compile(r'<fonte id="([^"]+)" rotulo="([^"]*)"[^>]*>\n(.*?)\n</fonte>', re.DOTALL)
+FONTE = re.compile(r'<fonte id="([^"]+)" rotulo="([^"]*)"[^>]*>\n(.*?)\n</fonte>', re.DOTALL)
 
 
-def _frase(texto: str, teto: int = 160) -> str:
+def frase(texto: str, teto: int = 160) -> str:
     t = " ".join(texto.split())
     corte = re.search(r"[.!?](\s|$)", t)
     t = t[: corte.end()].strip() if corte and corte.end() <= teto else t[:teto].rstrip()
@@ -25,9 +25,9 @@ def _frase(texto: str, teto: int = 160) -> str:
 def redigir(pedido: PedidoInferencia) -> str:
     paragrafos: list[str] = []
     for bruto in pedido.conteudo:
-        for fonte_id, rotulo, texto in _FONTE.findall(bruto):
+        for fonte_id, rotulo, texto in FONTE.findall(bruto):
             texto = html.unescape(texto)
-            trecho = _frase(texto)
+            trecho = frase(texto)
             if fonte_id.startswith("sessao:"):
                 paragrafos.append(f"Reuniu-se a Câmara Municipal em sessão. [[{fonte_id} | {trecho}]]")
                 continue

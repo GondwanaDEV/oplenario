@@ -97,6 +97,40 @@ class RascunhoGuardado:
 
 
 @dataclass(frozen=True)
+class NovoResumo:
+    """O rascunho de resumo cidadão que o núcleo produziu (A.8), da versão `texto_base_sha256` da proposição."""
+
+    ente_id: str
+    proposicao_id: str
+    texto_base_sha256: str
+    execucao_id: str
+    texto: str
+    citacoes: list[dict[str, Any]]
+    paragrafos_sem_fonte: list[int]
+    incerteza: dict[str, Any]
+    vendor: str
+    modelo: str
+    prompt_versao: str
+
+
+@dataclass(frozen=True)
+class ResumoGuardado:
+    id: str
+    ente_id: str
+    proposicao_id: str
+    texto_base_sha256: str
+    execucao_id: str
+    texto: str
+    citacoes: list[dict[str, Any]]
+    paragrafos_sem_fonte: list[int]
+    incerteza: dict[str, Any]
+    vendor: str
+    modelo: str
+    prompt_versao: str
+    criado_em: datetime | None = None
+
+
+@dataclass(frozen=True)
 class RevisaoAta:
     """A revisão humana de um rascunho nosso, medida quando a ata foi publicada no core (A.6c). Só números e hashes."""
 
@@ -167,6 +201,18 @@ class Armazem(Protocol):
         ...
 
     def rascunho(self, rascunho_id: str) -> RascunhoGuardado | None: ...
+
+    def concluir_resumo(
+        self, trabalho_id: int, novo: NovoResumo, notificar: Callable[[ResumoGuardado], NovoTrabalho]
+    ) -> ResumoGuardado:
+        """Guarda o rascunho do resumo, conclui o trabalho e enfileira o aviso ao core, de uma vez."""
+        ...
+
+    def resumo(self, resumo_id: str) -> ResumoGuardado | None: ...
+
+    def ultimo_resumo(self, ente_id: str, proposicao_id: str) -> ResumoGuardado | None:
+        """O rascunho mais recente da proposição — para não redigir de novo a mesma versão do texto."""
+        ...
 
     def enfileirar(self, novos: list[NovoTrabalho]) -> int:
         """Enfileira trabalhos (idempotente pela chave), sem mexer no cursor do feed. Devolve quantos eram novos."""
