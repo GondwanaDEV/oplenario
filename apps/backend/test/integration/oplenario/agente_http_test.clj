@@ -14,6 +14,7 @@
             [oplenario.identidade.components.repositorio :as repo-id]
             [oplenario.identidade.db.identidade :as id]
             [oplenario.identidade.db.vinculo :as vinc]
+            [oplenario.integracao-ia.components.repositorio :as repo-ia]
             [oplenario.integracao-ia.diplomat.http.out :as plataforma-ia]
             [oplenario.interceptors :as it]
             [oplenario.kernel.components.datasource :as datasource]
@@ -58,9 +59,11 @@
       (swap! pedidos conj [ente-id pedido])
       (if fora? (throw (ex-info "fora" {:tipo :ia/indisponivel :motivo "teste"})) resposta-ia))))
 
-(defn- servico [plataforma]
+(defn- servico [plataforma & {:keys [repo-integracao-ia]}]
   (let [auth (it/autenticacao (idp-dev/idp-dev) (repo))]
-    (-> (http/servico (config/carregar) (agente/rotas {:auth auth :repo-identidade (repo) :ia plataforma}) it/globais)
+    (-> (http/servico (config/carregar) (agente/rotas {:auth auth :repo-identidade (repo) :ia plataforma
+                                                       :repo-integracao-ia repo-integracao-ia})
+                      it/globais)
         ph/create-server ::ph/service-fn)))
 
 (defn- perguntar [svc ente iid corpo]
@@ -117,3 +120,26 @@
         (is (= 2 (count @pedidos)))))
     (testing "pergunta vazia e' 400"
       (is (= 400 (:status (perguntar svc ente (pessoa! ente "secretario") {:pergunta " "})))))))
+
+(deftest proposta-de-ato-da-execucao-vai-a-tela
+  ;; B.6 / ADR-0012: a execucao recebe `ato` (que por agente so' propoe); a proposta criada nela vira evento `proposta`
+  ;; para a tela levar a pessoa a confirmar. Aqui o satelite falso faz o papel do MCP e grava a proposta.
+  (let [ente (random-uuid)
+        iid (pessoa! ente "vereador")
+        ri (repo-ia/map->RepoIntegracaoIAPg {:datasource {:ds *ds*}})
+        classes (atom nil)
+        plataforma #_{:clj-kondo/ignore [:missing-protocol-method]}
+        (reify plataforma-ia/PlataformaIA
+          (executar-agente [_ ente-id {:keys [credencial correlation_id]}]
+            (reset! classes (get-in (auten/resolver-agente (repo) credencial) [:via :classes]))
+            (repo-ia/criar-proposta! ri {:ente-id ente-id :execucao-id (parse-uuid correlation_id) :identidade-id iid
+                                         :agente "assistente-da-casa" :ferramenta "protocolar_requerimento"
+                                         :entrada {} :titulo "Protocolar o requerimento “X”" :texto "texto"
+                                         :ritual "assinatura" :contaminada-por []
+                                         :expira-em (java.sql.Timestamp/from (.plusSeconds (java.time.Instant/now) 3600))})
+            resposta-ia))
+        evs (eventos (:body (perguntar (servico plataforma :repo-integracao-ia ri) ente iid {:pergunta "protocole"})))]
+    (is (= #{:leitura :ato} @classes) "ato concedido: por agente, so' proposta")
+    (is (= ["passo" "proposta" "resposta" "fim"] (map first evs)))
+    (is (= {"titulo" "Protocolar o requerimento “X”" "ritual" "assinatura"}
+           (select-keys (second (second evs)) ["titulo" "ritual"])))))

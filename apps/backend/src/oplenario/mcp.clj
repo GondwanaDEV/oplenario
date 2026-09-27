@@ -17,7 +17,8 @@
             [jsonista.core :as json]
             [oplenario.catalogo :as catalogo]
             [oplenario.http :as http]
-            [oplenario.interceptors :as it]))
+            [oplenario.interceptors :as it]
+            [oplenario.kernel.catalogo :as kcat]))
 
 (set! *warn-on-reflection* true)
 
@@ -48,7 +49,7 @@
         {:content (texto (json/write-value-as-string saida))
          :structuredContent saida
          :isError false
-         :_meta {"oplenario/origem" "interno" "oplenario/sigilo" "publico"}}
+         :_meta {"oplenario/origem" (kcat/origem (get catalogo/por-nome nome) saida) "oplenario/sigilo" "publico"}}
         (resultado-erro "Nada encontrado para o que foi informado (ou nao e' visivel para esta pessoa)."))
       (catch clojure.lang.ExceptionInfo e
         (let [{:keys [tipo erros]} (ex-data e)]

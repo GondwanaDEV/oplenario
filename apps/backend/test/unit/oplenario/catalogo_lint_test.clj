@@ -45,5 +45,30 @@
 (deftest fora-do-catalogo-tem-motivo
   (is (map? (ler "catalogo/fora-do-catalogo.edn")))
   (doseq [[rota {:keys [categoria motivo]}] (ler "catalogo/fora-do-catalogo.edn")]
-    (is (contains? #{:so-tela :servico} categoria) (str rota))
+    (is (contains? #{:so-tela :servico :pessoal} categoria) (str rota))
     (is (and (string? motivo) (>= (count motivo) 20)) (str rota " sem motivo"))))
+
+(def ^:private atos-pessoais
+  "docs/25 Eixo 4.3 (ADR-0012): voto, presenca e conducao da sessao ao vivo. Esta lista so' cresce."
+  #{:legislativo/registrar-voto :legislativo/abrir-votacao :legislativo/encerrar-votacao
+    :sessoes/confirmar-minha-presenca :sessoes/registrar-presenca :sessoes/registrar-presenca-lote
+    :sessoes/conduzir-chamada :sessoes/transicionar :sessoes/iniciar-fala :sessoes/encerrar-fala
+    :sessoes/registrar-evento-cronometro :sessoes/anunciar-item-pauta :sessoes/registrar-decisao-mesa})
+
+(deftest atos-que-o-agente-nem-propoe
+  (let [fora (ler "catalogo/fora-do-catalogo.edn")
+        pessoais (set (keep (fn [[r {:keys [categoria]}]] (when (= :pessoal categoria) r)) fora))
+        cobertas (set (mapcat :rotas catalogo/entradas))]
+    (is (empty? (remove pessoais atos-pessoais)) "ato pessoal saiu da lista :pessoal de fora-do-catalogo.edn")
+    (is (every? @rotas-montadas pessoais) "rota :pessoal que nao existe")
+    (is (empty? (filter pessoais cobertas)) "entrada do catalogo apontando para ato pessoal (Eixo 4.3)")))
+
+(deftest confirmar-proposta-nunca-e-ferramenta
+  (let [cobertas (set (mapcat :rotas catalogo/entradas))
+        propostas #{:propostas/listar :propostas/ver :propostas/confirmar :propostas/recusar}]
+    (is (every? @rotas-montadas propostas))
+    (is (empty? (filter propostas cobertas)) "o agente nunca confirma o que propos (Eixo 4.2 B)")))
+
+(deftest todo-ato-do-catalogo-e-proponivel
+  (doseq [e catalogo/entradas :when (= :ato (:classe e))]
+    (is (and (:ritual e) (:apresentar e)) (str (:nome e) " e' ato sem ritual/apresentar"))))

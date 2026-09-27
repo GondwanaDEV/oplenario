@@ -32,7 +32,6 @@
  :integracao-ia/feed
  :integracao-ia/receber
  :integracao-ia/texto-proposicao
- :legislativo/abrir-votacao
  :legislativo/acusar-ciencia
  :legislativo/apreciar-veto
  :legislativo/atualizar-modelo-documento
@@ -45,7 +44,6 @@
  :legislativo/editar-documento
  :legislativo/editar-proposicao
  :legislativo/emitir-parecer
- :legislativo/encerrar-votacao
  :legislativo/ficha-materia
  :legislativo/gerar-autografo
  :legislativo/gerar-documento
@@ -57,7 +55,6 @@
  :legislativo/meu-voto
  :legislativo/meus-colegas
  :legislativo/meus-convites-subscricao
- :legislativo/meus-modelos-requerimento
  :legislativo/minhas-propostas-requerimento
  :legislativo/parecer-editor
  :legislativo/pos-aprovacao
@@ -65,14 +62,12 @@
  :legislativo/proposta-requerimento
  :legislativo/protocolar-documento
  :legislativo/protocolar-proposta-requerimento
- :legislativo/protocolar-requerimento
  :legislativo/protocolo-geral
  :legislativo/publicar-resumo
  :legislativo/rascunho-resumo
  :legislativo/receber-movimentacao
  :legislativo/recebimentos-pendentes
  :legislativo/registrar-resposta-executivo
- :legislativo/registrar-voto
  :legislativo/responder-subscricao
  :legislativo/resumo
  :legislativo/salvar-rascunho-parecer
@@ -111,25 +106,20 @@
  :sessoes/abrir-minha-justificativa
  :sessoes/adicionar-item-pauta
  :sessoes/agendar
- :sessoes/anunciar-item-pauta
  :sessoes/assiduidade
  :sessoes/ata
  :sessoes/atos-mesa
  :sessoes/buscar
  :sessoes/chamada
  :sessoes/composicao
- :sessoes/conduzir-chamada
- :sessoes/confirmar-minha-presenca
  :sessoes/decidir-justificativa
  :sessoes/definir-tempos-regimentais
  :sessoes/desistir-inscricao
- :sessoes/encerrar-fala
  :sessoes/folha-html
  :sessoes/folha-pdf
  :sessoes/gerar-folha
  :sessoes/gravacoes-pendentes
  :sessoes/ingerir-gravacao
- :sessoes/iniciar-fala
  :sessoes/inscrever-orador
  :sessoes/leitura-ata
  :sessoes/listar
@@ -139,19 +129,14 @@
  :sessoes/publicar-ata
  :sessoes/quorum
  :sessoes/rascunho-ata
- :sessoes/registrar-decisao-mesa
- :sessoes/registrar-evento-cronometro
  :sessoes/registrar-incidente
  :sessoes/registrar-leitura-ata
- :sessoes/registrar-presenca
- :sessoes/registrar-presenca-lote
  :sessoes/remover-item-pauta
  :sessoes/reordenar-item-pauta
  :sessoes/solicitar-rascunho-ata
  :sessoes/tempos-regimentais
  :sessoes/transcricao
  :sessoes/transcricoes
- :sessoes/transicionar
  :sessoes/tribuna
  :sessoes/vincular-gravacao
  :tempo-real/plenario

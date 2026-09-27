@@ -26,6 +26,7 @@
             [oplenario.normas.diplomat.http.in :as normas-http]
             [oplenario.paineis.diplomat.http.in :as paineis-http]
             [oplenario.participacao.diplomat.http.in :as participacao-http]
+            [oplenario.propostas :as propostas]
             [oplenario.sessoes.components.renderizador-pdf :as renderizador-pdf]
             [oplenario.sessoes.components.repositorio :as repo-sessoes-comp]
             [oplenario.sessoes.logic :as sessoes-logic]
@@ -535,7 +536,7 @@
         (into (normas-http/rotas {:auth auth :repo-normas repo-normas
                                    :municipio-do-ente (fn [ente-id] (:municipio-ibge (repo-cadastros-comp/buscar-ente repo-cadastros ente-id)))}))
         ;; Faixa B / B.3: a tela pergunta ao assistente da Casa (credencial delegada por execucao, ADR-0010).
-        (into (agente/rotas {:auth auth :repo-identidade repo-identidade :ia ia}))
+        (into (agente/rotas {:auth auth :repo-identidade repo-identidade :ia ia :repo-integracao-ia repo-integracao-ia}))
         (into (compliance-http/rotas {:auth auth :repo-compliance repo-compliance}))
         (into (cadastros-http/rotas {:auth auth :repo-cadastros repo-cadastros :relogio relogio-producao
                                      :identidade-existe? identidade-existe?}))
@@ -578,15 +579,26 @@
                   :dispositivos-vigentes (fn [ente-id vid] (repo-normas-comp/dispositivos-vigentes repo-normas ente-id vid))})
                 #{}))
         ;; Faixa B / B.3 (ADR-0009/0010): o servidor MCP do catalogo de acoes — so' com a credencial delegada do agente.
+        ;; B.6 (ADR-0012): as MESMAS deps servem a confirmacao da proposta de ato na tela (a entrada roda como a pessoa).
         (into (if repo-integracao-ia
-                (mcp/rotas {:repo-identidade repo-identidade
-                             :deps {:repo-legislativo repo-legislativo :repo-sessoes repo-sessoes
-                                    :nome-na-casa nome-na-casa-fn :resumir-proposicoes resumir-proposicoes-fn
-                                    :registrar-chamada (catalogo/registrador repo-integracao-ia)
-                                    ;; B.5: as normas de referencia — o repositorio (so' a vigente) e a busca por sentido na IA
-                                    :repo-normas repo-normas
-                                    :buscar-dispositivos-ia (fn [ente-id consulta limite]
-                                                              (:resultados (plataforma-ia/buscar ia ente-id {:consulta consulta
-                                                                                                            :tipos ["dispositivo"]
-                                                                                                            :limite limite})))}})
+                (let [deps-catalogo
+                      {:repo-legislativo repo-legislativo :repo-sessoes repo-sessoes
+                       :nome-na-casa nome-na-casa-fn :resumir-proposicoes resumir-proposicoes-fn
+                       :registrar-chamada (catalogo/registrador repo-integracao-ia)
+                       ;; B.5: as normas de referencia — o repositorio (so' a vigente) e a busca por sentido na IA
+                       :repo-normas repo-normas
+                       :buscar-dispositivos-ia (fn [ente-id consulta limite]
+                                                 (:resultados (plataforma-ia/buscar ia ente-id {:consulta consulta
+                                                                                               :tipos ["dispositivo"]
+                                                                                               :limite limite})))
+                       ;; B.6: o requerimento do vereador (o primeiro ato) e os seams da proposta
+                       :resolver-autor (fn [ente-id identidade-id]
+                                         (resolver-autor-vereador repo-cadastros ente-id identidade-id))
+                       :resolver-municipio resolver-municipio
+                       :relogio relogio-producao
+                       :propor (propostas/propositor repo-integracao-ia relogio-producao)
+                       :marcar-terceiro (propostas/marcador-de-terceiro repo-integracao-ia)}]
+                  (into (mcp/rotas {:repo-identidade repo-identidade :deps deps-catalogo})
+                        (propostas/rotas {:auth auth :repo-integracao-ia repo-integracao-ia :relogio relogio-producao
+                                          :deps-catalogo deps-catalogo})))
                 #{})))))
