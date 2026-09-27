@@ -13,10 +13,13 @@ from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from oplenario_ia import __version__
 from oplenario_ia.armazem.porta import Armazem
 from oplenario_ia.ata.redacao import pontos_a_confirmar, texto_limpo
+from oplenario_ia.busca.embeddings import Embedder, criar_embedder
+from oplenario_ia.busca.indice import TIPOS
 from oplenario_ia.config import Config, carregar
 from oplenario_ia.erros import ErroIA, para_estruturado
 
@@ -29,9 +32,18 @@ def _armazem_do_config(cfg: Config) -> Armazem | None:
     return ArmazemPostgres(cfg.database_url)
 
 
-def criar_app(config: Config | None = None, armazem: Armazem | None = None) -> FastAPI:
+class PedidoBusca(BaseModel):
+    consulta: str = Field(min_length=2, max_length=300)
+    tipos: list[str] = Field(default_factory=lambda: list(TIPOS))
+    limite: int = Field(default=20, ge=1, le=50)
+
+
+def criar_app(
+    config: Config | None = None, armazem: Armazem | None = None, embedder: Embedder | None = None
+) -> FastAPI:
     cfg = config or carregar()
     arm = armazem if armazem is not None else _armazem_do_config(cfg)
+    emb = embedder or criar_embedder(cfg)
     app = FastAPI(title="O Plenário — Plataforma de IA", version=__version__)
 
     @app.exception_handler(ErroIA)
@@ -116,6 +128,30 @@ def criar_app(config: Config | None = None, armazem: Armazem | None = None) -> F
             "paragrafos-sem-fonte": g.paragrafos_sem_fonte,
             "pontos-a-confirmar": pontos_a_confirmar(g.texto),
             "criado-em": g.criado_em.isoformat() if g.criado_em else None,
+        }
+
+    @app.post("/v1/entes/{ente_id}/busca", dependencies=[Depends(servico)])
+    def busca(ente_id: str, pedido: PedidoBusca) -> dict[str, Any]:
+        """A busca intra-câmara (A.4/A.5; §22.3.4): só na Casa do caminho, híbrida (termo exato + sentido). Devolve
+        ids com o trecho e o score; o core completa com os dados das tabelas dele (número, ementa, sessão)."""
+        if arm is None:
+            raise HTTPException(503, "armazenamento do satélite não configurado")
+        tipos = [t for t in pedido.tipos if t in TIPOS]
+        vetor = emb.embed([pedido.consulta], "consulta")[0]
+        achados = arm.buscar(ente_id, pedido.consulta, vetor, emb.modelo, tipos, pedido.limite, emb.distancia_maxima)
+        return {
+            "modelo": emb.modelo,
+            "resultados": [
+                {
+                    "tipo": r.tipo,
+                    "ref-id": r.ref_id,
+                    "parte": r.parte,
+                    "texto": r.texto,
+                    "meta": r.meta,
+                    "score": round(r.score, 6),
+                }
+                for r in achados
+            ],
         }
 
     return app

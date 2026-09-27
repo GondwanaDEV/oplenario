@@ -109,6 +109,25 @@ class RevisaoAta:
     publicada_por: str
 
 
+@dataclass(frozen=True)
+class TrechoIndice:
+    """Um trecho do índice de busca (A.4): a unidade que a busca devolve."""
+
+    parte: int
+    texto: str
+    meta: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class Resultado:
+    tipo: str  # "proposicao" | "transcricao"
+    ref_id: str  # proposição: o id dela; transcrição: o SEGMENTO (reprocessar substitui, não duplica)
+    parte: int
+    texto: str
+    meta: dict[str, Any]
+    score: float
+
+
 class Armazem(Protocol):
     def cursor(self) -> int: ...
 
@@ -148,6 +167,34 @@ class Armazem(Protocol):
         ...
 
     def rascunho(self, rascunho_id: str) -> RascunhoGuardado | None: ...
+
+    def enfileirar(self, novos: list[NovoTrabalho]) -> int:
+        """Enfileira trabalhos (idempotente pela chave), sem mexer no cursor do feed. Devolve quantos eram novos."""
+        ...
+
+    def ultimas_transcricoes(self) -> list[TranscricaoGuardada]:
+        """A versão mais recente de cada gravação, de todas as Casas (a reindexação)."""
+        ...
+
+    def indexar(
+        self, ente_id: str, tipo: str, ref_id: str, trechos: list[TrechoIndice], vetores: list[list[float]], modelo: str
+    ) -> None:
+        """Substitui TODOS os trechos de (tipo, ref_id) por estes — reindexar não duplica."""
+        ...
+
+    def buscar(
+        self,
+        ente_id: str,
+        consulta: str,
+        vetor: list[float],
+        modelo: str,
+        tipos: list[str],
+        limite: int,
+        distancia_maxima: float,
+    ) -> list[Resultado]:
+        """Busca híbrida SÓ na Casa: termo exato (full-text português) + sentido (cosseno, só vetores do mesmo
+        modelo e abaixo da distância máxima), fundidos por RRF."""
+        ...
 
     def registrar_revisao(self, revisao: RevisaoAta) -> bool:
         """Guarda a revisão uma vez por (rascunho, versão da ata). True = nova; False = já estava (reentrega)."""

@@ -6,6 +6,7 @@
   (:gen-class)
   (:require [com.stuartsierra.component :as component]
             [oplenario.config :as config]
+            [oplenario.ia-republicar :as ia-republicar]
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.migracao :as migracao]
             [oplenario.sistema :as sistema]))
@@ -19,9 +20,21 @@
 
 (defn -main [& args]
   (let [cfg (config/carregar)]
-    (if (= "migrate" (first args))
+    (cond
+      (= "migrate" (first args))
       (do (migrar! cfg)
           (println "[oplenario] migrations aplicadas"))
+
+      ;; Track IA A.4: carga inicial do indice de busca de uma Casa (idempotente)
+      (= "ia-republicar-proposicoes" (first args))
+      (let [ente (or (parse-uuid (str (second args)))
+                     (throw (ex-info "uso: ia-republicar-proposicoes <ente-id>" {})))
+            ds   (component/start (datasource/datasource cfg))]
+        (try (println "[oplenario]" (ia-republicar/republicar-proposicoes! (:ds ds) ente)
+                      "proposicao(oes) publicada(s) no feed da IA")
+             (finally (component/stop ds))))
+
+      :else
       (let [sys (component/start (sistema/sistema-serve cfg))]
         (.addShutdownHook (Runtime/getRuntime)
                           (Thread. ^Runnable (fn [] (component/stop sys))))

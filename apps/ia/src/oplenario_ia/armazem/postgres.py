@@ -17,11 +17,14 @@ from oplenario_ia.armazem.porta import (
     NovoRascunho,
     NovoTrabalho,
     RascunhoGuardado,
+    Resultado,
     RevisaoAta,
     Trabalho,
     TranscricaoGuardada,
+    TrechoIndice,
 )
-from oplenario_ia.transcricao.modelo import Trecho
+from oplenario_ia.busca.indice import RRF_K
+from oplenario_ia.transcricao.modelo import Trecho as TrechoTranscricao
 
 MIGRACOES: list[str] = [
     # 1 — cursor, fila, transcrições
@@ -93,6 +96,28 @@ MIGRACOES: list[str] = [
       PRIMARY KEY (rascunho_id, versao_ata)
     );
     """,
+    # 4 — o índice único de busca (A.4): trechos de proposições e transcrições, com o vetor (pgvector, self-host) e o
+    # full-text em português; a busca híbrida funde os dois. Cada linha guarda o modelo que gerou o vetor.
+    """
+    CREATE EXTENSION IF NOT EXISTS vector;
+    CREATE TABLE IF NOT EXISTS ia.indice_trecho (
+      id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      ente_id    uuid NOT NULL,
+      tipo       text NOT NULL CHECK (tipo IN ('proposicao', 'transcricao')),
+      ref_id     uuid NOT NULL,
+      parte      integer NOT NULL,
+      texto      text NOT NULL,
+      meta       jsonb NOT NULL,
+      modelo     text NOT NULL,
+      embedding  vector(384) NOT NULL,
+      tsv        tsvector GENERATED ALWAYS AS (to_tsvector('portuguese', texto)) STORED,
+      indexado_em timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (tipo, ref_id, parte)
+    );
+    CREATE INDEX IF NOT EXISTS idx_indice_ente ON ia.indice_trecho (ente_id, tipo);
+    CREATE INDEX IF NOT EXISTS idx_indice_tsv ON ia.indice_trecho USING gin (tsv);
+    CREATE INDEX IF NOT EXISTS idx_indice_vetor ON ia.indice_trecho USING hnsw (embedding vector_cosine_ops);
+    """,
 ]
 
 
@@ -111,7 +136,11 @@ def migrar(conn: psycopg.Connection[Any]) -> None:
                 conn.execute("INSERT INTO ia.migracao (versao) VALUES (%s)", (n,))
 
 
-def _trecho_json(t: Trecho) -> dict[str, Any]:
+def _vetor(v: list[float]) -> str:
+    return "[" + ",".join(f"{x:.7g}" for x in v) + "]"
+
+
+def _trecho_json(t: TrechoTranscricao) -> dict[str, Any]:
     return asdict(t)
 
 
@@ -127,7 +156,7 @@ def _guardada(r: dict[str, Any]) -> TranscricaoGuardada:
         modelo_asr=r["modelo_asr"],
         modelo_diarizacao=r["modelo_diarizacao"],
         cobertura=r["cobertura"],
-        trechos=[Trecho(**t) for t in r["trechos"]],
+        trechos=[TrechoTranscricao(**t) for t in r["trechos"]],
         criado_em=r["criado_em"],
     )
 
@@ -314,6 +343,76 @@ class ArmazemPostgres:
             except psycopg.errors.InvalidTextRepresentation:
                 return None
         return _rascunho(r) if r else None
+
+    def enfileirar(self, novos: list[NovoTrabalho]) -> int:
+        with self._conectar() as c, c.transaction():
+            return sum(self._enfileirar(c, t) for t in novos)
+
+    def ultimas_transcricoes(self) -> list[TranscricaoGuardada]:
+        with self._conectar() as c:
+            rows = c.execute(
+                "SELECT DISTINCT ON (segmento_id) * FROM ia.transcricao ORDER BY segmento_id, versao DESC"
+            ).fetchall()
+        return [_guardada(r) for r in rows]
+
+    def indexar(
+        self, ente_id: str, tipo: str, ref_id: str, trechos: list[TrechoIndice], vetores: list[list[float]], modelo: str
+    ) -> None:
+        with self._conectar() as c, c.transaction():
+            c.execute("DELETE FROM ia.indice_trecho WHERE tipo = %s AND ref_id = %s", (tipo, ref_id))
+            for t, v in zip(trechos, vetores, strict=True):
+                c.execute(
+                    "INSERT INTO ia.indice_trecho (ente_id, tipo, ref_id, parte, texto, meta, modelo, embedding)"
+                    " VALUES (%s, %s, %s, %s, %s, %s, %s, %s::vector)",
+                    (ente_id, tipo, ref_id, t.parte, t.texto, Jsonb(t.meta), modelo, _vetor(v)),
+                )
+
+    def buscar(
+        self,
+        ente_id: str,
+        consulta: str,
+        vetor: list[float],
+        modelo: str,
+        tipos: list[str],
+        limite: int,
+        distancia_maxima: float,
+    ) -> list[Resultado]:
+        v = _vetor(vetor)
+        with self._conectar() as c:
+            rows = c.execute(
+                """WITH sentido AS (
+                     SELECT id, row_number() OVER (ORDER BY embedding <=> %(v)s::vector) AS r
+                       FROM ia.indice_trecho
+                      WHERE ente_id = %(e)s AND modelo = %(m)s AND tipo = ANY(%(t)s)
+                        AND embedding <=> %(v)s::vector <= %(d)s
+                      ORDER BY embedding <=> %(v)s::vector LIMIT 50),
+                   termo AS (
+                     SELECT id, row_number() OVER (ORDER BY ts_rank_cd(tsv, q) DESC) AS r
+                       FROM ia.indice_trecho, websearch_to_tsquery('portuguese', %(q)s) q
+                      WHERE ente_id = %(e)s AND tipo = ANY(%(t)s) AND tsv @@ q
+                      ORDER BY ts_rank_cd(tsv, q) DESC LIMIT 50)
+                   SELECT i.tipo, i.ref_id, i.parte, i.texto, i.meta,
+                          COALESCE(1.0 / (%(k)s + s.r), 0) + COALESCE(1.0 / (%(k)s + t.r), 0) AS score
+                     FROM ia.indice_trecho i
+                     LEFT JOIN sentido s ON s.id = i.id
+                     LEFT JOIN termo t ON t.id = i.id
+                    WHERE s.id IS NOT NULL OR t.id IS NOT NULL
+                    ORDER BY score DESC, i.id
+                    LIMIT %(l)s""",
+                {
+                    "v": v,
+                    "e": ente_id,
+                    "m": modelo,
+                    "t": tipos,
+                    "d": distancia_maxima,
+                    "q": consulta,
+                    "k": RRF_K,
+                    "l": limite,
+                },
+            ).fetchall()
+        return [
+            Resultado(r["tipo"], str(r["ref_id"]), r["parte"], r["texto"], r["meta"], float(r["score"])) for r in rows
+        ]
 
     def registrar_revisao(self, revisao: RevisaoAta) -> bool:
         with self._conectar() as c:

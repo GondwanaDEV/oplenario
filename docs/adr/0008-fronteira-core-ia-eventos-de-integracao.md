@@ -94,3 +94,25 @@ sob demanda).
   compara com o texto LIMPO do rascunho e registra `RevisaoHumana` (aprovado/editado + proporção alterada) — a
   métrica fica no registro de confiança do satélite, uma vez por (rascunho, versão). A coluna `proporcao_alterada` de
   `sessoes.ata` fica nula: a medida é da IA e não volta ao artefato legal.
+
+## Adendo (27/09/2026) — o índice de busca na mesma fronteira (Faixa A / A.4)
+
+O índice único (§22.3.4: embeddings são do satélite) é alimentado pelos mesmos mecanismos; a busca é o caminho
+síncrono que a §22.3.1 já previa.
+
+- **core → IA: `ProposicaoProtocolada` v1 / `ProposicaoAtualizada` v1** (`proposicao-id`, `ementa`, `autor-texto`),
+  promovidos de `proposicao.protocolada` / `proposicao.editada`. Só o texto público: número, tipo e estado o core
+  completa na hidratação. A chave de `ProposicaoAtualizada` inclui o hash de ementa+autoria, então a mesma edição
+  re-emitida não duplica o feed e uma edição real passa.
+- **Transcrição:** sem evento novo — o próprio satélite indexa ao concluir uma transcrição (trabalho
+  `indexar:transcricao:<id>`), em trechos por segmento.
+- **Carga inicial:** `clojure -M -m oplenario.main ia-republicar-proposicoes <ente-id>` reempurra as proposições já
+  existentes de uma Casa como `ProposicaoAtualizada` (idempotente pela chave); `oplenario-ia-trabalhador
+  --reindexar` refaz o índice das transcrições guardadas no satélite (troca de modelo de embedding).
+- **Busca: `POST /v1/entes/{ente}/busca`** (segredo de serviço), `{consulta, tipos?, limite?}` →
+  `{modelo, resultados: [{tipo, ref-id, parte, texto, meta, score}]}`. Híbrida (full-text português + cosseno no
+  pgvector, fundidas por RRF), com corte de distância por modelo para não devolver "o menos distante" de um índice sem
+  nada parecido. O satélite devolve ids e trechos; **quem decide o que o usuário vê é o core**, que hidrata das suas
+  tabelas com a visibilidade dele (§22.3.4).
+- **Embeddings:** fake determinístico por padrão (CI e deploy), adaptador self-host em ONNX na CPU (`fastembed`,
+  extra `embeddings`) por config. O corte de distância do adaptador real ainda não foi calibrado com consultas reais.

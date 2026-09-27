@@ -23,6 +23,10 @@ asr = [
   "numpy>=2,<3",
   "imageio-ffmpeg>=0.6,<1",
 ]
+# Embeddings self-host do índice de busca (A.4): modelo aberto em ONNX na CPU. Fora do CI (o fake basta).
+embeddings = [
+  "fastembed>=0.5,<1",
+]
 dev = [
   "pytest>=8",
   "ruff>=0.16,<0.17",  # fixados: formatter/lint novos mudariam o veredito do CI sem mudança de código
@@ -59,5 +63,5 @@ files = ["src"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["sherpa_onnx", "imageio_ffmpeg", "numpy"]
+module = ["sherpa_onnx", "imageio_ffmpeg", "numpy", "fastembed"]
 ignore_missing_imports = true

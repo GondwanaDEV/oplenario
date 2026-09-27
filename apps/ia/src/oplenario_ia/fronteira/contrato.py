@@ -61,6 +61,15 @@ class AtaRevisadaEPublicadaV1(Fio):
     conteudo_uri: str
 
 
+class ProposicaoIndexavelV1(Fio):
+    """`ProposicaoProtocolada`/`ProposicaoAtualizada` v1 (A.4): o snapshot público que entra no índice. Proposição é
+    ato público; número, tipo e estado o core completa na hora de mostrar."""
+
+    proposicao_id: str
+    ementa: str
+    autor_texto: str | None = None
+
+
 class AtaPublicada(Fio):
     versao: int
     texto: str

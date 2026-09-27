@@ -11,6 +11,7 @@ from typing import Any
 import httpx
 
 from oplenario_ia.armazem.memoria import ArmazemMemoria
+from oplenario_ia.busca.embeddings import EmbedderFake
 from oplenario_ia.erros import Categoria, ErroIA
 from oplenario_ia.fronteira.cliente import ClienteCore
 from oplenario_ia.trabalhador import MAX_TENTATIVAS, Trabalhador
@@ -130,6 +131,7 @@ def montar(core: CoreFalso, transcritor: TranscritorFake | None = None) -> tuple
         arm,
         transcritor or TranscritorFake(FRASES),
         DiarizadorFake(VOZES),
+        embedder=EmbedderFake(),
         agora=rel,
     )
     return t, arm, rel
@@ -138,7 +140,7 @@ def montar(core: CoreFalso, transcritor: TranscritorFake | None = None) -> tuple
 def test_gravacao_vinculada_vira_transcricao_atribuida_e_aviso_ao_core() -> None:
     core = CoreFalso()
     t, arm, _ = montar(core)
-    assert t.ciclo() == 2, "transcrever + notificar"
+    assert t.ciclo() == 3, "transcrever + notificar + indexar (a busca acha o que foi dito)"
     [aviso] = core.recebidos
     assert aviso["tipo"] == "TranscricaoConcluida" and aviso["ente-id"] == ENTE
     assert aviso["correlation-id"] == f"GravacaoVinculada:v1:{SEG}", "a correlação atravessa a fronteira"
@@ -166,7 +168,7 @@ def test_feed_fora_do_ar_nao_impede_processar_a_fila() -> None:
     t, _, _ = montar(core)
     t.puxar_feed()
     core.eventos = []
-    assert t.ciclo() == 2
+    assert t.ciclo() == 3
 
 
 def test_falha_de_infra_espera_e_tenta_de_novo_depois_desiste_e_avisa() -> None:

@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 Vendor = Literal["fake", "anthropic"]
 Asr = Literal["fake", "sherpa"]
+Embeddings = Literal["fake", "fastembed"]
 
 
 class Config(BaseModel):
@@ -31,6 +32,9 @@ class Config(BaseModel):
     whisper: str = "turbo"
     idioma: str = "pt"
     intervalo_s: float = Field(default=15.0, gt=0)
+    # O índice de busca (A.4): embeddings SELF-HOST (§22.9 Eixo 10). `fake` = hashing determinístico (dev/CI).
+    embeddings: Embeddings = "fake"
+    modelo_embeddings: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
 
 def carregar(env: Mapping[str, str] | None = None) -> Config:
@@ -53,6 +57,8 @@ def carregar(env: Mapping[str, str] | None = None) -> Config:
         ("OPLENARIO_IA_WHISPER", "whisper"),
         ("OPLENARIO_IA_IDIOMA", "idioma"),
         ("OPLENARIO_IA_INTERVALO_S", "intervalo_s"),
+        ("OPLENARIO_IA_EMBEDDINGS", "embeddings"),
+        ("OPLENARIO_IA_MODELO_EMBEDDINGS", "modelo_embeddings"),
     ):
         if v := e.get(var):
             dados[campo] = v
