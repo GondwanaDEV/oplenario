@@ -10,6 +10,7 @@
   (:require [clojure.string :as str]
             [malli.core :as m]
             [malli.error :as me]
+            [oplenario.legislativo.logic :as logic]
             [oplenario.legislativo.wire.in.proposicao :as wire])
   (:import (java.util UUID)))
 
@@ -111,6 +112,8 @@
   (when-not (map? wire-in) (invalido! "corpo deve ser objeto JSON" {:campo :corpo}))
   (let [m (so-esperados wire-in campos-criar)]
     (validar! wire/CriarProposicao m "corpo de criar proposicao invalido")
+    (when-let [campo (logic/campo-da-especie-faltando m)]
+      (invalido! (str (name campo) " e' obrigatorio para " (:tipo m)) {:campo campo}))
     {:id (random-uuid) :tipo (:tipo m) :ano (:ano m) :ementa (:ementa m)
      :autor-tipo (:autor-tipo m) :autor-id (->uuid? (:autor-id m) :autor-id) :autor-texto (:autor-texto m)
      :objeto-indicacao (:objeto-indicacao m)
@@ -125,6 +128,12 @@
   (when-not (map? wire-in) (invalido! "corpo deve ser objeto JSON" {:campo :corpo}))
   (let [m (so-esperados wire-in campos-editar)]
     (validar! wire/EditarProposicao m "corpo de editar proposicao invalido")
+    ;; O PATCH nao traz o tipo, e ausente/null nao mexe na coluna (`some?` de db/editar!) — o unico jeito de
+    ;; apagar o atributo da especie seria mandar branco. Branco num desses campos nao descreve nada em
+    ;; especie nenhuma, entao a borda recusa sem precisar ler a linha.
+    (when-let [campo (some #(when (and (string? (get m %)) (str/blank? (get m %))) %)
+                           (vals logic/atributo-da-especie))]
+      (invalido! (str (name campo) " nao pode ficar em branco") {:campo campo}))
     {:id id :lock-version (:lock-version m) :ementa (:ementa m) :autor-tipo (:autor-tipo m)
      :autor-id (->uuid? (:autor-id m) :autor-id) :autor-texto (:autor-texto m)
      :objeto-indicacao (:objeto-indicacao m)

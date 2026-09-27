@@ -83,6 +83,19 @@
                            :body (json/write-value-as-string {:tipo "lixo"}))]
     (is (= 400 (:status r)))))
 
+(deftest criar-indicacao-sem-objeto-400-nao-500
+  ;; O 500 da indicacao: sem `objeto-indicacao` a linha so' era barrada pelo CHECK da mig 0013 (500 opaco).
+  ;; A borda recusa ANTES do Repo — o protocolar! nem e' chamado.
+  (doseq [tipo ["indicacao" "requerimento" "mocao"]]
+    (let [chamou (atom false)
+          repo (fake-repo-legislativo {:protocolar (fn [_p] (reset! chamou true) {:id (random-uuid)})})
+          r (pt/response-for (service-fn #{"secretario"} repo (fake-repo-cadastros "CE" "Fortaleza"))
+                             :post "/legislativo/proposicoes"
+                             :headers (com-bearer (token (random-uuid) (random-uuid)))
+                             :body (json/write-value-as-string {:tipo tipo :ano 2026 :ementa "X"}))]
+      (is (= 400 (:status r)) tipo)
+      (is (false? @chamou) tipo))))
+
 (deftest criar-proposicao-sem-papel-403
   (let [repo (fake-repo-legislativo {})
         r (pt/response-for (service-fn #{"vereador"} repo)

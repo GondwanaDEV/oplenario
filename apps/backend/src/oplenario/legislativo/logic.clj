@@ -22,6 +22,19 @@
   #{"protocolo" "substitutivo" "aplicacao_emenda" "redacao_final" "promulgacao" "importacao_legado" "edicao"})
 (def estados-versao #{"rascunho" "vigente" "superada" "arquivada"})
 
+(def atributo-da-especie
+  "O atributo quente que cada especie EXIGE — espelha os CHECK `proposicao_*_tem_*` da mig 0013. Sem esta
+  regra na borda, a falta so' era barrada pelo banco e virava 500 opaco (o '500 da indicacao')."
+  {"indicacao" :objeto-indicacao "requerimento" :tipo-requerimento "mocao" :categoria-mocao})
+
+(defn campo-da-especie-faltando
+  "O campo que a especie `(:tipo m)` exige e `m` nao traz (ausente, nil ou em branco); nil se nada falta.
+  Em branco conta como faltando: o CHECK so' barra NULL, mas espacos nao descrevem objeto nenhum."
+  [m]
+  (when-let [campo (atributo-da-especie (:tipo m))]
+    (let [v (get m campo)]
+      (when (or (not (string? v)) (str/blank? v)) campo))))
+
 (def autor-tipos
   "Vocabulario de autor_tipo (espelha o CHECK da migration 20260620000013). 'cidadao' = iniciativa popular."
   #{"vereador" "mesa" "comissao" "executivo" "cidadao"})
