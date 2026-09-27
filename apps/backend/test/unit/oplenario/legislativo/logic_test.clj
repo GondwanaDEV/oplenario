@@ -72,3 +72,15 @@
 
 (deftest origens-versao-ganha-edicao-onda-b-slice-2
   (is (contains? logic/origens-versao "edicao")))
+
+(deftest campo-da-especie-faltando-segue-o-check-da-migration-0013
+  (testing "cada especie com atributo quente devolve o campo quando ele falta"
+    (is (= :objeto-indicacao (logic/campo-da-especie-faltando {:tipo "indicacao"})))
+    (is (= :tipo-requerimento (logic/campo-da-especie-faltando {:tipo "requerimento"})))
+    (is (= :categoria-mocao (logic/campo-da-especie-faltando {:tipo "mocao"}))))
+  (testing "em branco conta como faltando (o CHECK so' barra NULL; espacos nao descrevem nada)"
+    (is (= :objeto-indicacao (logic/campo-da-especie-faltando {:tipo "indicacao" :objeto-indicacao "  "}))))
+  (testing "preenchido, ou especie sem atributo quente -> nil"
+    (is (nil? (logic/campo-da-especie-faltando {:tipo "indicacao" :objeto-indicacao "Tapa-buraco na Rua A"})))
+    (is (nil? (logic/campo-da-especie-faltando {:tipo "projeto_lei"})))
+    (is (nil? (logic/campo-da-especie-faltando {:tipo "mocao" :objeto-indicacao "x" :categoria-mocao "aplauso"})))))
