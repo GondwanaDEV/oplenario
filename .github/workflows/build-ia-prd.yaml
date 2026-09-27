@@ -1,0 +1,81 @@
+name: Build/Deploy IA (prd)
+
+# Satelite de IA (apps/ia, ADR-0006) em producao. UMA imagem, DOIS apps no Dokploy:
+#   - API:         comando default (uvicorn oplenario_ia.app:app, porta 8090) — o core le por ela (OPLENARIO_IA_URL)
+#   - trabalhador: comando `oplenario-ia-trabalhador` — consome o feed do core e roda as capacidades
+# Sem passo de migrate: o satelite cria o proprio schema `ia` ao subir (armazem/postgres.py, idempotente).
+# Tudo de runtime entra no Dokploy, nao na imagem: OPLENARIO_CORE_URL, OPLENARIO_IA_SEGREDO (o MESMO do core),
+# OPLENARIO_IA_DATABASE_URL e, enquanto o [GAP] juridico do fornecedor (DPA/LGPD art. 33) nao fecha,
+# OPLENARIO_IA_VENDOR fica no default fake — nada sai do cluster.
+#
+# O deploy de cada app so' dispara quando o secret do applicationId dele existe: antes de os apps serem criados no
+# Dokploy, este workflow so' publica a imagem (e nao falha).
+
+on:
+  push:
+    branches: ["production"]
+    paths:
+      - "apps/ia/**"
+      - ".github/workflows/build-ia-prd.yaml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    concurrency:
+      group: deploy-ia-prd-${{ github.ref }}
+      cancel-in-progress: false
+    env:
+      APP_ID_API: ${{ secrets.DOKPLOY_APPLICATION_ID_IA }}
+      APP_ID_TRABALHADOR: ${{ secrets.DOKPLOY_APPLICATION_ID_IA_TRABALHADOR }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      # Contexto em apps/ia (pyproject.toml + src). Sem EXTRAS: o ASR self-host (sherpa-onnx) fica fora ate' a
+      # A.1 medir a transcricao com o audio real — com ele, a imagem cresce e os modelos entram por volume.
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ./apps/ia
+          file: ./apps/ia/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/gondwanadev/oplenario-ia-prd:latest
+          platforms: linux/amd64
+
+      - name: Trigger Dokploy Deployment (API)
+        if: env.APP_ID_API != ''
+        run: |
+          curl --fail-with-body -sS -X 'POST' \
+          'https://${{ vars.DOKPLOY_DOMAIN }}/api/application.deploy' \
+          -H 'accept: application/json' \
+          -H 'Content-Type: application/json' \
+          -H 'x-api-key: ${{ secrets.DOKPLOY_KEY }}' \
+          -d "{\"applicationId\": \"$APP_ID_API\"}"
+
+      - name: Trigger Dokploy Deployment (trabalhador)
+        if: env.APP_ID_TRABALHADOR != ''
+        run: |
+          curl --fail-with-body -sS -X 'POST' \
+          'https://${{ vars.DOKPLOY_DOMAIN }}/api/application.deploy' \
+          -H 'accept: application/json' \
+          -H 'Content-Type: application/json' \
+          -H 'x-api-key: ${{ secrets.DOKPLOY_KEY }}' \
+          -d "{\"applicationId\": \"$APP_ID_TRABALHADOR\"}"
+
+      - name: Apps ainda nao criados no Dokploy
+        if: env.APP_ID_API == '' || env.APP_ID_TRABALHADOR == ''
+        run: |
+          echo "::notice::Imagem publicada (ghcr.io/gondwanadev/oplenario-ia-prd@${{ steps.build.outputs.digest }})."
+          echo "::notice::Deploy pulado para o app sem secret: DOKPLOY_APPLICATION_ID_IA (API) / DOKPLOY_APPLICATION_ID_IA_TRABALHADOR."
