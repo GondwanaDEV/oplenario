@@ -21,7 +21,9 @@
   no payload do Keycloak por aqui, em vez de depender de disciplina de destructuring."
   (:require [oplenario.http :as http]
             [oplenario.identidade.adapters.in.acesso :as adapters-in]
+            [oplenario.identidade.adapters.out.agente-institucional :as adapters-out-agente]
             [oplenario.identidade.adapters.out.meu-identidade :as adapters-out-meu]
+            [oplenario.identidade.models.identidade :as mod]
             [oplenario.identidade.components.repositorio :as repo]
             [oplenario.interceptors :as it]
             [oplenario.kernel.components.idp :as idp]))
@@ -124,6 +126,37 @@
           nome (:nome (repo/nome-por-id repo-identidade (:identidade-id ator)))]
       (http/json-resposta 200 (adapters-out-meu/meu-identidade->wire {:nome nome :papeis (:papeis ator)})))))
 
+(defn- agentes-da-casa [repo-identidade ente-id]
+  (for [a (sort (keys mod/agentes-institucionais))]
+    [a (repo/concessao-agente repo-identidade ente-id a)]))
+
+(defn- agentes-handler
+  "GET /identidade/agentes-institucionais (B.8, ADR-0013): os agentes da Casa sem pessoa por tras e se cada um esta'
+  ligado. O `admin_ente` liga e desliga; a secretaria ve (e' a fila dela que recebe o que o agente produz)."
+  [repo-identidade]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out-agente/agentes->wire (agentes-da-casa repo-identidade (:ente-id (:ator req)))))))
+
+(defn- agente-do-path [req]
+  (let [a (get-in req [:path-params :agente])]
+    (when (contains? mod/agentes-institucionais a) a)))
+
+(defn- concessao-handler
+  "PUT (ligar) / DELETE (desligar) /identidade/agentes-institucionais/:agente/concessao — so' `admin_ente` (docs/25
+  3.3: agente institucional e' concedido pelo admin da Casa). Idempotente. Desligar vale na chamada seguinte do agente
+  (a credencial dele resolve sem papel), nao so' na proxima execucao."
+  [repo-identidade ligar?]
+  (fn [req]
+    (if-let [agente (agente-do-path req)]
+      (let [{:keys [ente-id identidade-id]} (:ator req)]
+        (if ligar?
+          (repo/conceder-agente! repo-identidade ente-id
+                                 {:agente agente :classes (map name (:classes (get mod/agentes-institucionais agente)))
+                                  :concedida-por identidade-id})
+          (repo/revogar-agente! repo-identidade ente-id agente identidade-id))
+        (http/json-resposta 200 (adapters-out-agente/agentes->wire (agentes-da-casa repo-identidade ente-id))))
+      (http/json-resposta 404 {:erro "agente institucional desconhecido"}))))
+
 (defn rotas
   "Fragmento de rotas do modulo identidade (table syntax Pedestal). As 3 primeiras sao a superficie
   ADMINISTRATIVA — TODAS exigem `admin_ente` (§22.5.1 — 'cadastrada pelo admin do ente'). `GET
@@ -140,6 +173,16 @@
       ["/identidade/acessos/:identidade-id/convite" :post
        [auth papel (reenviar-convite-handler idp)]
        :route-name :identidade/reenviar-convite]
+      ;; B.8 (ADR-0013): os agentes institucionais da Casa — ver e' da secretaria tambem; ligar/desligar, so' do admin
+      ["/identidade/agentes-institucionais" :get
+       [auth (it/exige-algum-papel ["admin_ente" "secretario"]) (agentes-handler repo-identidade)]
+       :route-name :identidade/agentes-institucionais]
+      ["/identidade/agentes-institucionais/:agente/concessao" :put
+       [auth papel (concessao-handler repo-identidade true)]
+       :route-name :identidade/ligar-agente-institucional]
+      ["/identidade/agentes-institucionais/:agente/concessao" :delete
+       [auth papel (concessao-handler repo-identidade false)]
+       :route-name :identidade/desligar-agente-institucional]
       ["/meu/identidade" :get
        [auth (meu-identidade-handler repo-identidade)]
        :route-name :identidade/meu-identidade]}))

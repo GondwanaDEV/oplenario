@@ -978,6 +978,44 @@
     (cond-> {:proposicao-id proposicao-id :texto texto :publicado-por (:identidade-id ator)}
       rascunho-id (assoc :rascunho-id rascunho-id))))
 
+;; ========================= Faixa B / B.8: a nota tecnica de conferencia =========================
+;; O agente institucional da Casa (ADR-0013) le a proposicao protocolada e os dispositivos da LOM/RI e grava um
+;; RASCUNHO de nota tecnica pela ferramenta `rascunho` do catalogo. A secretaria decide: aproveita (com ou sem edicao)
+;; ou descarta. Nunca uma decisao da IA — nada anda na tramitacao por causa da nota.
+
+(def teto-fila 200)
+
+(defn registrar-nota-tecnica!
+  "O rascunho do agente (o `ator` de agente institucional: agente e execucao vem do `:via`, nunca da entrada). nil =
+  proposicao inexistente nesta Casa."
+  [repo-legislativo ator {:keys [proposicao-id texto citacoes paragrafos-sem-fonte incerteza motivos-incerteza modelo]}]
+  (let [via (:via ator)]
+    (repo/registrar-nota-tecnica! repo-legislativo (:ente-id ator)
+                                  {:proposicao-id proposicao-id :agente (:agente via) :execucao-id (:execucao-id via)
+                                   :texto texto :citacoes (or citacoes []) :paragrafos-sem-fonte (or paragrafos-sem-fonte [])
+                                   :incerteza incerteza :motivos-incerteza (or motivos-incerteza []) :modelo-llm-id modelo})))
+
+(defn notas-tecnicas [repo-legislativo ente-id estado]
+  (repo/notas-tecnicas repo-legislativo ente-id estado teto-fila))
+
+(defn nota-tecnica [repo-legislativo ente-id id]
+  (repo/nota-tecnica repo-legislativo ente-id id))
+
+(defn decidir-nota-tecnica!
+  "A secretaria decide uma nota pendente. 'aproveitada' guarda o texto que ela aproveitou (o editado, ou o do agente
+  sem as marcas de citacao); 'descartada' nao guarda texto. Ja' decidida -> `:conflito/nota-decidida`. nil =
+  inexistente nesta Casa."
+  [repo-legislativo ator id {:keys [desfecho texto]}]
+  (let [ente-id (:ente-id ator)]
+    (when-let [n (repo/nota-tecnica repo-legislativo ente-id id)]
+      (when-not (= "pendente" (:estado n))
+        (throw (ex-info "nota ja' decidida" {:tipo :conflito/nota-decidida})))
+      (or (repo/decidir-nota-tecnica! repo-legislativo ente-id id
+                                      {:estado desfecho :decidida-por (:identidade-id ator)
+                                       :texto-final (when (= "aproveitada" desfecho)
+                                                      (if (str/blank? texto) (logic/texto-limpo (:texto n)) texto))})
+          (throw (ex-info "nota ja' decidida" {:tipo :conflito/nota-decidida}))))))
+
 ;; ========================= Faixa B / B.7: o copiloto do requerimento =========================
 ;; O vereador descreve em palavras; a IA (seam `copiloto` do host, sobre o satelite) escolhe o modelo, preenche e
 ;; redige a justificativa citando a norma. E' RASCUNHO que volta ao formulario: nada e' gravado aqui, e o vereador

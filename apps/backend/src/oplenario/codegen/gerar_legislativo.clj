@@ -16,6 +16,7 @@
             [oplenario.legislativo.wire.out.proposicao :as proposicao]
             [oplenario.legislativo.wire.out.protocolo-geral :as protocolo-geral]
             [oplenario.legislativo.wire.out.requerimento :as requerimento]
+            [oplenario.legislativo.wire.out.nota-tecnica :as nota-tecnica]
             [oplenario.legislativo.wire.out.resumo :as resumo]
             [oplenario.legislativo.wire.out.tramitacao-executiva :as tramitacao-executiva]))
 
@@ -97,7 +98,12 @@
    ["CitacaoResumoOut" resumo/CitacaoResumoOut]
    ["IncertezaResumoOut" resumo/IncertezaResumoOut]
    ["RascunhoResumoOut" resumo/RascunhoResumoOut]
-   ["ResumoReciboOut" resumo/ResumoReciboOut]])
+   ["ResumoReciboOut" resumo/ResumoReciboOut]
+   ;; Faixa B / B.8 (nota tecnica de conferencia) — referencias antes dos compostos.
+   ["CitacaoNotaOut" nota-tecnica/CitacaoNotaOut]
+   ["NotaTecnicaResumoOut" nota-tecnica/NotaTecnicaResumoOut]
+   ["NotasTecnicasOut" nota-tecnica/NotasTecnicasOut]
+   ["NotaTecnicaOut" nota-tecnica/NotaTecnicaOut]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))
 

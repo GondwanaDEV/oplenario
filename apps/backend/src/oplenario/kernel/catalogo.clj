@@ -110,7 +110,25 @@
    :entrada (json-schema/transform (or (mapa-de (:entrada e)) (:entrada e)))
    :saida (json-schema/transform (if (= :ato (:classe e)) PropostaOut (:saida e)))})
 
-(def ^:private transformador (mt/transformer mt/json-transformer mt/strip-extra-keys-transformer))
+(def ^:private chaves-declaradas
+  "Mapas ANINHADOS da entrada (ex.: as citacoes de uma nota tecnica) tambem chegam do JSON com chaves STRING: cada
+  `:map` do schema vira keyword so' as chaves que ele declara — a mesma disciplina de `so-chaves-conhecidas` (nunca
+  internar keyword de cliente); chave desconhecida cai. `:map-of` (chaves livres, ex.: campos de requerimento) nao passa
+  por aqui."
+  (mt/transformer
+   {:name :chaves-declaradas
+    :decoders {:map {:compile (fn [schema _]
+                                (let [conhecidas (into {} (map (fn [[k]] [(name k) k])) (m/children schema))]
+                                  (fn [x]
+                                    (if (map? x)
+                                      (into {} (keep (fn [[k v]] (if (keyword? k)
+                                                                   [k v]
+                                                                   (when-let [kw (get conhecidas (str k))] [kw v]))))
+                                            x)
+                                      x))))}}}))
+
+(def ^:private transformador
+  (mt/transformer chaves-declaradas mt/json-transformer mt/strip-extra-keys-transformer))
 
 (defn exige-classe!
   "A metade da interseccao (Eixo 3.2) que o papel nao cobre, para o ator de AGENTE (com `:via`): a classe da entrada

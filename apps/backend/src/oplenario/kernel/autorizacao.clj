@@ -13,6 +13,13 @@
   jobs usam este ator-sistema, nunca ausencia de ator)."
   {:identidade-id :sistema :papeis #{:sistema} :ente-id nil :sistema? true})
 
+(def papel-agente-institucional
+  "O papel do ator de um AGENTE INSTITUCIONAL da Casa (B.8, ADR-0013, docs/25 3.1 b) — o agente sem pessoa por tras.
+  Nenhuma pessoa o tem (nao e' concedivel por rota): o ator institucional o recebe na resolucao da credencial, so'
+  enquanto a concessao do `admin_ente` esta' ativa. Cada entrada do catalogo que o agente institucional pode usar o
+  declara em `:papeis` — por opcao explicita, uma a uma."
+  "agente_institucional")
+
 (defn negar!
   "Lanca a negacao de autorizacao. O interceptor/controller traduz p/ 403 (write + deny vao ao audit, F7).
   A aridade-3 preserva a `causa` original (ex-info 3o arg) -> getCause()/stack p/ diagnostico em prod."

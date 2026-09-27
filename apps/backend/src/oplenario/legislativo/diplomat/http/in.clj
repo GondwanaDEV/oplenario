@@ -22,6 +22,7 @@
             [oplenario.legislativo.adapters.in.parecer :as adapters-in-parecer]
             [oplenario.legislativo.adapters.in.proposicao :as adapters-in-proposicao]
             [oplenario.legislativo.adapters.in.requerimento :as adapters-in-requerimento]
+            [oplenario.legislativo.adapters.in.nota-tecnica :as adapters-in-nota]
             [oplenario.legislativo.adapters.in.resumo :as adapters-in-resumo]
             [oplenario.legislativo.adapters.in.votacao :as adapters-in]
             [oplenario.legislativo.adapters.out.documento :as adapters-out-documento]
@@ -36,6 +37,7 @@
             [oplenario.legislativo.adapters.out.protocolo-geral :as adapters-out-protocolo]
             [oplenario.legislativo.adapters.out.relator-pendente :as adapters-out-relator]
             [oplenario.legislativo.adapters.out.requerimento :as adapters-out-requerimento]
+            [oplenario.legislativo.adapters.out.nota-tecnica :as adapters-out-nota]
             [oplenario.legislativo.adapters.out.resumo :as adapters-out-resumo]
             [oplenario.legislativo.adapters.out.tramitacao-executiva :as adapters-out-tramitacao-executiva]
             [oplenario.legislativo.adapters.out.votacao :as adapters-out]
@@ -1006,6 +1008,40 @@
             (http/json-resposta 409 {:erro "outra versao do resumo foi publicada ao mesmo tempo: recarregue"})
             (throw e)))))))
 
+;; ========================= Faixa B / B.8: a nota tecnica de conferencia (secretaria) =========================
+
+(defn- notas-tecnicas-handler
+  "GET /legislativo/notas-tecnicas?estado=pendente|aproveitada|descartada|todas — a fila da secretaria."
+  [repo-leg]
+  (fn [req]
+    (let [estado (adapters-in-nota/estado-da-fila (:query-params req))]
+      (http/json-resposta 200 (adapters-out-nota/notas->wire
+                               (controllers/notas-tecnicas repo-leg (:ente-id (:ator req)) estado))))))
+
+(defn- nota-tecnica-handler
+  "GET /legislativo/notas-tecnicas/:id — o rascunho inteiro, para a revisao."
+  [repo-leg]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [n (controllers/nota-tecnica repo-leg (:ente-id (:ator req)) id)]
+        (http/json-resposta 200 (adapters-out-nota/nota->wire n))
+        (http/json-resposta 404 {:erro "nota tecnica nao encontrada"})))))
+
+(defn- decidir-nota-tecnica-handler
+  "POST /legislativo/notas-tecnicas/:id/decisao {desfecho, texto?} — a secretaria aproveita ou descarta."
+  [repo-leg]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          d (adapters-in-nota/decisao->dominio (:json-params req))]
+      (try
+        (if-let [n (controllers/decidir-nota-tecnica! repo-leg (:ator req) id d)]
+          (http/json-resposta 200 (adapters-out-nota/nota->wire n))
+          (http/json-resposta 404 {:erro "nota tecnica nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/nota-decidida (:tipo (ex-data e)))
+            (http/json-resposta 409 {:erro "Esta nota já foi decidida."})
+            (throw e)))))))
+
 (defn rotas
   "Fragmento de rotas da votacao ao vivo + proposicoes + editor de parecer + borda /meu do vereador (table
   syntax Pedestal). Recebe o interceptor `auth` (compartilhado), o `repo-legislativo` (Repo-Component do
@@ -1089,6 +1125,14 @@
                                             (or ler-rascunho-resumo
                                                 (fn [_ _] (throw (ex-info "sem IA" {:tipo :ia/indisponivel})))))]
        :route-name :legislativo/rascunho-resumo]
+      ;; Faixa B / B.8 — a fila das notas tecnicas do agente institucional (a secretaria aproveita ou descarta)
+      ["/legislativo/notas-tecnicas" :get [auth papel (notas-tecnicas-handler repo-legislativo)]
+       :route-name :legislativo/notas-tecnicas]
+      ["/legislativo/notas-tecnicas/:id" :get [auth papel (nota-tecnica-handler repo-legislativo)]
+       :route-name :legislativo/nota-tecnica]
+      ["/legislativo/notas-tecnicas/:id/decisao" :post
+       [auth papel it/corpo-json (decidir-nota-tecnica-handler repo-legislativo)]
+       :route-name :legislativo/decidir-nota-tecnica]
       ["/legislativo/proposicoes/:id/ficha" :get [auth papel-leitura (ficha-materia-handler repo-legislativo resolver-comissoes nome-na-casa)]
        :route-name :legislativo/ficha-materia]
       ["/legislativo/proposicoes/:id" :patch

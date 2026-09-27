@@ -91,6 +91,27 @@
         (http/json-resposta 200 (adapters-out/dispositivos-da-norma->wire v))
         (http/json-resposta 404 {:erro "versao vigente nao encontrada"})))))
 
+(defn- credencial-institucional-handler
+  "B.8 (ADR-0013): o satelite pede a credencial de UMA execucao do agente institucional `agente` na Casa — sem pessoa,
+  so' `leitura`/`rascunho`, so' com a concessao ativa do `admin_ente`. Nao concedido (ou agente desconhecido): 404, e o
+  satelite nao roda nada. A credencial crua sai uma vez, aqui."
+  [emitir]
+  (fn [req]
+    (let [ente (adapters-in/id-de-caminho (get-in req [:path-params :ente-id]) "ente-id")
+          agente (str (get-in req [:path-params :agente]))]
+      (if-let [{:keys [execucao-id credencial expira-em]} (emitir ente agente)]
+        (http/json-resposta 201 {:execucao-id (str execucao-id) :credencial credencial :expira-em (str expira-em)})
+        (http/json-resposta 404 {:erro "agente institucional nao concedido nesta Casa"})))))
+
+(defn- revogar-credencial-handler
+  "B.8: o satelite terminou a execucao — a credencial dela deixa de abrir qualquer coisa (idempotente)."
+  [revogar]
+  (fn [req]
+    (let [ente (adapters-in/id-de-caminho (get-in req [:path-params :ente-id]) "ente-id")
+          eid (adapters-in/id-de-caminho (get-in req [:path-params :execucao-id]) "execucao-id")]
+      (revogar ente eid)
+      {:status 204 :headers {} :body ""})))
+
 (defn- receber-handler [repo-ia efeitos]
   (fn [req]
     (try
@@ -108,7 +129,8 @@
 (defn rotas
   "Fragmento de rotas da fronteira. `segredo` = OPLENARIO_IA_SEGREDO; os seams vem do host (rotas/montar)."
   [{:keys [repo-integracao-ia segredo contexto-da-sessao abrir-gravacao registrar-transcricao registrar-rascunho-ata
-           ata-para-ia registrar-resumo texto-da-proposicao dispositivos-vigentes]}]
+           ata-para-ia registrar-resumo texto-da-proposicao dispositivos-vigentes
+           emitir-credencial-institucional revogar-credencial-institucional]}]
   (let [servico (exige-servico-ia segredo)]
     #{[(str logic/prefixo "/eventos") :get [servico (feed-handler repo-integracao-ia)]
        :route-name :integracao-ia/feed]
@@ -129,6 +151,13 @@
       [(str logic/prefixo "/entes/:ente-id/normas/versoes/:versao-id/dispositivos") :get
        [servico (norma-handler (or dispositivos-vigentes (fn [_ _] nil)))]
        :route-name :integracao-ia/norma-dispositivos]
+      ;; B.8 (ADR-0013): a credencial de uma execucao do agente institucional (e o fim dela)
+      [(str logic/prefixo "/entes/:ente-id/agentes/:agente/execucoes") :post
+       [servico (credencial-institucional-handler (or emitir-credencial-institucional (fn [_ _] nil)))]
+       :route-name :integracao-ia/credencial-institucional]
+      [(str logic/prefixo "/entes/:ente-id/agentes/:agente/execucoes/:execucao-id") :delete
+       [servico (revogar-credencial-handler (or revogar-credencial-institucional (fn [_ _] nil)))]
+       :route-name :integracao-ia/revogar-credencial-institucional]
       [(str logic/prefixo "/entes/:ente-id/gravacoes/:segmento-id/conteudo") :get
        [servico (conteudo-handler abrir-gravacao)]
        :route-name :integracao-ia/conteudo]}))

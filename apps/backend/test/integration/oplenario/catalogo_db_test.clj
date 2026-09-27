@@ -124,8 +124,8 @@
   (is (thrown? Exception
                (repo-id/emitir-credencial-agente! (repo-identidade)
                                                   {:execucao-id (random-uuid) :ente-id (random-uuid)
-                                                   :identidade-id nil :agente "conferencia-da-casa"
-                                                   :publico "secretaria" :classes ["leitura" "ato"]
+                                                   :identidade-id nil :agente "conferencia-normativa"
+                                                   :publico "institucional" :classes ["leitura" "ato"]
                                                    :expira-em (.plusSeconds (Instant/now) 60)}))))
 
 ;; ---------- as ferramentas ----------

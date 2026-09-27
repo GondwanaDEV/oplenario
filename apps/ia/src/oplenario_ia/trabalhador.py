@@ -14,6 +14,10 @@ Três tipos de trabalho na fila própria do satélite:
 - `redigir_resumo` (A.8, junto do `indexar_proposicao` de cada `ProposicaoProtocolada`/`ProposicaoAtualizada`): lê o
   texto no core; se a versão do texto já tem rascunho aqui, não faz nada; senão núcleo -> rascunho do resumo cidadão
   guardado + `ResumoCidadaoPronto` na mesma operação. Proposição é pública; o publicado vive no core.
+- `conferir_proposicao` (B.8, ADR-0013, um por `ProposicaoProtocolada`): se o `admin_ente` ligou o agente institucional
+  da Casa, pede ao core a credencial de UMA execução e roda a conferência pelo MCP — lê a matéria e os dispositivos da
+  LOM/RI, o núcleo redige, e a nota técnica volta ao core como RASCUNHO pela ferramenta do catálogo. Casa que não ligou:
+  o trabalho é descartado sem ruído.
 - `notificar`: entrega os eventos ao core (`Transcricao*`, `Ata*`, `Resumo*`); tenta até o core aceitar.
 
 Falhas seguem o §22.3.5: infraestrutura/sobrecarga tentam de novo com espera crescente (limite por tipo); entrada
@@ -32,6 +36,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from oplenario_ia.agente.laco import Porta as PortaMCP
 from oplenario_ia.armazem.porta import (
     Armazem,
     NovoRascunho,
@@ -47,6 +52,8 @@ from oplenario_ia.ata.redacao import OPERACAO as ATA_REDIGIR
 from oplenario_ia.ata.redacao import PROMPT_VERSAO, pedido_de_ata, pontos_a_confirmar, texto_limpo
 from oplenario_ia.busca.embeddings import Embedder
 from oplenario_ia.busca.indice import trechos_de_norma, trechos_de_proposicao, trechos_de_transcricao
+from oplenario_ia.conferencia.roteiro import AGENTE as AGENTE_CONFERENCIA
+from oplenario_ia.conferencia.roteiro import conferir
 from oplenario_ia.confianca.artefato import proporcao_alterada
 from oplenario_ia.confianca.indisponivel import Indisponivel
 from oplenario_ia.confianca.registro import Desfecho
@@ -82,6 +89,7 @@ MAX_TENTATIVAS = {
     "indexar_proposicao": 5,
     "indexar_norma": 5,
     "redigir_resumo": 5,
+    "conferir_proposicao": 5,
     "notificar": 20,
 }
 CATEGORIAS_DE_FALHA = {"infraestrutura", "sobrecarga", "entrada", "modelo"}  # 5 e 6 nunca viajam como falha
@@ -104,6 +112,7 @@ class Trabalhador:
         idioma: str = "pt",
         nucleo: Nucleo | None = None,
         embedder: Embedder | None = None,
+        abrir_mcp: Callable[[str], PortaMCP] | None = None,
         agora: Callable[[], datetime] = lambda: datetime.now(UTC),
         dir_temp: Path | None = None,
     ) -> None:
@@ -114,6 +123,7 @@ class Trabalhador:
         self.idioma = idioma
         self.nucleo = nucleo
         self.embedder = embedder
+        self.abrir_mcp = abrir_mcp  # credencial -> cliente MCP do core (B.8: o agente institucional)
         self.agora = agora
         self.dir_temp = dir_temp
 
@@ -134,6 +144,15 @@ class Trabalhador:
                         "redigir_resumo", f"resumo:{ev.chave}", ev.ente_id, ev.payload | {"correlation-id": ev.chave}
                     )
                 )
+                if ev.tipo == "ProposicaoProtocolada":
+                    novos.append(
+                        NovoTrabalho(
+                            "conferir_proposicao",
+                            f"conferencia:{ev.chave}",
+                            ev.ente_id,
+                            ev.payload | {"correlation-id": ev.chave},
+                        )
+                    )
             elif (ev.tipo, ev.versao) == ("NormaVigente", 1):
                 novos.append(NovoTrabalho("indexar_norma", ev.chave, ev.ente_id, ev.payload))
             elif (ev.tipo, ev.versao) == ("AtaRevisadaEPublicada", 1):
@@ -167,6 +186,8 @@ class Trabalhador:
                 self._indexar_norma(t)
             elif t.tipo == "redigir_resumo":
                 self._redigir_resumo(t)
+            elif t.tipo == "conferir_proposicao":
+                self._conferir_proposicao(t)
             elif t.tipo == "notificar":
                 self.core.enviar(EventoParaCore.model_validate(t.payload))
                 self.armazem.concluir(t.id)
@@ -409,6 +430,29 @@ class Trabalhador:
         correlacao = str(t.payload.get("correlation-id") or t.chave)
         chave = f"ResumoFalhou:v1:{hashlib.sha256(t.chave.encode()).hexdigest()[:32]}"
         return self._notificacao("ResumoFalhou", chave, t.ente_id, correlacao, payload.model_dump(by_alias=True))
+
+    # ---------- a conferência institucional (B.8) ----------
+
+    def _conferir_proposicao(self, t: Trabalho) -> None:
+        if self.nucleo is None or self.abrir_mcp is None:
+            raise ErroIA(Categoria.INFRAESTRUTURA, "núcleo ou MCP do core não configurados", retentavel=False)
+        cred = self.core.credencial_institucional(t.ente_id, AGENTE_CONFERENCIA)
+        if cred is None:
+            log.info("conferência %s descartada: o agente institucional não está ligado nesta Casa", t.id)
+            self.armazem.concluir(t.id, estado="descartado")
+            return
+        try:
+            correlacao = str(t.payload.get("correlation-id") or t.chave)
+            conferir(
+                self.nucleo,
+                self.abrir_mcp(cred.credencial),
+                t.ente_id,
+                str(t.payload["proposicao-id"]),
+                correlacao,
+            )
+        finally:
+            self.core.encerrar_execucao(t.ente_id, AGENTE_CONFERENCIA, cred.execucao_id)
+        self.armazem.concluir(t.id)
 
     def _aviso_ata_pronta(self, g: RascunhoGuardado, correlacao: str) -> NovoTrabalho:
         payload = AtaRascunhoProntaV1(

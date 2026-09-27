@@ -13,6 +13,7 @@ import logging
 import sys
 from pathlib import Path
 
+from oplenario_ia.agente.mcp import ClienteMCP
 from oplenario_ia.armazem.memoria import ArmazemMemoria
 from oplenario_ia.armazem.porta import Armazem
 from oplenario_ia.busca.embeddings import criar_embedder
@@ -29,6 +30,7 @@ from oplenario_ia.transcricao.porta import Diarizador, Transcritor
 def montar(config: Config) -> Trabalhador:
     if not config.core_url or not config.segredo:
         raise SystemExit("Faltam OPLENARIO_CORE_URL e OPLENARIO_IA_SEGREDO.")
+    core_url = config.core_url
     armazem: Armazem
     if config.database_url:
         from oplenario_ia.armazem.postgres import ArmazemPostgres
@@ -48,13 +50,15 @@ def montar(config: Config) -> Trabalhador:
         transcritor, diarizador = TranscritorFake(), DiarizadorFake()
     registro: RegistroConfianca = RegistroJsonl(config.registro_jsonl) if config.registro_jsonl else RegistroMemoria()
     return Trabalhador(
-        ClienteCore(config.core_url, config.segredo),
+        ClienteCore(core_url, config.segredo),
         armazem,
         transcritor,
         diarizador,
         idioma=config.idioma,
         nucleo=Nucleo(criar_porta(config), registro),
         embedder=criar_embedder(config),
+        # B.8: o agente institucional fala com o core pelo MESMO servidor MCP, com a credencial de cada execução
+        abrir_mcp=lambda credencial: ClienteMCP(core_url, credencial),
     )
 
 

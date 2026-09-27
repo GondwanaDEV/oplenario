@@ -3,7 +3,8 @@
   mesmo controller, mesmo wire/out — com descricao para o agente. As primeiras (§22.11 Eixo 2, 'migracao'): as
   consultas que um agente da Casa precisa antes de tudo: a situacao da materia e a tramitacao dela. B.6 (ADR-0012): o
   primeiro ATO — protocolar o requerimento do vereador —, que o agente so' PROPOE; a pessoa confirma e assina na tela."
-  (:require [oplenario.kernel.catalogo :as catalogo]
+  (:require [oplenario.kernel.autorizacao :as authz]
+            [oplenario.kernel.catalogo :as catalogo]
             [oplenario.kernel.tempo :as tempo]
             [oplenario.legislativo.adapters.in.proposicao :as adapters-in-proposicao]
             [oplenario.legislativo.adapters.out.proposicao :as adapters-out-proposicao]
@@ -43,7 +44,7 @@
                      "ementa, autoria, em que pe' esta (estado da tramitacao) e o texto vigente. Use quando alguem "
                      "perguntar sobre uma materia especifica, como 'qual a situacao do PL 12/2026?'.")
      :classe :leitura
-     :papeis #{"secretario" "vereador"}
+     :papeis #{"secretario" "vereador" authz/papel-agente-institucional}
      :entrada IdentificacaoMateria
      :saida wire/ProposicaoDetalheOut
      :rotas #{:legislativo/detalhe-proposicao}
@@ -128,4 +129,50 @@
                             :hoje (hoje deps)})
                          adapters-out-requerimento/protocolado->wire))})])
 
-(def entradas (into entradas-materia entradas-requerimento))
+;; ---------- B.8 (ADR-0013): a nota tecnica do agente institucional ----------
+
+(def ^:private CitacaoNota
+  [:map {:closed true}
+   [:fonte-id {:description "A fonte citada, como no texto: norma:<id>#<endereco> ou materia:<id>."} [:string {:min 1 :max 300}]]
+   [:trecho {:optional true} [:maybe [:string {:max 2000}]]]
+   [:status {:description "O resultado da conferencia da citacao nesta execucao."}
+    [:enum "conferida" "sem_trecho" "trecho_nao_encontrado" "fonte_nao_lida"]]
+   [:rotulo {:optional true} [:maybe [:string {:max 500}]]]])
+
+(def RegistrarNotaTecnica
+  [:map {:closed true}
+   [:proposicao-id {:description "A proposicao conferida."} :uuid]
+   [:texto {:description "A nota, com as marcas de citacao [[fonte | trecho]]; um paragrafo por ponto conferido."}
+    [:and [:string {:min 1 :max 20000}] [:re #"\S"]]]
+   [:citacoes {:optional true} [:vector {:max 100} CitacaoNota]]
+   [:paragrafos-sem-fonte {:optional true} [:vector {:max 200} [:int {:min 0}]]]
+   [:incerteza [:enum "normal" "revisar_com_atencao"]]
+   [:motivos-incerteza {:optional true}
+    [:vector {:max 10} [:enum "truncado" "sem_fonte" "citacao_nao_conferida" "conteudo_de_terceiro"]]]
+   [:modelo {:description "fornecedor:modelo que redigiu."} [:string {:min 1 :max 200}]]])
+
+(def NotaRegistradaOut
+  [:map {:closed true} [:nota-id :string] [:estado :string] [:mensagem :string]])
+
+(def ^:private mensagem-nota
+  (str "Nota registrada na fila da secretaria como RASCUNHO. Ninguem decidiu nada: a secretaria le, aproveita ou "
+       "descarta."))
+
+(def ^:private entradas-conferencia
+  [(catalogo/entrada
+    {:nome "registrar_nota_tecnica"
+     :descricao (str "Registra na fila da secretaria o RASCUNHO de nota tecnica da conferencia de uma proposicao "
+                     "protocolada contra as normas da Casa (LOM, Regimento): o texto com as citacoes dos dispositivos "
+                     "lidos nesta execucao e o resultado da conferencia de cada citacao. Nao decide nada e nao move a "
+                     "materia: a secretaria revisa, aproveita ou descarta. Uma nota por proposicao — registrar de "
+                     "novo devolve a que ja' existe.")
+     :classe :rascunho
+     :papeis #{authz/papel-agente-institucional}
+     :entrada RegistrarNotaTecnica
+     :saida NotaRegistradaOut
+     :rotas #{}
+     :executar (fn [{:keys [repo-legislativo]} ator m]
+                 (when-let [n (controllers/registrar-nota-tecnica! repo-legislativo ator m)]
+                   {:nota-id (str (:id n)) :estado (:estado n) :mensagem mensagem-nota}))})])
+
+(def entradas (into [] cat [entradas-materia entradas-requerimento entradas-conferencia]))
