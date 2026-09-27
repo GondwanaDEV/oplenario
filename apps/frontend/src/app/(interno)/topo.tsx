@@ -31,6 +31,9 @@ const DESTINOS_NAV = [
   // Primeiro da lista de propósito: é o ponto de partida (a tela que responde "o que eu faço agora?") e a
   // única porta para as telas de sessão ao vivo, que não têm entrada de navegação própria.
   { rotulo: "Central", href: "/inicio" },
+  // Faixa A / A.5 da Track IA — busca intra-câmara (proposições + o que foi dito em plenário). Gated "secretario"
+  // (GuardSecretaria + exige-papel no backend). Logo depois da Central: é a outra porta de entrada da secretaria.
+  { rotulo: "Busca", href: "/busca" },
   { rotulo: "Painéis da Mesa", href: "/paineis/mesa" },
   { rotulo: "Tramitação", href: "/tramitacao" },
   // Fatia 2b — a fila de cargas não recebidas (o rito exige que quem recebe assine). Ao lado de Tramitação:

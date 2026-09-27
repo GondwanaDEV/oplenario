@@ -8,7 +8,7 @@
   (:require [clojure.string :as str]
             [jsonista.core :as json])
   (:import (java.net URI)
-           (java.net.http HttpClient HttpRequest HttpResponse HttpResponse$BodyHandlers)
+           (java.net.http HttpClient HttpRequest HttpRequest$BodyPublishers HttpResponse HttpResponse$BodyHandlers)
            (java.time Duration)))
 
 (set! *warn-on-reflection* true)
@@ -18,33 +18,45 @@
     "A transcricao (trechos com orador) ou nil (inexistente para o tenant). Lanca `:ia/indisponivel`.")
   (ler-rascunho-ata [this ente-id rascunho-id]
     "Faixa A / A.6b: o rascunho da ata (texto, texto limpo, citacoes conferidas, incerteza, pontos a confirmar) ou
-    nil. Lanca `:ia/indisponivel`."))
+    nil. Lanca `:ia/indisponivel`.")
+  (buscar [this ente-id pedido]
+    "Faixa A / A.5: a busca no indice do satelite. `pedido` = {:consulta :tipos? :limite?} -> {:modelo :resultados
+    [{:tipo :ref-id :parte :texto :meta :score}]}: ids e trechos, nunca a decisao do que o usuario ve (o core hidrata).
+    Timeout curto (busca e' interativa, §22.3.4 <2s). Lanca `:ia/indisponivel`."))
 
 (defn- indisponivel! [motivo]
   (throw (ex-info "plataforma de IA indisponivel" {:tipo :ia/indisponivel :motivo motivo})))
 
 (defn- ler-json
-  "GET no satelite: 200 -> mapa (chaves keyword), 404 -> nil, qualquer outra coisa -> `:ia/indisponivel`."
-  [url segredo ^HttpClient cliente caminho]
-  (when (or (str/blank? url) (str/blank? segredo)) (indisponivel! "integracao nao configurada"))
-  (let [req (-> (HttpRequest/newBuilder (URI/create (str (str/replace url #"/+$" "") caminho)))
-                (.header "Authorization" (str "Bearer " segredo))
-                (.timeout (Duration/ofSeconds 10))
-                (.GET) (.build))
-        ^HttpResponse r (try (.send cliente req (HttpResponse$BodyHandlers/ofString))
-                             (catch java.io.IOException e (indisponivel! (.getMessage e)))
-                             (catch InterruptedException e (indisponivel! (.getMessage e))))]
-    (case (.statusCode r)
-      200 (json/read-value ^String (.body r) json/keyword-keys-object-mapper)
-      404 nil
-      (indisponivel! (str "status " (.statusCode r))))))
+  "GET (ou POST com `corpo`) no satelite: 200 -> mapa (chaves keyword), 404 -> nil, qualquer outra coisa ->
+  `:ia/indisponivel`."
+  ([url segredo cliente caminho] (ler-json url segredo cliente caminho nil (Duration/ofSeconds 10)))
+  ([url segredo ^HttpClient cliente caminho corpo ^Duration timeout]
+   (when (or (str/blank? url) (str/blank? segredo)) (indisponivel! "integracao nao configurada"))
+   (let [b (-> (HttpRequest/newBuilder (URI/create (str (str/replace url #"/+$" "") caminho)))
+               (.header "Authorization" (str "Bearer " segredo))
+               (.timeout timeout))
+         req (.build (if corpo
+                       (-> b (.header "Content-Type" "application/json")
+                           (.POST (HttpRequest$BodyPublishers/ofString (json/write-value-as-string corpo))))
+                       (.GET b)))
+         ^HttpResponse r (try (.send cliente req (HttpResponse$BodyHandlers/ofString))
+                              (catch java.io.IOException e (indisponivel! (.getMessage e)))
+                              (catch InterruptedException e (indisponivel! (.getMessage e))))]
+     (case (.statusCode r)
+       200 (json/read-value ^String (.body r) json/keyword-keys-object-mapper)
+       404 nil
+       (indisponivel! (str "status " (.statusCode r)))))))
 
 (defrecord PlataformaIAHttp [url segredo ^HttpClient cliente]
   PlataformaIA
   (ler-transcricao [_ ente-id transcricao-id]
     (ler-json url segredo cliente (str "/v1/entes/" ente-id "/transcricoes/" transcricao-id)))
   (ler-rascunho-ata [_ ente-id rascunho-id]
-    (ler-json url segredo cliente (str "/v1/entes/" ente-id "/atas/rascunhos/" rascunho-id))))
+    (ler-json url segredo cliente (str "/v1/entes/" ente-id "/atas/rascunhos/" rascunho-id)))
+  (buscar [_ ente-id pedido]
+    (or (ler-json url segredo cliente (str "/v1/entes/" ente-id "/busca") pedido (Duration/ofSeconds 2))
+        (indisponivel! "busca sem resposta"))))
 
 (defn plataforma-ia
   "{:url :segredo} -> PlataformaIA. url/segredo em branco = toda leitura responde indisponivel (R-IA-1)."

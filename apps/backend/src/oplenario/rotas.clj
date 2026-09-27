@@ -3,7 +3,8 @@
   (oplenario.interceptors) — fica separada de http.clj p/ evitar ciclo (http nao conhece interceptors). W2
   monta /saude (publica) + /eu (auth) + /painel-secretaria (auth + papel). W3 adiciona as rotas-dado de cada
   modulo (com o servidor `using` os Repo). `montar` recebe os deps ja injetados (idp + repo-identidade)."
-  (:require [oplenario.cadastros.components.repositorio :as repo-cadastros-comp]
+  (:require [oplenario.busca :as busca]
+            [oplenario.cadastros.components.repositorio :as repo-cadastros-comp]
             [oplenario.cadastros.diplomat.http.in :as cadastros-http]
             [oplenario.compliance.diplomat.http.in :as compliance-http]
             [oplenario.config :as config]
@@ -517,6 +518,9 @@
                                        :membros-da-casa membros-da-casa
                                        :registro registro-fatos
                                        :relogio relogio-producao}))
+        ;; Faixa A / A.5: a busca intra-camara (host: cruza integracao-ia, legislativo e sessoes).
+        (into (busca/rotas {:auth auth :seams (busca/seams {:ia ia :repo-legislativo repo-legislativo
+                                                             :repo-sessoes repo-sessoes})}))
         (into (compliance-http/rotas {:auth auth :repo-compliance repo-compliance}))
         (into (cadastros-http/rotas {:auth auth :repo-cadastros repo-cadastros :relogio relogio-producao
                                      :identidade-existe? identidade-existe?}))
