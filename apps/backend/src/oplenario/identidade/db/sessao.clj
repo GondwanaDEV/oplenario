@@ -15,7 +15,7 @@
 
 (set! *warn-on-reflection* true)
 
-(defn- gerar-segredo
+(defn gerar-segredo
   "CSPRNG (SecureRandom) 32 bytes = 256 bits -> base64url SEM padding. E' o segredo CRU do cookie de
   sessao — existe fora do banco (so' o hash persiste); devolvido UMA UNICA vez, na criacao."
   ^String []
@@ -23,10 +23,10 @@
     (.nextBytes (SecureRandom.) b)
     (.encodeToString (.withoutPadding (Base64/getUrlEncoder)) b)))
 
-(defn- sha256-bytes
+(defn sha256-bytes
   "sha256(s) -> bytes. Deterministico (mesma entrada sempre produz o mesmo hash) — a base da resolucao
   de sessao por hash (o banco nunca compara/guarda o segredo cru). Privado: o caller nunca precisa do
-  hash cru, so' das operacoes criar/resolver/apagar."
+  hash cru, so' das operacoes criar/resolver/apagar. (Publica tambem para a credencial do agente, mesma custodia.)"
   ^bytes [^String s]
   (.digest (MessageDigest/getInstance "SHA-256") (.getBytes s "UTF-8")))
 

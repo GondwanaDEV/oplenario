@@ -3,9 +3,12 @@
   `diplomat/catalogo.clj`, agregadas e validadas na carga, e os CONJUNTOS POR PUBLICO. O servidor MCP (B.3) e o agente
   interno so' chegam ao core por aqui; a tela continua pela rota HTTP de mesma acao (`:rotas` de cada entrada).
 
-  Conjunto por publico = o que um agente daquele publico PODE oferecer; expoe MENOS do que a permissao da pessoa
-  (Eixo 2), e a ferramenta ainda exige o papel dela a cada chamada (interseccao, Eixo 3.2)."
-  (:require [oplenario.kernel.catalogo :as catalogo]
+  Conjunto por publico = o que um agente daquele publico PODE oferecer (o publico vem da credencial delegada,
+  ADR-0010); expoe MENOS do que a permissao da pessoa (Eixo 2), e a ferramenta ainda exige o papel dela a cada
+  chamada (interseccao, Eixo 3.2)."
+  (:require [oplenario.integracao-ia.components.repositorio :as repo-ia]
+            [oplenario.kernel.autorizacao :as authz]
+            [oplenario.kernel.catalogo :as catalogo]
             [oplenario.legislativo.diplomat.catalogo :as legislativo]
             [oplenario.sessoes.diplomat.catalogo :as sessoes]))
 
@@ -20,21 +23,41 @@
   {:secretaria #{"situacao_da_materia" "tramitacao_da_materia" "pauta_da_sessao"}
    :vereador   #{"situacao_da_materia" "tramitacao_da_materia" "pauta_da_sessao"}})
 
+(defn- publico-do [ator]
+  (or (get-in ator [:via :publico])
+      (authz/negar! :sem-agente {:motivo "o catalogo so' atende chamada de agente (credencial delegada)"})))
+
 (defn ferramentas
-  "As ferramentas que o agente do `publico` pode oferecer a este `ator`: o conjunto do publico ∩ o que o papel do ator
-  alcanca. Descritas como o agente as ve (JSON Schema)."
-  [publico ator]
-  (->> (get conjuntos publico #{})
-       sort
-       (map por-nome)
-       (filter #(some (set (:papeis ator)) (:papeis %)))
-       (mapv catalogo/descrever)))
+  "As ferramentas que o agente pode oferecer a este `ator` (com `:via`, ADR-0010): o conjunto do publico da
+  credencial ∩ o que os papeis da pessoa AGORA alcancam ∩ as classes concedidas a execucao. Descritas como o agente
+  as ve (JSON Schema)."
+  [ator]
+  (let [classes (get-in ator [:via :classes] #{})]
+    (->> (get conjuntos (publico-do ator) #{})
+         sort
+         (map por-nome)
+         (filter #(some (set (:papeis ator)) (:papeis %)))
+         (filter #(contains? classes (:classe %)))
+         (mapv catalogo/descrever))))
 
 (defn executar!
-  "Executa a ferramenta `nome` para o `ator` com os `dados` (JSON decodificado, chaves keyword). Ferramenta fora do
-  conjunto do `publico` nao existe para ele (`:validacao/ferramenta-desconhecida`). nil = nao encontrado."
-  [deps publico ator nome dados]
-  (let [e (get por-nome nome)]
+  "Executa a ferramenta `nome` para o `ator` de agente com os `dados` (JSON decodificado, chaves keyword). Ferramenta
+  fora do conjunto do publico da credencial nao existe para ele (`:validacao/ferramenta-desconhecida`). nil = nao
+  encontrado."
+  [deps ator nome dados]
+  (let [publico (publico-do ator)
+        e (get por-nome nome)]
     (when-not (and e (contains? (get conjuntos publico #{}) nome))
       (throw (ex-info (str "ferramenta desconhecida: " nome) {:tipo :validacao/ferramenta-desconhecida :nome nome})))
     (catalogo/executar e deps ator dados)))
+
+(defn registrador
+  "O seam de audit das chamadas de agente que escrevem (ADR-0010, Eixo 3.5), sobre o repositorio da fronteira com a
+  IA: pessoa + agente + execucao + ferramenta + classe + desfecho."
+  [repo-integracao-ia]
+  (fn [ator e desfecho]
+    (let [via (:via ator)]
+      (repo-ia/registrar-chamada-agente! repo-integracao-ia
+                                         {:ente-id (:ente-id ator) :execucao-id (:execucao-id via)
+                                          :identidade-id (:identidade-id ator) :agente (:agente via)
+                                          :ferramenta (:nome e) :classe (name (:classe e)) :desfecho desfecho}))))

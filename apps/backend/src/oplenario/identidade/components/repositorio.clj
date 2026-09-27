@@ -10,7 +10,8 @@
   protocolo) para manter o metodo 2-arg, do qual o interceptor de auth (Task 4) depende. CARRY: reconciliar
   este default com a config `:sessao :ociosa-min` quando o mint (Task 4) existir — hoje sao DUAS fontes
   do mesmo numero (o mint crava o `ocioso-ate` inicial; este campo crava o deslize) que precisam concordar."
-  (:require [oplenario.identidade.db.identidade :as id]
+  (:require [oplenario.identidade.db.credencial-agente :as cred]
+            [oplenario.identidade.db.identidade :as id]
             [oplenario.identidade.db.sessao :as sess]
             [oplenario.identidade.db.vinculo :as vinc]
             [oplenario.kernel.tenancy :as tenancy]))
@@ -33,6 +34,11 @@
   (criar-sessao! [this sessao] "Sessao opaca de login (custodia BFF): gera+INSERT o hash, devolve o SEGREDO CRU.")
   (resolver-sessao-por-segredo [this segredo] "segredo -> {:identidade-id :ente-id} | nil; desliza ocioso_ate em acerto.")
   (apagar-sessao! [this segredo] "DELETE por hash (logout), idempotente.")
+  (emitir-credencial-agente! [this credencial]
+    "Credencial delegada do agente (ADR-0010): INSERT do hash, devolve o SEGREDO CRU (uma vez so').")
+  (resolver-credencial-agente [this segredo]
+    "segredo -> {:execucao-id :ente-id :identidade-id :agente :publico :classes} | nil (expirada/revogada/desconhecida).")
+  (revogar-credencial-agente! [this execucao-id] "Revoga a credencial da execucao; idempotente.")
   ;; TENANT (com-tenant*)
   (criar-vinculo! [this ente-id vinculo])
   (vinculos-de [this ente-id identidade-id])
@@ -64,6 +70,9 @@
   (criar-sessao! [_ sessao] (sess/inserir! (:ds datasource) sessao))
   (resolver-sessao-por-segredo [_ segredo] (sess/resolver! (:ds datasource) segredo sessao-janela-ociosa-seg))
   (apagar-sessao! [_ segredo] (sess/apagar! (:ds datasource) segredo))
+  (emitir-credencial-agente! [_ c] (cred/inserir! (:ds datasource) c))
+  (resolver-credencial-agente [_ segredo] (cred/resolver (:ds datasource) segredo))
+  (revogar-credencial-agente! [_ execucao-id] (cred/revogar! (:ds datasource) execucao-id))
   ;; tenant
   (criar-vinculo! [this ente-id v] (transacao this ente-id #(vinc/criar! % v)))
   (vinculos-de [this ente-id ident] (transacao this ente-id #(vinc/vinculos-de % ente-id ident)))

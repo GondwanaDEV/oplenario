@@ -3,6 +3,7 @@
   outbox); a CAIXA DE ENTRADA roda na tx do tenant do evento (`com-tenant*`), com o efeito injetado pelo host
   aplicado na MESMA tx do registro — dedup e efeito atomicos."
   (:require [next.jdbc :as jdbc]
+            [oplenario.integracao-ia.db.chamada-agente :as chamada-agente]
             [oplenario.integracao-ia.db.eventos :as eventos]
             [oplenario.integracao-ia.logic :as logic]
             [oplenario.kernel.tenancy :as tenancy]))
@@ -13,7 +14,10 @@
   (listar-eventos [this depois limite] "Feed: eventos com seq > depois (supratenant).")
   (receber-evento! [this evento efeito]
     "Caixa de entrada: registra `evento` (dominio) na tx do tenant e, se novo, chama (efeito tx ente-id evento)
-    na mesma tx. Devolve {:aplicado boolean}."))
+    na mesma tx. Devolve {:aplicado boolean}.")
+  (registrar-chamada-agente! [this chamada]
+    "Audit (ADR-0010, Eixo 3.5): uma chamada de ferramenta de agente que escreve, com o desfecho, na tx do tenant.")
+  (chamadas-da-execucao [this ente-id execucao-id] "As chamadas registradas de uma execucao, em ordem."))
 
 (defrecord RepoIntegracaoIAPg [datasource]
   RepoIntegracaoIA
@@ -25,7 +29,11 @@
       (fn [tx]
         (if (eventos/registrar-entrada! tx evento)
           (do (efeito tx (:ente-id evento) evento) {:aplicado true})
-          {:aplicado false})))))
+          {:aplicado false}))))
+  (registrar-chamada-agente! [_ chamada]
+    (tenancy/com-tenant* (:ds datasource) (:ente-id chamada) #(chamada-agente/registrar! % chamada)))
+  (chamadas-da-execucao [_ ente-id execucao-id]
+    (tenancy/com-tenant* (:ds datasource) ente-id #(chamada-agente/da-execucao % ente-id execucao-id))))
 
 (defn repositorio [] (map->RepoIntegracaoIAPg {}))
 
