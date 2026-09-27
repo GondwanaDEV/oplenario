@@ -1,0 +1,28 @@
+/* Formulários do cidadão no portal (ADR-0015) — porte de ficha-materia-publica.html (.acomp, .compor) e
+   ouvidoria.html (.pf-*). Tokens do sistema; nada de cor solta além do que o design já fixa. */
+.acomp { display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; margin: 1.2rem 0 0; padding: 1rem 1.2rem;
+  background: color-mix(in srgb, var(--marca) 6%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--marca) 26%, var(--linha)); border-radius: var(--raio); }
+.acomp .t { font-size: var(--t-13); color: var(--texto-2); }
+.acomp .t b { color: var(--texto); font-weight: 600; display: block; font-family: var(--display); }
+.acomp .btn { margin-left: auto; display: inline-flex; align-items: center; gap: 0.45rem; }
+.acomp .compor-aviso { margin: 0; flex-basis: 100%; }
+
+.compor { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio);
+  padding: 1rem 1.2rem; margin: 0 0 1.4rem; }
+.compor label { display: block; font-size: var(--t-13); font-weight: 600; color: var(--texto); margin: 0 0 0.4rem; }
+.compor textarea { width: 100%; min-height: 80px; resize: vertical; font-family: var(--corpo); font-size: var(--t-16);
+  color: var(--texto); background: var(--surface-2);
+  border: 1px solid color-mix(in srgb, var(--texto-2) 50%, var(--linha)); border-radius: var(--raio-sm); padding: 0.7rem 0.8rem; }
+.compor-rod { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; margin-top: 0.7rem; }
+.compor-rod .ident { font-size: var(--t-12); color: var(--texto-2); display: inline-flex; align-items: center; gap: 0.4rem; }
+.compor-rod .ident svg { color: var(--cobalto-texto); }
+.compor-rod .btn { margin-left: auto; }
+.compor-ok { font-size: var(--t-13); color: var(--texto-2); line-height: 1.5; }
+.compor-ok b { color: var(--texto); }
+.compor-aviso { font-size: var(--t-13); color: var(--texto-2); line-height: 1.5; margin: 0 0 1.4rem; }
+.link-simples { background: none; border: 0; padding: 0; color: var(--marca); font: inherit; font-weight: 600;
+  text-decoration: underline; cursor: pointer; }
+/* Mesma forma do .form-erro interno (formulario-proposicao.css): --acento-texto, sem token de erro próprio. */
+.superficie-publica .form-erro { color: var(--acento-texto); background: var(--surface-2); border: 1px solid var(--linha);
+  border-radius: var(--raio-sm); padding: 0.6rem 0.9rem; font-size: var(--t-13); margin: 0.6rem 0 0; }
