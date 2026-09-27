@@ -45,7 +45,7 @@
 (deftest fora-do-catalogo-tem-motivo
   (is (map? (ler "catalogo/fora-do-catalogo.edn")))
   (doseq [[rota {:keys [categoria motivo]}] (ler "catalogo/fora-do-catalogo.edn")]
-    (is (contains? #{:so-tela :servico :pessoal} categoria) (str rota))
+    (is (contains? #{:so-tela :servico :pessoal :supratenant} categoria) (str rota))
     (is (and (string? motivo) (>= (count motivo) 20)) (str rota " sem motivo"))))
 
 (def ^:private atos-pessoais
@@ -72,3 +72,14 @@
 (deftest todo-ato-do-catalogo-e-proponivel
   (doseq [e catalogo/entradas :when (= :ato (:classe e))]
     (is (and (:ritual e) (:apresentar e)) (str (:nome e) " e' ato sem ritual/apresentar"))))
+
+(deftest o-console-do-operador-fica-fora-do-alcance-do-agente
+  ;; ADR-0016: o agente e' de uma Casa. Toda rota do admin_sistema e' `:supratenant`, e nenhuma entrada do catalogo
+  ;; aponta para ela — nem para qualquer rota `:supratenant`.
+  (let [fora (ler "catalogo/fora-do-catalogo.edn")
+        do-operador (filter #(= "admin-sistema" (namespace %)) @rotas-montadas)
+        cobertas (set (mapcat :rotas catalogo/entradas))]
+    (is (seq do-operador) "as rotas do console estao montadas")
+    (doseq [r do-operador]
+      (is (= :supratenant (get-in fora [r :categoria])) (str r " precisa ser :supratenant")))
+    (is (empty? (filter #(= :supratenant (get-in fora [% :categoria])) cobertas)))))

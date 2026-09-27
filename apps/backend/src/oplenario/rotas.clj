@@ -3,7 +3,8 @@
   (oplenario.interceptors) — fica separada de http.clj p/ evitar ciclo (http nao conhece interceptors). W2
   monta /saude (publica) + /eu (auth) + /painel-secretaria (auth + papel). W3 adiciona as rotas-dado de cada
   modulo (com o servidor `using` os Repo). `montar` recebe os deps ja injetados (idp + repo-identidade)."
-  (:require [oplenario.agente :as agente]
+  (:require [oplenario.admin-sistema.diplomat.http.in :as admin-sistema-http]
+            [oplenario.agente :as agente]
             [oplenario.busca :as busca]
             [oplenario.catalogo :as catalogo]
             [oplenario.cadastros.components.repositorio :as repo-cadastros-comp]
@@ -265,7 +266,9 @@
   [{:keys [idp repo-identidade repo-sessoes repo-legislativo repo-compliance repo-participacao
            repo-transparencia repo-paineis repo-cadastros canal-store objeto-store painel-compliance
            presenca-resumo esic-cumprimento relatores-pendentes info-ente registro-fatos
-           keycloak sessao identidade-existe? repo-integracao-ia integracao-ia repo-normas relogio]
+           keycloak sessao identidade-existe? repo-integracao-ia integracao-ia repo-normas relogio
+           ;; ADR-0016: o console do operador (supratenant)
+           idp-operacao repo-admin-sistema operacao]
     ;; nome LOCAL distinto da defn de topo `ficha-e-janelas-publicas` p/ nao sombrea-la (mesmo cuidado de
     ;; `resolver-vereador`/`resolver-vereador-fn`); a chave do mapa segue sendo :ficha-e-janelas-publicas.
     ficha-e-janelas-override :ficha-e-janelas-publicas}]
@@ -470,6 +473,8 @@
         ;; config/carregar aqui no HOST; auth-http/rotas recebe ja' resolvido, nunca chama config/carregar
         ;; ela mesma).
         sessao (or sessao (:sessao (config/carregar)))
+        ;; ADR-0016: o bloco :operacao (realm/URL publica/client do console + a sessao do console)
+        operacao (or operacao (:operacao (config/carregar)))
         integracao-ia (or integracao-ia (:integracao-ia (config/carregar)))
         ;; ADR-0008: o cliente core -> IA (leitura da transcricao). Construido uma vez; sem url/segredo toda leitura
         ;; responde indisponivel (R-IA-1), nunca 500.
@@ -576,6 +581,9 @@
                                 :idp idp :repo-identidade repo-identidade
                                 :relogio relogio-producao :sessao sessao}))
         (into (identidade-http/rotas {:auth auth :repo-identidade repo-identidade :idp idp}))
+        ;; ADR-0016: o console do operador. Interceptor PROPRIO (nunca o `auth` das Casas) — cross-esfera fecha.
+        (into (admin-sistema-http/rotas {:idp-operacao idp-operacao :repo-admin-sistema repo-admin-sistema
+                                         :relogio relogio-producao :operacao operacao}))
         ;; Faixa A / A.3 (ADR-0008): a fronteira de SERVICO com o satelite de IA. So' entra com o Repo (os testes de
         ;; outras verticais montam sem ele). Os seams abaixo sao o unico caminho da IA ate' sessoes/cadastros.
         (into (if repo-integracao-ia

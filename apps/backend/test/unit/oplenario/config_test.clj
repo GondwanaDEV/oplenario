@@ -74,3 +74,17 @@
       "o simulado tem client fixo")
   (is (nil? (get-in (config/carregar {"GOVBR_AMBIENTE" "producao"}) [:keycloak :govbr :client-id]))
       "producao nunca herda o client do simulado"))
+
+(deftest operacao-herda-o-keycloak-em-dev-e-separa-em-producao
+  ;; ADR-0016: sem OPERACAO_KC_* o console usa o mesmo Keycloak (dev/CI); com eles, o Keycloak separado.
+  (let [dev (config/carregar {})]
+    (is (= "operacao" (get-in dev [:operacao :realm])))
+    (is (= (get-in dev [:keycloak :base-url]) (get-in dev [:operacao :base-url])))
+    (is (= (get-in dev [:keycloak :smtp]) (get-in dev [:operacao :smtp]))))
+  (let [prod (config/carregar {"KEYCLOAK_BASE_URL" "https://kc-casas" "OPERACAO_KC_BASE_URL" "https://kc-operacao"
+                               "OPERACAO_KC_ADMIN_SENHA" "outra" "OPERACAO_REDIRECT_URIS" "https://app/api/operacao/callback"
+                               "OPERACAO_AAGUIDS" "a, b"})]
+    (is (= "https://kc-operacao" (get-in prod [:operacao :base-url])))
+    (is (= "outra" (get-in prod [:operacao :admin-senha])))
+    (is (= ["https://app/api/operacao/callback"] (get-in prod [:operacao :redirect-uris])))
+    (is (= ["a" "b"] (get-in prod [:operacao :aaguids])))))
