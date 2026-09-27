@@ -25,7 +25,11 @@
   (buscar [this ente-id pedido]
     "Faixa A / A.5: a busca no indice do satelite. `pedido` = {:consulta :tipos? :limite?} -> {:modelo :resultados
     [{:tipo :ref-id :parte :texto :meta :score}]}: ids e trechos, nunca a decisao do que o usuario ve (o core hidrata).
-    Timeout curto (busca e' interativa, §22.3.4 <2s). Lanca `:ia/indisponivel`."))
+    Timeout curto (busca e' interativa, §22.3.4 <2s). Lanca `:ia/indisponivel`.")
+  (executar-agente [this ente-id pedido]
+    "Faixa B / B.3: uma execucao do agente. `pedido` = {:pergunta :credencial :correlation_id} -> {:passos :resposta
+    :indisponivel}. A credencial e' a delegada da execucao (ADR-0010): e' com ela, e so' com ela, que o satelite
+    volta ao core pelo MCP. Timeout de uma conversa (60 s). Lanca `:ia/indisponivel`."))
 
 (defn- indisponivel! [motivo]
   (throw (ex-info "plataforma de IA indisponivel" {:tipo :ia/indisponivel :motivo motivo})))
@@ -61,7 +65,10 @@
     (ler-json url segredo cliente (str "/v1/entes/" ente-id "/resumos/rascunhos/" rascunho-id)))
   (buscar [_ ente-id pedido]
     (or (ler-json url segredo cliente (str "/v1/entes/" ente-id "/busca") pedido (Duration/ofSeconds 2))
-        (indisponivel! "busca sem resposta"))))
+        (indisponivel! "busca sem resposta")))
+  (executar-agente [_ ente-id pedido]
+    (or (ler-json url segredo cliente (str "/v1/entes/" ente-id "/agente/execucoes") pedido (Duration/ofSeconds 60))
+        (indisponivel! "agente sem resposta"))))
 
 (defn plataforma-ia
   "{:url :segredo} -> PlataformaIA. url/segredo em branco = toda leitura responde indisponivel (R-IA-1)."

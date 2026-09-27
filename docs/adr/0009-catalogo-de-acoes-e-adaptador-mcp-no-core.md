@@ -77,3 +77,28 @@ silhueta do ADR-0001, qual é o formato e como o CI impede que rota nova nasça 
   wires de todos os módulos; a entrada fica longe do código que ela descreve.
 - **Metadado na própria rota** (`:catalogo` no vetor da rota): amarra a ação à forma de tela e não cobre ação
   sem rota (as de agente que ainda não têm tela).
+
+## Adendo (27/09/2026) — o servidor MCP, o laço do agente e a tela (Faixa B / B.3)
+
+1. **Servidor MCP no host** (`oplenario.mcp`, `POST /integracao/ia/v1/mcp`): transporte *Streamable HTTP* sem estado
+   (cada POST é uma mensagem JSON-RPC 2.0, resposta em JSON; o servidor não inicia mensagens), só com a credencial
+   delegada (ADR-0010). Métodos `initialize`, `ping`, `tools/list`, `tools/call`. Ferramenta ou método desconhecido é
+   erro de protocolo; negação, entrada inválida e "nada encontrado" são resultado com `isError`, para o agente
+   corrigir o rumo. A entrada JSON nunca vira keyword arbitrária: só as chaves que a entrada declara.
+2. **Todo resultado leva `_meta` com a origem (`interno` | `terceiro`, Eixo 4.5) e o sigilo**. O catálogo só entrega
+   ao agente o que pode ir à IA — `pauta_da_sessao` ignora sessão sem transmissão pública (sessão secreta nunca vai à
+   IA) — e o satélite trata resultado sem `publico` como restrito (nunca vira peça) e sem origem como de terceiro.
+3. **O laço do agente vive no satélite** (`agente/laco.py`) e compõe o núcleo, como toda capacidade: *planejar*
+   (`agente.planejar`: o modelo vê a pergunta, as ferramentas que o core ofereceu a esta pessoa e o que já voltou, e
+   responde só um JSON — ferramenta ou responder) e *responder* (`agente.responder`: cada resultado é uma fonte
+   citável e a Camada de Confiança confere cada citação contra o que a ferramenta devolveu nesta execução). No
+   máximo 4 ferramentas por pergunta. **Sem tool-use nativo do fornecedor**: o plano em JSON passa pelo mesmo filtro,
+   registro e custo das outras capacidades e não depende de API de um fornecedor.
+4. **A tela fala com o core** (`POST /agente/perguntas`, secretaria ou vereador): o core emite a credencial da
+   execução (só `leitura`), chama o satélite, devolve a conversa em **SSE** (`passo`, `resposta` | `indisponivel`,
+   `fim`) e revoga a credencial ao fim, com resposta ou com a IA fora. O público vem do papel. Hoje o satélite
+   responde de uma vez e o core emite os eventos em sequência; quando o fornecedor real transmitir aos poucos, a mesma
+   forma carrega o fluxo.
+5. **Tela `/assistente`** da secretaria: mostra o que o assistente consultou, a resposta com as citações conferidas,
+   "de onde veio" e o selo de IA; IA fora manda seguir pela tela (R-IA-1). A tela do vereador entra com o copiloto do
+   requerimento (B.7); a rota do core já o atende.

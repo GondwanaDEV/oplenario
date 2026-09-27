@@ -53,11 +53,36 @@
     (doseq [e entradas] (json-schema/transform (:entrada e)) (json-schema/transform (:saida e)))
     (into {} (map (juxt :nome identity)) entradas)))
 
+(defn- mapa-de
+  "O schema de mapa de uma entrada: ela mesma, ou o primeiro mapa dentro de um `[:and ...]` (a regra entre campos
+  mora no `:fn` ao lado)."
+  [s]
+  (let [s (m/schema s)]
+    (case (m/type s)
+      :map s
+      :and (some mapa-de (m/children s))
+      nil)))
+
+(defn- chaves-da-entrada
+  "nome-string -> keyword das chaves que a entrada aceita."
+  [e]
+  (into {} (map (fn [[k]] [(name k) k])) (some-> (mapa-de (:entrada e)) m/entries)))
+
+(defn- so-chaves-conhecidas
+  "Os `dados` do agente chegam de JSON, possivelmente com chaves STRING (o `corpo-json` da borda nunca interna
+  keyword de cliente). So' as chaves que a entrada declara viram keyword; o resto cai aqui."
+  [e dados]
+  (let [conhecidas (chaves-da-entrada e)]
+    (into {} (keep (fn [[k v]] (when-let [kw (get conhecidas (if (keyword? k) (name k) (str k)))] [kw v])))
+          dados)))
+
 (defn descrever
-  "A entrada como o agente a ve: nome, descricao, classe e os JSON Schemas de entrada e saida."
+  "A entrada como o agente a ve: nome, descricao, classe e os JSON Schemas de entrada e saida. O de entrada e' sempre
+  um objeto (o MCP exige): de uma entrada `[:and mapa regra]` sai o mapa, e a regra continua valendo no servidor."
   [e]
   {:nome (:nome e) :descricao (:descricao e) :classe (name (:classe e))
-   :entrada (json-schema/transform (:entrada e)) :saida (json-schema/transform (:saida e))})
+   :entrada (json-schema/transform (or (mapa-de (:entrada e)) (:entrada e)))
+   :saida (json-schema/transform (:saida e))})
 
 (def ^:private transformador (mt/transformer mt/json-transformer mt/strip-extra-keys-transformer))
 
@@ -85,7 +110,7 @@
   [e deps ator dados]
   (authz/exige-algum-papel! ator (:papeis e))
   (exige-classe! e ator)
-  (let [entrada (m/decode (:entrada e) (or dados {}) transformador)]
+  (let [entrada (m/decode (:entrada e) (so-chaves-conhecidas e (if (map? dados) dados {})) transformador)]
     (when-not (m/validate (:entrada e) entrada)
       (throw (ex-info (str "entrada invalida para " (:nome e))
                       {:tipo :validacao/invalido :ferramenta (:nome e)
