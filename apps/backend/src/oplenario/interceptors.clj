@@ -8,6 +8,9 @@
             [clojure.tools.logging :as log]
             [io.pedestal.interceptor.chain :as chain]
             [jsonista.core :as json]
+            [oplenario.admin-sistema.autenticacao :as auten-operador]
+            [oplenario.admin-sistema.components.idp-admin :as idp-operacao]
+            [oplenario.admin-sistema.components.repositorio :as repo-operacao]
             [oplenario.http :as http]
             [oplenario.identidade.autenticacao :as auten]
             [oplenario.identidade.components.repositorio :as repo]
@@ -19,6 +22,22 @@
 (defn- bearer [req]
   (let [h (get-in req [:headers "authorization"])]
     (when (and h (str/starts-with? h "Bearer ")) (subs h 7))))
+
+(defn cookie
+  "Valor do cookie `nome` no header CRU `Cookie` (vazio = ausente). PURA."
+  [req nome]
+  (let [prefixo (str nome "=")]
+    (when-let [h (get-in req [:headers "cookie"])]
+      (some (fn [par]
+              (when (str/starts-with? par prefixo)
+                (let [v (subs par (count prefixo))]
+                  (when-not (str/blank? v) v))))
+            (map str/trim (str/split h #";"))))))
+
+(def nome-cookie-operacao
+  "O cookie do console do operador (ADR-0016). Outro nome, outra tabela: a sessao de uma Casa nunca abre o console
+  e a do console nunca abre uma Casa."
+  "sessao_operacao")
 
 (defn cookie-sessao
   "Extrai o valor do cookie `sessao` do header CRU `Cookie` do request (RFC 6265: pares `nome=valor`
@@ -60,6 +79,28 @@
                   (if-let [ator (auten/resolver-claims repo-identidade claims)]
                     (assoc-in ctx [:request :ator] ator)
                     (nega! ctx 401 "sem vinculo ativo"))
+                  (nega! ctx 401 "token invalido"))
+                (nega! ctx 401 "sem credencial"))))})
+
+(defn autenticacao-operador
+  "Interceptor do CONSOLE DO OPERADOR (ADR-0016, §22.5 eixo E). Cookie `sessao_operacao` primeiro; senao Bearer do
+  realm do operador. O ator resolvido nao tem Casa e passou pela checagem de esfera `:supratenant`. Qualquer outra
+  credencial — a sessao de uma Casa, o token de um realm de Casa, a credencial do agente — nao abre estas rotas:
+  401 (fail-closed). Operador desligado cai na hora, mesmo com sessao no prazo."
+  [idp-op repo-op]
+  {:name  ::autenticacao-operador
+   :enter (fn [ctx]
+            (if-let [seg (cookie (:request ctx) nome-cookie-operacao)]
+              (if-let [{:keys [operador-id]} (repo-operacao/resolver-sessao-operador repo-op seg)]
+                (if-let [ator (auten-operador/ator-do-operador repo-op operador-id)]
+                  (assoc-in ctx [:request :ator] ator)
+                  (nega! ctx 401 "operador inativo"))
+                (nega! ctx 401 "sessao invalida"))
+              (if-let [tok (bearer (:request ctx))]
+                (if-let [claims (idp-operacao/verificar-token-operador idp-op tok)]
+                  (if-let [ator (auten-operador/ator-do-operador repo-op (:operador-id claims))]
+                    (assoc-in ctx [:request :ator] ator)
+                    (nega! ctx 401 "operador inativo"))
                   (nega! ctx 401 "token invalido"))
                 (nega! ctx 401 "sem credencial"))))})
 

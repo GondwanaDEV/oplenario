@@ -83,4 +83,15 @@ docker run --rm --network "$REDE" \
   clojure -Sdeps '{:aliases {:seed {:extra-paths ["demo"]}}}' -X:seed "personas/semear-credenciais!"
 
 echo "==> credenciais gravadas em $ARTEFATOS/credenciais.edn"
+# ADR-0016: a operadora do console (realm `operacao`, senha de demo; a chave de seguranca e' cadastrada no 1o login)
+docker run --rm --network "$REDE" \
+  -v "$(cd "$(dirname "$0")/../apps/backend" && pwd):/app:ro" \
+  -v oplenario_e2e_m2:/root/.m2 \
+  -e CLJ_CACHE=/tmp/cpcache \
+  -e DATABASE_URL="jdbc:postgresql://postgres:5432/oplenario" \
+  -e DB_USER=oplenario -e DB_PASSWORD=dev \
+  -e KEYCLOAK_BASE_URL="$KEYCLOAK_BASE_URL" \
+  -e OPERACAO_ATESTACAO="${OPERACAO_ATESTACAO:-none}" \
+  -w /app clojure:temurin-21-tools-deps \
+  clojure -Sdeps '{:aliases {:seed {:extra-paths ["demo"]}}}' -X:seed "operacao-demo/semear-operador!"
 echo "==> semear-credenciais.sh OK"

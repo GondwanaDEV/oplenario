@@ -1,0 +1,170 @@
+(ns oplenario.admin-sistema.console-login-test
+  "INTEGRACAO (PG real, IdP fake): o login do OPERADOR e a separacao de esferas (ADR-0016, §22.5 eixo E). O
+  operador entra pelo realm proprio e ganha o cookie do console; nenhuma credencial de Casa abre o console e nenhuma
+  do console abre uma Casa (2a dimensao do teste de vazamento: cross-esfera). O Keycloak de verdade (realm, chave
+  fisica) e' prova do suite :keycloak e do e2e de navegador."
+  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+            [com.stuartsierra.component :as component]
+            [io.pedestal.http :as ph]
+            [io.pedestal.test :as pt]
+            [jsonista.core :as json]
+            [next.jdbc :as jdbc]
+            [oplenario.admin-sistema.components.idp-admin :as idp-admin]
+            [oplenario.admin-sistema.components.repositorio :as repo]
+            [oplenario.admin-sistema.db.atuacao :as atuacao]
+            [oplenario.config :as config]
+            [oplenario.http :as http]
+            [oplenario.identidade.components.repositorio :as repo-id]
+            [oplenario.identidade.db.identidade :as id]
+            [oplenario.identidade.db.vinculo :as vinc]
+            [oplenario.interceptors :as it]
+            [oplenario.kernel.components.datasource :as datasource]
+            [oplenario.kernel.components.idp :as idp]
+            [oplenario.kernel.tenancy :as tenancy]
+            [oplenario.migracao :as migracao]
+            [oplenario.rotas :as rotas])
+  (:import (java.time Instant)))
+
+(def ^:dynamic *ds* nil)
+
+(use-fixtures :once
+  (fn [t]
+    (let [c (component/start (datasource/datasource (config/carregar)))]
+      (migracao/migrar! (:ds c))
+      (binding [*ds* (:ds c)] (try (t) (finally (component/stop c)))))))
+
+(defn- repo-op [] (assoc (repo/repositorio) :datasource {:ds *ds*}))
+
+(defn- fake-idp-casa [tokens]
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify idp/IdentityProvider (verificar-token [_ t] (get tokens t))))
+
+(defn- servico [tokens-casa]
+  (-> (http/servico (config/carregar)
+                    (rotas/montar {:idp (fake-idp-casa tokens-casa)
+                                   :repo-identidade (assoc (repo-id/repositorio) :datasource {:ds *ds*})
+                                   :info-ente (constantly {:nome-oficial "Câmara" :nome-curto "Câmara"})
+                                   :idp-operacao (idp-admin/idp-operacao-dev)
+                                   :repo-admin-sistema (repo-op)
+                                   :operacao {:realm "operacao" :base-url "http://kc" :base-url-publico "http://kc-pub"
+                                              :client-id "oplenario-console"
+                                              :sessao {:absoluta-h 8 :ociosa-min 15}}})
+                    it/globais)
+      ph/create-server ::ph/service-fn))
+
+(defn- ler [r] (json/read-value (:body r) json/keyword-keys-object-mapper))
+
+(defn- operador! []
+  (repo/criar-operador! (repo-op) {:id (random-uuid) :email (str "op-" (random-uuid) "@oplenario.dev")
+                                   :nome "Operadora de Plantão"}))
+
+(defn- token-op [o] (json/write-value-as-string {:sub "kc" :operador-id (str (:id o))}))
+
+(defn- mint! [svc token]
+  (pt/response-for svc :post "/operacao/sessoes" :headers {"Content-Type" "application/json"}
+                   :body (json/write-value-as-string {:token token})))
+
+(defn- cookie-op [seg] {"cookie" (str "sessao_operacao=" seg)})
+
+(deftest descoberta-publica-do-realm-do-operador
+  (let [r (pt/response-for (servico {}) :get "/operacao/descoberta")]
+    (is (= 200 (:status r)))
+    (is (= {:realm "operacao" :base-url "http://kc-pub" :client-id "oplenario-console"} (ler r))
+        "a URL do navegador e' a publica")))
+
+(deftest operador-entra-e-ve-quem-e
+  (let [svc (servico {}) o (operador!)
+        r (mint! svc (token-op o))]
+    (is (= 200 (:status r)))
+    (let [eu (pt/response-for svc :get "/operacao/eu" :headers (cookie-op (:sessao (ler r))))]
+      (is (= 200 (:status eu)))
+      (is (= {:id (str (:id o)) :nome "Operadora de Plantão" :email (:email o) :papeis ["operador"]}
+             (:operador (ler eu)))))
+    (testing "o Bearer do realm do operador tambem vale (servico/automacao)"
+      (is (= 200 (:status (pt/response-for svc :get "/operacao/eu"
+                                           :headers {"authorization" (str "Bearer " (token-op o))})))))
+    (testing "a entrada fica na atuacao, com a corrente integra"
+      (is (some #(= "entrou-no-console" (:acao %))
+                (jdbc/execute! *ds* ["SELECT acao FROM admin_sistema.atuacao WHERE operador_id = ?" (:id o)]
+                               {:builder-fn next.jdbc.result-set/as-unqualified-maps})))
+      (is (true? (:integra? (atuacao/verificar-corrente *ds*)))))))
+
+(deftest token-de-operador-desconhecido-nao-entra
+  (let [svc (servico {})]
+    (is (= 401 (:status (mint! svc (json/write-value-as-string {:operador-id (str (random-uuid))})))))
+    (is (= 401 (:status (mint! svc "lixo"))))
+    (is (= 400 (:status (mint! svc ""))))))
+
+(deftest operador-desligado-cai-na-hora
+  (let [svc (servico {}) o (operador!)
+        seg (:sessao (ler (mint! svc (token-op o))))]
+    (repo/desligar-operador! (repo-op) (:id o))
+    (is (= 401 (:status (pt/response-for svc :get "/operacao/eu" :headers (cookie-op seg))))
+        "a sessao dele foi apagada junto")
+    (is (= 401 (:status (pt/response-for svc :get "/operacao/eu"
+                                         :headers {"authorization" (str "Bearer " (token-op o))})))
+        "e o token ainda no prazo tambem nao vale")
+    (is (= 401 (:status (mint! svc (token-op o)))))))
+
+(deftest logout-apaga-a-sessao-do-console
+  (let [svc (servico {}) o (operador!)
+        seg (:sessao (ler (mint! svc (token-op o))))]
+    (is (= 204 (:status (pt/response-for svc :delete "/operacao/sessoes" :headers (cookie-op seg)))))
+    (is (= 401 (:status (pt/response-for svc :get "/operacao/eu" :headers (cookie-op seg)))))))
+
+;; ---- cross-esfera (2a dimensao do teste de vazamento) ----
+
+(defn- dv [ds] (let [r (mod (reduce + (map * ds (range (inc (count ds)) 1 -1))) 11)] (if (< r 2) 0 (- 11 r))))
+(defn- cpf-valido [] (let [b (vec (repeatedly 9 #(rand-int 10))) d1 (dv b)] (apply str (concat b [d1 (dv (conj b d1))]))))
+
+(defn- servidora-da-casa! [ente]
+  (let [iid (id/inserir! *ds* {:id (random-uuid) :cpf (cpf-valido) :nome "Servidora"})]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (vinc/criar! tx {:id (random-uuid) :ente-id ente :identidade-id iid :tipo "servidor"})
+        (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente :identidade-id iid :papel "admin_ente"})))
+    iid))
+
+(deftest credencial-de-casa-nao-abre-o-console
+  (let [ente (random-uuid) iid (servidora-da-casa! ente)
+        svc (servico {"tok-casa" {:sub "kc" :ente-id ente :identidade-id iid}})
+        seg-casa (repo-id/criar-sessao! (assoc (repo-id/repositorio) :datasource {:ds *ds*})
+                                        {:identidade-id iid :ente-id ente
+                                         :expira-em (.plusSeconds (Instant/now) 3600)
+                                         :ocioso-ate (.plusSeconds (Instant/now) 600)})]
+    (testing "a credencial vale na Casa (controle)"
+      (is (= 200 (:status (pt/response-for svc :get "/eu" :headers {"cookie" (str "sessao=" seg-casa)})))))
+    (testing "mas nao no console — nem a admin_ente da Casa"
+      (is (= 401 (:status (pt/response-for svc :get "/operacao/eu" :headers {"cookie" (str "sessao=" seg-casa)}))))
+      (is (= 401 (:status (pt/response-for svc :get "/operacao/eu" :headers {"authorization" "Bearer tok-casa"}))))
+      (is (= 401 (:status (mint! svc "tok-casa"))) "o mint do console nao aceita token de Casa")
+      (is (= 401 (:status (pt/response-for svc :get "/operacao/eu"
+                                           :headers {"cookie" (str "sessao_operacao=" seg-casa)})))
+          "o segredo de uma sessao de Casa nao e' uma sessao do console"))))
+
+(deftest credencial-do-console-nao-abre-uma-casa
+  (let [svc (servico {}) o (operador!)
+        seg (:sessao (ler (mint! svc (token-op o))))]
+    (is (= 401 (:status (pt/response-for svc :get "/eu" :headers (cookie-op seg)))) "o cookie do console nao e' `sessao`")
+    (is (= 401 (:status (pt/response-for svc :get "/eu" :headers {"cookie" (str "sessao=" seg)})))
+        "nem o segredo dele posto no cookie da Casa")
+    (is (= 401 (:status (pt/response-for svc :get "/eu" :headers {"authorization" (str "Bearer " (token-op o))})))
+        "nem o token do realm do operador")
+    (is (= 401 (:status (pt/response-for svc :post "/auth/sessoes" :headers {"Content-Type" "application/json"}
+                                         :body (json/write-value-as-string {:token (token-op o)}))))
+        "nem vira sessao de Casa pelo mint das Casas")))
+
+(deftest o-dominio-de-uma-casa-nao-enxerga-o-operador
+  (let [o (operador!)]
+    (tenancy/com-tenant* *ds* (random-uuid)
+      (fn [tx]
+        (is (thrown-with-msg? Exception #"permission denied"
+                              (jdbc/execute! tx ["SELECT * FROM admin_sistema.operador WHERE id = ?" (:id o)])))))
+    (tenancy/com-tenant* *ds* (random-uuid)
+      (fn [tx]
+        (is (thrown-with-msg? Exception #"permission denied"
+                              (jdbc/execute! tx ["SELECT * FROM admin_sistema.sessao_operador"])))))
+    (tenancy/com-tenant* *ds* (random-uuid)
+      (fn [tx]
+        (is (thrown-with-msg? Exception #"permission denied"
+                              (jdbc/execute! tx ["SELECT * FROM admin_sistema.atuacao"])))))))

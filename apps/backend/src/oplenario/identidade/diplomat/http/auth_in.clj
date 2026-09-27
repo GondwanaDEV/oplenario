@@ -143,6 +143,9 @@
                                  :expira-em     (.plus agora-inst absoluta)
                                  :ocioso-ate    (.plus agora-inst ociosa)}
                           (auten/govbr? verificadas) (assoc :vinculo-tipo "cidadao")))]
+              ;; ADR-0016: o 1o acesso do vinculo vira evento (o registro de Casas ativa a Casa quando e' o 1o admin)
+              (when (:vinculo-ativo-id ator)
+                (repo/registrar-primeiro-acesso! repo-identidade (:ente-id ator) ator))
               (http/json-resposta 200 {:sessao seg}))
             (http/json-resposta 401 {:erro "sem vinculo ativo"}))
           (http/json-resposta 401 {:erro "token invalido"}))))))

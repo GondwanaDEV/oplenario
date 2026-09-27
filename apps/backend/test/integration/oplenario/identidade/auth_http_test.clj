@@ -103,7 +103,9 @@
   (reify repo-id/RepoIdentidade
     (snapshot-ator [_ ente-id identidade-id] (snapshot-ator ente-id identidade-id))
     (criar-sessao! [_ sessao] (criar-sessao! sessao))
-    (apagar-sessao! [_ segredo] (apagar-sessao! segredo))))
+    (apagar-sessao! [_ segredo] (apagar-sessao! segredo))
+    ;; ADR-0016: o mint marca o 1o acesso do vinculo (o evento que ativa a Casa); aqui nao ha' banco
+    (registrar-primeiro-acesso! [_ _ente _ator] false)))
 
 (defn- vinculo-ativo-fixture [] {:vinculo-ativo {:id (random-uuid) :tipo "servidor"} :papeis #{}})
 

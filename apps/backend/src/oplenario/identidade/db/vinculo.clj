@@ -51,6 +51,15 @@
   (jdbc/execute-one! tx
     (sql/format {:update :identidade.vinculo :set {:estado estado} :where [:= :id id]})))
 
+(defn marcar-primeiro-acesso!
+  "Grava o 1o acesso do vinculo SO' se ainda nao havia (UPDATE condicional atomico). true = foi agora (o chamador
+  emite o evento); false = ja' tinha entrado antes."
+  [tx vinculo-id]
+  (some? (jdbc/execute-one! tx
+           (sql/format {:update :identidade.vinculo :set {:primeiro_acesso_em [:now]}
+                        :where [:and [:= :id vinculo-id] [:= :primeiro_acesso_em nil]]
+                        :returning [:id]}))))
+
 ;; ---- usuario_papel (RBAC estatico) ----
 (defn adicionar-papel! [tx {:keys [id ente-id identidade-id papel]}]
   (jdbc/execute-one! tx

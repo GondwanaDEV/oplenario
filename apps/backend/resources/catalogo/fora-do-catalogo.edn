@@ -3,6 +3,9 @@
 ;;   :servico  — borda de servico entre sistemas (fronteira com a IA, captacao), nao acao de pessoa
 ;;   :pessoal  — ato PESSOAL e intransferivel (docs/25 Eixo 4.3, ADR-0012): voto, presenca e conducao da sessao ao
 ;;               vivo. O agente nem propoe; o lint cobra que esta lista nao encolha e que nenhuma entrada aponte para ela.
+;;   :supratenant — o console do OPERADOR da plataforma (ADR-0016). O agente e' de uma Casa e age como uma pessoa da
+;;               Casa; a esfera do operador fica fora do alcance dele por construcao. Toda rota `:admin-sistema/*` e'
+;;               desta categoria (o lint cobra).
 ;; Uma rota nova entra aqui so' com motivo revisado em PR; o padrao e' virar entrada do catalogo.
 {:integracao-ia/mcp {:categoria :servico
                      :motivo "e' o proprio adaptador MCP que serve o catalogo ao agente (ADR-0009/0010), nao uma acao"}
@@ -78,4 +81,23 @@
                                   :motivo "conducao da sessao ao vivo: a decisao da Mesa e' da Mesa, pela tela (Eixo 4.3)"}
  ;; ---------- formularios do cidadao (ADR-0015): o que a cidada protocolou ----------
  :participacao/meus-protocolos {:categoria :so-tela
-                                :motivo "lista da propria cidada para acompanhar o que protocolou; agente do cidadao e' pos-V1 (docs/26 §4)"}}
+                                :motivo "lista da propria cidada para acompanhar o que protocolou; agente do cidadao e' pos-V1 (docs/26 §4)"}
+ ;; ---------- ADR-0016: o console do operador (supratenant) ----------
+ :admin-sistema/descoberta {:categoria :supratenant
+                            :motivo "descoberta publica do realm do operador para o login do console"}
+ :admin-sistema/mint-sessao {:categoria :supratenant
+                             :motivo "abre a sessao do console do operador a partir do token do realm do operador"}
+ :admin-sistema/logout-sessao {:categoria :supratenant
+                               :motivo "encerra a sessao do console do operador"}
+ :admin-sistema/eu {:categoria :supratenant
+                    :motivo "quem e' o operador desta sessao do console"}
+ :admin-sistema/listar-casas {:categoria :supratenant
+                              :motivo "o registro de Casas da plataforma, visto pela Operacao (metadado, nao dado da Casa)"}
+ :admin-sistema/provisionar-casa {:categoria :supratenant
+                                  :motivo "a Operacao cria o tenant e convida o 1o administrador da Casa (handoff)"}
+ :admin-sistema/ficha-da-casa {:categoria :supratenant
+                               :motivo "a ficha da Casa no console: estado do handoff e a atuacao da Operacao nela"}
+ :admin-sistema/reenviar-convite {:categoria :supratenant
+                                  :motivo "reenvia o convite ao 1o administrador enquanto a Casa espera o handoff"}
+ :admin-sistema/reprovisionar-realm {:categoria :supratenant
+                                     :motivo "converge o realm da Casa com a config atual (ex.: gov.br ligado depois)"}}

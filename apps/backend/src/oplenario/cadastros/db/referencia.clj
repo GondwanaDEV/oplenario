@@ -15,6 +15,15 @@
                  :do-update-set {:nome :excluded.nome :uf :excluded.uf
                                  :capital :excluded.capital :populacao :excluded.populacao}})))
 
+(defn garantir-municipio!
+  "INSERT so' se o codigo IBGE ainda nao existe (ADR-0016: o console provisiona a Casa de um municipio que a tabela de
+  referencia pode nao ter). Nunca sobrescreve o que ja' esta' la'."
+  [conn {:keys [codigo-ibge nome uf]}]
+  (jdbc/execute-one! conn
+    (sql/format {:insert-into :cadastros.municipios
+                 :values [{:codigo_ibge codigo-ibge :nome nome :uf uf :capital false}]
+                 :on-conflict [:codigo_ibge] :do-nothing true})))
+
 (defn buscar-municipio [tx codigo-ibge]
   (comum/linha->kebab
     (jdbc/execute-one! tx

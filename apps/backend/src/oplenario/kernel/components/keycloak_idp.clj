@@ -91,9 +91,42 @@
 ;; verificar-token
 ;; ---------------------------------------------------------------------------------------------
 
-(defn- claim-str [verificado nome]
+(defn claim-str
+  "Claim textual do token JA' verificado; ausente/nulo -> nil."
+  [verificado nome]
   (let [c (.getClaim verificado nome)]
     (when-not (or (nil? c) (.isNull c) (.isMissing c)) (.asString c))))
+
+(defn verificar-jwt
+  "O nucleo de verificacao, comum ao realm da Casa (`verificar-token*`) e ao realm do operador (ADR-0016): o
+  `iss` passa pela allowlist `emissor-aceito?` ANTES de qualquer chave ser buscada; depois JWKS por `kid`, RS256,
+  issuer exato, `audiencia` e `exp`. `extrair` recebe o token verificado + o iss e monta as claims. MESMO
+  contrato fail-closed (e a mesma ORDEM de catches) documentado em `verificar-token*`: problema do token -> nil;
+  infra da JWKS -> propaga."
+  [{:keys [config jwks-cache jwks-provider-fn]} emissor-aceito? audiencia token extrair]
+  (try
+    (let [nao-verificado (JWT/decode token)
+          iss (.getIssuer nao-verificado)]
+      (when (and iss (emissor-aceito? iss))
+        (let [provider   (provider-para! jwks-cache jwks-provider-fn config iss)
+              kid        (.getKeyId nao-verificado)
+              jwk        (.get provider kid)
+              chave-pub  ^RSAPublicKey (.getPublicKey jwk)
+              algoritmo  (Algorithm/RSA256 chave-pub nil)
+              verificado (-> (JWT/require algoritmo)
+                             (.withIssuer (into-array String [iss]))
+                             (.withAudience (into-array String [audiencia]))
+                             (.build)
+                             (.verify token))]
+          (extrair verificado iss))))
+    (catch NetworkException e (throw e))
+    (catch RateLimitReachedException e (throw e))
+    (catch SigningKeyNotFoundException _ nil)
+    (catch JwkException _ nil)
+    (catch JWTVerificationException _ nil)
+    (catch JWTDecodeException _ nil)
+    (catch IllegalArgumentException _ nil)
+    (catch ClassCastException _ nil)))
 
 (defn verificar-token*
   "Nucleo testavel: recebe o mapa {:config :jwks-cache :jwks-provider-fn} (campos do Component) + o
@@ -123,41 +156,20 @@
   `.getPublicKey` retorna com sucesso, se a chave da JWKS nao for RSA o cast implicito do type-hint
   `^RSAPublicKey` no `let` pode lancar em vez de `InvalidPublicKeyException` — mesmo contrato fail-closed,
   mesmo motivo de existir."
-  [{:keys [config jwks-cache jwks-provider-fn]} token]
-  (try
-    (let [nao-verificado (JWT/decode token)
-          iss (.getIssuer nao-verificado)]
-      (if-not (issuer-valido? config iss)
-        nil
-        (let [provider   (provider-para! jwks-cache jwks-provider-fn config iss)
-              kid        (.getKeyId nao-verificado)
-              jwk        (.get provider kid)
-              chave-pub  ^RSAPublicKey (.getPublicKey jwk)
-              algoritmo  (Algorithm/RSA256 chave-pub nil)
-              verificado (-> (JWT/require algoritmo)
-                             (.withIssuer (into-array String [iss]))
-                             (.withAudience (into-array String [(:audiencia config)]))
-                             (.build)
-                             (.verify token))
-              identidade-id-str (claim-str verificado "identidade-id")
-              idp-sessao (claim-str verificado "idp")]
-          (cond-> {:sub           (.getSubject verificado)
-                   :identidade-id (when identidade-id-str (UUID/fromString identidade-id-str))
-                   :ente-id       (ente-id-do-issuer config iss)
-                   :exp           (some-> verificado .getExpiresAtAsInstant .getEpochSecond int)}
-            ;; ADR-0015: por qual IdP a pessoa entrou (nota de sessao do realm) + o CPF e o nome que o gov.br
-            ;; verificou. So' presentes num login brokered — o login institucional segue com as 4 chaves.
-            idp-sessao (assoc :idp idp-sessao
-                              :govbr-sub (claim-str verificado "govbr-sub")
-                              :nome (claim-str verificado "govbr-nome"))))))
-    (catch NetworkException e (throw e))
-    (catch RateLimitReachedException e (throw e))
-    (catch SigningKeyNotFoundException _ nil)
-    (catch JwkException _ nil)
-    (catch JWTVerificationException _ nil)
-    (catch JWTDecodeException _ nil)
-    (catch IllegalArgumentException _ nil)
-    (catch ClassCastException _ nil)))
+  [{:keys [config] :as comp} token]
+  (verificar-jwt comp #(issuer-valido? config %) (:audiencia config) token
+    (fn [verificado iss]
+      (let [identidade-id-str (claim-str verificado "identidade-id")
+            idp-sessao (claim-str verificado "idp")]
+        (cond-> {:sub           (.getSubject verificado)
+                 :identidade-id (when identidade-id-str (UUID/fromString identidade-id-str))
+                 :ente-id       (ente-id-do-issuer config iss)
+                 :exp           (some-> verificado .getExpiresAtAsInstant .getEpochSecond int)}
+          ;; ADR-0015: por qual IdP a pessoa entrou (nota de sessao do realm) + o CPF e o nome que o gov.br
+          ;; verificou. So' presentes num login brokered — o login institucional segue com as 4 chaves.
+          idp-sessao (assoc :idp idp-sessao
+                            :govbr-sub (claim-str verificado "govbr-sub")
+                            :nome (claim-str verificado "govbr-nome")))))))
 
 ;; ---------------------------------------------------------------------------------------------
 ;; Admin API (provisionamento) — java.net.http + jsonista, sem lib HTTP nova.
@@ -166,7 +178,7 @@
 (defn- body->json [m] (json/write-value-as-string m))
 (defn- json->body [s] (when (seq s) (json/read-value s json/keyword-keys-object-mapper)))
 
-(defn- admin-token!
+(defn admin-token!
   "Token admin via ROPC no realm master, client PUBLICO builtin `admin-cli` (KEYCLOAK_ADMIN/_PASSWORD do
   docker-compose dev — nao existe client confidential dedicado, confirmado contra o Keycloak 26 real).
   SEM CACHE nesta fatia: provisionamento e' operacao administrativa rara, nao hot-path (YAGNI; cache de
@@ -186,7 +198,7 @@
       (throw (ex-info "keycloak-idp: falha ao obter token admin (infra)"
                        {:status (.statusCode resp) :corpo (.body resp)})))))
 
-(defn- admin-req!
+(defn admin-req!
   "Requisicao autenticada ao admin-API. `metodo` = :get/:post/:put/:delete. Devolve {:status :corpo :headers}."
   [^HttpClient http-client token metodo caminho corpo-map base-url]
   (let [builder (-> (HttpRequest/newBuilder)
@@ -235,7 +247,7 @@
 
 (declare garantir-mappers-do-client!)
 
-(defn- garantir-client!
+(defn garantir-client!
   "GET-then-converge idempotente de um client no realm: consulta por `client-id`; se NAO existe, POST do
   `payload`; se JA existe, PUT convergindo os campos declarativos que mudam entre deploys
   (redirectUris/webOrigins) sobre a representacao atual — os mappers sao subrecursos e ficam intactos.
@@ -287,7 +299,7 @@
       (throw (ex-info "keycloak-idp: falha ao habilitar a required action de passkey (infra)"
                       {:status status :corpo corpo})))))
 
-(defn- configurar-smtp!
+(defn configurar-smtp!
   "Aponta o realm p/ o relay. Quem envia o convite e' o Keycloak — p/ nos e' config, nao codigo (nao
   confundir com o carry F6, que e' o e-mail TRANSACIONAL da app). Prod = relay BR (§22.9 Eixo 12).
   PUT PARCIAL (so' :realm + :smtpServer no corpo) em vez do padrao GET-then-merge de
@@ -359,9 +371,9 @@
     :config {"user.session.note" "identity_provider" "claim.name" "idp" "jsonType.label" "String"
              "access.token.claim" "true"}}])
 
-(defn- lista [corpo] (when (sequential? corpo) corpo))
+(defn lista [corpo] (when (sequential? corpo) corpo))
 
-(defn- exigir! [status esperados msg info]
+(defn exigir! [status esperados msg info]
   (when-not (contains? esperados status)
     (throw (ex-info (str "keycloak-idp: " msg " (infra)") (assoc info :status status)))))
 
@@ -504,7 +516,7 @@
                              mappers-de-sessao)})
     {:realm realm}))
 
-(defn- nome->first-last
+(defn nome->first-last
   "Deriva firstName/lastName do `nome` (Keycloak 26 EXIGE os 2 no User Profile default p/ role 'user' —
   achado real: sem eles, o login falha com 'Account is not fully set up'). Nome de 1 palavra so' repete
   como sobrenome (nao ha' um 2o campo pra inventar)."

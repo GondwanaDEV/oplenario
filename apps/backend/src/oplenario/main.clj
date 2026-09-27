@@ -4,7 +4,11 @@
   replicas); sem arg = `serve` (sobe o sistema Component e bloqueia ate o shutdown). Glue fino
   sobre pecas ja testadas (config/sistema/migracao/datasource)."
   (:gen-class)
-  (:require [com.stuartsierra.component :as component]
+  (:require [clojure.string :as str]
+            [com.stuartsierra.component :as component]
+            [oplenario.admin-sistema.components.idp-admin :as idp-admin]
+            [oplenario.admin-sistema.components.repositorio :as repo-admin]
+            [oplenario.admin-sistema.controllers :as admin-sistema]
             [oplenario.config :as config]
             [oplenario.ia-republicar :as ia-republicar]
             [oplenario.integracao-ia.components.repositorio :as repo-ia]
@@ -48,6 +52,21 @@
                (println "[oplenario] orcamento de IA definido:" (str (:mensal d)) "/ teto" (str (:teto-duro d))
                         (:moeda d) "— a IA recebe pelo feed"))
              (finally (component/stop ds))))
+
+      ;; ADR-0016: o ciclo de vida do OPERADOR da plataforma. O primeiro nao tem console para se convidar.
+      (#{"operador-convidar" "operador-desligar"} (first args))
+      (let [[cmd email & nome] args
+            uso "uso: operador-convidar <email> <nome completo> | operador-desligar <email>"
+            _ (when (or (nil? email) (and (= "operador-convidar" cmd) (empty? nome))) (throw (ex-info uso {})))
+            ds (component/start (datasource/datasource cfg))
+            idp (component/start (idp-admin/keycloak-operacao (:operacao cfg)))
+            repo (assoc (repo-admin/repositorio) :datasource ds)]
+        (try (if (= "operador-convidar" cmd)
+               (let [o (admin-sistema/convidar-operador! repo idp {:email email :nome (str/join " " nome)})]
+                 (println "[oplenario] operador convidado:" (:email o) "— o e-mail pede a senha e a chave fisica"))
+               (let [o (admin-sistema/desligar-operador! repo idp {:email email})]
+                 (println "[oplenario] operador desligado:" (:email o))))
+             (finally (component/stop idp) (component/stop ds))))
 
       :else
       (let [sys (component/start (sistema/sistema-serve cfg))]
