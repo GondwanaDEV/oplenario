@@ -528,17 +528,22 @@
           (let [r (when rascunho-id
                     (or (resumo/buscar-pronto tx ente-id proposicao-id rascunho-id)
                         (throw (ex-info "o rascunho informado nao e' um rascunho pronto desta proposicao"
-                                        {:tipo :conflito/rascunho-desconhecido :proposicao-id proposicao-id}))))]
-            (resumo/publicar! tx
-              (cond-> {:ente-id ente-id :proposicao-id proposicao-id :texto (:texto m)
-                       :conteudo-sha256 (logic/sha256-hex (:texto m)) :publicado-por (:publicado-por m)
-                       :origem-redacao "redigida_pela_casa"
-                       :texto-base-sha256 (logic/texto-base-sha256
-                                           (:ementa p) (:texto-inline (texto/vigente tx ente-id proposicao-id)))}
-                r (assoc :origem-redacao "gerada_automaticamente" :rascunho-id rascunho-id
-                         :modelo-llm-id (:modelo-llm-id r) :prompt-versao (:prompt-versao r)
-                         ;; o resumo descreve a versao do texto que a IA LEU, mesmo que o texto tenha mudado depois
-                         :texto-base-sha256 (:texto-base-sha256 r)))))))))
+                                        {:tipo :conflito/rascunho-desconhecido :proposicao-id proposicao-id}))))
+                v (resumo/publicar! tx
+                    (cond-> {:ente-id ente-id :proposicao-id proposicao-id :texto (:texto m)
+                             :conteudo-sha256 (logic/sha256-hex (:texto m)) :publicado-por (:publicado-por m)
+                             :origem-redacao "redigida_pela_casa"
+                             :texto-base-sha256 (logic/texto-base-sha256
+                                                 (:ementa p) (:texto-inline (texto/vigente tx ente-id proposicao-id)))}
+                      r (assoc :origem-redacao "gerada_automaticamente" :rascunho-id rascunho-id
+                               :modelo-llm-id (:modelo-llm-id r) :prompt-versao (:prompt-versao r)
+                               ;; o resumo descreve a versao do texto que a IA LEU, mesmo que o texto tenha mudado
+                               :texto-base-sha256 (:texto-base-sha256 r))))]
+            ;; A.8b: o portal projeta o resumo publicado a partir deste evento, na MESMA tx da versao
+            (producers/emitir-resumo-publicado! bus tx ente-id
+              {:proposicao-id proposicao-id :versao (:versao v) :texto (:texto m)
+               :origem-redacao (:origem-redacao v) :publicado-em (str (:publicado-em v))})
+            v)))))
   (texto-para-ia [this ente-id proposicao-id]
     (transacao this ente-id
       (fn [tx]

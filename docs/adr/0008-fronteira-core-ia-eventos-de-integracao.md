@@ -128,4 +128,6 @@ síncrono que a §22.3.1 já previa.
   core o lê sob demanda em `GET /v1/entes/{ente}/resumos/rascunhos/{id}`, só para um id que ele registrou para a
   proposição. O texto da proposição entra no núcleo como conteúdo de terceiro (§22.11.4).
 - **Publicado:** `legislativo.resumo_cidadao`, versionado; a versão que partiu da IA leva o `rascunho-id`, com modelo e
-  prompt vindos do ponteiro. A ida ao portal (projeção da transparência) é a A.8b.
+  prompt vindos do ponteiro. Cada publicação emite `proposicao.resumo-publicado` na mesma tx; a transparência projeta a
+  versão mais nova em `transparencia.materia` e a ficha pública do portal mostra o resumo com o selo de revisão humana
+  (A.8b). O portal nunca fala com a IA: só mostra o que a Casa publicou.

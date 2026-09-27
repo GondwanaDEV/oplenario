@@ -26,7 +26,7 @@
 (def tipos-consumidos
   "FONTE UNICA dos tipos consumidos pelo projetor do portal (evita drift entre `repo/projetar-evento!` e o
   registro no bus, mesmo racional de tempo_real/consumer.clj)."
-  ["proposicao.protocolada" "proposicao.editada" "proposicao.transicionou" "norma.publicada"
+  ["proposicao.protocolada" "proposicao.editada" "proposicao.transicionou" "proposicao.resumo-publicado" "norma.publicada"
    "artefato.publicacao.gerado" "voto.registrado" "presenca.registrada"])
 
 (defn registrar

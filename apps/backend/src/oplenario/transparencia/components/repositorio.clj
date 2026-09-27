@@ -152,6 +152,16 @@
           (log/warn "transparencia: proposicao.editada sem materia projetada (protocolada ausente?)"
                     {:ente-id ente-id :proposicao-id (:proposicao-id m)})))
 
+    ;; Faixa A / A.8b: o resumo cidadao publicado (a versao mais nova; reentrega de versao velha nao volta atras)
+    "proposicao.resumo-publicado"
+    (let [pid (UUID/fromString (:proposicao-id payload))]
+      (or (db-materia/atualizar-resumo! tx {:ente-id ente-id :proposicao-id pid :versao (:versao payload)
+                                             :texto (:texto payload)
+                                             :gerado-com-ia (= "gerada_automaticamente" (:origem-redacao payload))
+                                             :publicado-em (Instant/parse (:publicado-em payload))})
+          (log/warn "transparencia: resumo publicado sem materia projetada (ou versao ja' superada)"
+                    {:ente-id ente-id :proposicao-id pid :versao (:versao payload)})))
+
     "proposicao.transicionou"
     (let [pid (UUID/fromString (:proposicao-id payload))]
       (or (db-materia/atualizar-estado! tx {:ente-id ente-id :proposicao-id pid :estado (:para payload)})
