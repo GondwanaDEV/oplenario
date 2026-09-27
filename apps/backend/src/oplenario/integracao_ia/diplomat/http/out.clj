@@ -33,7 +33,11 @@
   (rascunhar-requerimento [this ente-id pedido]
     "Faixa B / B.7: o copiloto do requerimento. `pedido` = {:descricao :modelos [{:id :nome :campos}] :correlation_id}
     -> {:preenchimento :justificativa :indisponivel}. Rascunho: o core confere contra os modelos e a tela devolve ao
-    formulario. Timeout de 30 s (dois passos de modelo). Lanca `:ia/indisponivel`."))
+    formulario. Timeout de 30 s (dois passos de modelo). Lanca `:ia/indisponivel`.")
+  (consumo [this ente-id mes]
+    "Faixa B / B.9: o consumo de IA da Casa no mes `mes` ('AAAA-MM') x o orcamento que o satelite esta' aplicando, o
+    estado da cota e, por capacidade, execucoes, custo e revisao humana. So' contagens e valores. Lanca
+    `:ia/indisponivel`."))
 
 (defn- indisponivel! [motivo]
   (throw (ex-info "plataforma de IA indisponivel" {:tipo :ia/indisponivel :motivo motivo})))
@@ -75,7 +79,10 @@
         (indisponivel! "agente sem resposta")))
   (rascunhar-requerimento [_ ente-id pedido]
     (or (ler-json url segredo cliente (str "/v1/entes/" ente-id "/requerimentos/rascunhos") pedido (Duration/ofSeconds 30))
-        (indisponivel! "copiloto sem resposta"))))
+        (indisponivel! "copiloto sem resposta")))
+  (consumo [_ ente-id mes]
+    (or (ler-json url segredo cliente (str "/v1/entes/" ente-id "/consumo?mes=" mes))
+        (indisponivel! "consumo sem resposta"))))
 
 (defn plataforma-ia
   "{:url :segredo} -> PlataformaIA. url/segredo em branco = toda leitura responde indisponivel (R-IA-1)."

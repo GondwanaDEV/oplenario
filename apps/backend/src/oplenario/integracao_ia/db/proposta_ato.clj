@@ -4,6 +4,7 @@
   encontra `executando` e nao executa de novo."
   (:require [honey.sql :as sql]
             [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as rs]
             [oplenario.kernel.db-util :as comum]))
 
 (set! *warn-on-reflection* true)
@@ -74,3 +75,17 @@
         (jdbc/execute! tx (sql/format {:select [:ferramenta :origem :referencia] :from [:integracao_ia.leitura_de_terceiro]
                                        :where [:and [:= :ente_id ente-id] [:= :execucao_id execucao-id]]
                                        :order-by [[:lida_em :asc] [:id :asc]]}))))
+
+(defn contar-por-estado
+  "B.9: quantas propostas de ato por estado, das criadas em [desde, ate) — o painel da IA da Casa. Expirar e' lido
+  pelo prazo (a expiracao so' e' gravada quando alguem abre a proposta)."
+  [tx ente-id desde ate]
+  (into {} (map (juxt :estado :n))
+        (jdbc/execute! tx
+          ["SELECT CASE WHEN estado = 'aguardando' AND expira_em < now() THEN 'expirada' ELSE estado END AS estado,
+                   count(*) AS n
+              FROM integracao_ia.proposta_ato
+             WHERE ente_id = ? AND criada_em >= ? AND criada_em < ?
+             GROUP BY 1"
+           ente-id (java.sql.Timestamp/from ^java.time.Instant desde) (java.sql.Timestamp/from ^java.time.Instant ate)]
+          {:builder-fn rs/as-unqualified-maps})))

@@ -46,3 +46,16 @@
   [repo-paineis ator id]
   (repo/marcar-notificacao-lida! repo-paineis (:ente-id ator)
                                  {:id id :destinatario-identidade-id (:identidade-id ator)}))
+
+(defn painel-ia
+  "B.9 (ADR-0014): o painel da IA da Casa no mes {:mes :desde :ate}. Tudo vem pelos seams do host (paineis nunca
+  importa integracao_ia nem legislativo): `orcamento-ia` (ente -> definicao | nil), `consumo-ia` (ente mes -> mapa do
+  satelite; lanca `:ia/indisponivel`), `desfechos-ia` (ente desde ate -> {:notas {estado n} :propostas {estado n}}).
+  IA fora nao derruba o painel: o consumo sai nil e o resto aparece (R-IA-1)."
+  [{:keys [orcamento-ia consumo-ia desfechos-ia]} ator {:keys [mes desde ate]}]
+  (let [ente (:ente-id ator)
+        consumo (try (consumo-ia ente mes)
+                     (catch clojure.lang.ExceptionInfo e
+                       (if (= :ia/indisponivel (:tipo (ex-data e))) nil (throw e))))
+        {:keys [notas propostas]} (desfechos-ia ente desde ate)]
+    {:mes mes :orcamento (orcamento-ia ente) :consumo consumo :notas notas :propostas propostas}))

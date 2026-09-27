@@ -23,6 +23,7 @@ from oplenario_ia.armazem.porta import (
 )
 from oplenario_ia.busca.embeddings import normalizar
 from oplenario_ia.busca.indice import fundir
+from oplenario_ia.confianca.cota import Orcamento
 
 
 class ArmazemMemoria:
@@ -36,6 +37,7 @@ class ArmazemMemoria:
         self._resumos: dict[str, ResumoGuardado] = {}
         self._revisoes: dict[tuple[str, int], RevisaoAta] = {}
         self._indice: dict[tuple[str, str], list[tuple[str, TrechoIndice, list[float], str]]] = {}
+        self._orcamentos: dict[str, tuple[Orcamento, datetime]] = {}
 
     def cursor(self) -> int:
         return self._cursor
@@ -80,6 +82,18 @@ class ArmazemMemoria:
     def adiar(self, trabalho_id: int, erro: str, quando: datetime) -> None:
         t = self._trab[trabalho_id]
         t.update(estado="pendente", tentativas=t["tentativas"] + 1, proxima=quando, erro=erro)
+
+    def pausar(self, trabalho_id: int, motivo: str, ate: datetime) -> None:
+        self._trab[trabalho_id].update(estado="pendente", proxima=ate, erro=motivo)
+
+    def definir_orcamento(self, ente_id: str, orcamento: Orcamento, definido_em: datetime, chave: str) -> None:
+        atual = self._orcamentos.get(ente_id)
+        if atual is None or atual[1] <= definido_em:
+            self._orcamentos[ente_id] = (orcamento, definido_em)
+
+    def orcamento(self, ente_id: str) -> Orcamento | None:
+        o = self._orcamentos.get(ente_id)
+        return o[0] if o else None
 
     def desistir(self, trabalho_id: int, erro: str, seguintes: list[NovoTrabalho] | None = None) -> None:
         t = self._trab[trabalho_id]

@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from oplenario_ia.governanca.proveniencia import Peca
 
-Decisao = Literal["liberado", "bloqueado", "vazio"]
+Decisao = Literal["liberado", "bloqueado", "vazio", "cota"]  # cota: a Casa esgotou a cota (B.9), nada cruzou
 
 
 class AuditoriaGovernanca(BaseModel):

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import hmac
 from collections.abc import Callable
-from typing import Annotated, Any
+from typing import Annotated, Any, Protocol
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -23,7 +23,9 @@ from oplenario_ia.armazem.porta import Armazem, Resultado
 from oplenario_ia.ata.redacao import pontos_a_confirmar, texto_limpo
 from oplenario_ia.busca.embeddings import Embedder, criar_embedder
 from oplenario_ia.busca.indice import TIPOS, TIPOS_PADRAO
-from oplenario_ia.confianca.registro import RegistroJsonl, RegistroMemoria
+from oplenario_ia.confianca.consumo import consumo_do_mes
+from oplenario_ia.confianca.cota import Cota, Fonte
+from oplenario_ia.confianca.registro import ConsultaConsumo, RegistroConfianca, RegistroJsonl, RegistroMemoria
 from oplenario_ia.config import Config, carregar
 from oplenario_ia.erros import ErroIA, para_estruturado
 from oplenario_ia.inferencia.fabrica import criar_porta
@@ -52,6 +54,10 @@ class PedidoBusca(BaseModel):
     limite: int = Field(default=20, ge=1, le=50)
 
 
+class _Registro(RegistroConfianca, ConsultaConsumo, Protocol):
+    """O registro que a API usa: anexa execuções e responde o consumo da Casa (B.9)."""
+
+
 def criar_app(
     config: Config | None = None,
     armazem: Armazem | None = None,
@@ -59,17 +65,31 @@ def criar_app(
     *,
     nucleo: Nucleo | None = None,
     mcp_de: Callable[[str], laco.Porta] | None = None,
+    registro: _Registro | None = None,
 ) -> FastAPI:
     cfg = config or carregar()
     arm = armazem if armazem is not None else _armazem_do_config(cfg)
     emb = embedder or criar_embedder(cfg)
     nucleos: list[Nucleo] = [nucleo] if nucleo is not None else []
+    registros: list[_Registro] = [registro] if registro is not None else []
+
+    def registro_do_app() -> _Registro:
+        # B.9: com o Postgres do satélite, o MESMO registro do trabalhador — a cota da Casa vê o gasto de todos
+        if not registros:
+            if cfg.database_url:
+                from oplenario_ia.confianca.registro_postgres import RegistroPostgres
+
+                registros.append(RegistroPostgres(cfg.database_url))
+            else:
+                registros.append(RegistroJsonl(cfg.registro_jsonl) if cfg.registro_jsonl else RegistroMemoria())
+        return registros[0]
 
     def nucleo_do_app() -> Nucleo:
         # o núcleo real nasce na primeira execução do agente (a porta do fornecedor só carrega se alguém a usar)
         if not nucleos:
-            registro = RegistroJsonl(cfg.registro_jsonl) if cfg.registro_jsonl else RegistroMemoria()
-            nucleos.append(Nucleo(criar_porta(cfg), registro))
+            reg = registro_do_app()
+            cota = Cota(Fonte(arm, reg)) if arm is not None else None
+            nucleos.append(Nucleo(criar_porta(cfg), reg, cota=cota))
         return nucleos[0]
 
     app = FastAPI(title="O Plenário — Plataforma de IA", version=__version__)
@@ -259,6 +279,17 @@ def criar_app(
             if r.indisponivel is None
             else {"motivo": r.indisponivel.motivo, "mensagem": r.indisponivel.mensagem},
         }
+
+    @app.get("/v1/entes/{ente_id}/consumo", dependencies=[Depends(servico)])
+    def consumo(ente_id: str, mes: str | None = None) -> dict[str, Any]:
+        """B.9: o consumo de IA da Casa no mês (civil, America/Fortaleza) × o orçamento, por capacidade, com a revisão
+        humana e os erros reportados. Só contagens e valores (8.5) — o insumo do painel da Casa no core."""
+        orcamento = arm.orcamento(ente_id) if arm is not None else None
+        try:
+            c = consumo_do_mes(registro_do_app(), ente_id, orcamento, mes)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
+        return c.model_dump(mode="json", by_alias=True)
 
     @app.post("/v1/entes/{ente_id}/requerimentos/rascunhos", dependencies=[Depends(servico)])
     def rascunho_requerimento(ente_id: str, pedido: PedidoCopiloto) -> dict[str, Any]:

@@ -27,7 +27,7 @@ import { rotuloPapel } from "@/lib/rotulo-papel";
 import { comToken } from "@/lib/nav";
 import "./topo.css";
 
-const DESTINOS_NAV = [
+const DESTINOS_NAV: { rotulo: string; href: string; papel?: string }[] = [
   // Primeiro da lista de propósito: é o ponto de partida (a tela que responde "o que eu faço agora?") e a
   // única porta para as telas de sessão ao vivo, que não têm entrada de navegação própria.
   { rotulo: "Central", href: "/inicio" },
@@ -44,6 +44,9 @@ const DESTINOS_NAV = [
   // Faixa B / B.8 — a conferência das proposições: a IA deixa uma nota técnica em rascunho a cada proposição
   // protocolada, e a secretaria aproveita ou descarta. Gated "secretario" (GuardSecretaria + exige-papel no backend).
   { rotulo: "Conferências", href: "/conferencias" },
+  // Faixa B / B.9 — a IA da Casa: consumo × orçamento e o que as pessoas fizeram com o resultado. Só para o
+  // administrador da Casa (exige-papel "admin_ente" no backend) — por isso a entrada só aparece para ele.
+  { rotulo: "IA da Casa", href: "/paineis/ia", papel: "admin_ente" },
   { rotulo: "Painéis da Mesa", href: "/paineis/mesa" },
   { rotulo: "Tramitação", href: "/tramitacao" },
   // Fatia 2b — a fila de cargas não recebidas (o rito exige que quem recebe assine). Ao lado de Tramitação:
@@ -97,7 +100,7 @@ export function TopoInterno({ area }: { area: string }) {
         <div className="topo-sep" aria-hidden="true" />
         <span className="area-tag">{area}</span>
         <nav className="nav-interna" aria-label="Navegação interna">
-          {DESTINOS_NAV.map((d) => (
+          {DESTINOS_NAV.filter((d) => !d.papel || (dados?.papeis ?? []).includes(d.papel)).map((d) => (
             <Link
               key={d.href}
               href={comToken(d.href, token)}

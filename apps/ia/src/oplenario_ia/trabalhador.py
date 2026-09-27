@@ -18,6 +18,9 @@ Três tipos de trabalho na fila própria do satélite:
   da Casa, pede ao core a credencial de UMA execução e roda a conferência pelo MCP — lê a matéria e os dispositivos da
   LOM/RI, o núcleo redige, e a nota técnica volta ao core como RASCUNHO pela ferramenta do catálogo. Casa que não ligou:
   o trabalho é descartado sem ruído.
+- `definir_orcamento` (B.9, um por `OrcamentoIADefinido`): guarda o orçamento de IA da Casa que o core definiu. A
+  cota é conferida pelo núcleo a cada execução; trabalho de SEGUNDO PLANO (resumo, conferência) que esbarra nela
+  PAUSA (volta à fila em 1 h, sem contar tentativa) — não falha nem avisa ninguém.
 - `notificar`: entrega os eventos ao core (`Transcricao*`, `Ata*`, `Resumo*`); tenta até o core aceitar.
 
 Falhas seguem o §22.3.5: infraestrutura/sobrecarga tentam de novo com espera crescente (limite por tipo); entrada
@@ -55,6 +58,7 @@ from oplenario_ia.busca.indice import trechos_de_norma, trechos_de_proposicao, t
 from oplenario_ia.conferencia.roteiro import AGENTE as AGENTE_CONFERENCIA
 from oplenario_ia.conferencia.roteiro import conferir
 from oplenario_ia.confianca.artefato import proporcao_alterada
+from oplenario_ia.confianca.cota import CotaFechada, Orcamento
 from oplenario_ia.confianca.indisponivel import Indisponivel
 from oplenario_ia.confianca.registro import Desfecho
 from oplenario_ia.erros import Categoria, ErroIA
@@ -67,6 +71,7 @@ from oplenario_ia.fronteira.contrato import (
     EventoParaCore,
     GravacaoVinculadaV1,
     NormaVigenteV1,
+    OrcamentoIADefinidoV1,
     ProposicaoIndexavelV1,
     ResumoCidadaoProntoV1,
     ResumoFalhouV1,
@@ -95,6 +100,7 @@ MAX_TENTATIVAS = {
 CATEGORIAS_DE_FALHA = {"infraestrutura", "sobrecarga", "entrada", "modelo"}  # 5 e 6 nunca viajam como falha
 ESPERA_BASE_S = 30.0
 ESPERA_MAX_S = 1800.0
+PAUSA_DA_COTA = timedelta(hours=1)  # de hora em hora o trabalho pausado confere se a cota da Casa reabriu
 
 
 def espera(tentativa: int) -> timedelta:
@@ -153,6 +159,8 @@ class Trabalhador:
                             ev.payload | {"correlation-id": ev.chave},
                         )
                     )
+            elif (ev.tipo, ev.versao) == ("OrcamentoIADefinido", 1):
+                novos.append(NovoTrabalho("definir_orcamento", ev.chave, ev.ente_id, ev.payload))
             elif (ev.tipo, ev.versao) == ("NormaVigente", 1):
                 novos.append(NovoTrabalho("indexar_norma", ev.chave, ev.ente_id, ev.payload))
             elif (ev.tipo, ev.versao) == ("AtaRevisadaEPublicada", 1):
@@ -188,11 +196,16 @@ class Trabalhador:
                 self._redigir_resumo(t)
             elif t.tipo == "conferir_proposicao":
                 self._conferir_proposicao(t)
+            elif t.tipo == "definir_orcamento":
+                self._definir_orcamento(t)
             elif t.tipo == "notificar":
                 self.core.enviar(EventoParaCore.model_validate(t.payload))
                 self.armazem.concluir(t.id)
             else:
                 self.armazem.desistir(t.id, f"tipo de trabalho desconhecido: {t.tipo}")
+        except CotaFechada:
+            log.info("trabalho %s pausado: a cota de IA da Casa fechou para o segundo plano", t.id)
+            self.armazem.pausar(t.id, "cota da Casa: segundo plano pausado", self.agora() + PAUSA_DA_COTA)
         except Sigiloso:
             log.info("trabalho %s descartado: conteúdo sigiloso (o core recusou)", t.id)
             self.armazem.concluir(t.id, estado="descartado")
@@ -387,6 +400,8 @@ class Trabalhador:
             return
         correlacao = str(t.payload.get("correlation-id") or t.chave)
         r = self.nucleo.executar(pedido_de_resumo(texto, t.ente_id, correlacao), "por_paragrafo")
+        if isinstance(r, Indisponivel) and r.motivo == "cota":
+            raise CotaFechada(t.ente_id)
         if isinstance(r, Indisponivel):
             raise ErroIA(r.categoria or Categoria.ENTRADA, r.mensagem, retentavel=r.retentavel)
         novo = NovoResumo(
@@ -430,6 +445,15 @@ class Trabalhador:
         correlacao = str(t.payload.get("correlation-id") or t.chave)
         chave = f"ResumoFalhou:v1:{hashlib.sha256(t.chave.encode()).hexdigest()[:32]}"
         return self._notificacao("ResumoFalhou", chave, t.ente_id, correlacao, payload.model_dump(by_alias=True))
+
+    # ---------- o orçamento da Casa (B.9) ----------
+
+    def _definir_orcamento(self, t: Trabalho) -> None:
+        ev = OrcamentoIADefinidoV1.model_validate(t.payload)
+        self.armazem.definir_orcamento(
+            t.ente_id, Orcamento(mensal=ev.mensal, teto_duro=ev.teto_duro, moeda=ev.moeda), ev.definido_em, t.chave
+        )
+        self.armazem.concluir(t.id)
 
     # ---------- a conferência institucional (B.8) ----------
 

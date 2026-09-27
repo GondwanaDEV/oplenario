@@ -2,14 +2,15 @@
 
 Três eventos: a execução (governança, fornecedor e modelo usados, tokens, custo, resultado, citações, incerteza), o
 "reportar erro" e a revisão humana. Só contagens, identificadores e hashes — o texto nunca entra aqui. O armazenamento
-é uma porta: memória (testes), arquivo JSONL append-only; o adaptador Postgres (schema do satélite, §22.3.4) entra com a
-primeira capacidade em produção.
+é uma porta: memória (testes), arquivo JSONL append-only e Postgres (`registro_postgres`, B.9 — o que a API e o
+trabalhador compartilham, e de onde a cota e o painel da Casa leem o consumo do mês).
 """
 
 from __future__ import annotations
 
 import threading
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Annotated, Literal, Protocol
 
@@ -90,6 +91,22 @@ class RegistroConfianca(Protocol):
     def eventos(self) -> list[Evento]: ...
 
 
+class ConsultaConsumo(Protocol):
+    """O que a cota e o painel da Casa leem do registro (B.9)."""
+
+    def gasto_desde(self, ente_id: str, desde: datetime) -> Decimal: ...
+
+    def eventos_entre(self, ente_id: str, desde: datetime, ate: datetime) -> list[Evento]: ...
+
+
+def gasto(eventos: list[Evento]) -> Decimal:
+    """A soma do custo CONHECIDO das execuções (modelo sem preço não soma — o painel diz que é parcial)."""
+    return sum(
+        (e.custo.valor for e in eventos if isinstance(e, RegistroExecucao) and e.custo and e.custo.valor is not None),
+        Decimal(0),
+    )
+
+
 class RegistroMemoria:
     def __init__(self) -> None:
         self._eventos: list[Evento] = []
@@ -99,6 +116,12 @@ class RegistroMemoria:
 
     def eventos(self) -> list[Evento]:
         return [e.model_copy(deep=True) for e in self._eventos]
+
+    def eventos_entre(self, ente_id: str, desde: datetime, ate: datetime) -> list[Evento]:
+        return [e.model_copy(deep=True) for e in self._eventos if e.ente_id == ente_id and desde <= e.instante < ate]
+
+    def gasto_desde(self, ente_id: str, desde: datetime) -> Decimal:
+        return gasto([e for e in self._eventos if e.ente_id == ente_id and e.instante >= desde])
 
 
 class RegistroJsonl:
@@ -118,3 +141,9 @@ class RegistroJsonl:
             return []
         with self._caminho.open(encoding="utf-8") as f:
             return [_EVENTO.validate_json(linha) for linha in f if linha.strip()]
+
+    def eventos_entre(self, ente_id: str, desde: datetime, ate: datetime) -> list[Evento]:
+        return [e for e in self.eventos() if e.ente_id == ente_id and desde <= e.instante < ate]
+
+    def gasto_desde(self, ente_id: str, desde: datetime) -> Decimal:
+        return gasto([e for e in self.eventos() if e.ente_id == ente_id and e.instante >= desde])

@@ -15,6 +15,7 @@
             [oplenario.identidade.components.repositorio :as repo-identidade-comp]
             [oplenario.identidade.diplomat.http.auth-in :as auth-http]
             [oplenario.identidade.diplomat.http.in :as identidade-http]
+            [oplenario.integracao-ia.components.repositorio :as repo-ia-comp]
             [oplenario.integracao-ia.diplomat.http.in :as integracao-ia-http]
             [oplenario.integracao-ia.diplomat.http.out :as plataforma-ia]
             [oplenario.interceptors :as it]
@@ -558,7 +559,18 @@
                                    :painel-compliance painel-compliance
                                    :presenca-resumo presenca-resumo
                                    :esic-cumprimento esic-cumprimento
-                                   :relatores-pendentes relatores-pendentes}))
+                                   :relatores-pendentes relatores-pendentes
+                                   :relogio relogio-producao
+                                   ;; Faixa B / B.9 (ADR-0014): o painel da IA da Casa — o orcamento (integracao_ia), o
+                                   ;; consumo (satelite) e os desfechos (notas do legislativo, propostas da integracao)
+                                   :ia (when repo-integracao-ia
+                                         {:orcamento-ia (fn [ente-id] (repo-ia-comp/orcamento-atual repo-integracao-ia ente-id))
+                                          :consumo-ia (fn [ente-id mes] (plataforma-ia/consumo ia ente-id mes))
+                                          :desfechos-ia (fn [ente-id desde ate]
+                                                          {:notas (repo-legislativo-comp/contar-notas-tecnicas
+                                                                   repo-legislativo ente-id desde ate)
+                                                           :propostas (repo-ia-comp/contar-propostas
+                                                                       repo-integracao-ia ente-id desde ate)})})}))
         (into (tempo-real-sse/rotas {:auth auth :canal-store canal-store :consultar-sessao consultar-sessao}))
         (into (auth-http/rotas {:info-ente info-ente :keycloak keycloak
                                 :idp idp :repo-identidade repo-identidade

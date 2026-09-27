@@ -7,6 +7,7 @@
   (:require [com.stuartsierra.component :as component]
             [oplenario.config :as config]
             [oplenario.ia-republicar :as ia-republicar]
+            [oplenario.integracao-ia.components.repositorio :as repo-ia]
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.migracao :as migracao]
             [oplenario.sistema :as sistema]))
@@ -32,6 +33,20 @@
             ds   (component/start (datasource/datasource cfg))]
         (try (println "[oplenario]" (ia-republicar/republicar-proposicoes! (:ds ds) ente)
                       "proposicao(oes) publicada(s) no feed da IA")
+             (finally (component/stop ds))))
+
+      ;; Track IA B.9 (ADR-0014): o OPERADOR define o orcamento de IA da Casa conforme o plano (valores comerciais)
+      (= "ia-orcamento" (first args))
+      (let [[_ ente mensal teto moeda] args
+            uso "uso: ia-orcamento <ente-id> <mensal> <teto-duro> [moeda=USD]  (na moeda da tabela de precos da IA)"
+            ente (or (parse-uuid (str ente)) (throw (ex-info uso {})))
+            valor #(try (bigdec %) (catch Exception _ (throw (ex-info uso {}))))
+            ds (component/start (datasource/datasource cfg))]
+        (try (let [d (repo-ia/definir-orcamento! (repo-ia/map->RepoIntegracaoIAPg {:datasource ds})
+                                                 {:ente-id ente :mensal (valor mensal) :teto-duro (valor teto)
+                                                  :moeda (or moeda "USD") :definido-por "operador (linha de comando)"})]
+               (println "[oplenario] orcamento de IA definido:" (str (:mensal d)) "/ teto" (str (:teto-duro d))
+                        (:moeda d) "— a IA recebe pelo feed"))
              (finally (component/stop ds))))
 
       :else

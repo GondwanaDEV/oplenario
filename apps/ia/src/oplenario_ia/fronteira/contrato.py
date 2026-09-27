@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -77,6 +78,16 @@ class NormaVigenteV1(Fio):
     norma_id: str
     versao_id: str
     especie: str
+
+
+class OrcamentoIADefinidoV1(Fio):
+    """`OrcamentoIADefinido` v1 (B.9, ADR-0014): o orçamento mensal de IA da Casa e o teto duro, na moeda da tabela
+    de preços, definidos pelo operador conforme o plano. O mais recente vale."""
+
+    mensal: Decimal
+    teto_duro: Decimal
+    moeda: str
+    definido_em: datetime
 
 
 class DispositivoNorma(Fio):

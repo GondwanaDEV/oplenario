@@ -16,6 +16,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from oplenario_ia.avaliacao.agente import ConjuntoAgente, avaliar_agente
 from oplenario_ia.avaliacao.conjunto import Conjunto
 from oplenario_ia.avaliacao.harness import Relatorio, avaliar
 from oplenario_ia.config import Config
@@ -66,12 +67,16 @@ def main(argv: list[str] | None = None) -> int:
 
     relatorios: list[Relatorio] = []
     for arquivo in arquivos:
+        texto = arquivo.read_text(encoding="utf-8")
         try:
-            conjunto = Conjunto.model_validate_json(arquivo.read_text(encoding="utf-8"))
-        except ValidationError as e:
+            # B.9: conjunto com `"nivel": "agente"` roda o laço inteiro do agente contra um MCP roteirizado
+            if json.loads(texto).get("nivel") == "agente":
+                relatorios.append(avaliar_agente(ConjuntoAgente.model_validate_json(texto), porta))
+            else:
+                relatorios.append(avaliar(Conjunto.model_validate_json(texto), porta))
+        except (ValidationError, ValueError) as e:
             print(f"{arquivo}: conjunto inválido\n{e}", file=sys.stderr)
             return 2
-        relatorios.append(avaliar(conjunto, porta))
         _imprimir(relatorios[-1])
 
     if args.saida is not None:

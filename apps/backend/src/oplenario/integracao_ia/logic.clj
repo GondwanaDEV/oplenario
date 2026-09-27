@@ -117,6 +117,24 @@
   (when-let [f (get promocoes tipo)]
     (f ente-id payload)))
 
+;; ---------- B.9 (ADR-0014): o orcamento da Casa vai a IA ----------
+
+(defn evento-orcamento
+  "A definicao do orcamento de IA da Casa -> `OrcamentoIADefinido` v1. Nao nasce de evento de dominio: o orcamento ja'
+  e' configuracao da propria fronteira com a IA (valores do plano), gravado junto com o evento, na mesma tx. Valores
+  como texto decimal (o satelite le Decimal, sem arredondar por float)."
+  [{:keys [id ente-id mensal teto-duro moeda definido-em]}]
+  {:ente-id ente-id
+   :tipo    "OrcamentoIADefinido"
+   :versao  1
+   :chave   (str "OrcamentoIADefinido:v1:" id)
+   :payload {:mensal      (.toPlainString (bigdec mensal))
+             :teto-duro   (.toPlainString (bigdec teto-duro))
+             :moeda       moeda
+             :definido-em (str (if (instance? java.util.Date definido-em)
+                                 (.toInstant ^java.util.Date definido-em)
+                                 definido-em))}})
+
 ;; ---------- o que a IA pode devolver (tipo, versao) ----------
 
 (def categorias-falha
