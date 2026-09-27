@@ -526,6 +526,8 @@
                                        ;; dependencia de consultar-sessao (legislativo NAO importa cadastros, §22.10).
                                        :membros-da-casa membros-da-casa
                                        :ler-rascunho-resumo ler-rascunho-resumo-fn
+                                       ;; Faixa B / B.7: o copiloto do requerimento — o rascunho da IA para o formulario
+                                       :copiloto-requerimento (fn [ente-id pedido] (plataforma-ia/rascunhar-requerimento ia ente-id pedido))
                                        :registro registro-fatos
                                        :relogio relogio-producao}))
         ;; Faixa A / A.5: a busca intra-camara (host: cruza integracao-ia, legislativo e sessoes).

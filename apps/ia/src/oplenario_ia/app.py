@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from oplenario_ia import __version__
 from oplenario_ia.agente import laco
 from oplenario_ia.agente.mcp import ClienteMCP
-from oplenario_ia.armazem.porta import Armazem
+from oplenario_ia.armazem.porta import Armazem, Resultado
 from oplenario_ia.ata.redacao import pontos_a_confirmar, texto_limpo
 from oplenario_ia.busca.embeddings import Embedder, criar_embedder
 from oplenario_ia.busca.indice import TIPOS, TIPOS_PADRAO
@@ -28,6 +28,8 @@ from oplenario_ia.config import Config, carregar
 from oplenario_ia.erros import ErroIA, para_estruturado
 from oplenario_ia.inferencia.fabrica import criar_porta
 from oplenario_ia.nucleo import Nucleo
+from oplenario_ia.requerimento import copiloto
+from oplenario_ia.requerimento.copiloto import PedidoCopiloto
 
 
 def _armazem_do_config(cfg: Config) -> Armazem | None:
@@ -252,6 +254,45 @@ def criar_app(
                 "incerteza": a.incerteza.nivel,
                 "modelo": a.modelo,
                 "contaminado": a.contaminado,
+            },
+            "indisponivel": None
+            if r.indisponivel is None
+            else {"motivo": r.indisponivel.motivo, "mensagem": r.indisponivel.mensagem},
+        }
+
+    @app.post("/v1/entes/{ente_id}/requerimentos/rascunhos", dependencies=[Depends(servico)])
+    def rascunho_requerimento(ente_id: str, pedido: PedidoCopiloto) -> dict[str, Any]:
+        """O copiloto do requerimento (B.7): o pedido em palavras vira modelo, ementa, campos e justificativa
+        citada. Nada é guardado além do registro da execução (B4); o core confere o preenchimento contra os modelos
+        da Casa."""
+
+        def buscar(consulta: str) -> list[Resultado]:
+            assert arm is not None
+            vetor = emb.embed([consulta], "consulta")[0]
+            return arm.buscar(ente_id, consulta, vetor, emb.modelo, ["dispositivo"], 4, emb.distancia_maxima)
+
+        r = copiloto.rascunhar(nucleo_do_app(), pedido, ente_id, buscar if arm is not None else None)
+        p, j = r.preenchimento, r.justificativa
+        return {
+            "preenchimento": None if p is None else {"modelo-id": p.modelo_id, "ementa": p.ementa, "campos": p.campos},
+            "justificativa": None
+            if j is None
+            else {
+                "campo": r.campo_justificativa,
+                "execucao-id": j.execucao_id,
+                "citacoes": [
+                    {
+                        "fonte-id": c.fonte_id,
+                        "rotulo": r.fontes.get(c.fonte_id),
+                        "trecho": c.trecho,
+                        "status": c.status,
+                    }
+                    for c in j.citacoes
+                ],
+                "paragrafos-sem-fonte": j.paragrafos_sem_fonte,
+                "incerteza": j.incerteza.nivel,
+                "modelo": j.modelo,
+                "contaminado": j.contaminado,
             },
             "indisponivel": None
             if r.indisponivel is None

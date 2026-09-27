@@ -51,3 +51,12 @@
   (let [out (gerar-legislativo/gerar-tudo)]
     (is (str/includes? out "aprovada: boolean;")
         "ProposicaoDetalheOut.aprovada é obrigatório (nunca opcional) e boolean — o FE gateia botao nele")))
+
+;; ---------- Faixa B / B.7 (copiloto do requerimento) ----------
+
+(deftest copiloto-out-emite-os-campos-como-record-e-as-referencias-nomeadas
+  (let [out (gerar-legislativo/gerar-tudo)]
+    (is (str/includes? out "campos: Record<string, string>;") "[:map-of :string :string] vira Record, nao unknown")
+    (is (str/includes? out "preenchimento: PreenchimentoCopilotoOut | null;"))
+    (is (str/includes? out "justificativa: JustificativaCopilotoOut | null;"))
+    (is (str/includes? out "citacoes: CitacaoCopilotoOut[];"))))

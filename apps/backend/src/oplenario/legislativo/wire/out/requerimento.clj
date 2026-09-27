@@ -111,3 +111,35 @@
    [:estado :string]
    [:assinatura-algoritmo :string]
    [:coautores [:sequential :string]]])
+
+;; ---------- Faixa B / B.7: o copiloto do requerimento (rascunho da IA, que volta ao formulario) ----------
+
+(def PreenchimentoCopilotoOut
+  "O que a IA preencheu, ja' conferido contra os modelos da Casa: o modelo e' um da lista, os campos sao os que ele pede."
+  [:map {:closed true}
+   [:modelo-id :string]
+   [:ementa :string]
+   [:campos [:map-of :string :string]]])
+
+(def CitacaoCopilotoOut
+  [:map {:closed true}
+   [:fonte-id :string]
+   [:rotulo [:maybe :string]]
+   [:trecho [:maybe :string]]
+   [:status :string]])
+
+(def JustificativaCopilotoOut
+  "A justificativa redigida pela IA (ja' no campo de `campo` do preenchimento, sem as marcas): as citacoes conferidas
+  contra os dispositivos lidos, os paragrafos sem fonte e o nivel de incerteza — para a tela mostrar 'de onde veio'."
+  [:map {:closed true}
+   [:campo :string]
+   [:citacoes [:sequential CitacaoCopilotoOut]]
+   [:paragrafos-sem-fonte [:sequential :int]]
+   [:incerteza :string]
+   [:modelo :string]])
+
+(def CopilotoRequerimentoOut
+  [:map {:closed true}
+   [:preenchimento [:maybe PreenchimentoCopilotoOut]]
+   [:justificativa [:maybe JustificativaCopilotoOut]]
+   [:indisponivel [:maybe :string]]])

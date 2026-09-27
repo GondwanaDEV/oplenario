@@ -52,3 +52,19 @@ sessão ao vivo. O 4.5 exige que a proposta mostre ao confirmador que a execuç�
 - **Fica para depois:** bloquear proposta que "leva para fora" dado restrito lido na mesma execução (4.5.2) — hoje o
   catálogo só entrega conteúdo público ao agente, então não há o que bloquear; entra junto da primeira ferramenta que
   ler conteúdo restrito. Step-up na confirmação entra com a assinatura ICP real.
+
+## Adendo (27/09/2026) — o copiloto do requerimento (B.7)
+
+1. **Na tela, não há proposta.** Quando a pessoa já está no formulário ("Novo requerimento"), o copiloto só preenche:
+   o vereador descreve em palavras, a IA escolhe o modelo da Casa, preenche a ementa e os campos e redige a
+   justificativa; tudo volta ao formulário, editável, e o ato segue o fluxo de sempre (prévia → assinatura em 2
+   toques). A proposta de ato (acima) é para o pedido feito ao assistente, fora da tela da ação.
+2. **Uma capacidade do satélite, não o agente.** `POST /v1/entes/:ente/requerimentos/rascunhos`: dois passos pelo
+   núcleo — `requerimento.preencher` (JSON: modelo, ementa, campos) e `requerimento.justificar` (texto com citação
+   conferida, política por parágrafo). As fontes da justificativa são os dispositivos da Casa que o índice acha pelo
+   sentido (só a versão vigente está lá, B.4b); sem dispositivo, a justificativa sai sem base citada e a tela avisa.
+3. **O core confere tudo de novo** (`POST /meu/requerimentos/copiloto`): o modelo tem de ser um da lista da Casa, os
+   campos só os que ele pede (um "vereador" forjado cai), textos com teto; nada é gravado. IA fora = 503 com "preencha
+   o formulário" (R-IA-1) — a prévia e o protocolo não dependem dela.
+4. **Autoria:** quem assina é o vereador; o texto é dele (Eixo 4.6). A justificativa redigida chega com o selo
+   "Rascunho do assistente" e "de onde veio"; o registro da execução fica no satélite (§22.3.4).

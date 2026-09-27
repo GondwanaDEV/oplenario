@@ -611,6 +611,29 @@
         (http/json-resposta 201 (adapters-out-requerimento/protocolado->wire r))
         (http/json-resposta 404 {:erro "modelo de requerimento nao encontrado"})))))
 
+;; ========================= Faixa B / B.7: o copiloto do requerimento =========================
+
+(def ^:private mensagem-copiloto-fora
+  "O assistente está indisponível agora. Preencha o formulário — nada do requerimento depende dele.")
+
+(defn- copiloto-requerimento-handler
+  "POST /meu/requerimentos/copiloto — o vereador descreve em palavras; volta o rascunho da IA para o formulario
+  (modelo, ementa, campos e a justificativa citada), ja' conferido contra os modelos da Casa. Nada e' gravado. 404 sem
+  cadastro de vereador; 503 com a IA fora (R-IA-1); sem o seam (integracao desligada), 503 tambem."
+  [repo-leg resolver-autor copiloto]
+  (fn [req]
+    (let [m (adapters-in-requerimento/copiloto->dominio (:json-params req))]
+      (try
+        (if-let [r (and copiloto (controllers/copiloto-requerimento repo-leg resolver-autor copiloto (:ator req) m))]
+          (http/json-resposta 200 (adapters-out-requerimento/copiloto->wire r))
+          (if copiloto
+            (http/json-resposta 404 {:erro "vereador nao cadastrado nesta Casa"})
+            (http/json-resposta 503 {:erro mensagem-copiloto-fora})))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :ia/indisponivel (:tipo (ex-data e)))
+            (http/json-resposta 503 {:erro mensagem-copiloto-fora})
+            (throw e)))))))
+
 ;; ========================= Fatia 2c: o requerimento COLETIVO (subscricao) =========================
 
 (defn- conflito-subscricao
@@ -1013,7 +1036,7 @@
   movimentacao no historico; ausente, o historico sai sem nome (degrada p/ 'recebida', nunca inventa)."
   [{:keys [auth repo-legislativo consultar-sessao sessao-fechada? pode-ver-votacao-aberta? resolver-municipio
            resolver-vereador resolver-comissoes vereador-vinculado? vereador-no-roster? membros-da-casa
-           registro relogio resolver-autor nome-na-casa colegas-da-casa ler-rascunho-resumo]}]
+           registro relogio resolver-autor nome-na-casa colegas-da-casa ler-rascunho-resumo copiloto-requerimento]}]
   (let [nome-na-casa (or nome-na-casa (constantly nil))
         ;; fatia 2c: sem o seam, ninguem e' colega (fail-closed: nenhum convite passa na validacao)
         colegas-da-casa (or colegas-da-casa (constantly []))
@@ -1143,6 +1166,10 @@
       ["/meu/requerimentos/previa" :post
        [auth papel-vereador it/corpo-json (previa-requerimento-handler repo-legislativo resolver-autor relogio)]
        :route-name :legislativo/previa-requerimento]
+      ;; Faixa B / B.7: o copiloto — o rascunho da IA para o formulario (seam do host sobre o satelite)
+      ["/meu/requerimentos/copiloto" :post
+       [auth papel-vereador it/corpo-json (copiloto-requerimento-handler repo-legislativo resolver-autor copiloto-requerimento)]
+       :route-name :legislativo/copiloto-requerimento]
       ;; fatia 2c — requerimento COLETIVO (subscricao antes do protocolo)
       ["/meu/colegas" :get [auth papel-vereador (meus-colegas-handler resolver-autor colegas-da-casa)]
        :route-name :legislativo/meus-colegas]

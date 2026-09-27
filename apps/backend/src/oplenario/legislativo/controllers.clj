@@ -4,7 +4,8 @@
   da votacao ao vivo (F4 Slice 3) DIRIGE a votacao: a authz e' HERDADA do recurso SESSAO (lido via
   `consultar-sessao` INJETADA pelo host — legislativo NAO importa sessoes, §22.10), e as escritas usam o Repo do
   PROPRIO modulo (que casa ato + emissao do evento de tempo real na MESMA tx, Slice 1)."
-  (:require [oplenario.kernel.autorizacao :as authz]
+  (:require [clojure.string :as str]
+            [oplenario.kernel.autorizacao :as authz]
             [oplenario.legislativo.components.repositorio :as repo]
             [oplenario.legislativo.logic :as logic]
             [oplenario.motor.api :as motor]))
@@ -976,3 +977,46 @@
   (repo/publicar-resumo! repo-legislativo (:ente-id ator)
     (cond-> {:proposicao-id proposicao-id :texto texto :publicado-por (:identidade-id ator)}
       rascunho-id (assoc :rascunho-id rascunho-id))))
+
+;; ========================= Faixa B / B.7: o copiloto do requerimento =========================
+;; O vereador descreve em palavras; a IA (seam `copiloto` do host, sobre o satelite) escolhe o modelo, preenche e
+;; redige a justificativa citando a norma. E' RASCUNHO que volta ao formulario: nada e' gravado aqui, e o vereador
+;; revisa e assina pelo fluxo de sempre (previa -> protocolo). O core CONFERE o que a IA devolveu contra os modelos
+;; da Casa: modelo fora da lista ou campo que o modelo nao pede nao chegam a tela.
+
+(def ^:private teto-campo 2000)
+
+(defn- conferir-preenchimento
+  "O preenchimento da IA, se couber num modelo da Casa: o modelo da lista, so' os campos dele, textos com teto."
+  [modelos {:keys [modelo-id ementa campos]}]
+  (when-let [m (some #(when (= (str (:id %)) (str modelo-id)) %) modelos)]
+    (let [ementa (some-> ementa str str/trim)
+          pedidos (set (:campos m))
+          campos (into {} (keep (fn [[k v]]
+                                  (let [k (name k)]
+                                    (when (and (pedidos k) (string? v) (not (str/blank? v)))
+                                      [k (subs v 0 (min teto-campo (count v)))]))))
+                       campos)]
+      (when-not (str/blank? ementa)
+        {:modelo-id (:id m) :ementa (subs ementa 0 (min teto-campo (count ementa))) :campos campos}))))
+
+(defn copiloto-requerimento
+  "POST /meu/requerimentos/copiloto — o rascunho da IA para o formulario do vereador. nil = o login nao e' vereador
+  cadastrado nesta Casa (-> 404). Sem modelo de requerimento na Casa, nem chama a IA. IA fora lanca
+  `:ia/indisponivel` (a borda responde 503, R-IA-1: 'preencha o formulario')."
+  [repo-legislativo resolver-autor copiloto ator {:keys [descricao]}]
+  (when (resolver-autor (:ente-id ator) (:identidade-id ator))
+    (let [modelos (modelos-de-requerimento repo-legislativo ator)]
+      (if (empty? modelos)
+        {:preenchimento nil :justificativa nil :indisponivel nil}
+        (let [r (copiloto (:ente-id ator) {:descricao descricao :correlation_id (str (random-uuid))
+                                           :modelos (mapv #(-> (select-keys % [:id :nome :campos])
+                                                               (update :id str)) modelos)})
+              p (some->> (:preenchimento r) (conferir-preenchimento modelos))
+              j (:justificativa r)
+              j (when (and p j (contains? (:campos p) (:campo j)))
+                  {:campo (:campo j)
+                   :citacoes (mapv #(select-keys % [:fonte-id :rotulo :trecho :status]) (:citacoes j))
+                   :paragrafos-sem-fonte (vec (:paragrafos-sem-fonte j))
+                   :incerteza (str (:incerteza j)) :modelo (str (:modelo j))})]
+          {:preenchimento p :justificativa j :indisponivel (get-in r [:indisponivel :mensagem])})))))

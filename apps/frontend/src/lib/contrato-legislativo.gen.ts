@@ -405,6 +405,33 @@ export interface RequerimentoColetivoProtocoladoOut {
   coautores: string[];
 }
 
+export interface PreenchimentoCopilotoOut {
+  modeloId: string;
+  ementa: string;
+  campos: Record<string, string>;
+}
+
+export interface CitacaoCopilotoOut {
+  fonteId: string;
+  rotulo: string | null;
+  trecho: string | null;
+  status: string;
+}
+
+export interface JustificativaCopilotoOut {
+  campo: string;
+  citacoes: CitacaoCopilotoOut[];
+  paragrafosSemFonte: number[];
+  incerteza: string;
+  modelo: string;
+}
+
+export interface CopilotoRequerimentoOut {
+  preenchimento: PreenchimentoCopilotoOut | null;
+  justificativa: JustificativaCopilotoOut | null;
+  indisponivel: string | null;
+}
+
 export interface RascunhoResumoPonteiroOut {
   situacao: "pronto" | "falhou";
   rascunhoId: string | null;

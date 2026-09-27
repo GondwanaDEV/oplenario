@@ -142,3 +142,16 @@
     (is (= 400 (post {:modelo-id "nao-e-uuid" :campos campos :ementa "E"})))
     (is (= 400 (post {:modelo-id (str (:id modelo-req)) :campos {"assunto" "so um"} :ementa "E"}))
         "campo do modelo faltando -> 400 (fail-closed do renderizador)")))
+
+(deftest copiloto-com-a-ia-fora-manda-preencher-o-formulario
+  ;; R-IA-1: sem o satelite (integracao nao configurada), o copiloto responde 503 com a mensagem da tela — o
+  ;; formulario continua funcionando (a previa e o protocolo nao dependem da IA)
+  (let [r (pt/response-for (service-fn) :post "/meu/requerimentos/copiloto" :headers (headers)
+                           :body (corpo {:descricao "pedir informações sobre a obra da praça"}))]
+    (is (= 503 (:status r)))
+    (is (re-find #"Preencha o formulário" (:erro (ler-json r))))
+    (is (= 400 (:status (pt/response-for (service-fn) :post "/meu/requerimentos/copiloto" :headers (headers)
+                                         :body (corpo {:descricao "oi"}))))
+        "descricao curta demais e' 400")
+    (is (= 403 (:status (pt/response-for (service-fn :papeis #{"secretario"}) :post "/meu/requerimentos/copiloto"
+                                         :headers (headers) :body (corpo {:descricao "pedir informações"})))))))
