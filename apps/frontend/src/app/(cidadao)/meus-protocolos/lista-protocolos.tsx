@@ -8,7 +8,7 @@ import { useState } from "react";
 import { DIREITOS_LGPD, LIMITES, TIPOS_MANIFESTACAO, rotuloEstado } from "@/lib/formularios-cidadao";
 import { formatarData } from "@/lib/formatar-data";
 import { useEnvioCidadao } from "@/lib/use-envio-cidadao";
-import type { MeusProtocolos, Resposta } from "@/lib/use-meus-protocolos";
+import type { MeusProtocolos, RecursoEsic, Resposta } from "@/lib/use-meus-protocolos";
 
 const ABERTOS = new Set(["protocolado", "protocolada", "em_analise"]);
 const RECORRIVEIS = new Set(["respondido", "indeferido"]);
@@ -89,6 +89,24 @@ function Recurso({ pedidoId, token, aoMudar }: { pedidoId: string; token: string
   );
 }
 
+// V1: um recurso por pedido — já interposto, a tela mostra o recurso (e a decisão) no lugar do botão.
+function RecursoInterposto({ recurso }: { recurso: RecursoEsic }) {
+  return (
+    <div className="mp-recurso-ok">
+      <p>
+        Recurso <span className="mp-protocolo">{recurso.protocolo}</span> ·{" "}
+        {recurso.estado === "decidido" ? "Decidido" : "Em revisão"} (enviado em {formatarData(recurso.reciboEm)})
+      </p>
+      {recurso.resposta && (
+        <div className="mp-resposta">
+          <p className="mp-resposta-cab">Decisão do recurso · {formatarData(recurso.resposta.respondidaEm)}</p>
+          <p>{recurso.resposta.corpo}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Item({
   protocolo,
   titulo,
@@ -144,7 +162,11 @@ export function ListaProtocolos({
             {dados.pedidosEsic.map((p) => (
               <Item key={p.id} protocolo={p.protocolo} titulo={p.assunto} estado={p.estado} reciboEm={p.reciboEm}
                 dias={p.diasRestantes} resposta={p.resposta}>
-                {RECORRIVEIS.has(p.estado) && <Recurso pedidoId={p.id} token={token} aoMudar={aoMudar} />}
+                {p.recurso ? (
+                  <RecursoInterposto recurso={p.recurso} />
+                ) : (
+                  RECORRIVEIS.has(p.estado) && <Recurso pedidoId={p.id} token={token} aoMudar={aoMudar} />
+                )}
               </Item>
             ))}
           </ul>

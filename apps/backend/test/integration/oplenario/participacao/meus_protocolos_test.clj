@@ -68,7 +68,13 @@
       (is (= "Segue a planilha em anexo." (get-in wire [:pedidos-esic 0 :resposta :corpo])))
       (is (string? (get-in wire [:pedidos-esic 0 :resposta :respondida-em])))
       (is (= "Seus dados: nome e CPF." (get-in wire [:solicitacoes-lgpd 0 :resposta :corpo])))
-      (is (= "Ampliamos o atendimento." (get-in wire [:manifestacoes 0 :resposta :corpo]))))))
+      (is (= "Ampliamos o atendimento." (get-in wire [:manifestacoes 0 :resposta :corpo])))
+      (is (nil? (get-in wire [:pedidos-esic 0 :recurso])) "sem recurso ainda"))
+    (let [rec (controllers/interpor-recurso! *repo* relogio (ator ente eu) (:id p) {:motivo "Faltou o valor."})
+          wire (out/meus-protocolos->wire (controllers/meus-protocolos *repo* (ator ente eu) relogio))]
+      (is (= {:protocolo (:protocolo rec) :estado "protocolado"}
+             (select-keys (get-in wire [:pedidos-esic 0 :recurso]) [:protocolo :estado]))
+          "o recurso aparece no item — a tela nao oferece recorrer de novo"))))
 
 (deftest sem-nada-protocolado-listas-vazias
   (is (= {:pedidos-esic [] :solicitacoes-lgpd [] :manifestacoes []}

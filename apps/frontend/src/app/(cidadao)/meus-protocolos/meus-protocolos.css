@@ -22,3 +22,5 @@
 .mp-recurso-acoes { display: flex; gap: 0.6rem; flex-wrap: wrap; }
 .mp-recurso-ok { font-size: var(--t-13); color: var(--texto-2); margin: 0.8rem 0 0; }
 .mp-item .form-erro { color: var(--acento-texto); font-size: var(--t-13); margin: 0; }
+.mp-recurso-ok p { margin: 0; }
+.mp-recurso-ok .mp-resposta { margin-top: 0.6rem; }

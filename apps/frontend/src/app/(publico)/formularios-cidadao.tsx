@@ -40,7 +40,7 @@ const IconeEscudo = () => (
 export function Hero({ rotulo, titulo, texto, lei }: { rotulo: string; titulo: string; texto: string; lei: ReactNode }) {
   return (
     <div className="pf-hero">
-      <span className="rotulo-secao">{rotulo}</span>
+      <span className="eyebrow">{rotulo}</span>
       <h1>{titulo}</h1>
       <p>{texto}</p>
       <span className="pf-lei">
@@ -102,7 +102,7 @@ function ReciboProtocolo({
 }) {
   return (
     <div className="pf-card pf-recibo" role="status">
-      <span className="rotulo-secao">Recibo</span>
+      <span className="eyebrow">Recibo</span>
       <h2>{titulo}</h2>
       <p className="pf-protocolo">{recibo.protocolo}</p>
       <p className="pf-ajuda">

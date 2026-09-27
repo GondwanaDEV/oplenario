@@ -89,8 +89,12 @@ não-treino, LGPD art. 33) — o fake não espera. Desenho: **`docs/25`** + doc-
 de cidadão + consentimento, e a sessão aberta pelo gov.br é **só de cidadão** (zero papéis, mesmo para quem é
 vereador). O portal tem "Entrar para participar" (`/portal/casa/[ente]/participar`); a cidadã cai em
 `/acompanhamentos`. Dev/demo/CI usam o **gov.br simulado** (`demo/govbr_simulado.clj`, realm no próprio Keycloak).
-**Falta:** os formulários de escrita do cidadão no portal (abrir e-SIC, pedido LGPD, ouvidoria, comentar — as rotas
-existem) e, `[GAP]` externo, o credenciamento no gov.br (client de homologação/produção + URL de retorno por Casa).
+**Formulários do cidadão ENTREGUES (27/09/2026):** no portal, abrir pedido de e-SIC (`/esic/novo`), exercer direito
+LGPD (`/lgpd/novo?tipo=`), manifestar à ouvidoria (`/ouvidoria`, inclusive anônima), comentar e acompanhar a matéria
+na ficha pública — cada escrita devolve o recibo com protocolo. Na área da cidadã, `/meus-protocolos` (rota
+`GET /portal/meus-protocolos`) mostra estado, prazo e a resposta da Câmara, e o recurso do e-SIC. **Fora por não
+existir no backend:** anexo da ouvidoria, cartão do ouvidor, denunciar comentário (sem desenho). **Falta, `[GAP]`
+externo:** o credenciamento no gov.br (client de homologação/produção + URL de retorno por Casa).
 O IdP do operador (`admin_sistema`) segue **stub de 3 linhas** — bloqueia o console supratenant.
 
 **3. Onda E da track FE — MEDIDA em 10/09/2026, e a cauda NÃO é trabalho mecânico.** A descrição

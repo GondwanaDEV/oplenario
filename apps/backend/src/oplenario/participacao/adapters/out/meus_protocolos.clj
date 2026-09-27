@@ -17,7 +17,10 @@
 
 (defn meus-protocolos->wire
   [{:keys [pedidos-esic solicitacoes-lgpd manifestacoes]}]
-  (let [out {:pedidos-esic      (mapv #(assoc (base %) :assunto (:assunto %)) pedidos-esic)
+  (let [recurso (fn [r] (when r {:protocolo (:protocolo r) :estado (:estado r) :recibo-em (->str (:recibo-em r))
+                                  :resposta (when-let [x (:resposta r)]
+                                              {:corpo (:corpo x) :respondida-em (->str (:respondida-em x))})}))
+        out {:pedidos-esic      (mapv #(assoc (base %) :assunto (:assunto %) :recurso (recurso (:recurso %))) pedidos-esic)
              :solicitacoes-lgpd (mapv #(assoc (base %) :tipo (:tipo %)) solicitacoes-lgpd)
              :manifestacoes     (mapv #(assoc (base %) :tipo (:tipo %) :assunto (:assunto %)) manifestacoes)}]
     (when-not (m/validate wire/MeusProtocolosOut out)

@@ -12,12 +12,18 @@
    ;; a resposta MAIS RECENTE da Casa, para a propria cidada ler (e decidir se recorre); nil enquanto nao ha'.
    [:resposta [:maybe [:map {:closed true} [:corpo :string] [:respondida-em :string]]]]])
 
+(def ^:private Resposta [:maybe [:map {:closed true} [:corpo :string] [:respondida-em :string]]])
+
 (def PedidoEsicItem
   (into [:map {:closed true}
          [:id :string] [:protocolo :string]
          ;; CONTEUDO DO USUARIO: o consumidor escapa antes de renderizar como HTML (React ja' escapa).
          [:assunto :string]
-         [:estado (km/enum-de logic/estados-pedido)]]
+         [:estado (km/enum-de logic/estados-pedido)]
+         ;; o recurso ja' interposto (V1: um por pedido) — a tela o mostra no lugar do botao de recorrer
+         [:recurso [:maybe [:map {:closed true}
+                            [:protocolo :string] [:estado [:enum "protocolado" "decidido"]]
+                            [:recibo-em :string] [:resposta Resposta]]]]]
         prazo))
 
 (def SolicitacaoLgpdItem

@@ -47,6 +47,28 @@ describe("ListaProtocolos — o que a cidadã protocolou", () => {
     expect(within(p1).queryByRole("button", { name: /recorrer/i })).toBeNull();
   });
 
+  it("pedido que já tem recurso mostra o recurso (e a decisão), sem oferecer recorrer de novo", () => {
+    const comRecurso: MeusProtocolos = {
+      ...DADOS,
+      pedidosEsic: [
+        {
+          ...DADOS.pedidosEsic[1],
+          recurso: {
+            protocolo: "REC-2026-000001",
+            estado: "decidido",
+            reciboEm: "2026-07-11T12:00:00Z",
+            resposta: { corpo: "Recurso provido: segue a lista com valores.", respondidaEm: "2026-07-15T12:00:00Z" },
+          },
+        },
+      ],
+    };
+    render(<ListaProtocolos dados={comRecurso} token="tok" aoMudar={() => {}} />);
+    const p2 = screen.getByText("ESIC-2026-000002").closest("li")!;
+    expect(within(p2).getByText("REC-2026-000001")).toBeTruthy();
+    expect(within(p2).getByText(/Recurso provido/)).toBeTruthy();
+    expect(within(p2).queryByRole("button", { name: /recorrer/i })).toBeNull();
+  });
+
   it("recorrer: envia o motivo e mostra o protocolo do recurso", async () => {
     global.fetch = vi.fn(async () =>
       ({ ok: true, status: 201, json: async () => ({ protocolo: "REC-2026-000001", "recibo-em": "2026-07-11T12:00:00Z" }) }) as Response,

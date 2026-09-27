@@ -106,3 +106,9 @@
   border-color: color-mix(in srgb, var(--marca) 35%, var(--linha)); }
 .superficie-publica a.civico-link:hover { border-color: var(--marca); }
 .superficie-publica a.civico-link .em-breve-titulo { color: var(--marca); }
+
+/* `.superficie-publica a` pinta todo link com a cor de marca e vencia os botões-link (texto sumia no
+   .btn-primaria). Botão que é link mantém a cor do botão. */
+.superficie-publica a.btn-primaria, .superficie-publica a.btn-primaria:hover { color: var(--acao-texto); text-decoration: none; }
+.superficie-publica a.btn-contorno, .superficie-publica a.btn-contorno:hover { color: var(--texto); text-decoration: none; }
+.pf-hero .eyebrow, .pf-recibo .eyebrow { color: var(--acento-texto); }

@@ -110,10 +110,14 @@
   tenant, sem PII, sem o corpo do pedido)."
   [repo-participacao ator relogio]
   (let [com-prazo (fn [linhas]
-                    (mapv (fn [{:keys [item prazo resposta]}]
-                            (assoc item :vence-em (some-> prazo logic/vencimento-efetivo)
-                                   :dias-restantes (dias-restantes-do-prazo relogio prazo)
-                                   :resposta (some-> resposta (select-keys [:corpo :respondida-em]))))
+                    (mapv (fn [{:keys [item prazo resposta recurso]}]
+                            (cond-> (assoc item :vence-em (some-> prazo logic/vencimento-efetivo)
+                                           :dias-restantes (dias-restantes-do-prazo relogio prazo)
+                                           :resposta (some-> resposta (select-keys [:corpo :respondida-em])))
+                              recurso (assoc :recurso {:protocolo (:protocolo recurso) :estado (:estado recurso)
+                                                       :recibo-em (:recibo-em recurso)
+                                                       :resposta (some-> (:resposta recurso)
+                                                                         (select-keys [:corpo :respondida-em]))})))
                           linhas))]
     (update-vals (repo/meus-protocolos repo-participacao (:ente-id ator) (:identidade-id ator)) com-prazo)))
 

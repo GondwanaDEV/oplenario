@@ -18,7 +18,8 @@ type Base = {
   diasRestantes: number | null;
   resposta: Resposta | null;
 };
-export type PedidoEsic = Base & { assunto: string };
+export type RecursoEsic = { protocolo: string; estado: string; reciboEm: string; resposta: Resposta | null };
+export type PedidoEsic = Base & { assunto: string; recurso?: RecursoEsic | null };
 export type SolicitacaoLgpd = Base & { tipo: string };
 export type Manifestacao = Base & { tipo: string; assunto: string };
 export type MeusProtocolos = { pedidosEsic: PedidoEsic[]; solicitacoesLgpd: SolicitacaoLgpd[]; manifestacoes: Manifestacao[] };

@@ -467,8 +467,13 @@
                                          :prazo (db-prazo/buscar-do-objeto tx ente-id objeto-tipo (:id i))
                                          :resposta (last (respostas tx ente-id (:id i)))})
                                 itens))]
-          {:pedidos-esic      (com-prazo "pedido_esic" db-resposta/listar-do-pedido
-                                         (db-pedido/listar-por-solicitante tx ente-id identidade-id))
+          {:pedidos-esic      (mapv (fn [{:keys [item] :as linha}]
+                                      ;; o recurso ja' interposto (V1: um por pedido) + a decisao, se houver
+                                      (assoc linha :recurso
+                                             (when-let [r (db-recurso/ultimo-do-pedido tx ente-id (:id item))]
+                                               (assoc r :resposta (last (db-resposta/listar-do-recurso tx ente-id (:id r)))))))
+                                    (com-prazo "pedido_esic" db-resposta/listar-do-pedido
+                                               (db-pedido/listar-por-solicitante tx ente-id identidade-id)))
            :solicitacoes-lgpd (com-prazo "solicitacao_titular" db-resposta-titular/listar-da-solicitacao
                                          (db-solicitacao/listar-por-titular tx ente-id identidade-id))
            :manifestacoes     (com-prazo "manifestacao_ouvidoria" db-resposta-ouvidoria/listar-da-manifestacao
