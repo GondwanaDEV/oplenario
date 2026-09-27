@@ -3,7 +3,9 @@
   (oplenario.interceptors) — fica separada de http.clj p/ evitar ciclo (http nao conhece interceptors). W2
   monta /saude (publica) + /eu (auth) + /painel-secretaria (auth + papel). W3 adiciona as rotas-dado de cada
   modulo (com o servidor `using` os Repo). `montar` recebe os deps ja injetados (idp + repo-identidade)."
-  (:require [oplenario.busca :as busca]
+  (:require [oplenario.agente :as agente]
+            [oplenario.busca :as busca]
+            [oplenario.catalogo :as catalogo]
             [oplenario.cadastros.components.repositorio :as repo-cadastros-comp]
             [oplenario.cadastros.diplomat.http.in :as cadastros-http]
             [oplenario.compliance.diplomat.http.in :as compliance-http]
@@ -19,6 +21,7 @@
             [oplenario.kernel.tempo :as tempo]
             [oplenario.legislativo.components.repositorio :as repo-legislativo-comp]
             [oplenario.legislativo.diplomat.http.in :as legislativo-http]
+            [oplenario.mcp :as mcp]
             [oplenario.paineis.diplomat.http.in :as paineis-http]
             [oplenario.participacao.diplomat.http.in :as participacao-http]
             [oplenario.sessoes.components.renderizador-pdf :as renderizador-pdf]
@@ -523,6 +526,8 @@
         ;; Faixa A / A.5: a busca intra-camara (host: cruza integracao-ia, legislativo e sessoes).
         (into (busca/rotas {:auth auth :seams (busca/seams {:ia ia :repo-legislativo repo-legislativo
                                                              :repo-sessoes repo-sessoes})}))
+        ;; Faixa B / B.3: a tela pergunta ao assistente da Casa (credencial delegada por execucao, ADR-0010).
+        (into (agente/rotas {:auth auth :repo-identidade repo-identidade :ia ia}))
         (into (compliance-http/rotas {:auth auth :repo-compliance repo-compliance}))
         (into (cadastros-http/rotas {:auth auth :repo-cadastros repo-cadastros :relogio relogio-producao
                                      :identidade-existe? identidade-existe?}))
@@ -561,4 +566,11 @@
                   ;; Faixa A / A.8: o resumo cidadao — o texto publico da proposicao e o ponteiro do rascunho (legislativo)
                   :registrar-resumo repo-legislativo-comp/registrar-resumo-em-tx!
                   :texto-da-proposicao (fn [ente-id pid] (repo-legislativo-comp/texto-para-ia repo-legislativo ente-id pid))})
+                #{}))
+        ;; Faixa B / B.3 (ADR-0009/0010): o servidor MCP do catalogo de acoes — so' com a credencial delegada do agente.
+        (into (if repo-integracao-ia
+                (mcp/rotas {:repo-identidade repo-identidade
+                             :deps {:repo-legislativo repo-legislativo :repo-sessoes repo-sessoes
+                                    :nome-na-casa nome-na-casa-fn :resumir-proposicoes resumir-proposicoes-fn
+                                    :registrar-chamada (catalogo/registrador repo-integracao-ia)}})
                 #{})))))

@@ -71,10 +71,10 @@
                                          :uf "CE" :municipio-nome "Fortaleza" :ementa ementa
                                          :autor-texto "Ver. Ana"}))))
 
-(defn- sessao! [ente quando]
+(defn- sessao! [ente quando & {:keys [tipo] :or {tipo "ordinaria"}}]
   (tenancy/com-tenant* *ds* ente
     (fn [tx] (:id (sessao/agendar! tx {:id (random-uuid) :ente-id ente :sessao-legislativa-id (random-uuid)
-                                       :tipo-sessao "ordinaria" :modalidade "presencial"
+                                       :tipo-sessao tipo :modalidade "presencial"
                                        :agendada-para (Instant/parse quando)})))))
 
 (defn- erro [f] (try (f) nil (catch clojure.lang.ExceptionInfo e (select-keys (ex-data e) [:tipo :razao]))))
@@ -168,6 +168,22 @@
     (testing "com sessao informada, aquela"
       (is (= (str depois) (:sessao-id (catalogo/executar! (deps) vereador "pauta_da_sessao"
                                                           {:sessao-id (str depois)})))))
+    (testing "sessao secreta nunca vai ao agente (a IA): nem como a da vez, nem pedida pelo id"
+      (let [casa (random-uuid)
+            secreta (sessao! casa "2026-11-01T13:00:00Z" :tipo "secreta")
+            publica (sessao! casa "2026-11-20T13:00:00Z")
+            v (agente-de casa "vereador" :vereador)]
+        (is (= (str publica) (:sessao-id (catalogo/executar! (deps) v "pauta_da_sessao" {}))))
+        (is (nil? (catalogo/executar! (deps) (agente-de casa "secretario" :secretaria) "pauta_da_sessao"
+                                      {:sessao-id (str secreta)})))))
+    (testing "sessao secreta nunca vai ao agente (a IA): nem como a da vez, nem pedida pelo id"
+      (let [casa (random-uuid)
+            secreta (sessao! casa "2026-11-01T13:00:00Z" :tipo "secreta")
+            publica (sessao! casa "2026-11-20T13:00:00Z")]
+        (is (= (str publica) (:sessao-id (catalogo/executar! (deps) (agente-de casa "vereador" :vereador)
+                                                             "pauta_da_sessao" {}))))
+        (is (nil? (catalogo/executar! (deps) (agente-de casa "secretario" :secretaria) "pauta_da_sessao"
+                                      {:sessao-id (str secreta)})))))
     (testing "Casa sem sessao nenhuma: nada a mostrar"
       (is (nil? (catalogo/executar! (deps) (agente-de (random-uuid) "vereador" :vereador) "pauta_da_sessao" {}))))))
 

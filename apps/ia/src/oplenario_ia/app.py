@@ -9,6 +9,7 @@ categorizada vira `ErroEstruturado` com o status da categoria — nunca um 500 o
 from __future__ import annotations
 
 import hmac
+from collections.abc import Callable
 from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
@@ -16,12 +17,17 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from oplenario_ia import __version__
+from oplenario_ia.agente import laco
+from oplenario_ia.agente.mcp import ClienteMCP
 from oplenario_ia.armazem.porta import Armazem
 from oplenario_ia.ata.redacao import pontos_a_confirmar, texto_limpo
 from oplenario_ia.busca.embeddings import Embedder, criar_embedder
 from oplenario_ia.busca.indice import TIPOS
+from oplenario_ia.confianca.registro import RegistroJsonl, RegistroMemoria
 from oplenario_ia.config import Config, carregar
 from oplenario_ia.erros import ErroIA, para_estruturado
+from oplenario_ia.inferencia.fabrica import criar_porta
+from oplenario_ia.nucleo import Nucleo
 
 
 def _armazem_do_config(cfg: Config) -> Armazem | None:
@@ -32,6 +38,12 @@ def _armazem_do_config(cfg: Config) -> Armazem | None:
     return ArmazemPostgres(cfg.database_url)
 
 
+class PedidoAgente(BaseModel):
+    pergunta: str = Field(min_length=2, max_length=1_000)
+    credencial: str = Field(min_length=20, max_length=200)
+    correlation_id: str = Field(min_length=1, max_length=100)
+
+
 class PedidoBusca(BaseModel):
     consulta: str = Field(min_length=2, max_length=300)
     tipos: list[str] = Field(default_factory=lambda: list(TIPOS))
@@ -39,11 +51,25 @@ class PedidoBusca(BaseModel):
 
 
 def criar_app(
-    config: Config | None = None, armazem: Armazem | None = None, embedder: Embedder | None = None
+    config: Config | None = None,
+    armazem: Armazem | None = None,
+    embedder: Embedder | None = None,
+    *,
+    nucleo: Nucleo | None = None,
+    mcp_de: Callable[[str], laco.Porta] | None = None,
 ) -> FastAPI:
     cfg = config or carregar()
     arm = armazem if armazem is not None else _armazem_do_config(cfg)
     emb = embedder or criar_embedder(cfg)
+    nucleos: list[Nucleo] = [nucleo] if nucleo is not None else []
+
+    def nucleo_do_app() -> Nucleo:
+        # o núcleo real nasce na primeira execução do agente (a porta do fornecedor só carrega se alguém a usar)
+        if not nucleos:
+            registro = RegistroJsonl(cfg.registro_jsonl) if cfg.registro_jsonl else RegistroMemoria()
+            nucleos.append(Nucleo(criar_porta(cfg), registro))
+        return nucleos[0]
+
     app = FastAPI(title="O Plenário — Plataforma de IA", version=__version__)
 
     @app.exception_handler(ErroIA)
@@ -186,6 +212,42 @@ def criar_app(
                 }
                 for r in achados
             ],
+        }
+
+    @app.post("/v1/entes/{ente_id}/agente/execucoes", dependencies=[Depends(servico)])
+    def agente(ente_id: str, pedido: PedidoAgente) -> dict[str, Any]:
+        """Uma execução do agente (B.3; docs/25 Eixo 5.2: a tela fala com o core, o core chama o satélite). A
+        credencial delegada vem do core (ADR-0010) e é a ÚNICA coisa com que o agente chega ao core: as ferramentas
+        rodam lá, como a pessoa. Nada aqui é guardado além do registro da execução (texto fica fora, B4)."""
+        if not cfg.core_url:
+            raise HTTPException(503, "integração com o core desligada")
+        mcp = mcp_de(pedido.credencial) if mcp_de else ClienteMCP(cfg.core_url, pedido.credencial)
+        r = laco.executar(nucleo_do_app(), mcp, pedido.pergunta, ente_id, pedido.correlation_id)
+        a = r.artefato
+        return {
+            "passos": [
+                {
+                    "ferramenta": p.ferramenta,
+                    "argumentos": p.argumentos,
+                    "ok": p.ok,
+                    "enviado-ao-modelo": p.enviado_ao_modelo,
+                }
+                for p in r.passos
+            ],
+            "resposta": None
+            if a is None
+            else {
+                "execucao-id": a.execucao_id,
+                "texto": a.texto,
+                "citacoes": [{"fonte-id": c.fonte_id, "trecho": c.trecho, "status": c.status} for c in a.citacoes],
+                "paragrafos-sem-fonte": a.paragrafos_sem_fonte,
+                "incerteza": a.incerteza.nivel,
+                "modelo": a.modelo,
+                "contaminado": a.contaminado,
+            },
+            "indisponivel": None
+            if r.indisponivel is None
+            else {"motivo": r.indisponivel.motivo, "mensagem": r.indisponivel.mensagem},
         }
 
     return app

@@ -2,4 +2,7 @@
 ;;   :so-tela  — so' serve a tela (forma de tela, sem acao de dominio que um agente chamaria)
 ;;   :servico  — borda de servico entre sistemas (fronteira com a IA, captacao), nao acao de pessoa
 ;; Uma rota nova entra aqui so' com motivo revisado em PR; o padrao e' virar entrada do catalogo.
-{}
+{:integracao-ia/mcp {:categoria :servico
+                     :motivo "e' o proprio adaptador MCP que serve o catalogo ao agente (ADR-0009/0010), nao uma acao"}
+ :agente/perguntar {:categoria :so-tela
+                    :motivo "e' a porta da tela para o proprio agente: o agente nao chama o agente"}}

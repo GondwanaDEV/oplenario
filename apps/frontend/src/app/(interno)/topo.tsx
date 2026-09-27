@@ -34,6 +34,10 @@ const DESTINOS_NAV = [
   // Faixa A / A.5 da Track IA — busca intra-câmara (proposições + o que foi dito em plenário). Gated "secretario"
   // (GuardSecretaria + exige-papel no backend). Logo depois da Central: é a outra porta de entrada da secretaria.
   { rotulo: "Busca", href: "/busca" },
+  // Faixa B / B.3 da Track IA — o assistente da Casa: pergunta em palavras, ele consulta o sistema com as permissoes de
+  // quem pergunta (credencial delegada, ADR-0010) e responde citando. Gated "secretario" (GuardSecretaria; o backend
+  // aceita secretario ou vereador).
+  { rotulo: "Assistente", href: "/assistente" },
   { rotulo: "Painéis da Mesa", href: "/paineis/mesa" },
   { rotulo: "Tramitação", href: "/tramitacao" },
   // Fatia 2b — a fila de cargas não recebidas (o rito exige que quem recebe assine). Ao lado de Tramitação:

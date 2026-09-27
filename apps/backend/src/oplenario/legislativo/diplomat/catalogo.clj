@@ -15,7 +15,7 @@
 (def IdentificacaoMateria
   "Como o agente aponta a materia: pelo id, OU pela identificacao que uma pessoa usa (especie + numero + ano)."
   [:and
-   [:map {:closed true}
+   [:map {:closed true :description "Informe proposicao-id, ou tipo + sequencial + ano."}
     [:proposicao-id {:optional true :description "Id da proposicao, se ja' for conhecido."} :uuid]
     [:tipo {:optional true :description "Especie da proposicao (ex.: projeto_lei para PL, requerimento para REQ)."}
      (into [:enum] (sort logic/tipos))]
