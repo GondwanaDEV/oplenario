@@ -26,6 +26,7 @@
             [oplenario.legislativo.db.proposicao :as proposicao]
             [oplenario.legislativo.db.protocolo-geral :as protocolo]
             [oplenario.legislativo.db.recebimento :as recebimento]
+            [oplenario.legislativo.db.resumo :as resumo]
             [oplenario.legislativo.db.subscricao :as subscricao]
             [oplenario.legislativo.db.texto-versao :as texto]
             [oplenario.legislativo.db.tramitacao :as tram]
@@ -63,6 +64,19 @@
   (buscar-proposicao-detalhe [this ente-id id]
     "{:proposicao ... :texto (a linha de texto/vigente, ou nil)}, uma leitura. `:proposicao` carrega
      `:aprovada` (Fatia 2) na MESMA tx — ver proposicao-aprovada-em-votacao? logo abaixo.")
+  (resumo-da-proposicao [this ente-id proposicao-id]
+    "Faixa A / A.8: {:proposicao :texto-base-sha256 :rascunho :atual :versoes} numa tx — o resumo cidadao da materia
+     (o ultimo rascunho da IA, a versao publicada e o historico) e a versao ATUAL do texto, para dizer o que ficou
+     para tras. nil = proposicao inexistente.")
+  (buscar-rascunho-resumo-pronto [this ente-id proposicao-id rascunho-id]
+    "O ponteiro 'pronto' do rascunho `rascunho-id` desta proposicao, ou nil.")
+  (publicar-resumo! [this ente-id m]
+    "Publica a proxima versao do resumo cidadao. Com :rascunho-id, o ponteiro TEM de ser um rascunho pronto desta
+     proposicao (modelo, prompt e a versao do texto vem dele); sem, a versao do texto e' a vigente. Numa tx. nil =
+     proposicao inexistente.")
+  (texto-para-ia [this ente-id proposicao-id]
+    "O texto PUBLICO da proposicao para a IA redigir o resumo (ADR-0008): tipo, numero, ementa, autoria, texto vigente
+     inline e o `texto-sha256` da versao. nil = inexistente.")
   (aprovacao-vigente [this ente-id proposicao-id]
     "T3-A2 — a votacao que aprovou esta materia: {:votacao-id :texto-versao-id}, ou nil. O
      `:texto-versao-id` e' o CONTEUDO deliberado (congelado na abertura, mig 0075) e pode ser nil em
@@ -474,11 +488,15 @@
               (texto/promover! tx {:ente-id ente-id :proposicao-id (:id m) :versao-id versao-id
                                     :updated-by (:updated-by m) :lock-version 0})))
           (producers/emitir-editada! bus tx ente-id
-            {:proposicao-id (:id r) :ementa (:ementa r) :autor-tipo (:autor-tipo r)
-             :autor-texto (:autor-texto r)
-             ;; some-> : (str nil) daria "" e quebraria o UUID/fromString do consumer (mesmo bug corrigido
-             ;; em protocolar! -> emitir-protocolada!, Onda E fatia 2).
-             :autor-id (some-> (:autor-id r) str)})
+            (cond->
+              {:proposicao-id (:id r) :ementa (:ementa r) :autor-tipo (:autor-tipo r)
+               :autor-texto (:autor-texto r)
+               ;; some-> : (str nil) daria "" e quebraria o UUID/fromString do consumer (mesmo bug corrigido
+               ;; em protocolar! -> emitir-protocolada!, Onda E fatia 2).
+               :autor-id (some-> (:autor-id r) str)}
+              ;; A.8: so' quando o TEXTO mudou — o sinal que faz a IA redigir de novo o resumo cidadao (sem ele, uma
+              ;; edicao so' de texto teria a mesma chave de integracao da anterior e seria deduplicada)
+              (:texto m) (assoc :hash-texto (logic/sha256-hex (:texto m)))))
           r))))
   ;; Onda B Slice 2: leitura composta (proposicao + texto vigente) NUMA UNICA tx — mesmo snapshot MVCC
   ;; (mesma disciplina de listar-e-contar-proposicoes). Nao lanca quando a proposicao nao existe: devolve
@@ -491,6 +509,43 @@
       (fn [tx]
         {:proposicao (proposicao-com-aprovada tx ente-id id)
          :texto (texto/vigente tx ente-id id)})))
+  ;; Faixa A / A.8 — o resumo cidadao. Tudo na tx do tenant: a versao do texto e' lida junto do que se compara a ela.
+  (resumo-da-proposicao [this ente-id proposicao-id]
+    (transacao this ente-id
+      (fn [tx]
+        (when-let [p (proposicao/buscar tx ente-id proposicao-id)]
+          {:proposicao p
+           :texto-base-sha256 (logic/texto-base-sha256 (:ementa p) (:texto-inline (texto/vigente tx ente-id proposicao-id)))
+           :rascunho (resumo/ultimo-rascunho tx ente-id proposicao-id)
+           :atual (resumo/atual tx ente-id proposicao-id)
+           :versoes (resumo/listar-versoes tx ente-id proposicao-id)}))))
+  (buscar-rascunho-resumo-pronto [this ente-id proposicao-id rascunho-id]
+    (transacao this ente-id #(resumo/buscar-pronto % ente-id proposicao-id rascunho-id)))
+  (publicar-resumo! [this ente-id {:keys [proposicao-id rascunho-id] :as m}]
+    (transacao this ente-id
+      (fn [tx]
+        (when-let [p (proposicao/buscar tx ente-id proposicao-id)]
+          (let [r (when rascunho-id
+                    (or (resumo/buscar-pronto tx ente-id proposicao-id rascunho-id)
+                        (throw (ex-info "o rascunho informado nao e' um rascunho pronto desta proposicao"
+                                        {:tipo :conflito/rascunho-desconhecido :proposicao-id proposicao-id}))))]
+            (resumo/publicar! tx
+              (cond-> {:ente-id ente-id :proposicao-id proposicao-id :texto (:texto m)
+                       :conteudo-sha256 (logic/sha256-hex (:texto m)) :publicado-por (:publicado-por m)
+                       :origem-redacao "redigida_pela_casa"
+                       :texto-base-sha256 (logic/texto-base-sha256
+                                           (:ementa p) (:texto-inline (texto/vigente tx ente-id proposicao-id)))}
+                r (assoc :origem-redacao "gerada_automaticamente" :rascunho-id rascunho-id
+                         :modelo-llm-id (:modelo-llm-id r) :prompt-versao (:prompt-versao r)
+                         ;; o resumo descreve a versao do texto que a IA LEU, mesmo que o texto tenha mudado depois
+                         :texto-base-sha256 (:texto-base-sha256 r)))))))))
+  (texto-para-ia [this ente-id proposicao-id]
+    (transacao this ente-id
+      (fn [tx]
+        (when-let [p (proposicao/buscar tx ente-id proposicao-id)]
+          (let [t (:texto-inline (texto/vigente tx ente-id proposicao-id))]
+            {:proposicao-id (:id p) :tipo (:tipo p) :ano (:ano p) :sequencial (:sequencial p) :ementa (:ementa p)
+             :autor-texto (:autor-texto p) :texto t :texto-sha256 (logic/texto-base-sha256 (:ementa p) t)})))))
   ;; T3-A (guarda-autografo-votacao): o fato de aprovacao servido como LEITURA — o controller o consulta
   ;; antes de gerar o autografo, e o read-model o publica p/ o FE gatear o botao na mesma verdade.
   (proposicao-aprovada-em-votacao? [this ente-id proposicao-id]
@@ -1157,3 +1212,9 @@
                              "docs/16-ledger-prontidao.md)")
                      {:id id :ente-id ente-id}))
         nil))))
+
+(defn registrar-resumo-em-tx!
+  "Faixa A / A.8 (ADR-0008): grava o fato que a IA devolveu sobre o resumo cidadao de uma proposicao NA TX DO CHAMADOR
+  (a caixa de entrada da fronteira) — mesmo molde de `sessoes/registrar-rascunho-ata-em-tx!`."
+  [tx ente-id m]
+  (resumo/registrar-rascunho! tx (assoc m :ente-id ente-id)))

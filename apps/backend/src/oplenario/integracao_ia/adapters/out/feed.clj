@@ -51,3 +51,9 @@
   (validado wire/AtaPublicadaOut {:versao (:versao a) :texto (:texto a) :conteudo-sha256 (:conteudo-sha256 a)
                                   :origem-redacao (:origem-redacao a)}
             "ata viola o contrato AtaPublicadaOut (bug de servidor)"))
+
+(defn texto-proposicao->wire [t]
+  (validado wire/TextoProposicaoOut
+            {:proposicao-id (str (:proposicao-id t)) :tipo (:tipo t) :ano (:ano t) :sequencial (:sequencial t)
+             :ementa (:ementa t) :autor-texto (:autor-texto t) :texto (:texto t) :texto-sha256 (:texto-sha256 t)}
+            "texto viola o contrato TextoProposicaoOut (bug de servidor)"))

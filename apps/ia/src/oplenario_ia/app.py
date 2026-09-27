@@ -130,6 +130,40 @@ def criar_app(
             "criado-em": g.criado_em.isoformat() if g.criado_em else None,
         }
 
+    @app.get("/v1/entes/{ente_id}/resumos/rascunhos/{rascunho_id}", dependencies=[Depends(servico)])
+    def rascunho_resumo(ente_id: str, rascunho_id: str) -> dict[str, Any]:
+        """O rascunho do resumo cidadão para a revisão no core (A.8): o texto com as marcas de citação, o texto LIMPO
+        (o que vai para o editor), cada citação conferida e os parágrafos sem fonte. De outra Casa: 404."""
+        if arm is None:
+            raise HTTPException(503, "armazenamento do satélite não configurado")
+        g = arm.resumo(rascunho_id)
+        if g is None or g.ente_id != ente_id:
+            raise HTTPException(404, "rascunho não encontrado")
+        return {
+            "id": g.id,
+            "proposicao-id": g.proposicao_id,
+            "texto-base-sha256": g.texto_base_sha256,
+            "texto": g.texto,
+            "texto-limpo": texto_limpo(g.texto),
+            "prompt-versao": g.prompt_versao,
+            "vendor": g.vendor,
+            "modelo": g.modelo,
+            "incerteza": {"nivel": g.incerteza["nivel"], "motivos": g.incerteza.get("motivos", [])},
+            "citacoes": [
+                {
+                    "fonte-id": c["fonte_id"],
+                    "trecho": c.get("trecho"),
+                    "inicio": c["inicio"],
+                    "fim": c["fim"],
+                    "status": c["status"],
+                    "rotulo": c.get("rotulo"),
+                }
+                for c in g.citacoes
+            ],
+            "paragrafos-sem-fonte": g.paragrafos_sem_fonte,
+            "criado-em": g.criado_em.isoformat() if g.criado_em else None,
+        }
+
     @app.post("/v1/entes/{ente_id}/busca", dependencies=[Depends(servico)])
     def busca(ente_id: str, pedido: PedidoBusca) -> dict[str, Any]:
         """A busca intra-câmara (A.4/A.5; §22.3.4): só na Casa do caminho, híbrida (termo exato + sentido). Devolve

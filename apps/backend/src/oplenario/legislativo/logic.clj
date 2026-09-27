@@ -5,7 +5,9 @@
   imutabilidade pos-publicacao moram no banco (kernel/sequencial + trigger). O mapa tipo->lexml e
   tipo->sigla sao DADO (vocabulario LexML uniforme do Brasil, nao regra por tribunal — Inv.4)."
   (:require [clojure.string :as str])
-  (:import (java.text Normalizer Normalizer$Form)))
+  (:import (java.nio.charset StandardCharsets)
+           (java.security MessageDigest)
+           (java.text Normalizer Normalizer$Form)))
 
 (set! *warn-on-reflection* true)
 
@@ -384,3 +386,21 @@
                 ::ordem (reduce min Long/MAX_VALUE (map #(or (:ordem %) 0) ts))}))
        (sort-by (juxt ::ordem :gatilho))
        (mapv #(dissoc % ::ordem))))
+
+;; --- Faixa A / A.8: o resumo cidadao. ---
+
+(def teto-texto-resumo
+  "O resumo cidadao e' curto por natureza (a IA escreve ate' ~180 palavras); o teto so' barra colar o texto da lei."
+  4000)
+
+(defn sha256-hex
+  "Hash SHA-256 de uma string (UTF-8), prefixado 'sha256:'. Puro."
+  [^String s]
+  (let [h (.digest (MessageDigest/getInstance "SHA-256") (.getBytes s StandardCharsets/UTF_8))]
+    (str "sha256:" (apply str (map #(format "%02x" (bit-and (int %) 0xff)) h)))))
+
+(defn texto-base-sha256
+  "A identidade da VERSAO do texto que o resumo cidadao descreve: ementa + texto vigente. E' o que a IA confere para
+  nao redigir de novo a mesma versao, e o que diz a secretaria (e o portal) que um resumo ficou para tras."
+  [ementa texto]
+  (sha256-hex (str ementa "\n\n" (or texto ""))))

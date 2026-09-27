@@ -949,3 +949,30 @@
   (if-let [vid (resolver-vereador (:ente-id ator) (:identidade-id ator))]
     (repo/propostas-abertas-do-autor repo-legislativo (:ente-id ator) vid)
     []))
+
+;; ========================= Faixa A / A.8: o resumo cidadao =========================
+
+(defn resumo-da-proposicao
+  "O resumo cidadao da materia: o ultimo rascunho da IA, a versao publicada e o historico, com a versao ATUAL do texto
+  (para dizer o que ficou para tras). nil = proposicao inexistente no tenant."
+  [repo-legislativo ente-id proposicao-id]
+  (repo/resumo-da-proposicao repo-legislativo ente-id proposicao-id))
+
+(defn rascunho-resumo
+  "O CONTEUDO do rascunho, lido da IA pelo seam `ler-rascunho-resumo` (fn [ente-id rascunho-id] -> mapa | nil). So'
+  pede a IA um id que o core registrou como rascunho pronto DESTA proposicao — nunca repassa id arbitrario. nil =
+  proposicao, ponteiro ou rascunho inexistente. IA fora -> `:ia/indisponivel` (a borda traduz em 503, R-IA-1)."
+  [repo-legislativo ler-rascunho-resumo ente-id proposicao-id rascunho-id]
+  (when-let [{:keys [texto-base-sha256]} (repo/resumo-da-proposicao repo-legislativo ente-id proposicao-id)]
+    (when-let [p (repo/buscar-rascunho-resumo-pronto repo-legislativo ente-id proposicao-id rascunho-id)]
+      (when-let [r (ler-rascunho-resumo ente-id rascunho-id)]
+        (assoc r :ponteiro p :texto-base-sha256 texto-base-sha256)))))
+
+(defn publicar-resumo!
+  "Publica a proxima versao do resumo cidadao (ele vai para o portal). Quem publica vem do `ator`. Com `rascunho-id`,
+  tem de ser um rascunho PRONTO desta proposicao (`:conflito/rascunho-desconhecido`); modelo, versao do prompt e a
+  versao do texto resumida vem do ponteiro, nunca do cliente. nil = proposicao inexistente."
+  [repo-legislativo ator proposicao-id {:keys [texto rascunho-id]}]
+  (repo/publicar-resumo! repo-legislativo (:ente-id ator)
+    (cond-> {:proposicao-id proposicao-id :texto texto :publicado-por (:identidade-id ator)}
+      rascunho-id (assoc :rascunho-id rascunho-id))))

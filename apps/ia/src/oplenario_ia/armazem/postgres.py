@@ -15,9 +15,11 @@ from psycopg.types.json import Jsonb
 from oplenario_ia.armazem.porta import (
     NovaTranscricao,
     NovoRascunho,
+    NovoResumo,
     NovoTrabalho,
     RascunhoGuardado,
     Resultado,
+    ResumoGuardado,
     RevisaoAta,
     Trabalho,
     TranscricaoGuardada,
@@ -118,6 +120,25 @@ MIGRACOES: list[str] = [
     CREATE INDEX IF NOT EXISTS idx_indice_tsv ON ia.indice_trecho USING gin (tsv);
     CREATE INDEX IF NOT EXISTS idx_indice_vetor ON ia.indice_trecho USING hnsw (embedding vector_cosine_ops);
     """,
+    # 5 — rascunhos de resumo cidadão (A.8): um por versão do texto da proposição; o publicado vive no core
+    """
+    CREATE TABLE IF NOT EXISTS ia.rascunho_resumo (
+      id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      ente_id           uuid NOT NULL,
+      proposicao_id     uuid NOT NULL,
+      texto_base_sha256 text NOT NULL,
+      execucao_id       text NOT NULL,
+      texto             text NOT NULL,
+      citacoes          jsonb NOT NULL,
+      paragrafos_sem_fonte jsonb NOT NULL,
+      incerteza         jsonb NOT NULL,
+      vendor            text NOT NULL,
+      modelo            text NOT NULL,
+      prompt_versao     text NOT NULL,
+      criado_em         timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_rascunho_resumo_prop ON ia.rascunho_resumo (ente_id, proposicao_id, criado_em);
+    """,
 ]
 
 
@@ -157,6 +178,24 @@ def _guardada(r: dict[str, Any]) -> TranscricaoGuardada:
         modelo_diarizacao=r["modelo_diarizacao"],
         cobertura=r["cobertura"],
         trechos=[TrechoTranscricao(**t) for t in r["trechos"]],
+        criado_em=r["criado_em"],
+    )
+
+
+def _resumo(r: dict[str, Any]) -> ResumoGuardado:
+    return ResumoGuardado(
+        id=str(r["id"]),
+        ente_id=str(r["ente_id"]),
+        proposicao_id=str(r["proposicao_id"]),
+        texto_base_sha256=r["texto_base_sha256"],
+        execucao_id=r["execucao_id"],
+        texto=r["texto"],
+        citacoes=r["citacoes"],
+        paragrafos_sem_fonte=r["paragrafos_sem_fonte"],
+        incerteza=r["incerteza"],
+        vendor=r["vendor"],
+        modelo=r["modelo"],
+        prompt_versao=r["prompt_versao"],
         criado_em=r["criado_em"],
     )
 
@@ -343,6 +382,54 @@ class ArmazemPostgres:
             except psycopg.errors.InvalidTextRepresentation:
                 return None
         return _rascunho(r) if r else None
+
+    def concluir_resumo(
+        self, trabalho_id: int, novo: NovoResumo, notificar: Callable[[ResumoGuardado], NovoTrabalho]
+    ) -> ResumoGuardado:
+        with self._conectar() as c, c.transaction():
+            r = c.execute(
+                """INSERT INTO ia.rascunho_resumo (ente_id, proposicao_id, texto_base_sha256, execucao_id, texto,
+                                                   citacoes, paragrafos_sem_fonte, incerteza, vendor, modelo,
+                                                   prompt_versao)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *""",
+                (
+                    novo.ente_id,
+                    novo.proposicao_id,
+                    novo.texto_base_sha256,
+                    novo.execucao_id,
+                    novo.texto,
+                    Jsonb(novo.citacoes),
+                    Jsonb(novo.paragrafos_sem_fonte),
+                    Jsonb(novo.incerteza),
+                    novo.vendor,
+                    novo.modelo,
+                    novo.prompt_versao,
+                ),
+            ).fetchone()
+            assert r is not None
+            g = _resumo(r)
+            c.execute(
+                "UPDATE ia.trabalho SET estado = 'concluido', atualizado_em = now() WHERE id = %s", (trabalho_id,)
+            )
+            self._enfileirar(c, notificar(g))
+            return g
+
+    def resumo(self, resumo_id: str) -> ResumoGuardado | None:
+        with self._conectar() as c:
+            try:
+                r = c.execute("SELECT * FROM ia.rascunho_resumo WHERE id = %s", (resumo_id,)).fetchone()
+            except psycopg.errors.InvalidTextRepresentation:
+                return None
+        return _resumo(r) if r else None
+
+    def ultimo_resumo(self, ente_id: str, proposicao_id: str) -> ResumoGuardado | None:
+        with self._conectar() as c:
+            r = c.execute(
+                """SELECT * FROM ia.rascunho_resumo WHERE ente_id = %s AND proposicao_id = %s
+                   ORDER BY criado_em DESC, id DESC LIMIT 1""",
+                (ente_id, proposicao_id),
+            ).fetchone()
+        return _resumo(r) if r else None
 
     def enfileirar(self, novos: list[NovoTrabalho]) -> int:
         with self._conectar() as c, c.transaction():

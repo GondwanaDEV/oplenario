@@ -16,6 +16,7 @@
             [oplenario.legislativo.wire.out.proposicao :as proposicao]
             [oplenario.legislativo.wire.out.protocolo-geral :as protocolo-geral]
             [oplenario.legislativo.wire.out.requerimento :as requerimento]
+            [oplenario.legislativo.wire.out.resumo :as resumo]
             [oplenario.legislativo.wire.out.tramitacao-executiva :as tramitacao-executiva]))
 
 (def manifesto
@@ -82,7 +83,16 @@
    ["ConviteSubscricaoOut" requerimento/ConviteSubscricaoOut]
    ["ConvitesSubscricaoOut" requerimento/ConvitesSubscricaoOut]
    ["RespostaSubscricaoOut" requerimento/RespostaSubscricaoOut]
-   ["RequerimentoColetivoProtocoladoOut" requerimento/RequerimentoColetivoProtocoladoOut]])
+   ["RequerimentoColetivoProtocoladoOut" requerimento/RequerimentoColetivoProtocoladoOut]
+   ;; Faixa A / A.8 (resumo cidadao) — referencias antes dos compostos.
+   ["RascunhoResumoPonteiroOut" resumo/RascunhoResumoPonteiroOut]
+   ["ResumoVersaoOut" resumo/ResumoVersaoOut]
+   ["ResumoAtualOut" resumo/ResumoAtualOut]
+   ["ResumoProposicaoOut" resumo/ResumoProposicaoOut]
+   ["CitacaoResumoOut" resumo/CitacaoResumoOut]
+   ["IncertezaResumoOut" resumo/IncertezaResumoOut]
+   ["RascunhoResumoOut" resumo/RascunhoResumoOut]
+   ["ResumoReciboOut" resumo/ResumoReciboOut]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))
 

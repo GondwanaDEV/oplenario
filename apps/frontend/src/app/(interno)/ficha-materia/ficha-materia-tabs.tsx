@@ -1,7 +1,7 @@
 "use client";
 
-// FichaMateriaTabs — as 5 abas do corpo da ficha (Onda B Slice 3): Texto vigente, Tramitação, Pareceres,
-// Emendas, Anexos. Porte de ficha-materia.html:180-236 (padrão ARIA tabs: role=tablist/tab/tabpanel,
+// FichaMateriaTabs — as abas do corpo da ficha (Onda B Slice 3): Texto vigente, Tramitação, Pareceres,
+// Emendas, Resumo cidadão (Faixa A / A.8) e Anexos. Porte de ficha-materia.html:180-236 (padrão ARIA tabs: role=tablist/tab/tabpanel,
 // roving tabindex, ArrowLeft/ArrowRight com wraparound — mesmo script inline da tela-fonte, portado pra
 // React). Pareceres/Emendas mostram TODOS os estados (decisão da fatia, ver ficha-materia-vista.ts) — só
 // rotulam, nunca filtram. Anexos não tem backend nesta fatia -> <EmBreve> honesto (mesma disciplina de
@@ -12,6 +12,7 @@ import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { EmBreve } from "@/lib/em-breve";
 import { AcoesTramitacao } from "./acoes-tramitacao";
+import { PainelResumo } from "./painel-resumo";
 import { derivarTimelineTramitacao, derivarPareceres, derivarEmendas } from "@/lib/ficha-materia-vista";
 import { formatarData } from "@/lib/formatar-data";
 import { comToken } from "@/lib/nav";
@@ -49,6 +50,8 @@ export function FichaMateriaTabs({
     { id: "tram", rotulo: "Tramitação", contagem: timeline.length, truncado: ficha.tramitacaoTruncado },
     { id: "pareceres", rotulo: "Pareceres", contagem: pareceres.length, truncado: ficha.pareceresTruncado },
     { id: "emendas", rotulo: "Emendas", contagem: emendas.length, truncado: ficha.emendasTruncado },
+    // Faixa A / A.8: o resumo em linguagem simples que vai ao portal (a IA redige, a secretaria revisa e publica)
+    { id: "resumo", rotulo: "Resumo cidadão" },
     { id: "anexos", rotulo: "Anexos" },
   ];
 
@@ -236,11 +239,23 @@ export function FichaMateriaTabs({
 
       <section
         className="painel"
+        id="p-resumo"
+        role="tabpanel"
+        aria-labelledby="t-resumo"
+        tabIndex={0}
+        hidden={selecionada !== 4}
+      >
+        {/* montado só quando aberto: a leitura do resumo não sai a cada ficha aberta */}
+        {selecionada === 4 && <PainelResumo proposicaoId={ficha.proposicao.id} token={token} />}
+      </section>
+
+      <section
+        className="painel"
         id="p-anexos"
         role="tabpanel"
         aria-labelledby="t-anexos"
         tabIndex={0}
-        hidden={selecionada !== 4}
+        hidden={selecionada !== 5}
       >
         <EmBreve
           titulo="Anexos"

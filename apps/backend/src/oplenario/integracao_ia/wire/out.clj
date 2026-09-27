@@ -61,6 +61,19 @@
    [:conteudo-sha256 :string]
    [:origem-redacao :string]])
 
+(def TextoProposicaoOut
+  "A.8: o texto PUBLICO de uma proposicao para a IA redigir o resumo cidadao. `texto-sha256` identifica a versao
+  (ementa + texto vigente) — a IA so' redige de novo quando ela muda."
+  [:map {:closed true}
+   [:proposicao-id :string]
+   [:tipo :string]
+   [:ano :int]
+   [:sequencial :int]
+   [:ementa :string]
+   [:autor-texto [:maybe :string]]
+   [:texto [:maybe :string]]
+   [:texto-sha256 :string]])
+
 (def ReciboEventoOut
   [:map {:closed true}
    [:chave :string]

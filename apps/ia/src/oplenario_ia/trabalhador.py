@@ -10,7 +10,10 @@ Três tipos de trabalho na fila própria do satélite:
   mudou do rascunho — vira `RevisaoHumana` no registro (a taxa de aceitação da ata por Casa). Uma vez por versão.
 - `indexar_transcricao` / `indexar_proposicao` (A.4): trechos -> embeddings self-host -> índice (substitui o que havia
   do mesmo documento). A transcrição entra no índice assim que fica pronta; a proposição, pelos eventos do core.
-- `notificar`: entrega os eventos ao core (`Transcricao*`, `Ata*`); tenta até o core aceitar.
+- `redigir_resumo` (A.8, junto do `indexar_proposicao` de cada `ProposicaoProtocolada`/`ProposicaoAtualizada`): lê o
+  texto no core; se a versão do texto já tem rascunho aqui, não faz nada; senão núcleo -> rascunho do resumo cidadão
+  guardado + `ResumoCidadaoPronto` na mesma operação. Proposição é pública; o publicado vive no core.
+- `notificar`: entrega os eventos ao core (`Transcricao*`, `Ata*`, `Resumo*`); tenta até o core aceitar.
 
 Falhas seguem o §22.3.5: infraestrutura/sobrecarga tentam de novo com espera crescente (limite por tipo); entrada
 falha na hora; sigilo (403 do core) DESCARTA o trabalho sem avisar ninguém — fail-closed, não é erro.
@@ -31,8 +34,10 @@ from typing import Any
 from oplenario_ia.armazem.porta import (
     Armazem,
     NovoRascunho,
+    NovoResumo,
     NovoTrabalho,
     RascunhoGuardado,
+    ResumoGuardado,
     RevisaoAta,
     Trabalho,
     TranscricaoGuardada,
@@ -54,10 +59,14 @@ from oplenario_ia.fronteira.contrato import (
     EventoParaCore,
     GravacaoVinculadaV1,
     ProposicaoIndexavelV1,
+    ResumoCidadaoProntoV1,
+    ResumoFalhouV1,
     TranscricaoConcluidaV1,
     TranscricaoFalhouV1,
 )
 from oplenario_ia.nucleo import Nucleo
+from oplenario_ia.resumo.redacao import PROMPT_VERSAO as PROMPT_RESUMO
+from oplenario_ia.resumo.redacao import pedido_de_resumo
 from oplenario_ia.transcricao.porta import Diarizador, Transcritor
 from oplenario_ia.transcricao.servico import transcrever_segmento
 
@@ -69,6 +78,7 @@ MAX_TENTATIVAS = {
     "registrar_revisao": 10,
     "indexar_transcricao": 5,
     "indexar_proposicao": 5,
+    "redigir_resumo": 5,
     "notificar": 20,
 }
 CATEGORIAS_DE_FALHA = {"infraestrutura", "sobrecarga", "entrada", "modelo"}  # 5 e 6 nunca viajam como falha
@@ -116,6 +126,11 @@ class Trabalhador:
                 )
             elif (ev.tipo, ev.versao) in (("ProposicaoProtocolada", 1), ("ProposicaoAtualizada", 1)):
                 novos.append(NovoTrabalho("indexar_proposicao", ev.chave, ev.ente_id, ev.payload))
+                novos.append(
+                    NovoTrabalho(
+                        "redigir_resumo", f"resumo:{ev.chave}", ev.ente_id, ev.payload | {"correlation-id": ev.chave}
+                    )
+                )
             elif (ev.tipo, ev.versao) == ("AtaRevisadaEPublicada", 1):
                 novos.append(NovoTrabalho("registrar_revisao", ev.chave, ev.ente_id, ev.payload))
             elif (ev.tipo, ev.versao) == ("AtaSolicitada", 1):
@@ -143,6 +158,8 @@ class Trabalhador:
                 self._indexar_transcricao(t)
             elif t.tipo == "indexar_proposicao":
                 self._indexar_proposicao(t)
+            elif t.tipo == "redigir_resumo":
+                self._redigir_resumo(t)
             elif t.tipo == "notificar":
                 self.core.enviar(EventoParaCore.model_validate(t.payload))
                 self.armazem.concluir(t.id)
@@ -171,6 +188,8 @@ class Trabalhador:
             if t.tipo == "transcrever"
             else [self._aviso_de_falha_da_ata(t, e)]
             if t.tipo == "redigir_ata"
+            else [self._aviso_de_falha_do_resumo(t, e)]
+            if t.tipo == "redigir_resumo"
             else []
         )
         self.armazem.desistir(t.id, erro, seguintes)
@@ -313,6 +332,64 @@ class Trabalhador:
         vetores = emb.embed([x.texto for x in trechos], "documento")
         self.armazem.indexar(t.ente_id, "proposicao", ev.proposicao_id, trechos, vetores, emb.modelo)
         self.armazem.concluir(t.id)
+
+    # ---------- o resumo cidadão (A.8) ----------
+
+    def _redigir_resumo(self, t: Trabalho) -> None:
+        if self.nucleo is None:
+            raise ErroIA(Categoria.INFRAESTRUTURA, "o núcleo de IA não está configurado", retentavel=False)
+        proposicao_id = str(t.payload["proposicao-id"])
+        texto = self.core.texto_proposicao(t.ente_id, proposicao_id)
+        ultimo = self.armazem.ultimo_resumo(t.ente_id, proposicao_id)
+        if ultimo is not None and ultimo.texto_base_sha256 == texto.texto_sha256:
+            # a mesma versão do texto (edição só de metadado, reentrega, carga inicial repetida): nada a redigir
+            self.armazem.concluir(t.id)
+            return
+        correlacao = str(t.payload.get("correlation-id") or t.chave)
+        r = self.nucleo.executar(pedido_de_resumo(texto, t.ente_id, correlacao), "por_paragrafo")
+        if isinstance(r, Indisponivel):
+            raise ErroIA(r.categoria or Categoria.ENTRADA, r.mensagem, retentavel=r.retentavel)
+        novo = NovoResumo(
+            ente_id=t.ente_id,
+            proposicao_id=proposicao_id,
+            texto_base_sha256=texto.texto_sha256,
+            execucao_id=r.execucao_id,
+            texto=r.texto,
+            citacoes=[c.model_dump(mode="json") for c in r.citacoes],
+            paragrafos_sem_fonte=list(r.paragrafos_sem_fonte),
+            incerteza=r.incerteza.model_dump(mode="json"),
+            vendor=r.vendor,
+            modelo=r.modelo,
+            prompt_versao=PROMPT_RESUMO,
+        )
+        self.armazem.concluir_resumo(t.id, novo, lambda g: self._aviso_resumo_pronto(g, correlacao))
+
+    def _aviso_resumo_pronto(self, g: ResumoGuardado, correlacao: str) -> NovoTrabalho:
+        payload = ResumoCidadaoProntoV1(
+            proposicao_id=g.proposicao_id,
+            rascunho_id=g.id,
+            texto_base_sha256=g.texto_base_sha256,
+            modelo_llm_id=f"{g.vendor}:{g.modelo}",
+            prompt_versao=g.prompt_versao,
+            incerteza=g.incerteza["nivel"],
+            n_citacoes=len(g.citacoes),
+            n_citacoes_conferidas=sum(c["status"] == "conferida" for c in g.citacoes),
+            n_paragrafos_sem_fonte=len(g.paragrafos_sem_fonte),
+        )
+        chave = f"ResumoCidadaoPronto:v1:{g.id}"
+        return self._notificacao("ResumoCidadaoPronto", chave, g.ente_id, correlacao, payload.model_dump(by_alias=True))
+
+    def _aviso_de_falha_do_resumo(self, t: Trabalho, e: ErroIA) -> NovoTrabalho:
+        categoria = e.categoria if e.categoria.value in CATEGORIAS_DE_FALHA else Categoria.MODELO
+        payload = ResumoFalhouV1(
+            proposicao_id=str(t.payload["proposicao-id"]),
+            categoria=categoria.value,
+            detalhe=e.detalhe[:2000],
+            retentavel=e.retentavel,
+        )
+        correlacao = str(t.payload.get("correlation-id") or t.chave)
+        chave = f"ResumoFalhou:v1:{hashlib.sha256(t.chave.encode()).hexdigest()[:32]}"
+        return self._notificacao("ResumoFalhou", chave, t.ente_id, correlacao, payload.model_dump(by_alias=True))
 
     def _aviso_ata_pronta(self, g: RascunhoGuardado, correlacao: str) -> NovoTrabalho:
         payload = AtaRascunhoProntaV1(

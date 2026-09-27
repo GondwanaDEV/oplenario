@@ -465,7 +465,8 @@
         ;; responde indisponivel (R-IA-1), nunca 500.
         ia (plataforma-ia/plataforma-ia integracao-ia)
         ler-transcricao-fn (fn [ente-id tid] (plataforma-ia/ler-transcricao ia ente-id tid))
-        ler-rascunho-ata-fn (fn [ente-id rid] (plataforma-ia/ler-rascunho-ata ia ente-id rid))]
+        ler-rascunho-ata-fn (fn [ente-id rid] (plataforma-ia/ler-rascunho-ata ia ente-id rid))
+        ler-rascunho-resumo-fn (fn [ente-id rid] (plataforma-ia/ler-rascunho-resumo ia ente-id rid))]
     (-> #{["/saude"             :get http/saude :route-name :saude]
           ["/eu"                :get [auth http/eu] :route-name :eu]
           ["/painel-secretaria" :get [auth (it/exige-papel "secretario") http/painel-secretaria]
@@ -516,6 +517,7 @@
                                        ;; ja' injetado em sessoes (hoje no fuso civil), mesma inversao de
                                        ;; dependencia de consultar-sessao (legislativo NAO importa cadastros, §22.10).
                                        :membros-da-casa membros-da-casa
+                                       :ler-rascunho-resumo ler-rascunho-resumo-fn
                                        :registro registro-fatos
                                        :relogio relogio-producao}))
         ;; Faixa A / A.5: a busca intra-camara (host: cruza integracao-ia, legislativo e sessoes).
@@ -555,5 +557,8 @@
                   :abrir-gravacao (fn [ente-id seg-id] (abrir-gravacao-para-ia repo-sessoes objeto-store ente-id seg-id))
                   :registrar-transcricao repo-sessoes-comp/registrar-transcricao-em-tx!
                   :registrar-rascunho-ata repo-sessoes-comp/registrar-rascunho-ata-em-tx!
-                  :ata-para-ia (fn [ente-id sessao-id versao] (ata-para-ia repo-sessoes ente-id sessao-id versao))})
+                  :ata-para-ia (fn [ente-id sessao-id versao] (ata-para-ia repo-sessoes ente-id sessao-id versao))
+                  ;; Faixa A / A.8: o resumo cidadao — o texto publico da proposicao e o ponteiro do rascunho (legislativo)
+                  :registrar-resumo repo-legislativo-comp/registrar-resumo-em-tx!
+                  :texto-da-proposicao (fn [ente-id pid] (repo-legislativo-comp/texto-para-ia repo-legislativo ente-id pid))})
                 #{})))))

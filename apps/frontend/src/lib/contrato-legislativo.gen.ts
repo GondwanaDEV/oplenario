@@ -404,3 +404,71 @@ export interface RequerimentoColetivoProtocoladoOut {
   assinaturaAlgoritmo: string;
   coautores: string[];
 }
+
+export interface RascunhoResumoPonteiroOut {
+  situacao: "pronto" | "falhou";
+  rascunhoId: string | null;
+  desatualizado: boolean;
+  modeloLlmId: string | null;
+  promptVersao: string | null;
+  incerteza: "normal" | "revisar_com_atencao" | null;
+  nCitacoes: number | null;
+  nCitacoesConferidas: number | null;
+  nParagrafosSemFonte: number | null;
+  categoriaErro: string | null;
+  retentavel: boolean | null;
+  ocorridoEm: string;
+}
+
+export interface ResumoVersaoOut {
+  versao: number;
+  conteudoSha256: string;
+  desatualizado: boolean;
+  origemRedacao: "gerada_automaticamente" | "redigida_pela_casa";
+  rascunhoId: string | null;
+  modeloLlmId: string | null;
+  promptVersao: string | null;
+  publicadoPor: string;
+  publicadoEm: string;
+}
+
+export interface ResumoAtualOut {
+  versao: ResumoVersaoOut;
+  texto: string;
+}
+
+export interface ResumoProposicaoOut {
+  proposicaoId: string;
+  rascunho: RascunhoResumoPonteiroOut | null;
+  atual: ResumoAtualOut | null;
+  versoes: ResumoVersaoOut[];
+}
+
+export interface CitacaoResumoOut {
+  fonteId: string;
+  trecho?: string | null;
+  status: "conferida" | "sem_trecho" | "trecho_nao_encontrado" | "fonte_nao_lida";
+  rotulo?: string | null;
+}
+
+export interface IncertezaResumoOut {
+  nivel: "normal" | "revisar_com_atencao";
+  motivos: string[];
+}
+
+export interface RascunhoResumoOut {
+  rascunhoId: string;
+  texto: string;
+  textoLimpo: string;
+  incerteza: IncertezaResumoOut;
+  citacoes: CitacaoResumoOut[];
+  paragrafosSemFonte: number[];
+  modeloLlmId: string;
+  promptVersao: string;
+  desatualizado: boolean;
+}
+
+export interface ResumoReciboOut {
+  versao: number;
+  conteudoSha256: string;
+}

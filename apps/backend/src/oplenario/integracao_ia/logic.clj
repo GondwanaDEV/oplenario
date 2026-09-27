@@ -78,13 +78,15 @@
   "`proposicao.protocolada`/`.editada` -> `ProposicaoProtocolada`/`ProposicaoAtualizada` v1 (A.4, §22.3.3): o snapshot
   PUBLICO (proposicao e' ato publico) que a IA indexa para a busca — a ementa e a autoria. Numero, tipo e estado o core
   completa na hora de mostrar (§22.3.4). A chave da atualizacao leva o hash do texto: editar de novo com o mesmo texto
-  nao vira evento novo; texto novo, sim."
-  [tipo-ia ente-id {:keys [proposicao-id ementa autor-texto]}]
+  nao vira evento novo; texto novo, sim — ementa e autoria sempre, e o `hash-texto` quando a edicao trocou o TEXTO
+  (A.8: e' o que faz a IA redigir de novo o resumo cidadao)."
+  [tipo-ia ente-id {:keys [proposicao-id ementa autor-texto hash-texto]}]
   {:ente-id ente-id
    :tipo    tipo-ia
    :versao  1
    :chave   (str tipo-ia ":v1:" proposicao-id
-                 (when (= tipo-ia "ProposicaoAtualizada") (str ":" (sha1-hex (str ementa "|" autor-texto)))))
+                 (when (= tipo-ia "ProposicaoAtualizada")
+                   (str ":" (sha1-hex (str ementa "|" autor-texto (when hash-texto (str "|" hash-texto)))))))
    :payload (cond-> {:proposicao-id (str proposicao-id) :ementa ementa}
               autor-texto (assoc :autor-texto autor-texto))})
 
@@ -111,9 +113,11 @@
 
 (def eventos-aceitos
   "(tipo, versao) que a caixa de entrada conhece. Desconhecido -> 422 (a IA esta' a frente do core: nao aplica)."
-  #{["TranscricaoConcluida" 1] ["TranscricaoFalhou" 1] ["AtaRascunhoPronta" 1] ["AtaFalhou" 1]})
+  #{["TranscricaoConcluida" 1] ["TranscricaoFalhou" 1] ["AtaRascunhoPronta" 1] ["AtaFalhou" 1]
+    ["ResumoCidadaoPronto" 1] ["ResumoFalhou" 1]})
 
 (def eventos-de-ata #{"AtaRascunhoPronta" "AtaFalhou"})
+(def eventos-de-resumo #{"ResumoCidadaoPronto" "ResumoFalhou"})
 
 ;; ---------- sigilo e contexto ----------
 
@@ -160,3 +164,13 @@
     "AtaFalhou"         {:situacao "falhou" :sessao-id (:sessao-id payload) :solicitacao-id (:solicitacao-id payload)
                          :categoria-erro (:categoria payload) :detalhe-erro (:detalhe payload)
                          :retentavel (:retentavel payload) :ocorrido-em ocorrido-em}))
+
+(defn fato-do-resumo
+  "Evento `ResumoCidadaoPronto`/`ResumoFalhou` (dominio) -> o fato que `legislativo` grava no ponteiro do rascunho do
+  resumo cidadao (A.8). O texto nunca vem: so' o id na IA, a versao do texto resumida, a proveniencia e os sinais."
+  [{:keys [tipo payload ocorrido-em]}]
+  (case tipo
+    "ResumoCidadaoPronto" (assoc payload :situacao "pronto" :ocorrido-em ocorrido-em)
+    "ResumoFalhou"        {:situacao "falhou" :proposicao-id (:proposicao-id payload)
+                           :categoria-erro (:categoria payload) :detalhe-erro (:detalhe payload)
+                           :retentavel (:retentavel payload) :ocorrido-em ocorrido-em}))
