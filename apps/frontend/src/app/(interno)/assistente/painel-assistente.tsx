@@ -6,19 +6,34 @@
 // nada: a mensagem manda seguir pela tela (R-IA-1).
 
 import { useState } from "react";
+import Link from "next/link";
 import { comRotuloDoPasso, rotuloDoPasso, type Conversa } from "@/lib/assistente-vista";
 import { avisoDoRascunho, paragrafosDoRascunho, rotuloDaCitacao } from "@/lib/rascunho-ata-vista";
 import { useAssistente } from "@/lib/use-assistente";
+import { comToken } from "@/lib/nav";
 
-const SUGESTOES = [
+export const SUGESTOES_SECRETARIA = [
   "Qual a situação do PL 11/2026?",
   "Por onde passou o PL 11/2026?",
   "O que vai ser votado na próxima sessão?",
   "Qual o quórum para derrubar um veto?",
 ];
 
-function Resposta({ conversa }: { conversa: Conversa }) {
+export const SUGESTOES_VEREADOR = [
+  "Protocole um requerimento de informação à Secretaria de Obras sobre a reforma da praça do Centro",
+  "Qual a situação do PL 11/2026?",
+  "Qual o quórum para derrubar um veto?",
+];
+
+const CONFIANCA_CONSULTA = "Só consulta: não protocola, não assina, não altera nada. Confira as fontes antes de usar a resposta.";
+
+export const CONFIANCA_PROPOE =
+  "Não protocola nem assina por você: quando você pede um ato, ele prepara uma proposta e você lê e decide aqui, na " +
+  "plataforma. Confira as fontes antes de usar a resposta.";
+
+function Resposta({ conversa, token }: { conversa: Conversa; token: string | null }) {
   const { passos, resposta, indisponivel } = conversa;
+  const propostas = conversa.propostas ?? [];
   const citacoes = resposta ? resposta.citacoes.map((c) => comRotuloDoPasso(c, passos)) : [];
   const aviso = resposta ? avisoDoRascunho(resposta.incerteza, resposta.contaminado ? ["conteudo_de_terceiro"] : []) : null;
   return (
@@ -31,6 +46,19 @@ function Resposta({ conversa }: { conversa: Conversa }) {
         </ul>
       )}
       {indisponivel && <p className="assistente-indisponivel" role="status">{indisponivel}</p>}
+      {propostas.length > 0 && (
+        <ul className="assistente-propostas" aria-label="Propostas preparadas">
+          {propostas.map((p) => (
+            <li key={p.id} className="assistente-proposta">
+              <span className="assistente-selo">Proposta — nada foi feito ainda</span>
+              <b>{p.titulo}</b>
+              <Link className="btn btn-primaria" href={comToken(`/propostas/${p.id}`, token)}>
+                {p.ritual === "assinatura" ? "Revisar e assinar" : "Revisar e confirmar"}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
       {resposta && (
         <>
           {aviso && <p className="assistente-aviso" role="note">{aviso}</p>}
@@ -71,8 +99,18 @@ function Resposta({ conversa }: { conversa: Conversa }) {
   );
 }
 
-export function PainelAssistente({ token = null }: { token?: string | null }) {
-  const { turnos, ocupado, perguntar } = useAssistente(token);
+export function PainelAssistente({
+  token = null,
+  sugestoes = SUGESTOES_SECRETARIA,
+  confianca = CONFIANCA_CONSULTA,
+  publico,
+}: {
+  token?: string | null;
+  sugestoes?: string[];
+  confianca?: string;
+  publico?: "secretaria" | "vereador";
+}) {
+  const { turnos, ocupado, perguntar } = useAssistente(token, publico);
   const [pergunta, setPergunta] = useState("");
 
   function enviar(texto: string) {
@@ -92,14 +130,12 @@ export function PainelAssistente({ token = null }: { token?: string | null }) {
             <p className="assistente-sub">Pergunte em palavras. Ele consulta o sistema com as suas permissões e responde citando o que encontrou.</p>
           </div>
         </div>
-        <p className="assistente-confianca">
-          Só consulta: não protocola, não assina, não altera nada. Confira as fontes antes de usar a resposta.
-        </p>
+        <p className="assistente-confianca">{confianca}</p>
       </header>
 
       {turnos.length === 0 && (
         <div className="assistente-sugestoes" aria-label="Sugestões">
-          {SUGESTOES.map((s) => (
+          {sugestoes.map((s) => (
             <button key={s} type="button" className="assistente-sugestao" onClick={() => enviar(s)}>{s}</button>
           ))}
         </div>
@@ -111,7 +147,7 @@ export function PainelAssistente({ token = null }: { token?: string | null }) {
             <p className="assistente-pergunta">{t.pergunta}</p>
             {t.fase === "respondendo" && <p className="assistente-pensando" role="status">Consultando o sistema…</p>}
             {t.fase === "erro" && <p className="assistente-indisponivel" role="status">{t.mensagem}</p>}
-            {t.fase === "pronto" && <Resposta conversa={t.conversa} />}
+            {t.fase === "pronto" && <Resposta conversa={t.conversa} token={token} />}
           </li>
         ))}
       </ol>

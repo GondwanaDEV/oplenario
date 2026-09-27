@@ -52,4 +52,33 @@ describe("PainelAssistente", () => {
     fireEvent.click(screen.getByRole("button", { name: "Perguntar" }));
     expect(await screen.findByText(/secretaria e dos vereadores/)).toBeTruthy();
   });
+
+  it("B.6: a proposta preparada vira um cartão que leva à tela de confirmar — nunca confirma aqui", async () => {
+    mockar(
+      [
+        'event: passo\ndata: {"ferramenta":"protocolar_requerimento","argumentos":{},"ok":true}',
+        'event: proposta\ndata: {"id":"p-9","titulo":"Protocolar o requerimento “Obra”","ritual":"assinatura"}',
+        'event: fim\ndata: {}',
+        "",
+      ].join("\n\n"),
+    );
+    render(<PainelAssistente token="tok" />);
+    fireEvent.change(screen.getByLabelText("Sua pergunta"), { target: { value: "protocole um requerimento" } });
+    fireEvent.click(screen.getByRole("button", { name: "Perguntar" }));
+    expect(await screen.findByText("Preparou uma proposta de requerimento — nada foi protocolado")).toBeTruthy();
+    expect(screen.getByText("Protocolar o requerimento “Obra”")).toBeTruthy();
+    const link = screen.getByRole("link", { name: "Revisar e assinar" });
+    expect(link.getAttribute("href")).toMatch(/^\/propostas\/p-9/);
+    expect(screen.queryByRole("button", { name: /Confirmar/ })).toBeNull();
+  });
+
+  it("no app do vereador pede o conjunto do vereador (quem tem os dois papéis não cai no da secretaria)", async () => {
+    const fetchMock = mockar(SSE);
+    render(<PainelAssistente token="tok" publico="vereador" />);
+    fireEvent.change(screen.getByLabelText("Sua pergunta"), { target: { value: "oi, tudo bem?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Perguntar" }));
+    await screen.findByText("Consultou a situação do PL 11/2026");
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({ pergunta: "oi, tudo bem?", publico: "vereador" });
+  });
 });

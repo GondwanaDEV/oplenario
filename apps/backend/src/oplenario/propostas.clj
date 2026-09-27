@@ -17,7 +17,7 @@
 
 (set! *warn-on-reflection* true)
 
-(def prazo (Duration/ofHours 72))
+(def ^Duration prazo (Duration/ofHours 72))
 
 (def mensagem-ao-agente
   (str "Proposta criada. Nada foi feito ainda: a pessoa revisa e confirma (ou recusa) na tela Propostas da "
@@ -38,7 +38,7 @@
                                            :ritual (name (:ritual e))
                                            :contaminada-por (repo-ia/leituras-de-terceiro repo (:ente-id ator)
                                                                                           (:execucao-id via))
-                                           :expira-em (java.sql.Timestamp/from (.plus agora prazo))})]
+                                           :expira-em (java.sql.Timestamp/from (.plus agora ^Duration prazo))})]
       {:proposta-id (str (:id p)) :titulo (:titulo p) :estado "aguardando_confirmacao"
        :mensagem mensagem-ao-agente})))
 
@@ -77,7 +77,7 @@
 (defn listar [{:keys [repo-integracao-ia relogio]} ator]
   (so-pessoa! ator)
   (repo-ia/propostas-da-pessoa repo-integracao-ia (:ente-id ator) (:identidade-id ator)
-                               (java.sql.Timestamp/from (tempo/agora relogio))))
+                               (java.sql.Timestamp/from ^Instant (tempo/agora relogio))))
 
 (defn ver
   "A proposta e, se ainda espera, o que seria feito AGORA (`:apresentacao-atual` — a data do texto e' a de hoje)."

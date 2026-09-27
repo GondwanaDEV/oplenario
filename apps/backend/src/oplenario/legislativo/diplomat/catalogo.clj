@@ -13,7 +13,8 @@
             [oplenario.legislativo.controllers :as controllers]
             [oplenario.legislativo.logic :as logic]
             [oplenario.legislativo.wire.out.proposicao :as wire]
-            [oplenario.legislativo.wire.out.requerimento :as wire-req]))
+            [oplenario.legislativo.wire.out.requerimento :as wire-req])
+  (:import (java.time ZoneId)))
 
 (set! *warn-on-reflection* true)
 
@@ -82,7 +83,11 @@
     [:and [:string {:min 1 :max 2000}] [:re #"\S"]]]
    [:campos {:optional true} Campos]])
 
-(defn- hoje [{:keys [relogio]}] (tempo/hoje (or relogio (tempo/relogio-sistema)) tempo/zona-civil-padrao))
+;; a mesma data civil da borda HTTP do legislativo (`diplomat/http/in`, zona propria do modulo — o legislativo ainda nao
+;; consome a constante de fuso do kernel): o texto assinado pela proposta e pela tela tem a mesma data.
+(def ^:private zona-civil (ZoneId/of "America/Fortaleza"))
+
+(defn- hoje [{:keys [relogio]}] (tempo/hoje (or relogio (tempo/relogio-sistema)) zona-civil))
 
 (def ^:private entradas-requerimento
   [(catalogo/entrada

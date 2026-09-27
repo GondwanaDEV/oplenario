@@ -23,6 +23,14 @@ describe("lerConversa", () => {
     expect(c.indisponivel).toBe("Siga pela tela.");
     expect(c.resposta).toBeNull();
   });
+
+  it("B.6: a proposta de ato criada na execução vira um cartão para confirmar", () => {
+    const c = lerConversa(
+      'event: proposta\ndata: {"id":"p1","titulo":"Protocolar o requerimento “X”","ritual":"assinatura"}\n\nevent: fim\ndata: {}\n\n',
+    );
+    expect(c.propostas).toEqual([{ id: "p1", titulo: "Protocolar o requerimento “X”", ritual: "assinatura" }]);
+    expect(lerConversa(SSE).propostas).toEqual([]);
+  });
 });
 
 describe("rótulos", () => {
@@ -55,6 +63,18 @@ describe("rótulos", () => {
     );
     const c = { fonteId: "norma:abc#art45_par1", trecho: "t", status: "conferida" as const, rotulo: "Regimento Interno, art. 45, § 1º (consolidada até 30/06/2026)" };
     expect(comRotuloDoPasso(c, [{ ferramenta: "ler_dispositivo", argumentos: {}, ok: true }]).rotulo).toBe(c.rotulo);
+  });
+
+  it("B.6: o passo de ato diz que só preparou a proposta", () => {
+    expect(rotuloDoPasso({ ferramenta: "modelos_de_requerimento", argumentos: {}, ok: true })).toBe(
+      "Consultou os modelos de requerimento da Casa",
+    );
+    expect(rotuloDoPasso({ ferramenta: "protocolar_requerimento", argumentos: {}, ok: true })).toBe(
+      "Preparou uma proposta de requerimento — nada foi protocolado",
+    );
+    expect(rotuloDoPasso({ ferramenta: "protocolar_requerimento", argumentos: {}, ok: false })).toBe(
+      "Não conseguiu preparar a proposta de requerimento",
+    );
   });
 
   it("erros em linguagem de quem usa", () => {
