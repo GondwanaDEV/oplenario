@@ -4,7 +4,7 @@
   gravada na versao de texto no MESMO insert do conteudo (mig 0082), imutavel depois; a autoria vinda do
   resolvedor (nunca do corpo); o texto do modelo da Casa com autor e data do servidor; e que o Expediente nao
   gera documento administrativo a partir de um modelo de requerimento."
-  (:require [clojure.test :refer [deftest is use-fixtures]]
+  (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [com.stuartsierra.component :as component]
             [next.jdbc :as jdbc]
             [oplenario.config :as config]
@@ -162,3 +162,62 @@
                                                                           :dados {} :created-by (random-uuid)})
                                 (catch clojure.lang.ExceptionInfo e e)))))
         "400, nunca o 500 do CHECK da tabela documento")))
+
+;; ---------- Faixa B / B.7: o copiloto do requerimento ----------
+
+(defn- modelo-com-justificativa! [ente]
+  (let [id (random-uuid)]
+    (repo/criar-modelo! *repo* ente {:id id :chave (str "m-" id) :nome "Requerimento de informação"
+                                     :tipo-documento "requerimento_proposicao" :created-by (random-uuid)
+                                     :corpo-template (str "{{vereador}} requer a {{destinatario}} informacoes sobre "
+                                                          "{{assunto}}.\n\nJUSTIFICATIVA\n\n{{justificativa}}\n\n{{data}}")})
+    id))
+
+(deftest copiloto-confere-o-rascunho-da-ia-contra-os-modelos-da-casa
+  (let [ente (random-uuid) identidade (random-uuid)
+        mid (modelo-com-justificativa! ente)
+        ator {:ente-id ente :identidade-id identidade}
+        resolver-autor (fn [_ i] (when (= i identidade) {:id (random-uuid) :nome "Ana Prado"}))
+        pedidos (atom [])
+        ia (fn [resposta] (fn [e p] (swap! pedidos conj [e p]) resposta))
+        justificativa {:campo "justificativa" :citacoes [{:fonte-id "norma:n1#art25" :rotulo "LOM, art. 25"
+                                                           :trecho "Compete à Câmara" :status "conferida"}]
+                       :paragrafos-sem-fonte [] :incerteza "normal" :modelo "fake-1"}
+        boa {:preenchimento {:modelo-id (str mid) :ementa " Obras da praça "
+                             :campos {:destinatario "Secretaria de Obras" :assunto "a praça"
+                                      :justificativa "Ampara-se no art. 25." :vereador "Nome Forjado"}}
+             :justificativa justificativa :indisponivel nil}
+        r (controllers/copiloto-requerimento *repo* resolver-autor (ia boa) ator {:descricao "pedir informações da praça"})]
+    (testing "a IA recebe os modelos da Casa com os campos, e a Casa vem do ator"
+      (let [[e p] (first @pedidos)]
+        (is (= ente e))
+        (is (= [{:id (str mid) :nome "Requerimento de informação" :campos ["destinatario" "assunto" "justificativa"]}]
+               (:modelos p)))))
+    (is (= {:modelo-id mid :ementa "Obras da praça"
+            :campos {"destinatario" "Secretaria de Obras" "assunto" "a praça" "justificativa" "Ampara-se no art. 25."}}
+           (:preenchimento r))
+        "so' os campos que o modelo pede: o 'vereador' forjado cai")
+    (is (= "justificativa" (get-in r [:justificativa :campo])))
+    (testing "modelo que nao e' da Casa nao chega a tela (nem a justificativa)"
+      (let [r2 (controllers/copiloto-requerimento *repo* resolver-autor
+                                                  (ia (assoc-in boa [:preenchimento :modelo-id] (str (random-uuid))))
+                                                  ator {:descricao "x x x x x"})]
+        (is (nil? (:preenchimento r2)))
+        (is (nil? (:justificativa r2)))))
+    (testing "IA sem preenchimento: nada a mostrar, com a mensagem de indisponivel se veio"
+      (is (= {:preenchimento nil :justificativa nil :indisponivel "fora"}
+             (controllers/copiloto-requerimento *repo* resolver-autor
+                                                (ia {:preenchimento nil :justificativa nil
+                                                     :indisponivel {:motivo "timeout" :mensagem "fora"}})
+                                                ator {:descricao "x x x x x"}))))
+    (testing "quem nao e' vereador desta Casa: nil (404), sem chamar a IA"
+      (reset! pedidos [])
+      (is (nil? (controllers/copiloto-requerimento *repo* resolver-autor (ia boa) (assoc ator :identidade-id (random-uuid))
+                                                   {:descricao "x x x x x"})))
+      (is (empty? @pedidos)))
+    (testing "Casa sem modelo de requerimento: nem chama a IA"
+      (is (= {:preenchimento nil :justificativa nil :indisponivel nil}
+             (controllers/copiloto-requerimento *repo* (constantly {:id 1 :nome "X"}) (ia boa)
+                                                {:ente-id (random-uuid) :identidade-id identidade}
+                                                {:descricao "x x x x x"})))
+      (is (empty? @pedidos)))))

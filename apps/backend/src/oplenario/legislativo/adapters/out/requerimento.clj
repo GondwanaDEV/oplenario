@@ -88,3 +88,14 @@
             {:proposicao-id (str id) :ano ano :sequencial sequencial :urn-lex urn-lex :estado estado
              :assinatura-algoritmo (:algoritmo assinatura) :coautores (mapv :vereador-nome coautores)}
             "recibo do requerimento coletivo viola o contrato (bug de servidor)"))
+
+;; ---------- Faixa B / B.7: o copiloto do requerimento ----------
+
+(defn copiloto->wire
+  "{:preenchimento :justificativa :indisponivel} (ja' conferido pelo controller) -> CopilotoRequerimentoOut."
+  [{:keys [preenchimento justificativa indisponivel]}]
+  (validado wire/CopilotoRequerimentoOut
+            {:preenchimento (some-> preenchimento (update :modelo-id str))
+             :justificativa justificativa
+             :indisponivel indisponivel}
+            "rascunho do copiloto viola o contrato CopilotoRequerimentoOut (bug de servidor)"))

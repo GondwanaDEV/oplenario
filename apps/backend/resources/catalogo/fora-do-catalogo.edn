@@ -18,6 +18,8 @@
                  :motivo "lista de curadoria (vigente e em conferencia); o agente le norma pela B.5 (buscar/ler dispositivo)"}
  :normas/versao {:categoria :so-tela
                  :motivo "tela de conferencia de uma versao; o agente le so' o vigente, pela B.5 (ler dispositivo)"}
+ :legislativo/copiloto-requerimento {:categoria :so-tela
+                                      :motivo "a tela pede a IA um rascunho para o formulario (B.7); o agente tem protocolar_requerimento"}
  ;; ---------- B.6 / ADR-0012: a confirmacao de proposta de ato e' so' da tela ----------
  :propostas/listar {:categoria :so-tela
                     :motivo "as propostas de ato que esperam a pessoa (Eixo 4.2 B); o agente cria proposta pela ferramenta do ato"}

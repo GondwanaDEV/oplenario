@@ -40,3 +40,11 @@
   "Corpo de POST /meu/requerimentos/propostas/:id/resposta: confirmar (assina) ou recusar."
   [:map {:closed true}
    [:acao [:enum "confirmar" "recusar"]]])
+
+;; ---------- Faixa B / B.7: o copiloto do requerimento ----------
+
+(def CopilotoRequerimento
+  "Corpo de POST /meu/requerimentos/copiloto: o que o vereador quer pedir, em palavras. So' isso — os modelos da Casa
+  e o autor o core resolve (anti-forja, como na previa)."
+  [:map {:closed true}
+   [:descricao [:string {:min 5 :max 1000}]]])

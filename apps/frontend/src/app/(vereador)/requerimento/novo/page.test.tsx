@@ -20,6 +20,10 @@ const protocolar = vi.fn();
 const enviarParaSubscricao = vi.fn();
 const useNovoMock = vi.fn();
 vi.mock("@/lib/use-novo-requerimento", () => ({ useNovoRequerimento: (...a: unknown[]) => useNovoMock(...a) }));
+const pedirCopiloto = vi.fn();
+vi.mock("@/lib/use-copiloto-requerimento", () => ({
+  useCopilotoRequerimento: () => ({ montando: false, pedir: (...a: unknown[]) => pedirCopiloto(...a) }),
+}));
 
 const modelos = [
   { id: "m1", nome: "Requerimento de informação", campos: ["destinatario", "justificativa"] },
@@ -166,5 +170,52 @@ describe("Novo requerimento — coletivo (fatia 2c)", () => {
     fireEvent.click(screen.getByRole("button", { name: /Ver o texto formatado/ }));
     await screen.findByText("TEXTO");
     expect(screen.getByRole("button", { name: "Revisar e assinar" })).toBeTruthy();
+  });
+});
+
+describe("Novo requerimento — o copiloto (B.7)", () => {
+  it("descrever em palavras preenche o formulário, e a justificativa vem com selo e de onde veio", async () => {
+    pedirCopiloto.mockResolvedValue({
+      tipo: "preenchido",
+      resposta: {
+        preenchimento: {
+          modeloId: "m1",
+          ementa: "Informações sobre a obra da praça",
+          campos: { destinatario: "Secretaria de Obras", justificativa: "A iniciativa ampara-se no art. 25." },
+        },
+        justificativa: {
+          campo: "justificativa",
+          citacoes: [{ fonteId: "norma:n1#art25", rotulo: "Lei Orgânica, art. 25 (consolidada até 30/06/2026)", trecho: "Compete à Câmara", status: "conferida" }],
+          paragrafosSemFonte: [],
+          incerteza: "normal",
+          modelo: "fake-1",
+        },
+        indisponivel: null,
+      },
+    });
+    montar();
+    fireEvent.change(screen.getByLabelText("Descreva o que quer pedir"), {
+      target: { value: "pedir à Secretaria de Obras informações sobre a obra da praça" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preencher com o assistente" }));
+    await waitFor(() => expect((screen.getByLabelText("Ementa") as HTMLInputElement).value).toBe("Informações sobre a obra da praça"));
+    expect(pedirCopiloto).toHaveBeenCalledWith("pedir à Secretaria de Obras informações sobre a obra da praça");
+    expect((screen.getByLabelText("Requerimento de informação") as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("Destinatário") as HTMLInputElement).value).toBe("Secretaria de Obras");
+    expect((screen.getByLabelText("Justificativa") as HTMLTextAreaElement).value).toMatch(/art\. 25/);
+    expect(screen.getByText("Rascunho do assistente — revise antes de assinar")).toBeTruthy();
+    expect(screen.getByText("De onde veio (1)")).toBeTruthy();
+    expect(screen.getByText(/Revise cada campo/)).toBeTruthy();
+    // o resto é o fluxo de sempre: o vereador vê o texto e assina
+    expect((screen.getByRole("button", { name: "Ver o texto formatado" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("assistente fora: a mensagem manda preencher à mão, nada é tocado", async () => {
+    pedirCopiloto.mockResolvedValue({ tipo: "nada", mensagem: "O assistente está indisponível agora. Preencha o formulário." });
+    montar();
+    fireEvent.change(screen.getByLabelText("Descreva o que quer pedir"), { target: { value: "pedir informações da obra" } });
+    fireEvent.click(screen.getByRole("button", { name: "Preencher com o assistente" }));
+    expect(await screen.findByText(/indisponível agora/)).toBeTruthy();
+    expect((screen.getByLabelText("Requerimento de informação") as HTMLInputElement).checked).toBe(false);
   });
 });

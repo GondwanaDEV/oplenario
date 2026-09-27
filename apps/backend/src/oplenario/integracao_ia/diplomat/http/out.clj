@@ -29,7 +29,11 @@
   (executar-agente [this ente-id pedido]
     "Faixa B / B.3: uma execucao do agente. `pedido` = {:pergunta :credencial :correlation_id} -> {:passos :resposta
     :indisponivel}. A credencial e' a delegada da execucao (ADR-0010): e' com ela, e so' com ela, que o satelite
-    volta ao core pelo MCP. Timeout de uma conversa (60 s). Lanca `:ia/indisponivel`."))
+    volta ao core pelo MCP. Timeout de uma conversa (60 s). Lanca `:ia/indisponivel`.")
+  (rascunhar-requerimento [this ente-id pedido]
+    "Faixa B / B.7: o copiloto do requerimento. `pedido` = {:descricao :modelos [{:id :nome :campos}] :correlation_id}
+    -> {:preenchimento :justificativa :indisponivel}. Rascunho: o core confere contra os modelos e a tela devolve ao
+    formulario. Timeout de 30 s (dois passos de modelo). Lanca `:ia/indisponivel`."))
 
 (defn- indisponivel! [motivo]
   (throw (ex-info "plataforma de IA indisponivel" {:tipo :ia/indisponivel :motivo motivo})))
@@ -68,7 +72,10 @@
         (indisponivel! "busca sem resposta")))
   (executar-agente [_ ente-id pedido]
     (or (ler-json url segredo cliente (str "/v1/entes/" ente-id "/agente/execucoes") pedido (Duration/ofSeconds 60))
-        (indisponivel! "agente sem resposta"))))
+        (indisponivel! "agente sem resposta")))
+  (rascunhar-requerimento [_ ente-id pedido]
+    (or (ler-json url segredo cliente (str "/v1/entes/" ente-id "/requerimentos/rascunhos") pedido (Duration/ofSeconds 30))
+        (indisponivel! "copiloto sem resposta"))))
 
 (defn plataforma-ia
   "{:url :segredo} -> PlataformaIA. url/segredo em branco = toda leitura responde indisponivel (R-IA-1)."

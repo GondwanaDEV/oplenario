@@ -2,7 +2,8 @@
   "Gate de ENTRADA `wire/in -> dominio` do requerimento do vereador (§22.10 adapters/in, ADR-0001, fatia 2a).
   Chamado SO pelo diplomat/. Valida (fail-closed -> 400) e coage; gera o `:id` da proposicao no protocolo.
   NAO injeta autor nem data: o controller resolve do login e o diplomat passa o `hoje` do relogio."
-  (:require [malli.core :as m]
+  (:require [clojure.string :as str]
+            [malli.core :as m]
             [malli.error :as me]
             [oplenario.legislativo.wire.in.requerimento :as wire])
   (:import (java.util UUID)))
@@ -62,3 +63,13 @@
   (let [mp (so-esperados json ["acao"])]
     (validar! wire/ResponderSubscricao mp "corpo de resposta de subscricao invalido")
     (keyword (:acao mp))))
+
+;; ---------- Faixa B / B.7: o copiloto do requerimento ----------
+
+(defn copiloto->dominio
+  "Corpo (wire/in.CopilotoRequerimento) -> {:descricao}, aparada."
+  [json]
+  (when-not (map? json) (invalido! "corpo deve ser objeto JSON {descricao}" {:campo :corpo}))
+  (let [mp (update (so-esperados json ["descricao"]) :descricao #(some-> % str str/trim))]
+    (validar! wire/CopilotoRequerimento mp "pedido ao copiloto invalido")
+    {:descricao (:descricao mp)}))

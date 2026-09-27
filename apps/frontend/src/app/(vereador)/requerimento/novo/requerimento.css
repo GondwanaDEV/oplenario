@@ -40,3 +40,22 @@
 .req-selo { font-size: var(--t-13); color: var(--texto); background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio); padding: 0.8rem 1rem; line-height: 1.5; margin: 0 0 1.3rem; }
 .req-selo.provisorio { color: var(--aviso-texto); }
 .req-voltar-inicio { width: 100%; min-height: 52px; }
+
+/* Faixa B / B.7 — o copiloto: pedir em palavras, e o rascunho da justificativa com selo e fontes. */
+.req-copiloto { display: grid; gap: 0.5rem; padding: 0.9rem 1rem; margin: 0 0 1.2rem; border: 1px solid var(--cobalto);
+  border-radius: var(--raio); background: color-mix(in srgb, var(--cobalto) 8%, transparent); }
+.req-copiloto label { font-weight: 700; font-size: var(--t-13); color: var(--texto); }
+.req-copiloto textarea { width: 100%; font: inherit; font-size: var(--t-16); padding: 0.6rem 0.7rem; border-radius: 8px;
+  border: 1px solid var(--campo-borda); background: var(--surface); color: var(--texto); resize: vertical; }
+.req-copiloto-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.8rem; }
+.req-copiloto-msg { margin: 0; font-size: var(--t-13); color: var(--texto); }
+.req-sugestao { display: grid; gap: 0.35rem; margin-top: 0.4rem; }
+.req-sugestao-selo { font-size: var(--t-11); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--cobalto-texto); }
+.req-sugestao-aviso { margin: 0; padding: 0.45rem 0.7rem; border: 1px solid var(--linha); border-left: 3px solid var(--aviso-texto);
+  border-radius: 8px; font-size: var(--t-12); color: var(--texto); }
+.req-sugestao-fontes { font-size: var(--t-12); color: var(--texto-2); }
+.req-sugestao-fontes summary { cursor: pointer; font-weight: 700; color: var(--texto); }
+.req-sugestao-fontes ol { margin: 0.4rem 0 0; padding-left: 1.2rem; display: grid; gap: 0.3rem; }
+.req-sugestao-fontes b { color: var(--texto); }
+.req-sugestao-falha { color: var(--aviso-texto); }

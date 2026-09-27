@@ -8,7 +8,9 @@
 //      ilha-papel; "Revisar e assinar" abre a folha de confirmação; confirmar assina e protocola.
 // Fatia 2c: com COAUTORES escolhidos no passo 1, o passo 2 não assina — "Enviar para subscrição" grava o texto e
 // convida os colegas; o autor assina e protocola depois, na página da proposta (/requerimento/proposta/:id).
-// A IA de redação (copiloto, feature 3.11) entra depois NESTE formulário — hoje o texto vem do modelo.
+// Faixa B / B.7 — o COPILOTO (feature 3.11) entrou NESTE formulário: o vereador descreve em palavras e o assistente
+// escolhe o modelo, preenche a ementa e os campos e redige a justificativa citando a norma da Casa. É rascunho: os
+// campos ficam editáveis, a justificativa vem com o selo e "de onde veio", e o resto é o fluxo de sempre.
 //
 // A folha de confirmação e a ilha-papel REUSAM o CSS da assinatura do parecer (mesmo ritual, mesma
 // aparência — um só lugar para evoluir quando a assinatura real, ICP/gov.br, entrar). O que é só desta
@@ -20,6 +22,9 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { useNovoRequerimento } from "@/lib/use-novo-requerimento";
 import { useColegas } from "@/lib/use-subscricao";
+import { useCopilotoRequerimento } from "@/lib/use-copiloto-requerimento";
+import { avisoDaJustificativa } from "@/lib/copiloto-requerimento-vista";
+import type { JustificativaCopilotoOut } from "@/lib/contrato-legislativo.gen";
 import { Coautores } from "../coautores";
 import { campoLongo, faltando, podeVerPrevia, rotuloCampo, seloDaAssinatura } from "@/lib/requerimento-vista";
 import type { RequerimentoProtocoladoOut } from "@/lib/contrato-legislativo.gen";
@@ -42,6 +47,10 @@ export default function PaginaNovoRequerimento() {
   const [texto, setTexto] = useState<string | null>(null);
   const [sheetAberta, setSheetAberta] = useState(false);
   const [recibo, setRecibo] = useState<RequerimentoProtocoladoOut | null>(null);
+  const { montando, pedir } = useCopilotoRequerimento(token);
+  const [descricao, setDescricao] = useState("");
+  const [mensagemCopiloto, setMensagemCopiloto] = useState<string | null>(null);
+  const [sugestao, setSugestao] = useState<JustificativaCopilotoOut | null>(null);
 
   const modelo = modelos.find((m) => m.id === modeloId) ?? null;
   const campos = modelo?.campos ?? [];
@@ -57,6 +66,20 @@ export default function PaginaNovoRequerimento() {
     } catch {
       // a mensagem do servidor já está em `erro`
     }
+  }
+
+  async function preencherComAssistente() {
+    const r = await pedir(descricao.trim());
+    if (r.tipo === "nada") {
+      setMensagemCopiloto(r.mensagem);
+      return;
+    }
+    const p = r.resposta.preenchimento!;
+    setModeloId(p.modeloId);
+    setEmenta(p.ementa);
+    setValores(p.campos);
+    setSugestao(r.resposta.justificativa);
+    setMensagemCopiloto("Preenchido pelo assistente. Revise cada campo — o texto é seu e é você quem assina.");
   }
 
   async function confirmar() {
@@ -135,6 +158,34 @@ export default function PaginaNovoRequerimento() {
             A Casa ainda não cadastrou modelos de requerimento. A secretaria cadastra na aba “Modelos” do Expediente.
           </p>
         ) : (
+          <>
+          <section className="req-copiloto" aria-label="Pedir ao assistente">
+            <label htmlFor="req-copiloto">Descreva o que quer pedir</label>
+            <textarea
+              id="req-copiloto"
+              rows={3}
+              maxLength={1000}
+              value={descricao}
+              placeholder="Ex.: pedir à Secretaria de Obras informações sobre a reforma da praça do Centro"
+              onChange={(e) => setDescricao(e.target.value)}
+            />
+            <div className="req-copiloto-acoes">
+              <button
+                type="button"
+                className="btn btn-contorno"
+                disabled={montando || descricao.trim().length < 5}
+                onClick={() => void preencherComAssistente()}
+              >
+                {montando ? "Montando o pedido…" : "Preencher com o assistente"}
+              </button>
+              <span className="req-ajuda">Ou escolha o modelo e preencha à mão, abaixo.</span>
+            </div>
+            {mensagemCopiloto && (
+              <p role="status" className="req-copiloto-msg">
+                {mensagemCopiloto}
+              </p>
+            )}
+          </section>
           <form
             className="req-form"
             onSubmit={(e) => {
@@ -193,6 +244,7 @@ export default function PaginaNovoRequerimento() {
                         onChange={(e) => setValores((v) => ({ ...v, [c]: e.target.value }))}
                       />
                     )}
+                    {sugestao && sugestao.campo === c && <SugestaoDoAssistente j={sugestao} />}
                   </div>
                 ))}
                 <p className="req-ajuda">Seu nome e a data de hoje entram no texto automaticamente.</p>
@@ -216,6 +268,7 @@ export default function PaginaNovoRequerimento() {
               </div>
             </div>
           </form>
+          </>
         )
       ) : (
         <>
@@ -301,6 +354,36 @@ export default function PaginaNovoRequerimento() {
             <p className="legal">A assinatura é registrada no sistema junto com o texto, e não pode ser desfeita.</p>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** B.7: a justificativa que o assistente redigiu — rascunho com selo, o aviso quando a base não foi conferida e de
+ *  onde veio cada citação (o dispositivo da norma da Casa, com a data até quando o texto foi conferido). */
+function SugestaoDoAssistente({ j }: { j: JustificativaCopilotoOut }) {
+  const aviso = avisoDaJustificativa(j);
+  return (
+    <div className="req-sugestao">
+      <span className="req-sugestao-selo">Rascunho do assistente — revise antes de assinar</span>
+      {aviso && (
+        <p className="req-sugestao-aviso" role="note">
+          {aviso}
+        </p>
+      )}
+      {j.citacoes.length > 0 && (
+        <details className="req-sugestao-fontes">
+          <summary>De onde veio ({j.citacoes.length})</summary>
+          <ol>
+            {j.citacoes.map((c, i) => (
+              <li key={i} className={c.status === "conferida" ? undefined : "req-sugestao-falha"}>
+                <b>{c.rotulo ?? c.fonteId}</b>
+                {c.trecho && <span> — “{c.trecho}”</span>}
+                {c.status !== "conferida" && <span> (não conferida)</span>}
+              </li>
+            ))}
+          </ol>
+        </details>
       )}
     </div>
   );

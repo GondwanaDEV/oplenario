@@ -84,6 +84,11 @@
    ["ConvitesSubscricaoOut" requerimento/ConvitesSubscricaoOut]
    ["RespostaSubscricaoOut" requerimento/RespostaSubscricaoOut]
    ["RequerimentoColetivoProtocoladoOut" requerimento/RequerimentoColetivoProtocoladoOut]
+   ;; Faixa B / B.7 (copiloto do requerimento) — referencias antes do composto.
+   ["PreenchimentoCopilotoOut" requerimento/PreenchimentoCopilotoOut]
+   ["CitacaoCopilotoOut" requerimento/CitacaoCopilotoOut]
+   ["JustificativaCopilotoOut" requerimento/JustificativaCopilotoOut]
+   ["CopilotoRequerimentoOut" requerimento/CopilotoRequerimentoOut]
    ;; Faixa A / A.8 (resumo cidadao) — referencias antes dos compostos.
    ["RascunhoResumoPonteiroOut" resumo/RascunhoResumoPonteiroOut]
    ["ResumoVersaoOut" resumo/ResumoVersaoOut]
