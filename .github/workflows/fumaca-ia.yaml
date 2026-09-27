@@ -10,9 +10,6 @@ name: Fumaca da IA (producao)
 # Tira screenshot de cada tela (artifact `fumaca-ia`) e FALHA se alguma checagem der [ERRO].
 
 on:
-  push:  # TEMPORARIO: so' para testar da branch antes do merge — sai antes do PR ser mergeado
-    branches: ["claude/vibrant-shannon-hpdedv"]
-    paths: [".github/workflows/fumaca-ia.yaml"]
   workflow_dispatch:
     inputs:
       apresentacao:
@@ -155,8 +152,8 @@ jobs:
           JS
       - name: Rodar fumaca
         env:
-          APRESENTACAO_ID: ${{ inputs.apresentacao || 'be377e81-094b-44c6-a56d-e7998e707324' }}
-          PERGUNTAR: ${{ inputs.perguntar || 'true' }}
+          APRESENTACAO_ID: ${{ inputs.apresentacao }}
+          PERGUNTAR: ${{ inputs.perguntar }}
         run: node fumaca.mjs
       - uses: actions/upload-artifact@v4
         if: always()
