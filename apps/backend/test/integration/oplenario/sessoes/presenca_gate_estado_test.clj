@@ -191,7 +191,10 @@
   (let [ente (random-uuid)
         sid (agendar! ente)
         aberta-em (abrir! ente sid)
-        chegada (.minusSeconds ^Instant aberta-em 720)
+        ;; 12 min antes do martelo, mas nunca antes do dia civil da sessao: aberta nos primeiros 12 min apos a
+        ;; meia-noite de Fortaleza, a chegada cairia no dia anterior e a recusa seria CORRETA (outra sessao)
+        piso (logic/piso-da-janela-de-presenca {:aberta-em aberta-em})
+        chegada (let [c (.minusSeconds ^Instant aberta-em 720)] (if (.isBefore c ^Instant piso) piso c))
         agora (.plusSeconds ^Instant aberta-em 180)
         recibo (registrar! ente sid (random-uuid) chegada agora)]
     (is (some? (:id recibo)))
