@@ -96,4 +96,10 @@
      (get env "OPERACAO_REDIRECT_URIS") (assoc-in [:operacao :redirect-uris] (lista-csv (get env "OPERACAO_REDIRECT_URIS")))
      (get env "OPERACAO_WEB_ORIGINS")   (assoc-in [:operacao :web-origins]   (lista-csv (get env "OPERACAO_WEB_ORIGINS")))
      ;; modelos de chave fisica aceitos (AAGUID, CSV). Vazio = qualquer chave de seguranca (cross-platform).
-     (get env "OPERACAO_AAGUIDS")       (assoc-in [:operacao :aaguids]       (lista-csv (get env "OPERACAO_AAGUIDS")))))))
+     (get env "OPERACAO_AAGUIDS")       (assoc-in [:operacao :aaguids]       (lista-csv (get env "OPERACAO_AAGUIDS")))
+     (get env "OPERACAO_ATESTACAO")
+     (assoc-in [:operacao :atestacao]
+               (let [v (get env "OPERACAO_ATESTACAO")]
+                 (if (#{"none" "indirect" "direct"} v)
+                   v
+                   (throw (ex-info "OPERACAO_ATESTACAO invalida — use none|indirect|direct" {:valor v})))))))))

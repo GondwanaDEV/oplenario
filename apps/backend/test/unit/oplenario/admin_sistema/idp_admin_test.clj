@@ -113,6 +113,11 @@
                               [:attributes "pkce.code.challenge.method"])))))
     (is (some #(and (= :put (:metodo %)) (str/ends-with? (:caminho %) "/required-actions/webauthn-register")) chamadas))))
 
+(deftest atestacao-direta-por-padrao
+  (is (= "direct" (:webAuthnPolicyAttestationConveyancePreference (op/politica-do-realm config)))
+      "sem config: confere a cadeia da chave (producao)")
+  (is (= "none" (:webAuthnPolicyAttestationConveyancePreference (op/politica-do-realm (assoc config :atestacao "none"))))))
+
 (deftest aaguids-restringem-o-modelo-de-chave
   (is (= ["cb69481e-8ff7-4039-93ec-0a2729a154a8"]
          (:webAuthnPolicyAcceptableAaguids (op/politica-do-realm (assoc config :aaguids ["cb69481e-8ff7-4039-93ec-0a2729a154a8"])))))

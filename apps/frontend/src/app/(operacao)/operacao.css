@@ -141,3 +141,11 @@
   .op-dl { grid-template-columns: 1fr; gap: 0.1rem; }
   .op-dl dd { margin-bottom: 0.4rem; }
 }
+
+/* barra no celular: a trilha "Supratenant" sai (a marca "Operação · console" já diz a esfera) e quem opera + Sair
+   cabem sem encostar na borda */
+@media (max-width: 620px) {
+  .topo .topo-trilha, .topo .topo-sep { display: none; }
+  .topo .topo-dir { flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; max-width: 100%; }
+  .op-sair { min-height: 34px; padding: 0 0.6rem; }
+}

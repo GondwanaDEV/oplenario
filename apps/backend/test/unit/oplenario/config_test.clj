@@ -87,4 +87,7 @@
     (is (= "https://kc-operacao" (get-in prod [:operacao :base-url])))
     (is (= "outra" (get-in prod [:operacao :admin-senha])))
     (is (= ["https://app/api/operacao/callback"] (get-in prod [:operacao :redirect-uris])))
-    (is (= ["a" "b"] (get-in prod [:operacao :aaguids])))))
+    (is (= ["a" "b"] (get-in prod [:operacao :aaguids])))
+    (is (= "direct" (get-in prod [:operacao :atestacao]))))
+  (is (= "none" (get-in (config/carregar {"OPERACAO_ATESTACAO" "none"}) [:operacao :atestacao])))
+  (is (thrown? clojure.lang.ExceptionInfo (config/carregar {"OPERACAO_ATESTACAO" "talvez"}))))

@@ -45,6 +45,9 @@
             :redirect-uris ["http://localhost:3000/api/operacao/callback"]
             :web-origins ["http://localhost:3000"]
             :aaguids []
+            ;; atestacao da chave no registro: "direct" (producao: exige as raizes FIDO no truststore do Keycloak) |
+            ;; "none" (dev/demo/CI, chave virtual). OPERACAO_ATESTACAO sobrepoe.
+            :atestacao "direct"
             :sessao {:absoluta-h 8 :ociosa-min 15}}
  ;; ADR-0008: fronteira com o satelite de IA. Segredo SO' por ambiente (OPLENARIO_IA_SEGREDO); nil = desligada.
  :integracao-ia {:segredo nil :url nil}

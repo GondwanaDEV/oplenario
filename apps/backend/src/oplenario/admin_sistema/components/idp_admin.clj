@@ -53,7 +53,7 @@
 
 (defn politica-do-realm
   "Os atributos do realm que fazem dele o realm do operador (pura; o teste le' daqui)."
-  [{:keys [realm aaguids sessao]}]
+  [{:keys [realm aaguids sessao atestacao]}]
   (cond-> {:realm realm :enabled true
            :displayName "O Plenário · Operação"
            :registrationAllowed false :resetPasswordAllowed false :rememberMe false
@@ -64,7 +64,10 @@
            :ssoSessionMaxLifespan (* 3600 (or (:absoluta-h sessao) 8))
            :webAuthnPolicyRpEntityName "O Plenário · Operação"
            :webAuthnPolicyAuthenticatorAttachment "cross-platform"
-           :webAuthnPolicyAttestationConveyancePreference "direct"
+           ;; `direct` (padrao): o Keycloak confere a cadeia de certificados da chave contra o truststore dele — em producao
+           ;; o truststore PRECISA ter as raizes FIDO dos modelos aceitos, senao nenhuma chave registra (falha fechada).
+           ;; `none` so' em dev/demo/CI (chave virtual, sem raiz confiavel).
+           :webAuthnPolicyAttestationConveyancePreference (or atestacao "direct")
            :webAuthnPolicyUserVerificationRequirement "preferred"
            :webAuthnPolicyRequireResidentKey "No"
            :webAuthnPolicyAvoidSameAuthenticatorRegister true
