@@ -90,4 +90,14 @@
  :admin-sistema/logout-sessao {:categoria :supratenant
                                :motivo "encerra a sessao do console do operador"}
  :admin-sistema/eu {:categoria :supratenant
-                    :motivo "quem e' o operador desta sessao do console"}}
+                    :motivo "quem e' o operador desta sessao do console"}
+ :admin-sistema/listar-casas {:categoria :supratenant
+                              :motivo "o registro de Casas da plataforma, visto pela Operacao (metadado, nao dado da Casa)"}
+ :admin-sistema/provisionar-casa {:categoria :supratenant
+                                  :motivo "a Operacao cria o tenant e convida o 1o administrador da Casa (handoff)"}
+ :admin-sistema/ficha-da-casa {:categoria :supratenant
+                               :motivo "a ficha da Casa no console: estado do handoff e a atuacao da Operacao nela"}
+ :admin-sistema/reenviar-convite {:categoria :supratenant
+                                  :motivo "reenvia o convite ao 1o administrador enquanto a Casa espera o handoff"}
+ :admin-sistema/reprovisionar-realm {:categoria :supratenant
+                                     :motivo "converge o realm da Casa com a config atual (ex.: gov.br ligado depois)"}}

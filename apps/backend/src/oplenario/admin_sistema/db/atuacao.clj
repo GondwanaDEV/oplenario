@@ -46,17 +46,20 @@
 
 (defn- ->registro [r]
   (-> (comum/linha->kebab r)
+      (select-keys [:id :em :operador-id :ente-id :acao :detalhe :selo])
       (update :detalhe comum/jsonb->kw)
-      (update :em ->instant)
-      (dissoc :seq)))
+      (update :em ->instant)))
 
 (defn do-ente
-  "A atuacao numa Casa, mais recente primeiro (o que a ficha da Casa mostra)."
+  "A atuacao numa Casa, mais recente primeiro (o que a ficha da Casa mostra), com o nome de quem atuou."
   [conn ente-id limite]
-  (mapv ->registro
-        (jdbc/execute! conn (sql/format {:select [:seq :id :em :operador_id :ente_id :acao :detalhe :selo]
-                                         :from [:admin_sistema.atuacao] :where [:= :ente_id ente-id]
-                                         :order-by [[:seq :desc]] :limit limite}))))
+  (mapv #(-> % ->registro (assoc :operador-nome (:operador-nome (comum/linha->kebab %))))
+        (jdbc/execute! conn (sql/format {:select [:a.seq :a.id :a.em :a.operador_id :a.ente_id :a.acao :a.detalhe :a.selo
+                                                  [:o.nome :operador_nome]]
+                                         :from [[:admin_sistema.atuacao :a]]
+                                         :left-join [[:admin_sistema.operador :o] [:= :o.id :a.operador_id]]
+                                         :where [:= :a.ente_id ente-id]
+                                         :order-by [[:a.seq :desc]] :limit limite}))))
 
 (defn verificar-corrente
   "Recalcula a corrente inteira. {:integra? true} ou {:integra? false :quebra-em <id do 1o registro que nao confere>}."

@@ -6,9 +6,12 @@
   O login espelha o da Casa (`identidade/diplomat/http/auth_in`): descoberta publica -> PKCE no BFF -> o token
   e' RE-VERIFICADO aqui (nunca se confia no BFF) -> sessao opaca em `admin_sistema.sessao_operador`."
   (:require [clojure.string :as str]
+            [oplenario.admin-sistema.adapters.in.ente :as in-ente]
+            [oplenario.admin-sistema.adapters.out.ente :as out-ente]
             [oplenario.admin-sistema.autenticacao :as auten]
             [oplenario.admin-sistema.components.idp-admin :as idp-op]
             [oplenario.admin-sistema.components.repositorio :as repo]
+            [oplenario.admin-sistema.controllers :as controllers]
             [oplenario.http :as http]
             [oplenario.interceptors :as it]
             [oplenario.kernel.tempo :as tempo])
@@ -54,12 +57,61 @@
   (let [{:keys [operador-id nome email papeis]} (:ator req)]
     (http/json-resposta 200 {:operador {:id (str operador-id) :nome nome :email email :papeis (vec (sort papeis))}})))
 
+;; ---- registro de Casas (12.1) ----
+
+(defn- com-erros
+  "Os erros do registro que viram resposta: Casa inexistente -> 404; estado que nao permite -> 409 (com o porque)."
+  [f]
+  (fn [req]
+    (try (f req)
+         (catch clojure.lang.ExceptionInfo e
+           (case (:tipo (ex-data e))
+             :admin-sistema/nao-encontrada (http/json-resposta 404 {:erro "Casa nao encontrada"})
+             :admin-sistema/conflito (http/json-resposta 409 {:erro (ex-message e)})
+             (throw e))))))
+
+(defn- ente-do-path [req] (in-ente/ente-param->uuid (get-in req [:path-params :ente])))
+
+(defn- listar-handler [repo-op]
+  (fn [_] (http/json-resposta 200 (out-ente/lista->wire (repo/listar-casas repo-op)))))
+
+(defn- provisionar-handler [repo-op deps]
+  (fn [req]
+    (let [casa (in-ente/provisionar->dominio (:json-params req))]
+      (http/json-resposta 201 (out-ente/provisionada->wire
+                               (controllers/provisionar-casa! repo-op deps (:ator req) casa))))))
+
+(defn- ficha-handler [repo-op deps]
+  (com-erros (fn [req] (http/json-resposta 200 (out-ente/ficha->wire
+                                                (controllers/ficha-da-casa repo-op deps (ente-do-path req)))))))
+
+(defn- reenviar-convite-handler [repo-op deps]
+  (com-erros (fn [req] (http/json-resposta 200 (out-ente/casa->wire
+                                                (controllers/reenviar-convite! repo-op deps (:ator req)
+                                                                               (ente-do-path req)))))))
+
+(defn- reprovisionar-realm-handler [repo-op deps]
+  (com-erros (fn [req] (http/json-resposta 200 (out-ente/casa->wire
+                                                (controllers/reprovisionar-realm! repo-op deps (:ator req)
+                                                                                  (ente-do-path req)))))))
+
 (defn rotas
-  "`operacao` = o mapa `:operacao` da config, ja' resolvido pelo host."
-  [{:keys [idp-operacao repo-admin-sistema relogio operacao]}]
-  (let [auth (it/autenticacao-operador idp-operacao repo-admin-sistema)]
+  "`operacao` = o mapa `:operacao` da config, ja' resolvido pelo host. `deps-registro` = os seams que o host injeta
+  para o provisionamento cruzar cadastros/identidade/IdP das Casas sem import (§22.10)."
+  [{:keys [idp-operacao repo-admin-sistema relogio operacao deps-registro]}]
+  (let [auth (it/autenticacao-operador idp-operacao repo-admin-sistema)
+        papel (it/exige-papel "operador")]
     #{["/operacao/descoberta" :get [(descoberta-handler operacao)] :route-name :admin-sistema/descoberta]
       ["/operacao/sessoes" :post [it/corpo-json (mint-handler idp-operacao repo-admin-sistema relogio (:sessao operacao))]
        :route-name :admin-sistema/mint-sessao]
       ["/operacao/sessoes" :delete [(logout-handler repo-admin-sistema)] :route-name :admin-sistema/logout-sessao]
-      ["/operacao/eu" :get [auth eu-handler] :route-name :admin-sistema/eu]}))
+      ["/operacao/eu" :get [auth eu-handler] :route-name :admin-sistema/eu]
+      ["/operacao/casas" :get [auth papel (listar-handler repo-admin-sistema)] :route-name :admin-sistema/listar-casas]
+      ["/operacao/casas" :post [auth papel it/corpo-json (provisionar-handler repo-admin-sistema deps-registro)]
+       :route-name :admin-sistema/provisionar-casa]
+      ["/operacao/casas/:ente" :get [auth papel (ficha-handler repo-admin-sistema deps-registro)]
+       :route-name :admin-sistema/ficha-da-casa]
+      ["/operacao/casas/:ente/convite" :post [auth papel (reenviar-convite-handler repo-admin-sistema deps-registro)]
+       :route-name :admin-sistema/reenviar-convite]
+      ["/operacao/casas/:ente/realm" :post [auth papel (reprovisionar-realm-handler repo-admin-sistema deps-registro)]
+       :route-name :admin-sistema/reprovisionar-realm]}))

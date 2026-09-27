@@ -6,6 +6,7 @@
   (:require [com.stuartsierra.component :as component]
             [oplenario.admin-sistema.components.idp-admin :as idp-admin]
             [oplenario.admin-sistema.components.repositorio :as repo-admin-sistema]
+            [oplenario.admin-sistema.diplomat.consumers :as admin-sistema-consumers]
             [oplenario.cadastros.components.repositorio :as repo-cadastros]
             [oplenario.cadastros.relacoes.cadastro :as rel-cadastros]
             [oplenario.compliance.components.repositorio :as repo-compliance]
@@ -85,7 +86,9 @@
                         (legislativo-consumers/registrar resolver-identidade-do-vereador)
                         ;; Faixa A / A.3 (ADR-0008): a fronteira com a IA promove eventos de dominio escolhidos
                         ;; (gravacao vinculada) a eventos de integracao no feed que o satelite puxa.
-                        (integracao-ia-consumers/registrar))]
+                        (integracao-ia-consumers/registrar)
+                        ;; ADR-0016: o 1o acesso do 1o administrador ativa a Casa no registro (handoff)
+                        (admin-sistema-consumers/registrar))]
    (component/system-map
    :datasource      (datasource/datasource config)
    ;; EventBus (producer): grava no shared.outbox na tx do ato. Stateless (sem Lifecycle); os Repo que

@@ -582,8 +582,29 @@
                                 :relogio relogio-producao :sessao sessao}))
         (into (identidade-http/rotas {:auth auth :repo-identidade repo-identidade :idp idp}))
         ;; ADR-0016: o console do operador. Interceptor PROPRIO (nunca o `auth` das Casas) — cross-esfera fecha.
-        (into (admin-sistema-http/rotas {:idp-operacao idp-operacao :repo-admin-sistema repo-admin-sistema
-                                         :relogio relogio-producao :operacao operacao}))
+        (into (admin-sistema-http/rotas
+               {:idp-operacao idp-operacao :repo-admin-sistema repo-admin-sistema
+                :relogio relogio-producao :operacao operacao
+                ;; o provisionamento cruza cadastros/identidade/IdP das Casas SO' por estes seams (§22.10)
+                :deps-registro
+                {:idp-casa idp
+                 :garantir-perfil-da-casa!
+                 (fn [ente-id {:keys [nome nome-curto uf municipio-ibge municipio-nome]}]
+                   (repo-cadastros-comp/garantir-municipio! repo-cadastros {:codigo-ibge municipio-ibge
+                                                                            :nome municipio-nome :uf uf})
+                   (repo-cadastros-comp/criar-ente! repo-cadastros ente-id
+                                                    {:ente-id ente-id :municipio-ibge municipio-ibge
+                                                     :nome-oficial nome :nome-curto nome-curto}))
+                 :garantir-primeiro-admin!
+                 (fn [ente-id {:keys [cpf nome]}]
+                   (let [iid (repo-identidade-comp/criar-identidade! repo-identidade
+                                                                      {:id (random-uuid) :cpf cpf :nome nome})]
+                     (repo-identidade-comp/conceder-acesso! repo-identidade ente-id
+                                                            {:id (random-uuid) :ente-id ente-id :identidade-id iid
+                                                             :tipo "servidor" :estado "ativo"}
+                                                            ["admin_ente"])
+                     iid))
+                 :nome-da-identidade (fn [iid] (:nome (repo-identidade-comp/nome-por-id repo-identidade iid)))}}))
         ;; Faixa A / A.3 (ADR-0008): a fronteira de SERVICO com o satelite de IA. So' entra com o Repo (os testes de
         ;; outras verticais montam sem ele). Os seams abaixo sao o unico caminho da IA ate' sessoes/cadastros.
         (into (if repo-integracao-ia
