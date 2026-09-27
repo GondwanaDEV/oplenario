@@ -116,3 +116,16 @@ síncrono que a §22.3.1 já previa.
   tabelas com a visibilidade dele (§22.3.4).
 - **Embeddings:** fake determinístico por padrão (CI e deploy), adaptador self-host em ONNX na CPU (`fastembed`,
   extra `embeddings`) por config. O corte de distância do adaptador real ainda não foi calibrado com consultas reais.
+
+## Adendo (27/09/2026) — o resumo cidadão na mesma fronteira (Faixa A / A.8)
+
+- **Gatilho:** os mesmos `ProposicaoProtocolada` / `ProposicaoAtualizada` do índice (§22.3.3; a feature 5.4 nasce do
+  protocolo). A IA lê o texto em `GET /integracao/ia/v1/entes/{ente}/proposicoes/{id}/texto` (ementa, autoria, texto
+  vigente e `texto-sha256` da versão) e só redige quando aquela versão ainda não tem rascunho. Editar só o texto passa
+  a mudar a chave de `ProposicaoAtualizada`: `proposicao.editada` leva `hash-texto` quando o texto muda.
+- **IA → core: `ResumoCidadaoPronto` v1 / `ResumoFalhou` v1**, só metadados (id do rascunho na IA, a versão do texto
+  resumida, modelo, prompt e os sinais da Camada de Confiança). O texto fica em `ia.rascunho_resumo` (§22.3.4) e o
+  core o lê sob demanda em `GET /v1/entes/{ente}/resumos/rascunhos/{id}`, só para um id que ele registrou para a
+  proposição. O texto da proposição entra no núcleo como conteúdo de terceiro (§22.11.4).
+- **Publicado:** `legislativo.resumo_cidadao`, versionado; a versão que partiu da IA leva o `rascunho-id`, com modelo e
+  prompt vindos do ponteiro. A ida ao portal (projeção da transparência) é a A.8b.

@@ -23,7 +23,8 @@ def redigir(pedido: PedidoInferencia) -> str:
             trecho = frase(ementa)
             paragrafos.append(f"Esta proposição trata do seguinte: {trecho} [[{fid} | {trecho}]]")
             break
-    dispositivos = [(fid, texto) for fid, texto in fontes if not fid.endswith("#ementa")]
+    # o primeiro dispositivo COM CONTEÚDO: um título solto ("Lei", "PROJETO DE LEI") não sustenta frase nenhuma
+    dispositivos = [(fid, texto) for fid, texto in fontes if not fid.endswith("#ementa") and len(texto.strip()) >= 40]
     if dispositivos:
         fid, texto = dispositivos[0]
         # "Art. 1º" não é fim de frase: o trecho do dispositivo é o começo dele, sem cortar na abreviação

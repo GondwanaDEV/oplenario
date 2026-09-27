@@ -267,3 +267,10 @@ def test_api_le_o_rascunho_com_texto_limpo_e_so_na_casa() -> None:
     assert b["paragrafos-sem-fonte"] == [2] and b["incerteza"]["nivel"] == "revisar_com_atencao"
     assert c.get(f"/v1/entes/{OUTRA}/resumos/rascunhos/{rid}", headers=h).status_code == 404
     assert c.get(f"/v1/entes/{ENTE}/resumos/rascunhos/{rid}").status_code == 401
+
+
+def test_fake_pula_titulo_solto_e_cita_o_primeiro_dispositivo_com_conteudo() -> None:
+    n = Nucleo(PortaFake({OPERACAO: fake.redigir}), RegistroMemoria())
+    r = n.executar(pedido_de_resumo(texto_proposicao(texto="Lei\n\n" + TEXTO), ENTE, "c-1"), "por_paragrafo")
+    assert [c.status for c in r.citacoes] == ["conferida", "conferida"]  # type: ignore[union-attr]
+    assert "Art. 1º Fica instituído" in r.texto  # type: ignore[union-attr]
