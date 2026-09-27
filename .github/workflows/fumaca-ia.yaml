@@ -1,0 +1,165 @@
+name: Fumaca da IA (producao)
+
+# Smoke das telas e leituras da Track IA em producao (oplenario.calvetec.com.br), com o satelite (apps/ia) no ar.
+# Loga de verdade via Keycloak como a persona `apresentacao` (vereador + secretario + admin_ente: a unica que abre
+# todas as telas) e confere que cada tela RENDERIZA e cada leitura da API responde. Por padrao e' SO' LEITURA.
+#
+# `perguntar=true` faz UMA pergunta real ao assistente (POST /agente/perguntas): exercita o laco do agente, o MCP de
+# volta ao core e o fornecedor configurado — grava a execucao e conta na cota da Casa, por isso e' opt-in.
+#
+# Tira screenshot de cada tela (artifact `fumaca-ia`) e FALHA se alguma checagem der [ERRO].
+
+on:
+  push:  # TEMPORARIO: so' para testar da branch antes do merge — sai antes do PR ser mergeado
+    branches: ["claude/vibrant-shannon-hpdedv"]
+    paths: [".github/workflows/fumaca-ia.yaml"]
+  workflow_dispatch:
+    inputs:
+      apresentacao:
+        # Username (= identidade-id) da persona `apresentacao` no seed ATUAL de producao — muda a cada reset do banco.
+        # O valor novo sai no passo "Ids da demo" do semear-hml (credenciais.edn, persona :apresentacao).
+        description: 'identidade-id da persona apresentacao (ver "Ids da demo" do ultimo semear)'
+        required: true
+        default: 'be377e81-094b-44c6-a56d-e7998e707324'
+        type: string
+      perguntar:
+        description: 'fazer UMA pergunta real ao assistente (grava a execucao e conta na cota)'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  fumaca:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar Playwright + Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm i -D playwright@1.47.2 >/dev/null 2>&1
+          npx playwright install --with-deps chromium
+      - name: Escrever o teste
+        run: |
+          cat > fumaca.mjs <<'JS'
+          import { chromium } from 'playwright';
+          import fs from 'node:fs';
+          fs.mkdirSync('shots', { recursive: true });
+          const B = 'https://oplenario.calvetec.com.br';
+          const E = '10000000-0000-0000-0000-000000000001';
+          const SENHA = 'Plenario@2026';
+          const USUARIO = process.env.APRESENTACAO_ID;
+          const PERGUNTAR = process.env.PERGUNTAR === 'true';
+          const R = [];
+          const rec = (tela, flag, nota) => { R.push({ tela, flag, nota }); console.log(`  [${flag}] ${tela} — ${nota}`); };
+
+          async function login(ctx, user) {
+            const p = await ctx.newPage();
+            await p.goto(`${B}/api/auth/login?ente=${E}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await p.waitForSelector('#username', { timeout: 25000 });
+            await p.fill('#username', user); await p.fill('#password', SENHA);
+            await Promise.all([ p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(()=>{}), p.click('#kc-login') ]);
+            await p.waitForTimeout(2500);
+            const ok = p.url().startsWith(B) && !new URL(p.url()).pathname.startsWith('/api/auth');
+            await p.close(); return ok;
+          }
+          async function api(ctx, path, opts = {}) {
+            const r = await ctx.request.fetch(B + path, { headers: { accept: 'application/json' }, timeout: 25000, ...opts });
+            let j = null; try { j = await r.json(); } catch {}
+            return { status: r.status(), body: j };
+          }
+          const texto = async (p) => (await p.evaluate(() => document.body?.innerText || '')).replace(/\s+/g, ' ').trim();
+          const ERRO_TELA = /Acesso restrito|Application error|Internal Server|erro inesperado/i;
+
+          async function tela(ctx, rota, nome, esperado) {
+            try {
+              const p = await ctx.newPage();
+              await p.goto(`${B}${rota}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await p.waitForTimeout(3000);
+              const t = await texto(p);
+              try { await p.screenshot({ path: `shots/${nome}.png`, fullPage: true }); } catch {}
+              await p.close();
+              const ok = esperado.test(t) && !ERRO_TELA.test(t);
+              rec(rota, ok ? 'OK' : 'ERRO', ok ? 'renderizou' : t.slice(0, 160));
+            } catch (e) { rec(rota, 'ERRO', String(e).split('\n')[0].slice(0, 140)); }
+          }
+
+          const browser = await chromium.launch();
+          try {
+            const ctx = await browser.newContext({ locale: 'pt-BR' });
+            const ok = await login(ctx, USUARIO);
+            console.log(`login apresentacao=${ok}`);
+            if (!ok) rec('login', 'ERRO', 'login da persona apresentacao falhou (id do seed atual?)');
+
+            // ---------- telas ----------
+            await tela(ctx, '/assistente', '1-assistente', /Assistente da Casa/);
+            await tela(ctx, '/vereador/assistente', '2-vereador-assistente', /Assistente da Casa/);
+            await tela(ctx, '/normas', '3-normas', /Normas da Casa/);
+            await tela(ctx, '/propostas', '4-propostas', /Propostas do assistente/);
+            await tela(ctx, '/conferencias', '5-conferencias', /Confer[eê]ncia das proposi[cç][oõ]es/);
+            await tela(ctx, '/paineis/ia', '6-paineis-ia', /IA da Casa/);
+
+            // ---------- leituras da API ----------
+            const lista = async (rota, chave) => {
+              try {
+                const r = await api(ctx, `/api${rota}`);
+                const n = Array.isArray(r.body?.[chave]) ? r.body[chave].length : null;
+                const okL = r.status === 200 && n !== null;
+                rec(`GET ${rota}`, okL ? 'OK' : 'ERRO', `status=${r.status} ${chave}=${n ?? '-'}`);
+              } catch (e) { rec(`GET ${rota}`, 'ERRO', String(e).split('\n')[0].slice(0, 140)); }
+            };
+            await lista('/normas', 'normas');
+            await lista('/propostas', 'itens');
+            await lista('/legislativo/notas-tecnicas?estado=pendente', 'itens');
+            await lista('/identidade/agentes-institucionais', 'itens');
+
+            // o painel da IA: consumo-disponivel=true so' quando o core consegue ler o consumo do satelite
+            try {
+              const r = await api(ctx, '/api/paineis/ia');
+              const b = r.body || {};
+              const okP = r.status === 200 && b['consumo-disponivel'] === true;
+              rec('GET /paineis/ia', okP ? 'OK' : 'ERRO',
+                  `status=${r.status} consumo-disponivel=${b['consumo-disponivel']} estado=${b.estado} gasto=${b.gasto ?? '-'} ` +
+                  `orcamento=${b.orcamento ? 'definido' : 'nenhum'} execucoes=${b.execucoes ?? '-'}`);
+            } catch (e) { rec('GET /paineis/ia', 'ERRO', String(e).split('\n')[0].slice(0, 140)); }
+
+            // a busca: modo=ia so' quando o core chamou o satelite e ele respondeu
+            try {
+              const r = await api(ctx, `/api/busca?q=${encodeURIComponent('municipio')}`);
+              const b = r.body || {};
+              const n = (b.resultados || []).length;
+              const okB = r.status === 200 && b.modo === 'ia' && n > 0;
+              rec('GET /busca', okB ? 'OK' : 'ERRO', `status=${r.status} modo=${b.modo} resultados=${n}`);
+            } catch (e) { rec('GET /busca', 'ERRO', String(e).split('\n')[0].slice(0, 140)); }
+
+            // ---------- opt-in: uma pergunta real ao assistente ----------
+            if (!PERGUNTAR) rec('POST /agente/perguntas', 'OK', 'pulado (perguntar=false)');
+            else try {
+              const r = await ctx.request.fetch(`${B}/api/agente/perguntas`, {
+                method: 'POST', timeout: 90000,
+                headers: { 'content-type': 'application/json', accept: 'text/event-stream' },
+                data: JSON.stringify({ pergunta: 'Quais proposições tratam de escolas?' }),
+              });
+              const corpo = await r.text();
+              const eventos = [...corpo.matchAll(/^event: (.+)$/gm)].map(m => m[1].trim());
+              const okA = r.status() === 200 && eventos.includes('resposta') && !eventos.includes('indisponivel');
+              rec('POST /agente/perguntas', okA ? 'OK' : 'ERRO', `status=${r.status()} eventos=${eventos.join(',') || '-'}`);
+            } catch (e) { rec('POST /agente/perguntas', 'ERRO', String(e).split('\n')[0].slice(0, 140)); }
+
+            console.log('\n===== RESUMO FUMACA (IA / producao) =====');
+            for (const r of R) console.log(`  [${r.flag}] ${r.tela} — ${r.nota}`);
+            console.log('== fumaca concluida ==');
+            if (!ok || R.some(r => r.flag === 'ERRO')) process.exitCode = 1;
+          } finally { await browser.close(); }
+          JS
+      - name: Rodar fumaca
+        env:
+          APRESENTACAO_ID: ${{ inputs.apresentacao || 'be377e81-094b-44c6-a56d-e7998e707324' }}
+          PERGUNTAR: ${{ inputs.perguntar || 'true' }}
+        run: node fumaca.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fumaca-ia
+          path: shots/
