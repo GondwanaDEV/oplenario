@@ -8,6 +8,8 @@ Três tipos de trabalho na fila própria do satélite:
   porta, citação conferida, incerteza, registro); guarda o rascunho e enfileira `AtaRascunhoPronta` junto.
 - `registrar_revisao` (um por `AtaRevisadaEPublicada`, A.6c): lê a ata publicada, confere o hash e mede quanto a pessoa
   mudou do rascunho — vira `RevisaoHumana` no registro (a taxa de aceitação da ata por Casa). Uma vez por versão.
+- `indexar_transcricao` / `indexar_proposicao` (A.4): trechos -> embeddings self-host -> índice (substitui o que havia
+  do mesmo documento). A transcrição entra no índice assim que fica pronta; a proposição, pelos eventos do core.
 - `notificar`: entrega os eventos ao core (`Transcricao*`, `Ata*`); tenta até o core aceitar.
 
 Falhas seguem o §22.3.5: infraestrutura/sobrecarga tentam de novo com espera crescente (limite por tipo); entrada
@@ -37,6 +39,8 @@ from oplenario_ia.armazem.porta import (
 )
 from oplenario_ia.ata.redacao import OPERACAO as ATA_REDIGIR
 from oplenario_ia.ata.redacao import PROMPT_VERSAO, pedido_de_ata, pontos_a_confirmar, texto_limpo
+from oplenario_ia.busca.embeddings import Embedder
+from oplenario_ia.busca.indice import trechos_de_proposicao, trechos_de_transcricao
 from oplenario_ia.confianca.artefato import proporcao_alterada
 from oplenario_ia.confianca.indisponivel import Indisponivel
 from oplenario_ia.confianca.registro import Desfecho
@@ -49,6 +53,7 @@ from oplenario_ia.fronteira.contrato import (
     AtaSolicitadaV1,
     EventoParaCore,
     GravacaoVinculadaV1,
+    ProposicaoIndexavelV1,
     TranscricaoConcluidaV1,
     TranscricaoFalhouV1,
 )
@@ -58,7 +63,14 @@ from oplenario_ia.transcricao.servico import transcrever_segmento
 
 log = logging.getLogger("oplenario_ia.trabalhador")
 
-MAX_TENTATIVAS = {"transcrever": 5, "redigir_ata": 5, "registrar_revisao": 10, "notificar": 20}
+MAX_TENTATIVAS = {
+    "transcrever": 5,
+    "redigir_ata": 5,
+    "registrar_revisao": 10,
+    "indexar_transcricao": 5,
+    "indexar_proposicao": 5,
+    "notificar": 20,
+}
 CATEGORIAS_DE_FALHA = {"infraestrutura", "sobrecarga", "entrada", "modelo"}  # 5 e 6 nunca viajam como falha
 ESPERA_BASE_S = 30.0
 ESPERA_MAX_S = 1800.0
@@ -78,6 +90,7 @@ class Trabalhador:
         *,
         idioma: str = "pt",
         nucleo: Nucleo | None = None,
+        embedder: Embedder | None = None,
         agora: Callable[[], datetime] = lambda: datetime.now(UTC),
         dir_temp: Path | None = None,
     ) -> None:
@@ -87,6 +100,7 @@ class Trabalhador:
         self.diarizador = diarizador
         self.idioma = idioma
         self.nucleo = nucleo
+        self.embedder = embedder
         self.agora = agora
         self.dir_temp = dir_temp
 
@@ -100,6 +114,8 @@ class Trabalhador:
                 novos.append(
                     NovoTrabalho("transcrever", ev.chave, ev.ente_id, ev.payload | {"correlation-id": ev.chave})
                 )
+            elif (ev.tipo, ev.versao) in (("ProposicaoProtocolada", 1), ("ProposicaoAtualizada", 1)):
+                novos.append(NovoTrabalho("indexar_proposicao", ev.chave, ev.ente_id, ev.payload))
             elif (ev.tipo, ev.versao) == ("AtaRevisadaEPublicada", 1):
                 novos.append(NovoTrabalho("registrar_revisao", ev.chave, ev.ente_id, ev.payload))
             elif (ev.tipo, ev.versao) == ("AtaSolicitada", 1):
@@ -123,6 +139,10 @@ class Trabalhador:
                 self._redigir_ata(t)
             elif t.tipo == "registrar_revisao":
                 self._registrar_revisao(t)
+            elif t.tipo == "indexar_transcricao":
+                self._indexar_transcricao(t)
+            elif t.tipo == "indexar_proposicao":
+                self._indexar_proposicao(t)
             elif t.tipo == "notificar":
                 self.core.enviar(EventoParaCore.model_validate(t.payload))
                 self.armazem.concluir(t.id)
@@ -167,7 +187,18 @@ class Trabalhador:
                 ctx, t.ente_id, ev.segmento_id, arquivo, self.transcritor, self.diarizador, self.idioma
             )
         correlacao = str(t.payload.get("correlation-id") or t.chave)
-        self.armazem.concluir_transcricao(t.id, nova, lambda g: self._aviso_de_conclusao(g, correlacao))
+        guardada = self.armazem.concluir_transcricao(t.id, nova, lambda g: self._aviso_de_conclusao(g, correlacao))
+        # a busca acha o que foi dito em plenário: a transcrição nova entra no índice (trabalho próprio, com retry)
+        self.armazem.enfileirar([self.trabalho_de_indexacao(guardada)])
+
+    @staticmethod
+    def trabalho_de_indexacao(g: TranscricaoGuardada) -> NovoTrabalho:
+        return NovoTrabalho("indexar_transcricao", f"indexar:transcricao:{g.id}", g.ente_id, {"transcricao-id": g.id})
+
+    def reindexar_transcricoes(self) -> int:
+        """Enfileira a (re)indexação da versão mais recente de cada gravação — depois de trocar o modelo de embeddings,
+        ou na primeira vez que o índice liga. Idempotente: a mesma transcrição não entra duas vezes na fila."""
+        return self.armazem.enfileirar([self.trabalho_de_indexacao(g) for g in self.armazem.ultimas_transcricoes()])
 
     def _aviso_de_conclusao(self, g: TranscricaoGuardada, correlacao: str) -> NovoTrabalho:
         chave = f"TranscricaoConcluida:v1:{g.id}"
@@ -256,6 +287,31 @@ class Trabalhador:
         # é preferível a contá-la em dobro
         if nova and self.nucleo is not None:
             self.nucleo.registrar_revisao(g.execucao_id, t.ente_id, ATA_REDIGIR, ev.publicada_por, desfecho, proporcao)
+        self.armazem.concluir(t.id)
+
+    # ---------- o índice (A.4) ----------
+
+    def _exigir_embedder(self) -> Embedder:
+        if self.embedder is None:
+            raise ErroIA(Categoria.INFRAESTRUTURA, "embeddings não configurados", retentavel=False)
+        return self.embedder
+
+    def _indexar_transcricao(self, t: Trabalho) -> None:
+        emb = self._exigir_embedder()
+        g = self.armazem.transcricao(str(t.payload["transcricao-id"]))
+        if g is None:
+            raise ErroIA(Categoria.ENTRADA, "transcrição inexistente neste satélite", retentavel=False)
+        trechos = trechos_de_transcricao(g)
+        vetores = emb.embed([x.texto for x in trechos], "documento") if trechos else []
+        self.armazem.indexar(g.ente_id, "transcricao", g.segmento_id, trechos, vetores, emb.modelo)
+        self.armazem.concluir(t.id)
+
+    def _indexar_proposicao(self, t: Trabalho) -> None:
+        emb = self._exigir_embedder()
+        ev = ProposicaoIndexavelV1.model_validate(t.payload)
+        trechos = trechos_de_proposicao(ev.ementa, ev.autor_texto)
+        vetores = emb.embed([x.texto for x in trechos], "documento")
+        self.armazem.indexar(t.ente_id, "proposicao", ev.proposicao_id, trechos, vetores, emb.modelo)
         self.armazem.concluir(t.id)
 
     def _aviso_ata_pronta(self, g: RascunhoGuardado, correlacao: str) -> NovoTrabalho:

@@ -15,6 +15,7 @@ from pathlib import Path
 
 from oplenario_ia.armazem.memoria import ArmazemMemoria
 from oplenario_ia.armazem.porta import Armazem
+from oplenario_ia.busca.embeddings import criar_embedder
 from oplenario_ia.confianca.registro import RegistroConfianca, RegistroJsonl, RegistroMemoria
 from oplenario_ia.config import Config, carregar
 from oplenario_ia.fronteira.cliente import ClienteCore
@@ -53,16 +54,24 @@ def montar(config: Config) -> Trabalhador:
         diarizador,
         idioma=config.idioma,
         nucleo=Nucleo(criar_porta(config), registro),
+        embedder=criar_embedder(config),
     )
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="oplenario-ia-trabalhador", description=__doc__.split("\n")[0] if __doc__ else "")
     ap.add_argument("--uma-vez", action="store_true", help="uma volta só (puxa o feed e esvazia a fila)")
+    ap.add_argument(
+        "--reindexar",
+        action="store_true",
+        help="enfileira a reindexação de todas as transcrições (troca de modelo de embeddings, índice novo)",
+    )
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     config = carregar()
     t = montar(config)
+    if args.reindexar:
+        logging.info("reindexação: %d transcrição(ões) enfileirada(s)", t.reindexar_transcricoes())
     if args.uma_vez:
         n = t.ciclo()
         logging.info("volta concluída: %d trabalho(s) processado(s)", n)

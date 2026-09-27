@@ -302,7 +302,8 @@ jobs:
     # ADR-0008: o armazenamento proprio do satelite (schema `ia`). Banco descartavel so' para a bateria de contrato.
     services:
       postgres:
-        image: postgres:16
+        # pgvector: o indice de busca do satelite (A.4) — Postgres 16 com a extensao `vector`
+        image: pgvector/pgvector:pg16-trixie
         env:
           POSTGRES_USER: ia
           POSTGRES_PASSWORD: ia

@@ -70,12 +70,32 @@
                :conteudo-sha256 conteudo-sha256
                :conteudo-uri    (uri-ata-publicada ente-id sessao-id versao)}}))
 
+(defn- sha1-hex ^String [^String s]
+  (let [d (.digest (MessageDigest/getInstance "SHA-1") (.getBytes s StandardCharsets/UTF_8))]
+    (apply str (map #(format "%02x" (bit-and % 0xff)) d))))
+
+(defn- promover-proposicao
+  "`proposicao.protocolada`/`.editada` -> `ProposicaoProtocolada`/`ProposicaoAtualizada` v1 (A.4, §22.3.3): o snapshot
+  PUBLICO (proposicao e' ato publico) que a IA indexa para a busca — a ementa e a autoria. Numero, tipo e estado o core
+  completa na hora de mostrar (§22.3.4). A chave da atualizacao leva o hash do texto: editar de novo com o mesmo texto
+  nao vira evento novo; texto novo, sim."
+  [tipo-ia ente-id {:keys [proposicao-id ementa autor-texto]}]
+  {:ente-id ente-id
+   :tipo    tipo-ia
+   :versao  1
+   :chave   (str tipo-ia ":v1:" proposicao-id
+                 (when (= tipo-ia "ProposicaoAtualizada") (str ":" (sha1-hex (str ementa "|" autor-texto)))))
+   :payload (cond-> {:proposicao-id (str proposicao-id) :ementa ementa}
+              autor-texto (assoc :autor-texto autor-texto))})
+
 (def promocoes
   "tipo de dominio -> (fn [ente-id payload] -> evento de integracao | nil). FONTE UNICA do que atravessa."
   {"gravacao.segmento-vinculado" promover-gravacao-vinculada
    "gravacao.segmento-captado"   promover-gravacao-captada
    "ata.rascunho-solicitado"     promover-ata-solicitada
-   "ata.publicada"               promover-ata-publicada})
+   "ata.publicada"               promover-ata-publicada
+   "proposicao.protocolada"      (partial promover-proposicao "ProposicaoProtocolada")
+   "proposicao.editada"          (partial promover-proposicao "ProposicaoAtualizada")})
 
 (defn promover
   "O evento de integracao para um evento de dominio, ou nil (tipo nao promovido, ou conteudo restrito)."

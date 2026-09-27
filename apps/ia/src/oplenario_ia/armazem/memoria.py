@@ -13,10 +13,14 @@ from oplenario_ia.armazem.porta import (
     NovoRascunho,
     NovoTrabalho,
     RascunhoGuardado,
+    Resultado,
     RevisaoAta,
     Trabalho,
     TranscricaoGuardada,
+    TrechoIndice,
 )
+from oplenario_ia.busca.embeddings import normalizar
+from oplenario_ia.busca.indice import fundir
 
 
 class ArmazemMemoria:
@@ -28,6 +32,7 @@ class ArmazemMemoria:
         self._transc: dict[str, TranscricaoGuardada] = {}
         self._rasc: dict[str, RascunhoGuardado] = {}
         self._revisoes: dict[tuple[str, int], RevisaoAta] = {}
+        self._indice: dict[tuple[str, str], list[tuple[str, TrechoIndice, list[float], str]]] = {}
 
     def cursor(self) -> int:
         return self._cursor
@@ -112,6 +117,61 @@ class ArmazemMemoria:
 
     def rascunho(self, rascunho_id: str) -> RascunhoGuardado | None:
         return self._rasc.get(rascunho_id)
+
+    def enfileirar(self, novos: list[NovoTrabalho]) -> int:
+        return sum(self._enfileirar(t) for t in novos)
+
+    def ultimas_transcricoes(self) -> list[TranscricaoGuardada]:
+        ultimas: dict[str, TranscricaoGuardada] = {}
+        for t in self._transc.values():
+            if t.segmento_id not in ultimas or t.versao > ultimas[t.segmento_id].versao:
+                ultimas[t.segmento_id] = t
+        return list(ultimas.values())
+
+    def indexar(
+        self, ente_id: str, tipo: str, ref_id: str, trechos: list[TrechoIndice], vetores: list[list[float]], modelo: str
+    ) -> None:
+        self._indice[(tipo, ref_id)] = [(ente_id, t, v, modelo) for t, v in zip(trechos, vetores, strict=True)]
+
+    def buscar(
+        self,
+        ente_id: str,
+        consulta: str,
+        vetor: list[float],
+        modelo: str,
+        tipos: list[str],
+        limite: int,
+        distancia_maxima: float,
+    ) -> list[Resultado]:
+        termos = set(normalizar(consulta))
+        candidatos = {
+            f"{tipo}|{ref}|{t.parte}": (tipo, ref, t, v, m)
+            for (tipo, ref), linhas in self._indice.items()
+            if tipo in tipos
+            for (e, t, v, m) in linhas
+            if e == ente_id
+        }
+        lexico = sorted(
+            (k for k, (_, _, t, _, _) in candidatos.items() if termos & set(normalizar(t.texto))),
+            key=lambda k: -len(termos & set(normalizar(candidatos[k][2].texto))),
+        )
+        dist = {
+            k: 1 - sum(a * b for a, b in zip(vetor, c[3], strict=True)) for k, c in candidatos.items() if c[4] == modelo
+        }
+        sentido = sorted((k for k, d in dist.items() if d <= distancia_maxima), key=lambda k: dist[k])
+        score = fundir([lexico[:50], sentido[:50]])
+        melhores = sorted(score, key=lambda k: -score[k])[:limite]
+        return [
+            Resultado(
+                candidatos[k][0],
+                candidatos[k][1],
+                candidatos[k][2].parte,
+                candidatos[k][2].texto,
+                dict(candidatos[k][2].meta),
+                score[k],
+            )
+            for k in melhores
+        ]
 
     def registrar_revisao(self, revisao: RevisaoAta) -> bool:
         k = (revisao.rascunho_id, revisao.versao_ata)

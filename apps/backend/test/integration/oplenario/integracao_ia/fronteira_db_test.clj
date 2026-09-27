@@ -14,6 +14,8 @@
             [oplenario.migracao :as migracao]
             [oplenario.sessoes.components.repositorio :as repo-sessoes]
             [oplenario.sessoes.db.gravacao :as gravacao]
+            [oplenario.ia-republicar]
+            [oplenario.legislativo.db.proposicao]
             [oplenario.sessoes.db.sessao :as sessao])
   (:import (java.time Instant)))
 
@@ -35,8 +37,16 @@
 
 (defn- drena! [] (outbox/drenar! *ds* (consumers/registrar {})))
 
-(defn- do-ente [ente]
-  (filter #(= ente (:ente-id %)) (repo/listar-eventos *repo* 0 200)))
+(defn- do-ente
+  "Os eventos do feed deste ente depois do cursor, andando o feed inteiro: toda proposicao de
+  qualquer teste tambem entra no feed (A.4), entao a primeira pagina nao basta."
+  ([ente] (do-ente ente 0))
+  ([ente depois]
+   (loop [cursor depois acc []]
+     (let [pag (repo/listar-eventos *repo* cursor 500)]
+       (if (empty? pag)
+         (filterv #(= ente (:ente-id %)) acc)
+         (recur (:seq (peek (vec pag))) (into acc pag)))))))
 
 (deftest gravacao-vinculada-chega-ao-feed-uma-vez-e-restrita-nunca
   (let [ente (random-uuid) sid (random-uuid) seg (random-uuid) seg-r (random-uuid)]
@@ -67,7 +77,7 @@
     (drena!)
     (let [todos (do-ente ente)
           corte (:seq (first todos))
-          depois (filter #(= ente (:ente-id %)) (repo/listar-eventos *repo* corte 200))]
+          depois (do-ente ente corte)]
       (is (= 3 (count todos)))
       (is (= (rest (map :seq todos)) (map :seq depois)) "depois do cursor, so' os seguintes, em ordem")
       (is (= 1 (count (repo/listar-eventos *repo* 0 1))) "o limite corta"))))
@@ -216,3 +226,41 @@
       (is (re-find #"/sessoes/.+/atas/1$" (get-in e [:payload :conteudo-uri]))))
     (is (= "Ata final." (:texto (repo-sessoes/ata-versao rs ente sid 1))))
     (is (nil? (repo-sessoes/ata-versao rs ente sid 2)))))
+
+;; ---------- A.4: as proposicoes entram no indice da IA ----------
+
+(defn- proposicao! [ente sid-ignorado ementa]
+  (tenancy/com-tenant* *ds* ente
+    (fn [tx] (eventos/emitir! (outbox/bus) tx
+               (eventos/evento "proposicao.protocolada" ente
+                 {:proposicao-id sid-ignorado :tipo "projeto_lei" :ano 2026 :sequencial 7 :urn-lex "urn:x"
+                  :ementa ementa :autor-texto "Ver. Ana" :estado "protocolada"})))))
+
+(deftest proposicao-protocolada-e-editada-vao-para-o-feed-uma-vez-por-texto
+  (let [ente (random-uuid) pid (random-uuid)
+        editada! (fn [ementa] (tenancy/com-tenant* *ds* ente
+                                (fn [tx] (eventos/emitir! (outbox/bus) tx
+                                           (eventos/evento "proposicao.editada" ente
+                                             {:proposicao-id pid :ementa ementa})))))]
+    (proposicao! ente pid "Dispoe sobre a merenda escolar.")
+    (editada! "Dispoe sobre a merenda e o transporte escolar.")
+    (editada! "Dispoe sobre a merenda e o transporte escolar.") ; mesmo texto: a chave barra
+    (drena!)
+    (let [evs (do-ente ente)]
+      (is (= ["ProposicaoProtocolada" "ProposicaoAtualizada"] (mapv :tipo evs)))
+      (is (= {:proposicao-id (str pid) :ementa "Dispoe sobre a merenda escolar." :autor-texto "Ver. Ana"}
+             (:payload (first evs))) "so' o texto publico: sem numero, sem estado (o core completa na busca)"))))
+
+(deftest republicar-as-proposicoes-existentes-de-uma-casa-e-idempotente
+  (let [ente (random-uuid)
+        ids (tenancy/com-tenant* *ds* ente
+              (fn [tx] (vec (for [e ["Denomina a Rua das Flores." "Institui a semana da agua."]]
+                              (:id (oplenario.legislativo.db.proposicao/protocolar!
+                                    tx {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026
+                                        :uf "CE" :municipio-nome "Fortaleza" :ementa e}))))))]
+    (is (= 2 (oplenario.ia-republicar/republicar-proposicoes! *ds* ente)))
+    (is (= 2 (oplenario.ia-republicar/republicar-proposicoes! *ds* ente)) "rodar de novo le' de novo...")
+    (let [evs (do-ente ente)]
+      (is (= 2 (count evs)) "...mas nao duplica o feed")
+      (is (= (set (map str ids)) (set (map #(get-in % [:payload :proposicao-id]) evs))))
+      (is (every? #(= "ProposicaoAtualizada" (:tipo %)) evs)))))
