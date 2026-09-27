@@ -7,9 +7,12 @@ from typing import Literal
 
 from oplenario_ia.armazem.porta import TranscricaoGuardada, TrechoIndice
 from oplenario_ia.ata.redacao import blocos
+from oplenario_ia.fronteira.contrato import DispositivosDaNorma
 
-TipoDoc = Literal["proposicao", "transcricao"]
-TIPOS: tuple[str, ...] = ("proposicao", "transcricao")
+TipoDoc = Literal["proposicao", "transcricao", "dispositivo"]
+TIPOS: tuple[str, ...] = ("proposicao", "transcricao", "dispositivo")
+# a busca da tela (A.5) pede estes por padrao; dispositivo de norma e' do agente (B.5), que o pede explicitamente
+TIPOS_PADRAO: tuple[str, ...] = ("proposicao", "transcricao")
 TETO_TRECHO = 900  # caracteres: uma fala longa vira vários trechos (o vetor de um trecho enorme dilui o sentido)
 RRF_K = 60
 
@@ -57,3 +60,26 @@ def fundir(rankings: list[list[str]], k: int = RRF_K) -> dict[str, float]:
         for pos, chave in enumerate(lista, start=1):
             score[chave] = score.get(chave, 0.0) + 1.0 / (k + pos)
     return score
+
+
+def trechos_de_norma(n: DispositivosDaNorma) -> list[TrechoIndice]:
+    """Um trecho por dispositivo da versão vigente (B.4b): o texto leva o título da norma e o rótulo de citação
+    ("Regimento Interno, art. 12, § 1º: …"), para "art. 12" casar pela palavra exata e o assunto casar pelo sentido. O
+    endereço e o rótulo vão na meta: é por eles que o agente lê e cita o dispositivo (B.5)."""
+    saida: list[TrechoIndice] = []
+    for d in n.dispositivos:
+        if not d.texto.strip():
+            continue
+        for texto in _janelas(f"{n.titulo}, {d.rotulo}: {d.texto.strip()}"):
+            meta = {
+                "norma-id": n.norma_id,
+                "versao-id": n.versao_id,
+                "especie": n.especie,
+                "titulo": n.titulo,
+                "endereco": d.endereco,
+                "rotulo": d.rotulo,
+                "agrupador": d.agrupador,
+                "consolidada-ate": n.consolidada_ate,
+            }
+            saida.append(TrechoIndice(len(saida), texto, meta))
+    return saida

@@ -57,3 +57,10 @@
             {:proposicao-id (str (:proposicao-id t)) :tipo (:tipo t) :ano (:ano t) :sequencial (:sequencial t)
              :ementa (:ementa t) :autor-texto (:autor-texto t) :texto (:texto t) :texto-sha256 (:texto-sha256 t)}
             "texto viola o contrato TextoProposicaoOut (bug de servidor)"))
+
+(defn dispositivos-da-norma->wire [v]
+  (validado wire/DispositivosDaNormaOut
+            {:norma-id (str (:norma-id v)) :versao-id (str (:id v)) :especie (get-in v [:norma :especie])
+             :titulo (get-in v [:norma :titulo]) :consolidada-ate (some-> (:consolidada-ate v) str)
+             :dispositivos (mapv #(select-keys % [:endereco :rotulo :tipo :texto :agrupador]) (:dispositivos v))}
+            "dispositivos violam o contrato DispositivosDaNormaOut (bug de servidor)"))

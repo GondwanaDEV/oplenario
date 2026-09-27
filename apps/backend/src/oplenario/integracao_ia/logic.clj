@@ -90,6 +90,17 @@
    :payload (cond-> {:proposicao-id (str proposicao-id) :ementa ementa}
               autor-texto (assoc :autor-texto autor-texto))})
 
+(defn- promover-norma-vigente
+  "`norma.versao-vigente` -> `NormaVigente` v1 (B.4b, ADR-0011): a versao conferida de uma norma de referencia da Casa
+  vai ao indice da IA. So' identidade: a IA le os dispositivos pela fronteira, e so' os da versao que vale. Norma e'
+  publica (LOM, Regimento, lei): nao ha' sigilo a filtrar."
+  [ente-id {:keys [norma-id versao-id especie]}]
+  {:ente-id ente-id
+   :tipo    "NormaVigente"
+   :versao  1
+   :chave   (str "NormaVigente:v1:" versao-id)
+   :payload {:norma-id (str norma-id) :versao-id (str versao-id) :especie especie}})
+
 (def promocoes
   "tipo de dominio -> (fn [ente-id payload] -> evento de integracao | nil). FONTE UNICA do que atravessa."
   {"gravacao.segmento-vinculado" promover-gravacao-vinculada
@@ -97,7 +108,8 @@
    "ata.rascunho-solicitado"     promover-ata-solicitada
    "ata.publicada"               promover-ata-publicada
    "proposicao.protocolada"      (partial promover-proposicao "ProposicaoProtocolada")
-   "proposicao.editada"          (partial promover-proposicao "ProposicaoAtualizada")})
+   "proposicao.editada"          (partial promover-proposicao "ProposicaoAtualizada")
+   "norma.versao-vigente"        promover-norma-vigente})
 
 (defn promover
   "O evento de integracao para um evento de dominio, ou nil (tipo nao promovido, ou conteudo restrito)."

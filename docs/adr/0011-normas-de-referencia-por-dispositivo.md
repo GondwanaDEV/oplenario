@@ -58,3 +58,18 @@ conferência, versões consolidadas — e camadas que não são da Casa (federal
   estadual não têm Casa.
 - **PDF + busca por trechos (Eixo 7.2 A)**: já descartado — a citação precisa de endereço conferível.
 - **IA quebrando o texto**: custo por Casa, resultado não determinístico e, ainda assim, conferência humana.
+
+## Adendo (27/09/2026) — a versão vigente no índice da IA (B.4b)
+
+1. Publicar uma versão grava `norma.versao-vigente` no outbox **na mesma transação** da conferência; descartar não
+   emite nada. A fronteira (ADR-0008) promove a `NormaVigente` v1, chave `NormaVigente:v1:<versao-id>`, só com
+   identidade (norma, versão, espécie).
+2. O satélite lê os dispositivos por uma rota de serviço nova, `GET /integracao/ia/v1/entes/:ente/normas/versoes/:id/
+   dispositivos`, que **só entrega a versão vigente e só da Casa do caminho** (404 para em conferência, substituída,
+   descartada ou de outra Casa). O seam vem do host sobre o repositório de `normas`.
+3. No satélite, o trabalho `indexar_norma` indexa um trecho por dispositivo como tipo `dispositivo`, **por norma** —
+   publicar uma versão nova substitui os trechos da anterior. O trecho leva o título e o rótulo ("Lei Orgânica do
+   Município, art. 11: …"), para "art. 11" casar pela palavra e o assunto pelo sentido; o endereço e o rótulo vão na
+   meta, que é por onde o agente lê e cita (B.5). Versão que já não vale (404) conclui sem indexar.
+4. A busca da tela (A.5) continua pedindo só proposição e transcrição; dispositivo é pedido explicitamente pelo agente.
+   Normas federais e estaduais (sem Casa) ainda não entram no índice por Casa: entram junto com a curadoria do produto.

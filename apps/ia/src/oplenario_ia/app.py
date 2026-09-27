@@ -22,7 +22,7 @@ from oplenario_ia.agente.mcp import ClienteMCP
 from oplenario_ia.armazem.porta import Armazem
 from oplenario_ia.ata.redacao import pontos_a_confirmar, texto_limpo
 from oplenario_ia.busca.embeddings import Embedder, criar_embedder
-from oplenario_ia.busca.indice import TIPOS
+from oplenario_ia.busca.indice import TIPOS, TIPOS_PADRAO
 from oplenario_ia.confianca.registro import RegistroJsonl, RegistroMemoria
 from oplenario_ia.config import Config, carregar
 from oplenario_ia.erros import ErroIA, para_estruturado
@@ -46,7 +46,7 @@ class PedidoAgente(BaseModel):
 
 class PedidoBusca(BaseModel):
     consulta: str = Field(min_length=2, max_length=300)
-    tipos: list[str] = Field(default_factory=lambda: list(TIPOS))
+    tipos: list[str] = Field(default_factory=lambda: list(TIPOS_PADRAO))
     limite: int = Field(default=20, ge=1, le=50)
 
 

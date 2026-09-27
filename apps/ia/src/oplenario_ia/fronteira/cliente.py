@@ -23,6 +23,7 @@ from oplenario_ia.erros import Categoria, ErroIA
 from oplenario_ia.fronteira.contrato import (
     AtaPublicada,
     ContextoSessao,
+    DispositivosDaNorma,
     EventoParaCore,
     Feed,
     ReciboCore,
@@ -84,6 +85,25 @@ class ClienteCore:
     def texto_proposicao(self, ente_id: str, proposicao_id: str) -> TextoProposicao:
         caminho = f"/integracao/ia/v1/entes/{ente_id}/proposicoes/{proposicao_id}/texto"
         return TextoProposicao.model_validate(self._pedir("GET", caminho, "texto da proposição").json())
+
+    def dispositivos_norma(self, ente_id: str, versao_id: str) -> DispositivosDaNorma | None:
+        """Os dispositivos da versão VIGENTE (B.4b). None se ela já não é a vigente (foi substituída): o evento da
+        versão nova indexa por cima, e este trabalho não tem mais o que fazer."""
+        caminho = f"/integracao/ia/v1/entes/{ente_id}/normas/versoes/{versao_id}/dispositivos"
+        try:
+            r = self._http.request("GET", f"{self._base}{caminho}", headers=self._cab)
+        except httpx.HTTPError as e:
+            raise ErroIA(
+                Categoria.INFRAESTRUTURA,
+                f"dispositivos da norma: core inalcançável ({type(e).__name__})",
+                retentavel=True,
+                vendor="core",
+            ) from e
+        if r.status_code == 404:
+            return None
+        if r.status_code >= 400:
+            raise _erro_http(r, "dispositivos da norma")
+        return DispositivosDaNorma.model_validate(r.json())
 
     def baixar(self, uri: str, destino: Path) -> str:
         """Baixa a gravação em streaming para `destino` e confere o sha256 que o core informa. Devolve o hash."""

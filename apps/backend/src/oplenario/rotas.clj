@@ -22,6 +22,7 @@
             [oplenario.legislativo.components.repositorio :as repo-legislativo-comp]
             [oplenario.legislativo.diplomat.http.in :as legislativo-http]
             [oplenario.mcp :as mcp]
+            [oplenario.normas.components.repositorio :as repo-normas-comp]
             [oplenario.normas.diplomat.http.in :as normas-http]
             [oplenario.paineis.diplomat.http.in :as paineis-http]
             [oplenario.participacao.diplomat.http.in :as participacao-http]
@@ -570,7 +571,9 @@
                   :ata-para-ia (fn [ente-id sessao-id versao] (ata-para-ia repo-sessoes ente-id sessao-id versao))
                   ;; Faixa A / A.8: o resumo cidadao — o texto publico da proposicao e o ponteiro do rascunho (legislativo)
                   :registrar-resumo repo-legislativo-comp/registrar-resumo-em-tx!
-                  :texto-da-proposicao (fn [ente-id pid] (repo-legislativo-comp/texto-para-ia repo-legislativo ente-id pid))})
+                  :texto-da-proposicao (fn [ente-id pid] (repo-legislativo-comp/texto-para-ia repo-legislativo ente-id pid))
+                  ;; Faixa B / B.4b: os dispositivos da versao vigente de uma norma da Casa (normas), para o indice
+                  :dispositivos-vigentes (fn [ente-id vid] (repo-normas-comp/dispositivos-vigentes repo-normas ente-id vid))})
                 #{}))
         ;; Faixa B / B.3 (ADR-0009/0010): o servidor MCP do catalogo de acoes — so' com a credencial delegada do agente.
         (into (if repo-integracao-ia
