@@ -8,8 +8,9 @@ Três tipos de trabalho na fila própria do satélite:
   porta, citação conferida, incerteza, registro); guarda o rascunho e enfileira `AtaRascunhoPronta` junto.
 - `registrar_revisao` (um por `AtaRevisadaEPublicada`, A.6c): lê a ata publicada, confere o hash e mede quanto a pessoa
   mudou do rascunho — vira `RevisaoHumana` no registro (a taxa de aceitação da ata por Casa). Uma vez por versão.
-- `indexar_transcricao` / `indexar_proposicao` (A.4): trechos -> embeddings self-host -> índice (substitui o que havia
-  do mesmo documento). A transcrição entra no índice assim que fica pronta; a proposição, pelos eventos do core.
+- `indexar_transcricao` / `indexar_proposicao` (A.4) e `indexar_norma` (B.4b, a versão vigente de uma norma):
+  trechos -> embeddings self-host -> índice (substitui o que havia do mesmo documento). A transcrição entra no índice
+  assim que fica pronta; a proposição e a norma, pelos eventos do core.
 - `redigir_resumo` (A.8, junto do `indexar_proposicao` de cada `ProposicaoProtocolada`/`ProposicaoAtualizada`): lê o
   texto no core; se a versão do texto já tem rascunho aqui, não faz nada; senão núcleo -> rascunho do resumo cidadão
   guardado + `ResumoCidadaoPronto` na mesma operação. Proposição é pública; o publicado vive no core.
@@ -45,7 +46,7 @@ from oplenario_ia.armazem.porta import (
 from oplenario_ia.ata.redacao import OPERACAO as ATA_REDIGIR
 from oplenario_ia.ata.redacao import PROMPT_VERSAO, pedido_de_ata, pontos_a_confirmar, texto_limpo
 from oplenario_ia.busca.embeddings import Embedder
-from oplenario_ia.busca.indice import trechos_de_proposicao, trechos_de_transcricao
+from oplenario_ia.busca.indice import trechos_de_norma, trechos_de_proposicao, trechos_de_transcricao
 from oplenario_ia.confianca.artefato import proporcao_alterada
 from oplenario_ia.confianca.indisponivel import Indisponivel
 from oplenario_ia.confianca.registro import Desfecho
@@ -58,6 +59,7 @@ from oplenario_ia.fronteira.contrato import (
     AtaSolicitadaV1,
     EventoParaCore,
     GravacaoVinculadaV1,
+    NormaVigenteV1,
     ProposicaoIndexavelV1,
     ResumoCidadaoProntoV1,
     ResumoFalhouV1,
@@ -78,6 +80,7 @@ MAX_TENTATIVAS = {
     "registrar_revisao": 10,
     "indexar_transcricao": 5,
     "indexar_proposicao": 5,
+    "indexar_norma": 5,
     "redigir_resumo": 5,
     "notificar": 20,
 }
@@ -131,6 +134,8 @@ class Trabalhador:
                         "redigir_resumo", f"resumo:{ev.chave}", ev.ente_id, ev.payload | {"correlation-id": ev.chave}
                     )
                 )
+            elif (ev.tipo, ev.versao) == ("NormaVigente", 1):
+                novos.append(NovoTrabalho("indexar_norma", ev.chave, ev.ente_id, ev.payload))
             elif (ev.tipo, ev.versao) == ("AtaRevisadaEPublicada", 1):
                 novos.append(NovoTrabalho("registrar_revisao", ev.chave, ev.ente_id, ev.payload))
             elif (ev.tipo, ev.versao) == ("AtaSolicitada", 1):
@@ -158,6 +163,8 @@ class Trabalhador:
                 self._indexar_transcricao(t)
             elif t.tipo == "indexar_proposicao":
                 self._indexar_proposicao(t)
+            elif t.tipo == "indexar_norma":
+                self._indexar_norma(t)
             elif t.tipo == "redigir_resumo":
                 self._redigir_resumo(t)
             elif t.tipo == "notificar":
@@ -331,6 +338,18 @@ class Trabalhador:
         trechos = trechos_de_proposicao(ev.ementa, ev.autor_texto)
         vetores = emb.embed([x.texto for x in trechos], "documento")
         self.armazem.indexar(t.ente_id, "proposicao", ev.proposicao_id, trechos, vetores, emb.modelo)
+        self.armazem.concluir(t.id)
+
+    def _indexar_norma(self, t: Trabalho) -> None:
+        """B.4b: os dispositivos da versão vigente entram no índice como `dispositivo`, por NORMA — publicar uma versão
+        nova substitui os trechos da anterior. Se a versão já não é a vigente, não há o que indexar."""
+        emb = self._exigir_embedder()
+        ev = NormaVigenteV1.model_validate(t.payload)
+        n = self.core.dispositivos_norma(t.ente_id, ev.versao_id)
+        if n is not None:
+            trechos = trechos_de_norma(n)
+            vetores = emb.embed([x.texto for x in trechos], "documento") if trechos else []
+            self.armazem.indexar(t.ente_id, "dispositivo", n.norma_id, trechos, vetores, emb.modelo)
         self.armazem.concluir(t.id)
 
     # ---------- o resumo cidadão (A.8) ----------

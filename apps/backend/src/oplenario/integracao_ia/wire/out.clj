@@ -78,3 +78,19 @@
   [:map {:closed true}
    [:chave :string]
    [:aplicado :boolean]])
+
+(def DispositivosDaNormaOut
+  "B.4b: os dispositivos da versao VIGENTE de uma norma de referencia da Casa, para o indice da IA. Cada dispositivo
+  com o endereco e o rotulo com que sera' citado."
+  [:map {:closed true}
+   [:norma-id :string]
+   [:versao-id :string]
+   [:especie :string]
+   [:titulo :string]
+   [:consolidada-ate [:maybe :string]]
+   [:dispositivos [:vector [:map {:closed true}
+                            [:endereco :string]
+                            [:rotulo :string]
+                            [:tipo :string]
+                            [:texto :string]
+                            [:agrupador [:maybe :string]]]]]])

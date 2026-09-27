@@ -81,6 +81,16 @@
         (http/json-resposta 200 (adapters-out/texto-proposicao->wire t))
         (http/json-resposta 404 {:erro "proposicao nao encontrada"})))))
 
+(defn- norma-handler
+  "B.4b: os dispositivos da versao vigente de uma norma da Casa, para o indice da IA."
+  [dispositivos-vigentes]
+  (fn [req]
+    (let [ente (adapters-in/id-de-caminho (get-in req [:path-params :ente-id]) "ente-id")
+          vid  (adapters-in/id-de-caminho (get-in req [:path-params :versao-id]) "versao-id")]
+      (if-let [v (controllers/dispositivos-da-norma dispositivos-vigentes ente vid)]
+        (http/json-resposta 200 (adapters-out/dispositivos-da-norma->wire v))
+        (http/json-resposta 404 {:erro "versao vigente nao encontrada"})))))
+
 (defn- receber-handler [repo-ia efeitos]
   (fn [req]
     (try
@@ -98,7 +108,7 @@
 (defn rotas
   "Fragmento de rotas da fronteira. `segredo` = OPLENARIO_IA_SEGREDO; os seams vem do host (rotas/montar)."
   [{:keys [repo-integracao-ia segredo contexto-da-sessao abrir-gravacao registrar-transcricao registrar-rascunho-ata
-           ata-para-ia registrar-resumo texto-da-proposicao]}]
+           ata-para-ia registrar-resumo texto-da-proposicao dispositivos-vigentes]}]
   (let [servico (exige-servico-ia segredo)]
     #{[(str logic/prefixo "/eventos") :get [servico (feed-handler repo-integracao-ia)]
        :route-name :integracao-ia/feed]
@@ -116,6 +126,9 @@
       [(str logic/prefixo "/entes/:ente-id/proposicoes/:proposicao-id/texto") :get
        [servico (texto-handler (or texto-da-proposicao (fn [_ _] nil)))]
        :route-name :integracao-ia/texto-proposicao]
+      [(str logic/prefixo "/entes/:ente-id/normas/versoes/:versao-id/dispositivos") :get
+       [servico (norma-handler (or dispositivos-vigentes (fn [_ _] nil)))]
+       :route-name :integracao-ia/norma-dispositivos]
       [(str logic/prefixo "/entes/:ente-id/gravacoes/:segmento-id/conteudo") :get
        [servico (conteudo-handler abrir-gravacao)]
        :route-name :integracao-ia/conteudo]}))

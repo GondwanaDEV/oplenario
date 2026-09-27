@@ -45,3 +45,9 @@
   Proposicao e' ato publico: nao ha' sigilo a filtrar aqui."
   [texto-da-proposicao ente-id proposicao-id]
   (texto-da-proposicao ente-id proposicao-id))
+
+(defn dispositivos-da-norma
+  "B.4b: os dispositivos da versao vigente de uma norma da Casa, pelo seam das normas. nil = nao e' a vigente, ou nao e'
+  desta Casa (a IA descarta o trabalho: a versao nova tera' o seu evento)."
+  [dispositivos-vigentes ente-id versao-id]
+  (dispositivos-vigentes ente-id versao-id))

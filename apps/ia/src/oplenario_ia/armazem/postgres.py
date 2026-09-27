@@ -139,6 +139,12 @@ MIGRACOES: list[str] = [
     );
     CREATE INDEX IF NOT EXISTS idx_rascunho_resumo_prop ON ia.rascunho_resumo (ente_id, proposicao_id, criado_em);
     """,
+    # 6 — dispositivos de normas de referência no índice (B.4b, ADR-0011)
+    """
+    ALTER TABLE ia.indice_trecho DROP CONSTRAINT IF EXISTS indice_trecho_tipo_check;
+    ALTER TABLE ia.indice_trecho ADD CONSTRAINT indice_trecho_tipo_check
+      CHECK (tipo IN ('proposicao', 'transcricao', 'dispositivo'));
+    """,
 ]
 
 

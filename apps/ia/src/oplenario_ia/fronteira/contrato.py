@@ -70,6 +70,34 @@ class ProposicaoIndexavelV1(Fio):
     autor_texto: str | None = None
 
 
+class NormaVigenteV1(Fio):
+    """`NormaVigente` v1 (B.4b, ADR-0011): uma versão de norma de referência da Casa passou a valer. Só identidade: os
+    dispositivos a IA lê pela fronteira, e só os da versão vigente."""
+
+    norma_id: str
+    versao_id: str
+    especie: str
+
+
+class DispositivoNorma(Fio):
+    endereco: str
+    rotulo: str
+    tipo: str
+    texto: str
+    agrupador: str | None = None
+
+
+class DispositivosDaNorma(Fio):
+    """Os dispositivos da versão vigente de uma norma, lidos no core para o índice (B.4b)."""
+
+    norma_id: str
+    versao_id: str
+    especie: str
+    titulo: str
+    consolidada_ate: str | None = None
+    dispositivos: list[DispositivoNorma]
+
+
 class TextoProposicao(Fio):
     """O texto público de uma proposição, lido no core para o resumo cidadão (A.8). `texto-sha256` identifica a versão
     lida (ementa + texto): é o que decide se o resumo precisa ser refeito."""

@@ -128,7 +128,7 @@
    ;; Faixa A / A.3 (ADR-0008): o feed core->IA e a caixa de entrada IA->core. So' :datasource.
    :repo-integracao-ia (component/using (repo-integracao-ia/repositorio) [:datasource])
    ;; Faixa B / B.4 (ADR-0011): as normas de referencia (LOM, Regimento, leis), por dispositivo. So' :datasource.
-   :repo-normas     (component/using (repo-normas/repositorio) [:datasource])
+   :repo-normas     (component/using (repo-normas/repositorio) [:datasource :bus])
    ;; o host É a fronteira (§22.10): importa as `relacoes` dos módulos e as injeta no registry do motor.
    ;; O motor chama por nome (resolver-para), nunca importa o módulo. Sem :datasource — a `tx` do tenant
    ;; entra por-chamada (quem avalia abre a tx via Repo). O `start` roda o assert de costura (fail-closed).

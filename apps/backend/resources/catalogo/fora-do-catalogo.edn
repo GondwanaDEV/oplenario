@@ -6,6 +6,8 @@
                      :motivo "e' o proprio adaptador MCP que serve o catalogo ao agente (ADR-0009/0010), nao uma acao"}
  :agente/perguntar {:categoria :so-tela
                     :motivo "e' a porta da tela para o proprio agente: o agente nao chama o agente"}
+ :integracao-ia/norma-dispositivos {:categoria :servico
+                                    :motivo "fronteira de servico com o satelite: a IA le os dispositivos vigentes para o indice (B.4b)"}
  :normas/importar-versao {:categoria :so-tela
                           :motivo "curadoria humana: importar o texto de uma norma para conferir (Eixo 7.3); o agente nao importa norma"}
  :normas/conferir {:categoria :so-tela
