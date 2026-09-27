@@ -1,0 +1,26 @@
+/* /meus-protocolos — folha própria (convenção da casa); os chips vêm de acompanhamentos.css. */
+.mp-grupo { margin: 0 0 2rem; }
+.mp-grupo h2 { font-family: var(--display); font-size: var(--t-21); color: var(--texto); margin: 0 0 0.8rem; }
+.mp-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.9rem; }
+.mp-item { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); padding: 1.1rem 1.2rem; }
+.mp-item-topo { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+.mp-protocolo { font-family: var(--mono); font-weight: 600; font-size: var(--t-13); color: var(--texto); overflow-wrap: anywhere; }
+.mp-titulo { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); margin: 0 0 0.35rem; overflow-wrap: anywhere; }
+.mp-meta { font-size: var(--t-13); color: var(--texto-2); margin: 0; display: flex; flex-wrap: wrap; gap: 0.4rem 0.8rem; }
+.mp-prazo { font-family: var(--mono); font-size: var(--t-12); }
+.mp-vencido { color: var(--acento-texto); }
+.mp-resposta { margin: 0.8rem 0 0; padding: 0.8rem 1rem; background: var(--surface-2); border-left: 3px solid var(--marca);
+  border-radius: var(--raio-sm); }
+.mp-resposta-cab { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin: 0 0 0.3rem; }
+.mp-resposta p:last-child { font-size: var(--t-13); color: var(--texto); margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mp-item > .btn { margin-top: 0.8rem; }
+.mp-recurso { margin: 0.9rem 0 0; display: grid; gap: 0.4rem; }
+.mp-recurso label { font-size: var(--t-13); font-weight: 600; color: var(--texto); }
+.mp-recurso textarea { font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); background: var(--surface-2);
+  border: 1px solid color-mix(in srgb, var(--texto-2) 55%, var(--linha)); border-radius: var(--raio-sm); padding: 0.7rem 0.8rem;
+  min-height: 96px; resize: vertical; width: 100%; box-sizing: border-box; }
+.mp-recurso-acoes { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+.mp-recurso-ok { font-size: var(--t-13); color: var(--texto-2); margin: 0.8rem 0 0; }
+.mp-item .form-erro { color: var(--acento-texto); font-size: var(--t-13); margin: 0; }
+.mp-recurso-ok p { margin: 0; }
+.mp-recurso-ok .mp-resposta { margin-top: 0.6rem; }

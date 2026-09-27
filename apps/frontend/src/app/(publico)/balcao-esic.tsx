@@ -8,8 +8,8 @@
 // cidadão busca um protocolo de verdade — antes disso, um formulário controlado ("Acompanhar pelo
 // número") é a superfície, sem inventar um pedido de exemplo.
 //
-// "Abrir um pedido" (fluxo de escrita) exige identificação (gov.br) — fora do escopo de leitura pública
-// desta fatia (Global Constraints "só leitura pública") -> <EmBreve>.
+// "Abrir um pedido" (fluxo de escrita) exige identificação (gov.br) e leva ao formulário
+// /portal/casa/{ente}/esic/novo (formulários do cidadão, ADR-0015).
 //
 // `buscarPublico` colapsa 404 e falha de rede no mesmo `null` (degradação por seção) — não dá para
 // distinguir "protocolo não existe" de "erro transitório" com a fundação atual; a mensagem cobre os
@@ -31,11 +31,11 @@
 // breve", que já vive dentro da live region acima (não precisa de um role próprio).
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import "./participacao.css";
 import { buscarPublico } from "@/lib/portal-api";
 import { AzulejoFaixa } from "@/lib/charts/azulejo-faixa";
 import { descreverFaixa } from "@/lib/tramitacao-vista";
 import { AnelPrazo } from "@/lib/charts/anel-prazo";
-import { EmBreve } from "@/lib/em-breve";
 import { derivarStatusEsic, DIAS_TOTAL_LAI } from "@/lib/esic-vista";
 import type { AcompanhamentoEsicOut } from "@/lib/contrato-portal.gen";
 
@@ -151,10 +151,10 @@ export function BalcaoEsic({ ente }: { ente: string }) {
       </div>
 
       <div className="balcao-acoes">
-        <EmBreve
-          titulo="Abrir um pedido"
-          motivo="Abrir um novo pedido de acesso à informação exige identificação pelo gov.br (já disponível em “Entrar”); o formulário de abertura chega na próxima etapa. Enquanto isso, você já pode acompanhar um pedido existente pelo número acima."
-        />
+        <a className="btn btn-primaria" href={`/portal/casa/${ente}/esic/novo`}>
+          Abrir um pedido
+        </a>
+        <span className="nota-ident">Abrir um pedido exige identificação pelo gov.br.</span>
       </div>
 
       <p className="recibo-nota">

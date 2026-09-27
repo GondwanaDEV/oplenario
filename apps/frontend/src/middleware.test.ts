@@ -73,6 +73,13 @@ describe("middleware — gate de presença do cookie sessao em rotas protegidas"
     expect(resp.headers.get("location")).toBeNull();
   });
 
+  it("rota /meus-protocolos (cidadã) sem cookie → mesmo gate de sessão", async () => {
+    const resp = middleware(req("/meus-protocolos"));
+    expect(resp.status).toBe(307);
+    expect(new URL(resp.headers.get("location")!).searchParams.get("redirect")).toBe("/meus-protocolos");
+    expect(middleware(req("/meus-protocolos", "sessao=segredo-opaco")).headers.get("location")).toBeNull();
+  });
+
   it("(publico) /portal sem cookie → nunca gated, passa direto", async () => {
     const resp = middleware(req("/portal/materias/123"));
     expect(resp.headers.get("location")).toBeNull();

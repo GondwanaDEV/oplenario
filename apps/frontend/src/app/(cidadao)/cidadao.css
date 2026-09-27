@@ -1,0 +1,6 @@
+/* Chrome da área da cidadã: o menu "Minha área" no topo (formulários do cidadão, ADR-0015). */
+.cid-nav { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+.cid-nav a { font-size: var(--t-13); font-weight: 600; color: var(--texto-2); text-decoration: none; padding: 0.55rem 0.75rem;
+  border-radius: 8px; min-height: 44px; display: inline-flex; align-items: center; }
+.cid-nav a:hover { color: var(--texto); background: var(--surface-2); }
+.cid-nav a[aria-current="page"] { color: var(--marca); background: color-mix(in srgb, var(--marca) 8%, transparent); }

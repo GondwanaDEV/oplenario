@@ -25,9 +25,9 @@ describe("BalcaoEsic", () => {
     expect(screen.queryByText(/^Pedido nº/)).toBeNull();
   });
 
-  it("'Abrir um pedido' é em-breve honesto (fluxo autenticado deferido)", () => {
+  it("'Abrir um pedido' leva ao formulário (exige gov.br)", () => {
     render(<BalcaoEsic ente="fortaleza" />);
-    expect(screen.getByText("Abrir um pedido").textContent).toBe("Abrir um pedido");
+    expect(screen.getByRole("link", { name: "Abrir um pedido" }).getAttribute("href")).toBe("/portal/casa/fortaleza/esic/novo");
     expect(screen.getByText(/exige identificação/i)).toBeTruthy();
   });
 
