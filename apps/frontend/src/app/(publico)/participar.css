@@ -1,0 +1,42 @@
+/* "Entrar para participar" — porte de produto/design-system/o-plenario/telas/entrar-govbr.html (arquétipo auth do
+   cidadão). Classes com prefixo `pt-` para não colidir com o chassi público (.cartao/.govbr são genéricos). */
+/* `.superficie-publica .envelope` zera o padding vertical — a especificidade aqui devolve o respiro sob a barra. */
+.superficie-publica .pt-wrap { display: grid; place-items: center; padding-block: 2.5rem; min-height: 60vh; }
+.pt-cartao { width: 100%; max-width: 440px; background: var(--surface-solida); border: 1px solid var(--linha);
+  border-radius: var(--raio-lg); box-shadow: var(--sombra-alta); padding: 1.8rem 1.7rem; }
+.pt-selo { width: 52px; height: 52px; border-radius: 13px; display: grid; place-items: center; color: #fff;
+  background: var(--jade); margin: 0 0 1rem; }
+.pt-cartao h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em;
+  color: var(--texto); margin: 0; line-height: 1.1; }
+.pt-lead { font-size: var(--t-16); color: var(--texto-2); margin: 0.5rem 0 0; line-height: 1.5; }
+
+.pt-porques { display: grid; gap: 0.55rem; margin: 1.3rem 0; }
+.pt-porque { display: flex; align-items: flex-start; gap: 0.6rem; font-size: var(--t-13); color: var(--texto-2); line-height: 1.45; }
+.pt-porque svg { color: var(--marca); flex: 0 0 auto; margin-top: 2px; }
+.pt-porque b { color: var(--texto); }
+
+/* botão gov.br (identidade oficial — cores fixas, não tematizam) */
+/* `.superficie-publica a` pinta todo link com a cor de marca; o botão oficial é branco sobre o azul gov.br. */
+.superficie-publica .pt-govbr { width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.6rem; min-height: 56px;
+  border-radius: var(--raio-sm); background: #1351B4; color: #fff; font-family: var(--corpo); font-weight: 700;
+  font-size: var(--t-16); text-decoration: none; }
+.superficie-publica .pt-govbr:hover { background: #0C3D8C; color: #fff; }
+.superficie-publica .pt-govbr:focus-visible { outline: 3px solid var(--marca); outline-offset: 3px; }
+.pt-wm { font-family: var(--display); font-weight: 800; letter-spacing: -0.02em; }
+.pt-wm b { color: #FFCD07; font-weight: 800; }
+
+.pt-ou { display: flex; align-items: center; gap: 0.7rem; margin: 1.1rem 0; color: var(--texto-2); font-size: var(--t-12); }
+.pt-ou::before, .pt-ou::after { content: ""; flex: 1; height: 1px; background: var(--linha); }
+
+.pt-livre { display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.85rem 1rem;
+  background: color-mix(in srgb, var(--marca) 6%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--marca) 24%, var(--linha)); border-radius: var(--raio);
+  font-size: var(--t-13); color: var(--texto-2); line-height: 1.5; }
+.pt-livre svg { color: var(--marca); flex: 0 0 auto; margin-top: 2px; }
+.pt-livre a { color: var(--marca); font-weight: 600; text-decoration: none; }
+.pt-livre a:hover { text-decoration: underline; }
+
+.pt-lgpd { display: flex; align-items: flex-start; gap: 0.5rem; margin: 1.1rem 0 0; font-size: var(--t-12);
+  color: var(--texto-2); line-height: 1.5; }
+.pt-lgpd svg { color: var(--texto-2); flex: 0 0 auto; margin-top: 1px; }
+.pt-lgpd b { color: var(--texto); }

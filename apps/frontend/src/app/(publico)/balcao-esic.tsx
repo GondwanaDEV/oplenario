@@ -153,7 +153,7 @@ export function BalcaoEsic({ ente }: { ente: string }) {
       <div className="balcao-acoes">
         <EmBreve
           titulo="Abrir um pedido"
-          motivo="Abrir um novo pedido de acesso à informação exige identificação (Entrar com gov.br) — chega numa fatia futura de autenticação. Enquanto isso, você já pode acompanhar um pedido existente pelo número acima."
+          motivo="Abrir um novo pedido de acesso à informação exige identificação pelo gov.br (já disponível em “Entrar”); o formulário de abertura chega na próxima etapa. Enquanto isso, você já pode acompanhar um pedido existente pelo número acima."
         />
       </div>
 

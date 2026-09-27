@@ -27,3 +27,4 @@ Enforcement · Consequências · Alternativas descartadas). Complementa a SSOT (
 | [0012](0012-proposta-de-ato.md) | Proposta de ato: o agente prepara, a pessoa confirma na tela | Aceito |
 | [0013](0013-agente-institucional-e-conferencia.md) | Agente institucional da Casa (concessão do admin) e a conferência das proposições | Aceito |
 | [0014](0014-orcamento-de-ia-e-painel-da-casa.md) | Orçamento de IA por Casa, a cota no satélite e o painel da Casa | Aceito |
+| [0015](0015-cidadao-entra-pelo-govbr.md) | O cidadão entra pelo gov.br: broker no realm da Casa, sessão só de cidadão | Aceito |

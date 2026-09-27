@@ -161,3 +161,28 @@ describe("GET /api/auth/login — inicia PKCE (S256) contra o Keycloak resolvido
     }
   });
 });
+
+describe("GET /api/auth/login?via=govbr — o cidadão entra pelo gov.br (ADR-0015)", () => {
+  const fetchComGovbr = (govbr: boolean) =>
+    fetchMock(async () => new Response(JSON.stringify({ ...descobertaOk(), govbr }), { status: 200 }));
+
+  it("pede ao Keycloak da Casa que vá direto ao gov.br (kc_idp_hint)", async () => {
+    const resp = await GET(req(`/api/auth/login?ente=${ENTE}&via=govbr`), { fetchImpl: fetchComGovbr(true) });
+    expect(resp.status).toBe(307);
+    const location = new URL(resp.headers.get("location")!);
+    expect(location.searchParams.get("kc_idp_hint")).toBe("govbr");
+  });
+
+  it("o login institucional não leva a dica", async () => {
+    const resp = await GET(req(`/api/auth/login?ente=${ENTE}`), { fetchImpl: fetchComGovbr(true) });
+    expect(new URL(resp.headers.get("location")!).searchParams.get("kc_idp_hint")).toBeNull();
+  });
+
+  it("Casa sem gov.br ligado: volta à tela de participar dizendo que não está disponível, sem ir ao Keycloak", async () => {
+    const resp = await GET(req(`/api/auth/login?ente=${ENTE}&via=govbr`), { fetchImpl: fetchComGovbr(false) });
+    const location = new URL(resp.headers.get("location")!);
+    expect(location.pathname).toBe(`/portal/casa/${ENTE}/participar`);
+    expect(location.searchParams.get("erro")).toBe("indisponivel");
+    expect(resp.headers.get("set-cookie") ?? "").not.toMatch(/pkce=/);
+  });
+});

@@ -19,6 +19,11 @@
     (edn/read-string (slurp r))
     (throw (ex-info "config.edn ausente do classpath" {}))))
 
+(def govbr-simulado-client-id
+  "O client do broker no realm `govbr-simulado` (dev/demo/CI, ADR-0015). Fixo: o simulado nao guarda segredo real."
+  "oplenario-broker")
+(def govbr-simulado-client-secret "govbr-simulado-dev")
+
 (defn carregar
   "Le o config.edn e aplica overrides do ambiente. `env` default = System/getenv (java.util.Map);
   os testes injetam um mapa. Sobrepoe credenciais alem da URL — senao o pool ignoraria a URL de
@@ -63,4 +68,13 @@
      (get env "KEYCLOAK_SMTP_USUARIO")   (assoc-in [:keycloak :smtp :usuario]  (get env "KEYCLOAK_SMTP_USUARIO"))
      (get env "KEYCLOAK_SMTP_SENHA")     (assoc-in [:keycloak :smtp :senha]    (get env "KEYCLOAK_SMTP_SENHA"))
      (get env "SESSAO_ABSOLUTA_H")  (assoc-in [:sessao :absoluta-h] (Integer/parseInt (get env "SESSAO_ABSOLUTA_H")))
-     (get env "SESSAO_OCIOSA_MIN")  (assoc-in [:sessao :ociosa-min] (Integer/parseInt (get env "SESSAO_OCIOSA_MIN"))))))
+     (get env "SESSAO_OCIOSA_MIN")  (assoc-in [:sessao :ociosa-min] (Integer/parseInt (get env "SESSAO_OCIOSA_MIN")))
+     ;; ADR-0015: o broker gov.br do cidadao. Sem GOVBR_AMBIENTE = sem gov.br (o realm nao ganha o IdP e o portal
+     ;; nao mostra o botao). producao|homologacao pedem o client credenciado no gov.br (cofre); o simulado (realm
+     ;; `govbr-simulado` no proprio Keycloak, dev/demo/CI) tem client fixo semeado por `demo/govbr_simulado.clj`.
+     (get env "GOVBR_AMBIENTE")
+     (assoc-in [:keycloak :govbr]
+               (let [simulado? (= "simulado" (get env "GOVBR_AMBIENTE"))]
+                 {:ambiente      (get env "GOVBR_AMBIENTE")
+                  :client-id     (or (get env "GOVBR_CLIENT_ID") (when simulado? govbr-simulado-client-id))
+                  :client-secret (or (get env "GOVBR_CLIENT_SECRET") (when simulado? govbr-simulado-client-secret))})))))

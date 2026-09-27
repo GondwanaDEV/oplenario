@@ -83,9 +83,15 @@ não-treino, LGPD art. 33) — o fake não espera. Desenho: **`docs/25`** + doc-
 (rev. 2, "Confirmo" do Daouda com o merge do PR #38). **Ler os dois antes de escrever qualquer feature de IA.**
 `prototipos/governanca-ia/` é só referência histórica (o filtro de produção está em `apps/ia/`).
 
-**2. Dois IdPs abertos.** O broker **gov.br** (cidadão) não tem uma linha — bloqueia os fluxos de
-escrita autenticados do cidadão (a consulta pública não exige login, então M5 não está bloqueado).
-O IdP do operador (`admin_sistema`) é um **stub de 3 linhas** — bloqueia o console supratenant.
+**2. IdPs — o gov.br do cidadão ENTREGUE (27/09/2026); o do operador segue aberto.** O broker **gov.br**
+([ADR-0015](docs/adr/0015-cidadao-entra-pelo-govbr.md)) é IdP do realm de cada Casa (OIDC+PKCE, `GOVBR_AMBIENTE`
+= producao|homologacao|simulado): do gov.br entram só CPF e nome, o 1º login cria identidade (pelo CPF) + vínculo
+de cidadão + consentimento, e a sessão aberta pelo gov.br é **só de cidadão** (zero papéis, mesmo para quem é
+vereador). O portal tem "Entrar para participar" (`/portal/casa/[ente]/participar`); a cidadã cai em
+`/acompanhamentos`. Dev/demo/CI usam o **gov.br simulado** (`demo/govbr_simulado.clj`, realm no próprio Keycloak).
+**Falta:** os formulários de escrita do cidadão no portal (abrir e-SIC, pedido LGPD, ouvidoria, comentar — as rotas
+existem) e, `[GAP]` externo, o credenciamento no gov.br (client de homologação/produção + URL de retorno por Casa).
+O IdP do operador (`admin_sistema`) segue **stub de 3 linhas** — bloqueia o console supratenant.
 
 **3. Onda E da track FE — MEDIDA em 10/09/2026, e a cauda NÃO é trabalho mecânico.** A descrição
 anterior deste item ("~13 telas com design pronto e zero rota Next… trabalho mecânico, o design já foi

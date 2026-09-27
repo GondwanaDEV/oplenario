@@ -63,3 +63,14 @@
     (is (pos? (get-in c [:keycloak :jwks-cache-ttl-s])))
     (is (= "oplenario-web" (get-in c [:keycloak :web-client-id])) "client id publico default do edn")
     (is (= "http://localhost:8090" (get-in c [:keycloak :base-url-publico])) "base-url publico default do edn")))
+
+(deftest govbr-so-existe-com-ambiente
+  ;; ADR-0015: sem GOVBR_AMBIENTE o realm nao ganha o broker (fail-closed)
+  (is (nil? (get-in (config/carregar {}) [:keycloak :govbr])))
+  (is (= {:ambiente "producao" :client-id "cid" :client-secret "seg"}
+         (get-in (config/carregar {"GOVBR_AMBIENTE" "producao" "GOVBR_CLIENT_ID" "cid" "GOVBR_CLIENT_SECRET" "seg"})
+                 [:keycloak :govbr])))
+  (is (= "oplenario-broker" (get-in (config/carregar {"GOVBR_AMBIENTE" "simulado"}) [:keycloak :govbr :client-id]))
+      "o simulado tem client fixo")
+  (is (nil? (get-in (config/carregar {"GOVBR_AMBIENTE" "producao"}) [:keycloak :govbr :client-id]))
+      "producao nunca herda o client do simulado"))
