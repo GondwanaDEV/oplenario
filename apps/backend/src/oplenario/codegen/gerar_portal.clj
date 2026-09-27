@@ -29,6 +29,7 @@
    ;; nomeada por igualdade estrutural, mesmo racional do resto deste manifesto): resposta de GET
    ;; /portal/casa/:ente/materias, frente "truncamento-familia" sitio (b) — o par lista+total.
    ["MateriasOut" materia/MateriasOut]
+   ["ResumoPublicoOut" materia/ResumoPublicoOut]
    ["FichaOut" materia/FichaOut]
    ["EncarregadoOut" encarregado/EncarregadoPublicoOut]
    ["AcompanhamentoEsicOut" ac-esic/AcompanhamentoOut]
