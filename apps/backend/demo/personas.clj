@@ -33,6 +33,7 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [com.stuartsierra.component :as component]
+            [govbr-simulado]
             [keycloak-admin :as kc-admin]
             [oplenario.config :as config]
             [oplenario.identidade.db.identidade :as id]
@@ -152,7 +153,15 @@
         ;; 2. mata a armadilha do token de 56s ANTES de qualquer outra chamada admin.
         (let [tok0 (kc-admin/admin-token! http base-url admin-usuario admin-senha)]
           (kc-admin/estender-lifespan-admin-token! http base-url tok0))
-        ;; 3. provisiona o realm do ente (idempotente).
+        ;; 3. provisiona o realm do ente (idempotente). Com GOVBR_AMBIENTE=simulado (ADR-0015) o realm ganha o broker
+        ;;    gov.br, e a Cidada passa a existir TAMBEM no gov.br simulado (CPF + a mesma senha de demo) — e' por la'
+        ;;    que ela entra no portal para participar.
+        (when (= "simulado" (get-in kc-cfg [:govbr :ambiente]))
+          (govbr-simulado/garantir! kc-cfg)
+          (let [cidada (:identidade (first (filter #(= :cidadao (:chave %)) resolvidas)))]
+            (govbr-simulado/garantir-cidadao! kc-cfg {:cpf (:cpf cidada) :nome (:nome cidada) :senha senha-demo})
+            (println "personas/semear-credenciais!: gov.br simulado — Cidadã entra com CPF" (:cpf cidada)
+                     "e a senha de demo")))
         (idp/provisionar-realm! idp casa/ente-id)
         (let [realm (str realm-prefixo casa/ente-id)
               ;; token NOVO, obtido DEPOIS da extensao — este e' o que vive 3600s e e' reusado pelas 5

@@ -289,7 +289,8 @@
               do login real -> 'token invalido' no mint"
       (let [mappers (:protocolMappers (:corpo post-web))
             por-mapper (into {} (map (juxt :protocolMapper identity) mappers))
-            id-mapper (get por-mapper "oidc-usermodel-attribute-mapper")
+            ;; por NOME: ha' mais de um mapper de atributo desde o gov.br (identidade-id e govbr-sub, ADR-0015)
+            id-mapper (some #(when (= "identidade-id" (:name %)) %) mappers)
             aud-mapper (get por-mapper "oidc-audience-mapper")]
         (is (some? id-mapper) "esperava o mapper de atributo identidade-id no client web")
         (is (= "identidade-id" (get-in id-mapper [:config "claim.name"])))
@@ -354,3 +355,101 @@
                    (#'kc/provisionar-realm-impl {:config config-provisionamento :http-client nil} ente-id))
           "PUT que falha ao configurar o SMTP do realm tem de LANCAR — erro de infra nunca segue em
            frente com o realm parcialmente configurado"))))
+
+;; ---------------------------------------------------------------------------------------------
+;; gov.br (ADR-0015): as claims do login pelo gov.br e o provisionamento do broker no realm da Casa
+;; ---------------------------------------------------------------------------------------------
+
+(deftest token-do-govbr-traz-idp-cpf-e-nome
+  (let [ip (idp-com (fn [_ _] (provider-fixo (jwk-de pub kid))))
+        tok (-> (JWT/create) (.withIssuer ^String iss) (.withSubject "kc-user") (.withKeyId ^String kid)
+                (.withAudience (into-array String [audiencia]))
+                (.withClaim "idp" "govbr") (.withClaim "govbr-sub" "52998224725") (.withClaim "govbr-nome" "Maria Cidadã")
+                (.withExpiresAt (.plusSeconds (Instant/now) 60))
+                (.sign (Algorithm/RSA256 pub ^RSAPrivateKey priv)))
+        claims (idp/verificar-token ip tok)]
+    (is (= "govbr" (:idp claims)))
+    (is (= "52998224725" (:govbr-sub claims)))
+    (is (= "Maria Cidadã" (:nome claims)))
+    (is (nil? (:identidade-id claims)))
+    (is (= ente-id (:ente-id claims)))))
+
+(deftest token-institucional-nao-traz-idp
+  (let [ip (idp-com (fn [_ _] (provider-fixo (jwk-de pub kid))))
+        claims (idp/verificar-token ip (token-valido))]
+    (is (nil? (:idp claims)))
+    (is (nil? (:govbr-sub claims)))))
+
+(deftest govbr-endpoints-por-ambiente
+  (testing "producao e homologacao: as URLs do Login Unico, o sub e' o CPF"
+    (let [p (kc/govbr-endpoints {:ambiente "producao" :client-id "c" :client-secret "s"})]
+      (is (= "https://sso.acesso.gov.br/authorize" (:url-autorizacao p)))
+      (is (= "https://sso.acesso.gov.br/token" (:url-token p)))
+      (is (= "https://sso.acesso.gov.br/jwk" (:url-jwks p)))
+      (is (= "sub" (:claim-cpf p))))
+    (is (= "https://sso.staging.acesso.gov.br/authorize"
+           (:url-autorizacao (kc/govbr-endpoints {:ambiente "homologacao"})))))
+  (testing "simulado: um realm no proprio Keycloak — o navegador pela URL publica, o broker pela interna"
+    (let [s (kc/govbr-endpoints {:ambiente "simulado" :base-url "http://keycloak:8080"
+                                 :base-url-publico "http://localhost:8090"})]
+      (is (= "http://localhost:8090/realms/govbr-simulado/protocol/openid-connect/auth" (:url-autorizacao s)))
+      (is (= "http://keycloak:8080/realms/govbr-simulado/protocol/openid-connect/token" (:url-token s)))
+      (is (= "cpf" (:claim-cpf s)))))
+  (is (nil? (kc/govbr-endpoints nil)) "sem config -> sem gov.br")
+  (is (thrown? clojure.lang.ExceptionInfo (kc/govbr-endpoints {:ambiente "outro"}))))
+
+(defn- provisionar-com-govbr! []
+  (let [chamadas (atom [])
+        base (fake-admin-req! chamadas #{})]
+    (with-redefs-fn {#'kc/admin-token! (fn [_config _http-client] "fake-token")
+                     #'kc/admin-req! (fn [h t metodo caminho corpo b]
+                                       (if (and (= :get metodo) (str/ends-with? caminho "/identity-provider/instances/govbr"))
+                                         (do (swap! chamadas conj {:metodo metodo :caminho caminho}) {:status 404 :corpo nil})
+                                         (base h t metodo caminho corpo b)))}
+      (fn [] (#'kc/provisionar-realm-impl
+              {:config (assoc config-provisionamento
+                              :govbr {:ambiente "producao" :client-id "cid" :client-secret "seg"})
+               :http-client nil}
+              ente-id)))
+    @chamadas))
+
+(deftest provisionar-realm-com-govbr-cria-o-broker
+  (let [chamadas (provisionar-com-govbr!)
+        post-de (fn [sufixo] (filter #(and (= :post (:metodo %)) (str/ends-with? (:caminho %) sufixo)) chamadas))
+        idp-post (first (post-de "/identity-provider/instances"))
+        cfg (get-in idp-post [:corpo :config])]
+    (testing "o IdP gov.br: OIDC + PKCE S256, escondido da tela de login institucional, 1o login so' cria"
+      (is (= "govbr" (get-in idp-post [:corpo :alias])))
+      (is (= "govbr-primeiro-login" (get-in idp-post [:corpo :firstBrokerLoginFlowAlias])))
+      (is (false? (get-in idp-post [:corpo :trustEmail])))
+      (is (= "true" (get cfg "pkceEnabled")))
+      (is (= "S256" (get cfg "pkceMethod")))
+      (is (= "true" (get cfg "hideOnLoginPage")))
+      (is (= "client_secret_basic" (get cfg "clientAuthMethod")))
+      (is (= "cid" (get cfg "clientId"))))
+    (testing "mappers do IdP: username govbr-<cpf>, CPF -> govbr-sub, nome -> govbr-nome; nada de e-mail"
+      (let [mappers (map :corpo (post-de "/identity-provider/instances/govbr/mappers"))
+            por-attr (into {} (map (juxt #(get-in % [:config "user.attribute"]) identity)) mappers)]
+        (is (some #(= "govbr-${CLAIM.sub}" (get-in % [:config "template"])) mappers))
+        (is (= "sub" (get-in (por-attr "govbr-sub") [:config "claim"])))
+        (is (= "name" (get-in (por-attr "govbr-nome") [:config "claim"])) "o nome como o gov.br mandou")
+        (is (= "name" (get-in (por-attr "firstName") [:config "claim"])) "e o firstName que o perfil exige")
+        (is (nil? (por-attr "email")))))
+    (testing "o fluxo de 1o login so' tem 'criar se unico' — nao ha' como vincular a conta existente"
+      (is (seq (post-de "/authentication/flows")))
+      (is (some #(= "idp-create-user-if-unique" (get-in % [:corpo :provider]))
+                (post-de "/authentication/flows/govbr-primeiro-login/executions/execution"))))
+    (testing "os clients emitem govbr-sub e o IdP da sessao (idp)"
+      (let [web (post-do-client chamadas "oplenario-web")
+            nomes (set (map :name (:protocolMappers (:corpo web))))]
+        (is (contains? nomes "govbr-sub"))
+        (is (contains? nomes "govbr-nome"))
+        (is (contains? nomes "idp"))))
+    (testing "o atributo govbr-sub e' declarado so' p/ admin"
+      (let [perfil (some #(when (and (= :put (:metodo %)) (str/ends-with? (:caminho %) "/users/profile")) %) chamadas)
+            attr (some #(when (= "govbr-sub" (:name %)) %) (get-in perfil [:corpo :attributes]))]
+        (is (= {:view ["admin"] :edit ["admin"]} (:permissions attr)))))))
+
+(deftest provisionar-realm-sem-govbr-nao-mexe-em-identity-provider
+  (let [chamadas (provisionar-capturando! #{})]
+    (is (not-any? #(str/includes? (:caminho %) "identity-provider") chamadas))))

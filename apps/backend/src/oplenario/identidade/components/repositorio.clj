@@ -61,7 +61,11 @@
   (revogar-agente! [this ente-id agente revogada-por] "Desliga o agente institucional; idempotente.")
   (snapshot-ator [this ente-id identidade-id]
     "Snapshot de SESSAO numa UNICA tx (vinculo ATIVO + papeis). Devolve {:vinculo-ativo :papeis} ou nil
-    se nao ha vinculo ativo. Composto AQUI (§3-bis) p/ resolver-sessao nao importar db/ direto."))
+    se nao ha vinculo ativo. Composto AQUI (§3-bis) p/ resolver-sessao nao importar db/ direto.")
+  (snapshot-cidadao [this ente-id identidade-id]
+    "ADR-0015: o vinculo de CIDADAO ativo com zero papeis (sessao aberta pelo gov.br) | nil.")
+  (garantir-vinculo-cidadao! [this ente-id identidade-id consentimento]
+    "ADR-0015: cria o vinculo de cidadao e registra o consentimento da 1a vinculacao, numa tx; ja' existe -> nada."))
 
 (defrecord RepoIdentidadePg [datasource sessao-janela-ociosa-seg]
   RepoIdentidade
@@ -114,7 +118,22 @@
         (when-let [ativo (->> (vinc/vinculos-de tx ente-id identidade-id)
                               (filter #(= "ativo" (:estado %)))
                               first)]
-          {:vinculo-ativo ativo :papeis (vinc/papeis-de tx ente-id identidade-id)})))))
+          {:vinculo-ativo ativo :papeis (vinc/papeis-de tx ente-id identidade-id)}))))
+  (snapshot-cidadao [this ente-id identidade-id]
+    (transacao this ente-id
+      (fn [tx]
+        (when-let [v (->> (vinc/vinculos-de tx ente-id identidade-id)
+                          (filter #(and (= "cidadao" (:tipo %)) (= "ativo" (:estado %))))
+                          first)]
+          {:vinculo-ativo v :papeis #{}}))))
+  (garantir-vinculo-cidadao! [this ente-id identidade-id {:keys [finalidade base-legal versao-termo]}]
+    (transacao this ente-id
+      (fn [tx]
+        (when-not (some #(= "cidadao" (:tipo %)) (vinc/vinculos-de tx ente-id identidade-id))
+          (vinc/criar! tx {:id (random-uuid) :ente-id ente-id :identidade-id identidade-id :tipo "cidadao"})
+          (vinc/registrar-consentimento! tx {:id (random-uuid) :ente-id ente-id :identidade-id identidade-id
+                                             :finalidade finalidade :base-legal base-legal
+                                             :versao-termo versao-termo}))))))
 
 (defn repositorio
   "Cria o Component (recebe :datasource via `using`). Aridade-1 seta a janela de deslize de ociosidade da

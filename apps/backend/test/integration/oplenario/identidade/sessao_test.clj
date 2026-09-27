@@ -95,3 +95,12 @@
 
 (deftest segredo-desconhecido-nil
   (is (nil? (sessao/resolver! *ds* "segredo-que-nunca-existiu" 1800)) "hash desconhecido -> nil"))
+
+(deftest sessao-de-cidadao-lembra-o-tipo-do-vinculo
+  ;; ADR-0015: a sessao aberta pelo gov.br resolve SEMPRE como cidadao; a institucional nao ganha a chave
+  (let [iid (random-uuid) ente (random-uuid)
+        prazo {:expira-em (.plusSeconds (Instant/now) 3600) :ocioso-ate (.plusSeconds (Instant/now) 1800)}
+        seg (sessao/inserir! *ds* (merge prazo {:identidade-id iid :ente-id ente :vinculo-tipo "cidadao"}))
+        inst (sessao/inserir! *ds* (merge prazo {:identidade-id iid :ente-id ente}))]
+    (is (= {:identidade-id iid :ente-id ente :vinculo-tipo "cidadao"} (sessao/resolver! *ds* seg 1800)))
+    (is (= {:identidade-id iid :ente-id ente} (sessao/resolver! *ds* inst 1800)))))

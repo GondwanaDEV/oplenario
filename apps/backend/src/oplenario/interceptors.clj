@@ -49,14 +49,15 @@
   {:name  ::autenticacao
    :enter (fn [ctx]
             (if-let [seg (cookie-sessao (:request ctx))]
-              (if-let [claims (repo/resolver-sessao-por-segredo repo-identidade seg)]  ; {:identidade-id :ente-id} ou nil
+              (if-let [claims (repo/resolver-sessao-por-segredo repo-identidade seg)]  ; {:identidade-id :ente-id [:vinculo-tipo]} ou nil
                 (if-let [ator (auten/resolver-sessao repo-identidade claims)]
                   (assoc-in ctx [:request :ator] ator)
                   (nega! ctx 401 "sem vinculo ativo"))
                 (nega! ctx 401 "sessao invalida"))
               (if-let [tok (bearer (:request ctx))]
                 (if-let [claims (idp/verificar-token idp tok)]
-                  (if-let [ator (auten/resolver-sessao repo-identidade claims)]
+                  ;; resolver-claims: login pelo gov.br resolve pelo CPF e so' como cidadao (ADR-0015)
+                  (if-let [ator (auten/resolver-claims repo-identidade claims)]
                     (assoc-in ctx [:request :ator] ator)
                     (nega! ctx 401 "sem vinculo ativo"))
                   (nega! ctx 401 "token invalido"))

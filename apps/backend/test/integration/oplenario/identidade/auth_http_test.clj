@@ -253,3 +253,10 @@
 (deftest cookie-sessao-nao-confunde-cookie-de-nome-parecido
   ;; "outra-sessao=xyz" NAO deve ser lido como o par "sessao=" (prefixo estrito, nao substring).
   (is (nil? (it/cookie-sessao {:headers {"cookie" "outra-sessao=xyz"}}))))
+
+(deftest descoberta-diz-se-ha-govbr
+  ;; ADR-0015: o portal so' mostra 'Entrar com gov.br' quando o realm tem o broker
+  (let [ente (random-uuid)
+        r (pt/response-for (service-fn {}) :get (str "/auth/descoberta/" ente))]
+    (is (= 200 (:status r)))
+    (is (contains? (ler-json r) :govbr))))
