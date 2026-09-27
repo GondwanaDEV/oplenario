@@ -103,3 +103,30 @@ describe("middleware — gate de presença do cookie sessao em rotas protegidas"
     expect(new URL(resp.headers.get("location")!).pathname).toBe("/entrar");
   });
 });
+
+describe("middleware — o console do operador (ADR-0016) é outra esfera", () => {
+  it("sem o cookie do console → vai para /operacao/entrar com o destino", () => {
+    const resp = middleware(req("/operacao/casas/nova"));
+    const location = new URL(resp.headers.get("location")!);
+    expect(location.pathname).toBe("/operacao/entrar");
+    expect(location.searchParams.get("redirect")).toBe("/operacao/casas/nova");
+  });
+
+  it("o cookie `sessao` de uma Casa NÃO abre o console", () => {
+    const resp = middleware(req("/operacao", "sessao=segredo-da-casa"));
+    expect(new URL(resp.headers.get("location")!).pathname).toBe("/operacao/entrar");
+  });
+
+  it("o cookie do console abre o console", () => {
+    expect(middleware(req("/operacao", "sessao_operacao=segredo")).headers.get("location")).toBeNull();
+  });
+
+  it("a tela de entrada do console é pública", () => {
+    expect(middleware(req("/operacao/entrar")).headers.get("location")).toBeNull();
+  });
+
+  it("o cookie do console não abre uma área de Casa", () => {
+    const resp = middleware(req("/proposicoes", "sessao_operacao=segredo"));
+    expect(new URL(resp.headers.get("location")!).pathname).toBe("/entrar");
+  });
+});

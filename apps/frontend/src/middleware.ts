@@ -46,7 +46,22 @@ function ehRotaProtegida(pathname: string): boolean {
   );
 }
 
+// ADR-0016 — o console do OPERADOR é outra esfera: outro cookie (`sessao_operacao`), outra porta de entrada
+// (`/operacao/entrar`). O cookie de uma Casa não abre o console (e o backend recusa de qualquer forma).
+function ehRotaDoConsole(pathname: string): boolean {
+  if (pathname === "/operacao/entrar" || pathname.startsWith("/operacao/entrar/")) return false;
+  return pathname === "/operacao" || pathname.startsWith("/operacao/");
+}
+
 export function middleware(request: NextRequest): NextResponse {
+  if (ehRotaDoConsole(request.nextUrl.pathname)) {
+    const devToken = request.nextUrl.searchParams.has("token") && process.env.NODE_ENV !== "production";
+    if (devToken || request.cookies.has("sessao_operacao")) return NextResponse.next();
+    const entrar = new URL("/operacao/entrar", request.url);
+    entrar.searchParams.set("redirect", request.nextUrl.pathname + request.nextUrl.search);
+    return NextResponse.redirect(entrar);
+  }
+
   if (!ehRotaProtegida(request.nextUrl.pathname)) {
     return NextResponse.next();
   }
@@ -88,5 +103,7 @@ export const config = {
     "/votar/:path*",
     "/sessoes/:id/plenario",
     "/sessoes/:id/folha",
+    "/operacao",
+    "/operacao/:path*",
   ],
 };
