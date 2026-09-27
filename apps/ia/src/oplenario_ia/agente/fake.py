@@ -1,6 +1,7 @@
 """O agente FAKE — roteiros determinísticos do fornecedor fake para `agente.planejar` e `agente.responder` (dev, CI,
-demo). Planeja por padrões da pergunta ("PL 12/2026", "tramitação", "pauta") entre as ferramentas que o core
-ofereceu, e responde citando linhas LITERAIS do que a ferramenta devolveu (a conferência roda de verdade).
+demo). Planeja por padrões da pergunta ("PL 12/2026", "tramitação", "pauta", "art. 45 do Regimento", "quórum")
+entre as ferramentas que o core ofereceu, e responde citando linhas LITERAIS do que a ferramenta devolveu (a
+conferência roda de verdade) — dispositivo de norma é citado pelo artigo, com a data até quando o texto foi conferido.
 """
 
 from __future__ import annotations
@@ -9,7 +10,7 @@ import html
 import json
 import re
 
-from oplenario_ia.ata.fake import FONTE
+from oplenario_ia.ata.fake import frase
 from oplenario_ia.inferencia.modelo import PedidoInferencia
 
 SIGLAS = {
@@ -25,6 +26,14 @@ SIGLAS = {
 _MATERIA = re.compile(r"\b(PLC|PDL|PELOM|PL|PR|REQ|IND|MOC)\s*(?:n[ºo°.]*\s*)?(\d+)\s*/\s*(\d{4})\b", re.IGNORECASE)
 _TRAMITACAO = re.compile(r"tramit|andamento|por onde|passou|pr[óo]ximo passo|falta", re.IGNORECASE)
 _PAUTA = re.compile(r"pauta|votad|vota[çc][ãa]o|pr[óo]xima sess[ãa]o", re.IGNORECASE)
+_ARTIGO = re.compile(r"\bart(?:igo|\.)?\s*(\d+)", re.IGNORECASE)
+_REGIMENTO = re.compile(r"regimento", re.IGNORECASE)
+_LOM = re.compile(r"lei org[âa]nica|\bLOM\b", re.IGNORECASE)
+_NORMATIVA = re.compile(
+    r"regimento|lei org[âa]nica|\bLOM\b|qu[óo]rum|prazo|\bveto\b|maioria|compet[êe]ncia|\brito\b|dispositivo",
+    re.IGNORECASE,
+)
+_FONTE = re.compile(r'<fonte id="([^"]+)" rotulo="([^"]*)"(?: versao="([^"]*)")?>\n(.*?)\n</fonte>', re.DOTALL)
 _PREFERIDAS = ("ementa:", "estado-atual:", "estado:", "itens.1.proposicao.ementa:", "itens.1.texto-descricao:")
 
 
@@ -47,7 +56,7 @@ def _disponiveis(pedido: PedidoInferencia) -> set[str]:
 
 
 def planejar(pedido: PedidoInferencia) -> str:
-    ja_consultou = any(c.startswith('<fonte id="ferramenta:') or c.startswith("A ferramenta ") for c in pedido.conteudo)
+    ja_consultou = any(c.startswith(("<fonte id=", "A ferramenta ")) for c in pedido.conteudo)
     if ja_consultou:
         return json.dumps({"acao": "responder"})
     pergunta = _pergunta(pedido)
@@ -58,6 +67,14 @@ def planejar(pedido: PedidoInferencia) -> str:
         argumentos = {"tipo": SIGLAS[m.group(1).upper()], "sequencial": int(m.group(2)), "ano": int(m.group(3))}
         if nome in disponiveis:
             return json.dumps({"acao": "ferramenta", "nome": nome, "argumentos": argumentos})
+    artigo = _ARTIGO.search(pergunta)
+    especie = "regimento_interno" if _REGIMENTO.search(pergunta) else "lei_organica" if _LOM.search(pergunta) else None
+    if artigo and especie and "ler_dispositivo" in disponiveis:
+        argumentos = {"especie": especie, "endereco": f"art{int(artigo.group(1))}"}
+        return json.dumps({"acao": "ferramenta", "nome": "ler_dispositivo", "argumentos": argumentos})
+    if _NORMATIVA.search(pergunta) and "buscar_dispositivos" in disponiveis:
+        argumentos = {"consulta": pergunta[:300]}
+        return json.dumps({"acao": "ferramenta", "nome": "buscar_dispositivos", "argumentos": argumentos})
     if _PAUTA.search(pergunta) and "pauta_da_sessao" in disponiveis:
         return json.dumps({"acao": "ferramenta", "nome": "pauta_da_sessao", "argumentos": {}})
     return json.dumps({"acao": "responder"})
@@ -73,11 +90,20 @@ def _linha_informativa(texto: str) -> str:
 
 
 def responder(pedido: PedidoInferencia) -> str:
-    fontes = [(fid, html.unescape(texto)) for bruto in pedido.conteudo for fid, _rotulo, texto in FONTE.findall(bruto)]
+    fontes = [
+        (fid, html.unescape(rotulo), html.unescape(versao), html.unescape(texto))
+        for bruto in pedido.conteudo
+        for fid, rotulo, versao, texto in _FONTE.findall(bruto)
+    ]
     if not fontes:
         return "Não encontrei nas informações da Casa o que responder a essa pergunta."
     paragrafos = []
-    for fid, texto in fontes[:2]:
+    for fid, rotulo, versao, texto in fontes[:2]:
+        if fid.startswith("norma:"):
+            trecho = frase(texto).rstrip(" .;:")
+            quando = f" ({versao})" if versao else ""
+            paragrafos.append(f"{rotulo}{quando}: “{trecho}”. [[{fid} | {trecho}]]")
+            continue
         linha = _linha_informativa(texto)[:200].rstrip(" .")
         if linha:
             valor = linha.split(": ", 1)[-1]

@@ -73,3 +73,24 @@ conferência, versões consolidadas — e camadas que não são da Casa (federal
    meta, que é por onde o agente lê e cita (B.5). Versão que já não vale (404) conclui sem indexar.
 4. A busca da tela (A.5) continua pedindo só proposição e transcrição; dispositivo é pedido explicitamente pelo agente.
    Normas federais e estaduais (sem Casa) ainda não entram no índice por Casa: entram junto com a curadoria do produto.
+
+## Adendo (27/09/2026) — o agente consulta as normas (B.5)
+
+1. Duas entradas novas no catálogo (ADR-0009), em `normas/diplomat/catalogo.clj`, classe `leitura`, para secretaria e
+   vereador (nos dois públicos): **`buscar_dispositivos`** (assunto ou número em palavras → até 10 dispositivos) e
+   **`ler_dispositivo`** (norma pelo id ou, para a LOM e o Regimento, pela espécie; o endereço devolve o dispositivo
+   com tudo o que está dentro dele — o artigo inteiro com parágrafos, incisos e alíneas).
+2. **Só a versão vigente.** A busca pelo sentido é da IA (seam do host sobre a busca do satélite, tipo `dispositivo`);
+   o core **hidrata** cada par (versão, endereço) das suas tabelas e descarta o que já não é da vigente ou não é da
+   Casa — a IA pode estar um passo atrás de uma publicação. IA fora (ou sem o seam): a busca cai nas palavras exatas do
+   texto, com aviso (R-IA-1).
+3. **Cada dispositivo é uma fonte.** O satélite transforma cada dispositivo devolvido numa fonte própria,
+   `norma:<norma-id>#<endereço>`, com o rótulo pronto ("Regimento Interno, art. 45, § 1º") e a vigência ("consolidada
+   até dd/mm/aaaa", ou "conferida em" quando a Casa não informou a consolidação). A citação da resposta aponta o
+   dispositivo, e a Camada de Confiança a confere contra o texto lido **nesta execução**; o mesmo dispositivo lido duas
+   vezes é uma fonte só. As instruções do `agente.responder` exigem que prazo, quórum, rito e competência citem o
+   dispositivo; sem dispositivo lido, a resposta diz que não encontrou a regra.
+4. A resposta do agente leva, por citação, o rótulo legível que o satélite montou; a tela mostra "Lei Orgânica do
+   Município, art. 11 (consolidada até 30/06/2026)" em "De onde veio".
+5. Fica para depois: a `referencia_normativa` de `tempo_regimental` apontando o dispositivo (Eixo 7.6), PDF/OCR e a
+   coleta automática (B.4c), e as normas federais e estaduais no índice por Casa.

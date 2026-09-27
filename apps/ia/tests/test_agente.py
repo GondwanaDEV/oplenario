@@ -299,6 +299,7 @@ def test_rota_executa_o_agente() -> None:
         }
     ]
     assert b["resposta"]["citacoes"][0]["status"] == "conferida"
+    assert b["resposta"]["citacoes"][0]["rotulo"].startswith("situacao_da_materia("), "a citação diz o que aponta"
     assert b["indisponivel"] is None
     assert TestClient(app).post(f"/v1/entes/{ENTE}/agente/execucoes", json=corpo).status_code == 401
 

@@ -582,5 +582,11 @@
                 (mcp/rotas {:repo-identidade repo-identidade
                              :deps {:repo-legislativo repo-legislativo :repo-sessoes repo-sessoes
                                     :nome-na-casa nome-na-casa-fn :resumir-proposicoes resumir-proposicoes-fn
-                                    :registrar-chamada (catalogo/registrador repo-integracao-ia)}})
+                                    :registrar-chamada (catalogo/registrador repo-integracao-ia)
+                                    ;; B.5: as normas de referencia — o repositorio (so' a vigente) e a busca por sentido na IA
+                                    :repo-normas repo-normas
+                                    :buscar-dispositivos-ia (fn [ente-id consulta limite]
+                                                              (:resultados (plataforma-ia/buscar ia ente-id {:consulta consulta
+                                                                                                            :tipos ["dispositivo"]
+                                                                                                            :limite limite})))}})
                 #{})))))

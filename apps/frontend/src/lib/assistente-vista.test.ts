@@ -40,6 +40,23 @@ describe("rótulos", () => {
     expect(comRotuloDoPasso({ fonteId: "outra", trecho: null, status: "conferida" }, passos).rotulo).toBeUndefined();
   });
 
+  it("B.5: conta a consulta às normas pelo artigo, e a citação de dispositivo mantém o rótulo que veio", () => {
+    expect(rotuloDoPasso({ ferramenta: "buscar_dispositivos", argumentos: { consulta: "quórum do veto" }, ok: true })).toBe(
+      "Consultou as normas da Casa sobre “quórum do veto”",
+    );
+    expect(
+      rotuloDoPasso({ ferramenta: "ler_dispositivo", argumentos: { especie: "regimento_interno", endereco: "art45_par1" }, ok: true }),
+    ).toBe("Consultou o art. 45 do Regimento Interno");
+    expect(rotuloDoPasso({ ferramenta: "ler_dispositivo", argumentos: { especie: "lei_organica", endereco: "art9" }, ok: false })).toBe(
+      "Não encontrou o art. 9 da Lei Orgânica",
+    );
+    expect(rotuloDoPasso({ ferramenta: "ler_dispositivo", argumentos: { "norma-id": "x", endereco: "art3" }, ok: true })).toBe(
+      "Consultou o art. 3 da norma",
+    );
+    const c = { fonteId: "norma:abc#art45_par1", trecho: "t", status: "conferida" as const, rotulo: "Regimento Interno, art. 45, § 1º (consolidada até 30/06/2026)" };
+    expect(comRotuloDoPasso(c, [{ ferramenta: "ler_dispositivo", argumentos: {}, ok: true }]).rotulo).toBe(c.rotulo);
+  });
+
   it("erros em linguagem de quem usa", () => {
     expect(mensagemDeErroAssistente(403)).toMatch(/secretaria e dos vereadores/);
     expect(mensagemDeErroAssistente(500)).toMatch(/Siga pela tela/);

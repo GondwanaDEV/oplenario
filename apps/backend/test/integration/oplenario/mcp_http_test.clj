@@ -87,7 +87,8 @@
     (testing "tools/list: o conjunto do publico, em JSON Schema de objeto"
       (let [ferramentas (get-in (:corpo (rpc svc cred (chamada 2 "tools/list" {}))) ["result" "tools"])
             situacao (first (filter #(= "situacao_da_materia" (get % "name")) ferramentas))]
-        (is (= #{"situacao_da_materia" "tramitacao_da_materia" "pauta_da_sessao"} (set (map #(get % "name") ferramentas))))
+        (is (= #{"situacao_da_materia" "tramitacao_da_materia" "pauta_da_sessao" "buscar_dispositivos" "ler_dispositivo"}
+               (set (map #(get % "name") ferramentas))))
         (is (= "object" (get-in situacao ["inputSchema" "type"])) "a regra entre campos fica no servidor")
         (is (contains? (get-in situacao ["inputSchema" "properties"]) "sequencial"))
         (is (true? (get-in situacao ["annotations" "readOnlyHint"])))))

@@ -10,18 +10,19 @@
             [oplenario.kernel.autorizacao :as authz]
             [oplenario.kernel.catalogo :as catalogo]
             [oplenario.legislativo.diplomat.catalogo :as legislativo]
+            [oplenario.normas.diplomat.catalogo :as normas]
             [oplenario.sessoes.diplomat.catalogo :as sessoes]))
 
 (def entradas
   "Todas as entradas, na ordem dos modulos."
-  (into [] cat [legislativo/entradas sessoes/entradas]))
+  (into [] cat [legislativo/entradas sessoes/entradas normas/entradas]))
 
 (def por-nome (catalogo/validar-catalogo! entradas))
 
 (def conjuntos
   "Publico -> nomes das ferramentas que um agente daquele publico oferece."
-  {:secretaria #{"situacao_da_materia" "tramitacao_da_materia" "pauta_da_sessao"}
-   :vereador   #{"situacao_da_materia" "tramitacao_da_materia" "pauta_da_sessao"}})
+  {:secretaria #{"situacao_da_materia" "tramitacao_da_materia" "pauta_da_sessao" "buscar_dispositivos" "ler_dispositivo"}
+   :vereador   #{"situacao_da_materia" "tramitacao_da_materia" "pauta_da_sessao" "buscar_dispositivos" "ler_dispositivo"}})
 
 (defn- publico-do [ator]
   (or (get-in ator [:via :publico])
