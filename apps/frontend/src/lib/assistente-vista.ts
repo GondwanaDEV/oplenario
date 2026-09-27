@@ -62,10 +62,21 @@ function materia(args: Record<string, unknown>): string {
   return "a matéria";
 }
 
+const DA_ESPECIE: Record<string, string> = { lei_organica: "da Lei Orgânica", regimento_interno: "do Regimento Interno" };
+
+/** B.5: "o art. 45 do Regimento Interno" — pelo artigo do endereço (art45_par1 → art. 45); a norma, pela espécie. */
+function dispositivo(a: Record<string, unknown>): string {
+  const art = /^art(\d+)/.exec(String(a.endereco ?? ""))?.[1];
+  const onde = DA_ESPECIE[String(a.especie ?? "")] ?? "da norma";
+  return `${art ? `o art. ${art}` : "um dispositivo"} ${onde}`;
+}
+
 const O_QUE: Record<string, (a: Record<string, unknown>) => string> = {
   situacao_da_materia: (a) => `a situação do ${materia(a)}`,
   tramitacao_da_materia: (a) => `a tramitação do ${materia(a)}`,
   pauta_da_sessao: (a) => (a.sessaoId ?? a["sessao-id"] ? "a pauta da sessão" : "a pauta da próxima sessão"),
+  buscar_dispositivos: (a) => `as normas da Casa sobre “${String(a.consulta ?? "")}”`,
+  ler_dispositivo: dispositivo,
 };
 
 /** "Consultou a situação do PL 12/2026" / "Não encontrou …". */
@@ -74,7 +85,9 @@ export function rotuloDoPasso(p: PassoAgente): string {
   return p.ok ? `Consultou ${o}` : `Não encontrou ${o}`;
 }
 
-/** A citação aponta `ferramenta:<nome>#<n>` (o n-ésimo passo): vira o rótulo do passo que a sustenta. */
+/** A citação aponta `ferramenta:<nome>#<n>` (o n-ésimo passo): vira o rótulo do passo que a sustenta. Citação de
+ *  dispositivo (`norma:<id>#<endereço>`) já vem com o rótulo do satélite — "Regimento Interno, art. 45, § 1º
+ *  (consolidada até 30/06/2026)" — e fica como veio. */
 export function comRotuloDoPasso(c: CitacaoVista, passos: PassoAgente[]): CitacaoVista {
   const m = /^ferramenta:([a-z_]+)#(\d+)$/.exec(c.fonteId);
   const p = m ? passos[Number(m[2]) - 1] : undefined;

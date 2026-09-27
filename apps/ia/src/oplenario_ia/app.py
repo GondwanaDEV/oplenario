@@ -239,7 +239,15 @@ def criar_app(
             else {
                 "execucao-id": a.execucao_id,
                 "texto": a.texto,
-                "citacoes": [{"fonte-id": c.fonte_id, "trecho": c.trecho, "status": c.status} for c in a.citacoes],
+                "citacoes": [
+                    {
+                        "fonte-id": c.fonte_id,
+                        "rotulo": r.fontes.get(c.fonte_id),
+                        "trecho": c.trecho,
+                        "status": c.status,
+                    }
+                    for c in a.citacoes
+                ],
                 "paragrafos-sem-fonte": a.paragrafos_sem_fonte,
                 "incerteza": a.incerteza.nivel,
                 "modelo": a.modelo,

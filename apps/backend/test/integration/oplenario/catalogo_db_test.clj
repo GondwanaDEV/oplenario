@@ -190,7 +190,7 @@
 (deftest ferramentas-e-o-que-fica-fora
   (let [ente (random-uuid)
         secretaria (agente-de ente "secretario" :secretaria)]
-    (is (= ["pauta_da_sessao" "situacao_da_materia" "tramitacao_da_materia"]
+    (is (= ["buscar_dispositivos" "ler_dispositivo" "pauta_da_sessao" "situacao_da_materia" "tramitacao_da_materia"]
            (map :nome (catalogo/ferramentas secretaria))))
     (is (empty? (catalogo/ferramentas (agente-de ente "admin_ente" :secretaria)))
         "o conjunto do publico nao da' a ninguem o que o papel dele nao alcanca")

@@ -98,7 +98,10 @@
         (is (logged? 'oplenario.paineis.components.repositorio :warn
                      java.time.format.DateTimeParseException (re-pattern (str oid)))
             "o :id da linha do outbox aparece no log — achavel sem SELECT de adivinhacao")
-        (is (not (logged? 'oplenario.paineis.components.repositorio :error Throwable #"NAO projetado"))
+        ;; so' o log DESTA linha: `drenar!` drena o outbox compartilhado inteiro, e o que outro teste deixou pendente
+        ;; (a ordem e' aleatoria) passa pelo mesmo `with-log`
+        (is (not (logged? 'oplenario.paineis.components.repositorio :error Throwable
+                          (re-pattern (str "NAO projetado.*:id " oid "[^0-9]"))))
             "payload malformado NUNCA loga como perda de infra")))
     (is (empty? (:pendencias (repo/o-que-vence *repo* ente {}))) "nenhuma pendencia foi criada")))
 
@@ -127,5 +130,7 @@
           (is (logged? 'oplenario.paineis.components.repositorio :error
                        java.sql.SQLException (re-pattern (str oid)))
               "o :id da linha do outbox aparece no log — achavel sem SELECT de adivinhacao")
-          (is (not (logged? 'oplenario.paineis.components.repositorio :warn Throwable #"payload malformado"))
+          ;; so' o log DESTA linha (o outbox e' compartilhado: outro teste pode ter deixado um evento torto pendente)
+          (is (not (logged? 'oplenario.paineis.components.repositorio :warn Throwable
+                            (re-pattern (str "payload malformado.*:id " oid "[^0-9]"))))
               "falha de infra NUNCA loga como rotina de dado malformado"))))))

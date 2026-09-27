@@ -14,6 +14,7 @@
             [oplenario.interceptors :as it]
             [oplenario.kernel.autorizacao :as authz]
             [oplenario.kernel.components.idp-dev :as idp-dev]
+            [oplenario.kernel.tempo :as tempo]
             [oplenario.legislativo.components.repositorio :as repo-leg]
             [oplenario.rotas :as rotas])
   (:import (java.time Instant)))
@@ -51,7 +52,7 @@
                                     :repo-identidade (fake-repo-identidade papeis nomes)
                                     :repo-legislativo repo-l
                                     :registro-fatos :registro-fake
-                                    :relogio (constantly agora)})
+                                    :relogio (tempo/relogio-fixo agora)})
                      it/globais)
        ph/create-server ::ph/service-fn)))
 

@@ -262,7 +262,7 @@
   [{:keys [idp repo-identidade repo-sessoes repo-legislativo repo-compliance repo-participacao
            repo-transparencia repo-paineis repo-cadastros canal-store objeto-store painel-compliance
            presenca-resumo esic-cumprimento relatores-pendentes info-ente registro-fatos
-           keycloak sessao identidade-existe? repo-integracao-ia integracao-ia repo-normas]
+           keycloak sessao identidade-existe? repo-integracao-ia integracao-ia repo-normas relogio]
     ;; nome LOCAL distinto da defn de topo `ficha-e-janelas-publicas` p/ nao sombrea-la (mesmo cuidado de
     ;; `resolver-vereador`/`resolver-vereador-fn`); a chave do mapa segue sendo :ficha-e-janelas-publicas.
     ficha-e-janelas-override :ficha-e-janelas-publicas}]
@@ -275,7 +275,9 @@
         ;; participacao (prazo LAI) e legislativo (Onda B Slice 5, `agora` do gatilho de emissao do parecer,
         ;; review MEDIUM fe-11-parecer) usam a MESMA instancia; determinismo em teste vem de cada fragmento de
         ;; rotas receber `relogio-fixo` no lugar, direto.
-        relogio-producao (tempo/relogio-sistema)
+        ;; `:relogio` nos deps (teste) substitui o do sistema em todos os fragmentos que recebem este — sem ele a
+        ;; data de um teste de rota vira a data de hoje (previa de requerimento quebrou ao virar o dia).
+        relogio-producao (or relogio (tempo/relogio-sistema))
         ;; cross-modulo via inversao de dependencia: o host fecha sobre o Repo de sessoes e expoe a consulta-fato
         ;; que o endpoint SSE (G3) E a vertical de votacao ao vivo (F4 Slice 3, no legislativo) precisam p/
         ;; autorizar (a RLS escopa por tenant). Os modulos chamam por esta fn, nunca importam sessoes (§22.10).
@@ -580,5 +582,11 @@
                 (mcp/rotas {:repo-identidade repo-identidade
                              :deps {:repo-legislativo repo-legislativo :repo-sessoes repo-sessoes
                                     :nome-na-casa nome-na-casa-fn :resumir-proposicoes resumir-proposicoes-fn
-                                    :registrar-chamada (catalogo/registrador repo-integracao-ia)}})
+                                    :registrar-chamada (catalogo/registrador repo-integracao-ia)
+                                    ;; B.5: as normas de referencia — o repositorio (so' a vigente) e a busca por sentido na IA
+                                    :repo-normas repo-normas
+                                    :buscar-dispositivos-ia (fn [ente-id consulta limite]
+                                                              (:resultados (plataforma-ia/buscar ia ente-id {:consulta consulta
+                                                                                                            :tipos ["dispositivo"]
+                                                                                                            :limite limite})))}})
                 #{})))))

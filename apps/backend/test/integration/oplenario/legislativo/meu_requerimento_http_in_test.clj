@@ -14,6 +14,7 @@
             [oplenario.identidade.components.repositorio :as repo-id]
             [oplenario.interceptors :as it]
             [oplenario.kernel.components.idp-dev :as idp-dev]
+            [oplenario.kernel.tempo :as tempo]
             [oplenario.legislativo.components.repositorio :as repo-leg]
             [oplenario.rotas :as rotas])
   (:import (java.time Instant)))
@@ -58,7 +59,7 @@
                                    :repo-legislativo (fake-repo-legislativo protocolado)
                                    :repo-cadastros (fake-repo-cadastros tem-cadastro?)
                                    :registro :registro-fake
-                                   :relogio (constantly (Instant/parse "2026-09-26T12:00:00Z"))})
+                                   :relogio (tempo/relogio-fixo (Instant/parse "2026-09-26T12:00:00Z"))})
                     it/globais)
       ph/create-server ::ph/service-fn))
 

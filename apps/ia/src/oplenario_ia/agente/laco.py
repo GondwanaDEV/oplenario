@@ -49,7 +49,9 @@ INSTRUCOES_PLANEJAR = (
 INSTRUCOES_RESPONDER = (
     "Você é o assistente da Câmara Municipal. Responda à pergunta da pessoa em português claro, em até três parágrafos "
     "curtos, usando SOMENTE o que as fontes dizem. Se as fontes não bastarem, diga o que não foi possível saber, sem "
-    "inventar. Não prometa agir: você só consulta."
+    "inventar. Não prometa agir: você só consulta. Toda afirmação sobre prazo, quórum, rito ou competência cita o "
+    "dispositivo da norma (artigo, parágrafo, inciso) de onde saiu; sem dispositivo lido, diga que não encontrou a "
+    "regra nas normas da Casa."
 )
 
 
@@ -72,6 +74,7 @@ class RespostaAgente(BaseModel):
     passos: list[Passo]
     artefato: Artefato | None = None
     indisponivel: Indisponivel | None = None
+    fontes: dict[str, str] = {}  # fonte-id -> rótulo legível: o que cada citação da resposta aponta
 
 
 def _linhas(valor: Any, prefixo: str = "") -> list[str]:
@@ -98,15 +101,60 @@ def _peca_pergunta(pergunta: str) -> Peca:
     )
 
 
-def _peca_resultado(r: ResultadoFerramenta, n: int) -> Peca:
+def _data_br(iso: str | None) -> str | None:
+    if not iso:
+        return None
+    a, m, d = iso[:10].split("-")
+    return f"{d}/{m}/{a}"
+
+
+def _vigencia(versao: dict[str, Any]) -> str:
+    """'consolidada até 30/06/2026' ou 'conferida em 27/09/2026': até quando o texto lido foi conferido (Eixo 7.5)."""
+    if c := _data_br(versao.get("consolidada-ate")):
+        return f"consolidada até {c}"
+    return f"conferida em {_data_br(versao.get('conferida-em'))}"
+
+
+def dispositivos_do_resultado(r: ResultadoFerramenta) -> list[tuple[Fonte, str]]:
+    """Os dispositivos de norma num resultado de `buscar_dispositivos` ou `ler_dispositivo`, como (fonte, texto). Cada
+    dispositivo é uma FONTE própria: a citação da resposta aponta o artigo, não o resultado da ferramenta (Eixo 7.5:
+    toda afirmação normativa cita um dispositivo lido nesta execução); a fonte diz até quando o texto foi conferido."""
+    e = r.estruturado if isinstance(r.estruturado, dict) else {}
+    saida: list[tuple[Fonte, str]] = []
+    if r.nome == "ler_dispositivo" and isinstance(e.get("dispositivos"), list):
+        titulo, nid, vig = e["norma"]["titulo"], e["norma"]["id"], _vigencia(e["versao"])
+        for d in e["dispositivos"]:
+            if str(d.get("texto", "")).strip():
+                fonte = Fonte(id=f"norma:{nid}#{d['endereco']}", rotulo=f"{titulo}, {d['rotulo']}", versao=vig)
+                saida.append((fonte, d["texto"]))
+    elif r.nome == "buscar_dispositivos" and isinstance(e.get("resultados"), list):
+        for d in e["resultados"]:
+            if str(d.get("texto", "")).strip():
+                fonte = Fonte(
+                    id=f"norma:{d['norma']['id']}#{d['endereco']}", rotulo=d["citacao"], versao=_vigencia(d["versao"])
+                )
+                saida.append((fonte, d["texto"]))
+    return saida
+
+
+def pecas_do_resultado(r: ResultadoFerramenta, n: int) -> list[Peca]:
+    prov = Proveniencia(origem=f"core.catalogo.{r.nome}", sigilo=Sigilo.PUBLICO, terceiro=r.origem != "interno")
+    ds = dispositivos_do_resultado(r)
+    if ds:
+        return [Peca(texto=texto, proveniencia=prov, fonte=fonte) for fonte, texto in ds]
     args = ", ".join(f"{k}={v}" for k, v in sorted(r.argumentos.items()))
-    return Peca(
-        texto=texto_da_fonte(r),
-        proveniencia=Proveniencia(
-            origem=f"core.catalogo.{r.nome}", sigilo=Sigilo.PUBLICO, terceiro=r.origem != "interno"
-        ),
-        fonte=Fonte(id=f"ferramenta:{r.nome}#{n}", rotulo=f"{r.nome}({args})"),
-    )
+    fonte = Fonte(id=f"ferramenta:{r.nome}#{n}", rotulo=f"{r.nome}({args})")
+    return [Peca(texto=texto_da_fonte(r), proveniencia=prov, fonte=fonte)]
+
+
+def acrescentar(fontes: list[Peca], novas: list[Peca]) -> None:
+    """O mesmo dispositivo lido duas vezes (achado na busca, depois lido inteiro) é UMA fonte."""
+    vistas = {p.fonte.id for p in fontes if p.fonte}
+    fontes.extend(p for p in novas if not (p.fonte and p.fonte.id in vistas))
+
+
+def _rotulo(f: Fonte) -> str:
+    return f"{f.rotulo} ({f.versao})" if f.versao else f.rotulo
 
 
 def _peca_aviso(r: ResultadoFerramenta) -> Peca:
@@ -171,7 +219,7 @@ def executar(nucleo: Nucleo, mcp: Porta, pergunta: str, ente_id: str, correlatio
         vai = r.ok and r.publico
         passos.append(Passo(ferramenta=nome, argumentos=argumentos, ok=r.ok, enviado_ao_modelo=vai))
         if vai:
-            fontes.append(_peca_resultado(r, len(passos)))
+            acrescentar(fontes, pecas_do_resultado(r, len(passos)))
         elif not r.ok:
             fontes.append(_peca_aviso(r))
 
@@ -188,4 +236,5 @@ def executar(nucleo: Nucleo, mcp: Porta, pergunta: str, ente_id: str, correlatio
     )
     if isinstance(resposta, Indisponivel):
         return RespostaAgente(passos=passos, indisponivel=resposta)
-    return RespostaAgente(passos=passos, artefato=resposta)
+    rotulos = {p.fonte.id: _rotulo(p.fonte) for p in fontes if p.fonte}
+    return RespostaAgente(passos=passos, artefato=resposta, fontes=rotulos)

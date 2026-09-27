@@ -10,7 +10,12 @@ import { comRotuloDoPasso, rotuloDoPasso, type Conversa } from "@/lib/assistente
 import { avisoDoRascunho, paragrafosDoRascunho, rotuloDaCitacao } from "@/lib/rascunho-ata-vista";
 import { useAssistente } from "@/lib/use-assistente";
 
-const SUGESTOES = ["Qual a situação do PL 11/2026?", "Por onde passou o PL 11/2026?", "O que vai ser votado na próxima sessão?"];
+const SUGESTOES = [
+  "Qual a situação do PL 11/2026?",
+  "Por onde passou o PL 11/2026?",
+  "O que vai ser votado na próxima sessão?",
+  "Qual o quórum para derrubar um veto?",
+];
 
 function Resposta({ conversa }: { conversa: Conversa }) {
   const { passos, resposta, indisponivel } = conversa;
