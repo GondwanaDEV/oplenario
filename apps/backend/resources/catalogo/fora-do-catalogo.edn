@@ -75,4 +75,7 @@
  :sessoes/anunciar-item-pauta {:categoria :pessoal
                                :motivo "conducao da sessao ao vivo: anunciar o item em discussao e' da Mesa (Eixo 4.3)"}
  :sessoes/registrar-decisao-mesa {:categoria :pessoal
-                                  :motivo "conducao da sessao ao vivo: a decisao da Mesa e' da Mesa, pela tela (Eixo 4.3)"}}
+                                  :motivo "conducao da sessao ao vivo: a decisao da Mesa e' da Mesa, pela tela (Eixo 4.3)"}
+ ;; ---------- formularios do cidadao (ADR-0015): o que a cidada protocolou ----------
+ :participacao/meus-protocolos {:categoria :so-tela
+                                :motivo "lista da propria cidada para acompanhar o que protocolou; agente do cidadao e' pos-V1 (docs/26 §4)"}}

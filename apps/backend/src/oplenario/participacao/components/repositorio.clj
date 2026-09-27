@@ -160,7 +160,10 @@
      sem paginacao nesta fatia.")
   (fila-moderacao [this ente-id]
     "'fila-moderacao' (SERVIDOR): SO pendentes, denunciados PRIMEIRO, depois cronologico, com teto.")
-  (esic-cumprimento [this ente-id] "Cumprimento de prazo do e-SIC (FE Onda A1, §16.11)."))
+  (esic-cumprimento [this ente-id] "Cumprimento de prazo do e-SIC (FE Onda A1, §16.11).")
+  (meus-protocolos [this ente-id identidade-id]
+    "O que a pessoa protocolou nesta Casa, cada item com o seu prazo, numa UNICA tx: {:pedidos-esic
+    :solicitacoes-lgpd :manifestacoes}, cada um [{:item :prazo}]. Manifestacao anonima fica de fora."))
 
 (defrecord RepoParticipacaoPg [datasource bus]
   RepoParticipacao
@@ -454,7 +457,18 @@
     (transacao this ente-id #(db-comentario/listar-aprovados-da-materia % ente-id proposicao-id)))
   (fila-moderacao [this ente-id]
     (transacao this ente-id #(db-comentario/listar-fila-moderacao % ente-id)))
-  (esic-cumprimento [this ente-id] (transacao this ente-id #(db-prazo/esic-cumprimento % ente-id))))
+  (esic-cumprimento [this ente-id] (transacao this ente-id #(db-prazo/esic-cumprimento % ente-id)))
+  (meus-protocolos [this ente-id identidade-id]
+    (transacao this ente-id
+      (fn [tx]
+        (let [com-prazo (fn [objeto-tipo itens]
+                          (mapv (fn [i] {:item i :prazo (db-prazo/buscar-do-objeto tx ente-id objeto-tipo (:id i))})
+                                itens))]
+          {:pedidos-esic      (com-prazo "pedido_esic" (db-pedido/listar-por-solicitante tx ente-id identidade-id))
+           :solicitacoes-lgpd (com-prazo "solicitacao_titular"
+                                         (db-solicitacao/listar-por-titular tx ente-id identidade-id))
+           :manifestacoes     (com-prazo "manifestacao_ouvidoria"
+                                         (db-manifestacao/listar-por-manifestante tx ente-id identidade-id))})))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource + :bus via `using`)."

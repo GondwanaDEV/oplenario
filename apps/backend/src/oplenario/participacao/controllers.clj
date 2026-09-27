@@ -102,6 +102,19 @@
   [repo-participacao ator]
   (repo/pedidos-do-solicitante repo-participacao (:ente-id ator) (:identidade-id ator)))
 
+(defn meus-protocolos
+  "GET /portal/meus-protocolos — o que o `ator` protocolou NESTA Casa (a da sessao), cada item com vence-em
+  EFETIVO e dias-restantes, pela mesma derivacao dos detalhes (meu-pedido/minha-solicitacao/minha-manifestacao).
+  So' do proprio ator por construcao (a consulta filtra pelo dono). Linhas CRUAS: a borda projeta pelo adapters/out
+  (sem tenant, sem PII, sem o corpo do pedido)."
+  [repo-participacao ator relogio]
+  (let [com-prazo (fn [linhas]
+                    (mapv (fn [{:keys [item prazo]}]
+                            (assoc item :vence-em (some-> prazo logic/vencimento-efetivo)
+                                   :dias-restantes (dias-restantes-do-prazo relogio prazo)))
+                          linhas))]
+    (update-vals (repo/meus-protocolos repo-participacao (:ente-id ator) (:identidade-id ator)) com-prazo)))
+
 ;; ========================= SLICE 2: responder / recorrer / decidir =========================
 
 (defn responder-pedido!

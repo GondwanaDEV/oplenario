@@ -57,3 +57,14 @@
                   :where [:and [:= :ente_id ente-id] [:= :id id]
                           [:in :estado [[:inline "protocolada"] [:inline "em_analise"]]]]
                   :returning [:*]}))))
+
+(defn listar-por-titular
+  "'Minhas solicitacoes' do titular autenticado (ente, titular_identidade_id), mais recentes primeiro, com teto."
+  [tx ente-id titular-id]
+  {:pre [(some? ente-id) (some? titular-id)]}
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select cols :from [:participacao.solicitacao_titular]
+                  :where [:and [:= :ente_id ente-id] [:= :titular_identidade_id titular-id]]
+                  :order-by [[:criado_em :desc] [:id :asc]]
+                  :limit 100}))))
