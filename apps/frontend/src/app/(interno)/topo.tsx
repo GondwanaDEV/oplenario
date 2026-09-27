@@ -38,6 +38,9 @@ const DESTINOS_NAV = [
   // quem pergunta (credencial delegada, ADR-0010) e responde citando. Gated "secretario" (GuardSecretaria; o backend
   // aceita secretario ou vereador).
   { rotulo: "Assistente", href: "/assistente" },
+  // Faixa B / B.4 — as normas de referencia (LOM, Regimento, leis) que o assistente consulta; a secretaria importa e
+  // confere. Gated "secretario" (GuardSecretaria + exige-papel no backend).
+  { rotulo: "Normas", href: "/normas" },
   { rotulo: "Painéis da Mesa", href: "/paineis/mesa" },
   { rotulo: "Tramitação", href: "/tramitacao" },
   // Fatia 2b — a fila de cargas não recebidas (o rito exige que quem recebe assine). Ao lado de Tramitação:

@@ -22,6 +22,7 @@
             [oplenario.legislativo.components.repositorio :as repo-legislativo-comp]
             [oplenario.legislativo.diplomat.http.in :as legislativo-http]
             [oplenario.mcp :as mcp]
+            [oplenario.normas.diplomat.http.in :as normas-http]
             [oplenario.paineis.diplomat.http.in :as paineis-http]
             [oplenario.participacao.diplomat.http.in :as participacao-http]
             [oplenario.sessoes.components.renderizador-pdf :as renderizador-pdf]
@@ -260,7 +261,7 @@
   [{:keys [idp repo-identidade repo-sessoes repo-legislativo repo-compliance repo-participacao
            repo-transparencia repo-paineis repo-cadastros canal-store objeto-store painel-compliance
            presenca-resumo esic-cumprimento relatores-pendentes info-ente registro-fatos
-           keycloak sessao identidade-existe? repo-integracao-ia integracao-ia]
+           keycloak sessao identidade-existe? repo-integracao-ia integracao-ia repo-normas]
     ;; nome LOCAL distinto da defn de topo `ficha-e-janelas-publicas` p/ nao sombrea-la (mesmo cuidado de
     ;; `resolver-vereador`/`resolver-vereador-fn`); a chave do mapa segue sendo :ficha-e-janelas-publicas.
     ficha-e-janelas-override :ficha-e-janelas-publicas}]
@@ -526,6 +527,10 @@
         ;; Faixa A / A.5: a busca intra-camara (host: cruza integracao-ia, legislativo e sessoes).
         (into (busca/rotas {:auth auth :seams (busca/seams {:ia ia :repo-legislativo repo-legislativo
                                                              :repo-sessoes repo-sessoes})}))
+        ;; Faixa B / B.4 (ADR-0011): a curadoria das normas de referencia (importar, conferir, publicar). O municipio da
+        ;; Casa (a LOM e' do Municipio) vem de cadastros pelo host — normas nunca importa cadastros (§22.10).
+        (into (normas-http/rotas {:auth auth :repo-normas repo-normas
+                                   :municipio-do-ente (fn [ente-id] (:municipio-ibge (repo-cadastros-comp/buscar-ente repo-cadastros ente-id)))}))
         ;; Faixa B / B.3: a tela pergunta ao assistente da Casa (credencial delegada por execucao, ADR-0010).
         (into (agente/rotas {:auth auth :repo-identidade repo-identidade :ia ia}))
         (into (compliance-http/rotas {:auth auth :repo-compliance repo-compliance}))

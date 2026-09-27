@@ -5,4 +5,12 @@
 {:integracao-ia/mcp {:categoria :servico
                      :motivo "e' o proprio adaptador MCP que serve o catalogo ao agente (ADR-0009/0010), nao uma acao"}
  :agente/perguntar {:categoria :so-tela
-                    :motivo "e' a porta da tela para o proprio agente: o agente nao chama o agente"}}
+                    :motivo "e' a porta da tela para o proprio agente: o agente nao chama o agente"}
+ :normas/importar-versao {:categoria :so-tela
+                          :motivo "curadoria humana: importar o texto de uma norma para conferir (Eixo 7.3); o agente nao importa norma"}
+ :normas/conferir {:categoria :so-tela
+                   :motivo "conferir e publicar norma e' ato de pessoa (Eixo 7.3); o agente nunca confere"}
+ :normas/listar {:categoria :so-tela
+                 :motivo "lista de curadoria (vigente e em conferencia); o agente le norma pela B.5 (buscar/ler dispositivo)"}
+ :normas/versao {:categoria :so-tela
+                 :motivo "tela de conferencia de uma versao; o agente le so' o vigente, pela B.5 (ler dispositivo)"}}
