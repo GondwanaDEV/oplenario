@@ -1,0 +1,5 @@
+;; ADR-0009 — rotas que, POR DECISAO, nao sao acao do catalogo de acoes, cada uma com o motivo. Categorias:
+;;   :so-tela  — so' serve a tela (forma de tela, sem acao de dominio que um agente chamaria)
+;;   :servico  — borda de servico entre sistemas (fronteira com a IA, captacao), nao acao de pessoa
+;; Uma rota nova entra aqui so' com motivo revisado em PR; o padrao e' virar entrada do catalogo.
+{}

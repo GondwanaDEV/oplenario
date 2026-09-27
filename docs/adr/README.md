@@ -21,3 +21,4 @@ Enforcement · Consequências · Alternativas descartadas). Complementa a SSOT (
 | [0006](0006-satelite-de-ia-apps-ia.md) | Satélite de IA em `apps/ia/` (Python): silhueta, porta de inferência e trilho de CI | Aceito |
 | [0007](0007-captacao-da-gravacao-local.md) | Captação da gravação local: `apps/captacao`, papel `captacao` e vínculo pós-sessão | Aceito |
 | [0008](0008-fronteira-core-ia-eventos-de-integracao.md) | Fronteira core ↔ IA: eventos de integração por feed e caixa de entrada, conteúdo sob demanda | Aceito |
+| [0009](0009-catalogo-de-acoes-e-adaptador-mcp-no-core.md) | Catálogo de ações no core: uma entrada por ação de domínio, `diplomat/catalogo.clj` e lint de rotas | Aceito |
