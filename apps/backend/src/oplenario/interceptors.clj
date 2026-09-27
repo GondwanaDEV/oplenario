@@ -231,3 +231,18 @@
   "Interceptors OUTERMOST de TODA rota (prepend em http/servico): cabecalhos (leave por ultimo, cobre ate erros)
   + erro (envolve toda a cadeia). W3: rota nova herda isto automaticamente — nao depende de lembrar por rota."
   [cabecalhos-seguranca erro])
+
+(defn autenticacao-agente
+  "Interceptor de AUTENTICACAO de AGENTE (ADR-0010): so' a credencial delegada (bearer opaco emitido pelo core a
+  cada execucao) e' aceita — nem cookie de sessao, nem token do IdP. O ator e' resolvido A CADA chamada
+  (`identidade/resolver-agente`: a pessoa como esta' agora + `:via`). Usado SO' nas rotas do catalogo (o adaptador
+  MCP, B.3): a credencial de agente nao abre nenhuma outra rota, porque o interceptor `autenticacao` das telas nao a
+  reconhece."
+  [repo-identidade]
+  {:name  ::autenticacao-agente
+   :enter (fn [ctx]
+            (if-let [seg (bearer (:request ctx))]
+              (if-let [ator (auten/resolver-agente repo-identidade seg)]
+                (assoc-in ctx [:request :ator] ator)
+                (nega! ctx 401 "credencial de agente invalida"))
+              (nega! ctx 401 "sem credencial")))})

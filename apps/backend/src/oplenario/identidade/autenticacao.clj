@@ -27,3 +27,41 @@
        :tipo-vinculo     (:tipo vinculo-ativo)
        :vinculo-ativo-id (:id vinculo-ativo)
        :papeis           papeis})))
+
+(defn resolver-agente
+  "Credencial delegada (ADR-0010) -> o `ator` de uma chamada de AGENTE, ou nil (fail-closed). A permissao nunca vem
+  da credencial: a pessoa e' resolvida AGORA pela mesma `resolver-sessao` das telas (vinculo ativo + papeis do
+  momento — mandato encerrado ou vinculo suspenso derruba o agente na hora, Eixo 3.2), e a credencial so' acrescenta
+  `:via` — quem age (agente, execucao), o publico cujo conjunto de ferramentas vale e as classes concedidas.
+  Agente institucional (sem pessoa, 3.1 b): ator sem papel algum ate' a concessao do `admin_ente` existir (B.8) —
+  nada executa, por construcao."
+  [repo-identidade segredo]
+  (when segredo
+    (when-let [{:keys [execucao-id ente-id identidade-id agente publico classes]}
+               (repo/resolver-credencial-agente repo-identidade segredo)]
+      (let [via {:agente agente :execucao-id execucao-id :publico (keyword publico)
+                 :classes (into #{} (map keyword) classes) :institucional? (nil? identidade-id)}]
+        (if identidade-id
+          (some-> (resolver-sessao repo-identidade {:identidade-id identidade-id :ente-id ente-id})
+                  (assoc :via via))
+          {:identidade-id nil :ente-id ente-id :papeis #{} :via via})))))
+
+(def prazo-credencial-agente-seg
+  "Vida maxima de uma credencial delegada: uma execucao de agente, nao uma sessao de trabalho. Curta de proposito —
+  vazou, expira logo; e a execucao que precisar de mais pede outra."
+  (* 15 60))
+
+(defn emitir-credencial-agente!
+  "Emite a credencial delegada de UMA execucao (ADR-0010, Eixo 3.4): a pessoa do `ator` (a sessao dela, que invocou
+  o agente numa tela — 3.3) como sujeito, o `agente` como ator, o `publico` cujo conjunto de ferramentas vale e as
+  `classes` concedidas. Devolve {:execucao-id :credencial :expira-em}; a credencial crua existe so' aqui."
+  [repo-identidade ator {:keys [agente publico classes]}]
+  {:pre [(:identidade-id ator) (:ente-id ator) (seq classes)]}
+  (let [execucao-id (random-uuid)
+        expira-em (.plusSeconds (java.time.Instant/now) prazo-credencial-agente-seg)
+        segredo (repo/emitir-credencial-agente! repo-identidade
+                                                {:execucao-id execucao-id :ente-id (:ente-id ator)
+                                                 :identidade-id (:identidade-id ator) :agente agente
+                                                 :publico (name publico) :classes (mapv name (sort classes))
+                                                 :expira-em expira-em})]
+    {:execucao-id execucao-id :credencial segredo :expira-em expira-em}))

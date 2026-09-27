@@ -60,3 +60,55 @@
       (let [torta (catalogo/entrada (assoc eco :executar (fn [_ _ _] {:n "tres"})))]
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"viola o contrato"
                               (catalogo/executar torta {} secretaria {:n 3})))))))
+
+;; ---------- ADR-0010: o ator de AGENTE (com `:via`) — interseccao de classes e audit das escritas ----------
+
+(defn- via [classes & {:as extra}]
+  (merge {:agente "assistente" :execucao-id (random-uuid) :publico :secretaria :classes classes :institucional? false}
+         extra))
+
+(defn- gravador []
+  (let [a (atom [])] [a (fn [_ e desfecho] (swap! a conj [(:nome e) desfecho]))]))
+
+(deftest classe-precisa-estar-concedida
+  (let [leitura (catalogo/entrada (assoc eco :classe :leitura))
+        rascunho (catalogo/entrada (assoc eco :classe :rascunho))
+        [_ reg] (gravador)]
+    (is (= {:n 1} (catalogo/executar leitura {} (assoc secretaria :via (via #{:leitura})) {:n 1})))
+    (is (= :autorizacao/negado
+           (tipo-do-erro #(catalogo/executar rascunho {:registrar-chamada reg}
+                                             (assoc secretaria :via (via #{:leitura})) {:n 1})))
+        "execucao que so' recebeu leitura nao escreve")
+    (testing "a tela (sem :via) nao passa pela regra de classe"
+      (is (= {:n 1} (catalogo/executar rascunho {} secretaria {:n 1}))))))
+
+(deftest ato-por-agente-nunca-executa-direto
+  (let [ato (catalogo/entrada eco)
+        [_ reg] (gravador)]
+    (is (= :ato-so-por-proposta
+           (try (catalogo/executar ato {:registrar-chamada reg}
+                                   (assoc secretaria :via (via #{:leitura :rascunho :ato})) {:n 1})
+                (catch clojure.lang.ExceptionInfo e (:razao (ex-data e))))))
+    (is (= :institucional-nunca-ato
+           (try (catalogo/executar ato {:registrar-chamada reg}
+                                   (assoc secretaria :via (via #{:ato} :institucional? true)) {:n 1})
+                (catch clojure.lang.ExceptionInfo e (:razao (ex-data e))))))))
+
+(deftest escrita-por-agente-vai-sempre-ao-audit
+  (let [rascunho (catalogo/entrada (assoc eco :classe :rascunho))
+        ator (assoc secretaria :via (via #{:leitura :rascunho}))
+        [a reg] (gravador)]
+    (catalogo/executar rascunho {:registrar-chamada reg} ator {:n 1})
+    (catalogo/executar rascunho {:registrar-chamada reg} ator {:n 500})
+    (tipo-do-erro #(catalogo/executar rascunho {:registrar-chamada reg} ator {:n 0}))
+    (tipo-do-erro #(catalogo/executar rascunho {:registrar-chamada reg} (assoc ator :papeis #{"vereador"}) {:n 1}))
+    (is (= [["eco_de_teste" "ok"] ["eco_de_teste" "nao_encontrado"] ["eco_de_teste" "invalido"]
+            ["eco_de_teste" "negado"]]
+           @a))
+    (testing "leitura por agente segue a regra das telas: sem audit por chamada"
+      (let [[b reg2] (gravador)]
+        (catalogo/executar (catalogo/entrada (assoc eco :classe :leitura)) {:registrar-chamada reg2} ator {:n 1})
+        (is (empty? @b))))
+    (testing "sem o seam de audit, a escrita por agente nao roda"
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"sem registro de audit"
+                            (catalogo/executar rascunho {} ator {:n 1}))))))
