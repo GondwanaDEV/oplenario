@@ -56,7 +56,7 @@ export function BalcaoLgpd({ ente }: { ente: string }) {
       <div id="lgpd-direitos-embreve">
         <EmBreve
           titulo="Exercer um direito da LGPD"
-          motivo="Pedir para acessar, corrigir, eliminar ou revogar um consentimento exige identificação formal (Entrar com gov.br) — chega numa fatia futura de autenticação."
+          motivo="Pedir para acessar, corrigir, eliminar ou revogar um consentimento exige identificação formal pelo gov.br (já disponível em “Entrar”); o formulário do pedido chega na próxima etapa."
         />
       </div>
 

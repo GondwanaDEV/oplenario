@@ -47,6 +47,10 @@ reciclagem de `sub` já estavam prontos desde a F1; ninguém os chamava.
   (`…/realms/ente-<id>/broker/govbr/endpoint`), cadastrada no gov.br. É custo operacional do realm por ente. Se o
   cadastro por Casa pesar, a alternativa é um realm único de cidadão (cidadão não tem poder de tenant, então a razão
   do realm por ente pesa menos para ele), mas isso reabre o §22.9 Eixo 6 e é decisão do Daouda.
+- Ligar `GOVBR_AMBIENTE` num ambiente cujas Casas já têm realm exige **re-provisionar** esses realms
+  (`provisionar-realm!` é idempotente e converge IdP, fluxo, atributos e mappers de client). Sem isso a descoberta
+  mostra o botão, mas o Keycloak ignora a dica `govbr` e cai na tela institucional. A semente de personas já faz
+  isso na demo; um comando de operador para re-provisionar todas as Casas fica para o console do operador.
 - `[GAP]` externo: o credenciamento no gov.br (client_id/secret de homologação e produção, URLs de retorno) e o texto
   final da política de privacidade da tela.
 - Quem é servidor e cidadão tem duas contas no realm (institucional e `govbr-<cpf>`) sobre **uma** identidade. A
