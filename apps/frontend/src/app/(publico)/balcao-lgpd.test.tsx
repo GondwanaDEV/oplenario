@@ -21,11 +21,15 @@ describe("BalcaoLgpd", () => {
     expect(screen.getByText(/aqui é só sobre os/i)).toBeTruthy();
   });
 
-  it("os 5 direitos aparecem como botões inertes (disabled) + em-breve honesto", () => {
+  it("os 5 direitos levam ao formulário com o direito já marcado", () => {
     global.fetch = vi.fn(async () => ({ ok: false })) as unknown as typeof fetch;
     render(<BalcaoLgpd ente="fortaleza" />);
-    const botao = screen.getByRole("button", { name: "Acessar meus dados" }) as HTMLButtonElement;
-    expect(botao.disabled).toBe(true);
+    expect(screen.getByRole("link", { name: "Acessar meus dados" }).getAttribute("href")).toBe(
+      "/portal/casa/fortaleza/lgpd/novo?tipo=acessar",
+    );
+    expect(screen.getByRole("link", { name: "Revogar um consentimento que dei" }).getAttribute("href")).toBe(
+      "/portal/casa/fortaleza/lgpd/novo?tipo=revogar_consentimento",
+    );
     expect(screen.getByText(/exige identificação formal/i)).toBeTruthy();
   });
 
