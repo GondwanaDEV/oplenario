@@ -3,6 +3,8 @@
   entrada IA -> core aplica o ponteiro da transcricao uma vez so', na tx do tenant."
   (:require [clojure.test :refer [deftest is use-fixtures]]
             [com.stuartsierra.component :as component]
+            [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as rs]
             [oplenario.config :as config]
             [oplenario.integracao-ia.components.repositorio :as repo]
             [oplenario.integracao-ia.controllers :as controllers]
@@ -264,3 +266,14 @@
       (is (= 2 (count evs)) "...mas nao duplica o feed")
       (is (= (set (map str ids)) (set (map #(get-in % [:payload :proposicao-id]) evs))))
       (is (every? #(= "ProposicaoAtualizada" (:tipo %)) evs)))))
+
+(deftest o-papel-da-aplicacao-escreve-e-le-o-feed
+  ;; os testes rodam como DONO das tabelas; o app (compose, producao) roda como `oplenario_app`. Sem o GRANT (mig
+  ;; 0089) o relay falhava no primeiro evento promovido e travava o outbox inteiro.
+  (let [ente (random-uuid) pid (random-uuid)]
+    (jdbc/with-transaction [tx *ds* {:rollback-only true}]
+      (jdbc/execute-one! tx ["SET LOCAL ROLE oplenario_app"])
+      (repo/promover-em-tx! tx {:tipo "proposicao.editada" :ente-id ente
+                                :payload {:proposicao-id pid :ementa "Denomina a Rua das Flores."}})
+      (is (= 1 (:n (jdbc/execute-one! tx ["SELECT count(*) AS n FROM integracao_ia.evento_saida WHERE ente_id = ?" ente]
+                                      {:builder-fn rs/as-unqualified-maps})))))))
