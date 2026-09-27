@@ -44,6 +44,8 @@
   (transacao [this ente-id f] "Roda (f tx) numa UNICA tx do tenant — compoe acoes atomicamente.")
   (protocolar! [this ente-id proposicao] "Gate eixo H: numera (gapless) + URN + insere, atomico.")
   (buscar-proposicao [this ente-id id])
+  (buscar-proposicao-por-numero [this ente-id tipo ano sequencial]
+    "B.1 (catalogo): a proposicao por especie + ano + sequencial ('PL 12/2026'), ou nil.")
   (resumos-de-proposicoes [this ente-id ids]
     "Modo TV (docs/22): {id -> {:tipo :ano :sequencial :ementa :autor-texto}} de um LOTE, numa tx. Id fora do tenant nao
      volta. Consumido por `sessoes` (pauta) via seam injetado pelo host — sessoes nunca importa legislativo.")
@@ -453,6 +455,8 @@
   (protocolar! [this ente-id p]
     (transacao this ente-id #(protocolar-na-tx! bus % ente-id p)))
   (buscar-proposicao [this ente-id id] (transacao this ente-id #(proposicao/buscar % ente-id id)))
+  (buscar-proposicao-por-numero [this ente-id tipo ano sequencial]
+    (transacao this ente-id #(proposicao/buscar-por-numero % ente-id tipo ano sequencial)))
   (resumos-de-proposicoes [this ente-id ids]
     (if (empty? ids)
       {}

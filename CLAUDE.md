@@ -77,7 +77,7 @@ artefato legal do core com retificação, rascunho pelo núcleo com citação co
 medida de volta na IA — PRs #43–#47 — e **leitura da ata anterior (A.7)** como ato da sessão (voz sintetizada,
 presencial ou dispensada; a voz é a do navegador da Mesa, provisória até a decisão do fornecedor de voz). **Tudo roda
 com o fornecedor fake** (conferência real, texto de roteiro). **Índice único e busca intra-câmara (A.4/A.5)** entregues — PR #49 e o seguinte: a IA devolve ids, o core decide o que se vê; IA fora cai na busca pela ementa. **Resumo cidadão (A.8)** entregue: a IA redige a cada versão do texto, a secretaria revisa e publica, o portal mostra com o selo de revisão humana — **a Faixa A está completa em código**; a A.1 (qualidade medida) espera o áudio de
-Baturité com 15 min anotados. A Faixa B (agente, consulta LOM/RI, copiloto) não começou. M4 fecha em código com a
+Baturité com 15 min anotados. A **Faixa B** (agente, consulta LOM/RI, copiloto) começou pelo **catálogo de ações (B.1, [ADR-0009](docs/adr/0009-catalogo-de-acoes-e-adaptador-mcp-no-core.md))**: uma ferramenta por ação de domínio, declarada em `diplomat/catalogo.clj` de cada módulo; **rota nova sem entrada no catálogo (ou motivo em `resources/catalogo/fora-do-catalogo.edn`) quebra o CI**. M4 fecha em código com a
 A.6; a qualidade real depende da A.1 e do fornecedor real. Uso real de fornecedor segue travado no `[GAP]` jurídico (DPA de
 não-treino, LGPD art. 33) — o fake não espera. Desenho: **`docs/25`** + doc-mestre §22.11 (v1.46); plano: **`docs/26`**
 (rev. 2, "Confirmo" do Daouda com o merge do PR #38). **Ler os dois antes de escrever qualquer feature de IA.**
